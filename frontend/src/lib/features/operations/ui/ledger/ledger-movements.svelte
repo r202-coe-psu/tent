@@ -10,7 +10,7 @@
 	import { useItemMasters, formatUnit, useUnitsOfMeasure } from '$lib/features/catalog';
 	import { langState } from '$lib/states/i18n.svelte';
 	import { getShelterCode } from '$lib/db/shelter';
-	import { useLedger } from '../../application/queries';
+	import { useLedger, useLedgerRefLabels } from '../../application/queries';
 	import { useStoragePoints } from '../../application/use-storage-points.svelte';
 	import { clampPage, pageSlice } from '../stock/stock-view';
 	import DaySummaryCards from './day-summary-cards.svelte';
@@ -66,10 +66,15 @@
 		return names;
 	});
 
+	const refLabelsQuery = useLedgerRefLabels(() =>
+		(ledgerQuery.data ?? []).flatMap((entry) => (entry.ref_id ? [entry.ref_id] : []))
+	);
+
 	const lookup = $derived<LedgerLookup>({
 		itemName: (id) => itemNames[id] ?? 'ไม่ระบุชื่อสิ่งของ',
 		unitLabel: (unit) => formatUnit(unit, unitsQuery.data ?? [], langState.current),
-		points: storagePoints.points
+		points: storagePoints.points,
+		refLabel: (refId) => refLabelsQuery.data?.get(refId) ?? undefined
 	});
 
 	const allRows = $derived(buildLedgerRows(ledgerQuery.data ?? [], lookup));

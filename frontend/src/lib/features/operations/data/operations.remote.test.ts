@@ -1577,6 +1577,57 @@ describe('OperationsRemoteRepository — transfer via BFF (CR-059 Flow 1 / T-13)
 		);
 	});
 
+	it('reads ledger transfer refs by id from the transfer API, not the shelter DB (#811)', async () => {
+		fetchMock.mockResolvedValue({
+			ok: true,
+			status: 200,
+			json: async () => [requestedTransfer]
+		});
+
+		const docs = await repo.listLedgerRefDocs([requestedTransfer._id, 'stock_transfer:01GONE']);
+
+		expect(docs.map((d) => d._id)).toEqual([requestedTransfer._id]);
+		expect(fetchMock).toHaveBeenCalledTimes(1);
+		const url = new URL(fetchMock.mock.calls[0][0], 'http://localhost');
+		expect(url.pathname).toBe('/api/back-office/transfer');
+		expect(url.searchParams.get('shelter_code')).toBe('SH001');
+		expect(url.searchParams.getAll('id')).toEqual([requestedTransfer._id, 'stock_transfer:01GONE']);
+	});
+
+	it('names every transfer ref even past one list page, in batches of ids (#811)', async () => {
+		const ids = Array.from(
+			{ length: 120 },
+			(_, i) => `stock_transfer:01OLD${String(i).padStart(3, '0')}`
+		);
+		fetchMock.mockImplementation(async (input: string) => {
+			const asked = new URL(input, 'http://localhost').searchParams.getAll('id');
+			return {
+				ok: true,
+				status: 200,
+				json: async () => asked.map((_id) => ({ ...requestedTransfer, _id }))
+			};
+		});
+
+		const docs = await repo.listLedgerRefDocs(ids);
+
+		expect(docs.map((d) => d._id)).toEqual(ids);
+		const batchSizes = fetchMock.mock.calls.map(
+			([input]) => new URL(input, 'http://localhost').searchParams.getAll('id').length
+		);
+		expect(batchSizes).toEqual([50, 50, 20]);
+	});
+
+	it('leaves transfer refs unread when the transfer API refuses the account (#811)', async () => {
+		fetchMock.mockResolvedValue({ ok: false, status: 403, statusText: 'Forbidden' });
+
+		expect(await repo.listLedgerRefDocs([requestedTransfer._id])).toEqual([]);
+	});
+
+	it('does not call the transfer API when no ref is a transfer', async () => {
+		expect(await repo.listLedgerRefDocs([])).toEqual([]);
+		expect(fetchMock).not.toHaveBeenCalled();
+	});
+
 	it('returns null for a 404 getTransfer', async () => {
 		fetchMock.mockResolvedValue({ ok: false, status: 404, json: async () => null });
 		expect(await repo.getTransfer('stock_transfer:missing')).toBeNull();

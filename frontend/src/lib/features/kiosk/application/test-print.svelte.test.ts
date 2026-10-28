@@ -1,6 +1,4 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { StaffPinEntryDeps } from './staff-pin-entry.svelte';
-import { StaffPinEntry } from './staff-pin-entry.svelte';
 import { TEST_PRINT_DONE_VISIBLE_MS, TestPrint, type TestPrintDeps } from './test-print.svelte';
 import type { KioskPrintFlowResult } from './kiosk-print-flow';
 
@@ -23,34 +21,15 @@ function setup(result: KioskPrintFlowResult | Error = { kind: 'printed', printed
 }
 
 describe('TestPrint', () => {
-	it('starts idle and prints nothing until staff open the PIN panel', () => {
+	it('starts idle and prints nothing until staff ask', () => {
 		const { testPrint, printLabels } = setup();
 		expect(testPrint.phase).toBe('idle');
-		expect(testPrint.pinOpen).toBe(false);
 		expect(printLabels).not.toHaveBeenCalled();
 	});
 
-	it('asks for the PIN first: opening shows the panel and prints nothing', () => {
+	it('print() from idle prints exactly one label with the test payload and name', async () => {
 		const { testPrint, prepareQrImage, printLabels } = setup();
-		testPrint.open();
-		expect(testPrint.phase).toBe('pin');
-		expect(testPrint.pinOpen).toBe(true);
-		expect(prepareQrImage).not.toHaveBeenCalled();
-		expect(printLabels).not.toHaveBeenCalled();
-	});
-
-	it('cancel closes the PIN panel without printing', () => {
-		const { testPrint, printLabels } = setup();
-		testPrint.open();
-		testPrint.pinCancelled();
-		expect(testPrint.phase).toBe('idle');
-		expect(printLabels).not.toHaveBeenCalled();
-	});
-
-	it('a verified PIN prints exactly one label with the test payload and name', async () => {
-		const { testPrint, prepareQrImage, printLabels } = setup();
-		testPrint.open();
-		await testPrint.pinVerified();
+		await testPrint.print();
 
 		expect(prepareQrImage).toHaveBeenCalledExactlyOnceWith('KIOSK-TEST-PRINT');
 		expect(printLabels).toHaveBeenCalledOnce();
@@ -63,8 +42,7 @@ describe('TestPrint', () => {
 		const { testPrint, printLabels } = setup();
 		let release: (r: KioskPrintFlowResult) => void = () => {};
 		printLabels.mockImplementationOnce(() => new Promise((resolve) => (release = resolve)));
-		testPrint.open();
-		const pending = testPrint.pinVerified();
+		const pending = testPrint.print();
 		await vi.waitFor(() => expect(testPrint.phase).toBe('printing'));
 		expect(testPrint.busy).toBe(true);
 		release({ kind: 'printed', printed: 1 });
@@ -75,8 +53,7 @@ describe('TestPrint', () => {
 	it('hides the printed status after a moment', async () => {
 		vi.useFakeTimers();
 		const { testPrint } = setup();
-		testPrint.open();
-		await testPrint.pinVerified();
+		await testPrint.print();
 		expect(testPrint.phase).toBe('done');
 		vi.advanceTimersByTime(TEST_PRINT_DONE_VISIBLE_MS);
 		expect(testPrint.phase).toBe('idle');
@@ -87,8 +64,7 @@ describe('TestPrint', () => {
 			kind: 'error',
 			message: 'เครื่องพิมพ์ไม่พร้อม'
 		});
-		testPrint.open();
-		await testPrint.pinVerified();
+		await testPrint.print();
 		expect(testPrint.phase).toBe('error');
 		expect(testPrint.error).toBe('เครื่องพิมพ์ไม่พร้อม');
 		expect(printLabels).toHaveBeenCalledOnce();
@@ -98,8 +74,7 @@ describe('TestPrint', () => {
 	it('a QR render failure is an error too', async () => {
 		const { testPrint, prepareQrImage, printLabels } = setup();
 		prepareQrImage.mockRejectedValueOnce(new Error('qr'));
-		testPrint.open();
-		await testPrint.pinVerified();
+		await testPrint.print();
 		expect(testPrint.phase).toBe('error');
 		expect(testPrint.error).not.toBe('');
 		expect(printLabels).not.toHaveBeenCalled();
@@ -107,63 +82,46 @@ describe('TestPrint', () => {
 
 	it('with no scanner client the browser print label sheet is used and the screen goes back to idle', async () => {
 		const { testPrint } = setup({ kind: 'fallback' });
-		testPrint.open();
-		await testPrint.pinVerified();
+		await testPrint.print();
 		expect(testPrint.phase).toBe('idle');
 		expect(testPrint.labels).toHaveLength(1);
 	});
 
 	it('hands the browser fallback to the print flow', async () => {
 		const { testPrint, printLabels, fallbackPrint } = setup();
-		testPrint.open();
-		await testPrint.pinVerified();
+		await testPrint.print();
 		expect(printLabels.mock.calls[0][1]).toBe(fallbackPrint);
 	});
 
-	it('ignores a verified PIN when the panel is not open', async () => {
+	it('a second print() while printing does nothing', async () => {
 		const { testPrint, printLabels } = setup();
-		await testPrint.pinVerified();
-		expect(printLabels).not.toHaveBeenCalled();
-		expect(testPrint.phase).toBe('idle');
+		await Promise.all([testPrint.print(), testPrint.print()]);
+		expect(printLabels).toHaveBeenCalledOnce();
 	});
 
-	it('ignores a second verified PIN while printing', async () => {
+	it('print() again after an error clears the error and prints', async () => {
 		const { testPrint, printLabels } = setup();
-		testPrint.open();
-		await Promise.all([testPrint.pinVerified(), testPrint.pinVerified()]);
-		expect(printLabels).toHaveBeenCalledOnce();
+		printLabels.mockResolvedValueOnce({ kind: 'error', message: 'x' });
+		await testPrint.print();
+		expect(testPrint.phase).toBe('error');
+		await testPrint.print();
+		expect(testPrint.error).toBe('');
+		expect(testPrint.phase).toBe('done');
+		expect(printLabels).toHaveBeenCalledTimes(2);
+	});
+
+	it('print() again while the printed status shows prints another label', async () => {
+		const { testPrint, printLabels } = setup();
+		await testPrint.print();
+		await testPrint.print();
+		expect(printLabels).toHaveBeenCalledTimes(2);
 	});
 
 	it('dismiss clears an error', async () => {
 		const { testPrint } = setup({ kind: 'error', message: 'x' });
-		testPrint.open();
-		await testPrint.pinVerified();
+		await testPrint.print();
 		testPrint.dismiss();
 		expect(testPrint.phase).toBe('idle');
 		expect(testPrint.error).toBe('');
-	});
-
-	it('wired to the staff PIN: a wrong PIN prints nothing, the right one prints once', async () => {
-		const { testPrint, printLabels } = setup();
-		const verify = vi
-			.fn<StaffPinEntryDeps['verify']>()
-			.mockResolvedValueOnce({ kind: 'wrong' })
-			.mockResolvedValueOnce({ kind: 'verified' });
-		const entry = new StaffPinEntry({
-			verify,
-			onverified: () => void testPrint.pinVerified(),
-			oncancel: () => testPrint.pinCancelled()
-		});
-		testPrint.open();
-
-		entry.pin = '111111';
-		await entry.confirm();
-		expect(entry.status.kind).toBe('wrong');
-		expect(printLabels).not.toHaveBeenCalled();
-		expect(testPrint.phase).toBe('pin');
-
-		entry.pin = '222222';
-		await entry.confirm();
-		await vi.waitFor(() => expect(printLabels).toHaveBeenCalledOnce());
 	});
 });

@@ -1,16 +1,18 @@
 import asyncio
 import io
 import os
+import socket
 import subprocess
 import sys
 import tempfile
 import threading
 import time
 import unittest
+from contextlib import ExitStack
 from pathlib import Path
 from types import SimpleNamespace
 from urllib.parse import parse_qs, urlparse
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from app import manager
 from app.escpos import CUT_SELF_FEED_MM, ESC_INIT, LABEL_LENGTH_MM, label_to_escpos
@@ -542,6 +544,20 @@ class KioskApiRouteTests(unittest.IsolatedAsyncioTestCase):
             (
                 "kiosk banners POST from a foreign Origin header",
                 "https://tent.example.go.th/api/v1/kiosk/banners",
+                "POST",
+                "https://attacker.example",
+                False,
+            ),
+            (
+                "same-origin kiosk device-info POST",
+                "https://tent.example.go.th/api/v1/kiosk/device-info",
+                "POST",
+                "https://tent.example.go.th",
+                True,
+            ),
+            (
+                "kiosk device-info POST from a foreign Origin header",
+                "https://tent.example.go.th/api/v1/kiosk/device-info",
                 "POST",
                 "https://attacker.example",
                 False,
@@ -1217,6 +1233,26 @@ class FakeHardwareRoute(FakePrintRoute):
         super().__init__(url="https://tent.example.go.th/api/v1/kiosk/hardware", **kwargs)
 
 
+def fake_network(*, hostname="kiosk-07", udp_ip="192.168.1.42", resolved=()):
+    """Stand in for the OS network calls so no test touches a real interface or DNS."""
+    udp = MagicMock()
+    udp.getsockname.return_value = (udp_ip, 54321)
+    infos = [(socket.AF_INET, socket.SOCK_STREAM, 6, "", (ip, 0)) for ip in resolved]
+    stack = ExitStack()
+    stack.enter_context(patch("socket.gethostname", return_value=hostname))
+    stack.enter_context(patch("socket.socket", return_value=udp))
+    stack.enter_context(patch("socket.getaddrinfo", return_value=infos))
+    return stack
+
+
+def broken_network():
+    stack = ExitStack()
+    stack.enter_context(patch("socket.gethostname", side_effect=OSError("no hostname")))
+    stack.enter_context(patch("socket.socket", side_effect=OSError("network is unreachable")))
+    stack.enter_context(patch("socket.getaddrinfo", side_effect=OSError("no resolver")))
+    return stack
+
+
 class KioskHardwareRouteTests(unittest.IsolatedAsyncioTestCase):
     async def test_answers_locally_with_the_machine_settings_and_no_credentials(self):
         client = manager.ScannerClientManager(
@@ -1298,6 +1334,86 @@ class KioskHardwareRouteTests(unittest.IsolatedAsyncioTestCase):
             await client._route_kiosk_api(route)
             self.assertEqual(route.fulfilled["status"], 404)
             self.assertNotIn("qr_input", route.fulfilled["body"])
+            self.assertIsNone(route.continued_headers)  # not forwarded: no server access log
+
+
+class FakeHostInfoRoute(FakePrintRoute):
+    def __init__(self, **kwargs):
+        super().__init__(url="https://tent.example.go.th/api/v1/kiosk/host-info", **kwargs)
+
+
+class KioskHostInfoRouteTests(unittest.IsolatedAsyncioTestCase):
+    async def test_answers_locally_with_the_hostname_and_lan_ips_outbound_first(self):
+        route = FakeHostInfoRoute()
+        resolved = ("127.0.1.1", "10.0.0.5", "192.168.1.42")
+
+        with fake_network(hostname="kiosk-07", udp_ip="192.168.1.42", resolved=resolved):
+            await manager.ScannerClientManager(valid_config())._route_kiosk_api(route)
+
+        self.assertIsNone(route.continued_headers)  # never forwarded to the server
+        self.assertEqual(route.fulfilled["status"], 200)
+        self.assertEqual(
+            route.fulfilled["body"],
+            {"hostname": "kiosk-07", "ips": ["192.168.1.42", "10.0.0.5"]},
+        )
+
+    async def test_response_is_not_cacheable_and_carries_no_credentials(self):
+        client = manager.ScannerClientManager(valid_config())
+        captured = {}
+
+        class CapturingRoute(FakeHostInfoRoute):
+            async def fulfill(self, *, status, content_type, headers, body):
+                captured.update(headers=headers, content_type=content_type)
+                await super().fulfill(status=status, content_type=content_type, headers=headers, body=body)
+
+        route = CapturingRoute()
+        with fake_network(resolved=("192.168.1.42",)):
+            await client._route_kiosk_api(route)
+
+        self.assertEqual(captured["headers"], {"cache-control": "no-store"})
+        self.assertEqual(captured["content_type"], "application/json")
+        body = manager.json.dumps(route.fulfilled["body"])
+        self.assertNotIn(client.device_id, body)
+        self.assertNotIn(client.device_secret, body)
+
+    async def test_still_answers_when_the_machine_cannot_find_its_ip(self):
+        route = FakeHostInfoRoute()
+
+        with broken_network():
+            await manager.ScannerClientManager(valid_config())._route_kiosk_api(route)
+
+        self.assertEqual(route.fulfilled["status"], 200)
+        self.assertEqual(route.fulfilled["body"], {"hostname": None, "ips": []})
+
+    async def test_still_answers_with_empty_info_when_the_lookup_is_too_slow(self):
+        route = FakeHostInfoRoute()
+        client = manager.ScannerClientManager(valid_config())
+
+        def hanging_lookup():
+            time.sleep(0.5)  # DNS that hangs while the WAN is down
+            return {"hostname": "kiosk-07", "ips": ["192.168.1.42"]}
+
+        started = time.monotonic()
+        with (
+            patch.object(manager, "HOST_INFO_TIMEOUT_S", 0.05),
+            patch.object(client, "_host_info", hanging_lookup),
+        ):
+            await client._route_kiosk_api(route)
+
+        self.assertLess(time.monotonic() - started, 0.4)
+        self.assertEqual(route.fulfilled["status"], 200)
+        self.assertEqual(route.fulfilled["body"], {"hostname": None, "ips": []})
+
+    async def test_foreign_origin_or_get_gets_a_local_404_and_never_reaches_the_server(self):
+        client = manager.ScannerClientManager(valid_config())
+        foreign = FakeHostInfoRoute(origin="https://attacker.example")
+        get = FakeHostInfoRoute()
+        get.request.method = "GET"
+
+        for route in (foreign, get):
+            await client._route_kiosk_api(route)
+            self.assertEqual(route.fulfilled["status"], 404)
+            self.assertNotIn("hostname", route.fulfilled["body"])
             self.assertIsNone(route.continued_headers)  # not forwarded: no server access log
 
 

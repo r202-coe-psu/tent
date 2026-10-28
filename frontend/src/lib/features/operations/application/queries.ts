@@ -1,6 +1,7 @@
 import {
 	createMutation,
 	createQuery,
+	keepPreviousData,
 	useQueryClient,
 	type QueryClient
 } from '@tanstack/svelte-query';
@@ -32,6 +33,8 @@ import type { MergeItemsInput } from '../domain/item-merge';
 import type { DonationBatchLine } from '../domain/donation-batch';
 import type { CycleCountSubmission } from '../domain/cycle-count';
 import { countPendingTransfers } from '../domain/transfer-pending';
+import { labelledLedgerRefIds, ledgerRefLabels } from '../domain/ledger-ref';
+import { digestRefIds, resolveLedgerRefLabels, type LedgerRefLabels } from './ledger-ref-labels';
 import { retryUnlessForbidden } from './transfer-retry';
 import { distributeBatch } from './distribute-batch';
 import type { BatchLinePlan } from '../domain/distribute-batch';
@@ -50,6 +53,8 @@ export const operationsKeys = {
 	donations: () => [...operationsKeys.all, 'donations', getShelterCode()] as const,
 	ledger: () => [...operationsKeys.all, 'ledger'] as const,
 	byItem: (id: string) => [...operationsKeys.ledger(), id] as const,
+	ledgerRefs: () => [...operationsKeys.all, 'ledgerRefs', getShelterCode()] as const,
+	ledgerRefsFor: (idsDigest: string) => [...operationsKeys.ledgerRefs(), idsDigest] as const,
 	balance: () => [...operationsKeys.all, 'balance', getShelterCode()] as const,
 	donationSlots: () => [...operationsKeys.all, 'donationSlots', getShelterCode()] as const,
 	transfers: () => [...operationsKeys.all, 'transfers'] as const,
@@ -159,6 +164,32 @@ export const useLedgerByItem = (itemId: () => string | undefined) =>
 		queryFn: () => operationsRepository().listLedgerByItem(itemId() ?? ''),
 		enabled: !!itemId()
 	}));
+
+/**
+ * Readable labels for ledger `ref_id`s (#811); ids without one fall back to `shortLedgerRef`.
+ * Keyed on a digest of the ids, and ids an earlier key already resolved come from the cache.
+ */
+export const useLedgerRefLabels = (refIds: () => readonly string[]) => {
+	const queryClient = useQueryClient();
+	return createQuery(() => {
+		const ids = labelledLedgerRefIds(refIds());
+		const shelterKey = operationsKeys.ledgerRefs();
+		return {
+			queryKey: operationsKeys.ledgerRefsFor(digestRefIds(ids)),
+			queryFn: () =>
+				resolveLedgerRefLabels(
+					ids,
+					queryClient
+						.getQueriesData<LedgerRefLabels>({ queryKey: shelterKey })
+						.map(([, labels]) => labels),
+					async (missing) =>
+						ledgerRefLabels(await operationsRepository().listLedgerRefDocs(missing))
+				),
+			enabled: ids.length > 0,
+			placeholderData: keepPreviousData
+		};
+	});
+};
 
 export const useStockBalance = () =>
 	createQuery(() => ({
