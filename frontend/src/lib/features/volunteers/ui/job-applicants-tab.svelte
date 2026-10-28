@@ -45,6 +45,7 @@
 		useSkillOptions,
 		useVolunteers
 	} from '../application/queries';
+	import { SvelteDate } from 'svelte/reactivity';
 
 	let { job }: { job: Job } = $props();
 
@@ -58,6 +59,12 @@
 	);
 	const assignments = $derived(assignmentsQuery.data ?? []);
 	const today = $derived(todayDateString());
+	// #885 — "รอยืนยันการเข้างาน" turns on as time passes, so the clock ticks every minute.
+	const now = new SvelteDate();
+	$effect(() => {
+		const timer = setInterval(() => now.setTime(Date.now()), 60_000);
+		return () => clearInterval(timer);
+	});
 	const volunteerById = $derived(new Map((volunteersQuery.data ?? []).map((v) => [v._id, v])));
 	const board = $derived(
 		buildApplicantBoard({
@@ -116,7 +123,7 @@
 			assignments,
 			volunteers: volunteerById,
 			today,
-			now: new Date()
+			now
 		})
 	);
 	const viewPendingShifts = $derived(view.pending.reduce((n, g) => n + g.applications.length, 0));
