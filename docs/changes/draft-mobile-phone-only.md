@@ -12,13 +12,15 @@ affects:
   - docs/data/schema.md §6 `_users.phone`, §2.8 `volunteer.phone`, evacuee `phone`
   - docs/changes/01-core/CR-202-account-contact-phone.md (status → superseded)
   - docs/changes/00-baseline/CR-148-pre-register-validation-and-fields.md FR-11
-  - docs/changes/14-kiosk/CR-151-kiosk-pre-registration-check-in.md FR-KPC-51, E-14
+  - docs/changes/14-kiosk/CR-151-kiosk-pre-registration-check-in.md FR-KPC-51, FR-KPC-53, E-14
+  - "ฝั่งบริจาค, นำเข้า Excel, `emergency_contact.phone` (spec ติดตามใน #1001): docs/changes/04-donation/CR-173-donation-track-by-phone.md FR-1, docs/data/schema.md §2.3 `donation.donor.phone`, CR-055 (walk-in donor ตาม #981)"
   - docs/changes/10-eoc/CR-154-m2-partner-booking-residency.md FR-12
   - docs/changes/10-eoc/CR-169-ext-008-multi-cid-booking.md FR-2
   - docs/data/api-contract.md (validation ของ `phone` ใน external bookings)
   - ไม่ bump `schema_v` (ไม่เปลี่ยนรูปร่างเอกสาร)
-  - "ส่วนจิตอาสา (implement ใน PR #984): frontend/src/lib/utils/volunteer-phone.ts, volunteers (walk-in, แก้ไขโปรไฟล์, volunteer-card, volunteer-access), volunteer-portal (`phoneField`), quick apply, BFF /api/public/v1/volunteer/apply + /preflight, volunteers/server/public-application.ts"
-  - "ส่วนที่เหลือ (implement ใน #991): users, me, server/user-service.ts, people/registration, public-register, routes/api/public/v1/registrations, kiosk/domain/phone.ts, public-portal/domain/search-input.ts, db/model.ts, backend/apiapp/utils/search_query.py, backend/apiapp/modules/thirdparty_bookings"
+  - "กฎกลาง: frontend/src/lib/db/model.ts `normalizeThaiPhone` + `thaiMobilePhoneSchema` (#981), backend/apiapp/utils/masking.py และ worker/src/worker/masking.py `normalize_phone`"
+  - "ส่วนจิตอาสา (implement ใน PR #984): frontend/src/lib/utils/volunteer-phone.ts (ใช้ `normalizeThaiPhone` แล้ว re-export `thaiMobilePhoneSchema` เมื่อ #981 merge), volunteers (walk-in, แก้ไขโปรไฟล์, volunteer-card, volunteer-access), volunteer-portal (`phoneField`), quick apply, BFF /api/public/v1/volunteer/apply + /preflight, volunteers/server/public-application.ts"
+  - "ส่วนที่เหลือ (implement ใน #991): users, me, server/user-service.ts, people/domain/registration-validation.ts, people/domain/unified-registration.ts, people/ui/registration/, people-import/domain/import-row.ts, people/domain/people.ts (`emergency_contact.phone`), public-register, routes/api/public/v1/registrations, kiosk/domain/phone.ts, public-portal/domain/search-input.ts, db/model.ts, backend/apiapp/utils/search_query.py, backend/apiapp/modules/thirdparty_bookings"
 ---
 
 # draft-mobile-phone-only — เบอร์มือถือ 10 หลักทั้งระบบ
@@ -26,13 +28,13 @@ affects:
 > **สรุป (TL;DR):**
 >
 > - **เปลี่ยนอะไร:** ทุกช่องที่กรอกหรือค้นด้วยเบอร์ในระบบต้องเป็นมือถือ 10 หลัก (`^0\d{9}$` หลัง normalize) เลิกรับเบอร์บ้าน 9 หลัก
-> - **ครอบคลุม:** จิตอาสา, บัญชีผู้ใช้ (ถอน CR-202), ผู้อพยพ, kiosk, ค้นหาครอบครัว, ค้นหาฝั่ง FastAPI, API ภายนอก
+> - **ครอบคลุม:** จิตอาสา, บัญชีผู้ใช้ (ถอน CR-202), ผู้อพยพ (รวมผู้ติดต่อฉุกเฉินและนำเข้า Excel), ผู้บริจาค, kiosk, ค้นหาครอบครัว, ค้นหาฝั่ง FastAPI, API ภายนอก
 > - **จิตอาสาเพิ่มเติม:**
 >   - walk-in เว้นเบอร์ได้
 >   - โปรไฟล์เดิมที่เป็นเบอร์ 9 หลักต้องแก้ก่อนออกสิทธิ์ใช้งานระบบ
 >   - สมัครด้วยเบอร์ของโปรไฟล์ที่ถูกปิดใช้งานได้ใบ `pending_review` (#882)
 > - **ข้อมูลเดิม:** ไม่ migrate เอกสารเดิมอ่านได้ แต่บันทึกฟอร์มใหม่ต้องแก้เป็นมือถือหรือเว้นว่าง
-> - **ภายนอก:** API ภายนอกปฏิเสธเบอร์ 9 หลัก ต้องแจ้งพาร์ทเนอร์ก่อน deploy · ไม่ bump `schema_v`
+> - **ภายนอก:** API ภายนอกปฏิเสธเบอร์ 9 หลัก แจ้งพาร์ทเนอร์แล้ว · ไม่ bump `schema_v`
 
 ---
 
@@ -53,13 +55,17 @@ affects:
 
 ### A. กฎกลาง (ทั้งระบบ)
 
-- **FR-1:** normalize ก่อน: ตัดช่องว่าง ขีด วงเล็บ และ `+66` / `66` → `0` (CR-148) แล้วต้องตรง `^0\d{9}$`
-  - ฝั่ง frontend ใช้ schema ตัวเดียว (`lib/utils/volunteer-phone.ts` ของ #951 ขยายเป็นกฎกลาง)
+- **FR-1:** normalize ก่อน: ตัดช่องว่าง ขีด จุด วงเล็บ และ `+66` / `66` → `0` (CR-148) แล้วต้องตรง `^0\d{9}$`
+  - ฝั่ง frontend กฎกลางคือ `normalizeThaiPhone` + `thaiMobilePhoneSchema` ใน `lib/db/model.ts` (#981) ทุกช่องใช้ตัวนี้ ห้ามมี normalize ของตัวเอง เพราะผลต้องตรงกันเพื่อให้ `phone_hash` ตรงกัน
+  - `lib/utils/volunteer-phone.ts` (#984) ใช้ `normalizeThaiPhone` แล้ว และเปลี่ยนเป็น re-export `thaiMobilePhoneSchema` (หรือลบทิ้ง) เมื่อ #981 merge
   - ฝั่ง FastAPI ใช้ regex จุดเดียว
+  - `normalize_phone` ของ backend และ worker (`masking.py` ทั้งสองไฟล์ ใช้คำนวณ `phone_hash`) ต้องให้ผลเดียวกับ `normalizeThaiPhone` ตอนนี้ยังไม่ตัด `.` และแปลง `66…` ต่างจากฝั่ง frontend แก้ใน #991
 - **FR-2 ช่องกรอกเบอร์ที่ใช้ FR-1:**
   - จิตอาสา: สมัคร portal, quick apply, walk-in, แก้ไขโปรไฟล์ และ BFF apply/preflight ตรวจซ้ำฝั่ง server
   - บัญชีผู้ใช้: ฟอร์มผู้ใช้, `/me`, `user-service`
   - เบอร์ผู้อพยพและหัวหน้าครัวเรือน: onsite, pre-register, BFF registrations
+  - `emergency_contact.phone` และนำเข้า Excel (`people-import`) เว้นว่างได้ (spec ติดตามใน #1001)
+  - ผู้บริจาค: walk-in donor (#981, CR-055) และค้นหาการบริจาคด้วยเบอร์ (CR-173 FR-1, `lookup-by-phone`) (spec ติดตามใน #1001)
   - kiosk: ลงทะเบียน walk-in
   - API ภายนอก (EXT bookings)
 - **FR-3:** ช่องที่เดิมเว้นได้ยังเว้นได้ เช่นเบอร์ผู้อพยพ "ไม่มี" → `null`
@@ -69,7 +75,7 @@ affects:
   - ค้นหาครอบครัวใน public portal
   - FastAPI search
 - **FR-5 บัญชีผู้ใช้:** `phone` เป็นมือถือ 10 หลักหรือ `null` ห้ามซ้ำข้ามบัญชี และห้ามชน `name` ของบัญชีอื่น (CR-105) ใช้ login และกู้รหัสได้
-- **FR-6 ข้อความ error:** ใช้ข้อความเดียวกันทั้งระบบ "เบอร์มือถือต้องเป็นตัวเลข 10 หลักขึ้นต้นด้วย 0" ส่วน API ภายนอกใช้รูปแบบ error เดิมของ API
+- **FR-6 ข้อความ error:** ใช้ข้อความเดียวกันทั้งระบบ "เบอร์โทรต้องเป็นตัวเลข 10 หลัก ขึ้นต้นด้วย 0" (`THAI_MOBILE_PHONE_MESSAGE` ของ #981) ส่วน API ภายนอกใช้รูปแบบ error เดิมของ API
 
 ### B. จิตอาสา (#951, #882)
 
@@ -98,19 +104,21 @@ affects:
 
 ### spec ที่ต้องแก้เมื่อ approve
 
-| เอกสาร                           | ก่อน                                            | หลัง                                                                                                                  |
-| -------------------------------- | ----------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| CR-202                           | approved                                        | superseded by CR นี้                                                                                                  |
-| schema.md §6 `_users.phone`      | มือถือ 10 หลักหรือเบอร์บ้าน 9 หลัก (CR-202)     | มือถือ 10 หลักหรือ `null`; unique ข้ามบัญชี (CR-105)                                                                  |
-| schema.md §2.8 `volunteer.phone` | เบอร์ติดต่อและระบุตัวตน; public apply ต้องมีค่า | มือถือ 10 หลัก; public apply ต้องมีค่า; walk-in / staff entry เว้นได้ (`null`); เอกสารเดิม 9 หลักต้องแก้ก่อนออกสิทธิ์ |
-| schema.md evacuee `phone`        | normalize เป็นตัวเลขล้วน                        | เพิ่ม "มือถือ 10 หลัก (CR นี้)"                                                                                       |
-| CR-148 FR-11                     | ค้นหาครอบครัว 9–10 หลัก                         | 10 หลัก                                                                                                               |
-| CR-151 FR-KPC-51, E-14           | kiosk 9–10 หลัก / รองรับเบอร์บ้าน               | 10 หลัก                                                                                                               |
-| CR-154 FR-12, CR-169 FR-2        | partner `phone` 9–10 หลัก                       | 10 หลัก                                                                                                               |
+| เอกสาร                                        | ก่อน                                                         | หลัง                                                                                                                  |
+| --------------------------------------------- | ------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------- |
+| CR-202                                        | approved                                                     | superseded by CR นี้                                                                                                  |
+| schema.md §6 `_users.phone`                   | มือถือ 10 หลักหรือเบอร์บ้าน 9 หลัก (CR-202)                  | มือถือ 10 หลักหรือ `null`; unique ข้ามบัญชี (CR-105)                                                                  |
+| schema.md §2.8 `volunteer.phone`              | เบอร์ติดต่อและระบุตัวตน; public apply ต้องมีค่า              | มือถือ 10 หลัก; public apply ต้องมีค่า; walk-in / staff entry เว้นได้ (`null`); เอกสารเดิม 9 หลักต้องแก้ก่อนออกสิทธิ์ |
+| schema.md evacuee `phone`                     | normalize เป็นตัวเลขล้วน                                     | เพิ่ม "มือถือ 10 หลัก (CR นี้)"                                                                                       |
+| CR-148 FR-11                                  | ค้นหาครอบครัว 9–10 หลัก                                      | 10 หลัก                                                                                                               |
+| CR-151 FR-KPC-51, FR-KPC-53, E-14             | kiosk 9–10 หลัก / รองรับเบอร์บ้าน / server ตรวจ `^0\d{8,9}$` | 10 หลัก / server ตรวจ `^0\d{9}$`                                                                                      |
+| CR-173 FR-1 (#1001)                           | มือถือ 10 หลักหรือเบอร์บ้าน 9 หลัก                           | 10 หลัก                                                                                                               |
+| schema.md §2.3 `donation.donor.phone` (#1001) | ไม่ระบุรูปแบบ                                                | มือถือ 10 หลักหรือ `null`                                                                                             |
+| CR-154 FR-12, CR-169 FR-2                     | partner `phone` 9–10 หลัก                                    | 10 หลัก                                                                                                               |
 
 ## Acceptance
 
-- **AC-1:** ทุกจุดใน FR-2 / FR-4 ปฏิเสธ `022222222` และ `02-222-2222` ส่วน `081-234-5678` และ `+66812345678` ผ่าน และเก็บเป็น `0812345678`
+- **AC-1:** ทุกจุดใน FR-2 / FR-4 ปฏิเสธ `022222222` และ `02-222-2222` ส่วน `081-234-5678`, `081.234.5678` และ `+66812345678` ผ่าน เก็บเป็น `0812345678` และได้ `phone_hash` เดียวกัน
 - **AC-2:** walk-in จิตอาสาเว้นเบอร์ได้ (`null`) แต่ "ไม่มี" ไม่ผ่าน ผู้อพยพที่ไม่มีเบอร์ยังลงทะเบียนได้
 - **AC-3:** โปรไฟล์จิตอาสาเบอร์ 9 หลักเดิมมีป้ายเตือนและออกสิทธิ์ไม่ได้ แก้เป็นมือถือแล้วออกสิทธิ์ได้ และ `phone_hash` เปลี่ยนตาม
 - **AC-4:** จิตอาสาที่ไม่มีเบอร์ออกสิทธิ์ได้ บัญชีไม่มีเบอร์
@@ -124,10 +132,11 @@ affects:
 - **code:**
   - ส่วนจิตอาสา (A + B) implement แล้วใน PR #984 (#951, #882)
   - ส่วนที่เหลือ implement ใน #991 หลัง CR นี้ approve และ #984 merge
+  - ฝั่งบริจาค นำเข้า Excel และ `emergency_contact.phone` ติดตาม spec ใน #1001 (walk-in donor แก้โค้ดใน #981)
 - **test:**
   - frontend unit test ทุก schema/route ที่แก้
   - backend `backend/tests/` (search_query, thirdparty_bookings)
-- **ภายนอก:** พาร์ทเนอร์ที่ใช้ API EXT bookings ต้องได้รับแจ้งก่อน deploy
+- **ภายนอก:** แจ้งพาร์ทเนอร์ที่ใช้ API EXT bookings แล้ว (Team Lead ยืนยันใน PR #994 2026-10-28)
 - **ข้อมูลเดิม:** ค้นด้วยเบอร์ 9 หลักไม่ได้ เจ้าหน้าที่ต้องแก้เบอร์เมื่อเจอ
 - **โปรไฟล์ซ้ำ:** คนที่เคยลงเบอร์บ้านแล้วสมัครใหม่ด้วยมือถือจะได้โปรไฟล์ใหม่ เพราะ `phone_hash` ต่างกัน (เกี่ยวกับ #694)
 
@@ -146,4 +155,10 @@ affects:
   - ไม่มีเบอร์ออกสิทธิ์ได้
 - 2026-10-28 — @net-lynx สั่งเลิกรับเบอร์บ้าน 9 หลักทั้งระบบ ผู้รับงานยืนยันขอบเขตทั้งระบบและไม่ migrate
 - 2026-10-28 — รวม `draft-volunteer-mobile-phone` (#951) เข้า CR นี้
-- 2026-10-28 — proposed ใน PR #994 รอ @Jackyzaz approve
+- 2026-10-28 — proposed ใน PR #994
+- 2026-10-28 — Soravit Sukkarn (Team Lead) ใน PR #981: เบอร์ผู้บริจาค walk-in ใช้มือถือ 10 หลัก (`thaiMobilePhoneSchema`)
+- 2026-10-28 — Soravit Sukkarn (Team Lead) ตัดสินใน review PR #994:
+  - กฎกลางฝั่ง frontend คือ `thaiMobilePhoneSchema` + `normalizeThaiPhone` ใน `lib/db/model.ts` ให้ `volunteer-phone.ts` re-export หรือลบ (FR-1)
+  - ฝั่งบริจาคอยู่ในขอบเขต "ทั้งระบบ" ติดตาม spec ใน #1001 (FR-2)
+  - `emergency_contact.phone` และนำเข้า Excel ใช้ FR-1 เว้นว่างได้ (FR-2)
+  - แจ้งพาร์ทเนอร์ API EXT bookings แล้ว (Impact)
