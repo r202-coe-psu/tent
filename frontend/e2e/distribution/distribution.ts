@@ -108,6 +108,7 @@ export interface SeededVolunteer extends SeededRecipient {
 export interface SeededTicket {
 	ticketId: string;
 	ticketNo: string;
+	type: 'food' | 'supplies';
 }
 
 export interface CreateDistributionScenarioOptions {
@@ -635,7 +636,7 @@ export async function seedTicket(
 			});
 		}
 	}
-	return { ticketId, ticketNo };
+	return { ticketId, ticketNo, type: options.type };
 }
 
 /**

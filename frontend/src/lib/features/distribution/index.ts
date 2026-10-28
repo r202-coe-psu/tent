@@ -422,11 +422,9 @@ export {
 export {
 	bulkReturnPoolHref,
 	deskFallbackForBackOfficeParams,
-	mergeOnsitePoolParam,
-	mergeOnsiteTabParam,
+	onsiteDeskHref,
 	parseOnsiteDistributionParams,
 	ONSITE_DISTRIBUTION_PATH,
-	type FrontlineTab,
 	type OnsiteDistributionHref
 } from './ui/model/pool-url-state';
 

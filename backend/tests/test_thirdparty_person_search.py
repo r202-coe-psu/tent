@@ -255,6 +255,30 @@ async def test_search_returns_masked_envelope_without_family(
     assert PASSPORT not in response.text
 
 
+async def test_zone_is_still_reported_to_partners(client: AsyncClient) -> None:
+    """CR-183 FR-18 removes the zone from the occupants search only; EXT-012 keeps it."""
+    await PublicShelter(
+        id="SH001",
+        shelter_code="SH001",
+        name="ศูนย์หนึ่ง",
+        status="closed",
+        location_status="closed",
+        is_active=True,
+        capacity=100,
+        raw_data={"zones": [{"code": "Z1", "name": "อาคาร 1"}]},
+        updated_at=datetime.now(UTC),
+    ).insert()
+    person = await _person()
+    person.care_zone = "Z1"
+    await person.save()
+
+    response = await _search(client, CID)
+    assert response.status_code == 200
+    item = response.json()["result"][0]
+    assert item["care_zone"] == "อาคาร 1"
+    assert item["zone_name"] == "อาคาร 1"
+
+
 async def test_no_match_is_200_with_empty_result(client: AsyncClient) -> None:
     response = await _search(client, CID)
     assert response.status_code == 200
