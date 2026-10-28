@@ -20,6 +20,7 @@ import {
 	completeDonationReceipt,
 	isNeedCutOff,
 	needCloseState,
+	matchesStatusFilter,
 	forceCutOffNeed,
 	editNeed,
 	buildCampaignNotes,
@@ -2548,4 +2549,25 @@ describe('batch receive in progress (CR-143 FR-B7 / FR-B9)', () => {
 			'donation:D1'
 		]);
 	});
+});
+
+describe('matchesStatusFilter', () => {
+	it.each([
+		// state, showOnHome, all, showing, hidden, reached, closed
+		['open', true, true, true, false, false, false],
+		['open', false, true, false, true, false, false],
+		['reached', true, true, false, false, true, false],
+		['reached', false, true, false, false, true, false],
+		['closed', true, true, false, false, false, true],
+		['closed', false, true, false, false, false, true]
+	] as const)(
+		'filters %s / showOnHome=%s',
+		(state, show, all, showing, hidden, reached, closed) => {
+			expect(matchesStatusFilter(state, show, 'all')).toBe(all);
+			expect(matchesStatusFilter(state, show, 'showing')).toBe(showing);
+			expect(matchesStatusFilter(state, show, 'hidden')).toBe(hidden);
+			expect(matchesStatusFilter(state, show, 'reached')).toBe(reached);
+			expect(matchesStatusFilter(state, show, 'closed')).toBe(closed);
+		}
+	);
 });

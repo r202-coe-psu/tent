@@ -183,12 +183,17 @@ describe('T-22 invariant — what is advertised has to be bookable', () => {
 	});
 });
 
-describe('a need the board shows as "ครบถ้วน" is exactly one the public side drops', () => {
+describe('with one campaign per item, a need the board shows as "ครบถ้วน" is one the public side drops', () => {
 	/**
 	 * The back-office badge reads `needCloseState`; the public projection drops a need whose
 	 * remaining is ≤ 0. For an open need in an open campaign the two have to agree, or the
 	 * board says "reached" while donors can still book it (or the reverse). Donations carry
 	 * a campaign_id and item_id — the domain both sides count the same way.
+	 *
+	 * Only for ONE campaign per item: the public side sums each campaign's remaining without
+	 * clamping, so a reached campaign's negative remaining can cancel another campaign's
+	 * shortfall and drop the item while that row is still `open`. Clamping is a separate fix
+	 * (TS, Python and needs-fixtures together).
 	 */
 	const fixture = (owed: string, needStatus: 'open' | 'closed' = 'open'): Case => ({
 		name: `owed ${owed}`,

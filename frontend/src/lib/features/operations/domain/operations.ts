@@ -1900,6 +1900,26 @@ export function needCloseState(
 	return qtyGte(addQty(onHandStock, reservedQty), qtyTarget) ? 'reached' : 'open';
 }
 
+/** The needs-board status filter. */
+export type NeedStatusFilter = 'all' | 'showing' | 'hidden' | 'reached' | 'closed';
+
+/**
+ * Which rows a status filter keeps. The buckets don't overlap: "showing"/"hidden" are
+ * the campaign toggle of rows still accepting donations; a reached or closed row is
+ * neither, it sits under its own state.
+ */
+export function matchesStatusFilter(
+	state: NeedCloseState,
+	showOnHome: boolean,
+	filter: NeedStatusFilter
+): boolean {
+	if (filter === 'showing') return state === 'open' && showOnHome;
+	if (filter === 'hidden') return state === 'open' && !showOnHome;
+	if (filter === 'reached') return state === 'reached';
+	if (filter === 'closed') return state === 'closed';
+	return true;
+}
+
 /**
  * Manual force cut-off of a single need (T-22 / CR-052 §1.6).
  *

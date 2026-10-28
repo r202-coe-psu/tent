@@ -2,7 +2,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { flushSync, mount, tick, unmount } from 'svelte';
 import type { DonationCampaign, NeedCloseState, NeedItem } from '$lib/features/operations';
-import NeedsBoardAdmin, { matchesStatusFilter } from './needs-board-admin.svelte';
+import NeedsBoardAdmin from './needs-board-admin.svelte';
 
 vi.mock('$lib/features/catalog', async (importOriginal) => ({
 	...(await importOriginal<typeof import('$lib/features/catalog')>()),
@@ -218,21 +218,18 @@ describe('needs board row state (#816 / #817)', () => {
 
 describe('status filter (#816)', () => {
 	it.each([
-		// state, showOnHome, all, showing, hidden, reached, closed
-		['open', true, true, true, false, false, false],
-		['open', false, true, false, true, false, false],
-		['reached', true, true, false, false, true, false],
-		['reached', false, true, false, false, true, false],
-		['closed', true, true, false, false, false, true],
-		['closed', false, true, false, false, false, true]
-	] as const)(
-		'filters %s / showOnHome=%s',
-		(state, show, all, showing, hidden, reached, closed) => {
-			expect(matchesStatusFilter(state, show, 'all')).toBe(all);
-			expect(matchesStatusFilter(state, show, 'showing')).toBe(showing);
-			expect(matchesStatusFilter(state, show, 'hidden')).toBe(hidden);
-			expect(matchesStatusFilter(state, show, 'reached')).toBe(reached);
-			expect(matchesStatusFilter(state, show, 'closed')).toBe(closed);
+		['สถานะ', 'ทั้งหมด'],
+		['เรียง', 'ความคืบหน้าน้อยไปมาก']
+	])(
+		'puts the "%s" label above its select and only the value in the button',
+		async (label, value) => {
+			await render([]);
+			const labelEl = [...document.body.querySelectorAll('label')].find((l) => text(l) === label)!;
+			const trigger = document.getElementById(labelEl.htmlFor)!;
+			expect(trigger.tagName).toBe('BUTTON');
+			expect(text(trigger)).toBe(value);
+			// Named by the label and its own text, so the selected value is announced too.
+			expect(trigger.getAttribute('aria-labelledby')).toBe(`${labelEl.id} ${trigger.id}`);
 		}
 	);
 
@@ -245,8 +242,8 @@ describe('status filter (#816)', () => {
 			])
 		]);
 
-		const trigger = document.body.querySelector('[aria-label="กรองตามสถานะ"]')!;
-		expect(text(trigger)).toBe('สถานะ: ทั้งหมด');
+		const label = [...document.body.querySelectorAll('label')].find((l) => text(l) === 'สถานะ')!;
+		expect(text(document.getElementById(label.htmlFor)!)).toBe('ทั้งหมด');
 		expect(cards()).toHaveLength(3);
 	});
 });

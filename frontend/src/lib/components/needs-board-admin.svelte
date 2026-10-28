@@ -1,26 +1,3 @@
-<script lang="ts" module>
-	import type { NeedCloseState } from '$lib/features/operations';
-
-	export type NeedStatusFilter = 'all' | 'showing' | 'hidden' | 'reached' | 'closed';
-
-	/**
-	 * Which rows a status filter keeps. The buckets don't overlap: "showing"/"hidden" are
-	 * the campaign toggle of rows still accepting donations; a reached or closed row is
-	 * neither, it sits under its own state (#816).
-	 */
-	export function matchesStatusFilter(
-		state: NeedCloseState,
-		showOnHome: boolean,
-		filter: NeedStatusFilter
-	): boolean {
-		if (filter === 'showing') return state === 'open' && showOnHome;
-		if (filter === 'hidden') return state === 'open' && !showOnHome;
-		if (filter === 'reached') return state === 'reached';
-		if (filter === 'closed') return state === 'closed';
-		return true;
-	}
-</script>
-
 <script lang="ts">
 	import Megaphone from '@lucide/svelte/icons/megaphone';
 	import Search from '@lucide/svelte/icons/search';
@@ -29,10 +6,18 @@
 	import { Badge } from '$lib/components/ui/badge/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
+	import { Label } from '$lib/components/ui/label/index.js';
 	import PaginationControls from '$lib/components/pagination-controls.svelte';
 	import * as Select from '$lib/components/ui/select/index.js';
 	import * as Table from '$lib/components/ui/table/index.js';
-	import { parseCampaignNotes, publicItemAggregate, type NeedItem } from '$lib/features/operations';
+	import {
+		matchesStatusFilter,
+		parseCampaignNotes,
+		publicItemAggregate,
+		type NeedCloseState,
+		type NeedItem,
+		type NeedStatusFilter
+	} from '$lib/features/operations';
 	import { addQty, formatQty, parseQty, qtyIsZero } from '$lib/utils/qty';
 	import { DEFAULT_ITEM_UNIT, formatUnit, useUnitsOfMeasure } from '$lib/features/catalog';
 	import { langState } from '$lib/states/i18n.svelte';
@@ -53,6 +38,10 @@
 		onEdit?: (item: NeedItem, itemId: string) => void;
 	} = $props();
 
+	const uid = $props.id();
+	const statusId = `${uid}-status`;
+	const sortId = `${uid}-sort`;
+
 	const unitsQuery = useUnitsOfMeasure();
 	const units = $derived(unitsQuery.data ?? []);
 
@@ -61,16 +50,16 @@
 	let sortOrder = $state<'progress_asc' | 'progress_desc' | 'name'>('progress_asc');
 
 	const STATUS_OPTIONS: { value: NeedStatusFilter; label: string }[] = [
-		{ value: 'all', label: 'สถานะ: ทั้งหมด' },
-		{ value: 'showing', label: 'สถานะ: กำลังโชว์บนหน้าเว็บ' },
-		{ value: 'hidden', label: 'สถานะ: ซ่อนจากหน้าเว็บ' },
-		{ value: 'reached', label: 'สถานะ: ครบถ้วน' },
-		{ value: 'closed', label: 'สถานะ: Force Cut-off' }
+		{ value: 'all', label: 'ทั้งหมด' },
+		{ value: 'showing', label: 'กำลังโชว์บนหน้าเว็บ' },
+		{ value: 'hidden', label: 'ซ่อนจากหน้าเว็บ' },
+		{ value: 'reached', label: 'ครบถ้วน' },
+		{ value: 'closed', label: 'Force Cut-off' }
 	];
 	const SORT_OPTIONS = [
-		{ value: 'progress_asc', label: 'เรียง: ความคืบหน้าน้อยไปมาก' },
-		{ value: 'progress_desc', label: 'เรียง: ความคืบหน้ามากไปน้อย' },
-		{ value: 'name', label: 'เรียง: ชื่อ ก-ฮ' }
+		{ value: 'progress_asc', label: 'ความคืบหน้าน้อยไปมาก' },
+		{ value: 'progress_desc', label: 'ความคืบหน้ามากไปน้อย' },
+		{ value: 'name', label: 'ชื่อ ก-ฮ' }
 	] as const;
 
 	const statusLabel = $derived(
@@ -221,7 +210,7 @@
 
 		<!-- Filter Bar -->
 		<div class="border-b border-border/60 bg-card p-4">
-			<div class="flex flex-col gap-3 md:flex-row md:items-center">
+			<div class="flex flex-col gap-3 md:flex-row md:items-end">
 				<!-- Search input -->
 				<div class="relative flex-1">
 					<Search
@@ -236,34 +225,51 @@
 				</div>
 
 				<!-- Filter dropdowns -->
-				<div class="flex flex-wrap items-center gap-2">
-					<Select.Root type="single" bind:value={statusFilter}>
-						<Select.Trigger
-							aria-label="กรองตามสถานะ"
-							class="h-9 rounded-xl text-xs data-[size=default]:h-9"
+				<div class="flex flex-wrap items-end gap-2">
+					<div class="space-y-1">
+						<Label
+							id="{statusId}-label"
+							for={statusId}
+							class="text-xs font-semibold text-slate-600"
 						>
-							{statusLabel}
-						</Select.Trigger>
-						<Select.Content>
-							{#each STATUS_OPTIONS as option (option.value)}
-								<Select.Item value={option.value} label={option.label} />
-							{/each}
-						</Select.Content>
-					</Select.Root>
+							สถานะ
+						</Label>
+						<Select.Root type="single" bind:value={statusFilter}>
+							<!-- Label + own text, so a screen reader also hears the selected value. -->
+							<Select.Trigger
+								id={statusId}
+								aria-labelledby="{statusId}-label {statusId}"
+								class="h-9 rounded-xl text-xs data-[size=default]:h-9"
+							>
+								{statusLabel}
+							</Select.Trigger>
+							<Select.Content>
+								{#each STATUS_OPTIONS as option (option.value)}
+									<Select.Item value={option.value} label={option.label} />
+								{/each}
+							</Select.Content>
+						</Select.Root>
+					</div>
 
-					<Select.Root type="single" bind:value={sortOrder}>
-						<Select.Trigger
-							aria-label="เรียงลำดับ"
-							class="h-9 rounded-xl text-xs data-[size=default]:h-9"
-						>
-							{sortLabel}
-						</Select.Trigger>
-						<Select.Content>
-							{#each SORT_OPTIONS as option (option.value)}
-								<Select.Item value={option.value} label={option.label} />
-							{/each}
-						</Select.Content>
-					</Select.Root>
+					<div class="space-y-1">
+						<Label id="{sortId}-label" for={sortId} class="text-xs font-semibold text-slate-600">
+							เรียง
+						</Label>
+						<Select.Root type="single" bind:value={sortOrder}>
+							<Select.Trigger
+								id={sortId}
+								aria-labelledby="{sortId}-label {sortId}"
+								class="h-9 rounded-xl text-xs data-[size=default]:h-9"
+							>
+								{sortLabel}
+							</Select.Trigger>
+							<Select.Content>
+								{#each SORT_OPTIONS as option (option.value)}
+									<Select.Item value={option.value} label={option.label} />
+								{/each}
+							</Select.Content>
+						</Select.Root>
+					</div>
 				</div>
 			</div>
 		</div>
