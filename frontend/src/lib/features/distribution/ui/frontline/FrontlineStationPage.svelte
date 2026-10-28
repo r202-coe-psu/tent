@@ -50,11 +50,17 @@
 	import * as Select from '$lib/components/ui/select/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
 
+	import type { FrontlineTab } from '../model/pool-url-state';
+
 	interface Props {
-		initialTab?: 'receive' | 'food' | 'supplies' | 'returns' | 'reconciliation';
+		initialTab?: FrontlineTab;
+		/** Bulk return pool to open on the returns tab (deep link). */
+		initialPoolId?: string | null;
+		/** Called when the open pool changes (select / close), e.g. to sync the URL. */
+		onSelectedPoolChange?: (poolId: string | null) => void;
 	}
 
-	let { initialTab = 'receive' }: Props = $props();
+	let { initialTab = 'receive', initialPoolId = null, onSelectedPoolChange }: Props = $props();
 
 	const currentShelterCode = $derived(shelterStore.selectedShelterCode ?? getShelterCode());
 
@@ -73,7 +79,7 @@
 	// activeTab is intentionally set once from the initialTab prop; user navigation controls it
 	// after mount. A closure breaks the Svelte reactivity chain so Svelte does not warn that
 	// only the initial prop value is captured.
-	let activeTab = $state<'receive' | 'food' | 'supplies' | 'returns' | 'reconciliation'>(
+	let activeTab = $state<FrontlineTab>(
 		(function () {
 			return initialTab;
 		})()
@@ -719,7 +725,11 @@
 			<LoanReturnCard shelterCode={currentShelterCode} />
 			<!-- Bulk return pools (#659): the desk adds / moves / voids entries; open / edit / cancel stay
 				 hidden (canManage). -->
-			<BulkReturnPoolBoard shelterCode={currentShelterCode ?? undefined} />
+			<BulkReturnPoolBoard
+				shelterCode={currentShelterCode ?? undefined}
+				{initialPoolId}
+				{onSelectedPoolChange}
+			/>
 		</div>
 	{:else if activeTab === 'reconciliation'}
 		<!-- TAB 5: Shift Reconciliation & Close Surface -->
