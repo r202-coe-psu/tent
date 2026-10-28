@@ -243,10 +243,16 @@ async function cancelLinkedAssignments(
 		}
 		result.matched++;
 		if (!['assigned', 'standby'].includes(String(assignment.status))) continue;
-		for (let attempt = 0; attempt < MAX_WRITE_RETRIES; attempt++) {
+		let settled = false;
+		for (let attempt = 0; attempt < MAX_WRITE_RETRIES && !settled; attempt++) {
 			const fresh = await getAsPublicWriter(dbName, assignment._id);
-			const doc = fresh.data as Doc | null;
-			if (fresh.status !== 200 || !doc || !['assigned', 'standby'].includes(String(doc.status))) {
+			// Any non-200 (404 included) throws so the application stays cancellable; a retry
+			// re-runs the lookup, where an assignment that was really deleted just drops out.
+			if (fresh.status !== 200 || !fresh.data) throw new TicketCancelError('WRITE_FAILED', 502);
+			const doc = fresh.data as Doc;
+			// Moved on concurrently (withdrawn / checked in): nothing left here to cancel.
+			if (!['assigned', 'standby'].includes(String(doc.status))) {
+				settled = true;
 				break;
 			}
 			const put = await putAsPublicWriter(dbName, assignment._id, {
@@ -257,8 +263,9 @@ async function cancelLinkedAssignments(
 			if (put.status === 409) continue;
 			if (put.status >= 400) throw new TicketCancelError('WRITE_FAILED', 502);
 			result.cancelled++;
-			break;
+			settled = true;
 		}
+		if (!settled) throw new TicketCancelError('WRITE_FAILED', 409);
 	}
 	return result;
 }

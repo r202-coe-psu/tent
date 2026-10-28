@@ -35,7 +35,11 @@ function match(selector: Record<string, unknown>) {
 	});
 }
 
-import { findAsPublicWriter, putAsPublicWriter } from '$lib/server/couch-public-writer';
+import {
+	findAsPublicWriter,
+	getAsPublicWriter,
+	putAsPublicWriter
+} from '$lib/server/couch-public-writer';
 import { cancelTicket, isTicketCancellable, TicketCancelError } from './public-ticket';
 
 const NOW = new Date('2026-10-27T03:00:00Z'); // 10:00 Bangkok
@@ -151,6 +155,73 @@ describe('cancelTicket', () => {
 		});
 		expect(putAsPublicWriter).not.toHaveBeenCalled();
 		expect(get('job_application:a1').status).toBe('confirmed');
+	});
+
+	it.each([
+		['500', { status: 500, data: null }],
+		['404 (deleted meanwhile)', { status: 404, data: null }]
+	])(
+		'a failed fresh assignment read (%s) is 502 and leaves the application, shift and quota alone',
+		async (_label, reply) => {
+			const realGet = vi.mocked(getAsPublicWriter).getMockImplementation()!;
+			vi.mocked(getAsPublicWriter).mockImplementation(async (d, id) =>
+				id === 'shift_assignment:x1' ? (reply as never) : realGet(d, id)
+			);
+			vi.mocked(putAsPublicWriter).mockClear();
+			try {
+				await expect(cancelTicket('APPTOKEN', NOW)).rejects.toMatchObject({
+					code: 'WRITE_FAILED',
+					httpStatus: 502
+				});
+			} finally {
+				vi.mocked(getAsPublicWriter).mockImplementation(realGet);
+			}
+			expect(putAsPublicWriter).not.toHaveBeenCalled();
+			expect(get('job_application:a1').status).toBe('confirmed');
+			expect(get('shift_assignment:x1').status).toBe('assigned');
+			expect(get('job:j1')).toMatchObject({ slots_confirmed: 1, slots_remaining: 0 });
+		}
+	);
+
+	it('an assignment PUT that keeps conflicting is 409, the application is never written', async () => {
+		const realPut = vi.mocked(putAsPublicWriter).getMockImplementation()!;
+		vi.mocked(putAsPublicWriter).mockImplementation(async (d, id, doc) =>
+			id === 'shift_assignment:x1' ? { status: 409, data: null } : realPut(d, id, doc)
+		);
+		vi.mocked(putAsPublicWriter).mockClear();
+		try {
+			await expect(cancelTicket('APPTOKEN', NOW)).rejects.toMatchObject({
+				code: 'WRITE_FAILED',
+				httpStatus: 409
+			});
+		} finally {
+			vi.mocked(putAsPublicWriter).mockImplementation(realPut);
+		}
+		expect(putAsPublicWriter).toHaveBeenCalledTimes(5);
+		expect(putAsPublicWriter).not.toHaveBeenCalledWith(
+			expect.anything(),
+			'job_application:a1',
+			expect.anything()
+		);
+		expect(get('job_application:a1').status).toBe('confirmed');
+		expect(get('shift_assignment:x1').status).toBe('assigned');
+		expect(get('job:j1')).toMatchObject({ slots_confirmed: 1, slots_remaining: 0 });
+	});
+
+	it('an assignment already cancelled concurrently is skipped, not retried or double-released', async () => {
+		const realGet = vi.mocked(getAsPublicWriter).getMockImplementation()!;
+		vi.mocked(getAsPublicWriter).mockImplementation(async (d, id) =>
+			id === 'shift_assignment:x1'
+				? { status: 200, data: { ...get('shift_assignment:x1'), status: 'cancelled' } }
+				: realGet(d, id)
+		);
+		try {
+			await cancelTicket('APPTOKEN', NOW);
+		} finally {
+			vi.mocked(getAsPublicWriter).mockImplementation(realGet);
+		}
+		expect(get('job_application:a1').status).toBe('cancelled');
+		expect(get('job:j1')).toMatchObject({ slots_confirmed: 1, slots_remaining: 0 });
 	});
 
 	it('the volunteer token follows the earliest cancellable application', async () => {
