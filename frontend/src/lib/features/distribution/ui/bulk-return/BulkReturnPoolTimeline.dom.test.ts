@@ -53,10 +53,10 @@ describe('pool timeline skipped docs', () => {
 	});
 
 	it('shows the banner with the id and a non-contradictory empty label when expanded', () => {
-		render({ skipped: [{ _id: 'x' }], expanded: true });
+		render({ skipped: [{ _id: 'bulk_return_entry:bad-1' }], expanded: true });
 
 		const banner = byId('bulk-return-timeline-skipped-docs');
-		expect(banner?.textContent).toContain('x');
+		expect(banner?.textContent).toContain('(bulk_return_entry:bad-1)');
 		expect(text()).toContain('ไม่มีประวัติที่แสดงได้');
 		expect(text()).not.toContain('ยังไม่มีประวัติ');
 	});
@@ -68,9 +68,11 @@ describe('pool timeline skipped docs', () => {
 			at: '2026-01-01T00:00:00.000Z',
 			by: 'staff'
 		};
-		render({ events: [opened], skipped: [{ _id: 'x' }], expanded: true });
+		render({ events: [opened], skipped: [{ _id: 'bulk_return_entry:bad-1' }], expanded: true });
 
-		expect(byId('bulk-return-timeline-skipped-docs')?.textContent).toContain('x');
+		expect(byId('bulk-return-timeline-skipped-docs')?.textContent).toContain(
+			'(bulk_return_entry:bad-1)'
+		);
 		expect(text()).toContain('เปิดกอง');
 	});
 
