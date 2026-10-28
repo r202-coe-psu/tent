@@ -8,6 +8,7 @@ import {
 	CLOSED_LOAN_WARNING_TEXT,
 	MISSING_LOAN_WARNING_TEXT,
 	RECEIVED_POOL_HIDE_AFTER_DAYS,
+	anyLoanRefsUnavailable,
 	getPoolStatusFilterLabel,
 	hasActivePoolFilters,
 	poolItemIds,
@@ -40,6 +41,7 @@ import {
 	returnerDisplayName,
 	buildReturnerNames,
 	returnerLabel,
+	rowNeedsAttention,
 	validatePoolName
 } from './bulk-return-pool-v3';
 
@@ -94,6 +96,7 @@ function makeRow(
 		snapshot_conflicts: [],
 		unresolved_refs: [],
 		closed_loan_refs: [],
+		loan_refs_unavailable: false,
 		is_empty: live.length === 0
 	};
 }
@@ -307,6 +310,27 @@ describe('pool filters (#659)', () => {
 			'o5',
 			's1'
 		]);
+	});
+
+	it('needsAttention keeps a pool whose only issue is unavailable loan refs', () => {
+		const degradedRow = {
+			...makeRow(makePool('o6')),
+			loan_refs_unavailable: true
+		} as unknown as BulkReturnPoolOverviewRow;
+		const out = filterPoolRows([...rows, degradedRow], { needsAttention: true });
+		expect(ids(out).sort()).toEqual(['o3', 'o6', 's1']);
+		expect(rowNeedsAttention(degradedRow)).toBe(true);
+		expect(rowNeedsAttention(makeRow(makePool('clean')))).toBe(false);
+	});
+
+	it('anyLoanRefsUnavailable is true only when some row is degraded', () => {
+		const degradedRow = {
+			...makeRow(makePool('o7')),
+			loan_refs_unavailable: true
+		} as unknown as BulkReturnPoolOverviewRow;
+		expect(anyLoanRefsUnavailable(rows)).toBe(false);
+		expect(anyLoanRefsUnavailable([])).toBe(false);
+		expect(anyLoanRefsUnavailable([...rows, degradedRow])).toBe(true);
 	});
 
 	it('needsAttention also keeps pools with closed-loan refs', () => {

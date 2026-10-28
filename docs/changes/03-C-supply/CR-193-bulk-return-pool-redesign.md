@@ -3,7 +3,7 @@ id: CR-193
 title: CR-193 — ออกแบบ bulk_return_pool ใหม่เป็น "กองรวมตอนรับของคืน" (pool header + entry/move/void event log)
 status: approved
 date: 2026-10-22
-updated: 2026-10-27
+updated: 2026-10-28
 requested_by: feedback ระบบคลัง & เบิกของ ข้อ 4–5 (GitHub #657, #658)
 decided_by: kong (decisions 2026-10-22 — https://github.com/r202-coe-psu/tent/pull/768#issuecomment-6339918664; approved 2026-10-25)
 layer: stable
@@ -17,6 +17,7 @@ affects:
   - frontend/src/lib/server/shelters.admin.ts / shelters/server/provisioner.ts / scripts/redeploy-access.ts / scripts/seed/registry-shelters.ts (deploy index)
   - frontend/src/lib/features/distribution/domain/food-supplies (bulk-return-pool / entry / entry-move / entry-void) และ distribution-log
   - (ข้อ 32–34 — kong approve 2026-10-27) docs/data/schema.md §2.31 invariants ข้อ 2–3 — แก้ให้ตรงแล้ว · application `bulk-return-pool-v3-{shared,void,move,lifecycle,add-entry,read,missed-loans}.ts` · domain `bulk-return-pool-{summary,overview,timeline}.ts` · UI หน้ากอง / คิวงาน / ฟอร์มรับของ / timeline · ข้อ 35 เป็นคำถามนอกขอบเขต PR นี้ ไม่มีโค้ด
+  - (ข้อ 36 — kong ตัดสิน 2026-10-28) #976: application `bulk-return-pool-v3-read.ts` (loan read degrade → `loan_refs_unavailable`) · domain `bulk-return-pool-overview.ts` (`loan_refs_unavailable`, `liveEntriesOf` / `liveLoanRefCount`) · application `query/read-queries.ts` + `$lib/db/query-client.ts` (overview re-checks at once while degraded — staleTime 0) · UI model `bulk-return-pool-v3.ts` / `bulk-return-work-queue.ts` (ตัวกรองบอร์ด/คิวงาน) · `BulkReturnPoolBoard.svelte` (banner/ป้าย) · จุดของฉัน (#977) · timeline หน้ากอง (#978) · คิวงานตาม role + redirect ลิงก์กอง (#980) — ไม่มี schema change
 ---
 
 # CR-193 — ออกแบบ bulk_return_pool ใหม่เป็นกองรวมตอนรับของคืน
@@ -320,7 +321,7 @@ D1–D5 ข้างบนยังมีผลตามเดิม (ปรั�
   สถานะที่ "ต้องติดตาม" อ้างตามปุ่มที่ `TicketActionPanel` แสดงให้แต่ละบทบาท
 - **ตัดสิน (ผู้เสนอ PR — Nekokun2004, 2026-10-27):** ไม่ทำตัวกรองวันที่ปล่อยของใน PR นี้ (ต้องเพิ่ม field ใหม่ = CR แยก) — คงตัวกรองตามวันที่สร้างตามที่ implement
 
-### 23. "ต้องจัดการ" ใน overview รวมยอดยืมที่ถูกปิดกลางทาง (เพิ่ม 2026-10-26)
+### 23. "ต้องจัดการ" ใน overview รวมยอดยืมที่ถูกปิดกลางทาง (เพิ่ม 2026-10-26) (แก้โดยข้อ 36.1)
 
 - **ตัดสิน:** overview ดึง loan ที่ทุกกองอ้างด้วยการอ่าน**ครั้งเดียว** (`DistributionLogRepository.getMany`, `allDocsByIds` ชุดละ 100)
   แล้วคำนวณ `closed_loan_refs` ต่อกองด้วยกฎเดียวกับข้อ 15 · "ต้องจัดการ" = มีรายการค้าง หรือรอซิงก์ หรือยอดยืมถูกปิดกลางทาง
@@ -343,7 +344,7 @@ D1–D5 ข้างบนยังมีผลตามเดิม (ปรั�
 
 #### ระยะ 2 — คิวงาน, ไทม์ไลน์, QR
 
-### 26. คิวงานตามบทบาท (เพิ่ม 2026-10-26)
+### 26. คิวงานตามบทบาท (เพิ่ม 2026-10-26) (แก้โดยข้อ 36.4)
 
 - **ตัดสิน:** บนบอร์ด (หลังบ้านและหน้างาน) จากข้อมูล overview เดิม ไม่ query เพิ่ม
   - คลัง / supply coordinator: "รอคลังตรวจรับ" — กองที่ส่งแล้ว เรียงเก่าสุดก่อน พร้อม "รอมาแล้ว n ชม./n วัน"
@@ -351,7 +352,7 @@ D1–D5 ข้างบนยังมีผลตามเดิม (ปรั�
   - distribution staff: "กองที่จุดของฉัน" (ข้อ 27)
   - ข้อความทั้งหมดอยู่ใน `WORK_QUEUE_COPY` (ยืนยันแล้ว)
 
-### 27. "จุดของฉัน" สำหรับ distribution staff (เพิ่ม 2026-10-26)
+### 27. "จุดของฉัน" สำหรับ distribution staff (เพิ่ม 2026-10-26) (แก้โดยข้อ 36.2, 36.4)
 
 - **ตัดสิน:** เจ้าหน้าที่เลือกจุดของตัวเองจาก**จุดเก็บของของศูนย์** (หรือ "ไม่ระบุจุดที่ตั้ง") จำใน localStorage ต่อเครื่องและศูนย์
   (`tent.distribution.myPoolPoint:{shelter}`) แล้วคิวแสดงกองที่เปิดรับที่จุดนั้น (`location_storage_point_id`) · ไม่มี field ใหม่ ไม่มี CR
@@ -364,7 +365,7 @@ D1–D5 ข้างบนยังมีผลตามเดิม (ปรั�
   เรียงตามเวลา ไม่จัดกลุ่ม (ยืนยันแล้ว) · อ่านด้วย `listForPool`
 - **ข้อจำกัด:** การแก้ชื่อ/จุดที่ตั้ง/หมายเหตุของกองไม่แสดง เพราะไม่ได้บันทึกประวัติ (มีแค่ `updated_at`) — ถ้าต้องการต้องเพิ่ม field = CR
 
-### 29. ลิงก์ (เพิ่ม 2026-10-26)
+### 29. ลิงก์ (เพิ่ม 2026-10-26) (ต่อโดยข้อ 36.4)
 
 - **ตัดสิน:**
   - deep link ไปกอง: `/back-office/distribution?view=bulk_pools&pool=<id>`
@@ -469,6 +470,59 @@ D1–D5 ข้างบนยังมีผลตามเดิม (ปรั�
 - **คำถาม:** (1) ต้องมี action นี้ไหม หรือยอมรับว่าแก้ได้แค่ยอดคลัง; (2) ถ้ามี — role ใด (ผู้ดูแลระบบ / ผู้จัดการศูนย์ / คลัง); (3) ทำได้ถึงเมื่อไหร่ (ก่อน/หลังตรวจรับ, มีกำหนดวันไหม);
   (4) ต้องผูกกับแถวปรับยอดคลังไหม
 - **ผลกระทบถ้าทำ:** เปลี่ยนกติกา role และ VDU ของ `distribution_log` (revert ตอนนี้อนุญาตเฉพาะ path void) — ต้องเป็น CR / ข้อใหม่ของตัวเอง
+
+### 36. คำตัดสินจาก review PR follow-up #976–#980 (kong ตัดสิน 2026-10-28)
+
+ข้อ 36 แก้/ต่อกติกา UI และคิวงานของข้อ 19, 23, 26–29 — **ไม่เพิ่ม field ไม่เปลี่ยน shape ไม่ bump `schema_v` ไม่แก้ VDU**
+(ค่าที่เกี่ยวข้องทั้งหมดคำนวณตอนอ่านหรือเก็บใน localStorage เดิม) · โค้ดของแต่ละข้อย่อยอยู่ใน PR ของข้อนั้น
+
+#### 36.1 overview อ่าน loan ไม่ได้ (#976)
+
+ที่มา: [คอมเมนต์ของ kong](https://github.com/r202-coe-psu/tent/pull/976#issuecomment-6464508260)
+
+- **ตัดสิน:** เมื่อ overview อ่าน loan ไม่ได้ (เครือข่าย) แถวของกองที่ไม่ถูกยกเลิก
+  และมีรายการที่ยังไม่ void อ้าง loan มี `loan_refs_unavailable: true` (แถวอื่นเป็น `false`)
+  - `loan_refs_unavailable` **คำนวณตอนอ่าน ไม่ใช่ field ที่บันทึก** — ไม่มี schema / `schema_v` change
+  - บอร์ดแสดง banner และป้าย "ตรวจยอดยืมไม่ได้" บนการ์ดกอง
+  - นับเป็น "ต้องจัดการ" ทั้งในตัวกรองบอร์ดและคิวงาน (เหตุผลที่แสดง: "ตรวจยอดยืมไม่ได้")
+  - แถบตัดการเชื่อมต่อสีแดงแสดงพร้อม banner นี้ได้
+  - ระหว่างที่มีแถว `loan_refs_unavailable` บอร์ดตรวจซ้ำทันทีเมื่อกลับมาที่หน้า/เชื่อมต่อใหม่ (staleTime 0) และปุ่ม "ลองใหม่" บน banner
+  - ถ้อยคำ banner / ป้ายผ่าน
+- **แก้:** ข้อ 23 (ซึ่งไม่ได้กำหนดพฤติกรรมเมื่ออ่าน loan ไม่ได้)
+- **โค้ด:** PR #976
+
+#### 36.2 "จุดของฉัน" ที่จุดเก็บถูกลบแล้ว (#977)
+
+ที่มา: [คอมเมนต์ของ kong](https://github.com/r202-coe-psu/tent/pull/977#issuecomment-6464602448)
+
+- **ตัดสิน:** ถ้า "จุดของฉัน" ที่จำไว้ชี้ไปจุดเก็บที่ถูกลบแล้ว ให้ช่องเลือกกลับเป็น placeholder และล้างค่าที่จำไว้
+  (`tent.distribution.myPoolPoint:{shelter}`)
+  - ตัดสินหลังโหลดรายการจุดเก็บสำเร็จเท่านั้น — ระหว่างโหลดหรือโหลดไม่สำเร็จไม่ล้างค่า
+- **แก้:** ข้อ 27
+- **โค้ด:** PR #977
+
+#### 36.3 timeline หน้ากอง (#978)
+
+ที่มา: [คอมเมนต์ของ kong](https://github.com/r202-coe-psu/tent/pull/978#issuecomment-6464670468)
+
+- **ตัดสิน:**
+  - ถ้อยคำ timeline เรื่องข้ามเอกสารที่ผิดรูปใช้ได้
+  - หน้ากองไม่แสดง banner ใน timeline เมื่อทุก id อยู่ใน banner ระดับศูนย์แล้ว — ป้าย "ข้าม N รายการ" ยังแสดงตามเดิม
+  - ไม่เพิ่มข้อความ action ที่ถูกระงับ
+- **ต่อ:** ข้อ 19 (เอกสารผิดรูป) และข้อ 28 (timeline)
+- **โค้ด:** PR #978
+
+#### 36.4 คิวงานตาม role และ redirect ลิงก์กอง (#980)
+
+ที่มา: [คอมเมนต์ของ kong](https://github.com/r202-coe-psu/tent/pull/980#issuecomment-6465023600) + การยืนยันของผู้เสนอ PR
+
+- **ตัดสิน — คิวงาน:**
+  - system admin / shelter manager เห็นคิวทั้ง 3: "รอคลังตรวจรับ", "ต้องจัดการ", "กองที่จุดของฉัน"
+  - role อื่นได้คิวรวมตามทุก role ที่ถือ (คลัง → "รอคลังตรวจรับ", distribution staff → "กองที่จุดของฉัน")
+- **ตัดสิน — ลิงก์กอง:** distribution staff ที่เข้าหลังบ้านไม่ได้ แต่เปิดลิงก์กอง
+  `/back-office/distribution?view=bulk_pools&pool=<id>` ให้พาไป `/onsite/distribution?tab=returns&pool=<id>` และเปิดกองนั้น (แทนการพาไป `/portal`)
+- **แก้:** ข้อ 26 และข้อ 27 (คิวตาม role) · **ต่อ:** ข้อ 29 (deep link)
+- **โค้ด:** PR #980
 
 ### สิ่งที่ encode แล้ว
 
@@ -603,3 +657,8 @@ VDU อ่านเอกสารอื่นไม่ได้ — กติ�
   FR-33.7 ทางเขียน fail closed เมื่ออ่านกองที่อ้างถึงไม่ได้ · D1 ขั้น 2 แก้ (ไม่ได้อ่าน view) · **เปิดข้อ 35** คำถามเปิด loan กลับ ให้ kong ตัดสินแยก
 - 2026-10-27 — kong approve ข้อ 32–34
 - 2026-10-27 — คำถามข้อ 19, 21, 22, 24, 27 ตัดสินโดยผู้เสนอ PR (Nekokun2004) ตามที่ implement; ข้อ 35 แยกออกนอก PR นี้ (ยังไม่ตัดสิน)
+- 2026-10-28 — kong ตัดสินข้อ 36 จาก review PR follow-up #976–#980: 36.1 ([#976](https://github.com/r202-coe-psu/tent/pull/976#issuecomment-6464508260)) overview อ่าน loan ไม่ได้ → `loan_refs_unavailable` (คำนวณตอนอ่าน) + banner/ป้าย + นับเป็น "ต้องจัดการ" (แก้ข้อ 23) ·
+  36.2 ([#977](https://github.com/r202-coe-psu/tent/pull/977#issuecomment-6464602448)) "จุดของฉัน" ที่จุดเก็บถูกลบ → placeholder + ล้างค่าที่จำไว้ (แก้ข้อ 27) ·
+  36.3 ([#978](https://github.com/r202-coe-psu/tent/pull/978#issuecomment-6464670468)) timeline ไม่ซ้ำ banner ระดับศูนย์ (ต่อข้อ 19/28) ·
+  36.4 ([#980](https://github.com/r202-coe-psu/tent/pull/980#issuecomment-6465023600)) คิวงานตามทุก role ที่ถือ + redirect ลิงก์กองของ distribution staff ไป `/onsite/distribution` (แก้ข้อ 26/27, ต่อข้อ 29) ·
+  ไม่เปลี่ยน shape/`schema_v`/VDU
