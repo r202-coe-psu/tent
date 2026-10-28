@@ -257,7 +257,7 @@ describe('requireDistributionDesk (Station 4 route guard)', () => {
 });
 
 describe('requireWarehouseAccess desk fallback (bulk pool links)', () => {
-	const deskFallback: DeskFallbackHref = '/onsite/distribution?tab=returns&pool=p1';
+	const deskFallback: DeskFallbackHref = '/onsite/distribution?mode=supplies&tab=returns&pool=p1';
 
 	async function outcome(roles: string[], fallback?: DeskFallbackHref | null) {
 		mocks.user = { roles };

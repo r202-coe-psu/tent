@@ -170,6 +170,43 @@ describe('BFF Transfer List and Create Endpoints', () => {
 			expect(data).toEqual(mockTransfers);
 			expect(mockList).toHaveBeenCalledWith({ status: 'requested' });
 		});
+
+		it('passes repeated id params through as an ids filter (#811)', async () => {
+			vi.mocked(requireShelterScopeOrSA).mockResolvedValue({
+				name: 'ws_user',
+				roles: ['warehouse_staff', 'shelter:SH001'],
+				isSA: false,
+				shelterCode: 'SH001'
+			});
+			mockList.mockResolvedValue([]);
+			const event = createMockEvent();
+			event.url.searchParams.append('id', 'stock_transfer:A');
+			event.url.searchParams.append('id', 'stock_transfer:B');
+
+			const res = await GET(event);
+
+			expect(res.status).toBe(200);
+			expect(mockList).toHaveBeenCalledWith({
+				status: undefined,
+				ids: ['stock_transfer:A', 'stock_transfer:B']
+			});
+		});
+
+		it('rejects more id params than one request may name', async () => {
+			vi.mocked(requireShelterScopeOrSA).mockResolvedValue({
+				name: 'ws_user',
+				roles: ['warehouse_staff', 'shelter:SH001'],
+				isSA: false,
+				shelterCode: 'SH001'
+			});
+			const event = createMockEvent();
+			for (let i = 0; i < 51; i++) event.url.searchParams.append('id', `stock_transfer:${i}`);
+
+			const res = await GET(event);
+
+			expect(res.status).toBe(400);
+			expect(mockList).not.toHaveBeenCalled();
+		});
 	});
 
 	describe('POST /api/back-office/transfer', () => {

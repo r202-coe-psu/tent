@@ -599,7 +599,7 @@ type RosterPerson = {
 	nickname?: string | null;
 };
 
-/** Returner id → display name from the shelter rosters (same wording as RecipientName). */
+/** Returner id → display name from the shelter rosters (volunteers prefixed "จิตอาสา "). */
 export function buildReturnerNames(
 	evacuees: readonly RosterPerson[],
 	volunteers: readonly RosterPerson[]

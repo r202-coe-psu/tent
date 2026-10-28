@@ -417,17 +417,12 @@ export {
 
 /**
  * Bulk return pool links: back-office deep link + fallback to the desk, and the Distribution
- * Desk (`/onsite/distribution`) `?tab=` / `?pool=` URL helpers.
+ * Desk (`/onsite/distribution`) `?mode=&tab=[&pool=]` URL parser.
  */
 export {
 	bulkReturnPoolHref,
 	deskFallbackForBackOfficeParams,
-	mergeOnsitePoolParam,
-	mergeOnsiteTabParam,
-	parseOnsiteDistributionParams,
-	ONSITE_DISTRIBUTION_PATH,
-	type FrontlineTab,
-	type OnsiteDistributionHref
+	parseOnsiteDistributionParams
 } from './ui/model/pool-url-state';
 
 export {

@@ -214,18 +214,17 @@ describe('provisionShelter seeding', () => {
 		);
 	}
 
+	// Stateful store so PUTs are readable back: a seed write that succeeds must be
+	// observable, otherwise the test could pass for the wrong reason.
+	let docs: Map<string, unknown>;
+
 	beforeEach(() => {
+		docs = new Map<string, unknown>();
 		adminRawMock.mockReset();
 		deployRegistryDesignMock.mockReset().mockResolvedValue({ status: 201, updated: true });
 		findMasterByNameMock.mockReset().mockResolvedValue(null);
 		findMasterByCodeMock.mockReset().mockResolvedValue(null);
 		mergeShelterSecurityMock.mockReset().mockResolvedValue(undefined);
-	});
-
-	it('creates a shelter without writing evacuee docs or seed:* steps', async () => {
-		// Stateful store so PUTs are readable back: a seed write that succeeds must be
-		// observable, otherwise the test could pass for the wrong reason.
-		const docs = new Map<string, unknown>();
 		adminRawMock.mockImplementation(async (path: string, method: string, body?: unknown) => {
 			if (method === 'GET' && path === '/catalog') {
 				return { status: 200, data: { db_name: 'catalog' } };
@@ -248,7 +247,15 @@ describe('provisionShelter seeding', () => {
 			}
 			return { status: 201, data: { ok: true } };
 		});
+	});
 
+	function writtenMaster(): Record<string, unknown> {
+		const entry = [...docs].find(([key]) => key.startsWith('/registry/shelter:'));
+		if (!entry) throw new Error('no registry master was written');
+		return entry[1] as Record<string, unknown>;
+	}
+
+	it('creates a shelter without writing evacuee docs or seed:* steps', async () => {
 		const result = await provisionShelter(
 			{ name: 'ศูนย์ทดสอบ' } as Parameters<typeof provisionShelter>[0],
 			'SH001'
@@ -261,5 +268,27 @@ describe('provisionShelter seeding', () => {
 			.map(([path, method]) => `${method} ${path}`);
 		expect(evacueeWrites).toEqual([]);
 		expect(result.steps.filter((step) => step.step.startsWith('seed:'))).toEqual([]);
+	});
+
+	it('stamps closed_at when a shelter is created already closed (CR-183 FR-14)', async () => {
+		await provisionShelter(
+			{ name: 'ศูนย์ปิด', operation_status: 'closed' } as Parameters<typeof provisionShelter>[0],
+			'SH002'
+		);
+
+		expect(writtenMaster().closed_at).toEqual(expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/));
+	});
+
+	it('ignores a client closed_at on create', async () => {
+		await provisionShelter(
+			{
+				name: 'ศูนย์เปิด',
+				operation_status: 'active',
+				closed_at: '2020-01-01T00:00:00.000Z'
+			} as Parameters<typeof provisionShelter>[0],
+			'SH003'
+		);
+
+		expect(writtenMaster().closed_at).toBeNull();
 	});
 });

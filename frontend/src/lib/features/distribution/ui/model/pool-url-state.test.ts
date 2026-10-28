@@ -3,15 +3,16 @@ import type { DeskFallbackHref } from '$lib/guards/auth';
 import {
 	bulkReturnPoolHref,
 	deskFallbackForBackOfficeParams,
-	mergeOnsitePoolParam,
-	mergeOnsiteTabParam,
 	mergePoolParams,
+	onsiteDeskHref,
 	onsiteReturnsHref,
 	parseOnsiteDistributionParams,
 	parsePoolParams,
 	ticketHref,
 	type OnsiteDistributionHref
 } from './pool-url-state';
+
+const parse = (qs: string) => parseOnsiteDistributionParams(new URLSearchParams(qs));
 
 describe('desk href type', () => {
 	it('keeps the desk href type in sync with the warehouse guard', () => {
@@ -20,120 +21,107 @@ describe('desk href type', () => {
 	});
 });
 
+describe('onsiteDeskHref', () => {
+	it('writes mode and tab without a pool', () => {
+		expect(onsiteDeskHref({ mode: 'food', tab: 'food' })).toBe(
+			'/onsite/distribution?mode=food&tab=food'
+		);
+		expect(onsiteDeskHref({ mode: 'supplies', tab: 'receive', pool: null })).toBe(
+			'/onsite/distribution?mode=supplies&tab=receive'
+		);
+	});
+
+	it('appends and encodes the pool on the returns tab', () => {
+		expect(onsiteDeskHref({ mode: 'supplies', tab: 'returns', pool: '01ABC' })).toBe(
+			'/onsite/distribution?mode=supplies&tab=returns&pool=01ABC'
+		);
+		expect(onsiteDeskHref({ mode: 'supplies', tab: 'returns', pool: 'a b&c' })).toBe(
+			'/onsite/distribution?mode=supplies&tab=returns&pool=a%20b%26c'
+		);
+	});
+
+	it('never writes a pool outside the returns tab', () => {
+		expect(onsiteDeskHref({ mode: 'supplies', tab: 'supplies', pool: 'x' })).toBe(
+			'/onsite/distribution?mode=supplies&tab=supplies'
+		);
+	});
+});
+
 describe('onsiteReturnsHref', () => {
-	it('builds the returns tab link without a pool', () => {
-		expect(onsiteReturnsHref(null)).toBe('/onsite/distribution?tab=returns');
+	it('builds the supplies-mode returns link without a pool', () => {
+		expect(onsiteReturnsHref(null)).toBe('/onsite/distribution?mode=supplies&tab=returns');
 	});
 
 	it('appends and encodes the pool id', () => {
-		expect(onsiteReturnsHref('01ABC')).toBe('/onsite/distribution?tab=returns&pool=01ABC');
-		expect(onsiteReturnsHref('a b&c')).toBe('/onsite/distribution?tab=returns&pool=a%20b%26c');
+		expect(onsiteReturnsHref('01ABC')).toBe(
+			'/onsite/distribution?mode=supplies&tab=returns&pool=01ABC'
+		);
+		expect(onsiteReturnsHref('a b&c')).toBe(
+			'/onsite/distribution?mode=supplies&tab=returns&pool=a%20b%26c'
+		);
 	});
 });
 
 describe('parseOnsiteDistributionParams', () => {
-	it('reads a valid tab and pool', () => {
-		expect(parseOnsiteDistributionParams(new URLSearchParams('tab=returns&pool=abc'))).toEqual({
+	it('reads a valid mode, tab and pool', () => {
+		expect(parse('mode=supplies&tab=returns&pool=abc')).toEqual({
+			mode: 'supplies',
 			tab: 'returns',
 			pool: 'abc'
 		});
-		expect(parseOnsiteDistributionParams(new URLSearchParams('tab=food'))).toEqual({
-			tab: 'food',
-			pool: null
-		});
+		expect(parse('mode=food&tab=receive')).toEqual({ mode: 'food', tab: 'receive', pool: null });
 	});
 
-	it('returns null for an unknown or missing tab', () => {
-		expect(parseOnsiteDistributionParams(new URLSearchParams('tab=nope'))).toEqual({
-			tab: null,
-			pool: null
-		});
-		expect(parseOnsiteDistributionParams(new URLSearchParams(''))).toEqual({
-			tab: null,
-			pool: null
-		});
+	it('returns null for unknown or missing values', () => {
+		expect(parse('tab=nope&mode=nope')).toEqual({ mode: null, tab: null, pool: null });
+		expect(parse('')).toEqual({ mode: null, tab: null, pool: null });
+	});
+
+	it('keeps a valid mode when there is no tab', () => {
+		expect(parse('mode=supplies')).toEqual({ mode: 'supplies', tab: null, pool: null });
 	});
 
 	it('trims the pool and treats blank as null', () => {
-		expect(
-			parseOnsiteDistributionParams(new URLSearchParams('tab=returns&pool=%20x%20')).pool
-		).toBe('x');
-		expect(parseOnsiteDistributionParams(new URLSearchParams('tab=returns&pool=%20')).pool).toBe(
-			null
-		);
+		expect(parse('tab=returns&pool=%20x%20').pool).toBe('x');
+		expect(parse('tab=returns&pool=%20').pool).toBe(null);
 	});
 
-	it('a pool without a valid tab implies the returns tab', () => {
-		expect(parseOnsiteDistributionParams(new URLSearchParams('pool=abc')).tab).toBe('returns');
-		expect(parseOnsiteDistributionParams(new URLSearchParams('tab=nope&pool=abc')).tab).toBe(
-			'returns'
-		);
-	});
-
-	it('a pool forces the returns tab even when another valid tab is given', () => {
-		expect(parseOnsiteDistributionParams(new URLSearchParams('tab=food&pool=x'))).toEqual({
+	it('a pool forces the returns tab and the supplies mode', () => {
+		expect(parse('pool=abc')).toEqual({ mode: 'supplies', tab: 'returns', pool: 'abc' });
+		expect(parse('tab=nope&pool=abc').tab).toBe('returns');
+		expect(parse('mode=food&tab=food&pool=x')).toEqual({
+			mode: 'supplies',
 			tab: 'returns',
 			pool: 'x'
 		});
 	});
-});
 
-describe('mergeOnsiteTabParam', () => {
-	it('sets tab and keeps other keys', () => {
-		const out = mergeOnsiteTabParam(new URLSearchParams('x=1'), 'food');
-		expect(out.get('x')).toBe('1');
-		expect(out.get('tab')).toBe('food');
+	it('a one-mode tab forces its mode over ?mode=', () => {
+		expect(parse('mode=food&tab=returns').mode).toBe('supplies');
+		expect(parse('mode=food&tab=supplies').mode).toBe('supplies');
+		expect(parse('mode=supplies&tab=food').mode).toBe('food');
+		expect(parse('tab=food').mode).toBe('food');
 	});
 
-	it('drops pool for a non-returns tab', () => {
-		const out = mergeOnsiteTabParam(new URLSearchParams('tab=returns&pool=x&y=2'), 'supplies');
-		expect(out.toString()).toBe('tab=supplies&y=2');
-	});
-
-	it('keeps pool for the returns tab', () => {
-		const out = mergeOnsiteTabParam(new URLSearchParams('tab=returns&pool=x'), 'returns');
-		expect(out.toString()).toBe('tab=returns&pool=x');
-	});
-});
-
-describe('mergeOnsitePoolParam', () => {
-	it('sets tab and pool and keeps other keys', () => {
-		const out = mergeOnsitePoolParam(new URLSearchParams('x=1'), 'p 1');
-		expect(out.get('x')).toBe('1');
-		expect(out.get('tab')).toBe('returns');
-		expect(out.get('pool')).toBe('p 1');
-	});
-
-	it('removes only pool when closed', () => {
-		const out = mergeOnsitePoolParam(new URLSearchParams('tab=returns&pool=x&y=2'), null);
-		expect(out.toString()).toBe('tab=returns&y=2');
-	});
-
-	it('keeps the returns tab when closing a pool opened without a tab', () => {
-		expect(mergeOnsitePoolParam(new URLSearchParams('pool=x'), null).toString()).toBe(
-			'tab=returns'
-		);
-	});
-
-	it('forces tab=returns when closing from another tab value', () => {
-		expect(mergeOnsitePoolParam(new URLSearchParams('tab=food&pool=x'), null).toString()).toBe(
-			'tab=returns'
-		);
+	it('a tab both modes have leaves the mode to ?mode=', () => {
+		expect(parse('mode=food&tab=reconciliation').mode).toBe('food');
+		expect(parse('mode=supplies&tab=receive').mode).toBe('supplies');
+		expect(parse('tab=receive').mode).toBeNull();
 	});
 });
 
 describe('deskFallbackForBackOfficeParams', () => {
-	it('maps a pool link to the desk returns tab', () => {
-		const expected = '/onsite/distribution?tab=returns&pool=x';
+	it('maps a pool link to the desk returns step in supplies mode', () => {
+		const expected = '/onsite/distribution?mode=supplies&tab=returns&pool=x';
 		expect(deskFallbackForBackOfficeParams(new URLSearchParams('view=bulk_pools&pool=x'))).toBe(
 			expected
 		);
 		expect(deskFallbackForBackOfficeParams(new URLSearchParams('pool=x'))).toBe(expected);
 	});
 
-	it('maps the pools view without a pool to the returns tab', () => {
+	it('maps the pools view without a pool to the returns step', () => {
 		expect(deskFallbackForBackOfficeParams(new URLSearchParams('view=bulk_pools'))).toBe(
-			'/onsite/distribution?tab=returns'
+			'/onsite/distribution?mode=supplies&tab=returns'
 		);
 	});
 

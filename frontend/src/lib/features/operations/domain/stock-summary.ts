@@ -3,6 +3,7 @@ import { calculateReorderLevel } from '$lib/features/supply/domain/threshold-cal
 import { qtyGt, qtyLte, addQty } from '$lib/utils/qty';
 import type { StockLedger, StockLotBalance } from './operations';
 import { lotStorageKey } from './lot-storage';
+import { expiryInstant } from './expiry-instant';
 import { isLotExpired, type LotPriorityItem } from './lot-priority';
 
 /** Days before expiry at which a lot counts as "expiring soon". */
@@ -58,7 +59,7 @@ export function summarizeItemStock(
 		let expiryStr: string | null = null;
 
 		if (lot.lot?.expiry) {
-			const parsed = Date.parse(lot.lot.expiry);
+			const parsed = expiryInstant(lot.lot.expiry);
 			if (!Number.isNaN(parsed)) {
 				expiryMs = parsed;
 				expiryStr = lot.lot.expiry;

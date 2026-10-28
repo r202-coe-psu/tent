@@ -131,7 +131,7 @@ test.describe('Tab 1 — confirm cargo arrival (plan §4.3)', { tag: DESK_TAGS }
 		});
 
 		await desk.goto();
-		await desk.openTab('receive');
+		await desk.openTab('receive', 'supplies');
 		const card = desk.receiveCard(ticket);
 		await expect(card).toContainText(item.name);
 		await expect(card).toContainText('กำลังนำส่ง');
@@ -190,14 +190,15 @@ test.describe('Tab 1 — confirm cargo arrival (plan §4.3)', { tag: DESK_TAGS }
 			lines: [{ item, allocatedQty: '5' }]
 		});
 
-		// The badge counts every IN_TRANSIT desk ticket in the shelter.
-		const waiting = await deskTicketCount('IN_TRANSIT');
+		// The badge counts every IN_TRANSIT desk ticket of the current mode in the shelter.
+		const waiting = await deskTicketCount('IN_TRANSIT', 'supplies');
 		await desk.goto();
+		await desk.switchMode('supplies');
 		await expect.poll(() => tabBadge(desk, 'receive', /รอรับ (\d+)/)).toBe(waiting);
 		await desk.receive(first);
 		await expect.poll(() => tabBadge(desk, 'receive', /รอรับ (\d+)/)).toBe(waiting - 1);
 
-		await desk.openTab('receive');
+		await desk.openTab('receive', 'supplies');
 		await expect(page.getByText(first.ticketNo, { exact: true })).toHaveCount(0);
 		await expect(desk.receiveCard(second)).toBeVisible();
 	});
@@ -217,7 +218,7 @@ test.describe('Tab 1 — confirm cargo arrival (plan §4.3)', { tag: DESK_TAGS }
 		const otherDesk = `${scenario.namespace}_other_desk`;
 
 		await desk.goto();
-		await desk.openTab('receive');
+		await desk.openTab('receive', 'supplies');
 		const card = desk.receiveCard(ticket);
 		await expect(card).toBeVisible();
 
@@ -317,7 +318,7 @@ test.describe('Tab 2 — ready-meal handover (plan §4.4)', { tag: DESK_TAGS }, 
 
 		await desk.itemButton(item.name).click();
 		await desk.chooseRecipientBySearch(recipient);
-		await expect(desk.alert('คนนี้รับอาหารมื้อนี้ไปแล้ววันนี้')).toBeVisible();
+		await expect(desk.alert(/รับมื้อนี้ไปแล้ว 1 ครั้ง รวม 1 กล่อง/)).toBeVisible();
 		await desk.foodSubmit().click();
 		await expect(desk.overrideDialog()).toHaveAccessibleName('แจ้งเตือน: ได้รับอาหารมื้อนี้แล้ว');
 		await desk.confirmOverride('รับแทนผู้ป่วยติดเตียง');
@@ -595,6 +596,36 @@ test.describe('Tab 2 — ready-meal handover (plan §4.4)', { tag: DESK_TAGS }, 
 		await desk.foodSubmit().click();
 		await expect(desk.toast(/บันทึกแจกอาหารสำเร็จ/)).toBeVisible();
 		await expectTicketLogs(ticket, item, 1, 'Handover after preflight retry');
+	});
+
+	// CR-200 FR-DFS-05: a mode switch drops the step's form, so typed input asks first.
+	test('T2-14 switching mode with a typed quantity asks first; cancelling keeps the input', async ({
+		page,
+		scenarioAs
+	}) => {
+		const scenario = await scenarioAs('food_mode_draft');
+		const { desk, item, recipient } = await foodSetup(page, scenario);
+		const qty = page.locator('#food-qty-input');
+
+		await desk.itemButton(item.name).click();
+		await desk.chooseRecipientBySearch(recipient);
+		await desk.fillFoodQty('2');
+		await desk.modeButton('supplies').click();
+		const confirm = page.getByRole('alertdialog', { name: /สลับไปโหมดสิ่งของ/ });
+		await expect(confirm).toBeVisible();
+		await confirm.getByRole('button', { name: 'อยู่โหมดเดิม' }).click();
+		await expect(confirm).toBeHidden();
+		await expect(desk.modeButton('food')).toHaveAttribute('aria-pressed', 'true');
+		await expect(qty).toHaveValue('2');
+
+		await desk.modeButton('supplies').click();
+		await confirm.getByRole('button', { name: 'สลับโหมด' }).click();
+		await expect(desk.modeButton('supplies')).toHaveAttribute('aria-pressed', 'true');
+
+		// Back at the defaults there is nothing to lose, so the switch is immediate.
+		await desk.modeButton('food').click();
+		await expect(desk.modeButton('food')).toHaveAttribute('aria-pressed', 'true');
+		await expect(confirm).toHaveCount(0);
 	});
 });
 

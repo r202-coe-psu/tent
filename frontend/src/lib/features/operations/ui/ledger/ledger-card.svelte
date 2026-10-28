@@ -33,7 +33,7 @@
 			{#if row.detail}
 				<div class="flex gap-1.5">
 					<dt class="shrink-0 text-slate-500">ที่มา/ปลายทาง</dt>
-					<dd class="break-words">
+					<dd class="min-w-0 [overflow-wrap:anywhere]">
 						{#if row.refHref}
 							<a
 								href={resolve(row.refHref)}
@@ -51,12 +51,12 @@
 			{#if place}
 				<div class="flex gap-1.5">
 					<dt class="shrink-0 text-slate-500">ล็อต · จุดเก็บ</dt>
-					<dd>{place}</dd>
+					<dd class="min-w-0 [overflow-wrap:anywhere]">{place}</dd>
 				</div>
 			{/if}
 			<div class="flex gap-1.5">
 				<dt class="shrink-0 text-slate-500">ผู้บันทึก</dt>
-				<dd>{row.createdBy}</dd>
+				<dd class="min-w-0 [overflow-wrap:anywhere]">{row.createdBy}</dd>
 			</div>
 		</dl>
 	{/if}

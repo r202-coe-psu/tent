@@ -1,3 +1,11 @@
+import {
+	STATION_TABS,
+	isDeskMode,
+	modeOwningStep,
+	type DeskMode,
+	type StationTab
+} from './desk-mode';
+
 /** Query keys owned by the distribution back-office view switch / pool deep link. */
 export const POOL_PARAM_KEYS = ['view', 'pool'] as const;
 
@@ -51,53 +59,44 @@ export const ONSITE_DISTRIBUTION_PATH = '/onsite/distribution';
 export type OnsiteDistributionHref =
 	typeof ONSITE_DISTRIBUTION_PATH | `${typeof ONSITE_DISTRIBUTION_PATH}?${string}`;
 
-export const FRONTLINE_TABS = ['receive', 'food', 'supplies', 'returns', 'reconciliation'] as const;
+/**
+ * The whole desk URL, always written from the desk's state: `?mode=<m>&tab=<t>[&pool=<id>]`.
+ * `pool` appears only on the returns tab with a pool open.
+ */
+export function onsiteDeskHref(state: {
+	mode: DeskMode;
+	tab: StationTab;
+	pool?: string | null;
+}): OnsiteDistributionHref {
+	const base = `${ONSITE_DISTRIBUTION_PATH}?mode=${state.mode}&tab=${state.tab}` as const;
+	return state.tab === 'returns' && state.pool
+		? (`${base}&pool=${encodeURIComponent(state.pool)}` as const)
+		: base;
+}
 
-/** Tabs of the Distribution Desk (`?tab=`). */
-export type FrontlineTab = (typeof FRONTLINE_TABS)[number];
-
-/** Desk returns tab, with `pool` appended when a pool id is given. */
+/** Desk returns step (supplies mode), with `pool` appended when a pool id is given. */
 export function onsiteReturnsHref(poolId: string | null): OnsiteDistributionHref {
-	const base = `${ONSITE_DISTRIBUTION_PATH}?tab=returns` as const;
-	return poolId ? (`${base}&pool=${encodeURIComponent(poolId)}` as const) : base;
+	return onsiteDeskHref({ mode: 'supplies', tab: 'returns', pool: poolId });
 }
 
 /**
- * Read `tab` / `pool` on the Distribution Desk. Unknown `tab` is `null`; a blank `pool` is `null`.
- * A present `pool` always forces the `returns` tab (pools live only there), whatever `tab` says.
+ * Read `mode` / `tab` / `pool` on the Distribution Desk. Unknown values are `null`; a blank `pool`
+ * is `null`. A `pool` forces `tab=returns`, and a tab that exists in one mode only (`food`,
+ * `supplies`, `returns`) forces that mode, whatever `?mode=` says. Otherwise a valid `?mode=` wins.
  */
 export function parseOnsiteDistributionParams(params: URLSearchParams): {
-	tab: FrontlineTab | null;
+	mode: DeskMode | null;
+	tab: StationTab | null;
 	pool: string | null;
 } {
 	const rawTab = params.get('tab');
+	const rawMode = params.get('mode');
 	const pool = params.get('pool')?.trim() || null;
-	const tab = pool ? 'returns' : (FRONTLINE_TABS.find((t) => t === rawTab) ?? null);
-	return { tab, pool };
-}
-
-/** `base` with the desk `tab` set; `pool` is dropped unless `returns`. Other keys are kept. */
-export function mergeOnsiteTabParam(base: URLSearchParams, tab: FrontlineTab): URLSearchParams {
-	const out = new URLSearchParams(base);
-	out.set('tab', tab);
-	if (tab !== 'returns') out.delete('pool');
-	return out;
-}
-
-/**
- * `base` with the desk `pool` param set or removed; other keys are kept. `tab=returns` is always
- * set (pools only open/close from the returns tab) so closing a pool opened via `?pool=` alone
- * does not drop the tab and bounce the desk to `receive`.
- */
-export function mergeOnsitePoolParam(
-	base: URLSearchParams,
-	poolId: string | null
-): URLSearchParams {
-	const out = new URLSearchParams(base);
-	out.set('tab', 'returns');
-	if (poolId) out.set('pool', poolId);
-	else out.delete('pool');
-	return out;
+	const tab: StationTab | null = pool
+		? 'returns'
+		: (STATION_TABS.find((t) => t === rawTab) ?? null);
+	const mode = (tab ? modeOwningStep(tab) : null) ?? (isDeskMode(rawMode) ? rawMode : null);
+	return { mode, tab, pool };
 }
 
 /**
