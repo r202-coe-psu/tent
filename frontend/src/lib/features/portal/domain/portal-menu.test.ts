@@ -390,7 +390,7 @@ describe('portal department colours', () => {
 			security: 'security',
 			facility: 'facility',
 			management: 'admin',
-			pr: 'volunteer',
+			pr: 'pr',
 			central: 'admin'
 		});
 	});

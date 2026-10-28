@@ -443,9 +443,8 @@ export const PORTAL_DEPARTMENTS: readonly PortalDepartment[] = [
 		id: 'pr',
 		label: 'ฝ่ายประชาสัมพันธ์',
 		desc: 'ข่าวสารและประชาสัมพันธ์บนตู้ Kiosk ของศูนย์',
-		// Shares the volunteer family (community outreach, steel blue): every other family is taken
-		// by a department, and it is not a status colour.
-		domain: 'volunteer',
+		// Own gold family (CR-203): the other 7 families each belong to a department.
+		domain: 'pr',
 		icon: 'megaphone',
 		items: [
 			{
