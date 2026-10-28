@@ -1,11 +1,12 @@
 ---
-id: draft
+id: CR-205 # renumbered from draft-storage-drop-off-points
 title: ใช้จุดเก็บของเป็นจุดรับบริจาค พร้อมพิกัดบนแผนที่ และส่งออก public
-status: proposed
+status: approved
 date: 2026-10-27
-updated: 2026-10-27
+updated: 2026-10-28 # approved (Soravit Sukkarn, Team Lead)
 requested_by: "feedback จาก demo 2026-10-23 (epic #825) — issue #812"
-decided_by: ""
+decided_by: Soravit Sukkarn (Team Lead)
+decision_date: 2026-10-28
 layer: volatile
 affects:
   - docs/data/schema.md §3.1 `shelter.common_areas.sub_storage[]` — field ใหม่ `accepts_donations`, `lat`, `lng`, `location_note` · shelter schema_v 8 → 9
@@ -172,7 +173,7 @@ CR นี้ไม่เพิ่มกติกาฝั่งใบจอง �
 
 ## ข้อตกลง
 
-Soravit Sukkarn (Team Lead) ตัดสิน D-1..D-4 ใน review ของ PR #944 วันที่ 2026-10-27 · CR ยัง `proposed` จนกว่าผู้อนุมัติจะเปลี่ยนสถานะและใส่ `decided_by`
+Soravit Sukkarn (Team Lead) ตัดสิน D-1..D-4 ใน review ของ PR #944 วันที่ 2026-10-27 และ approve CR นี้วันที่ 2026-10-28
 
 - **D-1 — slot เวลารับของ** (คำถามค้างใน #812): ผูกกับศูนย์ต่อไป **หรือ** ผูกกับจุด
   - **ผล: ผูกกับศูนย์ไปก่อน** — ถ้าผูกกับจุด ต้องเปลี่ยน `_id` ของ `donation_slot` (§2.13), `donation_slot_counters` และสูตรที่ว่างของ CR-157 ทั้งหมด ซึ่งใหญ่กว่างานนี้มาก
@@ -196,3 +197,4 @@ Soravit Sukkarn (Team Lead) ตัดสิน D-1..D-4 ใน review ของ 
   - ตัด `created` ออกจาก frontmatter ตาม `_template.md`
   - ไม่จำกัดพิกัดให้อยู่ใกล้ศูนย์ เพราะศูนย์บางแห่งยังไม่มี `geo` และไม่มีระยะที่ตกลงกันไว้
 - 2026-10-27 — เพิ่ม FR-DP-18 / AC-12: แผนที่ของ #814 แสดงหมุดจุดเฉพาะศูนย์ที่เลือกหรือล็อก อ่านจาก detail — ผลจากการตัด `donation_points` ออกจาก list
+- 2026-10-28 — approved by Soravit Sukkarn (Team Lead) · รันเลข CR-205 (renumbered from draft-storage-drop-off-points) ย้ายเข้า `04-donation/`
