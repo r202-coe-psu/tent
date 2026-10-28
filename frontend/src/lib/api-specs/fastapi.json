@@ -529,7 +529,9 @@
 					"200": {
 						"description": "Successful Response",
 						"content": {
-							"application/json": { "schema": { "$ref": "#/components/schemas/SearchResponse" } }
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/ExternalSearchResponse" }
+							}
 						}
 					},
 					"429": {
@@ -3718,6 +3720,65 @@
 				"type": "object",
 				"required": ["name", "phone", "relation"],
 				"title": "EmergencyContactOut"
+			},
+			"ExternalSearchResponse": {
+				"properties": {
+					"results": {
+						"items": { "$ref": "#/components/schemas/ExternalSearchResult" },
+						"type": "array",
+						"title": "Results"
+					},
+					"count": { "type": "integer", "title": "Count" },
+					"as_of": { "type": "string", "format": "date-time", "title": "As Of" }
+				},
+				"type": "object",
+				"required": ["results", "count", "as_of"],
+				"title": "ExternalSearchResponse"
+			},
+			"ExternalSearchResult": {
+				"properties": {
+					"name": { "type": "string", "title": "Name" },
+					"status": { "type": "string", "title": "Status" },
+					"national_id": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "National Id"
+					},
+					"gender": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Gender" },
+					"shelter_name": { "type": "string", "title": "Shelter Name" },
+					"shelter_address": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Shelter Address"
+					},
+					"origin_address": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Origin Address"
+					},
+					"checked_in_at": {
+						"anyOf": [{ "type": "string", "format": "date-time" }, { "type": "null" }],
+						"title": "Checked In At"
+					},
+					"shelter_status": {
+						"anyOf": [
+							{ "type": "string", "enum": ["open", "closed", "full", "standby"] },
+							{ "type": "null" }
+						],
+						"title": "Shelter Status"
+					},
+					"family_members": {
+						"items": { "$ref": "#/components/schemas/FamilyMember" },
+						"type": "array",
+						"title": "Family Members"
+					},
+					"care_zone": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Care Zone"
+					},
+					"zone_name": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Zone Name" }
+				},
+				"type": "object",
+				"required": ["name", "status", "shelter_name"],
+				"title": "ExternalSearchResult",
+				"description": "`/external/v1/occupants` keeps the zone partners read (CR-183 FR-18 is public-only)."
 			},
 			"FamilyMember": {
 				"properties": {
