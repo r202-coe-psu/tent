@@ -64,7 +64,7 @@ test.describe('Public Donation & Queue Booking Wizard (T-60)', TAGS, () => {
 		await page.locator('#donor-line').fill('donordonor');
 		await page.locator('#donor-email').fill('donor@example.com');
 
-		// Fill item details (already pre-filled with name/qty/unit, let's verify)
+		// Item details: name and unit are pre-filled from the need card
 		// Keyed on the field's own id (`name-{item.id}`), not its placeholder copy —
 		// the placeholder has been reworded twice and silently broke this assertion.
 		const itemName = page.locator('input[id^="name-"]').first();
@@ -75,6 +75,12 @@ test.describe('Public Donation & Queue Booking Wizard (T-60)', TAGS, () => {
 		// food), and the unit is rendered from the canonical code (`kg` → "กิโลกรัม").
 		await expect(page.getByRole('textbox', { name: 'หมวดหมู่' })).not.toHaveValue('');
 		await expect(page.getByRole('textbox', { name: 'หน่วย' })).toHaveValue('กิโลกรัม');
+
+		// The quantity starts at 0 for the donor to fill in; the shortfall is only a hint.
+		const qty = page.locator('input[id^="amount-"]').first();
+		await expect(qty).toHaveValue('0');
+		await expect(page.getByTestId(/^need-shortage-/).first()).toContainText('ยังขาด 50');
+		await qty.fill('12');
 
 		// Click Next to Step 3
 		await page.getByRole('button', { name: 'ถัดไป: เลือกจุดส่งมอบ' }).click();
@@ -497,6 +503,7 @@ test.describe('Donor wizard layout and step scrolling (#619, #620)', TAGS, () =>
 		await openDonorForm(page);
 		await page.locator('#donor-name').fill('ผู้ทดสอบเลื่อนหน้า');
 		await page.locator('#donor-phone').fill('0899999999');
+		await page.locator('input[id^="amount-"]').first().fill('1');
 
 		const next = page.getByRole('button', { name: 'ถัดไป: เลือกจุดส่งมอบ' });
 		await next.scrollIntoViewIfNeeded();
