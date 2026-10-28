@@ -15,6 +15,7 @@ from datetime import UTC, datetime
 from zoneinfo import ZoneInfo
 
 from fastapi import HTTPException, status
+from tent_model.public_shelter import PublicShelter
 from tent_model.third_party_access_log import ThirdPartyAccessLog
 
 from ...utils.search_query import parse_search_query
@@ -39,6 +40,22 @@ def _to_bangkok_iso(value: datetime | None) -> str | None:
     if value.tzinfo is None:
         value = value.replace(tzinfo=UTC)
     return value.astimezone(_BANGKOK_TZ).isoformat()
+
+
+def _resolve_zone_name(shelter: PublicShelter | None, care_zone: str | None) -> str | None:
+    """EXT-012 still reports the zone; CR-183 FR-18 drops it from the occupants search only."""
+    if not care_zone:
+        return None
+    if not shelter or not shelter.raw_data:
+        return care_zone
+    zones = shelter.raw_data.get("zones") or []
+    for z in zones:
+        if isinstance(z, dict):
+            if z.get("code") == care_zone:
+                return z.get("name") or care_zone
+            if z.get("name") == care_zone:
+                return z.get("name")
+    return care_zone
 
 
 def _error(status_code: int, code: str, message: str) -> HTTPException:
@@ -128,13 +145,22 @@ class ThirdPartyPersonSearchUseCase:
         persons = await self._evacuee.find_persons(parsed, exclude_statuses=_EXCLUDED_STATUSES)
         # No household lookup (#736 decision 4); `family_members` is dropped from the item.
         results = await self._evacuee.build_results(persons, include_family=False)
-        items = [
-            PersonSearchItem(
-                **r.model_dump(exclude={"family_members", "checked_in_at"}),
-                checked_in_at=_to_bangkok_iso(r.checked_in_at),
+        codes = list({person.shelter_code for person in persons})
+        shelters = {
+            shelter.shelter_code: shelter
+            for shelter in await PublicShelter.find({"shelter_code": {"$in": codes}}).to_list()
+        }
+        items = []
+        for person, r in zip(persons, results, strict=True):
+            zone_name = _resolve_zone_name(shelters.get(person.shelter_code), person.care_zone)
+            items.append(
+                PersonSearchItem(
+                    **r.model_dump(exclude={"family_members", "checked_in_at"}),
+                    checked_in_at=_to_bangkok_iso(r.checked_in_at),
+                    care_zone=zone_name,
+                    zone_name=zone_name,
+                )
             )
-            for r in results
-        ]
 
         await self._log(
             claims=claims,

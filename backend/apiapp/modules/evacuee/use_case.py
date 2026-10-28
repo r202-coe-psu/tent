@@ -22,7 +22,7 @@ from ...utils.masking import (
 )
 from ...utils.search_query import ParsedSearchQuery, SearchQueryKind, parse_search_query
 from ...utils.ulid import new_ulid
-from .schemas import FamilyMember, SearchResponse, SearchResult
+from .schemas import FamilyMember, SearchResponse, SearchResult, ShelterStatus
 
 logger = logging.getLogger(__name__)
 
@@ -50,6 +50,16 @@ PUBLIC_STAY_STATUSES = frozenset(
 
 def map_public_status(stay_status: str) -> str:
     return stay_status if stay_status in PUBLIC_STAY_STATUSES else "unknown"
+
+
+_SHELTER_STATUSES: frozenset[str] = frozenset({"open", "closed", "full", "standby"})
+
+
+def _shelter_status(shelter: PublicShelter | None) -> ShelterStatus | None:
+    """`public_shelters.status` for the response; unknown values are reported as null."""
+    if shelter is None or shelter.status not in _SHELTER_STATUSES:
+        return None
+    return shelter.status  # type: ignore[return-value]
 
 
 def _extract_shelter_address(shelter: PublicShelter | None) -> str | None:
@@ -108,21 +118,6 @@ def _extract_shelter_address(shelter: PublicShelter | None) -> str | None:
         return " ".join(parts)
 
     return None
-
-
-def _resolve_zone_name(shelter: PublicShelter | None, care_zone: str | None) -> str | None:
-    if not care_zone:
-        return None
-    if not shelter or not shelter.raw_data:
-        return care_zone
-    zones = shelter.raw_data.get("zones") or []
-    for z in zones:
-        if isinstance(z, dict):
-            if z.get("code") == care_zone:
-                return z.get("name") or care_zone
-            if z.get("name") == care_zone:
-                return z.get("name")
-    return care_zone
 
 
 class EvacueeUseCase:
@@ -272,7 +267,10 @@ class EvacueeUseCase:
         return {shelter.shelter_code: shelter for shelter in shelters}
 
     async def _load_family_members(
-        self, person: PublicPerson, shelter_name: str
+        self,
+        person: PublicPerson,
+        shelter_name: str,
+        shelter_status: ShelterStatus | None,
     ) -> list[FamilyMember]:
         if not person.household_id:
             return []
@@ -288,6 +286,7 @@ class EvacueeUseCase:
                 name=f"{member.first_name} {member.last_name_masked}",
                 status=map_public_status(member.status),
                 shelter_name=shelter_name,
+                shelter_status=shelter_status,
             )
             for member in members
             if member.id != person.id
@@ -303,7 +302,7 @@ class EvacueeUseCase:
     ) -> SearchResult:
         name = shelter_name or (shelter.name if shelter and shelter.name else person.shelter_code)
         shelter_address = _extract_shelter_address(shelter)
-        zone_name = _resolve_zone_name(shelter, person.care_zone)
+        shelter_status = _shelter_status(shelter)
 
         return SearchResult(
             name=f"{person.first_name} {person.last_name_masked}",
@@ -314,10 +313,11 @@ class EvacueeUseCase:
             shelter_address=shelter_address,
             origin_address=person.address_masked,
             checked_in_at=person.checked_in_at,
-            care_zone=zone_name,
-            zone_name=zone_name,
+            shelter_status=shelter_status,
             family_members=(
-                await self._load_family_members(person, name) if include_family else []
+                await self._load_family_members(person, name, shelter_status)
+                if include_family
+                else []
             ),
         )
 

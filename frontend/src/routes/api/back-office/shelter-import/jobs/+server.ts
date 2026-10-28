@@ -126,6 +126,13 @@ export const POST: RequestHandler = async ({ request }) => {
 			if (clientValidationFailed && parsed?.success) {
 				errors.push({ column: '-', message: 'Row failed client-side validation' });
 			}
+			// CR-183 FR-23: a stale or hand-rolled client must not import a closed shelter either.
+			if (parsed?.success && parsed.data.operation_status === 'closed') {
+				errors.push({
+					column: 'operation_status',
+					message: 'นำเข้าศูนย์สถานะ "ปิดศูนย์" ไม่ได้ — ปิดศูนย์จากหน้าจัดการศูนย์'
+				});
+			}
 			const input = parsed?.success && errors.length === 0 ? parsed.data : undefined;
 			return {
 				row: row.row,
