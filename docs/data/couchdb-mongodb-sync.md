@@ -2,8 +2,8 @@
 title: Smart Shelter — CouchDB ⇄ MongoDB Sync (Public Plane)
 status: draft for review
 created: 2026-06-11
-updated: 2026-10-25
-note: CR-183 (2026-10-22) — ศูนย์ปิดคง `public_shelters` + `public_persons` ไว้จนครบ `closed_at` + `retention_months_after_close`, listener/bootstrap ครอบศูนย์ปิดในระยะ retention, rescan ตอนเปิดใหม่ (bump PROJECTION_VERSION); decision sync 2026-10-25 — §3.3 `unassigned_registrations.members[]` เพิ่ม `consent` + `search_excluded` (UNASSIGNED_SCHEMA_V 3→4; PDPA consent block FR-42); CR-176 (2026-10-20) — projector evacuee `checked_in_at` = null เมื่อ `cancelled` (PROJECTION_VERSION 4→5); คู่กับ data-model.md v3 + api-contract.md v1 + CR-017/CR-044 — public tier ทำงานบน MongoDB ผ่าน FastAPI; ตัด public_transparency (CR-017 Decision B); CR-113 unassigned_registrations; CR-166 (2026-10-13) — public_persons เพิ่ม `first_name_key`/`last_name_hash`, PROJECTION_VERSION 2→3, เลิก `$text`; decision sync 2026-10-09 — worker PROJECTION_VERSION + auto re-bootstrap on start (stored in Mongo _worker_meta); bootstrap reads update_seq before scan; CR-172 (2026-10-21) — `public_donations` เพิ่ม `reject_reason`/`reject_reason_code` + `received_summary.items[].rejected/reject_reason/reject_reason_code` ส่งผ่านทั้งก้อน, PROJECTION_VERSION 6→7; CR-174 (2026-10-21) — `public_donations.items_declared[]` เพิ่ม `review_status`/`review_reason_code`/`review_reason` (PROJECTION_VERSION 7 ครอบทั้ง CR-172 + CR-174 — 6 = CR-185 บน develop); inbound ปั๊ม donation schema_v 7 + เขียน audit อนุมัติอัตโนมัติ
+updated: 2026-10-28
+note: CR-205 approved (2026-10-28, #812) — §3.2 `public_shelters.donation_points` ใหม่ (ticked storage points ที่มีพิกัด, ไม่มี `area_m2`), PROJECTION_VERSION 10 → 11 บน branch นี้ (ลำดับเลขขึ้นกับ merge); CR-183 (2026-10-22) — ศูนย์ปิดคง `public_shelters` + `public_persons` ไว้จนครบ `closed_at` + `retention_months_after_close`, listener/bootstrap ครอบศูนย์ปิดในระยะ retention, rescan ตอนเปิดใหม่ (bump PROJECTION_VERSION); decision sync 2026-10-25 — §3.3 `unassigned_registrations.members[]` เพิ่ม `consent` + `search_excluded` (UNASSIGNED_SCHEMA_V 3→4; PDPA consent block FR-42); CR-176 (2026-10-20) — projector evacuee `checked_in_at` = null เมื่อ `cancelled` (PROJECTION_VERSION 4→5); คู่กับ data-model.md v3 + api-contract.md v1 + CR-017/CR-044 — public tier ทำงานบน MongoDB ผ่าน FastAPI; ตัด public_transparency (CR-017 Decision B); CR-113 unassigned_registrations; CR-166 (2026-10-13) — public_persons เพิ่ม `first_name_key`/`last_name_hash`, PROJECTION_VERSION 2→3, เลิก `$text`; decision sync 2026-10-09 — worker PROJECTION_VERSION + auto re-bootstrap on start (stored in Mongo _worker_meta); bootstrap reads update_seq before scan; CR-172 (2026-10-21) — `public_donations` เพิ่ม `reject_reason`/`reject_reason_code` + `received_summary.items[].rejected/reject_reason/reject_reason_code` ส่งผ่านทั้งก้อน, PROJECTION_VERSION 6→7; CR-174 (2026-10-21) — `public_donations.items_declared[]` เพิ่ม `review_status`/`review_reason_code`/`review_reason` (PROJECTION_VERSION 7 ครอบทั้ง CR-172 + CR-174 — 6 = CR-185 บน develop); inbound ปั๊ม donation schema_v 7 + เขียน audit อนุมัติอัตโนมัติ
 ---
 
 # Smart Shelter — CouchDB ⇄ MongoDB Sync
@@ -137,7 +137,13 @@ The worker resumes `_changes` from its checkpoint, so documents that never chang
 // เฉพาะ cancelled ที่ถูกลบออกจาก public plane (draft-shelter-cancelled-status)
 { _id: "SH001", shelter_code: "SH001", registry_id: "shelter:{ulid}", name, status: "open|full|standby|closed",
   closed_at,                        // จาก registry — นาฬิกา retention ของ public_persons (data-model §7)
-  geo, capacity, province, district, subdistrict, updated_at }
+  geo, capacity, province, district, subdistrict,
+  donation_points: [{ id, name, types: [str], geo: { lat, lng }, location_note: str | null }],
+  updated_at }
+// donation_points (CR-205): worker คัดจาก raw_data.common_areas.sub_storage[] เฉพาะจุดที่ accepts_donations = true
+//   และมี lat/lng ที่ไม่ใช่ (0,0) — ไม่ส่ง area_m2; รองรับจุดรูปเดิม (type เดี่ยว) แปลงเป็น types[] เสมอ;
+//   FastAPI detail อ่านจาก field นี้เท่านั้น ไม่อ่านจุดจาก raw_data (PROJECTION_VERSION 11 — re-project ทุกแถว;
+//   แถวที่ยังไม่ re-project ไม่มี key → API คืน [] = จุดหลัก)
 
 // public_needs — ความต้องการรวม (จาก donation_campaign − donation ที่รับแล้ว)
 { _id: "{shelter_code}:item:01H...", shelter_code, item_name, category, qty_needed, unit, updated_at }
