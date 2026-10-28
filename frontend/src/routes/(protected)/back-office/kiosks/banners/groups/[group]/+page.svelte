@@ -11,10 +11,13 @@
 	import { Label } from '$lib/components/ui/label/index.js';
 	import { Textarea } from '$lib/components/ui/textarea/index.js';
 	import { spatial } from '$lib/tokens';
+	import { canManageScanners } from '$lib/auth/roles';
+	import { authStore } from '$lib/stores/auth.svelte';
 	import { getShelterCode } from '$lib/db/shelter';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
 	import { KIOSK_SCREEN_TYPES } from '$lib/features/shared';
 	import {
+		SetStaffPinDialog,
 		useScannerDevices,
 		ViewStaffPinDialog,
 		type ScannerDevice
@@ -143,13 +146,21 @@
 		renameOpen = false;
 	}
 
-	// View-PIN dialog — reveal only (logged server-side); setting a PIN stays on /back-office/kiosks
+	// View-PIN dialog — reveal is logged server-side; only SM/KIO may go on to set a PIN (pr_staff
+	// is reveal-only, CR-203)
 	let viewPinOpen = $state(false);
+	let setPinOpen = $state(false);
 	let pinDevice = $state.raw<ScannerDevice | null>(null);
+	const canSetPin = $derived(canManageScanners(authStore.user?.roles ?? [], activeShelter));
 
 	function openViewPin(device: ScannerDevice) {
 		pinDevice = device;
 		viewPinOpen = true;
+	}
+
+	function openSetPin(device: ScannerDevice) {
+		pinDevice = device;
+		setPinOpen = true;
 	}
 
 	// Manage-devices dialog
@@ -362,7 +373,14 @@
 		</Dialog.Content>
 	</Dialog.Root>
 
-	<ViewStaffPinDialog bind:open={viewPinOpen} device={pinDevice} />
+	<ViewStaffPinDialog
+		bind:open={viewPinOpen}
+		device={pinDevice}
+		onsetpin={canSetPin ? openSetPin : undefined}
+	/>
+	{#if canSetPin}
+		<SetStaffPinDialog bind:open={setPinOpen} device={pinDevice} />
+	{/if}
 
 	<Dialog.Root bind:open={devicesOpen}>
 		<Dialog.Content class="max-h-[90dvh] gap-5 overflow-y-auto rounded-2xl sm:max-w-[560px]">
