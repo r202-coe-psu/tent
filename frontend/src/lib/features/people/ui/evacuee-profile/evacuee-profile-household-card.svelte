@@ -45,7 +45,7 @@
 		pre_registered: 'ลงทะเบียนล่วงหน้า',
 		arriving: 'กำลังเดินทางมา',
 		checked_in: 'เช็คอินแล้ว',
-		checked_out: 'เช็คเอาท์แล้ว',
+		checked_out: 'เช็คเอาต์แล้ว',
 		cancelled: 'ยกเลิก',
 		merged: 'รวมแล้ว'
 	};

@@ -176,7 +176,7 @@ affects:
 - **สิ่งที่ปรับเปลี่ยนใน CR-092 (Schema v2):**
   - ✨ **[เพิ่มฟิลด์ใหม่] `duty_window: { start_ts: string, end_ts: string }` (required):** หน้าต่างเวลากะงานจริง สำหรับระบบบังคับ Server BFF Time-Bound Shift Access Control ($\pm 5$ นาที)
   - ✨ **[เพิ่มฟิลด์ใหม่] `check_in_at: string | null` (optional):** Timestamp สแกน QR Ticket รายงานตัวเข้างานที่จุด Tablet เช็คอิน
-  - ✨ **[เพิ่มฟิลด์ใหม่] `check_out_at: string | null` (optional):** Timestamp เช็คเอาท์ออกงาน
+  - ✨ **[เพิ่มฟิลด์ใหม่] `check_out_at: string | null` (optional):** Timestamp เช็คเอาต์ออกงาน
   - ✨ **[เพิ่มฟิลด์ใหม่] `check_in_by: string | null` (optional):** Username/Staff ID ของเจ้าหน้าที่ผู้กดรับรายงานตัว
   - ✨ **[เพิ่มฟิลด์ใหม่] `dispatch_status: 'dispatched' | 'accepted' | 'declined' | null` (optional):** สถานะเมื่อได้รับการเสนอจ่ายงานจาก SM ผ่าน Direct Dispatch
   - 🔄 **[ปรับปรุง Enum] `status`:** เพิ่มค่าสถานะ `standby`, `checked_in`, `completed` เพื่อรองรับ Real-time Shift Lifecycle (กลายเป็น `enum('assigned', 'standby', 'checked_in', 'completed', 'no_show', 'cancelled')`)

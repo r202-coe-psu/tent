@@ -20,7 +20,7 @@
 		room_confirmed: 'ยืนยันถึงโซน',
 		temporary_leave: 'ออกชั่วคราว',
 		transferred: 'ย้ายศูนย์',
-		checked_out: 'เช็คเอาท์',
+		checked_out: 'เช็คเอาต์',
 		deceased: 'เสียชีวิต',
 		cancelled: 'ยกเลิก'
 	};
@@ -78,7 +78,7 @@
 		<Dialog.Header class="border-b pb-4">
 			<Dialog.Title class="flex items-center gap-2 text-base font-black">
 				<Search class="size-5 text-emerald-500" />
-				ค้นหาผู้พักพิงเพื่อเช็คอิน / เช็คเอาท์
+				ค้นหาผู้พักพิงเพื่อเช็คอิน / เช็คเอาต์
 			</Dialog.Title>
 		</Dialog.Header>
 
