@@ -24,11 +24,12 @@ export function useStoragePoints(shelterCode: () => string) {
 			return shelterQuery.isLoading;
 		},
 		/**
-		 * True only when the shelter query succeeded with data: the points list is then
-		 * authoritative, so a missing id can safely be treated as a deleted point.
+		 * True once the shelter doc has been read (the last successful data is kept through
+		 * a failed refetch), so the points list is authoritative and a missing id can be
+		 * treated as deleted.
 		 */
 		get isLoaded() {
-			return shelterQuery.isSuccess && shelterQuery.data != null;
+			return shelterQuery.data != null;
 		}
 	};
 }

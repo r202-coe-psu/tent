@@ -12,6 +12,7 @@ import { LOAN_REFS_UNKNOWN_LABEL } from '../model/bulk-return-pool-v3';
 import { WORK_QUEUE_COPY } from '../model/bulk-return-work-queue';
 import { MY_POOL_POINT_UNSPECIFIED, myPoolPointKey } from '../model/my-pool-point-storage';
 import BulkReturnPoolBoard from './BulkReturnPoolBoard.svelte';
+import { resetStoragePointsMock, storagePointsMock } from './storage-points.fixture.svelte';
 
 type EntryRow = BulkReturnPoolOverviewRow['entries'][number];
 type ItemRow = BulkReturnPoolOverviewRow['items'][number];
@@ -36,8 +37,6 @@ const state = vi.hoisted(() => ({
 	authContext: null as { shelterCode: string; createdBy: string; roles: string[] } | null,
 	evacuees: [] as unknown[],
 	skippedDocs: [] as unknown[],
-	storagePoints: [] as { id: string; name: string }[],
-	storagePointsLoaded: true,
 	// Props the board passed to the (mocked) detail sheet; read lazily, they are getter-backed.
 	detailProps: null as { row?: BulkReturnPoolOverviewRow | null } | null
 }));
@@ -66,13 +65,15 @@ vi.mock('$lib/features/people', () => ({
 	useEvacuees: () => ({ data: state.evacuees })
 }));
 vi.mock('$lib/features/volunteers', () => ({ useVolunteers: () => ({ data: [] }) }));
+// Backed by a reactive `$state` helper (read lazily in the getters, after imports resolve) so a
+// test can move the points from loading to loaded after mount.
 vi.mock('$lib/features/operations', () => ({
 	useStoragePoints: () => ({
 		get points() {
-			return state.storagePoints;
+			return storagePointsMock.points;
 		},
 		get isLoaded() {
-			return state.storagePointsLoaded;
+			return storagePointsMock.loaded;
 		}
 	})
 }));
@@ -290,8 +291,7 @@ beforeEach(() => {
 	state.authContext = ADMIN;
 	state.evacuees = [];
 	state.skippedDocs = [];
-	state.storagePoints = [];
-	state.storagePointsLoaded = true;
+	resetStoragePointsMock();
 	state.detailProps = null;
 	authorContextCalls.mockClear();
 	localStorage.clear();
@@ -606,7 +606,7 @@ describe('BulkReturnPoolBoard role wiring of the work queues', () => {
 	it('wires the stored my-point selection into the my-point queue', async () => {
 		// The board reads the stored point once at mount, so seed it before render.
 		localStorage.setItem(myPoolPointKey('SH001'), 'sp:1');
-		state.storagePoints = [{ id: 'sp:1', name: 'คลังหลัก' }];
+		storagePointsMock.points = [{ id: 'sp:1', name: 'คลังหลัก' }];
 		state.authContext = withCapability('distribution_staff');
 		const onSelectedPoolChange = vi.fn();
 		await render({}, { onSelectedPoolChange });
@@ -630,7 +630,7 @@ describe('BulkReturnPoolBoard role wiring of the work queues', () => {
 
 		it('resets a deleted point to the placeholder and clears the stored value', async () => {
 			localStorage.setItem(myPoolPointKey('SH001'), 'sp:gone');
-			state.storagePoints = [{ id: 'sp:1', name: 'คลังหลัก' }];
+			storagePointsMock.points = [{ id: 'sp:1', name: 'คลังหลัก' }];
 			state.authContext = withCapability('distribution_staff');
 			await render();
 
@@ -642,16 +642,31 @@ describe('BulkReturnPoolBoard role wiring of the work queues', () => {
 
 		it('keeps the stored value while the storage points are not loaded', async () => {
 			localStorage.setItem(myPoolPointKey('SH001'), 'sp:gone');
-			state.storagePointsLoaded = false;
+			storagePointsMock.loaded = false;
 			state.authContext = withCapability('distribution_staff');
 			await render();
 
 			expect(localStorage.getItem(myPoolPointKey('SH001'))).toBe('sp:gone');
 		});
 
+		it('clears the stored value once the storage points finish loading after mount', async () => {
+			localStorage.setItem(myPoolPointKey('SH001'), 'sp:gone');
+			storagePointsMock.loaded = false;
+			state.authContext = withCapability('distribution_staff');
+			await render();
+			expect(localStorage.getItem(myPoolPointKey('SH001'))).toBe('sp:gone');
+
+			storagePointsMock.points = [{ id: 'sp:1', name: 'คลังหลัก' }];
+			storagePointsMock.loaded = true;
+			await settle();
+
+			expect(myPointText()).toContain(WORK_QUEUE_COPY.myPointPlaceholder);
+			expect(localStorage.getItem(myPoolPointKey('SH001'))).toBeNull();
+		});
+
 		it('keeps the unspecified choice even though it is not a listed point', async () => {
 			localStorage.setItem(myPoolPointKey('SH001'), MY_POOL_POINT_UNSPECIFIED);
-			state.storagePoints = [{ id: 'sp:1', name: 'คลังหลัก' }];
+			storagePointsMock.points = [{ id: 'sp:1', name: 'คลังหลัก' }];
 			state.authContext = withCapability('distribution_staff');
 			await render();
 
