@@ -53,6 +53,7 @@
 	import type { FrontlineTab } from '../model/pool-url-state';
 
 	interface Props {
+		/** Active tab from the URL; followed on same-route navigation, local clicks override it. */
 		initialTab?: FrontlineTab;
 		/** Bulk return pool to open on the returns tab (deep link). */
 		initialPoolId?: string | null;
