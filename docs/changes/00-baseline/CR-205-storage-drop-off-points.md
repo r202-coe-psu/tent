@@ -197,4 +197,4 @@ Soravit Sukkarn (Team Lead) ตัดสิน D-1..D-4 ใน review ของ 
   - ตัด `created` ออกจาก frontmatter ตาม `_template.md`
   - ไม่จำกัดพิกัดให้อยู่ใกล้ศูนย์ เพราะศูนย์บางแห่งยังไม่มี `geo` และไม่มีระยะที่ตกลงกันไว้
 - 2026-10-27 — เพิ่ม FR-DP-18 / AC-12: แผนที่ของ #814 แสดงหมุดจุดเฉพาะศูนย์ที่เลือกหรือล็อก อ่านจาก detail — ผลจากการตัด `donation_points` ออกจาก list
-- 2026-10-28 — approved by Soravit Sukkarn (Team Lead) · รันเลข CR-205 (renumbered from draft-storage-drop-off-points) ย้ายเข้า `04-donation/`
+- 2026-10-28 — approved by Soravit Sukkarn (Team Lead) · รันเลข CR-205 (renumbered from draft-storage-drop-off-points) ย้ายเข้า `00-baseline/` (หมวดเดียวกับ CR-139 ที่สร้าง `sub_storage`)
