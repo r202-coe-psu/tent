@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
+import { COORDINATOR_GRANTABLE_CAPABILITIES } from './roles';
 import {
-	COORDINATOR_GRANTABLE_ROLES,
+	coordinatorShelterCodes,
 	grantExpiresAt,
 	grantExpiryError,
 	grantExpiryLabel,
@@ -8,6 +9,7 @@ import {
 	grantFor,
 	isCoordinatorGrantableRole,
 	pruneRoleGrants,
+	withoutGrantedRole,
 	type RoleGrant
 } from './role-grants';
 
@@ -24,7 +26,7 @@ const grant = (role: string, code = 'SH001'): RoleGrant => ({
 
 describe('coordinator grantable roles', () => {
 	it('allows exactly the four non-health, non-warehouse desk roles', () => {
-		expect([...COORDINATOR_GRANTABLE_ROLES].sort()).toEqual([
+		expect([...COORDINATOR_GRANTABLE_CAPABILITIES].sort()).toEqual([
 			'distribution_staff',
 			'facility_staff',
 			'kitchen_staff',
@@ -100,5 +102,46 @@ describe('role grants on a user', () => {
 
 	it('labels the expiry with the Thai date of the Bangkok day', () => {
 		expect(grantExpiryLabel(grant('kitchen_staff'))).toBe('หมดอายุสิ้นวันที่ 30/10/2569');
+	});
+});
+
+describe('coordinatorShelterCodes', () => {
+	it('finds compound and legacy flat coordinator scope', () => {
+		expect(
+			coordinatorShelterCodes(['shelter:SH001', 'SH001:volunteer_coordinator', 'shelter:SH002'])
+		).toEqual(['SH001']);
+		expect(coordinatorShelterCodes(['shelter:SH001', 'volunteer_coordinator'])).toEqual(['SH001']);
+	});
+
+	it('does not count a flat role across several shelters, a manager or a system admin', () => {
+		expect(
+			coordinatorShelterCodes(['shelter:SH001', 'shelter:SH002', 'volunteer_coordinator'])
+		).toEqual([]);
+		expect(coordinatorShelterCodes(['shelter:SH001', 'SH001:shelter_manager'])).toEqual([]);
+		expect(coordinatorShelterCodes(['system_admin'])).toEqual([]);
+	});
+});
+
+describe('withoutGrantedRole', () => {
+	it('drops the role and its grant but keeps the shelter while another role is left', () => {
+		const out = withoutGrantedRole(
+			['shelter:SH001', 'SH001:kitchen_staff', 'SH001:facility_staff'],
+			[grant('kitchen_staff'), grant('facility_staff')],
+			'SH001',
+			'kitchen_staff'
+		);
+		expect(out.roles).toEqual(['shelter:SH001', 'SH001:facility_staff']);
+		expect(out.role_grants).toEqual([grant('facility_staff')]);
+	});
+
+	it('drops the shelter scope with the last role and leaves other shelters alone', () => {
+		const out = withoutGrantedRole(
+			['shelter:SH001', 'SH001:kitchen_staff', 'shelter:SH002', 'SH002:kitchen_staff'],
+			[grant('kitchen_staff'), grant('kitchen_staff', 'SH002')],
+			'SH001',
+			'kitchen_staff'
+		);
+		expect(out.roles).toEqual(['shelter:SH002', 'SH002:kitchen_staff']);
+		expect(out.role_grants).toEqual([grant('kitchen_staff', 'SH002')]);
 	});
 });

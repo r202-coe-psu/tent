@@ -25,7 +25,10 @@ export const DISTRIBUTION_STAFF = 'distribution_staff';
 /** Looks after the kiosk devices of one shelter (draft CR scanner back-office FR-SBO-28). */
 export const KIOSK_STAFF = 'kiosk_staff';
 
-/** Capability roles a shelter_manager or coordinator is allowed to grant (per CR-104 §2.1). */
+/**
+ * Capability roles a shelter_manager may grant (per CR-104 §2.1). A volunteer_coordinator may
+ * grant only {@link COORDINATOR_GRANTABLE_CAPABILITIES}, never all of these.
+ */
 export const STAFF_CAPABILITIES = [
 	'registration_staff',
 	TRIAGE_STAFF,
@@ -40,6 +43,17 @@ export const STAFF_CAPABILITIES = [
 	KIOSK_STAFF
 ] as const;
 export type StaffCapability = (typeof STAFF_CAPABILITIES)[number];
+
+/**
+ * The only roles a volunteer_coordinator may issue to a volunteer, each with an expiry
+ * (draft-coordinator-limited-access-grant FR-2; #879 item 2).
+ */
+export const COORDINATOR_GRANTABLE_CAPABILITIES = [
+	'registration_staff',
+	'kitchen_staff',
+	DISTRIBUTION_STAFF,
+	FACILITY_STAFF
+] as const satisfies readonly StaffCapability[];
 
 /** Every capability an SA may grant alongside the shelter scope. */
 export const SHELTER_CAPABILITIES = [...STAFF_CAPABILITIES, SHELTER_MANAGER] as const;

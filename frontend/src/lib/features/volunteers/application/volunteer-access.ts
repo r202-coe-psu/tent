@@ -1,8 +1,9 @@
 import { z } from 'zod';
 import { serviceFetch } from '$lib/api/service';
 import { passwordSchema } from '$lib/auth/password-schema';
-import { COORDINATOR_GRANTABLE_ROLES, grantExpiryError } from '$lib/auth/role-grants';
+import { grantExpiryError } from '$lib/auth/role-grants';
 import {
+	COORDINATOR_GRANTABLE_CAPABILITIES,
 	STAFF_CAPABILITIES,
 	hasCapabilityInShelter,
 	rolesFromAssignments,
@@ -139,7 +140,7 @@ async function linkVolunteerProfile(
 export const coordinatorAccessSchema = z.object({
 	email: volunteerAccessSchema.shape.email,
 	password: volunteerAccessSchema.shape.password,
-	role: z.enum(COORDINATOR_GRANTABLE_ROLES),
+	role: z.enum(COORDINATOR_GRANTABLE_CAPABILITIES),
 	/** `YYYY-MM-DD` (Asia/Bangkok), required, no default. */
 	expires_on: z.string().min(1, 'กรุณาเลือกวันหมดอายุ')
 });

@@ -14,17 +14,14 @@
 	import { Input } from '$lib/components/ui/input/index.js';
 	import * as Select from '$lib/components/ui/select/index.js';
 	import {
+		COORDINATOR_GRANTABLE_CAPABILITIES,
 		STAFF_CAPABILITIES,
 		isShelterManager,
 		isSystemAdmin,
 		roleOptionLabel,
 		type StaffCapability
 	} from '$lib/auth/roles';
-	import {
-		COORDINATOR_GRANTABLE_ROLES,
-		MAX_GRANT_DAYS,
-		grantExpiryRange
-	} from '$lib/auth/role-grants';
+	import { MAX_GRANT_DAYS, grantExpiryRange } from '$lib/auth/role-grants';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { formatThaiShortDate } from '$lib/utils/date';
 	import { generateTemporaryPassphrase } from '$lib/auth/passphrase-generator';
@@ -65,7 +62,7 @@
 		return !(isSystemAdmin(roles) || isShelterManager(roles, volunteer.shelter_code));
 	});
 	const roleChoices = $derived<readonly StaffCapability[]>(
-		limited ? COORDINATOR_GRANTABLE_ROLES : STAFF_CAPABILITIES
+		limited ? COORDINATOR_GRANTABLE_CAPABILITIES : STAFF_CAPABILITIES
 	);
 	const expiryRange = $derived(grantExpiryRange());
 	// Identity verified in another shelter (same phone) is only known to the server, so a
