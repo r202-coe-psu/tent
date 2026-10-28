@@ -12,6 +12,7 @@ type BoardProps = {
 
 const board = vi.hoisted(() => ({ props: null as BoardProps | null }));
 const nav = vi.hoisted(() => ({ replaceState: vi.fn() }));
+const appPage = vi.hoisted(() => ({ url: { pathname: '/onsite/distribution' } }));
 
 // Svelte 5 client components are plain `(anchor, props) => void` functions.
 vi.mock('../bulk-return/BulkReturnPoolBoard.svelte', () => ({
@@ -41,6 +42,7 @@ vi.mock('$lib/stores/shelter.svelte', () => ({ shelterStore: { selectedShelterCo
 vi.mock('$lib/db/shelter', () => ({ getShelterCode: () => 'SH001' }));
 vi.mock('$app/paths', () => ({ resolve: (path: string) => path }));
 vi.mock('$app/navigation', () => ({ replaceState: nav.replaceState }));
+vi.mock('$app/state', () => ({ page: appPage }));
 vi.mock('svelte-sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
 const MODE_STORAGE_KEY = 'distribution-desk-mode';
@@ -72,6 +74,7 @@ const lastUrl = () => nav.replaceState.mock.lastCall?.[0];
 beforeEach(() => {
 	board.props = null;
 	nav.replaceState.mockClear();
+	appPage.url.pathname = '/onsite/distribution';
 	localStorage.clear();
 });
 
@@ -219,6 +222,17 @@ describe('frontline station URL writes', () => {
 		click(tabButton('3. รับคืนสิ่งของ'));
 		expect(lastUrl()).toBe('/onsite/distribution?mode=supplies&tab=returns');
 		expect(board.props?.initialPoolId).toBeNull();
+	});
+
+	it('does not write the URL once the user has navigated away from the desk', async () => {
+		await render({ initialMode: 'supplies', initialTab: 'returns', initialPoolId: 'p1' });
+		appPage.url.pathname = '/portal';
+
+		click(tabButton('2. จ่ายพัสดุ'));
+		board.props?.onSelectedPoolChange?.('p2');
+		flushSync();
+
+		expect(nav.replaceState).not.toHaveBeenCalled();
 	});
 
 	it('a local mode switch is not undone by the props', async () => {

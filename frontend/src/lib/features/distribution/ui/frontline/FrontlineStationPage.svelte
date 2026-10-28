@@ -12,6 +12,7 @@
 	import AlertCircle from '@lucide/svelte/icons/alert-circle';
 	import RefreshCw from '@lucide/svelte/icons/refresh-cw';
 	import { replaceState } from '$app/navigation';
+	import { page } from '$app/state';
 	import { resolve } from '$app/paths';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
 	import { getShelterCode } from '$lib/db/shelter';
@@ -69,7 +70,7 @@
 	import * as AlertDialog from '$lib/components/ui/alert-dialog/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
 
-	import { onsiteDeskHref } from '../model/pool-url-state';
+	import { ONSITE_DISTRIBUTION_PATH, onsiteDeskHref } from '../model/pool-url-state';
 
 	interface Props {
 		/** Mode from the URL (`?mode=`, or forced by the tab); beats the remembered mode. */
@@ -113,8 +114,10 @@
 	});
 
 	// One URL model: `?mode=&tab=[&pool=]`, always written whole. Shallow, so a goto does not
-	// cancel the phone scroll. Never called on initial load.
+	// cancel the phone scroll. Never called on initial load. Skipped once the user has navigated
+	// away (a late board callback or awaited receive must not overwrite another page's URL).
 	function writeUrl() {
+		if (page.url.pathname !== resolve(ONSITE_DISTRIBUTION_PATH)) return;
 		replaceState(resolve(onsiteDeskHref({ mode, tab: activeTab, pool: selectedPoolId })), {});
 	}
 
@@ -360,11 +363,9 @@
 				selectTab('food');
 				pickedFoodDay = ticketServiceDay(ticket);
 				pickedFoodTicketId = ticket._id;
-				void scrollToContent();
 			} else if (ticket.requisition_type === 'supplies') {
 				selectTab('supplies');
 				pickedSuppliesTicketId = ticket._id;
-				void scrollToContent();
 			}
 		} catch (err) {
 			toast.error(formatDistributionError(err, 'ไม่สามารถตรวจรับสินค้าได้ กรุณาลองใหม่อีกครั้ง'));
