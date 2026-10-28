@@ -25,7 +25,7 @@ describe('useStoragePoints.isLoaded', () => {
 		query.data = undefined;
 	});
 
-	it('is loaded whenever shelter data is present (including after a failed background refetch)', () => {
+	it('is loaded whenever shelter data is present', () => {
 		// TanStack keeps the last data while status is 'error'.
 		query.data = shelter;
 		const hook = useStoragePoints(() => 'SH001');
