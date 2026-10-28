@@ -12,7 +12,9 @@
 	} from '../model/bulk-return-pool-v3';
 	import {
 		formatSkippedDocIds,
-		isTimelineSkippedCoveredByShelter,
+		isTimelineSkippedCoveredByShelter
+	} from '../model/bulk-return-skipped-docs';
+	import {
 		POOL_TIMELINE_SKIPPED_BADGE_SR_HINT,
 		POOL_TIMELINE_SKIPPED_NOTICE_PREFIX,
 		POOL_TIMELINE_SKIPPED_NOTICE_SUFFIX,
@@ -56,8 +58,9 @@
 	const skippedCount = $derived(skipped.length);
 	const skippedIds = $derived(formatSkippedDocIds(skipped));
 	const showSkipped = $derived(!isLoading && !isError && skippedCount > 0);
-	const skippedCoveredByShelter = $derived(
-		isTimelineSkippedCoveredByShelter(skipped, shelterSkipped)
+	// Badge stays; the banner is dropped when the shelter-level banner already lists every id.
+	const showSkippedBanner = $derived(
+		showSkipped && !isTimelineSkippedCoveredByShelter(skipped, shelterSkipped)
 	);
 
 	const KIND_LABELS: Record<PoolTimelineEventKind, string> = {
@@ -144,7 +147,7 @@
 
 	{#if open}
 		<div id="pool-timeline-list" class="space-y-2">
-			{#if showSkipped && !skippedCoveredByShelter}
+			{#if showSkippedBanner}
 				<div
 					role="status"
 					data-testid="bulk-return-timeline-skipped-docs"

@@ -62,7 +62,7 @@
 		type BulkReturnPoolRow,
 		type PoolCatalogItem
 	} from '../model/bulk-return-pool-v3';
-	import { formatSkippedDocIds } from '../model/bulk-return-timeline-copy';
+	import { formatSkippedDocIds } from '../model/bulk-return-skipped-docs';
 	import { ticketHref } from '../model/pool-url-state';
 	import { liveSummaryRows, submittedSummaryRows } from '../model/bulk-return-lifecycle';
 	import BulkReturnPoolReceiveRecord from './BulkReturnPoolReceiveRecord.svelte';
