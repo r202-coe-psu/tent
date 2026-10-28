@@ -290,7 +290,8 @@ afterEach(() => {
 
 describe('BulkReturnPoolBoard mount and selection', () => {
 	// Smoke: mount and first paint through the full derived chain (rows -> filter -> view state).
-	// Note: the 6aec2cd98 declaration-order bug is caught by svelte-check, not by this runtime mount.
+	// Note: the board catalog declaration-order bug (fixed in #768) is caught by svelte-check,
+	// not by this runtime mount.
 	it('mounts with realistic data and renders the headings and pool cards', async () => {
 		await render();
 
@@ -526,7 +527,9 @@ describe('BulkReturnPoolBoard empty and error states', () => {
 	it('refetches the overview when the retry button is clicked', async () => {
 		await render({ data: undefined, isError: true, error: new Error('boom') });
 
-		const retry = buttonByText(document.body.querySelector('[role="alert"]')!, 'ลองใหม่');
+		const alert = document.body.querySelector('[role="alert"]');
+		expect(alert).not.toBeNull();
+		const retry = buttonByText(alert!, 'ลองใหม่');
 		expect(retry).toBeDefined();
 		retry?.click();
 		await settle();
