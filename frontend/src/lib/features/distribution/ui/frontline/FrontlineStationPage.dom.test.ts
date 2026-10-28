@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushSync, mount, tick, unmount } from 'svelte';
+import { SvelteMap } from 'svelte/reactivity';
 import FrontlineStationPage from './FrontlineStationPage.svelte';
 
 type BoardProps = {
@@ -92,6 +93,29 @@ describe('frontline station returns tab wiring (#921)', () => {
 
 		expect(onTabChange).toHaveBeenCalledWith('food');
 		expect(boardMarker()).toBeNull();
+	});
+
+	it('follows a later initialTab and initialPoolId change instead of capturing once', async () => {
+		const state = new SvelteMap<string, unknown>([
+			['initialTab', 'receive'],
+			['initialPoolId', null]
+		]);
+		await render({
+			get initialTab() {
+				return state.get('initialTab');
+			},
+			get initialPoolId() {
+				return state.get('initialPoolId');
+			}
+		});
+		expect(boardMarker()).toBeNull();
+
+		state.set('initialTab', 'returns');
+		state.set('initialPoolId', 'p1');
+		flushSync();
+
+		expect(boardMarker()).not.toBeNull();
+		expect(board.props?.initialPoolId).toBe('p1');
 	});
 
 	it('does not render the board outside the returns tab', async () => {

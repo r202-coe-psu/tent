@@ -13,6 +13,7 @@ import { seedOpenPool, switchUser, poolName } from './bulk-return-pool';
 import { DESK_TAGS } from './distribution-desk-setup';
 import { expect, test } from './fixtures';
 import { BulkReturnPoolBoard } from './pages/bulk-return-pool.page';
+import { DeskPage } from './pages/desk.page';
 
 test.describe('Bulk return pool — desk link for DST (#921)', { tag: DESK_TAGS }, () => {
 	test('a DST-only user following a back-office pool link lands on the desk with the pool open', async ({
@@ -40,6 +41,26 @@ test.describe('Bulk return pool — desk link for DST (#921)', { tag: DESK_TAGS 
 		await board.expectDetail(name);
 
 		await board.closeDetail(name);
+		await expect
+			.poll(() => {
+				const url = new URL(page.url());
+				return [url.pathname, url.searchParams.get('tab'), url.searchParams.has('pool')];
+			})
+			.toEqual(['/onsite/distribution', 'returns', false]);
+		await expect(board.heading()).toBeVisible();
+
+		// Leaving returns for another tab keeps the desk route and carries no `pool`. The detail is a
+		// modal dialog, so the tab buttons are only reachable once it is closed (above).
+		const desk = new DeskPage(page);
+		await desk.openTab('food');
+		await expect
+			.poll(() => {
+				const url = new URL(page.url());
+				return [url.pathname, url.searchParams.get('tab'), url.searchParams.has('pool')];
+			})
+			.toEqual(['/onsite/distribution', 'food', false]);
+
+		await desk.openTab('returns');
 		await expect
 			.poll(() => {
 				const url = new URL(page.url());
