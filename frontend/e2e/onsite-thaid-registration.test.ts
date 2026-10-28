@@ -226,8 +226,10 @@ test.describe('Station 1 ThaiD autofill (#588)', { tag: ['@onsite', '@critical']
 		});
 
 		await test.step('head stays editable after the fill', async () => {
-			await desk.locator('#member-0-last-name').fill(`${LAST_NAME}`);
-			await expect(desk.locator('#member-0-last-name')).toBeEditable();
+			await desk.locator('#member-0-last-name').fill(`${LAST_NAME}Edited`);
+			await expect(desk.locator('#member-0-last-name')).toHaveValue(`${LAST_NAME}Edited`);
+			// Restore so the saved head still matches `head` for the print/search checks.
+			await desk.locator('#member-0-last-name').fill(LAST_NAME);
 		});
 
 		await test.step('member 2: scan fills only that row', async () => {
