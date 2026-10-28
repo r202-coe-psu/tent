@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushSync, mount, tick, unmount } from 'svelte';
+import { toast } from 'svelte-sonner';
 import type { ThaiDAutofillProfile } from '../../domain/thaid-profile';
 import { blankUnifiedMember, type UnifiedMemberWithMeta } from '../../domain/unified-registration';
 import UnifiedRegistrationMembersSection from './unified-registration-members-section.svelte';
@@ -56,6 +57,7 @@ class FakeEventSource {
 let instance: ReturnType<typeof mount> | null = null;
 
 beforeEach(() => {
+	vi.clearAllMocks();
 	FakeEventSource.last = null;
 	vi.stubGlobal('EventSource', FakeEventSource);
 	vi.stubGlobal(
@@ -114,5 +116,30 @@ describe('UnifiedRegistrationMembersSection — onsite ThaiD scan', () => {
 		);
 		await tick();
 		expect(inputs('last-name')).toEqual(['ใจดี', 'ใจดี']);
+	});
+
+	it('names the scanned member from the filled row when ThaiD returns no name', async () => {
+		const members: UnifiedMemberWithMeta[] = [
+			{ ...blankUnifiedMember(), first_name: 'สมชาย', last_name: 'ใจดี' },
+			{ ...blankUnifiedMember(), first_name: 'มานี', last_name: 'มีนา' }
+		];
+		instance = mount(UnifiedRegistrationMembersSection, {
+			target: document.body,
+			props: { members, membersSectionDesc: '', channel: 'onsite', thaidEnabled: true }
+		});
+		flushSync();
+
+		[...document.querySelectorAll('button')]
+			.find((b) => b.textContent?.includes('สแกน ThaiD'))!
+			.click();
+		await vi.waitFor(() => expect(FakeEventSource.last?.url).toContain('sess-1'));
+		FakeEventSource.last!.emit('completed', {
+			profile: { ...scannedProfile, first_name: '', last_name: '' }
+		});
+
+		await vi.waitFor(
+			() => expect(toast.success).toHaveBeenCalledWith('ดึงข้อมูล มานี มีนา เรียบร้อยแล้ว'),
+			{ timeout: 3000 }
+		);
 	});
 });

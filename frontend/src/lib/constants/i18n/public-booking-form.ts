@@ -231,7 +231,8 @@ export const PUBLIC_BOOKING_FORM_I18N = {
 		thaidAddMember: 'เพิ่มสมาชิกด้วย ThaiD (สแกน QR)',
 		thaidFetchedToast: (name: string) => `ดึงข้อมูล ${name} เรียบร้อยแล้ว`,
 		thaidScanTitle: (member: string) => `ดึงข้อมูล ${member} ผ่าน ThaiD`,
-		thaidScanDesc: 'ให้สมาชิกใช้กล้องมือถือสแกน QR Code นี้ เพื่อยืนยันตัวตนและยินยอมส่งข้อมูล',
+		thaidScanDesc:
+			'ให้ผู้ลงทะเบียนใช้กล้องมือถือสแกน QR Code นี้ เพื่อยืนยันตัวตนและยินยอมส่งข้อมูล',
 		thaidScanFamilyMember: 'สมาชิกในครอบครัว',
 		thaidScanMemberN: (n: number) => `สมาชิกคนที่ ${n}`,
 		thaidScanHead: 'หัวหน้าครอบครัว',
@@ -743,7 +744,7 @@ export const PUBLIC_BOOKING_FORM_I18N = {
 		thaidFetchedToast: (name: string) => `Filled in details for ${name}`,
 		thaidScanTitle: (member: string) => `Fill in ${member} with ThaiD`,
 		thaidScanDesc:
-			'Have the member scan this QR code with their phone camera to verify identity and consent to share details',
+			'Have the person being registered scan this QR code with their phone camera to verify identity and consent to share details',
 		thaidScanFamilyMember: 'a family member',
 		thaidScanMemberN: (n: number) => `member ${n}`,
 		thaidScanHead: 'the head of household',
