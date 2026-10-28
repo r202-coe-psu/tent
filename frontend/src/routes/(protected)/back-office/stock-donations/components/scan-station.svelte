@@ -504,6 +504,9 @@
 	const walkinPhoneError = $derived(
 		walkinPhoneCheck.success ? null : walkinPhoneCheck.error.issues[0].message
 	);
+	// Shown once the field is left or a save is tried, not while the first digits go in.
+	let walkinPhoneTouched = $state(false);
+	const walkinPhoneShownError = $derived(walkinPhoneTouched ? walkinPhoneError : null);
 	let walkinDonorEmail = $state('');
 	type WalkinItemState = {
 		id: string;
@@ -787,7 +790,12 @@
 			toast.error('กรุณาระบุชื่อผู้บริจาค');
 			return;
 		}
-		if (walkinPhoneError) return;
+		if (walkinPhoneError) {
+			walkinPhoneTouched = true;
+			toast.error(walkinPhoneError);
+			document.getElementById('donor-phone-input')?.focus();
+			return;
+		}
 		// A picked item still at 0 is a missed count, not a line to drop silently.
 		const uncounted = walkinItems.filter((it) => it.itemId && !qtyGt(it.qty || '0', 0));
 		if (uncounted.length > 0) {
@@ -866,6 +874,7 @@
 			activeView = 'scan';
 			walkinDonorName = '';
 			walkinDonorPhone = '';
+			walkinPhoneTouched = false;
 			walkinDonorEmail = '';
 			walkinItems = [
 				{
@@ -1541,7 +1550,11 @@
 					variant="link"
 					size="sm"
 					type="button"
-					onclick={() => (initialView === 'walkin' && onClose ? onClose() : (activeView = 'scan'))}
+					onclick={() => {
+						walkinPhoneTouched = false;
+						if (initialView === 'walkin' && onClose) onClose();
+						else activeView = 'scan';
+					}}
 					class="mb-3 h-auto gap-1.5 p-0 text-sm font-medium text-blue-200 no-underline hover:text-white hover:no-underline"
 				>
 					<ArrowLeft class="size-4" />
@@ -1599,12 +1612,18 @@
 									// The input re-reads the getter after set, so it always shows the digits-only value.
 									(v) => (walkinDonorPhone = sanitizePhoneTyping(v ?? ''))
 								}
-								aria-invalid={walkinPhoneError ? true : undefined}
+								onblur={() => (walkinPhoneTouched = true)}
+								aria-invalid={walkinPhoneShownError ? true : undefined}
+								aria-describedby={walkinPhoneShownError ? 'donor-phone-error' : undefined}
 								class="h-10 rounded-xl text-sm"
 							/>
-							{#if walkinPhoneError}
-								<p class="text-xs text-destructive" data-testid="walkin-phone-error">
-									{walkinPhoneError}
+							{#if walkinPhoneShownError}
+								<p
+									id="donor-phone-error"
+									class="text-xs text-destructive"
+									data-testid="walkin-phone-error"
+								>
+									{walkinPhoneShownError}
 								</p>
 							{/if}
 						</div>

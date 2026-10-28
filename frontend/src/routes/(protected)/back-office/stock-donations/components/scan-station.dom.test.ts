@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { flushSync, mount, tick, unmount } from 'svelte';
+import { THAI_MOBILE_PHONE_MESSAGE } from '$lib/db/model';
 import ScanStation from './scan-station.svelte';
 
 const toastMock = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn(), info: vi.fn() }));
@@ -97,15 +98,21 @@ describe('scan-station walk-in', () => {
 		expect(phone.placeholder).toBe('เช่น 0891234567');
 
 		await type('donor-name-input', 'สมชาย');
+		// Not shown while typing — only once the field is left or a save is tried.
+		expect(document.querySelector('[data-testid="walkin-phone-error"]')).toBeNull();
 		save().click();
 		await settle();
 
+		const message = THAI_MOBILE_PHONE_MESSAGE;
 		expect(document.querySelector('[data-testid="walkin-phone-error"]')?.textContent?.trim()).toBe(
-			'เบอร์โทรต้องเป็นตัวเลข 10 หลัก ขึ้นต้นด้วย 0'
+			message
 		);
 		expect(fetchMock).not.toHaveBeenCalled();
-		// The phone gate is what stopped it: a valid phone moves on to the next check (no items).
-		expect(toastMock.error).not.toHaveBeenCalled();
+		// A blocked save says why and takes the user to the field, which may be off-screen.
+		expect(toastMock.error).toHaveBeenCalledWith(message);
+		expect(document.activeElement?.id).toBe('donor-phone-input');
+		expect(phone.getAttribute('aria-describedby')).toBe('donor-phone-error');
+		toastMock.error.mockReset();
 		await type('donor-phone-input', '0891234567');
 		expect(document.querySelector('[data-testid="walkin-phone-error"]')).toBeNull();
 		save().click();

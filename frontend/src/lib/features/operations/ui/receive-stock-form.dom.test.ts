@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { flushSync, mount, tick, unmount } from 'svelte';
+import { THAI_MOBILE_PHONE_MESSAGE } from '$lib/db/model';
 import ReceiveStockForm from './receive-stock-form.svelte';
 
 const mutation = { mutateAsync: vi.fn(), isPending: false, data: undefined };
@@ -91,10 +92,23 @@ describe('receive-stock walk-in phone', () => {
 		expect(input.value).toBe('');
 	});
 
+	it('waits until the field is left before showing the error', async () => {
+		const input = await openWalkIn();
+		await type(input, '0');
+		expect(errorEl()).toBeNull();
+		input.dispatchEvent(new Event('blur'));
+		await settle();
+		expect(errorEl()?.textContent?.trim()).toBe(THAI_MOBILE_PHONE_MESSAGE);
+		// Screen readers read the reason, not just "invalid".
+		expect(input.getAttribute('aria-describedby')).toBe(errorEl()!.id);
+	});
+
 	it('shows the inline error for an incomplete number and clears it for a valid one', async () => {
 		const input = await openWalkIn();
 		await type(input, '089123');
-		expect(errorEl()?.textContent?.trim()).toBe('เบอร์โทรต้องเป็นตัวเลข 10 หลัก ขึ้นต้นด้วย 0');
+		input.dispatchEvent(new Event('blur'));
+		await settle();
+		expect(errorEl()?.textContent?.trim()).toBe(THAI_MOBILE_PHONE_MESSAGE);
 		await type(input, '0891234567');
 		expect(errorEl()).toBeNull();
 		await type(input, '+66891234567');
