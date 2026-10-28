@@ -2,6 +2,7 @@
 	import {
 		FrontlineStationPage,
 		mergeOnsitePoolParam,
+		mergeOnsiteTabParam,
 		parseOnsiteDistributionParams
 	} from '$lib/features/distribution';
 	import { page } from '$app/state';
@@ -9,29 +10,29 @@
 	import { resolve } from '$app/paths';
 
 	// `?tab=returns&pool=<id>` opens the returns tab with that bulk return pool's detail.
-	const urlState = $derived.by(() => {
-		try {
-			return parseOnsiteDistributionParams(page.url.searchParams);
-		} catch {
-			return { tab: null, pool: null };
-		}
-	});
+	const urlState = $derived(parseOnsiteDistributionParams(page.url.searchParams));
 
-	// Keep `pool` in the URL on select / close; other params are preserved.
+	// Replace the query string (other params preserved); skipped when nothing changed.
+	function replaceQuery(next: URLSearchParams) {
+		const qs = next.toString();
+		if (qs === page.url.searchParams.toString()) return;
+		void goto(
+			resolve(
+				`/onsite/distribution${qs ? `?${qs}` : ''}` as
+					'/onsite/distribution' | `/onsite/distribution?${string}`
+			),
+			{ replaceState: true, keepFocus: true, noScroll: true }
+		);
+	}
+
+	// Keep `pool` in the URL on select / close.
 	function updatePoolParam(poolId: string | null) {
-		try {
-			const qs = mergeOnsitePoolParam(page.url.searchParams, poolId).toString();
-			if (qs === page.url.searchParams.toString()) return;
-			void goto(
-				resolve(
-					`/onsite/distribution${qs ? `?${qs}` : ''}` as
-						'/onsite/distribution' | `/onsite/distribution?${string}`
-				),
-				{ replaceState: true, keepFocus: true, noScroll: true }
-			);
-		} catch {
-			// page.url unavailable — nothing to persist
-		}
+		replaceQuery(mergeOnsitePoolParam(page.url.searchParams, poolId));
+	}
+
+	// Keep `tab` in the URL; `pool` is dropped once the user leaves the returns tab.
+	function updateTabParam(tab: Parameters<typeof mergeOnsiteTabParam>[1]) {
+		replaceQuery(mergeOnsiteTabParam(page.url.searchParams, tab));
 	}
 </script>
 
@@ -47,4 +48,5 @@
 	initialTab={urlState.tab ?? 'receive'}
 	initialPoolId={urlState.pool}
 	onSelectedPoolChange={updatePoolParam}
+	onTabChange={updateTabParam}
 />

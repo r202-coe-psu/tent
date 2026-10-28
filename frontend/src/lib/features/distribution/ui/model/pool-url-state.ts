@@ -56,7 +56,7 @@ export function onsiteReturnsHref(poolId: string | null): string {
 
 /**
  * Read `tab` / `pool` on the Distribution Desk. Unknown `tab` is `null`; a blank `pool` is `null`.
- * A `pool` param without a valid `tab` implies the `returns` tab (that is where pools live).
+ * A present `pool` always forces the `returns` tab (pools live only there), whatever `tab` says.
  */
 export function parseOnsiteDistributionParams(params: URLSearchParams): {
 	tab: FrontlineTab | null;
@@ -64,8 +64,16 @@ export function parseOnsiteDistributionParams(params: URLSearchParams): {
 } {
 	const rawTab = params.get('tab');
 	const pool = params.get('pool')?.trim() || null;
-	const tab = FRONTLINE_TABS.find((t) => t === rawTab) ?? (pool ? 'returns' : null);
+	const tab = pool ? 'returns' : (FRONTLINE_TABS.find((t) => t === rawTab) ?? null);
 	return { tab, pool };
+}
+
+/** `base` with the desk `tab` set; `pool` is dropped unless `returns`. Other keys are kept. */
+export function mergeOnsiteTabParam(base: URLSearchParams, tab: FrontlineTab): URLSearchParams {
+	const out = new URLSearchParams(base);
+	out.set('tab', tab);
+	if (tab !== 'returns') out.delete('pool');
+	return out;
 }
 
 /** `base` with the desk `pool` param set (and `tab=returns`) or removed; other keys are kept. */

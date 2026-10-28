@@ -3,6 +3,7 @@ import {
 	bulkReturnPoolHref,
 	deskFallbackForBackOfficeParams,
 	mergeOnsitePoolParam,
+	mergeOnsiteTabParam,
 	mergePoolParams,
 	onsiteReturnsHref,
 	parseOnsiteDistributionParams,
@@ -58,6 +59,31 @@ describe('parseOnsiteDistributionParams', () => {
 		expect(parseOnsiteDistributionParams(new URLSearchParams('tab=nope&pool=abc')).tab).toBe(
 			'returns'
 		);
+	});
+
+	it('a pool forces the returns tab even when another valid tab is given', () => {
+		expect(parseOnsiteDistributionParams(new URLSearchParams('tab=food&pool=x'))).toEqual({
+			tab: 'returns',
+			pool: 'x'
+		});
+	});
+});
+
+describe('mergeOnsiteTabParam', () => {
+	it('sets tab and keeps other keys', () => {
+		const out = mergeOnsiteTabParam(new URLSearchParams('x=1'), 'food');
+		expect(out.get('x')).toBe('1');
+		expect(out.get('tab')).toBe('food');
+	});
+
+	it('drops pool for a non-returns tab', () => {
+		const out = mergeOnsiteTabParam(new URLSearchParams('tab=returns&pool=x&y=2'), 'supplies');
+		expect(out.toString()).toBe('tab=supplies&y=2');
+	});
+
+	it('keeps pool for the returns tab', () => {
+		const out = mergeOnsiteTabParam(new URLSearchParams('tab=returns&pool=x'), 'returns');
+		expect(out.toString()).toBe('tab=returns&pool=x');
 	});
 });
 

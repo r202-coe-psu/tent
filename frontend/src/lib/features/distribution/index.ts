@@ -415,15 +415,16 @@ export {
 	type WarehouseReturnFormValidationResult
 } from './ui/model/warehouse-return';
 
-/** Deep link to one bulk return pool (back-office pools tab, detail open). */
+/**
+ * Bulk return pool links: back-office deep link + fallback to the desk, and the Distribution
+ * Desk (`/onsite/distribution`) `?tab=` / `?pool=` URL helpers.
+ */
 export {
 	bulkReturnPoolHref,
 	deskFallbackForBackOfficeParams,
 	mergeOnsitePoolParam,
-	onsiteReturnsHref,
-	parseOnsiteDistributionParams,
-	ONSITE_DISTRIBUTION_PATH,
-	type FrontlineTab
+	mergeOnsiteTabParam,
+	parseOnsiteDistributionParams
 } from './ui/model/pool-url-state';
 
 export {
