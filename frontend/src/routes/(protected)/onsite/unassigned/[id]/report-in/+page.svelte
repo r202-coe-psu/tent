@@ -32,6 +32,8 @@
 	} from '$lib/features/people';
 	import {
 		formatOpenPetLabel,
+		petsLeftBehind,
+		totalPetCount,
 		unassignedHouseholdToUnifiedInput,
 		unassignedMemberToUnifiedMember,
 		unassignedPhotoUrl,
@@ -47,9 +49,16 @@
 	const openMembers = $derived(
 		(review?.open_members ?? []).filter((m) => data.memberIds.includes(m.reserved_evacuee_id))
 	);
-	const openPets = $derived(
-		(review?.open_pets ?? []).filter((p) => data.petIds.includes(p.pet_id))
+	let claimEveryOpenPet = $state(false);
+	const selectedPetIds = $derived(
+		claimEveryOpenPet ? (review?.open_pets ?? []).map((pet) => pet.pet_id) : data.petIds
 	);
+	const openPets = $derived(
+		(review?.open_pets ?? []).filter((p) => selectedPetIds.includes(p.pet_id))
+	);
+	const leftBehindPets = $derived(petsLeftBehind(review?.open_pets ?? [], selectedPetIds));
+	const leftBehindCount = $derived(totalPetCount(leftBehindPets));
+
 	/** No member ticked at all — pets-only claim (FR-PUF-16), no Report-in step. */
 	const isPetsOnly = $derived(data.memberIds.length === 0);
 	/** Ticked members no longer open (claimed elsewhere between dialog and page load). */
@@ -118,7 +127,7 @@
 			registrationId: data.registrationId,
 			payload: {
 				...(data.memberIds.length > 0 ? { member_ids: data.memberIds } : {}),
-				...(data.petIds.length > 0 ? { pet_ids: data.petIds } : {}),
+				...(selectedPetIds.length > 0 ? { pet_ids: selectedPetIds } : {}),
 				...(data.shelterCode ? { shelter_code: data.shelterCode } : {})
 			}
 		};
@@ -208,6 +217,40 @@
 		<ArrowLeft class="size-4" />
 		<span>กลับคิวทะเบียน</span>
 	</button>
+{/snippet}
+
+{#snippet leftBehindWarning()}
+	{#if leftBehindPets.length > 0}
+		<div class="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-4 shadow-2xs" role="status">
+			<div class="flex items-start gap-3">
+				<AlertTriangle class="mt-0.5 size-5 shrink-0 text-amber-600" aria-hidden="true" />
+				<div class="min-w-0 flex-1">
+					<h2 class="text-sm font-bold text-amber-900">
+						ยังมีสัตว์เลี้ยง {leftBehindCount} ตัวที่ไม่ได้เลือก
+					</h2>
+					<p class="mt-1 text-xs text-amber-900">
+						ถ้ารับเข้าศูนย์ตอนนี้ สัตว์เลี้ยงด้านล่างจะค้างอยู่ในคิวกลาง
+						และจะไม่ปรากฏในข้อมูลครัวเรือนที่สถานี 1
+					</p>
+					<ul class="mt-2 space-y-1">
+						{#each leftBehindPets as pet (pet.pet_id)}
+							<li class="text-xs font-medium text-amber-900">
+								{formatOpenPetLabel(pet)}{pet.has_cage ? ' · มีกรง' : ''}
+							</li>
+						{/each}
+					</ul>
+					<Button
+						variant="outline"
+						class="mt-3 min-h-11 w-full border-amber-300 bg-white text-amber-900 hover:bg-amber-100 sm:w-auto"
+						onclick={() => (claimEveryOpenPet = true)}
+					>
+						<PawPrint class="size-4" aria-hidden="true" />
+						เพิ่มสัตว์เลี้ยงที่เหลือเข้ารายการนี้
+					</Button>
+				</div>
+			</div>
+		</div>
+	{/if}
 {/snippet}
 
 <div class="mx-auto w-full max-w-6xl px-4 py-4 md:px-6 md:py-6 xl:max-w-7xl">
@@ -311,7 +354,9 @@
 					{isConfirmingPetsOnly ? 'กำลังรับเข้าศูนย์...' : 'ยืนยันรับเข้าศูนย์'}
 				</Button>
 			</Card.Root>
+			{@render leftBehindWarning()}
 		{:else if initialHousehold}
+			{@render leftBehindWarning()}
 			{#if openPets.length > 0}
 				<Card.Root class="mb-4 border-border bg-card p-4 shadow-sm">
 					<div class="mb-2 flex items-center gap-2">

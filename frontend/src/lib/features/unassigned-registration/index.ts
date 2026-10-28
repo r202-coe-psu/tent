@@ -40,7 +40,9 @@ export {
 	formatOpenMemberName,
 	formatOpenMemberVulnerableGroup,
 	formatOpenPetLabel,
-	isOnlineRequiredError
+	isOnlineRequiredError,
+	petsLeftBehind,
+	totalPetCount
 } from './domain/search';
 export {
 	pickReportInEvacueeId,

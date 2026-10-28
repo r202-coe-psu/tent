@@ -13,7 +13,10 @@ import {
 	formatOpenMemberVulnerableGroup,
 	isOnlineRequiredError,
 	openMemberHitSchema,
-	type OpenMemberHit
+	petsLeftBehind,
+	totalPetCount,
+	type OpenMemberHit,
+	type OpenPetHit
 } from './search';
 
 const baseMember = {
@@ -128,5 +131,59 @@ describe('isOnlineRequiredError', () => {
 		expect(isOnlineRequiredError({ code: 'ONLINE_REQUIRED' })).toBe(true);
 		expect(isOnlineRequiredError({ error: { code: 'ONLINE_REQUIRED' } })).toBe(true);
 		expect(isOnlineRequiredError({ error: { code: 'OTHER' } })).toBe(false);
+	});
+});
+
+describe('petsLeftBehind (#798)', () => {
+	const pet = (id: string, count = 1): OpenPetHit => ({
+		pet_id: id,
+		status: 'open',
+		species: 'dog',
+		count
+	});
+
+	it('returns the open pets the claimer did not tick', () => {
+		const open = [pet('pet:a'), pet('pet:b'), pet('pet:c')];
+
+		expect(petsLeftBehind(open, ['pet:b']).map((p) => p.pet_id)).toEqual(['pet:a', 'pet:c']);
+	});
+
+	it('returns every open pet when nothing is ticked', () => {
+		const open = [pet('pet:a'), pet('pet:b')];
+
+		expect(petsLeftBehind(open, [])).toHaveLength(2);
+	});
+
+	it('returns nothing when every open pet is ticked', () => {
+		const open = [pet('pet:a'), pet('pet:b')];
+
+		expect(petsLeftBehind(open, ['pet:a', 'pet:b'])).toEqual([]);
+	});
+
+	it('ignores ticked ids that are no longer open', () => {
+		const open = [pet('pet:a')];
+
+		expect(petsLeftBehind(open, ['pet:a', 'pet:gone'])).toEqual([]);
+	});
+
+	it('handles an empty open list', () => {
+		expect(petsLeftBehind([], ['pet:a'])).toEqual([]);
+	});
+});
+
+describe('totalPetCount', () => {
+	const pet = (id: string, count: number): OpenPetHit => ({
+		pet_id: id,
+		status: 'open',
+		species: 'cat',
+		count
+	});
+
+	it('sums the count of each row rather than counting rows', () => {
+		expect(totalPetCount([pet('pet:a', 2), pet('pet:b', 3)])).toBe(5);
+	});
+
+	it('is zero for an empty list', () => {
+		expect(totalPetCount([])).toBe(0);
 	});
 });

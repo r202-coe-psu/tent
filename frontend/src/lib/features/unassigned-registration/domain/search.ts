@@ -156,6 +156,18 @@ export function formatOpenPetLabel(pet: OpenPetHit): string {
 	return notes ? `${species}${countPart} (${notes})` : `${species}${countPart}`;
 }
 
+export function petsLeftBehind(
+	openPets: readonly OpenPetHit[],
+	selectedPetIds: readonly string[]
+): OpenPetHit[] {
+	const selected = new Set(selectedPetIds);
+	return openPets.filter((pet) => !selected.has(pet.pet_id));
+}
+
+export function totalPetCount(pets: readonly OpenPetHit[]): number {
+	return pets.reduce((sum, pet) => sum + pet.count, 0);
+}
+
 /** Thai-locale date+time for claim registration header. */
 export function formatClaimCreatedAt(iso: string): string {
 	return formatThaiDateTime(iso) || iso;
