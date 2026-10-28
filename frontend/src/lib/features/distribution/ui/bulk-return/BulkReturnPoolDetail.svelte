@@ -421,7 +421,8 @@
 									entryId: entry._id,
 									appliedRefs: appliedRefsByEntry.get(entry._id) ?? [],
 									canReopen,
-									reopened: reopenedIds.has(entry._id)
+									reopened: reopenedIds.has(entry._id),
+									reopenedKnown: timelineQuery.isSuccess
 								})}
 								{@const item = resolveItemDisplay(entry.item_id, catalog)}
 								{@const closedRefs = closedRefsByEntry.get(entry._id) ?? []}

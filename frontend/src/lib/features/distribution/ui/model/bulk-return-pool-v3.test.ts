@@ -815,6 +815,7 @@ describe('reopenLoanAction', () => {
 			appliedRefs,
 			canReopen: true,
 			reopened: false,
+			reopenedKnown: true,
 			...extra
 		});
 	const notice = (appliedRefs: Args['appliedRefs']) => act(appliedRefs).blockedNotice;
@@ -869,6 +870,18 @@ describe('reopenLoanAction', () => {
 	it('hides a reopened entry with no revertable ref left', () => {
 		expect(act([active], { reopened: true })).toEqual(HIDDEN);
 		expect(act([lost], { reopened: true })).toEqual(HIDDEN);
+	});
+
+	it('shows nothing for a blocked entry while the reopened state is unknown', () => {
+		expect(act([ok, lost], { reopenedKnown: false })).toEqual(HIDDEN);
+		expect(act([lost], { reopenedKnown: false })).toEqual(HIDDEN);
+	});
+
+	it('keeps the button for an all-revertable entry while the reopened state is unknown', () => {
+		expect(act([ok], { reopenedKnown: false })).toEqual({
+			showButton: true,
+			blockedNotice: null
+		});
 	});
 
 	it('explains an entry whose applied loans are all lost', () => {
