@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+	buildDonationItemsPayload,
 	donationPayloadUnit,
 	donorUnitOptions,
 	isDonorEditable,
@@ -113,5 +114,34 @@ describe('linesMissingExpiry (perishable lot rule, schema.md §2.1)', () => {
 
 	it('falls back to the item id when the line has no display name', () => {
 		expect(linesMissingExpiry([{ item_id: 'item:egg', perishable: true }])).toEqual(['item:egg']);
+	});
+});
+
+describe('buildDonationItemsPayload', () => {
+	const t = { unspecified: 'ไม่ระบุ', defaultItemUnit: 'piece' };
+	const line = (amount: number) => ({ name: 'ข้าวสาร', unit: 'kg', amount, condition: 'new' });
+
+	it('sends the typed amount as qty', () => {
+		expect(buildDonationItemsPayload([line(3)], t)[0].qty).toBe(3);
+		expect(buildDonationItemsPayload([line(0.5)], t)[0].qty).toBe(0.5);
+	});
+
+	it('never coerces 0 to 1', () => {
+		expect(buildDonationItemsPayload([line(0)], t)[0].qty).toBe(0);
+	});
+
+	it('does not fabricate an item for an empty list', () => {
+		expect(buildDonationItemsPayload([], t)).toEqual([]);
+	});
+
+	it('keeps the existing mapping and never sends needQty', () => {
+		const item = { name: '', unit: '', amount: 5, condition: 'new', remark: '', needQty: 365 };
+		const [p] = buildDonationItemsPayload([item], t);
+		expect(p.free_text).toBe('ไม่ระบุ');
+		expect(p.item_id).toBeUndefined();
+		expect(p.unit).toBe('piece');
+		expect(p.condition).toBe('new');
+		expect(p.note).toBeUndefined();
+		expect(p).not.toHaveProperty('needQty');
 	});
 });

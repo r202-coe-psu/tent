@@ -20,13 +20,13 @@
 	import { toast } from 'svelte-sonner';
 	import { onMount } from 'svelte';
 	import {
+		buildDonationItemsPayload,
 		publicDonationErrorMessage,
 		slotModeForDelivery,
 		useDonationSlots
 	} from '$lib/features/donations';
 	import { formatUnit, useUnitsOfMeasure } from '$lib/features/catalog';
 	import { getDonationStore } from '../../../routes/(public)/donations/donation.svelte';
-	import { buildDonationItemsPayload } from '../../../routes/(public)/donations/donation-payload';
 	import { langState } from '$lib/states/i18n.svelte';
 	import { getTranslation } from '$lib/utils/i18n';
 	import { bangkokToday, DISPLAY_TIME_ZONE } from '$lib/utils/date';
