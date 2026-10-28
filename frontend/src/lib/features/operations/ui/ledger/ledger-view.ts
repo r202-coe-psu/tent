@@ -134,9 +134,7 @@ export function toLedgerRow(entry: StockLedger, lookup: LedgerLookup): LedgerRow
 		? [adjustReasonLabel, entry.note?.trim()].filter(Boolean).join(' · ')
 		: '';
 	const lot = entry.lot && isOut ? { ...entry.lot, note: undefined } : entry.lot;
-	// Only when the row's detail text is the ref id itself (adjust / destination win otherwise).
-	// Safety net for when ledgerRefHref's reason gate widens (e.g. to adjust rows); today a
-	// receive row is never outgoing and has no adjust detail, so this never changes the result.
+	// Adjust / destination text replaces the ref id as the row detail, so it wins over the ref link.
 	const refHref =
 		adjustDetail || destination ? undefined : ledgerRefHref(entry.reason, entry.ref_id);
 	return {

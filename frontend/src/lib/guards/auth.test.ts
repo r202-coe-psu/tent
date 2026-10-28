@@ -41,7 +41,8 @@ import {
 	requireMedicalScreening,
 	requireVolunteerBackoffice,
 	requireWarehouseAccess,
-	LANDING_ROUTE
+	LANDING_ROUTE,
+	type DeskFallbackHref
 } from './auth';
 
 describe('resolvePostLoginDestination (CR-124)', () => {
@@ -256,9 +257,9 @@ describe('requireDistributionDesk (Station 4 route guard)', () => {
 });
 
 describe('requireWarehouseAccess desk fallback (bulk pool links)', () => {
-	const deskFallback = '/onsite/distribution?tab=returns&pool=p1';
+	const deskFallback: DeskFallbackHref = '/onsite/distribution?tab=returns&pool=p1';
 
-	async function outcome(roles: string[], fallback?: string | null) {
+	async function outcome(roles: string[], fallback?: DeskFallbackHref | null) {
 		mocks.user = { roles };
 		mocks.selectedShelterCode = 'SH001';
 		try {
@@ -281,7 +282,6 @@ describe('requireWarehouseAccess desk fallback (bulk pool links)', () => {
 		const roles = ['shelter:SH001', 'SH001:distribution_staff'];
 		expect(await outcome(roles)).toBe(LANDING_ROUTE);
 		expect(await outcome(roles, null)).toBe(LANDING_ROUTE);
-		expect(await outcome(roles, '')).toBe(LANDING_ROUTE);
 	});
 
 	it('does not redirect SA, SM or warehouse-side staff', async () => {

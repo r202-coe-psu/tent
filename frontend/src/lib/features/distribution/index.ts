@@ -424,7 +424,8 @@ export {
 	deskFallbackForBackOfficeParams,
 	mergeOnsitePoolParam,
 	mergeOnsiteTabParam,
-	parseOnsiteDistributionParams
+	parseOnsiteDistributionParams,
+	type FrontlineTab
 } from './ui/model/pool-url-state';
 
 export {

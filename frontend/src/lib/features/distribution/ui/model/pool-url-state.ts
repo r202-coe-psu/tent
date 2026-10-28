@@ -43,15 +43,19 @@ export function bulkReturnPoolHref(poolId: string): string {
 /** Distribution Desk (Station 4) page — the pool link target for staff without back-office access. */
 export const ONSITE_DISTRIBUTION_PATH = '/onsite/distribution';
 
+/** Desk href with an optional query string (typed so route code can pass it to `resolve`). */
+export type OnsiteDistributionHref =
+	typeof ONSITE_DISTRIBUTION_PATH | `${typeof ONSITE_DISTRIBUTION_PATH}?${string}`;
+
 export const FRONTLINE_TABS = ['receive', 'food', 'supplies', 'returns', 'reconciliation'] as const;
 
 /** Tabs of the Distribution Desk (`?tab=`). */
 export type FrontlineTab = (typeof FRONTLINE_TABS)[number];
 
 /** Desk returns tab, with `pool` appended when a pool id is given. */
-export function onsiteReturnsHref(poolId: string | null): string {
-	const base = `${ONSITE_DISTRIBUTION_PATH}?tab=returns`;
-	return poolId ? `${base}&pool=${encodeURIComponent(poolId)}` : base;
+export function onsiteReturnsHref(poolId: string | null): OnsiteDistributionHref {
+	const base = `${ONSITE_DISTRIBUTION_PATH}?tab=returns` as const;
+	return poolId ? (`${base}&pool=${encodeURIComponent(poolId)}` as const) : base;
 }
 
 /**
@@ -95,7 +99,9 @@ export function mergeOnsitePoolParam(
  * Desk href to use when a user cannot open the back office but follows a pool link
  * (`?view=bulk_pools` or `?pool=`). `null` when the params are not a pool link.
  */
-export function deskFallbackForBackOfficeParams(params: URLSearchParams): string | null {
+export function deskFallbackForBackOfficeParams(
+	params: URLSearchParams
+): OnsiteDistributionHref | null {
 	const { view, pool } = parsePoolParams(params);
 	return view === 'bulk_pools' ? onsiteReturnsHref(pool) : null;
 }

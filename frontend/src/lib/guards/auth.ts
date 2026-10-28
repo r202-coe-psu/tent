@@ -166,7 +166,7 @@ export function confineKioskStaffOnly(pathname: string) {
  */
 export async function requireWarehouseAccess(
 	fetchFn: typeof fetch = fetch,
-	options?: { deskFallback?: string | null }
+	options?: { deskFallback?: DeskFallbackHref | null }
 ) {
 	await requireAuth(fetchFn);
 	const roles = authStore.user?.roles ?? [];
@@ -176,13 +176,12 @@ export async function requireWarehouseAccess(
 		!isShelterManager(roles, shelter) &&
 		!isWarehouseStaff(roles, shelter)
 	) {
-		const dest = warehouseDeniedDestination(roles, shelter, options?.deskFallback);
-		if (dest === LANDING_ROUTE) throw redirect(302, resolve(LANDING_ROUTE));
-		throw redirect(302, resolve(dest as DeskFallbackHref));
+		throw redirect(302, resolve(warehouseDeniedDestination(roles, shelter, options?.deskFallback)));
 	}
 }
 
-type DeskFallbackHref = '/onsite/distribution' | `/onsite/distribution?${string}`;
+/** Distribution Desk href (optional query) a route may offer as the warehouse-guard fallback. */
+export type DeskFallbackHref = '/onsite/distribution' | `/onsite/distribution?${string}`;
 
 /**
  * Where a user denied by {@link requireWarehouseAccess} goes: `deskFallback` (an app path with
@@ -192,8 +191,8 @@ type DeskFallbackHref = '/onsite/distribution' | `/onsite/distribution?${string}
 export function warehouseDeniedDestination(
 	roles: readonly string[],
 	shelter: string | null,
-	deskFallback?: string | null
-): string {
+	deskFallback?: DeskFallbackHref | null
+): DeskFallbackHref | typeof LANDING_ROUTE {
 	if (deskFallback && canAccessDistributionDesk(roles, shelter)) return deskFallback;
 	return LANDING_ROUTE;
 }

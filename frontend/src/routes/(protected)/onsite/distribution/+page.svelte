@@ -3,7 +3,8 @@
 		FrontlineStationPage,
 		mergeOnsitePoolParam,
 		mergeOnsiteTabParam,
-		parseOnsiteDistributionParams
+		parseOnsiteDistributionParams,
+		type FrontlineTab
 	} from '$lib/features/distribution';
 	import { page } from '$app/state';
 	import { goto } from '$app/navigation';
@@ -31,7 +32,7 @@
 	}
 
 	// Keep `tab` in the URL; `pool` is dropped once the user leaves the returns tab.
-	function updateTabParam(tab: Parameters<typeof mergeOnsiteTabParam>[1]) {
+	function updateTabParam(tab: FrontlineTab) {
 		replaceQuery(mergeOnsiteTabParam(page.url.searchParams, tab));
 	}
 </script>
