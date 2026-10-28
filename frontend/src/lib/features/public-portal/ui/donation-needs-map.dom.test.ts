@@ -6,7 +6,7 @@ import type { PublicShelterItem } from '../domain/types';
 import DonationNeedsMap from './donation-needs-map.svelte';
 
 type MapProps = {
-	shelters: Array<{ id: string; code: string }>;
+	shelters: Array<{ id: string; code: string; pin: { label: string; fill: string } }>;
 	selectedId: string | null;
 	onSelectShelter: (id: string) => void;
 	onLoadError: () => void;
@@ -101,6 +101,35 @@ describe('DonationNeedsMap', () => {
 		await render();
 		expect(map().shelters.map((s) => s.code)).toEqual(['SH001', 'SH002']);
 		expect(cardText()).toBeNull();
+	});
+
+	it("numbers each pin by its card's place on the board, counting shelters without a pin", async () => {
+		await render({ shelters: [board[2], board[0], board[1]] });
+		expect(map().shelters.map((s) => [s.code, s.pin.label])).toEqual([
+			['SH001', '2'],
+			['SH002', '3']
+		]);
+	});
+
+	it("colours a pin by the shelter's most urgent open need", async () => {
+		await render({
+			shelters: [
+				{
+					code: 'SH001',
+					name: 'ศูนย์หาดใหญ่',
+					needs: [
+						{ item_id: 'item:a', qty_needed: 1, urgency: 'normal' },
+						{ item_id: 'item:b', qty_needed: 1, urgency: 'critical' }
+					]
+				},
+				{
+					code: 'SH002',
+					name: 'ศูนย์สงขลา',
+					needs: [{ item_id: 'item:c', qty_needed: 1, urgency: 'critical', status: 'closed' }]
+				}
+			]
+		});
+		expect(map().shelters.map((s) => s.pin.fill)).toEqual(['#DC2626', '#047857']);
 	});
 
 	it('reports a pin tap to the board', async () => {

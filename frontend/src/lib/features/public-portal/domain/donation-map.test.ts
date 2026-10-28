@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { buildDonationMap, type DonationMapPoint, type DonationNeedsEntry } from './donation-map';
+import {
+	buildDonationMap,
+	donationShelterUrgency,
+	type DonationMapPoint,
+	type DonationNeedsEntry
+} from './donation-map';
 import type { PublicShelterItem } from './types';
 
 function needsEntry(code: string, overrides: Partial<DonationNeedsEntry> = {}): DonationNeedsEntry {
@@ -128,6 +133,29 @@ describe('buildDonationMap', () => {
 		]);
 	});
 
+	it('ranks a need without a set level by what is still short, like the board', () => {
+		const { onMap } = buildDonationMap(
+			[
+				needsEntry('SH001', {
+					needs: [
+						{ item_id: 'item:a', qty_needed: 50 },
+						{ item_id: 'item:b', qty_needed: 3, urgency: '' },
+						{ item_id: 'item:c', qty_needed: 0 },
+						{ item_id: 'item:d', qty_needed: 80, urgency: 'normal' }
+					]
+				})
+			],
+			[publicShelter('SH001')],
+			null
+		);
+		expect(onMap[0].needs.map((n) => [n.itemId, n.urgency])).toEqual([
+			['item:a', 'critical'],
+			['item:b', 'high'],
+			['item:c', 'normal'],
+			['item:d', 'normal']
+		]);
+	});
+
 	it('reads qty_needed from a string or a number', () => {
 		const { onMap } = buildDonationMap(
 			[
@@ -173,5 +201,26 @@ describe('buildDonationMap', () => {
 		);
 		expect(onMap).toHaveLength(1);
 		expect(onMap[0]).toMatchObject({ code: 'SH001', needs: [], geo: { lat: 7.0, lng: 100.4 } });
+	});
+});
+
+describe('donationShelterUrgency', () => {
+	const need = (urgency: 'critical' | 'high' | 'normal') => ({
+		itemId: `item:${urgency}`,
+		name: urgency,
+		unit: '',
+		qtyNeeded: 1,
+		urgency
+	});
+
+	it('takes the most urgent open need', () => {
+		expect(donationShelterUrgency([need('normal'), need('high')])).toBe('high');
+		expect(donationShelterUrgency([need('high'), need('critical'), need('normal')])).toBe(
+			'critical'
+		);
+	});
+
+	it('is normal with no open needs', () => {
+		expect(donationShelterUrgency([])).toBe('normal');
 	});
 });

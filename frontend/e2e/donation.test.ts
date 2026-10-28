@@ -92,15 +92,19 @@ async function openShelterStep(page: Page, sheltersStatus = 200) {
 }
 
 test.describe('Needs board shelter map (#814)', TAGS, () => {
-	test('tapping a pin opens the shelter card under the map and donating locks that shelter', async ({
+	test('tapping a pin opens the shelter card on the map and donating locks that shelter', async ({
 		page
 	}) => {
 		await openBoard(page);
 
 		await expect(page.locator('.maplibregl-canvas').first()).toBeVisible({ timeout: 15_000 });
-		await page.getByTestId('shelter-marker-SH001').click({ timeout: 15_000 });
+		// The pin carries the number of its card in the list below.
+		await expect(page.getByTestId('shelter-marker-SH001')).toContainText('1', { timeout: 15_000 });
+		await expect(page.getByTestId('donation-pin-badge').first()).toContainText('1');
+		await page.getByTestId('shelter-marker-SH001').click();
 
 		const card = page.getByTestId('donation-needs-map-card');
+		await expect(card.getByTestId('donation-pin-badge')).toContainText('1');
 		await expect(card).toContainText(SH001_NAME);
 		await expect(card).toContainText('ข้าวสาร');
 		await expect(card.getByRole('button', { name: 'ดูความต้องการทั้งหมด' })).toBeVisible();
@@ -109,7 +113,7 @@ test.describe('Needs board shelter map (#814)', TAGS, () => {
 		await expect(navigate).toHaveAttribute('href', DIRECTIONS_HREF);
 		await expect(navigate).toHaveAttribute('target', '_blank');
 
-		await card.getByRole('button', { name: 'บริจาครายการนี้' }).first().click();
+		await card.getByRole('button', { name: 'บริจาค', exact: true }).first().click();
 		await expect(page.locator('#donor-name')).toBeVisible();
 		await fillDonorStep(page);
 		await expect(page.getByTestId('drop-off-shelter-name')).toHaveText(SH001_NAME);
@@ -144,6 +148,27 @@ test.describe('Needs board shelter map (#814)', TAGS, () => {
 			() => document.documentElement.scrollWidth - document.documentElement.clientWidth
 		);
 		expect(overflow).toBeLessThanOrEqual(0);
+	});
+
+	test('on a wide screen the card opens over the left of the map', async ({ page }) => {
+		await page.setViewportSize({ width: 1280, height: 900 });
+		await openBoard(page);
+
+		const map = page.getByTestId('donation-needs-map');
+		await expect(map).toBeVisible({ timeout: 15_000 });
+		await page.getByTestId('shelter-marker-SH001').click({ timeout: 15_000 });
+		const card = page.getByTestId('donation-needs-map-card');
+		await expect(card).toBeVisible();
+
+		const mapBox = await map.boundingBox();
+		const cardBox = await card.boundingBox();
+		expect(mapBox && cardBox && cardBox.x >= mapBox.x && cardBox.x < mapBox.x + 40).toBe(true);
+		expect(
+			mapBox &&
+				cardBox &&
+				cardBox.y >= mapBox.y &&
+				cardBox.y + cardBox.height <= mapBox.y + mapBox.height
+		).toBe(true);
 	});
 });
 
@@ -505,6 +530,53 @@ test.describe('Needs board reflects the urgency staff set (not the quantity)', T
  * The "ปกติ" chip used to return every open need — same result as "ทั้งหมด" — because
  * it filtered on `status` alone and never looked at the level.
  */
+test.describe('Board order follows urgency (#814)', TAGS, () => {
+	test('critical, then high, then normal, each level in code order', async ({ page }) => {
+		const need = (id: string, urgency: string) => ({
+			item_id: `item:${id}`,
+			name: id,
+			qty_needed: 10,
+			unit: 'kg',
+			urgency,
+			status: 'open'
+		});
+		await page.route('**/api/public/v1/needs', (route) =>
+			route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify([
+					{ code: 'SH001', name: 'ศูนย์ลำดับ ปกติ', needs: [need('a', 'normal')] },
+					{ code: 'SH002', name: 'ศูนย์ลำดับ สำคัญ ก', needs: [need('b', 'important')] },
+					{ code: 'SH003', name: 'ศูนย์ลำดับ วิกฤต', needs: [need('c', 'critical')] },
+					{
+						code: 'SH004',
+						name: 'ศูนย์ลำดับ สำคัญ ข',
+						needs: [need('d', 'normal'), need('e', 'high')]
+					}
+				])
+			})
+		);
+		await page.route('**/api/public/v1/shelters*', (route) => route.fulfill({ status: 503 }));
+		await page.goto('/donations');
+
+		await expect(page.locator('h3').filter({ hasText: /^ศูนย์ลำดับ/ })).toHaveText(
+			['ศูนย์ลำดับ วิกฤต', 'ศูนย์ลำดับ สำคัญ ก', 'ศูนย์ลำดับ สำคัญ ข', 'ศูนย์ลำดับ ปกติ'],
+			{ timeout: 15_000 }
+		);
+		// Each badge also carries screen-reader text ("หมุดที่") before its number.
+		await expect(page.getByTestId('donation-pin-badge')).toHaveText([/1$/, /2$/, /3$/, /4$/]);
+
+		// The card's status chip names the same level as its pin, high included.
+		await expect(page.getByText('วิกฤต (Critical)')).toHaveCount(1);
+		await expect(page.getByText('สำคัญ (High)')).toHaveCount(2);
+		await expect(page.getByText('เปิดรับบริจาค', { exact: true })).toHaveCount(1);
+
+		// Inside a card the most urgent line comes first, even when the API lists it later.
+		const mixed = page.locator('div.group').filter({ hasText: 'ศูนย์ลำดับ สำคัญ ข' });
+		await expect(mixed.getByText(/^\[(สำคัญ|วิกฤต)\]|^[a-e]$/).first()).toHaveText('[สำคัญ] e');
+	});
+});
+
 test.describe('Urgency filter chips', TAGS, () => {
 	test.beforeEach(async ({ page }) => {
 		await page.route('**/api/public/v1/needs', async (route) => {

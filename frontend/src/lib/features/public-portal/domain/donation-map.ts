@@ -69,10 +69,16 @@ function hasUsableGeo(geo: PublicGeoPoint | null | undefined): geo is PublicGeoP
 	);
 }
 
-function toUrgency(level: string | undefined): DonationNeedUrgency {
-	if (level === 'critical') return 'critical';
-	if (level === 'important' || level === 'high') return 'high';
-	return 'normal';
+/**
+ * Same reading as the needs board: the level staff set wins (`important` is the
+ * back-office word for `high`); only a need without one is ranked by what is still short.
+ */
+function toUrgency(level: string | undefined, qtyNeeded: number): DonationNeedUrgency {
+	const set = (level ?? '').trim();
+	if (set === 'critical') return 'critical';
+	if (set === 'important' || set === 'high') return 'high';
+	if (set === 'normal') return 'normal';
+	return qtyNeeded >= 50 ? 'critical' : qtyNeeded > 0 ? 'high' : 'normal';
 }
 
 const URGENCY_RANK: Record<DonationNeedUrgency, number> = { critical: 0, high: 1, normal: 2 };
@@ -81,16 +87,25 @@ function toOpenNeeds(entry: DonationNeedsEntry): DonationMapNeed[] {
 	const open: DonationMapNeed[] = [];
 	for (const need of entry.needs ?? []) {
 		if (need.status === 'closed' || !need.item_id) continue;
+		const qtyNeeded = Number(need.qty_needed) || 0;
 		open.push({
 			itemId: need.item_id,
 			name: (need.name || need.item_id).replace(/^item:/, ''),
 			unit: need.unit ?? '',
-			qtyNeeded: Number(need.qty_needed) || 0,
-			urgency: toUrgency(need.urgency)
+			qtyNeeded,
+			urgency: toUrgency(need.urgency, qtyNeeded)
 		});
 	}
 	// Array.prototype.sort is stable, so equal urgencies keep the board's order.
 	return open.sort((a, b) => URGENCY_RANK[a.urgency] - URGENCY_RANK[b.urgency]);
+}
+
+/** A shelter is as urgent as its most urgent open need; one with none open is normal. */
+export function donationShelterUrgency(needs: DonationMapNeed[]): DonationNeedUrgency {
+	return needs.reduce<DonationNeedUrgency>(
+		(top, need) => (URGENCY_RANK[need.urgency] < URGENCY_RANK[top] ? need.urgency : top),
+		'normal'
+	);
 }
 
 function areaLabelOf(shelter: PublicShelterItem | undefined): string {

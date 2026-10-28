@@ -4,10 +4,14 @@ export { default as ShelterFilterPanel } from './ui/shelter-filter-panel.svelte'
 export { default as ShelterMap } from './ui/shelter-map.svelte';
 export { default as DonationNeedsMap } from './ui/donation-needs-map.svelte';
 export { default as DropOffShelterMap } from './ui/drop-off-shelter-map.svelte';
+export { default as DonationPinBadge } from './ui/donation-pin-badge.svelte';
+export { DONATION_URGENCY_STYLE } from './ui/donation-urgency';
 export {
 	buildDonationMap,
+	donationShelterUrgency,
 	type DonationMap,
 	type DonationMapNeed,
+	type DonationNeedUrgency,
 	type DonationMapPoint,
 	type DonationMapShelter,
 	type DonationNeedsEntry

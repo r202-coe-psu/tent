@@ -46,6 +46,8 @@
 		admin_type?: string | null;
 		geo?: ShelterGeo | null;
 		accepts_pre_registration?: boolean;
+		/** Draws a numbered pin in these colours instead of the status-coloured glyph pin. */
+		pin?: { label: string; fill: string; text: string };
 	}
 
 	type ShelterMarkerItem = {
@@ -264,6 +266,16 @@
 		</svg>`;
 	}
 
+	/** Teardrop pin with a number in the head, matched to the same number on a list card. */
+	function numberedPinSvg(pin: { label: string; fill: string; text: string }): string {
+		const label = pin.label.replace(/[^0-9A-Za-z+]/g, '').slice(0, 3);
+		const fontSize = label.length > 2 ? 9 : 12;
+		return `<svg class="marker-pin" width="30" height="40" viewBox="0 0 30 40" aria-hidden="true" style="display:block;filter:drop-shadow(0 1px 2px rgba(15,23,42,0.25));cursor:pointer;transition:transform 0.2s,filter 0.2s;">
+			<path d="M15 1.5C8.1 1.5 2.5 7.1 2.5 14c0 8.2 10.2 22.8 12.1 25.2a0.6 0.6 0 0 0 0.8 0C17.3 36.8 27.5 22.2 27.5 14 27.5 7.1 21.9 1.5 15 1.5z" fill="${pin.fill}" stroke="#ffffff" stroke-width="2" stroke-linejoin="round"/>
+			<text x="15" y="14.5" text-anchor="middle" dominant-baseline="central" font-family="'IBM Plex Sans Thai',sans-serif" font-size="${fontSize}" font-weight="700" fill="${pin.text}">${label}</text>
+		</svg>`;
+	}
+
 	function getShelterPinSvg(siteKind: PublicSiteKind | undefined, fill: string): string {
 		return siteKind === 'host_house' ? hostHousePinSvg(fill) : evacCenterPinSvg(fill);
 	}
@@ -453,7 +465,9 @@
 				bounds.extend(lngLat);
 
 				const color = getStatusColorCode(shelter.status);
-				const pinSvg = getShelterPinSvg(shelter.site_kind, color);
+				const pinSvg = shelter.pin
+					? numberedPinSvg(shelter.pin)
+					: getShelterPinSvg(shelter.site_kind, color);
 				const shelterId = shelter.id || shelter.code || '';
 				const shelterCode = shelter.code || shelter.id || '';
 				const canBook =
