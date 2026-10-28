@@ -40,9 +40,9 @@
 	import {
 		LATE_BADGE_CLASS,
 		LATE_CARD_EXCLUDED_TEXT,
+		LOAN_REFS_UNKNOWN_LABEL,
 		POOL_STATUS_FILTER_VALUES,
 		RECEIVED_POOL_HIDE_AFTER_DAYS,
-		LOAN_REFS_UNKNOWN_LABEL,
 		UNRESOLVED_REFS_HINT,
 		anyLoanRefsUnavailable,
 		buildReturnerNames,
@@ -341,7 +341,10 @@
 				disabled={overviewQuery.isFetching}
 				class="min-h-11 gap-2 border-amber-200 bg-white text-amber-900 hover:bg-amber-100"
 			>
-				<RefreshCw class="h-4 w-4" aria-hidden="true" />
+				<RefreshCw
+					class={['h-4 w-4', overviewQuery.isFetching && 'animate-spin']}
+					aria-hidden="true"
+				/>
 				ลองใหม่
 			</Button>
 		</div>

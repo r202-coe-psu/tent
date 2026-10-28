@@ -24,6 +24,7 @@ vi.mock('$lib/features/catalog', () => ({
 	canonicalizeUnitCode: (value: unknown) => value
 }));
 
+import { cancelBulkReturnPoolV3 } from '../../domain/food-supplies';
 import { cancelBulkReturnPool, submitBulkReturnPool } from './bulk-return-pool-v3-lifecycle';
 import { addBulkReturnEntries } from './bulk-return-pool-v3-add-entry';
 import { moveBulkReturnEntry } from './bulk-return-pool-v3-move';
@@ -159,12 +160,16 @@ describe('bulk return pool v3 workflows', () => {
 			expect(row.closed_loan_refs).toEqual([]);
 		});
 
-		it('keeps a cancelled pool available when degrading with includeCancelled', async () => {
+		it('does not flag a cancelled pool when the loan read degrades', async () => {
 			await seedLoan(59, { qty: '3' });
 			const open = await openPool('Gate A');
 			const cancelled = await openPool('Gate B');
 			await add(open._id, { type: 'evacuee', id: EVACUEE }, [{ item_id: 'item:cot', qty: '1' }]);
-			await cancelBulkReturnPool(cancelled._id, nextOp(), mgr, deps);
+			// Non-empty pool with a live loan ref, forced to CANCELLED (the workflow refuses non-empty).
+			await add(cancelled._id, { type: 'evacuee', id: EVACUEE }, [
+				{ item_id: 'item:cot', qty: '1' }
+			]);
+			await poolRepo.mutateCAS(cancelled._id, (cur) => cancelBulkReturnPoolV3(cur, mgr));
 			vi.spyOn(logRepo, 'getMany').mockRejectedValueOnce(new CannotConnectError());
 			const rows = await getBulkReturnPoolOverview({ includeCancelled: true }, mgr, deps);
 			expect(rows.find((r) => r.pool._id === open._id)!.loan_refs_unavailable).toBe(true);
@@ -191,8 +196,10 @@ describe('bulk return pool v3 workflows', () => {
 
 		it('still rejects when the pool read fails', async () => {
 			await openPool('Gate A');
-			vi.spyOn(poolRepo, 'list').mockRejectedValueOnce(new Error('pools down'));
-			await expect(getBulkReturnPoolOverview({}, mgr, deps)).rejects.toThrow('pools down');
+			vi.spyOn(poolRepo, 'list').mockRejectedValueOnce(new CannotConnectError('pools down'));
+			await expect(getBulkReturnPoolOverview({}, mgr, deps)).rejects.toBeInstanceOf(
+				CannotConnectError
+			);
 		});
 
 		it('does not read loans when no entry carries a loan ref', async () => {
