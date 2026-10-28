@@ -128,11 +128,32 @@ describe('workQueuesFor', () => {
 				roles: [`shelter:${code}`, compoundCapabilityRole(code, 'shelter_manager')],
 				shelterCode: code
 			})
-		).toEqual(['waiting_receive', 'flagged']);
+		).toEqual(['waiting_receive', 'flagged', 'my_point']);
 		expect(workQueuesFor({ roles: ['system_admin'], shelterCode: code })).toEqual([
 			'waiting_receive',
-			'flagged'
+			'flagged',
+			'my_point'
 		]);
+		expect(
+			workQueuesFor({
+				roles: [
+					`shelter:${code}`,
+					compoundCapabilityRole(code, 'shelter_manager'),
+					compoundCapabilityRole(code, 'distribution_staff')
+				],
+				shelterCode: code
+			})
+		).toEqual(['waiting_receive', 'flagged', 'my_point']);
+		expect(
+			workQueuesFor({
+				roles: [
+					`shelter:${code}`,
+					compoundCapabilityRole(code, 'warehouse_staff'),
+					compoundCapabilityRole(code, 'distribution_staff')
+				],
+				shelterCode: code
+			})
+		).toEqual(['waiting_receive', 'my_point']);
 		expect(
 			workQueuesFor({
 				roles: [`shelter:${code}`, compoundCapabilityRole(code, 'warehouse_staff')],
