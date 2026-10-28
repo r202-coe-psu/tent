@@ -35,6 +35,7 @@ const state = vi.hoisted(() => ({
 	authContext: null as { shelterCode: string; createdBy: string; roles: string[] } | null,
 	evacuees: [] as unknown[],
 	skippedDocs: [] as unknown[],
+	storagePoints: [] as { id: string; name: string }[],
 	// Props the board passed to the (mocked) detail sheet; read lazily, they are getter-backed.
 	detailProps: null as { row?: BulkReturnPoolOverviewRow | null } | null
 }));
@@ -63,7 +64,9 @@ vi.mock('$lib/features/people', () => ({
 	useEvacuees: () => ({ data: state.evacuees })
 }));
 vi.mock('$lib/features/volunteers', () => ({ useVolunteers: () => ({ data: [] }) }));
-vi.mock('$lib/features/operations', () => ({ useStoragePoints: () => ({ points: [] }) }));
+vi.mock('$lib/features/operations', () => ({
+	useStoragePoints: () => ({ points: state.storagePoints })
+}));
 vi.mock('$lib/db/shelter', () => ({ getShelterCode: () => 'SH001' }));
 vi.mock('$app/navigation', () => ({ goto: vi.fn() }));
 vi.mock('$app/paths', () => ({ resolve: (path: string) => path }));
@@ -272,6 +275,7 @@ beforeEach(() => {
 	state.authContext = ADMIN;
 	state.evacuees = [];
 	state.skippedDocs = [];
+	state.storagePoints = [];
 	state.detailProps = null;
 	authorContextCalls.mockClear();
 	localStorage.clear();
@@ -293,7 +297,7 @@ describe('BulkReturnPoolBoard mount and selection', () => {
 		const headings = [...document.body.querySelectorAll('h2')].map((h) => h.textContent?.trim());
 		expect(headings).toContain('กองรับคืน');
 		expect(text()).toContain('ศูนย์ SH001');
-		expect(document.body.querySelector('[data-testid="bulk-return-work-queues"]')).not.toBeNull();
+		expect(queryByTestId('bulk-return-work-queues')).not.toBeNull();
 		// Default view: open, submitted and recently received pools; cancelled and old received hidden.
 		expect(cardNames().sort()).toEqual(['กองตรวจรับแล้ว', 'กองผ้าห่ม', 'กองอาหาร'].sort());
 		// Scoped to pool a's item row: the pool name 'กองผ้าห่ม' alone also contains 'ผ้าห่ม'.
@@ -583,11 +587,22 @@ describe('BulkReturnPoolBoard role wiring of the work queues', () => {
 	it('wires the stored my-point selection into the my-point queue', async () => {
 		// The board reads the stored point once at mount, so seed it before render.
 		localStorage.setItem(myPoolPointKey('SH001'), 'sp:1');
+		state.storagePoints = [{ id: 'sp:1', name: 'คลังหลัก' }];
 		state.authContext = withCapability('distribution_staff');
-		await render();
+		const onSelectedPoolChange = vi.fn();
+		await render({}, { onSelectedPoolChange });
 
 		const queue = queryByTestId('bulk-return-queue-my-point');
 		expect(queue).not.toBeNull();
-		expect(buttonByText(queue!, 'กองผ้าห่ม')).toBeDefined();
+		// The point name resolves from the board's storage points (else it falls back to the id).
+		expect(queue!.textContent).toContain('คลังหลัก');
+		const button = buttonByText(queue!, 'กองผ้าห่ม');
+		expect(button).toBeDefined();
+
+		button!.click();
+		await settle();
+
+		expect(onSelectedPoolChange).toHaveBeenCalledWith('bulk_return_pool:a');
+		expect(state.detailProps?.row?.pool._id).toBe('bulk_return_pool:a');
 	});
 });

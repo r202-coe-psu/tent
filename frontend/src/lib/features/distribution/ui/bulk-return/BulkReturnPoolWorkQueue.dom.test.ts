@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { flushSync, mount, tick, unmount, type ComponentProps } from 'svelte';
 import { compoundCapabilityRole } from '$lib/auth/roles';
 import type {
+	BulkReturnEntry,
 	BulkReturnPoolOverviewRow,
 	BulkReturnPoolV3,
 	BulkReturnPoolV3Status
@@ -27,12 +28,12 @@ function row(
 			submitted_at: opts.submitted_at,
 			location_storage_point_id: opts.point,
 			created_at: '2026-01-01T00:00:00.000Z'
-		} satisfies Partial<BulkReturnPoolV3>,
+		} satisfies Partial<BulkReturnPoolV3> as BulkReturnPoolV3,
 		entry_count: opts.entry_count ?? 0,
 		items: [],
 		entries: [],
 		late_entries: Array.from({ length: opts.late ?? 0 }, (_, i) => ({
-			entry: { _id: `${id}-late-${i}` },
+			entry: { _id: `${id}-late-${i}` } as BulkReturnEntry,
 			pool_id: id,
 			voided: false
 		})),
@@ -40,7 +41,7 @@ function row(
 		unresolved_refs: [],
 		closed_loan_refs: [],
 		snapshot_conflicts: []
-	} as unknown as BulkReturnPoolOverviewRow;
+	};
 }
 
 const ROWS = [
