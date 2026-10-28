@@ -10,7 +10,9 @@ import {
 	buildBulkReturnPoolOverview,
 	buildPoolTimeline,
 	findAppliedBulkReturnLoanRefs,
-	findClosedBulkReturnLoanRefs
+	findClosedBulkReturnLoanRefs,
+	liveEntriesOf,
+	liveLoanRefCount
 } from '../../domain/food-supplies';
 import type { SkippedDoc } from '../../data/food-supplies';
 import { CannotConnectError, NetworkError } from '$lib/utils/errors';
@@ -49,9 +51,7 @@ export async function getBulkReturnPoolOverview(
 	});
 
 	// Closed-loan-mid-flight: ONE batched loan read for every live entry of every non-cancelled pool.
-	const liveByRow = rows.map((row) =>
-		row.pool.status === 'CANCELLED' ? [] : row.entries.filter((r) => !r.voided).map((r) => r.entry)
-	);
+	const liveByRow = rows.map(liveEntriesOf);
 	const loanIds = [
 		...new Set(
 			liveByRow.flatMap((live) =>
@@ -68,10 +68,7 @@ export async function getBulkReturnPoolOverview(
 		return null;
 	});
 	if (!loans) {
-		return rows.map((row, i) => ({
-			...row,
-			loan_refs_unavailable: liveByRow[i].some((entry) => entry.loan_refs.length > 0)
-		}));
+		return rows.map((row) => ({ ...row, loan_refs_unavailable: liveLoanRefCount(row) > 0 }));
 	}
 	const found = new Map(loans.items.map((loan) => [loan._id, loan]));
 	const loansById = new Map<string, DistributionLog | null>(

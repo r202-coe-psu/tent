@@ -2,13 +2,14 @@ import { describe, expect, it } from 'vitest';
 import { compoundCapabilityRole } from '$lib/auth/roles';
 import type { BulkReturnPoolOverviewRow } from '../../domain/food-supplies';
 import {
+	WORK_QUEUE_COPY,
 	flaggedPools,
 	formatWaitingAge,
 	openPoolsAtPoint,
-	rowNeedsAttention,
 	waitingForReceive,
 	workQueuesFor
 } from './bulk-return-work-queue';
+import { rowNeedsAttention } from './bulk-return-pool-v3';
 
 const HOUR = 3_600_000;
 const NOW = new Date('2026-01-10T12:00:00.000Z');
@@ -24,6 +25,8 @@ function row(
 		closed?: number;
 		conflicts?: number;
 		loanUnavailable?: boolean;
+		/** Entries as `{ refs: loan ref count, voided }`. */
+		entries?: { refs: number; voided?: boolean }[];
 	} = {}
 ): BulkReturnPoolOverviewRow {
 	return {
@@ -36,7 +39,10 @@ function row(
 		},
 		entry_count: 0,
 		items: [],
-		entries: [],
+		entries: (opts.entries ?? []).map((e, i) => ({
+			entry: { _id: `${id}-e${i}`, loan_refs: Array.from({ length: e.refs }) },
+			voided: e.voided ?? false
+		})),
 		late_entries: Array.from({ length: opts.late ?? 0 }),
 		is_empty: true,
 		unresolved_refs: Array.from({ length: opts.unresolved ?? 0 }),
@@ -95,9 +101,21 @@ describe('flaggedPools', () => {
 		expect(out[0].reasons).toEqual([{ reason: 'snapshot_conflict', count: 2 }]);
 	});
 
-	it('does not flag a pool only because its loan refs could not be checked (CR-193 item 23)', () => {
-		expect(rowNeedsAttention(row('d', 'OPEN', { loanUnavailable: true }))).toBe(false);
-		expect(flaggedPools([row('d', 'OPEN', { loanUnavailable: true })])).toEqual([]);
+	it('flags a pool whose loan refs could not be checked, counting live loan refs only', () => {
+		const d = row('d', 'OPEN', {
+			loanUnavailable: true,
+			entries: [{ refs: 2 }, { refs: 1 }, { refs: 5, voided: true }]
+		});
+		expect(rowNeedsAttention(d)).toBe(true);
+		const out = flaggedPools([d, row('clean', 'OPEN')]);
+		expect(out).toHaveLength(1);
+		expect(out[0].reasons).toEqual([{ reason: 'loan_unknown', count: 3 }]);
+		expect(WORK_QUEUE_COPY.reasonLabels.loan_unknown).toBe('ตรวจยอดยืมไม่ได้');
+	});
+
+	it('still excludes a cancelled pool whose loan refs could not be checked', () => {
+		const c = row('c', 'CANCELLED', { loanUnavailable: true, entries: [{ refs: 1 }] });
+		expect(flaggedPools([c])).toEqual([]);
 	});
 
 	it('sorts by most reasons, then oldest created_at', () => {

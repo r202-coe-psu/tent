@@ -331,7 +331,7 @@
 				<AlertTriangle class="mt-0.5 h-4 w-4 shrink-0 text-amber-600" aria-hidden="true" />
 				<p class="min-w-0 [overflow-wrap:anywhere]">
 					โหลดข้อมูลยอดยืมไม่สำเร็จ กองที่มีป้าย "{LOAN_REFS_UNKNOWN_LABEL}"
-					ยังตรวจไม่ได้ว่ายอดยืมถูกปิดหรือไม่ และอาจไม่อยู่ในรายการ "ต้องจัดการ"
+					ยังตรวจไม่ได้ว่ายอดยืมถูกปิดหรือไม่ จึงแสดงไว้ในรายการ "ต้องจัดการ"
 				</p>
 			</div>
 			<Button

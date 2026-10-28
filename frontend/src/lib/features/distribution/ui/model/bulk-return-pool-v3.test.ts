@@ -41,6 +41,7 @@ import {
 	returnerDisplayName,
 	buildReturnerNames,
 	returnerLabel,
+	rowNeedsAttention,
 	validatePoolName
 } from './bulk-return-pool-v3';
 
@@ -311,15 +312,15 @@ describe('pool filters (#659)', () => {
 		]);
 	});
 
-	it('needsAttention filters out a pool whose only issue is unavailable loan refs', () => {
+	it('needsAttention keeps a pool whose only issue is unavailable loan refs', () => {
 		const degradedRow = {
 			...makeRow(makePool('o6')),
 			loan_refs_unavailable: true
 		} as unknown as BulkReturnPoolOverviewRow;
-		expect(ids(filterPoolRows([...rows, degradedRow], { needsAttention: true })).sort()).toEqual([
-			'o3',
-			's1'
-		]);
+		const out = filterPoolRows([...rows, degradedRow], { needsAttention: true });
+		expect(ids(out).sort()).toEqual(['o3', 'o6', 's1']);
+		expect(rowNeedsAttention(degradedRow)).toBe(true);
+		expect(rowNeedsAttention(makeRow(makePool('clean')))).toBe(false);
 	});
 
 	it('anyLoanRefsUnavailable is true only when some row is degraded', () => {

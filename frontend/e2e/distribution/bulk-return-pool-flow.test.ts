@@ -967,9 +967,25 @@ test.describe('Bulk return pool v3 — lifecycle (BRP-F)', { tag: DESK_TAGS }, (
 		await expect(board.card(name)).toBeVisible();
 		await expect(board.card(name).getByTestId('bulk-return-card-loan-unknown-hint')).toBeVisible();
 
+		// Loan-unknown pools count as "ต้องจัดการ": listed in the flagged queue and kept by the filter.
+		const flaggedQueue = page
+			.getByTestId('bulk-return-work-queues')
+			.locator('section[aria-labelledby="bulk-queue-flagged"]');
+		const flaggedItem = flaggedQueue.getByRole('listitem').filter({ hasText: name });
+		await expect(flaggedItem).toBeVisible();
+		await expect(flaggedItem).toContainText('ตรวจยอดยืมไม่ได้');
+
+		const needsAttentionSwitch = page.locator('#bulk-pool-needs-attention');
+		await needsAttentionSwitch.click();
+		await expect(needsAttentionSwitch).toHaveAttribute('aria-checked', 'true');
+		await expect(board.card(name)).toBeVisible();
+		await needsAttentionSwitch.click();
+		await expect(needsAttentionSwitch).toHaveAttribute('aria-checked', 'false');
+
 		await page.unroute(`${COUCH_BASE}/**`, loanReadDown);
 		await banner.getByRole('button', { name: 'ลองใหม่' }).click();
 		await expect(banner).toHaveCount(0);
 		await expect(board.card(name).getByTestId('bulk-return-card-loan-unknown-hint')).toHaveCount(0);
+		await expect(flaggedItem).toHaveCount(0);
 	});
 });

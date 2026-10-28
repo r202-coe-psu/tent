@@ -57,11 +57,30 @@ export interface BulkReturnPoolOverviewRow {
 	 */
 	closed_loan_refs: ClosedBulkReturnLoanRef[];
 	/**
-	 * True when the overview's batched loan read failed and this row has live entries with loan refs,
-	 * so `closed_loan_refs` is unknown (left empty) rather than verified clean. The pure builder
-	 * always sets `false`.
+	 * True when the overview's batched loan read failed and this non-cancelled row has live entries
+	 * with loan refs (`liveLoanRefCount > 0`), so `closed_loan_refs` is unknown (left empty) rather
+	 * than verified clean. The pure builder always sets `false`.
 	 */
 	loan_refs_unavailable: boolean;
+}
+
+/**
+ * Non-voided entries of a non-cancelled pool row; `[]` for a CANCELLED pool. The single source of
+ * the "live entries of a non-cancelled pool" rule (loan read, degrade flag and work queue count).
+ */
+export function liveEntriesOf(
+	row: Pick<BulkReturnPoolOverviewRow, 'pool' | 'entries'>
+): BulkReturnEntry[] {
+	if (row.pool.status === 'CANCELLED') return [];
+	return row.entries.filter((r) => !r.voided).map((r) => r.entry);
+}
+
+/**
+ * Loan refs of the live entries (`liveEntriesOf`) of a pool row; 0 for a CANCELLED pool. Single
+ * source for "does this row have live loan refs" (loan read degrade flag and work queue count).
+ */
+export function liveLoanRefCount(row: Pick<BulkReturnPoolOverviewRow, 'pool' | 'entries'>): number {
+	return liveEntriesOf(row).reduce((sum, entry) => sum + entry.loan_refs.length, 0);
 }
 
 export interface BulkReturnPoolOverviewOptions {

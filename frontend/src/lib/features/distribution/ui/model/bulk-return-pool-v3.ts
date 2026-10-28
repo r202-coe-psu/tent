@@ -123,7 +123,10 @@ export interface PoolRowFilter {
 	itemId?: string;
 	/** Pool's `location_storage_point_id`; `'unspecified'` = pools without a storage point. */
 	storagePointId?: string;
-	/** Keep pools with late entries, unresolved refs or closed-loan-mid-flight refs. */
+	/**
+	 * Keep pools with late entries, unresolved refs, closed-loan-mid-flight refs, snapshot
+	 * conflicts, or loan refs that could not be checked (loan-unknown).
+	 */
 	needsAttention?: boolean;
 	/**
 	 * Returner id -> display name. When given, `search` also matches the returner name of any
@@ -153,6 +156,20 @@ function passesToggles(
 		}
 	}
 	return true;
+}
+
+/**
+ * A pool needs attention when it has late entries, unresolved refs, closed-loan-mid-flight refs,
+ * snapshot conflicts, or its loan refs could not be checked (loan read failed).
+ */
+export function rowNeedsAttention(row: BulkReturnPoolOverviewRow): boolean {
+	return (
+		row.late_entries.length > 0 ||
+		row.unresolved_refs.length > 0 ||
+		row.closed_loan_refs.length > 0 ||
+		row.snapshot_conflicts.length > 0 ||
+		row.loan_refs_unavailable
+	);
 }
 
 /** True when any non-toggle filter narrows the list (used for the "ล้างตัวกรอง" button). */
@@ -244,15 +261,7 @@ export function filterPoolRows(
 					return false;
 				}
 			}
-			if (
-				filter.needsAttention &&
-				row.late_entries.length === 0 &&
-				row.unresolved_refs.length === 0 &&
-				row.closed_loan_refs.length === 0 &&
-				row.snapshot_conflicts.length === 0
-			) {
-				return false;
-			}
+			if (filter.needsAttention && !rowNeedsAttention(row)) return false;
 			if (!needle) return true;
 			if (row.pool.name.toLocaleLowerCase().includes(needle)) return true;
 			return row.entries.some(
