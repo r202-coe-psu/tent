@@ -134,6 +134,8 @@ export async function suspendRecaptcha(browser: Browser): Promise<() => Promise<
 		try {
 			await setRecaptcha(page, wasEnabled);
 		} finally {
+			// Drop the routes first so an in-flight `_changes` long-poll cannot reject close().
+			await Promise.all(context.pages().map((p) => p.unrouteAll({ behavior: 'ignoreErrors' })));
 			await context.close();
 		}
 	};
@@ -191,6 +193,8 @@ export async function provisionShelter(
 		);
 		return { code, name };
 	} finally {
+		// Drop the routes first so an in-flight `_changes` long-poll cannot reject close().
+		await Promise.all(context.pages().map((p) => p.unrouteAll({ behavior: 'ignoreErrors' })));
 		await context.close();
 	}
 }
