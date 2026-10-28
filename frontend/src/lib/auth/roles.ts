@@ -194,6 +194,12 @@ export function canDistributeStock(roles: readonly string[], shelterCode: string
 export const BANNER_MANAGER_CAPABILITIES = [SHELTER_MANAGER, KIOSK_STAFF, PR_STAFF] as const;
 
 /**
+ * Capabilities that may read a shelter's kiosk devices and reveal their staff PIN, without
+ * changing them (CR-203). Listed on its own so a future banner-only role does not gain PIN access.
+ */
+export const DEVICE_VIEWER_CAPABILITIES = [SHELTER_MANAGER, KIOSK_STAFF, PR_STAFF] as const;
+
+/**
  * True when the user may manage kiosk banners in `shelterCode` (SA, or its shelter_manager /
  * kiosk_staff / pr_staff).
  */

@@ -1,5 +1,5 @@
 import { ServiceError } from '$lib/server/couch-admin';
-import { BANNER_MANAGER_CAPABILITIES, SCANNER_MANAGER_CAPABILITIES } from '$lib/auth/roles';
+import { DEVICE_VIEWER_CAPABILITIES, SCANNER_MANAGER_CAPABILITIES } from '$lib/auth/roles';
 import {
 	callerCanManage,
 	requireShelterCapabilityCaller,
@@ -22,7 +22,7 @@ export function requireScannerManager(request: Request): Promise<ScopedCaller> {
  * `requireScannerManager`.
  */
 export function requireDeviceViewer(request: Request): Promise<ScopedCaller> {
-	return requireShelterCapabilityCaller(request.headers.get('cookie'), BANNER_MANAGER_CAPABILITIES);
+	return requireShelterCapabilityCaller(request.headers.get('cookie'), DEVICE_VIEWER_CAPABILITIES);
 }
 
 /** A device outside the caller's scope reads as missing (FR-SBO-04). */

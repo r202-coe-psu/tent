@@ -13,6 +13,7 @@ import {
 	canManageScanners,
 	canManageBanners,
 	BANNER_MANAGER_CAPABILITIES,
+	DEVICE_VIEWER_CAPABILITIES,
 	SCANNER_MANAGER_CAPABILITIES,
 	canDistributeStock,
 	capabilitiesForShelter,
@@ -485,6 +486,12 @@ describe('canManageBanners', () => {
 
 	it('does not let pr_staff manage scanner devices', () => {
 		expect(canManageScanners(['shelter:A', 'A:pr_staff'], 'A')).toBe(false);
+	});
+});
+
+describe('DEVICE_VIEWER_CAPABILITIES', () => {
+	it('lets shelter_manager, kiosk_staff and pr_staff view devices and reveal the staff PIN', () => {
+		expect(DEVICE_VIEWER_CAPABILITIES).toEqual(['shelter_manager', 'kiosk_staff', 'pr_staff']);
 	});
 });
 
