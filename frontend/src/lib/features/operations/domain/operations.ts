@@ -1393,11 +1393,16 @@ export const disputeInfoSchema = z.object({
 });
 export type DisputeInfoInput = z.input<typeof disputeInfoSchema>;
 
+/** Most transfer ids one list request may name — keeps the BFF query string short (#811). */
+export const TRANSFER_IDS_PER_REQUEST = 50;
+
 export const transferFilterSchema = z.object({
 	status: transferStatusSchema.optional(),
 	limit: z.number().int().positive().max(1000).default(50),
 	skip: z.number().int().nonnegative().default(0),
-	sort: z.enum(['created_at_desc', 'created_at_asc']).default('created_at_desc')
+	sort: z.enum(['created_at_desc', 'created_at_asc']).default('created_at_desc'),
+	/** Read exactly these transfers (ledger ref labels, #811) — `limit` does not cap them. */
+	ids: z.array(z.string().min(1)).min(1).max(TRANSFER_IDS_PER_REQUEST).optional()
 });
 export type TransferFilter = z.input<typeof transferFilterSchema>;
 
@@ -1709,6 +1714,17 @@ export function keyableDonations(donations: Donation[], stockLedgers: StockLedge
 	);
 }
 
+/**
+ * Goods still owed to the shelter, per item: outstanding donations plus `received`
+ * ones the ledger has not recorded, minus what a batch receipt already recorded.
+ *
+ * With `campaignId`, only that campaign's donations count — a donation with no
+ * `campaign_id` belongs to none, and a line with no `item_id` (free text) to no item.
+ * Both used to be attributed anyway (every campaign; an item guessed from the text),
+ * so the back-office board showed one booking under every campaign asking for the
+ * item while the public board and the quota counter counted it nowhere (#689). Now
+ * the three copies of the T-22 rule agree — see `packages/needs-fixtures`.
+ */
 export function calculateReserved(
 	donations: Donation[],
 	stockLedgers: StockLedger[],
@@ -1719,16 +1735,14 @@ export function calculateReserved(
 
 	const reserved = new Map<string, string>();
 	for (const don of donations) {
-		if (campaignId && don.campaign_id && don.campaign_id !== campaignId) continue;
+		if (campaignId && don.campaign_id !== campaignId) continue;
 		const isUnkeyedReceived = don.status === 'received' && !keyed.has(don._id);
 		if (!isDonationOutstanding(don.status) && !isUnkeyedReceived) continue;
 
 		const declared = new Map<string, string>();
 		for (const item of don.items ?? []) {
-			const itemId =
-				item.item_id || (item.free_text ? mapNeedItemHeuristic(item.free_text) : undefined);
-			if (!itemId) continue;
-			declared.set(itemId, addQty(declared.get(itemId) ?? '0', item.qty));
+			if (!item.item_id) continue;
+			declared.set(item.item_id, addQty(declared.get(item.item_id) ?? '0', item.qty));
 		}
 
 		// FR-B9: a donation part-way through a batch receipt already has some of its
@@ -1784,7 +1798,9 @@ export function deriveNeedAvailability(
 			qty_target: need.qty_target,
 			qty_on_hand: currentOnHand,
 			qty_reserved: currentReserved,
-			qty_remaining: remaining,
+			// What the board offers a donor: nothing once the need is cut off (met, or
+			// closed by hand), the same zero `computeNeeds` folds a closed need into.
+			qty_remaining: isCutOff ? '0' : remaining,
 			is_cut_off: isCutOff,
 			status: need.status ?? 'open',
 			unit: need.unit
@@ -2103,24 +2119,4 @@ export function publicItemAggregate(
 	}
 
 	return { campaignCount, totalTarget };
-}
-
-/**
- * Maps a Thai item name heuristic to a slugged itemId.
- */
-export function mapNeedItemHeuristic(name: string): string {
-	const lowerName = name.toLowerCase();
-	if (lowerName.includes('ข้าว')) return 'item:rice';
-	if (lowerName.includes('น้ำ')) return 'item:water';
-	if (lowerName.includes('พารา') || lowerName.includes('ยา')) return 'item:paracetamol';
-	if (lowerName.includes('สบู่')) return 'item:soap';
-	if (lowerName.includes('ห่ม')) return 'item:blanket';
-	if (lowerName.includes('ไข่')) return 'item:egg';
-
-	const slug = name
-		.trim()
-		.toLowerCase()
-		.replace(/[^a-z0-9\u0e00-\u0e7f]+/g, '-')
-		.replace(/^-+|-+$/g, '');
-	return `item:${slug || 'custom'}`;
 }

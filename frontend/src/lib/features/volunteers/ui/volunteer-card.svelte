@@ -25,6 +25,7 @@
 	import Lock from '@lucide/svelte/icons/lock';
 	import { toast } from 'svelte-sonner';
 	import { useQueryClient } from '@tanstack/svelte-query';
+	import { resolve } from '$app/paths';
 	import { isShelterManager, isSystemAdmin } from '$lib/auth/roles';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
@@ -43,6 +44,7 @@
 		identityVerificationStatus,
 		skillVerificationStatus
 	} from '../domain/verification';
+	import type { VolunteerAccessStatus } from '../domain/volunteer-access-status';
 	import type { Volunteer, VolunteerSource } from '../domain/volunteer.schema';
 	import type { ShiftAssignment, ShiftKind } from '../domain/shift-assignment.schema';
 
@@ -51,13 +53,16 @@
 		shelterName,
 		shelterType,
 		skillOptions = [],
-		todayAssignment
+		todayAssignment,
+		accessStatus = { kind: 'none' }
 	}: {
 		volunteer: Volunteer;
 		shelterName: string | undefined;
 		shelterType: string | null | undefined;
 		skillOptions?: readonly SkillOption[];
 		todayAssignment: Pick<ShiftAssignment, 'shift' | 'station' | 'status'> | null | undefined;
+		/** Computed by the tab (`volunteerAccessStatus`) — this row only renders it. */
+		accessStatus?: VolunteerAccessStatus;
 	} = $props();
 
 	const SOURCE_LABELS: Record<VolunteerSource, string> = {
@@ -118,6 +123,13 @@
 		const roles = authStore.user?.roles ?? [];
 		return isSystemAdmin(roles) || isShelterManager(roles, shelterStore.selectedShelterCode);
 	});
+	const hasAccount = $derived(accessStatus.kind !== 'none');
+	// Only SA/SM can open the users page (and only they know the exact login to deep-link).
+	const manageAccountHref = $derived(
+		accessStatus.kind === 'none'
+			? '/back-office/users'
+			: `/back-office/users/${encodeURIComponent(accessStatus.loginName)}`
+	);
 	let deleteDialogOpen = $state(false);
 
 	const queryClient = useQueryClient();
@@ -273,6 +285,32 @@
 				</Badge>
 			{/if}
 
+			{#if accessStatus.kind === 'deactivated'}
+				<Badge
+					class="max-w-full gap-1 border-rose-200 bg-rose-50 whitespace-normal text-rose-700"
+					variant="outline"
+				>
+					<KeyRound class="h-3 w-3 shrink-0" />
+					บัญชีถูกปิดใช้งาน
+				</Badge>
+			{:else if accessStatus.kind === 'linked'}
+				<Badge
+					class="max-w-full gap-1 border-emerald-300 bg-emerald-50 whitespace-normal text-emerald-700"
+					variant="outline"
+				>
+					<KeyRound class="h-3 w-3 shrink-0" />
+					มีบัญชีแล้ว{accessStatus.roleLabels && accessStatus.roleLabels.length > 0
+						? ` · ${accessStatus.roleLabels.join(', ')}`
+						: ''}
+				</Badge>
+			{/if}
+			{#if accessStatus.kind !== 'none'}
+				<p class="text-xs break-all text-muted-foreground">{accessStatus.loginName}</p>
+				{#if accessStatus.roleLabels && accessStatus.roleLabels.length === 0}
+					<p class="text-[11px] text-amber-700">ยังไม่มีสิทธิ์ในศูนย์นี้</p>
+				{/if}
+			{/if}
+
 			{#if todayAssignment}
 				<p class="text-xs text-muted-foreground">{SHIFT_LABELS[todayAssignment.shift]}</p>
 			{:else if identityStatus !== 'verified'}
@@ -310,14 +348,26 @@
 
 			<div class="flex items-center gap-1.5">
 				{#if canGrantAccess}
-					<Button
-						size="sm"
-						class="flex-1 gap-1.5 bg-primary-dark text-white hover:bg-primary-dark/90"
-						onclick={() => (accessDialogOpen = true)}
-					>
-						<KeyRound class="h-3.5 w-3.5" />
-						ออกสิทธิ์ใช้งานระบบ
-					</Button>
+					{#if hasAccount}
+						<Button
+							size="sm"
+							variant="outline"
+							class="flex-1 gap-1.5"
+							href={resolve(manageAccountHref as '/back-office/users')}
+						>
+							<KeyRound class="h-3.5 w-3.5" />
+							จัดการบัญชีผู้ใช้
+						</Button>
+					{:else}
+						<Button
+							size="sm"
+							class="flex-1 gap-1.5 bg-primary-dark text-white hover:bg-primary-dark/90"
+							onclick={() => (accessDialogOpen = true)}
+						>
+							<KeyRound class="h-3.5 w-3.5" />
+							ออกสิทธิ์ใช้งานระบบ
+						</Button>
+					{/if}
 				{/if}
 
 				<Button
@@ -348,7 +398,7 @@
 	{shelterLine}
 	focusSkillCode={qualificationFocusSkillCode}
 />
-{#if canGrantAccess}
+{#if canGrantAccess && !hasAccount}
 	<VolunteerAccessDialog bind:open={accessDialogOpen} {volunteer} {shelterLine} />
 {/if}
 

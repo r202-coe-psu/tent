@@ -3,10 +3,8 @@ import {
 	positiveWholeQtySchema,
 	type DistributionLog,
 	type ReturnCondition,
-	type NonPhysicalClearReason,
-	type BulkReturnPoolStatus
+	type NonPhysicalClearReason
 } from '../../domain/food-supplies';
-import { getBulkPoolStatusLabel } from './bulk-pool-manager';
 
 export type { NonPhysicalClearReason };
 
@@ -331,39 +329,6 @@ export function isEligibleBulkPool(
 	if (!qtyGt(pool.unclaimed_quota, '0')) return false;
 	if (requiredQty && !qtyLte(requiredQty, pool.unclaimed_quota)) return false;
 	return true;
-}
-
-/**
- * Validates operator input for CR-134 bulk gate clearance.
- * - Pool must be selected
- * - Pool must be ACTIVE
- * - Pool must have unclaimed_quota >= required loan outstanding balance
- */
-export function validateBulkGateClear(
-	selectedPool: { status: string; unclaimed_quota: string } | null | undefined,
-	requiredQty: string
-): BulkGateClearValidationResult {
-	if (!selectedPool) {
-		return { isValid: false, error: 'กรุณาเลือกกองรับคืนที่ต้องการจับคู่' };
-	}
-	if (selectedPool.status !== 'ACTIVE') {
-		const statusLabel =
-			getBulkPoolStatusLabel(selectedPool.status as BulkReturnPoolStatus) ?? selectedPool.status;
-		return {
-			isValid: false,
-			error: `กองรับคืนนี้ไม่พร้อมใช้งาน (สถานะ: ${statusLabel})`
-		};
-	}
-	if (!qtyGt(selectedPool.unclaimed_quota, '0')) {
-		return { isValid: false, error: 'กองรับคืนนี้ไม่มีของเหลือรอจับคู่แล้ว' };
-	}
-	if (!qtyLte(requiredQty, selectedPool.unclaimed_quota)) {
-		return {
-			isValid: false,
-			error: `กองนี้เหลือรอจับคู่ ${selectedPool.unclaimed_quota} ชิ้น แต่รายการนี้ต้องใช้ ${requiredQty} ชิ้น`
-		};
-	}
-	return { isValid: true };
 }
 
 export interface BulkForwardRecoveryInput {

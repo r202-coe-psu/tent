@@ -202,7 +202,7 @@
 	{#if value}
 		<!-- Selected recipient -->
 		<div
-			class="flex items-center justify-between gap-3 rounded-lg border px-3 py-3 {value.recipientType ===
+			class="flex flex-col gap-3 rounded-lg border px-3 py-3 sm:flex-row sm:items-center sm:justify-between {value.recipientType ===
 			'outside'
 				? 'border-slate-200 bg-slate-50'
 				: 'border-emerald-200 bg-emerald-50/60'}"
@@ -224,12 +224,12 @@
 				</div>
 
 				<div class="min-w-0">
-					<p class="truncate text-base font-bold text-slate-900">{value.label}</p>
+					<p class="text-base font-bold break-words text-slate-900">{value.label}</p>
 					<div class="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-sm text-slate-600">
 						{#if value.recipientType === 'evacuee'}
 							{#if value.stayInfo}<span>{value.stayInfo}</span>{/if}
 							{#if value.phone}<span>โทร {value.phone}</span>{/if}
-							<span class="text-xs text-slate-400">{value.recipientId}</span>
+							<span class="text-xs break-all text-slate-400">{value.recipientId}</span>
 						{:else if value.recipientType === 'volunteer'}
 							<span>จิตอาสา{value.volunteerCode ? ` · ${value.volunteerCode}` : ''}</span>
 							{#if value.phone}<span>โทร {value.phone}</span>{/if}
@@ -246,7 +246,7 @@
 				onclick={handleClearSelection}
 				aria-label="เปลี่ยนผู้รับ"
 				{disabled}
-				class="min-h-11 shrink-0 rounded-lg text-sm font-semibold"
+				class="min-h-11 w-full shrink-0 rounded-lg text-sm font-semibold sm:w-auto"
 			>
 				<X class="size-4" aria-hidden="true" />
 				<span>เปลี่ยนคน</span>

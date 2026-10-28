@@ -18,6 +18,7 @@ import {
 	buildValidateDocUpdate,
 	DAILY_SOP_ROLE_MANGO_INDEX,
 	KIOSK_LOOKUP_MANGO_INDEXES,
+	BULK_RETURN_ENTRY_MANGO_INDEXES,
 	KIOSK_LOOKUP_WARMUP_SELECTORS,
 	PEOPLE_MANGO_INDEXES,
 	REFERRAL_MANGO_INDEXES,
@@ -316,6 +317,7 @@ describe('buildValidateDocUpdate', () => {
 			TRANSFER_LEDGER_MANGO_INDEXES,
 			PEOPLE_MANGO_INDEXES,
 			REQUISITION_TICKET_MANGO_INDEXES,
+			BULK_RETURN_ENTRY_MANGO_INDEXES,
 			[DAILY_SOP_ROLE_MANGO_INDEX]
 		];
 		const byName = new Map<string, string>();
@@ -324,6 +326,28 @@ describe('buildValidateDocUpdate', () => {
 			expect(byName.get(name) ?? definition, name).toBe(definition);
 			byName.set(name, definition);
 		}
+	});
+
+	it('declares the bulk return Mango indexes: entries by pool, moves by target pool (#658)', () => {
+		expect(BULK_RETURN_ENTRY_MANGO_INDEXES).toEqual([
+			{
+				index: { fields: ['type', 'pool_id'] },
+				name: 'bulk-return-entry-type-pool-idx',
+				type: 'json'
+			},
+			{
+				index: { fields: ['type', 'to_pool_id'] },
+				name: 'bulk-return-move-type-to-pool-idx',
+				type: 'json'
+			}
+		]);
+	});
+
+	it('allows the bulk_return_entry, _move and _void doc types', () => {
+		const source = buildValidateDocUpdate('SH001');
+		expect(source).toContain(
+			"'bulk_return_entry', 'bulk_return_entry_move', 'bulk_return_entry_void'"
+		);
 	});
 
 	it('keeps referral indexes separate and unchanged', () => {
@@ -1815,6 +1839,42 @@ describe('buildValidateDocUpdate', () => {
 			expect(() => compile()(distLedger, null, WAREHOUSE)).not.toThrow();
 		});
 
+		describe('direct issue (requisition_ticket:direct-…, #837)', () => {
+			const SUPPLY_COORD: UserCtx = { name: 'sc', roles: ['shelter:SH001', 'supply_coordinator'] };
+			const directLedger = () =>
+				ledger({
+					qty: '-10',
+					reason: 'distribute',
+					ref_id: 'requisition_ticket:direct-01J',
+					lot_ref: 'stock_ledger:01J'
+				});
+
+			it.each([
+				['warehouse_staff', WAREHOUSE],
+				['shelter_manager', MANAGER],
+				['system_admin', ADMIN]
+			])('allows a direct distribute row from %s', (_role, userCtx) => {
+				expect(() => compile()(directLedger(), null, userCtx)).not.toThrow();
+			});
+
+			it('rejects a direct distribute row from supply_coordinator', () => {
+				expectForbidden(
+					() => compile()(directLedger(), null, SUPPLY_COORD),
+					/Only warehouse staff, shelter manager, or system admin can write direct distribute stock ledger/
+				);
+			});
+
+			it('still lets supply_coordinator write a requisition ticket distribute row (CR-121)', () => {
+				const ticketLedger = ledger({
+					qty: '-10',
+					reason: 'distribute',
+					ref_id: 'requisition_ticket:01J',
+					lot_ref: 'stock_ledger:01J'
+				});
+				expect(() => compile()(ticketLedger, null, SUPPLY_COORD)).not.toThrow();
+			});
+		});
+
 		it.each([
 			['warehouse_staff', WAREHOUSE],
 			['system_admin', { name: 'admin', roles: ['system_admin'] }]
@@ -2551,12 +2611,20 @@ describe('buildValidateDocUpdate', () => {
 		it('rejects stock_lot_reservation mutation from non-warehouse staff', () => {
 			expectForbidden(
 				() => compile()(resDoc(), null, REGISTRATION),
-				/Only warehouse staff or system admin can manage stock lot reservations/
+				/Only warehouse staff, shelter manager, or system admin can manage stock lot reservations/
+			);
+			expectForbidden(
+				() => compile()(resDoc(), null, SUPPLY_COORDINATOR),
+				/Only warehouse staff, shelter manager, or system admin can manage stock lot reservations/
 			);
 		});
 
 		it('allows warehouse_staff to manage stock_lot_reservation', () => {
 			expect(() => compile()(resDoc(), null, WAREHOUSE)).not.toThrow();
+		});
+
+		it('allows shelter_manager to manage stock_lot_reservation (direct issue, #837)', () => {
+			expect(() => compile()(resDoc(), null, MANAGER)).not.toThrow();
 		});
 
 		it('rejects malformed reservation claims and non-authorized pending request edits', () => {
@@ -4307,9 +4375,451 @@ describe('buildValidateDocUpdate', () => {
 			});
 		});
 
+		describe('distribution_log v3 bulk entry path (schema_v 2, #658)', () => {
+			const E1 = 'bulk_return_entry:01J00000000000000000000041';
+			const E2 = 'bulk_return_entry:01J00000000000000000000042';
+			const E3 = 'bulk_return_entry:01J00000000000000000000043';
+			const LEGACY_POOL = 'bulk_return_pool:01J00000000000000000000001';
+			const AT = '2026-09-01T01:00:00.000Z';
+			const ALLOWED = [WAREHOUSE, SUPPLY_COORD, MANAGER, DISTRIBUTION, ADMIN];
+			const DENIED = [REGISTRATION, KITCHEN, { name: 'nobody', roles: [] }];
+			const active: Doc = {
+				...validReturnableLog,
+				_id: 'distribution_log:01J00000000000000000000009',
+				item_id: 'item:cot',
+				qty: '10',
+				status: 'active'
+			};
+			const v2Active: Doc = { ...active, schema_v: 2 };
+			const applied = (
+				base: Doc,
+				user: UserCtx,
+				ids: string[],
+				qty: string,
+				status: string
+			): Doc => ({
+				...base,
+				schema_v: 2,
+				status,
+				qty_returned: qty,
+				clear_reason: 'bulk_dropoff',
+				returned_at: AT,
+				returned_by: user.name,
+				applied_bulk_entry_ids: ids
+			});
+			const partialOne = applied(active, WAREHOUSE, [E1], '4', 'partially_returned');
+			const partialTwo = applied(active, WAREHOUSE, [E1, E2], '7', 'partially_returned');
+			const fullThree = applied(active, WAREHOUSE, [E1, E2, E3], '10', 'returned');
+
+			describe('apply', () => {
+				it('allows WH, SC, SM, DST and SA to apply the first entry (partial, v1 -> v2 upgrade)', () => {
+					for (const user of ALLOWED) {
+						const next = applied(active, user, [E1], '4', 'partially_returned');
+						expect(() => compile()(next, active, user)).not.toThrow();
+					}
+				});
+
+				it('denies registration_staff, kitchen_staff and role-less users', () => {
+					for (const user of DENIED) {
+						expectForbidden(
+							() => compile()(applied(active, user, [E1], '4', 'partially_returned'), active, user),
+							/can apply bulk return entries to loans/
+						);
+					}
+				});
+
+				it('allows a further partial apply and the final full apply', () => {
+					const next = applied(partialOne, WAREHOUSE, [E1, E2], '7', 'partially_returned');
+					expect(() => compile()(next, partialOne, WAREHOUSE)).not.toThrow();
+					expect(() =>
+						compile()(
+							applied(partialTwo, DISTRIBUTION, [E1, E2, E3], '10', 'returned'),
+							partialTwo,
+							DISTRIBUTION
+						)
+					).not.toThrow();
+					expect(() =>
+						compile()(applied(v2Active, MANAGER, [E1], '10', 'returned'), v2Active, MANAGER)
+					).not.toThrow();
+				});
+
+				it('requires qty_returned to strictly increase, stay whole and not exceed the issued qty', () => {
+					expectForbidden(
+						() =>
+							compile()(
+								applied(partialOne, WAREHOUSE, [E1, E2], '4', 'partially_returned'),
+								partialOne,
+								WAREHOUSE
+							),
+						/qty_returned must increase/
+					);
+					expectForbidden(
+						() =>
+							compile()(
+								applied(partialOne, WAREHOUSE, [E1, E2], '11', 'returned'),
+								partialOne,
+								WAREHOUSE
+							),
+						/must not exceed issued qty/
+					);
+					expectForbidden(
+						() =>
+							compile()(
+								applied(active, WAREHOUSE, [E1], '1.5', 'partially_returned'),
+								active,
+								WAREHOUSE
+							),
+						/qty_returned must be a whole number/
+					);
+				});
+
+				it('requires status returned exactly when fully returned', () => {
+					expectForbidden(
+						() =>
+							compile()(
+								applied(active, WAREHOUSE, [E1], '10', 'partially_returned'),
+								active,
+								WAREHOUSE
+							),
+						/status must be returned when fully returned/
+					);
+					expectForbidden(
+						() => compile()(applied(active, WAREHOUSE, [E1], '4', 'returned'), active, WAREHOUSE),
+						/status must be returned when fully returned/
+					);
+				});
+
+				it('adds exactly one new id and keeps every previous id', () => {
+					expectForbidden(
+						() =>
+							compile()(
+								applied(partialOne, WAREHOUSE, [E1, E2, E3], '8', 'partially_returned'),
+								partialOne,
+								WAREHOUSE
+							),
+						/can only gain or lose exactly one id/
+					);
+					expectForbidden(
+						() =>
+							compile()(
+								applied(partialOne, WAREHOUSE, [E2, E3], '8', 'partially_returned'),
+								partialOne,
+								WAREHOUSE
+							),
+						/can only gain or lose exactly one id|keep every previously applied id/
+					);
+					expectForbidden(
+						() =>
+							compile()(
+								applied(partialOne, WAREHOUSE, [E2, E3], '8', 'partially_returned'),
+								{ ...partialOne, applied_bulk_entry_ids: [E1, E3] },
+								WAREHOUSE
+							),
+						/can only gain or lose exactly one id/
+					);
+				});
+
+				it('rejects apply from returned, voided or lost logs', () => {
+					const returned = applied(active, WAREHOUSE, [E1], '10', 'returned');
+					expectForbidden(
+						() => compile()({ ...returned, applied_bulk_entry_ids: [E1, E2] }, returned, WAREHOUSE),
+						/Illegal distribution_log transition/
+					);
+				});
+
+				it('requires clear_reason bulk_dropoff, the actor as returned_by, returned_at and schema_v 2', () => {
+					const ok = applied(active, WAREHOUSE, [E1], '4', 'partially_returned');
+					expectForbidden(
+						() => compile()({ ...ok, clear_reason: 'routine' }, active, WAREHOUSE),
+						/require clear_reason bulk_dropoff/
+					);
+					expectForbidden(
+						() => compile()({ ...ok, returned_by: 'mallory' }, active, WAREHOUSE),
+						/returned_by must match the current actor/
+					);
+					expectForbidden(
+						() => compile()({ ...ok, returned_at: undefined }, active, WAREHOUSE),
+						/returned_by must match the current actor/
+					);
+					expectForbidden(
+						() => compile()({ ...ok, schema_v: 1 }, active, WAREHOUSE),
+						/applied_bulk_entry_ids requires schema_v 2/
+					);
+				});
+
+				it('carries bulk_pool_id unchanged on the v3 path', () => {
+					const legacyLinked = { ...active, bulk_pool_id: LEGACY_POOL };
+					const next = applied(legacyLinked, WAREHOUSE, [E1], '4', 'partially_returned');
+					expect(() => compile()(next, legacyLinked, WAREHOUSE)).not.toThrow();
+					expectForbidden(
+						() => compile()({ ...next, bulk_pool_id: undefined }, legacyLinked, WAREHOUSE),
+						/bulk_pool_id is immutable on the v3 bulk path/
+					);
+					expectForbidden(
+						() =>
+							compile()(
+								{ ...partialOne, bulk_pool_id: LEGACY_POOL, applied_bulk_entry_ids: [E1] },
+								active,
+								WAREHOUSE
+							),
+						/bulk_pool_id is immutable on the v3 bulk path/
+					);
+				});
+
+				it('rejects duplicate or malformed applied ids and ids on a v1 log', () => {
+					expectForbidden(
+						() =>
+							compile()({ ...partialTwo, applied_bulk_entry_ids: [E1, E1] }, partialOne, WAREHOUSE),
+						/Duplicate id in distribution_log.applied_bulk_entry_ids/
+					);
+					expectForbidden(
+						() =>
+							compile()(
+								{ ...partialOne, applied_bulk_entry_ids: ['bulk_return_entry:x'] },
+								active,
+								WAREHOUSE
+							),
+						/must contain bulk_return_entry:\{ulid\} ids/
+					);
+					expectForbidden(
+						() => compile()({ ...partialOne, applied_bulk_entry_ids: 'x' }, active, WAREHOUSE),
+						/must be an array/
+					);
+					expectForbidden(
+						() => compile()({ ...active, applied_bulk_entry_ids: [] }, active, WAREHOUSE),
+						/applied_bulk_entry_ids requires schema_v 2/
+					);
+				});
+			});
+
+			describe('revert (entry void)', () => {
+				it('reverts one entry to partially_returned for WH, SC, SM, DST and SA', () => {
+					for (const user of ALLOWED) {
+						const next = applied(partialTwo, user, [E1], '4', 'partially_returned');
+						expect(() => compile()(next, partialTwo, user)).not.toThrow();
+					}
+				});
+
+				it('reverts a fully returned log to partially_returned', () => {
+					const next = applied(fullThree, DISTRIBUTION, [E1, E2], '7', 'partially_returned');
+					expect(() => compile()(next, fullThree, DISTRIBUTION)).not.toThrow();
+				});
+
+				it('reverts the last entry back to active with qty_returned 0', () => {
+					for (const user of ALLOWED) {
+						const next = applied(partialOne, user, [], '0', 'active');
+						expect(() => compile()(next, partialOne, user)).not.toThrow();
+					}
+				});
+
+				it('denies registration_staff, kitchen_staff and role-less users', () => {
+					for (const user of DENIED) {
+						expectForbidden(
+							() =>
+								compile()(
+									applied(partialTwo, user, [E1], '4', 'partially_returned'),
+									partialTwo,
+									user
+								),
+							/can apply bulk return entries to loans/
+						);
+					}
+				});
+
+				it('requires qty_returned to strictly decrease and the status to follow it', () => {
+					expectForbidden(
+						() =>
+							compile()(
+								applied(partialTwo, WAREHOUSE, [E1], '7', 'partially_returned'),
+								partialTwo,
+								WAREHOUSE
+							),
+						/qty_returned must decrease/
+					);
+					expectForbidden(
+						() =>
+							compile()(
+								applied(partialOne, WAREHOUSE, [], '0', 'partially_returned'),
+								partialOne,
+								WAREHOUSE
+							),
+						/status must be active when nothing is returned/
+					);
+					expectForbidden(
+						() =>
+							compile()(applied(partialTwo, WAREHOUSE, [E1], '4', 'active'), partialTwo, WAREHOUSE),
+						/status must be active when nothing is returned|qty_returned must decrease/
+					);
+				});
+
+				it('only removes ids that were applied and only from partially_returned or returned logs', () => {
+					expectForbidden(
+						() =>
+							compile()(
+								applied(partialOne, WAREHOUSE, [E3], '2', 'partially_returned'),
+								{ ...partialOne, applied_bulk_entry_ids: [E1, E2] },
+								WAREHOUSE
+							),
+						/can only lose ids when reverting/
+					);
+					expectForbidden(
+						() =>
+							compile()(
+								applied(v2Active, WAREHOUSE, [], '0', 'active'),
+								{ ...v2Active, applied_bulk_entry_ids: [E1] },
+								WAREHOUSE
+							),
+						/Illegal distribution_log transition/
+					);
+				});
+			});
+
+			describe('schema_v and unchanged ids on other paths', () => {
+				it('allows a 1 -> 2 upgrade on the apply path and rejects 2 -> 1', () => {
+					expect(() =>
+						compile()(
+							applied(active, WAREHOUSE, [E1], '4', 'partially_returned'),
+							active,
+							WAREHOUSE
+						)
+					).not.toThrow();
+					expectForbidden(
+						() =>
+							compile()(
+								{ ...partialOne, schema_v: 1, applied_bulk_entry_ids: undefined },
+								partialOne,
+								WAREHOUSE
+							),
+						/schema_v can only stay the same or upgrade from 1 to 2/
+					);
+					expectForbidden(
+						() => compile()({ ...active, schema_v: 3 }, active, DISTRIBUTION),
+						/Unsupported distribution_log schema version/
+					);
+				});
+
+				it('keeps applied_bulk_entry_ids unchanged on routine returns, voids and non-physical clears', () => {
+					const routine = {
+						...partialOne,
+						qty_returned: '6',
+						clear_reason: 'routine',
+						returned_by: WAREHOUSE.name
+					};
+					expect(() => compile()(routine, partialOne, WAREHOUSE)).not.toThrow();
+					expectForbidden(
+						() =>
+							compile()({ ...routine, applied_bulk_entry_ids: [E1, E2] }, partialOne, WAREHOUSE),
+						/require clear_reason bulk_dropoff/
+					);
+					expectForbidden(
+						() => compile()({ ...routine, applied_bulk_entry_ids: [E2] }, partialOne, WAREHOUSE),
+						/can only gain or lose exactly one id/
+					);
+					const lost = {
+						...partialOne,
+						status: 'lost',
+						clear_reason: 'lost',
+						notes: 'gone',
+						returned_by: DISTRIBUTION.name
+					};
+					expect(() => compile()(lost, partialOne, DISTRIBUTION)).not.toThrow();
+					expectForbidden(
+						() => compile()({ ...lost, applied_bulk_entry_ids: [] }, partialOne, DISTRIBUTION),
+						/require clear_reason bulk_dropoff/
+					);
+				});
+
+				it('keeps the legacy bulk_pool_id path DST/SM only and leaves v1 logs working', () => {
+					const legacy = {
+						...active,
+						status: 'returned',
+						qty_returned: '10',
+						clear_reason: 'bulk_dropoff',
+						bulk_pool_id: LEGACY_POOL,
+						returned_at: AT,
+						returned_by: DISTRIBUTION.name
+					};
+					expect(() => compile()(legacy, active, DISTRIBUTION)).not.toThrow();
+					expect(() =>
+						compile()({ ...legacy, returned_by: MANAGER.name }, active, MANAGER)
+					).not.toThrow();
+					for (const user of [WAREHOUSE, SUPPLY_COORD, REGISTRATION]) {
+						expectForbidden(
+							() => compile()({ ...legacy, returned_by: user.name }, active, user),
+							/can clear distribution logs/
+						);
+					}
+				});
+
+				it('requires bulk_dropoff to carry a bulk_pool_id or applied_bulk_entry_ids', () => {
+					const noRef = {
+						...active,
+						status: 'returned',
+						qty_returned: '10',
+						clear_reason: 'bulk_dropoff',
+						returned_at: AT,
+						returned_by: DISTRIBUTION.name
+					};
+					expectForbidden(
+						() => compile()(noRef, active, DISTRIBUTION),
+						/bulk_dropoff requires bulk_pool_id or applied_bulk_entry_ids/
+					);
+				});
+			});
+
+			describe('create and void', () => {
+				it('allows creating a schema_v 2 log without ids and rejects ids on create', () => {
+					expect(() =>
+						compile()({ ...validReturnableLog, schema_v: 2 }, null, DISTRIBUTION)
+					).not.toThrow();
+					expect(() =>
+						compile()(
+							{ ...validReturnableLog, schema_v: 2, applied_bulk_entry_ids: [] },
+							null,
+							DISTRIBUTION
+						)
+					).not.toThrow();
+					expectForbidden(
+						() =>
+							compile()(
+								{ ...validReturnableLog, schema_v: 2, applied_bulk_entry_ids: [E1] },
+								null,
+								DISTRIBUTION
+							),
+						/cannot carry applied_bulk_entry_ids/
+					);
+				});
+
+				it('blocks voiding a log whose applied_bulk_entry_ids is non-empty', () => {
+					const withIds = { ...v2Active, applied_bulk_entry_ids: [E1] };
+					expectForbidden(
+						() =>
+							compile()(
+								{
+									...withIds,
+									status: 'voided',
+									voided_at: AT,
+									voided_by: DISTRIBUTION.name
+								},
+								withIds,
+								DISTRIBUTION
+							),
+						/Cannot void a distribution_log after return or clear activity has begun/
+					);
+					// An untouched v2 log (no ids) can still be voided.
+					expect(() =>
+						compile()(
+							{ ...v2Active, status: 'voided', voided_at: AT, voided_by: DISTRIBUTION.name },
+							v2Active,
+							DISTRIBUTION
+						)
+					).not.toThrow();
+				});
+			});
+		});
+
 		describe('bulk_return_pool VDU validation', () => {
 			const firstClaimId = 'bulk_return_claim:01J00000000000000000000003';
-			const secondClaimId = 'bulk_return_claim:01J00000000000000000000004';
 			const activeV2Pool = {
 				...validPool,
 				schema_v: 2,
@@ -4317,193 +4827,1366 @@ describe('buildValidateDocUpdate', () => {
 				unclaimed_quota: '16',
 				claim_ids: [firstClaimId]
 			};
+			const POOL_ID = 'bulk_return_pool:01J00000000000000000000010';
+			const POOL_ID_2 = 'bulk_return_pool:01J00000000000000000000011';
+			const OP_ID = '01J00000000000000000000020';
+			const SUMMARY = [{ item_id: 'item_master:cot', qty: '3' }];
+			const ENTRY_1 = 'bulk_return_entry:01J00000000000000000000031';
+			const ENTRY_2 = 'bulk_return_entry:01J00000000000000000000032';
+			const lock = {
+				op: 'SUBMIT',
+				op_id: OP_ID,
+				locked_at: '2026-10-01T00:00:00.000Z',
+				locked_by: 'ws'
+			};
+			const openV3Pool: Doc = {
+				_id: POOL_ID,
+				type: 'bulk_return_pool',
+				schema_v: 3,
+				shelter_code: 'SH001',
+				created_at: '2026-10-01T00:00:00.000Z',
+				updated_at: '2026-10-01T00:00:00.000Z',
+				created_by: 'ws',
+				name: 'Zone A drop-off',
+				location_storage_point_id: 'sp-1',
+				location_storage_zone: 'Gate 1',
+				status: 'OPEN'
+			};
+			const submittedV3Pool: Doc = {
+				...openV3Pool,
+				status: 'SUBMITTED',
+				items_summary: SUMMARY,
+				entry_ids: [ENTRY_1, ENTRY_2],
+				submitted_at: '2026-10-01T02:00:00.000Z',
+				submitted_by: 'ws'
+			};
+			const receivedItems = [{ item_id: 'item_master:cot', expected_qty: '3', received_qty: '3' }];
+			const receivedV3Pool: Doc = {
+				...submittedV3Pool,
+				status: 'RECEIVED',
+				received_at: '2026-10-01T03:00:00.000Z',
+				received_by: 'ws',
+				received_items: receivedItems
+			};
+			const cancelledV3Pool: Doc = {
+				...openV3Pool,
+				status: 'CANCELLED',
+				cancelled_at: '2026-10-01T01:00:00.000Z',
+				cancelled_by: 'ws'
+			};
+			const without = (doc: Doc, ...keys: string[]): Doc => {
+				const copy = { ...doc };
+				for (const key of keys) delete copy[key];
+				return copy;
+			};
+			// Pool writers (WH, SC, SM, SA via isRole); actor-bound fields follow the caller.
+			const POOL_WRITERS = [WAREHOUSE, SUPPLY_COORD, MANAGER, ADMIN];
+			const POOL_DENIED = [DISTRIBUTION, REGISTRATION, KITCHEN, { name: 'nobody', roles: [] }];
+			const by = (doc: Doc, user: UserCtx, ...fields: string[]): Doc => {
+				const copy = { ...doc };
+				for (const field of fields) copy[field] = user.name;
+				return copy;
+			};
 
-			it('allows creating valid bulk_return_pool with status ACTIVE', () => {
-				expect(() => compile()(validPool, null, WAREHOUSE)).not.toThrow();
+			describe('legacy v1/v2 pools are frozen', () => {
+				it('rejects every update of an existing v1 or v2 pool, whatever the role', () => {
+					for (const user of [WAREHOUSE, REGISTRATION, MANAGER]) {
+						expectForbidden(
+							() => compile()({ ...validPool, notes: 'edit' }, validPool, user),
+							/schema_v 1 documents are frozen/
+						);
+						expectForbidden(
+							() => compile()({ ...activeV2Pool, notes: 'edit' }, activeV2Pool, user),
+							/schema_v 2 documents are frozen/
+						);
+					}
+				});
+
+				it('rejects the old claim, close and v1 to v2 upgrade paths', () => {
+					const claimed = {
+						...activeV2Pool,
+						claimed_qty: '5',
+						unclaimed_quota: '15',
+						claim_ids: [firstClaimId, 'bulk_return_claim:01J00000000000000000000004']
+					};
+					expectForbidden(
+						() => compile()(claimed, activeV2Pool, REGISTRATION),
+						/schema_v 2 documents are frozen/
+					);
+					expectForbidden(
+						() =>
+							compile()(
+								{
+									...validPool,
+									status: 'CLOSED',
+									closed_at: '2026-09-01T02:00:00.000Z',
+									closed_by: 'x'
+								},
+								validPool,
+								WAREHOUSE
+							),
+						/schema_v 1 documents are frozen/
+					);
+					expectForbidden(
+						() => compile()({ ...activeV2Pool, schema_v: 3 }, validPool, REGISTRATION),
+						/schema_v 1 documents are frozen/
+					);
+				});
+
+				it('rejects downgrading a v3 pool and creating new v1/v2 pools', () => {
+					expectForbidden(
+						() => compile()({ ...openV3Pool, schema_v: 2 }, openV3Pool, WAREHOUSE),
+						/must be schema_v 3/
+					);
+					expectForbidden(() => compile()(validPool, null, WAREHOUSE), /must be schema_v 3/);
+					expectForbidden(() => compile()(activeV2Pool, null, WAREHOUSE), /must be schema_v 3/);
+				});
 			});
 
-			it('rejects pool creation by a role without physical receipt authority', () => {
-				expectForbidden(
-					() => compile()(validPool, null, REGISTRATION),
-					/Only warehouse staff, supply coordinator, or shelter manager can create bulk return pool/
-				);
-			});
-
-			it('rejects creating pool with invalid equation', () => {
-				expectForbidden(
-					() => compile()({ ...validPool, unclaimed_quota: '15' }, null, WAREHOUSE),
-					/claimed_qty \+ unclaimed_quota must equal total_received_qty/
-				);
-			});
-
-			it('enforces ACTIVE and EXHAUSTED quota states', () => {
-				expectForbidden(
-					() =>
+			describe('v3 pool create', () => {
+				it('allows an OPEN pool with only name (+ optional location pair/notes)', () => {
+					expect(() => compile()(openV3Pool, null, WAREHOUSE)).not.toThrow();
+					expect(() =>
 						compile()(
-							{ ...validPool, claimed_qty: '20', unclaimed_quota: '0', status: 'ACTIVE' },
+							without(openV3Pool, 'location_storage_point_id', 'location_storage_zone'),
 							null,
 							WAREHOUSE
-						),
-					/ACTIVE bulk_return_pool must have remaining quota/
-				);
-				expectForbidden(
-					() =>
+						)
+					).not.toThrow();
+					expect(() => compile()({ ...openV3Pool, notes: 'n' }, null, WAREHOUSE)).not.toThrow();
+				});
+
+				it('allows WH, SC, SM and SA to create and denies every other role', () => {
+					for (const user of POOL_WRITERS) {
+						expect(() => compile()(by(openV3Pool, user, 'created_by'), null, user)).not.toThrow();
+					}
+					for (const user of POOL_DENIED) {
+						expectForbidden(
+							() => compile()(by(openV3Pool, user, 'created_by'), null, user),
+							/can write bulk return pools/
+						);
+					}
+				});
+
+				it('requires created_by to be the current actor', () => {
+					expectForbidden(
+						() => compile()({ ...openV3Pool, created_by: 'mallory' }, null, WAREHOUSE),
+						/created_by must match the current actor/
+					);
+				});
+
+				it('requires a trimmed name of 1 to 80 characters', () => {
+					expect(() =>
+						compile()({ ...openV3Pool, name: 'a'.repeat(80) }, null, WAREHOUSE)
+					).not.toThrow();
+					expectForbidden(
+						() => compile()({ ...openV3Pool, name: 'a'.repeat(81) }, null, WAREHOUSE),
+						/name must be 1 to 80 characters/
+					);
+					for (const name of [undefined, '', '  ', 5]) {
+						expectForbidden(
+							() => compile()({ ...openV3Pool, name }, null, WAREHOUSE),
+							/name must be 1 to 80 characters/
+						);
+					}
+					expectForbidden(
+						() => compile()(without(openV3Pool, 'name'), null, WAREHOUSE),
+						/name must be 1 to 80 characters/
+					);
+				});
+
+				it('rejects an empty notes', () => {
+					expectForbidden(() => compile()({ ...openV3Pool, notes: ' ' }, null, WAREHOUSE), /notes/);
+				});
+
+				it('requires the location storage point id and zone together', () => {
+					expectForbidden(
+						() => compile()(without(openV3Pool, 'location_storage_zone'), null, WAREHOUSE),
+						/location storage point id and zone must be set together/
+					);
+					expectForbidden(
+						() => compile()(without(openV3Pool, 'location_storage_point_id'), null, WAREHOUSE),
+						/location storage point id and zone must be set together/
+					);
+					expectForbidden(
+						() => compile()({ ...openV3Pool, location_storage_point_id: ' ' }, null, WAREHOUSE),
+						/storage point id must be a non-empty string/
+					);
+					expectForbidden(
+						() => compile()({ ...openV3Pool, location_storage_zone: ' ' }, null, WAREHOUSE),
+						/storage zone must be a non-empty string/
+					);
+					expectForbidden(
+						() =>
+							compile()({ ...openV3Pool, location_storage_zone: 'z'.repeat(101) }, null, WAREHOUSE),
+						/at most 100 characters/
+					);
+					expect(() =>
+						compile()({ ...openV3Pool, location_storage_zone: 'z'.repeat(100) }, null, WAREHOUSE)
+					).not.toThrow();
+				});
+
+				it('ignores the removed free-text location and return_ticket_id fields', () => {
+					expect(() =>
 						compile()(
-							{ ...validPool, claimed_qty: '4', unclaimed_quota: '16', status: 'EXHAUSTED' },
+							{ ...openV3Pool, location: 'Gate 1', return_ticket_id: 'T-1' },
 							null,
 							WAREHOUSE
+						)
+					).not.toThrow();
+				});
+
+				it('requires a bulk_return_pool ULID id and the OPEN initial status', () => {
+					expectForbidden(
+						() => compile()({ ...openV3Pool, _id: 'bulk_return_pool:short' }, null, WAREHOUSE),
+						/id must be bulk_return_pool:\{ulid\}/
+					);
+					expectForbidden(
+						() => compile()(submittedV3Pool, null, WAREHOUSE),
+						/Initial bulk_return_pool status must be OPEN/
+					);
+					expectForbidden(
+						() => compile()(cancelledV3Pool, null, WAREHOUSE),
+						/Initial bulk_return_pool status must be OPEN/
+					);
+					expectForbidden(
+						() => compile()({ ...openV3Pool, status: 'ACTIVE' }, null, WAREHOUSE),
+						/Invalid bulk_return_pool status/
+					);
+				});
+
+				it('rejects snapshot, cancel and receive fields while OPEN', () => {
+					for (const field of [
+						'items_summary',
+						'entry_ids',
+						'submitted_at',
+						'submitted_by',
+						'cancelled_at',
+						'cancelled_by',
+						'received_at',
+						'received_by',
+						'received_storage_point_id',
+						'received_storage_zone',
+						'received_items'
+					]) {
+						expectForbidden(
+							() => compile()({ ...openV3Pool, [field]: 'x' }, null, WAREHOUSE),
+							new RegExp(`OPEN bulk_return_pool must not have ${field}`)
+						);
+					}
+				});
+			});
+
+			describe('v3 pool lock', () => {
+				it('accepts a null/absent lock and a well-formed SUBMIT or CANCEL lock while OPEN', () => {
+					expect(() => compile()({ ...openV3Pool, lock: null }, null, WAREHOUSE)).not.toThrow();
+					expect(() => compile()({ ...openV3Pool, lock }, openV3Pool, WAREHOUSE)).not.toThrow();
+					expect(() =>
+						compile()({ ...openV3Pool, lock: { ...lock, op: 'CANCEL' } }, openV3Pool, WAREHOUSE)
+					).not.toThrow();
+				});
+
+				it('lets WH, SC, SM and SA set and clear the lock and denies other roles', () => {
+					for (const user of POOL_WRITERS) {
+						const locked = { ...openV3Pool, lock: { ...lock, locked_by: user.name } };
+						expect(() => compile()(locked, openV3Pool, user)).not.toThrow();
+						expect(() => compile()(openV3Pool, locked, user)).not.toThrow();
+					}
+					for (const user of POOL_DENIED) {
+						expectForbidden(
+							() =>
+								compile()(
+									{ ...openV3Pool, lock: { ...lock, locked_by: user.name } },
+									openV3Pool,
+									user
+								),
+							/can write bulk return pools/
+						);
+					}
+				});
+
+				it('requires a newly written lock to be held by the current actor', () => {
+					expectForbidden(
+						() =>
+							compile()(
+								{ ...openV3Pool, lock: { ...lock, locked_by: 'mallory' } },
+								openV3Pool,
+								WAREHOUSE
+							),
+						/lock.locked_by must match the current actor/
+					);
+					// An existing lock held by someone else may stay as it is while another writer edits.
+					const heldByOther = { ...openV3Pool, lock: { ...lock, locked_by: 'sm' } };
+					expect(() =>
+						compile()({ ...heldByOther, notes: 'edit' }, heldByOther, WAREHOUSE)
+					).not.toThrow();
+				});
+
+				it('rejects the old DELETE lock op and other malformed locks', () => {
+					expectForbidden(
+						() => compile()({ ...openV3Pool, lock: { ...lock, op: 'DELETE' } }, null, WAREHOUSE),
+						/lock.op must be SUBMIT or CANCEL/
+					);
+					expectForbidden(
+						() => compile()({ ...openV3Pool, lock: { ...lock, op_id: 'nope' } }, null, WAREHOUSE),
+						/lock.op_id must be a ULID/
+					);
+					expectForbidden(
+						() => compile()({ ...openV3Pool, lock: { ...lock, locked_by: '' } }, null, WAREHOUSE),
+						/lock requires locked_at and locked_by/
+					);
+					expectForbidden(
+						() =>
+							compile()(
+								{ ...openV3Pool, lock: { ...lock, locked_at: undefined } },
+								null,
+								WAREHOUSE
+							),
+						/lock requires locked_at and locked_by/
+					);
+				});
+
+				it('rejects a lock on a SUBMITTED or RECEIVED pool', () => {
+					expectForbidden(
+						() => compile()({ ...submittedV3Pool, lock }, null, WAREHOUSE),
+						/lock is only allowed while OPEN/
+					);
+					expectForbidden(
+						() => compile()({ ...receivedV3Pool, lock }, submittedV3Pool, WAREHOUSE),
+						/lock is only allowed while OPEN/
+					);
+					expect(() =>
+						compile()({ ...submittedV3Pool, lock: null }, { ...openV3Pool, lock }, WAREHOUSE)
+					).not.toThrow();
+				});
+			});
+
+			describe('v3 pool transitions', () => {
+				it('allows OPEN -> SUBMITTED with snapshot and submit audit, clearing the lock', () => {
+					expect(() =>
+						compile()({ ...submittedV3Pool, lock: null }, { ...openV3Pool, lock }, WAREHOUSE)
+					).not.toThrow();
+				});
+
+				it('allows submit, receive and cancel for WH, SC, SM and SA, and denies other roles', () => {
+					for (const user of POOL_WRITERS) {
+						expect(() =>
+							compile()(by(submittedV3Pool, user, 'submitted_by'), openV3Pool, user)
+						).not.toThrow();
+						expect(() =>
+							compile()(by(receivedV3Pool, user, 'received_by'), submittedV3Pool, user)
+						).not.toThrow();
+						expect(() =>
+							compile()(by(cancelledV3Pool, user, 'cancelled_by'), openV3Pool, user)
+						).not.toThrow();
+						expect(() =>
+							compile()({ ...openV3Pool, notes: 'edit' }, openV3Pool, user)
+						).not.toThrow();
+					}
+					for (const user of POOL_DENIED) {
+						const attempts: [Doc, Doc][] = [
+							[by(submittedV3Pool, user, 'submitted_by'), openV3Pool],
+							[by(receivedV3Pool, user, 'received_by'), submittedV3Pool],
+							[by(cancelledV3Pool, user, 'cancelled_by'), openV3Pool],
+							[{ ...openV3Pool, notes: 'edit' }, openV3Pool]
+						];
+						for (const [next, prev] of attempts) {
+							expectForbidden(() => compile()(next, prev, user), /can write bulk return pools/);
+						}
+					}
+				});
+
+				it('requires the submit, receive and cancel actor fields to be the current actor', () => {
+					expectForbidden(
+						() => compile()({ ...submittedV3Pool, submitted_by: 'mallory' }, openV3Pool, WAREHOUSE),
+						/submitted_by must match the current actor/
+					);
+					expectForbidden(
+						() =>
+							compile()({ ...receivedV3Pool, received_by: 'mallory' }, submittedV3Pool, WAREHOUSE),
+						/received_by must match the current actor/
+					);
+					expectForbidden(
+						() => compile()({ ...cancelledV3Pool, cancelled_by: 'mallory' }, openV3Pool, WAREHOUSE),
+						/cancelled_by must match the current actor/
+					);
+				});
+
+				it('allows OPEN -> CANCELLED with cancel audit and no snapshot, lock or receive fields', () => {
+					expect(() =>
+						compile()(
+							cancelledV3Pool,
+							{ ...openV3Pool, lock: { ...lock, op: 'CANCEL' } },
+							WAREHOUSE
+						)
+					).not.toThrow();
+					expectForbidden(
+						() => compile()(without(cancelledV3Pool, 'cancelled_at'), openV3Pool, WAREHOUSE),
+						/requires cancelled_at and cancelled_by/
+					);
+					expectForbidden(
+						() => compile()(without(cancelledV3Pool, 'cancelled_by'), openV3Pool, WAREHOUSE),
+						/requires cancelled_at and cancelled_by/
+					);
+					expectForbidden(
+						() =>
+							compile()({ ...cancelledV3Pool, cancelled_at: 'not a date' }, openV3Pool, WAREHOUSE),
+						/requires cancelled_at and cancelled_by/
+					);
+					for (const field of ['items_summary', 'entry_ids', 'submitted_at', 'received_items']) {
+						expectForbidden(
+							() => compile()({ ...cancelledV3Pool, [field]: SUMMARY }, openV3Pool, WAREHOUSE),
+							new RegExp(`CANCELLED bulk_return_pool must not have ${field}`)
+						);
+					}
+					expectForbidden(
+						() => compile()({ ...cancelledV3Pool, lock }, openV3Pool, WAREHOUSE),
+						/lock is only allowed while OPEN/
+					);
+				});
+
+				it('rejects cancel audit on SUBMITTED and RECEIVED pools', () => {
+					expectForbidden(
+						() =>
+							compile()(
+								{
+									...submittedV3Pool,
+									cancelled_at: '2026-10-01T01:00:00.000Z',
+									cancelled_by: 'ws'
+								},
+								openV3Pool,
+								WAREHOUSE
+							),
+						/SUBMITTED bulk_return_pool must not have cancelled_at/
+					);
+				});
+
+				it('allows SUBMITTED -> RECEIVED', () => {
+					expect(() => compile()(receivedV3Pool, submittedV3Pool, WAREHOUSE)).not.toThrow();
+				});
+
+				it('allows an untouched same-status update of a frozen pool (e.g. a no-op rewrite)', () => {
+					for (const pool of [submittedV3Pool, receivedV3Pool, cancelledV3Pool]) {
+						expect(() => compile()(pool, pool, WAREHOUSE)).not.toThrow();
+					}
+				});
+
+				it('rejects submitting without snapshot or submit audit', () => {
+					expectForbidden(
+						() => compile()(without(submittedV3Pool, 'items_summary'), openV3Pool, WAREHOUSE),
+						/requires a non-empty items_summary array/
+					);
+					expectForbidden(
+						() => compile()({ ...submittedV3Pool, items_summary: 'x' }, openV3Pool, WAREHOUSE),
+						/requires a non-empty items_summary array/
+					);
+					expectForbidden(
+						() => compile()({ ...submittedV3Pool, items_summary: [] }, openV3Pool, WAREHOUSE),
+						/requires a non-empty items_summary array/
+					);
+					expectForbidden(
+						() => compile()(without(submittedV3Pool, 'entry_ids'), openV3Pool, WAREHOUSE),
+						/requires a non-empty entry_ids array/
+					);
+					expectForbidden(
+						() => compile()({ ...submittedV3Pool, entry_ids: [] }, openV3Pool, WAREHOUSE),
+						/requires a non-empty entry_ids array/
+					);
+					expectForbidden(
+						() =>
+							compile()(
+								{ ...submittedV3Pool, entry_ids: [ENTRY_1, ENTRY_1] },
+								openV3Pool,
+								WAREHOUSE
+							),
+						/Duplicate id in bulk_return_pool entry_ids/
+					);
+					expectForbidden(
+						() =>
+							compile()(
+								{ ...submittedV3Pool, entry_ids: ['bulk_return_entry:x'] },
+								openV3Pool,
+								WAREHOUSE
+							),
+						/entry_ids must contain bulk_return_entry:\{ulid\} ids/
+					);
+					expectForbidden(
+						() => compile()(without(submittedV3Pool, 'submitted_at'), openV3Pool, WAREHOUSE),
+						/requires submitted_at and submitted_by/
+					);
+					expectForbidden(
+						() => compile()(without(submittedV3Pool, 'submitted_by'), openV3Pool, WAREHOUSE),
+						/requires submitted_at and submitted_by/
+					);
+				});
+
+				it('rejects every transition that is not forward-only', () => {
+					const cases: { from: Doc; to: Doc; label: string }[] = [
+						{ from: submittedV3Pool, to: openV3Pool, label: 'SUBMITTED -> OPEN' },
+						{ from: submittedV3Pool, to: cancelledV3Pool, label: 'SUBMITTED -> CANCELLED' },
+						{ from: receivedV3Pool, to: submittedV3Pool, label: 'RECEIVED -> SUBMITTED' },
+						{ from: receivedV3Pool, to: openV3Pool, label: 'RECEIVED -> OPEN' },
+						{ from: receivedV3Pool, to: cancelledV3Pool, label: 'RECEIVED -> CANCELLED' },
+						{ from: cancelledV3Pool, to: openV3Pool, label: 'CANCELLED -> OPEN' },
+						{ from: cancelledV3Pool, to: submittedV3Pool, label: 'CANCELLED -> SUBMITTED' },
+						{ from: cancelledV3Pool, to: receivedV3Pool, label: 'CANCELLED -> RECEIVED' },
+						{ from: openV3Pool, to: receivedV3Pool, label: 'OPEN -> RECEIVED' }
+					];
+					for (const { from, to, label } of cases) {
+						for (const user of [WAREHOUSE, ADMIN]) {
+							expectForbidden(
+								() => compile()(to, from, user),
+								new RegExp(`Invalid bulk_return_pool status transition ${label}$`)
+							);
+						}
+					}
+				});
+
+				it('allows OPEN edits of name, location pair and notes', () => {
+					expect(() =>
+						compile()(
+							{
+								...openV3Pool,
+								name: 'Renamed',
+								location_storage_point_id: 'sp-2',
+								location_storage_zone: 'Gate 2',
+								notes: 'n'
+							},
+							openV3Pool,
+							WAREHOUSE
+						)
+					).not.toThrow();
+				});
+
+				it('keeps name and location unchanged across every transition', () => {
+					for (const next of [submittedV3Pool, cancelledV3Pool]) {
+						for (const patch of [
+							{ name: 'Renamed' },
+							{ location_storage_point_id: 'sp-2' },
+							{ location_storage_zone: 'Gate 2' }
+						]) {
+							expectForbidden(
+								() => compile()({ ...next, ...patch }, openV3Pool, WAREHOUSE),
+								/name and location are immutable once the pool has left OPEN/
+							);
+						}
+					}
+				});
+
+				it('allows a notes edit on every transition and in every status', () => {
+					for (const next of [submittedV3Pool, cancelledV3Pool]) {
+						expect(() =>
+							compile()({ ...next, notes: 'new note' }, openV3Pool, WAREHOUSE)
+						).not.toThrow();
+					}
+					for (const pool of [submittedV3Pool, receivedV3Pool, cancelledV3Pool]) {
+						expect(() => compile()({ ...pool, notes: 'edit' }, pool, WAREHOUSE)).not.toThrow();
+					}
+				});
+
+				it('freezes name, location and every written snapshot field once not OPEN', () => {
+					for (const pool of [submittedV3Pool, receivedV3Pool, cancelledV3Pool]) {
+						for (const patch of [
+							{ name: 'Renamed' },
+							{ location_storage_point_id: 'sp-2' },
+							{ location_storage_zone: 'Gate 2' }
+						]) {
+							expectForbidden(
+								() => compile()({ ...pool, ...patch }, pool, WAREHOUSE),
+								/name and location are immutable once the pool has left OPEN/
+							);
+						}
+					}
+					expectForbidden(
+						() =>
+							compile()(
+								{ ...submittedV3Pool, items_summary: [{ item_id: 'item_master:cot', qty: '4' }] },
+								submittedV3Pool,
+								WAREHOUSE
+							),
+						/items_summary is immutable once written/
+					);
+					for (const patch of [
+						{ entry_ids: [ENTRY_1] },
+						{ entry_ids: [ENTRY_2, ENTRY_1] },
+						{ submitted_at: '2026-10-02T00:00:00.000Z' },
+						{ submitted_by: 'someone-else' }
+					]) {
+						for (const pool of [submittedV3Pool, receivedV3Pool]) {
+							expectForbidden(
+								() => compile()({ ...pool, ...patch }, pool, WAREHOUSE),
+								/is immutable once written/
+							);
+						}
+					}
+					for (const patch of [
+						{ received_at: '2026-10-02T00:00:00.000Z' },
+						{ received_by: 'someone-else' },
+						{ received_storage_point_id: 'sp-9', received_storage_zone: 'Z' },
+						{
+							received_items: [
+								{ ...receivedItems[0], received_qty: '2', discrepancy_reason: 'missing' }
+							]
+						}
+					]) {
+						expectForbidden(
+							() => compile()({ ...receivedV3Pool, ...patch }, receivedV3Pool, WAREHOUSE),
+							/is immutable once written/
+						);
+					}
+					expectForbidden(
+						() =>
+							compile()(
+								{ ...cancelledV3Pool, cancelled_by: 'someone-else' },
+								cancelledV3Pool,
+								WAREHOUSE
+							),
+						/cancelled_by is immutable once written/
+					);
+				});
+
+				it('rejects changing identity fields of an existing v3 pool', () => {
+					for (const patch of [
+						{ _id: POOL_ID_2 },
+						{ shelter_code: 'SH002' },
+						{ created_at: '2026-01-01T00:00:00.000Z' }
+					]) {
+						expect(() => compile()({ ...openV3Pool, ...patch }, openV3Pool, WAREHOUSE)).toThrow();
+					}
+					expectForbidden(
+						() => compile()({ ...openV3Pool, created_by: 'other' }, openV3Pool, WAREHOUSE),
+						/created_by is immutable/
+					);
+				});
+			});
+
+			describe('v3 items_summary shape', () => {
+				const submittedWith = (items_summary: unknown): Doc => ({
+					...submittedV3Pool,
+					items_summary
+				});
+
+				it('rejects an empty summary and accepts several unique items', () => {
+					expectForbidden(
+						() => compile()(submittedWith([]), openV3Pool, WAREHOUSE),
+						/requires a non-empty items_summary array/
+					);
+					expect(() =>
+						compile()(
+							submittedWith([
+								{ item_id: 'item_master:a', qty: '1' },
+								{ item_id: 'item_master:b', qty: '12' }
+							]),
+							openV3Pool,
+							WAREHOUSE
+						)
+					).not.toThrow();
+				});
+
+				it('rejects duplicate item_id', () => {
+					expectForbidden(
+						() =>
+							compile()(
+								submittedWith([
+									{ item_id: 'item_master:a', qty: '1' },
+									{ item_id: 'item_master:a', qty: '2' }
+								]),
+								openV3Pool,
+								WAREHOUSE
+							),
+						/Duplicate item_id in bulk_return_pool items_summary/
+					);
+				});
+
+				it('rejects non-positive, decimal, numeric or empty qty and missing item_id', () => {
+					for (const qty of ['0', '-1', '1.5', 'abc', '', 2]) {
+						expectForbidden(
+							() =>
+								compile()(
+									submittedWith([{ item_id: 'item_master:a', qty }]),
+									openV3Pool,
+									WAREHOUSE
+								),
+							/items_summary qty must be a positive whole number string/
+						);
+					}
+					expectForbidden(
+						() => compile()(submittedWith([{ item_id: '', qty: '1' }]), openV3Pool, WAREHOUSE),
+						/items_summary row requires item_id/
+					);
+					expectForbidden(
+						() => compile()(submittedWith([null]), openV3Pool, WAREHOUSE),
+						/items_summary row requires item_id/
+					);
+				});
+			});
+
+			describe('v3 receive inspection', () => {
+				const TWO_ITEMS = [
+					{ item_id: 'item_master:cot', qty: '3' },
+					{ item_id: 'item_master:blanket', qty: '10' }
+				];
+				const submittedTwo: Doc = { ...submittedV3Pool, items_summary: TWO_ITEMS };
+				const rows = [
+					{ item_id: 'item_master:cot', expected_qty: '3', received_qty: '3' },
+					{ item_id: 'item_master:blanket', expected_qty: '10', received_qty: '10' }
+				];
+				const receiveWith = (received_items: unknown, over: Doc = {}): Doc => ({
+					...submittedTwo,
+					status: 'RECEIVED',
+					received_at: '2026-10-01T03:00:00.000Z',
+					received_by: 'ws',
+					received_items,
+					...over
+				});
+				const receive = (doc: Doc) => () => compile()(doc, submittedTwo, WAREHOUSE);
+				const patchRow = (index: number, patch: Doc) =>
+					rows.map((row, i) => (i === index ? { ...row, ...patch } : row));
+
+				it('accepts a row per summary item that matches (any order)', () => {
+					expect(receive(receiveWith(rows))).not.toThrow();
+					expect(receive(receiveWith([rows[1], rows[0]]))).not.toThrow();
+				});
+
+				it('requires receipt audit and accepts an optional storage point pair', () => {
+					expectForbidden(
+						receive(without(receiveWith(rows), 'received_at')),
+						/requires received_at and received_by/
+					);
+					expectForbidden(
+						receive(without(receiveWith(rows), 'received_by')),
+						/requires received_at and received_by/
+					);
+					expect(
+						receive(
+							receiveWith(rows, {
+								received_storage_point_id: 'sp-3',
+								received_storage_zone: 'Zone 3'
+							})
+						)
+					).not.toThrow();
+					expectForbidden(
+						receive(receiveWith(rows, { received_storage_point_id: 'sp-3' })),
+						/received storage point id and zone must be set together/
+					);
+					expectForbidden(
+						receive(receiveWith(rows, { received_storage_zone: 'Zone 3' })),
+						/received storage point id and zone must be set together/
+					);
+				});
+
+				it('rejects receive fields on a SUBMITTED pool', () => {
+					expectForbidden(
+						() =>
+							compile()(
+								{ ...submittedTwo, received_at: '2026-10-01T03:00:00.000Z' },
+								submittedTwo,
+								WAREHOUSE
+							),
+						/SUBMITTED bulk_return_pool must not have received_at/
+					);
+				});
+
+				it('requires exactly one row per items_summary item_id', () => {
+					for (const items of [undefined, 'x', [], [rows[0]], [...rows, rows[0]]]) {
+						expectForbidden(
+							receive(receiveWith(items)),
+							/received_items must have exactly one row per items_summary item/
+						);
+					}
+					expectForbidden(
+						receive(receiveWith([rows[0], rows[0]])),
+						/Duplicate item_id in bulk_return_pool received_items/
+					);
+					expectForbidden(
+						receive(receiveWith([rows[0], { ...rows[1], item_id: 'item_master:extra' }])),
+						/must reference an items_summary item_id/
+					);
+					expectForbidden(
+						receive(receiveWith([rows[0], null])),
+						/must reference an items_summary item_id/
+					);
+				});
+
+				it('requires expected_qty to equal the items_summary qty', () => {
+					for (const expected_qty of ['4', '03x', '', 3]) {
+						expectForbidden(
+							receive(receiveWith(patchRow(0, { expected_qty }))),
+							/expected_qty must equal the items_summary qty/
+						);
+					}
+				});
+
+				it('requires received_qty to be a non-negative whole number not above expected_qty', () => {
+					for (const received_qty of ['-1', '1.5', 'x', '', 3]) {
+						expectForbidden(
+							receive(receiveWith(patchRow(0, { received_qty }))),
+							/received_qty must be a non-negative whole number string/
+						);
+					}
+					expectForbidden(
+						receive(receiveWith(patchRow(0, { received_qty: '4' }))),
+						/received_qty must not exceed expected_qty/
+					);
+				});
+
+				it('requires a reason when received_qty is below expected_qty', () => {
+					expectForbidden(
+						receive(receiveWith(patchRow(0, { received_qty: '2' }))),
+						/requires discrepancy_reason/
+					);
+					for (const discrepancy_reason of ['damaged', 'missing', 'miscount']) {
+						expect(
+							receive(receiveWith(patchRow(0, { received_qty: '0', discrepancy_reason })))
+						).not.toThrow();
+					}
+					expect(
+						receive(
+							receiveWith(
+								patchRow(0, {
+									received_qty: '2',
+									discrepancy_reason: 'damaged',
+									discrepancy_note: 'wet'
+								})
+							)
+						)
+					).not.toThrow();
+					expectForbidden(
+						receive(receiveWith(patchRow(0, { received_qty: '2', discrepancy_reason: 'broken' }))),
+						/discrepancy_reason is invalid/
+					);
+				});
+
+				it('requires a note when the reason is other', () => {
+					expectForbidden(
+						receive(receiveWith(patchRow(0, { received_qty: '2', discrepancy_reason: 'other' }))),
+						/requires discrepancy_note when the reason is other/
+					);
+					expect(
+						receive(
+							receiveWith(
+								patchRow(0, {
+									received_qty: '2',
+									discrepancy_reason: 'other',
+									discrepancy_note: 'left at gate'
+								})
+							)
+						)
+					).not.toThrow();
+					expectForbidden(
+						receive(
+							receiveWith(
+								patchRow(0, {
+									received_qty: '2',
+									discrepancy_reason: 'other',
+									discrepancy_note: '  '
+								})
+							)
 						),
-					/EXHAUSTED bulk_return_pool must have zero unclaimed quota/
-				);
+						/discrepancy_note must be a non-empty string/
+					);
+				});
+
+				it('rejects a reason or note when received_qty equals expected_qty', () => {
+					expectForbidden(
+						receive(receiveWith(patchRow(0, { discrepancy_reason: 'damaged' }))),
+						/must not carry a discrepancy/
+					);
+					expectForbidden(
+						receive(receiveWith(patchRow(0, { discrepancy_note: 'x' }))),
+						/must not carry a discrepancy/
+					);
+				});
 			});
 
-			it('rejects mutating immutable pool fields', () => {
+			it('keeps the pool delete ban', () => {
+				for (const pool of [validPool, activeV2Pool, openV3Pool, submittedV3Pool]) {
+					expectForbidden(
+						() => compile()({ _id: pool._id, _deleted: true }, pool, ADMIN),
+						/Cannot delete bulk_return_pool documents/
+					);
+				}
+			});
+		});
+
+		describe('bulk_return_entry VDU validation (Rule 14b)', () => {
+			const ENTRY_ID = 'bulk_return_entry:01J00000000000000000000030';
+			const POOL = 'bulk_return_pool:01J00000000000000000000010';
+			const LOG_A = 'distribution_log:01J0000000000000000000000A';
+			const LOG_B = 'distribution_log:01J0000000000000000000000B';
+			const entry: Doc = {
+				_id: ENTRY_ID,
+				type: 'bulk_return_entry',
+				schema_v: 1,
+				shelter_code: 'SH001',
+				created_at: '2026-10-01T00:00:00.000Z',
+				updated_at: '2026-10-01T00:00:00.000Z',
+				created_by: 'dist',
+				pool_id: POOL,
+				item_id: 'item_master:cot',
+				qty: '5',
+				returner_type: 'unspecified',
+				returner_id: null,
+				loan_refs: []
+			};
+			const evacueeEntry: Doc = {
+				...entry,
+				returner_type: 'evacuee',
+				returner_id: 'evacuee:01J'
+			};
+			const ENTRY_WRITERS = [WAREHOUSE, SUPPLY_COORD, MANAGER, DISTRIBUTION, ADMIN];
+			const ENTRY_DENIED = [REGISTRATION, KITCHEN, { name: 'nobody', roles: [] }];
+			const without = (doc: Doc, ...keys: string[]): Doc => {
+				const copy = { ...doc };
+				for (const key of keys) delete copy[key];
+				return copy;
+			};
+
+			it('allows WH, SC, SM, DST and SA to create an entry and denies other roles', () => {
+				for (const user of ENTRY_WRITERS) {
+					expect(() => compile()({ ...entry, created_by: user.name }, null, user)).not.toThrow();
+				}
+				for (const user of ENTRY_DENIED) {
+					expectForbidden(
+						() => compile()({ ...entry, created_by: user.name }, null, user),
+						/can record bulk return entries/
+					);
+				}
+			});
+
+			it('requires created_by to be the current actor', () => {
 				expectForbidden(
-					() => compile()({ ...validPool, total_received_qty: '30' }, validPool, WAREHOUSE),
-					/bulk_return_pool.total_received_qty is immutable/
+					() => compile()({ ...entry, created_by: 'mallory' }, null, DISTRIBUTION),
+					/created_by must match the current actor/
 				);
 			});
 
-			it('allows a canonical ACTIVE to EXHAUSTED quota claim', () => {
-				const exhausted = {
-					...activeV2Pool,
-					claimed_qty: '20',
-					unclaimed_quota: '0',
-					claim_ids: [firstClaimId, secondClaimId],
-					status: 'EXHAUSTED'
-				};
-				expect(() => compile()(exhausted, activeV2Pool, REGISTRATION)).not.toThrow();
+			it('rejects a bad schema_v, id, pool_id, item_id and qty', () => {
+				expectForbidden(
+					() => compile()({ ...entry, schema_v: 2 }, null, DISTRIBUTION),
+					/schema version/
+				);
+				expectForbidden(
+					() => compile()({ ...entry, _id: 'bulk_return_entry:short' }, null, DISTRIBUTION),
+					/id must be bulk_return_entry:\{ulid\}/
+				);
+				expectForbidden(
+					() => compile()({ ...entry, pool_id: 'bulk_return_pool:x' }, null, DISTRIBUTION),
+					/requires pool_id/
+				);
+				expectForbidden(
+					() => compile()({ ...entry, item_id: '' }, null, DISTRIBUTION),
+					/requires item_id/
+				);
+				for (const qty of ['0', '-1', '1.5', 'abc', '', 5]) {
+					expectForbidden(
+						() => compile()({ ...entry, qty }, null, DISTRIBUTION),
+						/qty must be a positive whole number string/
+					);
+				}
 			});
 
-			it('rejects reopening EXHAUSTED capacity', () => {
-				const exhausted = {
-					...activeV2Pool,
-					claimed_qty: '20',
-					unclaimed_quota: '0',
-					claim_ids: [firstClaimId, secondClaimId],
-					status: 'EXHAUSTED'
-				};
+			it('requires a valid returner_type', () => {
+				for (const returner_type of [undefined, '', 'staff', 5]) {
+					expectForbidden(
+						() => compile()({ ...entry, returner_type }, null, DISTRIBUTION),
+						/returner_type must be evacuee, volunteer or unspecified/
+					);
+				}
+				expectForbidden(
+					() => compile()(without(entry, 'returner_type'), null, DISTRIBUTION),
+					/returner_type must be evacuee, volunteer or unspecified/
+				);
+			});
+
+			it('requires returner_id null and no loan_refs for an unspecified returner', () => {
+				expect(() => compile()(entry, null, DISTRIBUTION)).not.toThrow();
+				for (const returner_id of [undefined, 'evacuee:01J', '']) {
+					expectForbidden(
+						() => compile()({ ...entry, returner_id }, null, DISTRIBUTION),
+						/unspecified bulk_return_entry requires returner_id null/
+					);
+				}
+				expectForbidden(
+					() => compile()(without(entry, 'returner_id'), null, DISTRIBUTION),
+					/unspecified bulk_return_entry requires returner_id null/
+				);
 				expectForbidden(
 					() =>
 						compile()(
-							{ ...exhausted, claimed_qty: '19', unclaimed_quota: '1', status: 'ACTIVE' },
-							exhausted,
-							REGISTRATION
+							{ ...entry, loan_refs: [{ distribution_log_id: LOG_A, qty: '1' }] },
+							null,
+							DISTRIBUTION
 						),
-					/Invalid bulk_return_pool status transition EXHAUSTED -> ACTIVE/
+					/unspecified bulk_return_entry must not have loan_refs/
 				);
 			});
 
-			it('rejects reversing claimed or unclaimed accounting', () => {
+			it('requires an evacuee: or volunteer: returner_id matching the returner_type', () => {
+				for (const [returner_type, returner_id] of [
+					['evacuee', 'evacuee:01J'],
+					['volunteer', 'volunteer:01J']
+				]) {
+					expect(() =>
+						compile()({ ...entry, returner_type, returner_id }, null, DISTRIBUTION)
+					).not.toThrow();
+				}
+				for (const [returner_type, returner_id] of [
+					['evacuee', 'volunteer:01J'],
+					['volunteer', 'evacuee:01J'],
+					['evacuee', null],
+					['evacuee', undefined],
+					['volunteer', 'staff:01J'],
+					['evacuee', 5]
+				]) {
+					expectForbidden(
+						() => compile()({ ...entry, returner_type, returner_id }, null, DISTRIBUTION),
+						/returner_id must start with (evacuee|volunteer):/
+					);
+				}
+			});
+
+			it('requires loan_refs to be an array that may be empty', () => {
+				expect(() => compile()({ ...entry, loan_refs: [] }, null, DISTRIBUTION)).not.toThrow();
+				expectForbidden(
+					() => compile()(without(entry, 'loan_refs'), null, DISTRIBUTION),
+					/requires loan_refs array/
+				);
+			});
+
+			it('allows loan_refs summing to at most the entry qty', () => {
+				const refs = [
+					{ distribution_log_id: LOG_A, qty: '2' },
+					{ distribution_log_id: LOG_B, qty: '3' }
+				];
+				expect(() =>
+					compile()({ ...evacueeEntry, loan_refs: refs }, null, DISTRIBUTION)
+				).not.toThrow();
+				expect(() =>
+					compile()({ ...evacueeEntry, loan_refs: [refs[0]] }, null, DISTRIBUTION)
+				).not.toThrow();
+				// A returner with no outstanding loan has empty loan_refs (UI warning only).
+				expect(() => compile()(evacueeEntry, null, DISTRIBUTION)).not.toThrow();
+			});
+
+			it('rejects loan_refs summing above the entry qty', () => {
 				expectForbidden(
 					() =>
 						compile()(
-							{ ...activeV2Pool, claimed_qty: '2', unclaimed_quota: '18' },
-							activeV2Pool,
-							REGISTRATION
+							{
+								...evacueeEntry,
+								loan_refs: [
+									{ distribution_log_id: LOG_A, qty: '3' },
+									{ distribution_log_id: LOG_B, qty: '3' }
+								]
+							},
+							null,
+							DISTRIBUTION
 						),
-					/bulk_return_pool claimed_qty cannot decrease/
+					/must not exceed entry qty/
+				);
+			});
+
+			it('rejects duplicate and malformed loan_refs', () => {
+				expectForbidden(
+					() =>
+						compile()(
+							{
+								...evacueeEntry,
+								loan_refs: [
+									{ distribution_log_id: LOG_A, qty: '1' },
+									{ distribution_log_id: LOG_A, qty: '1' }
+								]
+							},
+							null,
+							DISTRIBUTION
+						),
+					/Duplicate distribution_log_id/
 				);
 				expectForbidden(
 					() =>
 						compile()(
-							{ ...activeV2Pool, claimed_qty: '4', unclaimed_quota: '17' },
-							activeV2Pool,
-							REGISTRATION
+							{
+								...evacueeEntry,
+								loan_refs: [{ distribution_log_id: 'distribution_log:x', qty: '1' }]
+							},
+							null,
+							DISTRIBUTION
 						),
-					/claimed_qty \+ unclaimed_quota must equal total_received_qty/
+					/loan_refs require distribution_log_id/
+				);
+				for (const qty of ['0', '1.5', 1]) {
+					expectForbidden(
+						() =>
+							compile()(
+								{ ...evacueeEntry, loan_refs: [{ distribution_log_id: LOG_A, qty }] },
+								null,
+								DISTRIBUTION
+							),
+						/loan_refs qty must be a positive whole number string/
+					);
+				}
+			});
+
+			it('is append-only: no update and no delete, even for system_admin', () => {
+				for (const user of [DISTRIBUTION, WAREHOUSE, MANAGER, ADMIN]) {
+					expectForbidden(
+						() => compile()({ ...entry, notes: 'edit' }, entry, user),
+						/Cannot update append-only bulk_return_entry documents/
+					);
+					expectForbidden(
+						() => compile()({ _id: ENTRY_ID, _deleted: true }, entry, user),
+						/Cannot delete append-only bulk_return_entry documents/
+					);
+				}
+			});
+
+			it('rejects an entry with a mismatched shelter_code', () => {
+				expectForbidden(
+					() => compile()({ ...entry, shelter_code: 'SH002' }, null, DISTRIBUTION),
+					/shelter_code must be SH001/
+				);
+			});
+		});
+
+		describe('bulk_return_entry_move VDU validation (Rule 14c)', () => {
+			const ENTRY_ULID = '01J00000000000000000000030';
+			const MOVE_ID = `bulk_return_entry_move:${ENTRY_ULID}:0001`;
+			const move: Doc = {
+				_id: MOVE_ID,
+				type: 'bulk_return_entry_move',
+				schema_v: 1,
+				shelter_code: 'SH001',
+				created_at: '2026-10-01T00:00:00.000Z',
+				updated_at: '2026-10-01T00:00:00.000Z',
+				created_by: 'dist',
+				entry_id: `bulk_return_entry:${ENTRY_ULID}`,
+				seq: 1,
+				from_pool_id: 'bulk_return_pool:01J00000000000000000000010',
+				to_pool_id: 'bulk_return_pool:01J00000000000000000000011',
+				item_id: 'item_master:cot',
+				qty: '5'
+			};
+			const without = (doc: Doc, ...keys: string[]): Doc => {
+				const copy = { ...doc };
+				for (const key of keys) delete copy[key];
+				return copy;
+			};
+
+			it('allows WH, SC, SM, DST and SA to move an entry and denies other roles', () => {
+				for (const user of [WAREHOUSE, SUPPLY_COORD, MANAGER, DISTRIBUTION, ADMIN]) {
+					expect(() => compile()({ ...move, created_by: user.name }, null, user)).not.toThrow();
+				}
+				for (const user of [REGISTRATION, KITCHEN, { name: 'nobody', roles: [] }]) {
+					expectForbidden(
+						() => compile()({ ...move, created_by: user.name }, null, user),
+						/can move bulk return entries/
+					);
+				}
+				expect(() => compile()({ ...move, notes: 'n' }, null, DISTRIBUTION)).not.toThrow();
+			});
+
+			it('requires created_by to be the current actor', () => {
+				expectForbidden(
+					() => compile()({ ...move, created_by: 'mallory' }, null, DISTRIBUTION),
+					/created_by must match the current actor/
 				);
 			});
 
-			it('allows an authorized append-only v2 quota claim and rejects unauthorized claim updates', () => {
-				const claimed = {
-					...activeV2Pool,
-					claimed_qty: '5',
-					unclaimed_quota: '15',
-					claim_ids: [firstClaimId, secondClaimId]
-				};
-				expect(() => compile()(claimed, activeV2Pool, REGISTRATION)).not.toThrow();
-				expectForbidden(
-					() => compile()(claimed, activeV2Pool, KITCHEN),
-					/Only frontline distribution staff can claim bulk return pool quota/
-				);
+			it('requires the id to be bulk_return_entry_move:{entryUlid}:{4-digit seq}', () => {
+				for (const _id of [
+					'bulk_return_entry_move:short:0001',
+					`bulk_return_entry_move:${ENTRY_ULID}:1`,
+					`bulk_return_entry_move:${ENTRY_ULID}`
+				]) {
+					expectForbidden(
+						() => compile()({ ...move, _id }, null, DISTRIBUTION),
+						/id must be bulk_return_entry_move/
+					);
+				}
 			});
 
-			it('preserves v1 to v2 lazy upgrade only when it carries the first quota claim', () => {
-				const lazyUpgrade = {
-					...validPool,
-					schema_v: 2,
-					claimed_qty: '4',
-					unclaimed_quota: '16',
-					claim_ids: [firstClaimId]
-				};
-				expect(() => compile()(lazyUpgrade, validPool, REGISTRATION)).not.toThrow();
+			it('requires entry_id and seq to match the id', () => {
 				expectForbidden(
-					() => compile()({ ...validPool, schema_v: 2, claim_ids: [] }, validPool, REGISTRATION),
-					/bulk_return_pool v1 to v2 upgrade must include the first quota claim and claim_id/
+					() =>
+						compile()(
+							{ ...move, entry_id: 'bulk_return_entry:01J00000000000000000000099' },
+							null,
+							DISTRIBUTION
+						),
+					/entry_id must match the entry ULID/
 				);
 				expectForbidden(
-					() => compile()({ ...validPool, schema_v: 1 }, lazyUpgrade, REGISTRATION),
-					/Cannot downgrade bulk_return_pool from schema_v 2 to 1/
+					() => compile()({ ...move, seq: 2 }, null, DISTRIBUTION),
+					/seq must be an integer/
 				);
-			});
-
-			it('requires v2 claim_ids to remain unique and append-only', () => {
 				expectForbidden(
-					() => compile()({ ...activeV2Pool, claim_ids: [] }, activeV2Pool, REGISTRATION),
-					/Cannot remove claim_ids from bulk_return_pool/
+					() => compile()({ ...move, seq: '1' }, null, DISTRIBUTION),
+					/seq must be an integer/
 				);
 				expectForbidden(
 					() =>
 						compile()(
-							{ ...activeV2Pool, claim_ids: [firstClaimId, firstClaimId] },
-							activeV2Pool,
-							REGISTRATION
+							{ ...move, _id: `bulk_return_entry_move:${ENTRY_ULID}:0000`, seq: 0 },
+							null,
+							DISTRIBUTION
 						),
-					/Duplicate claim_id in bulk_return_pool/
+					/seq must be an integer/
 				);
 			});
 
-			it('allows closing pool by warehouse_staff with audit fields and rejects non-authorized staff', () => {
-				const closed = {
-					...validPool,
-					status: 'CLOSED',
-					closed_at: '2026-09-01T02:00:00.000Z',
-					closed_by: 'user:wh1'
-				};
-				expect(() => compile()(closed, validPool, WAREHOUSE)).not.toThrow();
-
+			it('requires distinct, well-formed pool ids', () => {
 				expectForbidden(
-					() => compile()(closed, validPool, REGISTRATION),
-					/Only warehouse staff, supply coordinator, or shelter manager can close bulk return pool/
+					() => compile()({ ...move, to_pool_id: move.from_pool_id }, null, DISTRIBUTION),
+					/must differ/
 				);
-			});
-
-			it('rejects reopening a CLOSED bulk_return_pool', () => {
-				const closed = {
-					...validPool,
-					status: 'CLOSED',
-					closed_at: '2026-09-01T02:00:00.000Z',
-					closed_by: 'user:wh1'
-				};
 				expectForbidden(
-					() => compile()({ ...closed, status: 'ACTIVE' }, closed, WAREHOUSE),
-					/Invalid bulk_return_pool status transition CLOSED -> ACTIVE/
+					() => compile()({ ...move, from_pool_id: 'bulk_return_pool:x' }, null, DISTRIBUTION),
+					/requires from_pool_id and to_pool_id/
+				);
+				expectForbidden(
+					() => compile()(without(move, 'to_pool_id'), null, DISTRIBUTION),
+					/requires from_pool_id and to_pool_id/
 				);
 			});
 
-			it('rejects changing accounting after a pool is CLOSED', () => {
-				const closed = {
-					...activeV2Pool,
-					status: 'CLOSED',
-					closed_at: '2026-09-01T02:00:00.000Z',
-					closed_by: 'user:wh1'
-				};
+			it('requires item_id and a positive whole qty, and rejects a bad schema_v', () => {
+				expectForbidden(
+					() => compile()({ ...move, item_id: '' }, null, DISTRIBUTION),
+					/requires item_id/
+				);
+				for (const qty of ['0', '1.5', '', 5]) {
+					expectForbidden(
+						() => compile()({ ...move, qty }, null, DISTRIBUTION),
+						/qty must be a positive whole number string/
+					);
+				}
+				expectForbidden(
+					() => compile()({ ...move, schema_v: 2 }, null, DISTRIBUTION),
+					/schema version/
+				);
+			});
+
+			it('is append-only: no update and no delete, even for system_admin', () => {
+				for (const user of [DISTRIBUTION, WAREHOUSE, MANAGER, ADMIN]) {
+					expectForbidden(
+						() => compile()({ ...move, notes: 'edit' }, move, user),
+						/Cannot update append-only bulk_return_entry_move documents/
+					);
+					expectForbidden(
+						() => compile()({ _id: MOVE_ID, _deleted: true }, move, user),
+						/Cannot delete append-only bulk_return_entry_move documents/
+					);
+				}
+			});
+		});
+
+		describe('bulk_return_entry_void VDU validation (Rule 14d)', () => {
+			const ENTRY_ULID = '01J00000000000000000000030';
+			const VOID_ID = `bulk_return_entry_void:${ENTRY_ULID}`;
+			const voidDoc: Doc = {
+				_id: VOID_ID,
+				type: 'bulk_return_entry_void',
+				schema_v: 1,
+				shelter_code: 'SH001',
+				created_at: '2026-10-01T00:00:00.000Z',
+				updated_at: '2026-10-01T00:00:00.000Z',
+				created_by: 'dist',
+				entry_id: `bulk_return_entry:${ENTRY_ULID}`,
+				pool_id: 'bulk_return_pool:01J00000000000000000000010',
+				item_id: 'item_master:cot',
+				qty: '5'
+			};
+			const without = (doc: Doc, ...keys: string[]): Doc => {
+				const copy = { ...doc };
+				for (const key of keys) delete copy[key];
+				return copy;
+			};
+
+			it('allows WH, SC, SM, DST and SA to void an entry and denies other roles', () => {
+				for (const user of [WAREHOUSE, SUPPLY_COORD, MANAGER, DISTRIBUTION, ADMIN]) {
+					expect(() => compile()({ ...voidDoc, created_by: user.name }, null, user)).not.toThrow();
+				}
+				for (const user of [REGISTRATION, KITCHEN, { name: 'nobody', roles: [] }]) {
+					expectForbidden(
+						() => compile()({ ...voidDoc, created_by: user.name }, null, user),
+						/can void bulk return entries/
+					);
+				}
+				expect(() =>
+					compile()({ ...voidDoc, notes: 'wrong item' }, null, DISTRIBUTION)
+				).not.toThrow();
+			});
+
+			it('requires created_by to be the current actor', () => {
+				expectForbidden(
+					() => compile()({ ...voidDoc, created_by: 'mallory' }, null, DISTRIBUTION),
+					/created_by must match the current actor/
+				);
+			});
+
+			it('requires the id to be bulk_return_entry_void:{entryUlid} and entry_id to match it', () => {
+				for (const _id of [
+					'bulk_return_entry_void:short',
+					`bulk_return_entry_void:${ENTRY_ULID}:0001`,
+					`bulk_return_entry:${ENTRY_ULID}`
+				]) {
+					expectForbidden(
+						() => compile()({ ...voidDoc, _id }, null, DISTRIBUTION),
+						/id must be bulk_return_entry_void:\{entryUlid\}/
+					);
+				}
 				expectForbidden(
 					() =>
-						compile()({ ...closed, claimed_qty: '5', unclaimed_quota: '15' }, closed, WAREHOUSE),
-					/CLOSED bulk_return_pool accounting is immutable/
+						compile()(
+							{ ...voidDoc, entry_id: 'bulk_return_entry:01J00000000000000000000099' },
+							null,
+							DISTRIBUTION
+						),
+					/entry_id must match the entry ULID/
 				);
+			});
+
+			it('requires pool_id, item_id, a positive whole qty, a non-empty notes and schema_v 1', () => {
+				expectForbidden(
+					() => compile()({ ...voidDoc, pool_id: 'bulk_return_pool:x' }, null, DISTRIBUTION),
+					/requires pool_id/
+				);
+				expectForbidden(
+					() => compile()(without(voidDoc, 'pool_id'), null, DISTRIBUTION),
+					/requires pool_id/
+				);
+				expectForbidden(
+					() => compile()({ ...voidDoc, item_id: '' }, null, DISTRIBUTION),
+					/requires item_id/
+				);
+				for (const qty of ['0', '1.5', '', 5]) {
+					expectForbidden(
+						() => compile()({ ...voidDoc, qty }, null, DISTRIBUTION),
+						/qty must be a positive whole number string/
+					);
+				}
+				expectForbidden(
+					() => compile()({ ...voidDoc, notes: ' ' }, null, DISTRIBUTION),
+					/notes must be a non-empty string/
+				);
+				expectForbidden(
+					() => compile()({ ...voidDoc, schema_v: 2 }, null, DISTRIBUTION),
+					/schema version/
+				);
+			});
+
+			it('is append-only: no update and no delete, even for system_admin', () => {
+				for (const user of [DISTRIBUTION, WAREHOUSE, MANAGER, ADMIN]) {
+					expectForbidden(
+						() => compile()({ ...voidDoc, notes: 'edit' }, voidDoc, user),
+						/Cannot update append-only bulk_return_entry_void documents/
+					);
+					expectForbidden(
+						() => compile()({ _id: VOID_ID, _deleted: true }, voidDoc, user),
+						/Cannot delete append-only bulk_return_entry_void documents/
+					);
+				}
 			});
 		});
 
@@ -5052,6 +6735,46 @@ describe('buildValidateDocUpdate', () => {
 				expect(() => compile()(receivePool, null, WAREHOUSE)).not.toThrow();
 			});
 
+			describe('bulk return pool v3 receive row (#660)', () => {
+				const SUPPLY_COORD: UserCtx = {
+					name: 'sc',
+					roles: ['shelter:SH001', 'SH001:supply_coordinator']
+				};
+				// Shape written by receiveBulkReturnPool (bulk-return-pool-v3-workflow.ts).
+				const poolReceive = (over: Doc = {}): Doc =>
+					ledger({
+						_id: 'stock_ledger:01J00000000000000000000009',
+						schema_v: 6,
+						qty: '2',
+						reason: 'receive',
+						ref_id: 'bulk_return_pool:01J00000000000000000000001',
+						lot_ref: 'stock_ledger:01J00000000000000000000009',
+						lot: {
+							note: 'bulk_return_pool',
+							storage_point_id: 'sp-1',
+							storage_zone: 'Gate 1',
+							produced_at: '2026-10-11T00:00:00.000Z'
+						},
+						created_by: 'ws',
+						...over
+					});
+
+				it.each([
+					['warehouse_staff', WAREHOUSE],
+					['supply_coordinator', SUPPLY_COORD],
+					['shelter_manager', MANAGER]
+				])('allows %s to write the receive row with a v5 storage lot', (_role, user) => {
+					expect(() => compile()(poolReceive({ created_by: user.name }), null, user)).not.toThrow();
+				});
+
+				it('rejects distribution_staff writing the pool receive row', () => {
+					expectForbidden(
+						() => compile()(poolReceive({ created_by: 'dist' }), null, DISTRIBUTION),
+						/Only warehouse staff or managers can write stock ledger/
+					);
+				});
+			});
+
 			describe('distribution_staff loan-return receipt (CR-161 R3)', () => {
 				const DIST: UserCtx = {
 					name: 'dist',
@@ -5261,7 +6984,7 @@ describe('buildValidateDocUpdate', () => {
 	});
 
 	describe('bulk_return_claim / bulk_return_pool VDU rules (moved from return-workflow)', () => {
-		it('23. v2 → v1 rejected by VDU', () => {
+		it('23. v2 → v1 rejected by VDU (legacy v2 pools are frozen, #658)', () => {
 			const vduCode = buildValidateDocUpdate('SH001');
 			const validate = new Function(`return ${vduCode}`)();
 
@@ -5289,7 +7012,7 @@ describe('buildValidateDocUpdate', () => {
 						name: 'wh_user',
 						roles: ['shelter:SH001', 'warehouse_staff']
 					}),
-				/Cannot downgrade bulk_return_pool from schema_v 2 to 1/
+				/bulk_return_pool schema_v 2 documents are frozen/
 			);
 		});
 
