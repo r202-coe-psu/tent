@@ -17,6 +17,7 @@
 
 	import { getTranslation } from '$lib/utils/i18n';
 	import { PUBLIC_SHELTER_CARD_I18N } from '$lib/constants/i18n';
+	import { directionsUrl } from '$lib/utils/maps';
 	import { langState } from '$lib/states/i18n.svelte';
 
 	const VULNERABLE_PREVIEW_COUNT = 5;
@@ -308,7 +309,7 @@
 			</Button>
 			<Button
 				href={shelter.geo?.lat != null && shelter.geo?.lng != null
-					? `https://www.google.com/maps/dir/?api=1&destination=${shelter.geo.lat},${shelter.geo.lng}`
+					? directionsUrl(shelter.geo)
 					: undefined}
 				target={shelter.geo?.lat != null && shelter.geo?.lng != null ? '_blank' : null}
 				rel={shelter.geo?.lat != null && shelter.geo?.lng != null ? 'noopener noreferrer' : null}

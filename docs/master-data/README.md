@@ -2,7 +2,7 @@
 title: Smart Shelter — Master Data Seed SSoT
 status: draft
 created: 2026-09-17
-updated: 2026-10-22
+updated: 2026-10-26
 language: th
 ---
 
@@ -112,7 +112,7 @@ Global seed ใช้ `enforceOneDefault()` เพื่อให้แต่ล
 | `apartment_dorm` | อะพาร์ตเมนต์/หอพัก                | Apartment / dormitory | —       |
 | `homeless`       | ไร้ที่อยู่อาศัย / ไม่มีบ้านเลขที่ | Homeless / no house number | —       |
 
-#### `shelter_type` — ประเภทศูนย์พักพิง
+#### `shelter_type` — ประเภทอาคาร
 
 | code                  | label_th    | label_en | default |
 | --------------------- | ----------- | -------- | ------- |
@@ -459,7 +459,7 @@ code เสมอ. หากไม่มีค่า default เฉพาะ ร
 | `duplicate_hint_threshold`       |        `0.8` | threshold สำหรับ duplicate hint  |
 | `donation_reservation_ttl_hours` |         `72` | อายุ reservation บริจาค ชั่วโมง  |
 | `device_db_ttl_days`             |         `30` | อายุ device DB วัน               |
-| `retention_months_after_close`   |          `3` | retention หลังปิดเคส เดือน       |
+| `retention_months_after_close`   |          `3` | ระยะที่คนของศูนย์ปิดยังค้นเจอบน public search (เดือน, CR-183) |
 | `fam_search_max_results`         |         `10` | จำนวนผลค้นหา family สูงสุด       |
 
 ## 6. Public portal config seed

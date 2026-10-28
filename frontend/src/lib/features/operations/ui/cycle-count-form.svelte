@@ -23,6 +23,7 @@
 		type CycleCountEntry,
 		type CycleCountLineResult
 	} from '../domain/cycle-count';
+	import { expiryInstant, isExpiryPassed } from '../domain/expiry-instant';
 	import { ADJUST_NOTE_MAX_LENGTH, type StockLedger } from '../domain/operations';
 
 	let {
@@ -77,10 +78,9 @@
 
 	function formatExpiry(expiry: string | undefined): string {
 		if (!expiry) return 'ไม่ระบุวันหมดอายุ';
-		const date = new Date(expiry);
-		if (Number.isNaN(date.getTime())) return expiry;
+		if (Number.isNaN(expiryInstant(expiry))) return expiry;
 		const label = formatThaiShortDate(expiry) || expiry;
-		return date.getTime() <= Date.now() ? `หมดอายุแล้ว ${label}` : `หมดอายุ ${label}`;
+		return isExpiryPassed(expiry, Date.now()) ? `หมดอายุแล้ว ${label}` : `หมดอายุ ${label}`;
 	}
 
 	function startCount(storageKey: string) {

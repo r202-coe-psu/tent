@@ -5,7 +5,7 @@
 		useMealServices,
 		useMealServiceReceipts,
 		useKitchenRequisitions,
-		useActiveEvacueeDietCounts,
+		useShelterMealHeadcount,
 		useCreateMealSession,
 		useDeleteMealSession,
 		computeSessionGroupProgress,
@@ -71,7 +71,7 @@
 	const services = useMealServices();
 	const serviceReceipts = useMealServiceReceipts();
 	const requisitions = useKitchenRequisitions();
-	const dietCounts = useActiveEvacueeDietCounts();
+	const mealHeadcount = useShelterMealHeadcount();
 	const tickets = useTickets();
 
 	// Per meal_plan_id: the most relevant requisition_ticket (CR-141 write path — the legacy
@@ -184,6 +184,13 @@
 	let countRegular = $state(0);
 	let countVolunteer = $state(0);
 
+	const shelterPeople = $derived(mealHeadcount.data?.people);
+	const shelterPeopleCards = $derived([
+		{ key: 'evacuees', label: 'ผู้อพยพ', count: shelterPeople?.evacuees },
+		{ key: 'staff', label: 'เจ้าหน้าที่', count: shelterPeople?.staff },
+		{ key: 'volunteers', label: 'อาสาสมัคร', count: shelterPeople?.volunteers }
+	]);
+
 	const formTotal = $derived(
 		Number(countHalal || 0) +
 			Number(countInfant || 0) +
@@ -205,7 +212,7 @@
 	const countsValid = $derived(Object.values(countErrors).every((e) => e === null));
 
 	function openCreateDialog() {
-		const counts = dietCounts.data;
+		const counts = mealHeadcount.data?.headcount;
 		if (counts) {
 			countHalal = counts.halal;
 			countInfant = counts.infant;
@@ -1014,7 +1021,7 @@
 
 <!-- Create Meal Session Modal -->
 <Dialog.Root bind:open={createDialogOpen}>
-	<Dialog.Content class="sm:max-w-xl">
+	<Dialog.Content class="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-xl">
 		<Dialog.Header>
 			<Dialog.Title class="text-base font-bold text-foreground sm:text-lg"
 				>สร้างรอบมื้ออาหารใหม่</Dialog.Title
@@ -1024,7 +1031,7 @@
 			</Dialog.Description>
 		</Dialog.Header>
 
-		<div class="space-y-4 py-2">
+		<div class="min-w-0 space-y-4 py-2">
 			<div>
 				<Label for="session-name" class="text-xs font-medium">ชื่อรอบมื้ออาหาร</Label>
 				<Input id="session-name" bind:value={formName} class="mt-1.5 h-9 text-sm" />
@@ -1050,6 +1057,21 @@
 						</Select.Content>
 					</Select.Root>
 				</div>
+			</div>
+
+			<div class="flex gap-2.5 overflow-x-auto" data-testid="shelter-people-counts">
+				{#each shelterPeopleCards as card (card.key)}
+					<div
+						class="min-w-32 shrink-0 grow rounded-lg border bg-background p-2.5 shadow-2xs"
+						data-testid="shelter-people-{card.key}"
+					>
+						<div class="text-xs font-medium text-muted-foreground">{card.label}</div>
+						<div class="mt-0.5 text-base font-bold text-foreground tabular-nums">
+							{card.count ?? '–'}
+							<span class="text-xs font-medium text-muted-foreground">คน</span>
+						</div>
+					</div>
+				{/each}
 			</div>
 
 			<!-- 5-Group Target Headcount Inputs -->

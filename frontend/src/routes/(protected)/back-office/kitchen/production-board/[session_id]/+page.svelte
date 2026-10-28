@@ -19,6 +19,7 @@
 		CountInputGuard,
 		isCount,
 		isPositiveQty,
+		selectableCookingIngredients,
 		TARGET_GROUP_LABELS,
 		MEAL_PERIOD_LABELS,
 		type TargetGroupTag
@@ -395,7 +396,7 @@
 	}
 
 	const ingredientComboItems = $derived(
-		(itemMasters.data ?? []).map((item) => ({
+		selectableCookingIngredients(itemMasters.data).map((item) => ({
 			value: item._id,
 			label: `${item.name} (${unitLabel(item.base_unit)})`,
 			keywords: [item.name]
@@ -791,7 +792,7 @@
 			</div>
 			<div class="flex shrink-0 gap-2">
 				<div class="rounded-lg border border-white/20 bg-white/10 px-3 py-1.5 text-center">
-					<p class="text-2xs font-semibold whitespace-nowrap text-white/70">ผู้เข้าพักรวม</p>
+					<p class="text-2xs font-semibold whitespace-nowrap text-white/70">คนรวม</p>
 					<p class="text-lg font-bold tabular-nums">{session?.target_headcount.total ?? 0} คน</p>
 				</div>
 				<div class="rounded-lg border border-white/20 bg-white/10 px-3 py-1.5 text-center">

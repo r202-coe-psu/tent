@@ -359,7 +359,10 @@ describe('POST /api/public/v1/registrations', () => {
 
 		it('writes the PDPA block decision onto every evacuee (FR-42)', async () => {
 			const res = await POST(
-				event({ ...FAMILY, ...webConsentBody(3, { mode: 'basic', guardian_for: ['m2'] }) })
+				event({
+					...FAMILY,
+					...webConsentBody(3, { health: false, search_visible: false })
+				})
 			);
 			expect(res.status).toBe(201);
 
@@ -367,13 +370,25 @@ describe('POST /api/public/v1/registrations', () => {
 			expect(evacuees.map((e) => (e.consent as { given_by: string }).given_by)).toEqual([
 				'self',
 				'household_member',
-				'guardian'
+				'household_member'
 			]);
 			for (const e of evacuees) {
 				expect(e.schema_v).toBe(15);
-				expect(e.consent).toMatchObject({ mode: 'basic', health: false, channel: 'web' });
+				expect(e.consent).toMatchObject({ mode: 'full', health: false, channel: 'web' });
 				expect(e.privacy).toEqual({ search_excluded: true });
 			}
+		});
+
+		it('422s a basic-mode decision and writes nothing (D17)', async () => {
+			const res = await POST(event({ ...FAMILY, ...webConsentBody(3, { mode: 'basic' }) }));
+			expect(res.status).toBe(422);
+			expect(bulkAsPublicWriter).not.toHaveBeenCalled();
+		});
+
+		it('422s a guardian-for decision and writes nothing (D21)', async () => {
+			const res = await POST(event({ ...FAMILY, ...webConsentBody(3, { guardian_for: ['m2'] }) }));
+			expect(res.status).toBe(422);
+			expect(bulkAsPublicWriter).not.toHaveBeenCalled();
 		});
 
 		it('422s without the consent decision and writes nothing', async () => {
