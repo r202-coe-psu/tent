@@ -35,7 +35,12 @@ export type {
 	PublicShelterListResponse,
 	PublicSiteKind
 } from './domain/types';
-export { searchResultKey, toPublicShelterCard, toUiShelterStatus } from './domain/mappers';
+export {
+	isShelterClosed,
+	searchResultKey,
+	toPublicShelterCard,
+	toUiShelterStatus
+} from './domain/mappers';
 export { resolveMasterLabel, shelterTypeLabel, toLabelMap } from './domain/master-labels';
 export {
 	isInShelterStatus,
@@ -47,6 +52,7 @@ export {
 	type StayStatusTone
 } from './domain/stay-status';
 export { default as StayStatusChip } from './ui/stay-status-chip.svelte';
+export { default as ShelterClosedBadge } from './ui/shelter-closed-badge.svelte';
 export {
 	FAMILY_SEARCH_MAX_LENGTH,
 	normalizeFamilySearchQuery,
