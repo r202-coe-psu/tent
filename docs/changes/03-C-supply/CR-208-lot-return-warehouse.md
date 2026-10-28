@@ -15,14 +15,14 @@ affects:
   - docs/data/schema.md §2.1 stock_ledger — ตาราง field (`reason`, `lot_ref`, `lot.note`), ตาราง `reason` → `ref_id` (`distribution_return`, `receive`), ขอบเขตลำดับการเลือกล็อต (CR-143 §A), Migration note
   - no schema_v bump (stock_ledger คง 6 · ไม่เพิ่ม/ลบ field · ขยายค่า `ref_id` ที่ยอมรับของ `distribution_return`)
   - frontend/src/lib/features/distribution/application/food-supplies/reconciliation-workflow.ts (`receiveWarehouseReturns`, `assertWarehouseReturnLedgerSemantics`)
-  - frontend/src/lib/features/operations/domain/operations.ts (`REF_PREFIX_BY_REASON.distribution_return`)
+  - frontend/src/lib/features/operations/domain/operations.ts (`REF_PREFIX_BY_REASON.distribution_return`, `distributionReturnInputSchema` / `createDistributionReturnEntry`)
   - frontend/src/lib/server/shelter-access-design.ts (VDU stock_ledger — role gate และ ref_id ของ `distribution_return`)
   - frontend/src/lib/features/operations/ui/ledger/ledger-view.ts (`LEDGER_GROUP_BY_REASON.distribution_return`)
   - frontend/src/lib/features/distribution/application/food-supplies/reconciliation-workflow.test.ts
   - frontend/src/lib/features/distribution/application/food-supplies/ledger-replay.test.ts
   - frontend/src/lib/server/shelter-access-design.test.ts
   - frontend/src/lib/features/operations/ui/ledger/ledger-view.test.ts
-  - frontend/src/lib/features/operations/domain (test ของ `createStockLedger` / `REF_PREFIX_BY_REASON`)
+  - frontend/src/lib/features/operations/domain (test ของ `createStockLedger` / `REF_PREFIX_BY_REASON` / `createDistributionReturnEntry`)
 ---
 
 # CR-208 — ของเหลือจากรอบแจกคืนเข้า lot เดิม
@@ -228,7 +228,9 @@ metadata ของ lot = `lot` ของแถวนั้น, `received_at` = `
 
 ### Domain (`operations.ts`)
 
-- **FR-RTN-17** — `REF_PREFIX_BY_REASON.distribution_return` ต้องรับทั้ง `distribution_batch:` และ `requisition_ticket:`
+- **FR-RTN-17** — `distribution_return` ต้องรับ `ref_id` ทั้ง `distribution_batch:` และ `requisition_ticket:` ในทุกจุดที่ตรวจ `ref_id` ของ reason นี้:
+  - `REF_PREFIX_BY_REASON.distribution_return`
+  - `distributionReturnInputSchema.ref_id` (ปัจจุบัน regex `^distribution_batch:.+` — input ของ `createDistributionReturnEntry` ที่ export ผ่าน barrel)
 - **FR-RTN-18** — `createStockLedger` ต้องปฏิเสธ `distribution_return` ที่ `ref_id` ขึ้นต้น `requisition_ticket:direct-`
 
 ### VDU (`shelter-access-design.ts`)
@@ -301,7 +303,7 @@ metadata ของ lot = `lot` ของแถวนั้น, `received_at` = `
 | `…/food-supplies/reconciliation-workflow.test.ts`, `ledger-replay.test.ts` | test แบ่งยอด, ลำดับ lot, ยอดที่ระบุ lot ไม่ได้ (top-up), idempotent, partial write retry, client เก่า retry, replay ตั๋วเก่า |
 | `server/shelter-access-design.test.ts` | test role/ref ของ `distribution_return` |
 | `features/operations/ui/ledger/ledger-view.test.ts` | กลุ่ม `in` ของ `distribution_return` |
-| `features/operations/domain` tests | `REF_PREFIX_BY_REASON` / `createStockLedger` รับ `requisition_ticket:` และปฏิเสธ `direct-` |
+| `features/operations/domain` tests | `REF_PREFIX_BY_REASON` / `createStockLedger` / `createDistributionReturnEntry` รับ `requisition_ticket:` และปฏิเสธ `direct-` |
 
 UI ตรวจรับ (`features/distribution/ui/model/warehouse-return.ts`) ไม่เปลี่ยน — คลังยังนับยอดต่อชนิด.
 
@@ -350,6 +352,7 @@ UI ตรวจรับ (`features/distribution/ui/model/warehouse-return.ts`) 
   - ข้อ 5 — ตามที่เสนอ (ของคืนแสดงในกลุ่ม "รับเข้า")
   - ข้อ 6 — ตามที่เสนอ (อนุมัติพร้อม CR ทั้งฉบับ)
   - ข้อ 7 — คงสิทธิ์ `distribution_batch:` ไว้ที่ warehouse_staff / system_admin
+- 2026-10-28 — FR-RTN-17 ขยายให้ครอบ `distributionReturnInputSchema` (`createDistributionReturnEntry`) ด้วย — จาก PR review #993; ไม่เปลี่ยนพฤติกรรมที่ approve (kong)
 
 ## Out of scope
 
