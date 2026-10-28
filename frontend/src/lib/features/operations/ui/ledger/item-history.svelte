@@ -154,7 +154,7 @@
 										{/if}
 										{#if refHref}
 											<a
-												href={resolve(refHref as '/')}
+												href={resolve(refHref)}
 												title="เปิดกองรับคืน"
 												class="w-fit rounded border border-border/80 bg-muted/80 px-1.5 py-0.5 font-mono text-2xs text-foreground/80 underline underline-offset-2"
 												>Ref: {entry.ref_id}</a

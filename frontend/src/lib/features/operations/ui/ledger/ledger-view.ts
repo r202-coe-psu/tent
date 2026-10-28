@@ -80,8 +80,11 @@ export interface LedgerRow {
 	createdBy: string;
 	refId: string;
 	/** Deep link to the source document, when one exists (bulk return pool receives). */
-	refHref?: string;
+	refHref?: BulkReturnPoolLedgerHref;
 }
+
+/** Deep link to a bulk return pool in the distribution back-office. */
+export type BulkReturnPoolLedgerHref = `/back-office/distribution?view=bulk_pools&pool=${string}`;
 
 /**
  * Link target for a ledger `ref_id` that points at a bulk return pool, else `undefined`.
@@ -93,7 +96,7 @@ export interface LedgerRow {
 export function ledgerRefHref(
 	reason: LedgerReason,
 	refId: string | null | undefined
-): string | undefined {
+): BulkReturnPoolLedgerHref | undefined {
 	if (reason !== 'receive') return undefined;
 	if (!refId || !refId.startsWith(BULK_RETURN_POOL_REF_PREFIX)) return undefined;
 	const poolId = refId.slice(BULK_RETURN_POOL_REF_PREFIX.length);
