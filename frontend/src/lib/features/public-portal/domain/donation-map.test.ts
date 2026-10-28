@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
 	buildDonationMap,
+	donationNeedUrgency,
 	donationShelterUrgency,
 	type DonationMapPoint,
 	type DonationNeedsEntry
@@ -204,23 +205,46 @@ describe('buildDonationMap', () => {
 	});
 });
 
+describe('donationNeedUrgency', () => {
+	it('takes the level staff set, reading back-office `important` as high', () => {
+		expect(donationNeedUrgency('critical', 0)).toBe('critical');
+		expect(donationNeedUrgency('important', 999)).toBe('high');
+		expect(donationNeedUrgency('high', 999)).toBe('high');
+		expect(donationNeedUrgency(' normal ', 999)).toBe('normal');
+	});
+
+	it('ranks a need with no level by what is still short', () => {
+		expect(donationNeedUrgency(undefined, 50)).toBe('critical');
+		expect(donationNeedUrgency('', '3')).toBe('high');
+		expect(donationNeedUrgency(undefined, 0)).toBe('normal');
+	});
+});
+
 describe('donationShelterUrgency', () => {
-	const need = (urgency: 'critical' | 'high' | 'normal') => ({
-		itemId: `item:${urgency}`,
-		name: urgency,
-		unit: '',
-		qtyNeeded: 1,
-		urgency
-	});
-
 	it('takes the most urgent open need', () => {
-		expect(donationShelterUrgency([need('normal'), need('high')])).toBe('high');
-		expect(donationShelterUrgency([need('high'), need('critical'), need('normal')])).toBe(
-			'critical'
-		);
+		expect(
+			donationShelterUrgency([
+				{ item_id: 'item:a', urgency: 'normal' },
+				{ item_id: 'item:b', urgency: 'important' }
+			])
+		).toBe('high');
+		expect(
+			donationShelterUrgency([
+				{ item_id: 'item:a', urgency: 'high' },
+				{ item_id: 'item:b', urgency: 'critical' }
+			])
+		).toBe('critical');
 	});
 
-	it('is normal with no open needs', () => {
+	it('skips closed needs and is normal with none open', () => {
+		expect(
+			donationShelterUrgency([{ item_id: 'item:a', urgency: 'critical', status: 'closed' }])
+		).toBe('normal');
 		expect(donationShelterUrgency([])).toBe('normal');
+		expect(donationShelterUrgency(undefined)).toBe('normal');
+	});
+
+	it('counts a need without an item_id, so the pin matches the card badge', () => {
+		expect(donationShelterUrgency([{ name: 'ไม่มีรหัส', urgency: 'critical' }])).toBe('critical');
 	});
 });

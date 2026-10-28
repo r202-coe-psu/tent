@@ -69,19 +69,45 @@ function hasUsableGeo(geo: PublicGeoPoint | null | undefined): geo is PublicGeoP
 	);
 }
 
+/** Lower is more urgent; sort with `RANK[a] - RANK[b]`. */
+export const DONATION_URGENCY_RANK: Record<DonationNeedUrgency, number> = {
+	critical: 0,
+	high: 1,
+	normal: 2
+};
+
 /**
- * Same reading as the needs board: the level staff set wins (`important` is the
- * back-office word for `high`); only a need without one is ranked by what is still short.
+ * The one urgency rule for a need, shared by the needs board badges and the map pins.
+ * The level staff set wins: back-office stores `important`, older rows say `high`. Only a
+ * need with no level (a projection that predates `urgency`) is ranked by what is still
+ * short, `>= 50` being critical.
  */
-function toUrgency(level: string | undefined, qtyNeeded: number): DonationNeedUrgency {
+export function donationNeedUrgency(
+	level: string | undefined,
+	qtyNeeded: string | number | undefined
+): DonationNeedUrgency {
 	const set = (level ?? '').trim();
 	if (set === 'critical') return 'critical';
 	if (set === 'important' || set === 'high') return 'high';
 	if (set === 'normal') return 'normal';
-	return qtyNeeded >= 50 ? 'critical' : qtyNeeded > 0 ? 'high' : 'normal';
+	const qty = Number(qtyNeeded) || 0;
+	return qty >= 50 ? 'critical' : qty > 0 ? 'high' : 'normal';
 }
 
-const URGENCY_RANK: Record<DonationNeedUrgency, number> = { critical: 0, high: 1, normal: 2 };
+/**
+ * A shelter is as urgent as its most urgent open need; one with none open is normal.
+ * Reads the board's own rows (not `DonationMapNeed`), so a need without an `item_id`,
+ * which the map's need list leaves out, still counts the same on the pin and the card.
+ */
+export function donationShelterUrgency(
+	needs: DonationNeedsEntry['needs'] | undefined
+): DonationNeedUrgency {
+	return (needs ?? []).reduce<DonationNeedUrgency>((top, need) => {
+		if (need.status === 'closed') return top;
+		const level = donationNeedUrgency(need.urgency, need.qty_needed);
+		return DONATION_URGENCY_RANK[level] < DONATION_URGENCY_RANK[top] ? level : top;
+	}, 'normal');
+}
 
 function toOpenNeeds(entry: DonationNeedsEntry): DonationMapNeed[] {
 	const open: DonationMapNeed[] = [];
@@ -93,19 +119,11 @@ function toOpenNeeds(entry: DonationNeedsEntry): DonationMapNeed[] {
 			name: (need.name || need.item_id).replace(/^item:/, ''),
 			unit: need.unit ?? '',
 			qtyNeeded,
-			urgency: toUrgency(need.urgency, qtyNeeded)
+			urgency: donationNeedUrgency(need.urgency, qtyNeeded)
 		});
 	}
 	// Array.prototype.sort is stable, so equal urgencies keep the board's order.
-	return open.sort((a, b) => URGENCY_RANK[a.urgency] - URGENCY_RANK[b.urgency]);
-}
-
-/** A shelter is as urgent as its most urgent open need; one with none open is normal. */
-export function donationShelterUrgency(needs: DonationMapNeed[]): DonationNeedUrgency {
-	return needs.reduce<DonationNeedUrgency>(
-		(top, need) => (URGENCY_RANK[need.urgency] < URGENCY_RANK[top] ? need.urgency : top),
-		'normal'
-	);
+	return open.sort((a, b) => DONATION_URGENCY_RANK[a.urgency] - DONATION_URGENCY_RANK[b.urgency]);
 }
 
 function areaLabelOf(shelter: PublicShelterItem | undefined): string {

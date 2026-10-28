@@ -11,9 +11,13 @@
 	import Navigation from '@lucide/svelte/icons/navigation';
 	import { Button } from '$lib/components/ui/button';
 	import {
+		type DonationNeedUrgency,
+		DONATION_URGENCY_RANK,
 		DONATION_URGENCY_STYLE,
 		DonationNeedsMap,
-		DonationPinBadge
+		DonationPinBadge,
+		donationNeedUrgency,
+		donationShelterUrgency
 	} from '$lib/features/public-portal';
 	import { getDonationStore } from '../../routes/(public)/donations/donation.svelte';
 	import { langState } from '$lib/states/i18n.svelte';
@@ -267,49 +271,24 @@
 				// Critical, then high, then normal; the sort is stable, so shelters of one level
 				// keep the API's code order. Map pins are numbered from this order.
 				.sort(
-					(a, b) => URGENCY_RANK[shelterUrgency(a.needs)] - URGENCY_RANK[shelterUrgency(b.needs)]
+					(a, b) =>
+						DONATION_URGENCY_RANK[donationShelterUrgency(a.needs)] -
+						DONATION_URGENCY_RANK[donationShelterUrgency(b.needs)]
 				)
 		);
 	});
 
-	// Searching or filtering can drop the shelter whose card is open under the map.
-	$effect(() => {
-		if (mapSelectedCode && !filteredShelters.some((s) => s.code === mapSelectedCode)) {
-			mapSelectedCode = null;
-		}
-	});
+	// Searching or filtering can drop the shelter whose card is open on the map; the card
+	// then just closes, and comes back if the filter brings that shelter back.
+	const visibleMapSelectedCode = $derived(
+		mapSelectedCode && filteredShelters.some((s) => s.code === mapSelectedCode)
+			? mapSelectedCode
+			: null
+	);
 
-	const URGENCY_RANK = { critical: 0, high: 1, normal: 2 } as const;
-
-	/**
-	 * ระดับความเร่งด่วนที่ใช้แสดงผล — ยึดค่าที่เจ้าหน้าที่ตั้งไว้เป็นหลัก
-	 *
-	 * เดิมทุกจุดบนหน้านี้ตัดสินเองด้วยยอดที่ยังขาด: ถ้าขาดตั้งแต่ 50 หน่วยขึ้นไปจะขึ้น
-	 * "วิกฤต" เสมอ ไม่ว่า back-office จะตั้งระดับไหนไว้ก็ตาม แก้เป็นระดับอื่นแล้วหน้านี้
-	 * จึงยังโชว์วิกฤตเหมือนเดิม
-	 *
-	 * back-office บันทึกคำว่า `important` ส่วน `high` เป็นคำเดิมของหน้านี้ จึงรับทั้งคู่
-	 * ยอดที่ขาดใช้เดาได้เฉพาะตอน projection ยังไม่ส่ง `urgency` มาเท่านั้น
-	 */
-	function needUrgency(n: {
-		urgency?: string;
-		qty_needed: number;
-	}): 'critical' | 'high' | 'normal' {
-		const level = (n.urgency ?? '').trim();
-		if (level === 'critical') return 'critical';
-		if (level === 'important' || level === 'high') return 'high';
-		if (level === 'normal') return 'normal';
-		return n.qty_needed >= 50 ? 'critical' : n.qty_needed > 0 ? 'high' : 'normal';
-	}
-
-	/** A shelter is as urgent as its most urgent open need; its pin and card badge use this. */
-	function shelterUrgency(needs: Need[]): 'critical' | 'high' | 'normal' {
-		return needs
-			.filter((n) => n.status !== 'closed')
-			.reduce<'critical' | 'high' | 'normal'>((top, n) => {
-				const level = needUrgency(n);
-				return URGENCY_RANK[level] < URGENCY_RANK[top] ? level : top;
-			}, 'normal');
+	/** Badges, filters and sort all read urgency through the public-portal domain rule. */
+	function needUrgency(n: Need): DonationNeedUrgency {
+		return donationNeedUrgency(n.urgency, n.qty_needed);
 	}
 
 	function formatUnit(unit: string): string {
@@ -733,7 +712,7 @@
 			<div class="mb-6">
 				<DonationNeedsMap
 					shelters={filteredShelters}
-					selectedCode={mapSelectedCode}
+					selectedCode={visibleMapSelectedCode}
 					onSelect={(code) => (mapSelectedCode = code)}
 				>
 					{#snippet card(mapShelter, pin)}
@@ -741,7 +720,10 @@
 						{#if shelter}
 							{@const openNeeds = shelter.needs
 								.filter((n) => n.status !== 'closed')
-								.sort((a, b) => URGENCY_RANK[needUrgency(a)] - URGENCY_RANK[needUrgency(b)])}
+								.sort(
+									(a, b) =>
+										DONATION_URGENCY_RANK[needUrgency(a)] - DONATION_URGENCY_RANK[needUrgency(b)]
+								)}
 							<article
 								class="flex flex-col rounded-2xl border-2 border-slate-200 bg-white text-left md:border-0"
 								aria-live="polite"
@@ -894,8 +876,11 @@
 					<!-- Most urgent first, so the lines that set the shelter's level are the ones shown. -->
 					{@const displayedNeeds = shelter.needs
 						.filter((n) => n.status !== 'closed')
-						.sort((a, b) => URGENCY_RANK[needUrgency(a)] - URGENCY_RANK[needUrgency(b)])}
-					{@const level = shelterUrgency(shelter.needs)}
+						.sort(
+							(a, b) =>
+								DONATION_URGENCY_RANK[needUrgency(a)] - DONATION_URGENCY_RANK[needUrgency(b)]
+						)}
+					{@const level = donationShelterUrgency(shelter.needs)}
 					{@const hasCritical = level === 'critical'}
 					<!-- Shelter-level progress from the projection's own terms, summed over the
 					     items it publishes. Only items that announced a target take part, so a

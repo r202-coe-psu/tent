@@ -55,7 +55,9 @@
 				shelter.code,
 				{
 					no: shelters.findIndex((entry) => entry.code === shelter.code) + 1,
-					urgency: donationShelterUrgency(shelter.needs)
+					urgency: donationShelterUrgency(
+						shelters.find((entry) => entry.code === shelter.code)?.needs
+					)
 				}
 			])
 		)

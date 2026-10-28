@@ -8,6 +8,8 @@ export { default as DonationPinBadge } from './ui/donation-pin-badge.svelte';
 export { DONATION_URGENCY_STYLE } from './ui/donation-urgency';
 export {
 	buildDonationMap,
+	DONATION_URGENCY_RANK,
+	donationNeedUrgency,
 	donationShelterUrgency,
 	type DonationMap,
 	type DonationMapNeed,
