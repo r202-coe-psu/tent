@@ -424,6 +424,9 @@ export type OperationsDoc = StockLedger | Donation | DonationCampaign | StockTra
 type LedgerRefPrefix = string | null;
 export type LedgerRefRule = LedgerRefPrefix | readonly LedgerRefPrefix[];
 
+/** `ref_id` prefix of a bulk return pool document; allowed for `receive` ledger rows only. */
+export const BULK_RETURN_POOL_REF_PREFIX = 'bulk_return_pool:';
+
 export const REF_PREFIX_BY_REASON: Record<LedgerReason, LedgerRefRule> = {
 	donation: 'donation:',
 	// kitchen_requisition: legacy doc type, deprecated (CR-141) — still accepted so
@@ -435,7 +438,12 @@ export const REF_PREFIX_BY_REASON: Record<LedgerReason, LedgerRefRule> = {
 	adjust: null, // manual correction — no source document by definition
 	distribute: 'requisition_ticket:',
 	distribution_return: 'distribution_batch:',
-	receive: ['meal_service:', 'requisition_ticket:', 'distribution_log:', 'bulk_return_pool:']
+	receive: [
+		'meal_service:',
+		'requisition_ticket:',
+		'distribution_log:',
+		BULK_RETURN_POOL_REF_PREFIX
+	]
 };
 
 function matchesLedgerRefPrefix(refId: string, prefix: string): boolean {

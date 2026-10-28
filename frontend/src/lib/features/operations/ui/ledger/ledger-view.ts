@@ -2,6 +2,7 @@ import { qtyGt } from '$lib/utils/qty';
 import { DISPLAY_LOCALE, DISPLAY_TIME_ZONE } from '$lib/utils/date';
 import { lotStorageName, type StoragePointRef } from '../../domain/lot-storage';
 import {
+	BULK_RETURN_POOL_REF_PREFIX,
 	resolveAdjustReason,
 	type AdjustReason,
 	type LedgerReason,
@@ -82,8 +83,6 @@ export interface LedgerRow {
 	refHref?: string;
 }
 
-export const BULK_RETURN_POOL_REF_PREFIX = 'bulk_return_pool:';
-
 /**
  * Link target for a ledger `ref_id` that points at a bulk return pool, else `undefined`.
  * Receive-only: the `reason` gate is a render-side guard that mirrors `REF_PREFIX_BY_REASON.receive`
@@ -136,6 +135,8 @@ export function toLedgerRow(entry: StockLedger, lookup: LedgerLookup): LedgerRow
 		: '';
 	const lot = entry.lot && isOut ? { ...entry.lot, note: undefined } : entry.lot;
 	// Only when the row's detail text is the ref id itself (adjust / destination win otherwise).
+	// Safety net for when ledgerRefHref's reason gate widens (e.g. to adjust rows); today a
+	// receive row is never outgoing and has no adjust detail, so this never changes the result.
 	const refHref =
 		adjustDetail || destination ? undefined : ledgerRefHref(entry.reason, entry.ref_id);
 	return {
