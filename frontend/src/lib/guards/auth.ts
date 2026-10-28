@@ -162,7 +162,8 @@ export function confineKioskStaffOnly(pathname: string) {
 /**
  * Warehouse guard — system_admin, or in the active shelter shelter_manager or the warehouse
  * side: warehouse_staff or supply_coordinator (`isWarehouseStaff`; role-permission-matrix.md
- * §4). Redirects to / otherwise.
+ * §4). Otherwise redirects to `LANDING_ROUTE`, or to `options.deskFallback` when the user can open
+ * the Distribution Desk — see {@link warehouseDeniedDestination}.
  */
 export async function requireWarehouseAccess(
 	fetchFn: typeof fetch = fetch,
@@ -183,7 +184,7 @@ export async function requireWarehouseAccess(
 /**
  * Distribution Desk href (optional query) a route may offer as the warehouse-guard fallback.
  * Must match `OnsiteDistributionHref` in distribution `ui/model/pool-url-state.ts` (the guard does
- * not import the feature).
+ * not import the feature); a type check in `pool-url-state.test.ts` fails on drift.
  */
 export type DeskFallbackHref = '/onsite/distribution' | `/onsite/distribution?${string}`;
 

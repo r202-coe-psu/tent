@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, expectTypeOf, it } from 'vitest';
+import type { DeskFallbackHref } from '$lib/guards/auth';
 import {
 	bulkReturnPoolHref,
 	deskFallbackForBackOfficeParams,
@@ -8,8 +9,16 @@ import {
 	onsiteReturnsHref,
 	parseOnsiteDistributionParams,
 	parsePoolParams,
-	ticketHref
+	ticketHref,
+	type OnsiteDistributionHref
 } from './pool-url-state';
+
+describe('desk href type', () => {
+	it('keeps the desk href type in sync with the warehouse guard', () => {
+		// Compile-time only (checked by `pnpm check`): fails on drift between the two copies.
+		expectTypeOf<OnsiteDistributionHref>().toEqualTypeOf<DeskFallbackHref>();
+	});
+});
 
 describe('onsiteReturnsHref', () => {
 	it('builds the returns tab link without a pool', () => {

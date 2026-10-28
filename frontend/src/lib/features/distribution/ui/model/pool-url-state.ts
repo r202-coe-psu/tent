@@ -45,7 +45,8 @@ export const ONSITE_DISTRIBUTION_PATH = '/onsite/distribution';
 
 /**
  * Desk href with an optional query string (typed so route code can pass it to `resolve`).
- * Must match `DeskFallbackHref` in `$lib/guards/auth.ts` (the guard does not import the feature).
+ * Must match `DeskFallbackHref` in `$lib/guards/auth.ts` (the guard does not import the feature);
+ * a type check in `pool-url-state.test.ts` fails on drift.
  */
 export type OnsiteDistributionHref =
 	typeof ONSITE_DISTRIBUTION_PATH | `${typeof ONSITE_DISTRIBUTION_PATH}?${string}`;
