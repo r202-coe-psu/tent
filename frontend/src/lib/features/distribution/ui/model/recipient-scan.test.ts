@@ -79,6 +79,22 @@ describe('resolveScannedRecipient', () => {
 		expect(result).toMatchObject({ kind: 'error', message: expect.stringContaining('ปิดใช้งาน') });
 	});
 
+	it('rejects a bulk-return pool QR without any lookup', async () => {
+		const d = deps();
+		const result = await resolveScannedRecipient(
+			'bulk_return_pool:01J00000000000000000000001',
+			{ allowVolunteer: true },
+			d
+		);
+
+		expect(result).toEqual({
+			kind: 'error',
+			message: 'นี่คือ QR ของกองรับคืน กรุณาสแกน QR ผู้คืน'
+		});
+		expect(d.lookupVolunteer).not.toHaveBeenCalled();
+		expect(d.lookupEvacuee).not.toHaveBeenCalled();
+	});
+
 	it('reports an unknown evacuee card', async () => {
 		const d = deps({ lookupEvacuee: vi.fn().mockResolvedValue(null) });
 		const result = await resolveScannedRecipient('01JX', { allowVolunteer: true }, d);

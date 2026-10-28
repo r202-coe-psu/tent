@@ -14,6 +14,7 @@ import {
 	canManageBanners,
 	BANNER_MANAGER_CAPABILITIES,
 	SCANNER_MANAGER_CAPABILITIES,
+	canDistributeStock,
 	capabilitiesForShelter,
 	compoundCapabilityRole,
 	hasCapabilityInShelter,
@@ -484,6 +485,18 @@ describe('canManageBanners', () => {
 
 	it('does not let pr_staff manage scanner devices', () => {
 		expect(canManageScanners(['shelter:A', 'A:pr_staff'], 'A')).toBe(false);
+	});
+});
+
+describe('canDistributeStock', () => {
+	it('allows SA and the warehouse_staff or shelter_manager of that shelter only (#837)', () => {
+		expect(canDistributeStock(['system_admin'], 'A')).toBe(true);
+		expect(canDistributeStock(['shelter:A', 'A:warehouse_staff'], 'A')).toBe(true);
+		expect(canDistributeStock(['shelter:A', 'A:shelter_manager'], 'A')).toBe(true);
+		expect(canDistributeStock(['shelter:A', 'shelter_manager'], 'A')).toBe(true);
+		expect(canDistributeStock(['shelter:A', 'A:shelter_manager'], 'B')).toBe(false);
+		expect(canDistributeStock(['shelter:A', 'A:supply_coordinator'], 'A')).toBe(false);
+		expect(canDistributeStock(['shelter:A', 'A:registration_staff'], 'A')).toBe(false);
 	});
 });
 

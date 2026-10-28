@@ -242,6 +242,9 @@ export class TransferServerRepository {
 		if (parsed.status) {
 			selector.status = parsed.status;
 		}
+		if (parsed.ids) {
+			selector._id = { $in: parsed.ids };
+		}
 
 		const sort =
 			parsed.sort === 'created_at_asc'
@@ -250,7 +253,7 @@ export class TransferServerRepository {
 
 		const { status, data } = await this.couchPost<MangoFindResponse>(this.dbName, '/_find', {
 			selector,
-			limit: parsed.limit,
+			limit: parsed.ids?.length ?? parsed.limit,
 			skip: parsed.skip,
 			sort
 		});

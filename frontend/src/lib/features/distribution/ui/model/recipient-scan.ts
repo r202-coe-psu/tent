@@ -1,6 +1,9 @@
 import type { Evacuee } from '$lib/features/people';
 import { parseVolunteerScanCode, type Volunteer } from '$lib/features/volunteers';
 import type { FrontlineRecipientSelection } from './frontline-handover';
+import { parsePoolScanCode } from './bulk-return-pool-qr';
+
+const POOL_QR_IN_RECIPIENT_SCAN_MESSAGE = 'นี่คือ QR ของกองรับคืน กรุณาสแกน QR ผู้คืน';
 
 /**
  * Recipient-picker scan routing (#650): one scanner takes both evacuee cards and volunteer
@@ -41,6 +44,9 @@ export async function resolveScannedRecipient(
 	options: { allowVolunteer: boolean },
 	deps: RecipientScanDeps
 ): Promise<ScannedRecipient> {
+	if (parsePoolScanCode(code)) {
+		return { kind: 'error', message: POOL_QR_IN_RECIPIENT_SCAN_MESSAGE };
+	}
 	if (parseVolunteerScanCode(code)) {
 		if (!options.allowVolunteer) {
 			return { kind: 'error', message: 'QR จิตอาสาใช้กับรายการนี้ไม่ได้ กรุณาสแกนบัตรผู้ประสบภัย' };

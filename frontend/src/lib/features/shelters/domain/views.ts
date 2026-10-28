@@ -65,6 +65,24 @@ export const SHELTER_DASHBOARD_VIEWS = {
 			}`,
 			reduce: '_count'
 		},
+		// #658: per-pool item totals over the append-only entry/move/void event log.
+		// A void subtracts the entry from the pool it resolved to at void time (nets it out).
+		// value = [qty, entry_count]; a move subtracts from the source pool and adds to the target.
+		// group_level=1 -> per pool, 2 -> per item, 3 -> per entry (net count 1 = present).
+		bulk_return_pool_item_totals: {
+			map: `function (doc) {
+				if (doc.type === 'bulk_return_entry') {
+					emit([doc.pool_id, doc.item_id, doc._id], [parseFloat(doc.qty), 1]);
+				} else if (doc.type === 'bulk_return_entry_move') {
+					var moved = parseFloat(doc.qty);
+					emit([doc.from_pool_id, doc.item_id, doc.entry_id], [-moved, -1]);
+					emit([doc.to_pool_id, doc.item_id, doc.entry_id], [moved, 1]);
+					} else if (doc.type === 'bulk_return_entry_void') {
+						emit([doc.pool_id, doc.item_id, doc.entry_id], [-parseFloat(doc.qty), -1]);
+				}
+			}`,
+			reduce: '_sum'
+		},
 		station_logs_by_station: {
 			// CR-192: raw per-event rows; start/complete pairing happens in the BFF (a map cannot
 			// join across docs). Date-first key so the range is filtered inside CouchDB.
