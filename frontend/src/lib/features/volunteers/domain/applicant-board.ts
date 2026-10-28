@@ -58,7 +58,7 @@ export interface ApplicantBoard {
 		pending: number;
 		confirmed: number;
 		declined: number;
-		/** Cancelled staff rows are listed but not counted. */
+		/** Active staff-assigned shifts; a cancelled one counts under `declined` (#849). */
 		staffAssigned: number;
 	};
 }
