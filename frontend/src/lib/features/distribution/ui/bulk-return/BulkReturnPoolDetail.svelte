@@ -562,6 +562,7 @@
 					isLoading={timelineQuery.isPending && timelineQuery.fetchStatus !== 'idle'}
 					isError={timelineQuery.isError}
 					skipped={timelineQuery.data?.skipped}
+					shelterSkipped={skippedQuery.data}
 				/>
 
 				{#if canManage && pool.status === 'OPEN'}

@@ -12,6 +12,7 @@
 	} from '../model/bulk-return-pool-v3';
 	import {
 		formatSkippedDocIds,
+		isTimelineSkippedCoveredByShelter,
 		POOL_TIMELINE_SKIPPED_BADGE_SR_HINT,
 		POOL_TIMELINE_SKIPPED_NOTICE_PREFIX,
 		POOL_TIMELINE_SKIPPED_NOTICE_SUFFIX,
@@ -32,6 +33,11 @@
 		isError?: boolean;
 		/** Malformed event docs of this pool the read left out (the timeline may be incomplete). */
 		skipped?: readonly { _id: string }[];
+		/**
+		 * Shelter-level skipped docs already listed on this page (undefined until loaded); the
+		 * timeline banner is hidden when it covers every timeline skipped id.
+		 */
+		shelterSkipped?: readonly { _id: string }[];
 	}
 
 	let {
@@ -41,7 +47,8 @@
 		poolNameById,
 		isLoading = false,
 		isError = false,
-		skipped = []
+		skipped = [],
+		shelterSkipped
 	}: Props = $props();
 
 	let open = $state(false);
@@ -49,6 +56,9 @@
 	const skippedCount = $derived(skipped.length);
 	const skippedIds = $derived(formatSkippedDocIds(skipped));
 	const showSkipped = $derived(!isLoading && !isError && skippedCount > 0);
+	const skippedCoveredByShelter = $derived(
+		isTimelineSkippedCoveredByShelter(skipped, shelterSkipped)
+	);
 
 	const KIND_LABELS: Record<PoolTimelineEventKind, string> = {
 		opened: 'เปิดกอง',
@@ -134,7 +144,7 @@
 
 	{#if open}
 		<div id="pool-timeline-list" class="space-y-2">
-			{#if showSkipped}
+			{#if showSkipped && !skippedCoveredByShelter}
 				<div
 					role="status"
 					data-testid="bulk-return-timeline-skipped-docs"

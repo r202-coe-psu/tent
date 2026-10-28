@@ -12,6 +12,7 @@ let instance: ReturnType<typeof mount> | null = null;
 
 function render(props: {
 	skipped?: { _id: string }[];
+	shelterSkipped?: { _id: string }[];
 	isLoading?: boolean;
 	isError?: boolean;
 	expanded?: boolean;
@@ -120,5 +121,35 @@ describe('pool timeline skipped docs', () => {
 		render({ skipped: [{ _id: 'x' }], isError: true, expanded: true });
 
 		expect(byId('bulk-return-timeline-skipped-docs')).toBeNull();
+	});
+
+	it('hides the banner when the shelter list covers every timeline id, keeping badge and label', () => {
+		render({
+			skipped: [{ _id: 'a' }, { _id: 'b' }],
+			shelterSkipped: [{ _id: 'a' }, { _id: 'b' }, { _id: 'c' }],
+			expanded: true
+		});
+
+		expect(byId('bulk-return-timeline-skipped-docs')).toBeNull();
+		expect(byId('bulk-return-timeline-skipped-badge')?.textContent).toContain(
+			poolTimelineSkippedBadge(2)
+		);
+		expect(text()).toContain('ไม่มีประวัติที่แสดงได้');
+	});
+
+	it('shows the banner when the shelter list misses a timeline id', () => {
+		render({
+			skipped: [{ _id: 'a' }, { _id: 'b' }],
+			shelterSkipped: [{ _id: 'a' }],
+			expanded: true
+		});
+
+		expect(byId('bulk-return-timeline-skipped-docs')).not.toBeNull();
+	});
+
+	it('shows the banner while the shelter list is not loaded', () => {
+		render({ skipped: [{ _id: 'a' }], shelterSkipped: undefined, expanded: true });
+
+		expect(byId('bulk-return-timeline-skipped-docs')).not.toBeNull();
 	});
 });
