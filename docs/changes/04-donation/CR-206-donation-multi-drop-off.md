@@ -1,11 +1,12 @@
 ---
-id: draft
+id: CR-206 # renumbered from draft-donation-multi-drop-off
 title: บริจาคครั้งเดียวแยกส่งหลายจุดรับบริจาค — ระบุจุดต่อรายการ และรับของทีละจุด
-status: proposed
+status: approved
 date: 2026-10-27
-updated: 2026-10-28
+updated: 2026-10-28 # approved (Soravit Sukkarn, Team Lead)
 requested_by: "Kunanon Nusaeng — feedback จาก demo 2026-10-23 (epic #825, issue #813)"
-decided_by: ""
+decided_by: Soravit Sukkarn (Team Lead)
+decision_date: 2026-10-28
 layer: volatile
 depends_on: "CR-205-storage-drop-off-points (#812, PR #944 · อนุมัติ 2026-10-28 — ต่อยอด `donations/domain/drop-off.ts` ของ #926) — ต้อง implement ก่อน"
 affects:
@@ -274,9 +275,9 @@ migration: >
 - CR นี้ใช้กติกาเดียวกัน: ได้เลขถัดจากเลขล่าสุดบน develop ตอน merge
 - PROJECTION_VERSION ใช้กติกาเดียวกัน (2026-10-28: develop = 10 · CR-196 #956 และโค้ดของ CR-205 ใช้ 11 บน branch ของตัวเอง ตัวที่ merge ทีหลังขยับเลข)
 
-## ข้อตกลงที่รออนุมัติ
+## ข้อตกลง
 
-ผู้ขอ (Kunanon Nusaeng) เลือก D-1 – D-9 แล้วเมื่อ 2026-10-27 และ D-10 – D-12 เมื่อ 2026-10-28 (D-10, D-11 มาจาก review ของ PR #945) · ทุกข้อต้องรอผู้อนุมัติยืนยัน
+Soravit Sukkarn (Team Lead) อนุมัติตามที่ผู้ขอเลือก (D-1 – D-12) เมื่อ 2026-10-28 ใน PR #945
 
 | # | เรื่อง | ที่เลือก | FR |
 | --- | --- | --- | --- |
@@ -327,3 +328,4 @@ migration: >
   - ช่องโหว่ที่เจอระหว่างแก้: ใบที่รับไปบางจุดแล้วแต่ศูนย์เลิกติ๊กทุกจุด รับของที่เหลือไม่ได้ (FR-MP-24 ใช้กับใบที่ยังไม่มี `point_receipts` เท่านั้น) · ผู้ขอเลือก D-12: รับเข้าสถานที่จัดเก็บไหนก็ได้ `point_id = null` หมายเหตุไม่บังคับ (FR-MP-18b, FR-MP-22a, FR-MP-13, AC-23, AC-24)
   - นอกขอบเขต: `received_summary.remarks` หลุดไป public API (มีอยู่แล้ว · แยก issue)
   - ผู้ขอยืนยัน D-10 (`point_receipts[]`) และ D-11 (คืนยอดจองตอนปิดใบ) ตามที่ FR เขียนไว้ · ไม่ต้องแก้ FR
+- 2026-10-28 — approved by Soravit Sukkarn (Team Lead) · รันเลข CR-206 (renumbered from draft-donation-multi-drop-off) ย้ายเข้า 04-donation/
