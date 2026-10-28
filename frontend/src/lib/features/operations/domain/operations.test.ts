@@ -36,7 +36,6 @@ import {
 	projectStockLotBalances,
 	sortStockLotsByConsumptionOrder,
 	StockLotIntegrityError,
-	mapNeedItemHeuristic,
 	createTransfer,
 	dispatchTransfer,
 	receiveTransfer,
@@ -732,27 +731,51 @@ describe('calculateReserved', () => {
 		expect(reservedAll.get('item:water')).toBe('180');
 	});
 
-	it('correctly maps and sums public donations without campaign_id and using free_text', () => {
+	// #689: the back-office board counted these under every campaign asking for the item
+	// (and guessed the item from the text) while the public board and the quota counter
+	// counted them nowhere, so "จองแล้ว" ran ahead of what donors had booked.
+	it('leaves a donation with no campaign out of every campaign', () => {
 		const donations: Donation[] = [
 			{
 				...declaredItemsDonation(),
 				_id: 'don:public-1',
 				campaign_id: null,
 				status: 'declared',
-				items: [{ free_text: 'ข้าวสาร', qty: '15', unit: 'kg' }] // Maps to item:rice
-			},
-			{
-				...declaredItemsDonation(),
-				_id: 'don:public-2',
-				campaign_id: null,
-				status: 'declared',
-				items: [{ free_text: 'น้ำดื่ม', qty: '25', unit: 'bottle' }] // Maps to item:water
+				items: [{ item_id: 'item:rice', qty: '15', unit: 'kg' }]
 			}
 		];
 
-		const reserved = calculateReserved(donations, [], 'camp-any');
-		expect(reserved.get('item:rice')).toBe('15');
-		expect(reserved.get('item:water')).toBe('25');
+		expect(calculateReserved(donations, [], 'camp-any').get('item:rice')).toBeUndefined();
+	});
+
+	it('does not guess an item from free text', () => {
+		const donations: Donation[] = [
+			{
+				...declaredItemsDonation(),
+				_id: 'don:public-2',
+				campaign_id: 'camp-a',
+				status: 'declared',
+				items: [{ free_text: 'น้ำดื่ม', qty: '25', unit: 'bottle' }]
+			}
+		];
+
+		const reserved = calculateReserved(donations, [], 'camp-a');
+		expect(reserved.get('item:water')).toBeUndefined();
+		expect(reserved.size).toBe(0);
+	});
+
+	it('still totals every campaign when no campaign is given', () => {
+		const donations: Donation[] = [
+			{
+				...declaredItemsDonation(),
+				_id: 'don:no-campaign',
+				campaign_id: null,
+				status: 'declared',
+				items: [{ item_id: 'item:rice', qty: '15', unit: 'kg' }]
+			}
+		];
+
+		expect(calculateReserved(donations, []).get('item:rice')).toBe('15');
 	});
 
 	it('returns the reserved quota once a donation is expired past its TTL (T-21)', () => {
@@ -862,6 +885,39 @@ describe('deriveNeedAvailability', () => {
 		expect(riceAvail?.qty_reserved).toBe('0');
 		expect(riceAvail?.qty_remaining).toBe('50');
 		expect(riceAvail?.is_cut_off).toBe(false);
+	});
+
+	it('offers nothing more on a need staff closed by hand', () => {
+		const campaign = createCampaign(
+			{
+				title: 'ของยังชีพ',
+				needs: [{ item_id: 'item:rice', qty_target: 50, unit: 'kg', status: 'closed' }]
+			},
+			ctx
+		);
+
+		const [rice] = deriveNeedAvailability(campaign, [], []);
+
+		expect(rice.is_cut_off).toBe(true);
+		expect(rice.qty_remaining).toBe('0');
+	});
+
+	it('offers nothing on any need once the whole campaign is closed', () => {
+		const campaign = {
+			...createCampaign(
+				{
+					title: 'ของยังชีพ',
+					needs: [{ item_id: 'item:rice', qty_target: 50, unit: 'kg' }]
+				},
+				ctx
+			),
+			status: 'closed' as const
+		};
+
+		const [rice] = deriveNeedAvailability(campaign, [], []);
+
+		expect(rice.is_cut_off).toBe(true);
+		expect(rice.qty_remaining).toBe('0');
 	});
 });
 
@@ -1499,22 +1555,6 @@ describe('Inter-shelter Transfers', () => {
 
 	it('rejects resuming a transfer that is not disputed (FR-07)', () => {
 		expect(() => resumeTransfer(requestedTransfer())).toThrow();
-	});
-});
-
-describe('mapNeedItemHeuristic', () => {
-	it('maps known items correctly', () => {
-		expect(mapNeedItemHeuristic('ข้าวสารหอมมะลิ')).toBe('item:rice');
-		expect(mapNeedItemHeuristic('น้ำดื่มสะอาด')).toBe('item:water');
-		expect(mapNeedItemHeuristic('ยาพาราเซตามอล')).toBe('item:paracetamol');
-		expect(mapNeedItemHeuristic('สบู่ถูตัว')).toBe('item:soap');
-		expect(mapNeedItemHeuristic('ผ้าห่มกันหนาว')).toBe('item:blanket');
-		expect(mapNeedItemHeuristic('ไข่ไก่สด')).toBe('item:egg');
-	});
-
-	it('slugs unknown items correctly', () => {
-		expect(mapNeedItemHeuristic('ปลากระป๋องรสเผ็ด')).toBe('item:ปลากระป๋องรสเผ็ด');
-		expect(mapNeedItemHeuristic('  Spoons & Forks  ')).toBe('item:spoons-forks');
 	});
 });
 

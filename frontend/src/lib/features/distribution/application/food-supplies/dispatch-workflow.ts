@@ -7,6 +7,7 @@ import { catalogRepository } from '$lib/features/catalog';
 import {
 	createStockLedger,
 	deriveDeterministicLedgerId,
+	expiryInstant,
 	isLotExpired,
 	projectStockLotBalances,
 	toLotPriorityItems,
@@ -142,7 +143,7 @@ const LOT_FAILURE_MESSAGES: Record<DispatchLotFailureReason, string> = {
 };
 
 function lotExpiryMs(lot: StockLotBalance | undefined): number {
-	const ms = lot?.lot?.expiry ? Date.parse(lot.lot.expiry) : NaN;
+	const ms = expiryInstant(lot?.lot?.expiry);
 	return Number.isNaN(ms) ? Number.POSITIVE_INFINITY : ms;
 }
 

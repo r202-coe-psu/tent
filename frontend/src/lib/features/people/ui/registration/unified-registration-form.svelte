@@ -25,7 +25,11 @@
 		type ResidenceMatchChip
 	} from '$lib/features/public-register/data/public-register.api';
 	import { Input } from '$lib/components/ui/input/index.js';
-	import { ConsentBlock, ConsentBlockState } from '$lib/features/consent';
+	import {
+		ConsentBlock,
+		ConsentBlockState,
+		type ConsentAcknowledgement
+	} from '$lib/features/consent';
 	import HouseholdAddressFields from '../forms/household-address-fields.svelte';
 	import UnifiedRegistrationSection from './unified-registration-section.svelte';
 	import UnifiedRegistrationStickyNav from './unified-registration-sticky-nav.svelte';
@@ -57,7 +61,6 @@
 	} from './unified-registration-pets';
 	import {
 		blankUnifiedMember,
-		memberCardLabel,
 		memberFormKey,
 		membersMissingPhoneChoice,
 		unifiedRegistrationInputSchema,
@@ -142,6 +145,7 @@
 		/** Shelter codes that accept public pre-registration (fallback when chip lacks the flag). */
 		bookableShelterCodes = [],
 		consent,
+		consentAcknowledgement,
 		children
 	}: {
 		channel?: UnifiedRegistrationChannel;
@@ -177,6 +181,13 @@
 		bookableShelterCodes?: string[];
 		/** Shows the PDPA consent block at the end of the form; its confirm is this form's submit. */
 		consent?: RegistrationConsentConfig;
+		/**
+		 * Pre-register group A (FR-22), built from the current household: rendered inside the consent
+		 * block and required for submit. Return undefined when nothing needs acknowledging.
+		 */
+		consentAcknowledgement?: (
+			household: UnifiedRegistrationInput['household']
+		) => ConsentAcknowledgement | undefined;
 		children?: import('svelte').Snippet<[{ household: UnifiedRegistrationInput['household'] }]>;
 	} = $props();
 
@@ -284,25 +295,28 @@
 		consentBlock !== null &&
 			members.some((m) => !consent?.consentedKeys?.includes(memberFormKey(m)))
 	);
-	const guardianOptions = $derived(
-		members
-			.map((m, index) => ({ m, index }))
-			.filter(({ m, index }) => index > 0 && !consent?.consentedKeys?.includes(memberFormKey(m)))
-			.map(({ m, index }) => ({
-				key: memberFormKey(m),
-				label: formatPersonName(m).trim() || memberCardLabel(index)
-			}))
-	);
 	const consentHasMedicalInput = $derived(members.some(hasMedicalInput));
-	const consentBlocksSubmit = $derived(
-		consentActive && !consentBlock!.canConfirm(guardianOptions.map((o) => o.key))
-	);
-	const consentHidesSubmit = $derived(consentActive && consentBlock!.noticeVisible);
-	const effectiveSubmitDisabled = $derived(submitDisabled || readOnly || consentBlocksSubmit);
 	let household = $state<UnifiedRegistrationInput['household']>(
 		untrack(() => buildInitialHousehold())
 	);
 	let assetDescription = $state(untrack(() => initialHousehold?.assets?.description ?? ''));
+	/** What `children` and the acknowledgement see: vehicles/assets only where the form shows them. */
+	const visibleHousehold = $derived({
+		...household,
+		vehicles: showVehiclesAssets ? (household.vehicles ?? []) : [],
+		assets:
+			showVehiclesAssets && assetDescription.trim()
+				? { description: assetDescription.trim(), image_url: null }
+				: null
+	});
+	const acknowledgement = $derived(consentAcknowledgement?.(visibleHousehold));
+	/** FR-11/FR-22: C1 (and the pre-register acknowledgement) must be ticked to submit. */
+	const consentBlocksSubmit = $derived(
+		consentActive &&
+			(!consentBlock!.canConfirm || (acknowledgement !== undefined && !acknowledgement.checked))
+	);
+	const consentNeedId = $props.id();
+	const effectiveSubmitDisabled = $derived(submitDisabled || readOnly || consentBlocksSubmit);
 	/** Errors reported by the last failed submit; `null` until the first submit. */
 	let submittedEntries = $state.raw<RegistrationErrorEntry[] | null>(null);
 	/** Bumped on every failed submit — collapsed sections holding an error re-open on it. */
@@ -1390,10 +1404,10 @@
 
 	function handleSubmit(e: Event) {
 		e.preventDefault();
-		void submit('confirm');
+		void submit();
 	}
 
-	async function submit(intent: 'confirm' | 'basic') {
+	async function submit() {
 		if (pending || readOnly) return;
 
 		household.pets = syncPetsToHousehold(petItems);
@@ -1416,11 +1430,7 @@
 		try {
 			let registrationConsent: RegistrationConsent | null = null;
 			if (consentActive && consentBlock) {
-				const eligibleKeys = guardianOptions.map((o) => o.key);
-				const gate =
-					intent === 'basic'
-						? consentBlock.confirmBasic(eligibleKeys)
-						: consentBlock.confirm(eligibleKeys);
+				const gate = consentBlock.confirm();
 				if (gate.kind !== 'decided') return;
 				registrationConsent = {
 					decision: gate.decision,
@@ -1589,7 +1599,6 @@
 				submitDisabled={effectiveSubmitDisabled}
 				submitLabel={effectiveSubmitLabel}
 				submittingLabel={t.submitting}
-				showSubmit={!consentHidesSubmit}
 				existingHeadName={summaryExistingHeadName}
 				existingMemberCount={summaryExistingMemberCount}
 				existingPets={selectedMatchChip?.pets ?? []}
@@ -2007,26 +2016,17 @@
 
 			{#if children}
 				<div class="pt-2">
-					{@render children({
-						household: {
-							...household,
-							vehicles: showVehiclesAssets ? (household.vehicles ?? []) : [],
-							assets:
-								showVehiclesAssets && assetDescription.trim()
-									? { description: assetDescription.trim(), image_url: null }
-									: null
-						}
-					})}
+					{@render children({ household: visibleHousehold })}
 				</div>
 			{/if}
 
 			{#if consentActive && consentBlock}
 				<ConsentBlock
 					block={consentBlock}
-					members={guardianOptions}
 					hasMedicalInput={consentHasMedicalInput}
 					disabled={fieldsLocked}
-					onbasic={() => void submit('basic')}
+					{acknowledgement}
+					needId={consentNeedId}
 				/>
 			{/if}
 
@@ -2055,11 +2055,12 @@
 								onNavigate={(id) => scrollToSection(id as FormSectionId)}
 							/>
 						</div>
-						{#if !readOnly && !consentHidesSubmit}
+						{#if !readOnly}
 							<div class="min-w-0 flex-1">
 								<UnifiedRegistrationSubmitBar
 									{pending}
 									submitDisabled={effectiveSubmitDisabled}
+									describedBy={consentBlocksSubmit ? consentNeedId : undefined}
 									label={effectiveSubmitLabel}
 									submittingLabel={t.submitting}
 									align={submitAlign}
