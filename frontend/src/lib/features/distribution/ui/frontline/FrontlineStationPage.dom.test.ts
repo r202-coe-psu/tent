@@ -30,10 +30,24 @@ vi.mock('./ShiftReconciliationCard.svelte', () => ({ default: () => {} }));
 vi.mock('../common/DistributionHistory.svelte', () => ({ default: () => {} }));
 vi.mock('../common/TicketStatusBadge.svelte', () => ({ default: () => {} }));
 
+const queries = vi.hoisted(() => ({
+	tickets: [] as unknown[],
+	receive: vi.fn<(input: unknown) => Promise<unknown>>()
+}));
+
 vi.mock('../../application/queries', () => ({
 	resolveAuthenticatedAuthorContext: () => ({}),
-	useRequisitionTickets: () => ({ data: [], isPending: false, isError: false }),
-	useReceiveTicketAtDistributionPoint: () => ({ mutateAsync: vi.fn(), isPending: false })
+	useRequisitionTickets: () => ({
+		get data() {
+			return queries.tickets;
+		},
+		isPending: false,
+		isError: false
+	}),
+	useReceiveTicketAtDistributionPoint: () => ({
+		mutateAsync: (input: unknown) => queries.receive(input),
+		isPending: false
+	})
 }));
 vi.mock('../../application/food-supplies/auth', () => ({
 	canPerformFrontlineDistribution: () => true
@@ -73,6 +87,8 @@ const lastUrl = () => nav.replaceState.mock.lastCall?.[0];
 
 beforeEach(() => {
 	board.props = null;
+	queries.tickets = [];
+	queries.receive.mockReset();
 	nav.replaceState.mockClear();
 	appPage.url.pathname = '/onsite/distribution';
 	localStorage.clear();
@@ -140,6 +156,54 @@ describe('frontline station returns tab wiring (#921)', () => {
 		expect(boardMarker()).not.toBeNull();
 		expect(board.props?.initialPoolId).toBe('p1');
 		expect(modeButton('สิ่งของ').getAttribute('aria-pressed')).toBe('true');
+	});
+
+	it('a link that changes only the pool re-applies mode, tab and pool together', async () => {
+		const state = new SvelteMap<string, unknown>([['initialPoolId', 'p1']]);
+		await render({
+			initialMode: 'supplies',
+			initialTab: 'returns',
+			get initialPoolId() {
+				return state.get('initialPoolId');
+			}
+		});
+
+		click(modeButton('อาหาร'));
+		expect(modeButton('อาหาร').getAttribute('aria-pressed')).toBe('true');
+		expect(boardMarker()).toBeNull();
+
+		state.set('initialPoolId', 'p2');
+		flushSync();
+
+		expect(modeButton('สิ่งของ').getAttribute('aria-pressed')).toBe('true');
+		expect(tabButton('3. รับคืนสิ่งของ').getAttribute('aria-pressed')).toBe('true');
+		expect(boardMarker()).not.toBeNull();
+		expect(board.props?.initialPoolId).toBe('p2');
+	});
+
+	it('following the same link again (new linkKey) re-applies it after local changes', async () => {
+		const state = new SvelteMap<string, unknown>([['linkKey', 0]]);
+		await render({
+			initialMode: 'supplies',
+			initialTab: 'returns',
+			initialPoolId: 'p1',
+			get linkKey() {
+				return state.get('linkKey');
+			}
+		});
+
+		board.props?.onSelectedPoolChange?.(null);
+		flushSync();
+		click(modeButton('อาหาร'));
+		expect(boardMarker()).toBeNull();
+
+		state.set('linkKey', 1);
+		flushSync();
+
+		expect(modeButton('สิ่งของ').getAttribute('aria-pressed')).toBe('true');
+		expect(tabButton('3. รับคืนสิ่งของ').getAttribute('aria-pressed')).toBe('true');
+		expect(boardMarker()).not.toBeNull();
+		expect(board.props?.initialPoolId).toBe('p1');
 	});
 
 	it('does not render the board outside the returns tab', async () => {
@@ -232,6 +296,39 @@ describe('frontline station URL writes', () => {
 		board.props?.onSelectedPoolChange?.('p2');
 		flushSync();
 
+		expect(nav.replaceState).not.toHaveBeenCalled();
+	});
+
+	it('a receive that resolves after a mode switch does not jump tabs or write a mixed URL', async () => {
+		queries.tickets = [
+			{
+				_id: 't1',
+				ticket_no: 'T-1',
+				status: 'IN_TRANSIT',
+				requisition_type: 'food',
+				destination_location: 'P1',
+				items: []
+			}
+		];
+		let resolveReceive: () => void = () => {};
+		queries.receive.mockReturnValue(
+			new Promise<void>((r) => {
+				resolveReceive = r;
+			})
+		);
+		await render({ initialMode: 'food', initialTab: 'receive' });
+
+		click(tabButton('ตรวจรับเข้าจุดแจก'));
+		click(modeButton('สิ่งของ'));
+		nav.replaceState.mockClear();
+
+		resolveReceive();
+		await tick();
+		flushSync();
+
+		expect(queries.receive).toHaveBeenCalledOnce();
+		expect(modeButton('สิ่งของ').getAttribute('aria-pressed')).toBe('true');
+		expect(tabButton('1. รับของถึงจุดแจก').getAttribute('aria-pressed')).toBe('true');
 		expect(nav.replaceState).not.toHaveBeenCalled();
 	});
 

@@ -1,9 +1,17 @@
 <script lang="ts">
 	import { FrontlineStationPage, parseOnsiteDistributionParams } from '$lib/features/distribution';
 	import { page } from '$app/state';
+	import { afterNavigate } from '$app/navigation';
 
 	// `?mode=&tab=&pool=` come from a link; the desk owns the URL after that and rewrites it whole.
 	const urlState = $derived(parseOnsiteDistributionParams(page.url.searchParams));
+
+	// Shallow `replaceState` leaves `page.url` stale, so following the same link again changes no
+	// prop. This counter bumps on real navigations only (not on shallow writes) to re-apply it.
+	let linkKey = $state(0);
+	afterNavigate((nav) => {
+		if (nav.type !== 'enter') linkKey++;
+	});
 </script>
 
 <svelte:head>
@@ -18,4 +26,5 @@
 	initialMode={urlState.mode}
 	initialTab={urlState.tab ?? 'receive'}
 	initialPoolId={urlState.pool}
+	{linkKey}
 />

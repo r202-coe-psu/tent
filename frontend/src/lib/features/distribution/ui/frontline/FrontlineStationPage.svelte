@@ -75,13 +75,22 @@
 	interface Props {
 		/** Mode from the URL (`?mode=`, or forced by the tab); beats the remembered mode. */
 		initialMode?: DeskMode | null;
-		/** Active tab from the URL; followed on same-route navigation, local clicks override it. */
+		/** Active tab from the URL; local clicks override it until the next link. */
 		initialTab?: StationTab;
 		/** Bulk return pool to open on the returns tab (deep link). */
 		initialPoolId?: string | null;
+		/** Bumped on each real navigation, so following the same link again re-applies it. */
+		linkKey?: number;
 	}
 
-	let { initialMode = null, initialTab = 'receive', initialPoolId = null }: Props = $props();
+	// Mode, tab and pool are re-applied whenever the link changes (new URL params or a new
+	// navigation).
+	let {
+		initialMode = null,
+		initialTab = 'receive',
+		initialPoolId = null,
+		linkKey = 0
+	}: Props = $props();
 
 	const currentShelterCode = $derived(shelterStore.selectedShelterCode ?? getShelterCode());
 
@@ -101,12 +110,17 @@
 	// written whole from this state (`writeUrl`); the shallow write does not touch `page.url`, so
 	// the props stay as the link had them until a real navigation changes them.
 	// `?mode=` beats the remembered mode (FR-DFS-07); the stored read is not a dependency.
-	const linkedMode = $derived(resolveInitialMode(initialMode, untrack(readStoredDeskMode)));
-	let mode = $derived<DeskMode>(linkedMode);
-	// Depends on `linkedMode`, not `mode`, so a local mode switch does not recompute it.
-	let activeTab = $derived<StationTab>(stepAfterModeSwitch(initialTab, linkedMode));
+	// One link object: any prop or `linkKey` change makes a fresh one, so mode, tab and pool are
+	// re-applied together (a local write overrides until the next link).
+	const link = $derived.by(() => {
+		void linkKey;
+		const m = resolveInitialMode(initialMode, untrack(readStoredDeskMode));
+		return { mode: m, tab: stepAfterModeSwitch(initialTab, m), pool: initialPoolId };
+	});
+	let mode = $derived<DeskMode>(link.mode);
+	let activeTab = $derived<StationTab>(link.tab);
 	// Open bulk return pool; the local value keeps a closed pool closed when the user returns.
-	let selectedPoolId = $derived<string | null>(initialPoolId);
+	let selectedPoolId = $derived<string | null>(link.pool);
 
 	// FR-DFS-06: a deep link (e.g. a supplies QR or pool link) is also the mode this device last used.
 	$effect(() => {
@@ -356,16 +370,18 @@
 				shelterCode: currentShelterCode
 			});
 			toast.success(`ตรวจรับสินค้าเข้าจุดแจกจ่ายเรียบร้อยแล้ว: ${ticket.ticket_no}`);
-			// Show the received ticket: clear the point filter, then switch to its tab.
-			pickedPoint = null;
-			// If received food, switch tab to food; if supplies, switch to supplies
-			if (ticket.requisition_type === 'food') {
-				selectTab('food');
-				pickedFoodDay = ticketServiceDay(ticket);
-				pickedFoodTicketId = ticket._id;
-			} else if (ticket.requisition_type === 'supplies') {
-				selectTab('supplies');
-				pickedSuppliesTicketId = ticket._id;
+			// Show the received ticket in its tab, but only if the desk is still in its mode: the mode
+			// buttons stay enabled during the await, and a jump would mix modes (and the URL).
+			if (ticket.requisition_type === mode) {
+				pickedPoint = null;
+				if (ticket.requisition_type === 'food') {
+					selectTab('food');
+					pickedFoodDay = ticketServiceDay(ticket);
+					pickedFoodTicketId = ticket._id;
+				} else {
+					selectTab('supplies');
+					pickedSuppliesTicketId = ticket._id;
+				}
 			}
 		} catch (err) {
 			toast.error(formatDistributionError(err, 'ไม่สามารถตรวจรับสินค้าได้ กรุณาลองใหม่อีกครั้ง'));
