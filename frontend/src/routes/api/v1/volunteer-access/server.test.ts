@@ -1,8 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { readSessionUserCtx, grant } = vi.hoisted(() => ({
+const { readSessionUserCtx, grant, revoke } = vi.hoisted(() => ({
 	readSessionUserCtx: vi.fn(),
-	grant: vi.fn()
+	grant: vi.fn(),
+	revoke: vi.fn()
 }));
 
 vi.mock('$lib/server/couch-admin', () => {
@@ -29,10 +30,11 @@ vi.mock('$lib/server/couch-admin', () => {
 	};
 });
 vi.mock('$lib/features/volunteers/server/volunteer-access-grant', () => ({
-	grantVolunteerAccessAsCoordinator: grant
+	grantVolunteerAccessAsCoordinator: grant,
+	revokeVolunteerAccessAsCoordinator: revoke
 }));
 
-import { POST } from './+server';
+import { DELETE, POST } from './+server';
 
 function post(body: Record<string, unknown>) {
 	const request = new Request('http://localhost/api/v1/volunteer-access', {
@@ -83,5 +85,51 @@ describe('POST /api/v1/volunteer-access (#955)', () => {
 		expect((await post({ role: 'medical_staff' })).status).toBe(403);
 		grant.mockRejectedValueOnce(new ServiceError('VALIDATION', 'bad'));
 		expect((await post({})).status).toBe(422);
+	});
+});
+
+describe('DELETE /api/v1/volunteer-access (#955)', () => {
+	function del(body: Record<string, unknown>) {
+		const request = new Request('http://localhost/api/v1/volunteer-access', {
+			method: 'DELETE',
+			headers: { 'Content-Type': 'application/json', cookie: 'AuthSession=x' },
+			body: JSON.stringify(body)
+		});
+		return DELETE({ request } as Parameters<typeof DELETE>[0]);
+	}
+
+	beforeEach(() => {
+		vi.clearAllMocks();
+		readSessionUserCtx.mockResolvedValue({
+			name: 'staff03',
+			roles: ['shelter:SH001', 'SH001:volunteer_coordinator']
+		});
+		revoke.mockResolvedValue(undefined);
+	});
+
+	it('hands the session caller and only the named fields to the revoke policy', async () => {
+		const body = {
+			shelter_code: 'SH001',
+			volunteer_id: 'volunteer:V1',
+			email: 'vol@example.com',
+			role: 'kitchen_staff'
+		};
+		const res = await del({ ...body, granted_by: 'forged' });
+		expect(res.status).toBe(200);
+		expect(await res.json()).toEqual({ ok: true });
+		expect(revoke).toHaveBeenCalledWith(
+			{ name: 'staff03', roles: ['shelter:SH001', 'SH001:volunteer_coordinator'] },
+			body
+		);
+	});
+
+	it('answers 401 without a session and 403 when the policy refuses', async () => {
+		readSessionUserCtx.mockResolvedValue({ name: null, roles: [] });
+		expect((await del({})).status).toBe(401);
+		expect(revoke).not.toHaveBeenCalled();
+		readSessionUserCtx.mockResolvedValue({ name: 'staff03', roles: [] });
+		const { ServiceError } = await import('$lib/server/couch-admin');
+		revoke.mockRejectedValueOnce(new ServiceError('FORBIDDEN', 'no'));
+		expect((await del({ role: 'kitchen_staff' })).status).toBe(403);
 	});
 });

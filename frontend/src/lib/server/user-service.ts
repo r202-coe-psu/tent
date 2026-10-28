@@ -3,11 +3,14 @@ import { ServiceError, serviceErrorFromCouch, type Caller } from '$lib/server/co
 import {
 	SHELTER_MANAGER,
 	STAFF_CAPABILITIES,
+	VOLUNTEER_COORDINATOR,
 	capabilitiesForShelter,
+	compoundCapabilityRole,
 	hasCapabilityInShelter,
 	hasShelterScope,
 	isAppSystemAdmin,
 	isLastAppSystemAdmin,
+	isSystemAdmin,
 	managerShelterCodes,
 	mergeShelterAssignment,
 	rolesFromAssignments,
@@ -17,8 +20,10 @@ import {
 	grantFor,
 	isCoordinatorGrantableRole,
 	pruneRoleGrants,
+	withoutGrantedRole,
 	type RoleGrant
 } from '$lib/auth/role-grants';
+import { recordRoleGrantAudit } from '$lib/server/role-grant-audit';
 import { validatePassword, validateProvisionedPassword } from '$lib/server/password-policy';
 import {
 	hashSecurityAnswer,
@@ -432,10 +437,36 @@ export async function createOrMergeUser(
 }
 
 /**
+ * An existing account a coordinator may extend (draft-coordinator-limited-access-grant FR-7):
+ * the volunteer's own active volunteer account, never a system admin, a shelter manager or a
+ * coordinator in any shelter, and never the caller's own account. 403 and no write otherwise.
+ */
+function assertGrantableTarget(existing: CouchUserDoc, volunteerId: string, actor: string): void {
+	const roles = existing.roles ?? [];
+	if (
+		existing.name === actor ||
+		existing.volunteer_id !== volunteerId ||
+		existing.personnel_type !== 'volunteer' ||
+		existing.active === false ||
+		isProtectedBootstrapAdmin(existing, bootstrapAdminName()) ||
+		isSystemAdmin(roles) ||
+		hasCapabilityInShelter(roles, null, SHELTER_MANAGER) ||
+		hasCapabilityInShelter(roles, null, VOLUNTEER_COORDINATOR)
+	) {
+		throw new ServiceError(
+			'FORBIDDEN',
+			'บัญชีนี้ออกสิทธิ์ผ่านผู้ประสานงานไม่ได้ กรุณาให้ผู้จัดการศูนย์จัดการผ่านหน้าผู้ใช้งาน'
+		);
+	}
+}
+
+/**
  * Give a volunteer one time-limited staff role on their account (#955). Creates the account on
- * first grant; on a re-grant it only adds the role and the grant (or renews the grant) and
- * never touches the password. A role the account already holds without a grant (given by a
- * shelter manager) is left alone. Who may grant, and what, is decided by the caller.
+ * first grant; on a re-grant it only adds the role and the grant (or renews or shortens the
+ * grant) and never touches the password. A role the account already holds without a grant (given
+ * by a shelter manager) is left alone. Who may grant, and what, is decided by the caller except
+ * the target-account rules, which are enforced here before any write. The audit is written after
+ * the `_users` write succeeds (FR-14).
  */
 export async function grantCoordinatorRole(input: {
 	name: string;
@@ -450,11 +481,13 @@ export async function grantCoordinatorRole(input: {
 }): Promise<{ created: boolean; unchanged: boolean }> {
 	const { name, volunteer_id, grant } = input;
 	const code = grant.shelter_code;
+	const actor = grant.granted_by;
 	if (!isCoordinatorGrantableRole(grant.role)) {
 		throw new ServiceError('FORBIDDEN', 'A coordinator may not grant this role');
 	}
 	const docs = await fetchAllUserDocs();
 	const existing = docs.find((d) => d.name === name);
+	if (existing) assertGrantableTarget(existing, volunteer_id, actor);
 	const otherLinked = docs.find(
 		(d) =>
 			d.volunteer_id === volunteer_id && d.name !== name && hasShelterScope(d.roles ?? [], code)
@@ -485,32 +518,31 @@ export async function grantCoordinatorRole(input: {
 			must_change_password: true,
 			role_grants: [grant]
 		});
+		await recordRoleGrantAudit({
+			shelter_code: code,
+			user_name: name,
+			reason: 'role_grant.issued',
+			role: grant.role,
+			expires_at: grant.expires_at,
+			actor
+		});
 		return { created: true, unchanged: false };
 	}
 
-	if (
-		existing.volunteer_id !== volunteer_id ||
-		existing.personnel_type !== 'volunteer' ||
-		existing.active === false ||
-		isProtectedBootstrapAdmin(existing, bootstrapAdminName()) ||
-		isAppSystemAdmin(existing.roles ?? [])
-	) {
-		throw new ServiceError(
-			'CONFLICT',
-			'อีเมลนี้มีบัญชีอยู่แล้วหรือสิทธิ์ไม่ตรงกัน กรุณาให้ผู้จัดการศูนย์จัดการผ่านหน้าผู้ใช้งาน'
-		);
-	}
 	const roles = existing.roles ?? [];
-	const capsHere = capabilitiesForShelter(roles, code);
+	const previous = grantFor(existing.role_grants, code, grant.role);
 	const hasRole = hasCapabilityInShelter(roles, code, grant.role);
-	const hasGrant = grantFor(existing.role_grants, code, grant.role) !== null;
-	// A manager gave this role (or the account is already a manager here): nothing to add.
-	if (capsHere.includes(SHELTER_MANAGER) || (hasRole && !hasGrant)) {
-		return { created: false, unchanged: true };
+	// A manager gave this role: nothing to add, and nothing a coordinator may change.
+	if (hasRole && !previous) return { created: false, unchanged: true };
+	// Another coordinator's grant may be renewed (it becomes the caller's) but not cut short.
+	const shortened =
+		previous !== null && Date.parse(grant.expires_at) < Date.parse(previous.expires_at);
+	if (previous && shortened && previous.granted_by !== actor) {
+		throw new ServiceError('FORBIDDEN', 'ย่นอายุได้เฉพาะสิทธิ์ที่ตนเองออกให้');
 	}
 	const nextRoles = hasRole
 		? roles
-		: mergeShelterAssignment(roles, code, [...capsHere, grant.role]);
+		: mergeShelterAssignment(roles, code, [...capabilitiesForShelter(roles, code), grant.role]);
 	const role_grants = [
 		...(existing.role_grants ?? []).filter((g) => g.shelter_code !== code || g.role !== grant.role),
 		grant
@@ -522,7 +554,60 @@ export async function grantCoordinatorRole(input: {
 		role_grants
 	});
 	if (res.status >= 400) throw serviceErrorFromCouch('grant volunteer role', res.status, res.data);
+	await recordRoleGrantAudit({
+		shelter_code: code,
+		user_name: name,
+		reason: !previous
+			? 'role_grant.issued'
+			: shortened
+				? 'role_grant.shortened'
+				: 'role_grant.renewed',
+		role: grant.role,
+		expires_at: grant.expires_at,
+		...(previous ? { previous_expires_at: previous.expires_at } : {}),
+		actor
+	});
 	return { created: false, unchanged: false };
+}
+
+/**
+ * A coordinator takes back a grant they issued (FR-8): the role and its grant go, and the
+ * shelter scope with the last role there, as the worker sweep does for an expiry. A role without
+ * a grant (given by a manager) or another coordinator's grant is 403 and stays. The account and
+ * password stay.
+ */
+export async function revokeCoordinatorGrant(input: {
+	name: string;
+	volunteer_id: string;
+	shelter_code: string;
+	role: string;
+	actor: string;
+}): Promise<void> {
+	const { name, volunteer_id, shelter_code: code, role, actor } = input;
+	if (!isCoordinatorGrantableRole(role)) {
+		throw new ServiceError('FORBIDDEN', 'A coordinator may not revoke this role');
+	}
+	const doc = await readUserDoc(name, 'read user');
+	const grant = grantFor(doc.role_grants, code, role);
+	if (doc.volunteer_id !== volunteer_id || !grant || grant.granted_by !== actor) {
+		throw new ServiceError('FORBIDDEN', 'ถอนได้เฉพาะสิทธิ์ที่ตนเองออกให้');
+	}
+	const next = withoutGrantedRole(doc.roles ?? [], doc.role_grants, code, role);
+	const res = await adminRaw(`/_users/${userDocId(name)}`, 'PUT', {
+		...doc,
+		roles: next.roles,
+		role_grants: next.role_grants,
+		shelter_id: shelterCodeFromRoles(next.roles)
+	});
+	if (res.status >= 400) throw serviceErrorFromCouch('revoke volunteer role', res.status, res.data);
+	await recordRoleGrantAudit({
+		shelter_code: code,
+		user_name: name,
+		reason: 'role_grant.revoked',
+		role,
+		expires_at: grant.expires_at,
+		actor
+	});
 }
 
 /** List users, scoped: SA sees all; a manager sees users with their managed shelter scope. */
@@ -723,6 +808,25 @@ export async function updateUser(
 
 	const res = await adminRaw(`/_users/${userDocId(name)}`, 'PUT', updatedDoc);
 	if (res.status >= 400) throw serviceErrorFromCouch('update user', res.status, res.data);
+
+	// Every grant this save dropped is audited: made permanent on purpose, or revoked with its role.
+	const finalRoles = nextRoles ?? doc.roles ?? [];
+	for (const dropped of (doc.role_grants ?? []).filter(
+		(g) => grantFor(roleGrants, g.shelter_code, g.role) === null
+	)) {
+		const compound = compoundCapabilityRole(dropped.shelter_code, dropped.role);
+		await recordRoleGrantAudit({
+			shelter_code: dropped.shelter_code,
+			user_name: name,
+			reason:
+				permanentRoles.includes(compound) && finalRoles.includes(compound)
+					? 'role_grant.made_permanent'
+					: 'role_grant.revoked',
+			role: dropped.role,
+			expires_at: dropped.expires_at,
+			actor: caller.name
+		});
+	}
 }
 
 /** Fields a logged-in staff member may change on their own `_users` doc (no roles/password/MFA). */

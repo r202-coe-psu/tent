@@ -503,7 +503,7 @@ test.describe('Volunteer access: coordinator limits (#955)', { tag: TAGS }, () =
 		['an expiry more than 7 days away', { expires_on: bangkokDate(8) }, 422],
 		['an expiry in the past', { expires_on: bangkokDate(-1) }, 422],
 		['no expiry', { expires_on: undefined }, 422],
-		['a volunteer who is not verified', { volunteer_id: unverifiedId }, 403]
+		['a volunteer who is not verified', { volunteer_id: unverifiedId }, 422]
 	] as const) {
 		test(`refuses ${label}`, async () => {
 			const email = `e2e-vaccess-${RUN_ID}-refused@example.com`;

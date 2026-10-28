@@ -65,12 +65,16 @@
 		limited ? COORDINATOR_GRANTABLE_CAPABILITIES : STAFF_CAPABILITIES
 	);
 	const expiryRange = $derived(grantExpiryRange());
-	// Identity verified in another shelter (same phone) is only known to the server, so a
-	// volunteer with a phone may still be granted; one without a phone cannot be.
+	// Identity verified in another shelter (same phone AND national ID) is only known to the
+	// server, so a volunteer with both may still be granted; one missing either cannot be.
 	const unverifiedHere = $derived(identityVerificationStatus(volunteer) !== 'verified');
+	const canCheckElsewhere = $derived(
+		accountPhones(volunteer.phone).contact !== null &&
+			Boolean(volunteer.national_id_hash || volunteer.national_id)
+	);
 	const blockedReason = $derived(
-		limited && unverifiedHere && !accountPhones(volunteer.phone).contact
-			? 'อาสาสมัครยังไม่ยืนยันตัวตนในศูนย์นี้ และไม่มีเบอร์โทรให้ตรวจผลยืนยันจากศูนย์อื่น จึงออกสิทธิ์ไม่ได้'
+		limited && unverifiedHere && !canCheckElsewhere
+			? 'อาสาสมัครยังไม่ยืนยันตัวตนในศูนย์นี้ และไม่มีเบอร์โทรหรือเลขบัตรประชาชนให้ตรวจผลยืนยันจากศูนย์อื่น จึงออกสิทธิ์ไม่ได้'
 			: null
 	);
 	let expiresOn = $state('');
@@ -227,8 +231,8 @@
 				</Select.Root>
 				<p class="text-[11px] text-muted-foreground">
 					{#if limited}
-						* ผู้ประสานงานออกสิทธิ์ได้เฉพาะ 4 บทบาทนี้ ในศูนย์พักพิงนี้ และถอนสิทธิ์เองไม่ได้
-						(สิทธิ์หมดอายุเอง หรือให้ผู้จัดการศูนย์ถอน)
+						* ผู้ประสานงานออกสิทธิ์ได้เฉพาะ 4 บทบาทนี้ ในศูนย์พักพิงนี้
+						ถอนหรือย่นอายุได้เฉพาะสิทธิ์ที่ตนเองออก (สิทธิ์อื่นหมดอายุเอง หรือให้ผู้จัดการศูนย์ถอน)
 					{:else}
 						* บัญชีใช้สิทธิ์ที่เลือกในศูนย์พักพิงนี้ จัดการสิทธิ์เพิ่มเติมได้ผ่านหน้าผู้ใช้งาน
 					{/if}
@@ -262,8 +266,9 @@
 					<p role="alert" class="text-sm font-medium text-destructive">{blockedReason}</p>
 				{:else if unverifiedHere}
 					<p class="rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs text-amber-800">
-						อาสาสมัครยังไม่ยืนยันตัวตนในศูนย์นี้ ระบบจะตรวจผลยืนยันจากศูนย์อื่นที่เบอร์โทรตรงกัน
-						หากไม่พบ จะออกสิทธิ์ไม่ได้
+						อาสาสมัครยังไม่ยืนยันตัวตนในศูนย์นี้
+						ระบบจะตรวจผลยืนยันจากศูนย์อื่นที่เบอร์โทรและเลขบัตรประชาชนตรงกัน หากไม่พบ
+						จะออกสิทธิ์ไม่ได้
 					</p>
 				{/if}
 				{#if submitError}

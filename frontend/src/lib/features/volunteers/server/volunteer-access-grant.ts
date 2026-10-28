@@ -1,6 +1,6 @@
 import { sha256Hex } from '$lib/db/hash';
-import { VOLUNTEER_COORDINATOR, hasStaffCapability, shelterScopeRole } from '$lib/auth/roles';
 import {
+	coordinatorShelterCodes,
 	grantExpiresAt,
 	grantExpiryError,
 	isCoordinatorGrantableRole,
@@ -13,10 +13,16 @@ import {
 	type Caller
 } from '$lib/server/couch-admin';
 import { shelterDbName } from '$lib/server/shelter-access-design';
-import { grantCoordinatorRole } from '$lib/server/user-service';
+import { grantCoordinatorRole, revokeCoordinatorGrant } from '$lib/server/user-service';
 import { normalizePhone } from '../domain/phone';
 import { identityVerificationStatus } from '../domain/verification';
 import { shelterRefs } from './public-schedule-action';
+
+/** What the coordinator sends to take a grant back. */
+export type CoordinatorRevokeInput = Pick<
+	CoordinatorGrantInput,
+	'shelter_code' | 'volunteer_id' | 'email' | 'role'
+>;
 
 /** What the coordinator sends: everything else is read server-side. */
 export type CoordinatorGrantInput = {
@@ -36,6 +42,9 @@ type VolunteerDoc = {
 	first_name?: string;
 	last_name?: string;
 	phone?: string | null;
+	phone_hash?: string | null;
+	national_id?: string | null;
+	national_id_hash?: string | null;
 	organization?: string | null;
 	user_name?: string | null;
 	identity_verified?: boolean;
@@ -70,47 +79,71 @@ const isVerified = (doc: VolunteerDoc): boolean =>
 	}) === 'verified';
 
 /**
- * Identity is verified in this shelter, or in another shelter's profile with the same phone
- * (`phone_hash`, the lookup `resolveIdentities` uses; #886). No phone: this shelter only.
+ * The profile that proves the volunteer's identity, or `null`: this shelter's own verified
+ * profile, else another shelter's verified profile with the same `phone_hash` AND
+ * `national_id_hash` (draft-coordinator-limited-access-grant FR-3). A phone alone is not enough
+ * to lend another shelter's verification, and a profile without a national ID counts only here.
  */
-async function identityVerified(volunteer: VolunteerDoc): Promise<boolean> {
-	if (isVerified(volunteer)) return true;
+async function identityVerifiedBy(
+	volunteer: VolunteerDoc
+): Promise<{ shelter_code: string; volunteer_id: string } | null> {
+	const own = { shelter_code: volunteer.shelter_code as string, volunteer_id: volunteer._id };
+	if (isVerified(volunteer)) return own;
 	const phone = volunteer.phone ? normalizePhone(volunteer.phone) : '';
-	if (!phone) return false;
+	const nationalIdHash =
+		volunteer.national_id_hash ||
+		(volunteer.national_id ? await sha256Hex(volunteer.national_id) : '');
+	if (!phone || !nationalIdHash) return null;
 	const phoneHash = await sha256Hex(phone);
 	for (const ref of await shelterRefs()) {
 		if (ref.code === volunteer.shelter_code) continue;
 		const res = await adminRaw(`/${ref.dbName}/_find`, 'POST', {
-			selector: { type: 'volunteer', phone_hash: phoneHash },
+			selector: { type: 'volunteer', phone_hash: phoneHash, national_id_hash: nationalIdHash },
 			limit: 20
 		});
 		if (res.status === 404) continue;
 		if (res.status >= 400)
 			throw serviceErrorFromCouch('find volunteer profiles', res.status, res.data);
 		const docs = (res.data as { docs?: VolunteerDoc[] } | null)?.docs ?? [];
-		if (docs.some(isVerified)) return true;
+		const match = docs.find(isVerified);
+		if (match) return { shelter_code: ref.code, volunteer_id: match._id };
 	}
-	return false;
+	return null;
+}
+
+/**
+ * The shelter a coordinator acts in, read from their session roles (`capabilitiesForShelter`,
+ * compound or legacy flat), never trusted from the body (FR-1). A body shelter the caller holds no
+ * coordinator scope for is 403; a caller with several shelters must name one.
+ */
+function coordinatorShelter(caller: Pick<Caller, 'roles'>, requested: unknown): string {
+	const owned = coordinatorShelterCodes(caller.roles);
+	if (owned.length === 0) {
+		throw new ServiceError('FORBIDDEN', 'Requires volunteer_coordinator in a shelter');
+	}
+	const code = asString(requested);
+	if (code === '') {
+		if (owned.length === 1) return owned[0];
+		throw new ServiceError('VALIDATION', 'shelter_code is required');
+	}
+	if (!owned.includes(code)) {
+		throw new ServiceError('FORBIDDEN', 'Requires volunteer_coordinator in this shelter');
+	}
+	return code;
 }
 
 /**
  * A `volunteer_coordinator` gives a volunteer system access (#955, #879 item 2). Every rule is
- * enforced here, not in the UI: own shelter only, four roles, identity verified (here or in
- * another shelter by phone), and a required expiry within 7 days. Authorization runs first.
+ * enforced here, not in the UI: own shelter only (from the session), four roles, identity
+ * verified (here, or in another shelter by phone and national ID), and a required expiry within
+ * 7 days. Authorization runs first; the existing-account rules run in `grantCoordinatorRole`.
  */
 export async function grantVolunteerAccessAsCoordinator(
 	caller: Pick<Caller, 'name' | 'roles'>,
 	input: CoordinatorGrantInput,
 	now: Date = new Date()
 ): Promise<{ created: boolean; unchanged: boolean }> {
-	const shelterCode = asString(input.shelter_code);
-	const isCoordinatorHere =
-		shelterCode !== '' &&
-		caller.roles.includes(shelterScopeRole(shelterCode)) &&
-		hasStaffCapability(caller.roles, VOLUNTEER_COORDINATOR, shelterCode);
-	if (!isCoordinatorHere) {
-		throw new ServiceError('FORBIDDEN', 'Requires volunteer_coordinator in this shelter');
-	}
+	const shelterCode = coordinatorShelter(caller, input.shelter_code);
 
 	const role = input.role;
 	if (!isCoordinatorGrantableRole(role)) {
@@ -125,8 +158,9 @@ export async function grantVolunteerAccessAsCoordinator(
 	if (!volunteerId) throw new ServiceError('VALIDATION', 'volunteer_id is required');
 
 	const volunteer = await readVolunteer(shelterCode, volunteerId);
-	if (!(await identityVerified(volunteer))) {
-		throw new ServiceError('FORBIDDEN', 'อาสาสมัครต้องยืนยันตัวตนก่อนจึงจะออกสิทธิ์ได้');
+	const verifiedBy = await identityVerifiedBy(volunteer);
+	if (!verifiedBy) {
+		throw new ServiceError('VALIDATION', 'อาสาสมัครต้องยืนยันตัวตนก่อนจึงจะออกสิทธิ์ได้');
 	}
 
 	const phone = volunteer.phone ? normalizePhone(volunteer.phone) : '';
@@ -135,7 +169,8 @@ export async function grantVolunteerAccessAsCoordinator(
 		role,
 		expires_at: grantExpiresAt(input.expires_on as string),
 		granted_by: caller.name,
-		granted_at: now.toISOString()
+		granted_at: now.toISOString(),
+		verified_by: verifiedBy
 	};
 	return grantCoordinatorRole({
 		name: email,
@@ -146,5 +181,33 @@ export async function grantVolunteerAccessAsCoordinator(
 		volunteer_id: volunteerId,
 		linked_user_name: volunteer.user_name ?? null,
 		grant
+	});
+}
+
+/**
+ * A coordinator takes back a grant they issued (FR-8). Same caller scope as the grant; the
+ * account is named like the grant names it (`email` + `volunteer_id`). Only a grant the caller
+ * issued can go: anything else is 403 and nothing is written.
+ */
+export async function revokeVolunteerAccessAsCoordinator(
+	caller: Pick<Caller, 'name' | 'roles'>,
+	input: CoordinatorRevokeInput
+): Promise<void> {
+	const shelterCode = coordinatorShelter(caller, input.shelter_code);
+	const role = input.role;
+	if (!isCoordinatorGrantableRole(role)) {
+		throw new ServiceError('FORBIDDEN', 'A coordinator may only revoke a desk staff role');
+	}
+	const email = asString(input.email);
+	const volunteerId = asString(input.volunteer_id);
+	if (!email || !volunteerId) {
+		throw new ServiceError('VALIDATION', 'email and volunteer_id are required');
+	}
+	await revokeCoordinatorGrant({
+		name: email,
+		volunteer_id: volunteerId,
+		shelter_code: shelterCode,
+		role,
+		actor: caller.name
 	});
 }

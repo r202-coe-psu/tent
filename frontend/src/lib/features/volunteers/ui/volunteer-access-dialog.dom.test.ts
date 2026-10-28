@@ -137,6 +137,7 @@ describe('VolunteerAccessDialog for a volunteer_coordinator (#955)', () => {
 			new Error('อาสาสมัครต้องยืนยันตัวตนก่อนจึงจะออกสิทธิ์ได้')
 		);
 		await render(COORDINATOR, {
+			national_id_hash: 'nid-hash-1',
 			identity_verified: false,
 			identity_verification: { status: 'pending' }
 		} as Partial<Volunteer>);
@@ -159,8 +160,19 @@ describe('VolunteerAccessDialog for a volunteer_coordinator (#955)', () => {
 		expect(saveButton().disabled).toBe(true);
 	});
 
-	it('warns, but does not block, an unverified volunteer who has a phone (other shelters are checked server-side)', async () => {
+	it('blocks an unverified volunteer who has a phone but no national ID (the other shelter match needs both)', async () => {
 		await render(COORDINATOR, {
+			identity_verified: false,
+			identity_verification: { status: 'pending' }
+		} as Partial<Volunteer>);
+
+		expect(document.body.textContent).toContain('ออกสิทธิ์ไม่ได้');
+		expect(saveButton().disabled).toBe(true);
+	});
+
+	it('warns, but does not block, an unverified volunteer with a phone and national ID (other shelters are checked server-side)', async () => {
+		await render(COORDINATOR, {
+			national_id_hash: 'nid-hash-1',
 			identity_verified: false,
 			identity_verification: { status: 'pending' }
 		} as Partial<Volunteer>);

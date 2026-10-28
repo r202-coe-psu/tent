@@ -1,6 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as couchAdmin from './couch-admin';
-import { grantCoordinatorRole, updateUser, type CouchUserDoc } from './user-service';
+import {
+	grantCoordinatorRole,
+	revokeCoordinatorGrant,
+	updateUser,
+	type CouchUserDoc
+} from './user-service';
 import type { RoleGrant } from '$lib/auth/role-grants';
 
 type FakeUserDoc = CouchUserDoc & { password?: string; derived_key?: string };
@@ -32,6 +37,16 @@ const input = (g: RoleGrant = grant(), over: Record<string, unknown> = {}) => ({
 
 describe('coordinator role grants on _users (#955)', () => {
 	let db: Record<string, FakeUserDoc>;
+	/** Docs written outside `_users`: the shelter audits, as `[database, doc]`. */
+	let written: [string, Record<string, unknown>][];
+
+	const audits = () =>
+		written.map(([database, doc]) => ({
+			db: database,
+			reason: doc.reason,
+			target: doc.target_id,
+			context: doc.context
+		}));
 
 	function seed(name: string, doc: Partial<FakeUserDoc>) {
 		db[key(name)] = {
@@ -52,9 +67,14 @@ describe('coordinator role grants on _users (#955)', () => {
 
 	beforeEach(() => {
 		db = {};
+		written = [];
 		vi.spyOn(couchAdmin, 'bootstrapAdminName').mockReturnValue('admin');
 		vi.spyOn(couchAdmin, 'adminRaw').mockImplementation(async (path, method = 'GET', body) => {
 			const clean = path.split('?')[0];
+			if (!clean.startsWith('/_users/')) {
+				written.push([clean.split('/')[1], body as Record<string, unknown>]);
+				return { status: 201, data: { ok: true } };
+			}
 			if (method === 'GET' && clean === '/_users/_all_docs') {
 				return {
 					status: 200,
@@ -88,6 +108,14 @@ describe('coordinator role grants on _users (#955)', () => {
 		expect(doc.personnel_type).toBe('volunteer');
 		expect(doc.volunteer_id).toBe('volunteer:V1');
 		expect(doc.must_change_password).toBe(true);
+		expect(audits()).toEqual([
+			{
+				db: 'shelter_sh001',
+				reason: 'role_grant.issued',
+				target: `org.couchdb.user:${EMAIL}`,
+				context: { role: 'kitchen_staff', expires_at: grant().expires_at, actor: 'staff03' }
+			}
+		]);
 	});
 
 	it('adds a second role to an existing account without touching the password', async () => {
@@ -112,6 +140,51 @@ describe('coordinator role grants on _users (#955)', () => {
 		await grantCoordinatorRole(input(renewed));
 		expect(db[key(EMAIL)].role_grants).toEqual([renewed]);
 		expect(db[key(EMAIL)].roles).toEqual(['shelter:SH001', 'SH001:kitchen_staff']);
+		expect(audits()).toMatchObject([
+			{
+				reason: 'role_grant.renewed',
+				context: { expires_at: renewed.expires_at, previous_expires_at: grant().expires_at }
+			}
+		]);
+	});
+
+	describe('another coordinator and a grant that is not theirs', () => {
+		const mine = (over: Partial<RoleGrant> = {}) => grant('kitchen_staff', over);
+
+		it('renews it, and the grant becomes the caller', async () => {
+			seed(EMAIL, {
+				roles: ['shelter:SH001', 'SH001:kitchen_staff'],
+				role_grants: [mine({ granted_by: 'other-coord' })]
+			});
+			const renewed = mine({ expires_at: '2026-11-03T16:59:59.999Z' });
+			await grantCoordinatorRole(input(renewed));
+			expect(db[key(EMAIL)].role_grants).toEqual([renewed]);
+			expect(audits()[0]).toMatchObject({ reason: 'role_grant.renewed' });
+		});
+
+		it('refuses to shorten it (403, no write)', async () => {
+			const theirs = mine({ granted_by: 'other-coord', expires_at: '2026-11-03T16:59:59.999Z' });
+			seed(EMAIL, { roles: ['shelter:SH001', 'SH001:kitchen_staff'], role_grants: [theirs] });
+			await expect(
+				grantCoordinatorRole(input(mine({ expires_at: '2026-10-30T16:59:59.999Z' })))
+			).rejects.toMatchObject({ code: 'FORBIDDEN' });
+			expect(db[key(EMAIL)].role_grants).toEqual([theirs]);
+			expect(written).toEqual([]);
+		});
+
+		it('lets the issuer shorten their own grant, with a shortened audit', async () => {
+			const own = mine({ expires_at: '2026-11-03T16:59:59.999Z' });
+			seed(EMAIL, { roles: ['shelter:SH001', 'SH001:kitchen_staff'], role_grants: [own] });
+			const shorter = mine({ expires_at: '2026-10-30T16:59:59.999Z' });
+			await grantCoordinatorRole(input(shorter));
+			expect(db[key(EMAIL)].role_grants).toEqual([shorter]);
+			expect(audits()).toMatchObject([
+				{
+					reason: 'role_grant.shortened',
+					context: { expires_at: shorter.expires_at, previous_expires_at: own.expires_at }
+				}
+			]);
+		});
 	});
 
 	it('re-grants an account whose roles were revoked by the worker', async () => {
@@ -128,11 +201,7 @@ describe('coordinator role grants on _users (#955)', () => {
 			unchanged: true
 		});
 		expect(db[key(EMAIL)].role_grants).toBeUndefined();
-	});
-
-	it('does nothing for an account that is already the shelter manager', async () => {
-		seed(EMAIL, { roles: ['shelter:SH001', 'SH001:shelter_manager'] });
-		await expect(grantCoordinatorRole(input())).resolves.toMatchObject({ unchanged: true });
+		expect(written).toEqual([]);
 	});
 
 	it('keeps other shelters roles and grants', async () => {
@@ -149,14 +218,27 @@ describe('coordinator role grants on _users (#955)', () => {
 		expect(doc.role_grants).toEqual([other, grant()]);
 	});
 
+	// FR-7: an existing account must pass every rule, else 403 and no write of any kind.
 	it.each([
 		['a staff account', { personnel_type: 'staff' as const }],
 		['another volunteer profile', { volunteer_id: 'volunteer:OTHER' }],
 		['a deactivated account', { active: false }],
-		['a system admin', { roles: ['system_admin'] }]
-	])('refuses to extend %s', async (_label, over) => {
-		seed(EMAIL, over);
-		await expect(grantCoordinatorRole(input())).rejects.toMatchObject({ code: 'CONFLICT' });
+		['a system admin', { roles: ['system_admin'] }],
+		['a shelter manager here', { roles: ['shelter:SH001', 'SH001:shelter_manager'] }],
+		['a shelter manager elsewhere', { roles: ['shelter:SH002', 'SH002:shelter_manager'] }],
+		['a legacy flat shelter manager', { roles: ['shelter:SH002', 'shelter_manager'] }],
+		['a coordinator here', { roles: ['shelter:SH001', 'SH001:volunteer_coordinator'] }],
+		['a coordinator elsewhere', { roles: ['shelter:SH002', 'SH002:volunteer_coordinator'] }],
+		['the caller itself', { name: 'staff03' }]
+	])('refuses to extend %s (403, no write)', async (_label, over) => {
+		const name = (over as { name?: string }).name ?? EMAIL;
+		seed(name, over);
+		const before = JSON.stringify(db);
+		await expect(grantCoordinatorRole(input(grant(), { name }))).rejects.toMatchObject({
+			code: 'FORBIDDEN'
+		});
+		expect(JSON.stringify(db)).toBe(before);
+		expect(written).toEqual([]);
 	});
 
 	it('refuses a volunteer who already has a different account', async () => {
@@ -196,17 +278,29 @@ describe('coordinator role grants on _users (#955)', () => {
 		it('keeps the expiry when the role stays', async () => {
 			await updateUser(EMAIL, { roles: granted, display_name: 'ใหม่' }, sm);
 			expect(db[key(EMAIL)].role_grants).toEqual([grant(), grant('facility_staff')]);
+			expect(written).toEqual([]);
 		});
 
 		it('drops the grant of a role the manager removes', async () => {
 			await updateUser(EMAIL, { roles: ['shelter:SH001', 'SH001:facility_staff'] }, sm);
 			expect(db[key(EMAIL)].role_grants).toEqual([grant('facility_staff')]);
+			expect(audits()).toMatchObject([
+				{ reason: 'role_grant.revoked', context: { role: 'kitchen_staff', actor: 'sm01' } }
+			]);
 		});
 
-		it('makes a role permanent: grant removed, role kept', async () => {
+		it('makes a role permanent: grant removed, role kept, audited', async () => {
 			await updateUser(EMAIL, { roles: granted, permanent_roles: ['SH001:kitchen_staff'] }, sm);
 			expect(db[key(EMAIL)].roles).toEqual(granted);
 			expect(db[key(EMAIL)].role_grants).toEqual([grant('facility_staff')]);
+			expect(audits()).toEqual([
+				{
+					db: 'shelter_sh001',
+					reason: 'role_grant.made_permanent',
+					target: `org.couchdb.user:${EMAIL}`,
+					context: { role: 'kitchen_staff', expires_at: grant().expires_at, actor: 'sm01' }
+				}
+			]);
 		});
 
 		it('a system admin may make a role permanent too', async () => {
@@ -218,6 +312,74 @@ describe('coordinator role grants on _users (#955)', () => {
 			await expect(
 				updateUser(EMAIL, { roles: granted, permanent_roles: ['SH002:kitchen_staff'] }, sm)
 			).rejects.toMatchObject({ code: 'FORBIDDEN' });
+		});
+	});
+
+	describe('a coordinator revoking a grant (FR-8)', () => {
+		const revoke = (over: Record<string, unknown> = {}) =>
+			revokeCoordinatorGrant({
+				name: EMAIL,
+				volunteer_id: 'volunteer:V1',
+				shelter_code: 'SH001',
+				role: 'kitchen_staff',
+				actor: 'staff03',
+				...over
+			});
+
+		it('takes the role, its grant and the empty shelter scope; keeps the account', async () => {
+			seed(EMAIL, { roles: ['shelter:SH001', 'SH001:kitchen_staff'], role_grants: [grant()] });
+			await revoke();
+			const doc = db[key(EMAIL)];
+			expect(doc.roles).toEqual([]);
+			expect(doc.role_grants).toEqual([]);
+			expect(doc.shelter_id).toBeNull();
+			expect(doc.derived_key).toBe('keep-me');
+			expect(audits()).toMatchObject([
+				{ reason: 'role_grant.revoked', context: { role: 'kitchen_staff', actor: 'staff03' } }
+			]);
+		});
+
+		it('keeps the manager-given role and the other shelters', async () => {
+			const other = grant('kitchen_staff', { shelter_code: 'SH002' });
+			seed(EMAIL, {
+				roles: [
+					'shelter:SH001',
+					'SH001:kitchen_staff',
+					'SH001:facility_staff',
+					'shelter:SH002',
+					'SH002:kitchen_staff'
+				],
+				role_grants: [grant(), other]
+			});
+			await revoke();
+			expect(db[key(EMAIL)].roles).toEqual([
+				'shelter:SH001',
+				'SH001:facility_staff',
+				'shelter:SH002',
+				'SH002:kitchen_staff'
+			]);
+			expect(db[key(EMAIL)].role_grants).toEqual([other]);
+		});
+
+		it.each([
+			['another coordinator grant', { role_grants: [grant('kitchen_staff', { granted_by: 'x' })] }],
+			['a role a manager gave (no grant)', { role_grants: [] }],
+			['a grant for another role', { role_grants: [grant('facility_staff')] }],
+			['another volunteer profile', { volunteer_id: 'volunteer:OTHER' }]
+		])('refuses %s with 403 and no write', async (_label, over) => {
+			seed(EMAIL, {
+				roles: ['shelter:SH001', 'SH001:kitchen_staff', 'SH001:facility_staff'],
+				role_grants: [grant()],
+				...over
+			});
+			const before = JSON.stringify(db);
+			await expect(revoke()).rejects.toMatchObject({ code: 'FORBIDDEN' });
+			expect(JSON.stringify(db)).toBe(before);
+			expect(written).toEqual([]);
+		});
+
+		it('refuses a role outside the coordinator list', async () => {
+			await expect(revoke({ role: 'medical_staff' })).rejects.toMatchObject({ code: 'FORBIDDEN' });
 		});
 	});
 });

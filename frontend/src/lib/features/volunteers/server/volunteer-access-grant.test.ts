@@ -1,8 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { adminRaw, grantCoordinatorRole, shelterRefs } = vi.hoisted(() => ({
+const { adminRaw, grantCoordinatorRole, revokeCoordinatorGrant, shelterRefs } = vi.hoisted(() => ({
 	adminRaw: vi.fn(),
 	grantCoordinatorRole: vi.fn(),
+	revokeCoordinatorGrant: vi.fn(),
 	shelterRefs: vi.fn()
 }));
 
@@ -18,11 +19,14 @@ vi.mock('$lib/server/couch-admin', () => ({
 		}
 	}
 }));
-vi.mock('$lib/server/user-service', () => ({ grantCoordinatorRole }));
+vi.mock('$lib/server/user-service', () => ({ grantCoordinatorRole, revokeCoordinatorGrant }));
 vi.mock('./public-schedule-action', () => ({ shelterRefs }));
 
 import { sha256Hex } from '$lib/db/hash';
-import { grantVolunteerAccessAsCoordinator } from './volunteer-access-grant';
+import {
+	grantVolunteerAccessAsCoordinator,
+	revokeVolunteerAccessAsCoordinator
+} from './volunteer-access-grant';
 
 // 2026-10-28 in Bangkok.
 const NOW = new Date('2026-10-27T18:30:00Z');
@@ -45,6 +49,7 @@ const volunteer = (over: Record<string, unknown> = {}) => ({
 	first_name: 'สมชาย',
 	last_name: 'ใจดี',
 	phone: '0812345678',
+	national_id_hash: 'nid-hash-1',
 	identity_verified: true,
 	identity_verification: { status: 'verified' },
 	...over
@@ -63,10 +68,18 @@ function couch(local: Record<string, unknown>, others: Record<string, unknown[]>
 			name: dbName
 		}))
 	]);
-	adminRaw.mockImplementation(async (path: string) => {
+	adminRaw.mockImplementation(async (path: string, _method?: string, body?: unknown) => {
 		if (path === '/shelter_sh001/volunteer%3AV1') return { status: 200, data: local };
 		const db = path.split('/')[1];
-		if (path.endsWith('/_find') && others[db]) return { status: 200, data: { docs: others[db] } };
+		if (path.endsWith('/_find') && others[db]) {
+			const selector = (body ?? {}) as { selector?: Record<string, unknown> };
+			const wanted = Object.entries(selector.selector ?? {}).filter(([k]) => k !== 'type');
+			// Like Mango: a doc matches when every selector field equals the doc's.
+			const docs = others[db].filter((d) =>
+				wanted.every(([k, v]) => (d as Record<string, unknown>)[k] === v)
+			);
+			return { status: 200, data: { docs } };
+		}
 		return { status: 404, data: null };
 	});
 }
@@ -93,7 +106,8 @@ describe('grantVolunteerAccessAsCoordinator', () => {
 					role: 'distribution_staff',
 					expires_at: '2026-10-31T16:59:59.999Z',
 					granted_by: 'staff03',
-					granted_at: NOW.toISOString()
+					granted_at: NOW.toISOString(),
+					verified_by: { shelter_code: 'SH001', volunteer_id: 'volunteer:V1' }
 				}
 			})
 		);
@@ -121,6 +135,39 @@ describe('grantVolunteerAccessAsCoordinator', () => {
 		it('rejects a shelter the coordinator does not hold', async () => {
 			await expect(grant(body({ shelter_code: 'SH002' }))).rejects.toMatchObject({
 				code: 'FORBIDDEN'
+			});
+			expect(grantCoordinatorRole).not.toHaveBeenCalled();
+		});
+
+		it('reads the shelter from the session when the body names none', async () => {
+			await grant(body({ shelter_code: undefined }));
+			expect(grantCoordinatorRole).toHaveBeenCalledWith(
+				expect.objectContaining({ grant: expect.objectContaining({ shelter_code: 'SH001' }) })
+			);
+		});
+
+		it('makes a coordinator of two shelters name one, and rejects the one they do not hold', async () => {
+			const both = {
+				name: 'staff03',
+				roles: [
+					'shelter:SH001',
+					'SH001:volunteer_coordinator',
+					'shelter:SH002',
+					'SH002:registration_staff'
+				]
+			};
+			await expect(grant(body(), both)).resolves.toBeDefined();
+			const two = {
+				name: 'staff03',
+				roles: [
+					'shelter:SH001',
+					'SH001:volunteer_coordinator',
+					'shelter:SH002',
+					'SH002:volunteer_coordinator'
+				]
+			};
+			await expect(grant(body({ shelter_code: undefined }), two)).rejects.toMatchObject({
+				code: 'VALIDATION'
 			});
 		});
 
@@ -175,26 +222,79 @@ describe('grantVolunteerAccessAsCoordinator', () => {
 	});
 
 	describe('identity verification', () => {
-		it('rejects a volunteer not verified in this shelter and with no phone to look up', async () => {
+		it('rejects (422) a volunteer not verified here and with no phone to look up', async () => {
 			couch(unverified({ phone: null }));
-			await expect(grant()).rejects.toMatchObject({ code: 'FORBIDDEN' });
+			await expect(grant()).rejects.toMatchObject({ code: 'VALIDATION' });
 			expect(grantCoordinatorRole).not.toHaveBeenCalled();
 		});
 
-		it('rejects when no other shelter has a verified profile with the same phone', async () => {
-			couch(unverified(), { shelter_sh002: [unverified({ shelter_code: 'SH002' })] });
-			await expect(grant()).rejects.toMatchObject({ code: 'FORBIDDEN' });
+		it('rejects when no other shelter has a verified profile with the same phone and national ID', async () => {
+			couch(unverified(), {
+				shelter_sh002: [
+					unverified({ shelter_code: 'SH002', phone_hash: 'x', national_id_hash: 'y' })
+				]
+			});
+			await expect(grant()).rejects.toMatchObject({ code: 'VALIDATION' });
 		});
 
-		it('accepts a profile verified in another shelter with the same phone_hash', async () => {
+		it('accepts a profile verified in another shelter with the same phone_hash and national_id_hash', async () => {
+			const phoneHash = await sha256Hex('0812345678');
 			couch(unverified(), {
-				shelter_sh002: [volunteer({ _id: 'volunteer:V9', shelter_code: 'SH002' })]
+				shelter_sh002: [
+					volunteer({
+						_id: 'volunteer:V9',
+						shelter_code: 'SH002',
+						phone_hash: phoneHash,
+						national_id_hash: 'nid-hash-1'
+					})
+				]
 			});
 			await expect(grant()).resolves.toBeDefined();
 			expect(adminRaw).toHaveBeenCalledWith('/shelter_sh002/_find', 'POST', {
-				selector: { type: 'volunteer', phone_hash: await sha256Hex('0812345678') },
+				selector: { type: 'volunteer', phone_hash: phoneHash, national_id_hash: 'nid-hash-1' },
 				limit: 20
 			});
+			expect(grantCoordinatorRole).toHaveBeenCalledWith(
+				expect.objectContaining({
+					grant: expect.objectContaining({
+						verified_by: { shelter_code: 'SH002', volunteer_id: 'volunteer:V9' }
+					})
+				})
+			);
+		});
+
+		it('rejects (422) a profile verified elsewhere that matches the phone only', async () => {
+			const phoneHash = await sha256Hex('0812345678');
+			couch(unverified(), {
+				shelter_sh002: [
+					volunteer({
+						_id: 'volunteer:V9',
+						shelter_code: 'SH002',
+						phone_hash: phoneHash,
+						national_id_hash: 'someone-else'
+					})
+				]
+			});
+			await expect(grant()).rejects.toMatchObject({ code: 'VALIDATION' });
+			expect(grantCoordinatorRole).not.toHaveBeenCalled();
+		});
+
+		it('uses this shelter only when the profile has no national ID', async () => {
+			couch(unverified({ national_id_hash: null }), {
+				shelter_sh002: [
+					volunteer({
+						shelter_code: 'SH002',
+						phone_hash: await sha256Hex('0812345678'),
+						national_id_hash: null
+					})
+				]
+			});
+			await expect(grant()).rejects.toMatchObject({ code: 'VALIDATION' });
+			expect(adminRaw).not.toHaveBeenCalledWith(
+				expect.stringContaining('_find'),
+				expect.anything(),
+				expect.anything()
+			);
 		});
 
 		it('does not look elsewhere when the volunteer is verified here', async () => {
@@ -216,5 +316,49 @@ describe('grantVolunteerAccessAsCoordinator', () => {
 	it('rejects a bad email before reading anything', async () => {
 		await expect(grant(body({ email: 'nope' }))).rejects.toMatchObject({ code: 'VALIDATION' });
 		expect(adminRaw).not.toHaveBeenCalled();
+	});
+});
+
+describe('revokeVolunteerAccessAsCoordinator', () => {
+	const input = (over: Record<string, unknown> = {}) => ({
+		shelter_code: 'SH001',
+		volunteer_id: 'volunteer:V1',
+		email: 'vol@example.com',
+		role: 'kitchen_staff',
+		...over
+	});
+	const revoke = (i = input(), caller: { name: string; roles: string[] } = COORDINATOR) =>
+		revokeVolunteerAccessAsCoordinator(caller, i);
+
+	it('hands the account, shelter, role and the caller as the issuer to the service', async () => {
+		await revoke();
+		expect(revokeCoordinatorGrant).toHaveBeenCalledWith({
+			name: 'vol@example.com',
+			volunteer_id: 'volunteer:V1',
+			shelter_code: 'SH001',
+			role: 'kitchen_staff',
+			actor: 'staff03'
+		});
+	});
+
+	it.each([
+		['another shelter', input({ shelter_code: 'SH002' }), COORDINATOR],
+		['a role outside the four', input({ role: 'medical_staff' }), COORDINATOR],
+		[
+			'a shelter manager',
+			input(),
+			{ name: 'm', roles: ['shelter:SH001', 'SH001:shelter_manager'] }
+		],
+		['no roles', input(), { name: 'x', roles: [] }]
+	])('refuses %s with 403 and writes nothing', async (_label, i, caller) => {
+		await expect(revoke(i, caller)).rejects.toMatchObject({ code: 'FORBIDDEN' });
+		expect(revokeCoordinatorGrant).not.toHaveBeenCalled();
+	});
+
+	it('needs the account and the volunteer', async () => {
+		await expect(revoke(input({ email: '' }))).rejects.toMatchObject({ code: 'VALIDATION' });
+		await expect(revoke(input({ volunteer_id: undefined }))).rejects.toMatchObject({
+			code: 'VALIDATION'
+		});
 	});
 });
