@@ -102,6 +102,12 @@ describe('pool timeline skipped docs', () => {
 		expect(byId('bulk-return-timeline-skipped-badge')).toBeNull();
 	});
 
+	it('shows no header badge while loading', () => {
+		render({ skipped: [{ _id: 'x' }], isLoading: true });
+
+		expect(byId('bulk-return-timeline-skipped-badge')).toBeNull();
+	});
+
 	it('hides the banner while loading', () => {
 		render({ skipped: [{ _id: 'x' }], isLoading: true, expanded: true });
 
