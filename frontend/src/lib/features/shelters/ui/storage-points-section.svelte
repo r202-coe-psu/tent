@@ -7,11 +7,20 @@
 	import { Button } from '$lib/components/ui/button/index.js';
 	import * as Form from '$lib/components/ui/form/index.js';
 	import * as ToggleGroup from '$lib/components/ui/toggle-group/index.js';
+	import * as Dialog from '$lib/components/ui/dialog/index.js';
+	import { Checkbox } from '$lib/components/ui/checkbox/index.js';
+	import { DEFAULT_MAP_CENTER } from '$lib/constants/maps';
 	import { toast } from 'svelte-sonner';
 	import { ulid } from '$lib/db/ulid';
 	import Plus from '@lucide/svelte/icons/plus';
 	import Trash2 from '@lucide/svelte/icons/trash-2';
 	import Warehouse from '@lucide/svelte/icons/warehouse';
+	import MapPin from '@lucide/svelte/icons/map-pin';
+	import LocationMapPicker from './location-map-picker.svelte';
+	import { SUB_STORAGE_NOTE_MAX } from '../domain/schema';
+
+	/** Street-level zoom for the pin dialog (easy fine placement). */
+	const PIN_MAP_ZOOM = 18;
 
 	let {
 		form,
@@ -34,7 +43,16 @@
 	function addPoint() {
 		setPoints([
 			...($formData.common_areas.sub_storage ?? []),
-			{ id: ulid(), name: '', types: [], area_m2: null }
+			{
+				id: ulid(),
+				name: '',
+				types: [],
+				area_m2: null,
+				accepts_donations: false,
+				lat: null,
+				lng: null,
+				location_note: null
+			}
 		]);
 	}
 
@@ -58,6 +76,42 @@
 		const types = sortSubStorageTypes(next as SubStorageType[]);
 		const points = $formData.common_areas.sub_storage ?? [];
 		setPoints(points.map((p, i) => (i === index ? { ...p, types } : p)));
+	}
+
+	// CR-205 FR-DP-5: unticking keeps lat/lng/location_note so ticking back needs no new pin.
+	function patchPoint(id: string, patch: Partial<SubStorageItem>) {
+		setPoints(
+			($formData.common_areas.sub_storage ?? []).map((p) => (p.id === id ? { ...p, ...patch } : p))
+		);
+	}
+
+	let pinPointId = $state<string | null>(null);
+	const pinPoint = $derived(
+		($formData.common_areas.sub_storage ?? []).find((p) => p.id === pinPointId) ?? null
+	);
+	let pinDraftLat = $state<number | null>(null);
+	let pinDraftLng = $state<number | null>(null);
+
+	// FR-DP-7: the map starts at the shelter's own coordinates.
+	const pinMapCenter = $derived.by((): [number, number] => {
+		const lat = $formData.location?.lat;
+		const lng = $formData.location?.lng;
+		return lat != null && lng != null ? [Number(lng), Number(lat)] : DEFAULT_MAP_CENTER;
+	});
+
+	function openPinDialog(point: SubStorageItem) {
+		pinDraftLat = point.lat ?? null;
+		pinDraftLng = point.lng ?? null;
+		pinPointId = point.id;
+	}
+
+	function closePinDialog() {
+		pinPointId = null;
+	}
+
+	function confirmPin() {
+		if (pinPointId) patchPoint(pinPointId, { lat: pinDraftLat, lng: pinDraftLng });
+		closePinDialog();
 	}
 </script>
 
@@ -176,6 +230,63 @@
 					</ToggleGroup.Root>
 					<Form.FieldErrors />
 				</Form.Fieldset>
+
+				<div class="space-y-3 border-t border-slate-100 pt-3">
+					<label
+						class="flex cursor-pointer items-center gap-3 text-sm font-semibold text-slate-900"
+					>
+						<Checkbox
+							checked={point.accepts_donations}
+							onCheckedChange={(v) => patchPoint(point.id, { accepts_donations: v === true })}
+							{disabled}
+							aria-label="ใช้เป็นจุดรับบริจาค"
+						/>
+						ใช้เป็นจุดรับบริจาค
+					</label>
+
+					{#if point.accepts_donations}
+						<div class="flex flex-wrap items-center gap-3">
+							<Button
+								type="button"
+								variant="outline"
+								size="sm"
+								onclick={() => openPinDialog(point)}
+								{disabled}
+							>
+								<MapPin class="mr-1 h-4 w-4" />
+								ปักหมุดตำแหน่ง
+							</Button>
+							<span class="text-xs text-muted-foreground">
+								{#if point.lat != null && point.lng != null}
+									พิกัดปัจจุบัน: {point.lat}, {point.lng}
+								{:else}
+									ยังไม่ได้ปักหมุด
+								{/if}
+							</span>
+						</div>
+						<Form.Field {form} name={`common_areas.sub_storage[${i}].lat`}>
+							<Form.FieldErrors />
+						</Form.Field>
+
+						<Form.Field {form} name={`common_areas.sub_storage[${i}].location_note`}>
+							<Form.Control>
+								{#snippet children({ props })}
+									<Form.Label>คำอธิบายตำแหน่งสำหรับผู้มาส่ง</Form.Label>
+									<Input
+										{...props}
+										value={point.location_note ?? ''}
+										oninput={(e) => patchPoint(point.id, { location_note: e.currentTarget.value })}
+										placeholder="เช่น ประตู 2 ข้างโรงยิม"
+										maxlength={SUB_STORAGE_NOTE_MAX}
+										class="bg-white"
+										{disabled}
+									/>
+								{/snippet}
+							</Form.Control>
+							<Form.FieldErrors />
+						</Form.Field>
+					{/if}
+				</div>
 			</div>
 		{:else}
 			<p class="py-4 text-center text-sm text-muted-foreground">
@@ -184,3 +295,40 @@
 		{/each}
 	</div>
 </section>
+
+<Dialog.Root
+	open={pinPointId !== null}
+	onOpenChange={(open) => {
+		if (!open) closePinDialog();
+	}}
+>
+	<Dialog.Content class="sm:max-w-2xl">
+		<Dialog.Header>
+			<Dialog.Title>ปักหมุดจุดรับบริจาค</Dialog.Title>
+			<Dialog.Description>
+				{pinPoint?.name?.trim() ? pinPoint.name : 'เลือกตำแหน่งบนแผนที่ หรือกรอกพิกัด'}
+			</Dialog.Description>
+		</Dialog.Header>
+
+		{#if pinPoint}
+			{#key pinPoint.id}
+				<LocationMapPicker
+					lat={pinDraftLat}
+					lng={pinDraftLng}
+					center={pinMapCenter}
+					zoom={PIN_MAP_ZOOM}
+					{disabled}
+					onchange={(lat, lng) => {
+						pinDraftLat = lat;
+						pinDraftLng = lng;
+					}}
+				/>
+			{/key}
+		{/if}
+
+		<Dialog.Footer class="gap-2">
+			<Button type="button" variant="outline" onclick={closePinDialog}>ยกเลิก</Button>
+			<Button type="button" onclick={confirmPin}>ยืนยันปักหมุด</Button>
+		</Dialog.Footer>
+	</Dialog.Content>
+</Dialog.Root>

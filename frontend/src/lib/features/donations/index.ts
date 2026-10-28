@@ -52,9 +52,15 @@ export {
 	rejectedLineReasons
 } from './domain/tracking';
 // Domain — drop-off destination (#590)
-export type { DropOffGeo, DropOffPoint, DropOffShelterSource } from './domain/drop-off';
+export type {
+	DonationPointSource,
+	DropOffGeo,
+	DropOffPoint,
+	DropOffShelterSource
+} from './domain/drop-off';
 export {
 	dropOffDirectionsUrl,
+	listDropOffPoints,
 	needsDropOffDestination,
 	resolveDropOffPoint
 } from './domain/drop-off';

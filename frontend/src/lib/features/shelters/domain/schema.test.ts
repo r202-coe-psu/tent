@@ -33,6 +33,8 @@ const validShelterInput = {
 	zones: []
 };
 
+const NO_DROP_OFF = { accepts_donations: false, lat: null, lng: null, location_note: null };
+
 describe('shelterSchema', () => {
 	it('accepts minimal valid shelter', () => {
 		const s = shelterSchema.parse(validShelterInput);
@@ -963,7 +965,7 @@ describe('CR-023 — migrate v3 → v4 default-fill', () => {
 		expect(m.risk?.secondary_muster_point).toBeNull();
 		expect(m.zones?.[0].area_m2).toBeNull();
 		expect(m.common_areas?.sub_storage).toEqual([
-			{ id: 'legacy-0', name: 'S', types: ['general'], area_m2: null }
+			{ id: 'legacy-0', name: 'S', types: ['general'], area_m2: null, ...NO_DROP_OFF }
 		]);
 	});
 });
@@ -1195,8 +1197,8 @@ describe('CR-199 — migrate v7 → v8 sub_storage type → types[]', () => {
 		const m = migrateShelterV2ToCurrent(v7doc);
 		expect(m.schema_v).toBe(SHELTER_MASTER_SCHEMA_V);
 		expect(m.common_areas?.sub_storage).toEqual([
-			{ id: 's1', name: 'คลังยา', types: ['medical_supplies'], area_m2: null },
-			{ id: 's2', name: 'ห้องเก็บของกลาง', types: ['food_dry'] }
+			{ id: 's1', name: 'คลังยา', types: ['medical_supplies'], area_m2: null, ...NO_DROP_OFF },
+			{ id: 's2', name: 'ห้องเก็บของกลาง', types: ['food_dry'], ...NO_DROP_OFF }
 		]);
 	});
 
@@ -1216,5 +1218,157 @@ describe('CR-199 — migrate v7 → v8 sub_storage type → types[]', () => {
 		const m = migrateShelterV2ToCurrent(v7doc);
 		const keys = (m.common_areas?.sub_storage ?? []).flatMap((p) => p.types);
 		expect(keys).toEqual(['medical_supplies', 'food_dry']);
+	});
+});
+
+describe('CR-205 — storage point drop-off fields', () => {
+	const base = { id: 's1', name: 'โรงยิม', types: ['general'] };
+
+	it('defaults missing keys to not accepting donations, no pin, no note (AC-1)', () => {
+		expect(subStorageItemSchema.parse(base)).toMatchObject(NO_DROP_OFF);
+	});
+
+	it('accepts a ticked point with a pin and trims the note (AC-3)', () => {
+		const p = subStorageItemSchema.parse({
+			...base,
+			accepts_donations: true,
+			lat: 7.0086,
+			lng: 100.4747,
+			location_note: '  ประตู 2  '
+		});
+		expect(p).toMatchObject({ accepts_donations: true, lat: 7.0086, lng: 100.4747 });
+		expect(p.location_note).toBe('ประตู 2');
+	});
+
+	it('turns a blank note into null (FR-DP-4)', () => {
+		expect(subStorageItemSchema.parse({ ...base, location_note: '   ' }).location_note).toBeNull();
+	});
+
+	it('rejects a note over 200 characters', () => {
+		const r = subStorageItemSchema.safeParse({ ...base, location_note: 'ก'.repeat(201) });
+		expect(r.success).toBe(false);
+	});
+
+	it('refuses a ticked point without a pin, error path .lat (AC-2)', () => {
+		for (const pin of [{}, { lat: 7, lng: null }, { lat: null, lng: 100 }]) {
+			const r = subStorageItemSchema.safeParse({ ...base, accepts_donations: true, ...pin });
+			expect(r.success).toBe(false);
+			expect(r.error?.issues.map((i) => i.path.join('.'))).toContain('lat');
+		}
+	});
+
+	it('allows an unticked point with no pin', () => {
+		expect(subStorageItemSchema.safeParse({ ...base, accepts_donations: false }).success).toBe(
+			true
+		);
+	});
+
+	it('refuses coordinates out of range (FR-DP-3)', () => {
+		expect(subStorageItemSchema.safeParse({ ...base, lat: 91, lng: 0 }).success).toBe(false);
+		expect(subStorageItemSchema.safeParse({ ...base, lat: 0, lng: 181 }).success).toBe(false);
+		expect(subStorageItemSchema.safeParse({ ...base, lat: -90, lng: -180 }).success).toBe(true);
+	});
+
+	it('refuses (0, 0) whether or not the point is ticked (AC-9)', () => {
+		for (const accepts_donations of [true, false]) {
+			const r = subStorageItemSchema.safeParse({ ...base, accepts_donations, lat: 0, lng: 0 });
+			expect(r.success).toBe(false);
+			expect(r.error?.issues.map((i) => i.path.join('.'))).toContain('lat');
+		}
+		expect(subStorageItemSchema.safeParse({ ...base, lat: 0, lng: 100 }).success).toBe(true);
+	});
+
+	it('keeps the pin and note when unticked (AC-4)', () => {
+		const p = subStorageItemSchema.parse({
+			...base,
+			accepts_donations: false,
+			lat: 7,
+			lng: 100,
+			location_note: 'ประตู 2'
+		});
+		expect(p).toMatchObject({ lat: 7, lng: 100, location_note: 'ประตู 2' });
+	});
+});
+
+describe('CR-205 — migrate to schema_v 9', () => {
+	const doc = (schema_v: number, sub_storage: unknown[]) =>
+		({
+			_id: 'shelter:x',
+			type: 'shelter',
+			schema_v,
+			code: 'SH001',
+			name: 'X',
+			site_kind: 'evacuation_center',
+			operation_status: 'standby',
+			capacity: 10,
+			zones: [],
+			food_distribution_points: [],
+			common_areas: { sub_storage },
+			created_at: '2024-01-01T00:00:00Z',
+			updated_at: '2024-01-01T00:00:00Z'
+		}) as unknown as ShelterMasterV2;
+
+	it('is schema_v 9', () => {
+		expect(SHELTER_MASTER_SCHEMA_V).toBe(9);
+	});
+
+	it('v8 → v9 fills the defaults (AC-1)', () => {
+		const m = migrateShelterV2ToCurrent(
+			doc(8, [{ id: 's1', name: 'คลังยา', types: ['medical_supplies'] }])
+		);
+		expect(m.schema_v).toBe(9);
+		expect(m.common_areas?.sub_storage?.[0]).toMatchObject(NO_DROP_OFF);
+	});
+
+	it('v7 with a single `type` ends at v9 with types[] and the defaults (AC-10)', () => {
+		const m = migrateShelterV2ToCurrent(doc(7, [{ id: 's1', name: 'คลังยา', type: 'food_dry' }]));
+		expect(m.schema_v).toBe(9);
+		expect(m.common_areas?.sub_storage?.[0]).toEqual({
+			id: 's1',
+			name: 'คลังยา',
+			types: ['food_dry'],
+			...NO_DROP_OFF
+		});
+	});
+
+	it('v6 without ids ends at v9 with legacy ids, types[] and the defaults', () => {
+		const m = migrateShelterV2ToCurrent(doc(6, [{ name: 'คลังยา', type: 'food_dry' }]));
+		expect(m.schema_v).toBe(9);
+		expect(m.common_areas?.sub_storage?.[0]).toEqual({
+			id: 'legacy-0',
+			name: 'คลังยา',
+			types: ['food_dry'],
+			...NO_DROP_OFF
+		});
+	});
+
+	it('does not overwrite a pin that is already there', () => {
+		const m = migrateShelterV2ToCurrent(
+			doc(8, [
+				{
+					id: 's1',
+					name: 'โรงยิม',
+					types: ['general'],
+					accepts_donations: true,
+					lat: 7,
+					lng: 100,
+					location_note: 'ประตู 2'
+				}
+			])
+		);
+		expect(m.common_areas?.sub_storage?.[0]).toMatchObject({
+			accepts_donations: true,
+			lat: 7,
+			lng: 100,
+			location_note: 'ประตู 2'
+		});
+	});
+
+	it('fills a doc stamped 9 that lacks the keys, and is then identity-stable', () => {
+		const stamped = doc(9, [{ id: 's1', name: 'โรงยิม', types: ['general'] }]);
+		const m = migrateShelterV2ToCurrent(stamped);
+		expect(m).not.toBe(stamped);
+		expect(m.common_areas?.sub_storage?.[0]).toMatchObject(NO_DROP_OFF);
+		expect(migrateShelterV2ToCurrent(m)).toBe(m);
 	});
 });

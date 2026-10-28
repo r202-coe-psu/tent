@@ -29,7 +29,7 @@ import {
 	ZONE_TYPE_CHOICES
 } from './columns';
 import type { EnumChoice, MasterColumn } from './columns';
-import type { PetCategory, SubStorageType, VehicleType } from '$lib/features/shelters';
+import type { PetCategory, SubStorageItem, VehicleType } from '$lib/features/shelters';
 import { findInFileDuplicates } from './duplicates';
 
 /**
@@ -321,7 +321,7 @@ function resolveSubStorage(raw: RawRow, sink: ErrorSink) {
 	// CR-199: schema takes `types[]` — import format stays
 	// single-type-per-cell (no requirement yet to express multiple types per row in the
 	// workbook).
-	const out: { id: string; name: string; types: SubStorageType[]; area_m2: number | null }[] = [];
+	const out: SubStorageItem[] = [];
 	for (const item of splitMulti(cell(raw, H.sub_storage))) {
 		const [rawName = '', rawType = '', rawArea = ''] = item
 			.split(FIELD_SEPARATOR)
@@ -352,7 +352,17 @@ function resolveSubStorage(raw: RawRow, sink: ErrorSink) {
 			area = n;
 		}
 		// Stock ledger lots reference storage points by id (shelter schema_v 7).
-		out.push({ id: ulid(), name: rawName, types: [type], area_m2: area });
+		// CR-205 FR-DP-10: imported points never accept donations; staff pin them in the form.
+		out.push({
+			id: ulid(),
+			name: rawName,
+			types: [type],
+			area_m2: area,
+			accepts_donations: false,
+			lat: null,
+			lng: null,
+			location_note: null
+		});
 	}
 	return out;
 }

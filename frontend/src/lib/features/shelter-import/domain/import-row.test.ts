@@ -28,6 +28,8 @@ function baseRow(over: Partial<RawRow> = {}): RawRow {
 	return { [H.name]: 'ศูนย์ทดสอบ', [H.capacity]: '150', ...over };
 }
 
+const NOT_A_DROP_OFF = { accepts_donations: false, lat: null, lng: null, location_note: null };
+
 describe('validateRow — happy path', () => {
 	it('maps a minimal valid row to a shelter payload', () => {
 		const r = validateRow(baseRow(), 1, emptyLookups());
@@ -289,8 +291,20 @@ describe('validateRow — sub storage list', () => {
 		);
 		expect(r.ok).toBe(true);
 		expect(r.shelter?.common_areas.sub_storage).toEqual([
-			{ id: expect.any(String), name: 'คลังหน้าอาคาร', types: ['food_dry'], area_m2: 20 },
-			{ id: expect.any(String), name: 'คลังยา', types: ['medical_supplies'], area_m2: null }
+			{
+				id: expect.any(String),
+				name: 'คลังหน้าอาคาร',
+				types: ['food_dry'],
+				area_m2: 20,
+				...NOT_A_DROP_OFF
+			},
+			{
+				id: expect.any(String),
+				name: 'คลังยา',
+				types: ['medical_supplies'],
+				area_m2: null,
+				...NOT_A_DROP_OFF
+			}
 		]);
 	});
 
