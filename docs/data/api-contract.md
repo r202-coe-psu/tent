@@ -393,8 +393,8 @@ Out of scope: claim สัตว์เลี้ยง, ความจุศู�
 
 | Endpoint | ผู้เรียกที่รับ (scope ศูนย์ตัวเอง; SA ทุกศูนย์) |
 | --- | --- |
-| `GET /api/v1/kiosk/devices` | `shelter_manager` · `kiosk_staff` · `pr_staff` (`BANNER_MANAGER_CAPABILITIES`) |
-| `POST /api/v1/kiosk/devices/[id]/staff-pin/reveal` | `shelter_manager` · `kiosk_staff` · `pr_staff` — log `by=` ทุกครั้ง (ไม่ log ค่า PIN) |
+| `GET /api/v1/kiosk/devices` | `shelter_manager` · `kiosk_staff` · `pr_staff` (`DEVICE_VIEWER_CAPABILITIES`) |
+| `POST /api/v1/kiosk/devices/[id]/staff-pin/reveal` | `shelter_manager` · `kiosk_staff` · `pr_staff` (`DEVICE_VIEWER_CAPABILITIES`) — log `by=` ทุกครั้ง (ไม่ log ค่า PIN) |
 | `POST /api/v1/kiosk/devices` · `PATCH` / `DELETE /api/v1/kiosk/devices/[id]` · `POST .../staff-pin` | `shelter_manager` · `kiosk_staff` (`SCANNER_MANAGER_CAPABILITIES`) — `pr_staff` ได้ `403 FORBIDDEN` |
 
 ศูนย์นอก scope: list `403` · `[id]` `404` (เหมือนเดิม).
