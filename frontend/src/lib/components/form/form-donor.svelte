@@ -280,7 +280,8 @@
 							<input
 								type="number"
 								id="amount-{item.id}"
-								min="1"
+								min="0"
+								step="any"
 								bind:value={item.amount}
 								class="w-full rounded-xl border-2 border-slate-200 bg-white p-3 font-bold text-slate-800 outline-hidden transition-colors focus:border-domain-donation-strong"
 							/>

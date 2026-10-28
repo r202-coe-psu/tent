@@ -106,14 +106,15 @@ describe('form-donor quantity (#822)', () => {
 		expect(document.body.textContent).not.toContain(amountMsg(1));
 	});
 
-	it('keeps min=1 and shows the shortfall hint for need-derived items only', () => {
+	it('allows fractional amounts and shows the shortfall hint for need-derived items only', () => {
 		store.items = [
 			newDonationItem({ name: 'ไข่ไก่', unit: 'ฟอง', unit_code: 'piece', qty_needed: 365 }),
 			newDonationItem({ name: 'อื่น', unit: 'kg' })
 		];
 		render();
 		const first = document.getElementById(`amount-${store.items[0].id}`) as HTMLInputElement;
-		expect(first.getAttribute('min')).toBe('1');
+		expect(first.getAttribute('min')).toBe('0');
+		expect(first.getAttribute('step')).toBe('any');
 		expect(first.value).toBe('0');
 		const hint = document.querySelector(`[data-testid="need-shortage-${store.items[0].id}"]`);
 		expect(hint?.textContent).toContain('ยังขาด 365');
