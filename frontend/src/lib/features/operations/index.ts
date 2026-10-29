@@ -94,6 +94,8 @@ export {
 	StockLotIntegrityError,
 	LotWriteOffError,
 	projectLotsByItem,
+	isNegativeLot,
+	negativeLots,
 	TransferForbiddenError,
 	adjustInputSchema,
 	createAdjustEntry,

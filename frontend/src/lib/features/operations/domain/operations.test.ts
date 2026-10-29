@@ -40,6 +40,9 @@ import {
 	projectStockLotBalances,
 	sortStockLotsByConsumptionOrder,
 	StockLotIntegrityError,
+	isNegativeLot,
+	negativeLots,
+	projectLotsByItem,
 	createTransfer,
 	dispatchTransfer,
 	receiveTransfer,
@@ -2390,13 +2393,56 @@ describe('projectStockLotBalances', () => {
 		]);
 	});
 
-	it('fails closed for impossible legacy history', () => {
+	it('attaches the shortfall of a legacy outbound row to the last lot it consumed (#855)', () => {
+		const balances = projectStockLotBalances([
+			legacyInbound('A', '2', '2026-01-01T00:00:00Z'),
+			legacyOutbound('OUT', '3', '2026-02-01T00:00:00Z')
+		]);
+		expect(balances).toHaveLength(1);
+		expect(balances[0].qty).toBe('-1');
+		expect(isNegativeLot(balances[0])).toBe(true);
+	});
+
+	it('lets a lot_ref outbound row overdraw its lot without clamping (#855)', () => {
+		const a = inbound('A', '5', '2026-01-01T00:00:00Z');
+		const b = inbound('B', '9', '2026-01-02T00:00:00Z');
+		const out = createDistributeEntry(
+			{
+				note: 'x',
+				item_id: 'item:rice',
+				qty: '8',
+				unit: 'kg',
+				ref_id: 'requisition_ticket:TICKET1',
+				lot_ref: a.lot_ref!,
+				occurred_at: '2026-02-01T00:00:00Z'
+			},
+			ctx,
+			'OUT-OVER'
+		);
+		const balances = projectStockLotBalances([a, b, out]);
+		expect(balances.find((l) => l.lot_ref === a.lot_ref)?.qty).toBe('-3');
+		expect(balances.find((l) => l.lot_ref === b.lot_ref)?.qty).toBe('9');
+		expect(negativeLots(balances).map((l) => l.lot_ref)).toEqual([a.lot_ref]);
+	});
+
+	it('still fails closed when a legacy outbound has no lot to consume', () => {
 		expect(() =>
-			projectStockLotBalances([
-				legacyInbound('A', '2', '2026-01-01T00:00:00Z'),
-				legacyOutbound('OUT', '3', '2026-02-01T00:00:00Z')
-			])
+			projectStockLotBalances([legacyOutbound('OUT', '3', '2026-02-01T00:00:00Z')])
 		).toThrow(StockLotIntegrityError);
+	});
+
+	it('still fails closed for an outbound naming an unknown lot', () => {
+		const a = inbound('A', '5', '2026-02-01T00:00:00Z');
+		const out = { ...legacyOutbound('OUT', '1', '2026-01-01T00:00:00Z'), lot_ref: a.lot_ref };
+		expect(() => projectStockLotBalances([a, out])).toThrow(StockLotIntegrityError);
+	});
+
+	it('projectLotsByItem reports a negative lot as a lot, not as a broken item', () => {
+		const a = inbound('A', '2', '2026-01-01T00:00:00Z');
+		const out = legacyOutbound('OUT', '3', '2026-02-01T00:00:00Z');
+		const { lots, brokenItemIds } = projectLotsByItem([a, out]);
+		expect(brokenItemIds).toEqual([]);
+		expect(lots.map((l) => l.qty)).toEqual(['-1']);
 	});
 });
 
