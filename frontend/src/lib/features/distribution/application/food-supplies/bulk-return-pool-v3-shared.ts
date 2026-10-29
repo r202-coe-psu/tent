@@ -354,6 +354,18 @@ export async function loadSnapshotPinsForWrite(
 	if (ownPoolId !== undefined) poolIds.delete(ownPoolId);
 	const ids = [...poolIds];
 	const pools = await Promise.all(ids.map((id) => poolRepo.get(id)));
+	return snapshotPinsFromReadPools(ids, pools);
+}
+
+/**
+ * Builds the pins from pools that were already read (`pools[i]` is the read of `ids[i]`), with the
+ * same fail-closed rule as `loadSnapshotPinsForWrite`: any null read throws
+ * `DistributionDataIntegrityError` naming those ids.
+ */
+export function snapshotPinsFromReadPools(
+	ids: readonly string[],
+	pools: readonly (BulkReturnPoolV3 | null)[]
+): Map<string, string> {
 	const unreadable = ids.filter((_, i) => pools[i] === null);
 	if (unreadable.length > 0) {
 		throw new DistributionDataIntegrityError(unreadable, 'referenced bulk return pool unreadable');

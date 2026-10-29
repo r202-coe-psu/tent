@@ -112,6 +112,9 @@ export function formatDistributionError(
 		return 'กองนี้ไม่ได้อยู่ในสถานะเปิดรับ หรือกำลังถูกดำเนินการอยู่ จึงทำรายการนี้ไม่ได้ กรุณารีเฟรชแล้วตรวจสอบสถานะล่าสุด';
 	}
 	if (err instanceof BulkReturnPoolLockTimeoutError) {
+		if (err.blockingPoolId) {
+			return 'มีกองอื่นที่เกี่ยวข้องกำลังถูกส่งเข้าคลังอยู่ กรุณารอสักครู่แล้วลองอีกครั้ง';
+		}
 		return 'กองนี้กำลังถูกส่งเข้าคลังอยู่ ระบบยังยืนยันรายการไม่ได้ กรุณารอสักครู่แล้วกดบันทึกอีกครั้ง';
 	}
 	if (err instanceof BulkReturnPoolNotEmptyError) {

@@ -497,9 +497,12 @@ describe('bulk return pool v3 — submit vs move across pools (snapshot pins of 
 		await setLock(poolA._id, 'SUBMIT', U(901), '2026-01-01T00:00:00.000Z');
 		const { clock, sleeps } = virtualClock();
 
-		await expect(
-			submitBulkReturnPool(poolB._id, U(902), mgr, { ...deps, fenceClock: clock })
-		).rejects.toBeInstanceOf(BulkReturnPoolLockTimeoutError);
+		const err = await submitBulkReturnPool(poolB._id, U(902), mgr, {
+			...deps,
+			fenceClock: clock
+		}).catch((e) => e);
+		expect(err).toBeInstanceOf(BulkReturnPoolLockTimeoutError);
+		expect((err as BulkReturnPoolLockTimeoutError).blockingPoolId).toBe(poolA._id);
 
 		expect(clock.now()).toBeGreaterThanOrEqual(POOL_FENCE_SETTLE_TIMEOUT_MS);
 		expect(sleeps()).toBeLessThan(50);

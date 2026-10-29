@@ -91,11 +91,15 @@ export class BulkReturnPoolStateError extends WorkflowError {
  * The fence waited `POOL_FENCE_SETTLE_TIMEOUT_MS` for a pool's submit / cancel lock to clear and it
  * did not (the other operation is slow or crashed). Nothing about the loans was decided: retrying
  * with the same operationUlid is safe and settles the entry once the lock is gone.
+ * `blockingPoolId` is set when a submit waited on ANOTHER pool's SUBMIT lock.
  */
 export class BulkReturnPoolLockTimeoutError extends WorkflowError {
-	constructor(message: string) {
+	readonly blockingPoolId?: string;
+
+	constructor(message: string, options?: { blockingPoolId?: string }) {
 		super(message);
 		this.name = 'BulkReturnPoolLockTimeoutError';
+		this.blockingPoolId = options?.blockingPoolId;
 	}
 }
 

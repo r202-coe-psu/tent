@@ -100,6 +100,15 @@ describe('formatDistributionError', () => {
 		);
 	});
 
+	it('names another pool being submitted when the lock timeout carries a blocking pool', () => {
+		const err = new BulkReturnPoolLockTimeoutError('Timed out waiting for pool lock', {
+			blockingPoolId: 'pool:other'
+		});
+		expect(formatDistributionError(err)).toBe(
+			'มีกองอื่นที่เกี่ยวข้องกำลังถูกส่งเข้าคลังอยู่ กรุณารอสักครู่แล้วลองอีกครั้ง'
+		);
+	});
+
 	it('maps BulkReturnPoolNotEmptyError to Thai copy telling to move items out', () => {
 		const err = new BulkReturnPoolNotEmptyError('Pool has live entries');
 		expect(formatDistributionError(err)).toContain('ย้ายของออกให้หมดก่อน');

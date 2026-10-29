@@ -469,6 +469,26 @@ describe('bulk return pool v3 workflows', () => {
 			expect(again.replayed).toBe(true);
 		});
 
+		it('repairs the ledger of a RECEIVED pool by replay even when the pins changed since', async () => {
+			const { poolA, poolB } = await doubleCounted();
+			const input = { items: [{ item_id: 'item:cot', received_qty: '1' }] };
+			const first = await receive(poolB._id, input);
+			const [row] = first.ledgerEntries;
+			couch.store.delete(row._id);
+			expect(ledgerKeys()).toEqual([]);
+
+			// Pool A now looks newer than B, so the receivable cap of B would be the full snapshot.
+			couch.store.set(poolA._id, {
+				...couch.store.get(poolA._id),
+				submitted_at: '2026-01-03T00:00:00.000Z'
+			} as never);
+
+			const again = await receive(poolB._id, input);
+			expect(again.replayed).toBe(true);
+			expect(ledgerKeys()).toEqual([row._id]);
+			expect(await balanceOf()).toEqual({ 'item:cot': '1' });
+		});
+
 		it('still receives the entry in the older pool that owns it', async () => {
 			const { poolA } = await doubleCounted();
 			const res = await receive(poolA._id, { items: [{ item_id: 'item:cot', received_qty: '2' }] });

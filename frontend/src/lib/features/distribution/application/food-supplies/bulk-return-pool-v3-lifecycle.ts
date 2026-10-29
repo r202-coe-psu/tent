@@ -56,6 +56,7 @@ import {
 	POOL_FENCE_SETTLE_TIMEOUT_MS,
 	requirePool,
 	resolveDependencies,
+	snapshotPinsFromReadPools,
 	type BulkReturnPoolV3WorkflowDependencies,
 	type FenceClock
 } from './bulk-return-pool-v3-shared';
@@ -303,7 +304,8 @@ export async function cancelBulkReturnPool(
  * at the same time wait on each other until both time out; that ends in
  * `BulkReturnPoolLockTimeoutError` (each releases its own lock, the user submits again), never in a
  * double count. CANCEL locks are not waited for (a cancel writes no snapshot). Uses the same
- * backoff and timeout as the fence.
+ * backoff and timeout as the fence. Returns the referenced pool ids with the pools read on the
+ * final (non-blocking) pass; the pins are built from those reads, with no further read.
  */
 async function waitForReferencedSubmitLocks(
 	poolRepo: BulkReturnPoolV3Repository,
@@ -314,7 +316,7 @@ async function waitForReferencedSubmitLocks(
 	},
 	ownPoolId: string,
 	clock: FenceClock
-): Promise<void> {
+): Promise<{ ids: string[]; pools: (BulkReturnPoolV3 | null)[] }> {
 	const otherIds = [
 		...new Set([
 			...events.entries.map((e) => e.pool_id),
@@ -322,7 +324,7 @@ async function waitForReferencedSubmitLocks(
 			...events.voids.map((v) => v.pool_id)
 		])
 	].filter((id) => id !== ownPoolId);
-	if (otherIds.length === 0) return;
+	if (otherIds.length === 0) return { ids: [], pools: [] };
 
 	const deadline = clock.now() + POOL_FENCE_SETTLE_TIMEOUT_MS;
 	for (let attempt = 0; ; attempt++) {
@@ -330,10 +332,11 @@ async function waitForReferencedSubmitLocks(
 		const blocking = pools.find(
 			(p) => p !== null && p.lock?.op === 'SUBMIT' && p.status === 'OPEN'
 		);
-		if (!blocking) return;
+		if (!blocking) return { ids: otherIds, pools };
 		if (clock.now() >= deadline) {
 			throw new BulkReturnPoolLockTimeoutError(
-				`Bulk return pool ${blocking._id} is still locked for SUBMIT after ${POOL_FENCE_SETTLE_TIMEOUT_MS}ms; retry with the same operationUlid`
+				`Bulk return pool ${blocking._id} is still locked for SUBMIT after ${POOL_FENCE_SETTLE_TIMEOUT_MS}ms; retry with the same operationUlid`,
+				{ blockingPoolId: blocking._id }
 			);
 		}
 		const delay = POOL_FENCE_BACKOFF_MS[Math.min(attempt, POOL_FENCE_BACKOFF_MS.length - 1)];
@@ -407,9 +410,9 @@ export async function submitBulkReturnPool(
 		const events = await eventRepo.listForPool(poolId);
 		// Fail closed: a skipped doc would drop an entry from (or add a voided one to) the snapshot.
 		assertNoSkippedDocs(events.skipped, `bulk return pool ${poolId}`);
-		await waitForReferencedSubmitLocks(poolRepo, events, poolId, fenceClock);
+		const read = await waitForReferencedSubmitLocks(poolRepo, events, poolId, fenceClock);
 		// Entries pinned to another closed pool's snapshot are never re-counted here.
-		const pins = await loadSnapshotPinsForWrite(poolRepo, events, poolId);
+		const pins = snapshotPinsFromReadPools(read.ids, read.pools);
 		snapshot = {
 			items_summary: summarizePoolItems(events.entries, events.moves, poolId, events.voids, pins),
 			entry_ids: poolSnapshotEntryIds(
@@ -534,8 +537,9 @@ async function persistBulkReceiveLedger(
  * pinned entries only: an entry in `entry_ids` that is pinned to ANOTHER pool (earliest
  * `submitted_at` wins) is excluded, so a double-counted entry can never be received twice. When the
  * received qty equals the pinned qty but is below the snapshot qty, the row is recorded as
- * `miscount` with a deterministic note unless the caller sent a reason. The same receivable summary
- * is used for a RECEIVED pool so an identical retry still matches the stored record.
+ * `miscount` with a deterministic note unless the caller sent a reason. The cap is computed and
+ * enforced only for a SUBMITTED pool. For a RECEIVED pool the stored received qty is the cap of an
+ * item whose input qty equals it, so an identical retry still matches the stored record.
  */
 export async function receiveBulkReturnPool(
 	poolId: string,
@@ -564,10 +568,27 @@ export async function receiveBulkReturnPool(
 
 	// --- pure validation, before any write ---
 	// Own pool is included in the pins so submitted_at is compared against the other pools.
-	const events = await eventRepo.listForPool(poolId);
-	assertNoSkippedDocs(events.skipped, `bulk return pool ${poolId}`);
-	const pins = await loadSnapshotPinsForWrite(poolRepo, events);
-	const receivable = pinnedItemsSummary(pool, events.entries, pins);
+	// The receivable cap is enforced only while the pool is SUBMITTED. A RECEIVED pool is already
+	// committed: its input is matched against the stored record, so a ledger repair replay never
+	// depends on the current pins.
+	let receivable: ReturnType<typeof pinnedItemsSummary>;
+	if (pool.status === 'SUBMITTED') {
+		const events = await eventRepo.listForPool(poolId);
+		assertNoSkippedDocs(events.skipped, `bulk return pool ${poolId}`);
+		const pins = await loadSnapshotPinsForWrite(poolRepo, events);
+		receivable = pinnedItemsSummary(pool, events.entries, pins);
+	} else {
+		const stored = new Map(
+			(pool.received_items ?? []).map((row) => [row.item_id, row.received_qty])
+		);
+		const sent = new Map(input.items.map((row) => [row.item_id, String(row.received_qty)]));
+		receivable = (pool.items_summary ?? []).map((row) => {
+			const storedQty = stored.get(row.item_id);
+			return storedQty !== undefined && sent.get(row.item_id) === storedQty
+				? { item_id: row.item_id, qty: storedQty }
+				: row;
+		});
+	}
 	let received: BulkReturnPoolReceivedItem[];
 	try {
 		received = buildBulkReturnReceivedItems(pool.items_summary ?? [], input.items, receivable);
