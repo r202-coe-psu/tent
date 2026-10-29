@@ -1,24 +1,18 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { fastapiBaseUrl, fastapiServiceHeaders } from '$lib/server/fastapi';
+import { cancelTicket, TicketCancelError } from '$lib/features/volunteers/server/public-ticket';
 
 /** "ขอยกเลิกการสมัครล่วงหน้า" on the pass (CR-092 FR-VOL-03.3). */
-export const POST: RequestHandler = async ({ params, fetch }) => {
+export const POST: RequestHandler = async ({ params, request }) => {
 	try {
-		const res = await fetch(
-			`${fastapiBaseUrl()}/public/v1/volunteer/ticket/${encodeURIComponent(params.token)}/cancel`,
-			{ method: 'POST', headers: fastapiServiceHeaders() }
-		);
-		if (!res.ok) {
-			const body = (await res.json().catch(() => ({}))) as { errors?: Array<{ error?: string }> };
-			const code = body.errors?.[0]?.error;
-			return json(
-				{ success: false, error: code ?? 'CANCEL_FAILED' },
-				{ status: res.status >= 400 ? res.status : 502 }
-			);
+		const body = (await request.json().catch(() => null)) as { application_id?: unknown } | null;
+		const applicationId = typeof body?.application_id === 'string' ? body.application_id : '';
+		await cancelTicket(params.token.trim(), applicationId);
+		return json({ success: true, message: 'Application cancelled' });
+	} catch (err) {
+		if (err instanceof TicketCancelError) {
+			return json({ success: false, error: err.code }, { status: err.httpStatus });
 		}
-		return json(await res.json());
-	} catch {
 		return json({ success: false, error: 'CANCEL_FAILED' }, { status: 503 });
 	}
 };
