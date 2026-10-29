@@ -92,6 +92,19 @@
 	let selectedSiteKind = $state<string>('');
 	const siteKindsQuery = useSiteKinds();
 	const activeKinds = $derived(activeSiteKinds(siteKindsQuery.data));
+	// Passed to Select.Root as `items` too: the closed trigger reads its label from there, else it shows the raw code.
+	const siteKindOptions = $derived(
+		[
+			...activeKinds.map((k) => k.code),
+			// A code from the URL that is no longer offered still needs a label in the trigger.
+			...(selectedSiteKind && !activeKinds.some((k) => k.code === selectedSiteKind)
+				? [selectedSiteKind]
+				: [])
+		].map((code) => ({
+			value: code,
+			label: siteKindLabel(code, siteKindsQuery.data, langState.current)
+		}))
+	);
 	let selectedType = $state<string>('');
 	let distanceValue = $state<string>('5');
 	/** Draft for the custom km field (may differ from distanceValue while typing). */
@@ -533,22 +546,20 @@
 					<Label for={`${idPrefix}site_kind`} class="text-xs font-semibold text-muted-foreground"
 						>{t.siteKindLabel}</Label
 					>
-					<Select.Root type="single" name="site_kind" bind:value={selectedSiteKind}>
+					<Select.Root
+						type="single"
+						name="site_kind"
+						bind:value={selectedSiteKind}
+						items={siteKindOptions}
+					>
 						<Select.Trigger id={`${idPrefix}site_kind`} class="w-full rounded-xl">
 							<Select.Value placeholder={t.siteKindPlaceholder} />
 						</Select.Trigger>
 						<Select.Content>
 							<Select.Item value="">{t.siteKindAll}</Select.Item>
-							{#each activeKinds as kind (kind.code)}
-								<Select.Item value={kind.code}>
-									{siteKindLabel(kind.code, siteKindsQuery.data, langState.current)}
-								</Select.Item>
+							{#each siteKindOptions as option (option.value)}
+								<Select.Item value={option.value}>{option.label}</Select.Item>
 							{/each}
-							{#if selectedSiteKind && !activeKinds.some((k) => k.code === selectedSiteKind)}
-								<Select.Item value={selectedSiteKind}>
-									{siteKindLabel(selectedSiteKind, siteKindsQuery.data, langState.current)}
-								</Select.Item>
-							{/if}
 						</Select.Content>
 					</Select.Root>
 				</div>
