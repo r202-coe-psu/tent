@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
 	buildDonationItemsPayload,
+	donationItemEditGate,
 	donationPayloadUnit,
 	donorUnitOptions,
 	isDonorEditable,
@@ -20,9 +21,9 @@ describe('isDonorEditable (T-21 / CR-080 / D-1)', () => {
 		expect(isDonorEditable('pending_review')).toBe(true);
 	});
 
-	// CR-174 FR-20..FR-23 — a campaign booking has its QR from the start; the donor can
-	// still cancel, fix the basket or add the courier number.
-	it('still lets the donor change a booking that has its QR', () => {
+	// CR-174 FR-20 / FR-22 — a campaign booking has its QR from the start; the donor can
+	// still cancel or add the courier number (the lines are fixed — CR-196).
+	it('still lets the donor cancel a booking that has its QR', () => {
 		expect(isDonorEditable('verifying')).toBe(true);
 	});
 
@@ -35,6 +36,36 @@ describe('isDonorEditable (T-21 / CR-080 / D-1)', () => {
 		expect(isDonorEditable('expired')).toBe(false);
 		expect(isDonorEditable('redirected')).toBe(false);
 		expect(isDonorEditable('rejected')).toBe(false);
+	});
+});
+
+/** CR-196 FR-LK-4 — the lines are the donor's only until anything is decided. */
+describe('donationItemEditGate', () => {
+	const pending = { review_status: 'pending' as const };
+
+	it('is open while every line still waits for review', () => {
+		expect(donationItemEditGate('pending_review', [pending, pending])).toBe('editable');
+		expect(donationItemEditGate('declared', [{}])).toBe('editable');
+	});
+
+	it('closes once one line is decided, by the campaign rule or by staff', () => {
+		expect(donationItemEditGate('pending_review', [{ review_status: 'approved' }, pending])).toBe(
+			'already_reviewed'
+		);
+		expect(donationItemEditGate('pending_review', [{ review_status: 'rejected' }, pending])).toBe(
+			'already_reviewed'
+		);
+	});
+
+	it('closes a booking with its QR, or refused, whatever its lines say', () => {
+		expect(donationItemEditGate('verifying', [{}])).toBe('already_reviewed');
+		expect(donationItemEditGate('rejected', [{}])).toBe('already_reviewed');
+	});
+
+	it('is closed for good once the booking is past drop-off', () => {
+		for (const status of ['received', 'cancelled', 'expired', 'redirected']) {
+			expect(donationItemEditGate(status, [pending])).toBe('closed');
+		}
 	});
 });
 

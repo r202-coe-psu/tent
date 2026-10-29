@@ -1,5 +1,12 @@
 import { z } from 'zod';
-import { type AuthorContext, type BaseDoc, type Timestamp, makeDoc, now } from '$lib/db/model';
+import {
+	type AuthorContext,
+	type BaseDoc,
+	type Timestamp,
+	makeDoc,
+	now,
+	thaiMobilePhoneSchema
+} from '$lib/db/model';
 import {
 	addQty,
 	persistQty,
@@ -248,6 +255,12 @@ export interface DonationItem {
 	review_reason_code?: string | null;
 	review_reason?: string | null;
 	/**
+	 * Which line this is (CR-196 · schema_v 8): a ULID FastAPI gives every public line at
+	 * booking, and the donor's edit form sends back to name the line it changes. Absent on
+	 * walk-in lines and on docs before schema_v 8.
+	 */
+	line_key?: string;
+	/**
 	 * What the campaign counter holds for this line's item (CR-080) — stamped by FastAPI
 	 * only when the counter really took it, so it is also how an automatic approval
 	 * (FR-2) is told from a person's (FR-8).
@@ -257,10 +270,11 @@ export interface DonationItem {
 
 /**
  * `schema_v` every donation writer stamps — the walk-in factory here, the donor edit
- * route, and `worker/inbound/donations.py`. 7 = CR-174 `items[].review_status`
- * (6 CR-172 `reject_reason`, 5 CR-087 `redirect_to_shelter_code`, 4 CR-080 `revisions[]`).
+ * route, and `worker/inbound/donations.py`. 8 = CR-196 `items[].line_key` (7 CR-174
+ * `items[].review_status`, 6 CR-172 `reject_reason`, 5 CR-087 `redirect_to_shelter_code`,
+ * 4 CR-080 `revisions[]`).
  */
-export const DONATION_SCHEMA_V = 7;
+export const DONATION_SCHEMA_V = 8;
 
 export interface Donor {
 	name: string;
@@ -434,7 +448,9 @@ export const REF_PREFIX_BY_REASON: Record<LedgerReason, LedgerRefRule> = {
 	transfer_out: ['stock_transfer:', 'requisition_ticket:'],
 	adjust: null, // manual correction — no source document by definition
 	distribute: 'requisition_ticket:',
-	distribution_return: 'distribution_batch:',
+	// distribution_batch: legacy batch flow; requisition_ticket: leftovers received back from a
+	// ticket into their source lot (CR-208), never a `direct-` issue — see isCanonicalLedgerRef.
+	distribution_return: ['distribution_batch:', 'requisition_ticket:'],
 	receive: ['meal_service:', 'requisition_ticket:', 'distribution_log:', 'bulk_return_pool:']
 };
 
@@ -447,9 +463,15 @@ export function isCanonicalLedgerRef(reason: LedgerReason, refId: string | null)
 	const rule = REF_PREFIX_BY_REASON[reason];
 	const accepted = Array.isArray(rule) ? rule : [rule];
 	if (refId === null) return accepted.includes(null);
+	if (isDirectIssueReturnRef(reason, refId)) return false;
 	return accepted.some(
 		(value) => typeof value === 'string' && matchesLedgerRefPrefix(refId, value)
 	);
+}
+
+/** CR-208 FR-RTN-18 — a direct issue from the stock page has no return step to receive back. */
+function isDirectIssueReturnRef(reason: LedgerReason, refId: string): boolean {
+	return reason === 'distribution_return' && refId.startsWith('requisition_ticket:direct-');
 }
 
 /**
@@ -465,6 +487,14 @@ function checkRefIdAgainstRule(
 ): void {
 	const accepted = Array.isArray(rule) ? rule : [rule];
 	if (isCanonicalLedgerRef(reason, refId)) return;
+	if (refId !== null && isDirectIssueReturnRef(reason, refId)) {
+		ctx.addIssue({
+			code: 'custom',
+			path: ['ref_id'],
+			message: `รายการประเภท '${reason}' ต้องไม่อ้างอิงการเบิกตรงจากหน้าคลัง (requisition_ticket:direct-)`
+		});
+		return;
+	}
 	if (accepted.length === 1 && accepted[0] === null) {
 		ctx.addIssue({
 			code: 'custom',
@@ -844,7 +874,12 @@ export const distributionReturnInputSchema = z.object({
 	item_id: z.string().min(1),
 	qty: qtyStrCoercePositiveSchema,
 	unit: z.string().trim().min(1),
-	ref_id: z.string().regex(/^distribution_batch:.+/, 'ref_id must reference a distribution batch'),
+	ref_id: z
+		.string()
+		.regex(
+			/^(?:distribution_batch|requisition_ticket):.+/,
+			'ref_id must reference a distribution batch or requisition ticket'
+		),
 	lot_ref: z.string().regex(/^stock_ledger:.+/, 'lot_ref must reference an inbound stock ledger'),
 	lot: stockLotSchema.optional(),
 	occurred_at: z.string().optional()
@@ -1179,11 +1214,7 @@ export const walkInDonationInputSchema = z
 	.object({
 		donor: z.object({
 			name: z.string().trim().min(1),
-			phone: z
-				.string()
-				.trim()
-				.regex(/^[0-9]+$/)
-				.nullable(),
+			phone: thaiMobilePhoneSchema,
 			phone_hash: z.string().min(1),
 			tax_receipt: z.boolean().optional(),
 			tax_id: z.string().optional()
