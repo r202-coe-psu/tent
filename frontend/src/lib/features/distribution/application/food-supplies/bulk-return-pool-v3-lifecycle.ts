@@ -54,6 +54,7 @@ import {
 	loadSnapshotPinsForWrite,
 	POOL_FENCE_BACKOFF_MS,
 	POOL_FENCE_SETTLE_TIMEOUT_MS,
+	referencedPoolIds,
 	requirePool,
 	resolveDependencies,
 	snapshotPinsFromReadPools,
@@ -317,13 +318,7 @@ async function waitForReferencedSubmitLocks(
 	ownPoolId: string,
 	clock: FenceClock
 ): Promise<{ ids: string[]; pools: (BulkReturnPoolV3 | null)[] }> {
-	const otherIds = [
-		...new Set([
-			...events.entries.map((e) => e.pool_id),
-			...events.moves.flatMap((m) => [m.from_pool_id, m.to_pool_id]),
-			...events.voids.map((v) => v.pool_id)
-		])
-	].filter((id) => id !== ownPoolId);
+	const otherIds = referencedPoolIds(events, ownPoolId);
 	if (otherIds.length === 0) return { ids: [], pools: [] };
 
 	const deadline = clock.now() + POOL_FENCE_SETTLE_TIMEOUT_MS;
@@ -458,6 +453,16 @@ export interface ReceiveBulkReturnPoolResult {
 	replayed: boolean;
 }
 
+/** Numeric equality of a stored qty and a sent qty; an unparsable sent qty is simply not equal. */
+function sameQtyValue(storedQty: string, sentQty: string | undefined): boolean {
+	if (sentQty === undefined) return false;
+	try {
+		return parseQty(storedQty).eq(sentQty);
+	} catch {
+		return false;
+	}
+}
+
 function sameReceivedRecord(
 	pool: BulkReturnPoolV3,
 	received: readonly BulkReturnPoolReceivedItem[],
@@ -584,7 +589,7 @@ export async function receiveBulkReturnPool(
 		const sent = new Map(input.items.map((row) => [row.item_id, String(row.received_qty)]));
 		receivable = (pool.items_summary ?? []).map((row) => {
 			const storedQty = stored.get(row.item_id);
-			return storedQty !== undefined && sent.get(row.item_id) === storedQty
+			return storedQty !== undefined && sameQtyValue(storedQty, sent.get(row.item_id))
 				? { item_id: row.item_id, qty: storedQty }
 				: row;
 		});

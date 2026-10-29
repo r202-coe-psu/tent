@@ -308,6 +308,27 @@ export function assertEntryNotPendingSync(
 }
 
 /**
+ * Unique pool ids the events reference: entry.pool_id, move from/to and void pool_id. `ownPoolId`
+ * is removed when given.
+ */
+export function referencedPoolIds(
+	events: {
+		entries: readonly Pick<BulkReturnEntry, 'pool_id'>[];
+		moves: readonly Pick<BulkReturnEntryMove, 'from_pool_id' | 'to_pool_id'>[];
+		voids: readonly { pool_id: string }[];
+	},
+	ownPoolId?: string
+): string[] {
+	const poolIds = new Set<string>([
+		...events.entries.map((e) => e.pool_id),
+		...events.moves.flatMap((m) => [m.from_pool_id, m.to_pool_id]),
+		...events.voids.map((v) => v.pool_id)
+	]);
+	if (ownPoolId !== undefined) poolIds.delete(ownPoolId);
+	return [...poolIds];
+}
+
+/**
  * Snapshot pins (entry id -> closed pool that counted it) for the pools the events reference:
  * entry.pool_id, move from/to and void pool_id. `ownPoolId` is left out when the caller already
  * knows it is OPEN (an OPEN pool pins nothing); omit it to include that pool too.
@@ -321,14 +342,9 @@ export async function loadSnapshotPins(
 	},
 	ownPoolId?: string
 ): Promise<Map<string, string>> {
-	const poolIds = new Set<string>([
-		...events.entries.map((e) => e.pool_id),
-		...events.moves.flatMap((m) => [m.from_pool_id, m.to_pool_id]),
-		...events.voids.map((v) => v.pool_id)
-	]);
-	if (ownPoolId !== undefined) poolIds.delete(ownPoolId);
 	// Scoped reads (CR-193 §18): only the pools the events name, never a whole-shelter list.
-	const pools = await Promise.all([...poolIds].map((id) => poolRepo.get(id)));
+	const ids = referencedPoolIds(events, ownPoolId);
+	const pools = await Promise.all(ids.map((id) => poolRepo.get(id)));
 	return buildSnapshotPins(pools.filter((p): p is BulkReturnPoolV3 => p !== null));
 }
 
@@ -346,13 +362,7 @@ export async function loadSnapshotPinsForWrite(
 	},
 	ownPoolId?: string
 ): Promise<Map<string, string>> {
-	const poolIds = new Set<string>([
-		...events.entries.map((e) => e.pool_id),
-		...events.moves.flatMap((m) => [m.from_pool_id, m.to_pool_id]),
-		...events.voids.map((v) => v.pool_id)
-	]);
-	if (ownPoolId !== undefined) poolIds.delete(ownPoolId);
-	const ids = [...poolIds];
+	const ids = referencedPoolIds(events, ownPoolId);
 	const pools = await Promise.all(ids.map((id) => poolRepo.get(id)));
 	return snapshotPinsFromReadPools(ids, pools);
 }
