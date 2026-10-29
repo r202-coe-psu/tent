@@ -193,7 +193,7 @@ function rejectBootstrapMutation(caller: Caller, target: string, action: string)
 	throw new ServiceError('FORBIDDEN', 'Cannot modify the system bootstrap admin');
 }
 
-async function fetchAllUserDocs(): Promise<CouchUserDoc[]> {
+export async function fetchAllUserDocs(): Promise<CouchUserDoc[]> {
 	const res = await adminRaw('/_users/_all_docs?include_docs=true', 'GET');
 	if (res.status >= 400) throw serviceErrorFromCouch('list users', res.status, res.data);
 	const rows = (res.data as { rows?: { id: string; doc: CouchUserDoc }[] })?.rows ?? [];

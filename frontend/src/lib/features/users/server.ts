@@ -2,5 +2,7 @@
 export {
 	STAFF_TOKEN_RANDOM_BYTES,
 	formatStaffToken,
-	isValidStaffTokenHash
+	isValidStaffTokenHash,
+	parseStaffCardPayload,
+	staffRecipientId
 } from './domain/staff-card';

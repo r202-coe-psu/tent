@@ -175,11 +175,12 @@ export async function requireShelterManagerOrSA(
 // session-cookie authorization. These helpers keep the BFF on that contract.
 
 export type ServiceErrorCode =
-	'UNAUTHENTICATED' | 'FORBIDDEN' | 'VALIDATION' | 'CONFLICT' | 'INTERNAL';
+	'UNAUTHENTICATED' | 'FORBIDDEN' | 'NOT_FOUND' | 'VALIDATION' | 'CONFLICT' | 'INTERNAL';
 
 const STATUS_BY_CODE: Record<ServiceErrorCode, number> = {
 	UNAUTHENTICATED: 401,
 	FORBIDDEN: 403,
+	NOT_FOUND: 404,
 	VALIDATION: 422,
 	CONFLICT: 409,
 	INTERNAL: 500
