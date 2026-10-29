@@ -66,7 +66,10 @@ export interface AddBulkReturnEntryResult {
 	 * cut by retrying with the same operationUlid or by the pool's loan repair.
 	 */
 	loan_pending?: true;
-	/** The entry was voided before its loans were cut: no loan was touched. */
+	/**
+	 * The entry was voided before its loans were cut and no submit snapshot counts it: no loan was
+	 * touched. A void written after a snapshot counted the entry has no effect (never set then).
+	 */
 	voided?: true;
 	/** Ids of the distribution logs this entry is applied to (empty when late, pending or voided). */
 	loansApplied: string[];
@@ -196,8 +199,10 @@ function claimOnLocalLoans(
  * A reopen of the entry's loans (CR-193 §35) wins over the replay's fence / loan cut
  * (`loans_reopened`).
  *
- * Right before each loan is cut the entry's void is re-read inside the loan CAS; a voided entry
- * cuts nothing (`voided`).
+ * A void only counts while the entry is NOT in a submit snapshot (CR-193 §33): a replay of an entry
+ * that is voided and not counted returns `voided` at once (no fence, no loan cut); otherwise right
+ * before each loan is cut the void is re-read inside the loan CAS (fence 'open' only) and a voided
+ * entry cuts nothing (`voided`). An entry counted in a snapshot ignores a void and has its loans cut.
  */
 export async function addBulkReturnEntries(
 	input: AddBulkReturnEntriesInput,
@@ -343,7 +348,9 @@ export async function addBulkReturnEntries(
 			// Loans reopened by a manager after the pool closed (CR-193 §35): never cut them again.
 			// A move cannot reach here: a pinned entry (counted in a closed pool's snapshot) cannot
 			// leave that pool, so a reopened entry always still resolves to its creation pool. Reopen
-			// wins over the replay's fence / loan cut on that pool; the pool's stop is kept.
+			// wins over the replay's fence / loan cut on that pool. `stop` is false on purpose: a reopen
+			// only applies to an entry counted in a closed pool's snapshot, and a closed pool already
+			// blocks new lines into it (`blocked`), so there is nothing left to stop.
 			if ((await eventRepo.getLoanReopen(deriveLoanReopenId(entry._id))) !== null) {
 				return {
 					result: {
@@ -354,6 +361,25 @@ export async function addBulkReturnEntries(
 						loansSkipped: [],
 						unallocated_qty,
 						loans_reopened: true
+					},
+					stop: false
+				};
+			}
+			// Voided and NOT counted in a submit snapshot (a pinned entry resolves `voided: false`, so
+			// `current.voided` means no snapshot counts it; CR-193 §33): the void is effective. Return
+			// right away, with no fence wait (a lock that outlives the timeout must not turn this into
+			// `loan_pending`) and no loan cut. A voided entry never ends the pool's accepting state.
+			// A pinned entry with a late void doc skips this and takes the normal fence + cut path.
+			if (current.voided) {
+				return {
+					result: {
+						entry,
+						late: false,
+						replayed,
+						voided: true,
+						loansApplied: [],
+						loansSkipped: [],
+						unallocated_qty
 					},
 					stop: false
 				};
@@ -402,6 +428,9 @@ export async function addBulkReturnEntries(
 
 		const voidId = deriveEntryVoidId(entry._id);
 		const isEntryVoided = async () => (await eventRepo.getVoid(voidId)) !== null;
+		// CR-193 §33 / FR-33.1: a void written after the submit snapshot counted the entry has no
+		// effect, so the void re-check applies only while the entry is not counted (fence 'open').
+		const voidCheck = fence === 'in_snapshot' ? undefined : isEntryVoided;
 		const loansApplied: string[] = [];
 		const loansSkipped: BulkReturnLoanSkipped[] = [];
 		let voided = false;
@@ -411,8 +440,9 @@ export async function addBulkReturnEntries(
 			// write, no throw): the entry stays and the item still counts in the pool; the UI derives a
 			// warning at read time. Never a partial apply: void reverts ref.qty and no per-entry applied
 			// qty is persisted, so a partial apply would over-revert on a later void.
-			// A voided entry never cuts a loan: the void is re-read inside every CAS attempt.
-			const outcome = await applyRefToLoanDetailed(logRepo, entry, ref, ctx, isEntryVoided);
+			// A voided entry not counted in a snapshot never cuts a loan: the void is re-read inside
+			// every CAS attempt. An in_snapshot entry ignores a void (it stays counted and cut).
+			const outcome = await applyRefToLoanDetailed(logRepo, entry, ref, ctx, voidCheck);
 			if (outcome.voided) voided = true;
 			else if (outcome.skipped) loansSkipped.push(outcome.skipped);
 			else loansApplied.push(ref.distribution_log_id);

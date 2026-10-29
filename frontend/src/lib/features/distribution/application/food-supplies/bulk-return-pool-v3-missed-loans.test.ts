@@ -220,12 +220,10 @@ describe('bulk return pool v3 — missed loan refs (fence timeout repair)', () =
 		expect((await logRepo.get(loanId(83)))?.applied_bulk_entry_ids ?? []).toEqual([]);
 	});
 
-	it('lists a missed ref of a locked OPEN pool but rejects its apply as locked', async () => {
+	it('lists nothing for a locked OPEN pool (CR-193 §37.3) and rejects its apply as locked', async () => {
 		const { pool, entry } = await lockedPoolWithMissedEntry(84);
 
-		expect(await listBulkReturnPoolMissedLoanRefs(pool._id, dist, deps)).toEqual([
-			{ entry_id: entry._id, distribution_log_id: loanId(84), qty: '2' }
-		]);
+		expect(await listBulkReturnPoolMissedLoanRefs(pool._id, dist, deps)).toEqual([]);
 		const err = await applyMissedBulkReturnLoanRefs(
 			{ entry_id: entry._id, pool_id: pool._id },
 			dist,

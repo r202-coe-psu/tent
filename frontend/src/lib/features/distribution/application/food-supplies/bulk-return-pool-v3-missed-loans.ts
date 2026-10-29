@@ -32,8 +32,8 @@ import {
  * Refs that were planned but never applied although the loan can still take them.
  * - Closed (SUBMITTED / RECEIVED) pool: the entries of its snapshot (`entry_ids`). Voids / moves
  *   are ignored on purpose: an entry in a closed pool's `entry_ids` stays counted there.
- * - OPEN pool (locked or not): the LIVE entries, i.e. not voided and currently resolving to this
- *   pool. A ref listed for a pool whose add is still in flight is applied by that add; the apply is
+ * - OPEN pool: the LIVE entries, i.e. not voided and currently resolving to this pool. An OPEN pool
+ *   that currently holds a lock (SUBMIT / CANCEL in flight) returns [] (§37.3). A ref listed for a pool whose add is still in flight is applied by that add; the apply is
  *   idempotent, so a repair racing it never cuts a loan twice.
  * Derived at read time, nothing is persisted.
  */
@@ -45,6 +45,9 @@ export async function listBulkReturnPoolMissedLoanRefs(
 	const { poolRepo, eventRepo, logRepo } = resolveDependencies(deps, ctx);
 	const pool = await requirePool(poolRepo, poolId);
 	if (pool.status === 'OPEN') {
+		// CR-193 §37.3: a pool locked for SUBMIT / CANCEL waits for that to finish first; the apply
+		// path rejects it as 'locked', so offering its refs would only lead to a rejected click.
+		if (pool.lock) return [];
 		const { live, loansById } = await loadLivePoolEntriesWithLoans(poolId, ctx, deps);
 		return findMissedLoanRefs(live, loansById);
 	}
