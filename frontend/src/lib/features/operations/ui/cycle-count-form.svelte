@@ -49,6 +49,11 @@
 	const brokenItemNames = $derived(
 		counted.brokenItemIds.map((id) => itemsById.get(id)?.name ?? id).join(', ')
 	);
+	const negativeLotNotes = $derived(
+		counted.negativeLots.map(
+			(lot) => `${itemsById.get(lot.item_id)?.name ?? lot.item_id} ${lot.qty} ${lot.unit}`
+		)
+	);
 
 	/**
 	 * The walk in progress. System quantities are frozen when a storage point is picked, so a
@@ -169,6 +174,20 @@
 	>
 		ไม่ได้รวมในการตรวจนับ เพราะประวัติคลังคำนวณยอดรายล็อตไม่ได้: {brokenItemNames} — กรุณาแจ้งผู้ดูแลระบบ
 	</p>
+{/if}
+
+{#if negativeLotNotes.length > 0}
+	<div
+		class="mb-4 rounded-xl border border-red-200 bg-red-50 p-3 text-xs font-semibold text-red-900"
+		role="alert"
+	>
+		<p>ล็อตติดลบ ไม่ถูกรวมในการตรวจนับ และห้ามเบิกจากล็อตนี้ — กรุณาแจ้งผู้ดูแลระบบ:</p>
+		<ul class="mt-1 list-disc pl-5">
+			{#each negativeLotNotes as text (text)}
+				<li class="tabular-nums">{text}</li>
+			{/each}
+		</ul>
+	</div>
 {/if}
 
 {#if activeGroupLabel === null}
