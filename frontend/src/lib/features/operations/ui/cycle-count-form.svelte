@@ -50,9 +50,10 @@
 		counted.brokenItemIds.map((id) => itemsById.get(id)?.name ?? id).join(', ')
 	);
 	const negativeLotNotes = $derived(
-		counted.negativeLots.map(
-			(lot) => `${itemsById.get(lot.item_id)?.name ?? lot.item_id} ${lot.qty} ${lot.unit}`
-		)
+		counted.negativeLots.map((lot) => ({
+			key: lot.lot_ref,
+			text: `${itemsById.get(lot.item_id)?.name ?? lot.item_id} ${lot.qty} ${lot.unit}`
+		}))
 	);
 
 	/**
@@ -183,8 +184,8 @@
 	>
 		<p>ล็อตติดลบ ไม่ถูกรวมในการตรวจนับ และห้ามเบิกจากล็อตนี้ — กรุณาแจ้งผู้ดูแลระบบ:</p>
 		<ul class="mt-1 list-disc pl-5">
-			{#each negativeLotNotes as text (text)}
-				<li class="tabular-nums">{text}</li>
+			{#each negativeLotNotes as negative (negative.key)}
+				<li class="tabular-nums">{negative.text}</li>
 			{/each}
 		</ul>
 	</div>
