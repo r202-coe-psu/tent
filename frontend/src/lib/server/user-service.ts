@@ -535,7 +535,8 @@ export async function grantCoordinatorRole(input: {
 	const hasRole = hasCapabilityInShelter(roles, code, grant.role);
 	// A manager gave this role: nothing to add, and nothing a coordinator may change.
 	if (hasRole && !previous) return { created: false, unchanged: true };
-	// Another coordinator's grant may be renewed (it becomes the caller's) but not cut short.
+	// Another coordinator's grant may be renewed but not cut short. A renewal keeps the issuer, so
+	// the renewer cannot then revoke or shorten it (FR-8); the audit records who renewed.
 	const shortened =
 		previous !== null && Date.parse(grant.expires_at) < Date.parse(previous.expires_at);
 	if (previous && shortened && previous.granted_by !== actor) {
@@ -546,7 +547,9 @@ export async function grantCoordinatorRole(input: {
 		: mergeShelterAssignment(roles, code, [...capabilitiesForShelter(roles, code), grant.role]);
 	const role_grants = [
 		...(existing.role_grants ?? []).filter((g) => g.shelter_code !== code || g.role !== grant.role),
-		grant
+		previous
+			? { ...grant, granted_by: previous.granted_by, granted_at: previous.granted_at }
+			: grant
 	];
 	const res = await adminRaw(`/_users/${userDocId(name)}`, 'PUT', {
 		...existing,

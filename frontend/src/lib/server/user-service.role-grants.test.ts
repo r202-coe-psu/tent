@@ -152,15 +152,36 @@ describe('coordinator role grants on _users (#955)', () => {
 	describe('another coordinator and a grant that is not theirs', () => {
 		const mine = (over: Partial<RoleGrant> = {}) => grant('kitchen_staff', over);
 
-		it('renews it, and the grant becomes the caller', async () => {
+		it('renews it but keeps the issuer, and audits the caller as the renewer', async () => {
+			const theirs = mine({ granted_by: 'other-coord', granted_at: '2026-10-27T02:00:00.000Z' });
+			seed(EMAIL, { roles: ['shelter:SH001', 'SH001:kitchen_staff'], role_grants: [theirs] });
+			const renewed = mine({ expires_at: '2026-11-03T16:59:59.999Z' });
+			await grantCoordinatorRole(input(renewed));
+			expect(db[key(EMAIL)].role_grants).toEqual([
+				{ ...renewed, granted_by: 'other-coord', granted_at: theirs.granted_at }
+			]);
+			expect(audits()[0]).toMatchObject({
+				reason: 'role_grant.renewed',
+				context: { actor: 'staff03' }
+			});
+		});
+
+		it('still refuses the renewer a revoke of the grant they renewed', async () => {
 			seed(EMAIL, {
 				roles: ['shelter:SH001', 'SH001:kitchen_staff'],
 				role_grants: [mine({ granted_by: 'other-coord' })]
 			});
-			const renewed = mine({ expires_at: '2026-11-03T16:59:59.999Z' });
-			await grantCoordinatorRole(input(renewed));
-			expect(db[key(EMAIL)].role_grants).toEqual([renewed]);
-			expect(audits()[0]).toMatchObject({ reason: 'role_grant.renewed' });
+			await grantCoordinatorRole(input(mine({ expires_at: '2026-11-03T16:59:59.999Z' })));
+			await expect(
+				revokeCoordinatorGrant({
+					name: EMAIL,
+					volunteer_id: 'volunteer:V1',
+					shelter_code: 'SH001',
+					role: 'kitchen_staff',
+					actor: 'staff03'
+				})
+			).rejects.toMatchObject({ code: 'FORBIDDEN' });
+			expect(db[key(EMAIL)].roles).toContain('SH001:kitchen_staff');
 		});
 
 		it('refuses to shorten it (403, no write)', async () => {
