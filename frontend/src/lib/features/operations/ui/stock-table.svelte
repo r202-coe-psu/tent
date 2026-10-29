@@ -24,7 +24,7 @@
 	} from '$lib/features/catalog';
 	import { langState } from '$lib/states/i18n.svelte';
 	import { authStore } from '$lib/stores/auth.svelte';
-	import { isSystemAdmin, hasCapabilityInShelter, WAREHOUSE_STAFF } from '$lib/auth/roles';
+	import { isSystemAdmin, canDistributeStock } from '$lib/auth/roles';
 	import { useShelters } from '$lib/features/shelters';
 	import { getShelterCode } from '$lib/db/shelter';
 	import * as Table from '$lib/components/ui/table/index.js';
@@ -100,7 +100,7 @@
 	const roles = $derived(authStore.user?.roles ?? []);
 	const isSA = $derived(isSystemAdmin(roles));
 	const currentShelter = $derived(getShelterCode());
-	const canDistribute = $derived(hasCapabilityInShelter(roles, currentShelter, WAREHOUSE_STAFF));
+	const canDistribute = $derived(canDistributeStock(roles, currentShelter));
 	let showOverall = $state(false);
 
 	const sheltersQuery = useShelters();
@@ -697,7 +697,12 @@
 				{quickActionDescription}
 			</Sheet.Description>
 		</Sheet.Header>
-		<div class="min-h-0 flex-1 overflow-y-auto p-4 sm:p-6">
+		<div
+			class={[
+				'min-h-0 flex-1',
+				quickActionKind === 'distribute' ? 'flex flex-col' : 'overflow-y-auto p-4 sm:p-6'
+			]}
+		>
 			{#if quickActionKind === 'receive'}
 				<ReceiveStockForm preselectedItemId={quickActionItemId} onsuccess={onMovementSuccess} />
 			{:else if quickActionKind === 'distribute'}

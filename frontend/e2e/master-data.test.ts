@@ -32,7 +32,7 @@ const HUB_PATH = '/back-office/master-data';
 const SHORT_TITLES: Record<string, string> = {
 	vulnerable_group: 'กลุ่มเปราะบาง',
 	housing_type: 'ประเภทที่อยู่',
-	shelter_type: 'ประเภทศูนย์',
+	shelter_type: 'ประเภทอาคาร',
 	volunteer_skills: 'ทักษะอาสา',
 	chronic_disease: 'โรคประจำตัว',
 	allergy: 'อาการแพ้'
@@ -185,6 +185,13 @@ test.describe('Master Data hub', () => {
 				page.getByRole('navigation', { name: 'ประเภท Master Data' }).getByText(shortTitle).first()
 			).toBeVisible();
 		}
+
+		await page
+			.getByRole('navigation', { name: 'ประเภท Master Data' })
+			.getByText(SHORT_TITLES.shelter_type)
+			.first()
+			.click();
+		await expect(page.getByRole('heading', { level: 2, name: 'ประเภทอาคาร' })).toBeVisible();
 	});
 
 	test('supports add and edit of an item', async ({ page }) => {

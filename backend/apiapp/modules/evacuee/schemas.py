@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Literal
 
 from pydantic import AliasChoices, BaseModel, Field
 
@@ -16,10 +17,14 @@ class SearchRequest(BaseModel):
     )
 
 
+ShelterStatus = Literal["open", "closed", "full", "standby"]
+
+
 class FamilyMember(BaseModel):
     name: str
     status: str
     shelter_name: str
+    shelter_status: ShelterStatus | None = None
 
 
 class SearchResult(BaseModel):
@@ -31,13 +36,25 @@ class SearchResult(BaseModel):
     shelter_address: str | None = None
     origin_address: str | None = None
     checked_in_at: datetime | None = None
-    care_zone: str | None = None
-    zone_name: str | None = None
+    shelter_status: ShelterStatus | None = None
     family_members: list[FamilyMember] = Field(default_factory=list)
 
 
 class SearchResponse(BaseModel):
     results: list[SearchResult]
+    count: int
+    as_of: datetime
+
+
+class ExternalSearchResult(SearchResult):
+    """`/external/v1/occupants` keeps the zone partners read (CR-183 FR-18 is public-only)."""
+
+    care_zone: str | None = None
+    zone_name: str | None = None
+
+
+class ExternalSearchResponse(BaseModel):
+    results: list[ExternalSearchResult]
     count: int
     as_of: datetime
 
