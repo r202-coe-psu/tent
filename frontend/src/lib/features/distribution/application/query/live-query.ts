@@ -42,7 +42,8 @@ export function startDistributionLiveQuery(queryClient: QueryClient): SubscribeD
 		if (
 			type === 'bulk_return_entry' ||
 			type === 'bulk_return_entry_move' ||
-			type === 'bulk_return_entry_void'
+			type === 'bulk_return_entry_void' ||
+			type === 'bulk_return_loan_reopen'
 		) {
 			return [distributionKeys.bulkPoolsV3All(shelterCode)];
 		}
