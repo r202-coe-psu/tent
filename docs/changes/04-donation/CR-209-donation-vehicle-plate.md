@@ -79,7 +79,7 @@ migration: field ใหม่ optional — doc เดิมไม่ต้อง
 - **AC-6** — response ของ API ติดตามใบไม่มี `vehicle_plate` และยังมี field `logistics` ตาม FR-4 (ทั้งแหล่ง CouchDB และ FastAPI fallback)
 - **AC-6b** — response ของ API ติดตามใบมี `donor` แค่ `name` + `phone_masked` · ไม่มีเบอร์เต็ม, `phone_hash`, `line_id`, `email` (ทั้งสองแหล่ง)
 - **AC-7** — ผู้ที่ไม่ใช่บทบาทคลังเรียก back-office GET → 403
-- **AC-8** — doc v7 (ไม่มีทะเบียน) และ v8 (มีทะเบียน) แสดงถูกในทุก reader (ตั๋ว, สแกน, รอประเมิน, ติดตาม)
+- **AC-8** — doc ก่อน v10 (ไม่มีทะเบียน) และ v10 (มีทะเบียน) แสดงถูกในทุก reader (ตั๋ว, สแกน, รอประเมิน, ติดตาม)
 - **AC-9** — `DONATION_SCHEMA_V` ของ frontend และ worker = 10
 
 ## Impact
@@ -94,7 +94,7 @@ migration: field ใหม่ optional — doc เดิมไม่ต้อง
 
 - `schema_v` 9 → 10: field optional → ไม่ backfill · ไม่มีทะเบียน = ไม่มี field · donation สาธารณะใหม่เขียน 10
 - ไม่มี migration ของ Mongo · ไม่ bump `PROJECTION_VERSION`
-- **ลำดับ `schema_v`:** CR-175 (#957), CR-196 (#956), CR-206 และ CR นี้ต่างจองเลขถัดจาก 7 — ตามมติใน CR-196 PR ที่ merge ก่อนได้เลขก่อน · CR นี้ใช้ **เลขถัดไปจาก `DONATION_SCHEMA_V` บน `develop` ตอน merge** (ตอนเขียน = 8) ทั้ง frontend, worker, test และ schema.md · ถ้า CR-206 merge ก่อนและเพิ่ม key ใน `logistics` ที่ต้องแสดงบนหน้าติดตาม ต้องเพิ่ม key นั้นใน allowlist ของ FR-4
+- **ลำดับ `schema_v`:** CR-175 (#957), CR-196 (#956), CR-206 และ CR นี้ต่างจองเลขถัดจาก 7 — ตามมติใน CR-196 PR ที่ merge ก่อนได้เลขก่อน · CR นี้ใช้ **เลขถัดไปจาก `DONATION_SCHEMA_V` บน `develop` ตอน merge** (ตอนร่าง = 8; ตอน merge = 10 หลัง CR-196 / CR-175) ทั้ง frontend, worker, test และ schema.md · ถ้า CR-206 merge ก่อนและเพิ่ม key ใน `logistics` ที่ต้องแสดงบนหน้าติดตาม ต้องเพิ่ม key นั้นใน allowlist ของ FR-4
 - schema.md §2.3, `public-tier-donation-spec.html` และ `data-model.md` §7 แก้ใน PR โค้ดของ CR นี้
 
 ## Why

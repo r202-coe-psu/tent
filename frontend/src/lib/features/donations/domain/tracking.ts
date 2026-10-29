@@ -40,11 +40,10 @@ export type DonationTrackLogistics = {
 	pickup_address?: string | null;
 };
 
+/** What the tracking API sends of the donor (CR-209 FR-4b allowlist): no contact beyond this. */
 export type DonationTrackDonor = {
 	name?: string;
 	phone_masked?: string;
-	line_id?: string | null;
-	email?: string | null;
 };
 
 export type DonationTrackView = {
@@ -288,9 +287,7 @@ export function toDonationTrackView(raw: Record<string, unknown>): DonationTrack
 		shelter_code: String(raw.shelter_code ?? ''),
 		donor: {
 			name: donorRaw.name != null ? String(donorRaw.name) : undefined,
-			phone_masked: donorRaw.phone_masked != null ? String(donorRaw.phone_masked) : undefined,
-			line_id: donorRaw.line_id != null ? String(donorRaw.line_id) : null,
-			email: donorRaw.email != null ? String(donorRaw.email) : null
+			phone_masked: donorRaw.phone_masked != null ? String(donorRaw.phone_masked) : undefined
 		},
 		items: itemsRaw.map((item) => {
 			const row = item as Record<string, unknown>;
