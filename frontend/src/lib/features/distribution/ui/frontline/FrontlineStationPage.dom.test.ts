@@ -121,6 +121,7 @@ afterEach(() => {
 	if (instance) unmount(instance);
 	instance = null;
 	document.body.innerHTML = '';
+	window.history.replaceState(null, '', '/');
 });
 
 describe('frontline station returns tab wiring (#921)', () => {
@@ -616,7 +617,6 @@ describe('frontline station links with an unsaved draft (FR-DFS-05)', () => {
 
 	it('a popstate reads its target mode from location, not to.url (held)', async () => {
 		await renderFoodDeskWithDraft();
-		const start = location.href;
 
 		const cancel = fireNav('/onsite/distribution?mode=food&tab=food', {
 			type: 'popstate',
@@ -624,7 +624,6 @@ describe('frontline station links with an unsaved draft (FR-DFS-05)', () => {
 			location: '/onsite/distribution?mode=supplies&tab=returns'
 		});
 		await settle();
-		window.history.replaceState(null, '', start);
 
 		expect(cancel).toHaveBeenCalledOnce();
 		expect(dialog()).not.toBeNull();
@@ -632,7 +631,6 @@ describe('frontline station links with an unsaved draft (FR-DFS-05)', () => {
 
 	it('a popstate reads its target mode from location, not to.url (not held)', async () => {
 		await renderFoodDeskWithDraft();
-		const start = location.href;
 
 		const cancel = fireNav('/onsite/distribution?mode=supplies&tab=supplies', {
 			type: 'popstate',
@@ -640,7 +638,6 @@ describe('frontline station links with an unsaved draft (FR-DFS-05)', () => {
 			location: '/onsite/distribution?mode=food&tab=food'
 		});
 		await settle();
-		window.history.replaceState(null, '', start);
 
 		expect(cancel).not.toHaveBeenCalled();
 		expect(dialog()).toBeNull();
@@ -648,13 +645,11 @@ describe('frontline station links with an unsaved draft (FR-DFS-05)', () => {
 
 	it('a link navigation uses to.url even when location differs', async () => {
 		await renderFoodDeskWithDraft();
-		const start = location.href;
 
 		const cancel = fireNav(SUPPLIES_HREF, {
 			location: '/onsite/distribution?mode=food&tab=food'
 		});
 		await settle();
-		window.history.replaceState(null, '', start);
 
 		expect(cancel).toHaveBeenCalledOnce();
 		expect(dialog()).not.toBeNull();
