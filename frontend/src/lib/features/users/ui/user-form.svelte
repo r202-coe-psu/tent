@@ -7,6 +7,7 @@
 	import * as AlertDialog from '$lib/components/ui/alert-dialog/index.js';
 	import * as Popover from '$lib/components/ui/popover/index.js';
 	import { defaults, setError, superForm } from 'sveltekit-superforms';
+	import { toast } from 'svelte-sonner';
 	import { zod4 } from 'sveltekit-superforms/adapters';
 	import {
 		SA_GRANTABLE_CAPABILITIES,
@@ -205,14 +206,14 @@
 					});
 					if (!editing) reset();
 				} catch (err) {
-					setError(
-						form,
+					const message =
 						err instanceof Error
 							? err.message
 							: editing
 								? 'ไม่สามารถบันทึกข้อมูลผู้ใช้งานได้'
-								: 'ไม่สามารถสร้างผู้ใช้งานได้'
-					);
+								: 'ไม่สามารถสร้างผู้ใช้งานได้';
+					setError(form, message);
+					toast.error(message);
 				}
 			}
 		}
@@ -383,6 +384,11 @@
 			id: 'kiosk_staff',
 			description:
 				'ดูแลตู้ Kiosk ของศูนย์ตัวเอง: เพิ่มเครื่อง, แก้ชื่อและจุดบริการ, เปิด/ปิด/ลบเครื่อง, ตั้งหรือดู PIN เจ้าหน้าที่ของเครื่อง, และจัดการแบนเนอร์ที่แสดงบนตู้'
+		},
+		{
+			id: 'pr_staff',
+			description:
+				'จัดการข่าวสารบนตู้ Kiosk ของศูนย์ตัวเอง: สร้าง แก้ จัดลำดับ และลบแบนเนอร์และกลุ่มแบนเนอร์, เลือกเครื่องที่แสดง, และดู PIN เจ้าหน้าที่ของเครื่อง (ตั้งค่าเครื่องหรือแก้ PIN ไม่ได้)'
 		},
 		{
 			id: 'facility_staff',

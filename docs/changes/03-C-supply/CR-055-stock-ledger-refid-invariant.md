@@ -3,7 +3,7 @@ id: CR-055
 title: "Enforce reason ↔ ref_id invariant on stock_ledger"
 status: done
 date: 2026-07-25
-updated: 2026-08-15
+updated: 2026-10-28
 requested_by: project owner (design review ของ CR-032 Option A)
 decided_by: project owner
 layer: volatile
@@ -345,3 +345,4 @@ ref_id: z.string().nullable().default(null)
   ที่ **ไม่มีไฟล์นั้นอยู่แล้ว** → แก้ให้ชี้ `CR-055-stock-ledger-refid-invariant.md`
   · **ยังค้าง:** Q-1..Q-6 ไม่มีบรรทัดใดบันทึกคำตอบ — entry 2026-07-25 ยังปิดท้ายว่า "ยังไม่ approve — รอเคาะ
   Q-1..Q-5" สวนกับ `status: approved` ที่หัวไฟล์ · R7 implement ได้โดยไม่ต้องรอ Q ข้อไหน แต่ R1/R2 ยังรอ Q-1/Q-2
+- 2026-10-28 — decision sync (Soravit Sukkarn, Team Lead, [review PR #981](https://github.com/r202-coe-psu/tent/pull/981#pullrequestreview-5681910876)): เบอร์ผู้บริจาค walk-in ใน `walkInDonationInputSchema` ใช้ `thaiMobilePhoneSchema` — 10 หลักขึ้นต้นด้วย `0` (normalize ขีด / ช่องว่าง / `+66` ก่อน) · ไม่รับเบอร์บ้าน 9 หลัก · ว่าง = `null` · ไม่เปลี่ยนรูป doc ไม่ bump `schema_v`

@@ -45,8 +45,22 @@ export const BULK_GATE_CLEAR_EXPLANATION = {
 	body: 'ใช้เมื่อพัสดุของผู้ยืมถูกเก็บคืนเข้ากองรับคืนแล้ว แต่ยังไม่ได้ระบุว่าเป็นของผู้ยืมรายใด ระบบจะนำจำนวนจากกองนั้นมาปิดภาระยืมของรายการนี้ โดยไม่รับของเข้าคลังซ้ำ'
 } as const;
 
+/**
+ * Shown on a closed-pool entry INSTEAD of the "reopen loans" button when an applied loan can no
+ * longer be reverted (CR-193 §35). `label` is a closed-as label; `n` / `total` count applied refs.
+ */
+export const BULK_RETURN_REOPEN_BLOCKED_COPY = {
+	labels: { lost: 'สูญหาย', waived: 'ยกเว้นการคืน', both: 'สูญหาย/ยกเว้นการคืน' },
+	allClosed: (label: string) => `เปิดยอดยืมกลับไม่ได้ ยอดยืมถูกปิดเป็น${label}แล้ว`,
+	someClosed: (n: number, total: number, label: string) =>
+		`เปิดยอดยืมกลับไม่ได้ ยอดยืม ${n} จาก ${total} รายการถูกปิดเป็น${label}แล้ว`,
+	allChanged: 'เปิดยอดยืมกลับไม่ได้ ยอดยืมเปลี่ยนไปแล้ว',
+	someChanged: (n: number, total: number) =>
+		`เปิดยอดยืมกลับไม่ได้ ยอดยืม ${n} จาก ${total} รายการเปลี่ยนไปแล้ว`
+} as const;
+
 export const RETURN_ACTION_HELP = {
 	counter: 'ใช้เมื่อผู้ยืมนำพัสดุมาคืนกับเจ้าหน้าที่โดยตรง',
 	nonPhysical: 'ใช้กรณีสูญหาย หรือได้รับอนุญาตให้ยกเว้นการคืน',
-	bulk: 'ใช้เมื่อพัสดุถูกคืนเข้ากองรวมและรับเข้าคลังแล้ว แต่ยังไม่ได้ระบุว่าเป็นของผู้ยืมรายใด'
+	bulk: 'ใช้เมื่อผู้ยืมนำของมาวางที่จุดรวม บันทึกเข้ากองรับคืน ระบบจะตัดยอดยืมของผู้ยืมรายนี้ให้ (เก่าสุดก่อน)'
 } as const;

@@ -105,6 +105,21 @@ describe('buildLotRows', () => {
 		expect(row.storageName).toBe('ห้องเย็น');
 	});
 
+	it("shows what the lot's storage point can hold (#647 AC3)", () => {
+		const points = [{ id: 'sp1', name: 'ห้องเย็น', typeLabels: ['อาหารแช่เย็น/แข็ง', 'ยา'] }];
+		const rows = buildLotRows(
+			[
+				lot({ lot_ref: 'a', lot: { storage_point_id: 'sp1' } }),
+				lot({ lot_ref: 'b', lot: { storage_point_id: 'gone', storage_zone: 'จุดที่ลบแล้ว' } }),
+				lot({ lot_ref: 'c' })
+			],
+			points,
+			NOW
+		);
+		const types = Object.fromEntries(rows.map((r) => [r.lotRef, r.storageTypes]));
+		expect(types).toEqual({ a: 'อาหารแช่เย็น/แข็ง, ยา', b: null, c: null });
+	});
+
 	it('puts a lot expiring in 3 days before long-stored dry stock without expiry (AC-A3)', () => {
 		const rows = buildLotRows(
 			[

@@ -9,6 +9,7 @@ import {
 	MASTER_COLUMNS,
 	PATH_TO_HEADER,
 	SUB_STORAGE_TYPE_CHOICES,
+	SUB_STORAGE_TYPE_LEGACY_LABELS,
 	ZONE_PATH_TO_HEADER,
 	AREA_TYPE_CHOICES,
 	COMMUNICATION_COLUMNS,
@@ -317,7 +318,10 @@ function resolveInt(raw: RawRow, header: string, sink: ErrorSink): number | null
 
 /** `ชื่อ:ประเภท:ตร.ม.` items separated by `|` → sub_storage entries. */
 function resolveSubStorage(raw: RawRow, sink: ErrorSink) {
-	const out: { id: string; name: string; type: SubStorageType; area_m2: number | null }[] = [];
+	// CR-199: schema takes `types[]` — import format stays
+	// single-type-per-cell (no requirement yet to express multiple types per row in the
+	// workbook).
+	const out: { id: string; name: string; types: SubStorageType[]; area_m2: number | null }[] = [];
 	for (const item of splitMulti(cell(raw, H.sub_storage))) {
 		const [rawName = '', rawType = '', rawArea = ''] = item
 			.split(FIELD_SEPARATOR)
@@ -326,7 +330,11 @@ function resolveSubStorage(raw: RawRow, sink: ErrorSink) {
 			sink.push(H.sub_storage, `รายการ "${item}" ไม่มีชื่อคลัง`);
 			continue;
 		}
-		const type = rawType === '' ? 'general' : matchChoice(rawType, SUB_STORAGE_TYPE_CHOICES)?.value;
+		const type =
+			rawType === ''
+				? 'general'
+				: (matchChoice(rawType, SUB_STORAGE_TYPE_CHOICES)?.value ??
+					SUB_STORAGE_TYPE_LEGACY_LABELS.get(rawType));
 		if (!type) {
 			sink.push(
 				H.sub_storage,
@@ -344,7 +352,7 @@ function resolveSubStorage(raw: RawRow, sink: ErrorSink) {
 			area = n;
 		}
 		// Stock ledger lots reference storage points by id (shelter schema_v 7).
-		out.push({ id: ulid(), name: rawName, type, area_m2: area });
+		out.push({ id: ulid(), name: rawName, types: [type], area_m2: area });
 	}
 	return out;
 }
@@ -544,6 +552,13 @@ export function validateRow(
 
 	// -- sheet 1: identity, address, people --
 	const status = resolveEnum(raw, H.operation_status, OPERATION_STATUS_CHOICES, sink);
+	// CR-183 FR-23: closing goes through the staff PATCH so `closed_at` has one writer.
+	if (status === 'closed') {
+		sink.push(
+			H.operation_status,
+			'นำเข้าศูนย์สถานะ "ปิดศูนย์" ไม่ได้ — ปิดศูนย์จากหน้าจัดการศูนย์'
+		);
+	}
 	const siteKind = resolveEnum(raw, H.site_kind, SITE_KIND_CHOICES, sink) ?? 'evacuation_center';
 	const level = resolveEnum(raw, H.project_level, PROJECT_LEVEL_CHOICES, sink);
 	const areaType = resolveEnum(raw, H.area_type, AREA_TYPE_CHOICES, sink);

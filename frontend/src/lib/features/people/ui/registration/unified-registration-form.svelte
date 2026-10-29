@@ -25,7 +25,11 @@
 		type ResidenceMatchChip
 	} from '$lib/features/public-register/data/public-register.api';
 	import { Input } from '$lib/components/ui/input/index.js';
-	import { ConsentBlock, ConsentBlockState } from '$lib/features/consent';
+	import {
+		ConsentBlock,
+		ConsentBlockState,
+		type ConsentAcknowledgement
+	} from '$lib/features/consent';
 	import HouseholdAddressFields from '../forms/household-address-fields.svelte';
 	import UnifiedRegistrationSection from './unified-registration-section.svelte';
 	import UnifiedRegistrationStickyNav from './unified-registration-sticky-nav.svelte';
@@ -36,7 +40,9 @@
 	import UnifiedRegistrationSummaryCard from './unified-registration-summary-card.svelte';
 	import UnifiedRegistrationStepper from './unified-registration-stepper.svelte';
 	import ThaidActionButton from './thaid-action-button.svelte';
+	import ThaidMemberScanDialog from './thaid-member-scan-dialog.svelte';
 	import type { ThaiDAutofillProfile } from '../../domain/thaid-profile';
+	import { applyThaidToHead, canScanThaidForHead } from '../../domain/thaid-autofill';
 	import { fetchThaidRegistrationStatus } from '$lib/api/thaid-status';
 	import { readRegistrationStickyTopPx } from './registration-sticky-offset';
 	import { firstInvalidField, focusTargetFor } from './registration-focus';
@@ -52,7 +58,6 @@
 	} from './unified-registration-pets';
 	import {
 		blankUnifiedMember,
-		memberCardLabel,
 		memberFormKey,
 		membersMissingPhoneChoice,
 		unifiedRegistrationInputSchema,
@@ -137,6 +142,7 @@
 		/** Shelter codes that accept public pre-registration (fallback when chip lacks the flag). */
 		bookableShelterCodes = [],
 		consent,
+		consentAcknowledgement,
 		children
 	}: {
 		channel?: UnifiedRegistrationChannel;
@@ -172,6 +178,13 @@
 		bookableShelterCodes?: string[];
 		/** Shows the PDPA consent block at the end of the form; its confirm is this form's submit. */
 		consent?: RegistrationConsentConfig;
+		/**
+		 * Pre-register group A (FR-22), built from the current household: rendered inside the consent
+		 * block and required for submit. Return undefined when nothing needs acknowledging.
+		 */
+		consentAcknowledgement?: (
+			household: UnifiedRegistrationInput['household']
+		) => ConsentAcknowledgement | undefined;
 		children?: import('svelte').Snippet<[{ household: UnifiedRegistrationInput['household'] }]>;
 	} = $props();
 
@@ -279,25 +292,28 @@
 		consentBlock !== null &&
 			members.some((m) => !consent?.consentedKeys?.includes(memberFormKey(m)))
 	);
-	const guardianOptions = $derived(
-		members
-			.map((m, index) => ({ m, index }))
-			.filter(({ m, index }) => index > 0 && !consent?.consentedKeys?.includes(memberFormKey(m)))
-			.map(({ m, index }) => ({
-				key: memberFormKey(m),
-				label: formatPersonName(m).trim() || memberCardLabel(index)
-			}))
-	);
 	const consentHasMedicalInput = $derived(members.some(hasMedicalInput));
-	const consentBlocksSubmit = $derived(
-		consentActive && !consentBlock!.canConfirm(guardianOptions.map((o) => o.key))
-	);
-	const consentHidesSubmit = $derived(consentActive && consentBlock!.noticeVisible);
-	const effectiveSubmitDisabled = $derived(submitDisabled || readOnly || consentBlocksSubmit);
 	let household = $state<UnifiedRegistrationInput['household']>(
 		untrack(() => buildInitialHousehold())
 	);
 	let assetDescription = $state(untrack(() => initialHousehold?.assets?.description ?? ''));
+	/** What `children` and the acknowledgement see: vehicles/assets only where the form shows them. */
+	const visibleHousehold = $derived({
+		...household,
+		vehicles: showVehiclesAssets ? (household.vehicles ?? []) : [],
+		assets:
+			showVehiclesAssets && assetDescription.trim()
+				? { description: assetDescription.trim(), image_url: null }
+				: null
+	});
+	const acknowledgement = $derived(consentAcknowledgement?.(visibleHousehold));
+	/** FR-11/FR-22: C1 (and the pre-register acknowledgement) must be ticked to submit. */
+	const consentBlocksSubmit = $derived(
+		consentActive &&
+			(!consentBlock!.canConfirm || (acknowledgement !== undefined && !acknowledgement.checked))
+	);
+	const consentNeedId = $props.id();
+	const effectiveSubmitDisabled = $derived(submitDisabled || readOnly || consentBlocksSubmit);
 	/** Errors reported by the last failed submit; `null` until the first submit. */
 	let submittedEntries = $state.raw<RegistrationErrorEntry[] | null>(null);
 	/** Bumped on every failed submit — collapsed sections holding an error re-open on it. */
@@ -378,8 +394,10 @@
 	let residenceSuggestCheckedEmpty = $state(false);
 	/** Public lookup request failed — not the same as "no family matched". */
 	let residenceSuggestFailed = $state(false);
-	/** Stay false until GET /api/public/v1/thaid/status confirms ON (public channel only). */
+	/** Stay false until GET /api/public/v1/thaid/status confirms ON. */
 	let thaidEnabled = $state(false);
+	/** Onsite head: cross-device QR scan, so the half-filled form never leaves the page (#588). */
+	let headScanOpen = $state(false);
 
 	const enableResidenceJoin = $derived(mode === 'create' || allowHouseholdJoin);
 	let householdDecision = $state<'join' | 'create' | null>(null);
@@ -831,11 +849,13 @@
 			});
 		}
 
-		if (channel === 'public' && typeof window !== 'undefined') {
+		if (typeof window !== 'undefined') {
 			void fetchThaidRegistrationStatus().then((s) => {
 				thaidEnabled = s.enabled;
 			});
+		}
 
+		if (channel === 'public' && typeof window !== 'undefined') {
 			const params = new URLSearchParams(window.location.search);
 			const errorParam = params.get('error');
 			if (errorParam) {
@@ -1151,38 +1171,16 @@
 		);
 	}
 
-	/** ThaiD mock/real autofill: populate head member + address from profile. */
+	/** ThaiD autofill: head member (index 0) + residence; joining a family keeps its residence. */
 	function handleThaiDAutofill(profile: ThaiDAutofillProfile) {
-		// Fill head member (index 0) personal info
-		const head = members[0];
-		if (head) {
-			head.first_name = profile.first_name;
-			head.last_name = profile.last_name;
-			head.nickname = profile.nickname;
-			head.gender = profile.gender;
-			head.birth_year = profile.birth_year > 0 ? profile.birth_year : undefined;
-			head.age = profile.age > 0 ? profile.age : undefined;
-			if (profile.phone) head.phone = profile.phone;
-			head.person_id = { cardType: 'national_id', number: profile.person_id };
-			head.vulnerable_groups = profile.vulnerable_groups;
-			head.special_needs = profile.special_needs;
-			head.medical_conditions = profile.medical_conditions;
-			members = [...members]; // trigger reactivity
-		}
-
-		// Fill address from ThaiD — reassign object to trigger reactive cascading selects
-		household = {
-			...household,
-			address_no: profile.address.address_no || household.address_no,
-			village_no: profile.address.village_no || household.village_no,
-			province: profile.address.province || household.province,
-			district: profile.address.district || household.district,
-			subdistrict: profile.address.subdistrict || household.subdistrict,
-			postal_code: profile.address.postal_code || household.postal_code
-		};
+		const next = applyThaidToHead({ members, household, hasJoinSelection }, profile);
+		members = next.members;
+		// Reassign the object to trigger the reactive cascading selects
+		household = next.household;
 
 		markDirty();
-		toast.success(t.thaidHeadFetchedToast(`${profile.first_name} ${profile.last_name}`));
+		const head = members[0];
+		toast.success(t.thaidHeadFetchedToast((head && formatPersonName(head)) || t.thaidScanHead));
 	}
 
 	$effect(() => {
@@ -1401,10 +1399,10 @@
 
 	function handleSubmit(e: Event) {
 		e.preventDefault();
-		void submit('confirm');
+		void submit();
 	}
 
-	async function submit(intent: 'confirm' | 'basic') {
+	async function submit() {
 		if (pending || readOnly) return;
 
 		household.pets = syncPetsToHousehold(petItems);
@@ -1427,11 +1425,7 @@
 		try {
 			let registrationConsent: RegistrationConsent | null = null;
 			if (consentActive && consentBlock) {
-				const eligibleKeys = guardianOptions.map((o) => o.key);
-				const gate =
-					intent === 'basic'
-						? consentBlock.confirmBasic(eligibleKeys)
-						: consentBlock.confirm(eligibleKeys);
+				const gate = consentBlock.confirm();
 				if (gate.kind !== 'decided') return;
 				registrationConsent = {
 					decision: gate.decision,
@@ -1600,7 +1594,6 @@
 				submitDisabled={effectiveSubmitDisabled}
 				submitLabel={effectiveSubmitLabel}
 				submittingLabel={t.submitting}
-				showSubmit={!consentHidesSubmit}
 				existingHeadName={summaryExistingHeadName}
 				existingMemberCount={summaryExistingMemberCount}
 				existingPets={selectedMatchChip?.pets ?? []}
@@ -1627,12 +1620,21 @@
 				description={t.sectionAddressDesc}
 				icon={Home}
 			>
-				<!-- ThaiD Action Button: Public Pre-Register -->
-				{#if channel === 'public' && thaidEnabled}
+				<!-- ThaiD: public redirects to ThaiD; onsite scans a QR without leaving the page;
+						no head scan on onsite report-in (would overwrite the existing head) -->
+				{#if thaidEnabled && canScanThaidForHead({ channel, mode })}
 					<ThaidActionButton
 						shelterCode={shelterCode || (enableUnassignedPhoto ? 'unassigned' : '')}
 						disabled={fieldsLocked}
+						onConnect={channel === 'public' ? undefined : () => (headScanOpen = true)}
 					/>
+					{#if channel !== 'public'}
+						<ThaidMemberScanDialog
+							bind:open={headScanOpen}
+							memberLabel={t.thaidScanHead}
+							onscanned={handleThaiDAutofill}
+						/>
+					{/if}
 				{/if}
 
 				<!-- Quick Search & Merge Tool Bar (both Public and Onsite) -->
@@ -1975,7 +1977,7 @@
 				existingMembers={joinedFamilyMembers}
 				existingMemberCount={summaryExistingMemberCount}
 				primaryContactPhone={members[0]?.phone ?? null}
-				thaidEnabled={channel === 'public' && thaidEnabled}
+				{thaidEnabled}
 				onDirty={markDirty}
 			/>
 
@@ -2010,26 +2012,17 @@
 
 			{#if children}
 				<div class="pt-2">
-					{@render children({
-						household: {
-							...household,
-							vehicles: showVehiclesAssets ? (household.vehicles ?? []) : [],
-							assets:
-								showVehiclesAssets && assetDescription.trim()
-									? { description: assetDescription.trim(), image_url: null }
-									: null
-						}
-					})}
+					{@render children({ household: visibleHousehold })}
 				</div>
 			{/if}
 
 			{#if consentActive && consentBlock}
 				<ConsentBlock
 					block={consentBlock}
-					members={guardianOptions}
 					hasMedicalInput={consentHasMedicalInput}
 					disabled={fieldsLocked}
-					onbasic={() => void submit('basic')}
+					{acknowledgement}
+					needId={consentNeedId}
 				/>
 			{/if}
 
@@ -2058,11 +2051,12 @@
 								onNavigate={(id) => scrollToSection(id as FormSectionId)}
 							/>
 						</div>
-						{#if !readOnly && !consentHidesSubmit}
+						{#if !readOnly}
 							<div class="min-w-0 flex-1">
 								<UnifiedRegistrationSubmitBar
 									{pending}
 									submitDisabled={effectiveSubmitDisabled}
+									describedBy={consentBlocksSubmit ? consentNeedId : undefined}
 									label={effectiveSubmitLabel}
 									submittingLabel={t.submitting}
 									align={submitAlign}

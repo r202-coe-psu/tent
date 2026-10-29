@@ -1,11 +1,11 @@
 /* eslint-disable no-restricted-imports */
-import { json } from '@sveltejs/kit';
+import { error, json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { authorizeReferral, resolveShelterCode, handleEndpointError } from './_auth';
 import { CouchDbReferralServerRepository } from '$lib/features/referrals/server/referral.server-repository';
 import {
 	referralInputSchema,
-	type ReferralStatus
+	referralListQuerySchema
 } from '$lib/features/referrals/domain/referral.schema';
 import { redactForScope } from '$lib/features/referrals/domain/referral.redaction';
 import { adminRaw } from '$lib/server/couch-admin';
@@ -20,9 +20,28 @@ export const prerender = false;
  */
 const BACK_OFFICE_SCOPE = 'internal' as const;
 
+/** Parse list query params; invalid values answer 400 `{ error }` via `handleEndpointError`. */
+function parseListQuery(params: URLSearchParams) {
+	const raw: Record<string, string> = {};
+	for (const key of ['limit', 'bookmark', 'status', 'direction', 'sort', 'evacuee_id']) {
+		const value = params.get(key);
+		if (value) raw[key] = value;
+	}
+	const parsed = referralListQuerySchema.safeParse(raw);
+	if (!parsed.success) {
+		const issue = parsed.error.issues[0];
+		throw error(
+			400,
+			`Invalid query: ${issue?.path.join('.') ?? ''} ${issue?.message ?? ''}`.trim()
+		);
+	}
+	return parsed.data;
+}
+
 /**
  * GET /api/back-office/referral
- * List referrals for a shelter (filter by status or evacuee_id)
+ * One page of referrals for a shelter: `{ items, bookmark, has_more }`.
+ * Params: limit (1–200, default 50), bookmark, status, direction, sort, evacuee_id.
  */
 export const GET: RequestHandler = async ({ request, url }) => {
 	try {
@@ -30,13 +49,16 @@ export const GET: RequestHandler = async ({ request, url }) => {
 
 		const shelterCode = resolveShelterCode(caller, url.searchParams.get('shelter_code'));
 
-		const status = (url.searchParams.get('status') as ReferralStatus) || undefined;
-		const evacueeId = url.searchParams.get('evacuee_id') || undefined;
+		const query = parseListQuery(url.searchParams);
 
 		const repo = new CouchDbReferralServerRepository('central_ops', shelterCode);
-		const list = await repo.list({ status, evacuee_id: evacueeId });
+		const page = await repo.listPage(query);
 
-		return json(list.map((doc) => redactForScope(doc, BACK_OFFICE_SCOPE)));
+		return json({
+			items: page.items.map((doc) => redactForScope(doc, BACK_OFFICE_SCOPE)),
+			bookmark: page.bookmark,
+			has_more: page.hasMore
+		});
 	} catch (e: unknown) {
 		return handleEndpointError(e, 'Referral API GET');
 	}

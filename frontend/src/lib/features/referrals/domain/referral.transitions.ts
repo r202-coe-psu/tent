@@ -6,7 +6,7 @@
  *
  * State matrix (valid transitions only):
  *   draft    → sent | closed   (closed = cancel draft before send — CR-046)
- *   sent     → accepted | rejected
+ *   sent     → accepted | rejected | closed   (closed = withdraw — CR-167, source shelter only)
  *   accepted → closed
  *   rejected → closed
  *   closed   → (terminal — no further transitions)
@@ -20,7 +20,7 @@ import type { Referral, ReferralStatus, ReferralTimeline } from './referral.sche
 
 const VALID_TRANSITIONS: Record<ReferralStatus, readonly ReferralStatus[]> = {
 	draft: ['sent', 'closed'],
-	sent: ['accepted', 'rejected'],
+	sent: ['accepted', 'rejected', 'closed'],
 	accepted: ['closed'],
 	rejected: ['closed'],
 	closed: []
@@ -36,6 +36,7 @@ export function canTransition(from: ReferralStatus, to: ReferralStatus): boolean
 
 /**
  * Apply a validated state transition to a Referral document.
+ * `reason` is stored as `response_reason` (accepted/rejected) or `close_reason` (closed).
  * Returns a new doc (immutable) — does NOT mutate the original.
  *
  * @throws {Error} if the transition is not permitted by the state matrix.
@@ -45,7 +46,7 @@ export function applyTransition(
 	to: ReferralStatus,
 	actor: string,
 	nowIso: string,
-	responseReason?: string
+	reason?: string
 ): Referral {
 	if (!canTransition(doc.status, to)) {
 		throw new Error(
@@ -69,13 +70,24 @@ export function applyTransition(
 			break;
 	}
 
-	return {
+	const next: Referral = {
 		...doc,
 		status: to,
 		timeline,
-		response_reason: responseReason ?? doc.response_reason,
 		updated_at: nowIso
 	};
+
+	// CR-167 FR-C2/C3: `response_reason` belongs to the destination's accept/reject only;
+	// `close_reason` is written only on a transition to `closed`. Neither touches the other.
+	if (to === 'accepted' || to === 'rejected') {
+		next.response_reason = reason ?? doc.response_reason;
+	} else if (to === 'closed' && reason) {
+		next.close_reason = reason;
+		// FR-C5: a v1 doc that gains `close_reason` is lifted to v2 on write.
+		next.schema_v = 2;
+	}
+
+	return next;
 }
 
 /**

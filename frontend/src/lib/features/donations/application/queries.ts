@@ -8,6 +8,7 @@ import { fetchDonationQueue, fetchReceivedDonationsPage } from '../data/back-off
 import {
 	cancelDonation,
 	fetchDonationTracking,
+	lookupDonationsByPhone,
 	searchDonationTracking,
 	updateCourierTracking,
 	updateDonationItems,
@@ -34,6 +35,13 @@ export function useDonationTracking(token: () => string) {
 export function useDonationTrackSearch() {
 	return createMutation(() => ({
 		mutationFn: (input: { bookingRef: string; phone: string }) => searchDonationTracking(input)
+	}));
+}
+
+/** Phone number alone → the bookings of it (CR-173). A mutation: it is a POST, never cached. */
+export function useDonationPhoneLookup() {
+	return createMutation(() => ({
+		mutationFn: (input: { phone: string; captchaToken?: string }) => lookupDonationsByPhone(input)
 	}));
 }
 

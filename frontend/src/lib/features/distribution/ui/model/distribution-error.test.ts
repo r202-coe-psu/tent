@@ -22,10 +22,175 @@ import {
 	TicketStateError,
 	CapacityExceededError,
 	StockIntegrityError,
-	WorkflowAuthorizationError
+	WorkflowAuthorizationError,
+	BulkReturnLoanReopenError,
+	BulkReturnPoolNameTakenError,
+	BulkReturnPoolStateError,
+	BulkReturnPoolLockTimeoutError,
+	BulkReturnPoolNotEmptyError,
+	BulkReturnPoolEmptyError,
+	DistributionDataIntegrityError
 } from '../../application/food-supplies/errors';
 
 describe('formatDistributionError', () => {
+	it('maps BulkReturnPoolNameTakenError to Thai copy even though it is a WorkflowValidationError', () => {
+		const err = new BulkReturnPoolNameTakenError('Pool name "A" is already used');
+		expect(formatDistributionError(err)).toBe(
+			'มีกองที่เปิดรับอยู่ใช้ชื่อนี้แล้ว กรุณาตั้งชื่ออื่น'
+		);
+	});
+
+	it('maps BulkReturnPoolStateError to Thai copy', () => {
+		const err = new BulkReturnPoolStateError('Bulk return pool x must be OPEN and unlocked');
+		expect(formatDistributionError(err)).toContain('กองนี้ไม่ได้อยู่ในสถานะเปิดรับ');
+	});
+
+	it('tells staff to pick another pool when the target pool is closed (intake)', () => {
+		const err = new BulkReturnPoolStateError('Pool x is not OPEN', 'closed');
+		expect(formatDistributionError(err, undefined, { poolContext: 'intake' })).toBe(
+			'กองนี้ปิดรับของแล้ว กรุณาเลือกกองอื่น'
+		);
+	});
+
+	it('does not tell staff to pick another pool for a closed pool in manage context', () => {
+		const manage =
+			'กองนี้ไม่ได้เปิดรับแล้ว (ส่งเข้าคลัง ตรวจรับ หรือยกเลิกไปแล้ว) จึงทำรายการนี้ไม่ได้ กรุณารีเฟรชเพื่อดูสถานะล่าสุด';
+		const err = new BulkReturnPoolStateError('Pool x is not OPEN', 'closed');
+		expect(formatDistributionError(err, undefined, { poolContext: 'manage' })).toBe(manage);
+		expect(formatDistributionError(err)).toBe(manage);
+	});
+
+	it('blames the source pool, not the target, for source_closed in any context', () => {
+		const copy =
+			'ย้ายรายการนี้ไม่ได้ เพราะกองที่รายการอยู่ถูกส่งเข้าคลังแล้ว และรายการนี้นับรวมในยอดที่ส่งแล้ว กรุณารีเฟรชเพื่อดูสถานะล่าสุด';
+		const err = new BulkReturnPoolStateError('Source pool x is not OPEN', 'source_closed');
+		expect(formatDistributionError(err, undefined, { poolContext: 'intake' })).toBe(copy);
+		expect(formatDistributionError(err, undefined, { poolContext: 'manage' })).toBe(copy);
+	});
+
+	it('explains a receive on a pool that is not yet submitted', () => {
+		const err = new BulkReturnPoolStateError('Only a SUBMITTED pool', 'not_submitted');
+		expect(formatDistributionError(err)).toBe(
+			'กองนี้ยังไม่ได้ส่งเข้าคลัง จึงยังตรวจรับไม่ได้ กรุณารีเฟรชเพื่อดูสถานะล่าสุด'
+		);
+	});
+
+	it('explains a receive that conflicts with an earlier received record', () => {
+		const err = new BulkReturnPoolStateError('different record', 'conflict');
+		expect(formatDistributionError(err)).toBe(
+			'กองนี้ถูกตรวจรับไปแล้วด้วยยอดที่ต่างจากที่ส่งมา กรุณารีเฟรชแล้วลองใหม่อีกครั้ง'
+		);
+	});
+
+	it('keeps the generic pool state copy for locked and reason-less state errors', () => {
+		const generic =
+			'กองนี้ไม่ได้อยู่ในสถานะเปิดรับ หรือกำลังถูกดำเนินการอยู่ จึงทำรายการนี้ไม่ได้ กรุณารีเฟรชแล้วตรวจสอบสถานะล่าสุด';
+		expect(formatDistributionError(new BulkReturnPoolStateError('locked', 'locked'))).toBe(generic);
+		expect(formatDistributionError(new BulkReturnPoolStateError('no reason'))).toBe(generic);
+	});
+
+	describe('loan reopen', () => {
+		it.each([
+			['loan_not_revertable', 'lost', 'ใบยืมนี้ถูกปิดเป็นสูญหายไปแล้ว จึงเปิดยอดยืมกลับไม่ได้'],
+			[
+				'loan_not_revertable',
+				'waived',
+				'ใบยืมนี้ถูกปิดเป็นยกเว้นการคืนไปแล้ว จึงเปิดยอดยืมกลับไม่ได้'
+			],
+			[
+				'loan_not_revertable',
+				'active',
+				'ใบยืมนี้เปลี่ยนไปแล้ว จึงเปิดยอดยืมกลับไม่ได้ กรุณารีเฟรชเพื่อดูสถานะล่าสุด'
+			],
+			[
+				'loan_not_revertable',
+				undefined,
+				'ใบยืมนี้เปลี่ยนไปแล้ว จึงเปิดยอดยืมกลับไม่ได้ กรุณารีเฟรชเพื่อดูสถานะล่าสุด'
+			],
+			[
+				'not_in_snapshot',
+				undefined,
+				'รายการนี้ไม่ได้อยู่ในยอดที่ส่งของกองนี้ จึงเปิดยอดยืมกลับไม่ได้ กรุณาย้ายรายการไปกองอื่นแทน'
+			],
+			[
+				'no_applied_loan',
+				undefined,
+				'รายการนี้ไม่มียอดยืมที่ถูกตัด (ไม่ได้ตัด หรือเปิดกลับไปแล้ว) จึงไม่มียอดยืมให้เปิดกลับ'
+			],
+			['reason_required', undefined, 'กรุณาระบุเหตุผลในการเปิดยอดยืมกลับ'],
+			['entry_not_found', undefined, 'ไม่พบรายการนี้ กรุณารีเฟรชเพื่อดูสถานะล่าสุด']
+		] as const)('maps %s (%s) to fixed Thai copy', (reason, loanStatus, copy) => {
+			const err = new BulkReturnLoanReopenError('English dev message', reason, loanStatus);
+			expect(formatDistributionError(err)).toBe(copy);
+			expect(formatDistributionError(err, undefined, { poolContext: 'reopen' })).toBe(copy);
+		});
+
+		it('maps OPEN / CANCELLED pool state errors to reopen copy only in the reopen context', () => {
+			const open = new BulkReturnPoolStateError('Pool x is still OPEN', 'not_submitted');
+			const cancelled = new BulkReturnPoolStateError('Pool x is CANCELLED', 'closed');
+			const ctx = { poolContext: 'reopen' } as const;
+			expect(formatDistributionError(open, undefined, ctx)).toBe(
+				'กองนี้ยังเปิดรับอยู่ จึงเปิดยอดยืมกลับไม่ได้ ให้ยกเลิกรายการแทน'
+			);
+			expect(formatDistributionError(cancelled, undefined, ctx)).toBe(
+				'กองนี้ถูกยกเลิกแล้ว จึงไม่มียอดยืมให้เปิดกลับ'
+			);
+		});
+
+		it('maps a missing pool to not-found copy only in the reopen context', () => {
+			const missing = new BulkReturnPoolStateError('Bulk return pool x was not found', 'not_found');
+			expect(formatDistributionError(missing, undefined, { poolContext: 'reopen' })).toBe(
+				'ไม่พบกองนี้ กรุณารีเฟรชเพื่อดูสถานะล่าสุด'
+			);
+			expect(formatDistributionError(missing)).toContain('กองนี้ไม่ได้อยู่ในสถานะเปิดรับ');
+		});
+
+		it('leaves the other contexts unchanged for the same state errors', () => {
+			const open = new BulkReturnPoolStateError('Pool x is still OPEN', 'not_submitted');
+			const cancelled = new BulkReturnPoolStateError('Pool x is CANCELLED', 'closed');
+			const receive =
+				'กองนี้ยังไม่ได้ส่งเข้าคลัง จึงยังตรวจรับไม่ได้ กรุณารีเฟรชเพื่อดูสถานะล่าสุด';
+			expect(formatDistributionError(open)).toBe(receive);
+			expect(formatDistributionError(open, undefined, { poolContext: 'manage' })).toBe(receive);
+			expect(formatDistributionError(open, undefined, { poolContext: 'intake' })).toBe(receive);
+			expect(formatDistributionError(cancelled, undefined, { poolContext: 'intake' })).toBe(
+				'กองนี้ปิดรับของแล้ว กรุณาเลือกกองอื่น'
+			);
+			expect(formatDistributionError(cancelled)).toContain('กองนี้ไม่ได้เปิดรับแล้ว');
+		});
+	});
+
+	it('asks staff to retry the save when the pool lock wait timed out', () => {
+		const err = new BulkReturnPoolLockTimeoutError('Timed out waiting for pool lock');
+		expect(formatDistributionError(err)).toBe(
+			'กองนี้กำลังถูกส่งเข้าคลังอยู่ ระบบยังยืนยันรายการไม่ได้ กรุณารอสักครู่แล้วกดบันทึกอีกครั้ง'
+		);
+	});
+
+	it('maps BulkReturnPoolNotEmptyError to Thai copy telling to move items out', () => {
+		const err = new BulkReturnPoolNotEmptyError('Pool has live entries');
+		expect(formatDistributionError(err)).toContain('ย้ายของออกให้หมดก่อน');
+	});
+
+	it('maps BulkReturnPoolEmptyError to Thai copy telling to cancel the pool', () => {
+		const err = new BulkReturnPoolEmptyError('Pool has no entries');
+		expect(formatDistributionError(err)).toBe(
+			'กองนี้ไม่มีรายการ จึงเก็บเข้าคลังไม่ได้ กรุณายกเลิกกองแทน'
+		);
+	});
+
+	it('maps DistributionDataIntegrityError to Thai copy naming the malformed doc ids', () => {
+		const err = new DistributionDataIntegrityError(['distribution_log:A', 'distribution_log:B']);
+		expect(formatDistributionError(err)).toBe(
+			'พบเอกสารที่ข้อมูลไม่ถูกต้อง (distribution_log:A, distribution_log:B) — ติดต่อผู้ดูแลระบบก่อนทำรายการต่อ'
+		);
+	});
+
+	it('falls back to a count when a malformed doc has no readable id', () => {
+		const err = new DistributionDataIntegrityError(['']);
+		expect(formatDistributionError(err)).toContain('(1 รายการ)');
+	});
+
 	it('formats typed WorkflowValidationError preserving clean messages', () => {
 		const err = new WorkflowValidationError('จำนวนที่คืนต้องมากกว่า 0');
 		expect(formatDistributionError(err)).toBe('จำนวนที่คืนต้องมากกว่า 0');

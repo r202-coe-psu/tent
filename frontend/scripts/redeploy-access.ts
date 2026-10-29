@@ -38,6 +38,7 @@ import {
 	type SecurityMutationLock
 } from '$lib/server/security-mutation-lock';
 import {
+	BULK_RETURN_ENTRY_MANGO_INDEXES,
 	buildValidateDocUpdate,
 	DAILY_SOP_ROLE_MANGO_INDEX,
 	DONATION_RECEIVED_MANGO_INDEX,
@@ -474,6 +475,7 @@ async function main() {
 					TRANSFER_LEDGER_MANGO_INDEXES.length +
 					PEOPLE_MANGO_INDEXES.length +
 					REQUISITION_TICKET_MANGO_INDEXES.length +
+					BULK_RETURN_ENTRY_MANGO_INDEXES.length +
 					2;
 				console.log(`    would ensure ${indexCount} shelter Mango indexes`);
 				if (PUBLIC_WRITER_NAME) {
@@ -504,6 +506,14 @@ async function main() {
 			);
 			console.log(
 				`    ✓ requisition_ticket mango indexes (${ticketIndexResult.created} created, ${ticketIndexResult.existing} existing)`
+			);
+			const bulkReturnEntryIndexResult = await deployMangoIndexes(
+				db,
+				BULK_RETURN_ENTRY_MANGO_INDEXES,
+				false
+			);
+			console.log(
+				`    ✓ bulk_return_entry mango indexes (${bulkReturnEntryIndexResult.created} created, ${bulkReturnEntryIndexResult.existing} existing)`
 			);
 			const dailySopIndexResult = await deployMangoIndexes(db, [DAILY_SOP_ROLE_MANGO_INDEX], false);
 			console.log(

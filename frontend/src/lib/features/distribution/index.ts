@@ -124,6 +124,24 @@ export {
 	type BulkReturnPool
 } from './domain/food-supplies';
 
+/** Bulk return pool v3 domain types (#659). Workflows, errors and auth helpers come via application/food-supplies. */
+export {
+	type BulkReturnPoolV3,
+	type BulkReturnPoolV3Status,
+	type BulkReturnPoolLock,
+	type BulkReturnPoolItemSummaryRow,
+	type BulkReturnPoolDiscrepancyReason,
+	type BulkReturnPoolReceivedItem,
+	type BulkReturnReceivedRowInput,
+	type BulkReturnEntry,
+	type BulkReturnEntryLoanRef,
+	type BulkReturnEntryReturnerType,
+	type BulkReturnEntryMove,
+	type BulkReturnEntryVoid,
+	type BulkReturnPoolOverviewRow,
+	type UnresolvedBulkReturnRef
+} from './domain/food-supplies';
+
 /** Per-lot dispatch validation (#655) — shared with the kitchen ticket dispatch (CR-178). */
 export {
 	validateDispatchLotAllocations,
@@ -229,7 +247,23 @@ export {
 	useDistributionLog,
 	useBulkReturnPools,
 	useBulkReturnPool,
-	useBulkReturnClaim,
+	useBulkReturnPoolOverview,
+	useBulkReturnPoolClosedLoanRefs,
+	useBulkReturnPoolMissedLoanRefs,
+	useBulkReturnPoolTimeline,
+	useBulkReturnPoolAppliedLoanRefs,
+	useReturnerOutstandingLoans,
+	useBulkReturnSkippedDocs,
+	useOpenBulkReturnPool,
+	useUpdateBulkReturnPoolHeader,
+	useAddBulkReturnEntries,
+	useMoveBulkReturnEntry,
+	useApplyMissedBulkReturnLoanRefs,
+	useVoidBulkReturnEntry,
+	useReopenBulkReturnEntryLoans,
+	useCancelBulkReturnPool,
+	useSubmitBulkReturnPool,
+	useReceiveBulkReturnPool,
 	useShiftReconciliation,
 	useCreateRequisitionTicket,
 	useAllocateTicketItems,
@@ -244,20 +278,28 @@ export {
 	useReturnLoanAtCounter,
 	useClearLoanNonPhysical,
 	useCreateBulkReturnPool,
-	useClearLoanViaBulkPool,
 	useCloseShift,
 	useSubmitReturnsToWarehouse,
 	useReceiveWarehouseReturns,
 	useCompleteTicket,
 	startDistributionLiveQuery,
-	type ItemReconciliationSummary
+	type ItemReconciliationSummary,
+	type OpenBulkReturnPoolMutationInput,
+	type UpdateBulkReturnPoolHeaderMutationInput,
+	type AddBulkReturnEntriesMutationInput,
+	type MoveBulkReturnEntryMutationInput,
+	type ApplyMissedBulkReturnLoanRefsMutationInput,
+	type VoidBulkReturnEntryMutationInput,
+	type ReopenBulkReturnEntryLoansMutationInput,
+	type CancelBulkReturnPoolMutationInput,
+	type SubmitBulkReturnPoolMutationInput,
+	type ReceiveBulkReturnPoolMutationInput
 } from './application/queries';
 
 /** Ticket-era Food & Supplies UI components & models (Slice 5.1). */
 export { default as TicketStatusBadge } from './ui/common/TicketStatusBadge.svelte';
 export { default as TicketManagementPage } from './ui/back-office/TicketManagementPage.svelte';
-export { default as BulkPoolManager } from './ui/back-office/BulkPoolManager.svelte';
-export { default as CreateBulkPoolDialog } from './ui/back-office/CreateBulkPoolDialog.svelte';
+export { default as BulkReturnPoolBoard } from './ui/bulk-return/BulkReturnPoolBoard.svelte';
 export { default as TicketGroupTabs } from './ui/back-office/TicketGroupTabs.svelte';
 export { default as TicketTable } from './ui/back-office/TicketTable.svelte';
 export { default as TicketFilters } from './ui/back-office/TicketFilters.svelte';
@@ -374,6 +416,9 @@ export {
 	type VerifiedQtyValidationResult,
 	type WarehouseReturnFormValidationResult
 } from './ui/model/warehouse-return';
+
+/** Deep link to one bulk return pool (back-office pools tab, detail open). */
+export { bulkReturnPoolHref } from './ui/model/pool-url-state';
 
 export {
 	formatDistributionError,

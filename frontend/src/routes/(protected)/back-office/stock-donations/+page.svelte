@@ -285,13 +285,15 @@
 		     domain read as one control. Built on the Tabs primitive rather than supply's
 		     bare <button>s: identical geometry, but the list keeps its tablist role and
 		     arrow-key navigation. -->
+		<!-- Below sm the three tabs share the width as equal columns, so none sits hidden
+		     behind a scrollbar the donor-desk staff can't see. -->
 		<div class="flex w-full scrollbar-none overflow-x-auto pb-1 sm:pb-0">
 			<Tabs.List
-				class="inline-flex h-auto min-w-max justify-start rounded-xl border border-border/40 bg-muted/60 p-1 shadow-sm"
+				class="grid h-auto w-full grid-cols-3 rounded-xl border border-border/40 bg-muted/60 p-1 shadow-sm sm:inline-flex sm:w-auto sm:min-w-max sm:justify-start"
 			>
 				<Tabs.Trigger
 					value="list"
-					class="flex shrink-0 items-center gap-2 rounded-lg border border-transparent px-3.5 py-2 text-xs font-semibold tracking-wide text-muted-foreground transition-all duration-300 hover:text-foreground active:scale-[0.98] data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm md:px-5 md:py-2.5"
+					class="flex min-w-0 flex-col items-center justify-center gap-1 rounded-lg border border-transparent px-1.5 py-2 text-center text-xs leading-tight font-semibold tracking-wide whitespace-normal text-muted-foreground transition-all duration-300 hover:text-foreground active:scale-[0.98] data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm sm:shrink-0 sm:flex-row sm:gap-2 sm:px-3.5 sm:whitespace-nowrap md:px-5 md:py-2.5"
 				>
 					<ClipboardList class="h-4 w-4" />
 					รายการของบริจาค
@@ -307,7 +309,7 @@
 
 				<Tabs.Trigger
 					value="needs"
-					class="flex shrink-0 items-center gap-2 rounded-lg border border-transparent px-3.5 py-2 text-xs font-semibold tracking-wide text-muted-foreground transition-all duration-300 hover:text-foreground active:scale-[0.98] data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm md:px-5 md:py-2.5"
+					class="flex min-w-0 flex-col items-center justify-center gap-1 rounded-lg border border-transparent px-1.5 py-2 text-center text-xs leading-tight font-semibold tracking-wide whitespace-normal text-muted-foreground transition-all duration-300 hover:text-foreground active:scale-[0.98] data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm sm:shrink-0 sm:flex-row sm:gap-2 sm:px-3.5 sm:whitespace-nowrap md:px-5 md:py-2.5"
 				>
 					<Megaphone class="h-4 w-4" />
 					จัดการความต้องการ
@@ -316,7 +318,7 @@
 				<!-- DN-5 — the queue the public wizard books into (schema.md §2.13). -->
 				<Tabs.Trigger
 					value="slots"
-					class="flex shrink-0 items-center gap-2 rounded-lg border border-transparent px-3.5 py-2 text-xs font-semibold tracking-wide text-muted-foreground transition-all duration-300 hover:text-foreground active:scale-[0.98] data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm md:px-5 md:py-2.5"
+					class="flex min-w-0 flex-col items-center justify-center gap-1 rounded-lg border border-transparent px-1.5 py-2 text-center text-xs leading-tight font-semibold tracking-wide whitespace-normal text-muted-foreground transition-all duration-300 hover:text-foreground active:scale-[0.98] data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm sm:shrink-0 sm:flex-row sm:gap-2 sm:px-3.5 sm:whitespace-nowrap md:px-5 md:py-2.5"
 				>
 					<CalendarClock class="h-4 w-4" />
 					ช่วงเวลารับของ

@@ -1,5 +1,12 @@
 import { z } from 'zod';
-import { type AuthorContext, type BaseDoc, type Timestamp, makeDoc, now } from '$lib/db/model';
+import {
+	type AuthorContext,
+	type BaseDoc,
+	type Timestamp,
+	makeDoc,
+	now,
+	thaiMobilePhoneSchema
+} from '$lib/db/model';
 import {
 	addQty,
 	persistQty,
@@ -1179,11 +1186,7 @@ export const walkInDonationInputSchema = z
 	.object({
 		donor: z.object({
 			name: z.string().trim().min(1),
-			phone: z
-				.string()
-				.trim()
-				.regex(/^[0-9]+$/)
-				.nullable(),
+			phone: thaiMobilePhoneSchema,
 			phone_hash: z.string().min(1),
 			tax_receipt: z.boolean().optional(),
 			tax_id: z.string().optional()
@@ -1393,11 +1396,16 @@ export const disputeInfoSchema = z.object({
 });
 export type DisputeInfoInput = z.input<typeof disputeInfoSchema>;
 
+/** Most transfer ids one list request may name — keeps the BFF query string short (#811). */
+export const TRANSFER_IDS_PER_REQUEST = 50;
+
 export const transferFilterSchema = z.object({
 	status: transferStatusSchema.optional(),
 	limit: z.number().int().positive().max(1000).default(50),
 	skip: z.number().int().nonnegative().default(0),
-	sort: z.enum(['created_at_desc', 'created_at_asc']).default('created_at_desc')
+	sort: z.enum(['created_at_desc', 'created_at_asc']).default('created_at_desc'),
+	/** Read exactly these transfers (ledger ref labels, #811) — `limit` does not cap them. */
+	ids: z.array(z.string().min(1)).min(1).max(TRANSFER_IDS_PER_REQUEST).optional()
 });
 export type TransferFilter = z.input<typeof transferFilterSchema>;
 
@@ -1709,6 +1717,17 @@ export function keyableDonations(donations: Donation[], stockLedgers: StockLedge
 	);
 }
 
+/**
+ * Goods still owed to the shelter, per item: outstanding donations plus `received`
+ * ones the ledger has not recorded, minus what a batch receipt already recorded.
+ *
+ * With `campaignId`, only that campaign's donations count — a donation with no
+ * `campaign_id` belongs to none, and a line with no `item_id` (free text) to no item.
+ * Both used to be attributed anyway (every campaign; an item guessed from the text),
+ * so the back-office board showed one booking under every campaign asking for the
+ * item while the public board and the quota counter counted it nowhere (#689). Now
+ * the three copies of the T-22 rule agree — see `packages/needs-fixtures`.
+ */
 export function calculateReserved(
 	donations: Donation[],
 	stockLedgers: StockLedger[],
@@ -1719,16 +1738,14 @@ export function calculateReserved(
 
 	const reserved = new Map<string, string>();
 	for (const don of donations) {
-		if (campaignId && don.campaign_id && don.campaign_id !== campaignId) continue;
+		if (campaignId && don.campaign_id !== campaignId) continue;
 		const isUnkeyedReceived = don.status === 'received' && !keyed.has(don._id);
 		if (!isDonationOutstanding(don.status) && !isUnkeyedReceived) continue;
 
 		const declared = new Map<string, string>();
 		for (const item of don.items ?? []) {
-			const itemId =
-				item.item_id || (item.free_text ? mapNeedItemHeuristic(item.free_text) : undefined);
-			if (!itemId) continue;
-			declared.set(itemId, addQty(declared.get(itemId) ?? '0', item.qty));
+			if (!item.item_id) continue;
+			declared.set(item.item_id, addQty(declared.get(item.item_id) ?? '0', item.qty));
 		}
 
 		// FR-B9: a donation part-way through a batch receipt already has some of its
@@ -1753,6 +1770,8 @@ export interface NeedAvailability {
 	qty_reserved: string;
 	qty_remaining: string;
 	is_cut_off: boolean;
+	/** `is_cut_off` split by cause — `is_cut_off === (close_state !== 'open')`. */
+	close_state: NeedCloseState;
 	status: 'open' | 'closed';
 	unit: string;
 }
@@ -1771,7 +1790,7 @@ export function deriveNeedAvailability(
 		const covered = addQty(currentOnHand, currentReserved);
 		const rem = subQty(need.qty_target, covered);
 		const remaining = qtyGte(rem, 0) ? rem : '0';
-		const isCutOff = isNeedCutOff(
+		const closeState = needCloseState(
 			need.qty_target,
 			currentOnHand,
 			currentReserved,
@@ -1784,8 +1803,11 @@ export function deriveNeedAvailability(
 			qty_target: need.qty_target,
 			qty_on_hand: currentOnHand,
 			qty_reserved: currentReserved,
-			qty_remaining: remaining,
-			is_cut_off: isCutOff,
+			// What the board offers a donor: nothing once the need is cut off (met, or
+			// closed by hand), the same zero `computeNeeds` folds a closed need into.
+			qty_remaining: closeState !== 'open' ? '0' : remaining,
+			is_cut_off: closeState !== 'open',
+			close_state: closeState,
 			status: need.status ?? 'open',
 			unit: need.unit
 		};
@@ -1860,8 +1882,50 @@ export function isNeedCutOff(
 	needStatus?: 'open' | 'closed',
 	campaignStatus?: 'open' | 'closed'
 ): boolean {
-	if (campaignStatus === 'closed' || needStatus === 'closed') return true;
-	return qtyGte(addQty(onHandStock, reservedQty), qtyTarget);
+	return needCloseState(qtyTarget, onHandStock, reservedQty, needStatus, campaignStatus) !== 'open';
+}
+
+/** Why a need takes no more donations — or `open` when it still does (#816/#817). */
+export type NeedCloseState = 'open' | 'reached' | 'closed';
+
+/**
+ * The one answer the needs board reads a row's badge, bar, buttons and filter from.
+ *
+ * A stored `closed` (need or campaign) always wins: the docs carry no close reason, so a
+ * closed need whose stock later passes the target is still `closed`, not `reached`.
+ * Otherwise `reached` is derived live from on-hand + reserved ≥ target — the same T-22
+ * formula the public projection uses to drop the need — so it falls back to `open` as
+ * soon as stock is distributed or a reservation is released.
+ */
+export function needCloseState(
+	qtyTarget: string | number,
+	onHandStock: string | number,
+	reservedQty: string | number,
+	needStatus?: 'open' | 'closed',
+	campaignStatus?: 'open' | 'closed'
+): NeedCloseState {
+	if (campaignStatus === 'closed' || needStatus === 'closed') return 'closed';
+	return qtyGte(addQty(onHandStock, reservedQty), qtyTarget) ? 'reached' : 'open';
+}
+
+/** The needs-board status filter. */
+export type NeedStatusFilter = 'all' | 'showing' | 'hidden' | 'reached' | 'closed';
+
+/**
+ * Which rows a status filter keeps. The buckets don't overlap: "showing"/"hidden" are
+ * the campaign toggle of rows still accepting donations; a reached or closed row is
+ * neither, it sits under its own state.
+ */
+export function matchesStatusFilter(
+	state: NeedCloseState,
+	showOnHome: boolean,
+	filter: NeedStatusFilter
+): boolean {
+	if (filter === 'showing') return state === 'open' && showOnHome;
+	if (filter === 'hidden') return state === 'open' && !showOnHome;
+	if (filter === 'reached') return state === 'reached';
+	if (filter === 'closed') return state === 'closed';
+	return true;
 }
 
 /**
@@ -2103,24 +2167,4 @@ export function publicItemAggregate(
 	}
 
 	return { campaignCount, totalTarget };
-}
-
-/**
- * Maps a Thai item name heuristic to a slugged itemId.
- */
-export function mapNeedItemHeuristic(name: string): string {
-	const lowerName = name.toLowerCase();
-	if (lowerName.includes('ข้าว')) return 'item:rice';
-	if (lowerName.includes('น้ำ')) return 'item:water';
-	if (lowerName.includes('พารา') || lowerName.includes('ยา')) return 'item:paracetamol';
-	if (lowerName.includes('สบู่')) return 'item:soap';
-	if (lowerName.includes('ห่ม')) return 'item:blanket';
-	if (lowerName.includes('ไข่')) return 'item:egg';
-
-	const slug = name
-		.trim()
-		.toLowerCase()
-		.replace(/[^a-z0-9\u0e00-\u0e7f]+/g, '-')
-		.replace(/^-+|-+$/g, '');
-	return `item:${slug || 'custom'}`;
 }

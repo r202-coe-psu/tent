@@ -43,6 +43,15 @@
 			minute: '2-digit'
 		});
 	}
+
+	const RECIPIENT_TYPE_BADGE: Record<
+		DistributionLog['recipient_type'],
+		{ label: string; className: string }
+	> = {
+		evacuee: { label: 'ผู้พักอาศัย', className: 'border-sky-200 bg-sky-50 text-sky-800' },
+		volunteer: { label: 'จิตอาสา', className: 'border-violet-200 bg-violet-50 text-violet-800' },
+		outside: { label: 'บุคคลภายนอก', className: 'border-slate-200 bg-slate-50 text-slate-700' }
+	};
 </script>
 
 <section class="rounded-2xl border border-slate-200/80 bg-white shadow-2xs">
@@ -83,6 +92,11 @@
 							<span class="w-28 shrink-0 text-xs text-slate-500 tabular-nums">
 								{formatTime(log.distributed_at)}
 							</span>
+							<span
+								class="shrink-0 rounded-full border px-2 py-0.5 text-xs font-semibold {RECIPIENT_TYPE_BADGE[
+									log.recipient_type
+								].className}">{RECIPIENT_TYPE_BADGE[log.recipient_type].label}</span
+							>
 							<span
 								class="min-w-0 flex-1 truncate font-medium {log.status === 'voided'
 									? 'text-slate-400 line-through'

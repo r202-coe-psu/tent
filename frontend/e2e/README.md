@@ -11,7 +11,7 @@
 | ------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Playwright                     | 1.64, Chromium only                                                                                                                                                                                                                     |
 | `playwright.config.ts`         | local: `vite preview` (:4173) + `e2e/mock-api.js` (:9001); `grepInvert: /@quarantine/`                                                                                                                                                  |
-| `playwright.staging.config.ts` | remote: `grep: /@critical\|@smoke/`, `grepInvert: /@quarantine/`, workers=1, `globalTimeout` 30 min                                                                                                                                     |
+| `playwright.staging.config.ts` | remote: `grep: /@critical\|@smoke/`, `grepInvert: /@quarantine/`, workers=2, `globalTimeout` 2 h                                                                                                                                        |
 | `playwright.prod.config.ts`    | remote read-only: `grep: /@prod/`, `globalTimeout` 2 min                                                                                                                                                                                |
 | `playwright.public.config.ts`  | remote read-only public suites (incl. pre-register) — **not wired to any job**                                                                                                                                                          |
 | Suites                         | J1–J6 carry `@release` where green locally; unsafe SH001 suites are `@quarantine`; donations are `@donation` (§8.3); the Partner API (`/external/*`) is `@partner-api` (§8.5)                                                           |
@@ -305,14 +305,18 @@ How the three full-stack suites obey §4:
 
 Feature tag `@distribution`, layer `@critical`; none carries `@release` yet.
 
-| Suite                                                  | What it proves                                                                                                                                                                                   |
-| ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `distribution/distribution-ticket-lifecycle.test.ts`   | Back-office ↔ desk: create → allocate → approve → dispatch → receive → hand out → close (Journey A: zero returns → COMPLETED; Journey B: warehouse credits only the verified return qty)         |
-| `distribution/distribution-desk-access.test.ts`        | Who may do what: page access by role (every capability × flat/compound, SA, scope-only, cross-shelter) and VDU write permissions (no UI)                                                         |
-| `distribution/distribution-desk-handover.test.ts`      | Tab 1 receive cargo, tab 2 ready meals (duplicate / menu-mismatch overrides, lot expiry, service day, history, preflight retry), tab 3 supplies and loans                                        |
-| `distribution/distribution-desk-returns-close.test.ts` | Tab 4 loan returns (physical, lost/waived, bulk pool, offline, resume) and tab 5 shift close + warehouse hand-off (incl. the "card stays on the closed ticket" regression)                       |
-| `distribution/distribution-desk-flow.test.ts`          | Across tabs (point filter, badges, live updates between desks, scan-first) and a compound-role DST working every tab                                                                             |
-| `distribution/distribution-desk-volunteer.test.ts`     | Volunteer recipients (#650): pass-QR scan → meal logged as `volunteer:{ulid}`, repeat meal needs an override, deactivated pass selects nobody, volunteer loan issued and returned at the counter |
+| Suite                                                  | What it proves                                                                                                                                                                                                                                               |
+| ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `distribution/distribution-ticket-lifecycle.test.ts`   | Back-office ↔ desk: create → allocate → approve → dispatch → receive → hand out → close (Journey A: zero returns → COMPLETED; Journey B: warehouse credits only the verified return qty)                                                                     |
+| `distribution/distribution-desk-access.test.ts`        | Who may do what: page access by role (every capability × flat/compound, SA, scope-only, cross-shelter) and VDU write permissions (no UI); v3 pool writes are in bulk-return-pool-access                                                                      |
+| `distribution/distribution-desk-handover.test.ts`      | Tab 1 receive cargo, tab 2 ready meals (duplicate / menu-mismatch overrides, lot expiry, service day, history, preflight retry), tab 3 supplies and loans                                                                                                    |
+| `distribution/distribution-desk-returns-close.test.ts` | Tab 4 loan returns (physical, lost/waived, offline, resume) and tab 5 shift close + warehouse hand-off (incl. the "card stays on the closed ticket" regression)                                                                                              |
+| `distribution/distribution-desk-flow.test.ts`          | Across tabs (point filter, badges, live updates between desks, scan-first) and a compound-role DST working every tab                                                                                                                                         |
+| `distribution/distribution-desk-volunteer.test.ts`     | Volunteer recipients (#650): pass-QR scan → meal logged as `volunteer:{ulid}`, repeat meal needs an override, deactivated pass selects nobody, volunteer loan issued and returned at the counter                                                             |
+| `distribution/bulk-return-pool-flow.test.ts`           | Bulk return pool v3 lifecycle on both surfaces: open, add (board, detail, loan card), move, void, submit, receive, cancel; loans, entries and `stock_ledger` read back (BRP-F1 to F10, F10 = regression for the fixed stale detail sheet; fixme: loan drift) |
+| `distribution/bulk-return-pool-storage.test.ts`        | Storage points (CR-139): a pool opened at one point and received into another, receive refuses a missing point; own shelter with two points (`shelterStoragePoints`, BRP-S1/S2)                                                                              |
+| `distribution/bulk-return-pool-access.test.ts`         | Roles on the board (onsite DST, back-office WH / SC / SM) and the VDU matrix for pool, entry, move, void and receive-ledger writes (BRP-A, BRP-V1), incl. system_admin (BRP-A-SA)                                                                            |
+| `distribution/bulk-return-pool-gap-isolation.test.ts`  | Regression for the fixed gap BRP-F11: an orphan move/void doc is skipped and shown as "รอซิงก์" instead of failing the pool board for the whole shelter; own worker and shelter so it can never poison the other specs                                       |
 
 How they obey §4:
 
@@ -321,9 +325,16 @@ How they obey §4:
   it with `recordCreatedShelter`. Every test seeds at its own distribution point inside it, so
   tests never see each other's tickets. SH002 is only visited/read as "another shelter".
 - **Setup.** Ticket-level prerequisites that are not the subject of a test (a ticket already
-  dispatched, a meal already served, a counted bulk pool) are written with the admin API —
-  driving back-office for each of ~70 tests would dominate the run. The UI path itself is
-  covered end to end by Journey A/B.
+  dispatched, a meal already served, an open bulk return pool or a loan the pool tests start
+  from) are written with the admin API — driving back-office for each of ~70 tests would
+  dominate the run. The UI path itself is covered end to end by Journey A/B; every pool action
+  that is the subject of a bulk return pool test (open, add, move, void, submit, receive,
+  cancel) goes through the UI.
+- **Storage points.** `bulk-return-pool-storage.test.ts` sets the worker option
+  `shelterStoragePoints` (`test.use`); the `shelter` fixture then writes
+  `common_areas.sub_storage` onto that run's own `E2E Distribution …` registry doc (admin API,
+  refused for any other shelter) before any page loads. Playwright starts a separate worker, and
+  so a separate shelter, for that spec; every other spec keeps a shelter without points.
 - **Teardown by id.** Users and catalog items are recorded per scenario and deleted by id after
   each test; the shelter (registry master, database and its `shelter:{code}` grant on
   `registry`/`catalog`) is removed when the worker ends, then `assertRunLeftNothing` fails the
@@ -484,7 +495,7 @@ assertion green; `--list` shows every touched test with exactly one layer tag; a
 ### 9.C Pipeline (after B is merged) — **done in Step C PR**
 
 - `playwright.staging.config.ts`: `grep: /@critical|@smoke/`, `grepInvert: /@quarantine/`,
-  workers=1, `globalTimeout` 30 min. `@critical` suites only run their live writes when the
+  workers=2, `globalTimeout` 2 h (run went past 30 min in build #64). `@critical` suites only run their live writes when the
   `tent-staging-e2e-env` credential sets `ALLOW_REMOTE_WRITES=true` (exactly `true`; `CAN_WRITE`
   in `helpers/e2e-env.ts`). `public-search-flow` / `public-shelters-filter` now create and tear
   down their own per-run data on such a run too (zero-leak Z test each); only `public-home-flow`

@@ -154,12 +154,7 @@ export const PUBLIC_BOOKING_FORM_I18N = {
 		submitting: 'กำลังบันทึกข้อมูล…',
 		submitConfirm: 'ยืนยันการลงทะเบียน',
 		submitOnsite: 'บันทึกลงทะเบียนทั้งครอบครัว',
-		unassignedDisclaimerTitle: 'เงื่อนไขการใช้งานระบบลงทะเบียนล่วงหน้า',
-		unassignedDisclaimerBody:
-			'ข้อมูลที่ท่านกรอกจะถูกเก็บในคิวกลางของระบบจนกว่าเจ้าหน้าที่ศูนย์พักพิงจะยืนยันการลงทะเบียน',
-		unassignedDisclaimerAckPrefix: 'ข้าพเจ้ารับทราบ',
-		unassignedDisclaimerAckLink: 'ข้อตกลงการใช้งาน',
-		unassignedDisclaimerAckSuffix: ' และยินยอมให้เก็บข้อมูลตามที่ระบุเพื่อการลงทะเบียนล่วงหน้า',
+		unassignedDisclaimerAck: 'เข้าใจว่าข้อมูลจะรอในคิวจนกว่าเจ้าหน้าที่ศูนย์จะยืนยัน',
 		unassignedDisclaimerRequired: 'กรุณายืนยันการรับทราบเงื่อนไขการใช้งานระบบก่อนส่งข้อมูล',
 		capacityAvailable: (available: number, capacity: number, unit: string) =>
 			`ว่าง ${available} / ${capacity} ${unit}`,
@@ -183,8 +178,7 @@ export const PUBLIC_BOOKING_FORM_I18N = {
 		shelterChangedToast: (name: string) => `เปลี่ยนศูนย์พักพิงเป็น "${name}" เรียบร้อยแล้ว`,
 		submitRegistration: 'ยืนยันการลงทะเบียน',
 		shelterSafetyTitle: 'เงื่อนไขและมาตรการความปลอดภัยของศูนย์พักพิง',
-		shelterSafetyAck:
-			'ข้าพเจ้ารับทราบและยินยอมปฏิบัติตามเงื่อนไขและมาตรการด้านความปลอดภัยของศูนย์พักพิงทุกประการ',
+		shelterSafetyAck: 'รับทราบและจะปฏิบัติตามกฎความปลอดภัยของศูนย์',
 		chooseShelterTitle: 'กรุณาเลือกศูนย์พักพิง',
 		chooseShelterDesc:
 			'เลือกศูนย์พักพิงที่ท่านต้องการเข้าพัก หรือเลือก "ไม่ระบุศูนย์พักพิง" เพื่อดำเนินการลงทะเบียน',
@@ -237,9 +231,11 @@ export const PUBLIC_BOOKING_FORM_I18N = {
 		thaidAddMember: 'เพิ่มสมาชิกด้วย ThaiD (สแกน QR)',
 		thaidFetchedToast: (name: string) => `ดึงข้อมูล ${name} เรียบร้อยแล้ว`,
 		thaidScanTitle: (member: string) => `ดึงข้อมูล ${member} ผ่าน ThaiD`,
-		thaidScanDesc: 'ให้สมาชิกใช้กล้องมือถือสแกน QR Code นี้ เพื่อยืนยันตัวตนและยินยอมส่งข้อมูล',
+		thaidScanDesc:
+			'ให้ผู้ลงทะเบียนใช้กล้องมือถือสแกน QR Code นี้ เพื่อยืนยันตัวตนและยินยอมส่งข้อมูล',
 		thaidScanFamilyMember: 'สมาชิกในครอบครัว',
 		thaidScanMemberN: (n: number) => `สมาชิกคนที่ ${n}`,
+		thaidScanHead: 'หัวหน้าครอบครัว',
 		thaidScanGenerating: 'กำลังสร้าง QR Code เชื่อมต่อ ThaiD...',
 		thaidScanQrAlt: 'QR Code สำหรับสแกน ThaiD',
 		thaidScanExpiresIn: 'หมดอายุใน',
@@ -672,13 +668,8 @@ export const PUBLIC_BOOKING_FORM_I18N = {
 		submitting: 'Saving...',
 		submitConfirm: 'Confirm Registration',
 		submitOnsite: 'Save family registration',
-		unassignedDisclaimerTitle: 'System pre-registration terms',
-		unassignedDisclaimerBody:
-			'Your information is stored in the central queue until shelter staff confirms your registration.',
-		unassignedDisclaimerAckPrefix: 'I acknowledge the ',
-		unassignedDisclaimerAckLink: 'Terms of Use',
-		unassignedDisclaimerAckSuffix:
-			' and consent to storing this information for advance registration.',
+		unassignedDisclaimerAck:
+			'I understand my information waits in the queue until shelter staff confirm it.',
 		unassignedDisclaimerRequired: 'Please acknowledge the system terms before submitting.',
 		capacityAvailable: (available: number, capacity: number, unit: string) =>
 			`${available} / ${capacity} ${unit} free`,
@@ -701,8 +692,7 @@ export const PUBLIC_BOOKING_FORM_I18N = {
 		shelterChangedToast: (name: string) => `Shelter changed to "${name}"`,
 		submitRegistration: 'Submit registration',
 		shelterSafetyTitle: 'Shelter conditions and safety rules',
-		shelterSafetyAck:
-			"I acknowledge and agree to follow all of the shelter's conditions and safety rules.",
+		shelterSafetyAck: "I acknowledge and will follow the shelter's safety rules.",
 		chooseShelterTitle: 'Please choose a shelter',
 		chooseShelterDesc:
 			'Choose the shelter you want to stay at, or choose "No shelter selected" to continue registering.',
@@ -754,9 +744,10 @@ export const PUBLIC_BOOKING_FORM_I18N = {
 		thaidFetchedToast: (name: string) => `Filled in details for ${name}`,
 		thaidScanTitle: (member: string) => `Fill in ${member} with ThaiD`,
 		thaidScanDesc:
-			'Have the member scan this QR code with their phone camera to verify identity and consent to share details',
+			'Have the person being registered scan this QR code with their phone camera to verify identity and consent to share details',
 		thaidScanFamilyMember: 'a family member',
 		thaidScanMemberN: (n: number) => `member ${n}`,
+		thaidScanHead: 'the head of household',
 		thaidScanGenerating: 'Generating the ThaiD QR code...',
 		thaidScanQrAlt: 'ThaiD scan QR code',
 		thaidScanExpiresIn: 'Expires in',

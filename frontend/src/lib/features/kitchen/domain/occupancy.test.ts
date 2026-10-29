@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { deriveHeadcountFromOccupancy, type OccupantView } from './occupancy';
+import {
+	countShelterPeople,
+	deriveHeadcountFromOccupancy,
+	deriveSessionHeadcountFromOccupancy,
+	type OccupantView,
+	type VolunteerPresenceView
+} from './occupancy';
 
 const occ = (o: Partial<OccupantView> & { status: string }): OccupantView => ({
 	current_stay: { status: o.status },
@@ -94,5 +100,82 @@ describe('deriveHeadcountFromOccupancy (CR-022 mapping, draft-in-shelter-headcou
 		});
 		const h = deriveHeadcountFromOccupancy([occ({ status: 'active' })]);
 		expect(h).toEqual({ total: 1, halal: 0, soft_food: 0, infant: 0 });
+	});
+});
+
+const vol = (v: Partial<VolunteerPresenceView> = {}): VolunteerPresenceView => ({
+	checked_in: true,
+	current_shelter_code: 'SH001',
+	user_name: null,
+	...v
+});
+
+describe('countShelterPeople', () => {
+	it('counts evacuees in the shelter only', () => {
+		const people = countShelterPeople(
+			'SH001',
+			[
+				occ({ status: 'active' }),
+				occ({ status: 'room_confirmed' }),
+				occ({ status: 'checked_out' })
+			],
+			[],
+			[]
+		);
+		expect(people.evacuees).toBe(2);
+	});
+
+	it('counts volunteers only while checked in at this shelter', () => {
+		const people = countShelterPeople(
+			'SH001',
+			[],
+			[
+				vol(),
+				vol(),
+				vol({ current_shelter_code: 'SH002' }),
+				vol({ current_shelter_code: null }),
+				vol({ checked_in: false })
+			],
+			[]
+		);
+		expect(people.volunteers).toBe(2);
+	});
+
+	it('counts each staff user once', () => {
+		const people = countShelterPeople(
+			'SH001',
+			[],
+			[],
+			[{ name: 'a' }, { name: 'b' }, { name: 'a' }]
+		);
+		expect(people.staff).toBe(2);
+	});
+
+	it('does not count a staff user linked to a volunteer as staff, checked in or not', () => {
+		const people = countShelterPeople(
+			'SH001',
+			[],
+			[vol({ user_name: 'linked_in' }), vol({ user_name: 'linked_out', checked_in: false })],
+			[{ name: 'linked_in' }, { name: 'linked_out' }, { name: 'plain' }]
+		);
+		expect(people).toEqual({ evacuees: 0, staff: 1, volunteers: 1 });
+	});
+});
+
+describe('deriveSessionHeadcountFromOccupancy staff and volunteers', () => {
+	it('puts staff + volunteers in the volunteer group and into total', () => {
+		const h = deriveSessionHeadcountFromOccupancy(
+			[occ({ status: 'active' }), occ({ status: 'checked_out' })],
+			5
+		);
+		expect(h.volunteer).toBe(5);
+		expect(h.regular).toBe(1);
+		expect(h.total).toBe(6);
+	});
+
+	it('defaults the volunteer group to 0', () => {
+		const h = deriveSessionHeadcountFromOccupancy([occ({ status: 'active' })]);
+		expect(h.volunteer).toBe(0);
+		expect(h.total).toBe(1);
 	});
 });
