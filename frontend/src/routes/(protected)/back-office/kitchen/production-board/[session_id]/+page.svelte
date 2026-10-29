@@ -98,6 +98,11 @@
 	const startCookingMutation = useStartMealPlanCooking();
 	const updateConfirmedMealPlanMutation = useUpdateConfirmedMealPlan();
 	const createTicketMutation = useCreateTicket();
+	const isOpeningRequisition = $derived(
+		createRecipeMutation.isPending ||
+			createMealPlanMutation.isPending ||
+			createTicketMutation.isPending
+	);
 	const updateTicketItemsMutation = useUpdateTicketItems();
 	const receiveTicketMutation = useReceiveTicket();
 	const recordServiceMutation = useRecordMealService();
@@ -969,18 +974,20 @@
 								{#if saveAsRecipe}
 									<div class="mt-2 space-y-2 rounded-md border bg-muted/20 p-2">
 										<div>
-											<Label class="text-xs">ชื่อสูตร</Label>
+											<Label for="new-recipe-name" class="text-xs">ชื่อสูตร</Label>
 											<Input
+												id="new-recipe-name"
 												bind:value={newRecipeName}
 												placeholder="ว่างไว้เพื่อใช้ชื่อเมนูที่แสดง"
 												class="mt-1 text-xs"
 											/>
 										</div>
 										<div>
-											<Label class="text-xs">จำนวนจานมาตรฐาน</Label>
+											<Label for="new-recipe-portions" class="text-xs">จำนวนจานมาตรฐาน</Label>
 											<Input
 												type="number"
 												min="1"
+												id="new-recipe-portions"
 												bind:value={newRecipePortions}
 												class="mt-1 text-xs"
 											/>
@@ -1291,14 +1298,10 @@
 				<Button
 					class="w-full gap-2 font-semibold shadow-sm"
 					onclick={handleCreateRequisition}
-					disabled={!ticketsFresh ||
-						createMealPlanMutation.isPending ||
-						createTicketMutation.isPending}
+					disabled={!ticketsFresh || isOpeningRequisition}
 				>
 					<Sparkles class="h-4 w-4" />
-					{createMealPlanMutation.isPending || createTicketMutation.isPending
-						? 'กำลังเปิดตั๋วเบิก...'
-						: 'สร้างใบเบิกวัตถุดิบ'}
+					{isOpeningRequisition ? 'กำลังเปิดตั๋วเบิก...' : 'สร้างใบเบิกวัตถุดิบ'}
 				</Button>
 			</div>
 		{:else if activeTicket.status === 'PENDING_PICK'}
