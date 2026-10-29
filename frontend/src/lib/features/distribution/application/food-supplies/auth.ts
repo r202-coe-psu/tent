@@ -1,5 +1,6 @@
 import type { AuthorContext } from '$lib/db/model';
 import {
+	canDistributeInShelter,
 	DISTRIBUTION_STAFF,
 	hasCapabilityInShelter,
 	isSystemAdmin,
@@ -59,11 +60,7 @@ export function canDispatchTicket(ctx: AuthorContext): boolean {
  */
 export function canPerformFrontlineDistribution(ctx: AuthorContext): boolean {
 	if (!ctx.roles) return false;
-	if (isSystemAdmin(ctx.roles)) return true;
-	return (
-		hasCapabilityInShelter(ctx.roles, ctx.shelterCode, DISTRIBUTION_STAFF) ||
-		hasCapabilityInShelter(ctx.roles, ctx.shelterCode, SHELTER_MANAGER)
-	);
+	return canDistributeInShelter(ctx.roles, ctx.shelterCode);
 }
 
 /**

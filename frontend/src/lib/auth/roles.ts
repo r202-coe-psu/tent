@@ -271,6 +271,14 @@ export function hasCapabilityInShelter(
 	return false;
 }
 
+/** Frontline distribution (receive, handover/scan, shift close) in `shelterCode` (CR-161 R3). */
+export function canDistributeInShelter(roles: readonly string[], shelterCode: string): boolean {
+	return (
+		hasCapabilityInShelter(roles, shelterCode, DISTRIBUTION_STAFF) ||
+		hasCapabilityInShelter(roles, shelterCode, SHELTER_MANAGER)
+	);
+}
+
 /** Build CouchDB `roles[]` from per-shelter assignments (always compound form). */
 export function rolesFromAssignments(assignments: readonly ShelterAssignment[]): string[] {
 	const out: string[] = [];
