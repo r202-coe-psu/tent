@@ -8,15 +8,23 @@ vi.mock('$lib/features/catalog', async (importOriginal) => ({
 	useUnitsOfMeasure: () => ({ data: [] })
 }));
 
+vi.mock('$lib/features/operations', () => ({
+	useStockFormItems: () => ({ items: [], isLoading: false }),
+	// Only rendered for an item search; its own behaviour is not under test here.
+	ItemCombobox: () => {}
+}));
+
 const { default: ReceivedDonationsList } = await import('./received-donations-list.svelte');
 
 const row = (n: number): PendingDonationRow => ({
 	donation_id: `donation:w${n}`,
 	shelter_code: 'SH001',
 	status: 'received',
+	// As the server sends a received row: already masked (FR-10).
 	donor_name: `ผู้บริจาค ${n}`,
-	donor_phone: '0811111111',
-	donor_email: n === 1 ? 'a@b.th' : null,
+	donor_phone: 'xxx-xxx-1111',
+	donor_email: n === 1 ? 'a***@b.th' : null,
+	contact_masked: true,
 	item_count: 0,
 	items: [],
 	received_at: '2026-10-20T03:00:00.000Z'
@@ -26,7 +34,14 @@ let instance: ReturnType<typeof mount> | null = null;
 function mountList(props: Record<string, unknown>) {
 	instance = mount(ReceivedDonationsList, {
 		target: document.body,
-		props: { rows: [], onLoadMore: vi.fn(), onViewDetails: vi.fn(), ...props } as never
+		props: {
+			rows: [],
+			onLoadMore: vi.fn(),
+			onViewDetails: vi.fn(),
+			onSearch: vi.fn(),
+			onClearSearch: vi.fn(),
+			...props
+		} as never
 	});
 	flushSync();
 }
@@ -42,59 +57,158 @@ afterEach(() => {
 	document.body.innerHTML = '';
 });
 
-describe('ReceivedDonationsList', () => {
-	it('shows the phone and email masked, and says when either is missing', () => {
-		mountList({ rows: [row(1), row(2)] });
+const searchInput = () => document.body.querySelector('#received-search') as HTMLInputElement;
+const form = () => document.body.querySelector('form[role="search"]') as HTMLFormElement;
+const submitButton = () =>
+	Array.from(document.body.querySelectorAll('button')).find(
+		(b) => b.getAttribute('type') === 'submit'
+	) as HTMLButtonElement;
+function typeInto(value: string) {
+	searchInput().value = value;
+	searchInput().dispatchEvent(new Event('input', { bubbles: true }));
+	flushSync();
+}
 
+describe('ReceivedDonationsList', () => {
+	it('shows the contact exactly as the server sent it — no masking on the client (FR-10)', () => {
+		// A value the client would mask differently proves the row is displayed as it is.
+		mountList({ rows: [{ ...row(1), donor_name: 'สมชาย ใ****', donor_phone: 'xxx-xxx-1111' }] });
+
+		expect(text()).toContain('สมชาย ใ****');
 		expect(text()).toContain('xxx-xxx-1111');
-		expect(text()).not.toContain('0811111111');
 		expect(text()).toContain('a***@b.th');
-		expect(text()).not.toContain('a@b.th');
+	});
+
+	it('shows what was received, not what was declared, and falls back to the declared items (FR-4)', () => {
+		mountList({
+			rows: [
+				{
+					...row(1),
+					items: [{ item_id: 'x', free_text: 'ข้าวสาร', qty: '10', unit: 'kg' }],
+					received_items: [{ item_id: 'x', free_text: 'ข้าวสาร', qty: '6', unit: 'kg' }]
+				},
+				{ ...row(2), items: [{ item_id: 'y', free_text: 'น้ำดื่ม', qty: '12', unit: 'ขวด' }] }
+			]
+		});
+		expect(text()).toContain('ข้าวสาร 6');
+		expect(text()).not.toContain('ข้าวสาร 10');
+		expect(text()).toContain('น้ำดื่ม 12');
+	});
+
+	it('says when the phone or email is missing', () => {
+		mountList({ rows: [{ ...row(2), donor_phone: null }] });
+
+		expect(text()).toContain('ไม่ระบุเบอร์โทร');
 		expect(text()).toContain('ไม่ระบุอีเมล');
 	});
 
-	it('filters the loaded rows by name or phone digits and says how many matched', () => {
-		const other = { ...row(2), donor_name: 'นายมานะ', donor_phone: '0899998888' };
-		mountList({ rows: [row(1), other], hasMore: true });
-		const search = document.body.querySelector('#received-search') as HTMLInputElement;
+	it('shows ไม่ระบุชื่อ for a donation whose name was removed', () => {
+		mountList({ rows: [{ ...row(3), donor_name: '' }] });
 
-		search.value = 'มานะ';
-		search.dispatchEvent(new Event('input', { bubbles: true }));
-		flushSync();
-		expect(text()).toContain('นายมานะ');
-		expect(text()).not.toContain('ผู้บริจาค 1');
+		expect(text()).toContain('ไม่ระบุชื่อ');
+	});
+
+	it('does not search while typing — only on submit (FR-8)', () => {
+		const onSearch = vi.fn();
+		mountList({ rows: [row(1)], onSearch });
+
+		typeInto('DN-306892');
+		expect(onSearch).not.toHaveBeenCalled();
+
+		form().dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+		expect(onSearch).toHaveBeenCalledTimes(1);
+		expect(onSearch).toHaveBeenCalledWith({
+			by: 'booking_ref',
+			q: 'DN-306892',
+			label: 'DN-306892'
+		});
+	});
+
+	it('does not submit an empty box, and the button is disabled', () => {
+		const onSearch = vi.fn();
+		mountList({ rows: [row(1)], onSearch });
+
+		expect(submitButton().disabled).toBe(true);
+		form().dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+		typeInto('   ');
+		form().dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+
+		expect(onSearch).not.toHaveBeenCalled();
+	});
+
+	it('trims the term it sends', () => {
+		const onSearch = vi.fn();
+		mountList({ rows: [], onSearch });
+
+		typeInto('  DN-306892  ');
+		form().dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+
+		expect(onSearch).toHaveBeenCalledWith(expect.objectContaining({ q: 'DN-306892' }));
+	});
+
+	it('offers "ล้าง" only while a search shows, and it goes back to the plain list', () => {
+		const onClearSearch = vi.fn();
+		mountList({ rows: [row(1)], onClearSearch });
+		const clearButton = () =>
+			Array.from(document.body.querySelectorAll('button')).find((b) =>
+				b.textContent?.includes('ล้าง')
+			);
+		expect(clearButton()).toBeUndefined();
+		unmount(instance!);
+		document.body.innerHTML = '';
+
+		mountList({
+			rows: [row(1)],
+			onClearSearch,
+			searchTerm: { by: 'name', q: 'สมชาย', label: 'สมชาย' }
+		});
+		clearButton()!.click();
+
+		expect(onClearSearch).toHaveBeenCalledTimes(1);
+	});
+
+	it('counts what the search found, and starts the box from the search that shows', () => {
+		mountList({
+			rows: [row(1), row(2)],
+			searchTerm: { by: 'phone', q: '0812345678', label: '0812345678' }
+		});
+
 		expect(document.body.querySelector('[data-testid="received-count"]')?.textContent).toMatch(
-			/พบ\s*1\s*จาก\s*2/
+			/พบ\s*2\s*รายการ/
 		);
-
-		search.value = '1111';
-		search.dispatchEvent(new Event('input', { bubbles: true }));
-		flushSync();
-		expect(text()).toContain('ผู้บริจาค 1');
-		expect(text()).not.toContain('นายมานะ');
+		expect(searchInput().value).toBe('0812345678');
 	});
 
-	it('masks the donor surname with **** but still finds them by full name', () => {
-		mountList({ rows: [{ ...row(1), donor_name: 'สมชาย ใจดี' }] });
+	it('says nothing matched, naming the term', () => {
+		mountList({
+			rows: [],
+			searchTerm: { by: 'name', q: 'ไม่มีชื่อนี้', label: 'ไม่มีชื่อนี้' }
+		});
 
-		expect(text()).toContain('สมชาย ใ****');
-		expect(text()).not.toContain('ใจดี');
-
-		const search = document.body.querySelector('#received-search') as HTMLInputElement;
-		search.value = 'ใจดี';
-		search.dispatchEvent(new Event('input', { bubbles: true }));
-		flushSync();
-		expect(text()).toContain('สมชาย ใ****');
+		expect(text()).toContain('ไม่พบรายการที่ตรงกับ "ไม่มีชื่อนี้"');
 	});
 
-	it('says when nothing matches the search', () => {
-		mountList({ rows: [row(1)] });
-		const search = document.body.querySelector('#received-search') as HTMLInputElement;
+	it('names the item, not its id, when an item search finds nothing', () => {
+		mountList({
+			rows: [],
+			searchTerm: { by: 'item', q: 'item_master:rice', label: 'ข้าวสาร' }
+		});
 
-		search.value = 'ไม่มีชื่อนี้';
-		search.dispatchEvent(new Event('input', { bubbles: true }));
-		flushSync();
-		expect(text()).toContain('ไม่พบรายการที่ตรงกับ');
+		expect(text()).toContain('ไม่พบรายการที่ตรงกับ "ข้าวสาร"');
+		expect(text()).not.toContain('item_master:rice');
+	});
+
+	it('shows a search error with the server message, and retries on request', () => {
+		const onRetry = vi.fn();
+		mountList({
+			rows: [],
+			error: 'เบอร์โทรต้องเป็นตัวเลข 10 หลัก ขึ้นต้นด้วย 0',
+			onRetry,
+			searchTerm: { by: 'phone', q: '5678', label: '5678' }
+		});
+
+		expect(text()).toContain('ค้นหารายการที่รับแล้วไม่สำเร็จ');
+		expect(text()).toContain('เบอร์โทรต้องเป็นตัวเลข 10 หลัก ขึ้นต้นด้วย 0');
 	});
 
 	it('shows "โหลดเพิ่ม" only while the server has more, and asks for the next page', () => {

@@ -13,7 +13,9 @@
 	import NeedsBoardAdmin from '$lib/components/needs-board-admin.svelte';
 	import PendingReviewBoard from '$lib/components/pending-review-board.svelte';
 	import PendingReviewDetail from '$lib/components/pending-review-detail.svelte';
-	import ReceivedDonationsList from './components/received-donations-list.svelte';
+	import ReceivedDonationsList, {
+		type SubmittedReceivedSearch
+	} from './components/received-donations-list.svelte';
 	import ScanStation from './components/scan-station.svelte';
 	import CreateCampaignForm from './components/create-campaign-form.svelte';
 	import EditCampaignForm from './components/edit-campaign-form.svelte';
@@ -32,6 +34,7 @@
 		queueGroupOf,
 		useDonationQueue,
 		useReceivedDonations,
+		useReceivedSearch,
 		type DonationQueueFilter,
 		type LineReviewDecision,
 		type PendingDonationRow,
@@ -101,11 +104,21 @@
 	);
 	// "รับแล้ว" (#821) — fetched only while that filter is open, for the shelter the page
 	// works in. Never part of `queueRows`, so "ทั้งหมด" and the badge stay the open queue.
+	// A submitted search (FR-8) replaces the plain list in the same place: it asks the server
+	// for the whole shelter, one type at a time, and pages by the cursor the server issues.
+	let activeSearch = $state<SubmittedReceivedSearch | null>(null);
+	const receivedOpen = $derived(activeSubTab === 'list' && queueFilter === 'received');
 	const receivedQuery = useReceivedDonations(
 		() => resolveShelterCode() ?? '',
-		() => activeSubTab === 'list' && queueFilter === 'received'
+		() => receivedOpen && activeSearch === null
 	);
-	const receivedRows = $derived(receivedQuery.data?.pages.flatMap((p) => p.donations) ?? []);
+	const searchQuery = useReceivedSearch(
+		() => resolveShelterCode() ?? '',
+		() => (receivedOpen && activeSearch ? { by: activeSearch.by, q: activeSearch.q } : null)
+	);
+	// The one query the list shows right now.
+	const shownReceived = $derived(activeSearch ? searchQuery : receivedQuery);
+	const receivedRows = $derived(shownReceived.data?.pages.flatMap((p) => p.donations) ?? []);
 	const refreshQueue = () => queryClient.invalidateQueries({ queryKey: donationQueueKeys.all });
 
 	/** What the list tab shows: the list, a booking under review, or the counter. */
@@ -133,6 +146,7 @@
 	}
 
 	function setQueueFilter(filter: DonationQueueFilter) {
+		activeSearch = null;
 		const params = new SvelteURLSearchParams(page.url.searchParams);
 		params.set('tab', 'list');
 		params.set('filter', filter);
@@ -155,6 +169,7 @@
 		viewState = 'list';
 		selectedPendingRequest = null;
 		station = null;
+		activeSearch = null;
 	}
 
 	async function handleApprovePending(
@@ -356,12 +371,16 @@
 					{#snippet received()}
 						<ReceivedDonationsList
 							rows={receivedRows}
-							loading={receivedQuery.isPending}
-							error={receivedQuery.error?.message ?? null}
-							hasMore={receivedQuery.hasNextPage}
-							loadingMore={receivedQuery.isFetchingNextPage}
-							onLoadMore={() => receivedQuery.fetchNextPage()}
-							onRetry={() => receivedQuery.refetch()}
+							shelterCode={resolveShelterCode() ?? ''}
+							searchTerm={activeSearch}
+							loading={shownReceived.isPending}
+							error={shownReceived.error?.message ?? null}
+							hasMore={shownReceived.hasNextPage}
+							loadingMore={shownReceived.isFetchingNextPage}
+							onLoadMore={() => shownReceived.fetchNextPage()}
+							onRetry={() => shownReceived.refetch()}
+							onSearch={(term) => (activeSearch = term)}
+							onClearSearch={() => (activeSearch = null)}
 							onViewDetails={openRow}
 						/>
 					{/snippet}

@@ -20,9 +20,6 @@
 	import {
 		donationActionRef,
 		donationRefLabel,
-		maskDonorEmail,
-		maskDonorName,
-		maskDonorPhone,
 		PUBLIC_DONATION_CATEGORIES,
 		RejectDonationDialog,
 		RejectReasonFields,
@@ -30,12 +27,15 @@
 		hasLineReview,
 		isAutoApprovedLine,
 		lineReviewDecisionSchema,
+		useRevealDonorContact,
 		type DonationRejectReasonCode,
+		type DonorContact,
 		type LineReviewDecision,
 		type PendingDonationRow,
 		type RejectDonationInput
 	} from '$lib/features/donations';
 	import { useShelters } from '$lib/features/shelters';
+	import { DonationLotsTable } from '$lib/features/operations';
 	import { formatUnit, useUnitsOfMeasure } from '$lib/features/catalog';
 	import { langState } from '$lib/states/i18n.svelte';
 	import { DISPLAY_LOCALE, DISPLAY_TIME_ZONE } from '$lib/utils/date';
@@ -64,10 +64,35 @@
 	// `donationActionRef`). Bailing out on a missing ref left those donations stuck.
 	const actionRef = $derived(donationActionRef(request));
 
-	// Received donations (#821) mask the donor contact until staff ask for it; the review
-	// queue keeps showing it in full, since reviewers call donors as part of the decision.
-	let contactRevealed = $state(false);
-	const showContact = $derived(!readonly || contactRevealed);
+	// A received donation (#821) arrives with the donor contact MASKED by the server; the full
+	// values are fetched on request, one donation at a time, and every request is audited
+	// (FR-10a/b). The review queue keeps showing the contact in full — reviewers call donors as
+	// part of the decision (FR-7).
+	const revealMutation = useRevealDonorContact();
+	let revealed = $state<DonorContact | null>(null);
+	const showContact = $derived(!readonly || revealed !== null);
+	const contact = $derived<DonorContact>(
+		readonly && revealed
+			? revealed
+			: {
+					name: request.donor_name || null,
+					phone: request.donor_phone,
+					email: request.donor_email ?? null
+				}
+	);
+	// Retention removed the contact (FR-10c): nothing left to show once it was asked for.
+	const contactRemoved = $derived(
+		revealed !== null && !revealed.name && !revealed.phone && !revealed.email
+	);
+
+	async function revealContact() {
+		if (!actionRef || revealMutation.isPending) return;
+		try {
+			revealed = await revealMutation.mutateAsync(actionRef);
+		} catch (e) {
+			toast.error(e instanceof Error ? e.message : 'โหลดข้อมูลติดต่อไม่สำเร็จ');
+		}
+	}
 
 	let memo = $state('');
 	let actionPanel = $state<'none' | 'redirect'>('none');
@@ -274,45 +299,46 @@
 					</span>
 					<div class="min-w-0 space-y-1.5">
 						<p class="text-lg font-bold break-words text-slate-900">
-							{showContact
-								? request.donor_name || 'ไม่ระบุชื่อ'
-								: maskDonorName(request.donor_name)}
+							{contact.name || 'ไม่ระบุชื่อ'}
 						</p>
-						<p class="flex items-center gap-2 text-base text-slate-700">
-							<Phone class="size-4 shrink-0 text-slate-400" aria-hidden="true" />
-							<span class="sr-only">เบอร์โทร</span>
-							{#if request.donor_phone && !showContact}
-								<span class="font-semibold text-slate-700 tabular-nums">
-									{maskDonorPhone(request.donor_phone)}
-								</span>
-							{:else if request.donor_phone}
-								<a
-									href="tel:{request.donor_phone}"
-									class="font-semibold text-sky-800 tabular-nums underline-offset-2 hover:underline"
-								>
-									{request.donor_phone}
-								</a>
-							{:else}
-								<span class="text-slate-500">ไม่ระบุเบอร์โทร</span>
-							{/if}
-						</p>
-						{#if request.donor_email}
-							<p class="flex items-center gap-2 text-sm break-all text-slate-600">
-								<Mail class="size-4 shrink-0 text-slate-400" aria-hidden="true" />
-								<span class="sr-only">อีเมล</span>
-								{showContact ? request.donor_email : maskDonorEmail(request.donor_email)}
+						{#if contactRemoved}
+							<p class="text-sm text-slate-600">ข้อมูลติดต่อถูกลบตามนโยบายการเก็บข้อมูล</p>
+						{:else}
+							<p class="flex items-center gap-2 text-base text-slate-700">
+								<Phone class="size-4 shrink-0 text-slate-400" aria-hidden="true" />
+								<span class="sr-only">เบอร์โทร</span>
+								{#if contact.phone && showContact}
+									<a
+										href="tel:{contact.phone}"
+										class="font-semibold text-sky-800 tabular-nums underline-offset-2 hover:underline"
+									>
+										{contact.phone}
+									</a>
+								{:else if contact.phone}
+									<span class="font-semibold text-slate-700 tabular-nums">{contact.phone}</span>
+								{:else}
+									<span class="text-slate-500">ไม่ระบุเบอร์โทร</span>
+								{/if}
 							</p>
+							{#if contact.email}
+								<p class="flex items-center gap-2 text-sm break-all text-slate-600">
+									<Mail class="size-4 shrink-0 text-slate-400" aria-hidden="true" />
+									<span class="sr-only">อีเมล</span>
+									{contact.email}
+								</p>
+							{/if}
 						{/if}
 						{#if !showContact}
-							<!-- Received donations (#821): full contact only on request, not on sight. -->
+							<!-- Received donations (#821): the full contact only on request, and audited. -->
 							<Button
 								type="button"
 								variant="outline"
 								class="min-h-11"
-								onclick={() => (contactRevealed = true)}
+								disabled={revealMutation.isPending}
+								onclick={revealContact}
 							>
 								<Eye class="size-4" aria-hidden="true" />
-								แสดงข้อมูลติดต่อ
+								{revealMutation.isPending ? 'กำลังโหลด...' : 'แสดงข้อมูลติดต่อ'}
 							</Button>
 						{/if}
 					</div>
@@ -506,6 +532,11 @@
 				</p>
 			</div>
 		</div>
+
+		<!-- A received donation: the lots it put into stock, and what is left of each (#821). -->
+		{#if readonly && request.donation_id}
+			<DonationLotsTable donationId={request.donation_id} shelterCode={request.shelter_code} />
+		{/if}
 
 		<!-- Staff Review Memo Textarea -->
 		{#if !readonly}
