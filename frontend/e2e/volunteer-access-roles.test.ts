@@ -253,7 +253,7 @@ test.describe('Volunteer access: grant dialog', { tag: TAGS }, () => {
 		await dialog.getByRole('button', { name: 'บันทึกและออกสิทธิ์ใหม่' }).click();
 	}
 
-	test('manager grants distribution_staff, retries, and the account reaches its desk', async ({
+	test('manager grants distribution_staff, then manages it as an account, and it reaches its desk', async ({
 		browser
 	}) => {
 		const page = await openAs(browser, manager);
@@ -269,11 +269,10 @@ test.describe('Volunteer access: grant dialog', { tag: TAGS }, () => {
 		expect(created?.volunteer_id).toBe(volunteerId);
 		expect((await getDocument(SHELTER_DB, volunteerId))?.user_name).toBe(email);
 
-		await grantDistributionStaff(page);
-		await expect(
-			page.getByText(`ผูกบัญชี (${email}) แล้ว รหัสผ่านเดิมไม่เปลี่ยนแปลง`)
-		).toBeVisible();
-		await expect(couchLogin(email, PASSWORD), 'password unchanged by retry').resolves.toBeTruthy();
+		// Once linked, the card sends a manager to the user page instead of re-granting (#953);
+		// relinking an existing account without touching its password is unit-tested.
+		await expect(page.getByRole('link', { name: 'จัดการบัญชีผู้ใช้' })).toBeVisible();
+		await expect(page.getByRole('button', { name: 'ออกสิทธิ์ใช้งานระบบ' })).toHaveCount(0);
 		await page.context().close();
 
 		await seedSecurityQuestion(email);
