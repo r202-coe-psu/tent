@@ -628,10 +628,21 @@ export class OperationsRemoteRepository implements OperationsRepository {
 		let acquired = false;
 		for (let attempt = 0; attempt <= maxRetries; attempt++) {
 			const ledger = await this.listLedger();
-			const lots = projectStockLotBalances(ledger);
+			// Lots never cross items: replay only this item's rows so another item's impossible
+			// history cannot block a healthy distribute (same scope as the write-off check).
+			const lots = projectStockLotBalances(ledger.filter((row) => row.item_id === entry.item_id));
 			const selectedLot = lots.find((lot) => lot.lot_ref === lotRef);
 
 			if (!selectedLot) {
+				// Not among this item's lots: either another item's lot or no such lot at all.
+				const belongsToOtherItem = ledger.some(
+					(row) => row.item_id !== entry.item_id && (row.lot_ref ?? row._id) === lotRef
+				);
+				if (belongsToOtherItem) {
+					throw new Error(
+						`Selected stock lot ${lotRef} does not match item ${entry.item_id} and unit ${entry.unit}`
+					);
+				}
 				throw new Error(`Selected stock lot ${lotRef} is not available for item ${entry.item_id}`);
 			}
 			if (selectedLot.item_id !== entry.item_id || selectedLot.unit !== entry.unit) {
