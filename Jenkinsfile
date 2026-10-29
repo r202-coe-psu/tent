@@ -71,6 +71,35 @@ pipeline {
                             error("Staging server is at ${deployedCommit}, expected ${env.GIT_COMMIT}")
                         }
 
+                        // The sync worker runs a full bootstrap re-projection before it starts the inbound
+                        // loops (donation bookings, search audit, ...) and the _changes listeners — minutes
+                        // after `up -d` when PROJECTION_VERSION was bumped. The e2e job only polls the frontend
+                        // health, so a run started inside that window sees bookings that never reach CouchDB.
+                        // Wait for the worker's "Sync worker running" line (logged once bootstrap is done and
+                        // every loop is started) before triggering. The container was force-recreated, so its
+                        // log holds this deploy only. Never fails the build (E2E does not gate the deploy):
+                        // on timeout we warn and trigger anyway.
+                        sh '''
+                            set +x
+                            if ssh -i "$SSH_KEY" -p "$SSH_PORT" -o StrictHostKeyChecking=no "$SSH_USER@$SSH_HOST" 'sh -s' <<'REMOTE'
+                            set -eu
+                            deadline=$(( $(date +%s) + 900 ))
+                            until docker logs tent-worker-staging 2>&1 | grep -q 'Sync worker running'; do
+                                if [ "$(date +%s)" -ge "$deadline" ]; then
+                                    echo 'sync worker not ready after 900s' >&2
+                                    exit 1
+                                fi
+                                sleep 5
+                            done
+                            echo 'sync worker is running'
+REMOTE
+                            then
+                                echo 'Staging sync worker is ready.'
+                            else
+                                echo 'WARNING: staging sync worker readiness not confirmed; triggering E2E anyway.'
+                            fi
+                        '''
+
                         // Fire and forget (decision 2026-10-09: E2E never gates the deploy; results are reviewed
                         // manually in the tent-e2e-staging job before promoting). Waiting held this build and its
                         // mgmt executor for the whole 15–30 min run for nothing; tent-e2e-staging reports its own
