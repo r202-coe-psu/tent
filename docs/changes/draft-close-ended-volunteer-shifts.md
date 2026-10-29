@@ -3,6 +3,7 @@ id: draft
 title: กะงานอาสาที่จบแล้วปิดรับสมัคร ไม่แสดงบนกระดาน public และงานที่ไม่เหลือกะแสดงว่า "ปิดรับแล้ว"
 status: proposed
 date: 2026-10-28
+updated: 2026-10-29
 requested_by: "ผู้รับงาน (@Mhapong) จากการทดสอบ 2026-10-28 (#972)"
 decided_by: project owner
 layer: volatile
@@ -56,8 +57,8 @@ affects:
 - **FR-3:** กระดานงาน public, แท็บงานใน portal และ quick apply ไม่แสดงกะที่ปิดรับแล้ว และเลือกไม่ได้
 - **FR-4:** งานที่ `status = open` แต่ไม่เหลือกะเปิดรับ
   - แสดงป้าย "ปิดรับแล้ว" และสมัครไม่ได้
-  - เรียงไว้ท้ายรายการ ถัดจากงานที่ยังเปิดรับทั้งหมด
-  - งานที่เปิดรับยังเรียงตามกะที่ใกล้ที่สุดเหมือนเดิม
+  - เรียงไว้ท้ายรายการ ถัดจากงานที่ยังเปิดรับทั้งหมด (`openJobsFirst` แบ่งสองกลุ่มแบบ stable)
+  - แต่ละกลุ่มคงลำดับเดิมจาก API (`GET /public/v1/volunteer/jobs` เรียงตาม `shelter_code` แล้ว `title`) CR นี้ไม่เปลี่ยนลำดับภายในกลุ่ม
   - ป้าย "ปิดรับแล้ว" คำนวณตอนแสดงผลจาก FR-1 เท่านั้น ไม่ได้มาจาก `job.status` · ข้อความอยู่ที่ `volunteers/i18n/jobs.i18n.ts` (`tagClosed`)
 - **FR-5:** BFF apply ตรวจ FR-1 ฝั่ง server ทั้ง `POST /api/public/v1/volunteer/jobs/{id}/apply` และ compat `POST /api/public/v1/volunteer/apply`
   - กะที่ปิดรับแล้วได้ผลรายกะ `{ ok: false, shift_id, error: "SHIFT_CLOSED" }` (เพิ่มในรายการรหัสของ CR-180 FR-6) และใช้ HTTP **409** เมื่อไม่มีกะผ่านเลยและกะแรกที่ไม่ผ่านคือกะที่ปิดรับ (CR-180 FR-7: มีกะผ่านอย่างน้อย 1 กะยังตอบ 201)
@@ -106,3 +107,4 @@ affects:
   - D1 อนุมัติหลังแก้ B1–B6 แล้วรันเลข CR ย้ายไป `06-A-volunteer/` พร้อมแก้ CR-180 FR-6 และ CR-185 FR-3/4/5
 - 2026-10-29 — ผู้รับงานแก้ตาม review รอบ 2 ของ PR #997: W1 (เวลาว่างเป็น `""`), S1 (เงื่อนไข 409), S2 (`affects` ข้อความ error), S3 (นิยามสิ้นวัน)
   - **รอ Team Lead ยืนยัน (W2):** ข้อยกเว้นใน FR-2 ที่ให้ `volunteer-portal/domain` import `volunteers/domain/shift-closing` ตรง ต่างจาก D6 ที่ให้ใช้ barrel เพราะใช้ barrel แล้วเกิด import cycle
+- 2026-10-29 — ผู้รับงานแก้ FR-4 ให้ตรงกับโค้ดใน #983: ลำดับภายในกลุ่มมาจาก API (`shelter_code`, `title`) ไม่ได้เรียงตามกะที่ใกล้ที่สุด
