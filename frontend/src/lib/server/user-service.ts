@@ -21,8 +21,9 @@ import { generateTemporaryPassphrase } from '$lib/server/passphrase-generator';
 
 /**
  * User service — the ONLY module that writes CouchDB `_users` with admin creds.
- * Both `/api/v1/users` (role-gated) and `/api/register` (public, fixed role)
- * call it, so there is a single audited admin-write surface that mirrors the
+ * `/api/v1/users` (role-gated) calls it. `/api/register` used to call it for
+ * public self-signup; that endpoint now answers 404 (#474). This keeps a
+ * single audited admin-write surface that mirrors the
  * future FastAPI route boundary. Authorization happens in the handlers
  * (couch-admin.authorizeUserWrite / assertCanGrant) BEFORE these run.
  *
