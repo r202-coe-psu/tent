@@ -42,6 +42,7 @@
 		moved_in: 'ย้ายเข้ามาจากกอง',
 		moved_out: 'ย้ายออกไปกอง',
 		voided: 'ยกเลิกรายการ',
+		loan_reopened: 'เปิดยอดยืมกลับ',
 		submitted: 'ส่งเข้าคลัง',
 		received: 'ตรวจรับเข้าคลัง',
 		cancelled: 'ยกเลิกกอง'
@@ -60,6 +61,7 @@
 			dot: 'bg-violet-500'
 		},
 		voided: { badge: 'border border-red-200 bg-red-50 text-red-800', dot: 'bg-red-500' },
+		loan_reopened: { badge: 'border border-rose-200 bg-rose-50 text-rose-800', dot: 'bg-rose-500' },
 		submitted: { badge: getPoolStatusBadgeClass('SUBMITTED'), dot: 'bg-sky-500' },
 		received: { badge: getPoolStatusBadgeClass('RECEIVED'), dot: 'bg-slate-700' },
 		cancelled: {
