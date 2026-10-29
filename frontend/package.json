@@ -46,6 +46,7 @@
 		"unseed:stock": "tsx --tsconfig .svelte-kit/tsconfig.json scripts/unseed-stock.ts",
 		"audit:ledger-refid": "tsx --tsconfig .svelte-kit/tsconfig.json scripts/audit-stock-ledger-refid.ts",
 		"backfill:evacuee-consent": "tsx --tsconfig .svelte-kit/tsconfig.json scripts/backfill-evacuee-consent.ts",
+		"backfill:staff-card-token": "tsx --tsconfig .svelte-kit/tsconfig.json scripts/backfill-staff-card-token.ts",
 		"migrate:shelter": "tsx --tsconfig .svelte-kit/tsconfig.json scripts/migrate-shelter.ts",
 		"migrate:shelter-closed-at": "tsx --tsconfig .svelte-kit/tsconfig.json scripts/migrate-shelter-closed-at.ts",
 		"migrate:volunteer-review": "tsx --tsconfig .svelte-kit/tsconfig.json scripts/migrate-volunteer-review.ts",
