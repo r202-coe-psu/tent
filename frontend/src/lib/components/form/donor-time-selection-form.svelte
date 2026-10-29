@@ -21,9 +21,11 @@
 	import { onMount } from 'svelte';
 	import {
 		buildDonationItemsPayload,
+		buildDonationLogistics,
 		publicDonationErrorMessage,
 		slotModeForDelivery,
-		useDonationSlots
+		useDonationSlots,
+		VEHICLE_PLATE_MAX
 	} from '$lib/features/donations';
 	import { formatUnit, useUnitsOfMeasure } from '$lib/features/catalog';
 	import { getDonationStore } from '../../../routes/(public)/donations/donation.svelte';
@@ -32,7 +34,6 @@
 	import { bangkokToday, DISPLAY_TIME_ZONE } from '$lib/utils/date';
 	import { PUBLIC_DONATIONS_I18N } from '$lib/constants/i18n';
 	import { fetchRecaptchaEnabled } from '$lib/api/recaptcha-status';
-	import { VEHICLE_PLATE_MAX } from '$lib/features/donations';
 	import { ensureRecaptchaLoaded } from '$lib/api/recaptcha-script';
 
 	const donationStore = getDonationStore();
@@ -182,24 +183,15 @@
 		let fromTime = donationStore.slotTime.split('-')[0]?.trim() || '00:00';
 		let toTime = donationStore.slotTime.split('-')[1]?.trim() || '23:59';
 
-		let logistics: Record<string, unknown> = {
-			delivery_method: donationStore.deliveryMethod
-		};
-
-		if (donationStore.deliveryMethod === 'self_dropoff') {
-			logistics.vehicle = donationStore.vehicleType;
-			const plate = donationStore.vehiclePlate.trim();
-			if (plate) logistics.vehicle_plate = plate;
-			logistics.slot = { date: slotDateStr, from: fromTime, to: toTime };
-		} else if (donationStore.deliveryMethod === 'shelter_pickup') {
-			logistics.slot = { date: slotDateStr, from: fromTime, to: toTime };
-			if (donationStore.pickupAddress) logistics.pickup_address = donationStore.pickupAddress;
-			if (donationStore.eta) logistics.eta = donationStore.eta;
-		} else if (donationStore.deliveryMethod === 'parcel') {
-			if (donationStore.eta) logistics.eta = donationStore.eta;
-			if (donationStore.courierTrackingNo)
-				logistics.courier_tracking_no = donationStore.courierTrackingNo;
-		}
+		const logistics = buildDonationLogistics({
+			deliveryMethod: donationStore.deliveryMethod,
+			vehicleType: donationStore.vehicleType,
+			vehiclePlate: donationStore.vehiclePlate,
+			slot: { date: slotDateStr, from: fromTime, to: toTime },
+			pickupAddress: donationStore.pickupAddress,
+			eta: donationStore.eta,
+			courierTrackingNo: donationStore.courierTrackingNo
+		});
 
 		try {
 			const res = await fetch('/api/public/v1/donations', {

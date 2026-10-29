@@ -35,7 +35,7 @@ export interface DonationPreDeclaration extends BaseDoc {
 	logistics?: {
 		delivery_method: 'self_dropoff' | 'parcel' | 'shelter_pickup';
 		vehicle?: 'motorcycle' | 'car' | 'pickup' | 'truck';
-		vehicle_plate?: string; // draft-donation-vehicle-plate — self_dropoff only, donor PII
+		vehicle_plate?: string; // CR-209 — self_dropoff only, donor PII
 		slot?: { date: string; from: string; to: string };
 		eta?: string;
 		courier_tracking_no?: string | null;
@@ -44,8 +44,56 @@ export interface DonationPreDeclaration extends BaseDoc {
 	booking_ref?: string;
 }
 
-/** draft-donation-vehicle-plate — free text, so a donor can type the province in the same field. */
+/** CR-209 — free text, so a donor can type the province in the same field. */
 export const VEHICLE_PLATE_MAX = 40;
+
+/** What the public booking form holds about delivery when the donor submits. */
+export type DonationLogisticsInput = {
+	deliveryMethod: 'self_dropoff' | 'parcel' | 'shelter_pickup';
+	vehicleType?: 'motorcycle' | 'car' | 'pickup' | 'truck';
+	vehiclePlate: string;
+	slot: { date: string; from: string; to: string };
+	pickupAddress?: string;
+	eta?: string;
+	courierTrackingNo?: string;
+};
+
+/** The `logistics` block of a public booking, as the BFF schema accepts it. */
+export type DonationLogisticsPayload = z.input<
+	typeof donationPreDeclarationInputSchema
+>['logistics'];
+
+/**
+ * The `logistics` block a public booking sends. The plate goes out only on `self_dropoff` and
+ * only when non-blank (CR-209 FR-2a) — the form keeps what was typed when the donor switches
+ * method, so switching back shows it again, but it is never sent for another method.
+ */
+export function buildDonationLogistics(input: DonationLogisticsInput): DonationLogisticsPayload {
+	switch (input.deliveryMethod) {
+		case 'self_dropoff': {
+			const plate = input.vehiclePlate.trim();
+			return {
+				delivery_method: 'self_dropoff',
+				vehicle: input.vehicleType,
+				...(plate ? { vehicle_plate: plate } : {}),
+				slot: input.slot
+			};
+		}
+		case 'shelter_pickup':
+			return {
+				delivery_method: 'shelter_pickup',
+				slot: input.slot,
+				...(input.pickupAddress ? { pickup_address: input.pickupAddress } : {}),
+				...(input.eta ? { eta: input.eta } : {})
+			};
+		case 'parcel':
+			return {
+				delivery_method: 'parcel',
+				...(input.eta ? { eta: input.eta } : {}),
+				...(input.courierTrackingNo ? { courier_tracking_no: input.courierTrackingNo } : {})
+			};
+	}
+}
 
 export const donationPreDeclarationInputSchema = z.object({
 	shelter_code: z.string().regex(/^[A-Za-z0-9_-]{1,20}$/, 'Invalid shelter code.'),
@@ -75,7 +123,7 @@ export const donationPreDeclarationInputSchema = z.object({
 		.object({
 			delivery_method: z.enum(['self_dropoff', 'parcel', 'shelter_pickup']),
 			vehicle: z.enum(['motorcycle', 'car', 'pickup', 'truck']).optional(),
-			// Blank after trim = not sent (draft-donation-vehicle-plate FR-1).
+			// Blank after trim = not sent (CR-209 FR-1).
 			vehicle_plate: z
 				.string()
 				.trim()
@@ -107,7 +155,7 @@ export const donationPreDeclarationInputSchema = z.object({
 			message: 'vehicle is only allowed for self_dropoff or shelter_pickup',
 			path: ['vehicle']
 		})
-		// draft-donation-vehicle-plate: the shelter's own vehicle collects a pickup, so a plate only fits self_dropoff.
+		// CR-209: the shelter's own vehicle collects a pickup, so a plate only fits self_dropoff.
 		.refine((l) => !(l.delivery_method !== 'self_dropoff' && l.vehicle_plate), {
 			message: 'vehicle_plate is only allowed for self_dropoff',
 			path: ['vehicle_plate']

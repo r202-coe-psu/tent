@@ -122,6 +122,7 @@ export {
 export {
 	donationPreDeclarationInputSchema,
 	VEHICLE_PLATE_MAX,
+	buildDonationLogistics,
 	isDonationPreDeclaration,
 	donorCategoryFromCatalog,
 	PUBLIC_DONATION_CATEGORIES
