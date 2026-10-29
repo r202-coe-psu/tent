@@ -36,15 +36,20 @@ class CouchClient:
         response.raise_for_status()
         return response.json()
 
-    async def put_doc(self, database: str, doc: dict[str, Any]) -> dict[str, Any]:
+    async def put_doc(
+        self, database: str, doc: dict[str, Any], *, retry_conflict: bool = True
+    ) -> dict[str, Any]:
         """PUT a document. On 409, retry once with the latest ``_rev``.
+
+        With ``retry_conflict=False`` a 409 raises instead: the caller put an explicit
+        ``_rev`` in ``doc`` and wants to know the document moved, not to overwrite it.
 
         Returns CouchDB's ``{"ok": true, "id": ..., "rev": ...}`` on success.
         Raises ``httpx.HTTPStatusError`` if the write cannot complete.
         """
         doc_id = doc["_id"]
         response = await self._client.put(f"/{database}/{doc_id}", json=doc)
-        if response.status_code != 409:
+        if response.status_code != 409 or not retry_conflict:
             response.raise_for_status()
             return response.json()
 
