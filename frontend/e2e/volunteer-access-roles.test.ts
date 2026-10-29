@@ -7,13 +7,12 @@
  *  1. One grant through the real "ออกสิทธิ์ใช้งานระบบ" dialog (`distribution_staff`): `_users`
  *     roles are compound, a retry relinks without touching the password, and the new account
  *     signs in and reaches `/onsite/distribution`.
- *  2. A table for all 11 `STAFF_CAPABILITIES`. Accounts are created directly with
+ *  2. A table for every `STAFF_CAPABILITIES` role. Accounts are created directly with
  *     `rolesFromAssignments` (the roles the dialog writes). Per role: `/portal` shows only its
  *     department, allowed URLs load, forbidden URLs bounce back to `/portal`.
  *
- * The table records the REAL guard behaviour. Where a role description promises more than the
- * guard allows, the row lists a `gap`: the description expectation is a `test.fixme` and the
- * real behaviour stays pinned. Permissions are not changed here (a change needs a CR).
+ * The table records the REAL guard behaviour. Permissions are not changed here (a change needs
+ * a CR).
  *
  * Tags: `@volunteers` + `@critical` + `@release`. Local: `docker compose up -d`, then
  *   pnpm exec playwright test e2e/volunteer-access-roles.test.ts
@@ -47,7 +46,7 @@ const RUN_ID = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 
 test.skip(!CAN_WRITE, READ_ONLY_REASON);
 test.use({ actionTimeout: 15_000 });
 
-export interface RoleAccess {
+interface RoleAccess {
 	role: StaffCapability;
 	/** `portal-dept-<id>` sections `/portal` must show for this role, and no others. */
 	portalDepartments: string[];
@@ -57,12 +56,10 @@ export interface RoleAccess {
 	allowed: string[];
 	/** URLs of other departments (real guard behaviour). */
 	forbidden: string[];
-	/** Description promises it, the guard refuses it: fixme until the owner decides (needs a CR). */
-	gaps?: { url: string; reason: string }[];
 }
 
-/** Role to pages, one row per `STAFF_CAPABILITIES` entry; #842 adds a sidebar column here. */
-export const ROLE_ACCESS: RoleAccess[] = [
+/** Role to pages, one row per `STAFF_CAPABILITIES` entry. */
+const ROLE_ACCESS: RoleAccess[] = [
 	{
 		role: 'registration_staff',
 		portalDepartments: ['registration'],
@@ -115,6 +112,13 @@ export const ROLE_ACCESS: RoleAccess[] = [
 		forbidden: ['/back-office/volunteers', '/back-office/supply']
 	},
 	{
+		// CR-203 (#930): confined to the banner pages.
+		role: 'pr_staff',
+		portalDepartments: ['pr'],
+		allowed: ['/back-office/kiosks/banners'],
+		forbidden: ['/back-office/kiosks', '/back-office/supply']
+	},
+	{
 		role: 'facility_staff',
 		portalDepartments: ['facility'],
 		allowed: ['/onsite/zoning'],
@@ -129,6 +133,8 @@ export const ROLE_ACCESS: RoleAccess[] = [
 	{
 		role: 'security_officer',
 		portalDepartments: ['security'],
+		// `requireIncidents` admits any staff of the shelter, so this URL does not single the role
+		// out; the portal department and the bounce from supply do.
 		allowed: ['/back-office/incidents'],
 		forbidden: ['/back-office/supply']
 	}
@@ -311,14 +317,6 @@ test.describe('Volunteer access: every staff role', { tag: TAGS }, () => {
 			for (const url of row.forbidden) await expectBouncedToPortal(page, url);
 			await page.context().close();
 		});
-
-		for (const gap of row.gaps ?? []) {
-			test.fixme(`${row.role} reaches ${gap.url} (GAP: ${gap.reason})`, async ({ browser }) => {
-				const page = await openAs(browser, roleUser(row.role));
-				await expectLoads(page, gap.url);
-				await page.context().close();
-			});
-		}
 	}
 
 	test('volunteer_coordinator cannot create accounts (real behaviour)', async () => {

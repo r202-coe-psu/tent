@@ -216,6 +216,8 @@ describe('grantVolunteerAccess', () => {
 		{ ...account, roles: ['shelter:SH001', `SH001:${input.role}`, 'SH001:warehouse_staff'] },
 		{ ...account, roles: ['shelter:SH001', input.role, 'SH001:warehouse_staff'] },
 		{ ...account, roles: ['shelter:SH001', `SH001:${input.role}`, input.role] },
+		{ ...account, roles: ['shelter:SH001', 'system_admin'] },
+		{ ...account, roles: ['shelter:SH001', '_admin'] },
 		{ ...account, name: 'another@example.com' }
 	])('does not adopt an existing mismatched account: %j', async (existing) => {
 		mocks.listUsers.mockResolvedValue([existing]);
