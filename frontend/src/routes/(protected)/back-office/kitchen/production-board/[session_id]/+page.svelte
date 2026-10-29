@@ -1057,7 +1057,7 @@
 								{/if}
 								{#each ingredientsList as ing, idx (ing.item_id + '_' + idx)}
 									{@const onHand = stock.data?.get(ing.item_id) ?? '0'}
-									{@const isShort = qtyGt(ing.needed, onHand)}
+									{@const isShort = isPositiveQty(ing.needed) && qtyGt(ing.needed, onHand)}
 									<Table.Row>
 										<Table.Cell class="font-medium">
 											{ing.name}

@@ -254,7 +254,7 @@ test.describe(
 			const note = page.getByRole('alert').filter({ hasText: NEGATIVE_NOTE });
 			const ingredientAmounts = page.locator('table input[type="number"]');
 
-			await expect(target).toBeVisible({ timeout: 20_000 });
+			await expect(target).toHaveValue('20', { timeout: 20_000 });
 			const recipe = page.locator('select').first();
 			await expect(recipe.locator('option', { hasText: RECIPE_LABEL })).toHaveCount(1, {
 				timeout: 20_000
@@ -301,7 +301,7 @@ test.describe(
 			const create = page.getByRole('button', { name: CREATE_REQUISITION });
 			const error = page.getByRole('alert').filter({ hasText: TARGET_ERROR });
 
-			await expect(target).toBeVisible({ timeout: 20_000 });
+			await expect(target).toHaveValue('20', { timeout: 20_000 });
 			for (const bad of ['0', '']) {
 				await target.fill(bad);
 				await expect(error).toHaveCount(1);
@@ -361,6 +361,8 @@ test.describe(
 			const create = page.getByRole('button', { name: CREATE_REQUISITION });
 			const errors = page.getByRole('alert').filter({ hasText: QTY_ERROR });
 			const amount = page.locator('table input[type="number"]').first();
+			const pageErrors: string[] = [];
+			page.on('pageerror', (e) => pageErrors.push(e.message));
 
 			await expect(recipe.locator('option', { hasText: RECIPE_LABEL })).toHaveCount(1, {
 				timeout: 20_000
@@ -402,6 +404,16 @@ test.describe(
 				await expect(page.getByRole('alert').filter({ hasText: NEGATIVE_NOTE })).toHaveCount(0);
 				await expect(create).toBeEnabled();
 			});
+
+			await test.step('emptied amount is flagged and blocks the requisition', async () => {
+				await amount.selectText();
+				await page.keyboard.press('Backspace');
+				await expect(amount).toHaveValue('');
+				await expect(errors).toHaveCount(1);
+				await expect(create).toBeDisabled();
+			});
+
+			expect(pageErrors, 'no uncaught page errors').toEqual([]);
 		});
 
 		test('add-ingredient quantity refuses negatives and flags 0', async ({ page }) => {
