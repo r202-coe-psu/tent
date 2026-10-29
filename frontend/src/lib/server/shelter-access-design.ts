@@ -73,6 +73,27 @@ export const DAILY_SOP_ROLE_MANGO_INDEX = {
 	type: 'json' as const
 };
 
+/**
+ * Donor photos no booking has bound yet (CR-175 donor photos FR-16). Partial: a photo
+ * leaves the index the moment the worker writes its `donation_id`, so the sweep never
+ * re-reads bound photos. CouchDB never picks a partial index on its own, so the worker
+ * names this one in `use_index` (`worker/src/worker/retention/donation_photos.py`) and
+ * repeats the filter in its selector.
+ */
+export const DONATION_PHOTO_ORPHAN_MANGO_INDEX = {
+	index: {
+		fields: ['created_at'],
+		partial_filter_selector: {
+			type: 'image',
+			purpose: 'donation',
+			donation_id: { $exists: false }
+		}
+	},
+	ddoc: 'donation-photo-orphans',
+	name: 'image-donation-unbound-created-idx',
+	type: 'json' as const
+};
+
 const DAILY_SOP_ROLE_VDU_CONTRACT = JSON.stringify({
 	version: DAILY_SOP_ROLE_QUESTION_VERSION,
 	roles: DAILY_SOP_ROLES.map((role) => ({
@@ -1212,9 +1233,6 @@ ${consentVduClause()}
         throw { forbidden: 'Loan return stock ledger requires a stock_ledger:{26-char id}' };
       }
     }
-    if (newDoc.reason === 'distribution_return' && !isWarehouseOrAdmin) {
-      throw { forbidden: 'Only warehouse staff or system admin can write distribution return stock ledger' };
-    }
     if (newDoc.reason === 'distribute') {
       if (typeof newDoc.ref_id !== 'string' || (!/^distribution_batch:.+/.test(newDoc.ref_id) && !/^requisition_ticket:.+/.test(newDoc.ref_id))) {
         throw { forbidden: 'Distribute stock ledger requires distribution_batch ref_id or requisition_ticket ref_id' };
@@ -1241,8 +1259,18 @@ ${consentVduClause()}
       }
     }
     if (newDoc.reason === 'distribution_return') {
-      if (typeof newDoc.ref_id !== 'string' || !/^distribution_batch:.+/.test(newDoc.ref_id)) {
-        throw { forbidden: 'Distribution return stock ledger requires distribution_batch ref_id' };
+      // CR-208: a ticket's leftovers go back into their source lot; a direct issue has no return step.
+      var isTicketReturn =
+        typeof newDoc.ref_id === 'string' &&
+        /^requisition_ticket:.+/.test(newDoc.ref_id) &&
+        !/^requisition_ticket:direct-/.test(newDoc.ref_id);
+      var isBatchReturn = typeof newDoc.ref_id === 'string' && /^distribution_batch:.+/.test(newDoc.ref_id);
+      if (!isTicketReturn && !isBatchReturn) {
+        throw { forbidden: 'Distribution return stock ledger requires distribution_batch or non-direct requisition_ticket ref_id' };
+      }
+      // Ticket returns follow canReceiveWarehouseReturns; the legacy batch flow keeps its narrower gate.
+      if (isBatchReturn && !isWarehouseOrAdmin) {
+        throw { forbidden: 'Only warehouse staff or system admin can write distribution return stock ledger' };
       }
       if (typeof newDoc.lot_ref !== 'string' || !/^stock_ledger:.+/.test(newDoc.lot_ref)) {
         throw { forbidden: 'Distribution return stock ledger requires physical stock_ledger lot_ref' };

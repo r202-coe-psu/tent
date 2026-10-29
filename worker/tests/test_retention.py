@@ -189,13 +189,21 @@ async def test_retention_cycle_runs_the_reservation_ttl_sweep(db: None) -> None:
     """The TTL sweep must stay wired into the loop — it has no other scheduler."""
     couch = AsyncMock()
     couch.get_doc.return_value = None
-    with patch(
-        "worker.retention.job.expire_declared_donations", new_callable=AsyncMock
-    ) as sweep:
+    with (
+        patch(
+            "worker.retention.job.expire_declared_donations", new_callable=AsyncMock
+        ) as sweep,
+        patch(
+            "worker.retention.job.sweep_orphan_donation_photos", new_callable=AsyncMock
+        ) as photo_sweep,
+    ):
         await run_retention_once(couch)
 
     sweep.assert_awaited_once()
     assert sweep.await_args.args[0] is couch
+    # CR-175 FR-16 — the unbound donor photo sweep rides the same cycle.
+    photo_sweep.assert_awaited_once()
+    assert photo_sweep.await_args.args[0] is couch
 
 
 async def test_retention_cycle_skips_the_sweep_without_a_couch_client(db: None) -> None:

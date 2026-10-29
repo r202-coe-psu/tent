@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
 	canCancelDonation,
 	canEditCourierTracking,
+	closedAtIntakeMessage,
 	donationStatusLabel,
 	formatTrackSchedule,
 	isTerminalDonationStatus,
@@ -105,6 +106,25 @@ describe('item_id survives the round trip', () => {
 			items: [{ free_text: 'ของใช้เบ็ดเตล็ด', qty: '2', unit: 'ชิ้น' }]
 		});
 		expect(view.items[0]?.item_id).toBeNull();
+	});
+});
+
+// CR-196 FR-LK-3 — the edit dialog names each held line by its key.
+describe('line_key survives the round trip', () => {
+	it('carries line_key from the payload', () => {
+		const view = toDonationTrackView({
+			status: 'pending_review',
+			items: [{ free_text: 'ผ้าห่ม', qty: '2', unit: 'ผืน', line_key: '01K8LINEKEY' }]
+		});
+		expect(view.items[0]?.line_key).toBe('01K8LINEKEY');
+	});
+
+	it('reports null for a line from before schema_v 8', () => {
+		const view = toDonationTrackView({
+			status: 'pending_review',
+			items: [{ free_text: 'ผ้าห่ม', qty: '2', unit: 'ผืน' }]
+		});
+		expect(view.items[0]?.line_key).toBeNull();
 	});
 });
 
@@ -287,5 +307,28 @@ describe('toTrackingDonor', () => {
 	it('returns an empty donor for missing or malformed input', () => {
 		expect(toTrackingDonor(undefined)).toEqual({});
 		expect(toTrackingDonor({ phone: null })).toEqual({});
+	});
+});
+
+describe('closedAtIntakeMessage', () => {
+	it('lets an open booking through to the count', () => {
+		for (const status of ['declared', 'pending_review', 'verifying']) {
+			expect(closedAtIntakeMessage('DN-1', status)).toBeNull();
+		}
+	});
+
+	it('names the booking and its status, and points a closed one to walk-in', () => {
+		expect(closedAtIntakeMessage('DN-1', 'cancelled')).toBe(
+			'ใบจอง DN-1 ยกเลิกการจองแล้ว — รับเข้าคลังไม่ได้ ถ้าของอยู่ที่เคาน์เตอร์จริงให้กรอกข้อมูลใหม่ผ่าน "ลงทะเบียน Walk-in"'
+		);
+		for (const status of ['rejected', 'redirected', 'expired']) {
+			expect(closedAtIntakeMessage('DN-1', status)).toContain('Walk-in');
+		}
+	});
+
+	it('does not offer walk-in for goods already received', () => {
+		expect(closedAtIntakeMessage('DN-1', 'received')).toBe(
+			'ใบจอง DN-1 รับเข้าคลังเรียบร้อย — รับซ้ำไม่ได้'
+		);
 	});
 });

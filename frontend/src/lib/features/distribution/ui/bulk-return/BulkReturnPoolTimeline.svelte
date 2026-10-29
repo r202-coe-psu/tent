@@ -1,4 +1,5 @@
 <script lang="ts">
+	import AlertTriangle from '@lucide/svelte/icons/alert-triangle';
 	import ChevronDown from '@lucide/svelte/icons/chevron-down';
 	import History from '@lucide/svelte/icons/history';
 	import { formatThaiDateTime } from '$lib/utils/date';
@@ -10,6 +11,15 @@
 		type PoolCatalogItem
 	} from '../model/bulk-return-pool-v3';
 	import {
+		formatSkippedDocIds,
+		isTimelineSkippedCoveredByShelter
+	} from '../model/bulk-return-skipped-docs';
+	import {
+		POOL_TIMELINE_SKIPPED_BADGE_SR_HINT,
+		POOL_TIMELINE_SKIPPED_NOTICE_PREFIX,
+		POOL_TIMELINE_SKIPPED_NOTICE_SUFFIX,
+		poolTimelineEmptyLabel,
+		poolTimelineSkippedBadge,
 		TIMELINE_NO_EFFECT_BADGE_CLASS,
 		TIMELINE_NO_EFFECT_LABEL
 	} from '../model/bulk-return-timeline-copy';
@@ -23,6 +33,13 @@
 		poolNameById: ReadonlyMap<string, string>;
 		isLoading?: boolean;
 		isError?: boolean;
+		/** Malformed event docs of this pool the read left out (the timeline may be incomplete). */
+		skipped?: readonly { _id: string }[];
+		/**
+		 * Shelter-level skipped docs already listed on this page (undefined until loaded); the
+		 * timeline banner is hidden when it covers every timeline skipped id.
+		 */
+		shelterSkipped?: readonly { _id: string }[];
 	}
 
 	let {
@@ -31,10 +48,20 @@
 		returnerNames,
 		poolNameById,
 		isLoading = false,
-		isError = false
+		isError = false,
+		skipped = [],
+		shelterSkipped
 	}: Props = $props();
 
 	let open = $state(false);
+
+	const skippedCount = $derived(skipped.length);
+	const skippedIds = $derived(formatSkippedDocIds(skipped));
+	const showSkipped = $derived(!isLoading && !isError && skippedCount > 0);
+	// Badge stays; the banner is dropped when the shelter-level banner already lists every id.
+	const showSkippedBanner = $derived(
+		showSkipped && !isTimelineSkippedCoveredByShelter(skipped, shelterSkipped)
+	);
 
 	const KIND_LABELS: Record<PoolTimelineEventKind, string> = {
 		opened: 'เปิดกอง',
@@ -100,6 +127,18 @@
 				<span class="text-sm font-normal text-slate-500 tabular-nums">
 					({events?.length ?? 0})
 				</span>
+				{#if showSkipped}
+					<span
+						data-testid="bulk-return-timeline-skipped-badge"
+						class="inline-flex items-center gap-1"
+					>
+						<AlertTriangle class="h-3.5 w-3.5 text-amber-600" aria-hidden="true" />
+						<span class="text-xs font-medium text-amber-800 tabular-nums">
+							{poolTimelineSkippedBadge(skippedCount)}
+						</span>
+						<span class="sr-only">{POOL_TIMELINE_SKIPPED_BADGE_SR_HINT}</span>
+					</span>
+				{/if}
 			</span>
 			<ChevronDown
 				class="h-4 w-4 shrink-0 text-slate-500 transition-transform {open ? 'rotate-180' : ''}"
@@ -109,13 +148,29 @@
 	</h3>
 
 	{#if open}
-		<div id="pool-timeline-list">
+		<div id="pool-timeline-list" class="space-y-2">
+			{#if showSkippedBanner}
+				<div
+					role="status"
+					data-testid="bulk-return-timeline-skipped-docs"
+					class="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-2.5 text-sm text-amber-900"
+				>
+					<AlertTriangle class="mt-0.5 h-4 w-4 shrink-0 text-amber-600" aria-hidden="true" />
+					<p class="min-w-0 [overflow-wrap:anywhere]">
+						{POOL_TIMELINE_SKIPPED_NOTICE_PREFIX}
+						<span class="tabular-nums">{skippedCount}</span>
+						{POOL_TIMELINE_SKIPPED_NOTICE_SUFFIX}
+						{#if skippedIds}({skippedIds}){/if}
+					</p>
+				</div>
+			{/if}
 			{#if isLoading}
 				<p role="status" class="text-sm text-slate-600">กำลังโหลดประวัติของกอง…</p>
 			{:else if isError}
 				<p role="status" class="text-sm text-red-700">โหลดประวัติของกองไม่สำเร็จ</p>
 			{:else if !events || events.length === 0}
-				<p role="status" class="text-sm text-slate-600">ยังไม่มีประวัติ</p>
+				<!-- Defensive: the production timeline always has an `opened` event. -->
+				<p role="status" class="text-sm text-slate-600">{poolTimelineEmptyLabel(skippedCount)}</p>
 			{:else}
 				<ol class="space-y-0 border-l-2 border-slate-200 pl-4">
 					{#each events as event (event.kind + ':' + event.id)}

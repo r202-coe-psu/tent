@@ -438,7 +438,7 @@
 			<AlertDialog.Footer>
 				<AlertDialog.Cancel>ยกเลิก</AlertDialog.Cancel>
 				<AlertDialog.Action
-					class="text-destructive-foreground bg-destructive hover:bg-destructive/90"
+					class="bg-destructive text-destructive-foreground hover:bg-destructive/90"
 					disabled={deleteGroup.isPending}
 					onclick={confirmDelete}
 				>

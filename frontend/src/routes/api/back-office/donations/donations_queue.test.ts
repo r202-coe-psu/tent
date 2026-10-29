@@ -119,6 +119,29 @@ describe('GET /api/back-office/donations (pending intake queue)', () => {
 		expect(data.donations[0]).toMatchObject({ donor_name: 'ผู้บริจาค ก', item_count: 1 });
 	});
 
+	it('carries the donor photos of a booking, and an empty list when it has none (FR-12)', async () => {
+		const photos = ['image:01K8PHXTX00000000000000001', 'image:01K8PHXTX00000000000000002'];
+		const withPhotos = { doc: { ...sh001[0].doc, photos } };
+		vi.mocked(adminRaw).mockImplementation((path: string, method: string) =>
+			Promise.resolve(
+				method === 'GET' && path.includes('/shelter_sh001/')
+					? { status: 200, data: { rows: [withPhotos, sh001[1]] } }
+					: { status: 404, data: {} }
+			)
+		);
+
+		const data = await (await GET(event())).json();
+		const byRef = Object.fromEntries(
+			data.donations.map((d: { booking_ref: string; photos: string[] }) => [
+				d.booking_ref,
+				d.photos
+			])
+		);
+
+		expect(byRef['DN-000002']).toEqual(photos);
+		expect(byRef['DN-000001']).toEqual([]);
+	});
+
 	it('never exposes the tracking token hash', async () => {
 		mockCouch();
 
@@ -177,12 +200,12 @@ describe('GET /api/back-office/donations (pending intake queue)', () => {
 		expect(response.status).toBe(403);
 	});
 
-	it('maps logistics.vehicle_plate: v8 doc → value, v7 doc → null', async () => {
-		const v8 = {
+	it('maps logistics.vehicle_plate: v10 doc → value, older doc → null', async () => {
+		const v10 = {
 			...sh001[0]!.doc,
-			_id: 'donation:v8',
-			booking_ref: 'DN-000008',
-			schema_v: 8,
+			_id: 'donation:v10',
+			booking_ref: 'DN-000010',
+			schema_v: 10,
 			logistics: {
 				delivery_method: 'self_dropoff',
 				vehicle: 'car',
@@ -199,7 +222,7 @@ describe('GET /api/back-office/donations (pending intake queue)', () => {
 				});
 			}
 			if (method === 'GET' && path.includes('/shelter_sh001/')) {
-				return Promise.resolve({ status: 200, data: { rows: [{ doc: v8 }, { doc: v7 }] } });
+				return Promise.resolve({ status: 200, data: { rows: [{ doc: v10 }, { doc: v7 }] } });
 			}
 			return Promise.resolve({ status: 404, data: {} });
 		});
@@ -211,7 +234,7 @@ describe('GET /api/back-office/donations (pending intake queue)', () => {
 				d.vehicle_plate
 			])
 		);
-		expect(byRef['DN-000008']).toBe('กข 1234 กรุงเทพมหานคร');
+		expect(byRef['DN-000010']).toBe('กข 1234 กรุงเทพมหานคร');
 		expect(byRef['DN-000001']).toBeNull();
 		// the existing columns are untouched
 		expect(data.donations[0]).toMatchObject({ vehicle: 'car', delivery_method: 'self_dropoff' });

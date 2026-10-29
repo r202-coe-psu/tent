@@ -69,17 +69,21 @@ describe('updateCourierTracking', () => {
 describe('updateDonationItems', () => {
 	const items: DonationItemEdit[] = [{ free_text: 'ผ้าห่ม', qty: '1', unit: 'piece' }];
 
-	// CR-174 — keeping only lines the shelter refused is refused; the booking itself is
-	// still the donor's, so the copy points at cancelling rather than "locked".
-	it('tells the donor to cancel when the edit would keep only refused lines', async () => {
-		mockFetch(400, {
-			success: false,
-			error: 'NO_ACCEPTED_ITEMS',
-			message: 'ต้องเหลืออย่างน้อย 1 รายการ'
-		});
+	// CR-196 FR-LK-4 — reviewed since the page loaded: the same words as the disabled button.
+	it('points the donor at cancelling once the booking was reviewed', async () => {
+		mockFetch(400, { success: false, error: 'ALREADY_REVIEWED' });
 
-		await expect(updateDonationItems('tok', items)).rejects.toThrow('ยกเลิกการจองนี้');
+		await expect(updateDonationItems('tok', items)).rejects.toThrow('กรุณายกเลิกเพื่อทำรายการใหม่');
 	});
+
+	it.each(['UNKNOWN_LINE_KEY', 'DUPLICATE_LINE_KEY'])(
+		'asks the donor to reload when the form names lines the booking no longer holds (%s)',
+		async (error) => {
+			mockFetch(400, { success: false, error, line_key: '01K8X' });
+
+			await expect(updateDonationItems('tok', items)).rejects.toThrow('รีเฟรช');
+		}
+	);
 
 	it('still reads any other 400 as a booking staff have taken over', async () => {
 		mockFetch(400, { success: false, error: 'Cannot edit a donation in status "received"' });

@@ -22,6 +22,9 @@ class DonationItemInput(BaseModel):
     unit: str | None = None
     condition: str | None = None
     note: str | None = None
+    #: CR-196 — which held line this is, as ``GET`` returned it. Ignored on create, where
+    #: every line gets a new one. On an edit, a line without one is a new line.
+    line_key: str | None = None
 
 
 class SlotHold(BaseModel):
@@ -49,6 +52,10 @@ class DonationCreateRequest(BaseModel):
     items: list[DonationItemInput] = Field(default_factory=list)
     logistics: dict[str, Any] | None = None
     slot_hold: SlotHold | None = None
+    #: CR-175 donor photos — ``image:{ulid}`` ids the BFF already checked against the
+    #: shelter's CouchDB (FR-10). The worker copies them onto the booking and binds each
+    #: photo to it (FR-11a).
+    photos: list[str] = Field(default_factory=list, max_length=30)
     captchaToken: str | None = Field(default=None, validation_alias=AliasChoices("captchaToken"))
 
 
@@ -74,10 +81,11 @@ class DonationItemsPatchRequest(BaseModel):
     #: The whole basket the donor wants, not a delta — dropping a line means leaving it
     #: out. The service works out the difference against what is already reserved.
     items: list[DonationItemInput]
-    #: CR-174 FR-18 — the CouchDB document's ``items`` and ``status`` as the BFF read them
-    #: before the edit. Staff review lines in CouchDB, which this service cannot read, so
-    #: without these an untouched line could not keep a staff decision. Omitted (e.g. the
-    #: booking has not reached CouchDB yet) → the service uses its own copies.
+    #: The CouchDB document's ``items`` and ``status`` as the BFF read them before the edit.
+    #: Staff review lines in CouchDB, which this service cannot read, so these are what
+    #: tells it the booking was reviewed (CR-196 FR-LK-4) and which ``line_key``s it holds.
+    #: Omitted (e.g. the booking has not reached CouchDB yet) → the service uses its own
+    #: copies.
     current_items: list[dict[str, Any]] | None = None
     current_status: str | None = None
 
@@ -96,9 +104,8 @@ class DonationItemsPatchResponse(BaseModel):
     #: The booking status after the edit, read off the re-reviewed lines (CR-174 FR-18b).
     #: The BFF writes it onto the CouchDB document with ``items``.
     status: str
-    #: Index into ``items`` of every line this edit approved automatically (CR-174 FR-26)
-    #: — a line that kept an approval it already had is not listed. The BFF writes the
-    #: ``approved_by: system`` audit for exactly these.
+    #: Index into ``items`` of every line this edit approved automatically (CR-174 FR-26).
+    #: The BFF writes the ``approved_by: system`` audit for exactly these.
     auto_approved_lines: list[int] = Field(default_factory=list)
 
 

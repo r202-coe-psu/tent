@@ -23,7 +23,7 @@ if (!/^https:\/\/[^\s/]+\/?$/.test(stagingURL)) {
  *     public-search-flow / public-shelters-filter, and public-home-flow as skipped
  *     rather than absent)
  *   - exclude `@quarantine`
- *   - workers=1; budget 15–30 min
+ *   - workers=2; budget up to 2 h (the run went past 30 min in build #64)
  *
  * `@critical` suites only run their live writes when this process also has
  * `ALLOW_REMOTE_WRITES=true` — set via the `tent-staging-e2e-env` Jenkins
@@ -70,10 +70,11 @@ export default defineConfig({
 	retries: process.env.CI ? 1 : 0,
 	grep: /@critical|@smoke/,
 	grepInvert: /@quarantine/,
-	workers: 1,
+	workers: 2,
 	timeout: 60_000,
-	// 30 min wall clock for the full @critical + @smoke remote set.
-	globalTimeout: 1_800_000,
+	// 2 h wall clock for the full @critical + @smoke remote set (213 tests, workers=2, retries=1
+	// in CI). Build #64 went past 30 min, which skipped tests and their teardown.
+	globalTimeout: 7_200_000,
 	expect: { timeout: 15_000 },
 	outputDir: 'test-results/staging',
 	reporter: [

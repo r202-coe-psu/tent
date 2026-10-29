@@ -148,13 +148,20 @@ _RICE = {
     "unit": "kg",
     "reserved_qty": "5",
     "review_status": "approved",
+    "line_key": "01K8TESTRICE00000000000000",
 }
-_BLANKET = {"free_text": "ผ้าห่ม", "qty": "2", "unit": "ผืน", "review_status": "pending"}
+_BLANKET = {
+    "free_text": "ผ้าห่ม",
+    "qty": "2",
+    "unit": "ผืน",
+    "review_status": "pending",
+    "line_key": "01K8TESTBLANKET00000000000",
+}
 
 
 @pytest.mark.asyncio
-async def test_persisted_donation_is_stamped_schema_v8(db: None):
-    # CR-209: 8 adds logistics.vehicle_plate (7 was CR-174 line review, 6 CR-172).
+async def test_persisted_donation_is_stamped_schema_v10(db: None):
+    # CR-209: 10 adds logistics.vehicle_plate (9 CR-175 donor photos, 8 CR-196 items[].line_key).
     # Must match the walk-in writer in the frontend — both channels write the same version.
     couch = _couch()
 
@@ -162,7 +169,7 @@ async def test_persisted_donation_is_stamped_schema_v8(db: None):
     assert await _persist_donation(couch, row) is True
     doc = couch.put_doc.await_args.args[1]
     assert doc["_id"] == row.id
-    assert doc["schema_v"] == 8
+    assert doc["schema_v"] == 10
     # Nothing is rejected at intake — the fields only appear once staff review it.
     assert "reject_reason" not in doc
     assert "reject_reason_code" not in doc
@@ -180,7 +187,7 @@ async def test_persisted_donation_copies_the_vehicle_plate_whole(db: None):
     }
     assert await _persist_donation(couch, await _row(logistics=logistics)) is True
     doc = couch.put_doc.await_args.args[1]
-    assert doc["schema_v"] == 8
+    assert doc["schema_v"] == 10
     assert doc["logistics"]["vehicle_plate"] == "กข 1234 กรุงเทพมหานคร"
 
     couch = _couch()
@@ -198,6 +205,11 @@ async def test_persisted_donation_carries_the_line_review_and_status(db: None):
     doc = couch.put_doc.await_args.args[1]
     assert doc["status"] == "pending_review"
     assert [i["review_status"] for i in doc["items"]] == ["approved", "pending"]
+    # CR-196: the keys the donor's edit form names lines by.
+    assert [i["line_key"] for i in doc["items"]] == [
+        _RICE["line_key"],
+        _BLANKET["line_key"],
+    ]
 
 
 @pytest.mark.asyncio

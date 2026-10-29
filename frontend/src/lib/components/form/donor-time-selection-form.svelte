@@ -37,6 +37,10 @@
 	import { ensureRecaptchaLoaded } from '$lib/api/recaptcha-script';
 
 	const donationStore = getDonationStore();
+	// CR-175 FR-1 — photos ride only an unsolicited booking.
+	const donorPhotos = $derived(
+		donationStore.flowMode === 'unsolicited' ? donationStore.photos.photoIds : []
+	);
 	const unitsQuery = useUnitsOfMeasure();
 	const units = $derived(unitsQuery.data ?? []);
 	const siteKey = env.PUBLIC_RECAPTCHA_SITE_KEY || '';
@@ -134,6 +138,10 @@
 
 	async function submitDonation(slotLabel: string, slotDateStr: string) {
 		donationStore.errorMessage = '';
+		if (donationStore.flowMode === 'unsolicited' && donationStore.photos.busy) {
+			toast.error(t.photoWaitUpload);
+			return;
+		}
 		donationStore.isSubmitting = true;
 		// E2E may inject a token; otherwise require real reCAPTCHA when enabled.
 		let token = window.__captchaToken || '';
@@ -194,6 +202,7 @@
 					},
 					items: buildDonationItemsPayload(donationStore.items, t),
 					logistics: logistics,
+					...(donorPhotos.length > 0 ? { photos: donorPhotos } : {}),
 					...(token ? { captchaToken: token } : {})
 				})
 			});

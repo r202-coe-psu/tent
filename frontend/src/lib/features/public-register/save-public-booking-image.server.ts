@@ -6,6 +6,7 @@
  * never uses the browser AuthSession — anonymous citizens upload through the BFF.
  */
 import { makeDoc } from '$lib/db/model';
+import { IMAGE_SCHEMA_V, type ImagePurpose } from '$lib/features/images/server';
 import {
 	deleteAsPublicWriter,
 	putAsPublicWriter,
@@ -25,6 +26,8 @@ export interface SavePublicBookingImageInput {
 	compressedSize: number;
 	thumbnailSize: number;
 	caption?: string;
+	/** `donation` for a donor's donation photo (CR-175 FR-8); omitted for a booking face photo. */
+	purpose?: ImagePurpose;
 }
 
 export interface SavePublicBookingImageResult {
@@ -58,7 +61,7 @@ export async function savePublicBookingImage(
 	const dbName = shelterDbName(shelterCode);
 	const doc = makeDoc(
 		'image',
-		1,
+		IMAGE_SCHEMA_V,
 		{
 			filename,
 			content_type: contentType,
@@ -67,7 +70,8 @@ export async function savePublicBookingImage(
 			original_size: input.originalSize,
 			compressed_size: input.compressedSize,
 			thumbnail_size: input.thumbnailSize,
-			caption: input.caption ?? ''
+			caption: input.caption ?? '',
+			...(input.purpose ? { purpose: input.purpose } : {})
 		},
 		{ shelterCode, createdBy: 'public' }
 	);

@@ -30,6 +30,7 @@ import { moveBulkReturnEntry } from './bulk-return-pool-v3-move';
 import { voidBulkReturnEntry } from './bulk-return-pool-v3-void';
 import {
 	getBulkReturnPoolOverview,
+	getBulkReturnPoolTimeline,
 	listBulkReturnPoolClosedLoanRefs,
 	listBulkReturnSkippedDocs
 } from './bulk-return-pool-v3-read';
@@ -223,6 +224,16 @@ describe('bulk return pool v3: malformed docs', () => {
 			const rows = await getBulkReturnPoolOverview({}, mgr, deps);
 			expect(rows[0].entry_count).toBe(1);
 			expect((await deps.eventRepo!.listAll()).skipped.map((s) => s._id)).toEqual([bad]);
+		});
+
+		it('the pool timeline reports malformed events of that pool only', async () => {
+			const { pool } = await poolWithEntry();
+			const other = await openPool('Gate B');
+			const bad = badEntryIn(905, pool._id);
+			badEntryIn(906, other._id);
+			const timeline = await getBulkReturnPoolTimeline(pool._id, mgr, deps);
+			expect(timeline.skipped.map((s) => s._id)).toEqual([bad]);
+			expect(timeline.events.map((e) => e.kind)).toEqual(['opened', 'entry_added']);
 		});
 
 		it('listBulkReturnSkippedDocs gathers malformed pools and events', async () => {

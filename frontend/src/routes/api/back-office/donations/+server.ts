@@ -73,7 +73,8 @@ function toPendingRow(d: PublicDonationDoc): PendingDonationRow {
 		vehicle_plate: d.logistics?.vehicle_plate ?? null,
 		pickup_address: d.logistics?.pickup_address ?? null,
 		donor_note: donorNote,
-		is_unsolicited: isUnsolicited
+		is_unsolicited: isUnsolicited,
+		photos: d.photos ?? []
 	};
 }
 
