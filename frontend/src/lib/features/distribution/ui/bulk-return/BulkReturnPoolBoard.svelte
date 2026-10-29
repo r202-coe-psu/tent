@@ -19,8 +19,8 @@
 	import { Label } from '$lib/components/ui/label/index.js';
 	import { Switch } from '$lib/components/ui/switch/index.js';
 	import { useItemMasters } from '$lib/features/catalog';
-	import { useEvacuees } from '$lib/features/people';
-	import { useVolunteers } from '$lib/features/volunteers';
+	import { useEvacueeNames } from '$lib/features/people';
+	import { useVolunteerNames } from '$lib/features/volunteers';
 	import { getShelterCode } from '$lib/db/shelter';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
@@ -54,6 +54,7 @@
 		hasActivePoolFilters,
 		lateItemQtyText,
 		poolItemIds,
+		poolReturnerIds,
 		poolStatusCounts,
 		poolStorageLabel,
 		poolStorageOptions,
@@ -110,11 +111,19 @@
 	);
 	const itemMastersQuery = useItemMasters(() => activeShelterCode ?? null);
 
-	// Full rosters (loaded client-side) so the search and the detail can show returner names.
-	const evacueesQuery = useEvacuees();
-	const volunteersQuery = useVolunteers(undefined, () => activeShelterCode);
+	// Names of the returners present in the pools only, read by id from the board's shelter (never
+	// the whole roster), so the search and the detail can show returner names.
+	const returnerIds = $derived(poolReturnerIds(overviewQuery.data ?? []));
+	const evacueeNamesQuery = useEvacueeNames(
+		() => returnerIds.evacueeIds,
+		() => activeShelterCode
+	);
+	const volunteerNamesQuery = useVolunteerNames(
+		() => returnerIds.volunteerIds,
+		() => activeShelterCode
+	);
 	const returnerNames = $derived(
-		buildReturnerNames(evacueesQuery.data ?? [], volunteersQuery.data ?? [])
+		buildReturnerNames(evacueeNamesQuery.data ?? [], volunteerNamesQuery.data ?? [])
 	);
 
 	let search = $state('');

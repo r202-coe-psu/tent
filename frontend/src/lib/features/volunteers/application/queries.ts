@@ -15,7 +15,12 @@
  * else here recomputes them (CR-094 FR-VOL-08.2 / AC-094-09).
  */
 
-import { createMutation, createQuery, type QueryClient } from '@tanstack/svelte-query';
+import {
+	createMutation,
+	createQuery,
+	keepPreviousData,
+	type QueryClient
+} from '@tanstack/svelte-query';
 import { getShelterCode, getShelterDb } from '$lib/db/shelter';
 import {
 	subscribeDataChanges,
@@ -40,6 +45,7 @@ import { jobRepository } from '../data/job.remote';
 import { jobApplicationRepository } from '../data/job-application.remote';
 import { shiftAssignmentRepository } from '../data/shift-assignment.remote';
 import { volunteerRepository, volunteerRepositoryFor } from '../data/volunteer.remote';
+import { getVolunteerNamesByIds, uniqueVolunteerIds } from '../data/volunteer-names.remote';
 import type {
 	JobApplicationFilter,
 	JobFilter,
@@ -90,6 +96,9 @@ export const volunteerKeys = {
 		[...volunteerKeys.all, 'volunteers', shelterCode] as const,
 	volunteersList: (filter?: VolunteerFilter, shelterCode?: string) =>
 		[...volunteerKeys.volunteersAll(shelterCode), 'list', filter] as const,
+	/** Nested under `volunteersAll(shelterCode)` so volunteer mutations also refresh looked-up names. */
+	volunteerNames: (ids: readonly string[], shelterCode?: string) =>
+		[...volunteerKeys.volunteersAll(shelterCode), 'names', ids] as const,
 	volunteersDetails: () => [...volunteerKeys.volunteersAll(), 'detail'] as const,
 	volunteerDetail: (id: string) => [...volunteerKeys.volunteersDetails(), id] as const
 };
@@ -230,6 +239,23 @@ export const useVolunteers = (
 		queryFn: () => volunteerRepositoryFor(shelterCode?.()).list(filter),
 		enabled: enabled()
 	}));
+
+/**
+ * Names (only `_id` + name fields) of the given `volunteer:` ids in one shelter, read by id —
+ * never the whole roster. The key is the sorted unique id list + shelter code; the query is
+ * disabled for an empty list, and the previous names stay visible while a changed id list loads.
+ */
+export const useVolunteerNames = (ids: () => string[], shelterCode: () => string | undefined) =>
+	createQuery(() => {
+		const wanted = uniqueVolunteerIds(ids());
+		const code = shelterCode();
+		return {
+			queryKey: volunteerKeys.volunteerNames(wanted, code),
+			queryFn: () => getVolunteerNamesByIds(wanted, code),
+			enabled: wanted.length > 0,
+			placeholderData: keepPreviousData
+		};
+	});
 
 export const useVolunteer = (id: () => string, enabled: () => boolean = () => true) =>
 	createQuery(() => ({

@@ -40,6 +40,7 @@ import {
 	resolveItemDisplay,
 	returnerDisplayName,
 	buildReturnerNames,
+	poolReturnerIds,
 	returnerLabel,
 	rowNeedsAttention,
 	validatePoolName
@@ -97,6 +98,7 @@ function makeRow(
 		unresolved_refs: [],
 		closed_loan_refs: [],
 		loan_refs_unavailable: false,
+		receivable_items_summary: [],
 		is_empty: live.length === 0
 	};
 }
@@ -799,6 +801,40 @@ describe('buildHeaderPatch', () => {
 		expect(isPatchEmpty(buildHeaderPatch(pool, { ...same, storagePointId: 'zzz' }, resolve))).toBe(
 			true
 		);
+	});
+});
+
+describe('poolReturnerIds', () => {
+	it('collects distinct evacuee and volunteer ids of live, voided and late entries, sorted', () => {
+		const withReturner = (id: string, returner_id: string | null) =>
+			resolved(
+				makeEntry(id, {
+					returner_id,
+					returner_type: returner_id?.startsWith('volunteer:') ? 'volunteer' : 'evacuee'
+				} as Partial<BulkReturnEntry>)
+			);
+		const out = poolReturnerIds([
+			makeRow(makePool('p1'), {
+				entries: [
+					withReturner('e1', 'evacuee:b'),
+					withReturner('e2', 'evacuee:a'),
+					withReturner('e3', 'volunteer:v1'),
+					{ ...withReturner('e4', 'evacuee:voided'), voided: true },
+					withReturner('e5', null)
+				],
+				late: [withReturner('e6', 'evacuee:late')]
+			}),
+			makeRow(makePool('p2'), { entries: [withReturner('e7', 'evacuee:a')] })
+		]);
+		expect(out.evacueeIds).toEqual(['evacuee:a', 'evacuee:b', 'evacuee:late', 'evacuee:voided']);
+		expect(out.volunteerIds).toEqual(['volunteer:v1']);
+	});
+
+	it('returns empty lists for no rows or unspecified returners', () => {
+		expect(poolReturnerIds([])).toEqual({ evacueeIds: [], volunteerIds: [] });
+		expect(
+			poolReturnerIds([makeRow(makePool('p'), { entries: [resolved(makeEntry('e'))] })])
+		).toEqual({ evacueeIds: [], volunteerIds: [] });
 	});
 });
 

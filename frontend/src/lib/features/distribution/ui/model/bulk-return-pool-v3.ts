@@ -599,7 +599,32 @@ type RosterPerson = {
 	nickname?: string | null;
 };
 
-/** Returner id → display name from the shelter rosters (volunteers prefixed "จิตอาสา "). */
+/**
+ * Distinct returner ids named by the entries of the rows (live, voided and late ones), split by id
+ * prefix. These are the only people whose names the board looks up.
+ */
+export function poolReturnerIds(rows: readonly BulkReturnPoolOverviewRow[]): {
+	evacueeIds: string[];
+	volunteerIds: string[];
+} {
+	const evacuees = new Set<string>();
+	const volunteers = new Set<string>();
+	for (const row of rows) {
+		for (const { entry } of [...row.entries, ...row.late_entries]) {
+			const id = entry.returner_id;
+			if (!id) continue;
+			if (id.startsWith('evacuee:')) evacuees.add(id);
+			else if (id.startsWith('volunteer:')) volunteers.add(id);
+		}
+	}
+	return { evacueeIds: [...evacuees].sort(), volunteerIds: [...volunteers].sort() };
+}
+
+/**
+ * Returner id → display name from the looked-up name records (evacuee "first last (nickname)",
+ * volunteers prefixed "จิตอาสา "). A returner without a record has no entry (the fallback label
+ * applies).
+ */
 export function buildReturnerNames(
 	evacuees: readonly RosterPerson[],
 	volunteers: readonly RosterPerson[]

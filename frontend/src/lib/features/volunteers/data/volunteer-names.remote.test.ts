@@ -1,0 +1,102 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+const couch = await vi.hoisted(async () => {
+	const { createInMemoryCouch } = await import('$lib/testing/in-memory-couch');
+	return createInMemoryCouch();
+});
+const byIds = vi.hoisted(() => vi.fn());
+
+vi.mock('$lib/db/couch-db', () => ({
+	...couch.couchDbModule,
+	allDocsByIds: (...args: unknown[]) => {
+		byIds(...args);
+		return (couch.couchDbModule.allDocsByIds as (...a: unknown[]) => unknown)(...args);
+	}
+}));
+vi.mock('$lib/db/shelter', () => ({
+	getShelterDb: (code = 'SH001') => `shelter_${code.toLowerCase()}`
+}));
+
+import type { AuthorContext } from '$lib/db/model';
+import { makeVolunteer, type VolunteerInput } from '../domain/volunteer.schema';
+import { getVolunteerNamesByIds, uniqueVolunteerIds } from './volunteer-names.remote';
+
+const ctx: AuthorContext = { shelterCode: 'SH001', createdBy: 'tester' };
+
+let code = 0;
+function seed(first_name: string): string {
+	code += 1;
+	const input: VolunteerInput = {
+		first_name,
+		last_name: 'ใจดี',
+		phone: '0812345678',
+		skills: ['ขับรถ'],
+		source: 'walk_in',
+		national_id: null
+	};
+	const doc = makeVolunteer(input, ctx, { volunteer_code: `V-${String(code).padStart(3, '0')}` });
+	couch.store.set(doc._id, doc as never);
+	return doc._id;
+}
+
+describe('getVolunteerNamesByIds', () => {
+	beforeEach(() => {
+		couch.reset();
+		byIds.mockClear();
+	});
+
+	it('returns only the requested volunteers and only name fields', async () => {
+		const a = seed('สมชาย');
+		const b = seed('สมหญิง');
+		seed('ไม่ได้ขอ');
+
+		const out = await getVolunteerNamesByIds([a, b]);
+
+		expect(out.map((r) => r._id).sort()).toEqual([a, b].sort());
+		expect(out.find((r) => r._id === a)).toEqual({
+			_id: a,
+			first_name: 'สมชาย',
+			last_name: 'ใจดี'
+		});
+		for (const record of out) {
+			expect(Object.keys(record).sort()).toEqual(['_id', 'first_name', 'last_name']);
+		}
+	});
+
+	it('ignores ids without the volunteer prefix and omits missing docs', async () => {
+		const a = seed('สมชาย');
+
+		const out = await getVolunteerNamesByIds([a, 'evacuee:x', 'volunteer:missing']);
+
+		expect(out.map((r) => r._id)).toEqual([a]);
+		expect(byIds.mock.calls[0][1]).toEqual([a, 'volunteer:missing'].sort());
+	});
+
+	it('reads the named shelter database and skips the read for an empty id list', async () => {
+		const a = seed('สมชาย');
+
+		await getVolunteerNamesByIds([a], 'SH007');
+		expect(byIds.mock.calls[0][0]).toBe('shelter_sh007');
+
+		byIds.mockClear();
+		expect(await getVolunteerNamesByIds(['evacuee:x'])).toEqual([]);
+		expect(byIds).not.toHaveBeenCalled();
+	});
+
+	it('reads the ids in chunks of 100 keys', async () => {
+		const ids = Array.from({ length: 230 }, (_, i) => `volunteer:${String(i).padStart(4, '0')}`);
+
+		await getVolunteerNamesByIds(ids);
+
+		expect(byIds.mock.calls.map((call) => (call[1] as string[]).length)).toEqual([100, 100, 30]);
+	});
+});
+
+describe('uniqueVolunteerIds', () => {
+	it('dedupes, sorts and drops other prefixes', () => {
+		expect(uniqueVolunteerIds(['volunteer:b', 'volunteer:a', 'volunteer:b', 'evacuee:c'])).toEqual([
+			'volunteer:a',
+			'volunteer:b'
+		]);
+	});
+});
