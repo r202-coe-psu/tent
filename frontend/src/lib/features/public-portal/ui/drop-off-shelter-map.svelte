@@ -2,7 +2,11 @@
 	import { langState } from '$lib/states/i18n.svelte';
 	import { getTranslation } from '$lib/utils/i18n';
 	import { PUBLIC_DONATIONS_I18N } from '$lib/constants/i18n';
-	import { buildDonationMap, donationMapPointsOf } from '../domain/donation-map';
+	import {
+		buildDonationMap,
+		donationMapPointsOf,
+		type MapPointFocus
+	} from '../domain/donation-map';
 	import { toUiShelterStatus } from '../domain/mappers';
 	import { usePublicShelter, usePublicShelters } from '../application/queries';
 	import ShelterMap from './shelter-map.svelte';
@@ -10,13 +14,16 @@
 	let {
 		shelterCode,
 		shelterName = '',
-		focusedPointId = $bindable(null),
+		focus = null,
+		focusNote = null,
 		onFocusPoint
 	}: {
 		shelterCode: string;
 		shelterName?: string;
-		/** The point in focus: tapped here, or picked in a line's dropdown — the map eases to it. */
-		focusedPointId?: string | null;
+		/** The point in focus — set by the form for a tap here or a dropdown pick. */
+		focus?: MapPointFocus | null;
+		/** What the point in focus is used for, under its name (e.g. "ใช้กับ: ข้าวสาร"). */
+		focusNote?: string | null;
 		/** The donor tapped a drop-off point (CR-206 FR-MP-9). */
 		onFocusPoint?: (pointId: string) => void;
 	} = $props();
@@ -53,7 +60,7 @@
 				]
 			: []
 	);
-	const focusedPoint = $derived(shelter?.points.find((point) => point.id === focusedPointId));
+	const focusedPoint = $derived(shelter?.points.find((point) => point.id === focus?.pointId));
 </script>
 
 {#if shelter && !mapFailed && !sheltersQuery.isError}
@@ -68,27 +75,30 @@
 				shelters={mapShelters}
 				points={shelter.points}
 				selectedId={shelter.code}
-				selectedPointId={focusedPointId}
+				pointFocus={focus}
 				disablePopup
 				showLegend={false}
 				cooperativeGestures
-				onSelectPoint={(id) => {
-					focusedPointId = id;
-					onFocusPoint?.(id);
-				}}
+				onSelectPoint={(id) => onFocusPoint?.(id)}
 				onLoadError={() => (mapFailed = true)}
 			/>
 		</div>
-		{#if focusedPoint}
-			<div
-				class="rounded-lg bg-sky-50 px-3 py-2 text-xs text-sky-900"
-				data-testid="drop-off-point-note"
-			>
-				<p class="font-bold">{focusedPoint.label}</p>
-				{#if focusedPoint.description}
-					<p class="mt-0.5">{focusedPoint.description}</p>
-				{/if}
-			</div>
-		{/if}
+		<!-- A live region that is always there, so a tap or a pick is read out (owner 2026-10-30). -->
+		<div role="status" aria-live="polite">
+			{#if focusedPoint}
+				<div
+					class="rounded-lg bg-sky-50 px-3 py-2 text-xs text-sky-900"
+					data-testid="drop-off-point-note"
+				>
+					<p class="font-bold">{focusedPoint.label}</p>
+					{#if focusedPoint.description}
+						<p class="mt-0.5">{focusedPoint.description}</p>
+					{/if}
+					{#if focusNote}
+						<p class="mt-1 font-semibold" data-testid="drop-off-point-applied">{focusNote}</p>
+					{/if}
+				</div>
+			{/if}
+		</div>
 	</div>
 {/if}

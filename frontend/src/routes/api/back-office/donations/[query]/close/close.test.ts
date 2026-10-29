@@ -44,7 +44,10 @@ const startedDonation = {
 	logistics: { delivery_method: 'self_dropoff' }
 } as unknown as PublicDonationDoc;
 
-function mockCouch(donation: PublicDonationDoc, over: { putStatus?: number } = {}) {
+function mockCouch(
+	donation: PublicDonationDoc,
+	over: { putStatus?: number; auditStatus?: number } = {}
+) {
 	vi.mocked(adminRaw).mockImplementation(async (path: string, method: string) => {
 		if (method === 'GET' && path.includes('/registry/')) {
 			return { status: 200, data: { rows: [{ id: 'shelter:SH001', doc: { code: 'SH001' } }] } };
@@ -53,7 +56,7 @@ function mockCouch(donation: PublicDonationDoc, over: { putStatus?: number } = {
 			return { status: 200, data: { rows: [{ doc: donation }] } };
 		}
 		if (method === 'POST' && path.includes('_bulk_docs')) {
-			return { status: 201, data: [{ ok: true }] };
+			return { status: over.auditStatus ?? 201, data: [{ ok: true }] };
 		}
 		if (method === 'PUT') {
 			return { status: over.putStatus ?? 201, data: { ok: true, rev: '4-closed' } };
@@ -242,14 +245,25 @@ describe('POST /api/back-office/donations/[query]/close', () => {
 		expect(writtenAudits()).toHaveLength(0);
 	});
 
-	it('keeps the same audit id on a retried close', async () => {
+	it("writes the audit under the booking's one close id", async () => {
 		mockCouch(startedDonation);
 		await POST(postEvent());
-		const first = writtenAudits()[0]._id;
-		vi.mocked(adminRaw).mockClear();
-		await POST(postEvent());
 
-		expect(writtenAudits()[0]._id).toBe(first);
+		expect(writtenAudits().map((a) => a._id)).toEqual([
+			await deriveDonationCloseAuditId('donation:123')
+		]);
+	});
+
+	it('still answers 200 when the audit is lost after the close landed', async () => {
+		const logged = vi.spyOn(console, 'error').mockImplementation(() => {});
+		mockCouch(startedDonation, { auditStatus: 500 });
+
+		const response = await POST(postEvent());
+
+		expect(response.status).toBe(200);
+		expect(putBody()).toMatchObject({ status: 'received' });
+		expect(logged).toHaveBeenCalledWith('donation close audit failed', expect.anything());
+		logged.mockRestore();
 	});
 
 	it('returns 403 when warehouse staff close another shelter donation', async () => {

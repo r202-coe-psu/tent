@@ -283,9 +283,13 @@ test.describe('Donation form drop-off shelter (#814)', TAGS, () => {
 		const trigger = line.locator('[data-slot="select-trigger"]');
 		await expect(trigger).toContainText('โรงยิม', { timeout: 15_000 });
 
+		// Before any tap, the map already shows the point the first line is on.
+		await expect(page.getByTestId('point-marker-point-gym')).toHaveClass(/is-selected/);
+
 		await page.getByTestId('point-marker-point-med').click();
 		await expect(trigger).toContainText('ห้องพยาบาล');
 		await expect(page.getByTestId('drop-off-point-note')).toContainText('ชั้น 1 อาคาร B');
+		await expect(page.getByTestId('drop-off-point-applied')).toContainText('ใช้กับ:');
 
 		await trigger.click();
 		await page.getByRole('option', { name: 'โรงยิม' }).click();
@@ -299,6 +303,7 @@ test.describe('Donation form drop-off shelter (#814)', TAGS, () => {
 	});
 
 	test('without the shelters list the name stays and the map is dropped', async ({ page }) => {
+		await mockDetail(page, [GYM_POINT]);
 		await openShelterStep(page, 503);
 
 		await expect(page.getByTestId('drop-off-shelter-name')).toHaveText(SH001_NAME);

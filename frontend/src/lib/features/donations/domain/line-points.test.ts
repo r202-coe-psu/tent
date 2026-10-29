@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
+	ALL_LINES_PICKER,
 	ANY_POINT_KEY,
+	pickerForMapTap,
 	AT_SHELTER_KEY,
 	bookableDropOffPoints,
 	currentDropOffPointIds,
@@ -229,5 +231,26 @@ describe('withCurrentLinePoints', () => {
 			{ name: 'b', drop_off_point_id: null },
 			{ name: 'c', drop_off_point_id: null }
 		]);
+	});
+});
+
+describe('pickerForMapTap (owner 2026-10-30)', () => {
+	const keys = ['a', 'b', 'c'];
+
+	it('fills the first line before any dropdown is used', () => {
+		expect(pickerForMapTap(null, keys)).toBe('a');
+	});
+
+	it('fills the dropdown used last', () => {
+		expect(pickerForMapTap('c', keys)).toBe('c');
+		expect(pickerForMapTap(ALL_LINES_PICKER, keys)).toBe(ALL_LINES_PICKER);
+	});
+
+	it('falls back to the first line once the one used last is gone', () => {
+		expect(pickerForMapTap('gone', keys)).toBe('a');
+	});
+
+	it('has nothing to fill without lines', () => {
+		expect(pickerForMapTap(null, [])).toBeNull();
 	});
 });

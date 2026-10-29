@@ -135,39 +135,6 @@ export const POST: RequestHandler = async ({ params, request }) => {
 			);
 		}
 
-		const ctx = { shelterCode: donation.shelter_code, createdBy: caller.name };
-		const audit: AuditEntry = createAuditEntry(
-			{
-				action: 'manual_adjust',
-				target_type: 'donation',
-				target_id: donation._id,
-				reason:
-					outcome.status === 'rejected'
-						? `ปฏิเสธทุกรายการที่รอประเมิน (${donation.booking_ref ?? donation._id})`
-						: `อนุมัติคำขอบริจาคเข้าสู่การตรวจรับ (${donation.booking_ref ?? donation._id})`,
-				context: {
-					booking_ref: donation.booking_ref ?? null,
-					approved_by: caller.name,
-					memo: memo ?? null,
-					...(lineReview
-						? {
-								lines: (lines ?? []).map(({ index, decision, reason_code }) => ({
-									index,
-									decision,
-									reason_code: reason_code ?? null
-								}))
-							}
-						: {})
-				}
-			},
-			ctx
-		);
-
-		const appendRes = await adminRaw(`/${dbName}/_bulk_docs`, 'POST', { docs: [audit] });
-		if (appendRes.status >= 400) {
-			throw new Error(`Failed to write audit trail: ${JSON.stringify(appendRes.data)}`);
-		}
-
 		const nowStr = new Date().toISOString();
 		let updated: PublicDonationDoc = {
 			...donation,
@@ -187,9 +154,47 @@ export const POST: RequestHandler = async ({ params, request }) => {
 				closedReason: 'all_points',
 				now: nowStr
 			});
-			if (closed.status !== 'rejected' || canTransitionDonation(donation.status, 'rejected')) {
+			if (closed.status !== 'rejected' || canTransitionDonation(outcome.status, 'rejected')) {
 				updated = { ...updated, ...closed };
 			}
+		}
+		const closedReason = updated.received_summary?.closed_reason ?? null;
+		const ref = donation.booking_ref ?? donation._id;
+
+		const ctx = { shelterCode: donation.shelter_code, createdBy: caller.name };
+		const audit: AuditEntry = createAuditEntry(
+			{
+				action: 'manual_adjust',
+				target_type: 'donation',
+				target_id: donation._id,
+				reason: closedReason
+					? `ประเมินรายการสุดท้ายแล้ว ปิดใบที่รับทีละจุด (${ref})`
+					: updated.status === 'rejected'
+						? `ปฏิเสธทุกรายการที่รอประเมิน (${ref})`
+						: `อนุมัติคำขอบริจาคเข้าสู่การตรวจรับ (${ref})`,
+				context: {
+					booking_ref: donation.booking_ref ?? null,
+					approved_by: caller.name,
+					memo: memo ?? null,
+					status: updated.status,
+					...(closedReason ? { closed_reason: closedReason } : {}),
+					...(lineReview
+						? {
+								lines: (lines ?? []).map(({ index, decision, reason_code }) => ({
+									index,
+									decision,
+									reason_code: reason_code ?? null
+								}))
+							}
+						: {})
+				}
+			},
+			ctx
+		);
+
+		const appendRes = await adminRaw(`/${dbName}/_bulk_docs`, 'POST', { docs: [audit] });
+		if (appendRes.status >= 400) {
+			throw new Error(`Failed to write audit trail: ${JSON.stringify(appendRes.data)}`);
 		}
 
 		const saveRes = await adminRaw(`/${dbName}/${donation._id}`, 'PUT', updated);

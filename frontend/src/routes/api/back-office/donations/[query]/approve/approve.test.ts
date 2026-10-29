@@ -279,6 +279,49 @@ describe('POST /api/back-office/donations/[query]/reject', () => {
 				status: 'received',
 				received_summary: { closed_reason: 'all_points', closed_by: 'warehouse' }
 			});
+			expect(writtenDocs()[0].context).toMatchObject({
+				status: 'received',
+				closed_reason: 'all_points'
+			});
+		});
+
+		it('closes as rejected when the point turned its line away and review refuses the rest', async () => {
+			mockCouch({
+				...mixed,
+				items: [
+					{
+						item_id: 'item:water',
+						qty: '24',
+						unit: 'ขวด',
+						review_status: 'approved',
+						drop_off_point_id: 'sp-gym'
+					},
+					{
+						free_text: 'ผ้าห่ม',
+						qty: '2',
+						unit: 'ผืน',
+						review_status: 'pending',
+						drop_off_point_id: 'sp-med'
+					}
+				],
+				point_receipts: POINT_RECEIPTS
+			} as unknown as PublicDonationDoc);
+
+			const response = await POST(
+				postEvent({ lines: [{ index: 1, decision: 'rejected', reason_code: 'expired' }] })
+			);
+
+			expect(response.status).toBe(200);
+			expect(putBody()).toMatchObject({
+				status: 'rejected',
+				received_summary: { closed_reason: 'all_points' }
+			});
+			expect(putBody()?.reject_reason).toBeTruthy();
+			expect(writtenDocs()[0].reason).toContain('ปิดใบ');
+			expect(writtenDocs()[0].context).toMatchObject({
+				status: 'rejected',
+				closed_reason: 'all_points'
+			});
 		});
 
 		it('keeps the booking open while a line still waits for its point', async () => {

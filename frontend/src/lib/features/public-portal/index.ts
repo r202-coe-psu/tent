@@ -16,6 +16,7 @@ export {
 	type DonationNeedUrgency,
 	type DonationMapPoint,
 	type DonationMapShelter,
+	type MapPointFocus,
 	type DonationNeedsEntry
 } from './domain/donation-map';
 export { default as PublicHeroMetrics } from './ui/public-hero-metrics.svelte';

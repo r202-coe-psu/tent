@@ -58,6 +58,19 @@ export function lineDropOffPointId(
 /** Picker key of "ส่งทุกรายการที่จุดเดียวกัน"; a line's picker is keyed by the line's own key. */
 export const ALL_LINES_PICKER = '*all';
 
+/**
+ * The picker a tap on the map fills (owner 2026-10-30): the one the donor used last, while it
+ * is still on the form; before any is used, the first line's.
+ */
+export function pickerForMapTap(
+	activePicker: string | null,
+	lineKeys: readonly string[]
+): string | null {
+	if (activePicker === ALL_LINES_PICKER) return activePicker;
+	if (activePicker !== null && lineKeys.includes(activePicker)) return activePicker;
+	return lineKeys[0] ?? null;
+}
+
 /** Ids of the points the shelter offers now (FR-MP-16) — the main point has none. */
 export function currentDropOffPointIds(shelter: DropOffShelterSource): Set<string> {
 	return new Set(

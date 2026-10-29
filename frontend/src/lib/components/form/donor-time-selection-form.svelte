@@ -23,12 +23,17 @@
 		defaultDropOffPointId,
 		DropOffPointsSection,
 		lineDropOffPointId,
+		pickerForMapTap,
 		publicDonationErrorMessage,
 		slotModeForDelivery,
 		useDonationSlots
 	} from '$lib/features/donations';
 	import { formatUnit, useUnitsOfMeasure } from '$lib/features/catalog';
-	import { DropOffShelterMap, usePublicShelter } from '$lib/features/public-portal';
+	import {
+		DropOffShelterMap,
+		usePublicShelter,
+		type MapPointFocus
+	} from '$lib/features/public-portal';
 	import { getDonationStore } from '../../../routes/(public)/donations/donation.svelte';
 	import { langState } from '$lib/states/i18n.svelte';
 	import { getTranslation } from '$lib/utils/i18n';
@@ -101,32 +106,71 @@
 	// The map shows only where there is a point to find: a self drop-off at a shelter with
 	// drop-off points (owner 2026-10-30). A shelter with none keeps just its name.
 	const showDropOffMap = $derived(bookablePoints.length > 0);
-	// The map and the dropdowns follow each other: a dropdown pick eases the map to that pin,
-	// and a tapped pin fills the dropdown used last — the first line until one is used.
-	let mapFocusPointId = $state<string | null>(null);
+	// The map and the dropdowns follow each other (owner 2026-10-30): a dropdown pick zooms the
+	// map to that pin, and a tapped pin fills the dropdown used last — the first line until one
+	// is used — panning only, so the other points stay in view.
 	let activePicker = $state<string | null>(null);
-	const pickerForMapTap = $derived(
-		activePicker === ALL_LINES_PICKER || pointLines.some((line) => line.key === activePicker)
-			? activePicker
-			: (pointLines[0]?.key ?? null)
+	const mapTapPicker = $derived(
+		pickerForMapTap(
+			activePicker,
+			pointLines.map((line) => line.key)
+		)
+	);
+	let mapFocusRequest = $state<MapPointFocus | null>(null);
+	let focusSeq = 0;
+	let focusAppliedTo = $state<string | null>(null);
+	// Before any tap or pick, the map zooms to the point the tap target is on now: at the
+	// shelter's own zoom its points sit under the shelter pin and cannot be tapped.
+	const mapFocus = $derived.by((): MapPointFocus | null => {
+		if (mapFocusRequest) return mapFocusRequest;
+		const line = pointLines.find((l) => l.key === mapTapPicker) ?? pointLines[0];
+		return line?.pointId ? { pointId: line.pointId, zoom: true, seq: 0 } : null;
+	});
+	const mapFocusNote = $derived(
+		focusAppliedTo ? t.dropOffPointAppliedTo.replace('{name}', focusAppliedTo) : null
 	);
 
-	function pickLinePoint(key: string, pointId: string) {
+	function focusMapOn(pointId: string, zoom: boolean, appliedTo: string | null) {
+		focusSeq += 1;
+		mapFocusRequest = { pointId, zoom, seq: focusSeq };
+		focusAppliedTo = appliedTo;
+	}
+
+	function setLinePoint(key: string, pointId: string) {
 		const item = donationStore.items.find((line) => line.id === key);
 		if (item) item.dropOffPointId = pointId;
-		mapFocusPointId = pointId;
+	}
+
+	function setAllLinesPoint(pointId: string) {
+		for (const item of donationStore.items) item.dropOffPointId = pointId;
+	}
+
+	function lineName(key: string): string | null {
+		return pointLines.find((line) => line.key === key)?.name ?? null;
+	}
+
+	function pickLinePoint(key: string, pointId: string) {
+		setLinePoint(key, pointId);
+		focusMapOn(pointId, true, lineName(key));
 	}
 
 	function pickAllLinesPoint(pointId: string) {
-		for (const item of donationStore.items) item.dropOffPointId = pointId;
-		mapFocusPointId = pointId;
+		setAllLinesPoint(pointId);
+		focusMapOn(pointId, true, t.dropOffPointAllLines);
 	}
 
 	function tapMapPoint(pointId: string) {
 		donationStore.tappedPointId = pointId;
-		if (!bookablePoints.some((point) => point.id === pointId)) return;
-		if (pickerForMapTap === ALL_LINES_PICKER) pickAllLinesPoint(pointId);
-		else if (pickerForMapTap) pickLinePoint(pickerForMapTap, pointId);
+		// One point fills every line by itself: nothing to say which line it went to.
+		if (bookablePoints.length < 2 || !bookablePoints.some((point) => point.id === pointId)) {
+			focusMapOn(pointId, false, null);
+		} else if (mapTapPicker === ALL_LINES_PICKER) {
+			setAllLinesPoint(pointId);
+			focusMapOn(pointId, false, t.dropOffPointAllLines);
+		} else if (mapTapPicker) {
+			setLinePoint(mapTapPicker, pointId);
+			focusMapOn(pointId, false, lineName(mapTapPicker));
+		}
 	}
 
 	// A window the donor picked earlier can fill or close before they submit — drop the
@@ -483,7 +527,8 @@
 						<DropOffShelterMap
 							shelterCode={donationStore.shelterCode}
 							shelterName={donationStore.selectedShelterName}
-							bind:focusedPointId={mapFocusPointId}
+							focus={mapFocus}
+							focusNote={mapFocusNote}
 							onFocusPoint={tapMapPoint}
 						/>
 					{/if}
@@ -518,7 +563,7 @@
 						points={bookablePoints}
 						lines={pointLines}
 						idPrefix="booking-drop-off"
-						activePicker={pickerForMapTap}
+						activePicker={mapTapPicker}
 						onPick={pickLinePoint}
 						onPickAll={pickAllLinesPoint}
 						onActivate={(picker) => (activePicker = picker)}

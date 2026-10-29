@@ -86,6 +86,7 @@ export {
 	currentDropOffPointIds,
 	defaultDropOffPointId,
 	ALL_LINES_PICKER,
+	pickerForMapTap,
 	groupDropOffDestinations,
 	hasLinePoints,
 	lineDestinationResolver,

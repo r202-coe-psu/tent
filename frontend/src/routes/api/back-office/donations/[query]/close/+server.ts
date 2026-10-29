@@ -37,8 +37,9 @@ type BulkDocsOutcome = { id?: string; ok?: boolean; error?: string };
  * stops holding their quota (the worker settles it once the booking is `received`).
  *
  * Who may close is who may receive (D-8): `authorizeWarehouse` plus the shelter scope. The
- * audit entry goes in first under a fixed id — one per booking — so a retried close neither
- * logs twice nor closes without a record.
+ * audit entry goes in once the close has landed, under a fixed id — one per booking — so a
+ * close another write beat leaves no record; a lost audit is only logged, since the closed
+ * booking carries `closed_by` itself.
  */
 export const POST: RequestHandler = async ({ params, request }) => {
 	try {
