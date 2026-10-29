@@ -469,6 +469,28 @@ describe('bulk return pool v3 workflows', () => {
 			expect(again.replayed).toBe(true);
 		});
 
+		it('replays a RECEIVED pool when the same qty is written with leading zeros', async () => {
+			const { poolB } = await doubleCounted();
+			await receive(poolB._id, { items: [{ item_id: 'item:cot', received_qty: '1' }] });
+
+			const again = await receive(poolB._id, {
+				items: [{ item_id: 'item:cot', received_qty: '01' }]
+			});
+			expect(again.replayed).toBe(true);
+			expect(again.pool.received_items?.[0]?.received_qty).toBe('1');
+		});
+
+		it('replays a RECEIVED pool when the same qty is written with surrounding whitespace', async () => {
+			const { poolB } = await doubleCounted();
+			await receive(poolB._id, { items: [{ item_id: 'item:cot', received_qty: '1' }] });
+
+			const again = await receive(poolB._id, {
+				items: [{ item_id: 'item:cot', received_qty: ' 1 ' }]
+			});
+			expect(again.replayed).toBe(true);
+			expect(again.pool.received_items?.[0]?.received_qty).toBe('1');
+		});
+
 		it('repairs the ledger of a RECEIVED pool by replay even when the pins changed since', async () => {
 			const { poolA, poolB } = await doubleCounted();
 			const input = { items: [{ item_id: 'item:cot', received_qty: '1' }] };

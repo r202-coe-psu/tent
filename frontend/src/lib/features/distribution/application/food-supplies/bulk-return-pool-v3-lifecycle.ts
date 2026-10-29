@@ -586,7 +586,7 @@ export async function receiveBulkReturnPool(
 		const stored = new Map(
 			(pool.received_items ?? []).map((row) => [row.item_id, row.received_qty])
 		);
-		const sent = new Map(input.items.map((row) => [row.item_id, String(row.received_qty)]));
+		const sent = new Map(input.items.map((row) => [row.item_id, String(row.received_qty).trim()]));
 		receivable = (pool.items_summary ?? []).map((row) => {
 			const storedQty = stored.get(row.item_id);
 			return storedQty !== undefined && sameQtyValue(storedQty, sent.get(row.item_id))

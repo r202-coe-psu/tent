@@ -106,8 +106,9 @@ export function createInMemoryCouch() {
 			return results;
 		},
 		// `_find` without paging. A selector value is either an equality operand or an operator object
-		// of `$in` / `$gte` / `$lte` (string comparison, all must hold); any other operator throws; `fields` projects each doc to those keys; `limit` defaults
-		// to 25 like CouchDB. Docs are served in `_id` order. Every query is recorded in `findQueries`.
+		// of `$in` / `$gte` / `$lte` (string comparison, all must hold); any other operator throws;
+		// `fields` projects each doc to those keys; `limit` defaults to 25 like CouchDB. Docs are
+		// served in `_id` order. Every query is recorded in `findQueries`.
 		findDocs: async <T>(
 			dbName: string,
 			query: { selector: Record<string, unknown>; fields?: string[]; limit?: number }
@@ -127,15 +128,14 @@ export function createInMemoryCouch() {
 					Object.entries(query.selector).every(([k, v]) => {
 						if (v && typeof v === 'object' && !Array.isArray(v)) {
 							return Object.entries(v as Record<string, unknown>).every(([op, operand]) => {
+								// Operators were validated up front; anything else here is `$lte`.
 								switch (op) {
 									case '$in':
 										return ((operand as unknown[]) ?? []).includes(doc[k]);
 									case '$gte':
 										return typeof doc[k] === 'string' && doc[k] >= (operand as string);
-									case '$lte':
-										return typeof doc[k] === 'string' && doc[k] <= (operand as string);
 									default:
-										throw new Error(`in-memory couch findDocs: unsupported operator ${op}`);
+										return typeof doc[k] === 'string' && doc[k] <= (operand as string);
 								}
 							});
 						}
