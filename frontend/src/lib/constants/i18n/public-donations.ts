@@ -397,7 +397,24 @@ export const PUBLIC_DONATIONS_I18N = {
 		// CR-196 FR-LK-4 — the CR's wording, verbatim.
 		editBlockedToast:
 			'ใบบริจาคได้รับการอนุมัติ/ออก QR แล้ว ไม่สามารถแก้ไขรายการได้ หากต้องการเปลี่ยนแปลง กรุณายกเลิกเพื่อทำรายการใหม่ หรือแจ้งเจ้าหน้าที่หน้างานตอนนำของมาส่ง',
-		editItemsHint: 'ปรับจำนวนหรือเพิ่ม-ลบรายการได้จนกว่าศูนย์จะประเมินรายการ'
+		editItemsHint: 'ปรับจำนวนหรือเพิ่ม-ลบรายการได้จนกว่าศูนย์จะประเมินรายการ',
+		// CR-175 donor photos
+		photoSectionTitle: 'รูปของที่จะบริจาค (ไม่บังคับ)',
+		photoSectionDesc:
+			'แนบรูปให้เจ้าหน้าที่เห็นสภาพของก่อนตอบรับ ได้สูงสุด 30 รูป รวมไม่เกิน 10 MB แนบได้ตอนจองเท่านั้น',
+		photoPrivacyWarning:
+			'รูปอาจติดข้อมูลส่วนตัว เช่น หน้าคน ทะเบียนรถ หรือบ้านเลขที่ กรุณาถ่ายเฉพาะตัวของ',
+		photoAddBtn: 'เลือกรูป',
+		photoUsage: 'ใช้ไปแล้ว {used} / 10 MB',
+		photoCount: '{count} / 30 รูป',
+		photoFull: 'แนบรูปครบแล้ว',
+		photoRefusedTooLarge: 'ไฟล์ {name} ใหญ่เกิน 20 MB',
+		photoRefusedNoRoom: 'แนบ {name} ไม่ได้ เพราะครบ 30 รูปหรือเกิน 10 MB แล้ว',
+		photoRefusedUnreadable: 'เปิดไฟล์ {name} ไม่ได้ กรุณาเลือกไฟล์รูป',
+		photoRefusedUpload: 'อัปโหลด {name} ไม่สำเร็จ กรุณาลองใหม่',
+		photoRemoveAria: 'ลบรูปที่ {n}',
+		photoUploading: 'กำลังอัปโหลด',
+		photoWaitUpload: 'รอให้รูปอัปโหลดเสร็จก่อนจองคิว'
 	},
 	en: {
 		// Header & Stepper
@@ -800,6 +817,22 @@ export const PUBLIC_DONATIONS_I18N = {
 		editFailToast: 'Failed to update items',
 		editBlockedToast:
 			'This donation has been approved or has its QR, so its items can no longer be changed. To change it, cancel and book again, or tell the staff when you bring the items.',
-		editItemsHint: 'Adjust quantities or add/remove items until the shelter reviews them'
+		editItemsHint: 'Adjust quantities or add/remove items until the shelter reviews them',
+		photoSectionTitle: 'Photos of your donation (optional)',
+		photoSectionDesc:
+			'Photos let staff see the condition of the items before they accept them. Up to 30 photos, 10 MB in total, at booking only.',
+		photoPrivacyWarning:
+			'Photos may show personal details such as faces, licence plates or house numbers. Please photograph the items only.',
+		photoAddBtn: 'Choose photos',
+		photoUsage: 'Used {used} / 10 MB',
+		photoCount: '{count} / 30 photos',
+		photoFull: 'Photo limit reached',
+		photoRefusedTooLarge: '{name} is larger than 20 MB',
+		photoRefusedNoRoom: 'Could not add {name}: 30 photos or 10 MB already used',
+		photoRefusedUnreadable: 'Could not open {name}. Please choose an image file',
+		photoRefusedUpload: 'Uploading {name} failed. Please try again',
+		photoRemoveAria: 'Remove photo {n}',
+		photoUploading: 'Uploading',
+		photoWaitUpload: 'Wait for the photos to finish uploading before booking'
 	}
 } as const;
