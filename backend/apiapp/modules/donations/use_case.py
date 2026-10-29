@@ -611,6 +611,8 @@ class DonationsUseCase:
                     tracking_token_hash=token_hash,
                     status=review.status,
                     synced_to_couch=False,
+                    photos=payload.photos,
+                    photos_linked=not payload.photos,
                     created_at=now,
                     expires_at=expires_at,
                 )

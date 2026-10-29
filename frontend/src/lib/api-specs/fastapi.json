@@ -3508,6 +3508,12 @@
 					"slot_hold": {
 						"anyOf": [{ "$ref": "#/components/schemas/SlotHold" }, { "type": "null" }]
 					},
+					"photos": {
+						"items": { "type": "string" },
+						"type": "array",
+						"maxItems": 30,
+						"title": "Photos"
+					},
 					"captchaToken": {
 						"anyOf": [{ "type": "string" }, { "type": "null" }],
 						"title": "Captchatoken"
@@ -3662,6 +3668,22 @@
 				},
 				"type": "object",
 				"title": "DonationPhoneLookupSlot"
+			},
+			"DonationPoint": {
+				"properties": {
+					"id": { "type": "string", "title": "Id" },
+					"name": { "type": "string", "title": "Name" },
+					"types": { "items": { "type": "string" }, "type": "array", "title": "Types" },
+					"geo": { "$ref": "#/components/schemas/GeoPoint" },
+					"location_note": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Location Note"
+					}
+				},
+				"type": "object",
+				"required": ["id", "name", "geo"],
+				"title": "DonationPoint",
+				"description": "A storage point ticked as a donation drop-off point, with a pin (CR-205)."
 			},
 			"DonationTrackSearchRequest": {
 				"properties": {
@@ -5203,6 +5225,11 @@
 						"type": "boolean",
 						"title": "Accepts Pre Registration",
 						"default": false
+					},
+					"donation_points": {
+						"items": { "$ref": "#/components/schemas/DonationPoint" },
+						"type": "array",
+						"title": "Donation Points"
 					}
 				},
 				"type": "object",

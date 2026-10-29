@@ -46,6 +46,7 @@ import { jobApplicationRepository } from '../data/job-application.remote';
 import { shiftAssignmentRepository } from '../data/shift-assignment.remote';
 import { volunteerRepository, volunteerRepositoryFor } from '../data/volunteer.remote';
 import { getVolunteerNamesByIds, uniqueVolunteerIds } from '../data/volunteer-names.remote';
+import { fetchVolunteerGrants } from './volunteer-access';
 import type {
 	JobApplicationFilter,
 	JobFilter,
@@ -58,8 +59,9 @@ import type {
  * wall-clock convention `domain/duty-window.ts` uses to build `duty_window`.
  * Deriving it from UTC instead would query yesterday's roster between 00:00
  * and 07:00 local, i.e. for the whole of the `night` shift. */
-export function todayDateString(): string {
-	return bangkokDateString();
+export function todayDateString(now: Date = new Date()): string {
+	// `.getTime()` (not `new Date(now)`) so a reactive `SvelteDate` clock is tracked.
+	return bangkokDateString(new Date(now.getTime()));
 }
 
 // ---------------------------------------------------------------------------
@@ -100,7 +102,11 @@ export const volunteerKeys = {
 	volunteerNames: (ids: readonly string[], shelterCode?: string) =>
 		[...volunteerKeys.volunteersAll(shelterCode), 'names', ids] as const,
 	volunteersDetails: () => [...volunteerKeys.volunteersAll(), 'detail'] as const,
-	volunteerDetail: (id: string) => [...volunteerKeys.volunteersDetails(), id] as const
+	volunteerDetail: (id: string) => [...volunteerKeys.volunteersDetails(), id] as const,
+
+	/** Coordinator grants on the volunteer's account (#955); under `all` so a grant refetches it. */
+	grants: (shelterCode: string, volunteerId: string) =>
+		[...volunteerKeys.all, 'grants', shelterCode, volunteerId] as const
 };
 
 /** Build the `{shelterCode, createdBy}` author context the same way every mutation does. */
@@ -131,6 +137,17 @@ export const useHubMetrics = () =>
 			]);
 			return computeHubMetrics({ volunteers, assignments, applications, today });
 		}
+	}));
+
+/** The coordinator's view of a volunteer's grants (#955); off until `enabled`. */
+export const useVolunteerGrants = (
+	volunteer: () => Pick<Volunteer, '_id' | 'shelter_code'>,
+	enabled: () => boolean
+) =>
+	createQuery(() => ({
+		queryKey: volunteerKeys.grants(volunteer().shelter_code, volunteer()._id),
+		queryFn: () => fetchVolunteerGrants(volunteer()),
+		enabled: enabled()
 	}));
 
 export const useJobs = (filter?: JobFilter) =>

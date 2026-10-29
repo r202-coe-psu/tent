@@ -144,3 +144,19 @@ def test_project_donation_pre_v8_lines_have_no_line_key():
 
     assert payload is not None
     assert payload["items_declared"][0]["line_key"] is None
+
+
+def test_project_donation_never_carries_donor_photos():
+    # CR-175 FR-14: no public read path for donor photos — they may show faces or plates.
+    _, payload = project_donation(
+        _donation(
+            schema_v=9,
+            status="pending_review",
+            photos=["image:01K8PHXTX00000000000000001"],
+        ),
+        shelter_code="SH001",
+    )
+
+    assert payload is not None
+    assert "photos" not in payload
+    assert "image:" not in repr(payload)
