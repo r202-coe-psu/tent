@@ -3,7 +3,7 @@ id: CR-208 # renumbered from draft-lot-return-warehouse
 title: ของเหลือจากรอบแจกคืนเข้า lot เดิม (`distribution_return` อ้าง `requisition_ticket`) แทนการเปิด lot ใหม่
 status: approved
 date: 2026-10-28
-updated: 2026-10-28 # approved (kong)
+updated: 2026-10-29 # amendment A1 (race fence) — draft รอ approve
 requested_by: Dev Team B · issue #888 (Fishcanwalk, 2026-10-25)
 decided_by: kong
 decision_date: 2026-10-28
@@ -354,6 +354,35 @@ UI ตรวจรับ (`features/distribution/ui/model/warehouse-return.ts`) 
   - ข้อ 7 — คงสิทธิ์ `distribution_batch:` ไว้ที่ warehouse_staff / system_admin
 - 2026-10-28 — FR-RTN-17 ขยายให้ครอบ `distributionReturnInputSchema` (`createDistributionReturnEntry`) ด้วย — จาก PR review #993; ไม่เปลี่ยนพฤติกรรมที่ approve (kong)
 - 2026-10-28 — stable-core review ส่วน VDU (`_design/access` role gate + `ref_id` ของ `distribution_return`, FR-RTN-19..22) โดย kong ใน PR #993 — review บน GitHub ที่ลงไว้เป็น comment "Deleted" เป็นการลงผิด ไม่ใช่ผล review
+- 2026-10-29 — **Amendment A1 (draft, Dev):** พบ race ตรวจรับพร้อมกันยอดต่างกันใน code review → เสนอให้ตั๋วเป็น fence (ดู Amendment A1) · รอ kong approve
+
+## Amendment A1 (2026-10-29) — ตั๋วเป็น fence ของการตรวจรับพร้อมกัน · **draft รอ kong approve**
+
+> **สรุป:** เปลี่ยนลำดับใน `receiveWarehouseReturns` เป็น "ตรวจ/วางแผน → เปลี่ยนตั๋วเป็น `RETURN_COMPLETED` (CAS) → เขียน ledger"
+> แทน "ตรวจ/วางแผน → เขียน ledger → เปลี่ยนตั๋ว". ไม่เพิ่ม field · ไม่ bump `schema_v` · ไม่แก้ VDU. แทนที่ FR-RTN-11 / FR-RTN-12 (ข้อความเดิมคงไว้ด้านบนเพื่อสืบย้อน)
+
+**ปัญหา (พบใน code review 2026-10-29, ยืนยันด้วย test):** id ตาม FR-RTN-07 ทำให้ชุดแถวของยอดน้อยเป็นส่วนย่อยของชุดแถวของยอดมาก
+(นับ 6 = [A6], นับ 8 = [A6, B2]). คลัง 2 คนตรวจรับตั๋วเดียวกันพร้อมกันด้วยยอด 8 และ 6: คนนับ 6 เห็นแถว A6 ที่อีกคนเพิ่งเขียน → ตรงกับแผน →
+ปิดตั๋วด้วย `returned_qty: 6` แล้วอีกคนเขียน B2 → ledger รับคืน 8 แต่ตั๋วบันทึก 6 และ retry ไม่ได้ (ก่อน CR-208 มีแถวเดียวต่อชนิด ยอดต่างกันจึงชน id แล้ว fail closed).
+ledger อย่างเดียวกันกรณีนี้ไม่ได้ ต้องมี doc เดียวที่ทุกคนต้องผ่าน CAS ก่อนเขียน — ตั๋ว
+
+- **FR-RTN-11a** (แทน FR-RTN-11) — ตั๋ว `RETURN_PENDING_RECEIPT`: หลังผ่าน Phase 1 (FR-RTN-01..10) ต้องเปลี่ยนตั๋วเป็น `RETURN_COMPLETED`
+  พร้อม `returned_qty` / `discrepancy_qty` **ก่อน** เขียนแถว ledger ใด ๆ แล้วจึงเขียนแถวใน E ที่ยังไม่มีใน X ตามลำดับ §2. ถ้าเปลี่ยนสถานะไม่สำเร็จ
+  และตั๋วเป็น `RETURN_COMPLETED` แล้ว: ยอดในตั๋วต่างจากยอดที่นับ → throw `StockIntegrityError` โดยไม่เขียนแถว; ยอดเท่ากัน → ทำต่อแบบ FR-RTN-12a
+- **FR-RTN-12a** (แทน FR-RTN-12) — ตั๋ว `RETURN_COMPLETED` (replay): ยอดในตั๋วต้องตรงกับยอดที่ขอ (เดิม) · X ต้องเป็นส่วนย่อยของ E ตาม FR-RTN-10 ·
+  **เขียนแถวใน E ที่ยังขาด** (กรณีหยุดกลางทางหลังเปลี่ยนสถานะ) แทนการ throw
+- **FR-RTN-25** — `completeTicket` จาก `RETURN_COMPLETED` ต้อง replay ตาม FR-RTN-12a ด้วยยอดในตั๋วก่อนเปลี่ยนเป็น `COMPLETED`
+  (ตั๋วต้องไม่ปิดทั้งที่แถวรับคืนยังไม่ครบ); replay ไม่ผ่าน → ไม่เปลี่ยนสถานะ
+
+**ผลข้างเคียง:** ระหว่างเปลี่ยนสถานะกับเขียนแถวเสร็จ ตั๋วแสดง `RETURN_COMPLETED` โดยแถวยังไม่ครบชั่วคราว (ms; ถ้าหยุดกลางทาง กดตรวจรับซ้ำหรือ
+ปิดตั๋วจะเขียนแถวที่ขาด). client รุ่นก่อน CR-208 ที่ทำงานพร้อมกับ client ใหม่ยังชน id แถวแรกตาม FR-RTN-16
+
+**Acceptance A1:** [ ] ยอดต่างกันพร้อมกัน (ทั้งสองลำดับการชนกัน) → ฝ่ายแพ้ได้ `StockIntegrityError` และ ledger = ยอดในตั๋ว ·
+[ ] ยอดเท่ากันพร้อมกัน → ทั้งคู่สำเร็จ ไม่มีแถวซ้ำ · [ ] เปลี่ยนสถานะไม่สำเร็จ → ไม่มีแถว · [ ] หยุดหลังเปลี่ยนสถานะ → replay / `completeTicket` เขียนแถวที่ขาด ·
+[ ] `completeTicket` ไม่ปิดตั๋วที่แถวขัดกับยอด
+
+**ทางที่ไม่เลือก:** (1) เพิ่ม field ยอดที่นับบนตั๋วแล้ว stamp แบบ CAS ก่อนเขียน — ต้องเพิ่ม field + เปิด same-status update ของ `RETURN_PENDING_RECEIPT` ใน VDU (stable core);
+(2) ใส่ยอดรวมใน id ทุกแถว — ขัด FR-RTN-07 และทำให้ FR-RTN-16 (กัน client เก่า) ใช้ไม่ได้; (3) re-read ledger หลังเขียน — ไม่ปิดช่อง เพราะฝ่ายยอดน้อยอาจทำเสร็จก่อนอีกฝ่ายเขียนแถวถัดไป
 
 ## Out of scope
 

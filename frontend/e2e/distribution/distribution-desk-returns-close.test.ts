@@ -436,8 +436,12 @@ test.describe('Tab 5 — shift close and returns (plan §4.7)', { tag: DESK_TAGS
 			await injectSession(page, warehouse.user, warehouse.session);
 			const backOffice = new BackOfficePage(page);
 			await backOffice.receiveWarehouseReturn(ticket, kit, '3', '5');
-			const receipts = await ledgerRows('receive', ticket.ticketId);
-			expect(receipts.find((r) => r.item_id === kit.itemId)?.qty).toBe('3');
+			// CR-208: the verified return goes back into the lot the kit was dispatched from.
+			const returns = await ledgerRows('distribution_return', ticket.ticketId);
+			expect(returns.find((r) => r.item_id === kit.itemId)).toMatchObject({
+				qty: '3',
+				lot_ref: kit.lotId
+			});
 			await backOffice.completeTicket(ticket);
 			expect(await getShelterDocument(ticket.ticketId)).toMatchObject({ status: 'COMPLETED' });
 		});
