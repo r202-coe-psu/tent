@@ -384,8 +384,9 @@ export function summarizeAddResult(result: AddBulkReturnEntriesResult): AddEntri
 	const voided = result.results.filter((r) => r.voided && !r.late && !r.relocated);
 	const onTime = result.results.filter((r) => !r.late && !r.relocated && !r.voided);
 	const loanPending = onTime.filter((r) => r.loan_pending);
-	// A pending line has not cut any loan yet, so it adds nothing to the applied qty.
-	const cut = onTime.filter((r) => !r.loan_pending);
+	// A pending line has not cut any loan yet, and a reopened line (CR-193 §35: reopen wins, nothing
+	// is cut) has none either, so neither adds to the applied qty nor is listed as unallocated.
+	const cut = onTime.filter((r) => !r.loan_pending && !r.loans_reopened);
 	const lateEntries = result.results.filter((r) => r.late);
 	let applied = '0';
 	for (const r of cut) {

@@ -87,8 +87,9 @@ export interface AddBulkReturnEntryResult {
 	/** The entry's current pool when `relocated` is 'moved'. */
 	relocated_pool_id?: string;
 	/**
-	 * Replay only: the entry's loans were deliberately reopened by a manager (CR-193 §35); a replay
-	 * must not cut them again. No loan was touched.
+	 * The entry's loans were deliberately reopened by a manager (CR-193 §35), so they must not stay
+	 * cut. The reopen can be seen before the cut (replay pre-check: nothing is cut) or right after
+	 * the cut (the applied refs are then reverted); either way no loan is left cut.
 	 */
 	loans_reopened?: true;
 }
@@ -191,6 +192,9 @@ function claimOnLocalLoans(
  * A replayed entry that was moved out of its pool meanwhile (or whose move chain is pending sync)
  * is reported with `relocated`: no fence, no loan touched (the move path owns its loans) and the
  * remaining items are still processed normally.
+ *
+ * A reopen of the entry's loans (CR-193 §35) wins over the replay's fence / loan cut
+ * (`loans_reopened`).
  *
  * Right before each loan is cut the entry's void is re-read inside the loan CAS; a voided entry
  * cuts nothing (`voided`).

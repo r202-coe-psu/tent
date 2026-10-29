@@ -430,6 +430,7 @@ describe('summarizeAddResult / dropWrittenLines', () => {
 			relocated?: 'moved' | 'pending_sync';
 			loanPending?: boolean;
 			voided?: boolean;
+			reopened?: boolean;
 		} = {}
 	) {
 		return {
@@ -446,7 +447,8 @@ describe('summarizeAddResult / dropWrittenLines', () => {
 			unallocated_qty: opts.unallocated ?? '0',
 			...(opts.relocated ? { relocated: opts.relocated } : {}),
 			...(opts.loanPending ? { loan_pending: true } : {}),
-			...(opts.voided ? { voided: true } : {})
+			...(opts.voided ? { voided: true } : {}),
+			...(opts.reopened ? { loans_reopened: true } : {})
 		};
 	}
 	const wrap = (
@@ -472,6 +474,29 @@ describe('summarizeAddResult / dropWrittenLines', () => {
 		expect(summary.loanPendingItemIds).toEqual(['item_master:B']);
 		expect(summary.loanAppliedQty).toBe('2');
 		expect(summary.unallocated).toEqual([]);
+	});
+
+	it('does not count a reopened replay as applied or unallocated, but still as replayed', () => {
+		const summary = summarizeAddResult(
+			wrap([res('A', { replayed: true, refs: ['3'], unallocated: '2', reopened: true })])
+		);
+		expect(summary.replayedCount).toBe(1);
+		expect(summary.savedCount).toBe(0);
+		expect(summary.loanAppliedQty).toBeUndefined();
+		expect(summary.unallocated).toEqual([]);
+	});
+
+	it('applies only the normal cut line when mixed with a reopened line', () => {
+		const summary = summarizeAddResult(
+			wrap([
+				res('A', { refs: ['2'], unallocated: '1' }),
+				res('B', { replayed: true, refs: ['5'], unallocated: '4', reopened: true })
+			])
+		);
+		expect(summary.savedCount).toBe(1);
+		expect(summary.replayedCount).toBe(1);
+		expect(summary.loanAppliedQty).toBe('2');
+		expect(summary.unallocated).toEqual([{ item_id: 'item_master:A', qty: '1' }]);
 	});
 
 	it('counts voided entries apart from saved ones', () => {
