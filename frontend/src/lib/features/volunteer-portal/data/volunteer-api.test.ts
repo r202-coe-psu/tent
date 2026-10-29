@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { ApplyFailedError, applyToJob, preflightApplication } from './volunteer-api';
+import { ApplyFailedError, apiErrorCopy, applyToJob, preflightApplication } from './volunteer-api';
 
 const input = {
 	job_id: 'job:target',
@@ -101,5 +101,11 @@ describe('applyToJob', () => {
 
 		expect(error).not.toBeInstanceOf(ApplyFailedError);
 		expect((error as Error).message).toBe('ส่งคำขอถี่เกินไป กรุณารอสักครู่แล้วลองใหม่');
+	});
+});
+
+describe('cancel error copy', () => {
+	it.each(['CANCEL_FAILED', 'NOT_CANCELLABLE', 'SHIFT_STARTED'])('has Thai copy for %s', (code) => {
+		expect(apiErrorCopy(code)).toMatch(/[ก-๙]/);
 	});
 });

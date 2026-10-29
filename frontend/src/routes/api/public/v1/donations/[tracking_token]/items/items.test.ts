@@ -90,7 +90,7 @@ describe('PATCH /api/public/v1/donations/[token]/items', () => {
 	// Owner decision 2026-10-22 — goods already keyed for this booking: the donor can no
 	// longer move its lines, which would re-number them under the stock rows.
 	it('refuses an edit once goods of the booking are in stock, moving no quota', async () => {
-		couchHas(couchDoc('verifying'));
+		couchHas(couchDoc('pending_review'));
 		fastapiOk();
 		vi.mocked(hasKeyedDonationStock).mockResolvedValue(true);
 
@@ -144,43 +144,98 @@ describe('PATCH /api/public/v1/donations/[token]/items', () => {
 		]);
 		expect((written as { revisions: unknown[] }).revisions).toHaveLength(1);
 		// FR-18b — the current version, not a stale constant.
-		expect((written as { schema_v: number }).schema_v).toBe(7);
+		expect((written as { schema_v: number }).schema_v).toBe(8);
+	});
+
+	// CR-196 FR-LK-4 — refused here, before the headroom reads or any quota moves.
+	describe('a booking something was decided on', () => {
+		it.each([
+			['its QR is out', couchDoc('verifying')],
+			['it was refused', couchDoc('rejected')],
+			[
+				'the campaign rule approved a line',
+				{
+					...couchDoc('pending_review'),
+					items: [
+						{ item_id: 'item:rice', qty: '5', unit: 'kg', review_status: 'approved' },
+						{ free_text: 'ผ้าห่ม', qty: '1', unit: 'ผืน', review_status: 'pending' }
+					]
+				}
+			],
+			[
+				'staff refused a line',
+				{
+					...couchDoc('pending_review'),
+					items: [{ free_text: 'ผ้าห่ม', qty: '1', unit: 'ผืน', review_status: 'rejected' }]
+				}
+			]
+		])('answers ALREADY_REVIEWED when %s', async (_, doc) => {
+			couchHas(doc);
+			fastapiOk();
+
+			const response = await call();
+
+			expect(response.status).toBe(400);
+			expect((await response.json()).error).toBe('ALREADY_REVIEWED');
+			expect(fetchDocsStrict).not.toHaveBeenCalled();
+			expect(fetch).not.toHaveBeenCalled();
+			expect(putAsPublicWriter).not.toHaveBeenCalled();
+		});
 	});
 
 	// CR-174 FR-18 / FR-18b / FR-26
 	describe('per-line review after an edit (CR-174)', () => {
-		it('sends FastAPI the booking as staff left it in CouchDB', async () => {
-			const staffLeft = [{ free_text: 'ผ้าห่ม', qty: '1', unit: 'ผืน', review_status: 'approved' }];
-			couchHas({ ...couchDoc('verifying'), items: [...staffLeft] });
+		it('sends FastAPI the booking as it stands in CouchDB, line keys included', async () => {
+			const held = [
+				{ free_text: 'ผ้าห่ม', qty: '1', unit: 'ผืน', review_status: 'pending', line_key: 'K1' }
+			];
+			couchHas({ ...couchDoc('pending_review'), items: [...held] });
 			fastapiOk();
 
-			await call();
+			await call([{ line_key: 'K1', free_text: 'ผ้าห่ม', qty: '2', unit: 'ผืน' }]);
 
 			const body = JSON.parse(String(vi.mocked(fetch).mock.calls[0]![1]!.body));
-			expect(body).toMatchObject({ current_items: staffLeft, current_status: 'verifying' });
+			expect(body).toMatchObject({
+				items: [{ line_key: 'K1', qty: '2' }],
+				current_items: held,
+				current_status: 'pending_review'
+			});
 		});
 
 		it('AC-14: writes the status FastAPI worked out back to CouchDB', async () => {
-			couchHas(couchDoc('verifying'));
-			fastapiOk({ status: 'pending_review' });
+			couchHas(couchDoc('pending_review'));
+			fastapiOk({ status: 'verifying' });
 
 			const response = await call();
 
 			const [, , written] = vi.mocked(putAsPublicWriter).mock.calls[0]!;
-			expect(written).toMatchObject({ status: 'pending_review', schema_v: 7 });
-			expect((await response.json()).status).toBe('pending_review');
+			expect(written).toMatchObject({ status: 'verifying', schema_v: 8 });
+			expect((await response.json()).status).toBe('verifying');
 		});
 
-		// A doc a newer writer stamped (CR-175 donor photos takes donation to 8) keeps its
-		// version: stamping 7 over it would claim it lacks fields it has.
-		it('never lowers the schema_v of a doc a newer writer stamped', async () => {
-			couchHas({ ...couchDoc('verifying'), schema_v: 8 });
-			fastapiOk({ status: 'verifying' });
+		it('writes the line keys FastAPI returned onto the CouchDB doc', async () => {
+			couchHas(couchDoc('pending_review'));
+			fastapiOk({
+				status: 'pending_review',
+				items: [{ free_text: 'ผ้าห่ม', qty: '2', unit: 'ผืน', line_key: 'K-NEW' }]
+			});
 
 			await call();
 
 			const [, , written] = vi.mocked(putAsPublicWriter).mock.calls[0]!;
-			expect(written).toMatchObject({ schema_v: 8 });
+			expect((written as { items: { line_key?: string }[] }).items[0]!.line_key).toBe('K-NEW');
+		});
+
+		// A doc a newer writer stamped keeps its version: stamping 8 over it would claim it
+		// lacks fields it has.
+		it('never lowers the schema_v of a doc a newer writer stamped', async () => {
+			couchHas({ ...couchDoc('pending_review'), schema_v: 9 });
+			fastapiOk({ status: 'pending_review' });
+
+			await call();
+
+			const [, , written] = vi.mocked(putAsPublicWriter).mock.calls[0]!;
+			expect(written).toMatchObject({ schema_v: 9 });
 		});
 
 		it('AC-22: audits the lines the campaign rule approved in this edit, after the write', async () => {
@@ -322,13 +377,13 @@ describe('PATCH /api/public/v1/donations/[token]/items', () => {
 	it('refuses before moving quota once staff have taken the booking', async () => {
 		// The buffer follows CouchDB a few seconds behind, so checking the record first
 		// means no quota is moved and rolled back for a booking that cannot be edited.
-		// `received`: since CR-174 a `verifying` booking (QR issued) is still the donor's.
 		couchHas(couchDoc('received'));
 		fastapiOk();
 
 		const response = await call();
 
 		expect(response.status).toBe(400);
+		expect((await response.json()).error).toBe('Cannot edit a donation in status "received"');
 		expect(fetch).not.toHaveBeenCalled();
 		expect(putAsPublicWriter).not.toHaveBeenCalled();
 	});
