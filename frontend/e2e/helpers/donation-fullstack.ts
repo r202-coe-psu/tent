@@ -20,7 +20,7 @@ import {
 import { bangkokToday } from '../../src/lib/utils/date';
 import { injectSession, routeBrowserCouchThroughApp } from './login';
 import { publicShelter, teardownShelter, waitForProjection } from './public-cleanup';
-import { createShelterViaUi, pinActiveShelter, setRecaptcha } from './staff-ui';
+import { createShelterViaUi, pinActiveShelter } from './staff-ui';
 
 /**
  * Shared steps for the full-stack donation specs (`donation-fullstack*.test.ts`,
@@ -117,29 +117,9 @@ export class RunLedger {
 
 // ─── reCAPTCHA ─────────────────────────────────────────────────────────────────
 
-/**
- * Turn `config:app.recaptcha_enabled` off as the CouchDB admin, the same switch
- * pre-register flips (`setRecaptcha`). It is global, so call this only once the spec
- * knows it will run, and always await the returned restore in `afterAll` — it puts
- * back whatever state the switch had before.
- */
-export async function suspendRecaptcha(browser: Browser): Promise<() => Promise<void>> {
-	const admin = await bootstrapAdminSession();
-	const context = await browser.newContext();
-	const page = await context.newPage();
-	await routeBrowserCouchThroughApp(page);
-	await injectSession(page, admin.user, admin.cookie);
-	const wasEnabled = await setRecaptcha(page, false);
-	return async () => {
-		try {
-			await setRecaptcha(page, wasEnabled);
-		} finally {
-			// Drop the routes first so an in-flight `_changes` long-poll cannot reject close().
-			await Promise.all(context.pages().map((p) => p.unrouteAll({ behavior: 'ignoreErrors' })));
-			await context.close();
-		}
-	};
-}
+// The switch is global and suites run on parallel workers: it is leased, not toggled (see
+// recaptcha-lease.ts), so one suite's restore can never turn it back on under another.
+export { suspendRecaptcha } from './recaptcha-lease';
 
 /**
  * Type a far-future expiry into a `DatePicker` (DD/MM/YYYY) and leave the field, which

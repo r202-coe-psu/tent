@@ -75,9 +75,13 @@ Known problems:
   any non-empty value, `false` included).
 - `config:app.recaptcha_enabled` defaults to `true`; any suite that writes through a public BFF
   route gated by `recaptcha-gate.ts` needs to flip it off for the duration of its writes and restore
-  it after (see `setRecaptcha` in `helpers/staff-ui.ts`, used by both pre-register W1-W4/W6 **and**
-  W5/W6 shelter-booking blocks) — a fake `window.__captchaToken` alone does not pass real reCAPTCHA
-  Enterprise verification once the server-side keys are configured. Re-running `pnpm seed` resets
+  it after. Use `suspendRecaptcha(browser)` (`helpers/recaptcha-lease.ts`, used by the donation
+  full-stack specs **and** pre-register W1-W4/W6 and W5/W6): the switch is global and staging runs
+  two workers, so it is a ref-counted lease in `node_modules/.cache/e2e-recaptcha/` — the first
+  holder saves the original and turns it off, the last release restores it, so one suite's restore
+  never turns it back on under another (a crashed holder is pruned by pid and its saved original
+  is kept). Do not call `setRecaptcha` (`helpers/staff-ui.ts`) directly from a suite. A fake `window.__captchaToken` alone does not pass real
+  reCAPTCHA Enterprise verification once the server-side keys are configured. Re-running `pnpm seed` resets
   this flag back to its default (`true`) even if a previous run had it toggled off mid-test.
 - ~~Repo-wide `playwright test --list` failed because `public-portal-faq-crud.test.ts` imported
   `completeUserOnboarding` (removed when `helpers/couch.ts` renamed it to `seedSecurityQuestion`).~~
@@ -293,9 +297,9 @@ How the three full-stack suites obey §4:
 - **Zero-leak Z test** (`expectRunGone`): shelter database and registry row gone, the shelter
   absent from the public needs board, staff users gone, every booking released
   (`cancelled`/`rejected`/`received`/…).
-- **Gating.** `CAN_WRITE` / `READ_ONLY_REASON`, not `PW_BASE_URL`. `suspendRecaptcha` flips
-  `config:app.recaptcha_enabled` off for the run and restores the previous value in afterAll
-  (the switch is global to the stack — do not run these suites against a stack someone else is
+- **Gating.** `CAN_WRITE` / `READ_ONLY_REASON`, not `PW_BASE_URL`. `suspendRecaptcha` leases
+  `config:app.recaptcha_enabled` off for the run (the last lease released restores the previous
+  value; the switch is global to the stack — do not run these suites against a stack someone else is
   using for reCAPTCHA-dependent testing).
 - **Residue the test side cannot remove:** the Mongo intake-buffer / `public_donations` rows of
   the run's bookings (no delete API; retention purges them on their TTL) and the closed

@@ -161,7 +161,8 @@ import {
 	teardownShelter,
 	waitForProjection
 } from './helpers/public-cleanup';
-import { createShelterViaUi, setRecaptcha } from './helpers/staff-ui';
+import { suspendRecaptcha } from './helpers/recaptcha-lease';
+import { createShelterViaUi } from './helpers/staff-ui';
 
 /** Id of this spec's created-data ledger (see helpers/public-cleanup.ts). */
 const LEDGER_SUITE = 'public-pre-register-flow';
@@ -1840,9 +1841,7 @@ test.describe(
 		// This suite writes through the real reCAPTCHA gate (recaptcha-gate.ts) — a fake
 		// __captchaToken never passes real Google verification — so disable the switch for
 		// the duration of the writes and restore whatever it was set to beforehand.
-		let adminContext: BrowserContext;
-		let adminPage: Page;
-		let recaptchaWasEnabled = true;
+		let restoreRecaptcha: (() => Promise<void>) | undefined;
 
 		test.beforeAll(async ({ browser }) => {
 			if (!CAN_WRITE) return;
@@ -1851,16 +1850,10 @@ test.describe(
 			health = watchPage(page);
 			statusCalls = recordStatusCalls(page);
 
-			const admin = await bootstrapAdminSession();
-			adminContext = await browser.newContext();
-			adminPage = await adminContext.newPage();
-			await routeBrowserCouchThroughApp(adminPage);
-			await injectSession(adminPage, admin.user, admin.cookie);
-			recaptchaWasEnabled = await setRecaptcha(adminPage, false);
+			restoreRecaptcha = await suspendRecaptcha(browser);
 		});
 		test.afterAll(async () => {
-			if (CAN_WRITE) await setRecaptcha(adminPage, recaptchaWasEnabled);
-			await adminContext?.close();
+			await restoreRecaptcha?.();
 			await context?.close();
 		});
 		test.beforeEach(() => {
@@ -2109,9 +2102,7 @@ test.describe(
 
 		// This booking also writes through the real reCAPTCHA gate (recaptcha-gate.ts) — see
 		// the W1-W4/W6 block above for why it must be disabled for the duration of the writes.
-		let adminContext: BrowserContext;
-		let adminPage: Page;
-		let recaptchaWasEnabled = true;
+		let restoreRecaptcha: (() => Promise<void>) | undefined;
 		const canWrite = () => CAN_WRITE && Boolean(process.env.COUCHDB_PUBLIC_WRITER_URL);
 
 		test.beforeEach(() => {
@@ -2124,16 +2115,10 @@ test.describe(
 		});
 		test.beforeAll(async ({ browser }) => {
 			if (!canWrite()) return;
-			const admin = await bootstrapAdminSession();
-			adminContext = await browser.newContext();
-			adminPage = await adminContext.newPage();
-			await routeBrowserCouchThroughApp(adminPage);
-			await injectSession(adminPage, admin.user, admin.cookie);
-			recaptchaWasEnabled = await setRecaptcha(adminPage, false);
+			restoreRecaptcha = await suspendRecaptcha(browser);
 		});
 		test.afterAll(async () => {
-			if (canWrite()) await setRecaptcha(adminPage, recaptchaWasEnabled);
-			await adminContext?.close();
+			await restoreRecaptcha?.();
 			await context?.close();
 		});
 
