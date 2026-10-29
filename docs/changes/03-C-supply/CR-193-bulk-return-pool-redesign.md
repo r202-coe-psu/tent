@@ -50,13 +50,13 @@ feedback ระบบคลัง & เบิกของ ข้อ 4–5: ข�
 (ยังไม่รู้ว่าเป็นของใคร) แล้วค่อยจับคู่กับรายการยืมทีหลัง — flow ปัจจุบันบังคับให้คลังรู้ยอดรวมและ item เดียว
 ก่อนเปิด pool
 
-| มิติ        | flow ปัจจุบัน (CR-121 / CR-134)                                                                                  | flow ใหม่ (epic #657)                                                                        |
-| ----------- | ---------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
-| เปิด pool   | หลังตรวจนับของ — ต้องมี `item_id`, `total_received_qty`, `stock_ledger_id` (receive ledger เขียนพร้อมสร้าง pool) | เปิดก่อน มีแค่ `name` (+ จุดเก็บ optional) สถานะ `OPEN` ไม่มียอด                             |
-| เนื้อหา     | 1 pool = 1 item, ยอดรวมตัวเดียว                                                                                  | หลาย item — บันทึกเป็น entry ต่อครั้งที่รับ (item, qty, ผู้คืน, loan ที่ปิด/ลด)              |
-| การใช้ pool | ด่าน Check-out ตัด `unclaimed_quota` ผ่าน `bulk_return_claim` (CAS ต่อ log)                                      | entry ผูก `loan_refs[]`; ย้าย/void entry ได้ขณะ `OPEN`                                        |
-| ปิดงาน      | `ACTIVE → EXHAUSTED/CLOSED`                                                                                      | `OPEN → SUBMITTED → RECEIVED` (ตรวจรับที่ pool เอง) หรือ `OPEN → CANCELLED` เมื่อกองว่าง     |
-| สรุปยอด     | `total_received_qty` ตัวเลขเดียว                                                                                 | `items_summary` + `entry_ids` (snapshot ตอน submit) และ `received_items` (ผลตรวจรับ)         |
+| มิติ        | flow ปัจจุบัน (CR-121 / CR-134)                                                                                  | flow ใหม่ (epic #657)                                                                    |
+| ----------- | ---------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| เปิด pool   | หลังตรวจนับของ — ต้องมี `item_id`, `total_received_qty`, `stock_ledger_id` (receive ledger เขียนพร้อมสร้าง pool) | เปิดก่อน มีแค่ `name` (+ จุดเก็บ optional) สถานะ `OPEN` ไม่มียอด                         |
+| เนื้อหา     | 1 pool = 1 item, ยอดรวมตัวเดียว                                                                                  | หลาย item — บันทึกเป็น entry ต่อครั้งที่รับ (item, qty, ผู้คืน, loan ที่ปิด/ลด)          |
+| การใช้ pool | ด่าน Check-out ตัด `unclaimed_quota` ผ่าน `bulk_return_claim` (CAS ต่อ log)                                      | entry ผูก `loan_refs[]`; ย้าย/void entry ได้ขณะ `OPEN`                                   |
+| ปิดงาน      | `ACTIVE → EXHAUSTED/CLOSED`                                                                                      | `OPEN → SUBMITTED → RECEIVED` (ตรวจรับที่ pool เอง) หรือ `OPEN → CANCELLED` เมื่อกองว่าง |
+| สรุปยอด     | `total_received_qty` ตัวเลขเดียว                                                                                 | `items_summary` + `entry_ids` (snapshot ตอน submit) และ `received_items` (ผลตรวจรับ)     |
 
 ## Why
 
@@ -536,6 +536,7 @@ D1–D5 ข้างบนยังมีผลตามเดิม (ปรั�
   ยังถือ `lock` แบบ `SUBMIT` ให้รอจน lock หายแล้วค่อยอ่าน pin (ข้อ 33) — backoff 50 → 1000 ms, timeout 8 วินาที กลไกเดียวกับ fence (ข้อ 32)
   - หมดเวลา → `BulkReturnPoolLockTimeoutError` และปลด lock ของตัวเอง · ไม่รอ lock `CANCEL`
   - สองกองที่อ้างถึงกันและ submit พร้อมกันอาจรอกันจนหมดเวลาทั้งคู่ (ปลอดภัย ไม่นับซ้ำ) แล้วกดส่งใหม่ได้
+  - SUBMIT lock ค้างจาก client ที่ล่มก็บล็อก submit ของกองที่ event อ้างถึงกองนั้นเช่นกัน จนกว่า lock จะถูกปลด (หมดเวลาแล้วลองใหม่) — การปลด lock ค้างอยู่นอกขอบเขตของข้อนี้
   - ข้อมูลเดิมที่ถูกนับซ้ำไปแล้วไม่ทำ repair/migration — ใช้ pin (FR-33.2 กองที่ `submitted_at` เก่ากว่าได้ entry) + คำเตือน (FR-33.6)
 - **ต่อ:** ข้อ 33 (FR-33.5)
 
@@ -602,35 +603,35 @@ D1–D5 ข้างบนยังมีผลตามเดิม (ปรั�
 
 ### สิ่งที่ encode แล้ว
 
-| หัวข้อ | encode แล้ว |
-| --- | --- |
-| pool | `status` 4 ค่า + transition forward-only; `lock.op` = `SUBMIT \| CANCEL`; `name` 1–80; `location_storage_point_id` + `location_storage_zone`; `items_summary`/`entry_ids` ไม่ว่างตอน submit; `cancelled_at/by`; `received_at/by`, `received_storage_*`, `received_items[]`; ถอด `return_ticket_id` และ `location` free text |
-| entry | `returner_type` + กติกา `unspecified`; `sum(loan_refs.qty) ≤ qty`; role เขียนกลุ่ม entry |
-| move | role เขียนกลุ่ม entry; `created_by` = ผู้เขียน |
-| void | doc type `bulk_return_entry_void` v1, `_id` `bulk_return_entry_void:{entryULID}`; append-only; role กลุ่ม entry |
+| หัวข้อ                | encode แล้ว                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| pool                  | `status` 4 ค่า + transition forward-only; `lock.op` = `SUBMIT \| CANCEL`; `name` 1–80; `location_storage_point_id` + `location_storage_zone`; `items_summary`/`entry_ids` ไม่ว่างตอน submit; `cancelled_at/by`; `received_at/by`, `received_storage_*`, `received_items[]`; ถอด `return_ticket_id` และ `location` free text                                                                                                                                                                                                |
+| entry                 | `returner_type` + กติกา `unspecified`; `sum(loan_refs.qty) ≤ qty`; role เขียนกลุ่ม entry                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| move                  | role เขียนกลุ่ม entry; `created_by` = ผู้เขียน                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| void                  | doc type `bulk_return_entry_void` v1, `_id` `bulk_return_entry_void:{entryULID}`; append-only; role กลุ่ม entry                                                                                                                                                                                                                                                                                                                                                                                                            |
 | `distribution_log` v2 | `applied_bulk_entry_ids`; apply: ปลดภาระ `active`/`partially_returned` + `clear_reason = bulk_dropoff` + เพิ่ม id ตัวเดียว + `qty_returned` เพิ่มขึ้นและ ≤ `qty` → `returned`/`partially_returned`; revert: `partially_returned`/`returned` + ถอด id ตัวเดียว + `qty_returned` ลดลง (≥ 0) → `active` เมื่อเป็น 0 ไม่เช่นนั้น `partially_returned`; `bulk_dropoff` ต้องมี `bulk_pool_id` (legacy) หรือ `applied_bulk_entry_ids`; void log ไม่ได้เมื่อ `applied_bulk_entry_ids` ไม่ว่าง; upgrade v1 → v2 แบบ lazy ห้าม 2 → 1 |
-| view | `bulk_return_pool_item_totals` หัก void |
+| view                  | `bulk_return_pool_item_totals` หัก void                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 
 ### VDU บังคับ กับ advisory
 
 VDU อ่านเอกสารอื่นไม่ได้ — กติกาข้ามเอกสารจึงเป็น advisory ฝั่ง domain/application เท่านั้น
 
-| กติกา | VDU | Advisory (domain/application) |
-| --- | --- | --- |
-| transition forward-only, role, ผู้เขียน (`*_by`), `name` 1–80, submit ไม่ว่าง, ความสมบูรณ์ของ `received_items`, ฟิลด์ freeze immutable, append-only ของ entry/move/void, `distribution_log` apply/revert | บังคับ | — |
-| ยกเลิกได้เฉพาะเมื่อกองว่าง | ไม่ได้ | `isPoolEmpty` + lock `CANCEL` (#659) |
-| void ได้เฉพาะตอน pool `OPEN` | ไม่ได้ | `canVoidEntry` |
-| `pool_id` ของ void ต้องเป็น pool ปัจจุบันของ entry | ไม่ได้ | fold (`resolveBulkReturnEntries`) |
-| entry ที่ void แล้วย้ายไม่ได้ | ไม่ได้ | fold / `canMoveEntry` |
-| ชื่อไม่ซ้ำในกลุ่ม pool `OPEN` | ไม่ได้ | `isPoolNameTakenAmongOpen` (UI) |
-| entry ที่มาช้า | ไม่ได้ | `findLateEntries` / `isLateEntry` |
-| item ต้อง `returnable === true` | ไม่ได้ (catalog อยู่คนละ DB) | `isBulkReturnEligibleItem` ใน workflow เพิ่ม entry ของ #659 |
-| move/void อ้าง entry ที่ยังไม่มี หรือ move seq ขาดช่วง → รอซิงก์ | ไม่ได้ (อ่าน doc อื่นไม่ได้) | fold ข้ามและรายงานใน `findUnresolvedBulkReturnRefs` (ข้อ 16) |
-| loan ถูกปิดก่อนตัดยอด → ข้าม ref และเตือน | ไม่ได้ | `assessBulkReturnRefOnLoan` (ข้อ 15) |
-| fence รอ `lock` แล้วตัดสินจากสถานะสุดท้าย | ไม่ได้ | `settlePoolFence` (ข้อ 32) |
-| void / ย้ายของ entry ที่ snapshot นับไว้ไม่มีผล ไม่ว่าเกิดจาก race หรือ writer นอกแอป | ไม่ได้ (อ่าน pool ไม่ได้) | fold `pins` + fence ต้นทาง (ข้อ 33) |
-| ทางเขียนอ่านกองที่ event อ้างถึงไม่ได้ → หยุด | ไม่ได้ | `loadSnapshotPinsForWrite` (FR-33.7) |
-| ยอดยืมที่ไม่ถูกตัดของกองที่ส่งแล้ว | ไม่ได้ | `findMissedLoanRefs` + action ซ่อม (ข้อ 34) |
+| กติกา                                                                                                                                                                                                    | VDU                          | Advisory (domain/application)                                |
+| -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------- | ------------------------------------------------------------ |
+| transition forward-only, role, ผู้เขียน (`*_by`), `name` 1–80, submit ไม่ว่าง, ความสมบูรณ์ของ `received_items`, ฟิลด์ freeze immutable, append-only ของ entry/move/void, `distribution_log` apply/revert | บังคับ                       | —                                                            |
+| ยกเลิกได้เฉพาะเมื่อกองว่าง                                                                                                                                                                               | ไม่ได้                       | `isPoolEmpty` + lock `CANCEL` (#659)                         |
+| void ได้เฉพาะตอน pool `OPEN`                                                                                                                                                                             | ไม่ได้                       | `canVoidEntry`                                               |
+| `pool_id` ของ void ต้องเป็น pool ปัจจุบันของ entry                                                                                                                                                       | ไม่ได้                       | fold (`resolveBulkReturnEntries`)                            |
+| entry ที่ void แล้วย้ายไม่ได้                                                                                                                                                                            | ไม่ได้                       | fold / `canMoveEntry`                                        |
+| ชื่อไม่ซ้ำในกลุ่ม pool `OPEN`                                                                                                                                                                            | ไม่ได้                       | `isPoolNameTakenAmongOpen` (UI)                              |
+| entry ที่มาช้า                                                                                                                                                                                           | ไม่ได้                       | `findLateEntries` / `isLateEntry`                            |
+| item ต้อง `returnable === true`                                                                                                                                                                          | ไม่ได้ (catalog อยู่คนละ DB) | `isBulkReturnEligibleItem` ใน workflow เพิ่ม entry ของ #659  |
+| move/void อ้าง entry ที่ยังไม่มี หรือ move seq ขาดช่วง → รอซิงก์                                                                                                                                         | ไม่ได้ (อ่าน doc อื่นไม่ได้) | fold ข้ามและรายงานใน `findUnresolvedBulkReturnRefs` (ข้อ 16) |
+| loan ถูกปิดก่อนตัดยอด → ข้าม ref และเตือน                                                                                                                                                                | ไม่ได้                       | `assessBulkReturnRefOnLoan` (ข้อ 15)                         |
+| fence รอ `lock` แล้วตัดสินจากสถานะสุดท้าย                                                                                                                                                                | ไม่ได้                       | `settlePoolFence` (ข้อ 32)                                   |
+| void / ย้ายของ entry ที่ snapshot นับไว้ไม่มีผล ไม่ว่าเกิดจาก race หรือ writer นอกแอป                                                                                                                    | ไม่ได้ (อ่าน pool ไม่ได้)    | fold `pins` + fence ต้นทาง (ข้อ 33)                          |
+| ทางเขียนอ่านกองที่ event อ้างถึงไม่ได้ → หยุด                                                                                                                                                            | ไม่ได้                       | `loadSnapshotPinsForWrite` (FR-33.7)                         |
+| ยอดยืมที่ไม่ถูกตัดของกองที่ส่งแล้ว                                                                                                                                                                       | ไม่ได้                       | `findMissedLoanRefs` + action ซ่อม (ข้อ 34)                  |
 
 ## Amends — ข้อความเดิมที่ถูกแก้
 
