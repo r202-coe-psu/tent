@@ -33,6 +33,7 @@ import {
 	outstandingLoansOf,
 	requirePool,
 	resolveDependencies,
+	revertAppliedRefsIfReopened,
 	settlePoolFence,
 	type BulkReturnLoanSkipped,
 	type BulkReturnPoolV3WorkflowDependencies,
@@ -382,6 +383,27 @@ export async function addBulkReturnEntries(
 				const skipped = await applyRefToLoan(logRepo, entry, ref, ctx);
 				if (skipped) loansSkipped.push(skipped);
 				else loansApplied.push(ref.distribution_log_id);
+			}
+		}
+		// A manager may reopen the entry's loans between the pre-check (replay only) and the CAS
+		// writes above, on a fresh entry too (a submit can count it first): re-check after the writes
+		// and undo them, so a reopened loan is never left cut.
+		if (loansApplied.length > 0) {
+			const appliedRefs = entry.loan_refs.filter((ref) =>
+				loansApplied.includes(ref.distribution_log_id)
+			);
+			if (await revertAppliedRefsIfReopened(eventRepo, logRepo, entry, appliedRefs, ctx)) {
+				results.push({
+					entry,
+					late: false,
+					replayed,
+					loansApplied: [],
+					loansSkipped: [],
+					unallocated_qty,
+					loans_reopened: true
+				});
+				if (fence === 'in_snapshot') break;
+				continue;
 			}
 		}
 		results.push({ entry, late: false, replayed, loansApplied, loansSkipped, unallocated_qty });

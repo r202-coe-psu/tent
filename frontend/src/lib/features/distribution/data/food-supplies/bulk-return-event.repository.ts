@@ -31,6 +31,16 @@ export interface BulkReturnEventRepository {
 	/** CR-193 §35: put-if-absent (ConflictError when the entry's loans were already reopened). */
 	createLoanReopen(reopen: BulkReturnLoanReopen): Promise<BulkReturnLoanReopen>;
 	getLoanReopen(reopenId: string): Promise<BulkReturnLoanReopen | null>;
+	/**
+	 * Batched `getEntry` (`_all_docs`, 100 ids per request). Absent ids are omitted; a doc that
+	 * fails validation (or is not an entry) throws, exactly like `getEntry` (fail closed).
+	 */
+	getEntriesByIds(entryIds: readonly string[]): Promise<BulkReturnEntry[]>;
+	/**
+	 * Batched `getLoanReopen` by reopen doc id (`_all_docs`, 100 ids per request). Absent ids are
+	 * omitted; an invalid doc throws like `getLoanReopen`.
+	 */
+	getLoanReopensByIds(reopenIds: readonly string[]): Promise<BulkReturnLoanReopen[]>;
 	listAll(): Promise<BulkReturnEventSet>;
 	/**
 	 * One entry with its whole move chain and void (an unknown entry yields empty lists). Reads only
@@ -50,6 +60,8 @@ const isOfType =
 	<T>(type: string) =>
 	(d: unknown): d is T =>
 		typeof d === 'object' && d !== null && (d as { type?: string }).type === type;
+
+const isObject = (d: unknown): d is Record<string, unknown> => typeof d === 'object' && d !== null;
 
 export class BulkReturnEventRemoteRepository implements BulkReturnEventRepository {
 	private readonly dbName: string;
@@ -98,6 +110,27 @@ export class BulkReturnEventRemoteRepository implements BulkReturnEventRepositor
 	async getLoanReopen(reopenId: string): Promise<BulkReturnLoanReopen | null> {
 		const raw = await getDoc<BulkReturnLoanReopen>(this.dbName, reopenId);
 		return raw ? (bulkReturnLoanReopenDocSchema.parse(raw) as BulkReturnLoanReopen) : null;
+	}
+
+	async getEntriesByIds(entryIds: readonly string[]): Promise<BulkReturnEntry[]> {
+		const out: BulkReturnEntry[] = [];
+		for (const chunk of chunked([...new Set(entryIds)], ID_CHUNK_SIZE)) {
+			// Any object passes the guard so a wrong-typed doc reaches the strict parse and throws.
+			const raws = await allDocsByIds<Record<string, unknown>>(this.dbName, chunk, isObject);
+			for (const raw of raws) out.push(bulkReturnEntryDocSchema.parse(raw) as BulkReturnEntry);
+		}
+		return out;
+	}
+
+	async getLoanReopensByIds(reopenIds: readonly string[]): Promise<BulkReturnLoanReopen[]> {
+		const out: BulkReturnLoanReopen[] = [];
+		for (const chunk of chunked([...new Set(reopenIds)], ID_CHUNK_SIZE)) {
+			const raws = await allDocsByIds<Record<string, unknown>>(this.dbName, chunk, isObject);
+			for (const raw of raws) {
+				out.push(bulkReturnLoanReopenDocSchema.parse(raw) as BulkReturnLoanReopen);
+			}
+		}
+		return out;
 	}
 
 	async listAll(): Promise<BulkReturnEventSet> {

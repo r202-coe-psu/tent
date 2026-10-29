@@ -159,5 +159,23 @@ export async function reopenBulkReturnEntryLoans(
 		}
 		if (await revertRefOnLoan(logRepo, entry, ref, ctx)) loansReopened.push(loanId);
 	}
+
+	// Final sweep over ALL loan refs of the entry: a concurrent apply (add replay / missed-loan
+	// repair) whose CAS landed after the first loan read above, but before the reopen doc existed,
+	// may have cut a loan this loop did not know about. Convergence: every apply CAS is either
+	// before this sweep (reverted here) or followed by the apply side's re-read of the reopen doc,
+	// which exists by now (written before this sweep) and makes that side revert its own writes.
+	const swept = await Promise.all([...refById.keys()].map((id) => logRepo.get(id)));
+	for (const loan of swept) {
+		if (!loan || !(loan.applied_bulk_entry_ids ?? []).includes(entry._id)) continue;
+		const ref = refById.get(loan._id) as BulkReturnEntryLoanRef;
+		if (isBulkReturnRefRevertable(loan, ref)) {
+			if ((await revertRefOnLoan(logRepo, entry, ref, ctx)) && !loansReopened.includes(loan._id)) {
+				loansReopened.push(loan._id);
+			}
+		} else if (!loansSkipped.some((s) => s.distribution_log_id === loan._id)) {
+			loansSkipped.push({ distribution_log_id: loan._id, reason: 'not_revertable' });
+		}
+	}
 	return { reopen, replayed, loansReopened, loansSkipped };
 }

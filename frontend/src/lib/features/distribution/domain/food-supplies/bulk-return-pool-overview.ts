@@ -25,8 +25,8 @@ export interface BulkReturnEventSet {
 	entries: BulkReturnEntry[];
 	moves: BulkReturnEntryMove[];
 	voids: BulkReturnEntryVoid[];
-	/** CR-193 §35 loan reopens of the entries read (optional: older callers / fixtures omit it). */
-	loanReopens?: BulkReturnLoanReopen[];
+	/** CR-193 §35 loan reopens of the entries read. */
+	loanReopens: BulkReturnLoanReopen[];
 	/** Docs the read left out because they failed validation (typed structurally: domain cannot import data). */
 	skipped: { _id: string; type: string; reason: string }[];
 }
