@@ -631,9 +631,14 @@
 	});
 	const serviceFormValid = $derived(Object.values(serviceFieldErrors).every((e) => e === null));
 
-	// Init stage C defaults from activeService or allocatedTarget
+	// Init stage C defaults from activeService or allocatedTarget, once per plan/service/outcome.
+	// A refetch of the same plan (an edit on another device) must not wipe what the kitchen typed.
+	let stageCDefaultsFor: string | null = null;
 	$effect(() => {
 		if (shownStage === 'C') {
+			const key = `${activePlan?._id}|${activeService?._id}|${serviceRejected}`;
+			if (key === stageCDefaultsFor) return;
+			stageCDefaultsFor = key;
 			if (activeService && !serviceRejected) {
 				yieldActualPortions = activeService.actual_yield ?? activePlan?.allocated_target ?? 50;
 				servedInShelter = activeService.served;

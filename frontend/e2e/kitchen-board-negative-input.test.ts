@@ -23,6 +23,7 @@ import {
 	createCouchUser,
 	deleteCouchUser,
 	deleteDocument,
+	getDocument,
 	putDocument,
 	routeBrowserCouchThroughApp,
 	seedSecurityQuestion,
@@ -325,7 +326,9 @@ test.describe(
 			const save = page.getByRole('button', { name: RECORD_SERVICE });
 			const errors = page.getByRole('alert').filter({ hasText: SERVICE_ERROR });
 
-			await expect(numberUnderLabel(page, SERVICE_FIELDS[0])).toBeVisible({ timeout: 20_000 });
+			await expect(numberUnderLabel(page, SERVICE_FIELDS[0])).toHaveValue('20', {
+				timeout: 20_000
+			});
 			await expect(save).toBeEnabled();
 
 			for (const label of SERVICE_FIELDS) {
@@ -350,7 +353,9 @@ test.describe(
 			const save = page.getByRole('button', { name: RECORD_SERVICE });
 			const errors = page.getByRole('alert').filter({ hasText: SERVICE_ERROR });
 
-			await expect(numberUnderLabel(page, SERVICE_FIELDS[0])).toBeVisible({ timeout: 20_000 });
+			await expect(numberUnderLabel(page, SERVICE_FIELDS[0])).toHaveValue('20', {
+				timeout: 20_000
+			});
 			for (const label of SERVICE_FIELDS.slice(0, 3)) {
 				const input = numberUnderLabel(page, label);
 				const original = await input.inputValue();
@@ -361,6 +366,28 @@ test.describe(
 				await expect(errors).toHaveCount(0);
 				await expect(save).toBeEnabled();
 			}
+		});
+
+		test('stage C keeps typed counts when the plan changes on another device', async ({ page }) => {
+			const watchingChanges = page.waitForRequest((r) =>
+				r.url().includes(`/${SHELTER_DB}/_changes`)
+			);
+			await openBoard(page, `?plan_id=${encodeURIComponent(planId)}&stage=C`);
+			const fields = SERVICE_FIELDS.map((label) => numberUnderLabel(page, label));
+			const typed = ['18', '7', '3', '2', '1'];
+			await expect(fields[0]).toHaveValue('20', { timeout: 20_000 });
+			for (const [i, field] of fields.entries()) await field.fill(typed[i]);
+
+			await watchingChanges;
+			const plan = await getDocument(SHELTER_DB, planId);
+			const label = `${plan!.label} แก้จากเครื่องอื่น`;
+			await putDocument(SHELTER_DB, { ...plan!, label });
+			await expect(page.getByText(label).first()).toBeVisible({ timeout: 20_000 });
+
+			for (const [i, field] of fields.entries()) {
+				await expect(field, `${SERVICE_FIELDS[i]} kept`).toHaveValue(typed[i]);
+			}
+			await page.unrouteAll({ behavior: 'ignoreErrors' });
 		});
 
 		test('stage C flags a minus typed on a virtual keyboard and blocks saving', async ({
