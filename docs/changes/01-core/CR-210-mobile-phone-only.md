@@ -1,10 +1,12 @@
 ---
-id: draft
+id: CR-210 # renumbered from draft-mobile-phone-only
 title: เบอร์โทรต้องเป็นมือถือ 10 หลักทั้งระบบ (เลิกรับเบอร์บ้าน 9 หลัก, ถอน CR-202) + กติกาเบอร์ของจิตอาสา
-status: proposed
+status: approved
 date: 2026-10-28
+updated: 2026-10-29 # approved (Soravit Sukkarn, Team Lead)
 requested_by: "@net-lynx — #880 ทาง B (2026-10-27) และสั่งเลิกรับเบอร์บ้านทั้งระบบ (2026-10-28) ผ่านผู้รับงาน @Mhapong — #951, #882, #991"
-decided_by: project owner
+decided_by: "Soravit Sukkarn (Team Lead)"
+decision_date: 2026-10-29
 layer: volatile
 supersedes:
   - CR-202 (บัญชีผู้ใช้เก็บเบอร์บ้าน 9 หลัก)
@@ -23,7 +25,7 @@ affects:
   - "ส่วนที่เหลือ (implement ใน #991): users, me, server/user-service.ts, people/domain/registration-validation.ts, people/domain/unified-registration.ts, people/ui/registration/, people-import/domain/import-row.ts, people/domain/people.ts (`emergency_contact.phone`), public-register, routes/api/public/v1/registrations, kiosk/domain/phone.ts, public-portal/domain/search-input.ts, db/model.ts, backend/apiapp/utils/search_query.py, backend/apiapp/modules/thirdparty_bookings"
 ---
 
-# draft-mobile-phone-only — เบอร์มือถือ 10 หลักทั้งระบบ
+# CR-210 — เบอร์มือถือ 10 หลักทั้งระบบ
 
 > **สรุป (TL;DR):**
 >
@@ -162,3 +164,4 @@ affects:
   - ฝั่งบริจาคอยู่ในขอบเขต "ทั้งระบบ" ติดตาม spec ใน #1001 (FR-2)
   - `emergency_contact.phone` และนำเข้า Excel ใช้ FR-1 เว้นว่างได้ (FR-2)
   - แจ้งพาร์ทเนอร์ API EXT bookings แล้ว (Impact)
+- 2026-10-29 — approved by Soravit Sukkarn (Team Lead) · รันเลข CR-210 (renumbered from draft-mobile-phone-only) ย้ายเข้า 01-core/
