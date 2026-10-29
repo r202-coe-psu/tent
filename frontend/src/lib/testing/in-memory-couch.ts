@@ -39,7 +39,15 @@ export function createInMemoryCouch() {
 		return `${count}-rev${id.replace(/[^a-zA-Z0-9]/g, '')}`;
 	}
 
+	const findQueries: {
+		dbName: string;
+		selector: Record<string, unknown>;
+		fields?: string[];
+		limit?: number;
+	}[] = [];
+
 	function reset(): void {
+		findQueries.length = 0;
 		store.clear();
 		revCounters.clear();
 	}
@@ -97,6 +105,35 @@ export function createInMemoryCouch() {
 			}
 			return results;
 		},
+		// `_find` without paging. A selector value is either an equality operand or `{ $in: [...] }`
+		// (other operators are unsupported); `fields` projects each doc to those keys; `limit` defaults
+		// to 25 like CouchDB. Docs are served in `_id` order. Every query is recorded in `findQueries`.
+		findDocs: async <T>(
+			dbName: string,
+			query: { selector: Record<string, unknown>; fields?: string[]; limit?: number }
+		): Promise<T[]> => {
+			findQueries.push({ dbName, ...clone(query) });
+			const matches = [...store.values()]
+				.filter((doc) =>
+					Object.entries(query.selector).every(([k, v]) => {
+						if (v && typeof v === 'object' && '$in' in v) {
+							return ((v as { $in: unknown[] }).$in ?? []).includes(doc[k]);
+						}
+						return doc[k] === v;
+					})
+				)
+				.sort((a, b) => (a._id < b._id ? -1 : a._id > b._id ? 1 : 0))
+				.slice(0, query.limit ?? 25);
+			return matches.map((doc) => {
+				const copy = clone(doc) as Record<string, unknown>;
+				if (!query.fields) return copy as T;
+				const projected: Record<string, unknown> = {};
+				for (const field of query.fields) {
+					if (field in copy) projected[field] = copy[field];
+				}
+				return projected as T;
+			});
+		},
 		// Equality-only selectors; `limit` defaults to 25 and `bookmark` is the next row offset, like
 		// CouchDB (docs are served in `_id` order, as an index on [type, field] would).
 		findDocsPage: async <T>(
@@ -112,5 +149,5 @@ export function createInMemoryCouch() {
 		}
 	};
 
-	return { store, nextRev, reset, couchDbModule };
+	return { store, nextRev, reset, couchDbModule, findQueries };
 }

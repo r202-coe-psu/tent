@@ -4,15 +4,8 @@ const couch = await vi.hoisted(async () => {
 	const { createInMemoryCouch } = await import('$lib/testing/in-memory-couch');
 	return createInMemoryCouch();
 });
-const byIds = vi.hoisted(() => vi.fn());
 
-vi.mock('$lib/db/couch-db', () => ({
-	...couch.couchDbModule,
-	allDocsByIds: (...args: unknown[]) => {
-		byIds(...args);
-		return (couch.couchDbModule.allDocsByIds as (...a: unknown[]) => unknown)(...args);
-	}
-}));
+vi.mock('$lib/db/couch-db', () => couch.couchDbModule);
 vi.mock('$lib/db/shelter', () => ({
 	getShelterDb: (code = 'SH001') => `shelter_${code.toLowerCase()}`
 }));
@@ -35,7 +28,23 @@ function seed(input: Partial<EvacueeInput> & { first_name: string }): string {
 describe('getEvacueeNamesByIds', () => {
 	beforeEach(() => {
 		couch.reset();
-		byIds.mockClear();
+	});
+
+	it('requests a name-only projection through _find with an _id $in selector', async () => {
+		const a = seed({ first_name: 'สมชาย', phone: '0899999999' });
+		const phoneBefore = (couch.store.get(a) as { phone?: string }).phone;
+		expect(phoneBefore).toBe('0899999999');
+
+		await getEvacueeNamesByIds([a]);
+
+		expect(couch.findQueries).toEqual([
+			{
+				dbName: 'shelter_sh001',
+				selector: { _id: { $in: [a] } },
+				fields: ['_id', 'first_name', 'last_name', 'nickname'],
+				limit: 1
+			}
+		]);
 	});
 
 	it('returns only the requested evacuees and only name fields', async () => {
@@ -70,26 +79,30 @@ describe('getEvacueeNamesByIds', () => {
 		const out = await getEvacueeNamesByIds([a, 'volunteer:x', 'household:y', 'evacuee:missing']);
 
 		expect(out.map((r) => r._id)).toEqual([a]);
-		expect(byIds.mock.calls[0][1]).toEqual([a, 'evacuee:missing'].sort());
+		expect(couch.findQueries[0].selector).toEqual({
+			_id: { $in: [a, 'evacuee:missing'].sort() }
+		});
 	});
 
 	it('reads the named shelter database and skips the read for an empty id list', async () => {
 		const a = seed({ first_name: 'สมชาย' });
 
 		await getEvacueeNamesByIds([a], 'SH007');
-		expect(byIds.mock.calls[0][0]).toBe('shelter_sh007');
+		expect(couch.findQueries[0].dbName).toBe('shelter_sh007');
 
-		byIds.mockClear();
+		couch.findQueries.length = 0;
 		expect(await getEvacueeNamesByIds(['volunteer:x'])).toEqual([]);
-		expect(byIds).not.toHaveBeenCalled();
+		expect(couch.findQueries).toEqual([]);
 	});
 
-	it('reads the ids in chunks of 100 keys', async () => {
+	it('reads the ids in chunks of 100 keys with limit equal to the chunk length', async () => {
 		const ids = Array.from({ length: 230 }, (_, i) => `evacuee:${String(i).padStart(4, '0')}`);
 
 		await getEvacueeNamesByIds(ids);
 
-		expect(byIds.mock.calls.map((call) => (call[1] as string[]).length)).toEqual([100, 100, 30]);
+		const sizes = couch.findQueries.map((q) => (q.selector._id as { $in: string[] }).$in.length);
+		expect(sizes).toEqual([100, 100, 30]);
+		expect(couch.findQueries.map((q) => q.limit)).toEqual(sizes);
 	});
 });
 

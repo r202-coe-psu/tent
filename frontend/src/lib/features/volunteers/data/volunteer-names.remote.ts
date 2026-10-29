@@ -1,6 +1,5 @@
-import { allDocsByIds } from '$lib/db/couch-db';
+import { findDocs } from '$lib/db/couch-db';
 import { getShelterDb } from '$lib/db/shelter';
-import { isVolunteer } from '../domain/volunteer.schema';
 
 /**
  * Name-only projection of a volunteer. The by-ids lookup returns nothing else, so callers that
@@ -14,16 +13,30 @@ export interface VolunteerNameRecord {
 
 const VOLUNTEER_ID_PREFIX = 'volunteer:';
 const KEYS_PER_READ = 100;
+/** The only fields requested from CouchDB; ID card, phone and address never cross the wire. */
+const NAME_FIELDS = ['_id', 'first_name', 'last_name'];
 
 /** Distinct `volunteer:` ids, sorted; ids with another prefix are dropped. */
 export function uniqueVolunteerIds(ids: readonly string[]): string[] {
 	return [...new Set(ids.filter((id) => id.startsWith(VOLUNTEER_ID_PREFIX)))].sort();
 }
 
+/** Shape of a `_find` row projected to `NAME_FIELDS`; the full volunteer guard cannot apply to it. */
+function isVolunteerNameProjection(value: unknown): value is VolunteerNameRecord {
+	if (typeof value !== 'object' || value === null) return false;
+	const v = value as Record<string, unknown>;
+	return (
+		typeof v._id === 'string' &&
+		v._id.startsWith(VOLUNTEER_ID_PREFIX) &&
+		typeof v.first_name === 'string' &&
+		typeof v.last_name === 'string'
+	);
+}
+
 /**
- * Names of the named volunteers of one shelter, read by id (`_all_docs` keys, chunked) and mapped
- * to name fields before they leave the data layer. Missing, deleted or malformed docs are omitted.
- * `shelterCode` omitted reads the active shelter.
+ * Names of the named volunteers of one shelter, read by id with a Mango `_find` (`_id` `$in`,
+ * chunked) that projects name fields only, so nothing else leaves CouchDB. Missing or malformed
+ * docs are omitted. `shelterCode` omitted reads the active shelter.
  */
 export async function getVolunteerNamesByIds(
 	ids: readonly string[],
@@ -36,11 +49,20 @@ export async function getVolunteerNamesByIds(
 	for (let i = 0; i < wanted.length; i += KEYS_PER_READ) {
 		chunks.push(wanted.slice(i, i + KEYS_PER_READ));
 	}
-	const docs = (
-		await Promise.all(chunks.map((chunk) => allDocsByIds(db, chunk, isVolunteer)))
+	const rows = (
+		await Promise.all(
+			chunks.map((chunk) =>
+				findDocs<unknown>(db, {
+					selector: { _id: { $in: chunk } },
+					fields: NAME_FIELDS,
+					limit: chunk.length
+				})
+			)
+		)
 	).flat();
 	const requested = new Set(wanted);
-	return docs
+	return rows
+		.filter(isVolunteerNameProjection)
 		.filter((doc) => requested.has(doc._id))
 		.map((doc) => ({ _id: doc._id, first_name: doc.first_name, last_name: doc.last_name }));
 }
