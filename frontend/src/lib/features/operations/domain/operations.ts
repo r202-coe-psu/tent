@@ -1,5 +1,12 @@
 import { z } from 'zod';
-import { type AuthorContext, type BaseDoc, type Timestamp, makeDoc, now } from '$lib/db/model';
+import {
+	type AuthorContext,
+	type BaseDoc,
+	type Timestamp,
+	makeDoc,
+	now,
+	thaiMobilePhoneSchema
+} from '$lib/db/model';
 import {
 	addQty,
 	persistQty,
@@ -1179,11 +1186,7 @@ export const walkInDonationInputSchema = z
 	.object({
 		donor: z.object({
 			name: z.string().trim().min(1),
-			phone: z
-				.string()
-				.trim()
-				.regex(/^[0-9]+$/)
-				.nullable(),
+			phone: thaiMobilePhoneSchema,
 			phone_hash: z.string().min(1),
 			tax_receipt: z.boolean().optional(),
 			tax_id: z.string().optional()

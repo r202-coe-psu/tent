@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
 	createWalkInDonation,
+	walkInDonationInputSchema,
 	receiveDonation,
 	expireDonation,
 	canTransitionDonation,
@@ -71,6 +72,23 @@ function declaredItemsDonation(): Donation {
 		ctx
 	);
 }
+
+describe('walkInDonationInputSchema phone', () => {
+	const base = {
+		donor: { name: 'ผู้ใจบุญ', phone: '0800000000', phone_hash: 'h' },
+		kind: 'items' as const,
+		items: [{ item_id: 'item:rice', qty: 10, unit: 'kg' }],
+		tracking_token_hash: 'tok'
+	};
+	const parse = (phone: string | null) =>
+		walkInDonationInputSchema.safeParse({ ...base, donor: { ...base.donor, phone } });
+
+	it('normalizes a formatted phone, keeps null, rejects a malformed one', () => {
+		expect(parse('080-000-0000').data?.donor.phone).toBe('0800000000');
+		expect(parse(null).data?.donor.phone).toBeNull();
+		expect(parse('12345').success).toBe(false);
+	});
+});
 
 describe('donation lifecycle (forward-only)', () => {
 	it('starts declared with a TTL and no received_at', () => {
