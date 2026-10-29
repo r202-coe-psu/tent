@@ -83,6 +83,9 @@ export function hasLinePoints(
 /** Group key of lines that may go to any point of the shelter (FR-MP-16). */
 export const ANY_POINT_KEY = '*';
 
+/** Group key of lines recorded after the shelter had no drop-off point left (FR-MP-18b). */
+export const AT_SHELTER_KEY = '@shelter';
+
 /**
  * Where a group of lines goes. A point the shelter offers resolves to that point; `null`
  * (no point, or one unticked or deleted since booking) resolves to the shelter itself under
@@ -127,8 +130,10 @@ type GroupSourceReceipt = { point_id: string | null; line_nos: readonly number[]
 
 /**
  * The booking's destinations, one group per point (FR-MP-13), with the lines no offered
- * point names in one "any point" group (FR-MP-16). Groups follow the order of their first
- * line. A line staff refused at review is left out: nothing of it is to be brought.
+ * point names in one "any point" group (FR-MP-16). A line recorded with no point (FR-MP-18b)
+ * leaves its group for one "received at the shelter" group, which no other line joins.
+ * Groups follow the order of their first line. A line staff refused at review is left out:
+ * nothing of it is to be brought.
  * `null` when the booking names no point at all — it shows the shelter as before.
  */
 export function groupDropOffDestinations(
@@ -145,24 +150,27 @@ export function groupDropOffDestinations(
 		for (const lineNo of receipt.line_nos) recordedAt.set(lineNo, receipt.point_id);
 	}
 
-	const lineNosByPoint = new Map<string | null, number[]>();
+	const lineNosByKey = new Map<string, number[]>();
 	items.forEach((item, lineNo) => {
 		if (item.review_status === 'rejected') return;
-		const pointId = currentLinePoint(item, currentIds);
-		const group = lineNosByPoint.get(pointId);
+		const key =
+			recordedAt.get(lineNo) === null
+				? AT_SHELTER_KEY
+				: (currentLinePoint(item, currentIds) ?? ANY_POINT_KEY);
+		const group = lineNosByKey.get(key);
 		if (group) group.push(lineNo);
-		else lineNosByPoint.set(pointId, [lineNo]);
+		else lineNosByKey.set(key, [lineNo]);
 	});
 
-	return [...lineNosByPoint].map(([pointId, lineNos]): DropOffDestinationGroup => {
+	return [...lineNosByKey].map(([key, lineNos]): DropOffDestinationGroup => {
+		const pointId = key === ANY_POINT_KEY || key === AT_SHELTER_KEY ? null : key;
 		const recorded = lineNos.every((lineNo) => recordedAt.has(lineNo));
-		const atShelter = lineNos.every((lineNo) => recordedAt.get(lineNo) === null);
 		return {
-			key: pointId ?? ANY_POINT_KEY,
+			key,
 			anyPoint: pointId === null,
-			point: resolvePoint(pointId),
+			point: key === AT_SHELTER_KEY ? resolveDropOffPoint(shelter) : resolvePoint(pointId),
 			lineNos,
-			status: !recorded ? 'pending' : atShelter ? 'received_at_shelter' : 'received'
+			status: !recorded ? 'pending' : key === AT_SHELTER_KEY ? 'received_at_shelter' : 'received'
 		};
 	});
 }

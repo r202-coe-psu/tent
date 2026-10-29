@@ -9,13 +9,16 @@ const empty = { data: [] as unknown[], isLoading: false };
 
 vi.mock('$lib/features/supply', () => ({ useSupplyItems: () => empty }));
 // The shelter doc the station reads its drop-off points from (CR-206 FR-MP-18).
-const shelterDoc = vi.hoisted(() => ({ current: undefined as unknown }));
+const shelterDoc = vi.hoisted(() => ({ current: undefined as unknown, ready: true }));
 vi.mock('$lib/features/shelters', async (importOriginal) => ({
 	...(await importOriginal<typeof import('$lib/features/shelters')>()),
 	useShelters: () => empty,
 	useShelter: () => ({
 		get data() {
 			return shelterDoc.current;
+		},
+		get isSuccess() {
+			return shelterDoc.ready;
 		},
 		isLoading: false
 	})
@@ -71,6 +74,7 @@ afterEach(async () => {
 	toastMock.error.mockReset();
 	toastMock.success.mockReset();
 	shelterDoc.current = undefined;
+	shelterDoc.ready = true;
 	storagePointList.current = [];
 	localStorage.clear();
 	if (instance) unmount(instance);
@@ -375,6 +379,26 @@ describe('scan-station point by point (CR-206)', () => {
 		expect(submit().disabled).toBe(true);
 	});
 
+	it('reads no "no point left" while the shelter doc is still loading', async () => {
+		shelterDoc.ready = false;
+		stubApi(
+			splitBooking({
+				point_receipts: [
+					{
+						point_id: GYM.id,
+						line_nos: [0],
+						received_at: '2026-10-28T09:12:00+07:00',
+						received_by: 'a'
+					}
+				]
+			})
+		);
+		await openBooking();
+
+		expect(document.querySelector('[data-testid="no-drop-off-point-banner"]')).toBeNull();
+		expect(submit().disabled).toBe(true);
+	});
+
 	it('sends point_id null with the remaining lines (FR-MP-18b)', async () => {
 		// A shelter with no storage point at all receives into the main store.
 		const fetchMock = stubApi(
@@ -420,26 +444,35 @@ describe('scan-station point by point (CR-206)', () => {
 		expect(sent.body).not.toHaveProperty('line_nos');
 	});
 
-	it('tells staff the goods are in stock when the booking closed under them (AC-22)', async () => {
-		shelterDoc.current = { common_areas: { sub_storage: [dropOffPoint(GYM), dropOffPoint(MED)] } };
-		storagePointList.current = [GYM, MED];
-		localStorage.setItem('stock-donations:receiving-point:SH001', MED.id);
-		stubApi(splitBooking(), {
-			success: false,
-			error_code: 'DONATION_CLOSED',
-			error: 'closed'
-		});
-		await openBooking();
+	it.each([
+		{ lots: [{ item_id: 'item:water', lot_no: 'L1' }], says: 'ลงคลังแล้ว' },
+		{ lots: [], says: 'ไม่มีของเข้าคลัง' }
+	])(
+		'tells staff whether goods went in when the booking closed under them (AC-22): $says',
+		async ({ lots, says }) => {
+			shelterDoc.current = {
+				common_areas: { sub_storage: [dropOffPoint(GYM), dropOffPoint(MED)] }
+			};
+			storagePointList.current = [GYM, MED];
+			localStorage.setItem('stock-donations:receiving-point:SH001', MED.id);
+			stubApi(splitBooking(), {
+				success: false,
+				error_code: 'DONATION_CLOSED',
+				error: 'closed',
+				lots
+			});
+			await openBooking();
 
-		buttonIn(line(1), 'ผ่านการตรวจสอบแล้ว').click();
-		await settle();
-		submit().click();
-		await settle();
-		await new Promise((resolve) => setTimeout(resolve, 0));
+			buttonIn(line(1), 'ผ่านการตรวจสอบแล้ว').click();
+			await settle();
+			submit().click();
+			await settle();
+			await new Promise((resolve) => setTimeout(resolve, 0));
 
-		expect(toastMock.error).toHaveBeenCalledWith(
-			expect.stringContaining('ถูกปิดไปก่อนบันทึกเสร็จ'),
-			expect.objectContaining({ description: expect.stringContaining('ลงคลังแล้ว') })
-		);
-	});
+			expect(toastMock.error).toHaveBeenCalledWith(
+				expect.stringContaining('ถูกปิดไปก่อนบันทึกเสร็จ'),
+				expect.objectContaining({ description: expect.stringContaining(says) })
+			);
+		}
+	);
 });

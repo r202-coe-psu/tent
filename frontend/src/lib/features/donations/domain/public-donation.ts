@@ -299,6 +299,8 @@ const PUBLIC_DONATION_ERROR_MESSAGES: Record<string, string> = {
 	SHELTER_NOT_FOUND: 'ไม่พบศูนย์พักพิงที่เลือก',
 	SHELTER_CLOSED: 'ศูนย์พักพิงนี้ปิดรับบริจาคชั่วคราว',
 	RATE_LIMITED: 'คุณส่งคำขอบ่อยเกินไป กรุณารอสักครู่แล้วลองใหม่',
+	// CR-206 FR-MP-2 — the shelter stopped offering a point while the donor filled the form
+	UNKNOWN_DROP_OFF_POINT: 'จุดรับบริจาคที่เลือกไม่เปิดรับแล้ว กรุณาเลือกจุดส่งของใหม่',
 	// CR-175 donor photos (FR-10)
 	PHOTO_LIMIT_EXCEEDED: 'แนบรูปได้ไม่เกิน 30 รูปต่อใบ',
 	PHOTO_NOT_FOUND: 'ไม่พบรูปที่แนบ กรุณาลบรูปนั้นแล้วแนบใหม่',

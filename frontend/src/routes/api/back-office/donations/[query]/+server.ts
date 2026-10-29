@@ -186,19 +186,23 @@ function pointLabel(pointId: string | null, points: readonly CurrentDonationPoin
 
 /**
  * How this point receipt meets what the booking already recorded (CR-206 FR-MP-22e): the
- * same receipt again (same lines → same audit id) is a retry of one that landed; a line
- * another receipt holds is refused; anything else may go in.
+ * same receipt again (same lines → same audit id, from the same point) is a retry of one
+ * that landed; a line another receipt holds is refused; anything else may go in. Another
+ * point sending the very same lines is refused too (AC-15) — its count is not the one kept.
  */
 function receiptOverlap(
 	donation: PublicDonationDoc,
 	lineNos: readonly number[],
-	auditId: string
+	auditId: string,
+	pointId: string | null
 ):
 	| { kind: 'retry'; receipt: DonationPointReceipt }
 	| { kind: 'taken'; lineNo: number; receipt: DonationPointReceipt }
 	| null {
 	const receipts = donation.point_receipts ?? [];
-	const same = receipts.find((receipt) => receipt.audit_id === auditId);
+	const same = receipts.find(
+		(receipt) => receipt.audit_id === auditId && receipt.point_id === pointId
+	);
 	if (same) return { kind: 'retry', receipt: same };
 	for (const receipt of receipts) {
 		const lineNo = receipt.line_nos.find((n) => lineNos.includes(n));
@@ -276,6 +280,16 @@ export const POST: RequestHandler = async ({ params, request }) => {
 		}
 
 		const { donation, dbName } = found;
+		if (parsed.data.line_nos?.some((lineNo) => lineNo >= (donation.items ?? []).length)) {
+			return json(
+				{
+					success: false,
+					error_code: 'INVALID_LINE_NOS',
+					error: 'line_nos must name lines of this donation'
+				},
+				{ status: 422 }
+			);
+		}
 
 		// CR-206 FR-MP-22 — `line_nos` makes this one drop-off point's receipt of those lines;
 		// without it the whole booking is received at once, as before (FR-MP-24).
@@ -289,7 +303,7 @@ export const POST: RequestHandler = async ({ params, request }) => {
 		// answer with the booking as it is, writing nothing. Checked before `expected_rev`, which
 		// that receipt moved on from the copy the screen still holds.
 		if (lineNos) {
-			const overlap = receiptOverlap(donation, lineNos, auditId);
+			const overlap = receiptOverlap(donation, lineNos, auditId, parsed.data.point_id ?? null);
 			if (overlap?.kind === 'retry') {
 				return json({
 					success: true,
@@ -411,7 +425,7 @@ export const POST: RequestHandler = async ({ params, request }) => {
 			);
 		}
 		if (lineNos) {
-			const overlap = receiptOverlap(donation, lineNos, auditId);
+			const overlap = receiptOverlap(donation, lineNos, auditId, pointId);
 			if (overlap?.kind === 'taken') return lineAlreadyReceived(overlap, points);
 		}
 		/** Lines this request records — all of them for a whole-booking receipt. */
@@ -775,7 +789,7 @@ export const POST: RequestHandler = async ({ params, request }) => {
 					);
 				}
 				const latest = await readDonation(dbName, donation._id);
-				const overlap = receiptOverlap(latest, lineNos, auditId);
+				const overlap = receiptOverlap(latest, lineNos, auditId, pointId);
 				if (overlap?.kind === 'retry') {
 					return json({ success: true, donation: toScanView(latest), lots: lots() });
 				}

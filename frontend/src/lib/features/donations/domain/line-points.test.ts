@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
 	ANY_POINT_KEY,
+	AT_SHELTER_KEY,
 	bookableDropOffPoints,
 	currentDropOffPointIds,
 	defaultDropOffPointId,
@@ -202,15 +203,10 @@ describe('groupDropOffDestinations (FR-MP-13, FR-MP-16)', () => {
 				{ point_id: null, line_nos: [1] }
 			]
 		})!;
-		// Both points gone: every line is in the one "any point" group, recorded at two places.
-		expect(groups).toHaveLength(1);
-		expect(groups[0].status).toBe('received');
-
-		const medOnly = groupDropOffDestinations([{ drop_off_point_id: 'point-med' }], unticked, {
-			anyPointName: ANY,
-			pointReceipts: [{ point_id: null, line_nos: [0] }]
-		})!;
-		expect(medOnly[0].status).toBe('received_at_shelter');
+		expect(groups.map((g) => [g.key, g.point.name, g.lineNos, g.status])).toEqual([
+			[ANY_POINT_KEY, ANY, [0, 2], 'received'],
+			[AT_SHELTER_KEY, SHELTER.name, [1], 'received_at_shelter']
+		]);
 	});
 
 	it('leaves out a line refused at review — nothing of it is to be brought', () => {

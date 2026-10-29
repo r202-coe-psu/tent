@@ -561,6 +561,34 @@ describe('CR-206 — receiving a booking point by point', () => {
 			expect(ledgerRows()).toHaveLength(1);
 		});
 
+		it('AC-15: another point sending exactly the lines the gym received is no retry', async () => {
+			await POST(atPoint('sp-gym', [0]));
+			vi.mocked(adminRaw).mockClear();
+
+			const response = await POST(atPoint('sp-med', [0]));
+			const body = await response.json();
+
+			expect(response.status).toBe(409);
+			expect(body.error_code).toBe('LINE_ALREADY_RECEIVED');
+			expect(body.error).toContain('โรงยิม');
+			expect(puts()).toHaveLength(0);
+		});
+
+		it('refuses line_nos past the end of the booking', async () => {
+			const response = await POST(
+				postEvent({
+					expected_rev: couch.donation._rev,
+					point_id: 'sp-gym',
+					line_nos: [2],
+					items: [water, medicine, water]
+				})
+			);
+
+			expect(response.status).toBe(422);
+			expect((await response.json()).error_code).toBe('INVALID_LINE_NOS');
+			expect(bulkWrites()).toHaveLength(0);
+		});
+
 		it('refuses a line of this receipt keyed under another item, scoped to its own lines', async () => {
 			const otherId = await deriveDonationReceiptLineId('donation:123', 'item:rice', 0);
 			couch.docs.set(otherId, {

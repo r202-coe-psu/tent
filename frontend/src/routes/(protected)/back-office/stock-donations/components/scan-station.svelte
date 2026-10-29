@@ -323,8 +323,11 @@
 	// CR-206: how this booking is received here — whole (FR-MP-24), by the receiving point's
 	// lines (FR-MP-19), or every remaining line once the shelter has no point left (FR-MP-18b).
 	// `scannedItems[i]` is `items[i]`, so an index is the line's `line_no`.
+	// Until the shelter doc answers, no point reads as "no point left" (FR-MP-18b): hold the
+	// mode at whole and the save button off rather than guess.
+	const shelterPointsKnown = $derived(shelterQuery.isSuccess);
 	const receiveMode = $derived(
-		donationDoc ? scanReceiveMode(donationDoc, donationPointIds) : 'whole'
+		donationDoc && shelterPointsKnown ? scanReceiveMode(donationDoc, donationPointIds) : 'whole'
 	);
 	const byLine = $derived(receiveMode !== 'whole');
 	const lineStates = $derived(
@@ -513,6 +516,7 @@
 	const canReceive = $derived(
 		!otherShelterCode &&
 			!pointChoiceMissing &&
+			shelterPointsKnown &&
 			scopeLines.length > 0 &&
 			!storagePoints.isLoading &&
 			scopeLines.every(({ it, idx }) =>
@@ -844,10 +848,12 @@
 					duration: 12_000
 				});
 			} else if (data.error_code === 'DONATION_CLOSED') {
-				// FR-MP-23a / AC-22: the ledger rows are already written, the booking is not.
+				// FR-MP-23a / AC-22: the ledger rows are already written, the booking is not —
+				// unless this point refused every line it recorded, and wrote none.
 				toast.error(`ใบ ${bookingRef || actionRef} ถูกปิดไปก่อนบันทึกเสร็จ`, {
-					description:
-						'ของที่สแกนครั้งนี้ลงคลังแล้ว แต่ไม่อยู่ในผลรับของของใบ — แจ้งผู้ดูแลคลังให้ตรวจสอบ ไม่ต้องสแกนซ้ำ',
+					description: data.lots?.length
+						? 'ของที่สแกนครั้งนี้ลงคลังแล้ว แต่ไม่อยู่ในผลรับของของใบ — แจ้งผู้ดูแลคลังให้ตรวจสอบ ไม่ต้องสแกนซ้ำ'
+						: 'ผลที่บันทึกครั้งนี้ไม่อยู่ในใบ และไม่มีของเข้าคลังจากครั้งนี้',
 					duration: Number.POSITIVE_INFINITY
 				});
 				finishBooking();
