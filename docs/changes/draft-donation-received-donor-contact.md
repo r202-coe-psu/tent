@@ -19,7 +19,6 @@ affects:
   - frontend/src/routes/api/back-office/donations/received/search/+server.ts (ใหม่ — `POST` ค้นใบที่รับแล้ว)
   - frontend/src/lib/features/shelters/domain/view-manifest.ts (view ใหม่ 2 ตัว · `_design/app` version 6 → 7)
   - Mango index ค้นด้วยเบอร์ และค้นเลขล็อต (ต่อ shelter DB)
-  - nginx/rate-limit.conf (zone ใหม่ของ route ค้นหา — ต่อ IP ตาม CR-188)
   - docs/data/schema.md — §2.1 ข้อความ `lot.lot_no` (ใช้เป็นคีย์ค้นได้ ไม่ unique) · §Index `shelter_*` (index ใหม่ของ `donation` และ `stock_ledger`) · §7 view ใหม่ 2 ตัว (view manifest v7) · §2.12 `audit.reason = donor_contact_view` · ไม่ bump `schema_v`
   - role/permission — ไม่เปลี่ยน: ใช้ `authorizeWarehouse` เดิม (warehouse_staff, shelter_manager, system_admin)
 why: walk-in บันทึกเบอร์และอีเมลผู้บริจาคแล้ว แต่หลังรับเข้าคลังไม่มีหน้าไหนให้เห็นอีก เจ้าหน้าที่ติดต่อกลับไม่ได้ (#821)
@@ -33,7 +32,7 @@ migration: ไม่เปลี่ยนรูปร่าง doc — ไม่
 - **เปลี่ยน:** เพิ่มตัวกรอง "รับแล้ว" ในแท็บ "รายการของบริจาค" (`/back-office/stock-donations?tab=list&filter=received`) เรียงใหม่สุดก่อน · ชื่อ / เบอร์ / อีเมลผู้บริจาคแสดงแบบ**ปิดบางส่วน** · ข้อมูลเต็มเห็นในหน้ารายละเอียดหลังกด "แสดงข้อมูลติดต่อ"
 - **เพื่อ:** ให้เจ้าหน้าที่หาใบบริจาคที่รับแล้วและติดต่อผู้บริจาคกลับได้ โดยไม่เปิดข้อมูลส่วนบุคคลให้เห็นทั้งหน้า (PDPA: data minimization, least privilege)
 - **dev ต้อง build:** API `?status=received` แบ่งหน้าด้วย bookmark + Mango index ใหม่ · **ค้นหาฝั่ง server ทั้งศูนย์** (`POST` + Mango index / CouchDB view ต่อประเภทค้น) · API รายการส่งเฉพาะค่าที่ปิดแล้ว + endpoint ข้อมูลติดต่อเต็มพร้อม audit · เลขล็อตของใบ + ค้นด้วยเลขล็อต · โหมดอ่านอย่างเดียวของหน้ารายละเอียด · อีเมลใน walk-in หน้าคลัง
-- **กระทบ:** ไม่เปลี่ยน schema / `schema_v` · เพิ่ม Mango index + view ต่อ shelter DB (view manifest 6 → 7) · rate limit ต่อ IP ที่ nginx · ไม่เปลี่ยน role / permission
+- **กระทบ:** ไม่เปลี่ยน schema / `schema_v` · เพิ่ม Mango index + view ต่อ shelter DB (view manifest 6 → 7) · ไม่เปลี่ยน role / permission
 
 ## Requirements
 
@@ -78,7 +77,7 @@ migration: ไม่เปลี่ยนรูปร่าง doc — ไม่
   3. ดึงใบด้วย `_all_docs` `keys` + `include_docs` · เก็บเฉพาะ `type = donation`, `status = received`
   4. เรียงตาม FR-8a (`received_at` ใหม่สุดก่อน, `_id` มากไปน้อย) — เรียงในแอปได้เพราะเป็นเฉพาะใบที่ตรงป้ายแล้ว ไม่ใช่ใบทั้งศูนย์
   5. ตัดหน้าละ 20 · `cursor` = `(received_at, _id)` ของใบสุดท้ายในหน้า · หน้าถัดไปเอาเฉพาะใบที่อยู่**ถัดจาก** tuple นี้ในลำดับเดียวกัน
-- **FR-8e** — rate limit ต่อ **IP** ที่ nginx (`limit_req` zone ใหม่ของ route ค้นหา ใน `nginx/rate-limit.conf`) ตาม CR-188 · ไม่มี limiter ในแอป · เกิน = 429
+- **FR-8e** — ไม่จำกัดอัตราการค้นของ route นี้ (ไม่เพิ่ม zone ใน `nginx/rate-limit.conf` · ไม่มี limiter ในแอป ตาม CR-188) · ตรวจย้อนหลังด้วย log ของ FR-8f
 - **FR-8f** — ทุกการค้นเขียน log ของแอป (ไม่ใช่ doc ใน CouchDB) event `donation_received_search`: ผู้ค้น, `shelter_code`, `by`, จำนวนผล, เวลา · **ไม่เก็บ `q`** หรือชื่อ / เบอร์ใน log
 - **FR-8g** — รายการในใบที่ไม่ได้ผูก `item_master` (`free_text` อย่างเดียว) ค้นด้วย `by = item` ไม่เจอ · ใบนั้นยังค้นด้วยประเภทอื่นได้
 - **FR-8h** — แบ่งหน้า view ด้วย lookahead: query `limit = 21` · แสดง 20 แถวแรก · มีแถวที่ 21 = มีหน้าถัดไป และ `cursor` = key + `_id` **ของแถวที่ 21** · หน้าถัดไปใช้ `startkey` / `startkey_docid` จาก `cursor` ซึ่งเริ่มที่แถวที่ 21 (CouchDB รวมแถวเริ่มต้น) จึงไม่ซ้ำและไม่ข้าม · ไม่ใช้ `skip` · map emit ใบหนึ่งไม่เกินหนึ่งแถวต่อ key (Migration) ผลจึงไม่มีใบซ้ำ
@@ -104,7 +103,7 @@ migration: ไม่เปลี่ยนรูปร่าง doc — ไม่
 | --- | --- | --- |
 | ใบที่รับแล้ว | ไม่มีหน้าให้ดู | ตัวกรอง "รับแล้ว" + หน้ารายละเอียดอ่านอย่างเดียว |
 | ข้อมูลติดต่อผู้บริจาค walk-in | ไม่เห็นหลังรับเข้าคลัง | รายการ: ปิดบางส่วน · รายละเอียด: กดดูเต็ม |
-| ค้นหา | — | `POST` ฝั่ง server ทั้งศูนย์ ครั้งละหนึ่งประเภท: เลขใบ / ชื่อหรือนามสกุลเต็มคำ / เบอร์เต็ม / สินค้าที่เลือก / เลขล็อต · rate limit ต่อ IP ที่ nginx |
+| ค้นหา | — | `POST` ฝั่ง server ทั้งศูนย์ ครั้งละหนึ่งประเภท: เลขใบ / ชื่อหรือนามสกุลเต็มคำ / เบอร์เต็ม / สินค้าที่เลือก / เลขล็อต |
 | API รายการ / ผลค้นหา | — | ส่งเฉพาะค่าที่ปิดแล้ว |
 | ข้อมูลติดต่อเต็ม | — | endpoint `/contact` ต่อใบ · ทุกครั้งที่เรียกเขียน `audit` |
 | เลขล็อตของใบ | ไม่แสดง | หน้ารายละเอียดแสดงล็อต / หมดอายุ / จุดจัดเก็บ / คงเหลือ · ค้นด้วยเลขล็อตได้ |
@@ -128,7 +127,7 @@ migration: ไม่เปลี่ยนรูปร่าง doc — ไม่
   - `name` = `ใจ`, `สม`, `ใจดี สมชาย` → ไม่เจอ
   - `phone` = `0812345678`, `081-234-5678`, `+66812345678` → เจอ · `5678`, `081234` → 400
   - ผลทุกกรณีไม่มีชื่อเต็ม / เบอร์เต็ม / อีเมลเต็ม (AC-5a)
-- **AC-6b** — ค้นเกินอัตราที่ตั้งใน `nginx/rate-limit.conf` จาก IP เดียว → 429 · log `donation_received_search` มีผู้ค้น ศูนย์ `by` จำนวนผล เวลา และไม่มี `q` / ชื่อ / เบอร์ · access log ของ route ค้นหาไม่มีคำค้น (อยู่ใน body)
+- **AC-6b** — log `donation_received_search` มีผู้ค้น ศูนย์ `by` จำนวนผล เวลา และไม่มี `q` / ชื่อ / เบอร์ · access log ของ route ค้นหาไม่มีคำค้น (อยู่ใน body)
 - **AC-6c** — ใบที่รายการเป็น `free_text` อย่างเดียว ค้นด้วย `item` ไม่เจอ แต่ค้นด้วย `booking_ref` / `name` / `phone` เจอ
 - **AC-6d** — ล็อต: ป้ายเดียวกันอยู่ใน 25 ใบ → หน้าแรก 20 ใบ หน้าสอง 5 ใบ ไม่ซ้ำ ไม่ขาด เรียงใหม่ไปเก่า · ใบเดียวมี 3 แถว ledger ป้ายเดียวกัน → ขึ้นครั้งเดียว · 2 ใบ `received_at` เท่ากันคร่อมรอยต่อหน้า → ไม่ซ้ำ ไม่หาย · แถว ledger ที่ชี้ใบสถานะอื่นไม่ขึ้นในผล
 - **AC-6e** — view: 25 ใบชื่อ `สมชาย` ที่ `received_at` เท่ากันหมด → หน้า 20 + 5 ไม่ซ้ำ ไม่หาย · ใบชื่อคำเดียว (`สมชาย`) ขึ้นครั้งเดียว · `cursor` ของคำค้นหนึ่งส่งมากับคำค้นอื่น → 400
@@ -139,7 +138,6 @@ migration: ไม่เปลี่ยนรูปร่าง doc — ไม่
 ## Impact
 
 - **Gate:** implement ได้เมื่อ CR approve · deploy ต้อง provision index และ `_design/app` v7 ลงทุก shelter DB (`redeploy-access`) ก่อนเปิดใช้ ไม่งั้นตัวกรองและการค้นตอบ 503 · view manifest เป็นเลขลำดับร่วมทั้งระบบ — ถ้ามีงานอื่น bump ก่อน ให้ใช้เลขถัดไปตอน merge
-- **nginx:** เพิ่ม zone ใน `nginx/rate-limit.conf` ทุก environment (CR-188)
 - **งานที่แตะไฟล์ร่วมกัน:** FR-11 และ #981 แก้ `receive-stock-form.svelte` ร่วมกัน · merge ได้ตามความพร้อม · งานที่ merge ทีหลังต้อง resolve conflict และตรวจว่าการรับเข้าคลังกับการบันทึกอีเมลยังทำงานครบ
 - **schema.md:** แก้ข้อความ ไม่เปลี่ยนรูปร่าง doc — §2.1 `lot.lot_no` ใช้เป็นคีย์ค้นใบบริจาคได้ (ยังไม่ unique และไม่ผูก business rule) · §Index `shelter_*` เพิ่ม donation `(type, status, received_at)`, `(type, status, donor.phone_hash, received_at)` และ stock_ledger `(type, lot.lot_no)` · §7 เพิ่ม view `donation_received_by_name`, `donation_received_by_item` (manifest v7) · §2.12 เพิ่ม `reason = donor_contact_view` ของ `action: other`
 - **ไม่ต้องแก้:** `donation` schema / `schema_v` · `audit` schema (ใช้ `action: other`) · FastAPI / Mongo / projection · worker · role-permission matrix
@@ -168,7 +166,7 @@ migration: ไม่เปลี่ยนรูปร่าง doc — ไม่
 - ค้นฝั่ง server — ค้นในหน้าที่โหลดแล้วหาใบในหน้าถัดไปไม่เจอ (FR-8)
 - ตรงทั้งคำ / เบอร์เต็ม — รายการปิดนามสกุลและเบอร์ไว้ ถ้าค้นบางส่วนได้จะไล่เดาค่าเต็มทีละตัวโดยไม่ผ่าน audit · กติกาเดียวกับค้นญาติ (CR-166) และติดตามใบด้วยเบอร์ (CR-173)
 - view แทนฟิลด์ใหม่ — `donor.name` เป็นสตริงเดียวและ `items[]` เป็น array ซึ่ง Mango index ค้นรายคำ / รายช่องไม่ได้ · view emit รายคำได้โดยไม่เปลี่ยน doc และไม่ bump `schema_v`
-- rate limit ต่อ IP — CR-188 เอา limiter ออกจากแอปแล้ว limit ต่อผู้ใช้ไม่มีกลไกรองรับ
+- ไม่จำกัดอัตราการค้น — เป็นหน้าหลังบ้านที่ต้อง login และผ่าน `authorizeWarehouse` · ค้นได้แค่ตรงทั้งค่า ไล่เดาทีละตัวไม่ได้ · ผลค้นปิดข้อมูล ค่าเต็มต้องผ่าน `/contact` ที่มี audit · ทุกการค้นมี log (FR-8f) · route หลังบ้านอื่นก็ไม่มี rate limit (`nginx/rate-limit.conf` จำกัดแค่ public / auth / kiosk / external) · จำกัดต่อ IP ยังทำให้เจ้าหน้าที่ทั้งศูนย์ที่ใช้ IP เดียวกันใช้โควตาร่วมกัน
 - ส่งเฉพาะค่าที่ปิดแล้ว — ปิดแค่บนจอ ค่าเต็มยังอยู่ใน response เปิด DevTools ก็เห็นทุกใบ · ดูค่าเต็มทีละใบผ่าน endpoint + audit เป็นแบบเดียวกับปุ่มดู PIN เครื่อง kiosk (FR-10)
 - คิวรอประเมินยังเห็นเต็ม — ผู้ตรวจต้องติดต่อผู้บริจาคระหว่างตัดสิน (FR-7)
 - เลขล็อต — ตามของจากใบบริจาคไปถึงล็อตในคลังได้ เช่น ของหมดอายุหรือมีปัญหา (FR-12, FR-13)
@@ -187,3 +185,4 @@ migration: ไม่เปลี่ยนรูปร่าง doc — ไม่
 - 2026-10-29 — วิธีค้น: ครั้งละหนึ่งประเภท · ชื่อหรือนามสกุลตรงเต็มคำ, เบอร์เต็ม, เลขใบ / ล็อตตรงทั้งค่า, สินค้าเลือกด้วยรหัส · ผลค้นยืนยันข้อมูลที่พิมพ์ได้แต่ไม่เปิดค่าเต็ม (FR-8 – FR-8b, AC-4, AC-6a)
 - 2026-10-29 — ทำจริง: ชื่อ / สินค้าใช้ CouchDB view (`_design/app` v7) ไม่เพิ่มฟิลด์ · ค้นผ่าน `POST` · rate limit ต่อ IP ที่ nginx ตาม CR-188 · log การค้นอยู่ใน log ของแอปไม่เก็บคำค้น (FR-8c – FR-8g, AC-6 – AC-6c)
 - 2026-10-29 — ระบุรายละเอียดที่ยังขาด ไม่เปลี่ยนมติ: retention ตาม data-model §7 + สถานะการลบจริง + พฤติกรรมหลังลบ (FR-10c, AC-6f) · แบ่งหน้าค้นล็อต (ตัดซ้ำ, เรียง, tuple cursor — FR-8d, AC-6d) · แบ่งหน้า view แบบ lookahead และ emit ไม่ซ้ำ (FR-8h, AC-6e) · `cursor` ผูกกับ `by` + `q` (FR-8a)
+- 2026-10-29 — ไม่จำกัดอัตราการค้น (FR-8e, AC-6b): แทนที่ "rate limit ต่อ IP ที่ nginx" ในบรรทัดทำจริงด้านบน · เหตุผลใน Why
