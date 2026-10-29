@@ -22,6 +22,9 @@ import {
 	groupMissedLoanRefsByEntry,
 	snapshotConflictEntryIds,
 	canMoveEntry,
+	reopenLoanAction,
+	reopenedEntryIds,
+	reopenedReasonByEntry,
 	canVoidEntry,
 	filterPoolRows,
 	findDuplicateOpenPoolName,
@@ -645,7 +648,9 @@ describe('labels', () => {
 		const ref = (entry_id: string, distribution_log_id: string) => ({
 			entry_id,
 			distribution_log_id,
-			qty: '1'
+			qty: '1',
+			loan_status: 'returned' as const,
+			revertable: true
 		});
 		const grouped = groupAppliedLoanRefsByEntry([ref('e1', 'a'), ref('e2', 'b'), ref('e1', 'c')]);
 		expect(grouped.get('e1')?.map((r) => r.distribution_log_id)).toEqual(['a', 'c']);
@@ -791,5 +796,171 @@ describe('buildReturnerNames', () => {
 		expect(names.get('evacuee:b')).toBe('สมหญิง รักดี');
 		expect(names.get('volunteer:c')).toBe('จิตอาสา มานี มีนา');
 		expect(names.get('evacuee:z')).toBeUndefined();
+	});
+});
+
+describe('reopenLoanAction', () => {
+	const entryId = 'bulk_return_entry:01HZX0000000000000000000A1';
+	const closed = (status: 'SUBMITTED' | 'RECEIVED') =>
+		makePool('r', { status, entry_ids: [entryId] });
+	const pool = closed('SUBMITTED');
+	const ok = { revertable: true, loan_status: 'returned' } as const;
+	const lost = { revertable: false, loan_status: 'lost' } as const;
+	const waived = { revertable: false, loan_status: 'waived' } as const;
+	const active = { revertable: false, loan_status: 'active' } as const;
+	type Args = Parameters<typeof reopenLoanAction>[0];
+	const act = (appliedRefs: Args['appliedRefs'], extra: Partial<Args> = {}) =>
+		reopenLoanAction({
+			pool,
+			entryId,
+			appliedRefs,
+			canReopen: true,
+			reopened: false,
+			reopenedKnown: true,
+			...extra
+		});
+	const notice = (appliedRefs: Args['appliedRefs']) => act(appliedRefs).blockedNotice;
+	const HIDDEN = { showButton: false, blockedNotice: null };
+
+	it('shows for a SUBMITTED / RECEIVED pool holding the entry, with applied refs, when permitted', () => {
+		for (const status of ['SUBMITTED', 'RECEIVED'] as const) {
+			expect(act([ok], { pool: closed(status) })).toEqual({
+				showButton: true,
+				blockedNotice: null
+			});
+		}
+	});
+
+	it('hides without permission', () => {
+		expect(act([ok, ok], { canReopen: false })).toEqual(HIDDEN);
+	});
+
+	it('hides when no loan ref is applied', () => {
+		expect(act([])).toEqual(HIDDEN);
+	});
+
+	it('hides for OPEN / CANCELLED pools', () => {
+		for (const status of ['OPEN', 'CANCELLED'] as const) {
+			expect(act([ok], { pool: makePool('r', { status, entry_ids: [entryId] }) })).toEqual(HIDDEN);
+		}
+	});
+
+	it('hides when the entry is not in the pool snapshot', () => {
+		expect(
+			act([ok], {
+				pool: closed('RECEIVED'),
+				entryId: 'bulk_return_entry:01HZX0000000000000000000B2'
+			})
+		).toEqual(HIDDEN);
+	});
+
+	it('hides the button when any applied ref is not revertable (the workflow rejects the whole entry)', () => {
+		const result = act([ok, lost]);
+		expect(result.showButton).toBe(false);
+		expect(result.blockedNotice).not.toBeNull();
+	});
+
+	it('still shows the button for a reopened entry whose refs are all revertable', () => {
+		expect(act([ok], { reopened: true })).toEqual({ showButton: true, blockedNotice: null });
+	});
+
+	it('offers the replay for a reopened entry with a revertable ref left, never a notice', () => {
+		expect(act([ok, lost], { reopened: true })).toEqual({ showButton: true, blockedNotice: null });
+	});
+
+	it('hides a reopened entry with no revertable ref left', () => {
+		expect(act([active], { reopened: true })).toEqual(HIDDEN);
+		expect(act([lost], { reopened: true })).toEqual(HIDDEN);
+	});
+
+	it('shows nothing for a blocked entry while the reopened state is unknown', () => {
+		expect(act([ok, lost], { reopenedKnown: false })).toEqual(HIDDEN);
+		expect(act([lost], { reopenedKnown: false })).toEqual(HIDDEN);
+	});
+
+	it('hides an all-revertable entry while the reopened state is unknown', () => {
+		expect(act([ok], { reopenedKnown: false })).toEqual(HIDDEN);
+	});
+
+	it('explains an entry whose applied loans are all lost', () => {
+		expect(notice([lost])).toBe('เปิดยอดยืมกลับไม่ได้ ยอดยืมถูกปิดเป็นสูญหายแล้ว');
+		expect(notice([lost, lost])).toBe('เปิดยอดยืมกลับไม่ได้ ยอดยืมถูกปิดเป็นสูญหายแล้ว');
+	});
+
+	it('explains an entry whose applied loans are all waived', () => {
+		expect(notice([waived])).toBe('เปิดยอดยืมกลับไม่ได้ ยอดยืมถูกปิดเป็นยกเว้นการคืนแล้ว');
+	});
+
+	it('explains a mix of lost and waived', () => {
+		expect(notice([lost, waived])).toBe(
+			'เปิดยอดยืมกลับไม่ได้ ยอดยืมถูกปิดเป็นสูญหาย/ยกเว้นการคืนแล้ว'
+		);
+	});
+
+	it('counts the closed loans when only some are blocked', () => {
+		expect(notice([ok, lost])).toBe(
+			'เปิดยอดยืมกลับไม่ได้ ยอดยืม 1 จาก 2 รายการถูกปิดเป็นสูญหายแล้ว'
+		);
+		expect(notice([waived, ok, lost])).toBe(
+			'เปิดยอดยืมกลับไม่ได้ ยอดยืม 2 จาก 3 รายการถูกปิดเป็นสูญหาย/ยกเว้นการคืนแล้ว'
+		);
+	});
+
+	it('says the status changed for a blocked loan that is neither lost nor waived', () => {
+		expect(notice([active])).toBe('เปิดยอดยืมกลับไม่ได้ ยอดยืมเปลี่ยนไปแล้ว');
+		expect(notice([ok, active])).toBe('เปิดยอดยืมกลับไม่ได้ ยอดยืม 1 จาก 2 รายการเปลี่ยนไปแล้ว');
+	});
+
+	it('uses the generic changed copy with the full blocked count when mixed with another status', () => {
+		expect(notice([lost, active])).toBe('เปิดยอดยืมกลับไม่ได้ ยอดยืมเปลี่ยนไปแล้ว');
+		expect(notice([ok, lost, active])).toBe(
+			'เปิดยอดยืมกลับไม่ได้ ยอดยืม 2 จาก 3 รายการเปลี่ยนไปแล้ว'
+		);
+	});
+
+	it('is null where the button would not be offered anyway', () => {
+		expect(act([lost], { canReopen: false }).blockedNotice).toBeNull();
+		expect(
+			act([lost], { pool: makePool('r', { status: 'OPEN', entry_ids: [entryId] }) }).blockedNotice
+		).toBeNull();
+		expect(
+			act([lost], { entryId: 'bulk_return_entry:01HZX0000000000000000000B2' }).blockedNotice
+		).toBeNull();
+		expect(notice([])).toBeNull();
+	});
+
+	it('is null when every applied ref is revertable (the button shows instead)', () => {
+		expect(notice([ok, ok])).toBeNull();
+	});
+});
+
+describe('reopenedEntryIds', () => {
+	it('collects entry ids of loan_reopened events only', () => {
+		const ids = reopenedEntryIds([
+			{ kind: 'loan_reopened', entry_id: 'e1' },
+			{ kind: 'voided', entry_id: 'e2' },
+			{ kind: 'loan_reopened' }
+		]);
+		expect([...ids]).toEqual(['e1']);
+	});
+
+	it('is empty for undefined', () => {
+		expect(reopenedEntryIds(undefined).size).toBe(0);
+	});
+});
+
+describe('reopenedReasonByEntry', () => {
+	it('maps loan_reopened entries to their stored reason', () => {
+		const reasons = reopenedReasonByEntry([
+			{ kind: 'loan_reopened', entry_id: 'e1', notes: 'ไม่ได้คืนจริง' },
+			{ kind: 'voided', entry_id: 'e2', notes: 'x' },
+			{ kind: 'loan_reopened', entry_id: 'e3', notes: '  ' },
+			{ kind: 'loan_reopened', notes: 'no entry' }
+		]);
+		expect([...reasons]).toEqual([['e1', 'ไม่ได้คืนจริง']]);
+	});
+
+	it('is empty for undefined', () => {
+		expect(reopenedReasonByEntry(undefined).size).toBe(0);
 	});
 });

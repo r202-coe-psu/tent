@@ -2,6 +2,22 @@ export { default as PublicShelterCard } from './ui/public-shelter-card.svelte';
 export { default as PublicShelterMetricCard } from './ui/public-shelter-metric-card.svelte';
 export { default as ShelterFilterPanel } from './ui/shelter-filter-panel.svelte';
 export { default as ShelterMap } from './ui/shelter-map.svelte';
+export { default as DonationNeedsMap } from './ui/donation-needs-map.svelte';
+export { default as DropOffShelterMap } from './ui/drop-off-shelter-map.svelte';
+export { default as DonationPinBadge } from './ui/donation-pin-badge.svelte';
+export { DONATION_URGENCY_STYLE } from './ui/donation-urgency';
+export {
+	buildDonationMap,
+	DONATION_URGENCY_RANK,
+	donationNeedUrgency,
+	donationShelterUrgency,
+	type DonationMap,
+	type DonationMapNeed,
+	type DonationNeedUrgency,
+	type DonationMapPoint,
+	type DonationMapShelter,
+	type DonationNeedsEntry
+} from './domain/donation-map';
 export { default as PublicHeroMetrics } from './ui/public-hero-metrics.svelte';
 export { default as PublicPageShell } from './ui/public-page-shell.svelte';
 export { default as FamilySearchModal } from './ui/family-search-modal.svelte';
