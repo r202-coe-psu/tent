@@ -75,6 +75,7 @@ One work domain uses **one** color family, identically on the public site and th
 | `facility`                                 | อาคารสถานที่            | `#0D9488` | `#0F766E` | `#F0FDFA` | `#99F6E4` | `#134E4A` | Staff: ฝ่ายอาคารสถานที่                                                                                  |
 | `security`                                 | ความปลอดภัย            | `#7C3AED` | `#6D28D9` | `#F5F3FF` | `#DDD6FE` | `#5B21B6` | Staff: ฝ่ายรักษาความปลอดภัย                                                                              |
 | `admin`                                    | บริหารและส่วนกลาง       | `#475569` | `#334155` | `#F1F5F9` | `#CBD5E1` | `#1E293B` | Staff: ฝ่ายบริหารศูนย์ (base) and ส่วนกลาง (use strong)                                                  |
+| `pr`                                       | ประชาสัมพันธ์           | `#CA8A04` | `#A16207` | `#FEFCE8` | `#FEF08A` | `#713F12` | Staff: ฝ่ายประชาสัมพันธ์ (ข่าวสารบนตู้ Kiosk, CR-203) — gold near warning amber: always pair with label + icon |
 
 **Tokens & classes** (single source `baseDomain` in `$lib/tokens/colors.ts`; CSS twin `--domain-<id>[-strong|-subtle|-border|-text]` in `app.css`; a unit test keeps them equal; `--domain-registration` references `var(--primary)`, the same `#124481`):
 
