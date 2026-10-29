@@ -15,6 +15,7 @@ const hoisted = vi.hoisted(() => {
 	let resolveAdd: (value: unknown) => void = () => {};
 	return {
 		loans: { data: [] as unknown[] },
+		picker: { props: null as Record<string, unknown> | null },
 		mutateAsync: vi.fn(
 			() =>
 				new Promise((resolve) => {
@@ -58,8 +59,12 @@ vi.mock('$lib/features/catalog', () => ({
 	})
 }));
 // Heavy children (own queries, camera) are out of scope for the form test.
-vi.mock('../common/RecipientSearchPicker.svelte', async () => ({
-	default: (await import('../__fixtures__/component-stub.fixture.svelte')).default
+// The picker stub keeps the props the form passes (bind:value arrives as a getter/setter pair), so
+// a test can read `disabled` and pick a returner the way the real picker would.
+vi.mock('../common/RecipientSearchPicker.svelte', () => ({
+	default: (_anchor: unknown, props: Record<string, unknown>) => {
+		hoisted.picker.props = props;
+	}
 }));
 vi.mock('$lib/components/camera-code-scanner-dialog.svelte', async () => ({
 	default: (await import('../__fixtures__/component-stub.fixture.svelte')).default
@@ -194,7 +199,10 @@ describe('AddBulkReturnEntriesForm save', () => {
 		expect(hoisted.mutateAsync).toHaveBeenCalledTimes(1);
 	});
 
-	it('disables line editing while the return-all written lookup is pending', async () => {
+	/** Remounts with one outstanding loan, fails a save, then starts return-all on a held lookup. */
+	async function startPendingReturnAll(): Promise<
+		(written: Map<string, { qty: string; item_id: string }>) => void
+	> {
 		unmount(component!);
 		component = null;
 		document.body.innerHTML = '';
@@ -229,8 +237,16 @@ describe('AddBulkReturnEntriesForm save', () => {
 		expect(returnAll).toBeDefined();
 		returnAll!.click();
 		flushSync();
+		return (written) => resolveLookup(written);
+	}
 
-		const qty = () => document.querySelector<HTMLInputElement>('input[id^="add-entry-qty-"]')!;
+	const qty = () => document.querySelector<HTMLInputElement>('input[id^="add-entry-qty-"]')!;
+	const unspecifiedSwitch = () =>
+		document.querySelector<HTMLButtonElement>('#add-entry-unspecified')!;
+
+	it('disables line editing while the return-all written lookup is pending', async () => {
+		const resolveLookup = await startPendingReturnAll();
+
 		const addLineButton = () =>
 			[...document.querySelectorAll<HTMLButtonElement>('button')].find((button) =>
 				button.textContent?.includes('เพิ่มรายการสินค้า')
@@ -248,5 +264,48 @@ describe('AddBulkReturnEntriesForm save', () => {
 
 		expect(qty().disabled).toBe(false);
 		expect(addLineButton().disabled).toBe(false);
+	});
+
+	it('disables the returner controls while the return-all written lookup is pending', async () => {
+		expect(unspecifiedSwitch().disabled).toBe(false);
+		expect(hoisted.picker.props?.disabled).toBe(false);
+
+		const resolveLookup = await startPendingReturnAll();
+		expect(unspecifiedSwitch().disabled).toBe(true);
+		expect(hoisted.picker.props?.disabled).toBe(true);
+
+		resolveLookup(new Map<string, { qty: string; item_id: string }>());
+		await settle();
+		expect(unspecifiedSwitch().disabled).toBe(false);
+		expect(hoisted.picker.props?.disabled).toBe(false);
+	});
+
+	it('replaces the lines from the loans when the returner is unchanged after the lookup', async () => {
+		const resolveLookup = await startPendingReturnAll();
+		resolveLookup(new Map());
+		await settle();
+
+		expect(qty().value).toBe('5');
+	});
+
+	it('leaves the lines alone when the returner changed before the lookup resolved', async () => {
+		const resolveLookup = await startPendingReturnAll();
+		expect(qty().value).toBe('2');
+		// The failed save above toasted; only toasts after this point count.
+		hoisted.toast.error.mockClear();
+
+		// The controls are disabled, so move the selection the way the picker binding would.
+		hoisted.picker.props!.value = {
+			recipientType: 'evacuee',
+			recipientId: 'evacuee:01JB1OTHER',
+			label: 'B'
+		};
+		flushSync();
+		resolveLookup(new Map());
+		await settle();
+
+		expect(qty().value).toBe('2');
+		expect(hoisted.toast.info).not.toHaveBeenCalled();
+		expect(hoisted.toast.error).not.toHaveBeenCalled();
 	});
 });

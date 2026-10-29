@@ -218,8 +218,12 @@
 	async function handleReturnAll() {
 		if (returnAllChecking) return;
 		const current = lines;
+		// The returner and their loans are fixed at click time; the lookup below must not mix in a
+		// returner picked while it runs.
+		const startReturnerId = returnerId;
+		const startLoanRows = loanRows;
 		const eligible = new Set(catalog.map((item) => item._id));
-		const toCheck = ulidsNeedingWrittenLookup(loanRows, eligible, current, sentUlids);
+		const toCheck = ulidsNeedingWrittenLookup(startLoanRows, eligible, current, sentUlids);
 		let written = new Map<string, { qty: string }>();
 		let lookupFailed = false;
 		if (toCheck.length > 0) {
@@ -237,8 +241,9 @@
 				returnAllChecking = false;
 			}
 		}
+		if (returnerId !== startReturnerId) return;
 		const result = linesFromOutstandingLoans(
-			loanRows,
+			startLoanRows,
 			eligible,
 			(preset) => addLine([], createStableOperationId, preset)[0],
 			current,
@@ -472,7 +477,7 @@
 						ผู้คืน <span class="text-red-600">*</span>
 					</p>
 					<div class="flex min-h-11 items-center gap-2">
-						<Switch id="add-entry-unspecified" bind:checked={unspecified} />
+						<Switch id="add-entry-unspecified" bind:checked={unspecified} disabled={busy} />
 						<Label for="add-entry-unspecified" class="text-sm font-medium text-slate-700">
 							ไม่ระบุผู้คืน
 						</Label>
@@ -480,7 +485,7 @@
 					<RecipientSearchPicker
 						bind:value={returnerSelection}
 						allowOutside={false}
-						disabled={unspecified}
+						disabled={unspecified || busy}
 					/>
 					{#if showErrors && !returnerResolution.returner && returnerResolution.error}
 						<p role="alert" class="text-xs font-medium text-red-700">{returnerResolution.error}</p>
