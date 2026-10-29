@@ -847,6 +847,11 @@ export class DistributionRemoteRepository implements DistributionRepository {
 					let acquired = false;
 					const maxRetries = 3;
 					for (let attempt = 0; attempt <= maxRetries; attempt++) {
+						// Read the reservation doc BEFORE the ledger on every attempt (#855). A claimer appends
+						// its ledger row and only then releases its claim; reading the ledger first could miss
+						// that row while the claim was already gone from the doc read next, so its quantity
+						// was counted nowhere.
+						const rawRes = await getDoc<{ _id: string }>(this.dbName, resId);
 						// Re-read physical ledgers & balance projection on each attempt
 						const allLedgers = await allDocsByType<StockLedger>(
 							this.dbName,
@@ -859,7 +864,6 @@ export class DistributionRemoteRepository implements DistributionRepository {
 						const physicalBalance = lotBalances.find((l) => l.lot_ref === lotRef)?.qty ?? '0';
 
 						let resDoc: StockLotReservation;
-						const rawRes = await getDoc<{ _id: string }>(this.dbName, resId);
 						if (!rawRes) {
 							resDoc = createStockLotReservation(
 								{ lot_ref: lotRef, pending_claims: [] },
