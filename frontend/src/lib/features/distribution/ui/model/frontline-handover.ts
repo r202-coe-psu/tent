@@ -1,4 +1,4 @@
-import { qtyGt } from '$lib/utils/qty';
+import { addQty, qtyGt } from '$lib/utils/qty';
 import {
 	formatMasterLabelByCode,
 	resolveMasterCodes,
@@ -112,27 +112,49 @@ export function getRecipientValidationErrorMessage(
 	return null;
 }
 
+/** Today's same-meal handovers already recorded for one recipient. */
+export interface MealRepeatSummary {
+	isDuplicate: boolean;
+	/** Number of handovers (logs), not boxes. */
+	visits: number;
+	/** Sum of `qty` over those handovers. */
+	boxes: string;
+	/** Latest `distributed_at` — the input is oldest-first, so this is not the array tail by contract. */
+	lastDistributedAt?: string;
+	/** Every handover time, oldest first. */
+	distributedAt: string[];
+}
+
+export const NO_MEAL_REPEAT: MealRepeatSummary = {
+	isDuplicate: false,
+	visits: 0,
+	boxes: '0',
+	distributedAt: []
+};
+
 /**
- * Advisory check to determine if the recipient has already received a meal of the same period today.
+ * Advisory summary of what the recipient already received for this meal today (FR-DDS).
  * Reuses the single-source-of-truth domain predicate `isDuplicateMealDistributionLog`.
  */
 export function checkDuplicateMealAdvisory(
 	recipientLogs: readonly DistributionLog[] | undefined,
 	targetMeal: MealPeriod | undefined,
 	referenceIsoOrDate: string | Date = new Date().toISOString()
-): { isDuplicate: boolean; priorLog: DistributionLog | null } {
-	if (!recipientLogs || recipientLogs.length === 0 || !targetMeal) {
-		return { isDuplicate: false, priorLog: null };
-	}
+): MealRepeatSummary {
+	if (!recipientLogs || recipientLogs.length === 0 || !targetMeal) return NO_MEAL_REPEAT;
 
-	const priorLog =
-		recipientLogs.find((log) =>
-			isDuplicateMealDistributionLog(log, targetMeal, referenceIsoOrDate)
-		) ?? null;
+	const matches = recipientLogs.filter((log) =>
+		isDuplicateMealDistributionLog(log, targetMeal, referenceIsoOrDate)
+	);
+	if (matches.length === 0) return NO_MEAL_REPEAT;
 
+	const distributedAt = matches.map((log) => log.distributed_at).sort();
 	return {
-		isDuplicate: Boolean(priorLog),
-		priorLog
+		isDuplicate: true,
+		visits: matches.length,
+		boxes: matches.reduce((sum, log) => addQty(sum, log.qty), '0'),
+		lastDistributedAt: distributedAt[distributedAt.length - 1],
+		distributedAt
 	};
 }
 

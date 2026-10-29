@@ -6,6 +6,7 @@
 import type {
 	FamilySearchResponse,
 	ListPublicSheltersParams,
+	PublicShelterDetail,
 	PublicShelterListResponse
 } from '../domain/types';
 import type { MasterLabelOption } from '../domain/master-labels';
@@ -83,6 +84,26 @@ export async function listPublicShelters(
 		throw publicApiError(data, response.status, 'ไม่สามารถโหลดรายการศูนย์พักพิงได้');
 	}
 	return data as PublicShelterListResponse;
+}
+
+/** Single shelter by code. Throws `PublicApiError` on 404 / 503 so callers can degrade. */
+export async function getPublicShelter(
+	code: string,
+	fetchFn: typeof fetch = fetch
+): Promise<PublicShelterDetail> {
+	let response: Response;
+	try {
+		response = await fetchFn(`/api/public/v1/shelters/${encodeURIComponent(code)}`);
+	} catch {
+		throw new PublicApiError('unavailable', 'ไม่สามารถโหลดข้อมูลศูนย์พักพิงได้');
+	}
+	const data = (await response.json().catch(() => null)) as {
+		shelter?: PublicShelterDetail;
+	} | null;
+	if (!response.ok || !data?.shelter) {
+		throw publicApiError(data, response.status, 'ไม่สามารถโหลดข้อมูลศูนย์พักพิงได้');
+	}
+	return data.shelter;
 }
 
 export type { MasterLabelOption };

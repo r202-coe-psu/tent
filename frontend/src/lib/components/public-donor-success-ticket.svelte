@@ -12,6 +12,12 @@
 	import { Button } from '$lib/components/ui/button';
 	import { resolve } from '$app/paths';
 	import { formatUnit, useUnitsOfMeasure } from '$lib/features/catalog';
+	import {
+		dropOffDirectionsUrl,
+		needsDropOffDestination,
+		resolveDropOffPoint
+	} from '$lib/features/donations';
+	import { usePublicShelter } from '$lib/features/public-portal';
 	import { getDonationStore } from '../../routes/(public)/donations/donation.svelte';
 	import { toast } from 'svelte-sonner';
 	import { langState } from '$lib/states/i18n.svelte';
@@ -23,6 +29,15 @@
 	const unitsQuery = useUnitsOfMeasure();
 	const units = $derived(unitsQuery.data ?? []);
 	const t = $derived(getTranslation(PUBLIC_DONATIONS_I18N, langState.current));
+
+	// Same gate as the track page: `shelter_pickup` has no destination to look up. Skipping or
+	// failing the lookup falls back to the name/code the donor picked, with no map link.
+	const wantsDestination = $derived(needsDropOffDestination(donationStore.deliveryMethod));
+	const shelterQuery = usePublicShelter(() =>
+		wantsDestination ? donationStore.shelterCode : null
+	);
+	const dropOffPoint = $derived(shelterQuery.data ? resolveDropOffPoint(shelterQuery.data) : null);
+	const directionsHref = $derived(dropOffPoint ? dropOffDirectionsUrl(dropOffPoint) : null);
 
 	let courierTracking = $state('');
 	let savingCourier = $state(false);
@@ -175,8 +190,14 @@
 					{t.destShelter}
 				</div>
 				<div class="text-base font-bold text-slate-800">
-					{donationStore.selectedShelterName || donationStore.shelterCode || t.centralShelter}
+					{dropOffPoint?.shelterName ||
+						donationStore.selectedShelterName ||
+						donationStore.shelterCode ||
+						t.centralShelter}
 				</div>
+				{#if dropOffPoint?.address}
+					<div class="mt-0.5 text-xs font-medium text-slate-500">{dropOffPoint.address}</div>
+				{/if}
 			</div>
 
 			<div class="grid grid-cols-2 gap-4">
@@ -341,14 +362,17 @@
 			</div>
 		{/if}
 
-		<button
-			type="button"
-			onclick={() => toast.success(t.openingMapsToast)}
-			class="mt-6 flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-slate-950 py-4 text-sm font-bold text-white shadow-md transition-colors hover:bg-slate-800"
-		>
-			<Navigation class="h-4.5 w-4.5" />
-			{t.navigateGoogleMaps}
-		</button>
+		{#if directionsHref}
+			<a
+				href={directionsHref}
+				target="_blank"
+				rel="noopener noreferrer"
+				class="mt-6 flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-slate-950 py-4 text-sm font-bold text-white shadow-md transition-colors hover:bg-slate-800"
+			>
+				<Navigation class="h-4.5 w-4.5" />
+				{t.navigateGoogleMaps}
+			</a>
+		{/if}
 
 		<button
 			type="button"

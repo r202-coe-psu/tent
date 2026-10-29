@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { searchResultKey, toPublicShelterCard, toUiShelterStatus } from './mappers';
+import {
+	isShelterClosed,
+	searchResultKey,
+	toPublicShelterCard,
+	toUiShelterStatus
+} from './mappers';
 import type { FamilySearchResult, PublicShelterItem } from './types';
 
 describe('toUiShelterStatus', () => {
@@ -108,5 +113,19 @@ describe('searchResultKey', () => {
 
 	it('survives a null result', () => {
 		expect(searchResultKey(null as unknown as FamilySearchResult, 4)).toBe('result-4');
+	});
+});
+
+describe('isShelterClosed', () => {
+	it('is true only for a closed shelter', () => {
+		expect(isShelterClosed({ shelter_status: 'closed' })).toBe(true);
+		expect(isShelterClosed({ shelter_status: 'open' })).toBe(false);
+		expect(isShelterClosed({ shelter_status: 'full' })).toBe(false);
+		expect(isShelterClosed({ shelter_status: 'standby' })).toBe(false);
+	});
+
+	it('is false when the shelter status is unknown or absent', () => {
+		expect(isShelterClosed({ shelter_status: null })).toBe(false);
+		expect(isShelterClosed({})).toBe(false);
 	});
 });

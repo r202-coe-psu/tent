@@ -202,6 +202,20 @@ describe('real backofficeNavbarGroups — visible leaves per role (regression gu
 		expect(kioskGroup && canSeeNavNode(kioskGroup, ctx(roles, 'SH001'))).toBe(true);
 	});
 
+	it('pr_staff-only sees only the banner management and its Kiosk group (#930)', () => {
+		const roles = ['shelter:SH001', 'SH001:pr_staff'];
+		expect(visibleLeafLabels(ctx(roles, 'SH001'))).toEqual([bannerManagement]);
+		const kioskGroup = backofficeNavbarGroups
+			.flatMap((g) => g.items)
+			.find((n) => n.label === 'จัดการ Kiosk');
+		expect(kioskGroup && canSeeNavNode(kioskGroup, ctx(roles, 'SH001'))).toBe(true);
+	});
+
+	it('kiosk_staff together with pr_staff sees both kiosk leaves (#930)', () => {
+		const roles = ['shelter:SH001', 'SH001:kiosk_staff', 'SH001:pr_staff'];
+		expect(visibleLeafLabels(ctx(roles, 'SH001'))).toEqual([scannerDevices, bannerManagement]);
+	});
+
 	it('kiosk_staff with another capability in the shelter keeps the other menus too', () => {
 		const roles = ['shelter:SH001', 'SH001:kiosk_staff', 'SH001:registration_staff'];
 		expect(visibleLeafLabels(ctx(roles, 'SH001'))).toEqual(withScanners);
