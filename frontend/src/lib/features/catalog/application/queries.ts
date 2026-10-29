@@ -17,7 +17,6 @@ import {
 	isSystemAdmin,
 	isShelterManager,
 	isWarehouseStaff,
-	hasStaffCapability,
 	shelterCodeFromRoles
 } from '$lib/auth/roles';
 import type {
@@ -29,6 +28,7 @@ import type {
 	RecipeInput
 } from '../domain/catalog';
 import type { UnitOfMeasure, UnitOfMeasureInput } from '../domain/unit-of-measure';
+import { canCreateShelterRecipe } from '../domain/catalog-permissions';
 
 export const catalogKeys = {
 	all: ['catalog'] as const,
@@ -253,10 +253,7 @@ export const useCreateRecipe = () => {
 			ctx: AuthorContext;
 			shelterCode?: string;
 		}) => {
-			// Kitchen staff may create (not edit/delete) a shelter recipe: #802.
-			enforceWriteAccess(shelterCode, (roles, code) =>
-				hasStaffCapability(roles, 'kitchen_staff', code)
-			);
+			enforceWriteAccess(shelterCode, canCreateShelterRecipe);
 			return catalogRepository().createRecipe(input, ctx, shelterCode);
 		},
 		onSuccess: () => {
