@@ -32,7 +32,7 @@ function openFigures(job: PublicJob, now: Date) {
 	if (shifts.length === 0) {
 		return {
 			needed: job.slots_remaining ?? 0,
-			enrolled: job.slots_confirmed ?? 0,
+			enrolled: Math.max(job.slots_confirmed ?? 0, 0),
 			quota: job.quota ?? 0
 		};
 	}
@@ -88,7 +88,7 @@ export function summarizeUrgentVolunteerNeed(
 		.sort((a, b) => b.needed - a.needed);
 	return {
 		needed: urgent.reduce((sum, { figures }) => sum + Math.max(figures.needed, 0), 0),
-		enrolled: urgent.reduce((sum, { figures }) => sum + figures.enrolled, 0),
+		enrolled: urgent.reduce((sum, { figures }) => sum + Math.max(figures.enrolled, 0), 0),
 		shelters
 	};
 }

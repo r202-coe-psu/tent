@@ -20,6 +20,11 @@ describe('isShiftOpen', () => {
 		expect(isShiftOpen(day, at('2026-10-29T08:00:00'))).toBe(false);
 	});
 
+	it('keeps a shift with no times and no usable date open', () => {
+		expect(isShiftOpen({ date: '' }, at('2026-10-28T12:00:00'))).toBe(true);
+		expect(isShiftOpen({ date: '', end_date: '' }, at('2026-10-28T12:00:00'))).toBe(true);
+	});
+
 	it('reads the clock in Bangkok, not UTC', () => {
 		expect(isShiftOpen(day, new Date('2026-10-28T08:59:00Z'))).toBe(true);
 		expect(isShiftOpen(day, new Date('2026-10-28T09:00:00Z'))).toBe(false);

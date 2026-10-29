@@ -234,8 +234,9 @@
 					<div class="mb-4">
 						<div class="mb-1.5 flex items-center justify-between">
 							<span
-								class="text-base font-bold {isFull ? 'text-muted-foreground' : 'text-foreground'}"
-								>{shift.date}</span
+								class="text-base font-bold {isFull || isClosed
+									? 'text-muted-foreground'
+									: 'text-foreground'}">{shift.date}</span
 							>
 							{#if isClosed}
 								<span
@@ -259,7 +260,7 @@
 							{/if}
 						</div>
 						<div
-							class="flex items-center gap-1.5 text-sm font-medium {isFull
+							class="flex items-center gap-1.5 text-sm font-medium {isFull || isClosed
 								? 'text-muted-foreground'
 								: 'text-primary'}"
 						>
@@ -288,10 +289,13 @@
 					<div class="mb-5">
 						<div class="mb-2 space-y-1 text-xs">
 							<div class="flex items-center justify-between gap-2 whitespace-nowrap">
-								<span class="font-medium {isFull ? 'text-muted-foreground/80' : ''}"
+								<span class="font-medium {isFull || isClosed ? 'text-muted-foreground/80' : ''}"
 									>{t.quotaCap} {shift.quota} {t.peopleUnit}</span
 								>
-								<span class="shrink-0 font-bold {isFull ? 'text-muted-foreground' : 'text-success'}"
+								<span
+									class="shrink-0 font-bold {isFull || isClosed
+										? 'text-muted-foreground'
+										: 'text-success'}"
 									>{isFull ? t.fullSeats : `${t.availableSeats} ${remaining} ${t.seatsUnit}`}</span
 								>
 							</div>

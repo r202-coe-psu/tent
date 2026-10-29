@@ -20,7 +20,9 @@ export type ClosableShift = {
 export function isShiftOpen(shift: ClosableShift, now: Date | string = new Date()): boolean {
 	const nowMs = new Date(now).getTime();
 	if (!shift.start_time || !shift.end_time) {
-		return bangkokDateString(new Date(nowMs)) <= (shift.end_date || shift.date);
+		const lastDay = shift.end_date || shift.date;
+		if (!/^\d{4}-\d{2}-\d{2}$/.test(lastDay)) return true;
+		return bangkokDateString(new Date(nowMs)) <= lastDay;
 	}
 	try {
 		const { end_ts } = shiftDutyWindow({
