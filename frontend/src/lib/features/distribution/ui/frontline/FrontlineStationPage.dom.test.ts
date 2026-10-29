@@ -24,7 +24,15 @@ vi.mock('../bulk-return/BulkReturnPoolBoard.svelte', () => ({
 		anchor.before(marker);
 	}
 }));
-vi.mock('./FoodDistributionCard.svelte', () => ({ default: () => {} }));
+// Stand-in food form: an input that registers as an FR-DFS-05 draft while it holds text.
+vi.mock('./FoodDistributionCard.svelte', () => ({
+	default: (anchor: Comment, props: { drafts?: { track: (isDraft: () => boolean) => void } }) => {
+		const input = document.createElement('input');
+		input.dataset.testid = 'draft-input';
+		anchor.before(input);
+		props.drafts?.track(() => input.isConnected && input.value !== '');
+	}
+}));
 vi.mock('./SuppliesDistributionCard.svelte', () => ({ default: () => {} }));
 vi.mock('./LoanReturnCard.svelte', () => ({ default: () => {} }));
 vi.mock('./ShiftReconciliationCard.svelte', () => ({ default: () => {} }));
@@ -278,6 +286,24 @@ describe('frontline station URL writes', () => {
 		expect(board.props?.initialPoolId).toBeNull();
 	});
 
+	it('an unknown pool link drops the pool from the URL and stays on the returns tab', async () => {
+		await render({ initialMode: 'supplies', initialTab: 'returns', initialPoolId: 'missing' });
+		expect(board.props?.initialPoolId).toBe('missing');
+
+		// The real board reports an unknown pool this way once its overview has loaded.
+		board.props?.onSelectedPoolChange?.(null);
+		flushSync();
+
+		expect(nav.replaceState).toHaveBeenLastCalledWith(
+			'/onsite/distribution?mode=supplies&tab=returns',
+			{ deskSearch: 'mode=supplies&tab=returns' }
+		);
+		expect(modeButton('สิ่งของ').getAttribute('aria-pressed')).toBe('true');
+		expect(tabButton('3. รับคืนสิ่งของ').getAttribute('aria-pressed')).toBe('true');
+		expect(boardMarker()).not.toBeNull();
+		expect(board.props?.initialPoolId).toBeNull();
+	});
+
 	it('closing a deep-linked pool keeps it closed when the user returns to the tab', async () => {
 		await render({ initialMode: 'supplies', initialTab: 'returns', initialPoolId: 'p1' });
 
@@ -376,5 +402,151 @@ describe('frontline station URL writes', () => {
 
 		expect(lastUrl()).toBe('/onsite/distribution?mode=food&tab=food');
 		expect(modeButton('อาหาร').getAttribute('aria-pressed')).toBe('true');
+	});
+});
+
+describe('frontline station links with an unsaved draft (FR-DFS-05)', () => {
+	const foodTicket = {
+		_id: 't1',
+		ticket_no: 'T-1',
+		status: 'DISTRIBUTING',
+		requisition_type: 'food',
+		destination_location: 'P1',
+		created_at: '2026-01-01T00:00:00Z',
+		items: []
+	};
+
+	const draftInput = () =>
+		document.body.querySelector('[data-testid="draft-input"]') as HTMLInputElement | null;
+	const dialog = () => document.body.querySelector('[role="alertdialog"]');
+	const dialogButton = (label: string) =>
+		[...document.body.querySelectorAll('[role="alertdialog"] button')].find(
+			(b) => b.textContent?.trim() === label
+		) as HTMLButtonElement;
+	const settle = async () => {
+		flushSync();
+		await tick();
+		flushSync();
+	};
+
+	/** Food desk on the food tab, with typed input and a `link` state the test can change. */
+	async function renderFoodDeskWithDraft(withDraft = true) {
+		queries.tickets = [foodTicket];
+		const link = new SvelteMap<string, unknown>([
+			['initialMode', 'food'],
+			['initialTab', 'food'],
+			['initialPoolId', null],
+			['linkKey', 0]
+		]);
+		await render({
+			get initialMode() {
+				return link.get('initialMode');
+			},
+			get initialTab() {
+				return link.get('initialTab');
+			},
+			get initialPoolId() {
+				return link.get('initialPoolId');
+			},
+			get linkKey() {
+				return link.get('linkKey');
+			}
+		});
+		expect(draftInput()).not.toBeNull();
+		if (withDraft) draftInput()!.value = '5';
+		return link;
+	}
+
+	function followSuppliesPoolLink(link: SvelteMap<string, unknown>) {
+		link.set('initialMode', 'supplies');
+		link.set('initialTab', 'returns');
+		link.set('initialPoolId', 'p1');
+		link.set('linkKey', 1);
+		flushSync();
+	}
+
+	it('holds a mode-changing link behind the confirm dialog', async () => {
+		const link = await renderFoodDeskWithDraft();
+
+		followSuppliesPoolLink(link);
+		await settle();
+
+		expect(dialog()?.textContent).toContain('สลับไปโหมดสิ่งของ?');
+		expect(modeButton('อาหาร').getAttribute('aria-pressed')).toBe('true');
+		expect(draftInput()?.value).toBe('5');
+		expect(boardMarker()).toBeNull();
+		expect(nav.replaceState).not.toHaveBeenCalled();
+		// FR-DFS-06: a held link's mode is not stored.
+		expect(localStorage.getItem(MODE_STORAGE_KEY)).not.toBe('supplies');
+	});
+
+	it('Cancel keeps the mode and draft and restores the previous URL', async () => {
+		const link = await renderFoodDeskWithDraft();
+		followSuppliesPoolLink(link);
+		await settle();
+
+		click(dialogButton('อยู่โหมดเดิม'));
+		await settle();
+
+		expect(dialog()).toBeNull();
+		expect(modeButton('อาหาร').getAttribute('aria-pressed')).toBe('true');
+		expect(draftInput()?.value).toBe('5');
+		expect(nav.replaceState).toHaveBeenCalledOnce();
+		expect(nav.replaceState).toHaveBeenCalledWith('/onsite/distribution?mode=food&tab=food', {
+			deskSearch: 'mode=food&tab=food'
+		});
+		expect(localStorage.getItem(MODE_STORAGE_KEY)).not.toBe('supplies');
+
+		// The restoring write comes back through the props as a same-mode link: no second dialog.
+		link.set('initialMode', 'food');
+		link.set('initialTab', 'food');
+		link.set('initialPoolId', null);
+		await settle();
+		expect(dialog()).toBeNull();
+		expect(draftInput()?.value).toBe('5');
+		expect(nav.replaceState).toHaveBeenCalledOnce();
+	});
+
+	it('Confirm applies the linked mode, tab and pool and stores the mode', async () => {
+		const link = await renderFoodDeskWithDraft();
+		followSuppliesPoolLink(link);
+		await settle();
+
+		click(dialogButton('สลับโหมด'));
+		await settle();
+
+		expect(dialog()).toBeNull();
+		expect(modeButton('สิ่งของ').getAttribute('aria-pressed')).toBe('true');
+		expect(tabButton('3. รับคืนสิ่งของ').getAttribute('aria-pressed')).toBe('true');
+		expect(boardMarker()).not.toBeNull();
+		expect(board.props?.initialPoolId).toBe('p1');
+		expect(draftInput()).toBeNull();
+		expect(localStorage.getItem(MODE_STORAGE_KEY)).toBe('supplies');
+		// The URL already shows the link, so confirming writes nothing.
+		expect(nav.replaceState).not.toHaveBeenCalled();
+	});
+
+	it('switches at once, with no dialog, when there is no draft', async () => {
+		const link = await renderFoodDeskWithDraft(false);
+
+		followSuppliesPoolLink(link);
+		await settle();
+
+		expect(dialog()).toBeNull();
+		expect(modeButton('สิ่งของ').getAttribute('aria-pressed')).toBe('true');
+		expect(board.props?.initialPoolId).toBe('p1');
+		expect(localStorage.getItem(MODE_STORAGE_KEY)).toBe('supplies');
+	});
+
+	it('applies a same-mode link with a draft, with no dialog', async () => {
+		const link = await renderFoodDeskWithDraft();
+
+		link.set('initialTab', 'receive');
+		link.set('linkKey', 1);
+		await settle();
+
+		expect(dialog()).toBeNull();
+		expect(modeButton('อาหาร').getAttribute('aria-pressed')).toBe('true');
+		expect(tabButton('1. รับของถึงจุดแจก').getAttribute('aria-pressed')).toBe('true');
 	});
 });

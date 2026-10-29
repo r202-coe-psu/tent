@@ -1,6 +1,7 @@
 <script lang="ts">
-	import { createSubscriber } from 'svelte/reactivity';
-	import type { Snippet } from 'svelte';
+	import { createSubscriber, SvelteSet } from 'svelte/reactivity';
+	import { untrack, type Snippet } from 'svelte';
+	import { toast } from 'svelte-sonner';
 	import AlertCircle from '@lucide/svelte/icons/alert-circle';
 	import AlertTriangle from '@lucide/svelte/icons/alert-triangle';
 	import Inbox from '@lucide/svelte/icons/inbox';
@@ -37,6 +38,8 @@
 	} from '../../application/food-supplies/auth';
 	import type { BulkReturnPoolOverviewRow } from '../../domain/food-supplies';
 	import { mapDistributionQueryError } from '../model/distribution-error';
+	import { BULK_RETURN_POOL_NOT_FOUND_TOAST } from '../model/bulk-return-copy';
+	import { missingDeepLinkedPoolId } from '../model/pool-deep-link';
 	import {
 		LATE_BADGE_CLASS,
 		LATE_CARD_EXCLUDED_TEXT,
@@ -123,9 +126,15 @@
 	let addPoolId = $state<string | undefined>(undefined);
 	// Writable derived: follows `initialPoolId` (deep link / URL), local selections override it.
 	let selectedPoolId = $derived<string | null>(initialPoolId ?? null);
+	// Last id chosen through this board (card, queue, just-opened pool); never a deep link.
+	let locallySelectedPoolId = $state<string | null>(null);
+	// Ids already toasted as not found, so one bad link toasts once per board instance.
+	// Only read/written inside untrack in the effect, so it adds no reactive dependency.
+	const toastedMissingPoolIds = new SvelteSet<string>();
 
 	function selectPool(poolId: string | null) {
 		selectedPoolId = poolId;
+		locallySelectedPoolId = poolId;
 		onSelectedPoolChange?.(poolId);
 	}
 
@@ -239,6 +248,34 @@
 		const list = rows;
 		const id = selectedPoolId;
 		return id ? (list.find((row) => row.pool._id === id) ?? null) : null;
+	});
+
+	// A deep-linked pool counts as not found only when absent from `rows` (the unfiltered overview,
+	// incl. CANCELLED and old RECEIVED), never because a view filter hides it. A just-opened pool is
+	// selected locally before the refetch contains it, so local selections are skipped, and nothing
+	// is decided while the query is loading, erroring or refetching.
+	const missingPoolId = $derived(
+		missingDeepLinkedPoolId({
+			poolId: selectedPoolId,
+			rows,
+			dataReady:
+				overviewQuery.isSuccess && !overviewQuery.isFetching && !overviewQuery.isPlaceholderData,
+			locallySelectedId: locallySelectedPoolId
+		})
+	);
+
+	// An effect because it reacts to async data arrival with a side effect (toast + URL clear).
+	$effect(() => {
+		const id = missingPoolId;
+		if (!id) return;
+		untrack(() => {
+			if (!toastedMissingPoolIds.has(id)) {
+				toastedMissingPoolIds.add(id);
+				toast.warning(BULK_RETURN_POOL_NOT_FOUND_TOAST);
+			}
+			// Clears the selection so the host drops `pool=`; the id is then null, so no loop.
+			selectPool(null);
+		});
 	});
 
 	/** Sum of late-entry qty per item_id (late entries are already non-voided). */

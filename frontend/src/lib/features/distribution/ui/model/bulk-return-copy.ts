@@ -45,6 +45,9 @@ export const BULK_GATE_CLEAR_EXPLANATION = {
 	body: 'ใช้เมื่อพัสดุของผู้ยืมถูกเก็บคืนเข้ากองรับคืนแล้ว แต่ยังไม่ได้ระบุว่าเป็นของผู้ยืมรายใด ระบบจะนำจำนวนจากกองนั้นมาปิดภาระยืมของรายการนี้ โดยไม่รับของเข้าคลังซ้ำ'
 } as const;
 
+/** Toast when a `?pool=` deep link names a pool that is not in the loaded overview. */
+export const BULK_RETURN_POOL_NOT_FOUND_TOAST = 'ไม่พบกองนี้ อาจถูกลบหรืออยู่ศูนย์อื่น';
+
 export const RETURN_ACTION_HELP = {
 	counter: 'ใช้เมื่อผู้ยืมนำพัสดุมาคืนกับเจ้าหน้าที่โดยตรง',
 	nonPhysical: 'ใช้กรณีสูญหาย หรือได้รับอนุญาตให้ยกเว้นการคืน',

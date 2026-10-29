@@ -53,6 +53,7 @@
 	} from '../model/desk-mode';
 	import { readStoredDeskMode, storeDeskMode } from '../model/desk-mode-storage';
 	import { DeskDrafts } from '../model/desk-draft';
+	import { incomingLinkAction } from '../model/desk-link-gate';
 	import {
 		filterTicketsByServiceDay,
 		resolveServiceDay,
@@ -112,23 +113,25 @@
 	// navigation clears `page.state`, so the link's URL applies again.
 	// `?mode=` beats the remembered mode (FR-DFS-07); the stored read is not a dependency.
 	// One link object: any prop or `linkKey` change makes a fresh one, so mode, tab and pool are
-	// re-applied together. `linkKey` re-derives it on a real navigation even when the parsed values
+	// applied together. `linkKey` re-derives it on a real navigation even when the parsed values
 	// are unchanged. Local state and the written URL agree, since every local change writes the URL.
+	// `explicit` is true when the link itself names a mode (FR-DFS-06).
 	const link = $derived.by(() => {
 		void linkKey;
 		const m = resolveInitialMode(initialMode, untrack(readStoredDeskMode));
-		return { mode: m, tab: stepAfterModeSwitch(initialTab, m), pool: initialPoolId };
+		return {
+			mode: m,
+			tab: stepAfterModeSwitch(initialTab, m),
+			pool: initialPoolId,
+			explicit: isDeskMode(initialMode)
+		};
 	});
-	let mode = $derived<DeskMode>(link.mode);
-	let activeTab = $derived<StationTab>(link.tab);
+	type DeskLink = typeof link;
+	// Local state, seeded from the first link. Later links are applied (or held) by `receiveLink`.
+	let mode = $state<DeskMode>(untrack(() => link.mode));
+	let activeTab = $state<StationTab>(untrack(() => link.tab));
 	// Open bulk return pool; the local value keeps a closed pool closed when the user returns.
-	let selectedPoolId = $derived<string | null>(link.pool);
-
-	// FR-DFS-06: a deep link (e.g. a supplies QR or pool link) is also the mode this device last used.
-	$effect(() => {
-		// Reads `link` so it also re-runs when the same link is followed again (`linkKey` bump).
-		if (isDeskMode(initialMode)) storeDeskMode(link.mode);
-	});
+	let selectedPoolId = $state<string | null>(untrack(() => link.pool));
 
 	// One URL model: `?mode=&tab=[&pool=]`, always written whole. Shallow, so a goto does not
 	// cancel the phone scroll. Never called on initial load. Skipped once the user has navigated
@@ -157,19 +160,75 @@
 
 	const drafts = new DeskDrafts();
 	// FR-DFS-05: a switch unmounts the step's form, so typed input waits on this confirm.
-	let pendingMode = $state<DeskMode | null>(null);
+	// One confirm for both paths: the in-page switcher and a link that changes the mode.
+	type PendingSwitch = { kind: 'mode'; mode: DeskMode } | { kind: 'link'; link: DeskLink };
+	let pendingSwitch = $state.raw<PendingSwitch | null>(null);
+	const pendingMode = $derived.by(() => {
+		if (!pendingSwitch) return null;
+		return pendingSwitch.kind === 'link' ? pendingSwitch.link.mode : pendingSwitch.mode;
+	});
 
 	function selectMode(next: DeskMode) {
 		if (next === mode) return;
 		if (drafts.hasDraft()) {
-			pendingMode = next;
+			pendingSwitch = { kind: 'mode', mode: next };
 			return;
 		}
 		switchMode(next);
 	}
 
+	// Apply a link: mode, tab and pool together. FR-DFS-06: a link that names a mode is also the
+	// mode this device last used. The URL already shows the link, so nothing is written.
+	function applyLink(next: DeskLink) {
+		pendingSwitch = null;
+		mode = next.mode;
+		activeTab = next.tab;
+		selectedPoolId = next.pool;
+		if (next.explicit) storeDeskMode(next.mode);
+	}
+
+	function receiveLink(next: DeskLink) {
+		const action = incomingLinkAction({
+			currentMode: mode,
+			linkMode: next.mode,
+			hasDraft: drafts.hasDraft()
+		});
+		if (action === 'apply') applyLink(next);
+		else pendingSwitch = { kind: 'link', link: next };
+	}
+
+	// Why an effect: whether a link applies depends on imperative draft state (`DeskDrafts`) and
+	// may have to open a dialog, which a `$derived` cannot do (no state writes in deriveds). It
+	// reads only `link`; everything else runs untracked, so it re-runs exactly once per link
+	// (including the same link again via `linkKey`). `$effect.pre` runs before the DOM update, so
+	// a held link never flashes the other mode or unmounts the draft form. The first run seeds
+	// nothing new (state already equals the link) and never writes the URL.
+	$effect.pre(() => {
+		const next = link;
+		untrack(() => receiveLink(next));
+	});
+
+	// Cancel (or closing the dialog). A held link already changed the URL, so put the current
+	// state back with the desk's one URL writer. That write returns through the props as a
+	// same-mode link, which applies without a second dialog.
+	function cancelPending() {
+		const held = pendingSwitch;
+		if (!held) return;
+		pendingSwitch = null;
+		if (held.kind === 'link') writeUrl();
+	}
+
+	function confirmPending() {
+		const held = pendingSwitch;
+		if (!held) return;
+		if (held.kind === 'link') {
+			applyLink({ ...held.link, explicit: true });
+			void scrollToContent();
+		} else switchMode(held.mode);
+	}
+
 	function switchMode(next: DeskMode) {
-		pendingMode = null;
+		pendingSwitch = null;
 		mode = next;
 		activeTab = stepAfterModeSwitch(activeTab, next);
 		if (activeTab !== 'returns') selectedPoolId = null;
@@ -956,7 +1015,7 @@
 	<AlertDialog.Root
 		open={pendingMode !== null}
 		onOpenChange={(open) => {
-			if (!open) pendingMode = null;
+			if (!open) cancelPending();
 		}}
 	>
 		<AlertDialog.Content class="max-w-md">
@@ -970,9 +1029,7 @@
 			</AlertDialog.Header>
 			<AlertDialog.Footer>
 				<AlertDialog.Cancel>อยู่โหมดเดิม</AlertDialog.Cancel>
-				<AlertDialog.Action onclick={() => pendingMode && switchMode(pendingMode)}>
-					สลับโหมด
-				</AlertDialog.Action>
+				<AlertDialog.Action onclick={confirmPending}>สลับโหมด</AlertDialog.Action>
 			</AlertDialog.Footer>
 		</AlertDialog.Content>
 	</AlertDialog.Root>

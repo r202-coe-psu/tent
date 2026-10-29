@@ -6,11 +6,17 @@
  * (supplies mode) with that pool's detail open, and closing the detail keeps
  * `?mode=supplies&tab=returns` (no `pool`).
  *
+ * Two more cases: a desk link to a pool that does not exist shows the "pool not found" toast and
+ * opens the returns step with no `pool`; and a mode-changing desk link followed client-side with an
+ * unsaved food draft asks first, and "stay" keeps the mode, draft and URL (FR-DFS-05).
+ *
  * The plain `/back-office/distribution` redirect to `/portal` is covered by
  * distribution-desk-access.test.ts and is not repeated here.
  */
 
+import type { Page } from '@playwright/test';
 import { seedOpenPool, switchUser, poolName } from './bulk-return-pool';
+import { scenarioPoint, seedItemWithStock, seedRecipient, seedTicket } from './distribution';
 import { DESK_TAGS } from './distribution-desk-setup';
 import { expect, test } from './fixtures';
 import { BulkReturnPoolBoard } from './pages/bulk-return-pool.page';
@@ -26,16 +32,7 @@ test.describe('Bulk return pool — desk link for DST (#921)', { tag: DESK_TAGS 
 		// The pool id comes from the seeding helper (admin API), before the page loads.
 		const pool = await seedOpenPool(scenario, { name });
 		const board = new BulkReturnPoolBoard(page);
-		// [pathname, mode, tab, pool]: `pool` is the id, or `null` when absent.
-		const deskUrl = () => {
-			const url = new URL(page.url());
-			return [
-				url.pathname,
-				url.searchParams.get('mode'),
-				url.searchParams.get('tab'),
-				url.searchParams.get('pool')
-			];
-		};
+		const deskUrl = () => deskUrlOf(page);
 
 		await switchUser(page, scenario, 'dst', 'distribution_staff');
 		await page.goto(
@@ -82,4 +79,89 @@ test.describe('Bulk return pool — desk link for DST (#921)', { tag: DESK_TAGS 
 		await expect.poll(deskUrl).toEqual(['/onsite/distribution', 'supplies', 'returns', null]);
 		await expect(board.heading()).toBeVisible();
 	});
+
+	test('a pool link to a pool that does not exist warns and opens the returns step with no pool', async ({
+		page,
+		scenarioAs
+	}) => {
+		const scenario = await scenarioAs('brp_desk_link_missing');
+		const board = new BulkReturnPoolBoard(page);
+		const desk = new DeskPage(page);
+
+		await switchUser(page, scenario, 'dst', 'distribution_staff');
+		await page.goto(
+			`/onsite/distribution?mode=supplies&tab=returns&pool=${encodeURIComponent('bulk_return_pool:does-not-exist')}`
+		);
+
+		await expect(desk.toast('ไม่พบกองนี้ อาจถูกลบหรืออยู่ศูนย์อื่น')).toBeVisible();
+		await expect
+			.poll(() => deskUrlOf(page))
+			.toEqual(['/onsite/distribution', 'supplies', 'returns', null]);
+		await expect(board.heading()).toBeVisible();
+	});
+
+	// A full `page.goto` would reload the desk and lose the draft, so the link is followed through
+	// the SvelteKit router (anchor click), as with the '/portal' hop above.
+	// `foodSetup` is local to distribution-desk-handover.test.ts (a spec file cannot be imported),
+	// so the few setup lines it needs are repeated here.
+	test('a mode-changing desk link with an unsaved food draft asks first; staying keeps the draft', async ({
+		page,
+		scenarioAs
+	}) => {
+		const scenario = await scenarioAs('brp_desk_link_draft');
+		const item = await seedItemWithStock(scenario, {
+			name: `E2E meal ${scenario.namespace}`,
+			stockQty: '50',
+			returnable: false,
+			typeClass: 'CONSUMABLE'
+		});
+		const ticket = await seedTicket(scenario, {
+			type: 'food',
+			status: 'DISTRIBUTING',
+			meal: 'lunch',
+			lines: [{ item, allocatedQty: '10' }]
+		});
+		const recipient = await seedRecipient(
+			scenario,
+			`Food${scenario.namespace.slice(-6)}`,
+			'Recipient'
+		);
+		const desk = new DeskPage(page);
+		await desk.goto();
+		await desk.openTab('food');
+		await desk.selectPoint(scenarioPoint(scenario));
+		await desk.selectTicket('food', ticket);
+		const qty = page.locator('#food-qty-input');
+
+		await desk.itemButton(item.name).click();
+		await desk.chooseRecipientBySearch(recipient);
+		await desk.fillFoodQty('2');
+
+		await page.evaluate(() => {
+			const a = document.createElement('a');
+			a.href = '/onsite/distribution?mode=supplies&tab=returns';
+			document.body.append(a);
+			a.click();
+		});
+		const confirm = page.getByRole('alertdialog', { name: /สลับไปโหมดสิ่งของ/ });
+		await expect(confirm).toBeVisible();
+		await confirm.getByRole('button', { name: 'อยู่โหมดเดิม' }).click();
+		await expect(confirm).toBeHidden();
+		await expect(desk.modeButton('food')).toHaveAttribute('aria-pressed', 'true');
+		await expect(qty).toHaveValue('2');
+		await expect
+			.poll(() => deskUrlOf(page))
+			.toEqual(['/onsite/distribution', 'food', 'food', null]);
+	});
 });
+
+/** [pathname, mode, tab, pool]: `pool` is the id, or `null` when absent. */
+function deskUrlOf(page: Page): Array<string | null> {
+	const url = new URL(page.url());
+	return [
+		url.pathname,
+		url.searchParams.get('mode'),
+		url.searchParams.get('tab'),
+		url.searchParams.get('pool')
+	];
+}
