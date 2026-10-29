@@ -18,7 +18,8 @@ import {
 	type Browser,
 	type BrowserContext,
 	type Locator,
-	type Page
+	type Page,
+	type Route
 } from '@playwright/test';
 import { ulid } from '../src/lib/db/ulid';
 import {
@@ -276,40 +277,67 @@ test.describe(
 			expect(pageErrors, 'an emptied box throws nothing while rendering its row').toEqual([]);
 		});
 
-		test('reopening a plan shows the saved ticket quantities, not the recipe', async ({
-			browser
-		}) => {
+		async function createTicketWithEditedQty(browser: Browser): Promise<string> {
 			const { page, bom } = await openBoardWithRecipe(browser);
 			await expect(qtyInput(bom, EIGHTH)).toHaveValue('0.125', { timeout: 15_000 });
 			await qtyInput(bom, EIGHTH).fill('0.1875');
 			await page.getByRole('button', { name: 'สร้างใบเบิกวัตถุดิบ' }).click();
 			await expect(toast(page, /เปิดตั๋วเบิกวัตถุดิบ .+ แล้ว/)).toBeVisible();
 
-			const plan = (await allDocuments(SHELTER_DB)).find(
-				(d) => d.type === 'meal_plan' && d.created_by === KITCHEN.name
+			const ticket = (await allDocuments(SHELTER_DB)).find(
+				(d) => d.type === 'requisition_ticket' && d.created_by === KITCHEN.name
 			);
-			expect(plan, 'the meal plan was written').toBeTruthy();
+			expect(ticket, 'the requisition ticket was written').toBeTruthy();
+			return String(ticket!.meal_plan_id);
+		}
 
+		async function reopenPlan(
+			browser: Browser,
+			planId: string,
+			onTicketsRequest: (route: Route) => Promise<void>
+		) {
 			const context = await browser.newContext();
 			contexts.push(context);
-			const reopened = await context.newPage();
-			await routeBrowserCouchThroughApp(reopened);
-			await reopened.route('**/_all_docs*', async (route) => {
+			const page = await context.newPage();
+			await routeBrowserCouchThroughApp(page);
+			await page.route('**/_all_docs*', async (route) => {
 				if (decodeURIComponent(route.request().url()).includes('requisition_ticket:')) {
-					await new Promise((resolve) => setTimeout(resolve, 2_000));
+					return onTicketsRequest(route);
 				}
 				await route.fallback();
 			});
-			await injectSession(reopened, KITCHEN, session);
-			await reopened.goto(
-				`/back-office/kitchen/production-board/${sessionId}?plan_id=${encodeURIComponent(plan!._id)}`
+			await injectSession(page, KITCHEN, session);
+			await page.goto(
+				`/back-office/kitchen/production-board/${sessionId}?plan_id=${encodeURIComponent(planId)}`
 			);
-			const reopenedBom = reopened.locator('[data-slot="card"]').filter({
+			const bom = page.locator('[data-slot="card"]').filter({
 				hasText: '2. คำนวณวัตถุดิบ & สต็อกในคลัง'
 			});
+			return { page, bom };
+		}
 
-			await expect(qtyInput(reopenedBom, EIGHTH)).toHaveValue('0.1875', { timeout: 15_000 });
-			await expect(qtyInput(reopenedBom, THIRD)).toHaveValue('0.3333');
+		test('reopening a plan shows the saved ticket quantities, not the recipe', async ({
+			browser
+		}) => {
+			const planId = await createTicketWithEditedQty(browser);
+
+			const { bom } = await reopenPlan(browser, planId, async (route) => {
+				await new Promise((resolve) => setTimeout(resolve, 2_000));
+				await route.fallback();
+			});
+
+			await expect(qtyInput(bom, EIGHTH)).toHaveValue('0.1875', { timeout: 15_000 });
+			await expect(qtyInput(bom, THIRD)).toHaveValue('0.3333');
+		});
+
+		test('a failed ticket load offers retry and never a second ticket', async ({ browser }) => {
+			const planId = await createTicketWithEditedQty(browser);
+
+			const { page } = await reopenPlan(browser, planId, (route) => route.abort());
+
+			await expect(page.getByText('โหลดข้อมูลใบเบิกไม่สำเร็จ')).toBeVisible({ timeout: 30_000 });
+			await expect(page.getByRole('button', { name: 'ลองใหม่' })).toBeVisible();
+			await expect(page.getByRole('button', { name: 'สร้างใบเบิกวัตถุดิบ' })).toHaveCount(0);
 		});
 	}
 );

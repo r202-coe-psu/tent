@@ -1170,12 +1170,25 @@
 			</Card.Root>
 		</div>
 
-		{#if !activeTicket}
+		{#if tickets.isError}
+			<!-- Without tickets we can't tell whether this plan already has one, so creating is unsafe. -->
+			<div
+				class="flex items-center justify-between gap-3 rounded-xl border border-red-200 bg-red-50 p-4 text-red-900"
+			>
+				<div class="flex items-center gap-2 text-sm font-semibold">
+					<AlertCircle class="h-5 w-5 shrink-0 text-red-600" />
+					โหลดข้อมูลใบเบิกไม่สำเร็จ
+				</div>
+				<Button variant="outline" size="sm" onclick={() => tickets.refetch()}>ลองใหม่</Button>
+			</div>
+		{:else if !activeTicket}
 			<div class="rounded-xl border border-primary/20 bg-primary/5 p-4">
 				<Button
 					class="w-full gap-2 font-semibold shadow-sm"
 					onclick={handleCreateRequisition}
-					disabled={createMealPlanMutation.isPending || createTicketMutation.isPending}
+					disabled={!tickets.isSuccess ||
+						createMealPlanMutation.isPending ||
+						createTicketMutation.isPending}
 				>
 					<Sparkles class="h-4 w-4" />
 					{createMealPlanMutation.isPending || createTicketMutation.isPending
