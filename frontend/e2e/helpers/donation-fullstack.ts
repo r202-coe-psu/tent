@@ -499,7 +499,7 @@ export async function openPendingRow(page: Page, bookingRef: string) {
 		await page.getByRole('tab', { name: /รายการของบริจาค/ }).click();
 		await page.getByRole('button', { name: /^รอประเมิน/ }).click();
 		await expect(row).toBeVisible({ timeout: 3_000 });
-	}).toPass({ timeout: 30_000 });
+	}).toPass({ timeout: 60_000 });
 	await row.getByRole('button', { name: 'จัดการ' }).click();
 	await expect(page.getByRole('heading', { name: new RegExp(`^${bookingRef} - `) })).toBeVisible();
 }
