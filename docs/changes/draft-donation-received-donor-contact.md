@@ -60,13 +60,28 @@ migration: ไม่เปลี่ยนรูปร่าง doc — ไม่
   | `lot` | เลขล็อต `L-YYMMDD-XXX` | ตาม FR-13 | Mango index `(type, lot.lot_no)` |
 
   normalize ชื่อ: NFKC → lowercase → trim → ยุบช่องว่างซ้ำ (ฟังก์ชันเดียวกันทั้งใน view และฝั่ง server) · normalize เบอร์: ตัดขีด / ช่องว่าง / วงเล็บ, `+66` → `0` แล้วต้องเป็นเบอร์ที่ใช้ได้ ไม่งั้น 400
-- **FR-8a** — ผลค้นหน้าละ 20 (`RECEIVED_PAGE_SIZE`) เรียง `received_at` ใหม่สุดก่อน · ปุ่ม "โหลดเพิ่ม" ส่ง `cursor` ที่ server ออกให้ (client ไม่ต้องรู้ว่าภายในเป็น Mango bookmark หรือ `startkey` / `startkey_docid` ของ view) · ไม่เจอ = "ไม่พบรายการที่ตรงกับ …"
+- **FR-8a** — ผลค้นหน้าละ 20 (`RECEIVED_PAGE_SIZE`) เรียง `received_at` ใหม่สุดก่อน · เวลาเท่ากันเรียง `_id` มากไปน้อย · ใบหนึ่งขึ้นในผลได้ครั้งเดียว · ปุ่ม "โหลดเพิ่ม" ส่ง `cursor` ที่ server ออกให้ · ไม่เจอ = "ไม่พบรายการที่ตรงกับ …" · วิธีแบ่งหน้าตามประเภท:
+
+  | `by` | แบ่งหน้าด้วย |
+  | --- | --- |
+  | `booking_ref` | ได้ไม่เกิน 1 ใบ ไม่มี `cursor` |
+  | `phone` | Mango bookmark ของ index `(type, status, donor.phone_hash, received_at)` |
+  | `name`, `item` | view + lookahead (FR-8h) |
+  | `lot` | tuple `(received_at, _id)` (FR-8d) |
+
+  `cursor` เป็นค่าทึบ (base64url ของ JSON) ที่ผูกกับ `by` และ `q` ของ request แรก · ส่ง `cursor` มากับ `by` หรือ `q` อื่น → 400
 - **FR-8b** — ผลค้นใช้ยืนยันได้ว่าชื่อหรือเบอร์ที่เจ้าหน้าที่พิมพ์มีใบอยู่ แต่ response ยังเป็นค่าที่ปิดแล้ว (FR-10) · การค้นไม่ถือเป็นการเปิดข้อมูลเต็ม · ค่าเต็มเปิดผ่าน FR-10a พร้อม audit เท่านั้น
 - **FR-8c** — route `POST /api/back-office/donations/received/search` · body `{ shelter_code?, by, q, cursor? }` (คำค้นอยู่ใน body ไม่อยู่ใน URL — ไม่ติด access log) · สิทธิ์และศูนย์ตาม FR-9 / FR-9a · response แบบเดียวกับรายการ (FR-10) + `cursor`
-- **FR-8d** — ทุกประเภทค้นอ่านผ่าน index หรือ view ที่จำกัดด้วยค่าค้น · ไม่ใช้ `$regex` · ไม่โหลดใบทั้งศูนย์มากรองในแอป · `lot` อ่านแถว ledger ที่ป้ายตรงแล้วดึงใบตาม `ref_id` (`_all_docs` `keys`) เก็บเฉพาะใบ `status = received` · index / view ยังไม่ deploy หรือ `_design/app` version ต่ำกว่า 7 → 503 ตาม FR-3
+- **FR-8d** — ทุกประเภทค้นอ่านผ่าน index หรือ view ที่จำกัดด้วยค่าค้น · ไม่ใช้ `$regex` · ไม่โหลดใบทั้งศูนย์มากรองในแอป · index / view ยังไม่ deploy หรือ `_design/app` version ต่ำกว่า 7 → 503 ตาม FR-3 · `by = lot` ทำตามลำดับนี้:
+  1. `_find` `stock_ledger` ที่ `lot.lot_no = q` และ `reason = donation` ผ่าน index `(type, lot.lot_no)` · `limit` 200 ต่อรอบ อ่านต่อด้วย bookmark จนหมด (ไม่พึ่ง `limit` ค่าเริ่มต้น 25)
+  2. ตัด `ref_id` ซ้ำ — ใบเดียวมีหลายแถว ledger ป้ายเดียวกันนับเป็นใบเดียว
+  3. ดึงใบด้วย `_all_docs` `keys` + `include_docs` · เก็บเฉพาะ `type = donation`, `status = received`
+  4. เรียงตาม FR-8a (`received_at` ใหม่สุดก่อน, `_id` มากไปน้อย) — เรียงในแอปได้เพราะเป็นเฉพาะใบที่ตรงป้ายแล้ว ไม่ใช่ใบทั้งศูนย์
+  5. ตัดหน้าละ 20 · `cursor` = `(received_at, _id)` ของใบสุดท้ายในหน้า · หน้าถัดไปเอาเฉพาะใบที่อยู่**ถัดจาก** tuple นี้ในลำดับเดียวกัน
 - **FR-8e** — rate limit ต่อ **IP** ที่ nginx (`limit_req` zone ใหม่ของ route ค้นหา ใน `nginx/rate-limit.conf`) ตาม CR-188 · ไม่มี limiter ในแอป · เกิน = 429
 - **FR-8f** — ทุกการค้นเขียน log ของแอป (ไม่ใช่ doc ใน CouchDB) event `donation_received_search`: ผู้ค้น, `shelter_code`, `by`, จำนวนผล, เวลา · **ไม่เก็บ `q`** หรือชื่อ / เบอร์ใน log
 - **FR-8g** — รายการในใบที่ไม่ได้ผูก `item_master` (`free_text` อย่างเดียว) ค้นด้วย `by = item` ไม่เจอ · ใบนั้นยังค้นด้วยประเภทอื่นได้
+- **FR-8h** — แบ่งหน้า view ด้วย lookahead: query `limit = 21` · แสดง 20 แถวแรก · มีแถวที่ 21 = มีหน้าถัดไป และ `cursor` = key + `_id` **ของแถวที่ 21** · หน้าถัดไปใช้ `startkey` / `startkey_docid` จาก `cursor` ซึ่งเริ่มที่แถวที่ 21 (CouchDB รวมแถวเริ่มต้น) จึงไม่ซ้ำและไม่ข้าม · ไม่ใช้ `skip` · map emit ใบหนึ่งไม่เกินหนึ่งแถวต่อ key (Migration) ผลจึงไม่มีใบซ้ำ
 
 **สิทธิ์**
 - **FR-9** — เข้าถึงได้เฉพาะบทบาทที่ผ่าน `authorizeWarehouse`: `warehouse_staff`, `shelter_manager`, `system_admin` (เหมือน API บริจาค back-office อื่น)
@@ -74,6 +89,7 @@ migration: ไม่เปลี่ยนรูปร่าง doc — ไม่
 - **FR-10** — API รายการ (และผลค้นหา) ส่ง**เฉพาะค่าที่ปิดแล้ว** · ห้ามมีชื่อเต็ม / เบอร์เต็ม / อีเมลเต็มใน response
 - **FR-10a** — ข้อมูลติดต่อเต็มมาจาก endpoint ของใบ `POST /api/back-office/donations/{query}/contact` · `{query}` = `booking_ref` หรือ `_id` หาใบด้วย `findDonationByQuery` เหมือน route อื่นใต้ `[query]/` · `POST` เพราะทุกครั้งที่เรียกเขียน audit (FR-10b) — แบบเดียวกับปุ่มดู PIN เครื่อง kiosk (`kiosk/devices/[id]/staff-pin/reveal`) · response มี `Cache-Control: no-store` · สิทธิ์ตาม FR-9/FR-9a (ใบต้องอยู่ในศูนย์ที่ผู้เรียกมีสิทธิ์) · เรียกเมื่อกด "แสดงข้อมูลติดต่อ" เท่านั้น
 - **FR-10b** — ทุกครั้งที่เรียก FR-10a บันทึก `audit` (§2.12) `action: other`, `target_type: donation`, `target_id`, `reason: "donor_contact_view"`, `created_by` = ผู้เรียก, `occurred_at` · ไม่เก็บค่าข้อมูลติดต่อใน audit
+- **FR-10c** — ใบที่ข้อมูลติดต่อถูกลบตาม retention (ไม่มี `donor.name` / `phone` / `email`): รายการแสดง "ไม่ระบุชื่อ" / "ไม่ระบุเบอร์โทร" / "ไม่ระบุอีเมล" · `POST /contact` ตอบ 200 ค่าเป็น `null` ทุกช่อง และยังเขียน audit ตาม FR-10b · UI แสดง "ข้อมูลติดต่อถูกลบตามนโยบายการเก็บข้อมูล" · ค้น `by = name` ไม่เจอ · ค้น `by = phone` **ยังเจอ** เพราะเก็บ `phone_hash` ไว้ตามนโยบาย
 
 **walk-in หน้าคลัง**
 - **FR-11** — `receive-stock-form.svelte` เพิ่มช่อง "อีเมล (ไม่บังคับ)" เก็บใน `donor.email` · ตรวจรูปแบบด้วย Zod ตัวเดียวกับ walk-in ในหน้ารับบริจาค (`z.string().trim().email().optional()`, `back-office.ts`) ใน `walkInDonationInputSchema` ทั้งที่ฟอร์มและตอนสร้างใบ (`createWalkInDonation`) · ว่าง = ไม่เก็บ
@@ -114,6 +130,9 @@ migration: ไม่เปลี่ยนรูปร่าง doc — ไม่
   - ผลทุกกรณีไม่มีชื่อเต็ม / เบอร์เต็ม / อีเมลเต็ม (AC-5a)
 - **AC-6b** — ค้นเกินอัตราที่ตั้งใน `nginx/rate-limit.conf` จาก IP เดียว → 429 · log `donation_received_search` มีผู้ค้น ศูนย์ `by` จำนวนผล เวลา และไม่มี `q` / ชื่อ / เบอร์ · access log ของ route ค้นหาไม่มีคำค้น (อยู่ใน body)
 - **AC-6c** — ใบที่รายการเป็น `free_text` อย่างเดียว ค้นด้วย `item` ไม่เจอ แต่ค้นด้วย `booking_ref` / `name` / `phone` เจอ
+- **AC-6d** — ล็อต: ป้ายเดียวกันอยู่ใน 25 ใบ → หน้าแรก 20 ใบ หน้าสอง 5 ใบ ไม่ซ้ำ ไม่ขาด เรียงใหม่ไปเก่า · ใบเดียวมี 3 แถว ledger ป้ายเดียวกัน → ขึ้นครั้งเดียว · 2 ใบ `received_at` เท่ากันคร่อมรอยต่อหน้า → ไม่ซ้ำ ไม่หาย · แถว ledger ที่ชี้ใบสถานะอื่นไม่ขึ้นในผล
+- **AC-6e** — view: 25 ใบชื่อ `สมชาย` ที่ `received_at` เท่ากันหมด → หน้า 20 + 5 ไม่ซ้ำ ไม่หาย · ใบชื่อคำเดียว (`สมชาย`) ขึ้นครั้งเดียว · `cursor` ของคำค้นหนึ่งส่งมากับคำค้นอื่น → 400
+- **AC-6f** — ใบที่ไม่มี `donor.name` / `phone` / `email`: รายการขึ้น "ไม่ระบุ…" · `POST /contact` ได้ `null` และมี audit 1 แถว · ค้นด้วยเบอร์เดิมยังเจอใบ · ค้นด้วยชื่อเดิมไม่เจอ
 - **AC-7** — walk-in จากหน้าคลังที่ใส่อีเมล → `donor.email` ถูกเก็บ · อีเมลผิดรูปแบบ → บันทึกไม่ได้ · เว้นว่าง → บันทึกได้ ไม่มี `donor.email`
 - **AC-8** — หน้ารายละเอียดแสดงเลขล็อตของแต่ละรายการที่รับเข้า (จาก ledger `reason = donation`) · ค้นด้วยเลขล็อตเจอทุกใบที่มีล็อตป้ายนั้น · ป้ายเดียวกันอยู่ 2 ใบ → ผลแสดงทั้ง 2 ใบ
 
@@ -124,7 +143,7 @@ migration: ไม่เปลี่ยนรูปร่าง doc — ไม่
 - **งานที่แตะไฟล์ร่วมกัน:** FR-11 และ #981 แก้ `receive-stock-form.svelte` ร่วมกัน · merge ได้ตามความพร้อม · งานที่ merge ทีหลังต้อง resolve conflict และตรวจว่าการรับเข้าคลังกับการบันทึกอีเมลยังทำงานครบ
 - **schema.md:** แก้ข้อความ ไม่เปลี่ยนรูปร่าง doc — §2.1 `lot.lot_no` ใช้เป็นคีย์ค้นใบบริจาคได้ (ยังไม่ unique และไม่ผูก business rule) · §Index `shelter_*` เพิ่ม donation `(type, status, received_at)`, `(type, status, donor.phone_hash, received_at)` และ stock_ledger `(type, lot.lot_no)` · §7 เพิ่ม view `donation_received_by_name`, `donation_received_by_item` (manifest v7) · §2.12 เพิ่ม `reason = donor_contact_view` ของ `action: other`
 - **ไม่ต้องแก้:** `donation` schema / `schema_v` · `audit` schema (ใช้ `action: other`) · FastAPI / Mongo / projection · worker · role-permission matrix
-- **PII:** ข้อมูลติดต่ออยู่ใต้ retention ของ PII ผู้บริจาคเดิม · หลังพ้น retention ระบบเหลือแค่ชื่อ ปุ่ม "แสดงข้อมูลติดต่อ" ไม่มีอะไรให้แสดง
+- **PII:** ข้อมูลติดต่ออยู่ใต้ retention ของ PII ผู้บริจาคตาม `docs/data/data-model.md` §7 — ลบ `donor.name` / `phone` / `line_id` / `email` ภายใน 3 เดือนหลังปิดศูนย์ เหลือ `phone_hash` + ยอด · **สถานะจริง:** ยังไม่มีงานลบอัตโนมัติฝั่ง CouchDB ข้อมูลติดต่อจึงยังอยู่จนกว่าจะมีงานลบ · CR นี้ไม่สร้างงานลบ · เมื่อข้อมูลถูกลบแล้วทำงานตาม FR-10c
 - **สถานะงาน:** FR-1 – FR-7, FR-9, FR-9a ทำแล้วใน branch `feat/821-received-filter` (FR-9a ต้องตรวจว่าจำกัดเฉพาะ `status=received`; comment / เทสต์ที่อ้าง "decision A1" เปลี่ยนเป็น FR-9a) · FR-8 ทำแล้วแบบค้นในหน้าที่โหลด ต้องเปลี่ยนเป็นฝั่ง server · FR-10 – FR-13 ยังไม่ทำ
 
 ## Migration
@@ -135,9 +154,9 @@ migration: ไม่เปลี่ยนรูปร่าง doc — ไม่
   - `donation-received-phone` — `[type, status, donor.phone_hash, received_at]` (FR-8 `phone`)
   - `stock-ledger-lot-no` — `[type, lot.lot_no]` (FR-8 `lot`, FR-13)
 - view ใหม่ใน `_design/app` (version 6 → 7):
-  - `donation_received_by_name` — emit เฉพาะ `type = donation`, `status = received`, มี `donor.name`: key `[ชื่อ normalize แล้วทั้งก้อน, received_at]` และ `[แต่ละคำ, received_at]` (คำซ้ำในชื่อเดียว emit ครั้งเดียว) · value `null`
+  - `donation_received_by_name` — emit เฉพาะ `type = donation`, `status = received`, มี `donor.name`: key `[ชื่อ normalize แล้วทั้งก้อน, received_at]` และ `[แต่ละคำ, received_at]` · emit แต่ละ key ไม่เกินครั้งเดียวต่อใบ — คำซ้ำในชื่อเดียว และชื่อคำเดียว (ชื่อทั้งก้อน = คำนั้น) emit ครั้งเดียว · value `null`
   - `donation_received_by_item` — emit เฉพาะใบเดียวกัน: key `[item_id, received_at]` ต่อ `item_id` ที่ไม่ซ้ำในใบ · value `null`
-  - query: `descending=true`, `startkey=[q, {}]`, `endkey=[q]`, `include_docs=true`, `limit=21` → หน้าถัดไปด้วย `startkey` + `startkey_docid` ของแถวสุดท้าย
+  - query หน้าแรก: `descending=true`, `startkey=[q, {}]`, `endkey=[q]`, `include_docs=true`, `limit=21` · หน้าถัดไป: `startkey` = key ของแถวที่ 21, `startkey_docid` = `_id` ของแถวที่ 21, `endkey=[q]`, `limit=21` (FR-8h) · แถวที่ key เท่ากัน CouchDB เรียงด้วย docid จากมากไปน้อยเมื่อ `descending=true`
 - ทุก index และ view: provisioner สร้างให้ศูนย์ใหม่ · ศูนย์เดิมใช้ `scripts/redeploy-access.ts`
 
 ## Why
@@ -167,3 +186,4 @@ migration: ไม่เปลี่ยนรูปร่าง doc — ไม่
 - 2026-10-29 — แก้ตามรีวิว PR #974: ledger `reason = donation` (FR-12) · `lot.lot_no` ไม่ unique ผลค้นได้หลายใบ (FR-13, AC-8) · FR-9a เฉพาะ `status=received` · `/contact` เป็น `POST` ใต้ `[query]/` · เพิ่ม `docs/data/schema.md` ใน `affects`
 - 2026-10-29 — วิธีค้น: ครั้งละหนึ่งประเภท · ชื่อหรือนามสกุลตรงเต็มคำ, เบอร์เต็ม, เลขใบ / ล็อตตรงทั้งค่า, สินค้าเลือกด้วยรหัส · ผลค้นยืนยันข้อมูลที่พิมพ์ได้แต่ไม่เปิดค่าเต็ม (FR-8 – FR-8b, AC-4, AC-6a)
 - 2026-10-29 — ทำจริง: ชื่อ / สินค้าใช้ CouchDB view (`_design/app` v7) ไม่เพิ่มฟิลด์ · ค้นผ่าน `POST` · rate limit ต่อ IP ที่ nginx ตาม CR-188 · log การค้นอยู่ใน log ของแอปไม่เก็บคำค้น (FR-8c – FR-8g, AC-6 – AC-6c)
+- 2026-10-29 — ระบุรายละเอียดที่ยังขาด ไม่เปลี่ยนมติ: retention ตาม data-model §7 + สถานะการลบจริง + พฤติกรรมหลังลบ (FR-10c, AC-6f) · แบ่งหน้าค้นล็อต (ตัดซ้ำ, เรียง, tuple cursor — FR-8d, AC-6d) · แบ่งหน้า view แบบ lookahead และ emit ไม่ซ้ำ (FR-8h, AC-6e) · `cursor` ผูกกับ `by` + `q` (FR-8a)
