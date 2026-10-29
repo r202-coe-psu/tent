@@ -39,6 +39,7 @@ import {
 	requireDistributionDesk,
 	requireBannerManagement,
 	requireKioskManagement,
+	requireManager,
 	requireMedicalScreening,
 	requireVolunteerBackoffice,
 	LANDING_ROUTE
@@ -160,6 +161,40 @@ describe('requireMedicalScreening (Station 2 route guard)', () => {
 		const roles = ['shelter:SH001', 'shelter:SH002', 'SH001:registration_staff'];
 		expect(await passes(requireMedicalScreening, roles, 'SH001')).toBe(true);
 		expect(await passes(requireMedicalScreening, roles, 'SH002')).toBe(false);
+	});
+});
+
+describe('requireManager scoped to a URL shelter (/back-office/shelters/readiness/[id], #478)', () => {
+	beforeEach(() => {
+		mocks.user = { roles: [] };
+		mocks.selectedShelterCode = null;
+	});
+
+	const forShelter = (code: string) => () => requireManager(undefined, code);
+
+	it('admits SA for any shelter', async () => {
+		expect(await passes(forShelter('SH999'), ['system_admin'])).toBe(true);
+	});
+
+	it('admits the shelter_manager of the requested shelter', async () => {
+		expect(await passes(forShelter('SH001'), ['shelter:SH001', 'SH001:shelter_manager'])).toBe(
+			true
+		);
+	});
+
+	it('redirects a manager of another shelter even while that shelter is selected', async () => {
+		const roles = ['shelter:SH001', 'SH001:shelter_manager'];
+		expect(await passes(forShelter('SH002'), roles, 'SH001')).toBe(false);
+	});
+
+	it('redirects a user who is only staff in the requested shelter', async () => {
+		const roles = [
+			'shelter:SH001',
+			'shelter:SH002',
+			'SH001:shelter_manager',
+			'SH002:kitchen_staff'
+		];
+		expect(await passes(forShelter('SH002'), roles, 'SH001')).toBe(false);
 	});
 });
 
