@@ -146,6 +146,22 @@ describe('grantVolunteerAccess', () => {
 		);
 	});
 
+	it('lowercases the email before creating the account', async () => {
+		await grantVolunteerAccess(volunteer, { ...input, email: 'Helper@Example.COM' });
+		expect(mocks.createUser).toHaveBeenCalledWith(
+			expect.objectContaining({ name: 'helper@example.com', email: 'helper@example.com' })
+		);
+	});
+
+	it('links a legacy mixed-case account by its stored name instead of creating one', async () => {
+		mocks.listUsers.mockResolvedValue([{ ...account, name: 'Helper@Example.com' }]);
+		await expect(grantVolunteerAccess(volunteer, input)).resolves.toEqual({ created: false });
+		expect(mocks.createUser).not.toHaveBeenCalled();
+		expect(mocks.update).toHaveBeenCalledWith(
+			expect.objectContaining({ user_name: 'Helper@Example.com' })
+		);
+	});
+
 	it('allows the volunteer phone as a forced first-login password', async () => {
 		await grantVolunteerAccess(volunteer, {
 			email: input.email,

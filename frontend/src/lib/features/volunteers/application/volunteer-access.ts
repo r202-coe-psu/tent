@@ -16,7 +16,7 @@ import { normalizePhone } from '../domain/phone';
 import type { Volunteer } from '../domain/volunteer.schema';
 
 export const volunteerAccessSchema = z.object({
-	email: z.string().trim().email('กรุณากรอกอีเมลให้ถูกต้อง'),
+	email: z.string().trim().toLowerCase().email('กรุณากรอกอีเมลให้ถูกต้อง'),
 	password: z.string().trim().min(1, 'กรุณากำหนดรหัสผ่าน'),
 	role: z.enum(STAFF_CAPABILITIES)
 });
@@ -60,10 +60,16 @@ export async function grantVolunteerAccess(
 	if (!profile) throw new Error('ไม่พบข้อมูลอาสาสมัคร กรุณาโหลดข้อมูลใหม่');
 	const scope = shelterScopeRole(volunteer.shelter_code);
 	const users = await listUsers();
-	const existing = users.find((user) => user.name === email);
+	const sameName = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
+	// A legacy mixed-case account is found by any casing; its stored name is what we link.
+	const existing =
+		users.find((user) => user.name === email) ?? users.find((user) => sameName(user.name, email));
+	const accountName = existing?.name ?? email;
 	const otherLinkedAccount = users.find(
 		(user) =>
-			user.volunteer_id === volunteer._id && user.roles.includes(scope) && user.name !== email
+			user.volunteer_id === volunteer._id &&
+			user.roles.includes(scope) &&
+			!sameName(user.name, email)
 	);
 	if (otherLinkedAccount) {
 		throw new Error(
@@ -72,7 +78,7 @@ export async function grantVolunteerAccess(
 	}
 	if (
 		profile.user_name &&
-		profile.user_name !== email &&
+		!sameName(profile.user_name, email) &&
 		users.some((user) => user.name === profile.user_name)
 	) {
 		throw new Error('โปรไฟล์อาสาสมัครผูกกับบัญชีอื่นแล้ว กรุณาจัดการผ่านหน้าผู้ใช้งาน');
@@ -104,7 +110,7 @@ export async function grantVolunteerAccess(
 			must_change_password: isPhoneBootstrapPassword
 		});
 	}
-	await linkVolunteerProfile(repository, volunteer, profile, email, created);
+	await linkVolunteerProfile(repository, volunteer, profile, accountName, created);
 	return { created };
 }
 
@@ -157,21 +163,23 @@ export async function grantVolunteerAccessAsCoordinator(
 	const repository = volunteerRepositoryFor(volunteer.shelter_code);
 	const profile = await repository.get(volunteer._id);
 	if (!profile) throw new Error('ไม่พบข้อมูลอาสาสมัคร กรุณาโหลดข้อมูลใหม่');
-	const result = await serviceFetch<{ ok: true; created: boolean; unchanged: boolean }>(
-		'/api/v1/volunteer-access',
-		{
-			method: 'POST',
-			body: JSON.stringify({
-				shelter_code: volunteer.shelter_code,
-				volunteer_id: volunteer._id,
-				email,
-				password,
-				role,
-				expires_on
-			})
-		}
-	);
-	await linkVolunteerProfile(repository, volunteer, profile, email, result.created);
+	const result = await serviceFetch<{
+		ok: true;
+		created: boolean;
+		unchanged: boolean;
+		name?: string;
+	}>('/api/v1/volunteer-access', {
+		method: 'POST',
+		body: JSON.stringify({
+			shelter_code: volunteer.shelter_code,
+			volunteer_id: volunteer._id,
+			email,
+			password,
+			role,
+			expires_on
+		})
+	});
+	await linkVolunteerProfile(repository, volunteer, profile, result.name ?? email, result.created);
 	return { created: result.created, unchanged: result.unchanged };
 }
 

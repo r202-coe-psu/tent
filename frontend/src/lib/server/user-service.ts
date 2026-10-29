@@ -247,6 +247,19 @@ async function assertNotLastAppSa(targetRoles: readonly string[]): Promise<void>
 	}
 }
 
+/** Exact name match wins; otherwise the one whose name differs only in case. */
+function findUserDocIgnoringCase(docs: CouchUserDoc[], name: string): CouchUserDoc | undefined {
+	const lower = name.toLowerCase();
+	return docs.find((d) => d.name === name) ?? docs.find((d) => d.name?.toLowerCase() === lower);
+}
+
+/** The `name` an account is actually stored under (legacy accounts may be mixed case). */
+async function storedUserName(name: string): Promise<string> {
+	const got = await adminRaw(`/_users/${userDocId(name)}`, 'GET');
+	if (got.status !== 404) return name;
+	return findUserDocIgnoringCase(await fetchAllUserDocs(), name)?.name ?? name;
+}
+
 async function readUserDoc(name: string, action: string): Promise<CouchUserDoc> {
 	const got = await adminRaw(`/_users/${userDocId(name)}`, 'GET');
 	if (got.status === 404) {
@@ -478,15 +491,17 @@ export async function grantCoordinatorRole(input: {
 	/** `volunteer.user_name` of the profile, when it is already linked to an account. */
 	linked_user_name: string | null;
 	grant: RoleGrant;
-}): Promise<{ created: boolean; unchanged: boolean }> {
-	const { name, volunteer_id, grant } = input;
+}): Promise<{ created: boolean; unchanged: boolean; name: string }> {
+	const { volunteer_id, grant } = input;
 	const code = grant.shelter_code;
 	const actor = grant.granted_by;
 	if (!isCoordinatorGrantableRole(grant.role)) {
 		throw new ServiceError('FORBIDDEN', 'A coordinator may not grant this role');
 	}
 	const docs = await fetchAllUserDocs();
-	const existing = docs.find((d) => d.name === name);
+	// A legacy mixed-case account is found by any casing; its stored name is the doc id.
+	const existing = findUserDocIgnoringCase(docs, input.name);
+	const name = existing?.name ?? input.name;
 	if (existing) assertGrantableTarget(existing, volunteer_id, actor);
 	const otherLinked = docs.find(
 		(d) =>
@@ -527,14 +542,14 @@ export async function grantCoordinatorRole(input: {
 			actor,
 			verified_by: grant.verified_by
 		});
-		return { created: true, unchanged: false };
+		return { created: true, unchanged: false, name };
 	}
 
 	const roles = existing.roles ?? [];
 	const previous = grantFor(existing.role_grants, code, grant.role);
 	const hasRole = hasCapabilityInShelter(roles, code, grant.role);
 	// A manager gave this role: nothing to add, and nothing a coordinator may change.
-	if (hasRole && !previous) return { created: false, unchanged: true };
+	if (hasRole && !previous) return { created: false, unchanged: true, name };
 	// Another coordinator's grant may be renewed but not cut short. A renewal keeps the issuer, so
 	// the renewer cannot then revoke or shorten it (FR-8); the audit records who renewed.
 	const shortened =
@@ -572,7 +587,7 @@ export async function grantCoordinatorRole(input: {
 		actor,
 		verified_by: grant.verified_by
 	});
-	return { created: false, unchanged: false };
+	return { created: false, unchanged: false, name };
 }
 
 /**
@@ -588,11 +603,12 @@ export async function revokeCoordinatorGrant(input: {
 	role: string;
 	actor: string;
 }): Promise<void> {
-	const { name, volunteer_id, shelter_code: code, role, actor } = input;
+	const { volunteer_id, shelter_code: code, role, actor } = input;
 	if (!isCoordinatorGrantableRole(role)) {
 		throw new ServiceError('FORBIDDEN', 'A coordinator may not revoke this role');
 	}
-	const doc = await readUserDoc(name, 'read user');
+	const doc = await readUserDoc(await storedUserName(input.name), 'read user');
+	const name = doc.name;
 	const grant = grantFor(doc.role_grants, code, role);
 	if (doc.volunteer_id !== volunteer_id || !grant || grant.granted_by !== actor) {
 		throw new ServiceError('FORBIDDEN', 'ถอนได้เฉพาะสิทธิ์ที่ตนเองออกให้');

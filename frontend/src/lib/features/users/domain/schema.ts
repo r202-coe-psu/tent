@@ -124,11 +124,13 @@ export const createUserSchema = z.object(userProfileFields).superRefine(refineUs
 export type CreateUserInput = z.infer<typeof createUserSchema>;
 
 /**
- * Form input for editing an existing user.
+ * Form input for editing an existing user. `username` is the read-only existing `_users` name
+ * (e.g. an email for a volunteer account), so it is not re-validated here.
  */
 export const editUserSchema = z
 	.object({
 		...userProfileFields,
+		username: z.string(),
 		password: passwordSchema.or(z.literal(''))
 	})
 	.superRefine(refineUserForm);

@@ -101,6 +101,13 @@ beforeEach(() => {
 });
 
 describe('grantVolunteerAccessAsCoordinator', () => {
+	it('lowercases the email used as the account name', async () => {
+		await grant(body({ email: ' Vol@Example.COM ' }));
+		expect(grantCoordinatorRole).toHaveBeenCalledWith(
+			expect.objectContaining({ name: 'vol@example.com' })
+		);
+	});
+
 	it('grants a verified volunteer one role with an expiry at the end of the chosen Bangkok day', async () => {
 		await expect(grant()).resolves.toEqual({ created: true, unchanged: false });
 		expect(grantCoordinatorRole).toHaveBeenCalledWith(
@@ -345,6 +352,13 @@ describe('revokeVolunteerAccessAsCoordinator', () => {
 	});
 	const revoke = (i = input(), caller: { name: string; roles: string[] } = COORDINATOR) =>
 		revokeVolunteerAccessAsCoordinator(caller, i);
+
+	it('lowercases the email before naming the account', async () => {
+		await revoke(input({ email: 'Vol@EXAMPLE.com' }));
+		expect(revokeCoordinatorGrant).toHaveBeenCalledWith(
+			expect.objectContaining({ name: 'vol@example.com' })
+		);
+	});
 
 	it('hands the account, shelter, role and the caller as the issuer to the service', async () => {
 		await revoke();

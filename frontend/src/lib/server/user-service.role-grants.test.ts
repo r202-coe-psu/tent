@@ -102,7 +102,8 @@ describe('coordinator role grants on _users (#955)', () => {
 	it('creates the account with compound roles, the grant and a forced password change', async () => {
 		await expect(grantCoordinatorRole(input())).resolves.toEqual({
 			created: true,
-			unchanged: false
+			unchanged: false,
+			name: EMAIL
 		});
 		const doc = db[key(EMAIL)];
 		expect(doc.roles).toEqual(['shelter:SH001', 'SH001:kitchen_staff']);
@@ -127,7 +128,8 @@ describe('coordinator role grants on _users (#955)', () => {
 			grantCoordinatorRole(input(next, { password: 'Other-Pass-999!' }))
 		).resolves.toEqual({
 			created: false,
-			unchanged: false
+			unchanged: false,
+			name: EMAIL
 		});
 		const doc = db[key(EMAIL)];
 		expect(doc.roles).toEqual(['shelter:SH001', 'SH001:kitchen_staff', 'SH001:facility_staff']);
@@ -210,6 +212,26 @@ describe('coordinator role grants on _users (#955)', () => {
 		});
 	});
 
+	it('finds a legacy mixed-case account by any casing and keeps its stored name', async () => {
+		const LEGACY = 'Vol@Example.com';
+		seed(LEGACY, { roles: [], role_grants: [] });
+		await expect(grantCoordinatorRole(input())).resolves.toMatchObject({
+			created: false,
+			name: LEGACY
+		});
+		expect(db[key(LEGACY)].roles).toEqual(['shelter:SH001', 'SH001:kitchen_staff']);
+		expect(db[key(EMAIL)]).toBeUndefined();
+		await revokeCoordinatorGrant({
+			name: EMAIL,
+			volunteer_id: 'volunteer:V1',
+			shelter_code: 'SH001',
+			role: 'kitchen_staff',
+			actor: 'staff03'
+		});
+		expect(db[key(LEGACY)].roles).not.toContain('SH001:kitchen_staff');
+		expect(db[key(EMAIL)]).toBeUndefined();
+	});
+
 	it('re-grants an account whose roles were revoked by the worker', async () => {
 		seed(EMAIL, { roles: [], role_grants: [] });
 		await grantCoordinatorRole(input());
@@ -221,7 +243,8 @@ describe('coordinator role grants on _users (#955)', () => {
 		seed(EMAIL, { roles: ['shelter:SH001', 'SH001:kitchen_staff'] });
 		await expect(grantCoordinatorRole(input())).resolves.toEqual({
 			created: false,
-			unchanged: true
+			unchanged: true,
+			name: EMAIL
 		});
 		expect(db[key(EMAIL)].role_grants).toBeUndefined();
 		expect(written).toEqual([]);

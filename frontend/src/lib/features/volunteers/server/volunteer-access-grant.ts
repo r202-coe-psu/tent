@@ -155,7 +155,7 @@ export async function grantVolunteerAccessAsCoordinator(
 	caller: Pick<Caller, 'name' | 'roles'>,
 	input: CoordinatorGrantInput,
 	now: Date = new Date()
-): Promise<{ created: boolean; unchanged: boolean }> {
+): Promise<{ created: boolean; unchanged: boolean; name: string }> {
 	const shelterCode = coordinatorShelter(caller, input.shelter_code);
 
 	const role = input.role;
@@ -164,7 +164,7 @@ export async function grantVolunteerAccessAsCoordinator(
 	}
 	const expiryError = grantExpiryError(input.expires_on, now);
 	if (expiryError) throw new ServiceError('VALIDATION', expiryError);
-	const email = asString(input.email);
+	const email = asString(input.email).toLowerCase();
 	if (!EMAIL_RE.test(email)) throw new ServiceError('VALIDATION', 'กรุณากรอกอีเมลให้ถูกต้อง');
 	const password = typeof input.password === 'string' ? input.password : '';
 	const volunteerId = asString(input.volunteer_id);
@@ -211,7 +211,7 @@ export async function revokeVolunteerAccessAsCoordinator(
 	if (!isCoordinatorGrantableRole(role)) {
 		throw new ServiceError('FORBIDDEN', 'A coordinator may only revoke a desk staff role');
 	}
-	const email = asString(input.email);
+	const email = asString(input.email).toLowerCase();
 	const volunteerId = asString(input.volunteer_id);
 	if (!email || !volunteerId) {
 		throw new ServiceError('VALIDATION', 'email and volunteer_id are required');
