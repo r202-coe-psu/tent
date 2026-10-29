@@ -4,7 +4,7 @@ title: ประเภทศูนย์ (site_kind) มาจาก master data
 status: approved
 date: 2026-10-26
 created: 2026-10-26
-updated: 2026-10-29
+updated: 2026-10-30
 requested_by: Suthinan Den (feedback roleplay 23/10/69 — issue #836)
 decided_by: Soravit Sukkarn (Team Lead) — approved 2026-10-26
 layer: volatile
@@ -156,7 +156,7 @@ item ใน seed → doc เดิมทุกตัวยัง valid. Deploy �
 - **D-1 (bump `schema_v` ของ shelter หรือไม่):** **ไม่ bump** — รูป doc ไม่เปลี่ยน (string เดิม, code เดิม). เลี่ยงชนลำดับกับ PR #756 (#647) และ #812 ที่จะใช้ 7 → 8 → 9.
 - **D-2 (ที่มาของ label หน้า public):** **BFF `config/site-kinds` (FR-15)** ตาม precedent `config/shelter-types`: แก้ label ที่ System Management แล้วหน้า public เห็นภายใน cache 5 นาที โดยไม่ต้อง re-project.
 - **D-3 (ตัวนับหน้า `/shelters`):** **นับแยกทุก code** (`counts_by_site_kind: {code: n}`) แล้วแสดงตาม label จาก master data.
-- **D-4 (import แบบอัปเดต ช่อง `ชนิดสถานที่` ว่าง — เคาะ 2026-10-29 โดย Suthinan Den ระหว่าง review PR):** **คงค่าเดิม** —
+- **D-4 (import แบบอัปเดต ช่อง `ชนิดสถานที่` ว่าง — เสนอโดย Suthinan Den ระหว่าง review PR, approved by Soravit Sukkarn (Team Lead) 2026-10-30):** **คงค่าเดิม** —
   ช่องว่างใช้ item `is_default` เฉพาะตอนสร้างศูนย์ใหม่; ตอนอัปเดตไม่เขียน `site_kind` จึงไม่ทับประเภทเดิม
   (เดิม FR-12 ให้ใช้ `is_default` ทุกกรณี ทำให้ `host_house` ถูกเปลี่ยนเป็น `evacuation_center` โดยไม่รู้ตัว)
 
@@ -166,4 +166,5 @@ item ใน seed → doc เดิมทุกตัวยัง valid. Deploy �
   เลือกได้ค่าเดียว (req), แสดง label ในหน้า public. track ด้วย CR ไฟล์ (เจ้าของสั่ง 2026-10-26)
 - 2026-10-26 — approved (#836) โดย Soravit Sukkarn (Team Lead). เคาะ D-1..D-3 ตามข้อเสนอของผู้เสนอ CR.
 - 2026-10-29 — PR review ของ #836: เพิ่ม D-4 (ช่องว่างตอน import แบบอัปเดตคงค่าเดิม) และให้ FR-12 รับรูป
-  `label_th (label_en)` จาก template เดิม — เคาะโดย Suthinan Den, บันทึกใน CR นี้ตามที่เจ้าของสั่ง
+  `label_th (label_en)` จาก template เดิม — เสนอโดย Suthinan Den, บันทึกใน CR นี้ตามที่เจ้าของสั่ง
+- 2026-10-30 — D-4 + FR-12 (รับรูป `label_th (label_en)`) approved by Soravit Sukkarn (Team Lead) (review PR #1023)
