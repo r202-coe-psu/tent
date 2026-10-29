@@ -54,6 +54,23 @@ function userDoc(name: string, overrides: Partial<CouchUserDoc> = {}): CouchUser
 	};
 }
 
+function findUsers(usersDb: Record<string, object>, body: unknown) {
+	const { selector, fields, limit } = body as {
+		selector: Record<string, unknown>;
+		fields?: string[];
+		limit?: number;
+	};
+	const docs = Object.values(usersDb)
+		.filter((doc) =>
+			Object.entries(selector).every(([k, v]) => (doc as Record<string, unknown>)[k] === v)
+		)
+		.slice(0, limit)
+		.map((doc) =>
+			fields ? Object.fromEntries(Object.entries(doc).filter(([k]) => fields.includes(k))) : doc
+		);
+	return { status: 200, data: { docs } };
+}
+
 describe('resolveStaffCard', () => {
 	let usersDb: Record<string, CouchUserDoc>;
 	let shelterDb: Record<string, Record<string, unknown>>;
@@ -61,12 +78,9 @@ describe('resolveStaffCard', () => {
 	beforeEach(() => {
 		usersDb = {};
 		shelterDb = {};
-		vi.spyOn(couchAdmin, 'adminRaw').mockImplementation(async (path, method = 'GET') => {
+		vi.spyOn(couchAdmin, 'adminRaw').mockImplementation(async (path, method = 'GET', body) => {
 			const cleanPath = path.split('?')[0];
-			if (method === 'GET' && cleanPath === '/_users/_all_docs') {
-				const rows = Object.values(usersDb).map((doc) => ({ id: doc._id, key: doc._id, doc }));
-				return { status: 200, data: { rows } };
-			}
+			if (method === 'POST' && cleanPath === '/_users/_find') return findUsers(usersDb, body);
 			const shelterDoc = cleanPath.match(/^\/shelter_sh001\/(.+)$/);
 			if (method === 'GET' && shelterDoc) {
 				const doc = shelterDb[decodeURIComponent(shelterDoc[1])];
@@ -469,10 +483,7 @@ describe('staff card administration', () => {
 		vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('unexpected network call'));
 		vi.spyOn(couchAdmin, 'adminRaw').mockImplementation(async (path, method = 'GET', body) => {
 			const cleanPath = path.split('?')[0];
-			if (method === 'GET' && cleanPath === '/_users/_all_docs') {
-				const rows = Object.values(usersDb).map((doc) => ({ id: doc._id, key: doc._id, doc }));
-				return { status: 200, data: { rows } };
-			}
+			if (method === 'POST' && cleanPath === '/_users/_find') return findUsers(usersDb, body);
 			const userPath = cleanPath.match(/^\/_users\/(org\.couchdb\.user:.+)$/);
 			if (userPath) {
 				const id = decodeURIComponent(userPath[1]);

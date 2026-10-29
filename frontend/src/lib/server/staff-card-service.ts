@@ -14,7 +14,7 @@ import {
 import { ensureRoleCardToken } from '$lib/features/volunteers/server/public-schedule-action';
 import { shelterDbName } from '$lib/server/shelter-access-design';
 import { mintStaffTokenHash } from '$lib/server/staff-card-token';
-import { fetchAllUserDocs, type CouchUserDoc } from '$lib/server/user-service';
+import type { CouchUserDoc } from '$lib/server/user-service';
 import {
 	isValidStaffTokenHash,
 	parseStaffCardPayload,
@@ -28,6 +28,28 @@ export type ResolvedCardRecipient =
 	| { kind: 'staff'; recipient_id: string; display_name: string; position: string | null }
 	| { kind: 'volunteer'; recipient_id: string; display_name: string };
 
+// Only the fields a scan needs, so other accounts' password hashes never reach this process.
+const STAFF_CARD_LOOKUP_FIELDS = [
+	'name',
+	'roles',
+	'active',
+	'volunteer_id',
+	'display_name',
+	'position',
+	'staff_token_hash'
+];
+
+async function findUsersByStaffTokenHash(hash: string): Promise<CouchUserDoc[]> {
+	// limit 2 is enough to tell "exactly one" from "duplicate".
+	const res = await adminRaw('/_users/_find', 'POST', {
+		selector: { staff_token_hash: hash },
+		fields: STAFF_CARD_LOOKUP_FIELDS,
+		limit: 2
+	});
+	if (res.status >= 400) throw serviceErrorFromCouch('find staff card', res.status, res.data);
+	return (res.data as { docs: CouchUserDoc[] }).docs;
+}
+
 export async function resolveStaffCard(
 	caller: Caller,
 	payload: string,
@@ -38,8 +60,7 @@ export async function resolveStaffCard(
 	}
 	const parsed = parseStaffCardPayload(payload);
 	if (!parsed) throw new ServiceError('VALIDATION', 'QR ไม่ใช่บัตรเจ้าหน้าที่');
-	const users = await fetchAllUserDocs();
-	const matches = users.filter((u) => u.staff_token_hash === parsed.hash);
+	const matches = await findUsersByStaffTokenHash(parsed.hash);
 	if (matches.length === 0) throw new ServiceError('NOT_FOUND', 'ไม่พบบัตรเจ้าหน้าที่นี้');
 	if (matches.length > 1) {
 		console.warn(`[staff-card] hash shared by ${matches.length} users; rejecting scan`);
