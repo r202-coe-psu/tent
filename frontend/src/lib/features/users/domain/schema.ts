@@ -74,7 +74,9 @@ const userProfileFields = {
 	shelter_id: shelterCodeSchema.optional(),
 	volunteer_id: z.string().optional(),
 	duty_window: dutyWindowSchema.optional(),
-	affiliation_tags: z.array(z.string()).optional()
+	affiliation_tags: z.array(z.string()).optional(),
+	/** Compound roles (`SHxxx:<role>`) made permanent in the form: their coordinator grant is removed. */
+	permanent_roles: z.array(z.string()).optional()
 };
 
 function refineUserForm(
@@ -119,11 +121,13 @@ export const createUserSchema = z.object(userProfileFields).superRefine(refineUs
 export type CreateUserInput = z.infer<typeof createUserSchema>;
 
 /**
- * Form input for editing an existing user.
+ * Form input for editing an existing user. `username` is the read-only existing `_users` name
+ * (e.g. an email for a volunteer account), so it is not re-validated here.
  */
 export const editUserSchema = z
 	.object({
 		...userProfileFields,
+		username: z.string(),
 		password: passwordSchema.or(z.literal(''))
 	})
 	.superRefine(refineUserForm);

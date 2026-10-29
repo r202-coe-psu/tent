@@ -3,6 +3,7 @@ import { thaiMobilePhoneSchema, type BaseDoc } from '$lib/db/model';
 import type { DonationStatus } from '$lib/features/operations';
 import { isRealCalendarDate, SLOT_TIME_PATTERN } from '$lib/features/operations/server';
 import { qtyStrCoercePositiveSchema } from '$lib/utils/qty';
+import { donationPhotoIdsSchema } from './donation-photos';
 
 export const PUBLIC_DONATION_CATEGORIES = [
 	{ value: 'food', label: 'อาหาร/เครื่องดื่ม' },
@@ -96,6 +97,8 @@ export const donationPreDeclarationInputSchema = z.object({
 			message: 'vehicle is only allowed for self_dropoff or shelter_pickup',
 			path: ['vehicle']
 		}),
+	/** `image:{ulid}` from `POST /api/public/v1/donations/photos` (CR-175 donor photos). */
+	photos: donationPhotoIdsSchema.optional(),
 	captchaToken: z.string().min(1).optional()
 });
 

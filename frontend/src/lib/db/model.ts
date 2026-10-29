@@ -160,6 +160,25 @@ export const phoneSchema = z
 	.transform((value) => value?.trim() || null)
 	.pipe(thaiMobilePhoneSchema.nullable());
 
+export const THAI_MOBILE_PHONE_MESSAGE = 'เบอร์โทรต้องเป็นตัวเลข 10 หลัก ขึ้นต้นด้วย 0';
+
+/**
+ * Walk-in donor phone: blank / missing → null; otherwise normalized (`+66…` → `0…`,
+ * separators dropped) and required to be exactly `^0\d{9}$`. It does NOT sanitize: letters and
+ * Thai digits are rejected (`sanitizePhoneTyping` is for typing only). Feeds `phone_hash`, so
+ * the same number must always normalize to the same string.
+ */
+export const thaiMobilePhoneSchema = z
+	.string()
+	.nullish()
+	.transform((val) => normalizeThaiPhone(val ?? ''))
+	.pipe(
+		z.union([
+			z.literal('').transform((): null => null),
+			z.string().regex(/^0\d{9}$/, THAI_MOBILE_PHONE_MESSAGE)
+		])
+	);
+
 /**
  * Reusable enum for the registration channel.
  *

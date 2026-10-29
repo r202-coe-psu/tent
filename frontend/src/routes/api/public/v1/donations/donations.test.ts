@@ -648,6 +648,28 @@ describe('POST /api/public/v1/donations', () => {
 		expect(data.success).toBe(false);
 	});
 
+	async function postItems(items: unknown) {
+		const mockRequest = { json: () => Promise.resolve({ ...validPayload, items }) };
+		const response = await POST({
+			request: mockRequest,
+			getClientAddress: () => '127.0.0.1'
+		} as unknown as PostEvent);
+		return { response, data: await response.json() };
+	}
+
+	it.each([0, '0', -1, ''])('returns 422 when an item qty is %j (#822)', async (qty) => {
+		const { response, data } = await postItems([{ ...validPayload.items[0], qty }]);
+		expect(response.status).toBe(422);
+		expect(data.success).toBe(false);
+	});
+
+	it('returns 422 for an empty items list (#822)', async () => {
+		const { response, data } = await postItems([]);
+		expect(response.status).toBe(422);
+		expect(data.success).toBe(false);
+		expect(JSON.stringify(data)).toContain('Please add at least one item to the donation');
+	});
+
 	it('returns 422 when logistics is missing (required for public channel)', async () => {
 		const noLogistics = { ...validPayload };
 		delete (noLogistics as Partial<typeof validPayload>).logistics;
@@ -960,6 +982,148 @@ describe('POST /api/public/v1/donations', () => {
 			});
 			expect(res.body.error).not.toBe('SLOT_FULL');
 			expect(res.body.success).toBe(true);
+		});
+	});
+	describe('donor photos (CR-175 FR-10)', () => {
+		const MB = 1024 * 1024;
+		const photoId = (n: number) => `image:01K8PHXTX${String(n).padStart(17, '0')}`;
+		const donationPhoto = (over: Record<string, unknown> = {}) => ({
+			status: 200,
+			data: {
+				_id: 'image:x',
+				type: 'image',
+				purpose: 'donation',
+				_attachments: { full: { length: 300_000 }, thumb: { length: 9_000 } },
+				...over
+			}
+		});
+
+		/** CouchDB: nothing booked, no campaigns, and `photo(id)` answers each photo GET. */
+		function couch(photo: (id: string) => { status: number; data: unknown }) {
+			vi.mocked(adminRaw).mockImplementation((path: string, method: string) => {
+				if (method !== 'GET') return Promise.resolve({ status: 404, data: {} });
+				const photoPath = /^\/shelter_sh001\/(image%3A[0-9A-Z]+)$/.exec(path);
+				if (photoPath) return Promise.resolve(photo(decodeURIComponent(photoPath[1])));
+				if (path.includes('_all_docs')) return Promise.resolve({ status: 200, data: { rows: [] } });
+				return Promise.resolve({ status: 404, data: {} });
+			});
+		}
+
+		async function book(photos: string[]) {
+			const response = await POST({
+				request: {
+					json: () =>
+						Promise.resolve({
+							...validPayload,
+							items: [{ free_text: 'ผ้าห่ม', qty: 2, unit: 'ผืน' }],
+							logistics: { delivery_method: 'parcel' },
+							photos
+						})
+				},
+				getClientAddress: () => '127.0.0.1'
+			} as unknown as PostEvent);
+			return { status: response.status, body: await response.json() };
+		}
+
+		const photoReads = () =>
+			vi.mocked(adminRaw).mock.calls.filter(([path]) => String(path).includes('image%3A'));
+
+		it('forwards the photo ids to FastAPI once every check passes (AC-1)', async () => {
+			mockFastapiCreate();
+			couch(() => donationPhoto());
+			const res = await book([photoId(1), photoId(2)]);
+
+			expect(res.status).toBe(200);
+			const [, init] = vi.mocked(fetch).mock.calls[0]!;
+			expect(JSON.parse(String((init as RequestInit).body)).photos).toEqual([
+				photoId(1),
+				photoId(2)
+			]);
+		});
+
+		it('sends no photos field when the donor attached none', async () => {
+			mockFastapiCreate();
+			couch(() => donationPhoto());
+			const res = await book([]);
+
+			expect(res.status).toBe(200);
+			const [, init] = vi.mocked(fetch).mock.calls[0]!;
+			expect(JSON.parse(String((init as RequestInit).body))).not.toHaveProperty('photos');
+			expect(photoReads()).toHaveLength(0);
+		});
+
+		it('refuses 31 ids before reading a single photo (AC-8)', async () => {
+			mockFastapiCreate();
+			couch(() => donationPhoto());
+			const res = await book(Array.from({ length: 31 }, (_, i) => photoId(i)));
+
+			expect(res.status).toBe(422);
+			expect(res.body).toMatchObject({
+				error: 'PHOTO_LIMIT_EXCEEDED',
+				error_code: 'PHOTO_LIMIT_EXCEEDED'
+			});
+			expect(photoReads()).toHaveLength(0);
+			expect(fetch).not.toHaveBeenCalled();
+		});
+
+		it("refuses another shelter's photo id as not found (AC-4)", async () => {
+			mockFastapiCreate();
+			couch((id) =>
+				id === photoId(2) ? { status: 404, data: { error: 'not_found' } } : donationPhoto()
+			);
+			const res = await book([photoId(1), photoId(2)]);
+
+			expect(res.status).toBe(422);
+			expect(res.body.error_code).toBe('PHOTO_NOT_FOUND');
+			expect(fetch).not.toHaveBeenCalled();
+		});
+
+		it('refuses a photo that is not a donation photo (AC-4)', async () => {
+			mockFastapiCreate();
+			couch(() => donationPhoto({ purpose: undefined }));
+			const res = await book([photoId(1)]);
+
+			expect(res.status).toBe(422);
+			expect(res.body.error_code).toBe('PHOTO_INVALID');
+		});
+
+		it('refuses a photo another booking already holds (AC-9)', async () => {
+			mockFastapiCreate();
+			couch(() => donationPhoto({ donation_id: 'donation:01K8OTHERB00KING0000000000' }));
+			const res = await book([photoId(1)]);
+
+			expect(res.status).toBe(422);
+			expect(res.body.error_code).toBe('PHOTO_ALREADY_USED');
+		});
+
+		it('refuses photos that add up to more than 10 MB (FR-7)', async () => {
+			mockFastapiCreate();
+			couch(() =>
+				donationPhoto({ _attachments: { full: { length: 1.5 * MB }, thumb: { length: 0.2 * MB } } })
+			);
+			const res = await book(Array.from({ length: 6 }, (_, i) => photoId(i)));
+
+			expect(res.status).toBe(422);
+			expect(res.body.error_code).toBe('PHOTOS_TOO_LARGE');
+		});
+
+		it('fails closed when a photo cannot be read', async () => {
+			mockFastapiCreate();
+			couch(() => ({ status: 500, data: {} }));
+			const res = await book([photoId(1)]);
+
+			expect(res.status).toBe(503);
+			expect(res.body.error).toBe('PHOTOS_UNAVAILABLE');
+			expect(fetch).not.toHaveBeenCalled();
+		});
+
+		it('refuses an id that is not an image doc id', async () => {
+			mockFastapiCreate();
+			couch(() => donationPhoto());
+			const res = await book(['image:../_all_docs']);
+
+			expect(res.status).toBe(422);
+			expect(fetch).not.toHaveBeenCalled();
 		});
 	});
 });

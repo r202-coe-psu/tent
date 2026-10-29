@@ -11,7 +11,7 @@
 | ------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Playwright                     | 1.64, Chromium only                                                                                                                                                                                                                     |
 | `playwright.config.ts`         | local: `vite preview` (:4173) + `e2e/mock-api.js` (:9001); `grepInvert: /@quarantine/`                                                                                                                                                  |
-| `playwright.staging.config.ts` | remote: `grep: /@critical\|@smoke/`, `grepInvert: /@quarantine/`, workers=1, `globalTimeout` 30 min                                                                                                                                     |
+| `playwright.staging.config.ts` | remote: `grep: /@critical\|@smoke/`, `grepInvert: /@quarantine/`, workers=2, `globalTimeout` 2 h                                                                                                                                        |
 | `playwright.prod.config.ts`    | remote read-only: `grep: /@prod/`, `globalTimeout` 2 min                                                                                                                                                                                |
 | `playwright.public.config.ts`  | remote read-only public suites (incl. pre-register) — **not wired to any job**                                                                                                                                                          |
 | Suites                         | J1–J6 carry `@release` where green locally; unsafe SH001 suites are `@quarantine`; donations are `@donation` (§8.3); the Partner API (`/external/*`) is `@partner-api` (§8.5)                                                           |
@@ -75,9 +75,13 @@ Known problems:
   any non-empty value, `false` included).
 - `config:app.recaptcha_enabled` defaults to `true`; any suite that writes through a public BFF
   route gated by `recaptcha-gate.ts` needs to flip it off for the duration of its writes and restore
-  it after (see `setRecaptcha` in `helpers/staff-ui.ts`, used by both pre-register W1-W4/W6 **and**
-  W5/W6 shelter-booking blocks) — a fake `window.__captchaToken` alone does not pass real reCAPTCHA
-  Enterprise verification once the server-side keys are configured. Re-running `pnpm seed` resets
+  it after. Use `suspendRecaptcha(browser)` (`helpers/recaptcha-lease.ts`, used by the donation
+  full-stack specs **and** pre-register W1-W4/W6 and W5/W6): the switch is global and staging runs
+  two workers, so it is a ref-counted lease in `node_modules/.cache/e2e-recaptcha/` — the first
+  holder saves the original and turns it off, the last release restores it, so one suite's restore
+  never turns it back on under another (a crashed holder is pruned by pid and its saved original
+  is kept). Do not call `setRecaptcha` (`helpers/staff-ui.ts`) directly from a suite. A fake `window.__captchaToken` alone does not pass real
+  reCAPTCHA Enterprise verification once the server-side keys are configured. Re-running `pnpm seed` resets
   this flag back to its default (`true`) even if a previous run had it toggled off mid-test.
 - ~~Repo-wide `playwright test --list` failed because `public-portal-faq-crud.test.ts` imported
   `completeUserOnboarding` (removed when `helpers/couch.ts` renamed it to `seedSecurityQuestion`).~~
@@ -127,6 +131,13 @@ Select a feature and a layer: `playwright test --grep "(?=.*@pre-register)(?=.*@
 1. Everything a test creates is fictitious and marked: names start with `E2E`, the run id comes from
    `LOCAL_RUN_ID`, Thai national IDs start with `0` (never a real person) with a valid checksum.
 2. **Teardown deletes only ids recorded by this run** (ledger). Never delete by search/query results.
+   The shelter/queue ledger (`helpers/public-cleanup.ts`) is **one file per suite**
+   (`node_modules/.cache/e2e-created/<suite>.json`, `<suite>` = the spec's basename). Staging runs
+   specs on parallel workers, so `recordCreatedShelter` / `recordCreatedQueueId` /
+   `purgeCreatedData` all take the suite id and a purge only ever deletes what its own suite
+   recorded — never another suite's live shelter. `forgetCreatedShelter(code)` (also called by
+   `teardownShelter`) drops a code from whichever ledger holds it. A suite that spans several
+   workers (the `distribution/` `shelter` fixture) uses one id per worker process.
 3. Never modify seeded or real records (e.g. SH001–SH004, `config:app`). A test that needs a
    shelter creates its own `E2E …` shelter through the staff UI and removes it with `teardownShelter`.
    Shelter settings a journey needs (e.g. `enable_medical_screening`, `accepts_pre_registration`)
@@ -286,9 +297,9 @@ How the three full-stack suites obey §4:
 - **Zero-leak Z test** (`expectRunGone`): shelter database and registry row gone, the shelter
   absent from the public needs board, staff users gone, every booking released
   (`cancelled`/`rejected`/`received`/…).
-- **Gating.** `CAN_WRITE` / `READ_ONLY_REASON`, not `PW_BASE_URL`. `suspendRecaptcha` flips
-  `config:app.recaptcha_enabled` off for the run and restores the previous value in afterAll
-  (the switch is global to the stack — do not run these suites against a stack someone else is
+- **Gating.** `CAN_WRITE` / `READ_ONLY_REASON`, not `PW_BASE_URL`. `suspendRecaptcha` leases
+  `config:app.recaptcha_enabled` off for the run (the last lease released restores the previous
+  value; the switch is global to the stack — do not run these suites against a stack someone else is
   using for reCAPTCHA-dependent testing).
 - **Residue the test side cannot remove:** the Mongo intake-buffer / `public_donations` rows of
   the run's bookings (no delete API; retention purges them on their TTL) and the closed
@@ -495,7 +506,7 @@ assertion green; `--list` shows every touched test with exactly one layer tag; a
 ### 9.C Pipeline (after B is merged) — **done in Step C PR**
 
 - `playwright.staging.config.ts`: `grep: /@critical|@smoke/`, `grepInvert: /@quarantine/`,
-  workers=1, `globalTimeout` 30 min. `@critical` suites only run their live writes when the
+  workers=2, `globalTimeout` 2 h (run went past 30 min in build #64). `@critical` suites only run their live writes when the
   `tent-staging-e2e-env` credential sets `ALLOW_REMOTE_WRITES=true` (exactly `true`; `CAN_WRITE`
   in `helpers/e2e-env.ts`). `public-search-flow` / `public-shelters-filter` now create and tear
   down their own per-run data on such a run too (zero-leak Z test each); only `public-home-flow`

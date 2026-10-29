@@ -1754,6 +1754,8 @@ export interface components {
 				[key: string]: unknown;
 			} | null;
 			slot_hold?: components['schemas']['SlotHold'] | null;
+			/** Photos */
+			photos?: string[];
 			/** Captchatoken */
 			captchaToken?: string | null;
 		};
@@ -1787,6 +1789,8 @@ export interface components {
 			condition?: string | null;
 			/** Note */
 			note?: string | null;
+			/** Line Key */
+			line_key?: string | null;
 		};
 		/** DonationItemsPatchRequest */
 		DonationItemsPatchRequest: {
@@ -1883,6 +1887,21 @@ export interface components {
 			from?: string | null;
 			/** To */
 			to?: string | null;
+		};
+		/**
+		 * DonationPoint
+		 * @description A storage point ticked as a donation drop-off point, with a pin (CR-205).
+		 */
+		DonationPoint: {
+			/** Id */
+			id: string;
+			/** Name */
+			name: string;
+			/** Types */
+			types?: string[];
+			geo: components['schemas']['GeoPoint'];
+			/** Location Note */
+			location_note?: string | null;
 		};
 		/**
 		 * DonationTrackSearchRequest
@@ -3280,6 +3299,8 @@ export interface components {
 			 * @default false
 			 */
 			accepts_pre_registration: boolean;
+			/** Donation Points */
+			donation_points?: components['schemas']['DonationPoint'][];
 		};
 		/** ShelterDetailResponse */
 		ShelterDetailResponse: {

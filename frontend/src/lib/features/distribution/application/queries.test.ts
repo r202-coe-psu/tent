@@ -1,6 +1,8 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { isUlid } from '$lib/db/ulid';
+import { DEFAULT_QUERY_STALE_TIME_MS } from '$lib/db/query-client';
+import type { BulkReturnPoolOverviewRow } from '../domain/food-supplies';
 
 type MutationDefinition = {
 	mutationFn: (variables: unknown) => Promise<unknown>;
@@ -11,6 +13,7 @@ type QueryDefinition = {
 	queryKey: unknown;
 	queryFn: () => Promise<unknown>;
 	enabled?: boolean;
+	staleTime?: number | ((query: unknown) => number);
 };
 
 const {
@@ -564,6 +567,19 @@ describe('Phase 5 Slice 5.0 — Distribution TanStack Query Layer', () => {
 
 			useBulkReturnPoolOverview(undefined, undefined, false);
 			expect(tracker.lastCreatedQuery?.enabled).toBe(false);
+		});
+
+		it('useBulkReturnPoolOverview is stale at once only while a row is degraded', () => {
+			useBulkReturnPoolOverview(() => ({}));
+			const staleTime = tracker.lastCreatedQuery?.staleTime;
+			expect(typeof staleTime).toBe('function');
+			const run = (data: Partial<BulkReturnPoolOverviewRow>[] | undefined) =>
+				(staleTime as (query: unknown) => number)({ state: { data } });
+
+			expect(run([{ loan_refs_unavailable: false }, { loan_refs_unavailable: true }])).toBe(0);
+			expect(run([{ loan_refs_unavailable: false }])).toBe(DEFAULT_QUERY_STALE_TIME_MS);
+			expect(run([])).toBe(DEFAULT_QUERY_STALE_TIME_MS);
+			expect(run(undefined)).toBe(DEFAULT_QUERY_STALE_TIME_MS);
 		});
 
 		it('useReturnerOutstandingLoans is enabled only for an evacuee:/volunteer: id', async () => {

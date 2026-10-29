@@ -1,5 +1,12 @@
 import { z } from 'zod';
-import { type AuthorContext, type BaseDoc, type Timestamp, makeDoc, now } from '$lib/db/model';
+import {
+	type AuthorContext,
+	type BaseDoc,
+	type Timestamp,
+	makeDoc,
+	now,
+	thaiMobilePhoneSchema
+} from '$lib/db/model';
 import {
 	addQty,
 	persistQty,
@@ -248,6 +255,12 @@ export interface DonationItem {
 	review_reason_code?: string | null;
 	review_reason?: string | null;
 	/**
+	 * Which line this is (CR-196 · schema_v 8): a ULID FastAPI gives every public line at
+	 * booking, and the donor's edit form sends back to name the line it changes. Absent on
+	 * walk-in lines and on docs before schema_v 8.
+	 */
+	line_key?: string;
+	/**
 	 * What the campaign counter holds for this line's item (CR-080) — stamped by FastAPI
 	 * only when the counter really took it, so it is also how an automatic approval
 	 * (FR-2) is told from a person's (FR-8).
@@ -257,10 +270,11 @@ export interface DonationItem {
 
 /**
  * `schema_v` every donation writer stamps — the walk-in factory here, the donor edit
- * route, and `worker/inbound/donations.py`. 7 = CR-174 `items[].review_status`
- * (6 CR-172 `reject_reason`, 5 CR-087 `redirect_to_shelter_code`, 4 CR-080 `revisions[]`).
+ * route, and `worker/inbound/donations.py`. 9 = CR-175 donor `photos` (8 CR-196
+ * `items[].line_key`, 7 CR-174 `items[].review_status`, 6 CR-172 `reject_reason`,
+ * 5 CR-087 `redirect_to_shelter_code`, 4 CR-080 `revisions[]`).
  */
-export const DONATION_SCHEMA_V = 7;
+export const DONATION_SCHEMA_V = 9;
 
 export interface Donor {
 	name: string;
@@ -333,6 +347,11 @@ export interface Donation extends BaseDoc {
 	 * scope isolation means a field here is invisible to them.
 	 */
 	redirect_to_shelter_code?: string | null;
+	/**
+	 * Donor photos of an unsolicited public booking, `image:{ulid}` ids in this shelter's
+	 * DB (CR-175 donor photos · schema_v 9). Attached at booking only; an edit keeps them.
+	 */
+	photos?: string[];
 }
 
 /**
@@ -434,7 +453,9 @@ export const REF_PREFIX_BY_REASON: Record<LedgerReason, LedgerRefRule> = {
 	transfer_out: ['stock_transfer:', 'requisition_ticket:'],
 	adjust: null, // manual correction — no source document by definition
 	distribute: 'requisition_ticket:',
-	distribution_return: 'distribution_batch:',
+	// distribution_batch: legacy batch flow; requisition_ticket: leftovers received back from a
+	// ticket into their source lot (CR-208), never a `direct-` issue — see isCanonicalLedgerRef.
+	distribution_return: ['distribution_batch:', 'requisition_ticket:'],
 	receive: ['meal_service:', 'requisition_ticket:', 'distribution_log:', 'bulk_return_pool:']
 };
 
@@ -447,9 +468,15 @@ export function isCanonicalLedgerRef(reason: LedgerReason, refId: string | null)
 	const rule = REF_PREFIX_BY_REASON[reason];
 	const accepted = Array.isArray(rule) ? rule : [rule];
 	if (refId === null) return accepted.includes(null);
+	if (isDirectIssueReturnRef(reason, refId)) return false;
 	return accepted.some(
 		(value) => typeof value === 'string' && matchesLedgerRefPrefix(refId, value)
 	);
+}
+
+/** CR-208 FR-RTN-18 — a direct issue from the stock page has no return step to receive back. */
+function isDirectIssueReturnRef(reason: LedgerReason, refId: string): boolean {
+	return reason === 'distribution_return' && refId.startsWith('requisition_ticket:direct-');
 }
 
 /**
@@ -465,6 +492,14 @@ function checkRefIdAgainstRule(
 ): void {
 	const accepted = Array.isArray(rule) ? rule : [rule];
 	if (isCanonicalLedgerRef(reason, refId)) return;
+	if (refId !== null && isDirectIssueReturnRef(reason, refId)) {
+		ctx.addIssue({
+			code: 'custom',
+			path: ['ref_id'],
+			message: `รายการประเภท '${reason}' ต้องไม่อ้างอิงการเบิกตรงจากหน้าคลัง (requisition_ticket:direct-)`
+		});
+		return;
+	}
 	if (accepted.length === 1 && accepted[0] === null) {
 		ctx.addIssue({
 			code: 'custom',
@@ -844,7 +879,12 @@ export const distributionReturnInputSchema = z.object({
 	item_id: z.string().min(1),
 	qty: qtyStrCoercePositiveSchema,
 	unit: z.string().trim().min(1),
-	ref_id: z.string().regex(/^distribution_batch:.+/, 'ref_id must reference a distribution batch'),
+	ref_id: z
+		.string()
+		.regex(
+			/^(?:distribution_batch|requisition_ticket):.+/,
+			'ref_id must reference a distribution batch or requisition ticket'
+		),
 	lot_ref: z.string().regex(/^stock_ledger:.+/, 'lot_ref must reference an inbound stock ledger'),
 	lot: stockLotSchema.optional(),
 	occurred_at: z.string().optional()
@@ -1179,11 +1219,7 @@ export const walkInDonationInputSchema = z
 	.object({
 		donor: z.object({
 			name: z.string().trim().min(1),
-			phone: z
-				.string()
-				.trim()
-				.regex(/^[0-9]+$/)
-				.nullable(),
+			phone: thaiMobilePhoneSchema,
 			phone_hash: z.string().min(1),
 			tax_receipt: z.boolean().optional(),
 			tax_id: z.string().optional()
@@ -1767,6 +1803,8 @@ export interface NeedAvailability {
 	qty_reserved: string;
 	qty_remaining: string;
 	is_cut_off: boolean;
+	/** `is_cut_off` split by cause — `is_cut_off === (close_state !== 'open')`. */
+	close_state: NeedCloseState;
 	status: 'open' | 'closed';
 	unit: string;
 }
@@ -1785,7 +1823,7 @@ export function deriveNeedAvailability(
 		const covered = addQty(currentOnHand, currentReserved);
 		const rem = subQty(need.qty_target, covered);
 		const remaining = qtyGte(rem, 0) ? rem : '0';
-		const isCutOff = isNeedCutOff(
+		const closeState = needCloseState(
 			need.qty_target,
 			currentOnHand,
 			currentReserved,
@@ -1800,8 +1838,9 @@ export function deriveNeedAvailability(
 			qty_reserved: currentReserved,
 			// What the board offers a donor: nothing once the need is cut off (met, or
 			// closed by hand), the same zero `computeNeeds` folds a closed need into.
-			qty_remaining: isCutOff ? '0' : remaining,
-			is_cut_off: isCutOff,
+			qty_remaining: closeState !== 'open' ? '0' : remaining,
+			is_cut_off: closeState !== 'open',
+			close_state: closeState,
 			status: need.status ?? 'open',
 			unit: need.unit
 		};
@@ -1876,8 +1915,50 @@ export function isNeedCutOff(
 	needStatus?: 'open' | 'closed',
 	campaignStatus?: 'open' | 'closed'
 ): boolean {
-	if (campaignStatus === 'closed' || needStatus === 'closed') return true;
-	return qtyGte(addQty(onHandStock, reservedQty), qtyTarget);
+	return needCloseState(qtyTarget, onHandStock, reservedQty, needStatus, campaignStatus) !== 'open';
+}
+
+/** Why a need takes no more donations — or `open` when it still does (#816/#817). */
+export type NeedCloseState = 'open' | 'reached' | 'closed';
+
+/**
+ * The one answer the needs board reads a row's badge, bar, buttons and filter from.
+ *
+ * A stored `closed` (need or campaign) always wins: the docs carry no close reason, so a
+ * closed need whose stock later passes the target is still `closed`, not `reached`.
+ * Otherwise `reached` is derived live from on-hand + reserved ≥ target — the same T-22
+ * formula the public projection uses to drop the need — so it falls back to `open` as
+ * soon as stock is distributed or a reservation is released.
+ */
+export function needCloseState(
+	qtyTarget: string | number,
+	onHandStock: string | number,
+	reservedQty: string | number,
+	needStatus?: 'open' | 'closed',
+	campaignStatus?: 'open' | 'closed'
+): NeedCloseState {
+	if (campaignStatus === 'closed' || needStatus === 'closed') return 'closed';
+	return qtyGte(addQty(onHandStock, reservedQty), qtyTarget) ? 'reached' : 'open';
+}
+
+/** The needs-board status filter. */
+export type NeedStatusFilter = 'all' | 'showing' | 'hidden' | 'reached' | 'closed';
+
+/**
+ * Which rows a status filter keeps. The buckets don't overlap: "showing"/"hidden" are
+ * the campaign toggle of rows still accepting donations; a reached or closed row is
+ * neither, it sits under its own state.
+ */
+export function matchesStatusFilter(
+	state: NeedCloseState,
+	showOnHome: boolean,
+	filter: NeedStatusFilter
+): boolean {
+	if (filter === 'showing') return state === 'open' && showOnHome;
+	if (filter === 'hidden') return state === 'open' && !showOnHome;
+	if (filter === 'reached') return state === 'reached';
+	if (filter === 'closed') return state === 'closed';
+	return true;
 }
 
 /**

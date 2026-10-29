@@ -21,6 +21,8 @@ import { isWithinDutyWindow } from '../domain/duty-window';
 import { normalizeThaiPhone } from '$lib/db/model';
 
 const MAX_WRITE_RETRIES = 5;
+/** Assignment statuses still open: a check-in, withdraw or pass cancel may act on them. */
+export const LIVE_ASSIGNMENT_STATUSES = ['assigned', 'standby'];
 
 type CouchDoc = {
 	_id: string;
@@ -87,7 +89,7 @@ function assignmentDbFallback(): ShelterRef[] {
 	return [{ dbName: shelterDbName('SH001'), code: 'SH001', name: 'ศูนย์พักพิงหลัก (SH001)' }];
 }
 
-async function shelterRefs(): Promise<ShelterRef[]> {
+export async function shelterRefs(): Promise<ShelterRef[]> {
 	const refs = new Map<string, ShelterRef>();
 	for (const ref of assignmentDbFallback()) refs.set(ref.dbName, ref);
 	try {
@@ -232,9 +234,9 @@ async function writeAssignment(
 			}
 		}
 		const allowed =
-			(action === 'check_in' && ['assigned', 'standby'].includes(String(current.status))) ||
+			(action === 'check_in' && LIVE_ASSIGNMENT_STATUSES.includes(String(current.status))) ||
 			(action === 'check_out' && current.status === 'checked_in') ||
-			(action === 'withdraw' && ['assigned', 'standby'].includes(String(current.status)));
+			(action === 'withdraw' && LIVE_ASSIGNMENT_STATUSES.includes(String(current.status)));
 		if (!allowed) throw actionError(action);
 
 		const next = applyAssignmentAction(current, action, now);
@@ -294,7 +296,11 @@ async function updateVolunteerAttendance(
 	throw new PublicScheduleError('WRITE_FAILED', 409);
 }
 
-async function releaseJobQuota(dbName: string, assignment: CouchDoc, now: string): Promise<void> {
+export async function releaseJobQuota(
+	dbName: string,
+	assignment: CouchDoc,
+	now: string
+): Promise<void> {
 	if (typeof assignment.job_id !== 'string') throw new PublicScheduleError('WRITE_FAILED', 502);
 	for (let attempt = 0; attempt < MAX_WRITE_RETRIES; attempt++) {
 		const jobResult = await getAsPublicWriter(dbName, assignment.job_id);

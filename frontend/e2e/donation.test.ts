@@ -2,6 +2,277 @@ import { test, expect, type Page } from '@playwright/test';
 
 const TAGS = { tag: ['@regression', '@donation'] };
 
+const SH001_NAME = 'ศูนย์พักพิง เทศบาลนครหาดใหญ่ (โรงเรียนเทศบาล 2)';
+
+const NEEDS_BODY = [
+	{
+		code: 'SH001',
+		name: SH001_NAME,
+		needs: [
+			{
+				item_id: 'item:rice',
+				name: 'ข้าวสาร',
+				category: 'food',
+				qty_needed: 50,
+				unit: 'kg',
+				urgency: 'critical',
+				status: 'open'
+			}
+		]
+	}
+];
+
+/** `GET /api/public/v1/shelters` — what the board map and the step-3 map need to place SH001. */
+async function mockShelters(page: Page, status = 200) {
+	await page.route('**/api/public/v1/shelters*', async (route) => {
+		await route.fulfill({
+			status,
+			contentType: 'application/json',
+			body:
+				status === 200
+					? JSON.stringify({
+							shelters: [
+								{
+									code: 'SH001',
+									name: SH001_NAME,
+									site_kind: 'evacuation_center',
+									status: 'open',
+									capacity: 120,
+									geo: { lat: 7.0086, lng: 100.4747 },
+									province: 'สงขลา',
+									district: 'หาดใหญ่',
+									subdistrict: 'หาดใหญ่',
+									accepts_pre_registration: true,
+									updated_at: '2026-10-26T00:00:00Z'
+								}
+							],
+							count: 1,
+							as_of: '2026-10-26T00:00:00Z'
+						})
+					: JSON.stringify({ success: false })
+		});
+	});
+}
+
+/** Mock the board, the shelters list and the slots, then open `/donations`. */
+async function openBoard(page: Page, sheltersStatus = 200) {
+	await page.route('**/api/public/v1/needs', (route) =>
+		route.fulfill({
+			status: 200,
+			contentType: 'application/json',
+			body: JSON.stringify(NEEDS_BODY)
+		})
+	);
+	await mockShelters(page, sheltersStatus);
+	await page.route('**/api/public/v1/donations/slots*', (route) =>
+		route.fulfill({
+			status: 200,
+			contentType: 'application/json',
+			body: JSON.stringify({ slots: [] })
+		})
+	);
+	await page.goto('/donations');
+}
+
+async function fillDonorStep(page: Page) {
+	await page.locator('#donor-name').fill('ผู้บริจาคใจบุญ');
+	await page.locator('#donor-phone').fill('0899999999');
+	// The quantity starts at 0 since #941; step 3 opens only for a positive one.
+	await page.locator('input[id^="amount-"]').first().fill('1');
+	await page.getByRole('button', { name: 'ถัดไป: เลือกจุดส่งมอบ' }).click();
+	await expect(
+		page.getByRole('heading', { name: 'ส่วนที่ 3: ข้อมูลการจัดส่ง โลจิสติกส์' })
+	).toBeVisible();
+}
+
+/** Needs board → pick the rice need from the shelter card (locks SH001) → donor form → step 3. */
+async function openShelterStep(page: Page, sheltersStatus = 200) {
+	await openBoard(page, sheltersStatus);
+	await page.getByRole('button', { name: 'ดูรายละเอียดและบริจาค' }).first().click();
+	await page.getByRole('button', { name: 'บริจาครายการนี้' }).first().click();
+	await fillDonorStep(page);
+}
+
+test.describe('Needs board shelter map (#814)', TAGS, () => {
+	test('tapping a pin opens the shelter card on the map and donating locks that shelter', async ({
+		page
+	}) => {
+		await openBoard(page);
+
+		await expect(page.locator('.maplibregl-canvas').first()).toBeVisible({ timeout: 15_000 });
+		// The pin carries the number of its card in the list below.
+		await expect(page.getByTestId('shelter-marker-SH001')).toContainText('1', { timeout: 15_000 });
+		await expect(page.getByTestId('donation-pin-badge').first()).toContainText('1');
+		await page.getByTestId('shelter-marker-SH001').click();
+
+		const card = page.getByTestId('donation-needs-map-card');
+		await expect(card.getByTestId('donation-pin-badge')).toContainText('1');
+		await expect(card).toContainText(SH001_NAME);
+		await expect(card).toContainText('ข้าวสาร');
+		await expect(card.getByRole('button', { name: 'ดูความต้องการทั้งหมด' })).toBeVisible();
+		await expect(card.getByRole('button', { name: 'บริจาคสิ่งของอื่นๆ' })).toBeVisible();
+		const navigate = card.getByRole('link', { name: 'นำทางด้วย Google Maps' });
+		await expect(navigate).toHaveAttribute('href', DIRECTIONS_HREF);
+		await expect(navigate).toHaveAttribute('target', '_blank');
+
+		await card.getByRole('button', { name: 'บริจาค', exact: true }).first().click();
+		await expect(page.locator('#donor-name')).toBeVisible();
+		await fillDonorStep(page);
+		await expect(page.getByTestId('drop-off-shelter-name')).toHaveText(SH001_NAME);
+	});
+
+	test("tapping a shelter pins only that shelter's drop-off points, from its detail (CR-205 AC-12)", async ({
+		page
+	}) => {
+		const detailRequests: string[] = [];
+		await page.route('**/api/public/v1/shelters/*', (route) => {
+			const code = new URL(route.request().url()).pathname.split('/').pop() ?? '';
+			detailRequests.push(code);
+			return route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({
+					shelter: {
+						...SHELTER_DETAIL,
+						donation_points: [
+							{
+								id: 'point-gym',
+								name: 'โรงยิม',
+								types: ['general'],
+								geo: { lat: 7.009, lng: 100.4752 },
+								location_note: 'เข้าทางประตู 2'
+							}
+						]
+					}
+				})
+			});
+		});
+		await openBoard(page);
+
+		await expect(page.getByTestId('shelter-marker-SH001')).toBeVisible({ timeout: 15_000 });
+		// Before a shelter is picked: shelter pins only, and no detail is fetched.
+		await expect(page.getByTestId('point-marker-point-gym')).toHaveCount(0);
+		expect(detailRequests).toEqual([]);
+
+		await page.getByTestId('shelter-marker-SH001').click();
+		const pin = page.getByTestId('point-marker-point-gym');
+		await expect(pin).toBeVisible();
+		expect(detailRequests).toEqual(['SH001']);
+
+		await pin.click();
+		await expect(page.getByTestId('donation-needs-map-point-note')).toContainText('เข้าทางประตู 2');
+	});
+
+	test('without the shelters list there is no map, but the board still books', async ({ page }) => {
+		await openBoard(page, 503);
+
+		await expect(page.getByText('แผนที่ใช้ไม่ได้ในตอนนี้')).toBeVisible({ timeout: 15_000 });
+		await expect(page.getByTestId('donation-needs-map')).toHaveCount(0);
+
+		await page.getByRole('button', { name: 'ดูรายละเอียดและบริจาค' }).first().click();
+		await page.getByRole('button', { name: 'บริจาครายการนี้' }).first().click();
+		await expect(page.locator('#donor-name')).toBeVisible();
+	});
+
+	test('on a 390px phone the map fits the screen and the card sits under it', async ({ page }) => {
+		await page.setViewportSize({ width: 390, height: 844 });
+		await openBoard(page);
+
+		const map = page.getByTestId('donation-needs-map');
+		await expect(map).toBeVisible({ timeout: 15_000 });
+		await page.getByTestId('shelter-marker-SH001').click({ timeout: 15_000 });
+		const card = page.getByTestId('donation-needs-map-card');
+		await expect(card).toBeVisible();
+
+		const mapBox = await map.boundingBox();
+		const cardBox = await card.boundingBox();
+		expect(mapBox && mapBox.x >= 0 && mapBox.x + mapBox.width <= 390).toBe(true);
+		expect(mapBox && cardBox && cardBox.y >= mapBox.y + mapBox.height).toBe(true);
+		const overflow = await page.evaluate(
+			() => document.documentElement.scrollWidth - document.documentElement.clientWidth
+		);
+		expect(overflow).toBeLessThanOrEqual(0);
+	});
+
+	test('on a wide screen the card opens over the left of the map', async ({ page }) => {
+		await page.setViewportSize({ width: 1280, height: 900 });
+		await openBoard(page);
+
+		const map = page.getByTestId('donation-needs-map');
+		await expect(map).toBeVisible({ timeout: 15_000 });
+		await page.getByTestId('shelter-marker-SH001').click({ timeout: 15_000 });
+		const card = page.getByTestId('donation-needs-map-card');
+		await expect(card).toBeVisible();
+
+		const mapBox = await map.boundingBox();
+		const cardBox = await card.boundingBox();
+		expect(mapBox && cardBox && cardBox.x >= mapBox.x && cardBox.x < mapBox.x + 40).toBe(true);
+		expect(
+			mapBox &&
+				cardBox &&
+				cardBox.y >= mapBox.y &&
+				cardBox.y + cardBox.height <= mapBox.y + mapBox.height
+		).toBe(true);
+	});
+});
+
+/**
+ * Every way into step 3 locks the shelter chosen on step 1, so step 3 only shows it:
+ * the name read-only and a small map, with no shelter dropdown.
+ */
+test.describe('Donation form drop-off shelter (#814)', TAGS, () => {
+	test('shows the locked shelter read-only with its pin and no shelter dropdown', async ({
+		page
+	}) => {
+		await openShelterStep(page);
+
+		await expect(page.locator('#shelter-select')).toHaveCount(0);
+		await expect(page.getByTestId('drop-off-shelter-name')).toHaveText(SH001_NAME);
+		await expect(page.getByTestId('drop-off-shelter-map')).toBeVisible({ timeout: 15_000 });
+		await expect(page.getByTestId('shelter-marker-SH001')).toBeVisible({ timeout: 15_000 });
+	});
+
+	test("pins the locked shelter's drop-off points from its detail (CR-205 FR-DP-18)", async ({
+		page
+	}) => {
+		await page.route('**/api/public/v1/shelters/SH001', (route) =>
+			route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({
+					shelter: {
+						...SHELTER_DETAIL,
+						donation_points: [
+							{
+								id: 'point-gym',
+								name: 'โรงยิม',
+								types: ['general'],
+								geo: { lat: 7.009, lng: 100.4752 },
+								location_note: 'เข้าทางประตู 2'
+							}
+						]
+					}
+				})
+			})
+		);
+		await openShelterStep(page);
+
+		await expect(page.getByTestId('shelter-marker-SH001')).toBeVisible({ timeout: 15_000 });
+		const pin = page.getByTestId('point-marker-point-gym');
+		await expect(pin).toBeVisible();
+		await pin.click();
+		await expect(page.getByTestId('drop-off-point-note')).toContainText('เข้าทางประตู 2');
+	});
+
+	test('without the shelters list the name stays and the map is dropped', async ({ page }) => {
+		await openShelterStep(page, 503);
+
+		await expect(page.getByTestId('drop-off-shelter-name')).toHaveText(SH001_NAME);
+		await expect(page.getByTestId('drop-off-shelter-map')).toHaveCount(0);
+		await expect(page.locator('#shelter-select')).toHaveCount(0);
+	});
+});
+
 /** Public shelter detail as the BFF returns it for GET /api/public/v1/shelters/{code}. */
 const SHELTER_DETAIL = {
 	id: 'SH001',
@@ -56,6 +327,9 @@ test.describe('Public Donation & Queue Booking Wizard (T-60)', TAGS, () => {
 			});
 		});
 
+		// The step-3 shelter map reads the public shelters list for coordinates
+		await mockShelters(page);
+
 		// 2. Go to /donations
 		await page.goto('/donations');
 
@@ -81,7 +355,7 @@ test.describe('Public Donation & Queue Booking Wizard (T-60)', TAGS, () => {
 		await page.locator('#donor-line').fill('donordonor');
 		await page.locator('#donor-email').fill('donor@example.com');
 
-		// Fill item details (already pre-filled with name/qty/unit, let's verify)
+		// Item details: name and unit are pre-filled from the need card
 		// Keyed on the field's own id (`name-{item.id}`), not its placeholder copy —
 		// the placeholder has been reworded twice and silently broke this assertion.
 		const itemName = page.locator('input[id^="name-"]').first();
@@ -93,6 +367,12 @@ test.describe('Public Donation & Queue Booking Wizard (T-60)', TAGS, () => {
 		await expect(page.getByRole('textbox', { name: 'หมวดหมู่' })).not.toHaveValue('');
 		await expect(page.getByRole('textbox', { name: 'หน่วย' })).toHaveValue('กิโลกรัม');
 
+		// The quantity starts at 0 for the donor to fill in; the shortfall is only a hint.
+		const qty = page.locator('input[id^="amount-"]').first();
+		await expect(qty).toHaveValue('0');
+		await expect(page.getByTestId(/^need-shortage-/).first()).toContainText('ยังขาด 50');
+		await qty.fill('12');
+
 		// Click Next to Step 3
 		await page.getByRole('button', { name: 'ถัดไป: เลือกจุดส่งมอบ' }).click();
 
@@ -101,8 +381,9 @@ test.describe('Public Donation & Queue Booking Wizard (T-60)', TAGS, () => {
 			page.getByRole('heading', { name: 'ส่วนที่ 3: ข้อมูลการจัดส่ง โลจิสติกส์' })
 		).toBeVisible();
 
-		// Assert shelter is locked to SH001
-		await expect(page.getByText('ล็อกตามความต้องการที่เลือก')).toBeVisible();
+		// The shelter picked on step 1 is shown read-only; there is no dropdown to change it.
+		await expect(page.getByTestId('drop-off-shelter-name')).toBeVisible();
+		await expect(page.locator('#shelter-select')).toHaveCount(0);
 
 		// Choose delivery method (Button grid)
 		await page.getByRole('button', { name: 'ส่งผ่านขนส่งพัสดุ' }).click();
@@ -147,6 +428,8 @@ test.describe('Public Donation & Queue Booking Wizard (T-60)', TAGS, () => {
 		const navigate = page.getByRole('link', { name: 'นำทางด้วย Google Maps' });
 		await expect(navigate).toHaveAttribute('href', DIRECTIONS_HREF);
 		await expect(navigate).toHaveAttribute('target', '_blank');
+		// No label until staff approve: it would tag a box the shelter may yet turn away.
+		await expect(page.getByTestId('ticket-box-label-link')).toHaveCount(0);
 
 		// Mock PATCH for courier tracking update
 		await page.route('**/api/public/v1/donations/TX-SH001-E2ETEST', async (route) => {
@@ -331,6 +614,53 @@ test.describe('Needs board reflects the urgency staff set (not the quantity)', T
  * The "ปกติ" chip used to return every open need — same result as "ทั้งหมด" — because
  * it filtered on `status` alone and never looked at the level.
  */
+test.describe('Board order follows urgency (#814)', TAGS, () => {
+	test('critical, then high, then normal, each level in code order', async ({ page }) => {
+		const need = (id: string, urgency: string) => ({
+			item_id: `item:${id}`,
+			name: id,
+			qty_needed: 10,
+			unit: 'kg',
+			urgency,
+			status: 'open'
+		});
+		await page.route('**/api/public/v1/needs', (route) =>
+			route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify([
+					{ code: 'SH001', name: 'ศูนย์ลำดับ ปกติ', needs: [need('a', 'normal')] },
+					{ code: 'SH002', name: 'ศูนย์ลำดับ สำคัญ ก', needs: [need('b', 'important')] },
+					{ code: 'SH003', name: 'ศูนย์ลำดับ วิกฤต', needs: [need('c', 'critical')] },
+					{
+						code: 'SH004',
+						name: 'ศูนย์ลำดับ สำคัญ ข',
+						needs: [need('d', 'normal'), need('e', 'high')]
+					}
+				])
+			})
+		);
+		await page.route('**/api/public/v1/shelters*', (route) => route.fulfill({ status: 503 }));
+		await page.goto('/donations');
+
+		await expect(page.locator('h3').filter({ hasText: /^ศูนย์ลำดับ/ })).toHaveText(
+			['ศูนย์ลำดับ วิกฤต', 'ศูนย์ลำดับ สำคัญ ก', 'ศูนย์ลำดับ สำคัญ ข', 'ศูนย์ลำดับ ปกติ'],
+			{ timeout: 15_000 }
+		);
+		// Each badge also carries screen-reader text ("หมุดที่") before its number.
+		await expect(page.getByTestId('donation-pin-badge')).toHaveText([/1$/, /2$/, /3$/, /4$/]);
+
+		// The card's status chip names the same level as its pin, high included.
+		await expect(page.getByText('วิกฤต (Critical)')).toHaveCount(1);
+		await expect(page.getByText('สำคัญ (High)')).toHaveCount(2);
+		await expect(page.getByText('เปิดรับบริจาค', { exact: true })).toHaveCount(1);
+
+		// Inside a card the most urgent line comes first, even when the API lists it later.
+		const mixed = page.locator('div.group').filter({ hasText: 'ศูนย์ลำดับ สำคัญ ข' });
+		await expect(mixed.getByText(/^\[(สำคัญ|วิกฤต)\]|^[a-e]$/).first()).toHaveText('[สำคัญ] e');
+	});
+});
+
 test.describe('Urgency filter chips', TAGS, () => {
 	test.beforeEach(async ({ page }) => {
 		await page.route('**/api/public/v1/needs', async (route) => {
@@ -519,6 +849,7 @@ test.describe('Donor wizard layout and step scrolling (#619, #620)', TAGS, () =>
 		await openDonorForm(page);
 		await page.locator('#donor-name').fill('ผู้ทดสอบเลื่อนหน้า');
 		await page.locator('#donor-phone').fill('0899999999');
+		await page.locator('input[id^="amount-"]').first().fill('1');
 
 		const next = page.getByRole('button', { name: 'ถัดไป: เลือกจุดส่งมอบ' });
 		await next.scrollIntoViewIfNeeded();
@@ -648,5 +979,148 @@ test.describe('Track page shows the drop-off shelter and directions (#590)', TAG
 		await expect(page.getByText('SH001', { exact: true })).toBeVisible();
 		await expect(page.getByRole('link', { name: 'นำทางด้วย Google Maps' })).toHaveCount(0);
 		expect(shelterRequests).toBe(0);
+	});
+});
+
+/** #591: the box label carries the goods, the destination and a QR the scan station reads. */
+test.describe('Box label for a booking the shelter accepted (#591)', TAGS, () => {
+	const TOKEN = 'TX-SH001-BOXLABEL';
+	const BOOKING_REF = 'DN-591001';
+
+	function mockTrack(page: Page, status: string) {
+		return page.route(`**/api/public/v1/donations/${TOKEN}`, (route) =>
+			route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({
+					success: true,
+					donation: {
+						status,
+						booking_ref: BOOKING_REF,
+						shelter_code: 'SH001',
+						donor: { name: 'สมศรี ผู้บริจาคลับ', phone_masked: '***-***-9876' },
+						items: [
+							{ item_name: 'ข้าวสาร', qty: 5, unit: 'kg' },
+							{ item_name: 'น้ำดื่ม', qty: 12, unit: 'bottle' },
+							{
+								item_name: 'ยาหมดอายุ',
+								qty: 1,
+								unit: 'box',
+								review_status: 'rejected',
+								review_reason: 'หมดอายุ'
+							}
+						],
+						logistics: {
+							delivery_method: 'self_dropoff',
+							slot: { date: '2026-10-27', from: '09:00', to: '11:00' },
+							pickup_address: '12 ซอยลับ'
+						},
+						received_summary: null,
+						updated_at: '2026-10-26T03:00:00Z',
+						expires_at: '2026-10-29T03:00:00Z'
+					}
+				})
+			})
+		);
+	}
+
+	function mockShelter(page: Page) {
+		return page.route('**/api/public/v1/shelters/SH001', (route) =>
+			route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({ shelter: SHELTER_DETAIL })
+			})
+		);
+	}
+
+	test('prints the shelter, its address, the goods and the booking ref, with no donor details', async ({
+		page
+	}) => {
+		await mockTrack(page, 'verifying');
+		await mockShelter(page);
+
+		await page.goto(`/donations/track/${TOKEN}`);
+		await page.getByTestId('box-label-link').click();
+		await expect(page).toHaveURL(`/donations/track/${TOKEN}/label`);
+
+		const label = page.getByTestId('box-label-preview').getByTestId('box-label');
+		await expect(label.getByText(SHELTER_DETAIL.name)).toBeVisible();
+		await expect(label.getByText(SHELTER_DETAIL.address)).toBeVisible();
+		await expect(label.getByTestId('box-label-ref')).toHaveText(BOOKING_REF);
+		await expect(label.getByTestId('box-label-items').getByRole('listitem')).toHaveText([
+			/ข้าวสาร\s+5\s+/,
+			/น้ำดื่ม\s+12\s+/
+		]);
+		await expect(label).not.toContainText('ยาหมดอายุ');
+
+		// It sits outside the box, so the donor's own details stay off it.
+		for (const private_ of ['สมศรี', '9876', 'ซอยลับ', TOKEN]) {
+			await expect(label).not.toContainText(private_);
+		}
+	});
+
+	test('the QR encodes the booking ref, not the tracking token', async ({ page }) => {
+		await mockTrack(page, 'verifying');
+		await mockShelter(page);
+
+		await page.goto(`/donations/track/${TOKEN}/label`);
+
+		const label = page.getByTestId('box-label-preview').getByTestId('box-label');
+		await expect(label).toHaveAttribute('data-qr-value', BOOKING_REF);
+		await expect(label.getByRole('img')).toBeVisible();
+	});
+
+	test('the printed page is a single A6 sheet', async ({ page }) => {
+		await mockTrack(page, 'verifying');
+		await mockShelter(page);
+
+		await page.goto(`/donations/track/${TOKEN}/label`);
+		await expect(page.getByTestId('box-label-preview').getByRole('img')).toBeVisible();
+		await page.emulateMedia({ media: 'print' });
+
+		const pdf = await page.pdf({ preferCSSPageSize: true });
+		const pages = pdf.toString('latin1').match(/\/Type\s*\/Page[^s]/g) ?? [];
+		expect(pages).toHaveLength(1);
+		// MediaBox is in points and Chrome rounds to whole CSS pixels: A6 is 297.6 x 419.5.
+		const box = /\/MediaBox\s*\[\s*0\s+0\s+([\d.]+)\s+([\d.]+)\s*\]/.exec(pdf.toString('latin1'));
+		expect(Math.abs(Number(box?.[1]) - 297.64)).toBeLessThan(1);
+		expect(Math.abs(Number(box?.[2]) - 419.53)).toBeLessThan(1);
+	});
+
+	test('offers no label while the booking still waits for review', async ({ page }) => {
+		await mockTrack(page, 'pending_review');
+		await mockShelter(page);
+
+		await page.goto(`/donations/track/${TOKEN}`);
+		await expect(page.getByRole('heading', { name: BOOKING_REF })).toBeVisible();
+		await expect(page.getByTestId('box-label-link')).toHaveCount(0);
+
+		await page.goto(`/donations/track/${TOKEN}/label`);
+		await expect(page.getByTestId('box-label-not-ready')).toContainText('ยังพิมพ์ใบปะหน้าไม่ได้');
+		await expect(page.getByTestId('box-label')).toHaveCount(0);
+		await expect(page.getByRole('link', { name: 'กลับหน้าติดตามสถานะ' }).last()).toHaveAttribute(
+			'href',
+			`/donations/track/${TOKEN}`
+		);
+	});
+
+	test('still prints when the shelter lookup fails, naming the shelter by its code', async ({
+		page
+	}) => {
+		await mockTrack(page, 'verifying');
+		await page.route('**/api/public/v1/shelters/SH001', (route) =>
+			route.fulfill({
+				status: 404,
+				contentType: 'application/json',
+				body: JSON.stringify({ error: 'Shelter not found' })
+			})
+		);
+
+		await page.goto(`/donations/track/${TOKEN}/label`);
+
+		const label = page.getByTestId('box-label-preview').getByTestId('box-label');
+		await expect(label.getByRole('heading', { name: 'SH001' })).toBeVisible();
+		await expect(label.getByTestId('box-label-ref')).toHaveText(BOOKING_REF);
 	});
 });

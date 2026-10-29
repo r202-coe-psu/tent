@@ -280,6 +280,14 @@ test.describe('Tab 4 — loan return counter (plan §4.6)', { tag: DESK_TAGS }, 
 		expect(await getShelterDocument(logId)).toMatchObject({ status: 'active' });
 		expect(await ledgerRows('receive', logId)).toHaveLength(0);
 
+		// The outage submit is still in the app's retry backoff. Reconnecting before it settles lets
+		// its last retry succeed and close the dialog by itself, so wait until it has given up.
+		const confirm = dialog.getByRole('button', { name: /ยืนยันตรวจรับคืนเข้าคลัง/ });
+		await expect(dialog.getByRole('button', { name: /กำลังบันทึกรับคืน\.\.\./ })).toHaveCount(0, {
+			timeout: 30_000
+		});
+		await expect(confirm).toBeEnabled();
+
 		// Back online: the live `_changes` poll reconnects the desk without a reload (the
 		// banner's retry button sits under the dialog's overlay).
 		await page.unroute(`${COUCH_BASE}/**`, centralDown); // keep the helper's own route
@@ -436,8 +444,12 @@ test.describe('Tab 5 — shift close and returns (plan §4.7)', { tag: DESK_TAGS
 			await injectSession(page, warehouse.user, warehouse.session);
 			const backOffice = new BackOfficePage(page);
 			await backOffice.receiveWarehouseReturn(ticket, kit, '3', '5');
-			const receipts = await ledgerRows('receive', ticket.ticketId);
-			expect(receipts.find((r) => r.item_id === kit.itemId)?.qty).toBe('3');
+			// CR-208: the verified return goes back into the lot the kit was dispatched from.
+			const returns = await ledgerRows('distribution_return', ticket.ticketId);
+			expect(returns.find((r) => r.item_id === kit.itemId)).toMatchObject({
+				qty: '3',
+				lot_ref: kit.lotId
+			});
 			await backOffice.completeTicket(ticket);
 			expect(await getShelterDocument(ticket.ticketId)).toMatchObject({ status: 'COMPLETED' });
 		});
