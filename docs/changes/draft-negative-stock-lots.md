@@ -17,11 +17,13 @@ affects:
   - frontend/src/lib/features/operations/domain/cycle-count.ts (`buildCycleCountLots`)
   - frontend/src/lib/features/operations/ui/stock-table.svelte · cycle-count-form.svelte · adjust-stock-form.svelte · distribute-stock-form.svelte
   - frontend/src/lib/features/distribution/ui/model/physical-lot.ts (picker ของตั๋ว)
-  - frontend/src/lib/features/operations/data/operations.remote.ts (`distributeStock` — ลำดับการอ่าน; `:633` และ `adjustStock` / `applyCycleCount` — ยอดใช้ได้ถือล็อตติดลบ = 0)
-  - frontend/src/lib/features/distribution/data/distribution.remote.ts (`loadPhysicalLots` `:267`, claim loop `:856` — ยอดใช้ได้ถือล็อตติดลบ = 0)
+  - frontend/src/lib/features/operations/data/operations.remote.ts
+    - `distributeStock` (`:633`): ลำดับการอ่าน (FR-9a) และข้อความยอดไม่พอถือล็อตติดลบ = 0
+    - `adjustStock` (`:871`) / `applyCycleCount` (`:961`) ผ่าน `assertLotWriteOffsFit`: ยอดใช้ได้ถือล็อตติดลบ = 0 (`usableStockByItem`)
+  - frontend/src/lib/features/distribution/data/distribution.remote.ts (`loadPhysicalLots` `:267`; claim loop ของการอนุมัติใบขอเบิก `:856` — ลำดับการอ่าน (FR-9a) และยอดใช้ได้ถือล็อตติดลบ = 0)
   - frontend/src/lib/features/operations/domain/item-merge.ts `:147` · frontend/src/lib/features/operations/ui/merge-item-dialog.svelte `:84` (กรองเฉพาะล็อต `qty > 0` อยู่แล้ว — คงไว้)
+  - frontend/src/lib/features/tickets/data/ticket.remote.ts `:158` · frontend/src/lib/features/distribution/application/food-supplies/dispatch-workflow.ts `:178` (กรอง `qtyGt(lot.qty, 0)` อยู่แล้ว — คงไว้)
   - frontend/src/lib/features/operations/domain/operations.ts `:1135` (`projectLotsByItem`) · `:1173` (`assertLotWriteOffsFit`) — ผู้เรียกต้องถือล็อตติดลบ = 0 ตาม FR-9b
-  - frontend/src/lib/features/distribution/data/distribution.remote.ts (การอนุมัติใบขอเบิก — claim loop, ลำดับการอ่านเท่านั้น)
   # Phase 2 (follow-up — ระบุไว้ ยังไม่ทำในรุ่นนี้)
   - docs/changes/03-C-supply/CR-190-lot-bound-adjust-and-count.md TL;DR ข้อ 2 · ตาราง Change แถว "`adjust` บวก" · FR-3
   - docs/data/schema.md §2.1 stock_ledger `lot_ref` · `note` · ตาราง "`reason` → `ref_id`" แถว `adjust` · ย่อหน้า "ขอบเขตการบังคับ"
@@ -80,7 +82,7 @@ affects:
   2. `distribution_return` อ้างล็อตที่ไม่มีในประวัติ
   3. แถวขาออกอ้าง `lot_ref` ที่ไม่มีในประวัติ
   4. แถวขาออก legacy ที่ไม่มีล็อตยอดบวกให้ตัดเลย (ไม่มี "ล็อตสุดท้ายที่ตัด")
-     — **คง fail-closed โดยเจตนา** (owner decision 2026-10-29): ไม่มีล็อตให้ผูกส่วนขาด การเดาล็อตจะสร้างยอดที่ไม่มีหลักฐานรองรับ จึงข้ามสินค้านั้นและแจ้งชื่อแทน
+     — **คง fail-closed โดยเจตนา** (owner decision 2026-10-29, Mhapong): ไม่มีล็อตให้ผูกส่วนขาด การเดาล็อตจะสร้างยอดที่ไม่มีหลักฐานรองรับ จึงข้ามสินค้านั้นและแจ้งชื่อแทน
 - **FR-5** — ประวัติที่ replay ผ่านก่อน CR นี้ต้องได้ยอดรายล็อตเท่าเดิมทุกล็อต
 
 ### หน้าจอ
@@ -104,7 +106,7 @@ affects:
   (ไม่เปลี่ยนกติกา; AC-8)
 - **FR-9b** — ทุกจุดที่คำนวณ "ยอดที่ใช้ได้" (ยอดทางกายภาพ − ยอดจอง หรือยอดรวมล็อต) ต้องถือล็อตติดลบ = **0**: ไม่หักล็อตติดลบจากล็อตอื่น
   และไม่แสดงตัวเลขติดลบเป็น "ยอดที่มี" ในข้อความ error — ครอบคลุมทุกผู้เรียก `projectStockLotBalances` / `projectLotsByItem` ที่ระบุใน `affects`
-  (`distribution.remote.ts` `loadPhysicalLots` และ claim loop, `operations.remote.ts` `distributeStock` / `adjustStock` / `applyCycleCount`, `item-merge.ts`, `merge-item-dialog.svelte`)
+  (`distribution.remote.ts` `loadPhysicalLots` และ claim loop, `operations.remote.ts` `distributeStock` / `adjustStock` / `applyCycleCount`, `item-merge.ts`, `merge-item-dialog.svelte`, `ticket.remote.ts`, `dispatch-workflow.ts`)
   ข้อความ FR-9 ที่บอกยอดของล็อตติดลบเองโดยตรงเป็นข้อยกเว้น (ผู้ใช้ต้องเห็นว่าติดลบเท่าใด)
 - **FR-10** — ล็อตที่ทั้งหมดอายุและติดลบ: UI ไม่แนะนำให้ปรับยอดออก (CR-195 FR-X3) — แสดงคำเตือนล็อตติดลบตาม FR-6 แทน
 
@@ -225,7 +227,7 @@ decision "comparator เดิมใน `projectStockLotBalances` ห้าม�
 - **ความพร้อมกัน (race fix, ไม่เปลี่ยนกติกา):** `distributeStock` (`operations.remote.ts`) และ claim loop ของการอนุมัติใบขอเบิก (`distribution.remote.ts`) อ่าน `stock_lot_reservation` **ก่อน** ledger —
   เดิมอ่าน ledger ก่อน ถ้า claim อื่นเขียน ledger แล้วปล่อย claim ระหว่างสองการอ่าน จะไม่เห็นยอดที่ถูกตัดไป
 - **Phase 2 ไม่มี claim (ยอมรับ):** การแก้ล็อตติดลบไม่จอง `stock_lot_reservation` — ผู้แก้สองคนพร้อมกันอาจแก้เกิน (ล็อตกลับเป็นบวก) หรือย้าย −X ออกจากล็อตต้นทางจนติดลบใหม่ได้;
-  **ยอมรับตามทาง D (owner decision 2026-10-29)** — Phase 2 ตรวจยอดล็อตซ้ำทันทีก่อนเขียน (FR-18) เพื่อลดช่วงเสี่ยง แต่ไม่ใช่การรับประกัน
+  **ยอมรับตามทาง D (owner decision 2026-10-29, Mhapong)** — Phase 2 ตรวจยอดล็อตซ้ำทันทีก่อนเขียน (FR-18) เพื่อลดช่วงเสี่ยง แต่ไม่ใช่การรับประกัน
 - **ช่วงระหว่าง Phase 1 กับ Phase 2:** ล็อตติดลบแก้ในแอปไม่ได้ (ห้ามตัด / ห้ามนับ ตาม FR-7, FR-9 และ CR-190 FR-3 ยังห้าม adjust บวกเข้าล็อตเดิม) —
   **ยอมรับ**; Phase 2 ติดตามเป็น follow-up ของ #855
 - **item merge:** `planItemMerge` ย้ายเฉพาะล็อตยอดบวก (`qtyGt(lot.qty, 0)` เดิม) — ล็อตติดลบค้างที่สินค้าต้นทาง
