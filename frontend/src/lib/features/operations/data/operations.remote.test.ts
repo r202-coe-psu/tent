@@ -1266,6 +1266,42 @@ describe('OperationsRemoteRepository', () => {
 			await expect(repo.receiveWalkInDonation(walkIn, receive, ctx)).rejects.toThrow();
 			expect(await repo.listDonations()).toHaveLength(0);
 		});
+
+		// #821 FR-11 / AC-7
+		it('stores a valid donor email on donor.email', async () => {
+			mockGetItem.mockResolvedValue({ unit: 'kg' } as SupplyItem);
+
+			const { donation } = await repo.receiveWalkInDonation(
+				{ ...walkIn, donor: { ...walkIn.donor, email: 'somchai@example.com' } },
+				receive,
+				ctx
+			);
+
+			expect(donation.donor.email).toBe('somchai@example.com');
+			expect((await repo.listDonations())[0].donor.email).toBe('somchai@example.com');
+		});
+
+		it('refuses a malformed donor email and writes nothing', async () => {
+			mockGetItem.mockResolvedValue({ unit: 'kg' } as SupplyItem);
+
+			await expect(
+				repo.receiveWalkInDonation(
+					{ ...walkIn, donor: { ...walkIn.donor, email: 'not-an-email' } },
+					receive,
+					ctx
+				)
+			).rejects.toThrow();
+			expect(await repo.listDonations()).toHaveLength(0);
+			expect(await repo.listLedger()).toHaveLength(0);
+		});
+
+		it('keeps no donor.email key when none was given', async () => {
+			mockGetItem.mockResolvedValue({ unit: 'kg' } as SupplyItem);
+
+			const { donation } = await repo.receiveWalkInDonation(walkIn, receive, ctx);
+
+			expect('email' in donation.donor).toBe(false);
+		});
 	});
 });
 
