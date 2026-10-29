@@ -1032,17 +1032,23 @@ async def test_search_shelter_status_is_null_without_shelter_row(
     assert [m["shelter_status"] for m in result["family_members"]] == [None]
 
 
-async def test_search_response_has_no_zone_keys_for_open_or_closed_shelters(
+@pytest.mark.parametrize("shelter_status", ["open", "closed"])
+async def test_search_reports_zone_to_partners_only(
     client: AsyncClient,
     db_client: AsyncMongoClient,
     settings: Settings,
     search_endpoint: tuple[str, dict[str, str]],
+    shelter_status: str,
 ):
+    """CR-183 FR-18 drops the zone from the public search; `/external/v1/occupants` keeps it."""
     phone = "0811111117"
     await _seed_household(
         db_client,
         settings,
-        shelter={"status": "closed", "raw_data": {"zones": [{"code": "Z1", "name": "อาคาร 1"}]}},
+        shelter={
+            "status": shelter_status,
+            "raw_data": {"zones": [{"code": "Z1", "name": "อาคาร 1"}]},
+        },
         phone=phone,
     )
 
@@ -1051,5 +1057,10 @@ async def test_search_response_has_no_zone_keys_for_open_or_closed_shelters(
 
     assert response.status_code == 200, response.text
     result = response.json()["results"][0]
-    assert "care_zone" not in result
-    assert "zone_name" not in result
+    if url.startswith("/public/"):
+        assert "care_zone" not in result
+        assert "zone_name" not in result
+    else:
+        assert result["care_zone"] == "อาคาร 1"
+        assert result["zone_name"] == "อาคาร 1"
+        assert result["shelter_status"] == shelter_status

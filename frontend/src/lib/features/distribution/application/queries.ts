@@ -66,6 +66,7 @@ export {
 	useMoveBulkReturnEntry,
 	useApplyMissedBulkReturnLoanRefs,
 	useVoidBulkReturnEntry,
+	useReopenBulkReturnEntryLoans,
 	useCancelBulkReturnPool,
 	useSubmitBulkReturnPool,
 	useReceiveBulkReturnPool,
@@ -75,6 +76,7 @@ export {
 	type AddBulkReturnEntriesMutationInput,
 	type MoveBulkReturnEntryMutationInput,
 	type VoidBulkReturnEntryMutationInput,
+	type ReopenBulkReturnEntryLoansMutationInput,
 	type CancelBulkReturnPoolMutationInput,
 	type SubmitBulkReturnPoolMutationInput,
 	type ReceiveBulkReturnPoolMutationInput
