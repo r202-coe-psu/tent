@@ -1255,3 +1255,28 @@ async def test_claim_of_member_queued_without_consent_births_without_consent(
         assert "consent" not in born[evacuee_id]
         assert born[evacuee_id]["privacy"] == {"search_excluded": False}
         assert born[evacuee_id]["schema_v"] == 15
+
+
+def test_claim_photo_is_image_schema_v2_without_a_donation_purpose():
+    # CR-175 AC-11: every image writer stamps 2, and only a donation photo carries
+    # `purpose` — the orphan sweep (FR-16) keys on it, so a claim photo must not.
+    from datetime import UTC, datetime
+
+    from apiapp.modules.unassigned_registrations.couch_birth import build_couch_image
+
+    doc = build_couch_image(
+        image_id="image:01K8TESTCLAIMPHOTO00000000",
+        shelter_code="SH001",
+        actor="reg.staff",
+        now=datetime(2026, 10, 26, 3, 0, tzinfo=UTC),
+        filename="face.webp",
+        content_type="image/webp",
+        width=800,
+        height=600,
+        original_size=12000,
+        compressed_size=4000,
+        thumbnail_size=800,
+    )
+    assert doc["schema_v"] == 2
+    assert "purpose" not in doc
+    assert "donation_id" not in doc

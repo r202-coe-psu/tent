@@ -86,6 +86,8 @@ export type VolunteerTicket = {
 	 * hiding the button is the courtesy, not the control.
 	 */
 	can_cancel: boolean;
+	/** The application this pass shows; sent back on cancel so a stale pass cannot cancel another one. */
+	application_id?: string;
 	status: TicketStatus | string;
 	job_id: string;
 	shift_id?: string | null;

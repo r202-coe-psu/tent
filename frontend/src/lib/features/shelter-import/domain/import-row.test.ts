@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { luggageRuleLabels } from '$lib/features/shelters';
+import { luggageRuleLabels, type SubStorageItem } from '$lib/features/shelters';
 import { H, isTextColumn, PET_CONDITION_COLUMNS, SHEETS } from './columns';
 import {
 	buildMasterLookup,
@@ -28,6 +28,8 @@ function baseRow(over: Partial<RawRow> = {}): RawRow {
 	return { [H.name]: 'ศูนย์ทดสอบ', [H.capacity]: '150', ...over };
 }
 
+const NOT_A_DROP_OFF = { accepts_donations: false, lat: null, lng: null, location_note: null };
+
 describe('validateRow — happy path', () => {
 	it('maps a minimal valid row to a shelter payload', () => {
 		const r = validateRow(baseRow(), 1, emptyLookups());
@@ -53,8 +55,8 @@ describe('validateRow — happy path', () => {
 		expect(byLabel.shelter?.operation_status).toBe('active');
 		expect(byLabel.shelter?.area_type).toBe('indoor');
 
-		const byCode = validateRow(baseRow({ [H.operation_status]: 'closed' }), 1, emptyLookups());
-		expect(byCode.shelter?.operation_status).toBe('closed');
+		const byCode = validateRow(baseRow({ [H.operation_status]: 'standby' }), 1, emptyLookups());
+		expect(byCode.shelter?.operation_status).toBe('standby');
 
 		const byBase = validateRow(baseRow({ [H.project_level]: 'ระดับชุมชน' }), 1, emptyLookups());
 		expect(byBase.shelter?.project_level).toBe('community');
@@ -100,6 +102,29 @@ describe('validateRow — errors', () => {
 		const r = validateRow(baseRow({ [H.operation_status]: 'ไม่รู้จัก' }), 1, emptyLookups());
 		expect(r.ok).toBe(false);
 		expect(r.errors[0].column).toBe(H.operation_status);
+	});
+
+	it.each(['closed', 'ปิดศูนย์ (Closed)', 'ปิดศูนย์'])(
+		'rejects operation_status %s with a per-row error and no payload (CR-183 FR-23)',
+		(value) => {
+			const r = validateRow(baseRow({ [H.operation_status]: value }), 4, emptyLookups());
+			expect(r.ok).toBe(false);
+			expect(r.shelter).toBeUndefined();
+			expect(r.errors).toEqual([
+				expect.objectContaining({
+					column: H.operation_status,
+					message: expect.stringContaining('ปิดศูนย์')
+				})
+			]);
+		}
+	);
+
+	it('rejects only the closed row in a workbook', () => {
+		const rows = validateRows(
+			[baseRow(), baseRow({ [H.operation_status]: 'closed' })],
+			emptyLookups()
+		);
+		expect(rows.map((r) => r.ok)).toEqual([true, false]);
 	});
 
 	it('rejects an unknown master-data label', () => {
@@ -266,8 +291,20 @@ describe('validateRow — sub storage list', () => {
 		);
 		expect(r.ok).toBe(true);
 		expect(r.shelter?.common_areas.sub_storage).toEqual([
-			{ id: expect.any(String), name: 'คลังหน้าอาคาร', types: ['food_dry'], area_m2: 20 },
-			{ id: expect.any(String), name: 'คลังยา', types: ['medical_supplies'], area_m2: null }
+			{
+				id: expect.any(String),
+				name: 'คลังหน้าอาคาร',
+				types: ['food_dry'],
+				area_m2: 20,
+				...NOT_A_DROP_OFF
+			},
+			{
+				id: expect.any(String),
+				name: 'คลังยา',
+				types: ['medical_supplies'],
+				area_m2: null,
+				...NOT_A_DROP_OFF
+			}
 		]);
 	});
 
@@ -586,6 +623,59 @@ describe('column contract — headers are unique across sheets', () => {
 				seen.set(col.header, sheet.name);
 			}
 		}
+	});
+});
+
+describe('buildUpdatePayload — storage points already in the app (#1004 review W2)', () => {
+	const fromFile = (cell: string) => {
+		const r = validateRow(baseRow({ [H.sub_storage]: cell }), 1, emptyLookups());
+		if (!r.shelter) throw new Error('fixture row should validate');
+		return r.shelter;
+	};
+	const gym: SubStorageItem = {
+		id: 'point-gym',
+		name: 'โรงยิม',
+		types: ['general'],
+		area_m2: null,
+		accepts_donations: true,
+		lat: 7.01,
+		lng: 100.41,
+		location_note: 'ประตู 2'
+	};
+
+	it('keeps the id and the drop-off settings of a point of the same name', () => {
+		const payload = buildUpdatePayload(fromFile('โรงยิม:อาหารแห้ง:40'), {
+			common_areas: { sub_storage: [gym] }
+		});
+		expect(payload.common_areas.sub_storage).toEqual([
+			{ ...gym, types: ['food_dry'], area_m2: 40 }
+		]);
+	});
+
+	it('gives a point new to the app a new id and no drop-off settings', () => {
+		const payload = buildUpdatePayload(fromFile('โรงยิม:ทั่วไป | ห้องพยาบาล:ยา'), {
+			common_areas: { sub_storage: [gym] }
+		});
+		const [kept, added] = payload.common_areas.sub_storage ?? [];
+		expect(kept.id).toBe('point-gym');
+		expect(added).toMatchObject({ name: 'ห้องพยาบาล', accepts_donations: false, lat: null });
+		expect(added.id).not.toBe('point-gym');
+	});
+
+	it('matches each stored point once, so two points of one name stay two', () => {
+		const payload = buildUpdatePayload(fromFile('โรงยิม:ทั่วไป | โรงยิม:ทั่วไป'), {
+			common_areas: { sub_storage: [gym] }
+		});
+		const ids = (payload.common_areas.sub_storage ?? []).map((p) => p.id);
+		expect(ids[0]).toBe('point-gym');
+		expect(ids[1]).not.toBe('point-gym');
+	});
+
+	it('drops a stored point the file no longer lists, as before', () => {
+		const payload = buildUpdatePayload(fromFile('ห้องพยาบาล:ยา'), {
+			common_areas: { sub_storage: [gym] }
+		});
+		expect(payload.common_areas.sub_storage?.map((p) => p.name)).toEqual(['ห้องพยาบาล']);
 	});
 });
 

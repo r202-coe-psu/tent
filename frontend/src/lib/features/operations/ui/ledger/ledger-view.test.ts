@@ -15,7 +15,8 @@ import {
 const lookup: LedgerLookup = {
 	itemName: (id) => ({ water: 'น้ำดื่ม', milk: 'นม UHT' })[id] ?? 'ไม่ระบุชื่อสิ่งของ',
 	unitLabel: (u) => u,
-	points: [{ id: 'sp1', name: 'A1' }]
+	points: [{ id: 'sp1', name: 'A1' }],
+	refLabel: (refId) => new Map([['donation:DN-0031', 'ผู้บริจาค ร้านป้าแดง']]).get(refId)
 };
 
 // Built from local components so the day keys do not depend on the runner's timezone.
@@ -73,13 +74,30 @@ describe('toLedgerRow', () => {
 		expect(row.group).toBe('out');
 	});
 
+	it('files a return into its source lot under "in" (CR-208)', () => {
+		const returned = entry({
+			reason: 'distribution_return',
+			qty: '3',
+			ref_id: 'requisition_ticket:T1',
+			lot_ref: 'stock_ledger:001'
+		});
+		const row = toLedgerRow(returned, lookup);
+		expect(row.group).toBe('in');
+		expect(summarizeRows([row]).find((card) => card.group === 'in')?.count).toBe(1);
+	});
+
 	it('resolves lot number, storage point and reference for a receipt', () => {
 		const row = toLedgerRow(receive, lookup);
 		expect(row.lotNo).toBe('L-261002-001');
 		expect(row.storage).toBe('A1');
-		expect(row.detail).toBe('donation:DN-0031');
+		expect(row.detail).toBe('ผู้บริจาค ร้านป้าแดง');
+		expect(row.refId).toBe('donation:DN-0031');
 		expect(row.dayKey).toBe('2026-10-02');
 		expect(row.time).toBe('10:42');
+	});
+
+	it('shows a short ref when the referenced doc has no label', () => {
+		expect(toLedgerRow(sent, lookup).detail).toBe('ใบโอนย้าย · …-0007');
 	});
 
 	it('does not throw on an unparseable timestamp', () => {
@@ -92,7 +110,7 @@ describe('toLedgerRow', () => {
 			entry({ reason: 'receive', qty: '5', ref_id: 'bulk_return_pool:01ABC' }),
 			lookup
 		);
-		expect(row.detail).toBe('bulk_return_pool:01ABC');
+		expect(row.detail).toBe('คืนของรวม · 01ABC');
 		expect(row.refHref).toBe('/back-office/distribution?view=bulk_pools&pool=01ABC');
 	});
 
@@ -141,6 +159,7 @@ describe('filterLedger', () => {
 		const q = (s: string) => filterLedger(rows, { range: open, type: 'all', q: s }).length;
 		expect(q('นม')).toBe(1);
 		expect(q('dn-0031')).toBe(1);
+		expect(q('ป้าแดง')).toBe(1);
 		expect(q('ครัวกลาง')).toBe(1);
 		expect(q('SOMCHAI')).toBe(5);
 		expect(q('ไม่มีแน่นอน')).toBe(0);
@@ -193,7 +212,7 @@ describe('ledgerToCsv', () => {
 		expect(lines).toHaveLength(2);
 		expect(lines[0]).toBe(LEDGER_CSV_HEADER.map((h) => `"${h}"`).join(','));
 		expect(lines[1]).toBe(
-			'"2026-10-02","10:42","รับบริจาค","น้ำดื่ม","20","pack","donation:DN-0031","L-261002-001","A1","somchai","donation:DN-0031"'
+			'"2026-10-02","10:42","รับบริจาค","น้ำดื่ม","20","pack","ผู้บริจาค ร้านป้าแดง","L-261002-001","A1","somchai","donation:DN-0031"'
 		);
 	});
 

@@ -1754,6 +1754,8 @@ export interface components {
 				[key: string]: unknown;
 			} | null;
 			slot_hold?: components['schemas']['SlotHold'] | null;
+			/** Photos */
+			photos?: string[];
 			/** Captchatoken */
 			captchaToken?: string | null;
 		};
@@ -1787,6 +1789,8 @@ export interface components {
 			condition?: string | null;
 			/** Note */
 			note?: string | null;
+			/** Line Key */
+			line_key?: string | null;
 		};
 		/** DonationItemsPatchRequest */
 		DonationItemsPatchRequest: {
@@ -1885,6 +1889,21 @@ export interface components {
 			to?: string | null;
 		};
 		/**
+		 * DonationPoint
+		 * @description A storage point ticked as a donation drop-off point, with a pin (CR-205).
+		 */
+		DonationPoint: {
+			/** Id */
+			id: string;
+			/** Name */
+			name: string;
+			/** Types */
+			types?: string[];
+			geo: components['schemas']['GeoPoint'];
+			/** Location Note */
+			location_note?: string | null;
+		};
+		/**
 		 * DonationTrackSearchRequest
 		 * @description CR-052 §2.6 — human booking_ref + phone exact match (not token alone).
 		 */
@@ -1956,6 +1975,48 @@ export interface components {
 			/** Relation */
 			relation: string;
 		};
+		/** ExternalSearchResponse */
+		ExternalSearchResponse: {
+			/** Results */
+			results: components['schemas']['ExternalSearchResult'][];
+			/** Count */
+			count: number;
+			/**
+			 * As Of
+			 * Format: date-time
+			 */
+			as_of: string;
+		};
+		/**
+		 * ExternalSearchResult
+		 * @description `/external/v1/occupants` keeps the zone partners read (CR-183 FR-18 is public-only).
+		 */
+		ExternalSearchResult: {
+			/** Name */
+			name: string;
+			/** Status */
+			status: string;
+			/** National Id */
+			national_id?: string | null;
+			/** Gender */
+			gender?: string | null;
+			/** Shelter Name */
+			shelter_name: string;
+			/** Shelter Address */
+			shelter_address?: string | null;
+			/** Origin Address */
+			origin_address?: string | null;
+			/** Checked In At */
+			checked_in_at?: string | null;
+			/** Shelter Status */
+			shelter_status?: ('open' | 'closed' | 'full' | 'standby') | null;
+			/** Family Members */
+			family_members?: components['schemas']['FamilyMember'][];
+			/** Care Zone */
+			care_zone?: string | null;
+			/** Zone Name */
+			zone_name?: string | null;
+		};
 		/** FamilyMember */
 		FamilyMember: {
 			/** Name */
@@ -1964,6 +2025,8 @@ export interface components {
 			status: string;
 			/** Shelter Name */
 			shelter_name: string;
+			/** Shelter Status */
+			shelter_status?: ('open' | 'closed' | 'full' | 'standby') | null;
 		};
 		/** FaqItem */
 		FaqItem: {
@@ -3157,10 +3220,8 @@ export interface components {
 			origin_address?: string | null;
 			/** Checked In At */
 			checked_in_at?: string | null;
-			/** Care Zone */
-			care_zone?: string | null;
-			/** Zone Name */
-			zone_name?: string | null;
+			/** Shelter Status */
+			shelter_status?: ('open' | 'closed' | 'full' | 'standby') | null;
 			/** Family Members */
 			family_members?: components['schemas']['FamilyMember'][];
 		};
@@ -3238,6 +3299,8 @@ export interface components {
 			 * @default false
 			 */
 			accepts_pre_registration: boolean;
+			/** Donation Points */
+			donation_points?: components['schemas']['DonationPoint'][];
 		};
 		/** ShelterDetailResponse */
 		ShelterDetailResponse: {
@@ -5012,7 +5075,7 @@ export interface operations {
 					[name: string]: unknown;
 				};
 				content: {
-					'application/json': components['schemas']['SearchResponse'];
+					'application/json': components['schemas']['ExternalSearchResponse'];
 				};
 			};
 			/** @description Unprocessable Content */

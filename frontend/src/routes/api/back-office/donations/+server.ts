@@ -72,7 +72,8 @@ function toPendingRow(d: PublicDonationDoc): PendingDonationRow {
 		vehicle: d.logistics?.vehicle ?? null,
 		pickup_address: d.logistics?.pickup_address ?? null,
 		donor_note: donorNote,
-		is_unsolicited: isUnsolicited
+		is_unsolicited: isUnsolicited,
+		photos: d.photos ?? []
 	};
 }
 
@@ -190,7 +191,7 @@ export const POST: RequestHandler = async ({ request }) => {
 
 		const dbName = shelterDb(shelterCode);
 		const ctx = { shelterCode, createdBy: caller.name };
-		const phone = input.donor.phone?.trim() || null;
+		const phone = input.donor.phone; // normalized by walkInIntakeInputSchema (or null)
 
 		// A walk-in has no donor-facing token; the hash still has to be opaque and
 		// unique, so it comes from a random value rather than anything guessable.

@@ -1,6 +1,7 @@
 import { qtyGt } from '$lib/utils/qty';
 import { DISPLAY_LOCALE, DISPLAY_TIME_ZONE } from '$lib/utils/date';
 import { lotStorageName, type StoragePointRef } from '../../domain/lot-storage';
+import { shortLedgerRef } from '../../domain/ledger-ref';
 import {
 	resolveAdjustReason,
 	type AdjustReason,
@@ -24,7 +25,7 @@ export const LEDGER_GROUP_BY_REASON: Record<LedgerReason, LedgerGroup> = {
 	donation: 'in',
 	distribute: 'out',
 	requisition: 'out',
-	distribution_return: 'out',
+	distribution_return: 'in',
 	adjust: 'adjust',
 	transfer_out: 'transfer',
 	transfer_in: 'transfer'
@@ -72,7 +73,7 @@ export interface LedgerRow {
 	/** Signed quantity string, exactly as persisted. */
 	qty: string;
 	unit: string;
-	/** Destination (distribute / requisition) or the originating document. */
+	/** Adjust reason, destination (distribute / requisition) or the originating document's label. */
 	detail: string;
 	lotNo: string;
 	storage: string;
@@ -101,6 +102,8 @@ export interface LedgerLookup {
 	itemName: (itemId: string) => string;
 	unitLabel: (unit: string) => string;
 	points: readonly StoragePointRef[];
+	/** Readable label of the doc a `ref_id` points at; unknown refs show `shortLedgerRef`. */
+	refLabel?: (refId: string) => string | undefined;
 }
 
 const pad = (n: number) => String(n).padStart(2, '0');
@@ -121,7 +124,7 @@ export function toLedgerRow(entry: StockLedger, lookup: LedgerLookup): LedgerRow
 	const valid = !Number.isNaN(date.getTime());
 	// A distribute/requisition row keeps its destination in `lot.note`, which
 	// `lotStorageName` would otherwise read as a legacy location.
-	const isOut = group === 'out' && entry.reason !== 'distribution_return';
+	const isOut = group === 'out';
 	const destination = isOut ? (entry.lot?.note?.trim() ?? '') : '';
 	const adjustReason = resolveAdjustReason(entry);
 	const adjustReasonLabel = adjustReason ? ADJUST_REASON_LABELS[adjustReason] : '';
@@ -129,6 +132,9 @@ export function toLedgerRow(entry: StockLedger, lookup: LedgerLookup): LedgerRow
 		? [adjustReasonLabel, entry.note?.trim()].filter(Boolean).join(' · ')
 		: '';
 	const lot = entry.lot && isOut ? { ...entry.lot, note: undefined } : entry.lot;
+	const refDetail = entry.ref_id
+		? (lookup.refLabel?.(entry.ref_id) ?? shortLedgerRef(entry.ref_id))
+		: '';
 	// Only when the row's detail text is the ref id itself (adjust / destination win otherwise).
 	const refHref = adjustDetail || destination ? undefined : ledgerRefHref(entry.ref_id);
 	return {
@@ -144,7 +150,7 @@ export function toLedgerRow(entry: StockLedger, lookup: LedgerLookup): LedgerRow
 		itemName: lookup.itemName(entry.item_id),
 		qty: entry.qty,
 		unit: lookup.unitLabel(entry.unit),
-		detail: adjustDetail || destination || (entry.ref_id ?? ''),
+		detail: adjustDetail || destination || refDetail,
 		lotNo: entry.lot?.lot_no ?? '',
 		storage: lotStorageName(lot, lookup.points) ?? '',
 		createdBy: entry.created_by,

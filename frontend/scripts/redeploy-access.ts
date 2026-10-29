@@ -41,6 +41,7 @@ import {
 	BULK_RETURN_ENTRY_MANGO_INDEXES,
 	buildValidateDocUpdate,
 	DAILY_SOP_ROLE_MANGO_INDEX,
+	DONATION_PHOTO_ORPHAN_MANGO_INDEX,
 	KIOSK_LOOKUP_WARMUP_SELECTORS,
 	PEOPLE_MANGO_INDEXES,
 	REFERRAL_MANGO_INDEXES,
@@ -475,7 +476,7 @@ async function main() {
 					PEOPLE_MANGO_INDEXES.length +
 					REQUISITION_TICKET_MANGO_INDEXES.length +
 					BULK_RETURN_ENTRY_MANGO_INDEXES.length +
-					1;
+					2;
 				console.log(`    would ensure ${indexCount} shelter Mango indexes`);
 				if (PUBLIC_WRITER_NAME) {
 					console.log(
@@ -517,6 +518,14 @@ async function main() {
 			const dailySopIndexResult = await deployMangoIndexes(db, [DAILY_SOP_ROLE_MANGO_INDEX], false);
 			console.log(
 				`    ✓ Daily SOP role mango index (${dailySopIndexResult.created} created, ${dailySopIndexResult.existing} existing)`
+			);
+			const donationPhotoIndexResult = await deployMangoIndexes(
+				db,
+				[DONATION_PHOTO_ORPHAN_MANGO_INDEX],
+				false
+			);
+			console.log(
+				`    ✓ donor photo mango index (${donationPhotoIndexResult.created} created, ${donationPhotoIndexResult.existing} existing)`
 			);
 			const kioskIndexResult = await deployKioskLookupMangoIndexes(db, false);
 			console.log(

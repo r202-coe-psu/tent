@@ -134,6 +134,14 @@ export const baseDomain = {
 		subtle: '#F1F5F9',
 		border: '#CBD5E1',
 		text: '#1E293B'
+	},
+	pr: {
+		name: 'ประชาสัมพันธ์',
+		base: '#CA8A04',
+		strong: '#A16207',
+		subtle: '#FEFCE8',
+		border: '#FEF08A',
+		text: '#713F12'
 	}
 } as const;
 
@@ -480,6 +488,17 @@ export const colors = {
 			subtleBtn:
 				'border border-domain-admin-border bg-domain-admin-subtle text-domain-admin-text hover:bg-white',
 			iconBox: 'border border-domain-admin-border bg-domain-admin-subtle text-domain-admin'
+		},
+		pr: {
+			id: 'pr',
+			...baseDomain.pr,
+			badge: 'border border-domain-pr-border bg-domain-pr-subtle text-domain-pr-text font-semibold',
+			card: 'border border-domain-pr-border bg-white shadow-2xs hover:border-domain-pr transition-all',
+			solid:
+				'bg-domain-pr-strong text-white hover:bg-domain-pr-text focus-visible:ring-domain-pr-strong',
+			subtleBtn:
+				'border border-domain-pr-border bg-domain-pr-subtle text-domain-pr-text hover:bg-white',
+			iconBox: 'border border-domain-pr-border bg-domain-pr-subtle text-domain-pr'
 		}
 	},
 

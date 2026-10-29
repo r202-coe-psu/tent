@@ -6,14 +6,22 @@ import {
 	pickCampaignForItems,
 	DEFAULT_SLOT_WINDOWS,
 	slotAvailabilityFor,
-	slotModeForDelivery
+	slotModeForDelivery,
+	rejectDonationPhotoDocs,
+	rejectDonationPhotoIds,
+	type DonationPhotoErrorCode
 } from '$lib/features/donations/server';
 import type { PublicDonationDoc } from '$lib/features/donations';
 import { ReCaptchaProvider } from '$lib/server/security/captcha';
 import { verifyRecaptchaOrSkip } from '$lib/server/security/recaptcha-gate';
 import { bangkokToday } from '$lib/utils/date';
 import { adminRaw } from '$lib/server/couch-admin';
-import { fetchDocs, fetchDocsStrict, CouchReadError } from '$lib/server/donation-docs';
+import {
+	fetchDocs,
+	fetchDocsStrict,
+	readDonationPhotos,
+	CouchReadError
+} from '$lib/server/donation-docs';
 import { fastapiBaseUrl, fastapiServiceHeaders, unwrapFastapiError } from '$lib/server/fastapi';
 
 import type {
@@ -66,6 +74,22 @@ export const POST = async ({ request, getClientAddress }) => {
 		// donation just to read one shelter's status.
 		const shelterCode = parsed.data.shelter_code;
 		const dbName = `shelter_${shelterCode.toLowerCase()}`;
+
+		// 3.2 Donor photos (CR-175 FR-10): the count first, then each doc by `_id`.
+		const photos = parsed.data.photos ?? [];
+		let photoError: DonationPhotoErrorCode | null = rejectDonationPhotoIds(photos);
+		if (!photoError && photos.length > 0) {
+			try {
+				photoError = rejectDonationPhotoDocs(await readDonationPhotos(dbName, photos));
+			} catch (e) {
+				if (!(e instanceof CouchReadError)) throw e;
+				console.error(e);
+				return json({ success: false, error: 'PHOTOS_UNAVAILABLE' }, { status: 503 });
+			}
+		}
+		if (photoError) {
+			return json({ success: false, error: photoError, error_code: photoError }, { status: 422 });
+		}
 
 		// โหลด campaigns + donations + stock ครั้งเดียวแล้วใช้ซ้ำทุกการตรวจ
 		// `donation:` is read strictly: it feeds both the need-remaining and the slot
@@ -185,7 +209,8 @@ export const POST = async ({ request, getClientAddress }) => {
 				donor: parsed.data.donor,
 				items: parsed.data.items,
 				logistics: parsed.data.logistics,
-				slot_hold: slotHold
+				slot_hold: slotHold,
+				...(photos.length > 0 ? { photos } : {})
 			})
 		});
 

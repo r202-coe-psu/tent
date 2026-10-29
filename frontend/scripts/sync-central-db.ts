@@ -2,7 +2,7 @@
  * Synchronize central CouchDB databases (registry, catalog, thailand_locations)
  *
  * Ensures:
- * 1. Central databases exist (registry, catalog, thailand_locations)
+ * 1. Central databases exist (registry, catalog, thailand_locations, central_ops, _users)
  * 2. Write policies first: registry _design/app and catalog _design/access (VDUs)
  * 3. Database security (_security) on registry and catalog — legacy flat roles plus
  *    `shelter:{code}` for every shelter in the registry (draft CR central-db-shelter-scope-members)
@@ -11,6 +11,8 @@
  * 6. System item categories and units of measure in catalog
  * 7. scanner_secrets (admin-only) + a default staff PIN for every scanner device that has none
  *    (draft-kiosk-staff-pin-face-bypass FR-13; never prints a PIN, never overwrites one)
+ * 8. `_users/_design/tent_guard`: only an admin may change `role_grants`, `active`,
+ *    `personnel_type`, `volunteer_id` (draft-coordinator-limited-access-grant FR-11)
  *
  * Fast and idempotent (<1 second). Safe to run on every CI/CD deployment.
  *
@@ -33,6 +35,7 @@ import { SYSTEM_ITEM_CATEGORIES, type ItemCategory } from '$lib/features/catalog
 import { backfillStaffPins } from '$lib/server/scanners/staff-pin-backfill';
 import { CENTRAL_MEMBER_DBS, syncCentralDbAccess } from '$lib/server/central-db-security';
 import { deployRegistryDesign, listShelterMasters } from '$lib/server/registry-redeploy';
+import { deployUsersGuardDesign, USERS_GUARD_DESIGN_ID } from '$lib/server/users-guard-design';
 
 // ─── env loader ─────────────────────────────────────────────────────────────
 
@@ -548,7 +551,7 @@ async function main() {
 	console.log('');
 
 	// 1. Ensure databases
-	const CENTRAL_DBS = ['registry', 'catalog', 'thailand_locations', 'central_ops'];
+	const CENTRAL_DBS = ['registry', 'catalog', 'thailand_locations', 'central_ops', '_users'];
 	for (const db of CENTRAL_DBS) {
 		const res = await ensureDb(db, DRY_RUN);
 		console.log(`  ✓ DB: ${db} (${res === 'created' && DRY_RUN ? 'would create' : res})`);
@@ -619,6 +622,12 @@ async function main() {
 			`  ⚠ scanner_secrets: skipped ${pins.conflicts.length} device(s) changed meanwhile (${pins.conflicts.join(', ')}) — run again`
 		);
 	}
+
+	// 8. `_users` guard: a user with a coordinator grant must not edit their own grant
+	const guard = await deployUsersGuardDesign(couchReq, DRY_RUN);
+	console.log(
+		`  ✓ _users: ${USERS_GUARD_DESIGN_ID} (${guard === 'deployed' && DRY_RUN ? 'would deploy' : guard})`
+	);
 
 	console.log('');
 	console.log('✨ Central database synchronization completed successfully');

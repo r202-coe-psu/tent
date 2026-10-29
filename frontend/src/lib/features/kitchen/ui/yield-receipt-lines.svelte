@@ -115,19 +115,20 @@
 					{disabled}
 					placeholder="เลือกอาหารปรุงสำเร็จ"
 					searchPlaceholder="ค้นหาชื่ออาหาร..."
-					emptyText="ไม่พบรายการ — สร้างชนิดของใหม่ได้ด้านล่าง"
+					emptyText="ไม่พบอาหารชื่อนี้ในรายการ"
+					createLabel="สร้างชนิดอาหารใหม่"
+					onCreate={oncreatenew && (() => oncreatenew(line.key))}
 					class="h-11 sm:h-10"
 				/>
 				{#if oncreatenew}
 					<Button
-						variant="link"
-						size="sm"
-						class="h-auto gap-1.5 p-0 text-sky-700"
+						variant="outline"
+						class="h-11 gap-1.5 border-sky-200 text-sky-800 hover:bg-sky-50 hover:text-sky-900 sm:h-10"
 						{disabled}
 						onclick={() => oncreatenew(line.key)}
 					>
 						<PackagePlus class="h-4 w-4" />
-						ไม่มีในรายการ? สร้างชนิดของใหม่
+						สร้างชนิดอาหารใหม่
 					</Button>
 				{/if}
 			</div>

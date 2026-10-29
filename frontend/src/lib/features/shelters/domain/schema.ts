@@ -175,7 +175,13 @@ export type Facilities = z.infer<typeof facilitiesSchema>;
  * CR-199 (schema_v 8): `type` (single) → `types` (array, min 1).
  * Rows written before schema_v 8 carry `type` instead — the preprocess step below derives
  * `types: [type]` on read; the next save persists `types` and drops `type`.
+ *
+ * CR-205 (schema_v 9): a point can be a donation drop-off point. `accepts_donations` needs a
+ * pinned `lat`/`lng` (never (0,0), the value of an unpinned map). Unticking keeps the pin and
+ * note so ticking it back needs no new pin.
  */
+export const SUB_STORAGE_NOTE_MAX = 200;
+
 export const subStorageItemSchema = z.preprocess(
 	(val) => {
 		if (
@@ -190,13 +196,50 @@ export const subStorageItemSchema = z.preprocess(
 		}
 		return val;
 	},
-	z.object({
-		id: z.string().trim().min(1),
-		name: z.string().trim().min(1, 'ชื่อสถานที่จัดเก็บต้องไม่ว่าง'),
-		types: z.array(subStorageTypeSchema).min(1, 'เลือกอย่างน้อย 1 ประเภท'),
-		// CR-023 FR-23-11
-		area_m2: z.coerce.number().min(0).nullish()
-	})
+	z
+		.object({
+			id: z.string().trim().min(1),
+			name: z.string().trim().min(1, 'ชื่อสถานที่จัดเก็บต้องไม่ว่าง'),
+			types: z.array(subStorageTypeSchema).min(1, 'เลือกอย่างน้อย 1 ประเภท'),
+			// CR-023 FR-23-11
+			area_m2: z.coerce.number().min(0).nullish(),
+			// CR-205 FR-DP-1..4
+			accepts_donations: z.boolean().default(false),
+			lat: z
+				.number()
+				.min(-90, 'ละติจูดต้องอยู่ระหว่าง -90 ถึง 90')
+				.max(90, 'ละติจูดต้องอยู่ระหว่าง -90 ถึง 90')
+				.nullable()
+				.default(null),
+			lng: z
+				.number()
+				.min(-180, 'ลองจิจูดต้องอยู่ระหว่าง -180 ถึง 180')
+				.max(180, 'ลองจิจูดต้องอยู่ระหว่าง -180 ถึง 180')
+				.nullable()
+				.default(null),
+			location_note: z
+				.string()
+				.trim()
+				.max(SUB_STORAGE_NOTE_MAX, `ไม่เกิน ${SUB_STORAGE_NOTE_MAX} ตัวอักษร`)
+				.nullable()
+				.default(null)
+				.transform((note) => note || null)
+		})
+		.superRefine((point, ctx) => {
+			if (point.lat === 0 && point.lng === 0) {
+				ctx.addIssue({
+					code: 'custom',
+					path: ['lat'],
+					message: 'พิกัด 0, 0 ไม่ใช่ตำแหน่งจริง กรุณาปักหมุดใหม่'
+				});
+			} else if (point.accepts_donations && (point.lat === null || point.lng === null)) {
+				ctx.addIssue({
+					code: 'custom',
+					path: ['lat'],
+					message: 'จุดรับบริจาคต้องปักหมุดตำแหน่ง'
+				});
+			}
+		})
 );
 export type SubStorageItem = z.infer<typeof subStorageItemSchema>;
 
@@ -492,7 +535,10 @@ export const shelterSchema = z.object({
 	parking_policy: parkingPolicySchema
 		.optional()
 		.default({ availability: null, supported_vehicles: [], rules: [], rules_other: null }),
-	feature_flags: shelterFeatureFlagsSchema.optional().default(DEFAULT_SHELTER_FEATURE_FLAGS)
+	feature_flags: shelterFeatureFlagsSchema.optional().default(DEFAULT_SHELTER_FEATURE_FLAGS),
+	// CR-183 FR-14: stamped by the PATCH route, never trusted from the client. Must stay
+	// `.optional()` — `.nullish().default(null)` would make `.partial()` reset it on every edit.
+	closed_at: z.string().datetime().nullable().optional()
 });
 export type Shelter = z.infer<typeof shelterSchema>;
 
@@ -685,7 +731,7 @@ function migrateV3ToV4(v3: ShelterMaster): ShelterMaster {
  * `migrateVxToVy` step so migration runners (`scripts/migrate-shelter.ts`) stop
  * skipping docs that are behind by less than a whole major shape change.
  */
-export const SHELTER_MASTER_SCHEMA_V = 8;
+export const SHELTER_MASTER_SCHEMA_V = 9;
 
 /** v4 → v5 default-fill (CR-067). Old registry docs are evacuation centers. */
 function migrateV4ToV5(v4: ShelterMaster): ShelterMaster {
@@ -771,10 +817,60 @@ function migrateSubStorageTypes(master: ShelterMaster): ShelterMaster {
 
 /**
  * v7 → v8 (CR-199). Storage points move from single `type` to
- * `types[]`.
+ * `types[]`. Stamps its own number: stamping the current constant would let a v7 doc skip
+ * `migrateV8ToV9`.
  */
 function migrateV7ToV8(v7: ShelterMaster): ShelterMaster {
-	return { ...migrateSubStorageTypes(v7), schema_v: SHELTER_MASTER_SCHEMA_V };
+	return { ...migrateSubStorageTypes(v7), schema_v: 8 as const };
+}
+
+type SubStoragePreV9 = Partial<
+	Pick<SubStorageItem, 'accepts_donations' | 'lat' | 'lng' | 'location_note'>
+>;
+
+/** True when any storage point lacks one of the CR-205 keys (judged by key, not `schema_v`). */
+function hasSubStorageWithoutDropOffKeys(master: ShelterMaster): boolean {
+	const items = (master.common_areas?.sub_storage ?? []) as SubStoragePreV9[];
+	return items.some(
+		(item) =>
+			item.accepts_donations === undefined ||
+			item.lat === undefined ||
+			item.lng === undefined ||
+			item.location_note === undefined
+	);
+}
+
+function fillSubStorageDropOff(master: ShelterMaster): ShelterMaster {
+	if (!master.common_areas) return master;
+	const items = (master.common_areas.sub_storage ?? []) as SubStoragePreV9[];
+	return {
+		...master,
+		common_areas: {
+			...master.common_areas,
+			sub_storage: items.map((item) => ({
+				...item,
+				accepts_donations: item.accepts_donations ?? false,
+				lat: item.lat ?? null,
+				lng: item.lng ?? null,
+				location_note: item.location_note ?? null
+			})) as SubStorageItem[]
+		}
+	};
+}
+
+/**
+ * v8 → v9 (CR-205). Storage points get the drop-off fields; additive, no backfill script.
+ * Goes through `normalizeCurrent`, which a v8 doc used to pass as the current version: it
+ * also fills the `site_kind`, `food_distribution_points`, `sub_storage[].id` and
+ * `types[]` a partially migrated doc can lack, and the drop-off fields with them.
+ */
+function migrateV8ToV9(v8: ShelterMaster): ShelterMaster {
+	return normalizeCurrent({ ...v8, schema_v: SHELTER_MASTER_SCHEMA_V });
+}
+
+/** Tail of the chain: v7 → v8 → v9. */
+function migrateV7ToV9(v7: ShelterMaster): ShelterMaster {
+	return migrateV8ToV9(migrateV7ToV8(v7));
 }
 
 /**
@@ -789,16 +885,19 @@ function normalizeCurrent(master: ShelterMaster): ShelterMaster {
 	const hasSiteKind = 'site_kind' in master && !!master.site_kind;
 	const missingSubStorageId = hasSubStorageWithoutId(master);
 	const legacySubStorageType = hasLegacySubStorageType(master);
+	const missingDropOffKeys = hasSubStorageWithoutDropOffKeys(master);
 	if (
 		hasSiteKind &&
 		Array.isArray(master.food_distribution_points) &&
 		!missingSubStorageId &&
-		!legacySubStorageType
+		!legacySubStorageType &&
+		!missingDropOffKeys
 	) {
 		return master;
 	}
 	let filled = missingSubStorageId ? fillSubStorageIds(master) : master;
 	filled = legacySubStorageType ? migrateSubStorageTypes(filled) : filled;
+	filled = missingDropOffKeys ? fillSubStorageDropOff(filled) : filled;
 	return {
 		...filled,
 		site_kind: filled.site_kind ?? 'evacuation_center',
@@ -811,17 +910,18 @@ export function migrateShelterV2ToCurrent(master: ShelterMasterV2 | ShelterMaste
 	if (master.schema_v >= SHELTER_MASTER_SCHEMA_V) {
 		return normalizeCurrent(master as ShelterMaster);
 	}
-	if (master.schema_v === 7) return migrateV7ToV8(master as unknown as ShelterMaster);
+	if (master.schema_v === 8) return migrateV8ToV9(master as unknown as ShelterMaster);
+	if (master.schema_v === 7) return migrateV7ToV9(master as unknown as ShelterMaster);
 	if (master.schema_v === 6)
-		return migrateV7ToV8(migrateV6ToV7(master as unknown as ShelterMaster));
+		return migrateV7ToV9(migrateV6ToV7(master as unknown as ShelterMaster));
 	if (master.schema_v === 5)
-		return migrateV7ToV8(migrateV6ToV7(migrateV5ToV6(master as unknown as ShelterMaster)));
+		return migrateV7ToV9(migrateV6ToV7(migrateV5ToV6(master as unknown as ShelterMaster)));
 	if (master.schema_v === 4)
-		return migrateV7ToV8(
+		return migrateV7ToV9(
 			migrateV6ToV7(migrateV5ToV6(migrateV4ToV5(master as unknown as ShelterMaster)))
 		);
 	if (master.schema_v === 3)
-		return migrateV7ToV8(
+		return migrateV7ToV9(
 			migrateV6ToV7(migrateV5ToV6(migrateV4ToV5(migrateV3ToV4(master as unknown as ShelterMaster))))
 		);
 	const v2 = master as ShelterMasterV2;
@@ -885,8 +985,8 @@ export function migrateShelterV2ToCurrent(master: ShelterMasterV2 | ShelterMaste
 	delete (v3 as Record<string, unknown>).items;
 	delete (v3 as Record<string, unknown>).rules;
 	delete (v3 as Record<string, unknown>).sops;
-	// Chain v2→v3→…→v8 so a v2 doc lands on the current shape in one call.
-	return migrateV7ToV8(
+	// Chain v2→v3→…→v9 so a v2 doc lands on the current shape in one call.
+	return migrateV7ToV9(
 		migrateV6ToV7(migrateV5ToV6(migrateV4ToV5(migrateV3ToV4(v3 as unknown as ShelterMaster))))
 	);
 }

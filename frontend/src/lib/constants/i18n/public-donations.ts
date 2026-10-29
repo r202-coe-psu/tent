@@ -23,7 +23,6 @@ export const PUBLIC_DONATIONS_I18N = {
 		filterNormal: 'ปกติ',
 		loadingNeeds: 'กำลังโหลดข้อมูลความต้องการ...',
 		errorLoadingNeeds: 'ไม่สามารถโหลดข้อมูลความต้องการได้ในขณะนี้',
-		errorLoadingShelters: 'ไม่สามารถโหลดข้อมูลศูนย์พักพิงได้',
 		errorConnect: 'เกิดข้อผิดพลาดในการเชื่อมต่อเซิร์ฟเวอร์',
 		noSheltersOrItems: 'ไม่พบศูนย์พักพิงหรือสิ่งของที่ค้นหา',
 		noNeedsCurrently: 'ขณะนี้ยังไม่มีรายการความต้องการ',
@@ -131,9 +130,23 @@ export const PUBLIC_DONATIONS_I18N = {
 		pickupAddressLabel: 'ที่อยู่เข้ารับของ',
 		pickupAddressPlaceholder:
 			'ระบุบ้านเลขที่ ซอย ถนน หรือจุดสังเกตเพื่อความสะดวกในการเข้ารับของ...',
-		selectShelterLabel: 'เลือกศูนย์รับบริจาค',
-		shelterLockedBadge: 'ล็อกตามความต้องการที่เลือก',
-		selectShelterPlaceholder: '-- เลือกศูนย์พักพิงปลายทาง --',
+		needsMapLabel: 'แผนที่ศูนย์ที่รับบริจาค',
+		needsMapTitle: 'ศูนย์อยู่ที่ไหน',
+		needsMapHint: 'เลขบนหมุดตรงกับเลขบนการ์ดด้านล่าง แตะหมุดเพื่อดูว่าศูนย์ต้องการอะไร',
+		needsMapUnavailable: 'แผนที่ใช้ไม่ได้ในตอนนี้ เลือกศูนย์จากรายการด้านล่างได้เลย',
+		needsMapCloseCard: 'ปิดการ์ดศูนย์',
+		needsMapLegend: 'ความเร่งด่วน',
+		needsMapPinPrefix: 'หมุดที่',
+		needsListTitle: 'ศูนย์ทั้งหมด {count} แห่ง',
+		needsListShown: 'แสดง {shown} จาก {total} ศูนย์',
+		needsListShowMore: 'แสดงศูนย์ที่เหลือ',
+		directionsShort: 'นำทาง',
+		donateShort: 'บริจาค',
+		viewAllNeedsBtn: 'ดูความต้องการทั้งหมด',
+		dropOffShelterLabel: 'ส่งที่',
+		dropOffMapLabel: 'แผนที่ศูนย์ที่จะนำของไปส่ง',
+		dropOffNoShelter: 'ยังไม่ได้เลือกศูนย์ที่จะส่งของ',
+		dropOffBackToNeeds: 'กลับไปเลือกศูนย์',
 		selectDateTimeLabel: 'เลือกวันที่และช่วงเวลา',
 		pickupTimeSuffix: 'ที่ต้องการให้ไปรับ',
 		dropoffTimeSuffix: 'ที่จะนำของมาส่ง',
@@ -186,7 +199,6 @@ export const PUBLIC_DONATIONS_I18N = {
 			'ยังไม่ได้ตั้งค่า reCAPTCHA (PUBLIC_RECAPTCHA_SITE_KEY) — ไม่สามารถส่งแบบฟอร์มได้',
 		recaptchaBranding: 'เว็บไซต์นี้มีการป้องกันด้วย reCAPTCHA',
 		defaultItemFreeText: 'ของบริจาคทั่วไป',
-		generalItemsFallback: 'ของบริจาคทั่วไป',
 		defaultItemUnit: 'piece',
 
 		// Success Ticket
@@ -245,7 +257,6 @@ export const PUBLIC_DONATIONS_I18N = {
 		navigateGoogleMaps: 'นำทางด้วย Google Maps',
 		backToHomeBtn: 'กลับสู่หน้าหลัก',
 		backToHome: 'กลับสู่หน้าหลัก',
-		openingMapsToast: 'กำลังเปิดแผนที่เพื่อนำทางไปยังศูนย์พักพิง',
 
 		// Track Search Page
 		trackPageTitle: 'ติดตามสถานะของบริจาค — Smart Shelter',
@@ -326,8 +337,6 @@ export const PUBLIC_DONATIONS_I18N = {
 		lineReviewApproved: 'อนุมัติแล้ว / รอนำส่ง',
 		lineReviewPending: 'รอประเมิน',
 		lineReviewRejected: 'ไม่รับ',
-		editVerifyingWarning:
-			'ใบนี้ได้ QR แล้ว — ถ้าแก้แล้วมีรายการที่ต้องประเมิน QR จะใช้ไม่ได้จนกว่าเจ้าหน้าที่ประเมินเสร็จ',
 		statusVerifying: 'กำลังตรวจรับที่ศูนย์',
 		statusReceived: 'รับเข้าคลังเรียบร้อย',
 		statusRedirected: 'ส่งต่อไปศูนย์อื่น',
@@ -384,7 +393,52 @@ export const PUBLIC_DONATIONS_I18N = {
 		editSaveBtn: 'บันทึกการแก้ไข',
 		editSaving: 'กำลังบันทึก…',
 		editSuccessToast: 'แก้ไขรายการบริจาคแล้ว',
-		editFailToast: 'แก้ไขรายการไม่สำเร็จ'
+		editFailToast: 'แก้ไขรายการไม่สำเร็จ',
+		// CR-196 FR-LK-4 — the CR's wording, verbatim.
+		editBlockedToast:
+			'ใบบริจาคได้รับการอนุมัติ/ออก QR แล้ว ไม่สามารถแก้ไขรายการได้ หากต้องการเปลี่ยนแปลง กรุณายกเลิกเพื่อทำรายการใหม่ หรือแจ้งเจ้าหน้าที่หน้างานตอนนำของมาส่ง',
+		editItemsHint: 'ปรับจำนวนหรือเพิ่ม-ลบรายการได้จนกว่าศูนย์จะประเมินรายการ',
+		// CR-175 donor photos
+		photoSectionTitle: 'รูปของที่จะบริจาค (ไม่บังคับ)',
+		photoSectionDesc:
+			'แนบรูปให้เจ้าหน้าที่เห็นสภาพของก่อนตอบรับ ได้สูงสุด 30 รูป รวมไม่เกิน 10 MB แนบได้ตอนจองเท่านั้น',
+		photoPrivacyWarning:
+			'รูปอาจติดข้อมูลส่วนตัว เช่น หน้าคน ทะเบียนรถ หรือบ้านเลขที่ กรุณาถ่ายเฉพาะตัวของ',
+		photoAddBtn: 'เลือกรูป',
+		photoUsage: 'ใช้ไปแล้ว {used} / 10 MB',
+		photoCount: '{count} / 30 รูป',
+		photoFull: 'แนบรูปครบแล้ว',
+		photoRefusedTooLarge: 'ไฟล์ {name} ใหญ่เกิน 20 MB',
+		photoRefusedNoRoom: 'แนบ {name} ไม่ได้ เพราะครบ 30 รูปหรือเกิน 10 MB แล้ว',
+		photoRefusedUnreadable: 'เปิดไฟล์ {name} ไม่ได้ กรุณาเลือกไฟล์รูป',
+		photoRefusedUpload: 'อัปโหลด {name} ไม่สำเร็จ กรุณาลองใหม่',
+		photoRemoveAria: 'ลบรูปที่ {n}',
+		photoUploading: 'กำลังอัปโหลด',
+		photoWaitUpload: 'รอให้รูปอัปโหลดเสร็จก่อนจองคิว',
+
+		// Box label (#591)
+		boxLabelOpenBtn: 'พิมพ์ใบปะหน้ากล่อง',
+		boxLabelOpenHint: 'ติดใบปะหน้าไว้ข้างกล่อง ให้เห็นว่าในกล่องมีอะไรและต้องส่งที่ไหน',
+		boxLabelPageTitle: 'ใบปะหน้ากล่องบริจาค — Smart Shelter',
+		boxLabelHeading: 'ใบปะหน้ากล่องบริจาค',
+		boxLabelBackToTrack: 'กลับหน้าติดตามสถานะ',
+		boxLabelPrintBtn: 'พิมพ์ใบปะหน้า',
+		boxLabelPrintTip:
+			'พิมพ์ขนาด A6 (105 × 148 มม.) · ไม่มีเครื่องพิมพ์ให้เลือก "บันทึกเป็น PDF" · ส่งหลายกล่องให้พิมพ์หลายสำเนา',
+		boxLabelNotReadyTitle: 'ใบนี้ยังพิมพ์ใบปะหน้าไม่ได้',
+		boxLabelNotReadyBody:
+			'พิมพ์ได้หลังเจ้าหน้าที่อนุมัติรับของและระบบออก QR รับของแล้ว ดูสถานะล่าสุดได้ที่หน้าติดตาม',
+		boxLabelNoLines: 'ไม่มีรายการของที่ต้องส่ง',
+		boxLabelDeliverTo: 'ส่งที่',
+		boxLabelRefTitle: 'เลขที่บริจาค',
+		boxLabelItemsTitle: 'ของในกล่อง',
+		boxLabelMoreItems: 'และอีก {count} รายการ',
+		boxLabelSheetOf: 'ใบที่ {index}/{total}',
+		boxLabelScanHint: 'สแกน QR ตอนตรวจรับ',
+		boxLabelCoordinates: 'พิกัด',
+		boxLabelMethodTitle: 'วิธีส่ง',
+		boxLabelScheduleTitle: 'นัดส่ง',
+		boxLabelQrAlt: 'QR เลขที่บริจาค {ref}'
 	},
 	en: {
 		// Header & Stepper
@@ -411,7 +465,6 @@ export const PUBLIC_DONATIONS_I18N = {
 		filterNormal: 'Normal',
 		loadingNeeds: 'Loading needs data...',
 		errorLoadingNeeds: 'Unable to load needs data at this time',
-		errorLoadingShelters: 'Unable to load shelters data',
 		errorConnect: 'Server connection error',
 		noSheltersOrItems: 'No shelters or items found',
 		noNeedsCurrently: 'No urgent needs at this time',
@@ -519,9 +572,23 @@ export const PUBLIC_DONATIONS_I18N = {
 		pickupAddressFieldLabel: 'Pickup Address / Location',
 		pickupAddressLabel: 'Pickup Address',
 		pickupAddressPlaceholder: 'Enter house number, street, landmarks for pickup...',
-		selectShelterLabel: 'Select Destination Shelter',
-		shelterLockedBadge: 'Locked based on selected need',
-		selectShelterPlaceholder: '-- Select Destination Shelter --',
+		needsMapLabel: 'Map of shelters accepting donations',
+		needsMapTitle: 'Where the shelters are',
+		needsMapHint: 'Pin numbers match the cards below. Tap a pin to see what a shelter needs.',
+		needsMapUnavailable: 'The map is unavailable right now. Pick a shelter from the list below.',
+		needsMapCloseCard: 'Close shelter card',
+		needsMapLegend: 'Urgency',
+		needsMapPinPrefix: 'Pin',
+		needsListTitle: '{count} shelters',
+		needsListShown: 'Showing {shown} of {total} shelters',
+		needsListShowMore: 'Show the rest',
+		directionsShort: 'Directions',
+		donateShort: 'Donate',
+		viewAllNeedsBtn: 'View all needs',
+		dropOffShelterLabel: 'Deliver to',
+		dropOffMapLabel: 'Map of the shelter you are delivering to',
+		dropOffNoShelter: 'No shelter selected for this donation yet',
+		dropOffBackToNeeds: 'Back to choose a shelter',
 		selectDateTimeLabel: 'Select Date & Time Slot',
 		pickupTimeSuffix: 'for pickup',
 		dropoffTimeSuffix: 'for drop-off',
@@ -574,7 +641,6 @@ export const PUBLIC_DONATIONS_I18N = {
 			'reCAPTCHA is not configured (PUBLIC_RECAPTCHA_SITE_KEY) — Unable to submit form.',
 		recaptchaBranding: 'This site is protected by reCAPTCHA.',
 		defaultItemFreeText: 'General Donation Item',
-		generalItemsFallback: 'General Donation Item',
 		defaultItemUnit: 'piece',
 
 		// Success Ticket
@@ -633,7 +699,6 @@ export const PUBLIC_DONATIONS_I18N = {
 		navigateGoogleMaps: 'Navigate with Google Maps',
 		backToHomeBtn: 'Back to Home',
 		backToHome: 'Back to Home',
-		openingMapsToast: 'Opening map navigation to shelter...',
 
 		// Track Search Page
 		trackPageTitle: 'Track Donation Status — Smart Shelter',
@@ -716,8 +781,6 @@ export const PUBLIC_DONATIONS_I18N = {
 		lineReviewApproved: 'Approved / awaiting drop-off',
 		lineReviewPending: 'Pending review',
 		lineReviewRejected: 'Not accepted',
-		editVerifyingWarning:
-			'This booking already has its QR. If your change adds an item that needs review, the QR stops working until staff finish reviewing it.',
 		statusVerifying: 'Checking in at Shelter',
 		statusReceived: 'Received into Warehouse',
 		statusRedirected: 'Redirected to Other Shelter',
@@ -775,6 +838,50 @@ export const PUBLIC_DONATIONS_I18N = {
 		editSaveBtn: 'Save Changes',
 		editSaving: 'Saving…',
 		editSuccessToast: 'Donation items updated',
-		editFailToast: 'Failed to update items'
+		editFailToast: 'Failed to update items',
+		editBlockedToast:
+			'This donation has been approved or has its QR, so its items can no longer be changed. To change it, cancel and book again, or tell the staff when you bring the items.',
+		editItemsHint: 'Adjust quantities or add/remove items until the shelter reviews them',
+		photoSectionTitle: 'Photos of your donation (optional)',
+		photoSectionDesc:
+			'Photos let staff see the condition of the items before they accept them. Up to 30 photos, 10 MB in total, at booking only.',
+		photoPrivacyWarning:
+			'Photos may show personal details such as faces, licence plates or house numbers. Please photograph the items only.',
+		photoAddBtn: 'Choose photos',
+		photoUsage: 'Used {used} / 10 MB',
+		photoCount: '{count} / 30 photos',
+		photoFull: 'Photo limit reached',
+		photoRefusedTooLarge: '{name} is larger than 20 MB',
+		photoRefusedNoRoom: 'Could not add {name}: 30 photos or 10 MB already used',
+		photoRefusedUnreadable: 'Could not open {name}. Please choose an image file',
+		photoRefusedUpload: 'Uploading {name} failed. Please try again',
+		photoRemoveAria: 'Remove photo {n}',
+		photoUploading: 'Uploading',
+		photoWaitUpload: 'Wait for the photos to finish uploading before booking',
+
+		// Box label (#591)
+		boxLabelOpenBtn: 'Print box label',
+		boxLabelOpenHint:
+			'Stick the label on the box so staff can see what is inside and where it goes.',
+		boxLabelPageTitle: 'Donation Box Label — Smart Shelter',
+		boxLabelHeading: 'Donation box label',
+		boxLabelBackToTrack: 'Back to tracking',
+		boxLabelPrintBtn: 'Print label',
+		boxLabelPrintTip:
+			'Prints at A6 (105 × 148 mm) · No printer? Choose "Save as PDF" · Sending several boxes? Print one copy per box.',
+		boxLabelNotReadyTitle: 'This booking cannot print a label yet',
+		boxLabelNotReadyBody:
+			'You can print it once staff approve the goods and the check-in QR is issued. Check the latest status on the tracking page.',
+		boxLabelNoLines: 'No items to send',
+		boxLabelDeliverTo: 'Deliver to',
+		boxLabelRefTitle: 'Donation ref',
+		boxLabelItemsTitle: 'Inside the box',
+		boxLabelMoreItems: 'and {count} more',
+		boxLabelSheetOf: 'Label {index}/{total}',
+		boxLabelScanHint: 'Scan the QR at check-in',
+		boxLabelCoordinates: 'Coordinates',
+		boxLabelMethodTitle: 'Delivery',
+		boxLabelScheduleTitle: 'Appointment',
+		boxLabelQrAlt: 'QR for donation ref {ref}'
 	}
 } as const;

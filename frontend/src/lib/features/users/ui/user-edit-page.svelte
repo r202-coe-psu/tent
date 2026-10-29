@@ -122,7 +122,8 @@
 			notes: input.notes,
 			volunteer_id: input.volunteer_id,
 			duty_window: input.duty_window,
-			affiliation_tags: input.affiliation_tags
+			affiliation_tags: input.affiliation_tags,
+			permanent_roles: input.permanent_roles
 		});
 		toast.success(`อัปเดตข้อมูลผู้ใช้งาน "${target.name}" สำเร็จ`);
 		demoteDialogOpen = false;

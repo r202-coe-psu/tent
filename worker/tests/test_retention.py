@@ -4,6 +4,7 @@ from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from unittest.mock import AsyncMock, patch
 
+import pytest
 from tent_model import (
     DonationBuffer,
     DonationNeedCounter,
@@ -160,13 +161,78 @@ async def test_purge_does_not_release_quota_for_received_buffer(db: None) -> Non
 async def test_retention_cycle_runs_the_reservation_ttl_sweep(db: None) -> None:
     """The TTL sweep must stay wired into the loop — it has no other scheduler."""
     couch = AsyncMock()
-    with patch(
-        "worker.retention.job.expire_declared_donations", new_callable=AsyncMock
-    ) as sweep:
+    couch.get_doc.return_value = None
+    with (
+        patch(
+            "worker.retention.job.expire_declared_donations", new_callable=AsyncMock
+        ) as sweep,
+        patch(
+            "worker.retention.job.sweep_orphan_donation_photos", new_callable=AsyncMock
+        ) as photo_sweep,
+        patch(
+            "worker.retention.job.expire_role_grants", new_callable=AsyncMock
+        ) as grants,
+    ):
         await run_retention_once(couch)
 
     sweep.assert_awaited_once()
     assert sweep.await_args.args[0] is couch
+    # Coordinator role grants (#955) lapse on the same cycle.
+    grants.assert_awaited_once()
+    assert grants.await_args.args[0] is couch
+    # CR-175 FR-16 — the unbound donor photo sweep rides the same cycle.
+    photo_sweep.assert_awaited_once()
+    assert photo_sweep.await_args.args[0] is couch
+
+
+@pytest.mark.parametrize(
+    "failing", ["reconcile_closed_shelters", "purge_expired_buffers"]
+)
+async def test_role_grant_sweep_runs_when_a_mongo_step_fails(failing: str) -> None:
+    """Coordinator access must end on time even while Mongo is down (#955 FR-12)."""
+    couch = AsyncMock()
+    steps = {
+        "reconcile_closed_shelters": AsyncMock(),
+        "purge_expired_buffers": AsyncMock(),
+    }
+    steps[failing].side_effect = RuntimeError("mongo down")
+    donations = AsyncMock()
+    grants = AsyncMock()
+    with (
+        patch.multiple(
+            "worker.retention.job",
+            **steps,
+            expire_declared_donations=donations,
+            expire_role_grants=grants,
+        ),
+        pytest.raises(RuntimeError, match="mongo down"),
+    ):
+        await run_retention_once(couch)
+
+    grants.assert_awaited_once()
+    assert grants.await_args.args[0] is couch
+    # The donation TTL is Mongo-backed and stays behind the failed step, as before.
+    donations.assert_not_awaited()
+
+
+async def test_a_failing_role_grant_sweep_does_not_stop_the_cycle(db: None) -> None:
+    couch = AsyncMock()
+    with (
+        patch(
+            "worker.retention.job.expire_declared_donations", new_callable=AsyncMock
+        ) as donations,
+        patch(
+            "worker.retention.job.sweep_orphan_donation_photos", new_callable=AsyncMock
+        ),
+        patch(
+            "worker.retention.job.expire_role_grants",
+            new_callable=AsyncMock,
+            side_effect=RuntimeError("couch down"),
+        ),
+    ):
+        await run_retention_once(couch)
+
+    donations.assert_awaited_once()
 
 
 async def test_retention_cycle_skips_the_sweep_without_a_couch_client(db: None) -> None:
@@ -207,11 +273,12 @@ async def test_purge_frees_the_place_of_a_timed_out_booking(db: None) -> None:
     assert counter.booked == 0
 
 
-async def test_reconcile_closed_shelters_audit_deletes_their_stock_rows(
+async def test_reconcile_closed_shelters_audit_deletes_stock_rows_but_keeps_the_shelter(
     db: None,
 ) -> None:
-    """`shelter_stocks` is keyed by shelter_code like needs — a closed shelter's rows go
-    with it, audited, while an open shelter's rows stay (#461)."""
+    """`shelter_stocks` is keyed by shelter_code like needs — a closed shelter's rows go,
+    audited (#461), while its `public_shelters` row stays (CR-183 FR-1); an open shelter keeps
+    both."""
     now = datetime.now(UTC)
     for code, status in (("SH940", "closed"), ("SH941", "open")):
         await PublicShelter(
@@ -220,6 +287,7 @@ async def test_reconcile_closed_shelters_audit_deletes_their_stock_rows(
             name=f"ศูนย์ {code}",
             status=status,
             capacity=10,
+            closed_at=now if status == "closed" else None,
             updated_at=now,
         ).insert()
         await ShelterStock(
@@ -232,9 +300,9 @@ async def test_reconcile_closed_shelters_audit_deletes_their_stock_rows(
             updated_at=now,
         ).insert()
 
-    await reconcile_closed_shelters("test-run-stock")
+    await reconcile_closed_shelters("test-run-stock", retention_months=3, now=now)
 
-    assert await PublicShelter.get("SH940") is None
+    assert await PublicShelter.get("SH940") is not None
     assert await ShelterStock.get("SH940:item_master:rice") is None
     assert await PublicShelter.get("SH941") is not None
     assert await ShelterStock.get("SH941:item_master:rice") is not None
@@ -243,3 +311,5 @@ async def test_reconcile_closed_shelters_audit_deletes_their_stock_rows(
     ).to_list()
     assert [a.target_id for a in audits] == ["SH940:item_master:rice"]
     assert audits[0].status == "verified"
+    assert audits[0].trigger == "scheduled"
+    assert audits[0].job_run_id == "test-run-stock"

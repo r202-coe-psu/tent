@@ -1,4 +1,5 @@
 import { ulid } from '$lib/db/ulid';
+import { nextClosedAt } from '../domain/closed-at';
 import { SHELTER_MASTER_SCHEMA_V, type Shelter, type ShelterMaster } from '../domain/schema';
 import { SHELTER_CAPABILITIES, shelterScopeRole } from '$lib/auth/roles';
 import { adminRaw, ServiceError } from '$lib/server/couch-admin';
@@ -7,6 +8,7 @@ import {
 	SHELTER_REGISTRY_DB,
 	deployBulkReturnEntryMangoIndexes,
 	deployDailySopRoleMangoIndexes,
+	deployDonationPhotoMangoIndex,
 	deployPeopleMangoIndexes,
 	deployRegistryDesign,
 	deployReferralMangoIndexes,
@@ -399,6 +401,9 @@ async function provisionShelterUnlocked(
 	await assertActive?.();
 	await deployDailySopRoleMangoIndexes(db);
 	steps.push({ step: 'daily-sop-role-mango', status: 200 });
+	await assertActive?.();
+	await deployDonationPhotoMangoIndex(db);
+	steps.push({ step: 'donation-photo-mango', status: 200 });
 
 	await assertActive?.();
 	const registry = await adminRaw(`/${SHELTER_REGISTRY_DB}`, 'PUT');
@@ -428,6 +433,7 @@ async function provisionShelterUnlocked(
 			schema_v: SHELTER_MASTER_SCHEMA_V,
 			code,
 			...input,
+			closed_at: nextClosedAt(null, input.operation_status, undefined, ts),
 			created_at: ts,
 			updated_at: ts
 		};

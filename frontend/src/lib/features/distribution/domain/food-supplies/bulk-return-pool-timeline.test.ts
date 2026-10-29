@@ -3,6 +3,7 @@ import { buildPoolTimeline } from './bulk-return-pool-timeline';
 import type { BulkReturnEntry } from './bulk-return-entry';
 import type { BulkReturnEntryMove } from './bulk-return-entry-move';
 import type { BulkReturnEntryVoid } from './bulk-return-entry-void';
+import type { BulkReturnLoanReopen } from './bulk-return-loan-reopen';
 import type { BulkReturnPoolV3 } from './bulk-return-pool-v3';
 
 const POOL_A = 'bulk_return_pool:01JA0000000000000000000001';
@@ -112,6 +113,54 @@ describe('buildPoolTimeline', () => {
 			voids: []
 		});
 		expect(timeline.map((e) => e.kind)).toEqual(['opened', 'entry_added', 'moved_out', 'moved_in']);
+	});
+
+	describe('loan reopens', () => {
+		const reopenOf = (entryId: string, poolId: string, n: number) =>
+			({
+				_id: entryId.replace('bulk_return_entry:', 'bulk_return_loan_reopen:'),
+				entry_id: entryId,
+				pool_id: poolId,
+				reason: 'wrong returner',
+				loan_ids: ['distribution_log:01JL0000000000000000000001'],
+				created_at: at(n),
+				created_by: 'user:sm'
+			}) as unknown as BulkReturnLoanReopen;
+
+		it('shows a loan_reopened event with the reason, author and time after the submit', () => {
+			const timeline = buildPoolTimeline(
+				pool(POOL_A, { submitted_at: at(3), submitted_by: 'user:e' }),
+				{
+					entries: [entry(E1, POOL_A, 1)],
+					moves: [],
+					voids: [],
+					loanReopens: [reopenOf(E1, POOL_A, 5)]
+				}
+			);
+			expect(timeline.map((e) => e.kind)).toEqual([
+				'opened',
+				'entry_added',
+				'submitted',
+				'loan_reopened'
+			]);
+			expect(timeline.at(-1)).toMatchObject({
+				entry_id: E1,
+				notes: 'wrong returner',
+				by: 'user:sm',
+				at: at(5),
+				qty: '2'
+			});
+		});
+
+		it('ignores a reopen recorded in another pool', () => {
+			const timeline = buildPoolTimeline(pool(POOL_B), {
+				entries: [],
+				moves: [],
+				voids: [],
+				loanReopens: [reopenOf(E1, POOL_A, 5)]
+			});
+			expect(timeline.map((e) => e.kind)).toEqual(['opened']);
+		});
 	});
 
 	describe('snapshot pins', () => {

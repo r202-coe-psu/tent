@@ -61,6 +61,10 @@
 
 	const t = $derived(getTranslation(PUBLIC_BOOKING_FORM_I18N, langState.current));
 	const totalPetCount = $derived(petItems.length);
+	const existingPetCount = $derived(
+		existingPets.reduce((sum, p) => sum + (Number(p.count) || 1), 0)
+	);
+	const petSlotsFull = $derived(existingPetCount + petItems.length >= PETS_MAX_COUNT);
 
 	let nextPetId = untrack(() => Math.max(0, ...petItems.map((p) => p.id), 0) + 1);
 	let uploadingPetId = $state<number | null>(null);
@@ -130,7 +134,7 @@
 
 	function addPet(species: 'dog' | 'cat' | 'other') {
 		if (pending) return;
-		if (petItems.length >= PETS_MAX_COUNT) {
+		if (petSlotsFull) {
 			toast.error(t.petMaxReached);
 			return;
 		}
@@ -300,7 +304,9 @@
 											? t.dogTitle
 											: ep.species === 'cat'
 												? t.catTitle
-												: ep.species}
+												: ep.species === 'other'
+													? t.otherPetTitle
+													: ep.species}
 										{#if ep.name}· {ep.name}{/if}
 									</span>
 									{#if ep.count && ep.count > 1}
@@ -320,7 +326,7 @@
 				>
 					<span class="text-xs font-medium text-foreground">
 						{totalPetCount > 0 ? t.petListTitle(totalPetCount) : t.addPetsTitle}
-						{#if petItems.length >= PETS_MAX_COUNT}
+						{#if petSlotsFull}
 							<span class="ml-1 font-normal text-amber-800">· {t.petMaxReached}</span>
 						{/if}
 					</span>
@@ -329,7 +335,7 @@
 							type="button"
 							variant="outline"
 							size="sm"
-							disabled={pending || petItems.length >= PETS_MAX_COUNT}
+							disabled={pending || petSlotsFull}
 							onclick={() => addPet('dog')}
 							class="h-8 gap-1 text-xs"
 						>
@@ -340,7 +346,7 @@
 							type="button"
 							variant="outline"
 							size="sm"
-							disabled={pending || petItems.length >= PETS_MAX_COUNT}
+							disabled={pending || petSlotsFull}
 							onclick={() => addPet('cat')}
 							class="h-8 gap-1 text-xs"
 						>
@@ -351,7 +357,7 @@
 							type="button"
 							variant="outline"
 							size="sm"
-							disabled={pending || petItems.length >= PETS_MAX_COUNT}
+							disabled={pending || petSlotsFull}
 							onclick={() => addPet('other')}
 							class="h-8 gap-1 text-xs"
 						>
@@ -373,7 +379,7 @@
 								type="button"
 								variant="outline"
 								size="sm"
-								disabled={pending || petItems.length >= PETS_MAX_COUNT}
+								disabled={pending || petSlotsFull}
 								onclick={() => addPet('dog')}
 								class="h-8 gap-1 text-xs"
 							>
@@ -384,7 +390,7 @@
 								type="button"
 								variant="outline"
 								size="sm"
-								disabled={pending || petItems.length >= PETS_MAX_COUNT}
+								disabled={pending || petSlotsFull}
 								onclick={() => addPet('cat')}
 								class="h-8 gap-1 text-xs"
 							>
@@ -395,7 +401,7 @@
 								type="button"
 								variant="outline"
 								size="sm"
-								disabled={pending || petItems.length >= PETS_MAX_COUNT}
+								disabled={pending || petSlotsFull}
 								onclick={() => addPet('other')}
 								class="h-8 gap-1 text-xs"
 							>
