@@ -132,6 +132,12 @@ export class VolunteerRemoteRepository implements VolunteerRepository {
 		return this.save(touch({ ...latest, status: 'inactive', _rev: latest._rev }));
 	}
 
+	async reactivate(id: string): Promise<Volunteer> {
+		const latest = await this.repo.get<Volunteer>(id);
+		if (!latest) throw new Error(`ไม่พบข้อมูลอาสาสมัคร: ${id}`);
+		return this.save(touch({ ...latest, status: 'active', _rev: latest._rev }));
+	}
+
 	async reviewIdentity(
 		id: string,
 		status: VerificationStatus,

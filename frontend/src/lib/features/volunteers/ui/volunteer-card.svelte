@@ -21,12 +21,13 @@
 	import SearchCheck from '@lucide/svelte/icons/search-check';
 	import KeyRound from '@lucide/svelte/icons/key-round';
 	import Trash2 from '@lucide/svelte/icons/trash-2';
+	import RotateCcw from '@lucide/svelte/icons/rotate-ccw';
 	import Phone from '@lucide/svelte/icons/phone';
 	import Lock from '@lucide/svelte/icons/lock';
 	import { toast } from 'svelte-sonner';
 	import { useQueryClient } from '@tanstack/svelte-query';
 	import { resolve } from '$app/paths';
-	import { isShelterManager, isSystemAdmin } from '$lib/auth/roles';
+	import { canAccessVolunteerBackoffice, isShelterManager, isSystemAdmin } from '$lib/auth/roles';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
 	import { Button } from '$lib/components/ui/button/index.js';
@@ -37,7 +38,7 @@
 	import VolunteerManageDialog from './volunteer-manage-dialog.svelte';
 	import VolunteerQualificationDialog from './volunteer-qualification-dialog.svelte';
 	import VolunteerAccessDialog from './volunteer-access-dialog.svelte';
-	import { useDeactivateVolunteer } from '../application/queries';
+	import { useDeactivateVolunteer, useReactivateVolunteer } from '../application/queries';
 	import { resolveSkillOption, type SkillOption } from '../domain/skill-catalog';
 	import {
 		hasPendingControlledSkill,
@@ -123,6 +124,10 @@
 		const roles = authStore.user?.roles ?? [];
 		return isSystemAdmin(roles) || isShelterManager(roles, shelterStore.selectedShelterCode);
 	});
+	// Re-activating a deactivated profile (#882, CR FR-12): SA / SM / volunteer_coordinator.
+	const canReactivate = $derived(
+		canAccessVolunteerBackoffice(authStore.user?.roles ?? [], shelterStore.selectedShelterCode)
+	);
 	const hasAccount = $derived(accessStatus.kind !== 'none');
 	// Only SA/SM can open the users page (and only they know the exact login to deep-link).
 	const manageAccountHref = $derived(
@@ -134,11 +139,20 @@
 
 	const queryClient = useQueryClient();
 	const deactivateMutation = useDeactivateVolunteer(queryClient);
+	const reactivateMutation = useReactivateVolunteer(queryClient);
 
 	function openQualificationAudit(skillCode?: string) {
 		manageDialogOpen = false;
 		qualificationFocusSkillCode = skillCode ?? null;
 		qualificationDialogOpen = true;
+	}
+
+	function reactivate() {
+		reactivateMutation.mutate(volunteer._id, {
+			onSuccess: () => toast.success(`เปิดใช้งานอาสาสมัคร ${fullName} อีกครั้งแล้ว`),
+			onError: (error) =>
+				toast.error(error instanceof Error ? error.message : 'เปิดใช้งานอาสาสมัครไม่สำเร็จ')
+		});
 	}
 
 	function confirmDeactivate(event: MouseEvent) {
@@ -368,6 +382,19 @@
 							ออกสิทธิ์ใช้งานระบบ
 						</Button>
 					{/if}
+				{/if}
+
+				{#if volunteer.status === 'inactive' && canReactivate}
+					<Button
+						size="sm"
+						variant="outline"
+						class="flex-1 gap-1.5 border-emerald-300 text-emerald-700 hover:bg-emerald-50"
+						onclick={reactivate}
+						disabled={reactivateMutation.isPending}
+					>
+						<RotateCcw class="h-3.5 w-3.5" />
+						{reactivateMutation.isPending ? 'กำลังเปิดใช้งาน...' : 'เปิดใช้งานอีกครั้ง'}
+					</Button>
 				{/if}
 
 				<Button
