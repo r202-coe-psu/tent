@@ -119,10 +119,16 @@ async function findLinkedVolunteer(user: CouchUserDoc): Promise<LinkedVolunteerR
 	return null;
 }
 
-export async function getMyCard(name: string): Promise<MyCard> {
+export async function getMyCard(
+	name: string,
+	sessionRoles: readonly string[] = []
+): Promise<MyCard> {
 	const res = await adminRaw(`/_users/org.couchdb.user:${encodeURIComponent(name)}`, 'GET');
-	// A CouchDB server admin is defined in the node config, not in `_users`, so it has no card.
-	if (res.status === 404) return { kind: 'none', reason: 'server_admin' };
+	if (res.status === 404) {
+		// A CouchDB server admin is defined in the node config, not in `_users`, so it has no card.
+		if (sessionRoles.includes('_admin')) return { kind: 'none', reason: 'server_admin' };
+		throw new ServiceError('UNAUTHENTICATED', 'Authentication required');
+	}
 	if (res.status >= 400) throw serviceErrorFromCouch('read user', res.status, res.data);
 	const user = res.data as CouchUserDoc;
 	if (user.active === false) return { kind: 'none', reason: 'inactive' };

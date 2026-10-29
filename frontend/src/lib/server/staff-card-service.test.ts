@@ -285,8 +285,17 @@ describe('getMyCard', () => {
 		expect(JSON.stringify(result)).not.toMatch(/0812345678/);
 	});
 
-	it('reports a session without a _users document (CouchDB server admin) as none/server_admin', async () => {
-		await expect(getMyCard('admin')).resolves.toEqual({ kind: 'none', reason: 'server_admin' });
+	it('reports a CouchDB server admin session, which has no _users document, as none/server_admin', async () => {
+		await expect(getMyCard('admin', ['_admin'])).resolves.toEqual({
+			kind: 'none',
+			reason: 'server_admin'
+		});
+	});
+
+	it('rejects a non-admin session whose _users document is gone as UNAUTHENTICATED', async () => {
+		const err = await rejection(getMyCard('ghost@x.com', []));
+
+		expect(err.code).toBe('UNAUTHENTICATED');
 	});
 
 	it('reports a deactivated account as none/inactive', async () => {
