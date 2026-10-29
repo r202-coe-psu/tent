@@ -103,7 +103,11 @@
 									? 'text-slate-400 line-through'
 									: 'text-slate-900'}"
 							>
-								<RecipientName recipientType={log.recipient_type} recipientId={log.recipient_id} />
+								<RecipientName
+									recipientType={log.recipient_type}
+									recipientId={log.recipient_id}
+									{shelterCode}
+								/>
 							</span>
 							<span class="text-slate-700">
 								{itemName(log)} × <span class="font-semibold tabular-nums">{log.qty}</span>

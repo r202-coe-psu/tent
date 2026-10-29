@@ -470,6 +470,8 @@
 		bind:this={picker}
 		bind:value={recipientSelection}
 		disabled={recordFoodMutation.isPending}
+		allowStaff
+		{shelterCode}
 	/>
 
 	{#if recipientSelection}

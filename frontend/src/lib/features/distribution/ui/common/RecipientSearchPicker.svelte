@@ -15,6 +15,7 @@
 		useVolunteers,
 		type Volunteer
 	} from '$lib/features/volunteers';
+	import { resolveStaffCard } from '$lib/features/users';
 	import CameraCodeScannerDialog from '$lib/components/camera-code-scanner-dialog.svelte';
 	import { createReadGuard } from '$lib/components/camera-code-scanner-state';
 	import { Input } from '$lib/components/ui/input/index.js';
@@ -35,6 +36,9 @@
 		allowOutside?: boolean;
 		/** Accept volunteer QR cards and list volunteers in the name search. */
 		allowVolunteer?: boolean;
+		/** Accept staff QR cards. Needs `shelterCode` to resolve the card. */
+		allowStaff?: boolean;
+		shelterCode?: string | null;
 		onselect?: (recipient: FrontlineRecipientSelection | null) => void;
 	}
 
@@ -43,6 +47,8 @@
 		disabled = false,
 		allowOutside = true,
 		allowVolunteer = true,
+		allowStaff = false,
+		shelterCode,
 		onselect
 	}: Props = $props();
 
@@ -126,10 +132,11 @@
 		try {
 			const result = await resolveScannedRecipient(
 				code,
-				{ allowVolunteer },
+				{ allowVolunteer, allowStaff },
 				{
 					lookupEvacuee: (c) => lookupEvacueeByScanCode(queryClient, c),
-					lookupVolunteer: (c) => lookupVolunteerByScanCode(c)
+					lookupVolunteer: (c) => lookupVolunteerByScanCode(c),
+					resolveStaffCard: shelterCode ? (p) => resolveStaffCard(p, shelterCode) : undefined
 				}
 			);
 			if (!isLatest()) return;
