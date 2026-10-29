@@ -243,3 +243,22 @@ def test_project_donation_reduces_point_receipts_to_point_lines_and_time():
     assert "gym-staff" not in repr(payload)
     assert "SECRET" not in repr(payload)
     assert "ลังบุบ" not in repr(payload)
+
+
+def test_project_donation_never_carries_who_closed_the_booking():
+    """Decision sync 2026-10-30 — ``closed_by`` is a staff name; ``closed_reason`` is not."""
+    summary = {
+        "total_items": 1,
+        "received_at": "2026-10-28T02:12:00.000Z",
+        "closed_by": "สมศรี",
+        "closed_reason": "staff_close",
+        "items": [{"item_id": "item:rice", "qty": "5", "unit": "ถุง"}],
+    }
+    _, payload = project_donation(
+        _donation(status="received", received_summary=summary), shelter_code="SH001"
+    )
+
+    assert payload is not None
+    assert "closed_by" not in payload["received_summary"]
+    assert payload["received_summary"]["closed_reason"] == "staff_close"
+    assert summary["closed_by"] == "สมศรี"

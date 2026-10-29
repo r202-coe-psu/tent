@@ -6,6 +6,7 @@ import {
 	isDonorEditable,
 	toTrackingDonor,
 	toTrackingLogistics,
+	toTrackingReceivedSummary,
 	type PublicDonationDoc
 } from '$lib/features/donations/server';
 import {
@@ -130,7 +131,10 @@ export const GET = async ({ params }) => {
 				items: latestDoc?.items ?? donation.items ?? [],
 				// CR-209 FR-4 — allowlisted, so `vehicle_plate` never leaves through tracking.
 				logistics: toTrackingLogistics(latestDoc?.logistics ?? donation.logistics),
-				received_summary: latestDoc?.received_summary ?? donation.received_summary ?? null,
+				// Without `closed_by`, the staff name (decision sync 2026-10-30).
+				received_summary: toTrackingReceivedSummary(
+					latestDoc?.received_summary ?? donation.received_summary
+				),
 				// CR-172 FR-14 — staff wrote it for the donor; the doc wins over the projection lag.
 				reject_reason: latestDoc?.reject_reason ?? donation.reject_reason ?? null,
 				reject_reason_code: latestDoc?.reject_reason_code ?? donation.reject_reason_code ?? null,

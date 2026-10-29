@@ -38,6 +38,17 @@ def project_point_receipts(receipts: Any) -> list[dict[str, Any]]:
     ]
 
 
+def project_received_summary(summary: Any) -> dict[str, Any] | None:
+    """The whole sub-doc, so received_summary.items[].rejected / reject_reason /
+    reject_reason_code (CR-172) ride along without a mapping here — but never
+    ``closed_by``, the name of the staff member who closed the booking (CR-206,
+    decision sync 2026-10-30).
+    """
+    if not isinstance(summary, dict):
+        return None
+    return {key: value for key, value in summary.items() if key != "closed_by"}
+
+
 def project_donation(
     doc: dict[str, Any], *, shelter_code: str
 ) -> tuple[ProjectionAction, dict[str, Any] | None]:
@@ -84,9 +95,7 @@ def project_donation(
         "status": doc.get("status") or "declared",
         "booking_ref": doc.get("booking_ref"),
         "items_declared": items_declared,
-        # Whole sub-doc, so received_summary.items[].rejected / reject_reason /
-        # reject_reason_code (CR-172) ride along without a mapping here.
-        "received_summary": doc.get("received_summary"),
+        "received_summary": project_received_summary(doc.get("received_summary")),
         # CR-172: the donor-facing reason. Docs before schema_v 6 have neither → None.
         "reject_reason": doc.get("reject_reason"),
         "reject_reason_code": doc.get("reject_reason_code"),
