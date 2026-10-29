@@ -30,6 +30,7 @@ export interface UserSummary {
 	active?: boolean;
 	must_change_password?: boolean;
 	has_security_question?: boolean;
+	has_staff_card: boolean;
 	affiliation_tags?: string[];
 	/** True when at least one MFA provider (Google or ThaID) is enrolled. */
 	mfa_enrolled?: boolean;

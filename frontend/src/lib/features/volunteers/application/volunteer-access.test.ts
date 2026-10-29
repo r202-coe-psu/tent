@@ -58,7 +58,8 @@ const account: UserSummary = {
 	roles: ['shelter:SH001', input.role],
 	personnel_type: 'volunteer',
 	volunteer_id: volunteer._id,
-	active: true
+	active: true,
+	has_staff_card: false
 };
 
 beforeEach(() => {

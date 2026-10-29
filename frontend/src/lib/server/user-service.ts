@@ -19,6 +19,7 @@ import {
 } from '$lib/server/security-questions';
 import { generateTemporaryPassphrase } from '$lib/server/passphrase-generator';
 import { mintStaffTokenHash } from '$lib/server/staff-card-token';
+import { isValidStaffTokenHash } from '$lib/features/users/server';
 
 /**
  * User service — the ONLY module that writes CouchDB `_users` with admin creds.
@@ -73,6 +74,8 @@ export interface UserSummary {
 	active?: boolean;
 	must_change_password?: boolean;
 	has_security_question?: boolean;
+	/** True when a staff card token hash is stored; the hash itself is never returned. */
+	has_staff_card: boolean;
 	affiliation_tags?: string[];
 	/** True when at least one MFA provider (Google or ThaID) is linked. */
 	mfa_enrolled?: boolean;
@@ -172,6 +175,7 @@ function toSummary(doc: CouchUserDoc): UserSummary {
 		active: doc.active ?? true,
 		must_change_password: doc.must_change_password ?? false,
 		has_security_question: Boolean(doc.security_question?.answer_hash),
+		has_staff_card: isValidStaffTokenHash(doc.staff_token_hash),
 		affiliation_tags: doc.affiliation_tags ?? [],
 		mfa_enrolled: Boolean(google || thaid),
 		mfa_google_email: google?.email ?? null,
