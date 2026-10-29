@@ -198,8 +198,8 @@
 	// popstate SvelteKit's `block` undoes the move with `history.go(-delta)`. Limit: SvelteKit can
 	// only cancel popstates it handles as navigations; a popstate within one navigation entry (the
 	// desk's own shallow writes) is not a navigation, never reaches here, and keeps the mode anyway.
-	// The target mode is read from `to.url`; a popstate entry's `page.state.deskSearch` is not
-	// visible here, so a popstate to an entry whose own state changed mode is not held.
+	// A popstate reads the target mode from `location`: kit sets `to.url` from the entry's original
+	// URL, but the browser is already on the entry, whose address is the desk's last write.
 	beforeNavigate((nav) => {
 		const bypass = bypassHref;
 		bypassHref = null;
@@ -207,8 +207,10 @@
 		if (nav.to.url.pathname !== resolve(ONSITE_DISTRIBUTION_PATH)) return;
 		if (bypass === nav.to.url.href) return;
 
+		const targetParams =
+			nav.type === 'popstate' ? new URL(location.href).searchParams : nav.to.url.searchParams;
 		const targetMode = resolveInitialMode(
-			parseOnsiteDistributionParams(nav.to.url.searchParams).mode,
+			parseOnsiteDistributionParams(targetParams).mode,
 			untrack(readStoredDeskMode)
 		);
 		const action = incomingLinkAction({
@@ -250,7 +252,6 @@
 		bypassHref = held.url.href;
 		if (held.popDelta !== null) {
 			history.go(held.popDelta);
-			void scrollToContent();
 			return;
 		}
 		const href = `${ONSITE_DISTRIBUTION_PATH}${held.url.search}${held.url.hash}`;

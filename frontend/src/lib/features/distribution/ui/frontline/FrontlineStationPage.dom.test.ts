@@ -490,9 +490,14 @@ describe('frontline station links with an unsaved draft (FR-DFS-05)', () => {
 			delta?: number;
 			willUnload?: boolean;
 			to?: null;
+			/** Address bar at the time of the event; popstates default to `href`. */
+			location?: string;
 		} = {}
 	) {
 		const url = new URL(href, 'http://localhost');
+		if (opts.location !== undefined || opts.type === 'popstate') {
+			window.history.replaceState(null, '', opts.location ?? href);
+		}
 		const cancel = vi.fn();
 		nav.beforeNavigate?.({
 			type: opts.type ?? 'link',
@@ -607,6 +612,52 @@ describe('frontline station links with an unsaved draft (FR-DFS-05)', () => {
 		expect(nav.goto).not.toHaveBeenCalled();
 		expect(nav.replaceState).not.toHaveBeenCalled();
 		go.mockRestore();
+	});
+
+	it('a popstate reads its target mode from location, not to.url (held)', async () => {
+		await renderFoodDeskWithDraft();
+		const start = location.href;
+
+		const cancel = fireNav('/onsite/distribution?mode=food&tab=food', {
+			type: 'popstate',
+			delta: -1,
+			location: '/onsite/distribution?mode=supplies&tab=returns'
+		});
+		await settle();
+		window.history.replaceState(null, '', start);
+
+		expect(cancel).toHaveBeenCalledOnce();
+		expect(dialog()).not.toBeNull();
+	});
+
+	it('a popstate reads its target mode from location, not to.url (not held)', async () => {
+		await renderFoodDeskWithDraft();
+		const start = location.href;
+
+		const cancel = fireNav('/onsite/distribution?mode=supplies&tab=supplies', {
+			type: 'popstate',
+			delta: -1,
+			location: '/onsite/distribution?mode=food&tab=food'
+		});
+		await settle();
+		window.history.replaceState(null, '', start);
+
+		expect(cancel).not.toHaveBeenCalled();
+		expect(dialog()).toBeNull();
+	});
+
+	it('a link navigation uses to.url even when location differs', async () => {
+		await renderFoodDeskWithDraft();
+		const start = location.href;
+
+		const cancel = fireNav(SUPPLIES_HREF, {
+			location: '/onsite/distribution?mode=food&tab=food'
+		});
+		await settle();
+		window.history.replaceState(null, '', start);
+
+		expect(cancel).toHaveBeenCalledOnce();
+		expect(dialog()).not.toBeNull();
 	});
 
 	it('does not cancel a mode-changing navigation when there is no draft', async () => {
