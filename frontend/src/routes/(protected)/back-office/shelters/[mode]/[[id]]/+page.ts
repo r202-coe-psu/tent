@@ -7,7 +7,7 @@ export const load = (async ({ params, fetch, url }) => {
 	if (params.mode === 'create') {
 		await requireAdmin(fetch);
 	} else {
-		await requireManager(fetch);
+		await requireManager(fetch, params.id);
 	}
 	if (params.mode !== 'create' && params.mode !== 'edit') {
 		error(404, 'Page not found');

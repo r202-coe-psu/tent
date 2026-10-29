@@ -120,11 +120,13 @@ export async function requireAdmin(fetchFn?: typeof fetch) {
 /**
  * Manager guard — requires a system admin OR a shelter_manager. Used by the
  * user-management page (the BFF is the real authorization gate; this is UX).
+ * Pass `shelterCode` when the page addresses a shelter by URL, so the check is
+ * made in that shelter rather than the selected one (#478).
  */
-export async function requireManager(fetchFn?: typeof fetch) {
+export async function requireManager(fetchFn?: typeof fetch, shelterCode?: string) {
 	await requireAuth(fetchFn);
 	const roles = authStore.user?.roles ?? [];
-	const shelter = activeShelterCode(roles);
+	const shelter = shelterCode ?? activeShelterCode(roles);
 	if (!isSystemAdmin(roles) && !isShelterManager(roles, shelter)) {
 		throw redirect(302, resolve(LANDING_ROUTE));
 	}
