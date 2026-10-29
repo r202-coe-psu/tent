@@ -3,7 +3,7 @@ id: CR-193
 title: CR-193 — ออกแบบ bulk_return_pool ใหม่เป็น "กองรวมตอนรับของคืน" (pool header + entry/move/void event log)
 status: approved
 date: 2026-10-22
-updated: 2026-10-28
+updated: 2026-10-29
 requested_by: feedback ระบบคลัง & เบิกของ ข้อ 4–5 (GitHub #657, #658)
 decided_by: kong (decisions 2026-10-22 — https://github.com/r202-coe-psu/tent/pull/768#issuecomment-6339918664; approved 2026-10-25)
 layer: stable
@@ -520,8 +520,22 @@ D1–D5 ข้างบนยังมีผลตามเดิม (ปรั�
   - system admin / shelter manager เห็นคิวทั้ง 3: "รอคลังตรวจรับ", "ต้องจัดการ", "กองที่จุดของฉัน"
   - role อื่นได้คิวรวมตามทุก role ที่ถือ (คลัง → "รอคลังตรวจรับ", distribution staff → "กองที่จุดของฉัน")
 - **ตัดสิน — ลิงก์กอง:** distribution staff ที่เข้าหลังบ้านไม่ได้ แต่เปิดลิงก์กอง
-  `/back-office/distribution?view=bulk_pools&pool=<id>` ให้พาไป `/onsite/distribution?tab=returns&pool=<id>` และเปิดกองนั้น (แทนการพาไป `/portal`)
-- **แก้:** ข้อ 26 และข้อ 27 (คิวตาม role) · **ต่อ:** ข้อ 29 (deep link)
+  `/back-office/distribution?view=bulk_pools&pool=<id>` ให้พาไป `/onsite/distribution?mode=supplies&tab=returns&pool=<id>` และเปิดกองนั้น (แทนการพาไป `/portal`)
+  - `/back-office/distribution?view=bulk_pools` ที่ไม่มี `pool` ให้พาไป `/onsite/distribution?mode=supplies&tab=returns` (ลิงก์ที่มีแค่ `?pool=<id>` ไม่มี `view` ก็ถือเป็นลิงก์กองเช่นกัน)
+  - ใส่ `mode=supplies` เพราะการคืนอยู่เฉพาะโหมด supplies (CR-200 FR-DFS-03)
+- **ตัดสิน — URL หน้างาน:** หน้างาน (onsite desk) ใช้ URL รูปแบบ `/onsite/distribution?mode=<m>&tab=<t>[&pool=<id>]`
+  - `pool` ใช้เฉพาะเมื่อ `tab=returns` (มี `pool` ⇒ บังคับ `tab=returns`; แท็บที่มีในโหมดเดียว เช่น `returns` ⇒ บังคับโหมดนั้น ไม่ว่า `mode=` จะเป็นอะไร)
+  - เฉพาะ desk เป็นผู้เขียน URL โดยใช้ replaceState
+  - กลับมาที่หน้างานด้วยปุ่ม Back ได้สถานะ desk (mode/tab/pool) ล่าสุดของ entry นั้น — การสลับแท็บ/โหมด/กองไม่เพิ่ม history entry
+- **ตัดสิน — ลิงก์กองที่หาไม่เจอ:** เมื่อ pool id ในลิงก์ไม่อยู่ในข้อมูลกองที่โหลดมา (ถูกลบ, เป็นของศูนย์อื่น หรือไม่เคยมี)
+  - แสดง toast หลังโหลดข้อมูลเสร็จแล้ว
+  - ลบ `pool=` ออกจาก URL และคงอยู่ที่แท็บ returns (หลังบ้านคงอยู่ที่ `view=bulk_pools`)
+  - กองที่อยู่ในข้อมูลแต่ถูก filter ของบอร์ดซ่อนอยู่ ยังเปิดได้
+- **ตัดสิน — ลิงก์ที่สลับโหมดขณะมีฟอร์มกรอกค้าง:**
+  - ถามยืนยันก่อน โดยใช้ dialog เดียวกับปุ่มสลับโหมด (CR-200 FR-DFS-05)
+  - ยกเลิก: คงโหมด แท็บ กอง และร่างเดิม และคืน URL ก่อนหน้า
+  - ยืนยัน: สลับโหมดและเปิดปลายทางตามลิงก์
+- **แก้:** ข้อ 26 และข้อ 27 (คิวตาม role) · **ต่อ:** ข้อ 29 (deep link), CR-200 FR-DFS-05 (ไม่แก้ CR-200)
 - **โค้ด:** PR #980
 
 ### สิ่งที่ encode แล้ว
@@ -662,3 +676,4 @@ VDU อ่านเอกสารอื่นไม่ได้ — กติ�
   36.3 ([#978](https://github.com/r202-coe-psu/tent/pull/978#issuecomment-6464670468)) timeline ไม่ซ้ำ banner ระดับศูนย์ (ต่อข้อ 19/28) ·
   36.4 ([#980](https://github.com/r202-coe-psu/tent/pull/980#issuecomment-6465023600)) คิวงานตามทุก role ที่ถือ + redirect ลิงก์กองของ distribution staff ไป `/onsite/distribution` (แก้ข้อ 26/27, ต่อข้อ 29) ·
   ไม่เปลี่ยน shape/`schema_v`/VDU
+- 2026-10-29 — ข้อ 36.4 เพิ่ม URL หน้างาน (`mode`/`tab`/`pool`), ลิงก์กองที่หาไม่เจอ, และลิงก์ที่สลับโหมดขณะมีฟอร์มค้าง; แก้ปลายทาง redirect เป็น `mode=supplies`
