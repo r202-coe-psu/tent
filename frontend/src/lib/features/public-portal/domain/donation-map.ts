@@ -134,6 +134,31 @@ function areaLabelOf(shelter: PublicShelterItem | undefined): string {
 		.join(' ');
 }
 
+/** One `donation_points` entry of a shelter detail (CR-205 FR-DP-12). */
+export type DonationPointDetail = {
+	id: string;
+	name: string;
+	geo: PublicGeoPoint;
+	location_note?: string | null;
+};
+
+/**
+ * The drop-off pins of one shelter, read from its detail (CR-205 FR-DP-18). A shelter with
+ * no ticked point gets none: its own pin already is the main point (FR-DP-16).
+ */
+export function donationMapPointsOf(
+	shelterCode: string,
+	points: readonly DonationPointDetail[] | null | undefined
+): DonationMapPoint[] {
+	return (points ?? []).map((point) => ({
+		id: point.id,
+		shelterCode,
+		geo: point.geo,
+		label: point.name,
+		description: point.location_note?.trim() || undefined
+	}));
+}
+
 /**
  * Who can be picked comes from `needs` (shelters that asked for donations); `shelters`
  * only adds geo and the area label, `pointsByShelter` (keyed by shelter code) adds
