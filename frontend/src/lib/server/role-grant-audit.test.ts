@@ -57,6 +57,23 @@ describe('recordRoleGrantAudit (FR-14)', () => {
 		expect(adminRaw.mock.calls[0][2].context).not.toHaveProperty('previous_expires_at');
 	});
 
+	it('records the verified profile and its verifier when the change carries one', async () => {
+		adminRaw.mockResolvedValue({ status: 201, data: {} });
+		const verified_by = {
+			shelter_code: 'SH001',
+			volunteer_id: 'volunteer:V1',
+			reviewed_by: 'staff03'
+		};
+		await recordRoleGrantAudit({ ...INPUT, verified_by });
+		expect(adminRaw.mock.calls[0][2].context.verified_by).toEqual(verified_by);
+	});
+
+	it('leaves verified_by out when the change carries none', async () => {
+		adminRaw.mockResolvedValue({ status: 201, data: {} });
+		await recordRoleGrantAudit(INPUT);
+		expect(adminRaw.mock.calls[0][2].context).not.toHaveProperty('verified_by');
+	});
+
 	it('retries with the same _id and counts a conflict as written', async () => {
 		adminRaw
 			.mockResolvedValueOnce({ status: 500, data: null })

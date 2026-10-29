@@ -24,6 +24,7 @@ vi.mock('$lib/features/shelters', () => ({
 }));
 
 import UserForm from './user-form.svelte';
+import type { RoleGrant } from '$lib/auth/role-grants';
 import {
 	STAFF_CAPABILITIES,
 	SHELTER_MANAGER,
@@ -83,7 +84,7 @@ describe('UserForm coordinator grants (#955)', () => {
 				granted_by: 'staff03',
 				granted_at: '2026-10-28T01:30:00.000Z'
 			}
-		]
+		] as RoleGrant[]
 	};
 	const renderEdit = (user: typeof volunteer) =>
 		render(UserForm, {
@@ -95,6 +96,32 @@ describe('UserForm coordinator grants (#955)', () => {
 
 		expect(body).toContain('หมดอายุสิ้นวันที่ 30/10/2569');
 		expect(body.match(/ไม่มีวันหมด/g)).toHaveLength(1);
+	});
+
+	it('shows who issued the grant and who verified the identity', () => {
+		const body = renderEdit({
+			...volunteer,
+			role_grants: [
+				{
+					...volunteer.role_grants[0],
+					verified_by: {
+						shelter_code: 'SH001',
+						volunteer_id: 'volunteer:V1',
+						reviewed_by: 'staff03'
+					}
+				}
+			]
+		});
+
+		expect(body).toContain('ออกโดย staff03');
+		expect(body).toContain('ยืนยันตัวตนโดย staff03 (คนเดียวกัน)');
+	});
+
+	it('leaves out the verifier when the grant does not record one', () => {
+		const body = renderEdit(volunteer);
+
+		expect(body).toContain('ออกโดย staff03');
+		expect(body).not.toContain('ยืนยันตัวตนโดย');
 	});
 
 	it('shows nothing for an account without grants', () => {

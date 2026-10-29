@@ -524,7 +524,8 @@ export async function grantCoordinatorRole(input: {
 			reason: 'role_grant.issued',
 			role: grant.role,
 			expires_at: grant.expires_at,
-			actor
+			actor,
+			verified_by: grant.verified_by
 		});
 		return { created: true, unchanged: false };
 	}
@@ -565,7 +566,8 @@ export async function grantCoordinatorRole(input: {
 		role: grant.role,
 		expires_at: grant.expires_at,
 		...(previous ? { previous_expires_at: previous.expires_at } : {}),
-		actor
+		actor,
+		verified_by: grant.verified_by
 	});
 	return { created: false, unchanged: false };
 }

@@ -1,4 +1,4 @@
-import type { RoleGrantAuditReason } from '$lib/auth/role-grants';
+import type { RoleGrant, RoleGrantAuditReason } from '$lib/auth/role-grants';
 import { ulid } from '$lib/db/ulid';
 import { adminRaw } from './couch-admin';
 import { shelterDbName } from './shelter-access-design';
@@ -20,6 +20,8 @@ export type RoleGrantAudit = {
 	previous_expires_at?: string | null;
 	/** The caller's user name, or `worker` for an expiry. */
 	actor: string;
+	/** On issue / renew / shorten: the verified profile and who verified it (FR-14). */
+	verified_by?: RoleGrant['verified_by'];
 };
 
 export const AUDIT_WRITE_ATTEMPTS = 3;
@@ -40,7 +42,8 @@ export async function recordRoleGrantAudit(input: RoleGrantAudit): Promise<boole
 		...(input.previous_expires_at !== undefined
 			? { previous_expires_at: input.previous_expires_at }
 			: {}),
-		actor: input.actor
+		actor: input.actor,
+		...(input.verified_by ? { verified_by: input.verified_by } : {})
 	};
 	// One `_id` for every attempt: a retry after a write that did land answers 409, not a second audit.
 	const doc = {

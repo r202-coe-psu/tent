@@ -58,7 +58,7 @@ const volunteer = (over: Record<string, unknown> = {}) => ({
 	phone: '0812345678',
 	national_id_hash: 'nid-hash-1',
 	identity_verified: true,
-	identity_verification: { status: 'verified' },
+	identity_verification: { status: 'verified', reviewed_by: 'staff03' },
 	...over
 });
 
@@ -114,7 +114,12 @@ describe('grantVolunteerAccessAsCoordinator', () => {
 					expires_at: '2026-10-31T16:59:59.999Z',
 					granted_by: 'staff03',
 					granted_at: NOW.toISOString(),
-					verified_by: { shelter_code: 'SH001', volunteer_id: 'volunteer:V1' }
+					// The coordinator verified and granted alone: kept so a manager can see it.
+					verified_by: {
+						shelter_code: 'SH001',
+						volunteer_id: 'volunteer:V1',
+						reviewed_by: 'staff03'
+					}
 				}
 			})
 		);
@@ -264,7 +269,11 @@ describe('grantVolunteerAccessAsCoordinator', () => {
 			expect(grantCoordinatorRole).toHaveBeenCalledWith(
 				expect.objectContaining({
 					grant: expect.objectContaining({
-						verified_by: { shelter_code: 'SH002', volunteer_id: 'volunteer:V9' }
+						verified_by: {
+							shelter_code: 'SH002',
+							volunteer_id: 'volunteer:V9',
+							reviewed_by: 'staff03'
+						}
 					})
 				})
 			);

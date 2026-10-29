@@ -472,12 +472,19 @@
 	{#if grant}
 		{@const key = compoundCapabilityRole(grant.shelter_code, grant.role)}
 		{@const permanent = ($formData.permanent_roles ?? []).includes(key)}
+		{@const reviewer = grant.verified_by?.reviewed_by}
 		<div
 			class="col-span-full -mt-0.5 mb-1 ml-8 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs"
 		>
 			<span class={permanent ? 'text-muted-foreground line-through' : 'font-medium text-amber-700'}>
 				{grantExpiryLabel(grant)}
 			</span>
+			<span class="text-muted-foreground">ออกโดย {grant.granted_by}</span>
+			{#if reviewer}
+				<span class="text-muted-foreground">
+					ยืนยันตัวตนโดย {reviewer}{reviewer === grant.granted_by ? ' (คนเดียวกัน)' : ''}
+				</span>
+			{/if}
 			<label class="flex cursor-pointer items-center gap-1.5 text-slate-700">
 				<input
 					type="checkbox"

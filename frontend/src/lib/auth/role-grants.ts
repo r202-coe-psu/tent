@@ -24,8 +24,12 @@ export type RoleGrant = {
 	expires_at: string;
 	granted_by: string;
 	granted_at: string;
-	/** The volunteer profile whose verified identity the grant rests on (FR-3). */
-	verified_by?: { shelter_code: string; volunteer_id: string };
+	/**
+	 * The volunteer profile whose verified identity the grant rests on (FR-3), and who marked
+	 * it verified (`identity_verification.reviewed_by`), so a manager can see when the
+	 * coordinator verified and granted alone.
+	 */
+	verified_by?: { shelter_code: string; volunteer_id: string; reviewed_by?: string | null };
 };
 
 /** Why a grant changed: the `audit.reason` written for it (draft CR FR-14). */

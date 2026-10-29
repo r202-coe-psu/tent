@@ -52,7 +52,7 @@ type VolunteerDoc = {
 	organization?: string | null;
 	user_name?: string | null;
 	identity_verified?: boolean;
-	identity_verification?: { status?: string } | null;
+	identity_verification?: { status?: string; reviewed_by?: string | null } | null;
 };
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -76,6 +76,16 @@ async function readVolunteer(shelterCode: string, volunteerId: string): Promise<
 	return doc;
 }
 
+/** Where the verification lives and who marked it verified (`reviewed_by`, null when unknown). */
+const verificationOf = (
+	doc: VolunteerDoc,
+	shelterCode: string = doc.shelter_code as string
+): NonNullable<RoleGrant['verified_by']> => ({
+	shelter_code: shelterCode,
+	volunteer_id: doc._id,
+	reviewed_by: doc.identity_verification?.reviewed_by ?? null
+});
+
 const isVerified = (doc: VolunteerDoc): boolean =>
 	identityVerificationStatus({
 		identity_verified: doc.identity_verified === true,
@@ -90,9 +100,8 @@ const isVerified = (doc: VolunteerDoc): boolean =>
  */
 async function identityVerifiedBy(
 	volunteer: VolunteerDoc
-): Promise<{ shelter_code: string; volunteer_id: string } | null> {
-	const own = { shelter_code: volunteer.shelter_code as string, volunteer_id: volunteer._id };
-	if (isVerified(volunteer)) return own;
+): Promise<NonNullable<RoleGrant['verified_by']> | null> {
+	if (isVerified(volunteer)) return verificationOf(volunteer);
 	const phone = volunteer.phone ? normalizePhone(volunteer.phone) : '';
 	const nationalIdHash =
 		volunteer.national_id_hash ||
@@ -110,7 +119,7 @@ async function identityVerifiedBy(
 			throw serviceErrorFromCouch('find volunteer profiles', res.status, res.data);
 		const docs = (res.data as { docs?: VolunteerDoc[] } | null)?.docs ?? [];
 		const match = docs.find(isVerified);
-		if (match) return { shelter_code: ref.code, volunteer_id: match._id };
+		if (match) return verificationOf(match, ref.code);
 	}
 	return null;
 }
