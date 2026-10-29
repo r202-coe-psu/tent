@@ -83,7 +83,10 @@ export interface ApplyMissedBulkReturnLoanRefsResult {
 	loansApplied: string[];
 	/** Refs not applied (loan closed / missing / insufficient). */
 	loansSkipped: BulkReturnLoanSkipped[];
-	/** The entry was voided (OPEN pool only): no loan was touched. */
+	/**
+	 * The entry was voided (OPEN pool only; found by the pre-check or the in-CAS re-read): no loan
+	 * was cut.
+	 */
 	voided?: true;
 }
 
@@ -92,8 +95,9 @@ export interface ApplyMissedBulkReturnLoanRefsResult {
  * only the entry's stored `loan_refs`. Idempotent via `applied_bulk_entry_ids`; a drifted loan is
  * skipped (CR-193 §15), never partially applied.
  * - SUBMITTED / RECEIVED pool: the entry must be in the pool's snapshot (`entry_ids`).
- * - OPEN pool: the entry must be live there (not voided, currently resolving to this pool) and the
- *   void is re-read inside every loan CAS attempt. A pool locked for SUBMIT / CANCEL is rejected
+ * - OPEN pool: the entry must currently resolve to this pool (else it is rejected). A voided entry
+ *   resolves to `{ voided: true }` without touching a loan, and the void is re-read inside every
+ *   loan CAS attempt. A pool locked for SUBMIT / CANCEL is rejected
  *   with reason 'locked' so the repair never races the snapshot.
  * - CANCELLED pool: rejected.
  */
@@ -135,7 +139,9 @@ export async function applyMissedBulkReturnLoanRefs(
 			events.voids,
 			pins
 		).find((r) => r.entry._id === input.entry_id);
-		if (!resolved || resolved.voided || resolved.pool_id !== pool._id) {
+		// A voided entry is a normal outcome (the UI shows an info toast), not a validation error.
+		if (resolved?.voided) return { loansApplied: [], loansSkipped: [], voided: true };
+		if (!resolved || resolved.pool_id !== pool._id) {
 			throw new WorkflowValidationError(`Entry ${input.entry_id} is not live in ${pool._id}`);
 		}
 	}

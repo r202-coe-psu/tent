@@ -189,9 +189,12 @@ describe('bulk return pool v3 — missed loan refs (fence timeout repair)', () =
 		await voidBulkReturnEntry({ entry_id: entry._id }, dist, deps);
 
 		expect(await listBulkReturnPoolMissedLoanRefs(pool._id, dist, deps)).toEqual([]);
-		await expect(
-			applyMissedBulkReturnLoanRefs({ entry_id: entry._id, pool_id: pool._id }, dist, deps)
-		).rejects.toBeInstanceOf(WorkflowValidationError);
+		const res = await applyMissedBulkReturnLoanRefs(
+			{ entry_id: entry._id, pool_id: pool._id },
+			dist,
+			deps
+		);
+		expect(res).toMatchObject({ voided: true, loansApplied: [], loansSkipped: [] });
 		const loan = await logRepo.get(loanId(82));
 		expect(loan?.applied_bulk_entry_ids ?? []).toEqual([]);
 		expect(loan?.qty_returned ?? '0').toBe('0');
