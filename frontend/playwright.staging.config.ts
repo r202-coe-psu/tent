@@ -63,7 +63,8 @@ export default defineConfig({
 		'public-shelters-filter.test.ts',
 		'staging/smoke.test.ts',
 		'stock-donations.test.ts',
-		'system-admin-shelter.test.ts'
+		'system-admin-shelter.test.ts',
+		'volunteer-access-roles.test.ts'
 	],
 	fullyParallel: false,
 	forbidOnly: true,

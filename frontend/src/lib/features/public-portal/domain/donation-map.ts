@@ -1,4 +1,9 @@
-import type { PublicGeoPoint, PublicShelterItem, PublicSiteKind } from './types';
+import type {
+	PublicDonationPoint,
+	PublicGeoPoint,
+	PublicShelterItem,
+	PublicSiteKind
+} from './types';
 
 /**
  * A pin on the donation map that is not the shelter itself (a drop-off point inside or
@@ -65,6 +70,8 @@ function hasUsableGeo(geo: PublicGeoPoint | null | undefined): geo is PublicGeoP
 		geo != null &&
 		Number.isFinite(geo.lat) &&
 		Number.isFinite(geo.lng) &&
+		Math.abs(geo.lat) <= 90 &&
+		Math.abs(geo.lng) <= 180 &&
 		!(geo.lat === 0 && geo.lng === 0)
 	);
 }
@@ -132,6 +139,27 @@ function areaLabelOf(shelter: PublicShelterItem | undefined): string {
 		.map((part) => part?.trim())
 		.filter(Boolean)
 		.join(' ');
+}
+
+/**
+ * The drop-off pins of one shelter, read from its detail (CR-205 FR-DP-18). A shelter with
+ * no ticked point gets none: its own pin already is the main point (FR-DP-16).
+ */
+export function donationMapPointsOf(
+	shelterCode: string,
+	points: readonly PublicDonationPoint[] | null | undefined
+): DonationMapPoint[] {
+	// The worker already drops (0,0) and out-of-range pins (FR-DP-11); a pin is never
+	// drawn off a bad row regardless.
+	return (points ?? [])
+		.filter((point) => hasUsableGeo(point.geo))
+		.map((point) => ({
+			id: point.id,
+			shelterCode,
+			geo: point.geo,
+			label: point.name,
+			description: point.location_note?.trim() || undefined
+		}));
 }
 
 /**

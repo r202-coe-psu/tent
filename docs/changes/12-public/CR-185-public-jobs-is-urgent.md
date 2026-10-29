@@ -3,6 +3,7 @@ id: CR-185
 title: public_jobs.is_urgent — การ์ดจิตอาสาหน้าแรกนับเฉพาะงานเร่งด่วนจากข้อมูลจริง
 status: approved
 date: 2026-10-21 (approved 2026-10-22)
+updated: 2026-10-30 # amend FR-3, FR-4, FR-5 โดย CR-215 (สูตรการ์ดหน้าแรกนับเฉพาะกะที่ยังเปิดรับ)
 requested_by: feedback หน้างาน 2026-10-20 (issue #709 — การ์ดหน้าแรกแสดง "ต้องการอีก 0 คน" เสมอ)
 decided_by: ผู้รับ issue (@mhapong — เลือก "เฉพาะงานเร่งด่วน" และ track ด้วย CR, 2026-10-21) · approve CR โดย @mhapong 2026-10-22
 layer: volatile
@@ -49,10 +50,10 @@ affects:
 - FR-1 — projector `job` ต้องเขียน `is_urgent = bool(job.is_urgent)` ลง `public_jobs` (ไม่มีค่า = `false`)
 - FR-2 — `GET /public/v1/jobs` ต้องส่ง `is_urgent` ต่องาน; BFF `GET /api/public/v1/volunteer/jobs` ส่งต่อโดยไม่แก้
   (CouchDB fallback ของ BFF ส่ง field นี้อยู่แล้ว)
-- FR-3 — **ต้องการอีก** = ผลรวม `slots_remaining` ของงานที่ `is_urgent = true` และ `status = open`
-- FR-4 — **มีแล้ว** = ผลรวม `slots_confirmed` ของงานชุดเดียวกับ FR-3
+- FR-3 — **ต้องการอีก** = ผลรวม `slots_remaining` ของงานที่ `is_urgent = true` และ `status = open` (ปรับปรุงโดย [CR-215](../06-A-volunteer/CR-215-close-ended-volunteer-shifts.md): นับเฉพาะกะที่ยังเปิดรับตามเวลาสิ้นสุดกะ ไม่นับกะที่จบแล้ว)
+- FR-4 — **มีแล้ว** = ผลรวม `slots_confirmed` ของงานชุดเดียวกับ FR-3 (ปรับปรุงโดย [CR-215](../06-A-volunteer/CR-215-close-ended-volunteer-shifts.md): นับเฉพาะกะที่ยังเปิดรับ)
 - FR-5 — รายการจิตอาสา: 1 การ์ดต่อศูนย์ที่มีงานตาม FR-3 ที่ยังมี `slots_remaining > 0` เรียงศูนย์ที่ขาดมากสุดก่อน;
-  การ์ดแสดงชื่องาน (ขาดมากสุดก่อน), สัดส่วนที่มีแล้วต่อโควตา และจำนวนที่ยังขาด
+  การ์ดแสดงชื่องาน (ขาดมากสุดก่อน), สัดส่วนที่มีแล้วต่อโควตา และจำนวนที่ยังขาด (ปรับปรุงโดย [CR-215](../06-A-volunteer/CR-215-close-ended-volunteer-shifts.md): งานที่ไม่เหลือกะเปิดรับไม่แสดงเป็นการ์ด)
 - FR-6 — ระหว่างโหลด หรืออ่านกระดานงานไม่ได้ (เช่น API ล่ม / rate limit) การ์ดต้องแสดง "—" ไม่ใช่ `0`
   และหน้าแรกต้องใช้งานส่วนอื่นได้ตามปกติ
 - FR-7 — คำนวณด้วยฟังก์ชัน pure `summarizeUrgentVolunteerNeed` (feature `volunteer-portal`) พร้อม unit test
