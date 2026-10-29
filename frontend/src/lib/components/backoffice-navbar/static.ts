@@ -2,8 +2,8 @@ import type { ResolvedPathname } from '$app/types';
 import { resolve } from '$app/paths';
 import type { Icon } from '@lucide/svelte';
 import {
-	BANNER_MANAGER_CAPABILITIES,
-	hasCapabilityAnywhere,
+	canManageBanners,
+	canManageScanners,
 	isKioskStaffOnly,
 	isShelterManager,
 	isSystemAdmin,
@@ -14,8 +14,7 @@ import {
 	canAccessTickets,
 	canAccessVolunteerBackoffice,
 	canAccessWarehouse,
-	shelterCodeFromRoles,
-	SCANNER_MANAGER_CAPABILITIES
+	shelterCodeFromRoles
 } from '$lib/auth/roles';
 import Users from '@lucide/svelte/icons/users';
 import HeartHandshake from '@lucide/svelte/icons/heart-handshake';
@@ -43,7 +42,7 @@ type Leaf = {
 	icon: typeof Icon;
 	requiresAdmin?: boolean;
 	requiresManager?: boolean;
-	/** Fine-grained visibility (e.g. capability in any shelter). Wins over the boolean flags. */
+	/** Fine-grained visibility (e.g. a capability of the active shelter). Wins over the boolean flags. */
 	visibleTo?: (ctx: NavVisibilityContext) => boolean;
 };
 
@@ -65,8 +64,8 @@ export type NavVisibilityContext = {
  * Whether the signed-in user sees a nav node. `visibleTo` wins; a group also needs at least one
  * visible child (no empty parents); otherwise `requiresAdmin` / `requiresManager` apply. A
  * kiosk_staff-only or pr_staff-only user of the active shelter sees only leaves whose `visibleTo`
- * admits them (FR-SBO-29): device management admits SCANNER_MANAGER_CAPABILITIES holders, banner
- * management admits BANNER_MANAGER_CAPABILITIES holders (#930).
+ * admits them (FR-SBO-29): device management admits scanner managers of the active shelter, banner
+ * management admits banner managers of the active shelter (#930) — same predicates as the guards.
  */
 export function canSeeNavNode(node: BackofficeNavbarNode, input: NavVisibilityContext): boolean {
 	// Same shelter fallback as the route guards (`activeShelterCode` in guards/auth.ts).
@@ -200,13 +199,15 @@ export const backofficeNavbarGroups: BackofficeNavbarGroup[] = [
 						label: 'จัดการอุปกรณ์',
 						href: resolve('/back-office/kiosks'),
 						icon: Cpu,
-						visibleTo: ({ roles }) => hasCapabilityAnywhere(roles, SCANNER_MANAGER_CAPABILITIES)
+						visibleTo: ({ roles, shelterCode }) =>
+							isSystemAdmin(roles) || (!!shelterCode && canManageScanners(roles, shelterCode))
 					},
 					{
 						label: 'จัดการแบนเนอร์',
 						href: resolve('/back-office/kiosks/banners'),
 						icon: Images,
-						visibleTo: ({ roles }) => hasCapabilityAnywhere(roles, BANNER_MANAGER_CAPABILITIES)
+						visibleTo: ({ roles, shelterCode }) =>
+							isSystemAdmin(roles) || (!!shelterCode && canManageBanners(roles, shelterCode))
 					}
 				]
 			},

@@ -232,11 +232,16 @@ describe('real backofficeNavbarGroups — visible leaves per role (regression gu
 		expect(labels).not.toContain('จัดการ Kiosk');
 	});
 
-	it('a manager of another shelter keeps only the kiosk devices (guards are shelter-scoped)', () => {
+	it('a manager of another shelter sees no kiosk menus (guards are shelter-scoped)', () => {
 		const roles = ['shelter:SH002', 'SH002:shelter_manager'];
-		expect(visibleLeafLabels(ctx(roles, 'SH001'))).toEqual(
-			labelsFor(scannerDevices, bannerManagement)
-		);
+		expect(visibleLeafLabels(ctx(roles, 'SH001'))).toEqual(labelsFor());
+	});
+
+	it('kiosk_staff / pr_staff of another shelter see no kiosk menus', () => {
+		for (const cap of ['kiosk_staff', 'pr_staff']) {
+			const roles = ['shelter:SH002', `SH002:${cap}`];
+			expect(visibleLeafLabels(ctx(roles, 'SH001')), cap).toEqual(labelsFor());
+		}
 	});
 
 	it('incident log is visible to system_admin, security_officer and shelter_manager only', () => {

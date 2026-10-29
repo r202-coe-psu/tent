@@ -35,7 +35,9 @@ vi.mock('$lib/features/users', () => ({
 
 import {
 	requireEvacueeRegistration,
+	requireBannerManagement,
 	requireIncidents,
+	requireKioskManagement,
 	requireKitchen,
 	requireManager,
 	requireTicketAccess,
@@ -68,16 +70,16 @@ const GUARD_OF: Record<string, Guard> = {
 	'/back-office/shelters': requireManager,
 	'/back-office/users': requireManager,
 	'/back-office/master-data': requireManager,
-	'/back-office/incidents': requireIncidents
+	'/back-office/incidents': requireIncidents,
+	'/back-office/kiosks': requireKioskManagement,
+	'/back-office/kiosks/banners': requireBannerManagement
 };
 
-/** No page guard (R2, #845), or a deliberately looser menu rule (kiosks, issue #842 Q3). */
+/** No page guard yet (R2, #845). */
 const EXEMPT = new Set([
 	'/back-office/shelters/readiness',
 	'/back-office/dailysop',
-	'/back-office/sop-parameters',
-	'/back-office/kiosks',
-	'/back-office/kiosks/banners'
+	'/back-office/sop-parameters'
 ]);
 
 const leaves = (): BackofficeNavbarNode[] => {
@@ -101,12 +103,17 @@ const ROLE_SETS: string[][] = [
 		'security_officer',
 		'triage_staff',
 		'medical_staff',
-		'facility_staff'
+		'facility_staff',
+		'kiosk_staff',
+		'pr_staff'
 	].flatMap((cap) => [
 		['shelter:SH001', `SH001:${cap}`],
 		['shelter:SH002', `SH002:${cap}`]
 	]),
-	['shelter:SH001', 'SH001:kitchen_staff', 'SH001:supply_coordinator']
+	['shelter:SH001', 'SH001:kitchen_staff', 'SH001:supply_coordinator'],
+	// Multi-shelter accounts: the selected shelter decides (#842 review).
+	['shelter:SH001', 'SH001:kiosk_staff', 'shelter:SH002', 'SH002:shelter_manager'],
+	['shelter:SH001', 'SH001:registration_staff', 'shelter:SH002', 'SH002:shelter_manager']
 ];
 
 async function allows(guard: Guard): Promise<boolean> {
