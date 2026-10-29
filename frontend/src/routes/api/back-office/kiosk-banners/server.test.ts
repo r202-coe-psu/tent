@@ -142,6 +142,24 @@ describe('GET /api/back-office/kiosk-banners (FR-KBR-10/11)', () => {
 		expect(mockList).toHaveBeenCalledWith('SH001');
 	});
 
+	it('lets pr_staff list the banners of their own shelter', async () => {
+		mockSession.mockResolvedValue(SESSIONS.prA);
+		const response = await get('?shelter_code=SH001');
+		expect(response.status).toBe(200);
+		expect(((await response.json()) as KioskBannerRecord[]).map((b) => b.title)).toEqual([
+			'live',
+			'late'
+		]);
+	});
+
+	it('returns 403 for pr_staff listing another shelter', async () => {
+		mockSession.mockResolvedValue(SESSIONS.prA);
+		const response = await get('?shelter_code=SH002');
+		expect(response.status).toBe(403);
+		expect((await response.json()).error.message).toContain('pr_staff');
+		expect(mockList).not.toHaveBeenCalled();
+	});
+
 	it('lists expired banners newest end first', async () => {
 		const response = await get('?shelter_code=SH001&view=expired');
 		expect(response.status).toBe(200);
@@ -218,6 +236,23 @@ describe('POST /api/back-office/kiosk-banners (FR-KBR-02/04/11)', () => {
 				{ shelterCode: 'SH001', createdBy: session.name }
 			);
 		}
+	});
+
+	it('lets pr_staff create for their own shelter as themselves', async () => {
+		mockSession.mockResolvedValue(SESSIONS.prA);
+		const response = await post('?shelter_code=SH001', { ...input, image });
+		expect(response.status).toBe(201);
+		expect(mockCreate).toHaveBeenLastCalledWith(
+			expect.objectContaining({ title: 'ประกาศ' }),
+			expect.objectContaining({ contentType: 'image/png' }),
+			{ shelterCode: 'SH001', createdBy: 'pr-a' }
+		);
+	});
+
+	it('returns 403 for pr_staff creating in another shelter', async () => {
+		mockSession.mockResolvedValue(SESSIONS.prA);
+		expect((await post('?shelter_code=SH002', { ...input, image })).status).toBe(403);
+		expect(mockCreate).not.toHaveBeenCalled();
 	});
 
 	it('passes screen_type through, defaulting to compact', async () => {

@@ -22,7 +22,8 @@ from worker.projectors.donation_need_counter import plan_need_counters
 from worker.projectors.evacuee import project_evacuee
 from worker.projectors.occupancy import aggregate_occupancy, count_stay_statuses
 from worker.projectors.shelter import (
-    is_shelter_open,
+    RetentionPhase,
+    classify_registry_shelter,
     map_public_shelter_status,
     project_shelter,
     resolve_site_kind,
@@ -168,10 +169,6 @@ def test_project_shelter_cancelled_deletes_by_code():
     assert project_shelter(doc) == ("delete", {"_id": "SH009"})
 
 
-def test_is_shelter_open_false_for_cancelled():
-    assert is_shelter_open({"operation_status": "cancelled"}) is False
-
-
 def test_project_shelter_malformed_doc_deletes():
     """Only malformed/non-shelter docs hard-delete here — the true archive signal (a
     CouchDB tombstone) is handled separately via `apply_shelter_deactivate`."""
@@ -225,11 +222,21 @@ def test_project_shelter_standby_keeps_status():
     assert payload["is_active"] is True
 
 
-def test_is_shelter_open_variants():
-    assert is_shelter_open({"operation_status": "active"}) is True
-    assert is_shelter_open({"operation_status": "standby"}) is True
-    assert is_shelter_open({"status": "open"}) is True
-    assert is_shelter_open({"operation_status": "closed"}) is False
+def test_classify_registry_shelter_variants():
+    def phase(doc):
+        return classify_registry_shelter(doc, retention_months=3, now=datetime.now(UTC))
+
+    assert phase({"operation_status": "active"}) is RetentionPhase.OPEN
+    assert phase({"operation_status": "standby"}) is RetentionPhase.OPEN
+    assert phase({"status": "open"}) is RetentionPhase.OPEN
+    assert phase({"operation_status": "cancelled"}) is RetentionPhase.HIDDEN
+    assert phase({"operation_status": "closed"}) is RetentionPhase.CLOSED_WITHOUT_DATE
+    assert (
+        phase(
+            {"operation_status": "closed", "closed_at": datetime.now(UTC).isoformat()}
+        )
+        is RetentionPhase.CLOSED_WITHIN_RETENTION
+    )
 
 
 def test_project_evacuee_maps_person_id_and_masked_fields():

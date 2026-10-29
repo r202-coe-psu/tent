@@ -471,7 +471,7 @@ code เสมอ. หากไม่มีค่า default เฉพาะ ร
 | `duplicate_hint_threshold`       |        `0.8` | threshold สำหรับ duplicate hint  |
 | `donation_reservation_ttl_hours` |         `72` | อายุ reservation บริจาค ชั่วโมง  |
 | `device_db_ttl_days`             |         `30` | อายุ device DB วัน               |
-| `retention_months_after_close`   |          `3` | retention หลังปิดเคส เดือน       |
+| `retention_months_after_close`   |          `3` | ระยะที่คนของศูนย์ปิดยังค้นเจอบน public search (เดือน, CR-183) |
 | `fam_search_max_results`         |         `10` | จำนวนผลค้นหา family สูงสุด       |
 
 ## 6. Public portal config seed

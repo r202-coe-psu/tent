@@ -577,6 +577,13 @@ export function validateRow(
 
 	// -- sheet 1: identity, address, people --
 	const status = resolveEnum(raw, H.operation_status, OPERATION_STATUS_CHOICES, sink);
+	// CR-183 FR-23: closing goes through the staff PATCH so `closed_at` has one writer.
+	if (status === 'closed') {
+		sink.push(
+			H.operation_status,
+			'นำเข้าศูนย์สถานะ "ปิดศูนย์" ไม่ได้ — ปิดศูนย์จากหน้าจัดการศูนย์'
+		);
+	}
 	const siteKind =
 		resolveMaster(raw, H.site_kind, lookups.site_kind, sink) ??
 		lookups.site_kind.defaultCode ??

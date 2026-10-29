@@ -136,7 +136,7 @@ async function closeSetup(
 	}
 	const desk = new DeskPage(page);
 	await desk.goto();
-	await desk.openTab('reconciliation');
+	await desk.openTab('reconciliation', 'supplies');
 	await desk.selectPoint(scenarioPoint(scenario));
 	await desk.selectTicket('reconciliation', ticket);
 	await expect(desk.reconciliationHeading(ticket)).toBeVisible();
@@ -279,6 +279,14 @@ test.describe('Tab 4 — loan return counter (plan §4.6)', { tag: DESK_TAGS }, 
 		await expect(dialog).toBeVisible();
 		expect(await getShelterDocument(logId)).toMatchObject({ status: 'active' });
 		expect(await ledgerRows('receive', logId)).toHaveLength(0);
+
+		// The outage submit is still in the app's retry backoff. Reconnecting before it settles lets
+		// its last retry succeed and close the dialog by itself, so wait until it has given up.
+		const confirm = dialog.getByRole('button', { name: /ยืนยันตรวจรับคืนเข้าคลัง/ });
+		await expect(dialog.getByRole('button', { name: /กำลังบันทึกรับคืน\.\.\./ })).toHaveCount(0, {
+			timeout: 30_000
+		});
+		await expect(confirm).toBeEnabled();
 
 		// Back online: the live `_changes` poll reconnects the desk without a reload (the
 		// banner's retry button sits under the dialog's overlay).

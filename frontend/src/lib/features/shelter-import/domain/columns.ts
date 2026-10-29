@@ -468,9 +468,9 @@ const SHEET_MAIN: SheetDef = {
 			header: H.operation_status,
 			kind: 'enum',
 			required: false,
-			choices: OPERATION_STATUS_CHOICES,
+			choices: OPERATION_STATUS_CHOICES.filter((c) => c.value !== 'closed'),
 			path: 'operation_status',
-			hint: 'สถานะการเปิดให้บริการ (ว่าง = กำลังเตรียมการ)'
+			hint: 'สถานะการเปิดให้บริการ (ว่าง = กำลังเตรียมการ) · ปิดศูนย์ได้จากหน้าจัดการศูนย์เท่านั้น'
 		},
 		{
 			header: H.shelter_type,

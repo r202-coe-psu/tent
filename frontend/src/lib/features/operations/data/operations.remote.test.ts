@@ -139,6 +139,7 @@ import {
 	createStockLedger,
 	LotWriteOffError,
 	projectStockLotBalances,
+	StockLotIntegrityError,
 	TransferForbiddenError
 } from '../domain/operations';
 import { createStockLotReservation, makeLotReservationDocId } from '$lib/features/distribution';
@@ -698,6 +699,98 @@ describe('OperationsRemoteRepository', () => {
 			expect(projectStockLotBalances(await repo.listLedger())).toEqual([
 				expect.objectContaining({ lot_ref: inbound._id, item_id: 'item:soap', qty: '2' })
 			]);
+		});
+
+		describe('another item in the shelter has an impossible lot history', () => {
+			const brokenLot = 'stock_ledger:01J20000000000000000000B01';
+			const ledgerRow = (
+				id: string,
+				itemId: string,
+				qty: string,
+				occurredAt: string,
+				lotRef?: string
+			) => ({
+				_id: id,
+				schema_v: 3,
+				shelter_code: 'SH001',
+				type: 'stock_ledger' as const,
+				item_id: itemId,
+				qty,
+				unit: 'bar',
+				reason: qty.startsWith('-') ? ('distribute' as const) : ('receive' as const),
+				ref_id: null,
+				...(lotRef ? { lot_ref: lotRef } : {}),
+				occurred_at: occurredAt,
+				created_at: occurredAt,
+				updated_at: occurredAt,
+				created_by: 'tester'
+			});
+
+			// Item B: an outbound dated before the inbound of the lot it names.
+			async function seedBrokenItemB() {
+				await repo.addLedgerEntry(
+					ledgerRow(
+						'stock_ledger:01J20000000000000000000B00',
+						'item:b',
+						'-3',
+						'2026-01-01T00:00:00.000Z',
+						brokenLot
+					)
+				);
+				await repo.addLedgerEntry(
+					ledgerRow(brokenLot, 'item:b', '10', '2026-01-02T00:00:00.000Z', brokenLot)
+				);
+			}
+
+			it("distributes a healthy item although another item's history cannot be replayed", async () => {
+				mockGetItem.mockResolvedValue({ unit: 'bar' } as SupplyItem);
+				const inbound = await repo.receiveStock(
+					{ item_id: 'item:a', qty: 10, unit: 'bar', source: 'donation', ref_id: DONATION_REF },
+					ctx
+				);
+				await seedBrokenItemB();
+
+				const entry = await repo.distributeStock(
+					{
+						note: 'ครัวกลาง',
+						item_id: 'item:a',
+						qty: 4,
+						unit: 'bar',
+						ref_id: DISTRIBUTION_BATCH_REF,
+						lot_ref: inbound._id
+					},
+					ctx
+				);
+
+				expect(entry.qty).toBe('-4');
+				const rows = (await repo.listLedger()).filter(
+					(e) => e.item_id === 'item:a' && e.reason === 'distribute'
+				);
+				expect(rows.map((e) => [e.lot_ref, e.qty])).toEqual([[inbound._id, '-4']]);
+				expect((await repo.getBalance()).get('item:a')).toBe('6');
+			});
+
+			it('still refuses to distribute the item whose own history is impossible', async () => {
+				mockGetItem.mockResolvedValue({ unit: 'bar' } as SupplyItem);
+				await seedBrokenItemB();
+
+				await expect(
+					repo.distributeStock(
+						{
+							note: 'ครัวกลาง',
+							item_id: 'item:b',
+							qty: 1,
+							unit: 'bar',
+							ref_id: DISTRIBUTION_BATCH_REF,
+							lot_ref: brokenLot
+						},
+						ctx
+					)
+				).rejects.toBeInstanceOf(StockLotIntegrityError);
+				expect(
+					(await repo.listLedger()).filter((e) => e.item_id === 'item:b' && e.qty === '-1')
+				).toHaveLength(0);
+			});
 		});
 	});
 
@@ -1575,6 +1668,57 @@ describe('OperationsRemoteRepository — transfer via BFF (CR-059 Flow 1 / T-13)
 			expect.stringContaining('shelter_code=SH001'),
 			expect.objectContaining({ credentials: 'include' })
 		);
+	});
+
+	it('reads ledger transfer refs by id from the transfer API, not the shelter DB (#811)', async () => {
+		fetchMock.mockResolvedValue({
+			ok: true,
+			status: 200,
+			json: async () => [requestedTransfer]
+		});
+
+		const docs = await repo.listLedgerRefDocs([requestedTransfer._id, 'stock_transfer:01GONE']);
+
+		expect(docs.map((d) => d._id)).toEqual([requestedTransfer._id]);
+		expect(fetchMock).toHaveBeenCalledTimes(1);
+		const url = new URL(fetchMock.mock.calls[0][0], 'http://localhost');
+		expect(url.pathname).toBe('/api/back-office/transfer');
+		expect(url.searchParams.get('shelter_code')).toBe('SH001');
+		expect(url.searchParams.getAll('id')).toEqual([requestedTransfer._id, 'stock_transfer:01GONE']);
+	});
+
+	it('names every transfer ref even past one list page, in batches of ids (#811)', async () => {
+		const ids = Array.from(
+			{ length: 120 },
+			(_, i) => `stock_transfer:01OLD${String(i).padStart(3, '0')}`
+		);
+		fetchMock.mockImplementation(async (input: string) => {
+			const asked = new URL(input, 'http://localhost').searchParams.getAll('id');
+			return {
+				ok: true,
+				status: 200,
+				json: async () => asked.map((_id) => ({ ...requestedTransfer, _id }))
+			};
+		});
+
+		const docs = await repo.listLedgerRefDocs(ids);
+
+		expect(docs.map((d) => d._id)).toEqual(ids);
+		const batchSizes = fetchMock.mock.calls.map(
+			([input]) => new URL(input, 'http://localhost').searchParams.getAll('id').length
+		);
+		expect(batchSizes).toEqual([50, 50, 20]);
+	});
+
+	it('leaves transfer refs unread when the transfer API refuses the account (#811)', async () => {
+		fetchMock.mockResolvedValue({ ok: false, status: 403, statusText: 'Forbidden' });
+
+		expect(await repo.listLedgerRefDocs([requestedTransfer._id])).toEqual([]);
+	});
+
+	it('does not call the transfer API when no ref is a transfer', async () => {
+		expect(await repo.listLedgerRefDocs([])).toEqual([]);
+		expect(fetchMock).not.toHaveBeenCalled();
 	});
 
 	it('returns null for a 404 getTransfer', async () => {

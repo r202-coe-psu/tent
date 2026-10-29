@@ -17,16 +17,14 @@
 		token,
 		shelterCode,
 		items,
-		status = '',
 		onSaved
 	}: {
 		open?: boolean;
 		token: string;
-		/** Booking status — a `verifying` booking already has its QR (CR-174 FR-24). */
-		status?: string;
 		/** Which shelter's published needs the donor may add from. */
 		shelterCode: string;
 		items: Array<{
+			line_key?: string | null;
 			item_id?: string | null;
 			item_name?: string;
 			qty: unknown;
@@ -35,8 +33,18 @@
 		onSaved?: () => void;
 	} = $props();
 
-	/** `key` only names the row for `{#each}`: removing a row must not shift the others' inputs. */
-	type Row = { key: number; item_id?: string; free_text: string; qty: string; unit: string };
+	/**
+	 * `key` only names the row for `{#each}`: removing a row must not shift the others'
+	 * inputs. `line_key` is the held line's identity (CR-196) — a row the donor adds has none.
+	 */
+	type Row = {
+		key: number;
+		line_key?: string;
+		item_id?: string;
+		free_text: string;
+		qty: string;
+		unit: string;
+	};
 	let nextKey = 0;
 
 	/**
@@ -64,6 +72,7 @@
 		untrack(() =>
 			items.map((item) => ({
 				key: nextKey++,
+				line_key: item.line_key ?? undefined,
 				item_id: item.item_id ?? undefined,
 				free_text: item.item_name ?? '',
 				qty: item.qty != null ? String(item.qty) : '',
@@ -99,6 +108,7 @@
 
 	function save() {
 		const payload: DonationItemEdit[] = rows.map((row) => ({
+			...(row.line_key ? { line_key: row.line_key } : {}),
 			...(row.item_id ? { item_id: row.item_id } : {}),
 			free_text: row.free_text.trim(),
 			qty: String(Number(row.qty)),
@@ -127,15 +137,6 @@
 				{t.editDialogDesc}
 			</Dialog.Description>
 		</Dialog.Header>
-
-		{#if status === 'verifying'}
-			<p
-				class="rounded-xl border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900 dark:bg-amber-950/30 dark:text-amber-200"
-				role="note"
-			>
-				{t.editVerifyingWarning}
-			</p>
-		{/if}
 
 		<div class="space-y-3">
 			{#each rows as row, index (row.key)}

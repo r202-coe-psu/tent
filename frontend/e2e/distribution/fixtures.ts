@@ -77,6 +77,9 @@ export const test = base.extend<DistributionFixtures, DistributionWorkerFixtures
 				});
 				recordCreatedShelter(code);
 			} finally {
+				// A `_changes` long-poll may still be in flight inside a route handler; drop the routes
+				// first so close() does not reject with "Request context disposed".
+				await Promise.all(context.pages().map((p) => p.unrouteAll({ behavior: 'ignoreErrors' })));
 				await context.close();
 			}
 			useShelter(code);

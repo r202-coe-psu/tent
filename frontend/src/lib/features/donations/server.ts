@@ -6,7 +6,11 @@
  * exports, whose import graph reaches browser-only packages such as `qrcode`.
  */
 
-export { receiveDonationInputSchema, isDonorEditable } from './domain/public-donation';
+export {
+	donationItemEditGate,
+	receiveDonationInputSchema,
+	isDonorEditable
+} from './domain/public-donation';
 export type { PublicDonationDoc, ScanDonationView } from './domain/public-donation';
 export { walkInIntakeInputSchema } from './domain/back-office';
 export type { PendingDonationRow } from './domain/back-office';

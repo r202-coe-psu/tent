@@ -62,8 +62,8 @@ describe('validateRow — happy path', () => {
 		expect(byLabel.shelter?.operation_status).toBe('active');
 		expect(byLabel.shelter?.area_type).toBe('indoor');
 
-		const byCode = validateRow(baseRow({ [H.operation_status]: 'closed' }), 1, emptyLookups());
-		expect(byCode.shelter?.operation_status).toBe('closed');
+		const byCode = validateRow(baseRow({ [H.operation_status]: 'standby' }), 1, emptyLookups());
+		expect(byCode.shelter?.operation_status).toBe('standby');
 
 		const byBase = validateRow(baseRow({ [H.project_level]: 'ระดับชุมชน' }), 1, emptyLookups());
 		expect(byBase.shelter?.project_level).toBe('community');
@@ -167,6 +167,29 @@ describe('validateRow — errors', () => {
 		const r = validateRow(baseRow({ [H.operation_status]: 'ไม่รู้จัก' }), 1, emptyLookups());
 		expect(r.ok).toBe(false);
 		expect(r.errors[0].column).toBe(H.operation_status);
+	});
+
+	it.each(['closed', 'ปิดศูนย์ (Closed)', 'ปิดศูนย์'])(
+		'rejects operation_status %s with a per-row error and no payload (CR-183 FR-23)',
+		(value) => {
+			const r = validateRow(baseRow({ [H.operation_status]: value }), 4, emptyLookups());
+			expect(r.ok).toBe(false);
+			expect(r.shelter).toBeUndefined();
+			expect(r.errors).toEqual([
+				expect.objectContaining({
+					column: H.operation_status,
+					message: expect.stringContaining('ปิดศูนย์')
+				})
+			]);
+		}
+	);
+
+	it('rejects only the closed row in a workbook', () => {
+		const rows = validateRows(
+			[baseRow(), baseRow({ [H.operation_status]: 'closed' })],
+			emptyLookups()
+		);
+		expect(rows.map((r) => r.ok)).toEqual([true, false]);
 	});
 
 	it('rejects an unknown master-data label', () => {

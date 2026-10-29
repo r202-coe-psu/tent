@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { formatLoanReference, loanReferenceLine } from '../model/loan-reference';
 	import { toast } from 'svelte-sonner';
 	import FileX from '@lucide/svelte/icons/file-x';
 	import Loader from '@lucide/svelte/icons/loader';
@@ -31,6 +32,8 @@
 		open?: boolean;
 		log: DistributionLog | null;
 		itemName?: string;
+		/** Readable loan line with the ticket number (the card knows the ticket, the dialog does not). */
+		reference?: string;
 		shelterCode?: string;
 		canClearLoan?: boolean;
 		onsuccess?: (updatedLog: DistributionLog) => void;
@@ -41,6 +44,7 @@
 		open = $bindable(false),
 		log,
 		itemName = '',
+		reference = '',
 		shelterCode,
 		canClearLoan = true,
 		onsuccess,
@@ -255,7 +259,7 @@
 							ตัดจำหน่ายรายการโดยไม่มีของคืน
 						</Dialog.Title>
 						<Dialog.Description class="text-xs text-slate-500">
-							{itemName || log.item_id} · รหัสรายการ: <span class="font-mono">{log._id}</span>
+							{itemName || log.item_id} · {reference || loanReferenceLine(formatLoanReference(log))}
 						</Dialog.Description>
 					</div>
 				</div>

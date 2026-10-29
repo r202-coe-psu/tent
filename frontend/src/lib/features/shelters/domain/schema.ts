@@ -516,7 +516,10 @@ export const shelterSchema = z.object({
 	parking_policy: parkingPolicySchema
 		.optional()
 		.default({ availability: null, supported_vehicles: [], rules: [], rules_other: null }),
-	feature_flags: shelterFeatureFlagsSchema.optional().default(DEFAULT_SHELTER_FEATURE_FLAGS)
+	feature_flags: shelterFeatureFlagsSchema.optional().default(DEFAULT_SHELTER_FEATURE_FLAGS),
+	// CR-183 FR-14: stamped by the PATCH route, never trusted from the client. Must stay
+	// `.optional()` — `.nullish().default(null)` would make `.partial()` reset it on every edit.
+	closed_at: z.string().datetime().nullable().optional()
 });
 export type Shelter = z.infer<typeof shelterSchema>;
 

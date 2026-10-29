@@ -64,7 +64,7 @@ function oklchToHex(l: number, c: number, hDeg: number): string {
 }
 
 describe('baseDomain', () => {
-	it('defines the 7 work domains', () => {
+	it('defines the 8 work domains', () => {
 		expect(DOMAIN_IDS).toEqual([
 			'registration',
 			'donation',
@@ -72,7 +72,8 @@ describe('baseDomain', () => {
 			'kitchen',
 			'facility',
 			'security',
-			'admin'
+			'admin',
+			'pr'
 		]);
 	});
 

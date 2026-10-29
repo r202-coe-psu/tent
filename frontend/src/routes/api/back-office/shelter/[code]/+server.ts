@@ -81,11 +81,15 @@ export const PATCH: RequestHandler = async ({ request, params }) => {
 
 		const body = (await request.json().catch(() => ({}))) as unknown;
 		const input = updateShelterSchema.parse(body);
+		// zod 4 `.partial()` still fills field `.default()`s, so a body without
+		// `operation_status` or `feature_flags` would reset them; patch only what was sent.
+		const sent = body !== null && typeof body === 'object' ? body : {};
+		const patch = Object.fromEntries(Object.entries(input).filter(([key]) => key in sent));
 
 		const siteKindItems = input.site_kind ? ((await readMasterDoc('site_kind'))?.items ?? []) : [];
 
 		// updateMaster re-reads the doc + retries 409s internally
-		// (skill: couchdb-pouchdb-bestpractices §3).
+		// (skill: couchdb-pouchdb-bestpractices §3) and owns `closed_at`.
 		await updateMaster(code, (current) => {
 			if (input.site_kind) {
 				// FR-8: compared with the stored kind of the doc being written, so a retry sees the winner's value.
@@ -96,12 +100,7 @@ export const PATCH: RequestHandler = async ({ request, params }) => {
 				);
 				if (siteKindError) throw new ServiceError('VALIDATION', siteKindError);
 			}
-			return {
-				patch: {
-					...input,
-					updated_at: nowIso()
-				}
-			};
+			return { patch: { ...patch, updated_at: nowIso() } };
 		});
 
 		return json({ ok: true, code });

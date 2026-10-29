@@ -4,14 +4,17 @@ import {
 	fetchShelterTypeLabels,
 	fetchSiteKinds,
 	fetchVulnerableGroupLabels,
+	getPublicShelter,
 	listPublicShelters
 } from '../data/public-api';
 import type { ListPublicSheltersParams } from '../domain/types';
 
 const LABEL_STALE_MS = 5 * 60 * 1000;
+const SHELTER_STALE_MS = 60 * 1000;
 
 export const publicPortalKeys = {
 	all: ['public-portal'] as const,
+	shelter: (code: string) => [...publicPortalKeys.all, 'shelter', code] as const,
 	shelters: (params: ListPublicSheltersParams) =>
 		[...publicPortalKeys.all, 'shelters', params] as const,
 	familySearch: (query: string) => [...publicPortalKeys.all, 'occupants', query] as const,
@@ -24,6 +27,17 @@ export function usePublicShelters(params: () => ListPublicSheltersParams) {
 	return createQuery(() => ({
 		queryKey: publicPortalKeys.shelters(params()),
 		queryFn: () => listPublicShelters(params())
+	}));
+}
+
+/** One shelter's public detail; stays idle while `code` is empty. */
+export function usePublicShelter(code: () => string | null | undefined) {
+	return createQuery(() => ({
+		queryKey: publicPortalKeys.shelter(code() ?? ''),
+		queryFn: () => getPublicShelter(code() as string),
+		enabled: Boolean(code()),
+		staleTime: SHELTER_STALE_MS,
+		retry: false
 	}));
 }
 
