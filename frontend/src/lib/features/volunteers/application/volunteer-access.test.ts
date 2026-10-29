@@ -334,6 +334,12 @@ describe('grantVolunteerAccessAsCoordinator (#955)', () => {
 		);
 	});
 
+	it('re-checks the stored profile phone: a landline saved meanwhile stops the grant (CR-210)', async () => {
+		mocks.get.mockResolvedValueOnce({ ...volunteer, phone: '022222222' });
+		await expect(grantVolunteerAccessAsCoordinator(volunteer, coordinatorInput)).rejects.toThrow();
+		expect(mocks.serviceFetch).not.toHaveBeenCalled();
+	});
+
 	it('accepts today as the earliest expiry', async () => {
 		await grantVolunteerAccessAsCoordinator(volunteer, { ...coordinatorInput, expires_on: min });
 		expect(mocks.serviceFetch).toHaveBeenCalled();

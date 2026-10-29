@@ -24,7 +24,7 @@ describe('phoneSchema and usernameSchema', () => {
 		expect(phoneSchema.safeParse('081234567A').success).toBe(false);
 	});
 
-	it('accepts a 9-digit landline as a contact phone but not as a login phone', () => {
+	it('rejects a 9-digit landline as a contact phone and login phone (CR-210)', () => {
 		expect(contactPhoneSchema.safeParse('022222222').success).toBe(false);
 		expect(contactPhoneSchema.safeParse('02-222-2222').success).toBe(false);
 		expect(contactPhoneSchema.parse('081-234-5678')).toBe('0812345678');

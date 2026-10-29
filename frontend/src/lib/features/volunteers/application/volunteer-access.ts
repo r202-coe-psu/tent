@@ -172,6 +172,7 @@ export async function grantVolunteerAccessAsCoordinator(
 	const repository = volunteerRepositoryFor(volunteer.shelter_code);
 	const profile = await repository.get(volunteer._id);
 	if (!profile) throw new Error('ไม่พบข้อมูลอาสาสมัคร กรุณาโหลดข้อมูลใหม่');
+	if (hasInvalidAccessPhone(profile.phone)) throw new Error(VOLUNTEER_ACCESS_PHONE_MESSAGE);
 	const result = await serviceFetch<{
 		ok: true;
 		created: boolean;
