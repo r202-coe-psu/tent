@@ -81,10 +81,15 @@ describe('formatDistributionError', () => {
 		);
 	});
 
-	it('keeps the generic pool state copy for locked and reason-less state errors', () => {
+	it('asks staff to wait and retry when the pool is locked by a submit or cancel', () => {
+		expect(formatDistributionError(new BulkReturnPoolStateError('locked', 'locked'))).toBe(
+			'กองนี้กำลังถูกส่งเข้าคลังหรือยกเลิกอยู่ กรุณารอสักครู่แล้วลองอีกครั้ง'
+		);
+	});
+
+	it('keeps the generic pool state copy for reason-less state errors', () => {
 		const generic =
 			'กองนี้ไม่ได้อยู่ในสถานะเปิดรับ หรือกำลังถูกดำเนินการอยู่ จึงทำรายการนี้ไม่ได้ กรุณารีเฟรชแล้วตรวจสอบสถานะล่าสุด';
-		expect(formatDistributionError(new BulkReturnPoolStateError('locked', 'locked'))).toBe(generic);
 		expect(formatDistributionError(new BulkReturnPoolStateError('no reason'))).toBe(generic);
 	});
 

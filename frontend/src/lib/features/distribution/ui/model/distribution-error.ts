@@ -106,6 +106,9 @@ export function formatDistributionError(
 		if (err.reason === 'conflict') {
 			return 'กองนี้ถูกตรวจรับไปแล้วด้วยยอดที่ต่างจากที่ส่งมา กรุณารีเฟรชแล้วลองใหม่อีกครั้ง';
 		}
+		if (err.reason === 'locked') {
+			return 'กองนี้กำลังถูกส่งเข้าคลังหรือยกเลิกอยู่ กรุณารอสักครู่แล้วลองอีกครั้ง';
+		}
 		return 'กองนี้ไม่ได้อยู่ในสถานะเปิดรับ หรือกำลังถูกดำเนินการอยู่ จึงทำรายการนี้ไม่ได้ กรุณารีเฟรชแล้วตรวจสอบสถานะล่าสุด';
 	}
 	if (err instanceof BulkReturnPoolLockTimeoutError) {

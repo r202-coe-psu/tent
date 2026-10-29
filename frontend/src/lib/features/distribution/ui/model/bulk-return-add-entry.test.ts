@@ -14,7 +14,10 @@ import {
 	removeLine,
 	resolveDefaultPoolId,
 	resolveReturner,
+	loanPendingWarning,
+	remainingLinesMessage,
 	summarizeAddResult,
+	ulidsNeedingWrittenLookup,
 	validateAddEntryLines,
 	type AddEntryLine
 } from './bulk-return-add-entry';
@@ -66,9 +69,9 @@ describe('linesFromOutstandingLoans', () => {
 		expect(result.skippedItemIds).toEqual(['item_master:x']);
 	});
 
-	it('re-fill keeps lineId and operationUlid of a line with the same item (qty updated)', () => {
+	it('re-fill keeps the line (same ulid) when the qty is unchanged', () => {
 		const current: AddEntryLine[] = [
-			{ lineId: 'L1', item_id: 'item_master:a', qty: '1', operationUlid: 'OP1' }
+			{ lineId: 'L1', item_id: 'item_master:a', qty: '5', operationUlid: 'OP1' }
 		];
 		const result = linesFromOutstandingLoans(
 			[loanRow('l1', 'item_master:a', '2'), loanRow('l2', 'item_master:a', '3')],
@@ -76,14 +79,61 @@ describe('linesFromOutstandingLoans', () => {
 			makeFrom(),
 			current
 		);
-		expect(result.lines).toEqual([
-			{ lineId: 'L1', item_id: 'item_master:a', qty: '5', operationUlid: 'OP1' }
+		expect(result.lines).toEqual(current);
+		expect(result.keptAtWrittenQtyItemIds).toEqual([]);
+	});
+
+	it('re-fill gives a new ulid when the qty changed and nothing was written', () => {
+		const current: AddEntryLine[] = [
+			{ lineId: 'L1', item_id: 'item_master:a', qty: '1', operationUlid: 'OP1' }
+		];
+		const result = linesFromOutstandingLoans(
+			[loanRow('l1', 'item_master:a', '2'), loanRow('l2', 'item_master:a', '3')],
+			new Set(['item_master:a']),
+			makeFrom(),
+			current,
+			new Map()
+		);
+		expect(result.lines.map((l) => [l.item_id, l.qty, l.operationUlid])).toEqual([
+			['item_master:a', '5', 'ULID1']
 		]);
+		expect(result.keptAtWrittenQtyItemIds).toEqual([]);
+	});
+
+	it('re-fill keeps the written qty and ulid when the qty changed but the entry was written', () => {
+		const current: AddEntryLine[] = [
+			{ lineId: 'L1', item_id: 'item_master:a', qty: '2', operationUlid: 'OP1' },
+			{ lineId: 'L2', item_id: 'item_master:b', qty: '1', operationUlid: 'OP2' }
+		];
+		const result = linesFromOutstandingLoans(
+			[loanRow('l1', 'item_master:a', '3'), loanRow('l2', 'item_master:b', '1')],
+			new Set(['item_master:a', 'item_master:b']),
+			makeFrom(),
+			current,
+			new Map([['OP1', { qty: '2' }]])
+		);
+		expect(result.lines).toEqual(current);
+		expect(result.keptAtWrittenQtyItemIds).toEqual(['item_master:a']);
+	});
+
+	it('re-fill restores the written qty of an edited line without reporting an equal total', () => {
+		const current: AddEntryLine[] = [
+			{ lineId: 'L1', item_id: 'item_master:a', qty: '3', operationUlid: 'OP1' }
+		];
+		const result = linesFromOutstandingLoans(
+			[loanRow('l1', 'item_master:a', '3')],
+			new Set(['item_master:a']),
+			makeFrom(),
+			current,
+			new Map([['OP1', { qty: '3' }]])
+		);
+		expect(result.lines).toEqual(current);
+		expect(result.keptAtWrittenQtyItemIds).toEqual([]);
 	});
 
 	it('gives a new item a fresh ulid and drops lines of items no longer outstanding', () => {
 		const current: AddEntryLine[] = [
-			{ lineId: 'L1', item_id: 'item_master:a', qty: '1', operationUlid: 'OP1' },
+			{ lineId: 'L1', item_id: 'item_master:a', qty: '2', operationUlid: 'OP1' },
 			{ lineId: 'L2', item_id: 'item_master:gone', qty: '1', operationUlid: 'OP2' }
 		];
 		const result = linesFromOutstandingLoans(
@@ -96,6 +146,25 @@ describe('linesFromOutstandingLoans', () => {
 			['item_master:a', 'OP1'],
 			['item_master:b', 'ULID1']
 		]);
+	});
+
+	it('lists only sent lines whose qty would change for the written-entries lookup', () => {
+		const current: AddEntryLine[] = [
+			{ lineId: 'L1', item_id: 'item_master:a', qty: '2', operationUlid: 'OP1' },
+			{ lineId: 'L2', item_id: 'item_master:b', qty: '1', operationUlid: 'OP2' },
+			{ lineId: 'L3', item_id: 'item_master:c', qty: '1', operationUlid: 'OP3' }
+		];
+		const rows = [
+			loanRow('l1', 'item_master:a', '3'),
+			loanRow('l2', 'item_master:b', '1'),
+			loanRow('l3', 'item_master:c', '4')
+		];
+		const eligible = new Set(['item_master:a', 'item_master:b', 'item_master:c']);
+		// a: sent + changed; b: sent but unchanged; c: changed but never sent
+		expect(ulidsNeedingWrittenLookup(rows, eligible, current, new Set(['OP1', 'OP2']))).toEqual([
+			'OP1'
+		]);
+		expect(ulidsNeedingWrittenLookup(rows, eligible, current, new Set())).toEqual([]);
 	});
 
 	it('preserves relocated lines and does not reuse them for the same item', () => {
@@ -126,7 +195,8 @@ describe('linesFromOutstandingLoans', () => {
 	it('returns nothing for no rows', () => {
 		expect(linesFromOutstandingLoans([], new Set(['item_master:a']), makeFrom())).toEqual({
 			lines: [],
-			skippedItemIds: []
+			skippedItemIds: [],
+			keptAtWrittenQtyItemIds: []
 		});
 	});
 });
@@ -358,6 +428,8 @@ describe('summarizeAddResult / dropWrittenLines', () => {
 			unallocated?: string;
 			returner?: string | null;
 			relocated?: 'moved' | 'pending_sync';
+			loanPending?: boolean;
+			voided?: boolean;
 		} = {}
 	) {
 		return {
@@ -372,18 +444,75 @@ describe('summarizeAddResult / dropWrittenLines', () => {
 			loansApplied: [],
 			loansSkipped: [],
 			unallocated_qty: opts.unallocated ?? '0',
-			...(opts.relocated ? { relocated: opts.relocated } : {})
+			...(opts.relocated ? { relocated: opts.relocated } : {}),
+			...(opts.loanPending ? { loan_pending: true } : {}),
+			...(opts.voided ? { voided: true } : {})
 		};
 	}
 	const wrap = (
 		results: ReturnType<typeof res>[],
-		no_outstanding_loan = false
+		no_outstanding_loan = false,
+		blocked?: { pool_id: string; reason: 'closed' | 'locked' }
 	): AddBulkReturnEntriesResult =>
 		({
 			results,
+			...(blocked ? { blocked } : {}),
 			returner_had_outstanding_loans: true,
 			no_outstanding_loan
 		}) as unknown as AddBulkReturnEntriesResult;
+
+	it('reports loan-pending items, which cut no loan yet', () => {
+		const summary = summarizeAddResult(
+			wrap([
+				res('A', { refs: ['2'] }),
+				res('B', { refs: ['4'], loanPending: true, unallocated: '1' })
+			])
+		);
+		expect(summary.savedCount).toBe(2);
+		expect(summary.loanPendingItemIds).toEqual(['item_master:B']);
+		expect(summary.loanAppliedQty).toBe('2');
+		expect(summary.unallocated).toEqual([]);
+	});
+
+	it('counts voided entries apart from saved ones', () => {
+		const summary = summarizeAddResult(
+			wrap([res('A', { refs: ['2'] }), res('B', { voided: true })])
+		);
+		expect(summary.savedCount).toBe(1);
+		expect(summary.voidedCount).toBe(1);
+		expect(summary.loanAppliedQty).toBe('2');
+	});
+
+	it('passes the blocked pool through and omits it otherwise', () => {
+		const blocked = { pool_id: 'bulk_return_pool:p', reason: 'closed' as const };
+		expect(summarizeAddResult(wrap([res('A')], false, blocked)).blocked).toEqual(blocked);
+		const plain = summarizeAddResult(wrap([res('A')]));
+		expect(plain).not.toHaveProperty('blocked');
+		expect(plain.loanPendingItemIds).toEqual([]);
+		expect(plain.voidedCount).toBe(0);
+	});
+
+	it('explains why lines remain: blocked, loan-pending stop, or a late entry', () => {
+		const pool_id = 'bulk_return_pool:p';
+		const message = (result: AddBulkReturnEntriesResult) =>
+			remainingLinesMessage(summarizeAddResult(result));
+		const closed = message(wrap([], false, { pool_id, reason: 'closed' }));
+		expect(closed).toContain('เลือกกองอื่นที่เปิดรับ');
+		const locked = message(wrap([], false, { pool_id, reason: 'locked' }));
+		expect(locked).toContain('รอสักครู่');
+		const pending = message(wrap([res('A', { loanPending: true })]));
+		expect(pending).toContain('รอสักครู่');
+		expect(pending).not.toBe(locked);
+		const late = message(wrap([res('A', { late: true })]));
+		expect(late).toContain('เลือกกองอื่นที่เปิดรับ');
+	});
+
+	it('names the items of a loan-pending warning and where to repair them', () => {
+		const text = loanPendingWarning(['พัดลม', 'ผ้าห่ม']);
+		expect(text).toContain('ยอดยืมของรายการนี้ยังไม่ถูกตัด');
+		expect(text).toContain('พัดลม, ผ้าห่ม');
+		expect(text).toContain('ตัดยอดยืมที่ค้าง');
+	});
 
 	it('counts saved, replayed and late and totals applied loan qty', () => {
 		const summary = summarizeAddResult(

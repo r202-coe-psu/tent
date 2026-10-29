@@ -136,11 +136,15 @@
 		() => shelterCode
 	);
 	const appliedRefsByEntry = $derived(groupAppliedLoanRefsByEntry(appliedRefsQuery.data ?? []));
-	// Snapshot entries of a submitted / received pool whose loans were never cut (CR-193 §34).
+	// Entries of an OPEN, SUBMITTED or RECEIVED pool whose loans were never cut (CR-193 §34).
+	// An OPEN pool is repaired while it is unlocked; a cancelled pool has nothing to repair.
 	const missedRefsQuery = useBulkReturnPoolMissedLoanRefs(
 		() => row?.pool._id ?? null,
 		() => shelterCode,
-		() => row?.pool.status === 'SUBMITTED' || row?.pool.status === 'RECEIVED'
+		() =>
+			row?.pool.status === 'OPEN' ||
+			row?.pool.status === 'SUBMITTED' ||
+			row?.pool.status === 'RECEIVED'
 	);
 	const missedRefsByEntry = $derived(groupMissedLoanRefsByEntry(missedRefsQuery.data ?? []));
 	const applyMissedMutation = useApplyMissedBulkReturnLoanRefs();

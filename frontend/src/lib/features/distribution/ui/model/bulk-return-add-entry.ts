@@ -1,4 +1,4 @@
-import { qtyGt, subQty, addQty } from '$lib/utils/qty';
+import { parseQty, qtyGt, subQty, addQty } from '$lib/utils/qty';
 import { isBulkReturnEligibleItem, type DistributionLog } from '../../domain/food-supplies';
 import type {
 	AddBulkReturnEntriesInput,
@@ -7,7 +7,9 @@ import type {
 } from '../../application/food-supplies/bulk-return-pool-v3-add-entry';
 import type { FrontlineRecipientSelection } from './frontline-handover';
 import { validatePositiveQuantity } from './ticket-quantity';
+import { ADD_ENTRY_COPY } from './bulk-return-copy';
 import {
+	MISSED_LOAN_WARNING,
 	listMoveTargets,
 	type BulkReturnPoolRow,
 	type PoolCatalogItem
@@ -242,40 +244,96 @@ export interface LinesFromLoans {
 	lines: AddEntryLine[];
 	/** item_ids with an outstanding loan that the add-entry catalog cannot select. */
 	skippedItemIds: string[];
+	/**
+	 * item_ids whose line was kept at the qty an earlier save already wrote, because the outstanding
+	 * total now differs. The retry replays that entry instead of writing a different qty.
+	 */
+	keptAtWrittenQtyItemIds: string[];
+}
+
+/** Outstanding qty per item (summed across loans), in first-seen order. */
+function outstandingTotals(rows: readonly OutstandingLoanRow[]): Map<string, string> {
+	const totals = new Map<string, string>();
+	for (const row of rows) {
+		totals.set(row.item_id, addQty(totals.get(row.item_id) ?? '0', row.outstanding));
+	}
+	return totals;
+}
+
+/** Numeric equality of two typed quantities; false when either is not a number. */
+function sameQty(a: string, b: string): boolean {
+	try {
+		return parseQty(a).eq(parseQty(b));
+	} catch {
+		return false;
+	}
+}
+
+/**
+ * operationUlids of current lines that "return all" would give a different qty and that were sent
+ * in an earlier save. Only these can already have written an entry, so only these need the
+ * written-entries lookup before `linesFromOutstandingLoans`.
+ */
+export function ulidsNeedingWrittenLookup(
+	rows: readonly OutstandingLoanRow[],
+	eligibleItemIds: ReadonlySet<string>,
+	currentLines: readonly AddEntryLine[],
+	sentUlids: ReadonlySet<string>
+): string[] {
+	const totals = outstandingTotals(rows);
+	const ulids: string[] = [];
+	for (const [item_id, qty] of totals) {
+		if (!eligibleItemIds.has(item_id)) continue;
+		const existing = currentLines.find((line) => !line.relocated && line.item_id === item_id);
+		if (existing && sentUlids.has(existing.operationUlid) && !sameQty(existing.qty, qty)) {
+			ulids.push(existing.operationUlid);
+		}
+	}
+	return ulids;
 }
 
 /**
  * "Return all": one line per item (outstanding summed across loans), in first-seen order, limited
  * to items the form can select. `makeLine` builds each NEW line (supplies lineId / operationUlid).
  *
- * `currentLines` keeps the write idempotent across a re-fill: an operationUlid identifies one
- * intended write, so an item that already has a (not relocated) line in the form reuses that line
- * (lineId + operationUlid kept, only qty set to the outstanding total). Otherwise a retry after a
- * failed save would write a second entry for the same goods. Current lines of other items are
- * dropped, except relocated (done) lines, which are kept at the end as they are.
+ * An operationUlid identifies one intended write, and replaying it with another qty collides. So
+ * for an item that already has a (not relocated) line in `currentLines`:
+ * - the ULID already wrote an entry (`written`): the line keeps its ULID and the WRITTEN qty, so a
+ *   retry replays it (no double count); it is reported in `keptAtWrittenQtyItemIds` when the
+ *   outstanding total differs;
+ * - the qty is unchanged: the line is kept as it is (same ULID);
+ * - otherwise the qty changed and nothing was written: a new line with a new ULID.
+ * Current lines of other items are dropped, except relocated (done) lines, which are kept at the
+ * end as they are.
  */
 export function linesFromOutstandingLoans(
 	rows: readonly OutstandingLoanRow[],
 	eligibleItemIds: ReadonlySet<string>,
 	makeLine: (preset: { item_id: string; qty: string }) => AddEntryLine,
-	currentLines: readonly AddEntryLine[] = []
+	currentLines: readonly AddEntryLine[] = [],
+	written: ReadonlyMap<string, { qty: string }> = new Map()
 ): LinesFromLoans {
-	const totals = new Map<string, string>();
-	for (const row of rows) {
-		totals.set(row.item_id, addQty(totals.get(row.item_id) ?? '0', row.outstanding));
-	}
 	const lines: AddEntryLine[] = [];
 	const skippedItemIds: string[] = [];
-	for (const [item_id, qty] of totals) {
+	const keptAtWrittenQtyItemIds: string[] = [];
+	for (const [item_id, qty] of outstandingTotals(rows)) {
 		if (!eligibleItemIds.has(item_id)) {
 			skippedItemIds.push(item_id);
 			continue;
 		}
 		const existing = currentLines.find((line) => !line.relocated && line.item_id === item_id);
-		lines.push(existing ? { ...existing, qty } : makeLine({ item_id, qty }));
+		const saved = existing ? written.get(existing.operationUlid) : undefined;
+		if (existing && saved) {
+			lines.push({ ...existing, qty: saved.qty });
+			if (!sameQty(saved.qty, qty)) keptAtWrittenQtyItemIds.push(item_id);
+		} else if (existing && sameQty(existing.qty, qty)) {
+			lines.push(existing);
+		} else {
+			lines.push(makeLine({ item_id, qty }));
+		}
 	}
 	for (const line of currentLines) if (line.relocated) lines.push(line);
-	return { lines, skippedItemIds };
+	return { lines, skippedItemIds, keptAtWrittenQtyItemIds };
 }
 
 /**
@@ -310,19 +368,35 @@ export interface AddEntriesSummary {
 	loanAppliedQty?: string;
 	/** Items whose qty was only partly (or not) matched to a loan. */
 	unallocated: { item_id: string; qty: string }[];
+	/**
+	 * Items written whose loan cut is still pending (the pool was locked); processing stopped at the
+	 * first of them. Their loans are cut from the pool page ("ตัดยอดยืมที่ค้าง").
+	 */
+	loanPendingItemIds: string[];
+	/** Written entries that were voided before their loan cut: no loan was touched. */
+	voidedCount: number;
+	/** The chosen pool could not take the new lines (they stay in the form). */
+	blocked?: { pool_id: string; reason: 'closed' | 'locked' };
 }
 
 export function summarizeAddResult(result: AddBulkReturnEntriesResult): AddEntriesSummary {
 	const relocated = result.results.filter((r) => r.relocated);
-	const onTime = result.results.filter((r) => !r.late && !r.relocated);
+	const voided = result.results.filter((r) => r.voided && !r.late && !r.relocated);
+	const onTime = result.results.filter((r) => !r.late && !r.relocated && !r.voided);
+	const loanPending = onTime.filter((r) => r.loan_pending);
+	// A pending line has not cut any loan yet, so it adds nothing to the applied qty.
+	const cut = onTime.filter((r) => !r.loan_pending);
 	const lateEntries = result.results.filter((r) => r.late);
 	let applied = '0';
-	for (const r of onTime) {
+	for (const r of cut) {
 		for (const ref of r.entry.loan_refs) applied = addQty(applied, ref.qty);
 	}
 	return {
 		savedCount: onTime.filter((r) => !r.replayed).length,
 		replayedCount: onTime.filter((r) => r.replayed).length,
+		loanPendingItemIds: loanPending.map((r) => r.entry.item_id),
+		voidedCount: voided.length,
+		...(result.blocked ? { blocked: result.blocked } : {}),
 		lateEntries,
 		relocated: relocated.map((r) => ({
 			item_id: r.entry.item_id,
@@ -330,10 +404,30 @@ export function summarizeAddResult(result: AddBulkReturnEntriesResult): AddEntri
 		})),
 		noOutstandingLoan: result.no_outstanding_loan,
 		...(qtyGt(applied, 0) ? { loanAppliedQty: applied } : {}),
-		unallocated: onTime
+		unallocated: cut
 			.filter((r) => r.entry.returner_id !== null && qtyGt(r.unallocated_qty, 0))
 			.map((r) => ({ item_id: r.entry.item_id, qty: r.unallocated_qty }))
 	};
+}
+
+/** Warning naming the items whose loan cut is pending and where to finish it. */
+export function loanPendingWarning(itemNames: readonly string[]): string {
+	return `${MISSED_LOAN_WARNING}: ${itemNames.join(', ')} — ${ADD_ENTRY_COPY.loanPendingWhere}`;
+}
+
+/**
+ * Why lines stay in the form after a save, and what to do. Call it only when active lines remain.
+ * A blocked pool wins, then a loan-pending stop; otherwise a late entry made the pool stop taking
+ * items.
+ */
+export function remainingLinesMessage(summary: AddEntriesSummary): string {
+	if (summary.blocked) {
+		return summary.blocked.reason === 'locked'
+			? ADD_ENTRY_COPY.remainingLocked
+			: ADD_ENTRY_COPY.remainingClosed;
+	}
+	if (summary.loanPendingItemIds.length > 0) return ADD_ENTRY_COPY.remainingLoanPending;
+	return ADD_ENTRY_COPY.remainingNotAccepting;
 }
 
 /**
