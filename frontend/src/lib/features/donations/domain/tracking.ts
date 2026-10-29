@@ -24,6 +24,8 @@ export type DonationTrackItem = {
 	qty: string | number | null;
 	unit: string | null;
 	category?: string | null;
+	/** The line's identity (CR-196) — the edit form sends it back. Absent before schema_v 8. */
+	line_key: string | null;
 	/** Per-line review (CR-174 FR-17) — absent on bookings before schema_v 7. */
 	review_status?: 'approved' | 'pending' | 'rejected' | null;
 	review_reason?: string | null;
@@ -183,7 +185,7 @@ export function formatTrackSchedule(
 	return '-';
 }
 
-/** Same set as `isDonorEditable` — `verifying` too since CR-174 (FR-20, FR-21). */
+/** Same set as `isDonorEditable` — `verifying` too since CR-174 (FR-20). */
 export function canCancelDonation(status: string): boolean {
 	return status === 'declared' || status === 'pending_review' || status === 'verifying';
 }
@@ -204,6 +206,19 @@ export function isTerminalDonationStatus(status: string): boolean {
 		status === 'rejected' ||
 		status === 'redirected'
 	);
+}
+
+/**
+ * Why the counter cannot open this booking, or `null` when it can. The receive route
+ * refuses every terminal status; saying so at lookup spares staff a full count that
+ * only fails on confirm. A received booking gets no walk-in hint — keying the same
+ * goods again would count them twice.
+ */
+export function closedAtIntakeMessage(bookingRef: string, status: string): string | null {
+	if (!isTerminalDonationStatus(status)) return null;
+	const head = `ใบจอง ${bookingRef} ${donationStatusLabel(status)}`;
+	if (status === 'received') return `${head} — รับซ้ำไม่ได้`;
+	return `${head} — รับเข้าคลังไม่ได้ ถ้าของอยู่ที่เคาน์เตอร์จริงให้กรอกข้อมูลใหม่ผ่าน "ลงทะเบียน Walk-in"`;
 }
 
 /** Normalize BFF / FastAPI tracking payload into a stable UI view. */
@@ -235,6 +250,7 @@ export function toDonationTrackView(raw: Record<string, unknown>): DonationTrack
 				qty: (row.qty as string | number | null) ?? null,
 				unit: row.unit != null ? String(row.unit) : null,
 				category: row.category != null ? String(row.category) : null,
+				line_key: typeof row.line_key === 'string' && row.line_key ? row.line_key : null,
 				review_status:
 					row.review_status === 'approved' ||
 					row.review_status === 'pending' ||

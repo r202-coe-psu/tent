@@ -28,6 +28,7 @@ from worker.projectors.shelter import (
 )
 from worker.quota.expiry import expire_declared_donations
 from worker.retention.audit import audit_and_delete
+from worker.retention.donation_photos import sweep_orphan_donation_photos
 
 logger = logging.getLogger(__name__)
 
@@ -78,6 +79,10 @@ async def reconcile_closed_shelters(
             now=now,
         )
         if phase is RetentionPhase.CLOSED_WITHOUT_DATE:
+            # A shelter deleted from the registry leaves this row behind with its persons
+            # already cascaded away — nothing is being kept, so nothing to warn about.
+            if not await PublicPerson.find(PublicPerson.shelter_code == code).count():
+                continue
             logger.warning(
                 "Closed shelter %s has no closed_at — keeping its public_persons "
                 "(CR-183 D-5); backfill with migrate:shelter-closed-at",
@@ -191,6 +196,7 @@ async def run_retention_once(couch: CouchClient | None = None) -> None:
         # second means a crash in between leaves the doc "declared", and the next cycle
         # retries the release harmlessly thanks to the underflow guard.
         await expire_declared_donations(couch, now=datetime.now(UTC))
+        await sweep_orphan_donation_photos(couch, now=datetime.now(UTC))
     logger.info("Retention job %s complete", job_run_id)
 
 

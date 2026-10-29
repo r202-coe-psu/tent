@@ -36,6 +36,7 @@
 	import RosterManualCheckinDialog from './roster-manual-checkin-dialog.svelte';
 	import { useCheckIn, useCheckOut, useSkillOptions } from '../application/queries';
 	import { resolveSkillOption, type SkillOption } from '../domain/skill-catalog';
+	import { describeCheckEvent } from '../domain/check-event-source';
 	import type { Volunteer } from '../domain/volunteer.schema';
 	import type {
 		ShiftAssignment,
@@ -234,19 +235,21 @@
 			<p class="text-[11px] text-amber-700">ต้องให้ จนท. ตรวจบัตร ปชช. ก่อนเข้ากะ</p>
 		{:else if assignment.status === 'checked_in' && assignment.check_in_at}
 			<p class="text-xs text-muted-foreground">
-				เข้า: {formatTime(assignment.check_in_at)} น. ({assignment.check_in_method ===
-				'manual_override'
-					? 'จนท. บันทึกแทน'
-					: 'ระบบตนเอง'})
+				เข้า: {formatTime(assignment.check_in_at)} น. · {describeCheckEvent({
+					kind: 'check_in',
+					method: assignment.check_in_method,
+					by: assignment.check_in_by,
+					volunteerName: fullName
+				}).actorLine}
 			</p>
 		{:else if assignment.status === 'completed' && assignment.check_out_at}
 			<p class="text-xs text-muted-foreground">
-				ออกกะล่าสุด: {formatTime(assignment.check_out_at)} น.
-				{#if assignment.check_out_by}
-					โดย {assignment.check_out_by}{assignment.check_out_method === 'manual_override'
-						? ' (จนท. บันทึกแทน)'
-						: ''}
-				{/if}
+				ออกกะล่าสุด: {formatTime(assignment.check_out_at)} น. · {describeCheckEvent({
+					kind: 'check_out',
+					method: assignment.check_out_method,
+					by: assignment.check_out_by,
+					volunteerName: fullName
+				}).actorLine}
 			</p>
 		{/if}
 	</div>

@@ -10,11 +10,18 @@ export {
 	receiveDonationInputSchema,
 	publicDonationErrorMessage,
 	isDonorEditable,
+	donationItemEditGate,
 	donationPayloadUnit,
+	buildDonationItemsPayload,
 	donorUnitOptions,
 	linesMissingExpiry
 } from './domain/public-donation';
-export type { DonationUnitSource, ExpiryCheckLine } from './domain/public-donation';
+export type {
+	DonationItemEditGate,
+	DonationPayloadLine,
+	DonationUnitSource,
+	ExpiryCheckLine
+} from './domain/public-donation';
 export type { ReceiveDonationInput } from './domain/public-donation';
 export type { PendingDonationRow, WalkInIntakeInput } from './domain/back-office';
 export { walkInIntakeInputSchema, donationActionRef, donationRefLabel } from './domain/back-office';
@@ -47,6 +54,7 @@ export {
 	canCancelDonation,
 	canEditCourierTracking,
 	isTerminalDonationStatus,
+	closedAtIntakeMessage,
 	lookupItemSchedule,
 	maskLookupPhone,
 	rejectedLineReasons
@@ -58,6 +66,21 @@ export {
 	needsDropOffDestination,
 	resolveDropOffPoint
 } from './domain/drop-off';
+// Domain — box label (#591)
+export type {
+	BoxLabel,
+	BoxLabelLine,
+	BoxLabelSource,
+	BoxLabelSourceItem
+} from './domain/box-label';
+export {
+	BOX_LABEL_MAX_LINES,
+	BOX_LABEL_MM,
+	boxLabelPageCss,
+	buildBoxLabels,
+	canPrintBoxLabel,
+	clipLabelLines
+} from './domain/box-label';
 // Domain — back-office booking list (#617)
 export {
 	DONATION_QUEUE_FILTERS,
@@ -149,10 +172,21 @@ export {
 	useDonationQueue
 } from './application/queries';
 
+// Donor photos (CR-175 donor photos)
+export {
+	DONATION_PHOTO_MAX_COUNT,
+	DONATION_PHOTOS_MAX_TOTAL_BYTES,
+	type DonorPhoto
+} from './domain/donation-photos';
+export { DonorPhotos, type DonorPhotoRefusal } from './application/donor-photos.svelte';
+
 // UI
+export { default as DonorPhotoPicker } from './ui/donor-photo-picker.svelte';
+export { default as DonationPhotoStrip } from './ui/donation-photo-strip.svelte';
 export { default as CancelDonationDialog } from './ui/cancel-donation-dialog.svelte';
 export { default as RejectDonationDialog } from './ui/reject-donation-dialog.svelte';
 export { default as RejectReasonFields } from './ui/reject-reason-fields.svelte';
 export { default as DropOffCard } from './ui/drop-off-card.svelte';
+export { default as BoxLabelSheet } from './ui/box-label-sheet.svelte';
 export { default as LineDecisionToggle } from './ui/line-decision-toggle.svelte';
 export { default as EditDonationItemsDialog } from './ui/edit-donation-items-dialog.svelte';

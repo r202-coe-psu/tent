@@ -6,7 +6,11 @@
  * exports, whose import graph reaches browser-only packages such as `qrcode`.
  */
 
-export { receiveDonationInputSchema, isDonorEditable } from './domain/public-donation';
+export {
+	donationItemEditGate,
+	receiveDonationInputSchema,
+	isDonorEditable
+} from './domain/public-donation';
 export type { PublicDonationDoc, ScanDonationView } from './domain/public-donation';
 export { walkInIntakeInputSchema } from './domain/back-office';
 export type { PendingDonationRow } from './domain/back-office';
@@ -39,3 +43,11 @@ export {
 	reviewDonationInputSchema
 } from './domain/item-review';
 export type { LineReviewResult } from './domain/item-review';
+export {
+	DONATION_PHOTO_MAX_UPLOAD_BYTES,
+	donationPhotoIdsSchema,
+	rejectDonationPhotoDocs,
+	rejectDonationPhotoIds,
+	shelterAcceptsDonations
+} from './domain/donation-photos';
+export type { DonationPhotoErrorCode, StoredDonationPhoto } from './domain/donation-photos';

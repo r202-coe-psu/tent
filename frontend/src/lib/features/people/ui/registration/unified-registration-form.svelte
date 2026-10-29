@@ -40,7 +40,9 @@
 	import UnifiedRegistrationSummaryCard from './unified-registration-summary-card.svelte';
 	import UnifiedRegistrationStepper from './unified-registration-stepper.svelte';
 	import ThaidActionButton from './thaid-action-button.svelte';
+	import ThaidMemberScanDialog from './thaid-member-scan-dialog.svelte';
 	import type { ThaiDAutofillProfile } from '../../domain/thaid-profile';
+	import { applyThaidToHead, canScanThaidForHead } from '../../domain/thaid-autofill';
 	import { fetchThaidRegistrationStatus } from '$lib/api/thaid-status';
 	import { readRegistrationStickyTopPx } from './registration-sticky-offset';
 	import { firstInvalidField, focusTargetFor } from './registration-focus';
@@ -127,6 +129,7 @@
 		submitAlign = 'right',
 		stickyTopOffset,
 		includeVehiclesAssets,
+		claimedPets = [],
 		enableUnassignedPhoto = false,
 		allowHouseholdJoin = false,
 		shelterCode = '',
@@ -156,6 +159,7 @@
 		submitAlign?: 'right' | 'center';
 		stickyTopOffset?: string;
 		includeVehiclesAssets?: boolean;
+		claimedPets?: Array<{ species: string; name?: string; count?: number; details?: string }>;
 		enableUnassignedPhoto?: boolean;
 		/** Report-in flows with no household must explicitly join or create. */
 		allowHouseholdJoin?: boolean;
@@ -361,6 +365,7 @@
 
 	/** Currently selected match chip from public residence match (for address prefill & pets). */
 	let selectedMatchChip = $state<ResidenceMatchChip | null>(null);
+	const readOnlyPets = $derived(selectedMatchChip ? (selectedMatchChip.pets ?? []) : claimedPets);
 	/**
 	 * Durable existing-member count for join UI (header badges / summary).
 	 * Captured at confirm time so it survives chip list refreshes / optional field loss.
@@ -392,8 +397,10 @@
 	let residenceSuggestCheckedEmpty = $state(false);
 	/** Public lookup request failed — not the same as "no family matched". */
 	let residenceSuggestFailed = $state(false);
-	/** Stay false until GET /api/public/v1/thaid/status confirms ON (public channel only). */
+	/** Stay false until GET /api/public/v1/thaid/status confirms ON. */
 	let thaidEnabled = $state(false);
+	/** Onsite head: cross-device QR scan, so the half-filled form never leaves the page (#588). */
+	let headScanOpen = $state(false);
 
 	const enableResidenceJoin = $derived(mode === 'create' || allowHouseholdJoin);
 	let householdDecision = $state<'join' | 'create' | null>(null);
@@ -605,9 +612,7 @@
 		hasJoinSelection ? Math.max(joinedFamilyMembers.length, resolvedExistingMemberCount ?? 0) : 0
 	);
 	const summaryExistingPetsCount = $derived(
-		hasJoinSelection
-			? (selectedMatchChip?.pets ?? []).reduce((sum, p) => sum + (Number(p.count) || 1), 0)
-			: 0
+		readOnlyPets.reduce((sum, p) => sum + (Number(p.count) || 1), 0)
 	);
 	const summaryTotalMembers = $derived(summaryExistingMemberCount + members.length);
 	const summaryTotalPets = $derived(summaryExistingPetsCount + petItems.length);
@@ -845,11 +850,13 @@
 			});
 		}
 
-		if (channel === 'public' && typeof window !== 'undefined') {
+		if (typeof window !== 'undefined') {
 			void fetchThaidRegistrationStatus().then((s) => {
 				thaidEnabled = s.enabled;
 			});
+		}
 
+		if (channel === 'public' && typeof window !== 'undefined') {
 			const params = new URLSearchParams(window.location.search);
 			const errorParam = params.get('error');
 			if (errorParam) {
@@ -1165,38 +1172,16 @@
 		);
 	}
 
-	/** ThaiD mock/real autofill: populate head member + address from profile. */
+	/** ThaiD autofill: head member (index 0) + residence; joining a family keeps its residence. */
 	function handleThaiDAutofill(profile: ThaiDAutofillProfile) {
-		// Fill head member (index 0) personal info
-		const head = members[0];
-		if (head) {
-			head.first_name = profile.first_name;
-			head.last_name = profile.last_name;
-			head.nickname = profile.nickname;
-			head.gender = profile.gender;
-			head.birth_year = profile.birth_year > 0 ? profile.birth_year : undefined;
-			head.age = profile.age > 0 ? profile.age : undefined;
-			if (profile.phone) head.phone = profile.phone;
-			head.person_id = { cardType: 'national_id', number: profile.person_id };
-			head.vulnerable_groups = profile.vulnerable_groups;
-			head.special_needs = profile.special_needs;
-			head.medical_conditions = profile.medical_conditions;
-			members = [...members]; // trigger reactivity
-		}
-
-		// Fill address from ThaiD — reassign object to trigger reactive cascading selects
-		household = {
-			...household,
-			address_no: profile.address.address_no || household.address_no,
-			village_no: profile.address.village_no || household.village_no,
-			province: profile.address.province || household.province,
-			district: profile.address.district || household.district,
-			subdistrict: profile.address.subdistrict || household.subdistrict,
-			postal_code: profile.address.postal_code || household.postal_code
-		};
+		const next = applyThaidToHead({ members, household, hasJoinSelection }, profile);
+		members = next.members;
+		// Reassign the object to trigger the reactive cascading selects
+		household = next.household;
 
 		markDirty();
-		toast.success(t.thaidHeadFetchedToast(`${profile.first_name} ${profile.last_name}`));
+		const head = members[0];
+		toast.success(t.thaidHeadFetchedToast((head && formatPersonName(head)) || t.thaidScanHead));
 	}
 
 	$effect(() => {
@@ -1612,7 +1597,7 @@
 				submittingLabel={t.submitting}
 				existingHeadName={summaryExistingHeadName}
 				existingMemberCount={summaryExistingMemberCount}
-				existingPets={selectedMatchChip?.pets ?? []}
+				existingPets={readOnlyPets}
 				newPets={petItems}
 				onNavigate={(id) => scrollToSection(id as FormSectionId)}
 			/>
@@ -1636,12 +1621,21 @@
 				description={t.sectionAddressDesc}
 				icon={Home}
 			>
-				<!-- ThaiD Action Button: Public Pre-Register -->
-				{#if channel === 'public' && thaidEnabled}
+				<!-- ThaiD: public redirects to ThaiD; onsite scans a QR without leaving the page;
+						no head scan on onsite report-in (would overwrite the existing head) -->
+				{#if thaidEnabled && canScanThaidForHead({ channel, mode })}
 					<ThaidActionButton
 						shelterCode={shelterCode || (enableUnassignedPhoto ? 'unassigned' : '')}
 						disabled={fieldsLocked}
+						onConnect={channel === 'public' ? undefined : () => (headScanOpen = true)}
 					/>
+					{#if channel !== 'public'}
+						<ThaidMemberScanDialog
+							bind:open={headScanOpen}
+							memberLabel={t.thaidScanHead}
+							onscanned={handleThaiDAutofill}
+						/>
+					{/if}
 				{/if}
 
 				<!-- Quick Search & Merge Tool Bar (both Public and Onsite) -->
@@ -1984,7 +1978,7 @@
 				existingMembers={joinedFamilyMembers}
 				existingMemberCount={summaryExistingMemberCount}
 				primaryContactPhone={members[0]?.phone ?? null}
-				thaidEnabled={channel === 'public' && thaidEnabled}
+				{thaidEnabled}
 				onDirty={markDirty}
 			/>
 
@@ -1996,7 +1990,7 @@
 				{channel}
 				{enableUnassignedPhoto}
 				{shelterCode}
-				existingPets={selectedMatchChip?.pets ?? []}
+				existingPets={readOnlyPets}
 				petErrors={visibleErrors.pets}
 				{validationSeq}
 				onsync={onPetsSynced}
@@ -2099,7 +2093,7 @@
 							showSubmit={false}
 							existingHeadName={summaryExistingHeadName}
 							existingMemberCount={summaryExistingMemberCount}
-							existingPets={selectedMatchChip?.pets ?? []}
+							existingPets={readOnlyPets}
 							newPets={petItems}
 							onNavigate={(id) => {
 								mobileSummaryOpen = false;

@@ -36,15 +36,20 @@ class CouchClient:
         response.raise_for_status()
         return response.json()
 
-    async def put_doc(self, database: str, doc: dict[str, Any]) -> dict[str, Any]:
+    async def put_doc(
+        self, database: str, doc: dict[str, Any], *, retry_conflict: bool = True
+    ) -> dict[str, Any]:
         """PUT a document. On 409, retry once with the latest ``_rev``.
+
+        With ``retry_conflict=False`` a 409 raises instead: the caller put an explicit
+        ``_rev`` in ``doc`` and wants to know the document moved, not to overwrite it.
 
         Returns CouchDB's ``{"ok": true, "id": ..., "rev": ...}`` on success.
         Raises ``httpx.HTTPStatusError`` if the write cannot complete.
         """
         doc_id = doc["_id"]
         response = await self._client.put(f"/{database}/{doc_id}", json=doc)
-        if response.status_code != 409:
+        if response.status_code != 409 or not retry_conflict:
             response.raise_for_status()
             return response.json()
 
@@ -98,11 +103,17 @@ class CouchClient:
         *,
         fields: list[str] | None = None,
         limit: int = 25,
+        use_index: list[str] | None = None,
     ) -> list[dict[str, Any]]:
-        """Mango ``_find`` — returns the matching ``docs`` list."""
+        """Mango ``_find`` — returns the matching ``docs`` list.
+
+        ``use_index`` is ``[ddoc, name]``; a partial index is only ever used when named.
+        """
         body: dict[str, Any] = {"selector": selector, "limit": limit}
         if fields is not None:
             body["fields"] = fields
+        if use_index is not None:
+            body["use_index"] = use_index
         response = await self._client.post(f"/{database}/_find", json=body)
         response.raise_for_status()
         return response.json().get("docs") or []

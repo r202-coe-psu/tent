@@ -31,6 +31,7 @@
 	import * as Select from '$lib/components/ui/select/index.js';
 	import { Textarea } from '$lib/components/ui/textarea/index.js';
 	import { toast } from 'svelte-sonner';
+	import { sanitizePhoneTyping, thaiMobilePhoneSchema } from '$lib/db/model';
 	import { Html5Qrcode } from 'html5-qrcode';
 	import { qtyGt } from '$lib/utils/qty';
 	import { onMount, untrack } from 'svelte';
@@ -45,7 +46,9 @@
 		LineDecisionToggle,
 		type DonationRejectReasonCode,
 		type RejectDonationInput,
-		type ScanDonationView
+		type ScanDonationView,
+		DonationPhotoStrip,
+		closedAtIntakeMessage
 	} from '$lib/features/donations';
 	import { useSupplyItems } from '$lib/features/supply';
 	import {
@@ -498,6 +501,14 @@
 	// Walk-in form state
 	let walkinDonorName = $state('');
 	let walkinDonorPhone = $state('');
+	// Same rule the BFF enforces (it stays the authority); this only stops a doomed submit.
+	const walkinPhoneCheck = $derived(thaiMobilePhoneSchema.safeParse(walkinDonorPhone));
+	const walkinPhoneError = $derived(
+		walkinPhoneCheck.success ? null : walkinPhoneCheck.error.issues[0].message
+	);
+	// Shown once the field is left or a save is tried, not while the first digits go in.
+	let walkinPhoneTouched = $state(false);
+	const walkinPhoneShownError = $derived(walkinPhoneTouched ? walkinPhoneError : null);
 	let walkinDonorEmail = $state('');
 	type WalkinItemState = {
 		id: string;
@@ -514,7 +525,7 @@
 			id: ulid(),
 			itemId: '',
 			name: '',
-			qty: '1',
+			qty: '0',
 			unit: 'piece',
 			expiry: '',
 			storagePointId: ''
@@ -547,7 +558,15 @@
 			}
 			const data = await res.json();
 			if (data.success && data.donation) {
-				donationDoc = data.donation as ScanDonationView;
+				const found = data.donation as ScanDonationView;
+				const closed = closedAtIntakeMessage(found.booking_ref || query.trim(), found.status);
+				if (closed) {
+					toast.error(closed);
+					scanState = 'idle';
+					if (fromList) onClose?.();
+					return;
+				}
+				donationDoc = found;
 				bookingRef = donationDoc?.booking_ref || '';
 				actionRef = donationDoc?.booking_ref || query.trim();
 				donorName = donationDoc?.donor?.name || 'ไม่ระบุชื่อ';
@@ -754,7 +773,7 @@
 			id: ulid(),
 			itemId: '',
 			name: '',
-			qty: '1',
+			qty: '0',
 			unit: 'piece',
 			expiry: '',
 			storagePointId: ''
@@ -781,7 +800,19 @@
 			toast.error('กรุณาระบุชื่อผู้บริจาค');
 			return;
 		}
-		const validItems = walkinItems.filter((it) => it.itemId && qtyGt(it.qty || '0', 0));
+		if (walkinPhoneError) {
+			walkinPhoneTouched = true;
+			toast.error(walkinPhoneError);
+			document.getElementById('donor-phone-input')?.focus();
+			return;
+		}
+		// A picked item still at 0 is a missed count, not a line to drop silently.
+		const uncounted = walkinItems.filter((it) => it.itemId && !qtyGt(it.qty || '0', 0));
+		if (uncounted.length > 0) {
+			toast.error(`กรุณาระบุจำนวนที่รับจริง: ${uncounted.map((it) => it.name).join(', ')}`);
+			return;
+		}
+		const validItems = walkinItems.filter((it) => it.itemId);
 		if (validItems.length === 0) {
 			toast.error('กรุณาเลือกรายการสิ่งของอย่างน้อย 1 รายการพร้อมระบุจำนวน');
 			return;
@@ -853,13 +884,14 @@
 			activeView = 'scan';
 			walkinDonorName = '';
 			walkinDonorPhone = '';
+			walkinPhoneTouched = false;
 			walkinDonorEmail = '';
 			walkinItems = [
 				{
 					id: ulid(),
 					itemId: '',
 					name: '',
-					qty: '1',
+					qty: '0',
 					unit: 'piece',
 					expiry: '',
 					storagePointId: ''
@@ -928,6 +960,13 @@
 				<div class="grid grid-cols-1 gap-5 bg-[#F8FAFC] p-4 sm:p-6 lg:grid-cols-12">
 					<!-- Left: items to count -->
 					<div class="space-y-4 lg:col-span-7">
+						<!-- CR-175 FR-12: what the donor photographed, next to what arrived. -->
+						{#if donationDoc}
+							<DonationPhotoStrip
+								photoIds={donationDoc.photos}
+								shelterCode={donationDoc.shelter_code}
+							/>
+						{/if}
 						<div class="flex items-baseline justify-between gap-2">
 							<h3 class="text-base font-semibold text-slate-800">รายการที่ต้องตรวจรับ</h3>
 							<span class="text-sm text-slate-500 tabular-nums">
@@ -1528,7 +1567,11 @@
 					variant="link"
 					size="sm"
 					type="button"
-					onclick={() => (initialView === 'walkin' && onClose ? onClose() : (activeView = 'scan'))}
+					onclick={() => {
+						walkinPhoneTouched = false;
+						if (initialView === 'walkin' && onClose) onClose();
+						else activeView = 'scan';
+					}}
 					class="mb-3 h-auto gap-1.5 p-0 text-sm font-medium text-blue-200 no-underline hover:text-white hover:no-underline"
 				>
 					<ArrowLeft class="size-4" />
@@ -1579,10 +1622,27 @@
 							<Input
 								id="donor-phone-input"
 								type="text"
-								placeholder="เช่น 089-XXX-XXXX"
-								bind:value={walkinDonorPhone}
+								placeholder="เช่น 0891234567"
+								inputmode="numeric"
+								bind:value={
+									() => walkinDonorPhone,
+									// The input re-reads the getter after set, so it always shows the digits-only value.
+									(v) => (walkinDonorPhone = sanitizePhoneTyping(v ?? ''))
+								}
+								onblur={() => (walkinPhoneTouched = true)}
+								aria-invalid={walkinPhoneShownError ? true : undefined}
+								aria-describedby={walkinPhoneShownError ? 'donor-phone-error' : undefined}
 								class="h-10 rounded-xl text-sm"
 							/>
+							{#if walkinPhoneShownError}
+								<p
+									id="donor-phone-error"
+									class="text-xs text-destructive"
+									data-testid="walkin-phone-error"
+								>
+									{walkinPhoneShownError}
+								</p>
+							{/if}
 						</div>
 
 						<div class="space-y-1.5">
@@ -1755,12 +1815,15 @@
 				</div>
 
 				<!-- Footer Action Buttons -->
-				<div class="flex items-center justify-end gap-3 border-t border-border/60 pt-6">
+				<div
+					class="flex flex-col-reverse gap-2 border-t border-border/60 pt-6 sm:flex-row sm:justify-end"
+					data-testid="walkin-footer"
+				>
 					<Button
 						variant="ghost"
 						type="button"
 						onclick={() => (activeView = 'scan')}
-						class="h-11 rounded-xl px-5 text-sm font-semibold text-muted-foreground hover:bg-muted hover:text-foreground"
+						class="h-11 w-full rounded-xl px-5 text-sm font-semibold text-muted-foreground hover:bg-muted hover:text-foreground sm:w-auto"
 					>
 						ยกเลิก
 					</Button>
@@ -1769,7 +1832,7 @@
 						type="button"
 						onclick={handleSaveWalkin}
 						disabled={walkinSaving}
-						class="flex h-11 items-center gap-2 rounded-xl bg-[#002D5B] px-6 text-sm font-bold text-white shadow-sm hover:bg-[#001f3f] dark:bg-blue-600 dark:hover:bg-blue-700"
+						class="flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-[#002D5B] px-6 text-sm font-bold text-white shadow-sm hover:bg-[#001f3f] sm:w-auto dark:bg-blue-600 dark:hover:bg-blue-700"
 					>
 						{#if walkinSaving}
 							<Loader2 class="h-4 w-4 animate-spin" />
