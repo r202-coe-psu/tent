@@ -120,3 +120,39 @@ describe('scan-station walk-in', () => {
 		expect(toastMock.error).toHaveBeenCalledWith(expect.stringContaining('รายการสิ่งของ'));
 	});
 });
+
+describe('scan-station vehicle plate (CR-209 FR-3b, AC-8)', () => {
+	const booking = (logistics: Record<string, unknown>) => ({
+		success: true,
+		donation: {
+			booking_ref: 'DN-000010',
+			shelter_code: 'SH001',
+			status: 'verifying',
+			donor: { name: 'ผู้บริจาค', phone: '0812345678', email: null },
+			items: [{ item_id: 'item:rice', qty: '5', unit: 'kg' }],
+			logistics
+		}
+	});
+
+	async function open(logistics: Record<string, unknown>) {
+		vi.stubGlobal(
+			'fetch',
+			vi.fn().mockResolvedValue({ ok: true, json: async () => booking(logistics) })
+		);
+		instance = mount(ScanStation, { target: document.body, props: { initialQuery: 'DN-000010' } });
+		await settle();
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		await settle();
+	}
+
+	it('shows the plate next to the vehicle on a v10 booking that has one', async () => {
+		await open({ delivery_method: 'self_dropoff', vehicle: 'car', vehicle_plate: 'กข 1234' });
+		expect(document.body.textContent).toContain('ทะเบียน กข 1234');
+	});
+
+	it('shows no plate line on a booking without one (doc from before v10)', async () => {
+		await open({ delivery_method: 'self_dropoff', vehicle: 'car' });
+		expect(document.body.textContent).toContain('วิธีส่ง / ยานพาหนะ');
+		expect(document.body.textContent).not.toContain('ทะเบียน ');
+	});
+});

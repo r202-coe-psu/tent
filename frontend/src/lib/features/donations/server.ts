@@ -29,6 +29,7 @@ export {
 	slotModeForDelivery
 } from './domain/compute-slots';
 export { donationPreDeclarationInputSchema } from './domain/donation';
+export { toTrackingDonor, toTrackingLogistics } from './domain/tracking';
 export {
 	combineLineRejectReasons,
 	donorRejectMessage,

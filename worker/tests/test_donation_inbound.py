@@ -160,8 +160,8 @@ _BLANKET = {
 
 
 @pytest.mark.asyncio
-async def test_persisted_donation_is_stamped_schema_v9(db: None):
-    # CR-175: donor photos (8 was CR-196's items[].line_key).
+async def test_persisted_donation_is_stamped_schema_v10(db: None):
+    # CR-209: 10 adds logistics.vehicle_plate (9 CR-175 donor photos, 8 CR-196 items[].line_key).
     # Must match the walk-in writer in the frontend — both channels write the same version.
     couch = _couch()
 
@@ -169,10 +169,31 @@ async def test_persisted_donation_is_stamped_schema_v9(db: None):
     assert await _persist_donation(couch, row) is True
     doc = couch.put_doc.await_args.args[1]
     assert doc["_id"] == row.id
-    assert doc["schema_v"] == 9
+    assert doc["schema_v"] == 10
     # Nothing is rejected at intake — the fields only appear once staff review it.
     assert "reject_reason" not in doc
     assert "reject_reason_code" not in doc
+
+
+@pytest.mark.asyncio
+async def test_persisted_donation_copies_the_vehicle_plate_whole(db: None):
+    # logistics is copied as one block, so the plate lands in CouchDB
+    # without the inbound knowing about it; a booking without a plate has none.
+    couch = _couch()
+    logistics = {
+        "delivery_method": "self_dropoff",
+        "vehicle": "motorcycle",
+        "vehicle_plate": "กข 1234 กรุงเทพมหานคร",
+    }
+    assert await _persist_donation(couch, await _row(logistics=logistics)) is True
+    doc = couch.put_doc.await_args.args[1]
+    assert doc["schema_v"] == 10
+    assert doc["logistics"]["vehicle_plate"] == "กข 1234 กรุงเทพมหานคร"
+
+    couch = _couch()
+    plain = {"delivery_method": "self_dropoff", "vehicle": "car"}
+    assert await _persist_donation(couch, await _row(logistics=plain)) is True
+    assert "vehicle_plate" not in couch.put_doc.await_args.args[1]["logistics"]
 
 
 @pytest.mark.asyncio

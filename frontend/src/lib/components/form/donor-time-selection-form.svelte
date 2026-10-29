@@ -18,9 +18,13 @@
 	import { toast } from 'svelte-sonner';
 	import {
 		buildDonationItemsPayload,
+		buildDonationLogistics,
+		pickedSlot,
 		publicDonationErrorMessage,
+		slotContextKey,
 		slotModeForDelivery,
-		useDonationSlots
+		useDonationSlots,
+		VEHICLE_PLATE_MAX
 	} from '$lib/features/donations';
 	import { formatUnit, useUnitsOfMeasure } from '$lib/features/catalog';
 	import { DropOffShelterMap } from '$lib/features/public-portal';
@@ -70,15 +74,19 @@
 	const timeSlots = $derived(slotsQuery.isSuccess ? slotsQuery.data : []);
 	const hasShelter = $derived(Boolean(donationStore.shelterCode));
 
-	// A window the donor picked earlier can fill or close before they submit — drop the
-	// selection instead of letting them send a booking the service will reject.
-	$effect(() => {
-		const picked = donationStore.slotTime;
-		if (!picked) return;
-		if (!timeSlots.some((slot) => slot.label === picked && slot.status === 'available')) {
-			donationStore.slotTime = '';
-		}
-	});
+	// A window is picked for one shelter, day and queue: changing any of them, or the window
+	// filling or closing before submit, leaves nothing picked (`pickedSlot`).
+	const slotContext = $derived(
+		slotContextKey(donationStore.shelterCode, selectedDateStr, slotMode)
+	);
+	const selectedSlot = $derived(
+		pickedSlot({
+			slotTime: donationStore.slotTime,
+			slotFor: donationStore.slotFor,
+			context: slotContext,
+			slots: timeSlots
+		})
+	);
 
 	function handleConfirmBookingRequest() {
 		donationStore.errorMessage = '';
@@ -96,7 +104,7 @@
 		if (
 			(donationStore.deliveryMethod === 'self_dropoff' ||
 				donationStore.deliveryMethod === 'shelter_pickup') &&
-			(!selectedDate || !donationStore.slotTime)
+			(!selectedDate || !selectedSlot)
 		) {
 			donationStore.errorMessage = t.errSelectDateTime;
 			toast.error(donationStore.errorMessage);
@@ -123,10 +131,12 @@
 			return;
 		}
 
-		submitDonation();
+		// Read once, before reCAPTCHA's awaits: if the window fills meanwhile, the booking still
+		// carries the window that passed the check above, and the BFF answers SLOT_FULL.
+		submitDonation(selectedSlot, selectedDateStr || bangkokToday());
 	}
 
-	async function submitDonation() {
+	async function submitDonation(slotLabel: string, slotDateStr: string) {
 		donationStore.errorMessage = '';
 		if (donationStore.flowMode === 'unsolicited' && donationStore.photos.busy) {
 			toast.error(t.photoWaitUpload);
@@ -165,26 +175,18 @@
 			}
 		}
 
-		let slotDateStr = selectedDate ? selectedDate.toString() : bangkokToday();
-		let fromTime = donationStore.slotTime.split('-')[0]?.trim() || '00:00';
-		let toTime = donationStore.slotTime.split('-')[1]?.trim() || '23:59';
+		const fromTime = slotLabel.split('-')[0]?.trim() || '00:00';
+		const toTime = slotLabel.split('-')[1]?.trim() || '23:59';
 
-		let logistics: Record<string, unknown> = {
-			delivery_method: donationStore.deliveryMethod
-		};
-
-		if (donationStore.deliveryMethod === 'self_dropoff') {
-			logistics.vehicle = donationStore.vehicleType;
-			logistics.slot = { date: slotDateStr, from: fromTime, to: toTime };
-		} else if (donationStore.deliveryMethod === 'shelter_pickup') {
-			logistics.slot = { date: slotDateStr, from: fromTime, to: toTime };
-			if (donationStore.pickupAddress) logistics.pickup_address = donationStore.pickupAddress;
-			if (donationStore.eta) logistics.eta = donationStore.eta;
-		} else if (donationStore.deliveryMethod === 'parcel') {
-			if (donationStore.eta) logistics.eta = donationStore.eta;
-			if (donationStore.courierTrackingNo)
-				logistics.courier_tracking_no = donationStore.courierTrackingNo;
-		}
+		const logistics = buildDonationLogistics({
+			deliveryMethod: donationStore.deliveryMethod,
+			vehicleType: donationStore.vehicleType,
+			vehiclePlate: donationStore.vehiclePlate,
+			slot: { date: slotDateStr, from: fromTime, to: toTime },
+			pickupAddress: donationStore.pickupAddress,
+			eta: donationStore.eta,
+			courierTrackingNo: donationStore.courierTrackingNo
+		});
 
 		try {
 			const res = await fetch('/api/public/v1/donations', {
@@ -213,6 +215,7 @@
 				donationStore.bookingRef = data.bookingRef;
 				donationStore.bookingStatus = data.status ?? 'pending_review';
 				donationStore.slotDate = slotDateStr;
+				donationStore.bookedVehiclePlate = logistics?.vehicle_plate ?? '';
 				donationStore.goToStep('ticket');
 				if (donationStore.reachedStep < 4) donationStore.reachedStep = 4;
 				toast.success(t.bookingSuccess);
@@ -384,6 +387,17 @@
 						</button>
 					{/each}
 				</div>
+				<div class="space-y-2">
+					<label class="block text-sm font-bold text-slate-800" for="vehicle-plate">
+						{t.vehiclePlateLabel}
+					</label>
+					<Input
+						id="vehicle-plate"
+						bind:value={donationStore.vehiclePlate}
+						maxlength={VEHICLE_PLATE_MAX}
+						placeholder={t.vehiclePlatePlaceholder}
+					/>
+				</div>
 			</div>
 		{/if}
 
@@ -508,12 +522,14 @@
 						<div class="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
 							{#each timeSlots as slot (slot.from)}
 								{@const isFull = slot.status !== 'available'}
-								{@const isSelected = donationStore.slotTime === slot.label}
+								{@const isSelected = selectedSlot === slot.label}
 								<button
 									type="button"
 									disabled={isFull}
 									onclick={() => {
-										if (!isFull) donationStore.slotTime = slot.label;
+										if (isFull) return;
+										donationStore.slotTime = slot.label;
+										donationStore.slotFor = slotContext;
 									}}
 									class="flex flex-col items-center justify-center gap-1 rounded-xl border-2 p-3 transition-all
 									{isFull
@@ -563,7 +579,7 @@
 				!donationStore.shelterCode ||
 				((donationStore.deliveryMethod === 'self_dropoff' ||
 					donationStore.deliveryMethod === 'shelter_pickup') &&
-					!donationStore.slotTime) ||
+					!selectedSlot) ||
 				(donationStore.deliveryMethod === 'shelter_pickup' && !donationStore.pickupAddress.trim())}
 			onclick={handleConfirmBookingRequest}
 			class="flex flex-1 cursor-pointer items-center justify-center gap-2 rounded-xl bg-domain-donation-strong py-4 text-lg font-bold text-white shadow-md transition-all hover:bg-domain-donation-text active:scale-95 disabled:opacity-50"

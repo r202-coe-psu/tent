@@ -144,7 +144,7 @@ describe('PATCH /api/public/v1/donations/[token]/items', () => {
 		]);
 		expect((written as { revisions: unknown[] }).revisions).toHaveLength(1);
 		// FR-18b — the current version, not a stale constant.
-		expect((written as { schema_v: number }).schema_v).toBe(9);
+		expect((written as { schema_v: number }).schema_v).toBe(10);
 	});
 
 	// CR-196 FR-LK-4 — refused here, before the headroom reads or any quota moves.
@@ -222,7 +222,7 @@ describe('PATCH /api/public/v1/donations/[token]/items', () => {
 			const response = await call();
 
 			const [, , written] = vi.mocked(putAsPublicWriter).mock.calls[0]!;
-			expect(written).toMatchObject({ status: 'verifying', schema_v: 9 });
+			expect(written).toMatchObject({ status: 'verifying', schema_v: 10 });
 			expect((await response.json()).status).toBe('verifying');
 		});
 
@@ -239,16 +239,16 @@ describe('PATCH /api/public/v1/donations/[token]/items', () => {
 			expect((written as { items: { line_key?: string }[] }).items[0]!.line_key).toBe('K-NEW');
 		});
 
-		// A doc a newer writer stamped keeps its version: stamping 8 over it would claim it
+		// A doc a newer writer stamped keeps its version: stamping the current one over it would claim it
 		// lacks fields it has.
 		it('never lowers the schema_v of a doc a newer writer stamped', async () => {
-			couchHas({ ...couchDoc('pending_review'), schema_v: 9 });
+			couchHas({ ...couchDoc('pending_review'), schema_v: 11 });
 			fastapiOk({ status: 'pending_review' });
 
 			await call();
 
 			const [, , written] = vi.mocked(putAsPublicWriter).mock.calls[0]!;
-			expect(written).toMatchObject({ schema_v: 9 });
+			expect(written).toMatchObject({ schema_v: 11 });
 		});
 
 		it('AC-22: audits the lines the campaign rule approved in this edit, after the write', async () => {

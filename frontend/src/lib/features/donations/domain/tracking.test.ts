@@ -10,6 +10,8 @@ import {
 	maskLookupPhone,
 	rejectedLineReasons,
 	toDonationTrackView,
+	toTrackingDonor,
+	toTrackingLogistics,
 	type DonationLookupItem
 } from './tracking';
 
@@ -235,6 +237,76 @@ describe('reject reasons on the ticket (CR-172)', () => {
 		});
 		expect(view.items.map((i) => i.review_status)).toEqual(['approved', 'rejected', 'rejected']);
 		expect(rejectedLineReasons(view)).toEqual([null, 'หมดอายุ', '']);
+	});
+});
+
+describe('toTrackingLogistics (CR-209 FR-4)', () => {
+	it('keeps only the allowlisted keys and drops vehicle_plate', () => {
+		const out = toTrackingLogistics({
+			delivery_method: 'self_dropoff',
+			vehicle: 'car',
+			vehicle_plate: 'กข 1234 กรุงเทพมหานคร',
+			slot: { date: '2026-11-01', from: '09:00', to: '10:00', capacity: 5 },
+			eta: '2026-11-01T02:00:00Z',
+			courier_tracking_no: null,
+			pickup_address: 'บ้านเลขที่ 1',
+			internal_note: 'x'
+		});
+		expect(out).toEqual({
+			delivery_method: 'self_dropoff',
+			vehicle: 'car',
+			slot: { date: '2026-11-01', from: '09:00', to: '10:00' },
+			eta: '2026-11-01T02:00:00Z',
+			courier_tracking_no: null,
+			pickup_address: 'บ้านเลขที่ 1'
+		});
+		expect(JSON.stringify(out)).not.toContain('vehicle_plate');
+	});
+
+	it('returns null when there is no logistics block', () => {
+		expect(toTrackingLogistics(undefined)).toBeNull();
+		expect(toTrackingLogistics(null)).toBeNull();
+		expect(toTrackingLogistics('parcel')).toBeNull();
+	});
+
+	it('leaves out keys the doc does not have (doc from before the plate)', () => {
+		expect(toTrackingLogistics({ delivery_method: 'parcel' })).toEqual({
+			delivery_method: 'parcel'
+		});
+	});
+});
+
+describe('toTrackingLogistics null handling', () => {
+	it('never writes null into delivery_method, and keeps null where the type allows it', () => {
+		expect(
+			toTrackingLogistics({ delivery_method: null, vehicle: null, courier_tracking_no: null })
+		).toEqual({ vehicle: null, courier_tracking_no: null });
+	});
+});
+
+describe('toTrackingDonor', () => {
+	it('keeps the name and masks a raw phone', () => {
+		expect(
+			toTrackingDonor({
+				name: 'สมชาย',
+				phone: '081-234-5678',
+				phone_hash: 'h',
+				line_id: 'l',
+				email: 'e@x.th'
+			})
+		).toEqual({ name: 'สมชาย', phone_masked: '***-***-5678' });
+	});
+
+	it('passes through an already-masked phone and nothing else', () => {
+		expect(toTrackingDonor({ name: 'A', phone_masked: '***-***-1111', email: 'e@x.th' })).toEqual({
+			name: 'A',
+			phone_masked: '***-***-1111'
+		});
+	});
+
+	it('returns an empty donor for missing or malformed input', () => {
+		expect(toTrackingDonor(undefined)).toEqual({});
+		expect(toTrackingDonor({ phone: null })).toEqual({});
 	});
 });
 

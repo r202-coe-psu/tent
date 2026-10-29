@@ -45,6 +45,7 @@ export interface PendingDonationRow {
 	slot?: { date: string; from: string; to: string };
 	delivery_method?: string;
 	vehicle?: string | null;
+	vehicle_plate?: string | null;
 	pickup_address?: string | null;
 	donor_note?: string | null;
 	is_unsolicited?: boolean;

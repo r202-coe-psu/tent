@@ -39,7 +39,7 @@ POLL_INTERVAL_SECONDS = 3
 
 #: ``donation`` schema_v this writer stamps. Keep in step with the walk-in writer in the
 #: frontend — both channels write the same shape (schema.md §2.3).
-DONATION_SCHEMA_V = 9
+DONATION_SCHEMA_V = 10
 
 _AUDIT_SCHEMA_V = 1
 _CROCKFORD = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
@@ -162,6 +162,7 @@ def _build_couch_doc(
     doc: dict[str, Any] = {
         "_id": doc_id,
         "type": "donation",
+        # 10 for logistics.vehicle_plate (CR-209) — copied with `logistics`, below.
         # 9 for photos (CR-175 donor photos); 8 for items[].line_key (CR-196); 7 was items[].review_status / review_reason_code /
         # review_reason (CR-174). FastAPI sets both on every line, and the lines are copied
         # whole below. 6 was reject_reason / reject_reason_code + received_summary.items[].rejected
