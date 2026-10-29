@@ -264,7 +264,7 @@ export interface DonationItem {
 
 /**
  * `schema_v` every donation writer stamps — the walk-in factory here, the donor edit
- * route, and `worker/inbound/donations.py`. 8 = draft-donation-vehicle-plate `logistics.vehicle_plate`,
+ * route, and `worker/inbound/donations.py`. 8 = CR-209 `logistics.vehicle_plate`,
  * 7 = CR-174 `items[].review_status` (6 CR-172 `reject_reason`, 5 CR-087 `redirect_to_shelter_code`, 4 CR-080 `revisions[]`).
  */
 export const DONATION_SCHEMA_V = 8;

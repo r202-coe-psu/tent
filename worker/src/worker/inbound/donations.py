@@ -153,7 +153,7 @@ def _build_couch_doc(donation: DonationBuffer, doc_id: str, now: str) -> dict[st
     return {
         "_id": doc_id,
         "type": "donation",
-        # 8 for logistics.vehicle_plate (draft-donation-vehicle-plate) — copied with `logistics`, below.
+        # 8 for logistics.vehicle_plate (CR-209) — copied with `logistics`, below.
         # 7 for items[].review_status / review_reason_code / review_reason (CR-174) —
         # FastAPI sets review_status on every line, and the lines are copied whole below.
         # 6 was reject_reason / reject_reason_code + received_summary.items[].rejected
