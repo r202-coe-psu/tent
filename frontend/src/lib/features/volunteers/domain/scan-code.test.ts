@@ -38,4 +38,9 @@ describe('parseVolunteerScanCode', () => {
 		expect(parseVolunteerScanCode('0812345678')).toBeNull();
 		expect(parseVolunteerScanCode('   ')).toBeNull();
 	});
+
+	it('leaves staff card payloads to the staff lookup', () => {
+		expect(parseVolunteerScanCode(`TKT-STF-HASH-${'a'.repeat(64)}`)).toBeNull();
+		expect(parseVolunteerScanCode(`tkt-stf-hash-${'a'.repeat(64)}`)).toBeNull();
+	});
 });
