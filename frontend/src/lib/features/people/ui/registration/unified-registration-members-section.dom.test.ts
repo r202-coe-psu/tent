@@ -76,9 +76,11 @@ beforeEach(() => {
 	);
 });
 
-afterEach(() => {
+afterEach(async () => {
 	if (instance) unmount(instance);
 	instance = null;
+	// bits-ui restores the body style 24ms after a dialog unmounts; let it run before the DOM goes away.
+	await new Promise((resolve) => setTimeout(resolve, 50));
 	document.body.innerHTML = '';
 	vi.unstubAllGlobals();
 });
