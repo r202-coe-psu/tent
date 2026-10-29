@@ -4,7 +4,7 @@ title: ล็อตติดลบไม่หยุดงาน — แสด�
 status: proposed
 date: 2026-10-29
 requested_by: issue #855 (เปลี่ยนเป้าหมาย 2026-10-27 ตามคำตอบ #881) · #881 ทาง D (net-lynx, 2026-10-26)
-decided_by: ทิศทาง — net-lynx (#881 ทาง D, 2026-10-26; Mhapong รับ 2026-10-26) · วิธี track — Mhapong (ไฟล์ draft CR, 2026-10-29) · approve — รอ @Jackyzaz (ผู้ approve CR)
+decided_by: pending approval by @Jackyzaz (รายละเอียดการตัดสินใจอยู่ใน Decision log)
 layer: volatile
 affects:
   # Phase 1 (รุ่นนี้ — code ใน PR แยกของ #855)
@@ -17,7 +17,10 @@ affects:
   - frontend/src/lib/features/operations/domain/cycle-count.ts (`buildCycleCountLots`)
   - frontend/src/lib/features/operations/ui/stock-table.svelte · cycle-count-form.svelte · adjust-stock-form.svelte · distribute-stock-form.svelte
   - frontend/src/lib/features/distribution/ui/model/physical-lot.ts (picker ของตั๋ว)
-  - frontend/src/lib/features/operations/data/operations.remote.ts (`distributeStock` — ลำดับการอ่าน, ไม่เปลี่ยนกติกา)
+  - frontend/src/lib/features/operations/data/operations.remote.ts (`distributeStock` — ลำดับการอ่าน; `:633` และ `adjustStock` / `applyCycleCount` — ยอดใช้ได้ถือล็อตติดลบ = 0)
+  - frontend/src/lib/features/distribution/data/distribution.remote.ts (`loadPhysicalLots` `:267`, claim loop `:856` — ยอดใช้ได้ถือล็อตติดลบ = 0)
+  - frontend/src/lib/features/operations/domain/item-merge.ts `:147` · frontend/src/lib/features/operations/ui/merge-item-dialog.svelte `:84` (กรองเฉพาะล็อต `qty > 0` อยู่แล้ว — คงไว้)
+  - frontend/src/lib/features/operations/domain/operations.ts `:1135` (`projectLotsByItem`) · `:1173` (`assertLotWriteOffsFit`) — ผู้เรียกต้องถือล็อตติดลบ = 0 ตาม FR-9b
   - frontend/src/lib/features/distribution/data/distribution.remote.ts (การอนุมัติใบขอเบิก — claim loop, ลำดับการอ่านเท่านั้น)
   # Phase 2 (follow-up — ระบุไว้ ยังไม่ทำในรุ่นนี้)
   - docs/changes/03-C-supply/CR-190-lot-bound-adjust-and-count.md TL;DR ข้อ 2 · ตาราง Change แถว "`adjust` บวก" · FR-3
@@ -77,12 +80,16 @@ affects:
   2. `distribution_return` อ้างล็อตที่ไม่มีในประวัติ
   3. แถวขาออกอ้าง `lot_ref` ที่ไม่มีในประวัติ
   4. แถวขาออก legacy ที่ไม่มีล็อตยอดบวกให้ตัดเลย (ไม่มี "ล็อตสุดท้ายที่ตัด")
+     — **คง fail-closed โดยเจตนา** (owner decision 2026-10-29): ไม่มีล็อตให้ผูกส่วนขาด การเดาล็อตจะสร้างยอดที่ไม่มีหลักฐานรองรับ จึงข้ามสินค้านั้นและแจ้งชื่อแทน
 - **FR-5** — ประวัติที่ replay ผ่านก่อน CR นี้ต้องได้ยอดรายล็อตเท่าเดิมทุกล็อต
 
 ### หน้าจอ
 
 - **FR-6** — ตารางสต็อกแสดงสินค้าที่มีล็อตติดลบตามปกติ; ล็อตติดลบแสดงยอดติดลบพร้อมคำเตือน "ล็อตนี้ยอดติดลบ — ต้องแก้ยอด";
-  ยอดรวมของสินค้า = ผลรวม `qty` ใน ledger (`stockBalance`) เหมือนเดิม
+  **ยอดรวมของตาราง** = ผลรวม `qty` ใน ledger (`stockBalance`) **รวมล็อตติดลบ** เหมือนเดิม
+- **FR-6a** — ฟอร์มเบิก / ปรับยอดแสดง "ยอดที่ใช้ได้" = ผลรวมล็อตที่ `qty > 0` **หักยอดจอง** (ล็อตติดลบนับเป็น 0 ไม่ถูกหักออก).
+  ตัวอย่าง A = −3, B = 10: ตารางแสดงรวม **7**, ฟอร์มเบิกเลือกได้ **10**. เมื่อสองตัวเลขต่างกัน ตารางสต็อกแสดงข้อความอธิบาย
+  เช่น "ใช้ได้ 10 (ไม่นับล็อตติดลบ −3)" ข้างยอดรวม เพื่อไม่ให้ผู้ใช้สับสน
 - **FR-7** — หน้าตรวจนับแสดงสินค้าและล็อตติดลบพร้อมคำเตือนเดียวกับ FR-6; ล็อตติดลบ**แสดงอย่างเดียว** — ไม่มีช่องกรอกยอดนับ
   และไม่สร้างแถว `count_mismatch` ของล็อตนั้น (การแก้ด้วยการนับอยู่ที่ FR-17 ของ Phase 2)
 - **FR-8** — ล็อตติดลบเลือกเพื่อเบิกหรือตัดยอดไม่ได้ทุกจุด: ฟอร์มเบิกตรง, picker ของตั๋ว (`PhysicalLotPicker`), ฟอร์มปรับยอด,
@@ -92,6 +99,13 @@ affects:
 
 - **FR-9** — การตรวจล็อตก่อนเขียน (CR-190 FR-4, CR-175) คงเดิมทุกข้อ. แถวตัดยอดที่อ้างล็อตติดลบ → `assertLotWriteOffsFit` ปฏิเสธด้วยข้อความ
   "ล็อตที่เลือกติดลบ (−N หน่วย) ตัดยอดเพิ่มไม่ได้ — ต้องแก้ยอดล็อตนี้ก่อน" และไม่เขียนแถวใดในคำขอนั้น
+- **FR-9a** — ลำดับการอ่านของ claim: ทั้ง `distributeStock` (`operations.remote.ts`) และ claim loop ของการอนุมัติใบขอเบิก (`distribution.remote.ts`)
+  ต้องอ่าน `stock_lot_reservation` **ก่อน** ledger ในทุก attempt — claimer เขียน ledger ก่อนแล้วจึงปล่อย claim การอ่านลำดับนี้เห็น claim, แถว ledger หรือทั้งคู่ ไม่มีกรณีที่ไม่เห็นเลย
+  (ไม่เปลี่ยนกติกา; AC-8)
+- **FR-9b** — ทุกจุดที่คำนวณ "ยอดที่ใช้ได้" (ยอดทางกายภาพ − ยอดจอง หรือยอดรวมล็อต) ต้องถือล็อตติดลบ = **0**: ไม่หักล็อตติดลบจากล็อตอื่น
+  และไม่แสดงตัวเลขติดลบเป็น "ยอดที่มี" ในข้อความ error — ครอบคลุมทุกผู้เรียก `projectStockLotBalances` / `projectLotsByItem` ที่ระบุใน `affects`
+  (`distribution.remote.ts` `loadPhysicalLots` และ claim loop, `operations.remote.ts` `distributeStock` / `adjustStock` / `applyCycleCount`, `item-merge.ts`, `merge-item-dialog.svelte`)
+  ข้อความ FR-9 ที่บอกยอดของล็อตติดลบเองโดยตรงเป็นข้อยกเว้น (ผู้ใช้ต้องเห็นว่าติดลบเท่าใด)
 - **FR-10** — ล็อตที่ทั้งหมดอายุและติดลบ: UI ไม่แนะนำให้ปรับยอดออก (CR-195 FR-X3) — แสดงคำเตือนล็อตติดลบตาม FR-6 แทน
 
 ## Requirements — Phase 2 (follow-up)
@@ -100,7 +114,7 @@ affects:
 
 - **FR-11** — หน้าในเมนูคลังแสดงล็อตติดลบทุกล็อตของศูนย์: สินค้า, ป้ายล็อต (`lot_no` / ที่เก็บ / วันหมดอายุ), ยอดติดลบ, แถวต้นเหตุ
   (`_id`, `reason`, `ref_id`), ผู้ทำ (`created_by` ของแถวต้นเหตุ) และเวลา (`occurred_at`)
-- **FR-12** — แถวต้นเหตุ = แถวขาออกล่าสุดที่ replay แล้วทำให้ยอดล็อตเปลี่ยนจาก ≥ 0 เป็น < 0
+- **FR-12** — แถวต้นเหตุ = แถวขาออกล่าสุดที่ replay แล้วทำให้ยอดล็อตเปลี่ยนจาก ≥ 0 เป็น < 0; ถ้าล็อตติดลบเพราะส่วนขาดของแถว legacy (FR-3) แถวต้นเหตุคือแถว legacy นั้น
 - **FR-13** — หน้าและปุ่มแก้แสดงเฉพาะ `system_admin`, `warehouse_staff` และ `supply_coordinator`; `shelter_manager` และ role อื่นไม่เห็น
 
 ### การแก้
@@ -126,7 +140,7 @@ affects:
 
 ### แจ้งผู้บันทึก
 
-- **FR-23** — หลังบันทึกรายการที่ตัดล็อต (#855 Requirement 3) ระบบเช็คยอดล็อตที่ตัดซ้ำ; ล็อตใดติดลบ → toast บอกผู้กดว่ารายการบันทึกสำเร็จแล้ว
+- **FR-23** — หลังบันทึกรายการที่ตัดล็อต ([#855](https://github.com/r202-coe-psu/tent/issues/855) Requirement 3) ระบบเช็คยอดล็อตที่ตัดซ้ำ; ล็อตใดติดลบ → toast บอกผู้กดว่ารายการบันทึกสำเร็จแล้ว
   ไม่ต้องทำใหม่ และล็อตนั้นรอแก้ที่หน้า "ล็อตที่ต้องแก้"
 
 ## ข้อความที่แก้ในเอกสารเดิม (ทำตอน approve — ไม่แก้ใน draft นี้)
@@ -154,10 +168,10 @@ decision "comparator เดิมใน `projectStockLotBalances` ห้าม�
 
 ### CR-175 (Phase 1)
 
-| จุด              | ก่อน                                                                                                    | หลัง                                                                                                                                      |
-| ---------------- | ------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| TL;DR "กติกา"    | ผลรวมทุก lot = `allocated_qty`; แต่ละ lot ไม่เกินยอดคงเหลือ; lot หมดอายุเลือกไม่ได้; ไม่มี lot → ปฏิเสธ | ผลรวมทุก lot = `allocated_qty`; แต่ละ lot ไม่เกินยอดคงเหลือ; lot หมดอายุหรือติดลบเลือกไม่ได้; ไม่มี lot → ปฏิเสธ                          |
-| Open question Q5 | ถ้ามีคนเบิก lot เดียวกันพร้อมกัน อาจติดลบได้ ต้องการ reservation claim เหมือน FR-A8 หรือไม่             | ตอบแล้ว: ไม่เพิ่ม reservation claim — lot ที่ติดลบจากการชนกันแสดงพร้อมคำเตือนและแก้ด้วยการปรับยอด (#881 ทาง D, draft-negative-stock-lots) |
+| จุด              | ก่อน                                                                                                                                                                                                                             | หลัง                                                                                                                                      |
+| ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| TL;DR "กติกา"    | ผลรวมทุก lot = `allocated_qty`; แต่ละ lot ไม่เกินยอดคงเหลือ; lot หมดอายุเลือกไม่ได้; ไม่มี lot → ปฏิเสธ                                                                                                                          | ผลรวมทุก lot = `allocated_qty`; แต่ละ lot ไม่เกินยอดคงเหลือ; lot หมดอายุหรือติดลบเลือกไม่ได้; ไม่มี lot → ปฏิเสธ                          |
+| Open question Q5 | **Q5 — ยอดคงเหลือที่ใช้ตรวจ:** ใช้ `projectStockLotBalances` (ตัดตาม `lot_ref`) ณ ตอนกดยืนยัน ไม่มี reservation ต่อ lot แบบเบิกตรง — ถ้ามีคนเบิก lot เดียวกันพร้อมกัน อาจติดลบได้ ต้องการ reservation claim เหมือน FR-A8 หรือไม่ | ตอบแล้ว: ไม่เพิ่ม reservation claim — lot ที่ติดลบจากการชนกันแสดงพร้อมคำเตือนและแก้ด้วยการปรับยอด (#881 ทาง D, draft-negative-stock-lots) |
 
 ### CR-195 (Phase 1)
 
@@ -190,7 +204,7 @@ decision "comparator เดิมใน `projectStockLotBalances` ห้าม�
 - [ ] **AC-5** — ล็อต A = −3, B = 10: เบิก 5 → แผนใช้ B; A ไม่อยู่ในตัวเลือกของฟอร์มเบิกตรง, picker ของตั๋ว และฟอร์มปรับยอด
 - [ ] **AC-6** — ตัดยอดที่อ้างล็อต A (ปรับยอดหรือตรวจนับ) → ปฏิเสธด้วยข้อความ FR-9; ไม่มีแถวใดถูกเขียน
 - [ ] **AC-7** — หน้าตรวจนับแสดงสินค้าและล็อต A พร้อมคำเตือน; ล็อต A ไม่มีช่องกรอกยอดนับ
-- [ ] **AC-8** — unit test ของ `distributeStock` และของการอนุมัติใบขอเบิก (`distribution.remote.ts`) ยืนยันว่าอ่าน reservation ก่อน ledger ทุก attempt
+- [ ] **AC-8** (FR-9a) — unit test ของ `distributeStock` และของการอนุมัติใบขอเบิก (`distribution.remote.ts`) ยืนยันว่าอ่าน reservation ก่อน ledger ทุก attempt
 
 ### Phase 2
 
@@ -200,7 +214,7 @@ decision "comparator เดิมใน `projectStockLotBalances` ห้าม�
 - [ ] **AC-12** — แก้ 4 ขณะ A = −3 → ปฏิเสธ; แก้ล็อตที่ยอด ≥ 0 → ปฏิเสธ; ไม่มีแถวใดถูกเขียน
 - [ ] **AC-13** — VDU: `shelter_manager` เขียน `adjust` บวกที่ `lot_ref ≠ _id` → `forbidden`; `warehouse_staff` / `supply_coordinator` / `system_admin` → ผ่าน; ไม่มี `note` → `forbidden`
 - [ ] **AC-14** — ฟอร์มปรับยอดทั่วไป: ปรับเพิ่มพร้อม `lot_ref` ยังถูกปฏิเสธ
-- [ ] **AC-15** — จำลอง 2 writer ตัดล็อตเดียวกันจนติดลบ → ผู้กดคนหลังเห็น toast ตาม FR-23 และรายการของเขาอยู่ใน ledger
+- [ ] **AC-15** (FR-23, #855 Requirement 3) — จำลอง 2 writer ตัดล็อตเดียวกันจนติดลบ → ผู้กดคนหลังเห็น toast ตาม FR-23 และรายการของเขาอยู่ใน ledger
 
 ## Impact
 
@@ -210,6 +224,10 @@ decision "comparator เดิมใน `projectStockLotBalances` ห้าม�
 - **ข้อมูลเสียที่ยังซ่อนอยู่:** แถว `distribute` รุ่นก่อน CR-175 ที่ตั้ง `lot_ref` = `_id` ของตัวเอง เข้าข่าย FR-4 ข้อ 3 — สินค้านั้นยังถูกข้ามเหมือนเดิม
 - **ความพร้อมกัน (race fix, ไม่เปลี่ยนกติกา):** `distributeStock` (`operations.remote.ts`) และ claim loop ของการอนุมัติใบขอเบิก (`distribution.remote.ts`) อ่าน `stock_lot_reservation` **ก่อน** ledger —
   เดิมอ่าน ledger ก่อน ถ้า claim อื่นเขียน ledger แล้วปล่อย claim ระหว่างสองการอ่าน จะไม่เห็นยอดที่ถูกตัดไป
+- **Phase 2 ไม่มี claim (ยอมรับ):** การแก้ล็อตติดลบไม่จอง `stock_lot_reservation` — ผู้แก้สองคนพร้อมกันอาจแก้เกิน (ล็อตกลับเป็นบวก) หรือย้าย −X ออกจากล็อตต้นทางจนติดลบใหม่ได้;
+  **ยอมรับตามทาง D (owner decision 2026-10-29)** — Phase 2 ตรวจยอดล็อตซ้ำทันทีก่อนเขียน (FR-18) เพื่อลดช่วงเสี่ยง แต่ไม่ใช่การรับประกัน
+- **ช่วงระหว่าง Phase 1 กับ Phase 2:** ล็อตติดลบแก้ในแอปไม่ได้ (ห้ามตัด / ห้ามนับ ตาม FR-7, FR-9 และ CR-190 FR-3 ยังห้าม adjust บวกเข้าล็อตเดิม) —
+  **ยอมรับ**; Phase 2 ติดตามเป็น follow-up ของ #855
 - **item merge:** `planItemMerge` ย้ายเฉพาะล็อตยอดบวก (`qtyGt(lot.qty, 0)` เดิม) — ล็อตติดลบค้างที่สินค้าต้นทาง
 - **VDU:** Phase 1 ไม่เปลี่ยน; Phase 2 เพิ่ม role gate ตาม FR-21 — `_design/access` ต้อง redeploy **ก่อน** deploy client ที่เขียนแถวแก้ล็อต
 - **schema_v:** ไม่ bump
@@ -233,3 +251,5 @@ N/A — ไม่เพิ่ม/ลบ field ไม่เพิ่ม enum ไ�
   - FR-13 / FR-21: แก้ได้ `system_admin`, `warehouse_staff` และ `supply_coordinator` (`warehouse_staff` เป็น alias ของ SC ใน role matrix); `shelter_manager` แก้ไม่ได้
 - 2026-10-29 — Mhapong: รวม claim loop ของการอนุมัติใบขอเบิก (`distribution.remote.ts`) ในการแก้ลำดับการอ่าน;
   ส่วนขาดของแถว legacy (ไม่มี `lot_ref`) หลังล็อตติดลบยัง fail-closed ตาม FR-4; การจัดการล็อตติดลบใน item merge คงเป็น Phase 2
+- 2026-10-29 — Mhapong: accepted fishcanwalk review W1–W4/S1–S3 (FR-9a, FR-9b, FR-6a, FR-12, Impact, FR-4.4 fail-closed)
+- decided_by (ย้ายจาก frontmatter): ทิศทาง — net-lynx (#881 ทาง D, 2026-10-26; Mhapong รับ 2026-10-26) · วิธี track — Mhapong (ไฟล์ draft CR, 2026-10-29) · approve — รอ @Jackyzaz
