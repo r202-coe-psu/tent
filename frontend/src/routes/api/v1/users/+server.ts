@@ -48,6 +48,7 @@ interface UpdateUserBody {
 	active?: unknown;
 	must_change_password?: unknown;
 	affiliation_tags?: unknown;
+	permanent_roles?: unknown;
 }
 
 /** POST — create a user (SA: any non-_admin; SM: own-shelter staff). */
@@ -169,6 +170,9 @@ export const PUT: RequestHandler = async ({ request }) => {
 		const affiliation_tags = Array.isArray(body.affiliation_tags)
 			? body.affiliation_tags.filter((t): t is string => typeof t === 'string')
 			: undefined;
+		const permanent_roles = Array.isArray(body.permanent_roles)
+			? body.permanent_roles.filter((r): r is string => typeof r === 'string')
+			: undefined;
 		const password =
 			typeof body.password === 'string' && body.password.length > 0 ? body.password : undefined;
 		const display_name =
@@ -192,7 +196,8 @@ export const PUT: RequestHandler = async ({ request }) => {
 				duty_window,
 				active,
 				must_change_password,
-				affiliation_tags
+				affiliation_tags,
+				permanent_roles
 			},
 			caller
 		);

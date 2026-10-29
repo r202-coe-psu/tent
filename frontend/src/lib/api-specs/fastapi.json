@@ -694,13 +694,7 @@
 						"name": "site_kind",
 						"in": "query",
 						"required": false,
-						"schema": {
-							"anyOf": [
-								{ "enum": ["evacuation_center", "host_house"], "type": "string" },
-								{ "type": "null" }
-							],
-							"title": "Site Kind"
-						}
+						"schema": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Site Kind" }
 					},
 					{
 						"name": "lat",
@@ -5180,8 +5174,8 @@
 					"name": { "type": "string", "title": "Name" },
 					"site_kind": {
 						"type": "string",
-						"enum": ["evacuation_center", "host_house"],
 						"title": "Site Kind",
+						"description": "Master code from master_data:site_kind (e.g. evacuation_center, host_house)",
 						"default": "evacuation_center"
 					},
 					"status": { "type": "string", "title": "Status" },
@@ -5303,8 +5297,8 @@
 					"name": { "type": "string", "title": "Name" },
 					"site_kind": {
 						"type": "string",
-						"enum": ["evacuation_center", "host_house"],
 						"title": "Site Kind",
+						"description": "Master code from master_data:site_kind (e.g. evacuation_center, host_house)",
 						"default": "evacuation_center"
 					},
 					"status": { "type": "string", "title": "Status" },

@@ -237,9 +237,15 @@ def test_donation_points_empty_without_common_areas():
         assert payload["donation_points"] == []
 
 
-def test_resolve_site_kind_defaults_unknown_values_to_evacuation_center():
+def test_resolve_site_kind_passes_master_codes_through():
+    assert resolve_site_kind({"site_kind": "host_house"}) == "host_house"
+    assert resolve_site_kind({"site_kind": "field_hospital"}) == "field_hospital"
+
+
+def test_resolve_site_kind_defaults_missing_or_empty_to_evacuation_center():
     assert resolve_site_kind({}) == "evacuation_center"
-    assert resolve_site_kind({"site_kind": "host"}) == "evacuation_center"
+    assert resolve_site_kind({"site_kind": ""}) == "evacuation_center"
+    assert resolve_site_kind({"site_kind": None}) == "evacuation_center"
 
 
 def test_project_shelter_closed_soft_retains():
