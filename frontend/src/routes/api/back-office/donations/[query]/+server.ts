@@ -145,7 +145,8 @@ function toScanView(d: PublicDonationDoc): ScanDonationView {
 			review_reason_code: (it.review_reason_code ?? null) as DonationRejectReasonCode | null,
 			review_reason: it.review_reason ?? null
 		})),
-		logistics: d.logistics
+		logistics: d.logistics,
+		photos: d.photos ?? []
 	};
 }
 

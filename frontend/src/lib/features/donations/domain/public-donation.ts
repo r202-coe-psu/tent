@@ -98,6 +98,8 @@ export interface ScanDonationView {
 		review_reason?: string | null;
 	}>;
 	logistics?: PublicDonationDoc['logistics'];
+	/** Donor photos, `image:{ulid}` in `shelter_code`'s DB (CR-175 donor photos FR-12). */
+	photos?: string[];
 }
 
 /**
@@ -246,7 +248,14 @@ const PUBLIC_DONATION_ERROR_MESSAGES: Record<string, string> = {
 	SLOTS_UNAVAILABLE: 'ตรวจสอบคิวไม่สำเร็จ กรุณาลองใหม่อีกครั้ง',
 	SHELTER_NOT_FOUND: 'ไม่พบศูนย์พักพิงที่เลือก',
 	SHELTER_CLOSED: 'ศูนย์พักพิงนี้ปิดรับบริจาคชั่วคราว',
-	RATE_LIMITED: 'คุณส่งคำขอบ่อยเกินไป กรุณารอสักครู่แล้วลองใหม่'
+	RATE_LIMITED: 'คุณส่งคำขอบ่อยเกินไป กรุณารอสักครู่แล้วลองใหม่',
+	// CR-175 donor photos (FR-10)
+	PHOTO_LIMIT_EXCEEDED: 'แนบรูปได้ไม่เกิน 30 รูปต่อใบ',
+	PHOTO_NOT_FOUND: 'ไม่พบรูปที่แนบ กรุณาลบรูปนั้นแล้วแนบใหม่',
+	PHOTO_INVALID: 'รูปที่แนบใช้กับการบริจาคไม่ได้ กรุณาลบรูปนั้นแล้วแนบใหม่',
+	PHOTO_ALREADY_USED: 'รูปที่แนบถูกใช้กับใบจองอื่นแล้ว กรุณาลบรูปนั้นแล้วแนบใหม่',
+	PHOTOS_TOO_LARGE: 'รูปที่แนบรวมกันเกิน 10 MB กรุณาลบบางรูป',
+	PHOTOS_UNAVAILABLE: 'ตรวจสอบรูปที่แนบไม่สำเร็จ กรุณาลองใหม่อีกครั้ง'
 };
 
 /** Map public donation API error codes to donor-facing Thai copy. */

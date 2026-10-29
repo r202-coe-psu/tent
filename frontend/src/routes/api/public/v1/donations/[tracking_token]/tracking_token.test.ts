@@ -208,6 +208,39 @@ describe('GET & PATCH & DELETE /api/public/v1/donations/[tracking_token]', () =>
 		});
 	});
 
+	it('GET never hands the donor the photo ids, even once the booking is in CouchDB (CR-175 FR-14)', async () => {
+		vi.stubGlobal(
+			'fetch',
+			vi.fn().mockResolvedValue({
+				ok: true,
+				status: 200,
+				json: async () => ({ success: true, donation: { status: 'pending_review', items: [] } })
+			})
+		);
+		vi.mocked(adminRaw).mockImplementation((path: string, method: string) =>
+			Promise.resolve(
+				method === 'GET' && path.includes('/shelter_sh001/') && path.includes('_all_docs')
+					? {
+							status: 200,
+							data: {
+								rows: [{ doc: { ...mockDonation, photos: ['image:01K8PHXTX00000000000000001'] } }]
+							}
+						}
+					: { status: 404, data: {} }
+			)
+		);
+
+		const response = await GET({
+			params: { tracking_token: TOKEN },
+			getClientAddress: () => '127.0.0.1'
+		} as unknown as GetEvent);
+
+		const data = await response.json();
+		expect(data.success).toBe(true);
+		expect(data.donation).not.toHaveProperty('photos');
+		expect(JSON.stringify(data)).not.toContain('image:');
+	});
+
 	it('PATCH updates the courier tracking number in CouchDB', async () => {
 		vi.mocked(adminRaw).mockImplementation((path: string, method: string) => {
 			if (method === 'GET' && path.includes('/shelter_sh001/') && path.includes('_all_docs')) {

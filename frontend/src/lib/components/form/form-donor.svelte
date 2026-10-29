@@ -9,7 +9,11 @@
 	import { toast } from 'svelte-sonner';
 	import * as Select from '$lib/components/ui/select';
 	import { getDonationStore } from '../../../routes/(public)/donations/donation.svelte';
-	import { PUBLIC_DONATION_CATEGORIES, donorUnitOptions } from '$lib/features/donations';
+	import {
+		DonorPhotoPicker,
+		PUBLIC_DONATION_CATEGORIES,
+		donorUnitOptions
+	} from '$lib/features/donations';
 	import { FALLBACK_UNIT_DEFINITIONS, formatUnit, useUnitsOfMeasure } from '$lib/features/catalog';
 	import { langState } from '$lib/states/i18n.svelte';
 	import { getTranslation } from '$lib/utils/i18n';
@@ -360,10 +364,6 @@
 							class="w-full rounded-xl border-2 border-slate-200 bg-white p-3 font-medium text-slate-800 outline-hidden transition-colors focus:border-domain-donation-strong"
 						/>
 					</div>
-
-					<!-- No photo field: the booking payload never carried the image (schema.md has no
-					     field for it), so donors attached photos nobody received. Bring it back
-					     together with a real upload path. -->
 				</div>
 			{/each}
 
@@ -378,6 +378,13 @@
 				</button>
 			{/if}
 		</div>
+
+		<!-- CR-175 FR-1: photos only for goods the donor typed in — campaign goods need no review. -->
+		{#if donationStore.flowMode === 'unsolicited'}
+			<div class="mt-6">
+				<DonorPhotoPicker photos={donationStore.photos} shelterCode={donationStore.shelterCode} />
+			</div>
+		{/if}
 	</div>
 
 	<!-- Validation Errors -->

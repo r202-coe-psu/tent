@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
 	canCancelDonation,
 	canEditCourierTracking,
+	closedAtIntakeMessage,
 	donationStatusLabel,
 	formatTrackSchedule,
 	isTerminalDonationStatus,
@@ -234,5 +235,28 @@ describe('reject reasons on the ticket (CR-172)', () => {
 		});
 		expect(view.items.map((i) => i.review_status)).toEqual(['approved', 'rejected', 'rejected']);
 		expect(rejectedLineReasons(view)).toEqual([null, 'หมดอายุ', '']);
+	});
+});
+
+describe('closedAtIntakeMessage', () => {
+	it('lets an open booking through to the count', () => {
+		for (const status of ['declared', 'pending_review', 'verifying']) {
+			expect(closedAtIntakeMessage('DN-1', status)).toBeNull();
+		}
+	});
+
+	it('names the booking and its status, and points a closed one to walk-in', () => {
+		expect(closedAtIntakeMessage('DN-1', 'cancelled')).toBe(
+			'ใบจอง DN-1 ยกเลิกการจองแล้ว — รับเข้าคลังไม่ได้ ถ้าของอยู่ที่เคาน์เตอร์จริงให้กรอกข้อมูลใหม่ผ่าน "ลงทะเบียน Walk-in"'
+		);
+		for (const status of ['rejected', 'redirected', 'expired']) {
+			expect(closedAtIntakeMessage('DN-1', status)).toContain('Walk-in');
+		}
+	});
+
+	it('does not offer walk-in for goods already received', () => {
+		expect(closedAtIntakeMessage('DN-1', 'received')).toBe(
+			'ใบจอง DN-1 รับเข้าคลังเรียบร้อย — รับซ้ำไม่ได้'
+		);
 	});
 });
