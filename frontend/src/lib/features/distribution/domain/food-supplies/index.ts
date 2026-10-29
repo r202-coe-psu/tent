@@ -249,6 +249,8 @@ export {
 	type MenuMatchResult
 } from './menu-matching';
 
+export { findAllergenConflicts, withFreeTextAllergyReason } from './allergen-matching';
+
 export {
 	validateDispatchLotAllocations,
 	sumDispatchAllocations,

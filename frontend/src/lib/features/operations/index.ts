@@ -200,8 +200,7 @@ export {
 	useLedgerByItem,
 	useStockBalance,
 	useReceiveStock,
-	useDistributeStock,
-	useDistributeAcrossLots,
+	useDistributeBatch,
 	useAdjustStock,
 	useMergeItems,
 	useCampaigns,
@@ -275,6 +274,7 @@ export {
 	type LotScore,
 	type RankLotsOptions
 } from './domain/lot-priority';
+export { expiryInstant, isExpiryPassed } from './domain/expiry-instant';
 export {
 	planLotSplit,
 	type LotAllocation,

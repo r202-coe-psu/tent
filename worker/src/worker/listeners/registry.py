@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 
-from worker.couch.bootstrap import REGISTRY_DB, list_open_shelter_codes
+from worker.couch.bootstrap import REGISTRY_DB, list_listened_shelters
 from worker.couch.changes import tail_database
 from worker.couch.client import CouchClient
 from worker.masking import shelter_db_name
@@ -19,9 +19,10 @@ class ListenerManager:
         self._tasks: dict[str, asyncio.Task[None]] = {}
         self._stop_events: dict[str, asyncio.Event] = {}
 
-    async def sync_open_shelters(self) -> None:
-        codes = await list_open_shelter_codes(self._couch)
-        desired = {shelter_db_name(code) for code in codes}
+    async def sync_shelter_listeners(self) -> None:
+        """Tail every shelter that still has persons on the public plane (CR-183 FR-7)."""
+        listened = await list_listened_shelters(self._couch)
+        desired = {shelter_db_name(code) for code in listened}
         for db_name in desired:
             await self.ensure_listener(db_name)
         for db_name in list(self._tasks):
@@ -57,14 +58,14 @@ class ListenerManager:
         """Periodically reconcile shelter listeners with registry state."""
         while True:
             try:
-                await self.sync_open_shelters()
+                await self.sync_shelter_listeners()
             except Exception:
-                logger.exception("Failed to sync open shelter listeners")
+                logger.exception("Failed to sync shelter listeners")
             await asyncio.sleep(30)
 
     async def start(self) -> None:
         await self.ensure_listener(REGISTRY_DB)
-        await self.sync_open_shelters()
+        await self.sync_shelter_listeners()
         asyncio.create_task(self.registry_watch_loop(), name="registry-watch")
 
     async def stop_all(self) -> None:

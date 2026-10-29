@@ -131,7 +131,7 @@ test.describe('Tab 1 — confirm cargo arrival (plan §4.3)', { tag: DESK_TAGS }
 		});
 
 		await desk.goto();
-		await desk.openTab('receive');
+		await desk.openTab('receive', 'supplies');
 		const card = desk.receiveCard(ticket);
 		await expect(card).toContainText(item.name);
 		await expect(card).toContainText('กำลังนำส่ง');
@@ -190,14 +190,15 @@ test.describe('Tab 1 — confirm cargo arrival (plan §4.3)', { tag: DESK_TAGS }
 			lines: [{ item, allocatedQty: '5' }]
 		});
 
-		// The badge counts every IN_TRANSIT desk ticket in the shelter.
-		const waiting = await deskTicketCount('IN_TRANSIT');
+		// The badge counts every IN_TRANSIT desk ticket of the current mode in the shelter.
+		const waiting = await deskTicketCount('IN_TRANSIT', 'supplies');
 		await desk.goto();
+		await desk.switchMode('supplies');
 		await expect.poll(() => tabBadge(desk, 'receive', /รอรับ (\d+)/)).toBe(waiting);
 		await desk.receive(first);
 		await expect.poll(() => tabBadge(desk, 'receive', /รอรับ (\d+)/)).toBe(waiting - 1);
 
-		await desk.openTab('receive');
+		await desk.openTab('receive', 'supplies');
 		await expect(page.getByText(first.ticketNo, { exact: true })).toHaveCount(0);
 		await expect(desk.receiveCard(second)).toBeVisible();
 	});
@@ -217,7 +218,7 @@ test.describe('Tab 1 — confirm cargo arrival (plan §4.3)', { tag: DESK_TAGS }
 		const otherDesk = `${scenario.namespace}_other_desk`;
 
 		await desk.goto();
-		await desk.openTab('receive');
+		await desk.openTab('receive', 'supplies');
 		const card = desk.receiveCard(ticket);
 		await expect(card).toBeVisible();
 
@@ -317,7 +318,7 @@ test.describe('Tab 2 — ready-meal handover (plan §4.4)', { tag: DESK_TAGS }, 
 
 		await desk.itemButton(item.name).click();
 		await desk.chooseRecipientBySearch(recipient);
-		await expect(desk.alert('คนนี้รับอาหารมื้อนี้ไปแล้ววันนี้')).toBeVisible();
+		await expect(desk.alert(/รับมื้อนี้ไปแล้ว 1 ครั้ง รวม 1 กล่อง/)).toBeVisible();
 		await desk.foodSubmit().click();
 		await expect(desk.overrideDialog()).toHaveAccessibleName('แจ้งเตือน: ได้รับอาหารมื้อนี้แล้ว');
 		await desk.confirmOverride('รับแทนผู้ป่วยติดเตียง');
@@ -387,6 +388,46 @@ test.describe('Tab 2 — ready-meal handover (plan §4.4)', { tag: DESK_TAGS }, 
 
 		const logs = await expectTicketLogs(ticket, item, 1, 'HALAL handover');
 		expect(logs[0]).toMatchObject({ recipient_id: recipient.recipientId, is_override: false });
+	});
+
+	// #607 / CR-191 FR-MRM-11: free-text allergens are never matched, but a free-text allergy on the
+	// recipient forces an override on every menu; the text is kept in the override reason.
+	test('T2-5c a free-text recipient allergy needs an override and is kept in the reason', async ({
+		page,
+		scenarioAs
+	}) => {
+		const scenario = await scenarioAs('food_allergen_free_text');
+		const { desk, item, ticket } = await foodSetup(page, scenario, {
+			item: { allergens: ['ถั่วเหลือง'] }
+		});
+		const allergic = await seedRecipient(
+			scenario,
+			`Allergy${scenario.namespace.slice(-6)}`,
+			'Soy',
+			{
+				allergies: ['ถั่วเหลือง']
+			}
+		);
+
+		await desk.itemButton(item.name).click();
+		await desk.chooseRecipientBySearch(allergic);
+		await expect(page.getByText('มีประวัติแพ้ (ไม่อยู่ในรายการ): ถั่วเหลือง')).toBeVisible();
+		await expect(page.getByText(/เมนูระบุ: ถั่วเหลือง/)).toBeVisible();
+		await expect(desk.alert(/ผู้รับแพ้/)).toHaveCount(0);
+
+		await desk.foodSubmit().click();
+		await expect(desk.overrideDialog()).toHaveAccessibleName(
+			'แจ้งเตือน: ผู้รับมีประวัติแพ้ที่ไม่อยู่ในรายการ'
+		);
+		await desk.confirmOverride('ตรวจกับผู้รับแล้ว');
+		await expect(desk.toast(/บันทึกแจกอาหารสำเร็จ/)).toBeVisible();
+
+		const [log] = await expectTicketLogs(ticket, item, 1, 'Free-text allergy override');
+		expect(log).toMatchObject({
+			is_override: true,
+			override_reason: 'แพ้ (ไม่อยู่ในรายการ): ถั่วเหลือง — ตรวจกับผู้รับแล้ว'
+		});
+		expect(log.allergen_conflicts).toBeUndefined();
 	});
 
 	// D-E3: an expired lot is advisory only today — the handover goes out and the log is stamped.
@@ -545,7 +586,7 @@ test.describe('Tab 2 — ready-meal handover (plan §4.4)', { tag: DESK_TAGS }, 
 			}
 		);
 		await desk.chooseRecipientBySearch(recipient);
-		const banner = desk.alert('ตรวจเมนูและประวัติการรับอาหารไม่สำเร็จ');
+		const banner = desk.alert('ตรวจเมนู ประวัติการรับอาหาร และการแพ้ไม่สำเร็จ');
 		await expect(banner).toBeVisible({ timeout: 20_000 });
 		await expect(desk.foodSubmit()).toBeDisabled();
 
@@ -555,6 +596,36 @@ test.describe('Tab 2 — ready-meal handover (plan §4.4)', { tag: DESK_TAGS }, 
 		await desk.foodSubmit().click();
 		await expect(desk.toast(/บันทึกแจกอาหารสำเร็จ/)).toBeVisible();
 		await expectTicketLogs(ticket, item, 1, 'Handover after preflight retry');
+	});
+
+	// CR-200 FR-DFS-05: a mode switch drops the step's form, so typed input asks first.
+	test('T2-14 switching mode with a typed quantity asks first; cancelling keeps the input', async ({
+		page,
+		scenarioAs
+	}) => {
+		const scenario = await scenarioAs('food_mode_draft');
+		const { desk, item, recipient } = await foodSetup(page, scenario);
+		const qty = page.locator('#food-qty-input');
+
+		await desk.itemButton(item.name).click();
+		await desk.chooseRecipientBySearch(recipient);
+		await desk.fillFoodQty('2');
+		await desk.modeButton('supplies').click();
+		const confirm = page.getByRole('alertdialog', { name: /สลับไปโหมดสิ่งของ/ });
+		await expect(confirm).toBeVisible();
+		await confirm.getByRole('button', { name: 'อยู่โหมดเดิม' }).click();
+		await expect(confirm).toBeHidden();
+		await expect(desk.modeButton('food')).toHaveAttribute('aria-pressed', 'true');
+		await expect(qty).toHaveValue('2');
+
+		await desk.modeButton('supplies').click();
+		await confirm.getByRole('button', { name: 'สลับโหมด' }).click();
+		await expect(desk.modeButton('supplies')).toHaveAttribute('aria-pressed', 'true');
+
+		// Back at the defaults there is nothing to lose, so the switch is immediate.
+		await desk.modeButton('food').click();
+		await expect(desk.modeButton('food')).toHaveAttribute('aria-pressed', 'true');
+		await expect(confirm).toHaveCount(0);
 	});
 });
 
