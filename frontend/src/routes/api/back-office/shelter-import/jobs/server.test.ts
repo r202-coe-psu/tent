@@ -148,6 +148,24 @@ describe('POST /api/back-office/shelter-import/jobs', () => {
 		expect(row.input).toMatchObject({ site_kind: 'field_hospital' });
 	});
 
+	it('passes site_kind_blank through only for rows that left the cell empty (CR-198 D-4)', async () => {
+		await POST({
+			request: request(
+				JSON.stringify({
+					filename: 'shelters.xlsx',
+					duplicate_action: 'update',
+					rows: [
+						{ row: 1, name: 'ศูนย์ A', shelter: { name: 'ศูนย์ A' }, site_kind_blank: true },
+						{ row: 2, name: 'ศูนย์ B', shelter: { name: 'ศูนย์ B', site_kind: 'host_house' } }
+					]
+				})
+			)
+		} as unknown as Parameters<typeof POST>[0]);
+		const [{ rows }] = createImportJobMock.mock.calls[0];
+		expect(rows[0]).toMatchObject({ site_kind_blank: true });
+		expect(rows[1]).not.toHaveProperty('site_kind_blank');
+	});
+
 	it('rejects a closed shelter row even when the client sent no row errors (CR-183 FR-23)', async () => {
 		const response = await POST({
 			request: request(

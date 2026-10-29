@@ -257,6 +257,23 @@ describe('POST /api/internal/shelter-import/worker/next', () => {
 			);
 		});
 
+		it('keeps the stored kind when the cell was blank, without checking it (CR-198 D-4)', async () => {
+			claimMock.mockResolvedValue(item({ input: inactiveInput, site_kind_blank: true }));
+			updateRunsMutatorOn({ site_kind: 'host_house' });
+
+			await call();
+
+			expect(buildUpdatePayloadMock).toHaveBeenCalledWith(
+				inactiveInput,
+				expect.anything(),
+				expect.objectContaining({ siteKindBlank: true })
+			);
+			expect(updateItemMock).toHaveBeenCalledWith(
+				expect.anything(),
+				expect.objectContaining({ status: 'updated', code: 'SH009' })
+			);
+		});
+
 		it('skips a duplicate without checking its kind', async () => {
 			claimMock.mockResolvedValue(item({ input: inactiveInput }));
 			findByNameMock.mockResolvedValue({ code: 'SH009', name: 'ศูนย์ A' });

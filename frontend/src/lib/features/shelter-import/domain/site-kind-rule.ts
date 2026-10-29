@@ -55,7 +55,8 @@ export function applySiteKindRule(
 			name: v.name,
 			ok: false,
 			errors: [...v.errors, { column: H.site_kind, message }],
-			foodDistributionPointsProvided: v.foodDistributionPointsProvided
+			foodDistributionPointsProvided: v.foodDistributionPointsProvided,
+			...(v.siteKindBlank ? { siteKindBlank: true } : {})
 		};
 	});
 }

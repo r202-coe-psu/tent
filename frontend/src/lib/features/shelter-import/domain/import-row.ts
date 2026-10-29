@@ -95,6 +95,8 @@ export interface RowValidation {
 	errors: RowFieldError[];
 	/** Whether the current workbook explicitly supplied food points for this row. */
 	foodDistributionPointsProvided?: boolean;
+	/** `ชนิดสถานที่` was left empty: a create takes the default, an update keeps the stored kind (CR-198 D-4). */
+	siteKindBlank?: boolean;
 }
 
 /** The stored shelter, as far as {@link buildUpdatePayload} needs to read it. */
@@ -118,7 +120,7 @@ export interface ExistingShelterPolicy {
 export function buildUpdatePayload(
 	shelter: ShelterInput,
 	existing: ExistingShelterPolicy | null,
-	options: { foodDistributionPointsProvided?: boolean } = {}
+	options: { foodDistributionPointsProvided?: boolean; siteKindBlank?: boolean } = {}
 ): Omit<ShelterInput, 'municipality_zone' | 'community'> {
 	const rest: Partial<ShelterInput> = { ...shelter };
 	delete rest.municipality_zone;
@@ -127,6 +129,7 @@ export function buildUpdatePayload(
 	// from the stored document instead of replacing them with schema defaults.
 	delete rest.feature_flags;
 	if (options.foodDistributionPointsProvided !== true) delete rest.food_distribution_points;
+	if (options.siteKindBlank === true) delete rest.site_kind;
 	return {
 		...(rest as Omit<ShelterInput, 'municipality_zone' | 'community'>),
 		...(existing?.feature_flags !== undefined ? { feature_flags: existing.feature_flags } : {}),
@@ -586,6 +589,7 @@ export function validateRow(
 			'นำเข้าศูนย์สถานะ "ปิดศูนย์" ไม่ได้ — ปิดศูนย์จากหน้าจัดการศูนย์'
 		);
 	}
+	const siteKindBlank = cell(raw, H.site_kind) === '';
 	const siteKind =
 		resolveMaster(raw, H.site_kind, lookups.site_kind, sink) ??
 		lookups.site_kind.defaultCode ??
@@ -777,7 +781,8 @@ export function validateRow(
 			ok: true,
 			shelter: parsed.data,
 			errors: [],
-			foodDistributionPointsProvided
+			foodDistributionPointsProvided,
+			...(siteKindBlank ? { siteKindBlank } : {})
 		};
 	}
 	return { row, name, ok: false, errors: sink.errors, foodDistributionPointsProvided };

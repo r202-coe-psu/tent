@@ -712,6 +712,18 @@ describe('buildUpdatePayload — fields the workbook cannot express', () => {
 		expect(payload.admission_policy.pet_policy).toEqual({ policy: null, categories: [] });
 	});
 
+	it('keeps the stored site_kind when the cell was blank (CR-198 D-4)', () => {
+		const blank = validateRow(baseRow(), 1, lookups());
+		expect(blank.siteKindBlank).toBe(true);
+		expect(blank.shelter?.site_kind).toBe('evacuation_center');
+		const payload = buildUpdatePayload(blank.shelter!, null, { siteKindBlank: true });
+		expect('site_kind' in payload).toBe(false);
+
+		const filled = validateRow(baseRow({ [H.site_kind]: 'host_house' }), 1, lookups());
+		expect(filled.siteKindBlank).toBeUndefined();
+		expect(buildUpdatePayload(filled.shelter!, null).site_kind).toBe('host_house');
+	});
+
 	it('keeps every other field from the file', () => {
 		const shelter = rowPayload();
 		const payload = buildUpdatePayload(shelter, null);

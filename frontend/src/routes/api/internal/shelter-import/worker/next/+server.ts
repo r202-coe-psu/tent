@@ -198,11 +198,13 @@ export const POST: RequestHandler = async ({ request }) => {
 					updateMaster(
 						code,
 						(current) => {
-							checkSiteKind(current.site_kind);
+							// A blank cell keeps the stored kind (CR-198 D-4), so there is nothing to check.
+							if (item.site_kind_blank !== true) checkSiteKind(current.site_kind);
 							return {
 								patch: {
 									...buildUpdatePayload(input, current, {
-										foodDistributionPointsProvided: item.food_distribution_points_present === true
+										foodDistributionPointsProvided: item.food_distribution_points_present === true,
+										siteKindBlank: item.site_kind_blank === true
 									}),
 									updated_at: nowIso()
 								}

@@ -52,6 +52,8 @@ export interface ShelterImportItem {
 	input?: Shelter;
 	/** Whether the uploaded workbook explicitly included the food-point sheet. */
 	food_distribution_points_present?: boolean;
+	/** The row left `ชนิดสถานที่` empty, so an update keeps the stored kind (CR-198 D-4). */
+	site_kind_blank?: boolean;
 	status: ImportItemStatus;
 	attempts: number;
 	max_attempts: number;
@@ -572,6 +574,7 @@ function sameStagedItem(left: ShelterImportItem, right: ShelterImportItem): bool
 			name: left.name,
 			input: left.input ?? null,
 			food_distribution_points_present: left.food_distribution_points_present ?? false,
+			...(left.site_kind_blank ? { site_kind_blank: true } : {}),
 			status: left.status,
 			attempts: left.attempts,
 			max_attempts: left.max_attempts,
@@ -581,6 +584,7 @@ function sameStagedItem(left: ShelterImportItem, right: ShelterImportItem): bool
 				name: right.name,
 				input: right.input ?? null,
 				food_distribution_points_present: right.food_distribution_points_present ?? false,
+				...(right.site_kind_blank ? { site_kind_blank: true } : {}),
 				status: right.status,
 				attempts: right.attempts,
 				max_attempts: right.max_attempts,
@@ -603,6 +607,7 @@ function idempotencyHashes(args: {
 		name: string | null;
 		input?: Shelter;
 		food_distribution_points_present?: boolean;
+		site_kind_blank?: boolean;
 		errors?: ImportItemError[];
 		valid: boolean;
 	}>;
@@ -617,6 +622,7 @@ function idempotencyHashes(args: {
 				name: row.name,
 				input: row.input ?? null,
 				food_distribution_points_present: row.food_distribution_points_present ?? false,
+				...(row.site_kind_blank ? { site_kind_blank: true } : {}),
 				errors: row.errors ?? [],
 				valid: row.valid
 			}))
@@ -667,6 +673,7 @@ export async function createImportJob(args: {
 		name: string | null;
 		input?: Shelter;
 		food_distribution_points_present?: boolean;
+		site_kind_blank?: boolean;
 		errors?: ImportItemError[];
 		valid: boolean;
 	}>;
@@ -736,6 +743,7 @@ export async function createImportJob(args: {
 		...(row.food_distribution_points_present === true
 			? { food_distribution_points_present: true }
 			: {}),
+		...(row.site_kind_blank === true ? { site_kind_blank: true } : {}),
 		status: row.valid ? 'pending' : 'validation_error',
 		attempts: 0,
 		max_attempts: MAX_IMPORT_ATTEMPTS,
