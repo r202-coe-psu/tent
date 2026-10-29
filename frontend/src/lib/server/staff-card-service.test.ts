@@ -1,8 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import * as couchAdmin from './couch-admin';
+import * as publicWriter from './couch-public-writer';
 import type { Caller } from './couch-admin';
 import { ServiceError } from './couch-admin';
-import { resolveStaffCard } from './staff-card-service';
+import { getMyCard, resolveStaffCard } from './staff-card-service';
 import type { CouchUserDoc } from './user-service';
 
 const HASH_A = 'a'.repeat(64);
@@ -223,5 +224,198 @@ describe('resolveStaffCard', () => {
 		);
 
 		expect(err.code).toBe('CONFLICT');
+	});
+});
+
+describe('getMyCard', () => {
+	let usersDb: Record<string, CouchUserDoc>;
+	let shelterDb: Record<string, Record<string, unknown>>;
+	let writes: { path: string; body: Record<string, unknown> }[];
+
+	beforeEach(() => {
+		usersDb = {};
+		shelterDb = {};
+		writes = [];
+		vi.spyOn(couchAdmin, 'adminRaw').mockImplementation(async (path, method = 'GET') => {
+			const userDoc = path.match(/^\/_users\/org\.couchdb\.user:(.+)$/);
+			if (method === 'GET' && userDoc) {
+				const doc = usersDb[`org.couchdb.user:${decodeURIComponent(userDoc[1])}`];
+				if (doc) return { status: 200, data: doc };
+			}
+			const shelterDoc = path.match(/^\/shelter_(sh\d+)\/(.+)$/);
+			if (method === 'GET' && shelterDoc) {
+				const doc = shelterDb[`${shelterDoc[1]}/${decodeURIComponent(shelterDoc[2])}`];
+				if (doc) return { status: 200, data: doc };
+			}
+			return { status: 404, data: { error: 'not_found', reason: 'missing' } };
+		});
+		vi.spyOn(publicWriter, 'putAsPublicWriter').mockImplementation(async (dbName, docId, doc) => {
+			writes.push({ path: `/${dbName}/${encodeURIComponent(docId)}`, body: doc as never });
+			shelterDb[`${dbName.replace('shelter_', '')}/${docId}`] = {
+				...(doc as Record<string, unknown>),
+				_rev: '2-written'
+			};
+			return { status: 201, data: { ok: true, rev: '2-written' } };
+		});
+	});
+
+	it('returns the staff card payload for a user without a volunteer profile', async () => {
+		usersDb['org.couchdb.user:somchai@x.com'] = userDoc('somchai@x.com', {
+			display_name: 'สมชาย ใจดี',
+			position: 'เจ้าหน้าที่ลงทะเบียน',
+			staff_token_hash: HASH_A,
+			phone: '0812345678',
+			email: 'somchai@x.com'
+		});
+
+		const result = await getMyCard('somchai@x.com');
+
+		expect(result).toEqual({
+			kind: 'staff',
+			payload: `TKT-STF-HASH-${HASH_A}`,
+			display_name: 'สมชาย ใจดี',
+			position: 'เจ้าหน้าที่ลงทะเบียน',
+			roles: ['shelter:SH001', 'SH001:registration_staff']
+		});
+		expect(JSON.stringify(result)).not.toMatch(/0812345678/);
+	});
+
+	it('rejects a caller whose user document does not exist as UNAUTHENTICATED', async () => {
+		const err = await rejection(getMyCard('ghost@x.com'));
+
+		expect(err.code).toBe('UNAUTHENTICATED');
+	});
+
+	it('reports a deactivated account as none/inactive', async () => {
+		usersDb['org.couchdb.user:somchai@x.com'] = userDoc('somchai@x.com', {
+			staff_token_hash: HASH_A,
+			active: false
+		});
+
+		const result = await getMyCard('somchai@x.com');
+
+		expect(result).toEqual({ kind: 'none', reason: 'inactive' });
+	});
+
+	it('reports a volunteer-type account without a linked profile as none/volunteer_unlinked', async () => {
+		usersDb['org.couchdb.user:vol@x.com'] = userDoc('vol@x.com', {
+			personnel_type: 'volunteer',
+			staff_token_hash: HASH_A
+		});
+
+		const result = await getMyCard('vol@x.com');
+
+		expect(result).toEqual({ kind: 'none', reason: 'volunteer_unlinked' });
+	});
+
+	it.each([
+		['no token hash', undefined],
+		['a malformed token hash', 'not-a-hash']
+	])('reports staff with %s as none/no_token without minting one', async (_label, hash) => {
+		usersDb['org.couchdb.user:somchai@x.com'] = userDoc('somchai@x.com', {
+			staff_token_hash: hash
+		});
+
+		const result = await getMyCard('somchai@x.com');
+
+		expect(result).toEqual({ kind: 'none', reason: 'no_token' });
+		expect(couchAdmin.adminRaw).not.toHaveBeenCalledWith(
+			expect.anything(),
+			'PUT',
+			expect.anything()
+		);
+		expect(writes).toEqual([]);
+	});
+
+	it.each([
+		['the volunteer profile is missing', undefined],
+		['the volunteer profile belongs to another user', 'someone-else@x.com']
+	])('reports a linked account as none/volunteer_unlinked when %s', async (_label, owner) => {
+		usersDb['org.couchdb.user:vol@x.com'] = userDoc('vol@x.com', {
+			volunteer_id: 'volunteer:01HZXVOL011'
+		});
+		if (owner) {
+			shelterDb['sh001/volunteer:01HZXVOL011'] = {
+				_id: 'volunteer:01HZXVOL011',
+				_rev: '1-a',
+				type: 'volunteer',
+				user_name: owner,
+				tracking_token_hash: HASH_B
+			};
+		}
+
+		const result = await getMyCard('vol@x.com');
+
+		expect(result).toEqual({ kind: 'none', reason: 'volunteer_unlinked' });
+	});
+
+	it('returns the existing volunteer role-card payload without rewriting the volunteer', async () => {
+		usersDb['org.couchdb.user:vol@x.com'] = userDoc('vol@x.com', {
+			display_name: 'มานี มีน้ำใจ',
+			roles: ['shelter:SH002', 'shelter:SH001', 'SH001:registration_staff'],
+			volunteer_id: 'volunteer:01HZXVOL011',
+			staff_token_hash: HASH_A,
+			phone: '0812345678'
+		});
+		shelterDb['sh001/volunteer:01HZXVOL011'] = {
+			_id: 'volunteer:01HZXVOL011',
+			_rev: '1-a',
+			type: 'volunteer',
+			user_name: 'vol@x.com',
+			volunteer_code: 'VOL-0007',
+			phone: '0812345678',
+			tracking_token_hash: HASH_B
+		};
+
+		const result = await getMyCard('vol@x.com');
+
+		expect(result).toEqual({
+			kind: 'volunteer',
+			payload: `TKT-VOL-HASH-${HASH_B.toUpperCase()}`,
+			display_name: 'มานี มีน้ำใจ',
+			volunteer_code: 'VOL-0007',
+			roles: ['shelter:SH002', 'shelter:SH001', 'SH001:registration_staff']
+		});
+		expect(writes).toEqual([]);
+		expect(shelterDb['sh001/volunteer:01HZXVOL011']).toMatchObject({
+			_rev: '1-a',
+			tracking_token_hash: HASH_B
+		});
+		expect(JSON.stringify(result)).not.toMatch(/0812345678|aaaaaaaa/);
+	});
+
+	it('mints and stores a role-card token for a linked volunteer who has none', async () => {
+		usersDb['org.couchdb.user:vol@x.com'] = userDoc('vol@x.com', {
+			volunteer_id: 'volunteer:01HZXVOL011'
+		});
+		shelterDb['sh001/volunteer:01HZXVOL011'] = {
+			_id: 'volunteer:01HZXVOL011',
+			_rev: '1-a',
+			type: 'volunteer',
+			user_name: 'vol@x.com',
+			volunteer_code: null
+		};
+
+		const result = await getMyCard('vol@x.com');
+
+		expect(result).toMatchObject({ kind: 'volunteer', volunteer_code: null });
+		const { payload } = result as { payload: string };
+		expect(payload).toMatch(/^TKT-VOL-[0-9A-Z]+$/);
+		expect(writes).toHaveLength(1);
+		expect(writes[0].path).toBe('/shelter_sh001/volunteer%3A01HZXVOL011');
+		expect(writes[0].body).toMatchObject({
+			_id: 'volunteer:01HZXVOL011',
+			_rev: '1-a',
+			user_name: 'vol@x.com'
+		});
+		expect(writes[0].body.tracking_token_hash).toMatch(/^[0-9a-f]{64}$/);
+
+		const again = await getMyCard('vol@x.com');
+
+		expect(again).toMatchObject({
+			kind: 'volunteer',
+			payload: `TKT-VOL-HASH-${(writes[0].body.tracking_token_hash as string).toUpperCase()}`
+		});
+		expect(writes).toHaveLength(1);
 	});
 });

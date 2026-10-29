@@ -4,10 +4,21 @@ import {
 	serviceErrorFromCouch,
 	type Caller
 } from '$lib/server/couch-admin';
-import { canDistributeInShelter, hasShelterScope, isSystemAdmin } from '$lib/auth/roles';
+import {
+	canDistributeInShelter,
+	hasShelterScope,
+	isSystemAdmin,
+	shelterCodesFromRoles
+} from '$lib/auth/roles';
+import { ensureRoleCardToken } from '$lib/features/volunteers/server/public-schedule-action';
 import { shelterDbName } from '$lib/server/shelter-access-design';
-import { fetchAllUserDocs } from '$lib/server/user-service';
-import { parseStaffCardPayload, staffRecipientId } from '$lib/features/users/server';
+import { fetchAllUserDocs, type CouchUserDoc } from '$lib/server/user-service';
+import {
+	isValidStaffTokenHash,
+	parseStaffCardPayload,
+	staffCardPayloadFromHash,
+	staffRecipientId
+} from '$lib/features/users/server';
 
 const VOLUNTEER_LINK_BROKEN = 'บัญชีเจ้าหน้าที่นี้ไม่ตรงกับโปรไฟล์อาสา กรุณาติดต่อผู้ดูแล';
 
@@ -62,5 +73,77 @@ export async function resolveStaffCard(
 		recipient_id: staffRecipientId(target.name),
 		display_name: target.display_name || target.name,
 		position: target.position ?? null
+	};
+}
+
+export type MyCard =
+	| {
+			kind: 'staff';
+			payload: string;
+			display_name: string;
+			position: string | null;
+			roles: string[];
+	  }
+	| {
+			kind: 'volunteer';
+			payload: string;
+			display_name: string;
+			volunteer_code: string | null;
+			roles: string[];
+	  }
+	| { kind: 'none'; reason: 'no_token' | 'volunteer_unlinked' | 'inactive' };
+
+type LinkedVolunteer = {
+	_id: string;
+	_rev?: string;
+	user_name?: string | null;
+	volunteer_code?: string | null;
+	[key: string]: unknown;
+};
+
+type LinkedVolunteerRef = { dbName: string; volunteer: LinkedVolunteer };
+
+async function findLinkedVolunteer(user: CouchUserDoc): Promise<LinkedVolunteerRef | null> {
+	for (const code of shelterCodesFromRoles(user.roles)) {
+		const res = await adminRaw(
+			`/${shelterDbName(code)}/${encodeURIComponent(user.volunteer_id as string)}`,
+			'GET'
+		);
+		if (res.status === 404) continue;
+		if (res.status >= 400) throw serviceErrorFromCouch('read volunteer', res.status, res.data);
+		const volunteer = res.data as LinkedVolunteer;
+		return volunteer.user_name === user.name ? { dbName: shelterDbName(code), volunteer } : null;
+	}
+	return null;
+}
+
+export async function getMyCard(name: string): Promise<MyCard> {
+	const res = await adminRaw(`/_users/org.couchdb.user:${encodeURIComponent(name)}`, 'GET');
+	if (res.status === 404) throw new ServiceError('UNAUTHENTICATED', 'Authentication required');
+	if (res.status >= 400) throw serviceErrorFromCouch('read user', res.status, res.data);
+	const user = res.data as CouchUserDoc;
+	if (user.active === false) return { kind: 'none', reason: 'inactive' };
+	if (!user.volunteer_id && user.personnel_type === 'volunteer') {
+		return { kind: 'none', reason: 'volunteer_unlinked' };
+	}
+	if (user.volunteer_id) {
+		const linked = await findLinkedVolunteer(user);
+		if (!linked) return { kind: 'none', reason: 'volunteer_unlinked' };
+		const { token } = await ensureRoleCardToken(linked.dbName, linked.volunteer);
+		return {
+			kind: 'volunteer',
+			payload: token,
+			display_name: user.display_name || user.name,
+			volunteer_code: linked.volunteer.volunteer_code ?? null,
+			roles: user.roles
+		};
+	}
+	if (!isValidStaffTokenHash(user.staff_token_hash)) return { kind: 'none', reason: 'no_token' };
+	return {
+		kind: 'staff',
+		payload: staffCardPayloadFromHash(user.staff_token_hash),
+		display_name: user.display_name || user.name,
+		position: user.position ?? null,
+		roles: user.roles
 	};
 }
