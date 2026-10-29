@@ -275,6 +275,11 @@ export async function openShelter(page: Page, shelter: Pick<PublicShelter, 'name
 	await expect(
 		page.getByRole('heading', { name: /ของที่ศูนย์พักพิง\s*ต้องการตอนนี้/ })
 	).toBeVisible();
+	// The board lists only the first few shelters (most urgent first) and other suites' E2E
+	// shelters run alongside this one — filter by name so the card is never behind "show more".
+	const search = page.getByRole('textbox', { name: 'ค้นหาศูนย์พักพิงหรือสิ่งของ' });
+	await search.fill(shelter.name);
+	await search.blur(); // closes the suggestion dropdown that would sit over the cards
 	await cardWith(page, shelter.name, 'ดูรายละเอียดและบริจาค').click();
 }
 
