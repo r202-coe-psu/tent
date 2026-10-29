@@ -3,7 +3,7 @@ id: CR-211 # renumbered from draft-staff-qr-card
 title: Staff QR card — permanent staff_token_hash in _users + recipient_type staff at distribution
 status: approved
 date: 2026-10-28
-updated: 2026-10-29 # approved (kong)
+updated: 2026-10-29 # approved (kong); ส่วนที่ปรับ A1 (proposed) — payload case, affects, role/rate limit ของ resolve, createUser ตัวไหน, e2e AC
 requested_by: ทีม (issue #893)
 decided_by: kong
 decision_date: 2026-10-29
@@ -11,13 +11,17 @@ layer: volatile
 affects:
   - docs/data/schema.md §6 (`_users.staff_token_hash` — additive)
   - docs/data/schema.md §2.30 (`distribution_log.recipient_type` + `staff`, `recipient_id` = `user:{name}`)
-  - docs/data/api-contract.md §3 (endpoint บัตร QR ใต้ `/api/v1/users` และ `/api/v1/me`)
+  - docs/data/api-contract.md §2 (endpoint บัตร QR ใต้ `/api/v1/users` และ `/api/v1/me` — service plane ไม่ใช่ §3 Provisioning)
+  - docs/prd/role-permission-matrix.md (ใครดู/พิมพ์/หมุนบัตร staff และใคร resolve QR staff ที่หน้าแจก)
   - frontend/src/lib/server/user-service.ts (mint ตอน `createUser`, ซ่อน hash จาก summary, กัน self-edit)
   - frontend/src/lib/server/shelter-access-design.ts (VDU `distribution_log` รับ `staff`) + frontend/scripts/redeploy-access.ts
   - frontend/src/routes/api/v1/users/ · frontend/src/routes/api/v1/me/
   - frontend/src/lib/features/users/ · frontend/src/lib/features/me/
   - frontend/src/lib/features/distribution/domain/food-supplies/distribution-log.ts
   - frontend/src/lib/features/distribution/ui/model/recipient-scan.ts · frontend/src/lib/features/distribution/ui/common/RecipientName.svelte
+  - frontend/src/lib/features/distribution/application/food-supplies/distribution-workflow.ts · frontend/src/lib/features/distribution/ui/model/frontline-handover.ts
+  - frontend/src/lib/features/distribution/ui/common/RecipientSearchPicker.svelte · frontend/src/lib/features/distribution/ui/common/DistributionHistory.svelte
+  - frontend/src/lib/features/distribution/ui/frontline/FoodDistributionCard.svelte · frontend/src/lib/features/distribution/ui/frontline/SuppliesDistributionCard.svelte · frontend/src/lib/features/distribution/ui/frontline/LoanReturnCard.svelte
   - frontend/src/routes/(protected)/portal/+page.svelte
   - frontend/src/lib/features/volunteers/server/public-schedule-action.ts (reuse read-or-mint role-card ของ CR-127)
   - frontend/scripts/seed/users.ts
@@ -33,6 +37,16 @@ migration: one-off backfill `staff_token_hash` ให้ `_users` เดิม�
 > - **เพื่อใคร/ทำไม:** เจ้าหน้าที่ศูนย์สแกนรับอาหาร/ของที่ `/onsite/distribution` ได้เหมือนจิตอาสา (#650) และกันรับซ้ำในมื้อเดียวกัน
 > - **Dev ต้อง build:** mint ใน `createUser` + backfill · endpoint อ่านบัตรตัวเอง / admin พิมพ์และหมุน / หน้าแจก resolve QR · ปุ่ม "ดูบัตรของฉัน" ที่ portal · scan routing + VDU รับ `staff`
 > - **กระทบ schema/scope:** `schema.md` §6 (additive บน `_users`, ไม่มี `schema_v`) · §2.30 enum เพิ่ม `staff` (ไม่ bump `schema_v`) · VDU shelter DB ต้อง redeploy · user ที่มี `volunteer_id` ใช้ QR จิตอาสาเดิม (CR-127) ไม่ได้ token staff
+
+> **ส่วนที่ปรับ 2026-10-29 (A1) — เสนอโดยทีม (proposed, ยังไม่ approve)** — ปิด warning จาก PR review หลัง approve
+> ไม่เปลี่ยนแนวทางที่ kong approve · แก้ใน §2.1, FR-SQR-02/03/13/21, เพิ่ม FR-SQR-40..43, AC-15, `affects` และ Decision log
+>
+> 1. **payload case:** QR พิมพ์ hex ตัวใหญ่แบบ `TKT-VOL-HASH-` · parser ไม่สนตัวพิมพ์ · เก็บและค้นด้วยตัวเล็ก (FR-SQR-40)
+> 2. **`affects`:** เพิ่มไฟล์ distribution ที่ใช้ `recipient_type` 7 ไฟล์ + `role-permission-matrix.md` · endpoint ย้ายไป api-contract §2
+> 3. **ใคร resolve ได้:** ตาม gate หน้าแจก `canAccessDistributionDesk` — `system_admin`, `shelter_manager` / `distribution_staff` ของศูนย์นั้น (FR-SQR-13/21)
+> 4. **กันใช้ resolve เป็นตัวเช็ก hash:** ตรวจสิทธิ์ผู้เรียกก่อน lookup · ไม่เจอกับ user ไม่อยู่ศูนย์ตอบเหมือนกัน · rate limit ต่อ user (FR-SQR-41/42)
+> 5. **`createUser` ตัวไหน:** ตัว server `frontend/src/lib/server/user-service.ts` (FR-SQR-02/03/43)
+> 6. **e2e:** เพิ่ม AC-15 สำหรับ flow สแกน แจก และ log
 
 ---
 
@@ -63,7 +77,9 @@ migration: one-off backfill `staff_token_hash` ให้ `_users` เดิม�
 | --- | --- | --- |
 | plaintext | `TKT-STF-` + 16 random bytes (CSPRNG) เป็น hex 32 ตัว | ไม่เก็บ — ทิ้งหลัง hash |
 | `staff_token_hash` | `sha256(plaintext)` hex 64 ตัว lowercase | เก็บใน `_users` |
-| QR payload | `TKT-STF-HASH-` + `staff_token_hash` | ไม่เก็บ — สร้างจาก hash ตอนแสดง |
+| QR payload | `TKT-STF-HASH-` + `staff_token_hash` เป็น hex **ตัวใหญ่** (เหมือน `TKT-VOL-HASH-`) — A1 | ไม่เก็บ — สร้างจาก hash ตอนแสดง |
+
+> **A1 (proposed):** parser รับ payload ทุกตัวพิมพ์ (`trim` + `toUpperCase` ก่อนเทียบ prefix แบบ `trackingTokenHashFromPayload` ใน `volunteer-portal/domain/volunteer.ts`) แล้วแปลง hash เป็นตัวเล็กก่อน lookup — ดู FR-SQR-40
 
 ---
 
@@ -72,8 +88,8 @@ migration: one-off backfill `staff_token_hash` ให้ `_users` เดิม�
 ### 3.1 Token และการออก token
 
 - **FR-SQR-01** — `_users` มี field `staff_token_hash` (str\|null) ค่าเป็น SHA-256 hex 64 ตัว ห้ามเก็บ plaintext token ใน CouchDB
-- **FR-SQR-02** — `createUser` ต้องออก `staff_token_hash` ให้ user ใหม่ทุกคนที่ไม่มี `volunteer_id` · `createOrMergeUser` ที่ merge เข้า account เดิมต้องไม่ออก token (ให้ backfill หรือ admin หมุนแทน)
-- **FR-SQR-03** — user ที่มี `volunteer_id` (รวมที่สร้างจาก `grantVolunteerAccess`) และ user ที่ `personnel_type: 'volunteer'` แต่ไม่มี `volunteer_id` ต้องไม่ได้ `staff_token_hash`
+- **FR-SQR-02** — `createUser` ของ server (`frontend/src/lib/server/user-service.ts`, A1) ต้องออก `staff_token_hash` ให้ user ใหม่ทุกคนที่ไม่มี `volunteer_id` · `createOrMergeUser` ที่ merge เข้า account เดิมต้องไม่ออก token (ให้ backfill หรือ admin หมุนแทน)
+- **FR-SQR-03** — user ที่มี `volunteer_id` (รวมที่สร้างจาก `grantVolunteerAccess` — A1: ตัวนี้เรียก `createUser` ของ `$lib/features/users` → `POST /api/v1/users` → `createOrMergeUser` → `createUser` ของ server จึงต้องตัดสินจาก `volunteer_id`/`personnel_type` ใน input ที่ server ไม่ใช่ฝั่ง client) และ user ที่ `personnel_type: 'volunteer'` แต่ไม่มี `volunteer_id` ต้องไม่ได้ `staff_token_hash`
 - **FR-SQR-04** — service account ที่ไม่ใช่คน (public writer) ต้องไม่ได้ `staff_token_hash`
 - **FR-SQR-05** — การแก้ user (`updateUser`, `updateOwnProfile`) ต้องคง `staff_token_hash` เดิมไว้
 - **FR-SQR-06** — `updateOwnProfile` ต้องไม่รับ `staff_token_hash` และ `volunteer_id` จาก input ของผู้ใช้
@@ -88,7 +104,7 @@ migration: one-off backfill `staff_token_hash` ให้ `_users` เดิม�
 | FR-SQR-10 | `GET /api/v1/me/card` | `_session` ของตัวเอง | บัตรของตัวเอง: `staff` / `volunteer` / `none` |
 | FR-SQR-11 | `GET /api/v1/users/staff-card?name=` | `system_admin` หรือ manager ที่มี scope ของ user | payload + ข้อมูลบัตรสำหรับพิมพ์ |
 | FR-SQR-12 | `POST /api/v1/users/staff-card/rotate` | `system_admin` หรือ manager ที่ดูแล**ทุก**ศูนย์ใน roles ของ user นั้น · เจ้าหน้าที่หมุนของตัวเองไม่ได้ | ออก hash ใหม่, QR เก่าใช้ไม่ได้ทันที |
-| FR-SQR-13 | `POST /api/v1/users/staff-card/resolve` | `_session` + สิทธิ์แจกของในศูนย์ที่ระบุ | หน้าแจก resolve payload → ผู้รับ |
+| FR-SQR-13 | `POST /api/v1/users/staff-card/resolve` | `_session` + `canAccessDistributionDesk(roles, shelter_code)` (A1) — `system_admin`, `shelter_manager` / `distribution_staff` ของศูนย์นั้น | หน้าแจก resolve payload → ผู้รับ |
 | FR-SQR-14 | แปลง `user:{name}` → ชื่อแสดงผล | `_session` + shelter scope | ใช้กับรายการประวัติการแจก |
 
 - **FR-SQR-15** — `GET /api/v1/me/card`: user ไม่มี `volunteer_id` และมี hash → `kind: 'staff'` · ไม่มี hash (รวม user ที่ `personnel_type: 'volunteer'` แต่ไม่มี `volunteer_id`) → `kind: 'none'` และ **ห้ามออก token**
@@ -97,7 +113,7 @@ migration: one-off backfill `staff_token_hash` ให้ `_users` เดิม�
 - **FR-SQR-18** — `GET /api/v1/me/card`: `active: false` → `kind: 'none'`
 - **FR-SQR-19** — `staff-card` / `rotate`: user ที่มี `volunteer_id` → ปฏิเสธ (409)
 - **FR-SQR-20** — `rotate` เขียนด้วย `_rev` เดิม · 409 → คืน 409 ให้ client ลองใหม่ · ไม่แตะ field อื่น
-- **FR-SQR-21** — `resolve` ตรวจที่ server ตามลำดับ: caller มีสิทธิ์แจกของในศูนย์ → payload ถูกรูปแบบ → หา user ด้วย `staff_token_hash` ผ่าน `_find` บน `_users` แบบไม่สร้าง index (0 → 404, >1 → 409) → `active !== false` (ไม่งั้น 403) → user มี `shelter:{code}` หรือ `{code}:{capability}` ของศูนย์นั้น หรือ `system_admin` (ไม่งั้น 403)
+- **FR-SQR-21** — `resolve` ตรวจที่ server ตามลำดับ: caller ผ่าน `canAccessDistributionDesk` (`frontend/src/lib/auth/roles.ts`) ของศูนย์ที่ระบุ จาก roles ใน `_session` (A1 — ไม่เชื่อ role จาก body) → rate limit (FR-SQR-42) → payload ถูกรูปแบบ → หา user ด้วย `staff_token_hash` ผ่าน `_find` บน `_users` แบบไม่สร้าง index (0 → 404, >1 → 409) → `active !== false` (ไม่งั้น 403) → user มี `shelter:{code}` หรือ `{code}:{capability}` ของศูนย์นั้น หรือ `system_admin` (ไม่งั้น 403)
 - **FR-SQR-22** — `resolve`: user ที่มี `volunteer_id` และลิงก์สองทางถูกต้อง → คืนผู้รับเป็น `recipient_type: 'volunteer'`, `recipient_id: volunteer:{ulid}` · ลิงก์ไม่ตรง → 409
 - **FR-SQR-23** — `resolve` คืนเฉพาะ `recipient_type`, `recipient_id`, `display_name`, ป้ายบทบาทในศูนย์, `position` — ห้ามคืน hash, `phone`, `email` หรือ doc ทั้งก้อน
 
@@ -126,6 +142,13 @@ migration: one-off backfill `staff_token_hash` ให้ `_users` เดิม�
 - **FR-SQR-38** — VDU `distribution_log` ใน shelter DB (`shelter-access-design.ts`) รับ `staff` และบังคับ `recipient_id` ขึ้นต้น `user:` · redeploy design doc ทุกศูนย์ด้วย `scripts/redeploy-access.ts`
 - **FR-SQR-39** — `returner_type` (bulk return) ไม่เปลี่ยน
 
+### 3.6 ส่วนที่ปรับ A1 (proposed 2026-10-29)
+
+- **FR-SQR-40** — QR payload staff พิมพ์ hex ตัวใหญ่ · parser ของหน้าแจก (FR-SQR-31) และ `resolve` รับทุกตัวพิมพ์ (`trim` + `toUpperCase` ก่อนเทียบ prefix, hex ต้องเป็น `[0-9A-F]{64}`) แล้วแปลง hash เป็นตัวเล็กก่อน `_find` · `staff_token_hash` ใน `_users` เป็นตัวเล็กเสมอ
+- **FR-SQR-41** — `resolve`: `shelter_code` ใน body ใช้เลือกศูนย์เท่านั้น ต้องผ่าน FR-SQR-21 ข้อแรกก่อน lookup ทุกครั้ง · ไม่เจอ hash กับ user ไม่มี role ในศูนย์นั้น ตอบ **404 แบบเดียวกัน** (ไม่บอกว่ามี hash อยู่ในศูนย์อื่น) · `active: false` ยังเป็น 403 · hash ซ้ำยังเป็น 409
+- **FR-SQR-42** — `resolve` มี rate limit ต่อ `_session` user ที่ 30 ครั้ง/นาที (เท่าโควตา token ของ CR-127 note 2026-10-18) · เกิน → 429 และหน้าแจกแสดงข้อความให้รอแล้วสแกนใหม่ · ไม่นับต่อ IP เพราะจุดแจกหลายเครื่องใช้ NAT IP เดียวกัน
+- **FR-SQR-43** — mint `staff_token_hash` ทำใน `createUser` ของ server ที่เดียว · `createUser` ฝั่ง client (`$lib/features/users`) ห้ามส่งหรือสร้าง hash · body ของ `POST /api/v1/users` ที่มี `staff_token_hash` → ignore
+
 ---
 
 ## 4. Acceptance criteria
@@ -143,6 +166,8 @@ migration: one-off backfill `staff_token_hash` ให้ `_users` เดิม�
 - [ ] **AC-11** QR ผู้อพยพและ QR จิตอาสายังทำงานเหมือนเดิม
 - [ ] **AC-12** response ของ `GET /api/v1/users` และ `resolve` ไม่มี `staff_token_hash`
 - [ ] **AC-13** client bundle ไม่มี admin credential
+- [ ] **AC-15** (A1) Playwright e2e ที่ `/onsite/distribution` ครอบ AC-07, AC-09 และ AC-10: สแกน QR staff → แจก → `distribution_log` เป็น `staff` / `user:{name}` · สแกนซ้ำมื้อเดียวกันติด "รับไปแล้ว" · QR จิตอาสาแล้ว QR staff ของคนเดียวกันติด "รับไปแล้ว" · payload ตัวเล็กยัง resolve ได้ (FR-SQR-40)
+- [ ] **AC-16** (A1) `resolve` จาก `warehouse_staff` / `supply_coordinator` หรือ role ของศูนย์อื่น → 403 · hash ที่ไม่มีกับ user ศูนย์อื่น → 404 เหมือนกัน · เกิน 30 ครั้ง/นาที → 429
 - [ ] **AC-14** unit test: token/payload parser, menu matching, scan routing, map user ที่มี `volunteer_id` · server test: mint ใน `createUser`, backfill, `me/card`, `staff-card`, `rotate`, `resolve` ทุก branch · VDU test รับ/ปฏิเสธ `staff` · `.svelte` ที่แตะผ่าน `svelte-autofixer`
 
 ---
@@ -191,3 +216,4 @@ migration: one-off backfill `staff_token_hash` ให้ `_users` เดิม�
 - 2026-10-29 — ข้อเสนอทีม: ไม่ bump `schema_v` ของ `distribution_log` เพราะเพิ่ม enum แบบ additive และ worker/backend ไม่อ่าน `recipient_type` · ต้อง redeploy VDU ก่อนเปิดใช้
 - 2026-10-29 — ข้อเสนอทีม: lookup hash ด้วย `_find` บน `_users` แบบไม่มี index เพราะปริมาณ `_users` น้อยและไม่ต้องแตะ provisioning (stable core)
 - 2026-10-29 — **approved (kong)** — รับข้อเสนอทีมทุกข้อใน Decision log ตามที่เสนอ และรับความเสี่ยง R1–R4 (§5) ตามที่เขียน
+- 2026-10-29 — ข้อเสนอทีม (A1, proposed): ปิด warning จาก PR review — payload ตัวใหญ่ + parser ไม่สนตัวพิมพ์ (FR-SQR-40) · resolve ตาม gate `canAccessDistributionDesk` · 404 เดียวกันสำหรับไม่เจอ/ศูนย์อื่น + rate limit 30/นาที/user (FR-SQR-41/42) · ระบุ `createUser` ของ server (FR-SQR-43) · e2e AC-15/16 · `affects` ครบ · รอ kong approve
