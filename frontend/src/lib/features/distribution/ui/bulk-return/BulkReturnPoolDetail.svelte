@@ -581,7 +581,8 @@
 										showButton={reopenAction.showButton}
 										blockedNotice={reopenAction.blockedNotice}
 										resume={resumeReason !== undefined}
-										pending={resumeMutation.isPending}
+										pending={resumeMutation.isPending &&
+											resumeMutation.variables?.input.entry_id === entry._id}
 										onReopen={() =>
 											resumeReason !== undefined
 												? void resumeReopen(entry._id, resumeReason)

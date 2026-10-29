@@ -399,6 +399,10 @@ the loan doc keeps the same `_rev`, status and `qty_returned`; one void doc exis
   "เปิดยอดยืมกลับแล้ว" and no button.
 - BRP-R2: same setup; the manager sees the button (control), distribution_staff at the desk sees the
   same entry with no button, no blocked notice and no reason text; the loan is untouched.
+- BRP-R3: same setup as R1, but the pool sheet is closed and warehouse_staff of the shelter opens the
+  back-office board, opens the pool and reopens the entry's loan with a reason. Same result as R1:
+  loan `active`, `qty_returned` "0", entry no longer applied, row shows "เปิดยอดยืมกลับแล้ว" and no
+  button.
 
 ## 8. Old tests and helpers (removed)
 

@@ -48,7 +48,7 @@ import {
 	EVACUEE,
 	fullInput,
 	loanId,
-	mgr,
+	mgr as warehouse, // support fixture `mgr` is a warehouse_staff ctx (user:wh1)
 	reg,
 	sm,
 	U,
@@ -81,7 +81,7 @@ describe('bulk return pool v3 — reopen the loans of an entry (CR-193 §35)', (
 		await seedLoan(loanNo, { qty: '3' });
 		await add(pool._id, { type: 'evacuee', id: EVACUEE }, [{ item_id: 'item:cot', qty: '2' }]);
 		const entry = (await eventRepo.listForPool(pool._id)).entries[0];
-		let closed = await submitBulkReturnPool(pool._id, nextOp(), mgr, deps);
+		let closed = await submitBulkReturnPool(pool._id, nextOp(), warehouse, deps);
 		if (receiveIt) {
 			await receive(pool._id, fullInput(closed));
 			closed = (await poolRepo.get(pool._id))!;
@@ -147,7 +147,11 @@ describe('bulk return pool v3 — reopen the loans of an entry (CR-193 §35)', (
 	it('lets warehouse_staff of the shelter reopen the loan of an entry (FR-35.2)', async () => {
 		const { entry } = await closedPoolWithAppliedLoan(87);
 
-		const res = await reopenBulkReturnEntryLoans({ entry_id: entry._id, reason: 'x' }, mgr, deps);
+		const res = await reopenBulkReturnEntryLoans(
+			{ entry_id: entry._id, reason: 'x' },
+			warehouse,
+			deps
+		);
 
 		expect(res).toMatchObject({ replayed: false, loansReopened: [loanId(87)] });
 		expect(reopenKeys()).toEqual([deriveLoanReopenId(entry._id)]);
@@ -198,7 +202,7 @@ describe('bulk return pool v3 — reopen the loans of an entry (CR-193 §35)', (
 		const late = await eventRepo.createEntry(
 			createBulkReturnEntry(
 				{ pool_id: pool._id, item_id: 'item:cot', qty: '1', returner_type: 'unspecified' },
-				mgr,
+				warehouse,
 				U(777)
 			)
 		);
@@ -217,7 +221,7 @@ describe('bulk return pool v3 — reopen the loans of an entry (CR-193 §35)', (
 	it('rejects an entry with no applied loan ref', async () => {
 		const pool = await openPool('Gate A');
 		await add(pool._id, { type: 'unspecified' }, [{ item_id: 'item:cot', qty: '1' }]);
-		await submitBulkReturnPool(pool._id, nextOp(), mgr, deps);
+		await submitBulkReturnPool(pool._id, nextOp(), warehouse, deps);
 		const entry = (await eventRepo.listForPool(pool._id)).entries[0];
 
 		const err = await reopenBulkReturnEntryLoans(
@@ -238,7 +242,7 @@ describe('bulk return pool v3 — reopen the loans of an entry (CR-193 §35)', (
 			await logRepo.recordClear(
 				loanId(no),
 				{ clear_reason: clearReason, notes: 'closed at the desk' },
-				mgr
+				warehouse
 			);
 
 			const err = await reopenBulkReturnEntryLoans(
@@ -304,7 +308,7 @@ describe('bulk return pool v3 — reopen the loans of an entry (CR-193 §35)', (
 		await logRepo.recordClear(
 			loanId(89),
 			{ clear_reason: 'lost', notes: 'lost in the flood' },
-			mgr
+			warehouse
 		);
 
 		const res = await reopenBulkReturnEntryLoans({ entry_id: entry._id, reason: 'x' }, sm, deps);

@@ -139,4 +139,40 @@ test.describe('Bulk return pool v3 — reopen loans (BRP-R)', { tag: DESK_TAGS }
 		// Nothing changed for the loan.
 		expect(await readStatus(loan.logId)).toBe('returned');
 	});
+
+	test('BRP-R3 warehouse staff reopens the loan an entry cut after the pool was submitted', async ({
+		page,
+		scenarioAs
+	}) => {
+		const scenario = await scenarioAs('brp_r3');
+		const { board, name, loan, entry } = await seedSubmittedEntryThatCutLoan(page, scenario, 'R3');
+		await board.closeDetail(name);
+
+		await switchUser(page, scenario, 'wh', 'warehouse_staff');
+		await board.gotoBackOffice();
+		await board.openDetail(name);
+		const row = board.entryRow(name, loan.item.name);
+		await expect(row).toBeVisible();
+		await expect(row.getByText(REOPEN_DONE_NOTE)).toHaveCount(0);
+		await row.getByRole('button', { name: REOPEN_ACTION, exact: true }).click();
+
+		const dialog = page.getByRole('dialog', { name: REOPEN_ACTION });
+		await expect(dialog).toBeVisible();
+		const confirm = dialog.getByRole('button', { name: REOPEN_CONFIRM, exact: true });
+		await expect(confirm).toBeDisabled();
+		await dialog.getByLabel(REOPEN_REASON_LABEL).fill(`E2E reopen ${scenario.namespace}`);
+		await expect(confirm).toBeEnabled();
+		await confirm.click();
+
+		await expect(board.toast(reopenSuccessToast(1))).toBeVisible();
+		await expect(dialog).toBeHidden();
+
+		await expect.poll(() => readStatus(loan.logId)).toBe('active');
+		const log = await getShelterDocument(loan.logId);
+		expect(log).toMatchObject({ status: 'active', qty_returned: '0' });
+		expect(sortedStrings(log?.applied_bulk_entry_ids)).not.toContain(entry._id);
+
+		await expect(row.getByText(REOPEN_DONE_NOTE)).toBeVisible();
+		await expect(row.getByRole('button', { name: REOPEN_ACTION, exact: true })).toHaveCount(0);
+	});
 });

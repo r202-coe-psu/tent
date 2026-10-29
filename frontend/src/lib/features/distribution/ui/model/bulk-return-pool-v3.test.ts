@@ -878,11 +878,8 @@ describe('reopenLoanAction', () => {
 		expect(act([lost], { reopenedKnown: false })).toEqual(HIDDEN);
 	});
 
-	it('keeps the button for an all-revertable entry while the reopened state is unknown', () => {
-		expect(act([ok], { reopenedKnown: false })).toEqual({
-			showButton: true,
-			blockedNotice: null
-		});
+	it('hides an all-revertable entry while the reopened state is unknown', () => {
+		expect(act([ok], { reopenedKnown: false })).toEqual(HIDDEN);
 	});
 
 	it('explains an entry whose applied loans are all lost', () => {

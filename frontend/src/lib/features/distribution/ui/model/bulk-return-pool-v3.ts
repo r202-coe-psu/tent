@@ -412,9 +412,8 @@ export function canVoidEntry(row: BulkReturnPoolRow): boolean {
  *   entry is not a reopen candidate, the button shows, or the entry was already reopened. The
  *   lost/waived-specific copy is used only when every blocked ref is lost or waived; otherwise the
  *   generic "changed" copy counts all blocked refs.
- * - `reopenedKnown`: whether `reopened` is trustworthy (the timeline loaded). When some ref is not
- *   revertable and it is false, nothing is shown (no button, no notice), since the entry may be an
- *   already reopened one whose replay would be accepted. All-revertable entries ignore it.
+ * - `reopenedKnown`: whether `reopened` is trustworthy (the timeline loaded). When it is false,
+ *   nothing is shown (no button, no notice), since the entry may already have a reopen doc.
  */
 export function reopenLoanAction(args: {
 	pool: Pick<BulkReturnPoolV3, 'status' | 'entry_ids'>;
@@ -425,13 +424,14 @@ export function reopenLoanAction(args: {
 	reopenedKnown: boolean;
 }): { showButton: boolean; blockedNotice: string | null } {
 	const none = { showButton: false, blockedNotice: null };
+	// Timeline not loaded (pending / failed): `reopened` is unreliable (an entry that already has a
+	// reopen doc must not get the plain reopen button), so neither offer the button nor claim the
+	// entry is blocked.
+	if (!args.reopenedKnown) return none;
 	if (!args.canReopen || args.appliedRefs.length === 0) return none;
 	if (!canReopenEntryLoans(args.pool, args.entryId)) return none;
 	const blocked = args.appliedRefs.filter((ref) => !ref.revertable);
 	if (blocked.length === 0) return { showButton: true, blockedNotice: null };
-	// Timeline not loaded (pending / failed): `reopened` is unreliable, so neither offer the button
-	// nor claim the entry is blocked.
-	if (!args.reopenedKnown) return none;
 	const total = args.appliedRefs.length;
 	if (args.reopened) {
 		// Replay path: the workflow skips the pre-check and not-revertable loans, and still reverts
