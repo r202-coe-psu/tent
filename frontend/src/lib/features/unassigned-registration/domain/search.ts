@@ -83,7 +83,7 @@ export type OpenMemberHit = z.infer<typeof openMemberHitSchema>;
 export type OpenPetHit = z.infer<typeof openPetHitSchema>;
 
 export type ClaimedPetSummary = {
-	species: string;
+	species: OpenPetHit['species'];
 	count: number;
 	details?: string;
 };

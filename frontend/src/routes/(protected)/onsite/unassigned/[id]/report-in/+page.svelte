@@ -61,6 +61,7 @@
 	const leftBehindPets = $derived(petsLeftBehind(review?.open_pets ?? [], selectedPetIds));
 	const leftBehindCount = $derived(totalPetCount(leftBehindPets));
 	const claimedPets = $derived(claimedPetSummaries(openPets));
+	const originallyLeftBehind = $derived(petsLeftBehind(review?.open_pets ?? [], data.petIds));
 
 	/** No member ticked at all — pets-only claim (FR-PUF-16), no Report-in step. */
 	const isPetsOnly = $derived(data.memberIds.length === 0);
@@ -223,7 +224,7 @@
 {/snippet}
 
 {#snippet claimAllUndo()}
-	{#if claimEveryOpenPet && !claimedHouseholdId && data.petIds.length < (review?.open_pets ?? []).length}
+	{#if claimEveryOpenPet && !claimedHouseholdId && originallyLeftBehind.length > 0}
 		<button
 			type="button"
 			onclick={() => (claimEveryOpenPet = false)}
