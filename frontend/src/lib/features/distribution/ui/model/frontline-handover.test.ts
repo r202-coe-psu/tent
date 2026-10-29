@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
 	canRecipientReceiveItem,
+	checkAllergenAdvisory,
 	checkDuplicateMealAdvisory,
+	formatAllergyCodes,
 	checkMenuMatchAdvisory,
 	formatMenuTags,
 	getItemCapacitySummary,
@@ -186,13 +188,18 @@ describe('frontline-handover model helpers', () => {
 		it('detects duplicate meal from recipient logs', () => {
 			const res = checkDuplicateMealAdvisory([priorLog], 'lunch', '2026-09-20T06:00:00.000Z');
 			expect(res.isDuplicate).toBe(true);
-			expect(res.priorLog).toBe(priorLog);
+			expect(res.visits).toBe(1);
+			expect(res.boxes).toBe('1');
+			expect(res.lastDistributedAt).toBe(priorLog.distributed_at);
 		});
 
 		it('returns isDuplicate false when no matching meal exists', () => {
 			const res = checkDuplicateMealAdvisory([priorLog], 'dinner', '2026-09-20T06:00:00.000Z');
 			expect(res.isDuplicate).toBe(false);
-			expect(res.priorLog).toBeNull();
+			expect(res.visits).toBe(0);
+			expect(res.boxes).toBe('0');
+			expect(res.lastDistributedAt).toBeUndefined();
+			expect(res.distributedAt).toEqual([]);
 		});
 
 		it('detects a volunteer repeat meal the same way', () => {
@@ -203,6 +210,45 @@ describe('frontline-handover model helpers', () => {
 			};
 			const res = checkDuplicateMealAdvisory([volunteerLog], 'lunch', '2026-09-20T06:00:00.000Z');
 			expect(res.isDuplicate).toBe(true);
+		});
+
+		it('counts visits and sums boxes across three handovers', () => {
+			const logs = [
+				{ ...priorLog, _id: 'a', qty: '2' },
+				{ ...priorLog, _id: 'b', qty: '1' },
+				{ ...priorLog, _id: 'c', qty: '3' }
+			];
+			const res = checkDuplicateMealAdvisory(logs, 'lunch', '2026-09-20T06:00:00.000Z');
+			expect(res.visits).toBe(3);
+			expect(res.boxes).toBe('6');
+		});
+
+		it('picks the latest time and lists times oldest first for out-of-order input', () => {
+			const logs = [
+				{ ...priorLog, _id: 'a', distributed_at: '2026-09-20T05:30:00.000Z' },
+				{ ...priorLog, _id: 'b', distributed_at: '2026-09-20T03:00:00.000Z' },
+				{ ...priorLog, _id: 'c', distributed_at: '2026-09-20T04:00:00.000Z' }
+			];
+			const res = checkDuplicateMealAdvisory(logs, 'lunch', '2026-09-20T06:00:00.000Z');
+			expect(res.lastDistributedAt).toBe('2026-09-20T05:30:00.000Z');
+			expect(res.distributedAt).toEqual([
+				'2026-09-20T03:00:00.000Z',
+				'2026-09-20T04:00:00.000Z',
+				'2026-09-20T05:30:00.000Z'
+			]);
+		});
+
+		it('excludes voided, loan, other-meal and other-day logs from the summary', () => {
+			const logs = [
+				{ ...priorLog, _id: 'ok', qty: '2' },
+				{ ...priorLog, _id: 'v', status: 'voided' as const, qty: '9' },
+				{ ...priorLog, _id: 'l', is_returnable: true, qty: '9' },
+				{ ...priorLog, _id: 'm', meal: 'dinner' as const, qty: '9' },
+				{ ...priorLog, _id: 'd', distributed_at: '2026-09-19T05:00:00.000Z', qty: '9' }
+			];
+			const res = checkDuplicateMealAdvisory(logs, 'lunch', '2026-09-20T06:00:00.000Z');
+			expect(res.visits).toBe(1);
+			expect(res.boxes).toBe('2');
 		});
 
 		it('returns isDuplicate false when logs are empty or targetMeal undefined', () => {
@@ -254,6 +300,98 @@ describe('frontline-handover model helpers', () => {
 
 		it('formats tags as Thai labels', () => {
 			expect(formatMenuTags(['HALAL', 'ELDERLY'])).toBe('ฮาลาล, ผู้สูงอายุ');
+		});
+	});
+	describe('checkAllergenAdvisory (#607)', () => {
+		const allergyItems = [
+			{
+				code: 'seafood',
+				label_th: 'อาหารทะเล',
+				label_en: 'Seafood',
+				is_default: false,
+				status: 'active' as const
+			},
+			{
+				code: 'egg',
+				label_th: 'ไข่',
+				label_en: 'Egg',
+				is_default: false,
+				status: 'active' as const
+			},
+			{
+				code: 'wheat',
+				label_th: 'แป้งสาลี',
+				label_en: 'Wheat',
+				is_default: false,
+				status: 'active' as const
+			}
+		];
+
+		it('flags the codes the recipient is allergic to (นางบีแพ้ไข่ — ข้าวผัดกุ้ง)', () => {
+			const result = checkAllergenAdvisory(
+				evacueeRecipient,
+				['egg'],
+				['seafood', 'egg'],
+				allergyItems
+			);
+			expect(result.conflicts).toEqual(['egg']);
+			expect(formatAllergyCodes(result.conflicts, allergyItems)).toBe('ไข่');
+		});
+
+		it('passes a menu without the recipient allergens (ข้าวมันไก่)', () => {
+			const result = checkAllergenAdvisory(evacueeRecipient, ['egg'], ['wheat'], allergyItems);
+			expect(result.conflicts).toEqual([]);
+			expect(result.menuUnspecified).toBe(false);
+		});
+
+		it('maps legacy labels on both sides to codes before matching', () => {
+			const result = checkAllergenAdvisory(
+				evacueeRecipient,
+				['ไข่'],
+				['อาหารทะเล', 'ไข่'],
+				allergyItems
+			);
+			expect(result.conflicts).toEqual(['egg']);
+		});
+
+		it('shows free-text allergies without matching them', () => {
+			const result = checkAllergenAdvisory(
+				evacueeRecipient,
+				['เพนิซิลลิน'],
+				['เพนิซิลลิน'],
+				allergyItems
+			);
+			expect(result.recipientFreeText).toEqual(['เพนิซิลลิน']);
+			expect(result.menuFreeText).toEqual(['เพนิซิลลิน']);
+			expect(result.conflicts).toEqual([]);
+		});
+
+		it('keeps menu free text apart from the codes it matches', () => {
+			const result = checkAllergenAdvisory(
+				evacueeRecipient,
+				['egg'],
+				['ไข่', 'ถั่วเหลือง'],
+				allergyItems
+			);
+			expect(result.menuCodes).toEqual(['egg']);
+			expect(result.menuFreeText).toEqual(['ถั่วเหลือง']);
+		});
+
+		it('notes a menu with no allergens listed when the recipient has allergies', () => {
+			expect(
+				checkAllergenAdvisory(evacueeRecipient, ['egg'], [], allergyItems).menuUnspecified
+			).toBe(true);
+			expect(checkAllergenAdvisory(evacueeRecipient, [], [], allergyItems).menuUnspecified).toBe(
+				false
+			);
+		});
+
+		it('skips volunteers and outside recipients', () => {
+			for (const recipient of [volunteerRecipient, outsideRecipient, null]) {
+				expect(checkAllergenAdvisory(recipient, ['egg'], ['egg'], allergyItems).conflicts).toEqual(
+					[]
+				);
+			}
 		});
 	});
 });

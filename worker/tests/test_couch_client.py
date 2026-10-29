@@ -295,3 +295,29 @@ async def test_get_doc_sends_the_encoded_id_on_the_wire():
     assert seen == ["/_users/org.couchdb.user%3Aa%2Bb%40x.co"]
 
     await client.close()
+
+
+@pytest.mark.asyncio
+async def test_put_doc_without_conflict_retry_raises_on_409():
+    settings = MagicMock()
+    settings.couch_base_url = "http://couch:5984"
+    settings.couchdb_user = "admin"
+    settings.couchdb_password = "password"
+
+    client = CouchClient(settings)
+    conflict = httpx.Response(
+        409, json={"error": "conflict"}, request=httpx.Request("PUT", "http://x")
+    )
+    client._client.put = AsyncMock(return_value=conflict)
+    client.get_doc = AsyncMock()
+
+    with pytest.raises(httpx.HTTPStatusError):
+        await client.put_doc(
+            "shelter_sh001",
+            {"_id": "donation:1", "_rev": "1-xyz"},
+            retry_conflict=False,
+        )
+    assert client._client.put.await_count == 1
+    client.get_doc.assert_not_awaited()
+
+    await client.close()

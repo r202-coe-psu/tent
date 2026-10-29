@@ -1217,7 +1217,12 @@ ${consentVduClause()}
       if (typeof newDoc.ref_id !== 'string' || (!/^distribution_batch:.+/.test(newDoc.ref_id) && !/^requisition_ticket:.+/.test(newDoc.ref_id))) {
         throw { forbidden: 'Distribute stock ledger requires distribution_batch ref_id or requisition_ticket ref_id' };
       }
-      if (/^requisition_ticket:.+/.test(newDoc.ref_id)) {
+      if (/^requisition_ticket:direct-.+/.test(newDoc.ref_id)) {
+        // Direct issue from the stock page (#837): supply_coordinator does not issue (CR-156 FR-H1).
+        if (!isWarehouseOrAdmin && !isRole('shelter_manager')) {
+          throw { forbidden: 'Only warehouse staff, shelter manager, or system admin can write direct distribute stock ledger' };
+        }
+      } else if (/^requisition_ticket:.+/.test(newDoc.ref_id)) {
         if (!isStaff) {
           throw { forbidden: 'Only warehouse staff, supply coordinator, shelter manager, or system admin can write ticket distribute stock ledger' };
         }
@@ -1484,9 +1489,10 @@ ${consentVduClause()}
   }
   // 6. stock_lot_reservation role rules
   if (newDoc.type === 'stock_lot_reservation') {
-    var isWarehouseOrAdminRes = isRole('warehouse_staff');
-    if (!isWarehouseOrAdminRes) {
-      throw { forbidden: 'Only warehouse staff or system admin can manage stock lot reservations' };
+    // shelter_manager may also issue stock directly (#837), which claims the lot first.
+    var isReservationStaff = isRole('warehouse_staff') || isRole('shelter_manager');
+    if (!isReservationStaff) {
+      throw { forbidden: 'Only warehouse staff, shelter manager, or system admin can manage stock lot reservations' };
     }
     if (typeof newDoc.lot_ref !== 'string' || !/^stock_ledger:.+/.test(newDoc.lot_ref)) {
       throw { forbidden: 'stock_lot_reservation requires stock_ledger lot_ref' };

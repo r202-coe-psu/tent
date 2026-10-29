@@ -11,18 +11,23 @@ from decimal import Decimal
 from tent_model import (
     DonationBuffer,
     PublicDonation,
-    PublicNeed,
     PublicPerson,
     PublicShelter,
-    RetentionAudit,
-    ShelterStock,
     release_quota,
     release_slot,
 )
 
+from worker.couch.bootstrap import read_retention_months
 from worker.couch.client import CouchClient
 from worker.donation_status import is_donation_outstanding
+from worker.mongo import delete_closed_shelter_operations
+from worker.projectors.shelter import (
+    DEFAULT_RETENTION_MONTHS_AFTER_CLOSE,
+    RetentionPhase,
+    classify_retention,
+)
 from worker.quota.expiry import expire_declared_donations
+from worker.retention.audit import audit_and_delete
 from worker.role_grants import expire_role_grants
 
 logger = logging.getLogger(__name__)
@@ -50,88 +55,51 @@ def classify_expired_buffer(
     return "stuck"
 
 
-async def _audit_and_delete(
-    *,
-    job_run_id: str,
-    trigger: str,
-    model: type,
-    target_id: str,
-    couchdb_ref: dict | None = None,
+async def reconcile_closed_shelters(
+    job_run_id: str, *, retention_months: int, now: datetime
 ) -> None:
-    audit_id = f"retention:{uuid.uuid4().hex}"
-    audit = RetentionAudit(
-        id=audit_id,
-        job_run_id=job_run_id,
-        trigger=trigger,
-        target_collection=model.Settings.name,
-        target_id=target_id,
-        couchdb_ref=couchdb_ref,
-        action="delete_one",
-        status="pending",
-        created_at=datetime.now(UTC),
-    )
-    await audit.insert()
+    """Apply the closed-shelter retention rule (CR-183, data-model §7).
 
-    existing = await model.get(target_id)
-    deleted_count = 0
-    if existing:
-        await existing.delete()
-        deleted_count = 1
-
-    remaining = await model.get(target_id)
-    if remaining is None:
-        audit.status = "verified"
-        audit.deleted_count = deleted_count
-        audit.verified_at = datetime.now(UTC)
-    else:
-        audit.status = "failed"
-        audit.error = "Document still present after delete"
-    await audit.save()
-
-
-async def reconcile_closed_shelters(job_run_id: str) -> None:
-    # Safety net only: CDC already deletes closed shelters from public_shelters
-    # (project_shelter returns "delete"). This path cleans orphaned rows if any
-    # still carry status "closed" (legacy / missed cascade).
+    The ``public_shelters`` row is kept for good (FR-1). Needs, stocks and occupants go
+    as soon as the shelter is closed; the processor already drops them on the closing
+    change, this is the safety net (FR-4). ``public_persons`` stay searchable until
+    ``closed_at`` + ``retention_months`` and are then deleted one by one with an audit
+    row (FR-2, FR-3). ``closed_at`` comes from the projected row only (FR-5).
+    """
     closed = await PublicShelter.find(PublicShelter.status == "closed").to_list()
     for shelter in closed:
-        persons = await PublicPerson.find(
-            PublicPerson.shelter_code == shelter.shelter_code
-        ).to_list()
+        code = shelter.shelter_code
+        await delete_closed_shelter_operations(
+            code, trigger="scheduled", job_run_id=job_run_id
+        )
+        phase = classify_retention(
+            status=shelter.status,
+            closed_at=shelter.closed_at,
+            retention_months=retention_months,
+            now=now,
+        )
+        if phase is RetentionPhase.CLOSED_WITHOUT_DATE:
+            # A shelter deleted from the registry leaves this row behind with its persons
+            # already cascaded away — nothing is being kept, so nothing to warn about.
+            if not await PublicPerson.find(PublicPerson.shelter_code == code).count():
+                continue
+            logger.warning(
+                "Closed shelter %s has no closed_at — keeping its public_persons "
+                "(CR-183 D-5); backfill with migrate:shelter-closed-at",
+                code,
+            )
+            continue
+        if phase is not RetentionPhase.CLOSED_EXPIRED:
+            continue
+        persons = await PublicPerson.find(PublicPerson.shelter_code == code).to_list()
         for person in persons:
-            await _audit_and_delete(
+            await audit_and_delete(
                 job_run_id=job_run_id,
                 trigger="scheduled",
                 model=PublicPerson,
                 target_id=person.id,
                 couchdb_ref={"db": "registry", "doc_id": shelter.registry_id},
             )
-        needs = await PublicNeed.find(
-            PublicNeed.shelter_code == shelter.shelter_code
-        ).to_list()
-        for need in needs:
-            await _audit_and_delete(
-                job_run_id=job_run_id,
-                trigger="scheduled",
-                model=PublicNeed,
-                target_id=need.id,
-            )
-        stocks = await ShelterStock.find(
-            ShelterStock.shelter_code == shelter.shelter_code
-        ).to_list()
-        for stock in stocks:
-            await _audit_and_delete(
-                job_run_id=job_run_id,
-                trigger="scheduled",
-                model=ShelterStock,
-                target_id=stock.id,
-            )
-        await _audit_and_delete(
-            job_run_id=job_run_id,
-            trigger="scheduled",
-            model=PublicShelter,
-            target_id=shelter.id,
-        )
 
 
 async def purge_expired_buffers(job_run_id: str) -> None:
@@ -192,7 +160,7 @@ async def purge_expired_buffers(job_run_id: str) -> None:
         if is_donation_outstanding(donation.status) and donation.slot_counter_id:
             await release_slot(counter_id=donation.slot_counter_id, now=now)
 
-        await _audit_and_delete(
+        await audit_and_delete(
             job_run_id=job_run_id,
             trigger="scheduled",
             model=DonationBuffer,
@@ -202,7 +170,7 @@ async def purge_expired_buffers(job_run_id: str) -> None:
             PublicDonation.tracking_token_hash == donation.tracking_token_hash
         )
         if public:
-            await _audit_and_delete(
+            await audit_and_delete(
                 job_run_id=job_run_id,
                 trigger="scheduled",
                 model=PublicDonation,
@@ -217,7 +185,14 @@ async def run_retention_once(couch: CouchClient | None = None) -> None:
     # failure is held and re-raised once the sweep is done.
     mongo_error: Exception | None = None
     try:
-        await reconcile_closed_shelters(job_run_id)
+        retention_months = (
+            await read_retention_months(couch)
+            if couch is not None
+            else DEFAULT_RETENTION_MONTHS_AFTER_CLOSE
+        )
+        await reconcile_closed_shelters(
+            job_run_id, retention_months=retention_months, now=datetime.now(UTC)
+        )
         await purge_expired_buffers(job_run_id)
         if couch is not None:
             # Same cycle as the quota release above so the counter and the CouchDB status

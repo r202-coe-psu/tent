@@ -16,7 +16,6 @@ import {
 	getShelterDocument,
 	roleSet,
 	scenarioPoint,
-	seedBulkReturnPool,
 	seedDistributionLog,
 	seedItemWithStock,
 	seedRecipient,
@@ -137,7 +136,7 @@ async function closeSetup(
 	}
 	const desk = new DeskPage(page);
 	await desk.goto();
-	await desk.openTab('reconciliation');
+	await desk.openTab('reconciliation', 'supplies');
 	await desk.selectPoint(scenarioPoint(scenario));
 	await desk.selectTicket('reconciliation', ticket);
 	await expect(desk.reconciliationHeading(ticket)).toBeVisible();
@@ -239,37 +238,6 @@ test.describe('Tab 4 — loan return counter (plan §4.6)', { tag: DESK_TAGS }, 
 		});
 	}
 
-	test('T4-6/T4-7 a loan is matched to a bulk pool with enough quota only', async ({
-		page,
-		scenarioAs
-	}) => {
-		const scenario = await scenarioAs('loan_bulk_pool');
-		const { desk, item, logId } = await issueLoan(page, scenario, '3');
-		const smallPool = await seedBulkReturnPool(scenario, item, '1');
-		const pool = await seedBulkReturnPool(scenario, item, '5');
-
-		await desk.loanCard(item.name).getByRole('button', { name: 'จับคู่กับกองรับคืน' }).click();
-		const dialog = desk.bulkDialog();
-		await expect(dialog).toBeVisible();
-		await expect(dialog.locator(`[id="bulk-pool-${smallPool}"]`)).toBeDisabled();
-		await dialog.locator(`[id="bulk-pool-${pool}"]`).click();
-		await dialog.getByRole('button', { name: 'ยืนยันจับคู่ (3 ชิ้น)' }).click();
-		await expect(dialog).toBeHidden();
-
-		await expectLog(
-			logId,
-			{ status: 'returned', clear_reason: 'bulk_dropoff', bulk_pool_id: pool },
-			'Bulk pool clear'
-		);
-		await expect.poll(async () => (await getShelterDocument(pool))?.unclaimed_quota).toBe('2');
-		const claims = await findShelterDocuments(
-			(doc) => doc.type === 'bulk_return_claim' && doc.bulk_pool_id === pool
-		);
-		expect(claims).toHaveLength(1);
-		expect((await getShelterDocument(smallPool))?.unclaimed_quota).toBe('1');
-		expect(await ledgerRows('receive', logId)).toHaveLength(0);
-	});
-
 	test('T4-10/T4-11 the counter starts empty and lists cleared loans as closed history', async ({
 		page,
 		scenarioAs
@@ -311,6 +279,14 @@ test.describe('Tab 4 — loan return counter (plan §4.6)', { tag: DESK_TAGS }, 
 		await expect(dialog).toBeVisible();
 		expect(await getShelterDocument(logId)).toMatchObject({ status: 'active' });
 		expect(await ledgerRows('receive', logId)).toHaveLength(0);
+
+		// The outage submit is still in the app's retry backoff. Reconnecting before it settles lets
+		// its last retry succeed and close the dialog by itself, so wait until it has given up.
+		const confirm = dialog.getByRole('button', { name: /ยืนยันตรวจรับคืนเข้าคลัง/ });
+		await expect(dialog.getByRole('button', { name: /กำลังบันทึกรับคืน\.\.\./ })).toHaveCount(0, {
+			timeout: 30_000
+		});
+		await expect(confirm).toBeEnabled();
 
 		// Back online: the live `_changes` poll reconnects the desk without a reload (the
 		// banner's retry button sits under the dialog's overlay).

@@ -12,11 +12,11 @@ from worker.couch.processor import process_change
 
 @pytest.fixture(autouse=True)
 def shelter_projected():
-    """Every shelter counts as listed in `public_shelters` unless a test says otherwise."""
+    """Every shelter counts as open in `public_shelters` unless a test says otherwise."""
     with patch(
-        "worker.couch.processor.is_shelter_projected",
+        "worker.couch.processor.projected_shelter_status",
         new_callable=AsyncMock,
-        return_value=True,
+        return_value="open",
     ) as projected:
         yield projected
 
@@ -555,7 +555,7 @@ async def test_process_registry_shelter_relisted_rescans_its_database(
 ):
     """Reverting `cancelled` (no public row yet) rebuilds the shelter DB's projections —
     its changes were skipped while it was hidden."""
-    shelter_projected.return_value = False
+    shelter_projected.return_value = None
     couch = AsyncMock()
     couch.database_exists.return_value = True
     change = {
@@ -617,7 +617,7 @@ async def test_process_change_skips_a_cancelled_shelters_database(
 ):
     """No public row (cancelled) → a shelter-DB change projects nothing, but the
     checkpoint still advances."""
-    shelter_projected.return_value = False
+    shelter_projected.return_value = None
     couch = AsyncMock()
     change = {
         "seq": 81,

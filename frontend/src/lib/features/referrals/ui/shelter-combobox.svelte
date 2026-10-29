@@ -23,6 +23,7 @@
 	} = $props();
 
 	const errorMessage = $derived(Array.isArray(error) ? error[0] : error);
+	const listboxId = $props.id();
 
 	const sheltersQuery = useSearchShelters();
 	const allShelters = $derived(sheltersQuery.data ?? []);
@@ -41,7 +42,7 @@
 	let listboxRef = $state<HTMLUListElement | null>(null);
 	let itemRefs = $state<(HTMLButtonElement | null)[]>([]);
 
-	const filteredShelters = $derived(() => {
+	const filteredShelters = $derived.by(() => {
 		if (!searchTerm.trim()) {
 			return availableShelters.slice(0, 10);
 		}
@@ -51,7 +52,7 @@
 			.slice(0, 20);
 	});
 
-	const displayValue = $derived(() => {
+	const displayValue = $derived.by(() => {
 		if (!value) return '';
 		const found = allShelters.find((s) => s.code === value);
 		return found ? `${found.name} (${found.code})` : value;
@@ -85,7 +86,7 @@
 	}
 
 	function handleKeyDown(e: KeyboardEvent) {
-		const currentList = filteredShelters();
+		const currentList = filteredShelters;
 		if (!isOpen) {
 			if (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'Enter') {
 				e.preventDefault();
@@ -150,11 +151,11 @@
 			type="text"
 			role="combobox"
 			aria-expanded={isOpen}
-			aria-controls="shelter-listbox"
+			aria-controls={listboxId}
 			aria-autocomplete="list"
 			aria-invalid={!!errorMessage || sheltersQuery.isError}
 			disabled={sheltersQuery.isPending}
-			value={isOpen ? searchTerm : displayValue()}
+			value={isOpen ? searchTerm : displayValue}
 			onfocus={() => {
 				if (!sheltersQuery.isPending) {
 					isOpen = true;
@@ -173,7 +174,7 @@
 				: sheltersQuery.isError
 					? 'เกิดข้อผิดพลาดในการโหลดรายชื่อศูนย์พักพิง'
 					: 'เลือกศูนย์พักพิงปลายทาง...'}
-			class="flex h-10 w-full rounded-md border bg-background px-3 py-2 pr-8 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50
+			class="flex h-11 w-full rounded-md border bg-background px-3 py-2 pr-12 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50 md:h-10 md:pr-8
 			{errorMessage || sheltersQuery.isError
 				? 'border-destructive focus-visible:ring-destructive'
 				: 'border-input focus-visible:ring-ring'}"
@@ -183,7 +184,7 @@
 				type="button"
 				onclick={clearSelection}
 				aria-label="ลบการเลือกศูนย์พักพิง"
-				class="absolute top-1/2 right-1 flex h-8 w-8 -translate-y-1/2 cursor-pointer items-center justify-center text-muted-foreground hover:text-foreground"
+				class="absolute top-1/2 right-0 flex h-11 w-11 -translate-y-1/2 cursor-pointer items-center justify-center text-muted-foreground hover:text-foreground md:right-1 md:h-8 md:w-8"
 			>
 				<X class="h-4 w-4" />
 			</button>
@@ -212,7 +213,7 @@
 					<button
 						type="button"
 						onclick={() => sheltersQuery.refetch()}
-						class="mt-1 inline-flex items-center gap-1.5 rounded-md bg-destructive/10 px-3 py-1.5 text-xs font-medium text-destructive transition-colors hover:bg-destructive/20 focus:outline-none"
+						class="mt-1 inline-flex min-h-11 items-center gap-1.5 rounded-md bg-destructive/10 px-3 py-1.5 text-xs font-medium text-destructive transition-colors hover:bg-destructive/20 focus:outline-none"
 					>
 						<RefreshCw class="h-3.5 w-3.5" />
 						ลองอีกครั้ง
@@ -222,18 +223,18 @@
 				<div class="p-4 text-center text-sm text-muted-foreground">
 					ไม่มีศูนย์พักพิงที่เปิดให้บริการ
 				</div>
-			{:else if filteredShelters().length === 0}
+			{:else if filteredShelters.length === 0}
 				<div class="p-4 text-center text-sm text-muted-foreground">
 					ไม่พบศูนย์พักพิงที่ตรงกับ "{searchTerm}"
 				</div>
 			{:else}
 				<ul
-					id="shelter-listbox"
+					id={listboxId}
 					role="listbox"
 					bind:this={listboxRef}
 					class="max-h-60 overflow-y-auto py-1"
 				>
-					{#each filteredShelters() as shelter, index (shelter.code)}
+					{#each filteredShelters as shelter, index (shelter.code)}
 						{@const isSelected = value === shelter.code}
 						{@const isHighlighted = highlightedIndex === index}
 						<li role="presentation">
@@ -257,7 +258,7 @@
 										{/if}
 										<span class="text-sm font-medium">{shelter.name}</span>
 									</div>
-									<span class="font-mono text-xs text-muted-foreground">({shelter.code})</span>
+									<span class="text-xs text-muted-foreground tabular-nums">({shelter.code})</span>
 								</div>
 								<div class="mt-0.5 flex items-center gap-2 pl-6 text-xs text-muted-foreground">
 									{#if shelter.province}
@@ -287,7 +288,7 @@
 			<button
 				type="button"
 				onclick={() => sheltersQuery.refetch()}
-				class="font-medium underline hover:text-destructive/80"
+				class="inline-flex min-h-11 items-center px-2 font-medium underline hover:text-destructive/80"
 			>
 				ลองอีกครั้ง
 			</button>

@@ -7,7 +7,7 @@
  *  1. One grant through the real "ออกสิทธิ์ใช้งานระบบ" dialog (`distribution_staff`): `_users`
  *     roles are compound, a retry relinks without touching the password, and the new account
  *     signs in and reaches `/onsite/distribution`.
- *  2. A table for all 11 `STAFF_CAPABILITIES`. Accounts are created directly with
+ *  2. A table for every `STAFF_CAPABILITIES` role. Accounts are created directly with
  *     `rolesFromAssignments` (the roles the dialog writes). Per role: `/portal` shows only its
  *     department, allowed URLs load, forbidden URLs bounce back to `/portal`.
  *
@@ -15,9 +15,8 @@
  * own shelter, four roles, verified identity, a required expiry within 7 days, and the account
  * shape (`role_grants`). Expiry revocation by the worker is covered by worker unit tests.
  *
- * The table records the REAL guard behaviour. Where a role description promises more than the
- * guard allows, the row lists a `gap`: the description expectation is a `test.fixme` and the
- * real behaviour stays pinned. Permissions are not changed here (a change needs a CR).
+ * The table records the REAL guard behaviour. Permissions are not changed here (a change needs
+ * a CR).
  *
  * Tags: `@volunteers` + `@critical` + `@release`. Local: `docker compose up -d`, then
  *   pnpm exec playwright test e2e/volunteer-access-roles.test.ts
@@ -51,7 +50,7 @@ const RUN_ID = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 
 test.skip(!CAN_WRITE, READ_ONLY_REASON);
 test.use({ actionTimeout: 15_000 });
 
-export interface RoleAccess {
+interface RoleAccess {
 	role: StaffCapability;
 	/** `portal-dept-<id>` sections `/portal` must show for this role, and no others. */
 	portalDepartments: string[];
@@ -61,12 +60,10 @@ export interface RoleAccess {
 	allowed: string[];
 	/** URLs of other departments (real guard behaviour). */
 	forbidden: string[];
-	/** Description promises it, the guard refuses it: fixme until the owner decides (needs a CR). */
-	gaps?: { url: string; reason: string }[];
 }
 
-/** Role to pages, one row per `STAFF_CAPABILITIES` entry; #842 adds a sidebar column here. */
-export const ROLE_ACCESS: RoleAccess[] = [
+/** Role to pages, one row per `STAFF_CAPABILITIES` entry. */
+const ROLE_ACCESS: RoleAccess[] = [
 	{
 		role: 'registration_staff',
 		portalDepartments: ['registration'],
@@ -119,6 +116,13 @@ export const ROLE_ACCESS: RoleAccess[] = [
 		forbidden: ['/back-office/volunteers', '/back-office/supply']
 	},
 	{
+		// CR-203 (#930): confined to the banner pages.
+		role: 'pr_staff',
+		portalDepartments: ['pr'],
+		allowed: ['/back-office/kiosks/banners'],
+		forbidden: ['/back-office/kiosks', '/back-office/supply']
+	},
+	{
 		role: 'facility_staff',
 		portalDepartments: ['facility'],
 		allowed: ['/onsite/zoning'],
@@ -133,6 +137,8 @@ export const ROLE_ACCESS: RoleAccess[] = [
 	{
 		role: 'security_officer',
 		portalDepartments: ['security'],
+		// `requireIncidents` admits any staff of the shelter, so this URL does not single the role
+		// out; the portal department and the bounce from supply do.
 		allowed: ['/back-office/incidents'],
 		forbidden: ['/back-office/supply']
 	}
@@ -179,8 +185,10 @@ const pathOf = (page: Page) => new URL(page.url()).pathname;
 
 async function expectLoads(page: Page, url: string): Promise<void> {
 	await page.goto(url);
-	// Guards run in the route `load`, so the URL only changes once the page has settled.
-	await page.waitForLoadState('networkidle');
+	// Guards run in the route `load` and SvelteKit renders only after every load resolves, so the
+	// protected shell's <main> means the guard has passed or redirected. Not `networkidle`: the
+	// `_changes` longpoll feeds keep the network busy for good.
+	await expect(page.locator('main').first()).toBeVisible();
 	expect.soft(pathOf(page), `${url} should load`).toBe(url);
 }
 
@@ -249,7 +257,7 @@ test.describe('Volunteer access: grant dialog', { tag: TAGS }, () => {
 		await dialog.getByRole('button', { name: 'บันทึกและออกสิทธิ์ใหม่' }).click();
 	}
 
-	test('manager grants distribution_staff, retries, and the account reaches its desk', async ({
+	test('manager grants distribution_staff, then manages it as an account, and it reaches its desk', async ({
 		browser
 	}) => {
 		const page = await openAs(browser, manager);
@@ -265,11 +273,10 @@ test.describe('Volunteer access: grant dialog', { tag: TAGS }, () => {
 		expect(created?.volunteer_id).toBe(volunteerId);
 		expect((await getDocument(SHELTER_DB, volunteerId))?.user_name).toBe(email);
 
-		await grantDistributionStaff(page);
-		await expect(
-			page.getByText(`ผูกบัญชี (${email}) แล้ว รหัสผ่านเดิมไม่เปลี่ยนแปลง`)
-		).toBeVisible();
-		await expect(couchLogin(email, PASSWORD), 'password unchanged by retry').resolves.toBeTruthy();
+		// Once linked, the card sends a manager to the user page instead of re-granting (#953);
+		// relinking an existing account without touching its password is unit-tested.
+		await expect(page.getByRole('link', { name: 'จัดการบัญชีผู้ใช้' })).toBeVisible();
+		await expect(page.getByRole('button', { name: 'ออกสิทธิ์ใช้งานระบบ' })).toHaveCount(0);
 		await page.context().close();
 
 		await seedSecurityQuestion(email);
@@ -313,14 +320,6 @@ test.describe('Volunteer access: every staff role', { tag: TAGS }, () => {
 			for (const url of row.forbidden) await expectBouncedToPortal(page, url);
 			await page.context().close();
 		});
-
-		for (const gap of row.gaps ?? []) {
-			test.fixme(`${row.role} reaches ${gap.url} (GAP: ${gap.reason})`, async ({ browser }) => {
-				const page = await openAs(browser, roleUser(row.role));
-				await expectLoads(page, gap.url);
-				await page.context().close();
-			});
-		}
 	}
 
 	test('volunteer_coordinator cannot create accounts (real behaviour)', async () => {

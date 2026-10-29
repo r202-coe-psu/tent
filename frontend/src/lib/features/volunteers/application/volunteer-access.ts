@@ -5,7 +5,7 @@ import { grantExpiryError } from '$lib/auth/role-grants';
 import {
 	COORDINATOR_GRANTABLE_CAPABILITIES,
 	STAFF_CAPABILITIES,
-	hasCapabilityInShelter,
+	compoundCapabilityRole,
 	rolesFromAssignments,
 	shelterScopeRole
 } from '$lib/auth/roles';
@@ -89,9 +89,12 @@ export async function grantVolunteerAccess(
 			existing.personnel_type !== 'volunteer' ||
 			existing.active === false ||
 			// Scope + exactly one capability, in compound or legacy flat form (issued before CR-093).
+			// Matched literally: `hasCapabilityInShelter` also passes `system_admin`.
 			existing.roles.length !== 2 ||
 			!existing.roles.includes(scope) ||
-			!hasCapabilityInShelter(existing.roles, volunteer.shelter_code, role))
+			!existing.roles.some(
+				(r) => r === compoundCapabilityRole(volunteer.shelter_code, role) || r === role
+			))
 	) {
 		throw new Error('อีเมลนี้มีบัญชีอยู่แล้วหรือสิทธิ์ไม่ตรงกัน กรุณาจัดการผ่านหน้าผู้ใช้งาน');
 	}

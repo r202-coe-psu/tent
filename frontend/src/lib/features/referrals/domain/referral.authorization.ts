@@ -25,7 +25,8 @@ export function isOutgoingCapacityReferral(referral: Referral, actorShelter: str
 
 /**
  * Capacity referral targeting `actorShelter` (incoming inbox).
- * Mirrored copies keep source `shelter_code` but live in the destination DB.
+ * The referral is stored once in `central_ops`; the incoming side is identified by
+ * `to_shelter_code`, while `shelter_code` keeps the source shelter.
  */
 export function isIncomingCapacityReferral(referral: Referral, actorShelter: string): boolean {
 	return (
@@ -38,7 +39,8 @@ export function isIncomingCapacityReferral(referral: Referral, actorShelter: str
 
 /**
  * Whether the actor's shelter may perform `to` on this referral.
- * Capacity accept/reject → destination only (DoD). Capacity send/close (incl. cancel draft) → source.
+ * Capacity accept/reject → destination only (DoD). Capacity send/close (incl. cancel draft and
+ * withdraw `sent → closed`, CR-167) → source only; a destination actor gets a 403 on `closed`.
  * Medical/resource respond → source (external org is out-of-band for R3).
  */
 export function assertActorMayTransition(

@@ -13,7 +13,7 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { computeNeeds, pickCampaignForItems } from './compute-needs';
-import { deriveNeedAvailability } from '$lib/features/operations';
+import { deriveNeedAvailability, needCloseState } from '$lib/features/operations';
 import type {
 	Donation,
 	DonationCampaign,
@@ -25,7 +25,7 @@ type Case = {
 	name: string;
 	why: string;
 	campaigns: { _id: string; needs: CampaignNeed[] }[];
-	donations: { _id: string; campaign_id: string; status: string; items: unknown[] }[];
+	donations: { _id: string; campaign_id: string | null; status: string; items: unknown[] }[];
 	stock_ledgers: { item_id: string; qty: string; reason: string; ref_id: string | null }[];
 	expected_remaining: Record<string, number>;
 	expected_per_campaign: Record<string, Record<string, number>>;
@@ -93,12 +93,9 @@ describe('T-22 remaining-need parity', () => {
 
 		it('matches the back-office board, which is the reference for this rule', () => {
 			// deriveNeedAvailability got the warehouse term first (CR-034); the donation
-			// side is the copy that fell behind. Compare what each side would actually
-			// offer a donor, not the raw fields: the back-office keeps qty_remaining at
-			// face value and carries a separate is_cut_off flag (openNeeds drops those
-			// rows), while this side folds the cut-off into a zero. Same answer, different
-			// shape. Ours clamps for the comparison since negatives never reach a donor.
-			// Cases stay in the common domain — see the fixtures README.
+			// side is the copy that fell behind. Both sides report a closed need as 0
+			// remaining (#689). Ours clamps for the comparison since negatives never
+			// reach a donor.
 			const campaigns = asCampaigns(testCase);
 			const donations = asDonations(testCase);
 			const ledgers = asLedgers(testCase);
@@ -107,7 +104,7 @@ describe('T-22 remaining-need parity', () => {
 			for (const campaign of campaigns) {
 				for (const availability of deriveNeedAvailability(campaign, donations, ledgers)) {
 					const ours = Number(campaignRemaining.get(campaign._id)?.get(availability.item_id));
-					const theirs = availability.is_cut_off ? 0 : Number(availability.qty_remaining);
+					const theirs = Number(availability.qty_remaining);
 					expect(Math.max(0, ours)).toBe(theirs);
 				}
 			}
@@ -183,5 +180,83 @@ describe('T-22 invariant — what is advertised has to be bookable', () => {
 		expect(pickCampaignForItems(campaignRemaining, [{ item_id: 'item:rice', qty: '540' }])).toEqual(
 			{ ok: false, itemId: 'item:rice' }
 		);
+	});
+});
+
+describe('with one campaign per item, a need the board shows as "ครบถ้วน" is one the public side drops', () => {
+	/**
+	 * The back-office badge reads `needCloseState`; the public projection drops a need whose
+	 * remaining is ≤ 0. For an open need in an open campaign the two have to agree, or the
+	 * board says "reached" while donors can still book it (or the reverse). Donations carry
+	 * a campaign_id and item_id — the domain both sides count the same way.
+	 *
+	 * Only for ONE campaign per item: the public side sums each campaign's remaining without
+	 * clamping, so a reached campaign's negative remaining can cancel another campaign's
+	 * shortfall and drop the item while that row is still `open`. Clamping is a separate fix
+	 * (TS, Python and needs-fixtures together).
+	 */
+	const fixture = (owed: string, needStatus: 'open' | 'closed' = 'open'): Case => ({
+		name: `owed ${owed}`,
+		why: '',
+		campaigns: [
+			{
+				_id: 'c1',
+				needs: [
+					{ item_id: 'item:rice', qty_target: '100', unit: 'kg', status: needStatus }
+				] as CampaignNeed[]
+			}
+		],
+		donations: [
+			{
+				_id: 'donation:1',
+				campaign_id: 'c1',
+				status: 'declared',
+				items: [{ item_id: 'item:rice', qty: owed }]
+			}
+		],
+		stock_ledgers: [{ item_id: 'item:rice', qty: '60', reason: 'donation', ref_id: null }],
+		expected_remaining: {},
+		expected_per_campaign: {}
+	});
+
+	it.each([
+		['40', 'reached'],
+		['30', 'open'],
+		['50', 'reached']
+	] as const)('A15 — on-hand 60 + owed %s against 100 is %s on both sides', (owed, expected) => {
+		const testCase = fixture(owed);
+		const campaigns = asCampaigns(testCase);
+		const donations = asDonations(testCase);
+		const ledgers = asLedgers(testCase);
+		const [availability] = deriveNeedAvailability(campaigns[0], donations, ledgers);
+		const state = needCloseState(
+			availability.qty_target,
+			availability.qty_on_hand,
+			availability.qty_reserved,
+			availability.status,
+			campaigns[0].status
+		);
+		const publicRemaining = Number(
+			computeNeeds(campaigns, donations, ledgers).campaignRemaining.get('c1')?.get('item:rice')
+		);
+
+		expect(state).toBe(expected);
+		expect(availability.close_state).toBe(expected);
+		expect(state === 'reached').toBe(publicRemaining <= 0);
+	});
+
+	it('a closed need with stock past the target stays closed, and the public side gives it 0', () => {
+		const testCase = fixture('90', 'closed');
+		const campaigns = asCampaigns(testCase);
+		const donations = asDonations(testCase);
+		const ledgers = asLedgers(testCase);
+		const [availability] = deriveNeedAvailability(campaigns[0], donations, ledgers);
+
+		expect(availability.close_state).toBe('closed');
+		expect(
+			Number(
+				computeNeeds(campaigns, donations, ledgers).campaignRemaining.get('c1')?.get('item:rice')
+			)
+		).toBe(0);
 	});
 });
