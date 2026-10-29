@@ -76,6 +76,10 @@
 	const services = useMealServices();
 	const serviceReceipts = useMealServiceReceipts();
 	const tickets = useTickets();
+	// Cached tickets from another kitchen page may predate an edit made elsewhere; only data
+	// fetched after this page mounted is trusted to decide prefill and whether a plan has a ticket.
+	const mountedAt = Date.now();
+	const ticketsFresh = $derived(tickets.dataUpdatedAt >= mountedAt);
 	const recipes = useRecipes(() => getShelterCode());
 	const itemMasters = useItemMasters(() => getShelterCode());
 	const unitsQuery = useUnitsOfMeasure();
@@ -235,10 +239,10 @@
 	// Pre-fill form when activePlan changes
 	let lastLoadedPlanId = $state<string | null>(null);
 
-	// Waits for tickets: prefilling from the recipe first would let "บันทึกการแก้ไข"
-	// overwrite the ticket's saved requested_qty.
+	// Waits for fresh tickets: prefilling from the recipe or a stale ticket first would let
+	// "บันทึกการแก้ไข" overwrite the ticket's saved requested_qty.
 	$effect(() => {
-		if (activePlan && tickets.isSuccess && activePlan._id !== lastLoadedPlanId) {
+		if (activePlan && ticketsFresh && activePlan._id !== lastLoadedPlanId) {
 			lastLoadedPlanId = activePlan._id;
 			menuLabel = activePlan.label ?? '';
 			allocatedTarget = activePlan.allocated_target ?? activePlan.headcount?.total ?? 50;
@@ -1170,8 +1174,8 @@
 			</Card.Root>
 		</div>
 
-		{#if tickets.isError}
-			<!-- Without tickets we can't tell whether this plan already has one, so creating is unsafe. -->
+		{#if tickets.isError && !ticketsFresh}
+			<!-- Without tickets we can't tell whether this meal already has one, and creating would open a second plan and ticket for it. -->
 			<div
 				class="flex items-center justify-between gap-3 rounded-xl border border-red-200 bg-red-50 p-4 text-red-900"
 			>
@@ -1186,7 +1190,7 @@
 				<Button
 					class="w-full gap-2 font-semibold shadow-sm"
 					onclick={handleCreateRequisition}
-					disabled={!tickets.isSuccess ||
+					disabled={!ticketsFresh ||
 						createMealPlanMutation.isPending ||
 						createTicketMutation.isPending}
 				>

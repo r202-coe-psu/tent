@@ -28,6 +28,7 @@ import {
 	createCouchUser,
 	deleteCouchUser,
 	deleteDocument,
+	getDocument,
 	putDocument,
 	routeBrowserCouchThroughApp,
 	seedSecurityQuestion,
@@ -346,6 +347,36 @@ test.describe(
 			await expect(page.getByText('โหลดข้อมูลใบเบิกไม่สำเร็จ')).toBeVisible({ timeout: 30_000 });
 			await expect(page.getByRole('button', { name: 'ลองใหม่' })).toBeVisible();
 			await expect(page.getByRole('button', { name: 'สร้างใบเบิกวัตถุดิบ' })).toHaveCount(0);
+		});
+
+		test('reopening with a stale tickets cache waits for the fresh ticket', async ({ browser }) => {
+			const ticket = await createTicketWithEditedQty(browser);
+			const { page, bom } = await reopenPlan(
+				browser,
+				String(ticket.meal_plan_id),
+				async (route) => {
+					await new Promise((resolve) => setTimeout(resolve, 2_000));
+					await route.fallback();
+				}
+			);
+			await expect(qtyInput(bom, EIGHTH)).toHaveValue('0.1875', { timeout: 15_000 });
+
+			const saved = (await getDocument(SHELTER_DB, ticket._id))!;
+			const items = (saved.items as { requested_qty: string }[]).map((it) =>
+				it.requested_qty === '0.1875' ? { ...it, requested_qty: '0.25' } : it
+			);
+			await putDocument(SHELTER_DB, { ...saved, items });
+
+			await page.evaluate(() => Object.assign(window, { __sameDocument: true }));
+			await page.locator('a[href="/back-office/kitchen"]').first().click();
+			await expect(page).toHaveURL(/\/back-office\/kitchen$/);
+			await page.goBack();
+			expect(
+				await page.evaluate(() => '__sameDocument' in window),
+				'the board remounted client-side, so the tickets cache survived'
+			).toBe(true);
+
+			await expect(qtyInput(bom, EIGHTH)).toHaveValue('0.25', { timeout: 15_000 });
 		});
 	}
 );
