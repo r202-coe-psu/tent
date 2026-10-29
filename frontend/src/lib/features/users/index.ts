@@ -13,6 +13,15 @@ export {
 	type ForgotPasswordVerifyInput
 } from './domain/schema';
 export {
+	STAFF_TOKEN_RANDOM_BYTES,
+	formatStaffToken,
+	isValidStaffTokenHash,
+	staffCardPayloadFromHash,
+	parseStaffCardPayload,
+	staffRecipientId,
+	userNameFromStaffRecipientId
+} from './domain/staff-card';
+export {
 	listUsers,
 	createUser,
 	deleteUser,
