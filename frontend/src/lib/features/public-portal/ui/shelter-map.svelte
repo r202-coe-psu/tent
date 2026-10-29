@@ -13,7 +13,13 @@
 	import type { PublicSiteKind } from '../domain/types';
 	import type { DonationMapPoint } from '../domain/donation-map';
 	import { shelterTypeLabel, toLabelMap } from '../domain/master-labels';
-	import { useShelterTypeLabelMap } from '../application/queries';
+	import { useShelterTypeLabelMap, useSiteKinds } from '../application/queries';
+	import {
+		HOST_HOUSE_SITE_KIND,
+		isHostHouseKind,
+		shelterPinKind,
+		siteKindLabel
+	} from '../domain/site-kind';
 	import { DEFAULT_MAP_STYLE, DEFAULT_MAP_CENTER, DEFAULT_MAP_ZOOM } from '$lib/constants/maps';
 	import { Button } from '$lib/components/ui/button';
 	import { langState } from '$lib/states/i18n.svelte';
@@ -102,6 +108,8 @@
 
 	const shelterTypeLabelsQuery = useShelterTypeLabelMap();
 	const shelterTypeLabels = $derived(toLabelMap(shelterTypeLabelsQuery.data, langState.current));
+	const siteKindsQuery = useSiteKinds();
+	const shelterPinLegendKind = $derived(shelterPinKind(siteKindsQuery.data));
 
 	const SEARCH_RADIUS_SOURCE = 'search-radius';
 	const SEARCH_RADIUS_FILL = 'search-radius-fill';
@@ -234,7 +242,7 @@
 	}
 
 	function getSiteKindText(siteKind: PublicSiteKind | undefined): string {
-		return siteKind === 'host_house' ? t.hostHouse : t.evacCenter;
+		return siteKindLabel(siteKind, siteKindsQuery.data, langState.current);
 	}
 
 	/** Classic teardrop pin — building/tent glyph in the head. Tip at bottom. */
@@ -277,7 +285,7 @@
 	}
 
 	function getShelterPinSvg(siteKind: PublicSiteKind | undefined, fill: string): string {
-		return siteKind === 'host_house' ? hostHousePinSvg(fill) : evacCenterPinSvg(fill);
+		return isHostHouseKind(siteKind) ? hostHousePinSvg(fill) : evacCenterPinSvg(fill);
 	}
 
 	function translateAdminType(type: string): string {
@@ -399,6 +407,7 @@
 		// Re-render popups when master-data labels arrive.
 		void shelterTypeLabelsQuery.data;
 		void shelterTypeLabels;
+		void siteKindsQuery.data;
 
 		closeActivePopup();
 		// Clear old markers
@@ -758,7 +767,9 @@
 						stroke-linejoin="round"
 					/>
 				</svg>
-				<span class="text-muted-foreground">{t.evacCenter}</span>
+				<span class="text-muted-foreground"
+					>{shelterPinLegendKind ? getSiteKindText(shelterPinLegendKind) : t.otherSiteKinds}</span
+				>
 			</div>
 			<div class="flex items-center gap-1.5">
 				<svg
@@ -785,7 +796,7 @@
 						stroke-linejoin="round"
 					/>
 				</svg>
-				<span class="text-muted-foreground">{t.hostHouse}</span>
+				<span class="text-muted-foreground">{getSiteKindText(HOST_HOUSE_SITE_KIND)}</span>
 			</div>
 		</div>
 		<div class="h-4 w-px bg-border"></div>

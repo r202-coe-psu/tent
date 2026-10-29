@@ -1,14 +1,22 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { requireShelterScopeOrSA, requireSystemAdmin, serviceError } from '$lib/server/couch-admin';
+import {
+	requireShelterScopeOrSA,
+	requireSystemAdmin,
+	ServiceError,
+	serviceError
+} from '$lib/server/couch-admin';
 import {
 	createShelterSchema,
 	EMPTY_ADMISSION_POLICY,
 	EMPTY_LUGGAGE_POLICY,
 	EMPTY_PARKING_POLICY,
 	DEFAULT_SHELTER_FEATURE_FLAGS,
+	DEFAULT_SITE_KIND,
+	validateSiteKindChange,
 	type ShelterMaster
 } from '$lib/features/shelters/server';
+import { readMasterDoc } from '$lib/server/master-data-server';
 import { migrate, listShelterMasters } from '$lib/server/shelters.admin';
 import { shelterDbName } from '$lib/server/shelter-access-design';
 import { provisionShelter } from '$lib/features/shelters/server/provisioner';
@@ -23,7 +31,13 @@ export const POST: RequestHandler = async ({ request }) => {
 	await requireSystemAdmin(request.headers.get('cookie'));
 	try {
 		const body = (await request.json().catch(() => ({}))) as unknown;
-		return json(await provisionShelter(createShelterSchema.parse(body)));
+		const input = createShelterSchema.parse(body);
+		const siteKindError = validateSiteKindChange(
+			input.site_kind,
+			(await readMasterDoc('site_kind'))?.items ?? []
+		);
+		if (siteKindError) throw new ServiceError('VALIDATION', siteKindError);
+		return json(await provisionShelter(input));
 	} catch (e) {
 		return serviceError(e);
 	}
@@ -41,7 +55,7 @@ export const GET: RequestHandler = async ({ request }) => {
 				return {
 					code: migrated.code,
 					name: migrated.name,
-					site_kind: migrated.site_kind ?? 'evacuation_center',
+					site_kind: migrated.site_kind ?? DEFAULT_SITE_KIND,
 					db: shelterDbName(migrated.code),
 					operation_status: migrated.operation_status ?? 'standby',
 					capacity: migrated.capacity ?? 0,
