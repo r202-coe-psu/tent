@@ -49,7 +49,10 @@ export const distributionKeys = {
 		[...distributionKeys.bulkPoolsV3All(shelterCode), 'closed_loan_refs'] as const,
 	bulkPoolClosedLoanRefs: (shelterCode: string, poolId: string) =>
 		[...distributionKeys.bulkPoolClosedLoanRefsAll(shelterCode), poolId] as const,
-	/** Planned-but-unapplied refs of a closed pool's entries (nested under bulkPoolsV3All like the closed one). */
+	/**
+	 * Planned-but-unapplied refs of a closed pool's snapshot entries or an OPEN pool's live entries
+	 * (nested under bulkPoolsV3All like the closed one).
+	 */
 	bulkPoolMissedLoanRefsAll: (shelterCode: string) =>
 		[...distributionKeys.bulkPoolsV3All(shelterCode), 'missed_loan_refs'] as const,
 	bulkPoolMissedLoanRefs: (shelterCode: string, poolId: string) =>
