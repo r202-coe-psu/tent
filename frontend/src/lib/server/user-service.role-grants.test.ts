@@ -300,6 +300,32 @@ describe('coordinator role grants on _users (#955)', () => {
 		).rejects.toMatchObject({ code: 'CONFLICT' });
 	});
 
+	it('answers CONFLICT, not a 500, when the account changed between read and write', async () => {
+		seed(EMAIL, { roles: ['shelter:SH001', 'SH001:kitchen_staff'], role_grants: [grant()] });
+		const put = vi.mocked(couchAdmin.adminRaw);
+		const impl = put.getMockImplementation()!;
+		put.mockImplementation(async (path, method, body) =>
+			method === 'PUT' && String(path).startsWith('/_users/')
+				? { status: 409, data: { error: 'conflict' } }
+				: impl(path, method, body)
+		);
+		await expect(
+			grantCoordinatorRole(
+				input(grant('kitchen_staff', { expires_at: '2026-11-01T16:59:59.999Z' }))
+			)
+		).rejects.toMatchObject({ code: 'CONFLICT' });
+		await expect(
+			revokeCoordinatorGrant({
+				name: EMAIL,
+				volunteer_id: 'volunteer:V1',
+				shelter_code: 'SH001',
+				role: 'kitchen_staff',
+				actor: 'staff03'
+			})
+		).rejects.toMatchObject({ code: 'CONFLICT' });
+		expect(written).toEqual([]);
+	});
+
 	it('never grants a role outside the coordinator list', async () => {
 		await expect(grantCoordinatorRole(input(grant('medical_staff')))).rejects.toMatchObject({
 			code: 'FORBIDDEN'

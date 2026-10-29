@@ -450,6 +450,18 @@ export async function createOrMergeUser(
 }
 
 /**
+ * A grant or revoke is a read-modify-write on the `_rev` it read: a 409 means the account changed
+ * meanwhile (another coordinator, or the worker sweep). Nothing was written, so answer CONFLICT
+ * ("try again") rather than an opaque 500.
+ */
+function assertGrantWritten(action: string, res: { status: number; data: unknown }): void {
+	if (res.status === 409) {
+		throw new ServiceError('CONFLICT', 'ข้อมูลบัญชีเพิ่งถูกเปลี่ยนโดยผู้อื่น กรุณาลองอีกครั้ง');
+	}
+	if (res.status >= 400) throw serviceErrorFromCouch(action, res.status, res.data);
+}
+
+/**
  * An existing account a coordinator may extend (draft-coordinator-limited-access-grant FR-7):
  * the volunteer's own active volunteer account, never a system admin, a shelter manager or a
  * coordinator in any shelter, and never the caller's own account. 403 and no write otherwise.
@@ -572,7 +584,7 @@ export async function grantCoordinatorRole(input: {
 		shelter_id: shelterCodeFromRoles(nextRoles),
 		role_grants
 	});
-	if (res.status >= 400) throw serviceErrorFromCouch('grant volunteer role', res.status, res.data);
+	assertGrantWritten('grant volunteer role', res);
 	await recordRoleGrantAudit({
 		shelter_code: code,
 		user_name: name,
@@ -620,7 +632,7 @@ export async function revokeCoordinatorGrant(input: {
 		role_grants: next.role_grants,
 		shelter_id: shelterCodeFromRoles(next.roles)
 	});
-	if (res.status >= 400) throw serviceErrorFromCouch('revoke volunteer role', res.status, res.data);
+	assertGrantWritten('revoke volunteer role', res);
 	await recordRoleGrantAudit({
 		shelter_code: code,
 		user_name: name,
