@@ -710,13 +710,17 @@ export async function deleteUser(name: string, caller: Caller): Promise<void> {
 		}
 		const remaining = mergeShelterAssignment(doc.roles ?? [], code, []);
 		if (remaining.length > 0) {
+			// The shelter's grants go with its roles, or a later permanent re-grant would expire.
+			const roleGrants = pruneRoleGrants(doc.role_grants, remaining);
 			const updatedDoc = {
 				...doc,
+				...(doc.role_grants !== undefined ? { role_grants: roleGrants } : {}),
 				roles: remaining,
 				shelter_id: shelterCodeFromRoles(remaining)
 			};
 			const res = await adminRaw(`/_users/${userDocId(name)}`, 'PUT', updatedDoc);
 			if (res.status >= 400) throw serviceErrorFromCouch('delete user', res.status, res.data);
+			await auditDroppedGrants(name, doc.role_grants, roleGrants, remaining, [], caller.name);
 			return;
 		}
 	} else {
@@ -799,8 +803,13 @@ export async function updateUser(
 			throw new ServiceError('FORBIDDEN', 'A manager may only change grants in their own shelter');
 		}
 	}
-	// A grant lives only as long as its role: keep it when a save keeps the role (#955).
-	const roleGrants = pruneRoleGrants(doc.role_grants, nextRoles ?? doc.roles ?? [], permanentRoles);
+	// A grant lives only as long as its role: keep it when a save keeps the role (#955). A grant
+	// whose role was already gone is stale; a manager re-adding that role gives it for good (FR-9).
+	const roleGrants = pruneRoleGrants(
+		pruneRoleGrants(doc.role_grants, doc.roles ?? []),
+		nextRoles ?? doc.roles ?? [],
+		permanentRoles
+	);
 
 	const updatedDoc = {
 		...doc,
@@ -832,10 +841,27 @@ export async function updateUser(
 	const res = await adminRaw(`/_users/${userDocId(name)}`, 'PUT', updatedDoc);
 	if (res.status >= 400) throw serviceErrorFromCouch('update user', res.status, res.data);
 
-	// Every grant this save dropped is audited: made permanent on purpose, or revoked with its role.
-	const finalRoles = nextRoles ?? doc.roles ?? [];
-	for (const dropped of (doc.role_grants ?? []).filter(
-		(g) => grantFor(roleGrants, g.shelter_code, g.role) === null
+	await auditDroppedGrants(
+		name,
+		doc.role_grants,
+		roleGrants,
+		nextRoles ?? doc.roles ?? [],
+		permanentRoles,
+		caller.name
+	);
+}
+
+/** Audit every grant a manager save dropped: made permanent on purpose, or revoked with its role. */
+async function auditDroppedGrants(
+	name: string,
+	before: readonly RoleGrant[] | undefined,
+	after: readonly RoleGrant[],
+	finalRoles: readonly string[],
+	permanentRoles: readonly string[],
+	actor: string
+): Promise<void> {
+	for (const dropped of (before ?? []).filter(
+		(g) => grantFor(after, g.shelter_code, g.role) === null
 	)) {
 		const compound = compoundCapabilityRole(dropped.shelter_code, dropped.role);
 		await recordRoleGrantAudit({
@@ -847,7 +873,7 @@ export async function updateUser(
 					: 'role_grant.revoked',
 			role: dropped.role,
 			expires_at: dropped.expires_at,
-			actor: caller.name
+			actor
 		});
 	}
 }

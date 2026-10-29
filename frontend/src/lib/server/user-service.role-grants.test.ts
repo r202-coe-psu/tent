@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as couchAdmin from './couch-admin';
 import {
+	deleteUser,
 	grantCoordinatorRole,
 	readVolunteerGrants,
 	revokeCoordinatorGrant,
@@ -309,6 +310,28 @@ describe('coordinator role grants on _users (#955)', () => {
 			expect(audits()).toMatchObject([
 				{ reason: 'role_grant.revoked', context: { role: 'kitchen_staff', actor: 'sm01' } }
 			]);
+		});
+
+		it('leaves no grant behind when the manager removes the user from the shelter', async () => {
+			const other = grant('kitchen_staff', { shelter_code: 'SH002' });
+			seed(EMAIL, {
+				roles: [...granted, 'shelter:SH002', 'SH002:kitchen_staff'],
+				role_grants: [grant(), grant('facility_staff'), other]
+			});
+			await deleteUser(EMAIL, sm);
+			expect(db[key(EMAIL)].roles).toEqual(['shelter:SH002', 'SH002:kitchen_staff']);
+			expect(db[key(EMAIL)].role_grants).toEqual([other]);
+			expect(audits()).toMatchObject([
+				{ reason: 'role_grant.revoked', context: { role: 'kitchen_staff' } },
+				{ reason: 'role_grant.revoked', context: { role: 'facility_staff' } }
+			]);
+		});
+
+		it('gives a role for good when a manager re-adds one whose grant was left stale', async () => {
+			seed(EMAIL, { roles: ['shelter:SH001', 'SH001:facility_staff'], role_grants: [grant()] });
+			await updateUser(EMAIL, { roles: granted }, sm);
+			expect(db[key(EMAIL)].roles).toEqual(granted);
+			expect(db[key(EMAIL)].role_grants).toEqual([]);
 		});
 
 		it('makes a role permanent: grant removed, role kept, audited', async () => {
