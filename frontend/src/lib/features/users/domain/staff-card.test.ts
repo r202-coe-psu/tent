@@ -4,6 +4,7 @@ import {
 	isValidStaffTokenHash,
 	parseStaffCardPayload,
 	staffCardPayloadFromHash,
+	staffCardRoleLabel,
 	staffRecipientId,
 	userNameFromStaffRecipientId
 } from './staff-card';
@@ -86,5 +87,52 @@ describe('staffRecipientId', () => {
 		expect(userNameFromStaffRecipientId('evacuee:01HZXEVAC')).toBeNull();
 		expect(userNameFromStaffRecipientId('somchai')).toBeNull();
 		expect(userNameFromStaffRecipientId('user:')).toBeNull();
+	});
+});
+
+describe('staffCardRoleLabel', () => {
+	it('labels a system admin as central admin whatever the shelter', () => {
+		expect(staffCardRoleLabel(['system_admin'], null)).toBe('ผู้ดูแลระบบส่วนกลาง');
+		expect(staffCardRoleLabel(['system_admin', 'shelter:SH001'], 'SH001')).toBe(
+			'ผู้ดูแลระบบส่วนกลาง'
+		);
+	});
+
+	it('lists the compound capabilities held in the given shelter, joined with a middle dot', () => {
+		const roles = [
+			'shelter:SH001',
+			'SH001:kitchen_staff',
+			'SH001:registration_staff',
+			'shelter:SH002',
+			'SH002:medical_staff'
+		];
+		expect(staffCardRoleLabel(roles, 'SH001')).toBe('เจ้าหน้าที่ลงทะเบียน · เจ้าหน้าที่ครัว');
+		expect(staffCardRoleLabel(roles, 'SH002')).toBe('เจ้าหน้าที่การแพทย์และพยาบาล');
+	});
+
+	it('puts the shelter manager label first', () => {
+		const roles = ['shelter:SH001', 'SH001:kitchen_staff', 'SH001:shelter_manager'];
+		expect(staffCardRoleLabel(roles, 'SH001')).toBe('ผู้จัดการศูนย์ · เจ้าหน้าที่ครัว');
+	});
+
+	it('counts a legacy bare capability only when the user has exactly one shelter', () => {
+		expect(staffCardRoleLabel(['shelter:SH001', 'security_officer'], 'SH001')).toBe(
+			'เจ้าหน้าที่รักษาความปลอดภัย'
+		);
+		expect(
+			staffCardRoleLabel(['shelter:SH001', 'shelter:SH002', 'security_officer'], 'SH001')
+		).toBe('เจ้าหน้าที่');
+	});
+
+	it('falls back to generic staff when no capability applies to the shelter', () => {
+		expect(staffCardRoleLabel(['shelter:SH001', 'SH001:kitchen_staff'], 'SH009')).toBe(
+			'เจ้าหน้าที่'
+		);
+		expect(staffCardRoleLabel(['shelter:SH001', 'SH001:kitchen_staff'], null)).toBe('เจ้าหน้าที่');
+		expect(staffCardRoleLabel([], null)).toBe('เจ้าหน้าที่');
+	});
+
+	it('ignores a compound capability for a shelter the user has no scope in', () => {
+		expect(staffCardRoleLabel(['SH001:kitchen_staff'], 'SH001')).toBe('เจ้าหน้าที่');
 	});
 });

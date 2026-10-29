@@ -11,6 +11,8 @@ const RESET_PASSWORD_ENDPOINT = '/api/v1/users/reset-password';
 const FORGOT_PASSWORD_ENDPOINT = '/api/v1/auth/forgot-password';
 const FORCE_SETUP_ENDPOINT = '/api/v1/auth/force-setup';
 const STAFF_CARD_RESOLVE_ENDPOINT = '/api/v1/users/staff-card/resolve';
+const STAFF_CARD_ENDPOINT = '/api/v1/users/staff-card';
+const STAFF_CARD_ROTATE_ENDPOINT = '/api/v1/users/staff-card/rotate';
 
 export interface UserSummary {
 	name: string;
@@ -81,6 +83,25 @@ export function resolveStaffCard(
 	return serviceFetch<ResolvedCardRecipient>(STAFF_CARD_RESOLVE_ENDPOINT, {
 		method: 'POST',
 		body: JSON.stringify({ payload, shelter_code: shelterCode })
+	});
+}
+
+export interface StaffCardForPrint {
+	name: string;
+	display_name: string;
+	position: string | null;
+	roles: string[];
+	payload: string;
+}
+
+export function getStaffCard(name: string): Promise<StaffCardForPrint> {
+	return serviceFetch<StaffCardForPrint>(`${STAFF_CARD_ENDPOINT}?name=${encodeURIComponent(name)}`);
+}
+
+export function rotateStaffCard(name: string): Promise<StaffCardForPrint> {
+	return serviceFetch<StaffCardForPrint>(STAFF_CARD_ROTATE_ENDPOINT, {
+		method: 'POST',
+		body: JSON.stringify({ name })
 	});
 }
 

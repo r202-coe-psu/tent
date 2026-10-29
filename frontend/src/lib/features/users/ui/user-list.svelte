@@ -5,6 +5,7 @@
 	import Settings2 from '@lucide/svelte/icons/settings-2';
 	import Trash2 from '@lucide/svelte/icons/trash-2';
 	import KeyRound from '@lucide/svelte/icons/key-round';
+	import IdCard from '@lucide/svelte/icons/id-card';
 	import Building from '@lucide/svelte/icons/building';
 	import Users from '@lucide/svelte/icons/users';
 	import ShieldCheck from '@lucide/svelte/icons/shield-check';
@@ -19,6 +20,7 @@
 		editHref,
 		ondelete,
 		onresetpassword,
+		onstaffcard,
 		onunlinkmfa,
 		pending = false
 	}: {
@@ -27,6 +29,7 @@
 		editHref: (user: UserSummary) => string;
 		ondelete: (name: string) => void;
 		onresetpassword?: (user: UserSummary) => void;
+		onstaffcard?: (user: UserSummary) => void;
 		onunlinkmfa?: (user: UserSummary, provider?: 'google' | 'thaid') => void;
 		pending?: boolean;
 	} = $props();
@@ -149,6 +152,16 @@
 							onclick={() => onresetpassword(user)}
 						>
 							<KeyRound class="mr-1.5 h-4 w-4 text-amber-700" /> รีเซ็ตรหัส
+						</Button>
+					{/if}
+					{#if onstaffcard && !user.volunteer_id}
+						<Button
+							variant="outline"
+							class="min-h-11 flex-1 border-slate-300 text-slate-800 sm:flex-none"
+							disabled={!canEdit}
+							onclick={() => onstaffcard(user)}
+						>
+							<IdCard class="mr-1.5 h-4 w-4 text-[#0A2647]" /> บัตรเจ้าหน้าที่
 						</Button>
 					{/if}
 					<Button
@@ -312,6 +325,18 @@
 										title="รีเซ็ตรหัสผ่านชั่วคราว"
 									>
 										<KeyRound class="mr-1 h-3.5 w-3.5 text-amber-700" /> รีเซ็ตรหัส
+									</Button>
+								{/if}
+								{#if onstaffcard && !user.volunteer_id}
+									<Button
+										variant="outline"
+										size="sm"
+										class="min-h-11 border-slate-300 px-2.5 text-xs text-slate-800"
+										disabled={!canEdit}
+										onclick={() => onstaffcard(user)}
+										title="เปิดบัตรเจ้าหน้าที่"
+									>
+										<IdCard class="mr-1 h-3.5 w-3.5 text-[#0A2647]" /> บัตรเจ้าหน้าที่
 									</Button>
 								{/if}
 								<Button

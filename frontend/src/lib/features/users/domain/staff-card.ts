@@ -1,3 +1,11 @@
+import {
+	SHELTER_CAPABILITIES,
+	SHELTER_MANAGER,
+	capabilitiesForShelter,
+	hasShelterScope,
+	isSystemAdmin,
+	roleDisplayLabel
+} from '$lib/auth/roles';
 import { extractScanCode } from '$lib/utils/scan-code';
 
 export const STAFF_TOKEN_PREFIX = 'TKT-STF-';
@@ -39,4 +47,18 @@ export function staffRecipientId(name: string): string {
 export function userNameFromStaffRecipientId(id: string): string | null {
 	if (!id.startsWith(STAFF_RECIPIENT_PREFIX)) return null;
 	return id.slice(STAFF_RECIPIENT_PREFIX.length) || null;
+}
+
+const CENTRAL_ADMIN_LABEL = 'ผู้ดูแลระบบส่วนกลาง';
+const GENERIC_STAFF_LABEL = 'เจ้าหน้าที่';
+
+export function staffCardRoleLabel(roles: readonly string[], shelterCode: string | null): string {
+	if (isSystemAdmin(roles)) return CENTRAL_ADMIN_LABEL;
+	if (!shelterCode || !hasShelterScope(roles, shelterCode)) return GENERIC_STAFF_LABEL;
+	const held = new Set<string>(capabilitiesForShelter(roles, shelterCode));
+	const ordered = [
+		...(held.has(SHELTER_MANAGER) ? [SHELTER_MANAGER] : []),
+		...SHELTER_CAPABILITIES.filter((cap) => cap !== SHELTER_MANAGER && held.has(cap))
+	];
+	return ordered.length > 0 ? ordered.map(roleDisplayLabel).join(' · ') : GENERIC_STAFF_LABEL;
 }
