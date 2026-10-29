@@ -20,6 +20,8 @@
 		selectableCookingIngredients,
 		TARGET_GROUP_LABELS,
 		MEAL_PERIOD_LABELS,
+		SaveAsRecipeFields,
+		emptySaveAsRecipeDraft,
 		type TargetGroupTag
 	} from '$lib/features/kitchen';
 	import {
@@ -208,6 +210,7 @@
 
 	function setRecipeMode(mode: 'bom' | 'custom') {
 		recipeMode = mode;
+		if (mode === 'bom') resetRecipeDraft();
 		if (mode === 'custom' && selectedRecipeId) {
 			selectedRecipeId = '';
 			isIngredientsManuallyEdited = false;
@@ -217,16 +220,14 @@
 	let menuLabel = $state('');
 	let allocatedTarget = $state(50);
 	// #802: save the hand-built ingredient list as a catalog recipe (custom mode, new batch only).
-	let saveAsRecipe = $state(false);
-	let newRecipeName = $state('');
-	let newRecipePortions = $state<number | null>(null);
+	let recipeDraft = $state(emptySaveAsRecipeDraft());
+	// Survives a failed plan/ticket attempt so the retry links the recipe already saved.
+	let savedRecipeId = $state<string | null>(null);
+	const canSaveAsRecipe = $derived(recipeMode === 'custom' && !activePlan);
 
-	function handleSaveAsRecipeChange(e: Event) {
-		saveAsRecipe = (e.target as HTMLInputElement).checked;
-		if (saveAsRecipe) {
-			newRecipeName = menuLabel.trim();
-			newRecipePortions = allocatedTarget;
-		}
+	function resetRecipeDraft() {
+		recipeDraft = emptySaveAsRecipeDraft();
+		savedRecipeId = null;
 	}
 	let targetTags = $state<TargetGroupTag[]>(['regular']);
 	let isEveryone = $state(false);
@@ -302,6 +303,7 @@
 			allocatedTarget = count > 0 ? count : session?.target_headcount?.total || 50;
 			selectedRecipeId = '';
 			recipeMode = 'bom';
+			resetRecipeDraft();
 			isIngredientsManuallyEdited = false;
 			ingredientsList = calculateRecipeIngredients('', allocatedTarget);
 			showAddIngredient = false;
@@ -458,37 +460,38 @@
 		fallbackLabel: string,
 		ctx: { shelterCode: string; createdBy: string }
 	): Promise<string | null> {
-		const label = newRecipeName.trim() || fallbackLabel;
-		if (findRecipeByLabel(recipes.data, label)) {
-			toast.warning(`มีสูตรชื่อ "${label}" อยู่แล้ว จึงไม่บันทึกซ้ำ`);
+		const fail = (reason: string) => {
+			toast.error(`บันทึกสูตรไม่สำเร็จ: ${reason} (ยังเปิดตั๋วเบิกต่อให้)`);
 			return null;
-		}
-		const standardPortions =
-			newRecipePortions !== null && Number.isFinite(newRecipePortions) && newRecipePortions > 0
-				? newRecipePortions
-				: allocatedTarget;
+		};
 		try {
+			const result = customRecipeInput({
+				label: recipeDraft.name.trim() || fallbackLabel,
+				standardPortions: recipeDraft.portions ?? allocatedTarget,
+				producedPortions: allocatedTarget,
+				ingredients: ingredientsList.map((ing) => ({
+					item_master_id: ing.item_id,
+					name: getItemName(ing.item_id),
+					quantity: ing.needed,
+					uom: ing.unit
+				})),
+				units: unitsQuery.data
+			});
+			if (!result.ok) return fail(result.reason);
+			const { label } = result.input;
+			if (findRecipeByLabel(recipes.data, label)) {
+				toast.warning(`มีสูตรชื่อ "${label}" อยู่แล้ว จึงไม่บันทึกซ้ำ`);
+				return null;
+			}
 			const saved = await createRecipeMutation.mutateAsync({
-				input: customRecipeInput({
-					label,
-					standardPortions,
-					producedPortions: allocatedTarget,
-					ingredients: ingredientsList.map((ing) => ({
-						item_master_id: ing.item_id,
-						quantity: ing.needed,
-						uom: ing.unit
-					}))
-				}),
+				input: result.input,
 				ctx,
 				shelterCode: ctx.shelterCode
 			});
 			toast.success(`บันทึกสูตร "${label}" เรียบร้อยแล้ว`);
-			saveAsRecipe = false;
 			return saved._id;
 		} catch (err) {
-			const reason = err instanceof Error ? err.message : 'ไม่ทราบสาเหตุ';
-			toast.error(`บันทึกสูตรไม่สำเร็จ: ${reason} (ยังเปิดตั๋วเบิกต่อให้)`);
-			return null;
+			return fail(err instanceof Error ? err.message : 'ไม่ทราบสาเหตุ');
 		}
 	}
 
@@ -523,10 +526,9 @@
 			createdBy: authStore.user?.name ?? 'kitchen_staff'
 		};
 
-		const savedRecipeId =
-			recipeMode === 'custom' && saveAsRecipe && !activePlan
-				? await saveCustomRecipe(finalLabel, ctx)
-				: null;
+		if (canSaveAsRecipe && recipeDraft.enabled && !savedRecipeId) {
+			savedRecipeId = await saveCustomRecipe(finalLabel, ctx);
+		}
 
 		try {
 			// Plan and ticket are separate features now (CR-121/CR-141) — created
@@ -961,42 +963,8 @@
 							<p class="mt-2 text-2xs text-muted-foreground">
 								กำหนดวัตถุดิบเองในตารางด้านขวา ไม่อ้างอิงสูตรจากฐานข้อมูล
 							</p>
-							{#if !activePlan}
-								<label class="mt-2 flex cursor-pointer items-center gap-2">
-									<input
-										type="checkbox"
-										checked={saveAsRecipe}
-										onchange={handleSaveAsRecipeChange}
-										class="h-3.5 w-3.5 rounded border-gray-300 text-primary focus:ring-primary"
-									/>
-									<span class="text-xs">บันทึกเป็นสูตรใหม่</span>
-								</label>
-								{#if saveAsRecipe}
-									<div class="mt-2 space-y-2 rounded-md border bg-muted/20 p-2">
-										<div>
-											<Label for="new-recipe-name" class="text-xs">ชื่อสูตร</Label>
-											<Input
-												id="new-recipe-name"
-												bind:value={newRecipeName}
-												placeholder="ว่างไว้เพื่อใช้ชื่อเมนูที่แสดง"
-												class="mt-1 text-xs"
-											/>
-										</div>
-										<div>
-											<Label for="new-recipe-portions" class="text-xs">จำนวนจานมาตรฐาน</Label>
-											<Input
-												type="number"
-												min="1"
-												id="new-recipe-portions"
-												bind:value={newRecipePortions}
-												class="mt-1 text-xs"
-											/>
-											<p class="mt-1 text-2xs text-muted-foreground">
-												ปริมาณวัตถุดิบจะถูกปรับสัดส่วนให้ตรงกับจำนวนจานนี้
-											</p>
-										</div>
-									</div>
-								{/if}
+							{#if canSaveAsRecipe}
+								<SaveAsRecipeFields bind:draft={recipeDraft} defaultPortions={allocatedTarget} />
 							{/if}
 						{/if}
 					</div>

@@ -55,3 +55,17 @@ describe('canCreateShelterRecipe', () => {
 		}
 	);
 });
+
+describe('canCreateShelterRecipe without a shelter (central catalog)', () => {
+	it('allows only system_admin', () => {
+		expect(canCreateShelterRecipe(['system_admin'], undefined)).toBe(true);
+		expect(canCreateShelterRecipe(['system_admin'], null)).toBe(true);
+	});
+
+	it.each([['SH001:kitchen_staff'], ['SH001:shelter_manager'], ['SH001:warehouse_staff']])(
+		'denies %s',
+		(role) => {
+			expect(canCreateShelterRecipe(['shelter:SH001', role], undefined)).toBe(false);
+		}
+	);
+});

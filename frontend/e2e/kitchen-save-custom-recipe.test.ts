@@ -134,6 +134,14 @@ async function buildCustomBatch(page: Page, qty: string): Promise<void> {
 	await expect(page.getByRole('cell', { name: INGREDIENT, exact: true })).toBeVisible();
 }
 
+function planRecipeId(plan: CouchDocument): unknown {
+	return (plan.recipes as { recipe_id: string }[] | undefined)?.[0]?.recipe_id;
+}
+
+async function recipesLabelled(label: string): Promise<CouchDocument[]> {
+	return (await allDocuments(SHELTER_DB)).filter((d) => d.type === 'recipe' && d.label === label);
+}
+
 async function mealPlansOfRun(): Promise<CouchDocument[]> {
 	return (await allDocuments(SHELTER_DB)).filter(
 		(d) => d.type === 'meal_plan' && d.meal_session_id === sessionId
@@ -186,9 +194,7 @@ test.describe(
 			await expect(page.getByText(`บันทึกสูตร "${RECIPE}" เรียบร้อยแล้ว`)).toBeVisible();
 			await expect(page.getByText(/เปิดตั๋วเบิกวัตถุดิบ .+ แล้ว/)).toBeVisible();
 
-			const recipes = (await allDocuments(SHELTER_DB)).filter(
-				(d) => d.type === 'recipe' && d.label === RECIPE
-			);
+			const recipes = await recipesLabelled(RECIPE);
 			expect(recipes, 'exactly one recipe saved').toHaveLength(1);
 			const [recipe] = recipes;
 			expect(recipe.created_by).toBe(KITCHEN.name);
@@ -221,14 +227,77 @@ test.describe(
 			await expect(page.getByText(/จึงไม่บันทึกซ้ำ/)).toBeVisible();
 			await expect(page.getByText(/เปิดตั๋วเบิกวัตถุดิบ .+ แล้ว/)).toBeVisible();
 
-			const recipes = (await allDocuments(SHELTER_DB)).filter(
-				(d) => d.type === 'recipe' && d.label === RECIPE
-			);
+			const recipes = await recipesLabelled(RECIPE);
 			expect(recipes, 'no second recipe written').toHaveLength(1);
 			const plans = await mealPlansOfRun();
 			expect(plans).toHaveLength(2);
-			const custom = plans.filter((p) => p.recipes?.[0]?.recipe_id === 'recipe:custom');
+			const custom = plans.filter((p) => planRecipeId(p) === 'recipe:custom');
 			expect(custom, 'the duplicate run plans as a one-off custom recipe').toHaveLength(1);
+		});
+
+		test('a retry after the plan write fails links the recipe already saved', async ({
+			browser
+		}) => {
+			const context = await browser.newContext();
+			contexts.push(context);
+			const page = await openBoard(context);
+			const retryRecipe = `${RECIPE} retry`;
+			let failNextPlanWrite = true;
+			await page.route(
+				(url) => url.pathname.includes('meal_plan'),
+				async (route) => {
+					if (failNextPlanWrite && route.request().method() === 'PUT') {
+						failNextPlanWrite = false;
+						await route.fulfill({
+							status: 403,
+							contentType: 'application/json',
+							headers: {
+								'access-control-allow-origin': new URL(page.url()).origin,
+								'access-control-allow-credentials': 'true'
+							},
+							body: JSON.stringify({ error: 'forbidden', reason: 'e2e: plan write rejected' })
+						});
+						return;
+					}
+					await route.fallback();
+				}
+			);
+
+			await buildCustomBatch(page, '1');
+			await page.getByRole('checkbox', { name: 'บันทึกเป็นสูตรใหม่' }).check();
+			await page.getByLabel('ชื่อสูตร').fill(retryRecipe);
+			const submit = page.getByRole('button', { name: 'สร้างใบเบิกวัตถุดิบ' });
+			await submit.click();
+			await expect(page.getByText(`บันทึกสูตร "${retryRecipe}" เรียบร้อยแล้ว`)).toBeVisible();
+			await expect(page.getByText('e2e: plan write rejected')).toBeVisible();
+
+			await expect(submit).toBeEnabled();
+			await submit.click();
+			await expect(page.getByText(/เปิดตั๋วเบิกวัตถุดิบ .+ แล้ว/)).toBeVisible();
+			await expect(page.getByText(/จึงไม่บันทึกซ้ำ/)).toHaveCount(0);
+
+			const recipes = await recipesLabelled(retryRecipe);
+			expect(recipes, 'the retry does not save a second recipe').toHaveLength(1);
+			const linked = (await mealPlansOfRun()).filter((p) => planRecipeId(p) === recipes[0]._id);
+			expect(linked, 'the retried plan links the saved recipe').toHaveLength(1);
+		});
+
+		test('switching to BOM mode and back clears the save-as-recipe choice', async ({ browser }) => {
+			const context = await browser.newContext();
+			contexts.push(context);
+			const page = await openBoard(context);
+
+			await page.getByRole('tab', { name: 'สร้างสูตรเอง' }).click();
+			const checkbox = page.getByRole('checkbox', { name: 'บันทึกเป็นสูตรใหม่' });
+			await checkbox.check();
+			await page.getByLabel('ชื่อสูตร').fill(RECIPE);
+
+			await page.getByRole('tab', { name: 'เลือกจากฐานสูตร (BOM)' }).click();
+			await page.getByRole('tab', { name: 'สร้างสูตรเอง' }).click();
+
+			await expect(checkbox).not.toBeChecked();
+			await checkbox.check();
+			await expect(page.getByLabel('ชื่อสูตร')).toHaveValue('');
 		});
 	}
 );

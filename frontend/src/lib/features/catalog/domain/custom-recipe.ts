@@ -1,34 +1,70 @@
-import { parseQty, persistQty, qtyGt, type QtyValue } from '$lib/utils/qty';
+import { persistQty, type QtyValue } from '$lib/utils/qty';
 import type { RecipeInput } from './catalog';
+import { isPositiveQty, scaleQuantityToPortions } from './recipe-quantity';
+import { canonicalizeUnitCode, type FallbackUnitDef, type UnitOfMeasure } from './unit-of-measure';
 
-export type CustomRecipeIngredient = { item_master_id: string; quantity: QtyValue; uom: string };
+/** The production board does not ask for a cooking time; recipes require one. */
+export const CUSTOM_RECIPE_DURATION_HOURS = '1';
 
-function positive(value: QtyValue, field: string): QtyValue {
-	if (!qtyGt(persistQty(value), 0)) throw new Error(`${field} must be greater than 0`);
-	return value;
-}
+export type CustomRecipeIngredient = {
+	item_master_id: string;
+	name: string;
+	quantity: QtyValue;
+	uom: string;
+};
+
+/** `reason` is Thai copy ready for a toast. */
+export type CustomRecipeResult = { ok: true; input: RecipeInput } | { ok: false; reason: string };
 
 /**
  * Builds the recipe input for an ingredient list sized for `producedPortions`, persisted at
- * `standardPortions` (recipe quantities are always stored at the standard yield).
+ * `standardPortions` (recipe quantities are always stored at the standard yield). Ingredient
+ * units may be legacy Thai labels and are stored as canonical unit codes.
  */
 export function customRecipeInput(args: {
 	label: string;
 	standardPortions: QtyValue;
 	producedPortions: QtyValue;
 	ingredients: readonly CustomRecipeIngredient[];
-}): RecipeInput {
-	const standard = parseQty(positive(args.standardPortions, 'standardPortions'));
-	const produced = parseQty(positive(args.producedPortions, 'producedPortions'));
+	units?: readonly (UnitOfMeasure | FallbackUnitDef)[] | null;
+}): CustomRecipeResult {
+	const label = args.label.trim();
+	if (!label) return { ok: false, reason: 'กรุณาระบุชื่อสูตร' };
+	if (!isPositiveQty(args.standardPortions)) {
+		return { ok: false, reason: 'จำนวนจานมาตรฐานต้องมากกว่า 0' };
+	}
+	if (!isPositiveQty(args.producedPortions)) {
+		return { ok: false, reason: 'จำนวนจานเป้าหมายต้องมากกว่า 0' };
+	}
+
+	const ingredients: RecipeInput['ingredients'] = [];
+	for (const ingredient of args.ingredients) {
+		const uom = canonicalizeUnitCode(ingredient.uom, args.units);
+		if (!uom) {
+			return { ok: false, reason: `ไม่รู้จักหน่วย "${ingredient.uom}" ของ ${ingredient.name}` };
+		}
+		const quantity = scaleQuantityToPortions(
+			ingredient.quantity,
+			args.producedPortions,
+			args.standardPortions
+		);
+		if (!isPositiveQty(quantity)) {
+			return {
+				ok: false,
+				reason: `ปริมาณ ${ingredient.name} ต่อ ${persistQty(args.standardPortions)} จานน้อยเกินไป`
+			};
+		}
+		ingredients.push({ item_master_id: ingredient.item_master_id, quantity, uom });
+	}
+
 	return {
-		label: args.label.trim(),
-		ingredients: args.ingredients.map((ingredient) => ({
-			item_master_id: ingredient.item_master_id,
-			quantity: persistQty(parseQty(ingredient.quantity).mul(standard).div(produced)),
-			uom: ingredient.uom
-		})),
-		standard_portions: persistQty(standard),
-		standard_duration_hours: '1'
+		ok: true,
+		input: {
+			label,
+			ingredients,
+			standard_portions: persistQty(args.standardPortions),
+			standard_duration_hours: CUSTOM_RECIPE_DURATION_HOURS
+		}
 	};
 }
 

@@ -124,7 +124,7 @@ export {
 	type QuickCreateErrors,
 	type ItemMasterInitialValues
 } from './domain/quick-create';
-export { canWriteShelterCatalog, canCreateShelterRecipe } from './domain/catalog-permissions';
+export { canWriteShelterCatalog } from './domain/catalog-permissions';
 export {
 	customRecipeInput,
 	findRecipeByLabel,

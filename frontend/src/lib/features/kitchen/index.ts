@@ -6,6 +6,11 @@ export { default as MealServiceForm } from './ui/meal-service-form.svelte';
 export { default as MealServiceSummary } from './ui/meal-service-summary.svelte';
 export { default as MealSessionList } from './ui/MealSessionList.svelte';
 export { default as YieldReceiptLines } from './ui/yield-receipt-lines.svelte';
+export {
+	default as SaveAsRecipeFields,
+	emptySaveAsRecipeDraft,
+	type SaveAsRecipeDraft
+} from './ui/save-as-recipe-fields.svelte';
 
 // Domain — meal calculation and requisition
 export {

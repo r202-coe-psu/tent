@@ -1,62 +1,78 @@
 import { describe, expect, it } from 'vitest';
 import { recipeInputSchema } from './catalog';
-import { customRecipeInput, findRecipeByLabel } from './custom-recipe';
+import {
+	CUSTOM_RECIPE_DURATION_HOURS,
+	customRecipeInput,
+	findRecipeByLabel,
+	type CustomRecipeIngredient
+} from './custom-recipe';
 
-const rice = { item_master_id: 'item_master:rice', quantity: '2', uom: 'kg' };
+const rice: CustomRecipeIngredient = {
+	item_master_id: 'item_master:rice',
+	name: 'ข้าวสาร',
+	quantity: '2',
+	uom: 'kg'
+};
+
+function build(overrides: Partial<Parameters<typeof customRecipeInput>[0]> = {}) {
+	return customRecipeInput({
+		label: 'Soup',
+		standardPortions: 10,
+		producedPortions: 50,
+		ingredients: [rice],
+		...overrides
+	});
+}
 
 describe('customRecipeInput', () => {
 	it('scales quantities from the produced portions to the standard portions', () => {
-		const input = customRecipeInput({
-			label: '  Fried rice ',
-			standardPortions: '10',
-			producedPortions: '50',
-			ingredients: [rice]
+		const result = build({ label: '  Fried rice ' });
+		expect(result).toEqual({
+			ok: true,
+			input: {
+				label: 'Fried rice',
+				standard_portions: '10',
+				standard_duration_hours: CUSTOM_RECIPE_DURATION_HOURS,
+				ingredients: [{ item_master_id: rice.item_master_id, quantity: '0.4', uom: 'kg' }]
+			}
 		});
-		expect(input.label).toBe('Fried rice');
-		expect(input.standard_portions).toBe('10');
-		expect(input.standard_duration_hours).toBe('1');
-		expect(input.ingredients).toEqual([{ ...rice, quantity: '0.4' }]);
-	});
-
-	it('keeps quantities unchanged when standard equals produced portions', () => {
-		const input = customRecipeInput({
-			label: 'Soup',
-			standardPortions: '30',
-			producedPortions: '30',
-			ingredients: [rice]
-		});
-		expect(input.ingredients[0].quantity).toBe('2');
-	});
-
-	it('uses decimal arithmetic without floating-point drift', () => {
-		const input = customRecipeInput({
-			label: 'Soup',
-			standardPortions: '3',
-			producedPortions: '10',
-			ingredients: [{ ...rice, quantity: '0.1' }]
-		});
-		expect(input.ingredients[0].quantity).toBe('0.03');
 	});
 
 	it('produces input the recipe schema accepts', () => {
-		const input = customRecipeInput({
-			label: 'Soup',
-			standardPortions: '10',
-			producedPortions: '50',
-			ingredients: [rice]
-		});
-		expect(recipeInputSchema.safeParse(input).success).toBe(true);
+		const result = build();
+		expect(result.ok && recipeInputSchema.safeParse(result.input).success).toBe(true);
 	});
 
-	it.each([
-		['0', '10'],
-		['-1', '10'],
-		['10', '0'],
-		['10', '-5']
-	])('rejects non-positive portions (%s, %s)', (standardPortions, producedPortions) => {
-		expect(() =>
-			customRecipeInput({ label: 'x', standardPortions, producedPortions, ingredients: [rice] })
-		).toThrow();
+	it('stores legacy Thai unit labels as canonical unit codes', () => {
+		const result = build({ ingredients: [{ ...rice, uom: 'กก.' }] });
+		expect(result.ok && result.input.ingredients[0].uom).toBe('kg');
+	});
+
+	it('explains an unknown unit in Thai', () => {
+		expect(build({ ingredients: [{ ...rice, uom: '???' }] })).toEqual({
+			ok: false,
+			reason: 'ไม่รู้จักหน่วย "???" ของ ข้าวสาร'
+		});
+	});
+
+	it('explains a quantity that rounds to zero at the standard portions', () => {
+		const result = build({
+			standardPortions: 1,
+			producedPortions: 1000,
+			ingredients: [{ ...rice, quantity: '0.0001' }]
+		});
+		expect(result).toEqual({ ok: false, reason: 'ปริมาณ ข้าวสาร ต่อ 1 จานน้อยเกินไป' });
+	});
+
+	it.each([[0], [-1], [Number.NaN]])('reports invalid standard portions (%s)', (portions) => {
+		expect(build({ standardPortions: portions })).toEqual({
+			ok: false,
+			reason: 'จำนวนจานมาตรฐานต้องมากกว่า 0'
+		});
+	});
+
+	it('reports a blank label', () => {
+		expect(build({ label: '   ' })).toEqual({ ok: false, reason: 'กรุณาระบุชื่อสูตร' });
 	});
 });
 

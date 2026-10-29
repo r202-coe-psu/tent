@@ -15,13 +15,19 @@ export function canWriteShelterCatalog(roles: readonly string[]): boolean {
 }
 
 /**
- * Recipe CREATE is wider than the rest of the catalog: kitchen staff of the shelter may save the
- * recipe they just built on the production board (#802). Update and delete keep
- * {@link canWriteShelterCatalog}.
+ * The only policy for creating a recipe: system admin anywhere; without a `shelterCode` (central
+ * catalog) nobody else. In a shelter: its shelter manager, warehouse staff, or kitchen staff.
+ * Kitchen staff may create only, so the production board can save the recipe they just built
+ * (#802). Recipe update and delete go through `enforceWriteAccess`; {@link canWriteShelterCatalog}
+ * is only a UI hint.
  */
-export function canCreateShelterRecipe(roles: readonly string[], shelterCode?: string | null) {
+export function canCreateShelterRecipe(
+	roles: readonly string[],
+	shelterCode: string | null | undefined
+): boolean {
+	if (isSystemAdmin(roles)) return true;
+	if (!shelterCode) return false;
 	return (
-		isSystemAdmin(roles) ||
 		isShelterManager(roles, shelterCode) ||
 		isWarehouseStaff(roles, shelterCode) ||
 		hasStaffCapability(roles, 'kitchen_staff', shelterCode)

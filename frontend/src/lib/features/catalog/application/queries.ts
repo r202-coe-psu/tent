@@ -90,10 +90,9 @@ export const useItemCategory = (
 		enabled: !!id()
 	}));
 
-function enforceWriteAccess(
-	shelterCode?: string | null,
-	alsoAllow?: (roles: readonly string[], shelterCode: string) => boolean
-) {
+const UNAUTHORIZED_WRITE = 'Unauthorized: You do not have permission to write to this catalog.';
+
+function enforceWriteAccess(shelterCode?: string | null) {
 	const roles = authStore.user?.roles ?? [];
 	if (isSystemAdmin(roles)) return;
 
@@ -104,10 +103,9 @@ function enforceWriteAccess(
 		if ((isManager || isWS) && userShelterCode === shelterCode) {
 			return;
 		}
-		if (alsoAllow?.(roles, shelterCode)) return;
 	}
 
-	throw new Error('Unauthorized: You do not have permission to write to this catalog.');
+	throw new Error(UNAUTHORIZED_WRITE);
 }
 
 export const useCreateItemCategory = () => {
@@ -253,7 +251,9 @@ export const useCreateRecipe = () => {
 			ctx: AuthorContext;
 			shelterCode?: string;
 		}) => {
-			enforceWriteAccess(shelterCode, canCreateShelterRecipe);
+			if (!canCreateShelterRecipe(authStore.user?.roles ?? [], shelterCode)) {
+				throw new Error(UNAUTHORIZED_WRITE);
+			}
 			return catalogRepository().createRecipe(input, ctx, shelterCode);
 		},
 		onSuccess: () => {
