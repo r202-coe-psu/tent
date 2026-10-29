@@ -13,6 +13,10 @@ vi.mock('$lib/features/catalog', async (importOriginal) => ({
 	...(await importOriginal<typeof import('$lib/features/catalog')>()),
 	useUnitsOfMeasure: () => ({ data: [] })
 }));
+vi.mock('$lib/features/public-portal', async (importOriginal) => ({
+	...(await importOriginal<typeof import('$lib/features/public-portal')>()),
+	usePublicShelter: () => ({ data: undefined })
+}));
 vi.mock('$lib/utils/qrcode', () => ({ generateQrDataUrl: async () => '' }));
 vi.mock('svelte-sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
@@ -39,26 +43,27 @@ afterEach(() => {
 	vi.unstubAllGlobals();
 });
 
-describe('success ticket vehicle plate', () => {
-	it('shows the typed plate for a self drop-off, without fetching', async () => {
+describe('success ticket vehicle plate (CR-209 FR-3a)', () => {
+	it('shows the plate the booking sent, without fetching', async () => {
 		store.deliveryMethod = 'self_dropoff';
 		store.vehicleType = 'car';
-		store.vehiclePlate = '  กข 1234 ';
+		store.bookedVehiclePlate = 'กข 1234';
 		await render();
 		expect(document.body.textContent).toContain('กข 1234');
 		expect(fetch).not.toHaveBeenCalled();
 	});
 
-	it('shows nothing extra when there is no plate', async () => {
+	it('shows nothing extra when the booking sent no plate', async () => {
 		store.deliveryMethod = 'self_dropoff';
-		store.vehiclePlate = '   ';
 		await render();
 		expect(document.body.textContent).not.toContain('ทะเบียนรถ');
 	});
 
-	it('hides a typed plate once the donor switched to another delivery method', async () => {
-		store.deliveryMethod = 'parcel';
+	it('ignores a plate still typed in the form that the booking did not send', async () => {
+		// Booked by parcel, then went back and switched to self drop-off without re-submitting.
+		store.deliveryMethod = 'self_dropoff';
 		store.vehiclePlate = 'กข 1234';
+		store.bookedVehiclePlate = '';
 		await render();
 		expect(document.body.textContent).not.toContain('กข 1234');
 	});

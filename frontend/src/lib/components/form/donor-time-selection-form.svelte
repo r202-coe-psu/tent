@@ -219,6 +219,7 @@
 				donationStore.bookingRef = data.bookingRef;
 				donationStore.bookingStatus = data.status ?? 'pending_review';
 				donationStore.slotDate = slotDateStr;
+				donationStore.bookedVehiclePlate = logistics?.vehicle_plate ?? '';
 				donationStore.goToStep('ticket');
 				if (donationStore.reachedStep < 4) donationStore.reachedStep = 4;
 				toast.success(t.bookingSuccess);

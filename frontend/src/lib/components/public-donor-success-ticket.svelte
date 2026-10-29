@@ -200,10 +200,11 @@
 				{/if}
 			</div>
 
-			{#if donationStore.deliveryMethod === 'self_dropoff' && donationStore.vehiclePlate.trim()}
+			<!-- CR-209 FR-3a: the plate the booking sent, not whatever the form holds now. -->
+			{#if donationStore.bookedVehiclePlate}
 				<div>
 					<div class="mb-1 text-xs font-bold text-slate-500">{t.vehiclePlateTicketLabel}</div>
-					<div class="text-sm font-bold text-slate-800">{donationStore.vehiclePlate.trim()}</div>
+					<div class="text-sm font-bold text-slate-800">{donationStore.bookedVehiclePlate}</div>
 				</div>
 			{/if}
 

@@ -69,6 +69,8 @@ export class DonationStore {
 	vehiclePlate = $state('');
 	slotDate = $state('');
 	slotTime = $state('');
+	/** The plate the booking actually sent — what the ticket shows (CR-209 FR-3a). */
+	bookedVehiclePlate = $state('');
 	shelterCode = $state('');
 	courierTrackingNo = $state('');
 	eta = $state('');
@@ -122,6 +124,7 @@ export class DonationStore {
 		this.vehiclePlate = '';
 		this.slotDate = '';
 		this.slotTime = '';
+		this.bookedVehiclePlate = '';
 		this.shelterCode = '';
 		this.courierTrackingNo = '';
 		this.eta = '';
