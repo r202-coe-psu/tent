@@ -6215,17 +6215,27 @@ describe('buildValidateDocUpdate', () => {
 				...over
 			});
 
-			it('accepts a valid doc from shelter_manager and system_admin', () => {
-				for (const user of [MANAGER, ADMIN]) {
+			it('accepts a valid doc from shelter_manager, warehouse_staff and system_admin', () => {
+				for (const user of [MANAGER, WAREHOUSE, ADMIN]) {
 					expect(() => compile()(asUser(user), null, user)).not.toThrow();
 				}
 			});
 
-			it('rejects warehouse, supply coordinator and distribution staff', () => {
-				for (const user of [WAREHOUSE, SUPPLY_COORD, DISTRIBUTION]) {
+			it('rejects supply coordinator and distribution staff', () => {
+				for (const user of [SUPPLY_COORD, DISTRIBUTION]) {
 					expectForbidden(
 						() => compile()(asUser(user), null, user),
-						/Only shelter managers or system admins can reopen bulk return loans/
+						/Only shelter managers, warehouse staff or system admins can reopen bulk return loans/
+					);
+				}
+			});
+
+			it('rejects a warehouse_staff or shelter_manager of another shelter', () => {
+				for (const roles of [['SH002:warehouse_staff'], ['SH002:shelter_manager']]) {
+					const user: UserCtx = { name: 'other', roles };
+					expectForbidden(
+						() => compile()(asUser(user), null, user),
+						/Only shelter managers, warehouse staff or system admins can reopen bulk return loans/
 					);
 				}
 			});

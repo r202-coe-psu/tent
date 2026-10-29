@@ -144,10 +144,26 @@ describe('bulk return pool v3 — reopen the loans of an entry (CR-193 §35)', (
 		expect((await logRepo.get(loanId(81)))?.applied_bulk_entry_ids).toEqual([entry._id]);
 	});
 
+	it('lets warehouse_staff of the shelter reopen the loan of an entry (FR-35.2)', async () => {
+		const { entry } = await closedPoolWithAppliedLoan(87);
+
+		const res = await reopenBulkReturnEntryLoans({ entry_id: entry._id, reason: 'x' }, mgr, deps);
+
+		expect(res).toMatchObject({ replayed: false, loansReopened: [loanId(87)] });
+		expect(reopenKeys()).toEqual([deriveLoanReopenId(entry._id)]);
+		expect((await logRepo.get(loanId(87)))?.applied_bulk_entry_ids ?? []).not.toContain(entry._id);
+	});
+
+	const coordinator = {
+		createdBy: 'user:coord1',
+		shelterCode: 'SH001',
+		roles: ['shelter:SH001', 'SH001:supply_coordinator']
+	};
+
 	it.each([
-		['warehouse_staff', mgr],
 		['distribution_staff', dist],
-		['registration_staff', reg]
+		['registration_staff', reg],
+		['supply_coordinator', coordinator]
 	])('rejects %s and writes nothing', async (_label, ctx) => {
 		const { entry } = await closedPoolWithAppliedLoan(82);
 
