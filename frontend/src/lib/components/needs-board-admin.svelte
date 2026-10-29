@@ -6,10 +6,18 @@
 	import { Badge } from '$lib/components/ui/badge/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
+	import { Label } from '$lib/components/ui/label/index.js';
 	import PaginationControls from '$lib/components/pagination-controls.svelte';
 	import * as Select from '$lib/components/ui/select/index.js';
 	import * as Table from '$lib/components/ui/table/index.js';
-	import { parseCampaignNotes, publicItemAggregate, type NeedItem } from '$lib/features/operations';
+	import {
+		matchesStatusFilter,
+		parseCampaignNotes,
+		publicItemAggregate,
+		type NeedCloseState,
+		type NeedItem,
+		type NeedStatusFilter
+	} from '$lib/features/operations';
 	import { addQty, formatQty, parseQty, qtyIsZero } from '$lib/utils/qty';
 	import { DEFAULT_ITEM_UNIT, formatUnit, useUnitsOfMeasure } from '$lib/features/catalog';
 	import { langState } from '$lib/states/i18n.svelte';
@@ -30,23 +38,28 @@
 		onEdit?: (item: NeedItem, itemId: string) => void;
 	} = $props();
 
+	const uid = $props.id();
+	const statusId = `${uid}-status`;
+	const sortId = `${uid}-sort`;
+
 	const unitsQuery = useUnitsOfMeasure();
 	const units = $derived(unitsQuery.data ?? []);
 
 	let searchQuery = $state('');
-	let statusFilter = $state('all');
+	let statusFilter = $state<NeedStatusFilter>('all');
 	let sortOrder = $state<'progress_asc' | 'progress_desc' | 'name'>('progress_asc');
 
-	const STATUS_OPTIONS = [
-		{ value: 'all', label: 'สถานะ: ทั้งหมด' },
-		{ value: 'showing', label: 'สถานะ: กำลังโชว์บนหน้าเว็บ' },
-		{ value: 'hidden', label: 'สถานะ: ซ่อนจากหน้าเว็บ' },
-		{ value: 'cutoff', label: 'สถานะ: Force Cut-off' }
+	const STATUS_OPTIONS: { value: NeedStatusFilter; label: string }[] = [
+		{ value: 'all', label: 'ทั้งหมด' },
+		{ value: 'showing', label: 'กำลังโชว์บนหน้าเว็บ' },
+		{ value: 'hidden', label: 'ซ่อนจากหน้าเว็บ' },
+		{ value: 'reached', label: 'ครบถ้วน' },
+		{ value: 'closed', label: 'Force Cut-off' }
 	];
 	const SORT_OPTIONS = [
-		{ value: 'progress_asc', label: 'เรียง: ความคืบหน้าน้อยไปมาก' },
-		{ value: 'progress_desc', label: 'เรียง: ความคืบหน้ามากไปน้อย' },
-		{ value: 'name', label: 'เรียง: ชื่อ ก-ฮ' }
+		{ value: 'progress_asc', label: 'ความคืบหน้าน้อยไปมาก' },
+		{ value: 'progress_desc', label: 'ความคืบหน้ามากไปน้อย' },
+		{ value: 'name', label: 'ชื่อ ก-ฮ' }
 	] as const;
 
 	const statusLabel = $derived(
@@ -71,7 +84,8 @@
 		remaining: string;
 		progressPercent: number;
 		showOnHome: boolean;
-		isCutOff: boolean;
+		/** Badge, bar, buttons and filter all read this one value (#817). */
+		state: NeedCloseState;
 		isManualClosed: boolean;
 		originalItem: NeedItem;
 		/** How many open campaigns share this item on the donor-facing board. */
@@ -100,7 +114,7 @@
 					remaining: '0',
 					progressPercent: 0,
 					showOnHome: item.showOnHome,
-					isCutOff: item.isCutOff,
+					state: item.closeState,
 					isManualClosed: item.isManualClosed,
 					originalItem: item,
 					sharedCampaigns: 0,
@@ -132,7 +146,7 @@
 						remaining: need.remaining,
 						progressPercent: progress,
 						showOnHome: item.showOnHome,
-						isCutOff: need.isCutOff,
+						state: need.closeState,
 						isManualClosed: need.isManualClosed,
 						originalItem: item,
 						sharedCampaigns: aggregate.campaignCount,
@@ -151,10 +165,7 @@
 				if (!matchName && !matchLoc) return false;
 			}
 
-			if (statusFilter === 'showing') return r.showOnHome && !r.isCutOff;
-			if (statusFilter === 'hidden') return !r.showOnHome || r.isCutOff;
-			if (statusFilter === 'cutoff') return r.isCutOff;
-			return true;
+			return matchesStatusFilter(r.state, r.showOnHome, statusFilter);
 		});
 
 		// Sort
@@ -188,17 +199,18 @@
 				<Button
 					type="button"
 					onclick={onAddRequest}
-					class="h-11 w-full gap-2 rounded-xl bg-[#0A2647] px-5 text-sm font-bold text-white shadow-2xs hover:bg-[#051930] sm:w-auto"
+					class="h-auto min-h-11 w-full gap-2 rounded-xl bg-[#0A2647] px-5 text-sm font-bold whitespace-normal text-white shadow-2xs hover:bg-[#051930] sm:w-auto"
 				>
 					<Plus class="h-4 w-4" />
-					สร้างประกาศแบบกำหนดเอง (Special Request)
+					<span class="sm:hidden">สร้างประกาศเอง</span>
+					<span class="hidden sm:inline">สร้างประกาศแบบกำหนดเอง (Special Request)</span>
 				</Button>
 			{/snippet}
 		</BoardSectionHeader>
 
 		<!-- Filter Bar -->
 		<div class="border-b border-border/60 bg-card p-4">
-			<div class="flex flex-col gap-3 md:flex-row md:items-center">
+			<div class="flex flex-col gap-3 md:flex-row md:items-end">
 				<!-- Search input -->
 				<div class="relative flex-1">
 					<Search
@@ -213,34 +225,51 @@
 				</div>
 
 				<!-- Filter dropdowns -->
-				<div class="flex flex-wrap items-center gap-2">
-					<Select.Root type="single" bind:value={statusFilter}>
-						<Select.Trigger
-							aria-label="กรองตามสถานะ"
-							class="h-9 rounded-xl text-xs data-[size=default]:h-9"
+				<div class="flex flex-wrap items-end gap-2">
+					<div class="space-y-1">
+						<Label
+							id="{statusId}-label"
+							for={statusId}
+							class="text-xs font-semibold text-slate-600"
 						>
-							{statusLabel}
-						</Select.Trigger>
-						<Select.Content>
-							{#each STATUS_OPTIONS as option (option.value)}
-								<Select.Item value={option.value} label={option.label} />
-							{/each}
-						</Select.Content>
-					</Select.Root>
+							สถานะ
+						</Label>
+						<Select.Root type="single" bind:value={statusFilter}>
+							<!-- Label + own text, so a screen reader also hears the selected value. -->
+							<Select.Trigger
+								id={statusId}
+								aria-labelledby="{statusId}-label {statusId}"
+								class="h-9 rounded-xl text-xs data-[size=default]:h-9"
+							>
+								{statusLabel}
+							</Select.Trigger>
+							<Select.Content>
+								{#each STATUS_OPTIONS as option (option.value)}
+									<Select.Item value={option.value} label={option.label} />
+								{/each}
+							</Select.Content>
+						</Select.Root>
+					</div>
 
-					<Select.Root type="single" bind:value={sortOrder}>
-						<Select.Trigger
-							aria-label="เรียงลำดับ"
-							class="h-9 rounded-xl text-xs data-[size=default]:h-9"
-						>
-							{sortLabel}
-						</Select.Trigger>
-						<Select.Content>
-							{#each SORT_OPTIONS as option (option.value)}
-								<Select.Item value={option.value} label={option.label} />
-							{/each}
-						</Select.Content>
-					</Select.Root>
+					<div class="space-y-1">
+						<Label id="{sortId}-label" for={sortId} class="text-xs font-semibold text-slate-600">
+							เรียง
+						</Label>
+						<Select.Root type="single" bind:value={sortOrder}>
+							<Select.Trigger
+								id={sortId}
+								aria-labelledby="{sortId}-label {sortId}"
+								class="h-9 rounded-xl text-xs data-[size=default]:h-9"
+							>
+								{sortLabel}
+							</Select.Trigger>
+							<Select.Content>
+								{#each SORT_OPTIONS as option (option.value)}
+									<Select.Item value={option.value} label={option.label} />
+								{/each}
+							</Select.Content>
+						</Select.Root>
+					</div>
 				</div>
 			</div>
 		</div>
@@ -256,13 +285,20 @@
 			{:else}
 				{#each pagedRows as row (row.compoundId + row.itemId)}
 					<article
-						class="space-y-4 rounded-xl border border-slate-200/80 bg-white p-4 shadow-2xs {row.isCutOff
+						class="space-y-4 rounded-xl border border-slate-200/80 bg-white p-4 shadow-2xs {row.state !==
+						'open'
 							? 'opacity-70'
 							: ''}"
 					>
 						<div class="space-y-1.5">
 							<div class="flex flex-wrap items-center gap-2 text-base font-bold text-slate-900">
-								{#if row.isCutOff}
+								{#if row.state === 'reached'}
+									<Badge
+										variant="outline"
+										class="border-success-border bg-success-muted text-xs font-extrabold text-success-dark"
+										>ครบถ้วน</Badge
+									>
+								{:else if row.state === 'closed'}
 									<Badge variant="destructive" class="text-xs font-extrabold">CUT-OFF</Badge>
 								{/if}
 								{row.title}
@@ -308,28 +344,29 @@
 							</div>
 							<div class="relative h-2.5 overflow-hidden rounded-full bg-slate-100">
 								<div
-									class="h-full rounded-full transition-all duration-300 {row.isCutOff
-										? 'bg-red-600'
-										: 'bg-[#0A2647]'}"
+									class="h-full rounded-full transition-all duration-300 {row.state === 'reached'
+										? 'bg-success'
+										: row.state === 'closed'
+											? 'bg-red-600'
+											: 'bg-[#0A2647]'}"
 									style="width: {row.progressPercent}%"
 								></div>
 							</div>
 						</div>
 
 						<div class="flex flex-col-reverse gap-2 sm:flex-row sm:flex-wrap">
+							<!-- Same row state as the badge and bar (#817). -->
 							<Button
 								variant="outline"
 								type="button"
 								onclick={() => onToggleShowOnHome(row.compoundId)}
-								disabled={row.originalItem.isCutOff}
+								disabled={row.state !== 'open'}
 								class="min-h-11 w-full rounded-xl px-3 text-sm font-bold sm:w-auto
-								{row.showOnHome && !row.originalItem.isCutOff
+								{row.showOnHome && row.state === 'open'
 									? 'border-sky-200 bg-sky-50 text-sky-900 hover:bg-sky-100'
 									: 'border-slate-200 bg-slate-100 text-slate-500 opacity-70'}"
 							>
-								{row.showOnHome && !row.originalItem.isCutOff
-									? 'กำลังโชว์บนหน้าเว็บ'
-									: 'ซ่อนจากหน้าเว็บ'}
+								{row.showOnHome && row.state === 'open' ? 'กำลังโชว์บนหน้าเว็บ' : 'ซ่อนจากหน้าเว็บ'}
 							</Button>
 
 							{#if onEdit && row.itemId}
@@ -345,7 +382,7 @@
 							{/if}
 
 							{#if row.itemId}
-								{#if row.isCutOff && !row.isManualClosed}
+								{#if row.state === 'reached'}
 									<Button
 										variant="outline"
 										type="button"
@@ -354,7 +391,7 @@
 									>
 										ปิดอัตโนมัติ (ครบเป้า)
 									</Button>
-								{:else}
+								{:else if row.state === 'open' || row.isManualClosed}
 									<Button
 										variant="outline"
 										type="button"
@@ -421,14 +458,20 @@
 					{:else}
 						{#each pagedRows as row (row.compoundId + row.itemId)}
 							<Table.Row
-								class="transition-colors hover:bg-muted/10 {row.isCutOff
+								class="transition-colors hover:bg-muted/10 {row.state !== 'open'
 									? 'bg-muted/10 opacity-70'
 									: ''}"
 							>
 								<!-- Item Title & Shelter -->
 								<Table.Cell class="min-w-[240px] px-6 py-4">
 									<div class="flex items-center gap-2 text-sm font-bold text-foreground">
-										{#if row.isCutOff}
+										{#if row.state === 'reached'}
+											<Badge
+												variant="outline"
+												class="border-success-border bg-success-muted text-3xs font-extrabold text-success-dark"
+												>ครบถ้วน</Badge
+											>
+										{:else if row.state === 'closed'}
 											<Badge variant="destructive" class="text-3xs font-extrabold">CUT-OFF</Badge>
 										{/if}
 										{row.title}
@@ -491,9 +534,12 @@
 									<div class="flex items-center gap-3">
 										<div class="relative h-2.5 flex-1 overflow-hidden rounded-full bg-muted">
 											<div
-												class="h-full rounded-full transition-all duration-300 {row.isCutOff
-													? 'bg-rose-500'
-													: 'bg-primary'}"
+												class="h-full rounded-full transition-all duration-300 {row.state ===
+												'reached'
+													? 'bg-success'
+													: row.state === 'closed'
+														? 'bg-rose-500'
+														: 'bg-primary'}"
 												style="width: {row.progressPercent}%"
 											></div>
 										</div>
@@ -509,13 +555,13 @@
 										variant="outline"
 										type="button"
 										onclick={() => onToggleShowOnHome(row.compoundId)}
-										disabled={row.originalItem.isCutOff}
+										disabled={row.state !== 'open'}
 										class="h-8 rounded-xl px-3 text-xs font-bold
-										{row.showOnHome && !row.originalItem.isCutOff
+										{row.showOnHome && row.state === 'open'
 											? 'border-blue-200 bg-blue-50/80 text-blue-600 hover:bg-blue-100 hover:text-blue-700 dark:border-blue-900/40 dark:bg-blue-950/30 dark:text-blue-400'
 											: 'border-transparent bg-muted text-muted-foreground opacity-60'}"
 									>
-										{row.showOnHome && !row.originalItem.isCutOff
+										{row.showOnHome && row.state === 'open'
 											? 'กำลังโชว์บนหน้าเว็บ'
 											: 'ซ่อนจากหน้าเว็บ'}
 									</Button>
@@ -537,7 +583,7 @@
 										{/if}
 
 										{#if row.itemId}
-											{#if row.isCutOff && !row.isManualClosed}
+											{#if row.state === 'reached'}
 												<Button
 													variant="outline"
 													type="button"
@@ -546,7 +592,7 @@
 												>
 													ปิดอัตโนมัติ (ครบเป้า)
 												</Button>
-											{:else}
+											{:else if row.state === 'open' || row.isManualClosed}
 												<Button
 													variant="outline"
 													type="button"

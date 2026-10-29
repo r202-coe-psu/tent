@@ -40,9 +40,11 @@
 	import {
 		LATE_BADGE_CLASS,
 		LATE_CARD_EXCLUDED_TEXT,
+		LOAN_REFS_UNKNOWN_LABEL,
 		POOL_STATUS_FILTER_VALUES,
 		RECEIVED_POOL_HIDE_AFTER_DAYS,
 		UNRESOLVED_REFS_HINT,
+		anyLoanRefsUnavailable,
 		buildReturnerNames,
 		filterPoolRows,
 		getPoolBoardViewState,
@@ -164,6 +166,7 @@
 	});
 
 	const rows = $derived(overviewQuery.data ?? []);
+	const loanRefsUnavailable = $derived(anyLoanRefsUnavailable(rows));
 	const hasOpenPool = $derived(listOpenPools(rows).length > 0);
 
 	function handleAddEntry(poolId?: string) {
@@ -315,6 +318,35 @@
 				รายการในศูนย์นี้ ระบบข้ามไว้ไม่แสดง กองที่เกี่ยวข้องจะย้าย ยกเลิกรายการ หรือส่งเข้าคลังไม่ได้จนกว่าจะแก้ไข
 				— ติดต่อผู้ดูแลระบบ
 			</p>
+		</div>
+	{/if}
+
+	{#if loanRefsUnavailable && viewState !== 'error'}
+		<div
+			role="status"
+			data-testid="bulk-return-board-loan-read-failed"
+			class="flex flex-wrap items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900"
+		>
+			<div class="flex min-w-0 flex-1 basis-60 items-start gap-2">
+				<AlertTriangle class="mt-0.5 h-4 w-4 shrink-0 text-amber-600" aria-hidden="true" />
+				<p class="min-w-0 [overflow-wrap:anywhere]">
+					โหลดข้อมูลยอดยืมไม่สำเร็จ กองที่มีป้าย "{LOAN_REFS_UNKNOWN_LABEL}"
+					ยังตรวจไม่ได้ว่ายอดยืมถูกปิดหรือไม่ จึงแสดงไว้ในรายการ "ต้องจัดการ"
+				</p>
+			</div>
+			<Button
+				type="button"
+				variant="outline"
+				onclick={() => overviewQuery.refetch()}
+				disabled={overviewQuery.isFetching}
+				class="min-h-11 gap-2 border-amber-200 bg-white text-amber-900 hover:bg-amber-100"
+			>
+				<RefreshCw
+					class={['h-4 w-4', overviewQuery.isFetching && 'animate-spin']}
+					aria-hidden="true"
+				/>
+				ลองใหม่
+			</Button>
 		</div>
 	{/if}
 
@@ -527,6 +559,15 @@
 									>
 										<AlertTriangle class="h-3.5 w-3.5" aria-hidden="true" />
 										ยอดยืมถูกปิด <span class="tabular-nums">{row.closed_loan_refs.length}</span>
+									</span>
+								{/if}
+								{#if row.loan_refs_unavailable}
+									<span
+										class="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold {LATE_BADGE_CLASS}"
+										data-testid="bulk-return-card-loan-unknown-hint"
+									>
+										<AlertTriangle class="h-3.5 w-3.5" aria-hidden="true" />
+										{LOAN_REFS_UNKNOWN_LABEL}
 									</span>
 								{/if}
 								{#if row.snapshot_conflicts.length > 0}

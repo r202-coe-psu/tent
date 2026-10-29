@@ -3,6 +3,7 @@
 	import Building2 from '@lucide/svelte/icons/building-2';
 	import CalendarDays from '@lucide/svelte/icons/calendar-days';
 	import CircleAlert from '@lucide/svelte/icons/circle-alert';
+	import CircleX from '@lucide/svelte/icons/circle-x';
 	import Clock from '@lucide/svelte/icons/clock';
 	import Download from '@lucide/svelte/icons/download';
 	import Link2 from '@lucide/svelte/icons/link-2';
@@ -127,7 +128,7 @@
 
 	async function confirmCancelTicket() {
 		try {
-			await cancel.mutateAsync(token);
+			await cancel.mutateAsync({ token, applicationId: ticket?.application_id ?? '' });
 			cancelDialogOpen = false;
 			toast.success(t.toastCancelSuccess);
 		} catch (err) {
@@ -256,7 +257,9 @@
 						<div class="text-[10px] font-semibold tracking-wider text-slate-400 uppercase">
 							{t.ticketPassCodeLabel}
 						</div>
-						<div class="mt-0.5 text-sm font-bold tracking-wider text-slate-800 select-all">
+						<div
+							class="mt-0.5 font-mono text-sm font-bold tracking-wider break-all text-slate-800 select-all"
+						>
 							{ticket.token}
 						</div>
 					</div>
@@ -346,16 +349,15 @@
 					</div>
 
 					{#if ticket.status !== 'cancelled' && ticket.can_cancel}
-						<div class="pt-2 text-center">
-							<button
-								class="inline-flex items-center gap-1 text-xs font-medium text-rose-500 transition hover:text-rose-700 disabled:opacity-50"
-								disabled={cancel.isPending}
-								onclick={() => (cancelDialogOpen = true)}
-							>
-								<CircleAlert class="size-3.5" aria-hidden="true" />
-								{t.cancelTicketButton}
-							</button>
-						</div>
+						<Button
+							variant="outline"
+							class="h-auto w-full rounded-xl border-destructive/40 px-4 py-2.5 text-xs font-semibold whitespace-normal text-destructive hover:bg-destructive/10 hover:text-destructive"
+							disabled={cancel.isPending}
+							onclick={() => (cancelDialogOpen = true)}
+						>
+							<CircleX class="size-4" aria-hidden="true" />
+							{t.cancelTicketButton}
+						</Button>
 					{/if}
 				</div>
 
@@ -394,7 +396,7 @@
 						{t.cancelModalCancelBtn}
 					</AlertDialog.Cancel>
 					<AlertDialog.Action
-						class="text-destructive-foreground rounded-xl bg-destructive text-xs font-semibold hover:bg-destructive/90"
+						class="rounded-xl bg-destructive text-xs font-semibold text-destructive-foreground hover:bg-destructive/90"
 						disabled={cancel.isPending}
 						onclick={(e) => {
 							e.preventDefault();

@@ -2,6 +2,8 @@
  * Application workflow errors for Food & Supplies Distribution.
  */
 
+import type { DistributionLog } from '../../domain/food-supplies';
+
 export class WorkflowError extends Error {
 	constructor(message: string) {
 		super(message);
@@ -84,6 +86,40 @@ export class BulkReturnPoolStateError extends WorkflowError {
 		super(message);
 		this.name = 'BulkReturnPoolStateError';
 		this.reason = reason;
+	}
+}
+
+/**
+ * Why a loan reopen (CR-193 §35) was refused: `reason_required` = blank reason, `entry_not_found` =
+ * no such entry, `not_in_snapshot` = the entry is not in the submitted pool snapshot (late entry),
+ * `no_applied_loan` = nothing was cut or it was already reverted, `loan_not_revertable` = an applied
+ * loan moved on (lost / waived / ...) and can no longer be reverted, or a `returned` /
+ * `partially_returned` loan whose `qty_returned` is below the ref qty (see
+ * `isBulkReturnRefRevertable`).
+ */
+export type BulkReturnLoanReopenRejection =
+	| 'reason_required'
+	| 'entry_not_found'
+	| 'not_in_snapshot'
+	| 'no_applied_loan'
+	| 'loan_not_revertable';
+
+/**
+ * A loan reopen was refused before anything was written. `loanStatus` is the current status of the
+ * offending loan for `loan_not_revertable`, so the UI can say why (e.g. `lost`, `waived`).
+ */
+export class BulkReturnLoanReopenError extends WorkflowValidationError {
+	readonly reason: BulkReturnLoanReopenRejection;
+	readonly loanStatus?: DistributionLog['status'];
+	constructor(
+		message: string,
+		reason: BulkReturnLoanReopenRejection,
+		loanStatus?: DistributionLog['status']
+	) {
+		super(message);
+		this.name = 'BulkReturnLoanReopenError';
+		this.reason = reason;
+		this.loanStatus = loanStatus;
 	}
 }
 

@@ -50,6 +50,7 @@ function makeRow(
 		snapshot_conflicts: [],
 		unresolved_refs: [],
 		closed_loan_refs: [],
+		loan_refs_unavailable: false,
 		is_empty: empty
 	} as BulkReturnPoolOverviewRow;
 }
