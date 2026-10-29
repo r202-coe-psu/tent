@@ -48,6 +48,7 @@ export {
 	migratePetGroup,
 	migratePetGroups,
 	isMeaningfulOtherPetNotes,
+	PETS_MAX_COUNT,
 	petSpeciesLabel,
 	groupPetsBySpecies,
 	genderSchema,

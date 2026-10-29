@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { petsForReportIn, unassignedMemberToUnifiedMember } from './review';
+import {
+	countPetGroups,
+	petsForReportIn,
+	petsOverCapForConfirm,
+	unassignedMemberToUnifiedMember
+} from './review';
 import { openMemberHitSchema, type OpenMemberHit } from './search';
 
 const baseMember: OpenMemberHit = {
@@ -83,5 +88,62 @@ describe('petsForReportIn (#798)', () => {
 
 		expect(claimedRows).toHaveLength(1);
 		expect(typedRows).toHaveLength(1);
+	});
+});
+
+describe('countPetGroups', () => {
+	it('adds up the count of each row rather than counting rows', () => {
+		expect(
+			countPetGroups([
+				{ species: 'dog', count: 3 },
+				{ species: 'cat', count: 2 }
+			])
+		).toBe(5);
+	});
+
+	it('treats a row with no usable count as one animal', () => {
+		expect(countPetGroups([{ species: 'dog' } as never])).toBe(1);
+	});
+
+	it('is zero for nothing at all', () => {
+		expect(countPetGroups([])).toBe(0);
+		expect(countPetGroups(null)).toBe(0);
+		expect(countPetGroups(undefined)).toBe(0);
+	});
+});
+
+describe('petsOverCapForConfirm (CR-148 cap stays enforced across both sources)', () => {
+	it('adds the household, the claim and the form together', () => {
+		const result = petsOverCapForConfirm([{ species: 'dog', count: 2 }], 3, [
+			{ species: 'cat', count: 1 }
+		]);
+
+		expect(result.total).toBe(6);
+		expect(result.over).toBe(0);
+	});
+
+	it('allows exactly the cap', () => {
+		expect(petsOverCapForConfirm([], 10, []).over).toBe(0);
+	});
+
+	it('reports how many animals are over the cap', () => {
+		const result = petsOverCapForConfirm([], 8, [{ species: 'cat', count: 5 }]);
+
+		expect(result.total).toBe(13);
+		expect(result.cap).toBe(10);
+		expect(result.over).toBe(3);
+	});
+
+	it('catches an overflow that neither side would catch on its own', () => {
+		expect(petsOverCapForConfirm([], 9, [{ species: 'cat', count: 1 }]).over).toBe(0);
+		expect(petsOverCapForConfirm([], 9, [{ species: 'cat', count: 2 }]).over).toBe(1);
+	});
+
+	it('ignores a negative claim count', () => {
+		expect(petsOverCapForConfirm([], -5, [{ species: 'cat', count: 1 }]).total).toBe(1);
+	});
+
+	it('is empty-safe', () => {
+		expect(petsOverCapForConfirm(null, 0, null)).toEqual({ total: 0, over: 0, cap: 10 });
 	});
 });

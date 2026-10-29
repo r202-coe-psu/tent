@@ -37,6 +37,7 @@
 		formatOpenPetLabel,
 		petsForReportIn,
 		petsLeftBehind,
+		petsOverCapForConfirm,
 		totalPetCount,
 		unassignedHouseholdToUnifiedInput,
 		unassignedMemberToUnifiedMember,
@@ -151,6 +152,16 @@
 		saveError = null;
 		const consent = meta?.consent ?? null;
 		try {
+			const petsCheck = petsOverCapForConfirm(
+				existingHousehold?.pets,
+				totalPetCount(openPets),
+				input.household.pets
+			);
+			if (petsCheck.over > 0) {
+				throw new Error(
+					`สัตว์เลี้ยงของครัวเรือนนี้จะรวมเป็น ${petsCheck.total} ตัว เกินเพดาน ${petsCheck.cap} ตัวต่อครัวเรือนอยู่ ${petsCheck.over} ตัว — ลดสัตว์เลี้ยงที่กรอกเพิ่มในขั้นตอนที่ 3 หรือกลับไปเลือกจากคิวกลางให้น้อยลง`
+				);
+			}
 			if (!claimedHouseholdId) {
 				const claimResult = await claimMutation.mutateAsync(claimPayload());
 				claimedHouseholdId = claimResult.household_id;

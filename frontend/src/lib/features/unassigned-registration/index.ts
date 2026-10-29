@@ -22,7 +22,9 @@ export type {
 
 export type { UnassignedRegistrationReview } from './domain/review';
 export {
+	countPetGroups,
 	petsForReportIn,
+	petsOverCapForConfirm,
 	unassignedHouseholdToUnifiedInput,
 	unassignedMemberToUnifiedMember,
 	unassignedPhotoUrl,

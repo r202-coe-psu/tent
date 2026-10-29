@@ -5,6 +5,7 @@
  */
 
 import { z } from 'zod';
+import { PETS_MAX_COUNT } from '$lib/features/people';
 import type { PetGroup, UnifiedHouseholdInput, UnifiedMemberWithMeta } from '$lib/features/people';
 import { openMemberHitSchema, openPetHitSchema, type OpenMemberHit } from './search';
 
@@ -102,6 +103,24 @@ export function unassignedMemberToUnifiedMember(member: OpenMemberHit): UnifiedM
  * at confirm time by {@link petsForReportIn}, never merged into this initial value.
  */
 type FormPetGroups = NonNullable<UnifiedHouseholdInput['pets']>;
+
+export function countPetGroups(
+	pets: FormPetGroups | readonly PetGroup[] | null | undefined
+): number {
+	return (pets ?? []).reduce((sum, pet) => sum + (Number(pet.count) || 1), 0);
+}
+
+export function petsOverCapForConfirm(
+	householdPetsBeforeClaim: readonly PetGroup[] | null | undefined,
+	petsClaimWillAdd: number,
+	petsTypedOnForm: FormPetGroups | null | undefined
+): { total: number; over: number; cap: number } {
+	const total =
+		countPetGroups(householdPetsBeforeClaim) +
+		Math.max(0, petsClaimWillAdd) +
+		countPetGroups(petsTypedOnForm);
+	return { total, over: Math.max(0, total - PETS_MAX_COUNT), cap: PETS_MAX_COUNT };
+}
 
 export function petsForReportIn(
 	petsWrittenByClaim: readonly PetGroup[] | null | undefined,
