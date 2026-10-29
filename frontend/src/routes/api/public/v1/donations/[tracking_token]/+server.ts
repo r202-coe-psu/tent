@@ -4,6 +4,7 @@ import { sha256Hex } from '$lib/db/hash';
 import { fastapiBaseUrl, fastapiServiceHeaders } from '$lib/server/fastapi';
 import {
 	isDonorEditable,
+	toTrackingDonor,
 	toTrackingLogistics,
 	type PublicDonationDoc
 } from '$lib/features/donations/server';
@@ -105,7 +106,8 @@ export const GET = async ({ params }) => {
 				status: latestDoc?.status ?? donation.status,
 				booking_ref: latestDoc?.booking_ref ?? donation.booking_ref,
 				shelter_code: latestDoc?.shelter_code ?? donation.shelter_code,
-				donor: latestDoc?.donor ?? donation.donor ?? {},
+				// Allowlisted: the CouchDB doc holds the full phone, phone_hash, LINE and email.
+				donor: toTrackingDonor(latestDoc?.donor ?? donation.donor),
 				items: latestDoc?.items ?? donation.items ?? [],
 				// CR-209 FR-4 — allowlisted, so `vehicle_plate` never leaves through tracking.
 				logistics: toTrackingLogistics(latestDoc?.logistics ?? donation.logistics),

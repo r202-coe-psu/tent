@@ -9,6 +9,7 @@ import {
 	maskLookupPhone,
 	rejectedLineReasons,
 	toDonationTrackView,
+	toTrackingDonor,
 	toTrackingLogistics,
 	type DonationLookupItem
 } from './tracking';
@@ -260,5 +261,31 @@ describe('toTrackingLogistics null handling', () => {
 		expect(
 			toTrackingLogistics({ delivery_method: null, vehicle: null, courier_tracking_no: null })
 		).toEqual({ vehicle: null, courier_tracking_no: null });
+	});
+});
+
+describe('toTrackingDonor', () => {
+	it('keeps the name and masks a raw phone', () => {
+		expect(
+			toTrackingDonor({
+				name: 'สมชาย',
+				phone: '081-234-5678',
+				phone_hash: 'h',
+				line_id: 'l',
+				email: 'e@x.th'
+			})
+		).toEqual({ name: 'สมชาย', phone_masked: '***-***-5678' });
+	});
+
+	it('passes through an already-masked phone and nothing else', () => {
+		expect(toTrackingDonor({ name: 'A', phone_masked: '***-***-1111', email: 'e@x.th' })).toEqual({
+			name: 'A',
+			phone_masked: '***-***-1111'
+		});
+	});
+
+	it('returns an empty donor for missing or malformed input', () => {
+		expect(toTrackingDonor(undefined)).toEqual({});
+		expect(toTrackingDonor({ phone: null })).toEqual({});
 	});
 });

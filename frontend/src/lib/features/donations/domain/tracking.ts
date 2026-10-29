@@ -238,6 +238,28 @@ export function toTrackingLogistics(raw: unknown): DonationTrackLogistics | null
 	return out;
 }
 
+/** `***-***-1234` — the form FastAPI's tracking payload already uses (`_mask_phone`). */
+function maskTrackingPhone(phone: string): string {
+	const digits = phone.replace(/\D/g, '');
+	return digits.length < 4 ? '***' : `***-***-${digits.slice(-4)}`;
+}
+
+/**
+ * The `donor` the public tracking API may return: the name and a masked phone, nothing else.
+ * The CouchDB doc carries the full `phone`, `phone_hash`, `line_id` and `email`; the tracking
+ * page shows only the name and `phone_masked`, so the rest never leaves the server.
+ */
+export function toTrackingDonor(raw: unknown): DonationTrackDonor {
+	if (!raw || typeof raw !== 'object') return {};
+	const src = raw as Record<string, unknown>;
+	const out: DonationTrackDonor = {};
+	if (typeof src.name === 'string') out.name = src.name;
+	if (typeof src.phone_masked === 'string') out.phone_masked = src.phone_masked;
+	else if (typeof src.phone === 'string' && src.phone)
+		out.phone_masked = maskTrackingPhone(src.phone);
+	return out;
+}
+
 /** Normalize BFF / FastAPI tracking payload into a stable UI view. */
 export function toDonationTrackView(raw: Record<string, unknown>): DonationTrackView {
 	const donorRaw = (raw.donor ?? {}) as Record<string, unknown>;
