@@ -512,6 +512,86 @@ describe('distribution-workflow', () => {
 		).rejects.toThrow(/already received a meal/);
 	});
 
+	it('logs a staff recipient by user id and blocks their repeat meal', async () => {
+		const ticket = await ticketRepo.create(
+			{
+				ticket_no: 'TKT-FOOD-STAFF1',
+				requisition_type: 'food',
+				meal: 'lunch',
+				source_location: 'warehouse:main',
+				destination_location: 'point:a',
+				items: [
+					{
+						item_id: 'item:curry',
+						item_name: 'Curry',
+						type_class: 'CONSUMABLE',
+						returnable: false,
+						requested_qty: '10',
+						allocated_qty: '10'
+					}
+				]
+			},
+			POS_CTX
+		);
+		const staffInput = {
+			item_id: 'item:curry',
+			qty: '1',
+			recipient_type: 'staff' as const,
+			recipient_id: 'user:somchai',
+			menu_check: { recipient_tags: null, menu: { dietary: [], age_group: 'ALL' } }
+		};
+
+		const log = await recordFoodDistribution(ticket._id, staffInput, POS_CTX, {
+			ticketRepo,
+			logRepo
+		});
+		expect(log.recipient_type).toBe('staff');
+		expect(log.recipient_id).toBe('user:somchai');
+
+		await expect(
+			recordFoodDistribution(ticket._id, staffInput, POS_CTX, { ticketRepo, logRepo })
+		).rejects.toThrow(/already received a meal/);
+	});
+
+	it('lets a different staff member receive the same meal', async () => {
+		const ticket = await ticketRepo.create(
+			{
+				ticket_no: 'TKT-FOOD-STAFF2',
+				requisition_type: 'food',
+				meal: 'lunch',
+				source_location: 'warehouse:main',
+				destination_location: 'point:a',
+				items: [
+					{
+						item_id: 'item:curry',
+						item_name: 'Curry',
+						type_class: 'CONSUMABLE',
+						returnable: false,
+						requested_qty: '10',
+						allocated_qty: '10'
+					}
+				]
+			},
+			POS_CTX
+		);
+		const staffInput = (recipient_id: string) => ({
+			item_id: 'item:curry',
+			qty: '1',
+			recipient_type: 'staff' as const,
+			recipient_id
+		});
+		await recordFoodDistribution(ticket._id, staffInput('user:somchai'), POS_CTX, {
+			ticketRepo,
+			logRepo
+		});
+
+		const second = await recordFoodDistribution(ticket._id, staffInput('user:somsri'), POS_CTX, {
+			ticketRepo,
+			logRepo
+		});
+		expect(second.recipient_id).toBe('user:somsri');
+	});
+
 	it('scopes food entitlement to the Thailand calendar day and ignores voided logs', async () => {
 		const ticket = await ticketRepo.create(
 			{
