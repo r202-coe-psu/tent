@@ -196,46 +196,68 @@ export async function applyRefToLoan(
 	return (await applyRefToLoanDetailed(logRepo, entry, ref, ctx)).skipped;
 }
 
-/** Like applyRefToLoan, but also reports whether this call newly wrote the apply. */
+/**
+ * Like applyRefToLoan, but also reports whether this call newly wrote the apply and whether the
+ * entry was found voided (then nothing is written: `skipped` is null and `written` false).
+ *
+ * `isEntryVoided` is awaited on every CAS attempt, after the loan was read and before the write is
+ * computed, so a void that lands between two attempts is seen by the retry. A void document written
+ * after that read but before the loan PUT is not seen: the void's own revert then finds nothing
+ * applied yet and the cut survives; that window is a single read-to-PUT round trip.
+ */
 export async function applyRefToLoanDetailed(
 	logRepo: DistributionLogRepository,
 	entry: BulkReturnEntry,
 	ref: BulkReturnEntryLoanRef,
-	ctx: AuthorContext
-): Promise<{ skipped: BulkReturnLoanSkipped | null; written: boolean }> {
+	ctx: AuthorContext,
+	isEntryVoided?: () => Promise<boolean>
+): Promise<{ skipped: BulkReturnLoanSkipped | null; written: boolean; voided: boolean }> {
 	let skipped = null as BulkReturnLoanSkipped | null;
 	let written = false;
+	let voided = false;
 	try {
-		await logRepo.mutateLogCAS(ref.distribution_log_id, (current) => {
-			skipped = null; // the mutator may run again on a CAS retry
-			written = false;
-			const assessment = assessBulkReturnRefOnLoan(current, ref, entry._id);
-			if (assessment.status === 'already_applied') return current;
-			if (assessment.status === 'skip') {
-				skipped = {
-					distribution_log_id: ref.distribution_log_id,
-					qty: ref.qty,
-					reason: assessment.reason,
-					...(assessment.outstanding !== undefined ? { outstanding: assessment.outstanding } : {})
-				};
-				return current; // same reference: the repository writes nothing
-			}
-			written = true;
-			return applyBulkEntryToLog(
-				current,
-				{ entry_id: entry._id, qty: ref.qty },
-				ctx.createdBy,
-				now()
-			);
-		});
+		await logRepo.mutateLogCAS(
+			ref.distribution_log_id,
+			(current) => {
+				skipped = null; // the mutator may run again on a CAS retry
+				written = false;
+				if (voided) return current;
+				const assessment = assessBulkReturnRefOnLoan(current, ref, entry._id);
+				if (assessment.status === 'already_applied') return current;
+				if (assessment.status === 'skip') {
+					skipped = {
+						distribution_log_id: ref.distribution_log_id,
+						qty: ref.qty,
+						reason: assessment.reason,
+						...(assessment.outstanding !== undefined ? { outstanding: assessment.outstanding } : {})
+					};
+					return current; // same reference: the repository writes nothing
+				}
+				written = true;
+				return applyBulkEntryToLog(
+					current,
+					{ entry_id: entry._id, qty: ref.qty },
+					ctx.createdBy,
+					now()
+				);
+			},
+			isEntryVoided
+				? {
+						beforeWrite: async () => {
+							voided = await isEntryVoided();
+						}
+					}
+				: undefined
+		);
 	} catch (err) {
 		if (!(err instanceof NotFoundError)) throw err;
 		return {
 			skipped: { distribution_log_id: ref.distribution_log_id, qty: ref.qty, reason: 'missing' },
-			written: false
+			written: false,
+			voided: false
 		};
 	}
-	return { skipped, written };
+	return { skipped, written, voided };
 }
 
 export async function revertRefOnLoan(

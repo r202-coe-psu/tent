@@ -179,7 +179,7 @@ export function createBulkReturnPoolV3Fixture(couch: InMemoryCouch) {
 				await afterList();
 				return found;
 			},
-			mutateLogCAS: (id, m) => logRepo.mutateLogCAS(id, m),
+			mutateLogCAS: (id, m, o) => logRepo.mutateLogCAS(id, m, o),
 			recordReturn: (id, i, c) => logRepo.recordReturn(id, i, c),
 			recordClear: (id, i, c) => logRepo.recordClear(id, i, c),
 			recordVoid: (id, c, n) => logRepo.recordVoid(id, c, n)

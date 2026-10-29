@@ -67,6 +67,11 @@ export interface RecordClearInput {
 	notes: string;
 }
 
+export interface MutateLogCasOptions {
+	/** Async hook run on every CAS attempt after the read and before the mutator (see `mutateLogCAS`). */
+	beforeWrite?: (current: DistributionLog) => Promise<void>;
+}
+
 export interface DistributionLogRepository {
 	create(
 		logInput: DistributionLogInput | DistributionLog,
@@ -87,9 +92,15 @@ export interface DistributionLogRepository {
 	 * malformed docs are reported in `skipped` instead of failing the read.
 	 */
 	getMany(ids: readonly string[]): Promise<{ items: DistributionLog[]; skipped: SkippedDoc[] }>;
+	/**
+	 * Read -> mutate -> put with `_rev` (409 re-reads and retries). The mutator is synchronous and
+	 * may run again on a retry. `options.beforeWrite` is awaited on EVERY attempt, right after the
+	 * log was read and before the mutator runs, for checks that need I/O against that fresh read.
+	 */
 	mutateLogCAS(
 		logId: string,
-		mutator: (current: DistributionLog) => DistributionLog
+		mutator: (current: DistributionLog) => DistributionLog,
+		options?: MutateLogCasOptions
 	): Promise<DistributionLog>;
 	recordReturn(
 		logId: string,
@@ -177,13 +188,15 @@ export class DistributionLogRemoteRepository implements DistributionLogRepositor
 
 	async mutateLogCAS(
 		logId: string,
-		mutator: (current: DistributionLog) => DistributionLog
+		mutator: (current: DistributionLog) => DistributionLog,
+		options?: MutateLogCasOptions
 	): Promise<DistributionLog> {
 		return retryCas(async () => {
 			const current = await this.get(logId);
 			if (!current) {
 				throw new NotFoundError(`Distribution log ${logId} not found`);
 			}
+			await options?.beforeWrite?.(current);
 
 			const computed = mutator(current);
 			// Same reference = "nothing to write" (e.g. an already-applied bulk entry); mirrors the pool repo.
