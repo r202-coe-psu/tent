@@ -41,3 +41,17 @@ export function listStoragePoints(shelter: ShelterWithStorage | undefined): SubS
 		(point) => !!point.id && point.name.trim() !== ''
 	);
 }
+
+/**
+ * Storage points ticked as donation drop-off points (CR-205). A ticked point with no
+ * usable pin is left out, matching what the worker projects to the public plane.
+ */
+export function listDonationPoints(shelter: ShelterWithStorage | undefined): SubStorageItem[] {
+	return listStoragePoints(shelter).filter(
+		(point) =>
+			point.accepts_donations === true &&
+			point.lat != null &&
+			point.lng != null &&
+			!(point.lat === 0 && point.lng === 0)
+	);
+}

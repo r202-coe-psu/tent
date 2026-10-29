@@ -29,4 +29,5 @@ per deploy, so batch related projector changes into one bump per release when po
 #: 10 — CR-183: bootstrap also scans closed shelters still in their retention window
 #: (persons only), restoring the ``public_persons`` the old retention deleted on close.
 #: 11 — CR-196 (``public_donations.items_declared[].line_key``).
-PROJECTION_VERSION: int = 11
+#: 12 — CR-205: ``public_shelters.donation_points`` (ticked storage points with a pin).
+PROJECTION_VERSION: int = 12
