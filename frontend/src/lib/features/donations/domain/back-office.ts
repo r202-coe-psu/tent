@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { thaiMobilePhoneSchema } from '$lib/db/model';
 import { qtyStrCoercePositiveSchema } from '$lib/utils/qty';
 import { isRealCalendarDate } from '$lib/features/operations/server';
 
@@ -64,13 +65,9 @@ export const walkInIntakeInputSchema = z.object({
 	shelter_code: z.string().trim().min(1).optional(),
 	donor: z.object({
 		name: z.string().trim().min(1, 'ต้องระบุชื่อผู้บริจาค'),
-		// Digits only: `donor.phone` feeds `phone_hash`, and a formatted string would
-		// hash differently every time the same donor comes back (schema.md §2.3).
-		phone: z
-			.string()
-			.trim()
-			.regex(/^[0-9]*$/, 'เบอร์โทรต้องเป็นตัวเลขเท่านั้น')
-			.optional(),
+		// Normalized to `^0\d{9}$` (null when blank): `donor.phone` feeds `phone_hash`, so the same
+		// donor must always produce the same string (schema.md §2.3).
+		phone: thaiMobilePhoneSchema,
 		email: z.string().trim().email().optional()
 	}),
 	items: z
