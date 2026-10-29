@@ -6239,6 +6239,155 @@ describe('buildValidateDocUpdate', () => {
 			});
 		});
 
+		describe('bulk_return_loan_reopen VDU validation (Rule 14e)', () => {
+			const ENTRY_ULID = '01J00000000000000000000040';
+			const REOPEN_ID = `bulk_return_loan_reopen:${ENTRY_ULID}`;
+			const reopenDoc: Doc = {
+				_id: REOPEN_ID,
+				type: 'bulk_return_loan_reopen',
+				schema_v: 1,
+				shelter_code: 'SH001',
+				created_at: '2026-10-01T00:00:00.000Z',
+				updated_at: '2026-10-01T00:00:00.000Z',
+				created_by: 'mgr',
+				entry_id: `bulk_return_entry:${ENTRY_ULID}`,
+				pool_id: 'bulk_return_pool:01J00000000000000000000010',
+				reason: 'wrong pool closed',
+				loan_ids: [
+					'distribution_log:01J00000000000000000000051',
+					'distribution_log:01J00000000000000000000052'
+				]
+			};
+			const asUser = (user: UserCtx, over: Doc = {}): Doc => ({
+				...reopenDoc,
+				created_by: user.name,
+				...over
+			});
+
+			it('accepts a valid doc from shelter_manager, warehouse_staff and system_admin', () => {
+				for (const user of [MANAGER, WAREHOUSE, ADMIN]) {
+					expect(() => compile()(asUser(user), null, user)).not.toThrow();
+				}
+			});
+
+			it('rejects supply coordinator and distribution staff', () => {
+				for (const user of [SUPPLY_COORD, DISTRIBUTION]) {
+					expectForbidden(
+						() => compile()(asUser(user), null, user),
+						/Only shelter managers, warehouse staff or system admins can reopen bulk return loans/
+					);
+				}
+			});
+
+			it('rejects a warehouse_staff or shelter_manager of another shelter', () => {
+				for (const roles of [['SH002:warehouse_staff'], ['SH002:shelter_manager']]) {
+					const user: UserCtx = { name: 'other', roles };
+					expectForbidden(
+						() => compile()(asUser(user), null, user),
+						/Only shelter managers, warehouse staff or system admins can reopen bulk return loans/
+					);
+				}
+			});
+
+			it('rejects a wrong schema_v', () => {
+				expectForbidden(
+					() => compile()(asUser(MANAGER, { schema_v: 2 }), null, MANAGER),
+					/schema version/
+				);
+			});
+
+			it('requires created_by to be the current actor', () => {
+				expectForbidden(
+					() => compile()(asUser(MANAGER, { created_by: 'mallory' }), null, MANAGER),
+					/created_by must match the current actor/
+				);
+			});
+
+			it('requires a well-formed id and an entry_id matching its ULID', () => {
+				for (const _id of [
+					'bulk_return_loan_reopen:short',
+					`bulk_return_loan_reopen:${ENTRY_ULID}:0001`,
+					`bulk_return_entry:${ENTRY_ULID}`
+				]) {
+					expectForbidden(
+						() => compile()(asUser(MANAGER, { _id }), null, MANAGER),
+						/id must be bulk_return_loan_reopen:\{entryUlid\}/
+					);
+				}
+				expectForbidden(
+					() =>
+						compile()(
+							asUser(MANAGER, { entry_id: 'bulk_return_entry:01J00000000000000000000099' }),
+							null,
+							MANAGER
+						),
+					/entry_id must match the entry ULID/
+				);
+			});
+
+			it('requires a valid pool_id', () => {
+				expectForbidden(
+					() => compile()(asUser(MANAGER, { pool_id: 'bulk_return_pool:x' }), null, MANAGER),
+					/requires pool_id/
+				);
+			});
+
+			it('requires a reason of 1-500 trimmed characters', () => {
+				for (const reason of ['', '   ', 'x'.repeat(501), 5]) {
+					expectForbidden(
+						() => compile()(asUser(MANAGER, { reason }), null, MANAGER),
+						/reason must be 1-500 characters/
+					);
+				}
+				expect(() =>
+					compile()(asUser(MANAGER, { reason: 'x'.repeat(500) }), null, MANAGER)
+				).not.toThrow();
+			});
+
+			it('requires loan_ids to be a non-empty array', () => {
+				for (const loan_ids of [[], undefined, 'distribution_log:01J00000000000000000000051']) {
+					expectForbidden(
+						() => compile()(asUser(MANAGER, { loan_ids }), null, MANAGER),
+						/loan_ids must be a non-empty array/
+					);
+				}
+			});
+
+			it('rejects duplicate loan_ids', () => {
+				const dup = 'distribution_log:01J00000000000000000000051';
+				expectForbidden(
+					() => compile()(asUser(MANAGER, { loan_ids: [dup, dup] }), null, MANAGER),
+					/Duplicate id in bulk_return_loan_reopen.loan_ids/
+				);
+			});
+
+			it('rejects loan_ids that are not distribution_log ids', () => {
+				for (const bad of [
+					'bulk_return_entry:01J00000000000000000000051',
+					'distribution_log:x',
+					5
+				]) {
+					expectForbidden(
+						() => compile()(asUser(MANAGER, { loan_ids: [bad] }), null, MANAGER),
+						/loan_ids must contain distribution_log:\{ulid\} ids/
+					);
+				}
+			});
+
+			it('is append-only: no update and no delete, even for system_admin', () => {
+				for (const user of [MANAGER, ADMIN]) {
+					expectForbidden(
+						() => compile()(asUser(user, { reason: 'edit' }), asUser(user), user),
+						/Cannot update append-only bulk_return_loan_reopen documents/
+					);
+					expectForbidden(
+						() => compile()({ _id: REOPEN_ID, _deleted: true }, asUser(user), user),
+						/Cannot delete append-only bulk_return_loan_reopen documents/
+					);
+				}
+			});
+		});
+
 		describe('bulk_return_claim VDU validation (Rule 15)', () => {
 			const STAFF_A: UserCtx = { name: 'staff_a', roles: ['shelter:SH001', 'registration_staff'] };
 			const STAFF_B: UserCtx = { name: 'staff_b', roles: ['shelter:SH001', 'supply_coordinator'] };

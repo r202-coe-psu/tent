@@ -416,7 +416,8 @@ ${consentVduClause()}
     'meal_service', 'meal_service_receipt',
     'distribution_issue', 'distribution_issue_idempotency',
     // #658: event log of a bulk return pool — never updated, never deleted.
-    'bulk_return_entry', 'bulk_return_entry_move', 'bulk_return_entry_void'
+    'bulk_return_entry', 'bulk_return_entry_move', 'bulk_return_entry_void',
+    'bulk_return_loan_reopen'
   ];
   var wasAppendOnly = oldDoc && appendOnly.indexOf(oldDoc.type) !== -1;
   if (newDoc._deleted) {
@@ -514,6 +515,7 @@ ${consentVduClause()}
 		'shelter_readiness_assessment',
     'requisition_ticket', 'distribution_log', 'bulk_return_pool', 'bulk_return_claim', 'loan_return_reservation',
     'bulk_return_entry', 'bulk_return_entry_move', 'bulk_return_entry_void',
+    'bulk_return_loan_reopen',
     'meal_service_receipt',
     'shelter_incident', 'daily_sop_role_assessment'
   ];
@@ -2773,6 +2775,49 @@ ${consentVduClause()}
     }
     if (typeof newDoc.notes !== 'undefined' && (typeof newDoc.notes !== 'string' || !newDoc.notes.trim())) {
       throw { forbidden: 'bulk_return_entry_void notes must be a non-empty string' };
+    }
+  }
+  // 14e. CR-193 §35: bulk_return_loan_reopen (append-only; deterministic id so an entry's loans are
+  // reopened at most once — a second reopen is a CouchDB 409 conflict, not a VDU rejection). A shelter
+  // manager or warehouse staff reopens the loans of ONE bulk_return_entry whose pool is closed. Advisory (VDU cannot
+  // read other docs): the pool is closed, entry_id belongs to pool_id, and loan_ids are exactly the
+  // loans that hold the entry in applied_bulk_entry_ids — enforced by the domain checks. The loan
+  // revert itself is authorised by the existing distribution_log rule (canReturnLoanPhysical); the
+  // narrower shelter_manager / warehouse_staff role applies to this doc only.
+  if (newDoc.type === 'bulk_return_loan_reopen') {
+    if (newDoc.schema_v !== 1) {
+      throw { forbidden: 'Unsupported bulk_return_loan_reopen schema version' };
+    }
+    if (!isRole('shelter_manager') && !isRole('warehouse_staff')) {
+      throw { forbidden: 'Only shelter managers, warehouse staff or system admins can reopen bulk return loans' };
+    }
+    if (newDoc.created_by !== userCtx.name) {
+      throw { forbidden: 'bulk_return_loan_reopen.created_by must match the current actor' };
+    }
+    var reopenIdMatch = /^bulk_return_loan_reopen:([0-9A-HJKMNP-TV-Z]{26})$/.exec(newDoc._id);
+    if (!reopenIdMatch) {
+      throw { forbidden: 'bulk_return_loan_reopen id must be bulk_return_loan_reopen:{entryUlid}' };
+    }
+    if (newDoc.entry_id !== 'bulk_return_entry:' + reopenIdMatch[1]) {
+      throw { forbidden: 'bulk_return_loan_reopen entry_id must match the entry ULID in _id' };
+    }
+    if (typeof newDoc.pool_id !== 'string' || !/^bulk_return_pool:[0-9A-HJKMNP-TV-Z]{26}$/.test(newDoc.pool_id)) {
+      throw { forbidden: 'bulk_return_loan_reopen requires pool_id' };
+    }
+    if (typeof newDoc.reason !== 'string' || newDoc.reason.trim().length < 1 || newDoc.reason.trim().length > 500) {
+      throw { forbidden: 'bulk_return_loan_reopen reason must be 1-500 characters' };
+    }
+    if (!Array.isArray(newDoc.loan_ids) || newDoc.loan_ids.length === 0) {
+      throw { forbidden: 'bulk_return_loan_reopen loan_ids must be a non-empty array' };
+    }
+    for (var rl = 0; rl < newDoc.loan_ids.length; rl++) {
+      var reopenLoanId = newDoc.loan_ids[rl];
+      if (typeof reopenLoanId !== 'string' || !/^distribution_log:[0-9A-HJKMNP-TV-Z]{26}$/.test(reopenLoanId)) {
+        throw { forbidden: 'bulk_return_loan_reopen.loan_ids must contain distribution_log:{ulid} ids' };
+      }
+      if (newDoc.loan_ids.indexOf(reopenLoanId) !== rl) {
+        throw { forbidden: 'Duplicate id in bulk_return_loan_reopen.loan_ids: ' + reopenLoanId };
+      }
     }
   }
   // 15. CR-134: bulk_return_claim validation (Rule 15)

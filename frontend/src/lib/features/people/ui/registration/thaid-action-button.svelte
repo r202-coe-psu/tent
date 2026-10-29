@@ -10,15 +10,21 @@
 	interface Props {
 		shelterCode?: string;
 		disabled?: boolean;
+		/** Onsite: open the cross-device QR dialog instead of leaving the page. */
+		onConnect?: () => void;
 	}
 
-	let { shelterCode = '', disabled = false }: Props = $props();
+	let { shelterCode = '', disabled = false, onConnect }: Props = $props();
 
 	const t = $derived(getTranslation(PUBLIC_BOOKING_FORM_I18N, langState.current));
 
 	let isRedirecting = $state(false);
 
 	function handleRealConnect() {
+		if (onConnect) {
+			onConnect();
+			return;
+		}
 		if (isRedirecting) return;
 		isRedirecting = true;
 		const currentUrl = new URL(window.location.href);

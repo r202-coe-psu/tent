@@ -1,6 +1,7 @@
 import { addQty } from '$lib/utils/qty';
 import {
 	canAppendToPool,
+	canReopenEntryLoans,
 	isPoolNameTakenAmongOpen,
 	type BulkReturnEntry,
 	type AppliedBulkReturnLoanRef,
@@ -11,6 +12,7 @@ import {
 	type BulkReturnPoolV3Status
 } from '../../domain/food-supplies';
 import type { UpdateBulkReturnPoolHeaderPatch } from '../../application/food-supplies/bulk-return-pool-v3-lifecycle';
+import { BULK_RETURN_REOPEN_BLOCKED_COPY } from './bulk-return-copy';
 
 /**
  * #659 — pure view-model helpers for the bulk return pool v3 board (list / detail / dialogs).
@@ -47,6 +49,22 @@ export const MOVE_SNAPSHOT_CONFLICT_TOAST =
 export const MISSED_LOAN_WARNING = 'ยอดยืมของรายการนี้ยังไม่ถูกตัด';
 export const MISSED_LOAN_WARNING_TESTID = 'bulk-return-missed-loan-warning';
 export const MISSED_LOAN_ACTION = 'ตัดยอดยืมที่ค้าง';
+/** CR-193 §35: reopen the loans of one entry of a closed pool. */
+export const REOPEN_LOAN_ACTION = 'เปิดยอดยืมกลับ';
+export const REOPEN_LOAN_DESCRIPTION =
+	'ใช้เมื่อพบภายหลังว่าของรายการนี้ไม่ได้คืนจริง ระบบจะเปิดยอดยืมของผู้คืนกลับเป็นค้าง โดยไม่แก้ยอดกองหรือยอดคลัง (ถ้าตอนตรวจรับยังไม่ได้หัก และต้องแก้ยอดคลัง ให้ทำแถวปรับยอดที่หน้าคลัง)';
+export const REOPEN_LOAN_CANCEL = 'ยกเลิก';
+/** Resume a reopen whose doc is already written but some loan is still applied (no new reason). */
+export const REOPEN_LOAN_RESUME_ACTION = 'ทำต่อให้เสร็จ';
+export const REOPEN_LOAN_REASON_LABEL = 'เหตุผล';
+export const REOPEN_LOAN_CONFIRM = 'ยืนยันเปิดยอดยืมกลับ';
+export const REOPEN_LOAN_ERROR = 'เปิดยอดยืมกลับไม่สำเร็จ กรุณาลองใหม่อีกครั้ง';
+export const REOPEN_LOAN_REPLAYED_TOAST = 'รายการนี้ถูกเปิดยอดยืมกลับไปแล้ว';
+export const REOPEN_LOAN_SKIPPED_TOAST = 'บางรายการยืมถูกปิดไปแล้ว จึงเปิดกลับไม่ได้';
+export const REOPEN_LOAN_DONE_NOTE = 'เปิดยอดยืมกลับแล้ว';
+export function reopenLoanSuccessToast(count: number): string {
+	return `เปิดยอดยืมกลับแล้ว ${count} รายการ`;
+}
 export const POOL_LOCKED_REASON = 'กองนี้กำลังถูกดำเนินการ กรุณารอสักครู่แล้วรีเฟรช';
 
 export type BulkReturnPoolRow = BulkReturnPoolOverviewRow;
@@ -382,6 +400,88 @@ export function canMoveEntry(row: BulkReturnPoolRow, entryId: string): boolean {
 /** Void is only possible while the pool is OPEN and unlocked. */
 export function canVoidEntry(row: BulkReturnPoolRow): boolean {
 	return isPoolEditable(row.pool);
+}
+
+/**
+ * CR-193 §35: "reopen loans" on an entry of a closed pool (SUBMITTED / RECEIVED, entry in the
+ * snapshot) that has applied loan refs, for a role allowed to do it.
+ * - `showButton`: every applied ref is still revertable. For an already reopened entry (replay path,
+ *   no pre-check) it is offered while at least one applied ref is still revertable.
+ * - `blockedNotice`: why the button is NOT offered where it otherwise would be (some applied loan
+ *   was closed or moved on, so the workflow pre-check would reject the whole entry). Null when the
+ *   entry is not a reopen candidate, the button shows, or the entry was already reopened. The
+ *   lost/waived-specific copy is used only when every blocked ref is lost or waived; otherwise the
+ *   generic "changed" copy counts all blocked refs.
+ * - `reopenedKnown`: whether `reopened` is trustworthy (the timeline loaded). When it is false,
+ *   nothing is shown (no button, no notice), since the entry may already have a reopen doc.
+ */
+export function reopenLoanAction(args: {
+	pool: Pick<BulkReturnPoolV3, 'status' | 'entry_ids'>;
+	entryId: string;
+	appliedRefs: readonly Pick<AppliedBulkReturnLoanRef, 'revertable' | 'loan_status'>[];
+	canReopen: boolean;
+	reopened: boolean;
+	reopenedKnown: boolean;
+}): { showButton: boolean; blockedNotice: string | null } {
+	const none = { showButton: false, blockedNotice: null };
+	// Timeline not loaded (pending / failed): `reopened` is unreliable (an entry that already has a
+	// reopen doc must not get the plain reopen button), so neither offer the button nor claim the
+	// entry is blocked.
+	if (!args.reopenedKnown) return none;
+	if (!args.canReopen || args.appliedRefs.length === 0) return none;
+	if (!canReopenEntryLoans(args.pool, args.entryId)) return none;
+	const blocked = args.appliedRefs.filter((ref) => !ref.revertable);
+	if (blocked.length === 0) return { showButton: true, blockedNotice: null };
+	const total = args.appliedRefs.length;
+	if (args.reopened) {
+		// Replay path: the workflow skips the pre-check and not-revertable loans, and still reverts
+		// the revertable ones, so offer it while any applied ref remains revertable (never a notice).
+		return { showButton: blocked.length < total, blockedNotice: null };
+	}
+
+	const lost = blocked.filter((ref) => ref.loan_status === 'lost').length;
+	const waived = blocked.filter((ref) => ref.loan_status === 'waived').length;
+	const copy = BULK_RETURN_REOPEN_BLOCKED_COPY;
+	const closed = lost + waived;
+	if (closed < blocked.length) {
+		const blockedNotice =
+			blocked.length === total ? copy.allChanged : copy.someChanged(blocked.length, total);
+		return { showButton: false, blockedNotice };
+	}
+	const label =
+		lost > 0 && waived > 0 ? copy.labels.both : lost > 0 ? copy.labels.lost : copy.labels.waived;
+	const blockedNotice =
+		blocked.length === total
+			? copy.allClosed(label)
+			: copy.someClosed(blocked.length, total, label);
+	return { showButton: false, blockedNotice };
+}
+
+/** Entry ids that have a `loan_reopened` timeline event. */
+export function reopenedEntryIds(
+	events: readonly { kind: string; entry_id?: string }[] | undefined
+): Set<string> {
+	const ids = new Set<string>();
+	for (const event of events ?? []) {
+		if (event.kind === 'loan_reopened' && event.entry_id) ids.add(event.entry_id);
+	}
+	return ids;
+}
+
+/**
+ * Entry id -> the reason stored on its reopen doc (the timeline `loan_reopened` event carries it
+ * as `notes`). Used to resume a half-finished reopen without asking for a new reason.
+ */
+export function reopenedReasonByEntry(
+	events: readonly { kind: string; entry_id?: string; notes?: string }[] | undefined
+): Map<string, string> {
+	const reasons = new Map<string, string>();
+	for (const event of events ?? []) {
+		if (event.kind === 'loan_reopened' && event.entry_id && event.notes?.trim()) {
+			reasons.set(event.entry_id, event.notes);
+		}
+	}
+	return reasons;
 }
 
 /** True when at least one live entry in the row offers an action (move or void). */
