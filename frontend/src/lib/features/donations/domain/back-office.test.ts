@@ -71,6 +71,32 @@ describe('walkInIntakeInputSchema', () => {
 		}
 	});
 
+	describe('lot.expiry (CR-195 FR-X6)', () => {
+		const withExpiry = (expiry: string | undefined) => ({
+			...valid,
+			items: [{ item_id: 'item:rice', qty: '10', unit: 'kg', lot: { expiry } }]
+		});
+
+		it('AC-X8: accepts a real YYYY-MM-DD date or an empty value', () => {
+			for (const expiry of ['2026-10-23', '2028-02-29', '', '  ', undefined]) {
+				expect(walkInIntakeInputSchema.safeParse(withExpiry(expiry)).success).toBe(true);
+			}
+		});
+
+		it('AC-X8: refuses other shapes and impossible dates with a Thai message on the field', () => {
+			for (const expiry of ['23/10/2026', '2026-02-30', '2026-10-23T10:00:00Z', 'abc']) {
+				const result = walkInIntakeInputSchema.safeParse(withExpiry(expiry));
+				expect(result.success).toBe(false);
+				if (!result.success) {
+					expect(result.error.issues[0].path).toEqual(['items', 0, 'lot', 'expiry']);
+					expect(result.error.issues[0].message).toBe(
+						'วันหมดอายุต้องเป็นวันที่จริงในรูปแบบ YYYY-MM-DD'
+					);
+				}
+			}
+		});
+	});
+
 	it('drops a client-sent lot_no — the server owns the per-day sequence (CR-088)', () => {
 		const withLot = {
 			...valid,

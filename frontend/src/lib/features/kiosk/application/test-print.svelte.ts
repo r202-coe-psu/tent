@@ -7,7 +7,7 @@ export const TEST_PRINT_DONE_VISIBLE_MS = 2500;
 
 const RENDER_FAILED_MESSAGE = 'สร้าง QR Code สำหรับพิมพ์ไม่สำเร็จ';
 
-export type TestPrintPhase = 'idle' | 'pin' | 'printing' | 'done' | 'error';
+export type TestPrintPhase = 'idle' | 'printing' | 'done' | 'error';
 
 export type TestPrintDeps = {
 	prepareQrImage: (payload: string) => Promise<KioskQrImage>;
@@ -20,9 +20,8 @@ export type TestPrintDeps = {
 };
 
 /**
- * Staff «test print» from the kiosk home page: ask for the staff PIN, then print one sample label
- * through the same path as real labels. The PIN itself is checked by the PIN panel (the same one
- * that skips the face check); this class prints only after that panel reports it verified.
+ * Staff «test print» from the kiosk device-info panel: print one sample label through the same
+ * path as real labels. The panel is only reachable after the staff PIN, so no PIN is asked here.
  */
 export class TestPrint {
 	phase = $state<TestPrintPhase>('idle');
@@ -32,10 +31,6 @@ export class TestPrint {
 	#doneTimer: ReturnType<typeof setTimeout> | null = null;
 
 	constructor(private readonly deps: TestPrintDeps) {}
-
-	get pinOpen(): boolean {
-		return this.phase === 'pin';
-	}
 
 	/** The label is on its way: the page must not send the visitor away meanwhile. */
 	get busy(): boolean {
@@ -56,18 +51,6 @@ export class TestPrint {
 			: [];
 	}
 
-	/** The round button: ask for the PIN. */
-	open(): void {
-		if (this.busy) return;
-		this.#clearDoneTimer();
-		this.error = '';
-		this.phase = 'pin';
-	}
-
-	pinCancelled(): void {
-		if (this.phase === 'pin') this.phase = 'idle';
-	}
-
 	/** Close the error line. */
 	dismiss(): void {
 		if (this.phase === 'error' || this.phase === 'done') {
@@ -77,9 +60,11 @@ export class TestPrint {
 		}
 	}
 
-	/** The PIN panel said the PIN was right: print the sample label. */
-	async pinVerified(): Promise<void> {
-		if (this.phase !== 'pin') return;
+	/** The panel's button: print the sample label (nothing happens while one is on its way). */
+	async print(): Promise<void> {
+		if (this.busy) return;
+		this.#clearDoneTimer();
+		this.error = '';
 		this.phase = 'printing';
 		try {
 			const image = await this.deps.prepareQrImage(TEST_PRINT_QR_PAYLOAD);

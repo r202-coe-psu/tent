@@ -21,13 +21,16 @@ import {
 	cleanupDistributionScenario,
 	createDistributionScenario,
 	DISTRIBUTION_SHELTER_PREFIX,
+	setShelterStoragePoints,
 	teardownDistributionShelter,
 	useShelter,
 	warmShelterIndexes,
-	type DistributionScenario
+	type DistributionScenario,
+	type StoragePointSeed
 } from './distribution';
 
 export { expect } from '@playwright/test';
+export type { StoragePointSeed } from './distribution';
 
 export interface DistributionShelter {
 	code: string;
@@ -41,11 +44,21 @@ interface DistributionFixtures {
 
 interface DistributionWorkerFixtures {
 	shelter: DistributionShelter;
+	/**
+	 * Storage points (CR-139) written onto the run's own shelter right after it is created.
+	 * Default none: the shelter then receives into the main store ("คลังหลัก"). A spec sets it with
+	 * `test.use({ shelterStoragePoints: [[...points], { scope: 'worker' }] })` at the top level of
+	 * the spec (a bare array would be read as Playwright's `[value, options]` pair); Playwright
+	 * starts a separate worker (and so a separate shelter) for every distinct value.
+	 */
+	shelterStoragePoints: StoragePointSeed[];
 }
 
 export const test = base.extend<DistributionFixtures, DistributionWorkerFixtures>({
+	shelterStoragePoints: [[], { scope: 'worker', option: true }],
+
 	shelter: [
-		async ({ browser }, use) => {
+		async ({ browser, shelterStoragePoints }, use) => {
 			const name = `${DISTRIBUTION_SHELTER_PREFIX} ${ulid().toLowerCase()}`;
 			const admin = await bootstrapAdminSession();
 			const context = await browser.newContext();
@@ -64,9 +77,22 @@ export const test = base.extend<DistributionFixtures, DistributionWorkerFixtures
 				});
 				recordCreatedShelter(code);
 			} finally {
+				// A `_changes` long-poll may still be in flight inside a route handler; drop the routes
+				// first so close() does not reject with "Request context disposed".
+				await Promise.all(context.pages().map((p) => p.unrouteAll({ behavior: 'ignoreErrors' })));
 				await context.close();
 			}
 			useShelter(code);
+			// Before any test page loads, so the app never caches a point-less shelter doc.
+			if (shelterStoragePoints.length > 0) {
+				try {
+					await setShelterStoragePoints(code, shelterStoragePoints);
+				} catch (error) {
+					// The shelter exists already; do not strand it because setup failed.
+					await teardownDistributionShelter(code);
+					throw error;
+				}
+			}
 			await warmShelterIndexes(code);
 			await assertCentralDbAccessReady();
 
@@ -106,8 +132,9 @@ export const test = base.extend<DistributionFixtures, DistributionWorkerFixtures
 			writeFileSync(path, [`final url: ${page.url()}`, ...failedCalls].join('\n'));
 			await testInfo.attach('failed-calls', { path, contentType: 'text/plain' });
 		}
-		await clearSession(page).catch(() => undefined);
+		// Unroute first: a long-poll `_changes` still in flight must not reach a disposed context.
 		await page.unrouteAll({ behavior: 'ignoreErrors' });
+		await clearSession(page).catch(() => undefined);
 		const failures: unknown[] = [];
 		for (const scenario of created) {
 			try {

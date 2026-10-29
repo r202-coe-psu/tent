@@ -19,6 +19,8 @@ import {
 	recordedDonationQty,
 	completeDonationReceipt,
 	isNeedCutOff,
+	needCloseState,
+	matchesStatusFilter,
 	forceCutOffNeed,
 	editNeed,
 	buildCampaignNotes,
@@ -36,7 +38,6 @@ import {
 	projectStockLotBalances,
 	sortStockLotsByConsumptionOrder,
 	StockLotIntegrityError,
-	mapNeedItemHeuristic,
 	createTransfer,
 	dispatchTransfer,
 	receiveTransfer,
@@ -732,27 +733,51 @@ describe('calculateReserved', () => {
 		expect(reservedAll.get('item:water')).toBe('180');
 	});
 
-	it('correctly maps and sums public donations without campaign_id and using free_text', () => {
+	// #689: the back-office board counted these under every campaign asking for the item
+	// (and guessed the item from the text) while the public board and the quota counter
+	// counted them nowhere, so "จองแล้ว" ran ahead of what donors had booked.
+	it('leaves a donation with no campaign out of every campaign', () => {
 		const donations: Donation[] = [
 			{
 				...declaredItemsDonation(),
 				_id: 'don:public-1',
 				campaign_id: null,
 				status: 'declared',
-				items: [{ free_text: 'ข้าวสาร', qty: '15', unit: 'kg' }] // Maps to item:rice
-			},
-			{
-				...declaredItemsDonation(),
-				_id: 'don:public-2',
-				campaign_id: null,
-				status: 'declared',
-				items: [{ free_text: 'น้ำดื่ม', qty: '25', unit: 'bottle' }] // Maps to item:water
+				items: [{ item_id: 'item:rice', qty: '15', unit: 'kg' }]
 			}
 		];
 
-		const reserved = calculateReserved(donations, [], 'camp-any');
-		expect(reserved.get('item:rice')).toBe('15');
-		expect(reserved.get('item:water')).toBe('25');
+		expect(calculateReserved(donations, [], 'camp-any').get('item:rice')).toBeUndefined();
+	});
+
+	it('does not guess an item from free text', () => {
+		const donations: Donation[] = [
+			{
+				...declaredItemsDonation(),
+				_id: 'don:public-2',
+				campaign_id: 'camp-a',
+				status: 'declared',
+				items: [{ free_text: 'น้ำดื่ม', qty: '25', unit: 'bottle' }]
+			}
+		];
+
+		const reserved = calculateReserved(donations, [], 'camp-a');
+		expect(reserved.get('item:water')).toBeUndefined();
+		expect(reserved.size).toBe(0);
+	});
+
+	it('still totals every campaign when no campaign is given', () => {
+		const donations: Donation[] = [
+			{
+				...declaredItemsDonation(),
+				_id: 'don:no-campaign',
+				campaign_id: null,
+				status: 'declared',
+				items: [{ item_id: 'item:rice', qty: '15', unit: 'kg' }]
+			}
+		];
+
+		expect(calculateReserved(donations, []).get('item:rice')).toBe('15');
 	});
 
 	it('returns the reserved quota once a donation is expired past its TTL (T-21)', () => {
@@ -811,6 +836,133 @@ describe('Donation Cut-off (T-22) threshold crossing', () => {
 	});
 });
 
+// #816/#817 — the needs board splits "takes no more" by cause. A stored close always
+// wins (the docs carry no reason, so it cannot be told apart from a target that was met);
+// otherwise "reached" is derived live from on-hand + reserved ≥ target.
+describe('needCloseState', () => {
+	it('below target stays open', () => {
+		expect(needCloseState(100, 40, 50, 'open', 'open')).toBe('open');
+	});
+
+	it('reached counts reservations, at and over the target', () => {
+		expect(needCloseState(100, 50, 50, 'open', 'open')).toBe('reached');
+		expect(needCloseState(100, 60, 50, 'open', 'open')).toBe('reached');
+		expect(needCloseState(100, 0, 100, 'open', 'open')).toBe('reached');
+	});
+
+	it('a need closed before its target is closed', () => {
+		expect(needCloseState(100, 10, 10, 'closed', 'open')).toBe('closed');
+	});
+
+	it('a closed need stays closed when stock later passes the target', () => {
+		expect(needCloseState(100, 150, 0, 'closed', 'open')).toBe('closed');
+	});
+
+	it('releasing a reservation reopens a reached need', () => {
+		expect(needCloseState(100, 60, 50, 'open', 'open')).toBe('reached');
+		expect(needCloseState(100, 60, 0, 'open', 'open')).toBe('open');
+	});
+
+	it('distributing stock below target reopens it', () => {
+		expect(needCloseState(100, 120, 0, 'open', 'open')).toBe('reached');
+		expect(needCloseState(100, 80, 0, 'open', 'open')).toBe('open');
+	});
+
+	it('a reached need closed by hand is closed', () => {
+		const campaign = createCampaign(
+			{ title: 'น้ำ', needs: [{ item_id: 'item:water', qty_target: 100, unit: 'bottle' }] },
+			ctx
+		);
+		const need = forceCutOffNeed(campaign, 'item:water', 'คลังเต็ม').needs[0];
+		expect(needCloseState(need.qty_target, 100, 0, need.status, campaign.status)).toBe('closed');
+	});
+
+	it('a closed campaign closes every need, whatever the stock', () => {
+		expect(needCloseState(100, 10, 10, 'open', 'closed')).toBe('closed');
+		expect(needCloseState(100, 200, 0, 'open', 'closed')).toBe('closed');
+		expect(needCloseState(100, 10, 10, 'closed', 'closed')).toBe('closed');
+	});
+
+	it('reopening with stock already at target lands on reached, not open', () => {
+		const campaign = createCampaign(
+			{ title: 'น้ำ', needs: [{ item_id: 'item:water', qty_target: 100, unit: 'bottle' }] },
+			ctx
+		);
+		const reopened = reopenNeed(forceCutOffNeed(campaign, 'item:water', 'คลังเต็ม'), 'item:water');
+		const need = reopened.needs[0];
+		expect(needCloseState(need.qty_target, '100', '0', need.status, reopened.status)).toBe(
+			'reached'
+		);
+	});
+
+	it('decimal quantity strings and float residue', () => {
+		expect(needCloseState('1.5', '1', '0.5', 'open', 'open')).toBe('reached');
+		expect(needCloseState('1.5', '1', '0.49', 'open', 'open')).toBe('open');
+		let noisySum = 0;
+		for (let i = 0; i < 10; i++) noisySum += 0.1;
+		expect(needCloseState(1, noisySum, 0, 'open', 'open')).toBe('reached');
+		expect(needCloseState('0', '0', '0', 'open', 'open')).toBe('reached');
+	});
+
+	it.each([
+		[100, 40, 50, 'open', 'open'],
+		[100, 50, 50, 'open', 'open'],
+		[100, 10, 10, 'closed', 'open'],
+		[100, 150, 0, 'closed', 'open'],
+		[100, 200, 0, 'open', 'closed'],
+		['1.5', '1', '0.49', 'open', 'open'],
+		['1.5', '1', '0.5', 'open', 'open'],
+		['0', '0', '0', 'open', 'open']
+	] as const)('A10b — isNeedCutOff(%s, %s, %s, %s, %s) is "not open"', (t, h, r, n, c) => {
+		expect(isNeedCutOff(t, h, r, n, c)).toBe(needCloseState(t, h, r, n, c) !== 'open');
+	});
+
+	it('deriveNeedAvailability carries close_state next to is_cut_off', () => {
+		const campaign = createCampaign(
+			{
+				title: 'ของยังชีพ',
+				needs: [
+					{ item_id: 'item:water', qty_target: 100, unit: 'bottle', status: 'open' },
+					{ item_id: 'item:rice', qty_target: 20, unit: 'kg', status: 'open' },
+					{ item_id: 'item:soap', qty_target: 50, unit: 'piece', status: 'closed' }
+				]
+			},
+			ctx
+		);
+		const ledgers = [
+			createStockLedger(
+				{
+					item_id: 'item:water',
+					qty: 30,
+					unit: 'ขวด',
+					reason: 'receive',
+					ref_id: 'distribution_log:fixture'
+				},
+				ctx
+			),
+			createStockLedger(
+				{
+					item_id: 'item:rice',
+					qty: 25,
+					unit: 'kg',
+					reason: 'receive',
+					ref_id: 'distribution_log:fixture'
+				},
+				ctx
+			)
+		];
+		const byItem = new Map(
+			deriveNeedAvailability(campaign, [], ledgers).map((a) => [a.item_id, a])
+		);
+		expect(byItem.get('item:water')?.close_state).toBe('open');
+		expect(byItem.get('item:rice')?.close_state).toBe('reached');
+		expect(byItem.get('item:soap')?.close_state).toBe('closed');
+		for (const avail of byItem.values()) {
+			expect(avail.is_cut_off).toBe(avail.close_state !== 'open');
+		}
+	});
+});
+
 describe('deriveNeedAvailability', () => {
 	it('correctly maps campaign needs to their availability status', () => {
 		const campaign = createCampaign(
@@ -862,6 +1014,39 @@ describe('deriveNeedAvailability', () => {
 		expect(riceAvail?.qty_reserved).toBe('0');
 		expect(riceAvail?.qty_remaining).toBe('50');
 		expect(riceAvail?.is_cut_off).toBe(false);
+	});
+
+	it('offers nothing more on a need staff closed by hand', () => {
+		const campaign = createCampaign(
+			{
+				title: 'ของยังชีพ',
+				needs: [{ item_id: 'item:rice', qty_target: 50, unit: 'kg', status: 'closed' }]
+			},
+			ctx
+		);
+
+		const [rice] = deriveNeedAvailability(campaign, [], []);
+
+		expect(rice.is_cut_off).toBe(true);
+		expect(rice.qty_remaining).toBe('0');
+	});
+
+	it('offers nothing on any need once the whole campaign is closed', () => {
+		const campaign = {
+			...createCampaign(
+				{
+					title: 'ของยังชีพ',
+					needs: [{ item_id: 'item:rice', qty_target: 50, unit: 'kg' }]
+				},
+				ctx
+			),
+			status: 'closed' as const
+		};
+
+		const [rice] = deriveNeedAvailability(campaign, [], []);
+
+		expect(rice.is_cut_off).toBe(true);
+		expect(rice.qty_remaining).toBe('0');
 	});
 });
 
@@ -1499,22 +1684,6 @@ describe('Inter-shelter Transfers', () => {
 
 	it('rejects resuming a transfer that is not disputed (FR-07)', () => {
 		expect(() => resumeTransfer(requestedTransfer())).toThrow();
-	});
-});
-
-describe('mapNeedItemHeuristic', () => {
-	it('maps known items correctly', () => {
-		expect(mapNeedItemHeuristic('ข้าวสารหอมมะลิ')).toBe('item:rice');
-		expect(mapNeedItemHeuristic('น้ำดื่มสะอาด')).toBe('item:water');
-		expect(mapNeedItemHeuristic('ยาพาราเซตามอล')).toBe('item:paracetamol');
-		expect(mapNeedItemHeuristic('สบู่ถูตัว')).toBe('item:soap');
-		expect(mapNeedItemHeuristic('ผ้าห่มกันหนาว')).toBe('item:blanket');
-		expect(mapNeedItemHeuristic('ไข่ไก่สด')).toBe('item:egg');
-	});
-
-	it('slugs unknown items correctly', () => {
-		expect(mapNeedItemHeuristic('ปลากระป๋องรสเผ็ด')).toBe('item:ปลากระป๋องรสเผ็ด');
-		expect(mapNeedItemHeuristic('  Spoons & Forks  ')).toBe('item:spoons-forks');
 	});
 });
 
@@ -2380,4 +2549,25 @@ describe('batch receive in progress (CR-143 FR-B7 / FR-B9)', () => {
 			'donation:D1'
 		]);
 	});
+});
+
+describe('matchesStatusFilter', () => {
+	it.each([
+		// state, showOnHome, all, showing, hidden, reached, closed
+		['open', true, true, true, false, false, false],
+		['open', false, true, false, true, false, false],
+		['reached', true, true, false, false, true, false],
+		['reached', false, true, false, false, true, false],
+		['closed', true, true, false, false, false, true],
+		['closed', false, true, false, false, false, true]
+	] as const)(
+		'filters %s / showOnHome=%s',
+		(state, show, all, showing, hidden, reached, closed) => {
+			expect(matchesStatusFilter(state, show, 'all')).toBe(all);
+			expect(matchesStatusFilter(state, show, 'showing')).toBe(showing);
+			expect(matchesStatusFilter(state, show, 'hidden')).toBe(hidden);
+			expect(matchesStatusFilter(state, show, 'reached')).toBe(reached);
+			expect(matchesStatusFilter(state, show, 'closed')).toBe(closed);
+		}
+	);
 });

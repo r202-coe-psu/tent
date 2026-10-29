@@ -1,4 +1,5 @@
 import type { AuthorContext } from '$lib/db/model';
+import type { LedgerRefDoc } from '../domain/ledger-ref';
 import type {
 	DonationCampaign,
 	CampaignInput,
@@ -50,6 +51,12 @@ export interface OperationsRepository {
 	 * Retrieve stock ledger entries filtered by item ID.
 	 */
 	listLedgerByItem(itemId: string): Promise<StockLedger[]>;
+
+	/**
+	 * The docs ledger rows point at by `ref_id`. Missing or deleted ids are left out,
+	 * so the caller falls back to the short ref.
+	 */
+	listLedgerRefDocs(refIds: readonly string[]): Promise<LedgerRefDoc[]>;
 
 	/**
 	 * Calculate current on-hand stock balance for all items (sum of signed deltas).

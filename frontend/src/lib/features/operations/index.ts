@@ -21,6 +21,8 @@ export type {
 	DonationSlot,
 	DonationSlotMode,
 	NeedAvailability,
+	NeedCloseState,
+	NeedStatusFilter,
 	StockLotBalance,
 	StockTransfer,
 	StockTransferItem,
@@ -61,6 +63,8 @@ export {
 	keyableDonations,
 	completeDonationReceipt,
 	isNeedCutOff,
+	needCloseState,
+	matchesStatusFilter,
 	forceCutOffNeed,
 	reopenNeed,
 	editNeed,
@@ -72,7 +76,6 @@ export {
 	isDonation,
 	isDonationCampaign,
 	isDonationSlot,
-	mapNeedItemHeuristic,
 	publicItemAggregate,
 	type StockLedgerInput,
 	type ReceiveInput,
@@ -201,8 +204,7 @@ export {
 	useLedgerByItem,
 	useStockBalance,
 	useReceiveStock,
-	useDistributeStock,
-	useDistributeAcrossLots,
+	useDistributeBatch,
 	useAdjustStock,
 	useMergeItems,
 	useCampaigns,
@@ -276,6 +278,7 @@ export {
 	type LotScore,
 	type RankLotsOptions
 } from './domain/lot-priority';
+export { expiryInstant, isExpiryPassed } from './domain/expiry-instant';
 export {
 	planLotSplit,
 	type LotAllocation,
