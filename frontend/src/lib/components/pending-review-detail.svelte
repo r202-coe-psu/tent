@@ -35,7 +35,7 @@
 		type RejectDonationInput
 	} from '$lib/features/donations';
 	import { useShelters } from '$lib/features/shelters';
-	import { DonationLotsTable } from '$lib/features/operations';
+	import { DonationLotsTable, useStockFormItems } from '$lib/features/operations';
 	import { formatUnit, useUnitsOfMeasure } from '$lib/features/catalog';
 	import { langState } from '$lib/states/i18n.svelte';
 	import { DISPLAY_LOCALE, DISPLAY_TIME_ZONE } from '$lib/utils/date';
@@ -145,6 +145,11 @@
 	}
 
 	const declaredItems = $derived(request.items ?? []);
+	// A walk-in line carries only `item_id`: name it from the catalog instead of the raw id.
+	const stockItems = useStockFormItems(() => request.shelter_code);
+	const itemNameById = $derived(new Map(stockItems.items.map((item) => [item._id, item.name])));
+	const lineName = (item: { free_text?: string; item_id?: string }, fallback: string) =>
+		item.free_text ?? (item.item_id && itemNameById.get(item.item_id)) ?? item.item_id ?? fallback;
 
 	/**
 	 * CR-174 — a schema_v 7 booking is decided line by line: only `pending` lines take a
@@ -385,7 +390,7 @@
 							<li class="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 p-4 sm:px-5">
 								<div class="min-w-0 space-y-2">
 									<p class="text-xl font-bold break-words text-slate-900">
-										{item.free_text ?? item.item_id ?? 'สิ่งของ'}
+										{lineName(item, 'สิ่งของ')}
 									</p>
 									{#if cat || cond || !item.item_id}
 										<div class="flex flex-wrap items-center gap-2">
@@ -472,7 +477,7 @@
 											}
 											acceptLabel="รับรายการนี้"
 											acceptHint="ผู้บริจาคนำมาส่งได้"
-											groupLabel="ผลการประเมิน {item.free_text ?? item.item_id ?? 'รายการ'}"
+											groupLabel="ผลการประเมิน {lineName(item, 'รายการ')}"
 											disabled={saving}
 										/>
 										{#if draft?.decision === 'rejected'}

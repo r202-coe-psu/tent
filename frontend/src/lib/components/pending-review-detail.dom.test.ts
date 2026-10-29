@@ -16,7 +16,9 @@ vi.mock('$lib/features/operations', () => ({
 	// The lots table has its own tests; here only whether and for what it is mounted.
 	DonationLotsTable: (_anchor: unknown, props: unknown) => {
 		lotsProps.calls.push(props);
-	}
+	},
+	// Catalog names for lines that carry only an item_id (a walk-in).
+	useStockFormItems: () => ({ items: [{ _id: 'item:rice', name: 'ข้าวสาร' }] })
 }));
 vi.mock('svelte-sonner', () => ({ toast: { error: toastError, success: vi.fn() } }));
 
@@ -87,6 +89,14 @@ describe('PendingReviewDetail readonly (a received donation)', () => {
 		expect(document.body.querySelector('#internal-review-memo')).toBeNull();
 		// Back is the one way out.
 		expect(labels).toContain('กลับหน้าตรวจรับบริจาค');
+	});
+
+	it('names a line that carries only an item_id from the catalog, not the raw id (walk-in)', () => {
+		render({ readonly: true });
+
+		const text = document.body.textContent ?? '';
+		expect(text).toContain('ข้าวสาร');
+		expect(text).not.toContain('item:rice');
 	});
 
 	it('shows the masked contact the server sent, and asks for nothing until pressed', () => {

@@ -90,6 +90,8 @@
 	const canSubmit = $derived(by === 'item' ? itemId !== '' : text.trim() !== '');
 
 	const stockItems = useStockFormItems(() => shelterCode);
+	// A walk-in line carries only `item_id`: show the catalog name, not the raw id (FR-4).
+	const itemNameById = $derived(new Map(stockItems.items.map((item) => [item._id, item.name])));
 
 	function chooseType(value: string) {
 		by = value as ReceivedSearchBy;
@@ -119,7 +121,7 @@
 		return lines
 			.map(
 				(it) =>
-					`${it.free_text ?? it.item_id ?? 'ไม่ระบุ'} ${it.qty} ${formatUnit(it.unit, units, langState.current)}`
+					`${it.free_text ?? (it.item_id && itemNameById.get(it.item_id)) ?? it.item_id ?? 'ไม่ระบุ'} ${it.qty} ${formatUnit(it.unit, units, langState.current)}`
 			)
 			.join(', ');
 	}

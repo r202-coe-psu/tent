@@ -9,7 +9,7 @@ vi.mock('$lib/features/catalog', async (importOriginal) => ({
 }));
 
 vi.mock('$lib/features/operations', () => ({
-	useStockFormItems: () => ({ items: [], isLoading: false }),
+	useStockFormItems: () => ({ items: [{ _id: 'item:rice', name: 'ข้าวสาร' }], isLoading: false }),
 	// Only rendered for an item search; its own behaviour is not under test here.
 	ItemCombobox: () => {}
 }));
@@ -93,6 +93,14 @@ describe('ReceivedDonationsList', () => {
 		expect(text()).toContain('ข้าวสาร 6');
 		expect(text()).not.toContain('ข้าวสาร 10');
 		expect(text()).toContain('น้ำดื่ม 12');
+	});
+
+	it('names a line that carries only an item_id from the catalog, not the raw id (walk-in)', () => {
+		mountList({
+			rows: [{ ...row(1), received_items: [{ item_id: 'item:rice', qty: '5', unit: 'kg' }] }]
+		});
+		expect(text()).toContain('ข้าวสาร 5');
+		expect(text()).not.toContain('item:rice');
 	});
 
 	it('says when the phone or email is missing', () => {
