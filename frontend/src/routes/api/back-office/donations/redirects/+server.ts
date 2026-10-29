@@ -3,6 +3,7 @@ import type { RequestHandler } from './$types';
 import {
 	authorizeWarehouse,
 	listShelterCodes,
+	resolveWarehouseShelter,
 	routeErrorResponse,
 	shelterDb
 } from '$lib/server/donation-intake';
@@ -17,15 +18,12 @@ import { isDonationRedirect, type DonationRedirect } from '$lib/features/donatio
  * destination's database, which is the whole reason the ticket exists (a field on
  * the origin's donation would be invisible across the scope boundary).
  */
-export const GET: RequestHandler = async ({ request }) => {
+export const GET: RequestHandler = async ({ request, url }) => {
 	try {
 		const caller = await authorizeWarehouse(request.headers.get('cookie'));
 
-		const codes = caller.isSA
-			? await listShelterCodes()
-			: caller.shelterCode
-				? [caller.shelterCode]
-				: [];
+		const active = resolveWarehouseShelter(caller, url.searchParams.get('shelter_code'));
+		const codes = active ? [active] : await listShelterCodes();
 
 		const rows: DonationRedirect[] = [];
 		for (const code of codes) {

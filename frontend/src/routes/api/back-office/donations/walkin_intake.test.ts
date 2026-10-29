@@ -49,7 +49,7 @@ function mockCouch() {
 			return Promise.resolve({ status: 200, data: { rows: catalogRows } });
 		}
 		// Lot allocation reads today's existing ledger rows; none yet.
-		if (method === 'GET' && path.includes('/shelter_sh001/')) {
+		if (method === 'GET' && /\/shelter_sh00[12]\//.test(path)) {
 			return Promise.resolve({ status: 200, data: { rows: [] } });
 		}
 		if (method === 'POST' && path.includes('_bulk_docs')) {
@@ -63,8 +63,9 @@ function mockCouch() {
 	});
 }
 
-const event = (body: unknown) =>
+const event = (body: unknown, search = '') =>
 	({
+		url: new URL(`http://localhost/api/back-office/donations${search}`),
 		request: {
 			headers: { get: () => 'session-cookie' },
 			json: () => Promise.resolve(body)
@@ -238,14 +239,66 @@ describe('POST /api/back-office/donations (walk-in intake)', () => {
 		expect(written).toBeNull();
 	});
 
-	it('writes to the caller own shelter and ignores a shelter_code they passed', async () => {
+	it('writes to the shelter the caller names when they hold the capability there (#477)', async () => {
 		mockCouch();
 
-		await POST(event({ ...validBody, shelter_code: 'SH002' }));
+		await POST(event({ ...validBody, shelter_code: 'SH001' }));
 
-		const paths = vi.mocked(adminRaw).mock.calls.map((c) => String(c[0]));
-		expect(paths.some((p) => p.includes('/shelter_sh002/'))).toBe(false);
 		expect(docsOfType('donation')[0].shelter_code).toBe('SH001');
+	});
+
+	it('refuses a shelter_code where the caller has no warehouse capability — nothing written (#477)', async () => {
+		mockCouch();
+
+		const response = await POST(event({ ...validBody, shelter_code: 'SH002' }));
+
+		expect(response.status).toBe(403);
+		expect(written).toBeNull();
+	});
+
+	describe('caller of several shelters (#477)', () => {
+		const twoShelters = {
+			name: 'two_shelter_user',
+			// warehouse_staff in SH002 only; SH001 is the FIRST `shelter:` role but a registration seat.
+			roles: [
+				'shelter:SH001',
+				'shelter:SH002',
+				'SH001:registration_staff',
+				'SH002:warehouse_staff'
+			],
+			isSA: false,
+			shelterCode: 'SH001'
+		};
+
+		it('403 when the warehouse capability is held in another shelter but not the active one', async () => {
+			mockCouch();
+			vi.mocked(requireShelterScopeOrSA).mockResolvedValue(twoShelters);
+
+			const response = await POST(event({ ...validBody, shelter_code: 'SH001' }));
+
+			expect(response.status).toBe(403);
+			expect(written).toBeNull();
+		});
+
+		it('writes to the shelter they picked, not the first one', async () => {
+			mockCouch();
+			vi.mocked(requireShelterScopeOrSA).mockResolvedValue(twoShelters);
+
+			const response = await POST(event(validBody, '?shelter_code=SH002'));
+
+			expect(response.status).toBe(200);
+			expect(docsOfType('donation')[0].shelter_code).toBe('SH002');
+		});
+
+		it('400 when they name no shelter — the first one is not assumed', async () => {
+			mockCouch();
+			vi.mocked(requireShelterScopeOrSA).mockResolvedValue(twoShelters);
+
+			const response = await POST(event(validBody));
+
+			expect(response.status).toBe(400);
+			expect(written).toBeNull();
+		});
 	});
 
 	// The counter form runs under whatever shelter the station is switched to, and a

@@ -4,6 +4,7 @@ import {
 	assertCountedAgainstCatalog,
 	authorizeWarehouse,
 	listShelterCodes,
+	resolveWarehouseShelter,
 	routeErrorResponse,
 	shelterDb,
 	toCountedItems
@@ -82,12 +83,11 @@ export const GET: RequestHandler = async ({ request, url }) => {
 		const caller = await authorizeWarehouse(request.headers.get('cookie'));
 		const status = url.searchParams.get('status') ?? 'declared';
 
-		// Scope first, then read: a non-SA caller never reaches another shelter's db.
-		const codes = caller.isSA
-			? await listShelterCodes()
-			: caller.shelterCode
-				? [caller.shelterCode]
-				: [];
+		// Scope first, then read: a non-SA caller never reaches a shelter where they hold no
+		// warehouse capability. `?shelter_code=` is the shelter they work in (#477); SA without
+		// one sees every shelter.
+		const active = resolveWarehouseShelter(caller, url.searchParams.get('shelter_code'));
+		const codes = active ? [active] : await listShelterCodes();
 
 		const rows: PendingDonationRow[] = [];
 		for (const code of codes) {
@@ -124,7 +124,7 @@ export const GET: RequestHandler = async ({ request, url }) => {
  * reconcile it against, or a locked donation whose goods never reached the ledger) is
  * the one outcome worth ruling out.
  */
-export const POST: RequestHandler = async ({ request }) => {
+export const POST: RequestHandler = async ({ request, url }) => {
 	try {
 		const caller = await authorizeWarehouse(request.headers.get('cookie'));
 
@@ -142,24 +142,28 @@ export const POST: RequestHandler = async ({ request }) => {
 		}
 		const input = parsed.data;
 
-		// Scope: staff key donations for their own shelter; SA has none of their own and
-		// must name one that exists.
-		let shelterCode = caller.shelterCode ?? '';
+		// Scope: staff key donations for the shelter they work in — `?shelter_code=` or the body's
+		// `shelter_code`, validated against their warehouse capability there (#477); SA has none
+		// of their own and must name one that exists.
+		const active = resolveWarehouseShelter(
+			caller,
+			url.searchParams.get('shelter_code') ?? input.shelter_code
+		);
+		const shelterCode = active ?? '';
 		if (caller.isSA) {
-			if (!input.shelter_code) {
+			if (!active) {
 				return json(
 					{ success: false, error_code: 'SHELTER_REQUIRED', error: 'shelter_code is required' },
 					{ status: 400 }
 				);
 			}
 			const codes = await listShelterCodes();
-			if (!codes.includes(input.shelter_code)) {
+			if (!codes.includes(active)) {
 				return json(
 					{ success: false, error_code: 'SHELTER_NOT_FOUND', error: 'Unknown shelter_code' },
 					{ status: 404 }
 				);
 			}
-			shelterCode = input.shelter_code;
 		}
 		if (!shelterCode) {
 			return json(

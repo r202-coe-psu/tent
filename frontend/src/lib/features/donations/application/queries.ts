@@ -12,6 +12,7 @@ import {
 import { fetchShelterNeeds } from '../data/public-needs';
 import { fetchDonationSlots } from '../data/public-slots';
 import type { DonationSlotMode } from '$lib/features/operations';
+import { resolveContextShelterCode } from '$lib/db/shelter';
 
 export const donationTrackingKeys = {
 	all: ['donations', 'tracking'] as const,
@@ -115,13 +116,18 @@ export function useDonationSlots(
 }
 
 export const donationQueueKeys = {
-	all: ['donations', 'back-office-queue'] as const
+	all: ['donations', 'back-office-queue'] as const,
+	/** One queue per active shelter: switching shelter must re-ask, not reuse the other's rows. */
+	forShelter: (shelterCode: string | null) => [...donationQueueKeys.all, shelterCode] as const
 };
 
 /** The back-office "รายการของบริจาค" list (#617) — review and drop-off in one query. */
 export function useDonationQueue() {
-	return createQuery(() => ({
-		queryKey: donationQueueKeys.all,
-		queryFn: fetchDonationQueue
-	}));
+	return createQuery(() => {
+		const shelterCode = resolveContextShelterCode();
+		return {
+			queryKey: donationQueueKeys.forShelter(shelterCode),
+			queryFn: () => fetchDonationQueue(shelterCode)
+		};
+	});
 }

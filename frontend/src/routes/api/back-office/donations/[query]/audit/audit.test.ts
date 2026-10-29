@@ -130,6 +130,45 @@ describe('GET /api/back-office/donations/[query]/audit', () => {
 		expect(response.status).toBe(403);
 	});
 
+	// #477: the donation's own shelter is the active one — the capability must be held THERE.
+	it('returns 403 when warehouse_staff is held in another shelter but not the donation shelter', async () => {
+		vi.mocked(requireShelterScopeOrSA).mockResolvedValue({
+			name: 'two_shelter_user',
+			roles: [
+				'shelter:SH001',
+				'shelter:SH002',
+				'SH001:registration_staff',
+				'SH002:warehouse_staff'
+			],
+			isSA: false,
+			shelterCode: 'SH001'
+		});
+		mockCouch();
+
+		const response = await GET(event());
+
+		expect(response.status).toBe(403);
+	});
+
+	it('allows a multi-shelter caller whose warehouse shelter is not their first one', async () => {
+		vi.mocked(requireShelterScopeOrSA).mockResolvedValue({
+			name: 'two_shelter_user',
+			roles: [
+				'shelter:SH002',
+				'shelter:SH001',
+				'SH002:registration_staff',
+				'SH001:warehouse_staff'
+			],
+			isSA: false,
+			shelterCode: 'SH002'
+		});
+		mockCouch();
+
+		const response = await GET(event());
+
+		expect(response.status).toBe(200);
+	});
+
 	it('returns 403 for a signed-in user without a warehouse capability', async () => {
 		vi.mocked(requireShelterScopeOrSA).mockResolvedValue({
 			name: 'reg',

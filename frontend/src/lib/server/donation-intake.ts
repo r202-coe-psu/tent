@@ -1,6 +1,13 @@
 import { error, json } from '@sveltejs/kit';
 import { adminRaw, requireShelterScopeOrSA, type Caller } from '$lib/server/couch-admin';
-import { hasStaffCapability, isShelterManager } from '$lib/auth/roles';
+import {
+	hasCapabilityInShelter,
+	hasStaffCapability,
+	isShelterManager,
+	SHELTER_MANAGER,
+	WAREHOUSE_STAFF
+} from '$lib/auth/roles';
+import { resolveActiveShelter } from '$lib/server/active-shelter';
 import type { PublicDonationDoc, ReceiveDonationInput } from '$lib/features/donations';
 import type { CountedItem } from '$lib/features/operations/server';
 import { isSupplyItem, type SupplyItem, CATALOG_DB } from '$lib/features/supply/server';
@@ -23,9 +30,17 @@ import { sha256Hex } from '$lib/db/hash';
 type RegistryRow = { id: string; doc?: { code?: string } };
 type RegistryAllDocs = { rows?: RegistryRow[] };
 
+/** Capabilities that run warehouse intake in a shelter (SA aside). */
+const WAREHOUSE_CAPABILITIES = [SHELTER_MANAGER, WAREHOUSE_STAFF] as const;
+
 /**
- * Warehouse intake gate — `warehouse_staff` (+ `shelter_manager` / SA), NOT
+ * Warehouse intake session gate — `warehouse_staff` (+ `shelter_manager` / SA), NOT
  * CouchDB `_admin`. Mirrors the CR-024 capability pattern (`requireKitchen`).
+ *
+ * This only proves the caller does warehouse work SOMEWHERE (#477). It says nothing about which
+ * shelter: `caller.shelterCode` is the first `shelter:` role and must not be used to scope an
+ * action. Resolve the shelter being worked on with {@link resolveWarehouseShelter} (lists,
+ * walk-in) or check the donation's own shelter with {@link isInCallerScope} (per-donation routes).
  */
 export async function authorizeWarehouse(cookie: string | null): Promise<Caller> {
 	const caller = await requireShelterScopeOrSA(cookie); // authenticated; resolves roles/scope
@@ -35,6 +50,25 @@ export async function authorizeWarehouse(cookie: string | null): Promise<Caller>
 		hasStaffCapability(caller.roles, 'warehouse_staff');
 	if (!allowed) throw error(403, 'Requires warehouse_staff, shelter_manager, or system_admin');
 	return caller;
+}
+
+/**
+ * The shelter a warehouse request works in: `requested` (the client's selected shelter) when the
+ * caller holds a warehouse capability THERE (403 otherwise); with none requested, the caller's
+ * only shelter, or 400 when they belong to several. SA: `requested`, or `null` for "no shelter
+ * chosen" (the route decides between every shelter and a 400).
+ */
+export function resolveWarehouseShelter(
+	caller: Caller,
+	requested: string | null | undefined
+): string | null {
+	return resolveActiveShelter(
+		caller.roles,
+		caller.isSA,
+		requested,
+		WAREHOUSE_CAPABILITIES,
+		'Requires warehouse_staff or shelter_manager in this shelter, or system_admin'
+	);
 }
 
 /** Every shelter code in the registry (`shelter:{ulid}` docs carry `code`). */
@@ -84,9 +118,20 @@ export async function findDonationByQuery(
 	return null;
 }
 
-/** Shelter-scope isolation: non-SA callers only touch their own shelter's donations. */
+/**
+ * Shelter-scope isolation: non-SA callers only touch donations of a shelter where they hold a
+ * warehouse capability — the donation's own shelter is the active one (#477), so a user with
+ * `warehouse_staff` in SH002 only is refused SH001's donations even when SH001 is their first
+ * `shelter:` role.
+ */
 export function isInCallerScope(caller: Caller, donation: PublicDonationDoc): boolean {
-	return caller.isSA || caller.shelterCode === donation.shelter_code;
+	return (
+		caller.isSA ||
+		(!!donation.shelter_code &&
+			WAREHOUSE_CAPABILITIES.some((cap) =>
+				hasCapabilityInShelter(caller.roles, donation.shelter_code, cap)
+			))
+	);
 }
 
 /** Render a thrown value as the `{ success: false, error }` shape this surface uses. */

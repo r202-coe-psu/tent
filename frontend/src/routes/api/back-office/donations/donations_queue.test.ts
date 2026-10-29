@@ -186,6 +186,56 @@ describe('GET /api/back-office/donations (pending intake queue)', () => {
 		]);
 	});
 
+	describe('caller of several shelters (#477)', () => {
+		// warehouse_staff in SH002 only; SH001 is the FIRST `shelter:` role but a registration seat.
+		const twoShelters = {
+			name: 'two_shelter_user',
+			roles: [
+				'shelter:SH001',
+				'shelter:SH002',
+				'SH001:registration_staff',
+				'SH002:warehouse_staff'
+			],
+			isSA: false,
+			shelterCode: 'SH001'
+		};
+
+		it('403 when the capability is held in another shelter but not the active one', async () => {
+			vi.mocked(requireShelterScopeOrSA).mockResolvedValue(twoShelters);
+			mockCouch();
+
+			const response = await GET(event('?shelter_code=SH001'));
+
+			expect(response.status).toBe(403);
+			const readSh001 = vi
+				.mocked(adminRaw)
+				.mock.calls.some((c) => String(c[0]).includes('/shelter_sh001/'));
+			expect(readSh001).toBe(false);
+		});
+
+		it('lists the shelter they picked, not the first one', async () => {
+			vi.mocked(requireShelterScopeOrSA).mockResolvedValue(twoShelters);
+			mockCouch();
+
+			const response = await GET(event('?shelter_code=SH002'));
+			const data = await response.json();
+
+			expect(response.status).toBe(200);
+			expect(data.donations.map((d: { booking_ref: string }) => d.booking_ref)).toEqual([
+				'DN-000004'
+			]);
+		});
+
+		it('400 when they name no shelter — the first one is not assumed', async () => {
+			vi.mocked(requireShelterScopeOrSA).mockResolvedValue(twoShelters);
+			mockCouch();
+
+			const response = await GET(event());
+
+			expect(response.status).toBe(400);
+		});
+	});
+
 	it('returns 403 for a signed-in user without a warehouse capability', async () => {
 		vi.mocked(requireShelterScopeOrSA).mockResolvedValue({
 			name: 'reg',

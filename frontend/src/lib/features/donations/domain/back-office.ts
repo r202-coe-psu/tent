@@ -60,8 +60,9 @@ export interface PendingDonationRow {
  * is being shelved. Lot numbers are NOT accepted: the server mints the per-day
  * sequence (CR-088), exactly as it does for a scanned pre-declaration.
  *
- * `shelter_code` is only honoured for a system admin, who has no shelter of their
- * own; shelter staff always write to their own shelter (scope isolation).
+ * `shelter_code` is the shelter the counter works in. The route checks the caller holds a
+ * warehouse capability THERE (#477); a system admin, who has no shelter of their own, must
+ * name one, and a caller of a single shelter may omit it.
  */
 export const walkInIntakeInputSchema = z.object({
 	shelter_code: z.string().trim().min(1).optional(),
