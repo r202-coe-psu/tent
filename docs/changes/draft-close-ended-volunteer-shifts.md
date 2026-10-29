@@ -17,6 +17,7 @@ affects:
   - frontend/src/routes/api/public/v1/volunteer/jobs/[id]/apply/+server.ts
   - frontend/src/routes/api/public/v1/volunteer/apply/+server.ts (compat) และ apply/preflight/+server.ts
   - frontend/src/lib/features/volunteers/server/public-application.ts
+  - frontend/src/lib/features/volunteer-portal/data/volunteer-api.ts (ข้อความของรหัส `SHIFT_CLOSED` ที่ผู้สมัครเห็น)
 ---
 
 # draft-close-ended-volunteer-shifts — กะที่จบแล้วปิดรับสมัคร
@@ -44,7 +45,8 @@ affects:
 
 - **FR-1:** กะเปิดรับสมัครจนถึงเวลาจบกะ คิดจาก `end_date` + `end_time` ตามเวลา Asia/Bangkok
   - แถวเก่าที่ไม่มี `end_date` ให้ derive แบบเดียวกับ `defaultShiftEndDate` (กะข้ามเที่ยงคืนจบวันถัดไป)
-  - แถวที่ไม่มี `start_time` / `end_time` (projection public ที่เป็น null) ปิดรับตอนสิ้นวันของ `end_date` (หรือ `date`)
+  - แถวที่ไม่มี `start_time` / `end_time` (ค่าว่าง `""` ใน projection public หรือ null) ปิดรับตอนสิ้นวันของ `end_date` (หรือ `date`)
+  - "สิ้นวัน" คือ 24:00 ของวันนั้นตามเวลา Asia/Bangkok (= 00:00 ของวันถัดไป) ทั้งวันนั้นยังสมัครได้
   - แถวกะที่ข้อมูลเสียจนคำนวณเวลาจบไม่ได้ ให้ถือว่า **เปิด** (ซ่อนงานเพราะข้อมูลเสียแย่กว่าแสดง)
   - ระหว่างกะยังสมัครได้
 - **FR-2:** กฎ FR-1 เป็น pure function ตัวเดียวใน `volunteers/domain/shift-closing.ts` (ข้าง `duty-window.ts`) export ผ่าน barrel `$lib/features/volunteers` ให้ UI, BFF และตัวนับหน้าแรกใช้ร่วมกัน
@@ -58,7 +60,8 @@ affects:
   - งานที่เปิดรับยังเรียงตามกะที่ใกล้ที่สุดเหมือนเดิม
   - ป้าย "ปิดรับแล้ว" คำนวณตอนแสดงผลจาก FR-1 เท่านั้น ไม่ได้มาจาก `job.status` · ข้อความอยู่ที่ `volunteers/i18n/jobs.i18n.ts` (`tagClosed`)
 - **FR-5:** BFF apply ตรวจ FR-1 ฝั่ง server ทั้ง `POST /api/public/v1/volunteer/jobs/{id}/apply` และ compat `POST /api/public/v1/volunteer/apply`
-  - กะที่ปิดรับแล้วได้ผลรายกะ `{ ok: false, shift_id, error: "SHIFT_CLOSED" }` (เพิ่มในรายการรหัสของ CR-180 FR-6) และใช้ HTTP **409** เมื่อเป็นกะแรกที่ไม่ผ่าน (CR-180 FR-7)
+  - กะที่ปิดรับแล้วได้ผลรายกะ `{ ok: false, shift_id, error: "SHIFT_CLOSED" }` (เพิ่มในรายการรหัสของ CR-180 FR-6) และใช้ HTTP **409** เมื่อไม่มีกะผ่านเลยและกะแรกที่ไม่ผ่านคือกะที่ปิดรับ (CR-180 FR-7: มีกะผ่านอย่างน้อย 1 กะยังตอบ 201)
+  - ข้อความที่ผู้สมัครเห็นของ `SHIFT_CLOSED` อยู่ที่ `volunteer-portal/data/volunteer-api.ts` (CR-180 FR-9)
   - คำขอหลายกะบันทึกเฉพาะกะที่ยังเปิด
   - preflight (`/apply/preflight`) คงตาม CR-180 FR-10: ตรวจรายกะเฉพาะตอนเลือกกะเดียว ตอนเลือกหลายกะตรวจระดับงาน `SHIFT_CLOSED` ของกะในชุดนั้นมาจากขั้น apply (UI กรองกะที่ปิดแล้วออกอยู่แล้วตาม FR-3)
 - **FR-6:** การ์ดจิตอาสาหน้าแรก (CR-185 FR-3/FR-4/FR-5) นับจากกะที่ยังเปิดรับเท่านั้น
@@ -101,3 +104,5 @@ affects:
   - D5 ข้อมูลกะเสีย / งานไม่มีแถวกะ ถือว่าเปิด (FR-1, FR-2)
   - D6 ฟังก์ชันกฎอยู่ `volunteers/domain` export ผ่าน barrel (FR-2)
   - D1 อนุมัติหลังแก้ B1–B6 แล้วรันเลข CR ย้ายไป `06-A-volunteer/` พร้อมแก้ CR-180 FR-6 และ CR-185 FR-3/4/5
+- 2026-10-29 — ผู้รับงานแก้ตาม review รอบ 2 ของ PR #997: W1 (เวลาว่างเป็น `""`), S1 (เงื่อนไข 409), S2 (`affects` ข้อความ error), S3 (นิยามสิ้นวัน)
+  - **รอ Team Lead ยืนยัน (W2):** ข้อยกเว้นใน FR-2 ที่ให้ `volunteer-portal/domain` import `volunteers/domain/shift-closing` ตรง ต่างจาก D6 ที่ให้ใช้ barrel เพราะใช้ barrel แล้วเกิด import cycle
