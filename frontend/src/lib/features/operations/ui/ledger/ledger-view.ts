@@ -1,6 +1,7 @@
 import { qtyGt } from '$lib/utils/qty';
 import { DISPLAY_LOCALE, DISPLAY_TIME_ZONE } from '$lib/utils/date';
 import { lotStorageName, type StoragePointRef } from '../../domain/lot-storage';
+import { shortLedgerRef } from '../../domain/ledger-ref';
 import {
 	resolveAdjustReason,
 	type AdjustReason,
@@ -72,7 +73,7 @@ export interface LedgerRow {
 	/** Signed quantity string, exactly as persisted. */
 	qty: string;
 	unit: string;
-	/** Destination (distribute / requisition) or the originating document. */
+	/** Adjust reason, destination (distribute / requisition) or the originating document's label. */
 	detail: string;
 	lotNo: string;
 	storage: string;
@@ -101,6 +102,8 @@ export interface LedgerLookup {
 	itemName: (itemId: string) => string;
 	unitLabel: (unit: string) => string;
 	points: readonly StoragePointRef[];
+	/** Readable label of the doc a `ref_id` points at; unknown refs show `shortLedgerRef`. */
+	refLabel?: (refId: string) => string | undefined;
 }
 
 const pad = (n: number) => String(n).padStart(2, '0');
@@ -129,6 +132,9 @@ export function toLedgerRow(entry: StockLedger, lookup: LedgerLookup): LedgerRow
 		? [adjustReasonLabel, entry.note?.trim()].filter(Boolean).join(' · ')
 		: '';
 	const lot = entry.lot && isOut ? { ...entry.lot, note: undefined } : entry.lot;
+	const refDetail = entry.ref_id
+		? (lookup.refLabel?.(entry.ref_id) ?? shortLedgerRef(entry.ref_id))
+		: '';
 	// Only when the row's detail text is the ref id itself (adjust / destination win otherwise).
 	const refHref = adjustDetail || destination ? undefined : ledgerRefHref(entry.ref_id);
 	return {
@@ -144,7 +150,7 @@ export function toLedgerRow(entry: StockLedger, lookup: LedgerLookup): LedgerRow
 		itemName: lookup.itemName(entry.item_id),
 		qty: entry.qty,
 		unit: lookup.unitLabel(entry.unit),
-		detail: adjustDetail || destination || (entry.ref_id ?? ''),
+		detail: adjustDetail || destination || refDetail,
 		lotNo: entry.lot?.lot_no ?? '',
 		storage: lotStorageName(lot, lookup.points) ?? '',
 		createdBy: entry.created_by,

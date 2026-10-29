@@ -111,6 +111,21 @@ describe('/api/back-office/kiosk-banner-groups/[id]', () => {
 		expect(mockDelete).toHaveBeenLastCalledWith(DOC_ID, '1-a', 'sa-user');
 	});
 
+	it('lets pr_staff read, edit and delete a group of their own shelter', async () => {
+		mockSession.mockResolvedValue(SESSIONS.prA);
+		expect((await send.GET()).status).toBe(200);
+		expect((await send.PUT()).status).toBe(200);
+		expect((await send.DELETE()).status).toBe(204);
+		expect(mockDelete).toHaveBeenLastCalledWith(DOC_ID, '1-a', 'pr-a');
+	});
+
+	it.each(METHODS)('%s returns 404 for pr_staff on a group of another shelter', async (m) => {
+		mockSession.mockResolvedValue(SESSIONS.prA);
+		mockGet.mockResolvedValue(record('SH002'));
+		expect((await send[m]()).status).toBe(404);
+		for (const w of writes()) expect(w).not.toHaveBeenCalled();
+	});
+
 	it.each(METHODS)('%s returns 404 for a group of another shelter and never writes', async (m) => {
 		mockGet.mockResolvedValue(record('SH002'));
 		for (const session of [SESSIONS.managerA, SESSIONS.kioskA]) {

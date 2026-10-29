@@ -11,10 +11,15 @@ export {
 	publicDonationErrorMessage,
 	isDonorEditable,
 	donationPayloadUnit,
+	buildDonationItemsPayload,
 	donorUnitOptions,
 	linesMissingExpiry
 } from './domain/public-donation';
-export type { DonationUnitSource, ExpiryCheckLine } from './domain/public-donation';
+export type {
+	DonationPayloadLine,
+	DonationUnitSource,
+	ExpiryCheckLine
+} from './domain/public-donation';
 export type { ReceiveDonationInput } from './domain/public-donation';
 export type { PendingDonationRow, WalkInIntakeInput } from './domain/back-office';
 export { walkInIntakeInputSchema, donationActionRef, donationRefLabel } from './domain/back-office';
@@ -51,6 +56,13 @@ export {
 	maskLookupPhone,
 	rejectedLineReasons
 } from './domain/tracking';
+// Domain — drop-off destination (#590)
+export type { DropOffGeo, DropOffPoint, DropOffShelterSource } from './domain/drop-off';
+export {
+	dropOffDirectionsUrl,
+	needsDropOffDestination,
+	resolveDropOffPoint
+} from './domain/drop-off';
 // Domain — back-office booking list (#617)
 export {
 	DONATION_QUEUE_FILTERS,
@@ -146,5 +158,6 @@ export {
 export { default as CancelDonationDialog } from './ui/cancel-donation-dialog.svelte';
 export { default as RejectDonationDialog } from './ui/reject-donation-dialog.svelte';
 export { default as RejectReasonFields } from './ui/reject-reason-fields.svelte';
+export { default as DropOffCard } from './ui/drop-off-card.svelte';
 export { default as LineDecisionToggle } from './ui/line-decision-toggle.svelte';
 export { default as EditDonationItemsDialog } from './ui/edit-donation-items-dialog.svelte';
