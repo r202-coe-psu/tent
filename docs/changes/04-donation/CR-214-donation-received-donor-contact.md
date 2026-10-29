@@ -1,11 +1,11 @@
 ---
-id: draft
+id: CR-214 # renumbered from draft-donation-received-donor-contact
 title: "รายการของบริจาคที่รับแล้ว + ข้อมูลติดต่อผู้บริจาคแบบปิดบางส่วน (#821)"
-status: proposed
+status: approved
 date: 2026-10-28
 updated: 2026-10-29
 requested_by: "GitHub #821 (roleplay 23/10/69 feedback) · epic #826"
-decided_by: ""
+decided_by: "Soravit Sukkarn (Team Lead)"
 layer: volatile
 affects:
   - frontend/src/routes/(protected)/back-office/stock-donations/+page.svelte · components/received-donations-list.svelte (ใหม่)
@@ -25,7 +25,7 @@ why: walk-in บันทึกเบอร์และอีเมลผู้�
 migration: ไม่เปลี่ยนรูปร่าง doc — ไม่ bump `schema_v` · เพิ่ม Mango index + view ต่อ shelter DB (view manifest 6 → 7; provision / redeploy-access)
 ---
 
-# draft-donation-received-donor-contact — รายการที่รับแล้ว + ข้อมูลติดต่อผู้บริจาค
+# CR-214 — รายการที่รับแล้ว + ข้อมูลติดต่อผู้บริจาค (#821)
 
 ## สรุป
 
@@ -188,3 +188,4 @@ migration: ไม่เปลี่ยนรูปร่าง doc — ไม่
 - 2026-10-29 — ระบุรายละเอียดที่ยังขาด ไม่เปลี่ยนมติ: retention ตาม data-model §7 + สถานะการลบจริง + พฤติกรรมหลังลบ (FR-10c, AC-6f) · แบ่งหน้าค้นล็อต (ตัดซ้ำ, เรียง, tuple cursor — FR-8d, AC-6d) · แบ่งหน้า view แบบ lookahead และ emit ไม่ซ้ำ (FR-8h, AC-6e) · `cursor` ผูกกับ `by` + `q` (FR-8a)
 - 2026-10-29 — ไม่จำกัดอัตราการค้น (FR-8e, AC-6b): แทนที่ "rate limit ต่อ IP ที่ nginx" ในบรรทัดทำจริงด้านบน · เหตุผลใน Why
 - 2026-10-29 — ค้นด้วยเลขใบใช้ Mango index ใหม่ `(type, booking_ref)` (FR-8, Migration): shelter DB ไม่มี index `booking_ref` อยู่ก่อน (index unique อยู่ใน Mongo) · ไม่มี index ต้องค้นผ่าน index รายการ "รับแล้ว" แล้วกรองในหน่วยความจำ ช้าลงตามจำนวนใบ และไม่ตรง AC-6
+- 2026-10-29 — approved (Soravit Sukkarn, Team Lead): อนุมัติ Change Record (#821) รันเลข CR-214 ย้ายเข้า 04-donation/ ตามผลการรีวิว PR #974
