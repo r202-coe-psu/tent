@@ -127,6 +127,13 @@ Select a feature and a layer: `playwright test --grep "(?=.*@pre-register)(?=.*@
 1. Everything a test creates is fictitious and marked: names start with `E2E`, the run id comes from
    `LOCAL_RUN_ID`, Thai national IDs start with `0` (never a real person) with a valid checksum.
 2. **Teardown deletes only ids recorded by this run** (ledger). Never delete by search/query results.
+   The shelter/queue ledger (`helpers/public-cleanup.ts`) is **one file per suite**
+   (`node_modules/.cache/e2e-created/<suite>.json`, `<suite>` = the spec's basename). Staging runs
+   specs on parallel workers, so `recordCreatedShelter` / `recordCreatedQueueId` /
+   `purgeCreatedData` all take the suite id and a purge only ever deletes what its own suite
+   recorded — never another suite's live shelter. `forgetCreatedShelter(code)` (also called by
+   `teardownShelter`) drops a code from whichever ledger holds it. A suite that spans several
+   workers (the `distribution/` `shelter` fixture) uses one id per worker process.
 3. Never modify seeded or real records (e.g. SH001–SH004, `config:app`). A test that needs a
    shelter creates its own `E2E …` shelter through the staff UI and removes it with `teardownShelter`.
    Shelter settings a journey needs (e.g. `enable_medical_screening`, `accepts_pre_registration`)

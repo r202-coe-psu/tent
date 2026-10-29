@@ -163,6 +163,9 @@ import {
 } from './helpers/public-cleanup';
 import { createShelterViaUi, setRecaptcha } from './helpers/staff-ui';
 
+/** Id of this spec's created-data ledger (see helpers/public-cleanup.ts). */
+const LEDGER_SUITE = 'public-pre-register-flow';
+
 // ------------------------------------------------------------------ fixtures
 
 /**
@@ -225,7 +228,7 @@ let liveWritesStarted = false;
 test.afterAll(async () => {
 	test.setTimeout(180_000);
 	if (!CAN_WRITE || !liveWritesStarted) return;
-	await purgeCreatedData(LAST_NAME, createdQueueIds);
+	await purgeCreatedData(LEDGER_SUITE, LAST_NAME, createdQueueIds);
 });
 
 // =============================================================== N — navigation
@@ -1641,7 +1644,7 @@ test.describe(
 					acceptsPreRegistration: false
 				});
 				// ledger first: the top-level afterAll sweeps it even if the steps below throw
-				recordCreatedShelter(code);
+				recordCreatedShelter(code, LEDGER_SUITE);
 
 				// the worker projects it asynchronously — wait until the public API serves it
 				await waitForProjection('shelter open and not accepting in /shelters', async () => {
@@ -1932,7 +1935,7 @@ test.describe(
 			const body = (await response.json()) as { id: string; members: unknown[] };
 			queueId = body.id;
 			createdQueueIds.add(queueId);
-			recordCreatedQueueId(queueId);
+			recordCreatedQueueId(queueId, LEDGER_SUITE);
 			expect(body.members).toHaveLength(2);
 
 			// the ticket
@@ -2156,7 +2159,7 @@ test.describe(
 				capacity: 40,
 				acceptsPreRegistration: true
 			});
-			recordCreatedShelter(shelterCode);
+			recordCreatedShelter(shelterCode, LEDGER_SUITE);
 			await staffContext.close();
 
 			// the worker projects it asynchronously — wait until the public API offers it
@@ -2263,7 +2266,7 @@ test.describe(
 		test('Z the central queue and CouchDB hold nothing of this run', async () => {
 			test.setTimeout(240_000);
 			// remove what this suite created (ledger + this run's registrations) …
-			const created = await purgeCreatedData(LAST_NAME, createdQueueIds);
+			const created = await purgeCreatedData(LEDGER_SUITE, LAST_NAME, createdQueueIds);
 			// … then prove it is gone
 			expect(await listUnassignedRegistrations(LAST_NAME)).toEqual([]);
 			for (const id of created.queue) expect(await getUnassignedRegistration(id)).toBeNull();
