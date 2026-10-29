@@ -135,7 +135,11 @@
 			if (!isLatest()) return;
 			if (result.kind === 'evacuee') selectEvacuee(result.evacuee, true);
 			else if (result.kind === 'volunteer') selectVolunteer(result.volunteer, true);
-			else scanError = result.message;
+			else if (result.kind === 'staff_card') {
+				pickedByScan = true;
+				searchTerm = '';
+				choose(result.selection);
+			} else scanError = result.message;
 		} catch (err) {
 			if (!isLatest()) return;
 			scanError = formatDistributionError(err, 'เกิดข้อผิดพลาดในการค้นหา กรุณาลองใหม่อีกครั้ง');
@@ -233,6 +237,8 @@
 						{:else if value.recipientType === 'volunteer'}
 							<span>จิตอาสา{value.volunteerCode ? ` · ${value.volunteerCode}` : ''}</span>
 							{#if value.phone}<span>โทร {value.phone}</span>{/if}
+						{:else if value.recipientType === 'staff'}
+							<span>เจ้าหน้าที่</span>
 						{:else}
 							<span>บุคคลภายนอก{value.notes ? ` · ${value.notes}` : ''}</span>
 						{/if}

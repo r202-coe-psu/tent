@@ -26,6 +26,7 @@ export {
 	createUser,
 	deleteUser,
 	updateUser,
+	resolveStaffCard,
 	getSecurityQuestionChallenge,
 	verifySecurityQuestionAndReset,
 	fetchAuthStatus,
@@ -39,6 +40,7 @@ export {
 	unlinkThaidMfa,
 	thaidOAuthStartHref,
 	type UserSummary,
+	type ResolvedCardRecipient,
 	type AuthStatus,
 	type OwnProfileUpdateInput,
 	type OwnProfileUpdateResult

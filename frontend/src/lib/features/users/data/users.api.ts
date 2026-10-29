@@ -10,6 +10,7 @@ const USERS_ENDPOINT = '/api/v1/users';
 const RESET_PASSWORD_ENDPOINT = '/api/v1/users/reset-password';
 const FORGOT_PASSWORD_ENDPOINT = '/api/v1/auth/forgot-password';
 const FORCE_SETUP_ENDPOINT = '/api/v1/auth/force-setup';
+const STAFF_CARD_RESOLVE_ENDPOINT = '/api/v1/users/staff-card/resolve';
 
 export interface UserSummary {
 	name: string;
@@ -66,6 +67,21 @@ export function createUser(input: {
 	affiliation_tags?: string[];
 }): Promise<{ ok: true; merged?: boolean }> {
 	return serviceFetch(USERS_ENDPOINT, { method: 'POST', body: JSON.stringify(input) });
+}
+
+/** What a scanned staff card resolves to: a staff member, or the volunteer linked to the account. */
+export type ResolvedCardRecipient =
+	| { kind: 'staff'; recipient_id: string; display_name: string; position: string | null }
+	| { kind: 'volunteer'; recipient_id: string; display_name: string };
+
+export function resolveStaffCard(
+	payload: string,
+	shelterCode: string
+): Promise<ResolvedCardRecipient> {
+	return serviceFetch<ResolvedCardRecipient>(STAFF_CARD_RESOLVE_ENDPOINT, {
+		method: 'POST',
+		body: JSON.stringify({ payload, shelter_code: shelterCode })
+	});
 }
 
 export function deleteUser(name: string): Promise<{ ok: true }> {

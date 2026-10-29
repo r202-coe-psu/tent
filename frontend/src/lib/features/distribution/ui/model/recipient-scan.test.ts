@@ -9,6 +9,7 @@ import {
 } from './recipient-scan';
 
 const PASS_URL = 'https://shelter.example/volunteer/ticket/TKT-VOL-ABC123';
+const STAFF_QR = `TKT-STF-HASH-${'a'.repeat(64)}`;
 
 function volunteer(overrides: Partial<Volunteer> = {}): Volunteer {
 	return {
@@ -29,6 +30,12 @@ function deps(overrides: Partial<RecipientScanDeps> = {}): RecipientScanDeps {
 	return {
 		lookupEvacuee: vi.fn().mockResolvedValue(evacuee),
 		lookupVolunteer: vi.fn().mockResolvedValue(volunteer()),
+		resolveStaffCard: vi.fn().mockResolvedValue({
+			kind: 'staff',
+			recipient_id: 'user:somchai',
+			display_name: 'สมชาย เจ้าหน้าที่',
+			position: null
+		}),
 		...overrides
 	};
 }
@@ -41,6 +48,100 @@ describe('resolveScannedRecipient', () => {
 		expect(result).toEqual({ kind: 'volunteer', volunteer: volunteer() });
 		expect(d.lookupVolunteer).toHaveBeenCalledWith(PASS_URL);
 		expect(d.lookupEvacuee).not.toHaveBeenCalled();
+	});
+
+	it('resolves a staff card QR on the server and selects the staff member, with no other lookup', async () => {
+		const d = deps();
+		const result = await resolveScannedRecipient(
+			STAFF_QR,
+			{ allowVolunteer: true, allowStaff: true },
+			d
+		);
+
+		expect(result).toEqual({
+			kind: 'staff_card',
+			selection: { recipientType: 'staff', recipientId: 'user:somchai', label: 'สมชาย เจ้าหน้าที่' }
+		});
+		expect(d.resolveStaffCard).toHaveBeenCalledWith(STAFF_QR);
+		expect(d.lookupEvacuee).not.toHaveBeenCalled();
+		expect(d.lookupVolunteer).not.toHaveBeenCalled();
+	});
+
+	it('refuses a staff card where staff cannot be picked, without any lookup', async () => {
+		const d = deps();
+		const result = await resolveScannedRecipient(
+			STAFF_QR,
+			{ allowVolunteer: true, allowStaff: false },
+			d
+		);
+
+		expect(result.kind).toBe('error');
+		expect(d.resolveStaffCard).not.toHaveBeenCalled();
+		expect(d.lookupVolunteer).not.toHaveBeenCalled();
+		expect(d.lookupEvacuee).not.toHaveBeenCalled();
+	});
+
+	it('selects the linked volunteer when the server resolves the staff card to one, without a volunteer lookup', async () => {
+		const d = deps({
+			resolveStaffCard: vi.fn().mockResolvedValue({
+				kind: 'volunteer',
+				recipient_id: 'volunteer:01J00000000000000000000001',
+				display_name: 'สมหญิง อาสา'
+			})
+		});
+		const result = await resolveScannedRecipient(
+			STAFF_QR,
+			{ allowVolunteer: true, allowStaff: true },
+			d
+		);
+
+		expect(result).toEqual({
+			kind: 'staff_card',
+			selection: {
+				recipientType: 'volunteer',
+				recipientId: 'volunteer:01J00000000000000000000001',
+				label: 'สมหญิง อาสา'
+			}
+		});
+		expect(d.lookupVolunteer).not.toHaveBeenCalled();
+	});
+
+	it("reports the server's message when the staff card cannot be resolved", async () => {
+		const d = deps({
+			resolveStaffCard: vi.fn().mockRejectedValue(new Error('ไม่พบบัตรเจ้าหน้าที่นี้'))
+		});
+		const result = await resolveScannedRecipient(
+			STAFF_QR,
+			{ allowVolunteer: true, allowStaff: true },
+			d
+		);
+
+		expect(result).toEqual({ kind: 'error', message: 'ไม่พบบัตรเจ้าหน้าที่นี้' });
+	});
+
+	it('falls back to a generic Thai message when the rejection carries none', async () => {
+		const d = deps({ resolveStaffCard: vi.fn().mockRejectedValue(undefined) });
+		const result = await resolveScannedRecipient(
+			STAFF_QR,
+			{ allowVolunteer: true, allowStaff: true },
+			d
+		);
+
+		expect(result).toMatchObject({
+			kind: 'error',
+			message: expect.stringContaining('บัตรเจ้าหน้าที่')
+		});
+	});
+
+	it('reports an error when no staff card resolver is available', async () => {
+		const withoutResolver = deps({ resolveStaffCard: undefined });
+		const result = await resolveScannedRecipient(
+			STAFF_QR,
+			{ allowVolunteer: true, allowStaff: true },
+			withoutResolver
+		);
+
+		expect(result.kind).toBe('error');
 	});
 
 	it('routes an evacuee card to the evacuee lookup', async () => {

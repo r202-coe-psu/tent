@@ -247,11 +247,11 @@ describe('resolveReturner', () => {
 	});
 
 	it('rejects a staff recipient as a returner because staff only receive consumables', () => {
-		const staff = {
+		const staff: ReturnerChoice = {
 			recipientType: 'staff',
 			recipientId: 'user:somchai',
 			label: 'Somchai'
-		} as unknown as ReturnerChoice;
+		};
 		const resolved = resolveReturner(staff);
 		expect(resolved.error).toBeTruthy();
 		expect(resolved.returner).toBeUndefined();

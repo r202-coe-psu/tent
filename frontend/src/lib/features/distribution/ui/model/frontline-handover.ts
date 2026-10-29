@@ -41,6 +41,11 @@ export type FrontlineRecipientSelection =
 			volunteerCode?: string;
 	  }
 	| {
+			recipientType: 'staff';
+			recipientId: string; // 'user:{name}'
+			label: string;
+	  }
+	| {
 			recipientType: 'outside';
 			recipientId: null;
 			label: string;
@@ -72,15 +77,19 @@ export function getItemCapacitySummary(
 	};
 }
 
-/** Evacuee or volunteer — someone a log can name, so a repeat meal can be caught (FR-DDS). */
+/** Evacuee, volunteer or staff — someone a log can name, so a repeat meal can be caught (FR-DDS). */
 export function isIdentifiedRecipient(recipient: FrontlineRecipientSelection | null): boolean {
-	return recipient?.recipientType === 'evacuee' || recipient?.recipientType === 'volunteer';
+	return (
+		recipient?.recipientType === 'evacuee' ||
+		recipient?.recipientType === 'volunteer' ||
+		recipient?.recipientType === 'staff'
+	);
 }
 
 /**
  * Validates whether the selected recipient is eligible to receive the given item.
  * Returnable loan items need a named borrower — an evacuee or a volunteer (FR-LON-01), never an
- * anonymous outside person.
+ * anonymous outside person or staff (staff receive consumables only).
  */
 export function canRecipientReceiveItem(
 	recipient: FrontlineRecipientSelection | null,
@@ -88,6 +97,7 @@ export function canRecipientReceiveItem(
 ): boolean {
 	if (!recipient) return false;
 	if (isReturnable) {
+		if (recipient.recipientType === 'staff') return false;
 		return isIdentifiedRecipient(recipient) && Boolean(recipient.recipientId);
 	}
 	return true;
@@ -105,6 +115,9 @@ export function getRecipientValidationErrorMessage(
 	}
 	if (isReturnable && recipient.recipientType === 'outside') {
 		return "สิ่งของประเภท 'ต้องคืน' ต้องระบุผู้ยืม (ผู้ประสบภัยหรือจิตอาสา) ไม่สามารถแจกให้บุคคลภายนอกได้";
+	}
+	if (isReturnable && recipient.recipientType === 'staff') {
+		return "สิ่งของประเภท 'ต้องคืน' ไม่สามารถแจกให้เจ้าหน้าที่ได้ เจ้าหน้าที่รับได้เฉพาะของใช้แล้วหมดไป";
 	}
 	if (isReturnable && !recipient.recipientId) {
 		return "สิ่งของประเภท 'ต้องคืน' จำเป็นต้องมีรหัสผู้รับที่ระบุตัวตนได้";
