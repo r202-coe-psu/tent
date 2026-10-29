@@ -2,8 +2,8 @@
 title: Smart Shelter — CouchDB ⇄ MongoDB Sync (Public Plane)
 status: draft for review
 created: 2026-06-11
-updated: 2026-10-28
-note: CR-205 approved (2026-10-28, #812) — §3.2 `public_shelters.donation_points` ใหม่ (ticked storage points ที่มีพิกัด, ไม่มี `area_m2`), PROJECTION_VERSION 11 → 12 (ต่อจาก CR-196); CR-196 (2026-10-26) — §3.2 `public_donations.items_declared[].line_key`, PROJECTION_VERSION 10→11, inbound ปั๊ม donation schema_v 8; decision sync 2026-10-28 — inbound donation sync vs donor cancel race: re-read แถวก่อน put, flip `synced_to_couch` แบบมีเงื่อนไข (fingerprint status/revisions/courier tracking no.) + re-put ตาม `_rev` ตัวเองเมื่อไม่ตรง, quota settle ข้าม buffer ที่ยังไม่ sync, audit อนุมัติอัตโนมัติเขียนหลัง flip (§4.1 ตรงกับโค้ด; ไม่เปลี่ยนรูป doc / PROJECTION_VERSION); CR-183 (2026-10-22) — ศูนย์ปิดคง `public_shelters` + `public_persons` ไว้จนครบ `closed_at` + `retention_months_after_close`, listener/bootstrap ครอบศูนย์ปิดในระยะ retention, rescan ตอนเปิดใหม่ (bump PROJECTION_VERSION); decision sync 2026-10-25 — §3.3 `unassigned_registrations.members[]` เพิ่ม `consent` + `search_excluded` (UNASSIGNED_SCHEMA_V 3→4; PDPA consent block FR-42); CR-176 (2026-10-20) — projector evacuee `checked_in_at` = null เมื่อ `cancelled` (PROJECTION_VERSION 4→5); คู่กับ data-model.md v3 + api-contract.md v1 + CR-017/CR-044 — public tier ทำงานบน MongoDB ผ่าน FastAPI; ตัด public_transparency (CR-017 Decision B); CR-113 unassigned_registrations; CR-166 (2026-10-13) — public_persons เพิ่ม `first_name_key`/`last_name_hash`, PROJECTION_VERSION 2→3, เลิก `$text`; decision sync 2026-10-09 — worker PROJECTION_VERSION + auto re-bootstrap on start (stored in Mongo _worker_meta); bootstrap reads update_seq before scan; CR-172 (2026-10-21) — `public_donations` เพิ่ม `reject_reason`/`reject_reason_code` + `received_summary.items[].rejected/reject_reason/reject_reason_code` ส่งผ่านทั้งก้อน, PROJECTION_VERSION 6→7; CR-174 (2026-10-21) — `public_donations.items_declared[]` เพิ่ม `review_status`/`review_reason_code`/`review_reason` (PROJECTION_VERSION 7 ครอบทั้ง CR-172 + CR-174 — 6 = CR-185 บน develop); inbound ปั๊ม donation schema_v 7 + เขียน audit อนุมัติอัตโนมัติ
+updated: 2026-10-30
+note: CR-206 approved (2026-10-28, #813) — §3.2 `public_donations.items_declared[].drop_off_point_id` + `point_receipts[]` (`point_id`, `line_nos`, `received_at`), PROJECTION_VERSION 12 → 13, inbound ปั๊ม donation schema_v 10; worker ปิดใบที่รับไปบางจุดแล้วเมื่อเลย `expires_at` (`closed_reason: expired`) และคืนยอดจองเมื่อใบเป็น `received`; CR-205 approved (2026-10-28, #812) — §3.2 `public_shelters.donation_points` ใหม่ (ticked storage points ที่มีพิกัด, ไม่มี `area_m2`), PROJECTION_VERSION 11 → 12 (ต่อจาก CR-196); CR-196 (2026-10-26) — §3.2 `public_donations.items_declared[].line_key`, PROJECTION_VERSION 10→11, inbound ปั๊ม donation schema_v 8; decision sync 2026-10-28 — inbound donation sync vs donor cancel race: re-read แถวก่อน put, flip `synced_to_couch` แบบมีเงื่อนไข (fingerprint status/revisions/courier tracking no.) + re-put ตาม `_rev` ตัวเองเมื่อไม่ตรง, quota settle ข้าม buffer ที่ยังไม่ sync, audit อนุมัติอัตโนมัติเขียนหลัง flip (§4.1 ตรงกับโค้ด; ไม่เปลี่ยนรูป doc / PROJECTION_VERSION); CR-183 (2026-10-22) — ศูนย์ปิดคง `public_shelters` + `public_persons` ไว้จนครบ `closed_at` + `retention_months_after_close`, listener/bootstrap ครอบศูนย์ปิดในระยะ retention, rescan ตอนเปิดใหม่ (bump PROJECTION_VERSION); decision sync 2026-10-25 — §3.3 `unassigned_registrations.members[]` เพิ่ม `consent` + `search_excluded` (UNASSIGNED_SCHEMA_V 3→4; PDPA consent block FR-42); CR-176 (2026-10-20) — projector evacuee `checked_in_at` = null เมื่อ `cancelled` (PROJECTION_VERSION 4→5); คู่กับ data-model.md v3 + api-contract.md v1 + CR-017/CR-044 — public tier ทำงานบน MongoDB ผ่าน FastAPI; ตัด public_transparency (CR-017 Decision B); CR-113 unassigned_registrations; CR-166 (2026-10-13) — public_persons เพิ่ม `first_name_key`/`last_name_hash`, PROJECTION_VERSION 2→3, เลิก `$text`; decision sync 2026-10-09 — worker PROJECTION_VERSION + auto re-bootstrap on start (stored in Mongo _worker_meta); bootstrap reads update_seq before scan; CR-172 (2026-10-21) — `public_donations` เพิ่ม `reject_reason`/`reject_reason_code` + `received_summary.items[].rejected/reject_reason/reject_reason_code` ส่งผ่านทั้งก้อน, PROJECTION_VERSION 6→7; CR-174 (2026-10-21) — `public_donations.items_declared[]` เพิ่ม `review_status`/`review_reason_code`/`review_reason` (PROJECTION_VERSION 7 ครอบทั้ง CR-172 + CR-174 — 6 = CR-185 บน develop); inbound ปั๊ม donation schema_v 7 + เขียน audit อนุมัติอัตโนมัติ
 ---
 
 # Smart Shelter — CouchDB ⇄ MongoDB Sync
@@ -155,6 +155,7 @@ The worker resumes `_changes` from its checkpoint, so documents that never chang
 { _id: "donation:01H...", tracking_token_hash, shelter_code, status: "declared|received|expired",
   items_declared: [...], received_summary: {...} | null,
   reject_reason: str | null, reject_reason_code: "not_needed|expired|damaged|other" | null,
+  point_receipts: [{ point_id: str | null, line_nos: [int], received_at }],
   updated_at }
 // projector: sync สถานะ donation กลับมาให้ public ดูผ่าน GET /public/v1/donations/{token}
 // received_summary ส่งทั้งก้อนตามรูปใน schema.md §2.3 — รวม items[].rejected / reject_reason /
@@ -162,12 +163,18 @@ The worker resumes `_changes` from its checkpoint, so documents that never chang
 // reject_reason / reject_reason_code (CR-172) = ข้อความที่ผู้บริจาคเห็น + code — มีค่าเฉพาะ
 //   status rejected; doc ก่อน schema_v 6 ไม่มี field → project เป็น null (PROJECTION_VERSION 7)
 // items_declared[] = [{ item_id? (มีเฉพาะ stub ของ FastAPI), item_name, qty, unit, category,
-//   line_key | null, review_status: "approved|pending|rejected" | null, review_reason_code | null, review_reason | null }]
+//   line_key | null, review_status: "approved|pending|rejected" | null, review_reason_code | null, review_reason | null,
+//   drop_off_point_id | null }]
 //   review_* (CR-174 FR-27) ส่งต่อจาก donation.items[] ตรง ๆ — หน้าติดตามอ่าน items จาก CouchDB ก่อน
 //   projection เป็น fallback จึงต้องมีข้อมูลเท่ากัน; รายการก่อน schema_v 7 ไม่มี field → null
 //   (PROJECTION_VERSION 7 — bump เดียวกับ CR-172 เพราะ implement พร้อมกันก่อน release; 6 = CR-185)
 //   line_key (CR-196 FR-LK-8) ส่งต่อจาก donation.items[].line_key ตรง ๆ — ฟอร์มแก้รายการของผู้บริจาค
 //   ใช้บอกว่าแก้รายการไหน; รายการก่อน schema_v 8 ไม่มี → null (PROJECTION_VERSION 11)
+//   drop_off_point_id (CR-206 FR-MP-1) ส่งต่อจาก donation.items[].drop_off_point_id ตรง ๆ — ตั๋ว หน้าติดตาม
+//   และใบปะหน้าแยกกลุ่มตามจุด; ไม่มี → null (PROJECTION_VERSION 13)
+// point_receipts (CR-206 FR-MP-5) = ผลการรับของทีละจุดแบบย่อ: เฉพาะ point_id, line_nos, received_at —
+//   ไม่ส่ง received_by, remarks, audit_id, ledger_ids, items · หน้าติดตามใช้แสดง "รับแล้ว" ต่อจุด;
+//   ใบที่ไม่มี key → [] (PROJECTION_VERSION 13)
 // create path เขียน stub ทันทีก่อน outbound CDC เพื่อให้ GET tracking ใช้ได้ทันที — stub ใช้ status
 //   และ review_status ที่ FastAPI คำนวณ (CR-174: `verifying` เมื่อทุกรายการอยู่ในแคมเปญ ไม่งั้น
 //   `pending_review`); PATCH items อัปเดต stub ด้วยเหตุผลเดียวกัน — items ทุกครั้ง, status เฉพาะใบ
