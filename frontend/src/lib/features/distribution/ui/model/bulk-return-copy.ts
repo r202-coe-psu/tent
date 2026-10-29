@@ -64,6 +64,9 @@ export const ADD_ENTRY_COPY = {
 		'บางรายการยังไม่ได้บันทึก เพราะกองนี้ไม่รับของแล้ว กรุณาเลือกกองอื่นที่เปิดรับ แล้วกดบันทึกอีกครั้ง'
 } as const;
 
+/** Toast when a `?pool=` deep link names a pool that is not in the loaded overview. */
+export const BULK_RETURN_POOL_NOT_FOUND_TOAST = 'ไม่พบกองนี้ อาจถูกลบหรืออยู่ศูนย์อื่น';
+
 /**
  * Shown on a closed-pool entry INSTEAD of the "reopen loans" button when an applied loan can no
  * longer be reverted (CR-193 §35). `label` is a closed-as label; `n` / `total` count applied refs.
