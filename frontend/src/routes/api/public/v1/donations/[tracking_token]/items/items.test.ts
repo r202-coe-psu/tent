@@ -144,10 +144,23 @@ describe('PATCH /api/public/v1/donations/[token]/items', () => {
 		]);
 		expect((written as { revisions: unknown[] }).revisions).toHaveLength(1);
 		// FR-18b — the current version, not a stale constant.
-		expect((written as { schema_v: number }).schema_v).toBe(8);
+		expect((written as { schema_v: number }).schema_v).toBe(9);
 	});
 
 	// CR-196 FR-LK-4 — refused here, before the headroom reads or any quota moves.
+	// CR-175 donor photos FR-3a / AC-12 — editing the lines leaves the photos as booked.
+	it('keeps the photos of the booking through an edit', async () => {
+		const photos = ['image:01K8PHXTX00000000000000001', 'image:01K8PHXTX00000000000000002'];
+		couchHas({ ...couchDoc('pending_review'), photos });
+		fastapiOk();
+
+		const response = await call();
+
+		expect(response.status).toBe(200);
+		const [, , written] = vi.mocked(putAsPublicWriter).mock.calls[0]!;
+		expect((written as { photos: string[] }).photos).toEqual(photos);
+	});
+
 	describe('a booking something was decided on', () => {
 		it.each([
 			['its QR is out', couchDoc('verifying')],
@@ -209,7 +222,7 @@ describe('PATCH /api/public/v1/donations/[token]/items', () => {
 			const response = await call();
 
 			const [, , written] = vi.mocked(putAsPublicWriter).mock.calls[0]!;
-			expect(written).toMatchObject({ status: 'verifying', schema_v: 8 });
+			expect(written).toMatchObject({ status: 'verifying', schema_v: 9 });
 			expect((await response.json()).status).toBe('verifying');
 		});
 

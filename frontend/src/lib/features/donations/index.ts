@@ -54,6 +54,7 @@ export {
 	canCancelDonation,
 	canEditCourierTracking,
 	isTerminalDonationStatus,
+	closedAtIntakeMessage,
 	lookupItemSchedule,
 	maskLookupPhone,
 	rejectedLineReasons
@@ -162,7 +163,17 @@ export {
 	useDonationQueue
 } from './application/queries';
 
+// Donor photos (CR-175 donor photos)
+export {
+	DONATION_PHOTO_MAX_COUNT,
+	DONATION_PHOTOS_MAX_TOTAL_BYTES,
+	type DonorPhoto
+} from './domain/donation-photos';
+export { DonorPhotos, type DonorPhotoRefusal } from './application/donor-photos.svelte';
+
 // UI
+export { default as DonorPhotoPicker } from './ui/donor-photo-picker.svelte';
+export { default as DonationPhotoStrip } from './ui/donation-photo-strip.svelte';
 export { default as CancelDonationDialog } from './ui/cancel-donation-dialog.svelte';
 export { default as RejectDonationDialog } from './ui/reject-donation-dialog.svelte';
 export { default as RejectReasonFields } from './ui/reject-reason-fields.svelte';

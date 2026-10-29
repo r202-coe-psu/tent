@@ -9,6 +9,7 @@ import {
 	BULK_RETURN_ENTRY_MANGO_INDEXES,
 	buildValidateDocUpdate,
 	DAILY_SOP_ROLE_MANGO_INDEX,
+	DONATION_PHOTO_ORPHAN_MANGO_INDEX,
 	PEOPLE_MANGO_INDEXES,
 	REFERRAL_MANGO_INDEXES,
 	KIOSK_LOOKUP_MANGO_INDEXES,
@@ -456,7 +457,8 @@ async function deployMangoIndexes(db: string): Promise<void> {
 		...PEOPLE_MANGO_INDEXES,
 		...REQUISITION_TICKET_MANGO_INDEXES,
 		...BULK_RETURN_ENTRY_MANGO_INDEXES,
-		DAILY_SOP_ROLE_MANGO_INDEX
+		DAILY_SOP_ROLE_MANGO_INDEX,
+		DONATION_PHOTO_ORPHAN_MANGO_INDEX
 	];
 	for (const def of defs) {
 		const { status, data } = await couchReq('POST', `/${db}/_index`, def);
@@ -468,7 +470,7 @@ async function deployMangoIndexes(db: string): Promise<void> {
 		}
 	}
 	console.log(
-		`  ✓ ${db}: referral, ledger, people, requisition and Daily SOP role Mango indexes deployed`
+		`  ✓ ${db}: referral, ledger, people, requisition, Daily SOP role and donor photo Mango indexes deployed`
 	);
 }
 

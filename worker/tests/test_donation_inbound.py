@@ -160,8 +160,8 @@ _BLANKET = {
 
 
 @pytest.mark.asyncio
-async def test_persisted_donation_is_stamped_schema_v8(db: None):
-    # CR-196: items[].line_key (7 was CR-174's per-line review).
+async def test_persisted_donation_is_stamped_schema_v9(db: None):
+    # CR-175: donor photos (8 was CR-196's items[].line_key).
     # Must match the walk-in writer in the frontend — both channels write the same version.
     couch = _couch()
 
@@ -169,7 +169,7 @@ async def test_persisted_donation_is_stamped_schema_v8(db: None):
     assert await _persist_donation(couch, row) is True
     doc = couch.put_doc.await_args.args[1]
     assert doc["_id"] == row.id
-    assert doc["schema_v"] == 8
+    assert doc["schema_v"] == 9
     # Nothing is rejected at intake — the fields only appear once staff review it.
     assert "reject_reason" not in doc
     assert "reject_reason_code" not in doc

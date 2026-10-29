@@ -48,6 +48,8 @@ export interface PendingDonationRow {
 	pickup_address?: string | null;
 	donor_note?: string | null;
 	is_unsolicited?: boolean;
+	/** Donor photos, `image:{ulid}` in `shelter_code`'s DB (CR-175 donor photos FR-12). */
+	photos?: string[];
 }
 
 /**

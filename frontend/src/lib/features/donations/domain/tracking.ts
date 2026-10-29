@@ -208,6 +208,19 @@ export function isTerminalDonationStatus(status: string): boolean {
 	);
 }
 
+/**
+ * Why the counter cannot open this booking, or `null` when it can. The receive route
+ * refuses every terminal status; saying so at lookup spares staff a full count that
+ * only fails on confirm. A received booking gets no walk-in hint — keying the same
+ * goods again would count them twice.
+ */
+export function closedAtIntakeMessage(bookingRef: string, status: string): string | null {
+	if (!isTerminalDonationStatus(status)) return null;
+	const head = `ใบจอง ${bookingRef} ${donationStatusLabel(status)}`;
+	if (status === 'received') return `${head} — รับซ้ำไม่ได้`;
+	return `${head} — รับเข้าคลังไม่ได้ ถ้าของอยู่ที่เคาน์เตอร์จริงให้กรอกข้อมูลใหม่ผ่าน "ลงทะเบียน Walk-in"`;
+}
+
 /** Normalize BFF / FastAPI tracking payload into a stable UI view. */
 export function toDonationTrackView(raw: Record<string, unknown>): DonationTrackView {
 	const donorRaw = (raw.donor ?? {}) as Record<string, unknown>;

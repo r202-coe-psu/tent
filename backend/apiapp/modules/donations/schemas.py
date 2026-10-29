@@ -52,6 +52,10 @@ class DonationCreateRequest(BaseModel):
     items: list[DonationItemInput] = Field(default_factory=list)
     logistics: dict[str, Any] | None = None
     slot_hold: SlotHold | None = None
+    #: CR-175 donor photos — ``image:{ulid}`` ids the BFF already checked against the
+    #: shelter's CouchDB (FR-10). The worker copies them onto the booking and binds each
+    #: photo to it (FR-11a).
+    photos: list[str] = Field(default_factory=list, max_length=30)
     captchaToken: str | None = Field(default=None, validation_alias=AliasChoices("captchaToken"))
 
 

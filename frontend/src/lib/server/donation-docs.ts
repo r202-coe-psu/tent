@@ -1,5 +1,6 @@
 import { adminRaw } from '$lib/server/couch-admin';
 import type { PublicDonationDoc } from '$lib/features/donations';
+import type { StoredDonationPhoto } from '$lib/features/donations/server';
 
 /**
  * Fetch all docs of a given type (by `_id` prefix) from a shelter database via
@@ -110,3 +111,34 @@ export const GOODS_IN_STOCK_ERROR = {
 	error: 'GOODS_IN_STOCK',
 	message: 'ศูนย์เริ่มรับของของใบนี้เข้าคลังแล้ว — แก้ไขหรือยกเลิกไม่ได้ กรุณาติดต่อศูนย์'
 } as const;
+
+/**
+ * The photo docs a booking names, read one by one by `_id` from the booking's shelter DB
+ * (CR-175 FR-10 — no index needed). `null` where the shelter has no such doc. Sizes come
+ * from the stored attachments, which only the upload BFF wrote. Any read failure other
+ * than 404 throws {@link CouchReadError}: the booking must not pass a check it never ran.
+ */
+export async function readDonationPhotos(
+	dbName: string,
+	ids: readonly string[]
+): Promise<(StoredDonationPhoto | null)[]> {
+	return Promise.all(
+		ids.map(async (id) => {
+			const res = await adminRaw(`/${dbName}/${encodeURIComponent(id)}`, 'GET');
+			if (res.status === 404) return null;
+			if (res.status !== 200) throw new CouchReadError(dbName, id, res.status);
+			const doc = res.data as {
+				type?: string;
+				purpose?: string;
+				donation_id?: string;
+				_attachments?: Record<string, { length?: number }>;
+			};
+			if (doc.type !== 'image') return null;
+			const bytes = Object.values(doc._attachments ?? {}).reduce(
+				(sum, a) => sum + (a.length ?? 0),
+				0
+			);
+			return { purpose: doc.purpose, donation_id: doc.donation_id, bytes };
+		})
+	);
+}
