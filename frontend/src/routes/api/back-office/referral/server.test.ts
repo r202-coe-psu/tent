@@ -97,6 +97,59 @@ describe('BFF Referral List and Create Endpoints', () => {
 			expect(data.error).toContain('Requires shelter_manager or system_admin');
 		});
 
+		it('403 when shelter_manager is held in another shelter but not the active one (#477)', async () => {
+			vi.mocked(requireShelterScopeOrSA).mockResolvedValue({
+				name: 'two_shelter_user',
+				roles: [
+					'shelter:SH001',
+					'shelter:SH002',
+					'SH001:registration_staff',
+					'SH002:shelter_manager'
+				],
+				isSA: false,
+				shelterCode: 'SH001'
+			});
+
+			const res = await GET(createMockEvent({ shelter_code: 'SH001' }));
+
+			expect(res.status).toBe(403);
+			expect(mockListPage).not.toHaveBeenCalled();
+		});
+
+		it('lists the shelter a multi-shelter manager picked, not the first one (#477)', async () => {
+			vi.mocked(requireShelterScopeOrSA).mockResolvedValue({
+				name: 'two_shelter_user',
+				roles: [
+					'shelter:SH001',
+					'shelter:SH002',
+					'SH001:registration_staff',
+					'SH002:shelter_manager'
+				],
+				isSA: false,
+				shelterCode: 'SH001'
+			});
+			mockListPage.mockResolvedValue({ items: [], bookmark: null, hasMore: false });
+
+			const res = await GET(createMockEvent({ shelter_code: 'SH002' }));
+
+			expect(res.status).toBe(200);
+			expect(mockListPage).toHaveBeenCalled();
+		});
+
+		it('400 when a multi-shelter manager names no shelter (#477)', async () => {
+			vi.mocked(requireShelterScopeOrSA).mockResolvedValue({
+				name: 'two_shelter_user',
+				roles: ['shelter:SH001', 'shelter:SH002', 'SH001:shelter_manager', 'SH002:shelter_manager'],
+				isSA: false,
+				shelterCode: 'SH001'
+			});
+
+			const res = await GET(createMockEvent());
+
+			expect(res.status).toBe(400);
+			expect(mockListPage).not.toHaveBeenCalled();
+		});
+
 		it('allows shelter_manager and lists referrals scoped to their shelter code', async () => {
 			vi.mocked(requireShelterScopeOrSA).mockResolvedValue({
 				name: 'sm_user',

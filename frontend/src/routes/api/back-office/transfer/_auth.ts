@@ -1,6 +1,13 @@
 import { error, json } from '@sveltejs/kit';
 import { requireShelterScopeOrSA, type Caller } from '$lib/server/couch-admin';
-import { isShelterManager, isWarehouseStaff } from '$lib/auth/roles';
+import {
+	isShelterManager,
+	isWarehouseStaff,
+	SHELTER_MANAGER,
+	SUPPLY_COORDINATOR,
+	WAREHOUSE_STAFF
+} from '$lib/auth/roles';
+import { resolveActiveShelter } from '$lib/server/active-shelter';
 
 /**
  * Shared helper to format, log, and return standardized SvelteKit API endpoint error responses.
@@ -15,30 +22,38 @@ export function handleEndpointError(e: unknown, label?: string) {
 }
 
 /**
- * Shared helper to authorize a transfer action: system_admin, or — in the caller's own shelter,
- * the one every transfer route acts on — shelter_manager or the warehouse side of that shelter:
- * `warehouse_staff` or `supply_coordinator` (#571).
+ * Shared helper to authorize a transfer action: system_admin, or — in the shelter the request
+ * acts on — shelter_manager or the warehouse side of that shelter: `warehouse_staff` or
+ * `supply_coordinator` (#571, #477).
  *
- * The capability is checked against `caller.shelterCode`, not "any shelter": a user who is
- * supply_coordinator in SH002 but only registration_staff in SH001 must not act on SH001's
- * transfers. role-permission-matrix.md gives SC the Inventory & Supply row at shelter scope, and
- * its decision sync 2026-10-10 note makes `warehouse_staff` an alias of SC
- * (docs/prd/role-permission-matrix.md, "พัสดุและคลัง"). `authorizeWarehouse` (donation intake and
- * others) is unchanged; its any-shelter check is #477.
+ * `requestedShelter` is the `?shelter_code=` the client sends (its selected shelter). The
+ * capability is checked IN that shelter, not "any shelter": a user who is supply_coordinator in
+ * SH002 but only registration_staff in SH001 must not act on SH001's transfers, and a user of
+ * several shelters picks which one they work in rather than being pinned to the first
+ * `shelter:` role. role-permission-matrix.md gives SC the Inventory & Supply row at shelter
+ * scope, and its decision sync 2026-10-10 note makes `warehouse_staff` an alias of SC
+ * (docs/prd/role-permission-matrix.md, "พัสดุและคลัง").
+ *
+ * The returned caller's `shelterCode` IS the resolved active shelter (SA: the requested one, or
+ * null when none was given), so {@link resolveShelterCode} agrees with it.
  */
-export async function authorizeTransfer(cookie: string | null): Promise<Caller> {
+export async function authorizeTransfer(
+	cookie: string | null,
+	requestedShelter: string | null
+): Promise<Caller> {
 	const caller = await requireShelterScopeOrSA(cookie);
-	const code = caller.shelterCode;
-	const allowed =
-		caller.isSA ||
-		(!!code && (isShelterManager(caller.roles, code) || isWarehouseStaff(caller.roles, code)));
-	if (!allowed) {
-		throw error(
-			403,
-			'Requires warehouse_staff, supply_coordinator, shelter_manager, or system_admin'
-		);
+	const message = 'Requires warehouse_staff, supply_coordinator, shelter_manager, or system_admin';
+	if (!caller.isSA && !isShelterManager(caller.roles) && !isWarehouseStaff(caller.roles)) {
+		throw error(403, message);
 	}
-	return caller;
+	const active = resolveActiveShelter(
+		caller.roles,
+		caller.isSA,
+		requestedShelter,
+		[SHELTER_MANAGER, WAREHOUSE_STAFF, SUPPLY_COORDINATOR],
+		message
+	);
+	return { ...caller, shelterCode: active ?? caller.shelterCode };
 }
 
 /**

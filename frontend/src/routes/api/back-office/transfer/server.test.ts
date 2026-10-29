@@ -106,12 +106,46 @@ describe('BFF Transfer List and Create Endpoints', () => {
 					shelterCode: 'SH001'
 				});
 
-				const res = await GET(createMockEvent());
+				const res = await GET(createMockEvent({ shelter_code: 'SH001' }));
 
 				expect(res.status).toBe(403);
 				expect(mockList).not.toHaveBeenCalled();
 			}
 		);
+
+		it('lets a multi-shelter user pick the shelter they hold the capability in (#477)', async () => {
+			vi.mocked(requireShelterScopeOrSA).mockResolvedValue({
+				name: 'two_shelter_user',
+				roles: [
+					'shelter:SH001',
+					'shelter:SH002',
+					'SH001:registration_staff',
+					'SH002:warehouse_staff'
+				],
+				isSA: false,
+				shelterCode: 'SH001'
+			});
+			mockList.mockResolvedValue([]);
+
+			const res = await GET(createMockEvent({ shelter_code: 'SH002' }));
+
+			expect(res.status).toBe(200);
+			expect(mockList).toHaveBeenCalled();
+		});
+
+		it('400 when a multi-shelter user names no shelter — the first is not assumed (#477)', async () => {
+			vi.mocked(requireShelterScopeOrSA).mockResolvedValue({
+				name: 'two_shelter_user',
+				roles: ['shelter:SH001', 'shelter:SH002', 'SH001:warehouse_staff', 'SH002:warehouse_staff'],
+				isSA: false,
+				shelterCode: 'SH001'
+			});
+
+			const res = await GET(createMockEvent());
+
+			expect(res.status).toBe(400);
+			expect(mockList).not.toHaveBeenCalled();
+		});
 
 		it('lets supply_coordinator create a transfer request too (#571)', async () => {
 			vi.mocked(requireShelterScopeOrSA).mockResolvedValue({

@@ -45,7 +45,10 @@ function parseListQuery(params: URLSearchParams) {
  */
 export const GET: RequestHandler = async ({ request, url }) => {
 	try {
-		const caller = await authorizeReferral(request.headers.get('cookie'));
+		const caller = await authorizeReferral(
+			request.headers.get('cookie'),
+			url.searchParams.get('shelter_code')
+		);
 
 		const shelterCode = resolveShelterCode(caller, url.searchParams.get('shelter_code'));
 
@@ -79,7 +82,7 @@ export const POST: RequestHandler = async ({ request, url }) => {
 
 		let caller;
 		try {
-			caller = await authorizeReferral(cookie);
+			caller = await authorizeReferral(cookie, url.searchParams.get('shelter_code'));
 		} catch (authErr: unknown) {
 			const err = authErr as { status?: number; body?: { message?: string }; message?: string };
 			const status = err.status || 401;
