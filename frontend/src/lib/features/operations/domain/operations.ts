@@ -448,7 +448,9 @@ export const REF_PREFIX_BY_REASON: Record<LedgerReason, LedgerRefRule> = {
 	transfer_out: ['stock_transfer:', 'requisition_ticket:'],
 	adjust: null, // manual correction — no source document by definition
 	distribute: 'requisition_ticket:',
-	distribution_return: 'distribution_batch:',
+	// distribution_batch: legacy batch flow; requisition_ticket: leftovers received back from a
+	// ticket into their source lot (CR-208), never a `direct-` issue — see isCanonicalLedgerRef.
+	distribution_return: ['distribution_batch:', 'requisition_ticket:'],
 	receive: ['meal_service:', 'requisition_ticket:', 'distribution_log:', 'bulk_return_pool:']
 };
 
@@ -461,9 +463,15 @@ export function isCanonicalLedgerRef(reason: LedgerReason, refId: string | null)
 	const rule = REF_PREFIX_BY_REASON[reason];
 	const accepted = Array.isArray(rule) ? rule : [rule];
 	if (refId === null) return accepted.includes(null);
+	if (isDirectIssueReturnRef(reason, refId)) return false;
 	return accepted.some(
 		(value) => typeof value === 'string' && matchesLedgerRefPrefix(refId, value)
 	);
+}
+
+/** CR-208 FR-RTN-18 — a direct issue from the stock page has no return step to receive back. */
+function isDirectIssueReturnRef(reason: LedgerReason, refId: string): boolean {
+	return reason === 'distribution_return' && refId.startsWith('requisition_ticket:direct-');
 }
 
 /**
@@ -479,6 +487,14 @@ function checkRefIdAgainstRule(
 ): void {
 	const accepted = Array.isArray(rule) ? rule : [rule];
 	if (isCanonicalLedgerRef(reason, refId)) return;
+	if (refId !== null && isDirectIssueReturnRef(reason, refId)) {
+		ctx.addIssue({
+			code: 'custom',
+			path: ['ref_id'],
+			message: `รายการประเภท '${reason}' ต้องไม่อ้างอิงการเบิกตรงจากหน้าคลัง (requisition_ticket:direct-)`
+		});
+		return;
+	}
 	if (accepted.length === 1 && accepted[0] === null) {
 		ctx.addIssue({
 			code: 'custom',
@@ -858,7 +874,12 @@ export const distributionReturnInputSchema = z.object({
 	item_id: z.string().min(1),
 	qty: qtyStrCoercePositiveSchema,
 	unit: z.string().trim().min(1),
-	ref_id: z.string().regex(/^distribution_batch:.+/, 'ref_id must reference a distribution batch'),
+	ref_id: z
+		.string()
+		.regex(
+			/^(?:distribution_batch|requisition_ticket):.+/,
+			'ref_id must reference a distribution batch or requisition ticket'
+		),
 	lot_ref: z.string().regex(/^stock_ledger:.+/, 'lot_ref must reference an inbound stock ledger'),
 	lot: stockLotSchema.optional(),
 	occurred_at: z.string().optional()
