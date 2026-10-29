@@ -19,6 +19,7 @@ import {
 	VEHICLE_TYPE_CHOICES,
 	type EnumChoice
 } from './columns';
+import { isThaiMobilePhone, normalizeThaiPhone, THAI_MOBILE_PHONE_MESSAGE } from '$lib/db/model';
 import { findInFileDuplicates, personDuplicateKey } from './duplicates';
 import { resolveMasterCode, type MasterLabelFields } from '$lib/features/master-data/domain';
 
@@ -264,7 +265,7 @@ function resolveInt(raw: RawRow, header: string, sink: ErrorSink): number | unde
 }
 
 /**
- * Phone cells: digits only, and "ไม่มี"/"-" reads as no phone.
+ * Phone cells: 10-digit mobile (CR-206; `+66` / separators normalised), and "ไม่มี"/"-" reads as no phone.
  *
  * `phoneSchema` is `nullable()` but rejects a non-numeric string, and Excel
  * users write "081-234-5678" — the separators are stripped here so a formatted
@@ -275,12 +276,12 @@ const NO_PHONE_WORDS = new Set(['ไม่มี', '-', 'none', 'n/a']);
 function resolvePhone(raw: RawRow, header: string, sink: ErrorSink): string | null {
 	const value = cell(raw, header);
 	if (value === '' || NO_PHONE_WORDS.has(value.toLowerCase())) return null;
-	const digits = value.replace(/[\s\-().]/g, '');
-	if (!/^[0-9]+$/.test(digits)) {
-		sink.push(header, 'เบอร์โทรศัพท์ต้องเป็นตัวเลขเท่านั้น (เว้นว่างหรือใส่ "ไม่มี" ได้)');
+	const phone = normalizeThaiPhone(value);
+	if (!isThaiMobilePhone(phone)) {
+		sink.push(header, `${THAI_MOBILE_PHONE_MESSAGE} (เว้นว่างหรือใส่ "ไม่มี" ได้)`);
 		return null;
 	}
-	return digits;
+	return phone;
 }
 
 /** `ชนิด:จำนวน:หมายเหตุ` items separated by `|` → household pets. */

@@ -780,8 +780,8 @@ export const emergencyContactRequiredSchema = z.object(
 			.min(1, 'กรุณากรอกชื่อ-นามสกุลผู้ติดต่อฉุกเฉิน'),
 		phone: z
 			.string({ error: 'กรุณากรอกเบอร์ติดต่อฉุกเฉิน' })
-			.trim()
-			.regex(/^\d{10}$/, 'กรุณากรอกเบอร์ติดต่อฉุกเฉินให้ครบ 10 หลัก'),
+			.transform(normalizeThaiPhone)
+			.pipe(z.string().regex(/^0\d{9}$/, 'กรุณากรอกเบอร์ติดต่อฉุกเฉินให้ครบ 10 หลัก')),
 		relation: z
 			.string({ error: 'กรุณาระบุความสัมพันธ์ของผู้ติดต่อฉุกเฉิน' })
 			.trim()

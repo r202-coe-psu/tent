@@ -83,7 +83,7 @@
 		type RegistrationErrorEntry,
 		type RegistrationIssue
 	} from '../../domain/registration-validation';
-	import { normalizeThaiPhone, sanitizePhoneTyping } from '$lib/db/model';
+	import { isThaiMobilePhone, normalizeThaiPhone, sanitizePhoneTyping } from '$lib/db/model';
 	import {
 		hasMinimumResidence,
 		suggestHouseholdsByPhone,
@@ -351,7 +351,7 @@
 	);
 
 	function isThaiPhone(value: string): boolean {
-		return /^0\d{8,9}$/.test(normalizeThaiPhone(value));
+		return isThaiMobilePhone(value);
 	}
 
 	function clearPhoneSearchFeedback() {
@@ -1247,7 +1247,7 @@
 	/** Public channel only: primary contact needs a 10-digit phone (join flows may leave it blank). */
 	function publicHeadPhoneMessage(): string | null {
 		const headPhone = members[0]?.phone?.trim() ?? '';
-		const phoneOk = /^0\d{8,9}$/.test(headPhone.replace(/[-\s]/g, ''));
+		const phoneOk = isThaiMobilePhone(headPhone);
 		if (hasJoinSelection) return headPhone && !phoneOk ? t.joinPhoneInvalid : null;
 		return phoneOk ? null : t.headPhoneRequired;
 	}

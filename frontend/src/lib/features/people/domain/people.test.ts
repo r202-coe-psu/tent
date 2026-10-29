@@ -600,6 +600,21 @@ describe('station1EvacueeInputSchema emergency contact', () => {
 		}
 	});
 
+	it('normalises a formatted emergency phone and rejects a 9-digit landline (CR-206)', () => {
+		const ok = station1EvacueeInputSchema.safeParse({
+			...base,
+			emergency_contact: { name: 'มานี', phone: '081-234-5678', relation: 'มารดา' }
+		});
+		expect(ok.success).toBe(true);
+		if (ok.success) expect(ok.data.emergency_contact?.phone).toBe('0812345678');
+
+		const landline = station1EvacueeInputSchema.safeParse({
+			...base,
+			emergency_contact: { name: 'มานี', phone: '022222222', relation: 'มารดา' }
+		});
+		expect(landline.success).toBe(false);
+	});
+
 	it('accepts a complete emergency contact on Station 1', () => {
 		const result = station1EvacueeInputSchema.safeParse({
 			...base,

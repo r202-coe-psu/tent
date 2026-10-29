@@ -1,9 +1,9 @@
-const CANONICAL = /^0\d{8,9}$/;
+const CANONICAL = /^0\d{9}$/;
 
-/** Canonical Thai phone: digits only, leading 0, 9–10 digits (landline or mobile). */
+/** Canonical Thai phone: digits only, leading 0, 10-digit mobile (CR-206 — no landlines). */
 export function normalizeKioskPhone(raw: string): string | null {
 	const digits = raw.replace(/\D/g, '');
-	const local = /^66\d{8,9}$/.test(digits) ? `0${digits.slice(2)}` : digits;
+	const local = /^66\d{9}$/.test(digits) ? `0${digits.slice(2)}` : digits;
 	return CANONICAL.test(local) ? local : null;
 }
 
@@ -37,5 +37,5 @@ export function isKioskPhoneSubmittable(phone: string): boolean {
  */
 export function phoneEntryHint(phone: string): string | null {
 	if (phone.length === 0 || isKioskPhoneSubmittable(phone)) return null;
-	return 'กรอกให้ครบ 9–10 หลัก ขึ้นต้นด้วย 0';
+	return 'กรอกให้ครบ 10 หลัก ขึ้นต้นด้วย 0';
 }

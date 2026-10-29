@@ -28,13 +28,13 @@ export function isValidThaiIdCandidate(
 	return digitsOnly.length === 13;
 }
 
-/** Check if phone number qualifies as a Thai phone candidate (9-10 digits, starts with 0). */
+/** Check if phone number qualifies as a Thai phone candidate (10-digit mobile, starts with 0). */
 export function isValidPhoneCandidate(phone: string | null | undefined): boolean {
 	if (!phone) return false;
 	const trimmed = phone.trim();
 	if (!trimmed) return false;
 	const digitsOnly = trimmed.replace(/\D/g, '');
-	return (digitsOnly.length === 9 || digitsOnly.length === 10) && digitsOnly.startsWith('0');
+	return digitsOnly.length === 10 && digitsOnly.startsWith('0');
 }
 
 export interface InstantDuplicateMatch {
