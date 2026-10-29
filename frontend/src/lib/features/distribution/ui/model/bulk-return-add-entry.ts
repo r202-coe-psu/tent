@@ -378,6 +378,11 @@ export interface AddEntriesSummary {
 	loanPendingItemIds: string[];
 	/** Written entries that were voided before their loan cut: no loan was touched. */
 	voidedCount: number;
+	/**
+	 * On-time lines whose loans were reopened (reopen wins, nothing cut). They still count in
+	 * saved / replayed.
+	 */
+	loansReopenedCount: number;
 	/** The chosen pool could not take the new lines (they stay in the form). */
 	blocked?: { pool_id: string; reason: 'closed' | 'locked' };
 }
@@ -400,6 +405,7 @@ export function summarizeAddResult(result: AddBulkReturnEntriesResult): AddEntri
 		replayedCount: onTime.filter((r) => r.replayed).length,
 		loanPendingItemIds: loanPending.map((r) => r.entry.item_id),
 		voidedCount: voided.length,
+		loansReopenedCount: onTime.filter((r) => r.loans_reopened).length,
 		...(result.blocked ? { blocked: result.blocked } : {}),
 		lateEntries,
 		relocated: relocated.map((r) => ({
@@ -412,6 +418,16 @@ export function summarizeAddResult(result: AddBulkReturnEntriesResult): AddEntri
 			.filter((r) => r.entry.returner_id !== null && qtyGt(r.unallocated_qty, 0))
 			.map((r) => ({ item_id: r.entry.item_id, qty: r.unallocated_qty }))
 	};
+}
+
+/**
+ * True when this call wrote into `poolId`: a newly saved on-time line, or an on-time replay whose
+ * entry lives in that pool. A replay of an entry that sits in another pool does not count.
+ */
+export function wroteIntoPool(result: AddBulkReturnEntriesResult, poolId: string): boolean {
+	return result.results.some(
+		(r) => !r.late && !r.relocated && !r.voided && (!r.replayed || r.entry.pool_id === poolId)
+	);
 }
 
 /** Warning naming the items whose loan cut is pending and where to finish it. */

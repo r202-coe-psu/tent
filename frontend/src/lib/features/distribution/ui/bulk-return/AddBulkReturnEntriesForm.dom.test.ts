@@ -72,22 +72,26 @@ vi.mock('$lib/components/camera-code-scanner-dialog.svelte', async () => ({
 
 const POOL = { _id: POOL_ID, name: 'กอง A', lock: null };
 
-function writtenResult(opts: { loanPending?: boolean } = {}) {
+function writtenResult(
+	opts: { loanPending?: boolean; reopened?: boolean; replayed?: boolean; poolId?: string } = {}
+) {
 	return {
 		results: [
 			{
 				entry: {
 					_id: `bulk_return_entry:${OP_ULID}`,
+					pool_id: opts.poolId ?? POOL_ID,
 					item_id: ITEM_ID,
 					returner_id: EVACUEE_ID,
 					loan_refs: [{ distribution_log_id: 'distribution_log:L1', qty: '2' }]
 				},
 				late: false,
-				replayed: false,
+				replayed: opts.replayed ?? false,
 				loansApplied: opts.loanPending ? [] : ['distribution_log:L1'],
 				loansSkipped: [],
 				unallocated_qty: '0',
-				...(opts.loanPending ? { loan_pending: true } : {})
+				...(opts.loanPending ? { loan_pending: true } : {}),
+				...(opts.reopened ? { loans_reopened: true } : {})
 			}
 		],
 		returner_had_outstanding_loans: true,
@@ -186,6 +190,32 @@ describe('AddBulkReturnEntriesForm save', () => {
 		expect(warning).toContain('ผ้าห่ม');
 		expect(warning).toContain('ตัดยอดยืมที่ค้าง');
 		expect(dialog.open).toBe(false);
+	});
+
+	it('toasts info for a saved line whose loans were reopened', async () => {
+		const form = fillQtyAndGetForm();
+		submit(form);
+		flushSync();
+
+		hoisted.resolveAdd(writtenResult({ reopened: true }));
+		await settle();
+
+		expect(hoisted.toast.error).not.toHaveBeenCalled();
+		expect(hoisted.toast.info).toHaveBeenCalledWith(
+			'1 รายการถูกเปิดยอดยืมกลับแล้ว จึงไม่ได้ตัดยอดยืม'
+		);
+		expect(dialog.open).toBe(false);
+	});
+
+	it('does not remember the pool when the only written line was a replay into another pool', async () => {
+		const form = fillQtyAndGetForm();
+		submit(form);
+		flushSync();
+
+		hoisted.resolveAdd(writtenResult({ replayed: true, poolId: 'bulk_return_pool:OTHER' }));
+		await settle();
+
+		expect(localStorage.getItem(lastBulkReturnPoolKey('SH1', 'tester'))).toBeNull();
 	});
 
 	it('starts only one save when submitted twice before the pending state renders', async () => {

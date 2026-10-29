@@ -17,6 +17,7 @@ import {
 	loanPendingWarning,
 	remainingLinesMessage,
 	summarizeAddResult,
+	wroteIntoPool,
 	ulidsNeedingWrittenLookup,
 	validateAddEntryLines,
 	type AddEntryLine
@@ -431,11 +432,13 @@ describe('summarizeAddResult / dropWrittenLines', () => {
 			loanPending?: boolean;
 			voided?: boolean;
 			reopened?: boolean;
+			poolId?: string;
 		} = {}
 	) {
 		return {
 			entry: {
 				_id: `bulk_return_entry:${ulid}`,
+				pool_id: opts.poolId ?? 'bulk_return_pool:p',
 				item_id: `item_master:${ulid}`,
 				returner_id: opts.returner === undefined ? 'evacuee:1' : opts.returner,
 				loan_refs: (opts.refs ?? []).map((qty) => ({ distribution_log_id: 'l', qty }))
@@ -497,6 +500,44 @@ describe('summarizeAddResult / dropWrittenLines', () => {
 		expect(summary.replayedCount).toBe(1);
 		expect(summary.loanAppliedQty).toBe('2');
 		expect(summary.unallocated).toEqual([{ item_id: 'item_master:A', qty: '1' }]);
+	});
+
+	it('counts on-time reopened lines in loansReopenedCount, not late, relocated or voided ones', () => {
+		const summary = summarizeAddResult(
+			wrap([
+				res('A', { reopened: true }),
+				res('B', { replayed: true, reopened: true }),
+				res('C', { refs: ['2'] }),
+				res('D', { late: true, reopened: true }),
+				res('E', { relocated: 'moved', reopened: true }),
+				res('F', { voided: true, reopened: true })
+			])
+		);
+		expect(summary.loansReopenedCount).toBe(2);
+		expect(summary.savedCount).toBe(2);
+		expect(summary.replayedCount).toBe(1);
+		expect(summarizeAddResult(wrap([res('A')])).loansReopenedCount).toBe(0);
+	});
+
+	it('wroteIntoPool: a new line or a replay in the submitted pool counts', () => {
+		const pool = 'bulk_return_pool:p';
+		expect(wroteIntoPool(wrap([res('A')]), pool)).toBe(true);
+		expect(wroteIntoPool(wrap([res('A', { replayed: true })]), pool)).toBe(true);
+		// A new line is written into the submitted pool whatever its entry says.
+		expect(wroteIntoPool(wrap([res('A', { poolId: 'bulk_return_pool:other' })]), pool)).toBe(true);
+	});
+
+	it('wroteIntoPool: replays into another pool, late, relocated, voided or none do not count', () => {
+		const pool = 'bulk_return_pool:p';
+		const other = 'bulk_return_pool:other';
+		expect(wroteIntoPool(wrap([res('A', { replayed: true, poolId: other })]), pool)).toBe(false);
+		expect(wroteIntoPool(wrap([res('A', { late: true })]), pool)).toBe(false);
+		expect(wroteIntoPool(wrap([res('A', { relocated: 'moved' })]), pool)).toBe(false);
+		expect(wroteIntoPool(wrap([res('A', { voided: true })]), pool)).toBe(false);
+		expect(wroteIntoPool(wrap([]), pool)).toBe(false);
+		expect(wroteIntoPool(wrap([res('A', { replayed: true, poolId: other }), res('B')]), pool)).toBe(
+			true
+		);
 	});
 
 	it('counts voided entries apart from saved ones', () => {

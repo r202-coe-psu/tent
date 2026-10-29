@@ -56,6 +56,7 @@
 		summarizeAddResult,
 		ulidsNeedingWrittenLookup,
 		validateAddEntryLines,
+		wroteIntoPool,
 		type AddEntriesSummary,
 		type AddEntryLine,
 		type ReturnerChoice
@@ -241,6 +242,8 @@
 				returnAllChecking = false;
 			}
 		}
+		// Normally unreachable: the returner picker is disabled while `busy` (this lookup runs), so
+		// the returner cannot change meanwhile. The guard only protects against a stale lookup.
 		if (returnerId !== startReturnerId) return;
 		const result = linesFromOutstandingLoans(
 			startLoanRows,
@@ -288,6 +291,9 @@
 		if (summary.lateEntries.length > 0) toast.warning(LATE_RESULT_WARNING);
 		if (summary.relocated.length > 0) toast.info('บางรายการถูกย้ายไปกองอื่นแล้ว ไม่ได้บันทึกซ้ำ');
 		if (summary.voidedCount > 0) toast.info(ADD_ENTRY_COPY.voided(summary.voidedCount));
+		if (summary.loansReopenedCount > 0) {
+			toast.info(ADD_ENTRY_COPY.loansReopened(summary.loansReopenedCount));
+		}
 		if (summary.loanPendingItemIds.length > 0) {
 			const names = summary.loanPendingItemIds.map((id) => resolveItemDisplay(id, catalog).name);
 			toast.warning(loanPendingWarning(names));
@@ -348,7 +354,8 @@
 		try {
 			const result = await addMutation.mutateAsync({ input, shelterCode });
 			const summary = summarizeAddResult(result);
-			if (shelterCode && summary.savedCount + summary.replayedCount > 0) {
+			// A replay into another pool must not make that pool the remembered default.
+			if (shelterCode && wroteIntoPool(result, submittedPoolId)) {
 				writeLastBulkReturnPool(shelterCode, userName, submittedPoolId);
 			}
 			reportSummary(summary);
