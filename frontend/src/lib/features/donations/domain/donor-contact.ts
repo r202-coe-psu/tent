@@ -25,7 +25,9 @@ export function maskDonorPhone(phone: string | null | undefined): string {
 
 /** Same form as backend `mask_email`: `s***i@example.com`, `a***@b.th`. */
 export function maskDonorEmail(email: string | null | undefined): string | null {
-	if (!email || !email.includes('@')) return email ?? null;
+	if (!email) return null;
+	// Not an address (old data, or a LINE id / number typed into the field): show nothing of it.
+	if (!email.includes('@')) return '***';
 	const at = email.indexOf('@');
 	const local = email.slice(0, at);
 	const masked = local.length <= 2 ? `${local.slice(0, 1)}***` : `${local[0]}***${local.at(-1)}`;

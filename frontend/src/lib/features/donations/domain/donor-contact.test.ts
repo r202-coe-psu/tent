@@ -35,8 +35,11 @@ describe('maskDonorEmail', () => {
 		expect(maskDonorEmail('ab@b.th')).toBe('a***@b.th');
 	});
 
-	it('returns null or the value itself when there is nothing to mask', () => {
+	it('returns null when there is no email, and fails closed on a value that is not one', () => {
 		expect(maskDonorEmail(null)).toBeNull();
-		expect(maskDonorEmail('not-an-email')).toBe('not-an-email');
+		expect(maskDonorEmail('')).toBeNull();
+		// Old data or a LINE id / number typed into the field never goes out as typed.
+		expect(maskDonorEmail('not-an-email')).toBe('***');
+		expect(maskDonorEmail('0812345678')).toBe('***');
 	});
 });
