@@ -82,7 +82,7 @@ function envelope(type: string, schemaV: number, extra: Record<string, unknown> 
 async function seedItemMaster(name: string): Promise<string> {
 	const doc = envelope('item_master', 4, {
 		name,
-		category: 'food',
+		category: 'item_category:food',
 		sku: `e2e-kid-${RUN}`,
 		base_unit: 'kg',
 		conversions: [],
