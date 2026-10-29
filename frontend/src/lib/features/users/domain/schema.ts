@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { shelterCodeSchema } from '$lib/db/model';
+import { shelterCodeSchema, thaiMobilePhoneSchema, THAI_MOBILE_PHONE_MESSAGE } from '$lib/db/model';
 import { SA_GRANTABLE_CAPABILITIES, SHELTER_CAPABILITIES } from '$lib/auth/roles';
 import { passwordSchema } from '$lib/auth/password-schema';
 import { SECURITY_QUESTION_IDS } from '$lib/auth/security-questions';
@@ -11,13 +11,10 @@ export type PersonnelType = z.infer<typeof personnelTypeSchema>;
 export const phoneSchema = z
 	.string()
 	.trim()
-	.regex(/^0[0-9]{9}$/, 'เบอร์โทรศัพท์ต้องเป็นตัวเลข 10 หลักขึ้นต้นด้วย 0');
+	.regex(/^0[0-9]{9}$/, THAI_MOBILE_PHONE_MESSAGE);
 
-/** Contact phone on an account: a mobile (10 digits) or a landline (9 digits, e.g. 02xxxxxxx). */
-export const contactPhoneSchema = z
-	.string()
-	.trim()
-	.regex(/^0[0-9]{8,9}$/, 'เบอร์โทรศัพท์ต้องเป็นตัวเลข 9–10 หลักขึ้นต้นด้วย 0');
+/** Contact phone on an account: a 10-digit mobile (landlines no longer accepted — CR-206). */
+export const contactPhoneSchema = thaiMobilePhoneSchema;
 
 /** Username: allows phone number or alphanumeric (letters, digits, _, -, .) */
 export const usernameSchema = z

@@ -22,8 +22,11 @@ describe('phoneSchema', () => {
 		expect(phoneSchema.parse(null)).toBeNull();
 	});
 
-	it('rejects non-numeric input', () => {
+	it('rejects non-numeric input and 9-digit landlines (CR-206)', () => {
 		expect(phoneSchema.safeParse('abc').success).toBe(false);
+		expect(phoneSchema.safeParse('022222222').success).toBe(false);
+		expect(phoneSchema.safeParse('02-222-2222').success).toBe(false);
+		expect(phoneSchema.parse('081.234.5678')).toBe('0812345678');
 	});
 });
 

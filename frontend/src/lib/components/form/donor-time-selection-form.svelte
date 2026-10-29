@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { normalizeThaiPhone } from '$lib/db/model';
 	import MapPin from '@lucide/svelte/icons/map-pin';
 	import CalendarIcon from '@lucide/svelte/icons/calendar';
 	import Lock from '@lucide/svelte/icons/lock';
@@ -206,7 +207,7 @@
 					shelter_code: donationStore.shelterCode,
 					donor: {
 						name: donationStore.donorName.trim(),
-						phone: donationStore.donorPhone.trim(),
+						phone: normalizeThaiPhone(donationStore.donorPhone),
 						line_id: donationStore.donorLine || undefined,
 						email: donationStore.donorEmail || undefined
 					},

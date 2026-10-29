@@ -1,24 +1,19 @@
 import { z } from 'zod';
-import { normalizeThaiPhone } from '$lib/db/model';
+import { isThaiMobilePhone, THAI_MOBILE_PHONE_MESSAGE, thaiMobilePhoneSchema } from '$lib/db/model';
 
 /*
- * Volunteer mobile rule (#951). The one normaliser is `normalizeThaiPhone` in `$lib/db/model`
- * (CR-206 / #994 review), so the same number hashes to the same `phone_hash` in every feature.
- * These exports become re-exports of `thaiMobilePhoneSchema` from `$lib/db/model` once #981 merges.
+ * Volunteer mobile rule (#951). The system-wide rule (CR-206 / #991) lives in `$lib/db/model`
+ * (`normalizeThaiPhone`, `thaiMobilePhoneSchema`); these are volunteer-named aliases so the same
+ * number hashes to the same `phone_hash` in every feature.
  */
 
-export const VOLUNTEER_PHONE_MESSAGE = 'เบอร์โทรต้องเป็นตัวเลข 10 หลัก ขึ้นต้นด้วย 0';
+export const VOLUNTEER_PHONE_MESSAGE = THAI_MOBILE_PHONE_MESSAGE;
 
 /** True when `value` normalises to a 10-digit mobile (`^0\d{9}$`). */
-export function isVolunteerMobile(value: string | null | undefined): boolean {
-	return /^0\d{9}$/.test(normalizeThaiPhone(value ?? ''));
-}
+export const isVolunteerMobile = isThaiMobilePhone;
 
 /** The single volunteer phone rule (#951): outputs the normalised 10-digit mobile. */
-export const volunteerMobileSchema = z
-	.string()
-	.transform((value) => normalizeThaiPhone(value))
-	.pipe(z.string().regex(/^0\d{9}$/, VOLUNTEER_PHONE_MESSAGE));
+export const volunteerMobileSchema = thaiMobilePhoneSchema;
 
 /** Same rule, but blank/null/undefined is allowed and becomes `null`. */
 export const optionalVolunteerMobileSchema = z
