@@ -1,10 +1,12 @@
 ---
-id: draft
+id: CR-211 # renumbered from draft-staff-qr-card
 title: Staff QR card — permanent staff_token_hash in _users + recipient_type staff at distribution
-status: proposed
+status: approved
 date: 2026-10-28
+updated: 2026-10-29 # approved (kong)
 requested_by: ทีม (issue #893)
-decided_by: project owner
+decided_by: kong
+decision_date: 2026-10-29
 layer: volatile
 affects:
   - docs/data/schema.md §6 (`_users.staff_token_hash` — additive)
@@ -23,7 +25,7 @@ why: เจ้าหน้าที่รับอาหาร/ของที�
 migration: one-off backfill `staff_token_hash` ให้ `_users` เดิมที่ไม่มี `volunteer_id` (idempotent); `distribution_log` เดิมไม่ต้อง migrate
 ---
 
-# Staff QR card — permanent `staff_token_hash` in `_users` + `recipient_type: 'staff'`
+# CR-211 — Staff QR card — permanent `staff_token_hash` in `_users` + `recipient_type: 'staff'`
 
 > **สรุป (TL;DR):**
 >
@@ -145,7 +147,7 @@ migration: one-off backfill `staff_token_hash` ให้ `_users` เดิม�
 
 ---
 
-## 5. Risks ที่ยอมรับ (ต้องเคาะ)
+## 5. Risks ที่ยอมรับ (kong รับ 2026-10-29)
 
 | # | ความเสี่ยง | เหตุผลที่รับได้ / mitigation |
 | --- | --- | --- |
@@ -188,3 +190,4 @@ migration: one-off backfill `staff_token_hash` ให้ `_users` เดิม�
 - 2026-10-29 — ข้อเสนอทีม: backfill ออก token ให้ user ที่ `active: false` ด้วย (สแกนไม่ผ่านอยู่แล้ว เปิดใช้ใหม่มี QR พร้อม)
 - 2026-10-29 — ข้อเสนอทีม: ไม่ bump `schema_v` ของ `distribution_log` เพราะเพิ่ม enum แบบ additive และ worker/backend ไม่อ่าน `recipient_type` · ต้อง redeploy VDU ก่อนเปิดใช้
 - 2026-10-29 — ข้อเสนอทีม: lookup hash ด้วย `_find` บน `_users` แบบไม่มี index เพราะปริมาณ `_users` น้อยและไม่ต้องแตะ provisioning (stable core)
+- 2026-10-29 — **approved (kong)** — รับข้อเสนอทีมทุกข้อใน Decision log ตามที่เสนอ และรับความเสี่ยง R1–R4 (§5) ตามที่เขียน
