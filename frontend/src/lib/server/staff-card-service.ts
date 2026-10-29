@@ -8,10 +8,12 @@ import {
 	canDistributeInShelter,
 	hasShelterScope,
 	isSystemAdmin,
+	managerShelterCodes,
 	shelterCodesFromRoles
 } from '$lib/auth/roles';
 import { ensureRoleCardToken } from '$lib/features/volunteers/server/public-schedule-action';
 import { shelterDbName } from '$lib/server/shelter-access-design';
+import { mintStaffTokenHash } from '$lib/server/staff-card-token';
 import { fetchAllUserDocs, type CouchUserDoc } from '$lib/server/user-service';
 import {
 	isValidStaffTokenHash,
@@ -146,4 +148,83 @@ export async function getMyCard(name: string): Promise<MyCard> {
 		position: user.position ?? null,
 		roles: user.roles
 	};
+}
+
+export type StaffCardForPrint = {
+	name: string;
+	display_name: string;
+	position: string | null;
+	roles: string[];
+	payload: string;
+};
+
+function userPath(name: string): string {
+	return `/_users/org.couchdb.user:${encodeURIComponent(name)}`;
+}
+
+function printable(doc: CouchUserDoc, hash: string): StaffCardForPrint {
+	return {
+		name: doc.name,
+		display_name: doc.display_name || doc.name,
+		position: doc.position ?? null,
+		roles: doc.roles,
+		payload: staffCardPayloadFromHash(hash)
+	};
+}
+
+async function readTarget(name: string): Promise<CouchUserDoc> {
+	const res = await adminRaw(userPath(name), 'GET');
+	if (res.status === 404) throw new ServiceError('NOT_FOUND', 'ไม่พบผู้ใช้');
+	if (res.status >= 400) throw serviceErrorFromCouch('read user', res.status, res.data);
+	return res.data as CouchUserDoc;
+}
+
+function isPrivilegedTarget(doc: CouchUserDoc): boolean {
+	return isSystemAdmin(doc.roles) || managerShelterCodes(doc.roles).length > 0;
+}
+
+async function readStaffTarget(name: string): Promise<CouchUserDoc> {
+	const doc = await readTarget(name);
+	if (doc.volunteer_id) throw new ServiceError('CONFLICT', 'ผู้ใช้นี้ใช้บัตรจิตอาสา');
+	return doc;
+}
+
+export async function rotateStaffCard(caller: Caller, name: string): Promise<StaffCardForPrint> {
+	const doc = await readStaffTarget(name);
+	if (!caller.isSA) {
+		const managed = managerShelterCodes(caller.roles);
+		const targetCodes = shelterCodesFromRoles(doc.roles);
+		const coversEveryShelter =
+			targetCodes.length > 0 && targetCodes.every((code) => managed.includes(code));
+		if (!coversEveryShelter || isPrivilegedTarget(doc)) {
+			throw new ServiceError('FORBIDDEN', 'ไม่มีสิทธิ์หมุน QR ของผู้ใช้นี้');
+		}
+	}
+	const newHash = await mintStaffTokenHash();
+	const put = await adminRaw(userPath(name), 'PUT', { ...doc, staff_token_hash: newHash });
+	if (put.status === 409) {
+		throw new ServiceError('CONFLICT', 'ข้อมูลผู้ใช้เพิ่งถูกแก้ไข กรุณาลองหมุน QR อีกครั้ง');
+	}
+	if (put.status >= 400) throw serviceErrorFromCouch('rotate staff card', put.status, put.data);
+	return printable(doc, newHash);
+}
+
+export async function getStaffCardForAdmin(
+	caller: Caller,
+	name: string
+): Promise<StaffCardForPrint> {
+	const doc = await readStaffTarget(name);
+	if (!caller.isSA) {
+		const managed = managerShelterCodes(caller.roles);
+		const inManagedShelter = shelterCodesFromRoles(doc.roles).some((code) =>
+			managed.includes(code)
+		);
+		if (!inManagedShelter || isPrivilegedTarget(doc)) {
+			throw new ServiceError('FORBIDDEN', 'ไม่มีสิทธิ์ดูบัตรของผู้ใช้นี้');
+		}
+	}
+	if (!isValidStaffTokenHash(doc.staff_token_hash)) {
+		throw new ServiceError('NOT_FOUND', 'ยังไม่มี QR กรุณาหมุน QR เพื่อออกบัตร');
+	}
+	return printable(doc, doc.staff_token_hash);
 }
