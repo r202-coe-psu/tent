@@ -75,7 +75,7 @@ export function applicantAttendance(
 	return live.length === 1 ? assignmentAttendance(live[0], identityVerified, today) : NONE;
 }
 
-/** #885 — minutes after a shift ends before an unconfirmed `assigned` row needs staff to confirm. */
+/** #885 — minutes after a shift ends before an unchecked-in `assigned` or accepted `standby` row needs staff to confirm. */
 export const ATTENDANCE_CONFIRM_AFTER_MINUTES = 30;
 
 /**
@@ -84,7 +84,12 @@ export const ATTENDANCE_CONFIRM_AFTER_MINUTES = 30;
  * time, never stored. `flex` (standby) has no end and is never awaiting confirmation.
  */
 export function awaitingAttendanceConfirmation(assignment: ShiftAssignment, now: Date): boolean {
-	if (assignment.status !== 'assigned' || assignment.shift === 'flex') return false;
+	if (assignment.shift === 'flex') return false;
+	// Accepted shifts are written as `standby` + `dispatch_status: 'accepted'` (assign / public apply).
+	const open =
+		assignment.status === 'assigned' ||
+		(assignment.status === 'standby' && assignment.dispatch_status === 'accepted');
+	if (!open) return false;
 	const end = Date.parse(assignment.duty_window?.end_ts ?? '');
 	return Number.isFinite(end) && now.getTime() >= end + ATTENDANCE_CONFIRM_AFTER_MINUTES * 60_000;
 }

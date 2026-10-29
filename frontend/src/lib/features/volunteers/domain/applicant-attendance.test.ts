@@ -241,12 +241,31 @@ describe('awaitingAttendanceConfirmation', () => {
 		expect(awaitingAttendanceConfirmation(assignment(), atThreshold)).toBe(true);
 	});
 
-	it.each(['standby', 'checked_in', 'completed', 'no_show', 'cancelled'] as const)(
+	it.each(['checked_in', 'completed', 'no_show', 'cancelled'] as const)(
 		'ignores a %s row',
 		(status) => {
 			expect(awaitingAttendanceConfirmation(assignment({ status }), atThreshold)).toBe(false);
 		}
 	);
+
+	it('counts a standby row only once the volunteer accepted it', () => {
+		const standby = (dispatch_status: ShiftAssignment['dispatch_status']) =>
+			assignment({ status: 'standby', dispatch_status });
+		expect(awaitingAttendanceConfirmation(standby('accepted'), justBefore)).toBe(false);
+		expect(awaitingAttendanceConfirmation(standby('accepted'), atThreshold)).toBe(true);
+		expect(awaitingAttendanceConfirmation(standby('dispatched'), atThreshold)).toBe(false);
+		expect(awaitingAttendanceConfirmation(standby(null), atThreshold)).toBe(false);
+	});
+
+	it('still counts an assigned row whatever its dispatch_status', () => {
+		const dispatched = assignment({ status: 'assigned', dispatch_status: 'dispatched' });
+		expect(awaitingAttendanceConfirmation(dispatched, atThreshold)).toBe(true);
+	});
+
+	it('never counts a flex standby row, accepted or not', () => {
+		const flex = assignment({ status: 'standby', dispatch_status: 'accepted', shift: 'flex' });
+		expect(awaitingAttendanceConfirmation(flex, atThreshold)).toBe(false);
+	});
 
 	it('never applies to a flex shift', () => {
 		expect(awaitingAttendanceConfirmation(assignment({ shift: 'flex' }), atThreshold)).toBe(false);
