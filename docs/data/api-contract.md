@@ -738,23 +738,25 @@ BFF คำนวณผลต่อสมาชิกด้วย `planRegistrati
 ```jsonc
 // PATCH /public/v1/donations/{tracking_token}/items — request
 {
-  "items": [{ "item_id": "item:rice", "free_text": "ข้าวสาร", "qty": "8", "unit": "kg" }],
-  // CR-174 FR-18 (opt) — donation doc ใน CouchDB ก่อนแก้ ตามที่ BFF อ่านมา (service-to-service
-  // หลัง Bearer). ผลประเมินของเจ้าหน้าที่อยู่ใน CouchDB ซึ่ง FastAPI อ่านไม่ได้ → BFF ส่งมาให้
-  "current_items": [{ "item_id": "item:rice", "qty": "5", "unit": "kg", "reserved_qty": "5",
-                     "review_status": "approved" }] | null,
-  "current_status": "verifying" | null
+  // line_key (CR-196 FR-LK-5) — ส่งกลับทุกรายการเดิมที่ยังอยู่ · รายการที่เพิ่มใหม่ไม่ส่ง
+  "items": [{ "line_key": "01K8…", "item_id": "item:rice", "free_text": "ข้าวสาร", "qty": "8", "unit": "kg" }],
+  // (opt) donation doc ใน CouchDB ก่อนแก้ ตามที่ BFF อ่านมา (service-to-service หลัง Bearer).
+  // ผลประเมินของเจ้าหน้าที่อยู่ใน CouchDB ซึ่ง FastAPI อ่านไม่ได้ → ใช้ตัดสิน ALREADY_REVIEWED
+  // และเป็นชุด line_key ที่ใบถืออยู่
+  "current_items": [{ "line_key": "01K8…", "item_id": "item:rice", "qty": "5", "unit": "kg",
+                      "review_status": "pending" }] | null,
+  "current_status": "pending_review" | null
 }
 
 // 200 — response
 {
   "success": true, "message": "Donation items updated",
   "revisions": 2,                       // จำนวนใน revisions[] หลังแก้
-  "items": [{ "item_id": "item:rice", "free_text": "ข้าวสาร", "qty": "8", "unit": "kg",
-              "reserved_qty": "8", "review_status": "approved" }],   // รายการที่เก็บจริง (+ review_*)
+  "items": [{ "line_key": "01K8…", "item_id": "item:rice", "free_text": "ข้าวสาร", "qty": "8",
+              "unit": "kg", "reserved_qty": "8", "review_status": "approved" }], // รายการที่เก็บจริง
   "revision": { "at": "…", "by": "donor", "items_before": [...], "items_after": [...] },
   "status": "verifying",                // CR-174 FR-18b — สถานะใบหลังคำนวณ (req)
-  "auto_approved_lines": [0]            // CR-174 FR-26 — index ใน items ที่เพิ่งได้ approved อัตโนมัติครั้งนี้
+  "auto_approved_lines": [0]            // CR-174 FR-26 — index ใน items ที่ได้ approved อัตโนมัติครั้งนี้
 }
 ```
 
@@ -762,20 +764,23 @@ BFF `items/+server.ts` เขียน `items`, `revisions`, `status` และ 
 CouchDB ใน `PUT` เดียว แล้วเขียน `audit` อนุมัติอัตโนมัติ (`approved_by: 'system'`,
 `rule: 'campaign_line'`, `lines` = `auto_approved_lines`) เมื่อ list ไม่ว่าง (FR-18b, FR-26).
 
-**การคำนวณ `review_status` ตอนแก้ (CR-174 FR-18/18a/18c)** — ฐานเดิม = `current_items`/`current_status`
-ถ้าส่งมา · ไม่ส่ง: ใบที่ยังไม่ sync ใช้ intake buffer · sync แล้วใช้ `status` + `review_*` (วางทับรายการ
-ใน buffer ตามลำดับ) จาก `public_donations`. ฟอร์มแก้ส่งมาแค่ `item_id`/`free_text`/`qty`/`unit` —
-ก่อนเทียบ FastAPI เติม `category`/`condition`/`note` ที่ request ไม่ได้ส่งจากรายการเดิมชื่อเดียวกัน
-(จับคู่ตามชื่อ รายการเดิมละครั้ง; ค่าที่ request ส่งมาชนะ; ถ้ารายการเดิมชื่อเดียวกันมี field ทั้งสามต่างกัน
-ไม่เติม — เดาไม่ได้ว่าเป็นบรรทัดไหน รายการนั้นจึงนับว่าถูกแก้และรอประเมิน) ไม่งั้นทุกรายการจะนับว่าถูกแก้และ
-field ทั้งสามหายจาก doc. ค่าข้อความเทียบหลังตัดช่องว่างหัวท้าย. รายการใหม่ที่ `item_id`, `category`, `free_text`, `qty`
-(เทียบเป็นตัวเลข), `unit`, `condition`, `note` ตรงกับรายการเดิมที่ยังไม่ถูกจับคู่ (ว่าง = ไม่มี field;
-รายการเดิมจับคู่ได้ครั้งเดียว) คงผลเดิมทั้ง 3 field รวม `rejected` · อื่น ๆ: จองโควต้าในแคมเปญได้ →
-`approved` (นับใน `auto_approved_lines`), ไม่ได้ → `pending`. ใบไม่มี `review_status` (ก่อน schema_v 7):
-`verifying` = ถือว่ารายการเดิม `approved` ทั้งหมด · `pending_review` = คำนวณใหม่ทุกรายการเหมือนใบใหม่ ·
-`declared` = ไม่เขียน `review_status` และคง `declared`. ผลเขียนลง intake buffer (`items_declared` +
-`status`) และ stub `public_donations` (`items_declared` ทุกกรณี · `status` เฉพาะใบที่ BFF ไม่ได้ส่ง
-`current_status` — ใบที่ sync แล้วได้ `status` จาก projector หลัง BFF เขียน CouchDB สำเร็จ)
+**แก้ได้เฉพาะใบที่ยังไม่ได้รับการประเมิน (CR-196 FR-LK-4)** — สถานะ `declared` หรือ `pending_review`
+และไม่มีรายการใดที่ `review_status` เป็น `approved`/`rejected` (อนุมัติอัตโนมัติจากแคมเปญนับด้วย) ·
+ใบ `verifying`/`rejected` หรือมีรายการที่ตัดสินแล้ว → `400 ALREADY_REVIEWED` ก่อนแตะโควตา. ฐานที่ใช้ตัดสิน
+= `current_items`/`current_status` ถ้าส่งมา · ไม่ส่ง: ใบที่ยังไม่ sync ใช้ intake buffer · sync แล้วใช้
+`status` + `review_*` (วางทับรายการใน buffer ตามลำดับ) จาก `public_donations` · และเช็ค intake buffer
+ด้วยเสมอ. BFF เช็คแบบเดียวกันกับ doc ใน CouchDB ก่อนเรียก FastAPI.
+
+**จับคู่รายการด้วย `line_key` (CR-196 FR-LK-5..FR-LK-7)** — รายการที่ส่ง `line_key` = รายการเดิมตัวนั้น:
+คง key เดิม และเติม `item_id`/`category`/`condition`/`note` ที่ request ไม่ได้ส่งจากรายการเดิม (ค่าที่ request
+ส่งมาชนะ) · รายการที่ไม่ส่ง = รายการใหม่ ได้ ULID ใหม่ (ใบก่อน schema_v 8 ไม่มี key ให้อ้าง ทุกรายการจึงได้
+key ใหม่ในการแก้ครั้งแรก) · `line_key` ที่ใบไม่มี → `400 UNKNOWN_LINE_KEY`, ซ้ำในคำขอเดียว →
+`400 DUPLICATE_LINE_KEY` (ทั้งสองไม่ขยับโควตา). ไม่มีการจับคู่ด้วยชื่อหรือเนื้อหาแล้ว ยกเว้นการเติม
+`item_id` ให้รายการที่ไม่มี `line_key` จากรายการเดิมชื่อเดียวกัน (`_carry_item_ids`). ทุกรายการคำนวณ
+`review_status` ใหม่: จองโควต้าในแคมเปญได้ → `approved` (นับใน `auto_approved_lines`), ไม่ได้ → `pending` ·
+ใบ `declared` (ก่อน schema_v 7) ไม่เขียน `review_status` และคง `declared`. ผลเขียนลง intake buffer
+(`items_declared` + `status`) และ stub `public_donations` (`items_declared` ทุกกรณี · `status` เฉพาะใบที่
+BFF ไม่ได้ส่ง `current_status` — ใบที่ sync แล้วได้ `status` จาก projector หลัง BFF เขียน CouchDB สำเร็จ)
 
 > `items[].unit` ต้องเป็น `item_master.base_unit` (code เช่น `kg`) เมื่อส่ง `item_id` มาด้วย —
 > ป้ายภาษาไทยที่ผู้ใช้เห็นเป็นเรื่องของชั้น UI เท่านั้น (schema.md §2.1; ด่านตรวจรับตอบ
@@ -788,7 +793,10 @@ field ทั้งสามหายจาก doc. ค่าข้อควา�
 | สถานะ                      | ความหมาย                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
 | -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `200`                      | แก้สำเร็จ — บันทึก `revisions[]` เพิ่ม 1 รายการ                                                                                                                                                                                                                                                                                                                                                                                                                                    |
-| `400`                      | สถานะไม่ได้อยู่ใน `{declared, pending_review, verifying}` แล้ว — ของถึงศูนย์/ปิดใบไปแล้ว (`DONOR_EDITABLE_STATUSES`, CR-174 FR-20..FR-23 — ชุดเดียวกันสำหรับแก้รายการ, `DELETE` ยกเลิก และ `PATCH` เลขพัสดุ). เส้นนี้เช็คกับ `current_status` ถ้า BFF ส่งมา และเช็คกับ `status` ของ intake buffer ด้วยเสมอ (settle อาจเลื่อนไปก่อนแล้ว)                                                                                                                                            |
+| `400 ALREADY_REVIEWED`     | ใบได้รับการประเมินแล้ว — `verifying`, `rejected` หรือมีรายการที่ `review_status` เป็น `approved`/`rejected` (CR-196 FR-LK-4) · ไม่แตะโควตา · body `{ success: false, error: "ALREADY_REVIEWED" }` · ผู้บริจาคยกเลิกแล้วจองใหม่ หรือแจ้งเจ้าหน้าที่หน้างาน (ยกเลิกและเลขพัสดุยังทำได้ใน `{declared, pending_review, verifying}` — FR-LK-10/11) |
+| `400 UNKNOWN_LINE_KEY`     | `line_key` ที่ใบไม่มี (CR-196 FR-LK-5) · ไม่แตะโควตา · body มี `line_key` ที่ไม่รู้จัก |
+| `400 DUPLICATE_LINE_KEY`   | `line_key` เดียวกันสองรายการในคำขอเดียว (CR-196 FR-LK-5) · ไม่แตะโควตา |
+| `400`                      | สถานะอื่นนอก `{declared, pending_review, verifying, rejected}` — ของถึงศูนย์/ปิดใบไปแล้ว · body `error` = `Cannot edit a donation in status "…"` · เช็คกับ `current_status` ถ้า BFF ส่งมา และกับ `status` ของ intake buffer ด้วยเสมอ (settle อาจเลื่อนไปก่อนแล้ว) |
 | `409 NEED_FULL`            | โควตาไม่พอ — **ของเดิมไม่เปลี่ยนเลย** ทุกการจองที่ทำไปในคำขอนี้ถูกคืนกลับ                                                                                                                                                                                                                                                                                                                                                                                                          |
 | `409 BOOKING_CHANGED`      | `status` ของ intake buffer เปลี่ยนระหว่างที่คำขอนี้ขยับโควตา (เช่น ศูนย์รับของแล้ว settle ปรับเป็น `received`) — **ของเดิมไม่เปลี่ยนเลย** โควตาที่ขยับไปในคำขอนี้ถูกคืนกลับ ผู้บริจาคโหลดใหม่แล้วลองอีกครั้ง                                                                                                                                                                                                                                                                       |
 | `409 GOODS_IN_STOCK`       | ศูนย์เริ่มรับของของใบนี้เข้าคลังแล้ว (มีแถว `stock_ledger` `reason: donation` ที่ `ref_id` ชี้ใบนี้) — BFF ปฏิเสธก่อนแตะโควตา · `DELETE /public/v1/donations/{tracking_token}` ตอบแบบเดียวกัน · body `{ success: false, error: "GOODS_IN_STOCK", message }` (decision sync 2026-10-22, CR-174 FR-20/21)                                                                                                                                                                            |
@@ -813,6 +821,7 @@ FastAPI อ่าน `public_donations` (fallback intake buffer เมื่อ 
     "shelter_code": "SH001",
     "donor": { ... },                  // เฉพาะทาง buffer / BFF overlay — ไม่มี phone_hash
     "items": [{ "item_id": "item:rice", "item_name": "ข้าวสาร", "qty": "10", "unit": "kg", "category": null,
+                "line_key": "01K8…" | null,      // CR-196 FR-LK-3 — null = ใบก่อน schema_v 8 / walk-in
                 "review_status": "approved|pending|rejected" | null,           // CR-174 FR-17/FR-27
                 "review_reason_code": "not_needed|expired|damaged|other" | null,
                 "review_reason": "…" | null }],

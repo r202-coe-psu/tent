@@ -11,7 +11,7 @@ layer: volatile
 affects:
   - docs/data/schema.md §3.1 `shelter.common_areas.sub_storage[]` — field ใหม่ `accepts_donations`, `lat`, `lng`, `location_note` · shelter schema_v 8 → 9
   - docs/data/schema.md §9.1 `public_shelters.donation_points` (projection field ใหม่)
-  - docs/data/couchdb-mongodb-sync.md §3.2 `public_shelters` · PROJECTION_VERSION 10 → 11 (หรือเลขถัดไปตอน merge)
+  - docs/data/couchdb-mongodb-sync.md §3.2 `public_shelters` · PROJECTION_VERSION 11 → 12 (หรือเลขถัดไปตอน merge)
   - docs/data/api-contract.md §5 — response ของ `GET /public/v1/shelters/{code}` มี `donation_points` (list `GET /public/v1/shelters` ไม่เปลี่ยน)
   - frontend/src/lib/features/shelters (domain/schema.ts `subStorageItemSchema` + migrate v8 → v9, domain/storage-points.ts, ui/storage-points-section.svelte, ui/shelter-form-validation.ts)
   - frontend/src/lib/features/shelter-import/domain/import-row.ts
@@ -39,7 +39,7 @@ migration: >
 - ไม่สร้าง entity "จุดรับบริจาค" แยก · ประเภทของที่จุดรับได้ = `types[]` ของจุดเก็บนั้น (CR-199)
 - worker ส่งออกเฉพาะจุดที่ติ๊กและมีพิกัด ไปที่ `public_shelters.donation_points` · FastAPI อ่านจาก field นี้เท่านั้น ห้ามอ่านจุดเก็บจาก `raw_data`
 - ศูนย์ที่ไม่มีจุดติ๊ก = มี "จุดหลัก" 1 จุดที่ตำแหน่งศูนย์ (คำนวณตอนอ่าน ไม่บันทึก)
-- shelter schema_v 8 → 9 · PROJECTION_VERSION 10 → 11 (หรือเลขถัดไปตอน merge) · เป็นฐานของ #813 (แยกส่งหลายจุด), #814 (แผนที่ในหน้าบริจาค), #590/#591 (ปลายทางในหน้าติดตามและใบปะหน้า)
+- shelter schema_v 8 → 9 · PROJECTION_VERSION 11 → 12 (หรือเลขถัดไปตอน merge) · เป็นฐานของ #813 (แยกส่งหลายจุด), #814 (แผนที่ในหน้าบริจาค), #590/#591 (ปลายทางในหน้าติดตามและใบปะหน้า)
 
 ## Why
 
@@ -121,7 +121,7 @@ CR นี้ไม่เพิ่มกติกาฝั่งใบจอง �
 | จุดเก็บของ | staff-only ไม่มีพิกัด | staff-only ยกเว้นจุดที่ติ๊กรับบริจาคและมีพิกัด |
 | ปลายทางของผู้บริจาค | ที่อยู่ศูนย์ | จุดรับบริจาคที่ติ๊ก หรือจุดหลัก (= ตำแหน่งศูนย์) |
 | shelter schema_v | 8 | 9 |
-| PROJECTION_VERSION | 10 | 11 (หรือเลขถัดไปตอน merge) |
+| PROJECTION_VERSION | 11 | 12 (หรือเลขถัดไปตอน merge) |
 
 ## Acceptance
 
@@ -198,5 +198,5 @@ Soravit Sukkarn (Team Lead) ตัดสิน D-1..D-4 ใน review ของ 
   - ไม่จำกัดพิกัดให้อยู่ใกล้ศูนย์ เพราะศูนย์บางแห่งยังไม่มี `geo` และไม่มีระยะที่ตกลงกันไว้
 - 2026-10-27 — เพิ่ม FR-DP-18 / AC-12: แผนที่ของ #814 แสดงหมุดจุดเฉพาะศูนย์ที่เลือกหรือล็อก อ่านจาก detail — ผลจากการตัด `donation_points` ออกจาก list
 - 2026-10-28 — approved by Soravit Sukkarn (Team Lead) · รันเลข CR-205 (renumbered from draft-storage-drop-off-points) ย้ายเข้า `00-baseline/` (หมวดเดียวกับ CR-139 ที่สร้าง `sub_storage`)
-- 2026-10-29 — amendment (PR #1004 · ยืนยันโดย Kunanon Nusaeng · ไม่เปลี่ยน rule): หลัง #995 (design A · decision sync 2026-10-28) แผนที่เลือกศูนย์แยกเป็น 2 ที่ — FR-DP-18 / AC-12 ใช้กับแผนที่ขั้น 1 ("เลือก" = ศูนย์ที่แตะหมุด) และแผนที่ขั้น 3 ("ล็อก") · แก้ชื่อไฟล์ใน affects / Impact (`donation-shelter-picker.svelte` ไม่มีแล้ว) · PROJECTION_VERSION ที่ใช้จริง 10 → 11 (develop อยู่ที่ 10 ตอน implement) ไม่ใช่ 9 → 10
+- 2026-10-29 — amendment (PR #1004 · ยืนยันโดย Kunanon Nusaeng · ไม่เปลี่ยน rule): หลัง #995 (design A · decision sync 2026-10-28) แผนที่เลือกศูนย์แยกเป็น 2 ที่ — FR-DP-18 / AC-12 ใช้กับแผนที่ขั้น 1 ("เลือก" = ศูนย์ที่แตะหมุด) และแผนที่ขั้น 3 ("ล็อก") · แก้ชื่อไฟล์ใน affects / Impact (`donation-shelter-picker.svelte` ไม่มีแล้ว) · PROJECTION_VERSION ที่ใช้จริง 11 → 12 (CR-196 #956 merge ไปก่อนด้วยเลข 11) ไม่ใช่ 9 → 10
 - 2026-10-29 — ตัดสินช่องว่างใน CR (PR #1004 · ยืนยันโดย Kunanon Nusaeng · ไม่เปลี่ยน field/rule): (1) ที่อยู่ของจุด = ที่อยู่ศูนย์ — จุดไม่มี field ที่อยู่ของตัวเอง ตั๋ว/หน้าติดตาม/ใบปะหน้าใช้ชื่อ + พิกัด + `location_note` ของจุด กับที่อยู่ศูนย์ · (2) FR-DP-3 ปฏิเสธพิกัด (0,0) ทุกจุดเก็บ ไม่ว่าจะติ๊กรับบริจาคหรือไม่ · (3) worker ข้ามจุดที่ไม่มี `id` (จุดที่ติ๊กต้องบันทึกที่ schema_v 9 ซึ่งตั้ง `id` เสมอ) · (4) จุดที่ไม่มีประเภท worker ส่ง `types: []` ไม่ทิ้งจุด
