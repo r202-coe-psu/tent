@@ -4,7 +4,12 @@ import { createBulkReturnEntry } from './bulk-return-entry';
 import { createBulkReturnEntryMove } from './bulk-return-entry-move';
 import { createBulkReturnEntryVoid } from './bulk-return-entry-void';
 import { cancelBulkReturnPoolV3, createBulkReturnPoolV3 } from './bulk-return-pool-v3';
-import { buildBulkReturnPoolOverview } from './bulk-return-pool-overview';
+import {
+	buildBulkReturnPoolOverview,
+	liveEntriesOf,
+	liveLoanRefCount,
+	type BulkReturnPoolOverviewRow
+} from './bulk-return-pool-overview';
 
 const ctx: AuthorContext = { shelterCode: 'SH001', createdBy: 'staff:wh' };
 const P1 = 'bulk_return_pool:01J00000000000000000000011';
@@ -88,6 +93,7 @@ describe('buildBulkReturnPoolOverview', () => {
 		expect(rows[0].is_empty).toBe(false);
 		// The pure builder never reads loans; the overview read fills this in.
 		expect(rows.every((r) => r.closed_loan_refs.length === 0)).toBe(true);
+		expect(rows.every((r) => r.loan_refs_unavailable === false)).toBe(true);
 	});
 
 	it('does not throw on an orphan void and lists it on the pool it names', () => {
@@ -190,5 +196,65 @@ describe('buildBulkReturnPoolOverview', () => {
 				skipped: []
 			})
 		).toThrow(/Duplicate/);
+	});
+});
+
+const poolRow = poolOf(P1, 'A');
+const entriesOf = (
+	...specs: { refs: number; voided?: boolean }[]
+): BulkReturnPoolOverviewRow['entries'] =>
+	specs.map(
+		(s) =>
+			({
+				entry: { loan_refs: Array.from({ length: s.refs }, () => ({})) },
+				voided: s.voided ?? false
+			}) as unknown as BulkReturnPoolOverviewRow['entries'][number]
+	);
+
+describe('liveEntriesOf', () => {
+	it('returns the entries of non-voided rows', () => {
+		const entries = entriesOf({ refs: 1 }, { refs: 2 });
+		expect(liveEntriesOf({ pool: poolRow, entries })).toEqual([entries[0].entry, entries[1].entry]);
+	});
+
+	it('excludes voided entries', () => {
+		const entries = entriesOf({ refs: 2, voided: true }, { refs: 1 });
+		expect(liveEntriesOf({ pool: poolRow, entries })).toEqual([entries[1].entry]);
+	});
+
+	it('returns [] for a CANCELLED pool', () => {
+		const pool = cancelBulkReturnPoolV3(poolRow, ctx);
+		expect(liveEntriesOf({ pool, entries: entriesOf({ refs: 1 }) })).toEqual([]);
+	});
+});
+
+describe('liveLoanRefCount', () => {
+	it('sums the loan refs of non-voided entries', () => {
+		expect(liveLoanRefCount({ pool: poolRow, entries: entriesOf({ refs: 2 }, { refs: 1 }) })).toBe(
+			3
+		);
+	});
+
+	it('excludes voided entries', () => {
+		expect(
+			liveLoanRefCount({
+				pool: poolRow,
+				entries: entriesOf({ refs: 2, voided: true }, { refs: 1 })
+			})
+		).toBe(1);
+	});
+
+	it('returns 0 for a CANCELLED pool', () => {
+		expect(
+			liveLoanRefCount({
+				pool: cancelBulkReturnPoolV3(poolRow, ctx),
+				entries: entriesOf({ refs: 2 })
+			})
+		).toBe(0);
+	});
+
+	it('returns 0 when no entry has loan refs', () => {
+		expect(liveLoanRefCount({ pool: poolRow, entries: [] })).toBe(0);
+		expect(liveLoanRefCount({ pool: poolRow, entries: entriesOf({ refs: 0 }) })).toBe(0);
 	});
 });

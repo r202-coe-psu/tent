@@ -136,6 +136,15 @@ export function shiftDutyWindow(shift: {
 }
 
 /**
+ * The UTC instant a shift starts, from its Bangkok wall-clock `date` + `HH:mm`
+ * (a public application's `selected_shift`, which carries no `end_date`).
+ * Throws `DutyWindowError` on a malformed date/time.
+ */
+export function shiftStartInstant(date: string, startTime: string): Date {
+	return bangkokWallClockToUtc(date, parseWallClockTime(startTime));
+}
+
+/**
  * True when `now` falls within `[window.start_ts - grace, window.end_ts + grace]`
  * (inclusive both ends — CR-094 FR-VOL-05R.3/CR-092 FR-VOL-05 use `>=`/`<=`).
  * `window === null` (the `flex`/no-fixed-window case) means the predicate
