@@ -3,14 +3,27 @@ import { ServiceError, serviceErrorFromCouch, type Caller } from '$lib/server/co
 import {
 	SHELTER_MANAGER,
 	STAFF_CAPABILITIES,
+	VOLUNTEER_COORDINATOR,
 	capabilitiesForShelter,
+	compoundCapabilityRole,
+	hasCapabilityInShelter,
 	hasShelterScope,
 	isAppSystemAdmin,
 	isLastAppSystemAdmin,
+	isSystemAdmin,
 	managerShelterCodes,
 	mergeShelterAssignment,
+	rolesFromAssignments,
 	shelterCodeFromRoles
 } from '$lib/auth/roles';
+import {
+	grantFor,
+	isCoordinatorGrantableRole,
+	pruneRoleGrants,
+	withoutGrantedRole,
+	type RoleGrant
+} from '$lib/auth/role-grants';
+import { recordRoleGrantAudit } from '$lib/server/role-grant-audit';
 import { validatePassword, validateProvisionedPassword } from '$lib/server/password-policy';
 import {
 	hashSecurityAnswer,
@@ -73,6 +86,8 @@ export interface UserSummary {
 	must_change_password?: boolean;
 	has_security_question?: boolean;
 	affiliation_tags?: string[];
+	/** Time-limited roles issued by a volunteer coordinator (#955). Absent = none. */
+	role_grants?: RoleGrant[];
 	/** True when at least one MFA provider (Google or ThaID) is linked. */
 	mfa_enrolled?: boolean;
 	/** CR-124 — linked Google email for display (admin / me). */
@@ -127,6 +142,8 @@ export interface CouchUserDoc {
 		set_at: string;
 	} | null;
 	affiliation_tags?: string[];
+	/** Time-limited roles issued by a volunteer coordinator (#955); the worker revokes them. */
+	role_grants?: RoleGrant[];
 	/** CR-124 — null / missing = not enrolled for Google step-up. */
 	mfa?: UserMfa | null;
 	/** CouchDB password salt — required to mint AuthSession (Phase 2). */
@@ -171,6 +188,7 @@ function toSummary(doc: CouchUserDoc): UserSummary {
 		must_change_password: doc.must_change_password ?? false,
 		has_security_question: Boolean(doc.security_question?.answer_hash),
 		affiliation_tags: doc.affiliation_tags ?? [],
+		role_grants: doc.role_grants ?? [],
 		mfa_enrolled: Boolean(google || thaid),
 		mfa_google_email: google?.email ?? null,
 		mfa_thaid_name: thaid?.name ?? null,
@@ -227,6 +245,19 @@ async function assertNotLastAppSa(targetRoles: readonly string[]): Promise<void>
 	if (isLastAppSystemAdmin(targetRoles, count)) {
 		throw new ServiceError('FORBIDDEN', 'Cannot remove the last system admin');
 	}
+}
+
+/** Exact name match wins; otherwise the one whose name differs only in case. */
+function findUserDocIgnoringCase(docs: CouchUserDoc[], name: string): CouchUserDoc | undefined {
+	const lower = name.toLowerCase();
+	return docs.find((d) => d.name === name) ?? docs.find((d) => d.name?.toLowerCase() === lower);
+}
+
+/** The `name` an account is actually stored under (legacy accounts may be mixed case). */
+async function storedUserName(name: string): Promise<string> {
+	const got = await adminRaw(`/_users/${userDocId(name)}`, 'GET');
+	if (got.status !== 404) return name;
+	return findUserDocIgnoringCase(await fetchAllUserDocs(), name)?.name ?? name;
 }
 
 async function readUserDoc(name: string, action: string): Promise<CouchUserDoc> {
@@ -334,6 +365,7 @@ export async function createUser(input: {
 		set_at: string;
 	} | null;
 	affiliation_tags?: string[];
+	role_grants?: RoleGrant[];
 }): Promise<void> {
 	const {
 		name,
@@ -350,7 +382,8 @@ export async function createUser(input: {
 		active = true,
 		must_change_password = false,
 		security_question,
-		affiliation_tags
+		affiliation_tags,
+		role_grants
 	} = input;
 	const bootstrap = bootstrapAdminName();
 	if (isProtectedBootstrapAdmin({ name, roles }, bootstrap)) {
@@ -380,7 +413,8 @@ export async function createUser(input: {
 		active,
 		must_change_password,
 		security_question: security_question ?? null,
-		affiliation_tags: affiliation_tags ?? []
+		affiliation_tags: affiliation_tags ?? [],
+		...(role_grants?.length ? { role_grants } : {})
 	});
 	if (res.status === 409) throw new ServiceError('CONFLICT', `User "${name}" already exists`);
 	if (res.status >= 400) throw serviceErrorFromCouch('create user', res.status, res.data);
@@ -413,6 +447,218 @@ export async function createOrMergeUser(
 		);
 		return { merged: true };
 	}
+}
+
+/**
+ * A grant or revoke is a read-modify-write on the `_rev` it read: a 409 means the account changed
+ * meanwhile (another coordinator, or the worker sweep). Nothing was written, so answer CONFLICT
+ * ("try again") rather than an opaque 500.
+ */
+function assertGrantWritten(action: string, res: { status: number; data: unknown }): void {
+	if (res.status === 409) {
+		throw new ServiceError('CONFLICT', 'ข้อมูลบัญชีเพิ่งถูกเปลี่ยนโดยผู้อื่น กรุณาลองอีกครั้ง');
+	}
+	if (res.status >= 400) throw serviceErrorFromCouch(action, res.status, res.data);
+}
+
+/**
+ * An existing account a coordinator may extend (draft-coordinator-limited-access-grant FR-7):
+ * the volunteer's own active volunteer account, never a system admin, a shelter manager or a
+ * coordinator in any shelter, and never the caller's own account. 403 and no write otherwise.
+ */
+function assertGrantableTarget(existing: CouchUserDoc, volunteerId: string, actor: string): void {
+	const roles = existing.roles ?? [];
+	if (
+		existing.name === actor ||
+		existing.volunteer_id !== volunteerId ||
+		existing.personnel_type !== 'volunteer' ||
+		existing.active === false ||
+		isProtectedBootstrapAdmin(existing, bootstrapAdminName()) ||
+		isSystemAdmin(roles) ||
+		hasCapabilityInShelter(roles, null, SHELTER_MANAGER) ||
+		hasCapabilityInShelter(roles, null, VOLUNTEER_COORDINATOR)
+	) {
+		throw new ServiceError(
+			'FORBIDDEN',
+			'บัญชีนี้ออกสิทธิ์ผ่านผู้ประสานงานไม่ได้ กรุณาให้ผู้จัดการศูนย์จัดการผ่านหน้าผู้ใช้งาน'
+		);
+	}
+}
+
+/**
+ * Give a volunteer one time-limited staff role on their account (#955). Creates the account on
+ * first grant; on a re-grant it only adds the role and the grant (or renews or shortens the
+ * grant) and never touches the password. A role the account already holds without a grant (given
+ * by a shelter manager) is left alone. Who may grant, and what, is decided by the caller except
+ * the target-account rules, which are enforced here before any write. The audit is written after
+ * the `_users` write succeeds (FR-14).
+ */
+export async function grantCoordinatorRole(input: {
+	name: string;
+	password: string;
+	display_name: string;
+	organization: string | null;
+	phone: string | null;
+	volunteer_id: string;
+	/** `volunteer.user_name` of the profile, when it is already linked to an account. */
+	linked_user_name: string | null;
+	grant: RoleGrant;
+}): Promise<{ created: boolean; unchanged: boolean; name: string }> {
+	const { volunteer_id, grant } = input;
+	const code = grant.shelter_code;
+	const actor = grant.granted_by;
+	if (!isCoordinatorGrantableRole(grant.role)) {
+		throw new ServiceError('FORBIDDEN', 'A coordinator may not grant this role');
+	}
+	const docs = await fetchAllUserDocs();
+	// A legacy mixed-case account is found by any casing; its stored name is the doc id.
+	const existing = findUserDocIgnoringCase(docs, input.name);
+	const name = existing?.name ?? input.name;
+	if (existing) assertGrantableTarget(existing, volunteer_id, actor);
+	const otherLinked = docs.find(
+		(d) =>
+			d.volunteer_id === volunteer_id && d.name !== name && hasShelterScope(d.roles ?? [], code)
+	);
+	if (
+		otherLinked ||
+		(input.linked_user_name &&
+			input.linked_user_name !== name &&
+			docs.some((d) => d.name === input.linked_user_name))
+	) {
+		throw new ServiceError(
+			'CONFLICT',
+			'อาสาสมัครนี้มีบัญชีอื่นแล้ว กรุณาให้ผู้จัดการศูนย์จัดการผ่านหน้าผู้ใช้งาน'
+		);
+	}
+
+	if (!existing) {
+		await createUser({
+			name,
+			password: input.password,
+			display_name: input.display_name,
+			roles: rolesFromAssignments([{ shelter_code: code, capabilities: [grant.role] }]),
+			personnel_type: 'volunteer',
+			organization: input.organization,
+			phone: input.phone,
+			email: name,
+			volunteer_id,
+			must_change_password: true,
+			role_grants: [grant]
+		});
+		await recordRoleGrantAudit({
+			shelter_code: code,
+			user_name: name,
+			reason: 'role_grant.issued',
+			role: grant.role,
+			expires_at: grant.expires_at,
+			actor,
+			verified_by: grant.verified_by
+		});
+		return { created: true, unchanged: false, name };
+	}
+
+	const roles = existing.roles ?? [];
+	const previous = grantFor(existing.role_grants, code, grant.role);
+	const hasRole = hasCapabilityInShelter(roles, code, grant.role);
+	// A manager gave this role: nothing to add, and nothing a coordinator may change.
+	if (hasRole && !previous) return { created: false, unchanged: true, name };
+	// Another coordinator's grant may be renewed but not cut short. A renewal keeps the issuer, so
+	// the renewer cannot then revoke or shorten it (FR-8); the audit records who renewed.
+	const shortened =
+		previous !== null && Date.parse(grant.expires_at) < Date.parse(previous.expires_at);
+	if (previous && shortened && previous.granted_by !== actor) {
+		throw new ServiceError('FORBIDDEN', 'ย่นอายุได้เฉพาะสิทธิ์ที่ตนเองออกให้');
+	}
+	const nextRoles = hasRole
+		? roles
+		: mergeShelterAssignment(roles, code, [...capabilitiesForShelter(roles, code), grant.role]);
+	const role_grants = [
+		...(existing.role_grants ?? []).filter((g) => g.shelter_code !== code || g.role !== grant.role),
+		previous
+			? { ...grant, granted_by: previous.granted_by, granted_at: previous.granted_at }
+			: grant
+	];
+	const res = await adminRaw(`/_users/${userDocId(name)}`, 'PUT', {
+		...existing,
+		roles: nextRoles,
+		shelter_id: shelterCodeFromRoles(nextRoles),
+		role_grants
+	});
+	assertGrantWritten('grant volunteer role', res);
+	await recordRoleGrantAudit({
+		shelter_code: code,
+		user_name: name,
+		reason: !previous
+			? 'role_grant.issued'
+			: shortened
+				? 'role_grant.shortened'
+				: 'role_grant.renewed',
+		role: grant.role,
+		expires_at: grant.expires_at,
+		...(previous ? { previous_expires_at: previous.expires_at } : {}),
+		actor,
+		verified_by: grant.verified_by
+	});
+	return { created: false, unchanged: false, name };
+}
+
+/**
+ * A coordinator takes back a grant they issued (FR-8): the role and its grant go, and the
+ * shelter scope with the last role there, as the worker sweep does for an expiry. A role without
+ * a grant (given by a manager) or another coordinator's grant is 403 and stays. The account and
+ * password stay.
+ */
+export async function revokeCoordinatorGrant(input: {
+	name: string;
+	volunteer_id: string;
+	shelter_code: string;
+	role: string;
+	actor: string;
+}): Promise<void> {
+	const { volunteer_id, shelter_code: code, role, actor } = input;
+	if (!isCoordinatorGrantableRole(role)) {
+		throw new ServiceError('FORBIDDEN', 'A coordinator may not revoke this role');
+	}
+	const doc = await readUserDoc(await storedUserName(input.name), 'read user');
+	const name = doc.name;
+	const grant = grantFor(doc.role_grants, code, role);
+	if (doc.volunteer_id !== volunteer_id || !grant || grant.granted_by !== actor) {
+		throw new ServiceError('FORBIDDEN', 'ถอนได้เฉพาะสิทธิ์ที่ตนเองออกให้');
+	}
+	const next = withoutGrantedRole(doc.roles ?? [], doc.role_grants, code, role);
+	const res = await adminRaw(`/_users/${userDocId(name)}`, 'PUT', {
+		...doc,
+		roles: next.roles,
+		role_grants: next.role_grants,
+		shelter_id: shelterCodeFromRoles(next.roles)
+	});
+	assertGrantWritten('revoke volunteer role', res);
+	await recordRoleGrantAudit({
+		shelter_code: code,
+		user_name: name,
+		reason: 'role_grant.revoked',
+		role,
+		expires_at: grant.expires_at,
+		actor
+	});
+}
+
+/**
+ * The grants in one shelter on the account linked to a volunteer, for the coordinator dialog
+ * (FR-8). Only the grants are returned, never the account doc. A missing account, or one linked
+ * to another volunteer, has none.
+ */
+export async function readVolunteerGrants(input: {
+	name: string;
+	volunteer_id: string;
+	shelter_code: string;
+}): Promise<RoleGrant[]> {
+	const got = await adminRaw(`/_users/${userDocId(input.name)}`, 'GET');
+	if (got.status === 404) return [];
+	if (got.status >= 400) throw serviceErrorFromCouch('read user', got.status, got.data);
+	const doc = got.data as CouchUserDoc;
+	if (doc.volunteer_id !== input.volunteer_id) return [];
+	return (doc.role_grants ?? []).filter((g) => g.shelter_code === input.shelter_code);
 }
 
 /** List users, scoped: SA sees all; a manager sees users with their managed shelter scope. */
@@ -492,13 +738,17 @@ export async function deleteUser(name: string, caller: Caller): Promise<void> {
 		}
 		const remaining = mergeShelterAssignment(doc.roles ?? [], code, []);
 		if (remaining.length > 0) {
+			// The shelter's grants go with its roles, or a later permanent re-grant would expire.
+			const roleGrants = pruneRoleGrants(doc.role_grants, remaining);
 			const updatedDoc = {
 				...doc,
+				...(doc.role_grants !== undefined ? { role_grants: roleGrants } : {}),
 				roles: remaining,
 				shelter_id: shelterCodeFromRoles(remaining)
 			};
 			const res = await adminRaw(`/_users/${userDocId(name)}`, 'PUT', updatedDoc);
 			if (res.status >= 400) throw serviceErrorFromCouch('delete user', res.status, res.data);
+			await auditDroppedGrants(name, doc.role_grants, roleGrants, remaining, [], caller.name);
 			return;
 		}
 	} else {
@@ -530,6 +780,8 @@ export async function updateUser(
 		active?: boolean;
 		must_change_password?: boolean;
 		affiliation_tags?: string[];
+		/** Compound roles (`SHxxx:<role>`) to make permanent: their coordinator grant is removed. */
+		permanent_roles?: string[];
 	},
 	caller: Caller
 ): Promise<void> {
@@ -572,8 +824,24 @@ export async function updateUser(
 		}
 	}
 
+	const permanentRoles = input.permanent_roles ?? [];
+	if (!caller.isSA) {
+		const code = managerShelterCodes(caller.roles)[0] ?? caller.shelterCode;
+		if (permanentRoles.some((role) => !code || !role.startsWith(`${code}:`))) {
+			throw new ServiceError('FORBIDDEN', 'A manager may only change grants in their own shelter');
+		}
+	}
+	// A grant lives only as long as its role: keep it when a save keeps the role (#955). A grant
+	// whose role was already gone is stale; a manager re-adding that role gives it for good (FR-9).
+	const roleGrants = pruneRoleGrants(
+		pruneRoleGrants(doc.role_grants, doc.roles ?? []),
+		nextRoles ?? doc.roles ?? [],
+		permanentRoles
+	);
+
 	const updatedDoc = {
 		...doc,
+		...(doc.role_grants !== undefined ? { role_grants: roleGrants } : {}),
 		...(input.display_name !== undefined ? { display_name: input.display_name } : {}),
 		...(nextRoles ? { roles: nextRoles, shelter_id: shelterCodeFromRoles(nextRoles) } : {}),
 		...(input.personnel_type !== undefined ? { personnel_type: input.personnel_type } : {}),
@@ -600,6 +868,42 @@ export async function updateUser(
 
 	const res = await adminRaw(`/_users/${userDocId(name)}`, 'PUT', updatedDoc);
 	if (res.status >= 400) throw serviceErrorFromCouch('update user', res.status, res.data);
+
+	await auditDroppedGrants(
+		name,
+		doc.role_grants,
+		roleGrants,
+		nextRoles ?? doc.roles ?? [],
+		permanentRoles,
+		caller.name
+	);
+}
+
+/** Audit every grant a manager save dropped: made permanent on purpose, or revoked with its role. */
+async function auditDroppedGrants(
+	name: string,
+	before: readonly RoleGrant[] | undefined,
+	after: readonly RoleGrant[],
+	finalRoles: readonly string[],
+	permanentRoles: readonly string[],
+	actor: string
+): Promise<void> {
+	for (const dropped of (before ?? []).filter(
+		(g) => grantFor(after, g.shelter_code, g.role) === null
+	)) {
+		const compound = compoundCapabilityRole(dropped.shelter_code, dropped.role);
+		await recordRoleGrantAudit({
+			shelter_code: dropped.shelter_code,
+			user_name: name,
+			reason:
+				permanentRoles.includes(compound) && finalRoles.includes(compound)
+					? 'role_grant.made_permanent'
+					: 'role_grant.revoked',
+			role: dropped.role,
+			expires_at: dropped.expires_at,
+			actor
+		});
+	}
 }
 
 /** Fields a logged-in staff member may change on their own `_users` doc (no roles/password/MFA). */

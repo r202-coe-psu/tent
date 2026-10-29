@@ -77,6 +77,8 @@ async function openBoard(page: Page, sheltersStatus = 200) {
 async function fillDonorStep(page: Page) {
 	await page.locator('#donor-name').fill('ผู้บริจาคใจบุญ');
 	await page.locator('#donor-phone').fill('0899999999');
+	// The quantity starts at 0 since #941; step 3 opens only for a positive one.
+	await page.locator('input[id^="amount-"]').first().fill('1');
 	await page.getByRole('button', { name: 'ถัดไป: เลือกจุดส่งมอบ' }).click();
 	await expect(
 		page.getByRole('heading', { name: 'ส่วนที่ 3: ข้อมูลการจัดส่ง โลจิสติกส์' })
@@ -117,6 +119,48 @@ test.describe('Needs board shelter map (#814)', TAGS, () => {
 		await expect(page.locator('#donor-name')).toBeVisible();
 		await fillDonorStep(page);
 		await expect(page.getByTestId('drop-off-shelter-name')).toHaveText(SH001_NAME);
+	});
+
+	test("tapping a shelter pins only that shelter's drop-off points, from its detail (CR-205 AC-12)", async ({
+		page
+	}) => {
+		const detailRequests: string[] = [];
+		await page.route('**/api/public/v1/shelters/*', (route) => {
+			const code = new URL(route.request().url()).pathname.split('/').pop() ?? '';
+			detailRequests.push(code);
+			return route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({
+					shelter: {
+						...SHELTER_DETAIL,
+						donation_points: [
+							{
+								id: 'point-gym',
+								name: 'โรงยิม',
+								types: ['general'],
+								geo: { lat: 7.009, lng: 100.4752 },
+								location_note: 'เข้าทางประตู 2'
+							}
+						]
+					}
+				})
+			});
+		});
+		await openBoard(page);
+
+		await expect(page.getByTestId('shelter-marker-SH001')).toBeVisible({ timeout: 15_000 });
+		// Before a shelter is picked: shelter pins only, and no detail is fetched.
+		await expect(page.getByTestId('point-marker-point-gym')).toHaveCount(0);
+		expect(detailRequests).toEqual([]);
+
+		await page.getByTestId('shelter-marker-SH001').click();
+		const pin = page.getByTestId('point-marker-point-gym');
+		await expect(pin).toBeVisible();
+		expect(detailRequests).toEqual(['SH001']);
+
+		await pin.click();
+		await expect(page.getByTestId('donation-needs-map-point-note')).toContainText('เข้าทางประตู 2');
 	});
 
 	test('without the shelters list there is no map, but the board still books', async ({ page }) => {
@@ -186,6 +230,38 @@ test.describe('Donation form drop-off shelter (#814)', TAGS, () => {
 		await expect(page.getByTestId('drop-off-shelter-name')).toHaveText(SH001_NAME);
 		await expect(page.getByTestId('drop-off-shelter-map')).toBeVisible({ timeout: 15_000 });
 		await expect(page.getByTestId('shelter-marker-SH001')).toBeVisible({ timeout: 15_000 });
+	});
+
+	test("pins the locked shelter's drop-off points from its detail (CR-205 FR-DP-18)", async ({
+		page
+	}) => {
+		await page.route('**/api/public/v1/shelters/SH001', (route) =>
+			route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({
+					shelter: {
+						...SHELTER_DETAIL,
+						donation_points: [
+							{
+								id: 'point-gym',
+								name: 'โรงยิม',
+								types: ['general'],
+								geo: { lat: 7.009, lng: 100.4752 },
+								location_note: 'เข้าทางประตู 2'
+							}
+						]
+					}
+				})
+			})
+		);
+		await openShelterStep(page);
+
+		await expect(page.getByTestId('shelter-marker-SH001')).toBeVisible({ timeout: 15_000 });
+		const pin = page.getByTestId('point-marker-point-gym');
+		await expect(pin).toBeVisible();
+		await pin.click();
+		await expect(page.getByTestId('drop-off-point-note')).toContainText('เข้าทางประตู 2');
 	});
 
 	test('without the shelters list the name stays and the map is dropped', async ({ page }) => {

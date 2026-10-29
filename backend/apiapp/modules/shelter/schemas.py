@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 
 from pydantic import BaseModel, Field
-from tent_model.public_shelter import GeoJsonPoint, GeoPoint
+from tent_model.public_shelter import DonationPoint, GeoJsonPoint, GeoPoint
 
 
 class ShelterListCapacityDetail(BaseModel):
@@ -119,6 +119,9 @@ class ShelterDetail(BaseModel):
     contact: ShelterContactDetail
     faq: list[ShelterFaqDetail]
     accepts_pre_registration: bool = False
+    # CR-205: ticked storage points with a pin, projected by the worker. [] = the shelter's
+    # own location is the only drop-off point. Detail only; the list does not carry it.
+    donation_points: list[DonationPoint] = Field(default_factory=list)
 
 
 class ShelterDetailResponse(BaseModel):

@@ -3,7 +3,7 @@ id: CR-205 # renumbered from draft-storage-drop-off-points
 title: ใช้จุดเก็บของเป็นจุดรับบริจาค พร้อมพิกัดบนแผนที่ และส่งออก public
 status: approved
 date: 2026-10-27
-updated: 2026-10-28 # approved (Soravit Sukkarn, Team Lead)
+updated: 2026-10-29 # amendment: FR-DP-18 file pointers + PROJECTION_VERSION (approved 2026-10-28, Soravit Sukkarn, Team Lead)
 requested_by: "feedback จาก demo 2026-10-23 (epic #825) — issue #812"
 decided_by: Soravit Sukkarn (Team Lead)
 decision_date: 2026-10-28
@@ -11,12 +11,12 @@ layer: volatile
 affects:
   - docs/data/schema.md §3.1 `shelter.common_areas.sub_storage[]` — field ใหม่ `accepts_donations`, `lat`, `lng`, `location_note` · shelter schema_v 8 → 9
   - docs/data/schema.md §9.1 `public_shelters.donation_points` (projection field ใหม่)
-  - docs/data/couchdb-mongodb-sync.md §3.2 `public_shelters` · PROJECTION_VERSION 9 → 10 (หรือเลขถัดไปตอน merge)
+  - docs/data/couchdb-mongodb-sync.md §3.2 `public_shelters` · PROJECTION_VERSION 11 → 12 (หรือเลขถัดไปตอน merge)
   - docs/data/api-contract.md §5 — response ของ `GET /public/v1/shelters/{code}` มี `donation_points` (list `GET /public/v1/shelters` ไม่เปลี่ยน)
   - frontend/src/lib/features/shelters (domain/schema.ts `subStorageItemSchema` + migrate v8 → v9, domain/storage-points.ts, ui/storage-points-section.svelte, ui/shelter-form-validation.ts)
   - frontend/src/lib/features/shelter-import/domain/import-row.ts
   - frontend/src/lib/features/donations (domain/drop-off.ts — ต่อยอด `resolveDropOffPoint` / `DropOffPoint` จาก #926)
-  - frontend/src/lib/features/public-portal (domain/donation-map.ts `pointsByShelter`, ui/donation-shelter-picker.svelte — จาก #814 · FR-DP-18)
+  - frontend/src/lib/features/public-portal (domain/donation-map.ts `donationMapPointsOf`, ui/donation-needs-map.svelte ขั้น 1 + ui/drop-off-shelter-map.svelte ขั้น 3 — จาก #814 · FR-DP-18)
   - packages/tent-model/src/tent_model/public_shelter.py (`DonationPoint`, `PublicShelter.donation_points`)
   - worker/src/worker/projectors/shelter.py · worker/src/worker/projection_version.py
   - backend/apiapp/modules/shelter (schemas.py `ShelterDetail`, use_case.py) · backend/tests/test_shelter.py
@@ -39,7 +39,7 @@ migration: >
 - ไม่สร้าง entity "จุดรับบริจาค" แยก · ประเภทของที่จุดรับได้ = `types[]` ของจุดเก็บนั้น (CR-199)
 - worker ส่งออกเฉพาะจุดที่ติ๊กและมีพิกัด ไปที่ `public_shelters.donation_points` · FastAPI อ่านจาก field นี้เท่านั้น ห้ามอ่านจุดเก็บจาก `raw_data`
 - ศูนย์ที่ไม่มีจุดติ๊ก = มี "จุดหลัก" 1 จุดที่ตำแหน่งศูนย์ (คำนวณตอนอ่าน ไม่บันทึก)
-- shelter schema_v 8 → 9 · PROJECTION_VERSION 9 → 10 · เป็นฐานของ #813 (แยกส่งหลายจุด), #814 (แผนที่ในหน้าบริจาค), #590/#591 (ปลายทางในหน้าติดตามและใบปะหน้า)
+- shelter schema_v 8 → 9 · PROJECTION_VERSION 11 → 12 (หรือเลขถัดไปตอน merge) · เป็นฐานของ #813 (แยกส่งหลายจุด), #814 (แผนที่ในหน้าบริจาค), #590/#591 (ปลายทางในหน้าติดตามและใบปะหน้า)
 
 ## Why
 
@@ -121,7 +121,7 @@ CR นี้ไม่เพิ่มกติกาฝั่งใบจอง �
 | จุดเก็บของ | staff-only ไม่มีพิกัด | staff-only ยกเว้นจุดที่ติ๊กรับบริจาคและมีพิกัด |
 | ปลายทางของผู้บริจาค | ที่อยู่ศูนย์ | จุดรับบริจาคที่ติ๊ก หรือจุดหลัก (= ตำแหน่งศูนย์) |
 | shelter schema_v | 8 | 9 |
-| PROJECTION_VERSION | 9 | 10 (หรือเลขถัดไปตอน merge) |
+| PROJECTION_VERSION | 11 | 12 (หรือเลขถัดไปตอน merge) |
 
 ## Acceptance
 
@@ -151,7 +151,7 @@ CR นี้ไม่เพิ่มกติกาฝั่งใบจอง �
   - เพิ่ม `listDropOffPoints(shelter)` คืน `DropOffPoint[]` (FR-DP-16, FR-DP-17): map `id` → `pointId`, `location_note` → `note`, `geo` ผ่าน `cleanGeo` ตัวเดิม · `donation_points` ว่าง → `[resolveDropOffPoint(shelter)]` (จุดหลัก `pointId = null`)
   - `DropOffShelterSource` เพิ่ม `donation_points?`
   - ถ้า #926 ยังไม่ merge ตอน implement ให้ต่อจาก branch ของ #926
-- **frontend `public-portal`** (แผนที่ของ #814 · FR-DP-18): `donation-shelter-picker.svelte` อ่าน detail ของศูนย์ที่เลือกหรือล็อก แล้วส่ง `listDropOffPoints` ของศูนย์นั้นเข้า `pointsByShelter` ของ `buildDonationMap` (มีช่องรับไว้แล้วบน branch ของ #814)
+- **frontend `public-portal`** (แผนที่ของ #814 · FR-DP-18): `donation-needs-map.svelte` (ขั้น 1 · ศูนย์ที่แตะหมุด) และ `drop-off-shelter-map.svelte` (ขั้น 3 · ศูนย์ที่ล็อก) อ่าน detail ของศูนย์นั้น 1 request แล้วแปลง `donation_points` ด้วย `donationMapPointsOf` ส่งเข้า `pointsByShelter` ของ `buildDonationMap`
 - **tent-model**: `DonationPoint` + `PublicShelter.donation_points: list[DonationPoint] = []`
 - **worker**: `project_shelter()` สร้าง `donation_points` ตาม FR-DP-11 – FR-DP-13 · bump `PROJECTION_VERSION`
 - **backend**: `ShelterDetail` เพิ่ม `donation_points` (`ShelterItem` ไม่เปลี่ยน) · `use_case.py` อ่านตาม FR-DP-15
@@ -198,3 +198,6 @@ Soravit Sukkarn (Team Lead) ตัดสิน D-1..D-4 ใน review ของ 
   - ไม่จำกัดพิกัดให้อยู่ใกล้ศูนย์ เพราะศูนย์บางแห่งยังไม่มี `geo` และไม่มีระยะที่ตกลงกันไว้
 - 2026-10-27 — เพิ่ม FR-DP-18 / AC-12: แผนที่ของ #814 แสดงหมุดจุดเฉพาะศูนย์ที่เลือกหรือล็อก อ่านจาก detail — ผลจากการตัด `donation_points` ออกจาก list
 - 2026-10-28 — approved by Soravit Sukkarn (Team Lead) · รันเลข CR-205 (renumbered from draft-storage-drop-off-points) ย้ายเข้า `00-baseline/` (หมวดเดียวกับ CR-139 ที่สร้าง `sub_storage`)
+- 2026-10-29 — amendment (PR #1004 · ยืนยันโดย Kunanon Nusaeng · ไม่เปลี่ยน rule): หลัง #995 (design A · decision sync 2026-10-28) แผนที่เลือกศูนย์แยกเป็น 2 ที่ — FR-DP-18 / AC-12 ใช้กับแผนที่ขั้น 1 ("เลือก" = ศูนย์ที่แตะหมุด) และแผนที่ขั้น 3 ("ล็อก") · แก้ชื่อไฟล์ใน affects / Impact (`donation-shelter-picker.svelte` ไม่มีแล้ว) · PROJECTION_VERSION ที่ใช้จริง 11 → 12 (CR-196 #956 merge ไปก่อนด้วยเลข 11) ไม่ใช่ 9 → 10
+- 2026-10-29 — ตัดสินช่องว่างใน CR (PR #1004 · ยืนยันโดย Kunanon Nusaeng · ไม่เปลี่ยน field/rule): (1) ที่อยู่ของจุด = ที่อยู่ศูนย์ — จุดไม่มี field ที่อยู่ของตัวเอง ตั๋ว/หน้าติดตาม/ใบปะหน้าใช้ชื่อ + พิกัด + `location_note` ของจุด กับที่อยู่ศูนย์ · (2) FR-DP-3 ปฏิเสธพิกัด (0,0) ทุกจุดเก็บ ไม่ว่าจะติ๊กรับบริจาคหรือไม่ · (3) worker ข้ามจุดที่ไม่มี `id` (จุดที่ติ๊กต้องบันทึกที่ schema_v 9 ซึ่งตั้ง `id` เสมอ) · (4) จุดที่ไม่มีประเภท worker ส่ง `types: []` ไม่ทิ้งจุด
+- 2026-10-29 — ตีความ FR-DP-10 ตอนนำเข้าซ้ำ (PR #1004 review W2 · ยืนยันโดย Kunanon Nusaeng · ไม่เปลี่ยน field): FR-DP-10 ("ไม่ติ๊ก + ไม่มีพิกัด") ใช้กับจุดที่**ยังไม่มี**ในศูนย์ · import แบบ `duplicate_action = update` จับคู่จุดจาก workbook กับจุดเดิมด้วยชื่อ (จุดเดิมแต่ละจุดจับได้ครั้งเดียว ตามลำดับ) → คง `id` และ `accepts_donations` / `lat` / `lng` / `location_note` เดิม · ชื่อ ประเภท พื้นที่มาจาก workbook · จุดชื่อใหม่ได้ `id` ใหม่และไม่ติ๊ก · จุดที่ workbook ไม่มีถูกลบเหมือนเดิม

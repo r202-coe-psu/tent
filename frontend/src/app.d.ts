@@ -9,6 +9,8 @@ declare global {
 		interface PageState {
 			/** Per-person failures of a create batch, passed to the batch page via `goto` state. */
 			failed?: { evacuee_id: string; error: string }[];
+			/** Desk query string last written by the desk (`mode=…&tab=…[&pool=…]`); restored on Back. */
+			deskSearch?: string;
 		}
 		// interface Platform {}
 	}

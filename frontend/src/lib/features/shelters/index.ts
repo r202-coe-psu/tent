@@ -116,6 +116,7 @@ export {
 
 export {
 	SUB_STORAGE_TYPE_LABELS,
+	listDonationPoints,
 	listStoragePoints,
 	sortSubStorageTypes,
 	subStorageTypeLabels

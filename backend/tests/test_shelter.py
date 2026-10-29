@@ -444,3 +444,79 @@ async def test_public_accepts_pre_registration_ignores_shelter_status(
     detail = await client.get("/public/v1/shelters/SH106", headers=auth_headers)
     assert detail.status_code == 200
     assert detail.json()["shelter"]["accepts_pre_registration"] is True
+
+
+# --- CR-205: donation_points (detail only, projected field only) ---
+
+
+_TICKED = {"accepts_donations": True}
+
+
+def _point(point_id: str, name: str, **over) -> dict:
+    return {
+        "id": point_id,
+        "name": name,
+        "types": ["food_dry"],
+        "geo": {"lat": 7.0086, "lng": 100.4747},
+        "location_note": "ประตู 2",
+        **over,
+    }
+
+
+async def test_shelter_detail_returns_projected_donation_points_only(
+    client: AsyncClient,
+    db_client: AsyncMongoClient,
+    settings: Settings,
+    auth_headers: dict[str, str],
+):
+    """AC-5: raw_data holds 3 points; only the projected one is public, and no area_m2."""
+    doc = _shelter_doc("SH201")
+    doc["raw_data"]["common_areas"] = {
+        "sub_storage": [
+            {"id": "a", "name": "โรงยิม", "area_m2": 40, **_TICKED, "lat": 7, "lng": 100},
+            {"id": "b", "name": "ห้องยา", "area_m2": 9, **_TICKED},
+            {"id": "c", "name": "โรงครัว", "area_m2": 12, "accepts_donations": False},
+        ]
+    }
+    doc["donation_points"] = [_point("a", "โรงยิม")]
+    await _insert_shelter_doc(db_client, settings, doc)
+
+    response = await client.get("/public/v1/shelters/SH201", headers=auth_headers)
+    assert response.status_code == 200
+    assert response.json()["shelter"]["donation_points"] == [_point("a", "โรงยิม")]
+    assert "area_m2" not in response.text.split('"donation_points"')[1].split('"faq"')[0]
+
+
+async def test_shelter_detail_donation_points_empty_when_not_projected(
+    client: AsyncClient,
+    db_client: AsyncMongoClient,
+    settings: Settings,
+    auth_headers: dict[str, str],
+):
+    """AC-6 / rollout: a row not yet re-projected has no key, and raw_data points do not leak."""
+    doc = _shelter_doc("SH202")
+    doc["raw_data"]["common_areas"] = {
+        "sub_storage": [{"id": "a", "name": "โรงยิม", **_TICKED, "lat": 7, "lng": 100}]
+    }
+    await _insert_shelter_doc(db_client, settings, doc)
+
+    response = await client.get("/public/v1/shelters/SH202", headers=auth_headers)
+    assert response.status_code == 200
+    assert response.json()["shelter"]["donation_points"] == []
+
+
+async def test_shelter_list_has_no_donation_points(
+    client: AsyncClient,
+    db_client: AsyncMongoClient,
+    settings: Settings,
+    auth_headers: dict[str, str],
+):
+    """AC-11: only the detail carries donation_points."""
+    doc = _shelter_doc("SH203")
+    doc["donation_points"] = [_point("a", "โรงยิม")]
+    await _insert_shelter_doc(db_client, settings, doc)
+
+    response = await client.get("/public/v1/shelters", headers=auth_headers)
+    assert response.status_code == 200
+    item = next(s for s in response.json()["shelters"] if s["code"] == "SH203")
+    assert "donation_points" not in item

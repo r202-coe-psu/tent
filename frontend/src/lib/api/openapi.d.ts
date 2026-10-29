@@ -1889,6 +1889,21 @@ export interface components {
 			to?: string | null;
 		};
 		/**
+		 * DonationPoint
+		 * @description A storage point ticked as a donation drop-off point, with a pin (CR-205).
+		 */
+		DonationPoint: {
+			/** Id */
+			id: string;
+			/** Name */
+			name: string;
+			/** Types */
+			types?: string[];
+			geo: components['schemas']['GeoPoint'];
+			/** Location Note */
+			location_note?: string | null;
+		};
+		/**
 		 * DonationTrackSearchRequest
 		 * @description CR-052 §2.6 — human booking_ref + phone exact match (not token alone).
 		 */
@@ -3284,6 +3299,8 @@ export interface components {
 			 * @default false
 			 */
 			accepts_pre_registration: boolean;
+			/** Donation Points */
+			donation_points?: components['schemas']['DonationPoint'][];
 		};
 		/** ShelterDetailResponse */
 		ShelterDetailResponse: {
