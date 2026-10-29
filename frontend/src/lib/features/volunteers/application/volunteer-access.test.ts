@@ -55,7 +55,7 @@ const input = {
 };
 const account: UserSummary = {
 	name: input.email,
-	roles: ['shelter:SH001', input.role],
+	roles: ['shelter:SH001', `SH001:${input.role}`],
 	personnel_type: 'volunteer',
 	volunteer_id: volunteer._id,
 	active: true
@@ -118,7 +118,7 @@ describe('grantVolunteerAccess', () => {
 				password: input.password,
 				display_name: 'อาสา ทดสอบ',
 				personnel_type: 'volunteer',
-				roles: ['shelter:SH001', input.role],
+				roles: ['shelter:SH001', `SH001:${input.role}`],
 				volunteer_id: volunteer._id,
 				phone: volunteer.phone,
 				must_change_password: false
@@ -207,10 +207,17 @@ describe('grantVolunteerAccess', () => {
 
 	it.each([
 		{ ...account, volunteer_id: 'volunteer:other' },
+		{ ...account, roles: ['shelter:SH002', `SH002:${input.role}`] },
 		{ ...account, roles: ['shelter:SH002', input.role] },
 		{ ...account, personnel_type: 'staff' as const },
 		{ ...account, active: false },
+		{ ...account, roles: ['shelter:SH001', 'SH001:warehouse_staff'] },
 		{ ...account, roles: ['shelter:SH001', 'warehouse_staff'] },
+		{ ...account, roles: ['shelter:SH001', `SH001:${input.role}`, 'SH001:warehouse_staff'] },
+		{ ...account, roles: ['shelter:SH001', input.role, 'SH001:warehouse_staff'] },
+		{ ...account, roles: ['shelter:SH001', `SH001:${input.role}`, input.role] },
+		{ ...account, roles: ['shelter:SH001', 'system_admin'] },
+		{ ...account, roles: ['shelter:SH001', '_admin'] },
 		{ ...account, name: 'another@example.com' }
 	])('does not adopt an existing mismatched account: %j', async (existing) => {
 		mocks.listUsers.mockResolvedValue([existing]);
@@ -226,6 +233,18 @@ describe('grantVolunteerAccess', () => {
 		await expect(grantVolunteerAccess(volunteer, input)).resolves.toEqual({ created: false });
 		expect(mocks.createUser).toHaveBeenCalledTimes(1);
 		expect(mocks.update).toHaveBeenCalledTimes(2);
+	});
+
+	it.each([
+		{ label: 'compound', roles: ['shelter:SH001', `SH001:${input.role}`] },
+		{ label: 'legacy flat', roles: ['shelter:SH001', input.role] }
+	])('relinks an existing $label account without recreating it', async ({ roles }) => {
+		mocks.listUsers.mockResolvedValue([{ ...account, roles }]);
+		await expect(grantVolunteerAccess(volunteer, input)).resolves.toEqual({ created: false });
+		expect(mocks.createUser).not.toHaveBeenCalled();
+		expect(mocks.update).toHaveBeenCalledWith(
+			expect.objectContaining({ user_name: input.email, email: input.email })
+		);
 	});
 
 	it('can replace the old mock-only user_name when there is no real account', async () => {

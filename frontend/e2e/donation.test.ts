@@ -352,6 +352,8 @@ test.describe('Public Donation & Queue Booking Wizard (T-60)', TAGS, () => {
 		const navigate = page.getByRole('link', { name: 'นำทางด้วย Google Maps' });
 		await expect(navigate).toHaveAttribute('href', DIRECTIONS_HREF);
 		await expect(navigate).toHaveAttribute('target', '_blank');
+		// No label until staff approve: it would tag a box the shelter may yet turn away.
+		await expect(page.getByTestId('ticket-box-label-link')).toHaveCount(0);
 
 		// Mock PATCH for courier tracking update
 		await page.route('**/api/public/v1/donations/TX-SH001-E2ETEST', async (route) => {
@@ -901,5 +903,148 @@ test.describe('Track page shows the drop-off shelter and directions (#590)', TAG
 		await expect(page.getByText('SH001', { exact: true })).toBeVisible();
 		await expect(page.getByRole('link', { name: 'นำทางด้วย Google Maps' })).toHaveCount(0);
 		expect(shelterRequests).toBe(0);
+	});
+});
+
+/** #591: the box label carries the goods, the destination and a QR the scan station reads. */
+test.describe('Box label for a booking the shelter accepted (#591)', TAGS, () => {
+	const TOKEN = 'TX-SH001-BOXLABEL';
+	const BOOKING_REF = 'DN-591001';
+
+	function mockTrack(page: Page, status: string) {
+		return page.route(`**/api/public/v1/donations/${TOKEN}`, (route) =>
+			route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({
+					success: true,
+					donation: {
+						status,
+						booking_ref: BOOKING_REF,
+						shelter_code: 'SH001',
+						donor: { name: 'สมศรี ผู้บริจาคลับ', phone_masked: '***-***-9876' },
+						items: [
+							{ item_name: 'ข้าวสาร', qty: 5, unit: 'kg' },
+							{ item_name: 'น้ำดื่ม', qty: 12, unit: 'bottle' },
+							{
+								item_name: 'ยาหมดอายุ',
+								qty: 1,
+								unit: 'box',
+								review_status: 'rejected',
+								review_reason: 'หมดอายุ'
+							}
+						],
+						logistics: {
+							delivery_method: 'self_dropoff',
+							slot: { date: '2026-10-27', from: '09:00', to: '11:00' },
+							pickup_address: '12 ซอยลับ'
+						},
+						received_summary: null,
+						updated_at: '2026-10-26T03:00:00Z',
+						expires_at: '2026-10-29T03:00:00Z'
+					}
+				})
+			})
+		);
+	}
+
+	function mockShelter(page: Page) {
+		return page.route('**/api/public/v1/shelters/SH001', (route) =>
+			route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({ shelter: SHELTER_DETAIL })
+			})
+		);
+	}
+
+	test('prints the shelter, its address, the goods and the booking ref, with no donor details', async ({
+		page
+	}) => {
+		await mockTrack(page, 'verifying');
+		await mockShelter(page);
+
+		await page.goto(`/donations/track/${TOKEN}`);
+		await page.getByTestId('box-label-link').click();
+		await expect(page).toHaveURL(`/donations/track/${TOKEN}/label`);
+
+		const label = page.getByTestId('box-label-preview').getByTestId('box-label');
+		await expect(label.getByText(SHELTER_DETAIL.name)).toBeVisible();
+		await expect(label.getByText(SHELTER_DETAIL.address)).toBeVisible();
+		await expect(label.getByTestId('box-label-ref')).toHaveText(BOOKING_REF);
+		await expect(label.getByTestId('box-label-items').getByRole('listitem')).toHaveText([
+			/ข้าวสาร\s+5\s+/,
+			/น้ำดื่ม\s+12\s+/
+		]);
+		await expect(label).not.toContainText('ยาหมดอายุ');
+
+		// It sits outside the box, so the donor's own details stay off it.
+		for (const private_ of ['สมศรี', '9876', 'ซอยลับ', TOKEN]) {
+			await expect(label).not.toContainText(private_);
+		}
+	});
+
+	test('the QR encodes the booking ref, not the tracking token', async ({ page }) => {
+		await mockTrack(page, 'verifying');
+		await mockShelter(page);
+
+		await page.goto(`/donations/track/${TOKEN}/label`);
+
+		const label = page.getByTestId('box-label-preview').getByTestId('box-label');
+		await expect(label).toHaveAttribute('data-qr-value', BOOKING_REF);
+		await expect(label.getByRole('img')).toBeVisible();
+	});
+
+	test('the printed page is a single A6 sheet', async ({ page }) => {
+		await mockTrack(page, 'verifying');
+		await mockShelter(page);
+
+		await page.goto(`/donations/track/${TOKEN}/label`);
+		await expect(page.getByTestId('box-label-preview').getByRole('img')).toBeVisible();
+		await page.emulateMedia({ media: 'print' });
+
+		const pdf = await page.pdf({ preferCSSPageSize: true });
+		const pages = pdf.toString('latin1').match(/\/Type\s*\/Page[^s]/g) ?? [];
+		expect(pages).toHaveLength(1);
+		// MediaBox is in points and Chrome rounds to whole CSS pixels: A6 is 297.6 x 419.5.
+		const box = /\/MediaBox\s*\[\s*0\s+0\s+([\d.]+)\s+([\d.]+)\s*\]/.exec(pdf.toString('latin1'));
+		expect(Math.abs(Number(box?.[1]) - 297.64)).toBeLessThan(1);
+		expect(Math.abs(Number(box?.[2]) - 419.53)).toBeLessThan(1);
+	});
+
+	test('offers no label while the booking still waits for review', async ({ page }) => {
+		await mockTrack(page, 'pending_review');
+		await mockShelter(page);
+
+		await page.goto(`/donations/track/${TOKEN}`);
+		await expect(page.getByRole('heading', { name: BOOKING_REF })).toBeVisible();
+		await expect(page.getByTestId('box-label-link')).toHaveCount(0);
+
+		await page.goto(`/donations/track/${TOKEN}/label`);
+		await expect(page.getByTestId('box-label-not-ready')).toContainText('ยังพิมพ์ใบปะหน้าไม่ได้');
+		await expect(page.getByTestId('box-label')).toHaveCount(0);
+		await expect(page.getByRole('link', { name: 'กลับหน้าติดตามสถานะ' }).last()).toHaveAttribute(
+			'href',
+			`/donations/track/${TOKEN}`
+		);
+	});
+
+	test('still prints when the shelter lookup fails, naming the shelter by its code', async ({
+		page
+	}) => {
+		await mockTrack(page, 'verifying');
+		await page.route('**/api/public/v1/shelters/SH001', (route) =>
+			route.fulfill({
+				status: 404,
+				contentType: 'application/json',
+				body: JSON.stringify({ error: 'Shelter not found' })
+			})
+		);
+
+		await page.goto(`/donations/track/${TOKEN}/label`);
+
+		const label = page.getByTestId('box-label-preview').getByTestId('box-label');
+		await expect(label.getByRole('heading', { name: 'SH001' })).toBeVisible();
+		await expect(label.getByTestId('box-label-ref')).toHaveText(BOOKING_REF);
 	});
 });
