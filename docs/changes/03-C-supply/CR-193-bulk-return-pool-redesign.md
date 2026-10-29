@@ -3,7 +3,7 @@ id: CR-193
 title: CR-193 — ออกแบบ bulk_return_pool ใหม่เป็น "กองรวมตอนรับของคืน" (pool header + entry/move/void event log)
 status: approved
 date: 2026-10-22
-updated: 2026-10-29
+updated: 2026-10-30
 requested_by: feedback ระบบคลัง & เบิกของ ข้อ 4–5 (GitHub #657, #658)
 decided_by: kong (decisions 2026-10-22 — https://github.com/r202-coe-psu/tent/pull/768#issuecomment-6339918664; approved 2026-10-25)
 layer: stable
@@ -19,7 +19,7 @@ affects:
   - (ข้อ 32–34 — kong approve 2026-10-27) docs/data/schema.md §2.31 invariants ข้อ 2–3 — แก้ให้ตรงแล้ว · application `bulk-return-pool-v3-{shared,void,move,lifecycle,add-entry,read,missed-loans}.ts` · domain `bulk-return-pool-{summary,overview,timeline}.ts` · UI หน้ากอง / คิวงาน / ฟอร์มรับของ / timeline · ข้อ 35 แยกไป #919
   - (ข้อ 35 — kong approve 2026-10-28, #919) doc type ใหม่ `bulk_return_loan_reopen` v1 (append-only) · docs/data/schema.md §2.31.4 + §8 ข้อ 19 · frontend/src/lib/server/shelter-access-design.ts (VDU rule 14e) · application `food-supplies/auth.ts` (`canReopenBulkReturnLoan`), `bulk-return-pool-v3-loan-reopen.ts`, `bulk-return-pool-v3-missed-loans.ts` · domain `bulk-return-loan-reopen.ts`, `bulk-return-pool-timeline.ts` · UI `ReopenBulkReturnLoanDialog.svelte`, หน้ากอง, timeline
   - (ข้อ 36 — kong ตัดสิน 2026-10-28) #976: application `bulk-return-pool-v3-read.ts` (loan read degrade → `loan_refs_unavailable`) · domain `bulk-return-pool-overview.ts` (`loan_refs_unavailable`, `liveEntriesOf` / `liveLoanRefCount`) · application `query/read-queries.ts` + `$lib/db/query-client.ts` (overview re-checks at once while degraded — staleTime 0) · UI model `bulk-return-pool-v3.ts` / `bulk-return-work-queue.ts` (ตัวกรองบอร์ด/คิวงาน) · `BulkReturnPoolBoard.svelte` (banner/ป้าย) · จุดของฉัน (#977) · timeline หน้ากอง (#978) · คิวงานตาม role + redirect ลิงก์กอง (#980) — ไม่มี schema change
-  - (ข้อ 37) #950: application bulk-return-pool-v3-{lifecycle,add-entry,shared,missed-loans,read}.ts · data distribution-log.repository.ts (mutateLogCAS beforeWrite) · domain bulk-return-pool-{summary,v3,overview}.ts · people/volunteers ค้นชื่อตาม id · UI ฟอร์มรับของ / ตรวจรับ / หน้ากอง / บอร์ด / คิวงาน · localStorage lastBulkReturnPool — ไม่มี schema change
+  - (ข้อ 37 — เสนอ) #950: application bulk-return-pool-v3-{lifecycle,add-entry,shared,missed-loans,read}.ts · data distribution-log.repository.ts (mutateLogCAS beforeWrite) · domain bulk-return-pool-{summary,v3,overview}.ts · people/volunteers ค้นชื่อตาม id · UI ฟอร์มรับของ / ตรวจรับ / หน้ากอง / บอร์ด / คิวงาน · localStorage lastBulkReturnPool — ไม่มี schema change
 ---
 
 # CR-193 — ออกแบบ bulk_return_pool ใหม่เป็นกองรวมตอนรับของคืน
@@ -558,7 +558,7 @@ D1–D5 ข้างบนยังมีผลตามเดิม (ปรั�
 - **แก้:** ข้อ 26 และข้อ 27 (คิวตาม role) · **ต่อ:** ข้อ 29 (deep link), CR-200 FR-DFS-05 (ไม่แก้ CR-200)
 - **โค้ด:** PR #980
 
-### 37. งานตาม review ของกองรับคืน (#950) (เพิ่ม 2026-10-29)
+### 37. งานตาม review ของกองรับคืน (#950) (เสนอ 2026-10-29 — **รอ kong อนุมัติ**)
 
 ข้อ 37 แก้/ต่อกติกาของข้อ 6, 7, 23–26, 31–34 — **ไม่เพิ่ม field ไม่เปลี่ยน shape ไม่ bump `schema_v` ไม่แก้ VDU**
 (ค่าที่เกี่ยวข้องคำนวณตอนอ่าน เป็นกติกา advisory ฝั่ง application/domain หรือเก็บใน localStorage)
@@ -592,6 +592,7 @@ D1–D5 ข้างบนยังมีผลตามเดิม (ปรั�
   - ถ้ากองที่เลือกรับรายการใหม่ไม่ได้ (ปิด/ล็อก) บรรทัดใหม่ไม่ถูกเขียนและผู้ใช้ได้รับแจ้งให้เลือกกองอื่น
   - ปุ่ม "ตัดยอดยืมที่ค้าง" (ข้อ 34) ใช้กับกอง `OPEN` ได้ด้วย — เฉพาะ entry ที่ยังอยู่ในกองและไม่ถูก void · กองที่กำลังถูกล็อกให้รอส่ง/ยกเลิกเสร็จก่อน
   - กอง `OPEN` ที่ถูกล็อกไม่แสดงรายการตัดยอดยืมที่ค้างระหว่างนั้น (รายการว่าง) จนกว่าการส่ง/ยกเลิกจะเสร็จ
+  - หน้ากองแสดงข้อความ "กองนี้กำลังถูกส่งเข้าคลังหรือยกเลิกอยู่ ตัดยอดยืมที่ค้างได้หลังเสร็จ" แทนในตำแหน่งที่กล่องซ่อมจะแสดง (ครั้งเดียวต่อกอง เหนือรายการ entry)
 - **แก้:** ข้อ 34 (เดิมเฉพาะ `SUBMITTED`/`RECEIVED`) · **ต่อ:** FR-32.4, ข้อ 35
 
 #### 37.4 "คืนทั้งหมด" กับ operation ULID (A3)
@@ -724,7 +725,7 @@ VDU อ่านเอกสารอื่นไม่ได้ — กติ�
 - `frontend/src/lib/server/shelters.admin.ts`, `frontend/src/lib/features/shelters/server/provisioner.ts`,
   `frontend/scripts/redeploy-access.ts`, `frontend/scripts/seed/registry-shelters.ts` — deploy index
 - ไม่แตะ `TICKET_DISTRIBUTION_MANGO_INDEXES`; ส่วน UI/workflow อยู่ #659/#660 ซึ่ง merge ใน PR เดียวกัน
-- (ข้อ 37, #950) application `bulk-return-pool-v3-{lifecycle,add-entry,shared,missed-loans,read}.ts` · data `distribution-log.repository.ts`
+- (ข้อ 37, #950 — เสนอ) application `bulk-return-pool-v3-{lifecycle,add-entry,shared,missed-loans,read}.ts` · data `distribution-log.repository.ts`
   (`mutateLogCAS` beforeWrite) · domain `bulk-return-pool-{summary,v3,overview}.ts` · people/volunteers ค้นชื่อตาม id ·
   UI ฟอร์มรับของ / ตรวจรับ / หน้ากอง / บอร์ด / คิวงาน · localStorage `lastBulkReturnPool` — ไม่มี schema change
 
@@ -793,3 +794,4 @@ VDU อ่านเอกสารอื่นไม่ได้ — กติ�
   อ่าน loan เฉพาะกองที่ยังไม่ปิด (37.8, แก้ข้อ 23), คิว "ต้องจัดการ" นับ RECEIVED ภายใน 7 วัน (37.9, แก้ข้อ 26/36.4),
   จำกองล่าสุดต่อคนต่อศูนย์ (37.10, แก้ข้อ 25) — ไม่เปลี่ยน shape/`schema_v`/VDU
 - 2026-10-29 — ข้อ 37 ปรับ: 37.3 เพิ่มข้อยกเว้น entry ที่เปิดยอดยืมกลับแล้ว (ข้อ 35) · 37.5 void หลัง snapshot ไม่มีผล (ตาม FR-33.1) และ replay ของ entry ที่ void แล้วคืนผลทันที · 37.3 กอง OPEN ที่ถูกล็อกไม่แสดงรายการตัดยอดยืมที่ค้าง · ข้อความกองถูกล็อกระบุ 'ส่งเข้าคลังหรือยกเลิก' · 37.5 ระบุข้อจำกัดช่วง fence กับการเขียน loan — ไม่เปลี่ยน shape/`schema_v`/VDU
+- 2026-10-29 — ข้อ 37 (37.1–37.10) เสนอพร้อม implementation ใน #1008 — ยังรอ kong อนุมัติ; รวม §37.3 (replay ไม่ตัดซ้ำ entry ที่เปิดยอดยืมกลับแล้ว, กอง OPEN ที่ถือ lock ไม่แสดงรายการซ่อม แต่แสดงข้อความ "กองนี้กำลังถูกส่งเข้าคลังหรือยกเลิกอยู่ ตัดยอดยืมที่ค้างได้หลังเสร็จ") และ §37.5 (void หลัง snapshot ไม่มีผล)
