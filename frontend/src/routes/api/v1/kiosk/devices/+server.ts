@@ -7,7 +7,11 @@ import {
 	ScannerShelterNotFoundError
 } from '$lib/server/scanners/device-credentials';
 import { scannerDeviceRepository } from '$lib/server/scanners/device-repository';
-import { assertCanCreateFor, requireScannerManager } from '$lib/server/scanners/scanner-access';
+import {
+	assertCanCreateFor,
+	requireDeviceViewer,
+	requireScannerManager
+} from '$lib/server/scanners/scanner-access';
 import { staffPinAdminError, staffPinJson } from '$lib/server/scanners/staff-pin-http';
 import { scopedShelterFilter } from '$lib/server/shelter-capability-access';
 // eslint-disable-next-line no-restricted-imports -- server-safe domain schema; feature barrel pulls client UI/query code
@@ -47,19 +51,23 @@ function scannerError(error: unknown): Response | null {
 }
 
 /**
- * List devices. A shelter manager lists one shelter at a time (`?shelter_code=` is required, 400
- * otherwise; a shelter outside their scope is 403 like POST). SA may omit it to list every shelter.
+ * List devices. A shelter manager / kiosk_staff / pr_staff lists one shelter at a time
+ * (`?shelter_code=` is required, 400 otherwise; a shelter outside their scope is 403 like POST).
+ * SA may omit it to list every shelter.
  */
 export const GET: RequestHandler = async ({ request, url }) => {
 	try {
-		const caller = await requireScannerManager(request);
+		const caller = await requireDeviceViewer(request);
 		const requested = url.searchParams.get('shelter_code');
 		if (!caller.isSA && !requested) {
 			throw new ServiceError('VALIDATION', 'shelter_code is required');
 		}
 		const scope = scopedShelterFilter(caller, requested);
 		if (scope?.length === 0) {
-			throw new ServiceError('FORBIDDEN', 'Not a shelter_manager of this shelter');
+			throw new ServiceError(
+				'FORBIDDEN',
+				'Not a shelter_manager, kiosk_staff or pr_staff of this shelter'
+			);
 		}
 		const devices = await scannerDeviceRepository.listDevices(scope);
 		return staffPinJson(devices.map(toScannerDeviceSummary), 200);

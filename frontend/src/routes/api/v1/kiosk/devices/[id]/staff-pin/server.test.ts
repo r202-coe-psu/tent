@@ -100,6 +100,15 @@ describe('POST /api/v1/kiosk/devices/[id]/staff-pin', () => {
 		expect(mockSet).not.toHaveBeenCalled();
 	});
 
+	it('returns 403 when pr_staff sets or regenerates a PIN without touching the device', async () => {
+		mockSession.mockResolvedValue(SESSIONS.prA);
+		expect((await post({ pin: '482913' })).status).toBe(403);
+		expect((await post({ regenerate: true })).status).toBe(403);
+		expect(mockGet).not.toHaveBeenCalled();
+		expect(mockSet).not.toHaveBeenCalled();
+		expect(mockRegenerate).not.toHaveBeenCalled();
+	});
+
 	it('lets a shelter manager set and regenerate a PIN of their own shelter, recorded under their name', async () => {
 		mockSession.mockResolvedValue(SESSIONS.managerA);
 		expect((await post({ pin: '482913' })).status).toBe(200);
