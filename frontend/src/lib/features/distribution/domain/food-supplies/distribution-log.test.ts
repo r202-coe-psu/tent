@@ -45,6 +45,23 @@ describe('Food & Supplies DistributionLog contract', () => {
 		);
 	});
 
+	it('accepts a staff recipient only with a user: recipient_id', () => {
+		const staffInput = { ...foodLogInput, recipient_type: 'staff' as const };
+		const accepts = (recipient_id: string | null | undefined) =>
+			distributionLogInputSchema.safeParse({ ...staffInput, recipient_id }).success;
+		expect(accepts('user:somchai')).toBe(true);
+		expect(accepts(null)).toBe(false);
+		expect(accepts(undefined)).toBe(false);
+		expect(accepts('user:')).toBe(false);
+		expect(accepts(`volunteer:${ULID}`)).toBe(false);
+		expect(accepts(`evacuee:${ULID}`)).toBe(false);
+		const log = createDistributionLog({ ...staffInput, recipient_id: 'user:somchai' }, ctx, ULID);
+		expect(distributionLogDocSchema.safeParse(log).success).toBe(true);
+		expect(
+			distributionLogDocSchema.safeParse({ ...log, recipient_id: 'volunteer:x' }).success
+		).toBe(false);
+	});
+
 	it('keeps allergen conflicts only on an overridden log (#607)', () => {
 		const overridden = createDistributionLog(
 			{

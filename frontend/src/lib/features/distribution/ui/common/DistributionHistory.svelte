@@ -50,6 +50,7 @@
 	> = {
 		evacuee: { label: 'ผู้พักอาศัย', className: 'border-sky-200 bg-sky-50 text-sky-800' },
 		volunteer: { label: 'จิตอาสา', className: 'border-violet-200 bg-violet-50 text-violet-800' },
+		staff: { label: 'เจ้าหน้าที่', className: 'border-amber-200 bg-amber-50 text-amber-800' },
 		outside: { label: 'บุคคลภายนอก', className: 'border-slate-200 bg-slate-50 text-slate-700' }
 	};
 </script>

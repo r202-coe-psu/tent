@@ -15,6 +15,7 @@ import {
 	resolveDefaultPoolId,
 	resolveReturner,
 	summarizeAddResult,
+	type ReturnerChoice,
 	validateAddEntryLines,
 	type AddEntryLine
 } from './bulk-return-add-entry';
@@ -243,6 +244,18 @@ describe('resolveReturner', () => {
 		expect(
 			resolveReturner({ recipientType: 'outside', recipientId: null, label: 'x' }).error
 		).toBeTruthy();
+	});
+
+	it('rejects a staff recipient as a returner because staff only receive consumables', () => {
+		const staff = {
+			recipientType: 'staff',
+			recipientId: 'user:somchai',
+			label: 'Somchai'
+		} as unknown as ReturnerChoice;
+		const resolved = resolveReturner(staff);
+		expect(resolved.error).toBeTruthy();
+		expect(resolved.returner).toBeUndefined();
+		expect(identifiedReturnerId(staff)).toBeNull();
 	});
 
 	it('exposes the id only for identified returners', () => {

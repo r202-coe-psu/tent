@@ -2185,7 +2185,7 @@ ${consentVduClause()}
     if (typeof newDoc.is_returnable !== 'boolean') {
       throw { forbidden: 'distribution_log requires boolean is_returnable' };
     }
-    if (['evacuee', 'volunteer', 'outside'].indexOf(newDoc.recipient_type) === -1) {
+    if (['evacuee', 'volunteer', 'staff', 'outside'].indexOf(newDoc.recipient_type) === -1) {
       throw { forbidden: 'Invalid recipient_type: ' + newDoc.recipient_type };
     }
     if (newDoc.recipient_type === 'evacuee' && (typeof newDoc.recipient_id !== 'string' || newDoc.recipient_id.indexOf('evacuee:') !== 0)) {
@@ -2193,6 +2193,9 @@ ${consentVduClause()}
     }
     if (newDoc.recipient_type === 'volunteer' && (typeof newDoc.recipient_id !== 'string' || newDoc.recipient_id.indexOf('volunteer:') !== 0)) {
       throw { forbidden: 'volunteer recipient_id is required' };
+    }
+    if (newDoc.recipient_type === 'staff' && (typeof newDoc.recipient_id !== 'string' || newDoc.recipient_id.indexOf('user:') !== 0 || newDoc.recipient_id.length <= 5)) {
+      throw { forbidden: 'staff recipient_id is required' };
     }
     if (newDoc.recipient_type === 'outside' && typeof newDoc.recipient_id !== 'undefined' && newDoc.recipient_id !== null) {
       throw { forbidden: 'outside recipients must not carry recipient_id' };
