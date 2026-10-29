@@ -3,6 +3,7 @@ import {
 	formatStaffToken,
 	isValidStaffTokenHash,
 	parseStaffCardPayload,
+	staffCardFileName,
 	staffCardPayloadFromHash,
 	staffCardRoleLabel,
 	staffRecipientId,
@@ -134,5 +135,19 @@ describe('staffCardRoleLabel', () => {
 
 	it('ignores a compound capability for a shelter the user has no scope in', () => {
 		expect(staffCardRoleLabel(['SH001:kitchen_staff'], 'SH001')).toBe('เจ้าหน้าที่');
+	});
+});
+
+describe('staffCardFileName', () => {
+	it('keeps Thai vowel and tone marks so the name stays readable', () => {
+		expect(staffCardFileName('สิทธิ์ ประดิษฐ์')).toBe('staff-card-สิทธิ์-ประดิษฐ์.png');
+	});
+
+	it('joins words with one hyphen and drops symbols at the edges', () => {
+		expect(staffCardFileName('  Somchai (Staff 01)  ')).toBe('staff-card-Somchai-Staff-01.png');
+	});
+
+	it('falls back to a generic name when nothing printable is left', () => {
+		expect(staffCardFileName(' -- ')).toBe('staff-card-card.png');
 	});
 });

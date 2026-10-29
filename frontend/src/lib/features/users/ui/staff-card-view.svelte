@@ -1,8 +1,14 @@
 <script lang="ts">
 	import { Button } from '$lib/components/ui/button/index.js';
+	import {
+		KIOSK_LABEL_MM,
+		KioskLabelCard,
+		KioskLabelSheet,
+		prepareKioskQrImage
+	} from '$lib/features/kiosk';
 	import { generateQrDataUrl } from '$lib/utils/qrcode';
+	import { staffCardFileName } from '../domain/staff-card';
 	import Download from '@lucide/svelte/icons/download';
-	import IdCard from '@lucide/svelte/icons/id-card';
 	import Printer from '@lucide/svelte/icons/printer';
 
 	let {
@@ -21,7 +27,16 @@
 		volunteerCode?: string | null;
 	} = $props();
 
-	const qrPromise = $derived(
+	const CSS_PX_PER_MM = 96 / 25.4;
+	let previewWidth = $state(0);
+	// Narrow dialogs shrink the 80 mm card to fit instead of clipping it.
+	const previewZoom = $derived(
+		previewWidth > 0 ? Math.min(1, previewWidth / (KIOSK_LABEL_MM.width * CSS_PX_PER_MM)) : 1
+	);
+
+	// The preview and the printed sheet are the same kiosk label card, so what staff see is what prints.
+	const labelQrPromise = $derived(prepareKioskQrImage(payload));
+	const downloadPromise = $derived(
 		generateQrDataUrl(payload, {
 			width: 320,
 			margin: 1,
@@ -29,67 +44,55 @@
 		})
 	);
 
-	const fileName = $derived(
-		`staff-card-${
-			displayName
-				.trim()
-				.replace(/[^\p{L}\p{N}]+/gu, '-')
-				.replace(/^-+|-+$/g, '') || 'card'
-		}.png`
-	);
+	const lines = $derived([
+		roleLabel,
+		...(volunteerCode ? [`รหัสจิตอาสา ${volunteerCode}`] : position ? [position] : [])
+	]);
+
+	const fileName = $derived(staffCardFileName(displayName));
+
+	function labelFor(qr: { src: string; sizeMm: number }) {
+		return {
+			key: payload,
+			qrSrc: qr?.src,
+			qrSizeMm: qr?.sizeMm,
+			name: displayName,
+			lines,
+			alt: `QR สำหรับสแกนบัตรของ ${displayName}`
+		};
+	}
 </script>
 
-<div class="space-y-4">
-	<div
-		class="mx-auto w-full max-w-sm space-y-4 rounded-2xl border border-slate-200/80 bg-white p-5 text-center shadow-2xs sm:p-6"
-	>
-		<div class="space-y-2">
-			<h3 class="text-xl font-bold text-slate-900">{displayName}</h3>
-			<span
-				class="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-sm font-semibold text-slate-800"
-			>
-				<IdCard class="size-4 shrink-0 text-[#0A2647]" aria-hidden="true" />
-				{roleLabel}
-			</span>
-			{#if volunteerCode}
-				<p class="text-sm text-slate-600 tabular-nums">รหัสจิตอาสา {volunteerCode}</p>
-			{:else if position}
-				<p class="text-sm text-slate-600">{position}</p>
-			{/if}
-			{#if shelterName}
-				<p class="text-sm text-slate-500">{shelterName}</p>
-			{/if}
-		</div>
-
-		{#await qrPromise}
+<div class="min-w-0 space-y-4">
+	{#await labelQrPromise}
+		<div class="flex justify-center">
 			<div
-				class="mx-auto aspect-square w-full max-w-72 animate-pulse rounded-xl bg-slate-100"
+				class="aspect-[4/3] w-[80mm] max-w-full animate-pulse rounded-lg bg-slate-100"
 				role="status"
 				aria-label="กำลังสร้าง QR"
 			></div>
-		{:then dataUrl}
-			{#if dataUrl}
-				<img
-					src={dataUrl}
-					alt="QR สำหรับสแกนบัตรเจ้าหน้าที่ของ {displayName}"
-					width="320"
-					height="320"
-					class="mx-auto aspect-square w-full max-w-72 rounded-xl"
+		</div>
+	{:then qr}
+		<div class="w-full min-w-0 overflow-hidden" bind:clientWidth={previewWidth}>
+			<div class="mx-auto w-fit" style:zoom={previewZoom}>
+				<KioskLabelCard
+					label={labelFor(qr)}
+					class="rounded-lg border border-slate-300 shadow-2xs"
 				/>
-			{:else}
-				<p class="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
-					ไม่สามารถสร้าง QR ได้
-				</p>
-			{/if}
-		{:catch}
-			<p class="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-900">
-				ไม่สามารถสร้าง QR ได้
-			</p>
-		{/await}
-	</div>
+			</div>
+		</div>
+		{#if shelterName}
+			<p class="text-center text-sm text-slate-500 print:hidden">{shelterName}</p>
+		{/if}
+		<KioskLabelSheet labels={[labelFor(qr)]} />
+	{:catch}
+		<p class="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-900">
+			ไม่สามารถสร้าง QR ได้
+		</p>
+	{/await}
 
 	<div class="flex flex-col gap-2 sm:flex-row sm:justify-center print:hidden">
-		{#await qrPromise then dataUrl}
+		{#await downloadPromise then dataUrl}
 			{#if dataUrl}
 				<Button
 					variant="outline"

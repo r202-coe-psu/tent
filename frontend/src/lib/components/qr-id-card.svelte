@@ -13,8 +13,10 @@
 		zone?: { label: string; value: string | null };
 		/** Small line at the bottom of the text column, e.g. the site address. */
 		footer?: string;
-		/** Station boxes (e.g. เช็คอิน · คัดกรอง · ที่พัก), one per row. */
-		checklist: readonly string[];
+		/** Bold lines under the name (e.g. role, position); omit for none. */
+		lines?: readonly string[];
+		/** Station boxes (e.g. เช็คอิน · คัดกรอง · ที่พัก), one per row. Omit for none. */
+		checklist?: readonly string[];
 		/** Stations already passed: this many boxes are ticked, top first. */
 		checkedCount?: number;
 		class?: string;
@@ -26,7 +28,8 @@
 		name,
 		zone,
 		footer,
-		checklist,
+		lines = [],
+		checklist = [],
 		checkedCount = 0,
 		class: className
 	}: Props = $props();
@@ -41,6 +44,9 @@
 <div class={cn('flex h-full w-full flex-row text-black', className)}>
 	<div class="flex min-w-0 flex-1 flex-col gap-[1mm]">
 		<p class="line-clamp-3 text-[16pt] leading-[1.3] font-bold [overflow-wrap:anywhere]">{name}</p>
+		{#each lines as line (line)}
+			<p class="text-[10pt] leading-[1.3] font-medium [overflow-wrap:anywhere]">{line}</p>
+		{/each}
 		{#if zone}
 			<p class="flex items-baseline gap-[1.5mm] text-[12pt] leading-[1.3] font-bold">
 				<span class="shrink-0">{zone.label}</span>
@@ -51,30 +57,37 @@
 				{/if}
 			</p>
 		{/if}
-		<div
-			class="label-checklist mt-auto flex flex-col items-start gap-[1.5mm] text-[10pt] leading-[1.3] font-medium"
-		>
-			{#each checklist as item, index (item)}
-				<span class="inline-flex items-center gap-[1.5mm]">
-					<span class="size-[3.5mm] shrink-0 border-[0.3mm] border-black" aria-hidden="true">
-						{#if index < checkedCount}
-							<svg viewBox="0 0 10 10" class="block size-full">
-								<polyline
-									points="2,5.2 4.2,7.5 8,2.5"
-									fill="none"
-									stroke="currentColor"
-									stroke-width="1.4"
-									stroke-linecap="square"
-								/>
-							</svg>
-						{/if}
+		{#if checklist.length > 0}
+			<div
+				class="label-checklist mt-auto flex flex-col items-start gap-[1.5mm] text-[10pt] leading-[1.3] font-medium"
+			>
+				{#each checklist as item, index (item)}
+					<span class="inline-flex items-center gap-[1.5mm]">
+						<span class="size-[3.5mm] shrink-0 border-[0.3mm] border-black" aria-hidden="true">
+							{#if index < checkedCount}
+								<svg viewBox="0 0 10 10" class="block size-full">
+									<polyline
+										points="2,5.2 4.2,7.5 8,2.5"
+										fill="none"
+										stroke="currentColor"
+										stroke-width="1.4"
+										stroke-linecap="square"
+									/>
+								</svg>
+							{/if}
+						</span>
+						{item}
 					</span>
-					{item}
-				</span>
-			{/each}
-		</div>
+				{/each}
+			</div>
+		{/if}
 		{#if footer}
-			<span class="text-[7pt] leading-[1.3] font-medium whitespace-nowrap">{footer}</span>
+			<span
+				class={cn(
+					'text-[7pt] leading-[1.3] font-medium whitespace-nowrap',
+					checklist.length === 0 && 'mt-auto'
+				)}>{footer}</span
+			>
 		{/if}
 	</div>
 

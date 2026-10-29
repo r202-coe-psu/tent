@@ -62,3 +62,12 @@ export function staffCardRoleLabel(roles: readonly string[], shelterCode: string
 	];
 	return ordered.length > 0 ? ordered.map(roleDisplayLabel).join(' · ') : GENERIC_STAFF_LABEL;
 }
+
+/** Download filename for a card PNG; keeps Thai combining marks (\p{M}) so names stay readable. */
+export function staffCardFileName(displayName: string): string {
+	const slug = displayName
+		.trim()
+		.replace(/[^\p{L}\p{M}\p{N}]+/gu, '-')
+		.replace(/^-+|-+$/g, '');
+	return `staff-card-${slug || 'card'}.png`;
+}
