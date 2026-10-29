@@ -268,7 +268,7 @@ export interface DonationItem {
 	reserved_qty?: string;
 	/**
 	 * The drop-off point (`sub_storage[].id` ticked `accepts_donations`) the donor takes this
-	 * line to (CR-206 · schema_v 10). `null` or absent = no point: the line may be received at
+	 * line to (CR-206 · schema_v 11). `null` or absent = no point: the line may be received at
 	 * any point of the shelter. Only `self_dropoff` bookings carry one.
 	 */
 	drop_off_point_id?: string | null;
@@ -307,12 +307,12 @@ export type DonationCloseReason = 'all_points' | 'staff_close' | 'expired';
 
 /**
  * `schema_v` every donation writer stamps — the walk-in factory here, the donor edit
- * route, and `worker/inbound/donations.py`. 10 = CR-206 `items[].drop_off_point_id` +
- * `point_receipts[]` (9 CR-175 donor `photos`, 8 CR-196
+ * route, and `worker/inbound/donations.py`. 11 = CR-206 `items[].drop_off_point_id` +
+ * `point_receipts[]` (10 CR-209 `logistics.vehicle_plate`, 9 CR-175 donor `photos`, 8 CR-196
  * `items[].line_key`, 7 CR-174 `items[].review_status`, 6 CR-172 `reject_reason`,
  * 5 CR-087 `redirect_to_shelter_code`, 4 CR-080 `revisions[]`).
  */
-export const DONATION_SCHEMA_V = 10;
+export const DONATION_SCHEMA_V = 11;
 
 export interface Donor {
 	name: string;
@@ -326,6 +326,7 @@ export interface Donor {
 export interface DonationLogistics {
 	delivery_method: 'self_dropoff' | 'parcel' | 'shelter_pickup';
 	vehicle?: 'motorcycle' | 'car' | 'pickup' | 'truck';
+	vehicle_plate?: string;
 	slot?: {
 		date: string;
 		from: string;
@@ -393,7 +394,7 @@ export interface Donation extends BaseDoc {
 	 * DB (CR-175 donor photos · schema_v 9). Attached at booking only; an edit keeps them.
 	 */
 	photos?: string[];
-	/** Receipts at drop-off points (CR-206 FR-MP-5 · schema_v 10). Absent or `[]` = no point recorded yet. */
+	/** Receipts at drop-off points (CR-206 FR-MP-5 · schema_v 11). Absent or `[]` = no point recorded yet. */
 	point_receipts?: DonationPointReceipt[];
 }
 

@@ -61,6 +61,9 @@ export {
 	maskLookupPhone,
 	rejectedLineReasons
 } from './domain/tracking';
+// Domain — which queue window counts as picked on the booking form
+export type { SlotOption } from './domain/slot-pick';
+export { pickedSlot, slotContextKey } from './domain/slot-pick';
 // Domain — drop-off destination (#590)
 export type {
 	DonationPointSource,
@@ -192,6 +195,8 @@ export {
 // Domain — input schemas + factories + transitions + guards
 export {
 	donationPreDeclarationInputSchema,
+	VEHICLE_PLATE_MAX,
+	buildDonationLogistics,
 	isDonationPreDeclaration,
 	donorCategoryFromCatalog,
 	PUBLIC_DONATION_CATEGORIES

@@ -247,7 +247,7 @@ describe('PATCH /api/public/v1/donations/[token]/items', () => {
 			expect((written as { items: { line_key?: string }[] }).items[0]!.line_key).toBe('K-NEW');
 		});
 
-		// A doc a newer writer stamped keeps its version: stamping 8 over it would claim it
+		// A doc a newer writer stamped keeps its version: stamping the current one over it would claim it
 		// lacks fields it has.
 		it('never lowers the schema_v of a doc a newer writer stamped', async () => {
 			couchHas({ ...couchDoc('pending_review'), schema_v: DONATION_SCHEMA_V + 1 });

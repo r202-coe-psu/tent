@@ -155,6 +155,150 @@ describe('GET & PATCH & DELETE /api/public/v1/donations/[tracking_token]', () =>
 		expect(data.donation.received_summary?.shortfalls[0].short).toBe('2');
 	});
 
+	describe('vehicle plate never leaves through tracking (CR-209 FR-4)', () => {
+		const PLATE = 'กข 1234 กรุงเทพมหานคร';
+		const plateLogistics = {
+			delivery_method: 'self_dropoff',
+			vehicle: 'car',
+			vehicle_plate: PLATE,
+			slot: { date: '2026-11-01', from: '09:00', to: '10:00' }
+		};
+
+		function fastapiReturns(donation: Record<string, unknown>) {
+			vi.stubGlobal(
+				'fetch',
+				vi.fn().mockResolvedValue({
+					ok: true,
+					status: 200,
+					json: async () => ({ success: true, donation })
+				})
+			);
+		}
+
+		it('drops vehicle_plate from the CouchDB doc', async () => {
+			fastapiReturns({ status: 'declared', booking_ref: 'DN-999999', items: [] });
+			vi.mocked(adminRaw).mockImplementation((path: string, method: string) => {
+				if (method === 'GET' && path.includes('_all_docs')) {
+					return Promise.resolve({
+						status: 200,
+						data: { rows: [{ doc: { ...mockDonation, logistics: plateLogistics } }] }
+					});
+				}
+				return Promise.resolve({ status: 404, data: {} });
+			});
+
+			const response = await GET({
+				params: { tracking_token: TOKEN },
+				getClientAddress: () => '127.0.0.1'
+			} as unknown as GetEvent);
+
+			const body = await response.json();
+			expect(response.status).toBe(200);
+			expect(body.donation.logistics).toEqual({
+				delivery_method: 'self_dropoff',
+				vehicle: 'car',
+				slot: { date: '2026-11-01', from: '09:00', to: '10:00' }
+			});
+			expect(JSON.stringify(body)).not.toContain(PLATE);
+		});
+
+		it('drops vehicle_plate from the FastAPI fallback (not yet in CouchDB)', async () => {
+			fastapiReturns({
+				status: 'declared',
+				booking_ref: 'DN-999999',
+				items: [],
+				logistics: plateLogistics
+			});
+			vi.mocked(adminRaw).mockResolvedValue({ status: 404, data: {} });
+
+			const response = await GET({
+				params: { tracking_token: TOKEN },
+				getClientAddress: () => '127.0.0.1'
+			} as unknown as GetEvent);
+
+			const body = await response.json();
+			expect(response.status).toBe(200);
+			expect(body.donation.logistics).not.toHaveProperty('vehicle_plate');
+			expect(body.donation.logistics.vehicle).toBe('car');
+			expect(JSON.stringify(body)).not.toContain(PLATE);
+		});
+	});
+
+	describe('donor contact never leaves through tracking', () => {
+		it('sends only the name and a masked phone from the CouchDB doc', async () => {
+			vi.stubGlobal(
+				'fetch',
+				vi.fn().mockResolvedValue({
+					ok: true,
+					status: 200,
+					json: async () => ({ success: true, donation: { status: 'declared', items: [] } })
+				})
+			);
+			vi.mocked(adminRaw).mockImplementation((path: string, method: string) => {
+				if (method === 'GET' && path.includes('_all_docs')) {
+					return Promise.resolve({
+						status: 200,
+						data: {
+							rows: [
+								{
+									doc: {
+										...mockDonation,
+										donor: { ...mockDonation.donor, line_id: 'secretline' }
+									}
+								}
+							]
+						}
+					});
+				}
+				return Promise.resolve({ status: 404, data: {} });
+			});
+
+			const response = await GET({
+				params: { tracking_token: TOKEN },
+				getClientAddress: () => '127.0.0.1'
+			} as unknown as GetEvent);
+
+			const body = await response.json();
+			expect(body.donation.donor).toEqual({ name: 'Secret Donor', phone_masked: '***-***-5678' });
+			const raw = JSON.stringify(body);
+			for (const secret of ['0812345678', 'abc', 'secret@donor.com', 'secretline']) {
+				expect(raw).not.toContain(secret);
+			}
+		});
+
+		it('drops LINE and email from the FastAPI fallback too', async () => {
+			vi.stubGlobal(
+				'fetch',
+				vi.fn().mockResolvedValue({
+					ok: true,
+					status: 200,
+					json: async () => ({
+						success: true,
+						donation: {
+							status: 'declared',
+							items: [],
+							donor: {
+								name: 'Buffer Donor',
+								phone_masked: '***-***-1111',
+								line_id: 'bufferline',
+								email: 'buffer@donor.com'
+							}
+						}
+					})
+				})
+			);
+			vi.mocked(adminRaw).mockResolvedValue({ status: 404, data: {} });
+
+			const response = await GET({
+				params: { tracking_token: TOKEN },
+				getClientAddress: () => '127.0.0.1'
+			} as unknown as GetEvent);
+
+			const body = await response.json();
+			expect(body.donation.donor).toEqual({ name: 'Buffer Donor', phone_masked: '***-***-1111' });
+		});
+	});
+
 	// CR-172 FR-14 — the reason staff gave reaches the donor before the projection catches up.
 	it('GET passes the reject reason through, from CouchDB over the projection', async () => {
 		vi.stubGlobal(

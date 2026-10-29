@@ -29,7 +29,7 @@ class DeclaredItem(BaseModel):
 	review_reason: str | None = None
 	# CR-206 FR-MP-1: the drop-off point (``public_shelters.donation_points[].id``) the donor
 	# takes this line to. None = no point — the line may be received at any point. Lines
-	# from before donation schema_v 10 have none.
+	# from before donation schema_v 11 have none.
 	drop_off_point_id: str | None = None
 
 

@@ -61,7 +61,7 @@ def project_donation(
             "review_status": item.get("review_status"),
             "review_reason_code": item.get("review_reason_code"),
             "review_reason": item.get("review_reason"),
-            # CR-206: where the donor takes the line. None = no point, and before schema_v 10.
+            # CR-206: where the donor takes the line. None = no point, and before schema_v 11.
             "drop_off_point_id": item.get("drop_off_point_id"),
         }
         for item in items

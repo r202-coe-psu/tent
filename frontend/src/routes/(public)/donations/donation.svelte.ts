@@ -69,8 +69,14 @@ export class DonationStore {
 
 	deliveryMethod = $state<'self_dropoff' | 'parcel' | 'shelter_pickup'>('self_dropoff');
 	vehicleType = $state<'motorcycle' | 'car' | 'pickup' | 'truck' | undefined>(undefined);
+	/** Optional plate for a self drop-off. Kept when the donor switches method, never sent then. */
+	vehiclePlate = $state('');
 	slotDate = $state('');
 	slotTime = $state('');
+	/** The shelter / day / queue `slotTime` was picked for (`slotContextKey`). */
+	slotFor = $state('');
+	/** The plate the booking actually sent — what the ticket shows (CR-209 FR-3a). */
+	bookedVehiclePlate = $state('');
 	shelterCode = $state('');
 	courierTrackingNo = $state('');
 	eta = $state('');
@@ -132,8 +138,11 @@ export class DonationStore {
 		this.donorEmail = '';
 		this.deliveryMethod = 'self_dropoff';
 		this.vehicleType = undefined;
+		this.vehiclePlate = '';
 		this.slotDate = '';
 		this.slotTime = '';
+		this.slotFor = '';
+		this.bookedVehiclePlate = '';
 		this.shelterCode = '';
 		this.courierTrackingNo = '';
 		this.eta = '';

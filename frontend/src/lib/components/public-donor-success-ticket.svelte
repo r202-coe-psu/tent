@@ -222,6 +222,14 @@
 				{/if}
 			</div>
 
+			<!-- CR-209 FR-3a: the plate the booking sent, not whatever the form holds now. -->
+			{#if donationStore.bookedVehiclePlate}
+				<div>
+					<div class="mb-1 text-xs font-bold text-slate-500">{t.vehiclePlateTicketLabel}</div>
+					<div class="text-sm font-bold text-slate-800">{donationStore.bookedVehiclePlate}</div>
+				</div>
+			{/if}
+
 			<div class="grid grid-cols-2 gap-4">
 				<div>
 					<div class="mb-1 flex items-center gap-1 text-xs font-bold text-slate-500">
