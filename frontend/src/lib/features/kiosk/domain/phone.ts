@@ -1,6 +1,6 @@
 const CANONICAL = /^0\d{9}$/;
 
-/** Canonical Thai phone: digits only, leading 0, 10-digit mobile (CR-206 — no landlines). */
+/** Canonical Thai phone: digits only, leading 0, 10-digit mobile (CR-210 — no landlines). */
 export function normalizeKioskPhone(raw: string): string | null {
 	const digits = raw.replace(/\D/g, '');
 	const local = /^66\d{9}$/.test(digits) ? `0${digits.slice(2)}` : digits;

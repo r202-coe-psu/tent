@@ -178,7 +178,7 @@ describe('user-service', () => {
 		).rejects.toMatchObject({ code: 'CONFLICT' });
 	});
 
-	it.each(['022222222', '02-222-2222'])('rejects a 9-digit landline %s (CR-206)', async (phone) => {
+	it.each(['022222222', '02-222-2222'])('rejects a 9-digit landline %s (CR-210)', async (phone) => {
 		await expect(
 			createUser({
 				name: 'vol_a',

@@ -138,7 +138,7 @@ export function sanitizePhoneTyping(value: string): string {
 	return digits.slice(0, digits.startsWith('66') ? 11 : 10);
 }
 
-/** System-wide phone rule (CR draft-mobile-phone-only FR-1/FR-6): 10-digit mobile, no landlines. */
+/** System-wide phone rule (CR-210 FR-1/FR-6): 10-digit mobile, no landlines. */
 export const THAI_MOBILE_PHONE_MESSAGE = 'เบอร์โทรต้องเป็นตัวเลข 10 หลัก ขึ้นต้นด้วย 0';
 const THAI_MOBILE_PHONE_RE = /^0\d{9}$/;
 
@@ -148,7 +148,7 @@ export function isThaiMobilePhone(value: string | null | undefined): boolean {
 }
 
 /** Required mobile: outputs the normalised 10-digit number (the form `phone_hash` is computed from). */
-export const thaiMobilePhoneSchema = z
+export const requiredThaiMobilePhoneSchema = z
 	.string({ error: THAI_MOBILE_PHONE_MESSAGE })
 	.transform(normalizeThaiPhone)
 	.pipe(z.string().regex(THAI_MOBILE_PHONE_RE, THAI_MOBILE_PHONE_MESSAGE));
@@ -158,9 +158,7 @@ export const phoneSchema = z
 	.string({ error: 'กรุณากรอกเบอร์โทรศัพท์' })
 	.nullable()
 	.transform((value) => value?.trim() || null)
-	.pipe(thaiMobilePhoneSchema.nullable());
-
-export const THAI_MOBILE_PHONE_MESSAGE = 'เบอร์โทรต้องเป็นตัวเลข 10 หลัก ขึ้นต้นด้วย 0';
+	.pipe(requiredThaiMobilePhoneSchema.nullable());
 
 /**
  * Walk-in donor phone: blank / missing → null; otherwise normalized (`+66…` → `0…`,
@@ -175,7 +173,7 @@ export const thaiMobilePhoneSchema = z
 	.pipe(
 		z.union([
 			z.literal('').transform((): null => null),
-			z.string().regex(/^0\d{9}$/, THAI_MOBILE_PHONE_MESSAGE)
+			z.string().regex(THAI_MOBILE_PHONE_RE, THAI_MOBILE_PHONE_MESSAGE)
 		])
 	);
 

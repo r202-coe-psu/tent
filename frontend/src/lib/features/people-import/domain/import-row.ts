@@ -265,7 +265,7 @@ function resolveInt(raw: RawRow, header: string, sink: ErrorSink): number | unde
 }
 
 /**
- * Phone cells: 10-digit mobile (CR-206; `+66` / separators normalised), and "ไม่มี"/"-" reads as no phone.
+ * Phone cells: 10-digit mobile (CR-210; `+66` / separators normalised), and "ไม่มี"/"-" reads as no phone.
  *
  * `phoneSchema` is `nullable()` but rejects a non-numeric string, and Excel
  * users write "081-234-5678" — the separators are stripped here so a formatted

@@ -222,7 +222,7 @@ describe('Instant ThaiID Duplicate Check (#389)', () => {
 			expect(isValidPhoneCandidate('061 234 5678')).toBe(true);
 		});
 
-		it('rejects 9-digit landline numbers (CR-206)', () => {
+		it('rejects 9-digit landline numbers (CR-210)', () => {
 			expect(isValidPhoneCandidate('021234567')).toBe(false);
 			expect(isValidPhoneCandidate('02-123-4567')).toBe(false);
 		});

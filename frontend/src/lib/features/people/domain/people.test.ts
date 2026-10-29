@@ -601,7 +601,7 @@ describe('station1EvacueeInputSchema emergency contact', () => {
 		}
 	});
 
-	it('normalises a formatted emergency phone and rejects a 9-digit landline (CR-206)', () => {
+	it('normalises a formatted emergency phone and rejects a 9-digit landline (CR-210)', () => {
 		const ok = station1EvacueeInputSchema.safeParse({
 			...base,
 			emergency_contact: { name: 'มานี', phone: '081-234-5678', relation: 'มารดา' }

@@ -98,7 +98,7 @@ describe('validateRow — cell resolution', () => {
 		expect(result.payload?.head.phone).toBe('0812345678');
 	});
 
-	it('normalises +66 and rejects a 9-digit landline (CR-206)', () => {
+	it('normalises +66 and rejects a 9-digit landline (CR-210)', () => {
 		const intl = validateRow(minimalHead({ [H.phone]: '+66812345678' }), 1, emptyLookups());
 		expect(intl.payload?.head.phone).toBe('0812345678');
 

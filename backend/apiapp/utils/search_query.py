@@ -32,7 +32,7 @@ MAX_NAME_WORDS = 4
 
 _DIGITS_ONLY = re.compile(r"^\d+$")
 _PASSPORT = re.compile(r"^[A-Za-z]{1,2}\d{6,9}$")
-_THAI_PHONE = re.compile(r"^0\d{9}$")  # 10-digit mobile only (CR-206)
+_THAI_PHONE = re.compile(r"^0\d{9}$")  # 10-digit mobile only (CR-210)
 
 
 def _normalize_phone(value: str) -> str | None:

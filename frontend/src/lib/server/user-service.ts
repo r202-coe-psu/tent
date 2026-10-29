@@ -274,7 +274,7 @@ async function readUserDoc(name: string, action: string): Promise<CouchUserDoc> 
 	return got.data as CouchUserDoc;
 }
 
-/** Account phone = a 10-digit mobile that also signs in (CR-206 — landlines no longer accepted). */
+/** Account phone = a 10-digit mobile that also signs in (CR-210 — landlines no longer accepted). */
 const PHONE_LOGIN_RE = /^0\d{9}$/;
 
 function normalizePhone(value: string | null | undefined): string | null {

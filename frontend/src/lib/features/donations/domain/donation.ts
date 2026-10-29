@@ -48,7 +48,7 @@ export const donationPreDeclarationInputSchema = z.object({
 	shelter_code: z.string().regex(/^[A-Za-z0-9_-]{1,20}$/, 'Invalid shelter code.'),
 	donor: z.object({
 		name: z.string().min(1, 'Name is required'),
-		phone: thaiMobilePhoneSchema, // CR-206: 10-digit mobile, normalised
+		phone: thaiMobilePhoneSchema, // CR-210: 10-digit mobile, normalised
 		line_id: z.string().optional(),
 		email: z.string().email().optional().or(z.literal(''))
 	}),

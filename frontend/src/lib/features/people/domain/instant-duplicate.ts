@@ -93,6 +93,8 @@ export async function performFederatedDuplicateLookup(
 	deps?: FederatedDuplicateLookupDeps
 ): Promise<InstantDuplicateMatch[]> {
 	const digitsOnly = query.trim().replace(/\D/g, '');
+	// 9 digits stays accepted on purpose (CR-210): this lookup finds legacy docs that still
+	// store a 9-digit landline; it is not a phone input, so FR-1 does not apply.
 	if (digitsOnly.length !== 13 && digitsOnly.length !== 10 && digitsOnly.length !== 9) return [];
 
 	const searchLocal =

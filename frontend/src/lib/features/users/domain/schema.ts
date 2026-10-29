@@ -1,5 +1,9 @@
 import { z } from 'zod';
-import { shelterCodeSchema, thaiMobilePhoneSchema, THAI_MOBILE_PHONE_MESSAGE } from '$lib/db/model';
+import {
+	shelterCodeSchema,
+	requiredThaiMobilePhoneSchema,
+	THAI_MOBILE_PHONE_MESSAGE
+} from '$lib/db/model';
 import { SA_GRANTABLE_CAPABILITIES, SHELTER_CAPABILITIES } from '$lib/auth/roles';
 import { passwordSchema } from '$lib/auth/password-schema';
 import { SECURITY_QUESTION_IDS } from '$lib/auth/security-questions';
@@ -13,8 +17,8 @@ export const phoneSchema = z
 	.trim()
 	.regex(/^0[0-9]{9}$/, THAI_MOBILE_PHONE_MESSAGE);
 
-/** Contact phone on an account: a 10-digit mobile (landlines no longer accepted — CR-206). */
-export const contactPhoneSchema = thaiMobilePhoneSchema;
+/** Contact phone on an account: a 10-digit mobile (landlines no longer accepted — CR-210). */
+export const contactPhoneSchema = requiredThaiMobilePhoneSchema;
 
 /** Username: allows phone number or alphanumeric (letters, digits, _, -, .) */
 export const usernameSchema = z
