@@ -4,7 +4,7 @@ title: ประเภทศูนย์ (site_kind) มาจาก master data
 status: approved
 date: 2026-10-26
 created: 2026-10-26
-updated: 2026-10-26
+updated: 2026-10-29
 requested_by: Suthinan Den (feedback roleplay 23/10/69 — issue #836)
 decided_by: Soravit Sukkarn (Team Lead) — approved 2026-10-26
 layer: volatile
@@ -86,7 +86,8 @@ affects:
   label จาก master (`formatMasterLabelByCode`, ไม่กรอง status); ตัวกรองแสดง "ทั้งหมด" + ทุก item `active`
 - **FR-11** — การสร้างศูนย์จากตัวกรองชนิด (D-HOST-NAV) ใช้ code ที่กรองอยู่เป็นค่าเริ่มต้น; "ทั้งหมด" → item `is_default`
 - **FR-12** — import ศูนย์: คอลัมน์ `ชนิดสถานที่` เป็นคอลัมน์ master (แบบ `shelter_type`) — รับ code หรือ
-  `label_th`/`label_en` ของ item `active`; ว่าง → item `is_default`; template dropdown จากรายการ ณ ตอนดาวน์โหลด
+  `label_th`/`label_en` ของ item `active` (รวมรูป `label_th (label_en)` ที่ template ก่อน CR นี้เขียนไว้);
+  ว่าง → สร้างใหม่ใช้ item `is_default`, อัปเดตศูนย์เดิมคง `site_kind` ที่เก็บไว้ (D-4); template dropdown จากรายการ ณ ตอนดาวน์โหลด
 
 **Public plane**
 
@@ -127,6 +128,7 @@ affects:
 - [ ] ส่ง `site_kind` ที่ไม่มีใน master หรือ `inactive` ผ่าน BFF → reject
 - [ ] doc เดิมที่ไม่มี `site_kind` แสดงเป็น "ศูนย์อพยพ" ทั้ง back-office และ public
 - [ ] import ไฟล์ที่ `ชนิดสถานที่` = `บ้านพี่เลี้ยง` / `host_house` / ว่าง → `host_house` / `host_house` / `evacuation_center`
+- [ ] import แบบอัปเดตศูนย์ `host_house` ที่ `ชนิดสถานที่` ว่าง → ศูนย์ยังเป็น `host_house` (D-4)
 - [ ] import ไฟล์ที่ `ชนิดสถานที่` = ค่าที่ไม่มีใน master → แถว error
 - [ ] หน้า public: ศูนย์ `field_hospital` แสดง label ไทย/อังกฤษตามภาษา, ไอคอนศูนย์, กรองได้
 - [ ] `/public/v1/shelters?site_kind=field_hospital` คืนเฉพาะศูนย์ชนิดนั้น
@@ -154,9 +156,14 @@ item ใน seed → doc เดิมทุกตัวยัง valid. Deploy �
 - **D-1 (bump `schema_v` ของ shelter หรือไม่):** **ไม่ bump** — รูป doc ไม่เปลี่ยน (string เดิม, code เดิม). เลี่ยงชนลำดับกับ PR #756 (#647) และ #812 ที่จะใช้ 7 → 8 → 9.
 - **D-2 (ที่มาของ label หน้า public):** **BFF `config/site-kinds` (FR-15)** ตาม precedent `config/shelter-types`: แก้ label ที่ System Management แล้วหน้า public เห็นภายใน cache 5 นาที โดยไม่ต้อง re-project.
 - **D-3 (ตัวนับหน้า `/shelters`):** **นับแยกทุก code** (`counts_by_site_kind: {code: n}`) แล้วแสดงตาม label จาก master data.
+- **D-4 (import แบบอัปเดต ช่อง `ชนิดสถานที่` ว่าง — เคาะ 2026-10-29 โดย Suthinan Den ระหว่าง review PR):** **คงค่าเดิม** —
+  ช่องว่างใช้ item `is_default` เฉพาะตอนสร้างศูนย์ใหม่; ตอนอัปเดตไม่เขียน `site_kind` จึงไม่ทับประเภทเดิม
+  (เดิม FR-12 ให้ใช้ `is_default` ทุกกรณี ทำให้ `host_house` ถูกเปลี่ยนเป็น `evacuation_center` โดยไม่รู้ตัว)
 
 ## Decision log
 
 - 2026-10-26 — proposed (#836 โดย Suthinan Den). เคาะแล้วใน issue: แทน `site_kind` (ไม่เพิ่ม field), global-only แบบ CR-186,
   เลือกได้ค่าเดียว (req), แสดง label ในหน้า public. track ด้วย CR ไฟล์ (เจ้าของสั่ง 2026-10-26)
 - 2026-10-26 — approved (#836) โดย Soravit Sukkarn (Team Lead). เคาะ D-1..D-3 ตามข้อเสนอของผู้เสนอ CR.
+- 2026-10-29 — PR review ของ #836: เพิ่ม D-4 (ช่องว่างตอน import แบบอัปเดตคงค่าเดิม) และให้ FR-12 รับรูป
+  `label_th (label_en)` จาก template เดิม — เคาะโดย Suthinan Den, บันทึกใน CR นี้ตามที่เจ้าของสั่ง
