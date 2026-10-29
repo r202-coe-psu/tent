@@ -142,9 +142,9 @@ describe('buildBoxLabels', () => {
 			name: pointId ?? 'main'
 		});
 		const items: BoxLabelSourceItem[] = [
-			{ item_id: 'a', item_name: 'ข้าวสาร', qty: 1, unit: 'kg', pointId: 'gate-2' },
-			{ item_id: 'b', item_name: 'ยา', qty: 2, unit: 'box', pointId: null },
-			{ item_id: 'c', item_name: 'น้ำ', qty: 3, unit: 'bottle', pointId: 'gate-2' }
+			{ item_id: 'a', item_name: 'ข้าวสาร', qty: 1, unit: 'kg', drop_off_point_id: 'gate-2' },
+			{ item_id: 'b', item_name: 'ยา', qty: 2, unit: 'box', drop_off_point_id: null },
+			{ item_id: 'c', item_name: 'น้ำ', qty: 3, unit: 'bottle', drop_off_point_id: 'gate-2' }
 		];
 
 		const labels = buildBoxLabels(source({}, items), pointNamed);

@@ -12,8 +12,8 @@ import {
 	type DonationTrackView
 } from './tracking';
 
-/** Where one line goes. Absent until bookings can split across drop-off points (#813). */
-export type BoxLabelSourceItem = DonationTrackItem & { pointId?: string | null };
+/** Where one line goes (CR-206 FR-MP-1). Absent until #813 splits bookings across points. */
+export type BoxLabelSourceItem = DonationTrackItem & { drop_off_point_id?: string | null };
 
 export type BoxLabelSource = Omit<DonationTrackView, 'items'> & { items: BoxLabelSourceItem[] };
 
@@ -63,7 +63,7 @@ export function buildBoxLabels(
 	const linesByPoint = new Map<string | null, BoxLabelLine[]>();
 	donation.items.forEach((item, index) => {
 		if (rejected[index] !== null) return;
-		const pointId = item.pointId ?? null;
+		const pointId = item.drop_off_point_id ?? null;
 		const line: BoxLabelLine = { name: item.item_name, qty: item.qty, unit: item.unit };
 		const group = linesByPoint.get(pointId);
 		if (group) group.push(line);
