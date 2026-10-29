@@ -7,7 +7,7 @@ from datetime import UTC, datetime, timedelta
 import pytest
 from httpx import AsyncClient
 from tent_model.api_key import ApiKey
-from tent_model.public_shelter import GeoPoint, PublicShelter
+from tent_model.public_shelter import DonationPoint, GeoPoint, PublicShelter
 
 from apiapp.utils.masking import sha256_hex
 from apiapp.utils.ulid import new_ulid
@@ -159,3 +159,37 @@ async def test_m2_v1_endpoints_removed(
         "/external/v1/persons/shelter-residency?cid=1909800123456", headers=bearer_headers
     )
     assert res_residency.status_code == 404
+
+
+async def test_external_shelter_detail_returns_donation_points(
+    client: AsyncClient, valid_api_key: ApiKey, bearer_headers: dict[str, str]
+) -> None:
+    """CR-205 D-4: the legacy detail shares ShelterDetailResponse, so it carries the points."""
+    await PublicShelter(
+        id="SH900",
+        shelter_code="SH900",
+        name="ศูนย์ทดสอบ",
+        status="open",
+        capacity=10,
+        donation_points=[
+            DonationPoint(
+                id="p1",
+                name="โรงยิม",
+                types=["food_dry"],
+                geo=GeoPoint(lat=7.0086, lng=100.4747),
+                location_note="ประตู 2",
+            )
+        ],
+        updated_at=datetime.now(UTC),
+    ).insert()
+    res = await client.get("/external/v1/shelters/SH900", headers=bearer_headers)
+    assert res.status_code == 200
+    assert res.json()["shelter"]["donation_points"] == [
+        {
+            "id": "p1",
+            "name": "โรงยิม",
+            "types": ["food_dry"],
+            "geo": {"lat": 7.0086, "lng": 100.4747},
+            "location_note": "ประตู 2",
+        }
+    ]

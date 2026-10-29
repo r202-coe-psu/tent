@@ -4,11 +4,14 @@ import { createRawSnippet, flushSync, mount, tick, unmount } from 'svelte';
 import type { DonationNeedsEntry } from '../domain/donation-map';
 import type { PublicShelterItem } from '../domain/types';
 import DonationNeedsMap from './donation-needs-map.svelte';
+import DonationNeedsMapHarness from './__fixtures__/donation-needs-map-harness.svelte';
 
 type MapProps = {
 	shelters: Array<{ id: string; code: string; pin: { label: string; fill: string } }>;
+	points: Array<{ id: string; shelterCode: string }>;
 	selectedId: string | null;
 	onSelectShelter: (id: string) => void;
+	onSelectPoint: (id: string) => void;
 	onLoadError: () => void;
 };
 
@@ -18,9 +21,19 @@ const sheltersQuery = vi.hoisted(() => ({
 	isError: false,
 	isSuccess: true
 }));
+const shelterQuery = vi.hoisted(() => ({
+	data: undefined as { donation_points?: unknown[] } | undefined,
+	codes: [] as Array<string | null | undefined>
+}));
 const mapProps = vi.hoisted(() => ({ current: null as unknown }));
 
-vi.mock('../application/queries', () => ({ usePublicShelters: () => sheltersQuery }));
+vi.mock('../application/queries', () => ({
+	usePublicShelters: () => sheltersQuery,
+	usePublicShelter: (code: () => string | null | undefined) => {
+		shelterQuery.codes.push(code());
+		return shelterQuery;
+	}
+}));
 // WebGL does not exist in happy-dom; the stub records what the component hands the map.
 vi.mock('./shelter-map.svelte', () => ({
 	default: (_anchor: unknown, props: unknown) => {
@@ -76,6 +89,7 @@ const cardText = () => document.body.querySelector('[data-testid="card"]')?.text
 beforeEach(() => {
 	vi.clearAllMocks();
 	mapProps.current = null;
+	Object.assign(shelterQuery, { data: undefined, codes: [] });
 	Object.assign(sheltersQuery, {
 		data: {
 			shelters: [
@@ -145,6 +159,63 @@ describe('DonationNeedsMap', () => {
 
 		document.body.querySelector<HTMLButtonElement>('button[aria-label]')?.click();
 		expect(onSelect).toHaveBeenCalledExactlyOnceWith(null);
+	});
+
+	it('draws no drop-off pins before a shelter is picked', async () => {
+		await render();
+		expect(map().points).toEqual([]);
+		expect(shelterQuery.codes).toEqual([null]);
+	});
+
+	it("pins only the picked shelter's drop-off points, read from its detail (CR-205 AC-12)", async () => {
+		shelterQuery.data = {
+			donation_points: [
+				{ id: 'p1', name: 'โรงยิม', geo: { lat: 7.01, lng: 100.41 }, location_note: 'ประตู 2' },
+				{ id: 'p2', name: 'ห้องพยาบาล', geo: { lat: 7.02, lng: 100.42 } }
+			]
+		};
+		await render({ selectedCode: 'SH002' });
+		expect(shelterQuery.codes).toEqual(['SH002']);
+		expect(map().points.map((p) => [p.id, p.shelterCode])).toEqual([
+			['p1', 'SH002'],
+			['p2', 'SH002']
+		]);
+
+		map().onSelectPoint('p1');
+		await settle();
+		const note = document.body.querySelector('[data-testid="donation-needs-map-point-note"]');
+		expect(note?.textContent).toContain('โรงยิม');
+		expect(note?.textContent).toContain('ประตู 2');
+	});
+
+	it('closes the point note when another shelter is picked, so it does not reopen later', async () => {
+		shelterQuery.data = {
+			donation_points: [{ id: 'p1', name: 'โรงยิม', geo: { lat: 7.01, lng: 100.41 } }]
+		};
+		instance = mount(DonationNeedsMapHarness, {
+			target: document.body,
+			props: { shelters: board, initialCode: 'SH002', card: cardSnippet }
+		});
+		await settle();
+		const note = () => document.body.querySelector('[data-testid="donation-needs-map-point-note"]');
+
+		map().onSelectPoint('p1');
+		await settle();
+		expect(note()).not.toBeNull();
+
+		const pick = (code: string) =>
+			document.body.querySelector<HTMLButtonElement>(`[data-testid="pick-${code}"]`)!.click();
+		pick('SH001');
+		await settle();
+		pick('SH002');
+		await settle();
+		expect(note()).toBeNull();
+	});
+
+	it('adds no drop-off pin for a picked shelter without ticked points', async () => {
+		shelterQuery.data = { donation_points: [] };
+		await render({ selectedCode: 'SH002' });
+		expect(map().points).toEqual([]);
 	});
 
 	it('shows no card for a shelter that is not on the map', async () => {

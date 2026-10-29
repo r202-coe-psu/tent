@@ -6,7 +6,7 @@ from datetime import datetime
 from typing import Literal
 
 from pydantic import BaseModel, Field
-from tent_model.public_shelter import GeoJsonPoint, GeoPoint
+from tent_model.public_shelter import DonationPoint, GeoJsonPoint, GeoPoint
 
 SiteKind = Literal["evacuation_center", "host_house"]
 
@@ -116,6 +116,9 @@ class ShelterDetail(BaseModel):
     contact: ShelterContactDetail
     faq: list[ShelterFaqDetail]
     accepts_pre_registration: bool = False
+    # CR-205: ticked storage points with a pin, projected by the worker. [] = the shelter's
+    # own location is the only drop-off point. Detail only; the list does not carry it.
+    donation_points: list[DonationPoint] = Field(default_factory=list)
 
 
 class ShelterDetailResponse(BaseModel):
