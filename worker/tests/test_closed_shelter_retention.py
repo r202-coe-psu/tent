@@ -279,8 +279,11 @@ async def test_retention_cycle_reads_the_months_from_registry_config(db: None) -
         "retention_months_after_close": 1200,
     }
 
-    with patch(
-        "worker.retention.job.expire_declared_donations", new_callable=AsyncMock
+    with (
+        patch("worker.retention.job.expire_declared_donations", new_callable=AsyncMock),
+        patch(
+            "worker.retention.job.sweep_orphan_donation_photos", new_callable=AsyncMock
+        ),
     ):
         await run_retention_once(couch)
 

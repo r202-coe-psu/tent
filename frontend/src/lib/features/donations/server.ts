@@ -68,3 +68,11 @@ export {
 	reviewDonationInputSchema
 } from './domain/item-review';
 export type { LineReviewResult } from './domain/item-review';
+export {
+	DONATION_PHOTO_MAX_UPLOAD_BYTES,
+	donationPhotoIdsSchema,
+	rejectDonationPhotoDocs,
+	rejectDonationPhotoIds,
+	shelterAcceptsDonations
+} from './domain/donation-photos';
+export type { DonationPhotoErrorCode, StoredDonationPhoto } from './domain/donation-photos';

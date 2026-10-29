@@ -12,6 +12,7 @@ import {
 	DONATION_RECEIVED_MANGO_INDEX,
 	DONATION_RECEIVED_PHONE_MANGO_INDEX,
 	DONATION_BOOKING_REF_MANGO_INDEX,
+	DONATION_PHOTO_ORPHAN_MANGO_INDEX,
 	PEOPLE_MANGO_INDEXES,
 	REFERRAL_MANGO_INDEXES,
 	KIOSK_LOOKUP_MANGO_INDEXES,
@@ -464,7 +465,8 @@ async function deployMangoIndexes(db: string): Promise<void> {
 		DONATION_RECEIVED_MANGO_INDEX,
 		DONATION_RECEIVED_PHONE_MANGO_INDEX,
 		DONATION_BOOKING_REF_MANGO_INDEX,
-		STOCK_LEDGER_LOT_NO_MANGO_INDEX
+		STOCK_LEDGER_LOT_NO_MANGO_INDEX,
+		DONATION_PHOTO_ORPHAN_MANGO_INDEX
 	];
 	for (const def of defs) {
 		const { status, data } = await couchReq('POST', `/${db}/_index`, def);
@@ -476,7 +478,7 @@ async function deployMangoIndexes(db: string): Promise<void> {
 		}
 	}
 	console.log(
-		`  ✓ ${db}: referral, ledger, people, requisition and Daily SOP role Mango indexes deployed`
+		`  ✓ ${db}: referral, ledger, people, requisition, Daily SOP role and donor photo Mango indexes deployed`
 	);
 }
 

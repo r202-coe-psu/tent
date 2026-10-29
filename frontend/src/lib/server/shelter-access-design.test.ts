@@ -27,6 +27,7 @@ import {
 	DONATION_RECEIVED_PHONE_MANGO_INDEX,
 	DONATION_BOOKING_REF_MANGO_INDEX,
 	STOCK_LEDGER_LOT_NO_MANGO_INDEX,
+	DONATION_PHOTO_ORPHAN_MANGO_INDEX,
 	KIOSK_LOOKUP_MANGO_INDEXES,
 	BULK_RETURN_ENTRY_MANGO_INDEXES,
 	KIOSK_LOOKUP_WARMUP_SELECTORS,
@@ -332,7 +333,8 @@ describe('buildValidateDocUpdate', () => {
 			[DONATION_RECEIVED_MANGO_INDEX],
 			[DONATION_RECEIVED_PHONE_MANGO_INDEX],
 			[DONATION_BOOKING_REF_MANGO_INDEX],
-			[STOCK_LEDGER_LOT_NO_MANGO_INDEX]
+			[STOCK_LEDGER_LOT_NO_MANGO_INDEX],
+			[DONATION_PHOTO_ORPHAN_MANGO_INDEX]
 		];
 		const byName = new Map<string, string>();
 		for (const { name, index } of lists.flat()) {
@@ -392,6 +394,17 @@ describe('buildValidateDocUpdate', () => {
 			`_design/${STOCK_LEDGER_LOT_NO_MANGO_INDEX.ddoc}`,
 			STOCK_LEDGER_LOT_NO_MANGO_INDEX.name
 		]);
+	});
+
+	it('indexes only donor photos no booking has bound, by age (CR-175 FR-16)', () => {
+		expect(DONATION_PHOTO_ORPHAN_MANGO_INDEX.index).toEqual({
+			fields: ['created_at'],
+			partial_filter_selector: {
+				type: 'image',
+				purpose: 'donation',
+				donation_id: { $exists: false }
+			}
+		});
 	});
 
 	it('declares the bulk return Mango indexes: entries by pool, moves by target pool (#658)', () => {

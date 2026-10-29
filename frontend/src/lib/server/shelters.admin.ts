@@ -21,6 +21,7 @@ import {
 	DONATION_RECEIVED_MANGO_INDEX,
 	DONATION_RECEIVED_PHONE_MANGO_INDEX,
 	DONATION_BOOKING_REF_MANGO_INDEX,
+	DONATION_PHOTO_ORPHAN_MANGO_INDEX,
 	PEOPLE_MANGO_INDEXES,
 	REFERRAL_MANGO_INDEXES,
 	KIOSK_LOOKUP_MANGO_INDEXES,
@@ -584,6 +585,18 @@ export async function deployPeopleMangoIndexes(db: string): Promise<void> {
 				`Mango index ${def.name} deploy failed (${res.status}): ${detail.reason ?? detail.error ?? 'unknown'}`
 			);
 		}
+	}
+}
+
+/** Idempotent deploy of the unbound donor photo index the worker's sweep reads (CR-175 FR-16). */
+export async function deployDonationPhotoMangoIndex(db: string): Promise<void> {
+	const res = await adminRaw(`/${db}/_index`, 'POST', DONATION_PHOTO_ORPHAN_MANGO_INDEX);
+	if (res.status >= 400) {
+		const detail = (res.data as { reason?: string; error?: string } | null) ?? {};
+		throw new ServiceError(
+			'INTERNAL',
+			`Mango index ${DONATION_PHOTO_ORPHAN_MANGO_INDEX.name} deploy failed (${res.status}): ${detail.reason ?? detail.error ?? 'unknown'}`
+		);
 	}
 }
 

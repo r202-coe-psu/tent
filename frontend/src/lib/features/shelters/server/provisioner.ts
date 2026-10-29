@@ -9,6 +9,7 @@ import {
 	deployBulkReturnEntryMangoIndexes,
 	deployDailySopRoleMangoIndexes,
 	deployDonationReceivedMangoIndex,
+	deployDonationPhotoMangoIndex,
 	deployPeopleMangoIndexes,
 	deployRegistryDesign,
 	deployReferralMangoIndexes,
@@ -404,6 +405,8 @@ async function provisionShelterUnlocked(
 	await assertActive?.();
 	await deployDonationReceivedMangoIndex(db);
 	steps.push({ step: 'donation-received-mango', status: 200 });
+	await deployDonationPhotoMangoIndex(db);
+	steps.push({ step: 'donation-photo-mango', status: 200 });
 
 	await assertActive?.();
 	const registry = await adminRaw(`/${SHELTER_REGISTRY_DB}`, 'PUT');

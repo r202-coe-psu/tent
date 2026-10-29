@@ -123,6 +123,27 @@ export const STOCK_LEDGER_LOT_NO_MANGO_INDEX = {
 	type: 'json' as const
 };
 
+/**
+ * Donor photos no booking has bound yet (CR-175 donor photos FR-16). Partial: a photo
+ * leaves the index the moment the worker writes its `donation_id`, so the sweep never
+ * re-reads bound photos. CouchDB never picks a partial index on its own, so the worker
+ * names this one in `use_index` (`worker/src/worker/retention/donation_photos.py`) and
+ * repeats the filter in its selector.
+ */
+export const DONATION_PHOTO_ORPHAN_MANGO_INDEX = {
+	index: {
+		fields: ['created_at'],
+		partial_filter_selector: {
+			type: 'image',
+			purpose: 'donation',
+			donation_id: { $exists: false }
+		}
+	},
+	ddoc: 'donation-photo-orphans',
+	name: 'image-donation-unbound-created-idx',
+	type: 'json' as const
+};
+
 const DAILY_SOP_ROLE_VDU_CONTRACT = JSON.stringify({
 	version: DAILY_SOP_ROLE_QUESTION_VERSION,
 	roles: DAILY_SOP_ROLES.map((role) => ({

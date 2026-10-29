@@ -32,7 +32,8 @@
 		type DonorContact,
 		type LineReviewDecision,
 		type PendingDonationRow,
-		type RejectDonationInput
+		type RejectDonationInput,
+		DonationPhotoStrip
 	} from '$lib/features/donations';
 	import { useShelters } from '$lib/features/shelters';
 	import { DonationLotsTable, useStockFormItems } from '$lib/features/operations';
@@ -496,6 +497,9 @@
 				{/if}
 			</div>
 		</div>
+
+		<!-- CR-175 FR-12: the donor's photos, so the goods can be judged before they arrive. -->
+		<DonationPhotoStrip photoIds={request.photos} shelterCode={request.shelter_code} />
 
 		<!-- Logistics Info Cards Grid (3 boxes) -->
 		<div class="grid grid-cols-1 gap-4 md:grid-cols-2">

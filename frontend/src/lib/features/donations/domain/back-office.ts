@@ -61,6 +61,8 @@ export interface PendingDonationRow {
 	 * before `received_summary.items` existed — the list then falls back to `items`.
 	 */
 	received_items?: Array<{ item_id?: string; free_text?: string; qty: string; unit: string }>;
+	/** Donor photos, `image:{ulid}` in `shelter_code`'s DB (CR-175 donor photos FR-12). */
+	photos?: string[];
 }
 
 /**
