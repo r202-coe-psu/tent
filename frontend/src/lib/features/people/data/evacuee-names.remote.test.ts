@@ -40,7 +40,7 @@ describe('getEvacueeNamesByIds', () => {
 		expect(couch.findQueries).toEqual([
 			{
 				dbName: 'shelter_sh001',
-				selector: { _id: { $in: [a] } },
+				selector: { _id: { $gte: a, $lte: a, $in: [a] } },
 				fields: ['_id', 'first_name', 'last_name', 'nickname'],
 				limit: 1
 			}
@@ -79,8 +79,9 @@ describe('getEvacueeNamesByIds', () => {
 		const out = await getEvacueeNamesByIds([a, 'volunteer:x', 'household:y', 'evacuee:missing']);
 
 		expect(out.map((r) => r._id)).toEqual([a]);
+		const sorted = [a, 'evacuee:missing'].sort();
 		expect(couch.findQueries[0].selector).toEqual({
-			_id: { $in: [a, 'evacuee:missing'].sort() }
+			_id: { $gte: sorted[0], $lte: sorted[1], $in: sorted }
 		});
 	});
 
@@ -103,6 +104,24 @@ describe('getEvacueeNamesByIds', () => {
 		const sizes = couch.findQueries.map((q) => (q.selector._id as { $in: string[] }).$in.length);
 		expect(sizes).toEqual([100, 100, 30]);
 		expect(couch.findQueries.map((q) => q.limit)).toEqual(sizes);
+	});
+
+	it('bounds each chunk with $gte = first id and $lte = last id next to $in', async () => {
+		const ids = Array.from({ length: 230 }, (_, i) => `evacuee:${String(i).padStart(4, '0')}`);
+
+		await getEvacueeNamesByIds([...ids].reverse());
+
+		const sorted = [...ids].sort();
+		const expected = [sorted.slice(0, 100), sorted.slice(100, 200), sorted.slice(200)];
+		expect(couch.findQueries.map((q) => q.selector)).toEqual(
+			expected.map((chunk) => ({ _id: { $gte: chunk[0], $lte: chunk.at(-1), $in: chunk } }))
+		);
+	});
+
+	it('makes the in-memory _find throw on an operator it does not support', async () => {
+		await expect(
+			couch.couchDbModule.findDocs('shelter_sh001', { selector: { _id: { $regex: '^evacuee:' } } })
+		).rejects.toThrow('unsupported operator $regex');
 	});
 });
 

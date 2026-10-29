@@ -45,7 +45,7 @@ describe('getVolunteerNamesByIds', () => {
 		expect(couch.findQueries).toEqual([
 			{
 				dbName: 'shelter_sh001',
-				selector: { _id: { $in: [a] } },
+				selector: { _id: { $gte: a, $lte: a, $in: [a] } },
 				fields: ['_id', 'first_name', 'last_name'],
 				limit: 1
 			}
@@ -76,8 +76,9 @@ describe('getVolunteerNamesByIds', () => {
 		const out = await getVolunteerNamesByIds([a, 'evacuee:x', 'volunteer:missing']);
 
 		expect(out.map((r) => r._id)).toEqual([a]);
+		const sorted = [a, 'volunteer:missing'].sort();
 		expect(couch.findQueries[0].selector).toEqual({
-			_id: { $in: [a, 'volunteer:missing'].sort() }
+			_id: { $gte: sorted[0], $lte: sorted[1], $in: sorted }
 		});
 	});
 
@@ -100,6 +101,18 @@ describe('getVolunteerNamesByIds', () => {
 		const sizes = couch.findQueries.map((q) => (q.selector._id as { $in: string[] }).$in.length);
 		expect(sizes).toEqual([100, 100, 30]);
 		expect(couch.findQueries.map((q) => q.limit)).toEqual(sizes);
+	});
+
+	it('bounds each chunk with $gte = first id and $lte = last id next to $in', async () => {
+		const ids = Array.from({ length: 230 }, (_, i) => `volunteer:${String(i).padStart(4, '0')}`);
+
+		await getVolunteerNamesByIds([...ids].reverse());
+
+		const sorted = [...ids].sort();
+		const expected = [sorted.slice(0, 100), sorted.slice(100, 200), sorted.slice(200)];
+		expect(couch.findQueries.map((q) => q.selector)).toEqual(
+			expected.map((chunk) => ({ _id: { $gte: chunk[0], $lte: chunk.at(-1), $in: chunk } }))
+		);
 	});
 });
 

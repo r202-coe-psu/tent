@@ -47,6 +47,8 @@ export async function getEvacueeNamesByIds(
 	const wanted = uniqueEvacueeIds(ids);
 	if (wanted.length === 0) return [];
 	const db = getShelterDb(shelterCode);
+	// `wanted` is sorted, so each chunk is too: its first and last id bound the `_all_docs` range
+	// that `$gte`/`$lte` hand to CouchDB; `$in` alone cannot, and would scan from the start.
 	const chunks: string[][] = [];
 	for (let i = 0; i < wanted.length; i += KEYS_PER_READ) {
 		chunks.push(wanted.slice(i, i + KEYS_PER_READ));
@@ -55,7 +57,7 @@ export async function getEvacueeNamesByIds(
 		await Promise.all(
 			chunks.map((chunk) =>
 				findDocs<unknown>(db, {
-					selector: { _id: { $in: chunk } },
+					selector: { _id: { $gte: chunk[0], $lte: chunk.at(-1), $in: chunk } },
 					fields: NAME_FIELDS,
 					limit: chunk.length
 				})
