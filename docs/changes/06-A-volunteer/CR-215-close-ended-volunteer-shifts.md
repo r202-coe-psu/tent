@@ -1,16 +1,17 @@
 ---
-id: draft
+id: CR-215 # renumbered from draft-close-ended-volunteer-shifts
 title: กะงานอาสาที่จบแล้วปิดรับสมัคร ไม่แสดงบนกระดาน public และงานที่ไม่เหลือกะแสดงว่า "ปิดรับแล้ว"
-status: proposed
+status: approved
 date: 2026-10-28
-updated: 2026-10-29
+updated: 2026-10-30 # approved (Soravit Sukkarn, Team Lead)
 requested_by: "ผู้รับงาน (@Mhapong) จากการทดสอบ 2026-10-28 (#972)"
-decided_by: project owner
+decided_by: Soravit Sukkarn (Team Lead)
+decision_date: 2026-10-30
 layer: volatile
 affects:
   - docs/changes/06-A-volunteer/CR-180-volunteer-multi-shift-apply.md FR-6 (เพิ่มรหัส `SHIFT_CLOSED`)
   - docs/changes/12-public/CR-185-public-jobs-is-urgent.md FR-3/FR-4/FR-5 (สูตรการ์ดหน้าแรกนับจากกะที่ยังเปิด)
-  - draft-ticket-cancel-rules (PR #999, #967) FR-2 — dependency ของ FR-7
+  - docs/changes/06-A-volunteer/CR-212-ticket-cancel-rules.md FR-2 — dependency ของ FR-7
   - ไม่เปลี่ยน schema และไม่ bump `schema_v`
   - frontend/src/lib/features/volunteers/domain/shift-closing.ts (กฎปิดรับกะ export ผ่าน barrel `$lib/features/volunteers`)
   - frontend/src/lib/features/volunteers/i18n/jobs.i18n.ts (ป้าย "ปิดรับแล้ว")
@@ -21,7 +22,7 @@ affects:
   - frontend/src/lib/features/volunteer-portal/data/volunteer-api.ts (ข้อความของรหัส `SHIFT_CLOSED` ที่ผู้สมัครเห็น)
 ---
 
-# draft-close-ended-volunteer-shifts — กะที่จบแล้วปิดรับสมัคร
+# CR-215 — กะที่จบแล้วปิดรับสมัคร
 
 > **สรุป (TL;DR):**
 >
@@ -70,7 +71,7 @@ affects:
   - งานที่ไม่มีแถวกะ (projection เก่า) ใช้ตัวนับระดับงานเหมือนเดิม
   - งานที่ไม่เหลือกะเปิดไม่แสดงเป็นการ์ด
 - **FR-7:** หน้าหลังบ้านของเจ้าหน้าที่ไม่เปลี่ยน ยังเห็นกะที่ผ่านไปแล้ว
-  - การยกเลิกจากบัตรใช้กฎ "ยกเลิกได้เฉพาะก่อนกะเริ่ม" ของ `draft-ticket-cancel-rules` (PR #999) ซึ่งเป็น dependency ของ draft นี้
+  - การยกเลิกจากบัตรใช้กฎ "ยกเลิกได้เฉพาะก่อนกะเริ่ม" ของ [CR-212](CR-212-ticket-cancel-rules.md) (PR #999) ซึ่งเป็น dependency ของ CR นี้
   - ผลรวม: **สมัครได้ถึงตอนจบกะ แต่ยกเลิกจากบัตรได้ถึงตอนเริ่มกะ** คนที่สมัครระหว่างกะจึงยกเลิกจากบัตรไม่ได้ ต้องให้เจ้าหน้าที่ยกเลิก / mark no-show (CR-104 §3.5) — ยอมรับพฤติกรรมนี้
 
 ## Acceptance
@@ -108,3 +109,4 @@ affects:
 - 2026-10-29 — ผู้รับงานแก้ตาม review รอบ 2 ของ PR #997: W1 (เวลาว่างเป็น `""`), S1 (เงื่อนไข 409), S2 (`affects` ข้อความ error), S3 (นิยามสิ้นวัน)
   - **รอ Team Lead ยืนยัน (W2):** ข้อยกเว้นใน FR-2 ที่ให้ `volunteer-portal/domain` import `volunteers/domain/shift-closing` ตรง ต่างจาก D6 ที่ให้ใช้ barrel เพราะใช้ barrel แล้วเกิด import cycle
 - 2026-10-29 — ผู้รับงานแก้ FR-4 ให้ตรงกับโค้ดใน #983: ลำดับภายในกลุ่มมาจาก API (`shelter_code`, `title`) ไม่ได้เรียงตามกะที่ใกล้ที่สุด
+- 2026-10-30 — Soravit Sukkarn (Team Lead) อนุมัติ CR (D1) และยืนยันข้อยกเว้น barrel ใน FR-2 (W2) รันเลขเป็น CR-215 ย้ายไป `06-A-volunteer/` พร้อมแก้ CR-180 และ CR-185
