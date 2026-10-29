@@ -1,14 +1,4 @@
-/**
- * scan-code.ts — normalize a raw QR/manual scan before matching it against a volunteer.
-
- */
-export function extractScanCode(raw: string): string {
-	const trimmed = raw.trim();
-	const withoutQuery = trimmed.split(/[?#]/)[0] ?? trimmed;
-	if (!withoutQuery.includes('/')) return trimmed;
-	const segments = withoutQuery.split('/').filter(Boolean);
-	return segments[segments.length - 1] || trimmed;
-}
+import { extractScanCode } from '$lib/utils/scan-code';
 
 const VOLUNTEER_ID_PREFIX = 'volunteer:';
 const VOLUNTEER_CODE_RE = /^V-\d+$/i;
