@@ -981,7 +981,7 @@ export function resolveAdjustReason(
 }
 
 /** Sum signed deltas per item — the `stock_balance` read model, computed client-side. */
-export function stockBalance(ledger: StockLedger[]): Map<string, string> {
+export function stockBalance(ledger: readonly StockLedger[]): Map<string, string> {
 	const balance = new Map<string, string>();
 	for (const entry of ledger) {
 		balance.set(entry.item_id, addQty(balance.get(entry.item_id) ?? '0', entry.qty));
