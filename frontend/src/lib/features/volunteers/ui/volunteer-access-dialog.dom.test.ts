@@ -252,3 +252,34 @@ describe('VolunteerAccessDialog for a shelter manager', () => {
 		expect(expiryInput()).toBeNull();
 	});
 });
+
+describe('VolunteerAccessDialog password for an existing account', () => {
+	const passwordInput = () =>
+		document.body.querySelector<HTMLInputElement>('input[id^="volunteer-access-password-"]');
+
+	it.each([
+		['coordinator', COORDINATOR],
+		['shelter manager', MANAGER]
+	])(
+		'hides the password when the profile is linked (%s): the account keeps its own',
+		async (_who, roles) => {
+			await render(roles, { user_name: 'vol@example.com' });
+
+			expect(passwordInput()).toBeNull();
+			expect(document.body.textContent).toContain('การออกสิทธิ์ไม่เปลี่ยนรหัสผ่านเดิม');
+		}
+	);
+
+	it('asks for a password for a new account', async () => {
+		await render(COORDINATOR);
+
+		expect(passwordInput()?.value).toBe('0812345678');
+		expect(document.body.textContent).not.toContain('การออกสิทธิ์ไม่เปลี่ยนรหัสผ่านเดิม');
+	});
+
+	it('still asks when a linked profile has no mobile to fall back on', async () => {
+		await render(COORDINATOR, { user_name: 'vol@example.com', phone: null });
+
+		expect(passwordInput()).not.toBeNull();
+	});
+});

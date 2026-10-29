@@ -85,6 +85,10 @@
 		() => open && limited
 	);
 	const grantedAccount = $derived(grantsQuery.data?.email ?? null);
+	// A linked profile already has an account: the server keeps its password, so the field is
+	// hidden. Only while the phone default stands in: should the account turn out to be gone,
+	// it is recreated with that phone password and a forced change, never an unknown one.
+	const keepsPassword = $derived(Boolean(volunteer.user_name) && loginPhone !== null);
 	const grants = $derived(grantsQuery.data?.grants ?? []);
 	let confirmRevoke = $state<string | null>(null);
 
@@ -386,89 +390,98 @@
 					</p>
 				</div>
 
-				<div class="space-y-1.5 rounded-lg border border-border p-3">
-					<label
-						for={`volunteer-access-password-${volunteer._id}`}
-						class="flex items-center gap-1.5 text-xs font-semibold text-foreground"
+				{#if keepsPassword && !passwordError}
+					<p
+						class="flex items-center gap-1.5 rounded-lg border border-border p-3 text-xs text-muted-foreground"
 					>
-						<KeyRound class="h-3.5 w-3.5" />
-						รหัสผ่านสำหรับบัญชีใหม่ <span class="text-destructive">*</span>
-					</label>
-					<div class="flex flex-col gap-2 sm:flex-row sm:items-stretch">
-						<div class="relative min-w-0 flex-1">
-							<Input
-								id={`volunteer-access-password-${volunteer._id}`}
-								type={showPassword ? 'text' : 'password'}
-								bind:value={password}
-								oninput={() => (passwordError = null)}
-								disabled={pending}
-								autocomplete="new-password"
-								aria-invalid={passwordError ? true : undefined}
-								aria-describedby={passwordError
-									? `volunteer-access-password-error-${volunteer._id}`
-									: undefined}
-								class="h-11 pr-10"
-								placeholder="กำหนดรหัสผ่านสำหรับเข้าสู่ระบบ"
-							/>
+						<KeyRound class="h-3.5 w-3.5 shrink-0" />
+						บัญชีนี้มีอยู่แล้ว การออกสิทธิ์ไม่เปลี่ยนรหัสผ่านเดิม
+					</p>
+				{:else}
+					<div class="space-y-1.5 rounded-lg border border-border p-3">
+						<label
+							for={`volunteer-access-password-${volunteer._id}`}
+							class="flex items-center gap-1.5 text-xs font-semibold text-foreground"
+						>
+							<KeyRound class="h-3.5 w-3.5" />
+							รหัสผ่านสำหรับบัญชีใหม่ <span class="text-destructive">*</span>
+						</label>
+						<div class="flex flex-col gap-2 sm:flex-row sm:items-stretch">
+							<div class="relative min-w-0 flex-1">
+								<Input
+									id={`volunteer-access-password-${volunteer._id}`}
+									type={showPassword ? 'text' : 'password'}
+									bind:value={password}
+									oninput={() => (passwordError = null)}
+									disabled={pending}
+									autocomplete="new-password"
+									aria-invalid={passwordError ? true : undefined}
+									aria-describedby={passwordError
+										? `volunteer-access-password-error-${volunteer._id}`
+										: undefined}
+									class="h-11 pr-10"
+									placeholder="กำหนดรหัสผ่านสำหรับเข้าสู่ระบบ"
+								/>
+								<Button
+									type="button"
+									variant="ghost"
+									size="icon"
+									class="absolute top-0 right-0 h-full px-3 hover:bg-transparent"
+									aria-label={showPassword ? 'ซ่อนรหัสผ่าน' : 'แสดงรหัสผ่าน'}
+									aria-pressed={showPassword}
+									onclick={() => (showPassword = !showPassword)}
+								>
+									{#if showPassword}
+										<EyeOff class="size-4 text-muted-foreground" />
+									{:else}
+										<Eye class="size-4 text-muted-foreground" />
+									{/if}
+								</Button>
+							</div>
 							<Button
 								type="button"
-								variant="ghost"
-								size="icon"
-								class="absolute top-0 right-0 h-full px-3 hover:bg-transparent"
-								aria-label={showPassword ? 'ซ่อนรหัสผ่าน' : 'แสดงรหัสผ่าน'}
-								aria-pressed={showPassword}
-								onclick={() => (showPassword = !showPassword)}
+								variant="outline"
+								class="h-11 shrink-0 gap-1.5 sm:px-3"
+								disabled={pending}
+								onclick={() => {
+									password = generateTemporaryPassphrase();
+									passwordError = null;
+									showPassword = true;
+								}}
 							>
-								{#if showPassword}
-									<EyeOff class="size-4 text-muted-foreground" />
-								{:else}
-									<Eye class="size-4 text-muted-foreground" />
-								{/if}
+								<RefreshCw class="size-4" />
+								สร้างรหัส
 							</Button>
 						</div>
-						<Button
-							type="button"
-							variant="outline"
-							class="h-11 shrink-0 gap-1.5 sm:px-3"
-							disabled={pending}
-							onclick={() => {
-								password = generateTemporaryPassphrase();
-								passwordError = null;
-								showPassword = true;
-							}}
-						>
-							<RefreshCw class="size-4" />
-							สร้างรหัส
-						</Button>
+						{#if passwordError}
+							<p
+								id={`volunteer-access-password-error-${volunteer._id}`}
+								class="text-sm font-medium text-destructive"
+							>
+								{passwordError}
+							</p>
+						{/if}
+						{#if loginPhone}
+							<p class="text-[11px] text-muted-foreground">
+								ค่าเริ่มต้นคือเบอร์โทรศัพท์ของอาสาสมัคร
+								และจะบังคับเปลี่ยนรหัสผ่านในการเข้าสู่ระบบครั้งแรก หากเปลี่ยนเป็นรหัสอื่น
+								ต้องมีอย่างน้อย 10 ตัวอักษร พร้อมตัวพิมพ์ใหญ่ ตัวพิมพ์เล็ก ตัวเลข และอักขระพิเศษ
+							</p>
+						{:else}
+							<p class="text-[11px] text-muted-foreground">
+								{phones.contact
+									? 'เบอร์โทรศัพท์ของอาสาสมัครไม่ใช่มือถือ 10 หลัก จะบันทึกลงบัญชีเป็นเบอร์ติดต่อ แต่ใช้เข้าสู่ระบบหรือเป็นรหัสผ่านเริ่มต้นไม่ได้'
+									: 'อาสาสมัครไม่มีเบอร์มือถือ 10 หลัก จึงใช้เบอร์เป็นรหัสผ่านเริ่มต้นไม่ได้'}
+								กรุณาตั้งรหัสผ่านเองหรือกด "สร้างรหัส" (อย่างน้อย 10 ตัวอักษร พร้อมตัวพิมพ์ใหญ่ ตัวพิมพ์เล็ก
+								ตัวเลข และอักขระพิเศษ) บัญชีนี้ใช้อีเมลเข้าสู่ระบบเท่านั้น และเมื่อเข้าสู่ระบบครั้งแรกจะต้องตั้งรหัสผ่านใหม่และคำถามความปลอดภัยเหมือนบัญชีอื่น
+							</p>
+						{/if}
+						<p class="text-[11px] text-muted-foreground">
+							หากสร้างบัญชีแล้วแต่บันทึกโปรไฟล์ไม่สำเร็จ ให้ลองอีกครั้งด้วยอีเมลและบทบาทเดิม
+							ระบบจะผูกบัญชีที่สร้างไว้โดยไม่เปลี่ยนรหัสผ่านเดิม
+						</p>
 					</div>
-					{#if passwordError}
-						<p
-							id={`volunteer-access-password-error-${volunteer._id}`}
-							class="text-sm font-medium text-destructive"
-						>
-							{passwordError}
-						</p>
-					{/if}
-					{#if loginPhone}
-						<p class="text-[11px] text-muted-foreground">
-							ค่าเริ่มต้นคือเบอร์โทรศัพท์ของอาสาสมัคร
-							และจะบังคับเปลี่ยนรหัสผ่านในการเข้าสู่ระบบครั้งแรก หากเปลี่ยนเป็นรหัสอื่น
-							ต้องมีอย่างน้อย 10 ตัวอักษร พร้อมตัวพิมพ์ใหญ่ ตัวพิมพ์เล็ก ตัวเลข และอักขระพิเศษ
-						</p>
-					{:else}
-						<p class="text-[11px] text-muted-foreground">
-							{phones.contact
-								? 'เบอร์โทรศัพท์ของอาสาสมัครไม่ใช่มือถือ 10 หลัก จะบันทึกลงบัญชีเป็นเบอร์ติดต่อ แต่ใช้เข้าสู่ระบบหรือเป็นรหัสผ่านเริ่มต้นไม่ได้'
-								: 'อาสาสมัครไม่มีเบอร์มือถือ 10 หลัก จึงใช้เบอร์เป็นรหัสผ่านเริ่มต้นไม่ได้'}
-							กรุณาตั้งรหัสผ่านเองหรือกด "สร้างรหัส" (อย่างน้อย 10 ตัวอักษร พร้อมตัวพิมพ์ใหญ่ ตัวพิมพ์เล็ก
-							ตัวเลข และอักขระพิเศษ) บัญชีนี้ใช้อีเมลเข้าสู่ระบบเท่านั้น และเมื่อเข้าสู่ระบบครั้งแรกจะต้องตั้งรหัสผ่านใหม่และคำถามความปลอดภัยเหมือนบัญชีอื่น
-						</p>
-					{/if}
-					<p class="text-[11px] text-muted-foreground">
-						หากสร้างบัญชีแล้วแต่บันทึกโปรไฟล์ไม่สำเร็จ ให้ลองอีกครั้งด้วยอีเมลและบทบาทเดิม
-						ระบบจะผูกบัญชีที่สร้างไว้โดยไม่เปลี่ยนรหัสผ่านเดิม
-					</p>
-				</div>
+				{/if}
 			</div>
 		</div>
 
