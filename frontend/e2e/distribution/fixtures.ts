@@ -75,7 +75,8 @@ export const test = base.extend<DistributionFixtures, DistributionWorkerFixtures
 					subdistrict: 'คอหงส์',
 					capacity: 40
 				});
-				recordCreatedShelter(code);
+				// one ledger per worker process: several workers run distribution specs, never share a file
+				recordCreatedShelter(code, `distribution-${process.pid}`);
 			} finally {
 				// A `_changes` long-poll may still be in flight inside a route handler; drop the routes
 				// first so close() does not reject with "Request context disposed".

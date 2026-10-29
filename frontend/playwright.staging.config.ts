@@ -42,8 +42,8 @@ if (!/^https:\/\/[^\s/]+\/?$/.test(stagingURL)) {
  *
  * The donation suites (`donation-fullstack*.test.ts`, `stock-donations.test.ts`; tag
  * `@donation`) follow the same rule: own `E2E Donation …` shelter, ledger teardown, a
- * zero-leak Z test. They flip the global reCAPTCHA switch off for their run and restore
- * it in afterAll, so the three
+ * zero-leak Z test. They lease the global reCAPTCHA switch off for their run (ref-counted across
+ * workers, restored by the last release), so the three
  * full-stack files add an estimated 10-15 minutes to a writable run (see e2e/README.md §9.C).
  */
 export default defineConfig({

@@ -3508,6 +3508,12 @@
 					"slot_hold": {
 						"anyOf": [{ "$ref": "#/components/schemas/SlotHold" }, { "type": "null" }]
 					},
+					"photos": {
+						"items": { "type": "string" },
+						"type": "array",
+						"maxItems": 30,
+						"title": "Photos"
+					},
 					"captchaToken": {
 						"anyOf": [{ "type": "string" }, { "type": "null" }],
 						"title": "Captchatoken"
