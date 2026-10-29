@@ -37,10 +37,21 @@ describe('canCreateShelterRecipe', () => {
 		);
 	});
 
-	it.each([['system_admin'], ['shelter_manager'], ['warehouse_staff']])(
-		'keeps allowing %s',
+	it('keeps allowing system_admin', () => {
+		expect(canCreateShelterRecipe(['system_admin'], 'SH001')).toBe(true);
+	});
+
+	it.each([['SH001:shelter_manager'], ['SH001:warehouse_staff']])(
+		'keeps allowing %s of the same shelter',
 		(role) => {
-			expect(canCreateShelterRecipe([role], 'SH001')).toBe(true);
+			expect(canCreateShelterRecipe(['shelter:SH001', role], 'SH001')).toBe(true);
+		}
+	);
+
+	it.each([['SH001:shelter_manager'], ['SH001:warehouse_staff']])(
+		'denies %s writing to another shelter',
+		(role) => {
+			expect(canCreateShelterRecipe(['shelter:SH001', role], 'SH002')).toBe(false);
 		}
 	);
 });

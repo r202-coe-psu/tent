@@ -20,5 +20,10 @@ export function canWriteShelterCatalog(roles: readonly string[]): boolean {
  * {@link canWriteShelterCatalog}.
  */
 export function canCreateShelterRecipe(roles: readonly string[], shelterCode?: string | null) {
-	return canWriteShelterCatalog(roles) || hasStaffCapability(roles, 'kitchen_staff', shelterCode);
+	return (
+		isSystemAdmin(roles) ||
+		isShelterManager(roles, shelterCode) ||
+		isWarehouseStaff(roles, shelterCode) ||
+		hasStaffCapability(roles, 'kitchen_staff', shelterCode)
+	);
 }
