@@ -15,6 +15,7 @@
 		type UnifiedRegistrationChannel
 	} from '../../domain/unified-registration';
 	import type { ThaiDAutofillProfile } from '../../domain/thaid-profile';
+	import { applyThaidProfileToMember } from '../../domain/thaid-autofill';
 	import {
 		evacueeAgeYears,
 		formatPersonName,
@@ -193,22 +194,12 @@
 	}
 
 	function handleMemberScanned(profile: ThaiDAutofillProfile) {
-		if (targetMemberIndex === null || !members[targetMemberIndex]) return;
-		const m = members[targetMemberIndex];
-		m.first_name = profile.first_name;
-		m.last_name = profile.last_name;
-		if (profile.nickname) m.nickname = profile.nickname;
-		m.gender = profile.gender;
-		m.birth_year = profile.birth_year;
-		m.age = profile.age;
-		if (profile.phone) m.phone = profile.phone;
-		m.person_id = { cardType: 'national_id', number: profile.person_id };
-		m.vulnerable_groups = profile.vulnerable_groups ?? [];
-		m.special_needs = profile.special_needs ?? [];
-		m.medical_conditions = profile.medical_conditions ?? [];
-		members = [...members];
+		const target = targetMemberIndex;
+		if (target === null || !members[target]) return;
+		const filled = applyThaidProfileToMember(members[target], profile);
+		members = members.map((m, i) => (i === target ? filled : m));
 		onDirty?.();
-		toast.success(t.thaidFetchedToast(`${profile.first_name} ${profile.last_name}`));
+		toast.success(t.thaidFetchedToast(formatPersonName(filled) || t.thaidScanMemberN(target + 1)));
 	}
 </script>
 
