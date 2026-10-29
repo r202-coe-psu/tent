@@ -37,6 +37,7 @@ import {
 	confineKioskStaffOnly,
 	resolvePostLoginDestination,
 	requireDistributionDesk,
+	requireBannerManagement,
 	requireKioskManagement,
 	requireMedicalScreening,
 	requireVolunteerBackoffice,
@@ -331,6 +332,29 @@ describe('requireKioskManagement (/back-office/kiosks)', () => {
 	});
 });
 
+describe('requireBannerManagement (/back-office/kiosks/banners, issue #930)', () => {
+	beforeEach(() => {
+		mocks.user = { roles: [] };
+		mocks.selectedShelterCode = null;
+	});
+
+	it('admits SA, SM, kiosk_staff and pr_staff of the selected shelter', async () => {
+		expect(await passes(requireBannerManagement, ['system_admin'], null)).toBe(true);
+		for (const cap of ['shelter_manager', 'kiosk_staff', 'pr_staff']) {
+			expect(await passes(requireBannerManagement, ['shelter:SH001', `SH001:${cap}`])).toBe(true);
+		}
+	});
+
+	it('redirects other staff roles and pr_staff of another shelter', async () => {
+		expect(
+			await passes(requireBannerManagement, ['shelter:SH001', 'SH001:registration_staff'])
+		).toBe(false);
+		const roles = ['shelter:SH001', 'shelter:SH002', 'SH001:pr_staff', 'SH002:registration_staff'];
+		expect(await passes(requireBannerManagement, roles, 'SH001')).toBe(true);
+		expect(await passes(requireBannerManagement, roles, 'SH002')).toBe(false);
+	});
+});
+
 describe('confineKioskStaffOnly (back-office layout, FR-SBO-29)', () => {
 	const kioskOnly = ['shelter:SH001', 'SH001:kiosk_staff'];
 
@@ -358,6 +382,32 @@ describe('confineKioskStaffOnly (back-office layout, FR-SBO-29)', () => {
 		expect(() => confineKioskStaffOnly('/back-office/evacuee-management')).not.toThrow();
 		mocks.user = { roles: ['system_admin'] };
 		expect(() => confineKioskStaffOnly('/back-office/evacuee-management')).not.toThrow();
+	});
+
+	it('confines a pr_staff-only user to the banner pages (issue #930)', () => {
+		mocks.user = { roles: ['shelter:SH001', 'SH001:pr_staff'] };
+		expect(() => confineKioskStaffOnly('/back-office/kiosks/banners')).not.toThrow();
+		expect(() => confineKioskStaffOnly('/back-office/kiosks/banners/groups/x')).not.toThrow();
+		expect(() => confineKioskStaffOnly('/back-office/kiosks')).toThrow(
+			expect.objectContaining({ status: 302, location: '/portal' })
+		);
+		expect(() => confineKioskStaffOnly('/back-office/users')).toThrow(
+			expect.objectContaining({ status: 302, location: '/portal' })
+		);
+	});
+
+	it('lets kiosk_staff + pr_staff open the device pages but nothing outside kiosks', () => {
+		mocks.user = { roles: ['shelter:SH001', 'SH001:kiosk_staff', 'SH001:pr_staff'] };
+		expect(() => confineKioskStaffOnly('/back-office/kiosks')).not.toThrow();
+		expect(() => confineKioskStaffOnly('/back-office/kiosks/banners/new')).not.toThrow();
+		expect(() => confineKioskStaffOnly('/back-office/users')).toThrow(
+			expect.objectContaining({ status: 302, location: '/portal' })
+		);
+	});
+
+	it('does not confine pr_staff who holds another capability in the selected shelter', () => {
+		mocks.user = { roles: ['shelter:SH001', 'SH001:pr_staff', 'SH001:registration_staff'] };
+		expect(() => confineKioskStaffOnly('/back-office/users')).not.toThrow();
 	});
 
 	it('follows the selected shelter', () => {

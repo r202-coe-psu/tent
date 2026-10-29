@@ -70,6 +70,14 @@ describe('PUT /api/back-office/kiosk-banners/order', () => {
 		expect(mockReorder).not.toHaveBeenCalled();
 	});
 
+	it('lets pr_staff reorder their own shelter and returns 403 for another', async () => {
+		mockSession.mockResolvedValue(SESSIONS.prA);
+		expect((await put('?shelter_code=SH001', body)).status).toBe(200);
+		expect(mockReorder).toHaveBeenCalledTimes(1);
+		expect((await put('?shelter_code=SH002', body)).status).toBe(403);
+		expect(mockReorder).toHaveBeenCalledTimes(1);
+	});
+
 	it('returns 422 for a bad body without calling the service', async () => {
 		const bad = [
 			{ ...body, shelter_code: 'SH002' },

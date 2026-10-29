@@ -48,6 +48,20 @@ export const BULK_GATE_CLEAR_EXPLANATION = {
 /** Toast when a `?pool=` deep link names a pool that is not in the loaded overview. */
 export const BULK_RETURN_POOL_NOT_FOUND_TOAST = 'ไม่พบกองนี้ อาจถูกลบหรืออยู่ศูนย์อื่น';
 
+/**
+ * Shown on a closed-pool entry INSTEAD of the "reopen loans" button when an applied loan can no
+ * longer be reverted (CR-193 §35). `label` is a closed-as label; `n` / `total` count applied refs.
+ */
+export const BULK_RETURN_REOPEN_BLOCKED_COPY = {
+	labels: { lost: 'สูญหาย', waived: 'ยกเว้นการคืน', both: 'สูญหาย/ยกเว้นการคืน' },
+	allClosed: (label: string) => `เปิดยอดยืมกลับไม่ได้ ยอดยืมถูกปิดเป็น${label}แล้ว`,
+	someClosed: (n: number, total: number, label: string) =>
+		`เปิดยอดยืมกลับไม่ได้ ยอดยืม ${n} จาก ${total} รายการถูกปิดเป็น${label}แล้ว`,
+	allChanged: 'เปิดยอดยืมกลับไม่ได้ ยอดยืมเปลี่ยนไปแล้ว',
+	someChanged: (n: number, total: number) =>
+		`เปิดยอดยืมกลับไม่ได้ ยอดยืม ${n} จาก ${total} รายการเปลี่ยนไปแล้ว`
+} as const;
+
 export const RETURN_ACTION_HELP = {
 	counter: 'ใช้เมื่อผู้ยืมนำพัสดุมาคืนกับเจ้าหน้าที่โดยตรง',
 	nonPhysical: 'ใช้กรณีสูญหาย หรือได้รับอนุญาตให้ยกเว้นการคืน',

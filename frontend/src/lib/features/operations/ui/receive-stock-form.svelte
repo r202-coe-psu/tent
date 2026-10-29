@@ -42,6 +42,7 @@
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { getShelterCode } from '$lib/db/shelter';
 	import { sha256Hex } from '$lib/db/hash';
+	import { sanitizePhoneTyping, thaiMobilePhoneSchema } from '$lib/db/model';
 	import { DISPLAY_LOCALE, DISPLAY_TIME_ZONE } from '$lib/utils/date';
 	import {
 		useDonations,
@@ -208,7 +209,12 @@
 			if (isWalkIn) {
 				const problem = walkInError();
 				if (problem) {
+					// Stop the submit here like the expiry gate, so nothing after it treats the form as saved.
+					cancel();
 					toast.error(problem);
+					// Mark the phone too, so a bad number shows alongside a missing name.
+					if (phoneError) phoneTouched = true;
+					if (problem === phoneError) document.getElementById('walkin-donor-phone')?.focus();
 					return;
 				}
 				await handleWalkInCommit(validated.data);
@@ -466,10 +472,15 @@
 	 */
 	function walkInError(): string | null {
 		if (!walkInDonorName.trim()) return 'ระบุชื่อผู้บริจาค';
-		const phone = walkInDonorPhone.trim();
-		if (phone && !/^[0-9]+$/.test(phone)) return 'เบอร์โทรต้องเป็นตัวเลขเท่านั้น';
-		return null;
+		return phoneError;
 	}
+
+	/** Same rule the walk-in schema enforces; UX only on this direct-to-CouchDB path. */
+	const walkInPhone = $derived(thaiMobilePhoneSchema.safeParse(walkInDonorPhone));
+	const phoneError = $derived(walkInPhone.success ? null : walkInPhone.error.issues[0].message);
+	// Shown once the field is left or a save is tried, not while the first digits go in.
+	let phoneTouched = $state(false);
+	const shownPhoneError = $derived(phoneTouched ? phoneError : null);
 
 	/**
 	 * `phone_hash` is what links a donor's donations together once retention
@@ -477,7 +488,7 @@
 	 * per-donation nonce fills the required field without inventing a linkage.
 	 */
 	async function buildWalkInInput(data: ReceiveInput): Promise<WalkInDonationInput> {
-		const phone = walkInDonorPhone.trim() || null;
+		const phone = walkInPhone.success ? walkInPhone.data : null;
 		const [phoneHash, trackingTokenHash] = await Promise.all([
 			sha256Hex(phone ?? ulid()),
 			sha256Hex(ulid())
@@ -495,6 +506,7 @@
 		isWalkInOpen = false;
 		walkInDonorName = '';
 		walkInDonorPhone = '';
+		phoneTouched = false;
 	}
 </script>
 
@@ -650,11 +662,27 @@
 						</Label>
 						<Input
 							id="walkin-donor-phone"
-							placeholder="ไม่บังคับ"
+							placeholder="เช่น 0891234567"
 							inputmode="numeric"
-							bind:value={walkInDonorPhone}
+							bind:value={
+								() => walkInDonorPhone,
+								// The input re-reads the getter after set, so it always shows the digits-only value.
+								(v) => (walkInDonorPhone = sanitizePhoneTyping(v ?? ''))
+							}
+							onblur={() => (phoneTouched = true)}
+							aria-invalid={shownPhoneError ? true : undefined}
+							aria-describedby={shownPhoneError ? 'walkin-donor-phone-error' : undefined}
 							class="min-h-11"
 						/>
+						{#if shownPhoneError}
+							<p
+								id="walkin-donor-phone-error"
+								class="mt-1 text-xs text-destructive"
+								data-testid="walkin-phone-error"
+							>
+								{shownPhoneError}
+							</p>
+						{/if}
 					</div>
 				</div>
 			</div>
