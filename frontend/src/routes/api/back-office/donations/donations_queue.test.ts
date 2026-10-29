@@ -216,7 +216,7 @@ describe('GET /api/back-office/donations?status=received (#821)', () => {
 		});
 	});
 
-	it('E3: lists a walk-in received donation with donor name, phone and email, redacted', async () => {
+	it('E3: lists a walk-in received donation with the donor contact MASKED (FR-10)', async () => {
 		mockFind({ data: { docs: [walkIn(1)], bookmark: 'b' } });
 
 		const data = await (await GET(event('?status=received'))).json();
@@ -224,12 +224,45 @@ describe('GET /api/back-office/donations?status=received (#821)', () => {
 		expect(data.donations).toHaveLength(1);
 		expect(data.donations[0]).toMatchObject({
 			status: 'received',
-			donor_name: 'ผู้บริจาค 1',
-			donor_phone: '0811111111',
-			donor_email: 'a@b.th',
+			donor_name: 'ผู้บริจาค 1****',
+			donor_phone: 'xxx-xxx-1111',
+			donor_email: 'a***@b.th',
+			contact_masked: true,
 			received_at: '2026-10-02T00:00:00.000Z'
 		});
 		expect(JSON.stringify(data)).not.toContain('secret');
+	});
+
+	it('E3c: "รายการที่รับ" carries what was received — counted qty, turned-away lines left out (FR-4)', async () => {
+		mockFind({
+			data: {
+				docs: [
+					walkIn(1, {
+						items: [
+							{ item_id: 'item_master:rice', qty: '10', unit: 'kg' },
+							{ item_id: 'item_master:milk', qty: '5', unit: 'box' }
+						],
+						received_summary: {
+							total_items: 2,
+							received_at: '2026-10-02T00:00:00.000Z',
+							items: [
+								{ item_id: 'item_master:rice', qty: '6', unit: 'kg' },
+								{ item_id: 'item_master:milk', qty: '0', rejected: true }
+							]
+						}
+					}),
+					walkIn(2, { items: [{ item_id: 'item_master:rice', qty: '3', unit: 'kg' }] })
+				]
+			}
+		});
+
+		const data = await (await GET(event('?status=received'))).json();
+
+		expect(data.donations[0].received_items).toEqual([
+			{ item_id: 'item_master:rice', qty: '6', unit: 'kg' }
+		]);
+		// A donation received before received_summary.items existed has none; the list falls back.
+		expect(data.donations[1].received_items).toBeUndefined();
 	});
 
 	it('E3b: a walk-in with no phone or email does not crash', async () => {
@@ -238,6 +271,57 @@ describe('GET /api/back-office/donations?status=received (#821)', () => {
 		const data = await (await GET(event('?status=received'))).json();
 
 		expect(data.donations[0]).toMatchObject({ donor_phone: null, donor_email: null });
+	});
+
+	it('FR-10 / AC-5a: no full name, phone or email anywhere in the response', async () => {
+		mockFind({
+			data: {
+				docs: [
+					walkIn(1, {
+						donor: {
+							name: 'สมชาย ใจดี',
+							phone: '0812345678',
+							phone_hash: 'ph-secret',
+							email: 'somchai@example.com'
+						}
+					})
+				]
+			}
+		});
+
+		const text = JSON.stringify(await (await GET(event('?status=received'))).json());
+
+		expect(text).not.toContain('ใจดี');
+		expect(text).not.toContain('0812345678');
+		expect(text).not.toContain('somchai@example.com');
+		expect(text).toContain('สมชาย ใ****');
+		expect(text).toContain('xxx-xxx-5678');
+		expect(text).toContain('s***i@example.com');
+	});
+
+	it('FR-10c: a donation whose contact was removed lists as ไม่ระบุชื่อ with null phone / email', async () => {
+		mockFind({ data: { docs: [walkIn(1, { donor: { phone_hash: 'ph-secret' } })] } });
+
+		const data = await (await GET(event('?status=received'))).json();
+
+		expect(data.donations[0]).toMatchObject({
+			donor_name: 'ไม่ระบุชื่อ',
+			donor_phone: null,
+			donor_email: null,
+			contact_masked: true
+		});
+	});
+
+	it('FR-7: the review queue keeps the full contact and is not marked masked', async () => {
+		mockCouch();
+
+		const data = await (await GET(event('?status=declared'))).json();
+
+		expect(data.donations[0]).toMatchObject({
+			donor_name: 'ผู้บริจาค ก',
+			donor_phone: '0800000001'
+		});
+		expect(data.donations[0]).not.toHaveProperty('contact_masked');
 	});
 
 	it('E6: sends a bounded index-pinned _find with no _all_docs scan', async () => {
@@ -280,17 +364,29 @@ describe('GET /api/back-office/donations?status=received (#821)', () => {
 		expect(data.donations).toHaveLength(7);
 	});
 
-	it('E6b2: a full page offers the next one; an empty page after it is handled', async () => {
+	it('E6b2: exactly 20 received donations: no "โหลดเพิ่ม" (one-row probe past the bookmark is empty)', async () => {
 		mockFind(
 			{ data: { docs: Array.from({ length: 20 }, (_, i) => walkIn(i)), bookmark: 'b1' } },
 			{ data: { docs: [], bookmark: 'b1' } }
 		);
 
 		const first = await (await GET(event('?status=received'))).json();
-		const second = await (await GET(event('?status=received&bookmark=b1'))).json();
+
+		expect(first).toMatchObject({ has_more: false, bookmark: null });
+		const probe = vi.mocked(adminRaw).mock.calls[1][2] as { bookmark?: string; limit?: number };
+		expect(probe).toMatchObject({ bookmark: 'b1', limit: 1 });
+	});
+
+	it('E6b3: a full page with a row after it offers the next page', async () => {
+		mockFind(
+			{ data: { docs: Array.from({ length: 20 }, (_, i) => walkIn(i)), bookmark: 'b1' } },
+			{ data: { docs: [walkIn(20)], bookmark: 'b2' } }
+		);
+
+		const first = await (await GET(event('?status=received'))).json();
 
 		expect(first).toMatchObject({ has_more: true, bookmark: 'b1' });
-		expect(second).toMatchObject({ success: true, donations: [], has_more: false, bookmark: null });
+		expect(first.donations).toHaveLength(20);
 	});
 
 	it('E6c: following bookmarks over a stable dataset yields no duplicates or skips', async () => {
@@ -409,7 +505,7 @@ describe('GET /api/back-office/donations?status=received (#821)', () => {
 		);
 	};
 
-	it('A1: a system admin must say which shelter (400 without), and reads only that one', async () => {
+	it('FR-9a: a system admin must say which shelter (400 without), and reads only that one', async () => {
 		asSA();
 
 		expect((await GET(event('?status=received'))).status).toBe(400);
@@ -418,6 +514,26 @@ describe('GET /api/back-office/donations?status=received (#821)', () => {
 		expect((await GET(event('?status=received&shelter=SH002'))).status).toBe(200);
 		expect(findCalls()).toHaveLength(1);
 		expect(findCalls()[0][0]).toBe('/shelter_sh002/_find');
+	});
+
+	it('AC-5c: FR-9a is for status=received only — a system admin reads every shelter for another status', async () => {
+		vi.mocked(requireShelterScopeOrSA).mockResolvedValue({
+			name: 'admin',
+			roles: ['system_admin'],
+			isSA: true,
+			shelterCode: null
+		});
+		mockCouch();
+
+		const response = await GET(event('?status=declared'));
+
+		expect(response.status).toBe(200);
+		const data = await response.json();
+		expect(data.donations.map((d: { shelter_code: string }) => d.shelter_code).sort()).toEqual([
+			'SH001',
+			'SH001',
+			'SH002'
+		]);
 	});
 
 	it.each(['x/../../_users', 'SH999', '..%2F_users'])(

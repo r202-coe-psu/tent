@@ -1,10 +1,10 @@
-import { normalizeThaiPhone } from '$lib/db/model';
 import { maskLastName } from '$lib/utils/mask';
-import type { PendingDonationRow } from './back-office';
+import { maskLookupPhone } from './tracking';
 
 /**
  * Donor contact as the back-office lists show it: masked by default, the full value only on
- * the detail view and only after the staff member asks for it (#821).
+ * the detail view and only after the staff member asks for it (#821). The masking happens on
+ * the server (FR-10) — the list route sends these forms, never the full value.
  */
 
 /**
@@ -18,13 +18,9 @@ export function maskDonorName(name: string | null | undefined): string {
 	return `${first} ${maskLastName(rest.join(' '))}`.trim();
 }
 
-/**
- * `xxx-xxx-1234` — same form as backend `mask_phone` and develop's `maskLookupPhone`
- * (`domain/tracking.ts`, #931). TODO: call `maskLookupPhone` once this branch is on develop.
- */
+/** `xxx-xxx-1234` — the one phone mask of the feature (`maskLookupPhone`, #931; CR FR-5). */
 export function maskDonorPhone(phone: string | null | undefined): string {
-	const digits = (phone ?? '').replace(/\D/g, '');
-	return digits.length < 4 ? 'xxx-xxx-xxxx' : `xxx-xxx-${digits.slice(-4)}`;
+	return maskLookupPhone(phone ?? '');
 }
 
 /** Same form as backend `mask_email`: `s***i@example.com`, `a***@b.th`. */
@@ -34,27 +30,4 @@ export function maskDonorEmail(email: string | null | undefined): string | null 
 	const local = email.slice(0, at);
 	const masked = local.length <= 2 ? `${local.slice(0, 1)}***` : `${local[0]}***${local.at(-1)}`;
 	return `${masked}${email.slice(at)}`;
-}
-
-/**
- * Whether a received donation matches the search box: booking ref, donor name, item name, or
- * phone (any run of 4+ digits, separators ignored — so "5678" and "081-234-5678" both work).
- */
-export function matchesReceivedSearch(row: PendingDonationRow, query: string): boolean {
-	const q = query.trim().toLowerCase();
-	if (!q) return true;
-
-	const text = [
-		row.booking_ref,
-		row.donor_name,
-		...row.items.map((it) => it.free_text ?? it.item_id)
-	]
-		.filter(Boolean)
-		.join(' ')
-		.toLowerCase();
-	if (text.includes(q)) return true;
-
-	const digits = normalizeThaiPhone(q).replace(/\D/g, '');
-	if (digits.length < 4 || !row.donor_phone) return false;
-	return normalizeThaiPhone(row.donor_phone).replace(/\D/g, '').includes(digits);
 }

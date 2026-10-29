@@ -24,6 +24,11 @@ export interface PendingDonationRow {
 	donor_name: string;
 	donor_phone: string | null;
 	donor_email?: string | null;
+	/**
+	 * `true` on a row of the "รับแล้ว" list / search (#821 FR-10): `donor_*` carry the masked
+	 * forms, never the full value. Absent on the review queue, which shows contact in full (FR-7).
+	 */
+	contact_masked?: boolean;
 	item_count: number;
 	items: Array<{
 		item_id?: string;
@@ -50,6 +55,12 @@ export interface PendingDonationRow {
 	pickup_address?: string | null;
 	donor_note?: string | null;
 	is_unsolicited?: boolean;
+	/**
+	 * What was actually received (#821 FR-4 "รายการที่รับ"): `received_summary.items` without the
+	 * lines staff turned away (CR-172), at the counted quantity. Absent on a donation received
+	 * before `received_summary.items` existed — the list then falls back to `items`.
+	 */
+	received_items?: Array<{ item_id?: string; free_text?: string; qty: string; unit: string }>;
 }
 
 /**

@@ -23,12 +23,12 @@ export type {
 export type { ReceiveDonationInput } from './domain/public-donation';
 export type { PendingDonationRow, WalkInIntakeInput } from './domain/back-office';
 export { walkInIntakeInputSchema, donationActionRef, donationRefLabel } from './domain/back-office';
+export { maskDonorName, maskDonorPhone, maskDonorEmail } from './domain/donor-contact';
 export {
-	maskDonorName,
-	maskDonorPhone,
-	maskDonorEmail,
-	matchesReceivedSearch
-} from './domain/donor-contact';
+	RECEIVED_SEARCH_BY,
+	RECEIVED_SEARCH_Q_MAX,
+	type ReceivedSearchBy
+} from './domain/received-search';
 
 // Domain — redirect ticket (R-16.4 · CR-087)
 export type { DonationRedirect, DonationRedirectInput } from './domain/donation-redirect';
@@ -79,7 +79,12 @@ export {
 	queueGroupOf
 } from './domain/donation-queue';
 export type { DonationQueueFilter } from './domain/donation-queue';
-export type { ReceivedDonationsPage } from './data/back-office-queue';
+export type {
+	DonorContact,
+	ReceivedDonationsPage,
+	ReceivedSearchPage
+} from './data/back-office-queue';
+export { fetchDonorContact } from './data/back-office-queue';
 // Domain — per-line review (CR-174)
 export {
 	donationStatusFromLines,
@@ -160,7 +165,10 @@ export {
 	useUpdateDonationItems,
 	donationQueueKeys,
 	useDonationQueue,
-	useReceivedDonations
+	useReceivedDonations,
+	useReceivedSearch,
+	useRevealDonorContact,
+	type ReceivedSearchTerm
 } from './application/queries';
 
 // UI
