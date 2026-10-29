@@ -2,7 +2,7 @@
 title: Smart Shelter — Data Model (CouchDB remote-first) v3
 status: draft for review
 created: 2026-06-11
-updated: 2026-10-25
+updated: 2026-10-29
 note: ออกแบบใหม่ทั้งหมด — ไม่สืบทอดจาก docs/data v2.0 (retired 2026-06-11); decision sync 2026-06-15 เลือก MongoDB projection สำหรับ public tier และ EOC read-model
 ---
 
@@ -232,7 +232,7 @@ design doc เดียวกัน deploy พร้อม db provisioning
 | `medical` | purge ทันทีที่ครบ 2 ปีหลัง `shelter.closed_at` (ลำดับแรก) |
 | `evacuee`, `household` | แทนที่ด้วย tombstone ไร้ PII (`{type, anonymized: true}`) เมื่อครบ 2 ปีหลังปิดศูนย์ |
 | `movement`, `screening`, ledger, audit | เก็บต่อได้ (อ้างถึงแค่ ULID — ไร้ PII หลัง tombstone) จนจบโครงการ |
-| donor PII ใน `donation` | ลบ name/phone ภายใน 3 เดือนหลังปิดศูนย์ (เหลือ hash + ยอด) |
+| donor PII ใน `donation` | ลบ `donor.name`/`phone`/`line_id`/`email` และ `logistics.vehicle_plate` ภายใน 3 เดือนหลังปิดศูนย์ (เหลือ `phone_hash` + ยอด) · **สถานะจริง (2026-10-29):** ยังไม่มีงานลบอัตโนมัติฝั่ง CouchDB — worker ลบเฉพาะ buffer ใน Mongo (`DonationBuffer`) และ projection สาธารณะ; PII ใน CouchDB `donation` ยังอยู่จนกว่าจะมีงานลบ |
 | local disconnected cache | ไม่ใช้ใน policy นี้ (status-only เมื่อไม่มี endpoint) |
 | edge server | wipe ทั้งเครื่อง (db + `_users` replica) เป็นขั้นตอนปิดศูนย์ — ก่อนนาฬิกา 2 ปีเริ่มนับที่ central |
 

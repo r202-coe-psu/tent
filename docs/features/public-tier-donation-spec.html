@@ -561,8 +561,8 @@
                   </td>
                 </tr>
                 <tr>
-                  <td>logistics: วิธีส่ง / ยานพาหนะ / ETA / slot</td>
-                  <td><code>delivery_method</code> / <code>vehicle</code> / <code>eta</code> / <code>slot</code></td>
+                  <td>logistics: วิธีส่ง / ยานพาหนะ / ทะเบียนรถ / ETA / slot</td>
+                  <td><code>delivery_method</code> / <code>vehicle</code> / <code>vehicle_plate</code> (CR-209 — opt, เฉพาะ self_dropoff, ไม่ออกทางหน้าติดตาม) / <code>eta</code> / <code>slot</code></td>
                   <td>
                     <span class="badge badge-success badge-sm">OK</span>
                     operational; ติดกับ declaration → ศูนย์เห็นเพื่อเตรียมรับ
@@ -733,6 +733,7 @@ Error : { "error": { "code": "LOCKED" } }          // ถ้า status = receive
   "logistics": {                          // req เมื่อ channel=public
     "delivery_method": "self_dropoff",    // self_dropoff | parcel | shelter_pickup
     "vehicle": "car",                     // เฉพาะ self_dropoff/shelter_pickup
+    "vehicle_plate": "กข 1234 กรุงเทพมหานคร", // CR-209 — opt, เฉพาะ self_dropoff, ≤ 40, PII
     "slot": { "date": "2026-06-22", "from": "09:00", "to": "10:00" },  // → donation_slot
     "eta": "2026-06-22T09:00:00+07:00",   // = ต้น slot ที่จอง
     "courier_tracking_no": null           // DN-6 — donor เติมภายหลังผ่าน PATCH
