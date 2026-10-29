@@ -8,9 +8,11 @@
 	import PackagePlus from '@lucide/svelte/icons/package-plus';
 	import ClipboardList from '@lucide/svelte/icons/clipboard-list';
 	import MapPin from '@lucide/svelte/icons/map-pin';
-	import { getDonationStore } from '../../routes/(public)/donations/donation.svelte';
+	import {
+		getDonationStore,
+		newDonationItem
+	} from '../../routes/(public)/donations/donation.svelte';
 	import { langState } from '$lib/states/i18n.svelte';
-	import { ulid } from '$lib/db/ulid';
 	import { getTranslation } from '$lib/utils/i18n';
 	import { PUBLIC_DONATIONS_I18N } from '$lib/constants/i18n';
 	import { donorCategoryFromCatalog } from '$lib/features/donations';
@@ -297,8 +299,7 @@
 		donationStore.shelterCode = shelter.code;
 		donationStore.shelterLocked = true;
 		donationStore.items = [
-			{
-				id: ulid(),
+			newDonationItem({
 				item_id: need.item_id,
 				// The card's category comes from the CATALOG (`food`/`water`/`bedding`/…),
 				// which is a finer split than the five buckets the donor form shows — so it
@@ -306,13 +307,11 @@
 				// blankets and soap as food on the donation doc itself.
 				category: donorCategoryFromCatalog(need.category),
 				name: formatItemName(need.raw_name || need.name || need.item_id),
-				amount: need.qty_needed > 0 ? need.qty_needed : 1,
 				unit: formatUnit(need.unit),
 				unit_code: need.unit,
-				condition: 'new',
-				remark: '',
-				image: need.image || ''
-			}
+				image: need.image || '',
+				qty_needed: need.qty_needed
+			})
 		];
 		donationStore.goToStep('form');
 		if (donationStore.reachedStep < 2) donationStore.reachedStep = 2;
@@ -324,18 +323,7 @@
 		donationStore.selectedShelterName = shelter.name;
 		donationStore.shelterCode = shelter.code;
 		donationStore.shelterLocked = true;
-		donationStore.items = [
-			{
-				id: ulid(),
-				category: 'food',
-				name: '',
-				amount: 1,
-				unit: t.defaultItemUnit,
-				condition: 'new',
-				remark: '',
-				image: ''
-			}
-		];
+		donationStore.items = [newDonationItem({ unit: t.defaultItemUnit })];
 		donationStore.goToStep('form');
 		if (donationStore.reachedStep < 2) donationStore.reachedStep = 2;
 	}

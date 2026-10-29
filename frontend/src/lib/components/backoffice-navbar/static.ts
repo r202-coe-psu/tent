@@ -2,6 +2,7 @@ import type { ResolvedPathname } from '$app/types';
 import { resolve } from '$app/paths';
 import type { Icon } from '@lucide/svelte';
 import {
+	BANNER_MANAGER_CAPABILITIES,
 	hasCapabilityAnywhere,
 	isKioskStaffOnly,
 	isShelterManager,
@@ -56,8 +57,9 @@ export type NavVisibilityContext = {
 /**
  * Whether the signed-in user sees a nav node. `visibleTo` wins; a group also needs at least one
  * visible child (no empty parents); otherwise `requiresAdmin` / `requiresManager` apply. A
- * kiosk_staff-only user of the active shelter sees only leaves whose `visibleTo` admits them
- * (FR-SBO-29).
+ * kiosk_staff-only or pr_staff-only user of the active shelter sees only leaves whose `visibleTo`
+ * admits them (FR-SBO-29): device management admits SCANNER_MANAGER_CAPABILITIES holders, banner
+ * management admits BANNER_MANAGER_CAPABILITIES holders (#930).
  */
 export function canSeeNavNode(node: BackofficeNavbarNode, ctx: NavVisibilityContext): boolean {
 	if (node.visibleTo) return node.visibleTo(ctx.roles);
@@ -177,7 +179,7 @@ export const backofficeNavbarGroups: BackofficeNavbarGroup[] = [
 						label: 'จัดการแบนเนอร์',
 						href: resolve('/back-office/kiosks/banners'),
 						icon: Images,
-						visibleTo: (roles) => hasCapabilityAnywhere(roles, SCANNER_MANAGER_CAPABILITIES)
+						visibleTo: (roles) => hasCapabilityAnywhere(roles, BANNER_MANAGER_CAPABILITIES)
 					}
 				]
 			},

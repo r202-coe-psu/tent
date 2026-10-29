@@ -59,9 +59,23 @@ describe('walkInIntakeInputSchema', () => {
 		expect(walkInIntakeInputSchema.safeParse(freeText).success).toBe(false);
 	});
 
-	it('refuses a formatted phone, which would hash differently every visit', () => {
-		const formatted = { ...valid, donor: { name: 'ผู้บริจาค', phone: '080-000-0001' } };
-		expect(walkInIntakeInputSchema.safeParse(formatted).success).toBe(false);
+	it('normalizes a formatted phone and keeps a blank one as null', () => {
+		const parse = (phone?: string) =>
+			walkInIntakeInputSchema.parse({ ...valid, donor: { name: 'ผู้บริจาค', phone } }).donor;
+		expect(parse('080-000-0001').phone).toBe('0800000001');
+		expect(parse('+66800000001').phone).toBe('0800000001');
+		expect(parse('  ').phone).toBeNull();
+		expect(parse(undefined).phone).toBeNull();
+		expect(
+			walkInIntakeInputSchema.safeParse({ ...valid, donor: { name: 'x', phone: '123' } }).success
+		).toBe(false);
+	});
+
+	it('keeps email handling unchanged', () => {
+		const withEmail = (email: string) =>
+			walkInIntakeInputSchema.safeParse({ ...valid, donor: { name: 'x', email } }).success;
+		expect(withEmail('a@b.co')).toBe(true);
+		expect(withEmail('nope')).toBe(false);
 	});
 
 	it('refuses a zero or negative quantity', () => {

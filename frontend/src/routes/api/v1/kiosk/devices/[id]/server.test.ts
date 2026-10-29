@@ -87,6 +87,13 @@ describe('DELETE /api/v1/kiosk/devices/[id]', () => {
 		expect(mockDelete).not.toHaveBeenCalled();
 	});
 
+	it('returns 403 when pr_staff deletes a device without touching the registry', async () => {
+		mockSession.mockResolvedValue(SESSIONS.prA);
+		expect((await del()).status).toBe(403);
+		expect(mockGet).not.toHaveBeenCalled();
+		expect(mockDelete).not.toHaveBeenCalled();
+	});
+
 	it('lets a shelter manager delete a device of their own shelter and logs shelter and actor', async () => {
 		mockSession.mockResolvedValue(SESSIONS.managerA);
 		expect((await del()).status).toBe(200);
@@ -219,6 +226,13 @@ describe('PATCH /api/v1/kiosk/devices/[id]', () => {
 
 		mockSession.mockResolvedValueOnce(SESSIONS.registrationA);
 		expect((await patch({ status: 'inactive' })).status).toBe(403);
+		expect(mockGet).not.toHaveBeenCalled();
+		expect(mockUpdate).not.toHaveBeenCalled();
+	});
+
+	it('returns 403 when pr_staff updates a device without touching the registry', async () => {
+		mockSession.mockResolvedValue(SESSIONS.prA);
+		expect((await patch({ name: 'เครื่องใหม่' })).status).toBe(403);
 		expect(mockGet).not.toHaveBeenCalled();
 		expect(mockUpdate).not.toHaveBeenCalled();
 	});
