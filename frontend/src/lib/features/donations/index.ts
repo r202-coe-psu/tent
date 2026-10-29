@@ -66,6 +66,21 @@ export {
 	needsDropOffDestination,
 	resolveDropOffPoint
 } from './domain/drop-off';
+// Domain — box label (#591)
+export type {
+	BoxLabel,
+	BoxLabelLine,
+	BoxLabelSource,
+	BoxLabelSourceItem
+} from './domain/box-label';
+export {
+	BOX_LABEL_MAX_LINES,
+	BOX_LABEL_MM,
+	boxLabelPageCss,
+	buildBoxLabels,
+	canPrintBoxLabel,
+	clipLabelLines
+} from './domain/box-label';
 // Domain — back-office booking list (#617)
 export {
 	DONATION_QUEUE_FILTERS,
@@ -172,5 +187,6 @@ export { default as CancelDonationDialog } from './ui/cancel-donation-dialog.sve
 export { default as RejectDonationDialog } from './ui/reject-donation-dialog.svelte';
 export { default as RejectReasonFields } from './ui/reject-reason-fields.svelte';
 export { default as DropOffCard } from './ui/drop-off-card.svelte';
+export { default as BoxLabelSheet } from './ui/box-label-sheet.svelte';
 export { default as LineDecisionToggle } from './ui/line-decision-toggle.svelte';
 export { default as EditDonationItemsDialog } from './ui/edit-donation-items-dialog.svelte';
