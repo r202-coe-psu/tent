@@ -1976,6 +1976,99 @@ describe('DistributionRemoteRepository (Phase 3A)', () => {
 		});
 	});
 
+	describe('approval ignores another item with an impossible lot history', () => {
+		function seedBrokenItem(itemId: string): string {
+			const lotId = 'stock_ledger:01J20000000000000000000B01';
+			const base = {
+				schema_v: 3,
+				shelter_code: 'SH001',
+				type: 'stock_ledger',
+				item_id: itemId,
+				unit: 'kg',
+				ref_id: null,
+				created_by: 'tester'
+			};
+			// An outbound dated before the inbound of the lot it names cannot be replayed.
+			const rows = [
+				{
+					...base,
+					_id: 'stock_ledger:01J20000000000000000000B00',
+					qty: '-3',
+					reason: 'distribute',
+					lot_ref: lotId,
+					occurred_at: '2026-01-01T00:00:00.000Z'
+				},
+				{
+					...base,
+					_id: lotId,
+					qty: '10',
+					reason: 'receive',
+					lot_ref: lotId,
+					occurred_at: '2026-01-02T00:00:00.000Z'
+				}
+			];
+			for (const row of rows) {
+				const stamp = '2026-01-02T00:00:00.000Z';
+				store.set(row._id, {
+					...row,
+					created_at: stamp,
+					updated_at: stamp,
+					_rev: nextRev(row._id)
+				});
+			}
+			return lotId;
+		}
+
+		const riceRequest = () =>
+			repo.createRequest(
+				{
+					purpose: 'Healthy item distribution',
+					active_headcount_snapshot: '80',
+					buffer_percent: 10,
+					items: [
+						{
+							item_id: 'item:rice',
+							requested_qty: '40',
+							unit: 'kg',
+							distribution_type_snapshot: 'one_time',
+							target_qty_snapshot: '44'
+						}
+					]
+				},
+				distributionCtx
+			);
+
+		it("approves a healthy item although another item's history cannot be replayed", async () => {
+			const lot = await seedInboundLot('item:rice', 50, 'kg', 'L-260829-001');
+			seedBrokenItem('item:broken');
+			const req = await riceRequest();
+
+			const batch = await repo.approveRequest(
+				req._id,
+				[{ item_id: 'item:rice', lot_ref: lot._id, qty: '40' }],
+				warehouseCtx
+			);
+
+			expect(batch.status).toBe('active');
+			expect(batch.allocations.map((a) => [a.item_id, a.lot_ref, a.qty])).toEqual([
+				['item:rice', lot._id, '40']
+			]);
+		});
+
+		it('still refuses to approve from the item whose own history is impossible', async () => {
+			const brokenLot = seedBrokenItem('item:rice');
+			const req = await riceRequest();
+
+			await expect(
+				repo.approveRequest(
+					req._id,
+					[{ item_id: 'item:rice', lot_ref: brokenLot, qty: '5' }],
+					warehouseCtx
+				)
+			).rejects.toThrow(/Historical outbound/);
+		});
+	});
+
 	describe('T3A-05 to T3A-10: Partial Approval Policy & Validation', () => {
 		it('T3A-05: allows partial quantity approval (requested 100, allocated 60)', async () => {
 			const lot = await seedInboundLot('item:blanket', 60, 'piece');

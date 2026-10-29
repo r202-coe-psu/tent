@@ -24,6 +24,29 @@ export interface DonationItem {
 	unit_code?: string;
 	condition?: string;
 	remark?: string;
+	/** UI-only hint: units still short on the need card this line came from. Never sent. */
+	needQty?: number;
+}
+
+/**
+ * A fresh donation line. `amount` always starts at 0 (#822): the donor must type a
+ * quantity on purpose, and the shortfall from the need card is only shown as a hint.
+ */
+export function newDonationItem(
+	init: Partial<Omit<DonationItem, 'id' | 'amount' | 'needQty'>> & { qty_needed?: number } = {}
+): DonationItem {
+	const { qty_needed, ...rest } = init;
+	return {
+		id: ulid(),
+		category: 'food',
+		name: '',
+		unit: 'piece',
+		condition: 'new',
+		remark: '',
+		...rest,
+		amount: 0,
+		...(qty_needed !== undefined && qty_needed > 0 ? { needQty: qty_needed } : {})
+	};
 }
 
 export type TabStep = 'needs' | 'shelter-details' | 'form' | 'time' | 'ticket';
@@ -54,17 +77,7 @@ export class DonationStore {
 	 */
 	photos = new DonorPhotos();
 
-	items = $state<DonationItem[]>([
-		{
-			id: ulid(),
-			category: 'food',
-			name: '',
-			amount: 1,
-			unit: 'piece',
-			condition: 'new',
-			remark: ''
-		}
-	]);
+	items = $state<DonationItem[]>([newDonationItem()]);
 
 	// ขั้น 3 — จุดส่งมอบ + วันเวลา (เก็บไว้โชว์บนตั๋ว)
 	selectedShelter = $state('');
@@ -91,15 +104,7 @@ export class DonationStore {
 	}
 
 	addItem() {
-		this.items.push({
-			id: ulid(),
-			category: 'food',
-			name: '',
-			amount: 1,
-			unit: 'piece',
-			condition: 'new',
-			remark: ''
-		});
+		this.items.push(newDonationItem());
 	}
 
 	removeItem(id: string) {
@@ -127,17 +132,7 @@ export class DonationStore {
 		this.selectedShelterName = '';
 		this.shelterLocked = false;
 		this.deliveryDate = '';
-		this.items = [
-			{
-				id: ulid(),
-				category: 'food',
-				name: '',
-				amount: 1,
-				unit: 'piece',
-				condition: 'new',
-				remark: ''
-			}
-		];
+		this.items = [newDonationItem()];
 		this.captchaToken = '';
 		this.isSubmitting = false;
 		this.errorMessage = '';

@@ -5,7 +5,8 @@ import type { LayoutLoad } from './$types';
 // guard (requireManager / requireAdmin / requireKitchen / requireAuth). A
 // requireManager gate at this level pre-empted every page guard, so
 // kitchen_staff (CR-024) was redirected before ever reaching requireKitchen.
-// A kiosk_staff-only user is the exception: they may open the kiosk pages only (FR-SBO-29).
+// A kiosk_staff-only user is the exception: they may open the kiosk pages only, and a
+// pr_staff-only user the kiosk banner pages only (FR-SBO-29, issue #930).
 export const load = (async ({ fetch, url }) => {
 	await requireAuth(fetch);
 	confineKioskStaffOnly(url.pathname);

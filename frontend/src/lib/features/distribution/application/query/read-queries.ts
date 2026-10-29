@@ -18,6 +18,7 @@ import {
 } from './repositories';
 import { calculateShiftReconciliation } from '../food-supplies/reconciliation-workflow';
 import { resolveDispatchedLotExpiry } from '../food-supplies/lot-expiry';
+import { DEFAULT_QUERY_STALE_TIME_MS } from '$lib/db/query-client';
 import { operationsRepository } from '$lib/features/operations';
 import { getReturnOperationState } from '../food-supplies/return-workflow';
 import {
@@ -176,7 +177,11 @@ export const useBulkReturnPoolOverview = (
 				const ctx = resolveAuthenticatedAuthorContext(shelterCode);
 				return getBulkReturnPoolOverview(resolvedOptions ?? {}, ctx);
 			},
-			enabled: isEnabled
+			enabled: isEnabled,
+			// A degraded overview (loan read failed) must be re-checked on focus/reconnect, so it is
+			// stale at once; otherwise keep the global default staleTime.
+			staleTime: (query) =>
+				query.state.data?.some((row) => row.loan_refs_unavailable) ? 0 : DEFAULT_QUERY_STALE_TIME_MS
 		};
 	});
 

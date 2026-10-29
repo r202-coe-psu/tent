@@ -5,6 +5,7 @@
 	import Trash2 from '@lucide/svelte/icons/trash-2';
 	import ArrowRight from '@lucide/svelte/icons/arrow-right';
 	import AlertCircle from '@lucide/svelte/icons/alert-circle';
+	import { tick } from 'svelte';
 	import { toast } from 'svelte-sonner';
 	import * as Select from '$lib/components/ui/select';
 	import { getDonationStore } from '../../../routes/(public)/donations/donation.svelte';
@@ -16,6 +17,7 @@
 	import { FALLBACK_UNIT_DEFINITIONS, formatUnit, useUnitsOfMeasure } from '$lib/features/catalog';
 	import { langState } from '$lib/states/i18n.svelte';
 	import { getTranslation } from '$lib/utils/i18n';
+	import { qtyStrCoercePositiveSchema } from '$lib/utils/qty';
 	import { PUBLIC_DONATIONS_I18N } from '$lib/constants/i18n';
 
 	const donationStore = getDonationStore();
@@ -65,6 +67,12 @@
 
 	let validationErrors = $state<string[]>([]);
 
+	// The schema the BFF validates `items[].qty` with (Decimal, 4 dp, > 0) — so 0.00001 is
+	// caught here instead of as a 422 at submit (#822, CR-038).
+	function isPositiveAmount(amount: unknown): boolean {
+		return qtyStrCoercePositiveSchema.safeParse(amount).success;
+	}
+
 	function handleNext() {
 		validationErrors = [];
 
@@ -89,7 +97,7 @@
 				if (!item.name || !item.name.trim()) {
 					validationErrors.push(t.valItemName.replace('{index}', String(index + 1)));
 				}
-				if (!item.amount || item.amount <= 0) {
+				if (!isPositiveAmount(item.amount)) {
 					validationErrors.push(t.valItemAmount.replace('{index}', String(index + 1)));
 				}
 				if (!item.unit || !item.unit.trim()) {
@@ -98,11 +106,16 @@
 			});
 		}
 
+		const firstBadAmount = donationStore.items.find((item) => !isPositiveAmount(item.amount));
+
 		if (validationErrors.length === 0) {
 			donationStore.goToStep('time');
 			if (donationStore.reachedStep < 3) donationStore.reachedStep = 3;
 		} else {
 			toast.error(t.valToastError);
+			if (firstBadAmount) {
+				void tick().then(() => document.getElementById(`amount-${firstBadAmount.id}`)?.focus());
+			}
 		}
 	}
 </script>
@@ -271,10 +284,24 @@
 							<input
 								type="number"
 								id="amount-{item.id}"
-								min="1"
+								min="0"
+								step="any"
 								bind:value={item.amount}
 								class="w-full rounded-xl border-2 border-slate-200 bg-white p-3 font-bold text-slate-800 outline-hidden transition-colors focus:border-domain-donation-strong"
 							/>
+							{#if item.needQty}
+								<p
+									class="mt-1 text-xs font-medium text-slate-500"
+									data-testid="need-shortage-{item.id}"
+								>
+									{t.needShortage
+										.replace('{qty}', String(item.needQty))
+										.replace(
+											'{unit}',
+											formatUnit(item.unit_code ?? item.unit, units, langState.current)
+										)}
+								</p>
+							{/if}
 						</div>
 						<div class="col-span-1">
 							<label class="mb-1 block text-xs font-bold text-slate-600" for="unit-{item.id}">

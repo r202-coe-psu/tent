@@ -79,6 +79,10 @@ async def reconcile_closed_shelters(
             now=now,
         )
         if phase is RetentionPhase.CLOSED_WITHOUT_DATE:
+            # A shelter deleted from the registry leaves this row behind with its persons
+            # already cascaded away — nothing is being kept, so nothing to warn about.
+            if not await PublicPerson.find(PublicPerson.shelter_code == code).count():
+                continue
             logger.warning(
                 "Closed shelter %s has no closed_at — keeping its public_persons "
                 "(CR-183 D-5); backfill with migrate:shelter-closed-at",

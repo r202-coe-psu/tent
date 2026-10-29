@@ -106,7 +106,7 @@ test.describe('Back-office ↔ desk ticket journeys', { tag: ['@critical', '@dis
 		});
 	});
 
-	test('Journey B: warehouse credits only the lower verified return quantity', async ({
+	test('Journey B: warehouse credits only the lower verified return quantity back into the source lot', async ({
 		page,
 		scenarioAs
 	}) => {
@@ -142,9 +142,13 @@ test.describe('Back-office ↔ desk ticket journeys', { tag: ['@critical', '@dis
 			VERIFIED_RETURN_QTY,
 			INVALID_VERIFIED_QTY
 		);
-		const receipts = await ledgerRows('receive', ticket.ticketId);
-		expect(receipts).toHaveLength(1);
-		expect(receipts[0]?.qty).toBe(VERIFIED_RETURN_QTY);
+		// CR-208: the verified leftovers go back into the lot the ticket was dispatched from.
+		const [dispatched] = await ledgerRows('distribute', ticket.ticketId);
+		const returns = await ledgerRows('distribution_return', ticket.ticketId);
+		expect(returns).toHaveLength(1);
+		expect(returns[0]).toMatchObject({ qty: VERIFIED_RETURN_QTY, lot_ref: dispatched?.lot_ref });
+		expect(returns[0]?.lot).toBeUndefined();
+		expect(await ledgerRows('receive', ticket.ticketId)).toHaveLength(0);
 
 		await backOffice.completeTicket(ticket);
 		await backOffice.expectCompletedInBrowser(ticket);

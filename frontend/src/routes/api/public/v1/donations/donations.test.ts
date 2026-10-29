@@ -648,6 +648,28 @@ describe('POST /api/public/v1/donations', () => {
 		expect(data.success).toBe(false);
 	});
 
+	async function postItems(items: unknown) {
+		const mockRequest = { json: () => Promise.resolve({ ...validPayload, items }) };
+		const response = await POST({
+			request: mockRequest,
+			getClientAddress: () => '127.0.0.1'
+		} as unknown as PostEvent);
+		return { response, data: await response.json() };
+	}
+
+	it.each([0, '0', -1, ''])('returns 422 when an item qty is %j (#822)', async (qty) => {
+		const { response, data } = await postItems([{ ...validPayload.items[0], qty }]);
+		expect(response.status).toBe(422);
+		expect(data.success).toBe(false);
+	});
+
+	it('returns 422 for an empty items list (#822)', async () => {
+		const { response, data } = await postItems([]);
+		expect(response.status).toBe(422);
+		expect(data.success).toBe(false);
+		expect(JSON.stringify(data)).toContain('Please add at least one item to the donation');
+	});
+
 	it('returns 422 when logistics is missing (required for public channel)', async () => {
 		const noLogistics = { ...validPayload };
 		delete (noLogistics as Partial<typeof validPayload>).logistics;

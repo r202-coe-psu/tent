@@ -5,8 +5,7 @@ from __future__ import annotations
 import copy
 import json
 from datetime import UTC, datetime
-from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import MagicMock
 
 import httpx
 import pytest
@@ -98,33 +97,34 @@ def photo(photo_id: str, **over) -> dict:
     }
 
 
-def buffer_row(photos: list[str], **over) -> SimpleNamespace:
-    row = {
+async def buffer_row(photos: list[str], **over) -> DonationBuffer:
+    """Insert the booking's buffer row — inbound re-reads and CASes it in Mongo."""
+    fields = {
         "id": DONATION,
         "shelter_code": "SH001",
-        "campaign_id": None,
         "created_at": datetime(2026, 10, 26, 3, 0, tzinfo=UTC),
-        "expires_at": None,
         "booking_ref": "DN-100001",
+        "tracking_token": "TX-SH001-PHOTOS01",
         "tracking_token_hash": "hash",
-        "donor": SimpleNamespace(
-            name="ผู้บริจาค", phone="0812345678", line_id=None, email=None
-        ),
+        "donor": DonorBuffer(name="ผู้บริจาค", phone="0812345678"),
         "items_declared": [{"free_text": "ผ้าห่ม", "qty": "2", "unit": "ผืน"}],
-        "logistics": None,
         "status": "pending_review",
-        "revisions": [],
         "photos": photos,
         "photos_linked": not photos,
         "synced_to_couch": False,
-        "save": AsyncMock(),
     }
-    row.update(over)
-    return SimpleNamespace(**row)
+    fields.update(over)
+    return await DonationBuffer(**fields).insert()
 
 
-async def persist(fake: FakeCouch, row: SimpleNamespace) -> bool:
-    return await _persist_donation(fake.client(), row)  # type: ignore[arg-type]
+async def stored() -> DonationBuffer:
+    row = await DonationBuffer.get(DONATION)
+    assert row is not None
+    return row
+
+
+async def persist(fake: FakeCouch, row: DonationBuffer) -> bool:
+    return await _persist_donation(fake.client(), row)
 
 
 def owner(fake: FakeCouch, photo_id: str) -> str | None:
@@ -132,9 +132,9 @@ def owner(fake: FakeCouch, photo_id: str) -> str | None:
 
 
 @pytest.mark.asyncio
-async def test_binds_every_photo_and_copies_the_ids_onto_the_booking():
+async def test_binds_every_photo_and_copies_the_ids_onto_the_booking(db: None):
     fake = FakeCouch([photo(P1), photo(P2)])
-    row = buffer_row([P1, P2])
+    row = await buffer_row([P1, P2])
 
     assert await persist(fake, row) is True
 
@@ -143,26 +143,27 @@ async def test_binds_every_photo_and_copies_the_ids_onto_the_booking():
     assert fake.docs[DONATION]["schema_v"] == 9
     # The attachments survive the rewrite: the stubs go back with the doc.
     assert fake.docs[P1]["_attachments"] == {"full": {"stub": True, "length": 10}}
-    assert (row.synced_to_couch, row.photos_linked) == (True, True)
+    stored_row = await stored()
+    assert (stored_row.synced_to_couch, stored_row.photos_linked) == (True, True)
 
 
 @pytest.mark.asyncio
-async def test_a_photo_another_booking_holds_is_left_alone_and_cut():
+async def test_a_photo_another_booking_holds_is_left_alone_and_cut(db: None):
     fake = FakeCouch([photo(P1), photo(P2, donation_id=OTHER)])
-    row = buffer_row([P1, P2])
+    row = await buffer_row([P1, P2])
 
     assert await persist(fake, row) is True
 
     assert owner(fake, P2) == OTHER
     assert P2 not in fake.puts
     assert fake.docs[DONATION]["photos"] == [P1]
-    assert row.photos_linked is True
+    assert (await stored()).photos_linked is True
 
 
 @pytest.mark.asyncio
-async def test_a_photo_that_is_not_a_donation_photo_is_never_claimed():
+async def test_a_photo_that_is_not_a_donation_photo_is_never_claimed(db: None):
     fake = FakeCouch([photo(P1, purpose=None)])
-    row = buffer_row([P1])
+    row = await buffer_row([P1])
 
     assert await persist(fake, row) is True
 
@@ -171,31 +172,33 @@ async def test_a_photo_that_is_not_a_donation_photo_is_never_claimed():
 
 
 @pytest.mark.asyncio
-async def test_a_photo_already_swept_stays_on_the_booking_for_staff_to_see_missing():
+async def test_a_photo_already_swept_stays_on_the_booking_for_staff_to_see_missing(
+    db: None,
+):
     # FR-13b: staff get a "รูปไม่พร้อมใช้" tile rather than silently fewer photos.
     fake = FakeCouch([photo(P1)])
-    row = buffer_row([P1, P2])
+    row = await buffer_row([P1, P2])
 
     assert await persist(fake, row) is True
 
     assert fake.docs[DONATION]["photos"] == [P1, P2]
-    assert row.photos_linked is True
+    assert (await stored()).photos_linked is True
 
 
 @pytest.mark.asyncio
-async def test_two_conflicts_are_retried_within_the_run():
+async def test_two_conflicts_are_retried_within_the_run(db: None):
     fake = FakeCouch([photo(P1)])
     fake.conflicts[P1] = 2
-    row = buffer_row([P1])
+    row = await buffer_row([P1])
 
     assert await persist(fake, row) is True
 
     assert owner(fake, P1) == DONATION
-    assert row.photos_linked is True
+    assert (await stored()).photos_linked is True
 
 
 @pytest.mark.asyncio
-async def test_a_reread_after_409_that_finds_another_booking_cuts_the_photo():
+async def test_a_reread_after_409_that_finds_another_booking_cuts_the_photo(db: None):
     fake = FakeCouch([photo(P1)])
     original = fake.handle
 
@@ -210,70 +213,71 @@ async def test_a_reread_after_409_that_finds_another_booking_cuts_the_photo():
         return original(request)
 
     fake.handle = other_booking_wins  # type: ignore[method-assign]
-    row = buffer_row([P1])
+    row = await buffer_row([P1])
 
     assert await persist(fake, row) is True
 
     assert owner(fake, P1) == OTHER
     assert fake.docs[DONATION]["photos"] == []
-    assert row.photos_linked is True
+    assert (await stored()).photos_linked is True
 
 
 @pytest.mark.asyncio
-async def test_three_conflicts_write_the_booking_anyway_and_leave_the_photo_for_later():
+async def test_three_conflicts_write_the_booking_anyway_and_leave_the_photo_for_later(
+    db: None,
+):
     fake = FakeCouch([photo(P1), photo(P2)])
     fake.conflicts[P1] = 3
-    row = buffer_row([P1, P2])
+    row = await buffer_row([P1, P2])
 
     assert await persist(fake, row) is True
 
     assert owner(fake, P1) is None
     assert owner(fake, P2) == DONATION
     assert fake.docs[DONATION]["photos"] == [P1, P2]  # FR-11a: the id stays
-    assert (row.synced_to_couch, row.photos_linked) == (True, False)
+    stored_row = await stored()
+    assert (stored_row.synced_to_couch, stored_row.photos_linked) == (True, False)
 
     # Next poll: the retry binds it and settles the row.
-    row.synced_to_couch = True
-    assert await _rebind_photos(fake.client(), row) is True  # type: ignore[arg-type]
+    assert await _rebind_photos(fake.client(), row) is True
     assert owner(fake, P1) == DONATION
-    assert row.photos_linked is True
+    assert (await stored()).photos_linked is True
 
 
 @pytest.mark.asyncio
-async def test_retry_cuts_a_photo_another_booking_took_meanwhile():
+async def test_retry_cuts_a_photo_another_booking_took_meanwhile(db: None):
     fake = FakeCouch([photo(P1, donation_id=OTHER), photo(P2, donation_id=DONATION)])
     fake.docs[DONATION] = {"_id": DONATION, "type": "donation", "photos": [P1, P2]}
     fake.revs[DONATION] = 1
-    row = buffer_row([P1, P2], synced_to_couch=True, photos_linked=False)
+    row = await buffer_row([P1, P2], synced_to_couch=True, photos_linked=False)
 
-    assert await _rebind_photos(fake.client(), row) is True  # type: ignore[arg-type]
+    assert await _rebind_photos(fake.client(), row) is True
 
     assert fake.docs[DONATION]["photos"] == [P2]
     assert owner(fake, P1) == OTHER
-    assert row.photos_linked is True
+    assert (await stored()).photos_linked is True
 
 
 @pytest.mark.asyncio
-async def test_retry_keeps_waiting_while_couchdb_refuses_the_write():
+async def test_retry_keeps_waiting_while_couchdb_refuses_the_write(db: None):
     fake = FakeCouch([photo(P1)])
     fake.fail_puts.add(P1)
-    row = buffer_row([P1], synced_to_couch=True, photos_linked=False)
+    row = await buffer_row([P1], synced_to_couch=True, photos_linked=False)
 
-    assert await _rebind_photos(fake.client(), row) is False  # type: ignore[arg-type]
-    assert row.photos_linked is False
-    row.save.assert_not_awaited()
+    assert await _rebind_photos(fake.client(), row) is False
+    assert (await stored()).photos_linked is False
 
 
 @pytest.mark.asyncio
-async def test_a_run_that_died_after_binding_converges_on_the_next_run():
+async def test_a_run_that_died_after_binding_converges_on_the_next_run(db: None):
     fake = FakeCouch([photo(P1), photo(P2)])
     fake.fail_puts.add(DONATION)
-    row = buffer_row([P1, P2])
+    row = await buffer_row([P1, P2])
 
     # The photos bind, then the booking write fails: the row stays unsynced.
     assert await persist(fake, row) is False
     assert owner(fake, P1) == owner(fake, P2) == DONATION
-    assert row.synced_to_couch is False
+    assert (await stored()).synced_to_couch is False
 
     fake.fail_puts.clear()
     fake.puts.clear()
@@ -282,19 +286,20 @@ async def test_a_run_that_died_after_binding_converges_on_the_next_run():
     # Already bound to this booking: no photo is rewritten, and none is cut as foreign.
     assert fake.puts == [DONATION]
     assert fake.docs[DONATION]["photos"] == [P1, P2]
-    assert (row.synced_to_couch, row.photos_linked) == (True, True)
+    stored_row = await stored()
+    assert (stored_row.synced_to_couch, stored_row.photos_linked) == (True, True)
 
 
 @pytest.mark.asyncio
-async def test_rerunning_a_settled_booking_changes_nothing():
+async def test_rerunning_a_settled_booking_changes_nothing(db: None):
     fake = FakeCouch([photo(P1, donation_id=DONATION)])
     fake.docs[DONATION] = {"_id": DONATION, "type": "donation", "photos": [P1]}
     fake.revs[DONATION] = 1
-    row = buffer_row([P1], synced_to_couch=True, photos_linked=False)
+    row = await buffer_row([P1], synced_to_couch=True, photos_linked=False)
     before = copy.deepcopy(fake.docs)
 
     for _ in range(3):
-        assert await _rebind_photos(fake.client(), row) is True  # type: ignore[arg-type]
+        assert await _rebind_photos(fake.client(), row) is True
 
     assert fake.docs == before
     assert fake.puts == []

@@ -11,10 +11,17 @@
 	import { Label } from '$lib/components/ui/label/index.js';
 	import { Textarea } from '$lib/components/ui/textarea/index.js';
 	import { spatial } from '$lib/tokens';
+	import { canManageScanners } from '$lib/auth/roles';
+	import { authStore } from '$lib/stores/auth.svelte';
 	import { getShelterCode } from '$lib/db/shelter';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
 	import { KIOSK_SCREEN_TYPES } from '$lib/features/shared';
-	import { useScannerDevices } from '$lib/features/kiosk-devices';
+	import {
+		SetStaffPinDialog,
+		useScannerDevices,
+		ViewStaffPinDialog,
+		type ScannerDevice
+	} from '$lib/features/kiosk-devices';
 	import {
 		KIOSK_BANNER_GROUP_LIMITS,
 		KioskBannerGroupDevicePicker,
@@ -31,6 +38,7 @@
 	} from '$lib/features/kiosk-banners';
 	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
 	import Cpu from '@lucide/svelte/icons/cpu';
+	import KeyRound from '@lucide/svelte/icons/key-round';
 	import Loader2 from '@lucide/svelte/icons/loader-2';
 	import Pencil from '@lucide/svelte/icons/pencil';
 	import Plus from '@lucide/svelte/icons/plus';
@@ -138,6 +146,23 @@
 		renameOpen = false;
 	}
 
+	// View-PIN dialog — reveal is logged server-side; only SM/KIO may go on to set a PIN (pr_staff
+	// is reveal-only, CR-203)
+	let viewPinOpen = $state(false);
+	let setPinOpen = $state(false);
+	let pinDevice = $state.raw<ScannerDevice | null>(null);
+	const canSetPin = $derived(canManageScanners(authStore.user?.roles ?? [], activeShelter));
+
+	function openViewPin(device: ScannerDevice) {
+		pinDevice = device;
+		viewPinOpen = true;
+	}
+
+	function openSetPin(device: ScannerDevice) {
+		pinDevice = device;
+		setPinOpen = true;
+	}
+
 	// Manage-devices dialog
 	let devicesOpen = $state(false);
 	let selected = $state<string[]>([]);
@@ -223,9 +248,18 @@
 					{:else}
 						{#each members as device (device.device_id)}
 							<span
-								class="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2.5 py-0.5 text-sm font-medium text-slate-800"
+								class="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 py-0.5 ps-2.5 pe-0.5 text-sm font-medium text-slate-800"
 							>
 								{device.name}
+								<Button
+									variant="ghost"
+									size="icon"
+									class="size-11 rounded-full"
+									aria-label={`ดู PIN เจ้าหน้าที่ของ ${device.name}`}
+									onclick={() => openViewPin(device)}
+								>
+									<KeyRound class="size-4" aria-hidden="true" />
+								</Button>
 							</span>
 						{/each}
 					{/if}
@@ -339,6 +373,15 @@
 		</Dialog.Content>
 	</Dialog.Root>
 
+	<ViewStaffPinDialog
+		bind:open={viewPinOpen}
+		device={pinDevice}
+		onsetpin={canSetPin ? openSetPin : undefined}
+	/>
+	{#if canSetPin}
+		<SetStaffPinDialog bind:open={setPinOpen} device={pinDevice} />
+	{/if}
+
 	<Dialog.Root bind:open={devicesOpen}>
 		<Dialog.Content class="max-h-[90dvh] gap-5 overflow-y-auto rounded-2xl sm:max-w-[560px]">
 			<Dialog.Header>
@@ -395,7 +438,7 @@
 			<AlertDialog.Footer>
 				<AlertDialog.Cancel>ยกเลิก</AlertDialog.Cancel>
 				<AlertDialog.Action
-					class="text-destructive-foreground bg-destructive hover:bg-destructive/90"
+					class="bg-destructive text-destructive-foreground hover:bg-destructive/90"
 					disabled={deleteGroup.isPending}
 					onclick={confirmDelete}
 				>

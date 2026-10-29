@@ -2,7 +2,7 @@
 title: "Full-System Role Permission Matrix (R2-R4 & V10)"
 status: approved
 created: 2026-06-04
-updated: 2026-10-27 # CR-204 แยกแถว Stock Distribution (WS/SM เบิกจ่าย, SC ไม่ได้); 2026-10-20 CR-153 Daily SOP rows; CR-155 amend incident log เฉพาะ SA/SM/SO; 2026-10-18 CR-165 kiosk_staff แทน banner_staff (11th role) + CR-162 path `/back-office/kiosks/banners`; 2026-10-11 CR-162 banner_staff; เดิม: CR-093 (Compound Roles) & CR-104 (Volunteer Backoffice, 10-Role Taxonomy, Health Policy); decision sync 2026-10-10; CR-155 shelter_incident แทน shelter_report
+updated: 2026-10-29 # #879 ข้อ 1 ตัดการส่งต่อผู้ป่วยออกจากคำอธิบาย MED; 2026-10-28 CR-203 (approved 2026-10-27, #930) pr_staff บทบาทที่ 12 + คอลัมน์ PR แถว kiosk; CR-204 แยกแถว Stock Distribution (WS/SM เบิกจ่าย, SC ไม่ได้); 2026-10-26 CR-153 แยก Daily SOP UI visibility กับ CouchDB read; 2026-10-24 CR-153 amendment Daily SOP Read = UI-visibility; 2026-10-20 CR-153 Daily SOP rows; CR-155 amend incident log เฉพาะ SA/SM/SO; 2026-10-18 CR-165 kiosk_staff แทน banner_staff (11th role) + CR-162 path `/back-office/kiosks/banners`; 2026-10-11 CR-162 banner_staff; เดิม: CR-093 (Compound Roles) & CR-104 (Volunteer Backoffice, 10-Role Taxonomy, Health Policy); decision sync 2026-10-10; CR-155 shelter_incident แทน shelter_report
 note: decision sync 2026-10-10 — VC may access /back-office/volunteers (job board/shifts), REG may access Station 2 medical screening; portal groups menus by department (ฝ่าย): ทะเบียน(REG; TRG/MED เห็นเฉพาะ Station 2), ครัว(KS), พัสดุและคลัง(SC, warehouse_staff alias), อาสาสมัคร(VC), รักษาความปลอดภัย(SO), อาคารสถานที่(FAC), บริหารศูนย์(SM), ส่วนกลาง(SA)
 closes: K-12 (A1 RBAC phase-blocker)
 affects:
@@ -25,30 +25,35 @@ affects:
 
 ## 1. Roles & Access Tiers
 
-### 1.1 โครงสร้าง 10 บทบาทผู้ใช้งานภายใน (Internal Authenticated Roles)
+### 1.1 โครงสร้าง 12 บทบาทผู้ใช้งานภายใน (Internal Authenticated Roles)
 
 | ตัวย่อ  | รหัสบทบาท (`RoleKey`)   | ชื่อบทบาท (ภาษาไทย)          | ขอบเขตความรับผิดชอบหลัก                                                                                                                                                                                                           |
 | :-----: | :---------------------- | :--------------------------- | :-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **SA**  | `system_admin`          | ผู้ดูแลระบบส่วนกลาง          | มีสิทธิ์สูงสุดระดับสากล (Global Access) เข้าถึงและจัดการได้ทุกศูนย์พักพิง, จัดการบัญชีผู้ใช้, กำหนดค่าระบบส่วนกลาง และกู้คืนข้อมูล                                                                                                |
-| **SM**  | `shelter_manager`       | ผู้จัดการศูนย์พักพิง         | ควบคุมการปฏิบัติงานทั้งหมดภายในศูนย์ของตนเอง มีอำนาจครอบคลุมสิทธิ์ของบทบาทที่ 3 ถึง 10 ทั้งหมดในศูนย์นั้น รวมถึงงานคัดกรองและการแพทย์                                                                                             |
+| **SM**  | `shelter_manager`       | ผู้จัดการศูนย์พักพิง         | ควบคุมการปฏิบัติงานทั้งหมดภายในศูนย์ของตนเอง มีอำนาจครอบคลุมสิทธิ์ของบทบาทที่ 3 ถึง 12 ทั้งหมดในศูนย์นั้น รวมถึงงานคัดกรองและการแพทย์                                                                                             |
 | **REG** | `registration_staff`    | เจ้าหน้าที่รับลงทะเบียน      | บันทึกข้อมูลทะเบียนประวัติผู้อพยพ (Evacuees), ข้อมูลครัวเรือน, ยานพาหนะ, สัตว์เลี้ยง, การเช็คอิน-เช็คเอาต์ประจำวัน และออกบัตรประจำตัว                                                                                             |
 | **TRG** | `triage_staff`          | เจ้าหน้าที่คัดกรอง           | คัดกรองกลุ่มเปราะบาง (ผู้สูงอายุ, ผู้พิการ, เด็ก, สตรีมีครรภ์) และคัดแยกผู้ป่วยเบื้องต้นเพื่อส่งต่อไปยังพื้นที่พักพิงที่เหมาะสม                                                                                                   |
-| **MED** | `medical_staff`         | เจ้าหน้าที่การแพทย์และพยาบาล | บันทึกข้อมูลสุขภาพ, ประวัติการรักษาพยาบาลเบื้องต้น, การจ่ายยา, การเฝ้าระวังโรคติดต่อ และการส่งต่อผู้ป่วยไปยังโรงพยาบาลภายนอก                                                                                                      |
+| **MED** | `medical_staff`         | เจ้าหน้าที่การแพทย์และพยาบาล | บันทึกข้อมูลสุขภาพ, ประวัติการรักษาพยาบาลเบื้องต้น, การจ่ายยา และการเฝ้าระวังโรคติดต่อ                                                                                                                                            |
 | **KS**  | `kitchen_staff`         | เจ้าหน้าที่ครัวกลาง          | วางแผนรายการอาหารประจำวัน (Meal Planning), คำนวณวัตถุดิบและแก๊สหุงต้ม, เบิกจ่ายวัตถุดิบ, และบันทึกยอดการแจกจ่ายอาหาร                                                                                                              |
 | **SC**  | `supply_coordinator`    | ผู้ประสานงานพัสดุและคลัง     | รับมอบสิ่งของบริจาค, จัดการคลังพัสดุ, ตัดจ่ายสิ่งของจำเป็น, เบิกถุงยังชีพ, และควบคุมระดับสต็อกขั้นต่ำ                                                                                                                             |
 | **VC**  | `volunteer_coordinator` | ผู้ประสานงานจิตอาสา          | สร้างประกาศภารกิจงานอาสา (`job`), ดูแลกระดานงาน, จัดสรรกะงาน, ดูแลจุดเช็คอินแท็บเล็ตหน้าศูนย์, และออกสิทธิ์ระบบให้อาสาช่วยงาน                                                                                                     |
 | **SO**  | `security_officer`      | เจ้าหน้าที่รักษาความปลอดภัย  | ควบคุมความสงบเรียบร้อย, บันทึกเหตุการณ์ความไม่ปลอดภัย (Incidents), จัดการพื้นที่หวงห้าม, และเฝ้าระวังจุดเข้า-ออกศูนย์                                                                                                             |
 | **FAC** | `facility_staff`        | เจ้าหน้าที่ฝ่ายอาคารสถานที่  | จัดการโซนที่พัก (Zoning), บริหารจัดการเต็นท์และพื้นที่นอน, ดูแลระบบไฟฟ้า น้ำประปา สุขาภิบาล และการซ่อมบำรุงอาคาร                                                                                                                  |
 | **KIO** | `kiosk_staff`           | เจ้าหน้าที่ดูแลตู้ Kiosk     | ดูแลตู้ kiosk ของศูนย์ตัวเอง — เครื่อง + staff PIN ([CR-165](../changes/14-kiosk/CR-165-kiosk-management-back-office.md)) และแบนเนอร์รูปภาพบนตู้ ([CR-162](../changes/14-kiosk/CR-162-kiosk-banner.md)) — ไม่มีสิทธิ์อื่นของศูนย์ |
+| **PR**  | `pr_staff`              | เจ้าหน้าที่ประชาสัมพันธ์     | ข่าวสารบนตู้ kiosk ของศูนย์ตัวเอง — banner + กลุ่ม banner, ผูกกลุ่มกับเครื่อง, ดูรายชื่อเครื่องและดู staff PIN (reveal + log) — ตั้งค่าเครื่องหรือแก้ PIN ไม่ได้ ([CR-203](../changes/14-kiosk/CR-203-pr-staff-role.md))          |
 
 > **CR-165 FR-SBO-41 / CR-162** — บทบาทที่ 11 คือ `kiosk_staff` (compound `{code}:kiosk_staff`, อยู่ใน `STAFF_CAPABILITIES` — SM ของศูนย์และ SA grant/revoke ได้) · `banner_staff` ของ CR-162 ฉบับ 2026-10-11 ถูกแทนที่และไม่มีใน `roles.ts`
+>
+> **[CR-203](../changes/14-kiosk/CR-203-pr-staff-role.md) (#930)** — บทบาทที่ 12 คือ `pr_staff` (compound `{code}:pr_staff`, อยู่ใน `STAFF_CAPABILITIES` — SM ของศูนย์และ SA grant/revoke ได้) · user ที่มีแค่ `kiosk_staff` และ/หรือ `pr_staff` ในศูนย์ที่เลือกเข้า back-office ได้เฉพาะหน้า kiosk (FR-SBO-29): มี `kiosk_staff` → `/back-office/kiosks/**` · `pr_staff` อย่างเดียว → `/back-office/kiosks/banners/**` เท่านั้น
 
-| หมวดงาน / เอกสาร                                 | การกระทำ (Action)                             | SA  |  SM   |  KIO  | บทบาทอื่น |
-| :----------------------------------------------- | :-------------------------------------------- | :-: | :---: | :---: | :-------: |
-| **Kiosk Device** (`/back-office/kiosks`)         | ดู / สร้าง / แก้ไข / เปิดปิด / staff PIN / ลบ |  ✓  | scope | scope |     —     |
-| **Kiosk Banner** (`/back-office/kiosks/banners`) | ดู / สร้าง / แก้ไข / เปิดปิด / จัดลำดับ / ลบ  |  ✓  | scope | scope |     —     |
+| หมวดงาน / เอกสาร                                 | การกระทำ (Action)                                     | SA  |  SM   |  KIO  |  PR   | บทบาทอื่น |
+| :----------------------------------------------- | :---------------------------------------------------- | :-: | :---: | :---: | :---: | :-------: |
+| **Kiosk Device** (`/back-office/kiosks`)         | สร้าง / แก้ไข / เปิดปิด / ตั้งหรือสุ่ม staff PIN / ลบ |  ✓  | scope | scope |   —   |     —     |
+| **Kiosk Device** (รายชื่อในหน้ากลุ่ม banner)     | ดูรายชื่อเครื่อง / ดู staff PIN (reveal + log)        |  ✓  | scope | scope | scope |     —     |
+| **Kiosk Banner** (`/back-office/kiosks/banners`) | ดู / สร้าง / แก้ไข / เปิดปิด / จัดลำดับ / ลบ          |  ✓  | scope | scope | scope |     —     |
+| **Kiosk Banner Group**                           | ดู / สร้าง / แก้ชื่อ / ผูกเครื่อง / ลบ                |  ✓  | scope | scope | scope |     —     |
 
-> scope = เฉพาะศูนย์ที่ถือ `{code}:shelter_manager` / `{code}:kiosk_staff` · เครื่องหรือ banner ของศูนย์อื่นที่เรียกด้วย `{id}` ตอบ `404`
+> scope = เฉพาะศูนย์ที่ถือ `{code}:shelter_manager` / `{code}:kiosk_staff` / `{code}:pr_staff` (คอลัมน์ PR = CR-203) · เครื่องหรือ banner ของศูนย์อื่นที่เรียกด้วย `{id}` ตอบ `404` · `pr_staff` เรียก API เขียนเครื่อง / ตั้ง PIN ได้ `403`
 
 ---
 
@@ -102,7 +107,7 @@ affects:
 | **Meal Planning & Service**                                                                 | แผนอาหาร, บันทึกแจกจ่ายมื้ออาหาร                                                                                                                                                           |  ✓  | scope |   —   |   —   |   —   | scope |   —   |   —   |   —   |   —   |
 | **Kitchen Requisition**                                                                     | เบิกวัตถุดิบทำอาหารตัดสต็อก                                                                                                                                                                |  ✓  | scope |   —   |   —   |   —   | scope | scope |   —   |   —   |   —   |
 | **Inventory & Supply**                                                                      | รับของบริจาค, สต็อก                                                                                                                                                                        |  ✓  | scope |   —   |   —   |   —   |   —   | scope |   —   |   —   |   —   |
-| **Stock Distribution**      | เบิกจ่ายพัสดุออกจากคลังโดยตรง (ตัดจ่าย)                                                                                                                                                    |  ✓  | scope |   —   |   —   |   —   |   —   |  WS   |   —   |   —   |   —   |
+| **Stock Distribution**                                                                      | เบิกจ่ายพัสดุออกจากคลังโดยตรง (ตัดจ่าย)                                                                                                                                                    |  ✓  | scope |   —   |   —   |   —   |   —   |  WS   |   —   |   —   |   —   |
 | **Volunteer Job Board**                                                                     | สร้างประกาศภารกิจงานอาสา, จัดกะ                                                                                                                                                            |  ✓  | scope |   —   |   —   |   —   |   —   |   —   | scope |   —   |   —   |
 | **Volunteer Check-in**                                                                      | รับรายงานตัวอาสาหน้างาน (POS/Kiosk)                                                                                                                                                        |  ✓  | scope | scope |   —   |   —   |   —   |   —   | scope |   —   |   —   |
 | **Shelter Incident Log** ([CR-155](../changes/08-E-reports/CR-155-shelter-incident-log.md)) | เฉพาะ SA/SM/SO (incident staff) เข้าเมนู/route · เปิดบันทึก + เพิ่มบันทึกสังเกตการณ์ · เปลี่ยนสถานะ/ส่งต่อ/ปิด = เจ้าของเคสหรือ SM · ยกเลิก = SM · ลบไม่ได้ทุก role · role อื่นไม่มีสิทธิ์ |  ✓  | scope |   —   |   —   |   —   |   —   |   —   |   —   | scope |   —   |

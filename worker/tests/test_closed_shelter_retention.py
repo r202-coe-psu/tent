@@ -243,6 +243,20 @@ async def test_retention_keeps_persons_of_a_closed_shelter_without_closed_at(
     assert await RetentionAudit.find_all().count() == 0
 
 
+async def test_retention_does_not_warn_for_a_closed_shelter_without_persons(
+    db: None, caplog: pytest.LogCaptureFixture
+) -> None:
+    """A shelter deleted from the registry keeps a closed row with no closed_at and no persons."""
+    await _insert_shelter("SH990", "closed", closed_at=None)
+
+    with caplog.at_level(logging.WARNING, logger="worker.retention.job"):
+        await reconcile_closed_shelters(
+            "run-orphan", retention_months=0, now=datetime(2030, 1, 1, tzinfo=UTC)
+        )
+
+    assert "SH990" not in caplog.text
+
+
 async def test_retention_leaves_open_shelters_alone(db: None) -> None:
     await _insert_shelter("SH953", "open")
     await _insert_person("SH953", "evacuee:p4")
