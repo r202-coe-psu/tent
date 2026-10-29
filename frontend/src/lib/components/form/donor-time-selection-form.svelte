@@ -22,7 +22,9 @@
 	import {
 		buildDonationItemsPayload,
 		buildDonationLogistics,
+		pickedSlot,
 		publicDonationErrorMessage,
+		slotContextKey,
 		slotModeForDelivery,
 		useDonationSlots,
 		VEHICLE_PLATE_MAX
@@ -71,15 +73,19 @@
 	const timeSlots = $derived(slotsQuery.isSuccess ? slotsQuery.data : []);
 	const hasShelter = $derived(Boolean(donationStore.shelterCode));
 
-	// A window the donor picked earlier can fill or close before they submit — drop the
-	// selection instead of letting them send a booking the service will reject.
-	$effect(() => {
-		const picked = donationStore.slotTime;
-		if (!picked) return;
-		if (!timeSlots.some((slot) => slot.label === picked && slot.status === 'available')) {
-			donationStore.slotTime = '';
-		}
-	});
+	// A window is picked for one shelter, day and queue: changing any of them, or the window
+	// filling or closing before submit, leaves nothing picked (`pickedSlot`).
+	const slotContext = $derived(
+		slotContextKey(donationStore.shelterCode, selectedDateStr, slotMode)
+	);
+	const selectedSlot = $derived(
+		pickedSlot({
+			slotTime: donationStore.slotTime,
+			slotFor: donationStore.slotFor,
+			context: slotContext,
+			slots: timeSlots
+		})
+	);
 
 	onMount(async () => {
 		try {
@@ -114,7 +120,7 @@
 		if (
 			(donationStore.deliveryMethod === 'self_dropoff' ||
 				donationStore.deliveryMethod === 'shelter_pickup') &&
-			(!selectedDate || !donationStore.slotTime)
+			(!selectedDate || !selectedSlot)
 		) {
 			donationStore.errorMessage = t.errSelectDateTime;
 			toast.error(donationStore.errorMessage);
@@ -141,10 +147,12 @@
 			return;
 		}
 
-		submitDonation();
+		// Read once, before reCAPTCHA's awaits: if the window fills meanwhile, the booking still
+		// carries the window that passed the check above, and the BFF answers SLOT_FULL.
+		submitDonation(selectedSlot, selectedDateStr || bangkokToday());
 	}
 
-	async function submitDonation() {
+	async function submitDonation(slotLabel: string, slotDateStr: string) {
 		donationStore.errorMessage = '';
 		donationStore.isSubmitting = true;
 		// E2E may inject a token; otherwise require real reCAPTCHA when enabled.
@@ -179,9 +187,8 @@
 			}
 		}
 
-		let slotDateStr = selectedDate ? selectedDate.toString() : bangkokToday();
-		let fromTime = donationStore.slotTime.split('-')[0]?.trim() || '00:00';
-		let toTime = donationStore.slotTime.split('-')[1]?.trim() || '23:59';
+		const fromTime = slotLabel.split('-')[0]?.trim() || '00:00';
+		const toTime = slotLabel.split('-')[1]?.trim() || '23:59';
 
 		const logistics = buildDonationLogistics({
 			deliveryMethod: donationStore.deliveryMethod,
@@ -536,12 +543,14 @@
 						<div class="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
 							{#each timeSlots as slot (slot.from)}
 								{@const isFull = slot.status !== 'available'}
-								{@const isSelected = donationStore.slotTime === slot.label}
+								{@const isSelected = selectedSlot === slot.label}
 								<button
 									type="button"
 									disabled={isFull}
 									onclick={() => {
-										if (!isFull) donationStore.slotTime = slot.label;
+										if (isFull) return;
+										donationStore.slotTime = slot.label;
+										donationStore.slotFor = slotContext;
 									}}
 									class="flex flex-col items-center justify-center gap-1 rounded-xl border-2 p-3 transition-all
 									{isFull
@@ -591,7 +600,7 @@
 				!donationStore.shelterCode ||
 				((donationStore.deliveryMethod === 'self_dropoff' ||
 					donationStore.deliveryMethod === 'shelter_pickup') &&
-					!donationStore.slotTime) ||
+					!selectedSlot) ||
 				(donationStore.deliveryMethod === 'shelter_pickup' && !donationStore.pickupAddress.trim())}
 			onclick={handleConfirmBookingRequest}
 			class="flex flex-1 cursor-pointer items-center justify-center gap-2 rounded-xl bg-domain-donation-strong py-4 text-lg font-bold text-white shadow-md transition-all hover:bg-domain-donation-text active:scale-95 disabled:opacity-50"

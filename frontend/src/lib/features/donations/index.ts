@@ -56,6 +56,9 @@ export {
 	maskLookupPhone,
 	rejectedLineReasons
 } from './domain/tracking';
+// Domain — which queue window counts as picked on the booking form
+export type { SlotOption } from './domain/slot-pick';
+export { pickedSlot, slotContextKey } from './domain/slot-pick';
 // Domain — drop-off destination (#590)
 export type { DropOffGeo, DropOffPoint, DropOffShelterSource } from './domain/drop-off';
 export {

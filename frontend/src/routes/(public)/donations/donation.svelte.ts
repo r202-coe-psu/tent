@@ -69,6 +69,8 @@ export class DonationStore {
 	vehiclePlate = $state('');
 	slotDate = $state('');
 	slotTime = $state('');
+	/** The shelter / day / queue `slotTime` was picked for (`slotContextKey`). */
+	slotFor = $state('');
 	/** The plate the booking actually sent — what the ticket shows (CR-209 FR-3a). */
 	bookedVehiclePlate = $state('');
 	shelterCode = $state('');
@@ -124,6 +126,7 @@ export class DonationStore {
 		this.vehiclePlate = '';
 		this.slotDate = '';
 		this.slotTime = '';
+		this.slotFor = '';
 		this.bookedVehiclePlate = '';
 		this.shelterCode = '';
 		this.courierTrackingNo = '';
