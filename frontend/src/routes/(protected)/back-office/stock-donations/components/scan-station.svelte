@@ -46,7 +46,9 @@
 		LineDecisionToggle,
 		type DonationRejectReasonCode,
 		type RejectDonationInput,
-		type ScanDonationView
+		type ScanDonationView,
+		DonationPhotoStrip,
+		closedAtIntakeMessage
 	} from '$lib/features/donations';
 	import { useSupplyItems } from '$lib/features/supply';
 	import {
@@ -556,7 +558,15 @@
 			}
 			const data = await res.json();
 			if (data.success && data.donation) {
-				donationDoc = data.donation as ScanDonationView;
+				const found = data.donation as ScanDonationView;
+				const closed = closedAtIntakeMessage(found.booking_ref || query.trim(), found.status);
+				if (closed) {
+					toast.error(closed);
+					scanState = 'idle';
+					if (fromList) onClose?.();
+					return;
+				}
+				donationDoc = found;
 				bookingRef = donationDoc?.booking_ref || '';
 				actionRef = donationDoc?.booking_ref || query.trim();
 				donorName = donationDoc?.donor?.name || 'ไม่ระบุชื่อ';
@@ -950,6 +960,13 @@
 				<div class="grid grid-cols-1 gap-5 bg-[#F8FAFC] p-4 sm:p-6 lg:grid-cols-12">
 					<!-- Left: items to count -->
 					<div class="space-y-4 lg:col-span-7">
+						<!-- CR-175 FR-12: what the donor photographed, next to what arrived. -->
+						{#if donationDoc}
+							<DonationPhotoStrip
+								photoIds={donationDoc.photos}
+								shelterCode={donationDoc.shelter_code}
+							/>
+						{/if}
 						<div class="flex items-baseline justify-between gap-2">
 							<h3 class="text-base font-semibold text-slate-800">รายการที่ต้องตรวจรับ</h3>
 							<span class="text-sm text-slate-500 tabular-nums">

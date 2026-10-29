@@ -119,6 +119,29 @@ describe('GET /api/back-office/donations (pending intake queue)', () => {
 		expect(data.donations[0]).toMatchObject({ donor_name: 'ผู้บริจาค ก', item_count: 1 });
 	});
 
+	it('carries the donor photos of a booking, and an empty list when it has none (FR-12)', async () => {
+		const photos = ['image:01K8PHXTX00000000000000001', 'image:01K8PHXTX00000000000000002'];
+		const withPhotos = { doc: { ...sh001[0].doc, photos } };
+		vi.mocked(adminRaw).mockImplementation((path: string, method: string) =>
+			Promise.resolve(
+				method === 'GET' && path.includes('/shelter_sh001/')
+					? { status: 200, data: { rows: [withPhotos, sh001[1]] } }
+					: { status: 404, data: {} }
+			)
+		);
+
+		const data = await (await GET(event())).json();
+		const byRef = Object.fromEntries(
+			data.donations.map((d: { booking_ref: string; photos: string[] }) => [
+				d.booking_ref,
+				d.photos
+			])
+		);
+
+		expect(byRef['DN-000002']).toEqual(photos);
+		expect(byRef['DN-000001']).toEqual([]);
+	});
+
 	it('never exposes the tracking token hash', async () => {
 		mockCouch();
 
