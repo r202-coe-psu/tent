@@ -1,11 +1,12 @@
 ---
-id: draft
+id: CR-209 # renumbered from draft-donation-vehicle-plate
 title: "ทะเบียนรถ (ไม่บังคับ) ตอนผู้บริจาคนำของมาส่งเอง — `logistics.vehicle_plate`"
-status: proposed
+status: approved
 date: 2026-10-26
-updated: 2026-10-28
-requested_by: "GitHub #823 (roleplay 23/10/69 feedback)"
-decided_by: "Jackyzaz"
+updated: 2026-10-29 # approved (Soravit Sukkarn, Team Lead)
+requested_by: "Verse (William)"
+decided_by: "Soravit Sukkarn (Team Lead)"
+decision_date: 2026-10-29
 layer: volatile
 affects:
   - docs/data/schema.md §2.3 `donation` — field ใหม่ `logistics.vehicle_plate`; migration note
@@ -20,7 +21,7 @@ why: จุดรับของ/รปภ. ต้องตรวจรถที
 migration: field ใหม่ optional — doc เดิมไม่ต้อง backfill; reader feature-detect ไม่ branch ตาม `schema_v`
 ---
 
-# draft-donation-vehicle-plate — ทะเบียนรถ (ไม่บังคับ) ตอนนำของมาส่งเอง
+# CR-209 — ทะเบียนรถ (ไม่บังคับ) ตอนนำของมาส่งเอง
 
 ## สรุป
 
@@ -111,3 +112,4 @@ migration: field ใหม่ optional — doc เดิมไม่ต้อง
   1. ช่องทะเบียนไม่บังคับ · free text ช่องเดียว ≤ 40 ตัวอักษร (FR-1)
   2. ถามทะเบียนเฉพาะ `self_dropoff` ไม่ถามตอน `shelter_pickup` / `parcel` (FR-1a, FR-2)
   3. ทะเบียนเห็นได้เฉพาะเจ้าหน้าที่คลังในหน้าหลังบ้าน (สแกนรับของ, รอประเมิน) และตั๋วหลังจองเสร็จ (ให้ผู้บริจาคแคปเก็บไว้) · **ห้าม**แสดงหรือส่งทางหน้าติดตามสถานะ / API ติดตามใบ (FR-3a–FR-3c, FR-4)
+- 2026-10-29 — approved by Soravit Sukkarn (Team Lead) · รันเลข CR-209 (renumbered from draft-donation-vehicle-plate) ย้ายเข้า 04-donation/
