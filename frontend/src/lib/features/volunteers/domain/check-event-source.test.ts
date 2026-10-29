@@ -17,13 +17,14 @@ describe('describeCheckEvent', () => {
 			);
 		});
 
-		it('qr → staff member (by) scanned, never the volunteer', () => {
+		it('qr → staff member (by) did it, never the volunteer, and no scan is claimed', () => {
 			const d = describeCheckEvent({ ...base, kind, method: 'qr', by: 'Sh001-VC-001' });
 			expect(d.source).toBe('staff_qr');
 			expect(d.group).toBe('staff');
-			expect(d.actorLine).toBe('Sh001-VC-001 (สแกน QR)');
+			expect(d.actorLine).toBe(`Sh001-VC-001 (${isIn ? 'เช็คอินให้' : 'เช็คเอาต์ให้'})`);
 			expect(d.actorLine).not.toContain('คีตศิลป์');
-			expect(d.sourceLabel).toContain('สแกน QR');
+			expect(d.sourceLabel).toBe(isIn ? 'จนท. เช็คอินให้' : 'จนท. เช็คเอาต์ให้');
+			expect(`${d.sourceLabel} ${d.actorLine}`).not.toContain('สแกน');
 		});
 
 		it('manual_override → staff + reason', () => {
@@ -46,7 +47,9 @@ describe('describeCheckEvent', () => {
 		});
 
 		it('qr / manual_override without by → generic staff label, not the volunteer', () => {
-			expect(describeCheckEvent({ ...base, kind, method: 'qr' }).actorLine).toBe('จนท. (สแกน QR)');
+			expect(describeCheckEvent({ ...base, kind, method: 'qr' }).actorLine).toBe(
+				`จนท. (${isIn ? 'เช็คอินให้' : 'เช็คเอาต์ให้'})`
+			);
 			expect(describeCheckEvent({ ...base, kind, method: 'manual_override' }).actorLine).toContain(
 				'จนท.'
 			);
@@ -76,7 +79,7 @@ describe('describeCheckEvent', () => {
 
 		it('blank by is treated as missing', () => {
 			expect(describeCheckEvent({ ...base, kind, method: 'qr', by: '  ' }).actorLine).toBe(
-				'จนท. (สแกน QR)'
+				`จนท. (${isIn ? 'เช็คอินให้' : 'เช็คเอาต์ให้'})`
 			);
 		});
 	});

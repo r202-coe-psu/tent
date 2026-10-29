@@ -152,11 +152,11 @@
 								>{/if}
 						</h4>
 						<p
-							class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground"
+							class="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground"
 						>
-							{#if volunteer.phone}<span class="whitespace-nowrap">{volunteer.phone} •</span>
+							{#if volunteer.phone}<span class="whitespace-nowrap">{volunteer.phone}</span>
 							{/if}
-							<span class="whitespace-nowrap">ID: {volunteer.volunteer_code} •</span>
+							<span class="whitespace-nowrap">ID: {volunteer.volunteer_code}</span>
 							<span class="font-mono text-[11px] whitespace-nowrap">{ticketCode(volunteer)}</span>
 						</p>
 					</div>

@@ -59,8 +59,10 @@ export function describeCheckEvent(input: CheckEventInput): CheckEventDescriptio
 		case 'staff_qr':
 			return {
 				source,
-				sourceLabel: isIn ? 'จนท. สแกน QR เช็คอิน' : 'จนท. สแกน QR เช็คเอาต์',
-				actorLine: `${staff} (สแกน QR)`,
+				// `qr` is also written by the one-click roster buttons and a typed search, so the
+				// wording does not claim a scan.
+				sourceLabel: isIn ? 'จนท. เช็คอินให้' : 'จนท. เช็คเอาต์ให้',
+				actorLine: `${staff} (${isIn ? 'เช็คอินให้' : 'เช็คเอาต์ให้'})`,
 				noteLine: defaultNote,
 				group: 'staff'
 			};

@@ -152,7 +152,7 @@
 			</Dialog.Title>
 			<p class="mt-1 text-xs text-muted-foreground">
 				บันทึกย้อนหลังการลงเวลาเข้า-ออก แยกชัดเจนระหว่างจิตอาสาทำรายการเองและเจ้าหน้าที่ดำเนินการให้
-				(สแกน QR / เช็คอินแทน)
+				(เช็คอินให้ / เช็คอินแทน)
 			</p>
 		</div>
 
@@ -176,7 +176,7 @@
 				</Select.Content>
 			</Select.Root>
 
-			<div class="ml-auto flex items-center gap-1 rounded-xl bg-muted p-1">
+			<div class="flex flex-wrap items-center gap-1 rounded-xl bg-muted p-1 sm:ml-auto">
 				<Button
 					size="sm"
 					variant={sourceFilter === 'all' ? 'default' : 'ghost'}
