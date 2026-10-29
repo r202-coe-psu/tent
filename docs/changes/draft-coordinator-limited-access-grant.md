@@ -70,6 +70,10 @@ affects:
   - grant ของ coordinator คนอื่น: ต่ออายุได้ (FR-7, `granted_by` เปลี่ยนเป็นผู้เรียก) แต่ย่นหรือถอนไม่ได้ (403)
   - ถอน grant = ถอด `SHxxx:<role>` ตาม FR-12 ข้อเดียวกับการหมดอายุ
   - role ที่ไม่มี grant (SM ให้) coordinator แตะไม่ได้
+  - dialog ออกสิทธิ์ (coordinator) แสดง grant ในศูนย์นี้ของบัญชีที่โปรไฟล์ผูกอยู่ แต่ละรายการมีชื่อ role และวันหมด
+    - อ่านผ่าน `GET /api/v1/volunteer-access?shelter_code=&volunteer_id=` ซึ่งหาบัญชีจาก `user_name` ของโปรไฟล์ฝั่ง server และคืนเฉพาะ `{ email, grants: [{ role, expires_at, mine }] }` ไม่คืนเอกสาร `_users`
+    - grant ที่ `mine` (ผู้เรียกออกเอง) มีปุ่ม "ถอนสิทธิ์" ต้องกด "ยืนยันถอนสิทธิ์" อีกครั้งจึงเรียก `DELETE`
+    - grant ของคนอื่นแสดง "ออกโดยผู้ประสานงานคนอื่น" ไม่มีปุ่มถอน
 
 ### FR — SM/SA, การหมดอายุ และการป้องกัน
 
@@ -96,7 +100,11 @@ affects:
 - **FR-14:** ทุกการเปลี่ยน grant เขียนเอกสาร `audit` (append-only §2.12) ใน `shelter_{code}` ของศูนย์ที่ grant อยู่
   - `action: other`, `target_type: user`, `target_id: org.couchdb.user:<name>`
   - `reason` เป็นหนึ่งใน `role_grant.issued`, `role_grant.renewed`, `role_grant.shortened`, `role_grant.revoked`, `role_grant.expired`, `role_grant.verification_revoked`, `role_grant.made_permanent`
-  - `context`: `{ role, expires_at, previous_expires_at?, actor }` (`actor` = ผู้เรียก หรือ `worker` สำหรับการหมดอายุ)
+  - `context`: `{ role, expires_at, previous_expires_at?, actor }`
+    - `expires_at`: วันหมดใหม่ สำหรับ `issued`, `renewed`, `shortened`; วันหมดของ grant ที่ถูกลบ สำหรับ `revoked`, `expired`, `verification_revoked`, `made_permanent`
+    - `previous_expires_at`: มีเฉพาะ `renewed` และ `shortened`
+    - `actor`: ผู้เรียก หรือ `worker` สำหรับ `expired` และ `verification_revoked`
+  - SM/SA ถอด role ที่มี grant ในฟอร์มแก้ไขผู้ใช้ (FR-10) เขียน `role_grant.revoked` โดย `actor` = SM/SA
   - เขียนหลังเปลี่ยน `_users` สำเร็จ ถ้าเขียน audit ไม่สำเร็จให้ลองใหม่ แล้ว log error พร้อม field เดียวกัน (การเปลี่ยนสิทธิ์ไม่ย้อนกลับ)
 
 ### schema.md §6 `_users` — เพิ่ม field
@@ -117,7 +125,7 @@ affects:
 ### api-contract
 
 - **authorization ของ `/api/v1/users`:** เพิ่ม `permanent_roles` ใน `PUT` (SM เฉพาะ grant ของศูนย์ตัวเอง)
-- **แถวใหม่:** `POST /api/v1/volunteer-access` (ออก / ต่ออายุ / ย่นอายุ) และ `DELETE /api/v1/volunteer-access` (ถอน) — เฉพาะ coordinator ตาม FR-1 ถึง FR-8
+- **แถวใหม่:** `GET /api/v1/volunteer-access` (grant ของบัญชีที่โปรไฟล์ผูกอยู่), `POST /api/v1/volunteer-access` (ออก / ต่ออายุ / ย่นอายุ) และ `DELETE /api/v1/volunteer-access` (ถอน) — เฉพาะ coordinator ตาม FR-1 ถึง FR-8
 
 ## นอกขอบเขต
 
@@ -138,6 +146,7 @@ affects:
 - **AC-7:** user ที่มี grant `PUT /couch/_users/org.couchdb.user:<self>` โดยลบหรือแก้ `role_grants` (หรือแก้ `active`, `personnel_type`, `volunteer_id`) ได้ 403 และ sweep ยังถอน role ได้ตามเวลา เปลี่ยนรหัสผ่านตัวเองยังทำได้
 - **AC-8:** เปลี่ยน `identity_verification.status` ของโปรไฟล์ `verified_by` เป็น `rejected` แล้วรอบ sweep ถัดไปถอน grant พร้อม audit `role_grant.verification_revoked`
 - **AC-9:** ขั้น Mongo ของ retention ล้ม sweep ยังทำงาน
+- **AC-10:** coordinator เปิด dialog ของจิตอาสาที่มีบัญชีแล้วเห็น grant ในศูนย์นี้ กด "ถอนสิทธิ์" แล้ว "ยืนยันถอนสิทธิ์" ที่ grant ของตัวเองแล้ว role หาย บัญชียังอยู่ และมี audit `role_grant.revoked` ส่วน grant ของคนอื่นไม่มีปุ่มถอน
 
 ## Impact
 
@@ -175,3 +184,6 @@ affects:
   - D6 `duty_window` ใน `_users` ยังไม่ทำ §4 อนาคตใช้ `role_grants` (FR-15)
   - D7 edge fallback ไม่อยู่ในขอบเขต ติดตามใน #1002
   - D8 รองรับ legacy flat role ผ่าน `capabilitiesForShelter` (FR-1)
+- 2026-10-29 — ผู้รับงานเพิ่มระหว่าง implement:
+  - ปุ่มถอนสิทธิ์ใน dialog และ `GET /api/v1/volunteer-access` (FR-8, AC-10)
+  - ความหมายของ `context.expires_at` และ audit เมื่อ SM/SA ถอด role ในฟอร์ม (FR-14)
