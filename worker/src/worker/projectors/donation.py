@@ -34,6 +34,8 @@ def project_donation(
             "qty": item.get("qty"),
             "unit": item.get("unit"),
             "category": item.get("category"),
+            # CR-196: the donor's edit form names lines by it. None before schema_v 8.
+            "line_key": item.get("line_key"),
             # CR-174 FR-27: the per-line review. Lines from before schema_v 7 have none.
             "review_status": item.get("review_status"),
             "review_reason_code": item.get("review_reason_code"),

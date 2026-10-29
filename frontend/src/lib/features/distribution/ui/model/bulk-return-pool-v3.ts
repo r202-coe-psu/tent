@@ -36,6 +36,8 @@ export const CLOSED_LOAN_WARNING_TEXT =
 	'ยอดยืมใบนี้ถูกปิดไปก่อนที่ของจะเข้ากอง — โปรดตรวจสอบว่าปิดถูกต้องหรือไม่';
 export const MISSING_LOAN_WARNING_TEXT =
 	'ไม่พบรายการยืมที่อ้างถึง จึงไม่ได้ตัดยอดยืม — โปรดตรวจสอบว่ารายการยืมถูกต้องหรือไม่';
+/** Per-card badge (and banner reference) when the batched loan read failed for a pool. */
+export const LOAN_REFS_UNKNOWN_LABEL = 'ตรวจยอดยืมไม่ได้';
 export const CLOSED_LOAN_WARNING_TESTID = 'bulk-return-entry-closed-loan-warning';
 /** CR-193 §33: a void / move written after the submit snapshot had no effect. */
 export const SNAPSHOT_CONFLICT_WARNING =
@@ -139,7 +141,10 @@ export interface PoolRowFilter {
 	itemId?: string;
 	/** Pool's `location_storage_point_id`; `'unspecified'` = pools without a storage point. */
 	storagePointId?: string;
-	/** Keep pools with late entries, unresolved refs or closed-loan-mid-flight refs. */
+	/**
+	 * Keep pools with late entries, unresolved refs, closed-loan-mid-flight refs, snapshot
+	 * conflicts, or loan refs that could not be checked (loan-unknown).
+	 */
 	needsAttention?: boolean;
 	/**
 	 * Returner id -> display name. When given, `search` also matches the returner name of any
@@ -169,6 +174,20 @@ function passesToggles(
 		}
 	}
 	return true;
+}
+
+/**
+ * A pool needs attention when it has late entries, unresolved refs, closed-loan-mid-flight refs,
+ * snapshot conflicts, or its loan refs could not be checked (loan read failed).
+ */
+export function rowNeedsAttention(row: BulkReturnPoolOverviewRow): boolean {
+	return (
+		row.late_entries.length > 0 ||
+		row.unresolved_refs.length > 0 ||
+		row.closed_loan_refs.length > 0 ||
+		row.snapshot_conflicts.length > 0 ||
+		row.loan_refs_unavailable
+	);
 }
 
 /** True when any non-toggle filter narrows the list (used for the "ล้างตัวกรอง" button). */
@@ -260,15 +279,7 @@ export function filterPoolRows(
 					return false;
 				}
 			}
-			if (
-				filter.needsAttention &&
-				row.late_entries.length === 0 &&
-				row.unresolved_refs.length === 0 &&
-				row.closed_loan_refs.length === 0 &&
-				row.snapshot_conflicts.length === 0
-			) {
-				return false;
-			}
+			if (filter.needsAttention && !rowNeedsAttention(row)) return false;
 			if (!needle) return true;
 			if (row.pool.name.toLocaleLowerCase().includes(needle)) return true;
 			return row.entries.some(
@@ -285,6 +296,11 @@ export function filterPoolRows(
 			}
 			return a.pool._id < b.pool._id ? 1 : a.pool._id > b.pool._id ? -1 : 0;
 		});
+}
+
+/** True when any overview row could not check its loan refs (the batched loan read failed). */
+export function anyLoanRefsUnavailable(rows: readonly BulkReturnPoolOverviewRow[]): boolean {
+	return rows.some((row) => row.loan_refs_unavailable);
 }
 
 export type BulkReturnPoolBoardViewState = 'loading' | 'error' | 'empty' | 'search_empty' | 'ready';

@@ -17,6 +17,9 @@ class DeclaredItem(BaseModel):
 	qty: Any = None
 	unit: str | None = None
 	category: str | None = None
+	# CR-196: the line's identity, which the donor's edit form sends back so an edit names
+	# the held line it changes. Lines from before donation schema_v 8 have none.
+	line_key: str | None = None
 	# CR-174 FR-27: the per-line review (approved | pending | rejected) and, on a rejected
 	# line only, why (code not_needed | expired | damaged | other, detail ≤500). Lines from
 	# before donation schema_v 7 carry none and read back as None — the booking-level

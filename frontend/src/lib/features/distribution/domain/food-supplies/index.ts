@@ -189,6 +189,8 @@ export {
 
 export {
 	buildBulkReturnPoolOverview,
+	liveEntriesOf,
+	liveLoanRefCount,
 	type BulkReturnEventSet,
 	type BulkReturnPoolOverviewRow,
 	type BulkReturnPoolOverviewOptions
