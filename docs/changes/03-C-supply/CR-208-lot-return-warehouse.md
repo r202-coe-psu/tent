@@ -3,7 +3,7 @@ id: CR-208 # renumbered from draft-lot-return-warehouse
 title: ของเหลือจากรอบแจกคืนเข้า lot เดิม (`distribution_return` อ้าง `requisition_ticket`) แทนการเปิด lot ใหม่
 status: approved
 date: 2026-10-28
-updated: 2026-10-29 # amendment A1 (race fence) — draft รอ approve
+updated: 2026-10-29 # amendment A1 (race fence) approved โดย kong
 requested_by: Dev Team B · issue #888 (Fishcanwalk, 2026-10-25)
 decided_by: kong
 decision_date: 2026-10-28
@@ -355,8 +355,9 @@ UI ตรวจรับ (`features/distribution/ui/model/warehouse-return.ts`) 
 - 2026-10-28 — FR-RTN-17 ขยายให้ครอบ `distributionReturnInputSchema` (`createDistributionReturnEntry`) ด้วย — จาก PR review #993; ไม่เปลี่ยนพฤติกรรมที่ approve (kong)
 - 2026-10-28 — stable-core review ส่วน VDU (`_design/access` role gate + `ref_id` ของ `distribution_return`, FR-RTN-19..22) โดย kong ใน PR #993 — review บน GitHub ที่ลงไว้เป็น comment "Deleted" เป็นการลงผิด ไม่ใช่ผล review
 - 2026-10-29 — **Amendment A1 (draft, Dev):** พบ race ตรวจรับพร้อมกันยอดต่างกันใน code review → เสนอให้ตั๋วเป็น fence (ดู Amendment A1) · รอ kong approve
+- 2026-10-29 — **Amendment A1 approved (kong)** — ตามที่เสนอ (ผู้เสนอ implement ไว้แล้วใน PR #1007): FR-RTN-11a / 12a / 25 แทน FR-RTN-11 / 12
 
-## Amendment A1 (2026-10-29) — ตั๋วเป็น fence ของการตรวจรับพร้อมกัน · **draft รอ kong approve**
+## Amendment A1 (2026-10-29) — ตั๋วเป็น fence ของการตรวจรับพร้อมกัน · **approved 2026-10-29 (kong)**
 
 > **สรุป:** เปลี่ยนลำดับใน `receiveWarehouseReturns` เป็น "ตรวจ/วางแผน → เปลี่ยนตั๋วเป็น `RETURN_COMPLETED` (CAS) → เขียน ledger"
 > แทน "ตรวจ/วางแผน → เขียน ledger → เปลี่ยนตั๋ว". ไม่เพิ่ม field · ไม่ bump `schema_v` · ไม่แก้ VDU. แทนที่ FR-RTN-11 / FR-RTN-12 (ข้อความเดิมคงไว้ด้านบนเพื่อสืบย้อน)
