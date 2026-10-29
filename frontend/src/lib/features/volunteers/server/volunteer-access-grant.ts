@@ -13,7 +13,11 @@ import {
 	type Caller
 } from '$lib/server/couch-admin';
 import { shelterDbName } from '$lib/server/shelter-access-design';
-import { grantCoordinatorRole, revokeCoordinatorGrant } from '$lib/server/user-service';
+import {
+	grantCoordinatorRole,
+	readVolunteerGrants,
+	revokeCoordinatorGrant
+} from '$lib/server/user-service';
 import { normalizePhone } from '../domain/phone';
 import { identityVerificationStatus } from '../domain/verification';
 import { shelterRefs } from './public-schedule-action';
@@ -210,4 +214,37 @@ export async function revokeVolunteerAccessAsCoordinator(
 		role,
 		actor: caller.name
 	});
+}
+
+/** A grant as the coordinator dialog shows it: `mine` grants are the ones the caller may revoke. */
+export type VolunteerGrantView = { role: string; expires_at: string; mine: boolean };
+
+/**
+ * The grants on the account linked to a volunteer of the coordinator's shelter (FR-8), so the
+ * dialog can offer to revoke the caller's own. The account is the profile's `user_name`, read
+ * server-side, so no other account can be probed.
+ */
+export async function listVolunteerGrantsAsCoordinator(
+	caller: Pick<Caller, 'name' | 'roles'>,
+	input: Pick<CoordinatorGrantInput, 'shelter_code' | 'volunteer_id'>
+): Promise<{ email: string | null; grants: VolunteerGrantView[] }> {
+	const shelterCode = coordinatorShelter(caller, input.shelter_code);
+	const volunteerId = asString(input.volunteer_id);
+	if (!volunteerId) throw new ServiceError('VALIDATION', 'volunteer_id is required');
+	const volunteer = await readVolunteer(shelterCode, volunteerId);
+	const email = volunteer.user_name ?? null;
+	if (!email) return { email: null, grants: [] };
+	const grants = await readVolunteerGrants({
+		name: email,
+		volunteer_id: volunteerId,
+		shelter_code: shelterCode
+	});
+	return {
+		email,
+		grants: grants.map((g) => ({
+			role: g.role,
+			expires_at: g.expires_at,
+			mine: g.granted_by === caller.name
+		}))
+	};
 }

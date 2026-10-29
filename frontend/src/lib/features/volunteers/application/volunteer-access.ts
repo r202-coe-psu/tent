@@ -174,3 +174,38 @@ export async function grantVolunteerAccessAsCoordinator(
 	await linkVolunteerProfile(repository, volunteer, profile, email, result.created);
 	return { created: result.created, unchanged: result.unchanged };
 }
+
+/** A grant on the volunteer's account; `mine` ones are those the caller may revoke (FR-8). */
+export type VolunteerGrant = { role: string; expires_at: string; mine: boolean };
+
+/** The grants on the account the volunteer profile is linked to, as the coordinator sees them. */
+export async function fetchVolunteerGrants(
+	volunteer: Pick<Volunteer, '_id' | 'shelter_code'>
+): Promise<{ email: string | null; grants: VolunteerGrant[] }> {
+	const query = new URLSearchParams({
+		shelter_code: volunteer.shelter_code,
+		volunteer_id: volunteer._id
+	});
+	const { email, grants } = await serviceFetch<{
+		ok: true;
+		email: string | null;
+		grants: VolunteerGrant[];
+	}>(`/api/v1/volunteer-access?${query}`);
+	return { email, grants };
+}
+
+/** Take back a grant the caller issued: the role goes, the account and password stay. */
+export async function revokeVolunteerGrant(
+	volunteer: Pick<Volunteer, '_id' | 'shelter_code'>,
+	input: { email: string; role: string }
+): Promise<void> {
+	await serviceFetch<{ ok: true }>('/api/v1/volunteer-access', {
+		method: 'DELETE',
+		body: JSON.stringify({
+			shelter_code: volunteer.shelter_code,
+			volunteer_id: volunteer._id,
+			email: input.email,
+			role: input.role
+		})
+	});
+}

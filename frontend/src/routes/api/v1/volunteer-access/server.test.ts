@@ -1,9 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { readSessionUserCtx, grant, revoke } = vi.hoisted(() => ({
+const { readSessionUserCtx, grant, revoke, list } = vi.hoisted(() => ({
 	readSessionUserCtx: vi.fn(),
 	grant: vi.fn(),
-	revoke: vi.fn()
+	revoke: vi.fn(),
+	list: vi.fn()
 }));
 
 vi.mock('$lib/server/couch-admin', () => {
@@ -31,10 +32,11 @@ vi.mock('$lib/server/couch-admin', () => {
 });
 vi.mock('$lib/features/volunteers/server/volunteer-access-grant', () => ({
 	grantVolunteerAccessAsCoordinator: grant,
+	listVolunteerGrantsAsCoordinator: list,
 	revokeVolunteerAccessAsCoordinator: revoke
 }));
 
-import { DELETE, POST } from './+server';
+import { DELETE, GET, POST } from './+server';
 
 function post(body: Record<string, unknown>) {
 	const request = new Request('http://localhost/api/v1/volunteer-access', {
@@ -131,5 +133,43 @@ describe('DELETE /api/v1/volunteer-access (#955)', () => {
 		const { ServiceError } = await import('$lib/server/couch-admin');
 		revoke.mockRejectedValueOnce(new ServiceError('FORBIDDEN', 'no'));
 		expect((await del({ role: 'kitchen_staff' })).status).toBe(403);
+	});
+});
+
+describe('GET /api/v1/volunteer-access (#955)', () => {
+	function get(query: string) {
+		const url = new URL(`http://localhost/api/v1/volunteer-access${query}`);
+		const request = new Request(url, { headers: { cookie: 'AuthSession=x' } });
+		return GET({ request, url } as unknown as Parameters<typeof GET>[0]);
+	}
+
+	beforeEach(() => {
+		vi.clearAllMocks();
+		readSessionUserCtx.mockResolvedValue({
+			name: 'staff03',
+			roles: ['shelter:SH001', 'SH001:volunteer_coordinator']
+		});
+	});
+
+	it('hands the session caller and the query to the list policy', async () => {
+		const grants = [{ role: 'kitchen_staff', expires_at: '2026-10-31T16:59:59.999Z', mine: true }];
+		list.mockResolvedValue({ email: 'vol@example.com', grants });
+		const res = await get('?shelter_code=SH001&volunteer_id=volunteer%3AV1');
+		expect(res.status).toBe(200);
+		expect(await res.json()).toEqual({ ok: true, email: 'vol@example.com', grants });
+		expect(list).toHaveBeenCalledWith(
+			{ name: 'staff03', roles: ['shelter:SH001', 'SH001:volunteer_coordinator'] },
+			{ shelter_code: 'SH001', volunteer_id: 'volunteer:V1' }
+		);
+	});
+
+	it('answers 401 without a session and 403 when the policy refuses', async () => {
+		readSessionUserCtx.mockResolvedValue({ name: null, roles: [] });
+		expect((await get('')).status).toBe(401);
+		expect(list).not.toHaveBeenCalled();
+		readSessionUserCtx.mockResolvedValue({ name: 'staff03', roles: [] });
+		const { ServiceError } = await import('$lib/server/couch-admin');
+		list.mockRejectedValueOnce(new ServiceError('FORBIDDEN', 'no'));
+		expect((await get('?shelter_code=SH002')).status).toBe(403);
 	});
 });

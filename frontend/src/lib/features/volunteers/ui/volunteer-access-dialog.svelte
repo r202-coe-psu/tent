@@ -8,6 +8,7 @@
 	import Lock from '@lucide/svelte/icons/lock';
 	import RefreshCw from '@lucide/svelte/icons/refresh-cw';
 	import Save from '@lucide/svelte/icons/save';
+	import UserMinus from '@lucide/svelte/icons/user-minus';
 	import * as Dialog from '$lib/components/ui/dialog/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Badge } from '$lib/components/ui/badge/index.js';
@@ -21,17 +22,18 @@
 		roleOptionLabel,
 		type StaffCapability
 	} from '$lib/auth/roles';
-	import { MAX_GRANT_DAYS, grantExpiryRange } from '$lib/auth/role-grants';
+	import { MAX_GRANT_DAYS, grantExpiryLabel, grantExpiryRange } from '$lib/auth/role-grants';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { formatThaiShortDate } from '$lib/utils/date';
 	import { generateTemporaryPassphrase } from '$lib/auth/passphrase-generator';
-	import { volunteerKeys } from '../application/queries';
+	import { useVolunteerGrants, volunteerKeys } from '../application/queries';
 	import { errorMessage } from '$lib/utils/errors';
 	import {
 		accountPhones,
 		coordinatorAccessSchema,
 		grantVolunteerAccess,
 		grantVolunteerAccessAsCoordinator,
+		revokeVolunteerGrant,
 		volunteerAccessSchema,
 		volunteerPasswordError
 	} from '../application/volunteer-access';
@@ -77,6 +79,15 @@
 			? 'อาสาสมัครยังไม่ยืนยันตัวตนในศูนย์นี้ และไม่มีเบอร์โทรหรือเลขบัตรประชาชนให้ตรวจผลยืนยันจากศูนย์อื่น จึงออกสิทธิ์ไม่ได้'
 			: null
 	);
+	// The caller's own grants can be taken back here (FR-8); the BFF refuses anyone else's.
+	const grantsQuery = useVolunteerGrants(
+		() => volunteer,
+		() => open && limited
+	);
+	const grantedAccount = $derived(grantsQuery.data?.email ?? null);
+	const grants = $derived(grantsQuery.data?.grants ?? []);
+	let confirmRevoke = $state<string | null>(null);
+
 	let expiresOn = $state('');
 	let submitError = $state<string | null>(null);
 
@@ -97,6 +108,7 @@
 		role = 'registration_staff';
 		password = loginPhone ?? '';
 		expiresOn = '';
+		confirmRevoke = null;
 		submitError = null;
 		passwordError = null;
 		showPassword = false;
@@ -160,6 +172,23 @@
 			);
 			password = '';
 			open = false;
+		} catch (err) {
+			submitError = errorMessage(err);
+		} finally {
+			await refresh();
+		}
+	}
+
+	async function revoke(grantedRole: string) {
+		if (pending || !grantedAccount) return;
+		submitError = null;
+		pending = true;
+		try {
+			await revokeVolunteerGrant(volunteer, { email: grantedAccount, role: grantedRole });
+			toast.success(
+				`ถอนสิทธิ์ ${roleOptionLabel(grantedRole)} จากบัญชี (${grantedAccount}) แล้ว บัญชียังอยู่`
+			);
+			confirmRevoke = null;
 		} catch (err) {
 			submitError = errorMessage(err);
 		} finally {
@@ -238,6 +267,56 @@
 					{/if}
 				</p>
 			</div>
+
+			{#if limited && grantedAccount && grants.length > 0}
+				<div class="space-y-2 rounded-xl border border-border p-4">
+					<p class="text-xs font-bold text-foreground">
+						สิทธิ์ที่ออกให้บัญชี ({grantedAccount}) แล้ว
+					</p>
+					<ul class="divide-y divide-border">
+						{#each grants as grant (grant.role)}
+							<li class="flex flex-wrap items-center justify-between gap-2 py-2 text-xs">
+								<div class="min-w-0">
+									<p class="font-semibold text-foreground">{roleOptionLabel(grant.role)}</p>
+									<p class="text-muted-foreground">{grantExpiryLabel(grant)}</p>
+								</div>
+								{#if !grant.mine}
+									<span class="text-muted-foreground">ออกโดยผู้ประสานงานคนอื่น</span>
+								{:else if confirmRevoke === grant.role}
+									<div class="flex gap-2">
+										<Button
+											type="button"
+											variant="ghost"
+											size="sm"
+											disabled={pending}
+											onclick={() => (confirmRevoke = null)}>ไม่ถอน</Button
+										>
+										<Button
+											type="button"
+											variant="destructive"
+											size="sm"
+											disabled={pending}
+											onclick={() => revoke(grant.role)}>ยืนยันถอนสิทธิ์</Button
+										>
+									</div>
+								{:else}
+									<Button
+										type="button"
+										variant="outline"
+										size="sm"
+										class="gap-1.5 text-destructive"
+										disabled={pending}
+										onclick={() => (confirmRevoke = grant.role)}
+									>
+										<UserMinus class="size-4" />
+										ถอนสิทธิ์
+									</Button>
+								{/if}
+							</li>
+						{/each}
+					</ul>
+				</div>
+			{/if}
 
 			{#if limited}
 				<div class="space-y-1.5">

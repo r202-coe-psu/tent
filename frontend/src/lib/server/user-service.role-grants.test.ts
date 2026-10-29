@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as couchAdmin from './couch-admin';
 import {
 	grantCoordinatorRole,
+	readVolunteerGrants,
 	revokeCoordinatorGrant,
 	updateUser,
 	type CouchUserDoc
@@ -380,6 +381,27 @@ describe('coordinator role grants on _users (#955)', () => {
 
 		it('refuses a role outside the coordinator list', async () => {
 			await expect(revoke({ role: 'medical_staff' })).rejects.toMatchObject({ code: 'FORBIDDEN' });
+		});
+	});
+	describe('reading a volunteer account grants for the dialog (FR-8)', () => {
+		const read = (over: Record<string, unknown> = {}) =>
+			readVolunteerGrants({
+				name: EMAIL,
+				volunteer_id: 'volunteer:V1',
+				shelter_code: 'SH001',
+				...over
+			});
+
+		it("returns only this shelter's grants", async () => {
+			const other = grant('kitchen_staff', { shelter_code: 'SH002' });
+			seed(EMAIL, { role_grants: [grant(), other] });
+			expect(await read()).toEqual([grant()]);
+		});
+
+		it('has none for a missing account or one linked to another volunteer', async () => {
+			expect(await read()).toEqual([]);
+			seed(EMAIL, { role_grants: [grant()], volunteer_id: 'volunteer:V2' });
+			expect(await read()).toEqual([]);
 		});
 	});
 });

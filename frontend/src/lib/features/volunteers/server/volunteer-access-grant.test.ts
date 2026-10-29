@@ -1,11 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { adminRaw, grantCoordinatorRole, revokeCoordinatorGrant, shelterRefs } = vi.hoisted(() => ({
-	adminRaw: vi.fn(),
-	grantCoordinatorRole: vi.fn(),
-	revokeCoordinatorGrant: vi.fn(),
-	shelterRefs: vi.fn()
-}));
+const { adminRaw, grantCoordinatorRole, readVolunteerGrants, revokeCoordinatorGrant, shelterRefs } =
+	vi.hoisted(() => ({
+		adminRaw: vi.fn(),
+		grantCoordinatorRole: vi.fn(),
+		readVolunteerGrants: vi.fn(),
+		revokeCoordinatorGrant: vi.fn(),
+		shelterRefs: vi.fn()
+	}));
 
 vi.mock('$lib/server/couch-admin', () => ({
 	adminRaw,
@@ -19,12 +21,17 @@ vi.mock('$lib/server/couch-admin', () => ({
 		}
 	}
 }));
-vi.mock('$lib/server/user-service', () => ({ grantCoordinatorRole, revokeCoordinatorGrant }));
+vi.mock('$lib/server/user-service', () => ({
+	grantCoordinatorRole,
+	readVolunteerGrants,
+	revokeCoordinatorGrant
+}));
 vi.mock('./public-schedule-action', () => ({ shelterRefs }));
 
 import { sha256Hex } from '$lib/db/hash';
 import {
 	grantVolunteerAccessAsCoordinator,
+	listVolunteerGrantsAsCoordinator,
 	revokeVolunteerAccessAsCoordinator
 } from './volunteer-access-grant';
 
@@ -360,5 +367,54 @@ describe('revokeVolunteerAccessAsCoordinator', () => {
 		await expect(revoke(input({ volunteer_id: undefined }))).rejects.toMatchObject({
 			code: 'VALIDATION'
 		});
+	});
+});
+
+describe('listVolunteerGrantsAsCoordinator', () => {
+	const list = (
+		i: { shelter_code: unknown; volunteer_id: unknown } = {
+			shelter_code: 'SH001',
+			volunteer_id: 'volunteer:V1'
+		},
+		caller: { name: string; roles: string[] } = COORDINATOR
+	) => listVolunteerGrantsAsCoordinator(caller, i);
+	const stored = (granted_by: string) => ({
+		shelter_code: 'SH001',
+		role: 'kitchen_staff',
+		expires_at: '2026-10-31T16:59:59.999Z',
+		granted_by,
+		granted_at: '2026-10-28T01:30:00.000Z'
+	});
+
+	it("reads the profile's own account and marks the caller's grants", async () => {
+		couch(volunteer({ user_name: 'vol@example.com' }));
+		readVolunteerGrants.mockResolvedValue([
+			stored('staff03'),
+			{ ...stored('staff09'), role: 'facility_staff' }
+		]);
+		expect(await list()).toEqual({
+			email: 'vol@example.com',
+			grants: [
+				{ role: 'kitchen_staff', expires_at: '2026-10-31T16:59:59.999Z', mine: true },
+				{ role: 'facility_staff', expires_at: '2026-10-31T16:59:59.999Z', mine: false }
+			]
+		});
+		expect(readVolunteerGrants).toHaveBeenCalledWith({
+			name: 'vol@example.com',
+			volunteer_id: 'volunteer:V1',
+			shelter_code: 'SH001'
+		});
+	});
+
+	it('has nothing to read for a profile without an account', async () => {
+		expect(await list()).toEqual({ email: null, grants: [] });
+		expect(readVolunteerGrants).not.toHaveBeenCalled();
+	});
+
+	it('refuses another shelter with 403 and reads nothing', async () => {
+		await expect(
+			list({ shelter_code: 'SH002', volunteer_id: 'volunteer:V1' })
+		).rejects.toMatchObject({ code: 'FORBIDDEN' });
+		expect(adminRaw).not.toHaveBeenCalled();
 	});
 });

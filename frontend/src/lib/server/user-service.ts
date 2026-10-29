@@ -610,6 +610,24 @@ export async function revokeCoordinatorGrant(input: {
 	});
 }
 
+/**
+ * The grants in one shelter on the account linked to a volunteer, for the coordinator dialog
+ * (FR-8). Only the grants are returned, never the account doc. A missing account, or one linked
+ * to another volunteer, has none.
+ */
+export async function readVolunteerGrants(input: {
+	name: string;
+	volunteer_id: string;
+	shelter_code: string;
+}): Promise<RoleGrant[]> {
+	const got = await adminRaw(`/_users/${userDocId(input.name)}`, 'GET');
+	if (got.status === 404) return [];
+	if (got.status >= 400) throw serviceErrorFromCouch('read user', got.status, got.data);
+	const doc = got.data as CouchUserDoc;
+	if (doc.volunteer_id !== input.volunteer_id) return [];
+	return (doc.role_grants ?? []).filter((g) => g.shelter_code === input.shelter_code);
+}
+
 /** List users, scoped: SA sees all; a manager sees users with their managed shelter scope. */
 export async function listUsers(caller: Caller): Promise<UserSummary[]> {
 	const bootstrap = bootstrapAdminName();

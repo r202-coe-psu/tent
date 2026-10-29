@@ -3,6 +3,7 @@ import type { RequestHandler } from './$types';
 import { ServiceError, readSessionUserCtx, serviceError } from '$lib/server/couch-admin';
 import {
 	grantVolunteerAccessAsCoordinator,
+	listVolunteerGrantsAsCoordinator,
 	revokeVolunteerAccessAsCoordinator
 } from '$lib/features/volunteers/server/volunteer-access-grant';
 
@@ -11,6 +12,24 @@ import {
 // coordinator rule is enforced in `grantVolunteerAccessAsCoordinator` and
 // `revokeVolunteerAccessAsCoordinator`.
 export const prerender = false;
+
+/** GET `?shelter_code=&volunteer_id=` — the grants on the volunteer's linked account. */
+export const GET: RequestHandler = async ({ request, url }) => {
+	try {
+		const { name, roles } = await readSessionUserCtx(request.headers.get('cookie'));
+		if (!name) throw new ServiceError('UNAUTHENTICATED', 'Authentication required');
+		const result = await listVolunteerGrantsAsCoordinator(
+			{ name, roles },
+			{
+				shelter_code: url.searchParams.get('shelter_code') ?? '',
+				volunteer_id: url.searchParams.get('volunteer_id') ?? ''
+			}
+		);
+		return json({ ok: true, ...result });
+	} catch (e) {
+		return serviceError(e);
+	}
+};
 
 /**
  * POST — grant `role` until the end of `expires_on` to a volunteer of the coordinator's shelter.

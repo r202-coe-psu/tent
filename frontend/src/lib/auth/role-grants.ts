@@ -129,6 +129,6 @@ export function withoutGrantedRole(
 }
 
 /** Edit-page note for a granted role, e.g. `หมดอายุสิ้นวันที่ 30/10/2569`. */
-export function grantExpiryLabel(grant: RoleGrant): string {
+export function grantExpiryLabel(grant: Pick<RoleGrant, 'expires_at'>): string {
 	return `หมดอายุสิ้นวันที่ ${formatThaiShortDate(grant.expires_at)}`;
 }

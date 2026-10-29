@@ -8,7 +8,9 @@ import VolunteerAccessDialog from './volunteer-access-dialog.svelte';
 const mocks = vi.hoisted(() => ({
 	roles: [] as string[],
 	grantLimited: vi.fn(),
-	grantFull: vi.fn()
+	grantFull: vi.fn(),
+	revoke: vi.fn(),
+	grants: null as { email: string | null; grants: unknown[] } | null
 }));
 
 vi.mock('@tanstack/svelte-query', () => ({
@@ -25,7 +27,16 @@ vi.mock('$lib/stores/auth.svelte', () => ({
 vi.mock('../application/volunteer-access', async (importOriginal) => ({
 	...(await importOriginal<typeof import('../application/volunteer-access')>()),
 	grantVolunteerAccessAsCoordinator: mocks.grantLimited,
-	grantVolunteerAccess: mocks.grantFull
+	grantVolunteerAccess: mocks.grantFull,
+	revokeVolunteerGrant: mocks.revoke
+}));
+vi.mock('../application/queries', () => ({
+	volunteerKeys: { all: ['volunteers'] },
+	useVolunteerGrants: () => ({
+		get data() {
+			return mocks.grants;
+		}
+	})
 }));
 
 const volunteer = {
@@ -84,6 +95,8 @@ async function fillCredentials() {
 beforeEach(() => {
 	vi.clearAllMocks();
 	mocks.grantLimited.mockResolvedValue({ created: true, unchanged: false });
+	mocks.revoke.mockResolvedValue(undefined);
+	mocks.grants = null;
 });
 
 afterEach(async () => {
@@ -179,6 +192,56 @@ describe('VolunteerAccessDialog for a volunteer_coordinator (#955)', () => {
 
 		expect(document.body.textContent).toContain('ตรวจผลยืนยันจากศูนย์อื่น');
 		expect(saveButton().disabled).toBe(false);
+	});
+});
+
+describe('VolunteerAccessDialog revoking a grant (#955 FR-8)', () => {
+	const EXPIRES = '2026-10-31T16:59:59.999Z';
+	const button = (text: string) =>
+		[...document.body.querySelectorAll('button')].find((b) => b.textContent?.trim() === text);
+
+	it('revokes only after the second click, for the linked account', async () => {
+		mocks.grants = {
+			email: 'vol@example.com',
+			grants: [{ role: 'kitchen_staff', expires_at: EXPIRES, mine: true }]
+		};
+		await render(COORDINATOR);
+		button('ถอนสิทธิ์')!.click();
+		await settle();
+		expect(mocks.revoke).not.toHaveBeenCalled();
+
+		button('ยืนยันถอนสิทธิ์')!.click();
+		await settle();
+		expect(mocks.revoke).toHaveBeenCalledWith(expect.objectContaining({ _id: volunteer._id }), {
+			email: 'vol@example.com',
+			role: 'kitchen_staff'
+		});
+	});
+
+	it("offers no revoke for another coordinator's grant", async () => {
+		mocks.grants = {
+			email: 'vol@example.com',
+			grants: [{ role: 'kitchen_staff', expires_at: EXPIRES, mine: false }]
+		};
+		await render(COORDINATOR);
+
+		expect(document.body.textContent).toContain('ออกโดยผู้ประสานงานคนอื่น');
+		expect(button('ถอนสิทธิ์')).toBeUndefined();
+	});
+
+	it('shows the server refusal inline', async () => {
+		mocks.grants = {
+			email: 'vol@example.com',
+			grants: [{ role: 'kitchen_staff', expires_at: EXPIRES, mine: true }]
+		};
+		mocks.revoke.mockRejectedValue(new Error('ถอนได้เฉพาะสิทธิ์ที่ตนเองออกให้'));
+		await render(COORDINATOR);
+		button('ถอนสิทธิ์')!.click();
+		await settle();
+		button('ยืนยันถอนสิทธิ์')!.click();
+		await settle();
+
+		expect(document.body.textContent).toContain('ถอนได้เฉพาะสิทธิ์ที่ตนเองออกให้');
 	});
 });
 
