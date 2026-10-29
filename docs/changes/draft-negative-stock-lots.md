@@ -18,6 +18,7 @@ affects:
   - frontend/src/lib/features/operations/ui/stock-table.svelte · cycle-count-form.svelte · adjust-stock-form.svelte · distribute-stock-form.svelte
   - frontend/src/lib/features/distribution/ui/model/physical-lot.ts (picker ของตั๋ว)
   - frontend/src/lib/features/operations/data/operations.remote.ts (`distributeStock` — ลำดับการอ่าน, ไม่เปลี่ยนกติกา)
+  - frontend/src/lib/features/distribution/data/distribution.remote.ts (การอนุมัติใบขอเบิก — claim loop, ลำดับการอ่านเท่านั้น)
   # Phase 2 (follow-up — ระบุไว้ ยังไม่ทำในรุ่นนี้)
   - docs/changes/03-C-supply/CR-190-lot-bound-adjust-and-count.md TL;DR ข้อ 2 · ตาราง Change แถว "`adjust` บวก" · FR-3
   - docs/data/schema.md §2.1 stock_ledger `lot_ref` · `note` · ตาราง "`reason` → `ref_id`" แถว `adjust` · ย่อหน้า "ขอบเขตการบังคับ"
@@ -189,7 +190,7 @@ decision "comparator เดิมใน `projectStockLotBalances` ห้าม�
 - [ ] **AC-5** — ล็อต A = −3, B = 10: เบิก 5 → แผนใช้ B; A ไม่อยู่ในตัวเลือกของฟอร์มเบิกตรง, picker ของตั๋ว และฟอร์มปรับยอด
 - [ ] **AC-6** — ตัดยอดที่อ้างล็อต A (ปรับยอดหรือตรวจนับ) → ปฏิเสธด้วยข้อความ FR-9; ไม่มีแถวใดถูกเขียน
 - [ ] **AC-7** — หน้าตรวจนับแสดงสินค้าและล็อต A พร้อมคำเตือน; ล็อต A ไม่มีช่องกรอกยอดนับ
-- [ ] **AC-8** — unit test ของ `distributeStock` ยืนยันว่าอ่าน reservation ก่อน ledger
+- [ ] **AC-8** — unit test ของ `distributeStock` และของการอนุมัติใบขอเบิก (`distribution.remote.ts`) ยืนยันว่าอ่าน reservation ก่อน ledger ทุก attempt
 
 ### Phase 2
 
@@ -207,7 +208,7 @@ decision "comparator เดิมใน `projectStockLotBalances` ห้าม�
   และ (ก่อน Phase 2) ให้แจ้งผู้ดูแลระบบ
 - **ข้อมูลเดิม:** ไม่แก้ ledger; ยอดรายล็อตของประวัติที่ replay ผ่านอยู่แล้วไม่เปลี่ยน (FR-5)
 - **ข้อมูลเสียที่ยังซ่อนอยู่:** แถว `distribute` รุ่นก่อน CR-175 ที่ตั้ง `lot_ref` = `_id` ของตัวเอง เข้าข่าย FR-4 ข้อ 3 — สินค้านั้นยังถูกข้ามเหมือนเดิม
-- **ความพร้อมกัน (race fix, ไม่เปลี่ยนกติกา):** `distributeStock` (`operations.remote.ts`) อ่าน `stock_lot_reservation` **ก่อน** ledger —
+- **ความพร้อมกัน (race fix, ไม่เปลี่ยนกติกา):** `distributeStock` (`operations.remote.ts`) และ claim loop ของการอนุมัติใบขอเบิก (`distribution.remote.ts`) อ่าน `stock_lot_reservation` **ก่อน** ledger —
   เดิมอ่าน ledger ก่อน ถ้า claim อื่นเขียน ledger แล้วปล่อย claim ระหว่างสองการอ่าน จะไม่เห็นยอดที่ถูกตัดไป
 - **item merge:** `planItemMerge` ย้ายเฉพาะล็อตยอดบวก (`qtyGt(lot.qty, 0)` เดิม) — ล็อตติดลบค้างที่สินค้าต้นทาง
 - **VDU:** Phase 1 ไม่เปลี่ยน; Phase 2 เพิ่ม role gate ตาม FR-21 — `_design/access` ต้อง redeploy **ก่อน** deploy client ที่เขียนแถวแก้ล็อต
@@ -230,3 +231,5 @@ N/A — ไม่เพิ่ม/ลบ field ไม่เพิ่ม enum ไ�
   - FR-16: คู่ย้ายยอดใช้ `adjust_reason: other` + `note` — ไม่เพิ่ม enum ไม่ bump `schema_v`
   - FR-23: toast หลังบันทึก (#855 Requirement 3) อยู่ Phase 2
   - FR-13 / FR-21: แก้ได้ `system_admin`, `warehouse_staff` และ `supply_coordinator` (`warehouse_staff` เป็น alias ของ SC ใน role matrix); `shelter_manager` แก้ไม่ได้
+- 2026-10-29 — Mhapong: รวม claim loop ของการอนุมัติใบขอเบิก (`distribution.remote.ts`) ในการแก้ลำดับการอ่าน;
+  ส่วนขาดของแถว legacy (ไม่มี `lot_ref`) หลังล็อตติดลบยัง fail-closed ตาม FR-4; การจัดการล็อตติดลบใน item merge คงเป็น Phase 2
