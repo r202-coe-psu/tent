@@ -199,7 +199,12 @@ def project_donation_points(doc: dict[str, Any]) -> list[dict[str, Any]]:
     Only ticked storage points with a real pin (both coordinates in range, not (0,0)) and
     a persisted ``id`` leave the staff plane. ``area_m2`` and every unticked point stay out.
     """
-    points = (doc.get("common_areas") or {}).get("sub_storage") or []
+    # A malformed ``common_areas`` / ``sub_storage`` drops only the points, not the whole
+    # shelter row.
+    areas = doc.get("common_areas")
+    points = areas.get("sub_storage") if isinstance(areas, dict) else None
+    if not isinstance(points, list):
+        return []
     out: list[dict[str, Any]] = []
     for point in points:
         if not isinstance(point, dict) or point.get("accepts_donations") is not True:

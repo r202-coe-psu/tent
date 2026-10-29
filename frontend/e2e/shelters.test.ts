@@ -529,8 +529,9 @@ test.describe('Shelter Form — Donation drop-off points (CR-205)', () => {
 
 	async function pin(page: import('@playwright/test').Page, lat: string, lng: string) {
 		await page.getByRole('button', { name: 'ปักหมุดตำแหน่ง' }).click();
-		await page.locator('[data-slot="dialog-content"] #location-lat').fill(lat);
-		await page.locator('[data-slot="dialog-content"] #location-lng').fill(lng);
+		const dialog = page.getByRole('dialog');
+		await dialog.getByLabel('ละติจูด (Latitude)').fill(lat);
+		await dialog.getByLabel('ลองจิจูด (Longitude)').fill(lng);
 		await page.getByRole('button', { name: 'ยืนยันปักหมุด' }).click();
 	}
 

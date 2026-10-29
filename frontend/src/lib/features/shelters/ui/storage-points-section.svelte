@@ -1,7 +1,12 @@
 <script lang="ts">
 	import type { SuperForm } from 'sveltekit-superforms';
 	import type { SuperFormData } from 'sveltekit-superforms/client';
-	import type { Shelter, SubStorageItem, SubStorageType } from '../domain/schema';
+	import {
+		SUB_STORAGE_NOTE_MAX,
+		type Shelter,
+		type SubStorageItem,
+		type SubStorageType
+	} from '../domain/schema';
 	import { SUB_STORAGE_TYPE_LABELS, sortSubStorageTypes } from '../domain/storage-points';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
@@ -17,10 +22,15 @@
 	import Warehouse from '@lucide/svelte/icons/warehouse';
 	import MapPin from '@lucide/svelte/icons/map-pin';
 	import LocationMapPicker from './location-map-picker.svelte';
-	import { SUB_STORAGE_NOTE_MAX } from '../domain/schema';
 
 	/** Street-level zoom for the pin dialog (easy fine placement). */
 	const PIN_MAP_ZOOM = 18;
+
+	/** Every row repeats the same control, so each one names its own point to a screen reader. */
+	function withPointName(label: string, point: SubStorageItem): string {
+		const name = point.name.trim();
+		return name ? `${label} — ${name}` : label;
+	}
 
 	let {
 		form,
@@ -239,7 +249,7 @@
 							checked={point.accepts_donations}
 							onCheckedChange={(v) => patchPoint(point.id, { accepts_donations: v === true })}
 							{disabled}
-							aria-label="ใช้เป็นจุดรับบริจาค"
+							aria-label={withPointName('ใช้เป็นจุดรับบริจาค', point)}
 						/>
 						ใช้เป็นจุดรับบริจาค
 					</label>
@@ -252,6 +262,7 @@
 								size="sm"
 								onclick={() => openPinDialog(point)}
 								{disabled}
+								aria-label={withPointName('ปักหมุดตำแหน่ง', point)}
 							>
 								<MapPin class="mr-1 h-4 w-4" />
 								ปักหมุดตำแหน่ง
@@ -265,6 +276,9 @@
 							</span>
 						</div>
 						<Form.Field {form} name={`common_areas.sub_storage[${i}].lat`}>
+							<Form.FieldErrors />
+						</Form.Field>
+						<Form.Field {form} name={`common_areas.sub_storage[${i}].lng`}>
 							<Form.FieldErrors />
 						</Form.Field>
 
@@ -283,6 +297,9 @@
 									/>
 								{/snippet}
 							</Form.Control>
+							<Form.Description>
+								ข้อความนี้แสดงต่อสาธารณะ ทั้งหน้าบริจาคและระบบของหน่วยงานภายนอก
+							</Form.Description>
 							<Form.FieldErrors />
 						</Form.Field>
 					{/if}

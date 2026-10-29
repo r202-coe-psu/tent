@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushSync, mount, tick, unmount } from 'svelte';
-import type { DonationPointDetail } from '../domain/donation-map';
+import type { PublicDonationPoint } from '../domain/types';
 import type { PublicShelterItem } from '../domain/types';
 import DropOffShelterMap from './drop-off-shelter-map.svelte';
 
@@ -50,7 +50,7 @@ function publicShelter(code: string, geo: PublicShelterItem['geo']): PublicShelt
 	};
 }
 
-const point: DonationPointDetail = {
+const point: PublicDonationPoint = {
 	id: 'p1',
 	name: 'โรงยิม (ประตู 2)',
 	geo: { lat: 7.01, lng: 100.41 },

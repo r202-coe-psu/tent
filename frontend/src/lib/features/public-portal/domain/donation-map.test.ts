@@ -275,6 +275,16 @@ describe('donationMapPointsOf', () => {
 		]);
 	});
 
+	it('skips a point at (0,0) or out of range rather than pin it off the map', () => {
+		expect(
+			donationMapPointsOf('SH001', [
+				{ id: 'zero', name: 'ศูนย์', geo: { lat: 0, lng: 0 } },
+				{ id: 'far', name: 'นอกโลก', geo: { lat: 7, lng: 200 } },
+				{ id: 'ok', name: 'โรงยิม', geo: { lat: 7.01, lng: 100.41 } }
+			]).map((p) => p.id)
+		).toEqual(['ok']);
+	});
+
 	it('adds no pin for a shelter without ticked points (FR-DP-18)', () => {
 		expect(donationMapPointsOf('SH001', [])).toEqual([]);
 		expect(donationMapPointsOf('SH001', undefined)).toEqual([]);

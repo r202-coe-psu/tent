@@ -220,6 +220,9 @@ def test_donation_points_empty_without_common_areas():
         {},
         {"common_areas": None},
         {"common_areas": {"sub_storage": None}},
+        # Malformed: the shelter row still projects, just without points.
+        {"common_areas": ["not", "a", "dict"]},
+        {"common_areas": {"sub_storage": "not a list"}},
     ):
         _, payload = project_shelter(
             {

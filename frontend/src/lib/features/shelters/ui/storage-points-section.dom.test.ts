@@ -68,7 +68,8 @@ describe('StoragePointsSection — storage types', () => {
 });
 
 const dropOffBox = () =>
-	document.body.querySelector<HTMLButtonElement>('button[aria-label="ใช้เป็นจุดรับบริจาค"]');
+	// Each row's checkbox names its point (#1004 review S2): "ใช้เป็นจุดรับบริจาค — คลัง 1".
+	document.body.querySelector<HTMLButtonElement>('button[aria-label^="ใช้เป็นจุดรับบริจาค"]');
 const pinButton = () =>
 	[...document.body.querySelectorAll<HTMLButtonElement>('button')].find((b) =>
 		b.textContent?.includes('ปักหมุดตำแหน่ง')
@@ -85,13 +86,14 @@ async function settle() {
 describe('StoragePointsSection — donation drop-off (CR-205)', () => {
 	it('hides the pin button and note until the point is ticked (FR-DP-6..8)', async () => {
 		await render(['general']);
-		expect(dropOffBox()).not.toBeNull();
+		expect(dropOffBox()?.getAttribute('aria-label')).toBe('ใช้เป็นจุดรับบริจาค — คลัง 1');
 		expect(pinButton()).toBeUndefined();
 		expect(document.body.textContent).not.toContain('คำอธิบายตำแหน่งสำหรับผู้มาส่ง');
 
 		dropOffBox()!.click();
 		await settle();
 		expect(storedPoint().accepts_donations).toBe(true);
+		expect(pinButton()?.getAttribute('aria-label')).toBe('ปักหมุดตำแหน่ง — คลัง 1');
 		expect(pinButton()).toBeDefined();
 		expect(document.body.textContent).toContain('คำอธิบายตำแหน่งสำหรับผู้มาส่ง');
 		expect(document.body.textContent).toContain('ยังไม่ได้ปักหมุด');

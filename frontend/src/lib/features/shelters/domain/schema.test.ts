@@ -1320,6 +1320,41 @@ describe('CR-205 — migrate to schema_v 9', () => {
 		expect(m.common_areas?.sub_storage?.[0]).toMatchObject(NO_DROP_OFF);
 	});
 
+	// A v8 doc used to be the current version and so went through `normalizeCurrent`;
+	// every production shelter is still v8 until its next save, so v8 → v9 must repair
+	// the same gaps a partially migrated doc can carry (#1004 review B1).
+	it('v8 without sub_storage ids gets legacy ids', () => {
+		const m = migrateShelterV2ToCurrent(
+			doc(8, [
+				{ name: 'คลังยา', types: ['medical_supplies'] },
+				{ id: 's2', name: 'ห้องเก็บของกลาง', types: ['food_dry'] }
+			])
+		);
+		expect(m.schema_v).toBe(9);
+		expect(m.common_areas?.sub_storage?.map((p) => p.id)).toEqual(['legacy-0', 's2']);
+	});
+
+	it('v8 with a single legacy `type` gets types[]', () => {
+		const m = migrateShelterV2ToCurrent(doc(8, [{ id: 's1', name: 'คลังยา', type: 'food_dry' }]));
+		expect(m.schema_v).toBe(9);
+		expect(m.common_areas?.sub_storage?.[0]).toEqual({
+			id: 's1',
+			name: 'คลังยา',
+			types: ['food_dry'],
+			...NO_DROP_OFF
+		});
+	});
+
+	it('v8 without site_kind or food_distribution_points gets the defaults', () => {
+		const bare = doc(8, []) as unknown as Record<string, unknown>;
+		delete bare.site_kind;
+		delete bare.food_distribution_points;
+		const m = migrateShelterV2ToCurrent(bare as unknown as ShelterMasterV2);
+		expect(m.schema_v).toBe(9);
+		expect(m.site_kind).toBe('evacuation_center');
+		expect(m.food_distribution_points).toEqual([]);
+	});
+
 	it('v7 with a single `type` ends at v9 with types[] and the defaults (AC-10)', () => {
 		const m = migrateShelterV2ToCurrent(doc(7, [{ id: 's1', name: 'คลังยา', type: 'food_dry' }]));
 		expect(m.schema_v).toBe(9);

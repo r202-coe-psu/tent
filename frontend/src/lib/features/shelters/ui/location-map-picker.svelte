@@ -38,6 +38,10 @@
 		onchange: (lat: number | null, lng: number | null) => void;
 	} = $props();
 
+	// Basic info and the storage-point dialog both render a picker, so fixed ids collided
+	// and the dialog's labels pointed at the inputs behind the modal.
+	const uid = $props.id();
+
 	let mapElement: HTMLElement;
 	let mapInstance: MapLibreMap | null = null;
 	let marker: MapLibreMarker | null = null;
@@ -171,9 +175,9 @@
 	<!-- Accessible manual entry — keyboard/screen-reader alternative to the map pin. -->
 	<div class="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
 		<div class="space-y-1">
-			<Label for="location-lat" class="text-xs">ละติจูด (Latitude)</Label>
+			<Label for="{uid}-lat" class="text-xs">ละติจูด (Latitude)</Label>
 			<Input
-				id="location-lat"
+				id="{uid}-lat"
 				type="number"
 				step="any"
 				inputmode="decimal"
@@ -184,9 +188,9 @@
 			/>
 		</div>
 		<div class="space-y-1">
-			<Label for="location-lng" class="text-xs">ลองจิจูด (Longitude)</Label>
+			<Label for="{uid}-lng" class="text-xs">ลองจิจูด (Longitude)</Label>
 			<Input
-				id="location-lng"
+				id="{uid}-lng"
 				type="number"
 				step="any"
 				inputmode="decimal"

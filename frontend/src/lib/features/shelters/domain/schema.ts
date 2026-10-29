@@ -205,8 +205,18 @@ export const subStorageItemSchema = z.preprocess(
 			area_m2: z.coerce.number().min(0).nullish(),
 			// CR-205 FR-DP-1..4
 			accepts_donations: z.boolean().default(false),
-			lat: z.number().min(-90).max(90).nullable().default(null),
-			lng: z.number().min(-180).max(180).nullable().default(null),
+			lat: z
+				.number()
+				.min(-90, 'ละติจูดต้องอยู่ระหว่าง -90 ถึง 90')
+				.max(90, 'ละติจูดต้องอยู่ระหว่าง -90 ถึง 90')
+				.nullable()
+				.default(null),
+			lng: z
+				.number()
+				.min(-180, 'ลองจิจูดต้องอยู่ระหว่าง -180 ถึง 180')
+				.max(180, 'ลองจิจูดต้องอยู่ระหว่าง -180 ถึง 180')
+				.nullable()
+				.default(null),
 			location_note: z
 				.string()
 				.trim()
@@ -848,9 +858,14 @@ function fillSubStorageDropOff(master: ShelterMaster): ShelterMaster {
 	};
 }
 
-/** v8 → v9 (CR-205). Storage points get the drop-off fields; additive, no backfill script. */
+/**
+ * v8 → v9 (CR-205). Storage points get the drop-off fields; additive, no backfill script.
+ * Goes through `normalizeCurrent`, which a v8 doc used to pass as the current version: it
+ * also fills the `site_kind`, `food_distribution_points`, `sub_storage[].id` and
+ * `types[]` a partially migrated doc can lack, and the drop-off fields with them.
+ */
 function migrateV8ToV9(v8: ShelterMaster): ShelterMaster {
-	return { ...fillSubStorageDropOff(v8), schema_v: SHELTER_MASTER_SCHEMA_V };
+	return normalizeCurrent({ ...v8, schema_v: SHELTER_MASTER_SCHEMA_V });
 }
 
 /** Tail of the chain: v7 → v8 → v9. */

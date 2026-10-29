@@ -41,7 +41,12 @@
 	const selectedQuery = usePublicShelter(() => selectedCode);
 
 	let mapFailed = $state(false);
-	let focusedPointId = $state<string | null>(null);
+	// The tapped point's note. Recomputed (back to none) whenever another shelter is
+	// picked, so coming back to a shelter does not reopen its old note; a tap overrides it.
+	let focusedPointId = $derived.by((): string | null => {
+		void selectedCode;
+		return null;
+	});
 
 	const legendLabel = $derived({
 		critical: t.filterCritical,
@@ -89,7 +94,6 @@
 		})
 	);
 	const selected = $derived(onMap.find((shelter) => shelter.code === selectedCode) ?? null);
-	// Picking another shelter drops the note: its points do not include the old id.
 	const focusedPoint = $derived(selected?.points.find((point) => point.id === focusedPointId));
 
 	const showMap = $derived(onMap.length > 0 && !mapFailed && !sheltersQuery.isError);

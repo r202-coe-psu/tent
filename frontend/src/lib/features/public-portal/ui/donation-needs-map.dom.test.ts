@@ -4,6 +4,7 @@ import { createRawSnippet, flushSync, mount, tick, unmount } from 'svelte';
 import type { DonationNeedsEntry } from '../domain/donation-map';
 import type { PublicShelterItem } from '../domain/types';
 import DonationNeedsMap from './donation-needs-map.svelte';
+import DonationNeedsMapHarness from './__fixtures__/donation-needs-map-harness.svelte';
 
 type MapProps = {
 	shelters: Array<{ id: string; code: string; pin: { label: string; fill: string } }>;
@@ -185,6 +186,30 @@ describe('DonationNeedsMap', () => {
 		const note = document.body.querySelector('[data-testid="donation-needs-map-point-note"]');
 		expect(note?.textContent).toContain('โรงยิม');
 		expect(note?.textContent).toContain('ประตู 2');
+	});
+
+	it('closes the point note when another shelter is picked, so it does not reopen later', async () => {
+		shelterQuery.data = {
+			donation_points: [{ id: 'p1', name: 'โรงยิม', geo: { lat: 7.01, lng: 100.41 } }]
+		};
+		instance = mount(DonationNeedsMapHarness, {
+			target: document.body,
+			props: { shelters: board, initialCode: 'SH002', card: cardSnippet }
+		});
+		await settle();
+		const note = () => document.body.querySelector('[data-testid="donation-needs-map-point-note"]');
+
+		map().onSelectPoint('p1');
+		await settle();
+		expect(note()).not.toBeNull();
+
+		const pick = (code: string) =>
+			document.body.querySelector<HTMLButtonElement>(`[data-testid="pick-${code}"]`)!.click();
+		pick('SH001');
+		await settle();
+		pick('SH002');
+		await settle();
+		expect(note()).toBeNull();
 	});
 
 	it('adds no drop-off pin for a picked shelter without ticked points', async () => {

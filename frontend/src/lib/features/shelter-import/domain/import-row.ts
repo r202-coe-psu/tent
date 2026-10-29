@@ -103,6 +103,34 @@ export interface ExistingShelterPolicy {
 	admission_policy?: { supported_vulnerable_groups?: string[] } | null;
 	food_distribution_points?: ShelterInput['food_distribution_points'];
 	feature_flags?: ShelterInput['feature_flags'];
+	common_areas?: { sub_storage?: readonly Partial<SubStorageItem>[] } | null;
+}
+
+/**
+ * Storage points from the workbook, matched by name to the stored ones. A match keeps
+ * its `id` (stock lots and donation bookings reference it) and the drop-off settings
+ * staff made in the app (CR-205 — the workbook has no columns for them); its name,
+ * types and area come from the file. Each stored point matches once, in order, so two
+ * points of one name stay two. Names not stored yet get a new point as on create.
+ */
+function keepStoredStoragePoints(
+	fromFile: readonly SubStorageItem[],
+	stored: readonly Partial<SubStorageItem>[]
+): SubStorageItem[] {
+	const unmatched = [...stored];
+	return fromFile.map((point) => {
+		const at = unmatched.findIndex((old) => old.name?.trim() === point.name);
+		if (at === -1) return point;
+		const [old] = unmatched.splice(at, 1);
+		return {
+			...point,
+			id: old.id || point.id,
+			accepts_donations: old.accepts_donations ?? false,
+			lat: old.lat ?? null,
+			lng: old.lng ?? null,
+			location_note: old.location_note ?? null
+		};
+	});
 }
 
 /**
@@ -136,6 +164,17 @@ export function buildUpdatePayload(
 			: existing?.food_distribution_points !== undefined
 				? { food_distribution_points: existing.food_distribution_points }
 				: {}),
+		...(shelter.common_areas?.sub_storage && existing?.common_areas?.sub_storage
+			? {
+					common_areas: {
+						...shelter.common_areas,
+						sub_storage: keepStoredStoragePoints(
+							shelter.common_areas.sub_storage,
+							existing.common_areas.sub_storage
+						)
+					}
+				}
+			: {}),
 		admission_policy: {
 			...shelter.admission_policy,
 			supported_vulnerable_groups: existing?.admission_policy?.supported_vulnerable_groups ?? []
