@@ -70,12 +70,18 @@
 			pick(next);
 		}}
 	>
-		<Select.Trigger {id} aria-label={ariaLabel} class="h-11 w-full bg-white text-sm">
-			<span>{pointName(value) ?? placeholder}</span>
+		<Select.Trigger
+			{id}
+			aria-label={ariaLabel}
+			class="h-12 w-full rounded-xl border-2 border-slate-200 bg-white px-4 text-base font-semibold text-slate-800 data-[size=default]:h-12"
+		>
+			<span class="truncate">{pointName(value) ?? placeholder}</span>
 		</Select.Trigger>
 		<Select.Content>
 			{#each points as point (point.id)}
-				<Select.Item value={point.id} label={point.name}>{point.name}</Select.Item>
+				<Select.Item value={point.id} label={point.name} class="min-h-11 py-2.5 text-base"
+					>{point.name}</Select.Item
+				>
 			{/each}
 		</Select.Content>
 	</Select.Root>
