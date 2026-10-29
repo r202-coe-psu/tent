@@ -254,3 +254,44 @@ async def test_database_missing_propagates_connection_errors():
     with pytest.raises(httpx.ConnectError):  # never reported as "missing"
         await client.database_missing("shelter_sh001")
     await client.close()
+
+
+@pytest.mark.parametrize(
+    ("doc_id", "path"),
+    [
+        ("donation:1", "/db/donation%3A1"),
+        ("org.couchdb.user:a+b@x.co", "/db/org.couchdb.user%3Aa%2Bb%40x.co"),
+        ("org.couchdb.user:a#b?c/d%e", "/db/org.couchdb.user%3Aa%23b%3Fc%2Fd%25e"),
+        ("_design/app", "/db/_design/app"),
+        ("_local/sync", "/db/_local/sync"),
+    ],
+)
+def test_doc_path_encodes_the_id(doc_id: str, path: str):
+    """#955: a raw `+` 404'd, so the role-grant sweep skipped `name+tag@` accounts."""
+    from worker.couch.client import _doc_path
+
+    assert _doc_path("db", doc_id) == path
+
+
+@pytest.mark.asyncio
+async def test_get_doc_sends_the_encoded_id_on_the_wire():
+    seen: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request.url.raw_path.decode())
+        return httpx.Response(200, json={"_id": "org.couchdb.user:a+b@x.co"})
+
+    settings = MagicMock()
+    settings.couch_base_url = "http://couch:5984"
+    settings.couchdb_user = "admin"
+    settings.couchdb_password = "password"
+    client = CouchClient(settings)
+    client._client = httpx.AsyncClient(
+        base_url="http://couch:5984", transport=httpx.MockTransport(handler)
+    )
+
+    doc = await client.get_doc("_users", "org.couchdb.user:a+b@x.co")
+    assert doc == {"_id": "org.couchdb.user:a+b@x.co"}
+    assert seen == ["/_users/org.couchdb.user%3Aa%2Bb%40x.co"]
+
+    await client.close()
