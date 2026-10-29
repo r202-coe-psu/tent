@@ -78,10 +78,10 @@ describe('bulk return pool v3 — reopen vs concurrent loan apply (CR-193 §35)'
 			getMany: (ids) => real.getMany(ids),
 			list: (f) => real.list(f),
 			listWithSkipped: (f) => real.listWithSkipped(f),
-			mutateLogCAS: async (id, m) => {
+			mutateLogCAS: async (id, m, o) => {
 				n++;
 				await before(n);
-				return real.mutateLogCAS(id, m);
+				return real.mutateLogCAS(id, m, o);
 			},
 			recordReturn: (id, i, c) => real.recordReturn(id, i, c),
 			recordClear: (id, i, c) => real.recordClear(id, i, c),
@@ -280,6 +280,78 @@ describe('bulk return pool v3 — reopen vs concurrent loan apply (CR-193 §35)'
 		});
 		expect(await eventRepo.getLoanReopen(deriveLoanReopenId(entry._id))).not.toBeNull();
 		await expectNoLoanCut(entry._id, [96, 97]);
+	});
+
+	it('add-entry fresh entry counted by a submit: a reopen landing between its two loan CASes is reverted', async () => {
+		const pool = await openPool('Gate A');
+		await seedLoan(110, { qty: '3' });
+		await seedLoan(111, { qty: '3' });
+		let submitted = false;
+		let reopened = false;
+		const racing = {
+			...deps,
+			// The first read of the pool after the entry landed is the fence: a submit counts it first.
+			poolRepo: racingPoolRepo(poolRepo, async (_n, id) => {
+				if (submitted || id !== pool._id) return;
+				const events = await eventRepo.listForPool(pool._id);
+				if (events.entries.length === 0) return;
+				submitted = true;
+				await poolRepo.mutateCAS(pool._id, (cur) =>
+					submitBulkReturnPoolV3(
+						cur,
+						{
+							items_summary: summarizePoolItems(
+								events.entries,
+								events.moves,
+								pool._id,
+								events.voids
+							),
+							entry_ids: poolSnapshotEntryIds(
+								resolveBulkReturnEntries(events.entries, events.moves, events.voids),
+								pool._id
+							)
+						},
+						mgr
+					)
+				);
+			}),
+			logRepo: logRepoBeforeCas(logRepo, async (n) => {
+				// Loan 110 is cut by now (so there is something to reopen); loan 111 is not yet.
+				if (n !== 2 || reopened) return;
+				reopened = true;
+				const events = await eventRepo.listForPool(pool._id);
+				await reopenNow(events.entries[0]._id);
+			})
+		};
+
+		const res = await addBulkReturnEntries(
+			{
+				pool_id: pool._id,
+				returner: { type: 'evacuee' as const, id: EVACUEE },
+				items: [
+					{ item_id: 'item:cot', qty: '5', operationUlid: nextOp() },
+					{ item_id: 'item:wheelchair', qty: '1', operationUlid: nextOp() }
+				]
+			},
+			dist,
+			racing
+		);
+
+		expect(submitted).toBe(true);
+		expect(reopened).toBe(true);
+		// Fence `in_snapshot`: the first line stops the call, the second item is never written.
+		expect(res.results).toHaveLength(1);
+		expect(res.results[0]).toMatchObject({
+			replayed: false,
+			late: false,
+			loansApplied: [],
+			loansSkipped: [],
+			loans_reopened: true
+		});
+		expect((await eventRepo.listForPool(pool._id)).entries).toHaveLength(1);
+		const entryId = res.results[0].entry._id;
+		expect(await eventRepo.getLoanReopen(deriveLoanReopenId(entryId))).not.toBeNull();
+		await expectNoLoanCut(entryId, [110, 111]);
 	});
 
 	it('add-entry A2 replay on the original pool: an entry reopened earlier is not cut again', async () => {

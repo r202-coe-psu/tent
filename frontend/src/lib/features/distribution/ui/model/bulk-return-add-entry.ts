@@ -364,7 +364,10 @@ export interface AddEntriesSummary {
 	/** Replayed lines whose entry was moved to another pool meanwhile (or is pending sync): not saved here. */
 	relocated: { item_id: string; kind: 'moved' | 'pending_sync' }[];
 	noOutstandingLoan: boolean;
-	/** Total qty applied to loans (sum of loan refs of on-time entries); undefined when none. */
+	/**
+	 * Total qty applied to loans: sum of loan refs of on-time entries that were cut (excludes
+	 * loan_pending and loans_reopened lines); undefined when none.
+	 */
 	loanAppliedQty?: string;
 	/** Items whose qty was only partly (or not) matched to a loan. */
 	unallocated: { item_id: string; qty: string }[];
