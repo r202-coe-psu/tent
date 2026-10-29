@@ -48,6 +48,7 @@ const RECIPE_LABEL = `E2E ข้าวต้ม ${RUN}`;
 const TARGET_ERROR = 'จำนวนจานต้องมากกว่า 0';
 const SERVICE_ERROR = 'ต้องเป็นตัวเลขตั้งแต่ 0 ขึ้นไป';
 const NEGATIVE_NOTE = 'ไม่รับค่าติดลบ';
+const NON_NUMERIC_NOTE = 'กรอกได้เฉพาะตัวเลข';
 const QTY_ERROR = 'จำนวนต้องมากกว่า 0';
 const ADD_INGREDIENT = 'เพิ่มวัตถุดิบนี้';
 const CREATE_SESSION = 'สร้างรอบมื้ออาหาร';
@@ -181,6 +182,13 @@ async function pasteOver(page: Page, input: Locator, text: string): Promise<void
 	await page.keyboard.press('Control+A');
 	await page.evaluate((value) => navigator.clipboard.writeText(value), text);
 	await page.keyboard.press('Control+V');
+}
+
+/** Appends text the way Android virtual keyboards do: no keydown names the key. */
+async function typeOnVirtualKeyboard(page: Page, input: Locator, text: string): Promise<void> {
+	await input.focus();
+	await page.keyboard.press('End');
+	await page.keyboard.insertText(text);
 }
 
 /**
@@ -355,6 +363,35 @@ test.describe(
 			}
 		});
 
+		test('stage C flags a minus typed on a virtual keyboard and blocks saving', async ({
+			page
+		}) => {
+			await openBoard(page, `?plan_id=${encodeURIComponent(planId)}&stage=C`);
+			const save = page.getByRole('button', { name: RECORD_SERVICE });
+			const errors = page.getByRole('alert').filter({ hasText: SERVICE_ERROR });
+			const note = page.getByRole('alert').filter({ hasText: NON_NUMERIC_NOTE });
+
+			await expect(numberUnderLabel(page, SERVICE_FIELDS[0])).toHaveValue('20', {
+				timeout: 20_000
+			});
+			for (const label of SERVICE_FIELDS) {
+				await test.step(label, async () => {
+					const input = numberUnderLabel(page, label);
+					await input.fill('4');
+					await typeOnVirtualKeyboard(page, input, '-');
+					await expect(note).toHaveCount(1);
+					await expect(errors).toHaveCount(1);
+					await expect(save).toBeDisabled();
+
+					await page.keyboard.press('Backspace');
+					await expect(input).toHaveValue('4');
+					await expect(note).toHaveCount(0);
+					await expect(errors).toHaveCount(0);
+					await expect(save).toBeEnabled();
+				});
+			}
+		});
+
 		test('ingredient table refuses negatives and flags a quantity of 0', async ({ page }) => {
 			await openBoard(page);
 			const recipe = page.locator('select').first();
@@ -483,6 +520,38 @@ test.describe(
 						await expect(page.getByRole('alert').filter({ hasText: NEGATIVE_NOTE })).toHaveCount(0);
 					});
 				}
+			}
+		});
+
+		test('new-meal dialog flags a minus typed on a virtual keyboard and blocks creating', async ({
+			page
+		}) => {
+			await routeBrowserCouchThroughApp(page);
+			await injectSession(page, KITCHEN, authSession);
+			await page.goto('/back-office/kitchen');
+			await page.getByRole('button', { name: 'สร้างมื้อใหม่' }).first().click();
+
+			const create = page.getByRole('button', { name: CREATE_SESSION });
+			const errors = page.getByRole('alert').filter({ hasText: SERVICE_ERROR });
+			const note = page.getByRole('alert').filter({ hasText: NON_NUMERIC_NOTE });
+			await expect(numberUnderLabel(page, SESSION_FIELDS[0])).toBeVisible({
+				timeout: 20_000
+			});
+
+			for (const label of SESSION_FIELDS) {
+				await test.step(label, async () => {
+					const input = numberUnderLabel(page, label);
+					await input.fill('4');
+					await typeOnVirtualKeyboard(page, input, '-5');
+					await expect(note).toHaveCount(1);
+					await expect(errors).toHaveCount(1);
+					await expect(create).toBeDisabled();
+
+					await input.fill('4');
+					await expect(note).toHaveCount(0);
+					await expect(errors).toHaveCount(0);
+					await expect(create).toBeEnabled();
+				});
 			}
 		});
 	}

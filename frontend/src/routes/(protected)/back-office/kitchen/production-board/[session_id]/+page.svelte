@@ -376,7 +376,7 @@
 	// Synchronize ingredients with recipe & portions when not manually customized
 	$effect(() => {
 		const recId = selectedRecipeId;
-		const target = allocatedTarget;
+		const target = scalingTarget;
 		void recipes.data;
 		if (!isIngredientsManuallyEdited && target > 0) {
 			ingredientsList = calculateRecipeIngredients(recId, target);
@@ -620,8 +620,14 @@
 		yieldActual: isCount(yieldActualPortions, 0) ? null : SERVICE_FIELD_ERROR,
 		served: isCount(servedInShelter, 0) ? null : SERVICE_FIELD_ERROR,
 		waste: isCount(wastePortions, 0) ? null : SERVICE_FIELD_ERROR,
-		extVolunteers: isCount(extVolunteers ?? 0, 0) ? null : SERVICE_FIELD_ERROR,
-		extOutside: isCount(extOutside ?? 0, 0) ? null : SERVICE_FIELD_ERROR
+		extVolunteers:
+			!guard.unparsed['service-ext-volunteers'] && isCount(extVolunteers ?? 0, 0)
+				? null
+				: SERVICE_FIELD_ERROR,
+		extOutside:
+			!guard.unparsed['service-ext-outside'] && isCount(extOutside ?? 0, 0)
+				? null
+				: SERVICE_FIELD_ERROR
 	});
 	const serviceFormValid = $derived(Object.values(serviceFieldErrors).every((e) => e === null));
 

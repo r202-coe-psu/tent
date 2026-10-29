@@ -202,12 +202,14 @@
 	const guard = new CountInputGuard();
 	const COUNT_ERROR = 'ต้องเป็นตัวเลขตั้งแต่ 0 ขึ้นไป';
 	// An empty box counts as 0 (see formTotal); a negative or non-numeric value is an error.
+	const errorFor = (id: string, n: number | null) =>
+		!guard.unparsed[id] && isCount(n ?? 0, 0) ? null : COUNT_ERROR;
 	const countErrors = $derived({
-		regular: isCount(countRegular ?? 0, 0) ? null : COUNT_ERROR,
-		volunteer: isCount(countVolunteer ?? 0, 0) ? null : COUNT_ERROR,
-		halal: isCount(countHalal ?? 0, 0) ? null : COUNT_ERROR,
-		softFood: isCount(countSoftFood ?? 0, 0) ? null : COUNT_ERROR,
-		infant: isCount(countInfant ?? 0, 0) ? null : COUNT_ERROR
+		regular: errorFor('count-regular', countRegular),
+		volunteer: errorFor('count-volunteer', countVolunteer),
+		halal: errorFor('count-halal', countHalal),
+		softFood: errorFor('count-soft-food', countSoftFood),
+		infant: errorFor('count-infant', countInfant)
 	});
 	const countsValid = $derived(Object.values(countErrors).every((e) => e === null));
 
