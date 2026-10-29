@@ -175,8 +175,10 @@ const pathOf = (page: Page) => new URL(page.url()).pathname;
 
 async function expectLoads(page: Page, url: string): Promise<void> {
 	await page.goto(url);
-	// Guards run in the route `load`, so the URL only changes once the page has settled.
-	await page.waitForLoadState('networkidle');
+	// Guards run in the route `load` and SvelteKit renders only after every load resolves, so the
+	// protected shell's <main> means the guard has passed or redirected. Not `networkidle`: the
+	// `_changes` longpoll feeds keep the network busy for good.
+	await expect(page.locator('main').first()).toBeVisible();
 	expect.soft(pathOf(page), `${url} should load`).toBe(url);
 }
 
