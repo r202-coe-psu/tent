@@ -49,7 +49,7 @@
 	import { Label } from '$lib/components/ui/label';
 	import { Textarea } from '$lib/components/ui/textarea';
 	import { toast } from 'svelte-sonner';
-	import { addQty, qtyGt, qtyLte } from '$lib/utils/qty';
+	import { addQty, persistQty, qtyGt, qtyLte } from '$lib/utils/qty';
 	import { formatThaiDateTime, formatThaiShortDate } from '$lib/utils/date';
 	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
 	import ChefHat from '@lucide/svelte/icons/chef-hat';
@@ -414,7 +414,7 @@
 				{
 					item_id: newItemId,
 					name: master?.name || newItemId,
-					needed: String(newQty),
+					needed: persistQty(newQty),
 					unit: newUnit || master?.base_unit || 'kg'
 				}
 			];
