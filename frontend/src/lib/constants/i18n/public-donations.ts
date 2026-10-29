@@ -186,7 +186,6 @@ export const PUBLIC_DONATIONS_I18N = {
 			'ยังไม่ได้ตั้งค่า reCAPTCHA (PUBLIC_RECAPTCHA_SITE_KEY) — ไม่สามารถส่งแบบฟอร์มได้',
 		recaptchaBranding: 'เว็บไซต์นี้มีการป้องกันด้วย reCAPTCHA',
 		defaultItemFreeText: 'ของบริจาคทั่วไป',
-		generalItemsFallback: 'ของบริจาคทั่วไป',
 		defaultItemUnit: 'piece',
 
 		// Success Ticket
@@ -575,7 +574,6 @@ export const PUBLIC_DONATIONS_I18N = {
 			'reCAPTCHA is not configured (PUBLIC_RECAPTCHA_SITE_KEY) — Unable to submit form.',
 		recaptchaBranding: 'This site is protected by reCAPTCHA.',
 		defaultItemFreeText: 'General Donation Item',
-		generalItemsFallback: 'General Donation Item',
 		defaultItemUnit: 'piece',
 
 		// Success Ticket

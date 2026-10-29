@@ -1958,6 +1958,48 @@ export interface components {
 			/** Relation */
 			relation: string;
 		};
+		/** ExternalSearchResponse */
+		ExternalSearchResponse: {
+			/** Results */
+			results: components['schemas']['ExternalSearchResult'][];
+			/** Count */
+			count: number;
+			/**
+			 * As Of
+			 * Format: date-time
+			 */
+			as_of: string;
+		};
+		/**
+		 * ExternalSearchResult
+		 * @description `/external/v1/occupants` keeps the zone partners read (CR-183 FR-18 is public-only).
+		 */
+		ExternalSearchResult: {
+			/** Name */
+			name: string;
+			/** Status */
+			status: string;
+			/** National Id */
+			national_id?: string | null;
+			/** Gender */
+			gender?: string | null;
+			/** Shelter Name */
+			shelter_name: string;
+			/** Shelter Address */
+			shelter_address?: string | null;
+			/** Origin Address */
+			origin_address?: string | null;
+			/** Checked In At */
+			checked_in_at?: string | null;
+			/** Shelter Status */
+			shelter_status?: ('open' | 'closed' | 'full' | 'standby') | null;
+			/** Family Members */
+			family_members?: components['schemas']['FamilyMember'][];
+			/** Care Zone */
+			care_zone?: string | null;
+			/** Zone Name */
+			zone_name?: string | null;
+		};
 		/** FamilyMember */
 		FamilyMember: {
 			/** Name */
@@ -5014,7 +5056,7 @@ export interface operations {
 					[name: string]: unknown;
 				};
 				content: {
-					'application/json': components['schemas']['SearchResponse'];
+					'application/json': components['schemas']['ExternalSearchResponse'];
 				};
 			};
 			/** @description Unprocessable Content */

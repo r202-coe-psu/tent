@@ -12,11 +12,13 @@ export {
 	isDonorEditable,
 	donationItemEditGate,
 	donationPayloadUnit,
+	buildDonationItemsPayload,
 	donorUnitOptions,
 	linesMissingExpiry
 } from './domain/public-donation';
 export type {
 	DonationItemEditGate,
+	DonationPayloadLine,
 	DonationUnitSource,
 	ExpiryCheckLine
 } from './domain/public-donation';
