@@ -74,6 +74,7 @@
 	--accent: oklch(0.97 0.001 106.424);
 	--accent-foreground: oklch(0.216 0.006 56.043);
 	--destructive: oklch(0.577 0.245 27.325);
+	--destructive-foreground: oklch(0.985 0 0);
 	--border: oklch(0.929 0.013 255.5);
 	--input: oklch(0.88 0.015 255.5);
 	--ring: oklch(0.5 0.08 255.6);
@@ -233,6 +234,12 @@
 	--domain-admin-border: #cbd5e1;
 	--domain-admin-text: #1e293b;
 
+	--domain-pr: #ca8a04;
+	--domain-pr-strong: #a16207;
+	--domain-pr-subtle: #fefce8;
+	--domain-pr-border: #fef08a;
+	--domain-pr-text: #713f12;
+
 	/* Onsite station families — station PAGES only (portal tiles keep the department colour).
 	   Keep in sync with baseStation in $lib/tokens/colors.ts — unit-tested. Never a status colour. */
 	--station-1: #124481;
@@ -284,6 +291,7 @@
 	--accent: oklch(0.268 0.007 34.298);
 	--accent-foreground: oklch(0.985 0.001 106.423);
 	--destructive: oklch(0.704 0.191 22.216);
+	--destructive-foreground: oklch(0.985 0 0);
 	--border: oklch(1 0 0 / 10%);
 	--input: oklch(1 0 0 / 15%);
 	--ring: oklch(0.553 0.013 58.071);
@@ -375,6 +383,7 @@
 	--color-accent: var(--accent);
 	--color-accent-foreground: var(--accent-foreground);
 	--color-destructive: var(--destructive);
+	--color-destructive-foreground: var(--destructive-foreground);
 	--color-border: var(--border);
 	--color-input: var(--input);
 	--color-ring: var(--ring);
@@ -436,6 +445,11 @@
 	--color-domain-admin-subtle: var(--domain-admin-subtle);
 	--color-domain-admin-border: var(--domain-admin-border);
 	--color-domain-admin-text: var(--domain-admin-text);
+	--color-domain-pr: var(--domain-pr);
+	--color-domain-pr-strong: var(--domain-pr-strong);
+	--color-domain-pr-subtle: var(--domain-pr-subtle);
+	--color-domain-pr-border: var(--domain-pr-border);
+	--color-domain-pr-text: var(--domain-pr-text);
 	--color-station-1: var(--station-1);
 	--color-station-1-strong: var(--station-1-strong);
 	--color-station-1-subtle: var(--station-1-subtle);
@@ -758,6 +772,12 @@
 	}
 	.card-domain-admin {
 		@apply border-2 border-domain-admin-border bg-white transition-all hover:border-domain-admin;
+	}
+	.badge-domain-pr {
+		@apply inline-flex items-center gap-1.5 rounded-full border border-domain-pr-border bg-domain-pr-subtle px-2.5 py-0.5 text-xs font-semibold text-domain-pr-text;
+	}
+	.card-domain-pr {
+		@apply border-2 border-domain-pr-border bg-white transition-all hover:border-domain-pr;
 	}
 
 	/* DEPRECATED(domain-color-tokens): use .badge-domain-<id> / .card-domain-<id> — remove after usages migrate (.badge-family / .card-ops-family stay) */

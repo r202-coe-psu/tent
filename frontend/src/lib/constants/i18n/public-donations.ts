@@ -23,7 +23,6 @@ export const PUBLIC_DONATIONS_I18N = {
 		filterNormal: 'ปกติ',
 		loadingNeeds: 'กำลังโหลดข้อมูลความต้องการ...',
 		errorLoadingNeeds: 'ไม่สามารถโหลดข้อมูลความต้องการได้ในขณะนี้',
-		errorLoadingShelters: 'ไม่สามารถโหลดข้อมูลศูนย์พักพิงได้',
 		errorConnect: 'เกิดข้อผิดพลาดในการเชื่อมต่อเซิร์ฟเวอร์',
 		noSheltersOrItems: 'ไม่พบศูนย์พักพิงหรือสิ่งของที่ค้นหา',
 		noNeedsCurrently: 'ขณะนี้ยังไม่มีรายการความต้องการ',
@@ -131,9 +130,23 @@ export const PUBLIC_DONATIONS_I18N = {
 		pickupAddressLabel: 'ที่อยู่เข้ารับของ',
 		pickupAddressPlaceholder:
 			'ระบุบ้านเลขที่ ซอย ถนน หรือจุดสังเกตเพื่อความสะดวกในการเข้ารับของ...',
-		selectShelterLabel: 'เลือกศูนย์รับบริจาค',
-		shelterLockedBadge: 'ล็อกตามความต้องการที่เลือก',
-		selectShelterPlaceholder: '-- เลือกศูนย์พักพิงปลายทาง --',
+		needsMapLabel: 'แผนที่ศูนย์ที่รับบริจาค',
+		needsMapTitle: 'ศูนย์อยู่ที่ไหน',
+		needsMapHint: 'เลขบนหมุดตรงกับเลขบนการ์ดด้านล่าง แตะหมุดเพื่อดูว่าศูนย์ต้องการอะไร',
+		needsMapUnavailable: 'แผนที่ใช้ไม่ได้ในตอนนี้ เลือกศูนย์จากรายการด้านล่างได้เลย',
+		needsMapCloseCard: 'ปิดการ์ดศูนย์',
+		needsMapLegend: 'ความเร่งด่วน',
+		needsMapPinPrefix: 'หมุดที่',
+		needsListTitle: 'ศูนย์ทั้งหมด {count} แห่ง',
+		needsListShown: 'แสดง {shown} จาก {total} ศูนย์',
+		needsListShowMore: 'แสดงศูนย์ที่เหลือ',
+		directionsShort: 'นำทาง',
+		donateShort: 'บริจาค',
+		viewAllNeedsBtn: 'ดูความต้องการทั้งหมด',
+		dropOffShelterLabel: 'ส่งที่',
+		dropOffMapLabel: 'แผนที่ศูนย์ที่จะนำของไปส่ง',
+		dropOffNoShelter: 'ยังไม่ได้เลือกศูนย์ที่จะส่งของ',
+		dropOffBackToNeeds: 'กลับไปเลือกศูนย์',
 		selectDateTimeLabel: 'เลือกวันที่และช่วงเวลา',
 		pickupTimeSuffix: 'ที่ต้องการให้ไปรับ',
 		dropoffTimeSuffix: 'ที่จะนำของมาส่ง',
@@ -186,7 +199,6 @@ export const PUBLIC_DONATIONS_I18N = {
 			'ยังไม่ได้ตั้งค่า reCAPTCHA (PUBLIC_RECAPTCHA_SITE_KEY) — ไม่สามารถส่งแบบฟอร์มได้',
 		recaptchaBranding: 'เว็บไซต์นี้มีการป้องกันด้วย reCAPTCHA',
 		defaultItemFreeText: 'ของบริจาคทั่วไป',
-		generalItemsFallback: 'ของบริจาคทั่วไป',
 		defaultItemUnit: 'piece',
 
 		// Success Ticket
@@ -325,8 +337,6 @@ export const PUBLIC_DONATIONS_I18N = {
 		lineReviewApproved: 'อนุมัติแล้ว / รอนำส่ง',
 		lineReviewPending: 'รอประเมิน',
 		lineReviewRejected: 'ไม่รับ',
-		editVerifyingWarning:
-			'ใบนี้ได้ QR แล้ว — ถ้าแก้แล้วมีรายการที่ต้องประเมิน QR จะใช้ไม่ได้จนกว่าเจ้าหน้าที่ประเมินเสร็จ',
 		statusVerifying: 'กำลังตรวจรับที่ศูนย์',
 		statusReceived: 'รับเข้าคลังเรียบร้อย',
 		statusRedirected: 'ส่งต่อไปศูนย์อื่น',
@@ -383,7 +393,11 @@ export const PUBLIC_DONATIONS_I18N = {
 		editSaveBtn: 'บันทึกการแก้ไข',
 		editSaving: 'กำลังบันทึก…',
 		editSuccessToast: 'แก้ไขรายการบริจาคแล้ว',
-		editFailToast: 'แก้ไขรายการไม่สำเร็จ'
+		editFailToast: 'แก้ไขรายการไม่สำเร็จ',
+		// CR-196 FR-LK-4 — the CR's wording, verbatim.
+		editBlockedToast:
+			'ใบบริจาคได้รับการอนุมัติ/ออก QR แล้ว ไม่สามารถแก้ไขรายการได้ หากต้องการเปลี่ยนแปลง กรุณายกเลิกเพื่อทำรายการใหม่ หรือแจ้งเจ้าหน้าที่หน้างานตอนนำของมาส่ง',
+		editItemsHint: 'ปรับจำนวนหรือเพิ่ม-ลบรายการได้จนกว่าศูนย์จะประเมินรายการ'
 	},
 	en: {
 		// Header & Stepper
@@ -410,7 +424,6 @@ export const PUBLIC_DONATIONS_I18N = {
 		filterNormal: 'Normal',
 		loadingNeeds: 'Loading needs data...',
 		errorLoadingNeeds: 'Unable to load needs data at this time',
-		errorLoadingShelters: 'Unable to load shelters data',
 		errorConnect: 'Server connection error',
 		noSheltersOrItems: 'No shelters or items found',
 		noNeedsCurrently: 'No urgent needs at this time',
@@ -518,9 +531,23 @@ export const PUBLIC_DONATIONS_I18N = {
 		pickupAddressFieldLabel: 'Pickup Address / Location',
 		pickupAddressLabel: 'Pickup Address',
 		pickupAddressPlaceholder: 'Enter house number, street, landmarks for pickup...',
-		selectShelterLabel: 'Select Destination Shelter',
-		shelterLockedBadge: 'Locked based on selected need',
-		selectShelterPlaceholder: '-- Select Destination Shelter --',
+		needsMapLabel: 'Map of shelters accepting donations',
+		needsMapTitle: 'Where the shelters are',
+		needsMapHint: 'Pin numbers match the cards below. Tap a pin to see what a shelter needs.',
+		needsMapUnavailable: 'The map is unavailable right now. Pick a shelter from the list below.',
+		needsMapCloseCard: 'Close shelter card',
+		needsMapLegend: 'Urgency',
+		needsMapPinPrefix: 'Pin',
+		needsListTitle: '{count} shelters',
+		needsListShown: 'Showing {shown} of {total} shelters',
+		needsListShowMore: 'Show the rest',
+		directionsShort: 'Directions',
+		donateShort: 'Donate',
+		viewAllNeedsBtn: 'View all needs',
+		dropOffShelterLabel: 'Deliver to',
+		dropOffMapLabel: 'Map of the shelter you are delivering to',
+		dropOffNoShelter: 'No shelter selected for this donation yet',
+		dropOffBackToNeeds: 'Back to choose a shelter',
 		selectDateTimeLabel: 'Select Date & Time Slot',
 		pickupTimeSuffix: 'for pickup',
 		dropoffTimeSuffix: 'for drop-off',
@@ -573,7 +600,6 @@ export const PUBLIC_DONATIONS_I18N = {
 			'reCAPTCHA is not configured (PUBLIC_RECAPTCHA_SITE_KEY) — Unable to submit form.',
 		recaptchaBranding: 'This site is protected by reCAPTCHA.',
 		defaultItemFreeText: 'General Donation Item',
-		generalItemsFallback: 'General Donation Item',
 		defaultItemUnit: 'piece',
 
 		// Success Ticket
@@ -714,8 +740,6 @@ export const PUBLIC_DONATIONS_I18N = {
 		lineReviewApproved: 'Approved / awaiting drop-off',
 		lineReviewPending: 'Pending review',
 		lineReviewRejected: 'Not accepted',
-		editVerifyingWarning:
-			'This booking already has its QR. If your change adds an item that needs review, the QR stops working until staff finish reviewing it.',
 		statusVerifying: 'Checking in at Shelter',
 		statusReceived: 'Received into Warehouse',
 		statusRedirected: 'Redirected to Other Shelter',
@@ -773,6 +797,9 @@ export const PUBLIC_DONATIONS_I18N = {
 		editSaveBtn: 'Save Changes',
 		editSaving: 'Saving…',
 		editSuccessToast: 'Donation items updated',
-		editFailToast: 'Failed to update items'
+		editFailToast: 'Failed to update items',
+		editBlockedToast:
+			'This donation has been approved or has its QR, so its items can no longer be changed. To change it, cancel and book again, or tell the staff when you bring the items.',
+		editItemsHint: 'Adjust quantities or add/remove items until the shelter reviews them'
 	}
 } as const;

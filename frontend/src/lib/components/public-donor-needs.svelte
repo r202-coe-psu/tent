@@ -8,10 +8,24 @@
 	import PackagePlus from '@lucide/svelte/icons/package-plus';
 	import ClipboardList from '@lucide/svelte/icons/clipboard-list';
 	import MapPin from '@lucide/svelte/icons/map-pin';
-	import { getDonationStore } from '../../routes/(public)/donations/donation.svelte';
+	import Navigation from '@lucide/svelte/icons/navigation';
+	import { Button } from '$lib/components/ui/button';
+	import {
+		type DonationNeedUrgency,
+		DONATION_URGENCY_RANK,
+		DONATION_URGENCY_STYLE,
+		DonationNeedsMap,
+		DonationPinBadge,
+		donationNeedUrgency,
+		donationShelterUrgency
+	} from '$lib/features/public-portal';
+	import {
+		getDonationStore,
+		newDonationItem
+	} from '../../routes/(public)/donations/donation.svelte';
 	import { langState } from '$lib/states/i18n.svelte';
-	import { ulid } from '$lib/db/ulid';
 	import { getTranslation } from '$lib/utils/i18n';
+	import { directionsUrl } from '$lib/utils/maps';
 	import { PUBLIC_DONATIONS_I18N } from '$lib/constants/i18n';
 	import { donorCategoryFromCatalog } from '$lib/features/donations';
 	import { formatUnit as formatUnitCatalog, useUnitsOfMeasure } from '$lib/features/catalog';
@@ -52,6 +66,11 @@
 	let search = $state('');
 	let filterType = $state('all');
 	let isSearchFocused = $state(false);
+	let mapSelectedCode = $state<string | null>(null);
+	let showAllShelters = $state(false);
+
+	/** Two rows of three on a wide screen; the rest wait behind a button. */
+	const SHELTERS_SHOWN = 6;
 
 	const suggestions = $derived.by(() => {
 		const q = search.trim().toLowerCase();
@@ -173,111 +192,105 @@
 
 	const filteredShelters = $derived.by(() => {
 		const q = search.trim().toLowerCase();
-		return shelters
-			.map((s) => {
-				let filteredNeeds = s.needs;
-				if (q) {
-					filteredNeeds = filteredNeeds.filter((n) => {
-						const localizedName = formatItemName(n.raw_name || n.name || n.item_id).toLowerCase();
-						return (
-							localizedName.includes(q) ||
-							n.name.toLowerCase().includes(q) ||
-							s.name.toLowerCase().includes(q)
-						);
-					});
-				}
+		return (
+			shelters
+				.map((s) => {
+					let filteredNeeds = s.needs;
+					if (q) {
+						filteredNeeds = filteredNeeds.filter((n) => {
+							const localizedName = formatItemName(n.raw_name || n.name || n.item_id).toLowerCase();
+							return (
+								localizedName.includes(q) ||
+								n.name.toLowerCase().includes(q) ||
+								s.name.toLowerCase().includes(q)
+							);
+						});
+					}
 
-				if (filterType === 'critical') {
-					filteredNeeds = filteredNeeds.filter(
-						(n) => n.status !== 'closed' && needUrgency(n) === 'critical'
-					);
-				} else if (filterType === 'high') {
-					filteredNeeds = filteredNeeds.filter(
-						(n) => n.status !== 'closed' && needUrgency(n) === 'high'
-					);
-				} else if (filterType === 'normal') {
-					filteredNeeds = filteredNeeds.filter(
-						(n) => n.status !== 'closed' && needUrgency(n) === 'normal'
-					);
-				} else if (filterType !== 'all') {
-					filteredNeeds = filteredNeeds.filter((n) => {
-						const name = (n.raw_name || n.name).toLowerCase();
-						const cat = (n.category || '').toLowerCase();
-						if (filterType === 'food')
-							return (
-								cat === 'food' ||
-								name.includes('อาหาร') ||
-								name.includes('น้ำ') ||
-								name.includes('ข้าว') ||
-								name.includes('food') ||
-								name.includes('rice') ||
-								name.includes('water')
-							);
-						if (filterType === 'medicine')
-							return (
-								cat === 'medicine' ||
-								name.includes('ยา') ||
-								name.includes('พยาบาล') ||
-								name.includes('เวชภัณฑ์') ||
-								name.includes('medicine') ||
-								name.includes('medical')
-							);
-						if (filterType === 'clothing')
-							return (
-								cat === 'clothing' ||
-								name.includes('เสื้อ') ||
-								name.includes('ผ้า') ||
-								name.includes('กางเกง') ||
-								name.includes('cloth') ||
-								name.includes('blanket')
-							);
-						if (filterType === 'supply')
-							return (
-								cat === 'supply' ||
-								name.includes('ของใช้') ||
-								name.includes('อุปกรณ์') ||
-								name.includes('เต็นท์') ||
-								name.includes('เตียง') ||
-								name.includes('สบู่') ||
-								name.includes('ทิชชู่') ||
-								name.includes('supply') ||
-								name.includes('tent') ||
-								name.includes('soap')
-							);
-						return true;
-					});
-				}
-				return { ...s, needs: filteredNeeds };
-			})
-			.filter((s) => s.needs.length > 0 || (search.trim() === '' && filterType === 'all'))
-			.sort((a, b) => {
-				const aCrit = a.needs.some((n) => n.status !== 'closed' && needUrgency(n) === 'critical');
-				const bCrit = b.needs.some((n) => n.status !== 'closed' && needUrgency(n) === 'critical');
-				if (aCrit && !bCrit) return -1;
-				if (!aCrit && bCrit) return 1;
-				return 0;
-			});
+					if (filterType === 'critical') {
+						filteredNeeds = filteredNeeds.filter(
+							(n) => n.status !== 'closed' && needUrgency(n) === 'critical'
+						);
+					} else if (filterType === 'high') {
+						filteredNeeds = filteredNeeds.filter(
+							(n) => n.status !== 'closed' && needUrgency(n) === 'high'
+						);
+					} else if (filterType === 'normal') {
+						filteredNeeds = filteredNeeds.filter(
+							(n) => n.status !== 'closed' && needUrgency(n) === 'normal'
+						);
+					} else if (filterType !== 'all') {
+						filteredNeeds = filteredNeeds.filter((n) => {
+							const name = (n.raw_name || n.name).toLowerCase();
+							const cat = (n.category || '').toLowerCase();
+							if (filterType === 'food')
+								return (
+									cat === 'food' ||
+									name.includes('อาหาร') ||
+									name.includes('น้ำ') ||
+									name.includes('ข้าว') ||
+									name.includes('food') ||
+									name.includes('rice') ||
+									name.includes('water')
+								);
+							if (filterType === 'medicine')
+								return (
+									cat === 'medicine' ||
+									name.includes('ยา') ||
+									name.includes('พยาบาล') ||
+									name.includes('เวชภัณฑ์') ||
+									name.includes('medicine') ||
+									name.includes('medical')
+								);
+							if (filterType === 'clothing')
+								return (
+									cat === 'clothing' ||
+									name.includes('เสื้อ') ||
+									name.includes('ผ้า') ||
+									name.includes('กางเกง') ||
+									name.includes('cloth') ||
+									name.includes('blanket')
+								);
+							if (filterType === 'supply')
+								return (
+									cat === 'supply' ||
+									name.includes('ของใช้') ||
+									name.includes('อุปกรณ์') ||
+									name.includes('เต็นท์') ||
+									name.includes('เตียง') ||
+									name.includes('สบู่') ||
+									name.includes('ทิชชู่') ||
+									name.includes('supply') ||
+									name.includes('tent') ||
+									name.includes('soap')
+								);
+							return true;
+						});
+					}
+					return { ...s, needs: filteredNeeds };
+				})
+				.filter((s) => s.needs.length > 0 || (search.trim() === '' && filterType === 'all'))
+				// Critical, then high, then normal; the sort is stable, so shelters of one level
+				// keep the API's code order. Map pins are numbered from this order.
+				.sort(
+					(a, b) =>
+						DONATION_URGENCY_RANK[donationShelterUrgency(a.needs)] -
+						DONATION_URGENCY_RANK[donationShelterUrgency(b.needs)]
+				)
+		);
 	});
 
-	/**
-	 * ระดับความเร่งด่วนที่ใช้แสดงผล — ยึดค่าที่เจ้าหน้าที่ตั้งไว้เป็นหลัก
-	 *
-	 * เดิมทุกจุดบนหน้านี้ตัดสินเองด้วยยอดที่ยังขาด: ถ้าขาดตั้งแต่ 50 หน่วยขึ้นไปจะขึ้น
-	 * "วิกฤต" เสมอ ไม่ว่า back-office จะตั้งระดับไหนไว้ก็ตาม แก้เป็นระดับอื่นแล้วหน้านี้
-	 * จึงยังโชว์วิกฤตเหมือนเดิม
-	 *
-	 * back-office บันทึกคำว่า `important` ส่วน `high` เป็นคำเดิมของหน้านี้ จึงรับทั้งคู่
-	 * ยอดที่ขาดใช้เดาได้เฉพาะตอน projection ยังไม่ส่ง `urgency` มาเท่านั้น
-	 */
-	function needUrgency(n: {
-		urgency?: string;
-		qty_needed: number;
-	}): 'critical' | 'high' | 'normal' {
-		const level = (n.urgency ?? '').trim();
-		if (level === 'critical') return 'critical';
-		if (level === 'important' || level === 'high') return 'high';
-		if (level === 'normal') return 'normal';
-		return n.qty_needed >= 50 ? 'critical' : n.qty_needed > 0 ? 'high' : 'normal';
+	// Searching or filtering can drop the shelter whose card is open on the map; the card
+	// then just closes, and comes back if the filter brings that shelter back.
+	const visibleMapSelectedCode = $derived(
+		mapSelectedCode && filteredShelters.some((s) => s.code === mapSelectedCode)
+			? mapSelectedCode
+			: null
+	);
+
+	/** Badges, filters and sort all read urgency through the public-portal domain rule. */
+	function needUrgency(n: Need): DonationNeedUrgency {
+		return donationNeedUrgency(n.urgency, n.qty_needed);
 	}
 
 	function formatUnit(unit: string): string {
@@ -297,8 +310,7 @@
 		donationStore.shelterCode = shelter.code;
 		donationStore.shelterLocked = true;
 		donationStore.items = [
-			{
-				id: ulid(),
+			newDonationItem({
 				item_id: need.item_id,
 				// The card's category comes from the CATALOG (`food`/`water`/`bedding`/…),
 				// which is a finer split than the five buckets the donor form shows — so it
@@ -306,13 +318,11 @@
 				// blankets and soap as food on the donation doc itself.
 				category: donorCategoryFromCatalog(need.category),
 				name: formatItemName(need.raw_name || need.name || need.item_id),
-				amount: need.qty_needed > 0 ? need.qty_needed : 1,
 				unit: formatUnit(need.unit),
 				unit_code: need.unit,
-				condition: 'new',
-				remark: '',
-				image: need.image || ''
-			}
+				image: need.image || '',
+				qty_needed: need.qty_needed
+			})
 		];
 		donationStore.goToStep('form');
 		if (donationStore.reachedStep < 2) donationStore.reachedStep = 2;
@@ -324,18 +334,7 @@
 		donationStore.selectedShelterName = shelter.name;
 		donationStore.shelterCode = shelter.code;
 		donationStore.shelterLocked = true;
-		donationStore.items = [
-			{
-				id: ulid(),
-				category: 'food',
-				name: '',
-				amount: 1,
-				unit: t.defaultItemUnit,
-				condition: 'new',
-				remark: '',
-				image: ''
-			}
-		];
+		donationStore.items = [newDonationItem({ unit: t.defaultItemUnit })];
 		donationStore.goToStep('form');
 		if (donationStore.reachedStep < 2) donationStore.reachedStep = 2;
 	}
@@ -697,6 +696,148 @@
 			</button>
 		</div>
 
+		{#if !isLoading && !loadError && filteredShelters.length > 0}
+			<div class="mb-6">
+				<DonationNeedsMap
+					shelters={filteredShelters}
+					selectedCode={visibleMapSelectedCode}
+					onSelect={(code) => (mapSelectedCode = code)}
+				>
+					{#snippet card(mapShelter, pin)}
+						{@const shelter = filteredShelters.find((s) => s.code === mapShelter.code)}
+						{#if shelter}
+							{@const openNeeds = shelter.needs
+								.filter((n) => n.status !== 'closed')
+								.sort(
+									(a, b) =>
+										DONATION_URGENCY_RANK[needUrgency(a)] - DONATION_URGENCY_RANK[needUrgency(b)]
+								)}
+							<article
+								class="flex flex-col rounded-2xl border-2 border-slate-200 bg-white text-left md:border-0"
+								aria-live="polite"
+							>
+								<header class="space-y-2 border-b border-slate-100 p-4">
+									<div class="flex items-center gap-2 pr-10">
+										<DonationPinBadge no={pin.no} urgency={pin.urgency} />
+										<span
+											class="inline-flex items-center rounded-full border px-2.5 py-0.5 text-2xs font-bold {DONATION_URGENCY_STYLE[
+												pin.urgency
+											].chip}"
+										>
+											{pin.urgency === 'critical'
+												? t.filterCritical
+												: pin.urgency === 'high'
+													? t.filterHigh
+													: t.filterNormal}
+										</span>
+									</div>
+									<h3 class="text-base leading-snug font-bold text-slate-900">{shelter.name}</h3>
+									{#if mapShelter.areaLabel || mapShelter.geo}
+										<div class="flex items-center justify-between gap-3">
+											<p class="flex min-w-0 items-center gap-1 text-xs font-medium text-slate-500">
+												{#if mapShelter.areaLabel}
+													<MapPin class="h-3.5 w-3.5 shrink-0" />
+													<span class="truncate">{mapShelter.areaLabel}</span>
+												{/if}
+											</p>
+											{#if mapShelter.geo}
+												<Button
+													href={directionsUrl(mapShelter.geo)}
+													target="_blank"
+													rel="noopener noreferrer"
+													variant="outline"
+													aria-label={t.navigateGoogleMaps}
+													title={t.navigateGoogleMaps}
+													class="min-h-[44px] shrink-0 rounded-xl border-slate-300 px-3 text-xs font-bold text-slate-800 hover:bg-slate-50"
+												>
+													<Navigation class="h-3.5 w-3.5 shrink-0" />
+													{t.directionsShort}
+												</Button>
+											{/if}
+										</div>
+									{/if}
+								</header>
+								<div class="space-y-3 p-4">
+									{#if openNeeds.length === 0}
+										<p class="text-sm text-slate-500">{t.noUrgentItems}</p>
+									{:else}
+										<p class="text-xs font-semibold text-slate-500">
+											{t.needsCount.replace('{count}', String(openNeeds.length))}
+										</p>
+										<ul class="space-y-3">
+											{#each openNeeds.slice(0, 3) as need, i (need.item_id || i)}
+												{@const target = need.qty_target ?? 0}
+												{@const onHand = Math.min(need.on_hand ?? 0, target)}
+												{@const reserved = Math.min(need.reserved ?? 0, target - onHand)}
+												<li
+													class="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1.5"
+												>
+													<div class="min-w-0">
+														<p class="truncate text-sm font-bold text-slate-800">
+															{formatItemName(need.raw_name || need.name || need.item_id)}
+														</p>
+														<p class="text-xs text-slate-500">
+															{need.qty_needed > 0
+																? t.openForMore
+																		.replace('{qty}', String(need.qty_needed))
+																		.replace('{unit}', formatUnit(need.unit))
+																: t.openFor}
+														</p>
+													</div>
+													<button
+														type="button"
+														onclick={() => donateSingleNeed(shelter, need)}
+														class="min-h-[44px] shrink-0 cursor-pointer rounded-xl bg-domain-donation-strong px-4 text-xs font-bold text-white shadow-xs transition-colors hover:bg-domain-donation-text"
+													>
+														{t.donateShort}
+													</button>
+													{#if target > 0}
+														<div
+															class="col-span-2 flex h-1.5 overflow-hidden rounded-full bg-slate-100"
+														>
+															<div
+																class="h-full bg-emerald-500"
+																style:width="{(onHand / target) * 100}%"
+															></div>
+															<div
+																class="h-full bg-amber-400"
+																style:width="{(reserved / target) * 100}%"
+															></div>
+														</div>
+													{/if}
+												</li>
+											{/each}
+										</ul>
+										{#if openNeeds.length > 3}
+											<p class="text-xs font-semibold text-slate-500">
+												{t.moreItems.replace('{count}', String(openNeeds.length - 3))}
+											</p>
+										{/if}
+									{/if}
+								</div>
+								<footer class="grid grid-cols-2 gap-2 border-t border-slate-100 p-4">
+									<button
+										type="button"
+										onclick={() => goToShelterDetails(shelter)}
+										class="min-h-[44px] cursor-pointer rounded-xl border border-slate-300 px-3 text-xs font-bold text-slate-800 transition-colors hover:bg-slate-50"
+									>
+										{t.viewAllNeedsBtn}
+									</button>
+									<button
+										type="button"
+										onclick={() => donateOtherItems(shelter)}
+										class="min-h-[44px] cursor-pointer rounded-xl border border-slate-300 px-3 text-xs font-bold text-slate-800 transition-colors hover:bg-slate-50"
+									>
+										{t.donateOtherBtn}
+									</button>
+								</footer>
+							</article>
+						{/if}
+					{/snippet}
+				</DonationNeedsMap>
+			</div>
+		{/if}
+
 		<!-- Feed Grid -->
 		{#if isLoading}
 			<div class="py-16 text-center">
@@ -712,10 +853,23 @@
 				{search.trim() ? t.noSheltersOrItems : t.noNeedsCurrently}
 			</p>
 		{:else}
+			<div class="mb-3 flex items-center gap-2">
+				<ClipboardList class="h-4.5 w-4.5 shrink-0 text-domain-donation-strong" />
+				<h2 class="text-base font-bold text-slate-900">
+					{t.needsListTitle.replace('{count}', String(filteredShelters.length))}
+				</h2>
+			</div>
 			<div class="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
-				{#each filteredShelters as shelter (shelter.code)}
-					{@const displayedNeeds = shelter.needs.filter((n) => n.status !== 'closed')}
-					{@const hasCritical = displayedNeeds.some((n) => needUrgency(n) === 'critical')}
+				{#each showAllShelters ? filteredShelters : filteredShelters.slice(0, SHELTERS_SHOWN) as shelter, index (shelter.code)}
+					<!-- Most urgent first, so the lines that set the shelter's level are the ones shown. -->
+					{@const displayedNeeds = shelter.needs
+						.filter((n) => n.status !== 'closed')
+						.sort(
+							(a, b) =>
+								DONATION_URGENCY_RANK[needUrgency(a)] - DONATION_URGENCY_RANK[needUrgency(b)]
+						)}
+					{@const level = donationShelterUrgency(shelter.needs)}
+					{@const hasCritical = level === 'critical'}
 					<!-- Shelter-level progress from the projection's own terms, summed over the
 					     items it publishes. Only items that announced a target take part, so a
 					     board with no targets shows no percentage rather than a made-up one. -->
@@ -736,12 +890,20 @@
 						<div class="flex flex-1 flex-col p-5">
 							<!-- Status Badge -->
 							<div class="mb-2 flex items-center gap-2">
+								<DonationPinBadge no={index + 1} urgency={level} />
 								{#if hasCritical}
 									<span
 										class="inline-flex items-center gap-1.5 rounded-full border border-red-200 bg-red-50 px-2.5 py-0.5 text-2xs font-bold tracking-wider text-red-700 uppercase shadow-2xs"
 									>
 										<span class="h-1.5 w-1.5 animate-pulse rounded-full bg-red-500"></span>
 										{t.criticalBadge}
+									</span>
+								{:else if level === 'high'}
+									<span
+										class="inline-flex items-center gap-1.5 rounded-full border border-orange-200 bg-orange-50 px-2.5 py-0.5 text-2xs font-bold tracking-wider text-orange-700 uppercase shadow-2xs"
+									>
+										<span class="h-1.5 w-1.5 rounded-full bg-orange-500"></span>
+										{t.highBadge}
 									</span>
 								{:else}
 									<span
@@ -878,6 +1040,22 @@
 					</div>
 				{/each}
 			</div>
+			{#if !showAllShelters && filteredShelters.length > SHELTERS_SHOWN}
+				<div class="mt-6 flex flex-col items-center gap-2">
+					<p class="text-xs font-medium text-slate-500">
+						{t.needsListShown
+							.replace('{shown}', String(SHELTERS_SHOWN))
+							.replace('{total}', String(filteredShelters.length))}
+					</p>
+					<button
+						type="button"
+						onclick={() => (showAllShelters = true)}
+						class="min-h-[44px] cursor-pointer rounded-xl border border-slate-300 bg-white px-5 text-sm font-bold text-slate-800 transition-colors hover:bg-slate-50"
+					>
+						{t.needsListShowMore}
+					</button>
+				</div>
+			{/if}
 		{/if}
 	</div>
 {/if}

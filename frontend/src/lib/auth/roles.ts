@@ -24,6 +24,8 @@ export const FACILITY_STAFF = 'facility_staff';
 export const DISTRIBUTION_STAFF = 'distribution_staff';
 /** Looks after the kiosk devices of one shelter (draft CR scanner back-office FR-SBO-28). */
 export const KIOSK_STAFF = 'kiosk_staff';
+/** Manages the kiosk banners of one shelter, but not its kiosk devices (issue #930). */
+export const PR_STAFF = 'pr_staff';
 
 /** Capability roles a shelter_manager or coordinator is allowed to grant (per CR-104 §2.1). */
 export const STAFF_CAPABILITIES = [
@@ -37,7 +39,8 @@ export const STAFF_CAPABILITIES = [
 	SECURITY_OFFICER,
 	FACILITY_STAFF,
 	DISTRIBUTION_STAFF,
-	KIOSK_STAFF
+	KIOSK_STAFF,
+	PR_STAFF
 ] as const;
 export type StaffCapability = (typeof STAFF_CAPABILITIES)[number];
 
@@ -187,18 +190,54 @@ export function canDistributeStock(roles: readonly string[], shelterCode: string
 	return canManageInShelters(roles, [shelterCode], STOCK_DISTRIBUTOR_CAPABILITIES);
 }
 
+/** Capabilities that manage kiosk banners of a shelter (issue #930). */
+export const BANNER_MANAGER_CAPABILITIES = [SHELTER_MANAGER, KIOSK_STAFF, PR_STAFF] as const;
+
 /**
- * True when `kiosk_staff` is the user's only capability in `shelterCode` (every shelter when
- * null) — such a user sees nothing in back-office but the kiosk pages (FR-SBO-29).
+ * Capabilities that may read a shelter's kiosk devices and reveal their staff PIN, without
+ * changing them (CR-203). Listed on its own so a future banner-only role does not gain PIN access.
+ */
+export const DEVICE_VIEWER_CAPABILITIES = [SHELTER_MANAGER, KIOSK_STAFF, PR_STAFF] as const;
+
+/**
+ * True when the user may manage kiosk banners in `shelterCode` (SA, or its shelter_manager /
+ * kiosk_staff / pr_staff).
+ */
+export function canManageBanners(roles: readonly string[], shelterCode: string): boolean {
+	return canManageInShelters(roles, [shelterCode], BANNER_MANAGER_CAPABILITIES);
+}
+
+/** Which kiosk back-office area a confined user may open (FR-SBO-29, issue #930). */
+export type KioskConfinement = 'devices' | 'banners';
+
+/**
+ * How the user is confined to the kiosk pages in `shelterCode` (every shelter when null):
+ * - `'devices'` — only `kiosk_staff` / `pr_staff` held, `kiosk_staff` among them: may open all of
+ *   `/back-office/kiosks/**`.
+ * - `'banners'` — `pr_staff` only: may open just `/back-office/kiosks/banners/**`.
+ * - `null` — not confined: SA, no capability, or any capability beyond kiosk_staff / pr_staff.
+ */
+export function kioskConfinement(
+	roles: readonly string[],
+	shelterCode: string | null | undefined
+): KioskConfinement | null {
+	if (isSystemAdmin(roles)) return null;
+	const codes = shelterCode ? [shelterCode] : shelterCodesFromRoles(roles);
+	const caps = codes.flatMap((code) => capabilitiesForShelter(roles, code));
+	if (caps.length === 0) return null;
+	if (!caps.every((cap) => cap === KIOSK_STAFF || cap === PR_STAFF)) return null;
+	return caps.includes(KIOSK_STAFF) ? 'devices' : 'banners';
+}
+
+/**
+ * True when the user is confined to the kiosk pages (see {@link kioskConfinement}) — such a user
+ * sees nothing in back-office but the kiosk area (FR-SBO-29).
  */
 export function isKioskStaffOnly(
 	roles: readonly string[],
 	shelterCode: string | null | undefined
 ): boolean {
-	if (isSystemAdmin(roles)) return false;
-	const codes = shelterCode ? [shelterCode] : shelterCodesFromRoles(roles);
-	const caps = codes.flatMap((code) => capabilitiesForShelter(roles, code));
-	return caps.length > 0 && caps.every((cap) => cap === KIOSK_STAFF);
+	return kioskConfinement(roles, shelterCode) !== null;
 }
 
 /** Shelter codes where the user holds `shelter_manager` (compound or legacy). */
@@ -469,7 +508,8 @@ const STAFF_CAPABILITY_LABELS: Record<StaffCapability, string> = {
 	security_officer: 'เจ้าหน้าที่รักษาความปลอดภัย',
 	facility_staff: 'เจ้าหน้าที่ฝ่ายอาคารสถานที่',
 	distribution_staff: 'เจ้าหน้าที่แจกจ่าย',
-	kiosk_staff: 'เจ้าหน้าที่ดูแลตู้ Kiosk'
+	kiosk_staff: 'เจ้าหน้าที่ดูแลตู้ Kiosk',
+	pr_staff: 'เจ้าหน้าที่ประชาสัมพันธ์'
 };
 
 /**

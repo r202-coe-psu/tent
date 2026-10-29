@@ -6,7 +6,7 @@ import { fastapiBaseUrl, fastapiServiceHeaders } from '$lib/server/fastapi';
 import {
 	carryItemIds,
 	computeNeeds,
-	isDonorEditable,
+	donationItemEditGate,
 	pickCampaignForItems
 } from '$lib/features/donations/server';
 import type { DonationRevision, PublicDonationDoc } from '$lib/features/donations';
@@ -63,9 +63,13 @@ export const PATCH = async ({ params, request }) => {
 
 		// Check the system of record before moving anything. FastAPI guards on the intake
 		// buffer, which follows CouchDB a few seconds behind; refusing here first means a
-		// donor whose booking staff just picked up never has quota moved and rolled back.
+		// donor whose booking staff just reviewed never has quota moved and rolled back.
 		const latestDoc = await findByTokenHash(shelterDb, trackingTokenHash);
-		if (latestDoc && !isDonorEditable(latestDoc.status)) {
+		const gate = latestDoc && donationItemEditGate(latestDoc.status, latestDoc.items ?? []);
+		if (gate === 'already_reviewed') {
+			return json({ success: false, error: 'ALREADY_REVIEWED' }, { status: 400 });
+		}
+		if (latestDoc && gate === 'closed') {
 			return json(
 				{ success: false, error: `Cannot edit a donation in status "${latestDoc.status}"` },
 				{ status: 400 }
@@ -121,8 +125,8 @@ export const PATCH = async ({ params, request }) => {
 			{
 				method: 'PATCH',
 				headers: fastapiServiceHeaders({ 'Content-Type': 'application/json' }),
-				// CR-174 FR-18 — staff decide lines in CouchDB, which FastAPI cannot read: send
-				// the booking as it is now so a line nobody touched keeps its decision.
+				// Staff decide lines in CouchDB, which FastAPI cannot read: send the booking as it
+				// is now, for FastAPI's own review gate and the line keys it holds (CR-196).
 				body: JSON.stringify({
 					items: resolvedItems,
 					...(latestDoc

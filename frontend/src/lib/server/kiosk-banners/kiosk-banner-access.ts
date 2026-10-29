@@ -1,5 +1,5 @@
 import { json } from '@sveltejs/kit';
-import { SCANNER_MANAGER_CAPABILITIES } from '$lib/auth/roles';
+import { BANNER_MANAGER_CAPABILITIES } from '$lib/auth/roles';
 import { serviceError, ServiceError } from '$lib/server/couch-admin';
 import {
 	callerCanManage,
@@ -22,12 +22,9 @@ import {
 import { makeDocId } from '$lib/db/model';
 import { getGroup, type KioskBannerGroupRecord } from './kiosk-banner-group.server';
 
-/** Resolve the caller of a banner admin route: SA, or a shelter_manager / kiosk_staff of any shelter (FR-KBR-10). */
+/** Resolve the caller of a banner admin route: SA, or a shelter_manager / kiosk_staff / pr_staff of any shelter (FR-KBR-10). */
 export function requireBannerManager(request: Request): Promise<ScopedCaller> {
-	return requireShelterCapabilityCaller(
-		request.headers.get('cookie'),
-		SCANNER_MANAGER_CAPABILITIES
-	);
+	return requireShelterCapabilityCaller(request.headers.get('cookie'), BANNER_MANAGER_CAPABILITIES);
 }
 
 /** A banner outside the caller's scope reads as missing (FR-KBR-12). */
@@ -79,7 +76,10 @@ export async function assertGroupInShelter(groupId: string, shelterCode: string)
 /** The shelter the caller chose for list / create is 403 when outside scope (FR-KBR-11). */
 export function assertCanManageShelter(caller: ScopedCaller, shelterCode: string): void {
 	if (!callerCanManage(caller, [shelterCode])) {
-		throw new ServiceError('FORBIDDEN', 'Not a shelter_manager or kiosk_staff of this shelter');
+		throw new ServiceError(
+			'FORBIDDEN',
+			'Not a shelter_manager, kiosk_staff or pr_staff of this shelter'
+		);
 	}
 }
 
