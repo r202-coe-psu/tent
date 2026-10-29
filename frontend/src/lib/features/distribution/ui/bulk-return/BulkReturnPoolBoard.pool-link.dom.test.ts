@@ -67,8 +67,8 @@ vi.mock('../../application/food-supplies/auth', () => ({
 	canWriteBulkReturnEntry: () => true
 }));
 vi.mock('$lib/features/catalog', () => ({ useItemMasters: () => ({ data: [] }) }));
-vi.mock('$lib/features/people', () => ({ useEvacuees: () => ({ data: [] }) }));
-vi.mock('$lib/features/volunteers', () => ({ useVolunteers: () => ({ data: [] }) }));
+vi.mock('$lib/features/people', () => ({ useEvacueeNames: () => ({ data: [] }) }));
+vi.mock('$lib/features/volunteers', () => ({ useVolunteerNames: () => ({ data: [] }) }));
 vi.mock('$lib/features/operations', () => ({ useStoragePoints: () => ({ points: [] }) }));
 vi.mock('$lib/stores/shelter.svelte', () => ({ shelterStore: { selectedShelterCode: 'SH001' } }));
 vi.mock('$lib/stores/auth.svelte', () => ({

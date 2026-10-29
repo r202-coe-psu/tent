@@ -145,9 +145,11 @@ describe('AddBulkReturnEntriesForm save', () => {
 		await settle();
 	});
 
-	afterEach(() => {
+	afterEach(async () => {
 		if (component) unmount(component);
 		component = null;
+		// bits-ui body-scroll-lock cleans up on a 24ms timer; let it run before the env tears down
+		await new Promise((resolve) => setTimeout(resolve, 50));
 		document.body.innerHTML = '';
 	});
 
