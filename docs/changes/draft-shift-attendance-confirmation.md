@@ -8,9 +8,9 @@ decided_by: รอ approve (@Jackyzaz)
 layer: volatile
 affects:
   - docs/data/schema.md §2.9 shift_assignment (field `no_show_at` / `no_show_by`, ตาราง transition, enum `status` เติม `standby`)
-  - schema_v `shift_assignment` 5 → 6 (เฉพาะเมื่อ D3 ใช้ค่าเสนอ)
+  - schema_v `shift_assignment` 5 → 6 (D3, additive)
   - docs/changes/06-A-volunteer/CR-104-volunteer-backoffice-and-user-management-v10.md §3.5 (Manual No-Show) · AC-104-06
-  - docs/changes/06-A-volunteer/CR-207-applicant-tab-filters-and-counts.md FR-1, FR-2
+  - docs/changes/06-A-volunteer/CR-207-applicant-tab-filters-and-counts.md FR-2 (ตัวเลือก "ขาดปฏิบัติงาน" — D7) · นิยาม P อ้าง CR-207 (amended 2026-10-29) FR-1
   - docs/features/volunteer-job-board-flow.md §4.4 (state machine — Shift assignment)
   - docs/task-breakdown/06-A-volunteer.md T-29 DoD (บรรทัด "การจัดการ No-Show")
   - frontend/src/lib/features/volunteers/domain/applicant-attendance.ts (`awaitingAttendanceConfirmation`, ค่าคงที่ 30 นาที / 24 ชม.)
@@ -29,10 +29,10 @@ affects:
 
 > **สรุป (TL;DR):**
 >
-> - **ขั้นที่ 1:** กะที่ยังไม่เช็คอิน (ไม่ใช่ `flex`) และจบไปแล้ว ≥ 30 นาที ขึ้นรายการ "รอยืนยันการเข้างาน" ในแท็บ "ตารางกะและเช็คอิน" — SA / SM / VC กด **มา** (→ `completed` ย้อนหลังด้วยเวลา `duty_window`, `manual_override` + เหตุผล) หรือ **ขาด** (→ `no_show`) ทีละคนหรือหลายคน
-> - **ขั้นที่ 2:** ครบ 24 ชม. หลังกะจบโดยไม่มีใครยืนยัน worker (รอบ retention ทุก 5 นาที) ตั้ง `no_show` ให้ — idempotent, ชนกับเจ้าหน้าที่แล้วเจ้าหน้าที่ชนะ; `no_show` แก้กลับเป็น "มา" ได้
+> - **ขั้นที่ 1:** กะ `assigned` หรือ `standby` ที่ตอบรับแล้ว (ไม่ใช่ `flex`) ที่ยังไม่เช็คอินและจบไปแล้ว ≥ 30 นาที ขึ้นรายการ "รอยืนยันการเข้างาน" ในแท็บ "ตารางกะและเช็คอิน" — SA / SM / VC กด **มา** (→ `completed` ย้อนหลังด้วยเวลา `duty_window`, `manual_override` + เหตุผล) หรือ **ขาด** (→ `no_show`) ทีละคนหรือหลายคน
+> - **ขั้นที่ 2:** ครบ 24 ชม. หลังกะจบโดยไม่มีใครยืนยัน worker (รอบ retention ทุก 5 นาที) ตั้ง `no_show` ให้ — เฉพาะกะที่จบหลังวัน deploy, idempotent, ชนกับเจ้าหน้าที่แล้วเจ้าหน้าที่ชนะ; `no_show` แก้กลับเป็น "มา" ได้ไม่จำกัดเวลา
 > - **dev build:** predicate กลาง 1 ตัว (TS + Python), repo method 2 ตัว, UI รายการรอยืนยัน, sweep ใน worker — เป็นผู้เขียน `no_show` รายแรกของระบบ
-> - **schema:** เสนอเพิ่ม `no_show_at` / `no_show_by` (`shift_assignment` schema_v 5 → 6, additive) · แก้ CR-104 §3.5, CR-207 FR-1/FR-2 · มี 7 ข้อ `[NEEDS DECISION]` (D1–D7)
+> - **schema:** เพิ่ม `no_show_at` / `no_show_by` (`shift_assignment` schema_v 5 → 6, additive, ไม่ backfill) · แก้ CR-104 §3.5 (`no_show` ไม่คืนโควตาทันที) + CR-207 FR-2 · D1–D7 เคาะแล้ว 2026-10-29 · merge หลัง PR #968
 
 ---
 
@@ -44,27 +44,26 @@ affects:
   - 24 ชม. ใช้กติกาเดียวได้ทุกกะ (รวมกะข้ามเที่ยงคืน) และเผื่อเวลากรอกการเช็คอินด้วยบัตรแทนย้อนหลัง (#880 / #952)
   - sweep อยู่ใน worker ไม่ทำเป็น HTTP endpoint — route cron เดิมไม่มี auth และไม่มีอะไรเรียก (บทเรียนเดียวกับ `worker/src/worker/quota/expiry.py`)
 - CR-207 (approved 2026-10-28) ทำเฉพาะการแสดงผล "รอยืนยันการเข้างาน" ในแท็บผู้สมัคร และยกขั้นที่ 1 (ปุ่ม) กับขั้นที่ 2 (worker) มาไว้ที่ CR ของ #885
-- **พบจากโค้ด (ที่มาของ D1):** การอนุมัติใบสมัคร (`JobApplicationRemoteRepository#assignConfirmed` → `ShiftAssignmentRemoteRepository#assign`), การมอบหมายโดยเจ้าหน้าที่ และการรับใบสมัคร public ทันที (`public-application.ts#makeConfirmedAssignment`) เขียน `status: 'standby'` ให้ **ทุกกะ** ไม่ใช่เฉพาะ `flex` — `awaitingAttendanceConfirmation` ใน PR #968 ที่ดูเฉพาะ `assigned` จึงแทบไม่ขึ้นเลยกับข้อมูลจริง
+- **พบจากโค้ด (ที่มาของ D1):** การอนุมัติใบสมัคร (`JobApplicationRemoteRepository#assignConfirmed` → `ShiftAssignmentRemoteRepository#assign`), การมอบหมายโดยเจ้าหน้าที่ และการรับใบสมัคร public ทันที (`public-application.ts#makeConfirmedAssignment`) เขียน `status: 'standby'` + `dispatch_status: 'accepted'` ให้ **ทุกกะ** ไม่ใช่เฉพาะ `flex` — นิยามที่ดูเฉพาะ `assigned` จึงแทบไม่ขึ้นเลยกับข้อมูลจริง; CR-207 (amended 2026-10-29) ใช้นิยามเดียวกับ P ของ CR นี้
 
 ## Change
 
 ### นิยาม
 
-- **กะที่รอยืนยัน (P)** — `shift_assignment` ที่ครบทุกข้อ:
-  1. `status` ∈ {`assigned`, `standby`} (D1)
+- **กะที่รอยืนยัน (P)** — `shift_assignment` ที่ครบทุกข้อ (นิยามเดียวกับ "รอยืนยันการเข้างาน" ของ CR-207 (amended 2026-10-29) FR-1):
+  1. `status = assigned` **หรือ** (`status = standby` **และ** `dispatch_status = accepted`) (D1)
   2. `shift` ≠ `flex`
-  3. `dispatch_status` ≠ `dispatched` (ข้อเสนองานแบบเก่าที่ยังไม่ตอบรับ — D1)
-  4. `duty_window.end_ts` parse ได้
-  5. `now ≥ duty_window.end_ts + 30 นาที`
+  3. `duty_window.end_ts` parse ได้
+  4. `now ≥ duty_window.end_ts + 30 นาที`
 - **กะที่ worker ตั้งขาด (Q)** — P และ `now ≥ duty_window.end_ts + 24 ชม.` (และเข้าเงื่อนไข cutoff ของ D6)
 
 ### Transition ที่ CR นี้เพิ่ม
 
 | จาก                                | ไป          | ใครทำ                 | เงื่อนไข                            |
 | ---------------------------------- | ----------- | --------------------- | ----------------------------------- |
-| `assigned` / `standby`             | `completed` | SA / SM / VC กด "มา"  | เข้า P                              |
-| `assigned` / `standby`             | `no_show`   | SA / SM / VC กด "ขาด" | เข้า P                              |
-| `assigned` / `standby`             | `no_show`   | worker                | เข้า Q                              |
+| `assigned` / `standby` (accepted)  | `completed` | SA / SM / VC กด "มา"  | เข้า P                              |
+| `assigned` / `standby` (accepted)  | `no_show`   | SA / SM / VC กด "ขาด" | เข้า P                              |
+| `assigned` / `standby` (accepted)  | `no_show`   | worker                | เข้า Q                              |
 | `no_show` (เจ้าหน้าที่หรือ worker) | `completed` | SA / SM / VC กด "มา"  | ไม่จำกัดเวลา (D5)                   |
 | `completed`                        | `no_show`   | —                     | ไม่อนุญาต (D5)                      |
 | `checked_in` (ลืมเช็คเอาต์)        | —           | —                     | ไม่อยู่ใน CR นี้ — ใช้เช็คเอาต์เดิม |
@@ -73,7 +72,7 @@ affects:
 
 - **FR-1** — predicate P / Q มีที่เดียวใน `volunteers/domain` (`awaitingAttendanceConfirmation`, `autoNoShowDue`); แท็บตารางกะ ตัวกรองแท็บผู้สมัคร และ guard ใน repository เรียกตัวเดียวกัน
 - **FR-2** — ค่าคงที่ทั้งระบบ ไม่มีหน้าตั้งค่า: `ATTENDANCE_CONFIRM_AFTER_MINUTES = 30`, `AUTO_NO_SHOW_AFTER_HOURS = 24`
-- **FR-3** — worker ถือค่าคงที่ชุดเดียวกันใน Python; test ทั้งสองฝั่งใช้ชุดกรณีขอบเดียวกัน (29/30 นาที, 23:59/24:00 ชม., `flex`, `standby`, `dispatched`, `end_ts` เสีย)
+- **FR-3** — worker ถือค่าคงที่ชุดเดียวกันใน Python; test ทั้งสองฝั่งใช้ชุดกรณีขอบเดียวกัน (29/30 นาที, 23:59/24:00 ชม., `flex`, `standby` + `accepted`, `standby` + `dispatched` / `null`, `end_ts` เสีย, cutoff ของ FR-27)
 - **FR-4** — กะ `flex` ไม่เข้าทั้งสองขั้น (ไม่มีเวลาจบกะที่มีความหมาย และ standby ไม่ได้แปลว่าต้องมา)
 
 ### FR — ขั้นที่ 1: รายการรอยืนยันในแท็บ "ตารางกะและเช็คอิน" (`/back-office/volunteers`)
@@ -93,7 +92,7 @@ affects:
   | `check_in_by` / `check_out_by`         | username ผู้กด               |
   | `check_in_method` / `check_out_method` | `manual_override`            |
   | `check_in_reason` / `check_out_reason` | เหตุผลที่กรอก (ข้อความเดียว) |
-  | `schema_v` / `updated_at`              | 6 (ตาม D3) / เวลาที่กด       |
+  | `schema_v` / `updated_at`              | 6 / เวลาที่กด                |
   - เหตุผลบังคับ (ไม่ว่าง หลัง trim); กดหลายแถว → เหตุผลเดียวใช้กับทุกแถว
 
 - **FR-11** — "มา" ไม่แก้ `volunteer.checked_in`, ไม่เพิ่มบทบาทชั่วคราวตามเวลากะ (CR-104 §2.4) และไม่เขียนตัวนับโควตาของ `job` (D4)
@@ -115,16 +114,16 @@ affects:
   - ต้องครอบคลุมทุกเอกสารที่เข้าเงื่อนไข ห้ามถูกตัดที่ `limit` ของ Mango — ใช้ `_find` บน index `(status)` แบบแบ่งหน้า หรือ `iter_all_docs` แบบ `quota/expiry.py`
   - รวบรวมรายการก่อนแล้วค่อยเขียน (ไม่เขียนระหว่างแบ่งหน้า)
 - **FR-21** — เขียน `status: no_show`, `no_show_at` = เวลารอบ sweep, `no_show_by: 'system'`, `updated_at`, `schema_v: 6` (D3); field อื่นคงเดิม
-- **FR-22 idempotent** — ตรวจ Q กับเอกสารที่อ่านมา; รันซ้ำไม่เขียนซ้ำเพราะ `status` ไม่ใช่ `assigned` / `standby` แล้ว
+- **FR-22 idempotent** — ตรวจ Q กับเอกสารที่อ่านมา; รันซ้ำไม่เขียนซ้ำเพราะ `status` เป็น `no_show` แล้ว (ไม่เข้า P)
 - **FR-23 ชนกับเจ้าหน้าที่** — PUT พร้อม `_rev` ที่อ่านมา; `409` → ข้าม (เจ้าหน้าที่ชนะ) แล้วประเมินใหม่รอบถัดไป
 - **FR-24** — `end_ts` parse ไม่ได้ → ข้าม + log warning; เอกสาร / ศูนย์ที่ error → log exception แล้วทำรายการถัดไปต่อ
 - **FR-25** — sweep ไม่เขียน `job`, `volunteer`, `_users` และไม่สร้าง `audit` doc (ผู้กระทำอยู่ใน `no_show_by` — D3)
 - **FR-26** — log จำนวนที่ตั้งขาดต่อ DB ต่อรอบ (ระดับ info เมื่อ > 0)
 - **FR-27 cutoff (D6)** — worker ตั้งขาดเฉพาะกะที่ `duty_window.end_ts ≥ AUTO_NO_SHOW_EFFECTIVE_FROM` (ค่าคงที่ = วัน deploy); กะเก่ากว่านั้นที่ยังเข้า P อยู่ในรายการรอยืนยันให้เจ้าหน้าที่จัดการเอง
 
-### FR — แท็บผู้สมัคร (แก้ CR-207)
+### FR — แท็บผู้สมัคร (CR-207)
 
-- **FR-28** — "รอยืนยันการเข้างาน" ของแท็บผู้สมัครใช้ P (รวม `standby` ที่ไม่ใช่ `flex`) แทน `status = assigned`
+- **FR-28** — "รอยืนยันการเข้างาน" ของแท็บผู้สมัครกับรายการรอยืนยันของ FR-5 เรียก predicate ตัวเดียวกัน (FR-1) ตามนิยามของ CR-207 (amended 2026-10-29)
 - **FR-29** — ตัวกรองสถานะการเข้างานเพิ่มตัวเลือก **"ขาดปฏิบัติงาน"** (`no_show`) (D7)
 - **FR-30** — แท็บผู้สมัครยังแสดงผลอย่างเดียว ไม่มีปุ่ม มา / ขาด (D7)
 
@@ -134,35 +133,29 @@ affects:
 | ------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | CR-104 §3.5 "เจ้าหน้าที่กดยกเลิกหน้างาน" ข้อ 1   | เลยเวลากะแล้วอาสาไม่มา เจ้าหน้าที่คลิกแถบของอาสาในทำเนียบกะ เลือก `[ ⚠️ ไม่มาปฏิบัติงาน (Mark No-Show) ]` หรือ `[ ❌ ยกเลิกกะงาน ]` | `[ ❌ ยกเลิกกะงาน ]` คงเดิม · ไม่มาปฏิบัติงาน: กะที่จบ ≥ 30 นาทีขึ้นรายการ "รอยืนยันการเข้างาน" ในแท็บตารางกะ กด มา / ขาด ทีละคนหรือหลายคน; ครบ 24 ชม. worker ตั้ง `no_show` (CR นี้) |
 | CR-104 §3.5 ข้อ 2                                | ระบบเปลี่ยน `shift_assignment` เป็น `no_show` หรือ `cancelled`                                                                      | `cancelled` คงเดิม · `no_show` เขียนตาม FR-12 / FR-21 พร้อม `no_show_at` / `no_show_by`                                                                                               |
-| CR-104 §3.5 ข้อ 3                                | โควตาคืนเป็น ⚪ ช่องว่าง ทันที                                                                                                      | `cancelled` คงเดิม · `no_show` ไม่เขียนตัวนับของ `job` ตอนตั้งสถานะ ตัวนับปรับเองเมื่อ `reconcileQuota` ครั้งถัดไป เหมือน `completed` (D4)                                            |
+| CR-104 §3.5 ข้อ 3                                | โควตาคืนเป็น ⚪ ช่องว่าง ทันที                                                                                                      | `cancelled` คงเดิม · `no_show` ไม่เขียนตัวนับของ `job` ตอนตั้งสถานะ (ไม่คืนโควตาทันที) ตัวนับปรับเองเมื่อ `reconcileQuota` ครั้งถัดไป เหมือน `completed` (D4 — amend CR-104 §3.5)     |
 | CR-104 AC-104-06                                 | เจ้าหน้าที่ยกเลิกหรือ Mark No-Show ด้วยมือ และระบบคืนโควตาสีขาวทันที                                                                | ยกเลิกด้วยมือแล้วคืนโควตาทันที (คงเดิม) · ไม่มาปฏิบัติงานตาม AC-1 – AC-11 ของ CR นี้                                                                                                  |
-| CR-207 FR-1 ข้อ 1                                | `status = assigned`, ไม่ใช่กะ `flex`, `now ≥ end_ts + 30 นาที`                                                                      | P ของ CR นี้: `status` ∈ {`assigned`, `standby`}, ไม่ใช่ `flex`, `dispatch_status` ≠ `dispatched`, `now ≥ end_ts + 30 นาที` (D1)                                                      |
-| CR-207 FR-1 ข้อ 4                                | ขั้นที่ 1 (ปุ่ม) และขั้นที่ 2 (worker) ทำใน #885 และ CR ของ #885                                                                    | ปุ่มอยู่ที่แท็บตารางกะ (FR-5 – FR-15) · worker ตาม FR-19 – FR-27 · แท็บผู้สมัครแสดงผลอย่างเดียว (FR-30)                                                                               |
 | CR-207 FR-2 รายการตัวเลือก                       | ยังไม่เช็คอิน / รอยืนยันการเข้างาน / กำลังปฏิบัติงาน / เสร็จสิ้น                                                                    | เพิ่ม "ขาดปฏิบัติงาน" (FR-29, D7)                                                                                                                                                     |
-| CR-207 FR-2 ข้อ 2                                | กะ `flex` / `standby` และกะที่ไม่มี `end_ts` อยู่ใน "ยังไม่เช็คอิน" เสมอจนกว่าจะเช็คอิน                                             | กะ `flex` และกะที่ไม่มี `end_ts` อยู่ใน "ยังไม่เช็คอิน" เสมอ · `standby` ที่ไม่ใช่ `flex` ใช้ P (D1)                                                                                  |
 | schema.md §2.9 `status`                          | enum(`assigned`,`checked_in`,`completed`,`no_show`,`cancelled`)                                                                     | เติม `standby` ให้ตรง CR-094 และโค้ด (ไม่เปลี่ยนความหมาย) + ตาราง transition ของ CR นี้                                                                                               |
 | schema.md §2.9 field                             | ไม่มี                                                                                                                               | `no_show_at` ts\|null opt · `no_show_by` str\|null opt (username หรือ `'system'`) · schema_v 5 → 6 (D3)                                                                               |
 | volunteer-job-board-flow.md §4.4                 | `assigned → done / no_show / cancelled`                                                                                             | `assigned`/`standby` → `checked_in` → `completed` · → `completed` (มา ย้อนหลัง) · → `no_show` (เจ้าหน้าที่ / worker) · `no_show` → `completed` (แก้ย้อนหลัง) · → `cancelled`          |
 | task-breakdown 06-A T-29 DoD "การจัดการ No-Show" | เจ้าหน้าที่กดยกเลิกหรือระบุคนไม่มาทำงานด้วยมือ คืนโควตาสีขาวทันที                                                                   | ยกเลิกด้วยมือ คืนโควตาทันที · ไม่มา: ยืนยัน มา / ขาด หลังกะจบ 30 นาที + worker `no_show` ที่ 24 ชม. (CR นี้)                                                                          |
 | CR-180                                           | —                                                                                                                                   | **ไม่แก้** — กะมอบหมายที่เป็น `no_show` ยังนับ "มอบหมายโดยเจ้าหน้าที่" ตาม CR-207 FR-3 เดิม (นับ "ปฏิเสธ/ยกเลิก" เฉพาะ `cancelled`)                                                   |
 
-### Decisions — `[NEEDS DECISION]` (ค่าเสนอใช้เขียน FR ข้างบน)
+### Decisions (เคาะ 2026-10-29 โดย @Mhapong — ใช้ค่าเสนอทุกข้อ)
 
-- **D1 `[NEEDS DECISION]` กะ `standby` นับเป็นกะที่รอยืนยันไหม** — ค่าเสนอ: นับ ถ้าไม่ใช่ `flex`; ตัด `dispatch_status = dispatched` ออก
-  - เหตุผล: ทุก flow หลัก (อนุมัติใบสมัคร, มอบหมายโดยเจ้าหน้าที่, public รับทันที) เขียน `standby` ให้ทุกกะ; ถ้าใช้ `assigned` อย่างเดียวตามคำตอบ #885 ทั้งสองขั้นแทบไม่ทำงาน · "standby ไม่ได้แปลว่าต้องมา" ในคำตอบหมายถึงกะ `flex` ซึ่ง P ตัดออกแล้ว
-  - ทางเลือก: `assigned` อย่างเดียว (ตามตัวอักษรของ #885 / CR-207)
-- **D2 `[NEEDS DECISION]` "มา" ย้อนหลังบันทึกเวลาอย่างไร** — ค่าเสนอ: ตามข้อเสนอใน #885 → `completed`, เวลาเข้า-ออก = `duty_window.start_ts` / `end_ts`, `manual_override` ทั้งขาเข้าและขาออก, เหตุผลกรอกครั้งเดียวใช้ทั้งสองขา
-  - ทางเลือก: ให้เจ้าหน้าที่กรอกเวลาเข้า-ออกจริงเอง / เช็คอินอย่างเดียวแล้วค้าง `checked_in`
-- **D3 `[NEEDS DECISION]` บันทึกผู้ตั้ง `no_show` อย่างไร** — ค่าเสนอ: เพิ่ม `no_show_at`, `no_show_by` (`'system'` เมื่อ worker) → `shift_assignment` schema_v 5 → 6 (additive) ตามแบบ `check_out_by` ของ CR-108
-  - ทางเลือก: ไม่เพิ่ม field — worker เขียน `audit` doc (§2.12, `action: other`, `_id` คงที่ต่อเอกสาร) และฝั่งเจ้าหน้าที่ไม่มีบันทึกผู้กด → ไม่ bump `schema_v`
-- **D4 `[NEEDS DECISION]` `no_show` คืนโควตาไหม** — ค่าเสนอ: ไม่เขียนตัวนับของ `job` ตอนตั้ง `no_show` (กะจบไปแล้ว ที่นั่งใช้ซ้ำไม่ได้) ตัวนับปรับเองตอน `reconcileQuota` ครั้งถัดไป เหมือน `completed` · worker จึงไม่ต้องเขียน `job` แข่งกับ `mutateQuota` ฝั่ง frontend
-  - ทางเลือก: เรียก `releaseSlot` ทันทีตาม CR-104 §3.5 เดิม (ทั้งฝั่งเจ้าหน้าที่และ worker)
-- **D5 `[NEEDS DECISION]` ขอบเขตการแก้ย้อนหลัง** — ค่าเสนอ: `no_show` → "มา" ได้ไม่จำกัดเวลา; `completed` → `no_show` ไม่ได้
-- **D6 `[NEEDS DECISION]` กะเก่าก่อน deploy** — ค่าเสนอ: worker ไม่แตะกะที่จบก่อน `AUTO_NO_SHOW_EFFECTIVE_FROM` (วัน deploy) กะเหล่านั้นอยู่ในรายการรอยืนยันให้เจ้าหน้าที่เคลียร์เอง
-  - เหตุผล: ประวัติก่อนมีระบบเช็คอินจริงอาจเป็นคนที่มาแต่ไม่ได้สแกน — ตั้งขาดเป็นชุดใหญ่รอบแรกจะขึ้น "ไม่มาปฏิบัติงาน" ใน portal ของจิตอาสา
-  - ทางเลือก: ไม่มี cutoff — รอบแรกตั้งขาดทุกกะเก่าที่เข้า Q
-- **D7 `[NEEDS DECISION]` ตำแหน่ง UI** — ค่าเสนอ: ปุ่ม มา / ขาด อยู่แท็บตารางกะเท่านั้น (ตาม #885 "หน้า roster"); แท็บผู้สมัครแสดงผลอย่างเดียว + เพิ่มตัวกรอง "ขาดปฏิบัติงาน"
-  - ทางเลือก: มีปุ่มในแท็บผู้สมัครด้วย / ไม่เพิ่มตัวกรอง "ขาดปฏิบัติงาน"
+| D   | เรื่อง                         | ข้อตัดสิน                                                                                                                                                | ทางเลือกที่ตัดทิ้ง                                                  |
+| --- | ------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------- |
+| D1  | นับ `standby` ไหม              | นับ: P = `assigned` หรือ (`standby` และ `dispatch_status = accepted`), ไม่ใช่ `flex` — นิยามเดียวกับ CR-207 (amended 2026-10-29)                         | `assigned` อย่างเดียว (ทั้งสองขั้นแทบไม่ทำงานกับข้อมูลจริง)         |
+| D2  | "มา" ย้อนหลังบันทึกเวลาอย่างไร | `completed`, เวลาเข้า-ออก = `duty_window.start_ts` / `end_ts`, `manual_override` ทั้งสองขา, เหตุผลกรอกครั้งเดียวใช้ทั้งสองขา (FR-10)                     | เจ้าหน้าที่กรอกเวลาจริงเอง / เช็คอินอย่างเดียวแล้วค้าง `checked_in` |
+| D3  | บันทึกผู้ตั้ง `no_show`        | เพิ่ม `no_show_at`, `no_show_by` (opt; `'system'` เมื่อ worker) · `shift_assignment` schema_v 5 → 6 additive · ไม่ backfill                              | `audit` doc แทน field ใหม่ (ฝั่งเจ้าหน้าที่ไม่มีบันทึกผู้กด)        |
+| D4  | `no_show` คืนโควตาไหม          | ไม่เขียนตัวนับของ `job` ตอนตั้ง `no_show`; `reconcileQuota` ครั้งถัดไปปรับเอง — **amend CR-104 §3.5 ข้อ 3** (ดูตาราง before → after)                     | เรียก `releaseSlot` ทันทีตาม CR-104 §3.5 เดิม                       |
+| D5  | ขอบเขตการแก้ย้อนหลัง           | `no_show` → "มา" ได้ไม่จำกัดเวลา; `completed` → `no_show` ไม่ได้                                                                                         | —                                                                   |
+| D6  | กะเก่าก่อน deploy              | worker แตะเฉพาะกะที่ `duty_window.end_ts ≥ AUTO_NO_SHOW_EFFECTIVE_FROM` (วัน deploy); กะเก่ากว่านั้นอยู่ในรายการรอยืนยันให้เจ้าหน้าที่เคลียร์เอง (FR-27) | ไม่มี cutoff — รอบแรกตั้งขาดทุกกะเก่า                               |
+| D7  | ตำแหน่ง UI                     | ปุ่ม มา / ขาด อยู่แท็บตารางกะและเช็คอินเท่านั้น; แท็บผู้สมัครแสดงผลอย่างเดียว + ตัวกรอง "ขาดปฏิบัติงาน" (FR-29, FR-30)                                   | มีปุ่มในแท็บผู้สมัครด้วย / ไม่เพิ่มตัวกรอง                          |
+
+- **D1 เหตุผล:** ทุก flow หลัก (อนุมัติใบสมัคร, มอบหมายโดยเจ้าหน้าที่, public รับทันที) เขียน `standby` + `accepted` ให้ทุกกะ · "standby ไม่ได้แปลว่าต้องมา" ในคำตอบ #885 หมายถึงกะ `flex` ซึ่ง P ตัดออกแล้ว · `standby` ที่ `dispatch_status` เป็น `dispatched` (ข้อเสนอที่ยังไม่ตอบรับ) หรือ `null` ไม่เข้า P
+- **D6 เหตุผล:** ประวัติก่อนมีระบบเช็คอินจริงอาจเป็นคนที่มาแต่ไม่ได้สแกน — ตั้งขาดเป็นชุดใหญ่รอบแรกจะขึ้น "ไม่มาปฏิบัติงาน" ใน portal ของจิตอาสา
 
 ### ไม่อยู่ใน CR นี้
 
@@ -173,7 +166,7 @@ affects:
 
 ## Acceptance
 
-- **AC-1:** กะ `standby` (ไม่ใช่ `flex`) ที่อนุมัติจากแท็บผู้สมัครและจบไปแล้ว 31 นาที ขึ้นในรายการรอยืนยันของแท็บตารางกะและตัวกรอง "รอยืนยันการเข้างาน" ของแท็บผู้สมัคร; จบ 29 นาทีไม่ขึ้น; กะ `flex` และ `dispatch_status = dispatched` ไม่ขึ้น
+- **AC-1:** กะ `standby` + `dispatch_status = accepted` (ไม่ใช่ `flex`) ที่อนุมัติจากแท็บผู้สมัครและจบไปแล้ว 31 นาที ขึ้นในรายการรอยืนยันของแท็บตารางกะและตัวกรอง "รอยืนยันการเข้างาน" ของแท็บผู้สมัคร; จบ 29 นาทีไม่ขึ้น; กะ `flex` และ `standby` ที่ `dispatch_status` ≠ `accepted` ไม่ขึ้น
 - **AC-2:** กะที่จบเมื่อวาน 22:00 ยังขึ้นในรายการรอยืนยันแม้ตัวกรองวันที่ของ roster เป็นวันนี้
 - **AC-3:** กด "มา" พร้อมเหตุผล → `completed`, `check_in_at = start_ts`, `check_out_at = end_ts`, method ทั้งสองขา `manual_override`, เหตุผลทั้งสองขา = ที่กรอก, `*_by` = ผู้กด; `volunteer.checked_in` ไม่เปลี่ยน; ไม่กรอกเหตุผลกดไม่ได้
 - **AC-4:** กด "ขาด" → `no_show`, `no_show_at`, `no_show_by` = ผู้กด; ตัวนับโควตาของ `job` ไม่ถูกเขียน
@@ -183,14 +176,15 @@ affects:
 - **AC-8:** worker รันซ้ำไม่เขียนซ้ำ (`_rev` ไม่เปลี่ยน); PUT ได้ `409` → ข้าม ไม่ error ทั้งรอบ
 - **AC-9:** `no_show` ที่ worker ตั้ง → กด "แก้เป็นมาปฏิบัติงาน" ได้ผลตาม AC-3 และ `no_show_at` / `no_show_by` ยังอยู่
 - **AC-10:** เอกสารที่ `end_ts` เสียถูกข้าม เอกสารอื่นใน DB เดียวกันยังถูกประมวลผล
-- **AC-11:** (D6 ค่าเสนอ) กะที่จบก่อน `AUTO_NO_SHOW_EFFECTIVE_FROM` ไม่ถูก worker แตะ และยังอยู่ในรายการรอยืนยัน
+- **AC-11:** (D6) กะที่จบก่อน `AUTO_NO_SHOW_EFFECTIVE_FROM` ไม่ถูก worker แตะ และยังอยู่ในรายการรอยืนยัน
 - **AC-12:** หลัง worker ตั้ง `no_show` portal ของจิตอาสาแสดงกะนั้นเป็น "ไม่มาปฏิบัติงาน"
 - **DoD (จาก #885):** unit test domain (P / Q, builder มา / ขาด) + worker sweep · `.svelte` ที่แก้ผ่าน `svelte-autofixer` · pre-push ผ่าน · ส่งขั้นตอนทดสอบมือ
 
 ## Impact
 
-- **ลำดับ merge:** ต้องตามหลัง PR #968 (`awaitingAttendanceConfirmation`, `bucketOf` ของ CR-207 อยู่ใน PR นั้น)
-- **Docs (เมื่อ approve):** schema.md §2.9, CR-104 §3.5 + AC-104-06, CR-207 FR-1 / FR-2, volunteer-job-board-flow.md §4.4, task-breakdown 06-A T-29 ตามตาราง before → after
+- **ลำดับ merge (dependency):** merge หลัง PR #968 เท่านั้น (`awaitingAttendanceConfirmation`, `bucketOf` ของ CR-207 อยู่ใน PR นั้น; PR #968 merge เข้า `develop` แล้ว 2026-10-29 — rebase branch ของ CR นี้และ implementation บน `develop` ก่อนเปิด PR)
+- **schema_v:** CR ของ #1003 (draft-ticket-quota-release-marker) bump `shift_assignment` 5 → 6 เช่นกัน — CR ที่ merge ทีหลังใช้เลขถัดไป (6 → 7); ทั้งสองเป็น additive
+- **Docs (เมื่อ approve):** schema.md §2.9, CR-104 §3.5 + AC-104-06, CR-207 FR-2 (ตัวเลือก "ขาดปฏิบัติงาน"), volunteer-job-board-flow.md §4.4, task-breakdown 06-A T-29 ตามตาราง before → after
 - **Code:** ตาม `affects:`; worker เป็นผู้เขียน `shift_assignment` ใน CouchDB ด้วย admin client แบบเดียวกับ `quota/expiry.py` — ไม่ใช่ sync path ใหม่
 - **Public plane:** change feed → `project_shift_assignment` → `public_shift_assignments` (`no_show` อยู่ใน `PUBLIC_SHIFT_STATUSES` อยู่แล้ว) จิตอาสาเห็น "ไม่มาปฏิบัติงาน" ใน portal · ตัวนับที่นั่งของกะใน Mongo (`worker/mongo/job.py`) ลดลงได้เฉพาะกะที่จบไปแล้ว ไม่กระทบกะที่เปิดรับ · ไม่ bump `PROJECTION_VERSION`
 - **ตัวเลข:** ไทล์ "วันนี้" ใน roster (`hub-metrics`) ไม่เปลี่ยนนิยาม; กะที่ยืนยัน "มา" ย้อนหลังนับเป็น `completed` ของวันที่ของกะ
@@ -199,9 +193,8 @@ affects:
 
 ## Migration
 
-- **D3 ค่าเสนอ:** `shift_assignment` schema_v 5 → 6 additive — `no_show_at` / `no_show_by` เป็น opt, อ่านเอกสารเก่าเป็น `null`, ไม่ batch backfill; การเขียนตาม CR นี้ (มา / ขาด / worker) เขียน `schema_v: 6`; writer อื่นคงเดิม; Zod union เพิ่ม `6`
-- **D3 ทางเลือก:** ไม่เปลี่ยนรูปร่างเอกสาร ไม่ bump `schema_v`
-- **D6 ค่าเสนอ:** ไม่แก้ประวัติก่อน deploy; ทางเลือกไม่มี cutoff = รอบ sweep แรกหลัง deploy ตั้ง `no_show` ให้กะเก่าทั้งหมดที่เข้า Q (ควรนับจำนวนต่อศูนย์ก่อน deploy)
+- **D3:** `shift_assignment` schema_v 5 → 6 additive — `no_show_at` / `no_show_by` เป็น opt, อ่านเอกสารเก่าเป็น `null`, ไม่ batch backfill; การเขียนตาม CR นี้ (มา / ขาด / worker) เขียน `schema_v: 6`; writer อื่นคงเดิม; Zod union เพิ่ม `6` (ถ้า CR ของ #1003 merge ก่อน ใช้ 6 → 7 แทน)
+- **D6:** ไม่แก้ประวัติก่อน deploy; ตั้ง `AUTO_NO_SHOW_EFFECTIVE_FROM` = วัน deploy ใน worker
 
 ## Decision log
 
@@ -210,3 +203,12 @@ affects:
 - 2026-10-28 — CR-207 approved: "รอยืนยันการเข้างาน" ในแท็บผู้สมัครแสดงผลอย่างเดียว ยกปุ่มและ worker มาที่ CR นี้
 - 2026-10-29 — owner (@Mhapong) เลือก track เป็น draft CR file ใน `docs/changes/`
 - 2026-10-29 — proposed (draft) โดยผู้รับงาน; พบจากโค้ดว่า flow หลักเขียน `standby` ให้ทุกกะ (D1); เปิด D1 – D7 รอเคาะ
+- 2026-10-29 — owner (@Mhapong) เคาะ D1 – D7 ตามค่าเสนอทุกข้อ:
+  - D1 — P = `assigned` หรือ (`standby` และ `dispatch_status = accepted`), ไม่ใช่ `flex`; สอดคล้อง CR-207 (amended 2026-10-29)
+  - D2 — "มา" → `completed`, เวลาจาก `duty_window`, `manual_override` ทั้งสองขา, เหตุผลเดียวใช้ทั้งสองขา
+  - D3 — เพิ่ม `no_show_at` / `no_show_by` (opt), `shift_assignment` schema_v 5 → 6 additive, ไม่ backfill
+  - D4 — ไม่เขียนโควตาทันทีตอน `no_show`; `reconcileQuota` ครั้งถัดไปปรับเอง (amend CR-104 §3.5)
+  - D5 — `no_show` → "มา" ได้ตลอด; `completed` → `no_show` ไม่ได้
+  - D6 — worker แตะเฉพาะกะที่ `end_ts ≥ AUTO_NO_SHOW_EFFECTIVE_FROM` (วัน deploy); กะเก่าอยู่ในรายการรอยืนยันให้เจ้าหน้าที่
+  - D7 — ปุ่มอยู่แท็บตารางกะและเช็คอินเท่านั้น; แท็บผู้สมัครแสดงผลอย่างเดียว + ตัวกรอง "ขาดปฏิบัติงาน"
+- รอ approve จาก @Jackyzaz; merge หลัง PR #968
