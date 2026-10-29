@@ -289,14 +289,18 @@ export async function readSessionUserCtx(
  * so the handler can scope the operation. Throws {@link ServiceError}.
  */
 export async function authorizeUserWrite(cookie: string | null): Promise<Caller> {
-	const { name, roles } = await readSessionUserCtx(cookie);
-	if (!name) throw new ServiceError('UNAUTHENTICATED', 'Authentication required');
-
-	const isSA = isSystemAdmin(roles);
-	if (!isSA && !isShelterManager(roles)) {
+	const caller = await authorizeSession(cookie);
+	if (!caller.isSA && !isShelterManager(caller.roles)) {
 		throw new ServiceError('FORBIDDEN', 'Requires system_admin or shelter_manager');
 	}
-	return { name, roles, isSA, shelterCode: shelterCodeFromRoles(roles) };
+	return caller;
+}
+
+/** Any logged-in caller; the operation itself enforces capability. Throws {@link ServiceError}. */
+export async function authorizeSession(cookie: string | null): Promise<Caller> {
+	const { name, roles } = await readSessionUserCtx(cookie);
+	if (!name) throw new ServiceError('UNAUTHENTICATED', 'Authentication required');
+	return { name, roles, isSA: isSystemAdmin(roles), shelterCode: shelterCodeFromRoles(roles) };
 }
 
 /**
