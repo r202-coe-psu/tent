@@ -10,12 +10,14 @@ export {
 	receiveDonationInputSchema,
 	publicDonationErrorMessage,
 	isDonorEditable,
+	donationItemEditGate,
 	donationPayloadUnit,
 	buildDonationItemsPayload,
 	donorUnitOptions,
 	linesMissingExpiry
 } from './domain/public-donation';
 export type {
+	DonationItemEditGate,
 	DonationPayloadLine,
 	DonationUnitSource,
 	ExpiryCheckLine

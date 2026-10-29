@@ -35,6 +35,7 @@ import {
 	distributeInputSchema,
 	createAdjustEntry,
 	createDistributionReturnEntry,
+	isCanonicalLedgerRef,
 	distributionReturnInputSchema,
 	projectStockLotBalances,
 	sortStockLotsByConsumptionOrder,
@@ -413,6 +414,18 @@ describe('stock_ledger reason ↔ ref_id invariant (CR-055)', () => {
 
 	// CR-141 — requisition now accepts either the legacy doc type or the new
 	// unified ticket, so old rows stay valid while new writes move to tickets.
+	it('accepts distribution_return from a requisition ticket but never a direct issue (CR-208)', () => {
+		expect(write('distribution_return', 'requisition_ticket:01J').ref_id).toBe(
+			'requisition_ticket:01J'
+		);
+		expect(() => write('distribution_return', 'requisition_ticket:direct-01J')).toThrow(
+			/requisition_ticket:direct-/
+		);
+		expect(isCanonicalLedgerRef('distribution_return', 'requisition_ticket:direct-01J')).toBe(
+			false
+		);
+	});
+
 	it('accepts requisition with a requisition_ticket: ref_id (CR-141)', () => {
 		expect(write('requisition', 'requisition_ticket:01J').ref_id).toBe('requisition_ticket:01J');
 	});
@@ -1387,6 +1400,21 @@ describe('createDistributionReturnEntry', () => {
 		expect(entry.qty).toBe('2.5');
 		expect(entry.ref_id).toBe('distribution_batch:BATCH1');
 		expect(entry.lot_ref).toBe('stock_ledger:LOT1');
+	});
+
+	it('accepts a requisition ticket return and refuses a direct issue (CR-208)', () => {
+		const input = {
+			item_id: 'item:blanket',
+			qty: '2',
+			unit: 'ผืน',
+			lot_ref: 'stock_ledger:LOT1'
+		};
+		expect(
+			createDistributionReturnEntry({ ...input, ref_id: 'requisition_ticket:T1' }, ctx).ref_id
+		).toBe('requisition_ticket:T1');
+		expect(() =>
+			createDistributionReturnEntry({ ...input, ref_id: 'requisition_ticket:direct-T1' }, ctx)
+		).toThrow();
 	});
 
 	it('rejects wrong ref prefixes and missing lot identity', () => {

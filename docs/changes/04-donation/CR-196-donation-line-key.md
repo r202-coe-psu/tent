@@ -5,14 +5,14 @@ status: approved
 date: 2026-10-25
 approved_at: 2026-10-26
 created: 2026-10-25
-updated: 2026-10-26
+updated: 2026-10-29
 requested_by: "Kunanon Nusaeng"
 decided_by: "Soravit Sukkarn (Team Lead)"
 layer: volatile
 affects:
   - docs/data/schema.md §2.3 `donation.items[]` — field ใหม่ `line_key` (opt) · กติกา donor edit (บล็อกการแก้เมื่อประเมินแล้ว)
   - schema_v donation 7 → 8 (ดูส่วนลำดับกับ CR-175)
-  - docs/data/couchdb-mongodb-sync.md §3.2 `public_donations.items_declared[].line_key` · PROJECTION_VERSION 7 → 8
+  - docs/data/couchdb-mongodb-sync.md §3.2 `public_donations.items_declared[].line_key` · PROJECTION_VERSION 10 → 11
   - docs/data/api-contract.md — `GET /public/v1/donations/{tracking_token}` (`items[].line_key`), `PATCH /public/v1/donations/{tracking_token}/items` (บล็อกเมื่อมีผลประเมิน, error `400 ALREADY_REVIEWED` / `400 UNKNOWN_LINE_KEY` / `400 DUPLICATE_LINE_KEY`)
   - docs/changes/04-donation/CR-174-donation-campaign-auto-approve.md FR-18a, FR-23 (ปรับชุดสถานะที่แก้รายการได้)
   - backend/apiapp/modules/donations (schemas `DonationItemInput`, use_case `create` / `update_items` / `_carry_item_ids`, ลบ `_carry_line_details`) · backend/tests/test_donations.py, test_donation_review.py
@@ -28,10 +28,10 @@ migration: optional field, ไม่ backfill — ใบที่ประเม
 ## สรุป (TL;DR)
 
 - เพิ่ม `items[].line_key` (ULID) ให้ทุกรายการของใบบริจาค public; FastAPI สร้างตอนจอง (`create`) และส่งกลับใน GET เสมอ
-- **บล็อกการแก้รายการทันทีที่ใบได้รับการประเมินแล้ว** ไม่ว่าจะจากระบบ Auto-Approve ในแคมเปญ (`verifying` ได้ QR แล้ว) หรือเจ้าหน้าที่ตรวจประเมินรายบรรทัด (`items[].review_status` มีค่า)
+- **บล็อกการแก้รายการทันทีที่ใบได้รับการประเมินแล้ว** ไม่ว่าจะจากระบบ Auto-Approve ในแคมเปญ (`verifying` ได้ QR แล้ว) หรือเจ้าหน้าที่ตรวจประเมินรายบรรทัด (`items[].review_status` เป็น `approved` หรือ `rejected`)
 - การบล็อกนี้ปิดช่องโหว่ความปลอดภัย 100% ไม่ให้รายการที่เจ้าหน้าที่เคย `rejected` หลุดกลายเป็นอนุมัติอัตโนมัติ และตัดความซับซ้อนของการเดา/carry ผลประเมินเดิมทิ้งทั้งหมด
 - หากผู้บริจาคต้องการเปลี่ยนของหลังใบได้รับการประเมินแล้ว: ให้กดยกเลิกใบเดิมแล้วจองใหม่ หรือนำของจริงมาแจ้งเจ้าหน้าที่เพื่อปรับยอดหน้างาน (Scan Station)
-- donation schema_v 7 → 8, PROJECTION_VERSION 7 → 8; ไม่แตะ `stock_ledger` `_id`
+- donation schema_v 7 → 8, PROJECTION_VERSION 10 → 11; ไม่แตะ `stock_ledger` `_id`
 
 ## Why
 
@@ -46,8 +46,9 @@ migration: optional field, ไม่ backfill — ใบที่ประเม
 - **FR-LK-2** — `line_key` ไม่ซ้ำกันภายในใบเดียว และไม่เปลี่ยนตลอดอายุรายการนั้น
 - **FR-LK-3** — `GET /public/v1/donations/{tracking_token}` (FastAPI และ BFF overlay จาก CouchDB) ต้องคืน `items[].line_key`
 - **FR-LK-4 — กติกาการบล็อกการแก้ไขรายการ (แบบที่ 1):**
-  - อนุญาตให้ผู้บริจาคแก้ไขรายการ (`PATCH …/items`) ได้เฉพาะใบจองที่ **ยังไม่ได้รับการประเมิน** เท่านั้น (`status: 'declared'` หรือ `pending_review` ที่ทุกรายการยังไม่มี `review_status`)
-  - หากใบจองอยู่ในสถานะ `verifying` (ออก QR แล้ว), `rejected`, หรือมีรายการใดรายการหนึ่งที่มี `review_status` แล้ว → ให้ตอบกลับ `400 ALREADY_REVIEWED` และไม่อนุญาตให้แก้ไข
+  - อนุญาตให้ผู้บริจาคแก้ไขรายการ (`PATCH …/items`) ได้เฉพาะใบจองที่ **ยังไม่ได้รับการประเมิน** เท่านั้น (`status: 'declared'` หรือ `pending_review` ที่ทุกรายการมี `review_status` เป็น `pending` หรือไม่มีค่า)
+  - หากใบจองอยู่ในสถานะ `verifying` (ออก QR แล้ว), `rejected`, หรือมีรายการใดรายการหนึ่งที่ `review_status` เป็น `approved` หรือ `rejected` → ให้ตอบกลับ `400 ALREADY_REVIEWED` และไม่อนุญาตให้แก้ไข
+  - รายการที่ระบบอนุมัติอัตโนมัติจากการ์ดความต้องการในแคมเปญตอนจอง (`approved`) นับเป็น "ประเมินแล้ว" · ใบที่มีรายการแบบนี้ (ทั้ง `verifying` และ `pending_review` ที่มีรายการปนกัน) จึงแก้รายการไม่ได้ตั้งแต่จอง (amendment 2026-10-29)
   - บนหน้าติดตาม (`/donations/track/[token]`): Disable ปุ่ม "แก้ไขรายการ" (ไม่ซ่อน เพื่อให้ UI ไม่กระโดด) และหากผู้บริจาคกดปุ่ม ให้แสดง toast แจ้งเตือน: *"ใบบริจาคได้รับการอนุมัติ/ออก QR แล้ว ไม่สามารถแก้ไขรายการได้ หากต้องการเปลี่ยนแปลง กรุณายกเลิกเพื่อทำรายการใหม่ หรือแจ้งเจ้าหน้าที่หน้างานตอนนำของมาส่ง"*
 - **FR-LK-5** — สำหรับใบที่ยังไม่ได้รับการประเมินและแก้รายการได้:
   - dialog แก้รายการต้องส่ง `line_key` ของรายการเดิมกลับมาทุกรายการที่ยังอยู่; รายการที่ผู้บริจาคเพิ่มใหม่ไม่ส่ง `line_key`
@@ -89,7 +90,7 @@ migration: optional field, ไม่ backfill — ใบที่ประเม
   - `review.py`: ลบ tuple `line_key()`
 - tent-model: `DeclaredItem.line_key: str | None = None`
 - worker:
-  - `projector/donation.py`: คัดลอก `line_key` ลง `items_declared`; `PROJECTION_VERSION` 7 → 8
+  - `projector/donation.py`: คัดลอก `line_key` ลง `items_declared`; `PROJECTION_VERSION` 10 → 11
   - `inbound/donations.py`: อัปเดต `DONATION_SCHEMA_V` 7 → 8
 - frontend:
   - `tracking.ts`: parse `line_key`
@@ -104,7 +105,7 @@ migration: optional field, ไม่ backfill — ใบที่ประเม
 
 - `line_key` optional → doc เดิมไม่ backfill
 - ใบที่ได้รับการประเมินแล้วบล็อกการแก้ไขทันทีตาม FR-LK-4; ใบ public มี TTL 72 ชม. จึงหมดไปเองภายใน 3 วันหลัง deploy
-- `public_donations` re-project ผ่าน PROJECTION_VERSION 8
+- `public_donations` re-project ผ่าน PROJECTION_VERSION 11
 - walk-in (frontend) ไม่เขียน `line_key`
 
 ## ลำดับ `schema_v` (กับ CR-175)
@@ -124,3 +125,6 @@ migration: optional field, ไม่ backfill — ใบที่ประเม
   5. UX หน้าติดตาม: Disable ปุ่ม "แก้ไขรายการ" เมื่อบล็อก และหากกดให้แสดง toast แจ้งเตือนแนะนำการยกเลิก/แจ้งหน้างาน
   6. เจ้าหน้าที่ยังคงปรับยอดรับจริงหน้างาน (Scan Station) ได้ตามปกติ
   7. ลำดับ `schema_v`: ยึดตามลำดับการ merge โค้ดจริงเข้า develop (first-merged gets 8, subsequent gets 9)
+- 2026-10-29 — amendment (review PR #956 Warning 1–2), ยืนยันโดย Kunanon Nusaeng:
+  1. FR-LK-4: `review_status: 'pending'` = ยังไม่ประเมิน · `approved`/`rejected` = ประเมินแล้ว รวมรายการที่อนุมัติอัตโนมัติจากการ์ดแคมเปญตอนจอง (ตรงกับข้อ 2 ด้านบน) — ข้อความเดิม "ทุกรายการยังไม่มี `review_status`" ใช้ไม่ได้จริง เพราะ FastAPI stamp `pending` ให้ทุกรายการตั้งแต่ schema_v 7
+  2. PROJECTION_VERSION ที่ใช้จริงคือ 10 → 11 (develop อยู่ที่ 10 ตอน implement) ไม่ใช่ 7 → 8
