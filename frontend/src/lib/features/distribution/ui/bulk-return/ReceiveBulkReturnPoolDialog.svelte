@@ -20,6 +20,8 @@
 		buildReceiveInput,
 		initReceiveLines,
 		isLineMismatched,
+		uncountedGap,
+		uncountedGapHint,
 		validateReceiveLines
 	} from '../model/bulk-return-lifecycle';
 	import {
@@ -31,7 +33,8 @@
 
 	/**
 	 * Warehouse receive form for a SUBMITTED pool. Lines come from the submit snapshot
-	 * (`pool.items_summary`), never from the live row items. The parent mounts it only while visible,
+	 * (`pool.items_summary`), never from the live row items; the qty shown and the cap are the
+	 * receivable qty (`row.receivable_items_summary`, the snapshot minus entries counted in an older pool). The parent mounts it only while visible,
 	 * so the form starts fresh every time it is opened.
 	 */
 	interface Props {
@@ -47,7 +50,12 @@
 	const storagePoints = useStoragePoints(() => shelterCode);
 
 	// Initial values only: the form is a draft and must not follow later pool updates.
-	let lines = $state(initReceiveLines(untrack(() => row.pool.items_summary ?? [])));
+	let lines = $state(
+		initReceiveLines(
+			untrack(() => row.pool.items_summary ?? []),
+			untrack(() => row.receivable_items_summary)
+		)
+	);
 	let storagePointId = $state('');
 	let attempted = $state(false);
 	let submitError = $state<string | null>(null);
@@ -146,6 +154,7 @@
 						{@const item = resolveItemDisplay(line.item_id, catalog)}
 						{@const errors = attempted ? validation.lineErrors[line.item_id] : undefined}
 						{@const mismatched = isLineMismatched(line)}
+						{@const gap = uncountedGap(line)}
 						{@const qtyId = `receive-qty-${line.item_id}`}
 						{@const reasonId = `receive-reason-${line.item_id}`}
 						{@const noteId = `receive-note-${line.item_id}`}
@@ -164,6 +173,9 @@
 									</span>
 								</span>
 							</div>
+							{#if gap !== null}
+								<p class="text-xs text-slate-500">{uncountedGapHint(gap)}</p>
+							{/if}
 
 							<div class="space-y-1.5">
 								<Label for={qtyId} class="text-sm font-semibold text-slate-700">
