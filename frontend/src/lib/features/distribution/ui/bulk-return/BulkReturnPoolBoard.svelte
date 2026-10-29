@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { createSubscriber } from 'svelte/reactivity';
-	import type { Snippet } from 'svelte';
+	import { untrack, type Snippet } from 'svelte';
+	import { toast } from 'svelte-sonner';
 	import AlertCircle from '@lucide/svelte/icons/alert-circle';
 	import AlertTriangle from '@lucide/svelte/icons/alert-triangle';
 	import Inbox from '@lucide/svelte/icons/inbox';
@@ -37,6 +38,8 @@
 	} from '../../application/food-supplies/auth';
 	import type { BulkReturnPoolOverviewRow } from '../../domain/food-supplies';
 	import { mapDistributionQueryError } from '../model/distribution-error';
+	import { BULK_RETURN_POOL_NOT_FOUND_TOAST } from '../model/bulk-return-copy';
+	import { decideDeepLinkedPool } from '../model/pool-deep-link';
 	import {
 		LATE_BADGE_CLASS,
 		LATE_CARD_EXCLUDED_TEXT,
@@ -130,9 +133,12 @@
 	let addPoolId = $state<string | undefined>(undefined);
 	// Writable derived: follows `initialPoolId` (deep link / URL), local selections override it.
 	let selectedPoolId = $derived<string | null>(initialPoolId ?? null);
+	// Last id chosen through this board (card, queue, just-opened pool); never a deep link.
+	let locallySelectedPoolId = $state<string | null>(null);
 
 	function selectPool(poolId: string | null) {
 		selectedPoolId = poolId;
+		locallySelectedPoolId = poolId;
 		onSelectedPoolChange?.(poolId);
 	}
 
@@ -256,6 +262,56 @@
 		const list = rows;
 		const id = selectedPoolId;
 		return id ? (list.find((row) => row.pool._id === id) ?? null) : null;
+	});
+
+	// Arrival time of the current deep link, plain (non-reactive) variables on purpose. A `$derived`
+	// would have to call Date.now() (impure, and re-evaluated at arbitrary moments); instead the
+	// effect below records it at the one place the `initialPoolId` change is observed. `undefined`
+	// means no link seen yet, so a link present at mount also counts as an arrival.
+	let lastSeenLink: string | null | undefined = undefined;
+	let linkArrivedAt: number | null = null;
+	let refetchRequested = false;
+
+	// A deep-linked pool counts as not found only when absent from `rows` (the unfiltered overview,
+	// incl. CANCELLED and old RECEIVED), never because a view filter hides it. A just-opened pool is
+	// selected locally before the refetch contains it, so local selections are skipped, and nothing
+	// is decided while the query is loading, erroring or refetching. A cached overview older than
+	// the link (staleTime) may predate a pool created elsewhere, so it is refetched once first.
+	//
+	// An effect because it reacts to async data arrival with side effects (refetch, toast, URL
+	// clear). Every follow of a bad link toasts; one link cannot toast twice because the selection is
+	// cleared (selectedPoolId becomes null), which ends the decision.
+	$effect(() => {
+		const link = initialPoolId ?? null;
+		if (link !== lastSeenLink) {
+			lastSeenLink = link;
+			if (link) {
+				linkArrivedAt = Date.now();
+				refetchRequested = false;
+			}
+		}
+		const decision = decideDeepLinkedPool({
+			poolId: selectedPoolId,
+			rows,
+			dataReady:
+				overviewQuery.isSuccess && !overviewQuery.isFetching && !overviewQuery.isPlaceholderData,
+			locallySelectedId: locallySelectedPoolId,
+			dataUpdatedAt: overviewQuery.dataUpdatedAt,
+			linkArrivedAt,
+			refetchRequested
+		});
+		if (decision === 'none') return;
+		// Untracked: the refetch / host callback must not add dependencies to this effect.
+		untrack(() => {
+			if (decision === 'refetch') {
+				refetchRequested = true;
+				void overviewQuery.refetch();
+				return;
+			}
+			toast.warning(BULK_RETURN_POOL_NOT_FOUND_TOAST);
+			// Clears the selection so the host drops `pool=`; the id is then null, so no loop.
+			selectPool(null);
+		});
 	});
 
 	/** Sum of late-entry qty per item_id (late entries are already non-voided). */

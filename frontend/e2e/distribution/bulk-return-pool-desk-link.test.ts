@@ -6,11 +6,17 @@
  * (supplies mode) with that pool's detail open, and closing the detail keeps
  * `?mode=supplies&tab=returns` (no `pool`).
  *
+ * Two more cases: a desk link to a pool that does not exist shows the "pool not found" toast and
+ * opens the returns step with no `pool`; and a mode-changing desk link followed client-side with an
+ * unsaved food draft asks first, and "stay" keeps the mode, draft and URL (FR-DFS-05).
+ *
  * The plain `/back-office/distribution` redirect to `/portal` is covered by
  * distribution-desk-access.test.ts and is not repeated here.
  */
 
+import type { Page } from '@playwright/test';
 import { seedOpenPool, switchUser, poolName } from './bulk-return-pool';
+import { scenarioPoint, seedItemWithStock, seedRecipient, seedTicket } from './distribution';
 import { DESK_TAGS } from './distribution-desk-setup';
 import { expect, test } from './fixtures';
 import { BulkReturnPoolBoard } from './pages/bulk-return-pool.page';
@@ -26,16 +32,7 @@ test.describe('Bulk return pool — desk link for DST (#921)', { tag: DESK_TAGS 
 		// The pool id comes from the seeding helper (admin API), before the page loads.
 		const pool = await seedOpenPool(scenario, { name });
 		const board = new BulkReturnPoolBoard(page);
-		// [pathname, mode, tab, pool]: `pool` is the id, or `null` when absent.
-		const deskUrl = () => {
-			const url = new URL(page.url());
-			return [
-				url.pathname,
-				url.searchParams.get('mode'),
-				url.searchParams.get('tab'),
-				url.searchParams.get('pool')
-			];
-		};
+		const deskUrl = () => deskUrlOf(page);
 
 		await switchUser(page, scenario, 'dst', 'distribution_staff');
 		await page.goto(
@@ -82,4 +79,103 @@ test.describe('Bulk return pool — desk link for DST (#921)', { tag: DESK_TAGS 
 		await expect.poll(deskUrl).toEqual(['/onsite/distribution', 'supplies', 'returns', null]);
 		await expect(board.heading()).toBeVisible();
 	});
+
+	test('a pool link to a pool that does not exist warns and opens the returns step with no pool', async ({
+		page,
+		scenarioAs
+	}) => {
+		const scenario = await scenarioAs('brp_desk_link_missing');
+		const board = new BulkReturnPoolBoard(page);
+		const desk = new DeskPage(page);
+
+		await switchUser(page, scenario, 'dst', 'distribution_staff');
+		await page.goto(
+			`/onsite/distribution?mode=supplies&tab=returns&pool=${encodeURIComponent('bulk_return_pool:does-not-exist')}`
+		);
+
+		await expect(desk.toast('ไม่พบกองนี้ อาจถูกลบหรืออยู่ศูนย์อื่น')).toBeVisible();
+		// Shown once, not repeated by a re-run of the link.
+		await expect(desk.toast('ไม่พบกองนี้ อาจถูกลบหรืออยู่ศูนย์อื่น')).toHaveCount(1);
+		await expect
+			.poll(() => deskUrlOf(page))
+			.toEqual(['/onsite/distribution', 'supplies', 'returns', null]);
+		await expect(board.heading()).toBeVisible();
+	});
+
+	// A full `page.goto` would reload the desk and lose the draft, so the link is followed through
+	// the SvelteKit router (anchor click), as with the '/portal' hop above.
+	// `foodSetup` is local to distribution-desk-handover.test.ts (a spec file cannot be imported),
+	// so the few setup lines it needs are repeated here.
+	test('a mode-changing desk link with an unsaved food draft asks first; staying keeps the draft', async ({
+		page,
+		scenarioAs
+	}) => {
+		const scenario = await scenarioAs('brp_desk_link_draft');
+		const item = await seedItemWithStock(scenario, {
+			name: `E2E meal ${scenario.namespace}`,
+			stockQty: '50',
+			returnable: false,
+			typeClass: 'CONSUMABLE'
+		});
+		const ticket = await seedTicket(scenario, {
+			type: 'food',
+			status: 'DISTRIBUTING',
+			meal: 'lunch',
+			lines: [{ item, allocatedQty: '10' }]
+		});
+		const recipient = await seedRecipient(
+			scenario,
+			`Food${scenario.namespace.slice(-6)}`,
+			'Recipient'
+		);
+		const desk = new DeskPage(page);
+		await desk.goto();
+		await desk.openTab('food');
+		await desk.selectPoint(scenarioPoint(scenario));
+		await desk.selectTicket('food', ticket);
+		const qty = page.locator('#food-qty-input');
+
+		await desk.itemButton(item.name).click();
+		await desk.chooseRecipientBySearch(recipient);
+		await desk.fillFoodQty('2');
+
+		// The link is held in `beforeNavigate` (cancelled, nothing pushed), so Cancel must leave
+		// history exactly as it was: same length, and one Back leaves the desk entirely.
+		const historyLengthBefore = await page.evaluate(() => history.length);
+		await page.evaluate(() => {
+			const a = document.createElement('a');
+			a.href = '/onsite/distribution?mode=supplies&tab=returns';
+			document.body.append(a);
+			a.click();
+		});
+		const confirm = page.getByRole('alertdialog', { name: /สลับไปโหมดสิ่งของ/ });
+		await expect(confirm).toBeVisible();
+		await confirm.getByRole('button', { name: 'อยู่โหมดเดิม' }).click();
+		await expect(confirm).toBeHidden();
+		await expect(desk.modeButton('food')).toHaveAttribute('aria-pressed', 'true');
+		await expect(qty).toHaveValue('2');
+		await expect
+			.poll(() => deskUrlOf(page))
+			.toEqual(['/onsite/distribution', 'food', 'food', null]);
+		expect(await page.evaluate(() => history.length)).toBe(historyLengthBefore);
+
+		// Back must go to whatever preceded the desk (reached by `desk.goto` above), not to a
+		// duplicate food entry (a replaced-in URL write would leave one) and not to the held link.
+		// The earlier entry's exact URL depends on the login fixture, so assert only that the desk
+		// entry is gone: the page is no longer on the desk, and never on the held link.
+		await page.goBack();
+		await expect.poll(() => new URL(page.url()).pathname).not.toBe('/onsite/distribution');
+		expect(page.url()).not.toContain('mode=supplies');
+	});
 });
+
+/** [pathname, mode, tab, pool]: `pool` is the id, or `null` when absent. */
+function deskUrlOf(page: Page): Array<string | null> {
+	const url = new URL(page.url());
+	return [
+		url.pathname,
+		url.searchParams.get('mode'),
+		url.searchParams.get('tab'),
+		url.searchParams.get('pool')
+	];
+}
