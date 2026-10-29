@@ -285,10 +285,8 @@ describe('getMyCard', () => {
 		expect(JSON.stringify(result)).not.toMatch(/0812345678/);
 	});
 
-	it('rejects a caller whose user document does not exist as UNAUTHENTICATED', async () => {
-		const err = await rejection(getMyCard('ghost@x.com'));
-
-		expect(err.code).toBe('UNAUTHENTICATED');
+	it('reports a session without a _users document (CouchDB server admin) as none/server_admin', async () => {
+		await expect(getMyCard('admin')).resolves.toEqual({ kind: 'none', reason: 'server_admin' });
 	});
 
 	it('reports a deactivated account as none/inactive', async () => {

@@ -21,7 +21,9 @@
 	const noneMessages: Record<MyCardNoneReason, string> = {
 		no_token: 'ยังไม่มี QR กรุณาติดต่อผู้ดูแลระบบเพื่อออกบัตร',
 		volunteer_unlinked: 'บัญชีนี้ยังไม่ผูกกับข้อมูลจิตอาสา กรุณาติดต่อผู้ดูแล',
-		inactive: 'บัญชีถูกปิดใช้งาน'
+		inactive: 'บัญชีถูกปิดใช้งาน',
+		server_admin:
+			'บัญชีผู้ดูแลระบบหลักไม่มีบัตรเจ้าหน้าที่ กรุณาเข้าสู่ระบบด้วยบัญชีเจ้าหน้าที่ของตนเอง'
 	};
 
 	const card = $derived(cardQuery.data);

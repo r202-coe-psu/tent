@@ -93,7 +93,7 @@ export type MyCard =
 			volunteer_code: string | null;
 			roles: string[];
 	  }
-	| { kind: 'none'; reason: 'no_token' | 'volunteer_unlinked' | 'inactive' };
+	| { kind: 'none'; reason: 'no_token' | 'volunteer_unlinked' | 'inactive' | 'server_admin' };
 
 type LinkedVolunteer = {
 	_id: string;
@@ -121,7 +121,8 @@ async function findLinkedVolunteer(user: CouchUserDoc): Promise<LinkedVolunteerR
 
 export async function getMyCard(name: string): Promise<MyCard> {
 	const res = await adminRaw(`/_users/org.couchdb.user:${encodeURIComponent(name)}`, 'GET');
-	if (res.status === 404) throw new ServiceError('UNAUTHENTICATED', 'Authentication required');
+	// A CouchDB server admin is defined in the node config, not in `_users`, so it has no card.
+	if (res.status === 404) return { kind: 'none', reason: 'server_admin' };
 	if (res.status >= 400) throw serviceErrorFromCouch('read user', res.status, res.data);
 	const user = res.data as CouchUserDoc;
 	if (user.active === false) return { kind: 'none', reason: 'inactive' };

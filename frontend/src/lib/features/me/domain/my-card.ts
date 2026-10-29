@@ -1,4 +1,4 @@
-export type MyCardNoneReason = 'no_token' | 'volunteer_unlinked' | 'inactive';
+export type MyCardNoneReason = 'no_token' | 'volunteer_unlinked' | 'inactive' | 'server_admin';
 
 export type MyCard =
 	| {
