@@ -247,6 +247,36 @@ export function donationPayloadUnit(item: DonationUnitSource, fallback: string):
 	return item.unit_code?.trim() || item.unit?.trim() || fallback;
 }
 
+/** One donor line as the wizard holds it; `needQty` is a hint and never leaves the form. */
+export type DonationPayloadLine = DonationUnitSource & {
+	item_id?: string;
+	name: string;
+	category?: string;
+	amount: number;
+	condition?: string;
+	remark?: string;
+};
+
+/**
+ * Maps the donor's lines onto the BFF `items[]`. `qty` is sent exactly as typed — a 0 is
+ * NOT coerced to 1 and an empty list is NOT replaced by a fake item; the BFF rejects
+ * both with 422.
+ */
+export function buildDonationItemsPayload(
+	items: DonationPayloadLine[],
+	t: { unspecified: string; defaultItemUnit: string }
+) {
+	return items.map((it) => ({
+		item_id: it.item_id || undefined,
+		free_text: it.name || t.unspecified,
+		category: it.category || undefined,
+		qty: it.amount,
+		unit: donationPayloadUnit(it, t.defaultItemUnit),
+		condition: it.condition || undefined,
+		note: it.remark || undefined
+	}));
+}
+
 /**
  * Units no donor offers goods in — nutrition and dosage units the UOM master carries
  * for recipes and medicine, which only lengthen the public picker.

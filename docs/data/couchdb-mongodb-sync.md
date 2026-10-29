@@ -2,8 +2,8 @@
 title: Smart Shelter — CouchDB ⇄ MongoDB Sync (Public Plane)
 status: draft for review
 created: 2026-06-11
-updated: 2026-10-25
-note: decision sync 2026-10-25 — §3.3 `unassigned_registrations.members[]` เพิ่ม `consent` + `search_excluded` (UNASSIGNED_SCHEMA_V 3→4; PDPA consent block FR-42); CR-176 (2026-10-20) — projector evacuee `checked_in_at` = null เมื่อ `cancelled` (PROJECTION_VERSION 4→5); คู่กับ data-model.md v3 + api-contract.md v1 + CR-017/CR-044 — public tier ทำงานบน MongoDB ผ่าน FastAPI; ตัด public_transparency (CR-017 Decision B); CR-113 unassigned_registrations; CR-166 (2026-10-13) — public_persons เพิ่ม `first_name_key`/`last_name_hash`, PROJECTION_VERSION 2→3, เลิก `$text`; decision sync 2026-10-09 — worker PROJECTION_VERSION + auto re-bootstrap on start (stored in Mongo _worker_meta); bootstrap reads update_seq before scan; CR-172 (2026-10-21) — `public_donations` เพิ่ม `reject_reason`/`reject_reason_code` + `received_summary.items[].rejected/reject_reason/reject_reason_code` ส่งผ่านทั้งก้อน, PROJECTION_VERSION 6→7; CR-174 (2026-10-21) — `public_donations.items_declared[]` เพิ่ม `review_status`/`review_reason_code`/`review_reason` (PROJECTION_VERSION 7 ครอบทั้ง CR-172 + CR-174 — 6 = CR-185 บน develop); inbound ปั๊ม donation schema_v 7 + เขียน audit อนุมัติอัตโนมัติ
+updated: 2026-10-28
+note: decision sync 2026-10-28 — inbound donation sync vs donor cancel race: re-read แถวก่อน put, flip `synced_to_couch` แบบมีเงื่อนไข (fingerprint status/revisions/courier tracking no.) + re-put ตาม `_rev` ตัวเองเมื่อไม่ตรง, quota settle ข้าม buffer ที่ยังไม่ sync, audit อนุมัติอัตโนมัติเขียนหลัง flip (§4.1 ตรงกับโค้ด; ไม่เปลี่ยนรูป doc / PROJECTION_VERSION); CR-183 (2026-10-22) — ศูนย์ปิดคง `public_shelters` + `public_persons` ไว้จนครบ `closed_at` + `retention_months_after_close`, listener/bootstrap ครอบศูนย์ปิดในระยะ retention, rescan ตอนเปิดใหม่ (bump PROJECTION_VERSION); decision sync 2026-10-25 — §3.3 `unassigned_registrations.members[]` เพิ่ม `consent` + `search_excluded` (UNASSIGNED_SCHEMA_V 3→4; PDPA consent block FR-42); CR-176 (2026-10-20) — projector evacuee `checked_in_at` = null เมื่อ `cancelled` (PROJECTION_VERSION 4→5); คู่กับ data-model.md v3 + api-contract.md v1 + CR-017/CR-044 — public tier ทำงานบน MongoDB ผ่าน FastAPI; ตัด public_transparency (CR-017 Decision B); CR-113 unassigned_registrations; CR-166 (2026-10-13) — public_persons เพิ่ม `first_name_key`/`last_name_hash`, PROJECTION_VERSION 2→3, เลิก `$text`; decision sync 2026-10-09 — worker PROJECTION_VERSION + auto re-bootstrap on start (stored in Mongo _worker_meta); bootstrap reads update_seq before scan; CR-172 (2026-10-21) — `public_donations` เพิ่ม `reject_reason`/`reject_reason_code` + `received_summary.items[].rejected/reject_reason/reject_reason_code` ส่งผ่านทั้งก้อน, PROJECTION_VERSION 6→7; CR-174 (2026-10-21) — `public_donations.items_declared[]` เพิ่ม `review_status`/`review_reason_code`/`review_reason` (PROJECTION_VERSION 7 ครอบทั้ง CR-172 + CR-174 — 6 = CR-185 บน develop); inbound ปั๊ม donation schema_v 7 + เขียน audit อนุมัติอัตโนมัติ
 ---
 
 # Smart Shelter — CouchDB ⇄ MongoDB Sync
@@ -62,8 +62,14 @@ staff device (PouchDB) ⇄ WAN ⇄ central (CouchDB) ⇄ sync worker (CDC ทั
 
 ### 3.1 กลไก
 
-- worker tail `GET /{db}/_changes?feed=continuous&include_docs=true&since={last_seq}` ของ **ทุก
-  `shelter_{shelter_code}`** ที่ central (+ `registry` สำหรับ shelter status)
+- worker tail `GET /{db}/_changes?feed=continuous&include_docs=true&since={last_seq}` ของ
+  `shelter_{shelter_code}` ที่ central (+ `registry` สำหรับ shelter status)
+- **Listener scope ([CR-183](../changes/11-famsearch/CR-183-closed-shelter-search-retention.md) FR-7, D-4):** ฟัง DB ของศูนย์ที่อ่านจาก `registry` (`type = shelter`) ที่
+  (ก) เปิด (`is_shelter_open`) **หรือ** (ข) `operation_status = closed` และ `now < closed_at + config:app.retention_months_after_close`
+  — เพื่อให้ check-out / opt-out (`privacy.search_excluded`) ของ evacuee ศูนย์ปิดไปถึง Mongo. ศูนย์ `cancelled`
+  และศูนย์ปิดที่เลยระยะ retention ไม่ถูกฟัง
+- **เปิดศูนย์ใหม่ (FR-9):** เมื่อ `public_shelters.status` เปลี่ยนจาก `closed` เป็นค่าอื่น processor ต้อง rescan DB
+  `shelter_{code}` (`_reproject_shelter_database`) ใน change เดียวกัน — ไม่รอ restart worker
 - เก็บ checkpoint `last_seq` ต่อ db ใน Mongo collection `_sync_checkpoints` — restart แล้ว resume จุดเดิม
 - แต่ละ change → ผ่าน **projector** ตาม `doc.type` → upsert/ลบใน Mongo collection ปลายทาง
 - เป็น CDC แบบ near-realtime (วินาที) — public เห็นข้อมูลช้ากว่า operational เล็กน้อย ยอมรับได้
@@ -95,7 +101,12 @@ The worker resumes `_changes` from its checkpoint, so documents that never chang
   filtered doc type). Do not bump for refactors or read-side changes. Never decrement.
 - **Deploy effect:** staging/prod deploys (`up -d --build --force-recreate`) re-project
   automatically on the first start after a bump; no manual `--bootstrap-only` is needed.
-- Limits: bootstrap covers open shelters only and never removes orphan rows. After a
+- Scope ([CR-183](../changes/11-famsearch/CR-183-closed-shelter-search-retention.md) FR-8): bootstrap reads shelters from `registry` (`type = shelter`)
+  and scans only open shelters (`is_shelter_open`) plus `closed` shelters whose
+  `closed_at + retention_months_after_close` has not passed. `cancelled` shelters and
+  closed shelters past the deadline are not scanned, so their `public_persons` are not
+  re-published (their `public_shelters` row stays).
+- Limits: bootstrap never removes orphan rows. After a
   rollback followed by a redeploy at the same version, run `sync-worker --bootstrap-only`
   manually.
 
@@ -122,8 +133,10 @@ The worker resumes `_changes` from its checkpoint, so documents that never chang
 หลัง deploy worker เพื่อให้ Mongo สะท้อนสูตรใหม่ด้วย (ติดตามใน CR ของ kiosk walk-in ก่อน deploy).
 
 // public_shelters — shelter list (จาก registry)
-// status: open|full only — closed/inactive shelters are deleted from this collection (not projected as "closed")
-{ _id: "SH001", shelter_code: "SH001", registry_id: "shelter:{ulid}", name, status: "open|full",
+// ศูนย์ closed คงแถวไว้ status = "closed" (ADR-0002 Soft Delete, CR-183 FR-1) — retention ไม่ลบแถวนี้;
+// เฉพาะ cancelled ที่ถูกลบออกจาก public plane (draft-shelter-cancelled-status)
+{ _id: "SH001", shelter_code: "SH001", registry_id: "shelter:{ulid}", name, status: "open|full|standby|closed",
+  closed_at,                        // จาก registry — นาฬิกา retention ของ public_persons (data-model §7)
   geo, capacity, province, district, subdistrict, updated_at }
 
 // public_needs — ความต้องการรวม (จาก donation_campaign − donation ที่รับแล้ว)
@@ -243,9 +256,10 @@ donation doc ที่ลงไปเป็น state machine แบบ **forward
 > ที่คำนวณจากรายการ (`verifying` / `pending_review`) ลง buffer — inbound (ขั้น 2) copy `items` ทั้งก้อนและ
 > `status` ตามนั้น ปั๊ม `schema_v` 7 · ถ้ามีรายการ `approved` inbound เขียน `audit` อนุมัติอัตโนมัติ
 > (`action: manual_adjust`, `created_by: system`, `context: {approved_by: 'system', rule: 'campaign_line',
-> lines: [index…]}`) **ก่อน** put donation ด้วย `_id` คงที่ต่อใบ (`audit:` + Crockford 26 ตัวจาก
-> SHA-256 ของ `"{donation _id}:campaign_auto_approve"`) → retry/ประมวลผลซ้ำได้ `conflict` = เขียนแล้ว ·
-> เขียน audit ไม่สำเร็จ → ไม่ put donation รอบนี้ (poll รอบหน้าลองใหม่ทั้งคู่)
+> lines: [index…]}`) **หลัง** put donation และ flip `synced_to_couch` สำเร็จ จากรายการที่ sync จริงรอบนั้น
+> ด้วย `_id` คงที่ต่อใบ (`audit:` + Crockford 26 ตัวจาก SHA-256 ของ `"{donation _id}:campaign_auto_approve"`)
+> → ประมวลผลซ้ำได้ `conflict` = เขียนแล้ว · เขียน audit ไม่สำเร็จ → log ไว้, donation ถือว่า sync แล้ว
+> (put ซ้ำไม่ได้อีก) — audit ไม่อยู่ก่อน put เพราะจะระบุรายการที่ผู้บริจาคยังแก้ได้
 
 ### 4.2 ⭐ donation → stock = manual (กฎธุรกิจหลักของงานนี้)
 
@@ -288,6 +302,14 @@ donation doc ที่ลงไปเป็น state machine แบบ **forward
   — ULID เดียวกันตลอด ใช้เป็น idempotency key ทั้งสองฝั่ง
 - ถ้า worker ตายระหว่าง persist: Mongo `synced_to_couch` ยัง false → poll รอบหน้า retry →
   put ซ้ำ → 409 แล้ว retry ด้วย `_rev` ล่าสุด (idempotent)
+- **flip `synced_to_couch` เป็นแบบมีเงื่อนไข**: inbound อ่านแถวซ้ำก่อนสร้าง doc (ข้ามถ้าหายหรือ sync แล้ว)
+  จำ fingerprint ที่อ่าน — `status`, ความยาว `revisions`, `logistics.courier_tracking_no` — แล้วหลัง put
+  `update_one` เฉพาะแถวที่ยัง `synced_to_couch=false` และ fingerprint เดิม (ไม่เขียนอะไรอื่นกลับ Mongo)
+  ถ้าไม่ตรง (ผู้บริจาคยกเลิก/แก้รายการ/แก้เลขพัสดุระหว่างนั้น) → อ่านแถวใหม่แล้ว put ซ้ำด้วย `_rev` ของ
+  put ตัวเองแบบ strict (ไม่ retry 409) สูงสุด 3 รอบ; ถ้าได้ 409 (มีคนอื่นเขียน doc) → log error และทิ้งแถว
+  ไว้ให้ poll รอบหน้า · หลัง flip สำเร็จ อ่าน doc อีกครั้ง ถ้า `_rev` ไม่ใช่ของเรา → settle quota ตาม status ปัจจุบัน
+- **quota settle ข้าม buffer ที่ยังไม่ sync**: จนกว่า `synced_to_couch=true` Mongo เป็นเจ้าของ status ของ
+  buffer (cancel ผ่าน FastAPI ปล่อย quota ไปแล้ว) — settle จาก change feed จึงไม่เขียน/ไม่ปล่อยซ้ำ
 
 ---
 
@@ -316,11 +338,15 @@ public ไม่อ่าน operational doc ตรง แค่เปลี่�
 
 ดังนั้น retention job (data-model §7) ต้องลบ Mongo **เป็นขั้นตอนเดียวกับ purge** เสมอ:
 
-| ตอนปิดศูนย์ / ครบ 3 เดือน | CouchDB | MongoDB (ต้องทำคู่กัน) |
+| ตอนปิดศูนย์ / ครบระยะ retention | CouchDB (`evacuee`/`household`/`medical` purge ครบ 2 ปี, T-43) | MongoDB (ต้องทำคู่กัน) |
 | --- | --- | --- |
-| evacuee → tombstone | `_purge` + tombstone | ลบ `public_persons` ของ shelter นั้น |
+| evacuee → tombstone | `_purge` + tombstone เมื่อครบ 2 ปีหลังปิดศูนย์ (ตาม pdpa-consent-block-spec — [CR-194](../changes/01-core/CR-194-public-person-data-retention.md)) | ลบ `public_persons` ของ shelter นั้น |
 | donor PII ใน donation | ลบ name/phone | ลบ donor PII ใน `public_donations` + `donations` |
-| ปิดศูนย์ | status=closed | ลบ `public_needs`, `public_transparency` ของ shelter |
+| ปิดศูนย์ | status=closed + `closed_at` | ลบ `public_needs`, `shelter_stocks`, `shelter_occupants` ของ shelter ทันที (processor + retention เป็น safety net); **คง** `public_shelters` (`status = closed`) และ `public_persons` ([CR-183](../changes/11-famsearch/CR-183-closed-shelter-search-retention.md)) |
+| ครบ `closed_at` + `retention_months_after_close` | — (CouchDB purge ที่ 2 ปียังเป็นงาน T-43) | ลบ `public_persons` ของ shelter ทีละ doc พร้อม `_retention_audit` (`trigger: "scheduled"`, verify + idempotent); `public_shelters` ยังคงอยู่ |
+
+ศูนย์ `closed` ที่ `closed_at = null` → retention ไม่ลบ `public_persons` และ log warning (CR-183 D-5).
+ระยะเดือนอ่านจาก `registry` `config:app.retention_months_after_close` ทุกรอบ (อ่านไม่ได้/ค่าผิด → `3`).
 
 donor PII (`donor.name/phone`) ใน Mongo `donations`: ลบทันทีที่ donation ถึง terminal state นานพอ
 หรืออย่างช้า 3 เดือนหลังปิดศูนย์ (เหลือ hash + ยอด) — เหมือนกฎ CouchDB.

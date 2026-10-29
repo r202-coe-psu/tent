@@ -1,5 +1,7 @@
 import { z } from 'zod';
+import { thaiMobilePhoneSchema } from '$lib/db/model';
 import { qtyStrCoercePositiveSchema } from '$lib/utils/qty';
+import { isRealCalendarDate } from '$lib/features/operations/server';
 
 /**
  * Redacted back-office donation queue row (T-16) — shared between the
@@ -64,13 +66,9 @@ export const walkInIntakeInputSchema = z.object({
 	shelter_code: z.string().trim().min(1).optional(),
 	donor: z.object({
 		name: z.string().trim().min(1, 'ต้องระบุชื่อผู้บริจาค'),
-		// Digits only: `donor.phone` feeds `phone_hash`, and a formatted string would
-		// hash differently every time the same donor comes back (schema.md §2.3).
-		phone: z
-			.string()
-			.trim()
-			.regex(/^[0-9]*$/, 'เบอร์โทรต้องเป็นตัวเลขเท่านั้น')
-			.optional(),
+		// Normalized to `^0\d{9}$` (null when blank): `donor.phone` feeds `phone_hash`, so the same
+		// donor must always produce the same string (schema.md §2.3).
+		phone: thaiMobilePhoneSchema,
 		email: z.string().trim().email().optional()
 	}),
 	items: z
@@ -83,7 +81,14 @@ export const walkInIntakeInputSchema = z.object({
 				unit: z.string().trim().min(1),
 				lot: z
 					.object({
-						expiry: z.string().trim().optional(),
+						expiry: z
+							.string()
+							.trim()
+							.refine(
+								(v) => v === '' || isRealCalendarDate(v),
+								'วันหมดอายุต้องเป็นวันที่จริงในรูปแบบ YYYY-MM-DD'
+							)
+							.optional(),
 						storage_zone: z.string().trim().max(100).optional(),
 						// → shelter sub_storage[].id (draft-shelter-storage-points); kept, not stripped
 						storage_point_id: z.string().trim().min(1).optional()

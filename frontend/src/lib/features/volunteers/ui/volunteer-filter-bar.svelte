@@ -1,3 +1,7 @@
+<script lang="ts" module>
+	export type AccountFilter = '' | 'has_account' | 'no_account';
+</script>
+
 <script lang="ts">
 	/**
 	 * "People" tab search + filter row (owner-approved mockup, 2026-08-28).
@@ -34,13 +38,15 @@
 		skill = $bindable(''),
 		shiftStatus = $bindable<ShiftAssignmentStatus | ''>(''),
 		source = $bindable<VolunteerSource | ''>(''),
-		personnelType = $bindable<PersonnelType | ''>('')
+		personnelType = $bindable<PersonnelType | ''>(''),
+		account = $bindable<AccountFilter>('')
 	}: {
 		search?: string;
 		skill?: string;
 		shiftStatus?: ShiftAssignmentStatus | '';
 		source?: VolunteerSource | '';
 		personnelType?: PersonnelType | '';
+		account?: AccountFilter;
 	} = $props();
 
 	// Keep the filter value as the Master Data code. Legacy volunteer documents
@@ -82,6 +88,12 @@
 	const personnelTypeOptions = [
 		{ value: '', label: 'บุคลากร: ทั้งหมด' },
 		...personnelTypeSchema.options.map((v) => ({ value: v, label: PERSONNEL_TYPE_LABELS[v] }))
+	];
+
+	const accountOptions: { value: AccountFilter; label: string }[] = [
+		{ value: '', label: 'บัญชีใช้งาน: ทั้งหมด' },
+		{ value: 'has_account', label: 'มีบัญชีแล้ว' },
+		{ value: 'no_account', label: 'ยังไม่มีบัญชี' }
 	];
 
 	const selectTriggerClass = 'h-11 w-full min-w-0 rounded-xl bg-background px-3 shadow-xs';
@@ -137,7 +149,7 @@
 		</Select.Root>
 	</div>
 
-	<div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+	<div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
 		<Select.Root type="single" bind:value={source}>
 			<Select.Trigger class={selectTriggerClass} aria-label="แหล่งที่มา">
 				<span class="truncate">
@@ -159,6 +171,19 @@
 			</Select.Trigger>
 			<Select.Content>
 				{#each personnelTypeOptions as opt (opt.value)}
+					<Select.Item value={opt.value} label={opt.label} />
+				{/each}
+			</Select.Content>
+		</Select.Root>
+
+		<Select.Root type="single" bind:value={account}>
+			<Select.Trigger class={selectTriggerClass} aria-label="บัญชีใช้งานระบบ">
+				<span class="truncate">
+					{accountOptions.find((o) => o.value === account)?.label ?? 'บัญชีใช้งาน: ทั้งหมด'}
+				</span>
+			</Select.Trigger>
+			<Select.Content>
+				{#each accountOptions as opt (opt.value)}
 					<Select.Item value={opt.value} label={opt.label} />
 				{/each}
 			</Select.Content>

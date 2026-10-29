@@ -188,7 +188,6 @@ export const PUBLIC_DONATIONS_I18N = {
 			'ยังไม่ได้ตั้งค่า reCAPTCHA (PUBLIC_RECAPTCHA_SITE_KEY) — ไม่สามารถส่งแบบฟอร์มได้',
 		recaptchaBranding: 'เว็บไซต์นี้มีการป้องกันด้วย reCAPTCHA',
 		defaultItemFreeText: 'ของบริจาคทั่วไป',
-		generalItemsFallback: 'ของบริจาคทั่วไป',
 		defaultItemUnit: 'piece',
 
 		// Success Ticket
@@ -247,7 +246,6 @@ export const PUBLIC_DONATIONS_I18N = {
 		navigateGoogleMaps: 'นำทางด้วย Google Maps',
 		backToHomeBtn: 'กลับสู่หน้าหลัก',
 		backToHome: 'กลับสู่หน้าหลัก',
-		openingMapsToast: 'กำลังเปิดแผนที่เพื่อนำทางไปยังศูนย์พักพิง',
 
 		// Track Search Page
 		trackPageTitle: 'ติดตามสถานะของบริจาค — Smart Shelter',
@@ -579,7 +577,6 @@ export const PUBLIC_DONATIONS_I18N = {
 			'reCAPTCHA is not configured (PUBLIC_RECAPTCHA_SITE_KEY) — Unable to submit form.',
 		recaptchaBranding: 'This site is protected by reCAPTCHA.',
 		defaultItemFreeText: 'General Donation Item',
-		generalItemsFallback: 'General Donation Item',
 		defaultItemUnit: 'piece',
 
 		// Success Ticket
@@ -638,7 +635,6 @@ export const PUBLIC_DONATIONS_I18N = {
 		navigateGoogleMaps: 'Navigate with Google Maps',
 		backToHomeBtn: 'Back to Home',
 		backToHome: 'Back to Home',
-		openingMapsToast: 'Opening map navigation to shelter...',
 
 		// Track Search Page
 		trackPageTitle: 'Track Donation Status — Smart Shelter',

@@ -67,6 +67,8 @@ const distributionLogFields = {
 	returned_by: z.string().min(1).optional(),
 	is_override: z.boolean(),
 	override_reason: z.string().trim().min(1).optional(),
+	/** #607 — `allergy` codes the recipient is allergic to that the item contains (overridden). */
+	allergen_conflicts: z.array(z.string().min(1)).optional(),
 	is_expired_warning: z.boolean().optional(),
 	distributed_at: z.string().datetime(),
 	distributed_by: z.string().min(1),
@@ -229,6 +231,13 @@ function validateDistributionLog(
 			message: 'bulk_dropoff requires bulk_pool_id or applied_bulk_entry_ids'
 		});
 	}
+	if (log.allergen_conflicts?.length && !log.is_override) {
+		ctx.addIssue({
+			code: 'custom',
+			path: ['allergen_conflicts'],
+			message: 'Allergen conflicts require an override'
+		});
+	}
 	if (log.is_override && !log.override_reason) {
 		ctx.addIssue({
 			code: 'custom',
@@ -263,6 +272,7 @@ export const distributionLogInputSchema = z
 		is_returnable: z.boolean(),
 		is_override: z.boolean(),
 		override_reason: z.string().trim().min(1).optional(),
+		allergen_conflicts: z.array(z.string().min(1)).optional(),
 		is_expired_warning: z.boolean().optional(),
 		distributed_at: z.string().datetime().optional(),
 		notes: z.string().trim().min(1).optional()

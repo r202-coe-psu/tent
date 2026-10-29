@@ -484,7 +484,7 @@ async def test_evacuee_search_writes_search_audit(
     assert audit.synced_to_couch is False
 
 
-async def test_evacuee_search_returns_shelter_address_and_resolves_zone_name(
+async def test_evacuee_search_returns_shelter_address_and_no_zone_keys(
     client: AsyncClient,
     db_client: AsyncMongoClient,
     settings: Settings,
@@ -540,8 +540,8 @@ async def test_evacuee_search_returns_shelter_address_and_resolves_zone_name(
     result = body["results"][0]
     assert result["shelter_name"] == "ศูนย์โรงเรียนอนุบาลแม่สาย"
     assert result["shelter_address"] == "123 หมู่ 4 ต.แม่สาย อ.แม่สาย จ.เชียงราย"
-    assert result["care_zone"] == "อาคารเรียน 1"
-    assert result["zone_name"] == "อาคารเรียน 1"
+    assert "care_zone" not in result
+    assert "zone_name" not in result
 
 
 async def test_evacuee_search_returns_physical_address_from_location(
@@ -948,3 +948,119 @@ async def test_basic_consent_person_leaves_occupant_search(
     assert after.status_code == 200
     assert after.json()["count"] == 1
     assert [r["name"].split()[0] for r in after.json()["results"]] == ["เห็น"]
+
+
+# ─── CR-183: shelter_status on results and family members, zone keys removed ───────────────
+
+
+async def _seed_household(
+    db_client: AsyncMongoClient,
+    settings: Settings,
+    *,
+    shelter: dict | None,
+    phone: str,
+) -> None:
+    now = datetime.now(UTC)
+    if shelter is not None:
+        await _insert_shelter(
+            db_client,
+            settings,
+            {
+                "_id": "SH009",
+                "shelter_code": "SH009",
+                "name": "ศูนย์ทดสอบ",
+                "capacity": 10,
+                "updated_at": now,
+                **shelter,
+            },
+        )
+    for doc_id, first_name in [("evacuee:p", "พ่อ"), ("evacuee:c", "ลูก")]:
+        await _insert_person(
+            db_client,
+            settings,
+            {
+                "_id": doc_id,
+                "shelter_code": "SH009",
+                "first_name": first_name,
+                "last_name_masked": mask_last_name("ใจดี"),
+                "phone_hash": phone_hash(phone) if doc_id == "evacuee:p" else None,
+                "household_id": "household:09",
+                "care_zone": "Z1",
+                "search_excluded": False,
+                "status": "active",
+                "updated_at": now,
+            },
+        )
+
+
+@pytest.mark.parametrize("shelter_status", ["open", "closed", "full", "standby"])
+async def test_search_reports_shelter_status_on_hit_and_family_member(
+    client: AsyncClient,
+    db_client: AsyncMongoClient,
+    settings: Settings,
+    search_endpoint: tuple[str, dict[str, str]],
+    shelter_status: str,
+):
+    phone = "0811111119"
+    await _seed_household(db_client, settings, shelter={"status": shelter_status}, phone=phone)
+
+    url, headers = search_endpoint
+    response = await client.post(url, json={"q": phone}, headers=headers)
+
+    assert response.status_code == 200, response.text
+    result = response.json()["results"][0]
+    assert result["shelter_status"] == shelter_status
+    assert [m["shelter_status"] for m in result["family_members"]] == [shelter_status]
+
+
+async def test_search_shelter_status_is_null_without_shelter_row(
+    client: AsyncClient,
+    db_client: AsyncMongoClient,
+    settings: Settings,
+    search_endpoint: tuple[str, dict[str, str]],
+):
+    phone = "0811111118"
+    await _seed_household(db_client, settings, shelter=None, phone=phone)
+
+    url, headers = search_endpoint
+    response = await client.post(url, json={"q": phone}, headers=headers)
+
+    assert response.status_code == 200, response.text
+    result = response.json()["results"][0]
+    assert result["shelter_status"] is None
+    assert result["shelter_name"] == "SH009"
+    assert [m["shelter_status"] for m in result["family_members"]] == [None]
+
+
+@pytest.mark.parametrize("shelter_status", ["open", "closed"])
+async def test_search_reports_zone_to_partners_only(
+    client: AsyncClient,
+    db_client: AsyncMongoClient,
+    settings: Settings,
+    search_endpoint: tuple[str, dict[str, str]],
+    shelter_status: str,
+):
+    """CR-183 FR-18 drops the zone from the public search; `/external/v1/occupants` keeps it."""
+    phone = "0811111117"
+    await _seed_household(
+        db_client,
+        settings,
+        shelter={
+            "status": shelter_status,
+            "raw_data": {"zones": [{"code": "Z1", "name": "อาคาร 1"}]},
+        },
+        phone=phone,
+    )
+
+    url, headers = search_endpoint
+    response = await client.post(url, json={"q": phone}, headers=headers)
+
+    assert response.status_code == 200, response.text
+    result = response.json()["results"][0]
+    if url.startswith("/public/"):
+        assert "care_zone" not in result
+        assert "zone_name" not in result
+    else:
+        assert result["care_zone"] == "อาคาร 1"
+        assert result["zone_name"] == "อาคาร 1"
+        assert result["shelter_status"] == shelter_status

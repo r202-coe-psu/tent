@@ -20,7 +20,7 @@
 	import { toast } from 'svelte-sonner';
 	import { onMount } from 'svelte';
 	import {
-		donationPayloadUnit,
+		buildDonationItemsPayload,
 		publicDonationErrorMessage,
 		slotModeForDelivery,
 		useDonationSlots
@@ -213,18 +213,7 @@
 						line_id: donationStore.donorLine || undefined,
 						email: donationStore.donorEmail || undefined
 					},
-					items:
-						donationStore.items.length > 0
-							? donationStore.items.map((it) => ({
-									item_id: it.item_id || undefined,
-									free_text: it.name || t.unspecified,
-									category: it.category || undefined,
-									qty: it.amount || 1,
-									unit: donationPayloadUnit(it, t.defaultItemUnit),
-									condition: it.condition || undefined,
-									note: it.remark || undefined
-								}))
-							: [{ free_text: t.generalItemsFallback, qty: 1, unit: t.defaultItemUnit }],
+					items: buildDonationItemsPayload(donationStore.items, t),
 					logistics: logistics,
 					...(token ? { captchaToken: token } : {})
 				})
