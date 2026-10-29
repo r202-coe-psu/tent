@@ -32,6 +32,7 @@ import {
 	createDistributeEntry,
 	createAdjustEntry,
 	projectStockLotBalances,
+	usableStockByItem,
 	assertLotWriteOffsFit,
 	type DonationCampaign,
 	type CampaignInput,
@@ -713,7 +714,7 @@ export class OperationsRemoteRepository implements OperationsRepository {
 
 			if (qtyGt(requestedQty, availableForClaim)) {
 				throw new InsufficientStockError(
-					`Insufficient stock in lot ${lotRef} for item ${entry.item_id} (requested ${requestedQty}, have ${availableForClaim})`
+					`Insufficient stock in lot ${lotRef} for item ${entry.item_id} (requested ${requestedQty}, have ${qtyGt(availableForClaim, 0) ? availableForClaim : '0'})`
 				);
 			}
 
@@ -876,7 +877,7 @@ export class OperationsRemoteRepository implements OperationsRepository {
 		} else if (qtyLte(entry.qty, 0)) {
 			// No lot named (an older caller): the projection takes it from the item's lots in
 			// consumption order, so the item's total is what it has to fit.
-			const balances = await this.getBalance();
+			const balances = usableStockByItem(await this.listLedger());
 			const currentQty = balances.get(entry.item_id) ?? '0';
 			const requestedQty = qtyAbs(entry.qty);
 
@@ -974,7 +975,7 @@ export class OperationsRemoteRepository implements OperationsRepository {
 				}
 			}
 			if (writeOffs.size > 0) {
-				const balances = await this.getBalance();
+				const balances = usableStockByItem(await this.listLedger());
 				for (const [itemId, total] of writeOffs) {
 					const have = balances.get(itemId) ?? '0';
 					if (!qtyGte(have, total)) {

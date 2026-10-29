@@ -1165,6 +1165,25 @@ export function projectLotsByItem(ledger: readonly StockLedger[]): {
 }
 
 /**
+ * Stock a no-lot write-off can actually draw on, per item: the sum of lots with qty > 0 (#855).
+ * A negative lot counts as 0 — it is never netted against healthy lots, so `A = -3, B = 10`
+ * offers 10, not 7. An item whose history cannot be projected falls back to its plain total.
+ */
+export function usableStockByItem(ledger: readonly StockLedger[]): Map<string, string> {
+	const { lots, brokenItemIds } = projectLotsByItem(ledger);
+	const usable = new Map<string, string>();
+	for (const lot of lots) {
+		if (!qtyGt(lot.qty, 0)) continue;
+		usable.set(lot.item_id, addQty(usable.get(lot.item_id) ?? '0', lot.qty));
+	}
+	if (brokenItemIds.length > 0) {
+		const totals = stockBalance(ledger);
+		for (const id of brokenItemIds) usable.set(id, totals.get(id) ?? '0');
+	}
+	return usable;
+}
+
+/**
  * A write-off that names its lot must fit in that lot (#569): an adjust or a count shortfall
  * carrying `lot_ref` is replayed against that one lot, so checking it against the item's total
  * would let it overdraw the lot and leave the item's history impossible to replay — for good,

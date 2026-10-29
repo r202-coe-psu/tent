@@ -43,6 +43,7 @@ import {
 	isNegativeLot,
 	negativeLots,
 	projectLotsByItem,
+	usableStockByItem,
 	createTransfer,
 	dispatchTransfer,
 	receiveTransfer,
@@ -2435,6 +2436,26 @@ describe('projectStockLotBalances', () => {
 		const a = inbound('A', '5', '2026-02-01T00:00:00Z');
 		const out = { ...legacyOutbound('OUT', '1', '2026-01-01T00:00:00Z'), lot_ref: a.lot_ref };
 		expect(() => projectStockLotBalances([a, out])).toThrow(StockLotIntegrityError);
+	});
+
+	it('usableStockByItem counts a negative lot as 0, never netting it (#855)', () => {
+		const a = inbound('A', '5', '2026-01-01T00:00:00Z');
+		const b = inbound('B', '10', '2026-01-02T00:00:00Z');
+		const out = createDistributeEntry(
+			{
+				note: 'x',
+				item_id: 'item:rice',
+				qty: '8',
+				unit: 'kg',
+				ref_id: 'requisition_ticket:TICKET1',
+				lot_ref: a.lot_ref!,
+				occurred_at: '2026-02-01T00:00:00Z'
+			},
+			ctx,
+			'OUT-OVER'
+		);
+		expect(stockBalance([a, b, out]).get('item:rice')).toBe('7');
+		expect(usableStockByItem([a, b, out]).get('item:rice')).toBe('10');
 	});
 
 	it('projectLotsByItem reports a negative lot as a lot, not as a broken item', () => {
