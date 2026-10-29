@@ -13,6 +13,7 @@
 
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
+import { nextClosedAt } from '../../src/lib/features/shelters/domain/closed-at';
 import { bootstrapAdminSession, couchReq } from './couch';
 import { appBaseUrl, IS_REMOTE } from './e2e-env';
 
@@ -62,8 +63,10 @@ export async function publicShelterStatus(code: string): Promise<string | undefi
 
 /**
  * Remove a shelter an E2E run created through the UI:
- *  1. set it `closed` and wait for the projection (the row the worker keeps in
- *     Mongo after a delete then reads "closed", not "open");
+ *  1. set it `closed` (stamping `closed_at` like the app does, so a run whose
+ *     later steps fail still ages out of public search) and wait for the
+ *     projection (the row the worker keeps in Mongo after a delete then reads
+ *     "closed", not "open");
  *  2. delete the registry master — the worker cascades that to the shelter's
  *     public persons and needs;
  *  3. delete its CouchDB database;
@@ -82,10 +85,17 @@ export async function teardownShelter(code: string): Promise<void> {
 			throw new Error(`Refusing to tear down non-E2E shelter ${code} ("${doc.name}")`);
 		}
 		const path = `/registry/${encodeURIComponent(String(doc._id))}`;
+		const now = new Date().toISOString();
 		const closed = await couchReq('PUT', path, {
 			...doc,
 			operation_status: 'closed',
-			updated_at: new Date().toISOString()
+			closed_at: nextClosedAt(
+				(doc.operation_status as string | undefined) ?? null,
+				'closed',
+				doc.closed_at as string | null | undefined,
+				now
+			),
+			updated_at: now
 		});
 		if (closed.status >= 400) throw new Error(`close ${code} failed (HTTP ${closed.status})`);
 		await waitForProjection(
