@@ -17,6 +17,27 @@ def _parse_datetime(value: Any) -> datetime | None:
         return None
 
 
+def project_point_receipts(receipts: Any) -> list[dict[str, Any]]:
+    """CR-206 §Change — each point receipt as the donor may see it: point, lines, time.
+
+    Never ``received_by``, ``remarks``, the line results or the ledger/audit ids beside
+    them: those are staff's.
+    """
+    if not isinstance(receipts, list):
+        return []
+    return [
+        {
+            "point_id": receipt.get("point_id"),
+            "line_nos": [
+                n for n in receipt.get("line_nos") or [] if isinstance(n, int)
+            ],
+            "received_at": receipt.get("received_at"),
+        }
+        for receipt in receipts
+        if isinstance(receipt, dict)
+    ]
+
+
 def project_donation(
     doc: dict[str, Any], *, shelter_code: str
 ) -> tuple[ProjectionAction, dict[str, Any] | None]:
@@ -40,6 +61,8 @@ def project_donation(
             "review_status": item.get("review_status"),
             "review_reason_code": item.get("review_reason_code"),
             "review_reason": item.get("review_reason"),
+            # CR-206: where the donor takes the line. None = no point, and before schema_v 10.
+            "drop_off_point_id": item.get("drop_off_point_id"),
         }
         for item in items
         if isinstance(item, dict)
@@ -67,6 +90,7 @@ def project_donation(
         # CR-172: the donor-facing reason. Docs before schema_v 6 have neither → None.
         "reject_reason": doc.get("reject_reason"),
         "reject_reason_code": doc.get("reject_reason_code"),
+        "point_receipts": project_point_receipts(doc.get("point_receipts")),
         "updated_at": updated_at,
     }
     return ("upsert", payload)

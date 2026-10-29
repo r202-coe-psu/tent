@@ -20,8 +20,11 @@ import logging
 from datetime import UTC, datetime
 from typing import Any
 
+import httpx
+
 from worker.couch.bootstrap import list_all_shelter_codes
 from worker.couch.client import CouchClient
+from worker.donation_close import close_donation_by_points
 from worker.donation_status import DONATION_OUTSTANDING_STATUSES
 from worker.masking import shelter_db_name
 
@@ -58,10 +61,28 @@ def should_expire(status: Any, expires_at: Any, *, now: datetime) -> bool:
     return deadline < now
 
 
+def lapsed_donation(doc: dict[str, Any], *, now: datetime) -> dict[str, Any]:
+    """The booking as it stands once its TTL has passed (FR-35, CR-206 FR-MP-29).
+
+    A booking some drop-off point already recorded is closed instead — ``received`` or
+    ``rejected`` by what the points recorded, with the rest as shortfall — so goods on the
+    shelf are never hidden under ``expired``. ``closed_by: system`` is the record; no
+    audit is written.
+    """
+    stamp = _iso(now)
+    if not doc.get("point_receipts"):
+        return {**doc, "status": "expired", "updated_at": stamp}
+    closed = close_donation_by_points(
+        doc, closed_by="system", closed_reason="expired", now=stamp
+    )
+    return {**doc, **closed, "updated_at": stamp}
+
+
 async def expire_declared_donations(couch: CouchClient, *, now: datetime) -> int:
     """Sweep every shelter database and expire reservations past their TTL.
 
-    Returns how many documents were flipped.
+    Returns how many documents were flipped — expired, or closed from their point
+    receipts (CR-206 FR-MP-29).
     """
     total = 0
     for code in await list_all_shelter_codes(couch):
@@ -80,9 +101,24 @@ async def expire_declared_donations(couch: CouchClient, *, now: datetime) -> int
 
         for doc in stale:
             try:
+                # Strict: the decision was read off this revision (CR-206 FR-MP-29a). A
+                # point that recorded a receipt since would be overwritten by a replay
+                # onto the newer rev, so a 409 leaves the booking to the next sweep.
                 await couch.put_doc(
-                    database, {**doc, "status": "expired", "updated_at": _iso(now)}
+                    database, lapsed_donation(doc, now=now), retry_conflict=False
                 )
+            except httpx.HTTPStatusError as exc:
+                if exc.response.status_code == 409:
+                    logger.info(
+                        "Donation %s in %s changed while expiring — next sweep",
+                        doc.get("_id"),
+                        database,
+                    )
+                else:
+                    logger.exception(
+                        "Failed to expire donation %s in %s", doc.get("_id"), database
+                    )
+                continue
             except Exception:
                 logger.exception(
                     "Failed to expire donation %s in %s", doc.get("_id"), database
