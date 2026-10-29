@@ -627,6 +627,11 @@ export class OperationsRemoteRepository implements OperationsRepository {
 		const maxRetries = 5;
 		let acquired = false;
 		for (let attempt = 0; attempt <= maxRetries; attempt++) {
+			// Read the reservation doc BEFORE the ledger (#855). A claimer appends its ledger row and
+			// only then releases its claim; reading the ledger first let us miss that row while the
+			// claim was already gone from the doc we read next — its quantity was then deducted
+			// nowhere. This order sees the claim, the row, or both, never neither.
+			const rawRes = await getDoc<{ _id: string }>(this.dbName, resId);
 			const ledger = await this.listLedger();
 			// Lots never cross items: replay only this item's rows so another item's impossible
 			// history cannot block a healthy distribute (same scope as the write-off check).
@@ -654,7 +659,6 @@ export class OperationsRemoteRepository implements OperationsRepository {
 			const physicalBalance = selectedLot.qty;
 
 			let resDoc: StockLotReservation;
-			const rawRes = await getDoc<{ _id: string }>(this.dbName, resId);
 			if (!rawRes) {
 				resDoc = createStockLotReservation(
 					{ lot_ref: lotRef, pending_claims: [] },
