@@ -15,7 +15,7 @@ import {
 	isOnlineRequiredError,
 	openMemberHitSchema,
 	petsLeftBehind,
-	totalPetCount,
+	totalOpenPetCount,
 	type OpenMemberHit,
 	type OpenPetHit
 } from './search';
@@ -172,7 +172,7 @@ describe('petsLeftBehind (#798)', () => {
 	});
 });
 
-describe('totalPetCount', () => {
+describe('totalOpenPetCount', () => {
 	const pet = (id: string, count: number): OpenPetHit => ({
 		pet_id: id,
 		status: 'open',
@@ -181,11 +181,11 @@ describe('totalPetCount', () => {
 	});
 
 	it('sums the count of each row rather than counting rows', () => {
-		expect(totalPetCount([pet('pet:a', 2), pet('pet:b', 3)])).toBe(5);
+		expect(totalOpenPetCount([pet('pet:a', 2), pet('pet:b', 3)])).toBe(5);
 	});
 
 	it('is zero for an empty list', () => {
-		expect(totalPetCount([])).toBe(0);
+		expect(totalOpenPetCount([])).toBe(0);
 	});
 });
 
@@ -235,5 +235,17 @@ describe('claimedPetSummaries', () => {
 
 	it('is empty when no pet was ticked', () => {
 		expect(claimedPetSummaries([])).toEqual([]);
+	});
+
+	it('reads a household PetGroup the same way, so both sources render as one list', () => {
+		expect(
+			claimedPetSummaries([{ species: 'cat', count: 2, notes: 'ส้มโอ', has_cage: true }])
+		).toEqual([{ species: 'cat', count: 2, details: 'ส้มโอ · มีกรง' }]);
+	});
+
+	it('tolerates a household row whose notes are null', () => {
+		expect(claimedPetSummaries([{ species: 'dog', count: 1, notes: null }])[0]).not.toHaveProperty(
+			'details'
+		);
 	});
 });

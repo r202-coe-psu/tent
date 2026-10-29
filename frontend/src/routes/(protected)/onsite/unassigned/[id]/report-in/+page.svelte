@@ -11,6 +11,7 @@
 	import { Badge } from '$lib/components/ui/badge';
 	import * as Card from '$lib/components/ui/card';
 	import { authStore } from '$lib/stores/auth.svelte';
+	import { ValidationError } from '$lib/utils/errors';
 	import { getShelterCode } from '$lib/db/shelter';
 	import { ConsentSummary, initialSearchVisible } from '$lib/features/consent';
 	import {
@@ -35,15 +36,18 @@
 	import {
 		claimedPetSummaries,
 		formatOpenPetLabel,
+		countPetGroups,
 		petsForReportIn,
 		petsLeftBehind,
+		petsOverCapAfterClaim,
 		petsOverCapForConfirm,
-		totalPetCount,
+		totalOpenPetCount,
 		unassignedHouseholdToUnifiedInput,
 		unassignedMemberToUnifiedMember,
 		unassignedPhotoUrl,
 		useClaimUnassignedRegistration,
-		useUnassignedRegistrationReview
+		useUnassignedRegistrationReview,
+		type PetCapCheck
 	} from '$lib/features/unassigned-registration';
 
 	let { data } = $props();
@@ -62,8 +66,7 @@
 		(review?.open_pets ?? []).filter((p) => selectedPetIds.includes(p.pet_id))
 	);
 	const leftBehindPets = $derived(petsLeftBehind(review?.open_pets ?? [], selectedPetIds));
-	const leftBehindCount = $derived(totalPetCount(leftBehindPets));
-	const claimedPets = $derived(claimedPetSummaries(openPets));
+	const leftBehindCount = $derived(totalOpenPetCount(leftBehindPets));
 	const originallyLeftBehind = $derived(petsLeftBehind(review?.open_pets ?? [], data.petIds));
 
 	/** No member ticked at all — pets-only claim (FR-PUF-16), no Report-in step. */
@@ -76,6 +79,13 @@
 		() => Boolean(review?.reserved_household_id)
 	);
 	const existingHousehold = $derived(existingHouseholdQuery.data ?? null);
+	let householdPetsAtClaim = $state<PetGroup[] | null>(null);
+	const householdPetsBeforeClaim = $derived(householdPetsAtClaim ?? existingHousehold?.pets ?? []);
+	const householdPetCountBeforeClaim = $derived(countPetGroups(householdPetsBeforeClaim));
+	const recordedPets = $derived([
+		...claimedPetSummaries(householdPetsBeforeClaim),
+		...claimedPetSummaries(openPets)
+	]);
 
 	const initialHousehold = $derived(review ? unassignedHouseholdToUnifiedInput(review) : null);
 	const initialMembers = $derived(openMembers.map(unassignedMemberToUnifiedMember));
@@ -141,6 +151,23 @@
 		};
 	}
 
+	const PET_CAP_TOAST = 'สัตว์เลี้ยงเกินเพดานของครัวเรือน';
+
+	function petCapError(check: PetCapCheck, advice: string) {
+		return new ValidationError(
+			`สัตว์เลี้ยงของครัวเรือนนี้จะรวมเป็น ${check.total} ตัว เกินเพดาน ${check.cap} ตัวต่อครัวเรือนอยู่ ${check.over} ตัว — ${advice}`
+		);
+	}
+
+	async function petsOnHouseholdBeforeClaim(): Promise<PetGroup[]> {
+		if (householdPetsAtClaim) return householdPetsAtClaim;
+		if (existingHousehold) return existingHousehold.pets ?? [];
+		const householdId = review?.reserved_household_id;
+		if (!householdId) return [];
+		const fresh = await peopleRepository().getHousehold(householdId);
+		return fresh?.pets ?? [];
+	}
+
 	async function handleConfirm(
 		input: UnifiedRegistrationInput,
 		meta?: {
@@ -152,17 +179,20 @@
 		saveError = null;
 		const consent = meta?.consent ?? null;
 		try {
-			const petsCheck = petsOverCapForConfirm(
-				existingHousehold?.pets,
-				totalPetCount(openPets),
-				input.household.pets
-			);
-			if (petsCheck.over > 0) {
-				throw new Error(
-					`สัตว์เลี้ยงของครัวเรือนนี้จะรวมเป็น ${petsCheck.total} ตัว เกินเพดาน ${petsCheck.cap} ตัวต่อครัวเรือนอยู่ ${petsCheck.over} ตัว — ลดสัตว์เลี้ยงที่กรอกเพิ่มในขั้นตอนที่ 3 หรือกลับไปเลือกจากคิวกลางให้น้อยลง`
-				);
-			}
 			if (!claimedHouseholdId) {
+				const petsBefore = await petsOnHouseholdBeforeClaim();
+				const petsCheck = petsOverCapForConfirm(
+					petsBefore,
+					totalOpenPetCount(openPets),
+					input.household.pets
+				);
+				if (petsCheck.over > 0) {
+					throw petCapError(
+						petsCheck,
+						'ลดสัตว์เลี้ยงที่กรอกเพิ่มในขั้นตอนที่ 3 หรือกลับไปเลือกจากคิวกลางให้น้อยลง'
+					);
+				}
+				householdPetsAtClaim = petsBefore;
 				const claimResult = await claimMutation.mutateAsync(claimPayload());
 				claimedHouseholdId = claimResult.household_id;
 			}
@@ -172,15 +202,26 @@
 			// re-reading keeps a retry after a partial write from appending the typed rows twice.
 			if (petsWrittenByClaim === null) {
 				const freshHousehold = await peopleRepository().getHousehold(claimedHouseholdId);
-				petsWrittenByClaim = freshHousehold?.pets ?? [];
+				if (!freshHousehold) {
+					throw new Error(
+						'อ่านข้อมูลครัวเรือนหลังรับเข้าศูนย์ไม่ได้ — กดยืนยันอีกครั้งเพื่อบันทึกการรายงานตัว'
+					);
+				}
+				petsWrittenByClaim = freshHousehold.pets ?? [];
+			}
+
+			const mergedPets = petsForReportIn(petsWrittenByClaim, input.household.pets);
+			const mergedCheck = petsOverCapAfterClaim(mergedPets);
+			if (mergedCheck.over > 0) {
+				throw petCapError(
+					mergedCheck,
+					'ลดสัตว์เลี้ยงที่กรอกเพิ่มในขั้นตอนที่ 3 แล้วกดยืนยันอีกครั้ง'
+				);
 			}
 
 			const result = await submitReportIn.mutateAsync({
 				householdId: claimedHouseholdId,
-				household: {
-					...input.household,
-					pets: petsForReportIn(petsWrittenByClaim, input.household.pets)
-				},
+				household: { ...input.household, pets: mergedPets },
 				members: meta?.allMembers ?? (input.members as UnifiedMemberWithMeta[]),
 				ctx: {
 					shelterCode: data.shelterCode ?? getShelterCode(),
@@ -194,6 +235,13 @@
 			completed = { ...result, consentRef: consent?.decision.ref ?? null };
 			toast.success(`รับเข้าศูนย์สำเร็จ ${result.members.length} คน`);
 		} catch (err) {
+			if (err instanceof ValidationError) {
+				saveError = buildSaveFailureReport(err, {
+					summaryTh: 'ยังยืนยันไม่ได้ — สัตว์เลี้ยงเกินเพดานของครัวเรือน'
+				});
+				toast.error(PET_CAP_TOAST);
+				throw err;
+			}
 			saveError = !claimedHouseholdId
 				? buildSaveFailureReport(err, { summaryTh: 'รับเข้าศูนย์ไม่สำเร็จ' })
 				: buildSaveFailureReport(err, {
@@ -212,13 +260,28 @@
 		saveError = null;
 		isConfirmingPetsOnly = true;
 		try {
+			const petsCheck = petsOverCapForConfirm(
+				await petsOnHouseholdBeforeClaim(),
+				totalOpenPetCount(openPets),
+				[]
+			);
+			if (petsCheck.over > 0) {
+				throw petCapError(petsCheck, 'กลับไปที่คิวทะเบียนแล้วเลือกสัตว์เลี้ยงให้น้อยลง');
+			}
 			const result = await claimMutation.mutateAsync(claimPayload());
 			isNavigatingAfterSave = true;
 			toast.success(`รับเข้าศูนย์ ${result.claimed_pets.length} สัตว์สำเร็จ`);
 			await goto(resolve('/onsite/people'));
 		} catch (err) {
-			saveError = buildSaveFailureReport(err, { summaryTh: 'รับเข้าศูนย์ไม่สำเร็จ' });
-			toast.error('รับเข้าศูนย์ไม่สำเร็จ กรุณาลองใหม่อีกครั้ง');
+			if (err instanceof ValidationError) {
+				saveError = buildSaveFailureReport(err, {
+					summaryTh: 'ยังรับเข้าศูนย์ไม่ได้ — สัตว์เลี้ยงเกินเพดานของครัวเรือน'
+				});
+				toast.error(PET_CAP_TOAST);
+			} else {
+				saveError = buildSaveFailureReport(err, { summaryTh: 'รับเข้าศูนย์ไม่สำเร็จ' });
+				toast.error('รับเข้าศูนย์ไม่สำเร็จ กรุณาลองใหม่อีกครั้ง');
+			}
 		} finally {
 			isConfirmingPetsOnly = false;
 		}
@@ -363,9 +426,9 @@
 					<PawPrint class="size-5 text-primary" />
 					<h2 class="text-base font-bold">สัตว์เลี้ยงที่จะรับเข้าศูนย์</h2>
 				</div>
-				{#if existingHousehold?.pets && existingHousehold.pets.length > 0}
+				{#if householdPetCountBeforeClaim > 0}
 					<p class="mb-3 text-xs text-muted-foreground">
-						ครัวเรือนนี้อยู่ในศูนย์แล้ว ({existingHousehold.pets.length} สัตว์เดิม) — รายการด้านล่างจะถูกเพิ่มเข้าไป
+						ครัวเรือนนี้อยู่ในศูนย์แล้ว ({householdPetCountBeforeClaim} สัตว์เดิม) — รายการด้านล่างจะถูกเพิ่มเข้าไป
 					</p>
 				{/if}
 				<ul class="space-y-2">
@@ -428,7 +491,7 @@
 				mode="report-in"
 				channel="onsite"
 				includeVehiclesAssets={true}
-				{claimedPets}
+				claimedPets={recordedPets}
 				shelterCode={data.shelterCode ?? getShelterCode()}
 				{initialHousehold}
 				{initialMembers}

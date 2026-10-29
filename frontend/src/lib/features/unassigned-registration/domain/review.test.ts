@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
 	countPetGroups,
 	petsForReportIn,
+	petsOverCapAfterClaim,
 	petsOverCapForConfirm,
 	unassignedMemberToUnifiedMember
 } from './review';
@@ -145,5 +146,30 @@ describe('petsOverCapForConfirm (CR-148 cap stays enforced across both sources)'
 
 	it('is empty-safe', () => {
 		expect(petsOverCapForConfirm(null, 0, null)).toEqual({ total: 0, over: 0, cap: 10 });
+	});
+});
+
+describe('petsOverCapAfterClaim (the snapshot is what actually gets written)', () => {
+	it('passes the rows claim wrote plus the rows staff typed when they fit', () => {
+		expect(
+			petsOverCapAfterClaim(
+				petsForReportIn([{ species: 'dog', count: 6 }], [{ species: 'cat', count: 4 }])
+			).over
+		).toBe(0);
+	});
+
+	it('catches a claim that wrote more than the form could predict', () => {
+		const check = petsOverCapAfterClaim(
+			petsForReportIn([{ species: 'dog', count: 9 }], [{ species: 'cat', count: 3 }])
+		);
+
+		expect(check.total).toBe(12);
+		expect(check.over).toBe(2);
+		expect(check.cap).toBe(10);
+	});
+
+	it('is empty-safe', () => {
+		expect(petsOverCapAfterClaim(null)).toEqual({ total: 0, over: 0, cap: 10 });
+		expect(petsOverCapAfterClaim([])).toEqual({ total: 0, over: 0, cap: 10 });
 	});
 });

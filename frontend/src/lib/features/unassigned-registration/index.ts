@@ -5,6 +5,7 @@
 
 export type {
 	ClaimedPetSummary,
+	PetSummarySource,
 	OpenMemberHit,
 	OpenMemberStatus,
 	OpenPetHit,
@@ -20,10 +21,11 @@ export type {
 	UnassignedRegistrationClaimResponse
 } from './domain/claim';
 
-export type { UnassignedRegistrationReview } from './domain/review';
+export type { PetCapCheck, UnassignedRegistrationReview } from './domain/review';
 export {
 	countPetGroups,
 	petsForReportIn,
+	petsOverCapAfterClaim,
 	petsOverCapForConfirm,
 	unassignedHouseholdToUnifiedInput,
 	unassignedMemberToUnifiedMember,
@@ -47,7 +49,7 @@ export {
 	formatOpenPetLabel,
 	isOnlineRequiredError,
 	petsLeftBehind,
-	totalPetCount
+	totalOpenPetCount
 } from './domain/search';
 export {
 	pickReportInEvacueeId,

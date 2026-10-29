@@ -82,6 +82,13 @@ export type PersonIdHit = z.infer<typeof personIdHitSchema>;
 export type OpenMemberHit = z.infer<typeof openMemberHitSchema>;
 export type OpenPetHit = z.infer<typeof openPetHitSchema>;
 
+export type PetSummarySource = {
+	species: OpenPetHit['species'];
+	count: number;
+	notes?: string | null;
+	has_cage?: boolean;
+};
+
 export type ClaimedPetSummary = {
 	species: OpenPetHit['species'];
 	count: number;
@@ -171,11 +178,11 @@ export function petsLeftBehind(
 	return openPets.filter((pet) => !selected.has(pet.pet_id));
 }
 
-export function totalPetCount(pets: readonly OpenPetHit[]): number {
+export function totalOpenPetCount(pets: readonly OpenPetHit[]): number {
 	return pets.reduce((sum, pet) => sum + pet.count, 0);
 }
 
-export function claimedPetSummaries(pets: readonly OpenPetHit[]): ClaimedPetSummary[] {
+export function claimedPetSummaries(pets: readonly PetSummarySource[]): ClaimedPetSummary[] {
 	return pets.map((pet) => {
 		const details = [pet.notes?.trim(), pet.has_cage ? 'มีกรง' : '']
 			.filter((part): part is string => Boolean(part))

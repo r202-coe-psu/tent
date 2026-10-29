@@ -5,7 +5,7 @@
  */
 
 import { z } from 'zod';
-import { PETS_MAX_COUNT } from '$lib/features/people';
+import { PETS_MAX_COUNT } from '$lib/features/people/server';
 import type { PetGroup, UnifiedHouseholdInput, UnifiedMemberWithMeta } from '$lib/features/people';
 import { openMemberHitSchema, openPetHitSchema, type OpenMemberHit } from './search';
 
@@ -95,14 +95,13 @@ export function unassignedMemberToUnifiedMember(member: OpenMemberHit): UnifiedM
 	};
 }
 
-/**
- * Household address block for the form — `pets` starts empty here on purpose.
- * Claim (couch_birth) owns the rows it writes into `household.pets[]`; the review page
- * shows those back read-only (`open_pets`) instead of seeding them into this editable
- * section, so a re-submit can never clobber them. Anything staff type on top is appended
- * at confirm time by {@link petsForReportIn}, never merged into this initial value.
- */
 type FormPetGroups = NonNullable<UnifiedHouseholdInput['pets']>;
+
+export type PetCapCheck = { total: number; over: number; cap: number };
+
+function capCheckFor(total: number): PetCapCheck {
+	return { total, over: Math.max(0, total - PETS_MAX_COUNT), cap: PETS_MAX_COUNT };
+}
 
 export function countPetGroups(
 	pets: FormPetGroups | readonly PetGroup[] | null | undefined
@@ -114,12 +113,18 @@ export function petsOverCapForConfirm(
 	householdPetsBeforeClaim: readonly PetGroup[] | null | undefined,
 	petsClaimWillAdd: number,
 	petsTypedOnForm: FormPetGroups | null | undefined
-): { total: number; over: number; cap: number } {
-	const total =
+): PetCapCheck {
+	return capCheckFor(
 		countPetGroups(householdPetsBeforeClaim) +
-		Math.max(0, petsClaimWillAdd) +
-		countPetGroups(petsTypedOnForm);
-	return { total, over: Math.max(0, total - PETS_MAX_COUNT), cap: PETS_MAX_COUNT };
+			Math.max(0, petsClaimWillAdd) +
+			countPetGroups(petsTypedOnForm)
+	);
+}
+
+export function petsOverCapAfterClaim(
+	petsAboutToBeWritten: FormPetGroups | readonly PetGroup[] | null | undefined
+): PetCapCheck {
+	return capCheckFor(countPetGroups(petsAboutToBeWritten));
 }
 
 export function petsForReportIn(
@@ -129,6 +134,13 @@ export function petsForReportIn(
 	return [...(petsWrittenByClaim ?? []), ...(petsTypedOnForm ?? [])];
 }
 
+/**
+ * Household address block for the form — `pets` starts empty here on purpose.
+ * Claim (couch_birth) owns the rows it writes into `household.pets[]`; the review page
+ * shows those back read-only (`open_pets`) instead of seeding them into this editable
+ * section, so a re-submit can never clobber them. Anything staff type on top is appended
+ * at confirm time by {@link petsForReportIn}, never merged into this initial value.
+ */
 export function unassignedHouseholdToUnifiedInput(
 	review: UnassignedRegistrationReview
 ): UnifiedHouseholdInput {
