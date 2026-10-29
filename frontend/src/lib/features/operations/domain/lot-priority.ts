@@ -12,6 +12,7 @@
  */
 
 import { qtyGt } from '$lib/utils/qty';
+import { expiryInstant } from './expiry-instant';
 import type { StockLotBalance } from './operations';
 
 const MS_DAY = 86_400_000;
@@ -51,7 +52,10 @@ export interface LotScore {
 	score: number;
 	/** `0 < daysLeft <= URGENT_DAYS` from real data (never from HORIZON) (FR-A3a, FR-A4b). */
 	isUrgent: boolean;
-	/** `lot.expiry <= now` (FR-A4), or no expiry and `shelf_life_days` already used up (FR-A4a). */
+	/**
+	 * `now >= expiryInstant(lot.expiry)` (CR-195), or no expiry and `shelf_life_days` already
+	 * used up (FR-A4a).
+	 */
 	isExpired: boolean;
 }
 
@@ -61,8 +65,9 @@ function parseMs(value: string | undefined): number {
 }
 
 /**
- * Whether a lot must not be picked automatically (FR-A4, FR-A4a): `lot.expiry <= now`, or —
- * with no usable expiry — `shelf_life_days` already used up. A lot past only the storage-type
+ * Whether a lot must not be picked automatically (FR-A4, FR-A4a):
+ * `now >= expiryInstant(lot.expiry)` (a bare date lasts through the whole Bangkok day, CR-195),
+ * or — with no usable expiry — `shelf_life_days` already used up. A lot past only the storage-type
  * HORIZON is NOT expired (FR-A4c). Pass `item` to apply the shelf-life rule; without it only
  * `lot.expiry` is checked.
  */
@@ -71,8 +76,8 @@ export function isLotExpired(
 	now: number,
 	item?: LotPriorityItem
 ): boolean {
-	const expiry = parseMs(lot.lot?.expiry);
-	if (!Number.isNaN(expiry)) return expiry <= now;
+	const expiry = expiryInstant(lot.lot?.expiry);
+	if (!Number.isNaN(expiry)) return now >= expiry;
 	if (item === undefined || !lot.received_at) return false;
 	const s = scoreLot({ lot: lot.lot, received_at: lot.received_at }, item, now);
 	return s.daysLeftSource === 'shelf_life' && s.daysLeft <= 0;
@@ -88,7 +93,7 @@ export function scoreLot(
 	const start = Number.isNaN(clock) ? parseMs(lot.received_at) : clock;
 	const ageDays = Number.isNaN(start) ? 0 : (now - start) / MS_DAY;
 
-	const expiry = parseMs(lot.lot?.expiry);
+	const expiry = expiryInstant(lot.lot?.expiry);
 	let daysLeft: number;
 	let daysLeftSource: DaysLeftSource;
 	if (!Number.isNaN(expiry)) {

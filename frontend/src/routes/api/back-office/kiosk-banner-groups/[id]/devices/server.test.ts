@@ -73,6 +73,16 @@ describe('PUT /api/back-office/kiosk-banner-groups/[id]/devices', () => {
 		expect(mockSet).toHaveBeenCalledWith(record('SH001'), ['kiosk-01', 'kiosk-02'], 'sm-a');
 	});
 
+	it('lets pr_staff set devices of a group in their own shelter, 404 for another', async () => {
+		mockSession.mockResolvedValue(SESSIONS.prA);
+		expect((await put({ device_ids: ['kiosk-01'] })).status).toBe(200);
+		expect(mockSet).toHaveBeenCalledWith(record('SH001'), ['kiosk-01'], 'pr-a');
+		mockSet.mockClear();
+		mockGet.mockResolvedValue(record('SH002'));
+		expect((await put({ device_ids: ['kiosk-01'] })).status).toBe(404);
+		expect(mockSet).not.toHaveBeenCalled();
+	});
+
 	it('accepts an empty list (free every device)', async () => {
 		expect((await put({ device_ids: [] })).status).toBe(200);
 		expect(mockSet).toHaveBeenCalledWith(expect.anything(), [], 'sm-a');

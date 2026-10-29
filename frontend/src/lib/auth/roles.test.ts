@@ -11,6 +11,9 @@ import {
 	canManageInShelters,
 	hasCapabilityAnywhere,
 	canManageScanners,
+	canManageBanners,
+	BANNER_MANAGER_CAPABILITIES,
+	DEVICE_VIEWER_CAPABILITIES,
 	SCANNER_MANAGER_CAPABILITIES,
 	canDistributeStock,
 	capabilitiesForShelter,
@@ -29,7 +32,9 @@ import {
 	assignmentsFromRoles,
 	DISTRIBUTION_STAFF,
 	isKioskStaffOnly,
+	kioskConfinement,
 	KIOSK_STAFF,
+	PR_STAFF,
 	SA_GRANTABLE_CAPABILITIES,
 	SHELTER_CAPABILITIES,
 	STAFF_CAPABILITIES,
@@ -468,6 +473,28 @@ describe('canManageScanners', () => {
 	});
 });
 
+describe('canManageBanners', () => {
+	it('allows SA and the shelter_manager, kiosk_staff or pr_staff of that shelter only', () => {
+		expect(BANNER_MANAGER_CAPABILITIES).toEqual(['shelter_manager', 'kiosk_staff', 'pr_staff']);
+		expect(canManageBanners(['system_admin'], 'A')).toBe(true);
+		expect(canManageBanners(['shelter:A', 'A:shelter_manager'], 'A')).toBe(true);
+		expect(canManageBanners(['shelter:A', 'A:kiosk_staff'], 'A')).toBe(true);
+		expect(canManageBanners(['shelter:A', 'A:pr_staff'], 'A')).toBe(true);
+		expect(canManageBanners(['shelter:A', 'A:pr_staff'], 'B')).toBe(false);
+		expect(canManageBanners(['shelter:A', 'A:registration_staff'], 'A')).toBe(false);
+	});
+
+	it('does not let pr_staff manage scanner devices', () => {
+		expect(canManageScanners(['shelter:A', 'A:pr_staff'], 'A')).toBe(false);
+	});
+});
+
+describe('DEVICE_VIEWER_CAPABILITIES', () => {
+	it('lets shelter_manager, kiosk_staff and pr_staff view devices and reveal the staff PIN', () => {
+		expect(DEVICE_VIEWER_CAPABILITIES).toEqual(['shelter_manager', 'kiosk_staff', 'pr_staff']);
+	});
+});
+
 describe('canDistributeStock', () => {
 	it('allows SA and the warehouse_staff or shelter_manager of that shelter only (#837)', () => {
 		expect(canDistributeStock(['system_admin'], 'A')).toBe(true);
@@ -494,6 +521,62 @@ describe('kiosk_staff capability', () => {
 		expect(assignmentsFromRoles(roles)).toEqual([
 			{ shelter_code: 'SH001', capabilities: [KIOSK_STAFF] }
 		]);
+	});
+});
+
+describe('pr_staff capability', () => {
+	it('is a grantable staff capability with a Thai label', () => {
+		expect(PR_STAFF).toBe('pr_staff');
+		expect(STAFF_CAPABILITIES).toContain(PR_STAFF);
+		expect(SHELTER_CAPABILITIES).toContain(PR_STAFF);
+		expect(SA_GRANTABLE_CAPABILITIES).toContain(PR_STAFF);
+		expect(roleDisplayLabel('SH001:pr_staff')).toContain('เจ้าหน้าที่ประชาสัมพันธ์');
+	});
+
+	it('round-trips through compound shelter assignments', () => {
+		const roles = rolesFromAssignments([{ shelter_code: 'SH001', capabilities: [PR_STAFF] }]);
+		expect(roles).toEqual(['shelter:SH001', 'SH001:pr_staff']);
+		expect(assignmentsFromRoles(roles)).toEqual([
+			{ shelter_code: 'SH001', capabilities: [PR_STAFF] }
+		]);
+	});
+});
+
+describe('kioskConfinement', () => {
+	it("is 'banners' when pr_staff is the only capability", () => {
+		expect(kioskConfinement(['shelter:A', 'A:pr_staff'], 'A')).toBe('banners');
+		expect(kioskConfinement(['shelter:A', 'A:pr_staff'], null)).toBe('banners');
+	});
+
+	it("is 'devices' when kiosk_staff is the only capability", () => {
+		expect(kioskConfinement(['shelter:A', 'A:kiosk_staff'], 'A')).toBe('devices');
+	});
+
+	it("is 'devices' when the user holds kiosk_staff and pr_staff", () => {
+		expect(kioskConfinement(['shelter:A', 'A:kiosk_staff', 'A:pr_staff'], 'A')).toBe('devices');
+	});
+
+	it('is null once the user holds another capability alongside pr_staff', () => {
+		expect(kioskConfinement(['shelter:A', 'A:pr_staff', 'A:registration_staff'], 'A')).toBeNull();
+		expect(kioskConfinement(['shelter:A', 'A:pr_staff', 'A:shelter_manager'], 'A')).toBeNull();
+	});
+
+	it('scopes to the selected shelter', () => {
+		const roles = ['shelter:A', 'shelter:B', 'A:pr_staff', 'B:registration_staff'];
+		expect(kioskConfinement(roles, 'A')).toBe('banners');
+		expect(kioskConfinement(roles, 'B')).toBeNull();
+		expect(kioskConfinement(roles, null)).toBeNull();
+	});
+
+	it('is null for SA and for users without capabilities', () => {
+		expect(kioskConfinement(['system_admin'], 'A')).toBeNull();
+		expect(kioskConfinement(['shelter:A'], 'A')).toBeNull();
+		expect(kioskConfinement([], null)).toBeNull();
+	});
+
+	it('treats pr_staff as confined for isKioskStaffOnly too', () => {
+		expect(isKioskStaffOnly(['shelter:A', 'A:pr_staff'], 'A')).toBe(true);
+		expect(isKioskStaffOnly(['shelter:A', 'A:pr_staff', 'A:registration_staff'], 'A')).toBe(false);
 	});
 });
 

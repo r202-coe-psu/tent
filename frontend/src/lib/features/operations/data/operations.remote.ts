@@ -1,4 +1,4 @@
-import { bulkDocs, bulkDocsDetailed, getDoc, putDocStrict } from '$lib/db/couch-db';
+import { allDocsByIds, bulkDocs, bulkDocsDetailed, getDoc, putDocStrict } from '$lib/db/couch-db';
 import { createRemoteRepository, type Repository } from '$lib/db/repository';
 import { getShelterCode, getShelterDb } from '$lib/db/shelter';
 import { now, touch, type AuthorContext } from '$lib/db/model';
@@ -21,6 +21,7 @@ import {
 	isDonationSlot,
 	isStockTransfer,
 	TransferForbiddenError,
+	TRANSFER_IDS_PER_REQUEST,
 	isTransferDestination,
 	stockBalance,
 	createReceiveEntry,
@@ -70,6 +71,7 @@ import {
 	type CycleCountSubmission
 } from '../domain/cycle-count';
 import type { OperationsRepository } from './operations.repository';
+import { isLedgerRefDoc, type LedgerRefDoc } from '../domain/ledger-ref';
 import { supplyRepository, type SupplyItem } from '$lib/features/supply';
 import {
 	isItemMaster,
@@ -188,6 +190,31 @@ export class OperationsRemoteRepository implements OperationsRepository {
 	async listLedgerByItem(itemId: string): Promise<StockLedger[]> {
 		const ledger = await this.listLedger();
 		return ledger.filter((entry) => entry.item_id === itemId);
+	}
+
+	async listLedgerRefDocs(refIds: readonly string[]): Promise<LedgerRefDoc[]> {
+		// `stock_transfer` lives in `central_ops`, not this shelter's DB (see the transfer methods
+		// below), so those ids come from the transfer BFF — by id, since a ref can point at a
+		// transfer older than any page of the list. An account it refuses keeps the short ref.
+		const transferIds = refIds.filter((id) => id.startsWith('stock_transfer:'));
+		const shelterIds = refIds.filter((id) => !id.startsWith('stock_transfer:'));
+		const [shelterDocs, transfers] = await Promise.all([
+			allDocsByIds(this.dbName, shelterIds, isLedgerRefDoc),
+			this.listTransfersByIds(transferIds).catch((e: unknown) => {
+				if (e instanceof TransferForbiddenError) return [];
+				throw e;
+			})
+		]);
+		return [...shelterDocs, ...transfers];
+	}
+
+	private async listTransfersByIds(ids: readonly string[]): Promise<StockTransfer[]> {
+		const batches: string[][] = [];
+		for (let i = 0; i < ids.length; i += TRANSFER_IDS_PER_REQUEST) {
+			batches.push(ids.slice(i, i + TRANSFER_IDS_PER_REQUEST));
+		}
+		const lists = await Promise.all(batches.map((batch) => this.listTransfers({ ids: batch })));
+		return lists.flat();
 	}
 
 	async getBalance(): Promise<Map<string, string>> {
@@ -601,10 +628,21 @@ export class OperationsRemoteRepository implements OperationsRepository {
 		let acquired = false;
 		for (let attempt = 0; attempt <= maxRetries; attempt++) {
 			const ledger = await this.listLedger();
-			const lots = projectStockLotBalances(ledger);
+			// Lots never cross items: replay only this item's rows so another item's impossible
+			// history cannot block a healthy distribute (same scope as the write-off check).
+			const lots = projectStockLotBalances(ledger.filter((row) => row.item_id === entry.item_id));
 			const selectedLot = lots.find((lot) => lot.lot_ref === lotRef);
 
 			if (!selectedLot) {
+				// Not among this item's lots: either another item's lot or no such lot at all.
+				const belongsToOtherItem = ledger.some(
+					(row) => row.item_id !== entry.item_id && (row.lot_ref ?? row._id) === lotRef
+				);
+				if (belongsToOtherItem) {
+					throw new Error(
+						`Selected stock lot ${lotRef} does not match item ${entry.item_id} and unit ${entry.unit}`
+					);
+				}
 				throw new Error(`Selected stock lot ${lotRef} is not available for item ${entry.item_id}`);
 			}
 			if (selectedLot.item_id !== entry.item_id || selectedLot.unit !== entry.unit) {
@@ -1178,6 +1216,7 @@ export class OperationsRemoteRepository implements OperationsRepository {
 	async listTransfers(filter?: TransferFilter): Promise<StockTransfer[]> {
 		const qs = new URLSearchParams({ shelter_code: getShelterCode() });
 		if (filter?.status) qs.append('status', filter.status);
+		for (const id of filter?.ids ?? []) qs.append('id', id);
 		const res = await fetch(`/api/back-office/transfer?${qs}`, {
 			credentials: 'include',
 			headers: { Accept: 'application/json' }

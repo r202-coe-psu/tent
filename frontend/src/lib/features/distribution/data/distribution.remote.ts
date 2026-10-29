@@ -257,13 +257,18 @@ export class DistributionRemoteRepository implements DistributionRepository {
 		}
 	}
 
-	private async loadPhysicalLots(): Promise<StockLotBalance[]> {
+	/**
+	 * Physical lot balances of the given items only. Lots never cross items, so replaying just
+	 * the items a request touches keeps another item's impossible history from blocking it.
+	 */
+	private async loadPhysicalLots(itemIds: Iterable<string>): Promise<StockLotBalance[]> {
+		const wanted = new Set(itemIds);
 		const ledgers = await allDocsByType<StockLedger>(this.dbName, 'stock_ledger', isStockLedger);
-		return projectStockLotBalances(ledgers);
+		return projectStockLotBalances(ledgers.filter((row) => wanted.has(row.item_id)));
 	}
 
-	private async loadPhysicalLotSnapshot(): Promise<PhysicalLotSnapshot> {
-		return { lots: await this.loadPhysicalLots() };
+	private async loadPhysicalLotSnapshot(itemIds: Iterable<string>): Promise<PhysicalLotSnapshot> {
+		return { lots: await this.loadPhysicalLots(itemIds) };
 	}
 
 	private async assertPhysicalLot(
@@ -274,7 +279,7 @@ export class DistributionRemoteRepository implements DistributionRepository {
 		lots?: readonly StockLotBalance[],
 		sourceCache?: Map<string, StockLedger>
 	): Promise<StockLotBalance> {
-		const balances = lots ?? (await this.loadPhysicalLots());
+		const balances = lots ?? (await this.loadPhysicalLots([itemId]));
 		const physicalLot = balances.find((lot) => lot.lot_ref === lotRef);
 		if (!physicalLot) throw new ValidationError(`Physical lot ${lotRef} does not exist`);
 		if (physicalLot.item_id !== itemId) {
@@ -353,7 +358,9 @@ export class DistributionRemoteRepository implements DistributionRepository {
 		if (!rawAllocations.length) {
 			throw new ValidationError('Approval must contain at least one positive allocation');
 		}
-		const lots = await this.loadPhysicalLots();
+		const lots = await this.loadPhysicalLots(
+			rawAllocations.map((allocation) => allocation.item_id)
+		);
 		const seenLotKeys = new Set<string>();
 		const itemTotals = new Map<string, string>();
 		const normalized = rawAllocations.map((allocation) => ({
@@ -438,7 +445,9 @@ export class DistributionRemoteRepository implements DistributionRepository {
 		if (JSON.stringify(ordered) !== JSON.stringify(persisted.allocations)) {
 			throw new IntegrityError(`Persisted batch ${persisted._id} allocations are not canonical`);
 		}
-		const lots = physicalLotSnapshot?.lots ?? (await this.loadPhysicalLots());
+		const lots =
+			physicalLotSnapshot?.lots ??
+			(await this.loadPhysicalLots(persisted.allocations.map((allocation) => allocation.item_id)));
 		const totals = new Map<string, string>();
 		for (let index = 0; index < persisted.allocations.length; index++) {
 			const allocation = persisted.allocations[index];
@@ -844,7 +853,9 @@ export class DistributionRemoteRepository implements DistributionRepository {
 							'stock_ledger',
 							isStockLedger
 						);
-						const lotBalances = projectStockLotBalances(allLedgers);
+						const lotBalances = projectStockLotBalances(
+							allLedgers.filter((row) => row.item_id === lotAllocation.item_id)
+						);
 						const physicalBalance = lotBalances.find((l) => l.lot_ref === lotRef)?.qty ?? '0';
 
 						let resDoc: StockLotReservation;
@@ -1025,7 +1036,9 @@ export class DistributionRemoteRepository implements DistributionRepository {
 		// The reservation claim checks intentionally read a fresh projection per lot.
 		// Once this approval's outbound ledgers are written, later batch status writes
 		// cannot mutate stock truth, so the post-write identity snapshot is reusable.
-		const postWriteSnapshot = await this.loadPhysicalLotSnapshot();
+		const postWriteSnapshot = await this.loadPhysicalLotSnapshot(
+			canonicalAllocations.map((allocation) => allocation.item_id)
+		);
 
 		// 9. CAS transition batch: activating -> active
 		if (batchDoc.status === 'activating') {

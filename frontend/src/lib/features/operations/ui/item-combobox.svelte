@@ -275,7 +275,7 @@
 			}}
 			onkeydown={handleInputKeydown}
 			class={cn(
-				'flex min-h-11 w-full rounded-md border border-input bg-background px-3 py-2 pr-36 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-none disabled:cursor-not-allowed disabled:bg-muted disabled:font-bold disabled:text-muted-foreground disabled:opacity-100',
+				'flex min-h-11 w-full rounded-md border border-input bg-white px-3 py-2 pr-36 text-sm shadow-xs ring-offset-background placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-none disabled:cursor-not-allowed disabled:bg-muted disabled:font-bold disabled:text-muted-foreground disabled:opacity-100',
 				className
 			)}
 		/>
