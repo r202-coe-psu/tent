@@ -29,6 +29,15 @@ export type DonationTrackItem = {
 	/** Per-line review (CR-174 FR-17) — absent on bookings before schema_v 7. */
 	review_status?: 'approved' | 'pending' | 'rejected' | null;
 	review_reason?: string | null;
+	/** Where the donor takes this line (CR-206 FR-MP-1) — `null` = no point. */
+	drop_off_point_id?: string | null;
+};
+
+/** What a point recorded, as the donor may see it (CR-206 §Change) — no staff or stock ids. */
+export type DonationTrackPointReceipt = {
+	point_id: string | null;
+	line_nos: number[];
+	received_at: string | null;
 };
 
 export type DonationTrackLogistics = {
@@ -83,6 +92,8 @@ export type DonationTrackView = {
 	expires_at: string | null;
 	/** Donor edits so far (CR-080) — the page shows the count, not the entries. */
 	revisions: Array<Record<string, unknown>>;
+	/** Receipts at drop-off points (CR-206 FR-MP-5) — `[]` until a point records one. */
+	point_receipts: DonationTrackPointReceipt[];
 };
 
 /** One booking of a phone number, as `lookup-by-phone` lists it (CR-173 FR-4). */
@@ -257,7 +268,11 @@ export function toDonationTrackView(raw: Record<string, unknown>): DonationTrack
 					row.review_status === 'rejected'
 						? row.review_status
 						: null,
-				review_reason: typeof row.review_reason === 'string' ? row.review_reason : null
+				review_reason: typeof row.review_reason === 'string' ? row.review_reason : null,
+				drop_off_point_id:
+					typeof row.drop_off_point_id === 'string' && row.drop_off_point_id
+						? row.drop_off_point_id
+						: null
 			};
 		}),
 		logistics:
@@ -272,8 +287,37 @@ export function toDonationTrackView(raw: Record<string, unknown>): DonationTrack
 			typeof raw.reject_reason === 'string' && raw.reject_reason.trim() ? raw.reject_reason : null,
 		updated_at: raw.updated_at != null ? String(raw.updated_at) : null,
 		expires_at: raw.expires_at != null ? String(raw.expires_at) : null,
-		revisions: Array.isArray(raw.revisions) ? (raw.revisions as Array<Record<string, unknown>>) : []
+		revisions: Array.isArray(raw.revisions)
+			? (raw.revisions as Array<Record<string, unknown>>)
+			: [],
+		point_receipts: toTrackPointReceipts(raw.point_receipts)
 	};
+}
+
+function toTrackPointReceipts(raw: unknown): DonationTrackPointReceipt[] {
+	if (!Array.isArray(raw)) return [];
+	return raw.flatMap((entry) => {
+		if (!entry || typeof entry !== 'object') return [];
+		const row = entry as Record<string, unknown>;
+		const lineNos = Array.isArray(row.line_nos)
+			? row.line_nos.filter((n): n is number => Number.isInteger(n))
+			: [];
+		return [
+			{
+				point_id: typeof row.point_id === 'string' && row.point_id ? row.point_id : null,
+				line_nos: lineNos,
+				received_at: typeof row.received_at === 'string' ? row.received_at : null
+			}
+		];
+	});
+}
+
+/**
+ * The donor may no longer cancel or edit once a point recorded a receipt (CR-206 FR-MP-17):
+ * the BFF answers 409 GOODS_IN_STOCK, so the page says so before the donor tries.
+ */
+export function isStartedAtPoint(view: Pick<DonationTrackView, 'point_receipts'>): boolean {
+	return view.point_receipts.length > 0;
 }
 
 /**

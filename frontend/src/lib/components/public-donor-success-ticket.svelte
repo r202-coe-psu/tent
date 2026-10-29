@@ -15,6 +15,8 @@
 	import { formatUnit, useUnitsOfMeasure } from '$lib/features/catalog';
 	import {
 		dropOffDirectionsUrl,
+		DropOffGroups,
+		groupDropOffDestinations,
 		needsDropOffDestination,
 		resolveDropOffPoint
 	} from '$lib/features/donations';
@@ -39,6 +41,23 @@
 	);
 	const dropOffPoint = $derived(shelterQuery.data ? resolveDropOffPoint(shelterQuery.data) : null);
 	const directionsHref = $derived(dropOffPoint ? dropOffDirectionsUrl(dropOffPoint) : null);
+	// CR-206 FR-MP-13 — a booking split across drop-off points shows one card per point, each
+	// with its own directions; `null` keeps the one shelter destination as before.
+	const pointGroups = $derived(
+		shelterQuery.data
+			? groupDropOffDestinations(
+					donationStore.items.map((item) => ({ drop_off_point_id: item.dropOffPointId ?? null })),
+					shelterQuery.data,
+					{ anyPointName: t.anyPointGroupTitle }
+				)
+			: null
+	);
+	const lineNames = $derived(
+		donationStore.items.map(
+			(item) =>
+				`${item.name || t.unspecified} — ${item.amount} ${formatUnit(item.unit, units, langState.current)}`
+		)
+	);
 
 	let courierTracking = $state('');
 	let savingCourier = $state(false);
@@ -196,7 +215,9 @@
 						donationStore.shelterCode ||
 						t.centralShelter}
 				</div>
-				{#if dropOffPoint?.address}
+				{#if pointGroups}
+					<DropOffGroups groups={pointGroups} {lineNames} />
+				{:else if dropOffPoint?.address}
 					<div class="mt-0.5 text-xs font-medium text-slate-500">{dropOffPoint.address}</div>
 				{/if}
 			</div>
@@ -374,7 +395,7 @@
 			</a>
 		{/if}
 
-		{#if directionsHref}
+		{#if directionsHref && !pointGroups}
 			<a
 				href={directionsHref}
 				target="_blank"

@@ -12,8 +12,8 @@ import {
 	type DonationTrackView
 } from './tracking';
 
-/** Where one line goes (CR-206 FR-MP-1). Absent until #813 splits bookings across points. */
-export type BoxLabelSourceItem = DonationTrackItem & { drop_off_point_id?: string | null };
+/** One line and the point it goes to (CR-206 FR-MP-1, carried on {@link DonationTrackItem}). */
+export type BoxLabelSourceItem = DonationTrackItem;
 
 export type BoxLabelSource = Omit<DonationTrackView, 'items'> & { items: BoxLabelSourceItem[] };
 

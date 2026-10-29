@@ -25,6 +25,8 @@
  * `src/lib/server/**` without an eslint-disable.
  */
 
+export { listDonationPoints } from './domain/storage-points';
+
 export {
 	migrateShelterV2ToCurrent,
 	SHELTER_MASTER_SCHEMA_V,

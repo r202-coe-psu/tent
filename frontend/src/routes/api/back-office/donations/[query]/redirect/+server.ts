@@ -72,7 +72,7 @@ export const POST: RequestHandler = async ({ params, request }) => {
 
 		// Goods keyed into stock by an unfinished receipt are on this shelter's shelf: the
 		// destination would count the same delivery again. Same rule as reject.
-		if (await hasKeyedDonationStock(dbName, donation._id)) {
+		if (await hasKeyedDonationStock(dbName, donation)) {
 			return json(
 				{
 					success: false,
@@ -158,7 +158,9 @@ export const POST: RequestHandler = async ({ params, request }) => {
 					unit: it.unit,
 					...(it.category ? { category: it.category } : {}),
 					...(it.condition ? { condition: it.condition } : {}),
-					...(it.note ? { note: it.note } : {})
+					...(it.note ? { note: it.note } : {}),
+					// The origin's drop-off points mean nothing at the destination (CR-206 FR-MP-30).
+					drop_off_point_id: null
 				})),
 				note: parsed.data.note ?? null
 			},

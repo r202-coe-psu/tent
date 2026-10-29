@@ -43,6 +43,17 @@ export {
 	reviewDonationInputSchema
 } from './domain/item-review';
 export type { LineReviewResult } from './domain/item-review';
+
+// Domain — receiving point by point (CR-206)
+export {
+	allLinesRecorded,
+	closeDonationByPoints,
+	currentLinePoint,
+	hasPointReceipts,
+	isReceivedByPoint,
+	recordedLineNos,
+	type DonationCloseResult
+} from './domain/point-receipts';
 export {
 	DONATION_PHOTO_MAX_UPLOAD_BYTES,
 	donationPhotoIdsSchema,

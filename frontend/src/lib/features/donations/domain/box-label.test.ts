@@ -9,6 +9,7 @@ import {
 } from './box-label';
 import { resolveDropOffPoint, type DropOffPoint } from './drop-off';
 import { toDonationTrackView } from './tracking';
+import { lineDestinationResolver, withCurrentLinePoints } from './line-points';
 
 const SHELTER = {
 	code: 'SH001',
@@ -179,6 +180,48 @@ describe('buildBoxLabels', () => {
 			{ index: 1, total: 2 },
 			{ index: 2, total: 2 }
 		]);
+	});
+});
+
+// CR-206 FR-MP-14, FR-MP-16 — how the label page feeds a split booking in.
+describe('box labels of a booking split across drop-off points', () => {
+	const ANY = 'ส่งที่จุดรับบริจาคไหนของศูนย์ก็ได้';
+	const shelter = {
+		...SHELTER,
+		donation_points: [
+			{ id: 'point-gym', name: 'โรงยิม', geo: { lat: 7.009, lng: 100.4752 } },
+			{ id: 'point-med', name: 'ห้องพยาบาล', geo: { lat: 7.01, lng: 100.476 } }
+		]
+	};
+	const line = (name: string, point: string | null): BoxLabelSourceItem => ({
+		item_id: null,
+		item_name: name,
+		qty: 1,
+		unit: 'kg',
+		line_key: null,
+		drop_off_point_id: point
+	});
+
+	it('prints one label per point, and one "any point" label for every point that is gone', () => {
+		const donation = source({}, [
+			line('น้ำดื่ม', 'point-gym'),
+			line('ยา', 'point-med'),
+			line('ผ้าห่ม', 'point-gone'),
+			line('สบู่', 'point-also-gone')
+		]);
+
+		const labels = buildBoxLabels(
+			{ ...donation, items: withCurrentLinePoints(donation.items, shelter) },
+			lineDestinationResolver(shelter, ANY)
+		);
+
+		expect(labels.map((l) => [l.destination.name, l.lines.map((x) => x.name)])).toEqual([
+			['โรงยิม', ['น้ำดื่ม']],
+			['ห้องพยาบาล', ['ยา']],
+			[ANY, ['ผ้าห่ม', 'สบู่']]
+		]);
+		expect(labels[2].destination.address).toBe(SHELTER.address);
+		expect(labels.map((l) => l.sheet.total)).toEqual([3, 3, 3]);
 	});
 });
 

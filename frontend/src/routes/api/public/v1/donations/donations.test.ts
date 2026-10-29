@@ -1126,4 +1126,84 @@ describe('POST /api/public/v1/donations', () => {
 			expect(fetch).not.toHaveBeenCalled();
 		});
 	});
+
+	describe('drop-off point per line (CR-206)', () => {
+		const LINES = [
+			{ free_text: 'น้ำดื่ม', qty: 24, unit: 'bottle', drop_off_point_id: 'point-gym' },
+			{ free_text: 'ยาพารา', qty: 10, unit: 'pack', drop_off_point_id: 'point-med' }
+		];
+
+		async function book(logistics: Record<string, unknown>, items: unknown = LINES) {
+			// Nothing booked, no campaigns — the booking only has to reach FastAPI.
+			vi.mocked(adminRaw).mockResolvedValue({ status: 200, data: { rows: [] } });
+			const response = await POST({
+				request: { json: () => Promise.resolve({ ...validPayload, items, logistics }) },
+				getClientAddress: () => '127.0.0.1'
+			} as unknown as PostEvent);
+			return { status: response.status, body: await response.json() };
+		}
+
+		const sentItems = () => {
+			const [, init] = vi.mocked(fetch).mock.calls[0]!;
+			return JSON.parse(String((init as RequestInit).body)).items as Array<Record<string, unknown>>;
+		};
+
+		it('forwards the point of each line of a self drop-off (FR-MP-1, AC-1)', async () => {
+			mockFastapiCreate();
+			const res = await book({ delivery_method: 'self_dropoff', vehicle: 'car' });
+
+			expect(res.status).toBe(200);
+			expect(sentItems().map((item) => item.drop_off_point_id)).toEqual(['point-gym', 'point-med']);
+		});
+
+		it('sends null for a line with no point', async () => {
+			mockFastapiCreate();
+			await book({ delivery_method: 'self_dropoff', vehicle: 'car' }, [
+				{ free_text: 'น้ำดื่ม', qty: 24, unit: 'bottle' }
+			]);
+
+			expect(sentItems()[0].drop_off_point_id).toBeNull();
+		});
+
+		it('clears every point of a parcel whatever the client sent (FR-MP-4, AC-4)', async () => {
+			mockFastapiCreate();
+			const res = await book({ delivery_method: 'parcel' });
+
+			expect(res.status).toBe(200);
+			expect(sentItems().map((item) => item.drop_off_point_id)).toEqual([null, null]);
+		});
+
+		it('passes FastAPI UNKNOWN_DROP_OFF_POINT through (FR-MP-2, AC-2)', async () => {
+			vi.stubGlobal(
+				'fetch',
+				vi.fn().mockResolvedValue({
+					ok: false,
+					status: 400,
+					json: async () => ({
+						errors: [
+							{
+								success: false,
+								error: 'UNKNOWN_DROP_OFF_POINT',
+								drop_off_point_id: 'point-gym'
+							}
+						]
+					})
+				})
+			);
+			const res = await book({ delivery_method: 'self_dropoff', vehicle: 'car' });
+
+			expect(res.status).toBe(400);
+			expect(res.body.error).toBe('UNKNOWN_DROP_OFF_POINT');
+		});
+
+		it('refuses a blank point id with 422 before FastAPI', async () => {
+			mockFastapiCreate();
+			const res = await book({ delivery_method: 'self_dropoff', vehicle: 'car' }, [
+				{ free_text: 'น้ำดื่ม', qty: 24, unit: 'bottle', drop_off_point_id: '  ' }
+			]);
+
+			expect(res.status).toBe(422);
+			expect(fetch).not.toHaveBeenCalled();
+		});
+	});
 });

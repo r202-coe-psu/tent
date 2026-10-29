@@ -120,7 +120,7 @@ export const POST: RequestHandler = async ({ params, request }) => {
 		// Refusing every line rejects the booking — the same guard as the reject route: a
 		// `pending_review` receipt can key rows and fail to close, and rejecting it then
 		// hands the quota back with the goods on the shelf.
-		if (outcome.status === 'rejected' && (await hasKeyedDonationStock(dbName, donation._id))) {
+		if (outcome.status === 'rejected' && (await hasKeyedDonationStock(dbName, donation))) {
 			return json(
 				{
 					success: false,

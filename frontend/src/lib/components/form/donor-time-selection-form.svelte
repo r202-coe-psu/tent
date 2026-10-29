@@ -17,13 +17,17 @@
 	import { today, type DateValue } from '@internationalized/date';
 	import { toast } from 'svelte-sonner';
 	import {
+		bookableDropOffPoints,
 		buildDonationItemsPayload,
+		defaultDropOffPointId,
+		DropOffPointsSection,
+		lineDropOffPointId,
 		publicDonationErrorMessage,
 		slotModeForDelivery,
 		useDonationSlots
 	} from '$lib/features/donations';
 	import { formatUnit, useUnitsOfMeasure } from '$lib/features/catalog';
-	import { DropOffShelterMap } from '$lib/features/public-portal';
+	import { DropOffShelterMap, usePublicShelter } from '$lib/features/public-portal';
 	import { getDonationStore } from '../../../routes/(public)/donations/donation.svelte';
 	import { langState } from '$lib/states/i18n.svelte';
 	import { getTranslation } from '$lib/utils/i18n';
@@ -69,6 +73,38 @@
 	// "this shelter is not collecting". Each of those states gets its own branch below.
 	const timeSlots = $derived(slotsQuery.isSuccess ? slotsQuery.data : []);
 	const hasShelter = $derived(Boolean(donationStore.shelterCode));
+
+	// CR-206 — drop-off point per line. The points come from the shelter's own detail, the
+	// same request the map makes (FR-DP-18); only a self drop-off picks one (FR-MP-11).
+	const shelterQuery = usePublicShelter(() => donationStore.shelterCode || null);
+	const bookablePoints = $derived(
+		bookableDropOffPoints(shelterQuery.data, donationStore.deliveryMethod)
+	);
+	const defaultPointId = $derived(
+		defaultDropOffPointId(bookablePoints, donationStore.tappedPointId)
+	);
+	// Unpicked lines follow the default; a pick the shelter does not offer (another shelter's)
+	// falls back to it as well, so changing the shelter clears every pick (FR-MP-12).
+	const pointLines = $derived(
+		donationStore.items.map((item) => ({
+			key: item.id,
+			name: item.name || t.unspecified,
+			pointId: lineDropOffPointId(item.dropOffPointId, bookablePoints, defaultPointId)
+		}))
+	);
+	// Until the shelter's points load, a self drop-off cannot tell which points to send.
+	const pointsPending = $derived(
+		donationStore.deliveryMethod === 'self_dropoff' && hasShelter && shelterQuery.isPending
+	);
+
+	function pickLinePoint(key: string, pointId: string) {
+		const item = donationStore.items.find((line) => line.id === key);
+		if (item) item.dropOffPointId = pointId;
+	}
+
+	function pickAllLinesPoint(pointId: string) {
+		for (const item of donationStore.items) item.dropOffPointId = pointId;
+	}
 
 	// A window the donor picked earlier can fill or close before they submit — drop the
 	// selection instead of letting them send a booking the service will reject.
@@ -172,6 +208,12 @@
 		let logistics: Record<string, unknown> = {
 			delivery_method: donationStore.deliveryMethod
 		};
+
+		// The point each line is booked to — kept on the line so the ticket groups by it.
+		for (const [index, line] of pointLines.entries()) {
+			const item = donationStore.items[index];
+			if (item) item.dropOffPointId = line.pointId;
+		}
 
 		if (donationStore.deliveryMethod === 'self_dropoff') {
 			logistics.vehicle = donationStore.vehicleType;
@@ -417,6 +459,7 @@
 					<DropOffShelterMap
 						shelterCode={donationStore.shelterCode}
 						shelterName={donationStore.selectedShelterName}
+						onFocusPoint={(pointId) => (donationStore.tappedPointId = pointId)}
 					/>
 				{:else}
 					<div class="flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-4">
@@ -432,6 +475,28 @@
 					</div>
 				{/if}
 			</div>
+
+			<!-- 2.1 จุดส่งของแต่ละรายการ (CR-206 FR-MP-8 – FR-MP-11) -->
+			{#if hasShelter && donationStore.deliveryMethod === 'self_dropoff'}
+				{#if pointsPending}
+					<p
+						role="status"
+						class="flex items-center gap-2 text-sm font-bold text-slate-600"
+						data-testid="drop-off-points-loading"
+					>
+						<LoaderCircle class="h-4 w-4 animate-spin text-slate-500" />
+						{t.dropOffPointsLoading}
+					</p>
+				{:else}
+					<DropOffPointsSection
+						points={bookablePoints}
+						lines={pointLines}
+						idPrefix="booking-drop-off"
+						onPick={pickLinePoint}
+						onPickAll={pickAllLinesPoint}
+					/>
+				{/if}
+			{/if}
 
 			<!-- 3. เลือกเวลา -->
 			{#if donationStore.deliveryMethod === 'self_dropoff' || donationStore.deliveryMethod === 'shelter_pickup'}
@@ -561,6 +626,7 @@
 			type="button"
 			disabled={donationStore.isSubmitting ||
 				!donationStore.shelterCode ||
+				pointsPending ||
 				((donationStore.deliveryMethod === 'self_dropoff' ||
 					donationStore.deliveryMethod === 'shelter_pickup') &&
 					!donationStore.slotTime) ||

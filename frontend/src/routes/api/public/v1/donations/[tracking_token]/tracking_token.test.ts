@@ -430,6 +430,127 @@ describe('GET & PATCH & DELETE /api/public/v1/donations/[tracking_token]', () =>
 		expect(putAsPublicWriter).not.toHaveBeenCalled();
 	});
 
+	// CR-206 FR-MP-17 / FR-MP-17a / AC-17 — a point that turned every line away keys no
+	// ledger row, yet the booking has started: the cancel is refused all the same.
+	it('DELETE refuses once a drop-off point recorded a receipt, with no stock row (AC-17)', async () => {
+		const started = {
+			...mockDonation,
+			status: 'verifying',
+			point_receipts: [
+				{
+					point_id: 'point-gym',
+					line_nos: [0],
+					received_at: '2026-10-28T02:12:00Z',
+					received_by: 'staff1',
+					audit_id: 'audit:x',
+					ledger_ids: [],
+					items: [{ line_no: 0, qty: '0', unit: 'kg', rejected: true }]
+				}
+			]
+		};
+		vi.mocked(adminRaw).mockImplementation((path: string, method: string) => {
+			if (method === 'GET' && path.includes('/shelter_sh001/') && path.includes('_all_docs')) {
+				return Promise.resolve({ status: 200, data: { rows: [{ doc: started }] } });
+			}
+			if (method === 'POST' && path.endsWith('/_find')) {
+				return Promise.resolve({ status: 200, data: { docs: [] } });
+			}
+			return Promise.resolve({ status: 404, data: {} });
+		});
+
+		const response = await DELETE({
+			params: { tracking_token: TOKEN },
+			getClientAddress: () => '127.0.0.1'
+		} as unknown as DeleteEvent);
+
+		expect(response.status).toBe(409);
+		expect((await response.json()).error).toBe('GOODS_IN_STOCK');
+		expect(putAsPublicWriter).not.toHaveBeenCalled();
+	});
+
+	// CR-206 §Change — the donor sees point, lines and time; not who recorded or which rows.
+	it('GET returns the point receipts of the CouchDB doc without staff or stock ids', async () => {
+		vi.stubGlobal(
+			'fetch',
+			vi.fn().mockResolvedValue({
+				ok: true,
+				status: 200,
+				json: async () => ({ success: true, donation: { status: 'verifying', point_receipts: [] } })
+			})
+		);
+		vi.mocked(adminRaw).mockImplementation((path: string, method: string) => {
+			if (method === 'GET' && path.includes('/shelter_sh001/') && path.includes('_all_docs')) {
+				return Promise.resolve({
+					status: 200,
+					data: {
+						rows: [
+							{
+								doc: {
+									...mockDonation,
+									status: 'verifying',
+									items: [
+										{ free_text: 'น้ำดื่ม', qty: '24', unit: 'ขวด', drop_off_point_id: 'point-gym' }
+									],
+									point_receipts: [
+										{
+											point_id: 'point-gym',
+											line_nos: [0],
+											received_at: '2026-10-28T02:12:00Z',
+											received_by: 'staff1',
+											audit_id: 'audit:x',
+											ledger_ids: ['stock_ledger:1'],
+											items: [{ line_no: 0, qty: '24', unit: 'ขวด' }],
+											remarks: 'internal'
+										}
+									]
+								}
+							}
+						]
+					}
+				});
+			}
+			return Promise.resolve({ status: 404, data: {} });
+		});
+
+		const response = await GET({
+			params: { tracking_token: TOKEN },
+			getClientAddress: () => '127.0.0.1'
+		} as unknown as GetEvent);
+		const data = await response.json();
+
+		expect(data.donation.items[0].drop_off_point_id).toBe('point-gym');
+		expect(data.donation.point_receipts).toEqual([
+			{ point_id: 'point-gym', line_nos: [0], received_at: '2026-10-28T02:12:00Z' }
+		]);
+	});
+
+	it('GET falls back to the projection receipts before the doc reaches CouchDB', async () => {
+		vi.stubGlobal(
+			'fetch',
+			vi.fn().mockResolvedValue({
+				ok: true,
+				status: 200,
+				json: async () => ({
+					success: true,
+					donation: {
+						status: 'verifying',
+						point_receipts: [{ point_id: null, line_nos: [1], received_at: '2026-10-28T03:00:00Z' }]
+					}
+				})
+			})
+		);
+		vi.mocked(adminRaw).mockResolvedValue({ status: 200, data: { rows: [] } });
+
+		const response = await GET({
+			params: { tracking_token: TOKEN },
+			getClientAddress: () => '127.0.0.1'
+		} as unknown as GetEvent);
+
+		expect((await response.json()).donation.point_receipts).toEqual([
+			{ point_id: null, line_nos: [1], received_at: '2026-10-28T03:00:00Z' }
+		]);
+	});
+
 	it('DELETE falls back to FastAPI when donation is not yet in CouchDB', async () => {
 		vi.mocked(adminRaw).mockResolvedValue({
 			status: 200,

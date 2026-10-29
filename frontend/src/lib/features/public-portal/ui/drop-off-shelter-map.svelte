@@ -9,10 +9,13 @@
 
 	let {
 		shelterCode,
-		shelterName = ''
+		shelterName = '',
+		onFocusPoint
 	}: {
 		shelterCode: string;
 		shelterName?: string;
+		/** The donor tapped a drop-off point — its lines start there (CR-206 FR-MP-9). */
+		onFocusPoint?: (pointId: string) => void;
 	} = $props();
 
 	const t = $derived(getTranslation(PUBLIC_DONATIONS_I18N, langState.current));
@@ -66,7 +69,10 @@
 				disablePopup
 				showLegend={false}
 				cooperativeGestures
-				onSelectPoint={(id) => (focusedPointId = id)}
+				onSelectPoint={(id) => {
+					focusedPointId = id;
+					onFocusPoint?.(id);
+				}}
 				onLoadError={() => (mapFailed = true)}
 			/>
 		</div>

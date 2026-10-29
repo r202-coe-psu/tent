@@ -1,5 +1,11 @@
 import { z } from 'zod';
-import type { Donation, DonationStatus, Donor } from '$lib/features/operations';
+import type {
+	Donation,
+	DonationCloseReason,
+	DonationPointReceipt,
+	DonationStatus,
+	Donor
+} from '$lib/features/operations';
 import { qtyGt, qtyStrCoerceNonNegativeSchema } from '$lib/utils/qty';
 import {
 	donationRejectReasonCodeSchema,
@@ -28,6 +34,8 @@ export interface PublicDonationDoc extends Omit<Donation, 'donor'> {
 		total_items: number;
 		received_at: string;
 		remarks?: string;
+		closed_by?: string;
+		closed_reason?: DonationCloseReason;
 		shortfalls?: Array<{
 			item_id?: string;
 			item_name?: string;
@@ -96,7 +104,13 @@ export interface ScanDonationView {
 		review_reason_code?: DonationRejectReasonCode | null;
 		/** What the donor was told at review — kept as is through the counter. */
 		review_reason?: string | null;
+		/** The point the donor takes this line to (CR-206 FR-MP-1); `null` = any point. */
+		drop_off_point_id?: string | null;
 	}>;
+	/** What each point already recorded (CR-206 FR-MP-19) — no ledger or audit ids. */
+	point_receipts?: Array<
+		Pick<DonationPointReceipt, 'point_id' | 'line_nos' | 'received_at' | 'received_by'>
+	>;
 	logistics?: PublicDonationDoc['logistics'];
 	/** Donor photos, `image:{ulid}` in `shelter_code`'s DB (CR-175 donor photos FR-12). */
 	photos?: string[];
@@ -115,6 +129,13 @@ export const receiveDonationInputSchema = z
 		status: z.literal('received'),
 		/** `_rev` of the booking the screen was loaded with (CR-174 FR-25). */
 		expected_rev: z.string().min(1),
+		/**
+		 * The recorder's drop-off point (CR-206 FR-MP-22). `null` only once the shelter has no
+		 * drop-off point left (FR-MP-18b) — checked by the route against the shelter doc.
+		 */
+		point_id: z.string().trim().min(1).nullable().optional(),
+		/** Positions in `items` this receipt records, received or turned away (FR-MP-22). */
+		line_nos: z.array(z.number().int().min(0)).optional(),
 		/** Optional note from the receiving staff — lands on `received_summary.remarks`. */
 		remarks: z.string().trim().max(500).optional(),
 		items: z
@@ -151,7 +172,36 @@ export const receiveDonationInputSchema = z
 			.optional()
 	})
 	.superRefine((value, ctx) => {
+		// FR-MP-22a — a point receipt names both its point and its lines, and only real lines once.
+		const hasPoint = value.point_id !== undefined;
+		const lineNos = value.line_nos;
+		if (hasPoint !== (lineNos !== undefined)) {
+			ctx.addIssue({
+				code: 'custom',
+				path: [hasPoint ? 'line_nos' : 'point_id'],
+				message: 'point_id and line_nos are sent together'
+			});
+		}
+		if (lineNos !== undefined) {
+			const lineCount = value.items?.length ?? 0;
+			if (lineNos.length === 0) {
+				ctx.addIssue({ code: 'custom', path: ['line_nos'], message: 'line_nos is empty' });
+			}
+			if (new Set(lineNos).size !== lineNos.length) {
+				ctx.addIssue({ code: 'custom', path: ['line_nos'], message: 'line_nos repeats a line' });
+			}
+			if (lineNos.some((lineNo) => lineNo >= lineCount)) {
+				ctx.addIssue({
+					code: 'custom',
+					path: ['line_nos'],
+					message: 'line_nos names a line outside items'
+				});
+			}
+		}
+		// A point receipt records only its own lines; the rest ride along unchecked (FR-MP-22).
+		const recordedNow = lineNos ? new Set(lineNos) : null;
 		for (const [index, line] of (value.items ?? []).entries()) {
+			if (recordedNow && !recordedNow.has(index)) continue;
 			if (line.rejected) {
 				if (!line.reject_reason_code) {
 					ctx.addIssue({
@@ -298,6 +348,8 @@ export type DonationPayloadLine = DonationUnitSource & {
 	amount: number;
 	condition?: string;
 	remark?: string;
+	/** The line's drop-off point (CR-206 FR-MP-1); left out of the payload when undefined. */
+	dropOffPointId?: string | null;
 };
 
 /**
@@ -316,7 +368,8 @@ export function buildDonationItemsPayload(
 		qty: it.amount,
 		unit: donationPayloadUnit(it, t.defaultItemUnit),
 		condition: it.condition || undefined,
-		note: it.remark || undefined
+		note: it.remark || undefined,
+		...(it.dropOffPointId !== undefined ? { drop_off_point_id: it.dropOffPointId } : {})
 	}));
 }
 
