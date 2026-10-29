@@ -149,7 +149,10 @@ State machine บน CouchDB = เขียน doc ใหม่ทั้ง doc 
                                           // (central_ops:counter:shelter) ตอน provisioning;
                                           // เป็นชื่อ db shelter_{code} + อ้างข้ามศูนย์ทุกที่ (shelter_code)
                                           // pattern ^SH\d{3,}$: 1–999 pad 3 หลัก, ≥1000 กว้างตามจริง (SH1000)
-  name, site_kind: "evacuation_center|host_house", status: "open|closed", capacity,
+  site_kind: "evacuation_center",         // req — code ของ master_data:site_kind (global-only; CR-198)
+                                          // seed: evacuation_center (default) | host_house; SA เพิ่มได้
+                                          // ต้อง active ตอนเขียน; doc ไม่มี field → evacuation_center
+  name, status: "open|closed", capacity,
   zones: [{ code, name, capacity }],
   area_m2: 1200,                          // opt — พื้นที่ปิดรวม m² (Sphere ≥3.5 m²/คน)
   facilities: {                           // opt — นับจริง ใช้คำนวณ Sphere ratio vs occupancy

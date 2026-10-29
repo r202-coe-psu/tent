@@ -45,6 +45,15 @@ export {
 } from './domain/mappers';
 export { resolveMasterLabel, shelterTypeLabel, toLabelMap } from './domain/master-labels';
 export {
+	DEFAULT_SITE_KIND,
+	activeSiteKinds,
+	countBySiteKind,
+	isHostHouseKind,
+	siteKindLabel,
+	siteKindTiles,
+	type SiteKindOption
+} from './domain/site-kind';
+export {
 	isInShelterStatus,
 	publicStayStatusLabel,
 	publicStayStatusTone,
@@ -68,6 +77,7 @@ export {
 	getPublicShelter,
 	listPublicShelters,
 	fetchShelterTypes,
+	fetchSiteKinds,
 	type ShelterTypeOption
 } from './data/public-api';
 export {
@@ -77,6 +87,7 @@ export {
 	usePublicShelters,
 	useShelterTypeLabels,
 	useShelterTypeLabelMap,
+	useSiteKinds,
 	useVulnerableGroupLabels,
 	useVulnerableGroupLabelMap
 } from './application/queries';

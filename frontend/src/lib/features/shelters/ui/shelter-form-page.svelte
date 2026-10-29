@@ -164,7 +164,8 @@
 	if (!$formData.feature_flags) $formData.feature_flags = { ...DEFAULT_SHELTER_FEATURE_FLAGS };
 	if (!$formData.food_distribution_points) $formData.food_distribution_points = [];
 
-	$effect(() => {
+	// `.pre` so a kind carried in from the list filter (FR-11) lands before the master default seeds.
+	$effect.pre(() => {
 		if (!isEdit && siteKind && !$formData.site_kind) $formData.site_kind = siteKind;
 	});
 
