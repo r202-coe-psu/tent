@@ -65,6 +65,11 @@ export const ADD_ENTRY_COPY = {
 		'บางรายการยังไม่ได้บันทึก เพราะกองนี้ไม่รับของแล้ว กรุณาเลือกกองอื่นที่เปิดรับ แล้วกดบันทึกอีกครั้ง'
 } as const;
 
+/** Pool-level notice: the missed-loan repair is unavailable while an OPEN pool holds a lock. */
+export const MISSED_LOAN_LOCKED_NOTICE =
+	'กองนี้กำลังถูกส่งเข้าคลังหรือยกเลิกอยู่ ตัดยอดยืมที่ค้างได้หลังเสร็จ';
+export const MISSED_LOAN_LOCKED_NOTICE_TESTID = 'bulk-return-missed-loan-locked-notice';
+
 /** Toast when a `?pool=` deep link names a pool that is not in the loaded overview. */
 export const BULK_RETURN_POOL_NOT_FOUND_TOAST = 'ไม่พบกองนี้ อาจถูกลบหรืออยู่ศูนย์อื่น';
 

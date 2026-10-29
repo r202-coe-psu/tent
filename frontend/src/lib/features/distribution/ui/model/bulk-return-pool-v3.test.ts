@@ -22,6 +22,7 @@ import {
 	groupAppliedLoanRefsByEntry,
 	groupMissedLoanRefsByEntry,
 	missedLoanApplyToast,
+	missedLoanLockedNotice,
 	snapshotConflictEntryIds,
 	canMoveEntry,
 	reopenLoanAction,
@@ -1023,6 +1024,38 @@ describe('reopenedReasonByEntry', () => {
 
 	it('is empty for undefined', () => {
 		expect(reopenedReasonByEntry(undefined).size).toBe(0);
+	});
+});
+
+describe('missedLoanLockedNotice', () => {
+	const lock = {
+		op: 'SUBMIT',
+		op_id: 'x',
+		locked_at: '2026-09-24T08:00:00.000Z',
+		locked_by: 'u'
+	} as BulkReturnPoolV3['lock'];
+	const missed = [{ entry_id: 'e1' }] as never;
+
+	it('shows the notice for an OPEN locked pool with loaded empty data', () => {
+		expect(missedLoanLockedNotice(makePool('a', { lock }), [])).toBe(
+			'กองนี้กำลังถูกส่งเข้าคลังหรือยกเลิกอยู่ ตัดยอดยืมที่ค้างได้หลังเสร็จ'
+		);
+	});
+
+	it('is null while the data is not loaded', () => {
+		expect(missedLoanLockedNotice(makePool('a', { lock }), undefined)).toBeNull();
+	});
+
+	it('is null for an unlocked OPEN pool', () => {
+		expect(missedLoanLockedNotice(makePool('a'), [])).toBeNull();
+	});
+
+	it('is null for a non-OPEN pool', () => {
+		expect(missedLoanLockedNotice(makePool('a', { status: 'SUBMITTED', lock }), [])).toBeNull();
+	});
+
+	it('is null when there are missed refs to repair', () => {
+		expect(missedLoanLockedNotice(makePool('a', { lock }), missed)).toBeNull();
 	});
 });
 

@@ -12,7 +12,11 @@ import {
 	type BulkReturnPoolV3Status
 } from '../../domain/food-supplies';
 import type { UpdateBulkReturnPoolHeaderPatch } from '../../application/food-supplies/bulk-return-pool-v3-lifecycle';
-import { ADD_ENTRY_COPY, BULK_RETURN_REOPEN_BLOCKED_COPY } from './bulk-return-copy';
+import {
+	ADD_ENTRY_COPY,
+	BULK_RETURN_REOPEN_BLOCKED_COPY,
+	MISSED_LOAN_LOCKED_NOTICE
+} from './bulk-return-copy';
 
 /**
  * #659 — pure view-model helpers for the bulk return pool v3 board (list / detail / dialogs).
@@ -581,6 +585,20 @@ export function groupMissedLoanRefsByEntry(
 		byEntry.set(ref.entry_id, list);
 	}
 	return byEntry;
+}
+
+/**
+ * Notice for an OPEN pool that holds a lock (SUBMIT / CANCEL in flight): the missed-loan query
+ * returns [] there, so the repair box would silently vanish. Only shown once the data has loaded
+ * and is empty; undefined (not loaded / disabled / error) yields null.
+ */
+export function missedLoanLockedNotice(
+	pool: Pick<BulkReturnPoolV3, 'status' | 'lock'>,
+	missedRefs: readonly MissedBulkReturnLoanRef[] | undefined
+): string | null {
+	if (pool.status !== 'OPEN' || !pool.lock) return null;
+	if (!missedRefs || missedRefs.length > 0) return null;
+	return MISSED_LOAN_LOCKED_NOTICE;
 }
 
 /**
