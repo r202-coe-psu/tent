@@ -18,7 +18,7 @@ affects:
   - frontend/src/lib/features/operations (lot ของใบบริจาคจาก `stock_ledger`)
   - frontend/src/routes/api/back-office/donations/received/search/+server.ts (ใหม่ — `POST` ค้นใบที่รับแล้ว)
   - frontend/src/lib/features/shelters/domain/view-manifest.ts (view ใหม่ 2 ตัว · `_design/app` version 6 → 7)
-  - Mango index ค้นด้วยเบอร์ และค้นเลขล็อต (ต่อ shelter DB)
+  - Mango index ค้นด้วยเบอร์ เลขใบ และเลขล็อต (ต่อ shelter DB)
   - docs/data/schema.md — §2.1 ข้อความ `lot.lot_no` (ใช้เป็นคีย์ค้นได้ ไม่ unique) · §Index `shelter_*` (index ใหม่ของ `donation` และ `stock_ledger`) · §7 view ใหม่ 2 ตัว (view manifest v7) · §2.12 `audit.reason = donor_contact_view` · ไม่ bump `schema_v`
   - role/permission — ไม่เปลี่ยน: ใช้ `authorizeWarehouse` เดิม (warehouse_staff, shelter_manager, system_admin)
 why: walk-in บันทึกเบอร์และอีเมลผู้บริจาคแล้ว แต่หลังรับเข้าคลังไม่มีหน้าไหนให้เห็นอีก เจ้าหน้าที่ติดต่อกลับไม่ได้ (#821)
@@ -52,7 +52,7 @@ migration: ไม่เปลี่ยนรูปร่าง doc — ไม่
 
   | `by` | ค่าที่ค้น | ตรงกับ | ใช้ |
   | --- | --- | --- | --- |
-  | `booking_ref` | เลขใบ เช่น `DN-306892` | `booking_ref` ตรงทั้งค่า | Mango index `(booking_ref)` เดิม |
+  | `booking_ref` | เลขใบ เช่น `DN-306892` | `booking_ref` ตรงทั้งค่า | Mango index ใหม่ `(type, booking_ref)` |
   | `name` | ชื่อ หรือ นามสกุล หรือ ชื่อเต็ม | คำใดคำหนึ่งของ `donor.name` ตรงทั้งคำ **หรือ** ทั้งชื่อตรงทั้งค่า · `สมชาย ใจดี` = ทั้งสองคำต้องตรงตามลำดับ | view `donation_received_by_name` |
   | `phone` | เบอร์เต็ม | `donor.phone_hash` = hash ของเบอร์ที่ normalize แล้ว (แบบ CR-173) | Mango index `(type, status, donor.phone_hash, received_at)` |
   | `item` | สินค้าที่เลือกจากรายการ `item_master` | `items[].item_id` ตรง | view `donation_received_by_item` |
@@ -108,7 +108,7 @@ migration: ไม่เปลี่ยนรูปร่าง doc — ไม่
 | ข้อมูลติดต่อเต็ม | — | endpoint `/contact` ต่อใบ · ทุกครั้งที่เรียกเขียน `audit` |
 | เลขล็อตของใบ | ไม่แสดง | หน้ารายละเอียดแสดงล็อต / หมดอายุ / จุดจัดเก็บ / คงเหลือ · ค้นด้วยเลขล็อตได้ |
 | walk-in หน้าคลัง | เก็บแค่เบอร์ | เบอร์ + อีเมล |
-| shelter DB | — | Mango index `donation-received-by-received-at` · donation `(type, status, donor.phone_hash, received_at)` · `stock_ledger` `(type, lot.lot_no)` · view `donation_received_by_name`, `donation_received_by_item` (`_design/app` v7) |
+| shelter DB | — | Mango index `donation-received-by-received-at` · donation `(type, status, donor.phone_hash, received_at)` · donation `(type, booking_ref)` · `stock_ledger` `(type, lot.lot_no)` · view `donation_received_by_name`, `donation_received_by_item` (`_design/app` v7) |
 
 ## Acceptance
 
@@ -139,7 +139,7 @@ migration: ไม่เปลี่ยนรูปร่าง doc — ไม่
 
 - **Gate:** implement ได้เมื่อ CR approve · deploy ต้อง provision index และ `_design/app` v7 ลงทุก shelter DB (`redeploy-access`) ก่อนเปิดใช้ ไม่งั้นตัวกรองและการค้นตอบ 503 · view manifest เป็นเลขลำดับร่วมทั้งระบบ — ถ้ามีงานอื่น bump ก่อน ให้ใช้เลขถัดไปตอน merge
 - **งานที่แตะไฟล์ร่วมกัน:** FR-11 และ #981 แก้ `receive-stock-form.svelte` ร่วมกัน · merge ได้ตามความพร้อม · งานที่ merge ทีหลังต้อง resolve conflict และตรวจว่าการรับเข้าคลังกับการบันทึกอีเมลยังทำงานครบ
-- **schema.md:** แก้ข้อความ ไม่เปลี่ยนรูปร่าง doc — §2.1 `lot.lot_no` ใช้เป็นคีย์ค้นใบบริจาคได้ (ยังไม่ unique และไม่ผูก business rule) · §Index `shelter_*` เพิ่ม donation `(type, status, received_at)`, `(type, status, donor.phone_hash, received_at)` และ stock_ledger `(type, lot.lot_no)` · §7 เพิ่ม view `donation_received_by_name`, `donation_received_by_item` (manifest v7) · §2.12 เพิ่ม `reason = donor_contact_view` ของ `action: other`
+- **schema.md:** แก้ข้อความ ไม่เปลี่ยนรูปร่าง doc — §2.1 `lot.lot_no` ใช้เป็นคีย์ค้นใบบริจาคได้ (ยังไม่ unique และไม่ผูก business rule) · §Index `shelter_*` เพิ่ม donation `(type, status, received_at)`, `(type, status, donor.phone_hash, received_at)`, `(type, booking_ref)` และ stock_ledger `(type, lot.lot_no)` · แก้รายการ index ของ `donation` ที่ระบุ `(booking_ref)` ไว้ทั้งที่ shelter DB ไม่มี · §7 เพิ่ม view `donation_received_by_name`, `donation_received_by_item` (manifest v7) · §2.12 เพิ่ม `reason = donor_contact_view` ของ `action: other`
 - **ไม่ต้องแก้:** `donation` schema / `schema_v` · `audit` schema (ใช้ `action: other`) · FastAPI / Mongo / projection · worker · role-permission matrix
 - **PII:** ข้อมูลติดต่ออยู่ใต้ retention ของ PII ผู้บริจาคตาม `docs/data/data-model.md` §7 — ลบ `donor.name` / `phone` / `line_id` / `email` ภายใน 3 เดือนหลังปิดศูนย์ เหลือ `phone_hash` + ยอด · **สถานะจริง:** ยังไม่มีงานลบอัตโนมัติฝั่ง CouchDB ข้อมูลติดต่อจึงยังอยู่จนกว่าจะมีงานลบ · CR นี้ไม่สร้างงานลบ · เมื่อข้อมูลถูกลบแล้วทำงานตาม FR-10c
 - **สถานะงาน:** FR-1 – FR-7, FR-9, FR-9a ทำแล้วใน branch `feat/821-received-filter` (FR-9a ต้องตรวจว่าจำกัดเฉพาะ `status=received`; comment / เทสต์ที่อ้าง "decision A1" เปลี่ยนเป็น FR-9a) · FR-8 ทำแล้วแบบค้นในหน้าที่โหลด ต้องเปลี่ยนเป็นฝั่ง server · FR-10 – FR-13 ยังไม่ทำ
@@ -150,6 +150,7 @@ migration: ไม่เปลี่ยนรูปร่าง doc — ไม่
 - Mango index ใหม่ (ddoc / ชื่อ):
   - `donation-received-list` / `donation-received-by-received-at` — `[type desc, status desc, received_at desc, _id desc]` (FR-1 – FR-3)
   - `donation-received-phone` — `[type, status, donor.phone_hash, received_at]` (FR-8 `phone`)
+  - `donation-booking-ref` — `[type, booking_ref]` (FR-8 `booking_ref`)
   - `stock-ledger-lot-no` — `[type, lot.lot_no]` (FR-8 `lot`, FR-13)
 - view ใหม่ใน `_design/app` (version 6 → 7):
   - `donation_received_by_name` — emit เฉพาะ `type = donation`, `status = received`, มี `donor.name`: key `[ชื่อ normalize แล้วทั้งก้อน, received_at]` และ `[แต่ละคำ, received_at]` · emit แต่ละ key ไม่เกินครั้งเดียวต่อใบ — คำซ้ำในชื่อเดียว และชื่อคำเดียว (ชื่อทั้งก้อน = คำนั้น) emit ครั้งเดียว · value `null`
@@ -186,3 +187,4 @@ migration: ไม่เปลี่ยนรูปร่าง doc — ไม่
 - 2026-10-29 — ทำจริง: ชื่อ / สินค้าใช้ CouchDB view (`_design/app` v7) ไม่เพิ่มฟิลด์ · ค้นผ่าน `POST` · rate limit ต่อ IP ที่ nginx ตาม CR-188 · log การค้นอยู่ใน log ของแอปไม่เก็บคำค้น (FR-8c – FR-8g, AC-6 – AC-6c)
 - 2026-10-29 — ระบุรายละเอียดที่ยังขาด ไม่เปลี่ยนมติ: retention ตาม data-model §7 + สถานะการลบจริง + พฤติกรรมหลังลบ (FR-10c, AC-6f) · แบ่งหน้าค้นล็อต (ตัดซ้ำ, เรียง, tuple cursor — FR-8d, AC-6d) · แบ่งหน้า view แบบ lookahead และ emit ไม่ซ้ำ (FR-8h, AC-6e) · `cursor` ผูกกับ `by` + `q` (FR-8a)
 - 2026-10-29 — ไม่จำกัดอัตราการค้น (FR-8e, AC-6b): แทนที่ "rate limit ต่อ IP ที่ nginx" ในบรรทัดทำจริงด้านบน · เหตุผลใน Why
+- 2026-10-29 — ค้นด้วยเลขใบใช้ Mango index ใหม่ `(type, booking_ref)` (FR-8, Migration): shelter DB ไม่มี index `booking_ref` อยู่ก่อน (index unique อยู่ใน Mongo) · ไม่มี index ต้องค้นผ่าน index รายการ "รับแล้ว" แล้วกรองในหน่วยความจำ ช้าลงตามจำนวนใบ และไม่ตรง AC-6
