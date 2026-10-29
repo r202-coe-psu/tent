@@ -12,7 +12,8 @@ const env = vi.hoisted(() => ({
 	// Reactive URL + overview query state; filled in beforeEach (needs the svelte import).
 	url: null as Map<string, unknown> | null,
 	overview: null as Map<string, unknown> | null,
-	goto: vi.fn()
+	goto: vi.fn(),
+	refetch: vi.fn()
 }));
 const sonner = vi.hoisted(() => ({ warning: vi.fn(), error: vi.fn(), success: vi.fn() }));
 
@@ -67,9 +68,12 @@ vi.mock('../../application/queries', () => ({
 		get isError() {
 			return env.overview?.get('isError');
 		},
+		get dataUpdatedAt() {
+			return env.overview?.get('dataUpdatedAt');
+		},
 		isPlaceholderData: false,
 		error: null,
-		refetch: () => {}
+		refetch: env.refetch
 	})
 }));
 vi.mock('../../application/food-supplies/auth', () => ({
@@ -121,6 +125,8 @@ function makeRow(id: string, status: string, extra: Record<string, unknown> = {}
 
 function setOverview(next: { data?: unknown[]; isSuccess?: boolean; isLoading?: boolean }) {
 	const s = env.overview!;
+	// Data is "as of now": never older than a link that arrived before this call.
+	s.set('dataUpdatedAt', Date.now());
 	s.set('data', next.data ?? []);
 	s.set('isSuccess', next.isSuccess ?? false);
 	s.set('isFetching', false);
@@ -145,6 +151,7 @@ beforeEach(() => {
 	stubs.detail = null;
 	sonner.warning.mockClear();
 	env.goto.mockReset();
+	env.refetch.mockReset();
 	// A replaceState navigation rewrites the (reactive) page URL, like SvelteKit does.
 	env.goto.mockImplementation((href: string) => {
 		env.url!.set('href', `${ORIGIN}${href}`);

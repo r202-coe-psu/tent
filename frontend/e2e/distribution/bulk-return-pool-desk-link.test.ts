@@ -94,6 +94,8 @@ test.describe('Bulk return pool — desk link for DST (#921)', { tag: DESK_TAGS 
 		);
 
 		await expect(desk.toast('ไม่พบกองนี้ อาจถูกลบหรืออยู่ศูนย์อื่น')).toBeVisible();
+		// Shown once, not repeated by a re-run of the link.
+		await expect(desk.toast('ไม่พบกองนี้ อาจถูกลบหรืออยู่ศูนย์อื่น')).toHaveCount(1);
 		await expect
 			.poll(() => deskUrlOf(page))
 			.toEqual(['/onsite/distribution', 'supplies', 'returns', null]);
@@ -137,6 +139,9 @@ test.describe('Bulk return pool — desk link for DST (#921)', { tag: DESK_TAGS 
 		await desk.chooseRecipientBySearch(recipient);
 		await desk.fillFoodQty('2');
 
+		// The link is held in `beforeNavigate` (cancelled, nothing pushed), so Cancel must leave
+		// history exactly as it was: same length, and one Back leaves the desk entirely.
+		const historyLengthBefore = await page.evaluate(() => history.length);
 		await page.evaluate(() => {
 			const a = document.createElement('a');
 			a.href = '/onsite/distribution?mode=supplies&tab=returns';
@@ -152,6 +157,15 @@ test.describe('Bulk return pool — desk link for DST (#921)', { tag: DESK_TAGS 
 		await expect
 			.poll(() => deskUrlOf(page))
 			.toEqual(['/onsite/distribution', 'food', 'food', null]);
+		expect(await page.evaluate(() => history.length)).toBe(historyLengthBefore);
+
+		// Back must go to whatever preceded the desk (reached by `desk.goto` above), not to a
+		// duplicate food entry (a replaced-in URL write would leave one) and not to the held link.
+		// The earlier entry's exact URL depends on the login fixture, so assert only that the desk
+		// entry is gone: the page is no longer on the desk, and never on the held link.
+		await page.goBack();
+		await expect.poll(() => new URL(page.url()).pathname).not.toBe('/onsite/distribution');
+		expect(page.url()).not.toContain('mode=supplies');
 	});
 });
 

@@ -17,6 +17,7 @@ const overview = vi.hoisted(() => ({
 	state: null as Map<string, unknown> | null
 }));
 const sonner = vi.hoisted(() => ({ warning: vi.fn(), error: vi.fn(), success: vi.fn() }));
+const refetch = vi.hoisted(() => vi.fn());
 
 vi.mock('svelte-sonner', () => ({ toast: sonner }));
 vi.mock('./BulkReturnPoolDetail.svelte', () => ({
@@ -53,9 +54,12 @@ vi.mock('../../application/queries', () => ({
 		get isError() {
 			return overview.state?.get('isError');
 		},
+		get dataUpdatedAt() {
+			return overview.state?.get('dataUpdatedAt');
+		},
 		isPlaceholderData: false,
 		error: null,
-		refetch: () => {}
+		refetch
 	})
 }));
 vi.mock('../../application/food-supplies/auth', () => ({
@@ -100,8 +104,11 @@ function setQuery(next: {
 	isFetching?: boolean;
 	isLoading?: boolean;
 	isError?: boolean;
+	/** Defaults to "now" (data fresher than any link that arrived before this call). */
+	dataUpdatedAt?: number;
 }) {
 	const s = overview.state!;
+	s.set('dataUpdatedAt', next.dataUpdatedAt ?? Date.now());
 	s.set('data', next.data ?? []);
 	s.set('isSuccess', next.isSuccess ?? false);
 	s.set('isFetching', next.isFetching ?? false);
@@ -126,6 +133,7 @@ beforeEach(() => {
 	stubs.openDialog = null;
 	sonner.warning.mockClear();
 	sonner.error.mockClear();
+	refetch.mockReset();
 	setQuery({ isLoading: true });
 });
 
@@ -166,7 +174,19 @@ describe('bulk pool board deep link (#921)', () => {
 		expect(onSelectedPoolChange).not.toHaveBeenCalled();
 	});
 
-	it('does not toast a second time for the same id after a refetch', async () => {
+	it('one link gives exactly one toast', async () => {
+		const onSelectedPoolChange = vi.fn();
+		await render({ initialPoolId: 'missing', onSelectedPoolChange });
+		loaded([makeRow('a', 'OPEN')]);
+		flushSync();
+		await tick();
+		flushSync();
+
+		expect(sonner.warning).toHaveBeenCalledOnce();
+		expect(onSelectedPoolChange).toHaveBeenCalledOnce();
+	});
+
+	it('does not toast again during a refetch of the same link', async () => {
 		const onSelectedPoolChange = vi.fn();
 		await render({ initialPoolId: 'missing', onSelectedPoolChange });
 		loaded([makeRow('a', 'OPEN')]);
@@ -180,6 +200,121 @@ describe('bulk pool board deep link (#921)', () => {
 
 		expect(sonner.warning).toHaveBeenCalledOnce();
 		expect(onSelectedPoolChange).toHaveBeenCalledOnce();
+	});
+
+	it('toasts again when the same bad link is followed a second time', async () => {
+		// Deterministic clock: the second follow is strictly newer than the cached data.
+		vi.useFakeTimers({ toFake: ['Date'] });
+		try {
+			const t0 = 1_800_000_000_000;
+			vi.setSystemTime(t0);
+			const onSelectedPoolChange = vi.fn();
+			// Reactive host-owned prop (runes are unavailable in a plain .ts test, so use a SvelteMap).
+			const link = new SvelteMap<string, string | null>([['id', 'missing']]);
+			const props = {
+				get initialPoolId() {
+					return link.get('id') ?? null;
+				},
+				onSelectedPoolChange
+			};
+			await render(props);
+			loaded([makeRow('a', 'OPEN')]);
+			flushSync();
+			expect(sonner.warning).toHaveBeenCalledTimes(1);
+			expect(refetch).not.toHaveBeenCalled();
+
+			// The host drops `pool=` after onSelectedPoolChange(null), then the link is followed again.
+			link.set('id', null);
+			flushSync();
+			vi.setSystemTime(t0 + 10_000);
+			refetch.mockImplementation(() =>
+				setQuery({
+					data: [makeRow('a', 'OPEN')],
+					isSuccess: true,
+					isFetching: true,
+					dataUpdatedAt: t0
+				})
+			);
+			link.set('id', 'missing');
+			flushSync();
+			await tick();
+			flushSync();
+
+			// New arrival newer than the cache: refetch first, no toast yet.
+			expect(refetch).toHaveBeenCalledOnce();
+			expect(sonner.warning).toHaveBeenCalledTimes(1);
+
+			// The refetch settles with fresher data; the pool is still absent.
+			vi.setSystemTime(t0 + 11_000);
+			loaded([makeRow('a', 'OPEN')]);
+			flushSync();
+			await tick();
+			flushSync();
+
+			expect(refetch).toHaveBeenCalledOnce();
+			expect(sonner.warning).toHaveBeenCalledTimes(2);
+			expect(onSelectedPoolChange).toHaveBeenCalledTimes(2);
+			expect(onSelectedPoolChange).toHaveBeenLastCalledWith(null);
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+
+	it('refetches a cached overview older than the link once, then opens the pool it gains', async () => {
+		const stale = Date.now() - 120_000;
+		setQuery({ data: [makeRow('a', 'OPEN')], isSuccess: true, dataUpdatedAt: stale });
+		refetch.mockImplementation(() =>
+			setQuery({
+				data: [makeRow('a', 'OPEN')],
+				isSuccess: true,
+				isFetching: true,
+				dataUpdatedAt: stale
+			})
+		);
+		const onSelectedPoolChange = vi.fn();
+		await render({ initialPoolId: 'new', onSelectedPoolChange });
+
+		expect(refetch).toHaveBeenCalledOnce();
+		expect(sonner.warning).not.toHaveBeenCalled();
+		expect(onSelectedPoolChange).not.toHaveBeenCalled();
+
+		// Settled: the refetch brought the pool in.
+		loaded([makeRow('a', 'OPEN'), makeRow('new', 'OPEN')]);
+		flushSync();
+		await tick();
+		flushSync();
+
+		expect(refetch).toHaveBeenCalledOnce();
+		expect(stubs.detail?.row?.pool._id).toBe('new');
+		expect(sonner.warning).not.toHaveBeenCalled();
+		expect(onSelectedPoolChange).not.toHaveBeenCalled();
+	});
+
+	it('toasts once after the single refetch when the pool is still absent', async () => {
+		const stale = Date.now() - 120_000;
+		setQuery({ data: [makeRow('a', 'OPEN')], isSuccess: true, dataUpdatedAt: stale });
+		refetch.mockImplementation(() =>
+			setQuery({
+				data: [makeRow('a', 'OPEN')],
+				isSuccess: true,
+				isFetching: true,
+				dataUpdatedAt: stale
+			})
+		);
+		const onSelectedPoolChange = vi.fn();
+		await render({ initialPoolId: 'missing', onSelectedPoolChange });
+
+		expect(refetch).toHaveBeenCalledOnce();
+		expect(sonner.warning).not.toHaveBeenCalled();
+
+		loaded([makeRow('a', 'OPEN')]);
+		flushSync();
+		await tick();
+		flushSync();
+
+		expect(refetch).toHaveBeenCalledOnce();
+		expect(sonner.warning).toHaveBeenCalledOnce();
+		expect(onSelectedPoolChange).toHaveBeenCalledExactlyOnceWith(null);
 	});
 
 	it('opens a known pool that view filters hide (old RECEIVED, CANCELLED) without a toast', async () => {

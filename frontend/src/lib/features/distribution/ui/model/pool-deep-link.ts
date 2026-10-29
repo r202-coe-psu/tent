@@ -28,3 +28,31 @@ export function missingDeepLinkedPoolId(input: MissingDeepLinkedPoolInput): stri
 	if (poolId === locallySelectedId) return null;
 	return rows.some((row) => row.pool._id === poolId) ? null : poolId;
 }
+
+export interface DeepLinkDecisionInput extends MissingDeepLinkedPoolInput {
+	/** `dataUpdatedAt` (ms) of the overview query; 0 / undefined when it never loaded. */
+	dataUpdatedAt: number | undefined;
+	/** When the current deep link arrived (ms); null when no link was followed. */
+	linkArrivedAt: number | null;
+	/** True once a refetch was already requested for this link (never ask twice). */
+	refetchRequested: boolean;
+}
+
+export type DeepLinkDecision = 'none' | 'refetch' | 'missing';
+
+/**
+ * What the board should do about a deep-linked pool.
+ *
+ * - `none`: nothing to do (no link, data not ready, local selection, or the pool is present).
+ * - `refetch`: the pool is absent, but the cached overview is older than the link (it may predate a
+ *   pool created elsewhere); refetch once and decide after it settles.
+ * - `missing`: the pool is absent from data that is at least as new as the link.
+ */
+export function decideDeepLinkedPool(input: DeepLinkDecisionInput): DeepLinkDecision {
+	if (missingDeepLinkedPoolId(input) === null) return 'none';
+	const { dataUpdatedAt, linkArrivedAt, refetchRequested } = input;
+	if (!refetchRequested && linkArrivedAt !== null && (dataUpdatedAt ?? 0) < linkArrivedAt) {
+		return 'refetch';
+	}
+	return 'missing';
+}

@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { createSubscriber, SvelteSet } from 'svelte/reactivity';
+	import { createSubscriber } from 'svelte/reactivity';
 	import { untrack, type Snippet } from 'svelte';
 	import { toast } from 'svelte-sonner';
 	import AlertCircle from '@lucide/svelte/icons/alert-circle';
@@ -39,7 +39,7 @@
 	import type { BulkReturnPoolOverviewRow } from '../../domain/food-supplies';
 	import { mapDistributionQueryError } from '../model/distribution-error';
 	import { BULK_RETURN_POOL_NOT_FOUND_TOAST } from '../model/bulk-return-copy';
-	import { missingDeepLinkedPoolId } from '../model/pool-deep-link';
+	import { decideDeepLinkedPool } from '../model/pool-deep-link';
 	import {
 		LATE_BADGE_CLASS,
 		LATE_CARD_EXCLUDED_TEXT,
@@ -128,9 +128,6 @@
 	let selectedPoolId = $derived<string | null>(initialPoolId ?? null);
 	// Last id chosen through this board (card, queue, just-opened pool); never a deep link.
 	let locallySelectedPoolId = $state<string | null>(null);
-	// Ids already toasted as not found, so one bad link toasts once per board instance.
-	// Only read/written inside untrack in the effect, so it adds no reactive dependency.
-	const toastedMissingPoolIds = new SvelteSet<string>();
 
 	function selectPool(poolId: string | null) {
 		selectedPoolId = poolId;
@@ -250,29 +247,51 @@
 		return id ? (list.find((row) => row.pool._id === id) ?? null) : null;
 	});
 
+	// Arrival time of the current deep link, plain (non-reactive) variables on purpose. A `$derived`
+	// would have to call Date.now() (impure, and re-evaluated at arbitrary moments); instead the
+	// effect below records it at the one place the `initialPoolId` change is observed. `undefined`
+	// means no link seen yet, so a link present at mount also counts as an arrival.
+	let lastSeenLink: string | null | undefined = undefined;
+	let linkArrivedAt: number | null = null;
+	let refetchRequested = false;
+
 	// A deep-linked pool counts as not found only when absent from `rows` (the unfiltered overview,
 	// incl. CANCELLED and old RECEIVED), never because a view filter hides it. A just-opened pool is
 	// selected locally before the refetch contains it, so local selections are skipped, and nothing
-	// is decided while the query is loading, erroring or refetching.
-	const missingPoolId = $derived(
-		missingDeepLinkedPoolId({
+	// is decided while the query is loading, erroring or refetching. A cached overview older than
+	// the link (staleTime) may predate a pool created elsewhere, so it is refetched once first.
+	//
+	// An effect because it reacts to async data arrival with side effects (refetch, toast, URL
+	// clear). Every follow of a bad link toasts; one link cannot toast twice because the selection is
+	// cleared (selectedPoolId becomes null), which ends the decision.
+	$effect(() => {
+		const link = initialPoolId ?? null;
+		if (link !== lastSeenLink) {
+			lastSeenLink = link;
+			if (link) {
+				linkArrivedAt = Date.now();
+				refetchRequested = false;
+			}
+		}
+		const decision = decideDeepLinkedPool({
 			poolId: selectedPoolId,
 			rows,
 			dataReady:
 				overviewQuery.isSuccess && !overviewQuery.isFetching && !overviewQuery.isPlaceholderData,
-			locallySelectedId: locallySelectedPoolId
-		})
-	);
-
-	// An effect because it reacts to async data arrival with a side effect (toast + URL clear).
-	$effect(() => {
-		const id = missingPoolId;
-		if (!id) return;
+			locallySelectedId: locallySelectedPoolId,
+			dataUpdatedAt: overviewQuery.dataUpdatedAt,
+			linkArrivedAt,
+			refetchRequested
+		});
+		if (decision === 'none') return;
+		// Untracked: the refetch / host callback must not add dependencies to this effect.
 		untrack(() => {
-			if (!toastedMissingPoolIds.has(id)) {
-				toastedMissingPoolIds.add(id);
-				toast.warning(BULK_RETURN_POOL_NOT_FOUND_TOAST);
+			if (decision === 'refetch') {
+				refetchRequested = true;
+				void overviewQuery.refetch();
+				return;
 			}
+			toast.warning(BULK_RETURN_POOL_NOT_FOUND_TOAST);
 			// Clears the selection so the host drops `pool=`; the id is then null, so no loop.
 			selectPool(null);
 		});
