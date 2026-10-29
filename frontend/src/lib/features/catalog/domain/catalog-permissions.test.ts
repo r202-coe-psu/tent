@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { canWriteShelterCatalog } from './catalog-permissions';
+import { canCreateShelterRecipe, canWriteShelterCatalog } from './catalog-permissions';
 
 describe('canWriteShelterCatalog', () => {
 	it.each([['system_admin'], ['shelter_manager'], ['warehouse_staff'], ['supply_coordinator']])(
@@ -20,4 +20,27 @@ describe('canWriteShelterCatalog', () => {
 	it('denies an empty role list', () => {
 		expect(canWriteShelterCatalog([])).toBe(false);
 	});
+});
+
+describe('canCreateShelterRecipe', () => {
+	it('allows kitchen staff of the same shelter', () => {
+		expect(canCreateShelterRecipe(['shelter:SH001', 'SH001:kitchen_staff'], 'SH001')).toBe(true);
+	});
+
+	it('denies kitchen staff of another shelter', () => {
+		expect(canCreateShelterRecipe(['shelter:SH001', 'SH001:kitchen_staff'], 'SH002')).toBe(false);
+	});
+
+	it('denies registration staff', () => {
+		expect(canCreateShelterRecipe(['shelter:SH001', 'SH001:registration_staff'], 'SH001')).toBe(
+			false
+		);
+	});
+
+	it.each([['system_admin'], ['shelter_manager'], ['warehouse_staff']])(
+		'keeps allowing %s',
+		(role) => {
+			expect(canCreateShelterRecipe([role], 'SH001')).toBe(true);
+		}
+	);
 });

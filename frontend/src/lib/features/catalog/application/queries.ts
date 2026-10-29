@@ -17,6 +17,7 @@ import {
 	isSystemAdmin,
 	isShelterManager,
 	isWarehouseStaff,
+	hasStaffCapability,
 	shelterCodeFromRoles
 } from '$lib/auth/roles';
 import type {
@@ -89,7 +90,10 @@ export const useItemCategory = (
 		enabled: !!id()
 	}));
 
-function enforceWriteAccess(shelterCode?: string | null) {
+function enforceWriteAccess(
+	shelterCode?: string | null,
+	alsoAllow?: (roles: readonly string[], shelterCode: string) => boolean
+) {
 	const roles = authStore.user?.roles ?? [];
 	if (isSystemAdmin(roles)) return;
 
@@ -100,6 +104,7 @@ function enforceWriteAccess(shelterCode?: string | null) {
 		if ((isManager || isWS) && userShelterCode === shelterCode) {
 			return;
 		}
+		if (alsoAllow?.(roles, shelterCode)) return;
 	}
 
 	throw new Error('Unauthorized: You do not have permission to write to this catalog.');
@@ -248,7 +253,10 @@ export const useCreateRecipe = () => {
 			ctx: AuthorContext;
 			shelterCode?: string;
 		}) => {
-			enforceWriteAccess(shelterCode);
+			// Kitchen staff may create (not edit/delete) a shelter recipe: #802.
+			enforceWriteAccess(shelterCode, (roles, code) =>
+				hasStaffCapability(roles, 'kitchen_staff', code)
+			);
 			return catalogRepository().createRecipe(input, ctx, shelterCode);
 		},
 		onSuccess: () => {
