@@ -42,12 +42,15 @@ import {
 	buildValidateDocUpdate,
 	DAILY_SOP_ROLE_MANGO_INDEX,
 	DONATION_RECEIVED_MANGO_INDEX,
+	DONATION_RECEIVED_PHONE_MANGO_INDEX,
+	DONATION_BOOKING_REF_MANGO_INDEX,
 	KIOSK_LOOKUP_WARMUP_SELECTORS,
 	PEOPLE_MANGO_INDEXES,
 	REFERRAL_MANGO_INDEXES,
 	KIOSK_LOOKUP_MANGO_INDEXES,
 	REQUISITION_TICKET_MANGO_INDEXES,
 	shelterDbName,
+	STOCK_LEDGER_LOT_NO_MANGO_INDEX,
 	TRANSFER_LEDGER_MANGO_INDEXES
 } from '$lib/server/shelter-access-design';
 
@@ -476,7 +479,8 @@ async function main() {
 					PEOPLE_MANGO_INDEXES.length +
 					REQUISITION_TICKET_MANGO_INDEXES.length +
 					BULK_RETURN_ENTRY_MANGO_INDEXES.length +
-					2;
+					// Daily SOP role + the four donation / ledger indexes of #821.
+					5;
 				console.log(`    would ensure ${indexCount} shelter Mango indexes`);
 				if (PUBLIC_WRITER_NAME) {
 					console.log(
@@ -521,11 +525,16 @@ async function main() {
 			);
 			const donationReceivedIndexResult = await deployMangoIndexes(
 				db,
-				[DONATION_RECEIVED_MANGO_INDEX],
+				[
+					DONATION_RECEIVED_MANGO_INDEX,
+					DONATION_RECEIVED_PHONE_MANGO_INDEX,
+					DONATION_BOOKING_REF_MANGO_INDEX,
+					STOCK_LEDGER_LOT_NO_MANGO_INDEX
+				],
 				false
 			);
 			console.log(
-				`    ✓ donation received mango index (${donationReceivedIndexResult.created} created, ${donationReceivedIndexResult.existing} existing)`
+				`    ✓ donation received / phone / ledger lot mango indexes (${donationReceivedIndexResult.created} created, ${donationReceivedIndexResult.existing} existing)`
 			);
 			const kioskIndexResult = await deployKioskLookupMangoIndexes(db, false);
 			console.log(

@@ -87,6 +87,42 @@ export const DONATION_RECEIVED_MANGO_INDEX = {
 	type: 'json' as const
 };
 
+/**
+ * Index behind the "รับแล้ว" search by donor phone (#821 FR-8 `phone`): `donor.phone_hash`
+ * equality inside the received donations, newest first. `phone_hash` outlives the retention
+ * wipe of the raw phone, so a donation stays findable by number after `donor.phone` is gone.
+ */
+export const DONATION_RECEIVED_PHONE_MANGO_INDEX = {
+	index: { fields: ['type', 'status', 'donor.phone_hash', 'received_at'] },
+	ddoc: 'donation-received-phone',
+	name: 'donation-received-phone',
+	type: 'json' as const
+};
+
+/**
+ * Index behind the "รับแล้ว" search by booking reference (#821 FR-8 `booking_ref`): equality on
+ * `booking_ref` among the donations. A shelter DB had no `booking_ref` index before (the unique
+ * one lives in Mongo), so without it the search could only filter the received list in memory.
+ */
+export const DONATION_BOOKING_REF_MANGO_INDEX = {
+	index: { fields: ['type', 'booking_ref'] },
+	ddoc: 'donation-booking-ref',
+	name: 'donation-booking-ref',
+	type: 'json' as const
+};
+
+/**
+ * Index behind the "รับแล้ว" search by lot number (#821 FR-8 `lot`, FR-13): the `stock_ledger`
+ * rows carrying one `lot.lot_no`. `lot_no` is a label, not a key — several rows and donations
+ * may share it — so the route reads every row of the label, not the first.
+ */
+export const STOCK_LEDGER_LOT_NO_MANGO_INDEX = {
+	index: { fields: ['type', 'lot.lot_no'] },
+	ddoc: 'stock-ledger-lot-no',
+	name: 'stock-ledger-lot-no',
+	type: 'json' as const
+};
+
 const DAILY_SOP_ROLE_VDU_CONTRACT = JSON.stringify({
 	version: DAILY_SOP_ROLE_QUESTION_VERSION,
 	roles: DAILY_SOP_ROLES.map((role) => ({
