@@ -45,7 +45,7 @@
 		useSkillOptions,
 		useVolunteers
 	} from '../application/queries';
-	import { SvelteDate } from 'svelte/reactivity';
+	import { createMinuteClock } from './minute-clock.svelte';
 
 	let { job }: { job: Job } = $props();
 
@@ -58,13 +58,10 @@
 		applicationsQuery.isPending || assignmentsQuery.isPending || volunteersQuery.isPending
 	);
 	const assignments = $derived(assignmentsQuery.data ?? []);
-	const today = $derived(todayDateString());
-	// #885 — "รอยืนยันการเข้างาน" turns on as time passes, so the clock ticks every minute.
-	const now = new SvelteDate();
-	$effect(() => {
-		const timer = setInterval(() => now.setTime(Date.now()), 60_000);
-		return () => clearInterval(timer);
-	});
+	// #885 — "รอยืนยันการเข้างาน" turns on as time passes, so the clock ticks every minute;
+	// `today` rides the same clock so it rolls over at Bangkok midnight with the page open.
+	const { now } = createMinuteClock();
+	const today = $derived(todayDateString(now));
 	const volunteerById = $derived(new Map((volunteersQuery.data ?? []).map((v) => [v._id, v])));
 	const board = $derived(
 		buildApplicantBoard({
