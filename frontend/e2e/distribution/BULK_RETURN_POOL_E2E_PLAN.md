@@ -391,6 +391,15 @@ an OPEN pool (expect 201), so the ref is never applied. The detail sheet shows "
 not "ตัดยอดยืม 1". After voiding, the visible toast is the no-revert text and none contains "คืนสถานะยอดยืม";
 the loan doc keeps the same `_rev`, status and `qty_returned`; one void doc exists.
 
+### BRP-R Reopen loans of a submitted entry (CR-193 §35, `bulk-return-pool-reopen.test.ts`)
+
+- BRP-R1: an evacuee's loan of 2 is returned through the UI into an OPEN pool, the pool is submitted,
+  and the shelter manager opens "เปิดยอดยืมกลับ" on the entry, types a reason and confirms. The loan
+  doc is `active` with `qty_returned` "0" and no longer lists the entry; the row shows
+  "เปิดยอดยืมกลับแล้ว" and no button.
+- BRP-R2: same setup; the manager sees the button (control), distribution_staff at the desk sees the
+  same entry with no button, no blocked notice and no reason text; the loan is untouched.
+
 ## 8. Old tests and helpers (removed)
 
 | Item                    | Location                                  | Action now                                                                                                                          | Follow-up (#661) |
