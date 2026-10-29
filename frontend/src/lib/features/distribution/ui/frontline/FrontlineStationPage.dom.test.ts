@@ -117,9 +117,11 @@ beforeEach(() => {
 	localStorage.clear();
 });
 
-afterEach(() => {
+afterEach(async () => {
 	if (instance) unmount(instance);
 	instance = null;
+	// bits-ui body-scroll-lock cleans up on a 24ms timer; let it run before the env tears down
+	await new Promise((resolve) => setTimeout(resolve, 50));
 	document.body.innerHTML = '';
 	window.history.replaceState(null, '', '/');
 });
