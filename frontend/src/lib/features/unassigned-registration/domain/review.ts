@@ -5,7 +5,7 @@
  */
 
 import { z } from 'zod';
-import type { UnifiedHouseholdInput, UnifiedMemberWithMeta } from '$lib/features/people';
+import type { PetGroup, UnifiedHouseholdInput, UnifiedMemberWithMeta } from '$lib/features/people';
 import { openMemberHitSchema, openPetHitSchema, type OpenMemberHit } from './search';
 
 export const unassignedRegistrationReviewSchema = z.object({
@@ -95,12 +95,21 @@ export function unassignedMemberToUnifiedMember(member: OpenMemberHit): UnifiedM
 }
 
 /**
- * Household address block for the form — `pets` intentionally left empty here.
- * Claim (couch_birth) is the single source of truth for what lands in `household.pets[]`;
- * the review page shows open pets as a separate read-only summary (`open_pets`) rather
- * than feeding them through this form section, and re-fetches the post-claim Couch
- * household before calling Report-in so nothing here can clobber what claim just wrote.
+ * Household address block for the form — `pets` starts empty here on purpose.
+ * Claim (couch_birth) owns the rows it writes into `household.pets[]`; the review page
+ * shows those back read-only (`open_pets`) instead of seeding them into this editable
+ * section, so a re-submit can never clobber them. Anything staff type on top is appended
+ * at confirm time by {@link petsForReportIn}, never merged into this initial value.
  */
+type FormPetGroups = NonNullable<UnifiedHouseholdInput['pets']>;
+
+export function petsForReportIn(
+	petsWrittenByClaim: readonly PetGroup[] | null | undefined,
+	petsTypedOnForm: FormPetGroups | null | undefined
+): FormPetGroups {
+	return [...(petsWrittenByClaim ?? []), ...(petsTypedOnForm ?? [])];
+}
+
 export function unassignedHouseholdToUnifiedInput(
 	review: UnassignedRegistrationReview
 ): UnifiedHouseholdInput {

@@ -608,10 +608,7 @@
 		hasJoinSelection ? Math.max(joinedFamilyMembers.length, resolvedExistingMemberCount ?? 0) : 0
 	);
 	const summaryExistingPetsCount = $derived(
-		(hasJoinSelection ? (selectedMatchChip?.pets ?? []) : claimedPets).reduce(
-			(sum, p) => sum + (Number(p.count) || 1),
-			0
-		)
+		readOnlyPets.reduce((sum, p) => sum + (Number(p.count) || 1), 0)
 	);
 	const summaryTotalMembers = $derived(summaryExistingMemberCount + members.length);
 	const summaryTotalPets = $derived(summaryExistingPetsCount + petItems.length);

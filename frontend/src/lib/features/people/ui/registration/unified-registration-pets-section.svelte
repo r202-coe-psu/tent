@@ -300,7 +300,9 @@
 											? t.dogTitle
 											: ep.species === 'cat'
 												? t.catTitle
-												: ep.species}
+												: ep.species === 'other'
+													? t.otherPetTitle
+													: ep.species}
 										{#if ep.name}· {ep.name}{/if}
 									</span>
 									{#if ep.count && ep.count > 1}

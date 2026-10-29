@@ -25,6 +25,7 @@
 		formatPersonName,
 		type Evacuee,
 		type Household,
+		type PetGroup,
 		type RegistrationConsent,
 		type RegistrationConsentConfig,
 		type SaveFailureReport,
@@ -34,6 +35,7 @@
 	import {
 		claimedPetSummaries,
 		formatOpenPetLabel,
+		petsForReportIn,
 		petsLeftBehind,
 		totalPetCount,
 		unassignedHouseholdToUnifiedInput,
@@ -112,6 +114,7 @@
 	let isNavigatingAfterSave = $state(false);
 	/** Set once claim succeeds — a retry after a Report-in failure must not claim again (FR-PUF-15). */
 	let claimedHouseholdId = $state<string | null>(null);
+	let petsWrittenByClaim = $state<PetGroup[] | null>(null);
 
 	beforeNavigate((nav) => {
 		if (isNavigatingAfterSave || completed) return;
@@ -153,16 +156,19 @@
 				claimedHouseholdId = claimResult.household_id;
 			}
 
-			// Claim's Couch birth already wrote the correct `pets[]` — always source it fresh
-			// here rather than resubmitting the review form's own (pre-claim) copy, or a
-			// stale/incomplete pets array would silently overwrite what claim just birthed.
-			const freshHousehold = await peopleRepository().getHousehold(claimedHouseholdId);
+			// Claim's Couch birth already wrote its own `pets[]` — read them once, here, rather
+			// than resubmitting the review form's own (pre-claim) copy. Snapshotting instead of
+			// re-reading keeps a retry after a partial write from appending the typed rows twice.
+			if (petsWrittenByClaim === null) {
+				const freshHousehold = await peopleRepository().getHousehold(claimedHouseholdId);
+				petsWrittenByClaim = freshHousehold?.pets ?? [];
+			}
 
 			const result = await submitReportIn.mutateAsync({
 				householdId: claimedHouseholdId,
 				household: {
 					...input.household,
-					pets: freshHousehold?.pets ?? input.household.pets
+					pets: petsForReportIn(petsWrittenByClaim, input.household.pets)
 				},
 				members: meta?.allMembers ?? (input.members as UnifiedMemberWithMeta[]),
 				ctx: {
