@@ -8,6 +8,7 @@ import DropOffShelterMap from './drop-off-shelter-map.svelte';
 type MapProps = {
 	shelters: Array<{ code: string }>;
 	points: Array<{ id: string }>;
+	selectedPointId: string | null;
 	onSelectPoint: (id: string) => void;
 };
 
@@ -60,7 +61,11 @@ const point: PublicDonationPoint = {
 let instance: ReturnType<typeof mount> | null = null;
 
 async function render(
-	props: { shelterCode?: string; onFocusPoint?: (pointId: string) => void } = {}
+	props: {
+		shelterCode?: string;
+		focusedPointId?: string | null;
+		onFocusPoint?: (pointId: string) => void;
+	} = {}
 ) {
 	instance = mount(DropOffShelterMap, {
 		target: document.body,
@@ -119,6 +124,16 @@ describe('DropOffShelterMap', () => {
 
 		map().onSelectPoint('p1');
 		expect(onFocusPoint).toHaveBeenCalledWith('p1');
+	});
+
+	it('eases to a point picked outside the map and names it under the map', async () => {
+		shelterQuery.data = { donation_points: [point] };
+		await render({ focusedPointId: 'p1' });
+
+		expect(map().selectedPointId).toBe('p1');
+		expect(
+			document.body.querySelector('[data-testid="drop-off-point-note"]')?.textContent
+		).toContain('โรงยิม (ประตู 2)');
 	});
 
 	it('keeps the shelter pin alone when the detail has no points or fails', async () => {

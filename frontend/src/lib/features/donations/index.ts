@@ -85,7 +85,7 @@ export {
 	bookableDropOffPoints,
 	currentDropOffPointIds,
 	defaultDropOffPointId,
-	dropOffPickerStyle,
+	ALL_LINES_PICKER,
 	groupDropOffDestinations,
 	hasLinePoints,
 	lineDestinationResolver,

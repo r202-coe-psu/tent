@@ -173,10 +173,12 @@ export async function bookSplitAsDonor(
 	const section = page.getByTestId('drop-off-points-section');
 	await expect(section).toBeVisible();
 	for (const [index, line] of opts.lines.entries()) {
-		await section
+		const trigger = section
 			.getByTestId(`drop-off-point-line-${index}`)
-			.getByRole('radio', { name: line.pointName })
-			.click();
+			.locator('[data-slot="select-trigger"]');
+		await trigger.click();
+		await page.getByRole('option', { name: line.pointName, exact: true }).click();
+		await expect(trigger).toContainText(line.pointName);
 	}
 	await page.getByRole('button', { name: 'รถยนต์' }).click();
 	const freeSlot = page.getByRole('button', { name: /^\d{2}:\d{2} - \d{2}:\d{2} ว่าง/ }).first();

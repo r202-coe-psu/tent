@@ -5,7 +5,6 @@ import {
 	bookableDropOffPoints,
 	currentDropOffPointIds,
 	defaultDropOffPointId,
-	dropOffPickerStyle,
 	groupDropOffDestinations,
 	hasLinePoints,
 	lineDestinationResolver,
@@ -91,14 +90,6 @@ describe('lineDropOffPointId', () => {
 
 	it('is null when there is no point to pick (FR-MP-11)', () => {
 		expect(lineDropOffPointId('point-med', [], null)).toBeNull();
-	});
-});
-
-describe('dropOffPickerStyle', () => {
-	it('uses buttons for up to three points and a dropdown for more', () => {
-		expect(dropOffPickerStyle(2)).toBe('segmented');
-		expect(dropOffPickerStyle(3)).toBe('segmented');
-		expect(dropOffPickerStyle(4)).toBe('select');
 	});
 });
 

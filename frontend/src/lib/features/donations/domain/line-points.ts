@@ -55,12 +55,8 @@ export function lineDropOffPointId(
 	return defaultPointId;
 }
 
-/** Up to three points read at a glance as buttons; more go in a dropdown (owner UI decision). */
-export const SEGMENTED_POINT_LIMIT = 3;
-
-export function dropOffPickerStyle(pointCount: number): 'segmented' | 'select' {
-	return pointCount <= SEGMENTED_POINT_LIMIT ? 'segmented' : 'select';
-}
+/** Picker key of "ส่งทุกรายการที่จุดเดียวกัน"; a line's picker is keyed by the line's own key. */
+export const ALL_LINES_PICKER = '*all';
 
 /** Ids of the points the shelter offers now (FR-MP-16) — the main point has none. */
 export function currentDropOffPointIds(shelter: DropOffShelterSource): Set<string> {

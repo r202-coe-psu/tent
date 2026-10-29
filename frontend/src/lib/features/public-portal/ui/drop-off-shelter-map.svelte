@@ -10,11 +10,14 @@
 	let {
 		shelterCode,
 		shelterName = '',
+		focusedPointId = $bindable(null),
 		onFocusPoint
 	}: {
 		shelterCode: string;
 		shelterName?: string;
-		/** The donor tapped a drop-off point — its lines start there (CR-206 FR-MP-9). */
+		/** The point in focus: tapped here, or picked in a line's dropdown — the map eases to it. */
+		focusedPointId?: string | null;
+		/** The donor tapped a drop-off point (CR-206 FR-MP-9). */
 		onFocusPoint?: (pointId: string) => void;
 	} = $props();
 
@@ -26,7 +29,6 @@
 	const points = $derived(donationMapPointsOf(shelterCode, shelterQuery.data?.donation_points));
 
 	let mapFailed = $state(false);
-	let focusedPointId = $state<string | null>(null);
 
 	const shelter = $derived(
 		buildDonationMap(
@@ -57,7 +59,7 @@
 {#if shelter && !mapFailed && !sheltersQuery.isError}
 	<div class="space-y-2">
 		<div
-			class="relative h-48 w-full overflow-hidden rounded-xl border-2 border-slate-200 bg-slate-100 sm:h-56"
+			class="relative h-64 w-full overflow-hidden rounded-xl border-2 border-slate-200 bg-slate-100 sm:h-80"
 			role="region"
 			aria-label={t.dropOffMapLabel}
 			data-testid="drop-off-shelter-map"
@@ -66,6 +68,7 @@
 				shelters={mapShelters}
 				points={shelter.points}
 				selectedId={shelter.code}
+				selectedPointId={focusedPointId}
 				disablePopup
 				showLegend={false}
 				cooperativeGestures

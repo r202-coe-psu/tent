@@ -17,6 +17,7 @@
 	import { today, type DateValue } from '@internationalized/date';
 	import { toast } from 'svelte-sonner';
 	import {
+		ALL_LINES_PICKER,
 		bookableDropOffPoints,
 		buildDonationItemsPayload,
 		defaultDropOffPointId,
@@ -97,13 +98,35 @@
 		donationStore.deliveryMethod === 'self_dropoff' && hasShelter && shelterQuery.isPending
 	);
 
+	// The map shows only where there is a point to find: a self drop-off at a shelter with
+	// drop-off points (owner 2026-10-30). A shelter with none keeps just its name.
+	const showDropOffMap = $derived(bookablePoints.length > 0);
+	// The map and the dropdowns follow each other: a dropdown pick eases the map to that pin,
+	// and a tapped pin fills the dropdown used last — the first line until one is used.
+	let mapFocusPointId = $state<string | null>(null);
+	let activePicker = $state<string | null>(null);
+	const pickerForMapTap = $derived(
+		activePicker === ALL_LINES_PICKER || pointLines.some((line) => line.key === activePicker)
+			? activePicker
+			: (pointLines[0]?.key ?? null)
+	);
+
 	function pickLinePoint(key: string, pointId: string) {
 		const item = donationStore.items.find((line) => line.id === key);
 		if (item) item.dropOffPointId = pointId;
+		mapFocusPointId = pointId;
 	}
 
 	function pickAllLinesPoint(pointId: string) {
 		for (const item of donationStore.items) item.dropOffPointId = pointId;
+		mapFocusPointId = pointId;
+	}
+
+	function tapMapPoint(pointId: string) {
+		donationStore.tappedPointId = pointId;
+		if (!bookablePoints.some((point) => point.id === pointId)) return;
+		if (pickerForMapTap === ALL_LINES_PICKER) pickAllLinesPoint(pointId);
+		else if (pickerForMapTap) pickLinePoint(pickerForMapTap, pointId);
 	}
 
 	// A window the donor picked earlier can fill or close before they submit — drop the
@@ -456,11 +479,14 @@
 					<p class="text-base font-bold text-slate-900" data-testid="drop-off-shelter-name">
 						{donationStore.selectedShelterName || donationStore.shelterCode}
 					</p>
-					<DropOffShelterMap
-						shelterCode={donationStore.shelterCode}
-						shelterName={donationStore.selectedShelterName}
-						onFocusPoint={(pointId) => (donationStore.tappedPointId = pointId)}
-					/>
+					{#if showDropOffMap}
+						<DropOffShelterMap
+							shelterCode={donationStore.shelterCode}
+							shelterName={donationStore.selectedShelterName}
+							bind:focusedPointId={mapFocusPointId}
+							onFocusPoint={tapMapPoint}
+						/>
+					{/if}
 				{:else}
 					<div class="flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-4">
 						<p class="text-sm font-bold text-slate-700">{t.dropOffNoShelter}</p>
@@ -492,8 +518,10 @@
 						points={bookablePoints}
 						lines={pointLines}
 						idPrefix="booking-drop-off"
+						activePicker={pickerForMapTap}
 						onPick={pickLinePoint}
 						onPickAll={pickAllLinesPoint}
+						onActivate={(picker) => (activePicker = picker)}
 					/>
 				{/if}
 			{/if}

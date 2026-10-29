@@ -72,6 +72,7 @@
 		center = DEFAULT_MAP_CENTER,
 		zoom = DEFAULT_MAP_ZOOM,
 		selectedId = null,
+		selectedPointId = null,
 		disablePopup = false,
 		points = [],
 		showLegend = true,
@@ -89,6 +90,8 @@
 		zoom?: number;
 		/** Currently selected shelter ID to sync with list */
 		selectedId?: string | null;
+		/** The drop-off point in focus: its pin is highlighted and the map eases to it. */
+		selectedPointId?: string | null;
 		/** When true (e.g. mobile view), marker click only triggers selection without showing map popup */
 		disablePopup?: boolean;
 		/** Extra pins that are not shelters (drop-off points); drawn smaller than shelter pins. */
@@ -126,6 +129,7 @@
 	let activePopup: MapLibrePopup | null = null;
 	let markersLayer: MapLibreMarker[] = [];
 	let shelterMarkerMap = new SvelteMap<string, ShelterMarkerItem>();
+	let pointMarkerMap = new SvelteMap<string, { el: HTMLElement; lng: number; lat: number }>();
 	let L: MapLibreNamespace | null = null;
 	let mapLoaded = $state(false);
 	let placingPin = $state(false);
@@ -417,6 +421,7 @@
 		});
 		markersLayer = [];
 		shelterMarkerMap.clear();
+		pointMarkerMap.clear();
 
 		const bounds = new lib.LngLatBounds();
 		let hasMarkers = false;
@@ -634,6 +639,7 @@
 				.setLngLat([lng, lat])
 				.addTo(map);
 			markersLayer.push(marker);
+			pointMarkerMap.set(point.id, { el, lng, lat });
 		}
 
 		if (!selectedId) {
@@ -706,6 +712,23 @@
 		} else {
 			closeActivePopup();
 		}
+	});
+
+	// Declared after the shelter selection above, so a focused point wins the camera over the
+	// shelter both effects ease to when the markers are redrawn.
+	$effect(() => {
+		if (!mapLoaded || !mapInstance) return;
+		for (const [id, item] of pointMarkerMap) {
+			item.el.classList.toggle('is-selected', id === selectedPointId);
+		}
+		const target = selectedPointId ? pointMarkerMap.get(selectedPointId) : undefined;
+		if (!target) return;
+		const { lng, lat } = target;
+		mapInstance.easeTo({
+			center: [lng, lat],
+			zoom: Math.max(mapInstance.getZoom(), 17),
+			duration: 400
+		});
 	});
 </script>
 
@@ -863,6 +886,14 @@
 	}
 	:global(.custom-shelter-marker.is-selected) {
 		z-index: 50 !important;
+	}
+	:global(.custom-point-marker.is-selected) {
+		z-index: 60 !important;
+	}
+	:global(.custom-point-marker.is-selected svg) {
+		transform: scale(1.5) !important;
+		transform-origin: bottom center;
+		filter: drop-shadow(0 0 2px #0f172a) drop-shadow(0 0 6px rgba(2, 132, 199, 0.8)) !important;
 	}
 	:global(.custom-shelter-marker.is-selected .marker-pin) {
 		transform: scale(1.18) !important;
