@@ -1,6 +1,11 @@
 import { z } from 'zod';
 import { passwordSchema } from '$lib/auth/password-schema';
-import { STAFF_CAPABILITIES, shelterScopeRole } from '$lib/auth/roles';
+import {
+	STAFF_CAPABILITIES,
+	compoundCapabilityRole,
+	rolesFromAssignments,
+	shelterScopeRole
+} from '$lib/auth/roles';
 import { contactPhoneSchema, createUser, listUsers, phoneSchema } from '$lib/features/users';
 import { volunteerRepositoryFor } from '../data/volunteer.remote';
 import { normalizePhone } from '../domain/phone';
@@ -73,9 +78,13 @@ export async function grantVolunteerAccess(
 		(existing.volunteer_id !== volunteer._id ||
 			existing.personnel_type !== 'volunteer' ||
 			existing.active === false ||
+			// Scope + exactly one capability, in compound or legacy flat form (issued before CR-093).
+			// Matched literally: `hasCapabilityInShelter` also passes `system_admin`.
 			existing.roles.length !== 2 ||
 			!existing.roles.includes(scope) ||
-			!existing.roles.includes(role))
+			!existing.roles.some(
+				(r) => r === compoundCapabilityRole(volunteer.shelter_code, role) || r === role
+			))
 	) {
 		throw new Error('อีเมลนี้มีบัญชีอยู่แล้วหรือสิทธิ์ไม่ตรงกัน กรุณาจัดการผ่านหน้าผู้ใช้งาน');
 	}
@@ -85,7 +94,7 @@ export async function grantVolunteerAccess(
 			name: email,
 			password,
 			display_name: `${profile.first_name} ${profile.last_name}`.trim(),
-			roles: [scope, role],
+			roles: rolesFromAssignments([{ shelter_code: volunteer.shelter_code, capabilities: [role] }]),
 			personnel_type: 'volunteer',
 			organization: profile.organization ?? null,
 			phone: accountPhones(profile.phone).contact,
