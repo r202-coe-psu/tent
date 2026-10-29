@@ -9,6 +9,7 @@ import {
 	maskLookupPhone,
 	rejectedLineReasons,
 	toDonationTrackView,
+	toTrackingLogistics,
 	type DonationLookupItem
 } from './tracking';
 
@@ -215,5 +216,49 @@ describe('reject reasons on the ticket (CR-172)', () => {
 		});
 		expect(view.items.map((i) => i.review_status)).toEqual(['approved', 'rejected', 'rejected']);
 		expect(rejectedLineReasons(view)).toEqual([null, 'หมดอายุ', '']);
+	});
+});
+
+describe('toTrackingLogistics (CR-209 FR-4)', () => {
+	it('keeps only the allowlisted keys and drops vehicle_plate', () => {
+		const out = toTrackingLogistics({
+			delivery_method: 'self_dropoff',
+			vehicle: 'car',
+			vehicle_plate: 'กข 1234 กรุงเทพมหานคร',
+			slot: { date: '2026-11-01', from: '09:00', to: '10:00', capacity: 5 },
+			eta: '2026-11-01T02:00:00Z',
+			courier_tracking_no: null,
+			pickup_address: 'บ้านเลขที่ 1',
+			internal_note: 'x'
+		});
+		expect(out).toEqual({
+			delivery_method: 'self_dropoff',
+			vehicle: 'car',
+			slot: { date: '2026-11-01', from: '09:00', to: '10:00' },
+			eta: '2026-11-01T02:00:00Z',
+			courier_tracking_no: null,
+			pickup_address: 'บ้านเลขที่ 1'
+		});
+		expect(JSON.stringify(out)).not.toContain('vehicle_plate');
+	});
+
+	it('returns null when there is no logistics block', () => {
+		expect(toTrackingLogistics(undefined)).toBeNull();
+		expect(toTrackingLogistics(null)).toBeNull();
+		expect(toTrackingLogistics('parcel')).toBeNull();
+	});
+
+	it('leaves out keys the doc does not have (doc from before the plate)', () => {
+		expect(toTrackingLogistics({ delivery_method: 'parcel' })).toEqual({
+			delivery_method: 'parcel'
+		});
+	});
+});
+
+describe('toTrackingLogistics null handling', () => {
+	it('never writes null into delivery_method, and keeps null where the type allows it', () => {
+		expect(
+			toTrackingLogistics({ delivery_method: null, vehicle: null, courier_tracking_no: null })
+		).toEqual({ vehicle: null, courier_tracking_no: null });
 	});
 });

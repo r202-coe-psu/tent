@@ -206,6 +206,38 @@ export function isTerminalDonationStatus(status: string): boolean {
 	);
 }
 
+function stringOrNull(value: unknown): string | null | undefined {
+	if (value === null) return null;
+	return typeof value === 'string' ? value : undefined;
+}
+
+/**
+ * The `logistics` the public tracking API may return (CR-209 FR-4): only these keys, from
+ * CouchDB and the FastAPI fallback alike. Anything else on the doc — `vehicle_plate` is donor
+ * PII — never reaches the tracking page.
+ */
+export function toTrackingLogistics(raw: unknown): DonationTrackLogistics | null {
+	if (!raw || typeof raw !== 'object') return null;
+	const src = raw as Record<string, unknown>;
+	const out: DonationTrackLogistics = {};
+	if (typeof src.delivery_method === 'string') out.delivery_method = src.delivery_method;
+	for (const key of ['vehicle', 'eta', 'courier_tracking_no', 'pickup_address'] as const) {
+		const value = stringOrNull(src[key]);
+		if (value !== undefined) out[key] = value;
+	}
+	if (src.slot === null) {
+		out.slot = null;
+	} else if (src.slot && typeof src.slot === 'object') {
+		const slot = src.slot as Record<string, unknown>;
+		out.slot = {};
+		for (const key of ['date', 'from', 'to'] as const) {
+			const value = slot[key];
+			if (typeof value === 'string') out.slot[key] = value;
+		}
+	}
+	return out;
+}
+
 /** Normalize BFF / FastAPI tracking payload into a stable UI view. */
 export function toDonationTrackView(raw: Record<string, unknown>): DonationTrackView {
 	const donorRaw = (raw.donor ?? {}) as Record<string, unknown>;

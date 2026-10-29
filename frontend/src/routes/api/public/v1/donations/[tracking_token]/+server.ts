@@ -2,14 +2,17 @@ import { json } from '@sveltejs/kit';
 import { putAsPublicWriter } from '$lib/server/couch-public-writer';
 import { sha256Hex } from '$lib/db/hash';
 import { fastapiBaseUrl, fastapiServiceHeaders } from '$lib/server/fastapi';
-import { isDonorEditable } from '$lib/features/donations/server';
+import {
+	isDonorEditable,
+	toTrackingLogistics,
+	type PublicDonationDoc
+} from '$lib/features/donations/server';
 import {
 	CouchReadError,
 	findByTokenHash,
 	GOODS_IN_STOCK_ERROR,
 	hasKeyedDonationStock
 } from '$lib/server/donation-docs';
-import type { PublicDonationDoc } from '$lib/features/donations';
 
 function shelterDbFromToken(token: string): string | null {
 	const match = token.match(/^TX-([A-Z0-9]+)-/);
@@ -104,7 +107,8 @@ export const GET = async ({ params }) => {
 				shelter_code: latestDoc?.shelter_code ?? donation.shelter_code,
 				donor: latestDoc?.donor ?? donation.donor ?? {},
 				items: latestDoc?.items ?? donation.items ?? [],
-				logistics: latestDoc?.logistics ?? donation.logistics ?? null,
+				// CR-209 FR-4 — allowlisted, so `vehicle_plate` never leaves through tracking.
+				logistics: toTrackingLogistics(latestDoc?.logistics ?? donation.logistics),
 				received_summary: latestDoc?.received_summary ?? donation.received_summary ?? null,
 				// CR-172 FR-14 — staff wrote it for the donor; the doc wins over the projection lag.
 				reject_reason: latestDoc?.reject_reason ?? donation.reject_reason ?? null,
