@@ -76,6 +76,8 @@ describe('GET /api/public/v1/volunteer/ticket/[token]', () => {
 		expect(json.success).toBe(true);
 		expect(json.ticket.token).toBe('app_01m1ceqt8vwxgzrmks1ybmk6v2');
 		expect(json.ticket.applicant_name).toBe('สมชาย ใจดี');
+		// 2026-06-13 08:00 is long past, so the pass must not offer cancel.
+		expect(json.ticket.can_cancel).toBe(false);
 		expect(json.ticket.job_title).toBe('ทีมอำนวยการและต้อนรับผู้ประสานงาน EOC ม.อ.');
 		const appQuery = adminRawMock.mock.calls[1]?.[2] as {
 			selector?: { $or?: Record<string, string>[] };

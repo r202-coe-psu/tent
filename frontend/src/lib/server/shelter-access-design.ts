@@ -1212,9 +1212,6 @@ ${consentVduClause()}
         throw { forbidden: 'Loan return stock ledger requires a stock_ledger:{26-char id}' };
       }
     }
-    if (newDoc.reason === 'distribution_return' && !isWarehouseOrAdmin) {
-      throw { forbidden: 'Only warehouse staff or system admin can write distribution return stock ledger' };
-    }
     if (newDoc.reason === 'distribute') {
       if (typeof newDoc.ref_id !== 'string' || (!/^distribution_batch:.+/.test(newDoc.ref_id) && !/^requisition_ticket:.+/.test(newDoc.ref_id))) {
         throw { forbidden: 'Distribute stock ledger requires distribution_batch ref_id or requisition_ticket ref_id' };
@@ -1241,8 +1238,18 @@ ${consentVduClause()}
       }
     }
     if (newDoc.reason === 'distribution_return') {
-      if (typeof newDoc.ref_id !== 'string' || !/^distribution_batch:.+/.test(newDoc.ref_id)) {
-        throw { forbidden: 'Distribution return stock ledger requires distribution_batch ref_id' };
+      // CR-208: a ticket's leftovers go back into their source lot; a direct issue has no return step.
+      var isTicketReturn =
+        typeof newDoc.ref_id === 'string' &&
+        /^requisition_ticket:.+/.test(newDoc.ref_id) &&
+        !/^requisition_ticket:direct-/.test(newDoc.ref_id);
+      var isBatchReturn = typeof newDoc.ref_id === 'string' && /^distribution_batch:.+/.test(newDoc.ref_id);
+      if (!isTicketReturn && !isBatchReturn) {
+        throw { forbidden: 'Distribution return stock ledger requires distribution_batch or non-direct requisition_ticket ref_id' };
+      }
+      // Ticket returns follow canReceiveWarehouseReturns; the legacy batch flow keeps its narrower gate.
+      if (isBatchReturn && !isWarehouseOrAdmin) {
+        throw { forbidden: 'Only warehouse staff or system admin can write distribution return stock ledger' };
       }
       if (typeof newDoc.lot_ref !== 'string' || !/^stock_ledger:.+/.test(newDoc.lot_ref)) {
         throw { forbidden: 'Distribution return stock ledger requires physical stock_ledger lot_ref' };

@@ -10,9 +10,12 @@ import {
 	buildBulkReturnPoolOverview,
 	buildPoolTimeline,
 	findAppliedBulkReturnLoanRefs,
-	findClosedBulkReturnLoanRefs
+	findClosedBulkReturnLoanRefs,
+	liveEntriesOf,
+	liveLoanRefCount
 } from '../../domain/food-supplies';
 import type { SkippedDoc } from '../../data/food-supplies';
+import { CannotConnectError, NetworkError } from '$lib/utils/errors';
 import { WorkflowValidationError } from './errors';
 import {
 	loadLivePoolEntriesWithLoans,
@@ -31,7 +34,11 @@ export interface BulkReturnPoolOverviewQuery {
 	includeCancelled?: boolean;
 }
 
-/** Pool list read model: per-pool entries, per-item totals, late entries, emptiness. */
+/**
+ * Pool list read model: per-pool entries, per-item totals, late entries, emptiness. A batched loan
+ * read that fails with a transport failure does not fail the overview: rows with loan refs get
+ * `loan_refs_unavailable: true`.
+ */
 export async function getBulkReturnPoolOverview(
 	options: BulkReturnPoolOverviewQuery,
 	ctx: AuthorContext,
@@ -44,9 +51,7 @@ export async function getBulkReturnPoolOverview(
 	});
 
 	// Closed-loan-mid-flight: ONE batched loan read for every live entry of every non-cancelled pool.
-	const liveByRow = rows.map((row) =>
-		row.pool.status === 'CANCELLED' ? [] : row.entries.filter((r) => !r.voided).map((r) => r.entry)
-	);
+	const liveByRow = rows.map(liveEntriesOf);
 	const loanIds = [
 		...new Set(
 			liveByRow.flatMap((live) =>
@@ -55,9 +60,17 @@ export async function getBulkReturnPoolOverview(
 		)
 	];
 	if (loanIds.length === 0) return rows;
-	// Skipped (malformed) loan docs are left out here, so they count as missing; never throw on read.
-	const { items } = await logRepo.getMany(loanIds);
-	const found = new Map(items.map((loan) => [loan._id, loan]));
+	// Malformed loan docs are skipped, so they count as missing. On degrade closed_loan_refs stays
+	// empty. Only transport errors (CannotConnectError/NetworkError) degrade; others still throw.
+	// NetworkError is defensive: couch-db withRetry normally converts it to CannotConnectError.
+	const loans = await logRepo.getMany(loanIds).catch((err: unknown) => {
+		if (!(err instanceof CannotConnectError || err instanceof NetworkError)) throw err;
+		return null;
+	});
+	if (!loans) {
+		return rows.map((row) => ({ ...row, loan_refs_unavailable: liveLoanRefCount(row) > 0 }));
+	}
+	const found = new Map(loans.items.map((loan) => [loan._id, loan]));
 	const loansById = new Map<string, DistributionLog | null>(
 		loanIds.map((id) => [id, found.get(id) ?? null])
 	);

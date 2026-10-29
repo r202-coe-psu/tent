@@ -25,7 +25,7 @@ export const LEDGER_GROUP_BY_REASON: Record<LedgerReason, LedgerGroup> = {
 	donation: 'in',
 	distribute: 'out',
 	requisition: 'out',
-	distribution_return: 'out',
+	distribution_return: 'in',
 	adjust: 'adjust',
 	transfer_out: 'transfer',
 	transfer_in: 'transfer'
@@ -124,7 +124,7 @@ export function toLedgerRow(entry: StockLedger, lookup: LedgerLookup): LedgerRow
 	const valid = !Number.isNaN(date.getTime());
 	// A distribute/requisition row keeps its destination in `lot.note`, which
 	// `lotStorageName` would otherwise read as a legacy location.
-	const isOut = group === 'out' && entry.reason !== 'distribution_return';
+	const isOut = group === 'out';
 	const destination = isOut ? (entry.lot?.note?.trim() ?? '') : '';
 	const adjustReason = resolveAdjustReason(entry);
 	const adjustReasonLabel = adjustReason ? ADJUST_REASON_LABELS[adjustReason] : '';
