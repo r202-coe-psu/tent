@@ -277,18 +277,24 @@ test.describe(
 			expect(pageErrors, 'an emptied box throws nothing while rendering its row').toEqual([]);
 		});
 
-		async function createTicketWithEditedQty(browser: Browser): Promise<string> {
+		const isKitchenTicket = (d: CouchDocument) =>
+			d.type === 'requisition_ticket' && d.created_by === KITCHEN.name;
+
+		async function createTicketWithEditedQty(browser: Browser): Promise<CouchDocument> {
+			const before = new Set(
+				(await allDocuments(SHELTER_DB)).filter(isKitchenTicket).map((d) => d._id)
+			);
 			const { page, bom } = await openBoardWithRecipe(browser);
 			await expect(qtyInput(bom, EIGHTH)).toHaveValue('0.125', { timeout: 15_000 });
 			await qtyInput(bom, EIGHTH).fill('0.1875');
 			await page.getByRole('button', { name: 'สร้างใบเบิกวัตถุดิบ' }).click();
 			await expect(toast(page, /เปิดตั๋วเบิกวัตถุดิบ .+ แล้ว/)).toBeVisible();
 
-			const ticket = (await allDocuments(SHELTER_DB)).find(
-				(d) => d.type === 'requisition_ticket' && d.created_by === KITCHEN.name
+			const created = (await allDocuments(SHELTER_DB)).filter(
+				(d) => isKitchenTicket(d) && !before.has(d._id)
 			);
-			expect(ticket, 'the requisition ticket was written').toBeTruthy();
-			return String(ticket!.meal_plan_id);
+			expect(created, 'exactly one requisition ticket was written').toHaveLength(1);
+			return created[0];
 		}
 
 		async function reopenPlan(
@@ -319,9 +325,9 @@ test.describe(
 		test('reopening a plan shows the saved ticket quantities, not the recipe', async ({
 			browser
 		}) => {
-			const planId = await createTicketWithEditedQty(browser);
+			const ticket = await createTicketWithEditedQty(browser);
 
-			const { bom } = await reopenPlan(browser, planId, async (route) => {
+			const { bom } = await reopenPlan(browser, String(ticket.meal_plan_id), async (route) => {
 				await new Promise((resolve) => setTimeout(resolve, 2_000));
 				await route.fallback();
 			});
@@ -331,9 +337,11 @@ test.describe(
 		});
 
 		test('a failed ticket load offers retry and never a second ticket', async ({ browser }) => {
-			const planId = await createTicketWithEditedQty(browser);
+			const ticket = await createTicketWithEditedQty(browser);
 
-			const { page } = await reopenPlan(browser, planId, (route) => route.abort());
+			const { page } = await reopenPlan(browser, String(ticket.meal_plan_id), (route) =>
+				route.abort()
+			);
 
 			await expect(page.getByText('โหลดข้อมูลใบเบิกไม่สำเร็จ')).toBeVisible({ timeout: 30_000 });
 			await expect(page.getByRole('button', { name: 'ลองใหม่' })).toBeVisible();
