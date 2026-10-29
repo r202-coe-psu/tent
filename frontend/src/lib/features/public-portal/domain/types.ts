@@ -18,6 +18,8 @@ export type PublicShelterListResponse = Omit<
 	shelters: PublicShelterItem[];
 };
 export type PublicGeoPoint = components['schemas']['GeoPoint'];
+/** One ticked storage point of a shelter detail (CR-205 FR-DP-12). */
+export type PublicDonationPoint = components['schemas']['DonationPoint'];
 
 /** UI list/map shape derived from the public shelters API (no occupancy). */
 export type PublicShelterCardModel = {

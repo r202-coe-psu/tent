@@ -206,6 +206,18 @@ describe('Back-office GET & POST /api/back-office/donations/[query]', () => {
 		expect(data.donation).not.toHaveProperty('_id');
 	});
 
+	it('GET carries the donor photos for the scan station (FR-12)', async () => {
+		const photos = ['image:01K8PHXTX00000000000000001'];
+		mockCouch({ ...baseDonation, photos });
+
+		const response = await GET({
+			params: { query: 'DN-999999' },
+			request: { headers: { get: () => 'session-cookie' } }
+		} as unknown as GetEvent);
+
+		expect((await response.json()).donation.photos).toEqual(photos);
+	});
+
 	it('GET returns 403 when warehouse staff queries another shelter donation', async () => {
 		vi.mocked(requireShelterScopeOrSA).mockResolvedValue({
 			name: 'warehouse',

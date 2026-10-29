@@ -274,6 +274,8 @@ class ShelterUseCase:
                 "zones": mapped_zones,
                 "contact": {"manager": manager_name, "phone": manager_phone},
                 "accepts_pre_registration": accepts_pre_registration(m),
+                # CR-205 FR-DP-15: the projected field only, never raw_data's sub_storage.
+                "donation_points": doc.donation_points,
                 "faq": m.get("faq")
                 or [
                     {
