@@ -785,7 +785,7 @@
 				{/if}
 			{/if}
 
-			{#if channel === 'public' && !isPrimary && onScanThaiD && !isAlreadyReported}
+			{#if !isPrimary && onScanThaiD && !isAlreadyReported}
 				<Button
 					type="button"
 					variant="outline"
