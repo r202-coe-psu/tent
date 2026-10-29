@@ -148,17 +148,6 @@ export const POST: RequestHandler = async ({ params, request }) => {
 			{ shelterCode: donation.shelter_code, createdBy: caller.name },
 			await deriveDonationCloseAuditId(donation._id)
 		);
-		const auditRes = await adminRaw(`/${dbName}/_bulk_docs`, 'POST', { docs: [audit] });
-		if (auditRes.status >= 400) {
-			throw new Error(`Failed to write audit trail: ${JSON.stringify(auditRes.data)}`);
-		}
-		// A conflict is the entry of an earlier attempt whose close did not land — it stands.
-		const outcomes = Array.isArray(auditRes.data) ? (auditRes.data as BulkDocsOutcome[]) : [];
-		const refused = outcomes.filter((o) => o.error && o.error !== 'conflict');
-		if (refused.length > 0) {
-			throw new Error(`Failed to write audit trail: ${JSON.stringify(refused)}`);
-		}
-
 		const updated: PublicDonationDoc = {
 			...donation,
 			...closed,
@@ -181,6 +170,17 @@ export const POST: RequestHandler = async ({ params, request }) => {
 		}
 		if (saveRes.status >= 400) {
 			throw new Error(`Failed to update donation to CouchDB: ${JSON.stringify(saveRes.data)}`);
+		}
+
+		// After the PUT: no audit of a close another write beat. The booking is closed by now
+		// (`closed_by` on the doc), so a lost audit is logged, not answered as a failure.
+		try {
+			const auditRes = await adminRaw(`/${dbName}/_bulk_docs`, 'POST', { docs: [audit] });
+			const outcomes = Array.isArray(auditRes.data) ? (auditRes.data as BulkDocsOutcome[]) : [];
+			if (auditRes.status >= 400 || outcomes.some((o) => o.error))
+				console.error('donation close audit failed', auditRes.data);
+		} catch (e) {
+			console.error('donation close audit failed', e);
 		}
 
 		const rev = (saveRes.data as { rev?: string } | null)?.rev;

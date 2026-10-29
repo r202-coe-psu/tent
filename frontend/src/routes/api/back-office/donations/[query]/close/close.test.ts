@@ -239,6 +239,7 @@ describe('POST /api/back-office/donations/[query]/close', () => {
 
 		expect(response.status).toBe(409);
 		expect((await response.json()).error_code).toBe('DONATION_CONFLICT');
+		expect(writtenAudits()).toHaveLength(0);
 	});
 
 	it('keeps the same audit id on a retried close', async () => {

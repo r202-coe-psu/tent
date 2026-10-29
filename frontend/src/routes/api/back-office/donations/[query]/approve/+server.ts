@@ -10,8 +10,11 @@ import {
 } from '$lib/server/donation-intake';
 import { hasKeyedDonationStock } from '$lib/server/donation-docs';
 import {
+	allLinesRecorded,
 	applyLineReview,
+	closeDonationByPoints,
 	hasLineReview,
+	hasPointReceipts,
 	reviewDonationInputSchema,
 	type LineReviewResult,
 	type PublicDonationDoc
@@ -166,7 +169,7 @@ export const POST: RequestHandler = async ({ params, request }) => {
 		}
 
 		const nowStr = new Date().toISOString();
-		const updated: PublicDonationDoc = {
+		let updated: PublicDonationDoc = {
 			...donation,
 			items: outcome.items,
 			status: outcome.status,
@@ -176,6 +179,18 @@ export const POST: RequestHandler = async ({ params, request }) => {
 			...(lineReview ? { schema_v: Math.max(donation.schema_v ?? 0, DONATION_SCHEMA_V) } : {}),
 			updated_at: nowStr
 		};
+		// CR-206 FR-MP-23 — refusing the last line no point recorded leaves nothing to receive:
+		// close the booking here, or it waits for its expiry with no "ปิดใบ" to press.
+		if (outcome.status !== 'rejected' && hasPointReceipts(updated) && allLinesRecorded(updated)) {
+			const closed = closeDonationByPoints(updated, {
+				closedBy: caller.name,
+				closedReason: 'all_points',
+				now: nowStr
+			});
+			if (closed.status !== 'rejected' || canTransitionDonation(donation.status, 'rejected')) {
+				updated = { ...updated, ...closed };
+			}
+		}
 
 		const saveRes = await adminRaw(`/${dbName}/${donation._id}`, 'PUT', updated);
 		if (saveRes.status === 409) {

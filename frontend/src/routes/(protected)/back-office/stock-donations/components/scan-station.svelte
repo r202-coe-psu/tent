@@ -859,7 +859,7 @@
 				finishBooking();
 			} else if (data.error_code === 'DONATION_CONFLICT') {
 				toast.error(data.error || 'มีจุดอื่นบันทึกใบนี้พร้อมกัน', {
-					description: 'กดบันทึกอีกครั้งได้ — ของที่บันทึกไปแล้วไม่ลงคลังซ้ำ',
+					description: 'ค้นหาใบใหม่แล้วกดรับอีกครั้ง — ของที่บันทึกไปแล้วไม่ลงคลังซ้ำ',
 					duration: 12_000
 				});
 			} else if (data.error_code === 'CATALOG_MISMATCH') {
@@ -883,7 +883,7 @@
 		donationDoc && canClose
 			? scannedItems.flatMap((it, idx) =>
 					lineStates[idx]?.kind === 'receivable' || lineStates[idx]?.kind === 'other_point'
-						? [it.name]
+						? [{ lineNo: idx, name: it.name }]
 						: []
 				)
 			: []

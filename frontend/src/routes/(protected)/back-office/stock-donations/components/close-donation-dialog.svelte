@@ -16,8 +16,8 @@
 	}: {
 		open?: boolean;
 		bookingRef: string;
-		/** Names of the lines still without a result. */
-		openLines: readonly string[];
+		/** The lines still without a result. */
+		openLines: readonly { lineNo: number; name: string }[];
 		pending?: boolean;
 		onconfirm: () => void;
 	} = $props();
@@ -39,8 +39,8 @@
 					ยังไม่ได้รับ <span class="tabular-nums">{openLines.length}</span> รายการ
 				</p>
 				<ul class="mt-1 list-disc space-y-0.5 pl-5 text-sm text-amber-900">
-					{#each openLines as line, i (`${line}:${i}`)}
-						<li>{line}</li>
+					{#each openLines as line (line.lineNo)}
+						<li>{line.name}</li>
 					{/each}
 				</ul>
 			</div>

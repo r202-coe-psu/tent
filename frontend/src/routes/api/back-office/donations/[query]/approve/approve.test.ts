@@ -242,6 +242,78 @@ describe('POST /api/back-office/donations/[query]/reject', () => {
 			expect(putBody()).toBeUndefined();
 		});
 
+		it('closes the booking when refusing the last line a point had not recorded (FR-MP-23)', async () => {
+			mockCouch({
+				...mixed,
+				items: [
+					{
+						item_id: 'item:rice',
+						qty: '10',
+						unit: 'kg',
+						review_status: 'approved',
+						drop_off_point_id: 'sp-gym'
+					},
+					{
+						free_text: 'ผ้าห่ม',
+						qty: '2',
+						unit: 'ผืน',
+						review_status: 'pending',
+						drop_off_point_id: 'sp-med'
+					}
+				],
+				point_receipts: [
+					{
+						...POINT_RECEIPTS[0],
+						ledger_ids: ['stock_ledger:row-1'],
+						items: [{ line_no: 0, item_id: 'item:rice', qty: '10', unit: 'kg' }]
+					}
+				]
+			} as unknown as PublicDonationDoc);
+
+			const response = await POST(
+				postEvent({ lines: [{ index: 1, decision: 'rejected', reason_code: 'damaged' }] })
+			);
+
+			expect(response.status).toBe(200);
+			expect(putBody()).toMatchObject({
+				status: 'received',
+				received_summary: { closed_reason: 'all_points', closed_by: 'warehouse' }
+			});
+		});
+
+		it('keeps the booking open while a line still waits for its point', async () => {
+			mockCouch({
+				...mixed,
+				items: [
+					{
+						item_id: 'item:rice',
+						qty: '10',
+						unit: 'kg',
+						review_status: 'approved',
+						drop_off_point_id: 'sp-gym'
+					},
+					{
+						free_text: 'ผ้าห่ม',
+						qty: '2',
+						unit: 'ผืน',
+						review_status: 'pending',
+						drop_off_point_id: 'sp-med'
+					}
+				],
+				point_receipts: [
+					{
+						...POINT_RECEIPTS[0],
+						items: [{ line_no: 0, item_id: 'item:rice', qty: '10', unit: 'kg' }]
+					}
+				]
+			} as unknown as PublicDonationDoc);
+
+			await POST(postEvent({ lines: [{ index: 1, decision: 'approved' }] }));
+
+			expect(putBody()).toMatchObject({ status: 'verifying' });
+			expect(putBody()).not.toHaveProperty('received_summary');
+		});
+
 		it('still approves lines of a booking with goods keyed (only a rejection is refused)', async () => {
 			mockCouch(mixed, { status: 200, data: { docs: [{ _id: 'stock_ledger:row-1' }] } });
 
