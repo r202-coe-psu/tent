@@ -2,7 +2,8 @@
  * Canonical master_data definitions for platform init (prod + staging).
  *
  * CR-137: only vulnerable_group, housing_type, shelter_type, volunteer_skills;
- * chronic_disease added back by #649 (Station 2 โรคประจำตัว); allergy by #648.
+ * chronic_disease added back by #649 (Station 2 โรคประจำตัว); allergy by #648;
+ * site_kind by #836 (CR-198, global-only).
  * municipality_zone / community are free-text fields on household/shelter docs
  * (not master types). Pet species is a domain enum (dog|cat|other).
  *
@@ -169,6 +170,19 @@ export const MASTER_DATA_DEFS: MasterTypeDef[] = [
 			{ key: 'egg', label_th: 'ไข่', label_en: 'Egg' },
 			{ key: 'wheat', label_th: 'แป้งสาลี', label_en: 'Wheat' },
 			{ key: 'nuts', label_th: 'ถั่ว', label_en: 'Nuts' }
+		]
+	},
+	{
+		// CR-198 — codes kept from the CR-067 enum so persisted shelters stay valid.
+		type: 'site_kind',
+		items: [
+			{
+				key: 'evacuation_center',
+				label_th: 'ศูนย์อพยพ',
+				label_en: 'Evacuation Center',
+				is_default: true
+			},
+			{ key: 'host_house', label_th: 'บ้านพี่เลี้ยง', label_en: 'Host House' }
 		]
 	}
 ];

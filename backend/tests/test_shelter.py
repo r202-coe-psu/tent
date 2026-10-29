@@ -181,6 +181,52 @@ async def test_list_shelters_filters_by_site_kind(
     assert body["shelters"][0]["site_kind"] == "host_house"
 
 
+async def test_list_shelters_filters_by_master_site_kind_code(
+    client: AsyncClient,
+    db_client: AsyncMongoClient,
+    settings: Settings,
+    auth_headers: dict[str, str],
+):
+    now = datetime.now(UTC)
+    for code, name, kind in (
+        ("SH001", "ศูนย์ทดสอบ", "evacuation_center"),
+        ("SH002", "โรงพยาบาลสนาม", "field_hospital"),
+    ):
+        await _insert_shelter_doc(
+            db_client,
+            settings,
+            {
+                "_id": code,
+                "shelter_code": code,
+                "name": name,
+                "site_kind": kind,
+                "status": "open",
+                "capacity": 50,
+                "updated_at": now,
+            },
+        )
+
+    response = await client.get(
+        "/public/v1/shelters",
+        params={"site_kind": "field_hospital"},
+        headers=auth_headers,
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["count"] == 1
+    assert body["shelters"][0]["code"] == "SH002"
+    assert body["shelters"][0]["site_kind"] == "field_hospital"
+
+    unused = await client.get(
+        "/public/v1/shelters",
+        params={"site_kind": "no_such_kind"},
+        headers=auth_headers,
+    )
+    assert unused.status_code == 200
+    assert unused.json()["count"] == 0
+    assert unused.json()["shelters"] == []
+
+
 async def test_list_shelters_filters_by_radius(
     client: AsyncClient,
     db_client: AsyncMongoClient,

@@ -14,13 +14,37 @@ export const operationStatusSchema = z.enum([
 ]);
 export type OperationStatus = z.infer<typeof operationStatusSchema>;
 
-// CR-067: one registry document represents either an evacuation center or a host house.
-export const siteKindSchema = z.enum(['evacuation_center', 'host_house']);
+// CR-067 / CR-198: one registry document is one site of a kind. The kind is a code of the global
+// `master_data:site_kind`; the schema checks the format only, activeness is `validateSiteKindChange`.
+export const siteKindSchema = z
+	.string()
+	.min(1, { message: 'กรุณาเลือกประเภทศูนย์', abort: true })
+	.regex(/^[a-z0-9_]+$/, 'ประเภทศูนย์ไม่ถูกต้อง');
 export type SiteKind = z.infer<typeof siteKindSchema>;
-export const SITE_KIND_LABELS: Record<SiteKind, string> = {
-	evacuation_center: 'ศูนย์อพยพ (Evacuation Center)',
-	host_house: 'บ้านพี่เลี้ยง (Host House)'
-};
+
+/**
+ * Seed default, and what a doc without `site_kind` reads as (CR-067).
+ * Mirrored in public-portal `domain/site-kind.ts`.
+ */
+export const DEFAULT_SITE_KIND = 'evacuation_center';
+/** The one kind that keeps kind-specific behaviour (CR-198 out of scope: new codes act as a plain centre). */
+export const HOST_HOUSE_SITE_KIND = 'host_house';
+
+/**
+ * FR-7 + FR-8. A kind that did not change is always accepted, even if its master item was
+ * deactivated since; a new or changed kind must be an active item of `master_data:site_kind`.
+ * Returns a Thai error naming the field, or `null` when the value is acceptable.
+ */
+export function validateSiteKindChange(
+	next: string,
+	items: readonly { code: string; status?: 'active' | 'inactive' }[],
+	previous?: string | null
+): string | null {
+	if (previous != null && next === previous) return null;
+	const item = items.find((i) => i.code === next);
+	if (item && item.status !== 'inactive') return null;
+	return `ประเภทศูนย์ "${next}" ไม่พร้อมใช้งาน กรุณาเลือกประเภทศูนย์ที่เปิดใช้อยู่`;
+}
 
 /**
  * Read a shelter master's operating status, tolerating the pre-CR-008 shape.
@@ -738,7 +762,7 @@ function migrateV4ToV5(v4: ShelterMaster): ShelterMaster {
 	return {
 		...v4,
 		schema_v: 5 as const,
-		site_kind: v4.site_kind ?? 'evacuation_center'
+		site_kind: v4.site_kind ?? DEFAULT_SITE_KIND
 	};
 }
 
@@ -900,7 +924,7 @@ function normalizeCurrent(master: ShelterMaster): ShelterMaster {
 	filled = missingDropOffKeys ? fillSubStorageDropOff(filled) : filled;
 	return {
 		...filled,
-		site_kind: filled.site_kind ?? 'evacuation_center',
+		site_kind: filled.site_kind ?? DEFAULT_SITE_KIND,
 		food_distribution_points: filled.food_distribution_points ?? []
 	};
 }

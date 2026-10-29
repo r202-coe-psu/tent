@@ -18,6 +18,8 @@ import {
 } from '$lib/features/shelter-import/server/job-store';
 import { findMasterByName, nowIso, updateMaster } from '$lib/server/shelters.admin';
 import { allocateShelterCode, provisionShelter } from '$lib/features/shelters/server/provisioner';
+import { validateSiteKindChange } from '$lib/features/shelters/server';
+import { readMasterDoc } from '$lib/server/master-data-server';
 import {
 	acquireShelterNameLock,
 	isShelterNameLockHeld,
@@ -32,6 +34,9 @@ function unauthorized() {
 		{ status: 401 }
 	);
 }
+
+/** CR-198 FR-7/FR-8 rejection: a verdict on the row, so the item is not retried. */
+class SiteKindRejected extends Error {}
 
 function itemError(error: unknown): ImportItemError[] {
 	return [
@@ -184,6 +189,29 @@ export const POST: RequestHandler = async ({ request }) => {
 					Math.max(1000, Math.floor(IMPORT_LEASE_MS / 3))
 				);
 				await assertActiveClaim();
+				const siteKindItems = (await readMasterDoc('site_kind'))?.items ?? [];
+				const checkSiteKind = (previous?: string) => {
+					const message = validateSiteKindChange(input.site_kind, siteKindItems, previous);
+					if (message) throw new SiteKindRejected(message);
+				};
+				const updateExisting = (code: string) =>
+					updateMaster(
+						code,
+						(current) => {
+							// A blank cell keeps the stored kind (CR-198 D-4), so there is nothing to check.
+							if (item.site_kind_blank !== true) checkSiteKind(current.site_kind);
+							return {
+								patch: {
+									...buildUpdatePayload(input, current, {
+										foodDistributionPointsProvided: item.food_distribution_points_present === true,
+										siteKindBlank: item.site_kind_blank === true
+									}),
+									updated_at: nowIso()
+								}
+							};
+						},
+						{ assertActive: assertActiveClaim }
+					);
 				const duplicate = await findMasterByName(input.name);
 				const resumingProvision = Boolean(item.code);
 
@@ -197,18 +225,7 @@ export const POST: RequestHandler = async ({ request }) => {
 					});
 				} else if (duplicate && !resumingProvision && job.duplicate_action === 'update') {
 					await assertActiveClaim();
-					await updateMaster(
-						duplicate.code,
-						(current) => ({
-							patch: {
-								...buildUpdatePayload(input, current, {
-									foodDistributionPointsProvided: item.food_distribution_points_present === true
-								}),
-								updated_at: nowIso()
-							}
-						}),
-						{ assertActive: assertActiveClaim }
-					);
+					await updateExisting(duplicate.code);
 					await updateImportItem(item, {
 						status: 'updated',
 						code: duplicate.code,
@@ -234,18 +251,7 @@ export const POST: RequestHandler = async ({ request }) => {
 						});
 					} else if (duplicateBeforeProvision && job.duplicate_action === 'update') {
 						await assertActiveClaim();
-						await updateMaster(
-							duplicateBeforeProvision.code,
-							(current) => ({
-								patch: {
-									...buildUpdatePayload(input, current, {
-										foodDistributionPointsProvided: item.food_distribution_points_present === true
-									}),
-									updated_at: nowIso()
-								}
-							}),
-							{ assertActive: assertActiveClaim }
-						);
+						await updateExisting(duplicateBeforeProvision.code);
 						await updateImportItem(item, {
 							status: 'updated',
 							code: duplicateBeforeProvision.code,
@@ -254,6 +260,7 @@ export const POST: RequestHandler = async ({ request }) => {
 							claim_token: undefined
 						});
 					} else {
+						if (!resumingProvision) checkSiteKind();
 						// Persist the code before touching the shelter DB. If the worker is
 						// restarted after a partial provision, the retry must reuse this code.
 						const allocatedCode = item.code ?? (await allocateShelterCode());
@@ -286,15 +293,25 @@ export const POST: RequestHandler = async ({ request }) => {
 					}
 				}
 			} catch (error) {
-				const terminalAttempt = item.attempts >= (item.max_attempts ?? MAX_IMPORT_ATTEMPTS);
-				await updateImportItem(item, {
-					status: 'failed',
-					errors: itemError(error),
-					lease_until: undefined,
-					worker_id: undefined,
-					claim_token: undefined,
-					...(terminalAttempt ? { dead_lettered_at: new Date().toISOString() } : {})
-				});
+				if (error instanceof SiteKindRejected) {
+					await updateImportItem(item, {
+						status: 'validation_error',
+						errors: [{ column: 'site_kind', message: error.message }],
+						lease_until: undefined,
+						worker_id: undefined,
+						claim_token: undefined
+					});
+				} else {
+					const terminalAttempt = item.attempts >= (item.max_attempts ?? MAX_IMPORT_ATTEMPTS);
+					await updateImportItem(item, {
+						status: 'failed',
+						errors: itemError(error),
+						lease_until: undefined,
+						worker_id: undefined,
+						claim_token: undefined,
+						...(terminalAttempt ? { dead_lettered_at: new Date().toISOString() } : {})
+					});
+				}
 			} finally {
 				if (leaseRenewalTimer) clearInterval(leaseRenewalTimer);
 				// A timer callback may already be waiting on the name-lock CAS. Do
