@@ -7,8 +7,12 @@ import {
 	COUCH_ADMIN,
 	hasStaffCapability,
 	isShelterManager,
-	isWarehouseStaff,
 	isSystemAdmin,
+	canAccessManagerPages,
+	canAccessWarehouse,
+	canAccessKitchen,
+	canAccessTickets,
+	canAccessEvacueeRegistration,
 	canAccessDistributionDesk,
 	canAccessMedicalScreening,
 	canAccessIncidents,
@@ -124,8 +128,7 @@ export async function requireAdmin(fetchFn?: typeof fetch) {
 export async function requireManager(fetchFn?: typeof fetch) {
 	await requireAuth(fetchFn);
 	const roles = authStore.user?.roles ?? [];
-	const shelter = activeShelterCode(roles);
-	if (!isSystemAdmin(roles) && !isShelterManager(roles, shelter)) {
+	if (!canAccessManagerPages(roles, activeShelterCode(roles))) {
 		throw redirect(302, resolve(LANDING_ROUTE));
 	}
 }
@@ -190,12 +193,7 @@ export function confineKioskStaffOnly(pathname: string) {
 export async function requireWarehouseAccess(fetchFn: typeof fetch = fetch) {
 	await requireAuth(fetchFn);
 	const roles = authStore.user?.roles ?? [];
-	const shelter = activeShelterCode(roles);
-	if (
-		!isSystemAdmin(roles) &&
-		!isShelterManager(roles, shelter) &&
-		!isWarehouseStaff(roles, shelter)
-	) {
+	if (!canAccessWarehouse(roles, activeShelterCode(roles))) {
 		throw redirect(302, resolve(LANDING_ROUTE));
 	}
 }
@@ -208,12 +206,7 @@ export async function requireWarehouseAccess(fetchFn: typeof fetch = fetch) {
 export async function requireKitchen(fetchFn?: typeof fetch) {
 	await requireAuth(fetchFn);
 	const roles = authStore.user?.roles ?? [];
-	const shelter = activeShelterCode(roles);
-	if (
-		!isSystemAdmin(roles) &&
-		!isShelterManager(roles, shelter) &&
-		!hasStaffCapability(roles, 'kitchen_staff', shelter)
-	) {
+	if (!canAccessKitchen(roles, activeShelterCode(roles))) {
 		throw redirect(302, resolve(LANDING_ROUTE));
 	}
 }
@@ -228,13 +221,7 @@ export async function requireKitchen(fetchFn?: typeof fetch) {
 export async function requireTicketAccess(fetchFn?: typeof fetch) {
 	await requireAuth(fetchFn);
 	const roles = authStore.user?.roles ?? [];
-	const shelter = activeShelterCode(roles);
-	if (
-		!isSystemAdmin(roles) &&
-		!isShelterManager(roles, shelter) &&
-		!isWarehouseStaff(roles, shelter) &&
-		!hasStaffCapability(roles, 'kitchen_staff', shelter)
-	) {
+	if (!canAccessTickets(roles, activeShelterCode(roles))) {
 		throw redirect(302, resolve(LANDING_ROUTE));
 	}
 }
@@ -263,12 +250,7 @@ export async function requireDistributionDesk(fetchFn?: typeof fetch) {
 export async function requireEvacueeRegistration(fetchFn?: typeof fetch) {
 	await requireAuth(fetchFn);
 	const roles = authStore.user?.roles ?? [];
-	const shelter = activeShelterCode(roles);
-	if (
-		!isSystemAdmin(roles) &&
-		!isShelterManager(roles, shelter) &&
-		!hasStaffCapability(roles, 'registration_staff', shelter)
-	) {
+	if (!canAccessEvacueeRegistration(roles, activeShelterCode(roles))) {
 		throw redirect(302, resolve(LANDING_ROUTE));
 	}
 }

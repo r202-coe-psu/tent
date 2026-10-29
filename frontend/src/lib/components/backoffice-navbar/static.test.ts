@@ -34,8 +34,8 @@ describe('canSeeNavNode — visibleTo', () => {
 		expect(canSeeNavNode(node, ctx(['system_admin']))).toBe(false);
 	});
 
-	it('decides from the roles it is given', () => {
-		const node = leaf({ visibleTo: (roles) => roles.includes('SH001:shelter_manager') });
+	it('decides from the roles and shelter it is given', () => {
+		const node = leaf({ visibleTo: ({ roles }) => roles.includes('SH001:shelter_manager') });
 		expect(canSeeNavNode(node, ctx(['SH001:shelter_manager']))).toBe(true);
 		expect(canSeeNavNode(node, ctx(['SH001:registration_staff']))).toBe(false);
 	});
@@ -117,6 +117,11 @@ describe('canSeeNavNode — groups', () => {
 });
 
 describe('real backofficeNavbarGroups — visible leaves per role (regression guard)', () => {
+	const allLeafLabels = (): string[] => {
+		const walk = (nodes: BackofficeNavbarNode[]): string[] =>
+			nodes.flatMap((n) => (isGroup(n) ? walk(n.children) : [n.label]));
+		return backofficeNavbarGroups.flatMap((g) => walk(g.items));
+	};
 	const visibleLeafLabels = (c: NavVisibilityContext): string[] => {
 		const walk = (nodes: BackofficeNavbarNode[]): string[] =>
 			nodes
@@ -125,41 +130,89 @@ describe('real backofficeNavbarGroups — visible leaves per role (regression gu
 		return backofficeNavbarGroups.flatMap((g) => walk(g.items));
 	};
 
-	const everyoneSees = [
-		'จัดการผู้เข้าพัก',
-		'จัดการอาสาสมัคร',
-		'การส่งต่อผู้เข้าพัก',
+	/** R2 (#842): no guard on the page, or no page yet — shown to every role as before. */
+	const ungated = [
 		'การประเมินความพร้อมศูนย์',
 		'การประเมินประจำวัน',
-		'คลัง',
-		'บริจาค',
-		'จัดการเบิกจ่ายพัสดุและอาหาร',
-		'เบิกวัตถุดิบครัว',
-		'ครัวกลางและอาหาร',
 		'รายงานความโปร่งใส',
 		'รายงานสรุปหลังเหตุการณ์',
-		'จัดการศูนย์พักพิง',
-		'จัดการผู้ใช้งานและสิทธิ์',
-		'ข้อมูลหลัก',
-		'คลังสินค้า',
 		'พารามิเตอร์',
 		'โลจิสติกส์ & GIS'
 	];
+	const registry = 'จัดการผู้เข้าพัก';
+	const volunteers = 'จัดการอาสาสมัคร';
+	const referrals = 'การส่งต่อผู้เข้าพัก';
+	const warehouse = ['คลัง', 'บริจาค', 'จัดการเบิกจ่ายพัสดุและอาหาร', 'คลังสินค้า'];
+	const kitchenTickets = 'เบิกวัตถุดิบครัว';
+	const kitchen = 'ครัวกลางและอาหาร';
+	const managerOnly = ['จัดการศูนย์พักพิง', 'จัดการผู้ใช้งานและสิทธิ์', 'ข้อมูลหลัก'];
 	const incidentLog = 'บันทึกเหตุการณ์ประจำวัน';
+	/** Tree-ordered ungated leaves plus the gated ones the role may open. */
+	const labelsFor = (...gated: (string | string[])[]): string[] => {
+		const allowed = new Set([...ungated, ...gated.flat()]);
+		return allLeafLabels().filter((l) => allowed.has(l));
+	};
+	const managerLabels = [
+		registry,
+		volunteers,
+		referrals,
+		...warehouse,
+		kitchenTickets,
+		kitchen,
+		...managerOnly
+	];
 	const withIncidents = (labels: string[]): string[] => {
 		const at = labels.indexOf('ครัวกลางและอาหาร') + 1;
 		return [...labels.slice(0, at), incidentLog, ...labels.slice(at)];
 	};
 	const scannerDevices = 'จัดการอุปกรณ์';
 	const bannerManagement = 'จัดการแบนเนอร์';
-	const afterUsers = everyoneSees.indexOf('จัดการผู้ใช้งานและสิทธิ์') + 1;
-	const withScanners = [
-		...everyoneSees.slice(0, afterUsers),
-		scannerDevices,
-		bannerManagement,
-		...everyoneSees.slice(afterUsers)
-	];
+	const withScanners = labelsFor(managerLabels, scannerDevices, bannerManagement);
 	const withScannersAndIncidents = withIncidents(withScanners);
+	const sh = (cap: string) => ['shelter:SH001', `SH001:${cap}`];
+
+	it('distribution_staff sees none of warehouse / kitchen / users / referrals / shelters (#842)', () => {
+		expect(visibleLeafLabels(ctx(sh('distribution_staff')))).toEqual(labelsFor());
+	});
+
+	it('kitchen_staff sees kitchen and kitchen requisitions, not the warehouse menus (#842)', () => {
+		expect(visibleLeafLabels(ctx(sh('kitchen_staff')))).toEqual(labelsFor(kitchenTickets, kitchen));
+	});
+
+	it.each(['supply_coordinator', 'warehouse_staff'])(
+		'%s sees warehouse menus and kitchen requisitions, not the central kitchen (#842)',
+		(cap) => {
+			expect(visibleLeafLabels(ctx(sh(cap)))).toEqual(labelsFor(warehouse, kitchenTickets));
+		}
+	);
+
+	it('volunteer_coordinator sees volunteers only (#842)', () => {
+		expect(visibleLeafLabels(ctx(sh('volunteer_coordinator')))).toEqual(labelsFor(volunteers));
+	});
+
+	it('registration_staff sees the evacuee registry only (#842)', () => {
+		expect(visibleLeafLabels(ctx(sh('registration_staff')))).toEqual(labelsFor(registry));
+	});
+
+	it('scopes to the active shelter: roles held in another shelter open nothing', () => {
+		const roles = ['shelter:SH002', 'SH002:kitchen_staff'];
+		expect(visibleLeafLabels(ctx(roles, 'SH001'))).toEqual(labelsFor());
+	});
+
+	it('falls back to the shelter in the roles when none is selected, like the guards', () => {
+		expect(visibleLeafLabels(ctx(sh('kitchen_staff'), null))).toEqual(
+			labelsFor(kitchenTickets, kitchen)
+		);
+	});
+
+	it('hides group headings that have no visible leaf', () => {
+		const visibleGroups = (c: NavVisibilityContext) =>
+			backofficeNavbarGroups
+				.filter((g) => g.items.some((n) => canSeeNavNode(n, c)))
+				.map((g) => g.title);
+		expect(visibleGroups(ctx(sh('kiosk_staff')))).toEqual(['4. ตั้งค่าระบบ']);
+		expect(visibleGroups(ctx(sh('distribution_staff')))).not.toContain('1. ทะเบียนและกำลังพล');
+	});
 
 	it('system_admin sees every leaf', () => {
 		expect(visibleLeafLabels(ctx(['system_admin']))).toEqual(withScannersAndIncidents);
@@ -173,15 +226,17 @@ describe('real backofficeNavbarGroups — visible leaves per role (regression gu
 	it('registration_staff does not see the kiosk device management', () => {
 		const roles = ['shelter:SH001', 'SH001:registration_staff'];
 		const labels = visibleLeafLabels(ctx(roles, 'SH001'));
-		expect(labels).toEqual(everyoneSees);
+		expect(labels).toEqual(labelsFor(registry));
 		expect(labels).not.toContain(scannerDevices);
 		expect(labels).not.toContain(bannerManagement);
 		expect(labels).not.toContain('จัดการ Kiosk');
 	});
 
-	it('a manager of another shelter keeps the kiosk devices', () => {
+	it('a manager of another shelter keeps only the kiosk devices (guards are shelter-scoped)', () => {
 		const roles = ['shelter:SH002', 'SH002:shelter_manager'];
-		expect(visibleLeafLabels(ctx(roles, 'SH001'))).toEqual(withScannersAndIncidents);
+		expect(visibleLeafLabels(ctx(roles, 'SH001'))).toEqual(
+			labelsFor(scannerDevices, bannerManagement)
+		);
 	});
 
 	it('incident log is visible to system_admin, security_officer and shelter_manager only', () => {
@@ -218,7 +273,9 @@ describe('real backofficeNavbarGroups — visible leaves per role (regression gu
 
 	it('kiosk_staff with another capability in the shelter keeps the other menus too', () => {
 		const roles = ['shelter:SH001', 'SH001:kiosk_staff', 'SH001:registration_staff'];
-		expect(visibleLeafLabels(ctx(roles, 'SH001'))).toEqual(withScanners);
+		expect(visibleLeafLabels(ctx(roles, 'SH001'))).toEqual(
+			labelsFor(registry, scannerDevices, bannerManagement)
+		);
 	});
 });
 

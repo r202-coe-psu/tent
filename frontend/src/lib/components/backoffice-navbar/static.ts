@@ -7,7 +7,14 @@ import {
 	isKioskStaffOnly,
 	isShelterManager,
 	isSystemAdmin,
+	canAccessEvacueeRegistration,
 	canAccessIncidents,
+	canAccessKitchen,
+	canAccessManagerPages,
+	canAccessTickets,
+	canAccessVolunteerBackoffice,
+	canAccessWarehouse,
+	shelterCodeFromRoles,
 	SCANNER_MANAGER_CAPABILITIES
 } from '$lib/auth/roles';
 import Users from '@lucide/svelte/icons/users';
@@ -37,7 +44,7 @@ type Leaf = {
 	requiresAdmin?: boolean;
 	requiresManager?: boolean;
 	/** Fine-grained visibility (e.g. capability in any shelter). Wins over the boolean flags. */
-	visibleTo?: (roles: readonly string[]) => boolean;
+	visibleTo?: (ctx: NavVisibilityContext) => boolean;
 };
 
 type Group = Leaf & {
@@ -61,13 +68,15 @@ export type NavVisibilityContext = {
  * admits them (FR-SBO-29): device management admits SCANNER_MANAGER_CAPABILITIES holders, banner
  * management admits BANNER_MANAGER_CAPABILITIES holders (#930).
  */
-export function canSeeNavNode(node: BackofficeNavbarNode, ctx: NavVisibilityContext): boolean {
-	if (node.visibleTo) return node.visibleTo(ctx.roles);
+export function canSeeNavNode(node: BackofficeNavbarNode, input: NavVisibilityContext): boolean {
+	// Same shelter fallback as the route guards (`activeShelterCode` in guards/auth.ts).
+	const ctx = { ...input, shelterCode: input.shelterCode ?? shelterCodeFromRoles(input.roles) };
+	if (node.visibleTo) return node.visibleTo(ctx);
 	if (!isGroup(node) && isKioskStaffOnly(ctx.roles, ctx.shelterCode)) return false;
 	const isSA = isSystemAdmin(ctx.roles);
 	if (node.requiresAdmin && !isSA) return false;
 	if (node.requiresManager && !isSA && !isShelterManager(ctx.roles, ctx.shelterCode)) return false;
-	if (isGroup(node)) return node.children.some((child) => canSeeNavNode(child, ctx));
+	if (isGroup(node)) return node.children.some((child) => canSeeNavNode(child, input));
 	return true;
 }
 
@@ -82,16 +91,23 @@ export const backofficeNavbarGroups: BackofficeNavbarGroup[] = [
 	{
 		title: '1. ทะเบียนและกำลังพล',
 		items: [
-			{ label: 'จัดการผู้เข้าพัก', href: resolve('/back-office/evacuee-management'), icon: Users },
+			{
+				label: 'จัดการผู้เข้าพัก',
+				href: resolve('/back-office/evacuee-management'),
+				icon: Users,
+				visibleTo: ({ roles, shelterCode }) => canAccessEvacueeRegistration(roles, shelterCode)
+			},
 			{
 				label: 'จัดการอาสาสมัคร',
 				href: resolve('/back-office/volunteers'),
-				icon: HeartHandshake
+				icon: HeartHandshake,
+				visibleTo: ({ roles, shelterCode }) => canAccessVolunteerBackoffice(roles, shelterCode)
 			},
 			{
 				label: 'การส่งต่อผู้เข้าพัก',
 				href: resolve('/back-office/referrals'),
-				icon: ClipboardList
+				icon: ClipboardList,
+				visibleTo: ({ roles, shelterCode }) => canAccessManagerPages(roles, shelterCode)
 			}
 		]
 	},
@@ -111,12 +127,14 @@ export const backofficeNavbarGroups: BackofficeNavbarGroup[] = [
 			{
 				label: 'คลัง',
 				href: resolve('/back-office/supply'),
-				icon: Package
+				icon: Package,
+				visibleTo: ({ roles, shelterCode }) => canAccessWarehouse(roles, shelterCode)
 			},
 			{
 				label: 'บริจาค',
 				href: resolve('/back-office/stock-donations'),
-				icon: HandHeart
+				icon: HandHeart,
+				visibleTo: ({ roles, shelterCode }) => canAccessWarehouse(roles, shelterCode)
 			},
 			{
 				label: 'จัดการคำร้องเบิกจ่าย',
@@ -126,19 +144,22 @@ export const backofficeNavbarGroups: BackofficeNavbarGroup[] = [
 					{
 						label: 'จัดการเบิกจ่ายพัสดุและอาหาร',
 						href: resolve('/back-office/distribution'),
-						icon: ClipboardList
+						icon: ClipboardList,
+						visibleTo: ({ roles, shelterCode }) => canAccessWarehouse(roles, shelterCode)
 					},
 					{
 						label: 'เบิกวัตถุดิบครัว',
 						href: resolve('/back-office/tickets/kitchen'),
-						icon: ClipboardCheck
+						icon: ClipboardCheck,
+						visibleTo: ({ roles, shelterCode }) => canAccessTickets(roles, shelterCode)
 					}
 				]
 			},
 			{
 				label: 'ครัวกลางและอาหาร',
 				href: resolve('/back-office/kitchen'),
-				icon: ForkSpoon
+				icon: ForkSpoon,
+				visibleTo: ({ roles, shelterCode }) => canAccessKitchen(roles, shelterCode)
 			}
 		]
 	},
@@ -149,7 +170,7 @@ export const backofficeNavbarGroups: BackofficeNavbarGroup[] = [
 				label: 'บันทึกเหตุการณ์ประจำวัน',
 				href: resolve('/back-office/incidents'),
 				icon: NotebookPen,
-				visibleTo: (roles) => canAccessIncidents(roles)
+				visibleTo: ({ roles, shelterCode }) => canAccessIncidents(roles, shelterCode)
 			},
 			{ label: 'รายงานความโปร่งใส', href: null, icon: FileCheck },
 			{ label: 'รายงานสรุปหลังเหตุการณ์', href: null, icon: FileText }
@@ -161,9 +182,15 @@ export const backofficeNavbarGroups: BackofficeNavbarGroup[] = [
 			{
 				label: 'จัดการศูนย์พักพิง',
 				href: resolve('/back-office/shelters'),
-				icon: Building
+				icon: Building,
+				visibleTo: ({ roles, shelterCode }) => canAccessManagerPages(roles, shelterCode)
 			},
-			{ label: 'จัดการผู้ใช้งานและสิทธิ์', href: resolve('/back-office/users'), icon: UserCog },
+			{
+				label: 'จัดการผู้ใช้งานและสิทธิ์',
+				href: resolve('/back-office/users'),
+				icon: UserCog,
+				visibleTo: ({ roles, shelterCode }) => canAccessManagerPages(roles, shelterCode)
+			},
 			{
 				label: 'จัดการ Kiosk',
 				href: null,
@@ -173,13 +200,13 @@ export const backofficeNavbarGroups: BackofficeNavbarGroup[] = [
 						label: 'จัดการอุปกรณ์',
 						href: resolve('/back-office/kiosks'),
 						icon: Cpu,
-						visibleTo: (roles) => hasCapabilityAnywhere(roles, SCANNER_MANAGER_CAPABILITIES)
+						visibleTo: ({ roles }) => hasCapabilityAnywhere(roles, SCANNER_MANAGER_CAPABILITIES)
 					},
 					{
 						label: 'จัดการแบนเนอร์',
 						href: resolve('/back-office/kiosks/banners'),
 						icon: Images,
-						visibleTo: (roles) => hasCapabilityAnywhere(roles, BANNER_MANAGER_CAPABILITIES)
+						visibleTo: ({ roles }) => hasCapabilityAnywhere(roles, BANNER_MANAGER_CAPABILITIES)
 					}
 				]
 			},
@@ -191,12 +218,14 @@ export const backofficeNavbarGroups: BackofficeNavbarGroup[] = [
 					{
 						label: 'ข้อมูลหลัก',
 						href: resolve('/back-office/master-data'),
-						icon: Database
+						icon: Database,
+						visibleTo: ({ roles, shelterCode }) => canAccessManagerPages(roles, shelterCode)
 					},
 					{
 						label: 'คลังสินค้า',
 						href: resolve('/back-office/supply?tab=catalog' as '/back-office/supply'),
-						icon: Warehouse
+						icon: Warehouse,
+						visibleTo: ({ roles, shelterCode }) => canAccessWarehouse(roles, shelterCode)
 					},
 					{
 						label: 'พารามิเตอร์',
