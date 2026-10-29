@@ -38,6 +38,7 @@ import {
 	findWrittenBulkReturnEntries
 } from './bulk-return-pool-v3-add-entry';
 import { moveBulkReturnEntry } from './bulk-return-pool-v3-move';
+import { POOL_FENCE_SETTLE_TIMEOUT_MS } from './bulk-return-pool-v3-shared';
 import { voidBulkReturnEntry } from './bulk-return-pool-v3-void';
 import {
 	getBulkReturnPoolOverview,
@@ -333,6 +334,45 @@ describe('bulk return pool v3 workflows', () => {
 			const loan = await logRepo.get(loanId(18));
 			expect(loan?.status).toBe('active');
 			expect(loan?.applied_bulk_entry_ids).toBeUndefined();
+		});
+
+		it('waits the fence timeout once for replays into a pool whose submit lock never clears', async () => {
+			const pool = await openPool('Gate A');
+			const items = [
+				{ item_id: 'item:cot', qty: '2', operationUlid: nextOp() },
+				{ item_id: 'item:wheelchair', qty: '1', operationUlid: nextOp() }
+			];
+			const input = {
+				pool_id: pool._id,
+				returner: { type: 'unspecified' as const },
+				items
+			};
+			await addBulkReturnEntries(input, mgr, deps);
+			await lockPool(pool._id);
+
+			let t = 0;
+			const res = await addBulkReturnEntries(input, mgr, {
+				...deps,
+				fenceClock: {
+					now: () => t,
+					sleep: async (ms: number) => {
+						t += ms;
+					}
+				}
+			});
+
+			expect(res.results).toHaveLength(2);
+			for (const r of res.results) {
+				expect(r).toMatchObject({
+					replayed: true,
+					late: false,
+					loan_pending: true,
+					loansApplied: [],
+					loansSkipped: []
+				});
+			}
+			expect(t).toBeGreaterThan(0);
+			expect(t).toBeLessThanOrEqual(POOL_FENCE_SETTLE_TIMEOUT_MS);
 		});
 
 		it('lists a late entry in a SUBMITTED pool and lets it be moved to an OPEN pool', async () => {

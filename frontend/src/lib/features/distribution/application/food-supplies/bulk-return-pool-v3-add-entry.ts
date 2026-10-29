@@ -271,6 +271,7 @@ export async function addBulkReturnEntries(
 
 	const returner_type: BulkReturnEntryReturnerType = input.returner.type;
 	const slots: (AddBulkReturnEntryResult | undefined)[] = input.items.map(() => undefined);
+	const timedOutPools = new Set<string>();
 
 	/**
 	 * Fences the entry's own pool and cuts its loans. `stop` = the pool stopped taking entries
@@ -332,24 +333,29 @@ export async function addBulkReturnEntries(
 
 		// FENCE: the pool may have been locked / submitted / cancelled after the entry landed. A lock
 		// is waited out: the submit may already have counted this entry in its snapshot.
+		// A pool whose lock already outlived the fence timeout in this call stays pending: later lines
+		// into it do not wait another full timeout.
+		const pendingResult = {
+			result: {
+				entry,
+				late: false,
+				replayed,
+				loan_pending: true as const,
+				loansApplied: [],
+				loansSkipped: [],
+				unallocated_qty
+			},
+			stop: true
+		};
+		if (timedOutPools.has(entry.pool_id)) return pendingResult;
 		let fence: Awaited<ReturnType<typeof settlePoolFence>>;
 		try {
 			fence = await settlePoolFence(poolRepo, entry.pool_id, entry._id, fenceClock);
 		} catch (err) {
 			if (!(err instanceof BulkReturnPoolLockTimeoutError)) throw err;
+			timedOutPools.add(entry.pool_id);
 			// The entry is written and counts in its pool; only the loans are pending.
-			return {
-				result: {
-					entry,
-					late: false,
-					replayed,
-					loan_pending: true,
-					loansApplied: [],
-					loansSkipped: [],
-					unallocated_qty
-				},
-				stop: true
-			};
+			return pendingResult;
 		}
 		if (fence === 'late') {
 			return {
@@ -431,8 +437,8 @@ export async function addBulkReturnEntries(
 	for (const i of newIdx) {
 		if (inputPoolStopped) break;
 		const item = input.items[i];
-		// DEFAULT policy, not confirmed by the user: oldest-first allocation, implemented only in the
-		// domain helper allocateBulkReturnToLoans (single place to change).
+		// CR-193 §17: oldest-first allocation, implemented only in the domain helper
+		// allocateBulkReturnToLoans (single place to change).
 		const refs = returnerId
 			? allocateBulkReturnToLoans(
 					selectOutstandingLoans(loans, { returnerId, itemId: item.item_id }),
