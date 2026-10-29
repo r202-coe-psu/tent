@@ -387,10 +387,15 @@ export interface AddEntriesSummary {
 	blocked?: { pool_id: string; reason: 'closed' | 'locked' };
 }
 
+/** Written into its pool now: not late, not relocated, not voided. */
+function isOnTime(r: AddBulkReturnEntriesResult['results'][number]): boolean {
+	return !r.late && !r.relocated && !r.voided;
+}
+
 export function summarizeAddResult(result: AddBulkReturnEntriesResult): AddEntriesSummary {
 	const relocated = result.results.filter((r) => r.relocated);
 	const voided = result.results.filter((r) => r.voided && !r.late && !r.relocated);
-	const onTime = result.results.filter((r) => !r.late && !r.relocated && !r.voided);
+	const onTime = result.results.filter(isOnTime);
 	const loanPending = onTime.filter((r) => r.loan_pending);
 	// A pending line has not cut any loan yet, and a reopened line (CR-193 §35: reopen wins, nothing
 	// is cut) has none either, so neither adds to the applied qty nor is listed as unallocated.
@@ -425,9 +430,7 @@ export function summarizeAddResult(result: AddBulkReturnEntriesResult): AddEntri
  * entry lives in that pool. A replay of an entry that sits in another pool does not count.
  */
 export function wroteIntoPool(result: AddBulkReturnEntriesResult, poolId: string): boolean {
-	return result.results.some(
-		(r) => !r.late && !r.relocated && !r.voided && (!r.replayed || r.entry.pool_id === poolId)
-	);
+	return result.results.some((r) => isOnTime(r) && (!r.replayed || r.entry.pool_id === poolId));
 }
 
 /** Warning naming the items whose loan cut is pending and where to finish it. */
@@ -453,8 +456,7 @@ export function remainingLinesMessage(
 			: ADD_ENTRY_COPY.remainingClosed;
 	}
 	const pendingInSubmittedPool = result.results.some(
-		(r) =>
-			!r.late && !r.relocated && !r.voided && r.loan_pending && r.entry.pool_id === submittedPoolId
+		(r) => isOnTime(r) && r.loan_pending && r.entry.pool_id === submittedPoolId
 	);
 	if (pendingInSubmittedPool) return ADD_ENTRY_COPY.remainingLoanPending;
 	return ADD_ENTRY_COPY.remainingNotAccepting;
