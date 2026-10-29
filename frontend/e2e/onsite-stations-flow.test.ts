@@ -239,7 +239,11 @@ test.describe(
 
 				await desk.goto(`/onsite/zoning/${ids[head.firstName]}`);
 				await expect(desk.getByText('Station 3', { exact: true })).toBeVisible({ timeout: 20_000 });
-				await desk.waitForLoadState('networkidle');
+				// `networkidle` never settles (CouchDB `_changes` long-polls stay open): wait for the
+				// confirm button the next step branches on instead.
+				await expect(desk.getByRole('button', { name: 'ยืนยันถึงโซน', exact: true })).toBeVisible({
+					timeout: 20_000
+				});
 				const confirmHousehold = desk.getByRole('button', { name: 'ยืนยันทั้งครัวเรือน' });
 				if (await confirmHousehold.isVisible().catch(() => false)) {
 					await confirmHousehold.click();
