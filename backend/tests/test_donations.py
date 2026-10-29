@@ -2241,3 +2241,64 @@ async def test_lk_a_retry_after_the_edit_was_approved_moves_no_more_quota(
 
     assert retry.json()["errors"][0]["error"] == "ALREADY_REVIEWED"
     assert await _reserved("item:water") == Decimal("12")
+
+
+_PHOTO_IDS = ["image:01K8PHXTX00000000000000001", "image:01K8PHXTX00000000000000002"]
+
+
+async def _create_unsolicited(client: AsyncClient, auth_headers: dict[str, str], **extra):
+    return await client.post(
+        "/public/v1/donations",
+        headers=auth_headers,
+        json={
+            "shelter_code": "SH001",
+            "donor": {"name": "Donor", "phone": "0812345678"},
+            "items": [{"free_text": "ผ้าห่ม", "qty": 2, "unit": "ผืน"}],
+            **extra,
+        },
+    )
+
+
+async def test_create_donation_keeps_photos_and_waits_to_bind_them(
+    client: AsyncClient, open_shelter: PublicShelter, auth_headers: dict[str, str]
+) -> None:
+    # CR-175 FR-11: the ids ride the buffer to CouchDB; the worker binds them (FR-11a).
+    response = await _create_unsolicited(client, auth_headers, photos=_PHOTO_IDS)
+    assert response.status_code == 201
+
+    buffer = await DonationBuffer.find_one(
+        DonationBuffer.booking_ref == response.json()["booking_ref"]
+    )
+    assert buffer is not None
+    assert buffer.photos == _PHOTO_IDS
+    assert buffer.photos_linked is False
+
+    # FR-14 — the donor's tracking page has no photo read path.
+    tracking = await client.get(
+        f"/public/v1/donations/{response.json()['tracking_token']}", headers=auth_headers
+    )
+    assert tracking.status_code == 200
+    assert "photos" not in tracking.json()["donation"]
+
+
+async def test_create_donation_without_photos_has_nothing_to_bind(
+    client: AsyncClient, open_shelter: PublicShelter, auth_headers: dict[str, str]
+) -> None:
+    response = await _create_unsolicited(client, auth_headers)
+    assert response.status_code == 201
+
+    buffer = await DonationBuffer.find_one(
+        DonationBuffer.booking_ref == response.json()["booking_ref"]
+    )
+    assert buffer is not None
+    assert buffer.photos == []
+    assert buffer.photos_linked is True
+
+
+async def test_create_donation_refuses_more_than_30_photos(
+    client: AsyncClient, open_shelter: PublicShelter, auth_headers: dict[str, str]
+) -> None:
+    photos = [f"image:01K8PHXTX{n:017d}" for n in range(31)]
+    response = await _create_unsolicited(client, auth_headers, photos=photos)
+    assert response.status_code == 422
+    assert await DonationBuffer.find_all().count() == 0

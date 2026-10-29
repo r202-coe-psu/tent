@@ -314,7 +314,7 @@
 <div class="mx-auto max-w-6xl px-4 py-8">
 	<!-- Header -->
 	<div class="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-		<div class="flex items-center gap-4">
+		<div class="flex min-w-0 items-center gap-4">
 			<Button
 				variant="secondary"
 				size="icon"
@@ -324,8 +324,10 @@
 			>
 				<ArrowLeft class="size-5" />
 			</Button>
-			<div>
-				<h1 class="flex items-center gap-2 text-xl font-bold text-foreground md:text-2xl">
+			<div class="min-w-0">
+				<h1
+					class="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xl font-bold text-foreground md:text-2xl"
+				>
 					<ScanLine class="size-5 text-primary md:size-6" />
 					จุดเช็คอินอาสาสมัครหน้างาน
 					<span class="text-sm font-semibold text-muted-foreground">(On-Site Check-In)</span>
@@ -335,7 +337,8 @@
 				</p>
 			</div>
 		</div>
-		<div class="flex items-center gap-2">
+		<!-- Wraps on narrow screens instead of pushing the walk-in button off-screen (#873). -->
+		<div class="flex flex-wrap items-center gap-2">
 			<Badge
 				variant="outline"
 				class="h-9 gap-1.5 rounded-xl border-emerald-300 bg-emerald-50 px-3 text-xs font-bold text-emerald-700"
@@ -343,7 +346,10 @@
 				<span class="h-1.5 w-1.5 rounded-full bg-emerald-500"></span>
 				ปฏิบัติงานจริง: {hubMetrics.data?.checkedInNow ?? 0} คน
 			</Badge>
-			<Button class="h-9 gap-1.5 rounded-xl text-xs font-bold" onclick={() => (showWalkIn = true)}>
+			<Button
+				class="h-auto min-h-9 gap-1.5 rounded-xl text-xs font-bold whitespace-normal"
+				onclick={() => (showWalkIn = true)}
+			>
 				<UserPlus class="size-3.5" />
 				ลงทะเบียน Walk-in ด่วน
 			</Button>

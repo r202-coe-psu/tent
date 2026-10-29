@@ -17,6 +17,7 @@ import { planPublicConsent } from '$lib/features/public-register/server';
 import {
 	buildValidateDocUpdate,
 	DAILY_SOP_ROLE_MANGO_INDEX,
+	DONATION_PHOTO_ORPHAN_MANGO_INDEX,
 	KIOSK_LOOKUP_MANGO_INDEXES,
 	BULK_RETURN_ENTRY_MANGO_INDEXES,
 	KIOSK_LOOKUP_WARMUP_SELECTORS,
@@ -318,7 +319,8 @@ describe('buildValidateDocUpdate', () => {
 			PEOPLE_MANGO_INDEXES,
 			REQUISITION_TICKET_MANGO_INDEXES,
 			BULK_RETURN_ENTRY_MANGO_INDEXES,
-			[DAILY_SOP_ROLE_MANGO_INDEX]
+			[DAILY_SOP_ROLE_MANGO_INDEX],
+			[DONATION_PHOTO_ORPHAN_MANGO_INDEX]
 		];
 		const byName = new Map<string, string>();
 		for (const { name, index } of lists.flat()) {
@@ -326,6 +328,17 @@ describe('buildValidateDocUpdate', () => {
 			expect(byName.get(name) ?? definition, name).toBe(definition);
 			byName.set(name, definition);
 		}
+	});
+
+	it('indexes only donor photos no booking has bound, by age (CR-175 FR-16)', () => {
+		expect(DONATION_PHOTO_ORPHAN_MANGO_INDEX.index).toEqual({
+			fields: ['created_at'],
+			partial_filter_selector: {
+				type: 'image',
+				purpose: 'donation',
+				donation_id: { $exists: false }
+			}
+		});
 	});
 
 	it('declares the bulk return Mango indexes: entries by pool, moves by target pool (#658)', () => {

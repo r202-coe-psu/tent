@@ -297,6 +297,8 @@ export type BookingOptions = {
 	mode?: DeliveryMode;
 	/** How many units to declare — 1 unless a test needs more. */
 	qty?: number;
+	/** Image files to attach on the typed-in form (CR-175 donor photos) — `unsolicited` only. */
+	photos?: string[];
 	/** Every accepted booking is recorded here for `teardownRun`. */
 	ledger: RunLedger;
 };
@@ -338,6 +340,7 @@ export async function fillBooking(
 		await expect(page.getByRole('textbox', { name: 'ประเภทสิ่งของ' })).toHaveValue(need!.name);
 	}
 	await page.getByRole('spinbutton', { name: 'ปริมาณ' }).fill(String(opts.qty ?? 1));
+	if (opts.photos?.length) await attachDonorPhotos(page, opts.photos);
 	await page.getByRole('button', { name: 'ถัดไป: เลือกจุดส่งมอบ' }).click();
 
 	// Step 3 — logistics. The destination is locked to the card's shelter.
@@ -389,6 +392,28 @@ export async function fillBooking(
 			return body;
 		}
 	};
+}
+
+/**
+ * Pick `files` in the typed-in form's photo section and wait until every one is stored
+ * (one `POST /api/public/v1/donations/photos` each) and none is still uploading.
+ */
+export async function attachDonorPhotos(page: Page, files: string[]) {
+	const picker = page.getByTestId('donor-photo-picker');
+	await expect(picker.getByRole('heading', { name: /รูปของที่จะบริจาค/ })).toBeVisible();
+	let stored = 0;
+	const onResponse = (r: { url(): string; status(): number }) => {
+		if (r.url().endsWith('/api/public/v1/donations/photos') && r.status() === 201) stored++;
+	};
+	page.on('response', onResponse);
+	try {
+		await page.getByTestId('donor-photo-input').setInputFiles(files);
+		await expect.poll(() => stored, { timeout: 30_000 }).toBe(files.length);
+		await expect(picker.getByRole('status')).toHaveCount(0);
+		await expect(picker.getByText(`${files.length} / 30 รูป`)).toBeVisible();
+	} finally {
+		page.off('response', onResponse);
+	}
 }
 
 /**
@@ -574,6 +599,12 @@ export async function findDonation(shelterCode: string, bookingRef: string) {
 		limit: 1
 	});
 	return (res.data as { docs: Record<string, unknown>[] }).docs[0];
+}
+
+/** A photo doc as CouchDB holds it — `null` once it is gone. */
+export async function findImage(shelterCode: string, imageId: string) {
+	const res = await couchReq('GET', `/${shelterDb(shelterCode)}/${encodeURIComponent(imageId)}`);
+	return res.status === 200 ? (res.data as Record<string, unknown>) : null;
 }
 
 export async function ledgerRowsFor(shelterCode: string, donationId: string) {
