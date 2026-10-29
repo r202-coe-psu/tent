@@ -12,7 +12,7 @@ import {
 	type BulkReturnPoolV3Status
 } from '../../domain/food-supplies';
 import type { UpdateBulkReturnPoolHeaderPatch } from '../../application/food-supplies/bulk-return-pool-v3-lifecycle';
-import { BULK_RETURN_REOPEN_BLOCKED_COPY } from './bulk-return-copy';
+import { ADD_ENTRY_COPY, BULK_RETURN_REOPEN_BLOCKED_COPY } from './bulk-return-copy';
 
 /**
  * #659 — pure view-model helpers for the bulk return pool v3 board (list / detail / dialogs).
@@ -581,6 +581,23 @@ export function groupMissedLoanRefsByEntry(
 		byEntry.set(ref.entry_id, list);
 	}
 	return byEntry;
+}
+
+/**
+ * Toast for the "ตัดยอดยืมที่ค้าง" action. A voided entry (OPEN pool repair raced with a void)
+ * touched no loan, so it is reported as such rather than as "0 applied".
+ */
+export function missedLoanApplyToast(result: {
+	loansApplied: readonly unknown[];
+	loansSkipped: readonly unknown[];
+	voided?: true;
+}): { kind: 'info' | 'warning' | 'success'; message: string } {
+	if (result.voided) return { kind: 'info', message: ADD_ENTRY_COPY.voided(1) };
+	const applied = result.loansApplied.length;
+	if (applied === 0 && result.loansSkipped.length > 0) {
+		return { kind: 'warning', message: 'ยอดยืมถูกปิดไปแล้ว ตัดเพิ่มไม่ได้' };
+	}
+	return { kind: 'success', message: `ตัดยอดยืมแล้ว ${applied} รายการ` };
 }
 
 /** Entry ids of a row whose void / move had no effect (written after the submit snapshot). */

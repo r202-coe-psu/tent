@@ -50,6 +50,7 @@
 		SNAPSHOT_CONFLICT_WARNING_TESTID,
 		VOID_SNAPSHOT_CONFLICT_TOAST,
 		groupMissedLoanRefsByEntry,
+		missedLoanApplyToast,
 		snapshotConflictEntryIds,
 		LATE_BADGE_CLASS,
 		LATE_ENTRY_GUIDANCE,
@@ -245,12 +246,8 @@
 				input: { entry_id: entryId, pool_id: row.pool._id },
 				shelterCode
 			});
-			const applied = result.loansApplied.length;
-			if (applied === 0 && result.loansSkipped.length > 0) {
-				toast.warning('ยอดยืมถูกปิดไปแล้ว ตัดเพิ่มไม่ได้');
-			} else {
-				toast.success(`ตัดยอดยืมแล้ว ${applied} รายการ`);
-			}
+			const outcome = missedLoanApplyToast(result);
+			toast[outcome.kind](outcome.message);
 		} catch (err) {
 			toast.error(formatDistributionError(err, 'ตัดยอดยืมไม่สำเร็จ กรุณาลองใหม่อีกครั้ง'));
 		}

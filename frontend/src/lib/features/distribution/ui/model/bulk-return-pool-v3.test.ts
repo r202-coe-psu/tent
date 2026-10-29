@@ -21,6 +21,7 @@ import {
 	groupClosedLoanRefsByEntry,
 	groupAppliedLoanRefsByEntry,
 	groupMissedLoanRefsByEntry,
+	missedLoanApplyToast,
 	snapshotConflictEntryIds,
 	canMoveEntry,
 	reopenLoanAction,
@@ -1022,5 +1023,28 @@ describe('reopenedReasonByEntry', () => {
 
 	it('is empty for undefined', () => {
 		expect(reopenedReasonByEntry(undefined).size).toBe(0);
+	});
+});
+
+describe('missedLoanApplyToast', () => {
+	it('reports a voided entry as info, not as 0 applied', () => {
+		expect(missedLoanApplyToast({ loansApplied: [], loansSkipped: [], voided: true })).toEqual({
+			kind: 'info',
+			message: '1 รายการถูกยกเลิกไปแล้ว จึงไม่ได้ตัดยอดยืม'
+		});
+	});
+
+	it('warns when nothing was applied and some loans were skipped', () => {
+		expect(missedLoanApplyToast({ loansApplied: [], loansSkipped: [{}] })).toEqual({
+			kind: 'warning',
+			message: 'ยอดยืมถูกปิดไปแล้ว ตัดเพิ่มไม่ได้'
+		});
+	});
+
+	it('reports success with the applied count', () => {
+		expect(missedLoanApplyToast({ loansApplied: [{}, {}], loansSkipped: [{}] })).toEqual({
+			kind: 'success',
+			message: 'ตัดยอดยืมแล้ว 2 รายการ'
+		});
 	});
 });
