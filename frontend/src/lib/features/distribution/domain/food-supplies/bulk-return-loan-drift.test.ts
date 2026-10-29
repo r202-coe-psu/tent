@@ -4,6 +4,7 @@ import {
 	findAppliedBulkReturnLoanRefs,
 	findClosedBulkReturnLoanRefs,
 	findMissedLoanRefs,
+	isBulkReturnRefRevertable,
 	type BulkReturnRefLoan
 } from './bulk-return-loan-drift';
 
@@ -226,6 +227,23 @@ describe('findMissedLoanRefs', () => {
 	});
 });
 
+describe('isBulkReturnRefRevertable', () => {
+	it.each(['returned', 'partially_returned'] as const)('accepts a %s loan holding enough', (s) => {
+		expect(isBulkReturnRefRevertable({ status: s, qty_returned: '2' }, { qty: '2' })).toBe(true);
+	});
+
+	it.each(['lost', 'waived', 'active'] as const)('rejects a %s loan', (s) => {
+		expect(isBulkReturnRefRevertable({ status: s, qty_returned: '5' }, { qty: '1' })).toBe(false);
+	});
+
+	it('rejects a ref larger than qty_returned (or no qty_returned)', () => {
+		expect(
+			isBulkReturnRefRevertable({ status: 'partially_returned', qty_returned: '1' }, { qty: '2' })
+		).toBe(false);
+		expect(isBulkReturnRefRevertable({ status: 'returned' }, { qty: '1' })).toBe(false);
+	});
+});
+
 describe('findAppliedBulkReturnLoanRefs', () => {
 	const A = 'distribution_log:01J0000000000000000000000A';
 	const B = 'distribution_log:01J0000000000000000000000B';
@@ -249,8 +267,46 @@ describe('findAppliedBulkReturnLoanRefs', () => {
 			[C, null]
 		]);
 		expect(findAppliedBulkReturnLoanRefs(entries, loans)).toEqual([
-			{ entry_id: ENTRY, distribution_log_id: A, qty: '2' },
-			{ entry_id: OTHER_ENTRY, distribution_log_id: A, qty: '1' }
+			{
+				entry_id: ENTRY,
+				distribution_log_id: A,
+				qty: '2',
+				loan_status: 'active',
+				revertable: false
+			},
+			{
+				entry_id: OTHER_ENTRY,
+				distribution_log_id: A,
+				qty: '1',
+				loan_status: 'active',
+				revertable: false
+			}
+		]);
+	});
+
+	it('carries the loan status and whether the ref is revertable', () => {
+		const entries = [
+			{
+				_id: ENTRY,
+				loan_refs: [
+					{ distribution_log_id: A, qty: '2' },
+					{ distribution_log_id: B, qty: '1' }
+				]
+			}
+		];
+		const loans = new Map<string, BulkReturnRefLoan | null>([
+			[A, loan({ _id: A, status: 'returned', qty_returned: '3', applied_bulk_entry_ids: [ENTRY] })],
+			[B, loan({ _id: B, status: 'lost', qty_returned: '1', applied_bulk_entry_ids: [ENTRY] })]
+		]);
+		expect(findAppliedBulkReturnLoanRefs(entries, loans)).toEqual([
+			{
+				entry_id: ENTRY,
+				distribution_log_id: A,
+				qty: '2',
+				loan_status: 'returned',
+				revertable: true
+			},
+			{ entry_id: ENTRY, distribution_log_id: B, qty: '1', loan_status: 'lost', revertable: false }
 		]);
 	});
 
