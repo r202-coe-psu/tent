@@ -18,6 +18,7 @@ import {
 	getSecurityQuestionLabel
 } from '$lib/server/security-questions';
 import { generateTemporaryPassphrase } from '$lib/server/passphrase-generator';
+import { mintStaffTokenHash } from '$lib/server/staff-card-token';
 
 /**
  * User service — the ONLY module that writes CouchDB `_users` with admin creds.
@@ -114,6 +115,7 @@ export interface CouchUserDoc {
 	email?: string | null;
 	notes?: string | null;
 	volunteer_id?: string | null;
+	staff_token_hash?: string;
 	duty_window?: {
 		start_ts: string;
 		end_ts: string;
@@ -376,6 +378,7 @@ export async function createUser(input: {
 		email: email ?? null,
 		notes: notes ?? null,
 		volunteer_id: volunteer_id ?? null,
+		...(volunteer_id ? {} : { staff_token_hash: await mintStaffTokenHash() }),
 		duty_window: duty_window ?? null,
 		active,
 		must_change_password,
