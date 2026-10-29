@@ -1,8 +1,8 @@
 import { adminFetch } from '$lib/server/couch-admin';
 import { makeDoc } from '$lib/db/model';
 import { ulid } from '$lib/db/ulid';
+import { detectImageMime, IMAGE_SCHEMA_V } from '$lib/features/images/server';
 import {
-	detectImageMime,
 	isCanonicalBase64,
 	MAX_KIOSK_FULL_PHOTO_BYTES,
 	MAX_KIOSK_THUMB_PHOTO_BYTES,
@@ -66,7 +66,7 @@ export async function putKioskCardImage(
 	const id = `image:${ulid()}`;
 	const imageDoc = makeDoc(
 		'image',
-		1,
+		IMAGE_SCHEMA_V,
 		{
 			filename: `smart-card-photo.${KIOSK_PHOTO_EXTENSION[photo.content_type]}`,
 			content_type: photo.content_type,

@@ -1,3 +1,4 @@
+import { fileURLToPath } from 'node:url';
 import { test, expect, type APIRequestContext, type Page } from '@playwright/test';
 import { CAN_WRITE, READ_ONLY_REASON } from './helpers/e2e-env';
 import { clearSession } from './helpers/login';
@@ -17,6 +18,7 @@ import {
 	expectRunGone,
 	fillExpiry,
 	findDonation,
+	findImage,
 	ledgerRowsFor,
 	openBackOffice,
 	openInScanStation,
@@ -57,6 +59,11 @@ import {
 const NEED_ITEM = 'ยาสีฟัน';
 // No `shelf_life_days`, so the scan station receives it without an expiry.
 const SHELVED_ITEM = 'แปรงสีฟัน';
+
+// Two small JPEGs the donor attaches (CR-175 donor photos).
+const DONOR_PHOTOS = ['donation-photo-1.jpg', 'donation-photo-2.jpg'].map((name) =>
+	fileURLToPath(new URL(`./fixtures/${name}`, import.meta.url))
+);
 
 const ledger = new RunLedger('donation-fullstack');
 
@@ -455,7 +462,7 @@ test.describe('Donation full-stack: donor and staff', { tag: ['@critical', '@don
 		await expect(page.getByText(/รับไม่ครบ/)).toHaveCount(0);
 	});
 
-	test('mixed booking: review waits for a reason on every refusal, and a later donor edit keeps it (CR-172 AC-4, CR-174 FR-18a, FR-24)', async ({
+	test('mixed booking: review waits for a reason on every refusal, and the donor can no longer edit it (CR-172 AC-4, CR-196 AC-2)', async ({
 		page,
 		request
 	}) => {
@@ -486,30 +493,33 @@ test.describe('Donation full-stack: donor and staff', { tag: ['@critical', '@don
 		await save.click();
 		await expectReadyForDropoff(shelter.code, bookingRef);
 
-		// The donor raises the campaign line only. The edit form sends back no category or
-		// condition; the refused line must still match itself and keep the refusal, and the
-		// booking its QR (full-branch review B1).
+		// Reviewed: the edit button stays where it was but only explains why (CR-196 FR-LK-4).
 		await clearSession(page);
+		const before = await findDonation(shelter.code, bookingRef);
+		let patched = false;
+		page.on('request', (r) => {
+			if (r.method() === 'PATCH' && r.url().includes(`/donations/${trackingToken}/items`)) {
+				patched = true;
+			}
+		});
 		await page.goto(`/donations/track/${trackingToken}`);
-		await page.getByRole('button', { name: 'แก้ไขรายการที่จะบริจาค' }).click();
-		const dialog = page.getByRole('dialog', { name: 'แก้ไขรายการที่จะบริจาค' });
-		await expect(dialog.getByText(/^ใบนี้ได้ QR แล้ว/)).toBeVisible();
-		await dialog.getByRole('spinbutton', { name: 'จำนวน' }).first().fill('2');
-		const saved = page.waitForResponse((r) =>
-			r.url().includes(`/api/public/v1/donations/${trackingToken}/items`)
-		);
-		await dialog.getByRole('button', { name: 'บันทึกการแก้ไข' }).click();
-		const res = await saved;
-		expect(res.ok(), `edit items failed: ${await res.text()}`).toBe(true);
-		await expect(dialog).toBeHidden();
+		const edit = page.getByRole('button', { name: 'แก้ไขรายการที่จะบริจาค' });
+		await expect(edit).toHaveAttribute('aria-disabled', 'true');
+		// Playwright counts aria-disabled as not clickable; a donor's tap still lands and gets the toast.
+		await edit.click({ force: true });
+		await expect(
+			page.locator('[data-sonner-toast]').filter({ hasText: 'ไม่สามารถแก้ไขรายการได้' })
+		).toBeVisible();
+		await expect(page.getByRole('dialog', { name: 'แก้ไขรายการที่จะบริจาค' })).toHaveCount(0);
 
-		const edited = await findDonation(shelter.code, bookingRef);
-		const items = edited.items as Record<string, unknown>[];
-		expect(edited.status).toBe('verifying');
-		expect(items.map((i) => Number(i.qty))).toEqual([2, 2]);
-		expect(items.map((i) => i.review_status)).toEqual(['approved', 'rejected']);
-		expect(items[1]).toMatchObject({ category: 'other', condition: 'new', review_reason: note });
-		await expect(page.getByText('รอประเมิน', { exact: true })).toHaveCount(0);
+		const after = await findDonation(shelter.code, bookingRef);
+		expect(patched).toBe(false);
+		expect(after.status).toBe('verifying');
+		expect(after.items).toEqual(before.items);
+		expect((after.items as Record<string, unknown>[]).map((i) => i.review_status)).toEqual([
+			'approved',
+			'rejected'
+		]);
 	});
 
 	test('donor cancels a booking still under review → no line reads as awaiting review', async ({
@@ -569,6 +579,63 @@ test.describe('Donation full-stack: donor and staff', { tag: ['@critical', '@don
 		await page.goto(`/donations/track/${trackingToken}`);
 		await expect(page.getByTestId('donation-reject-reason')).toContainText('ชำรุดเสียหาย');
 		await expect(page.getByText('รอประเมิน', { exact: true })).toHaveCount(0);
+	});
+
+	test('typed-in booking with two photos → staff see both at review and at the counter, the donor never does (CR-175 AC-1, AC-6)', async ({
+		page
+	}) => {
+		const { bookingRef, trackingToken } = await bookAsDonor(page, {
+			shelter,
+			unsolicited: { itemName: `โต๊ะไม้มีรูป ${RUN_ID}`, unitLabel: 'กล่อง' },
+			photos: DONOR_PHOTOS,
+			ledger,
+			donorName: `E2E แนบรูป ${RUN_ID}`,
+			phone: '0823456796'
+		});
+
+		// The worker copies the ids onto the booking and binds each photo to it (FR-11a).
+		let donation: Record<string, unknown> | undefined;
+		await expect
+			.poll(
+				async () => {
+					donation = await findDonation(shelter.code, bookingRef);
+					return (donation?.photos as string[] | undefined)?.length ?? 0;
+				},
+				{ timeout: 30_000 }
+			)
+			.toBe(2);
+		for (const photoId of donation!.photos as string[]) {
+			await expect
+				.poll(async () => (await findImage(shelter.code, photoId))?.donation_id)
+				.toBe(donation!._id);
+		}
+
+		const expectStripOpens = async () => {
+			await expect(page.getByTestId('donation-photo-thumb')).toHaveCount(2);
+			await page.getByTestId('donation-photo-thumb').first().click();
+			await expect(page.getByTestId('donation-photo-full')).toBeVisible();
+			await page.keyboard.press('Escape');
+			await expect(page.getByTestId('donation-photo-full')).toHaveCount(0);
+		};
+
+		await openBackOffice(page, ws);
+		await openPendingRow(page, bookingRef);
+		await expectStripOpens();
+
+		await approvePending(page, shelter.code, bookingRef);
+		await openInScanStation(page, bookingRef);
+		await expectStripOpens();
+
+		// AC-6 / FR-14 — no photo on the donor's page and none in what it reads.
+		await clearSession(page);
+		const tracked = page.waitForResponse(
+			(r) => r.url().includes(`/api/public/v1/donations/${trackingToken}`) && r.ok()
+		);
+		await page.goto(`/donations/track/${trackingToken}`);
+		expect(JSON.stringify(await (await tracked).json())).not.toContain('image:');
+		await expect(page.getByText(bookingRef).first()).toBeVisible();
+		await expect(page.getByTestId('donation-photo-strip')).toHaveCount(0);
+		await expect(page.locator('img[src^="blob:"]')).toHaveCount(0);
 	});
 
 	test('typed-in item in another unit maps to a stock item and is received in its own unit (#623, #636, #638)', async ({
@@ -844,7 +911,7 @@ test.describe('Donation full-stack: donor and staff', { tag: ['@critical', '@don
 				.poll(async () => (await findDonation(shelter.code, first.bookingRef))?.status)
 				.toBe('cancelled');
 
-			// The other one opens from the list too, and is still the donor's to edit.
+			// The other one opens from the list too, edit button in place (CR-196 FR-LK-4).
 			await page.goto('/donations/track');
 			await page.locator('#phone-field').fill(phone);
 			await page.getByRole('button', { name: 'ติดตามสถานะ' }).click();
@@ -876,14 +943,24 @@ test.describe('Donation full-stack: donor and staff', { tag: ['@critical', '@don
 			await expect(page).toHaveURL(/\/donations\/track$/);
 		});
 
+		// A typed-in item waits for review, so nothing is decided and the booking is still the
+		// donor's to edit (CR-196 FR-LK-4). The line keeps its key across the edit (FR-LK-2).
 		test('donor edits the quantity → the change is recorded as a revision', async ({ page }) => {
 			const { bookingRef, trackingToken } = await bookAsDonor(page, {
 				shelter,
-				need,
+				unsolicited: { itemName: `ผ้าขนหนู ${RUN_ID}`, unitLabel: 'กล่อง' },
 				ledger,
 				donorName: `E2E แก้จำนวน ${RUN_ID}`,
 				phone: '0845678901'
 			});
+			await expect
+				.poll(async () => (await findDonation(shelter.code, bookingRef))?.status, {
+					timeout: 30_000
+				})
+				.toBe('pending_review');
+			const booked = await findDonation(shelter.code, bookingRef);
+			const [lineKey] = (booked.items as { line_key?: string }[]).map((i) => i.line_key);
+			expect(lineKey).toMatch(/^[0-9A-HJKMNP-TV-Z]{26}$/);
 
 			await page.goto(`/donations/track/${trackingToken}`);
 			await page.getByRole('button', { name: 'แก้ไขรายการที่จะบริจาค' }).click();
@@ -910,6 +987,7 @@ test.describe('Donation full-stack: donor and staff', { tag: ['@critical', '@don
 				.toEqual([2]);
 			const d = await findDonation(shelter.code, bookingRef);
 			expect(d.revisions as unknown[]).toHaveLength(1);
+			expect((d.items as { line_key?: string }[])[0]?.line_key).toBe(lineKey);
 		});
 
 		test('donor cancels → quota released and the booking leaves the staff queue', async ({

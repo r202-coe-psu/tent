@@ -53,8 +53,9 @@ import type {
  * wall-clock convention `domain/duty-window.ts` uses to build `duty_window`.
  * Deriving it from UTC instead would query yesterday's roster between 00:00
  * and 07:00 local, i.e. for the whole of the `night` shift. */
-export function todayDateString(): string {
-	return bangkokDateString();
+export function todayDateString(now: Date = new Date()): string {
+	// `.getTime()` (not `new Date(now)`) so a reactive `SvelteDate` clock is tracked.
+	return bangkokDateString(new Date(now.getTime()));
 }
 
 // ---------------------------------------------------------------------------

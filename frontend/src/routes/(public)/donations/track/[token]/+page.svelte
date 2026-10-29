@@ -15,6 +15,7 @@
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import Download from '@lucide/svelte/icons/download';
+	import Printer from '@lucide/svelte/icons/printer';
 	import { generateQrDataUrl } from '$lib/utils/qrcode';
 	import { toast } from 'svelte-sonner';
 	import {
@@ -27,6 +28,7 @@
 		formatTrackSchedule,
 		canEditCourierTracking,
 		canCancelDonation,
+		donationItemEditGate,
 		isTerminalDonationStatus,
 		rejectedLineReasons,
 		needsDropOffDestination,
@@ -126,9 +128,17 @@
 		donation ? canEditCourierTracking(donation.status, donation.logistics) : false
 	);
 	const showCancel = $derived(donation ? canCancelDonation(donation.status) : false);
-	// Same gate as cancelling: while it is only a reservation the donor still owns it
-	// (CR-080 — the owner settled on `declared` only).
+	// Shown wherever cancelling is, so the page does not jump when a review lands; usable
+	// only until anything on the booking is decided (CR-196 FR-LK-4).
 	const showEdit = $derived(showCancel);
+	const canEditItems = $derived(
+		donation ? donationItemEditGate(donation.status, donation.items) === 'editable' : false
+	);
+
+	function openEdit() {
+		if (canEditItems) editOpen = true;
+		else toast.error(t.editBlockedToast);
+	}
 
 	async function saveCourier() {
 		const value = courierInput.trim();
@@ -268,6 +278,18 @@
 						<p class="max-w-xs text-2xs text-muted-foreground">
 							{t.qrHint}
 						</p>
+						<div class="mt-1 flex w-full flex-col items-center gap-2 border-t border-border pt-4">
+							<Button
+								href={resolve(`/donations/track/${encodeURIComponent(token)}/label`)}
+								variant="outline"
+								size="sm"
+								data-testid="box-label-link"
+							>
+								<Printer class="h-3.5 w-3.5" />
+								{t.boxLabelOpenBtn}
+							</Button>
+							<p class="max-w-xs text-2xs text-muted-foreground">{t.boxLabelOpenHint}</p>
+						</div>
 					</div>
 				{/if}
 
@@ -515,18 +537,19 @@
 
 					{#if showEdit}
 						<div class="flex flex-col gap-2 border-t border-border pt-5">
+							<!-- aria-disabled, not disabled: a disabled button swallows the click, and
+							     the donor has to hear why (CR-196 FR-LK-4). -->
 							<Button
 								variant="outline"
-								onclick={() => (editOpen = true)}
-								class="h-10 rounded-xl text-xs font-bold"
+								onclick={openEdit}
+								aria-disabled={!canEditItems}
+								class="h-10 rounded-xl text-xs font-bold aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
 							>
 								<Pencil class="h-4 w-4" />
 								{t.editItemsBtn}
 							</Button>
 							<p class="text-2xs leading-relaxed text-muted-foreground">
-								{langState.current === 'en'
-									? 'Adjust quantity or add/remove items until staff begins check-in'
-									: 'ปรับจำนวนหรือเพิ่ม-ลบรายการได้จนกว่าเจ้าหน้าที่จะเริ่มตรวจรับ'}
+								{t.editItemsHint}
 								{#if donation.revisions.length}
 									· {langState.current === 'en'
 										? `Edited ${donation.revisions.length} times`
@@ -565,7 +588,6 @@
 				{token}
 				shelterCode={donation.shelter_code}
 				items={donation.items}
-				{status}
 				onSaved={() => trackingQuery.refetch()}
 			/>
 		{/if}

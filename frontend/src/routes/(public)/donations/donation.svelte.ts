@@ -1,6 +1,7 @@
 import { setContext, getContext, tick } from 'svelte';
 import { ulid } from '$lib/db/ulid';
 import { scrollAppToTop } from '$lib/utils/scroll-app-to-top';
+import { DonorPhotos } from '$lib/features/donations';
 
 export interface DonationItem {
 	id: string;
@@ -23,7 +24,6 @@ export interface DonationItem {
 	unit_code?: string;
 	condition?: string;
 	remark?: string;
-	image?: string;
 	/** UI-only hint: units still short on the need card this line came from. Never sent. */
 	needQty?: number;
 }
@@ -43,7 +43,6 @@ export function newDonationItem(
 		unit: 'piece',
 		condition: 'new',
 		remark: '',
-		image: '',
 		...rest,
 		amount: 0,
 		...(qty_needed !== undefined && qty_needed > 0 ? { needQty: qty_needed } : {})
@@ -71,6 +70,12 @@ export class DonationStore {
 	courierTrackingNo = $state('');
 	eta = $state('');
 	pickupAddress = $state('');
+
+	/**
+	 * Booking-level donor photos (CR-175 FR-1, FR-2) — unsolicited mode only, and bound to
+	 * `shelterCode`: an uploaded photo lives in that shelter's DB.
+	 */
+	photos = new DonorPhotos();
 
 	items = $state<DonationItem[]>([newDonationItem()]);
 
@@ -134,6 +139,7 @@ export class DonationStore {
 		this.trackingToken = '';
 		this.bookingRef = '';
 		this.bookingStatus = '';
+		this.photos.clear();
 	}
 }
 

@@ -167,6 +167,9 @@ async def test_retention_cycle_runs_the_reservation_ttl_sweep(db: None) -> None:
             "worker.retention.job.expire_declared_donations", new_callable=AsyncMock
         ) as sweep,
         patch(
+            "worker.retention.job.sweep_orphan_donation_photos", new_callable=AsyncMock
+        ) as photo_sweep,
+        patch(
             "worker.retention.job.expire_role_grants", new_callable=AsyncMock
         ) as grants,
     ):
@@ -177,6 +180,9 @@ async def test_retention_cycle_runs_the_reservation_ttl_sweep(db: None) -> None:
     # Coordinator role grants (#955) lapse on the same cycle.
     grants.assert_awaited_once()
     assert grants.await_args.args[0] is couch
+    # CR-175 FR-16 — the unbound donor photo sweep rides the same cycle.
+    photo_sweep.assert_awaited_once()
+    assert photo_sweep.await_args.args[0] is couch
 
 
 @pytest.mark.parametrize(
@@ -215,6 +221,9 @@ async def test_a_failing_role_grant_sweep_does_not_stop_the_cycle(db: None) -> N
         patch(
             "worker.retention.job.expire_declared_donations", new_callable=AsyncMock
         ) as donations,
+        patch(
+            "worker.retention.job.sweep_orphan_donation_photos", new_callable=AsyncMock
+        ),
         patch(
             "worker.retention.job.expire_role_grants",
             new_callable=AsyncMock,

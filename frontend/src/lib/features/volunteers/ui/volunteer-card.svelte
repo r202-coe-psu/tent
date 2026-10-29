@@ -425,7 +425,7 @@
 		<AlertDialog.Footer>
 			<AlertDialog.Cancel disabled={deactivateMutation.isPending}>ยกเลิก</AlertDialog.Cancel>
 			<AlertDialog.Action
-				class="text-destructive-foreground bg-destructive hover:bg-destructive/90"
+				class="bg-destructive text-destructive-foreground hover:bg-destructive/90"
 				onclick={confirmDeactivate}
 				disabled={deactivateMutation.isPending}
 			>

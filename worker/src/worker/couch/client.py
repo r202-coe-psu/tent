@@ -116,11 +116,17 @@ class CouchClient:
         *,
         fields: list[str] | None = None,
         limit: int = 25,
+        use_index: list[str] | None = None,
     ) -> list[dict[str, Any]]:
-        """Mango ``_find`` — returns the matching ``docs`` list."""
+        """Mango ``_find`` — returns the matching ``docs`` list.
+
+        ``use_index`` is ``[ddoc, name]``; a partial index is only ever used when named.
+        """
         body: dict[str, Any] = {"selector": selector, "limit": limit}
         if fields is not None:
             body["fields"] = fields
+        if use_index is not None:
+            body["use_index"] = use_index
         response = await self._client.post(f"/{database}/_find", json=body)
         response.raise_for_status()
         return response.json().get("docs") or []

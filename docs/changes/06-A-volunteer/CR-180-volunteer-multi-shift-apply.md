@@ -3,6 +3,7 @@ id: CR-180
 title: สมัครหลายกะในครั้งเดียว (multi-select) + คิวอนุมัติจัดกลุ่มตามผู้สมัคร
 status: approved
 date: 2026-10-20 (approved 2026-10-20)
+updated: 2026-10-30 # amend FR-6 โดย CR-215 (เพิ่มรหัส SHIFT_CLOSED)
 requested_by: ทีม dev (issue #716 — สมัครทีละกะ / อนุมัติทีละกะ)
 decided_by: หัวหน้างาน (@net-lynx — ตอบใน #716 "ทำ multi-select", 2026-10-20) · approve CR + ยืนยันค่าเริ่มต้นโดย @mhapong (ผู้รับ issue) 2026-10-20
 layer: volatile
@@ -66,7 +67,7 @@ affects:
   และตอบกะที่ตามมาว่า `TIME_CONFLICT`
 - FR-6 — คำตอบมี `results[]` หนึ่งรายการต่อกะที่ขอ: `{ ok: true, shift_id, status, tracking_token }` หรือ
   `{ ok: false, shift_id, error }` โดย `error` ใช้รหัสเดิม (`SHIFT_FULL`, `JOB_FULL`, `TIME_CONFLICT`,
-  `SHIFT_NOT_FOUND`, `DUPLICATE_APPLICATION`, …)
+  `SHIFT_NOT_FOUND`, `DUPLICATE_APPLICATION`, … และ [CR-215](CR-215-close-ended-volunteer-shifts.md) เพิ่ม `SHIFT_CLOSED`)
 - FR-7 — มีกะผ่านอย่างน้อย 1 กะ → HTTP 201 พร้อม `results[]` (+ ฟิลด์ระดับบนของกะแรกที่ผ่าน ให้ client เก่าอ่านได้);
   ไม่ผ่านเลย → สถานะ / รหัสของกะแรกที่ไม่ผ่าน พร้อม `results[]`
 - FR-8 — `volunteer_token` (CR-127) ออกครั้งเดียวต่อคำขอ ตอนสร้างโปรไฟล์ใหม่

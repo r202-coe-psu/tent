@@ -6,7 +6,7 @@ import pytest
 
 from apiapp.modules.donations.review import (
     booking_status,
-    line_key,
+    item_edit_gate,
     review_edited_booking,
     review_new_booking,
 )
@@ -106,237 +106,51 @@ def test_other_fields_ride_through_untouched() -> None:
     assert outcome.items[0]["free_text"] == "ข้าวสาร"
 
 
-# --- FR-18a: what counts as an untouched line ---
+# --- CR-196 FR-LK-4: an edit is open only while nothing was decided ---
 
 
-def test_empty_and_missing_are_the_same() -> None:
-    assert line_key({**DIAPERS, "note": ""}) == line_key(DIAPERS)
-    assert line_key({**DIAPERS, "note": None}) == line_key(DIAPERS)
-    assert line_key({**DIAPERS, "note": "  "}) == line_key(DIAPERS)
+@pytest.mark.parametrize("status", ["declared", "pending_review"])
+def test_a_booking_nothing_was_decided_on_is_editable(status: str) -> None:
+    assert item_edit_gate(status, [{**DIAPERS, "review_status": "pending"}, BLANKET]) == "editable"
 
 
-def test_surrounding_spaces_are_not_an_edit() -> None:
-    """The wizard keeps a trailing space a phone keyboard added; the edit form trims it."""
-    assert line_key({**DIAPERS, "free_text": "ผ้าอ้อมผู้ใหญ่ "}) == line_key(DIAPERS)
+@pytest.mark.parametrize("decided", ["approved", "rejected"])
+def test_one_decided_line_closes_the_edit(decided: str) -> None:
+    """An approval by the campaign rule counts as much as a person's decision."""
+    lines = [{**RICE, "review_status": decided}, {**DIAPERS, "review_status": "pending"}]
+
+    assert item_edit_gate("pending_review", lines) == "already_reviewed"
 
 
-@pytest.mark.parametrize("qty", [3, "3", "3.0", 3.0, "3.00"])
-def test_qty_compares_as_a_number(qty: object) -> None:
-    assert line_key({**DIAPERS, "qty": qty}) == line_key(DIAPERS)
+@pytest.mark.parametrize("status", ["verifying", "rejected"])
+def test_a_reviewed_booking_is_already_reviewed(status: str) -> None:
+    """Even a booking from before schema_v 7, whose lines carry no review of their own."""
+    assert item_edit_gate(status, [RICE]) == "already_reviewed"
 
 
-@pytest.mark.parametrize(
-    "change",
-    [
-        {"note": "ใหม่"},
-        {"condition": "used"},
-        {"category": "hygiene"},
-        {"unit": "ห่อ"},
-        {"qty": "4"},
-        {"free_text": "ผ้าอ้อมเด็ก"},
-        {"item_id": "item:diapers"},
-    ],
-)
-def test_any_one_field_changed_is_an_edit(change: dict) -> None:
-    assert line_key({**DIAPERS, **change}) != line_key(DIAPERS)
+@pytest.mark.parametrize("status", ["received", "cancelled", "expired", "redirected", "?"])
+def test_a_booking_past_drop_off_is_closed(status: str) -> None:
+    assert item_edit_gate(status, [RICE]) == "closed"
 
 
-def test_bookkeeping_fields_do_not_count() -> None:
-    assert line_key({**RICE, "reserved_qty": "5", "review_status": "approved"}) == line_key(RICE)
+# --- FR-18: an edited booking is judged afresh ---
 
 
-# --- FR-18 on a schema_v 7 booking ---
-
-
-def _reviewed(item: dict, status: str, **reason: str) -> dict:
-    return {**item, "review_status": status, **reason}
-
-
-def test_ac7_adding_a_typed_line_to_a_verifying_booking_sends_it_back() -> None:
+def test_every_line_of_an_edit_is_judged_by_the_campaign_rule() -> None:
     outcome = review_edited_booking(
-        previous_items=[_reviewed(RICE, "approved")],
-        previous_status="verifying",
-        items=[RICE, DIAPERS],
-        reserved=[True, False],
-    )
-
-    assert outcome.status == "pending_review"
-    assert _statuses(outcome.items) == ["approved", "pending"]
-    # The rice line kept the approval it had — no new auto approval to audit.
-    assert outcome.auto_approved_lines == []
-
-
-def test_ac10_editing_a_staff_approved_typed_line_puts_it_back_in_review() -> None:
-    outcome = review_edited_booking(
-        previous_items=[_reviewed(RICE, "approved"), _reviewed(DIAPERS, "approved")],
-        previous_status="verifying",
-        items=[RICE, {**DIAPERS, "qty": "6"}],
-        reserved=[True, False],
-    )
-
-    assert outcome.status == "pending_review"
-    assert _statuses(outcome.items) == ["approved", "pending"]
-
-
-def test_ac16_changing_only_the_note_is_an_edit() -> None:
-    outcome = review_edited_booking(
-        previous_items=[_reviewed(RICE, "approved"), _reviewed(BLANKET, "approved")],
-        previous_status="verifying",
-        items=[RICE, {**BLANKET, "note": "ใหม่ ยังไม่แกะ"}],
-        reserved=[True, False],
-    )
-
-    assert _statuses(outcome.items) == ["approved", "pending"]
-    assert outcome.status == "pending_review"
-
-
-def test_an_untouched_rejected_line_stays_rejected_with_its_reason() -> None:
-    previous = [
-        _reviewed(RICE, "approved"),
-        _reviewed(BLANKET, "rejected", review_reason_code="damaged", review_reason="ขาดหลายจุด"),
-    ]
-    outcome = review_edited_booking(
-        previous_items=previous,
-        previous_status="verifying",
-        items=[{**RICE, "qty": "6"}, BLANKET],
-        reserved=[True, False],
-    )
-
-    assert outcome.items[1]["review_status"] == "rejected"
-    assert outcome.items[1]["review_reason_code"] == "damaged"
-    assert outcome.items[1]["review_reason"] == "ขาดหลายจุด"
-    assert outcome.items[0]["review_status"] == "approved"
-    # The rice line changed and is approved again by the campaign rule — audit it.
-    assert outcome.auto_approved_lines == [0]
-    assert outcome.status == "verifying"
-
-
-def test_lines_are_matched_regardless_of_order() -> None:
-    outcome = review_edited_booking(
-        previous_items=[_reviewed(DIAPERS, "approved"), _reviewed(RICE, "approved")],
-        previous_status="verifying",
-        items=[RICE, DIAPERS],
-        reserved=[True, False],
-    )
-
-    assert _statuses(outcome.items) == ["approved", "approved"]
-    assert outcome.status == "verifying"
-
-
-def test_an_old_line_can_be_claimed_once() -> None:
-    """Duplicating a staff-approved typed line does not approve the copy too."""
-    outcome = review_edited_booking(
-        previous_items=[_reviewed(DIAPERS, "approved")],
-        previous_status="verifying",
-        items=[DIAPERS, DIAPERS],
-        reserved=[False, False],
-    )
-
-    assert _statuses(outcome.items) == ["approved", "pending"]
-    assert outcome.status == "pending_review"
-
-
-def test_ac22_dropping_the_typed_line_leaves_a_verifying_booking() -> None:
-    outcome = review_edited_booking(
-        previous_items=[_reviewed(RICE, "approved"), _reviewed(DIAPERS, "pending")],
         previous_status="pending_review",
-        items=[RICE],
-        reserved=[True],
-    )
-
-    assert outcome.status == "verifying"
-    assert _statuses(outcome.items) == ["approved"]
-    # Approved at creation and audited then — not again.
-    assert outcome.auto_approved_lines == []
-
-
-def test_an_untouched_pending_line_keeps_waiting() -> None:
-    outcome = review_edited_booking(
-        previous_items=[_reviewed(RICE, "approved"), _reviewed(DIAPERS, "pending")],
-        previous_status="pending_review",
-        items=[{**RICE, "qty": "7"}, DIAPERS],
+        items=[{**RICE, "review_status": "pending"}, DIAPERS],
         reserved=[True, False],
     )
 
     assert _statuses(outcome.items) == ["approved", "pending"]
+    assert outcome.status == "pending_review"
     assert outcome.auto_approved_lines == [0]
 
 
-def test_keeping_only_rejected_lines_rejects_the_booking() -> None:
+def test_an_edit_down_to_campaign_lines_opens_verifying() -> None:
     outcome = review_edited_booking(
-        previous_items=[
-            _reviewed(DIAPERS, "rejected", review_reason_code="not_needed"),
-            _reviewed(BLANKET, "pending"),
-        ],
-        previous_status="pending_review",
-        items=[DIAPERS],
-        reserved=[False],
-    )
-
-    assert outcome.status == "rejected"
-
-
-def test_an_edited_campaign_line_the_counter_did_not_reserve_waits() -> None:
-    outcome = review_edited_booking(
-        previous_items=[_reviewed(RICE, "approved")],
-        previous_status="verifying",
-        items=[{**RICE, "qty": "9"}],
-        reserved=[False],
-    )
-
-    assert _statuses(outcome.items) == ["pending"]
-    assert outcome.status == "pending_review"
-
-
-# --- FR-18c: bookings from before schema_v 7 ---
-
-
-def test_ac19_legacy_verifying_keeps_the_typed_line_approved() -> None:
-    outcome = review_edited_booking(
-        previous_items=[RICE, DIAPERS],
-        previous_status="verifying",
-        items=[{**RICE, "qty": "8"}, DIAPERS],
-        reserved=[True, False],
-    )
-
-    assert _statuses(outcome.items) == ["approved", "approved"]
-    assert outcome.status == "verifying"
-    # The rice line changed and was approved by the rule now — that one is audited.
-    assert outcome.auto_approved_lines == [0]
-
-
-def test_legacy_verifying_still_reviews_a_new_typed_line() -> None:
-    outcome = review_edited_booking(
-        previous_items=[RICE],
-        previous_status="verifying",
-        items=[RICE, BLANKET],
-        reserved=[True, False],
-    )
-
-    assert _statuses(outcome.items) == ["approved", "pending"]
-    assert outcome.status == "pending_review"
-    assert outcome.auto_approved_lines == []
-
-
-def test_ac20_legacy_pending_review_is_judged_like_a_new_booking() -> None:
-    outcome = review_edited_booking(
-        previous_items=[RICE, WATER, DIAPERS],
-        previous_status="pending_review",
-        items=[RICE, {**WATER, "qty": "24"}, DIAPERS],
-        reserved=[True, True, False],
-    )
-
-    assert _statuses(outcome.items) == ["approved", "approved", "pending"]
-    assert outcome.status == "pending_review"
-    assert outcome.auto_approved_lines == [0, 1]
-
-
-def test_ac22_legacy_pending_review_dropping_the_typed_line_audits_every_line() -> None:
-    outcome = review_edited_booking(
-        previous_items=[RICE, WATER, DIAPERS],
-        previous_status="pending_review",
-        items=[RICE, WATER],
-        reserved=[True, True],
+        previous_status="pending_review", items=[RICE, WATER], reserved=[True, True]
     )
 
     assert outcome.status == "verifying"
@@ -344,8 +158,8 @@ def test_ac22_legacy_pending_review_dropping_the_typed_line_audits_every_line() 
 
 
 def test_ac21_a_declared_booking_stays_declared_with_no_review() -> None:
+    """FR-18c — a booking from before schema_v 7 still at ``declared``."""
     outcome = review_edited_booking(
-        previous_items=[RICE],
         previous_status="declared",
         items=[{**RICE, "qty": "9", "review_status": "approved"}, DIAPERS],
         reserved=[True, False],
@@ -356,10 +170,9 @@ def test_ac21_a_declared_booking_stays_declared_with_no_review() -> None:
     assert outcome.auto_approved_lines == []
 
 
-def test_the_flags_must_line_up_with_the_lines() -> None:
+@pytest.mark.parametrize("status", ["declared", "pending_review"])
+def test_the_flags_must_line_up_with_the_lines(status: str) -> None:
     with pytest.raises(ValueError):
         review_new_booking([RICE], [])
     with pytest.raises(ValueError):
-        review_edited_booking(
-            previous_items=[], previous_status="verifying", items=[RICE], reserved=[]
-        )
+        review_edited_booking(previous_status=status, items=[RICE], reserved=[])

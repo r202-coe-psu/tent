@@ -4,7 +4,12 @@ import { createBulkReturnEntry } from './bulk-return-entry';
 import { createBulkReturnEntryMove } from './bulk-return-entry-move';
 import { createBulkReturnEntryVoid } from './bulk-return-entry-void';
 import { cancelBulkReturnPoolV3, createBulkReturnPoolV3 } from './bulk-return-pool-v3';
-import { buildBulkReturnPoolOverview } from './bulk-return-pool-overview';
+import {
+	buildBulkReturnPoolOverview,
+	liveEntriesOf,
+	liveLoanRefCount,
+	type BulkReturnPoolOverviewRow
+} from './bulk-return-pool-overview';
 
 const ctx: AuthorContext = { shelterCode: 'SH001', createdBy: 'staff:wh' };
 const P1 = 'bulk_return_pool:01J00000000000000000000011';
@@ -33,6 +38,7 @@ describe('buildBulkReturnPoolOverview', () => {
 			entries: [e1, e2, e3],
 			moves: [],
 			voids: [],
+			loanReopens: [],
 			skipped: []
 		});
 		expect(rows.map((r) => r.pool._id)).toEqual([P2, P1]);
@@ -54,6 +60,7 @@ describe('buildBulkReturnPoolOverview', () => {
 				createBulkReturnEntryMove({ entry: e1, seq: 1, from_pool_id: P1, to_pool_id: P2 }, ctx)
 			],
 			voids: [createBulkReturnEntryVoid({ entry: e2, pool_id: P1 }, ctx)],
+			loanReopens: [],
 			skipped: []
 		});
 		const byId = new Map(rows.map((r) => [r.pool._id, r]));
@@ -64,7 +71,7 @@ describe('buildBulkReturnPoolOverview', () => {
 	});
 
 	it('hides CANCELLED pools unless includeCancelled', () => {
-		const events = { entries: [], moves: [], voids: [], skipped: [] };
+		const events = { entries: [], moves: [], voids: [], loanReopens: [], skipped: [] };
 		expect(buildBulkReturnPoolOverview([open1, cancelled], events).map((r) => r.pool._id)).toEqual([
 			P1
 		]);
@@ -79,13 +86,14 @@ describe('buildBulkReturnPoolOverview', () => {
 		const late = entryOf(4, P3, 'item:cot', '1');
 		const rows = buildBulkReturnPoolOverview(
 			[cancelled],
-			{ entries: [late], moves: [], voids: [], skipped: [] },
+			{ entries: [late], moves: [], voids: [], loanReopens: [], skipped: [] },
 			{ includeCancelled: true }
 		);
 		expect(rows[0].late_entries.map((r) => r.entry._id)).toEqual([late._id]);
 		expect(rows[0].is_empty).toBe(false);
 		// The pure builder never reads loans; the overview read fills this in.
 		expect(rows.every((r) => r.closed_loan_refs.length === 0)).toBe(true);
+		expect(rows.every((r) => r.loan_refs_unavailable === false)).toBe(true);
 	});
 
 	it('does not throw on an orphan void and lists it on the pool it names', () => {
@@ -94,6 +102,7 @@ describe('buildBulkReturnPoolOverview', () => {
 			entries: [e1, e2],
 			moves: [],
 			voids: [orphanVoid],
+			loanReopens: [],
 			skipped: []
 		});
 		const byId = new Map(rows.map((r) => [r.pool._id, r]));
@@ -116,6 +125,7 @@ describe('buildBulkReturnPoolOverview', () => {
 			entries: [e1, e3],
 			moves: [seq2],
 			voids: [],
+			loanReopens: [],
 			skipped: []
 		});
 		const byId = new Map(rows.map((r) => [r.pool._id, r]));
@@ -147,6 +157,7 @@ describe('buildBulkReturnPoolOverview', () => {
 				entries: [e1, e3],
 				moves: [seq2, seq1],
 				voids: [],
+				loanReopens: [],
 				skipped: []
 			}).map((r) => [r.pool._id, r])
 		);
@@ -167,6 +178,7 @@ describe('buildBulkReturnPoolOverview', () => {
 			entries: [e1],
 			moves: [seq2],
 			voids: [],
+			loanReopens: [],
 			skipped: []
 		});
 		const byId = new Map(rows.map((r) => [r.pool._id, r]));
@@ -180,8 +192,69 @@ describe('buildBulkReturnPoolOverview', () => {
 				entries: [e1, e1],
 				moves: [],
 				voids: [],
+				loanReopens: [],
 				skipped: []
 			})
 		).toThrow(/Duplicate/);
+	});
+});
+
+const poolRow = poolOf(P1, 'A');
+const entriesOf = (
+	...specs: { refs: number; voided?: boolean }[]
+): BulkReturnPoolOverviewRow['entries'] =>
+	specs.map(
+		(s) =>
+			({
+				entry: { loan_refs: Array.from({ length: s.refs }, () => ({})) },
+				voided: s.voided ?? false
+			}) as unknown as BulkReturnPoolOverviewRow['entries'][number]
+	);
+
+describe('liveEntriesOf', () => {
+	it('returns the entries of non-voided rows', () => {
+		const entries = entriesOf({ refs: 1 }, { refs: 2 });
+		expect(liveEntriesOf({ pool: poolRow, entries })).toEqual([entries[0].entry, entries[1].entry]);
+	});
+
+	it('excludes voided entries', () => {
+		const entries = entriesOf({ refs: 2, voided: true }, { refs: 1 });
+		expect(liveEntriesOf({ pool: poolRow, entries })).toEqual([entries[1].entry]);
+	});
+
+	it('returns [] for a CANCELLED pool', () => {
+		const pool = cancelBulkReturnPoolV3(poolRow, ctx);
+		expect(liveEntriesOf({ pool, entries: entriesOf({ refs: 1 }) })).toEqual([]);
+	});
+});
+
+describe('liveLoanRefCount', () => {
+	it('sums the loan refs of non-voided entries', () => {
+		expect(liveLoanRefCount({ pool: poolRow, entries: entriesOf({ refs: 2 }, { refs: 1 }) })).toBe(
+			3
+		);
+	});
+
+	it('excludes voided entries', () => {
+		expect(
+			liveLoanRefCount({
+				pool: poolRow,
+				entries: entriesOf({ refs: 2, voided: true }, { refs: 1 })
+			})
+		).toBe(1);
+	});
+
+	it('returns 0 for a CANCELLED pool', () => {
+		expect(
+			liveLoanRefCount({
+				pool: cancelBulkReturnPoolV3(poolRow, ctx),
+				entries: entriesOf({ refs: 2 })
+			})
+		).toBe(0);
+	});
+
+	it('returns 0 when no entry has loan refs', () => {
+		expect(liveLoanRefCount({ pool: poolRow, entries: [] })).toBe(0);
+		expect(liveLoanRefCount({ pool: poolRow, entries: entriesOf({ refs: 0 }) })).toBe(0);
 	});
 });
