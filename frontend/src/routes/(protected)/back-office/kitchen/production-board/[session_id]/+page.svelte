@@ -341,7 +341,7 @@
 	let newQty = $state('1');
 	let newUnit = $state('');
 
-	function calculateRecipeIngredients(recipeId: string, portions: number): IngredientRow[] {
+	function calculateRecipeIngredients(recipeId: string, portions: number | null): IngredientRow[] {
 		const recipe = (recipes.data ?? []).find((r) => r._id === recipeId);
 		if (!recipe) {
 			return [];

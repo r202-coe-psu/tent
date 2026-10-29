@@ -546,4 +546,8 @@ describe('scaleRecipeIngredientQty', () => {
 		expect(scaleRecipeIngredientQty('2', '1', 0)).toBe('0');
 		expect(scaleRecipeIngredientQty('', '1', 4)).toBe('0');
 	});
+
+	it('returns 0 for an emptied portions box instead of throwing', () => {
+		expect(scaleRecipeIngredientQty('2', '1', null)).toBe('0');
+	});
 });
