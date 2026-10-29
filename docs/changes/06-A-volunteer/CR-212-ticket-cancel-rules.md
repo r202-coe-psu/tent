@@ -1,11 +1,12 @@
 ---
-id: draft
+id: CR-212 # renumbered from draft-ticket-cancel-rules
 title: ยกเลิกการสมัครจากบัตรดิจิทัล — กติกาใหม่ (สถานะ, ก่อนเริ่มกะ, token ถาวรของจิตอาสา) และ BFF เขียน CouchDB เอง
-status: proposed
+status: approved
 date: 2026-10-28
-updated: 2026-10-29
+updated: 2026-10-29 # approved (Soravit Sukkarn, Team Lead)
 requested_by: "#967 (ผู้รับงาน @Mhapong) + review ของ @Jackyzaz ใน PR #966 (ขอ doc amend)"
-decided_by: project owner
+decided_by: Soravit Sukkarn (Team Lead)
+decision_date: 2026-10-29
 layer: volatile
 affects:
   - docs/changes/06-A-volunteer/CR-096-volunteer-portal-dispatch-response.md (FR-96-07, FR-96-08, AC-96-04)
@@ -18,7 +19,7 @@ affects:
   - ไม่เปลี่ยน schema / ไม่ bump `schema_v`
 ---
 
-# draft-ticket-cancel-rules — ยกเลิกการสมัครจากบัตรดิจิทัล
+# CR-212 — ยกเลิกการสมัครจากบัตรดิจิทัล
 
 > **สรุป (TL;DR):**
 >
@@ -149,3 +150,4 @@ affects:
   - cancel ส่ง `application_id` ที่บัตรแสดงและตรวจว่าเป็นใบของ token (FR-1, FR-3, AC-6)
   - กะงานที่เช็คอินแล้วตอบ `SHIFT_STARTED` (FR-2, FR-3, AC-7) และกะงานที่ถูกลบระหว่างคำขอข้ามไป (FR-4)
 - 2026-10-29 — ผู้รับงานแก้ตาม review รอบ 2 ของ PR #999: B-new (ข้อจำกัดโควตาเกิน 1 กรณีไม่มีกะงานผูก), W-B (#1003 ต้องมี CR เอง), ระบุ lookup `tracking_token` legacy
+- 2026-10-29 — **approved (Soravit Sukkarn, Team Lead)** — อนุมัติกติกาการยกเลิกการสมัครจากบัตรดิจิทัลและการเขียน CouchDB ของ BFF ตามที่เสนอ รันเลข CR-212 ย้ายเข้า `06-A-volunteer/`

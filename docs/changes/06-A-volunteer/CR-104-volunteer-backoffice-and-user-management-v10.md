@@ -3,7 +3,7 @@ id: CR-104
 title: Volunteer Backoffice & User Management V10 — สถาปัตยกรรมรวมศูนย์การบริหารจัดการงานอาสาสมัคร (Job Board Model), ระบบกะย่อยรายวัน, 10 Role Taxonomy, และ Compound Scoped Roles
 status: approved
 date: 2026-08-31 (approved 2026-09-01)
-updated: 2026-09-01
+updated: 2026-10-29 # amend §3.5 โดย CR-212 (ticket-cancel-rules)
 requested_by: เจ้าของโครงการ (Project Owner) & ทีมพัฒนา Dev Team B
 decided_by: เจ้าของโครงการ (Project Owner) — Approved 2026-09-01
 layer: stable + volatile   # Time-bound auth & CouchDB write path = stable core
@@ -319,7 +319,7 @@ sequenceDiagram
 ### 3.5 Flow 5: การยกเลิกงานและการจัดการกรณีไม่มาปฏิบัติงาน (Cancellation & Manual No-Show)
 
 เพื่อรักษาความเรียบง่ายตามความต้องการของเจ้าหน้าที่หน้างาน:
-* **อาสายกเลิกเองล่วงหน้า:** อาสาสามารถกดปุ่ม `[ ❌ ขอยกเลิกการสมัคร ]` บนหน้าตั๋วดิจิทัลของตนเอง
+* **อาสายกเลิกเองล่วงหน้า:** อาสาสามารถกดปุ่ม `[ ❌ ขอยกเลิกการสมัคร ]` บนหน้าตั๋วดิจิทัลของตนเอง (ปรับปรุงกติกาโดย [CR-212](CR-212-ticket-cancel-rules.md): กดได้เมื่อเข้าเงื่อนไขสถานะ `confirmed` / `pending_review` และกะยังไม่เริ่ม หลังกะเริ่มให้เจ้าหน้าที่ยกเลิก / mark no-show แทน)
 * **เจ้าหน้าที่กดยกเลิกหน้างาน (Manual Cancel / Mark No-Show):**
   * หากเลยเวลากะงานแล้วอาสาไม่มาปฏิบัติงาน เจ้าหน้าที่เปิดหน้าจอทำเนียบกะงานหลังบ้าน แล้วคลิกที่แถบของอาสาคนนั้น เลือกปุ่ม **`[ ⚠️ ไม่มาปฏิบัติงาน (Mark No-Show) ]`** หรือ **`[ ❌ ยกเลิกกะงาน ]`**
   * ระบบจะเปลี่ยนสถานะในเอกสาร `shift_assignment` เป็น `no_show` หรือ `cancelled`
