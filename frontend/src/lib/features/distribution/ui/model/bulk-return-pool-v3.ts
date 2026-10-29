@@ -52,7 +52,10 @@ export const MISSED_LOAN_ACTION = 'ตัดยอดยืมที่ค้า
 /** CR-193 §35: reopen the loans of one entry of a closed pool. */
 export const REOPEN_LOAN_ACTION = 'เปิดยอดยืมกลับ';
 export const REOPEN_LOAN_DESCRIPTION =
-	'ใช้เมื่อพบภายหลังว่าของรายการนี้ไม่ได้คืนจริง ระบบจะเปิดยอดยืมของผู้คืนกลับเป็นค้าง โดยไม่แก้ยอดกองหรือยอดคลัง (ถ้าต้องแก้ยอดคลัง ให้ทำแถวปรับยอดที่หน้าคลัง)';
+	'ใช้เมื่อพบภายหลังว่าของรายการนี้ไม่ได้คืนจริง ระบบจะเปิดยอดยืมของผู้คืนกลับเป็นค้าง โดยไม่แก้ยอดกองหรือยอดคลัง (ถ้าตอนตรวจรับยังไม่ได้หัก และต้องแก้ยอดคลัง ให้ทำแถวปรับยอดที่หน้าคลัง)';
+export const REOPEN_LOAN_CANCEL = 'ยกเลิก';
+/** Resume a reopen whose doc is already written but some loan is still applied (no new reason). */
+export const REOPEN_LOAN_RESUME_ACTION = 'ทำต่อให้เสร็จ';
 export const REOPEN_LOAN_REASON_LABEL = 'เหตุผล';
 export const REOPEN_LOAN_CONFIRM = 'ยืนยันเปิดยอดยืมกลับ';
 export const REOPEN_LOAN_ERROR = 'เปิดยอดยืมกลับไม่สำเร็จ กรุณาลองใหม่อีกครั้ง';
@@ -463,6 +466,22 @@ export function reopenedEntryIds(
 		if (event.kind === 'loan_reopened' && event.entry_id) ids.add(event.entry_id);
 	}
 	return ids;
+}
+
+/**
+ * Entry id -> the reason stored on its reopen doc (the timeline `loan_reopened` event carries it
+ * as `notes`). Used to resume a half-finished reopen without asking for a new reason.
+ */
+export function reopenedReasonByEntry(
+	events: readonly { kind: string; entry_id?: string; notes?: string }[] | undefined
+): Map<string, string> {
+	const reasons = new Map<string, string>();
+	for (const event of events ?? []) {
+		if (event.kind === 'loan_reopened' && event.entry_id && event.notes?.trim()) {
+			reasons.set(event.entry_id, event.notes);
+		}
+	}
+	return reasons;
 }
 
 /** True when at least one live entry in the row offers an action (move or void). */

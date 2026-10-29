@@ -15,6 +15,7 @@
 	import { formatDistributionError } from '../model/distribution-error';
 	import {
 		REOPEN_LOAN_ACTION,
+		REOPEN_LOAN_CANCEL,
 		REOPEN_LOAN_CONFIRM,
 		REOPEN_LOAN_DESCRIPTION,
 		REOPEN_LOAN_ERROR,
@@ -152,7 +153,7 @@
 					disabled={reopenMutation.isPending}
 					class="min-h-11 w-full sm:w-auto"
 				>
-					ยกเลิก
+					{REOPEN_LOAN_CANCEL}
 				</Button>
 				<Button
 					type="submit"

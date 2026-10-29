@@ -24,6 +24,7 @@ import {
 	canMoveEntry,
 	reopenLoanAction,
 	reopenedEntryIds,
+	reopenedReasonByEntry,
 	canVoidEntry,
 	filterPoolRows,
 	findDuplicateOpenPoolName,
@@ -890,11 +891,13 @@ describe('reopenLoanAction', () => {
 	});
 
 	it('explains an entry whose applied loans are all waived', () => {
-		expect(notice([waived])).toBe('เปิดยอดยืมกลับไม่ได้ ยอดยืมถูกปิดเป็นยกเว้นแล้ว');
+		expect(notice([waived])).toBe('เปิดยอดยืมกลับไม่ได้ ยอดยืมถูกปิดเป็นยกเว้นการคืนแล้ว');
 	});
 
 	it('explains a mix of lost and waived', () => {
-		expect(notice([lost, waived])).toBe('เปิดยอดยืมกลับไม่ได้ ยอดยืมถูกปิดเป็นสูญหาย/ยกเว้นแล้ว');
+		expect(notice([lost, waived])).toBe(
+			'เปิดยอดยืมกลับไม่ได้ ยอดยืมถูกปิดเป็นสูญหาย/ยกเว้นการคืนแล้ว'
+		);
 	});
 
 	it('counts the closed loans when only some are blocked', () => {
@@ -902,7 +905,7 @@ describe('reopenLoanAction', () => {
 			'เปิดยอดยืมกลับไม่ได้ ยอดยืม 1 จาก 2 รายการถูกปิดเป็นสูญหายแล้ว'
 		);
 		expect(notice([waived, ok, lost])).toBe(
-			'เปิดยอดยืมกลับไม่ได้ ยอดยืม 2 จาก 3 รายการถูกปิดเป็นสูญหาย/ยกเว้นแล้ว'
+			'เปิดยอดยืมกลับไม่ได้ ยอดยืม 2 จาก 3 รายการถูกปิดเป็นสูญหาย/ยกเว้นการคืนแล้ว'
 		);
 	});
 
@@ -946,5 +949,21 @@ describe('reopenedEntryIds', () => {
 
 	it('is empty for undefined', () => {
 		expect(reopenedEntryIds(undefined).size).toBe(0);
+	});
+});
+
+describe('reopenedReasonByEntry', () => {
+	it('maps loan_reopened entries to their stored reason', () => {
+		const reasons = reopenedReasonByEntry([
+			{ kind: 'loan_reopened', entry_id: 'e1', notes: 'ไม่ได้คืนจริง' },
+			{ kind: 'voided', entry_id: 'e2', notes: 'x' },
+			{ kind: 'loan_reopened', entry_id: 'e3', notes: '  ' },
+			{ kind: 'loan_reopened', notes: 'no entry' }
+		]);
+		expect([...reasons]).toEqual([['e1', 'ไม่ได้คืนจริง']]);
+	});
+
+	it('is empty for undefined', () => {
+		expect(reopenedReasonByEntry(undefined).size).toBe(0);
 	});
 });

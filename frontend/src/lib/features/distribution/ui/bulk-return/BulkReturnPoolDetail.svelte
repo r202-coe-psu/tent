@@ -27,6 +27,7 @@
 		useBulkReturnPoolTimeline,
 		useBulkReturnSkippedDocs,
 		useCancelBulkReturnPool,
+		useReopenBulkReturnEntryLoans,
 		useVoidBulkReturnEntry
 	} from '../../application/queries';
 	import type { BulkReturnEntry, BulkReturnPoolOverviewRow } from '../../domain/food-supplies';
@@ -34,8 +35,13 @@
 	import { formatDistributionError } from '../model/distribution-error';
 	import {
 		REOPEN_LOAN_DONE_NOTE,
+		REOPEN_LOAN_ERROR,
+		REOPEN_LOAN_REPLAYED_TOAST,
+		REOPEN_LOAN_SKIPPED_TOAST,
 		reopenLoanAction,
+		reopenLoanSuccessToast,
 		reopenedEntryIds,
+		reopenedReasonByEntry,
 		CLOSED_LOAN_WARNING_TESTID,
 		MISSED_LOAN_ACTION,
 		MISSED_LOAN_WARNING,
@@ -179,6 +185,9 @@
 		}
 	});
 	const reopenedIds = $derived(reopenedEntryIds(timelineQuery.data?.events));
+	// Stored reason of each existing reopen doc: resuming replays with it (no new reason asked).
+	const reopenedReasons = $derived(reopenedReasonByEntry(timelineQuery.data?.events));
+	const resumeMutation = useReopenBulkReturnEntryLoans();
 	const poolNameById = $derived(new Map(rows.map((r) => [r.pool._id, r.pool.name])));
 
 	const entries = $derived(row ? liveEntries(row) : []);
@@ -244,6 +253,24 @@
 			}
 		} catch (err) {
 			toast.error(formatDistributionError(err, 'ตัดยอดยืมไม่สำเร็จ กรุณาลองใหม่อีกครั้ง'));
+		}
+	}
+
+	async function resumeReopen(entryId: string, storedReason: string) {
+		try {
+			const result = await resumeMutation.mutateAsync({
+				input: { entry_id: entryId, reason: storedReason },
+				shelterCode
+			});
+			const reopened = result.loansReopened.length;
+			if (result.replayed && reopened === 0) {
+				toast.info(REOPEN_LOAN_REPLAYED_TOAST);
+			} else {
+				toast.success(reopenLoanSuccessToast(reopened));
+			}
+			if (result.loansSkipped.length > 0) toast.warning(REOPEN_LOAN_SKIPPED_TOAST);
+		} catch (err) {
+			toast.error(formatDistributionError(err, REOPEN_LOAN_ERROR, { poolContext: 'reopen' }));
 		}
 	}
 
@@ -424,6 +451,9 @@
 									reopened: reopenedIds.has(entry._id),
 									reopenedKnown: timelineQuery.isSuccess
 								})}
+								{@const resumeReason = reopenAction.showButton
+									? reopenedReasons.get(entry._id)
+									: undefined}
 								{@const item = resolveItemDisplay(entry.item_id, catalog)}
 								{@const closedRefs = closedRefsByEntry.get(entry._id) ?? []}
 								{@const missedRefs = missedRefsByEntry.get(entry._id) ?? []}
@@ -550,7 +580,12 @@
 									<BulkReturnEntryReopenAction
 										showButton={reopenAction.showButton}
 										blockedNotice={reopenAction.blockedNotice}
-										onReopen={() => (reopenEntry = entry)}
+										resume={resumeReason !== undefined}
+										pending={resumeMutation.isPending}
+										onReopen={() =>
+											resumeReason !== undefined
+												? void resumeReopen(entry._id, resumeReason)
+												: (reopenEntry = entry)}
 									/>
 
 									{#if canWriteEntry}

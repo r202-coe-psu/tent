@@ -268,8 +268,10 @@ export const useReopenBulkReturnEntryLoans = () => {
 			return reopenBulkReturnEntryLoans(input, ctx);
 		},
 		retry: false,
-		onSuccess: (
-			_data: ReopenBulkReturnEntryLoansResult,
+		// onSettled: a failed reopen may have half-written (doc created, a loan revert failed).
+		onSettled: (
+			_data: ReopenBulkReturnEntryLoansResult | undefined,
+			_error: Error | null,
 			variables: ReopenBulkReturnEntryLoansMutationInput
 		) => {
 			const shelterCode = resolveShelterCode(variables.shelterCode);

@@ -50,7 +50,7 @@ export const BULK_GATE_CLEAR_EXPLANATION = {
  * longer be reverted (CR-193 §35). `label` is a closed-as label; `n` / `total` count applied refs.
  */
 export const BULK_RETURN_REOPEN_BLOCKED_COPY = {
-	labels: { lost: 'สูญหาย', waived: 'ยกเว้น', both: 'สูญหาย/ยกเว้น' },
+	labels: { lost: 'สูญหาย', waived: 'ยกเว้นการคืน', both: 'สูญหาย/ยกเว้นการคืน' },
 	allClosed: (label: string) => `เปิดยอดยืมกลับไม่ได้ ยอดยืมถูกปิดเป็น${label}แล้ว`,
 	someClosed: (n: number, total: number, label: string) =>
 		`เปิดยอดยืมกลับไม่ได้ ยอดยืม ${n} จาก ${total} รายการถูกปิดเป็น${label}แล้ว`,

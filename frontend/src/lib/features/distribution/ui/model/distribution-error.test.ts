@@ -92,7 +92,11 @@ describe('formatDistributionError', () => {
 	describe('loan reopen', () => {
 		it.each([
 			['loan_not_revertable', 'lost', 'ใบยืมนี้ถูกปิดเป็นสูญหายไปแล้ว จึงเปิดยอดยืมกลับไม่ได้'],
-			['loan_not_revertable', 'waived', 'ใบยืมนี้ถูกปิดเป็นยกเว้นไปแล้ว จึงเปิดยอดยืมกลับไม่ได้'],
+			[
+				'loan_not_revertable',
+				'waived',
+				'ใบยืมนี้ถูกปิดเป็นยกเว้นการคืนไปแล้ว จึงเปิดยอดยืมกลับไม่ได้'
+			],
 			[
 				'loan_not_revertable',
 				'active',
