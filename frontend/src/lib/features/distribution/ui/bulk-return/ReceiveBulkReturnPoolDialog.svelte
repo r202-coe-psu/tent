@@ -34,8 +34,9 @@
 	/**
 	 * Warehouse receive form for a SUBMITTED pool. Lines come from the submit snapshot
 	 * (`pool.items_summary`), never from the live row items; the qty shown and the cap are the
-	 * receivable qty (`row.receivable_items_summary`, the snapshot minus entries counted in an older pool). The parent mounts it only while visible,
-	 * so the form starts fresh every time it is opened.
+	 * receivable qty (`row.receivable_items_summary`, the snapshot minus entries counted in an older
+	 * pool). The parent mounts it only while visible, so the form starts fresh every time it is
+	 * opened.
 	 */
 	interface Props {
 		open: boolean;

@@ -212,6 +212,8 @@
 	let returnAllChecking = $state(false);
 	// operationUlids sent in a save attempt of this dialog (only these can already be written).
 	const sentUlids = new SvelteSet<string>();
+	// Lines must not change while a save or the "คืนทั้งหมด" lookup is in flight.
+	const busy = $derived(addMutation.isPending || returnAllChecking);
 
 	async function handleReturnAll() {
 		if (returnAllChecking) return;
@@ -523,7 +525,7 @@
 									<Button
 										type="button"
 										variant="outline"
-										disabled={addMutation.isPending || returnAllChecking}
+										disabled={busy}
 										onclick={handleReturnAll}
 										class="min-h-11 w-full gap-2 sm:w-auto"
 									>
@@ -568,7 +570,7 @@
 										<Select.Root
 											type="single"
 											bind:value={line.item_id}
-											disabled={Boolean(line.relocated)}
+											disabled={Boolean(line.relocated) || busy}
 										>
 											<Select.Trigger
 												id="add-entry-item-{line.lineId}"
@@ -597,7 +599,7 @@
 											inputmode="numeric"
 											autocomplete="off"
 											bind:value={line.qty}
-											disabled={Boolean(line.relocated)}
+											disabled={Boolean(line.relocated) || busy}
 											aria-invalid={Boolean(lineError)}
 											placeholder="0"
 											class="h-11 text-base tabular-nums sm:h-10 sm:text-sm"
@@ -606,7 +608,7 @@
 									<Button
 										type="button"
 										variant="outline"
-										disabled={(lines.length === 1 && !line.relocated) || addMutation.isPending}
+										disabled={(lines.length === 1 && !line.relocated) || busy}
 										onclick={() => (lines = removeLine(lines, line.lineId))}
 										class="min-h-11 w-full gap-2 sm:w-auto"
 									>
@@ -640,7 +642,7 @@
 						<Button
 							type="button"
 							variant="outline"
-							disabled={addMutation.isPending}
+							disabled={busy}
 							onclick={() => (lines = addLine(lines, createStableOperationId))}
 							class="min-h-11 w-full gap-2 sm:w-auto"
 						>

@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushSync, mount, tick, unmount } from 'svelte';
 import { overviewMock } from '../__fixtures__/add-entries-overview.fixture.svelte';
 import { lastBulkReturnPoolKey } from '../model/last-bulk-return-pool-storage';
+import { findWrittenBulkReturnEntries } from '../../application/queries';
 import AddBulkReturnEntriesForm from './AddBulkReturnEntriesForm.svelte';
 
 const OP_ULID = '01JB1RACE0000000000000000A';
@@ -13,6 +14,7 @@ const EVACUEE_ID = 'evacuee:01JB1EV';
 const hoisted = vi.hoisted(() => {
 	let resolveAdd: (value: unknown) => void = () => {};
 	return {
+		loans: { data: [] as unknown[] },
 		mutateAsync: vi.fn(
 			() =>
 				new Promise((resolve) => {
@@ -42,7 +44,11 @@ vi.mock('../../application/queries', async () => {
 			},
 			isPending: false
 		}),
-		useReturnerOutstandingLoans: () => ({ data: [], isPending: false, isError: false })
+		useReturnerOutstandingLoans: () => ({
+			data: hoisted.loans.data,
+			isPending: false,
+			isError: false
+		})
 	};
 });
 vi.mock('../../application/food-supplies/auth', () => ({ canWriteBulkReturnEntry: () => true }));
@@ -127,6 +133,7 @@ describe('AddBulkReturnEntriesForm save', () => {
 	beforeEach(async () => {
 		vi.clearAllMocks();
 		localStorage.clear();
+		hoisted.loans.data = [];
 		dialog = { open: true };
 		overviewMock.data = [{ pool: { ...POOL, status: 'OPEN' } }];
 		mountForm();
@@ -185,5 +192,61 @@ describe('AddBulkReturnEntriesForm save', () => {
 		hoisted.resolveAdd(writtenResult());
 		await settle();
 		expect(hoisted.mutateAsync).toHaveBeenCalledTimes(1);
+	});
+
+	it('disables line editing while the return-all written lookup is pending', async () => {
+		unmount(component!);
+		component = null;
+		document.body.innerHTML = '';
+		hoisted.loans.data = [
+			{
+				_id: 'distribution_log:L1',
+				item_id: ITEM_ID,
+				qty: '5',
+				qty_returned: '0',
+				distributed_at: '2026-01-01T00:00:00.000Z'
+			}
+		];
+		mountForm();
+		await settle();
+
+		// A failed save marks the line ULID as sent, so return-all must look it up first.
+		hoisted.mutateAsync.mockImplementationOnce(() => Promise.reject(new Error('offline')));
+		const form = fillQtyAndGetForm();
+		submit(form);
+		await settle();
+
+		let resolveLookup: (value: Map<string, { qty: string; item_id: string }>) => void = () => {};
+		vi.mocked(findWrittenBulkReturnEntries).mockImplementationOnce(
+			() =>
+				new Promise((resolve) => {
+					resolveLookup = resolve;
+				})
+		);
+		const returnAll = [...document.querySelectorAll<HTMLButtonElement>('button')].find((button) =>
+			button.textContent?.includes('คืนทั้งหมด')
+		);
+		expect(returnAll).toBeDefined();
+		returnAll!.click();
+		flushSync();
+
+		const qty = () => document.querySelector<HTMLInputElement>('input[id^="add-entry-qty-"]')!;
+		const addLineButton = () =>
+			[...document.querySelectorAll<HTMLButtonElement>('button')].find((button) =>
+				button.textContent?.includes('เพิ่มรายการสินค้า')
+			)!;
+		const removeButtons = () =>
+			[...document.querySelectorAll<HTMLButtonElement>('button')].filter((button) =>
+				button.textContent?.includes('ลบรายการที่')
+			);
+		expect(qty().disabled).toBe(true);
+		expect(addLineButton().disabled).toBe(true);
+		expect(removeButtons().every((button) => button.disabled)).toBe(true);
+
+		resolveLookup(new Map());
+		await settle();
+
+		expect(qty().disabled).toBe(false);
+		expect(addLineButton().disabled).toBe(false);
 	});
 });
