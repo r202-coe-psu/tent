@@ -105,6 +105,38 @@ describe('summarizeUrgentVolunteerNeed', () => {
 			expect(summary.shelters[0]).toMatchObject({ needed: 3, enrolled: 2, quota: 5 });
 		});
 
+		it('keeps a job that needs people in an open shift although the ended one is over-booked', () => {
+			// Job-level slots_remaining is 0 (2 + 2 - 5 booked is clamped), yet the open shift needs 2.
+			const summary = summarizeUrgentVolunteerNeed(
+				[
+					job({
+						job_id: 'overbooked-past',
+						quota: 4,
+						slots_confirmed: 5,
+						slots_remaining: 0,
+						shifts: [shift('past', '2026-10-27', 0, 5), shift('next', '2026-10-29', 2, 0)]
+					})
+				],
+				now
+			);
+			expect(summary).toMatchObject({ needed: 2, enrolled: 0 });
+			expect(summary.shelters).toHaveLength(1);
+		});
+
+		it('drops a job whose only free seats are in an ended shift', () => {
+			const summary = summarizeUrgentVolunteerNeed(
+				[
+					job({
+						job_id: 'free-past',
+						slots_remaining: 4,
+						shifts: [shift('past', '2026-10-27', 4, 0), shift('next', '2026-10-29', 0, 2)]
+					})
+				],
+				now
+			);
+			expect(summary).toMatchObject({ needed: 0, shelters: [] });
+		});
+
 		it('drops a job whose shifts have all ended', () => {
 			const summary = summarizeUrgentVolunteerNeed(
 				[job({ job_id: 'over', shifts: [shift('past', '2026-10-27', 5, 1)] })],

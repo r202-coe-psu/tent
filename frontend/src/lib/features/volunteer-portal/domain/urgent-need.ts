@@ -64,7 +64,7 @@ export function summarizeUrgentVolunteerNeed(
 		UrgentShelterNeed & { jobs: { job: PublicJob; needed: number }[] }
 	>();
 	for (const { job, figures } of urgent) {
-		if ((job.slots_remaining ?? 0) <= 0 || figures.needed <= 0) continue;
+		if (figures.needed <= 0) continue;
 		const entry = byShelter.get(job.shelter_code) ?? {
 			shelter_code: job.shelter_code,
 			shelter_name: job.shelter_name || job.shelter_code,
@@ -87,10 +87,7 @@ export function summarizeUrgentVolunteerNeed(
 		}))
 		.sort((a, b) => b.needed - a.needed);
 	return {
-		needed: urgent.reduce(
-			(sum, { job, figures }) => sum + (job.slots_remaining > 0 ? figures.needed : 0),
-			0
-		),
+		needed: urgent.reduce((sum, { figures }) => sum + Math.max(figures.needed, 0), 0),
 		enrolled: urgent.reduce((sum, { figures }) => sum + figures.enrolled, 0),
 		shelters
 	};
