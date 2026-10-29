@@ -1,17 +1,17 @@
 ---
-id: draft
+id: CR-213
 title: ผู้ประสานงานจิตอาสาออกสิทธิ์ใช้งานระบบให้จิตอาสาได้แบบจำกัด role และมีวันหมดอายุ
-status: proposed
+status: approved
 date: 2026-10-27
 updated: 2026-10-29
 requested_by: "@net-lynx ใน #879 ข้อ 2 (2026-10-27) + ผู้รับงาน (@Mhapong) ตัดสินรายละเอียด"
-decided_by: project owner
+decided_by: Soravit Sukkarn (Team Lead)
 layer: stable
 affects:
   - docs/data/schema.md §6 `_users` (เพิ่ม `role_grants`, หมายเหตุ `duty_window`, design doc `_design/tent_guard`) และ §2.12 `audit` (reason ของ role grant)
   - docs/prd/role-permission-matrix.md decision sync 2026-10-10 (§3 บรรทัด "การจัดการผู้ใช้ยังเป็น SM/SA เท่านั้น"), แถว User Management (VC), แถว VC และ §4
   - docs/changes/06-A-volunteer/CR-104-volunteer-backoffice-and-user-management-v10.md (ตาราง role แถว `volunteer_coordinator` — อ้าง CR นี้)
-  - docs/data/api-contract.md (authorization ของ `/api/v1/users` + แถวใหม่ `POST` / `DELETE /api/v1/volunteer-access`, `permanent_roles`)
+  - docs/data/api-contract.md (authorization ของ `/api/v1/users` + แถวใหม่ `GET` / `POST` / `DELETE /api/v1/volunteer-access`, `permanent_roles`)
   - ไม่ bump `schema_v` (`_users` ไม่มี common envelope / `schema_v`)
   - frontend/src/lib/auth/roles.ts (`COORDINATOR_GRANTABLE_CAPABILITIES`, แก้ comment ของ `STAFF_CAPABILITIES`), frontend/src/lib/auth/role-grants.ts
   - frontend/src/lib/server/user-service.ts, frontend/src/routes/api/v1/volunteer-access/+server.ts, frontend/src/routes/api/v1/users/**
@@ -22,7 +22,7 @@ affects:
   - frontend/e2e/volunteer-access-roles.test.ts (#841)
 ---
 
-# draft-coordinator-limited-access-grant — coordinator ออกสิทธิ์แบบจำกัดและมีวันหมดอายุ
+# CR-213-coordinator-limited-access-grant — coordinator ออกสิทธิ์แบบจำกัดและมีวันหมดอายุ
 
 > **สรุป (TL;DR):**
 >
@@ -133,15 +133,15 @@ affects:
 
 | Field         | ชนิด                                                                                                                                                                    | req | หมายเหตุ                                                                                                                                                                                                                                                                                                      |
 | ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `role_grants` | [{`shelter_code`:str, `role`:str, `expires_at`:ts, `granted_by`:str, `granted_at`:ts, `verified_by`:{`shelter_code`:str, `volunteer_id`:str, `reviewed_by`:str\|null}}] | opt | role ที่ `volunteer_coordinator` ออกให้แบบมีวันหมด (draft-coordinator-limited-access-grant) — หนึ่งรายการต่อ (`shelter_code`, `role`); แก้ได้เฉพาะ admin (`_design/tent_guard`); worker ถอน `SHxxx:<role>` เมื่อพ้น `expires_at` หรือ `verified_by` ไม่ verified แล้ว; role ที่ไม่มีรายการในนี้เป็น role ถาวร |
+| `role_grants` | [{`shelter_code`:str, `role`:str, `expires_at`:ts, `granted_by`:str, `granted_at`:ts, `verified_by`:{`shelter_code`:str, `volunteer_id`:str, `reviewed_by`:str\|null}}] | opt | role ที่ `volunteer_coordinator` ออกให้แบบมีวันหมด (CR-213-coordinator-limited-access-grant) — หนึ่งรายการต่อ (`shelter_code`, `role`); แก้ได้เฉพาะ admin (`_design/tent_guard`); worker ถอน `SHxxx:<role>` เมื่อพ้น `expires_at` หรือ `verified_by` ไม่ verified แล้ว; role ที่ไม่มีรายการในนี้เป็น role ถาวร |
 
 - **FR-15 `duty_window` ใน `_users` (§6):** ยังไม่ได้ทำ ถ้าทำ §4 (role ตามช่วงกะ) ในอนาคตต้องใช้ `role_grants` (เช่นเพิ่ม `starts_at`) ร่วมกัน ไม่สร้าง field ตัดสิทธิ์ชุดที่สอง ให้เพิ่มหมายเหตุนี้ในแถว `duty_window`
 
 ### role-permission-matrix
 
-- **decision sync 2026-10-10 (§3):** "การจัดการผู้ใช้ยังเป็น SM/SA เท่านั้น" ต่อท้ายว่า "ยกเว้น coordinator ออกสิทธิ์จิตอาสาแบบจำกัด (draft-coordinator-limited-access-grant)"
+- **decision sync 2026-10-10 (§3):** "การจัดการผู้ใช้ยังเป็น SM/SA เท่านั้น" ต่อท้ายว่า "ยกเว้น coordinator ออกสิทธิ์จิตอาสาแบบจำกัด (CR-213-coordinator-limited-access-grant)"
 - **แถว User Management:** VC จาก `—` เป็น `grant` พร้อมหมายเหตุ "ออกสิทธิ์จิตอาสาแบบจำกัดเท่านั้น สร้าง/แก้ผู้ใช้ทั่วไปไม่ได้"
-- **แถว VC:** คงข้อความ "ออกสิทธิ์ระบบให้อาสาช่วยงาน" แล้วต่อท้ายว่า "(จำกัด 4 role, ศูนย์ตัวเอง, ยืนยันตัวตนแล้ว, หมดอายุไม่เกินสิ้นวันที่ +7 — draft-coordinator-limited-access-grant)"
+- **แถว VC:** คงข้อความ "ออกสิทธิ์ระบบให้อาสาช่วยงาน" แล้วต่อท้ายว่า "(จำกัด 4 role, ศูนย์ตัวเอง, ยืนยันตัวตนแล้ว, หมดอายุไม่เกินสิ้นวันที่ +7 — CR-213-coordinator-limited-access-grant)"
 - **§4:** เพิ่มหมายเหตุว่าการออกสิทธิ์โดย coordinator ใช้วันหมดอายุแทนช่วงกะ และ §4 ในอนาคตต้องใช้ `role_grants` (FR-15)
 
 ### api-contract
@@ -223,3 +223,4 @@ affects:
   - ต่ออายุแล้วคง `granted_by` เดิม เพื่อไม่ให้ผู้ต่ออายุได้สิทธิ์ถอน grant ของคนอื่น (FR-8, AC-6)
   - SM ถอดผู้ใช้ออกจากศูนย์แล้วลบ grant ของศูนย์นั้น (FR-10, AC-12)
   - ระบุพฤติกรรมที่โค้ดทำอยู่แล้ว: ที่มาข้อมูลข้ามศูนย์ (FR-3), โปรไฟล์หาย = ถอน (FR-12), concurrency ของ sweep (FR-12), `_id` ของ audit ตอนลองใหม่ (FR-14), วิธีเทียบของ `tent_guard` (FR-11), GET/DELETE ผูก FR-1 (FR-5), รูปแบบ `expires_at` (FR-4)
+- 2026-10-29 — approved โดย Soravit Sukkarn (Team Lead) เป็น CR-213
