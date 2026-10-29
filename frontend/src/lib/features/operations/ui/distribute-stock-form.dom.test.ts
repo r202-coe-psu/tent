@@ -38,8 +38,10 @@ const LEDGER = [
 	inbound('WATER1', WATER._id, '100', 'ขวด')
 ];
 
+let ledgerRows: unknown[] = LEDGER;
+
 vi.mock('../application/queries', () => ({
-	useLedger: () => ({ data: LEDGER, isLoading: false }),
+	useLedger: () => ({ data: ledgerRows, isLoading: false }),
 	useStockBalance: () => ({
 		data: new Map([
 			['item:rice', '10'],
@@ -124,6 +126,7 @@ async function type(input: HTMLInputElement, value: string) {
 }
 
 afterEach(async () => {
+	ledgerRows = LEDGER;
 	mutation.mutateAsync.mockReset();
 	toastMock.error.mockReset();
 	toastMock.success.mockReset();
@@ -193,6 +196,37 @@ describe('distribute form: one batch, many lines (#837)', () => {
 		expect(text).toContain('คลังหลัก −4 ถุง');
 		expect(text).toContain('คงเหลือ 10 → 6 ถุง');
 		expect(text).toContain('ไม่ระบุวันหมดอายุ');
+	});
+
+	it('one item with a broken history does not stop another item from planning its lots (#569)', async () => {
+		// Water was dispatched for more than its only lot held, so its history cannot be replayed.
+		ledgerRows = [
+			...LEDGER,
+			{
+				...inbound('WATER_OUT', WATER._id, '-150', 'ขวด'),
+				_id: 'stock_ledger:WATER_OUT',
+				reason: 'distribution',
+				lot_ref: LEDGER[1]._id,
+				occurred_at: '2026-10-02T00:00:00.000Z'
+			}
+		];
+		await render({ preselectedItemId: RICE._id });
+
+		await type(qtyInputs()[0], '4');
+
+		expect(document.body.textContent).not.toContain('ไม่สอดคล้องกัน');
+		expect(document.body.textContent).not.toContain('ไม่พบล็อตที่มีคงเหลือ');
+		expect(button('บันทึกแล้วเบิกรายการถัดไป')!.disabled).toBe(false);
+
+		button('เพิ่มรายการ')!.click();
+		await settle();
+		const water = (await openItemPicker(1)).find((o) => o.textContent?.includes('น้ำดื่ม'))!;
+		water.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, button: 0 }));
+		water.click();
+		await settle();
+
+		expect(document.body.textContent).toContain('ประวัติคลังของ น้ำดื่ม ไม่สอดคล้องกัน');
+		expect(document.body.textContent).not.toContain('ประวัติคลังของ ข้าวสาร');
 	});
 
 	it('saving without a destination writes nothing and names the problem', async () => {

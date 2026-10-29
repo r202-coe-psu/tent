@@ -260,6 +260,7 @@ export {
 	useMoveBulkReturnEntry,
 	useApplyMissedBulkReturnLoanRefs,
 	useVoidBulkReturnEntry,
+	useReopenBulkReturnEntryLoans,
 	useCancelBulkReturnPool,
 	useSubmitBulkReturnPool,
 	useReceiveBulkReturnPool,
@@ -289,6 +290,7 @@ export {
 	type MoveBulkReturnEntryMutationInput,
 	type ApplyMissedBulkReturnLoanRefsMutationInput,
 	type VoidBulkReturnEntryMutationInput,
+	type ReopenBulkReturnEntryLoansMutationInput,
 	type CancelBulkReturnPoolMutationInput,
 	type SubmitBulkReturnPoolMutationInput,
 	type ReceiveBulkReturnPoolMutationInput

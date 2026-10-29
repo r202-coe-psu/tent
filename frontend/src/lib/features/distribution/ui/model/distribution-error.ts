@@ -17,6 +17,7 @@ import {
 	StockIntegrityError,
 	InsufficientPoolQuotaError,
 	ConcurrencyCollisionError,
+	BulkReturnLoanReopenError,
 	BulkReturnPoolNameTakenError,
 	BulkReturnPoolStateError,
 	BulkReturnPoolLockTimeoutError,
@@ -73,6 +74,26 @@ function describePolicyReason(reason: string | undefined): string {
 	return 'ระบบปฏิเสธการบันทึกเอกสารตามนโยบายความปลอดภัย';
 }
 
+/** Fixed Thai copy for a refused loan reopen (the workflow messages are developer-facing English). */
+function describeLoanReopenRejection(err: BulkReturnLoanReopenError): string {
+	switch (err.reason) {
+		case 'loan_not_revertable':
+			if (err.loanStatus === 'lost')
+				return 'ใบยืมนี้ถูกปิดเป็นสูญหายไปแล้ว จึงเปิดยอดยืมกลับไม่ได้';
+			if (err.loanStatus === 'waived')
+				return 'ใบยืมนี้ถูกปิดเป็นยกเว้นการคืนไปแล้ว จึงเปิดยอดยืมกลับไม่ได้';
+			return 'ใบยืมนี้เปลี่ยนไปแล้ว จึงเปิดยอดยืมกลับไม่ได้ กรุณารีเฟรชเพื่อดูสถานะล่าสุด';
+		case 'not_in_snapshot':
+			return 'รายการนี้ไม่ได้อยู่ในยอดที่ส่งของกองนี้ จึงเปิดยอดยืมกลับไม่ได้ กรุณาย้ายรายการไปกองอื่นแทน';
+		case 'no_applied_loan':
+			return 'รายการนี้ไม่มียอดยืมที่ถูกตัด (ไม่ได้ตัด หรือเปิดกลับไปแล้ว) จึงไม่มียอดยืมให้เปิดกลับ';
+		case 'reason_required':
+			return 'กรุณาระบุเหตุผลในการเปิดยอดยืมกลับ';
+		case 'entry_not_found':
+			return 'ไม่พบรายการนี้ กรุณารีเฟรชเพื่อดูสถานะล่าสุด';
+	}
+}
+
 /**
  * Formats an unknown error into a safe, human-friendly user message.
  * Strictly prevents exposure of CouchDB internals, VDU logic, stack traces, and database identifiers,
@@ -81,17 +102,31 @@ function describePolicyReason(reason: string | undefined): string {
 export function formatDistributionError(
 	err: unknown,
 	fallbackMessage = 'เกิดข้อผิดพลาดในการทำรายการ กรุณาลองใหม่อีกครั้ง',
-	options?: { poolContext?: 'intake' | 'manage' }
+	options?: { poolContext?: 'intake' | 'manage' | 'reopen' }
 ): string {
 	if (!err) return fallbackMessage;
 
 	// 1. Distribution Workflow Typed Errors
-	// Bulk return pool v3 errors first: NameTaken extends WorkflowValidationError, and these
-	// workflow messages are developer-facing English, so they always map to fixed Thai copy.
+	// Bulk return pool v3 errors first: NameTaken / LoanReopen extend WorkflowValidationError, and
+	// these workflow messages are developer-facing English, so they always map to fixed Thai copy.
+	if (err instanceof BulkReturnLoanReopenError) {
+		return describeLoanReopenRejection(err);
+	}
 	if (err instanceof BulkReturnPoolNameTakenError) {
 		return 'มีกองที่เปิดรับอยู่ใช้ชื่อนี้แล้ว กรุณาตั้งชื่ออื่น';
 	}
 	if (err instanceof BulkReturnPoolStateError) {
+		if (options?.poolContext === 'reopen') {
+			if (err.reason === 'not_submitted') {
+				return 'กองนี้ยังเปิดรับอยู่ จึงเปิดยอดยืมกลับไม่ได้ ให้ยกเลิกรายการแทน';
+			}
+			if (err.reason === 'closed') {
+				return 'กองนี้ถูกยกเลิกแล้ว จึงไม่มียอดยืมให้เปิดกลับ';
+			}
+			if (err.reason === 'not_found') {
+				return 'ไม่พบกองนี้ กรุณารีเฟรชเพื่อดูสถานะล่าสุด';
+			}
+		}
 		if (err.reason === 'closed') {
 			return (options?.poolContext ?? 'manage') === 'intake'
 				? 'กองนี้ปิดรับของแล้ว กรุณาเลือกกองอื่น'

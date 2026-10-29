@@ -17,6 +17,7 @@ import {
 	applyBulkEntryToLog,
 	assessBulkReturnRefOnLoan,
 	buildSnapshotPins,
+	deriveLoanReopenId,
 	foldEntryMoves,
 	resolveBulkReturnEntries,
 	revertBulkEntryFromLog,
@@ -286,6 +287,26 @@ export async function revertRefOnLoan(
 		return false;
 	}
 	return reverted;
+}
+
+/**
+ * Apply-side half of the reopen race (CR-193 §35). Call AFTER the apply CAS writes of `entry`:
+ * re-reads the entry's loan reopen doc and, if one exists, reverts every ref in `appliedRefs` (the
+ * refs THIS call wrote) with the idempotent `revertRefOnLoan`. Returns true when it reopened.
+ * Together with the reopen's final sweep, every apply CAS is either before that sweep (reverted
+ * there) or followed by this re-read, which then sees the doc (the reopen writes it before its
+ * sweep), so a reopened loan is never left cut.
+ */
+export async function revertAppliedRefsIfReopened(
+	eventRepo: BulkReturnEventRepository,
+	logRepo: DistributionLogRepository,
+	entry: BulkReturnEntry,
+	appliedRefs: readonly BulkReturnEntryLoanRef[],
+	ctx: AuthorContext
+): Promise<boolean> {
+	if (!(await eventRepo.getLoanReopen(deriveLoanReopenId(entry._id)))) return false;
+	for (const ref of appliedRefs) await revertRefOnLoan(logRepo, entry, ref, ctx);
+	return true;
 }
 
 /**

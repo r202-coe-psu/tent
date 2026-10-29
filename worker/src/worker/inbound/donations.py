@@ -8,10 +8,12 @@ import logging
 from datetime import UTC, datetime
 from typing import Any
 
+import httpx
 from tent_model import DonationBuffer
 
 from worker.couch.client import CouchClient
 from worker.masking import phone_hash, shelter_db_name
+from worker.quota.settle import settle_donation_quota
 from worker.timeutil import iso_utc
 
 logger = logging.getLogger(__name__)
@@ -30,7 +32,7 @@ POLL_INTERVAL_SECONDS = 3
 
 #: ``donation`` schema_v this writer stamps. Keep in step with the walk-in writer in the
 #: frontend — both channels write the same shape (schema.md §2.3).
-DONATION_SCHEMA_V = 7
+DONATION_SCHEMA_V = 8
 
 _AUDIT_SCHEMA_V = 1
 _CROCKFORD = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
@@ -115,27 +117,45 @@ async def _write_auto_approve_audit(
             logger.error("CouchDB refused auto-approve audit %s: %s", audit["_id"], row)
 
 
-async def _persist_donation(couch: CouchClient, donation: DonationBuffer) -> bool:
-    database = shelter_db_name(donation.shelter_code)
-    if not await couch.database_exists(database):
-        logger.warning(
-            "Shelter database %s missing for donation %s", database, donation.id
-        )
-        return False
+#: Flip/re-PUT rounds before a row is left for the next poll. Each round is one donor
+#: edit (or cancel) landing inside the PUT→flip window, so a third in a row is not a
+#: race any more — the next poll starts from a fresh read anyway.
+_MAX_REPUTS = 3
 
-    now = iso_utc(datetime.now(UTC))
-    doc_id = (
-        donation.id
-        if donation.id.startswith("donation:")
-        else f"donation:{donation.id}"
-    )
+#: What a donor edit or cancel moves in the buffer row: ``status`` (cancel, item edit),
+#: the length of the append-only ``revisions`` (item edit) and the courier number.
+_Fingerprint = tuple[str, int, str | None]
 
-    couch_doc = {
+
+def _fingerprint(row: DonationBuffer) -> _Fingerprint:
+    logistics = row.logistics or {}
+    return (row.status, len(row.revisions), logistics.get("courier_tracking_no"))
+
+
+def _unsynced_filter(
+    row_id: str, fingerprint: _Fingerprint | None = None
+) -> dict[str, Any]:
+    """Mongo filter for the row while it is unsynced — and, given one, still as read.
+
+    A ``None`` courier number matches a missing ``logistics`` / tracking number too:
+    Mongo's ``null`` equality matches both a null and an absent field.
+    """
+    query: dict[str, Any] = {"_id": row_id, "synced_to_couch": False}
+    if fingerprint is not None:
+        status, revisions, tracking_no = fingerprint
+        query["status"] = status
+        query["revisions"] = {"$size": revisions}
+        query["logistics.courier_tracking_no"] = tracking_no
+    return query
+
+
+def _build_couch_doc(donation: DonationBuffer, doc_id: str, now: str) -> dict[str, Any]:
+    return {
         "_id": doc_id,
         "type": "donation",
-        # 7 for items[].review_status / review_reason_code / review_reason (CR-174) —
-        # FastAPI sets review_status on every line, and the lines are copied whole below.
-        # 6 was reject_reason / reject_reason_code + received_summary.items[].rejected
+        # 8 for items[].line_key (CR-196); 7 was items[].review_status / review_reason_code /
+        # review_reason (CR-174). FastAPI sets both on every line, and the lines are copied
+        # whole below. 6 was reject_reason / reject_reason_code + received_summary.items[].rejected
         # (CR-172); 5 was redirect_to_shelter_code (CR-087); 4 was revisions[] (CR-080).
         # This line read 2 until CR-080, two versions behind: CR-038 moved items[].qty to
         # qty_str and took schema.md §2.3 to 3, but only the walk-in writer followed, so
@@ -174,8 +194,53 @@ async def _persist_donation(couch: CouchClient, donation: DonationBuffer) -> boo
         "source": "public",
     }
 
+
+def _is_conflict(exc: Exception) -> bool:
+    return isinstance(exc, httpx.HTTPStatusError) and exc.response.status_code == 409
+
+
+async def _settle_after_flip(
+    couch: CouchClient, database: str, doc_id: str, our_rev: str | None
+) -> None:
+    """Catch up a CouchDB change that landed while the buffer was still unsynced.
+
+    ``settle_donation_quota`` ignores unsynced buffers, so a staff or BFF change to the
+    document between our PUT and the flip was skipped when the change feed delivered it.
+    Reading the document after the flip sees everything up to now; later changes find
+    the buffer synced and settle themselves. Idempotent — settle CASes on the status.
+    """
     try:
-        result = await couch.put_doc(database, couch_doc)
+        doc = await couch.get_doc(database, doc_id)
+        if doc is not None and doc.get("_rev") != our_rev:
+            await settle_donation_quota(doc, now=datetime.now(UTC))
+    except Exception:
+        logger.exception("Post-sync quota settle failed for donation %s", doc_id)
+
+
+async def _persist_donation(couch: CouchClient, donation: DonationBuffer) -> bool:
+    database = shelter_db_name(donation.shelter_code)
+    if not await couch.database_exists(database):
+        logger.warning(
+            "Shelter database %s missing for donation %s", database, donation.id
+        )
+        return False
+
+    doc_id = (
+        donation.id
+        if donation.id.startswith("donation:")
+        else f"donation:{donation.id}"
+    )
+
+    # The caller's row is a snapshot from the poll's start. A donor may have cancelled or
+    # edited since, and building from it would put the stale shape into CouchDB.
+    row = await DonationBuffer.find_one(_unsynced_filter(donation.id))
+    if row is None:
+        return False
+    fingerprint = _fingerprint(row)
+
+    now = iso_utc(datetime.now(UTC))
+    try:
+        result = await couch.put_doc(database, _build_couch_doc(row, doc_id, now))
     except Exception:
         logger.exception("Failed to persist donation %s to CouchDB", donation.id)
         return False
@@ -187,25 +252,81 @@ async def _persist_donation(couch: CouchClient, donation: DonationBuffer) -> boo
             result,
         )
         return False
+    our_rev: str | None = result.get("rev")
 
-    # CR-174 FR-26: record the lines the campaign rule approved, from the same lines just
-    # written. After the donation, not before: an audit ahead of a failed PUT named lines
-    # the donor could still change, and the next poll's copy hit the fixed id and was
-    # dropped. A failure here is logged and the row still counts as synced — the donation
-    # is in CouchDB, so a re-run could not PUT it again.
-    lines = auto_approved_lines(list(donation.items_declared))
+    # Mark synced only if the row is still what was just written. The old whole-row
+    # ``save()`` put the stale snapshot back over a donor's cancel (reverting it, after
+    # its quota was already released) or edit. Nothing else is written back to Mongo.
+    collection = DonationBuffer.get_pymongo_collection()
+    for attempt in range(_MAX_REPUTS + 1):
+        flipped = await collection.update_one(
+            _unsynced_filter(donation.id, fingerprint),
+            {"$set": {"synced_to_couch": True}},
+        )
+        if flipped.matched_count:
+            break
+        if attempt == _MAX_REPUTS:
+            logger.warning(
+                "Donation %s kept changing while syncing — leaving it to the next poll",
+                donation.id,
+            )
+            return False
+
+        row = await DonationBuffer.find_one(_unsynced_filter(donation.id))
+        if row is None:
+            return False
+        if not our_rev:
+            logger.error(
+                "Donation %s changed while syncing but CouchDB returned no rev",
+                donation.id,
+            )
+            return False
+        fingerprint = _fingerprint(row)
+        now = iso_utc(datetime.now(UTC))
+        try:
+            # Strict: if anyone but us moved the document, do not overwrite it.
+            result = await couch.put_doc(
+                database,
+                {**_build_couch_doc(row, doc_id, now), "_rev": our_rev},
+                retry_conflict=False,
+            )
+        except Exception as exc:
+            if _is_conflict(exc):
+                logger.error(
+                    "CouchDB document %s changed while donation %s was re-syncing — "
+                    "leaving it to the next poll",
+                    doc_id,
+                    donation.id,
+                )
+            else:
+                logger.exception("Failed to re-persist donation %s", donation.id)
+            return False
+        if not result.get("ok") or not result.get("rev"):
+            logger.error(
+                "CouchDB re-put for donation %s did not acknowledge ok: %s",
+                donation.id,
+                result,
+            )
+            return False
+        our_rev = result["rev"]
+
+    # CR-174 FR-26: record the lines the campaign rule approved, from the lines actually
+    # synced. After the flip, not before: an audit ahead of a PUT a donor's edit then
+    # superseded named lines that no longer exist, and the re-run's copy hit the fixed id
+    # and was dropped. A failure here is logged and the row still counts as synced — the
+    # donation is in CouchDB, so a re-run could not PUT it again.
+    lines = auto_approved_lines(list(row.items_declared))
     if lines:
         audit = build_auto_approve_audit(
             donation_id=doc_id,
-            shelter_code=donation.shelter_code,
-            booking_ref=donation.booking_ref,
+            shelter_code=row.shelter_code,
+            booking_ref=row.booking_ref,
             lines=lines,
             now=now,
         )
         await _write_auto_approve_audit(couch, database, audit)
 
-    donation.synced_to_couch = True
-    await donation.save()
+    await _settle_after_flip(couch, database, doc_id, our_rev)
     logger.info("Persisted donation %s to %s", donation.id, database)
     return True
 

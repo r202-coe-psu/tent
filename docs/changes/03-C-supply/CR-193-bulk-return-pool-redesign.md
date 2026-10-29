@@ -16,7 +16,8 @@ affects:
   - frontend/src/lib/features/shelters/domain/views.ts + view-manifest.ts (view `bulk_return_pool_item_totals`, `_design/app` v6)
   - frontend/src/lib/server/shelters.admin.ts / shelters/server/provisioner.ts / scripts/redeploy-access.ts / scripts/seed/registry-shelters.ts (deploy index)
   - frontend/src/lib/features/distribution/domain/food-supplies (bulk-return-pool / entry / entry-move / entry-void) และ distribution-log
-  - (ข้อ 32–34 — kong approve 2026-10-27) docs/data/schema.md §2.31 invariants ข้อ 2–3 — แก้ให้ตรงแล้ว · application `bulk-return-pool-v3-{shared,void,move,lifecycle,add-entry,read,missed-loans}.ts` · domain `bulk-return-pool-{summary,overview,timeline}.ts` · UI หน้ากอง / คิวงาน / ฟอร์มรับของ / timeline · ข้อ 35 เป็นคำถามนอกขอบเขต PR นี้ ไม่มีโค้ด
+  - (ข้อ 32–34 — kong approve 2026-10-27) docs/data/schema.md §2.31 invariants ข้อ 2–3 — แก้ให้ตรงแล้ว · application `bulk-return-pool-v3-{shared,void,move,lifecycle,add-entry,read,missed-loans}.ts` · domain `bulk-return-pool-{summary,overview,timeline}.ts` · UI หน้ากอง / คิวงาน / ฟอร์มรับของ / timeline · ข้อ 35 แยกไป #919
+  - (ข้อ 35 — kong approve 2026-10-28, #919) doc type ใหม่ `bulk_return_loan_reopen` v1 (append-only) · docs/data/schema.md §2.31.4 + §8 ข้อ 19 · frontend/src/lib/server/shelter-access-design.ts (VDU rule 14e) · application `food-supplies/auth.ts` (`canReopenBulkReturnLoan`), `bulk-return-pool-v3-loan-reopen.ts`, `bulk-return-pool-v3-missed-loans.ts` · domain `bulk-return-loan-reopen.ts`, `bulk-return-pool-timeline.ts` · UI `ReopenBulkReturnLoanDialog.svelte`, หน้ากอง, timeline
   - (ข้อ 36 — kong ตัดสิน 2026-10-28) #976: application `bulk-return-pool-v3-read.ts` (loan read degrade → `loan_refs_unavailable`) · domain `bulk-return-pool-overview.ts` (`loan_refs_unavailable`, `liveEntriesOf` / `liveLoanRefCount`) · application `query/read-queries.ts` + `$lib/db/query-client.ts` (overview re-checks at once while degraded — staleTime 0) · UI model `bulk-return-pool-v3.ts` / `bulk-return-work-queue.ts` (ตัวกรองบอร์ด/คิวงาน) · `BulkReturnPoolBoard.svelte` (banner/ป้าย) · จุดของฉัน (#977) · timeline หน้ากอง (#978) · คิวงานตาม role + redirect ลิงก์กอง (#980) — ไม่มี schema change
   - (ข้อ 37) #950: application bulk-return-pool-v3-{lifecycle,add-entry,shared,missed-loans,read}.ts · data distribution-log.repository.ts (mutateLogCAS beforeWrite) · domain bulk-return-pool-{summary,v3,overview}.ts · people/volunteers ค้นชื่อตาม id · UI ฟอร์มรับของ / ตรวจรับ / หน้ากอง / บอร์ด / คิวงาน · localStorage lastBulkReturnPool — ไม่มี schema change
 ---
@@ -35,7 +36,7 @@ affects:
 > - **เสนอเพิ่ม 2026-10-26 — kong approve 2026-10-27:** ข้อ 32–34 แก้ race ตอนเก็บเข้าคลัง — fence ตัดสินจากสถานะสุดท้ายของกอง (ข้อ 32),
 >   entry ที่อยู่ใน `entry_ids` ของกองที่ปิดแล้วถูกตรึงไว้กับกองนั้น void/ย้ายที่ลงหลัง snapshot ไม่มีผลและเตือนให้ staff ตรวจ (ข้อ 33),
 >   และทางซ่อมยอดยืมที่ไม่ถูกตัด (ข้อ 34) — แก้ข้อความข้อ 5, 6, D1 และ D3
-> - **คำถามแยกให้ kong (ข้อ 35):** การเปิด loan กลับเมื่อพบภายหลังว่าของในกองที่ปิดแล้วไม่ได้คืนจริง — ยังไม่มีทางทำ อยู่นอกขอบเขต PR นี้ รอ CR/issue แยก (ยังไม่ตัดสิน)
+> - **ข้อ 35 — kong approve 2026-10-28:** action "เปิดยอดยืมกลับ" ของผู้คืนหนึ่งรายการ สำหรับ `shelter_manager` และ `warehouse_staff` เมื่อพบภายหลังว่าของในกองที่ปิดแล้วไม่ได้คืนจริง — ไม่มีกำหนดเวลา, ไม่ผูกกับการปรับยอดคลัง (dialog เตือนให้ปรับเอง) — PR #919
 > - **Deploy:** #658 + #659 + #660 merge ใน PR เดียวและ redeploy ครั้งเดียว (ดู Rollout)
 > - **CR-121 ไม่ได้รับผลกระทบ** (ไม่มีตั๋วคืนแยก — ดู Decisions ข้อ 7)
 > - **อ้างอิง:** [#657](https://github.com/r202-coe-psu/tent/issues/657) (epic),
@@ -458,19 +459,37 @@ D1–D5 ข้างบนยังมีผลตามเดิม (ปรั�
   กอง `OPEN` และ entry ปกติไม่ขึ้นเตือน · loan ที่ถูกปิดไปแล้วขึ้นเป็นข้อ 15 ไม่ใช่ข้อนี้
 - **encode:** domain (`findMissedLoanRefs`) + application (`bulk-return-pool-v3-missed-loans.ts`) + UI หน้ากอง
 
-### 35. คำถามให้ kong ตัดสินแยก — เปิด loan กลับเมื่อของในกองที่ปิดแล้วไม่ได้คืนจริง (เปิด 2026-10-26)
+### 35. เปิด loan กลับเมื่อของในกองที่ปิดแล้วไม่ได้คืนจริง (เสนอ 2026-10-26 — **kong approve 2026-10-28**)
 
-> **สถานะ: คำถาม ยังไม่ตัดสิน — อยู่นอกขอบเขต PR นี้ เลื่อนไปทำเป็น CR/issue แยก** (ไม่บล็อก PR นี้; ข้อ 32–34 approve แล้วโดยไม่ต้องตอบข้อนี้)
+> **สถานะ: approved (kong, 2026-10-28) — implement ใน #919** · แยกจากข้อ 32–34 ซึ่ง kong approve แล้ว (2026-10-27);
+> ปรับจากข้อเสนอเดิม 2 จุด: role รวม `warehouse_staff` (FR-35.2) และ dialog เตือนเรื่องยอดคลัง (FR-35.9)
 
-- **กรณี:** กองส่งเข้าคลัง (หรือตรวจรับ) แล้ว และพบภายหลังว่ารายการหนึ่งในกองไม่ได้คืนจริง หรือบันทึกผิด (จำนวน / คน / ชนิดของ)
-- **ทำได้ตอนนี้:** แก้ยอดคลังด้วยแถวปรับยอด (`adjust`) หลังตรวจรับ หรือบันทึกส่วนต่างตอนตรวจรับ (`received_items[].discrepancy_reason`)
-- **ทำไม่ได้ตอนนี้:** เปิด loan กลับ — void ทำไม่ได้เพราะกองปิดแล้ว (ข้อ 6) และ void ที่หลุดเข้ามาไม่มีผล (ข้อ 33); entry แก้ไม่ได้ (append-only)
-  → loan ถูกบันทึกว่าคืนแล้วถาวร ผู้ยืมจะไม่ถูกตามคืน
-- **ข้อเสนอ (ยังไม่ทำ):** action สำหรับผู้ดูแลเท่านั้น "เปิด loan กลับ" ต่อ ref ของ entry ในกองที่ปิดแล้ว — ย้อน `applied_bulk_entry_ids` + `qty_returned`
-  ตาม path revert เดิม (ข้อ 11), ต้องมีเหตุผล, บันทึกใน timeline, ไม่แตะยอดคลัง (แก้แยกด้วย `adjust`)
-- **คำถาม:** (1) ต้องมี action นี้ไหม หรือยอมรับว่าแก้ได้แค่ยอดคลัง; (2) ถ้ามี — role ใด (ผู้ดูแลระบบ / ผู้จัดการศูนย์ / คลัง); (3) ทำได้ถึงเมื่อไหร่ (ก่อน/หลังตรวจรับ, มีกำหนดวันไหม);
-  (4) ต้องผูกกับแถวปรับยอดคลังไหม
-- **ผลกระทบถ้าทำ:** เปลี่ยนกติกา role และ VDU ของ `distribution_log` (revert ตอนนี้อนุญาตเฉพาะ path void) — ต้องเป็น CR / ข้อใหม่ของตัวเอง
+- **กรณี:** กองส่งเข้าคลัง (หรือตรวจรับ) แล้ว และพบภายหลังว่ารายการหนึ่งในกองไม่ได้คืนจริง — ตอนนี้แก้ได้แค่ยอดคลัง (`adjust` หลังตรวจรับ หรือส่วนต่างตอนตรวจรับ)
+  แต่ loan ของผู้คืนถูกบันทึกว่าคืนแล้วถาวร: void ทำไม่ได้เพราะกองปิด (ข้อ 6) และ void ที่หลุดเข้ามาไม่มีผล (ข้อ 33)
+- **กติกา (approved):**
+  - FR-35.1 action "เปิดยอดยืมกลับ" ต่อ **entry หนึ่งตัว** ที่อยู่ใน `entry_ids` ของกอง `SUBMITTED`/`RECEIVED` และมี ref ที่ตัด loan แล้ว — ไม่ใช่เครื่องมือเปิด loan ทั่วไป
+  - FR-35.2 role: `shelter_manager` และ `warehouse_staff` ของศูนย์นั้น (และ `system_admin` ผ่านตัวช่วย role เดิม) — ไม่สร้าง role ใหม่; แคบกว่ากลุ่มจัดการกอง (ไม่รวม `supply_coordinator`/`distribution_staff`) **(kong 2026-10-28: เพิ่ม `warehouse_staff` จากข้อเสนอเดิมที่ให้ `shelter_manager` อย่างเดียว)**
+  - FR-35.3 บังคับใส่เหตุผล 1–500 ตัวอักษรทุกครั้ง
+  - FR-35.4 เขียน event doc ใหม่ `bulk_return_loan_reopen:{entryULID}` (append-only, schema.md §2.31.4) อ้าง entry + pool + เหตุผล + loan ที่เปิดกลับ — ไม่แก้เอกสารอื่นแบบเงียบ
+  - FR-35.5 แก้เฉพาะ loan: ใช้ path revert เดิมของ `distribution_log` (ข้อ 11) ต่อ ref ของ entry นั้น — **ไม่แตะ pool / stock / entry** (กติกาการตรึงทำให้ยอดกองถูกอยู่แล้ว)
+  - FR-35.6 ความปลอดภัย: ตรวจก่อนเขียนว่าทุก loan ยัง `partially_returned`/`returned` (ถูกปิดเป็น `lost`/`waived` ไปแล้ว → ปฏิเสธโดยไม่เขียนอะไร) ·
+    `_id` deterministic → ทำซ้ำหรือกดพร้อมกันได้เอกสารเดียว และ revert idempotent (loan ที่ไม่มี id ของ entry แล้วเป็น no-op)
+  - FR-35.6a (รายละเอียดของ FR-35.6) หน้ากองไม่แสดงปุ่ม "เปิดยอดยืมกลับ" ที่ entry ซึ่งยอดยืมที่ตัดไปถูกปิดเป็น `lost`/`waived` แล้ว (แม้เพียงบางใบ เพราะ FR-35.6 ปฏิเสธทั้ง entry) แต่แสดงเหตุผลแทน เช่น "เปิดยอดยืมกลับไม่ได้ ยอดยืมถูกปิดเป็นสูญหายแล้ว" · ถ้าถูกปฏิเสธตอนกดยืนยัน ข้อความ error เป็นภาษาไทยที่บอกสถานะ
+  - FR-35.7 หลังเปิดกลับ entry นั้นไม่ขึ้นเป็น "ยอดยืมที่ไม่ถูกตัด" (ข้อ 34) และปุ่ม "ตัดยอดยืมที่ค้าง" ต้องปฏิเสธ entry นั้น — ไม่งั้นการซ่อมจะตัดยอดที่ตั้งใจเปิดกลับซ้ำ
+  - FR-35.8 ประวัติของกองแสดง "เปิดยอดยืมกลับ" พร้อมเหตุผลและผู้ทำ
+  - FR-35.9 dialog "เปิดยอดยืมกลับ" แสดงข้อความเตือน (ไม่บังคับ) ว่า action นี้ไม่แก้ยอดคลัง — ถ้าตอนตรวจรับยังไม่ได้หักของรายการนี้ ให้ไปปรับยอดคลัง (`adjust`) ที่หน้าคลังเอง
+  - FR-35.10 ไม่มีกำหนดเวลา — เปิดกลับได้ตลอดเมื่อเงื่อนไข FR-35.1 / FR-35.6 ผ่าน
+  - FR-35.11 เปิดกลับพร้อมกับการตัด loan ของ entry เดียวกัน ("ตัดยอดยืมที่ค้าง" ข้อ 34 หรือ replay ของ add-entry) → **ทั้งสองฝั่งลงที่ loan ถูกเปิดกลับ (active)**:
+    (a) ฝั่งตัด: หลัง CAS ของ loan ต้องอ่านเอกสาร reopen ของ entry ซ้ำ และ revert สิ่งที่เพิ่งตัด (`revertAppliedRefsIfReopened`) ·
+    (b) ฝั่งเปิดกลับ: หลัง revert ต้องอ่านทุก loan ของ entry ซ้ำ และ revert loan ที่ยังถูกตัดอยู่ (final sweep) — loan ที่ revert ไม่ได้ (ทั้งตอน replay และตอน sweep) ไม่ throw แต่รายงานเป็น `not_revertable` ·
+    (c) `loan_ids` ของเอกสาร reopen = loan ที่ถูกเปิดกลับ **ณ ตอนเขียนเอกสาร** เท่านั้น — loan ที่ถูก final sweep revert ภายหลังไม่ถูกเพิ่มเข้า `loan_ids` (เอกสาร append-only) ·
+    (d) loan ที่ถูก revert ทุกตัวดูได้จากสถานะ loan ปัจจุบัน (id ของ entry ไม่อยู่ใน `applied_bulk_entry_ids` แล้ว) — การ revert แก้เอกสาร loan เดิม ไม่สร้างแถวใหม่ จึงไม่มีบันทึกถาวรว่า loan ใดถูก revert โดยการเปิดกลับ · ยอดของ loan ถูกต้อง มีเพียง `loan_ids` ที่อาจไม่ครบ (ข้อจำกัดที่ยอมรับ)
+- **ข้อจำกัด:** VDU แยก revert ของ `distribution_log` ที่มาจากการเปิดกลับออกจาก revert ของ void ไม่ได้ (อ่านเอกสารอื่นไม่ได้) — role ที่แคบบังคับที่เอกสาร
+  `bulk_return_loan_reopen` และ application; การเขียน loan ยังใช้ role ของ path revert เดิม
+- **ตัดสิน (kong, 2026-10-28):** (1) รับ action นี้; (2) role = `shelter_manager` + `warehouse_staff` (FR-35.2); (3) ไม่มีกำหนดเวลา (FR-35.10);
+  (4) ไม่ผูกกับแถวปรับยอดคลัง (`adjust`) — ยอดคลังแก้จากยอดนับจริงได้โดยไม่ต้องรู้ว่าใครไม่ได้คืน (`received_qty` ตอนตรวจรับ หรือ `adjust` ภายหลัง)
+  ส่วนยอดยืมเปิดกลับได้เฉพาะเมื่อรู้ตัวผู้คืน การผูกจะทำให้แก้ยอดคลังไม่ได้เมื่อไม่รู้ตัวคน และเสี่ยงหักซ้ำเมื่อตอนตรวจรับหักไปแล้ว — ใช้ข้อความเตือนแทน (FR-35.9)
+- **ผลกระทบ:** doc type ใหม่ (whitelist + append-only + rule ใน VDU — ต้อง `pnpm redeploy:access`), ไม่เปลี่ยน shape ของเอกสารเดิม ไม่ bump `schema_v` ของ type อื่น
 
 ### 36. คำตัดสินจาก review PR follow-up #976–#980 (kong ตัดสิน 2026-10-28)
 
@@ -521,8 +540,22 @@ D1–D5 ข้างบนยังมีผลตามเดิม (ปรั�
   - system admin / shelter manager เห็นคิวทั้ง 3: "รอคลังตรวจรับ", "ต้องจัดการ", "กองที่จุดของฉัน"
   - role อื่นได้คิวรวมตามทุก role ที่ถือ (คลัง → "รอคลังตรวจรับ", distribution staff → "กองที่จุดของฉัน")
 - **ตัดสิน — ลิงก์กอง:** distribution staff ที่เข้าหลังบ้านไม่ได้ แต่เปิดลิงก์กอง
-  `/back-office/distribution?view=bulk_pools&pool=<id>` ให้พาไป `/onsite/distribution?tab=returns&pool=<id>` และเปิดกองนั้น (แทนการพาไป `/portal`)
-- **แก้:** ข้อ 26 และข้อ 27 (คิวตาม role) · **ต่อ:** ข้อ 29 (deep link)
+  `/back-office/distribution?view=bulk_pools&pool=<id>` ให้พาไป `/onsite/distribution?mode=supplies&tab=returns&pool=<id>` และเปิดกองนั้น (แทนการพาไป `/portal`)
+  - `/back-office/distribution?view=bulk_pools` ที่ไม่มี `pool` ให้พาไป `/onsite/distribution?mode=supplies&tab=returns` (ลิงก์ที่มีแค่ `?pool=<id>` ไม่มี `view` ก็ถือเป็นลิงก์กองเช่นกัน)
+  - ใส่ `mode=supplies` เพราะการคืนอยู่เฉพาะโหมด supplies (CR-200 FR-DFS-03)
+- **ตัดสิน — URL หน้างาน:** หน้างาน (onsite desk) ใช้ URL รูปแบบ `/onsite/distribution?mode=<m>&tab=<t>[&pool=<id>]`
+  - `pool` ใช้เฉพาะเมื่อ `tab=returns` (มี `pool` ⇒ บังคับ `tab=returns`; แท็บที่มีในโหมดเดียว เช่น `returns` ⇒ บังคับโหมดนั้น ไม่ว่า `mode=` จะเป็นอะไร)
+  - เฉพาะ desk เป็นผู้เขียน URL โดยใช้ replaceState
+  - กลับมาที่หน้างานด้วยปุ่ม Back ได้สถานะ desk (mode/tab/pool) ล่าสุดของ entry นั้น — การสลับแท็บ/โหมด/กองไม่เพิ่ม history entry
+- **ตัดสิน — ลิงก์กองที่หาไม่เจอ:** เมื่อ pool id ในลิงก์ไม่อยู่ในข้อมูลกองที่โหลดมา (ถูกลบ, เป็นของศูนย์อื่น หรือไม่เคยมี)
+  - แสดง toast หลังโหลดข้อมูลเสร็จแล้ว
+  - ลบ `pool=` ออกจาก URL และคงอยู่ที่แท็บ returns (หลังบ้านคงอยู่ที่ `view=bulk_pools`)
+  - กองที่อยู่ในข้อมูลแต่ถูก filter ของบอร์ดซ่อนอยู่ ยังเปิดได้
+- **ตัดสิน — ลิงก์ที่สลับโหมดขณะมีฟอร์มกรอกค้าง:**
+  - ถามยืนยันก่อน โดยใช้ dialog เดียวกับปุ่มสลับโหมด (CR-200 FR-DFS-05)
+  - ยกเลิก: คงโหมด แท็บ กอง และร่างเดิม และคืน URL ก่อนหน้า
+  - ยืนยัน: สลับโหมดและเปิดปลายทางตามลิงก์
+- **แก้:** ข้อ 26 และข้อ 27 (คิวตาม role) · **ต่อ:** ข้อ 29 (deep link), CR-200 FR-DFS-05 (ไม่แก้ CR-200)
 - **โค้ด:** PR #980
 
 ### 37. งานตาม review ของกองรับคืน (#950) (เพิ่ม 2026-10-29)
@@ -735,13 +768,20 @@ VDU อ่านเอกสารอื่นไม่ได้ — กติ�
 - 2026-10-26 — แก้ร่างข้อ 32–34 ให้ตรงโค้ดสุดท้าย (หลังตรวจซ้ำ): ข้อ 5 ข้อแรกอ้างข้อ 32 · FR-32.4 ลองซ้ำหลังรายการถูกย้ายไม่ตัด loan (แก้แล้ว) ·
   ข้อ 33 ใช้กับ void / ย้ายทุกตัวของ entry ที่ snapshot นับไว้ ไม่ว่าเกิดจากอะไร และไม่มี action ปกติใดเสียผล · FR-33.5 timeline แสดงพร้อมป้าย "ไม่มีผล" ·
   FR-33.7 ทางเขียน fail closed เมื่ออ่านกองที่อ้างถึงไม่ได้ · D1 ขั้น 2 แก้ (ไม่ได้อ่าน view) · **เปิดข้อ 35** คำถามเปิด loan กลับ ให้ kong ตัดสินแยก
+- 2026-10-26 — ข้อ 35 เปลี่ยนจากคำถามเป็น**ข้อเสนอพร้อม implementation** (PR แยก stack บน #768): event doc `bulk_return_loan_reopen`, role `shelter_manager`, บังคับเหตุผล,
+  แก้เฉพาะ loan, กันซ่อมยอดยืมซ้ำ — **ยังรอ kong อนุมัติหรือปรับ** · schema.md §2.31.4 + §8 ข้อ 19 (เสนอ)
 - 2026-10-27 — kong approve ข้อ 32–34
 - 2026-10-27 — คำถามข้อ 19, 21, 22, 24, 27 ตัดสินโดยผู้เสนอ PR (Nekokun2004) ตามที่ implement; ข้อ 35 แยกออกนอก PR นี้ (ยังไม่ตัดสิน)
+- 2026-10-27 — ข้อ 35 ยื่นเป็นข้อเสนอพร้อม implementation ใน PR แยก (#919) — ยังรอ kong ตัดสิน (ไม่เปลี่ยนข้อ 32–34 ที่ approve แล้ว)
+- 2026-10-28 — **kong approve ข้อ 35** พร้อมปรับ: (1) รับ action; (2) เพิ่ม `warehouse_staff` ใน role (FR-35.2); (3) ไม่มีกำหนดเวลา (FR-35.10);
+  (4) ไม่ผูกกับ `adjust` — เพิ่มข้อความเตือนใน dialog (FR-35.9) · โค้ดใน #919 ต้องแก้ตาม FR-35.2 / FR-35.9 และ schema.md §2.31.4 + §8 ข้อ 19 ต้องแก้ role ให้ตรง
 - 2026-10-28 — kong ตัดสินข้อ 36 จาก review PR follow-up #976–#980: 36.1 ([#976](https://github.com/r202-coe-psu/tent/pull/976#issuecomment-6464508260)) overview อ่าน loan ไม่ได้ → `loan_refs_unavailable` (คำนวณตอนอ่าน) + banner/ป้าย + นับเป็น "ต้องจัดการ" (แก้ข้อ 23) ·
   36.2 ([#977](https://github.com/r202-coe-psu/tent/pull/977#issuecomment-6464602448)) "จุดของฉัน" ที่จุดเก็บถูกลบ → placeholder + ล้างค่าที่จำไว้ (แก้ข้อ 27) ·
   36.3 ([#978](https://github.com/r202-coe-psu/tent/pull/978#issuecomment-6464670468)) timeline ไม่ซ้ำ banner ระดับศูนย์ (ต่อข้อ 19/28) ·
   36.4 ([#980](https://github.com/r202-coe-psu/tent/pull/980#issuecomment-6465023600)) คิวงานตามทุก role ที่ถือ + redirect ลิงก์กองของ distribution staff ไป `/onsite/distribution` (แก้ข้อ 26/27, ต่อข้อ 29) ·
   ไม่เปลี่ยน shape/`schema_v`/VDU
+- 2026-10-29 — ข้อ 35 เพิ่ม FR-35.11: การเปิดกลับพร้อมการตัดยอด + ขอบเขตของ `loan_ids` (ไม่เปลี่ยน shape/`schema_v`; schema.md §2.31.4 อ้างตาม)
+- 2026-10-29 — ข้อ 36.4 เพิ่ม URL หน้างาน (`mode`/`tab`/`pool`), ลิงก์กองที่หาไม่เจอ, และลิงก์ที่สลับโหมดขณะมีฟอร์มค้าง; แก้ปลายทาง redirect เป็น `mode=supplies`
 - 2026-10-29 — เพิ่มข้อ 37 (#950): submit รอกองที่ event อ้างถึงซึ่งถือ SUBMIT lock (37.1), ตรวจรับนับเฉพาะ entry ที่ pin กับกองนี้ (37.2),
   บันทึกหลายรายการที่ fence หมดเวลาไม่ error ทั้งชุด + "ตัดยอดยืมที่ค้าง" ใช้กับกอง OPEN (37.3, แก้ข้อ 34), "คืนทั้งหมด" ไม่นับซ้ำ (37.4),
   ตรวจ void ซ้ำใน CAS ของ loan (37.5), ฟอร์มรับของใช้กองที่ส่งจริง (37.6) · บอร์ด: โหลดชื่อเฉพาะ returner ในกอง (37.7, แก้ข้อ 24),

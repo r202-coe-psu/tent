@@ -42,6 +42,11 @@ export const dist: AuthorContext = {
 	shelterCode: 'SH001',
 	roles: ['shelter:SH001', 'SH001:distribution_staff']
 };
+export const sm: AuthorContext = {
+	createdBy: 'user:sm1',
+	shelterCode: 'SH001',
+	roles: ['shelter:SH001', 'SH001:shelter_manager']
+};
 export const reg: AuthorContext = {
 	createdBy: 'user:reg1',
 	shelterCode: 'SH001',

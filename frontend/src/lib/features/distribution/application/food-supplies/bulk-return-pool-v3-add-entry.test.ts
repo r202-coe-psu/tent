@@ -597,7 +597,9 @@ describe('bulk return pool v3 workflows', () => {
 				{
 					entry_id: appliedEntry._id,
 					distribution_log_id: appliedEntry.loan_refs[0].distribution_log_id,
-					qty: appliedEntry.loan_refs[0].qty
+					qty: appliedEntry.loan_refs[0].qty,
+					loan_status: 'returned',
+					revertable: true
 				}
 			]);
 

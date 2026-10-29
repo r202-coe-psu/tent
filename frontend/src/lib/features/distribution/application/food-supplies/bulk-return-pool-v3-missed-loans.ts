@@ -1,11 +1,12 @@
 import type { AuthorContext } from '$lib/db/model';
 import type {
-	BulkReturnEntry,
+	BulkReturnEntryLoanRef,
 	DistributionLog,
 	MissedBulkReturnLoanRef
 } from '../../domain/food-supplies';
 import {
 	deriveEntryVoidId,
+	deriveLoanReopenId,
 	findMissedLoanRefs,
 	resolveBulkReturnEntries
 } from '../../domain/food-supplies';
@@ -18,6 +19,7 @@ import {
 	loadSnapshotPinsForWrite,
 	requirePool,
 	resolveDependencies,
+	revertAppliedRefsIfReopened,
 	type BulkReturnLoanSkipped,
 	type BulkReturnPoolV3WorkflowDependencies
 } from './bulk-return-pool-v3-shared';
@@ -47,9 +49,14 @@ export async function listBulkReturnPoolMissedLoanRefs(
 		return findMissedLoanRefs(live, loansById);
 	}
 
-	// getEntry validates the doc and throws on a malformed one: the read fails closed.
-	const found = await Promise.all((pool.entry_ids ?? []).map((id) => eventRepo.getEntry(id)));
-	const entries = found.filter((e): e is BulkReturnEntry => e !== null);
+	// Batched reads; getEntriesByIds validates every doc and throws on a malformed one: fails closed.
+	const present = await eventRepo.getEntriesByIds(pool.entry_ids ?? []);
+	// CR-193 §35: an entry whose loans were reopened on purpose must never be offered for a re-cut.
+	const reopens = await eventRepo.getLoanReopensByIds(
+		present.map((e) => deriveLoanReopenId(e._id))
+	);
+	const reopenedIds = new Set(reopens.map((r) => r._id));
+	const entries = present.filter((e) => !reopenedIds.has(deriveLoanReopenId(e._id)));
 	const loanIds = [
 		...new Set(entries.flatMap((e) => e.loan_refs.map((ref) => ref.distribution_log_id)))
 	];
@@ -130,17 +137,34 @@ export async function applyMissedBulkReturnLoanRefs(
 	}
 	const entry = await eventRepo.getEntry(input.entry_id);
 	if (!entry) throw new WorkflowValidationError(`bulk_return_entry ${input.entry_id} not found`);
+	const reopenedError = () =>
+		new WorkflowValidationError(
+			`Entry ${entry._id} had its loans reopened on purpose: they are not re-applied`
+		);
+	if (await eventRepo.getLoanReopen(deriveLoanReopenId(entry._id))) throw reopenedError();
 
 	const voidId = deriveEntryVoidId(entry._id);
 	const isEntryVoided = isOpen ? async () => (await eventRepo.getVoid(voidId)) !== null : undefined;
 	const loansApplied: string[] = [];
+	const writtenRefs: BulkReturnEntryLoanRef[] = [];
 	const loansSkipped: BulkReturnLoanSkipped[] = [];
 	let voided = false;
 	for (const ref of entry.loan_refs) {
 		const outcome = await applyRefToLoanDetailed(logRepo, entry, ref, ctx, isEntryVoided);
 		if (outcome.voided) voided = true;
 		else if (outcome.skipped) loansSkipped.push(outcome.skipped);
-		else if (outcome.written) loansApplied.push(ref.distribution_log_id);
+		else if (outcome.written) {
+			loansApplied.push(ref.distribution_log_id);
+			writtenRefs.push(ref);
+		}
+	}
+	// A manager may have reopened between the pre-check and the CAS writes above: undo what this
+	// call wrote so the loan is not cut again behind the reopen (same outcome as an earlier reopen).
+	if (
+		writtenRefs.length > 0 &&
+		(await revertAppliedRefsIfReopened(eventRepo, logRepo, entry, writtenRefs, ctx))
+	) {
+		throw reopenedError();
 	}
 	return { loansApplied, loansSkipped, ...(voided ? { voided: true as const } : {}) };
 }

@@ -11,6 +11,7 @@ import {
 	canAppendToPool,
 	createBulkReturnEntry,
 	deriveEntryVoidId,
+	deriveLoanReopenId,
 	foldEntryMoves,
 	isBulkReturnEligibleItem,
 	resolveBulkReturnEntries,
@@ -33,6 +34,7 @@ import {
 	outstandingLoansOf,
 	requirePool,
 	resolveDependencies,
+	revertAppliedRefsIfReopened,
 	settlePoolFence,
 	type BulkReturnLoanSkipped,
 	type BulkReturnPoolV3WorkflowDependencies,
@@ -84,6 +86,11 @@ export interface AddBulkReturnEntryResult {
 	relocated?: 'moved' | 'pending_sync';
 	/** The entry's current pool when `relocated` is 'moved'. */
 	relocated_pool_id?: string;
+	/**
+	 * Replay only: the entry's loans were deliberately reopened by a manager (CR-193 §35); a replay
+	 * must not cut them again. No loan was touched.
+	 */
+	loans_reopened?: true;
 }
 
 export interface AddBulkReturnEntriesResult {
@@ -329,6 +336,24 @@ export async function addBulkReturnEntries(
 					stop: false
 				};
 			}
+			// Loans reopened by a manager after the pool closed (CR-193 §35): never cut them again.
+			// A move cannot reach here: a pinned entry (counted in a closed pool's snapshot) cannot
+			// leave that pool, so a reopened entry always still resolves to its creation pool. Reopen
+			// wins over the replay's fence / loan cut on that pool; the pool's stop is kept.
+			if ((await eventRepo.getLoanReopen(deriveLoanReopenId(entry._id))) !== null) {
+				return {
+					result: {
+						entry,
+						late: false,
+						replayed,
+						loansApplied: [],
+						loansSkipped: [],
+						unallocated_qty,
+						loans_reopened: true
+					},
+					stop: false
+				};
+			}
 		}
 
 		// FENCE: the pool may have been locked / submitted / cancelled after the entry landed. A lock
@@ -388,6 +413,30 @@ export async function addBulkReturnEntries(
 			else if (outcome.skipped) loansSkipped.push(outcome.skipped);
 			else loansApplied.push(ref.distribution_log_id);
 		}
+		// Counted by a submit that closed the pool: the next items would only land late, so stop.
+		const stop = fence === 'in_snapshot';
+		// A manager may reopen the entry's loans between the pre-check (replay only) and the CAS
+		// writes above, on a fresh entry too (a submit can count it first): re-check after the writes
+		// and undo them, so a reopened loan is never left cut. Reopen wins over everything else.
+		if (loansApplied.length > 0) {
+			const appliedRefs = entry.loan_refs.filter((ref) =>
+				loansApplied.includes(ref.distribution_log_id)
+			);
+			if (await revertAppliedRefsIfReopened(eventRepo, logRepo, entry, appliedRefs, ctx)) {
+				return {
+					result: {
+						entry,
+						late: false,
+						replayed,
+						loansApplied: [],
+						loansSkipped: [],
+						unallocated_qty,
+						loans_reopened: true
+					},
+					stop
+				};
+			}
+		}
 		return {
 			result: {
 				entry,
@@ -398,8 +447,7 @@ export async function addBulkReturnEntries(
 				loansSkipped,
 				unallocated_qty
 			},
-			// Counted by a submit that closed the pool: the next items would only land late, so stop.
-			stop: fence === 'in_snapshot'
+			stop
 		};
 	}
 

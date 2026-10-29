@@ -117,3 +117,30 @@ def test_project_donation_pre_v7_lines_have_no_review():
     assert line["review_status"] is None
     assert line["review_reason_code"] is None
     assert line["review_reason"] is None
+
+
+def test_project_donation_carries_the_line_key():
+    """CR-196 FR-LK-3 / FR-LK-8 — GET hands the key back for the edit form."""
+    doc = _donation(
+        schema_v=8,
+        status="pending_review",
+        items=[
+            {"free_text": "ผ้าห่ม", "qty": "2", "unit": "ผืน", "line_key": "01K8KEYA"},
+            {"free_text": "ผ้าห่ม", "qty": "1", "unit": "ผืน", "line_key": "01K8KEYB"},
+        ],
+    )
+
+    _, payload = project_donation(doc, shelter_code="SH001")
+
+    assert payload is not None
+    assert [line["line_key"] for line in payload["items_declared"]] == [
+        "01K8KEYA",
+        "01K8KEYB",
+    ]
+
+
+def test_project_donation_pre_v8_lines_have_no_line_key():
+    _, payload = project_donation(_donation(schema_v=7), shelter_code="SH001")
+
+    assert payload is not None
+    assert payload["items_declared"][0]["line_key"] is None

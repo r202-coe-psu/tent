@@ -80,6 +80,18 @@ describe('toLedgerRow', () => {
 		expect(row.group).toBe('out');
 	});
 
+	it('files a return into its source lot under "in" (CR-208)', () => {
+		const returned = entry({
+			reason: 'distribution_return',
+			qty: '3',
+			ref_id: 'requisition_ticket:T1',
+			lot_ref: 'stock_ledger:001'
+		});
+		const row = toLedgerRow(returned, lookup);
+		expect(row.group).toBe('in');
+		expect(summarizeRows([row]).find((card) => card.group === 'in')?.count).toBe(1);
+	});
+
 	it('resolves lot number, storage point and reference for a receipt', () => {
 		const row = toLedgerRow(receive, lookup);
 		expect(row.lotNo).toBe('L-261002-001');
