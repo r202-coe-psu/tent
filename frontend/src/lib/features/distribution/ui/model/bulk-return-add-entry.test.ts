@@ -561,7 +561,7 @@ describe('summarizeAddResult / dropWrittenLines', () => {
 	it('explains why lines remain: blocked, loan-pending stop, or a late entry', () => {
 		const pool_id = 'bulk_return_pool:p';
 		const message = (result: AddBulkReturnEntriesResult) =>
-			remainingLinesMessage(summarizeAddResult(result));
+			remainingLinesMessage(summarizeAddResult(result), result, pool_id);
 		const closed = message(wrap([], false, { pool_id, reason: 'closed' }));
 		expect(closed).toContain('เลือกกองอื่นที่เปิดรับ');
 		const locked = message(wrap([], false, { pool_id, reason: 'locked' }));
@@ -571,6 +571,23 @@ describe('summarizeAddResult / dropWrittenLines', () => {
 		expect(pending).not.toBe(locked);
 		const late = message(wrap([res('A', { late: true })]));
 		expect(late).toContain('เลือกกองอื่นที่เปิดรับ');
+	});
+
+	it('only a loan-pending line in the submitted pool is a loan-pending stop', () => {
+		const pool_id = 'bulk_return_pool:p';
+		const other = 'bulk_return_pool:other';
+		const message = (result: AddBulkReturnEntriesResult) =>
+			remainingLinesMessage(summarizeAddResult(result), result, pool_id);
+		const inPool = message(wrap([res('A', { loanPending: true })]));
+		const otherPoolReplayThenLate = message(
+			wrap([
+				res('A', { loanPending: true, replayed: true, poolId: other }),
+				res('B', { late: true })
+			])
+		);
+		expect(otherPoolReplayThenLate).toContain('เลือกกองอื่นที่เปิดรับ');
+		expect(otherPoolReplayThenLate).not.toBe(inPool);
+		expect(inPool).toContain('รอสักครู่');
 	});
 
 	it('names the items of a loan-pending warning and where to repair them', () => {

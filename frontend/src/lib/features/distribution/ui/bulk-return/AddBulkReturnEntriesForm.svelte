@@ -367,7 +367,7 @@
 				open = false;
 				onsuccess?.(summary);
 			} else if (activeLines(lines).length > 0) {
-				submitError = remainingLinesMessage(summary);
+				submitError = remainingLinesMessage(summary, result, submittedPoolId);
 			}
 		} catch (err) {
 			// Line operationUlids are kept, so pressing save again is an idempotent retry.

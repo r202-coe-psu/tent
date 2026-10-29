@@ -438,15 +438,25 @@ export function loanPendingWarning(itemNames: readonly string[]): string {
 /**
  * Why lines stay in the form after a save, and what to do. Call it only when active lines remain.
  * A blocked pool wins, then a loan-pending stop; otherwise a late entry made the pool stop taking
- * items.
+ * items. Only an on-time loan-pending line whose entry lives in `submittedPoolId` counts as a
+ * loan-pending stop: a loan-pending replay of an entry in another pool does not stop new lines for
+ * the submitted pool.
  */
-export function remainingLinesMessage(summary: AddEntriesSummary): string {
+export function remainingLinesMessage(
+	summary: AddEntriesSummary,
+	result: AddBulkReturnEntriesResult,
+	submittedPoolId: string
+): string {
 	if (summary.blocked) {
 		return summary.blocked.reason === 'locked'
 			? ADD_ENTRY_COPY.remainingLocked
 			: ADD_ENTRY_COPY.remainingClosed;
 	}
-	if (summary.loanPendingItemIds.length > 0) return ADD_ENTRY_COPY.remainingLoanPending;
+	const pendingInSubmittedPool = result.results.some(
+		(r) =>
+			!r.late && !r.relocated && !r.voided && r.loan_pending && r.entry.pool_id === submittedPoolId
+	);
+	if (pendingInSubmittedPool) return ADD_ENTRY_COPY.remainingLoanPending;
 	return ADD_ENTRY_COPY.remainingNotAccepting;
 }
 
