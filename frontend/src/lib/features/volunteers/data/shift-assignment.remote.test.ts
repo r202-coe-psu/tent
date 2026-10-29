@@ -203,6 +203,35 @@ describe('ShiftAssignmentRemoteRepository', () => {
 		);
 	});
 
+	it('list() and get() keep a worker-shaped doc that has no method keys (#1014)', async () => {
+		const { assignments, job, volunteer } = await setup();
+		await memoryRepo.put({
+			_id: 'shift_assignment:worker',
+			type: 'shift_assignment',
+			schema_v: 4,
+			shelter_code: 'SH001',
+			created_at: '2026-08-27T00:00:00.000Z',
+			updated_at: '2026-08-27T00:00:00.000Z',
+			created_by: 'public_apply',
+			job_id: job._id,
+			volunteer_id: volunteer._id,
+			date: '2026-08-27',
+			shift: 'morning',
+			station: 'ครัว',
+			duty_window: assignmentInput(job._id, volunteer._id).duty_window,
+			check_in_at: '2026-08-27T08:05:00.000Z',
+			check_out_at: null,
+			check_in_by: null,
+			status: 'checked_in',
+			dispatch_status: null
+		});
+
+		const listed = await assignments.list({ jobId: job._id });
+		expect(listed.map((x) => x._id)).toEqual(['shift_assignment:worker']);
+		expect(listed[0].check_in_method ?? null).toBeNull();
+		expect(await assignments.get('shift_assignment:worker')).not.toBeNull();
+	});
+
 	it('assign() rolls the assignment back when the quota move fails', async () => {
 		const { jobs, volunteers, assignments, job, volunteer } = await setup();
 		const second = await volunteers.create({ ...volunteerInput, phone: '0899999999' }, ctx);

@@ -91,14 +91,14 @@ export interface ShiftAssignment extends BaseDoc {
 	status: ShiftAssignmentStatus;
 	/** CR-094 §3.2 — set while a dispatch offer is outstanding / being decided. */
 	dispatch_status?: DispatchStatus | null;
-	/** CR-094 §3.2 — default `qr`; `manual_override` requires `check_in_reason`. */
-	check_in_method: CheckInMethod;
+	/** Legacy docs (e.g. worker-written v4) omit this: missing/null means unknown ("ไม่ระบุ"). CR-094 §3.2 — `manual_override` requires `check_in_reason`. */
+	check_in_method?: CheckInMethod | null;
 	/** CR-094 §3.2 — required when `check_in_method === 'manual_override'` (FR-VOL-11.2). */
-	check_in_reason: string | null;
-	/** CR-108 — default `qr`; `manual_override` requires `check_out_reason`. */
-	check_out_method: CheckInMethod;
+	check_in_reason?: string | null;
+	/** Missing/null on legacy docs = unknown. CR-108 — `manual_override` requires `check_out_reason`. */
+	check_out_method?: CheckInMethod | null;
 	/** CR-108 — required when `check_out_method === 'manual_override'`. */
-	check_out_reason: string | null;
+	check_out_reason?: string | null;
 }
 
 /** F12 — schema.md §2.9 v1 → v2 migration writes `job_id: 'legacy'` on rows that predate the `job` link; new writes must still use `job:{ulid}`. */
@@ -129,10 +129,11 @@ export const shiftAssignmentSchema = z
 		check_out_by: z.string().nullable().optional(),
 		status: shiftAssignmentStatusSchema,
 		dispatch_status: dispatchStatusSchema.nullable().optional(),
-		check_in_method: checkInMethodSchema,
-		check_in_reason: z.string().nullable(),
-		check_out_method: checkInMethodSchema,
-		check_out_reason: z.string().nullable()
+		// Legacy docs omit these keys (docs/data/schema.md migration notes) — read as null.
+		check_in_method: checkInMethodSchema.nullish(),
+		check_in_reason: z.string().nullable().optional(),
+		check_out_method: checkInMethodSchema.nullish(),
+		check_out_reason: z.string().nullable().optional()
 	})
 	.refine(
 		(d) =>
