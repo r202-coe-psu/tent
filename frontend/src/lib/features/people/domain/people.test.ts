@@ -53,6 +53,7 @@ import {
 	householdPreRegisterAddressFormSchema,
 	householdPostArrivalAddressFormSchema,
 	evacueePersonalEditFormSchema,
+	evacueeEmergencyEditFormSchema,
 	evacueeHealthEditFormSchema,
 	formatPersonName,
 	stayStatusSchema,
@@ -2168,5 +2169,36 @@ describe('evacuee booking_ref (CR-169, schema_v 14)', () => {
 		expect(out).toEqual(base);
 		expect(input.booking_ref).toBe('BK-X');
 		expect(withoutBookingRef(base)).toEqual(base);
+	});
+});
+
+describe('evacuee edit forms require a 10-digit mobile (CR-210)', () => {
+	const personal = (phone: string) =>
+		evacueePersonalEditFormSchema.safeParse({
+			firstName: 'A',
+			lastName: 'B',
+			nickname: '',
+			birthYear: '',
+			age: '',
+			gender: 'other',
+			phone,
+			noPhone: false,
+			cardType: 'other',
+			cardNumber: '',
+			country: 'TH',
+			religion: 'unknown'
+		});
+
+	it('rejects a 10-digit number that is not a 0-prefixed mobile', () => {
+		expect(personal('1234567890').success).toBe(false);
+		expect(personal('0812345678').success).toBe(true);
+		expect(personal('081-234-5678').success).toBe(true);
+	});
+
+	it('rejects a non-0 emergency phone', () => {
+		const run = (phone: string) =>
+			evacueeEmergencyEditFormSchema.safeParse({ name: 'N', phone, relation: 'R' }).success;
+		expect(run('1234567890')).toBe(false);
+		expect(run('0812345678')).toBe(true);
 	});
 });
