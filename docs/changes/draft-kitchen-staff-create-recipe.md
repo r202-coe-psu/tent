@@ -10,6 +10,7 @@ affects:
   - docs/prd/role-permission-matrix.md (catalog / recipe — create)
   - frontend/src/lib/features/catalog/domain/catalog-permissions.ts
   - frontend/src/lib/features/catalog/application/queries.ts (useCreateRecipe)
+  - frontend/src/lib/features/kitchen/ui/save-as-recipe-fields.svelte
   - frontend/src/routes/(protected)/back-office/kitchen/production-board/[session_id]/+page.svelte
 ---
 
@@ -45,7 +46,8 @@ Issue #802 ขอให้บันทึกเป็นสูตรใหม่
 ## Impact
 
 - `catalog` domain: เพิ่ม `canCreateShelterRecipe(roles, shelterCode?)`.
-- `catalog` application: `useCreateRecipe` ใช้เงื่อนไขใหม่.
+- `catalog` application: `useCreateRecipe` ใช้ `canCreateShelterRecipe` เป็นเงื่อนไขเดียว
+  (ไม่มี shelter = central catalog → system_admin เท่านั้น).
 - Production board Stage A โหมด "สร้างสูตรเอง": checkbox "บันทึกเป็นสูตรใหม่" + ชื่อสูตร + จำนวนจานมาตรฐาน.
   บันทึกล้ม / ชื่อซ้ำ → toast แจ้ง แต่ยังเปิดตั๋วเบิกได้.
 - เมื่อ approve: อัปเดต `docs/prd/role-permission-matrix.md` แถว recipe.
