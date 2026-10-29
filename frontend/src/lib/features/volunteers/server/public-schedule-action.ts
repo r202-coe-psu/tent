@@ -21,6 +21,8 @@ import { isWithinDutyWindow } from '../domain/duty-window';
 import { normalizePhone } from '../domain/phone';
 
 const MAX_WRITE_RETRIES = 5;
+/** Assignment statuses still open: a check-in, withdraw or pass cancel may act on them. */
+export const LIVE_ASSIGNMENT_STATUSES = ['assigned', 'standby'];
 
 type CouchDoc = {
 	_id: string;
@@ -232,9 +234,9 @@ async function writeAssignment(
 			}
 		}
 		const allowed =
-			(action === 'check_in' && ['assigned', 'standby'].includes(String(current.status))) ||
+			(action === 'check_in' && LIVE_ASSIGNMENT_STATUSES.includes(String(current.status))) ||
 			(action === 'check_out' && current.status === 'checked_in') ||
-			(action === 'withdraw' && ['assigned', 'standby'].includes(String(current.status)));
+			(action === 'withdraw' && LIVE_ASSIGNMENT_STATUSES.includes(String(current.status)));
 		if (!allowed) throw actionError(action);
 
 		const next = applyAssignmentAction(current, action, now);

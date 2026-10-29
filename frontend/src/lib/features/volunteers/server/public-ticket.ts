@@ -9,10 +9,16 @@ import { assignmentMatchesApplication } from '../domain/applicant-attendance';
 import { shiftStartInstant } from '../domain/duty-window';
 import type { JobApplication } from '../domain/job-application.schema';
 import type { ShiftAssignment } from '../domain/shift-assignment.schema';
-import { PublicScheduleError, releaseJobQuota } from './public-schedule-action';
+import {
+	LIVE_ASSIGNMENT_STATUSES,
+	PublicScheduleError,
+	releaseJobQuota
+} from './public-schedule-action';
 
 const MAX_WRITE_RETRIES = 5;
 const CANCELLABLE_STATUSES = ['confirmed', 'pending_review'];
+/** Assignment statuses meaning the person already started work: the pass can no longer be cancelled. */
+const STARTED_ASSIGNMENT_STATUSES = ['checked_in', 'completed'];
 
 export interface TicketApplicationDoc {
 	_id: string;
@@ -59,6 +65,8 @@ export interface ResolvedTicket {
 	shelter: { code: string; name: string };
 	app: TicketApplicationDoc | null;
 	volunteer: TicketVolunteerDoc | null;
+	/** Every application this token stands for (one for an application token, all of a volunteer's otherwise). */
+	applications: TicketApplicationDoc[];
 }
 
 export class TicketCancelError extends Error {
@@ -104,8 +112,9 @@ function pickVolunteerApplication(
 /**
  * Resolve a pass token the way the public pass does: an application token first, then a
  * volunteer's permanent role-card token (which shows that volunteer's application).
- * GET and cancel both go through here so the pass can never show one application and
- * cancel another.
+ * For a permanent token the shown application is re-picked on every request, so it can
+ * change between the pass render and a cancel; the cancel therefore carries the shown
+ * application `_id` and `cancelTicket` only acts on it if it is in `applications`.
  */
 export async function resolveTicket(
 	token: string,
@@ -143,7 +152,7 @@ export async function resolveTicket(
 				limit: 1
 			});
 			const app = appRes.status === 200 ? docsOf<TicketApplicationDoc>(appRes.data)[0] : undefined;
-			if (app) return { dbName, shelter, app, volunteer: null };
+			if (app) return { dbName, shelter, app, volunteer: null, applications: [app] };
 
 			const volRes = await adminRaw(`/${dbName}/_find`, 'POST', {
 				selector: { type: 'volunteer', ...byToken },
@@ -156,11 +165,10 @@ export async function resolveTicket(
 				selector: { type: 'job_application', volunteer_id: volunteer._id },
 				limit: 200
 			});
-			const volApp =
-				volAppsRes.status === 200
-					? pickVolunteerApplication(docsOf<TicketApplicationDoc>(volAppsRes.data), now)
-					: undefined;
-			return { dbName, shelter, app: volApp ?? null, volunteer };
+			const volApps =
+				volAppsRes.status === 200 ? docsOf<TicketApplicationDoc>(volAppsRes.data) : [];
+			const volApp = pickVolunteerApplication(volApps, now);
+			return { dbName, shelter, app: volApp ?? null, volunteer, applications: volApps };
 		} catch {
 			// Continue to next shelter db
 		}
@@ -190,12 +198,17 @@ export function isTicketCancellable(app: TicketApplicationDoc | null, now = new 
 async function readCancellableApplication(
 	dbName: string,
 	applicationId: string,
-	now: Date
+	now: Date,
+	expectedStatus?: string
 ): Promise<TicketApplicationDoc> {
 	const current = await getAsPublicWriter(dbName, applicationId);
 	if (current.status !== 200 || !current.data) throw new TicketCancelError('TICKET_NOT_FOUND', 404);
 	const app = current.data as TicketApplicationDoc;
 	if (!CANCELLABLE_STATUSES.includes(String(app.status))) {
+		throw new TicketCancelError('NOT_CANCELLABLE', 409);
+	}
+	// Status moved since the request began (e.g. staff approved it): abort, write nothing.
+	if (expectedStatus !== undefined && app.status !== expectedStatus) {
 		throw new TicketCancelError('NOT_CANCELLABLE', 409);
 	}
 	if (shiftHasStarted(app, now)) throw new TicketCancelError('SHIFT_STARTED', 409);
@@ -205,11 +218,12 @@ async function readCancellableApplication(
 async function markApplicationCancelled(
 	dbName: string,
 	applicationId: string,
-	now: Date
+	now: Date,
+	expectedStatus: string
 ): Promise<void> {
 	for (let attempt = 0; attempt < MAX_WRITE_RETRIES; attempt++) {
 		// Re-checked on every read: a concurrent second cancel sees `cancelled` and gets 409.
-		const app = await readCancellableApplication(dbName, applicationId, now);
+		const app = await readCancellableApplication(dbName, applicationId, now, expectedStatus);
 		const next = { ...app, status: 'cancelled', updated_at: now.toISOString() };
 		const put = await putAsPublicWriter(dbName, applicationId, next);
 		if (put.status === 409) continue;
@@ -232,26 +246,36 @@ async function cancelLinkedAssignments(
 		{ limit: 100 }
 	);
 	if (found.status !== 200) throw new TicketCancelError('WRITE_FAILED', 502);
-	for (const assignment of docsOf<Doc & { _id: string }>(found.data)) {
-		if (
-			!assignmentMatchesApplication(
-				app as unknown as JobApplication,
-				assignment as unknown as ShiftAssignment
-			)
-		) {
-			continue;
-		}
+	const linked = docsOf<Doc & { _id: string }>(found.data).filter((assignment) =>
+		assignmentMatchesApplication(
+			app as unknown as JobApplication,
+			assignment as unknown as ShiftAssignment
+		)
+	);
+	// Already checked in / completed: refuse before writing anything.
+	if (linked.some((a) => STARTED_ASSIGNMENT_STATUSES.includes(String(a.status)))) {
+		throw new TicketCancelError('SHIFT_STARTED', 409);
+	}
+	for (const assignment of linked) {
 		result.matched++;
-		if (!['assigned', 'standby'].includes(String(assignment.status))) continue;
+		if (!LIVE_ASSIGNMENT_STATUSES.includes(String(assignment.status))) continue;
 		let settled = false;
 		for (let attempt = 0; attempt < MAX_WRITE_RETRIES && !settled; attempt++) {
 			const fresh = await getAsPublicWriter(dbName, assignment._id);
-			// Any non-200 (404 included) throws so the application stays cancellable; a retry
-			// re-runs the lookup, where an assignment that was really deleted just drops out.
+			// Deleted meanwhile: nothing left to cancel, and no quota of ours to give back.
+			if (fresh.status === 404) {
+				settled = true;
+				break;
+			}
+			// Any other failed read throws so the application stays cancellable for a retry.
 			if (fresh.status !== 200 || !fresh.data) throw new TicketCancelError('WRITE_FAILED', 502);
 			const doc = fresh.data as Doc;
-			// Moved on concurrently (withdrawn / checked in): nothing left here to cancel.
-			if (!['assigned', 'standby'].includes(String(doc.status))) {
+			// Checked in concurrently: too late to cancel.
+			if (STARTED_ASSIGNMENT_STATUSES.includes(String(doc.status))) {
+				throw new TicketCancelError('SHIFT_STARTED', 409);
+			}
+			// Moved on concurrently (withdrawn): nothing left here to cancel.
+			if (!LIVE_ASSIGNMENT_STATUSES.includes(String(doc.status))) {
 				settled = true;
 				break;
 			}
@@ -273,30 +297,42 @@ async function cancelLinkedAssignments(
 /**
  * Applicant withdraws their own application from the pass. Writes CouchDB (the worker
  * projects to Mongo) and gives the quota back only for a `confirmed` application.
+ * `applicationId` is the application the pass showed; it must belong to the token and
+ * still be cancellable, otherwise 409 (the pass is stale, e.g. a permanent token whose
+ * shown application changed).
  *
- * Order matters so a failure midway can be retried: the application is marked `cancelled`
- * LAST, so until then it stays cancellable. Quota is released only when this call moved an
- * assignment to `cancelled` (or there is none), so a retry never releases twice; the rare
- * partial failure may under-release, never over-release.
+ * Linked assignment path: cancel assignment -> release quota -> mark application. The
+ * application is marked `cancelled` LAST, so until then it stays cancellable, and quota is
+ * released only when this call moved an assignment to `cancelled`, so a retry never
+ * releases twice.
+ *
+ * No linked assignment: there is no assignment to act as a once-only marker, so the
+ * application is marked `cancelled` FIRST (with its `_rev`: a concurrent cancel conflicts
+ * and then sees `cancelled`), and quota is released after. If that release fails quota is
+ * short by 1, never over by 1 (known limitation, #1003).
  */
-export async function cancelTicket(token: string, now = new Date()): Promise<void> {
+export async function cancelTicket(
+	token: string,
+	applicationId: string,
+	now = new Date()
+): Promise<void> {
 	const ticket = await resolveTicket(token, now);
 	if (!ticket?.app) throw new TicketCancelError('TICKET_NOT_FOUND', 404);
+	if (!applicationId || !ticket.applications.some((a) => a._id === applicationId)) {
+		throw new TicketCancelError('NOT_CANCELLABLE', 409);
+	}
 	const { dbName } = ticket;
 
-	const app = await readCancellableApplication(dbName, ticket.app._id, now);
+	const app = await readCancellableApplication(dbName, applicationId, now);
+	const status = String(app.status);
 	const assignments = await cancelLinkedAssignments(dbName, app, now.toISOString());
-	if (
-		app.status === 'confirmed' &&
-		app.job_id &&
-		(assignments.cancelled > 0 || assignments.matched === 0)
-	) {
+	const releaseQuota = async () => {
 		try {
 			await releaseJobQuota(
 				dbName,
 				{
 					_id: app._id,
-					job_id: app.job_id,
+					job_id: app.job_id as string,
 					shift_id: app.shift_id ?? app.selected_shift?.shift_id
 				},
 				now.toISOString()
@@ -305,6 +341,14 @@ export async function cancelTicket(token: string, now = new Date()): Promise<voi
 			if (error instanceof PublicScheduleError) throw new TicketCancelError('WRITE_FAILED', 502);
 			throw error;
 		}
+	};
+	const owesQuota = status === 'confirmed' && !!app.job_id;
+
+	if (assignments.matched === 0) {
+		await markApplicationCancelled(dbName, app._id, now, status);
+		if (owesQuota) await releaseQuota();
+		return;
 	}
-	await markApplicationCancelled(dbName, app._id, now);
+	if (owesQuota && assignments.cancelled > 0) await releaseQuota();
+	await markApplicationCancelled(dbName, app._id, now, status);
 }

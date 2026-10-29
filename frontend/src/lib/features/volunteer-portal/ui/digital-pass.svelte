@@ -128,7 +128,7 @@
 
 	async function confirmCancelTicket() {
 		try {
-			await cancel.mutateAsync(token);
+			await cancel.mutateAsync({ token, applicationId: ticket?.application_id ?? '' });
 			cancelDialogOpen = false;
 			toast.success(t.toastCancelSuccess);
 		} catch (err) {

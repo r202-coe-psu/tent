@@ -47,6 +47,7 @@ export const GET: RequestHandler = async ({ params, fetch }) => {
 					ticket: {
 						token: tokenOut,
 						can_cancel: isTicketCancellable(app),
+						application_id: app?._id,
 						status:
 							app?.status || (volunteer?.status === 'active' ? 'confirmed' : 'pending_review'),
 						job_id: app?.job_id || '',
