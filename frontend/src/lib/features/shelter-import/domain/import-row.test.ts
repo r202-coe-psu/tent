@@ -123,6 +123,17 @@ describe('validateRow — happy path', () => {
 		expect(empty.shelter?.site_kind).toBe('evacuation_center');
 	});
 
+	it('reads site kinds written by the pre-CR-198 template ("label_th (label_en)")', () => {
+		for (const [cell, code] of [
+			['ศูนย์อพยพ (Evacuation Center)', 'evacuation_center'],
+			['บ้านพี่เลี้ยง (Host House)', 'host_house']
+		]) {
+			const r = validateRow(baseRow({ [H.site_kind]: cell }), 1, lookups());
+			expect(r.ok).toBe(true);
+			expect(r.shelter?.site_kind).toBe(code);
+		}
+	});
+
 	it('resolves a label shared with an inactive item to the active one, in either order', () => {
 		const active = { code: 'field_hospital', label: 'โรงพยาบาลสนาม', label_en: 'Field Hospital' };
 		const retired = {
