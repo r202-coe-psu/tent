@@ -147,6 +147,7 @@ export {
 	findLateEntries,
 	findUnresolvedBulkReturnRefs,
 	buildSnapshotPins,
+	pinnedItemsSummary,
 	findSnapshotConflicts,
 	type SnapshotConflictKind,
 	type SnapshotPins,

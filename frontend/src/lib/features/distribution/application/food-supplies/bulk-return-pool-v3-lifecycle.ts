@@ -11,10 +11,13 @@ import {
 	type StockLedger
 } from '$lib/features/operations';
 import type {
+	BulkReturnEntry,
+	BulkReturnEntryMove,
 	BulkReturnPoolReceivedItem,
 	BulkReturnPoolV3,
 	BulkReturnReceivedRowInput
 } from '../../domain/food-supplies';
+import type { BulkReturnPoolV3Repository } from '../../data/food-supplies';
 import {
 	buildBulkReturnReceivedItems,
 	BulkReturnReceiveInputError,
@@ -23,6 +26,7 @@ import {
 	createBulkReturnPoolV3,
 	isPoolEmpty,
 	isPoolNameTakenAmongOpen,
+	pinnedItemsSummary,
 	poolSnapshotEntryIds,
 	receiveBulkReturnPoolV3,
 	resolveBulkReturnEntries,
@@ -35,6 +39,7 @@ import { resolveCanonicalItemUnits } from './canonical-unit';
 import {
 	assertNoSkippedDocs,
 	BulkReturnPoolEmptyError,
+	BulkReturnPoolLockTimeoutError,
 	BulkReturnPoolNameTakenError,
 	BulkReturnPoolNotEmptyError,
 	BulkReturnPoolStateError,
@@ -47,9 +52,12 @@ import {
 	assertOperationUlid,
 	isOurLock,
 	loadSnapshotPinsForWrite,
+	POOL_FENCE_BACKOFF_MS,
+	POOL_FENCE_SETTLE_TIMEOUT_MS,
 	requirePool,
 	resolveDependencies,
-	type BulkReturnPoolV3WorkflowDependencies
+	type BulkReturnPoolV3WorkflowDependencies,
+	type FenceClock
 } from './bulk-return-pool-v3-shared';
 
 export interface BulkReturnStoragePoint {
@@ -286,6 +294,54 @@ export async function cancelBulkReturnPool(
 // ---------------------------------------------------------------------------------------------
 
 /**
+ * An OPEN pool pins nothing, so a submit must not read the pins while another pool the events
+ * reference is mid-submit: that pool's snapshot may already hold an entry this one is about to
+ * count. The wait applies to ANY referenced pool holding a SUBMIT lock, whatever its lock age: the
+ * pool with the stale view (it read its events before a move doc existed) is the one that does not
+ * reference the other, so the fresh pool must wait for it even when that lock is younger. Once the
+ * other submit commits, its snapshot is read as pins. Two submits that reference each other and run
+ * at the same time wait on each other until both time out; that ends in
+ * `BulkReturnPoolLockTimeoutError` (each releases its own lock, the user submits again), never in a
+ * double count. CANCEL locks are not waited for (a cancel writes no snapshot). Uses the same
+ * backoff and timeout as the fence.
+ */
+async function waitForReferencedSubmitLocks(
+	poolRepo: BulkReturnPoolV3Repository,
+	events: {
+		entries: readonly Pick<BulkReturnEntry, 'pool_id'>[];
+		moves: readonly Pick<BulkReturnEntryMove, 'from_pool_id' | 'to_pool_id'>[];
+		voids: readonly { pool_id: string }[];
+	},
+	ownPoolId: string,
+	clock: FenceClock
+): Promise<void> {
+	const otherIds = [
+		...new Set([
+			...events.entries.map((e) => e.pool_id),
+			...events.moves.flatMap((m) => [m.from_pool_id, m.to_pool_id]),
+			...events.voids.map((v) => v.pool_id)
+		])
+	].filter((id) => id !== ownPoolId);
+	if (otherIds.length === 0) return;
+
+	const deadline = clock.now() + POOL_FENCE_SETTLE_TIMEOUT_MS;
+	for (let attempt = 0; ; attempt++) {
+		const pools = await Promise.all(otherIds.map((id) => poolRepo.get(id)));
+		const blocking = pools.find(
+			(p) => p !== null && p.lock?.op === 'SUBMIT' && p.status === 'OPEN'
+		);
+		if (!blocking) return;
+		if (clock.now() >= deadline) {
+			throw new BulkReturnPoolLockTimeoutError(
+				`Bulk return pool ${blocking._id} is still locked for SUBMIT after ${POOL_FENCE_SETTLE_TIMEOUT_MS}ms; retry with the same operationUlid`
+			);
+		}
+		const delay = POOL_FENCE_BACKOFF_MS[Math.min(attempt, POOL_FENCE_BACKOFF_MS.length - 1)];
+		await clock.sleep(Math.min(delay, Math.max(0, deadline - clock.now())));
+	}
+}
+
+/**
  * Submits an OPEN pool to the warehouse (OPEN -> SUBMITTED). Takes a SUBMIT lock first so no new
  * entry is accepted while the snapshot is computed, then writes `items_summary` + `entry_ids` and
  * clears the lock. No stock is written here (stock moves at receive). Entries that land after the
@@ -299,7 +355,12 @@ export async function submitBulkReturnPool(
 	ctx: AuthorContext,
 	deps?: BulkReturnPoolV3WorkflowDependencies
 ): Promise<BulkReturnPoolV3> {
-	const { poolRepo, eventRepo, endpointStore: epStore } = resolveDependencies(deps, ctx);
+	const {
+		poolRepo,
+		eventRepo,
+		endpointStore: epStore,
+		fenceClock
+	} = resolveDependencies(deps, ctx);
 	assertCentralWriteAuthority(epStore);
 	assertCanManageBulkReturnPool(ctx);
 	assertOperationUlid(operationUlid);
@@ -346,6 +407,7 @@ export async function submitBulkReturnPool(
 		const events = await eventRepo.listForPool(poolId);
 		// Fail closed: a skipped doc would drop an entry from (or add a voided one to) the snapshot.
 		assertNoSkippedDocs(events.skipped, `bulk return pool ${poolId}`);
+		await waitForReferencedSubmitLocks(poolRepo, events, poolId, fenceClock);
 		// Entries pinned to another closed pool's snapshot are never re-counted here.
 		const pins = await loadSnapshotPinsForWrite(poolRepo, events, poolId);
 		snapshot = {
@@ -467,6 +529,13 @@ async function persistBulkReceiveLedger(
  * call with the same input (or retrying after a crash between pool and ledger) is idempotent and
  * repairs missing rows; a different input on a RECEIVED pool is a BulkReturnPoolStateError.
  * `operationUlid` is validated but not persisted.
+ *
+ * The stored `expected_qty` per item is the snapshot `items_summary` qty. The receive cap counts
+ * pinned entries only: an entry in `entry_ids` that is pinned to ANOTHER pool (earliest
+ * `submitted_at` wins) is excluded, so a double-counted entry can never be received twice. When the
+ * received qty equals the pinned qty but is below the snapshot qty, the row is recorded as
+ * `miscount` with a deterministic note unless the caller sent a reason. The same receivable summary
+ * is used for a RECEIVED pool so an identical retry still matches the stored record.
  */
 export async function receiveBulkReturnPool(
 	poolId: string,
@@ -475,7 +544,12 @@ export async function receiveBulkReturnPool(
 	ctx: AuthorContext,
 	deps?: BulkReturnPoolV3WorkflowDependencies
 ): Promise<ReceiveBulkReturnPoolResult> {
-	const { poolRepo, catalogRepo, endpointStore: epStore } = resolveDependencies(deps, ctx);
+	const {
+		poolRepo,
+		eventRepo,
+		catalogRepo,
+		endpointStore: epStore
+	} = resolveDependencies(deps, ctx);
 	assertCentralWriteAuthority(epStore);
 	assertCanManageBulkReturnPool(ctx);
 	assertOperationUlid(operationUlid);
@@ -489,9 +563,14 @@ export async function receiveBulkReturnPool(
 	}
 
 	// --- pure validation, before any write ---
+	// Own pool is included in the pins so submitted_at is compared against the other pools.
+	const events = await eventRepo.listForPool(poolId);
+	assertNoSkippedDocs(events.skipped, `bulk return pool ${poolId}`);
+	const pins = await loadSnapshotPinsForWrite(poolRepo, events);
+	const receivable = pinnedItemsSummary(pool, events.entries, pins);
 	let received: BulkReturnPoolReceivedItem[];
 	try {
-		received = buildBulkReturnReceivedItems(pool.items_summary ?? [], input.items);
+		received = buildBulkReturnReceivedItems(pool.items_summary ?? [], input.items, receivable);
 	} catch (err) {
 		if (err instanceof BulkReturnReceiveInputError) throw new WorkflowValidationError(err.message);
 		throw err;

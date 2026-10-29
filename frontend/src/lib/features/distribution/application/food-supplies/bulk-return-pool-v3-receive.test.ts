@@ -24,7 +24,7 @@ vi.mock('$lib/features/catalog', () => ({
 	canonicalizeUnitCode: (value: unknown) => value
 }));
 
-import type { BulkReturnPoolV3 } from '../../domain/food-supplies';
+import { createBulkReturnEntryMove, type BulkReturnPoolV3 } from '../../domain/food-supplies';
 import { createStockLedger, deriveDeterministicLedgerId } from '$lib/features/operations';
 import {
 	cancelBulkReturnPool,
@@ -52,6 +52,7 @@ import {
 
 describe('bulk return pool v3 workflows', () => {
 	let poolRepo: Fx['poolRepo'];
+	let eventRepo: Fx['eventRepo'];
 	let operationsRepo: Fx['operationsRepo'];
 	let deps: Fx['deps'];
 	let nextOp: Fx['nextOp'];
@@ -65,6 +66,7 @@ describe('bulk return pool v3 workflows', () => {
 	beforeEach(() => {
 		({
 			poolRepo,
+			eventRepo,
 			operationsRepo,
 			deps,
 			nextOp,
@@ -396,6 +398,83 @@ describe('bulk return pool v3 workflows', () => {
 			await expect(
 				receiveBulkReturnPool(pool._id, fullInput(pool), 'not-a-ulid', mgr, deps)
 			).rejects.toBeInstanceOf(WorkflowValidationError);
+		});
+	});
+
+	describe('receive of a pool whose entry is double-counted in an older submitted pool', () => {
+		/**
+		 * Pool A submitted with E (cot x2). B submitted with F (cot x1) and E (moved A -> B after A's
+		 * snapshot, then counted again by B). B's submitted_at is later, so E is pinned to A.
+		 */
+		async function doubleCounted() {
+			const poolA = await openPool('Gate A');
+			const entryE = (
+				await add(poolA._id, { type: 'unspecified' }, [{ item_id: 'item:cot', qty: '2' }])
+			).results[0].entry;
+			await submitBulkReturnPool(poolA._id, nextOp(), mgr, deps);
+			const poolB = await openPool('Gate B');
+			const entryF = (
+				await add(poolB._id, { type: 'unspecified' }, [{ item_id: 'item:cot', qty: '1' }])
+			).results[0].entry;
+			await eventRepo.createMove(
+				createBulkReturnEntryMove(
+					{ entry: entryE, seq: 1, from_pool_id: poolA._id, to_pool_id: poolB._id },
+					mgr
+				)
+			);
+			await submitBulkReturnPool(poolB._id, nextOp(), mgr, deps);
+			// Legacy data the domain guards no longer allow, so write it raw into the store.
+			couch.store.set(poolA._id, {
+				...couch.store.get(poolA._id),
+				submitted_at: '2026-01-01T00:00:00.000Z'
+			} as never);
+			couch.store.set(poolB._id, {
+				...couch.store.get(poolB._id),
+				submitted_at: '2026-01-02T00:00:00.000Z',
+				entry_ids: [entryE._id, entryF._id].sort(),
+				items_summary: [{ item_id: 'item:cot', qty: '3' }]
+			} as never);
+			return { poolA, poolB };
+		}
+
+		it('rejects a received qty above the pinned expected qty on the later pool', async () => {
+			const { poolB } = await doubleCounted();
+			await expect(
+				receive(poolB._id, {
+					items: [{ item_id: 'item:cot', received_qty: '2', discrepancy_reason: 'miscount' }]
+				})
+			).rejects.toBeInstanceOf(WorkflowValidationError);
+			expect((await poolRepo.get(poolB._id))?.status).toBe('SUBMITTED');
+			expect(ledgerKeys()).toEqual([]);
+		});
+
+		it('accepts the pinned qty on the later pool; stores the snapshot qty as expected_qty with a miscount note', async () => {
+			const { poolB } = await doubleCounted();
+			const res = await receive(poolB._id, { items: [{ item_id: 'item:cot', received_qty: '1' }] });
+			expect(res.pool.received_items).toEqual([
+				{
+					item_id: 'item:cot',
+					expected_qty: '3',
+					received_qty: '1',
+					discrepancy_reason: 'miscount',
+					discrepancy_note: 'นับซ้ำกับกองอื่น 2 ชิ้น'
+				}
+			]);
+			expect(await balanceOf()).toEqual({ 'item:cot': '1' });
+
+			// An identical retry still matches the stored record.
+			const again = await receive(poolB._id, {
+				items: [{ item_id: 'item:cot', received_qty: '1' }]
+			});
+			expect(again.replayed).toBe(true);
+		});
+
+		it('still receives the entry in the older pool that owns it', async () => {
+			const { poolA } = await doubleCounted();
+			const res = await receive(poolA._id, { items: [{ item_id: 'item:cot', received_qty: '2' }] });
+			expect(res.pool.received_items).toEqual([
+				{ item_id: 'item:cot', expected_qty: '2', received_qty: '2' }
+			]);
 		});
 	});
 
