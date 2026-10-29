@@ -2,24 +2,25 @@
 	import { langState } from '$lib/states/i18n.svelte';
 	import { getTranslation } from '$lib/utils/i18n';
 	import { PUBLIC_DONATIONS_I18N } from '$lib/constants/i18n';
-	import { buildDonationMap, type DonationMapPoint } from '../domain/donation-map';
+	import { buildDonationMap, donationMapPointsOf } from '../domain/donation-map';
 	import { toUiShelterStatus } from '../domain/mappers';
-	import { usePublicShelters } from '../application/queries';
+	import { usePublicShelter, usePublicShelters } from '../application/queries';
 	import ShelterMap from './shelter-map.svelte';
 
 	let {
 		shelterCode,
-		shelterName = '',
-		points = []
+		shelterName = ''
 	}: {
 		shelterCode: string;
 		shelterName?: string;
-		/** Drop-off points of this shelter, each with its own pin. */
-		points?: DonationMapPoint[];
 	} = $props();
 
 	const t = $derived(getTranslation(PUBLIC_DONATIONS_I18N, langState.current));
 	const sheltersQuery = usePublicShelters(() => ({}));
+	// The list carries no drop-off points (CR-205 FR-DP-14), so the locked shelter's own
+	// detail adds them: one request for this shelter only (FR-DP-18).
+	const shelterQuery = usePublicShelter(() => shelterCode);
+	const points = $derived(donationMapPointsOf(shelterCode, shelterQuery.data?.donation_points));
 
 	let mapFailed = $state(false);
 	let focusedPointId = $state<string | null>(null);

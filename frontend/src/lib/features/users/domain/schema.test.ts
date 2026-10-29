@@ -39,6 +39,25 @@ describe('phoneSchema and usernameSchema', () => {
 	});
 });
 
+describe('editUserSchema username', () => {
+	const base = {
+		password: '',
+		display_name: 'อาสา',
+		capabilities: ['system_admin' as const]
+	};
+
+	it('keeps an existing email-style name, which createUserSchema still refuses', () => {
+		expect(editUserSchema.safeParse({ ...base, username: 'test03@gmail.com' }).success).toBe(true);
+		expect(
+			createUserSchema.safeParse({
+				...base,
+				password: validPassword,
+				username: 'test03@gmail.com'
+			}).success
+		).toBe(false);
+	});
+});
+
 describe('createUserSchema', () => {
 	it('accepts a system_admin grant without a shelter', () => {
 		const parsed = createUserSchema.parse({

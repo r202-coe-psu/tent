@@ -131,14 +131,18 @@ export function openPoolsAtPoint(
 		});
 }
 
-/** Which queues the viewer sees. Distribution staff get the per-device "my point" queue. */
+/**
+ * Which queues the viewer sees. System admin / shelter manager get all three (waiting_receive,
+ * flagged, my_point). Everyone else gets the union of their roles: warehouse staff ->
+ * waiting_receive, distribution staff -> the per-device "my point" queue.
+ */
 export function workQueuesFor(ctx: {
 	roles?: readonly string[];
 	shelterCode?: string | null;
 }): WorkQueueKind[] {
 	const roles = ctx.roles ?? [];
 	if (isSystemAdmin(roles) || isShelterManager(roles, ctx.shelterCode)) {
-		return ['waiting_receive', 'flagged'];
+		return ['waiting_receive', 'flagged', 'my_point'];
 	}
 	const queues: WorkQueueKind[] = [];
 	if (isWarehouseStaff(roles, ctx.shelterCode)) queues.push('waiting_receive');
