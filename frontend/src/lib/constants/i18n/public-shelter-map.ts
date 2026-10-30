@@ -9,6 +9,7 @@ export const PUBLIC_SHELTER_MAP_I18N = {
 		km: 'กม.',
 		shelterStatus: 'สถานะศูนย์พักพิง',
 		siteKindLabel: 'ชนิด',
+		otherSiteKinds: 'ศูนย์ประเภทอื่น',
 		statusOpen: 'เปิดใช้งาน',
 		statusStandby: 'กำลังเตรียมการ',
 		statusFull: 'เต็มความจุ',
@@ -16,11 +17,12 @@ export const PUBLIC_SHELTER_MAP_I18N = {
 		placePin: 'วางหมุดค้นหา',
 		placingPin: 'คลิกบนแผนที่เพื่อวางหมุด',
 		cancelPlacePin: 'ยกเลิก',
-		evacCenter: 'ศูนย์อพยพ',
-		hostHouse: 'บ้านพี่เลี้ยง',
 		preRegister: 'ลงทะเบียนล่วงหน้า',
 		viewDetails: 'ดูรายละเอียด',
-		shelterClosed: 'ศูนย์ปิดแล้ว'
+		shelterClosed: 'ศูนย์ปิดแล้ว',
+		gestureDesktop: 'กด Ctrl ค้างไว้แล้วเลื่อนเพื่อซูมแผนที่',
+		gestureMac: 'กด ⌘ ค้างไว้แล้วเลื่อนเพื่อซูมแผนที่',
+		gestureMobile: 'ใช้สองนิ้วเพื่อเลื่อนแผนที่'
 	},
 	en: {
 		yourLocation: 'Search origin',
@@ -32,6 +34,7 @@ export const PUBLIC_SHELTER_MAP_I18N = {
 		km: 'km',
 		shelterStatus: 'Shelter Status',
 		siteKindLabel: 'Type',
+		otherSiteKinds: 'Other site kinds',
 		statusOpen: 'Open',
 		statusStandby: 'Preparing',
 		statusFull: 'Full',
@@ -39,10 +42,11 @@ export const PUBLIC_SHELTER_MAP_I18N = {
 		placePin: 'Place search pin',
 		placingPin: 'Click the map to place a pin',
 		cancelPlacePin: 'Cancel',
-		evacCenter: 'Evacuation Center',
-		hostHouse: 'Host House',
 		preRegister: 'Pre-register',
 		viewDetails: 'View Details',
-		shelterClosed: 'Shelter Closed'
+		shelterClosed: 'Shelter Closed',
+		gestureDesktop: 'Use Ctrl + scroll to zoom the map',
+		gestureMac: 'Use ⌘ + scroll to zoom the map',
+		gestureMobile: 'Use two fingers to move the map'
 	}
 } as const;

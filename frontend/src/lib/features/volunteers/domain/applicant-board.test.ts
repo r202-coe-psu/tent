@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildApplicantBoard } from './applicant-board';
+import { buildApplicantBoard, historyBreakdown } from './applicant-board';
 import type { JobApplication } from './job-application.schema';
 import type { ShiftAssignment } from './shift-assignment.schema';
 import type { Volunteer } from './volunteer.schema';
@@ -108,11 +108,13 @@ describe('buildApplicantBoard', () => {
 		expect(b.counts).toMatchObject({ declined: 1, staffAssigned: 1, people: 1 });
 	});
 
-	it('lists a cancelled direct assignment without counting it', () => {
+	it('lists a cancelled direct assignment as cancelled, not staff-assigned (#849)', () => {
 		const cancelled = assignment({ status: 'cancelled' });
 		const b = board({ assignments: [cancelled] });
 		expect(staffRows(b).map((e) => e.key)).toEqual([cancelled._id]);
+		expect(staffRows(b)[0].facet).toBe('cancelled');
 		expect(b.counts.staffAssigned).toBe(0);
+		expect(b.counts.declined).toBe(1);
 		expect(b.counts.people).toBe(1);
 	});
 
@@ -238,5 +240,20 @@ describe('buildApplicantBoard', () => {
 		expect(b.pending[0].applications).toHaveLength(2);
 		expect(b.history).toEqual([]);
 		expect(b.counts).toMatchObject({ people: 1, pending: 2 });
+	});
+});
+
+describe('historyBreakdown', () => {
+	it('splits history rows into approved, declined/cancelled and staff-assigned', () => {
+		const facets = ['confirmed', 'confirmed', 'rejected', 'cancelled', 'staff_assigned'] as const;
+		expect(historyBreakdown(facets.map((facet) => ({ facet })))).toEqual({
+			confirmed: 2,
+			declined: 2,
+			staffAssigned: 1
+		});
+	});
+
+	it('is all zero for an empty history', () => {
+		expect(historyBreakdown([])).toEqual({ confirmed: 0, declined: 0, staffAssigned: 0 });
 	});
 });

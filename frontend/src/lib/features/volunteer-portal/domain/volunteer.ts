@@ -7,6 +7,8 @@
  */
 import { z } from 'zod';
 import { isValidThaiNationalId } from '$lib/utils/thai-id';
+// Deep import: the volunteers barrel re-exports UI that imports this domain (cycle).
+import { openShifts } from '$lib/features/volunteers/domain/shift-closing';
 
 /** CR-092 §4 ticket statuses. `rejected` is deliberately absent — see the module notes. */
 export const TICKET_STATUSES = ['confirmed', 'pending_review', 'cancelled'] as const;
@@ -84,6 +86,8 @@ export type VolunteerTicket = {
 	 * hiding the button is the courtesy, not the control.
 	 */
 	can_cancel: boolean;
+	/** The application this pass shows; sent back on cancel so a stale pass cannot cancel another one. */
+	application_id?: string;
 	status: TicketStatus | string;
 	job_id: string;
 	shift_id?: string | null;
@@ -222,9 +226,17 @@ export type PublicJobFilter = {
 	skill?: string;
 };
 
-/** A card can be applied to only while the projection still shows a free seat. */
-export function isJobApplicable(job: PublicJob): boolean {
-	return job.slots_remaining > 0 && job.status !== 'closed' && job.status !== 'cancelled';
+/**
+ * A card can be applied to only while the projection still shows a free seat and a shift
+ * that has not ended (#972).
+ */
+export function isJobApplicable(job: PublicJob, now: Date = new Date()): boolean {
+	if (job.status === 'closed' || job.status === 'cancelled') return false;
+	const shifts = job.shifts ?? [];
+	// With shift rows only the shifts that have not ended count; the job-level counter also
+	// includes ended ones. Without rows (an older projection) it is all there is (FR-6).
+	if (shifts.length === 0) return job.slots_remaining > 0;
+	return openShifts(shifts, now).some((shift) => (shift.slots_remaining ?? 0) > 0);
 }
 
 export const ticketFindSchema = z.object({ phone: phoneField });

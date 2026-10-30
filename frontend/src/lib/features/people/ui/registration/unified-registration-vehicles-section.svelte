@@ -51,6 +51,7 @@
 		? `${vehicles.length}${t.vehicleCountUnit ? ` ${t.vehicleCountUnit}` : ''}`
 		: null}
 	icon={Package}
+	tone="violet"
 >
 	{#snippet actions()}
 		<Button

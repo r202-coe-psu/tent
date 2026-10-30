@@ -26,7 +26,12 @@
 	import { toast } from 'svelte-sonner';
 	import { useQueryClient } from '@tanstack/svelte-query';
 	import { resolve } from '$app/paths';
-	import { isShelterManager, isSystemAdmin } from '$lib/auth/roles';
+	import {
+		VOLUNTEER_COORDINATOR,
+		hasStaffCapability,
+		isShelterManager,
+		isSystemAdmin
+	} from '$lib/auth/roles';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
 	import { Button } from '$lib/components/ui/button/index.js';
@@ -116,13 +121,27 @@
 	let qualificationDialogOpen = $state(false);
 	let qualificationFocusSkillCode = $state<string | null>(null);
 	let accessDialogOpen = $state(false);
-	// Granting system access creates a user account — SM/SA only (the BFF enforces it too); a
-	// volunteer_coordinator manages jobs/shifts but must not see a button that always 403s.
+	// SM/SA grant any role; a volunteer_coordinator of this shelter grants a limited, timed one
+	// (#955). The BFF enforces both, so no other role sees a button that would 403.
 	const canGrantAccess = $derived.by(() => {
 		const roles = authStore.user?.roles ?? [];
-		return isSystemAdmin(roles) || isShelterManager(roles, shelterStore.selectedShelterCode);
+		const code = shelterStore.selectedShelterCode;
+		return (
+			isSystemAdmin(roles) ||
+			isShelterManager(roles, code) ||
+			hasStaffCapability(roles, VOLUNTEER_COORDINATOR, code)
+		);
 	});
 	const hasAccount = $derived(accessStatus.kind !== 'none');
+	// A linked account is managed on the users page, which only SA/SM can open. A coordinator
+	// keeps the dialog: it lists their grants to renew or revoke (#955 FR-8).
+	const managesOnUsersPage = $derived.by(() => {
+		const roles = authStore.user?.roles ?? [];
+		return (
+			hasAccount &&
+			(isSystemAdmin(roles) || isShelterManager(roles, shelterStore.selectedShelterCode))
+		);
+	});
 	// Only SA/SM can open the users page (and only they know the exact login to deep-link).
 	const manageAccountHref = $derived(
 		accessStatus.kind === 'none'
@@ -339,7 +358,7 @@
 
 			<div class="flex items-center gap-1.5">
 				{#if canGrantAccess}
-					{#if hasAccount}
+					{#if managesOnUsersPage}
 						<Button
 							size="sm"
 							variant="outline"
@@ -389,7 +408,7 @@
 	{shelterLine}
 	focusSkillCode={qualificationFocusSkillCode}
 />
-{#if canGrantAccess && !hasAccount}
+{#if canGrantAccess && !managesOnUsersPage}
 	<VolunteerAccessDialog bind:open={accessDialogOpen} {volunteer} {shelterLine} />
 {/if}
 
@@ -406,7 +425,7 @@
 		<AlertDialog.Footer>
 			<AlertDialog.Cancel disabled={deactivateMutation.isPending}>ยกเลิก</AlertDialog.Cancel>
 			<AlertDialog.Action
-				class="text-destructive-foreground bg-destructive hover:bg-destructive/90"
+				class="bg-destructive text-destructive-foreground hover:bg-destructive/90"
 				onclick={confirmDeactivate}
 				disabled={deactivateMutation.isPending}
 			>

@@ -5,6 +5,7 @@ vi.mock('$env/dynamic/private', () => ({
 }));
 import {
 	assertCanGrant,
+	authorizeUserWrite,
 	isProtectedBootstrapAdmin,
 	requireSystemAdmin,
 	ServiceError,
@@ -197,6 +198,30 @@ describe('serviceError envelope', () => {
 				message: 'Could not create user',
 				description: 'CouchDB database missing'
 			}
+		});
+	});
+});
+
+describe('authorizeUserWrite (generic /api/v1/users gate)', () => {
+	afterEach(() => vi.unstubAllGlobals());
+
+	async function asRoles(roles: string[]) {
+		vi.stubGlobal(
+			'fetch',
+			vi.fn(async () => Response.json({ userCtx: { name: 'u', roles } }))
+		);
+		return authorizeUserWrite('AuthSession=x');
+	}
+
+	it('refuses a volunteer_coordinator: grants go through /api/v1/volunteer-access (#955)', async () => {
+		await expect(asRoles(['shelter:SH001', 'SH001:volunteer_coordinator'])).rejects.toMatchObject({
+			code: 'FORBIDDEN'
+		});
+	});
+
+	it('still lets a shelter manager through', async () => {
+		await expect(asRoles(['shelter:SH001', 'SH001:shelter_manager'])).resolves.toMatchObject({
+			name: 'u'
 		});
 	});
 });

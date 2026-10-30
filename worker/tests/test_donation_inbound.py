@@ -148,24 +148,72 @@ _RICE = {
     "unit": "kg",
     "reserved_qty": "5",
     "review_status": "approved",
+    "line_key": "01K8TESTRICE00000000000000",
 }
-_BLANKET = {"free_text": "ผ้าห่ม", "qty": "2", "unit": "ผืน", "review_status": "pending"}
+_BLANKET = {
+    "free_text": "ผ้าห่ม",
+    "qty": "2",
+    "unit": "ผืน",
+    "review_status": "pending",
+    "line_key": "01K8TESTBLANKET00000000000",
+}
 
 
 @pytest.mark.asyncio
-async def test_persisted_donation_is_stamped_schema_v7(db: None):
-    # CR-174: items[].review_status / review_reason_code / review_reason (6 was CR-172).
-    # Must match the walk-in writer in the frontend — both channels write the same version.
+async def test_persisted_donation_is_stamped_schema_v11(db: None):
+    # CR-206: 11 adds items[].drop_off_point_id (10 CR-209 logistics.vehicle_plate, 9 CR-175
+    # donor photos, 8 CR-196 items[].line_key). Must match the walk-in writer in the
+    # frontend — both channels write the same version.
     couch = _couch()
 
     row = await _row()
     assert await _persist_donation(couch, row) is True
     doc = couch.put_doc.await_args.args[1]
     assert doc["_id"] == row.id
-    assert doc["schema_v"] == 7
+    assert doc["schema_v"] == 11
     # Nothing is rejected at intake — the fields only appear once staff review it.
     assert "reject_reason" not in doc
     assert "reject_reason_code" not in doc
+
+
+@pytest.mark.asyncio
+async def test_persisted_donation_carries_each_lines_drop_off_point(db: None):
+    """CR-206 FR-MP-1 — the point FastAPI kept per line reaches CouchDB; no receipts yet."""
+    doc = await _persisted_doc(
+        await _row(
+            items_declared=[
+                {**_RICE, "drop_off_point_id": "01JGYM000000000000000000GY"},
+                _BLANKET,
+            ]
+        )
+    )
+
+    assert [line.get("drop_off_point_id") for line in doc["items"]] == [
+        "01JGYM000000000000000000GY",
+        None,
+    ]
+    assert "point_receipts" not in doc
+
+
+@pytest.mark.asyncio
+async def test_persisted_donation_copies_the_vehicle_plate_whole(db: None):
+    # logistics is copied as one block, so the plate lands in CouchDB
+    # without the inbound knowing about it; a booking without a plate has none.
+    couch = _couch()
+    logistics = {
+        "delivery_method": "self_dropoff",
+        "vehicle": "motorcycle",
+        "vehicle_plate": "กข 1234 กรุงเทพมหานคร",
+    }
+    assert await _persist_donation(couch, await _row(logistics=logistics)) is True
+    doc = couch.put_doc.await_args.args[1]
+    assert doc["schema_v"] == 11
+    assert doc["logistics"]["vehicle_plate"] == "กข 1234 กรุงเทพมหานคร"
+
+    couch = _couch()
+    plain = {"delivery_method": "self_dropoff", "vehicle": "car"}
+    assert await _persist_donation(couch, await _row(logistics=plain)) is True
+    assert "vehicle_plate" not in couch.put_doc.await_args.args[1]["logistics"]
 
 
 @pytest.mark.asyncio
@@ -177,6 +225,11 @@ async def test_persisted_donation_carries_the_line_review_and_status(db: None):
     doc = couch.put_doc.await_args.args[1]
     assert doc["status"] == "pending_review"
     assert [i["review_status"] for i in doc["items"]] == ["approved", "pending"]
+    # CR-196: the keys the donor's edit form names lines by.
+    assert [i["line_key"] for i in doc["items"]] == [
+        _RICE["line_key"],
+        _BLANKET["line_key"],
+    ]
 
 
 @pytest.mark.asyncio

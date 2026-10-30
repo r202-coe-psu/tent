@@ -5,13 +5,15 @@ import {
 	isSystemAdmin,
 	isWarehouseStaff
 } from '$lib/auth/roles';
-import type { BulkReturnPoolOverviewRow } from '../../domain/food-supplies';
+import { liveLoanRefCount, type BulkReturnPoolOverviewRow } from '../../domain/food-supplies';
 import { MY_POOL_POINT_UNSPECIFIED } from './my-pool-point-storage';
+import { LOAN_REFS_UNKNOWN_LABEL, rowNeedsAttention } from './bulk-return-pool-v3';
 
 /** Work queues shown above the bulk return pool board (#660). */
 
 export type WorkQueueKind = 'waiting_receive' | 'flagged' | 'my_point';
-export type FlagReason = 'late' | 'pending_sync' | 'closed_loan' | 'snapshot_conflict';
+export type FlagReason =
+	'late' | 'pending_sync' | 'closed_loan' | 'snapshot_conflict' | 'loan_unknown';
 
 export const WORK_QUEUE_COPY = {
 	waitingTitle: 'รอคลังตรวจรับ',
@@ -22,7 +24,8 @@ export const WORK_QUEUE_COPY = {
 		late: 'มีรายการค้าง',
 		pending_sync: 'รอซิงก์',
 		closed_loan: 'ยอดยืมถูกปิด',
-		snapshot_conflict: 'ต้องตรวจสอบ'
+		snapshot_conflict: 'ต้องตรวจสอบ',
+		loan_unknown: LOAN_REFS_UNKNOWN_LABEL
 	} satisfies Record<FlagReason, string>,
 	waitingEmpty: 'ไม่มีกองที่รอตรวจรับ',
 	flaggedEmpty: 'ไม่มีกองที่ต้องจัดการ',
@@ -68,16 +71,6 @@ export function waitingForReceive(
 		.map(({ row, ageMs }) => ({ row, ageMs }));
 }
 
-/** Same predicate as the board's "needs attention" filter. */
-export function rowNeedsAttention(row: BulkReturnPoolOverviewRow): boolean {
-	return (
-		row.late_entries.length > 0 ||
-		row.unresolved_refs.length > 0 ||
-		row.closed_loan_refs.length > 0 ||
-		row.snapshot_conflicts.length > 0
-	);
-}
-
 /** Non-cancelled pools needing attention; most reasons first, then oldest `created_at`. */
 export function flaggedPools(rows: readonly BulkReturnPoolOverviewRow[]): FlaggedPool[] {
 	return rows
@@ -94,6 +87,9 @@ export function flaggedPools(rows: readonly BulkReturnPoolOverviewRow[]): Flagge
 			}
 			if (row.snapshot_conflicts.length > 0) {
 				reasons.push({ reason: 'snapshot_conflict', count: row.snapshot_conflicts.length });
+			}
+			if (row.loan_refs_unavailable) {
+				reasons.push({ reason: 'loan_unknown', count: liveLoanRefCount(row) });
 			}
 			return { row, reasons };
 		})
@@ -135,14 +131,18 @@ export function openPoolsAtPoint(
 		});
 }
 
-/** Which queues the viewer sees. Distribution staff get the per-device "my point" queue. */
+/**
+ * Which queues the viewer sees. System admin / shelter manager get all three (waiting_receive,
+ * flagged, my_point). Everyone else gets the union of their roles: warehouse staff ->
+ * waiting_receive, distribution staff -> the per-device "my point" queue.
+ */
 export function workQueuesFor(ctx: {
 	roles?: readonly string[];
 	shelterCode?: string | null;
 }): WorkQueueKind[] {
 	const roles = ctx.roles ?? [];
 	if (isSystemAdmin(roles) || isShelterManager(roles, ctx.shelterCode)) {
-		return ['waiting_receive', 'flagged'];
+		return ['waiting_receive', 'flagged', 'my_point'];
 	}
 	const queues: WorkQueueKind[] = [];
 	if (isWarehouseStaff(roles, ctx.shelterCode)) queues.push('waiting_receive');

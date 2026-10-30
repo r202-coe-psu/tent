@@ -28,4 +28,10 @@ per deploy, so batch related projector changes into one bump per release when po
 #: search-excluded evacuees too) and ``external_bookings.stay_status`` for booked evacuees.
 #: 10 — CR-183: bootstrap also scans closed shelters still in their retention window
 #: (persons only), restoring the ``public_persons`` the old retention deleted on close.
-PROJECTION_VERSION: int = 10
+#: 11 — CR-196 (``public_donations.items_declared[].line_key``).
+#: 12 — CR-205: ``public_shelters.donation_points`` (ticked storage points with a pin).
+#: 13 — CR-198 (``public_shelters.site_kind`` passes any ``master_data:site_kind`` code
+#: through instead of coercing values outside the two seeded ones to ``evacuation_center``).
+#: 14 — CR-206: ``public_donations.items_declared[].drop_off_point_id`` and
+#: ``public_donations.point_receipts[]`` (``point_id``, ``line_nos``, ``received_at``).
+PROJECTION_VERSION: int = 14

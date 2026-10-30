@@ -5,10 +5,23 @@ from __future__ import annotations
 import json
 from collections.abc import AsyncIterator, Awaitable, Callable
 from typing import Any
+from urllib.parse import quote
 
 import httpx
 
 from worker.config import Settings
+
+
+def _doc_path(database: str, doc_id: str) -> str:
+    """``/{database}/{doc_id}`` with the id percent-encoded.
+
+    A raw id breaks on ``+``, ``#``, ``?``, ``/`` or ``%`` (``org.couchdb.user:a+b@x.co``
+    404s), so encode it; ``_design/`` and ``_local/`` keep their literal slash.
+    """
+    for prefix in ("_design/", "_local/"):
+        if doc_id.startswith(prefix):
+            return f"/{database}/{prefix}{quote(doc_id[len(prefix) :], safe='')}"
+    return f"/{database}/{quote(doc_id, safe='')}"
 
 
 class CouchClient:
@@ -30,7 +43,7 @@ class CouchClient:
         return response.json()
 
     async def get_doc(self, database: str, doc_id: str) -> dict[str, Any] | None:
-        response = await self._client.get(f"/{database}/{doc_id}")
+        response = await self._client.get(_doc_path(database, doc_id))
         if response.status_code == 404:
             return None
         response.raise_for_status()
@@ -48,7 +61,7 @@ class CouchClient:
         Raises ``httpx.HTTPStatusError`` if the write cannot complete.
         """
         doc_id = doc["_id"]
-        response = await self._client.put(f"/{database}/{doc_id}", json=doc)
+        response = await self._client.put(_doc_path(database, doc_id), json=doc)
         if response.status_code != 409 or not retry_conflict:
             response.raise_for_status()
             return response.json()
@@ -60,7 +73,7 @@ class CouchClient:
             raise RuntimeError(msg)
 
         retry_doc = {**doc, "_rev": existing["_rev"]}
-        retry = await self._client.put(f"/{database}/{doc_id}", json=retry_doc)
+        retry = await self._client.put(_doc_path(database, doc_id), json=retry_doc)
         retry.raise_for_status()
         return retry.json()
 
@@ -89,7 +102,7 @@ class CouchClient:
             changed = await mutate(current)
             if changed is None:
                 return None
-            response = await self._client.put(f"/{database}/{doc_id}", json=changed)
+            response = await self._client.put(_doc_path(database, doc_id), json=changed)
             if response.status_code == 409 and attempt + 1 < attempts:
                 continue
             response.raise_for_status()
@@ -103,11 +116,17 @@ class CouchClient:
         *,
         fields: list[str] | None = None,
         limit: int = 25,
+        use_index: list[str] | None = None,
     ) -> list[dict[str, Any]]:
-        """Mango ``_find`` — returns the matching ``docs`` list."""
+        """Mango ``_find`` — returns the matching ``docs`` list.
+
+        ``use_index`` is ``[ddoc, name]``; a partial index is only ever used when named.
+        """
         body: dict[str, Any] = {"selector": selector, "limit": limit}
         if fields is not None:
             body["fields"] = fields
+        if use_index is not None:
+            body["use_index"] = use_index
         response = await self._client.post(f"/{database}/_find", json=body)
         response.raise_for_status()
         return response.json().get("docs") or []

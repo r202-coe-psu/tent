@@ -4,6 +4,7 @@ title: "CR-175 — ปล่อยของตามตั๋วเบิกเ�
 status: approved
 date: 2026-10-20
 approved_at: 2026-10-20
+updated: 2026-10-30 # CR-216 lot ติดลบเลือกไม่ได้ · ตอบ Q5
 requested_by: feedback ระบบคลัง & เบิกของ ข้อ 1 (GitHub #655)
 decided_by: "kong"
 layer: volatile
@@ -24,7 +25,7 @@ affects:
 > - **เปลี่ยนอะไร:** ขั้น "เลือก Physical Lot และปล่อยรถ" ของตั๋วเบิกเลือกได้หลาย lot ต่อรายการ
 >   (กรอกจำนวนต่อ lot หรือกดจัดสรรอัตโนมัติ) แล้วบันทึกแถว `distribute` **หนึ่งแถวต่อ lot**
 >   ภายใต้ `ref_id` (ตั๋ว) เดียวกัน
-> - **กติกา:** ผลรวมทุก lot = `allocated_qty`; แต่ละ lot ไม่เกินยอดคงเหลือ; lot หมดอายุเลือกไม่ได้;
+> - **กติกา:** ผลรวมทุก lot = `allocated_qty`; แต่ละ lot ไม่เกินยอดคงเหลือ; lot หมดอายุหรือติดลบเลือกไม่ได้ ([CR-216](CR-216-negative-stock-lots.md));
 >   ไม่มี lot → ปฏิเสธ (เลิก fallback `lot_ref` = id ของแถวตัวเอง)
 > - **schema:** ไม่เปลี่ยนรูป doc และไม่ bump `schema_v` — เปลี่ยนแค่จำนวนแถวและกติกาตรวจ
 > - **อ้างอิง:** [#655](https://github.com/r202-coe-psu/tent/issues/655) (งานนี้),
@@ -149,10 +150,11 @@ affects:
   - การคัดลอกยังเปลี่ยนความหมายของ `lot` บนแถวขาออก ซึ่ง CR-143 §E ใช้ `lot.note` เป็นปลายทางของ
     `distribute` จากหน้าคลัง → **CR นี้ไม่คัดลอก** ให้ตัดสินใน #569 / CR ของมัน
 - **Q5 — ยอดคงเหลือที่ใช้ตรวจ:** ใช้ `projectStockLotBalances` (ตัดตาม `lot_ref`) ณ ตอนกดยืนยัน ไม่มี
-  reservation ต่อ lot แบบเบิกตรง — ถ้ามีคนเบิก lot เดียวกันพร้อมกัน อาจติดลบได้ ต้องการ reservation claim
-  เหมือน FR-A8 หรือไม่
+  reservation ต่อ lot แบบเบิกตรง — ตอบแล้ว 2026-10-30: ไม่เพิ่ม reservation claim — lot ที่ติดลบจากการชนกัน
+  แสดงพร้อมคำเตือนและแก้ด้วยการปรับยอด (#881 ทาง D, [CR-216](CR-216-negative-stock-lots.md))
 
 ## Decision log
 
 - 2026-10-20 — proposed (draft คู่กับ #655; รอ PM/lead กำหนดเลข CR และวิธี track)
 - 2026-10-20 — approved by kong (รันเลข CR-175 ย้ายเข้าหมวด 03-C-supply)
+- 2026-10-30 — แก้ TL;DR "กติกา" และตอบ Q5 ตาม [CR-216](CR-216-negative-stock-lots.md) (approved kong)

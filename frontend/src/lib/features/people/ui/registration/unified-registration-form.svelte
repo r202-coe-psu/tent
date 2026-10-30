@@ -107,6 +107,7 @@
 	import { createQuery } from '@tanstack/svelte-query';
 
 	type FormSectionId = 'address' | 'pets' | 'vehicles' | 'members';
+	type ActiveRegistrationItem = { kind: 'member' | 'pet'; index: number; total: number };
 
 	function safeQuery<T>(fn: () => T, fallback: T): T {
 		try {
@@ -129,6 +130,7 @@
 		submitAlign = 'right',
 		stickyTopOffset,
 		includeVehiclesAssets,
+		claimedPets = [],
 		enableUnassignedPhoto = false,
 		allowHouseholdJoin = false,
 		shelterCode = '',
@@ -158,6 +160,7 @@
 		submitAlign?: 'right' | 'center';
 		stickyTopOffset?: string;
 		includeVehiclesAssets?: boolean;
+		claimedPets?: Array<{ species: string; name?: string; count?: number; details?: string }>;
 		enableUnassignedPhoto?: boolean;
 		/** Report-in flows with no household must explicitly join or create. */
 		allowHouseholdJoin?: boolean;
@@ -202,9 +205,6 @@
 		}
 	})();
 	const summaryShelterName = $derived(shelterName || onsiteShelter?.data?.name || '');
-	const formStickyStyle = $derived(
-		stickyTopOffset ? `--registration-sticky-top: ${stickyTopOffset}` : undefined
-	);
 	const shelterPhotoEnabled = $derived(
 		channel === 'public' && !enableUnassignedPhoto && Boolean(shelterCode.trim())
 	);
@@ -324,10 +324,20 @@
 	let touched = $state(false);
 	let hasAutofilled = $state(false);
 	let activeSection = $state<FormSectionId>('address');
+	let activeRegistrationItem = $state<ActiveRegistrationItem | null>(null);
 	let scrollSpyPaused = $state(false);
 	let isVirtualKeyboardOpen = $state(false);
 	/** Mobile-only: summary sheet opened from chip near sticky CTA. */
 	let mobileSummaryOpen = $state(false);
+	const formStickyStyle = $derived(
+		[
+			stickyTopOffset ? `--registration-sticky-top: ${stickyTopOffset}` : '',
+			// Sticky section headers (sm+) sit below the member/pet position bar while it shows.
+			activeRegistrationItem && !readOnly ? '--registration-indicator-height: 2.5rem' : ''
+		]
+			.filter(Boolean)
+			.join('; ') || undefined
+	);
 
 	let petItems = $state<PetCardItem[]>(
 		untrack(() => parseInitialPets(household.pets as PetGroup[]).items)
@@ -363,6 +373,7 @@
 
 	/** Currently selected match chip from public residence match (for address prefill & pets). */
 	let selectedMatchChip = $state<ResidenceMatchChip | null>(null);
+	const readOnlyPets = $derived(selectedMatchChip ? (selectedMatchChip.pets ?? []) : claimedPets);
 	/**
 	 * Durable existing-member count for join UI (header badges / summary).
 	 * Captured at confirm time so it survives chip list refreshes / optional field loss.
@@ -609,9 +620,7 @@
 		hasJoinSelection ? Math.max(joinedFamilyMembers.length, resolvedExistingMemberCount ?? 0) : 0
 	);
 	const summaryExistingPetsCount = $derived(
-		hasJoinSelection
-			? (selectedMatchChip?.pets ?? []).reduce((sum, p) => sum + (Number(p.count) || 1), 0)
-			: 0
+		readOnlyPets.reduce((sum, p) => sum + (Number(p.count) || 1), 0)
 	);
 	const summaryTotalMembers = $derived(summaryExistingMemberCount + members.length);
 	const summaryTotalPets = $derived(summaryExistingPetsCount + petItems.length);
@@ -964,6 +973,89 @@
 			return () => {
 				observer.disconnect();
 				scrollTarget.removeEventListener('scroll', syncActive);
+			};
+		};
+	}
+
+	function createRegistrationItemSpy(): import('svelte/attachments').Attachment {
+		return (node) => {
+			const scrollRoot = findScrollParent(node);
+			const scrollTarget: Element | Window = scrollRoot ?? window;
+			let frame = 0;
+
+			const syncActiveItem = () => {
+				frame = 0;
+				const rootRect = scrollRoot?.getBoundingClientRect();
+				const viewportTop = Math.max(0, rootRect?.top ?? 0);
+				const viewportBottom = Math.min(window.innerHeight, rootRect?.bottom ?? window.innerHeight);
+				const viewportHeight = Math.max(0, viewportBottom - viewportTop);
+				const readingLine = viewportTop + viewportHeight * 0.35;
+				const visibleItems = [...node.querySelectorAll<HTMLElement>('[data-registration-item]')]
+					.map((element) => {
+						const rect = element.getBoundingClientRect();
+						return {
+							rect,
+							kind: element.dataset.registrationItem,
+							index: Number(element.dataset.registrationIndex),
+							total: Number(element.dataset.registrationTotal),
+							distance: Math.abs((rect.top + rect.bottom) / 2 - readingLine)
+						};
+					})
+					.filter(
+						(item) =>
+							(item.kind === 'member' || item.kind === 'pet') &&
+							item.total > 1 &&
+							item.index > 0 &&
+							item.rect.bottom > viewportTop &&
+							item.rect.top < viewportBottom
+					);
+
+				const inReadingLine = visibleItems.find(
+					(item) => item.rect.top <= readingLine && item.rect.bottom >= readingLine
+				);
+				const active = inReadingLine ?? visibleItems.sort((a, b) => a.distance - b.distance)[0];
+				const next = active
+					? {
+							kind: active.kind as 'member' | 'pet',
+							index: active.index,
+							total: active.total
+						}
+					: null;
+
+				if (
+					activeRegistrationItem?.kind !== next?.kind ||
+					activeRegistrationItem?.index !== next?.index ||
+					activeRegistrationItem?.total !== next?.total
+				) {
+					activeRegistrationItem = next;
+				}
+			};
+
+			const scheduleSync = () => {
+				if (frame) cancelAnimationFrame(frame);
+				frame = requestAnimationFrame(syncActiveItem);
+			};
+			const mutations = new MutationObserver(scheduleSync);
+			mutations.observe(node, {
+				childList: true,
+				subtree: true,
+				attributes: true,
+				attributeFilter: [
+					'data-registration-item',
+					'data-registration-index',
+					'data-registration-total'
+				]
+			});
+			scrollTarget.addEventListener('scroll', scheduleSync, { passive: true });
+			window.addEventListener('resize', scheduleSync, { passive: true });
+			scheduleSync();
+
+			return () => {
+				mutations.disconnect();
+				scrollTarget.removeEventListener('scroll', scheduleSync);
+				window.removeEventListener('resize', scheduleSync);
+				if (frame) cancelAnimationFrame(frame);
+				activeRegistrationItem = null;
 			};
 		};
 	}
@@ -1553,6 +1645,7 @@
 	onsubmit={handleSubmit}
 	oninput={markDirty}
 	{@attach createScrollSpy()}
+	{@attach createRegistrationItemSpy()}
 >
 	{#if visibleErrors.messages.length > 0}
 		<Alert.Root variant="destructive" class="border-destructive/40 bg-destructive/5" role="alert">
@@ -1596,7 +1689,7 @@
 				submittingLabel={t.submitting}
 				existingHeadName={summaryExistingHeadName}
 				existingMemberCount={summaryExistingMemberCount}
-				existingPets={selectedMatchChip?.pets ?? []}
+				existingPets={readOnlyPets}
 				newPets={petItems}
 				onNavigate={(id) => scrollToSection(id as FormSectionId)}
 			/>
@@ -1604,6 +1697,33 @@
 
 		<!-- Right Column: Form Area (Full width on mobile, 8-col on lg+) -->
 		<div class="space-y-6 lg:col-span-8">
+			<!-- Member/pet position, pinned under the public navbar. Zero-height sticky rail: the bar
+				spans the form column (full-bleed on mobile) and never shifts the layout. -->
+			{#if activeRegistrationItem && !readOnly}
+				<div
+					class="sticky top-(--public-navbar-offset,0px) z-40 mb-0! h-0 transition-[top] duration-200 ease-out motion-reduce:transition-none"
+				>
+					<div
+						class="absolute inset-x-0 top-0 flex h-10 items-center justify-between gap-3 border-b border-domain-registration-border bg-domain-registration-subtle px-4 text-sm text-domain-registration-text shadow-xs max-sm:-mx-4 sm:rounded-b-lg sm:border-x"
+						aria-live="off"
+					>
+						<span class="inline-flex min-w-0 items-center gap-2 font-semibold">
+							{#if activeRegistrationItem.kind === 'member'}
+								<Users class="size-4 shrink-0" aria-hidden="true" />
+								<span class="truncate">{t.sectionMembers}</span>
+							{:else}
+								<PawPrint class="size-4 shrink-0" aria-hidden="true" />
+								<span class="truncate">{t.sectionPets}</span>
+							{/if}
+						</span>
+						<span
+							class="shrink-0 rounded-md border border-domain-registration-border bg-white px-2 py-0.5 font-bold tabular-nums"
+						>
+							{activeRegistrationItem.index} / {activeRegistrationItem.total}
+						</span>
+					</div>
+				</div>
+			{/if}
 			<!-- Top Progress Stepper (Mobile & Desktop) -->
 			{#if channel !== 'public'}
 				<UnifiedRegistrationStepper
@@ -1619,6 +1739,8 @@
 				title={t.sectionAddress}
 				description={t.sectionAddressDesc}
 				icon={Home}
+				tone="blue"
+				mobileSurface="dark"
 			>
 				<!-- ThaiD: public redirects to ThaiD; onsite scans a QR without leaving the page;
 						no head scan on onsite report-in (would overwrite the existing head) -->
@@ -1989,7 +2111,7 @@
 				{channel}
 				{enableUnassignedPhoto}
 				{shelterCode}
-				existingPets={selectedMatchChip?.pets ?? []}
+				existingPets={readOnlyPets}
 				petErrors={visibleErrors.pets}
 				{validationSeq}
 				onsync={onPetsSynced}
@@ -2092,7 +2214,7 @@
 							showSubmit={false}
 							existingHeadName={summaryExistingHeadName}
 							existingMemberCount={summaryExistingMemberCount}
-							existingPets={selectedMatchChip?.pets ?? []}
+							existingPets={readOnlyPets}
 							newPets={petItems}
 							onNavigate={(id) => {
 								mobileSummaryOpen = false;

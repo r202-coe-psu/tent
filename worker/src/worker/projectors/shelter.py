@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import math
 from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Any, Literal
@@ -20,7 +21,6 @@ CLOSED_STATUSES = frozenset({"closed"})
 # public plane — unlike `closed`, which stays listed as a closed location
 # (docs/changes/draft-shelter-cancelled-status.md).
 CANCELLED_STATUSES = frozenset({"cancelled"})
-SITE_KINDS = frozenset({"evacuation_center", "host_house"})
 
 
 def resolve_operation_status(doc: dict[str, Any]) -> str | None:
@@ -126,7 +126,9 @@ def map_public_shelter_status(doc: dict[str, Any]) -> str:
 
 def resolve_site_kind(doc: dict[str, Any]) -> str:
     site_kind = doc.get("site_kind")
-    return site_kind if site_kind in SITE_KINDS else "evacuation_center"
+    return (
+        site_kind if isinstance(site_kind, str) and site_kind else "evacuation_center"
+    )
 
 
 def backfill_capacity(doc: dict[str, Any]) -> int:
@@ -174,6 +176,60 @@ def compose_address(doc: dict[str, Any]) -> str | None:
     ]
     composed = " ".join(str(p) for p in parts if p)
     return composed or None
+
+
+def _sub_storage_types(point: dict[str, Any]) -> list[str]:
+    """``types[]`` (schema_v 8+), or the single ``type`` of a pre-v8 point, as a list (FR-DP-13)."""
+    types = point.get("types")
+    if isinstance(types, list):
+        return [t for t in types if isinstance(t, str)]
+    legacy = point.get("type")
+    return [legacy] if isinstance(legacy, str) else []
+
+
+def _pin_coordinate(value: Any, limit: float) -> float | None:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    number = float(value)
+    return number if math.isfinite(number) and abs(number) <= limit else None
+
+
+def project_donation_points(doc: dict[str, Any]) -> list[dict[str, Any]]:
+    """``public_shelters.donation_points`` (CR-205 FR-DP-11/12).
+
+    Only ticked storage points with a real pin (both coordinates in range, not (0,0)) and
+    a persisted ``id`` leave the staff plane. ``area_m2`` and every unticked point stay out.
+    """
+    # A malformed ``common_areas`` / ``sub_storage`` drops only the points, not the whole
+    # shelter row.
+    areas = doc.get("common_areas")
+    points = areas.get("sub_storage") if isinstance(areas, dict) else None
+    if not isinstance(points, list):
+        return []
+    out: list[dict[str, Any]] = []
+    for point in points:
+        if not isinstance(point, dict) or point.get("accepts_donations") is not True:
+            continue
+        point_id = point.get("id")
+        name = point.get("name")
+        lat = _pin_coordinate(point.get("lat"), 90)
+        lng = _pin_coordinate(point.get("lng"), 180)
+        if not point_id or not isinstance(point_id, str) or not isinstance(name, str):
+            continue
+        if lat is None or lng is None or (lat == 0 and lng == 0):
+            continue
+        note = point.get("location_note")
+        note = note.strip() if isinstance(note, str) else ""
+        out.append(
+            {
+                "id": point_id,
+                "name": name,
+                "types": _sub_storage_types(point),
+                "geo": {"lat": lat, "lng": lng},
+                "location_note": note or None,
+            }
+        )
+    return out
 
 
 def project_shelter(
@@ -244,6 +300,7 @@ def project_shelter(
         "contact_name": contact.get("name"),
         "contact_phone": contact.get("phone"),
         "opened_at": _parse_timestamp(doc.get("opened_at")),
+        "donation_points": project_donation_points(doc),
         "raw_data": doc,
         "updated_at": updated_at,
     }

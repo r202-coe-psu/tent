@@ -4,6 +4,7 @@
  */
 
 import { serviceFetch } from '$lib/api/service';
+import type { RoleGrant } from '$lib/auth/role-grants';
 import type { ForgotPasswordVerifyInput, ForceSetupInput } from '../domain/schema';
 
 const USERS_ENDPOINT = '/api/v1/users';
@@ -35,6 +36,8 @@ export interface UserSummary {
 	has_security_question?: boolean;
 	has_staff_card: boolean;
 	affiliation_tags?: string[];
+	/** Time-limited roles a volunteer coordinator issued (#955); absent/empty = none. */
+	role_grants?: RoleGrant[];
 	/** True when at least one MFA provider (Google or ThaID) is enrolled. */
 	mfa_enrolled?: boolean;
 	/** CR-124 — linked Google email (display). */
@@ -129,6 +132,8 @@ export function updateUser(
 		active?: boolean;
 		must_change_password?: boolean;
 		affiliation_tags?: string[];
+		/** Compound roles (`SHxxx:<role>`) to make permanent ("ไม่มีวันหมด"): removes their grant. */
+		permanent_roles?: string[];
 	}
 ): Promise<{ ok: true }> {
 	return serviceFetch(USERS_ENDPOINT, {

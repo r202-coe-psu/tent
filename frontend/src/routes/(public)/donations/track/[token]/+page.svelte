@@ -15,6 +15,7 @@
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import Download from '@lucide/svelte/icons/download';
+	import Printer from '@lucide/svelte/icons/printer';
 	import { generateQrDataUrl } from '$lib/utils/qrcode';
 	import { toast } from 'svelte-sonner';
 	import {
@@ -27,12 +28,17 @@
 		formatTrackSchedule,
 		canEditCourierTracking,
 		canCancelDonation,
+		donationItemEditGate,
 		isTerminalDonationStatus,
+		isStartedAtPoint,
 		rejectedLineReasons,
 		needsDropOffDestination,
 		resolveDropOffPoint,
+		bookableDropOffPoints,
+		groupDropOffDestinations,
 		CancelDonationDialog,
 		DropOffCard,
+		DropOffGroups,
 		EditDonationItemsDialog
 	} from '$lib/features/donations';
 	import { PublicPageShell, usePublicShelter } from '$lib/features/public-portal';
@@ -72,6 +78,26 @@
 	const dropOffPoint = $derived(shelterQuery.data ? resolveDropOffPoint(shelterQuery.data) : null);
 	// A finished or cancelled booking still names its shelter, but no longer sends anyone there.
 	const showDirections = $derived(!isTerminalDonationStatus(status));
+
+	// CR-206 FR-MP-13, FR-MP-16 — a booking split across drop-off points: one card per point
+	// with what each point has taken. `null` (no line names a point) keeps the shelter card.
+	const pointGroups = $derived(
+		donation && shelterQuery.data
+			? groupDropOffDestinations(donation.items, shelterQuery.data, {
+					anyPointName: t.anyPointGroupTitle,
+					pointReceipts: donation.point_receipts
+				})
+			: null
+	);
+	const lineNames = $derived(donation ? donation.items.map((item) => item.item_name) : []);
+	// "รับแล้ว" stays true on a received booking; on one turned away or cancelled it would mislead.
+	const showReceivedGroups = $derived(!isTerminalDonationStatus(status) || status === 'received');
+	// The points the edit dialog offers each line (FR-MP-15).
+	const editPoints = $derived(
+		bookableDropOffPoints(shelterQuery.data, donation?.logistics?.delivery_method)
+	);
+	// FR-MP-17 — once a point recorded a receipt the donor can neither cancel nor edit.
+	const startedAtPoint = $derived(donation ? isStartedAtPoint(donation) : false);
 
 	/**
 	 * CR-052 §1.4 (Task #52) — "ยกเลิกกลไกการข้ามขั้นตอนไปออกรหัสตอบรับ (QR Code)
@@ -126,9 +152,24 @@
 		donation ? canEditCourierTracking(donation.status, donation.logistics) : false
 	);
 	const showCancel = $derived(donation ? canCancelDonation(donation.status) : false);
-	// Same gate as cancelling: while it is only a reservation the donor still owns it
-	// (CR-080 — the owner settled on `declared` only).
+	// Shown wherever cancelling is, so the page does not jump when a review lands; usable
+	// only until anything on the booking is decided (CR-196 FR-LK-4).
 	const showEdit = $derived(showCancel);
+	const canEditItems = $derived(
+		donation
+			? donationItemEditGate(donation.status, donation.items) === 'editable' && !startedAtPoint
+			: false
+	);
+
+	function openEdit() {
+		if (canEditItems) editOpen = true;
+		else toast.error(startedAtPoint ? t.pointStartedToast : t.editBlockedToast);
+	}
+
+	function openCancel() {
+		if (startedAtPoint) toast.error(t.pointStartedToast);
+		else cancelOpen = true;
+	}
 
 	async function saveCourier() {
 		const value = courierInput.trim();
@@ -268,6 +309,18 @@
 						<p class="max-w-xs text-2xs text-muted-foreground">
 							{t.qrHint}
 						</p>
+						<div class="mt-1 flex w-full flex-col items-center gap-2 border-t border-border pt-4">
+							<Button
+								href={resolve(`/donations/track/${encodeURIComponent(token)}/label`)}
+								variant="outline"
+								size="sm"
+								data-testid="box-label-link"
+							>
+								<Printer class="h-3.5 w-3.5" />
+								{t.boxLabelOpenBtn}
+							</Button>
+							<p class="max-w-xs text-2xs text-muted-foreground">{t.boxLabelOpenHint}</p>
+						</div>
 					</div>
 				{/if}
 
@@ -386,7 +439,15 @@
 									<span class="text-2xs font-bold text-muted-foreground uppercase"
 										>{t.destinationShelterLabel}</span
 									>
-									{#if dropOffPoint}
+									{#if pointGroups}
+										<DropOffGroups
+											groups={pointGroups}
+											{lineNames}
+											directions={showDirections}
+											showPending={!isTerminalDonationStatus(status)}
+											showReceived={showReceivedGroups}
+										/>
+									{:else if dropOffPoint}
 										<DropOffCard point={dropOffPoint} directions={showDirections} />
 									{:else}
 										<p class="mt-0.5 font-semibold text-foreground">{donation.shelter_code}</p>
@@ -515,18 +576,20 @@
 
 					{#if showEdit}
 						<div class="flex flex-col gap-2 border-t border-border pt-5">
+							<!-- aria-disabled, not disabled: a disabled button swallows the click, and
+							     the donor has to hear why (CR-196 FR-LK-4). -->
 							<Button
 								variant="outline"
-								onclick={() => (editOpen = true)}
-								class="h-10 rounded-xl text-xs font-bold"
+								onclick={openEdit}
+								aria-disabled={!canEditItems}
+								data-testid="edit-donation-items-btn"
+								class="h-10 rounded-xl text-xs font-bold aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
 							>
 								<Pencil class="h-4 w-4" />
 								{t.editItemsBtn}
 							</Button>
 							<p class="text-2xs leading-relaxed text-muted-foreground">
-								{langState.current === 'en'
-									? 'Adjust quantity or add/remove items until staff begins check-in'
-									: 'ปรับจำนวนหรือเพิ่ม-ลบรายการได้จนกว่าเจ้าหน้าที่จะเริ่มตรวจรับ'}
+								{t.editItemsHint}
 								{#if donation.revisions.length}
 									· {langState.current === 'en'
 										? `Edited ${donation.revisions.length} times`
@@ -538,18 +601,25 @@
 
 					{#if showCancel}
 						<div class="flex flex-col gap-2 border-t border-border pt-5">
+							<!-- aria-disabled for the same reason as the edit button (CR-206 FR-MP-17). -->
 							<Button
 								variant="outline"
-								onclick={() => (cancelOpen = true)}
-								class="h-10 rounded-xl border-destructive/40 text-xs font-bold text-destructive hover:bg-destructive/10 hover:text-destructive"
+								onclick={openCancel}
+								aria-disabled={startedAtPoint}
+								data-testid="cancel-donation-btn"
+								class="h-10 rounded-xl border-destructive/40 text-xs font-bold text-destructive hover:bg-destructive/10 hover:text-destructive aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
 							>
 								<Ban class="h-4 w-4" />
 								{t.cancelDonationBtn}
 							</Button>
 							<p class="text-2xs leading-relaxed text-muted-foreground">
-								{langState.current === 'en'
-									? 'Once cancelled, the reserved quota will be immediately released to other donors and cannot be undone'
-									: 'ยกเลิกแล้วจำนวนที่จองไว้จะถูกคืนให้ผู้บริจาคท่านอื่นทันที และย้อนกลับไม่ได้'}
+								{#if startedAtPoint}
+									{t.pointStartedToast}
+								{:else}
+									{langState.current === 'en'
+										? 'Once cancelled, the reserved quota will be immediately released to other donors and cannot be undone'
+										: 'ยกเลิกแล้วจำนวนที่จองไว้จะถูกคืนให้ผู้บริจาคท่านอื่นทันที และย้อนกลับไม่ได้'}
+								{/if}
 							</p>
 						</div>
 					{/if}
@@ -565,7 +635,7 @@
 				{token}
 				shelterCode={donation.shelter_code}
 				items={donation.items}
-				{status}
+				dropOffPoints={editPoints}
 				onSaved={() => trackingQuery.refetch()}
 			/>
 		{/if}

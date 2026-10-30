@@ -694,13 +694,7 @@
 						"name": "site_kind",
 						"in": "query",
 						"required": false,
-						"schema": {
-							"anyOf": [
-								{ "enum": ["evacuation_center", "host_house"], "type": "string" },
-								{ "type": "null" }
-							],
-							"title": "Site Kind"
-						}
+						"schema": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Site Kind" }
 					},
 					{
 						"name": "lat",
@@ -3508,6 +3502,12 @@
 					"slot_hold": {
 						"anyOf": [{ "$ref": "#/components/schemas/SlotHold" }, { "type": "null" }]
 					},
+					"photos": {
+						"items": { "type": "string" },
+						"type": "array",
+						"maxItems": 30,
+						"title": "Photos"
+					},
 					"captchaToken": {
 						"anyOf": [{ "type": "string" }, { "type": "null" }],
 						"title": "Captchatoken"
@@ -3545,7 +3545,12 @@
 						"anyOf": [{ "type": "string" }, { "type": "null" }],
 						"title": "Condition"
 					},
-					"note": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Note" }
+					"note": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Note" },
+					"line_key": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Line Key" },
+					"drop_off_point_id": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Drop Off Point Id"
+					}
 				},
 				"type": "object",
 				"required": ["qty"],
@@ -3661,6 +3666,22 @@
 				},
 				"type": "object",
 				"title": "DonationPhoneLookupSlot"
+			},
+			"DonationPoint": {
+				"properties": {
+					"id": { "type": "string", "title": "Id" },
+					"name": { "type": "string", "title": "Name" },
+					"types": { "items": { "type": "string" }, "type": "array", "title": "Types" },
+					"geo": { "$ref": "#/components/schemas/GeoPoint" },
+					"location_note": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Location Note"
+					}
+				},
+				"type": "object",
+				"required": ["id", "name", "geo"],
+				"title": "DonationPoint",
+				"description": "A storage point ticked as a donation drop-off point, with a pin (CR-205)."
 			},
 			"DonationTrackSearchRequest": {
 				"properties": {
@@ -5153,8 +5174,8 @@
 					"name": { "type": "string", "title": "Name" },
 					"site_kind": {
 						"type": "string",
-						"enum": ["evacuation_center", "host_house"],
 						"title": "Site Kind",
+						"description": "Master code from master_data:site_kind (e.g. evacuation_center, host_house)",
 						"default": "evacuation_center"
 					},
 					"status": { "type": "string", "title": "Status" },
@@ -5202,6 +5223,11 @@
 						"type": "boolean",
 						"title": "Accepts Pre Registration",
 						"default": false
+					},
+					"donation_points": {
+						"items": { "$ref": "#/components/schemas/DonationPoint" },
+						"type": "array",
+						"title": "Donation Points"
 					}
 				},
 				"type": "object",
@@ -5271,8 +5297,8 @@
 					"name": { "type": "string", "title": "Name" },
 					"site_kind": {
 						"type": "string",
-						"enum": ["evacuation_center", "host_house"],
 						"title": "Site Kind",
+						"description": "Master code from master_data:site_kind (e.g. evacuation_center, host_house)",
 						"default": "evacuation_center"
 					},
 					"status": { "type": "string", "title": "Status" },

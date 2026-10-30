@@ -1,6 +1,4 @@
 <script lang="ts">
-	import IdCard from '@lucide/svelte/icons/id-card';
-	import Sparkles from '@lucide/svelte/icons/sparkles';
 	import Loader2 from '@lucide/svelte/icons/loader-2';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { langState } from '$lib/states/i18n.svelte';
@@ -38,39 +36,28 @@
 	}
 </script>
 
-<div class="rounded-xl border border-primary/20 bg-primary/5 p-3.5 sm:p-4">
-	<div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-		<div class="flex items-start gap-2.5">
-			<div
-				class="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary"
-			>
-				<IdCard class="size-4" />
-			</div>
-			<div>
-				<div class="flex items-center gap-2">
-					<span class="text-sm font-semibold text-foreground">{t.thaidTitle}</span>
-				</div>
-				<p class="mt-0.5 text-xs text-muted-foreground">
-					{t.thaidDesc}
-				</p>
-			</div>
-		</div>
-
+<div class="space-y-4">
+	<div class="space-y-1.5">
 		<Button
 			type="button"
-			variant="outline"
-			size="sm"
 			disabled={disabled || isRedirecting}
 			onclick={handleRealConnect}
-			class="min-h-10 border-primary/30 text-primary hover:bg-primary/10"
+			class="h-11 w-full gap-2 rounded-xl text-base font-semibold shadow-xs"
 		>
 			{#if isRedirecting}
-				<Loader2 class="mr-1.5 size-4 animate-spin" />
+				<Loader2 class="size-5 animate-spin" />
 				<span>{t.thaidConnecting}</span>
 			{:else}
-				<Sparkles class="mr-1.5 size-4" />
+				<img src="/thaid-logo.png" alt="" class="size-6 rounded object-contain" />
 				<span>{t.thaidConnect}</span>
 			{/if}
 		</Button>
+		<p class="text-center text-xs text-muted-foreground">{t.thaidDesc}</p>
+	</div>
+
+	<div class="flex items-center gap-3 text-xs text-muted-foreground" role="separator">
+		<span class="h-px flex-1 bg-border"></span>
+		<span>{t.thaidOrManual}</span>
+		<span class="h-px flex-1 bg-border"></span>
 	</div>
 </div>

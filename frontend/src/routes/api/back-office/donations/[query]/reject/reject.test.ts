@@ -32,6 +32,28 @@ const baseDonation = {
 	items: [{ item_id: 'item:rice', qty: '10', unit: 'kg' }]
 } as unknown as PublicDonationDoc;
 
+/** One receipt at a drop-off point that turned its only line away — no ledger row (CR-206). */
+const POINT_RECEIPTS = [
+	{
+		point_id: 'sp-gym',
+		line_nos: [0],
+		received_at: '2026-10-28T02:12:00.000Z',
+		received_by: 'gym-staff',
+		audit_id: 'audit:gym',
+		ledger_ids: [],
+		items: [
+			{
+				line_no: 0,
+				item_id: 'item:water',
+				qty: '0',
+				unit: 'ขวด',
+				rejected: true,
+				reject_reason_code: 'damaged'
+			}
+		]
+	}
+];
+
 /** `ledgerFind` answers the stock_ledger `_find` — no rows by default (nothing keyed). */
 function mockCouch(
 	donation: PublicDonationDoc,
@@ -217,6 +239,23 @@ describe('POST /api/back-office/donations/[query]/reject', () => {
 			status: 200,
 			data: { docs: [{ _id: 'stock_ledger:row-1' }] }
 		});
+
+		const response = await POST(postEvent({ reason_code: 'damaged' }));
+
+		expect(response.status).toBe(409);
+		expect((await response.json()).error_code).toBe('GOODS_IN_STOCK');
+		expect(writtenDocs()).toHaveLength(0);
+		expect(putBody()).toBeUndefined();
+	});
+
+	// CR-206 AC-9 — a point that turned its lines away keyed no row; the booking is started.
+	it('refuses a booking a drop-off point already recorded, even with no row in stock', async () => {
+		mockCouch({
+			...baseDonation,
+			status: 'verifying',
+			items: [{ item_id: 'item:water', qty: '24', unit: 'ขวด', drop_off_point_id: 'sp-gym' }],
+			point_receipts: POINT_RECEIPTS
+		} as unknown as PublicDonationDoc);
 
 		const response = await POST(postEvent({ reason_code: 'damaged' }));
 

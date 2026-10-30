@@ -1,5 +1,11 @@
 import { z } from 'zod';
-import type { Donation, DonationStatus, Donor } from '$lib/features/operations';
+import type {
+	Donation,
+	DonationCloseReason,
+	DonationPointReceipt,
+	DonationStatus,
+	Donor
+} from '$lib/features/operations';
 import { qtyGt, qtyStrCoerceNonNegativeSchema } from '$lib/utils/qty';
 import {
 	donationRejectReasonCodeSchema,
@@ -19,6 +25,7 @@ export interface PublicDonationDoc extends Omit<Donation, 'donor'> {
 	logistics?: {
 		delivery_method: 'self_dropoff' | 'parcel' | 'shelter_pickup';
 		vehicle?: 'motorcycle' | 'car' | 'pickup' | 'truck';
+		vehicle_plate?: string;
 		slot?: { date: string; from: string; to: string };
 		eta?: string;
 		courier_tracking_no?: string | null;
@@ -28,6 +35,8 @@ export interface PublicDonationDoc extends Omit<Donation, 'donor'> {
 		total_items: number;
 		received_at: string;
 		remarks?: string;
+		closed_by?: string;
+		closed_reason?: DonationCloseReason;
 		shortfalls?: Array<{
 			item_id?: string;
 			item_name?: string;
@@ -96,8 +105,16 @@ export interface ScanDonationView {
 		review_reason_code?: DonationRejectReasonCode | null;
 		/** What the donor was told at review — kept as is through the counter. */
 		review_reason?: string | null;
+		/** The point the donor takes this line to (CR-206 FR-MP-1); `null` = any point. */
+		drop_off_point_id?: string | null;
 	}>;
+	/** What each point already recorded (CR-206 FR-MP-19) — no ledger or audit ids. */
+	point_receipts?: Array<
+		Pick<DonationPointReceipt, 'point_id' | 'line_nos' | 'received_at' | 'received_by'>
+	>;
 	logistics?: PublicDonationDoc['logistics'];
+	/** Donor photos, `image:{ulid}` in `shelter_code`'s DB (CR-175 donor photos FR-12). */
+	photos?: string[];
 }
 
 /**
@@ -113,6 +130,13 @@ export const receiveDonationInputSchema = z
 		status: z.literal('received'),
 		/** `_rev` of the booking the screen was loaded with (CR-174 FR-25). */
 		expected_rev: z.string().min(1),
+		/**
+		 * The recorder's drop-off point (CR-206 FR-MP-22). `null` only once the shelter has no
+		 * drop-off point left (FR-MP-18b) — checked by the route against the shelter doc.
+		 */
+		point_id: z.string().trim().min(1).nullable().optional(),
+		/** Positions in `items` this receipt records, received or turned away (FR-MP-22). */
+		line_nos: z.array(z.number().int().min(0)).optional(),
 		/** Optional note from the receiving staff — lands on `received_summary.remarks`. */
 		remarks: z.string().trim().max(500).optional(),
 		items: z
@@ -149,7 +173,36 @@ export const receiveDonationInputSchema = z
 			.optional()
 	})
 	.superRefine((value, ctx) => {
+		// FR-MP-22a — a point receipt names both its point and its lines, and only real lines once.
+		const hasPoint = value.point_id !== undefined;
+		const lineNos = value.line_nos;
+		if (hasPoint !== (lineNos !== undefined)) {
+			ctx.addIssue({
+				code: 'custom',
+				path: [hasPoint ? 'line_nos' : 'point_id'],
+				message: 'point_id and line_nos are sent together'
+			});
+		}
+		if (lineNos !== undefined) {
+			const lineCount = value.items?.length ?? 0;
+			if (lineNos.length === 0) {
+				ctx.addIssue({ code: 'custom', path: ['line_nos'], message: 'line_nos is empty' });
+			}
+			if (new Set(lineNos).size !== lineNos.length) {
+				ctx.addIssue({ code: 'custom', path: ['line_nos'], message: 'line_nos repeats a line' });
+			}
+			if (lineNos.some((lineNo) => lineNo >= lineCount)) {
+				ctx.addIssue({
+					code: 'custom',
+					path: ['line_nos'],
+					message: 'line_nos names a line outside items'
+				});
+			}
+		}
+		// A point receipt records only its own lines; the rest ride along unchecked (FR-MP-22).
+		const recordedNow = lineNos ? new Set(lineNos) : null;
 		for (const [index, line] of (value.items ?? []).entries()) {
+			if (recordedNow && !recordedNow.has(index)) continue;
 			if (line.rejected) {
 				if (!line.reject_reason_code) {
 					ctx.addIssue({
@@ -175,8 +228,9 @@ export const receiveDonationInputSchema = z
 export type ReceiveDonationInput = z.infer<typeof receiveDonationInputSchema>;
 
 /**
- * Statuses in which a donor may still change their own booking through the public
- * token routes (T-21 DoD — "Donor แก้/ยกเลิกการจองของตนผ่าน token ได้").
+ * Statuses in which a donor may still cancel their own booking or add a courier number
+ * through the public token routes (T-21 DoD — "Donor แก้/ยกเลิกการจองของตนผ่าน token ได้").
+ * Editing the lines is narrower — `donationItemEditGate` (CR-196).
  *
  * Only a reservation still awaiting drop-off qualifies. Once goods arrive the count
  * belongs to staff and the stock ledger, and `cancelled`/`expired` have already
@@ -203,6 +257,40 @@ export function isDonorEditable(status: DonationStatus): boolean {
 	return DONOR_EDITABLE_STATUSES.has(status);
 }
 
+/**
+ * What a donor's item edit meets (CR-196 FR-LK-4): `editable`, `already_reviewed` (the QR
+ * is out, the booking was refused, or a line was decided — by the campaign rule or by
+ * staff), or `closed` (the booking is past drop-off). Mirrors `item_edit_gate` in the
+ * FastAPI donations review module.
+ */
+export type DonationItemEditGate = 'editable' | 'already_reviewed' | 'closed';
+
+const ITEM_EDIT_BY_STATUS: Partial<Record<string, DonationItemEditGate>> = {
+	declared: 'editable',
+	pending_review: 'editable',
+	verifying: 'already_reviewed',
+	rejected: 'already_reviewed'
+};
+
+/**
+ * Once anything on a booking was decided its lines are fixed: an edit could otherwise
+ * re-pair a refused line with an approved one and come out approved (review #783 H1).
+ * The donor cancels and books again, or tells staff at drop-off.
+ */
+export function donationItemEditGate(
+	status: string,
+	items: readonly { review_status?: string | null }[]
+): DonationItemEditGate {
+	const gate = ITEM_EDIT_BY_STATUS[status] ?? 'closed';
+	if (
+		gate === 'editable' &&
+		items.some((item) => item.review_status === 'approved' || item.review_status === 'rejected')
+	) {
+		return 'already_reviewed';
+	}
+	return gate;
+}
+
 const PUBLIC_DONATION_ERROR_MESSAGES: Record<string, string> = {
 	NEED_FULL: 'รายการนี้รับบริจาคครบแล้ว กรุณาเลือกรายการอื่น',
 	SLOT_FULL: 'คิวจัดส่งเต็มแล้ว กรุณาเลือกช่วงเวลาอื่น',
@@ -211,7 +299,16 @@ const PUBLIC_DONATION_ERROR_MESSAGES: Record<string, string> = {
 	SLOTS_UNAVAILABLE: 'ตรวจสอบคิวไม่สำเร็จ กรุณาลองใหม่อีกครั้ง',
 	SHELTER_NOT_FOUND: 'ไม่พบศูนย์พักพิงที่เลือก',
 	SHELTER_CLOSED: 'ศูนย์พักพิงนี้ปิดรับบริจาคชั่วคราว',
-	RATE_LIMITED: 'คุณส่งคำขอบ่อยเกินไป กรุณารอสักครู่แล้วลองใหม่'
+	RATE_LIMITED: 'คุณส่งคำขอบ่อยเกินไป กรุณารอสักครู่แล้วลองใหม่',
+	// CR-206 FR-MP-2 — the shelter stopped offering a point while the donor filled the form
+	UNKNOWN_DROP_OFF_POINT: 'จุดรับบริจาคที่เลือกไม่เปิดรับแล้ว กรุณาเลือกจุดส่งของใหม่',
+	// CR-175 donor photos (FR-10)
+	PHOTO_LIMIT_EXCEEDED: 'แนบรูปได้ไม่เกิน 30 รูปต่อใบ',
+	PHOTO_NOT_FOUND: 'ไม่พบรูปที่แนบ กรุณาลบรูปนั้นแล้วแนบใหม่',
+	PHOTO_INVALID: 'รูปที่แนบใช้กับการบริจาคไม่ได้ กรุณาลบรูปนั้นแล้วแนบใหม่',
+	PHOTO_ALREADY_USED: 'รูปที่แนบถูกใช้กับใบจองอื่นแล้ว กรุณาลบรูปนั้นแล้วแนบใหม่',
+	PHOTOS_TOO_LARGE: 'รูปที่แนบรวมกันเกิน 10 MB กรุณาลบบางรูป',
+	PHOTOS_UNAVAILABLE: 'ตรวจสอบรูปที่แนบไม่สำเร็จ กรุณาลองใหม่อีกครั้ง'
 };
 
 /** Map public donation API error codes to donor-facing Thai copy. */
@@ -254,6 +351,8 @@ export type DonationPayloadLine = DonationUnitSource & {
 	amount: number;
 	condition?: string;
 	remark?: string;
+	/** The line's drop-off point (CR-206 FR-MP-1); left out of the payload when undefined. */
+	dropOffPointId?: string | null;
 };
 
 /**
@@ -272,7 +371,8 @@ export function buildDonationItemsPayload(
 		qty: it.amount,
 		unit: donationPayloadUnit(it, t.defaultItemUnit),
 		condition: it.condition || undefined,
-		note: it.remark || undefined
+		note: it.remark || undefined,
+		...(it.dropOffPointId !== undefined ? { drop_off_point_id: it.dropOffPointId } : {})
 	}));
 }
 

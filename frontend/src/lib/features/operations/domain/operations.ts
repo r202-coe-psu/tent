@@ -1,5 +1,12 @@
 import { z } from 'zod';
-import { type AuthorContext, type BaseDoc, type Timestamp, makeDoc, now } from '$lib/db/model';
+import {
+	type AuthorContext,
+	type BaseDoc,
+	type Timestamp,
+	makeDoc,
+	now,
+	thaiMobilePhoneSchema
+} from '$lib/db/model';
 import {
 	addQty,
 	persistQty,
@@ -248,19 +255,64 @@ export interface DonationItem {
 	review_reason_code?: string | null;
 	review_reason?: string | null;
 	/**
+	 * Which line this is (CR-196 · schema_v 8): a ULID FastAPI gives every public line at
+	 * booking, and the donor's edit form sends back to name the line it changes. Absent on
+	 * walk-in lines and on docs before schema_v 8.
+	 */
+	line_key?: string;
+	/**
 	 * What the campaign counter holds for this line's item (CR-080) — stamped by FastAPI
 	 * only when the counter really took it, so it is also how an automatic approval
 	 * (FR-2) is told from a person's (FR-8).
 	 */
 	reserved_qty?: string;
+	/**
+	 * The drop-off point (`sub_storage[].id` ticked `accepts_donations`) the donor takes this
+	 * line to (CR-206 · schema_v 11). `null` or absent = no point: the line may be received at
+	 * any point of the shelter. Only `self_dropoff` bookings carry one.
+	 */
+	drop_off_point_id?: string | null;
+}
+
+/** One line's result in a {@link DonationPointReceipt} — `received_summary.items[]` plus `line_no`. */
+export interface DonationPointReceiptItem {
+	line_no: number;
+	item_id?: string;
+	free_text?: string;
+	qty: string;
+	unit: string;
+	rejected?: boolean;
+	reject_reason?: string;
+	reject_reason_code?: string;
 }
 
 /**
- * `schema_v` every donation writer stamps — the walk-in factory here, the donor edit
- * route, and `worker/inbound/donations.py`. 7 = CR-174 `items[].review_status`
- * (6 CR-172 `reject_reason`, 5 CR-087 `redirect_to_shelter_code`, 4 CR-080 `revisions[]`).
+ * One receipt at a drop-off point (CR-206 FR-MP-5): the lines one point recorded, received or
+ * turned away. Appended, never rewritten; `items[]` stays what was declared.
  */
-export const DONATION_SCHEMA_V = 7;
+export interface DonationPointReceipt {
+	/** The recorder's point. `null` = recorded after the shelter had no drop-off point left (FR-MP-18b). */
+	point_id: string | null;
+	line_nos: number[];
+	received_at: Timestamp;
+	received_by: string;
+	audit_id: string;
+	ledger_ids: string[];
+	items: DonationPointReceiptItem[];
+	remarks?: string;
+}
+
+/** How a booking with point receipts was closed (CR-206 FR-MP-27a). */
+export type DonationCloseReason = 'all_points' | 'staff_close' | 'expired';
+
+/**
+ * `schema_v` every donation writer stamps — the walk-in factory here, the donor edit
+ * route, and `worker/inbound/donations.py`. 11 = CR-206 `items[].drop_off_point_id` +
+ * `point_receipts[]` (10 CR-209 `logistics.vehicle_plate`, 9 CR-175 donor `photos`, 8 CR-196
+ * `items[].line_key`, 7 CR-174 `items[].review_status`, 6 CR-172 `reject_reason`,
+ * 5 CR-087 `redirect_to_shelter_code`, 4 CR-080 `revisions[]`).
+ */
+export const DONATION_SCHEMA_V = 11;
 
 export interface Donor {
 	name: string;
@@ -274,6 +326,7 @@ export interface Donor {
 export interface DonationLogistics {
 	delivery_method: 'self_dropoff' | 'parcel' | 'shelter_pickup';
 	vehicle?: 'motorcycle' | 'car' | 'pickup' | 'truck';
+	vehicle_plate?: string;
 	slot?: {
 		date: string;
 		from: string;
@@ -302,6 +355,9 @@ export interface Donation extends BaseDoc {
 		total_items: number;
 		received_at: Timestamp;
 		remarks?: string;
+		/** Booking closed from point receipts (CR-206): staff name or `system`. Absent on a whole-booking receipt. */
+		closed_by?: string;
+		closed_reason?: DonationCloseReason;
 		shortfalls?: Array<{
 			item_id?: string;
 			item_name?: string;
@@ -333,6 +389,13 @@ export interface Donation extends BaseDoc {
 	 * scope isolation means a field here is invisible to them.
 	 */
 	redirect_to_shelter_code?: string | null;
+	/**
+	 * Donor photos of an unsolicited public booking, `image:{ulid}` ids in this shelter's
+	 * DB (CR-175 donor photos · schema_v 9). Attached at booking only; an edit keeps them.
+	 */
+	photos?: string[];
+	/** Receipts at drop-off points (CR-206 FR-MP-5 · schema_v 11). Absent or `[]` = no point recorded yet. */
+	point_receipts?: DonationPointReceipt[];
 }
 
 /**
@@ -424,6 +487,9 @@ export type OperationsDoc = StockLedger | Donation | DonationCampaign | StockTra
 type LedgerRefPrefix = string | null;
 export type LedgerRefRule = LedgerRefPrefix | readonly LedgerRefPrefix[];
 
+/** `ref_id` prefix of a bulk return pool document; allowed for `receive` ledger rows only. */
+export const BULK_RETURN_POOL_REF_PREFIX = 'bulk_return_pool:';
+
 export const REF_PREFIX_BY_REASON: Record<LedgerReason, LedgerRefRule> = {
 	donation: 'donation:',
 	// kitchen_requisition: legacy doc type, deprecated (CR-141) — still accepted so
@@ -434,8 +500,15 @@ export const REF_PREFIX_BY_REASON: Record<LedgerReason, LedgerRefRule> = {
 	transfer_out: ['stock_transfer:', 'requisition_ticket:'],
 	adjust: null, // manual correction — no source document by definition
 	distribute: 'requisition_ticket:',
-	distribution_return: 'distribution_batch:',
-	receive: ['meal_service:', 'requisition_ticket:', 'distribution_log:', 'bulk_return_pool:']
+	// distribution_batch: legacy batch flow; requisition_ticket: leftovers received back from a
+	// ticket into their source lot (CR-208), never a `direct-` issue — see isCanonicalLedgerRef.
+	distribution_return: ['distribution_batch:', 'requisition_ticket:'],
+	receive: [
+		'meal_service:',
+		'requisition_ticket:',
+		'distribution_log:',
+		BULK_RETURN_POOL_REF_PREFIX
+	]
 };
 
 function matchesLedgerRefPrefix(refId: string, prefix: string): boolean {
@@ -447,9 +520,15 @@ export function isCanonicalLedgerRef(reason: LedgerReason, refId: string | null)
 	const rule = REF_PREFIX_BY_REASON[reason];
 	const accepted = Array.isArray(rule) ? rule : [rule];
 	if (refId === null) return accepted.includes(null);
+	if (isDirectIssueReturnRef(reason, refId)) return false;
 	return accepted.some(
 		(value) => typeof value === 'string' && matchesLedgerRefPrefix(refId, value)
 	);
+}
+
+/** CR-208 FR-RTN-18 — a direct issue from the stock page has no return step to receive back. */
+function isDirectIssueReturnRef(reason: LedgerReason, refId: string): boolean {
+	return reason === 'distribution_return' && refId.startsWith('requisition_ticket:direct-');
 }
 
 /**
@@ -465,6 +544,14 @@ function checkRefIdAgainstRule(
 ): void {
 	const accepted = Array.isArray(rule) ? rule : [rule];
 	if (isCanonicalLedgerRef(reason, refId)) return;
+	if (refId !== null && isDirectIssueReturnRef(reason, refId)) {
+		ctx.addIssue({
+			code: 'custom',
+			path: ['ref_id'],
+			message: `รายการประเภท '${reason}' ต้องไม่อ้างอิงการเบิกตรงจากหน้าคลัง (requisition_ticket:direct-)`
+		});
+		return;
+	}
 	if (accepted.length === 1 && accepted[0] === null) {
 		ctx.addIssue({
 			code: 'custom',
@@ -844,7 +931,12 @@ export const distributionReturnInputSchema = z.object({
 	item_id: z.string().min(1),
 	qty: qtyStrCoercePositiveSchema,
 	unit: z.string().trim().min(1),
-	ref_id: z.string().regex(/^distribution_batch:.+/, 'ref_id must reference a distribution batch'),
+	ref_id: z
+		.string()
+		.regex(
+			/^(?:distribution_batch|requisition_ticket):.+/,
+			'ref_id must reference a distribution batch or requisition ticket'
+		),
 	lot_ref: z.string().regex(/^stock_ledger:.+/, 'lot_ref must reference an inbound stock ledger'),
 	lot: stockLotSchema.optional(),
 	occurred_at: z.string().optional()
@@ -1179,11 +1271,7 @@ export const walkInDonationInputSchema = z
 	.object({
 		donor: z.object({
 			name: z.string().trim().min(1),
-			phone: z
-				.string()
-				.trim()
-				.regex(/^[0-9]+$/)
-				.nullable(),
+			phone: thaiMobilePhoneSchema,
 			phone_hash: z.string().min(1),
 			tax_receipt: z.boolean().optional(),
 			tax_id: z.string().optional()
@@ -1328,6 +1416,24 @@ export function keyDonationReceipt(
 	);
 }
 
+/** Why the batch receive page turns away a booking split across drop-off points (CR-206 FR-MP-24a). */
+export const POINT_SPLIT_DONATION_ERROR = 'ใบนี้แยกส่งหลายจุด — รับที่หน้าสแกน';
+
+/**
+ * A booking received point by point at the scan station (CR-206 FR-MP-24a): a line names a
+ * drop-off point, or a point already recorded a receipt. The batch page has no shelter doc to
+ * tell a current point from one unticked since, so any named point counts — closing such a
+ * booking whole would record the other points' lines as missing before they arrive.
+ */
+export function isPointSplitDonation(
+	donation: Pick<Donation, 'items' | 'point_receipts'>
+): boolean {
+	return (
+		(donation.point_receipts ?? []).length > 0 ||
+		(donation.items ?? []).some((item) => (item.drop_off_point_id ?? null) !== null)
+	);
+}
+
 /**
  * Close a donation whose rows are all in the ledger (CR-143 FR-B4b).
  *
@@ -1336,9 +1442,11 @@ export function keyDonationReceipt(
  * straight from the counter by the scan route too (`api/back-office/donations/[query]`),
  * because the count IS the verification. Terminal statuses other than `received` stay
  * refused. An already `received` donation comes back unchanged so a retry that lost
- * the response of a transition that did land is a no-op (FR-B8).
+ * the response of a transition that did land is a no-op (FR-B8). A booking split across
+ * drop-off points is closed from its point receipts instead, never here (CR-206 FR-MP-24a).
  */
 export function completeDonationReceipt(donation: Donation): Donation {
+	if (isPointSplitDonation(donation)) throw new Error(POINT_SPLIT_DONATION_ERROR);
 	if (donation.status === 'received') return donation;
 	if (!isDonationOutstanding(donation.status)) {
 		throw new Error(`Cannot receive a donation in status "${donation.status}"`);

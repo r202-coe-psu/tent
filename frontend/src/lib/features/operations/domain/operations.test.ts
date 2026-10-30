@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
 	createWalkInDonation,
+	walkInDonationInputSchema,
 	receiveDonation,
 	expireDonation,
 	canTransitionDonation,
@@ -34,6 +35,7 @@ import {
 	distributeInputSchema,
 	createAdjustEntry,
 	createDistributionReturnEntry,
+	isCanonicalLedgerRef,
 	distributionReturnInputSchema,
 	projectStockLotBalances,
 	sortStockLotsByConsumptionOrder,
@@ -71,6 +73,23 @@ function declaredItemsDonation(): Donation {
 		ctx
 	);
 }
+
+describe('walkInDonationInputSchema phone', () => {
+	const base = {
+		donor: { name: 'ผู้ใจบุญ', phone: '0800000000', phone_hash: 'h' },
+		kind: 'items' as const,
+		items: [{ item_id: 'item:rice', qty: 10, unit: 'kg' }],
+		tracking_token_hash: 'tok'
+	};
+	const parse = (phone: string | null) =>
+		walkInDonationInputSchema.safeParse({ ...base, donor: { ...base.donor, phone } });
+
+	it('normalizes a formatted phone, keeps null, rejects a malformed one', () => {
+		expect(parse('080-000-0000').data?.donor.phone).toBe('0800000000');
+		expect(parse(null).data?.donor.phone).toBeNull();
+		expect(parse('12345').success).toBe(false);
+	});
+});
 
 describe('donation lifecycle (forward-only)', () => {
 	it('starts declared with a TTL and no received_at', () => {
@@ -365,6 +384,18 @@ describe('stock_ledger reason ↔ ref_id invariant (CR-055)', () => {
 
 	// CR-141 — requisition now accepts either the legacy doc type or the new
 	// unified ticket, so old rows stay valid while new writes move to tickets.
+	it('accepts distribution_return from a requisition ticket but never a direct issue (CR-208)', () => {
+		expect(write('distribution_return', 'requisition_ticket:01J').ref_id).toBe(
+			'requisition_ticket:01J'
+		);
+		expect(() => write('distribution_return', 'requisition_ticket:direct-01J')).toThrow(
+			/requisition_ticket:direct-/
+		);
+		expect(isCanonicalLedgerRef('distribution_return', 'requisition_ticket:direct-01J')).toBe(
+			false
+		);
+	});
+
 	it('accepts requisition with a requisition_ticket: ref_id (CR-141)', () => {
 		expect(write('requisition', 'requisition_ticket:01J').ref_id).toBe('requisition_ticket:01J');
 	});
@@ -1339,6 +1370,21 @@ describe('createDistributionReturnEntry', () => {
 		expect(entry.qty).toBe('2.5');
 		expect(entry.ref_id).toBe('distribution_batch:BATCH1');
 		expect(entry.lot_ref).toBe('stock_ledger:LOT1');
+	});
+
+	it('accepts a requisition ticket return and refuses a direct issue (CR-208)', () => {
+		const input = {
+			item_id: 'item:blanket',
+			qty: '2',
+			unit: 'ผืน',
+			lot_ref: 'stock_ledger:LOT1'
+		};
+		expect(
+			createDistributionReturnEntry({ ...input, ref_id: 'requisition_ticket:T1' }, ctx).ref_id
+		).toBe('requisition_ticket:T1');
+		expect(() =>
+			createDistributionReturnEntry({ ...input, ref_id: 'requisition_ticket:direct-T1' }, ctx)
+		).toThrow();
 	});
 
 	it('rejects wrong ref prefixes and missing lot identity', () => {
@@ -2466,6 +2512,49 @@ describe('completeDonationReceipt (CR-143 FR-B4b / FR-B8)', () => {
 				/Cannot receive/
 			);
 		}
+	});
+
+	// CR-206 FR-MP-24a — such a booking closes from its point receipts, not whole.
+	it('refuses a booking whose lines name a drop-off point', () => {
+		const donation = declaredItemsDonation();
+		const split = {
+			...donation,
+			items: donation.items!.map((item, i) =>
+				i === 0 ? { ...item, drop_off_point_id: 'sp-gym' } : item
+			)
+		};
+		expect(() => completeDonationReceipt(split)).toThrow('ใบนี้แยกส่งหลายจุด — รับที่หน้าสแกน');
+	});
+
+	it('refuses a booking a drop-off point already recorded, even once received', () => {
+		const receipt = {
+			point_id: null,
+			line_nos: [0],
+			received_at: '2026-10-28T02:00:00.000Z',
+			received_by: 'staff',
+			audit_id: 'audit:X',
+			ledger_ids: [],
+			items: []
+		};
+		for (const status of ['verifying', 'received'] as const) {
+			expect(() =>
+				completeDonationReceipt({
+					...declaredItemsDonation(),
+					status,
+					point_receipts: [receipt]
+				})
+			).toThrow(/แยกส่งหลายจุด/);
+		}
+	});
+
+	it('still closes a booking whose lines name no point', () => {
+		const donation = declaredItemsDonation();
+		const unsplit = {
+			...donation,
+			items: donation.items!.map((item) => ({ ...item, drop_off_point_id: null })),
+			point_receipts: []
+		};
+		expect(completeDonationReceipt(unsplit).status).toBe('received');
 	});
 });
 

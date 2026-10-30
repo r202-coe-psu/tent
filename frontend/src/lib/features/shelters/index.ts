@@ -2,7 +2,9 @@
 export {
 	operationStatusSchema,
 	siteKindSchema,
-	SITE_KIND_LABELS,
+	DEFAULT_SITE_KIND,
+	HOST_HOUSE_SITE_KIND,
+	validateSiteKindChange,
 	resolveOperationStatus,
 	isShelterBookable,
 	isShelterCancelled,
@@ -114,6 +116,7 @@ export {
 
 export {
 	SUB_STORAGE_TYPE_LABELS,
+	listDonationPoints,
 	listStoragePoints,
 	sortSubStorageTypes,
 	subStorageTypeLabels

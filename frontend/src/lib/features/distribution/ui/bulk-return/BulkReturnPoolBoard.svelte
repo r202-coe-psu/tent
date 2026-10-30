@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { createSubscriber } from 'svelte/reactivity';
-	import type { Snippet } from 'svelte';
+	import { untrack, type Snippet } from 'svelte';
+	import { toast } from 'svelte-sonner';
 	import AlertCircle from '@lucide/svelte/icons/alert-circle';
 	import AlertTriangle from '@lucide/svelte/icons/alert-triangle';
 	import Inbox from '@lucide/svelte/icons/inbox';
@@ -37,12 +38,16 @@
 	} from '../../application/food-supplies/auth';
 	import type { BulkReturnPoolOverviewRow } from '../../domain/food-supplies';
 	import { mapDistributionQueryError } from '../model/distribution-error';
+	import { BULK_RETURN_POOL_NOT_FOUND_TOAST } from '../model/bulk-return-copy';
+	import { decideDeepLinkedPool } from '../model/pool-deep-link';
 	import {
 		LATE_BADGE_CLASS,
 		LATE_CARD_EXCLUDED_TEXT,
+		LOAN_REFS_UNKNOWN_LABEL,
 		POOL_STATUS_FILTER_VALUES,
 		RECEIVED_POOL_HIDE_AFTER_DAYS,
 		UNRESOLVED_REFS_HINT,
+		anyLoanRefsUnavailable,
 		buildReturnerNames,
 		filterPoolRows,
 		getPoolBoardViewState,
@@ -61,7 +66,12 @@
 		type PoolStatusFilter
 	} from '../model/bulk-return-pool-v3';
 	import { workQueuesFor } from '../model/bulk-return-work-queue';
-	import { readMyPoolPoint, writeMyPoolPoint } from '../model/my-pool-point-storage';
+	import {
+		clearMyPoolPoint,
+		readMyPoolPoint,
+		resolveMyPoolPoint,
+		writeMyPoolPoint
+	} from '../model/my-pool-point-storage';
 	import { useStoragePoints } from '$lib/features/operations';
 	import * as Select from '$lib/components/ui/select/index.js';
 	import BulkReturnPoolWorkQueue from './BulkReturnPoolWorkQueue.svelte';
@@ -123,9 +133,12 @@
 	let addPoolId = $state<string | undefined>(undefined);
 	// Writable derived: follows `initialPoolId` (deep link / URL), local selections override it.
 	let selectedPoolId = $derived<string | null>(initialPoolId ?? null);
+	// Last id chosen through this board (card, queue, just-opened pool); never a deep link.
+	let locallySelectedPoolId = $state<string | null>(null);
 
 	function selectPool(poolId: string | null) {
 		selectedPoolId = poolId;
+		locallySelectedPoolId = poolId;
 		onSelectedPoolChange?.(poolId);
 	}
 
@@ -142,13 +155,23 @@
 
 	const queues = $derived(authContext ? workQueuesFor(authContext) : []);
 
-	// Per-device "my point" for the distribution staff queue; re-read when the shelter changes.
+	// Per-device "my point" for the my-point queue (SA/SM and distribution staff); re-read when the
+	// shelter changes.
 	// The hook has no enable switch, so it always loads (the shelter doc is shared and cached).
 	const storagePoints = useStoragePoints(() => activeShelterCode ?? '');
-	let myPoint = $derived<string | null>(readMyPoolPoint(activeShelterCode));
+	let storedMyPoint = $derived<string | null>(readMyPoolPoint(activeShelterCode));
+	// A remembered point that was deleted resolves to null (placeholder) once the list is loaded.
+	const myPoint = $derived(
+		resolveMyPoolPoint(storedMyPoint, storagePoints.points, storagePoints.isLoaded)
+	);
+
+	// External side effect only (no state writes): forget the deleted point in localStorage.
+	$effect(() => {
+		if (storedMyPoint !== null && myPoint === null) clearMyPoolPoint(activeShelterCode);
+	});
 
 	function handleMyPointChange(value: string) {
-		myPoint = value;
+		storedMyPoint = value;
 		writeMyPoolPoint(activeShelterCode, value);
 	}
 
@@ -164,6 +187,7 @@
 	});
 
 	const rows = $derived(overviewQuery.data ?? []);
+	const loanRefsUnavailable = $derived(anyLoanRefsUnavailable(rows));
 	const hasOpenPool = $derived(listOpenPools(rows).length > 0);
 
 	function handleAddEntry(poolId?: string) {
@@ -238,6 +262,56 @@
 		const list = rows;
 		const id = selectedPoolId;
 		return id ? (list.find((row) => row.pool._id === id) ?? null) : null;
+	});
+
+	// Arrival time of the current deep link, plain (non-reactive) variables on purpose. A `$derived`
+	// would have to call Date.now() (impure, and re-evaluated at arbitrary moments); instead the
+	// effect below records it at the one place the `initialPoolId` change is observed. `undefined`
+	// means no link seen yet, so a link present at mount also counts as an arrival.
+	let lastSeenLink: string | null | undefined = undefined;
+	let linkArrivedAt: number | null = null;
+	let refetchRequested = false;
+
+	// A deep-linked pool counts as not found only when absent from `rows` (the unfiltered overview,
+	// incl. CANCELLED and old RECEIVED), never because a view filter hides it. A just-opened pool is
+	// selected locally before the refetch contains it, so local selections are skipped, and nothing
+	// is decided while the query is loading, erroring or refetching. A cached overview older than
+	// the link (staleTime) may predate a pool created elsewhere, so it is refetched once first.
+	//
+	// An effect because it reacts to async data arrival with side effects (refetch, toast, URL
+	// clear). Every follow of a bad link toasts; one link cannot toast twice because the selection is
+	// cleared (selectedPoolId becomes null), which ends the decision.
+	$effect(() => {
+		const link = initialPoolId ?? null;
+		if (link !== lastSeenLink) {
+			lastSeenLink = link;
+			if (link) {
+				linkArrivedAt = Date.now();
+				refetchRequested = false;
+			}
+		}
+		const decision = decideDeepLinkedPool({
+			poolId: selectedPoolId,
+			rows,
+			dataReady:
+				overviewQuery.isSuccess && !overviewQuery.isFetching && !overviewQuery.isPlaceholderData,
+			locallySelectedId: locallySelectedPoolId,
+			dataUpdatedAt: overviewQuery.dataUpdatedAt,
+			linkArrivedAt,
+			refetchRequested
+		});
+		if (decision === 'none') return;
+		// Untracked: the refetch / host callback must not add dependencies to this effect.
+		untrack(() => {
+			if (decision === 'refetch') {
+				refetchRequested = true;
+				void overviewQuery.refetch();
+				return;
+			}
+			toast.warning(BULK_RETURN_POOL_NOT_FOUND_TOAST);
+			// Clears the selection so the host drops `pool=`; the id is then null, so no loop.
+			selectPool(null);
+		});
 	});
 
 	/** Sum of late-entry qty per item_id (late entries are already non-voided). */
@@ -315,6 +389,35 @@
 				รายการในศูนย์นี้ ระบบข้ามไว้ไม่แสดง กองที่เกี่ยวข้องจะย้าย ยกเลิกรายการ หรือส่งเข้าคลังไม่ได้จนกว่าจะแก้ไข
 				— ติดต่อผู้ดูแลระบบ
 			</p>
+		</div>
+	{/if}
+
+	{#if loanRefsUnavailable && viewState !== 'error'}
+		<div
+			role="status"
+			data-testid="bulk-return-board-loan-read-failed"
+			class="flex flex-wrap items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900"
+		>
+			<div class="flex min-w-0 flex-1 basis-60 items-start gap-2">
+				<AlertTriangle class="mt-0.5 h-4 w-4 shrink-0 text-amber-600" aria-hidden="true" />
+				<p class="min-w-0 [overflow-wrap:anywhere]">
+					โหลดข้อมูลยอดยืมไม่สำเร็จ กองที่มีป้าย "{LOAN_REFS_UNKNOWN_LABEL}"
+					ยังตรวจไม่ได้ว่ายอดยืมถูกปิดหรือไม่ จึงแสดงไว้ในรายการ "ต้องจัดการ"
+				</p>
+			</div>
+			<Button
+				type="button"
+				variant="outline"
+				onclick={() => overviewQuery.refetch()}
+				disabled={overviewQuery.isFetching}
+				class="min-h-11 gap-2 border-amber-200 bg-white text-amber-900 hover:bg-amber-100"
+			>
+				<RefreshCw
+					class={['h-4 w-4', overviewQuery.isFetching && 'animate-spin']}
+					aria-hidden="true"
+				/>
+				ลองใหม่
+			</Button>
 		</div>
 	{/if}
 
@@ -527,6 +630,15 @@
 									>
 										<AlertTriangle class="h-3.5 w-3.5" aria-hidden="true" />
 										ยอดยืมถูกปิด <span class="tabular-nums">{row.closed_loan_refs.length}</span>
+									</span>
+								{/if}
+								{#if row.loan_refs_unavailable}
+									<span
+										class="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold {LATE_BADGE_CLASS}"
+										data-testid="bulk-return-card-loan-unknown-hint"
+									>
+										<AlertTriangle class="h-3.5 w-3.5" aria-hidden="true" />
+										{LOAN_REFS_UNKNOWN_LABEL}
 									</span>
 								{/if}
 								{#if row.snapshot_conflicts.length > 0}

@@ -38,6 +38,7 @@ export * from './domain/shift-assignment.schema';
 export * from './domain/quota';
 export * from './domain/capacity';
 export * from './domain/duty-window';
+export * from './domain/shift-closing';
 export * from './domain/collision';
 export * from './domain/assign-roster';
 export * from './domain/skills';

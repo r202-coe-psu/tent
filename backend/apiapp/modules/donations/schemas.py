@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import AliasChoices, BaseModel, Field
+from pydantic import AliasChoices, BaseModel, Field, field_validator
 
 
 class DonorInput(BaseModel):
@@ -22,6 +22,14 @@ class DonationItemInput(BaseModel):
     unit: str | None = None
     condition: str | None = None
     note: str | None = None
+    #: CR-196 — which held line this is, as ``GET`` returned it. Ignored on create, where
+    #: every line gets a new one. On an edit, a line without one is a new line.
+    line_key: str | None = None
+    #: CR-206 FR-MP-1 — the drop-off point (``public_shelters.donation_points[].id``) the
+    #: donor takes this line to. ``None`` = no point. Only ``self_dropoff`` keeps it
+    #: (FR-MP-4); on create an id the shelter does not offer is refused (FR-MP-2), on an
+    #: edit it is dropped to ``None`` (FR-MP-2a).
+    drop_off_point_id: str | None = None
 
 
 class SlotHold(BaseModel):
@@ -42,6 +50,35 @@ class SlotHold(BaseModel):
     model_config = {"populate_by_name": True}
 
 
+#: CR-209 FR-1 — the same ceiling as the BFF's zod `VEHICLE_PLATE_MAX`.
+VEHICLE_PLATE_MAX = 40
+
+
+def _checked_vehicle_plate(logistics: dict[str, Any] | None) -> dict[str, Any] | None:
+    """CR-209 FR-1d: FR-1 / FR-1a enforced here too, not only in the BFF's zod schema.
+
+    The plate is free text, trimmed; blank after trim leaves no key; at most
+    ``VEHICLE_PLATE_MAX`` characters; only a ``self_dropoff`` may carry one.
+    """
+    if not logistics or "vehicle_plate" not in logistics:
+        return logistics
+    checked = dict(logistics)
+    plate = checked.pop("vehicle_plate")
+    if plate is None:
+        return checked
+    if not isinstance(plate, str):
+        raise ValueError("vehicle_plate must be text")
+    plate = plate.strip()
+    if not plate:
+        return checked
+    if len(plate) > VEHICLE_PLATE_MAX:
+        raise ValueError("ทะเบียนรถยาวเกินไป")
+    if checked.get("delivery_method") != "self_dropoff":
+        raise ValueError("vehicle_plate is only allowed for self_dropoff")
+    checked["vehicle_plate"] = plate
+    return checked
+
+
 class DonationCreateRequest(BaseModel):
     shelter_code: str
     campaign_id: str | None = None
@@ -49,7 +86,16 @@ class DonationCreateRequest(BaseModel):
     items: list[DonationItemInput] = Field(default_factory=list)
     logistics: dict[str, Any] | None = None
     slot_hold: SlotHold | None = None
+    #: CR-175 donor photos — ``image:{ulid}`` ids the BFF already checked against the
+    #: shelter's CouchDB (FR-10). The worker copies them onto the booking and binds each
+    #: photo to it (FR-11a).
+    photos: list[str] = Field(default_factory=list, max_length=30)
     captchaToken: str | None = Field(default=None, validation_alias=AliasChoices("captchaToken"))
+
+    @field_validator("logistics")
+    @classmethod
+    def _vehicle_plate(cls, value: dict[str, Any] | None) -> dict[str, Any] | None:
+        return _checked_vehicle_plate(value)
 
 
 class DonationCreateResponse(BaseModel):
@@ -74,10 +120,11 @@ class DonationItemsPatchRequest(BaseModel):
     #: The whole basket the donor wants, not a delta — dropping a line means leaving it
     #: out. The service works out the difference against what is already reserved.
     items: list[DonationItemInput]
-    #: CR-174 FR-18 — the CouchDB document's ``items`` and ``status`` as the BFF read them
-    #: before the edit. Staff review lines in CouchDB, which this service cannot read, so
-    #: without these an untouched line could not keep a staff decision. Omitted (e.g. the
-    #: booking has not reached CouchDB yet) → the service uses its own copies.
+    #: The CouchDB document's ``items`` and ``status`` as the BFF read them before the edit.
+    #: Staff review lines in CouchDB, which this service cannot read, so these are what
+    #: tells it the booking was reviewed (CR-196 FR-LK-4) and which ``line_key``s it holds.
+    #: Omitted (e.g. the booking has not reached CouchDB yet) → the service uses its own
+    #: copies.
     current_items: list[dict[str, Any]] | None = None
     current_status: str | None = None
 
@@ -96,9 +143,8 @@ class DonationItemsPatchResponse(BaseModel):
     #: The booking status after the edit, read off the re-reviewed lines (CR-174 FR-18b).
     #: The BFF writes it onto the CouchDB document with ``items``.
     status: str
-    #: Index into ``items`` of every line this edit approved automatically (CR-174 FR-26)
-    #: — a line that kept an approval it already had is not listed. The BFF writes the
-    #: ``approved_by: system`` audit for exactly these.
+    #: Index into ``items`` of every line this edit approved automatically (CR-174 FR-26).
+    #: The BFF writes the ``approved_by: system`` audit for exactly these.
     auto_approved_lines: list[int] = Field(default_factory=list)
 
 

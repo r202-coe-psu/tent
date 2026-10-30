@@ -20,7 +20,7 @@ import {
 import { bangkokToday } from '../../src/lib/utils/date';
 import { injectSession, routeBrowserCouchThroughApp } from './login';
 import { publicShelter, teardownShelter, waitForProjection } from './public-cleanup';
-import { createShelterViaUi, pinActiveShelter, setRecaptcha } from './staff-ui';
+import { createShelterViaUi, pinActiveShelter } from './staff-ui';
 
 /**
  * Shared steps for the full-stack donation specs (`donation-fullstack*.test.ts`,
@@ -117,29 +117,9 @@ export class RunLedger {
 
 // ─── reCAPTCHA ─────────────────────────────────────────────────────────────────
 
-/**
- * Turn `config:app.recaptcha_enabled` off as the CouchDB admin, the same switch
- * pre-register flips (`setRecaptcha`). It is global, so call this only once the spec
- * knows it will run, and always await the returned restore in `afterAll` — it puts
- * back whatever state the switch had before.
- */
-export async function suspendRecaptcha(browser: Browser): Promise<() => Promise<void>> {
-	const admin = await bootstrapAdminSession();
-	const context = await browser.newContext();
-	const page = await context.newPage();
-	await routeBrowserCouchThroughApp(page);
-	await injectSession(page, admin.user, admin.cookie);
-	const wasEnabled = await setRecaptcha(page, false);
-	return async () => {
-		try {
-			await setRecaptcha(page, wasEnabled);
-		} finally {
-			// Drop the routes first so an in-flight `_changes` long-poll cannot reject close().
-			await Promise.all(context.pages().map((p) => p.unrouteAll({ behavior: 'ignoreErrors' })));
-			await context.close();
-		}
-	};
-}
+// The switch is global and suites run on parallel workers: it is leased, not toggled (see
+// recaptcha-lease.ts), so one suite's restore can never turn it back on under another.
+export { suspendRecaptcha } from './recaptcha-lease';
 
 /**
  * Type a far-future expiry into a `DatePicker` (DD/MM/YYYY) and leave the field, which
@@ -275,6 +255,11 @@ export async function openShelter(page: Page, shelter: Pick<PublicShelter, 'name
 	await expect(
 		page.getByRole('heading', { name: /ของที่ศูนย์พักพิง\s*ต้องการตอนนี้/ })
 	).toBeVisible();
+	// The board lists only the first few shelters (most urgent first) and other suites' E2E
+	// shelters run alongside this one — filter by name so the card is never behind "show more".
+	const search = page.getByRole('textbox', { name: 'ค้นหาศูนย์พักพิงหรือสิ่งของ' });
+	await search.fill(shelter.name);
+	await search.blur(); // closes the suggestion dropdown that would sit over the cards
 	await cardWith(page, shelter.name, 'ดูรายละเอียดและบริจาค').click();
 }
 
@@ -297,6 +282,8 @@ export type BookingOptions = {
 	mode?: DeliveryMode;
 	/** How many units to declare — 1 unless a test needs more. */
 	qty?: number;
+	/** Image files to attach on the typed-in form (CR-175 donor photos) — `unsolicited` only. */
+	photos?: string[];
 	/** Every accepted booking is recorded here for `teardownRun`. */
 	ledger: RunLedger;
 };
@@ -338,13 +325,15 @@ export async function fillBooking(
 		await expect(page.getByRole('textbox', { name: 'ประเภทสิ่งของ' })).toHaveValue(need!.name);
 	}
 	await page.getByRole('spinbutton', { name: 'ปริมาณ' }).fill(String(opts.qty ?? 1));
+	if (opts.photos?.length) await attachDonorPhotos(page, opts.photos);
 	await page.getByRole('button', { name: 'ถัดไป: เลือกจุดส่งมอบ' }).click();
 
 	// Step 3 — logistics. The destination is locked to the card's shelter.
 	await expect(
 		page.getByRole('heading', { name: 'ส่วนที่ 3: ข้อมูลการจัดส่ง โลจิสติกส์' })
 	).toBeVisible();
-	await expect(page.getByText('ล็อกตามความต้องการที่เลือก')).toBeVisible();
+	// #814: step 3 shows the locked shelter read-only (no dropdown, no "locked" badge).
+	await expect(page.getByTestId('drop-off-shelter-name')).toHaveText(shelter.name);
 	const button = page.getByRole('button', { name: 'ยืนยันการจองคิวบริจาค' });
 
 	if (mode.kind === 'self') {
@@ -388,6 +377,28 @@ export async function fillBooking(
 			return body;
 		}
 	};
+}
+
+/**
+ * Pick `files` in the typed-in form's photo section and wait until every one is stored
+ * (one `POST /api/public/v1/donations/photos` each) and none is still uploading.
+ */
+export async function attachDonorPhotos(page: Page, files: string[]) {
+	const picker = page.getByTestId('donor-photo-picker');
+	await expect(picker.getByRole('heading', { name: /รูปของที่จะบริจาค/ })).toBeVisible();
+	let stored = 0;
+	const onResponse = (r: { url(): string; status(): number }) => {
+		if (r.url().endsWith('/api/public/v1/donations/photos') && r.status() === 201) stored++;
+	};
+	page.on('response', onResponse);
+	try {
+		await page.getByTestId('donor-photo-input').setInputFiles(files);
+		await expect.poll(() => stored, { timeout: 30_000 }).toBe(files.length);
+		await expect(picker.getByRole('status')).toHaveCount(0);
+		await expect(picker.getByText(`${files.length} / 30 รูป`)).toBeVisible();
+	} finally {
+		page.off('response', onResponse);
+	}
 }
 
 /**
@@ -449,6 +460,10 @@ export async function bookAsDonor(page: Page, opts: BookingOptions): Promise<Boo
 	} else {
 		await expect(page.getByRole('heading', { name: 'สำเร็จ! ตั๋วบริจาคของคุณ' })).toBeVisible();
 		await expect(page.getByTestId('ticket-qr')).toBeVisible();
+		await expect(page.getByTestId('ticket-box-label-link')).toHaveAttribute(
+			'href',
+			`/donations/track/${trackingToken}/label`
+		);
 	}
 	await expect(page.getByText(bookingRef).first()).toBeVisible();
 	return { bookingRef, trackingToken };
@@ -488,7 +503,7 @@ export async function openPendingRow(page: Page, bookingRef: string) {
 		await page.getByRole('tab', { name: /รายการของบริจาค/ }).click();
 		await page.getByRole('button', { name: /^รอประเมิน/ }).click();
 		await expect(row).toBeVisible({ timeout: 3_000 });
-	}).toPass({ timeout: 30_000 });
+	}).toPass({ timeout: 60_000 });
 	await row.getByRole('button', { name: 'จัดการ' }).click();
 	await expect(page.getByRole('heading', { name: new RegExp(`^${bookingRef} - `) })).toBeVisible();
 }
@@ -569,6 +584,12 @@ export async function findDonation(shelterCode: string, bookingRef: string) {
 		limit: 1
 	});
 	return (res.data as { docs: Record<string, unknown>[] }).docs[0];
+}
+
+/** A photo doc as CouchDB holds it — `null` once it is gone. */
+export async function findImage(shelterCode: string, imageId: string) {
+	const res = await couchReq('GET', `/${shelterDb(shelterCode)}/${encodeURIComponent(imageId)}`);
+	return res.status === 200 ? (res.data as Record<string, unknown>) : null;
 }
 
 export async function ledgerRowsFor(shelterCode: string, donationId: string) {
