@@ -13,7 +13,9 @@
 		zone?: { label: string; value: string | null };
 		/** Small line at the bottom of the text column, e.g. the site address. */
 		footer?: string;
-		/** Bold lines under the name (e.g. role, position); omit for none. */
+		/** Large bold badge under the name (e.g. เจ้าหน้าที่); omit for none. */
+		badge?: string;
+		/** Lines under the name and badge (e.g. volunteer code); omit for none. */
 		lines?: readonly string[];
 		/** Station boxes (e.g. เช็คอิน · คัดกรอง · ที่พัก), one per row. Omit for none. */
 		checklist?: readonly string[];
@@ -27,6 +29,7 @@
 		alt,
 		name,
 		zone,
+		badge,
 		footer,
 		lines = [],
 		checklist = [],
@@ -44,6 +47,9 @@
 <div class={cn('flex h-full w-full flex-row text-black', className)}>
 	<div class="flex min-w-0 flex-1 flex-col gap-[1mm]">
 		<p class="line-clamp-3 text-[16pt] leading-[1.3] font-bold [overflow-wrap:anywhere]">{name}</p>
+		{#if badge}
+			<p class="text-[14pt] leading-[1.3] font-bold">{badge}</p>
+		{/if}
 		{#each lines as line (line)}
 			<p class="text-[10pt] leading-[1.3] font-medium [overflow-wrap:anywhere]">{line}</p>
 		{/each}
