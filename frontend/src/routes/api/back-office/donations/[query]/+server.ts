@@ -10,13 +10,15 @@ import {
 	toCountedItems
 } from '$lib/server/donation-intake';
 import {
+	allLinesRecorded,
+	closeDonationByPoints,
 	combineLineRejectReasons,
 	donorRejectMessage,
 	hasLineReview,
+	isReceivedByPoint,
 	rejectRemainingLines,
 	type DonationRejectReasonCode,
 	type PublicDonationDoc,
-	type ScanDonationView,
 	receiveDonationInputSchema
 } from '$lib/features/donations/server';
 import {
@@ -26,11 +28,18 @@ import {
 	keyDonationReceipt,
 	type CountedItem,
 	type Donation,
+	type DonationPointReceipt,
+	type DonationPointReceiptItem,
 	type StockLedger,
 	donationShortfall
 } from '$lib/features/operations/server';
 import { createAuditEntry, type AuditEntry } from '$lib/features/shared';
-import { keyedDonationRowIds } from '$lib/server/donation-docs';
+import {
+	keyedDonationRowIds,
+	readCurrentDonationPoints,
+	type CurrentDonationPoint
+} from '$lib/server/donation-docs';
+import { toScanView } from '$lib/server/donation-scan-view';
 import { allocateLotNos } from '$lib/server/lot-number';
 import { persistQty } from '$lib/utils/qty';
 
@@ -119,35 +128,101 @@ function receiptMismatch(lineNo: number, row: StockLedger) {
 	);
 }
 
-// Project a raw donation doc to the redacted view the scan UI needs (no
-// tracking_token_hash, phone_hash, timestamps). Full phone kept for warehouse staff;
-// `_rev` goes out as `rev` and comes back as `expected_rev` (CR-174 FR-25).
-function toScanView(d: PublicDonationDoc): ScanDonationView {
-	return {
-		// CR-174 FR-25 — the counter sends it back so a booking the donor changed while
-		// the boxes were being counted is refused instead of received as it was.
-		rev: d._rev,
-		booking_ref: d.booking_ref,
-		shelter_code: d.shelter_code,
-		status: d.status,
-		donor: {
-			name: d.donor?.name ?? '',
-			phone: d.donor?.phone ?? null,
-			email: d.donor?.email ?? null
+/** Re-reads after a point receipt's PUT lost a 409 (CR-206 FR-MP-23a) — 3, then give up. */
+const RECEIPT_PUT_RETRIES = 3;
+
+/**
+ * Enough to see every `donation` row of one booking: one row per line, plus a line keyed
+ * under another item by an older screen.
+ */
+const LEDGER_SCAN_LIMIT = 1000;
+
+/** The booking as it is now, by `_id`. */
+async function readDonation(dbName: string, donationId: string): Promise<PublicDonationDoc> {
+	const res = await adminRaw(`/${dbName}/${encodeURIComponent(donationId)}`, 'GET');
+	if (res.status >= 400) {
+		throw new Error(`Failed to re-read the donation: ${JSON.stringify(res.data)}`);
+	}
+	return res.data as PublicDonationDoc;
+}
+
+/** What the scan station labels the boxes from (CR-088): one entry per ledger row. */
+async function lotsOf(dbName: string, ledgerIds: readonly string[]) {
+	const rows = await readLedgerRows(dbName, [...ledgerIds]);
+	return ledgerIds.flatMap((id) => {
+		const row = rows.get(id);
+		return row ? [{ item_id: row.item_id, lot_no: row.lot?.lot_no ?? null }] : [];
+	});
+}
+
+/** The `donation` ledger rows of this booking with their item, at most `limit` of them. */
+async function donationLedgerRows(
+	dbName: string,
+	donationId: string,
+	limit: number
+): Promise<{ _id: string; item_id: string }[]> {
+	const res = await adminRaw(`/${dbName}/_find`, 'POST', {
+		// `item_id` is in the selector so CouchDB picks `ledger-type-refid-itemid-reason-idx`.
+		selector: {
+			type: 'stock_ledger',
+			ref_id: donationId,
+			item_id: { $gt: null },
+			reason: 'donation'
 		},
-		items: (d.items ?? []).map((it) => ({
-			item_id: it.item_id,
-			free_text: it.free_text,
-			qty: it.qty,
-			unit: it.unit,
-			...(it.note?.trim() ? { note: it.note.trim() } : {}),
-			review_status: it.review_status,
-			review_reason_code: (it.review_reason_code ?? null) as DonationRejectReasonCode | null,
-			review_reason: it.review_reason ?? null
-		})),
-		logistics: d.logistics,
-		photos: d.photos ?? []
-	};
+		fields: ['_id', 'item_id'],
+		limit
+	});
+	if (res.status >= 400) {
+		throw new Error(`Failed to read the stock ledger: ${JSON.stringify(res.data)}`);
+	}
+	return (res.data as { docs?: { _id: string; item_id: string }[] }).docs ?? [];
+}
+
+/** The point name staff read in a message; `null` = recorded once the shelter had no point left. */
+function pointLabel(pointId: string | null, points: readonly CurrentDonationPoint[]): string {
+	if (pointId === null) return 'ศูนย์ (ไม่ระบุจุด)';
+	return points.find((point) => point.id === pointId)?.name || 'จุดรับบริจาคที่ถูกเลิกใช้แล้ว';
+}
+
+/**
+ * How this point receipt meets what the booking already recorded (CR-206 FR-MP-22e): the
+ * same receipt again (same lines → same audit id, from the same point) is a retry of one
+ * that landed; a line another receipt holds is refused; anything else may go in. Another
+ * point sending the very same lines is refused too (AC-15) — its count is not the one kept.
+ */
+function receiptOverlap(
+	donation: PublicDonationDoc,
+	lineNos: readonly number[],
+	auditId: string,
+	pointId: string | null
+):
+	| { kind: 'retry'; receipt: DonationPointReceipt }
+	| { kind: 'taken'; lineNo: number; receipt: DonationPointReceipt }
+	| null {
+	const receipts = donation.point_receipts ?? [];
+	const same = receipts.find(
+		(receipt) => receipt.audit_id === auditId && receipt.point_id === pointId
+	);
+	if (same) return { kind: 'retry', receipt: same };
+	for (const receipt of receipts) {
+		const lineNo = receipt.line_nos.find((n) => lineNos.includes(n));
+		if (lineNo !== undefined) return { kind: 'taken', lineNo, receipt };
+	}
+	return null;
+}
+
+function lineAlreadyReceived(
+	overlap: { lineNo: number; receipt: DonationPointReceipt },
+	points: readonly CurrentDonationPoint[]
+) {
+	return json(
+		{
+			success: false,
+			error_code: 'LINE_ALREADY_RECEIVED',
+			error: `รายการที่ ${overlap.lineNo + 1} รับไปแล้วที่ ${pointLabel(overlap.receipt.point_id, points)} — ค้นหาใบใหม่แล้วตรวจอีกครั้ง`
+		},
+		{ status: 409 }
+	);
 }
 
 export const GET: RequestHandler = async ({ params, request }) => {
@@ -205,6 +280,38 @@ export const POST: RequestHandler = async ({ params, request }) => {
 		}
 
 		const { donation, dbName } = found;
+		if (parsed.data.line_nos?.some((lineNo) => lineNo >= (donation.items ?? []).length)) {
+			return json(
+				{
+					success: false,
+					error_code: 'INVALID_LINE_NOS',
+					error: 'line_nos must name lines of this donation'
+				},
+				{ status: 422 }
+			);
+		}
+
+		// CR-206 FR-MP-22 — `line_nos` makes this one drop-off point's receipt of those lines;
+		// without it the whole booking is received at once, as before (FR-MP-24).
+		const lineNos = parsed.data.line_nos
+			? [...parsed.data.line_nos].sort((a, b) => a - b)
+			: undefined;
+		// One audit entry per receipt (#695): per booking, or per set of lines (FR-MP-22c).
+		const auditId = await deriveDonationReceiptAuditId(donation._id, lineNos);
+
+		// FR-MP-22e — the same lines again after a receipt that landed but whose answer was lost:
+		// answer with the booking as it is, writing nothing. Checked before `expected_rev`, which
+		// that receipt moved on from the copy the screen still holds.
+		if (lineNos) {
+			const overlap = receiptOverlap(donation, lineNos, auditId, parsed.data.point_id ?? null);
+			if (overlap?.kind === 'retry') {
+				return json({
+					success: true,
+					donation: toScanView(donation),
+					lots: await lotsOf(dbName, overlap.receipt.ledger_ids)
+				});
+			}
+		}
 
 		// FR-25 / FR-25a — before anything is keyed: what staff counted has to be the
 		// booking as it is now, not as it was when the screen loaded.
@@ -268,6 +375,62 @@ export const POST: RequestHandler = async ({ params, request }) => {
 			);
 		}
 
+		// CR-206 — the shelter's drop-off points as staff set them up now, from the registry doc
+		// (FR-MP-2a), read only when the booking or the request has anything to do with points.
+		const pointId = parsed.data.point_id ?? null;
+		const touchesPoints =
+			lineNos !== undefined ||
+			(donation.point_receipts ?? []).length > 0 ||
+			(donation.items ?? []).some((item) => (item.drop_off_point_id ?? null) !== null);
+		const points = touchesPoints ? await readCurrentDonationPoints(donation.shelter_code) : [];
+		const currentPointIds = new Set(points.map((point) => point.id));
+		if (!lineNos) {
+			// FR-MP-22a — a booking with a line on a point the shelter still offers, or one a point
+			// already started, is received point by point: an older screen sending the whole
+			// booking would close it before the other points' goods arrive.
+			if (isReceivedByPoint(donation, currentPointIds)) {
+				return json(
+					{
+						success: false,
+						error_code: 'LINE_NOS_REQUIRED',
+						error:
+							'ใบนี้แยกส่งหลายจุด — เลือกจุดที่ประจำแล้วรับเฉพาะรายการของจุดนั้น (โหลดหน้าสแกนใหม่ถ้าไม่เห็นตัวเลือกจุด)'
+					},
+					{ status: 422 }
+				);
+			}
+		} else if (pointId === null) {
+			// FR-MP-18b — "no point" is only for a shelter that has none left (AC-24).
+			if (points.length > 0) {
+				return json(
+					{
+						success: false,
+						error_code: 'POINT_REQUIRED',
+						error: 'ศูนย์นี้มีจุดรับบริจาค — เลือกจุดที่ประจำก่อนบันทึกรับของ'
+					},
+					{ status: 422 }
+				);
+			}
+		} else if (!currentPointIds.has(pointId)) {
+			// A point unticked or deleted since the screen loaded: the receipt would name a point
+			// the shelter no longer has. Staff pick again from what is there now.
+			return json(
+				{
+					success: false,
+					error_code: 'UNKNOWN_DROP_OFF_POINT',
+					error:
+						'จุดที่ประจำที่เลือกไม่ได้เป็นจุดรับบริจาคของศูนย์แล้ว — โหลดหน้าใหม่แล้วเลือกจุดอีกครั้ง'
+				},
+				{ status: 422 }
+			);
+		}
+		if (lineNos) {
+			const overlap = receiptOverlap(donation, lineNos, auditId, pointId);
+			if (overlap?.kind === 'taken') return lineAlreadyReceived(overlap, points);
+		}
+		/** Lines this request records — all of them for a whole-booking receipt. */
+		const inReceipt = (lineNo: number) => !lineNos || lineNos.includes(lineNo);
+
 		// What staff actually counted; falls back to the declared lines when the
 		// UI sends none (walk-through with nothing changed).
 		const countedLines = parsed.data.items ?? donation.items;
@@ -289,14 +452,83 @@ export const POST: RequestHandler = async ({ params, request }) => {
 			return rejectionOf(line);
 		});
 		// A rejected line keys no ledger row and gets no lot (CR-172 FR-10) — but keeps its
-		// number, so the lines after it still address the same rows.
+		// number, so the lines after it still address the same rows. A point receipt keys only
+		// its own lines (FR-MP-22): the others are not touched at all.
 		const numbered = (countedLines ?? []).flatMap((line, lineNo) =>
-			rejections[lineNo] ? [] : toCountedItems([line]).map((item) => ({ lineNo, item }))
+			!inReceipt(lineNo) || rejections[lineNo]
+				? []
+				: toCountedItems([line]).map((item) => ({ lineNo, item }))
 		);
 		const counted = numbered.map(({ item }) => item);
+
+		// Row ids are fixed by (donation, item, line) (CR-143 FR-B4a), so a retry — e.g.
+		// after the donation PUT below lost a 409 — finds the rows the first attempt wrote
+		// instead of keying the same goods into stock twice (#695). The same ids hold across
+		// points: `line_no` cannot move once a point has received (CR-206 FR-MP-22b).
+		const ids = await Promise.all(
+			numbered.map(({ lineNo, item }) =>
+				deriveDonationReceiptLineId(donation._id, item.item_id, lineNo)
+			)
+		);
+
+		const nowStr = new Date().toISOString();
+		// FR-MP-22f — what this point recorded, line by line: `received_summary.items[]` plus
+		// `line_no`. `items[]` is never rewritten; the summary is written once, at close.
+		const receipt: DonationPointReceipt | null = lineNos
+			? {
+					point_id: pointId,
+					line_nos: lineNos,
+					received_at: nowStr,
+					received_by: caller.name,
+					audit_id: auditId,
+					ledger_ids: ids,
+					items: lineNos.map((lineNo): DonationPointReceiptItem => {
+						const line = (countedLines ?? [])[lineNo];
+						const rejection = rejections[lineNo];
+						return {
+							line_no: lineNo,
+							...('item_id' in line && line.item_id ? { item_id: line.item_id } : {}),
+							...('free_text' in line && line.free_text ? { free_text: line.free_text } : {}),
+							qty: rejection ? '0' : String(line.qty),
+							unit: line.unit,
+							...(rejection ? { rejected: true, ...rejection } : {})
+						};
+					}),
+					...(parsed.data.remarks ? { remarks: parsed.data.remarks } : {})
+				}
+			: null;
+		/**
+		 * The booking with this receipt appended (FR-MP-22f) and, once every line has a result,
+		 * closed in the same write (FR-MP-23, FR-MP-27a) — or null when closing would reject a
+		 * booking that cannot be rejected (nothing received across every point, CR-172 FR-12).
+		 */
+		const withReceipt = (
+			doc: PublicDonationDoc,
+			pointReceipt: DonationPointReceipt
+		): PublicDonationDoc | null => {
+			const next: PublicDonationDoc = {
+				...doc,
+				point_receipts: [...(doc.point_receipts ?? []), pointReceipt],
+				updated_at: nowStr
+			};
+			if (!allLinesRecorded(next)) return next;
+			const closed = closeDonationByPoints(next, {
+				closedBy: caller.name,
+				closedReason: 'all_points',
+				now: nowStr
+			});
+			if (closed.status === 'rejected' && !canTransitionDonation(doc.status, 'rejected')) {
+				return null;
+			}
+			return { ...next, ...closed };
+		};
+
 		// FR-12 — nothing kept means the booking is refused, not received.
-		const allRejected = rejections.length > 0 && rejections.every(Boolean);
-		if (allRejected && !canTransitionDonation(donation.status, 'rejected')) {
+		const allRejected = !receipt && rejections.length > 0 && rejections.every(Boolean);
+		if (
+			(allRejected && !canTransitionDonation(donation.status, 'rejected')) ||
+			(receipt && withReceipt(donation, receipt) === null)
+		) {
 			return json(
 				{
 					success: false,
@@ -322,26 +554,18 @@ export const POST: RequestHandler = async ({ params, request }) => {
 
 		const ctx = { shelterCode: donation.shelter_code, createdBy: caller.name };
 
-		// Row ids are fixed by (donation, item, line) (CR-143 FR-B4a), so a retry — e.g.
-		// after the donation PUT below lost a 409 — finds the rows the first attempt wrote
-		// instead of keying the same goods into stock twice (#695).
-		const ids = await Promise.all(
-			numbered.map(({ lineNo, item }) =>
-				deriveDonationReceiptLineId(donation._id, item.item_id, lineNo)
-			)
-		);
 		// A retry must repeat the receipt it retries (#695). Rows are found by id, so a line
 		// switched to "ไม่รับ", or mapped to another item, after an attempt that already
 		// keyed it would leave that row behind or key the goods twice. The earlier attempt's
-		// audit says which rows and refusals it recorded; anything else is refused.
-		const auditId = await deriveDonationReceiptAuditId(donation._id);
+		// audit says which rows and refusals it recorded; anything else is refused. A point
+		// receipt is compared with the attempt at the same lines only (FR-MP-22d).
 		const earlier = await readEarlierReceipt(dbName, auditId);
 		if (
 			earlier &&
 			(!sameList(earlier.ledgerIds, [...ids].sort()) ||
 				!sameList(
 					earlier.rejectedLines,
-					rejections.flatMap((r, lineNo) => (r ? [lineNo] : []))
+					rejections.flatMap((r, lineNo) => (r && inReceipt(lineNo) ? [lineNo] : []))
 				))
 		) {
 			return json(
@@ -366,11 +590,36 @@ export const POST: RequestHandler = async ({ params, request }) => {
 		// (or this screen before a reload) may have keyed a line as another item under another
 		// id, and the booking stays open, so its `_rev` cannot tell. The ledger can: any row
 		// of this booking outside `ids` means the goods are already in stock.
+		//
+		// A point receipt looks at its own lines only (FR-MP-22d): rows another receipt lists
+		// are that receipt's, and a row derived from a line outside `line_nos` is another point
+		// saving at the same moment, its receipt not on the booking yet (AC-14). A row of one of
+		// our lines under another id — or one no line of the booking derives — still refuses.
+		const lineCount = Math.max(declaredLines.length, (countedLines ?? []).length);
+		const lineOfRow = async (row: { _id: string; item_id: string }) => {
+			for (let lineNo = 0; lineNo < lineCount; lineNo++) {
+				if ((await deriveDonationReceiptLineId(donation._id, row.item_id, lineNo)) === row._id) {
+					return lineNo;
+				}
+			}
+			return null;
+		};
+		const keyedForThisReceipt = async (): Promise<boolean> => {
+			const listed = new Set((donation.point_receipts ?? []).flatMap((r) => r.ledger_ids));
+			for (const row of await donationLedgerRows(dbName, donation._id, LEDGER_SCAN_LIMIT)) {
+				if (ids.includes(row._id) || listed.has(row._id)) continue;
+				const lineNo = await lineOfRow(row);
+				if (lineNo === null || inReceipt(lineNo)) return true;
+			}
+			return false;
+		};
 		if (
 			pending.length > 0 &&
-			(await keyedDonationRowIds(dbName, donation._id, ids.length + 1)).some(
-				(id) => !ids.includes(id)
-			)
+			(receipt
+				? await keyedForThisReceipt()
+				: (await keyedDonationRowIds(dbName, donation._id, ids.length + 1)).some(
+						(id) => !ids.includes(id)
+					))
 		) {
 			return json(
 				{
@@ -406,39 +655,51 @@ export const POST: RequestHandler = async ({ params, request }) => {
 
 		// 2) Audit — who received what, from which booking, declared vs actual.
 		//    No donor PII in `context`: the booking ref is the donor-facing handle.
-		const declaredSnapshot = (donation.items ?? []).map((it) => ({
-			item_id: it.item_id ?? null,
-			free_text: it.free_text ?? null,
-			qty: it.qty,
-			unit: it.unit
-		}));
-		const receivedSnapshot = (countedLines ?? []).map((it) => ({
-			item_id: it.item_id ?? null,
-			free_text: it.free_text ?? null,
-			qty: it.qty,
-			unit: it.unit
-		}));
+		const declaredSnapshot = (donation.items ?? [])
+			.flatMap((it, lineNo) => (inReceipt(lineNo) ? [it] : []))
+			.map((it) => ({
+				item_id: it.item_id ?? null,
+				free_text: it.free_text ?? null,
+				qty: it.qty,
+				unit: it.unit
+			}));
+		const receivedSnapshot = (countedLines ?? [])
+			.flatMap((it, lineNo) => (inReceipt(lineNo) ? [it] : []))
+			.map((it) => ({
+				item_id: it.item_id ?? null,
+				free_text: it.free_text ?? null,
+				qty: it.qty,
+				unit: it.unit
+			}));
 		const audit: AuditEntry = createAuditEntry(
 			{
 				action: 'manual_adjust',
 				target_type: 'donation',
 				target_id: donation._id,
-				reason: `ตรวจรับบริจาคที่ศูนย์ (${donation.booking_ref ?? donation._id})`,
+				reason: receipt
+					? `ตรวจรับบริจาคที่ศูนย์ — ${pointLabel(pointId, points)} (${donation.booking_ref ?? donation._id})`
+					: `ตรวจรับบริจาคที่ศูนย์ (${donation.booking_ref ?? donation._id})`,
 				context: {
 					booking_ref: donation.booking_ref ?? null,
 					received_by: caller.name,
+					// FR-MP-22c — which point recorded which lines.
+					...(receipt ? { point_id: pointId, line_nos: lineNos } : {}),
 					declared_items: declaredSnapshot,
 					received_items: receivedSnapshot,
 					has_discrepancy: JSON.stringify(declaredSnapshot) !== JSON.stringify(receivedSnapshot),
 					ledger_ids: ids,
 					lot_nos: ids.map((id) => ledgerAt(id).lot?.lot_no ?? null),
-					rejected_lines: rejections.flatMap((r, lineNo) => (r ? [{ line_no: lineNo, ...r }] : [])),
+					rejected_lines: rejections.flatMap((r, lineNo) =>
+						r && inReceipt(lineNo) ? [{ line_no: lineNo, ...r }] : []
+					),
 					free_text_lines_skipped:
-						(countedLines ?? []).length - counted.length - rejections.filter(Boolean).length
+						(countedLines ?? []).filter((_, lineNo) => inReceipt(lineNo)).length -
+						counted.length -
+						rejections.filter((r, lineNo) => r && inReceipt(lineNo)).length
 				}
 			},
 			ctx,
-			// One entry per donation: a retry of the same receipt is not a second event.
+			// One entry per receipt: a retry of the same receipt is not a second event.
 			auditId
 		);
 
@@ -476,8 +737,84 @@ export const POST: RequestHandler = async ({ params, request }) => {
 			}
 		}
 
-		const nowStr = new Date().toISOString();
-		// 3) Donation stays the record of what was DECLARED — `items` is never
+		const lots = () =>
+			ids.map((id) => {
+				const row = ledgerAt(id);
+				return { item_id: row.item_id, lot_no: row.lot?.lot_no ?? null };
+			});
+
+		// 3) CR-206 — a point receipt is appended to the booking, never written over it.
+		if (receipt && lineNos) {
+			let current = donation;
+			for (let attempt = 0; ; attempt++) {
+				const next = withReceipt(current, receipt);
+				if (!next) {
+					return json(
+						{
+							success: false,
+							error_code: 'INVALID_TRANSITION',
+							error: `Cannot reject a donation with status "${current.status}"`
+						},
+						{ status: 422 }
+					);
+				}
+				const putRes = await adminRaw(
+					`/${dbName}/${encodeURIComponent(donation._id)}`,
+					'PUT',
+					next
+				);
+				if (putRes.status < 400) {
+					// The screen may record more lines of this booking (FR-MP-21): it needs the new rev.
+					const rev = (putRes.data as { rev?: string } | null)?.rev;
+					return json({
+						success: true,
+						donation: toScanView(rev ? { ...next, _rev: rev } : next),
+						lots: lots()
+					});
+				}
+				if (putRes.status !== 409) {
+					throw new Error(`Failed to update donation to CouchDB: ${JSON.stringify(putRes.data)}`);
+				}
+				// FR-MP-23a — another point (or a close) wrote the booking after the rev check.
+				// The rows above are in and keep their ids, so a later retry keys nothing twice.
+				if (attempt >= RECEIPT_PUT_RETRIES) {
+					return json(
+						{
+							success: false,
+							error_code: 'DONATION_CONFLICT',
+							error:
+								'ใบบริจาคถูกแก้ไขระหว่างบันทึก — ค้นหาใบใหม่แล้วกดรับอีกครั้งได้ ของที่บันทึกไปแล้วจะไม่เข้าคลังซ้ำ'
+						},
+						{ status: 409 }
+					);
+				}
+				const latest = await readDonation(dbName, donation._id);
+				const overlap = receiptOverlap(latest, lineNos, auditId, pointId);
+				if (overlap?.kind === 'retry') {
+					return json({ success: true, donation: toScanView(latest), lots: lots() });
+				}
+				if (TERMINAL_STATUSES.has(latest.status)) {
+					// Closed by staff or the worker while this point was keying: the rows are in
+					// stock but outside the booking's result. Someone has to reconcile them.
+					return json(
+						{
+							success: false,
+							error_code: 'DONATION_CLOSED',
+							error:
+								ids.length > 0
+									? 'ใบนี้ถูกปิดไปแล้วระหว่างบันทึก — ของที่สแกนครั้งนี้ลงคลังแล้ว แต่ไม่อยู่ในผลรับของของใบ แจ้งผู้ดูแลคลังเพื่อตรวจยอด'
+									: 'ใบนี้ถูกปิดไปแล้วระหว่างบันทึก — ผลที่บันทึกครั้งนี้ไม่อยู่ในใบ (ไม่มีของเข้าคลังจากครั้งนี้)',
+							lots: lots()
+						},
+						{ status: 409 }
+					);
+				}
+				if (overlap) return lineAlreadyReceived(overlap, points);
+				current = latest;
+			}
+		}
+
+		// 4) Donation stays the record of what was DECLARED — `items` is never
 		//    overwritten (the projector mirrors it as `items_declared`). What was
 		//    actually received lands on `received_summary` (couchdb-mongodb-sync.md §3.2).
 		// "ไม่รับ" is not "ขาด" (CR-172 FR-13): a rejected line leaves the comparison on both
@@ -555,10 +892,7 @@ export const POST: RequestHandler = async ({ params, request }) => {
 			donation: toScanView(updated),
 			// Staff label the physical boxes from this (CR-088) — `toScanView` is the
 			// donation projection and has no room for per-ledger-row data.
-			lots: ids.map((id) => {
-				const row = ledgerAt(id);
-				return { item_id: row.item_id, lot_no: row.lot?.lot_no ?? null };
-			})
+			lots: lots()
 		});
 	} catch (e) {
 		return routeErrorResponse(e);

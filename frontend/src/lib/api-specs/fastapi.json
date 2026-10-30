@@ -3546,7 +3546,11 @@
 						"title": "Condition"
 					},
 					"note": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Note" },
-					"line_key": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Line Key" }
+					"line_key": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Line Key" },
+					"drop_off_point_id": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Drop Off Point Id"
+					}
 				},
 				"type": "object",
 				"required": ["qty"],

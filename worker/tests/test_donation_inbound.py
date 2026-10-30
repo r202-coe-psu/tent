@@ -160,19 +160,39 @@ _BLANKET = {
 
 
 @pytest.mark.asyncio
-async def test_persisted_donation_is_stamped_schema_v10(db: None):
-    # CR-209: 10 adds logistics.vehicle_plate (9 CR-175 donor photos, 8 CR-196 items[].line_key).
-    # Must match the walk-in writer in the frontend — both channels write the same version.
+async def test_persisted_donation_is_stamped_schema_v11(db: None):
+    # CR-206: 11 adds items[].drop_off_point_id (10 CR-209 logistics.vehicle_plate, 9 CR-175
+    # donor photos, 8 CR-196 items[].line_key). Must match the walk-in writer in the
+    # frontend — both channels write the same version.
     couch = _couch()
 
     row = await _row()
     assert await _persist_donation(couch, row) is True
     doc = couch.put_doc.await_args.args[1]
     assert doc["_id"] == row.id
-    assert doc["schema_v"] == 10
+    assert doc["schema_v"] == 11
     # Nothing is rejected at intake — the fields only appear once staff review it.
     assert "reject_reason" not in doc
     assert "reject_reason_code" not in doc
+
+
+@pytest.mark.asyncio
+async def test_persisted_donation_carries_each_lines_drop_off_point(db: None):
+    """CR-206 FR-MP-1 — the point FastAPI kept per line reaches CouchDB; no receipts yet."""
+    doc = await _persisted_doc(
+        await _row(
+            items_declared=[
+                {**_RICE, "drop_off_point_id": "01JGYM000000000000000000GY"},
+                _BLANKET,
+            ]
+        )
+    )
+
+    assert [line.get("drop_off_point_id") for line in doc["items"]] == [
+        "01JGYM000000000000000000GY",
+        None,
+    ]
+    assert "point_receipts" not in doc
 
 
 @pytest.mark.asyncio
@@ -187,7 +207,7 @@ async def test_persisted_donation_copies_the_vehicle_plate_whole(db: None):
     }
     assert await _persist_donation(couch, await _row(logistics=logistics)) is True
     doc = couch.put_doc.await_args.args[1]
-    assert doc["schema_v"] == 10
+    assert doc["schema_v"] == 11
     assert doc["logistics"]["vehicle_plate"] == "กข 1234 กรุงเทพมหานคร"
 
     couch = _couch()

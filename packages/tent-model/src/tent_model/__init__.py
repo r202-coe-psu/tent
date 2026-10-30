@@ -15,7 +15,7 @@ from tent_model.donation_need_counter_ops import (
 	set_reserved_qty,
 )
 from tent_model.public_announcement import PublicAnnouncement
-from tent_model.public_donation import DeclaredItem, PublicDonation
+from tent_model.public_donation import DeclaredItem, DonationPointReceipt, PublicDonation
 from tent_model.public_job import PublicJob, ShiftTemplate
 from tent_model.public_job_application import (
 	ApplicantSnapshot,
@@ -77,6 +77,7 @@ __all__ = [
 	"DeclaredItem",
 	"DonationBuffer",
 	"DonationNeedCounter",
+	"DonationPointReceipt",
 	"DonationSlotCounter",
 	"DonorBuffer",
 	"DutyWindow",

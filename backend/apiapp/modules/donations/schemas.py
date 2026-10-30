@@ -25,6 +25,11 @@ class DonationItemInput(BaseModel):
     #: CR-196 — which held line this is, as ``GET`` returned it. Ignored on create, where
     #: every line gets a new one. On an edit, a line without one is a new line.
     line_key: str | None = None
+    #: CR-206 FR-MP-1 — the drop-off point (``public_shelters.donation_points[].id``) the
+    #: donor takes this line to. ``None`` = no point. Only ``self_dropoff`` keeps it
+    #: (FR-MP-4); on create an id the shelter does not offer is refused (FR-MP-2), on an
+    #: edit it is dropped to ``None`` (FR-MP-2a).
+    drop_off_point_id: str | None = None
 
 
 class SlotHold(BaseModel):

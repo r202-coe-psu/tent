@@ -266,15 +266,53 @@ export interface DonationItem {
 	 * (FR-2) is told from a person's (FR-8).
 	 */
 	reserved_qty?: string;
+	/**
+	 * The drop-off point (`sub_storage[].id` ticked `accepts_donations`) the donor takes this
+	 * line to (CR-206 · schema_v 11). `null` or absent = no point: the line may be received at
+	 * any point of the shelter. Only `self_dropoff` bookings carry one.
+	 */
+	drop_off_point_id?: string | null;
+}
+
+/** One line's result in a {@link DonationPointReceipt} — `received_summary.items[]` plus `line_no`. */
+export interface DonationPointReceiptItem {
+	line_no: number;
+	item_id?: string;
+	free_text?: string;
+	qty: string;
+	unit: string;
+	rejected?: boolean;
+	reject_reason?: string;
+	reject_reason_code?: string;
 }
 
 /**
- * `schema_v` every donation writer stamps — the walk-in factory here, the donor edit
- * route, and `worker/inbound/donations.py`. 10 = CR-209 `logistics.vehicle_plate`,
- * 9 = CR-175 donor `photos` (8 CR-196 `items[].line_key`, 7 CR-174 `items[].review_status`,
- * 6 CR-172 `reject_reason`, 5 CR-087 `redirect_to_shelter_code`, 4 CR-080 `revisions[]`).
+ * One receipt at a drop-off point (CR-206 FR-MP-5): the lines one point recorded, received or
+ * turned away. Appended, never rewritten; `items[]` stays what was declared.
  */
-export const DONATION_SCHEMA_V = 10;
+export interface DonationPointReceipt {
+	/** The recorder's point. `null` = recorded after the shelter had no drop-off point left (FR-MP-18b). */
+	point_id: string | null;
+	line_nos: number[];
+	received_at: Timestamp;
+	received_by: string;
+	audit_id: string;
+	ledger_ids: string[];
+	items: DonationPointReceiptItem[];
+	remarks?: string;
+}
+
+/** How a booking with point receipts was closed (CR-206 FR-MP-27a). */
+export type DonationCloseReason = 'all_points' | 'staff_close' | 'expired';
+
+/**
+ * `schema_v` every donation writer stamps — the walk-in factory here, the donor edit
+ * route, and `worker/inbound/donations.py`. 11 = CR-206 `items[].drop_off_point_id` +
+ * `point_receipts[]` (10 CR-209 `logistics.vehicle_plate`, 9 CR-175 donor `photos`, 8 CR-196
+ * `items[].line_key`, 7 CR-174 `items[].review_status`, 6 CR-172 `reject_reason`,
+ * 5 CR-087 `redirect_to_shelter_code`, 4 CR-080 `revisions[]`).
+ */
+export const DONATION_SCHEMA_V = 11;
 
 export interface Donor {
 	name: string;
@@ -317,6 +355,9 @@ export interface Donation extends BaseDoc {
 		total_items: number;
 		received_at: Timestamp;
 		remarks?: string;
+		/** Booking closed from point receipts (CR-206): staff name or `system`. Absent on a whole-booking receipt. */
+		closed_by?: string;
+		closed_reason?: DonationCloseReason;
 		shortfalls?: Array<{
 			item_id?: string;
 			item_name?: string;
@@ -353,6 +394,8 @@ export interface Donation extends BaseDoc {
 	 * DB (CR-175 donor photos · schema_v 9). Attached at booking only; an edit keeps them.
 	 */
 	photos?: string[];
+	/** Receipts at drop-off points (CR-206 FR-MP-5 · schema_v 11). Absent or `[]` = no point recorded yet. */
+	point_receipts?: DonationPointReceipt[];
 }
 
 /**
@@ -1373,6 +1416,24 @@ export function keyDonationReceipt(
 	);
 }
 
+/** Why the batch receive page turns away a booking split across drop-off points (CR-206 FR-MP-24a). */
+export const POINT_SPLIT_DONATION_ERROR = 'ใบนี้แยกส่งหลายจุด — รับที่หน้าสแกน';
+
+/**
+ * A booking received point by point at the scan station (CR-206 FR-MP-24a): a line names a
+ * drop-off point, or a point already recorded a receipt. The batch page has no shelter doc to
+ * tell a current point from one unticked since, so any named point counts — closing such a
+ * booking whole would record the other points' lines as missing before they arrive.
+ */
+export function isPointSplitDonation(
+	donation: Pick<Donation, 'items' | 'point_receipts'>
+): boolean {
+	return (
+		(donation.point_receipts ?? []).length > 0 ||
+		(donation.items ?? []).some((item) => (item.drop_off_point_id ?? null) !== null)
+	);
+}
+
 /**
  * Close a donation whose rows are all in the ledger (CR-143 FR-B4b).
  *
@@ -1381,9 +1442,11 @@ export function keyDonationReceipt(
  * straight from the counter by the scan route too (`api/back-office/donations/[query]`),
  * because the count IS the verification. Terminal statuses other than `received` stay
  * refused. An already `received` donation comes back unchanged so a retry that lost
- * the response of a transition that did land is a no-op (FR-B8).
+ * the response of a transition that did land is a no-op (FR-B8). A booking split across
+ * drop-off points is closed from its point receipts instead, never here (CR-206 FR-MP-24a).
  */
 export function completeDonationReceipt(donation: Donation): Donation {
+	if (isPointSplitDonation(donation)) throw new Error(POINT_SPLIT_DONATION_ERROR);
 	if (donation.status === 'received') return donation;
 	if (!isDonationOutstanding(donation.status)) {
 		throw new Error(`Cannot receive a donation in status "${donation.status}"`);

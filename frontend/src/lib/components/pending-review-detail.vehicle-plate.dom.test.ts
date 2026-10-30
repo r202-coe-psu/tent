@@ -4,7 +4,11 @@ import { flushSync, mount, tick, unmount } from 'svelte';
 import type { PendingDonationRow } from '$lib/features/donations';
 import PendingReviewDetail from './pending-review-detail.svelte';
 
-vi.mock('$lib/features/shelters', () => ({ useShelters: () => ({ data: [] }) }));
+vi.mock('$lib/features/shelters', async (importOriginal) => ({
+	...(await importOriginal<typeof import('$lib/features/shelters')>()),
+	useShelters: () => ({ data: [] }),
+	useShelter: () => ({ data: undefined, isSuccess: true })
+}));
 vi.mock('$lib/features/catalog', async (importOriginal) => ({
 	...(await importOriginal<typeof import('$lib/features/catalog')>()),
 	useUnitsOfMeasure: () => ({ data: [] })
