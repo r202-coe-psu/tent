@@ -105,6 +105,7 @@ describe('resolveStaffCard', () => {
 			kind: 'staff',
 			recipient_id: 'user:somchai@x.com',
 			display_name: 'สมชาย ใจดี',
+			role_label: 'เจ้าหน้าที่ลงทะเบียน',
 			position: 'เจ้าหน้าที่ลงทะเบียน'
 		});
 		expect(JSON.stringify(result)).not.toMatch(/0812345678|registration_staff|aaaaaaaa/);
@@ -166,17 +167,39 @@ describe('resolveStaffCard', () => {
 		expect(err).toMatchObject({ code: 'FORBIDDEN', message: 'บัญชีถูกปิดใช้งาน' });
 	});
 
-	it('rejects a card of staff who do not belong to the shelter as FORBIDDEN', async () => {
+	it('answers a card of staff from another shelter exactly like an unknown card', async () => {
 		usersDb['org.couchdb.user:somchai@x.com'] = userDoc('somchai@x.com', {
 			staff_token_hash: HASH_A,
 			roles: ['shelter:SH002', 'SH002:registration_staff']
+		});
+
+		const otherShelter = await rejection(
+			resolveStaffCard(distributionStaff, `TKT-STF-HASH-${HASH_A}`, 'SH001')
+		);
+		const unknown = await rejection(
+			resolveStaffCard(distributionStaff, `TKT-STF-HASH-${HASH_B}`, 'SH001')
+		);
+
+		const response = (e: ServiceError) => ({
+			code: e.code,
+			message: e.message,
+			description: e.description
+		});
+		expect(otherShelter.code).toBe('NOT_FOUND');
+		expect(response(otherShelter)).toEqual(response(unknown));
+	});
+
+	it('rejects a volunteer-type account without a linked profile as CONFLICT', async () => {
+		usersDb['org.couchdb.user:vol@x.com'] = userDoc('vol@x.com', {
+			staff_token_hash: HASH_A,
+			personnel_type: 'volunteer'
 		});
 
 		const err = await rejection(
 			resolveStaffCard(distributionStaff, `TKT-STF-HASH-${HASH_A}`, 'SH001')
 		);
 
-		expect(err).toMatchObject({ code: 'FORBIDDEN', message: 'ไม่ใช่เจ้าหน้าที่ของศูนย์นี้' });
+		expect(err.code).toBe('CONFLICT');
 	});
 
 	it('resolves a system admin card without shelter scope', async () => {
@@ -187,7 +210,11 @@ describe('resolveStaffCard', () => {
 
 		const result = await resolveStaffCard(distributionStaff, `TKT-STF-HASH-${HASH_A}`, 'SH001');
 
-		expect(result).toMatchObject({ kind: 'staff', recipient_id: 'user:root@x.com' });
+		expect(result).toMatchObject({
+			kind: 'staff',
+			recipient_id: 'user:root@x.com',
+			role_label: 'ผู้ดูแลระบบส่วนกลาง'
+		});
 	});
 
 	it('resolves a staff card linked to a volunteer profile to that volunteer', async () => {
@@ -208,7 +235,8 @@ describe('resolveStaffCard', () => {
 		expect(result).toEqual({
 			kind: 'volunteer',
 			recipient_id: 'volunteer:01HZXVOL011',
-			display_name: 'มานี มีน้ำใจ'
+			display_name: 'มานี มีน้ำใจ',
+			role_label: 'เจ้าหน้าที่ลงทะเบียน'
 		});
 	});
 
@@ -556,6 +584,17 @@ describe('staff card administration', () => {
 			expect(puts).toEqual([]);
 		});
 
+		it('rejects a volunteer-type user without a linked profile as CONFLICT without writing', async () => {
+			usersDb['org.couchdb.user:vol@x.com'] = staffUser('vol@x.com', {
+				personnel_type: 'volunteer'
+			});
+
+			const err = await rejection(rotateStaffCard(systemAdmin, 'vol@x.com'));
+
+			expect(err).toMatchObject({ code: 'CONFLICT', message: 'ผู้ใช้นี้ใช้บัตรจิตอาสา' });
+			expect(puts).toEqual([]);
+		});
+
 		it.each([
 			['a shelter the manager does not manage', ['shelter:SH001', 'shelter:SH002']],
 			['only a shelter the manager does not manage', ['shelter:SH002', 'SH002:registration_staff']]
@@ -769,6 +808,17 @@ describe('staff card administration', () => {
 		it('rejects a user with a volunteer profile as CONFLICT', async () => {
 			usersDb['org.couchdb.user:vol@x.com'] = staffUser('vol@x.com', {
 				volunteer_id: 'volunteer:01HZXVOL011',
+				staff_token_hash: HASH_A
+			});
+
+			const err = await rejection(getStaffCardForAdmin(systemAdmin, 'vol@x.com'));
+
+			expect(err).toMatchObject({ code: 'CONFLICT', message: 'ผู้ใช้นี้ใช้บัตรจิตอาสา' });
+		});
+
+		it('rejects a volunteer-type user without a linked profile as CONFLICT', async () => {
+			usersDb['org.couchdb.user:vol@x.com'] = staffUser('vol@x.com', {
+				personnel_type: 'volunteer',
 				staff_token_hash: HASH_A
 			});
 

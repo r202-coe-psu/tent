@@ -19,14 +19,23 @@ import {
 	isValidStaffTokenHash,
 	parseStaffCardPayload,
 	staffCardPayloadFromHash,
+	staffCardRoleLabel,
 	staffRecipientId
 } from '$lib/features/users/server';
 
 const VOLUNTEER_LINK_BROKEN = 'บัญชีเจ้าหน้าที่นี้ไม่ตรงกับโปรไฟล์อาสา กรุณาติดต่อผู้ดูแล';
+// One message for "no such hash" and "not staff of this shelter" so a scan cannot tell them apart.
+const STAFF_CARD_NOT_FOUND = 'ไม่พบบัตรเจ้าหน้าที่นี้';
 
 export type ResolvedCardRecipient =
-	| { kind: 'staff'; recipient_id: string; display_name: string; position: string | null }
-	| { kind: 'volunteer'; recipient_id: string; display_name: string };
+	| {
+			kind: 'staff';
+			recipient_id: string;
+			display_name: string;
+			role_label: string;
+			position: string | null;
+	  }
+	| { kind: 'volunteer'; recipient_id: string; display_name: string; role_label: string };
 
 // Only the fields a scan needs, so other accounts' password hashes never reach this process.
 const STAFF_CARD_LOOKUP_FIELDS = [
@@ -34,6 +43,7 @@ const STAFF_CARD_LOOKUP_FIELDS = [
 	'roles',
 	'active',
 	'volunteer_id',
+	'personnel_type',
 	'display_name',
 	'position',
 	'staff_token_hash'
@@ -61,7 +71,7 @@ export async function resolveStaffCard(
 	const parsed = parseStaffCardPayload(payload);
 	if (!parsed) throw new ServiceError('VALIDATION', 'QR ไม่ใช่บัตรเจ้าหน้าที่');
 	const matches = await findUsersByStaffTokenHash(parsed.hash);
-	if (matches.length === 0) throw new ServiceError('NOT_FOUND', 'ไม่พบบัตรเจ้าหน้าที่นี้');
+	if (matches.length === 0) throw new ServiceError('NOT_FOUND', STAFF_CARD_NOT_FOUND);
 	if (matches.length > 1) {
 		console.warn(`[staff-card] hash shared by ${matches.length} users; rejecting scan`);
 		throw new ServiceError('CONFLICT', 'บัตรนี้ซ้ำกับผู้ใช้อื่น กรุณาติดต่อผู้ดูแล');
@@ -69,8 +79,9 @@ export async function resolveStaffCard(
 	const [target] = matches;
 	if (target.active === false) throw new ServiceError('FORBIDDEN', 'บัญชีถูกปิดใช้งาน');
 	if (!isSystemAdmin(target.roles) && !hasShelterScope(target.roles, shelterCode)) {
-		throw new ServiceError('FORBIDDEN', 'ไม่ใช่เจ้าหน้าที่ของศูนย์นี้');
+		throw new ServiceError('NOT_FOUND', STAFF_CARD_NOT_FOUND);
 	}
+	const role_label = staffCardRoleLabel(target.roles, shelterCode);
 	if (target.volunteer_id) {
 		const res = await adminRaw(
 			`/${shelterDbName(shelterCode)}/${encodeURIComponent(target.volunteer_id)}`,
@@ -88,13 +99,19 @@ export async function resolveStaffCard(
 		return {
 			kind: 'volunteer',
 			recipient_id: target.volunteer_id,
-			display_name: `${volunteer.first_name} ${volunteer.last_name}`.trim()
+			display_name: `${volunteer.first_name} ${volunteer.last_name}`.trim(),
+			role_label
 		};
+	}
+	// A hash minted before FR-SQR-03 skipped unlinked volunteers must not log as staff.
+	if (target.personnel_type === 'volunteer') {
+		throw new ServiceError('CONFLICT', VOLUNTEER_LINK_BROKEN);
 	}
 	return {
 		kind: 'staff',
 		recipient_id: staffRecipientId(target.name),
 		display_name: target.display_name || target.name,
+		role_label,
 		position: target.position ?? null
 	};
 }
@@ -213,7 +230,9 @@ function isPrivilegedTarget(doc: CouchUserDoc): boolean {
 
 async function readStaffTarget(name: string): Promise<CouchUserDoc> {
 	const doc = await readTarget(name);
-	if (doc.volunteer_id) throw new ServiceError('CONFLICT', 'ผู้ใช้นี้ใช้บัตรจิตอาสา');
+	if (doc.volunteer_id || doc.personnel_type === 'volunteer') {
+		throw new ServiceError('CONFLICT', 'ผู้ใช้นี้ใช้บัตรจิตอาสา');
+	}
 	return doc;
 }
 

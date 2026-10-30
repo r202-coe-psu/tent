@@ -5,5 +5,6 @@ export {
 	isValidStaffTokenHash,
 	parseStaffCardPayload,
 	staffCardPayloadFromHash,
+	staffCardRoleLabel,
 	staffRecipientId
 } from './domain/staff-card';

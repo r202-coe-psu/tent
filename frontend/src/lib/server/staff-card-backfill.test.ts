@@ -25,6 +25,15 @@ describe('planStaffCardBackfill', () => {
 		expect(plan.skipped).toEqual({ design: 1, volunteer: 1, has_hash: 1, service: 1 });
 	});
 
+	it('skips a volunteer-type user who has no volunteer_id', () => {
+		const docs: StaffCardBackfillDoc[] = [
+			{ _id: 'org.couchdb.user:vol', name: 'vol', personnel_type: 'volunteer' }
+		];
+		const plan = planStaffCardBackfill(docs, NO_SERVICE);
+		expect(plan.mint).toEqual([]);
+		expect(plan.skipped.volunteer).toBe(1);
+	});
+
 	it('still mints an inactive user', () => {
 		const docs = [{ _id: 'org.couchdb.user:retired', name: 'retired', active: false }];
 		const plan = planStaffCardBackfill(docs, NO_SERVICE);

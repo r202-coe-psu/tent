@@ -76,8 +76,14 @@ export function createUser(input: {
 
 /** What a scanned staff card resolves to: a staff member, or the volunteer linked to the account. */
 export type ResolvedCardRecipient =
-	| { kind: 'staff'; recipient_id: string; display_name: string; position: string | null }
-	| { kind: 'volunteer'; recipient_id: string; display_name: string };
+	| {
+			kind: 'staff';
+			recipient_id: string;
+			display_name: string;
+			role_label: string;
+			position: string | null;
+	  }
+	| { kind: 'volunteer'; recipient_id: string; display_name: string; role_label: string };
 
 export function resolveStaffCard(
 	payload: string,

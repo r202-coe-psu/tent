@@ -415,7 +415,9 @@ export async function createUser(input: {
 		email: email ?? null,
 		notes: notes ?? null,
 		volunteer_id: volunteer_id ?? null,
-		...(volunteer_id ? {} : { staff_token_hash: await mintStaffTokenHash() }),
+		...(volunteer_id || personnel_type === 'volunteer'
+			? {}
+			: { staff_token_hash: await mintStaffTokenHash() }),
 		duty_window: duty_window ?? null,
 		active,
 		must_change_password,

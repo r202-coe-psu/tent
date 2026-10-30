@@ -144,6 +144,19 @@ describe('user-service', () => {
 		expect(saved).not.toHaveProperty('staff_token_hash');
 	});
 
+	it('stores no staff_token_hash for a volunteer-type user without volunteer_id', async () => {
+		await createUser({
+			name: 'vol02',
+			password: 'Password123!',
+			display_name: 'Vol Two',
+			personnel_type: 'volunteer',
+			roles: ['shelter:SH001', 'registration_staff']
+		});
+
+		const saved = fakeUsersDb['org.couchdb.user:vol02'];
+		expect(saved).not.toHaveProperty('staff_token_hash');
+	});
+
 	describe('staff card summary', () => {
 		const sa = { name: 'sa01', roles: ['system_admin'], isSA: true, shelterCode: null };
 		const hash = 'ab'.repeat(32);

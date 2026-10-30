@@ -4,6 +4,7 @@ export type StaffCardBackfillDoc = {
 	_id: string;
 	name?: string;
 	volunteer_id?: string | null;
+	personnel_type?: string;
 	staff_token_hash?: unknown;
 };
 
@@ -23,7 +24,7 @@ export function planStaffCardBackfill(
 	for (const doc of docs) {
 		if (doc._id.startsWith('_design/')) plan.skipped.design++;
 		else if (doc.name !== undefined && opts.serviceNames.includes(doc.name)) plan.skipped.service++;
-		else if (doc.volunteer_id) plan.skipped.volunteer++;
+		else if (doc.volunteer_id || doc.personnel_type === 'volunteer') plan.skipped.volunteer++;
 		else if (isValidStaffTokenHash(doc.staff_token_hash)) plan.skipped.has_hash++;
 		else plan.mint.push(doc._id);
 	}
