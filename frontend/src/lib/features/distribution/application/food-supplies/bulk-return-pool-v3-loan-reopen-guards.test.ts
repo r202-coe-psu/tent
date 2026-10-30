@@ -32,7 +32,6 @@ import {
 } from '../../domain/food-supplies';
 import { addBulkReturnEntries } from './bulk-return-pool-v3-add-entry';
 import { reopenBulkReturnEntryLoans } from './bulk-return-pool-v3-loan-reopen';
-import { BulkReturnPoolLockTimeoutError } from './errors';
 import { applyRefToLoan } from './bulk-return-pool-v3-shared';
 import {
 	createBulkReturnPoolV3Fixture,
@@ -101,9 +100,10 @@ describe('bulk return pool v3 — a replayed add never re-cuts reopened loans (C
 			items: [{ item_id: 'item:cot', qty: '2', operationUlid: nextOp() }]
 		};
 
-		await expect(addBulkReturnEntries(input, dist, racing)).rejects.toBeInstanceOf(
-			BulkReturnPoolLockTimeoutError
-		);
+		// #950 (CR-193 §37.3 A2): the fence timeout no longer throws; the written line is loan_pending.
+		const missed = await addBulkReturnEntries(input, dist, racing);
+		expect(missed.results).toHaveLength(1);
+		expect(missed.results[0]).toMatchObject({ loan_pending: true, loansApplied: [] });
 		await poolRepo.mutateCAS(pool._id, (cur) => submitBulkReturnPoolV3(cur, snapshot, mgr));
 
 		const final = (await poolRepo.get(pool._id))!;

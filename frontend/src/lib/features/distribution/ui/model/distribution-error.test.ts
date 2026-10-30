@@ -82,10 +82,15 @@ describe('formatDistributionError', () => {
 		);
 	});
 
-	it('keeps the generic pool state copy for locked and reason-less state errors', () => {
+	it('asks staff to wait and retry when the pool is locked by a submit or cancel', () => {
+		expect(formatDistributionError(new BulkReturnPoolStateError('locked', 'locked'))).toBe(
+			'กองนี้กำลังถูกส่งเข้าคลังหรือยกเลิกอยู่ กรุณารอสักครู่แล้วลองอีกครั้ง'
+		);
+	});
+
+	it('keeps the generic pool state copy for reason-less state errors', () => {
 		const generic =
 			'กองนี้ไม่ได้อยู่ในสถานะเปิดรับ หรือกำลังถูกดำเนินการอยู่ จึงทำรายการนี้ไม่ได้ กรุณารีเฟรชแล้วตรวจสอบสถานะล่าสุด';
-		expect(formatDistributionError(new BulkReturnPoolStateError('locked', 'locked'))).toBe(generic);
 		expect(formatDistributionError(new BulkReturnPoolStateError('no reason'))).toBe(generic);
 	});
 
@@ -163,7 +168,16 @@ describe('formatDistributionError', () => {
 	it('asks staff to retry the save when the pool lock wait timed out', () => {
 		const err = new BulkReturnPoolLockTimeoutError('Timed out waiting for pool lock');
 		expect(formatDistributionError(err)).toBe(
-			'กองนี้กำลังถูกส่งเข้าคลังอยู่ ระบบยังยืนยันรายการไม่ได้ กรุณารอสักครู่แล้วกดบันทึกอีกครั้ง'
+			'กองนี้กำลังถูกส่งเข้าคลังหรือยกเลิกอยู่ ระบบยังยืนยันรายการไม่ได้ กรุณารอสักครู่แล้วลองอีกครั้ง'
+		);
+	});
+
+	it('names another pool being submitted when the lock timeout carries a blocking pool', () => {
+		const err = new BulkReturnPoolLockTimeoutError('Timed out waiting for pool lock', {
+			blockingPoolId: 'pool:other'
+		});
+		expect(formatDistributionError(err)).toBe(
+			'มีกองอื่นที่เกี่ยวข้องกำลังถูกส่งเข้าคลังอยู่ กรุณารอสักครู่แล้วลองอีกครั้ง'
 		);
 	});
 

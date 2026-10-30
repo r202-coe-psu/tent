@@ -9,6 +9,7 @@ import {
 	findLateEntries,
 	findSnapshotConflicts,
 	findUnresolvedBulkReturnRefs,
+	pinnedItemsSummary,
 	resolveBulkReturnEntries,
 	summarizePoolItems,
 	type ResolvedBulkReturnEntry,
@@ -65,6 +66,13 @@ export interface BulkReturnPoolOverviewRow {
 	 * than verified clean. The pure builder always sets `false`.
 	 */
 	loan_refs_unavailable: boolean;
+	/**
+	 * What the warehouse can receive from this pool: its submitted `items_summary` minus the qty of
+	 * entries that are in its `entry_ids` but pinned to ANOTHER pool (an entry double-counted by a
+	 * later pool is received by the earlier one only). `[]` for OPEN and CANCELLED pools: they have
+	 * no submitted snapshot to receive from.
+	 */
+	receivable_items_summary: BulkReturnPoolItemSummaryRow[];
 }
 
 /**
@@ -131,7 +139,11 @@ export function buildBulkReturnPoolOverview(
 				is_empty: live.length === 0,
 				unresolved_refs: unresolved.filter((ref) => ref.pool_ids.includes(pool._id)),
 				closed_loan_refs: [],
-				loan_refs_unavailable: false
+				loan_refs_unavailable: false,
+				receivable_items_summary:
+					pool.status === 'SUBMITTED' || pool.status === 'RECEIVED'
+						? pinnedItemsSummary(pool, events.entries, pins)
+						: []
 			};
 		});
 }
