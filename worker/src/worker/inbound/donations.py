@@ -12,6 +12,13 @@ import httpx
 from tent_model import DonationBuffer
 
 from worker.couch.client import CouchClient
+from worker.inbound.donation_photos import (
+    PhotoLink,
+    bind_photos,
+    drop_foreign_photos,
+    photos_settled,
+    photos_to_keep,
+)
 from worker.masking import phone_hash, shelter_db_name
 from worker.quota.settle import settle_donation_quota
 from worker.timeutil import iso_utc
@@ -32,7 +39,7 @@ POLL_INTERVAL_SECONDS = 3
 
 #: ``donation`` schema_v this writer stamps. Keep in step with the walk-in writer in the
 #: frontend — both channels write the same shape (schema.md §2.3).
-DONATION_SCHEMA_V = 8
+DONATION_SCHEMA_V = 11
 
 _AUDIT_SCHEMA_V = 1
 _CROCKFORD = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
@@ -149,11 +156,16 @@ def _unsynced_filter(
     return query
 
 
-def _build_couch_doc(donation: DonationBuffer, doc_id: str, now: str) -> dict[str, Any]:
-    return {
+def _build_couch_doc(
+    donation: DonationBuffer, doc_id: str, now: str, links: dict[str, PhotoLink]
+) -> dict[str, Any]:
+    doc: dict[str, Any] = {
         "_id": doc_id,
         "type": "donation",
-        # 8 for items[].line_key (CR-196); 7 was items[].review_status / review_reason_code /
+        # 11 for items[].drop_off_point_id (CR-206 — FastAPI checked it against the
+        # shelter's drop-off points; point_receipts[] is staff's, never written here);
+        # 10 for logistics.vehicle_plate (CR-209) — copied with `logistics`, below.
+        # 9 for photos (CR-175 donor photos); 8 for items[].line_key (CR-196); 7 was items[].review_status / review_reason_code /
         # review_reason (CR-174). FastAPI sets both on every line, and the lines are copied
         # whole below. 6 was reject_reason / reject_reason_code + received_summary.items[].rejected
         # (CR-172); 5 was redirect_to_shelter_code (CR-087); 4 was revisions[] (CR-080).
@@ -183,7 +195,8 @@ def _build_couch_doc(donation: DonationBuffer, doc_id: str, now: str) -> dict[st
             "line_id": donation.donor.line_id,
             "email": donation.donor.email,
         },
-        # Whole, so items[].review_* (CR-174) arrive as FastAPI wrote them.
+        # Whole, so items[].review_* (CR-174) and items[].drop_off_point_id (CR-206)
+        # arrive as FastAPI wrote them.
         "items": donation.items_declared,
         "logistics": donation.logistics,
         # Read off the lines by FastAPI (CR-174 FR-4..FR-6), not a fixed initial value.
@@ -193,6 +206,9 @@ def _build_couch_doc(donation: DonationBuffer, doc_id: str, now: str) -> dict[st
         "revisions": donation.revisions,
         "source": "public",
     }
+    if donation.photos:
+        doc["photos"] = photos_to_keep(donation.photos, links)
+    return doc
 
 
 def _is_conflict(exc: Exception) -> bool:
@@ -225,11 +241,7 @@ async def _persist_donation(couch: CouchClient, donation: DonationBuffer) -> boo
         )
         return False
 
-    doc_id = (
-        donation.id
-        if donation.id.startswith("donation:")
-        else f"donation:{donation.id}"
-    )
+    doc_id = _donation_doc_id(donation)
 
     # The caller's row is a snapshot from the poll's start. A donor may have cancelled or
     # edited since, and building from it would put the stale shape into CouchDB.
@@ -238,9 +250,18 @@ async def _persist_donation(couch: CouchClient, donation: DonationBuffer) -> boo
         return False
     fingerprint = _fingerprint(row)
 
+    # CR-175 FR-11a — bind the photos before the booking exists, so one another booking
+    # already holds is cut from `photos` in the same write. A crash after this point
+    # leaves photos bound to a booking not yet written; the next run finds them bound to
+    # it and writes the booking as if nothing happened. Photos are fixed at booking, so
+    # the re-PUT rounds below reuse these links.
+    links = await bind_photos(couch, database, doc_id, row.photos)
+
     now = iso_utc(datetime.now(UTC))
     try:
-        result = await couch.put_doc(database, _build_couch_doc(row, doc_id, now))
+        result = await couch.put_doc(
+            database, _build_couch_doc(row, doc_id, now, links)
+        )
     except Exception:
         logger.exception("Failed to persist donation %s to CouchDB", donation.id)
         return False
@@ -261,7 +282,12 @@ async def _persist_donation(couch: CouchClient, donation: DonationBuffer) -> boo
     for attempt in range(_MAX_REPUTS + 1):
         flipped = await collection.update_one(
             _unsynced_filter(donation.id, fingerprint),
-            {"$set": {"synced_to_couch": True}},
+            {
+                "$set": {
+                    "synced_to_couch": True,
+                    "photos_linked": photos_settled(links),
+                }
+            },
         )
         if flipped.matched_count:
             break
@@ -287,7 +313,7 @@ async def _persist_donation(couch: CouchClient, donation: DonationBuffer) -> boo
             # Strict: if anyone but us moved the document, do not overwrite it.
             result = await couch.put_doc(
                 database,
-                {**_build_couch_doc(row, doc_id, now), "_rev": our_rev},
+                {**_build_couch_doc(row, doc_id, now, links), "_rev": our_rev},
                 retry_conflict=False,
             )
         except Exception as exc:
@@ -331,16 +357,61 @@ async def _persist_donation(couch: CouchClient, donation: DonationBuffer) -> boo
     return True
 
 
+def _donation_doc_id(donation: DonationBuffer) -> str:
+    return (
+        donation.id
+        if donation.id.startswith("donation:")
+        else f"donation:{donation.id}"
+    )
+
+
+async def _rebind_photos(couch: CouchClient, donation: DonationBuffer) -> bool:
+    """Retry the photos a booking already in CouchDB could not bind (FR-11a).
+
+    Inbound writes a booking once and never returns to it, so without this a photo left
+    unbound by a 409 would be swept as an orphan after 24 hours.
+    """
+    database = shelter_db_name(donation.shelter_code)
+    doc_id = _donation_doc_id(donation)
+    links = await bind_photos(couch, database, doc_id, donation.photos)
+    if not photos_settled(links):
+        return False
+    if not await drop_foreign_photos(couch, database, doc_id, links):
+        return False
+    # Only the flag: a whole-row save() would put this poll's snapshot back over a
+    # donor's cancel or edit made since (the race `_persist_donation` guards against).
+    await DonationBuffer.get_pymongo_collection().update_one(
+        {"_id": donation.id}, {"$set": {"photos_linked": True}}
+    )
+    logger.info("Bound the photos of donation %s in %s", donation.id, database)
+    return True
+
+
+async def run_inbound_once(
+    couch: CouchClient, *, stop_event: asyncio.Event | None = None
+) -> None:
+    """One poll: write new bookings to CouchDB, then retry photos left unbound."""
+    pending = await DonationBuffer.find(
+        DonationBuffer.synced_to_couch == False
+    ).to_list()
+    for donation in pending:
+        if stop_event is not None and stop_event.is_set():
+            return
+        await _persist_donation(couch, donation)
+    unbound = await DonationBuffer.find(
+        DonationBuffer.synced_to_couch == True,
+        DonationBuffer.photos_linked == False,
+    ).to_list()
+    for donation in unbound:
+        if stop_event is not None and stop_event.is_set():
+            return
+        await _rebind_photos(couch, donation)
+
+
 async def run_inbound_loop(couch: CouchClient, *, stop_event: asyncio.Event) -> None:
     while not stop_event.is_set():
         try:
-            pending = await DonationBuffer.find(
-                DonationBuffer.synced_to_couch == False
-            ).to_list()
-            for donation in pending:
-                if stop_event.is_set():
-                    break
-                await _persist_donation(couch, donation)
+            await run_inbound_once(couch, stop_event=stop_event)
         except Exception:
             logger.exception("Inbound donation poll failed")
         await asyncio.sleep(POLL_INTERVAL_SECONDS)

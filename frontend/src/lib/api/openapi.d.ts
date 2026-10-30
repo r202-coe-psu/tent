@@ -1754,6 +1754,8 @@ export interface components {
 				[key: string]: unknown;
 			} | null;
 			slot_hold?: components['schemas']['SlotHold'] | null;
+			/** Photos */
+			photos?: string[];
 			/** Captchatoken */
 			captchaToken?: string | null;
 		};
@@ -1789,6 +1791,8 @@ export interface components {
 			note?: string | null;
 			/** Line Key */
 			line_key?: string | null;
+			/** Drop Off Point Id */
+			drop_off_point_id?: string | null;
 		};
 		/** DonationItemsPatchRequest */
 		DonationItemsPatchRequest: {
@@ -1885,6 +1889,21 @@ export interface components {
 			from?: string | null;
 			/** To */
 			to?: string | null;
+		};
+		/**
+		 * DonationPoint
+		 * @description A storage point ticked as a donation drop-off point, with a pin (CR-205).
+		 */
+		DonationPoint: {
+			/** Id */
+			id: string;
+			/** Name */
+			name: string;
+			/** Types */
+			types?: string[];
+			geo: components['schemas']['GeoPoint'];
+			/** Location Note */
+			location_note?: string | null;
 		};
 		/**
 		 * DonationTrackSearchRequest
@@ -3237,10 +3256,10 @@ export interface components {
 			name: string;
 			/**
 			 * Site Kind
+			 * @description Master code from master_data:site_kind (e.g. evacuation_center, host_house)
 			 * @default evacuation_center
-			 * @enum {string}
 			 */
-			site_kind: 'evacuation_center' | 'host_house';
+			site_kind: string;
 			/** Status */
 			status: string;
 			/** Admin Type */
@@ -3282,6 +3301,8 @@ export interface components {
 			 * @default false
 			 */
 			accepts_pre_registration: boolean;
+			/** Donation Points */
+			donation_points?: components['schemas']['DonationPoint'][];
 		};
 		/** ShelterDetailResponse */
 		ShelterDetailResponse: {
@@ -3332,10 +3353,10 @@ export interface components {
 			name: string;
 			/**
 			 * Site Kind
+			 * @description Master code from master_data:site_kind (e.g. evacuation_center, host_house)
 			 * @default evacuation_center
-			 * @enum {string}
 			 */
-			site_kind: 'evacuation_center' | 'host_house';
+			site_kind: string;
 			/** Status */
 			status: string;
 			/**
@@ -5180,7 +5201,7 @@ export interface operations {
 				district?: string | null;
 				subdistrict?: string | null;
 				status?: string | null;
-				site_kind?: ('evacuation_center' | 'host_house') | null;
+				site_kind?: string | null;
 				/** @description User latitude */
 				lat?: number | null;
 				/** @description User longitude */

@@ -32,3 +32,44 @@ describe('UnifiedRegistrationMembersSection — public join', () => {
 		expect(body).toMatch(/>\s*1 คน\s*</);
 	});
 });
+
+describe('UnifiedRegistrationMembersSection — card position titles', () => {
+	const twoMembers = () => [
+		{ ...blankUnifiedMember(), _id: 'new-1' },
+		{ ...blankUnifiedMember(), _id: 'new-2' }
+	];
+
+	it('public: folds the family position into each title', () => {
+		const { body } = render(UnifiedRegistrationMembersSection, {
+			props: { members: twoMembers(), membersSectionDesc: '', channel: 'public' }
+		});
+
+		expect(body).toContain('สมาชิกคนที่ 1/2 (ผู้ติดต่อหลัก)');
+		expect(body).toContain('สมาชิกคนที่ 2/2');
+		expect(body).not.toMatch(/>\s*2 \/ 2\s*</);
+	});
+
+	it('public join: counts the joined family in the position', () => {
+		const { body } = render(UnifiedRegistrationMembersSection, {
+			props: {
+				members: newMember(),
+				membersSectionDesc: '',
+				channel: 'public',
+				isJoiningExistingHousehold: true,
+				existingMemberCount: 2
+			}
+		});
+
+		expect(body).toContain('สมาชิกคนที่ 3/3');
+	});
+
+	it('onsite: keeps plain numbering without a total', () => {
+		const { body } = render(UnifiedRegistrationMembersSection, {
+			props: { members: twoMembers(), membersSectionDesc: '', channel: 'onsite' }
+		});
+
+		expect(body).toContain('สมาชิกคนที่ 1 (ผู้ติดต่อหลัก)');
+		expect(body).toContain('สมาชิกคนที่ 2');
+		expect(body).not.toContain('สมาชิกคนที่ 2/2');
+	});
+});

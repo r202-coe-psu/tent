@@ -28,6 +28,8 @@
 	import { PUBLIC_FILTER_PANEL_I18N } from '$lib/constants/i18n';
 	import { langState } from '$lib/states/i18n.svelte';
 	import { shelterTypeLabel } from '../domain/master-labels';
+	import { activeSiteKinds, siteKindLabel } from '../domain/site-kind';
+	import { useSiteKinds } from '../application/queries';
 
 	interface Filters {
 		search?: string;
@@ -35,7 +37,7 @@
 		district?: string;
 		subdistrict?: string;
 		type?: string;
-		site_kind?: 'evacuation_center' | 'host_house';
+		site_kind?: string;
 		distance?: string;
 		user_lat?: string | number;
 		user_lng?: string | number;
@@ -88,6 +90,21 @@
 	let selectedDistrict = $state<string>('');
 	let selectedSubdistrict = $state<string>('');
 	let selectedSiteKind = $state<string>('');
+	const siteKindsQuery = useSiteKinds();
+	const activeKinds = $derived(activeSiteKinds(siteKindsQuery.data));
+	// Passed to Select.Root as `items` too: the closed trigger reads its label from there, else it shows the raw code.
+	const siteKindOptions = $derived(
+		[
+			...activeKinds.map((k) => k.code),
+			// A code from the URL that is no longer offered still needs a label in the trigger.
+			...(selectedSiteKind && !activeKinds.some((k) => k.code === selectedSiteKind)
+				? [selectedSiteKind]
+				: [])
+		].map((code) => ({
+			value: code,
+			label: siteKindLabel(code, siteKindsQuery.data, langState.current)
+		}))
+	);
 	let selectedType = $state<string>('');
 	let distanceValue = $state<string>('5');
 	/** Draft for the custom km field (may differ from distanceValue while typing). */
@@ -529,14 +546,20 @@
 					<Label for={`${idPrefix}site_kind`} class="text-xs font-semibold text-muted-foreground"
 						>{t.siteKindLabel}</Label
 					>
-					<Select.Root type="single" name="site_kind" bind:value={selectedSiteKind}>
+					<Select.Root
+						type="single"
+						name="site_kind"
+						bind:value={selectedSiteKind}
+						items={siteKindOptions}
+					>
 						<Select.Trigger id={`${idPrefix}site_kind`} class="w-full rounded-xl">
 							<Select.Value placeholder={t.siteKindPlaceholder} />
 						</Select.Trigger>
 						<Select.Content>
 							<Select.Item value="">{t.siteKindAll}</Select.Item>
-							<Select.Item value="evacuation_center">{t.siteKindEvacCenter}</Select.Item>
-							<Select.Item value="host_house">{t.siteKindHostHouse}</Select.Item>
+							{#each siteKindOptions as option (option.value)}
+								<Select.Item value={option.value}>{option.label}</Select.Item>
+							{/each}
 						</Select.Content>
 					</Select.Root>
 				</div>

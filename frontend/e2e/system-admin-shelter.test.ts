@@ -21,6 +21,9 @@ import {
 } from './helpers/public-cleanup';
 import { createShelterViaUi } from './helpers/staff-ui';
 
+/** Id of this spec's created-data ledger (see helpers/public-cleanup.ts). */
+const LEDGER_SUITE = 'system-admin-shelter';
+
 test.describe.configure({ mode: 'serial' });
 
 const SHELTER_NAME = `E2E ศูนย์ทดสอบ J6 ${RUN_ID}`;
@@ -59,7 +62,7 @@ test.describe(
 				subdistrict: 'คอหงส์',
 				capacity: CREATE_CAPACITY
 			});
-			recordCreatedShelter(shelterCode);
+			recordCreatedShelter(shelterCode, LEDGER_SUITE);
 			await expect(page).toHaveURL(new RegExp(`/system-management/shelters/edit/${shelterCode}$`));
 		});
 

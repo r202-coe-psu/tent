@@ -122,6 +122,8 @@ export const PUBLIC_DONATIONS_I18N = {
 		trackingNoPlaceholder: 'ระบุภายหลังได้',
 		vehicleTypeLabel: 'ประเภทยานพาหนะที่จะนำมาส่ง',
 		vehicleTypeDesc: 'ข้อมูลนี้สำคัญมาก เพื่อให้จุดรับของกะพื้นที่จอดและเตรียมคนยกของ',
+		vehiclePlateLabel: 'ทะเบียนรถ (ถ้ามี)',
+		vehiclePlatePlaceholder: 'เช่น กข 1234 กรุงเทพมหานคร',
 		motorcycle: 'รถจักรยานยนต์',
 		car: 'รถเก๋ง / รถยนต์',
 		pickup: 'รถกระบะ',
@@ -147,6 +149,23 @@ export const PUBLIC_DONATIONS_I18N = {
 		dropOffMapLabel: 'แผนที่ศูนย์ที่จะนำของไปส่ง',
 		dropOffNoShelter: 'ยังไม่ได้เลือกศูนย์ที่จะส่งของ',
 		dropOffBackToNeeds: 'กลับไปเลือกศูนย์',
+		// CR-206 — drop-off point per line
+		dropOffPointsTitle: 'จุดส่งของแต่ละรายการ',
+		dropOffPointsDesc: 'ศูนย์นี้มีจุดรับบริจาคหลายจุด เลือกว่าของแต่ละรายการจะนำไปส่งที่จุดไหน',
+		dropOffPointsAllSame: 'ส่งทุกรายการที่จุดเดียวกัน',
+		dropOffPointsMixed: 'แยกหลายจุด',
+		dropOffPointsSelectPlaceholder: 'เลือกจุดส่งของ',
+		dropOffPointsLoading: 'กำลังโหลดจุดรับบริจาคของศูนย์...',
+		dropOffPointLineAria: 'จุดส่งของของ {name}',
+		dropOffSinglePointLabel: 'จุดส่งของ',
+		dropOffPointAppliedTo: 'ใช้กับ: {name}',
+		dropOffPointAllLines: 'ทุกรายการ',
+		anyPointGroupTitle: 'ส่งที่จุดรับบริจาคไหนของศูนย์ก็ได้',
+		pointGroupPending: 'รอรับ',
+		pointGroupReceived: 'รับแล้ว',
+		pointGroupReceivedAtShelter: 'รับแล้วที่ศูนย์',
+		pointGroupItemsLabel: 'ของที่ส่งจุดนี้',
+		pointStartedToast: 'ศูนย์เริ่มรับของของใบนี้แล้ว — แก้ไขหรือยกเลิกไม่ได้ กรุณาติดต่อศูนย์',
 		selectDateTimeLabel: 'เลือกวันที่และช่วงเวลา',
 		pickupTimeSuffix: 'ที่ต้องการให้ไปรับ',
 		dropoffTimeSuffix: 'ที่จะนำของมาส่ง',
@@ -318,6 +337,7 @@ export const PUBLIC_DONATIONS_I18N = {
 		destinationShelterLabel: 'ศูนย์ปลายทาง',
 		logisticsMethodLabel: 'วิธีการจัดส่ง',
 		vehicleLabel: 'ยานพาหนะ',
+		vehiclePlateTicketLabel: 'ทะเบียนรถ',
 		courierTrackingLabel: 'เลขพัสดุขนส่ง',
 		itemsListTitle: 'รายการสิ่งของที่บริจาค',
 		totalItemsCount: '{count} รายการ',
@@ -397,7 +417,48 @@ export const PUBLIC_DONATIONS_I18N = {
 		// CR-196 FR-LK-4 — the CR's wording, verbatim.
 		editBlockedToast:
 			'ใบบริจาคได้รับการอนุมัติ/ออก QR แล้ว ไม่สามารถแก้ไขรายการได้ หากต้องการเปลี่ยนแปลง กรุณายกเลิกเพื่อทำรายการใหม่ หรือแจ้งเจ้าหน้าที่หน้างานตอนนำของมาส่ง',
-		editItemsHint: 'ปรับจำนวนหรือเพิ่ม-ลบรายการได้จนกว่าศูนย์จะประเมินรายการ'
+		editItemsHint: 'ปรับจำนวนหรือเพิ่ม-ลบรายการได้จนกว่าศูนย์จะประเมินรายการ',
+		// CR-175 donor photos
+		photoSectionTitle: 'รูปของที่จะบริจาค (ไม่บังคับ)',
+		photoSectionDesc:
+			'แนบรูปให้เจ้าหน้าที่เห็นสภาพของก่อนตอบรับ ได้สูงสุด 30 รูป รวมไม่เกิน 10 MB แนบได้ตอนจองเท่านั้น',
+		photoPrivacyWarning:
+			'รูปอาจติดข้อมูลส่วนตัว เช่น หน้าคน ทะเบียนรถ หรือบ้านเลขที่ กรุณาถ่ายเฉพาะตัวของ',
+		photoAddBtn: 'เลือกรูป',
+		photoUsage: 'ใช้ไปแล้ว {used} / 10 MB',
+		photoCount: '{count} / 30 รูป',
+		photoFull: 'แนบรูปครบแล้ว',
+		photoRefusedTooLarge: 'ไฟล์ {name} ใหญ่เกิน 20 MB',
+		photoRefusedNoRoom: 'แนบ {name} ไม่ได้ เพราะครบ 30 รูปหรือเกิน 10 MB แล้ว',
+		photoRefusedUnreadable: 'เปิดไฟล์ {name} ไม่ได้ กรุณาเลือกไฟล์รูป',
+		photoRefusedUpload: 'อัปโหลด {name} ไม่สำเร็จ กรุณาลองใหม่',
+		photoRemoveAria: 'ลบรูปที่ {n}',
+		photoUploading: 'กำลังอัปโหลด',
+		photoWaitUpload: 'รอให้รูปอัปโหลดเสร็จก่อนจองคิว',
+
+		// Box label (#591)
+		boxLabelOpenBtn: 'พิมพ์ใบปะหน้ากล่อง',
+		boxLabelOpenHint: 'ติดใบปะหน้าไว้ข้างกล่อง ให้เห็นว่าในกล่องมีอะไรและต้องส่งที่ไหน',
+		boxLabelPageTitle: 'ใบปะหน้ากล่องบริจาค — Smart Shelter',
+		boxLabelHeading: 'ใบปะหน้ากล่องบริจาค',
+		boxLabelBackToTrack: 'กลับหน้าติดตามสถานะ',
+		boxLabelPrintBtn: 'พิมพ์ใบปะหน้า',
+		boxLabelPrintTip:
+			'พิมพ์ขนาด A6 (105 × 148 มม.) · ไม่มีเครื่องพิมพ์ให้เลือก "บันทึกเป็น PDF" · ส่งหลายกล่องให้พิมพ์หลายสำเนา',
+		boxLabelNotReadyTitle: 'ใบนี้ยังพิมพ์ใบปะหน้าไม่ได้',
+		boxLabelNotReadyBody:
+			'พิมพ์ได้หลังเจ้าหน้าที่อนุมัติรับของและระบบออก QR รับของแล้ว ดูสถานะล่าสุดได้ที่หน้าติดตาม',
+		boxLabelNoLines: 'ไม่มีรายการของที่ต้องส่ง',
+		boxLabelDeliverTo: 'ส่งที่',
+		boxLabelRefTitle: 'เลขที่บริจาค',
+		boxLabelItemsTitle: 'ของในกล่อง',
+		boxLabelMoreItems: 'และอีก {count} รายการ',
+		boxLabelSheetOf: 'ใบที่ {index}/{total}',
+		boxLabelScanHint: 'สแกน QR ตอนตรวจรับ',
+		boxLabelCoordinates: 'พิกัด',
+		boxLabelMethodTitle: 'วิธีส่ง',
+		boxLabelScheduleTitle: 'นัดส่ง',
+		boxLabelQrAlt: 'QR เลขที่บริจาค {ref}'
 	},
 	en: {
 		// Header & Stepper
@@ -524,6 +585,8 @@ export const PUBLIC_DONATIONS_I18N = {
 		trackingNoPlaceholder: 'Can be provided later',
 		vehicleTypeLabel: 'Vehicle Type for Delivery',
 		vehicleTypeDesc: 'Helps shelter staff prepare parking and unloading assistance.',
+		vehiclePlateLabel: 'License plate (optional)',
+		vehiclePlatePlaceholder: 'e.g. กข 1234 Bangkok',
 		motorcycle: 'Motorcycle',
 		car: 'Car / Sedan',
 		pickup: 'Pickup Truck',
@@ -548,6 +611,24 @@ export const PUBLIC_DONATIONS_I18N = {
 		dropOffMapLabel: 'Map of the shelter you are delivering to',
 		dropOffNoShelter: 'No shelter selected for this donation yet',
 		dropOffBackToNeeds: 'Back to choose a shelter',
+		// CR-206 — drop-off point per line
+		dropOffPointsTitle: 'Drop-off point for each item',
+		dropOffPointsDesc: 'This shelter has several drop-off points. Choose where to bring each item.',
+		dropOffPointsAllSame: 'Bring every item to the same point',
+		dropOffPointsMixed: 'Several points',
+		dropOffPointsSelectPlaceholder: 'Choose a drop-off point',
+		dropOffPointsLoading: "Loading the shelter's drop-off points...",
+		dropOffPointLineAria: 'Drop-off point for {name}',
+		dropOffSinglePointLabel: 'Drop-off point',
+		dropOffPointAppliedTo: 'For: {name}',
+		dropOffPointAllLines: 'every item',
+		anyPointGroupTitle: 'Any drop-off point of the shelter',
+		pointGroupPending: 'Awaiting',
+		pointGroupReceived: 'Received',
+		pointGroupReceivedAtShelter: 'Received at the shelter',
+		pointGroupItemsLabel: 'Items for this point',
+		pointStartedToast:
+			'The shelter has started receiving this donation — it can no longer be edited or cancelled. Please contact the shelter.',
 		selectDateTimeLabel: 'Select Date & Time Slot',
 		pickupTimeSuffix: 'for pickup',
 		dropoffTimeSuffix: 'for drop-off',
@@ -721,6 +802,7 @@ export const PUBLIC_DONATIONS_I18N = {
 		destinationShelterLabel: 'Destination Shelter',
 		logisticsMethodLabel: 'Delivery Method',
 		vehicleLabel: 'Vehicle',
+		vehiclePlateTicketLabel: 'License plate',
 		courierTrackingLabel: 'Tracking Number',
 		itemsListTitle: 'Donation Items',
 		totalItemsCount: '{count} items',
@@ -800,6 +882,47 @@ export const PUBLIC_DONATIONS_I18N = {
 		editFailToast: 'Failed to update items',
 		editBlockedToast:
 			'This donation has been approved or has its QR, so its items can no longer be changed. To change it, cancel and book again, or tell the staff when you bring the items.',
-		editItemsHint: 'Adjust quantities or add/remove items until the shelter reviews them'
+		editItemsHint: 'Adjust quantities or add/remove items until the shelter reviews them',
+		photoSectionTitle: 'Photos of your donation (optional)',
+		photoSectionDesc:
+			'Photos let staff see the condition of the items before they accept them. Up to 30 photos, 10 MB in total, at booking only.',
+		photoPrivacyWarning:
+			'Photos may show personal details such as faces, licence plates or house numbers. Please photograph the items only.',
+		photoAddBtn: 'Choose photos',
+		photoUsage: 'Used {used} / 10 MB',
+		photoCount: '{count} / 30 photos',
+		photoFull: 'Photo limit reached',
+		photoRefusedTooLarge: '{name} is larger than 20 MB',
+		photoRefusedNoRoom: 'Could not add {name}: 30 photos or 10 MB already used',
+		photoRefusedUnreadable: 'Could not open {name}. Please choose an image file',
+		photoRefusedUpload: 'Uploading {name} failed. Please try again',
+		photoRemoveAria: 'Remove photo {n}',
+		photoUploading: 'Uploading',
+		photoWaitUpload: 'Wait for the photos to finish uploading before booking',
+
+		// Box label (#591)
+		boxLabelOpenBtn: 'Print box label',
+		boxLabelOpenHint:
+			'Stick the label on the box so staff can see what is inside and where it goes.',
+		boxLabelPageTitle: 'Donation Box Label — Smart Shelter',
+		boxLabelHeading: 'Donation box label',
+		boxLabelBackToTrack: 'Back to tracking',
+		boxLabelPrintBtn: 'Print label',
+		boxLabelPrintTip:
+			'Prints at A6 (105 × 148 mm) · No printer? Choose "Save as PDF" · Sending several boxes? Print one copy per box.',
+		boxLabelNotReadyTitle: 'This booking cannot print a label yet',
+		boxLabelNotReadyBody:
+			'You can print it once staff approve the goods and the check-in QR is issued. Check the latest status on the tracking page.',
+		boxLabelNoLines: 'No items to send',
+		boxLabelDeliverTo: 'Deliver to',
+		boxLabelRefTitle: 'Donation ref',
+		boxLabelItemsTitle: 'Inside the box',
+		boxLabelMoreItems: 'and {count} more',
+		boxLabelSheetOf: 'Label {index}/{total}',
+		boxLabelScanHint: 'Scan the QR at check-in',
+		boxLabelCoordinates: 'Coordinates',
+		boxLabelMethodTitle: 'Delivery',
+		boxLabelScheduleTitle: 'Appointment',
+		boxLabelQrAlt: 'QR for donation ref {ref}'
 	}
 } as const;

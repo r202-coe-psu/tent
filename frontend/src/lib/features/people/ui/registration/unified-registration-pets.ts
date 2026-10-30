@@ -113,10 +113,11 @@ export function getPetTitle(
 		catTitle: string;
 		otherPetTitle: string;
 		petIndexSuffix: string;
-	}
+	},
+	sequenceNumber?: number
 ): string {
 	const sameSpecies = petItems.filter((p) => p.species === item.species);
-	const indexInSpecies = sameSpecies.findIndex((p) => p.id === item.id) + 1;
+	const indexInSpecies = sequenceNumber ?? sameSpecies.findIndex((p) => p.id === item.id) + 1;
 	if (item.species === 'dog') {
 		return `${labels.dogTitle} — ${labels.petIndexSuffix} ${indexInSpecies}`;
 	}

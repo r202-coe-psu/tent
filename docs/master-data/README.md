@@ -2,7 +2,7 @@
 title: Smart Shelter — Master Data Seed SSoT
 status: draft
 created: 2026-09-17
-updated: 2026-10-26
+updated: 2026-10-27
 language: th
 ---
 
@@ -18,7 +18,7 @@ language: th
 
 | พื้นที่    | ข้อมูลที่ seed สร้าง                                                                                  |
 | ---------- | ----------------------------------------------------------------------------------------------------- |
-| `registry` | global `master_data` 6 เอกสาร รวมรายการ seed 53 รายการ (CR-137 + shelter_type expand + CR-186 + CR-187)                 |
+| `registry` | global `master_data` 7 เอกสาร รวมรายการ seed 55 รายการ (CR-137 + shelter_type expand + CR-186 + CR-187 + CR-198)                 |
 | `registry` | `config:app` 1 singleton พร้อมค่า default                                                             |
 | `registry` | `config:public_portal` 1 singleton พร้อมค่า default FAQ 13 รายการ (ช่องทางติดต่อเว้นว่างไว้ ไม่ seed) |
 | `catalog`  | `unit_of_measure` 30, `item_category` 10, `item_master` 34, `recipe` 6                               |
@@ -61,8 +61,8 @@ language: th
 | Item status                      | `active` สำหรับรายการที่ seed ใหม่ |
 | Author                           | `seed`                             |
 | Global scope                     | ไม่มี `shelter_code`               |
-| จำนวน master types               | 6 (CR-137, CR-186, CR-187)         |
-| จำนวนรายการใน canonical seed set | 53                                 |
+| จำนวน master types               | 7 (CR-137, CR-186, CR-187, CR-198) |
+| จำนวนรายการใน canonical seed set | 55                                 |
 
 Global seed ใช้ `enforceOneDefault()` เพื่อให้แต่ละ master type มีรายการที่เป็น default ได้ไม่เกินหนึ่งรายการ หากเอกสารเดิมมีรายการที่ไม่มีอยู่ใน canonical seed set ระบบจะเก็บรายการเดิมไว้ เว้นแต่เข้าเงื่อนไข migration ใน §1.4 ดังนั้น ตารางด้านล่างจึงเป็น **รายการที่ seed กำหนด** ไม่ใช่รายการทั้งหมดที่อาจมีอยู่ใน database แล้ว
 
@@ -78,6 +78,7 @@ Global seed ใช้ `enforceOneDefault()` เพื่อให้แต่ล
 | `volunteer_skills` | `d.key` (stable) — เลิก `item_<ulid>` |
 | `chronic_disease` | `d.key` (stable) — CR-186 |
 | `allergy` | `d.key` (stable) — CR-187 |
+| `site_kind` | `d.key` (stable) — CR-198 (code เดิมจาก CR-067) |
 
 รายการเก็บชื่อแบบ bilingual: `label_th` + `label_en` (ทั้งคู่บังคับ). UI สร้างรายการใหม่ต้องกรอก `code` เอง (ไม่มี auto-ULID). รายการเก่า `item_*` แก้รหัสได้ตอนแก้ไข.
 
@@ -177,6 +178,17 @@ Seed ลง global `master_data:allergy` จำนวน 5 รายการ. *
 | `egg` | ไข่ | Egg | — |
 | `wheat` | แป้งสาลี | Wheat | — |
 | `nuts` | ถั่ว | Nuts | — |
+
+#### `site_kind` — ประเภทศูนย์ (CR-198)
+
+Seed ลง global `master_data:site_kind` จำนวน 2 รายการ. **Global-only** — ไม่มี shelter-local doc
+(`master_data:site_kind:{shelter_code}`); SA เพิ่ม แก้ หรือปิดใช้ประเภทศูนย์ได้ที่ `/system-management/master-data`.
+ค่าที่ `shelter.site_kind` อ้าง ([schema.md §3.1](../data/schema.md)). code ทั้ง 2 ตัวคงเดิมจาก enum CR-067 เพื่อให้ศูนย์ที่บันทึกไว้แล้วยัง valid โดยไม่ migrate.
+
+| code | label_th | label_en | default |
+| --- | --- | --- | --- |
+| `evacuation_center` | ศูนย์อพยพ | Evacuation Center | **ใช่** |
+| `host_house` | บ้านพี่เลี้ยง | Host House | — |
 
 ### 1.4 การย้ายข้อมูลเดิมและการ seed ซ้ำ
 
