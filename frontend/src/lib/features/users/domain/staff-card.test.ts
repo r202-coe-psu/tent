@@ -5,6 +5,7 @@ import {
 	isStaffCardScanCode,
 	parseStaffCardPayload,
 	staffCardFileName,
+	staffCardText,
 	staffCardPayloadFromHash,
 	staffCardRoleLabel,
 	staffRecipientId,
@@ -152,6 +153,20 @@ describe('staffCardRoleLabel', () => {
 
 	it('ignores a compound capability for a shelter the user has no scope in', () => {
 		expect(staffCardRoleLabel(['SH001:kitchen_staff'], 'SH001')).toBe('เจ้าหน้าที่');
+	});
+});
+
+describe('staffCardText', () => {
+	it('badges every staff card as generic staff with no role lines, however many roles they hold', () => {
+		expect(staffCardText({})).toEqual({ badge: 'เจ้าหน้าที่', lines: [] });
+		expect(staffCardText({ volunteerCode: null })).toEqual({ badge: 'เจ้าหน้าที่', lines: [] });
+	});
+
+	it('badges a volunteer card as volunteer with its code', () => {
+		expect(staffCardText({ volunteerCode: 'V-0012' })).toEqual({
+			badge: 'จิตอาสา',
+			lines: ['รหัสจิตอาสา V-0012']
+		});
 	});
 });
 

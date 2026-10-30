@@ -68,6 +68,23 @@ export function staffCardRoleLabel(roles: readonly string[], shelterCode: string
 	return ordered.length > 0 ? ordered.map(roleDisplayLabel).join(' · ') : GENERIC_STAFF_LABEL;
 }
 
+const STAFF_CARD_BADGE = 'เจ้าหน้าที่';
+const VOLUNTEER_CARD_BADGE = 'จิตอาสา';
+
+/**
+ * Text under the name on the printed card: one prominent badge, and staff never list their roles —
+ * a user with many roles would crowd the 80×60 label. The desk still shows roles after a scan
+ * (`role_label`).
+ */
+export function staffCardText(card: { volunteerCode?: string | null }): {
+	badge: string;
+	lines: string[];
+} {
+	return card.volunteerCode
+		? { badge: VOLUNTEER_CARD_BADGE, lines: [`รหัสจิตอาสา ${card.volunteerCode}`] }
+		: { badge: STAFF_CARD_BADGE, lines: [] };
+}
+
 /** Download filename for a card PNG; keeps Thai combining marks (\p{M}) so names stay readable. */
 export function staffCardFileName(displayName: string): string {
 	const slug = displayName
