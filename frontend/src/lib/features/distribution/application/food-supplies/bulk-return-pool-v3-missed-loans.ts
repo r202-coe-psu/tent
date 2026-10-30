@@ -4,12 +4,19 @@ import type {
 	DistributionLog,
 	MissedBulkReturnLoanRef
 } from '../../domain/food-supplies';
-import { deriveLoanReopenId, findMissedLoanRefs } from '../../domain/food-supplies';
+import {
+	deriveEntryVoidId,
+	deriveLoanReopenId,
+	findMissedLoanRefs,
+	resolveBulkReturnEntries
+} from '../../domain/food-supplies';
 import { assertCanWriteBulkReturnEntry } from './auth';
 import { assertCentralWriteAuthority } from './central-write-authority';
-import { BulkReturnPoolStateError, WorkflowValidationError } from './errors';
+import { assertNoSkippedDocs, BulkReturnPoolStateError, WorkflowValidationError } from './errors';
 import {
 	applyRefToLoanDetailed,
+	loadLivePoolEntriesWithLoans,
+	loadSnapshotPinsForWrite,
 	requirePool,
 	resolveDependencies,
 	revertAppliedRefsIfReopened,
@@ -22,10 +29,14 @@ import {
 // ---------------------------------------------------------------------------------------------
 
 /**
- * Refs of the entries in a closed (SUBMITTED / RECEIVED) pool's snapshot (`entry_ids`) that were
- * planned but never applied although the loan can still take them. An OPEN pool returns `[]`: an
- * unapplied ref there may just be an add in flight. Voids / moves are ignored on purpose: an entry
- * in a closed pool's `entry_ids` stays counted there. Derived at read time, nothing is persisted.
+ * Refs that were planned but never applied although the loan can still take them.
+ * - Closed (SUBMITTED / RECEIVED) pool: the entries of its snapshot (`entry_ids`). Voids / moves
+ *   are ignored on purpose: an entry in a closed pool's `entry_ids` stays counted there.
+ * - OPEN pool: the LIVE entries, i.e. not voided and currently resolving to this pool. An OPEN pool
+ *   that currently holds a lock (SUBMIT / CANCEL in flight) returns [] (§37.3). A ref listed for a
+ *   pool whose add is still in flight is applied by that add; the apply is idempotent, so a repair
+ *   racing it never cuts a loan twice.
+ * Derived at read time, nothing is persisted.
  */
 export async function listBulkReturnPoolMissedLoanRefs(
 	poolId: string,
@@ -34,7 +45,13 @@ export async function listBulkReturnPoolMissedLoanRefs(
 ): Promise<MissedBulkReturnLoanRef[]> {
 	const { poolRepo, eventRepo, logRepo } = resolveDependencies(deps, ctx);
 	const pool = await requirePool(poolRepo, poolId);
-	if (pool.status === 'OPEN') return [];
+	if (pool.status === 'OPEN') {
+		// CR-193 §37.3: a pool locked for SUBMIT / CANCEL waits for that to finish first; the apply
+		// path rejects it as 'locked', so offering its refs would only lead to a rejected click.
+		if (pool.lock) return [];
+		const { live, loansById } = await loadLivePoolEntriesWithLoans(poolId, ctx, deps);
+		return findMissedLoanRefs(live, loansById);
+	}
 
 	// Batched reads; getEntriesByIds validates every doc and throws on a malformed one: fails closed.
 	const present = await eventRepo.getEntriesByIds(pool.entry_ids ?? []);
@@ -66,12 +83,23 @@ export interface ApplyMissedBulkReturnLoanRefsResult {
 	loansApplied: string[];
 	/** Refs not applied (loan closed / missing / insufficient). */
 	loansSkipped: BulkReturnLoanSkipped[];
+	/**
+	 * The entry was voided (OPEN pool only; found by the pre-check or the in-CAS re-read): no loan
+	 * was cut.
+	 */
+	voided?: true;
 }
 
 /**
- * Applies the planned loan refs of ONE entry of a SUBMITTED / RECEIVED pool whose add never cut
- * its loans. Never re-allocates: only the entry's stored `loan_refs`. Idempotent via
- * `applied_bulk_entry_ids`; a drifted loan is skipped (CR-193 §15), never partially applied.
+ * Applies the planned loan refs of ONE entry whose add never cut its loans. Never re-allocates:
+ * only the entry's stored `loan_refs`. Idempotent via `applied_bulk_entry_ids`; a drifted loan is
+ * skipped (CR-193 §15), never partially applied.
+ * - SUBMITTED / RECEIVED pool: the entry must be in the pool's snapshot (`entry_ids`).
+ * - OPEN pool: the entry must currently resolve to this pool (else it is rejected). A voided entry
+ *   resolves to `{ voided: true }` without touching a loan, and the void is re-read inside every
+ *   loan CAS attempt. A pool locked for SUBMIT / CANCEL is rejected
+ *   with reason 'locked' so the repair never races the snapshot.
+ * - CANCELLED pool: rejected.
  */
 export async function applyMissedBulkReturnLoanRefs(
 	input: ApplyMissedBulkReturnLoanRefsInput,
@@ -83,18 +111,39 @@ export async function applyMissedBulkReturnLoanRefs(
 	assertCanWriteBulkReturnEntry(ctx);
 
 	const pool = await requirePool(poolRepo, input.pool_id);
-	if (pool.status !== 'SUBMITTED' && pool.status !== 'RECEIVED') {
+	const isOpen = pool.status === 'OPEN';
+	if (!isOpen && pool.status !== 'SUBMITTED' && pool.status !== 'RECEIVED') {
 		throw new BulkReturnPoolStateError(
-			pool.status === 'OPEN'
-				? `Bulk return pool ${pool._id} is still OPEN: its loans are applied when entries are added`
-				: `Bulk return pool ${pool._id} is ${pool.status}: nothing to apply`,
-			pool.status === 'OPEN' ? 'not_submitted' : 'closed'
+			`Bulk return pool ${pool._id} is ${pool.status}: nothing to apply`,
+			'closed'
 		);
 	}
-	if (!(pool.entry_ids ?? []).includes(input.entry_id)) {
+	if (isOpen && pool.lock) {
+		throw new BulkReturnPoolStateError(
+			`Bulk return pool ${pool._id} is locked for ${pool.lock.op}: try again when it clears`,
+			'locked'
+		);
+	}
+	if (!isOpen && !(pool.entry_ids ?? []).includes(input.entry_id)) {
 		throw new WorkflowValidationError(
 			`Entry ${input.entry_id} is not part of the ${pool._id} snapshot`
 		);
+	}
+	if (isOpen) {
+		const events = await eventRepo.listForEntry(input.entry_id);
+		assertNoSkippedDocs(events.skipped, `bulk return entry ${input.entry_id}`);
+		const pins = await loadSnapshotPinsForWrite(poolRepo, events);
+		const resolved = resolveBulkReturnEntries(
+			events.entries,
+			events.moves,
+			events.voids,
+			pins
+		).find((r) => r.entry._id === input.entry_id);
+		// A voided entry is a normal outcome (the UI shows an info toast), not a validation error.
+		if (resolved?.voided) return { loansApplied: [], loansSkipped: [], voided: true };
+		if (!resolved || resolved.pool_id !== pool._id) {
+			throw new WorkflowValidationError(`Entry ${input.entry_id} is not live in ${pool._id}`);
+		}
 	}
 	const entry = await eventRepo.getEntry(input.entry_id);
 	if (!entry) throw new WorkflowValidationError(`bulk_return_entry ${input.entry_id} not found`);
@@ -104,13 +153,17 @@ export async function applyMissedBulkReturnLoanRefs(
 		);
 	if (await eventRepo.getLoanReopen(deriveLoanReopenId(entry._id))) throw reopenedError();
 
+	const voidId = deriveEntryVoidId(entry._id);
+	const isEntryVoided = isOpen ? async () => (await eventRepo.getVoid(voidId)) !== null : undefined;
 	const loansApplied: string[] = [];
 	const writtenRefs: BulkReturnEntryLoanRef[] = [];
 	const loansSkipped: BulkReturnLoanSkipped[] = [];
+	let voided = false;
 	for (const ref of entry.loan_refs) {
-		const { skipped, written } = await applyRefToLoanDetailed(logRepo, entry, ref, ctx);
-		if (skipped) loansSkipped.push(skipped);
-		else if (written) {
+		const outcome = await applyRefToLoanDetailed(logRepo, entry, ref, ctx, isEntryVoided);
+		if (outcome.voided) voided = true;
+		else if (outcome.skipped) loansSkipped.push(outcome.skipped);
+		else if (outcome.written) {
 			loansApplied.push(ref.distribution_log_id);
 			writtenRefs.push(ref);
 		}
@@ -123,5 +176,5 @@ export async function applyMissedBulkReturnLoanRefs(
 	) {
 		throw reopenedError();
 	}
-	return { loansApplied, loansSkipped };
+	return { loansApplied, loansSkipped, ...(voided ? { voided: true as const } : {}) };
 }

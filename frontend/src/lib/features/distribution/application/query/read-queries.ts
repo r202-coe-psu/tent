@@ -209,8 +209,8 @@ export const useBulkReturnPoolClosedLoanRefs = (
 	});
 
 /**
- * Reads the refs of a SUBMITTED / RECEIVED pool's snapshot entries that were planned but never
- * applied to a loan that can still take them (fence timeout); empty for an OPEN pool.
+ * Reads the refs that were planned but never applied to a loan that can still take them (fence
+ * timeout): the snapshot entries of a SUBMITTED / RECEIVED pool, or the live entries of an OPEN pool.
  */
 export const useBulkReturnPoolMissedLoanRefs = (
 	poolId: MaybeGetter<string | null | undefined>,
