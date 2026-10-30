@@ -3,7 +3,7 @@ id: CR-211 # renumbered from draft-staff-qr-card
 title: Staff QR card — permanent staff_token_hash in _users + recipient_type staff at distribution
 status: approved
 date: 2026-10-28
-updated: 2026-10-31 # A2 proposed (ทีม) — บัตรแสดง "เจ้าหน้าที่" แทนรายการ role, PNG = ป้าย 80×60 เดียวกับพิมพ์ · approved (kong); ส่วนที่ปรับ A1 approved (kong, 2026-10-30) — payload case, affects, role ของ resolve (ไม่มี rate limit ในแอป ตาม CR-188), createUser ตัวไหน, e2e AC
+updated: 2026-10-31 # A2 approved (kong, 2026-10-31) — บัตรแสดง "เจ้าหน้าที่" แทนรายการ role, PNG = ป้าย 80×60 เดียวกับพิมพ์ · approved (kong); ส่วนที่ปรับ A1 approved (kong, 2026-10-30) — payload case, affects, role ของ resolve (ไม่มี rate limit ในแอป ตาม CR-188), createUser ตัวไหน, e2e AC
 requested_by: ทีม (issue #893)
 decided_by: kong
 decision_date: 2026-10-29
@@ -48,7 +48,7 @@ migration: one-off backfill `staff_token_hash` ให้ `_users` เดิม�
 > 5. **`createUser` ตัวไหน:** ตัว server `frontend/src/lib/server/user-service.ts` (FR-SQR-02/03/43)
 > 6. **e2e:** เพิ่ม AC-15 สำหรับ flow สแกน แจก และ log
 
-> **ส่วนที่ปรับ 2026-10-31 (A2) — เสนอโดยทีม, proposed (รอ approve)** — หน้าตาบัตรหลังใช้งานจริง
+> **ส่วนที่ปรับ 2026-10-31 (A2) — เสนอโดยทีม, approved (kong) 2026-10-31** — หน้าตาบัตรหลังใช้งานจริง
 > แก้ FR-SQR-26/27/29, AC-04 และ Decision log · เพิ่ม FR-SQR-44/45 · ไม่แตะ token, endpoint หรือ `resolve`
 >
 > 1. **ไม่แสดง role บนบัตร:** บัตร staff ทุกคน (รวม `system_admin` และคนที่มีหลาย role) แสดงคำว่า **"เจ้าหน้าที่"** อย่างเดียว ตัวใหญ่หนา ล่างสุดของคอลัมน์ข้อความ เหนือบรรทัด shelter.psu.ac.th — role หลายตัวทำให้ป้าย 80×60 รก (FR-SQR-26, FR-SQR-44)
@@ -157,7 +157,7 @@ migration: one-off backfill `staff_token_hash` ให้ `_users` เดิม�
 - **FR-SQR-42** — `resolve` **ไม่มี rate limit ใน application layer** ตาม CR-188 (rate limit อยู่ที่ nginx `limit_req` ต่อ IP เท่านั้น) · การกันใช้ `resolve` เช็ก hash พึ่ง gate ผู้เรียก (FR-SQR-21) และ 404 แบบเดียวกัน (FR-SQR-41)
 - **FR-SQR-43** — mint `staff_token_hash` ทำใน `createUser` ของ server ที่เดียว · `createUser` ฝั่ง client (`$lib/features/users`) ห้ามส่งหรือสร้าง hash · body ของ `POST /api/v1/users` ที่มี `staff_token_hash` → ignore
 
-### 3.7 ส่วนที่ปรับ A2 (proposed 2026-10-31)
+### 3.7 ส่วนที่ปรับ A2 (proposed 2026-10-31 · approved kong 2026-10-31)
 
 - **FR-SQR-44** — ป้ายสถานะบนบัตร อยู่ล่างสุดของคอลัมน์ข้อความ เหนือบรรทัดลิงก์ shelter.psu.ac.th: staff = "เจ้าหน้าที่" (14pt หนา ตัวดำบนพื้นขาว ใหญ่กว่าบรรทัดรอง) · จิตอาสา = "จิตอาสา" ขนาดเดียวกัน และมี "รหัสจิตอาสา {volunteer_code}" ใต้ชื่อ · ไม่คำนวณจาก role ของ user
 - **FR-SQR-45** — PNG ที่ดาวน์โหลดได้จากบัตร render จาก component ป้าย 80×60 mm ตัวเดียวกับตัวอย่างบนจอและแผ่นพิมพ์ (`KioskLabelCard`) · ชื่อไฟล์ `staff-card-{ชื่อ}.png` · บนมือถือที่แชร์ไฟล์ได้ เปิด share sheet แทนดาวน์โหลด
@@ -233,3 +233,4 @@ migration: one-off backfill `staff_token_hash` ให้ `_users` เดิม�
 - 2026-10-29 — ข้อเสนอทีม (A1, proposed): ปิด warning จาก PR review — payload ตัวใหญ่ + parser ไม่สนตัวพิมพ์ (FR-SQR-40) · resolve ตาม gate `canAccessDistributionDesk` · 404 เดียวกันสำหรับไม่เจอ/ศูนย์อื่น (FR-SQR-41) · ไม่มี rate limit ในแอปตาม CR-188 (FR-SQR-42, แก้ 2026-10-30 — เดิมเสนอ 30/นาที/user) · ระบุ `createUser` ของ server (FR-SQR-43) · e2e AC-15/16 · `affects` ครบ · รอ kong approve
 - 2026-10-30 — **A1 approved (kong)** — รับข้อเสนอ A1 ทุกข้อตามที่เขียน (FR-SQR-40..43, AC-15/16, แก้ §2.1 และ FR-SQR-02/03/13/21, `affects`) รวมการตอบ 404 เดียวกันใน FR-SQR-21 และไม่มี rate limit ในแอปตาม CR-188
 - 2026-10-31 — ข้อเสนอทีม (A2, proposed): บัตรแสดง "เจ้าหน้าที่" ตัวใหญ่แทนรายการ role (รวม admin) เพราะ user หลาย role ทำให้ป้ายรก · ไม่แสดง `position` บนบัตร · PNG เป็นป้าย 80×60 เดียวกับพิมพ์ · `resolve`/หน้าแจกยังแสดง role ตามเดิม (R1) · รอ approve
+- 2026-10-31 — **A2 approved (kong)** — รับข้อเสนอ A2 ทุกข้อตามที่เขียน (แก้ FR-SQR-26/27/29 และ AC-04, เพิ่ม FR-SQR-44/45 และ AC-17): บัตรแสดง "เจ้าหน้าที่" / "จิตอาสา" แทนรายการ role และไม่แสดง `position` · PNG เป็นป้าย 80×60 เดียวกับที่พิมพ์ · `resolve` และหน้าแจกยังแสดง role ตามเดิม (R1) — ไม่แตะ token, endpoint หรือ schema
