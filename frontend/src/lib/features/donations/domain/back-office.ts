@@ -42,6 +42,8 @@ export interface PendingDonationRow {
 		review_status?: 'approved' | 'pending' | 'rejected';
 		review_reason?: string | null;
 		reserved_qty?: string;
+		/** The drop-off point the donor takes this line to (CR-206 FR-MP-25); `null` = any point. */
+		drop_off_point_id?: string | null;
 	}>;
 	/** Campaign the booking was made against — tells an automatic approval from a person's (FR-8). */
 	campaign_id?: string | null;
@@ -52,6 +54,7 @@ export interface PendingDonationRow {
 	slot?: { date: string; from: string; to: string };
 	delivery_method?: string;
 	vehicle?: string | null;
+	vehicle_plate?: string | null;
 	pickup_address?: string | null;
 	donor_note?: string | null;
 	is_unsolicited?: boolean;

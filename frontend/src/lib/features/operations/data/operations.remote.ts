@@ -36,6 +36,8 @@ import {
 	keyDonationReceipt,
 	completeDonationReceipt,
 	isDonationOutstanding,
+	isPointSplitDonation,
+	POINT_SPLIT_DONATION_ERROR,
 	createDistributeEntry,
 	createAdjustEntry,
 	projectStockLotBalances,
@@ -346,9 +348,16 @@ export class OperationsRemoteRepository implements OperationsRepository {
 		return rows.map((row) => row._id);
 	}
 
-	/** Any donation ledger row pointing at this booking. */
-	private async hasKeyedDonationStock(donationId: string): Promise<boolean> {
-		return (await this.keyedDonationRowIds(donationId, 1)).length > 0;
+	/**
+	 * The shelter started taking this booking in: a donation ledger row points at it, or a
+	 * drop-off point recorded a receipt — one that turned every line away keys no row
+	 * (CR-206 FR-MP-17a, same rule as `$lib/server/donation-docs`).
+	 */
+	private async hasKeyedDonationStock(
+		donation: Pick<Donation, '_id' | 'point_receipts'>
+	): Promise<boolean> {
+		if ((donation.point_receipts ?? []).length > 0) return true;
+		return (await this.keyedDonationRowIds(donation._id, 1)).length > 0;
 	}
 
 	async receiveDonationBatch(
@@ -365,6 +374,13 @@ export class OperationsRemoteRepository implements OperationsRepository {
 		// goods the booking no longer asks for. A booking already `received` is the FR-B8
 		// retry of a transition whose answer was lost: its rows are found by id below.
 		const onFile = (await this.repo.get<Donation>(donation._id)) ?? donation;
+		// CR-206 FR-MP-24a — a booking split across drop-off points is received one point at a
+		// time at the scan station. Counting it whole here would close it and record the other
+		// points' lines as missing before they arrive. Checked on the copy on file and the one
+		// on screen, before anything is keyed.
+		if (isPointSplitDonation(onFile) || isPointSplitDonation(donation)) {
+			throw new Error(POINT_SPLIT_DONATION_ERROR);
+		}
 		if (onFile.status !== 'received') {
 			const stale = !isDonationOutstanding(onFile.status)
 				? `ใบนี้ปิดไปแล้ว (สถานะ ${onFile.status}) — รับเข้าคลังไม่ได้`
@@ -375,7 +391,7 @@ export class OperationsRemoteRepository implements OperationsRepository {
 				// Say what is true about the stock: an earlier, interrupted attempt may already
 				// have keyed some lines, and "nothing in stock" would invite counting them again.
 				throw new Error(
-					(await this.hasKeyedDonationStock(donation._id))
+					(await this.hasKeyedDonationStock(onFile))
 						? `${stale} · มีของบางรายการของใบนี้เข้าคลังไปแล้ว อย่านับรายการนั้นซ้ำ — ติดต่อผู้ดูแลเพื่อตรวจยอด`
 						: `${stale} · ยังไม่มีของเข้าคลัง`
 				);

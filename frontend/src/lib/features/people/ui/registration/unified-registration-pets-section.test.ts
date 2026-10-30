@@ -38,3 +38,40 @@ describe('UnifiedRegistrationPetsSection pet cap (CR-148)', () => {
 		expect(renderSection([], PETS_MAX_COUNT)).toContain(MAX_REACHED);
 	});
 });
+
+const dogAndCat = () => [createPetCard('dog', 1), createPetCard('cat', 2)];
+
+describe('UnifiedRegistrationPetsSection — card position titles', () => {
+	it('public: numbers pets across the whole family, after already registered ones', () => {
+		const { body } = render(UnifiedRegistrationPetsSection, {
+			props: {
+				petItems: dogAndCat(),
+				channel: 'public',
+				existingPets: [{ species: 'dog', count: 2 }]
+			}
+		});
+
+		expect(body).toContain('ตัวที่ 3/4');
+		expect(body).toContain('ตัวที่ 4/4');
+		expect(body).not.toContain('สุนัข — ');
+	});
+
+	it('onsite: numbers only the pets in this form, across species', () => {
+		const { body } = render(UnifiedRegistrationPetsSection, {
+			props: { petItems: dogAndCat(), channel: 'onsite' }
+		});
+
+		expect(body).toContain('ตัวที่ 1/2');
+		expect(body).toContain('ตัวที่ 2/2');
+	});
+
+	it('labels an "other" pet with its typed species', () => {
+		const rabbit = { ...createPetCard('other', 1), customSpecies: 'กระต่าย' };
+		const { body } = render(UnifiedRegistrationPetsSection, {
+			props: { petItems: [rabbit], channel: 'onsite' }
+		});
+
+		expect(body).toContain('กระต่าย');
+		expect(body).toContain('ตัวที่ 1/1');
+	});
+});

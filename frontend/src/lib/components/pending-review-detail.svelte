@@ -33,9 +33,11 @@
 		type LineReviewDecision,
 		type PendingDonationRow,
 		type RejectDonationInput,
-		DonationPhotoStrip
+		DonationPhotoStrip,
+		linePointLabel,
+		namesDropOffPoints
 	} from '$lib/features/donations';
-	import { useShelters } from '$lib/features/shelters';
+	import { listDonationPoints, useShelter, useShelters } from '$lib/features/shelters';
 	import { DonationLotsTable, useStockFormItems } from '$lib/features/operations';
 	import { formatUnit, useUnitsOfMeasure } from '$lib/features/catalog';
 	import { langState } from '$lib/states/i18n.svelte';
@@ -151,6 +153,15 @@
 	const itemNameById = $derived(new Map(stockItems.items.map((item) => [item._id, item.name])));
 	const lineName = (item: { free_text?: string; item_id?: string }, fallback: string) =>
 		item.free_text ?? (item.item_id && itemNameById.get(item.item_id)) ?? item.item_id ?? fallback;
+
+	// CR-206 FR-MP-25: the drop-off point of each line, resolved against the shelter's current
+	// points in its CouchDB doc. Shown only for a booking split between points; a point
+	// unticked or deleted since reads as "any point" (FR-MP-16).
+	const shelterQuery = useShelter(() => request.shelter_code);
+	const donationPoints = $derived(
+		listDonationPoints(shelterQuery.data).map((p) => ({ id: p.id, name: p.name.trim() }))
+	);
+	const showLinePoints = $derived(namesDropOffPoints(declaredItems));
 
 	/**
 	 * CR-174 — a schema_v 7 booking is decided line by line: only `pending` lines take a
@@ -393,7 +404,7 @@
 									<p class="text-xl font-bold break-words text-slate-900">
 										{lineName(item, 'สิ่งของ')}
 									</p>
-									{#if cat || cond || !item.item_id}
+									{#if cat || cond || !item.item_id || showLinePoints}
 										<div class="flex flex-wrap items-center gap-2">
 											{#if cat}
 												<Badge
@@ -409,6 +420,16 @@
 													class="border-sky-200 bg-sky-50 text-sm font-semibold text-sky-900"
 												>
 													{cond}
+												</Badge>
+											{/if}
+											{#if showLinePoints}
+												<Badge
+													variant="outline"
+													data-testid="review-line-{idx}-point"
+													class="gap-1 border-slate-200 bg-white text-sm font-semibold text-slate-700"
+												>
+													<MapPin class="size-3.5" aria-hidden="true" />
+													{linePointLabel(item, donationPoints)}
 												</Badge>
 											{/if}
 											{#if !item.item_id}
@@ -512,6 +533,9 @@
 				<p class="mt-2 text-lg font-bold text-slate-900">
 					{formatVehicle(request.vehicle, request.delivery_method)}
 				</p>
+				{#if request.vehicle_plate}
+					<p class="mt-1 text-sm font-semibold text-slate-700">ทะเบียน {request.vehicle_plate}</p>
+				{/if}
 			</div>
 
 			{#if request.pickup_address}

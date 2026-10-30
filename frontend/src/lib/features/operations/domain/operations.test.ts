@@ -2543,6 +2543,49 @@ describe('completeDonationReceipt (CR-143 FR-B4b / FR-B8)', () => {
 			);
 		}
 	});
+
+	// CR-206 FR-MP-24a — such a booking closes from its point receipts, not whole.
+	it('refuses a booking whose lines name a drop-off point', () => {
+		const donation = declaredItemsDonation();
+		const split = {
+			...donation,
+			items: donation.items!.map((item, i) =>
+				i === 0 ? { ...item, drop_off_point_id: 'sp-gym' } : item
+			)
+		};
+		expect(() => completeDonationReceipt(split)).toThrow('ใบนี้แยกส่งหลายจุด — รับที่หน้าสแกน');
+	});
+
+	it('refuses a booking a drop-off point already recorded, even once received', () => {
+		const receipt = {
+			point_id: null,
+			line_nos: [0],
+			received_at: '2026-10-28T02:00:00.000Z',
+			received_by: 'staff',
+			audit_id: 'audit:X',
+			ledger_ids: [],
+			items: []
+		};
+		for (const status of ['verifying', 'received'] as const) {
+			expect(() =>
+				completeDonationReceipt({
+					...declaredItemsDonation(),
+					status,
+					point_receipts: [receipt]
+				})
+			).toThrow(/แยกส่งหลายจุด/);
+		}
+	});
+
+	it('still closes a booking whose lines name no point', () => {
+		const donation = declaredItemsDonation();
+		const unsplit = {
+			...donation,
+			items: donation.items!.map((item) => ({ ...item, drop_off_point_id: null })),
+			point_receipts: []
+		};
+		expect(completeDonationReceipt(unsplit).status).toBe('received');
+	});
 });
 
 describe('batch receive in progress (CR-143 FR-B7 / FR-B9)', () => {

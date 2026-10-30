@@ -1791,6 +1791,8 @@ export interface components {
 			note?: string | null;
 			/** Line Key */
 			line_key?: string | null;
+			/** Drop Off Point Id */
+			drop_off_point_id?: string | null;
 		};
 		/** DonationItemsPatchRequest */
 		DonationItemsPatchRequest: {

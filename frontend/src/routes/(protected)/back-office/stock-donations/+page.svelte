@@ -197,7 +197,9 @@
 				toast.success(
 					data.donation?.status === 'rejected'
 						? `ปฏิเสธคำขอ ${bookingRef} แล้ว (ไม่รับทุกรายการ)`
-						: `บันทึกผลการประเมิน ${bookingRef} แล้ว — รอผู้บริจาคนำส่ง`
+						: data.donation?.status === 'received'
+							? `บันทึกผลการประเมิน ${bookingRef} แล้ว — ทุกรายการมีผลครบ ปิดใบแล้ว`
+							: `บันทึกผลการประเมิน ${bookingRef} แล้ว — รอผู้บริจาคนำส่ง`
 				);
 				selectedPendingRequest = null;
 				await refreshQueue();

@@ -23,7 +23,9 @@ vi.mock('$lib/features/operations', () => ({
 vi.mock('svelte-sonner', () => ({ toast: { error: toastError, success: vi.fn() } }));
 
 vi.mock('$lib/features/shelters', () => ({
-	useShelters: () => ({ data: [], isPending: false })
+	useShelters: () => ({ data: [], isPending: false }),
+	useShelter: () => ({ data: undefined, isSuccess: true }),
+	listDonationPoints: () => []
 }));
 vi.mock('$lib/features/catalog', () => ({
 	formatUnit: (unit: string) => unit,

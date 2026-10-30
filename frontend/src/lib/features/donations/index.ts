@@ -48,6 +48,7 @@ export type {
 	DonationTrackItem,
 	DonationTrackLogistics,
 	DonationTrackDonor,
+	DonationTrackPointReceipt,
 	DonationLookupItem
 } from './domain/tracking';
 export {
@@ -60,11 +61,15 @@ export {
 	canCancelDonation,
 	canEditCourierTracking,
 	isTerminalDonationStatus,
+	isStartedAtPoint,
 	closedAtIntakeMessage,
 	lookupItemSchedule,
 	maskLookupPhone,
 	rejectedLineReasons
 } from './domain/tracking';
+// Domain — which queue window counts as picked on the booking form
+export type { SlotOption } from './domain/slot-pick';
+export { pickedSlot, slotContextKey } from './domain/slot-pick';
 // Domain — drop-off destination (#590)
 export type {
 	DonationPointSource,
@@ -78,6 +83,25 @@ export {
 	needsDropOffDestination,
 	resolveDropOffPoint
 } from './domain/drop-off';
+// Domain — drop-off point per line (CR-206)
+export type {
+	BookablePoint,
+	DropOffDestinationGroup,
+	DropOffGroupStatus
+} from './domain/line-points';
+export {
+	ANY_POINT_KEY,
+	bookableDropOffPoints,
+	currentDropOffPointIds,
+	defaultDropOffPointId,
+	ALL_LINES_PICKER,
+	pickerForMapTap,
+	groupDropOffDestinations,
+	hasLinePoints,
+	lineDestinationResolver,
+	lineDropOffPointId,
+	withCurrentLinePoints
+} from './domain/line-points';
 // Domain — box label (#591)
 export type {
 	BoxLabel,
@@ -121,6 +145,32 @@ export type {
 	LineReviewDecision,
 	ReviewDonationInput
 } from './domain/item-review';
+
+// Domain — receiving point by point (CR-206)
+export {
+	allLinesRecorded,
+	closeDonationByPoints,
+	currentLinePoint,
+	hasPointReceipts,
+	isReceivedByPoint,
+	recordedLineNos,
+	type DonationCloseResult
+} from './domain/point-receipts';
+export {
+	ANY_DROP_OFF_POINT_LABEL,
+	canCloseByPoints,
+	defaultStoragePointId,
+	hasOtherPointLines,
+	linePointLabel,
+	namesDropOffPoints,
+	pointReceiptFields,
+	recordedAtLabel,
+	scanLineStates,
+	scanReceiveMode,
+	type NamedPoint,
+	type ScanLineState,
+	type ScanReceiveMode
+} from './domain/point-scan';
 // Domain — reject reasons (CR-172)
 export {
 	DONATION_REJECT_REASON_CODES,
@@ -158,6 +208,8 @@ export {
 // Domain — input schemas + factories + transitions + guards
 export {
 	donationPreDeclarationInputSchema,
+	VEHICLE_PLATE_MAX,
+	buildDonationLogistics,
 	isDonationPreDeclaration,
 	donorCategoryFromCatalog,
 	PUBLIC_DONATION_CATEGORIES
@@ -210,6 +262,8 @@ export { default as CancelDonationDialog } from './ui/cancel-donation-dialog.sve
 export { default as RejectDonationDialog } from './ui/reject-donation-dialog.svelte';
 export { default as RejectReasonFields } from './ui/reject-reason-fields.svelte';
 export { default as DropOffCard } from './ui/drop-off-card.svelte';
+export { default as DropOffGroups } from './ui/drop-off-groups.svelte';
+export { default as DropOffPointsSection } from './ui/drop-off-points-section.svelte';
 export { default as BoxLabelSheet } from './ui/box-label-sheet.svelte';
 export { default as LineDecisionToggle } from './ui/line-decision-toggle.svelte';
 export { default as EditDonationItemsDialog } from './ui/edit-donation-items-dialog.svelte';

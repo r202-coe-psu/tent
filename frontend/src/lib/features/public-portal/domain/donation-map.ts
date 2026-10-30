@@ -6,6 +6,12 @@ import type {
 } from './types';
 
 /**
+ * A request to show a drop-off point on the map. A new request (a new `seq`) moves the map
+ * even to the point already in focus; `zoom` brings it closer, a tap only pans to it.
+ */
+export type MapPointFocus = { pointId: string; zoom: boolean; seq: number };
+
+/**
  * A pin on the donation map that is not the shelter itself (a drop-off point inside or
  * next to a shelter). `shelterCode` ties it back to the shelter whose card it opens.
  * The shelter's own pin is never listed here: it comes from `DonationMapShelter.geo`.
