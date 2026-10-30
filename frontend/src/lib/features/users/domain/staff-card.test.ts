@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
 	formatStaffToken,
 	isValidStaffTokenHash,
+	isStaffCardScanCode,
 	parseStaffCardPayload,
 	staffCardFileName,
 	staffCardPayloadFromHash,
@@ -39,6 +40,22 @@ describe('isValidStaffTokenHash', () => {
 });
 
 const HASH = '0123456789abcdef'.repeat(4);
+
+describe('isStaffCardScanCode', () => {
+	it.each([`TKT-STF-HASH-${HASH}`, 'tkt-stf-hash-oops', ' TKT-STF-1234 '])(
+		'treats %s as a staff card',
+		(code) => {
+			expect(isStaffCardScanCode(code)).toBe(true);
+		}
+	);
+
+	it.each(['TKT-VOL-ABC123', 'EVAC-0001', 'TKT-STX-1'])(
+		'does not treat %s as a staff card',
+		(code) => {
+			expect(isStaffCardScanCode(code)).toBe(false);
+		}
+	);
+});
 
 describe('parseStaffCardPayload', () => {
 	it('reads the hash from a bare staff card payload', () => {

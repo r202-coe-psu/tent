@@ -1,10 +1,15 @@
 import type { Evacuee } from '$lib/features/people';
-import { parseStaffCardPayload, type ResolvedCardRecipient } from '$lib/features/users';
+import {
+	isStaffCardScanCode,
+	parseStaffCardPayload,
+	type ResolvedCardRecipient
+} from '$lib/features/users';
 import { parseVolunteerScanCode, type Volunteer } from '$lib/features/volunteers';
 import type { FrontlineRecipientSelection } from './frontline-handover';
 import { parsePoolScanCode } from './bulk-return-pool-qr';
 
 const STAFF_CARD_FALLBACK_MESSAGE = 'ตรวจสอบบัตรเจ้าหน้าที่ไม่สำเร็จ กรุณาลองสแกนใหม่';
+const STAFF_CARD_MALFORMED_MESSAGE = 'QR บัตรเจ้าหน้าที่ไม่ถูกต้อง';
 const POOL_QR_IN_RECIPIENT_SCAN_MESSAGE = 'นี่คือ QR ของกองรับคืน กรุณาสแกน QR ผู้คืน';
 
 /**
@@ -51,13 +56,15 @@ export async function resolveScannedRecipient(
 	if (parsePoolScanCode(code)) {
 		return { kind: 'error', message: POOL_QR_IN_RECIPIENT_SCAN_MESSAGE };
 	}
-	if (parseStaffCardPayload(code)) {
+	if (isStaffCardScanCode(code)) {
 		if (!options.allowStaff) {
 			return {
 				kind: 'error',
 				message: 'QR เจ้าหน้าที่ใช้กับรายการนี้ไม่ได้ กรุณาสแกนบัตรผู้ประสบภัย'
 			};
 		}
+		if (!parseStaffCardPayload(code))
+			return { kind: 'error', message: STAFF_CARD_MALFORMED_MESSAGE };
 		if (!deps.resolveStaffCard) return { kind: 'error', message: STAFF_CARD_FALLBACK_MESSAGE };
 		let card: ResolvedCardRecipient;
 		try {
@@ -68,14 +75,17 @@ export async function resolveScannedRecipient(
 				message: err instanceof Error && err.message ? err.message : STAFF_CARD_FALLBACK_MESSAGE
 			};
 		}
-		return {
-			kind: 'staff_card',
-			selection: {
-				recipientType: card.kind,
-				recipientId: card.recipient_id,
-				label: card.display_name
-			}
-		};
+		const selection: FrontlineRecipientSelection =
+			card.kind === 'staff'
+				? {
+						recipientType: 'staff',
+						recipientId: card.recipient_id,
+						label: card.display_name,
+						roleLabel: card.role_label,
+						position: card.position
+					}
+				: { recipientType: 'volunteer', recipientId: card.recipient_id, label: card.display_name };
+		return { kind: 'staff_card', selection };
 	}
 	if (parseVolunteerScanCode(code)) {
 		if (!options.allowVolunteer) {

@@ -161,7 +161,7 @@
 							disabled={!canEdit}
 							onclick={() => onstaffcard(user)}
 						>
-							<IdCard class="mr-1.5 h-4 w-4 text-[#0A2647]" /> บัตรเจ้าหน้าที่
+							<IdCard class="mr-1.5 h-4 w-4 text-primary" /> บัตรเจ้าหน้าที่
 						</Button>
 					{/if}
 					<Button
@@ -336,7 +336,7 @@
 										onclick={() => onstaffcard(user)}
 										title="เปิดบัตรเจ้าหน้าที่"
 									>
-										<IdCard class="mr-1 h-3.5 w-3.5 text-[#0A2647]" /> บัตรเจ้าหน้าที่
+										<IdCard class="mr-1 h-3.5 w-3.5 text-primary" /> บัตรเจ้าหน้าที่
 									</Button>
 								{/if}
 								<Button

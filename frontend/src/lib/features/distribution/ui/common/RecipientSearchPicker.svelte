@@ -245,7 +245,8 @@
 							<span>จิตอาสา{value.volunteerCode ? ` · ${value.volunteerCode}` : ''}</span>
 							{#if value.phone}<span>โทร {value.phone}</span>{/if}
 						{:else if value.recipientType === 'staff'}
-							<span>เจ้าหน้าที่</span>
+							<span>{value.roleLabel ?? 'เจ้าหน้าที่'}</span>
+							{#if value.position}<span>{value.position}</span>{/if}
 						{:else}
 							<span>บุคคลภายนอก{value.notes ? ` · ${value.notes}` : ''}</span>
 						{/if}

@@ -31,6 +31,11 @@ export function staffCardPayloadFromHash(hash: string): string {
 	return STAFF_TOKEN_HASH_PREFIX + hash;
 }
 
+/** Any `TKT-STF-` code is a staff card, even malformed, so it never falls through to evacuees. */
+export function isStaffCardScanCode(raw: string): boolean {
+	return extractScanCode(raw).toUpperCase().startsWith(STAFF_TOKEN_PREFIX);
+}
+
 export function parseStaffCardPayload(raw: string): { hash: string } | null {
 	const code = extractScanCode(raw);
 	if (!code.toUpperCase().startsWith(STAFF_TOKEN_HASH_PREFIX)) return null;

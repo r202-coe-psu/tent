@@ -34,7 +34,8 @@ function deps(overrides: Partial<RecipientScanDeps> = {}): RecipientScanDeps {
 			kind: 'staff',
 			recipient_id: 'user:somchai',
 			display_name: 'สมชาย เจ้าหน้าที่',
-			position: null
+			role_label: 'เจ้าหน้าที่แจกจ่าย',
+			position: 'หัวหน้าเวร'
 		}),
 		...overrides
 	};
@@ -60,7 +61,13 @@ describe('resolveScannedRecipient', () => {
 
 		expect(result).toEqual({
 			kind: 'staff_card',
-			selection: { recipientType: 'staff', recipientId: 'user:somchai', label: 'สมชาย เจ้าหน้าที่' }
+			selection: {
+				recipientType: 'staff',
+				recipientId: 'user:somchai',
+				label: 'สมชาย เจ้าหน้าที่',
+				roleLabel: 'เจ้าหน้าที่แจกจ่าย',
+				position: 'หัวหน้าเวร'
+			}
 		});
 		expect(d.resolveStaffCard).toHaveBeenCalledWith(STAFF_QR);
 		expect(d.lookupEvacuee).not.toHaveBeenCalled();
@@ -86,7 +93,8 @@ describe('resolveScannedRecipient', () => {
 			resolveStaffCard: vi.fn().mockResolvedValue({
 				kind: 'volunteer',
 				recipient_id: 'volunteer:01J00000000000000000000001',
-				display_name: 'สมหญิง อาสา'
+				display_name: 'สมหญิง อาสา',
+				role_label: 'เจ้าหน้าที่แจกจ่าย'
 			})
 		});
 		const result = await resolveScannedRecipient(
@@ -131,6 +139,36 @@ describe('resolveScannedRecipient', () => {
 			kind: 'error',
 			message: expect.stringContaining('บัตรเจ้าหน้าที่')
 		});
+	});
+
+	it.each([`TKT-STF-HASH-${'z'.repeat(64)}`, 'tkt-stf-hash-abc', 'TKT-STF-0123'])(
+		'rejects a malformed staff card %s without falling through to any lookup',
+		async (code) => {
+			const d = deps();
+			const result = await resolveScannedRecipient(
+				code,
+				{ allowVolunteer: true, allowStaff: true },
+				d
+			);
+
+			expect(result).toEqual({ kind: 'error', message: 'QR บัตรเจ้าหน้าที่ไม่ถูกต้อง' });
+			expect(d.resolveStaffCard).not.toHaveBeenCalled();
+			expect(d.lookupVolunteer).not.toHaveBeenCalled();
+			expect(d.lookupEvacuee).not.toHaveBeenCalled();
+		}
+	);
+
+	it('accepts a lowercase staff card payload', async () => {
+		const d = deps();
+		const code = STAFF_QR.toLowerCase();
+		const result = await resolveScannedRecipient(
+			code,
+			{ allowVolunteer: true, allowStaff: true },
+			d
+		);
+
+		expect(result.kind).toBe('staff_card');
+		expect(d.resolveStaffCard).toHaveBeenCalledWith(code);
 	});
 
 	it('reports an error when no staff card resolver is available', async () => {

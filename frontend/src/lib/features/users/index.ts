@@ -16,6 +16,7 @@ export {
 	STAFF_TOKEN_RANDOM_BYTES,
 	formatStaffToken,
 	isValidStaffTokenHash,
+	isStaffCardScanCode,
 	staffCardPayloadFromHash,
 	staffCardRoleLabel,
 	parseStaffCardPayload,

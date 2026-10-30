@@ -44,6 +44,8 @@ export type FrontlineRecipientSelection =
 			recipientType: 'staff';
 			recipientId: string; // 'user:{name}'
 			label: string;
+			roleLabel?: string;
+			position?: string | null;
 	  }
 	| {
 			recipientType: 'outside';
