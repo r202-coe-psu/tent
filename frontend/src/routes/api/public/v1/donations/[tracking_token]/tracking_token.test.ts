@@ -639,6 +639,7 @@ describe('GET & PATCH & DELETE /api/public/v1/donations/[tracking_token]', () =>
 										total_items: 1,
 										received_at: '2026-10-28T02:12:00Z',
 										closed_by: 'สมศรี',
+										remarks: 'internal summary remark',
 										closed_reason: 'all_points',
 										items: [{ free_text: 'น้ำดื่ม', qty: '24', unit: 'ขวด' }]
 									},
@@ -676,6 +677,9 @@ describe('GET & PATCH & DELETE /api/public/v1/donations/[tracking_token]', () =>
 		// The closing staff member's name stays in CouchDB (decision sync 2026-10-30).
 		expect(data.donation.received_summary).toMatchObject({ closed_reason: 'all_points' });
 		expect(data.donation.received_summary).not.toHaveProperty('closed_by');
+		// The point receipts' remarks, joined into the summary at close, are staff's too.
+		expect(data.donation.received_summary).not.toHaveProperty('remarks');
+		expect(JSON.stringify(data)).not.toContain('internal');
 	});
 
 	it('GET falls back to the projection receipts before the doc reaches CouchDB', async () => {

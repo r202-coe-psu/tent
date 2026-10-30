@@ -262,3 +262,24 @@ def test_project_donation_never_carries_who_closed_the_booking():
     assert "closed_by" not in payload["received_summary"]
     assert payload["received_summary"]["closed_reason"] == "staff_close"
     assert summary["closed_by"] == "สมศรี"
+
+
+def test_project_donation_never_carries_the_point_receipts_staff_remarks():
+    """CR-206 — close joins every point receipt's ``remarks`` into the summary; they stay staff's."""
+    summary = {
+        "total_items": 1,
+        "received_at": "2026-10-28T02:12:00.000Z",
+        "remarks": "ลังบุบ SECRET",
+        "closed_by": "สมศรี",
+        "closed_reason": "all_points",
+        "items": [{"item_id": "item:rice", "qty": "5", "unit": "ถุง"}],
+    }
+    _, payload = project_donation(
+        _donation(status="received", received_summary=summary), shelter_code="SH001"
+    )
+
+    assert payload is not None
+    assert "remarks" not in payload["received_summary"]
+    assert payload["received_summary"]["closed_reason"] == "all_points"
+    assert "SECRET" not in repr(payload)
+    assert summary["remarks"] == "ลังบุบ SECRET"

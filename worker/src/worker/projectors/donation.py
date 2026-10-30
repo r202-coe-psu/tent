@@ -41,12 +41,16 @@ def project_point_receipts(receipts: Any) -> list[dict[str, Any]]:
 def project_received_summary(summary: Any) -> dict[str, Any] | None:
     """The whole sub-doc, so received_summary.items[].rejected / reject_reason /
     reject_reason_code (CR-172) ride along without a mapping here — but never
-    ``closed_by``, the name of the staff member who closed the booking (CR-206,
-    decision sync 2026-10-30).
+    ``closed_by``, the name of the staff member who closed the booking (CR-206, decision
+    sync 2026-10-30), nor ``remarks``, the point receipts' staff remarks joined.
     """
     if not isinstance(summary, dict):
         return None
-    return {key: value for key, value in summary.items() if key != "closed_by"}
+    return {
+        key: value
+        for key, value in summary.items()
+        if key not in ("closed_by", "remarks")
+    }
 
 
 def project_donation(

@@ -253,12 +253,14 @@ export function toTrackingLogistics(raw: unknown): DonationTrackLogistics | null
 /**
  * The `received_summary` the public tracking API may return: the whole result the tracking
  * page reads (CR-172 line results, shortfalls, CR-206 `closed_reason`), minus `closed_by` —
- * the name of the staff member who closed the booking (decision sync 2026-10-30).
+ * the name of the staff member who closed the booking (decision sync 2026-10-30) — and
+ * `remarks`, the point receipts' staff remarks joined.
  */
 export function toTrackingReceivedSummary(raw: unknown): Record<string, unknown> | null {
 	if (!raw || typeof raw !== 'object') return null;
 	const summary = { ...(raw as Record<string, unknown>) };
 	delete summary.closed_by;
+	delete summary.remarks;
 	return summary;
 }
 
