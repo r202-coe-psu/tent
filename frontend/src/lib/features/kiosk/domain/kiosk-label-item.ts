@@ -8,9 +8,9 @@ export type KioskLabelSheetItem = {
 	zone?: string | null;
 	/** Intake stations passed: this many checklist boxes are ticked. */
 	checkedCount?: number;
-	/** Staff cards: large bold badge right under the name (e.g. เจ้าหน้าที่). */
+	/** Staff cards: large bold badge at the bottom, above the link (e.g. เจ้าหน้าที่). */
 	badge?: string;
-	/** Staff cards: bold lines under the badge, no zone row and no station checklist. */
+	/** Staff cards: bold lines under the name, no zone row and no station checklist. */
 	lines?: readonly string[];
 	alt?: string;
 };
