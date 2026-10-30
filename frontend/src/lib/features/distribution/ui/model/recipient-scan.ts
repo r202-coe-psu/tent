@@ -63,8 +63,9 @@ export async function resolveScannedRecipient(
 				message: 'QR เจ้าหน้าที่ใช้กับรายการนี้ไม่ได้ กรุณาสแกนบัตรผู้ประสบภัย'
 			};
 		}
-		if (!parseStaffCardPayload(code))
+		if (!parseStaffCardPayload(code)) {
 			return { kind: 'error', message: STAFF_CARD_MALFORMED_MESSAGE };
+		}
 		if (!deps.resolveStaffCard) return { kind: 'error', message: STAFF_CARD_FALLBACK_MESSAGE };
 		let card: ResolvedCardRecipient;
 		try {

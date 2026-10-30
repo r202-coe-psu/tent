@@ -154,7 +154,7 @@
 							<KeyRound class="mr-1.5 h-4 w-4 text-amber-700" /> รีเซ็ตรหัส
 						</Button>
 					{/if}
-					{#if onstaffcard && !user.volunteer_id}
+					{#if onstaffcard && !user.volunteer_id && !isVolunteer}
 						<Button
 							variant="outline"
 							class="min-h-11 flex-1 border-slate-300 text-slate-800 sm:flex-none"
@@ -327,7 +327,7 @@
 										<KeyRound class="mr-1 h-3.5 w-3.5 text-amber-700" /> รีเซ็ตรหัส
 									</Button>
 								{/if}
-								{#if onstaffcard && !user.volunteer_id}
+								{#if onstaffcard && !user.volunteer_id && !isVolunteer}
 									<Button
 										variant="outline"
 										size="sm"
