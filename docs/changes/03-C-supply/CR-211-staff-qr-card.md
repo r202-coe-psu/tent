@@ -3,7 +3,7 @@ id: CR-211 # renumbered from draft-staff-qr-card
 title: Staff QR card — permanent staff_token_hash in _users + recipient_type staff at distribution
 status: approved
 date: 2026-10-28
-updated: 2026-10-30 # approved (kong); ส่วนที่ปรับ A1 approved (kong, 2026-10-30) — payload case, affects, role ของ resolve (ไม่มี rate limit ในแอป ตาม CR-188), createUser ตัวไหน, e2e AC
+updated: 2026-10-31 # A2 proposed (ทีม) — บัตรแสดง "เจ้าหน้าที่" แทนรายการ role, PNG = ป้าย 80×60 เดียวกับพิมพ์ · approved (kong); ส่วนที่ปรับ A1 approved (kong, 2026-10-30) — payload case, affects, role ของ resolve (ไม่มี rate limit ในแอป ตาม CR-188), createUser ตัวไหน, e2e AC
 requested_by: ทีม (issue #893)
 decided_by: kong
 decision_date: 2026-10-29
@@ -47,6 +47,14 @@ migration: one-off backfill `staff_token_hash` ให้ `_users` เดิม�
 > 4. **กันใช้ resolve เป็นตัวเช็ก hash:** ตรวจสิทธิ์ผู้เรียกก่อน lookup · ไม่เจอกับ user ไม่อยู่ศูนย์ตอบเหมือนกัน (FR-SQR-41) · ไม่มี rate limit ในแอป (CR-188 — nginx ต่อ IP เท่านั้น, FR-SQR-42)
 > 5. **`createUser` ตัวไหน:** ตัว server `frontend/src/lib/server/user-service.ts` (FR-SQR-02/03/43)
 > 6. **e2e:** เพิ่ม AC-15 สำหรับ flow สแกน แจก และ log
+
+> **ส่วนที่ปรับ 2026-10-31 (A2) — เสนอโดยทีม, proposed (รอ approve)** — หน้าตาบัตรหลังใช้งานจริง
+> แก้ FR-SQR-26/27/29, AC-04 และ Decision log · เพิ่ม FR-SQR-44/45 · ไม่แตะ token, endpoint หรือ `resolve`
+>
+> 1. **ไม่แสดง role บนบัตร:** บัตร staff ทุกคน (รวม `system_admin` และคนที่มีหลาย role) แสดงคำว่า **"เจ้าหน้าที่"** อย่างเดียว ตัวใหญ่หนา ล่างสุดของคอลัมน์ข้อความ เหนือบรรทัด shelter.psu.ac.th — role หลายตัวทำให้ป้าย 80×60 รก (FR-SQR-26, FR-SQR-44)
+> 2. **ไม่แสดง `position` บนบัตร** (FR-SQR-26)
+> 3. **PNG = ป้ายเดียวกับพิมพ์:** ปุ่มดาวน์โหลด PNG ได้ภาพป้าย 80×60 mm หน้าตาเดียวกับที่พิมพ์ ไม่ใช่รูป QR เปล่า (FR-SQR-29, FR-SQR-45)
+> 4. **หน้าแจกไม่เปลี่ยน:** `resolve` ยังคืน `role_label` ตาม scoped role (FR-SQR-23) ให้คนแจกเทียบตัวตนตาม R1
 
 ---
 
@@ -121,10 +129,10 @@ migration: one-off backfill `staff_token_hash` ให้ `_users` เดิม�
 
 - **FR-SQR-24** — header หน้า portal (`routes/(protected)/portal/+page.svelte`) มีปุ่ม "ดูบัตรของฉัน" เปิด dialog — ไม่สร้างหน้าใหม่
 - **FR-SQR-25** — dialog บัตรอยู่ใน feature `me` (`lib/features/me/ui/`) export ผ่าน barrel `$lib/features/me`
-- **FR-SQR-26** — บัตร staff แสดง `display_name`, บทบาทในศูนย์ที่เลือกอยู่ (จาก scoped role; `system_admin` แสดง "ผู้ดูแลระบบส่วนกลาง"), `position` (ถ้ามี), ชื่อศูนย์ และ QR — QR ใบเดียวกันทุกศูนย์
-- **FR-SQR-27** — บัตรจิตอาสาแสดงชื่อ บทบาท `volunteer_code` และ QR จิตอาสา
+- **FR-SQR-26** — บัตร staff แสดง `display_name`, คำว่า "เจ้าหน้าที่" (A2 — ทุกคนเหมือนกัน รวม `system_admin` และ user ที่มีหลาย role · ไม่แสดงรายการ role และไม่แสดง `position`) และ QR · ชื่อศูนย์แสดงบนจอใต้ตัวอย่างบัตร ไม่พิมพ์ลงบัตร (A2) — QR ใบเดียวกันทุกศูนย์
+- **FR-SQR-27** — บัตรจิตอาสาแสดงชื่อ คำว่า "จิตอาสา" (ตำแหน่งเดียวกับ "เจ้าหน้าที่" — A2) `volunteer_code` และ QR จิตอาสา
 - **FR-SQR-28** — `kind: 'none'` แสดงข้อความตามเหตุผล (ไม่มี QR → "ยังไม่มี QR กรุณาติดต่อผู้ดูแล" / บัญชีถูกปิด / ลิงก์จิตอาสาไม่ถูกต้อง) และแนะนำให้ติดต่อผู้ดูแล
-- **FR-SQR-29** — ดาวน์โหลดและพิมพ์บัตรจาก dialog ได้ · dialog ไม่มีปุ่มหมุน QR
+- **FR-SQR-29** — ดาวน์โหลด (PNG) และพิมพ์บัตรจาก dialog ได้ · ทั้งสองแบบเป็นป้าย 80×60 mm หน้าตาเดียวกัน (A2 — FR-SQR-45) · dialog ไม่มีปุ่มหมุน QR
 - **FR-SQR-30** — หน้าจัดการ user (`lib/features/users/`) มีปุ่ม "พิมพ์บัตร" และ "หมุน QR" (มี confirm เตือนว่า QR เก่าใช้ไม่ได้ทุกศูนย์) · ซ่อนสำหรับ user ที่มี `volunteer_id`
 
 ### 3.4 หน้าแจก `/onsite/distribution`
@@ -149,6 +157,11 @@ migration: one-off backfill `staff_token_hash` ให้ `_users` เดิม�
 - **FR-SQR-42** — `resolve` **ไม่มี rate limit ใน application layer** ตาม CR-188 (rate limit อยู่ที่ nginx `limit_req` ต่อ IP เท่านั้น) · การกันใช้ `resolve` เช็ก hash พึ่ง gate ผู้เรียก (FR-SQR-21) และ 404 แบบเดียวกัน (FR-SQR-41)
 - **FR-SQR-43** — mint `staff_token_hash` ทำใน `createUser` ของ server ที่เดียว · `createUser` ฝั่ง client (`$lib/features/users`) ห้ามส่งหรือสร้าง hash · body ของ `POST /api/v1/users` ที่มี `staff_token_hash` → ignore
 
+### 3.7 ส่วนที่ปรับ A2 (proposed 2026-10-31)
+
+- **FR-SQR-44** — ป้ายสถานะบนบัตร อยู่ล่างสุดของคอลัมน์ข้อความ เหนือบรรทัดลิงก์ shelter.psu.ac.th: staff = "เจ้าหน้าที่" (14pt หนา ตัวดำบนพื้นขาว ใหญ่กว่าบรรทัดรอง) · จิตอาสา = "จิตอาสา" ขนาดเดียวกัน และมี "รหัสจิตอาสา {volunteer_code}" ใต้ชื่อ · ไม่คำนวณจาก role ของ user
+- **FR-SQR-45** — PNG ที่ดาวน์โหลดได้จากบัตร render จาก component ป้าย 80×60 mm ตัวเดียวกับตัวอย่างบนจอและแผ่นพิมพ์ (`KioskLabelCard`) · ชื่อไฟล์ `staff-card-{ชื่อ}.png` · บนมือถือที่แชร์ไฟล์ได้ เปิด share sheet แทนดาวน์โหลด
+
 ---
 
 ## 4. Acceptance criteria
@@ -156,7 +169,8 @@ migration: one-off backfill `staff_token_hash` ให้ `_users` เดิม�
 - [ ] **AC-01** สร้าง staff ใหม่ → `_users` doc มี `staff_token_hash` 64 hex และไม่มี plaintext token
 - [ ] **AC-02** สร้าง user จากฝั่งจิตอาสา → ไม่มี `staff_token_hash`
 - [ ] **AC-03** backfill dry-run แสดงจำนวน · write แล้วรันซ้ำออกเพิ่ม 0 · password ของ user ยัง login ได้
-- [ ] **AC-04** เจ้าหน้าที่กด "ดูบัตรของฉัน" เห็นชื่อ บทบาท ศูนย์ และ QR ครบ · เปลี่ยนศูนย์แล้ว QR เดิม
+- [ ] **AC-04** เจ้าหน้าที่กด "ดูบัตรของฉัน" เห็นชื่อ คำว่า "เจ้าหน้าที่" (ไม่มีรายการ role แม้มีหลาย role — A2) ศูนย์ และ QR ครบ · เปลี่ยนศูนย์แล้ว QR เดิม
+- [ ] **AC-17** (A2) กดดาวน์โหลด PNG จากบัตร (portal หรือหน้าจัดการ user) ได้ภาพป้าย 80×60 หน้าตาเดียวกับที่พิมพ์ · user `system_admin` และ user หลาย role ได้บรรทัด "เจ้าหน้าที่" เหมือนกัน
 - [ ] **AC-05** user ที่มาจากจิตอาสากด "ดูบัตรของฉัน" เห็น QR จิตอาสาใบเดิม (QR ในมือถือยังใช้ได้ ไม่ถูกหมุน)
 - [ ] **AC-06** user แก้ `volunteer_id` ใน `_users` doc ตัวเองเป็นของจิตอาสาคนอื่น → `GET /api/v1/me/card` ไม่คืน QR ของจิตอาสาคนนั้น
 - [ ] **AC-07** สแกน QR staff ที่หน้าแจกแล้วแจกได้ · log เป็น `recipient_type: 'staff'`, `recipient_id: user:{name}`
@@ -218,3 +232,4 @@ migration: one-off backfill `staff_token_hash` ให้ `_users` เดิม�
 - 2026-10-29 — **approved (kong)** — รับข้อเสนอทีมทุกข้อใน Decision log ตามที่เสนอ และรับความเสี่ยง R1–R4 (§5) ตามที่เขียน
 - 2026-10-29 — ข้อเสนอทีม (A1, proposed): ปิด warning จาก PR review — payload ตัวใหญ่ + parser ไม่สนตัวพิมพ์ (FR-SQR-40) · resolve ตาม gate `canAccessDistributionDesk` · 404 เดียวกันสำหรับไม่เจอ/ศูนย์อื่น (FR-SQR-41) · ไม่มี rate limit ในแอปตาม CR-188 (FR-SQR-42, แก้ 2026-10-30 — เดิมเสนอ 30/นาที/user) · ระบุ `createUser` ของ server (FR-SQR-43) · e2e AC-15/16 · `affects` ครบ · รอ kong approve
 - 2026-10-30 — **A1 approved (kong)** — รับข้อเสนอ A1 ทุกข้อตามที่เขียน (FR-SQR-40..43, AC-15/16, แก้ §2.1 และ FR-SQR-02/03/13/21, `affects`) รวมการตอบ 404 เดียวกันใน FR-SQR-21 และไม่มี rate limit ในแอปตาม CR-188
+- 2026-10-31 — ข้อเสนอทีม (A2, proposed): บัตรแสดง "เจ้าหน้าที่" ตัวใหญ่แทนรายการ role (รวม admin) เพราะ user หลาย role ทำให้ป้ายรก · ไม่แสดง `position` บนบัตร · PNG เป็นป้าย 80×60 เดียวกับพิมพ์ · `resolve`/หน้าแจกยังแสดง role ตามเดิม (R1) · รอ approve
