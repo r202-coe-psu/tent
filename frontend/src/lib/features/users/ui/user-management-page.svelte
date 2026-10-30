@@ -27,7 +27,6 @@
 		type StaffCardForPrint,
 		type UserSummary
 	} from '../data/users.api';
-	import { staffCardRoleLabel } from '../domain/staff-card';
 	import StaffCardView from './staff-card-view.svelte';
 	import { usersKeys } from '../application/queries';
 	import { usersListBaseFromPathname, withUsersView } from '../domain/user-edit-path';
@@ -575,8 +574,6 @@
 			<StaffCardView
 				payload={staffCard.payload}
 				displayName={staffCard.display_name}
-				roleLabel={staffCardRoleLabel(staffCard.roles, effectiveLock ?? null)}
-				position={staffCard.position}
 				shelterName={staffCardShelterName}
 			/>
 		{:else if staffCardMissingMessage}

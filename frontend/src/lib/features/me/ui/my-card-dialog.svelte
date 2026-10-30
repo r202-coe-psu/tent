@@ -1,18 +1,16 @@
 <script lang="ts">
 	import { Button } from '$lib/components/ui/button/index.js';
 	import * as Dialog from '$lib/components/ui/dialog/index.js';
-	import { StaffCardView, staffCardRoleLabel } from '$lib/features/users';
+	import { StaffCardView } from '$lib/features/users';
 	import type { MyCardNoneReason } from '../domain/my-card';
 	import { useMyCard } from '../application/queries';
 	import RefreshCw from '@lucide/svelte/icons/refresh-cw';
 
 	let {
 		open = $bindable(false),
-		shelterCode,
 		shelterName
 	}: {
 		open?: boolean;
-		shelterCode: string | null;
 		shelterName: string | null;
 	} = $props();
 
@@ -52,18 +50,11 @@
 				</Button>
 			</div>
 		{:else if card?.kind === 'staff'}
-			<StaffCardView
-				payload={card.payload}
-				displayName={card.display_name}
-				roleLabel={staffCardRoleLabel(card.roles, shelterCode)}
-				position={card.position}
-				{shelterName}
-			/>
+			<StaffCardView payload={card.payload} displayName={card.display_name} {shelterName} />
 		{:else if card?.kind === 'volunteer'}
 			<StaffCardView
 				payload={card.payload}
 				displayName={card.display_name}
-				roleLabel="จิตอาสา"
 				volunteerCode={card.volunteer_code}
 				{shelterName}
 			/>

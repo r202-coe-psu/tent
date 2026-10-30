@@ -6,23 +6,20 @@
 		KioskLabelSheet,
 		prepareKioskQrImage
 	} from '$lib/features/kiosk';
-	import { generateQrDataUrl } from '$lib/utils/qrcode';
-	import { staffCardFileName } from '../domain/staff-card';
+	import { downloadElementAsPng } from '$lib/utils/pdf';
+	import { toast } from 'svelte-sonner';
+	import { staffCardFileName, staffCardText } from '../domain/staff-card';
 	import Download from '@lucide/svelte/icons/download';
 	import Printer from '@lucide/svelte/icons/printer';
 
 	let {
 		payload,
 		displayName,
-		roleLabel,
-		position = null,
 		shelterName = null,
 		volunteerCode = null
 	}: {
 		payload: string;
 		displayName: string;
-		roleLabel: string;
-		position?: string | null;
 		shelterName?: string | null;
 		volunteerCode?: string | null;
 	} = $props();
@@ -34,22 +31,16 @@
 		previewWidth > 0 ? Math.min(1, previewWidth / (KIOSK_LABEL_MM.width * CSS_PX_PER_MM)) : 1
 	);
 
-	// The preview and the printed sheet are the same kiosk label card, so what staff see is what prints.
+	// The preview, the printed sheet and the PNG are the same kiosk label card, so what staff see is
+	// what prints and downloads.
 	const labelQrPromise = $derived(prepareKioskQrImage(payload));
-	const downloadPromise = $derived(
-		generateQrDataUrl(payload, {
-			width: 320,
-			margin: 1,
-			color: { dark: '#0A2647', light: '#ffffff' }
-		})
-	);
 
-	const lines = $derived([
-		roleLabel,
-		...(volunteerCode ? [`รหัสจิตอาสา ${volunteerCode}`] : position ? [position] : [])
-	]);
+	const text = $derived(staffCardText({ volunteerCode }));
 
 	const fileName = $derived(staffCardFileName(displayName));
+
+	let downloadEl = $state<HTMLElement>();
+	let downloading = $state(false);
 
 	function labelFor(qr: { src: string; sizeMm: number }) {
 		return {
@@ -57,9 +48,24 @@
 			qrSrc: qr?.src,
 			qrSizeMm: qr?.sizeMm,
 			name: displayName,
-			lines,
+			badge: text.badge,
+			lines: text.lines,
 			alt: `QR สำหรับสแกนบัตรของ ${displayName}`
 		};
+	}
+
+	async function downloadCard() {
+		if (!downloadEl || downloading) return;
+		downloading = true;
+		try {
+			await downloadElementAsPng(downloadEl, fileName);
+		} catch (err) {
+			toast.error(
+				err instanceof Error && err.message ? err.message : 'ดาวน์โหลดบัตรไม่สำเร็จ กรุณาลองใหม่'
+			);
+		} finally {
+			downloading = false;
+		}
 	}
 </script>
 
@@ -81,6 +87,12 @@
 				/>
 			</div>
 		</div>
+		<!-- Unzoomed off-screen copy for the PNG: the preview's `zoom` would shrink the raster. -->
+		<div class="pointer-events-none fixed top-0 -left-[10000px] print:hidden" aria-hidden="true">
+			<div bind:this={downloadEl} class="w-fit">
+				<KioskLabelCard label={labelFor(qr)} />
+			</div>
+		</div>
 		{#if shelterName}
 			<p class="text-center text-sm text-slate-500 print:hidden">{shelterName}</p>
 		{/if}
@@ -92,18 +104,15 @@
 	{/await}
 
 	<div class="flex flex-col gap-2 sm:flex-row sm:justify-center print:hidden">
-		{#await downloadPromise then dataUrl}
-			{#if dataUrl}
-				<Button
-					variant="outline"
-					class="min-h-11 gap-1.5 focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2"
-					href={dataUrl}
-					download={fileName}
-				>
-					<Download class="size-4" aria-hidden="true" /> ดาวน์โหลด PNG
-				</Button>
-			{/if}
-		{/await}
+		<Button
+			variant="outline"
+			class="min-h-11 gap-1.5 focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2"
+			disabled={!downloadEl || downloading}
+			onclick={downloadCard}
+		>
+			<Download class="size-4" aria-hidden="true" />
+			{downloading ? 'กำลังสร้างไฟล์...' : 'ดาวน์โหลด PNG'}
+		</Button>
 		<Button
 			variant="outline"
 			class="min-h-11 gap-1.5 focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2"

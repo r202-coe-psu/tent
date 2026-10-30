@@ -246,11 +246,7 @@
 			</div>
 		</section>
 
-		<MyCardDialog
-			bind:open={myCardOpen}
-			shelterCode={selectedCode ?? null}
-			shelterName={currentShelter?.name ?? null}
-		/>
+		<MyCardDialog bind:open={myCardOpen} shelterName={currentShelter?.name ?? null} />
 
 		<main>
 			<!-- Dev-server only: stripped from production builds (`dev` is false there). -->
