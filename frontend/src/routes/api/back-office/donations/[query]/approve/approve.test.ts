@@ -242,6 +242,53 @@ describe('POST /api/back-office/donations/[query]/reject', () => {
 			expect(putBody()).toBeUndefined();
 		});
 
+		// A point took the first line in while the booking waited for review; refusing it now
+		// would leave the receipt counting goods the donor reads as turned away.
+		it('refuses to reject a line a drop-off point already received', async () => {
+			mockCouch({
+				...mixed,
+				items: [
+					{
+						item_id: 'item:water',
+						qty: '24',
+						unit: 'ขวด',
+						review_status: 'pending',
+						drop_off_point_id: 'sp-gym'
+					},
+					{
+						free_text: 'ผ้าห่ม',
+						qty: '2',
+						unit: 'ผืน',
+						review_status: 'pending',
+						drop_off_point_id: 'sp-med'
+					}
+				],
+				point_receipts: [
+					{
+						...POINT_RECEIPTS[0],
+						ledger_ids: ['stock_ledger:row-1'],
+						items: [{ line_no: 0, item_id: 'item:water', qty: '24', unit: 'ขวด' }]
+					}
+				]
+			} as unknown as PublicDonationDoc);
+
+			const response = await POST(
+				postEvent({
+					lines: [
+						{ index: 0, decision: 'rejected', reason_code: 'expired' },
+						{ index: 1, decision: 'approved' }
+					]
+				})
+			);
+
+			expect(response.status).toBe(409);
+			const body = await response.json();
+			expect(body.error_code).toBe('LINE_ALREADY_RECEIVED');
+			expect(body.lines).toEqual([0]);
+			expect(writtenDocs()).toHaveLength(0);
+			expect(putBody()).toBeUndefined();
+		});
+
 		it('closes the booking when refusing the last line a point had not recorded (FR-MP-23)', async () => {
 			mockCouch({
 				...mixed,

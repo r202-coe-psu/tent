@@ -15,6 +15,7 @@ import {
 	closeDonationByPoints,
 	hasLineReview,
 	hasPointReceipts,
+	refusedReceivedLines,
 	reviewDonationInputSchema,
 	type LineReviewResult,
 	type PublicDonationDoc
@@ -130,6 +131,21 @@ export const POST: RequestHandler = async ({ params, request }) => {
 					error_code: 'GOODS_IN_STOCK',
 					error:
 						'ใบนี้มีของบันทึกเข้าคลังแล้ว — ปฏิเสธทุกรายการไม่ได้ ให้รับของต่อจากหน้าตรวจรับ หรือติดต่อผู้ดูแลเพื่อตรวจยอด'
+				},
+				{ status: 409 }
+			);
+		}
+
+		// CR-206 — a line a point already took in cannot be refused afterwards: the receipt
+		// and `received_summary` would count goods the donor reads as turned away.
+		const refusedReceived = refusedReceivedLines(donation, lines ?? []);
+		if (refusedReceived.length > 0) {
+			return json(
+				{
+					success: false,
+					error_code: 'LINE_ALREADY_RECEIVED',
+					error: `รายการที่ ${refusedReceived.map((n) => n + 1).join(', ')} จุดรับบริจาครับของไว้แล้ว — ปฏิเสธไม่ได้`,
+					lines: refusedReceived
 				},
 				{ status: 409 }
 			);

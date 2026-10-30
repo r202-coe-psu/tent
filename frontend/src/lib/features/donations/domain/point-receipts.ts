@@ -26,6 +26,44 @@ export function recordedLineNos(donation: ReceiptSource): Set<number> {
 	return new Set((donation.point_receipts ?? []).flatMap((receipt) => receipt.line_nos));
 }
 
+type ReceivedSource = {
+	point_receipts?:
+		| readonly (Pick<DonationPointReceipt, 'line_nos'> & {
+				items?: readonly { line_no: number; rejected?: boolean }[];
+		  })[]
+		| null;
+};
+
+/**
+ * Lines some point took in (FR-MP-5a) — recorded and not turned away there. A line a point
+ * refused is out of this set: review refusing it too only says the same thing twice.
+ */
+export function receivedLineNos(donation: ReceivedSource): Set<number> {
+	const received = new Set<number>();
+	for (const receipt of donation.point_receipts ?? []) {
+		for (const lineNo of receipt.line_nos) {
+			const result = receipt.items?.find((line) => line.line_no === lineNo);
+			if (!result?.rejected) received.add(lineNo);
+		}
+	}
+	return received;
+}
+
+/**
+ * The lines a review would refuse although a point already received them: the receipt and
+ * `received_summary` would count goods on the shelf that the donor reads as refused.
+ */
+export function refusedReceivedLines(
+	donation: ReceivedSource,
+	decisions: readonly { index: number; decision: 'approved' | 'rejected' }[]
+): number[] {
+	const received = receivedLineNos(donation);
+	return decisions
+		.filter(({ index, decision }) => decision === 'rejected' && received.has(index))
+		.map(({ index }) => index)
+		.sort((a, b) => a - b);
+}
+
 /** True once any point recorded a receipt — the booking is then started (FR-MP-17a). */
 export function hasPointReceipts(donation: ReceiptSource): boolean {
 	return (donation.point_receipts ?? []).length > 0;

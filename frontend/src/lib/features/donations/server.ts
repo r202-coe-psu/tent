@@ -52,7 +52,9 @@ export {
 	currentLinePoint,
 	hasPointReceipts,
 	isReceivedByPoint,
+	receivedLineNos,
 	recordedLineNos,
+	refusedReceivedLines,
 	type DonationCloseResult
 } from './domain/point-receipts';
 export {

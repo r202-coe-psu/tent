@@ -13,7 +13,9 @@ import {
 	currentLinePoint,
 	hasPointReceipts,
 	isReceivedByPoint,
-	recordedLineNos
+	receivedLineNos,
+	recordedLineNos,
+	refusedReceivedLines
 } from './point-receipts';
 
 /**
@@ -75,6 +77,30 @@ describe('point receipt helpers', () => {
 		expect(recordedLineNos({}).size).toBe(0);
 		expect(hasPointReceipts({ point_receipts: [] })).toBe(false);
 		expect(hasPointReceipts({ point_receipts: [receipt([0])] })).toBe(true);
+	});
+
+	it('flags a review refusal of a line a point took in, not of one it turned away', () => {
+		const donation = {
+			point_receipts: [
+				{
+					line_nos: [0, 1],
+					items: [
+						{ line_no: 0, qty: '5' },
+						{ line_no: 1, qty: '0', rejected: true }
+					]
+				}
+			]
+		};
+		expect([...receivedLineNos(donation)]).toEqual([0]);
+		expect(
+			refusedReceivedLines(donation, [
+				{ index: 2, decision: 'rejected' },
+				{ index: 1, decision: 'rejected' },
+				{ index: 0, decision: 'rejected' }
+			])
+		).toEqual([0]);
+		expect(refusedReceivedLines(donation, [{ index: 0, decision: 'approved' }])).toEqual([]);
+		expect(refusedReceivedLines({}, [{ index: 0, decision: 'rejected' }])).toEqual([]);
 	});
 
 	it('treats a point the shelter no longer offers as no point (FR-MP-19)', () => {
