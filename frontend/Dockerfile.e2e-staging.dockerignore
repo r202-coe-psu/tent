@@ -10,6 +10,9 @@
 !src/
 !src/lib/
 !src/lib/**
+!scripts/cleanup-e2e-residue.ts
+!scripts/t31-seed-support.ts
+!scripts/seed/couch.ts
 
 # Local credentials must never enter the runner image.
 **/.env

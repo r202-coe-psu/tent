@@ -449,6 +449,9 @@
 				<p class="mt-2 text-lg font-bold text-slate-900">
 					{formatVehicle(request.vehicle, request.delivery_method)}
 				</p>
+				{#if request.vehicle_plate}
+					<p class="mt-1 text-sm font-semibold text-slate-700">ทะเบียน {request.vehicle_plate}</p>
+				{/if}
 			</div>
 
 			{#if request.pickup_address}

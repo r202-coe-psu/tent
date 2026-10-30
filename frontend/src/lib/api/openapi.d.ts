@@ -1889,6 +1889,21 @@ export interface components {
 			to?: string | null;
 		};
 		/**
+		 * DonationPoint
+		 * @description A storage point ticked as a donation drop-off point, with a pin (CR-205).
+		 */
+		DonationPoint: {
+			/** Id */
+			id: string;
+			/** Name */
+			name: string;
+			/** Types */
+			types?: string[];
+			geo: components['schemas']['GeoPoint'];
+			/** Location Note */
+			location_note?: string | null;
+		};
+		/**
 		 * DonationTrackSearchRequest
 		 * @description CR-052 §2.6 — human booking_ref + phone exact match (not token alone).
 		 */
@@ -3239,10 +3254,10 @@ export interface components {
 			name: string;
 			/**
 			 * Site Kind
+			 * @description Master code from master_data:site_kind (e.g. evacuation_center, host_house)
 			 * @default evacuation_center
-			 * @enum {string}
 			 */
-			site_kind: 'evacuation_center' | 'host_house';
+			site_kind: string;
 			/** Status */
 			status: string;
 			/** Admin Type */
@@ -3284,6 +3299,8 @@ export interface components {
 			 * @default false
 			 */
 			accepts_pre_registration: boolean;
+			/** Donation Points */
+			donation_points?: components['schemas']['DonationPoint'][];
 		};
 		/** ShelterDetailResponse */
 		ShelterDetailResponse: {
@@ -3334,10 +3351,10 @@ export interface components {
 			name: string;
 			/**
 			 * Site Kind
+			 * @description Master code from master_data:site_kind (e.g. evacuation_center, host_house)
 			 * @default evacuation_center
-			 * @enum {string}
 			 */
-			site_kind: 'evacuation_center' | 'host_house';
+			site_kind: string;
 			/** Status */
 			status: string;
 			/**
@@ -5182,7 +5199,7 @@ export interface operations {
 				district?: string | null;
 				subdistrict?: string | null;
 				status?: string | null;
-				site_kind?: ('evacuation_center' | 'host_house') | null;
+				site_kind?: string | null;
 				/** @description User latitude */
 				lat?: number | null;
 				/** @description User longitude */

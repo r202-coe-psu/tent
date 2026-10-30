@@ -270,11 +270,11 @@ export interface DonationItem {
 
 /**
  * `schema_v` every donation writer stamps — the walk-in factory here, the donor edit
- * route, and `worker/inbound/donations.py`. 9 = CR-175 donor `photos` (8 CR-196
- * `items[].line_key`, 7 CR-174 `items[].review_status`, 6 CR-172 `reject_reason`,
- * 5 CR-087 `redirect_to_shelter_code`, 4 CR-080 `revisions[]`).
+ * route, and `worker/inbound/donations.py`. 10 = CR-209 `logistics.vehicle_plate`,
+ * 9 = CR-175 donor `photos` (8 CR-196 `items[].line_key`, 7 CR-174 `items[].review_status`,
+ * 6 CR-172 `reject_reason`, 5 CR-087 `redirect_to_shelter_code`, 4 CR-080 `revisions[]`).
  */
-export const DONATION_SCHEMA_V = 9;
+export const DONATION_SCHEMA_V = 10;
 
 export interface Donor {
 	name: string;
@@ -288,6 +288,7 @@ export interface Donor {
 export interface DonationLogistics {
 	delivery_method: 'self_dropoff' | 'parcel' | 'shelter_pickup';
 	vehicle?: 'motorcycle' | 'car' | 'pickup' | 'truck';
+	vehicle_plate?: string;
 	slot?: {
 		date: string;
 		from: string;
@@ -443,6 +444,9 @@ export type OperationsDoc = StockLedger | Donation | DonationCampaign | StockTra
 type LedgerRefPrefix = string | null;
 export type LedgerRefRule = LedgerRefPrefix | readonly LedgerRefPrefix[];
 
+/** `ref_id` prefix of a bulk return pool document; allowed for `receive` ledger rows only. */
+export const BULK_RETURN_POOL_REF_PREFIX = 'bulk_return_pool:';
+
 export const REF_PREFIX_BY_REASON: Record<LedgerReason, LedgerRefRule> = {
 	donation: 'donation:',
 	// kitchen_requisition: legacy doc type, deprecated (CR-141) — still accepted so
@@ -456,7 +460,12 @@ export const REF_PREFIX_BY_REASON: Record<LedgerReason, LedgerRefRule> = {
 	// distribution_batch: legacy batch flow; requisition_ticket: leftovers received back from a
 	// ticket into their source lot (CR-208), never a `direct-` issue — see isCanonicalLedgerRef.
 	distribution_return: ['distribution_batch:', 'requisition_ticket:'],
-	receive: ['meal_service:', 'requisition_ticket:', 'distribution_log:', 'bulk_return_pool:']
+	receive: [
+		'meal_service:',
+		'requisition_ticket:',
+		'distribution_log:',
+		BULK_RETURN_POOL_REF_PREFIX
+	]
 };
 
 function matchesLedgerRefPrefix(refId: string, prefix: string): boolean {

@@ -40,11 +40,10 @@ export type DonationTrackLogistics = {
 	pickup_address?: string | null;
 };
 
+/** What the tracking API sends of the donor (CR-209 FR-4b allowlist): no contact beyond this. */
 export type DonationTrackDonor = {
 	name?: string;
 	phone_masked?: string;
-	line_id?: string | null;
-	email?: string | null;
 };
 
 export type DonationTrackView = {
@@ -208,6 +207,60 @@ export function isTerminalDonationStatus(status: string): boolean {
 	);
 }
 
+function stringOrNull(value: unknown): string | null | undefined {
+	if (value === null) return null;
+	return typeof value === 'string' ? value : undefined;
+}
+
+/**
+ * The `logistics` the public tracking API may return (CR-209 FR-4): only these keys, from
+ * CouchDB and the FastAPI fallback alike. Anything else on the doc — `vehicle_plate` is donor
+ * PII — never reaches the tracking page.
+ */
+export function toTrackingLogistics(raw: unknown): DonationTrackLogistics | null {
+	if (!raw || typeof raw !== 'object') return null;
+	const src = raw as Record<string, unknown>;
+	const out: DonationTrackLogistics = {};
+	if (typeof src.delivery_method === 'string') out.delivery_method = src.delivery_method;
+	for (const key of ['vehicle', 'eta', 'courier_tracking_no', 'pickup_address'] as const) {
+		const value = stringOrNull(src[key]);
+		if (value !== undefined) out[key] = value;
+	}
+	if (src.slot === null) {
+		out.slot = null;
+	} else if (src.slot && typeof src.slot === 'object') {
+		const slot = src.slot as Record<string, unknown>;
+		out.slot = {};
+		for (const key of ['date', 'from', 'to'] as const) {
+			const value = slot[key];
+			if (typeof value === 'string') out.slot[key] = value;
+		}
+	}
+	return out;
+}
+
+/** `***-***-1234` — the form FastAPI's tracking payload already uses (`_mask_phone`). */
+function maskTrackingPhone(phone: string): string {
+	const digits = phone.replace(/\D/g, '');
+	return digits.length < 4 ? '***' : `***-***-${digits.slice(-4)}`;
+}
+
+/**
+ * The `donor` the public tracking API may return: the name and a masked phone, nothing else.
+ * The CouchDB doc carries the full `phone`, `phone_hash`, `line_id` and `email`; the tracking
+ * page shows only the name and `phone_masked`, so the rest never leaves the server.
+ */
+export function toTrackingDonor(raw: unknown): DonationTrackDonor {
+	if (!raw || typeof raw !== 'object') return {};
+	const src = raw as Record<string, unknown>;
+	const out: DonationTrackDonor = {};
+	if (typeof src.name === 'string') out.name = src.name;
+	if (typeof src.phone_masked === 'string') out.phone_masked = src.phone_masked;
+	else if (typeof src.phone === 'string' && src.phone)
+		out.phone_masked = maskTrackingPhone(src.phone);
+	return out;
+}
+
 /**
  * Why the counter cannot open this booking, or `null` when it can. The receive route
  * refuses every terminal status; saying so at lookup spares staff a full count that
@@ -234,9 +287,7 @@ export function toDonationTrackView(raw: Record<string, unknown>): DonationTrack
 		shelter_code: String(raw.shelter_code ?? ''),
 		donor: {
 			name: donorRaw.name != null ? String(donorRaw.name) : undefined,
-			phone_masked: donorRaw.phone_masked != null ? String(donorRaw.phone_masked) : undefined,
-			line_id: donorRaw.line_id != null ? String(donorRaw.line_id) : null,
-			email: donorRaw.email != null ? String(donorRaw.email) : null
+			phone_masked: donorRaw.phone_masked != null ? String(donorRaw.phone_masked) : undefined
 		},
 		items: itemsRaw.map((item) => {
 			const row = item as Record<string, unknown>;

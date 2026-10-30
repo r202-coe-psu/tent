@@ -39,6 +39,9 @@ import { recordCreatedShelter, teardownShelter } from './helpers/public-cleanup'
 import { createShelterViaUi } from './helpers/staff-ui';
 import { bangkokToday } from '../src/lib/utils/date';
 
+/** Id of this spec's created-data ledger (see helpers/public-cleanup.ts). */
+const LEDGER_SUITE = 'kiosk-pr-staff';
+
 test.describe.configure({ mode: 'serial' });
 test.use({ actionTimeout: 15_000 });
 
@@ -150,7 +153,7 @@ test.describe(
 				subdistrict: 'คอหงส์',
 				capacity: 60
 			});
-			recordCreatedShelter(shelterCode);
+			recordCreatedShelter(shelterCode, LEDGER_SUITE);
 
 			const created = await bff(adminCookie, 'POST', '/api/v1/kiosk/devices', {
 				device_id: DEVICE_ID,

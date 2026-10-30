@@ -6,6 +6,7 @@
 	import Package from '@lucide/svelte/icons/package';
 	import Navigation from '@lucide/svelte/icons/navigation';
 	import Copy from '@lucide/svelte/icons/copy';
+	import Printer from '@lucide/svelte/icons/printer';
 	import Search from '@lucide/svelte/icons/search';
 	import X from '@lucide/svelte/icons/x';
 	import { Input } from '$lib/components/ui/input';
@@ -200,6 +201,14 @@
 				{/if}
 			</div>
 
+			<!-- CR-209 FR-3a: the plate the booking sent, not whatever the form holds now. -->
+			{#if donationStore.bookedVehiclePlate}
+				<div>
+					<div class="mb-1 text-xs font-bold text-slate-500">{t.vehiclePlateTicketLabel}</div>
+					<div class="text-sm font-bold text-slate-800">{donationStore.bookedVehiclePlate}</div>
+				</div>
+			{/if}
+
 			<div class="grid grid-cols-2 gap-4">
 				<div>
 					<div class="mb-1 flex items-center gap-1 text-xs font-bold text-slate-500">
@@ -360,6 +369,17 @@
 					<p class="mt-2 text-2xs font-bold text-red-500">{courierError}</p>
 				{/if}
 			</div>
+		{/if}
+
+		{#if approved && donationStore.trackingToken}
+			<a
+				href={resolve(`/donations/track/${encodeURIComponent(donationStore.trackingToken)}/label`)}
+				class="mt-6 flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white py-3 text-sm font-bold text-slate-800 transition-colors hover:bg-slate-50"
+				data-testid="ticket-box-label-link"
+			>
+				<Printer class="h-4 w-4" />
+				{t.boxLabelOpenBtn}
+			</a>
 		{/if}
 
 		{#if directionsHref}

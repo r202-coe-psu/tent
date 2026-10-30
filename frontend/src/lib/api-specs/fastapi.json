@@ -694,13 +694,7 @@
 						"name": "site_kind",
 						"in": "query",
 						"required": false,
-						"schema": {
-							"anyOf": [
-								{ "enum": ["evacuation_center", "host_house"], "type": "string" },
-								{ "type": "null" }
-							],
-							"title": "Site Kind"
-						}
+						"schema": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Site Kind" }
 					},
 					{
 						"name": "lat",
@@ -3669,6 +3663,22 @@
 				"type": "object",
 				"title": "DonationPhoneLookupSlot"
 			},
+			"DonationPoint": {
+				"properties": {
+					"id": { "type": "string", "title": "Id" },
+					"name": { "type": "string", "title": "Name" },
+					"types": { "items": { "type": "string" }, "type": "array", "title": "Types" },
+					"geo": { "$ref": "#/components/schemas/GeoPoint" },
+					"location_note": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Location Note"
+					}
+				},
+				"type": "object",
+				"required": ["id", "name", "geo"],
+				"title": "DonationPoint",
+				"description": "A storage point ticked as a donation drop-off point, with a pin (CR-205)."
+			},
 			"DonationTrackSearchRequest": {
 				"properties": {
 					"booking_ref": { "type": "string", "title": "Booking Ref" },
@@ -5160,8 +5170,8 @@
 					"name": { "type": "string", "title": "Name" },
 					"site_kind": {
 						"type": "string",
-						"enum": ["evacuation_center", "host_house"],
 						"title": "Site Kind",
+						"description": "Master code from master_data:site_kind (e.g. evacuation_center, host_house)",
 						"default": "evacuation_center"
 					},
 					"status": { "type": "string", "title": "Status" },
@@ -5209,6 +5219,11 @@
 						"type": "boolean",
 						"title": "Accepts Pre Registration",
 						"default": false
+					},
+					"donation_points": {
+						"items": { "$ref": "#/components/schemas/DonationPoint" },
+						"type": "array",
+						"title": "Donation Points"
 					}
 				},
 				"type": "object",
@@ -5278,8 +5293,8 @@
 					"name": { "type": "string", "title": "Name" },
 					"site_kind": {
 						"type": "string",
-						"enum": ["evacuation_center", "host_house"],
 						"title": "Site Kind",
+						"description": "Master code from master_data:site_kind (e.g. evacuation_center, host_house)",
 						"default": "evacuation_center"
 					},
 					"status": { "type": "string", "title": "Status" },

@@ -70,6 +70,7 @@ function toPendingRow(d: PublicDonationDoc): PendingDonationRow {
 		slot: d.logistics?.slot,
 		delivery_method: d.logistics?.delivery_method,
 		vehicle: d.logistics?.vehicle ?? null,
+		vehicle_plate: d.logistics?.vehicle_plate ?? null,
 		pickup_address: d.logistics?.pickup_address ?? null,
 		donor_note: donorNote,
 		is_unsolicited: isUnsolicited,
