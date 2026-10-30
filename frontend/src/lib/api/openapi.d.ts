@@ -3896,6 +3896,11 @@ export interface components {
 			member_ids: string[];
 			/** Required Person Id */
 			required_person_id?: string | null;
+			/**
+			 * Claim Pets
+			 * @default false
+			 */
+			claim_pets: boolean;
 		};
 		/** UnassignedKioskPrepareResponse */
 		UnassignedKioskPrepareResponse: {
@@ -3913,6 +3918,12 @@ export interface components {
 			}[];
 			/** Images */
 			images: components['schemas']['UnassignedKioskImage'][];
+			/** Pets */
+			pets?: {
+				[key: string]: unknown;
+			}[];
+			/** Pet Ids */
+			pet_ids?: string[];
 		};
 		/**
 		 * UnassignedKioskRevertRequest
@@ -3924,12 +3935,16 @@ export interface components {
 			/** Device Id */
 			device_id: string;
 			/** Member Ids */
-			member_ids: string[];
+			member_ids?: string[];
+			/** Pet Ids */
+			pet_ids?: string[];
 		};
 		/** UnassignedKioskRevertResponse */
 		UnassignedKioskRevertResponse: {
 			/** Reverted */
 			reverted: string[];
+			/** Reverted Pets */
+			reverted_pets?: string[];
 		};
 		/**
 		 * UnassignedPhotoUploadResponse
