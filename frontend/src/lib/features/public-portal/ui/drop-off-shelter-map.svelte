@@ -2,17 +2,30 @@
 	import { langState } from '$lib/states/i18n.svelte';
 	import { getTranslation } from '$lib/utils/i18n';
 	import { PUBLIC_DONATIONS_I18N } from '$lib/constants/i18n';
-	import { buildDonationMap, donationMapPointsOf } from '../domain/donation-map';
+	import {
+		buildDonationMap,
+		donationMapPointsOf,
+		type MapPointFocus
+	} from '../domain/donation-map';
 	import { toUiShelterStatus } from '../domain/mappers';
 	import { usePublicShelter, usePublicShelters } from '../application/queries';
 	import ShelterMap from './shelter-map.svelte';
 
 	let {
 		shelterCode,
-		shelterName = ''
+		shelterName = '',
+		focus = null,
+		focusNote = null,
+		onFocusPoint
 	}: {
 		shelterCode: string;
 		shelterName?: string;
+		/** The point in focus — set by the form for a tap here or a dropdown pick. */
+		focus?: MapPointFocus | null;
+		/** What the point in focus is used for, under its name (e.g. "ใช้กับ: ข้าวสาร"). */
+		focusNote?: string | null;
+		/** The donor tapped a drop-off point (CR-206 FR-MP-9). */
+		onFocusPoint?: (pointId: string) => void;
 	} = $props();
 
 	const t = $derived(getTranslation(PUBLIC_DONATIONS_I18N, langState.current));
@@ -23,7 +36,6 @@
 	const points = $derived(donationMapPointsOf(shelterCode, shelterQuery.data?.donation_points));
 
 	let mapFailed = $state(false);
-	let focusedPointId = $state<string | null>(null);
 
 	const shelter = $derived(
 		buildDonationMap(
@@ -48,13 +60,13 @@
 				]
 			: []
 	);
-	const focusedPoint = $derived(shelter?.points.find((point) => point.id === focusedPointId));
+	const focusedPoint = $derived(shelter?.points.find((point) => point.id === focus?.pointId));
 </script>
 
 {#if shelter && !mapFailed && !sheltersQuery.isError}
 	<div class="space-y-2">
 		<div
-			class="relative h-48 w-full overflow-hidden rounded-xl border-2 border-slate-200 bg-slate-100 sm:h-56"
+			class="relative h-64 w-full overflow-hidden rounded-xl border-2 border-slate-200 bg-slate-100 sm:h-80"
 			role="region"
 			aria-label={t.dropOffMapLabel}
 			data-testid="drop-off-shelter-map"
@@ -63,23 +75,30 @@
 				shelters={mapShelters}
 				points={shelter.points}
 				selectedId={shelter.code}
+				pointFocus={focus}
 				disablePopup
 				showLegend={false}
 				cooperativeGestures
-				onSelectPoint={(id) => (focusedPointId = id)}
+				onSelectPoint={(id) => onFocusPoint?.(id)}
 				onLoadError={() => (mapFailed = true)}
 			/>
 		</div>
-		{#if focusedPoint}
-			<div
-				class="rounded-lg bg-sky-50 px-3 py-2 text-xs text-sky-900"
-				data-testid="drop-off-point-note"
-			>
-				<p class="font-bold">{focusedPoint.label}</p>
-				{#if focusedPoint.description}
-					<p class="mt-0.5">{focusedPoint.description}</p>
-				{/if}
-			</div>
-		{/if}
+		<!-- A live region that is always there, so a tap or a pick is read out (owner 2026-10-30). -->
+		<div role="status" aria-live="polite">
+			{#if focusedPoint}
+				<div
+					class="rounded-lg bg-sky-50 px-3 py-2 text-xs text-sky-900"
+					data-testid="drop-off-point-note"
+				>
+					<p class="font-bold">{focusedPoint.label}</p>
+					{#if focusedPoint.description}
+						<p class="mt-0.5">{focusedPoint.description}</p>
+					{/if}
+					{#if focusNote}
+						<p class="mt-1 font-semibold" data-testid="drop-off-point-applied">{focusNote}</p>
+					{/if}
+				</div>
+			{/if}
+		</div>
 	</div>
 {/if}

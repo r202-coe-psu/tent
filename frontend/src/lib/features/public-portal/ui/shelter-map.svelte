@@ -11,7 +11,7 @@
 	} from 'maplibre-gl';
 	import MapPin from '@lucide/svelte/icons/map-pin';
 	import type { PublicSiteKind } from '../domain/types';
-	import type { DonationMapPoint } from '../domain/donation-map';
+	import type { DonationMapPoint, MapPointFocus } from '../domain/donation-map';
 	import { shelterTypeLabel, toLabelMap } from '../domain/master-labels';
 	import { useShelterTypeLabelMap, useSiteKinds } from '../application/queries';
 	import {
@@ -72,6 +72,7 @@
 		center = DEFAULT_MAP_CENTER,
 		zoom = DEFAULT_MAP_ZOOM,
 		selectedId = null,
+		pointFocus = null,
 		disablePopup = false,
 		points = [],
 		showLegend = true,
@@ -89,6 +90,8 @@
 		zoom?: number;
 		/** Currently selected shelter ID to sync with list */
 		selectedId?: string | null;
+		/** The drop-off point in focus: its pin is highlighted, and each new request moves the map. */
+		pointFocus?: MapPointFocus | null;
 		/** When true (e.g. mobile view), marker click only triggers selection without showing map popup */
 		disablePopup?: boolean;
 		/** Extra pins that are not shelters (drop-off points); drawn smaller than shelter pins. */
@@ -126,6 +129,7 @@
 	let activePopup: MapLibrePopup | null = null;
 	let markersLayer: MapLibreMarker[] = [];
 	let shelterMarkerMap = new SvelteMap<string, ShelterMarkerItem>();
+	let pointMarkerMap = new SvelteMap<string, { el: HTMLElement; lng: number; lat: number }>();
 	let L: MapLibreNamespace | null = null;
 	let mapLoaded = $state(false);
 	let placingPin = $state(false);
@@ -417,6 +421,7 @@
 		});
 		markersLayer = [];
 		shelterMarkerMap.clear();
+		pointMarkerMap.clear();
 
 		const bounds = new lib.LngLatBounds();
 		let hasMarkers = false;
@@ -634,6 +639,7 @@
 				.setLngLat([lng, lat])
 				.addTo(map);
 			markersLayer.push(marker);
+			pointMarkerMap.set(point.id, { el, lng, lat });
 		}
 
 		if (!selectedId) {
@@ -706,6 +712,23 @@
 		} else {
 			closeActivePopup();
 		}
+	});
+
+	// Declared after the shelter selection above, so a focused point wins the camera over the
+	// shelter both effects ease to when the markers are redrawn.
+	$effect(() => {
+		if (!mapLoaded || !mapInstance) return;
+		const focus = pointFocus;
+		for (const [id, item] of pointMarkerMap) {
+			item.el.classList.toggle('is-selected', id === focus?.pointId);
+		}
+		const target = focus ? pointMarkerMap.get(focus.pointId) : undefined;
+		if (!focus || !target) return;
+		mapInstance.easeTo({
+			center: [target.lng, target.lat],
+			zoom: focus.zoom ? Math.max(mapInstance.getZoom(), 17) : mapInstance.getZoom(),
+			duration: 400
+		});
 	});
 </script>
 
@@ -863,6 +886,12 @@
 	}
 	:global(.custom-shelter-marker.is-selected) {
 		z-index: 50 !important;
+	}
+	/* A ring, not a bigger or raised pin: drop-off points of one shelter sit close together, and
+	   a pin grown or lifted over its neighbour would take that neighbour's taps. */
+	:global(.custom-point-marker.is-selected svg) {
+		filter: drop-shadow(0 0 1.5px #0f172a) drop-shadow(0 0 1.5px #0f172a)
+			drop-shadow(0 0 6px rgba(2, 132, 199, 0.9)) !important;
 	}
 	:global(.custom-shelter-marker.is-selected .marker-pin) {
 		transform: scale(1.18) !important;

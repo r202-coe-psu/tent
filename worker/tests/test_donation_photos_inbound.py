@@ -140,7 +140,7 @@ async def test_binds_every_photo_and_copies_the_ids_onto_the_booking(db: None):
 
     assert owner(fake, P1) == owner(fake, P2) == DONATION
     assert fake.docs[DONATION]["photos"] == [P1, P2]
-    assert fake.docs[DONATION]["schema_v"] == 9
+    assert fake.docs[DONATION]["schema_v"] == 11
     # The attachments survive the rewrite: the stubs go back with the doc.
     assert fake.docs[P1]["_attachments"] == {"full": {"stub": True, "length": 10}}
     stored_row = await stored()
