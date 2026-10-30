@@ -1330,6 +1330,15 @@ class UnassignedRegistrationsUseCase:
         to_mark = [m for m in targets if m.status == "open"]
         now = datetime.now(UTC)
 
+        if payload.claim_pets and _ensure_pet_ids(doc):
+            try:
+                await doc.save()
+            except (PyMongoError, ConnectionError, TimeoutError, OSError) as exc:
+                raise _mongo_unavailable("kiosk_prepare") from exc
+        pet_targets = _open_pets(doc) if payload.claim_pets else []
+        pet_mark_ids = [p.pet_id for p in pet_targets if p.pet_id]
+        pet_mark_id_set = set(pet_mark_ids)
+
         mark_ids = [m.reserved_evacuee_id for m in to_mark]
         mark_id_set = set(mark_ids)
         remaining_members = [
@@ -1337,13 +1346,13 @@ class UnassignedRegistrationsUseCase:
             for m in doc.members
             if m.status == "open" and m.reserved_evacuee_id not in mark_id_set
         ]
-        remaining_pets = [p for p in (doc.household.pets or []) if p.is_open()]
+        remaining_pets = [p for p in _open_pets(doc) if (p.pet_id or "") not in pet_mark_id_set]
         next_open_ids, next_open_phones = _open_identity_keys(remaining_members)
-        if mark_ids and not await _atomic_mark_claimed(
+        if (mark_ids or pet_mark_ids) and not await _atomic_mark_claimed(
             ClaimMarkParams(
                 registration_id=doc.id,
                 member_ids=mark_ids,
-                pet_ids=[],
+                pet_ids=pet_mark_ids,
                 shelter_code=shelter_code,
                 actor=actor,
                 claimed_at=now,
@@ -1357,26 +1366,25 @@ class UnassignedRegistrationsUseCase:
                 detail={
                     "error": {
                         "code": "ALREADY_CLAIMED",
-                        "message": "One or more members were already claimed",
+                        "message": "One or more members or pets were already claimed",
                     }
                 },
             )
 
         photo_by_member: dict[str, str] = {}
+        pet_image_urls: dict[str, str] = {}
         images: list[UnassignedKioskImage] = []
-        for member in targets:
-            if not member.photo:
-                continue
+
+        async def _append_image(photo_ref: str, *, label: str) -> str | None:
             image = await _load_couch_image_payload(
-                member.photo,
-                label=member.reserved_evacuee_id,
+                photo_ref,
+                label=label,
                 shelter_code=shelter_code,
                 actor=actor,
                 now=now,
             )
             if image is None:
-                continue
-            photo_by_member[member.reserved_evacuee_id] = image.doc["_id"]
+                return None
             images.append(
                 UnassignedKioskImage(
                     doc=image.doc,
@@ -1385,11 +1393,34 @@ class UnassignedRegistrationsUseCase:
                     content_type=image.content_type,
                 )
             )
+            return image.doc["_id"]
+
+        for member in targets:
+            if not member.photo:
+                continue
+            image_id = await _append_image(member.photo, label=member.reserved_evacuee_id)
+            if image_id:
+                photo_by_member[member.reserved_evacuee_id] = image_id
+
+        for pet in pet_targets:
+            if not pet.image_url or not pet.pet_id:
+                continue
+            image_id = await _append_image(pet.image_url, label=pet.pet_id)
+            if image_id:
+                pet_image_urls[pet.pet_id] = image_id
 
         return UnassignedKioskPrepareResponse(
             registration_id=doc.id,
             shelter_code=shelter_code,
-            household=build_couch_household(doc, targets[0], shelter_code, actor, now),
+            household=build_couch_household(
+                doc,
+                targets[0],
+                shelter_code,
+                actor,
+                now,
+                pets=pet_targets,
+                pet_image_urls=pet_image_urls or None,
+            ),
             evacuees=[
                 build_couch_evacuee(
                     member,
@@ -1403,6 +1434,11 @@ class UnassignedRegistrationsUseCase:
                 for member in targets
             ],
             images=images,
+            pets=[
+                build_couch_pet(pet, image_url=pet_image_urls.get(pet.pet_id or ""))
+                for pet in pet_targets
+            ],
+            pet_ids=pet_mark_ids,
         )
 
     async def kiosk_revert(
@@ -1410,11 +1446,12 @@ class UnassignedRegistrationsUseCase:
         registration_id: str,
         payload: UnassignedKioskRevertRequest,
     ) -> UnassignedKioskRevertResponse:
-        """Kiosk claim rollback — reopen the members *this kiosk* claimed into that shelter.
+        """Kiosk claim rollback — reopen the members and pets *this kiosk* claimed in that shelter.
 
-        Idempotent: members that are not (or no longer) this kiosk's claim are skipped.
+        Idempotent: members/pets that are not (or no longer) this kiosk's claim are skipped.
         """
         member_ids = list(dict.fromkeys(payload.member_ids))
+        pet_ids = list(dict.fromkeys(payload.pet_ids))
         actor = f"kiosk:{payload.device_id}"
         try:
             for _ in range(_KIOSK_REVERT_ATTEMPTS):
@@ -1437,10 +1474,23 @@ class UnassignedRegistrationsUseCase:
                     and m.claimed_shelter_code == payload.shelter_code
                     and m.claimed_by == actor
                 ]
-                if not target_ids:
+                target_pet_ids = [
+                    p.pet_id
+                    for p in (doc.household.pets or [])
+                    if p.pet_id
+                    and p.pet_id in pet_ids
+                    and p.effective_status() == "claimed"
+                    and p.claimed_shelter_code == payload.shelter_code
+                    and p.claimed_by == actor
+                ]
+                if not target_ids and not target_pet_ids:
                     return UnassignedKioskRevertResponse(reverted=[])
-                if await _atomic_kiosk_revert(doc, target_ids, payload.shelter_code, actor):
-                    return UnassignedKioskRevertResponse(reverted=target_ids)
+                if await _atomic_kiosk_revert(
+                    doc, target_ids, target_pet_ids, payload.shelter_code, actor
+                ):
+                    return UnassignedKioskRevertResponse(
+                        reverted=target_ids, reverted_pets=target_pet_ids
+                    )
                 # The document changed since it was read: re-read and recompute (FR-KUC-16a).
         except (PyMongoError, ConnectionError, TimeoutError, OSError) as exc:
             raise _mongo_unavailable("kiosk_revert") from exc
@@ -1448,9 +1498,13 @@ class UnassignedRegistrationsUseCase:
 
 
 async def _atomic_kiosk_revert(
-    doc: UnassignedRegistration, target_ids: list[str], shelter_code: str, actor: str
+    doc: UnassignedRegistration,
+    target_ids: list[str],
+    target_pet_ids: list[str],
+    shelter_code: str,
+    actor: str,
 ) -> bool:
-    """Reopen `target_ids` only if the identity keys are still those `doc` was read with.
+    """Reopen the members and pets in one update, only if `doc` is still as it was read.
 
     False when anything changed since the read (another claim, a concurrent revert), so a member
     claimed meanwhile never has its keys reopened.
@@ -1462,34 +1516,48 @@ async def _atomic_kiosk_revert(
     try:
         next_open_ids, next_open_phones = _open_identity_keys(reopened)
         owned = {
-            "reserved_evacuee_id": {"$in": target_ids},
             "status": "claimed",
             "claimed_shelter_code": shelter_code,
             "claimed_by": actor,
         }
+        member_owned = {"reserved_evacuee_id": {"$in": target_ids}, **owned}
+        pet_owned = {"pet_id": {"$in": target_pet_ids}, **owned}
+        and_clauses: list[dict] = [
+            {"members": {"$elemMatch": {**member_owned, "reserved_evacuee_id": tid}}}
+            for tid in target_ids
+        ]
+        and_clauses += [
+            {"household.pets": {"$elemMatch": {**pet_owned, "pet_id": pid}}}
+            for pid in target_pet_ids
+        ]
+        set_fields: dict = {
+            "open_person_id_numbers": next_open_ids,
+            "open_phones": next_open_phones,
+            # At least one member or pet is open again, so the document is open.
+            "status": "open",
+        }
+        array_filters: list[dict] = []
+        if target_ids:
+            set_fields["members.$[m].status"] = "open"
+            set_fields["members.$[m].claimed_shelter_code"] = None
+            set_fields["members.$[m].claimed_by"] = None
+            set_fields["members.$[m].claimed_at"] = None
+            array_filters.append({f"m.{key}": value for key, value in member_owned.items()})
+        if target_pet_ids:
+            set_fields["household.pets.$[p].status"] = "open"
+            set_fields["household.pets.$[p].claimed_shelter_code"] = None
+            set_fields["household.pets.$[p].claimed_by"] = None
+            set_fields["household.pets.$[p].claimed_at"] = None
+            array_filters.append({f"p.{key}": value for key, value in pet_owned.items()})
         result = await UnassignedRegistration.get_pymongo_collection().update_one(
             {
                 "_id": doc.id,
                 "open_person_id_numbers": doc.open_person_id_numbers,
                 "open_phones": doc.open_phones,
-                "$and": [
-                    {"members": {"$elemMatch": {**owned, "reserved_evacuee_id": tid}}}
-                    for tid in target_ids
-                ],
+                "$and": and_clauses,
             },
-            {
-                "$set": {
-                    "open_person_id_numbers": next_open_ids,
-                    "open_phones": next_open_phones,
-                    # At least one member is open again, so the document is open.
-                    "status": "open",
-                    "members.$[m].status": "open",
-                    "members.$[m].claimed_shelter_code": None,
-                    "members.$[m].claimed_by": None,
-                    "members.$[m].claimed_at": None,
-                }
-            },
-            array_filters=[{f"m.{key}": value for key, value in owned.items()}],
+            {"$set": set_fields},
+            array_filters=array_filters,
         )
     except (DuplicateKeyError, HTTPException) as exc:
         # Someone re-registered the same identity while the claim was in flight.
