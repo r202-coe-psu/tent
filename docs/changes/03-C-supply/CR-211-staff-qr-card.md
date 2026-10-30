@@ -3,7 +3,7 @@ id: CR-211 # renumbered from draft-staff-qr-card
 title: Staff QR card — permanent staff_token_hash in _users + recipient_type staff at distribution
 status: approved
 date: 2026-10-28
-updated: 2026-10-29 # approved (kong); ส่วนที่ปรับ A1 (proposed) — payload case, affects, role/rate limit ของ resolve, createUser ตัวไหน, e2e AC
+updated: 2026-10-30 # approved (kong); ส่วนที่ปรับ A1 approved (kong, 2026-10-30) — payload case, affects, role ของ resolve (ไม่มี rate limit ในแอป ตาม CR-188), createUser ตัวไหน, e2e AC
 requested_by: ทีม (issue #893)
 decided_by: kong
 decision_date: 2026-10-29
@@ -38,13 +38,13 @@ migration: one-off backfill `staff_token_hash` ให้ `_users` เดิม�
 > - **Dev ต้อง build:** mint ใน `createUser` + backfill · endpoint อ่านบัตรตัวเอง / admin พิมพ์และหมุน / หน้าแจก resolve QR · ปุ่ม "ดูบัตรของฉัน" ที่ portal · scan routing + VDU รับ `staff`
 > - **กระทบ schema/scope:** `schema.md` §6 (additive บน `_users`, ไม่มี `schema_v`) · §2.30 enum เพิ่ม `staff` (ไม่ bump `schema_v`) · VDU shelter DB ต้อง redeploy · user ที่มี `volunteer_id` ใช้ QR จิตอาสาเดิม (CR-127) ไม่ได้ token staff
 
-> **ส่วนที่ปรับ 2026-10-29 (A1) — เสนอโดยทีม (proposed, ยังไม่ approve)** — ปิด warning จาก PR review หลัง approve
+> **ส่วนที่ปรับ 2026-10-29 (A1) — เสนอโดยทีม, approved (kong) 2026-10-30** — ปิด warning จาก PR review หลัง approve
 > ไม่เปลี่ยนแนวทางที่ kong approve · แก้ใน §2.1, FR-SQR-02/03/13/21, เพิ่ม FR-SQR-40..43, AC-15, `affects` และ Decision log
 >
 > 1. **payload case:** QR พิมพ์ hex ตัวใหญ่แบบ `TKT-VOL-HASH-` · parser ไม่สนตัวพิมพ์ · เก็บและค้นด้วยตัวเล็ก (FR-SQR-40)
 > 2. **`affects`:** เพิ่มไฟล์ distribution ที่ใช้ `recipient_type` 7 ไฟล์ + `role-permission-matrix.md` · endpoint ย้ายไป api-contract §2
 > 3. **ใคร resolve ได้:** ตาม gate หน้าแจก `canAccessDistributionDesk` — `system_admin`, `shelter_manager` / `distribution_staff` ของศูนย์นั้น (FR-SQR-13/21)
-> 4. **กันใช้ resolve เป็นตัวเช็ก hash:** ตรวจสิทธิ์ผู้เรียกก่อน lookup · ไม่เจอกับ user ไม่อยู่ศูนย์ตอบเหมือนกัน · rate limit ต่อ user (FR-SQR-41/42)
+> 4. **กันใช้ resolve เป็นตัวเช็ก hash:** ตรวจสิทธิ์ผู้เรียกก่อน lookup · ไม่เจอกับ user ไม่อยู่ศูนย์ตอบเหมือนกัน (FR-SQR-41) · ไม่มี rate limit ในแอป (CR-188 — nginx ต่อ IP เท่านั้น, FR-SQR-42)
 > 5. **`createUser` ตัวไหน:** ตัว server `frontend/src/lib/server/user-service.ts` (FR-SQR-02/03/43)
 > 6. **e2e:** เพิ่ม AC-15 สำหรับ flow สแกน แจก และ log
 
@@ -79,7 +79,7 @@ migration: one-off backfill `staff_token_hash` ให้ `_users` เดิม�
 | `staff_token_hash` | `sha256(plaintext)` hex 64 ตัว lowercase | เก็บใน `_users` |
 | QR payload | `TKT-STF-HASH-` + `staff_token_hash` เป็น hex **ตัวใหญ่** (เหมือน `TKT-VOL-HASH-`) — A1 | ไม่เก็บ — สร้างจาก hash ตอนแสดง |
 
-> **A1 (proposed):** parser รับ payload ทุกตัวพิมพ์ (`trim` + `toUpperCase` ก่อนเทียบ prefix แบบ `trackingTokenHashFromPayload` ใน `volunteer-portal/domain/volunteer.ts`) แล้วแปลง hash เป็นตัวเล็กก่อน lookup — ดู FR-SQR-40
+> **A1:** parser รับ payload ทุกตัวพิมพ์ (`trim` + `toUpperCase` ก่อนเทียบ prefix แบบ `trackingTokenHashFromPayload` ใน `volunteer-portal/domain/volunteer.ts`) แล้วแปลง hash เป็นตัวเล็กก่อน lookup — ดู FR-SQR-40
 
 ---
 
@@ -113,7 +113,7 @@ migration: one-off backfill `staff_token_hash` ให้ `_users` เดิม�
 - **FR-SQR-18** — `GET /api/v1/me/card`: `active: false` → `kind: 'none'`
 - **FR-SQR-19** — `staff-card` / `rotate`: user ที่มี `volunteer_id` → ปฏิเสธ (409)
 - **FR-SQR-20** — `rotate` เขียนด้วย `_rev` เดิม · 409 → คืน 409 ให้ client ลองใหม่ · ไม่แตะ field อื่น
-- **FR-SQR-21** — `resolve` ตรวจที่ server ตามลำดับ: caller ผ่าน `canAccessDistributionDesk` (`frontend/src/lib/auth/roles.ts`) ของศูนย์ที่ระบุ จาก roles ใน `_session` (A1 — ไม่เชื่อ role จาก body) → rate limit (FR-SQR-42) → payload ถูกรูปแบบ → หา user ด้วย `staff_token_hash` ผ่าน `_find` บน `_users` แบบไม่สร้าง index (0 → 404, >1 → 409) → `active !== false` (ไม่งั้น 403) → user มี `shelter:{code}` หรือ `{code}:{capability}` ของศูนย์นั้น หรือ `system_admin` (ไม่งั้น 403)
+- **FR-SQR-21** — `resolve` ตรวจที่ server ตามลำดับ: caller ผ่าน `canAccessDistributionDesk` (`frontend/src/lib/auth/roles.ts`) ของศูนย์ที่ระบุ จาก roles ใน `_session` (A1 — ไม่เชื่อ role จาก body) → payload ถูกรูปแบบ → หา user ด้วย `staff_token_hash` ผ่าน `_find` บน `_users` แบบไม่สร้าง index (0 → 404, >1 → 409) → `active !== false` (ไม่งั้น 403) → user มี `shelter:{code}` หรือ `{code}:{capability}` ของศูนย์นั้น หรือ `system_admin` (ไม่งั้น 404 แบบเดียวกับไม่เจอ hash — FR-SQR-41)
 - **FR-SQR-22** — `resolve`: user ที่มี `volunteer_id` และลิงก์สองทางถูกต้อง → คืนผู้รับเป็น `recipient_type: 'volunteer'`, `recipient_id: volunteer:{ulid}` · ลิงก์ไม่ตรง → 409
 - **FR-SQR-23** — `resolve` คืนเฉพาะ `recipient_type`, `recipient_id`, `display_name`, ป้ายบทบาทในศูนย์, `position` — ห้ามคืน hash, `phone`, `email` หรือ doc ทั้งก้อน
 
@@ -142,11 +142,11 @@ migration: one-off backfill `staff_token_hash` ให้ `_users` เดิม�
 - **FR-SQR-38** — VDU `distribution_log` ใน shelter DB (`shelter-access-design.ts`) รับ `staff` และบังคับ `recipient_id` ขึ้นต้น `user:` · redeploy design doc ทุกศูนย์ด้วย `scripts/redeploy-access.ts`
 - **FR-SQR-39** — `returner_type` (bulk return) ไม่เปลี่ยน
 
-### 3.6 ส่วนที่ปรับ A1 (proposed 2026-10-29)
+### 3.6 ส่วนที่ปรับ A1 (proposed 2026-10-29 · approved kong 2026-10-30)
 
 - **FR-SQR-40** — QR payload staff พิมพ์ hex ตัวใหญ่ · parser ของหน้าแจก (FR-SQR-31) และ `resolve` รับทุกตัวพิมพ์ (`trim` + `toUpperCase` ก่อนเทียบ prefix, hex ต้องเป็น `[0-9A-F]{64}`) แล้วแปลง hash เป็นตัวเล็กก่อน `_find` · `staff_token_hash` ใน `_users` เป็นตัวเล็กเสมอ
 - **FR-SQR-41** — `resolve`: `shelter_code` ใน body ใช้เลือกศูนย์เท่านั้น ต้องผ่าน FR-SQR-21 ข้อแรกก่อน lookup ทุกครั้ง · ไม่เจอ hash กับ user ไม่มี role ในศูนย์นั้น ตอบ **404 แบบเดียวกัน** (ไม่บอกว่ามี hash อยู่ในศูนย์อื่น) · `active: false` ยังเป็น 403 · hash ซ้ำยังเป็น 409
-- **FR-SQR-42** — `resolve` มี rate limit ต่อ `_session` user ที่ 30 ครั้ง/นาที (เท่าโควตา token ของ CR-127 note 2026-10-18) · เกิน → 429 และหน้าแจกแสดงข้อความให้รอแล้วสแกนใหม่ · ไม่นับต่อ IP เพราะจุดแจกหลายเครื่องใช้ NAT IP เดียวกัน
+- **FR-SQR-42** — `resolve` **ไม่มี rate limit ใน application layer** ตาม CR-188 (rate limit อยู่ที่ nginx `limit_req` ต่อ IP เท่านั้น) · การกันใช้ `resolve` เช็ก hash พึ่ง gate ผู้เรียก (FR-SQR-21) และ 404 แบบเดียวกัน (FR-SQR-41)
 - **FR-SQR-43** — mint `staff_token_hash` ทำใน `createUser` ของ server ที่เดียว · `createUser` ฝั่ง client (`$lib/features/users`) ห้ามส่งหรือสร้าง hash · body ของ `POST /api/v1/users` ที่มี `staff_token_hash` → ignore
 
 ---
@@ -167,7 +167,7 @@ migration: one-off backfill `staff_token_hash` ให้ `_users` เดิม�
 - [ ] **AC-12** response ของ `GET /api/v1/users` และ `resolve` ไม่มี `staff_token_hash`
 - [ ] **AC-13** client bundle ไม่มี admin credential
 - [ ] **AC-15** (A1) Playwright e2e ที่ `/onsite/distribution` ครอบ AC-07, AC-09 และ AC-10: สแกน QR staff → แจก → `distribution_log` เป็น `staff` / `user:{name}` · สแกนซ้ำมื้อเดียวกันติด "รับไปแล้ว" · QR จิตอาสาแล้ว QR staff ของคนเดียวกันติด "รับไปแล้ว" · payload ตัวเล็กยัง resolve ได้ (FR-SQR-40)
-- [ ] **AC-16** (A1) `resolve` จาก `warehouse_staff` / `supply_coordinator` หรือ role ของศูนย์อื่น → 403 · hash ที่ไม่มีกับ user ศูนย์อื่น → 404 เหมือนกัน · เกิน 30 ครั้ง/นาที → 429
+- [ ] **AC-16** (A1) `resolve` จาก `warehouse_staff` / `supply_coordinator` หรือ role ของศูนย์อื่น → 403 · hash ที่ไม่มีกับ user ศูนย์อื่น → 404 เหมือนกัน
 - [ ] **AC-14** unit test: token/payload parser, menu matching, scan routing, map user ที่มี `volunteer_id` · server test: mint ใน `createUser`, backfill, `me/card`, `staff-card`, `rotate`, `resolve` ทุก branch · VDU test รับ/ปฏิเสธ `staff` · `.svelte` ที่แตะผ่าน `svelte-autofixer`
 
 ---
@@ -216,4 +216,5 @@ migration: one-off backfill `staff_token_hash` ให้ `_users` เดิม�
 - 2026-10-29 — ข้อเสนอทีม: ไม่ bump `schema_v` ของ `distribution_log` เพราะเพิ่ม enum แบบ additive และ worker/backend ไม่อ่าน `recipient_type` · ต้อง redeploy VDU ก่อนเปิดใช้
 - 2026-10-29 — ข้อเสนอทีม: lookup hash ด้วย `_find` บน `_users` แบบไม่มี index เพราะปริมาณ `_users` น้อยและไม่ต้องแตะ provisioning (stable core)
 - 2026-10-29 — **approved (kong)** — รับข้อเสนอทีมทุกข้อใน Decision log ตามที่เสนอ และรับความเสี่ยง R1–R4 (§5) ตามที่เขียน
-- 2026-10-29 — ข้อเสนอทีม (A1, proposed): ปิด warning จาก PR review — payload ตัวใหญ่ + parser ไม่สนตัวพิมพ์ (FR-SQR-40) · resolve ตาม gate `canAccessDistributionDesk` · 404 เดียวกันสำหรับไม่เจอ/ศูนย์อื่น + rate limit 30/นาที/user (FR-SQR-41/42) · ระบุ `createUser` ของ server (FR-SQR-43) · e2e AC-15/16 · `affects` ครบ · รอ kong approve
+- 2026-10-29 — ข้อเสนอทีม (A1, proposed): ปิด warning จาก PR review — payload ตัวใหญ่ + parser ไม่สนตัวพิมพ์ (FR-SQR-40) · resolve ตาม gate `canAccessDistributionDesk` · 404 เดียวกันสำหรับไม่เจอ/ศูนย์อื่น (FR-SQR-41) · ไม่มี rate limit ในแอปตาม CR-188 (FR-SQR-42, แก้ 2026-10-30 — เดิมเสนอ 30/นาที/user) · ระบุ `createUser` ของ server (FR-SQR-43) · e2e AC-15/16 · `affects` ครบ · รอ kong approve
+- 2026-10-30 — **A1 approved (kong)** — รับข้อเสนอ A1 ทุกข้อตามที่เขียน (FR-SQR-40..43, AC-15/16, แก้ §2.1 และ FR-SQR-02/03/13/21, `affects`) รวมการตอบ 404 เดียวกันใน FR-SQR-21 และไม่มี rate limit ในแอปตาม CR-188
