@@ -3,7 +3,7 @@ id: CR-206 # renumbered from draft-donation-multi-drop-off
 title: บริจาคครั้งเดียวแยกส่งหลายจุดรับบริจาค — ระบุจุดต่อรายการ และรับของทีละจุด
 status: approved
 date: 2026-10-27
-updated: 2026-10-28 # approved (Soravit Sukkarn, Team Lead)
+updated: 2026-10-30 # amendment A1 approved (Soravit Sukkarn, Team Lead; review PR #1038)
 requested_by: "Kunanon Nusaeng — feedback จาก demo 2026-10-23 (epic #825, issue #813)"
 decided_by: Soravit Sukkarn (Team Lead)
 decision_date: 2026-10-28
@@ -61,7 +61,7 @@ migration: >
 
 - **FR-MP-1** — `donation.items[]` มี field ใหม่ `drop_off_point_id: str | null` (optional) · ไม่มี key หรือ `null` = ไม่ระบุจุด
 - **FR-MP-2** — ตอนจอง (`POST /public/v1/donations`): ค่าที่ไม่ใช่ `null` ต้องเป็น `id` ที่อยู่ใน `public_shelters.donation_points` ของ `shelter_code` ของใบ · ไม่อยู่ → `400 UNKNOWN_DROP_OFF_POINT` และโควต้าไม่ขยับ
-- **FR-MP-2a** — ตอนผู้บริจาคแก้รายการ (`PATCH …/{tracking_token}/items`): `id` ที่ไม่อยู่ในจุดรับบริจาคปัจจุบันของศูนย์ → BFF เขียน `null` ให้รายการนั้น ไม่ตอบ error (จุดอาจถูกเลิกติ๊กหลังจอง) · จุดรับบริจาคปัจจุบันอ่านจาก shelter doc ใน CouchDB = `common_areas.sub_storage[]` ที่ `accepts_donations = true` และมีพิกัด (กติกาเดียวกับ FR-DP-11)
+- **FR-MP-2a** — ตอนผู้บริจาคแก้รายการ (`PATCH …/{tracking_token}/items`): `id` ที่ไม่อยู่ในจุดรับบริจาคปัจจุบันของศูนย์ → BFF เขียน `null` ให้รายการนั้น ไม่ตอบ error (จุดอาจถูกเลิกติ๊กหลังจอง) · จุดรับบริจาคปัจจุบันอ่านจาก shelter doc ใน CouchDB = `common_areas.sub_storage[]` ที่ `accepts_donations = true` และมีพิกัด (กติกาเดียวกับ FR-DP-11) · **FastAPI ไม่ตรวจจุดตอนแก้รายการ** (Amendment A1 FR-MP-2b)
 - **FR-MP-3** — ศูนย์ที่ไม่มีจุดรับบริจาค → ทุกรายการต้องเป็น `null` · ตอนจองส่ง id มา → `400 UNKNOWN_DROP_OFF_POINT`
 - **FR-MP-4** — `logistics.delivery_method` เป็น `shelter_pickup` (ศูนย์ไปรับ) หรือ `parcel` (ส่งพัสดุ) → ระบบเขียน `null` ทุกรายการ ไม่ว่า client จะส่งอะไรมา · ของมาถึงศูนย์ที่เดียว จึงรับทั้งใบที่จุดเดียว
 - **FR-MP-5** — `donation` มี field ใหม่ระดับใบ `point_receipts: [...]` (optional) = ผลการรับของแต่ละครั้งที่จุด · รับ 1 ครั้ง = 1 รายการ · ไม่มี key หรือ `[]` = ยังไม่มีจุดไหนรับ · shape ตามตาราง §Change
@@ -86,6 +86,7 @@ migration: >
 - **FR-MP-16** — รายการที่ `drop_off_point_id` ไม่อยู่ในจุดรับบริจาคปัจจุบันของศูนย์ (จุดถูกเลิกติ๊ก หรือถูกลบหลังจอง) → ตั๋วและหน้าติดตามแสดงรายการนั้นในกลุ่ม "ส่งที่จุดรับบริจาคไหนของศูนย์ก็ได้" พร้อมที่อยู่ศูนย์ · ไม่ error · ไม่ใช้คำว่า "จุดหลัก" (ตาม CR-205 D-3 จุดหลักมีเฉพาะศูนย์ที่ไม่มีจุดติ๊ก)
 - **FR-MP-17** — ใบที่มี `point_receipts` ไม่ว่าง → ผู้บริจาคยกเลิกและแก้รายการไม่ได้ · `DELETE …/{tracking_token}` และ `PATCH …/{tracking_token}/items` ตอบ `409 GOODS_IN_STOCK` (code เดิม) · หน้าติดตาม disable ปุ่มยกเลิกและแก้รายการ (ยกเว้นจาก CR-196 FR-LK-10)
 - **FR-MP-17a** — `hasKeyedDonationStock` (`lib/server/donation-docs.ts` และ copy ใน `operations/data/operations.remote.ts`) ต้องตอบ `true` เมื่อใบมี `point_receipts` ไม่ว่าง นอกเหนือจากเมื่อมีแถว `stock_ledger` ของใบ · จุดที่ "ไม่รับ" ทุกรายการของจุดนั้นไม่มีแถว ledger แต่ใบนับว่าเริ่มรับแล้ว · ทุก route ที่ใช้ guard นี้ได้ผลเดียวกัน: ยกเลิก, แก้รายการ, redirect, staff reject ทั้งสองทาง (`[query]/approve` ที่ผลเป็น rejected และ `[query]/reject`)
+- **FR-MP-17b** — Amendment A1: `[query]/approve` ปฏิเสธรายการที่จุดรับไปแล้วไม่ได้ (`409 LINE_ALREADY_RECEIVED`)
 
 **รับของทีละจุด (back-office)**
 
@@ -120,13 +121,14 @@ migration: >
 - **FR-MP-26** — ใบที่มี `point_receipts` ไม่ว่าง และยังมีรายการที่ไม่บันทึกผล → หน้าสแกนแสดงปุ่ม "ปิดใบ" · ปุ่มเรียก route ใหม่ `POST /api/back-office/donations/[query]/close` (body: `expected_rev`) · route ใช้ `authorizeWarehouse` และ shelter scope เดียวกับ route รับของ · ไม่เพิ่ม role หรือ permission
 - **FR-MP-27** — ปิดใบด้วยปุ่ม: ปิดตาม FR-MP-27a ด้วย `closed_by` = ชื่อผู้กด และ `closed_reason: staff_close` · เขียน audit 1 รายการต่อใบ (`_id` deterministic) · ใบที่ `point_receipts` ว่าง → `422` · `expected_rev` ไม่ตรง → `409 DONATION_CHANGED`
 - **FR-MP-27a** — ปิดใบ (ทุกทาง: ครบทุกจุด, ปุ่ม, worker) เขียน `received_summary` ครั้งเดียว:
-  - `total_items` = จำนวนรายการทั้งใบ · `received_at` = เวลาปิด · `remarks` = `remarks` ของแต่ละ receipt ต่อกัน
+  - `total_items` = จำนวนรายการทั้งใบ · `received_at` = เวลาปิด · `remarks` = `remarks` ของแต่ละ receipt ต่อกัน (เก็บใน CouchDB เท่านั้น ไม่ส่ง public plane — Amendment A1 FR-MP-27e)
   - `items[]` = รวม `point_receipts[].items` เรียงตาม `line_no` · รายการที่ไม่มีผล = `qty: "0"` ไม่มี `rejected`
   - `shortfalls` = `donationShortfall` เดิม ไม่นับรายการที่ `rejected` (CR-172 FR-13) · รายการที่ไม่มาจึงอยู่ใน `shortfalls`
-  - `closed_by` (ชื่อเจ้าหน้าที่ หรือ `system`) · `closed_reason`: `all_points` | `staff_close` | `expired`
+  - `closed_by` (ชื่อเจ้าหน้าที่ หรือ `system` · CouchDB เท่านั้น ไม่ส่ง public plane) · `closed_reason`: `all_points` | `staff_close` | `expired`
 - **FR-MP-27b** — สถานะตอนปิด: มีรายการที่รับจริง ≥ 1 → `received` · ไม่มีเลย (ทุกรายการไม่รับ หรือไม่รับปนไม่มา) → `rejected` + `reject_reason` / `reject_reason_code` ระดับใบตาม CR-172 FR-12
 - **FR-MP-27c** — worker (`processor.py` สาย `doc_type == "donation"`) เรียก `settle_shelved_quota` เมื่อใบมีสถานะ `received` · ยอดจองของ shortfall จึงคืนทันที ไม่ต้องรอ ledger event ถัดไป (ใช้กับใบที่รับทั้งใบแล้วมี shortfall ด้วย)
 - **FR-MP-27d** — ก่อนปิดใบ รายการที่จุด "ไม่รับ" ยังถูกจองอยู่ (`calculateReserved`, `compute_needs`, `still_owed` หักเฉพาะแถว ledger) · ตั้งใจ ไม่แก้กติกา T-22 ทั้ง 3 ชุด (TS, Python, `packages/needs-fixtures`) · ยอดคืนตอนปิดใบตาม FR-MP-27c
+- **FR-MP-27e** — Amendment A1: `received_summary.remarks` ไม่ส่ง public plane
 - **FR-MP-28** — ใบที่ `point_receipts` ว่าง → ไม่มีปุ่ม "ปิดใบ" (ใช้ reject / หมดอายุตามเดิม)
 
 **หมดอายุ**
@@ -150,7 +152,7 @@ migration: >
   - worker ปิดใบตาม FR-MP-29 (CR นี้)
   - เจ้าหน้าที่อีกคนกด "ปิดใบ" (FR-MP-27) ระหว่างที่จุดนี้เขียน ledger ไปแล้ว (CR นี้)
   - CR นี้กำหนดแค่ให้ route ตอบ `409 DONATION_CLOSED` และแจ้งเจ้าหน้าที่ตาม FR-MP-23a
-- `received_summary.remarks` (หมายเหตุภายในของเจ้าหน้าที่) ถูกส่งไป public API เพราะ projector ส่ง `received_summary` ทั้งก้อน (`worker/src/worker/projectors/donation.py:64`) · FR-MP-27a รวม `remarks` ของทุก receipt ไว้ที่ field นี้ จึงหลุดแบบเดียวกัน · แยกเป็น issue ต่างหาก · CR นี้ไม่ส่ง `point_receipts[].remarks` ลง Mongo (ตาม §Change)
+- ~~`received_summary.remarks` (หมายเหตุภายในของเจ้าหน้าที่) ถูกส่งไป public API เพราะ projector ส่ง `received_summary` ทั้งก้อน~~ — **แก้ใน CR นี้โดย Amendment A1 (FR-MP-27e)**: projector และ BFF ตัด `remarks` (และ `closed_by`) ออกจาก `received_summary` · CR นี้ไม่ส่ง `point_receipts[].remarks` ลง Mongo (ตาม §Change)
 
 ## Change (before → after)
 
@@ -181,11 +183,11 @@ migration: >
 - หลังโรงยิมรับ: `items` ไม่เปลี่ยน · `point_receipts: [{ point_id: '01J…GYM', line_nos: [0], received_at: '2026-10-28T09:12:00+07:00', … }]` · ใบคงสถานะเดิม · ยังไม่มี `received_summary`
 - หลังห้องพยาบาลรับ: `point_receipts` มี 2 รายการ · ใบ `received` · `received_summary.closed_reason: 'all_points'`
 
-**Mongo `public_donations`** — `items_declared[].drop_off_point_id` และ `point_receipts[]` เฉพาะ `{ point_id, line_nos, received_at }`
+**Mongo `public_donations`** — `items_declared[].drop_off_point_id` และ `point_receipts[]` เฉพาะ `{ point_id, line_nos, received_at }` · `received_summary` ไม่มี `closed_by` / `remarks` (Amendment A1 FR-MP-27e)
 
 **API (public)** — `items[].drop_off_point_id` (opt) ใน request ของ `POST /public/v1/donations` และ `PATCH …/{tracking_token}/items` · `items[].drop_off_point_id` และ `point_receipts[]` (`point_id`, `line_nos`, `received_at`) ใน response ของ `GET …/{tracking_token}` · error ใหม่ `400 UNKNOWN_DROP_OFF_POINT` (เฉพาะ `POST`)
 
-**API (back-office)** — `POST /api/back-office/donations/[query]` เพิ่ม `point_id`, `line_nos` และ error `409 LINE_ALREADY_RECEIVED` · route ใหม่ `POST /api/back-office/donations/[query]/close`
+**API (back-office)** — `POST /api/back-office/donations/[query]` เพิ่ม `point_id`, `line_nos` และ error `409 LINE_ALREADY_RECEIVED` · route ใหม่ `POST /api/back-office/donations/[query]/close` · `POST …/[query]/approve` เพิ่ม error `409 LINE_ALREADY_RECEIVED` (Amendment A1 FR-MP-17b)
 
 | เรื่อง | ก่อน | หลัง |
 | --- | --- | --- |
@@ -326,6 +328,35 @@ Soravit Sukkarn (Team Lead) อนุมัติตามที่ผู้ข�
   - route `[query]/reject` อยู่ใน `affects` / Impact · FR-MP-17a และ AC-9 ครอบ reject ทั้งสองทาง
   - อ้าง `draft-storage-drop-off-points` เป็น CR-205 (อนุมัติ 2026-10-28) · อัปเดตเลข PROJECTION_VERSION
   - ช่องโหว่ที่เจอระหว่างแก้: ใบที่รับไปบางจุดแล้วแต่ศูนย์เลิกติ๊กทุกจุด รับของที่เหลือไม่ได้ (FR-MP-24 ใช้กับใบที่ยังไม่มี `point_receipts` เท่านั้น) · ผู้ขอเลือก D-12: รับเข้าสถานที่จัดเก็บไหนก็ได้ `point_id = null` หมายเหตุไม่บังคับ (FR-MP-18b, FR-MP-22a, FR-MP-13, AC-23, AC-24)
-  - นอกขอบเขต: `received_summary.remarks` หลุดไป public API (มีอยู่แล้ว · แยก issue)
+  - นอกขอบเขต: `received_summary.remarks` หลุดไป public API (มีอยู่แล้ว · แยก issue) — แก้ภายหลังใน Amendment A1 (2026-10-30)
   - ผู้ขอยืนยัน D-10 (`point_receipts[]`) และ D-11 (คืนยอดจองตอนปิดใบ) ตามที่ FR เขียนไว้ · ไม่ต้องแก้ FR
 - 2026-10-28 — approved by Soravit Sukkarn (Team Lead) · รันเลข CR-206 (renumbered from draft-donation-multi-drop-off) ย้ายเข้า 04-donation/
+- 2026-10-30 — **Amendment A1 approved (Soravit Sukkarn (Team Lead), review PR #1038)** — เจ้าของโครงการอนุมัติให้บันทึกเป็น amendment ใน CR นี้ (ไม่รันเลข CR ใหม่) · แก้ code ตามที่เจอใน review PR #1038:
+  - B1 — `received_summary.remarks` (หมายเหตุของเจ้าหน้าที่ที่ต่อกันจาก `point_receipts[]`) ไม่ส่ง public plane: projector `project_received_summary` และ BFF `toTrackingReceivedSummary` ตัดทั้ง `closed_by` และ `remarks` · doc ใน CouchDB ยังมี · แทนข้อ "นอกขอบเขต" เรื่อง `remarks` หลุด (FR-MP-27e) · ไม่เปลี่ยน PROJECTION_VERSION (14 ของ branch นี้ยังไม่เคย release)
+  - W1 — `PATCH /public/v1/donations/{token}/items` ของ FastAPI ไม่ตรวจจุดกับ Mongo `public_shelters` อีก (เรียกได้ผ่าน BFF เท่านั้น) · BFF ตรวจกับ shelter doc ใน CouchDB (FR-MP-2a) และเขียน `null` ให้จุดที่ศูนย์เลิกรับ เพราะ projection ใน Mongo ช้ากว่า doc และจะตัดจุดที่เจ้าหน้าที่เพิ่งเพิ่มทิ้ง · FR-MP-4 ยังตรวจใน FastAPI (FR-MP-2b)
+  - W2 — `[query]/approve` ปฏิเสธรายการที่จุดรับไปแล้วไม่ได้: `409 LINE_ALREADY_RECEIVED` พร้อม `lines` (FR-MP-17b)
+  - W3 ของ PR เดียวกันอยู่ที่ [CR-172](CR-172-donation-reject-reason.md) Amendment A1 (FR-12) · FR-MP-27b ใช้ FR-12 ฉบับแก้
+
+## Amendment A1 (2026-10-30) — `remarks` ไม่ออก public · แก้รายการไม่ตรวจจุดซ้ำใน FastAPI · ปฏิเสธรายการที่จุดรับแล้วไม่ได้ · **approved 2026-10-30 (Soravit Sukkarn (Team Lead), review PR #1038)**
+
+> **สรุป:** (B1) ตัด `received_summary.remarks` ออกจาก public plane เหมือน `closed_by` · (W1) ย้ายการตรวจจุดตอนผู้บริจาคแก้รายการไปที่ BFF อย่างเดียว ·
+> (W2) `approve` ตอบ `409 LINE_ALREADY_RECEIVED` เมื่อผลประเมินปฏิเสธรายการที่จุดรับไปแล้ว. ไม่เพิ่ม field · ไม่ bump `schema_v` · ไม่เปลี่ยน PROJECTION_VERSION
+> (14 ของ branch นี้ยังไม่ release). เพิ่ม FR-MP-2b / FR-MP-17b / FR-MP-27e (ข้อความ FR เดิมคงไว้ด้านบน)
+
+**ปัญหา (พบใน review PR #1038):** (B1) `remarks` ใน `received_summary` คือหมายเหตุภายในของเจ้าหน้าที่ที่ FR-MP-27a ต่อจากทุก receipt แต่ projector และ BFF ส่ง `received_summary`
+ลง public ทั้งก้อน ·
+(W1) FastAPI ตรวจจุดตอนแก้รายการกับ `public_shelters` ใน Mongo ซึ่งตามหลัง shelter doc ใน CouchDB — จุดที่เจ้าหน้าที่เพิ่งติ๊กรับบริจาคถูกเขียนเป็น `null` ·
+(W2) ผลประเมินที่ปฏิเสธรายการซึ่งจุดรับไปแล้วทำให้ผู้บริจาคเห็น "ไม่รับ" ทั้งที่ของอยู่ในคลัง (receipt และ `received_summary` นับของรายการนั้นว่ารับ)
+
+- **FR-MP-2b** (เพิ่มต่อ FR-MP-2a) — `PATCH /public/v1/donations/{tracking_token}/items` ของ FastAPI **ไม่ตรวจ** `drop_off_point_id` กับ `public_shelters.donation_points` · endpoint นี้เรียกได้ผ่าน BFF เท่านั้น (internal Bearer) ·
+  BFF ตรวจกับ shelter doc ใน CouchDB ตาม FR-MP-2a แล้วเขียน `null` ให้ id ที่ศูนย์ไม่รับแล้ว ก่อนส่งต่อ FastAPI · FR-MP-4 (`parcel` / `shelter_pickup` ไม่มีจุด) ยังบังคับใน FastAPI · FR-MP-2 (ตอนจอง) ยังตรวจกับ Mongo ตามเดิม
+- **FR-MP-15** (ชี้ FR-MP-2b) — "ตรวจตาม FR-MP-2a" = ตรวจที่ BFF ตาม FR-MP-2b
+- **FR-MP-17b** — `POST /api/back-office/donations/[query]/approve`: ผลประเมิน (`lines`) ที่ตัดสิน `rejected` ให้รายการที่จุดรับไปแล้ว → `409 LINE_ALREADY_RECEIVED` พร้อม `lines: int[]` (index ของรายการที่ขัด, เริ่มที่ 0) · ไม่เขียนอะไร ·
+  "จุดรับไปแล้ว" = `line_no` อยู่ใน `point_receipts[].line_nos` และ `items[]` ของ receipt นั้นของ `line_no` ไม่ใช่ `rejected: true` · รายการที่จุดเองไม่รับ (`rejected: true`) ปฏิเสธตอนประเมินได้ ·
+  เช็คต่อจาก `409 GOODS_IN_STOCK` (FR-MP-17a) · เป็น code เดียวกับ `409 LINE_ALREADY_RECEIVED` ของ route รับของ (FR-MP-22e) แต่เงื่อนไขต่างกัน
+- **FR-MP-27e** — `received_summary.remarks` เก็บใน CouchDB เท่านั้น: worker projector `project_received_summary` และ BFF `toTrackingReceivedSummary` ตัด `closed_by` **และ** `remarks` ออกจาก `received_summary` ·
+  `public_donations.received_summary` และ response ของ `GET …/{tracking_token}` ไม่มี 2 key นี้ · key อื่น (`closed_reason`, `shortfalls`, `items[]`) ส่งตามเดิม · แทนข้อ "นอกขอบเขต" เรื่อง `remarks` หลุด
+
+**Acceptance A1:** [ ] ใบที่ปิดแล้วมี `remarks` ใน receipt → `received_summary.remarks` อยู่ใน CouchDB · ไม่อยู่ใน `public_donations` และไม่อยู่ใน response ติดตาม (ทั้ง projector และ BFF) ·
+[ ] ผู้บริจาคแก้รายการโดยเลือกจุดที่ศูนย์เพิ่งเพิ่ม (shelter doc มี Mongo ยังไม่ตาม) → จุดนั้นคงอยู่ · จุดที่ shelter doc ไม่รับแล้ว → `null` · `parcel` / `shelter_pickup` → `null` ทุกรายการ ·
+[ ] `approve` ที่ปฏิเสธรายการซึ่งจุดรับไปแล้ว → `409 LINE_ALREADY_RECEIVED` พร้อม `lines` และใบไม่เปลี่ยน · ปฏิเสธรายการที่จุดไม่รับ → สำเร็จ
