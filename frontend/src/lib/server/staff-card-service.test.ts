@@ -319,7 +319,7 @@ describe('getMyCard', () => {
 
 		expect(result).toEqual({
 			kind: 'staff',
-			payload: `TKT-STF-HASH-${HASH_A}`,
+			payload: `TKT-STF-HASH-${HASH_A.toUpperCase()}`,
 			display_name: 'สมชาย ใจดี',
 			position: 'เจ้าหน้าที่ลงทะเบียน',
 			roles: ['shelter:SH001', 'SH001:registration_staff']
@@ -554,8 +554,8 @@ describe('staff card administration', () => {
 				position: 'เจ้าหน้าที่ลงทะเบียน',
 				roles: ['shelter:SH001', 'SH001:registration_staff']
 			});
-			expect(card.payload).toMatch(/^TKT-STF-HASH-[0-9a-f]{64}$/);
-			expect(card.payload).not.toBe(`TKT-STF-HASH-${HASH_A}`);
+			expect(card.payload).toMatch(/^TKT-STF-HASH-[0-9A-F]{64}$/);
+			expect(card.payload).not.toBe(`TKT-STF-HASH-${HASH_A.toUpperCase()}`);
 			const err = await rejection(
 				resolveStaffCard(distributionStaff, `TKT-STF-HASH-${HASH_A}`, 'SH001')
 			);
@@ -699,7 +699,7 @@ describe('staff card administration', () => {
 
 			const card = await rotateStaffCard(systemAdmin, 'boss@x.com');
 
-			expect(card.payload).toMatch(/^TKT-STF-HASH-[0-9a-f]{64}$/);
+			expect(card.payload).toMatch(/^TKT-STF-HASH-[0-9A-F]{64}$/);
 		});
 
 		it('issues the first card for a staff user who has none', async () => {
@@ -727,7 +727,7 @@ describe('staff card administration', () => {
 				display_name: 'สมชาย ใจดี',
 				position: 'เจ้าหน้าที่ลงทะเบียน',
 				roles: ['shelter:SH001', 'SH001:registration_staff'],
-				payload: `TKT-STF-HASH-${HASH_A}`
+				payload: `TKT-STF-HASH-${HASH_A.toUpperCase()}`
 			});
 			expect(puts).toEqual([]);
 			expect(fetch).not.toHaveBeenCalled();
@@ -794,7 +794,7 @@ describe('staff card administration', () => {
 
 			const card = await getStaffCardForAdmin(managerSH001, 'somchai@x.com');
 
-			expect(card.payload).toBe(`TKT-STF-HASH-${HASH_A}`);
+			expect(card.payload).toBe(`TKT-STF-HASH-${HASH_A.toUpperCase()}`);
 			expect(Object.keys(card).sort()).toEqual([
 				'display_name',
 				'name',

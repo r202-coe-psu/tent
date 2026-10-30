@@ -28,7 +28,7 @@ export function isValidStaffTokenHash(v: unknown): v is string {
 
 /** The card QR carries the hash, never the plaintext token: the hash itself is the bearer. */
 export function staffCardPayloadFromHash(hash: string): string {
-	return STAFF_TOKEN_HASH_PREFIX + hash;
+	return STAFF_TOKEN_HASH_PREFIX + hash.toUpperCase();
 }
 
 /** Any `TKT-STF-` code is a staff card, even malformed, so it never falls through to evacuees. */

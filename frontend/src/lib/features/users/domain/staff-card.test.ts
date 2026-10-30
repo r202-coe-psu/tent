@@ -88,9 +88,9 @@ describe('parseStaffCardPayload', () => {
 });
 
 describe('staffCardPayloadFromHash', () => {
-	it('prefixes the hash with TKT-STF-HASH- and parses back to the same hash', () => {
+	it('prints the hash uppercase after TKT-STF-HASH- and parses back to the stored hash (FR-SQR-40)', () => {
 		const payload = staffCardPayloadFromHash(HASH);
-		expect(payload).toBe(`TKT-STF-HASH-${HASH}`);
+		expect(payload).toBe(`TKT-STF-HASH-${HASH.toUpperCase()}`);
 		expect(parseStaffCardPayload(payload)).toEqual({ hash: HASH });
 	});
 });
