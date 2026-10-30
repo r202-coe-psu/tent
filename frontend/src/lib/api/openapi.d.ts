@@ -1791,6 +1791,8 @@ export interface components {
 			note?: string | null;
 			/** Line Key */
 			line_key?: string | null;
+			/** Drop Off Point Id */
+			drop_off_point_id?: string | null;
 		};
 		/** DonationItemsPatchRequest */
 		DonationItemsPatchRequest: {
@@ -3254,10 +3256,10 @@ export interface components {
 			name: string;
 			/**
 			 * Site Kind
+			 * @description Master code from master_data:site_kind (e.g. evacuation_center, host_house)
 			 * @default evacuation_center
-			 * @enum {string}
 			 */
-			site_kind: 'evacuation_center' | 'host_house';
+			site_kind: string;
 			/** Status */
 			status: string;
 			/** Admin Type */
@@ -3351,10 +3353,10 @@ export interface components {
 			name: string;
 			/**
 			 * Site Kind
+			 * @description Master code from master_data:site_kind (e.g. evacuation_center, host_house)
 			 * @default evacuation_center
-			 * @enum {string}
 			 */
-			site_kind: 'evacuation_center' | 'host_house';
+			site_kind: string;
 			/** Status */
 			status: string;
 			/**
@@ -5199,7 +5201,7 @@ export interface operations {
 				district?: string | null;
 				subdistrict?: string | null;
 				status?: string | null;
-				site_kind?: ('evacuation_center' | 'host_house') | null;
+				site_kind?: string | null;
 				/** @description User latitude */
 				lat?: number | null;
 				/** @description User longitude */

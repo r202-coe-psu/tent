@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { createShelterSchema } from '$lib/features/shelters/server';
+import { createShelterSchema, DEFAULT_SITE_KIND } from '$lib/features/shelters/server';
 import { foodDistributionPointSchema, petPolicySchema, zoneSchema } from '$lib/features/shelters';
 import { ulid } from '$lib/db/ulid';
 import {
@@ -22,7 +22,6 @@ import {
 	PET_POLICY_CHOICES,
 	POWER_SOURCE_CHOICES,
 	PROJECT_LEVEL_CHOICES,
-	SITE_KIND_CHOICES,
 	WATER_SOURCE_CHOICES,
 	FOOD_DISTRIBUTION_PATH_TO_HEADER,
 	ZONE_STATUS_CHOICES,
@@ -96,6 +95,8 @@ export interface RowValidation {
 	errors: RowFieldError[];
 	/** Whether the current workbook explicitly supplied food points for this row. */
 	foodDistributionPointsProvided?: boolean;
+	/** `ชนิดสถานที่` was left empty: a create takes the default, an update keeps the stored kind (CR-198 D-4). */
+	siteKindBlank?: boolean;
 }
 
 /** The stored shelter, as far as {@link buildUpdatePayload} needs to read it. */
@@ -147,7 +148,7 @@ function keepStoredStoragePoints(
 export function buildUpdatePayload(
 	shelter: ShelterInput,
 	existing: ExistingShelterPolicy | null,
-	options: { foodDistributionPointsProvided?: boolean } = {}
+	options: { foodDistributionPointsProvided?: boolean; siteKindBlank?: boolean } = {}
 ): Omit<ShelterInput, 'municipality_zone' | 'community'> {
 	const rest: Partial<ShelterInput> = { ...shelter };
 	delete rest.municipality_zone;
@@ -156,6 +157,7 @@ export function buildUpdatePayload(
 	// from the stored document instead of replacing them with schema defaults.
 	delete rest.feature_flags;
 	if (options.foodDistributionPointsProvided !== true) delete rest.food_distribution_points;
+	if (options.siteKindBlank === true) delete rest.site_kind;
 	return {
 		...(rest as Omit<ShelterInput, 'municipality_zone' | 'community'>),
 		...(existing?.feature_flags !== undefined ? { feature_flags: existing.feature_flags } : {}),
@@ -186,23 +188,51 @@ export function buildUpdatePayload(
 export interface MasterLookup {
 	byLabel: Map<string, string>;
 	codes: Set<string>;
+	/** Codes in `codes` whose item is `inactive` — resolvable, but not freely assignable. */
+	inactiveCodes: Set<string>;
+	/** The list's active `is_default` item, used when the cell is left empty. */
+	defaultCode: string | null;
 }
 
 export type Lookups = Record<MasterColumn, MasterLookup>;
 
 /** Build a {@link MasterLookup} from a master_data items array. Pure. */
-export function buildMasterLookup(items: readonly { code: string; label: string }[]): MasterLookup {
+export function buildMasterLookup(
+	items: readonly {
+		code: string;
+		label: string;
+		label_en?: string;
+		is_default?: boolean;
+		status?: 'active' | 'inactive';
+	}[]
+): MasterLookup {
 	const byLabel = new Map<string, string>();
 	const codes = new Set<string>();
+	const inactiveCodes = new Set<string>();
+	let defaultCode: string | null = null;
 	for (const it of items) {
-		byLabel.set(it.label.trim(), it.code);
 		codes.add(it.code);
+		if (it.status === 'inactive') inactiveCodes.add(it.code);
+		else if (it.is_default) defaultCode = it.code;
 	}
-	return { byLabel, codes };
+	for (const it of items) {
+		const inactive = inactiveCodes.has(it.code);
+		// Workbooks from the CR-067 template carry "label_th (label_en)", e.g. "ศูนย์อพยพ (Evacuation Center)".
+		const combined = it.label_en?.trim() ? `${it.label.trim()} (${it.label_en.trim()})` : undefined;
+		for (const label of [it.label, it.label_en, combined]) {
+			const key = label?.trim();
+			if (!key) continue;
+			// An active item keeps a label it shares with an inactive one, whatever the list order.
+			const holder = byLabel.get(key);
+			if (inactive && holder !== undefined && !inactiveCodes.has(holder)) continue;
+			byLabel.set(key, it.code);
+		}
+	}
+	return { byLabel, codes, inactiveCodes, defaultCode };
 }
 
 function emptyLookup(): MasterLookup {
-	return { byLabel: new Map(), codes: new Set() };
+	return { byLabel: new Map(), codes: new Set(), inactiveCodes: new Set(), defaultCode: null };
 }
 
 /** An empty lookup set — for tests / when master data is unavailable. */
@@ -608,7 +638,11 @@ export function validateRow(
 			'นำเข้าศูนย์สถานะ "ปิดศูนย์" ไม่ได้ — ปิดศูนย์จากหน้าจัดการศูนย์'
 		);
 	}
-	const siteKind = resolveEnum(raw, H.site_kind, SITE_KIND_CHOICES, sink) ?? 'evacuation_center';
+	const siteKindBlank = cell(raw, H.site_kind) === '';
+	const siteKind =
+		resolveMaster(raw, H.site_kind, lookups.site_kind, sink) ??
+		lookups.site_kind.defaultCode ??
+		DEFAULT_SITE_KIND;
 	const level = resolveEnum(raw, H.project_level, PROJECT_LEVEL_CHOICES, sink);
 	const areaType = resolveEnum(raw, H.area_type, AREA_TYPE_CHOICES, sink);
 	const shelterType = resolveMaster(raw, H.shelter_type, lookups.shelter_type, sink);
@@ -796,7 +830,8 @@ export function validateRow(
 			ok: true,
 			shelter: parsed.data,
 			errors: [],
-			foodDistributionPointsProvided
+			foodDistributionPointsProvided,
+			...(siteKindBlank ? { siteKindBlank } : {})
 		};
 	}
 	return { row, name, ok: false, errors: sink.errors, foodDistributionPointsProvided };

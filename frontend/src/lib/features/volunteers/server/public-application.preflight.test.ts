@@ -103,7 +103,10 @@ function volunteersFound(docs: unknown[]) {
 	);
 }
 
+// The fixture shifts are in September 2026; pin the clock so they have not ended yet.
 beforeEach(() => {
+	vi.useFakeTimers({ toFake: ['Date'] });
+	vi.setSystemTime(new Date('2026-09-01T00:00:00+07:00'));
 	state.find.mockReset();
 	state.get.mockReset();
 	state.put.mockReset();
@@ -115,6 +118,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+	vi.useRealTimers();
 	vi.restoreAllMocks();
 });
 
@@ -201,6 +205,14 @@ describe('preflightPublicVolunteerApplication', () => {
 				shift_date: '2026-09-21'
 			})
 		).rejects.toMatchObject({ code: 'SHIFT_NOT_FOUND', httpStatus: 422 });
+	});
+
+	it('rejects a shift that has already ended (#972)', async () => {
+		vi.setSystemTime(new Date('2026-09-21T00:00:00+07:00'));
+		await expect(
+			preflightPublicVolunteerApplication('job:target', { ...input, shift_date: '2026-09-20' })
+		).rejects.toMatchObject({ code: 'SHIFT_CLOSED', httpStatus: 409 });
+		expect(state.find).not.toHaveBeenCalled();
 	});
 
 	it('uses shift_date to pick the shift when there is no shift id', async () => {

@@ -2,14 +2,19 @@ import { json } from '@sveltejs/kit';
 import { putAsPublicWriter } from '$lib/server/couch-public-writer';
 import { sha256Hex } from '$lib/db/hash';
 import { fastapiBaseUrl, fastapiServiceHeaders } from '$lib/server/fastapi';
-import { isDonorEditable } from '$lib/features/donations/server';
+import {
+	isDonorEditable,
+	toTrackingDonor,
+	toTrackingLogistics,
+	toTrackingReceivedSummary,
+	type PublicDonationDoc
+} from '$lib/features/donations/server';
 import {
 	CouchReadError,
 	findByTokenHash,
 	GOODS_IN_STOCK_ERROR,
 	hasKeyedDonationStock
 } from '$lib/server/donation-docs';
-import type { PublicDonationDoc } from '$lib/features/donations';
 
 function shelterDbFromToken(token: string): string | null {
 	const match = token.match(/^TX-([A-Z0-9]+)-/);
@@ -46,6 +51,25 @@ async function cancelViaFastApi(trackingToken: string) {
 	);
 	const body = await res.json().catch(() => ({}));
 	return { status: res.status, body };
+}
+
+/**
+ * What each drop-off point recorded, as the donor may see it (CR-206 §Change): point, lines
+ * and time. The CouchDB receipt also names the staff member and the stock rows — those stay.
+ */
+function publicPointReceipts(receipts: unknown): unknown[] {
+	if (!Array.isArray(receipts)) return [];
+	return receipts.flatMap((receipt) =>
+		receipt && typeof receipt === 'object'
+			? [
+					{
+						point_id: (receipt as { point_id?: unknown }).point_id ?? null,
+						line_nos: (receipt as { line_nos?: unknown }).line_nos ?? [],
+						received_at: (receipt as { received_at?: unknown }).received_at ?? null
+					}
+				]
+			: []
+	);
 }
 
 export const GET = async ({ params }) => {
@@ -102,16 +126,25 @@ export const GET = async ({ params }) => {
 				status: latestDoc?.status ?? donation.status,
 				booking_ref: latestDoc?.booking_ref ?? donation.booking_ref,
 				shelter_code: latestDoc?.shelter_code ?? donation.shelter_code,
-				donor: latestDoc?.donor ?? donation.donor ?? {},
+				// Allowlisted: the CouchDB doc holds the full phone, phone_hash, LINE and email.
+				donor: toTrackingDonor(latestDoc?.donor ?? donation.donor),
 				items: latestDoc?.items ?? donation.items ?? [],
-				logistics: latestDoc?.logistics ?? donation.logistics ?? null,
-				received_summary: latestDoc?.received_summary ?? donation.received_summary ?? null,
+				// CR-209 FR-4 — allowlisted, so `vehicle_plate` never leaves through tracking.
+				logistics: toTrackingLogistics(latestDoc?.logistics ?? donation.logistics),
+				// Without `closed_by`, the staff name (decision sync 2026-10-30).
+				received_summary: toTrackingReceivedSummary(
+					latestDoc?.received_summary ?? donation.received_summary
+				),
 				// CR-172 FR-14 — staff wrote it for the donor; the doc wins over the projection lag.
 				reject_reason: latestDoc?.reject_reason ?? donation.reject_reason ?? null,
 				reject_reason_code: latestDoc?.reject_reason_code ?? donation.reject_reason_code ?? null,
 				updated_at: latestDoc?.updated_at ?? donation.updated_at ?? null,
 				expires_at: latestDoc?.expires_at ?? donation.expires_at ?? null,
-				revisions: latestDoc?.revisions ?? donation.revisions ?? []
+				revisions: latestDoc?.revisions ?? donation.revisions ?? [],
+				// CR-206 FR-MP-13 — the doc wins over the projection lag, as for the status.
+				point_receipts: publicPointReceipts(
+					latestDoc ? latestDoc.point_receipts : donation.point_receipts
+				)
 			}
 		});
 	} catch {
@@ -261,7 +294,7 @@ export const DELETE = async ({ params }) => {
 			);
 		}
 		// Goods already keyed: cancelling would hand the quota back with the goods on the shelf.
-		if (await hasKeyedDonationStock(shelterDb, latestDoc._id)) {
+		if (await hasKeyedDonationStock(shelterDb, latestDoc)) {
 			return json(GOODS_IN_STOCK_ERROR, { status: 409 });
 		}
 

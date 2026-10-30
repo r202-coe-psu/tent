@@ -6,7 +6,7 @@ date: 2026-10-25
 requested_by: Dev Team B feedback — roleplay 23/10/69 (GitHub #824)
 decided_by: kong
 decision_date: 2026-10-26
-updated: 2026-10-26 # approved (kong)
+updated: 2026-10-30 # approved (kong) · CR-216 FR-X3 ล็อตติดลบ
 layer: volatile
 amends: CR-143 (§A FR-A4)
 affects:
@@ -57,7 +57,7 @@ migration: N/A — ไม่เพิ่ม/ลบ field, ไม่เปลี�
   - วันที่ล้วน `YYYY-MM-DD` → 00:00 Asia/Bangkok ของ **วันถัดไป** (`Date.parse(\`${d}T00:00:00+07:00\`) + 1 วัน`)
   - ISO datetime ที่มี offset หรือ `Z` → instant นั้นตรง ๆ
   - ISO datetime ที่ไม่มี offset (ค่า legacy) → ตีความเป็นเวลา Asia/Bangkok
-- **FR-X3** แทนที่ CR-143 FR-A4: ล็อตที่ `isExpiryPassed(lot.expiry, now)` ต้องไม่ถูกเลือกอัตโนมัติ และ UI ต้องแจ้งให้ปรับยอดออก (พฤติกรรมอื่นของ FR-A4 คงเดิม)
+- **FR-X3** แทนที่ CR-143 FR-A4: ล็อตที่ `isExpiryPassed(lot.expiry, now)` ต้องไม่ถูกเลือกอัตโนมัติ และ UI ต้องแจ้งให้ปรับยอดออก — ยกเว้นล็อตที่ติดลบ ซึ่งแสดงคำเตือนล็อตติดลบแทน ([CR-216](CR-216-negative-stock-lots.md) FR-10) (พฤติกรรมอื่นของ FR-A4 คงเดิม)
 - **FR-X4** ทุกจุดใน `affects` ที่ตัดสินว่า "หมดอายุหรือยัง" ต้องเรียก FR-X1 — ห้าม `Date.parse(lot.expiry)` / `new Date(lot.expiry)` เพื่อเทียบกับ `now` เอง ได้แก่ `isLotExpired` (operations + distribution), `isLotDateExpired`, `isExpired` ใน adjust-stock-form, `formatExpiry` ใน cycle-count-form, `lotExpiryStatus`
 - **FR-X5** ตาม D1: `daysLeft`, `isUrgent`, ลำดับล็อต (FR-A1/A3), นาฬิกา "เหลือหมดอายุ" (`timeUntilExpiryMs`), earliest expiry ใน stock-summary, การเรียง `byEarliestExpiry` ใน stock-view และ `lotExpiryMs` ใน dispatch-workflow ต้องคำนวณ/เทียบ/เรียงจาก `expiryInstant` เดียวกัน — ห้าม `Date.parse` สตริง expiry เพื่อเรียงเอง (`earliestExpiry` ใน stock-summary มีทั้งวันที่ล้วนและ ISO instant ของล็อต `shelf_life_days` ปนกัน)
 - **FR-X6** `walkInIntakeInputSchema.items[].lot.expiry` ต้องรับเฉพาะ `YYYY-MM-DD` ที่เป็นวันที่จริง (เช่น `2026-02-30` = reject) หรือว่าง; ค่าไม่ถูกรูปแบบ → validation error ภาษาไทยที่ช่องนั้น
@@ -108,3 +108,4 @@ N/A — ไม่เปลี่ยนรูป doc ไม่ bump `schema_v` �
 - 2026-10-25 — proposed (draft จาก GitHub #824) · รอ owner เคาะวิธี track, D1–D3 และการ approve
 - 2026-10-26 — เคาะ D1-a, D2-a, D3-a ตามที่ผู้เสนอ PR #868 (Hopewalk) เสนอ · รอ approve
 - 2026-10-26 — **approved** โดย kong → รันเลข CR-195 (หมวด 03-C-supply). แก้ CR-143 FR-A4 + `schema.md` §2.1 ใน PR implement ตามหลัง (#824)
+- 2026-10-30 — แก้ FR-X3 ตาม [CR-216](CR-216-negative-stock-lots.md) (approved kong)
