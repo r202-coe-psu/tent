@@ -2,6 +2,8 @@ import { z } from 'zod';
 import { adminFetch } from '$lib/server/couch-admin';
 import { fastapiBaseUrl, fastapiServiceHeaders } from '$lib/server/fastapi';
 import { shelterDbName } from '$lib/server/shelter-access-design';
+import { findMasterByCode } from '$lib/server/shelters.admin';
+import { isKioskPetClaimEnabled } from '../domain/kiosk-config';
 
 const LOOKUP_TIMEOUT_MS = 3_000;
 const REVERT_TIMEOUT_MS = 3_000;
@@ -109,10 +111,22 @@ export async function findQueuePrimaryHouseholdId(
 
 const couchDocSchema = z.looseObject({ _id: z.string() });
 
+/** A Couch pet row; the schema stays loose so extra fields FastAPI adds still pass through. */
+const couchPetSchema = z.looseObject({
+	species: z.string(),
+	count: z.number(),
+	has_cage: z.boolean(),
+	notes: z.string().nullish(),
+	image_url: z.string().nullish()
+});
+
 const preparedClaimSchema = z.object({
 	registration_id: z.string(),
 	shelter_code: z.string(),
 	household: couchDocSchema,
+	// Defaults keep an older FastAPI, which knows no pets, parsing (FR-KUC-12b).
+	pets: z.array(couchPetSchema).default([]),
+	pet_ids: z.array(z.string()).default([]),
 	evacuees: z.array(couchDocSchema.extend({ photo: z.string().nullish() })),
 	images: z.array(
 		z.object({
@@ -132,9 +146,17 @@ export type PrepareUnassignedClaimBody = {
 	device_id: string;
 	member_ids: string[];
 	required_person_id?: string;
+	/** FR-KUC-12a: false when the shelter does not take pets; the pets then stay open. */
+	claim_pets: boolean;
 };
 
-export type RevertUnassignedClaimBody = Omit<PrepareUnassignedClaimBody, 'required_person_id'>;
+export type RevertUnassignedClaimBody = Omit<
+	PrepareUnassignedClaimBody,
+	'required_person_id' | 'claim_pets'
+> & {
+	/** Pets claimed by the prepare being rolled back (FR-KUC-12d); `[]` when none or unknown. */
+	pet_ids: string[];
+};
 
 function claimUrl(registrationId: string, action: 'prepare' | 'revert'): string {
 	return `${fastapiBaseUrl()}/public/v1/unassigned-registrations/${encodeURIComponent(registrationId)}/kiosk-claim/${action}`;
@@ -166,6 +188,15 @@ async function errorCode(response: Response): Promise<string | null> {
 	const error = detail?.error;
 	if (typeof error === 'string') return error;
 	return typeof error?.code === 'string' ? error.code : null;
+}
+
+/** FR-KUC-12a: whether the shelter takes pets; any read error fails closed without blocking check-in. */
+async function isPetClaimAllowed(shelterCode: string): Promise<boolean> {
+	try {
+		return isKioskPetClaimEnabled(await findMasterByCode(shelterCode));
+	} catch {
+		return false;
+	}
 }
 
 /** Mark the members claimed in the queue and get back the Couch docs to birth. */
@@ -220,45 +251,119 @@ async function findMissingDocIds(dbName: string, docIds: string[]): Promise<stri
 	return docIds.filter((id) => !present.has(id));
 }
 
+/** The Couch write failed; `householdWritten` says whether the household (and so its pets) landed. */
+class PreparedClaimWriteError extends Error {
+	constructor(readonly householdWritten: boolean) {
+		super('Couch rejected the claimed documents');
+		this.name = 'PreparedClaimWriteError';
+	}
+}
+
+const HOUSEHOLD_APPEND_RETRIES = 2;
+
+function isConflict(error: unknown): boolean {
+	return (error as { status?: unknown } | null)?.status === 409;
+}
+
+/** FR-KUC-12c: the Couch household with the claimed pets after its own, every other field kept. */
+function withAppendedPets(
+	current: Record<string, unknown>,
+	prepared: PreparedUnassignedClaim
+): Record<string, unknown> {
+	const updatedAt = prepared.household.updated_at;
+	return {
+		...current,
+		pets: [...(Array.isArray(current.pets) ? current.pets : []), ...prepared.pets],
+		...(updatedAt === undefined ? {} : { updated_at: updatedAt })
+	};
+}
+
 /**
  * Birth the prepared docs in one `_bulk_docs`; a conflict means they were already born. Docs
  * already in Couch are left out first, so a repair claim (FR-KUC-15) never writes the `image:` doc
  * prepare minted afresh for an evacuee that already exists (FR-KUC-10).
+ *
+ * A household already in Couch gets the claimed pets appended (FR-KUC-12c). For that doc a
+ * conflict is a real failure, not "already born": it is re-read, merged and PUT again, twice more.
+ * Throws `PreparedClaimWriteError` carrying whether the household write (new or append) landed.
  */
 async function writePreparedClaim(
 	dbName: string,
 	prepared: PreparedUnassignedClaim
 ): Promise<void> {
-	const missing = new Set(
-		await findMissingDocIds(dbName, [
-			prepared.household._id,
-			...prepared.evacuees.map((doc) => doc._id)
-		])
-	);
-	const evacuees = prepared.evacuees.filter((doc) => missing.has(doc._id));
-	const photoIds = new Set(
-		evacuees.map((doc) => doc.photo).filter((id): id is string => Boolean(id))
-	);
-	const docs = [
-		...(missing.has(prepared.household._id) ? [prepared.household] : []),
-		...evacuees,
-		...prepared.images
-			.filter((image) => photoIds.has(image.doc._id))
-			.map((image) => ({
-				...image.doc,
-				_attachments: {
-					full: { content_type: image.content_type, data: image.full_b64 },
-					thumb: { content_type: image.content_type, data: image.thumb_b64 }
-				}
-			}))
-	];
-	if (docs.length === 0) return;
-	const rows = await adminFetch<Array<{ id?: string; error?: string }>>(`/${dbName}/_bulk_docs`, {
-		method: 'POST',
-		body: JSON.stringify({ docs })
-	});
-	if (!Array.isArray(rows) || rows.some((row) => row.error && row.error !== 'conflict')) {
-		throw new Error('Couch rejected the claimed documents');
+	const householdId = prepared.household._id;
+	// Unknown until the household write is known to be unneeded or to have landed.
+	let householdWritten = false;
+	try {
+		const missing = new Set(
+			await findMissingDocIds(dbName, [householdId, ...prepared.evacuees.map((doc) => doc._id)])
+		);
+		const newHousehold = missing.has(householdId);
+		const appendPets = !newHousehold && prepared.pets.length > 0;
+		householdWritten = !newHousehold && !appendPets;
+
+		const evacuees = prepared.evacuees.filter((doc) => missing.has(doc._id));
+		const imageIds = new Set(
+			evacuees.map((doc) => doc.photo).filter((id): id is string => Boolean(id))
+		);
+		// Pet images only go with a household write (FR-KUC-12c); member images stay per evacuee.
+		if (newHousehold || appendPets) {
+			for (const pet of prepared.pets) if (pet.image_url) imageIds.add(pet.image_url);
+		}
+		const current = appendPets
+			? await adminFetch<Record<string, unknown>>(`/${dbName}/${encodeURIComponent(householdId)}`)
+			: null;
+		const docs = [
+			...(newHousehold ? [prepared.household] : []),
+			...(current ? [withAppendedPets(current, prepared)] : []),
+			...evacuees,
+			...prepared.images
+				.filter((image) => imageIds.has(image.doc._id))
+				.map((image) => ({
+					...image.doc,
+					_attachments: {
+						full: { content_type: image.content_type, data: image.full_b64 },
+						thumb: { content_type: image.content_type, data: image.thumb_b64 }
+					}
+				}))
+		];
+		if (docs.length === 0) return;
+		const rows = await adminFetch<Array<{ id?: string; error?: string }>>(`/${dbName}/_bulk_docs`, {
+			method: 'POST',
+			body: JSON.stringify({ docs })
+		});
+		if (!Array.isArray(rows)) throw new PreparedClaimWriteError(false);
+
+		const householdRow = rows.find((row) => row.id === householdId);
+		if (newHousehold) householdWritten = !householdRow?.error || householdRow.error === 'conflict';
+		else if (appendPets) householdWritten = Boolean(householdRow) && !householdRow?.error;
+		const failedRows = rows.some(
+			(row) => row.error && row.error !== 'conflict' && !(appendPets && row.id === householdId)
+		);
+
+		for (
+			let retry = 0;
+			appendPets && !householdWritten && retry < HOUSEHOLD_APPEND_RETRIES;
+			retry++
+		) {
+			const latest = await adminFetch<Record<string, unknown>>(
+				`/${dbName}/${encodeURIComponent(householdId)}`
+			);
+			try {
+				await adminFetch(`/${dbName}/${encodeURIComponent(householdId)}`, {
+					method: 'PUT',
+					body: JSON.stringify(withAppendedPets(latest, prepared))
+				});
+				householdWritten = true;
+			} catch (error) {
+				if (!isConflict(error)) throw error;
+			}
+		}
+		if (failedRows || !householdWritten) throw new PreparedClaimWriteError(householdWritten);
+	} catch (error) {
+		throw error instanceof PreparedClaimWriteError
+			? error
+			: new PreparedClaimWriteError(householdWritten);
 	}
 }
 
@@ -294,11 +399,20 @@ export async function claimUnassignedMembers(
 	);
 	if (toClaim.length === 0) return;
 
-	const revertBody = { shelter_code: shelterCode, device_id: deviceId, member_ids: toClaim };
+	// The BFF does not know the pet ids until prepare answers, so this revert covers members only.
+	const revertBody = {
+		shelter_code: shelterCode,
+		device_id: deviceId,
+		member_ids: toClaim,
+		pet_ids: []
+	};
 	let prepared: PreparedUnassignedClaim;
 	try {
 		prepared = await prepareUnassignedClaim(registration.registration_id, {
-			...revertBody,
+			shelter_code: shelterCode,
+			device_id: deviceId,
+			member_ids: toClaim,
+			claim_pets: await isPetClaimAllowed(shelterCode),
 			...(options.requiredPersonId ? { required_person_id: options.requiredPersonId } : {})
 		});
 	} catch (error) {
@@ -311,11 +425,18 @@ export async function claimUnassignedMembers(
 
 	try {
 		await writePreparedClaim(dbName, prepared);
-	} catch {
+	} catch (error) {
 		// `_bulk_docs` is not atomic: keep the claim of anyone Couch did take, so Mongo matches Couch.
 		const unborn = await findMissingDocIds(dbName, toClaim).catch(() => toClaim);
-		if (unborn.length > 0) {
-			await revertQuietly(registration.registration_id, { ...revertBody, member_ids: unborn });
+		// FR-KUC-12d: pets follow the household; once it is in Couch they stay claimed.
+		const petIds =
+			error instanceof PreparedClaimWriteError && error.householdWritten ? [] : prepared.pet_ids;
+		if (unborn.length > 0 || petIds.length > 0) {
+			await revertQuietly(registration.registration_id, {
+				...revertBody,
+				member_ids: unborn,
+				pet_ids: petIds
+			});
 		}
 		throw new KioskUnassignedClaimFailedError();
 	}
