@@ -29,6 +29,7 @@ export {
 	slotModeForDelivery
 } from './domain/compute-slots';
 export { donationPreDeclarationInputSchema } from './domain/donation';
+export { toTrackingDonor, toTrackingLogistics, toTrackingReceivedSummary } from './domain/tracking';
 export {
 	combineLineRejectReasons,
 	donorRejectMessage,
@@ -43,3 +44,24 @@ export {
 	reviewDonationInputSchema
 } from './domain/item-review';
 export type { LineReviewResult } from './domain/item-review';
+
+// Domain — receiving point by point (CR-206)
+export {
+	allLinesRecorded,
+	closeDonationByPoints,
+	currentLinePoint,
+	hasPointReceipts,
+	isReceivedByPoint,
+	receivedLineNos,
+	recordedLineNos,
+	refusedReceivedLines,
+	type DonationCloseResult
+} from './domain/point-receipts';
+export {
+	DONATION_PHOTO_MAX_UPLOAD_BYTES,
+	donationPhotoIdsSchema,
+	rejectDonationPhotoDocs,
+	rejectDonationPhotoIds,
+	shelterAcceptsDonations
+} from './domain/donation-photos';
+export type { DonationPhotoErrorCode, StoredDonationPhoto } from './domain/donation-photos';

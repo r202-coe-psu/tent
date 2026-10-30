@@ -34,6 +34,9 @@ import { fictitiousNationalId, fictitiousPhone } from './helpers/pre-register';
 import { purgeCreatedData, recordCreatedShelter, teardownShelter } from './helpers/public-cleanup';
 import { createShelterViaUi, pinActiveShelter } from './helpers/staff-ui';
 
+/** Id of this spec's created-data ledger (see helpers/public-cleanup.ts). */
+const LEDGER_SUITE = 'onsite-thaid-registration';
+
 test.describe.configure({ mode: 'serial' });
 test.use({ actionTimeout: 15_000 });
 
@@ -141,7 +144,7 @@ test.afterAll(async () => {
 		await teardownShelter(shelterCode).catch(() => undefined);
 		shelterCode = undefined;
 	}
-	await purgeCreatedData(LAST_NAME);
+	await purgeCreatedData(LEDGER_SUITE, LAST_NAME);
 	if (registrar) await deleteCouchUser(registrar.name).catch(() => undefined);
 });
 
@@ -165,7 +168,7 @@ test.describe('Station 1 ThaiD autofill (#588)', { tag: ['@onsite', '@critical']
 			subdistrict: 'คอหงส์',
 			capacity: 40
 		});
-		recordCreatedShelter(shelterCode);
+		recordCreatedShelter(shelterCode, LEDGER_SUITE);
 
 		registrar = {
 			name: `thaid_reg_${RUN_ID}`,

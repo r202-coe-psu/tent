@@ -89,7 +89,7 @@ function assignmentDbFallback(): ShelterRef[] {
 	return [{ dbName: shelterDbName('SH001'), code: 'SH001', name: 'ศูนย์พักพิงหลัก (SH001)' }];
 }
 
-async function shelterRefs(): Promise<ShelterRef[]> {
+export async function shelterRefs(): Promise<ShelterRef[]> {
 	const refs = new Map<string, ShelterRef>();
 	for (const ref of assignmentDbFallback()) refs.set(ref.dbName, ref);
 	try {

@@ -3,7 +3,7 @@ id: CR-143
 title: กติกาคลังชุดใหม่สำหรับ redesign หน้าคลังของศูนย์ (ลำดับล็อต, รับบริจาคหลายรายการ, เหตุผลปรับยอด, วันหมดอายุ, ปลายทางเบิก, รวมสินค้า)
 status: done
 date: 2026-10-02
-updated: 2026-10-22
+updated: 2026-10-30 # แก้เพิ่มโดย CR-206
 requested_by: project owner (UX review หน้าคลังของศูนย์ — GitHub #331)
 decided_by: project owner (2026-10-02 — อนุมัติทุกหัวข้อ §A–§F; §C stable-core reviewed)
 layer: stable # §C แตะ stock_ledger (append-only ledger = stable core) → ต้อง review ก่อน; §A §B §D §E §F = volatile
@@ -333,3 +333,4 @@ quick-create (#339) ทำให้ศูนย์สร้างสินค้
 - 2026-10-02 — owner ตอบ open decision 4 ข้อ: (1) §A ใช้ค่าน้ำหนักตั้งต้นไปก่อน (2) §A ใช้ลำดับล็อตทั้งระบบ (3) §B บันทึกสำเร็จบางแถว → retry เฉพาะแถวที่ล้ม (4) §D เติมวันหมดอายุจาก `shelf_life_days` อัตโนมัติพร้อม label ให้ตรวจสอบอีกครั้ง · ยังรอการตัดสินรายหัวข้อ §A–§F
 - 2026-10-02 — **approved** ทุกหัวข้อ §A–§F โดย project owner · §C (stable-core) reviewed: ยอมรับรายการ `adjust_reason` 7 ค่า, stock_ledger schema_v 5→6 และการ redeploy `_design/access` · รันเลข CR-143 · แก้ `docs/data/schema.md` §2.1/§2.3/§4.2 และ `docs/task-breakdown/03-C-supply.md` T-11/T-12/T-14 · สถานะ `done` เมื่อ ticket Phase B (#340–#347) ที่เกี่ยวข้องเสร็จ
 - 2026-10-07 — แก้เพิ่มโดย [CR-156](CR-156-stock-redesign-amendment.md): FR-A4a–c, FR-C7–C10, FR-F4a–c, FR-F6 (approved โดย project owner)
+- 2026-10-30 — แก้เพิ่มโดย [CR-206](../04-donation/CR-206-donation-multi-drop-off.md): FR-B4a — แถว ledger ยังใช้ `_id` ต่อ (ใบ, item, ลำดับบรรทัด) เดิม แต่ audit ของการรับที่จุดใช้ id ต่อชุด `line_nos` (`deriveDonationReceiptAuditId(donationId, lineNos)`; ไม่ส่ง = id เดิมต่อใบ) · FR-B4b — batch receive ปฏิเสธใบที่มีรายการระบุจุดหรือมี `point_receipts` ("ใบนี้แยกส่งหลายจุด — รับที่หน้าสแกน") (FR-MP-22b, FR-MP-22c, FR-MP-24a)

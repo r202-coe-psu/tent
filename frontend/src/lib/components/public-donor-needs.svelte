@@ -305,6 +305,7 @@
 	function donateSingleNeed(shelter: ShelterNeeds, need: Need) {
 		if (need.status === 'closed') return;
 		donationStore.flowMode = 'solicited';
+		donationStore.photos.clear();
 		donationStore.selectedShelter = shelter.code;
 		donationStore.selectedShelterName = shelter.name;
 		donationStore.shelterCode = shelter.code;
@@ -320,7 +321,6 @@
 				name: formatItemName(need.raw_name || need.name || need.item_id),
 				unit: formatUnit(need.unit),
 				unit_code: need.unit,
-				image: need.image || '',
 				qty_needed: need.qty_needed
 			})
 		];
@@ -330,6 +330,8 @@
 
 	function donateOtherItems(shelter: ShelterNeeds) {
 		donationStore.flowMode = 'unsolicited';
+		// Photos live in the shelter's DB they were uploaded to — a new booking starts empty.
+		donationStore.photos.clear();
 		donationStore.selectedShelter = shelter.code;
 		donationStore.selectedShelterName = shelter.name;
 		donationStore.shelterCode = shelter.code;
@@ -702,6 +704,7 @@
 					shelters={filteredShelters}
 					selectedCode={visibleMapSelectedCode}
 					onSelect={(code) => (mapSelectedCode = code)}
+					onFocusPoint={(pointId) => (donationStore.tappedPointId = pointId)}
 				>
 					{#snippet card(mapShelter, pin)}
 						{@const shelter = filteredShelters.find((s) => s.code === mapShelter.code)}

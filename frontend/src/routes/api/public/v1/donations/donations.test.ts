@@ -984,4 +984,277 @@ describe('POST /api/public/v1/donations', () => {
 			expect(res.body.success).toBe(true);
 		});
 	});
+	describe('vehicle plate', () => {
+		function mockCouch() {
+			vi.mocked(adminRaw).mockImplementation((path: string, method: string) => {
+				if (method === 'GET' && path.includes('donation_campaign:')) {
+					return Promise.resolve({ status: 200, data: { rows: [] } });
+				}
+				if (method === 'GET' && path.includes('donation:')) {
+					return Promise.resolve({ status: 200, data: { rows: [] } });
+				}
+				return Promise.resolve({ status: 404, data: {} });
+			});
+		}
+
+		async function submit(logistics: Record<string, unknown>) {
+			mockCouch();
+			mockFastapiCreate();
+			return POST({
+				request: { json: () => Promise.resolve({ ...validPayload, logistics }) },
+				getClientAddress: () => '127.0.0.1'
+			} as unknown as PostEvent);
+		}
+
+		const forwardedLogistics = () => {
+			const [, init] = vi.mocked(fetch).mock.calls[0]!;
+			return JSON.parse(String((init as RequestInit).body)).logistics;
+		};
+
+		it('forwards a trimmed plate to FastAPI for a self drop-off', async () => {
+			const response = await submit({
+				delivery_method: 'self_dropoff',
+				vehicle: 'motorcycle',
+				vehicle_plate: '  กข 1234 กรุงเทพมหานคร '
+			});
+			expect(response.status).toBe(200);
+			expect(forwardedLogistics().vehicle_plate).toBe('กข 1234 กรุงเทพมหานคร');
+		});
+
+		it('omits a blank plate', async () => {
+			await submit({ delivery_method: 'self_dropoff', vehicle: 'car', vehicle_plate: '   ' });
+			expect(forwardedLogistics()).not.toHaveProperty('vehicle_plate');
+		});
+
+		it('rejects a plate on shelter_pickup with 422', async () => {
+			const response = await submit({
+				delivery_method: 'shelter_pickup',
+				vehicle_plate: 'กข 1234'
+			});
+			expect(response.status).toBe(422);
+		});
+	});
+
+	describe('donor photos (CR-175 FR-10)', () => {
+		const MB = 1024 * 1024;
+		const photoId = (n: number) => `image:01K8PHXTX${String(n).padStart(17, '0')}`;
+		const donationPhoto = (over: Record<string, unknown> = {}) => ({
+			status: 200,
+			data: {
+				_id: 'image:x',
+				type: 'image',
+				purpose: 'donation',
+				_attachments: { full: { length: 300_000 }, thumb: { length: 9_000 } },
+				...over
+			}
+		});
+
+		/** CouchDB: nothing booked, no campaigns, and `photo(id)` answers each photo GET. */
+		function couch(photo: (id: string) => { status: number; data: unknown }) {
+			vi.mocked(adminRaw).mockImplementation((path: string, method: string) => {
+				if (method !== 'GET') return Promise.resolve({ status: 404, data: {} });
+				const photoPath = /^\/shelter_sh001\/(image%3A[0-9A-Z]+)$/.exec(path);
+				if (photoPath) return Promise.resolve(photo(decodeURIComponent(photoPath[1])));
+				if (path.includes('_all_docs')) return Promise.resolve({ status: 200, data: { rows: [] } });
+				return Promise.resolve({ status: 404, data: {} });
+			});
+		}
+
+		async function book(photos: string[]) {
+			const response = await POST({
+				request: {
+					json: () =>
+						Promise.resolve({
+							...validPayload,
+							items: [{ free_text: 'ผ้าห่ม', qty: 2, unit: 'ผืน' }],
+							logistics: { delivery_method: 'parcel' },
+							photos
+						})
+				},
+				getClientAddress: () => '127.0.0.1'
+			} as unknown as PostEvent);
+			return { status: response.status, body: await response.json() };
+		}
+
+		const photoReads = () =>
+			vi.mocked(adminRaw).mock.calls.filter(([path]) => String(path).includes('image%3A'));
+
+		it('forwards the photo ids to FastAPI once every check passes (AC-1)', async () => {
+			mockFastapiCreate();
+			couch(() => donationPhoto());
+			const res = await book([photoId(1), photoId(2)]);
+
+			expect(res.status).toBe(200);
+			const [, init] = vi.mocked(fetch).mock.calls[0]!;
+			expect(JSON.parse(String((init as RequestInit).body)).photos).toEqual([
+				photoId(1),
+				photoId(2)
+			]);
+		});
+
+		it('sends no photos field when the donor attached none', async () => {
+			mockFastapiCreate();
+			couch(() => donationPhoto());
+			const res = await book([]);
+
+			expect(res.status).toBe(200);
+			const [, init] = vi.mocked(fetch).mock.calls[0]!;
+			expect(JSON.parse(String((init as RequestInit).body))).not.toHaveProperty('photos');
+			expect(photoReads()).toHaveLength(0);
+		});
+
+		it('refuses 31 ids before reading a single photo (AC-8)', async () => {
+			mockFastapiCreate();
+			couch(() => donationPhoto());
+			const res = await book(Array.from({ length: 31 }, (_, i) => photoId(i)));
+
+			expect(res.status).toBe(422);
+			expect(res.body).toMatchObject({
+				error: 'PHOTO_LIMIT_EXCEEDED',
+				error_code: 'PHOTO_LIMIT_EXCEEDED'
+			});
+			expect(photoReads()).toHaveLength(0);
+			expect(fetch).not.toHaveBeenCalled();
+		});
+
+		it("refuses another shelter's photo id as not found (AC-4)", async () => {
+			mockFastapiCreate();
+			couch((id) =>
+				id === photoId(2) ? { status: 404, data: { error: 'not_found' } } : donationPhoto()
+			);
+			const res = await book([photoId(1), photoId(2)]);
+
+			expect(res.status).toBe(422);
+			expect(res.body.error_code).toBe('PHOTO_NOT_FOUND');
+			expect(fetch).not.toHaveBeenCalled();
+		});
+
+		it('refuses a photo that is not a donation photo (AC-4)', async () => {
+			mockFastapiCreate();
+			couch(() => donationPhoto({ purpose: undefined }));
+			const res = await book([photoId(1)]);
+
+			expect(res.status).toBe(422);
+			expect(res.body.error_code).toBe('PHOTO_INVALID');
+		});
+
+		it('refuses a photo another booking already holds (AC-9)', async () => {
+			mockFastapiCreate();
+			couch(() => donationPhoto({ donation_id: 'donation:01K8OTHERB00KING0000000000' }));
+			const res = await book([photoId(1)]);
+
+			expect(res.status).toBe(422);
+			expect(res.body.error_code).toBe('PHOTO_ALREADY_USED');
+		});
+
+		it('refuses photos that add up to more than 10 MB (FR-7)', async () => {
+			mockFastapiCreate();
+			couch(() =>
+				donationPhoto({ _attachments: { full: { length: 1.5 * MB }, thumb: { length: 0.2 * MB } } })
+			);
+			const res = await book(Array.from({ length: 6 }, (_, i) => photoId(i)));
+
+			expect(res.status).toBe(422);
+			expect(res.body.error_code).toBe('PHOTOS_TOO_LARGE');
+		});
+
+		it('fails closed when a photo cannot be read', async () => {
+			mockFastapiCreate();
+			couch(() => ({ status: 500, data: {} }));
+			const res = await book([photoId(1)]);
+
+			expect(res.status).toBe(503);
+			expect(res.body.error).toBe('PHOTOS_UNAVAILABLE');
+			expect(fetch).not.toHaveBeenCalled();
+		});
+
+		it('refuses an id that is not an image doc id', async () => {
+			mockFastapiCreate();
+			couch(() => donationPhoto());
+			const res = await book(['image:../_all_docs']);
+
+			expect(res.status).toBe(422);
+			expect(fetch).not.toHaveBeenCalled();
+		});
+	});
+
+	describe('drop-off point per line (CR-206)', () => {
+		const LINES = [
+			{ free_text: 'น้ำดื่ม', qty: 24, unit: 'bottle', drop_off_point_id: 'point-gym' },
+			{ free_text: 'ยาพารา', qty: 10, unit: 'pack', drop_off_point_id: 'point-med' }
+		];
+
+		async function book(logistics: Record<string, unknown>, items: unknown = LINES) {
+			// Nothing booked, no campaigns — the booking only has to reach FastAPI.
+			vi.mocked(adminRaw).mockResolvedValue({ status: 200, data: { rows: [] } });
+			const response = await POST({
+				request: { json: () => Promise.resolve({ ...validPayload, items, logistics }) },
+				getClientAddress: () => '127.0.0.1'
+			} as unknown as PostEvent);
+			return { status: response.status, body: await response.json() };
+		}
+
+		const sentItems = () => {
+			const [, init] = vi.mocked(fetch).mock.calls[0]!;
+			return JSON.parse(String((init as RequestInit).body)).items as Array<Record<string, unknown>>;
+		};
+
+		it('forwards the point of each line of a self drop-off (FR-MP-1, AC-1)', async () => {
+			mockFastapiCreate();
+			const res = await book({ delivery_method: 'self_dropoff', vehicle: 'car' });
+
+			expect(res.status).toBe(200);
+			expect(sentItems().map((item) => item.drop_off_point_id)).toEqual(['point-gym', 'point-med']);
+		});
+
+		it('sends null for a line with no point', async () => {
+			mockFastapiCreate();
+			await book({ delivery_method: 'self_dropoff', vehicle: 'car' }, [
+				{ free_text: 'น้ำดื่ม', qty: 24, unit: 'bottle' }
+			]);
+
+			expect(sentItems()[0].drop_off_point_id).toBeNull();
+		});
+
+		it('clears every point of a parcel whatever the client sent (FR-MP-4, AC-4)', async () => {
+			mockFastapiCreate();
+			const res = await book({ delivery_method: 'parcel' });
+
+			expect(res.status).toBe(200);
+			expect(sentItems().map((item) => item.drop_off_point_id)).toEqual([null, null]);
+		});
+
+		it('passes FastAPI UNKNOWN_DROP_OFF_POINT through (FR-MP-2, AC-2)', async () => {
+			vi.stubGlobal(
+				'fetch',
+				vi.fn().mockResolvedValue({
+					ok: false,
+					status: 400,
+					json: async () => ({
+						errors: [
+							{
+								success: false,
+								error: 'UNKNOWN_DROP_OFF_POINT',
+								drop_off_point_id: 'point-gym'
+							}
+						]
+					})
+				})
+			);
+			const res = await book({ delivery_method: 'self_dropoff', vehicle: 'car' });
+
+			expect(res.status).toBe(400);
+			expect(res.body.error).toBe('UNKNOWN_DROP_OFF_POINT');
+		});
+
+		it('refuses a blank point id with 422 before FastAPI', async () => {
+			mockFastapiCreate();
+			const res = await book({ delivery_method: 'self_dropoff', vehicle: 'car' }, [
+				{ free_text: 'น้ำดื่ม', qty: 24, unit: 'bottle', drop_off_point_id: '  ' }
+			]);
+
+			expect(res.status).toBe(422);
+			expect(fetch).not.toHaveBeenCalled();
+		});
+	});
 });

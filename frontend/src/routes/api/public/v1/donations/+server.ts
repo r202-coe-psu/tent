@@ -6,14 +6,22 @@ import {
 	pickCampaignForItems,
 	DEFAULT_SLOT_WINDOWS,
 	slotAvailabilityFor,
-	slotModeForDelivery
+	slotModeForDelivery,
+	rejectDonationPhotoDocs,
+	rejectDonationPhotoIds,
+	type DonationPhotoErrorCode
 } from '$lib/features/donations/server';
 import type { PublicDonationDoc } from '$lib/features/donations';
 import { ReCaptchaProvider } from '$lib/server/security/captcha';
 import { verifyRecaptchaOrSkip } from '$lib/server/security/recaptcha-gate';
 import { bangkokToday } from '$lib/utils/date';
 import { adminRaw } from '$lib/server/couch-admin';
-import { fetchDocs, fetchDocsStrict, CouchReadError } from '$lib/server/donation-docs';
+import {
+	fetchDocs,
+	fetchDocsStrict,
+	readDonationPhotos,
+	CouchReadError
+} from '$lib/server/donation-docs';
 import { fastapiBaseUrl, fastapiServiceHeaders, unwrapFastapiError } from '$lib/server/fastapi';
 
 import type {
@@ -66,6 +74,22 @@ export const POST = async ({ request, getClientAddress }) => {
 		// donation just to read one shelter's status.
 		const shelterCode = parsed.data.shelter_code;
 		const dbName = `shelter_${shelterCode.toLowerCase()}`;
+
+		// 3.2 Donor photos (CR-175 FR-10): the count first, then each doc by `_id`.
+		const photos = parsed.data.photos ?? [];
+		let photoError: DonationPhotoErrorCode | null = rejectDonationPhotoIds(photos);
+		if (!photoError && photos.length > 0) {
+			try {
+				photoError = rejectDonationPhotoDocs(await readDonationPhotos(dbName, photos));
+			} catch (e) {
+				if (!(e instanceof CouchReadError)) throw e;
+				console.error(e);
+				return json({ success: false, error: 'PHOTOS_UNAVAILABLE' }, { status: 503 });
+			}
+		}
+		if (photoError) {
+			return json({ success: false, error: photoError, error_code: photoError }, { status: 422 });
+		}
 
 		// โหลด campaigns + donations + stock ครั้งเดียวแล้วใช้ซ้ำทุกการตรวจ
 		// `donation:` is read strictly: it feeds both the need-remaining and the slot
@@ -175,6 +199,16 @@ export const POST = async ({ request, getClientAddress }) => {
 			}
 		}
 
+		// 3.7 Drop-off point per line (CR-206): only a donor who brings the goods picks one. A
+		// parcel or a shelter pickup reaches the shelter whole, so its lines carry no point
+		// whatever the client sent (FR-MP-4). FastAPI checks the rest against the shelter's
+		// points and answers 400 UNKNOWN_DROP_OFF_POINT before any quota moves (FR-MP-2, FR-MP-3).
+		const picksPoints = parsed.data.logistics.delivery_method === 'self_dropoff';
+		const items = parsed.data.items.map((item) => ({
+			...item,
+			drop_off_point_id: picksPoints ? (item.drop_off_point_id ?? null) : null
+		}));
+
 		// 4. Persist via FastAPI → MongoDB donations buffer (inbound worker → CouchDB)
 		const apiRes = await fetch(`${fastapiBaseUrl()}/public/v1/donations`, {
 			method: 'POST',
@@ -183,9 +217,10 @@ export const POST = async ({ request, getClientAddress }) => {
 				shelter_code: parsed.data.shelter_code,
 				campaign_id: resolvedCampaignId,
 				donor: parsed.data.donor,
-				items: parsed.data.items,
+				items,
 				logistics: parsed.data.logistics,
-				slot_hold: slotHold
+				slot_hold: slotHold,
+				...(photos.length > 0 ? { photos } : {})
 			})
 		});
 

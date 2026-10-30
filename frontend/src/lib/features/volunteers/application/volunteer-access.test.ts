@@ -7,8 +7,10 @@ const mocks = vi.hoisted(() => ({
 	listUsers: vi.fn(),
 	get: vi.fn(),
 	update: vi.fn(),
-	repositoryFor: vi.fn()
+	repositoryFor: vi.fn(),
+	serviceFetch: vi.fn()
 }));
+vi.mock('$lib/api/service', () => ({ serviceFetch: mocks.serviceFetch }));
 vi.mock('$lib/features/users', async () => {
 	const { phoneSchema, contactPhoneSchema } = await vi.importActual<Record<string, unknown>>(
 		'$lib/features/users/domain/schema'
@@ -24,7 +26,13 @@ vi.mock('../data/volunteer.remote', () => ({
 	volunteerRepositoryFor: mocks.repositoryFor
 }));
 
-import { accountPhones, grantVolunteerAccess, volunteerPasswordError } from './volunteer-access';
+import {
+	accountPhones,
+	grantVolunteerAccess,
+	grantVolunteerAccessAsCoordinator,
+	volunteerPasswordError
+} from './volunteer-access';
+import { grantExpiryRange } from '$lib/auth/role-grants';
 
 const volunteer: Volunteer = {
 	_id: 'volunteer:one',
@@ -55,7 +63,7 @@ const input = {
 };
 const account: UserSummary = {
 	name: input.email,
-	roles: ['shelter:SH001', input.role],
+	roles: ['shelter:SH001', `SH001:${input.role}`],
 	personnel_type: 'volunteer',
 	volunteer_id: volunteer._id,
 	active: true
@@ -118,7 +126,7 @@ describe('grantVolunteerAccess', () => {
 				password: input.password,
 				display_name: 'อาสา ทดสอบ',
 				personnel_type: 'volunteer',
-				roles: ['shelter:SH001', input.role],
+				roles: ['shelter:SH001', `SH001:${input.role}`],
 				volunteer_id: volunteer._id,
 				phone: volunteer.phone,
 				must_change_password: false
@@ -135,6 +143,22 @@ describe('grantVolunteerAccess', () => {
 		);
 		expect(mocks.createUser.mock.invocationCallOrder[0]).toBeLessThan(
 			mocks.update.mock.invocationCallOrder[0]
+		);
+	});
+
+	it('lowercases the email before creating the account', async () => {
+		await grantVolunteerAccess(volunteer, { ...input, email: 'Helper@Example.COM' });
+		expect(mocks.createUser).toHaveBeenCalledWith(
+			expect.objectContaining({ name: 'helper@example.com', email: 'helper@example.com' })
+		);
+	});
+
+	it('links a legacy mixed-case account by its stored name instead of creating one', async () => {
+		mocks.listUsers.mockResolvedValue([{ ...account, name: 'Helper@Example.com' }]);
+		await expect(grantVolunteerAccess(volunteer, input)).resolves.toEqual({ created: false });
+		expect(mocks.createUser).not.toHaveBeenCalled();
+		expect(mocks.update).toHaveBeenCalledWith(
+			expect.objectContaining({ user_name: 'Helper@Example.com' })
 		);
 	});
 
@@ -207,10 +231,17 @@ describe('grantVolunteerAccess', () => {
 
 	it.each([
 		{ ...account, volunteer_id: 'volunteer:other' },
+		{ ...account, roles: ['shelter:SH002', `SH002:${input.role}`] },
 		{ ...account, roles: ['shelter:SH002', input.role] },
 		{ ...account, personnel_type: 'staff' as const },
 		{ ...account, active: false },
+		{ ...account, roles: ['shelter:SH001', 'SH001:warehouse_staff'] },
 		{ ...account, roles: ['shelter:SH001', 'warehouse_staff'] },
+		{ ...account, roles: ['shelter:SH001', `SH001:${input.role}`, 'SH001:warehouse_staff'] },
+		{ ...account, roles: ['shelter:SH001', input.role, 'SH001:warehouse_staff'] },
+		{ ...account, roles: ['shelter:SH001', `SH001:${input.role}`, input.role] },
+		{ ...account, roles: ['shelter:SH001', 'system_admin'] },
+		{ ...account, roles: ['shelter:SH001', '_admin'] },
 		{ ...account, name: 'another@example.com' }
 	])('does not adopt an existing mismatched account: %j', async (existing) => {
 		mocks.listUsers.mockResolvedValue([existing]);
@@ -226,6 +257,18 @@ describe('grantVolunteerAccess', () => {
 		await expect(grantVolunteerAccess(volunteer, input)).resolves.toEqual({ created: false });
 		expect(mocks.createUser).toHaveBeenCalledTimes(1);
 		expect(mocks.update).toHaveBeenCalledTimes(2);
+	});
+
+	it.each([
+		{ label: 'compound', roles: ['shelter:SH001', `SH001:${input.role}`] },
+		{ label: 'legacy flat', roles: ['shelter:SH001', input.role] }
+	])('relinks an existing $label account without recreating it', async ({ roles }) => {
+		mocks.listUsers.mockResolvedValue([{ ...account, roles }]);
+		await expect(grantVolunteerAccess(volunteer, input)).resolves.toEqual({ created: false });
+		expect(mocks.createUser).not.toHaveBeenCalled();
+		expect(mocks.update).toHaveBeenCalledWith(
+			expect.objectContaining({ user_name: input.email, email: input.email })
+		);
 	});
 
 	it('can replace the old mock-only user_name when there is no real account', async () => {
@@ -245,5 +288,85 @@ describe('grantVolunteerAccess', () => {
 		await expect(grantVolunteerAccess(volunteer, input)).rejects.toThrow(/บัญชี/);
 		expect(mocks.createUser).toHaveBeenCalledTimes(1);
 		expect(mocks.update).not.toHaveBeenCalled();
+	});
+});
+
+describe('grantVolunteerAccessAsCoordinator (#955)', () => {
+	const { min, max } = grantExpiryRange();
+	const coordinatorInput = { ...input, expires_on: max };
+
+	beforeEach(() => {
+		mocks.serviceFetch.mockResolvedValue({ ok: true, created: true, unchanged: false });
+	});
+
+	it('asks the BFF to grant, then links the profile; never uses the generic user routes', async () => {
+		await expect(grantVolunteerAccessAsCoordinator(volunteer, coordinatorInput)).resolves.toEqual({
+			created: true,
+			unchanged: false
+		});
+		expect(mocks.serviceFetch).toHaveBeenCalledWith('/api/v1/volunteer-access', {
+			method: 'POST',
+			body: JSON.stringify({
+				shelter_code: 'SH001',
+				volunteer_id: volunteer._id,
+				email: input.email,
+				password: input.password,
+				role: input.role,
+				expires_on: max
+			})
+		});
+		expect(mocks.update).toHaveBeenCalledWith(
+			expect.objectContaining({ user_name: input.email, email: input.email })
+		);
+		expect(mocks.createUser).not.toHaveBeenCalled();
+		expect(mocks.listUsers).not.toHaveBeenCalled();
+		expect(mocks.serviceFetch.mock.invocationCallOrder[0]).toBeLessThan(
+			mocks.update.mock.invocationCallOrder[0]
+		);
+	});
+
+	it('accepts today as the earliest expiry', async () => {
+		await grantVolunteerAccessAsCoordinator(volunteer, { ...coordinatorInput, expires_on: min });
+		expect(mocks.serviceFetch).toHaveBeenCalled();
+	});
+
+	it.each([
+		['no expiry', { expires_on: '' }],
+		['an expiry past the 7-day ceiling', { expires_on: '2999-01-01' }],
+		['an expiry in the past', { expires_on: '2000-01-01' }],
+		['a role outside the four', { role: 'medical_staff' }],
+		['a bad email', { email: 'bad' }],
+		['a weak password', { password: '0000000000' }]
+	])('rejects %s before calling the BFF', async (_label, over) => {
+		await expect(
+			grantVolunteerAccessAsCoordinator(volunteer, { ...coordinatorInput, ...over } as never)
+		).rejects.toThrow();
+		expect(mocks.serviceFetch).not.toHaveBeenCalled();
+		expect(mocks.update).not.toHaveBeenCalled();
+	});
+
+	it('shows the BFF refusal (e.g. identity not verified) and links nothing', async () => {
+		mocks.serviceFetch.mockRejectedValue(
+			new Error('อาสาสมัครต้องยืนยันตัวตนก่อนจึงจะออกสิทธิ์ได้')
+		);
+		await expect(grantVolunteerAccessAsCoordinator(volunteer, coordinatorInput)).rejects.toThrow(
+			'ยืนยันตัวตน'
+		);
+		expect(mocks.update).not.toHaveBeenCalled();
+	});
+
+	it('still links the profile when the account already had the role', async () => {
+		mocks.serviceFetch.mockResolvedValue({ ok: true, created: false, unchanged: true });
+		await expect(grantVolunteerAccessAsCoordinator(volunteer, coordinatorInput)).resolves.toEqual({
+			created: false,
+			unchanged: true
+		});
+		expect(mocks.update).toHaveBeenCalled();
+	});
+
+	it('fails before the BFF if the volunteer no longer exists', async () => {
+		mocks.get.mockResolvedValue(null);
+		await expect(grantVolunteerAccessAsCoordinator(volunteer, coordinatorInput)).rejects.toThrow();
+		expect(mocks.serviceFetch).not.toHaveBeenCalled();
 	});
 });

@@ -11,6 +11,10 @@ import type { CountedItem, Donation } from './operations';
 /** Namespace of the deterministic `_id` of a batch-receipt row (FR-B4a). */
 const DONATION_RECEIPT_NAMESPACE = 'donation_receipt';
 const DONATION_RECEIPT_AUDIT_NAMESPACE = 'donation_receipt_audit';
+/** A receipt of some lines at a drop-off point (CR-206 FR-MP-22c) — never the whole-booking id. */
+const DONATION_POINT_RECEIPT_AUDIT_NAMESPACE = 'donation_point_receipt_audit';
+/** Staff pressing "ปิดใบ" on a booking received point by point (CR-206 FR-MP-27). */
+const DONATION_CLOSE_AUDIT_NAMESPACE = 'donation_close_audit';
 
 /**
  * One line of the batch. `line_no` is the line's identity for the lifetime of the
@@ -74,9 +78,29 @@ export function deriveDonationReceiptLineId(
 /**
  * `_id` of the audit entry for receiving one donation at the scan station: one per
  * donation, so a retried receive cannot log the same receipt twice (#695).
+ *
+ * With `lineNos` (CR-206 FR-MP-22c) it is one per set of lines a drop-off point recorded —
+ * order does not matter, so a retry of the same lines gets the same id while another point
+ * recording other lines gets its own. Without it the id is the per-booking one, unchanged.
  */
-export async function deriveDonationReceiptAuditId(donationId: string): Promise<string> {
-	const ledgerId = await deriveDeterministicLedgerId(DONATION_RECEIPT_AUDIT_NAMESPACE, donationId);
+export async function deriveDonationReceiptAuditId(
+	donationId: string,
+	lineNos?: readonly number[]
+): Promise<string> {
+	const ledgerId =
+		lineNos === undefined
+			? await deriveDeterministicLedgerId(DONATION_RECEIPT_AUDIT_NAMESPACE, donationId)
+			: await deriveDeterministicLedgerId(
+					DONATION_POINT_RECEIPT_AUDIT_NAMESPACE,
+					donationId,
+					[...lineNos].sort((a, b) => a - b).join(',')
+				);
+	return `audit:${ledgerId.slice('stock_ledger:'.length)}`;
+}
+
+/** `_id` of the audit entry for staff closing a booking received point by point (CR-206 FR-MP-27). */
+export async function deriveDonationCloseAuditId(donationId: string): Promise<string> {
+	const ledgerId = await deriveDeterministicLedgerId(DONATION_CLOSE_AUDIT_NAMESPACE, donationId);
 	return `audit:${ledgerId.slice('stock_ledger:'.length)}`;
 }
 

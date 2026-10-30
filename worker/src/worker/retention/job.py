@@ -28,6 +28,8 @@ from worker.projectors.shelter import (
 )
 from worker.quota.expiry import expire_declared_donations
 from worker.retention.audit import audit_and_delete
+from worker.retention.donation_photos import sweep_orphan_donation_photos
+from worker.role_grants import expire_role_grants
 
 logger = logging.getLogger(__name__)
 
@@ -180,21 +182,37 @@ async def purge_expired_buffers(job_run_id: str) -> None:
 async def run_retention_once(couch: CouchClient | None = None) -> None:
     job_run_id = uuid.uuid4().hex
     logger.info("Starting retention job %s", job_run_id)
-    retention_months = (
-        await read_retention_months(couch)
-        if couch is not None
-        else DEFAULT_RETENTION_MONTHS_AFTER_CLOSE
-    )
-    await reconcile_closed_shelters(
-        job_run_id, retention_months=retention_months, now=datetime.now(UTC)
-    )
-    await purge_expired_buffers(job_run_id)
+    # The Mongo-backed steps may fail; the role-grant sweep below must still run, so the first
+    # failure is held and re-raised once the sweep is done.
+    mongo_error: Exception | None = None
+    try:
+        retention_months = (
+            await read_retention_months(couch)
+            if couch is not None
+            else DEFAULT_RETENTION_MONTHS_AFTER_CLOSE
+        )
+        await reconcile_closed_shelters(
+            job_run_id, retention_months=retention_months, now=datetime.now(UTC)
+        )
+        await purge_expired_buffers(job_run_id)
+        if couch is not None:
+            # Same cycle as the quota release above so the counter and the CouchDB status
+            # move together (T-21 TTL). Runs after the purge: releasing first and flipping
+            # second means a crash in between leaves the doc "declared", and the next cycle
+            # retries the release harmlessly thanks to the underflow guard.
+            await expire_declared_donations(couch, now=datetime.now(UTC))
+            await sweep_orphan_donation_photos(couch, now=datetime.now(UTC))
+    except Exception as exc:  # noqa: BLE001 - re-raised below, after the grant sweep
+        mongo_error = exc
     if couch is not None:
-        # Same cycle as the quota release above so the counter and the CouchDB status
-        # move together (T-21 TTL). Runs after the purge: releasing first and flipping
-        # second means a crash in between leaves the doc "declared", and the next cycle
-        # retries the release harmlessly thanks to the underflow guard.
-        await expire_declared_donations(couch, now=datetime.now(UTC))
+        # Coordinator-granted staff roles (#955) lapse on the same cycle. Own step, own
+        # try/except, and no MongoDB: access must end on time even while Mongo is down.
+        try:
+            await expire_role_grants(couch, now=datetime.now(UTC))
+        except Exception:
+            logger.exception("Role grant sweep failed")
+    if mongo_error is not None:
+        raise mongo_error
     logger.info("Retention job %s complete", job_run_id)
 
 

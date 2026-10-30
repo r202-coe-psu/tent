@@ -3,6 +3,7 @@ import { type BaseDoc } from '$lib/db/model';
 import type { DonationStatus } from '$lib/features/operations';
 import { isRealCalendarDate, SLOT_TIME_PATTERN } from '$lib/features/operations/server';
 import { qtyStrCoercePositiveSchema } from '$lib/utils/qty';
+import { donationPhotoIdsSchema } from './donation-photos';
 
 export const PUBLIC_DONATION_CATEGORIES = [
 	{ value: 'food', label: 'อาหาร/เครื่องดื่ม' },
@@ -35,12 +36,64 @@ export interface DonationPreDeclaration extends BaseDoc {
 	logistics?: {
 		delivery_method: 'self_dropoff' | 'parcel' | 'shelter_pickup';
 		vehicle?: 'motorcycle' | 'car' | 'pickup' | 'truck';
+		vehicle_plate?: string; // CR-209 — self_dropoff only, donor PII
 		slot?: { date: string; from: string; to: string };
 		eta?: string;
 		courier_tracking_no?: string | null;
 		pickup_address?: string;
 	};
 	booking_ref?: string;
+}
+
+/** CR-209 — free text, so a donor can type the province in the same field. */
+export const VEHICLE_PLATE_MAX = 40;
+
+/** What the public booking form holds about delivery when the donor submits. */
+export type DonationLogisticsInput = {
+	deliveryMethod: 'self_dropoff' | 'parcel' | 'shelter_pickup';
+	vehicleType?: 'motorcycle' | 'car' | 'pickup' | 'truck';
+	vehiclePlate: string;
+	slot: { date: string; from: string; to: string };
+	pickupAddress?: string;
+	eta?: string;
+	courierTrackingNo?: string;
+};
+
+/** The `logistics` block of a public booking, as the BFF schema accepts it. */
+export type DonationLogisticsPayload = z.input<
+	typeof donationPreDeclarationInputSchema
+>['logistics'];
+
+/**
+ * The `logistics` block a public booking sends. The plate goes out only on `self_dropoff` and
+ * only when non-blank (CR-209 FR-2a) — the form keeps what was typed when the donor switches
+ * method, so switching back shows it again, but it is never sent for another method.
+ */
+export function buildDonationLogistics(input: DonationLogisticsInput): DonationLogisticsPayload {
+	switch (input.deliveryMethod) {
+		case 'self_dropoff': {
+			const plate = input.vehiclePlate.trim();
+			return {
+				delivery_method: 'self_dropoff',
+				vehicle: input.vehicleType,
+				...(plate ? { vehicle_plate: plate } : {}),
+				slot: input.slot
+			};
+		}
+		case 'shelter_pickup':
+			return {
+				delivery_method: 'shelter_pickup',
+				slot: input.slot,
+				...(input.pickupAddress ? { pickup_address: input.pickupAddress } : {}),
+				...(input.eta ? { eta: input.eta } : {})
+			};
+		case 'parcel':
+			return {
+				delivery_method: 'parcel',
+				...(input.eta ? { eta: input.eta } : {}),
+				...(input.courierTrackingNo ? { courier_tracking_no: input.courierTrackingNo } : {})
+			};
+	}
 }
 
 export const donationPreDeclarationInputSchema = z.object({
@@ -62,7 +115,13 @@ export const donationPreDeclarationInputSchema = z.object({
 				qty: qtyStrCoercePositiveSchema,
 				unit: z.string().min(1, 'Please enter a unit'),
 				condition: z.string().optional(),
-				note: z.string().optional()
+				note: z.string().optional(),
+				/**
+				 * The drop-off point this line goes to (CR-206 FR-MP-1) — `public_shelters.donation_points[].id`.
+				 * FastAPI checks it against the shelter (FR-MP-2, FR-MP-3); the BFF clears it for any
+				 * delivery but `self_dropoff` (FR-MP-4).
+				 */
+				drop_off_point_id: z.string().trim().min(1).max(64).nullable().optional()
 			})
 		)
 		.min(1, 'Please add at least one item to the donation'),
@@ -71,6 +130,13 @@ export const donationPreDeclarationInputSchema = z.object({
 		.object({
 			delivery_method: z.enum(['self_dropoff', 'parcel', 'shelter_pickup']),
 			vehicle: z.enum(['motorcycle', 'car', 'pickup', 'truck']).optional(),
+			// Blank after trim = not sent (CR-209 FR-1).
+			vehicle_plate: z
+				.string()
+				.trim()
+				.max(VEHICLE_PLATE_MAX, 'ทะเบียนรถยาวเกินไป')
+				.optional()
+				.transform((v) => v || undefined),
 			// The donor's window is re-checked against the shelter's published slot by the
 			// BFF, but only well-formed input may reach that lookup: `date` and `from` are
 			// interpolated into a CouchDB doc id, and `to` is compared against the doc.
@@ -95,7 +161,14 @@ export const donationPreDeclarationInputSchema = z.object({
 		.refine((l) => !(l.delivery_method === 'parcel' && l.vehicle), {
 			message: 'vehicle is only allowed for self_dropoff or shelter_pickup',
 			path: ['vehicle']
+		})
+		// CR-209: the shelter's own vehicle collects a pickup, so a plate only fits self_dropoff.
+		.refine((l) => !(l.delivery_method !== 'self_dropoff' && l.vehicle_plate), {
+			message: 'vehicle_plate is only allowed for self_dropoff',
+			path: ['vehicle_plate']
 		}),
+	/** `image:{ulid}` from `POST /api/public/v1/donations/photos` (CR-175 donor photos). */
+	photos: donationPhotoIdsSchema.optional(),
 	captchaToken: z.string().min(1).optional()
 });
 
