@@ -326,7 +326,7 @@ def _drop_off_points(
     items: list[DonationItemInput],
     *,
     logistics: dict[str, Any] | None,
-    offered: set[str],
+    offered: set[str] | None,
     strict: bool,
 ) -> list[DonationItemInput]:
     """CR-206 FR-MP-2..FR-MP-4 — keep each line's drop-off point only where it can stand.
@@ -334,8 +334,12 @@ def _drop_off_points(
     A shelter pickup or a parcel reaches the shelter whole, so its lines lose any point the
     client sent. Otherwise a point must be one the shelter offers now: on create
     (``strict``) one that is not refuses the booking before any quota moves (FR-MP-2,
-    FR-MP-3); on an edit it becomes ``None`` (FR-MP-2a) — the point may have been unticked
-    since the booking was made, and the donor should not be stuck with it.
+    FR-MP-3).
+
+    ``offered=None`` skips that check: the donor edit is reachable only through the BFF,
+    which already settled each point against the shelter doc in CouchDB (FR-MP-2a) and
+    nulls the ones no longer offered. The Mongo projection lags that doc, so checking it
+    here would drop a point staff added a moment ago.
     """
     no_point = (logistics or {}).get("delivery_method") in _NO_POINT_DELIVERY_METHODS
     kept = []
@@ -344,7 +348,7 @@ def _drop_off_points(
         if point_id is None:
             kept.append(item)
             continue
-        if not no_point and point_id in offered:
+        if not no_point and (offered is None or point_id in offered):
             kept.append(item)
             continue
         if strict and not no_point:
@@ -1013,12 +1017,13 @@ class DonationsUseCase:
         now = datetime.now(UTC)
         before = [dict(item) for item in buffer.items_declared]
         items = _pair_held_lines(_carry_item_ids(items, before), previous_items)
-        # CR-206 FR-MP-2a / FR-MP-4 — a point the shelter no longer offers becomes None.
-        shelter = await PublicShelter.find_one(PublicShelter.shelter_code == buffer.shelter_code)
+        # CR-206 FR-MP-4 — a parcel or pickup carries no point. Which points the shelter
+        # offers (FR-MP-2a) the BFF has already settled from CouchDB, so the lagging Mongo
+        # projection is not consulted: it would drop a point staff added a moment ago.
         items = _drop_off_points(
             items,
             logistics=buffer.logistics,
-            offered=_offered_point_ids(shelter),
+            offered=None,
             strict=False,
         )
 

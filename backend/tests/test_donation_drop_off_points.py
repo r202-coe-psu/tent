@@ -174,32 +174,36 @@ async def _edit(client: AsyncClient, headers: dict[str, str], token: str, items:
     )
 
 
-async def test_fr_mp_2a_an_edit_drops_a_point_no_longer_offered(
+async def test_fr_mp_2a_an_edit_trusts_the_bffs_points_over_the_lagging_projection(
     client: AsyncClient, two_point_shelter: PublicShelter, auth_headers: dict[str, str]
 ) -> None:
+    """The edit path is BFF-only (Bearer secret, not under /external): the BFF has already
+    checked each point against the CouchDB shelter doc. A point staff added there that the
+    worker has not projected into Mongo yet must not be nulled here."""
     created = await _post(client, auth_headers, [{**_PARA, "drop_off_point_id": _MED}])
     token = created.json()["tracking_token"]
-    # Staff untick the infirmary after the booking (AC-13).
-    two_point_shelter.donation_points = [_point(_GYM, "โรงยิม")]
-    await two_point_shelter.save()
+    new_point = "point-just-added"
+    assert new_point not in {point.id for point in two_point_shelter.donation_points}
 
     response = await _edit(
         client,
         auth_headers,
         token,
         [
-            {**_PARA, "qty": "12", "drop_off_point_id": _MED},
+            {**_PARA, "qty": "12", "drop_off_point_id": new_point},
             {"free_text": "ผ้าห่ม", "qty": "2", "unit": "ผืน", "drop_off_point_id": _GYM},
+            {"free_text": "นม", "qty": "1", "unit": "กล่อง", "drop_off_point_id": None},
         ],
     )
 
     assert response.status_code == 200, response.text
-    assert [line.get("drop_off_point_id") for line in response.json()["items"]] == [None, _GYM]
+    expected = [new_point, _GYM, None]
+    assert [line.get("drop_off_point_id") for line in response.json()["items"]] == expected
     buffer = await _buffer(token)
-    assert [line.get("drop_off_point_id") for line in buffer.items_declared] == [None, _GYM]
+    assert [line.get("drop_off_point_id") for line in buffer.items_declared] == expected
     stub = await PublicDonation.find_one(PublicDonation.tracking_token_hash == sha256_hex(token))
     assert stub is not None
-    assert [line.drop_off_point_id for line in stub.items_declared] == [None, _GYM]
+    assert [line.drop_off_point_id for line in stub.items_declared] == expected
 
 
 async def test_fr_mp_4_an_edit_of_a_parcel_booking_carries_no_point(
