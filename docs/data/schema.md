@@ -454,7 +454,7 @@ station (staff เห็น warning toast).
 ลำดับ: (1) กลุ่มเร่งด่วน — `daysLeft ≤ URGENT_DAYS` ที่มาจาก `lot.expiry`/`shelf_life_days` (ไม่ใช่ HORIZON) เรียงตาม `daysLeft` (2) ที่เหลือเรียงตาม `score` (3) เท่ากัน → `received_at` เก่าก่อน → `lot_ref`. ล็อตที่ไม่มี `lot.expiry` และ `daysLeft ≤ 0` จาก `shelf_life_days` = หมดอายุแล้ว ไม่เลือกอัตโนมัติ (CR-156 FR-A4a).
 ค่าตั้งต้น `W_EXPIRY=1`, `W_AGE=0.5`, `URGENT_DAYS=7`, `HORIZON` DRY 365 / CHILLED 7 / FROZEN 90 / CONTROLLED_MED 365 / ไม่ทราบ 365. ล็อตที่หมดอายุแล้วไม่ถูกเลือกอัตโนมัติ.
 **ข้อยกเว้น (รับคืนจากตั๋ว):** การแบ่งยอดของเหลือคืนจากตั๋วเข้า lot ต้นทางใช้ลำดับ §2 ของ [CR-208](../changes/03-C-supply/CR-208-lot-return-warehouse.md) (วันหมดอายุเวลาสัมบูรณ์ — `lot.expiry` → `produced_at`/`received_at` + `shelf_life_days` → ไม่ทราบไว้หลัง; ไม่ใช้ HORIZON / `score` / `now`) เพื่อให้ replay ได้ผลเดิม.
-**ข้อยกเว้น:** การ replay แถว outbound legacy (ไม่มี `lot_ref`) ใน `projectStockLotBalances` ยังใช้ FEFO→FIFO เดิม เพื่อไม่ให้ยอดรายล็อตของประวัติเปลี่ยน.
+**ข้อยกเว้น:** การ replay แถว outbound legacy (ไม่มี `lot_ref`) ใน `projectStockLotBalances` ยังใช้ FEFO→FIFO เดิม เพื่อไม่ให้ยอดรายล็อตของประวัติเปลี่ยน. ส่วนที่เกินทุกล็อตหักจากล็อตสุดท้ายที่ตัด; แถวที่มี `lot_ref` ตัดล็อตนั้นเต็มจำนวน — ล็อตจึงติดลบได้. ล็อตติดลบแสดงพร้อมคำเตือน ไม่ถูกเลือกเบิก / ตัดยอด และแก้ด้วย `adjust` ([CR-216](../changes/03-C-supply/CR-216-negative-stock-lots.md)).
 **เบิกตรงหลายล็อต (CR-143 §A):** จำนวนเกินล็อตแรก → แบ่งเป็นแถว `distribute` ต่อล็อตตามลำดับข้างบน ใช้ `ref_id` (`requisition_ticket:direct-…`) เดียวกัน; ล้มกลางทางไม่ rollback (append-only) แต่ต้องรายงานส่วนที่ตัดแล้ว/ยังไม่ตัด; ยอดรวมไม่พอ → ห้ามบันทึก.
 
 ### 2.2 `stock_transfer` — [MIGRATED TO central_ops]
