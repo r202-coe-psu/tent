@@ -1122,6 +1122,43 @@ describe('distribution-workflow', () => {
 		expect(loanLog.status).toBe('active');
 	});
 
+	it('lets staff borrow a returnable item under their user id (FR-SQR-32)', async () => {
+		const ticket = await ticketRepo.create(
+			{
+				ticket_no: 'TKT-SUPPLIES-STAFF1',
+				requisition_type: 'supplies',
+				source_location: 'warehouse:main',
+				destination_location: 'point:supplies',
+				items: [
+					{
+						item_id: 'item:radio',
+						item_name: 'Radio',
+						type_class: 'EQUIPMENT',
+						returnable: true,
+						requested_qty: '5',
+						allocated_qty: '5'
+					}
+				]
+			},
+			POS_CTX
+		);
+
+		const loanLog = await recordSuppliesDistribution(
+			ticket._id,
+			{
+				item_id: 'item:radio',
+				qty: '1',
+				recipient_type: 'staff',
+				recipient_id: 'user:somchai'
+			},
+			POS_CTX,
+			{ ticketRepo, logRepo }
+		);
+		expect(loanLog.recipient_id).toBe('user:somchai');
+		expect(loanLog.is_returnable).toBe(true);
+		expect(loanLog.status).toBe('active');
+	});
+
 	it('voids erroneous distribution log without deleting document', async () => {
 		const ticket = await ticketRepo.create(
 			{

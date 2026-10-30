@@ -74,9 +74,9 @@ describe('frontline-handover model helpers', () => {
 			expect(canRecipientReceiveItem(volunteerRecipient, true)).toBe(true);
 		});
 
-		it('lets staff receive consumables but never borrow returnable items', () => {
+		it('lets staff receive consumables and borrow returnable items (FR-SQR-32)', () => {
 			expect(canRecipientReceiveItem(staffRecipient, false)).toBe(true);
-			expect(canRecipientReceiveItem(staffRecipient, true)).toBe(false);
+			expect(canRecipientReceiveItem(staffRecipient, true)).toBe(true);
 		});
 
 		it('forbids null recipient', () => {
@@ -102,11 +102,13 @@ describe('frontline-handover model helpers', () => {
 			expect(getRecipientValidationErrorMessage(volunteerRecipient, true)).toBeNull();
 		});
 
-		it('explains that staff cannot borrow returnable items', () => {
-			const msg = getRecipientValidationErrorMessage(staffRecipient, true);
-			expect(msg).toContain('ต้องคืน');
-			expect(msg).toContain('เจ้าหน้าที่');
+		it('returns null when staff borrow a returnable item (FR-SQR-32)', () => {
 			expect(getRecipientValidationErrorMessage(staffRecipient, false)).toBeNull();
+			expect(getRecipientValidationErrorMessage(staffRecipient, true)).toBeNull();
+		});
+
+		it('names staff among the valid borrowers when outside picks a returnable item', () => {
+			expect(getRecipientValidationErrorMessage(outsideRecipient, true)).toContain('เจ้าหน้าที่');
 		});
 
 		it('returns error message when recipient is not selected', () => {

@@ -90,8 +90,8 @@ export function isIdentifiedRecipient(recipient: FrontlineRecipientSelection | n
 
 /**
  * Validates whether the selected recipient is eligible to receive the given item.
- * Returnable loan items need a named borrower — an evacuee or a volunteer (FR-LON-01), never an
- * anonymous outside person or staff (staff receive consumables only).
+ * Returnable loan items need a named borrower — an evacuee, a volunteer (FR-LON-01) or staff
+ * (FR-SQR-32), never an anonymous outside person.
  */
 export function canRecipientReceiveItem(
 	recipient: FrontlineRecipientSelection | null,
@@ -99,7 +99,6 @@ export function canRecipientReceiveItem(
 ): boolean {
 	if (!recipient) return false;
 	if (isReturnable) {
-		if (recipient.recipientType === 'staff') return false;
 		return isIdentifiedRecipient(recipient) && Boolean(recipient.recipientId);
 	}
 	return true;
@@ -116,10 +115,7 @@ export function getRecipientValidationErrorMessage(
 		return 'กรุณาเลือกผู้รับก่อนทำรายการ';
 	}
 	if (isReturnable && recipient.recipientType === 'outside') {
-		return "สิ่งของประเภท 'ต้องคืน' ต้องระบุผู้ยืม (ผู้ประสบภัยหรือจิตอาสา) ไม่สามารถแจกให้บุคคลภายนอกได้";
-	}
-	if (isReturnable && recipient.recipientType === 'staff') {
-		return "สิ่งของประเภท 'ต้องคืน' ไม่สามารถแจกให้เจ้าหน้าที่ได้ เจ้าหน้าที่รับได้เฉพาะของใช้แล้วหมดไป";
+		return "สิ่งของประเภท 'ต้องคืน' ต้องระบุผู้ยืม (ผู้ประสบภัย จิตอาสา หรือเจ้าหน้าที่) ไม่สามารถแจกให้บุคคลภายนอกได้";
 	}
 	if (isReturnable && !recipient.recipientId) {
 		return "สิ่งของประเภท 'ต้องคืน' จำเป็นต้องมีรหัสผู้รับที่ระบุตัวตนได้";

@@ -172,7 +172,7 @@
 	</div>
 
 	<!-- Recipient Search Picker Reused Component -->
-	<RecipientSearchPicker bind:value={recipientSelection} allowOutside={false} />
+	<RecipientSearchPicker bind:value={recipientSelection} allowOutside={false} allowStaff />
 
 	<!-- Loan List & Operations Surface -->
 	{#if !recipientSelection}
