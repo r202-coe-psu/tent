@@ -110,7 +110,7 @@ def test_a_refused_booking_with_reviewed_lines_refuses_every_line() -> None:
 
     assert closed["status"] == "rejected"
     # The review-refused line with code "other" and no detail says nothing of its own.
-    assert closed["reject_reason"] == "หมดอายุ; "
+    assert closed["reject_reason"] == "หมดอายุ"
     assert closed["reject_reason_code"] == "other"
     assert [item["review_status"] for item in closed["items"]] == [
         "rejected",

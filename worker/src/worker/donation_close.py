@@ -92,8 +92,15 @@ def _donor_reject_message(code: str) -> str:
 
 
 def _combine_line_reject_reasons(lines: list[dict[str, str]]) -> dict[str, str]:
-    """CR-172 FR-12 — the lines' reasons, each once; their code when they agree."""
-    reasons = list(dict.fromkeys(line["reject_reason"] for line in lines))
+    """CR-172 FR-12 — the lines' reasons, each once; their code when they agree.
+
+    A line with no words of its own (code ``other``, no detail) adds nothing.
+    """
+    reasons = [
+        reason
+        for reason in dict.fromkeys(line["reject_reason"] for line in lines)
+        if reason != ""
+    ]
     codes = {line["reject_reason_code"] for line in lines}
     return {
         "reject_reason": _truncate("; ".join(reasons), _REJECT_REASON_MAX),

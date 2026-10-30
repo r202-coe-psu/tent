@@ -436,6 +436,110 @@
           ]
         }
       }
+    },
+    {
+      "name": "refused booking: a review-refused line with code other and no detail adds no empty reason",
+      "donation": {
+        "items": [
+          {
+            "item_id": "item:water",
+            "free_text": "น้ำดื่ม",
+            "qty": "24",
+            "unit": "bottle",
+            "review_status": "approved",
+            "drop_off_point_id": "p-gym"
+          },
+          {
+            "item_id": "item:para",
+            "free_text": "ยาพารา",
+            "qty": "10",
+            "unit": "pack",
+            "review_status": "rejected",
+            "review_reason_code": "other",
+            "review_reason": "",
+            "drop_off_point_id": "p-med"
+          }
+        ],
+        "point_receipts": [
+          {
+            "point_id": "p-gym",
+            "line_nos": [0],
+            "received_at": "2026-10-28T02:12:00.000Z",
+            "received_by": "gym",
+            "audit_id": "audit:a",
+            "ledger_ids": [],
+            "items": [
+              {
+                "line_no": 0,
+                "item_id": "item:water",
+                "free_text": "น้ำดื่ม",
+                "qty": "0",
+                "unit": "bottle",
+                "rejected": true,
+                "reject_reason": "หมดอายุ",
+                "reject_reason_code": "expired"
+              }
+            ]
+          }
+        ]
+      },
+      "opts": {
+        "closed_by": "system",
+        "closed_reason": "expired",
+        "now": "2026-10-30T17:00:00.000Z"
+      },
+      "expected": {
+        "status": "rejected",
+        "reject_reason": "หมดอายุ",
+        "reject_reason_code": "other",
+        "items": [
+          {
+            "item_id": "item:water",
+            "free_text": "น้ำดื่ม",
+            "qty": "24",
+            "unit": "bottle",
+            "review_status": "rejected",
+            "drop_off_point_id": "p-gym"
+          },
+          {
+            "item_id": "item:para",
+            "free_text": "ยาพารา",
+            "qty": "10",
+            "unit": "pack",
+            "review_status": "rejected",
+            "review_reason_code": "other",
+            "review_reason": "",
+            "drop_off_point_id": "p-med"
+          }
+        ],
+        "received_summary": {
+          "total_items": 2,
+          "received_at": "2026-10-30T17:00:00.000Z",
+          "closed_by": "system",
+          "closed_reason": "expired",
+          "shortfalls": [],
+          "items": [
+            {
+              "item_id": "item:water",
+              "free_text": "น้ำดื่ม",
+              "qty": "0",
+              "unit": "bottle",
+              "rejected": true,
+              "reject_reason": "หมดอายุ",
+              "reject_reason_code": "expired"
+            },
+            {
+              "item_id": "item:para",
+              "free_text": "ยาพารา",
+              "qty": "0",
+              "unit": "pack",
+              "rejected": true,
+              "reject_reason": "",
+              "reject_reason_code": "other"
+            }
+          ]
+        }
+      }
     }
   ]
 }
