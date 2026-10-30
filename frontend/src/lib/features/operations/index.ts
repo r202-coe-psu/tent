@@ -96,6 +96,7 @@ export {
 	projectLotsByItem,
 	isNegativeLot,
 	negativeLots,
+	negativeLotSummary,
 	TransferForbiddenError,
 	adjustInputSchema,
 	createAdjustEntry,

@@ -66,7 +66,7 @@ export function buildLotRows(
 		expiry: lot.lot?.expiry ? formatThaiShortDate(lot.lot.expiry) : null,
 		isExpired: false,
 		clockLine: formatLotClockLine(lot, now),
-		reason: 'ล็อตติดลบ — ห้ามเบิกจากล็อตนี้ กรุณาแจ้งผู้ดูแลระบบ',
+		reason: 'ล็อตนี้ยอดติดลบ — ต้องแก้ยอด (ห้ามเบิกจากล็อตนี้)',
 		isNext: false,
 		isNegative: true
 	}));

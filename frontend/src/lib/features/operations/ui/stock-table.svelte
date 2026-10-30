@@ -59,7 +59,7 @@
 		STOCK_PAGE_SIZE,
 		type StockUrlState
 	} from './stock/stock-url-state';
-	import { negativeLots, projectLotsByItem } from '../domain/operations';
+	import { negativeLotSummary, negativeLots, projectLotsByItem } from '../domain/operations';
 	import {
 		dailyConsumption,
 		daysOfCover,
@@ -334,6 +334,7 @@
 			const override = overrideByItem.get(item._id);
 			const reorderThreshold = resolveReorderThreshold(occupancy, item, override);
 			const summary = stockSummaryByItem.get(item._id);
+			const negative = negativeLotSummary(lotsByItem.get(item._id) ?? []);
 			return {
 				_id: item._id,
 				name: item.name,
@@ -347,6 +348,9 @@
 				earliestExpiry: summary?.earliestExpiry ?? null,
 				storageKeys: summary?.storageKeys ?? [],
 				lotCount: summary?.lotCount ?? 0,
+				usableNote: negative
+					? `ใช้ได้ ${negative.usable} (ไม่นับล็อตติดลบ ${negative.negative})`
+					: null,
 				locationLabel: locationLabelByItem.get(item._id) ?? null,
 				coverDays: daysOfCover(qtyOnHand, dailyConsumption(occupancy, item, override)),
 				neverReceived: !everStocked.has(item._id),
@@ -476,7 +480,7 @@
 			role="alert"
 			class="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-900"
 		>
-			มีล็อตติดลบ: {negativeLotItems.join(', ')} — ห้ามเบิกจากล็อตนี้ กรุณาแจ้งผู้ดูแลระบบ
+			ล็อตนี้ยอดติดลบ — ต้องแก้ยอด: {negativeLotItems.join(', ')} (ห้ามเบิกจากล็อตนี้)
 		</p>
 	{/if}
 

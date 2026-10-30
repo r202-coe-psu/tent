@@ -1007,6 +1007,25 @@ export function negativeLots<T extends Pick<StockLotBalance, 'qty'>>(lots: reado
 	return lots.filter(isNegativeLot);
 }
 
+/** The stock-table note for an item with an overdrawn lot (CR-216 FR-6a): the total nets the
+ * negative lot in, but only the positive lots can be issued — `A = -3, B = 10` is total 7,
+ * usable 10. Null when no lot is negative. */
+export function negativeLotSummary(
+	lots: readonly Pick<StockLotBalance, 'qty'>[]
+): { usable: string; negative: string } | null {
+	let usable = '0';
+	let negative = '0';
+	let anyNegative = false;
+	for (const lot of lots) {
+		if (qtyGt(lot.qty, 0)) usable = addQty(usable, lot.qty);
+		else if (isNegativeLot(lot)) {
+			anyNegative = true;
+			negative = addQty(negative, lot.qty);
+		}
+	}
+	return anyNegative ? { usable, negative } : null;
+}
+
 export class StockLotIntegrityError extends Error {
 	constructor(message: string) {
 		super(message);
@@ -1177,8 +1196,12 @@ export function usableStockByItem(ledger: readonly StockLedger[]): Map<string, s
 		usable.set(lot.item_id, addQty(usable.get(lot.item_id) ?? '0', lot.qty));
 	}
 	if (brokenItemIds.length > 0) {
+		// Never offer a negative total as stock on hand (CR-216 FR-9b).
 		const totals = stockBalance(ledger);
-		for (const id of brokenItemIds) usable.set(id, totals.get(id) ?? '0');
+		for (const id of brokenItemIds) {
+			const total = totals.get(id) ?? '0';
+			usable.set(id, qtyGt(total, 0) ? total : '0');
+		}
 	}
 	return usable;
 }

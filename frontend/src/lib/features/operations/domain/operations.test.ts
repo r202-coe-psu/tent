@@ -42,6 +42,7 @@ import {
 	StockLotIntegrityError,
 	isNegativeLot,
 	negativeLots,
+	negativeLotSummary,
 	projectLotsByItem,
 	usableStockByItem,
 	createTransfer,
@@ -2456,6 +2457,24 @@ describe('projectStockLotBalances', () => {
 		);
 		expect(stockBalance([a, b, out]).get('item:rice')).toBe('7');
 		expect(usableStockByItem([a, b, out]).get('item:rice')).toBe('10');
+	});
+
+	it('usableStockByItem never offers a negative total for an item it cannot project (CR-216 FR-9b)', () => {
+		const out = legacyOutbound('OUT', '3', '2026-02-01T00:00:00Z');
+		expect(stockBalance([out]).get(out.item_id)).toBe('-3');
+		expect(usableStockByItem([out]).get(out.item_id)).toBe('0');
+	});
+
+	it('negativeLotSummary splits usable stock from the overdrawn lots (CR-216 FR-6a)', () => {
+		expect(negativeLotSummary([{ qty: '-3' }, { qty: '10' }])).toEqual({
+			usable: '10',
+			negative: '-3'
+		});
+		expect(negativeLotSummary([{ qty: '-1' }, { qty: '-2' }, { qty: '0' }])).toEqual({
+			usable: '0',
+			negative: '-3'
+		});
+		expect(negativeLotSummary([{ qty: '4' }, { qty: '0' }])).toBeNull();
 	});
 
 	it('projectLotsByItem reports a negative lot as a lot, not as a broken item', () => {

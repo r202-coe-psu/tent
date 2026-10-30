@@ -182,7 +182,7 @@
 		class="mb-4 rounded-xl border border-red-200 bg-red-50 p-3 text-xs font-semibold text-red-900"
 		role="alert"
 	>
-		<p>ล็อตติดลบ ไม่ถูกรวมในการตรวจนับ และห้ามเบิกจากล็อตนี้ — กรุณาแจ้งผู้ดูแลระบบ:</p>
+		<p>ล็อตนี้ยอดติดลบ — ต้องแก้ยอด (ไม่ถูกรวมในการตรวจนับ และห้ามเบิกจากล็อตนี้):</p>
 		<ul class="mt-1 list-disc pl-5">
 			{#each negativeLotNotes as negative (negative.key)}
 				<li class="tabular-nums">{negative.text}</li>

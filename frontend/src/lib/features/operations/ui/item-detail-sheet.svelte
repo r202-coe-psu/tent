@@ -74,6 +74,11 @@
 							{row.qtyOnHand}
 							<span class="text-xs font-normal text-slate-500">{row.unitLabel}</span>
 						</dd>
+						{#if row.usableNote}
+							<dd class="mt-0.5 text-xs font-semibold text-red-800 tabular-nums">
+								{row.usableNote}
+							</dd>
+						{/if}
 					</div>
 					<div class="rounded-xl border border-slate-200/80 bg-slate-50 p-2.5">
 						<dt class="text-xs text-slate-500">เกณฑ์</dt>
@@ -157,7 +162,7 @@
 													<span
 														class="rounded-full bg-red-100 px-2.5 py-1 text-xs font-semibold text-red-800 ring-1 ring-red-300"
 													>
-														ติดลบ — ห้ามเบิก
+														ล็อตนี้ยอดติดลบ — ต้องแก้ยอด
 													</span>
 												{:else if lot.isNext}
 													<span
