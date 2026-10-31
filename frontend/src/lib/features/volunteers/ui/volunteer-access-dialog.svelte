@@ -9,14 +9,19 @@
 	import RefreshCw from '@lucide/svelte/icons/refresh-cw';
 	import Save from '@lucide/svelte/icons/save';
 	import UserMinus from '@lucide/svelte/icons/user-minus';
+	import Info from '@lucide/svelte/icons/info';
 	import * as Dialog from '$lib/components/ui/dialog/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Badge } from '$lib/components/ui/badge/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
-	import * as Select from '$lib/components/ui/select/index.js';
+	import * as RadioGroup from '$lib/components/ui/radio-group/index.js';
+	import { Label } from '$lib/components/ui/label/index.js';
+	import * as Popover from '$lib/components/ui/popover/index.js';
+	import DatePicker from '$lib/components/date-picker.svelte';
 	import {
 		COORDINATOR_GRANTABLE_CAPABILITIES,
 		STAFF_CAPABILITIES,
+		STAFF_CAPABILITY_DESCRIPTIONS,
 		isShelterManager,
 		isSystemAdmin,
 		roleOptionLabel,
@@ -29,6 +34,8 @@
 	import { useVolunteerGrants, volunteerKeys } from '../application/queries';
 	import { errorMessage } from '$lib/utils/errors';
 	import {
+		ROLE_REQUIRED_MESSAGE,
+		currentGrantRole,
 		VOLUNTEER_ACCESS_PHONE_MESSAGE,
 		accountPhone,
 		coordinatorAccessSchema,
@@ -100,11 +107,20 @@
 
 	let email = $state('');
 	let showPassword = $state(false);
-	let role = $state<StaffCapability>('registration_staff');
+	/** Empty until the grantor picks one: no role is preselected (#1072). */
+	let role = $state<StaffCapability | ''>('');
+	let roleError = $state<string | null>(null);
 	let password = $state('');
 	let passwordError = $state<string | null>(null);
 
 	let lastOpenedId = $state<string | null>(null);
+	/** Editing an account that already holds a grant here starts on its current role (#1044). */
+	let roleSeededFor = $state<string | null>(null);
+	$effect(() => {
+		if (!open || roleSeededFor === volunteer._id || !grantsQuery.data) return;
+		roleSeededFor = volunteer._id;
+		if (!role) role = currentGrantRole(grants, roleChoices);
+	});
 	$effect(() => {
 		if (!open) {
 			lastOpenedId = null;
@@ -112,7 +128,9 @@
 		}
 		if (lastOpenedId === volunteer._id) return;
 		email = volunteer.user_name ?? volunteer.email ?? '';
-		role = 'registration_staff';
+		role = '';
+		roleError = null;
+		roleSeededFor = null;
 		password = loginPhone ?? '';
 		expiresOn = '';
 		confirmRevoke = null;
@@ -129,6 +147,12 @@
 			toast.error(VOLUNTEER_ACCESS_PHONE_MESSAGE);
 			return;
 		}
+		if (!role) {
+			// Every refusal is a toast (it fades) and stays written next to its field until fixed.
+			roleError = ROLE_REQUIRED_MESSAGE;
+			toast.error(ROLE_REQUIRED_MESSAGE);
+			return;
+		}
 		if (limited) {
 			await submitLimited();
 			return;
@@ -139,7 +163,10 @@
 			return;
 		}
 		passwordError = volunteerPasswordError(parsed.data.password, loginPhone);
-		if (passwordError) return;
+		if (passwordError) {
+			toast.error(passwordError);
+			return;
+		}
 		pending = true;
 		try {
 			const result = await grantVolunteerAccess(volunteer, parsed.data);
@@ -166,10 +193,14 @@
 		});
 		if (!parsed.success) {
 			submitError = parsed.error.issues[0]?.message ?? 'กรุณาตรวจสอบข้อมูล';
+			toast.error(submitError);
 			return;
 		}
 		passwordError = volunteerPasswordError(parsed.data.password, loginPhone);
-		if (passwordError) return;
+		if (passwordError) {
+			toast.error(passwordError);
+			return;
+		}
 		pending = true;
 		try {
 			const result = await grantVolunteerAccessAsCoordinator(volunteer, parsed.data);
@@ -185,6 +216,7 @@
 			open = false;
 		} catch (err) {
 			submitError = errorMessage(err);
+			toast.error(submitError);
 		} finally {
 			await refresh();
 		}
@@ -202,6 +234,7 @@
 			confirmRevoke = null;
 		} catch (err) {
 			submitError = errorMessage(err);
+			toast.error(submitError);
 		} finally {
 			await refresh();
 		}
@@ -258,20 +291,62 @@
 			</div>
 
 			<div class="space-y-1.5">
-				<p class="text-xs font-bold text-foreground">บทบาท/สิทธิ์ใช้งานระบบ (ROLE ASSIGNMENT)</p>
-				<Select.Root type="single" bind:value={role} disabled={pending}>
-					<Select.Trigger class="h-11 w-full rounded-xl bg-background px-3">
-						<span class="truncate">{roleOptionLabel(role)}</span>
-					</Select.Trigger>
-					<Select.Content>
-						{#each roleChoices as capability (capability)}
-							<Select.Item value={capability} label={roleOptionLabel(capability)} />
-						{/each}
-					</Select.Content>
-				</Select.Root>
+				<p
+					id={`volunteer-access-role-label-${volunteer._id}`}
+					class="text-xs font-bold text-foreground"
+				>
+					บทบาท/สิทธิ์ใช้งานระบบ (ROLE ASSIGNMENT) <span class="text-destructive">*</span>
+				</p>
+				<RadioGroup.Root
+					bind:value={role}
+					onValueChange={() => (roleError = null)}
+					disabled={pending}
+					aria-labelledby={`volunteer-access-role-label-${volunteer._id}`}
+					aria-invalid={roleError ? true : undefined}
+					aria-describedby={roleError ? `volunteer-access-role-error-${volunteer._id}` : undefined}
+					class="grid grid-cols-1 gap-2 sm:grid-cols-2"
+				>
+					{#each roleChoices as capability (capability)}
+						<div
+							class="flex min-h-11 items-center gap-1 rounded-xl border border-border bg-background pr-1"
+						>
+							<Label
+								for={`volunteer-access-role-${volunteer._id}-${capability}`}
+								class="flex min-h-11 min-w-0 flex-1 cursor-pointer items-center gap-2.5 px-3 py-2 text-sm font-medium text-foreground"
+							>
+								<RadioGroup.Item
+									id={`volunteer-access-role-${volunteer._id}-${capability}`}
+									value={capability}
+								/>
+								<span>{roleOptionLabel(capability)}</span>
+							</Label>
+							<!-- Same wording as the users page role picker (STAFF_CAPABILITY_DESCRIPTIONS). -->
+							<Popover.Root>
+								<Popover.Trigger
+									type="button"
+									class="inline-flex size-9 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+									aria-label={`รายละเอียด${roleOptionLabel(capability)}`}
+								>
+									<Info class="size-4" />
+								</Popover.Trigger>
+								<Popover.Content class="max-w-[280px] p-3 text-sm" align="end" side="top">
+									{STAFF_CAPABILITY_DESCRIPTIONS[capability]}
+								</Popover.Content>
+							</Popover.Root>
+						</div>
+					{/each}
+				</RadioGroup.Root>
+				{#if roleError}
+					<p
+						id={`volunteer-access-role-error-${volunteer._id}`}
+						class="text-sm font-medium text-destructive"
+					>
+						{roleError}
+					</p>
+				{/if}
 				<p class="text-[11px] text-muted-foreground">
 					{#if limited}
-						* ผู้ประสานงานออกสิทธิ์ได้เฉพาะ 4 บทบาทนี้ ในศูนย์พักพิงนี้
+						* ผู้ประสานงานออกสิทธิ์ได้เฉพาะบทบาทเหล่านี้ ในศูนย์พักพิงนี้
 						ถอนหรือย่นอายุได้เฉพาะสิทธิ์ที่ตนเองออก (สิทธิ์อื่นหมดอายุเอง หรือให้ผู้จัดการศูนย์ถอน)
 					{:else}
 						* บัญชีใช้สิทธิ์ที่เลือกในศูนย์พักพิงนี้ จัดการสิทธิ์เพิ่มเติมได้ผ่านหน้าผู้ใช้งาน
@@ -333,20 +408,21 @@
 				<div class="space-y-1.5">
 					<label
 						for={`volunteer-access-expiry-${volunteer._id}`}
-						class="text-xs font-bold text-foreground"
+						class="block text-xs font-bold text-foreground"
 					>
 						วันหมดอายุของสิทธิ์ <span class="text-destructive">*</span>
 					</label>
-					<Input
-						id={`volunteer-access-expiry-${volunteer._id}`}
-						type="date"
-						bind:value={expiresOn}
-						min={expiryRange.min}
-						max={expiryRange.max}
-						required
-						disabled={pending}
-						class="h-11 sm:max-w-xs"
-					/>
+					<div class="sm:max-w-xs">
+						<DatePicker
+							id={`volunteer-access-expiry-${volunteer._id}`}
+							bind:value={expiresOn}
+							min={expiryRange.min}
+							max={expiryRange.max}
+							disabled={pending}
+							placeholder="เลือกวันหมดอายุ"
+							format={formatThaiShortDate}
+						/>
+					</div>
 					<p class="text-[11px] text-muted-foreground">
 						เลือกได้ตั้งแต่วันนี้ถึง {MAX_GRANT_DAYS} วันข้างหน้า สิทธิ์หมดอายุตอนสิ้นวันที่เลือก ต่ออายุได้ด้วยการออกสิทธิ์ซ้ำ
 					</p>

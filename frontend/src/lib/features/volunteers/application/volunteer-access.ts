@@ -16,10 +16,13 @@ import type { VolunteerRepository } from '../data/volunteer.repository';
 import { isVolunteerMobile } from '../domain/phone';
 import type { Volunteer } from '../domain/volunteer.schema';
 
+/** No role is picked for the grant by default (#1072); saving without one says this. */
+export const ROLE_REQUIRED_MESSAGE = 'กรุณาเลือกตำแหน่งหน้าที่';
+
 export const volunteerAccessSchema = z.object({
 	email: z.string().trim().toLowerCase().email('กรุณากรอกอีเมลให้ถูกต้อง'),
 	password: z.string().trim().min(1, 'กรุณากำหนดรหัสผ่าน'),
-	role: z.enum(STAFF_CAPABILITIES)
+	role: z.enum(STAFF_CAPABILITIES, { message: ROLE_REQUIRED_MESSAGE })
 });
 
 /** Thrown/shown when the profile phone is filled but not a 10-digit mobile (CR-210, #951). */
@@ -148,13 +151,13 @@ async function linkVolunteerProfile(
 
 /**
  * A `volunteer_coordinator` grants limited, time-boxed access (#955). The BFF enforces every
- * rule (own shelter, 4 roles, verified identity incl. other shelters, 7-day expiry) and
+ * rule (own shelter, the coordinator roles, verified identity incl. other shelters, 7-day expiry) and
  * creates or extends the account; this then links the profile like {@link grantVolunteerAccess}.
  */
 export const coordinatorAccessSchema = z.object({
 	email: volunteerAccessSchema.shape.email,
 	password: volunteerAccessSchema.shape.password,
-	role: z.enum(COORDINATOR_GRANTABLE_CAPABILITIES),
+	role: z.enum(COORDINATOR_GRANTABLE_CAPABILITIES, { message: ROLE_REQUIRED_MESSAGE }),
 	/** `YYYY-MM-DD` (Asia/Bangkok), required, no default. */
 	expires_on: z.string().min(1, 'กรุณาเลือกวันหมดอายุ')
 });
@@ -195,6 +198,21 @@ export async function grantVolunteerAccessAsCoordinator(
 
 /** A grant on the volunteer's account; `mine` ones are those the caller may revoke (FR-8). */
 export type VolunteerGrant = { role: string; expires_at: string; mine: boolean };
+
+/**
+ * The role to preselect when the account already holds grants here (#1044): the one that runs
+ * longest, i.e. the latest grant, if the caller may still give it. Empty when there is none, so
+ * a first grant starts with nothing picked (#1072).
+ */
+export function currentGrantRole<R extends string>(
+	grants: readonly Pick<VolunteerGrant, 'role' | 'expires_at'>[],
+	choices: readonly R[]
+): R | '' {
+	const latest = [...grants]
+		.filter((g): g is typeof g & { role: R } => (choices as readonly string[]).includes(g.role))
+		.sort((a, b) => Date.parse(b.expires_at) - Date.parse(a.expires_at))[0];
+	return latest?.role ?? '';
+}
 
 /** The grants on the account the volunteer profile is linked to, as the coordinator sees them. */
 export async function fetchVolunteerGrants(

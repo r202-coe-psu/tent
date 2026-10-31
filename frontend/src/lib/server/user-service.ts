@@ -485,8 +485,8 @@ function assertGrantableTarget(existing: CouchUserDoc, volunteerId: string, acto
 
 /**
  * Give a volunteer one time-limited staff role on their account (#955). Creates the account on
- * first grant; on a re-grant it only adds the role and the grant (or renews or shortens the
- * grant) and never touches the password. A role the account already holds without a grant (given
+ * first grant; on a re-grant it renews or shortens the grant of the same role, or replaces the
+ * coordinator grants in this shelter with the new role (#1044), and never touches the password. A role the account already holds without a grant (given
  * by a shelter manager) is left alone. Who may grant, and what, is decided by the caller except
  * the target-account rules, which are enforced here before any write. The audit is written after
  * the `_users` write succeeds (FR-14).
@@ -567,11 +567,25 @@ export async function grantCoordinatorRole(input: {
 	if (previous && shortened && previous.granted_by !== actor) {
 		throw new ServiceError('FORBIDDEN', 'ย่นอายุได้เฉพาะสิทธิ์ที่ตนเองออกให้');
 	}
-	const nextRoles = hasRole
-		? roles
-		: mergeShelterAssignment(roles, code, [...capabilitiesForShelter(roles, code), grant.role]);
+	// A volunteer holds one coordinator role per shelter (draft CR #1046 FR-4, FR-18): picking
+	// another role replaces the coordinator grants here in this same write, so the shelter scope
+	// never lapses in between. Roles a manager gave (no grant) stay as they are.
+	const replaced = (existing.role_grants ?? []).filter(
+		(g) => g.shelter_code === code && g.role !== grant.role
+	);
+	const replacedRoles = new Set(replaced.map((g) => g.role));
+	const keptCapabilities = capabilitiesForShelter(roles, code).filter(
+		(cap) => !replacedRoles.has(cap)
+	);
+	const nextRoles =
+		hasRole && replaced.length === 0
+			? roles
+			: mergeShelterAssignment(roles, code, [
+					...keptCapabilities.filter((cap) => cap !== grant.role),
+					grant.role
+				]);
 	const role_grants = [
-		...(existing.role_grants ?? []).filter((g) => g.shelter_code !== code || g.role !== grant.role),
+		...(existing.role_grants ?? []).filter((g) => g.shelter_code !== code),
 		previous
 			? { ...grant, granted_by: previous.granted_by, granted_at: previous.granted_at }
 			: grant
@@ -583,6 +597,16 @@ export async function grantCoordinatorRole(input: {
 		role_grants
 	});
 	assertGrantWritten('grant volunteer role', res);
+	for (const old of replaced) {
+		await recordRoleGrantAudit({
+			shelter_code: code,
+			user_name: name,
+			reason: 'role_grant.revoked',
+			role: old.role,
+			expires_at: old.expires_at,
+			actor
+		});
+	}
 	await recordRoleGrantAudit({
 		shelter_code: code,
 		user_name: name,

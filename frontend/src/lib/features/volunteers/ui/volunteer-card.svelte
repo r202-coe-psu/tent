@@ -319,9 +319,11 @@
 				</Badge>
 			{/if}
 
+			<!-- Account badges may wrap (a long role list): Badge is a fixed-height, overflow-hidden
+			     pill, so they take h-auto or the second line is cut off. -->
 			{#if accessStatus.kind === 'deactivated'}
 				<Badge
-					class="max-w-full gap-1 border-rose-200 bg-rose-50 whitespace-normal text-rose-700"
+					class="h-auto max-w-full justify-start gap-1 border-rose-200 bg-rose-50 text-left whitespace-normal text-rose-700"
 					variant="outline"
 				>
 					<KeyRound class="h-3 w-3 shrink-0" />
@@ -329,7 +331,7 @@
 				</Badge>
 			{:else if accessStatus.kind === 'linked'}
 				<Badge
-					class="max-w-full gap-1 border-emerald-300 bg-emerald-50 whitespace-normal text-emerald-700"
+					class="h-auto max-w-full justify-start gap-1 border-emerald-300 bg-emerald-50 text-left whitespace-normal text-emerald-700"
 					variant="outline"
 				>
 					<KeyRound class="h-3 w-3 shrink-0" />

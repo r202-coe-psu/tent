@@ -12,7 +12,7 @@
  *     department, allowed URLs load, forbidden URLs bounce back to `/portal`.
  *
  * A third group (#955, #879 item 2) pins the limits of a `volunteer_coordinator` granting access:
- * own shelter, four roles, verified identity, a required expiry within 7 days, and the account
+ * own shelter, the coordinator roles (all staff roles but volunteer_coordinator / kiosk_staff), verified identity, a required expiry within 7 days, and the account
  * shape (`role_grants`). Expiry revocation by the worker is covered by worker unit tests.
  *
  * The table records the REAL guard behaviour. Permissions are not changed here (a change needs
@@ -249,9 +249,8 @@ test.describe('Volunteer access: grant dialog', { tag: TAGS }, () => {
 	async function grantDistributionStaff(page: Page): Promise<void> {
 		await page.getByRole('button', { name: 'ออกสิทธิ์ใช้งานระบบ' }).click();
 		const dialog = page.getByRole('dialog');
-		// The dialog opens on registration_staff; its trigger is a button named after that role.
-		await dialog.getByRole('button', { name: 'เจ้าหน้าที่ลงทะเบียน' }).click();
-		await page.getByRole('option', { name: 'เจ้าหน้าที่แจกจ่าย', exact: true }).click();
+		// No role is preselected (#1072): the grantor picks one of the radios.
+		await dialog.getByRole('radio', { name: 'เจ้าหน้าที่แจกจ่าย', exact: true }).check();
 		await dialog.getByLabel('อีเมลสำหรับเข้าสู่ระบบ').fill(email);
 		await dialog.getByLabel(/รหัสผ่านสำหรับบัญชีใหม่/).fill(PASSWORD);
 		await dialog.getByRole('button', { name: 'บันทึกและออกสิทธิ์ใหม่' }).click();
@@ -433,17 +432,32 @@ test.describe('Volunteer access: coordinator limits (#955)', { tag: TAGS }, () =
 		await page.getByPlaceholder('ค้นหาชื่อ นามสกุล เบอร์โทร, รหัส...').fill(`E2EV${RUN_ID}`);
 		await page.getByRole('button', { name: 'ออกสิทธิ์ใช้งานระบบ' }).click();
 
+		// A date picker (#1044): empty until chosen, and only today through today + 7 can be picked.
 		const expiry = page.getByRole('dialog').getByLabel(/วันหมดอายุของสิทธิ์/);
 		await expect(expiry).toBeVisible();
-		await expect(expiry).toHaveValue('');
-		await expect(expiry).toHaveAttribute('min', bangkokDate(0));
-		await expect(expiry).toHaveAttribute('max', bangkokDate(7));
+		await expect(expiry).toContainText('เลือกวันหมดอายุ');
+		await expiry.click();
+		// Days of the shown month only; the window's last day may sit in the next month.
+		const day = (iso: string) =>
+			page.locator(`[data-calendar-cell][data-value="${iso}"]:not([data-outside-month])`);
+		await expect(day(bangkokDate(0))).not.toHaveAttribute('data-disabled');
+		if (bangkokDate(8).slice(0, 7) === bangkokDate(0).slice(0, 7)) {
+			await expect(day(bangkokDate(8))).toHaveAttribute('data-disabled');
+		}
+		await page.keyboard.press('Escape');
 
 		await page.getByRole('dialog').getByLabel('อีเมลสำหรับเข้าสู่ระบบ').fill(grantEmail);
 		await page
 			.getByRole('dialog')
 			.getByLabel(/รหัสผ่านสำหรับบัญชีใหม่/)
 			.fill(PASSWORD);
+		await page.getByRole('dialog').getByRole('button', { name: 'บันทึกและออกสิทธิ์ใหม่' }).click();
+		// No role is preselected (#1072), so the role is asked for first.
+		await expect(page.getByText('กรุณาเลือกตำแหน่งหน้าที่')).toBeVisible();
+		await page
+			.getByRole('dialog')
+			.getByRole('radio', { name: 'เจ้าหน้าที่ลงทะเบียน', exact: true })
+			.check();
 		await page.getByRole('dialog').getByRole('button', { name: 'บันทึกและออกสิทธิ์ใหม่' }).click();
 		await expect(page.getByText('กรุณาเลือกวันหมดอายุ')).toBeVisible();
 		expect(
@@ -475,29 +489,26 @@ test.describe('Volunteer access: coordinator limits (#955)', { tag: TAGS }, () =
 		expect(grants[0].granted_at).toBeTruthy();
 	});
 
-	test('a re-grant adds the role and renews without touching the password', async () => {
+	test('a re-grant with another role replaces it and renews without touching the password', async () => {
+		// One coordinator role per shelter (#1044): kitchen_staff replaces distribution_staff.
 		const res = await grantRequest({ role: 'kitchen_staff', password: 'Another-Pass9!' });
 		expect(res.status).toBe(200);
 
 		const doc = await getDocument('_users', `org.couchdb.user:${grantEmail}`);
-		expect(doc?.roles).toEqual([
-			`shelter:${SHELTER}`,
-			`${SHELTER}:distribution_staff`,
-			`${SHELTER}:kitchen_staff`
-		]);
-		expect(doc?.role_grants as unknown[]).toHaveLength(2);
+		expect(doc?.roles).toEqual([`shelter:${SHELTER}`, `${SHELTER}:kitchen_staff`]);
+		expect(doc?.role_grants as unknown[]).toHaveLength(1);
 		await expect(couchLogin(grantEmail, PASSWORD), 'password unchanged').resolves.toBeTruthy();
 
-		await expect(grantRequest({ expires_on: bangkokDate(7) })).resolves.toMatchObject({
-			status: 200
-		});
+		await expect(
+			grantRequest({ role: 'kitchen_staff', expires_on: bangkokDate(7) })
+		).resolves.toMatchObject({ status: 200 });
 		const renewed = await getDocument('_users', `org.couchdb.user:${grantEmail}`);
-		expect(renewed?.role_grants as unknown[], 'renewed, not duplicated').toHaveLength(2);
+		expect(renewed?.role_grants as unknown[], 'renewed, not duplicated').toHaveLength(1);
 	});
 
 	for (const [label, over, status] of [
-		['a role outside the four (medical_staff)', { role: 'medical_staff' }, 403],
-		['a role above the four (shelter_manager)', { role: 'shelter_manager' }, 403],
+		['a role the coordinator may not grant (kiosk_staff)', { role: 'kiosk_staff' }, 403],
+		['a role above the coordinator (shelter_manager)', { role: 'shelter_manager' }, 403],
 		['another shelter', { shelter_code: 'SH002' }, 403],
 		['an expiry more than 7 days away', { expires_on: bangkokDate(8) }, 422],
 		['an expiry in the past', { expires_on: bangkokDate(-1) }, 422],

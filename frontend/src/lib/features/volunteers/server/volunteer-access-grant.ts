@@ -146,7 +146,7 @@ function coordinatorShelter(caller: Pick<Caller, 'roles'>, requested: unknown): 
 
 /**
  * A `volunteer_coordinator` gives a volunteer system access (#955, #879 item 2). Every rule is
- * enforced here, not in the UI: own shelter only (from the session), four roles, identity
+ * enforced here, not in the UI: own shelter only (from the session), the coordinator roles (`COORDINATOR_GRANTABLE_CAPABILITIES`), identity
  * verified (here, or in another shelter by phone and national ID), and a required expiry within
  * 7 days. Authorization runs first; the existing-account rules run in `grantCoordinatorRole`.
  */
@@ -159,7 +159,7 @@ export async function grantVolunteerAccessAsCoordinator(
 
 	const role = input.role;
 	if (!isCoordinatorGrantableRole(role)) {
-		throw new ServiceError('FORBIDDEN', 'A coordinator may only grant a desk staff role');
+		throw new ServiceError('FORBIDDEN', 'A coordinator may not grant this role');
 	}
 	const expiryError = grantExpiryError(input.expires_on, now);
 	if (expiryError) throw new ServiceError('VALIDATION', expiryError);
@@ -215,7 +215,7 @@ export async function revokeVolunteerAccessAsCoordinator(
 	const shelterCode = coordinatorShelter(caller, input.shelter_code);
 	const role = input.role;
 	if (!isCoordinatorGrantableRole(role)) {
-		throw new ServiceError('FORBIDDEN', 'A coordinator may only revoke a desk staff role');
+		throw new ServiceError('FORBIDDEN', 'A coordinator may not revoke this role');
 	}
 	const email = asString(input.email).toLowerCase();
 	const volunteerId = asString(input.volunteer_id);
