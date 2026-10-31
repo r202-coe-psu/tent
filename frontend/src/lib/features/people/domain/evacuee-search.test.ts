@@ -102,12 +102,18 @@ describe('evacueeSearchClauses', () => {
 		expect(evacueeSearchClauses({ kind: 'scan', id: `evacuee:${ULID}` })).toEqual([]);
 	});
 
+	it('starts every prefix range at the lowercase form so a whole word typed in capitals still finds mixed-case names', () => {
+		// CouchDB ICU collation sorts `Kittipong` below `KITTIPONG`; a capitalised lower bound would skip it.
+		const [first] = evacueeSearchClauses(plan('KITTIPONG'));
+		expect(first.selector).toMatchObject({ first_name: { $gte: 'kittipong' } });
+	});
+
 	it('issues one prefix range per name field for a single word', () => {
 		const clauses = evacueeSearchClauses(plan('Som'));
 		expect(clauses.map((c) => c.key)).toEqual(['first_name', 'last_name', 'nickname']);
 		expect(clauses[0].selector).toEqual({
 			type: 'evacuee',
-			first_name: { $gte: 'Som', $lt: 'Som￰' }
+			first_name: { $gte: 'som', $lt: 'Som\ufff0' }
 		});
 	});
 
@@ -116,8 +122,8 @@ describe('evacueeSearchClauses', () => {
 		expect(clauses).toHaveLength(1);
 		expect(clauses[0].selector).toEqual({
 			type: 'evacuee',
-			first_name: { $gte: 'Som', $lt: 'Som￰' },
-			last_name: { $gte: 'Jai', $lt: 'Jai￰' }
+			first_name: { $gte: 'som', $lt: 'Som\ufff0' },
+			last_name: { $gte: 'jai', $lt: 'Jai\ufff0' }
 		});
 	});
 
@@ -126,7 +132,7 @@ describe('evacueeSearchClauses', () => {
 		expect(clauses.map((c) => c.key)).toEqual(['phone', 'emergency_contact.phone']);
 		expect(clauses[1].selector).toEqual({
 			type: 'evacuee',
-			'emergency_contact.phone': { $gte: '081', $lt: '081￰' }
+			'emergency_contact.phone': { $gte: '081', $lt: '081\ufff0' }
 		});
 	});
 

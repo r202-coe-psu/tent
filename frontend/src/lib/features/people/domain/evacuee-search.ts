@@ -75,8 +75,8 @@ export function parseEvacueeSearchQuery(raw: string): EvacueeSearchPlan {
 }
 
 // U+FFF0 sorts above every character a name uses, so [p, p+HIGH) is the prefix range.
-const HIGH = '￰';
-const prefixRange = (p: string) => ({ $gte: p, $lt: p + HIGH });
+const HIGH = '\ufff0';
+const prefixRange = (p: string) => ({ $gte: p.toLowerCase(), $lt: p + HIGH });
 const evacueeSelector = (fields: Record<string, unknown>) => ({ type: 'evacuee', ...fields });
 
 const CLAUSES: { [K in EvacueeSearchPlan['kind']]: (plan: PlanOf<K>) => EvacueeSearchClause[] } = {
