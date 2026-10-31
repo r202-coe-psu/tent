@@ -1051,7 +1051,8 @@ test.describe('Donation full-stack: donor and staff', { tag: ['@critical', '@don
 	test('Z teardown leaves nothing of this run behind', async ({ request }) => {
 		test.setTimeout(240_000);
 		const run = await teardownRun(request, ledger);
-		expect(run.shelters).toHaveLength(1);
+		// The ledger may also hold shelters from an aborted earlier run; this teardown purges those too.
+		expect(run.shelters).toContain(shelter.code);
 		await expectRunGone(request, run);
 	});
 });

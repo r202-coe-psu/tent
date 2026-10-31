@@ -761,4 +761,81 @@ describe('buildBulkReturnReceivedItems', () => {
 			/more than once/
 		);
 	});
+
+	describe('with a receivable summary below the snapshot', () => {
+		const receivable = [
+			{ item_id: 'item:a', qty: '1' },
+			{ item_id: 'item:b', qty: '5' }
+		];
+		const rows = (a: object) => [
+			{ item_id: 'item:a', received_qty: '1', ...a },
+			{ item_id: 'item:b', received_qty: '5' }
+		];
+
+		it('rejects a received qty above the receivable qty even when within the snapshot', () => {
+			expect(() =>
+				buildBulkReturnReceivedItems(
+					summary,
+					[
+						{ item_id: 'item:a', received_qty: '2', discrepancy_reason: 'miscount' },
+						{ item_id: 'item:b', received_qty: '5' }
+					],
+					receivable
+				)
+			).toThrow(BulkReturnReceiveInputError);
+		});
+
+		it('records the receivable qty as a miscount row with a deterministic note', () => {
+			const built = buildBulkReturnReceivedItems(summary, rows({}), receivable);
+			expect(built[0]).toEqual({
+				item_id: 'item:a',
+				expected_qty: '3',
+				received_qty: '1',
+				discrepancy_reason: 'miscount',
+				discrepancy_note: 'นับซ้ำกับกองอื่น 2 ชิ้น'
+			});
+			expect(built[1]).toEqual({ item_id: 'item:b', expected_qty: '5', received_qty: '5' });
+		});
+
+		it('produces a record that passes the RECEIVED pool schema', () => {
+			const built = buildBulkReturnReceivedItems(summary, rows({}), receivable);
+			const pool = submittedPool({
+				items_summary: summary,
+				status: 'RECEIVED',
+				received_at: TS2,
+				received_by: 'staff:wh',
+				received_items: built
+			});
+			expect(bulkReturnPoolV3DocSchema.safeParse(pool).success).toBe(true);
+		});
+
+		it('keeps the reason and note the caller sent', () => {
+			const built = buildBulkReturnReceivedItems(
+				summary,
+				rows({ discrepancy_reason: 'other', discrepancy_note: 'moved' }),
+				receivable
+			);
+			expect(built[0]).toMatchObject({ discrepancy_reason: 'other', discrepancy_note: 'moved' });
+		});
+
+		it('requires a reason below the receivable qty', () => {
+			expect(() =>
+				buildBulkReturnReceivedItems(
+					summary,
+					[
+						{ item_id: 'item:a', received_qty: '0' },
+						{ item_id: 'item:b', received_qty: '5' }
+					],
+					receivable
+				)
+			).toThrow(/reason is required/);
+		});
+
+		it('behaves as before when the receivable summary is absent', () => {
+			expect(() => buildBulkReturnReceivedItems(summary, rows({}))).toThrow(/reason is required/);
+			expect(buildBulkReturnReceivedItems(summary, full)).toEqual(
+				buildBulkReturnReceivedItems(summary, full, summary)
+			);
+		});
+	});
 });

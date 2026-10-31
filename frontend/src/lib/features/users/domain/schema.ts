@@ -1,5 +1,9 @@
 import { z } from 'zod';
-import { shelterCodeSchema } from '$lib/db/model';
+import {
+	shelterCodeSchema,
+	requiredThaiMobilePhoneSchema,
+	THAI_MOBILE_PHONE_MESSAGE
+} from '$lib/db/model';
 import { SA_GRANTABLE_CAPABILITIES, SHELTER_CAPABILITIES } from '$lib/auth/roles';
 import { passwordSchema } from '$lib/auth/password-schema';
 import { SECURITY_QUESTION_IDS } from '$lib/auth/security-questions';
@@ -11,13 +15,10 @@ export type PersonnelType = z.infer<typeof personnelTypeSchema>;
 export const phoneSchema = z
 	.string()
 	.trim()
-	.regex(/^0[0-9]{9}$/, 'เบอร์โทรศัพท์ต้องเป็นตัวเลข 10 หลักขึ้นต้นด้วย 0');
+	.regex(/^0[0-9]{9}$/, THAI_MOBILE_PHONE_MESSAGE);
 
-/** Contact phone on an account: a mobile (10 digits) or a landline (9 digits, e.g. 02xxxxxxx). */
-export const contactPhoneSchema = z
-	.string()
-	.trim()
-	.regex(/^0[0-9]{8,9}$/, 'เบอร์โทรศัพท์ต้องเป็นตัวเลข 9–10 หลักขึ้นต้นด้วย 0');
+/** Contact phone on an account: a 10-digit mobile (landlines no longer accepted — CR-210). */
+export const contactPhoneSchema = requiredThaiMobilePhoneSchema;
 
 /** Username: allows phone number or alphanumeric (letters, digits, _, -, .) */
 export const usernameSchema = z
@@ -77,7 +78,9 @@ const userProfileFields = {
 	shelter_id: shelterCodeSchema.optional(),
 	volunteer_id: z.string().optional(),
 	duty_window: dutyWindowSchema.optional(),
-	affiliation_tags: z.array(z.string()).optional()
+	affiliation_tags: z.array(z.string()).optional(),
+	/** Compound roles (`SHxxx:<role>`) made permanent in the form: their coordinator grant is removed. */
+	permanent_roles: z.array(z.string()).optional()
 };
 
 function refineUserForm(
@@ -122,11 +125,13 @@ export const createUserSchema = z.object(userProfileFields).superRefine(refineUs
 export type CreateUserInput = z.infer<typeof createUserSchema>;
 
 /**
- * Form input for editing an existing user.
+ * Form input for editing an existing user. `username` is the read-only existing `_users` name
+ * (e.g. an email for a volunteer account), so it is not re-validated here.
  */
 export const editUserSchema = z
 	.object({
 		...userProfileFields,
+		username: z.string(),
 		password: passwordSchema.or(z.literal(''))
 	})
 	.superRefine(refineUserForm);

@@ -22,7 +22,8 @@ export const MASTER_DATA_TYPES = [
 	'shelter_type',
 	'volunteer_skills',
 	'chronic_disease',
-	'allergy'
+	'allergy',
+	'site_kind'
 ] as const;
 export type MasterDataType = (typeof MASTER_DATA_TYPES)[number];
 
@@ -64,13 +65,14 @@ export const VOLUNTEER_MASTER_TYPES = [
 ] as const satisfies readonly MasterDataType[];
 
 /**
- * Types with no shelter-local tier (CR-186, CR-187): SA manages the global doc only and
+ * Types with no shelter-local tier (CR-186, CR-187, CR-198): SA manages the global doc only and
  * the writer rejects `master_data:{type}:{shelter_code}`. Back-office shows them
  * read-only.
  */
 export const GLOBAL_ONLY_MASTER_TYPES = [
 	'chronic_disease',
-	'allergy'
+	'allergy',
+	'site_kind'
 ] as const satisfies readonly MasterDataType[];
 
 export function isGlobalOnlyMasterType(type: MasterDataType): boolean {
@@ -84,7 +86,8 @@ export const MASTER_DATA_TYPE_LABELS: Record<MasterDataType, string> = {
 	shelter_type: 'ประเภทอาคาร (Building Type)',
 	volunteer_skills: 'ทักษะมาตรฐานจิตอาสา (Volunteer Skills)',
 	chronic_disease: 'โรคประจำตัว (Chronic Disease)',
-	allergy: 'อาการแพ้ (Allergy)'
+	allergy: 'อาการแพ้ (Allergy)',
+	site_kind: 'ประเภทศูนย์ (Site Kind)'
 };
 
 /** Hub copy: sidebar short title, panel title/lead, and forms that consume each type. */
@@ -141,6 +144,18 @@ export const MASTER_DATA_TYPE_META: Record<MasterDataType, MasterDataTypeMeta> =
 		description:
 			'รายการสิ่งที่แพ้มาตรฐาน (ส่วนกลางเท่านั้น) ที่เจ้าหน้าที่เลือกได้ตอนคัดกรองสุขภาพ — สิ่งอื่น เช่น แพ้ยา พิมพ์เพิ่มเองได้',
 		affectedForms: ['คัดกรองสุขภาพ Station 2', 'แก้ไขข้อมูลสุขภาพในโปรไฟล์ผู้พักพิง']
+	},
+	site_kind: {
+		shortTitle: 'ประเภทศูนย์',
+		title: 'ประเภทศูนย์',
+		description:
+			'ประเภทของศูนย์ (ส่วนกลางเท่านั้น) เช่น ศูนย์อพยพ บ้านพี่เลี้ยง ที่ใช้ตอนตั้งค่า กรอง และแสดงผลศูนย์',
+		affectedForms: [
+			'ฟอร์มข้อมูลศูนย์',
+			'นำเข้าศูนย์',
+			'รายการ/ภาพรวมศูนย์',
+			'หน้าค้นหาศูนย์สาธารณะ'
+		]
 	}
 };
 

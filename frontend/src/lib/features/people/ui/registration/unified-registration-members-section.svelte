@@ -1,7 +1,6 @@
 <script lang="ts">
 	import Plus from '@lucide/svelte/icons/plus';
 	import Users from '@lucide/svelte/icons/users';
-	import QrCodeIcon from '@lucide/svelte/icons/qr-code';
 	import { tick } from 'svelte';
 	import { toast } from 'svelte-sonner';
 	import { Button } from '$lib/components/ui/button/index.js';
@@ -210,6 +209,7 @@
 	badges={membersBadges}
 	icon={Users}
 	bodyClass="none"
+	tone="teal"
 >
 	{#if existingMembers.length > 0}
 		<section
@@ -311,6 +311,11 @@
 			<!-- Hidden (not unmounted) so every card keeps its state while switching tabs -->
 			<div
 				id={useMemberTabs ? `member-panel-${index}` : `member-card-${index}`}
+				data-registration-item={channel === 'public' && existingTotal + members.length > 1
+					? 'member'
+					: undefined}
+				data-registration-index={existingTotal + index + 1}
+				data-registration-total={existingTotal + members.length}
 				role={useMemberTabs ? 'tabpanel' : undefined}
 				aria-labelledby={useMemberTabs ? `member-tab-${index}` : undefined}
 				class={useMemberTabs && index !== activeMemberTab ? 'hidden' : undefined}
@@ -342,6 +347,7 @@
 					{validationSeq}
 					{isJoiningExistingHousehold}
 					numberOffset={existingTotal}
+					sequenceTotal={channel === 'public' ? existingTotal + members.length : undefined}
 					primaryContactPhone={isJoiningExistingHousehold
 						? primaryContactPhone
 						: (members[0]?.phone ?? null)}
@@ -360,9 +366,9 @@
 				variant="outline"
 				disabled={pending}
 				onclick={handleAddMemberViaThaiD}
-				class="h-11 w-full gap-1.5 border-primary/30 text-sm text-primary hover:bg-primary/10 sm:w-auto"
+				class="h-11 w-full gap-2 rounded-xl border-primary/30 text-sm font-semibold text-primary hover:bg-primary/10 sm:w-auto"
 			>
-				<QrCodeIcon class="size-4" />
+				<img src="/thaid-logo.png" alt="" class="size-5 rounded object-contain" />
 				<span>{t.thaidAddMember}</span>
 			</Button>
 		{/if}
@@ -373,7 +379,7 @@
 			onclick={addMember}
 			aria-invalid={membersError ? true : undefined}
 			aria-describedby={membersError ? MEMBERS_ERROR_ID : undefined}
-			class="h-11 w-full gap-1.5 border-transparent bg-[#0284C7] text-sm font-semibold text-white shadow-2xs hover:bg-[#0369A1] hover:text-white focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 sm:w-auto"
+			class="h-11 w-full gap-1.5 rounded-xl border-transparent bg-[#0284C7] text-sm font-semibold text-white shadow-2xs hover:bg-[#0369A1] hover:text-white focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 sm:w-auto"
 		>
 			<Plus class="size-4" />
 			{addMemberLabel}

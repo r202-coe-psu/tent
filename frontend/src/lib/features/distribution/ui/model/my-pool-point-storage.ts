@@ -32,6 +32,20 @@ export function writeMyPoolPoint(shelterCode: string | null | undefined, value: 
 	}
 }
 
+/**
+ * The stored point to actually use. A stored storage point id that is missing from an authoritative
+ * (`loaded`) points list was deleted, so it resolves to `null` (back to the placeholder). `null`, the
+ * unspecified sentinel, and any value while the list is not loaded are returned unchanged.
+ */
+export function resolveMyPoolPoint(
+	stored: string | null,
+	points: readonly { id: string }[],
+	loaded: boolean
+): string | null {
+	if (stored === null || stored === MY_POOL_POINT_UNSPECIFIED || !loaded) return stored;
+	return points.some((p) => p.id === stored) ? stored : null;
+}
+
 /** Forget the point for this shelter; silently skipped when storage is unavailable. */
 export function clearMyPoolPoint(shelterCode: string | null | undefined): void {
 	if (!shelterCode || typeof localStorage === 'undefined') return;

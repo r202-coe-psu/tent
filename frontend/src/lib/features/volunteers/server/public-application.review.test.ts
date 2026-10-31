@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const state = vi.hoisted(() => ({
 	find: vi.fn(),
@@ -74,7 +74,14 @@ const input = {
 	shelter_code: 'SH001'
 };
 
+// The fixture shifts are in September 2026; pin the clock so they have not ended yet.
+afterEach(() => {
+	vi.useRealTimers();
+});
+
 beforeEach(() => {
+	vi.useFakeTimers({ toFake: ['Date'] });
+	vi.setSystemTime(new Date('2026-09-01T00:00:00+07:00'));
 	state.find.mockReset();
 	state.get.mockReset();
 	state.put.mockReset();
@@ -142,5 +149,22 @@ describe('public application review safeguards', () => {
 			httpStatus: 409
 		});
 		expect(state.put).not.toHaveBeenCalled();
+	});
+	it('holds an application on an inactive profile for review without reactivating it', async () => {
+		const inactive = { ...volunteer, status: 'inactive' };
+		state.find.mockImplementation(async (_db: string, selector: Record<string, unknown>) => ({
+			status: 200,
+			data: { docs: selector.type === 'volunteer' ? [inactive] : [] }
+		}));
+
+		const result = await applyPublicVolunteerApplication('job:target', input);
+
+		expect(result.status).toBe('pending_review');
+		const docs = state.put.mock.calls.map((call) => call[2] as Record<string, unknown>);
+		const application = docs.find((doc) => doc.type === 'job_application');
+		expect(application).toMatchObject({ status: 'pending_review', volunteer_id: inactive._id });
+		const profile = docs.filter((doc) => doc.type === 'volunteer');
+		expect(profile).toHaveLength(1);
+		expect(profile[0]).toMatchObject({ _id: inactive._id, status: 'inactive' });
 	});
 });

@@ -3,6 +3,8 @@
 from datetime import UTC, datetime
 from unittest.mock import AsyncMock
 
+import httpx
+
 from worker.quota.expiry import expire_declared_donations, should_expire
 
 NOW = datetime(2026, 7, 29, 12, 0, 0, tzinfo=UTC)
@@ -162,7 +164,7 @@ async def test_reads_all_documents_before_writing_any():
             order.append(f"read:{doc_id}")
             yield _donation(doc_id, "declared", PAST)
 
-    async def put_doc(_database, doc):
+    async def put_doc(_database, doc, **_kwargs):
         order.append(f"write:{doc['_id']}")
         return {"ok": True}
 
@@ -188,3 +190,138 @@ async def test_skips_a_shelter_whose_database_is_missing():
 
     assert await expire_declared_donations(couch, now=NOW) == 0
     couch.put_doc.assert_not_awaited()
+
+
+# --- CR-206: a booking some drop-off point already recorded (FR-MP-29, FR-MP-29a) ---
+
+
+def _point_booking(receipt_items, *, status="verifying"):
+    return {
+        **_donation("donation:mp", status, PAST),
+        "items": [
+            {
+                "item_id": "item:water",
+                "qty": "24",
+                "unit": "ขวด",
+                "drop_off_point_id": "p-gym",
+            },
+            {
+                "item_id": "item:para",
+                "qty": "10",
+                "unit": "แผง",
+                "drop_off_point_id": "p-med",
+            },
+        ],
+        "point_receipts": [
+            {
+                "point_id": "p-gym",
+                "line_nos": [0],
+                "received_at": "2026-07-28T09:00:00Z",
+                "received_by": "gym",
+                "audit_id": "audit:a",
+                "ledger_ids": ["stock_ledger:a"],
+                "items": receipt_items,
+            }
+        ],
+    }
+
+
+async def test_ac8_a_booking_with_point_receipts_is_closed_not_expired():
+    couch = _couch(
+        {
+            "shelter_sh001": [
+                _point_booking(
+                    [
+                        {
+                            "line_no": 0,
+                            "item_id": "item:water",
+                            "qty": "24",
+                            "unit": "ขวด",
+                        }
+                    ]
+                )
+            ]
+        }
+    )
+
+    assert await expire_declared_donations(couch, now=NOW) == 1
+
+    (_, written), kwargs = couch.put_doc.call_args
+    assert kwargs == {"retry_conflict": False}
+    assert written["_rev"] == "1-abc"
+    assert written["status"] == "received"
+    assert written["received_at"] == "2026-07-29T12:00:00Z"
+    summary = written["received_summary"]
+    assert (summary["closed_by"], summary["closed_reason"]) == ("system", "expired")
+    assert summary["shortfalls"] == [
+        {"item_id": "item:para", "declared": "10", "counted": "0", "short": "10"}
+    ]
+    # The declared lines and the receipts stay as they were (FR-MP-5b).
+    assert written["items"] == _point_booking([])["items"]
+    assert len(written["point_receipts"]) == 1
+
+
+async def test_a_booking_whose_points_received_nothing_closes_rejected():
+    couch = _couch(
+        {
+            "shelter_sh001": [
+                _point_booking(
+                    [
+                        {
+                            "line_no": 0,
+                            "item_id": "item:water",
+                            "qty": "0",
+                            "unit": "ขวด",
+                            "rejected": True,
+                            "reject_reason": "ชำรุดเสียหาย",
+                            "reject_reason_code": "damaged",
+                        }
+                    ]
+                )
+            ]
+        }
+    )
+
+    assert await expire_declared_donations(couch, now=NOW) == 1
+
+    (_, written), _ = couch.put_doc.call_args
+    assert written["status"] == "rejected"
+    assert (written["reject_reason"], written["reject_reason_code"]) == (
+        "ชำรุดเสียหาย",
+        "damaged",
+    )
+    assert written["received_summary"]["closed_reason"] == "expired"
+
+
+async def test_empty_point_receipts_still_expire():
+    booking = {**_donation("donation:1", "verifying", PAST), "point_receipts": []}
+    couch = _couch({"shelter_sh001": [booking]})
+
+    assert await expire_declared_donations(couch, now=NOW) == 1
+
+    (_, written), kwargs = couch.put_doc.call_args
+    assert written["status"] == "expired"
+    assert "received_summary" not in written
+    assert kwargs == {"retry_conflict": False}
+
+
+async def test_ac16_a_booking_that_moved_since_the_read_is_left_to_the_next_sweep():
+    """A point recorded between the read and the PUT: no replay onto the newer rev."""
+    request = httpx.Request("PUT", "http://couch/shelter_sh001/donation:1")
+    conflict = httpx.HTTPStatusError(
+        "conflict", request=request, response=httpx.Response(409, request=request)
+    )
+    put = AsyncMock(side_effect=[conflict, {"ok": True}])
+    couch = _couch(
+        {
+            "shelter_sh001": [
+                _donation("donation:1", "verifying", PAST),
+                _donation("donation:2", "verifying", PAST),
+            ]
+        },
+        put=put,
+    )
+
+    assert await expire_declared_donations(couch, now=NOW) == 1
+    assert put.await_count == 2
+    assert all(call.kwargs == {"retry_conflict": False} for call in put.await_args_list)

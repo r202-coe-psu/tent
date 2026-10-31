@@ -11,7 +11,7 @@
 | ------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Playwright                     | 1.64, Chromium only                                                                                                                                                                                                                     |
 | `playwright.config.ts`         | local: `vite preview` (:4173) + `e2e/mock-api.js` (:9001); `grepInvert: /@quarantine/`                                                                                                                                                  |
-| `playwright.staging.config.ts` | remote: `grep: /@critical\|@smoke/`, `grepInvert: /@quarantine/`, workers=2, `globalTimeout` 2 h                                                                                                                                        |
+| `playwright.staging.config.ts` | remote: `grep: /@critical\|@smoke/`, `grepInvert: /@quarantine/`, workers=1, `globalTimeout` 2 h                                                                                                                                        |
 | `playwright.prod.config.ts`    | remote read-only: `grep: /@prod/`, `globalTimeout` 2 min                                                                                                                                                                                |
 | `playwright.public.config.ts`  | remote read-only public suites (incl. pre-register) — **not wired to any job**                                                                                                                                                          |
 | Suites                         | J1–J6 carry `@release` where green locally; unsafe SH001 suites are `@quarantine`; donations are `@donation` (§8.3); the Partner API (`/external/*`) is `@partner-api` (§8.5)                                                           |
@@ -506,7 +506,7 @@ assertion green; `--list` shows every touched test with exactly one layer tag; a
 ### 9.C Pipeline (after B is merged) — **done in Step C PR**
 
 - `playwright.staging.config.ts`: `grep: /@critical|@smoke/`, `grepInvert: /@quarantine/`,
-  workers=2, `globalTimeout` 2 h (run went past 30 min in build #64). `@critical` suites only run their live writes when the
+  workers=1, `globalTimeout` 2 h (run went past 30 min in build #64). `@critical` suites only run their live writes when the
   `tent-staging-e2e-env` credential sets `ALLOW_REMOTE_WRITES=true` (exactly `true`; `CAN_WRITE`
   in `helpers/e2e-env.ts`). `public-search-flow` / `public-shelters-filter` now create and tear
   down their own per-run data on such a run too (zero-leak Z test each); only `public-home-flow`

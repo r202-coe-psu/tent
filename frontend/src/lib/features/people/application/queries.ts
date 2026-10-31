@@ -2,6 +2,7 @@ import type { UlidReservation } from '$lib/db/ulid-reservation';
 import {
 	createMutation,
 	createQuery,
+	keepPreviousData,
 	useQueryClient,
 	type QueryClient
 } from '@tanstack/svelte-query';
@@ -13,6 +14,7 @@ import { getShelterDb, getShelterCode } from '$lib/db/shelter';
 import type { AuthorContext } from '$lib/db/model';
 import type { PaginatedResult } from '$lib/db/repository';
 import { peopleRepository } from '../data/people.remote';
+import { getEvacueeNamesByIds, uniqueEvacueeIds } from '../data/evacuee-names.remote';
 import type {
 	EvacueeFilters,
 	EvacueePatch,
@@ -58,6 +60,9 @@ export const peopleKeys = {
 		] as const,
 	evacueesSearch: (query: string) =>
 		[...peopleKeys.all, 'evacuees', getShelterCode(), 'search', query] as const,
+	/** Nested under `evacuees()` so evacuee mutations also refresh the looked-up names. */
+	evacueeNames: (ids: readonly string[], shelterCode: string = getShelterCode()) =>
+		[...peopleKeys.all, 'evacuees', shelterCode, 'names', ids] as const,
 	households: () => [...peopleKeys.all, 'households', getShelterCode()] as const,
 	household: (id: string) => [...peopleKeys.all, 'household', getShelterCode(), id] as const,
 	householdsPaginated: (
@@ -106,6 +111,23 @@ export const useEvacuees = (enabled?: () => boolean) =>
 		queryFn: () => peopleRepository().listEvacuees(),
 		enabled: enabled ? enabled() : true
 	}));
+
+/**
+ * Names (only `_id` + name fields) of the given `evacuee:` ids in one shelter, read by id — never
+ * the whole roster. The key is the sorted unique id list + shelter code; the query is disabled for
+ * an empty list, and the previous names stay visible while a changed id list loads.
+ */
+export const useEvacueeNames = (ids: () => string[], shelterCode: () => string | undefined) =>
+	createQuery(() => {
+		const wanted = uniqueEvacueeIds(ids());
+		const code = shelterCode();
+		return {
+			queryKey: peopleKeys.evacueeNames(wanted, code),
+			queryFn: () => getEvacueeNamesByIds(wanted, code),
+			enabled: wanted.length > 0,
+			placeholderData: keepPreviousData
+		};
+	});
 
 export const useEvacueesPaginated = (
 	page: () => number,

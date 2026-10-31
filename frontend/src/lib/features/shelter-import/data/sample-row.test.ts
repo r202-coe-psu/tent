@@ -12,16 +12,33 @@ import { buildSampleWorkbook } from './sample-row';
 import type { TemplateMasters } from './template';
 
 function emptyMasters(): TemplateMasters {
-	return { shelter_type: [] };
+	return { shelter_type: [], site_kind: [] };
 }
 
 function mastersWithShelterType(): TemplateMasters {
-	return { shelter_type: [{ value: 'school', label: 'โรงเรียน' }] };
+	return {
+		shelter_type: [{ value: 'school', label: 'โรงเรียน' }],
+		site_kind: [
+			{ value: 'host_house', label: 'บ้านพี่เลี้ยง' },
+			{ value: 'evacuation_center', label: 'ศูนย์อพยพ' }
+		]
+	};
 }
 
 /** Lookups matching {@link mastersWithShelterType} — the sample's label must resolve. */
 function lookupsWithShelterType(): Lookups {
-	return { shelter_type: buildMasterLookup([{ code: 'school', label: 'โรงเรียน' }]) };
+	return {
+		shelter_type: buildMasterLookup([{ code: 'school', label: 'โรงเรียน' }]),
+		site_kind: buildMasterLookup([
+			{
+				code: 'evacuation_center',
+				label: 'ศูนย์อพยพ',
+				label_en: 'Evacuation Center',
+				is_default: true
+			},
+			{ code: 'host_house', label: 'บ้านพี่เลี้ยง', label_en: 'Host House' }
+		])
+	};
 }
 
 /** Cast the sample's header -> value map to the string-keyed `RawRow` the validator expects. */
@@ -41,6 +58,15 @@ describe('buildSampleWorkbook', () => {
 	it('leaves ประเภทอาคาร empty when no shelter_type master data exists', () => {
 		const sample = buildSampleWorkbook(emptyMasters());
 		expect(sample.shelter[H.shelter_type]).toBeUndefined();
+	});
+
+	it('fills ชนิดสถานที่ with the default evacuation_center label, not the first item', () => {
+		const sample = buildSampleWorkbook(mastersWithShelterType());
+		expect(sample.shelter[H.site_kind]).toBe('ศูนย์อพยพ');
+	});
+
+	it('leaves ชนิดสถานที่ empty when no site_kind master data exists', () => {
+		expect(buildSampleWorkbook(emptyMasters()).shelter[H.site_kind]).toBeUndefined();
 	});
 
 	it('fills ประเภทอาคาร with the first shelter_type label when master data exists', () => {

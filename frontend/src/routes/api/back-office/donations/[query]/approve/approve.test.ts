@@ -28,6 +28,28 @@ const baseDonation = {
 	items: [{ item_id: 'item:rice', qty: '10', unit: 'kg' }]
 } as unknown as PublicDonationDoc;
 
+/** One receipt at a drop-off point that turned its only line away — no ledger row (CR-206). */
+const POINT_RECEIPTS = [
+	{
+		point_id: 'sp-gym',
+		line_nos: [0],
+		received_at: '2026-10-28T02:12:00.000Z',
+		received_by: 'gym-staff',
+		audit_id: 'audit:gym',
+		ledger_ids: [],
+		items: [
+			{
+				line_no: 0,
+				item_id: 'item:water',
+				qty: '0',
+				unit: 'ขวด',
+				rejected: true,
+				reject_reason_code: 'damaged'
+			}
+		]
+	}
+];
+
 /** `ledgerFind` answers the stock_ledger `_find` — no rows by default (nothing keyed). */
 function mockCouch(
 	donation: PublicDonationDoc,
@@ -192,6 +214,194 @@ describe('POST /api/back-office/donations/[query]/reject', () => {
 			expect((await response.json()).error_code).toBe('GOODS_IN_STOCK');
 			expect(writtenDocs()).toHaveLength(0);
 			expect(putBody()).toBeUndefined();
+		});
+
+		// CR-206 AC-9 — a point that turned its lines away keyed no row; the booking is started.
+		it('refuses to reject every line once a drop-off point recorded a receipt', async () => {
+			mockCouch({
+				...mixed,
+				items: [
+					{
+						item_id: 'item:water',
+						qty: '24',
+						unit: 'ขวด',
+						review_status: 'pending',
+						drop_off_point_id: 'sp-gym'
+					}
+				],
+				point_receipts: POINT_RECEIPTS
+			} as unknown as PublicDonationDoc);
+
+			const response = await POST(
+				postEvent({ lines: [{ index: 0, decision: 'rejected', reason_code: 'expired' }] })
+			);
+
+			expect(response.status).toBe(409);
+			expect((await response.json()).error_code).toBe('GOODS_IN_STOCK');
+			expect(writtenDocs()).toHaveLength(0);
+			expect(putBody()).toBeUndefined();
+		});
+
+		// A point took the first line in while the booking waited for review; refusing it now
+		// would leave the receipt counting goods the donor reads as turned away.
+		it('refuses to reject a line a drop-off point already received', async () => {
+			mockCouch({
+				...mixed,
+				items: [
+					{
+						item_id: 'item:water',
+						qty: '24',
+						unit: 'ขวด',
+						review_status: 'pending',
+						drop_off_point_id: 'sp-gym'
+					},
+					{
+						free_text: 'ผ้าห่ม',
+						qty: '2',
+						unit: 'ผืน',
+						review_status: 'pending',
+						drop_off_point_id: 'sp-med'
+					}
+				],
+				point_receipts: [
+					{
+						...POINT_RECEIPTS[0],
+						ledger_ids: ['stock_ledger:row-1'],
+						items: [{ line_no: 0, item_id: 'item:water', qty: '24', unit: 'ขวด' }]
+					}
+				]
+			} as unknown as PublicDonationDoc);
+
+			const response = await POST(
+				postEvent({
+					lines: [
+						{ index: 0, decision: 'rejected', reason_code: 'expired' },
+						{ index: 1, decision: 'approved' }
+					]
+				})
+			);
+
+			expect(response.status).toBe(409);
+			const body = await response.json();
+			expect(body.error_code).toBe('LINE_ALREADY_RECEIVED');
+			expect(body.lines).toEqual([0]);
+			expect(writtenDocs()).toHaveLength(0);
+			expect(putBody()).toBeUndefined();
+		});
+
+		it('closes the booking when refusing the last line a point had not recorded (FR-MP-23)', async () => {
+			mockCouch({
+				...mixed,
+				items: [
+					{
+						item_id: 'item:rice',
+						qty: '10',
+						unit: 'kg',
+						review_status: 'approved',
+						drop_off_point_id: 'sp-gym'
+					},
+					{
+						free_text: 'ผ้าห่ม',
+						qty: '2',
+						unit: 'ผืน',
+						review_status: 'pending',
+						drop_off_point_id: 'sp-med'
+					}
+				],
+				point_receipts: [
+					{
+						...POINT_RECEIPTS[0],
+						ledger_ids: ['stock_ledger:row-1'],
+						items: [{ line_no: 0, item_id: 'item:rice', qty: '10', unit: 'kg' }]
+					}
+				]
+			} as unknown as PublicDonationDoc);
+
+			const response = await POST(
+				postEvent({ lines: [{ index: 1, decision: 'rejected', reason_code: 'damaged' }] })
+			);
+
+			expect(response.status).toBe(200);
+			expect(putBody()).toMatchObject({
+				status: 'received',
+				received_summary: { closed_reason: 'all_points', closed_by: 'warehouse' }
+			});
+			expect(writtenDocs()[0].context).toMatchObject({
+				status: 'received',
+				closed_reason: 'all_points'
+			});
+		});
+
+		it('closes as rejected when the point turned its line away and review refuses the rest', async () => {
+			mockCouch({
+				...mixed,
+				items: [
+					{
+						item_id: 'item:water',
+						qty: '24',
+						unit: 'ขวด',
+						review_status: 'approved',
+						drop_off_point_id: 'sp-gym'
+					},
+					{
+						free_text: 'ผ้าห่ม',
+						qty: '2',
+						unit: 'ผืน',
+						review_status: 'pending',
+						drop_off_point_id: 'sp-med'
+					}
+				],
+				point_receipts: POINT_RECEIPTS
+			} as unknown as PublicDonationDoc);
+
+			const response = await POST(
+				postEvent({ lines: [{ index: 1, decision: 'rejected', reason_code: 'expired' }] })
+			);
+
+			expect(response.status).toBe(200);
+			expect(putBody()).toMatchObject({
+				status: 'rejected',
+				received_summary: { closed_reason: 'all_points' }
+			});
+			expect(putBody()?.reject_reason).toBeTruthy();
+			expect(writtenDocs()[0].reason).toContain('ปิดใบ');
+			expect(writtenDocs()[0].context).toMatchObject({
+				status: 'rejected',
+				closed_reason: 'all_points'
+			});
+		});
+
+		it('keeps the booking open while a line still waits for its point', async () => {
+			mockCouch({
+				...mixed,
+				items: [
+					{
+						item_id: 'item:rice',
+						qty: '10',
+						unit: 'kg',
+						review_status: 'approved',
+						drop_off_point_id: 'sp-gym'
+					},
+					{
+						free_text: 'ผ้าห่ม',
+						qty: '2',
+						unit: 'ผืน',
+						review_status: 'pending',
+						drop_off_point_id: 'sp-med'
+					}
+				],
+				point_receipts: [
+					{
+						...POINT_RECEIPTS[0],
+						items: [{ line_no: 0, item_id: 'item:rice', qty: '10', unit: 'kg' }]
+					}
+				]
+			} as unknown as PublicDonationDoc);
+
+			await POST(postEvent({ lines: [{ index: 1, decision: 'approved' }] }));
+
+			expect(putBody()).toMatchObject({ status: 'verifying' });
+			expect(putBody()).not.toHaveProperty('received_summary');
 		});
 
 		it('still approves lines of a booking with goods keyed (only a rejection is refused)', async () => {

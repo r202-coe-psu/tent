@@ -53,6 +53,19 @@ export interface OperationsRepository {
 	listLedgerByItem(itemId: string): Promise<StockLedger[]>;
 
 	/**
+	 * The `reason: 'donation'` ledger rows a donation wrote on receipt (`ref_id` = its `_id`) —
+	 * the lots it brought in (#821 FR-12). Read through the `['type','ref_id','item_id','reason']`
+	 * Mango index, not by scanning the ledger.
+	 */
+	listDonationLedger(donationId: string): Promise<StockLedger[]>;
+
+	/**
+	 * Every ledger row of the given items — the history a per-lot balance is replayed from.
+	 * Bounded by those items, paged by bookmark to the end (never the default `limit` of 25).
+	 */
+	listLedgerByItems(itemIds: readonly string[]): Promise<StockLedger[]>;
+
+	/**
 	 * The docs ledger rows point at by `ref_id`. Missing or deleted ids are left out,
 	 * so the caller falls back to the short ref.
 	 */

@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const state = vi.hoisted(() => ({
 	find: vi.fn(),
@@ -76,7 +76,14 @@ function mockFindFor(volunteerDocs: Record<string, unknown>[]) {
 	});
 }
 
+// The fixture shifts are in September 2026; pin the clock so they have not ended yet.
+afterEach(() => {
+	vi.useRealTimers();
+});
+
 beforeEach(() => {
+	vi.useFakeTimers({ toFake: ['Date'] });
+	vi.setSystemTime(new Date('2026-09-01T00:00:00+07:00'));
 	state.find.mockReset();
 	state.get.mockReset();
 	state.put.mockReset();

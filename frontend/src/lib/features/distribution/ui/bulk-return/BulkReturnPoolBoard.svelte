@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { createSubscriber } from 'svelte/reactivity';
-	import type { Snippet } from 'svelte';
+	import { untrack, type Snippet } from 'svelte';
+	import { toast } from 'svelte-sonner';
 	import AlertCircle from '@lucide/svelte/icons/alert-circle';
 	import AlertTriangle from '@lucide/svelte/icons/alert-triangle';
 	import Inbox from '@lucide/svelte/icons/inbox';
@@ -19,8 +20,8 @@
 	import { Label } from '$lib/components/ui/label/index.js';
 	import { Switch } from '$lib/components/ui/switch/index.js';
 	import { useItemMasters } from '$lib/features/catalog';
-	import { useEvacuees } from '$lib/features/people';
-	import { useVolunteers } from '$lib/features/volunteers';
+	import { useEvacueeNames } from '$lib/features/people';
+	import { useVolunteerNames } from '$lib/features/volunteers';
 	import { getShelterCode } from '$lib/db/shelter';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
@@ -37,6 +38,8 @@
 	} from '../../application/food-supplies/auth';
 	import type { BulkReturnPoolOverviewRow } from '../../domain/food-supplies';
 	import { mapDistributionQueryError } from '../model/distribution-error';
+	import { BULK_RETURN_POOL_NOT_FOUND_TOAST } from '../model/bulk-return-copy';
+	import { decideDeepLinkedPool } from '../model/pool-deep-link';
 	import {
 		LATE_BADGE_CLASS,
 		LATE_CARD_EXCLUDED_TEXT,
@@ -54,6 +57,7 @@
 		hasActivePoolFilters,
 		lateItemQtyText,
 		poolItemIds,
+		poolReturnerIds,
 		poolStatusCounts,
 		poolStorageLabel,
 		poolStorageOptions,
@@ -63,7 +67,12 @@
 		type PoolStatusFilter
 	} from '../model/bulk-return-pool-v3';
 	import { workQueuesFor } from '../model/bulk-return-work-queue';
-	import { readMyPoolPoint, writeMyPoolPoint } from '../model/my-pool-point-storage';
+	import {
+		clearMyPoolPoint,
+		readMyPoolPoint,
+		resolveMyPoolPoint,
+		writeMyPoolPoint
+	} from '../model/my-pool-point-storage';
 	import { useStoragePoints } from '$lib/features/operations';
 	import * as Select from '$lib/components/ui/select/index.js';
 	import BulkReturnPoolWorkQueue from './BulkReturnPoolWorkQueue.svelte';
@@ -105,11 +114,19 @@
 	);
 	const itemMastersQuery = useItemMasters(() => activeShelterCode ?? null);
 
-	// Full rosters (loaded client-side) so the search and the detail can show returner names.
-	const evacueesQuery = useEvacuees();
-	const volunteersQuery = useVolunteers(undefined, () => activeShelterCode);
+	// Names of the returners present in the pools only, read by id from the board's shelter (never
+	// the whole roster), so the search and the detail can show returner names.
+	const returnerIds = $derived(poolReturnerIds(overviewQuery.data ?? []));
+	const evacueeNamesQuery = useEvacueeNames(
+		() => returnerIds.evacueeIds,
+		() => activeShelterCode
+	);
+	const volunteerNamesQuery = useVolunteerNames(
+		() => returnerIds.volunteerIds,
+		() => activeShelterCode
+	);
 	const returnerNames = $derived(
-		buildReturnerNames(evacueesQuery.data ?? [], volunteersQuery.data ?? [])
+		buildReturnerNames(evacueeNamesQuery.data ?? [], volunteerNamesQuery.data ?? [])
 	);
 
 	let search = $state('');
@@ -125,9 +142,12 @@
 	let addPoolId = $state<string | undefined>(undefined);
 	// Writable derived: follows `initialPoolId` (deep link / URL), local selections override it.
 	let selectedPoolId = $derived<string | null>(initialPoolId ?? null);
+	// Last id chosen through this board (card, queue, just-opened pool); never a deep link.
+	let locallySelectedPoolId = $state<string | null>(null);
 
 	function selectPool(poolId: string | null) {
 		selectedPoolId = poolId;
+		locallySelectedPoolId = poolId;
 		onSelectedPoolChange?.(poolId);
 	}
 
@@ -144,13 +164,23 @@
 
 	const queues = $derived(authContext ? workQueuesFor(authContext) : []);
 
-	// Per-device "my point" for the distribution staff queue; re-read when the shelter changes.
+	// Per-device "my point" for the my-point queue (SA/SM and distribution staff); re-read when the
+	// shelter changes.
 	// The hook has no enable switch, so it always loads (the shelter doc is shared and cached).
 	const storagePoints = useStoragePoints(() => activeShelterCode ?? '');
-	let myPoint = $derived<string | null>(readMyPoolPoint(activeShelterCode));
+	let storedMyPoint = $derived<string | null>(readMyPoolPoint(activeShelterCode));
+	// A remembered point that was deleted resolves to null (placeholder) once the list is loaded.
+	const myPoint = $derived(
+		resolveMyPoolPoint(storedMyPoint, storagePoints.points, storagePoints.isLoaded)
+	);
+
+	// External side effect only (no state writes): forget the deleted point in localStorage.
+	$effect(() => {
+		if (storedMyPoint !== null && myPoint === null) clearMyPoolPoint(activeShelterCode);
+	});
 
 	function handleMyPointChange(value: string) {
-		myPoint = value;
+		storedMyPoint = value;
 		writeMyPoolPoint(activeShelterCode, value);
 	}
 
@@ -241,6 +271,56 @@
 		const list = rows;
 		const id = selectedPoolId;
 		return id ? (list.find((row) => row.pool._id === id) ?? null) : null;
+	});
+
+	// Arrival time of the current deep link, plain (non-reactive) variables on purpose. A `$derived`
+	// would have to call Date.now() (impure, and re-evaluated at arbitrary moments); instead the
+	// effect below records it at the one place the `initialPoolId` change is observed. `undefined`
+	// means no link seen yet, so a link present at mount also counts as an arrival.
+	let lastSeenLink: string | null | undefined = undefined;
+	let linkArrivedAt: number | null = null;
+	let refetchRequested = false;
+
+	// A deep-linked pool counts as not found only when absent from `rows` (the unfiltered overview,
+	// incl. CANCELLED and old RECEIVED), never because a view filter hides it. A just-opened pool is
+	// selected locally before the refetch contains it, so local selections are skipped, and nothing
+	// is decided while the query is loading, erroring or refetching. A cached overview older than
+	// the link (staleTime) may predate a pool created elsewhere, so it is refetched once first.
+	//
+	// An effect because it reacts to async data arrival with side effects (refetch, toast, URL
+	// clear). Every follow of a bad link toasts; one link cannot toast twice because the selection is
+	// cleared (selectedPoolId becomes null), which ends the decision.
+	$effect(() => {
+		const link = initialPoolId ?? null;
+		if (link !== lastSeenLink) {
+			lastSeenLink = link;
+			if (link) {
+				linkArrivedAt = Date.now();
+				refetchRequested = false;
+			}
+		}
+		const decision = decideDeepLinkedPool({
+			poolId: selectedPoolId,
+			rows,
+			dataReady:
+				overviewQuery.isSuccess && !overviewQuery.isFetching && !overviewQuery.isPlaceholderData,
+			locallySelectedId: locallySelectedPoolId,
+			dataUpdatedAt: overviewQuery.dataUpdatedAt,
+			linkArrivedAt,
+			refetchRequested
+		});
+		if (decision === 'none') return;
+		// Untracked: the refetch / host callback must not add dependencies to this effect.
+		untrack(() => {
+			if (decision === 'refetch') {
+				refetchRequested = true;
+				void overviewQuery.refetch();
+				return;
+			}
+			toast.warning(BULK_RETURN_POOL_NOT_FOUND_TOAST);
+			// Clears the selection so the host drops `pool=`; the id is then null, so no loop.
+			selectPool(null);
+		});
 	});
 
 	/** Sum of late-entry qty per item_id (late entries are already non-voided). */

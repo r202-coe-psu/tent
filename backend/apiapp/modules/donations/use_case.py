@@ -19,7 +19,7 @@ from tent_model.donation_need_counter_ops import (
     reserve_quota,
 )
 from tent_model.donation_slot_counter_ops import release_slot, reserve_slot, slot_counter_id
-from tent_model.public_donation import DeclaredItem, PublicDonation
+from tent_model.public_donation import DeclaredItem, DonationPointReceipt, PublicDonation
 from tent_model.public_shelter import PublicShelter
 
 from ...utils.masking import normalize_phone, phone_hash, sha256_hex
@@ -313,6 +313,57 @@ def _pair_held_lines(
     return paired
 
 
+#: Delivery methods that bring the goods to the shelter in one go — the shelter's own
+#: pickup and a parcel. Their lines carry no drop-off point (CR-206 FR-MP-4).
+_NO_POINT_DELIVERY_METHODS = frozenset({"shelter_pickup", "parcel"})
+
+
+def _offered_point_ids(shelter: PublicShelter | None) -> set[str]:
+    return {point.id for point in shelter.donation_points} if shelter else set()
+
+
+def _drop_off_points(
+    items: list[DonationItemInput],
+    *,
+    logistics: dict[str, Any] | None,
+    offered: set[str] | None,
+    strict: bool,
+) -> list[DonationItemInput]:
+    """CR-206 FR-MP-2..FR-MP-4 — keep each line's drop-off point only where it can stand.
+
+    A shelter pickup or a parcel reaches the shelter whole, so its lines lose any point the
+    client sent. Otherwise a point must be one the shelter offers now: on create
+    (``strict``) one that is not refuses the booking before any quota moves (FR-MP-2,
+    FR-MP-3).
+
+    ``offered=None`` skips that check: the donor edit is reachable only through the BFF,
+    which already settled each point against the shelter doc in CouchDB (FR-MP-2a) and
+    nulls the ones no longer offered. The Mongo projection lags that doc, so checking it
+    here would drop a point staff added a moment ago.
+    """
+    no_point = (logistics or {}).get("delivery_method") in _NO_POINT_DELIVERY_METHODS
+    kept = []
+    for item in items:
+        point_id = item.drop_off_point_id
+        if point_id is None:
+            kept.append(item)
+            continue
+        if not no_point and (offered is None or point_id in offered):
+            kept.append(item)
+            continue
+        if strict and not no_point:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={
+                    "success": False,
+                    "error": "UNKNOWN_DROP_OFF_POINT",
+                    "drop_off_point_id": point_id,
+                },
+            )
+        kept.append(item.model_copy(update={"drop_off_point_id": None}))
+    return kept
+
+
 def _wanted_by_item(items: list[DonationItemInput]) -> dict[str, Decimal]:
     wanted: dict[str, Decimal] = {}
     for item in items:
@@ -389,6 +440,8 @@ def _declared_items(raw_items: list[dict[str, Any]]) -> list[DeclaredItem]:
             review_status=item.get("review_status"),
             review_reason_code=item.get("review_reason_code"),
             review_reason=item.get("review_reason"),
+            # CR-206 — the donor's ticket groups lines by it.
+            drop_off_point_id=item.get("drop_off_point_id"),
         )
         for item in raw_items
     ]
@@ -461,6 +514,7 @@ def _tracking_payload(
     logistics: dict[str, Any] | None = None,
     expires_at: datetime | None = None,
     revisions: list[dict[str, Any]] | None = None,
+    point_receipts: list[DonationPointReceipt] | None = None,
 ) -> dict[str, Any]:
     payload: dict[str, Any] = {
         "status": status_value,
@@ -478,6 +532,9 @@ def _tracking_payload(
         "expires_at": expires_at.isoformat() if expires_at else None,
         # CR-080 — the donor's page shows how many times they have edited.
         "revisions": revisions or [],
+        # CR-206 FR-MP-13 — which lines each drop-off point has recorded, so the ticket
+        # shows a point "รับแล้ว". Point, lines and time only (§Change).
+        "point_receipts": [receipt.model_dump() for receipt in point_receipts or []],
     }
     return payload
 
@@ -508,6 +565,18 @@ class DonationsUseCase:
                     "shelter_code": payload.shelter_code,
                 },
             )
+
+        # CR-206 FR-MP-2..FR-MP-4 — before any quota moves, so a refused point holds nothing.
+        payload = payload.model_copy(
+            update={
+                "items": _drop_off_points(
+                    payload.items,
+                    logistics=payload.logistics,
+                    offered=_offered_point_ids(shelter),
+                    strict=True,
+                )
+            }
+        )
 
         donation_id = f"donation:{new_ulid()}"
         tracking_token = f"TX-{payload.shelter_code.upper()}-{secrets.token_hex(16).upper()}"
@@ -686,6 +755,7 @@ class DonationsUseCase:
                     logistics=(dict(buffer.logistics) if buffer and buffer.logistics else None),
                     expires_at=buffer.expires_at if buffer else None,
                     revisions=list(buffer.revisions) if buffer else [],
+                    point_receipts=list(donation.point_receipts),
                 )
             )
 
@@ -947,6 +1017,15 @@ class DonationsUseCase:
         now = datetime.now(UTC)
         before = [dict(item) for item in buffer.items_declared]
         items = _pair_held_lines(_carry_item_ids(items, before), previous_items)
+        # CR-206 FR-MP-4 — a parcel or pickup carries no point. Which points the shelter
+        # offers (FR-MP-2a) the BFF has already settled from CouchDB, so the lagging Mongo
+        # projection is not consulted: it would drop a point staff added a moment ago.
+        items = _drop_off_points(
+            items,
+            logistics=buffer.logistics,
+            offered=None,
+            strict=False,
+        )
 
         held = _held_by_item(before)
         wanted = _wanted_by_item(items)

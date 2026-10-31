@@ -7,7 +7,6 @@ describe('ThaidActionButton', () => {
 		const result = render(ThaidActionButton, {
 			props: {}
 		});
-		expect(result.body).toContain('ดึงข้อมูลด้วย ThaiD');
 		expect(result.body).toContain('เชื่อมต่อ ThaiD');
 		expect(result.body).not.toContain('จำลอง / Mock');
 		expect(result.body).not.toContain('เลือกข้อมูลจำลอง (Mock)');

@@ -164,6 +164,8 @@ export type DonationItemEdit = {
 	free_text?: string;
 	qty: string;
 	unit: string;
+	/** The line's drop-off point — sent for every line (CR-206 FR-MP-15); `null` = none. */
+	drop_off_point_id?: string | null;
 };
 
 export async function updateDonationItems(
