@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { nextVolunteerCode, formatVolunteerCode } from './volunteer-code';
+import { compactVolunteerCode, nextVolunteerCode, formatVolunteerCode } from './volunteer-code';
 
 describe('formatVolunteerCode', () => {
 	it('zero-pads to 3 digits', () => {
@@ -51,5 +51,15 @@ describe('nextVolunteerCode', () => {
 
 	it('deduplicates a code repeated by an existing-codes list (e.g. duplicate mint already occurred)', () => {
 		expect(nextVolunteerCode(['V-001', 'V-001', 'V-002'])).toBe('V-003');
+	});
+});
+
+describe('compactVolunteerCode (#1013)', () => {
+	it.each(['V-013', 'v013', 'V 013', 'v-013'])('turns %s into v013', (code) => {
+		expect(compactVolunteerCode(code)).toBe('v013');
+	});
+
+	it('leaves nothing of a lone dash or spaces', () => {
+		expect(compactVolunteerCode(' - ')).toBe('');
 	});
 });

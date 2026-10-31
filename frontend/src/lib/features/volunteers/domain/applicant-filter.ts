@@ -7,6 +7,7 @@
  */
 
 import { applicantAttendance, awaitingAttendanceConfirmation } from './applicant-attendance';
+import { compactVolunteerCode } from './volunteer-code';
 import {
 	applicationPerson,
 	applicationShiftId,
@@ -66,16 +67,14 @@ export interface FilteredApplicantBoard {
 }
 
 const digits = (value: string) => value.replace(/\D/g, '');
-/** A volunteer code without its dashes and spaces: "v013", "V 013" and "v-013" all find V-013. */
-const compactCode = (value: string) => value.toLowerCase().replace(/[\s-]/g, '');
 
 function matchesSearch(query: string, person: ApplicantPerson): boolean {
 	if (!query) return true;
 	const q = query.toLowerCase();
 	if (person.name?.toLowerCase().includes(q)) return true;
 	if (person.code) {
-		const qCode = compactCode(q);
-		if (qCode !== '' && compactCode(person.code).includes(qCode)) return true;
+		const qCode = compactVolunteerCode(q);
+		if (qCode !== '' && compactVolunteerCode(person.code).includes(qCode)) return true;
 	}
 	if (!person.phone) return false;
 	if (person.phone.toLowerCase().includes(q)) return true;

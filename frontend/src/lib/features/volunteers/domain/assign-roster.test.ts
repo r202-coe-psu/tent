@@ -307,6 +307,9 @@ describe('filterAssignRoster', () => {
 		expect(codes(filterAssignRoster(rows(), { search: 'สอนใจ' }))).toEqual(['V-003']);
 		expect(codes(filterAssignRoster(rows(), { search: '0841981118' }))).toEqual(['V-8004']);
 		expect(codes(filterAssignRoster(rows(), { search: 'v-001' }))).toEqual(['V-001']);
+		// #1013: the code matches without its dash, as on the applicants tab.
+		expect(codes(filterAssignRoster(rows(), { search: 'v001' }))).toEqual(['V-001']);
+		expect(codes(filterAssignRoster(rows(), { search: 'V 001' }))).toEqual(['V-001']);
 		expect(codes(filterAssignRoster(rows(), { search: '  ' }))).toHaveLength(3);
 	});
 
