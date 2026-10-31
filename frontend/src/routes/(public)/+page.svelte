@@ -112,7 +112,8 @@
 	const urgentItemsCount = $derived.by(() => {
 		let totalNeeds = 0;
 		for (const s of data.donationNeeds || []) {
-			totalNeeds += (s.needs || []).length;
+			// One item can have a row per drop-off point (CR-206 A2 FR-AP-29): count items.
+			totalNeeds += new Set((s.needs || []).map((n) => n.item_id)).size;
 		}
 		return totalNeeds;
 	});

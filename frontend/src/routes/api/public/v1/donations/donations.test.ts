@@ -1291,6 +1291,32 @@ describe('POST /api/public/v1/donations', () => {
 			expect(fetch).not.toHaveBeenCalled();
 		});
 
+		it('books no campaign staff hid from the site, even at the card point (D-AP-18, FR-AP-31)', async () => {
+			mockFastapiCreate();
+			const hidden = {
+				...campaignDoc('donation_campaign:a-hidden', 'point-gym'),
+				visible_on_home: false
+			};
+			const res = await book([{ ...RICE, need_drop_off_point_id: 'point-gym' }], undefined, [
+				hidden,
+				campaignDoc('donation_campaign:b-shown', 'point-gym')
+			]);
+
+			expect(res.status).toBe(200);
+			expect(sentBody().campaign_id).toBe('donation_campaign:b-shown');
+		});
+
+		it('refuses with NEED_FULL when the only campaign at the card point is hidden', async () => {
+			mockFastapiCreate();
+			const res = await book([{ ...RICE, need_drop_off_point_id: 'point-gym' }], undefined, [
+				{ ...campaignDoc('donation_campaign:hidden', 'point-gym'), visible_on_home: false }
+			]);
+
+			expect(res.status).toBe(409);
+			expect(res.body.error).toBe('NEED_FULL');
+			expect(fetch).not.toHaveBeenCalled();
+		});
+
 		it('refuses with NEED_FULL when no campaign has the card point', async () => {
 			mockFastapiCreate();
 			const res = await book(

@@ -125,3 +125,43 @@ describe('public donor needs board — cards per item and drop-off point', () =>
 		expect(store.items[0]).toMatchObject({ item_id: 'item:soap', needDropOffPointId: null });
 	});
 });
+
+describe('public donor needs board — shelter progress', () => {
+	it('counts stock on hand once per item, however many point cards it has (FR-AP-25)', async () => {
+		const rice = {
+			item_id: 'item:rice',
+			name: 'ข้าวสาร',
+			unit: 'kg',
+			qty_needed: '30',
+			qty_target: '50',
+			on_hand: '40',
+			reserved: '0',
+			status: 'open',
+			urgency: 'critical'
+		};
+		vi.stubGlobal(
+			'fetch',
+			vi.fn(async () => ({
+				ok: true,
+				json: async () => [
+					{
+						code: 'SH001',
+						name: 'ศูนย์พักพิงหาดใหญ่',
+						needs: [
+							{ ...rice, drop_off_point_id: 'point-gym', drop_off_point_name: 'โรงยิม' },
+							{ ...rice, drop_off_point_id: 'point-med', drop_off_point_name: 'ห้องพยาบาล' }
+						]
+					}
+				]
+			}))
+		);
+		store.activeTab = 'needs';
+		instance = mount(PublicDonorNeeds, { target: document.body, props: {} });
+		flushSync();
+
+		// target 50 + 50, on hand 40 once (not 40 + 40): 40%.
+		await vi.waitFor(() =>
+			expect(document.body.textContent).toContain('ต้องการ 1 รายการ · คืบหน้าแล้ว 40% ของเป้าหมาย')
+		);
+	});
+});

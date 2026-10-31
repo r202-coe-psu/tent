@@ -4,12 +4,19 @@ import { flushSync, mount, tick, unmount } from 'svelte';
 import type { PendingDonationRow } from '$lib/features/donations';
 import PendingReviewDetail from './pending-review-detail.svelte';
 
-const shelter = vi.hoisted(() => ({ doc: undefined as unknown }));
+const shelter = vi.hoisted(() => ({
+	doc: undefined as unknown,
+	state: 'success' as 'success' | 'pending' | 'error'
+}));
 
 vi.mock('$lib/features/shelters', async (importOriginal) => ({
 	...(await importOriginal<typeof import('$lib/features/shelters')>()),
 	useShelters: () => ({ data: [] }),
-	useShelter: () => ({ data: shelter.doc, isSuccess: true })
+	useShelter: () => ({
+		data: shelter.state === 'success' ? shelter.doc : undefined,
+		isSuccess: shelter.state === 'success',
+		isError: shelter.state === 'error'
+	})
 }));
 vi.mock('$lib/features/catalog', async (importOriginal) => ({
 	...(await importOriginal<typeof import('$lib/features/catalog')>()),
@@ -117,6 +124,7 @@ async function choosePoint(line: number, name: string) {
 
 beforeEach(() => {
 	shelter.doc = shelterWith(GYM, MED);
+	shelter.state = 'success';
 });
 
 afterEach(async () => {
@@ -128,6 +136,26 @@ afterEach(async () => {
 });
 
 describe('PendingReviewDetail drop-off point per line (FR-AP-20)', () => {
+	it("waits for the shelter's points before an approved line can be confirmed", async () => {
+		shelter.state = 'pending';
+		await render(baseRow);
+
+		await approve(0);
+		await approve(1);
+		expect(confirmButton().disabled).toBe(true);
+		expect(document.body.textContent).toContain('กำลังโหลดจุดรับบริจาคของศูนย์');
+	});
+
+	it('says so when the shelter points cannot be loaded, and still blocks confirming', async () => {
+		shelter.state = 'error';
+		await render(baseRow);
+
+		await approve(0);
+		await approve(1);
+		expect(confirmButton().disabled).toBe(true);
+		expect(document.body.textContent).toContain('โหลดจุดรับบริจาคของศูนย์ไม่สำเร็จ');
+	});
+
 	it('AC-AP-10: staff pick a point for each approved line before confirming', async () => {
 		await render(baseRow);
 		expect(pointPicker(0)).toBeNull();

@@ -232,12 +232,26 @@
 			})
 		)
 	);
-	const reviewComplete = $derived(lineDecisions.every((parsed) => parsed.success));
-	const reviewIncompleteHint = $derived(
-		picksPoints
-			? 'ตัดสินรายการที่รอประเมินให้ครบ เลือกจุดรับบริจาคของรายการที่รับ และใส่เหตุผลของรายการที่ไม่รับ'
-			: 'ตัดสินรายการที่รอประเมินให้ครบ และใส่เหตุผลของรายการที่ไม่รับ'
+	// Until the shelter doc is read, a self drop-off cannot tell whether an approved line needs a
+	// point, so the confirm button waits instead of letting the server answer POINT_REQUIRED.
+	const awaitsPoints = $derived(
+		request.delivery_method === 'self_dropoff' &&
+			!shelterQuery.isSuccess &&
+			pendingIndexes.some(
+				(index) => drafts[index]?.decision === 'approved' && !receiptPointByLine.has(index)
+			)
 	);
+	const reviewComplete = $derived(!awaitsPoints && lineDecisions.every((parsed) => parsed.success));
+	const reviewIncompleteHint = $derived.by(() => {
+		if (awaitsPoints) {
+			return shelterQuery.isError
+				? 'โหลดจุดรับบริจาคของศูนย์ไม่สำเร็จ ลองโหลดหน้านี้ใหม่'
+				: 'กำลังโหลดจุดรับบริจาคของศูนย์...';
+		}
+		return picksPoints
+			? 'ตัดสินรายการที่รอประเมินให้ครบ เลือกจุดรับบริจาคของรายการที่รับ และใส่เหตุผลของรายการที่ไม่รับ'
+			: 'ตัดสินรายการที่รอประเมินให้ครบ และใส่เหตุผลของรายการที่ไม่รับ';
+	});
 	/** Every line ends up refused, so saving rejects the booking (FR-6) — shown in red. */
 	const rejectsAll = $derived.by(() => {
 		if (!lineReview || !reviewComplete) return false;
@@ -256,7 +270,7 @@
 			return;
 		}
 		const lines = lineDecisions.flatMap((parsed) => (parsed.success ? [parsed.data] : []));
-		if (lines.length !== pendingIndexes.length) {
+		if (!reviewComplete || lines.length !== pendingIndexes.length) {
 			toast.error(reviewIncompleteHint);
 			return;
 		}

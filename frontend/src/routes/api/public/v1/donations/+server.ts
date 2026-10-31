@@ -98,8 +98,17 @@ export const POST = async ({ request, getClientAddress }) => {
 		// count, so an outage there must refuse the booking (503) instead of reading as
 		// "nothing booked yet" and letting a full window or need be overbooked.
 		const [campaigns, donations, stockLedgers] = await Promise.all([
+			// A campaign staff hid from the site takes no public booking (owner 2026-10-31, CR-206
+			// A2 D-AP-18): the worker leaves it off the board, so counting it here would book
+			// against a quota no card shows (FR-AP-31).
 			fetchDocs<DonationCampaign>(dbName, 'donation_campaign:').then((docs) =>
-				docs.filter((c) => c && c.type === 'donation_campaign' && c.status === 'open')
+				docs.filter(
+					(c) =>
+						c &&
+						c.type === 'donation_campaign' &&
+						c.status === 'open' &&
+						c.visible_on_home !== false
+				)
 			),
 			fetchDocsStrict<PublicDonationDoc>(dbName, 'donation:').then((docs) =>
 				docs.filter((d) => d && d.type === 'donation')

@@ -306,6 +306,12 @@
 		return new Set(needs.map((n) => n.item_id)).size;
 	}
 
+	/** Stock on hand is per item, repeated on every card of it (FR-AP-25): count it once. */
+	function itemOnHand(needs: Need[]): number {
+		const byItem = new Map(needs.map((n) => [n.item_id, n.on_hand ?? 0]));
+		return [...byItem.values()].reduce((sum, qty) => sum + qty, 0);
+	}
+
 	function formatUnit(unit: string): string {
 		return formatUnitCatalog(unit, units, langState.current);
 	}
@@ -909,7 +915,7 @@
 					     items it publishes. Only items that announced a target take part, so a
 					     board with no targets shows no percentage rather than a made-up one. -->
 					{@const totalTarget = displayedNeeds.reduce((sum, n) => sum + (n.qty_target ?? 0), 0)}
-					{@const totalOnHand = displayedNeeds.reduce((sum, n) => sum + (n.on_hand ?? 0), 0)}
+					{@const totalOnHand = itemOnHand(displayedNeeds)}
 					{@const totalReserved = displayedNeeds.reduce((sum, n) => sum + (n.reserved ?? 0), 0)}
 					{@const overallPct =
 						totalTarget > 0
