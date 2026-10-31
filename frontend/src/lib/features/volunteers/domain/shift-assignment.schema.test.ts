@@ -241,6 +241,42 @@ describe('isShiftAssignment', () => {
 	});
 });
 
+describe('isShiftAssignment — legacy docs without method keys (#1014)', () => {
+	const legacy = (omit: string[]) => {
+		const doc: Record<string, unknown> = { ...validDoc() };
+		for (const k of omit) delete doc[k];
+		return doc;
+	};
+
+	it('accepts a doc with no check_in_method / check_out_method keys', () => {
+		expect(isShiftAssignment(legacy(['check_in_method', 'check_out_method']))).toBe(true);
+	});
+
+	it('accepts a v4 doc without any check_out_* or reason keys (worker shape)', () => {
+		expect(
+			isShiftAssignment(
+				legacy([
+					'check_out_by',
+					'check_out_method',
+					'check_out_reason',
+					'check_in_reason',
+					'check_out_at'
+				])
+			)
+		).toBe(true);
+	});
+
+	it('accepts explicit null methods', () => {
+		expect(
+			isShiftAssignment({ ...validDoc(), check_in_method: null, check_out_method: null })
+		).toBe(true);
+	});
+
+	it('still rejects an unknown method value', () => {
+		expect(isShiftAssignment({ ...validDoc(), check_in_method: 'telepathy' })).toBe(false);
+	});
+});
+
 describe('shiftAssignmentInputSchema', () => {
 	it('accepts a valid input', () => {
 		expect(shiftAssignmentInputSchema.safeParse(baseInput).success).toBe(true);
