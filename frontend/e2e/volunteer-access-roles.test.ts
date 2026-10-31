@@ -481,24 +481,21 @@ test.describe('Volunteer access: coordinator limits (#955)', { tag: TAGS }, () =
 		expect(grants[0].granted_at).toBeTruthy();
 	});
 
-	test('a re-grant adds the role and renews without touching the password', async () => {
+	test('a re-grant with another role replaces it and renews without touching the password', async () => {
+		// One coordinator role per shelter (#1044): kitchen_staff replaces distribution_staff.
 		const res = await grantRequest({ role: 'kitchen_staff', password: 'Another-Pass9!' });
 		expect(res.status).toBe(200);
 
 		const doc = await getDocument('_users', `org.couchdb.user:${grantEmail}`);
-		expect(doc?.roles).toEqual([
-			`shelter:${SHELTER}`,
-			`${SHELTER}:distribution_staff`,
-			`${SHELTER}:kitchen_staff`
-		]);
-		expect(doc?.role_grants as unknown[]).toHaveLength(2);
+		expect(doc?.roles).toEqual([`shelter:${SHELTER}`, `${SHELTER}:kitchen_staff`]);
+		expect(doc?.role_grants as unknown[]).toHaveLength(1);
 		await expect(couchLogin(grantEmail, PASSWORD), 'password unchanged').resolves.toBeTruthy();
 
-		await expect(grantRequest({ expires_on: bangkokDate(7) })).resolves.toMatchObject({
-			status: 200
-		});
+		await expect(
+			grantRequest({ role: 'kitchen_staff', expires_on: bangkokDate(7) })
+		).resolves.toMatchObject({ status: 200 });
 		const renewed = await getDocument('_users', `org.couchdb.user:${grantEmail}`);
-		expect(renewed?.role_grants as unknown[], 'renewed, not duplicated').toHaveLength(2);
+		expect(renewed?.role_grants as unknown[], 'renewed, not duplicated').toHaveLength(1);
 	});
 
 	for (const [label, over, status] of [

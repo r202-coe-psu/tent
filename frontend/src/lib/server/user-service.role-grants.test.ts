@@ -121,9 +121,9 @@ describe('coordinator role grants on _users (#955)', () => {
 		]);
 	});
 
-	it('adds a second role to an existing account without touching the password', async () => {
+	it('replaces the coordinator role with the newly picked one, without touching the password (#1044)', async () => {
 		seed(EMAIL, { roles: ['shelter:SH001', 'SH001:kitchen_staff'], role_grants: [grant()] });
-		const next = grant('facility_staff');
+		const next = grant('warehouse_staff');
 		await expect(
 			grantCoordinatorRole(input(next, { password: 'Other-Pass-999!' }))
 		).resolves.toEqual({
@@ -132,10 +132,47 @@ describe('coordinator role grants on _users (#955)', () => {
 			name: EMAIL
 		});
 		const doc = db[key(EMAIL)];
-		expect(doc.roles).toEqual(['shelter:SH001', 'SH001:kitchen_staff', 'SH001:facility_staff']);
-		expect(doc.role_grants).toEqual([grant(), next]);
+		expect(doc.roles).toEqual(['shelter:SH001', 'SH001:warehouse_staff']);
+		expect(doc.role_grants).toEqual([next]);
 		expect(doc.derived_key).toBe('keep-me');
 		expect(doc.password).toBeUndefined();
+		expect(audits()).toMatchObject([
+			{ reason: 'role_grant.revoked', context: { role: 'kitchen_staff', actor: 'staff03' } },
+			{ reason: 'role_grant.issued', context: { role: 'warehouse_staff', actor: 'staff03' } }
+		]);
+	});
+
+	it('replaces every older coordinator grant of this shelter at once', async () => {
+		seed(EMAIL, {
+			roles: ['shelter:SH001', 'SH001:kitchen_staff', 'SH001:facility_staff'],
+			role_grants: [grant(), grant('facility_staff')]
+		});
+		await grantCoordinatorRole(input(grant('warehouse_staff')));
+		expect(db[key(EMAIL)].roles).toEqual(['shelter:SH001', 'SH001:warehouse_staff']);
+		expect(db[key(EMAIL)].role_grants).toEqual([grant('warehouse_staff')]);
+	});
+
+	it('replaces a grant another coordinator issued (draft CR #1046 FR-17)', async () => {
+		seed(EMAIL, {
+			roles: ['shelter:SH001', 'SH001:kitchen_staff'],
+			role_grants: [grant('kitchen_staff', { granted_by: 'coord-other' })]
+		});
+		await grantCoordinatorRole(input(grant('warehouse_staff')));
+		expect(db[key(EMAIL)].roles).toEqual(['shelter:SH001', 'SH001:warehouse_staff']);
+	});
+
+	it('keeps a role a manager gave (no grant) when replacing the coordinator one', async () => {
+		seed(EMAIL, {
+			roles: ['shelter:SH001', 'SH001:registration_staff', 'SH001:kitchen_staff'],
+			role_grants: [grant()]
+		});
+		await grantCoordinatorRole(input(grant('warehouse_staff')));
+		expect(db[key(EMAIL)].roles).toEqual([
+			'shelter:SH001',
+			'SH001:registration_staff',
+			'SH001:warehouse_staff'
+		]);
+		expect(db[key(EMAIL)].role_grants).toEqual([grant('warehouse_staff')]);
 	});
 
 	it('renews an existing grant instead of duplicating it', async () => {
