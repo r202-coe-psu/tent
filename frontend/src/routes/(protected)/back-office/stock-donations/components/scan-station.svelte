@@ -52,7 +52,9 @@
 		closedAtIntakeMessage,
 		canCloseByPoints,
 		defaultStoragePointId,
-		hasOtherPointLines,
+		otherPointLineCount,
+		scanCounterLabel,
+		scanIdleSubmitLabel,
 		linePointLabel,
 		namesDropOffPoints,
 		pointReceiptFields,
@@ -224,6 +226,8 @@
 
 	function chooseReceivingPoint(pointId: string | null) {
 		const shelter = getShelterCode();
+		// An unlock belongs to the point it was made for — a new point starts locked again.
+		if (pointId !== chosenPointId) otherPointsUnlocked = false;
 		pickedPoints[shelter] = pointId;
 		writeReceivingPoint(shelter, pointId);
 	}
@@ -341,9 +345,7 @@
 	);
 	/** Show where each line goes (FR-MP-25) once the booking was split between points. */
 	const showLinePoints = $derived(byLine || namesDropOffPoints(donationDoc?.items));
-	const canUnlockOtherPoints = $derived(
-		receiveMode === 'by_point' && chosenPointId !== null && hasOtherPointLines(lineStates)
-	);
+	const otherPointCount = $derived(otherPointLineCount(lineStates));
 	const isOpenLine = (idx: number) => lineStates[idx]?.kind === 'receivable';
 	/** FR-MP-26 / FR-MP-28: a point already recorded something and a line has no result yet. */
 	const canClose = $derived(!!donationDoc && canCloseByPoints(donationDoc));
@@ -558,14 +560,27 @@
 	);
 	/** Red only when everything recorded is turned away (CR-172 FR-12). */
 	const refusesAll = $derived(scopeLines.length > 0 && keptItems.length === 0);
+	const counterLabel = $derived(
+		scanCounterLabel({
+			verified: verifiedCount,
+			decidable: decidableCount,
+			otherPointCount,
+			needsPoint: pointChoiceMissing
+		})
+	);
 	const receiveLabel = $derived(
-		rejectedCount === 0
-			? 'ยืนยันรับเข้าคลัง'
-			: keptItems.length === 0
-				? byLine
-					? `บันทึกไม่รับ ${rejectedCount} รายการ`
-					: 'ปฏิเสธทั้งใบ'
-				: `รับ ${keptItems.length} รายการ · ไม่รับ ${rejectedCount} รายการ`
+		scanIdleSubmitLabel({
+			needsPoint: pointChoiceMissing,
+			noneToSave: scopeLines.length === 0,
+			otherPointCount
+		}) ??
+			(rejectedCount === 0
+				? 'ยืนยันรับเข้าคลัง'
+				: keptItems.length === 0
+					? byLine
+						? `บันทึกไม่รับ ${rejectedCount} รายการ`
+						: 'ปฏิเสธทั้งใบ'
+					: `รับ ${keptItems.length} รายการ · ไม่รับ ${rejectedCount} รายการ`)
 	);
 
 	/**
@@ -882,7 +897,9 @@
 	const openLineNames = $derived(
 		donationDoc && canClose
 			? scannedItems.flatMap((it, idx) =>
-					lineStates[idx]?.kind === 'receivable' || lineStates[idx]?.kind === 'other_point'
+					lineStates[idx]?.kind === 'receivable' ||
+					lineStates[idx]?.kind === 'other_point' ||
+					lineStates[idx]?.kind === 'needs_point'
 						? [{ lineNo: idx, name: it.name }]
 						: []
 				)
@@ -1185,7 +1202,7 @@
 						<div class="flex items-baseline justify-between gap-2">
 							<h3 class="text-base font-semibold text-slate-800">รายการที่ต้องตรวจรับ</h3>
 							<span class="text-sm text-slate-500 tabular-nums">
-								ตรวจแล้ว {verifiedCount} / {decidableCount} รายการ
+								{counterLabel}
 							</span>
 						</div>
 
@@ -1201,45 +1218,79 @@
 							</div>
 						{/if}
 
-						{#if canUnlockOtherPoints || otherPointsUnlocked}
+						{#snippet unlockButton()}
+							<Button
+								type="button"
+								variant="outline"
+								data-testid="unlock-other-points"
+								aria-pressed={otherPointsUnlocked}
+								disabled={saving || !!otherShelterCode}
+								onclick={() => (otherPointsUnlocked = !otherPointsUnlocked)}
+								class="min-h-11 gap-1.5 text-sm font-semibold text-sky-800"
+							>
+								<MapPin class="size-4" aria-hidden="true" />
+								{otherPointsUnlocked ? 'ล็อกรายการของจุดอื่น' : 'รับรายการของจุดอื่น'}
+							</Button>
+						{/snippet}
+
+						{#if pointChoiceMissing}
+							<!-- FR-MP-18a: no line can be ticked before the recorder's point is chosen. -->
+							<div
+								role="status"
+								data-testid="choose-point-warning"
+								class="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 p-4 text-base text-amber-900"
+							>
+								<TriangleAlert class="mt-0.5 size-5 shrink-0 text-amber-600" aria-hidden="true" />
+								<p>เลือกจุดที่ประจำก่อน แล้วจึงตรวจรับรายการได้ (ตัวเลือกอยู่ด้านขวา)</p>
+							</div>
+						{:else if otherPointCount > 0}
+							<!-- Another point's lines are locked here (FR-MP-19); FR-MP-21 unlocks them. -->
+							<div
+								role="status"
+								data-testid="other-point-warning"
+								class="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-base text-amber-900"
+							>
+								<p class="flex items-start gap-2">
+									<TriangleAlert class="mt-0.5 size-5 shrink-0 text-amber-600" aria-hidden="true" />
+									<span>
+										{otherPointCount} รายการเป็นของจุดอื่น — รับที่จุดนั้น หรือกด "รับรายการของจุดอื่น"
+									</span>
+								</p>
+								{@render unlockButton()}
+							</div>
+						{:else if otherPointsUnlocked}
 							<!-- FR-MP-21: the donor brought another point's lines to this one. -->
 							<div
 								class="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-sky-200 bg-white p-4 shadow-2xs"
 							>
 								<p class="text-sm text-slate-700">
-									{otherPointsUnlocked
-										? 'รับรายการของจุดอื่นได้แล้ว — เก็บเข้าจุดที่ประจำเป็นค่าเริ่มต้น'
-										: 'ผู้บริจาคนำรายการของจุดอื่นมาที่จุดนี้?'}
+									รับรายการของจุดอื่นได้แล้ว — เก็บเข้าจุดที่ประจำเป็นค่าเริ่มต้น
 								</p>
-								<Button
-									type="button"
-									variant="outline"
-									data-testid="unlock-other-points"
-									aria-pressed={otherPointsUnlocked}
-									disabled={saving || !!otherShelterCode}
-									onclick={() => (otherPointsUnlocked = !otherPointsUnlocked)}
-									class="min-h-11 gap-1.5 text-sm font-semibold text-sky-800"
-								>
-									<MapPin class="size-4" aria-hidden="true" />
-									{otherPointsUnlocked ? 'ล็อกรายการของจุดอื่น' : 'รับรายการของจุดอื่น'}
-								</Button>
+								{@render unlockButton()}
 							</div>
 						{/if}
 
 						{#each scannedItems as item, idx (item.key)}
 							{@const diff = qtyDifference(item)}
 							{@const lineState = lineStates[idx]}
-							{@const locked = lineState?.kind === 'recorded' || lineState?.kind === 'other_point'}
+							{@const locked =
+								lineState?.kind === 'recorded' ||
+								lineState?.kind === 'other_point' ||
+								lineState?.kind === 'needs_point'}
+							{@const warned =
+								lineState?.kind === 'other_point' || lineState?.kind === 'needs_point'}
 							<div
 								data-testid="scan-line-{idx}"
 								data-line-state={lineState?.kind}
-								class="rounded-xl border bg-white shadow-2xs {locked
-									? 'border-slate-200/80'
-									: item.rejected
-										? 'border-rose-200'
-										: item.verified
-											? 'border-emerald-200'
-											: 'border-slate-200/80'}"
+								class="rounded-xl border bg-white shadow-2xs {warned
+									? 'border-amber-200'
+									: locked
+										? 'border-slate-200/80'
+										: item.rejected
+											? 'border-rose-200'
+											: item.verified
+												? 'border-emerald-200'
+												: 'border-slate-200/80'}"
 							>
 								<!-- Item header -->
 								<div
@@ -1260,6 +1311,15 @@
 										>
 											<MapPin class="h-3.5 w-3.5" aria-hidden="true" />
 											{linePointLabel(donationDoc.items[idx] ?? {}, donationPoints)}
+										</span>
+									{/if}
+									{#if lineState?.kind === 'receivable' && lineState.borrowed}
+										<span
+											data-testid="scan-line-{idx}-borrowed"
+											class="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-0.5 text-xs font-semibold text-amber-900"
+										>
+											<TriangleAlert class="h-3.5 w-3.5 text-amber-600" aria-hidden="true" />
+											ของจุดอื่น
 										</span>
 									{/if}
 									{#if diff && !item.rejected && !locked}
@@ -1290,10 +1350,21 @@
 									<div class="p-4 sm:px-5">
 										<p
 											data-testid="scan-line-{idx}-other-point"
-											class="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm font-semibold text-slate-700"
+											class="flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm font-semibold text-amber-900"
 										>
-											<MapPin class="h-4 w-4 shrink-0 text-slate-500" aria-hidden="true" />
-											ส่งที่ {destinationName(lineState.pointId)} — รับที่จุดนั้น
+											<TriangleAlert class="h-4 w-4 shrink-0 text-amber-600" aria-hidden="true" />
+											ของจุดอื่น · ส่งที่ {destinationName(lineState.pointId)} — รับที่จุดนั้น
+										</p>
+									</div>
+								{:else if lineState?.kind === 'needs_point'}
+									<!-- FR-MP-18a: locked until the recorder's point is chosen. -->
+									<div class="p-4 sm:px-5">
+										<p
+											data-testid="scan-line-{idx}-needs-point"
+											class="flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm font-semibold text-amber-900"
+										>
+											<MapPin class="h-4 w-4 shrink-0 text-amber-600" aria-hidden="true" />
+											เลือกจุดที่ประจำก่อนจึงจะตรวจรับรายการนี้ได้
 										</p>
 									</div>
 								{:else if item.reviewReason !== undefined}
@@ -1556,7 +1627,9 @@
 								{#if byLine}
 									{@render step(
 										scopeLines.length > 0,
-										`เลือกผลรายการที่มาส่งอย่างน้อย 1 รายการ (${verifiedCount}/${decidableCount})`
+										decidableCount === 0 && otherPointCount > 0
+											? 'ไม่มีรายการของจุดนี้ — รับที่จุดอื่น หรือกด "รับรายการของจุดอื่น"'
+											: `เลือกผลรายการที่มาส่งอย่างน้อย 1 รายการ (${verifiedCount}/${decidableCount})`
 									)}
 								{:else}
 									{@render step(

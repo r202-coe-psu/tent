@@ -220,9 +220,82 @@ describe('scan-station point by point (CR-206)', () => {
 		await openBooking();
 
 		expect(document.querySelector('[data-testid="receiving-point"]')).not.toBeNull();
-		expect(line(0).dataset.lineState).toBe('other_point');
-		expect(line(1).dataset.lineState).toBe('other_point');
+		expect(line(0).dataset.lineState).toBe('needs_point');
+		expect(line(1).dataset.lineState).toBe('needs_point');
 		expect(submit().disabled).toBe(true);
+		expect(submit().textContent).toContain('เลือกจุดที่ประจำก่อน');
+	});
+
+	it('locks every row and hides 0 / 0 until a point is chosen (#1059)', async () => {
+		shelterDoc.current = { common_areas: { sub_storage: [dropOffPoint(GYM), dropOffPoint(MED)] } };
+		storagePointList.current = [GYM, MED];
+		stubApi(splitBooking());
+		await openBooking();
+
+		expect(document.querySelector('[data-testid="choose-point-warning"]')).not.toBeNull();
+		expect(document.querySelector('[data-testid="other-point-warning"]')).toBeNull();
+		expect(document.body.textContent).toContain('เลือกจุดที่ประจำก่อนจึงจะตรวจรับได้');
+		expect(document.body.textContent).not.toContain('0 / 0');
+		expect(
+			document.querySelector('[data-testid="scan-line-0-needs-point"]')?.textContent
+		).toContain('เลือกจุดที่ประจำก่อนจึงจะตรวจรับรายการนี้ได้');
+		expect(buttonIn(line(0), 'ผ่านการตรวจสอบแล้ว')).toBeUndefined();
+	});
+
+	it('locks a whole booking too until a point is chosen (Q4)', async () => {
+		shelterDoc.current = { common_areas: { sub_storage: [dropOffPoint(GYM), dropOffPoint(MED)] } };
+		storagePointList.current = [GYM, MED];
+		stubApi(splitBooking({ items: [{ item_id: 'item:water', qty: '24', unit: 'bottle' }] }));
+		await openBooking();
+
+		expect(line(0).dataset.lineState).toBe('needs_point');
+		expect(buttonIn(line(0), 'ผ่านการตรวจสอบแล้ว')).toBeUndefined();
+		expect(submit().disabled).toBe(true);
+	});
+
+	it('warns that a line is another points, and counts it (#1059)', async () => {
+		shelterDoc.current = { common_areas: { sub_storage: [dropOffPoint(GYM), dropOffPoint(MED)] } };
+		storagePointList.current = [GYM, MED];
+		localStorage.setItem('stock-donations:receiving-point:SH001', GYM.id);
+		stubApi(splitBooking());
+		await openBooking();
+
+		const warning = document.querySelector('[data-testid="other-point-warning"]')!;
+		expect(warning.textContent).toContain('1 รายการเป็นของจุดอื่น');
+		expect(warning.querySelector('[data-testid="unlock-other-points"]')).not.toBeNull();
+		expect(document.querySelector('[data-testid="choose-point-warning"]')).toBeNull();
+		const row = document.querySelector('[data-testid="scan-line-1-other-point"]')!;
+		expect(row.className).toContain('border-amber-200');
+		expect(row.textContent).toContain('ของจุดอื่น');
+		expect(line(1).className).toContain('border-amber-200');
+		expect(document.body.textContent).toContain('ตรวจแล้ว 0 / 1 รายการ · อีก 1 รายการอยู่จุดอื่น');
+	});
+
+	it('says so when the chosen point has no line of its own (#1059)', async () => {
+		shelterDoc.current = { common_areas: { sub_storage: [dropOffPoint(GYM), dropOffPoint(MED)] } };
+		storagePointList.current = [GYM, MED];
+		localStorage.setItem('stock-donations:receiving-point:SH001', MED.id);
+		stubApi(
+			splitBooking({
+				items: [
+					{ item_id: 'item:water', qty: '24', unit: 'bottle', drop_off_point_id: GYM.id },
+					{ item_id: 'item:rice', qty: '5', unit: 'bag', drop_off_point_id: GYM.id }
+				]
+			})
+		);
+		await openBooking();
+
+		expect(document.body.textContent).toContain('ตรวจแล้ว 0 / 0 รายการ · อีก 2 รายการอยู่จุดอื่น');
+		expect(submit().disabled).toBe(true);
+		expect(submit().textContent).toContain('ไม่มีรายการของจุดนี้ให้รับ');
+
+		document.querySelector<HTMLButtonElement>('[data-testid="unlock-other-points"]')!.click();
+		await settle();
+		expect(document.querySelector('[data-testid="other-point-warning"]')).toBeNull();
+		expect(document.body.textContent).toContain('รับรายการของจุดอื่นได้แล้ว');
+		expect(document.body.textContent).toContain('ตรวจแล้ว 0 / 2 รายการ');
+		expect(document.body.textContent).not.toContain('อีก 2 รายการอยู่จุดอื่น');
+		expect(document.querySelector('[data-testid="scan-line-0-borrowed"]')).not.toBeNull();
 	});
 
 	it('records only the gyms line and sends point_id + line_nos (AC-5)', async () => {

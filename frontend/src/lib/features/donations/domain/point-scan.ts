@@ -51,12 +51,15 @@ export function scanReceiveMode(
  * - `receivable` — this point may record it. `pointId` is the line's current point (`null`
  *   = any point); `borrowed` = another point's line unlocked by "รับรายการของจุดอื่น" (FR-MP-21).
  * - `other_point` — another point's line, read-only until unlocked (FR-MP-19).
+ * - `needs_point` — the shelter has drop-off points but staff have not chosen theirs yet
+ *   (FR-MP-18a): nothing can be ticked, so we do not yet know which lines are "another point's".
  */
 export type ScanLineState =
 	| { kind: 'recorded'; receiptPointId: string | null }
 	| { kind: 'review_rejected' }
 	| { kind: 'receivable'; pointId: string | null; borrowed: boolean }
-	| { kind: 'other_point'; pointId: string };
+	| { kind: 'other_point'; pointId: string }
+	| { kind: 'needs_point' };
 
 export function scanLineStates(
 	donation: PointScanSource,
@@ -78,6 +81,9 @@ export function scanLineStates(
 			return { kind: 'recorded', receiptPointId: receiptOf.get(lineNo) ?? null };
 		}
 		if (item.review_status === 'rejected') return { kind: 'review_rejected' };
+		if (opts.currentPointIds.size > 0 && opts.chosenPointId === null) {
+			return { kind: 'needs_point' };
+		}
 		const pointId = currentLinePoint(item, opts.currentPointIds);
 		if (pointId === null || pointId === opts.chosenPointId) {
 			return { kind: 'receivable', pointId, borrowed: false };
@@ -94,6 +100,36 @@ export function hasOtherPointLines(states: readonly ScanLineState[]): boolean {
 	return states.some(
 		(state) => state.kind === 'other_point' || (state.kind === 'receivable' && state.borrowed)
 	);
+}
+
+/** Lines of another point still locked here — what the banner and the counter report. */
+export function otherPointLineCount(states: readonly ScanLineState[]): number {
+	return states.filter((state) => state.kind === 'other_point').length;
+}
+
+/** The "ตรวจแล้ว X / Y" counter; never a bare 0 / 0 (#1059). */
+export function scanCounterLabel(opts: {
+	verified: number;
+	decidable: number;
+	otherPointCount: number;
+	needsPoint: boolean;
+}): string {
+	if (opts.needsPoint) return 'เลือกจุดที่ประจำก่อนจึงจะตรวจรับได้';
+	const base = `ตรวจแล้ว ${opts.verified} / ${opts.decidable} รายการ`;
+	return opts.otherPointCount > 0
+		? `${base} · อีก ${opts.otherPointCount} รายการอยู่จุดอื่น`
+		: base;
+}
+
+/** The label of the save button when there is nothing to save yet, else `null`. */
+export function scanIdleSubmitLabel(opts: {
+	needsPoint: boolean;
+	noneToSave: boolean;
+	otherPointCount: number;
+}): string | null {
+	if (opts.needsPoint) return 'เลือกจุดที่ประจำก่อน';
+	if (opts.noneToSave && opts.otherPointCount > 0) return 'ไม่มีรายการของจุดนี้ให้รับ';
+	return null;
 }
 
 /**
