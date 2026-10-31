@@ -550,6 +550,36 @@ export function isStaffOnly(roles: readonly string[]): boolean {
 }
 
 /**
+ * What each staff role does, in Thai, for the info popover next to a role picker (user form,
+ * volunteer access dialog — #1044). One place so both pickers say the same thing.
+ */
+export const STAFF_CAPABILITY_DESCRIPTIONS: Record<StaffCapability, string> = {
+	registration_staff:
+		'บันทึกข้อมูลทะเบียนประวัติผู้อพยพ (Evacuees), ข้อมูลครัวเรือน, ยานพาหนะ, สัตว์เลี้ยง, การเช็คอิน-เช็คเอาต์ประจำวัน และออกบัตรประจำตัว',
+	triage_staff:
+		'คัดกรองกลุ่มเปราะบาง (ผู้สูงอายุ, ผู้พิการ, เด็ก, สตรีมีครรภ์) และคัดแยกผู้ป่วยเบื้องต้นเพื่อส่งต่อไปยังพื้นที่พักพิงที่เหมาะสม',
+	medical_staff:
+		'บันทึกข้อมูลสุขภาพ, ประวัติการรักษาพยาบาลเบื้องต้น, การจ่ายยา และการเฝ้าระวังโรคติดต่อ',
+	kitchen_staff:
+		'วางแผนรายการอาหารประจำวัน (Meal Planning), คำนวณวัตถุดิบและแก๊สหุงต้ม, เบิกจ่ายวัตถุดิบ, และบันทึกยอดการแจกจ่ายอาหาร',
+	supply_coordinator:
+		'รับมอบสิ่งของบริจาค, จัดการคลังพัสดุ, ตัดจ่ายสิ่งของจำเป็น, เบิกถุงยังชีพ, และควบคุมระดับสต็อกขั้นต่ำ',
+	warehouse_staff: 'ดูแลคลังสินค้า รับ-จ่ายวัสดุ และบันทึกสต็อกภายในศูนย์',
+	distribution_staff:
+		'ปฏิบัติงานจุดแจกจ่ายอาหารและสิ่งของ (Station 4) ภายในศูนย์ของตนเอง: รับของจากคลัง, สแกนส่งมอบให้ผู้ประสบภัย, ปิดกะ และส่งคืนของเหลือ',
+	kiosk_staff:
+		'ดูแลตู้ Kiosk ของศูนย์ตัวเอง: เพิ่มเครื่อง, แก้ชื่อและจุดบริการ, เปิด/ปิด/ลบเครื่อง, ตั้งหรือดู PIN เจ้าหน้าที่ของเครื่อง, และจัดการแบนเนอร์ที่แสดงบนตู้',
+	pr_staff:
+		'จัดการข่าวสารบนตู้ Kiosk ของศูนย์ตัวเอง: สร้าง แก้ จัดลำดับ และลบแบนเนอร์และกลุ่มแบนเนอร์, เลือกเครื่องที่แสดง, และดู PIN เจ้าหน้าที่ของเครื่อง (ตั้งค่าเครื่องหรือแก้ PIN ไม่ได้)',
+	facility_staff:
+		'จัดการโซนที่พัก (Zoning), บริหารจัดการเต็นท์และพื้นที่นอน, ดูแลระบบไฟฟ้า น้ำประปา สุขาภิบาล และการซ่อมบำรุงอาคาร',
+	volunteer_coordinator:
+		'สร้างประกาศงานอาสาสมัคร, ดูแลกระดานงาน, จัดสรรกะงาน, ดูแลจุดเช็คอินแท็บเล็ตหน้าศูนย์, และออกสิทธิ์ระบบให้อาสาช่วยงาน',
+	security_officer:
+		'ควบคุมความสงบเรียบร้อย, บันทึกเหตุการณ์ความไม่ปลอดภัย (Incidents), จัดการพื้นที่หวงห้าม, และเฝ้าระวังจุดเข้า-ออกศูนย์'
+};
+
+/**
  * Per-role Thai display labels for the staff capability set. Kept in one
  * place so adding a new capability in `STAFF_CAPABILITIES` surfaces here at
  * the type level (TypeScript will flag a missing entry below). Stored RoleKey

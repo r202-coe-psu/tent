@@ -19,7 +19,9 @@
 		roleDisplayLabel,
 		assignmentsFromRoles,
 		capabilitiesForShelter,
-		compoundCapabilityRole
+		compoundCapabilityRole,
+		STAFF_CAPABILITY_DESCRIPTIONS,
+		type StaffCapability
 	} from '$lib/auth/roles';
 	import { grantExpiryLabel, grantFor } from '$lib/auth/role-grants';
 	import {
@@ -347,67 +349,23 @@
 		'ควบคุมการปฏิบัติงานทั้งหมดภายในศูนย์ของตนเอง มีอำนาจครอบคลุมสิทธิ์ของบทบาทเจ้าหน้าที่ทั้งหมดในศูนย์นั้น รวมถึงงานคัดกรองและการแพทย์';
 
 	/** Compact role picker — PRD descriptions per capability. */
-	const ROLE_OPTIONS = [
-		{
-			id: 'registration_staff',
-			description:
-				'บันทึกข้อมูลทะเบียนประวัติผู้อพยพ (Evacuees), ข้อมูลครัวเรือน, ยานพาหนะ, สัตว์เลี้ยง, การเช็คอิน-เช็คเอาต์ประจำวัน และออกบัตรประจำตัว'
-		},
-		{
-			id: 'triage_staff',
-			description:
-				'คัดกรองกลุ่มเปราะบาง (ผู้สูงอายุ, ผู้พิการ, เด็ก, สตรีมีครรภ์) และคัดแยกผู้ป่วยเบื้องต้นเพื่อส่งต่อไปยังพื้นที่พักพิงที่เหมาะสม'
-		},
-		{
-			id: 'medical_staff',
-			description:
-				'บันทึกข้อมูลสุขภาพ, ประวัติการรักษาพยาบาลเบื้องต้น, การจ่ายยา และการเฝ้าระวังโรคติดต่อ'
-		},
-		{
-			id: 'kitchen_staff',
-			description:
-				'วางแผนรายการอาหารประจำวัน (Meal Planning), คำนวณวัตถุดิบและแก๊สหุงต้ม, เบิกจ่ายวัตถุดิบ, และบันทึกยอดการแจกจ่ายอาหาร'
-		},
-		{
-			id: 'supply_coordinator',
-			description:
-				'รับมอบสิ่งของบริจาค, จัดการคลังพัสดุ, ตัดจ่ายสิ่งของจำเป็น, เบิกถุงยังชีพ, และควบคุมระดับสต็อกขั้นต่ำ'
-		},
-		{
-			id: 'warehouse_staff',
-			description: 'ดูแลคลังสินค้า รับ-จ่ายวัสดุ และบันทึกสต็อกภายในศูนย์'
-		},
-		{
-			id: 'distribution_staff',
-			description:
-				'ปฏิบัติงานจุดแจกจ่ายอาหารและสิ่งของ (Station 4) ภายในศูนย์ของตนเอง: รับของจากคลัง, สแกนส่งมอบให้ผู้ประสบภัย, ปิดกะ และส่งคืนของเหลือ'
-		},
-		{
-			id: 'kiosk_staff',
-			description:
-				'ดูแลตู้ Kiosk ของศูนย์ตัวเอง: เพิ่มเครื่อง, แก้ชื่อและจุดบริการ, เปิด/ปิด/ลบเครื่อง, ตั้งหรือดู PIN เจ้าหน้าที่ของเครื่อง, และจัดการแบนเนอร์ที่แสดงบนตู้'
-		},
-		{
-			id: 'pr_staff',
-			description:
-				'จัดการข่าวสารบนตู้ Kiosk ของศูนย์ตัวเอง: สร้าง แก้ จัดลำดับ และลบแบนเนอร์และกลุ่มแบนเนอร์, เลือกเครื่องที่แสดง, และดู PIN เจ้าหน้าที่ของเครื่อง (ตั้งค่าเครื่องหรือแก้ PIN ไม่ได้)'
-		},
-		{
-			id: 'facility_staff',
-			description:
-				'จัดการโซนที่พัก (Zoning), บริหารจัดการเต็นท์และพื้นที่นอน, ดูแลระบบไฟฟ้า น้ำประปา สุขาภิบาล และการซ่อมบำรุงอาคาร'
-		},
-		{
-			id: 'volunteer_coordinator',
-			description:
-				'สร้างประกาศงานอาสาสมัคร, ดูแลกระดานงาน, จัดสรรกะงาน, ดูแลจุดเช็คอินแท็บเล็ตหน้าศูนย์, และออกสิทธิ์ระบบให้อาสาช่วยงาน'
-		},
-		{
-			id: 'security_officer',
-			description:
-				'ควบคุมความสงบเรียบร้อย, บันทึกเหตุการณ์ความไม่ปลอดภัย (Incidents), จัดการพื้นที่หวงห้าม, และเฝ้าระวังจุดเข้า-ออกศูนย์'
-		}
-	] as const;
+	/** Picker order; the descriptions live in `STAFF_CAPABILITY_DESCRIPTIONS` (shared with the volunteer access dialog). */
+	const ROLE_OPTIONS = (
+		[
+			'registration_staff',
+			'triage_staff',
+			'medical_staff',
+			'kitchen_staff',
+			'supply_coordinator',
+			'warehouse_staff',
+			'distribution_staff',
+			'kiosk_staff',
+			'pr_staff',
+			'facility_staff',
+			'volunteer_coordinator',
+			'security_officer'
+		] as const satisfies readonly StaffCapability[]
+	).map((id) => ({ id, description: STAFF_CAPABILITY_DESCRIPTIONS[id] }));
 
 	function toggleRole(roleId: string, checked: boolean) {
 		const cap = roleId as SaGrantableCapability;

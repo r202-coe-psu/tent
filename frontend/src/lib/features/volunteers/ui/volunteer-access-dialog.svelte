@@ -9,15 +9,18 @@
 	import RefreshCw from '@lucide/svelte/icons/refresh-cw';
 	import Save from '@lucide/svelte/icons/save';
 	import UserMinus from '@lucide/svelte/icons/user-minus';
+	import Info from '@lucide/svelte/icons/info';
 	import * as Dialog from '$lib/components/ui/dialog/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Badge } from '$lib/components/ui/badge/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import * as RadioGroup from '$lib/components/ui/radio-group/index.js';
 	import { Label } from '$lib/components/ui/label/index.js';
+	import * as Popover from '$lib/components/ui/popover/index.js';
 	import {
 		COORDINATOR_GRANTABLE_CAPABILITIES,
 		STAFF_CAPABILITIES,
+		STAFF_CAPABILITY_DESCRIPTIONS,
 		isShelterManager,
 		isSystemAdmin,
 		roleOptionLabel,
@@ -292,16 +295,33 @@
 					class="grid grid-cols-1 gap-2 sm:grid-cols-2"
 				>
 					{#each roleChoices as capability (capability)}
-						<Label
-							for={`volunteer-access-role-${volunteer._id}-${capability}`}
-							class="flex min-h-11 cursor-pointer items-center gap-2.5 rounded-xl border border-border bg-background px-3 py-2 text-sm font-medium text-foreground"
+						<div
+							class="flex min-h-11 items-center gap-1 rounded-xl border border-border bg-background pr-1"
 						>
-							<RadioGroup.Item
-								id={`volunteer-access-role-${volunteer._id}-${capability}`}
-								value={capability}
-							/>
-							<span>{roleOptionLabel(capability)}</span>
-						</Label>
+							<Label
+								for={`volunteer-access-role-${volunteer._id}-${capability}`}
+								class="flex min-h-11 min-w-0 flex-1 cursor-pointer items-center gap-2.5 px-3 py-2 text-sm font-medium text-foreground"
+							>
+								<RadioGroup.Item
+									id={`volunteer-access-role-${volunteer._id}-${capability}`}
+									value={capability}
+								/>
+								<span>{roleOptionLabel(capability)}</span>
+							</Label>
+							<!-- Same wording as the users page role picker (STAFF_CAPABILITY_DESCRIPTIONS). -->
+							<Popover.Root>
+								<Popover.Trigger
+									type="button"
+									class="inline-flex size-9 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+									aria-label={`รายละเอียด${roleOptionLabel(capability)}`}
+								>
+									<Info class="size-4" />
+								</Popover.Trigger>
+								<Popover.Content class="max-w-[280px] p-3 text-sm" align="end" side="top">
+									{STAFF_CAPABILITY_DESCRIPTIONS[capability]}
+								</Popover.Content>
+							</Popover.Root>
+						</div>
 					{/each}
 				</RadioGroup.Root>
 				{#if roleError}

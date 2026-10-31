@@ -239,6 +239,15 @@ describe('VolunteerAccessDialog role radios (#1044, #1072)', () => {
 		]);
 	});
 
+	it('has an info button per role, named after it, like the users page', async () => {
+		await render(COORDINATOR);
+		const infos = [...document.body.querySelectorAll('button')].filter((b) =>
+			b.getAttribute('aria-label')?.startsWith('รายละเอียด')
+		);
+		expect(infos).toHaveLength(10);
+		expect(infos.map((b) => b.getAttribute('aria-label'))).toContain('รายละเอียดเจ้าหน้าที่คลัง');
+	});
+
 	it('offers a manager every staff role', async () => {
 		await render(MANAGER);
 		expect(roleRadios()).toHaveLength(12);
