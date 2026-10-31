@@ -7,6 +7,7 @@ import {
 	DEFAULT_SLOT_WINDOWS,
 	slotAvailabilityFor,
 	slotModeForDelivery,
+	withCampaignLinePoints,
 	rejectDonationPhotoDocs,
 	rejectDonationPhotoIds,
 	type DonationPhotoErrorCode
@@ -121,6 +122,7 @@ export const POST = async ({ request, getClientAddress }) => {
 			return json({ success: false, error: 'NEED_FULL', item_id: pick.itemId }, { status: 409 });
 		}
 		const resolvedCampaignId = pick.campaignId;
+		const pickedCampaign = campaigns.find((c) => c._id === resolvedCampaignId) ?? null;
 
 		// 3.6 Re-check the chosen window: full or closed → SLOT_FULL.
 		// Not atomic on its own — two submits can both read the last place free before
@@ -199,15 +201,13 @@ export const POST = async ({ request, getClientAddress }) => {
 			}
 		}
 
-		// 3.7 Drop-off point per line (CR-206): only a donor who brings the goods picks one. A
-		// parcel or a shelter pickup reaches the shelter whole, so its lines carry no point
-		// whatever the client sent (FR-MP-4). FastAPI checks the rest against the shelter's
-		// points and answers 400 UNKNOWN_DROP_OFF_POINT before any quota moves (FR-MP-2, FR-MP-3).
-		const picksPoints = parsed.data.logistics.delivery_method === 'self_dropoff';
-		const items = parsed.data.items.map((item) => ({
-			...item,
-			drop_off_point_id: picksPoints ? (item.drop_off_point_id ?? null) : null
-		}));
+		// 3.7 Drop-off point per line, set by staff (FR-AP-8): a campaign line takes its need's
+		// point from the campaign picked above. Not checked against the registry (D-10).
+		const items = withCampaignLinePoints(
+			parsed.data.items,
+			pickedCampaign,
+			parsed.data.logistics.delivery_method
+		);
 
 		// 4. Persist via FastAPI → MongoDB donations buffer (inbound worker → CouchDB)
 		const apiRes = await fetch(`${fastapiBaseUrl()}/public/v1/donations`, {
@@ -236,6 +236,7 @@ export const POST = async ({ request, getClientAddress }) => {
 			tracking_token: string;
 			booking_ref: string;
 			status?: string;
+			items?: { drop_off_point_id: string | null; review_status: string }[];
 		};
 
 		return json({
@@ -244,6 +245,8 @@ export const POST = async ({ request, getClientAddress }) => {
 			bookingRef: created.booking_ref,
 			// CR-174 FR-15 — `verifying` when every line is a campaign line: the ticket shows the QR.
 			status: created.status ?? 'pending_review',
+			// FR-AP-8a — each line's point and review, for the ticket to group by.
+			items: created.items ?? [],
 			as_of: new Date().toISOString()
 		});
 	} catch (e) {
