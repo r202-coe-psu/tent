@@ -452,14 +452,15 @@ test.describe('Volunteer access: coordinator limits (#955)', { tag: TAGS }, () =
 			.getByLabel(/รหัสผ่านสำหรับบัญชีใหม่/)
 			.fill(PASSWORD);
 		await page.getByRole('dialog').getByRole('button', { name: 'บันทึกและออกสิทธิ์ใหม่' }).click();
-		// No role is preselected (#1072), so the role is asked for first.
-		await expect(page.getByText('กรุณาเลือกตำแหน่งหน้าที่')).toBeVisible();
+		// No role is preselected (#1072), so the role is asked for first. Refusals also toast, so the
+		// note is looked up inside the dialog.
+		await expect(page.getByRole('dialog').getByText('กรุณาเลือกตำแหน่งหน้าที่')).toBeVisible();
 		await page
 			.getByRole('dialog')
 			.getByRole('radio', { name: 'เจ้าหน้าที่ลงทะเบียน', exact: true })
 			.check();
 		await page.getByRole('dialog').getByRole('button', { name: 'บันทึกและออกสิทธิ์ใหม่' }).click();
-		await expect(page.getByText('กรุณาเลือกวันหมดอายุ')).toBeVisible();
+		await expect(page.getByRole('dialog').getByText('กรุณาเลือกวันหมดอายุ')).toBeVisible();
 		expect(
 			await getDocument('_users', `org.couchdb.user:${grantEmail}`),
 			'nothing created'
