@@ -1046,6 +1046,84 @@ test.describe('Volunteer end-to-end operational flow', () => {
 		});
 	});
 
+	test('the applicants filters start fresh when moving to another job in the app (#1013)', async ({
+		page
+	}) => {
+		const jobA = { ...SECOND_JOB, _id: `job:e2eflow${RUN_ID}keyA`, title: `งาน E2E A ${RUN_ID}` };
+		const jobB = { ...SECOND_JOB, _id: `job:e2eflow${RUN_ID}keyB`, title: `งาน E2E B ${RUN_ID}` };
+		// The filter bar shows once a job has applicants, so each job gets one pending application.
+		const phoneHash = await sha256Hex(APPLICANT_PHONE);
+		const applicationFor = (job: typeof jobA) => ({
+			_id: `job_application:${job._id.slice('job:'.length)}app`,
+			type: 'job_application',
+			schema_v: 3,
+			shelter_code: 'SH001',
+			created_at: '2026-09-02T00:00:00.000Z',
+			updated_at: '2026-09-02T00:00:00.000Z',
+			created_by: 'public',
+			job_id: job._id,
+			shift_id: 'reg-1',
+			volunteer_id: null,
+			applicant: {
+				first_name: 'เก่งกล้า',
+				last_name: 'อาสา',
+				phone: APPLICANT_PHONE,
+				phone_hash: phoneHash,
+				email: null,
+				skills: []
+			},
+			selected_shift: { shift_id: 'reg-1', date: TOMORROW, start_time: '09:00', end_time: '12:00' },
+			tracking_token: mintToken(),
+			status: 'pending_review',
+			review_notes: null,
+			reviewed_at: null,
+			reviewed_by: null,
+			review_reasons: ['job_fit']
+		});
+		const world = new World([jobA, jobB, applicationFor(jobA), applicationFor(jobB)]);
+		await mockCouch(page, world);
+		await mockPublicApi(page, world);
+		await injectSession(page, ADMIN, adminSession);
+
+		const jobUrl = (job: typeof jobA) =>
+			`${BASE}/back-office/volunteers/jobs/${encodeURIComponent(job._id)}`;
+		// A client-side navigation (SvelteKit handles the link click), so the page component stays
+		// mounted; page.goto would reload and hide the bug {#key job._id} fixes.
+		const followLink = async (href: string) => {
+			await page.evaluate((target) => {
+				document.getElementById('e2e-next-job')?.remove();
+				const link = document.createElement('a');
+				link.href = target;
+				link.id = 'e2e-next-job';
+				link.textContent = 'next job';
+				link.style.cssText = 'position:fixed;top:0;left:0;z-index:2147483647;background:#fff';
+				document.body.append(link);
+			}, href);
+			await page.locator('#e2e-next-job').click();
+		};
+		const search = page.getByPlaceholder('ค้นหาชื่อ นามสกุล เบอร์โทร, รหัส V-xxx');
+		const openApplicants = async () => {
+			const tab = page.getByRole('tab', { name: /ผู้สมัคร/ });
+			if ((await tab.getAttribute('aria-selected')) !== 'true') await tab.click();
+			await expect(search).toBeVisible();
+		};
+
+		// Job B is visited first so it is already cached when we come back to it: the job query
+		// then never goes pending and nothing else unmounts the applicants tab.
+		await page.goto(jobUrl(jobB));
+		await openApplicants();
+		await followLink(jobUrl(jobA));
+		await expect(page.getByRole('heading', { name: jobA.title })).toBeVisible();
+		await openApplicants();
+		await search.fill('v013');
+		await expect(search).toHaveValue('v013');
+
+		await followLink(jobUrl(jobB));
+		await expect(page.getByRole('heading', { name: jobB.title })).toBeVisible();
+		await openApplicants();
+		await expect(search).toHaveValue('');
+	});
+
 	test('one applicant with several pending shifts is one card, approved together (#716)', async ({
 		page
 	}) => {

@@ -184,12 +184,21 @@ describe('filterApplicantBoard', () => {
 		expect(run({ search: 'nobody' })).toEqual({ pending: [], history: [] });
 	});
 
-	it('finds a volunteer code typed without the dash or in another case (#1013)', () => {
-		for (const search of ['v006', 'V006', 'v-006', 'V 006']) {
+	it.each(['v006', 'V006', 'v-006', 'V 006'])(
+		'finds V-006 when searched as %s (#1013)',
+		(search) => {
 			expect(run({ search }).history).toEqual([asg(6)]);
 		}
+	);
+
+	it('finds a pending application by a code typed without the dash (#1013)', () => {
 		expect(run({ search: 'v001' }).pending).toEqual([app(1)]);
-		// A lone dash compacts to nothing; it must not match every code.
+	});
+
+	it('does not match every code on a lone dash (#1013)', () => {
+		// A lone dash compacts to nothing, so the code path never matches; names and phones in
+		// this fixture have no dash either, so nothing matches. A name or phone that contains a
+		// dash would still match on its own path.
 		expect(run({ search: '-' })).toEqual({ pending: [], history: [] });
 	});
 

@@ -33,3 +33,8 @@ export function nextVolunteerCode(existingCodes: readonly string[]): string {
 	}, 0);
 	return formatVolunteerCode(max + 1);
 }
+
+/** Lowercase, no dashes or spaces, for search: "V-013", "v013" and "V 013" compare equal (#1013). */
+export function compactVolunteerCode(value: string): string {
+	return value.toLowerCase().replace(/[\s-]/g, '');
+}
