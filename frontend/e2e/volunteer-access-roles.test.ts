@@ -94,13 +94,23 @@ const ROLE_ACCESS: RoleAccess[] = [
 	{
 		role: 'supply_coordinator',
 		portalDepartments: ['supply'],
-		allowed: ['/back-office/supply', '/back-office/stock-donations', '/back-office/distribution'],
+		allowed: [
+			'/back-office/supply',
+			'/back-office/stock-donations',
+			'/back-office/distribution',
+			'/back-office/tickets/kitchen'
+		],
 		forbidden: ['/back-office/kitchen']
 	},
 	{
 		role: 'warehouse_staff',
 		portalDepartments: ['supply'],
-		allowed: ['/back-office/supply'],
+		allowed: [
+			'/back-office/supply',
+			'/back-office/stock-donations',
+			'/back-office/distribution',
+			'/back-office/tickets/kitchen'
+		],
 		forbidden: ['/back-office/kitchen']
 	},
 	{
@@ -182,6 +192,51 @@ async function portalDepartments(page: Page): Promise<string[]> {
 }
 
 const pathOf = (page: Page) => new URL(page.url()).pathname;
+
+/** Back-office pages with no role guard yet (#845): every role sees them, so they prove nothing. */
+const UNGUARDED_PAGES = [
+	'/back-office/shelters/readiness',
+	'/back-office/dailysop',
+	'/back-office/sop-parameters'
+];
+
+/**
+ * The back-office paths the sidebar offers this role (#1037), groups opened one by one in case
+ * they behave as an accordion. Opened on the role's first back-office page, else on an unguarded
+ * one, so roles with no back-office page of their own are checked too.
+ */
+async function sidebarPaths(page: Page, row: RoleAccess): Promise<string[]> {
+	await page.goto(
+		row.allowed.find((url) => url.startsWith('/back-office/')) ?? '/back-office/dailysop'
+	);
+	const sidebar = page.getByTestId('backoffice-sidebar');
+	await expect(sidebar).toBeVisible();
+	// The sidebar starts as a collapsed rail, which renders no group children; open it first.
+	const expand = sidebar.getByRole('button', { name: 'ขยายแถบเมนู' });
+	if (await expand.isVisible()) await expand.click();
+	await expect(sidebar.getByRole('button', { name: 'ย่อแถบเมนู' })).toBeVisible();
+	const seen = new Set<string>();
+	const opened = new Set<string>();
+	const collect = async () => {
+		const hrefs = await sidebar
+			.locator('a[href^="/back-office/"]')
+			.evaluateAll((els) => els.map((el) => el.getAttribute('href') ?? ''));
+		for (const href of hrefs) seen.add(new URL(href, 'http://localhost').pathname);
+	};
+	await collect();
+	for (let round = 0; round < 20; round++) {
+		const closed = sidebar.locator('button[aria-expanded="false"]');
+		const titles = await closed.evaluateAll((els) =>
+			els.map((el) => el.getAttribute('title') ?? '')
+		);
+		const next = titles.find((title) => title !== '' && !opened.has(title));
+		if (next === undefined) break;
+		opened.add(next);
+		await sidebar.locator(`button[aria-expanded="false"][title="${next}"]`).click();
+		await collect();
+	}
+	return [...seen].filter((path) => !UNGUARDED_PAGES.includes(path)).sort();
+}
 
 async function expectLoads(page: Page, url: string): Promise<void> {
 	await page.goto(url);
@@ -318,6 +373,10 @@ test.describe('Volunteer access: every staff role', { tag: TAGS }, () => {
 				.toEqual(expected ? [] : row.portalDepartments);
 			for (const url of row.allowed) await expectLoads(page, url);
 			for (const url of row.forbidden) await expectBouncedToPortal(page, url);
+			// #1037: the sidebar offers exactly the back-office pages the guards let this role open.
+			expect(await sidebarPaths(page, row), 'sidebar menus').toEqual(
+				row.allowed.filter((url) => url.startsWith('/back-office/')).sort()
+			);
 			await page.context().close();
 		});
 	}
