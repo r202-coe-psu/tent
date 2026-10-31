@@ -20,7 +20,9 @@ import {
 export type ItemReviewStatus = NonNullable<DonationItem['review_status']>;
 
 /** True once FastAPI (or staff) has stamped the lines — schema_v 7 and later. */
-export function hasLineReview(items: readonly DonationItem[] | undefined): boolean {
+export function hasLineReview(
+	items: readonly Pick<DonationItem, 'review_status'>[] | undefined
+): boolean {
 	return (items ?? []).some((item) => item.review_status !== undefined);
 }
 
