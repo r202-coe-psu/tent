@@ -79,12 +79,14 @@
 		display: none;
 	}
 
+	/* `body:where(:has(...))` keeps these global rules inert on pages without this print area
+	   (:where adds no specificity); otherwise they hide other print pages (#1057). */
 	/* Label size comes from domain/print-label.ts (CSS vars + generated @page in <svelte:head>). */
 	@media print {
-		:global(body) {
+		:global(body:where(:has(.kiosk-print-area))) {
 			margin: 0 !important;
 		}
-		:global(body > :not(.kiosk-print-area)) {
+		:global(body:where(:has(.kiosk-print-area)) > :not(.kiosk-print-area)) {
 			display: none !important;
 		}
 		.kiosk-print-area {

@@ -225,13 +225,13 @@
 		isolation gap; the `!important` below is only belt-and-braces.
 	*/
 	@media print {
-		:global(*),
-		:global(*::before),
-		:global(*::after) {
+		:global(body:where(:has(#booking-ticket-print)) *),
+		:global(body:where(:has(#booking-ticket-print)) *::before),
+		:global(body:where(:has(#booking-ticket-print)) *::after) {
 			transition: none !important;
 			animation: none !important;
 		}
-		:global(body *) {
+		:global(body:where(:has(#booking-ticket-print)) *) {
 			visibility: hidden !important;
 		}
 		#booking-ticket-print,
@@ -246,7 +246,7 @@
 			height entirely; the dialog's own chrome is `position: fixed`, so what is
 			left contributes nothing to the flow and the QR fits one page.
 		*/
-		:global(body > *:not(:has(#booking-ticket-print))) {
+		:global(body:where(:has(#booking-ticket-print)) > *:not(:has(#booking-ticket-print))) {
 			display: none !important;
 		}
 		#booking-ticket-print {

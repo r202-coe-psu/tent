@@ -91,7 +91,7 @@
 
 <style>
 	@media print {
-		:global(body *) {
+		:global(body:where(:has(.pool-qr-label)) *) {
 			visibility: hidden;
 		}
 		:global(.pool-qr-label),
