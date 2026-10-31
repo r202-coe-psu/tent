@@ -13,18 +13,15 @@
 	 *     already `checked_in`/`completed` (e.g. seeded/legacy data checked in
 	 *     before verification existed), so `blockedByIdentity` below only ever
 	 *     applies to the not-yet-on-shift statuses.
-	 *   - `assigned`/`standby` (verified) → 1-click "เช็คอินเข้างาน" (`useCheckIn`,
-	 *     default `method: 'qr'`) + "เช็คอินแทน" opens
-	 *     `roster-manual-checkin-dialog.svelte` (`method: 'manual_override'`,
-	 *     requires a reason — FR-VOL-11.2).
-	 *   - `checked_in` → 1-click "เช็คเอาต์ออกงาน" (`useCheckOut`) + "เช็คเอาต์แทน"
-	 *     (same dialog, `check_out` mode, `method: 'manual_override'`, requires a
-	 *     reason — CR-108) — available regardless of identity verification, per
-	 *     the point above.
+	 *   - `assigned`/`standby` (verified) → "เช็คอินเข้างาน" opens
+	 *     `applicant-check-in-dialog.svelte` (#1089): scan the volunteer's QR
+	 *     (`method: 'qr'`) or check in without a scan with a reason
+	 *     (`manual_override` — FR-VOL-11.2). Nothing is saved on the click itself.
+	 *   - `checked_in` → "เช็คเอาต์ออกงาน" opens the same dialog in `check_out` mode
+	 *     (scan, or a reason — CR-108) — available regardless of identity
+	 *     verification, per the point above.
 	 *   - `completed`/`no_show`/`cancelled` → final-state badge only.
 	 */
-	import { useQueryClient } from '@tanstack/svelte-query';
-	import { toast } from 'svelte-sonner';
 	import History from '@lucide/svelte/icons/history';
 	import LogIn from '@lucide/svelte/icons/log-in';
 	import LogOut from '@lucide/svelte/icons/log-out';
@@ -33,8 +30,8 @@
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Badge } from '$lib/components/ui/badge/index.js';
 	import * as Tooltip from '$lib/components/ui/tooltip/index.js';
-	import RosterManualCheckinDialog from './roster-manual-checkin-dialog.svelte';
-	import { useCheckIn, useCheckOut, useSkillOptions } from '../application/queries';
+	import ApplicantCheckInDialog from './applicant-check-in-dialog.svelte';
+	import { useSkillOptions } from '../application/queries';
 	import { resolveSkillOption, type SkillOption } from '../domain/skill-catalog';
 	import { describeCheckEvent } from '../domain/check-event-source';
 	import type { Volunteer } from '../domain/volunteer.schema';
@@ -112,34 +109,14 @@
 		return Array.from(map.values());
 	});
 
-	const queryClient = useQueryClient();
-	const checkInMutation = useCheckIn(queryClient);
-	const checkOutMutation = useCheckOut(queryClient);
-
-	async function checkInNow() {
-		try {
-			await checkInMutation.mutateAsync({ id: assignment._id });
-			toast.success(`เช็คอินเข้างาน ${fullName} แล้ว`);
-		} catch (err) {
-			toast.error(err instanceof Error ? err.message : 'เช็คอินไม่สำเร็จ');
-		}
+	// Check-in / check-out confirm in the applicants tab's scan dialog (#1089).
+	let attendanceDialogOpen = $state(false);
+	let attendanceMode = $state<'check_in' | 'check_out'>('check_in');
+	function openAttendance(mode: 'check_in' | 'check_out') {
+		attendanceMode = mode;
+		attendanceDialogOpen = true;
 	}
-
-	async function checkOutNow() {
-		try {
-			await checkOutMutation.mutateAsync({ id: assignment._id });
-			toast.success(`เช็คเอาต์ออกงาน ${fullName} แล้ว`);
-		} catch (err) {
-			toast.error(err instanceof Error ? err.message : 'เช็คเอาต์ไม่สำเร็จ');
-		}
-	}
-
-	let manualDialogOpen = $state(false);
-	let manualMode = $state<'check_in' | 'check_out'>('check_in');
-	function openManual(mode: 'check_in' | 'check_out') {
-		manualMode = mode;
-		manualDialogOpen = true;
-	}
+	const shiftLabel = $derived(`${assignment.date} · ${dutyWindowLabel}`);
 </script>
 
 <div
@@ -285,8 +262,7 @@
 				<Button
 					size="sm"
 					class="flex-1 gap-1.5 bg-amber-500 text-white hover:bg-amber-600"
-					disabled={checkOutMutation.isPending}
-					onclick={checkOutNow}
+					onclick={() => openAttendance('check_out')}
 				>
 					<LogOut class="h-3.5 w-3.5" />
 					เช็คเอาต์ออกงาน
@@ -295,8 +271,7 @@
 				<Button
 					size="sm"
 					class="flex-1 gap-1.5 bg-emerald-600 text-white hover:bg-emerald-700"
-					disabled={checkInMutation.isPending}
-					onclick={checkInNow}
+					onclick={() => openAttendance('check_in')}
 				>
 					<LogIn class="h-3.5 w-3.5" />
 					เช็คอินเข้างาน
@@ -307,23 +282,14 @@
 				</Badge>
 			{/if}
 		</div>
-
-		{#if !blockedByIdentity && (assignment.status === 'checked_in' || assignment.status === 'assigned' || assignment.status === 'standby')}
-			<Button
-				size="sm"
-				variant="outline"
-				class="gap-1.5 border-violet-300 text-violet-700 hover:bg-violet-50"
-				onclick={() => openManual(assignment.status === 'checked_in' ? 'check_out' : 'check_in')}
-			>
-				{assignment.status === 'checked_in' ? 'เช็คเอาต์แทน' : 'เช็คอินแทน'}
-			</Button>
-		{/if}
 	</div>
 </div>
 
-<RosterManualCheckinDialog
-	bind:open={manualDialogOpen}
-	mode={manualMode}
-	assignmentId={assignment._id}
-	volunteerName={fullName}
+<ApplicantCheckInDialog
+	bind:open={attendanceDialogOpen}
+	mode={attendanceMode}
+	{assignment}
+	{volunteer}
+	personName={fullName}
+	{shiftLabel}
 />

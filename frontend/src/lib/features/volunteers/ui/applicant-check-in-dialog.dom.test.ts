@@ -26,10 +26,12 @@ vi.mock('html5-qrcode', () => ({
 }));
 
 const mutateAsync = vi.fn();
+const checkOutAsync = vi.fn();
 const lookup = vi.fn();
 vi.mock('@tanstack/svelte-query', () => ({ useQueryClient: () => ({}) }));
 vi.mock('../application/queries', () => ({
 	useCheckIn: () => ({ mutateAsync, isPending: false }),
+	useCheckOut: () => ({ mutateAsync: checkOutAsync, isPending: false }),
 	lookupVolunteerByScanCode: (raw: string) => lookup(raw)
 }));
 vi.mock('svelte-sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
@@ -51,12 +53,16 @@ async function settle() {
 	flushSync();
 }
 
-async function render() {
+async function render(mode: 'check_in' | 'check_out' = 'check_in') {
 	instance = mount(ApplicantCheckInDialog, {
 		target: document.body,
 		props: {
 			open: true,
-			assignment,
+			mode,
+			assignment:
+				mode === 'check_out'
+					? { ...assignment, status: 'checked_in', check_in_at: '2026-09-05T01:00:00.000Z' }
+					: assignment,
 			volunteer,
 			personName: 'สมชาย ใจดี',
 			shiftLabel: '2026-09-05 · 08:00 - 16:00 น.'
@@ -87,6 +93,7 @@ beforeEach(() => {
 	vi.clearAllMocks();
 	camera.decode = null;
 	mutateAsync.mockResolvedValue(assignment);
+	checkOutAsync.mockResolvedValue(assignment);
 });
 afterEach(async () => {
 	if (instance) unmount(instance);
@@ -201,6 +208,59 @@ describe('ApplicantCheckInDialog', () => {
 
 			expect(mutateAsync).not.toHaveBeenCalled();
 			expect(document.body.querySelector('[role="alert"]')).not.toBeNull();
+		});
+	});
+});
+
+describe('ApplicantCheckInDialog in check_out mode (#1089)', () => {
+	const button = (text: string) =>
+		[...document.body.querySelectorAll('button')].find(
+			(b) => b.textContent?.trim() === text
+		) as HTMLButtonElement;
+
+	it('reads as a check-out and shows when they checked in', async () => {
+		await render('check_out');
+		const text = document.body.textContent ?? '';
+		expect(text).toContain('เช็คเอาต์ออกงาน');
+		expect(text).toContain('เช็คอินเมื่อ');
+		expect(text).toContain('เหตุผลที่เช็คเอาต์โดยไม่สแกน');
+	});
+
+	it('checks out with method qr when the QR is this volunteer, never checking in', async () => {
+		lookup.mockResolvedValue(volunteer);
+		await render('check_out');
+		await scan('TKT-VOL-ABC');
+
+		expect(checkOutAsync).toHaveBeenCalledExactlyOnceWith({
+			id: 'shift_assignment:1',
+			method: 'qr',
+			reason: undefined
+		});
+		expect(mutateAsync).not.toHaveBeenCalled();
+		expect(toast.success).toHaveBeenCalledWith('เช็คเอาต์ออกงาน สมชาย ใจดี แล้ว');
+	});
+
+	it('refuses a QR of another volunteer', async () => {
+		lookup.mockResolvedValue({ ...volunteer, _id: 'volunteer:002', volunteer_code: 'V-002' });
+		await render('check_out');
+		await scan('V-002');
+
+		expect(checkOutAsync).not.toHaveBeenCalled();
+		expect(document.body.querySelector('[role="alert"]')?.textContent).toContain('V-002');
+	});
+
+	it('checks out without a scan only with a reason, as manual_override', async () => {
+		await render('check_out');
+		expect(button('ยืนยันเช็คเอาต์').disabled).toBe(true);
+
+		await typeReason(' กลับก่อนเวลา ');
+		button('ยืนยันเช็คเอาต์').click();
+		await settle();
+
+		expect(checkOutAsync).toHaveBeenCalledExactlyOnceWith({
+			id: 'shift_assignment:1',
+			method: 'manual_override',
+			reason: 'กลับก่อนเวลา'
 		});
 	});
 });
