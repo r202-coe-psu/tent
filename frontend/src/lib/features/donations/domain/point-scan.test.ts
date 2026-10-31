@@ -6,8 +6,11 @@ import {
 	hasOtherPointLines,
 	linePointLabel,
 	namesDropOffPoints,
+	otherPointLineCount,
 	pointReceiptFields,
 	recordedAtLabel,
+	scanCounterLabel,
+	scanIdleSubmitLabel,
 	scanLineStates,
 	scanReceiveMode,
 	type PointScanSource
@@ -60,12 +63,70 @@ describe('scanLineStates (FR-MP-19, FR-MP-21)', () => {
 		]);
 	});
 
-	it('locks every pointed line until a point is chosen (FR-MP-18a)', () => {
+	it('locks every unrecorded line, any-point ones too, until a point is chosen (FR-MP-18a)', () => {
 		expect(states(split, null, true).map((s) => s.kind)).toEqual([
-			'other_point',
-			'other_point',
+			'needs_point',
+			'needs_point',
+			'needs_point'
+		]);
+	});
+
+	it('does not lock when the shelter has no point left, and keeps recorded / refused lines', () => {
+		expect(states(split, null, false, none).map((s) => s.kind)).toEqual([
+			'receivable',
+			'receivable',
 			'receivable'
 		]);
+		const mixed = {
+			items: [
+				{ drop_off_point_id: GYM },
+				{ drop_off_point_id: GYM, review_status: 'rejected' as const },
+				{ drop_off_point_id: MED }
+			],
+			point_receipts: [{ point_id: MED, line_nos: [2] }]
+		};
+		expect(states(mixed, null).map((s) => s.kind)).toEqual([
+			'needs_point',
+			'review_rejected',
+			'recorded'
+		]);
+	});
+
+	it('counts only still-locked other-point lines', () => {
+		expect(otherPointLineCount(states(split, GYM))).toBe(1);
+		expect(otherPointLineCount(states(split, GYM, true))).toBe(0);
+		expect(otherPointLineCount(states(split, null))).toBe(0);
+		const started = { ...split, point_receipts: [{ point_id: MED, line_nos: [1] }] };
+		expect(otherPointLineCount(states(started, GYM))).toBe(0);
+	});
+
+	it('words the counter with the other-point count, never a bare 0 / 0 (#1059)', () => {
+		const base = { verified: 0, decidable: 0, otherPointCount: 0, needsPoint: false };
+		expect(scanCounterLabel({ ...base, otherPointCount: 3 })).toBe(
+			'ตรวจแล้ว 0 / 0 รายการ · อีก 3 รายการอยู่จุดอื่น'
+		);
+		expect(
+			scanCounterLabel({ verified: 1, decidable: 2, otherPointCount: 1, needsPoint: false })
+		).toBe('ตรวจแล้ว 1 / 2 รายการ · อีก 1 รายการอยู่จุดอื่น');
+		expect(scanCounterLabel({ ...base, verified: 1, decidable: 2 })).toBe('ตรวจแล้ว 1 / 2 รายการ');
+		const needs = scanCounterLabel({ ...base, needsPoint: true, otherPointCount: 2 });
+		expect(needs).toBe('เลือกจุดที่ประจำก่อนจึงจะตรวจรับได้');
+		expect(needs).not.toContain('0 / 0');
+	});
+
+	it('words the idle save button', () => {
+		expect(scanIdleSubmitLabel({ needsPoint: true, noneToSave: true, otherPointCount: 1 })).toBe(
+			'เลือกจุดที่ประจำก่อน'
+		);
+		expect(scanIdleSubmitLabel({ needsPoint: false, noneToSave: true, otherPointCount: 2 })).toBe(
+			'ไม่มีรายการของจุดนี้ให้รับ'
+		);
+		expect(
+			scanIdleSubmitLabel({ needsPoint: false, noneToSave: false, otherPointCount: 2 })
+		).toBeNull();
+		expect(
+			scanIdleSubmitLabel({ needsPoint: false, noneToSave: true, otherPointCount: 0 })
+		).toBeNull();
 	});
 
 	it('unlocks another point’s unrecorded line on "รับรายการของจุดอื่น" (AC-10)', () => {
