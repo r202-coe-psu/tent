@@ -17,6 +17,7 @@
 	import * as RadioGroup from '$lib/components/ui/radio-group/index.js';
 	import { Label } from '$lib/components/ui/label/index.js';
 	import * as Popover from '$lib/components/ui/popover/index.js';
+	import DatePicker from '$lib/components/date-picker.svelte';
 	import {
 		COORDINATOR_GRANTABLE_CAPABILITIES,
 		STAFF_CAPABILITIES,
@@ -400,15 +401,15 @@
 					>
 						วันหมดอายุของสิทธิ์ <span class="text-destructive">*</span>
 					</label>
-					<Input
+					<DatePicker
 						id={`volunteer-access-expiry-${volunteer._id}`}
-						type="date"
 						bind:value={expiresOn}
 						min={expiryRange.min}
 						max={expiryRange.max}
-						required
 						disabled={pending}
-						class="h-11 sm:max-w-xs"
+						placeholder="เลือกวันหมดอายุ"
+						format={formatThaiShortDate}
+						class="sm:max-w-xs"
 					/>
 					<p class="text-[11px] text-muted-foreground">
 						เลือกได้ตั้งแต่วันนี้ถึง {MAX_GRANT_DAYS} วันข้างหน้า สิทธิ์หมดอายุตอนสิ้นวันที่เลือก ต่ออายุได้ด้วยการออกสิทธิ์ซ้ำ

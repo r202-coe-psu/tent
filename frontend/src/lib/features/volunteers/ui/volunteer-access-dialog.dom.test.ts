@@ -73,7 +73,32 @@ async function render(roles: string[], profile: Partial<Volunteer> = {}) {
 	await settle();
 }
 
-const expiryInput = () => document.body.querySelector<HTMLInputElement>('input[type="date"]');
+const expiryButton = () =>
+	document.body.querySelector<HTMLButtonElement>('[id^="volunteer-access-expiry-"]');
+/** The calendar cell for `iso` in the open expiry picker, if it is in the shown month. */
+function dayCell(iso: string): HTMLElement | null {
+	const cell = document.body.querySelector<HTMLElement>(
+		`[data-calendar-cell][data-value="${iso}"]`
+	);
+	return cell && !cell.hasAttribute('data-outside-month') ? cell : null;
+}
+
+/** Open the expiry picker and show the month holding `iso` (moving forward a month at most). */
+async function showMonthOf(iso: string) {
+	expiryButton()!.click();
+	await settle();
+	if (!dayCell(iso)) {
+		document.body.querySelector<HTMLButtonElement>('[data-calendar-next-button]')!.click();
+		await settle();
+	}
+}
+
+async function pickExpiry(iso: string) {
+	await showMonthOf(iso);
+	dayCell(iso)!.querySelector<HTMLElement>('[data-calendar-day]')!.click();
+	await settle();
+}
+
 const saveButton = () =>
 	[...document.body.querySelectorAll('button')].find((b) =>
 		b.textContent?.includes('บันทึกและออกสิทธิ์ใหม่')
@@ -121,15 +146,27 @@ afterEach(async () => {
 });
 
 describe('VolunteerAccessDialog for a volunteer_coordinator (#955)', () => {
-	it('has a required expiry field limited to today through today + 7 days, empty by default', async () => {
+	it('has an expiry date picker, empty by default, limited to today through today + 7 days', async () => {
 		await render(COORDINATOR);
-		const input = expiryInput()!;
-		const { min, max } = grantExpiryRange();
+		const { max } = grantExpiryRange();
+		expect(expiryButton()!.textContent).toContain('เลือกวันหมดอายุ');
 
-		expect(input.required).toBe(true);
-		expect(input.value).toBe('');
-		expect(input.min).toBe(min);
-		expect(input.max).toBe(max);
+		await showMonthOf(max);
+		expect(dayCell(max)!.hasAttribute('data-disabled')).toBe(false);
+		const after = new Date(`${max}T00:00:00Z`);
+		after.setUTCDate(after.getUTCDate() + 1);
+		const afterIso = after.toISOString().slice(0, 10);
+		// The day after the window is disabled when it is on the shown month.
+		const outside = dayCell(afterIso);
+		if (outside) expect(outside.hasAttribute('data-disabled')).toBe(true);
+	});
+
+	it('shows the chosen day in Thai on the picker', async () => {
+		await render(COORDINATOR);
+		const { max } = grantExpiryRange();
+		await pickExpiry(max);
+		expect(expiryButton()!.textContent).not.toContain('เลือกวันหมดอายุ');
+		expect(expiryButton()!.textContent).not.toContain(max);
 	});
 
 	it('refuses to save without an expiry and says why', async () => {
@@ -147,7 +184,7 @@ describe('VolunteerAccessDialog for a volunteer_coordinator (#955)', () => {
 		await render(COORDINATOR);
 		await fillCredentials();
 		await pickRole('registration_staff');
-		await fill(expiryInput()!, grantExpiryRange().max);
+		await pickExpiry(grantExpiryRange().max);
 		saveButton().click();
 		await settle();
 
@@ -173,7 +210,7 @@ describe('VolunteerAccessDialog for a volunteer_coordinator (#955)', () => {
 		} as Partial<Volunteer>);
 		await fillCredentials();
 		await pickRole('registration_staff');
-		await fill(expiryInput()!, grantExpiryRange().min);
+		await pickExpiry(grantExpiryRange().min);
 		saveButton().click();
 		await settle();
 
@@ -256,7 +293,7 @@ describe('VolunteerAccessDialog role radios (#1044, #1072)', () => {
 	it('refuses to save without a role, says why under the radios, and clears once one is picked', async () => {
 		await render(COORDINATOR);
 		await fillCredentials();
-		await fill(expiryInput()!, grantExpiryRange().max);
+		await pickExpiry(grantExpiryRange().max);
 		saveButton().click();
 		await settle();
 
@@ -324,7 +361,7 @@ describe('VolunteerAccessDialog for a shelter manager', () => {
 	it('keeps the full form: no expiry field', async () => {
 		await render(MANAGER);
 
-		expect(expiryInput()).toBeNull();
+		expect(expiryButton()).toBeNull();
 	});
 });
 

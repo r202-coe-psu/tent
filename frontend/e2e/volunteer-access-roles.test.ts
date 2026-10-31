@@ -432,11 +432,19 @@ test.describe('Volunteer access: coordinator limits (#955)', { tag: TAGS }, () =
 		await page.getByPlaceholder('ค้นหาชื่อ นามสกุล เบอร์โทร, รหัส...').fill(`E2EV${RUN_ID}`);
 		await page.getByRole('button', { name: 'ออกสิทธิ์ใช้งานระบบ' }).click();
 
+		// A date picker (#1044): empty until chosen, and only today through today + 7 can be picked.
 		const expiry = page.getByRole('dialog').getByLabel(/วันหมดอายุของสิทธิ์/);
 		await expect(expiry).toBeVisible();
-		await expect(expiry).toHaveValue('');
-		await expect(expiry).toHaveAttribute('min', bangkokDate(0));
-		await expect(expiry).toHaveAttribute('max', bangkokDate(7));
+		await expect(expiry).toContainText('เลือกวันหมดอายุ');
+		await expiry.click();
+		// Days of the shown month only; the window's last day may sit in the next month.
+		const day = (iso: string) =>
+			page.locator(`[data-calendar-cell][data-value="${iso}"]:not([data-outside-month])`);
+		await expect(day(bangkokDate(0))).not.toHaveAttribute('data-disabled');
+		if (bangkokDate(8).slice(0, 7) === bangkokDate(0).slice(0, 7)) {
+			await expect(day(bangkokDate(8))).toHaveAttribute('data-disabled');
+		}
+		await page.keyboard.press('Escape');
 
 		await page.getByRole('dialog').getByLabel('อีเมลสำหรับเข้าสู่ระบบ').fill(grantEmail);
 		await page
