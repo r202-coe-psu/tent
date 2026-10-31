@@ -201,7 +201,8 @@ test.describe(
 			await page.locator('#member-0-first-name').fill('สมชาย');
 			await page.locator('#member-0-last-name').fill('ใจดี');
 			await page.locator('#member-0-gender-male').click({ force: true });
-			await page.getByLabel(/ข้าพเจ้ารับทราบข้อตกลงการใช้งาน/).check();
+			await page.getByLabel(/เข้าใจว่าข้อมูลจะรอในคิว/).check();
+			await acceptFullConsent(page);
 
 			// The sticky summary aside repeats the submit button; use the one in the form body.
 			await page.getByRole('button', { name: 'ยืนยันการลงทะเบียน' }).last().click();
@@ -375,9 +376,7 @@ test.describe(
 			await page.getByPlaceholder(/มีโรคประจำตัว|สายพันธุ์/).fill('ชิวาว่า');
 			await page.getByText('มีกรง / สายจูง / ตะกร้า').click();
 
-			await page
-				.getByLabel(/ข้าพเจ้ารับทราบและยินยอมปฏิบัติตามเงื่อนไขและมาตรการด้านความปลอดภัย/)
-				.check();
+			await page.getByLabel(/รับทราบและจะปฏิบัติตามกฎความปลอดภัยของศูนย์/).check();
 
 			await acceptFullConsent(page);
 			await page.getByRole('button', { name: 'ยืนยันการลงทะเบียน' }).last().click();
@@ -526,7 +525,7 @@ test.describe(
 			});
 			await expect(page.locator('#member-0-no-phone')).toHaveCount(0);
 
-			await page.getByLabel(/ข้าพเจ้ารับทราบข้อตกลงการใช้งาน/).check();
+			await page.getByLabel(/เข้าใจว่าข้อมูลจะรอในคิว/).check();
 			await acceptFullConsent(page);
 			await page.getByRole('button', { name: 'ยืนยันการลงทะเบียน' }).last().click();
 
@@ -591,7 +590,7 @@ test.describe(
 					lastName: 'ใจดี',
 					phone: '0812345678'
 				});
-				await page.getByLabel(/ข้าพเจ้ารับทราบข้อตกลงการใช้งาน/).check();
+				await page.getByLabel(/เข้าใจว่าข้อมูลจะรอในคิว/).check();
 				await acceptFullConsent(page);
 				await page.getByRole('button', { name: 'ยืนยันการลงทะเบียน' }).last().click();
 				await expect(page.getByText('ลงทะเบียนล่วงหน้าสำเร็จ')).toBeVisible();

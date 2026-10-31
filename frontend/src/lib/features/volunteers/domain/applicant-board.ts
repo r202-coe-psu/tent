@@ -58,7 +58,7 @@ export interface ApplicantBoard {
 		pending: number;
 		confirmed: number;
 		declined: number;
-		/** Cancelled staff rows are listed but not counted. */
+		/** Active staff-assigned shifts; a cancelled one counts under `declined` (#849). */
 		staffAssigned: number;
 	};
 }
@@ -125,7 +125,9 @@ function staffEntry(
 		assignment,
 		key: assignment._id,
 		decidedAt: assignment.created_at,
-		facet: 'staff_assigned',
+		// A cancelled direct assignment is no longer "assigned": count and filter it with the
+		// declined/cancelled rows so the tile, the status filter and the heading agree (#849).
+		facet: assignment.status === 'cancelled' ? 'cancelled' : 'staff_assigned',
 		personKey: assignment.volunteer_id,
 		volunteer,
 		person: volunteer
@@ -170,9 +172,27 @@ export function buildApplicantBoard(input: {
 			people: people.size,
 			pending: queue.pending.length,
 			confirmed: queue.reviewed.filter((a) => a.status === 'confirmed').length,
-			declined: queue.reviewed.filter((a) => a.status === 'rejected' || a.status === 'cancelled')
-				.length,
+			declined:
+				queue.reviewed.filter((a) => a.status === 'rejected' || a.status === 'cancelled').length +
+				staff.filter((a) => a.status === 'cancelled').length,
 			staffAssigned: staff.filter((a) => a.status !== 'cancelled').length
 		}
 	};
+}
+
+/** Per-facet totals for the history heading, so its shift count reads as a sum (#849). */
+export function historyBreakdown(history: readonly Pick<ApplicantHistoryEntry, 'facet'>[]): {
+	confirmed: number;
+	declined: number;
+	staffAssigned: number;
+} {
+	let confirmed = 0;
+	let declined = 0;
+	let staffAssigned = 0;
+	for (const entry of history) {
+		if (entry.facet === 'confirmed') confirmed++;
+		else if (entry.facet === 'staff_assigned') staffAssigned++;
+		else declined++;
+	}
+	return { confirmed, declined, staffAssigned };
 }

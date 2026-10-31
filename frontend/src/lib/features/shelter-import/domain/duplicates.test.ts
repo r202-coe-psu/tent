@@ -39,8 +39,17 @@ describe('findExistingDuplicates', () => {
 			row: 1,
 			name: '  ศูนย์   ก  ',
 			existingCode: 'SH001',
-			existingName: 'ศูนย์ ก'
+			existingName: 'ศูนย์ ก',
+			existingSiteKind: 'evacuation_center'
 		});
+	});
+
+	it('carries the stored site kind of the matched shelter', () => {
+		const matches = findExistingDuplicates(
+			[ok(1, 'ศูนย์ ก')],
+			[{ code: 'SH001', name: 'ศูนย์ ก', site_kind: 'host_house' }]
+		);
+		expect(matches.get(1)?.existingSiteKind).toBe('host_house');
 	});
 
 	it('is case-insensitive for latin names', () => {

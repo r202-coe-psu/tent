@@ -26,6 +26,10 @@ const TODAY = new Intl.DateTimeFormat('en-CA', {
 	month: '2-digit',
 	day: '2-digit'
 }).format(new Date());
+/** Tomorrow in Asia/Bangkok: a public-board shift that is never ended while the suite runs (#972). */
+const TOMORROW = new Date(new Date(`${TODAY}T00:00:00Z`).getTime() + 24 * 60 * 60 * 1000)
+	.toISOString()
+	.slice(0, 10);
 
 const ACCOUNTS = {
 	sa: {
@@ -189,7 +193,7 @@ const PUBLIC_JOB = {
 	shifts: [
 		{
 			id: 'morning-1',
-			date: TODAY,
+			date: TOMORROW,
 			start_time: '08:00',
 			end_time: '12:00',
 			quota: 2,

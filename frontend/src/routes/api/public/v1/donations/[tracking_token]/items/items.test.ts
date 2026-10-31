@@ -3,7 +3,13 @@ import { PATCH } from './+server';
 import { adminRaw } from '$lib/server/couch-admin';
 import { putAsPublicWriter } from '$lib/server/couch-public-writer';
 import { sha256Hex } from '$lib/db/hash';
-import { CouchReadError, fetchDocsStrict, hasKeyedDonationStock } from '$lib/server/donation-docs';
+import {
+	CouchReadError,
+	fetchDocsStrict,
+	hasKeyedDonationStock,
+	readCurrentDonationPoints
+} from '$lib/server/donation-docs';
+import { DONATION_SCHEMA_V } from '$lib/features/operations/server';
 
 type PatchEvent = Parameters<typeof PATCH>[0];
 
@@ -16,6 +22,7 @@ vi.mock('$lib/server/donation-docs', async (importOriginal) => {
 		findByTokenHash: actual.findByTokenHash,
 		fetchDocsStrict: vi.fn(async () => []),
 		hasKeyedDonationStock: vi.fn(async () => false),
+		readCurrentDonationPoints: vi.fn(async () => []),
 		GOODS_IN_STOCK_ERROR: { success: false, error: 'GOODS_IN_STOCK', message: 'in stock' }
 	};
 });
@@ -85,12 +92,13 @@ describe('PATCH /api/public/v1/donations/[token]/items', () => {
 		vi.mocked(putAsPublicWriter).mockResolvedValue({ status: 201, data: {} });
 		vi.mocked(fetchDocsStrict).mockResolvedValue([]);
 		vi.mocked(hasKeyedDonationStock).mockResolvedValue(false);
+		vi.mocked(readCurrentDonationPoints).mockResolvedValue([]);
 	});
 
 	// Owner decision 2026-10-22 — goods already keyed for this booking: the donor can no
 	// longer move its lines, which would re-number them under the stock rows.
 	it('refuses an edit once goods of the booking are in stock, moving no quota', async () => {
-		couchHas(couchDoc('verifying'));
+		couchHas(couchDoc('pending_review'));
 		fastapiOk();
 		vi.mocked(hasKeyedDonationStock).mockResolvedValue(true);
 
@@ -144,43 +152,111 @@ describe('PATCH /api/public/v1/donations/[token]/items', () => {
 		]);
 		expect((written as { revisions: unknown[] }).revisions).toHaveLength(1);
 		// FR-18b — the current version, not a stale constant.
-		expect((written as { schema_v: number }).schema_v).toBe(7);
+		expect((written as { schema_v: number }).schema_v).toBe(DONATION_SCHEMA_V);
+	});
+
+	// CR-196 FR-LK-4 — refused here, before the headroom reads or any quota moves.
+	// CR-175 donor photos FR-3a / AC-12 — editing the lines leaves the photos as booked.
+	it('keeps the photos of the booking through an edit', async () => {
+		const photos = ['image:01K8PHXTX00000000000000001', 'image:01K8PHXTX00000000000000002'];
+		couchHas({ ...couchDoc('pending_review'), photos });
+		fastapiOk();
+
+		const response = await call();
+
+		expect(response.status).toBe(200);
+		const [, , written] = vi.mocked(putAsPublicWriter).mock.calls[0]!;
+		expect((written as { photos: string[] }).photos).toEqual(photos);
+	});
+
+	describe('a booking something was decided on', () => {
+		it.each([
+			['its QR is out', couchDoc('verifying')],
+			['it was refused', couchDoc('rejected')],
+			[
+				'the campaign rule approved a line',
+				{
+					...couchDoc('pending_review'),
+					items: [
+						{ item_id: 'item:rice', qty: '5', unit: 'kg', review_status: 'approved' },
+						{ free_text: 'ผ้าห่ม', qty: '1', unit: 'ผืน', review_status: 'pending' }
+					]
+				}
+			],
+			[
+				'staff refused a line',
+				{
+					...couchDoc('pending_review'),
+					items: [{ free_text: 'ผ้าห่ม', qty: '1', unit: 'ผืน', review_status: 'rejected' }]
+				}
+			]
+		])('answers ALREADY_REVIEWED when %s', async (_, doc) => {
+			couchHas(doc);
+			fastapiOk();
+
+			const response = await call();
+
+			expect(response.status).toBe(400);
+			expect((await response.json()).error).toBe('ALREADY_REVIEWED');
+			expect(fetchDocsStrict).not.toHaveBeenCalled();
+			expect(fetch).not.toHaveBeenCalled();
+			expect(putAsPublicWriter).not.toHaveBeenCalled();
+		});
 	});
 
 	// CR-174 FR-18 / FR-18b / FR-26
 	describe('per-line review after an edit (CR-174)', () => {
-		it('sends FastAPI the booking as staff left it in CouchDB', async () => {
-			const staffLeft = [{ free_text: 'ผ้าห่ม', qty: '1', unit: 'ผืน', review_status: 'approved' }];
-			couchHas({ ...couchDoc('verifying'), items: [...staffLeft] });
+		it('sends FastAPI the booking as it stands in CouchDB, line keys included', async () => {
+			const held = [
+				{ free_text: 'ผ้าห่ม', qty: '1', unit: 'ผืน', review_status: 'pending', line_key: 'K1' }
+			];
+			couchHas({ ...couchDoc('pending_review'), items: [...held] });
 			fastapiOk();
 
-			await call();
+			await call([{ line_key: 'K1', free_text: 'ผ้าห่ม', qty: '2', unit: 'ผืน' }]);
 
 			const body = JSON.parse(String(vi.mocked(fetch).mock.calls[0]![1]!.body));
-			expect(body).toMatchObject({ current_items: staffLeft, current_status: 'verifying' });
+			expect(body).toMatchObject({
+				items: [{ line_key: 'K1', qty: '2' }],
+				current_items: held,
+				current_status: 'pending_review'
+			});
 		});
 
 		it('AC-14: writes the status FastAPI worked out back to CouchDB', async () => {
-			couchHas(couchDoc('verifying'));
-			fastapiOk({ status: 'pending_review' });
+			couchHas(couchDoc('pending_review'));
+			fastapiOk({ status: 'verifying' });
 
 			const response = await call();
 
 			const [, , written] = vi.mocked(putAsPublicWriter).mock.calls[0]!;
-			expect(written).toMatchObject({ status: 'pending_review', schema_v: 7 });
-			expect((await response.json()).status).toBe('pending_review');
+			expect(written).toMatchObject({ status: 'verifying', schema_v: DONATION_SCHEMA_V });
+			expect((await response.json()).status).toBe('verifying');
 		});
 
-		// A doc a newer writer stamped (CR-175 donor photos takes donation to 8) keeps its
-		// version: stamping 7 over it would claim it lacks fields it has.
-		it('never lowers the schema_v of a doc a newer writer stamped', async () => {
-			couchHas({ ...couchDoc('verifying'), schema_v: 8 });
-			fastapiOk({ status: 'verifying' });
+		it('writes the line keys FastAPI returned onto the CouchDB doc', async () => {
+			couchHas(couchDoc('pending_review'));
+			fastapiOk({
+				status: 'pending_review',
+				items: [{ free_text: 'ผ้าห่ม', qty: '2', unit: 'ผืน', line_key: 'K-NEW' }]
+			});
 
 			await call();
 
 			const [, , written] = vi.mocked(putAsPublicWriter).mock.calls[0]!;
-			expect(written).toMatchObject({ schema_v: 8 });
+			expect((written as { items: { line_key?: string }[] }).items[0]!.line_key).toBe('K-NEW');
+		});
+
+		// A doc a newer writer stamped keeps its version: stamping the current one over it would claim it
+		// lacks fields it has.
+		it('never lowers the schema_v of a doc a newer writer stamped', async () => {
+			couchHas({ ...couchDoc('pending_review'), schema_v: DONATION_SCHEMA_V + 1 });
+			fastapiOk({ status: 'pending_review' });
+
+			await call();
+
+			const [, , written] = vi.mocked(putAsPublicWriter).mock.calls[0]!;
+			expect(written).toMatchObject({ schema_v: DONATION_SCHEMA_V + 1 });
 		});
 
 		it('AC-22: audits the lines the campaign rule approved in this edit, after the write', async () => {
@@ -322,13 +398,13 @@ describe('PATCH /api/public/v1/donations/[token]/items', () => {
 	it('refuses before moving quota once staff have taken the booking', async () => {
 		// The buffer follows CouchDB a few seconds behind, so checking the record first
 		// means no quota is moved and rolled back for a booking that cannot be edited.
-		// `received`: since CR-174 a `verifying` booking (QR issued) is still the donor's.
 		couchHas(couchDoc('received'));
 		fastapiOk();
 
 		const response = await call();
 
 		expect(response.status).toBe(400);
+		expect((await response.json()).error).toBe('Cannot edit a donation in status "received"');
 		expect(fetch).not.toHaveBeenCalled();
 		expect(putAsPublicWriter).not.toHaveBeenCalled();
 	});
@@ -501,6 +577,120 @@ describe('PATCH /api/public/v1/donations/[token]/items', () => {
 			// 100 − 50 on hand − 40 someone else = 10 left.
 			expect((await call(blanket('30'))).status).toBe(409);
 			expect((await call(blanket('10'))).status).toBe(200);
+		});
+	});
+
+	describe('drop-off point per line (CR-206)', () => {
+		const dropOffDoc = (extra: Record<string, unknown> = {}) => ({
+			...couchDoc('pending_review'),
+			shelter_code: 'SH001',
+			logistics: { delivery_method: 'self_dropoff', vehicle: 'car' },
+			...extra
+		});
+		const pointLines = (...ids: Array<string | null>) =>
+			ids.map((id, n) => ({
+				free_text: `ของ ${n}`,
+				qty: '1',
+				unit: 'ชิ้น',
+				drop_off_point_id: id
+			}));
+		const sentPoints = () => {
+			const [, init] = vi.mocked(fetch).mock.calls[0]!;
+			return (
+				JSON.parse(String((init as RequestInit).body)).items as Array<Record<string, unknown>>
+			).map((item) => item.drop_off_point_id);
+		};
+
+		it('keeps an offered point and writes null for one the shelter dropped (FR-MP-2a, AC-13)', async () => {
+			couchHas(dropOffDoc());
+			vi.mocked(readCurrentDonationPoints).mockResolvedValue([{ id: 'point-gym', name: 'โรงยิม' }]);
+			fastapiOk();
+
+			const response = await call(pointLines('point-gym', 'point-gone', null));
+
+			expect(response.status).toBe(200);
+			expect(readCurrentDonationPoints).toHaveBeenCalledWith('SH001');
+			expect(sentPoints()).toEqual(['point-gym', null, null]);
+		});
+
+		it('clears every point of a booking that is not a self drop-off (FR-MP-4)', async () => {
+			couchHas(dropOffDoc({ logistics: { delivery_method: 'parcel' } }));
+			fastapiOk();
+
+			await call(pointLines('point-gym'));
+
+			expect(readCurrentDonationPoints).not.toHaveBeenCalled();
+			expect(sentPoints()).toEqual([null]);
+		});
+
+		it('reads no registry when no line names a point, and leaves a line without the key alone', async () => {
+			couchHas(dropOffDoc());
+			fastapiOk();
+
+			await call([...pointLines(null), { free_text: 'ข้าว', qty: '1', unit: 'kg' }]);
+
+			expect(readCurrentDonationPoints).not.toHaveBeenCalled();
+			expect(sentPoints()).toEqual([null, undefined]);
+		});
+
+		it('checks the points by the token shelter before the booking reaches CouchDB', async () => {
+			couchHas(null);
+			vi.mocked(readCurrentDonationPoints).mockResolvedValue([{ id: 'point-gym', name: 'โรงยิม' }]);
+			fastapiOk();
+
+			await call(pointLines('point-gym', 'point-gone'));
+
+			expect(readCurrentDonationPoints).toHaveBeenCalledWith('SH001');
+			expect(sentPoints()).toEqual(['point-gym', null]);
+		});
+
+		it('stops before moving quota when the shelter points cannot be read', async () => {
+			couchHas(dropOffDoc());
+			vi.mocked(readCurrentDonationPoints).mockRejectedValue(new Error('registry down'));
+			fastapiOk();
+
+			const response = await call(pointLines('point-gym'));
+
+			expect(response.status).toBe(503);
+			expect((await response.json()).error).toBe('DONATION_UNAVAILABLE');
+			expect(fetch).not.toHaveBeenCalled();
+			expect(putAsPublicWriter).not.toHaveBeenCalled();
+		});
+
+		it('writes the points FastAPI returned and stamps the current schema_v', async () => {
+			couchHas(dropOffDoc());
+			vi.mocked(readCurrentDonationPoints).mockResolvedValue([{ id: 'point-gym', name: 'โรงยิม' }]);
+			fastapiOk({
+				items: [{ free_text: 'ของ 0', qty: '1', unit: 'ชิ้น', drop_off_point_id: 'point-gym' }]
+			});
+
+			await call(pointLines('point-gym'));
+
+			const [, , written] = vi.mocked(putAsPublicWriter).mock.calls[0]!;
+			const doc = written as { items: Array<Record<string, unknown>>; schema_v: number };
+			expect(doc.items[0].drop_off_point_id).toBe('point-gym');
+			expect(doc.schema_v).toBe(DONATION_SCHEMA_V);
+		});
+
+		// FR-MP-17 / FR-MP-17a / AC-9 — the real guard: a receipt alone starts the booking.
+		it('refuses an edit once a point recorded a receipt, moving no quota (AC-9)', async () => {
+			const actual = await vi.importActual<typeof import('$lib/server/donation-docs')>(
+				'$lib/server/donation-docs'
+			);
+			vi.mocked(hasKeyedDonationStock).mockImplementation(actual.hasKeyedDonationStock);
+			couchHas(
+				dropOffDoc({
+					point_receipts: [{ point_id: 'point-gym', line_nos: [0], ledger_ids: [] }]
+				})
+			);
+			fastapiOk();
+
+			const response = await call(pointLines('point-gym'));
+
+			expect(response.status).toBe(409);
+			expect((await response.json()).error).toBe('GOODS_IN_STOCK');
+			expect(fetch).not.toHaveBeenCalled();
+			expect(putAsPublicWriter).not.toHaveBeenCalled();
 		});
 	});
 });

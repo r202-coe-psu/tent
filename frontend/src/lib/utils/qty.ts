@@ -44,6 +44,13 @@ export function roundQtyNumber(value: QtyValue): number {
 	return parseQty(value).toDecimalPlaces(QTY_DECIMALS, Decimal.ROUND_HALF_UP).toNumber();
 }
 
+/** Display form with thousands separators ("12,500.5"), keeping up to {@link QTY_DECIMALS} decimals. */
+export function formatQty(value: QtyValue): string {
+	return new Intl.NumberFormat('th-TH', { maximumFractionDigits: QTY_DECIMALS }).format(
+		Number(persistQty(value))
+	);
+}
+
 /** `a + b`, then persist. */
 export function addQty(a: QtyValue, b: QtyValue): string {
 	return persistQty(parseQty(a).plus(b));

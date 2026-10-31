@@ -11,6 +11,7 @@ import HeartHandshake from '@lucide/svelte/icons/heart-handshake';
 import HeartPulse from '@lucide/svelte/icons/heart-pulse';
 import House from '@lucide/svelte/icons/house';
 import MapPin from '@lucide/svelte/icons/map-pin';
+import Megaphone from '@lucide/svelte/icons/megaphone';
 import Monitor from '@lucide/svelte/icons/monitor';
 import MonitorSmartphone from '@lucide/svelte/icons/monitor-smartphone';
 import Package from '@lucide/svelte/icons/package';
@@ -41,6 +42,7 @@ export const PORTAL_ICONS: Record<PortalIconKey, Component<{ class?: string }>> 
 	'heart-pulse': HeartPulse,
 	house: House,
 	'map-pin': MapPin,
+	megaphone: Megaphone,
 	monitor: Monitor,
 	'monitor-smartphone': MonitorSmartphone,
 	package: Package,

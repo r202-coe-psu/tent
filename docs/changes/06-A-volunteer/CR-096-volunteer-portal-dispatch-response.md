@@ -6,7 +6,7 @@ superseded_by: CR-104
 superseded_date: 2026-09-01
 note: รวมเนื้อหาและยกเลิกระบบ Direct Dispatch/Voice 2FA เข้าสู่ CR-104-volunteer-backoffice-and-user-management-v10.md ฉบับสมบูรณ์แล้ว
 date: 2026-08-29
-updated: 2026-10-23
+updated: 2026-10-29 # amend FR-96-07, FR-96-08, AC-96-04 โดย CR-212 (ticket-cancel-rules)
 requested_by: เจ้าของโครงการ (ปิดช่องว่างที่พบระหว่าง implement CR-092)
 decided_by: เจ้าของโครงการ (superseded โดย CR-104)
 layer: volatile
@@ -59,8 +59,8 @@ CR-092 วางระบบจิตอาสาไว้ครบ แต่เ
 ### Digital Pass — อ่านอย่างเดียวเมื่อเข้าด้วยเบอร์โทร (D-READ-ONLY-LOOKUP)
 
 - **FR-96-06** — `POST /public/v1/volunteer/ticket/find` ต้องคืน **view token** ที่มีอายุจำกัดและเปิดบัตรได้อย่างเดียว — ห้ามคืน `tracking_token`
-- **FR-96-07** — `GET /public/v1/volunteer/ticket/{token}` ต้องรับได้ทั้ง tracking token และ view token และคืน `can_cancel` ตามชนิดของ token ที่ใช้เปิด
-- **FR-96-08** — `POST /public/v1/volunteer/ticket/{token}/cancel` ต้องรับเฉพาะ tracking token · view token ตอบ 404
+- **FR-96-07** — `GET /public/v1/volunteer/ticket/{token}` ต้องรับได้ทั้ง tracking token และ view token และคืน `can_cancel` ตามชนิดของ token ที่ใช้เปิด (ปรับปรุงกติกาโดย [CR-212](CR-212-ticket-cancel-rules.md): คืนตามชนิด token และเงื่อนไขสถานะ `confirmed`/`pending_review` ก่อนเริ่มกะเวลาไทย)
+- **FR-96-08** — `POST /public/v1/volunteer/ticket/{token}/cancel` ต้องรับเฉพาะ tracking token · view token ตอบ 404 (ปรับปรุงโดย [CR-212](CR-212-ticket-cancel-rules.md): รับ tracking token ของใบสมัครหรือ token ถาวรของจิตอาสา ภายใต้เงื่อนไขสถานะและก่อนเริ่มกะ)
 - **FR-96-09** — view token ต้องหมดอายุภายใน 30 นาที และต้องตรวจสอบลายเซ็นได้โดยไม่ต้องเก็บ state
 - **FR-96-10** — `ticket/find` ต้องคืน `applicant_name` เพื่อให้พอร์ทัลแสดงชื่อผู้ล็อกอินได้ (ข้อมูลนี้เปิดอยู่แล้วบนบัตรที่ view token เดียวกันเปิดได้)
 
@@ -133,7 +133,7 @@ Additive ล้วน ไม่ต้อง backfill:
 - [ ] **AC-96-01** — เบอร์ที่มีกะได้ตารางเรียงตามเวลา · เบอร์ที่ไม่มีได้ list ว่าง HTTP 200
 - [ ] **AC-96-02** — อาสาที่ผู้จัดการศูนย์มอบหมายตรง (ไม่เคยยื่นใบสมัคร) เห็นกะของตนในตาราง
 - [ ] **AC-96-03** — ค้นบัตรด้วยเบอร์ได้ view token ที่เปิดบัตรได้แต่ `can_cancel = false` และเรียก cancel แล้วได้ 404
-- [ ] **AC-96-04** — เปิดบัตรด้วย tracking token ได้ `can_cancel = true` และยกเลิกได้สำเร็จ
+- [ ] **AC-96-04** — เปิดบัตรด้วย tracking token ได้ `can_cancel = true` และยกเลิกได้สำเร็จ (ปรับปรุงโดย [CR-212](CR-212-ticket-cancel-rules.md): ได้ `true` และยกเลิกได้เมื่อเข้าเงื่อนไขสถานะ `confirmed`/`pending_review` และกะยังไม่เริ่ม กะที่เริ่มแล้วได้ `false`/409)
 - [ ] **AC-96-05** — view token ที่หมดอายุหรือถูกปลอมลายเซ็น ตอบ 404
 - [ ] **AC-96-06** — ตอบรับด้วยเบอร์ถูก+รหัสถูก สำเร็จ · เบอร์ผิด หรือ รหัสผิด ตอบ 404 และโควตาไม่ขยับ
 - [ ] **AC-96-07** — รหัสที่พิมพ์ต่างรูปแบบ (`seed 99`, `SEED-99`) ให้ผลเดียวกัน

@@ -4,7 +4,7 @@ title: "ประเมินใบบริจาคทีละรายกา
 status: approved
 date: 2026-10-17
 approved_at: 2026-10-19
-updated: 2026-10-25
+updated: 2026-10-26
 requested_by: "Kan"
 decided_by: "Soravit Sukkarn (Team Lead)"
 layer: volatile
@@ -75,6 +75,8 @@ migration: field ใหม่ optional — doc เดิมไม่ต้อง
   - `pending_review` → ถือว่ายังไม่มีรายการใดถูกประเมิน · คำนวณทุกรายการตาม FR-2 (เงื่อนไข "จองโควต้าได้" ใช้ผลการจองของ `update_items` ครั้งนั้น) แล้วคำนวณสถานะใบตาม FR-4..FR-6 — ผลเท่ากับใบใหม่
   - `declared` → ไม่เขียน `review_status` ลงรายการใด และไม่คำนวณสถานะใบใหม่ (คง `declared`)
 
+> **แทนที่โดย [CR-196](CR-196-donation-line-key.md) (approved 2026-10-26):** ผู้บริจาคแก้รายการได้เฉพาะใบที่ยังไม่ได้รับการประเมิน (FR-LK-4) จึงไม่มีผลประเมินเดิมให้คง — FR-18a (จับคู่ "รายการไม่ถูกแก้" ด้วย 7 field) และ decision sync 2026-10-25 ข้างล่างเลิกใช้ ทุกรายการคำนวณใหม่ตาม FR-2 และจับคู่รายการเดิมด้วย `items[].line_key` · FR-18c `verifying` ไม่เกิดแล้ว (ใบ `verifying` แก้ไม่ได้) · `pending_review` / `declared` คงเดิม
+
 > **decision sync 2026-10-25 (เสนอโดย Kunanon Nusaeng · รอ approve):** ข้อยกเว้นของ FR-18a/FR-2 — ตอนผู้บริจาคแก้รายการ รายการที่ `free_text` ตรงกับรายการเดิม ≥ 2 รายการที่ `category`/`condition`/`note` ต่างกัน (ฟอร์มแก้รายการไม่ส่งสาม field นี้ จึงบอกไม่ได้ว่าเป็นรายการเดิมตัวไหน) และไม่ตรงกับรายการเดิมตาม FR-18a → `pending` เสมอ **ไม่อนุมัติอัตโนมัติ** แม้จองโควต้าในแคมเปญได้. เหตุผล: review PR #783 H1 — รายการในแคมเปญที่เจ้าหน้าที่ `rejected` กลับเป็น `approved` และใบได้ QR. ชั่วคราวจนกว่า `draft-donation-line-key` (PR #859) จะ approve และจับคู่รายการด้วย `line_key` แทน. ไม่เปลี่ยน field / schema_v
 
 ### สิทธิ์ผู้บริจาคหลังได้ QR (`verifying`)
@@ -82,6 +84,8 @@ migration: field ใหม่ optional — doc เดิมไม่ต้อง
 - **FR-21** — ใบ `verifying` ผู้บริจาค**แก้รายการได้** ตามกฎ FR-18: รายการที่แก้หรือเพิ่มถูกคำนวณ `review_status` ใหม่ (ถ้าเป็นรายการที่พิมพ์เอง → `pending` แม้เจ้าหน้าที่เคยอนุมัติรายการนั้นแล้ว) · ถ้ามีรายการ `pending` ใบกลับไป `pending_review` และ QR ใช้ไม่ได้จนกว่าประเมินครบ (ยกเว้นใบที่มีของเข้าคลังแล้ว — decision sync 2026-10-22 ด้านล่าง)
 - **FR-22** — ใบ `verifying` ผู้บริจาค**ใส่/แก้เลขพัสดุได้**
 - **FR-23** — กฎสิทธิ์ (แก้ / ยกเลิก / เลขพัสดุ) ใช้ชุดสถานะเดียวกันทั้ง backend (`DONOR_EDITABLE_STATUSES`) และ frontend (`public-donation.ts`, `tracking.ts`) → `{declared, pending_review, verifying}`
+
+> **แก้โดย [CR-196](CR-196-donation-line-key.md) (approved 2026-10-26):** ชุด `{declared, pending_review, verifying}` ใช้กับยกเลิกและเลขพัสดุเท่านั้น (FR-LK-10/11) · แก้รายการได้เฉพาะ `declared`/`pending_review` ที่ไม่มีรายการ `approved`/`rejected` (FR-LK-4, `item_edit_gate` / `donationItemEditGate`) → FR-21 และ FR-24 เลิกใช้
 
 > **decision sync 2026-10-22 (เสนอโดย Kunanon Nusaeng · รอ approve):** ใบที่มีของเข้าคลังแล้วอย่างน้อย 1 รายการ (มีแถว `stock_ledger` ที่ `reason: donation` และ `ref_id` ชี้มาที่ใบนี้) ผู้บริจาค**ยกเลิกไม่ได้และแก้รายการไม่ได้** แม้สถานะยังอยู่ใน `DONOR_EDITABLE_STATUSES` — BFF ตอบ `409 GOODS_IN_STOCK` ก่อนแตะโควตาที่ FastAPI (`DELETE /public/v1/donations/{tracking_token}`, `PATCH …/items`). ใส่/แก้เลขพัสดุ (FR-22) ทำได้ตามเดิม. เหตุผล: การยกเลิกจะคืนโควตาทั้งที่ของอยู่บนชั้นแล้ว และการแก้รายการจะเลื่อนลำดับรายการใต้แถวคลังที่บันทึกตามลำดับเดิม (`deriveDonationReceiptLineId`). ไม่เปลี่ยน field / schema_v
 - **FR-24** — หน้าติดตามเตือนก่อนบันทึกการแก้ใบที่ได้ QR แล้วว่า "ถ้ามีรายการที่ต้องประเมิน QR จะใช้ไม่ได้จนกว่าเจ้าหน้าที่ประเมินเสร็จ"

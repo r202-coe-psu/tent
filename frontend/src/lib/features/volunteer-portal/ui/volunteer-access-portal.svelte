@@ -342,7 +342,9 @@
 		() => ({}),
 		() => session !== null
 	);
-	const openingsCount = $derived((openingsQuery.data ?? []).filter(isJobApplicable).length);
+	const openingsCount = $derived(
+		(openingsQuery.data ?? []).filter((job) => isJobApplicable(job)).length
+	);
 	const profileQuery = useVolunteerProfile(() => session);
 	let profileDialogOpen = $state(false);
 	const respond = useRespondToDispatchMutation(() => session);

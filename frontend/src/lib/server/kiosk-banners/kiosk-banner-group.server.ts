@@ -50,7 +50,7 @@ export async function listGroups(shelterCode: string): Promise<KioskBannerGroupR
 }
 
 /** The group doc, or null when the id is missing or is not a banner group. */
-async function readGroupDoc(id: string): Promise<KioskBannerGroupDoc | null> {
+export async function readGroupDoc(id: string): Promise<KioskBannerGroupDoc | null> {
 	const res = await adminRaw(docPath(id), 'GET');
 	if (res.status === 404) return null;
 	if (res.status >= 400) {

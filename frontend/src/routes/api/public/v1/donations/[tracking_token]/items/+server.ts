@@ -6,7 +6,7 @@ import { fastapiBaseUrl, fastapiServiceHeaders } from '$lib/server/fastapi';
 import {
 	carryItemIds,
 	computeNeeds,
-	isDonorEditable,
+	donationItemEditGate,
 	pickCampaignForItems
 } from '$lib/features/donations/server';
 import type { DonationRevision, PublicDonationDoc } from '$lib/features/donations';
@@ -15,17 +15,50 @@ import {
 	fetchDocsStrict,
 	findByTokenHash,
 	GOODS_IN_STOCK_ERROR,
-	hasKeyedDonationStock
+	hasKeyedDonationStock,
+	readCurrentDonationPoints
 } from '$lib/server/donation-docs';
 import type { DonationCampaign, StockLedger } from '$lib/features/operations';
 import { DONATION_SCHEMA_V } from '$lib/features/operations/server';
 import { createAuditEntry } from '$lib/features/shared';
 
-function shelterDbFromToken(token: string): string | null {
+function shelterCodeFromToken(token: string): string | null {
 	const match = token.match(/^TX-([A-Z0-9]+)-/);
 	if (!match) return null;
-	const code = match[1] === 'DON' ? 'SH001' : match[1];
-	return `shelter_${code.toLowerCase()}`;
+	return match[1] === 'DON' ? 'SH001' : match[1];
+}
+
+function shelterDbFromToken(token: string): string | null {
+	const code = shelterCodeFromToken(token);
+	return code ? `shelter_${code.toLowerCase()}` : null;
+}
+
+type PointLine = { drop_off_point_id?: unknown };
+
+/**
+ * CR-206 FR-MP-2a, FR-MP-4 — the point each edited line keeps. The dialog sends a point for
+ * every line (FR-MP-15); one the shelter no longer offers (unticked or deleted since the
+ * booking) becomes `null` rather than an error, and a booking that is not a self drop-off
+ * keeps none. Points are read from the shelter doc in CouchDB, not the public projection.
+ * A line sent without the key is left as it came.
+ */
+async function withOfferedPoints<T extends PointLine>(
+	items: T[],
+	shelterCode: string | null,
+	picksPoints: boolean
+): Promise<T[]> {
+	const named = items.some(
+		(item) => typeof item.drop_off_point_id === 'string' && item.drop_off_point_id !== ''
+	);
+	const offered =
+		picksPoints && named && shelterCode
+			? new Set((await readCurrentDonationPoints(shelterCode)).map((point) => point.id))
+			: new Set<string>();
+	return items.map((item) => {
+		if (!item || typeof item !== 'object' || !('drop_off_point_id' in item)) return item;
+		const id = item.drop_off_point_id;
+		return { ...item, drop_off_point_id: typeof id === 'string' && offered.has(id) ? id : null };
+	});
 }
 
 /**
@@ -63,17 +96,37 @@ export const PATCH = async ({ params, request }) => {
 
 		// Check the system of record before moving anything. FastAPI guards on the intake
 		// buffer, which follows CouchDB a few seconds behind; refusing here first means a
-		// donor whose booking staff just picked up never has quota moved and rolled back.
+		// donor whose booking staff just reviewed never has quota moved and rolled back.
 		const latestDoc = await findByTokenHash(shelterDb, trackingTokenHash);
-		if (latestDoc && !isDonorEditable(latestDoc.status)) {
+		const gate = latestDoc && donationItemEditGate(latestDoc.status, latestDoc.items ?? []);
+		if (gate === 'already_reviewed') {
+			return json({ success: false, error: 'ALREADY_REVIEWED' }, { status: 400 });
+		}
+		if (latestDoc && gate === 'closed') {
 			return json(
 				{ success: false, error: `Cannot edit a donation in status "${latestDoc.status}"` },
 				{ status: 400 }
 			);
 		}
 		// Goods already keyed: moving lines would re-number them under the stock rows.
-		if (latestDoc && (await hasKeyedDonationStock(shelterDb, latestDoc._id))) {
+		if (latestDoc && (await hasKeyedDonationStock(shelterDb, latestDoc))) {
 			return json(GOODS_IN_STOCK_ERROR, { status: 409 });
+		}
+
+		// Each line's drop-off point, checked against what the shelter offers now (FR-MP-2a).
+		// Before the booking reaches CouchDB its delivery method is unknown here; FastAPI
+		// clears the points of a parcel or a pickup itself (FR-MP-4).
+		let pointedItems: typeof payload.items;
+		try {
+			pointedItems = await withOfferedPoints(
+				payload.items,
+				latestDoc?.shelter_code ?? shelterCodeFromToken(tracking_token),
+				!latestDoc || latestDoc.logistics?.delivery_method === 'self_dropoff'
+			);
+		} catch (e) {
+			// The registry could not be read: nothing has moved yet, so the donor may retry.
+			console.error(e);
+			return json({ success: false, error: 'DONATION_UNAVAILABLE' }, { status: 503 });
 		}
 
 		// Restore any item_id the client dropped before anything is measured or moved.
@@ -81,8 +134,8 @@ export const PATCH = async ({ params, request }) => {
 		// line used to read as untracked here, sail through, and then be reserved against
 		// the identity FastAPI restored a moment later.
 		const resolvedItems: typeof payload.items = latestDoc
-			? carryItemIds(payload.items, latestDoc.items ?? [])
-			: payload.items;
+			? carryItemIds(pointedItems, latestDoc.items ?? [])
+			: pointedItems;
 
 		// The same headroom check the create route makes. Without it an edit answers only
 		// to the atomic counter, which caps reserved_qty at qty_target and knows nothing
@@ -121,8 +174,8 @@ export const PATCH = async ({ params, request }) => {
 			{
 				method: 'PATCH',
 				headers: fastapiServiceHeaders({ 'Content-Type': 'application/json' }),
-				// CR-174 FR-18 — staff decide lines in CouchDB, which FastAPI cannot read: send
-				// the booking as it is now so a line nobody touched keeps its decision.
+				// Staff decide lines in CouchDB, which FastAPI cannot read: send the booking as it
+				// is now, for FastAPI's own review gate and the line keys it holds (CR-196).
 				body: JSON.stringify({
 					items: resolvedItems,
 					...(latestDoc

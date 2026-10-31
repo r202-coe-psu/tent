@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
  * Multi-shift apply (#716) against a small in-memory CouchDB: writes land in `docs`, and
@@ -93,7 +93,14 @@ const person = {
 
 const applications = () => [...store.docs.values()].filter((doc) => doc.type === 'job_application');
 
+// The fixture shifts are in September 2026; pin the clock so they have not ended yet.
+afterEach(() => {
+	vi.useRealTimers();
+});
+
 beforeEach(() => {
+	vi.useFakeTimers({ toFake: ['Date'] });
+	vi.setSystemTime(new Date('2026-09-01T00:00:00+07:00'));
 	store.docs.clear();
 	ulidCounter = 0;
 });
@@ -118,6 +125,26 @@ describe('applyPublicVolunteerApplicationToShifts', () => {
 		// One profile, and its pass token is handed out once.
 		expect([...store.docs.values()].filter((doc) => doc.type === 'volunteer')).toHaveLength(1);
 		expect(result.volunteer_token).toEqual(expect.any(String));
+	});
+
+	it('saves the open shifts and reports one that has ended as SHIFT_CLOSED (#972)', async () => {
+		seedJob([
+			shift('d1-am', '2026-09-20', '08:00', '12:00'),
+			shift('d2-am', '2026-09-21', '08:00', '12:00')
+		]);
+		// Mid-way through the second shift: it is still open. The first ended yesterday.
+		vi.setSystemTime(new Date('2026-09-21T10:00:00+07:00'));
+
+		const result = await applyPublicVolunteerApplicationToShifts('job:target', person, [
+			{ shift_id: 'd1-am' },
+			{ shift_id: 'd2-am' }
+		]);
+
+		expect(result.results).toMatchObject([
+			{ ok: false, shift_id: 'd1-am', error: 'SHIFT_CLOSED' },
+			{ ok: true, shift_id: 'd2-am', status: 'confirmed' }
+		]);
+		expect(applications().map((doc) => doc.shift_id)).toEqual(['d2-am']);
 	});
 
 	it('saves the shifts that pass and reports the full one', async () => {

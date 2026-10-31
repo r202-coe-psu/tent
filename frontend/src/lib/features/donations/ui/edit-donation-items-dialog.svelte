@@ -8,6 +8,8 @@
 	import { toast } from 'svelte-sonner';
 	import { usePublicShelterNeeds, useUpdateDonationItems } from '../application/queries';
 	import type { DonationItemEdit } from '../data/public-tracking';
+	import { lineDropOffPointId, type BookablePoint } from '../domain/line-points';
+	import DropOffPointsSection from './drop-off-points-section.svelte';
 	import { langState } from '$lib/states/i18n.svelte';
 	import { getTranslation } from '$lib/utils/i18n';
 	import { PUBLIC_DONATIONS_I18N } from '$lib/constants/i18n';
@@ -17,26 +19,43 @@
 		token,
 		shelterCode,
 		items,
-		status = '',
+		dropOffPoints = [],
 		onSaved
 	}: {
 		open?: boolean;
 		token: string;
-		/** Booking status — a `verifying` booking already has its QR (CR-174 FR-24). */
-		status?: string;
 		/** Which shelter's published needs the donor may add from. */
 		shelterCode: string;
 		items: Array<{
+			line_key?: string | null;
 			item_id?: string | null;
 			item_name?: string;
 			qty: unknown;
 			unit?: string | null;
+			drop_off_point_id?: string | null;
 		}>;
+		/**
+		 * The points a line may go to (CR-206 FR-MP-15) — `[]` when the booking is not a self
+		 * drop-off, the shelter has none, or its detail did not load.
+		 */
+		dropOffPoints?: BookablePoint[];
 		onSaved?: () => void;
 	} = $props();
 
-	/** `key` only names the row for `{#each}`: removing a row must not shift the others' inputs. */
-	type Row = { key: number; item_id?: string; free_text: string; qty: string; unit: string };
+	/**
+	 * `key` only names the row for `{#each}`: removing a row must not shift the others'
+	 * inputs. `line_key` is the held line's identity (CR-196) — a row the donor adds has none.
+	 */
+	type Row = {
+		key: number;
+		line_key?: string;
+		item_id?: string;
+		free_text: string;
+		qty: string;
+		unit: string;
+		/** The line's point: as booked, then as the donor picks (FR-MP-15). */
+		pointId: string | null;
+	};
 	let nextKey = 0;
 
 	/**
@@ -64,15 +83,36 @@
 		untrack(() =>
 			items.map((item) => ({
 				key: nextKey++,
+				line_key: item.line_key ?? undefined,
 				item_id: item.item_id ?? undefined,
 				free_text: item.item_name ?? '',
 				qty: item.qty != null ? String(item.qty) : '',
-				unit: item.unit ?? ''
+				unit: item.unit ?? '',
+				pointId: item.drop_off_point_id ?? null
 			}))
 		)
 	);
 
 	const mutation = useUpdateDonationItems();
+
+	// A held line starts at the point it was booked to; one the shelter no longer offers, and
+	// an added line, start at the first point (FR-MP-15 — no map tap to start from here).
+	const pointLines = $derived(
+		rows.map((row, index) => ({
+			key: String(row.key),
+			name: row.free_text.trim() || `#${index + 1}`,
+			pointId: lineDropOffPointId(row.pointId, dropOffPoints, dropOffPoints[0]?.id ?? null)
+		}))
+	);
+
+	function pickLinePoint(key: string, pointId: string) {
+		const row = rows.find((line) => String(line.key) === key);
+		if (row) row.pointId = pointId;
+	}
+
+	function pickAllLinesPoint(pointId: string) {
+		for (const row of rows) row.pointId = pointId;
+	}
 
 	const canSave = $derived(
 		rows.length > 0 &&
@@ -80,7 +120,7 @@
 	);
 
 	function addRow() {
-		rows = [...rows, { key: nextKey++, free_text: '', qty: '', unit: '' }];
+		rows = [...rows, { key: nextKey++, free_text: '', qty: '', unit: '', pointId: null }];
 	}
 
 	/** Bind a blank row to a catalog item: name and unit come from the board, not typing. */
@@ -98,11 +138,15 @@
 	}
 
 	function save() {
-		const payload: DonationItemEdit[] = rows.map((row) => ({
+		// Every line carries its point (FR-MP-15). With no points to pick from, the booked one
+		// goes back as it was and the BFF keeps it only if the shelter still offers it (FR-MP-2a).
+		const payload: DonationItemEdit[] = rows.map((row, index) => ({
+			...(row.line_key ? { line_key: row.line_key } : {}),
 			...(row.item_id ? { item_id: row.item_id } : {}),
 			free_text: row.free_text.trim(),
 			qty: String(Number(row.qty)),
-			unit: row.unit.trim()
+			unit: row.unit.trim(),
+			drop_off_point_id: dropOffPoints.length > 0 ? pointLines[index].pointId : row.pointId
 		}));
 
 		mutation.mutate(
@@ -127,15 +171,6 @@
 				{t.editDialogDesc}
 			</Dialog.Description>
 		</Dialog.Header>
-
-		{#if status === 'verifying'}
-			<p
-				class="rounded-xl border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900 dark:bg-amber-950/30 dark:text-amber-200"
-				role="note"
-			>
-				{t.editVerifyingWarning}
-			</p>
-		{/if}
 
 		<div class="space-y-3">
 			{#each rows as row, index (row.key)}
@@ -244,6 +279,14 @@
 					{t.editPickItemHint}
 				{/if}
 			</p>
+
+			<DropOffPointsSection
+				points={dropOffPoints}
+				lines={pointLines}
+				idPrefix="edit-drop-off"
+				onPick={pickLinePoint}
+				onPickAll={pickAllLinesPoint}
+			/>
 		</div>
 
 		<Dialog.Footer>

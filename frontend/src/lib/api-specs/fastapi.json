@@ -243,6 +243,41 @@
 				"security": [{ "HTTPBearer": [] }]
 			}
 		},
+		"/public/v1/donations/lookup-by-phone": {
+			"post": {
+				"tags": ["Donations"],
+				"summary": "Lookup Donations By Phone",
+				"description": "Phone number alone → every booking of it still in the buffer (CR-173).\n\nFull access: each item carries its ``tracking_token``. Guarding against number\nenumeration is the BFF's captcha plus nginx's rate limit (CR-188); this logs every call\nand alerts on volume without refusing any. The BFF sends the donor's IP as ``X-Real-IP``.",
+				"operationId": "lookup_donations_by_phone_public_v1_donations_lookup_by_phone_post",
+				"requestBody": {
+					"content": {
+						"application/json": {
+							"schema": { "$ref": "#/components/schemas/DonationPhoneLookupRequest" }
+						}
+					},
+					"required": true
+				},
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/DonationPhoneLookupResponse" }
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+							}
+						}
+					}
+				},
+				"security": [{ "HTTPBearer": [] }]
+			}
+		},
 		"/public/v1/donations/{tracking_token}": {
 			"get": {
 				"tags": ["Donations"],
@@ -494,7 +529,9 @@
 					"200": {
 						"description": "Successful Response",
 						"content": {
-							"application/json": { "schema": { "$ref": "#/components/schemas/SearchResponse" } }
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/ExternalSearchResponse" }
+							}
 						}
 					},
 					"429": {
@@ -657,13 +694,7 @@
 						"name": "site_kind",
 						"in": "query",
 						"required": false,
-						"schema": {
-							"anyOf": [
-								{ "enum": ["evacuation_center", "host_house"], "type": "string" },
-								{ "type": "null" }
-							],
-							"title": "Site Kind"
-						}
+						"schema": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Site Kind" }
 					},
 					{
 						"name": "lat",
@@ -3471,6 +3502,12 @@
 					"slot_hold": {
 						"anyOf": [{ "$ref": "#/components/schemas/SlotHold" }, { "type": "null" }]
 					},
+					"photos": {
+						"items": { "type": "string" },
+						"type": "array",
+						"maxItems": 30,
+						"title": "Photos"
+					},
 					"captchaToken": {
 						"anyOf": [{ "type": "string" }, { "type": "null" }],
 						"title": "Captchatoken"
@@ -3508,7 +3545,12 @@
 						"anyOf": [{ "type": "string" }, { "type": "null" }],
 						"title": "Condition"
 					},
-					"note": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Note" }
+					"note": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Note" },
+					"line_key": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Line Key" },
+					"drop_off_point_id": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Drop Off Point Id"
+					}
 				},
 				"type": "object",
 				"required": ["qty"],
@@ -3558,6 +3600,88 @@
 				"type": "object",
 				"required": ["status"],
 				"title": "DonationItemsPatchResponse"
+			},
+			"DonationPhoneLookupItem": {
+				"properties": {
+					"tracking_token": { "type": "string", "title": "Tracking Token" },
+					"booking_ref": { "type": "string", "title": "Booking Ref" },
+					"status": { "type": "string", "title": "Status" },
+					"shelter_code": { "type": "string", "title": "Shelter Code" },
+					"shelter_name": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Shelter Name"
+					},
+					"delivery_method": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Delivery Method"
+					},
+					"slot": {
+						"anyOf": [
+							{ "$ref": "#/components/schemas/DonationPhoneLookupSlot" },
+							{ "type": "null" }
+						]
+					},
+					"item_count": { "type": "integer", "title": "Item Count" },
+					"created_at": { "type": "string", "title": "Created At" }
+				},
+				"type": "object",
+				"required": [
+					"tracking_token",
+					"booking_ref",
+					"status",
+					"shelter_code",
+					"item_count",
+					"created_at"
+				],
+				"title": "DonationPhoneLookupItem",
+				"description": "One booking of the number — enough to tell them apart and open the full ticket."
+			},
+			"DonationPhoneLookupRequest": {
+				"properties": {
+					"phone": { "type": "string", "maxLength": 32, "minLength": 1, "title": "Phone" }
+				},
+				"type": "object",
+				"required": ["phone"],
+				"title": "DonationPhoneLookupRequest",
+				"description": "CR-173 FR-1 — the phone travels in the body only, never in the URL."
+			},
+			"DonationPhoneLookupResponse": {
+				"properties": {
+					"success": { "type": "boolean", "title": "Success", "default": true },
+					"items": {
+						"items": { "$ref": "#/components/schemas/DonationPhoneLookupItem" },
+						"type": "array",
+						"title": "Items"
+					}
+				},
+				"type": "object",
+				"title": "DonationPhoneLookupResponse",
+				"description": "Same shape whether the number has bookings or not (CR-173 FR-5)."
+			},
+			"DonationPhoneLookupSlot": {
+				"properties": {
+					"date": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Date" },
+					"from": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "From" },
+					"to": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "To" }
+				},
+				"type": "object",
+				"title": "DonationPhoneLookupSlot"
+			},
+			"DonationPoint": {
+				"properties": {
+					"id": { "type": "string", "title": "Id" },
+					"name": { "type": "string", "title": "Name" },
+					"types": { "items": { "type": "string" }, "type": "array", "title": "Types" },
+					"geo": { "$ref": "#/components/schemas/GeoPoint" },
+					"location_note": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Location Note"
+					}
+				},
+				"type": "object",
+				"required": ["id", "name", "geo"],
+				"title": "DonationPoint",
+				"description": "A storage point ticked as a donation drop-off point, with a pin (CR-205)."
 			},
 			"DonationTrackSearchRequest": {
 				"properties": {
@@ -3618,11 +3742,77 @@
 				"required": ["name", "phone", "relation"],
 				"title": "EmergencyContactOut"
 			},
+			"ExternalSearchResponse": {
+				"properties": {
+					"results": {
+						"items": { "$ref": "#/components/schemas/ExternalSearchResult" },
+						"type": "array",
+						"title": "Results"
+					},
+					"count": { "type": "integer", "title": "Count" },
+					"as_of": { "type": "string", "format": "date-time", "title": "As Of" }
+				},
+				"type": "object",
+				"required": ["results", "count", "as_of"],
+				"title": "ExternalSearchResponse"
+			},
+			"ExternalSearchResult": {
+				"properties": {
+					"name": { "type": "string", "title": "Name" },
+					"status": { "type": "string", "title": "Status" },
+					"national_id": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "National Id"
+					},
+					"gender": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Gender" },
+					"shelter_name": { "type": "string", "title": "Shelter Name" },
+					"shelter_address": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Shelter Address"
+					},
+					"origin_address": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Origin Address"
+					},
+					"checked_in_at": {
+						"anyOf": [{ "type": "string", "format": "date-time" }, { "type": "null" }],
+						"title": "Checked In At"
+					},
+					"shelter_status": {
+						"anyOf": [
+							{ "type": "string", "enum": ["open", "closed", "full", "standby"] },
+							{ "type": "null" }
+						],
+						"title": "Shelter Status"
+					},
+					"family_members": {
+						"items": { "$ref": "#/components/schemas/FamilyMember" },
+						"type": "array",
+						"title": "Family Members"
+					},
+					"care_zone": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Care Zone"
+					},
+					"zone_name": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Zone Name" }
+				},
+				"type": "object",
+				"required": ["name", "status", "shelter_name"],
+				"title": "ExternalSearchResult",
+				"description": "`/external/v1/occupants` keeps the zone partners read (CR-183 FR-18 is public-only)."
+			},
 			"FamilyMember": {
 				"properties": {
 					"name": { "type": "string", "title": "Name" },
 					"status": { "type": "string", "title": "Status" },
-					"shelter_name": { "type": "string", "title": "Shelter Name" }
+					"shelter_name": { "type": "string", "title": "Shelter Name" },
+					"shelter_status": {
+						"anyOf": [
+							{ "type": "string", "enum": ["open", "closed", "full", "standby"] },
+							{ "type": "null" }
+						],
+						"title": "Shelter Status"
+					}
 				},
 				"type": "object",
 				"required": ["name", "status", "shelter_name"],
@@ -4930,13 +5120,12 @@
 						"anyOf": [{ "type": "string", "format": "date-time" }, { "type": "null" }],
 						"title": "Checked In At"
 					},
-					"care_zone": {
-						"anyOf": [{ "type": "string" }, { "type": "null" }],
-						"title": "Care Zone"
-					},
-					"zone_name": {
-						"anyOf": [{ "type": "string" }, { "type": "null" }],
-						"title": "Zone Name"
+					"shelter_status": {
+						"anyOf": [
+							{ "type": "string", "enum": ["open", "closed", "full", "standby"] },
+							{ "type": "null" }
+						],
+						"title": "Shelter Status"
 					},
 					"family_members": {
 						"items": { "$ref": "#/components/schemas/FamilyMember" },
@@ -4985,8 +5174,8 @@
 					"name": { "type": "string", "title": "Name" },
 					"site_kind": {
 						"type": "string",
-						"enum": ["evacuation_center", "host_house"],
 						"title": "Site Kind",
+						"description": "Master code from master_data:site_kind (e.g. evacuation_center, host_house)",
 						"default": "evacuation_center"
 					},
 					"status": { "type": "string", "title": "Status" },
@@ -5034,6 +5223,11 @@
 						"type": "boolean",
 						"title": "Accepts Pre Registration",
 						"default": false
+					},
+					"donation_points": {
+						"items": { "$ref": "#/components/schemas/DonationPoint" },
+						"type": "array",
+						"title": "Donation Points"
 					}
 				},
 				"type": "object",
@@ -5103,8 +5297,8 @@
 					"name": { "type": "string", "title": "Name" },
 					"site_kind": {
 						"type": "string",
-						"enum": ["evacuation_center", "host_house"],
 						"title": "Site Kind",
+						"description": "Master code from master_data:site_kind (e.g. evacuation_center, host_house)",
 						"default": "evacuation_center"
 					},
 					"status": { "type": "string", "title": "Status" },

@@ -68,6 +68,49 @@ describe('summarizeItemStock', () => {
 		expect(s.earliestExpiry).toBe(iso(5));
 	});
 
+	describe('bare-date expiry lasts through the Bangkok day (CR-195)', () => {
+		const at = (s: string) => Date.parse(s);
+
+		it('AC-X1: a lot expiring today is expiring, not expired, at 08:00', () => {
+			const s = summarizeItemStock(
+				[lot({ lot_ref: 'a', lot: { expiry: '2026-10-23' } })],
+				at('2026-10-23T08:00:00+07:00')
+			);
+			expect(s.expiryState).toBe('expiring');
+			expect(s.expiredQty).toBe('0');
+		});
+
+		it('AC-X3: the same lot is expired once the next Bangkok day starts', () => {
+			const s = summarizeItemStock(
+				[lot({ lot_ref: 'a', qty: '4', lot: { expiry: '2026-10-23' } })],
+				at('2026-10-24T00:00:00+07:00')
+			);
+			expect(s.expiryState).toBe('expired');
+			expect(s.expiredQty).toBe('4');
+		});
+
+		it('AC-X9: keeps the recorded date string for display, never the converted instant', () => {
+			const s = summarizeItemStock(
+				[lot({ lot_ref: 'a', lot: { expiry: '2026-10-23' } })],
+				at('2026-10-23T08:00:00+07:00')
+			);
+			expect(s.earliestExpiry).toBe('2026-10-23');
+		});
+
+		it('AC-X9: a noon shelf-life lot is earlier than a bare date of the same day', () => {
+			const s = summarizeItemStock(
+				[
+					lot({ lot_ref: 'date', lot: { expiry: '2026-10-23' } }),
+					lot({ lot_ref: 'noon', received_at: '2026-10-22T12:00:00+07:00', lot: {} })
+				],
+				at('2026-10-23T08:00:00+07:00'),
+				undefined,
+				{ shelf_life_days: 1 }
+			);
+			expect(s.earliestExpiry).toBe('2026-10-23T05:00:00.000Z');
+		});
+	});
+
 	it('reports none when no lot carries an expiry and no shelf_life_days is configured', () => {
 		expect(summarizeItemStock([lot({ lot_ref: 'a' })], NOW).expiryState).toBe('none');
 		expect(summarizeItemStock([], NOW)).toMatchObject({

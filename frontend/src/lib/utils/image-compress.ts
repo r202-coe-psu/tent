@@ -13,8 +13,11 @@ export interface CompressOptions {
 	thumbPx?: number;
 	/** Encode quality 0-1. Default: 0.82 */
 	quality?: number;
-	/** Output mime type. Default: 'image/webp' */
-	mimeType?: 'image/webp';
+	/**
+	 * Output mime type. Default: 'image/webp'. A browser that cannot encode WEBP (Safari)
+	 * hands back PNG instead; a caller that must send JPEG/WEBP asks again with JPEG.
+	 */
+	mimeType?: 'image/webp' | 'image/jpeg';
 }
 
 export interface CompressResult {

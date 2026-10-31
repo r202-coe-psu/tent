@@ -6,8 +6,9 @@ pipeline {
         skipDefaultCheckout(true)
         disableConcurrentBuilds(abortPrevious: true)
         buildDiscarder(logRotator(numToKeepStr: '20', daysToKeepStr: '14'))
-        // @critical + @smoke remote set can take 15–30 min (playwright globalTimeout 30m).
-        timeout(time: 40, unit: 'MINUTES')
+        // @critical + @smoke remote set ran past 30 min in build #64 (playwright globalTimeout 2h);
+        // this pipeline timeout also covers image build, health check and post actions.
+        timeout(time: 135, unit: 'MINUTES')
         timestamps()
     }
 

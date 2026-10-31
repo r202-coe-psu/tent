@@ -115,6 +115,30 @@ describe('TransferServerRepository', () => {
 		});
 	});
 
+	it('reads exactly the asked ids, still scoped to the shelter and not capped at 50 (#811)', async () => {
+		let capturedBody: unknown;
+		adminRaw.mockImplementation(async (path: string, method: string, body?: unknown) => {
+			if (method === 'POST' && String(path).endsWith('/_find')) {
+				capturedBody = body;
+				return { status: 200, data: { docs: [] } };
+			}
+			return { status: 200, data: {} };
+		});
+		const ids = Array.from({ length: 50 }, (_, i) => `stock_transfer:01OLD${i}`);
+
+		const repo = new TransferServerRepository('central_ops', 'SH001');
+		await repo.list({ ids, limit: 10 });
+
+		expect(capturedBody).toMatchObject({
+			selector: {
+				type: 'stock_transfer',
+				$or: [{ from_shelter: 'SH001' }, { to_shelter: 'SH001' }],
+				_id: { $in: ids }
+			},
+			limit: 50
+		});
+	});
+
 	it('returns null for a missing transfer', async () => {
 		adminRaw.mockImplementation(async (_path: string, method: string) => {
 			if (method === 'GET') return { status: 404, data: { error: 'not_found' } };

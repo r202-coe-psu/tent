@@ -21,27 +21,37 @@
 	import SearchCheck from '@lucide/svelte/icons/search-check';
 	import KeyRound from '@lucide/svelte/icons/key-round';
 	import Trash2 from '@lucide/svelte/icons/trash-2';
+	import RotateCcw from '@lucide/svelte/icons/rotate-ccw';
 	import Phone from '@lucide/svelte/icons/phone';
 	import Lock from '@lucide/svelte/icons/lock';
 	import { toast } from 'svelte-sonner';
 	import { useQueryClient } from '@tanstack/svelte-query';
-	import { isShelterManager, isSystemAdmin } from '$lib/auth/roles';
+	import { resolve } from '$app/paths';
+	import {
+		VOLUNTEER_COORDINATOR,
+		canAccessVolunteerBackoffice,
+		hasStaffCapability,
+		isShelterManager,
+		isSystemAdmin
+	} from '$lib/auth/roles';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Badge } from '$lib/components/ui/badge/index.js';
+	import { isVolunteerMobile } from '../domain/phone';
 	import * as Table from '$lib/components/ui/table/index.js';
 	import * as AlertDialog from '$lib/components/ui/alert-dialog/index.js';
 	import VolunteerManageDialog from './volunteer-manage-dialog.svelte';
 	import VolunteerQualificationDialog from './volunteer-qualification-dialog.svelte';
 	import VolunteerAccessDialog from './volunteer-access-dialog.svelte';
-	import { useDeactivateVolunteer } from '../application/queries';
+	import { useDeactivateVolunteer, useReactivateVolunteer } from '../application/queries';
 	import { resolveSkillOption, type SkillOption } from '../domain/skill-catalog';
 	import {
 		hasPendingControlledSkill,
 		identityVerificationStatus,
 		skillVerificationStatus
 	} from '../domain/verification';
+	import type { VolunteerAccessStatus } from '../domain/volunteer-access-status';
 	import type { Volunteer, VolunteerSource } from '../domain/volunteer.schema';
 	import type { ShiftAssignment, ShiftKind } from '../domain/shift-assignment.schema';
 
@@ -50,13 +60,16 @@
 		shelterName,
 		shelterType,
 		skillOptions = [],
-		todayAssignment
+		todayAssignment,
+		accessStatus = { kind: 'none' }
 	}: {
 		volunteer: Volunteer;
 		shelterName: string | undefined;
 		shelterType: string | null | undefined;
 		skillOptions?: readonly SkillOption[];
 		todayAssignment: Pick<ShiftAssignment, 'shift' | 'station' | 'status'> | null | undefined;
+		/** Computed by the tab (`volunteerAccessStatus`) — this row only renders it. */
+		accessStatus?: VolunteerAccessStatus;
 	} = $props();
 
 	const SOURCE_LABELS: Record<VolunteerSource, string> = {
@@ -111,21 +124,55 @@
 	let qualificationDialogOpen = $state(false);
 	let qualificationFocusSkillCode = $state<string | null>(null);
 	let accessDialogOpen = $state(false);
-	// Granting system access creates a user account — SM/SA only (the BFF enforces it too); a
-	// volunteer_coordinator manages jobs/shifts but must not see a button that always 403s.
+	// SM/SA grant any role; a volunteer_coordinator of this shelter grants a limited, timed one
+	// (#955). The BFF enforces both, so no other role sees a button that would 403.
 	const canGrantAccess = $derived.by(() => {
 		const roles = authStore.user?.roles ?? [];
-		return isSystemAdmin(roles) || isShelterManager(roles, shelterStore.selectedShelterCode);
+		const code = shelterStore.selectedShelterCode;
+		return (
+			isSystemAdmin(roles) ||
+			isShelterManager(roles, code) ||
+			hasStaffCapability(roles, VOLUNTEER_COORDINATOR, code)
+		);
 	});
+	// Re-activating a deactivated profile (#882, CR FR-12): SA / SM / volunteer_coordinator.
+	const canReactivate = $derived(
+		canAccessVolunteerBackoffice(authStore.user?.roles ?? [], shelterStore.selectedShelterCode)
+	);
+	const hasAccount = $derived(accessStatus.kind !== 'none');
+	// A linked account is managed on the users page, which only SA/SM can open. A coordinator
+	// keeps the dialog: it lists their grants to renew or revoke (#955 FR-8).
+	const managesOnUsersPage = $derived.by(() => {
+		const roles = authStore.user?.roles ?? [];
+		return (
+			hasAccount &&
+			(isSystemAdmin(roles) || isShelterManager(roles, shelterStore.selectedShelterCode))
+		);
+	});
+	// Only SA/SM can open the users page (and only they know the exact login to deep-link).
+	const manageAccountHref = $derived(
+		accessStatus.kind === 'none'
+			? '/back-office/users'
+			: `/back-office/users/${encodeURIComponent(accessStatus.loginName)}`
+	);
 	let deleteDialogOpen = $state(false);
 
 	const queryClient = useQueryClient();
 	const deactivateMutation = useDeactivateVolunteer(queryClient);
+	const reactivateMutation = useReactivateVolunteer(queryClient);
 
 	function openQualificationAudit(skillCode?: string) {
 		manageDialogOpen = false;
 		qualificationFocusSkillCode = skillCode ?? null;
 		qualificationDialogOpen = true;
+	}
+
+	function reactivate() {
+		reactivateMutation.mutate(volunteer._id, {
+			onSuccess: () => toast.success(`เปิดใช้งานอาสาสมัคร ${fullName} อีกครั้งแล้ว`),
+			onError: (error) =>
+				toast.error(error instanceof Error ? error.message : 'เปิดใช้งานอาสาสมัครไม่สำเร็จ')
+		});
 	}
 
 	function confirmDeactivate(event: MouseEvent) {
@@ -196,6 +243,14 @@
 						<Phone class="h-3.5 w-3.5" />
 						{volunteer.phone}
 					</p>
+					{#if !isVolunteerMobile(volunteer.phone)}
+						<Badge
+							variant="outline"
+							class="gap-1 border-amber-300 bg-amber-50 text-[11px] text-amber-800"
+						>
+							เบอร์ไม่ใช่มือถือ 10 หลัก
+						</Badge>
+					{/if}
 				{/if}
 			</div>
 		</div>
@@ -264,6 +319,32 @@
 				</Badge>
 			{/if}
 
+			{#if accessStatus.kind === 'deactivated'}
+				<Badge
+					class="max-w-full gap-1 border-rose-200 bg-rose-50 whitespace-normal text-rose-700"
+					variant="outline"
+				>
+					<KeyRound class="h-3 w-3 shrink-0" />
+					บัญชีถูกปิดใช้งาน
+				</Badge>
+			{:else if accessStatus.kind === 'linked'}
+				<Badge
+					class="max-w-full gap-1 border-emerald-300 bg-emerald-50 whitespace-normal text-emerald-700"
+					variant="outline"
+				>
+					<KeyRound class="h-3 w-3 shrink-0" />
+					มีบัญชีแล้ว{accessStatus.roleLabels && accessStatus.roleLabels.length > 0
+						? ` · ${accessStatus.roleLabels.join(', ')}`
+						: ''}
+				</Badge>
+			{/if}
+			{#if accessStatus.kind !== 'none'}
+				<p class="text-xs break-all text-muted-foreground">{accessStatus.loginName}</p>
+				{#if accessStatus.roleLabels && accessStatus.roleLabels.length === 0}
+					<p class="text-[11px] text-amber-700">ยังไม่มีสิทธิ์ในศูนย์นี้</p>
+				{/if}
+			{/if}
+
 			{#if todayAssignment}
 				<p class="text-xs text-muted-foreground">{SHIFT_LABELS[todayAssignment.shift]}</p>
 			{:else if identityStatus !== 'verified'}
@@ -301,13 +382,38 @@
 
 			<div class="flex items-center gap-1.5">
 				{#if canGrantAccess}
+					{#if managesOnUsersPage}
+						<Button
+							size="sm"
+							variant="outline"
+							class="flex-1 gap-1.5"
+							href={resolve(manageAccountHref as '/back-office/users')}
+						>
+							<KeyRound class="h-3.5 w-3.5" />
+							จัดการบัญชีผู้ใช้
+						</Button>
+					{:else}
+						<Button
+							size="sm"
+							class="flex-1 gap-1.5 bg-primary-dark text-white hover:bg-primary-dark/90"
+							onclick={() => (accessDialogOpen = true)}
+						>
+							<KeyRound class="h-3.5 w-3.5" />
+							ออกสิทธิ์ใช้งานระบบ
+						</Button>
+					{/if}
+				{/if}
+
+				{#if volunteer.status === 'inactive' && canReactivate}
 					<Button
 						size="sm"
-						class="flex-1 gap-1.5 bg-primary-dark text-white hover:bg-primary-dark/90"
-						onclick={() => (accessDialogOpen = true)}
+						variant="outline"
+						class="flex-1 gap-1.5 border-emerald-300 text-emerald-700 hover:bg-emerald-50"
+						onclick={reactivate}
+						disabled={reactivateMutation.isPending}
 					>
-						<KeyRound class="h-3.5 w-3.5" />
-						ออกสิทธิ์ใช้งานระบบ
+						<RotateCcw class="h-3.5 w-3.5" />
+						{reactivateMutation.isPending ? 'กำลังเปิดใช้งาน...' : 'เปิดใช้งานอีกครั้ง'}
 					</Button>
 				{/if}
 
@@ -339,7 +445,7 @@
 	{shelterLine}
 	focusSkillCode={qualificationFocusSkillCode}
 />
-{#if canGrantAccess}
+{#if canGrantAccess && !managesOnUsersPage}
 	<VolunteerAccessDialog bind:open={accessDialogOpen} {volunteer} {shelterLine} />
 {/if}
 
@@ -356,7 +462,7 @@
 		<AlertDialog.Footer>
 			<AlertDialog.Cancel disabled={deactivateMutation.isPending}>ยกเลิก</AlertDialog.Cancel>
 			<AlertDialog.Action
-				class="text-destructive-foreground bg-destructive hover:bg-destructive/90"
+				class="bg-destructive text-destructive-foreground hover:bg-destructive/90"
 				onclick={confirmDeactivate}
 				disabled={deactivateMutation.isPending}
 			>

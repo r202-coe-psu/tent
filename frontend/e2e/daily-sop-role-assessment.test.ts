@@ -54,6 +54,9 @@ import {
 	type DailySopRoleCode
 } from '../src/lib/features/daily-sop/domain/daily-sop';
 
+/** Id of this spec's created-data ledger (see helpers/public-cleanup.ts). */
+const LEDGER_SUITE = 'daily-sop-role-assessment';
+
 test.describe.configure({ mode: 'serial' });
 test.use({ actionTimeout: 15_000 });
 
@@ -420,7 +423,7 @@ test.describe(
 				subdistrict: 'คอหงส์',
 				capacity: 60
 			});
-			recordCreatedShelter(shelterCode);
+			recordCreatedShelter(shelterCode, LEDGER_SUITE);
 			await provisionAccounts(shelterCode);
 			// SA, nine positions, the SC alias (warehouse_staff) and a no-position account.
 			expect(accounts).toHaveLength(DAILY_SOP_ROLES.length + 3);

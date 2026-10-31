@@ -195,9 +195,17 @@ describe('POST /api/v1/kiosk/register', () => {
 		['guardian_for on the kiosk', { consent: kioskDecision({ guardian_for: ['member-1'] }) }],
 		['verbal consent on the kiosk', { consent: kioskDecision({ verbal: true }) }],
 		['a malformed consent ref', { consent: kioskDecision({ ref: 'CS-bad' }) }],
+		['a basic-mode consent', { consent: kioskDecision({ mode: 'basic' }) }],
 		[
-			'a basic consent claiming health',
-			{ consent: kioskDecision({ mode: 'basic', health: true }) }
+			'a basic-mode consent in its old shape',
+			{
+				consent: {
+					mode: 'basic',
+					guardian_for: [],
+					verbal: false,
+					...mintConsentStamp()
+				}
+			}
 		],
 		['an unknown consent field', { consent: { ...kioskDecision(), channel: 'staff' } }],
 		['a consented_at that is not the decision time', { consented_at: '2020-01-01T00:00:00.000Z' }]

@@ -135,10 +135,6 @@
 					: 'กรุณานำบัตรออกจากเครื่อง รับ QR Code แล้วไปที่จุดคัดกรอง'}
 			</p>
 			<p class="text-base kiosk-portrait:text-xl">
-				{CONSENT_COPY.summary.mode}: {registration.consent_mode === 'basic'
-					? CONSENT_COPY.summary.modeBasic
-					: CONSENT_COPY.summary.modeFull}
-				<br />
 				{CONSENT_COPY.summary.ref}:
 				<span class="font-mono tracking-wide">{registration.consent_ref}</span>
 			</p>

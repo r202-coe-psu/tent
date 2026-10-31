@@ -1,0 +1,545 @@
+{
+  "$comment": "CR-206 FR-MP-27a / FR-MP-29b. Read by frontend `point-receipts.parity.test.ts` (donationShortfall + closeDonationByPoints) and worker `test_donation_close.py` (port). Change both sides together.",
+  "shortfall": [
+    {
+      "name": "counted in full",
+      "declared": [
+        {
+          "item_id": "item:water",
+          "qty": "24"
+        }
+      ],
+      "counted": [
+        {
+          "item_id": "item:water",
+          "qty": "24"
+        }
+      ],
+      "expected": []
+    },
+    {
+      "name": "counted less, summed per item",
+      "declared": [
+        {
+          "item_id": "item:water",
+          "qty": "12"
+        },
+        {
+          "item_id": "item:water",
+          "qty": "12"
+        },
+        {
+          "item_id": "item:rice",
+          "qty": "5"
+        }
+      ],
+      "counted": [
+        {
+          "item_id": "item:water",
+          "qty": "20"
+        },
+        {
+          "item_id": "item:rice",
+          "qty": "5"
+        }
+      ],
+      "expected": [
+        {
+          "item_id": "item:water",
+          "declared": "24",
+          "counted": "20",
+          "short": "4"
+        }
+      ]
+    },
+    {
+      "name": "decimal quantities, nothing counted",
+      "declared": [
+        {
+          "item_id": "item:rice",
+          "qty": "2.5"
+        }
+      ],
+      "counted": [],
+      "expected": [
+        {
+          "item_id": "item:rice",
+          "declared": "2.5",
+          "counted": "0",
+          "short": "2.5"
+        }
+      ]
+    },
+    {
+      "name": "over-count is not a shortfall; lines without item_id are ignored",
+      "declared": [
+        {
+          "item_id": "item:water",
+          "qty": "10"
+        },
+        {
+          "item_id": null,
+          "qty": "3"
+        }
+      ],
+      "counted": [
+        {
+          "item_id": "item:water",
+          "qty": "15"
+        },
+        {
+          "item_id": null,
+          "qty": "1"
+        }
+      ],
+      "expected": []
+    }
+  ],
+  "close": [
+    {
+      "name": "AC-6 every point received in full",
+      "donation": {
+        "items": [
+          {
+            "item_id": "item:water",
+            "free_text": "น้ำดื่ม",
+            "qty": "24",
+            "unit": "bottle",
+            "drop_off_point_id": "p-gym"
+          },
+          {
+            "item_id": "item:para",
+            "free_text": "ยาพารา",
+            "qty": "10",
+            "unit": "pack",
+            "drop_off_point_id": "p-med"
+          }
+        ],
+        "point_receipts": [
+          {
+            "point_id": "p-gym",
+            "line_nos": [0],
+            "received_at": "2026-10-28T02:12:00.000Z",
+            "received_by": "gym",
+            "audit_id": "audit:a",
+            "ledger_ids": ["stock_ledger:a"],
+            "items": [
+              {
+                "line_no": 0,
+                "item_id": "item:water",
+                "free_text": "น้ำดื่ม",
+                "qty": "24",
+                "unit": "bottle"
+              }
+            ]
+          },
+          {
+            "point_id": "p-med",
+            "line_nos": [1],
+            "received_at": "2026-10-28T03:00:00.000Z",
+            "received_by": "med",
+            "audit_id": "audit:b",
+            "ledger_ids": ["stock_ledger:b"],
+            "items": [
+              {
+                "line_no": 1,
+                "item_id": "item:para",
+                "free_text": "ยาพารา",
+                "qty": "10",
+                "unit": "pack"
+              }
+            ]
+          }
+        ]
+      },
+      "opts": {
+        "closed_by": "med",
+        "closed_reason": "all_points",
+        "now": "2026-10-28T03:00:00.000Z"
+      },
+      "expected": {
+        "status": "received",
+        "received_at": "2026-10-28T03:00:00.000Z",
+        "received_summary": {
+          "total_items": 2,
+          "received_at": "2026-10-28T03:00:00.000Z",
+          "closed_by": "med",
+          "closed_reason": "all_points",
+          "shortfalls": [],
+          "items": [
+            {
+              "item_id": "item:water",
+              "free_text": "น้ำดื่ม",
+              "qty": "24",
+              "unit": "bottle"
+            },
+            {
+              "item_id": "item:para",
+              "free_text": "ยาพารา",
+              "qty": "10",
+              "unit": "pack"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "AC-7 staff close with a point that never came, remarks joined",
+      "donation": {
+        "items": [
+          {
+            "item_id": "item:water",
+            "free_text": "น้ำดื่ม",
+            "qty": "24",
+            "unit": "bottle",
+            "drop_off_point_id": "p-gym"
+          },
+          {
+            "item_id": "item:para",
+            "free_text": "ยาพารา",
+            "qty": "10",
+            "unit": "pack",
+            "drop_off_point_id": "p-med"
+          }
+        ],
+        "point_receipts": [
+          {
+            "point_id": "p-gym",
+            "line_nos": [0],
+            "received_at": "2026-10-28T02:12:00.000Z",
+            "received_by": "gym",
+            "audit_id": "audit:a",
+            "ledger_ids": ["stock_ledger:a"],
+            "items": [
+              {
+                "line_no": 0,
+                "item_id": "item:water",
+                "free_text": "น้ำดื่ม",
+                "qty": "20",
+                "unit": "bottle"
+              }
+            ],
+            "remarks": "  ลังบุบ 1 ลัง "
+          }
+        ]
+      },
+      "opts": {
+        "closed_by": "lead",
+        "closed_reason": "staff_close",
+        "now": "2026-10-29T10:00:00.000Z"
+      },
+      "expected": {
+        "status": "received",
+        "received_at": "2026-10-29T10:00:00.000Z",
+        "received_summary": {
+          "total_items": 2,
+          "received_at": "2026-10-29T10:00:00.000Z",
+          "remarks": "ลังบุบ 1 ลัง",
+          "closed_by": "lead",
+          "closed_reason": "staff_close",
+          "shortfalls": [
+            {
+              "item_id": "item:water",
+              "declared": "24",
+              "counted": "20",
+              "short": "4"
+            },
+            {
+              "item_id": "item:para",
+              "declared": "10",
+              "counted": "0",
+              "short": "10"
+            }
+          ],
+          "items": [
+            {
+              "item_id": "item:water",
+              "free_text": "น้ำดื่ม",
+              "qty": "20",
+              "unit": "bottle"
+            },
+            {
+              "item_id": "item:para",
+              "free_text": "ยาพารา",
+              "qty": "0",
+              "unit": "pack"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "AC-18 every recorded line refused, the rest missing: booking rejected",
+      "donation": {
+        "items": [
+          {
+            "item_id": "item:water",
+            "free_text": "น้ำดื่ม",
+            "qty": "24",
+            "unit": "bottle",
+            "drop_off_point_id": "p-gym"
+          },
+          {
+            "item_id": "item:para",
+            "free_text": "ยาพารา",
+            "qty": "10",
+            "unit": "pack",
+            "drop_off_point_id": "p-med"
+          }
+        ],
+        "point_receipts": [
+          {
+            "point_id": "p-gym",
+            "line_nos": [0],
+            "received_at": "2026-10-28T02:12:00.000Z",
+            "received_by": "gym",
+            "audit_id": "audit:a",
+            "ledger_ids": [],
+            "items": [
+              {
+                "line_no": 0,
+                "item_id": "item:water",
+                "free_text": "น้ำดื่ม",
+                "qty": "0",
+                "unit": "bottle",
+                "rejected": true,
+                "reject_reason": "ชำรุดเสียหาย",
+                "reject_reason_code": "damaged"
+              }
+            ],
+            "remarks": "ขวดรั่วทั้งลัง"
+          }
+        ]
+      },
+      "opts": {
+        "closed_by": "system",
+        "closed_reason": "expired",
+        "now": "2026-10-30T17:00:00.000Z"
+      },
+      "expected": {
+        "status": "rejected",
+        "reject_reason": "ชำรุดเสียหาย",
+        "reject_reason_code": "damaged",
+        "received_summary": {
+          "total_items": 2,
+          "received_at": "2026-10-30T17:00:00.000Z",
+          "remarks": "ขวดรั่วทั้งลัง",
+          "closed_by": "system",
+          "closed_reason": "expired",
+          "shortfalls": [
+            {
+              "item_id": "item:para",
+              "declared": "10",
+              "counted": "0",
+              "short": "10"
+            }
+          ],
+          "items": [
+            {
+              "item_id": "item:water",
+              "free_text": "น้ำดื่ม",
+              "qty": "0",
+              "unit": "bottle",
+              "rejected": true,
+              "reject_reason": "ชำรุดเสียหาย",
+              "reject_reason_code": "damaged"
+            },
+            {
+              "item_id": "item:para",
+              "free_text": "ยาพารา",
+              "qty": "0",
+              "unit": "pack"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "typed-in line matched to a stock item at the point; review-refused line needs no receipt",
+      "donation": {
+        "items": [
+          {
+            "free_text": "ข้าวสาร 5 กก.",
+            "qty": "2",
+            "unit": "bag",
+            "drop_off_point_id": "p-gym",
+            "review_status": "approved"
+          },
+          {
+            "item_id": "item:milk",
+            "free_text": "นมกล่อง",
+            "qty": "6",
+            "unit": "box",
+            "drop_off_point_id": "p-med",
+            "review_status": "rejected",
+            "review_reason_code": "not_needed",
+            "review_reason": "ศูนย์ได้รับนมครบแล้ว"
+          }
+        ],
+        "point_receipts": [
+          {
+            "point_id": null,
+            "line_nos": [0],
+            "received_at": "2026-10-28T02:12:00.000Z",
+            "received_by": "gym",
+            "audit_id": "audit:a",
+            "ledger_ids": ["stock_ledger:a"],
+            "items": [
+              {
+                "line_no": 0,
+                "item_id": "item:rice",
+                "free_text": "ข้าวสาร 5 กก.",
+                "qty": "1",
+                "unit": "bag"
+              }
+            ]
+          }
+        ]
+      },
+      "opts": {
+        "closed_by": "gym",
+        "closed_reason": "all_points",
+        "now": "2026-10-28T02:12:00.000Z"
+      },
+      "expected": {
+        "status": "received",
+        "received_at": "2026-10-28T02:12:00.000Z",
+        "received_summary": {
+          "total_items": 2,
+          "received_at": "2026-10-28T02:12:00.000Z",
+          "closed_by": "gym",
+          "closed_reason": "all_points",
+          "shortfalls": [
+            {
+              "item_id": "item:rice",
+              "declared": "2",
+              "counted": "1",
+              "short": "1"
+            }
+          ],
+          "items": [
+            {
+              "item_id": "item:rice",
+              "free_text": "ข้าวสาร 5 กก.",
+              "qty": "1",
+              "unit": "bag"
+            },
+            {
+              "item_id": "item:milk",
+              "free_text": "นมกล่อง",
+              "qty": "0",
+              "unit": "box",
+              "rejected": true,
+              "reject_reason": "ศูนย์ได้รับนมครบแล้ว",
+              "reject_reason_code": "not_needed"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "refused booking: a review-refused line with code other and no detail adds no empty reason",
+      "donation": {
+        "items": [
+          {
+            "item_id": "item:water",
+            "free_text": "น้ำดื่ม",
+            "qty": "24",
+            "unit": "bottle",
+            "review_status": "approved",
+            "drop_off_point_id": "p-gym"
+          },
+          {
+            "item_id": "item:para",
+            "free_text": "ยาพารา",
+            "qty": "10",
+            "unit": "pack",
+            "review_status": "rejected",
+            "review_reason_code": "other",
+            "review_reason": "",
+            "drop_off_point_id": "p-med"
+          }
+        ],
+        "point_receipts": [
+          {
+            "point_id": "p-gym",
+            "line_nos": [0],
+            "received_at": "2026-10-28T02:12:00.000Z",
+            "received_by": "gym",
+            "audit_id": "audit:a",
+            "ledger_ids": [],
+            "items": [
+              {
+                "line_no": 0,
+                "item_id": "item:water",
+                "free_text": "น้ำดื่ม",
+                "qty": "0",
+                "unit": "bottle",
+                "rejected": true,
+                "reject_reason": "หมดอายุ",
+                "reject_reason_code": "expired"
+              }
+            ]
+          }
+        ]
+      },
+      "opts": {
+        "closed_by": "system",
+        "closed_reason": "expired",
+        "now": "2026-10-30T17:00:00.000Z"
+      },
+      "expected": {
+        "status": "rejected",
+        "reject_reason": "หมดอายุ",
+        "reject_reason_code": "other",
+        "items": [
+          {
+            "item_id": "item:water",
+            "free_text": "น้ำดื่ม",
+            "qty": "24",
+            "unit": "bottle",
+            "review_status": "rejected",
+            "drop_off_point_id": "p-gym"
+          },
+          {
+            "item_id": "item:para",
+            "free_text": "ยาพารา",
+            "qty": "10",
+            "unit": "pack",
+            "review_status": "rejected",
+            "review_reason_code": "other",
+            "review_reason": "",
+            "drop_off_point_id": "p-med"
+          }
+        ],
+        "received_summary": {
+          "total_items": 2,
+          "received_at": "2026-10-30T17:00:00.000Z",
+          "closed_by": "system",
+          "closed_reason": "expired",
+          "shortfalls": [],
+          "items": [
+            {
+              "item_id": "item:water",
+              "free_text": "น้ำดื่ม",
+              "qty": "0",
+              "unit": "bottle",
+              "rejected": true,
+              "reject_reason": "หมดอายุ",
+              "reject_reason_code": "expired"
+            },
+            {
+              "item_id": "item:para",
+              "free_text": "ยาพารา",
+              "qty": "0",
+              "unit": "pack",
+              "rejected": true,
+              "reject_reason": "",
+              "reject_reason_code": "other"
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

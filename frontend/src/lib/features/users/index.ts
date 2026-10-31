@@ -3,6 +3,8 @@ export {
 	editUserSchema,
 	capabilitySchema,
 	shelterAssignmentSchema,
+	phoneSchema,
+	contactPhoneSchema,
 	type CreateUserInput,
 	type EditUserInput,
 	type UserFormInput,
@@ -32,6 +34,7 @@ export {
 	type OwnProfileUpdateInput,
 	type OwnProfileUpdateResult
 } from './data/users.api';
+export { listShelterStaff, type StaffDirectoryEntry } from './data/staff-directory.api';
 export { useUsers, useCreateUser, useDeleteUser, useUpdateUser } from './application/queries';
 export { default as UserForm } from './ui/user-form.svelte';
 export { default as UserList } from './ui/user-list.svelte';

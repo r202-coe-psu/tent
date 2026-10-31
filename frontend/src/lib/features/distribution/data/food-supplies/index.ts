@@ -22,6 +22,16 @@ export {
 } from './bulk-return-pool.repository';
 
 export {
+	BulkReturnPoolV3RemoteRepository,
+	type BulkReturnPoolV3Repository
+} from './bulk-return-pool-v3.repository';
+
+export {
+	BulkReturnEventRemoteRepository,
+	type BulkReturnEventRepository
+} from './bulk-return-event.repository';
+
+export {
 	BulkReturnClaimRemoteRepository,
 	type BulkReturnClaimRepository
 } from './bulk-return-claim.repository';
@@ -31,5 +41,7 @@ export {
 	type LoanReturnReservationRepository,
 	type ReinitializeLoanReturnReservationInput
 } from './return-reservation.repository';
+
+export { parseDocsOrSkip, type SkippedDoc } from './parse-or-skip';
 
 export { resolveShelterDbName, retryCas, isCouchConflictError, MAX_CAS_RETRIES } from './shared';

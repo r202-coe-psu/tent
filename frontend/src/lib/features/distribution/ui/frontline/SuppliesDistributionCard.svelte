@@ -23,6 +23,12 @@
 		type FrontlineRecipientSelection
 	} from '../model/frontline-handover';
 	import { formatDistributionError } from '../model/distribution-error';
+	import {
+		HANDOVER_DEFAULT_QTY,
+		isHandoverDraft,
+		isOutsideNotesDraft,
+		type DeskDrafts
+	} from '../model/desk-draft';
 	import RecipientSearchPicker from '../common/RecipientSearchPicker.svelte';
 	import QtyStepper from '../common/QtyStepper.svelte';
 	import InFlightTopUpDialog from './InFlightTopUpDialog.svelte';
@@ -30,9 +36,11 @@
 	interface Props {
 		ticket: RequisitionTicket;
 		shelterCode?: string;
+		/** FR-DFS-05 — the page asks before a mode switch drops typed input. */
+		drafts?: DeskDrafts;
 	}
 
-	let { ticket, shelterCode }: Props = $props();
+	let { ticket, shelterCode, drafts }: Props = $props();
 
 	const recordSuppliesMutation = useRecordSuppliesDistribution();
 
@@ -53,12 +61,25 @@
 	// Item the user picked; the effective selection falls back to the first ticket item whenever
 	// the pick is empty or no longer on the ticket (e.g. parent switches active ticket).
 	let pickedItemId = $state('');
-	let qtyInput = $state('1');
+	let qtyInput = $state(HANDOVER_DEFAULT_QTY);
 	let recipientSelection = $state<FrontlineRecipientSelection | null>(null);
 	let notesInput = $state('');
 	let localSubmitError = $state<string | null>(null);
 	let topUpDialogOpen = $state(false);
 	let picker = $state<ReturnType<typeof RecipientSearchPicker>>();
+
+	// Notes the last handover recorded for the walk-in the picker keeps selected.
+	let recordedOutsideNotes: string | undefined;
+
+	// The outside recipient's notes live in the picker but reach the card through the selection.
+	$effect(() =>
+		drafts?.track(
+			() =>
+				isHandoverDraft({ qtyInput, notesInput }) ||
+				(recipientSelection?.recipientType === 'outside' &&
+					isOutsideNotesDraft(recipientSelection.notes, recordedOutsideNotes))
+		)
+	);
 
 	function handleQtyBlur() {
 		const raw = qtyInput.trim();
@@ -157,8 +178,10 @@
 			);
 
 			// Reset for the next person; a scanned recipient reopens the scanner.
-			qtyInput = '1';
+			qtyInput = HANDOVER_DEFAULT_QTY;
 			notesInput = '';
+			recordedOutsideNotes =
+				recipientSelection?.recipientType === 'outside' ? recipientSelection.notes : undefined;
 			picker?.next();
 		} catch (err) {
 			localSubmitError = formatDistributionError(
@@ -169,19 +192,19 @@
 	}
 </script>
 
-<div class="space-y-5 rounded-2xl border border-slate-200/80 bg-white p-6 shadow-xs">
+<div class="space-y-5 rounded-2xl border border-slate-200/80 bg-white p-4 shadow-xs sm:p-6">
 	<!-- Ticket Header -->
 	<div
 		class="flex flex-col gap-3 border-b border-slate-100 pb-4 sm:flex-row sm:items-center sm:justify-between"
 	>
-		<div class="flex items-center gap-3">
+		<div class="flex min-w-0 items-center gap-3">
 			<div
-				class="flex h-11 w-11 items-center justify-center rounded-xl border border-indigo-200 bg-indigo-50 text-indigo-700 shadow-2xs"
+				class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-indigo-200 bg-indigo-50 text-indigo-700 shadow-2xs"
 			>
 				<Package class="h-6 w-6" />
 			</div>
-			<div>
-				<div class="flex items-center gap-2">
+			<div class="min-w-0">
+				<div class="flex flex-wrap items-center gap-2">
 					<span class="font-mono text-xs font-bold text-slate-500">{ticket.ticket_no}</span>
 					<span
 						class="rounded-full border border-indigo-200 bg-indigo-50 px-2 py-0.5 text-2xs font-bold text-indigo-900"
@@ -189,7 +212,7 @@
 						พัสดุและอุปกรณ์บรรเทาทุกข์
 					</span>
 				</div>
-				<h3 class="text-base font-bold text-slate-900">
+				<h3 class="text-base font-bold break-words text-slate-900">
 					สถานีจ่ายพัสดุ & ยืม-คืน · จุดบริการ {ticket.destination_location}
 				</h3>
 			</div>
@@ -220,8 +243,10 @@
 						: 'border-slate-200 bg-white hover:border-slate-300'}"
 				>
 					<div class="min-w-0 flex-1">
-						<div class="flex items-center gap-1.5">
-							<p class="truncate text-base font-bold text-slate-900">{item.item_name}</p>
+						<div class="flex flex-wrap items-center gap-1.5">
+							<p class="line-clamp-2 text-base font-bold break-words text-slate-900">
+								{item.item_name}
+							</p>
 							<span
 								class="shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold {isItemReturnable
 									? 'border border-purple-200 bg-purple-50 text-purple-800'

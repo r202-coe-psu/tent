@@ -8,7 +8,6 @@ import type {
 	PetCondition,
 	PowerSource,
 	ProjectLevel,
-	SiteKind,
 	SubStorageType,
 	VehicleType,
 	WaterSource,
@@ -16,7 +15,6 @@ import type {
 	ZoneType
 } from '$lib/features/shelters';
 import {
-	SITE_KIND_LABELS,
 	luggageRuleLabels,
 	parkingRuleLabels,
 	petCategoryConditions,
@@ -71,11 +69,6 @@ export const OPERATION_STATUS_CHOICES: EnumChoice<OperationStatus>[] = [
 	{ value: 'active', label: 'เปิดรับผู้อพยพ (Active)' },
 	{ value: 'full_capacity', label: 'เต็มความจุ (Full Capacity)' },
 	{ value: 'closed', label: 'ปิดศูนย์ (Closed)' }
-];
-
-export const SITE_KIND_CHOICES: EnumChoice<SiteKind>[] = [
-	{ value: 'evacuation_center', label: SITE_KIND_LABELS.evacuation_center },
-	{ value: 'host_house', label: SITE_KIND_LABELS.host_house }
 ];
 
 export const PROJECT_LEVEL_CHOICES: EnumChoice<ProjectLevel>[] = [
@@ -235,7 +228,7 @@ export const H = {
 	name: 'ชื่อศูนย์พักพิง',
 	site_kind: 'ชนิดสถานที่',
 	operation_status: 'สถานะ',
-	shelter_type: 'ประเภทศูนย์พักพิง',
+	shelter_type: 'ประเภทอาคาร',
 	project_level: 'ระดับโครงการ',
 	area_type: 'สถานะพื้นที่อาคาร',
 	capacity: 'ความจุสูงสุด (คน)',
@@ -360,10 +353,19 @@ export function isTextColumn(kind: ColumnKind): boolean {
  * No Thai header ends in "*", so the strip is unambiguous. Workbooks from the
  * earlier template — which carried the asterisk in its own narrow column —
  * normalize that cell to '' and it is ignored like any unknown column.
+ *
+ * Renamed headers in workbooks downloaded before the rename resolve to their
+ * current name through {@link LEGACY_HEADERS}.
  */
 export function normalizeHeader(text: string): string {
-	return text.replace(/\s*\*+\s*$/, '').trim();
+	const header = text.replace(/\s*\*+\s*$/, '').trim();
+	return Object.hasOwn(LEGACY_HEADERS, header) ? LEGACY_HEADERS[header] : header;
 }
+
+/** Retired header text → current header, so old templates keep importing. */
+const LEGACY_HEADERS: Readonly<Record<string, string>> = {
+	ประเภทศูนย์พักพิง: H.shelter_type
+};
 
 /**
  * master_data lists the importer resolves.
@@ -374,9 +376,9 @@ export function normalizeHeader(text: string): string {
  * downloaded template would go stale, so they are left out of the workbook
  * entirely rather than shipped as columns people get wrong.
  */
-export type MasterColumn = 'shelter_type';
+export type MasterColumn = 'shelter_type' | 'site_kind';
 
-export const MASTER_COLUMNS: readonly MasterColumn[] = ['shelter_type'];
+export const MASTER_COLUMNS: readonly MasterColumn[] = ['shelter_type', 'site_kind'];
 
 /** Shelter fields intentionally absent from the workbook — documented on the README sheet. */
 export const APP_ONLY_FIELDS: readonly string[] = [
@@ -456,19 +458,19 @@ const SHEET_MAIN: SheetDef = {
 		},
 		{
 			header: H.site_kind,
-			kind: 'enum',
-			required: true,
-			choices: SITE_KIND_CHOICES,
+			kind: 'masterdata',
+			required: false,
+			masterType: 'site_kind',
 			path: 'site_kind',
-			hint: 'ชนิดสถานที่ — เลือกจากรายการ (จำเป็น)'
+			hint: 'ชนิดสถานที่ — เลือกจากรายการประเภทศูนย์ (ว่าง = ค่าเริ่มต้นของรายการ)'
 		},
 		{
 			header: H.operation_status,
 			kind: 'enum',
 			required: false,
-			choices: OPERATION_STATUS_CHOICES,
+			choices: OPERATION_STATUS_CHOICES.filter((c) => c.value !== 'closed'),
 			path: 'operation_status',
-			hint: 'สถานะการเปิดให้บริการ (ว่าง = กำลังเตรียมการ)'
+			hint: 'สถานะการเปิดให้บริการ (ว่าง = กำลังเตรียมการ) · ปิดศูนย์ได้จากหน้าจัดการศูนย์เท่านั้น'
 		},
 		{
 			header: H.shelter_type,
@@ -476,7 +478,7 @@ const SHEET_MAIN: SheetDef = {
 			required: false,
 			masterType: 'shelter_type',
 			path: 'shelter_type',
-			hint: 'เลือกจากรายการประเภทศูนย์พักพิง'
+			hint: 'เลือกจากรายการประเภทอาคาร'
 		},
 		{
 			header: H.project_level,

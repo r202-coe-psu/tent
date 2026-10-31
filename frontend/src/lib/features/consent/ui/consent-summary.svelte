@@ -7,21 +7,19 @@
 	let {
 		consent,
 		searchExcluded,
-		guardianNames = [],
 		staff = null,
 		heading
 	}: {
 		consent: EvacueeConsent;
 		/** The person's current `privacy.search_excluded`. */
 		searchExcluded: boolean;
-		guardianNames?: readonly string[];
 		staff?: ConsentStaff | null;
 		/** Replaces the §5 title, e.g. with the person's name on a read-only report-in summary. */
 		heading?: string;
 	} = $props();
 
 	const uid = $props.id();
-	const summary = $derived(summarizeConsent(consent, searchExcluded, { guardianNames, staff }));
+	const summary = $derived(summarizeConsent(consent, searchExcluded, { staff }));
 </script>
 
 <section

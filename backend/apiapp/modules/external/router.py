@@ -12,7 +12,7 @@ from ...utils.request_meta import client_ip
 from ..announcements.router import PaginatedAnnouncements
 from ..config.schemas import ConfigResponse
 from ..config.use_case import ConfigUseCase, get_config_use_case
-from ..evacuee.schemas import ApiErrorResponse, SearchRequest, SearchResponse
+from ..evacuee.schemas import ApiErrorResponse, ExternalSearchResponse, SearchRequest
 from ..evacuee.use_case import EvacueeUseCase, get_evacuee_use_case
 from ..needs.schemas import NeedsListResponse
 from ..needs.use_case import NeedsUseCase, get_needs_use_case
@@ -56,7 +56,7 @@ async def list_needs(
 
 @router.post(
     "/occupants",
-    response_model=SearchResponse,
+    response_model=ExternalSearchResponse,
     responses={
         429: {"model": ApiErrorResponse},
         422: {"model": ApiErrorResponse},
@@ -67,10 +67,10 @@ async def search_evacuees(
     request: Request,
     response: Response,
     use_case: EvacueeUseCase = Depends(get_evacuee_use_case),  # noqa: B008
-) -> SearchResponse:
+) -> ExternalSearchResponse:
     ip = client_ip(request)
     response.headers["Cache-Control"] = "no-store"
-    return await use_case.search(payload.search, client_ip=ip)
+    return await use_case.search_external(payload.search, client_ip=ip)
 
 
 @router.get("/announcements", response_model=PaginatedAnnouncements)

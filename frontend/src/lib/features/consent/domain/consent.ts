@@ -73,36 +73,33 @@ type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K>
 export type UnboundConsent = DistributiveOmit<EvacueeConsent, 'giver_evacuee_id'>;
 
 export interface SurfaceCaps {
-	guardian: boolean;
 	verbal: boolean;
 }
 
 export const SURFACE_CAPS: Record<BlockChannel, SurfaceCaps> = {
-	staff: { guardian: true, verbal: true },
-	web: { guardian: true, verbal: false },
-	kiosk: { guardian: false, verbal: false }
+	staff: { verbal: true },
+	web: { verbal: false },
+	kiosk: { verbal: false }
 };
 
+/**
+ * D17/D21: a new decision is always `full` and names no guardian members. `guardian_for` stays
+ * in the payload (always empty) so the endpoints keep their shape; stored `basic`/`guardian`
+ * consents from before stay readable through `evacueeConsentSchema`.
+ */
 function decisionSchemaFor(caps: SurfaceCaps) {
-	const shared = {
-		guardian_for: caps.guardian ? z.array(z.string().min(1)) : z.array(z.string()).max(0),
+	return z.strictObject({
+		mode: z.literal('full'),
+		health: z.boolean(),
+		search_visible: z.boolean(),
+		guardian_for: z.array(z.string()).max(0),
 		verbal: caps.verbal ? z.boolean() : z.literal(false),
 		ref: consentRefSchema,
 		given_at: isoTimestampSchema,
 		notice_version: z.string().min(1)
-	};
-	return z.discriminatedUnion('mode', [
-		z.strictObject({ mode: z.literal('basic'), ...shared }),
-		z.strictObject({
-			mode: z.literal('full'),
-			health: z.boolean(),
-			search_visible: z.boolean(),
-			...shared
-		})
-	]);
+	});
 }
 
-/** `guardian_for` holds member keys, never list indexes. */
 export function consentDecisionSchemaFor(channel: BlockChannel) {
 	return decisionSchemaFor(SURFACE_CAPS[channel]);
 }
@@ -142,8 +139,7 @@ export interface MemberConsentPlan {
 
 /**
  * The only implementation of FR-11, FR-30 to FR-33 and the FR-41 skip.
- * members[0] is the registrant (`self`), keys in `guardian_for` are `guardian`, the rest
- * `household_member`. Members already consented get no plan.
+ * members[0] is the registrant (`self`), everyone else is `household_member` (D17). Members already consented get no plan.
  */
 export function planRegistrationConsent(
 	decision: ConsentDecision,
@@ -161,19 +157,9 @@ export function planRegistrationConsent(
 	if (decision.verbal && !recordedBy) {
 		throw new Error('verbal consent needs the recording staff user');
 	}
-	if (decision.guardian_for.length > 0 && !caps.guardian) {
-		throw new Error(`channel ${channel} has no guardian consent`);
-	}
 	const registrantKey = members[0].key;
-	const memberKeys = new Set(members.map((m) => m.key));
-	for (const key of decision.guardian_for) {
-		if (key === registrantKey) throw new Error('the registrant cannot be a guardian-for member');
-		if (!memberKeys.has(key)) throw new Error(`guardian_for key not in members: ${key}`);
-	}
-
-	const guardianKeys = new Set(decision.guardian_for);
-	const health = decision.mode === 'full' && decision.health;
-	const searchExcluded = decision.mode === 'basic' || !decision.search_visible;
+	const health = decision.health;
+	const searchExcluded = !decision.search_visible;
 	const common = {
 		ref: decision.ref,
 		given_at: decision.given_at,
@@ -181,23 +167,15 @@ export function planRegistrationConsent(
 		channel,
 		recorded_verbally_by: decision.verbal ? recordedBy : null
 	};
-	const modePart =
-		decision.mode === 'basic'
-			? { mode: 'basic' as const, health: false as const }
-			: { mode: 'full' as const, health };
 
 	return members
 		.filter((member) => !member.alreadyConsented)
 		.map((member) => {
 			const given_by =
-				member.key === registrantKey
-					? ('self' as const)
-					: guardianKeys.has(member.key)
-						? ('guardian' as const)
-						: ('household_member' as const);
+				member.key === registrantKey ? ('self' as const) : ('household_member' as const);
 			return {
 				key: member.key,
-				consent: { ...common, ...modePart, given_by },
+				consent: { ...common, mode: 'full' as const, health, given_by },
 				searchExcluded,
 				medicalAllowed: health
 			};
@@ -247,7 +225,7 @@ export function initialSearchVisible(targets: readonly { search_excluded: boolea
 }
 
 export interface ConsentSummaryRow {
-	key: 'mode' | 'general' | 'health' | 'search' | 'guardian' | 'verbal' | 'time' | 'ref';
+	key: 'mode' | 'general' | 'health' | 'search' | 'verbal' | 'time' | 'ref';
 	label: string;
 	value: string;
 	consented?: boolean;
@@ -283,7 +261,6 @@ export function summarizeConsent(
 	consent: EvacueeConsent,
 	searchExcluded: boolean,
 	extras: {
-		guardianNames?: readonly string[];
 		staff?: { name: string; userId: string } | null;
 	} = {}
 ): ConsentSummary {
@@ -306,9 +283,6 @@ export function summarizeConsent(
 		yesNo('health', copy.health, consent.health),
 		yesNo('search', copy.search, !searchExcluded)
 	];
-	if (extras.guardianNames && extras.guardianNames.length > 0) {
-		rows.push({ key: 'guardian', label: copy.guardian, value: extras.guardianNames.join(', ') });
-	}
 	if (consent.recorded_verbally_by !== null) {
 		const staff = extras.staff;
 		rows.push({
@@ -324,7 +298,7 @@ export function summarizeConsent(
 	);
 
 	return {
-		title: basic ? CONSENT_COPY.result.titleBasic : CONSENT_COPY.result.titleFull,
+		title: CONSENT_COPY.result.title,
 		rows,
 		footer: CONSENT_COPY.result.withdrawNote
 	};

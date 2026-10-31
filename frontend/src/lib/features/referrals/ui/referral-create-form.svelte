@@ -6,11 +6,14 @@
 	import { type Referral, type ReferralInput } from '../domain/referral.schema';
 	import type { ReferralBatchFailure, ReferralSubmitIntent } from '../data/referral.repository';
 	import { useCreateReferralBatch } from '../application/queries';
+	import { useEvacuees } from '$lib/features/people';
+	import { formatEvacueeFullName, getEvacueeSelectionError } from './referral.ui-helpers';
 	import RedactionBanner from './redaction-banner.svelte';
 	import EvacueePickerTable from './evacuee-picker-table.svelte';
 	import MedicalReferralForm from './medical-referral-form.svelte';
 	import CapacityReferralForm from './capacity-referral-form.svelte';
 	import ResourceReferralForm from './resource-referral-form.svelte';
+	import ReferralConfirmDialog from './referral-confirm-dialog.svelte';
 
 	let {
 		onBatchDone
@@ -20,37 +23,86 @@
 
 	const queryClient = useQueryClient();
 	const batchMutation = useCreateReferralBatch(queryClient);
+	const evacueesQuery = useEvacuees();
+
+	type PendingSend = {
+		formData: ReferralInput;
+		intent: ReferralSubmitIntent;
+		evacueeIds: string[];
+	};
+	/** Set when a "ส่งข้อมูล" submit awaits confirmation; kept after close so the dialog stays mounted. */
+	let pendingSend = $state.raw<PendingSend | null>(null);
+	let sendConfirmOpen = $state(false);
+	// Resolved at render time so names fill in once the evacuee list has loaded.
+	const pendingNames = $derived(pendingSend ? namesFor(pendingSend.evacueeIds) : []);
 
 	let selectedIds = $state<string[]>([]);
 	let selectedType = $state<'medical-emergency' | 'capacity' | 'resource'>('medical-emergency');
 	let selectionAttempted = $state(false);
 
 	const evacueeError = $derived(
-		selectionAttempted && selectedIds.length === 0
-			? 'กรุณาเลือกผู้เข้าพักอย่างน้อย 1 คน'
-			: undefined
+		selectionAttempted ? getEvacueeSelectionError(selectedIds) : undefined
 	);
 
 	const formEvacueeId = $derived(selectedIds[0] ?? '');
 
+	// Superforms skips onUpdate → handleSubmit when evacuee_id is empty (schema fails first),
+	// so an empty selection never reaches handleSubmit. This runs on every submit attempt
+	// (draft or send) in the capture phase, before superforms' listener on the <form>.
+	function handleSubmitAttempt() {
+		const error = getEvacueeSelectionError(selectedIds);
+		if (!error) return;
+		selectionAttempted = true;
+		toast.error(error);
+	}
+
+	function namesFor(ids: string[]): string[] {
+		return ids.map((id) => {
+			const found = evacueesQuery.data?.find((e) => e._id === id);
+			return found ? formatEvacueeFullName(found) : id;
+		});
+	}
+
 	async function handleSubmit(formData: ReferralInput, intent: ReferralSubmitIntent) {
-		if (selectedIds.length === 0) {
+		const selectionError = getEvacueeSelectionError(selectedIds);
+		if (selectionError) {
 			selectionAttempted = true;
-			toast.error('กรุณาเลือกผู้เข้าพักอย่างน้อย 1 คน');
+			toast.error(selectionError);
 			return;
 		}
 
 		selectionAttempted = false;
+		if (intent === 'send') {
+			// Sending moves referrals out of draft, so confirm first. Snapshot the selection now.
+			const evacueeIds = [...selectedIds];
+			pendingSend = { formData, intent, evacueeIds };
+			sendConfirmOpen = true;
+			return;
+		}
+		await submitBatch(formData, intent, [...selectedIds]);
+	}
+
+	function confirmPendingSend() {
+		const request = pendingSend;
+		if (!request) return;
+		return submitBatch(request.formData, request.intent, request.evacueeIds);
+	}
+
+	async function submitBatch(
+		formData: ReferralInput,
+		intent: ReferralSubmitIntent,
+		evacueeIds: string[]
+	) {
 		const actionLabel = intent === 'send' ? 'สร้างและส่ง' : 'บันทึกร่าง';
 		const mutation = batchMutation.mutateAsync({
 			template: formData,
-			evacueeIds: [...selectedIds],
+			evacueeIds,
 			intent
 		});
 
 		try {
 			void toast.promise(mutation, {
-				loading: `กำลัง${actionLabel} ${selectedIds.length} รายการ...`,
+				loading: `กำลัง${actionLabel} ${evacueeIds.length} รายการ...`,
 				success: (res) => {
 					if (res.failed.length === 0) {
 						return intent === 'send'
@@ -78,8 +130,8 @@
 		<RedactionBanner />
 	{/if}
 
-	<Card.Root class="overflow-hidden border border-border/80 shadow-md">
-		<Card.Header class="bg-muted/40 pb-4">
+	<Card.Root class="border border-border/80 shadow-md">
+		<Card.Header class="rounded-t-xl bg-muted/40 pb-4">
 			<Card.Title class="text-xl font-bold"
 				>สร้างรายการส่งต่อผู้เข้าพัก (New Referral Request)</Card.Title
 			>
@@ -87,16 +139,16 @@
 				>เลือกผู้เข้าพักได้หลายคน — ระบบจะสร้าง 1 ใบต่อคนด้วยข้อมูลปลายทางชุดเดียวกัน</Card.Description
 			>
 		</Card.Header>
-		<Card.Content class="space-y-6 p-6">
+		<Card.Content class="space-y-6 p-4 md:p-6">
 			<div class="space-y-3">
 				<span class="text-sm font-semibold text-foreground"
-					>1. เลือกประเภทการส่งต่อ (Referral Type) *</span
+					>1. เลือกประเภทการส่งต่อ (Referral Type) <span class="text-red-600">*</span></span
 				>
 				<div class="grid grid-cols-1 gap-3 md:grid-cols-3">
 					<button
 						type="button"
 						onclick={() => (selectedType = 'medical-emergency')}
-						class="flex cursor-pointer flex-col justify-between rounded-xl border-2 p-4 text-left shadow-xs transition-all duration-200 hover:scale-[1.02] hover:shadow-md active:scale-[0.98]
+						class="flex min-h-11 cursor-pointer flex-col justify-between rounded-xl border-2 p-4 text-left shadow-xs transition-all duration-200 hover:scale-[1.02] hover:shadow-md active:scale-[0.98]
 						{selectedType === 'medical-emergency'
 							? 'border-red-500 bg-red-50/50 dark:bg-red-950/20'
 							: 'border-border/60 hover:border-border'}"
@@ -115,7 +167,7 @@
 					<button
 						type="button"
 						onclick={() => (selectedType = 'capacity')}
-						class="flex cursor-pointer flex-col justify-between rounded-xl border-2 p-4 text-left shadow-xs transition-all duration-200 hover:scale-[1.02] hover:shadow-md active:scale-[0.98]
+						class="flex min-h-11 cursor-pointer flex-col justify-between rounded-xl border-2 p-4 text-left shadow-xs transition-all duration-200 hover:scale-[1.02] hover:shadow-md active:scale-[0.98]
 						{selectedType === 'capacity'
 							? 'border-purple-500 bg-purple-50/50 dark:bg-purple-950/20'
 							: 'border-border/60 hover:border-border'}"
@@ -134,7 +186,7 @@
 					<button
 						type="button"
 						onclick={() => (selectedType = 'resource')}
-						class="flex cursor-pointer flex-col justify-between rounded-xl border-2 p-4 text-left shadow-xs transition-all duration-200 hover:scale-[1.02] hover:shadow-md active:scale-[0.98]
+						class="flex min-h-11 cursor-pointer flex-col justify-between rounded-xl border-2 p-4 text-left shadow-xs transition-all duration-200 hover:scale-[1.02] hover:shadow-md active:scale-[0.98]
 						{selectedType === 'resource'
 							? 'border-blue-500 bg-blue-50/50 dark:bg-blue-950/20'
 							: 'border-border/60 hover:border-border'}"
@@ -158,27 +210,40 @@
 
 			<hr class="border-border/60" />
 
-			{#key selectedType}
-				{#if selectedType === 'medical-emergency'}
-					<MedicalReferralForm
-						evacueeId={formEvacueeId}
-						onSubmit={handleSubmit}
-						submitting={batchMutation.isPending}
-					/>
-				{:else if selectedType === 'capacity'}
-					<CapacityReferralForm
-						evacueeId={formEvacueeId}
-						onSubmit={handleSubmit}
-						submitting={batchMutation.isPending}
-					/>
-				{:else if selectedType === 'resource'}
-					<ResourceReferralForm
-						evacueeId={formEvacueeId}
-						onSubmit={handleSubmit}
-						submitting={batchMutation.isPending}
-					/>
-				{/if}
-			{/key}
+			<div class="contents" onsubmitcapture={handleSubmitAttempt}>
+				{#key selectedType}
+					{#if selectedType === 'medical-emergency'}
+						<MedicalReferralForm
+							evacueeId={formEvacueeId}
+							onSubmit={handleSubmit}
+							submitting={batchMutation.isPending}
+						/>
+					{:else if selectedType === 'capacity'}
+						<CapacityReferralForm
+							evacueeId={formEvacueeId}
+							onSubmit={handleSubmit}
+							submitting={batchMutation.isPending}
+						/>
+					{:else if selectedType === 'resource'}
+						<ResourceReferralForm
+							evacueeId={formEvacueeId}
+							onSubmit={handleSubmit}
+							submitting={batchMutation.isPending}
+						/>
+					{/if}
+				{/key}
+			</div>
 		</Card.Content>
 	</Card.Root>
+	{#if pendingSend}
+		<ReferralConfirmDialog
+			bind:open={sendConfirmOpen}
+			title="ยืนยันการสร้างและส่งข้อมูล"
+			names={pendingNames}
+			count={pendingSend.evacueeIds.length}
+			confirmLabel={`สร้างและส่ง ${pendingSend.evacueeIds.length} รายการ`}
+			pending={batchMutation.isPending}
+			onConfirm={confirmPendingSend}
+		/>
+	{/if}
 </div>

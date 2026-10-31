@@ -57,7 +57,7 @@
 			{/if}
 		</div>
 	</section>
-	<ConsentBlock {block} confirm="standalone" size="kiosk" onconfirm={onconsent} />
+	<ConsentBlock {block} confirm="standalone" size="kiosk" showLinks={false} onconfirm={onconsent} />
 	<Button type="button" variant="outline" onclick={oncancel} class={KIOSK_NOTICE_SECONDARY_ACTION}
 		>ยกเลิก</Button
 	>

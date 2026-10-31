@@ -23,7 +23,9 @@ if (!/^https:\/\/[^\s/]+\/?$/.test(stagingURL)) {
  *     public-search-flow / public-shelters-filter, and public-home-flow as skipped
  *     rather than absent)
  *   - exclude `@quarantine`
- *   - workers=1; budget 15–30 min
+ *   - workers=1; budget up to 2 h (the run went past 30 min in build #64). Two workers on
+ *     the shared CI agent starved the browsers (actions stuck at "performing click
+ *     action" past actionTimeout in builds #65–#67), so the remote run stays serial
  *
  * `@critical` suites only run their live writes when this process also has
  * `ALLOW_REMOTE_WRITES=true` — set via the `tent-staging-e2e-env` Jenkins
@@ -42,8 +44,8 @@ if (!/^https:\/\/[^\s/]+\/?$/.test(stagingURL)) {
  *
  * The donation suites (`donation-fullstack*.test.ts`, `stock-donations.test.ts`; tag
  * `@donation`) follow the same rule: own `E2E Donation …` shelter, ledger teardown, a
- * zero-leak Z test. They flip the global reCAPTCHA switch off for their run and restore
- * it in afterAll, so the three
+ * zero-leak Z test. They lease the global reCAPTCHA switch off for their run (ref-counted across
+ * workers, restored by the last release), so the three
  * full-stack files add an estimated 10-15 minutes to a writable run (see e2e/README.md §9.C).
  */
 export default defineConfig({
@@ -63,7 +65,8 @@ export default defineConfig({
 		'public-shelters-filter.test.ts',
 		'staging/smoke.test.ts',
 		'stock-donations.test.ts',
-		'system-admin-shelter.test.ts'
+		'system-admin-shelter.test.ts',
+		'volunteer-access-roles.test.ts'
 	],
 	fullyParallel: false,
 	forbidOnly: true,
@@ -72,8 +75,9 @@ export default defineConfig({
 	grepInvert: /@quarantine/,
 	workers: 1,
 	timeout: 60_000,
-	// 30 min wall clock for the full @critical + @smoke remote set.
-	globalTimeout: 1_800_000,
+	// 2 h wall clock for the full @critical + @smoke remote set (239 tests, workers=1, retries=1
+	// in CI). Build #64 went past 30 min, which skipped tests and their teardown.
+	globalTimeout: 7_200_000,
 	expect: { timeout: 15_000 },
 	outputDir: 'test-results/staging',
 	reporter: [

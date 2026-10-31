@@ -67,10 +67,6 @@ function full(over: Partial<Extract<ConsentDecision, { mode: 'full' }>> = {}): C
 	};
 }
 
-function basic(): ConsentDecision {
-	return { mode: 'basic', guardian_for: [], verbal: false, ...mintConsentStamp(NOW) };
-}
-
 function consentFor(decision: ConsentDecision, keys: string[]): RegistrationConsent {
 	return { decision, memberKeys: keys, recordedBy: 'staff01' };
 }
@@ -92,7 +88,7 @@ describe('createFamilyRegistration with consent', () => {
 	});
 
 	it('writes one consent to every member with giver roles, privacy and schema_v 15', async () => {
-		const decision = full({ guardian_for: ['k-child'], verbal: true });
+		const decision = full({ verbal: true });
 		const { members } = await repo.createFamilyRegistration(
 			{ members: [member('พ่อ'), member('ลูก'), member('ยาย')], household },
 			ctx,
@@ -113,7 +109,10 @@ describe('createFamilyRegistration with consent', () => {
 			channel: 'staff',
 			recorded_verbally_by: 'staff01'
 		});
-		expect(child.consent).toMatchObject({ given_by: 'guardian', giver_evacuee_id: head._id });
+		expect(child.consent).toMatchObject({
+			given_by: 'household_member',
+			giver_evacuee_id: head._id
+		});
 		expect(gran.consent).toMatchObject({
 			given_by: 'household_member',
 			giver_evacuee_id: head._id
@@ -147,16 +146,16 @@ describe('createFamilyRegistration with consent', () => {
 		expect(members[0].consent).toMatchObject({ mode: 'full', health: false });
 	});
 
-	it('basic mode hides everyone from search and writes no medical doc (FR-31/FR-32)', async () => {
+	it('hides everyone from search and writes no medical doc when C2 and C3 are unticked (FR-30/FR-32)', async () => {
 		const { members } = await repo.createFamilyRegistration(
 			{ members: [member('พ่อ', withMedical), member('ลูก')], household },
 			ctx,
 			'onsite',
 			undefined,
-			consentFor(basic(), ['k-head', 'k-child'])
+			consentFor(full({ health: false, search_visible: false }), ['k-head', 'k-child'])
 		);
 		expect(members.every((m) => m.privacy.search_excluded)).toBe(true);
-		expect(members.every((m) => m.consent?.mode === 'basic' && !m.consent.health)).toBe(true);
+		expect(members.every((m) => m.consent?.mode === 'full' && !m.consent.health)).toBe(true);
 		expect(await medicalsOf(members[0]._id)).toHaveLength(0);
 	});
 
@@ -251,7 +250,7 @@ describe('submitFamilyReportIn with consent (FR-41)', () => {
 	it('gives a member added at report-in the new consent from the registrant', async () => {
 		const family = await preRegisteredFamily();
 		const [dad, mom] = family.members;
-		const decision = basic();
+		const decision = full({ health: false, search_visible: false });
 		await repo.submitFamilyReportIn({
 			householdId: family.householdId,
 			household,
@@ -267,7 +266,8 @@ describe('submitFamilyReportIn with consent (FR-41)', () => {
 		const all = await repo.listEvacuees();
 		const child = all.find((e) => e.first_name === 'ลูก');
 		expect(child?.consent).toMatchObject({
-			mode: 'basic',
+			mode: 'full',
+			health: false,
 			given_by: 'household_member',
 			giver_evacuee_id: dad._id
 		});

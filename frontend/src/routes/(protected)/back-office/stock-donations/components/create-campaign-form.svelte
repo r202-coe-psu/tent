@@ -335,20 +335,22 @@
 			</div>
 		</div>
 
-		<!-- Footer Action Buttons -->
-		<div class="flex items-center justify-end gap-3 border-t border-border/60 pt-6">
+		<!-- Footer Action Buttons — stacked full width on mobile so the long submit label fits -->
+		<div
+			class="flex flex-col-reverse gap-3 border-t border-border/60 pt-6 sm:flex-row sm:items-center sm:justify-end"
+		>
 			<Button
 				variant="ghost"
 				type="button"
 				onclick={onclose}
-				class="h-10 rounded-xl px-5 text-xs font-bold text-muted-foreground hover:bg-muted hover:text-foreground"
+				class="h-10 w-full rounded-xl px-5 text-xs font-bold text-muted-foreground hover:bg-muted hover:text-foreground sm:w-auto"
 			>
 				ยกเลิก
 			</Button>
 
 			<Button
 				type="submit"
-				class="flex h-10 items-center gap-2 rounded-xl bg-[#002D5B] px-6 text-xs font-bold text-white shadow-sm hover:bg-[#001f3f] dark:bg-blue-600 dark:hover:bg-blue-700"
+				class="flex h-auto min-h-10 w-full items-center gap-2 rounded-xl bg-[#002D5B] px-6 py-2 text-xs font-bold whitespace-normal text-white shadow-sm hover:bg-[#001f3f] sm:w-auto dark:bg-blue-600 dark:hover:bg-blue-700"
 			>
 				<Megaphone class="h-4 w-4" />
 				ประกาศขอรับบริจาคผ่านหน้าเว็บสาธารณะ

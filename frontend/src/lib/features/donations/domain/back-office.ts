@@ -1,5 +1,7 @@
 import { z } from 'zod';
+import { thaiMobilePhoneSchema } from '$lib/db/model';
 import { qtyStrCoercePositiveSchema } from '$lib/utils/qty';
+import { isRealCalendarDate } from '$lib/features/operations/server';
 
 /**
  * Redacted back-office donation queue row (T-16) — shared between the
@@ -22,6 +24,11 @@ export interface PendingDonationRow {
 	donor_name: string;
 	donor_phone: string | null;
 	donor_email?: string | null;
+	/**
+	 * `true` on a row of the "รับแล้ว" list / search (#821 FR-10): `donor_*` carry the masked
+	 * forms, never the full value. Absent on the review queue, which shows contact in full (FR-7).
+	 */
+	contact_masked?: boolean;
 	item_count: number;
 	items: Array<{
 		item_id?: string;
@@ -35,17 +42,30 @@ export interface PendingDonationRow {
 		review_status?: 'approved' | 'pending' | 'rejected';
 		review_reason?: string | null;
 		reserved_qty?: string;
+		/** The drop-off point the donor takes this line to (CR-206 FR-MP-25); `null` = any point. */
+		drop_off_point_id?: string | null;
 	}>;
 	/** Campaign the booking was made against — tells an automatic approval from a person's (FR-8). */
 	campaign_id?: string | null;
 	declared_at?: string;
+	/** Set on a received donation (#821). */
+	received_at?: string | null;
 	eta?: string;
 	slot?: { date: string; from: string; to: string };
 	delivery_method?: string;
 	vehicle?: string | null;
+	vehicle_plate?: string | null;
 	pickup_address?: string | null;
 	donor_note?: string | null;
 	is_unsolicited?: boolean;
+	/**
+	 * What was actually received (#821 FR-4 "รายการที่รับ"): `received_summary.items` without the
+	 * lines staff turned away (CR-172), at the counted quantity. Absent on a donation received
+	 * before `received_summary.items` existed — the list then falls back to `items`.
+	 */
+	received_items?: Array<{ item_id?: string; free_text?: string; qty: string; unit: string }>;
+	/** Donor photos, `image:{ulid}` in `shelter_code`'s DB (CR-175 donor photos FR-12). */
+	photos?: string[];
 }
 
 /**
@@ -63,13 +83,9 @@ export const walkInIntakeInputSchema = z.object({
 	shelter_code: z.string().trim().min(1).optional(),
 	donor: z.object({
 		name: z.string().trim().min(1, 'ต้องระบุชื่อผู้บริจาค'),
-		// Digits only: `donor.phone` feeds `phone_hash`, and a formatted string would
-		// hash differently every time the same donor comes back (schema.md §2.3).
-		phone: z
-			.string()
-			.trim()
-			.regex(/^[0-9]*$/, 'เบอร์โทรต้องเป็นตัวเลขเท่านั้น')
-			.optional(),
+		// Normalized to `^0\d{9}$` (null when blank): `donor.phone` feeds `phone_hash`, so the same
+		// donor must always produce the same string (schema.md §2.3).
+		phone: thaiMobilePhoneSchema,
 		email: z.string().trim().email().optional()
 	}),
 	items: z
@@ -82,7 +98,14 @@ export const walkInIntakeInputSchema = z.object({
 				unit: z.string().trim().min(1),
 				lot: z
 					.object({
-						expiry: z.string().trim().optional(),
+						expiry: z
+							.string()
+							.trim()
+							.refine(
+								(v) => v === '' || isRealCalendarDate(v),
+								'วันหมดอายุต้องเป็นวันที่จริงในรูปแบบ YYYY-MM-DD'
+							)
+							.optional(),
 						storage_zone: z.string().trim().max(100).optional(),
 						// → shelter sub_storage[].id (draft-shelter-storage-points); kept, not stripped
 						storage_point_id: z.string().trim().min(1).optional()

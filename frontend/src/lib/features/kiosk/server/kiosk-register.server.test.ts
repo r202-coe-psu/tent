@@ -101,6 +101,9 @@ describe('registerKioskWalkIn', () => {
 		});
 		expect(image?.created_by).toBe('scanner:KIOSK-01');
 		expect(image?.caption).toBe('ภาพจากบัตรประชาชน');
+		// CR-175 AC-11 — schema_v 2 and no `purpose`, so the donation orphan sweep skips it.
+		expect(image).toMatchObject({ schema_v: 2 });
+		expect(image).not.toHaveProperty('purpose');
 		expect(saved?._id).toBe(result._id);
 		expect(result.current_stay.status).toBe('arriving');
 		expect(result.schema_v).toBe(EVACUEE_SCHEMA_V);
@@ -140,21 +143,16 @@ describe('registerKioskWalkIn', () => {
 		expect(saved.privacy.search_excluded).toBe(false);
 	});
 
-	it('excludes a basic registration from search and keeps health off', async () => {
+	it('excludes the evacuee from search when search visibility is declined', async () => {
 		const db = fakeShelterDb();
-		const basic: ConsentDecision = {
-			mode: 'basic',
-			guardian_for: [],
-			verbal: false,
-			...mintConsentStamp()
-		};
-		await registerKioskWalkIn('SH001', 'KIOSK-01', 'โต๊ะ 1', card, null, basic);
+		const hidden: ConsentDecision = { ...decision, search_visible: false };
+		await registerKioskWalkIn('SH001', 'KIOSK-01', 'โต๊ะ 1', card, null, hidden);
 		const [saved] = db.ofType<{
 			consent: { mode: string; health: boolean };
 			privacy: { search_excluded: boolean };
 		}>('evacuee');
 
-		expect(saved.consent).toMatchObject({ mode: 'basic', health: false });
+		expect(saved.consent).toMatchObject({ mode: 'full', health: false });
 		expect(saved.privacy.search_excluded).toBe(true);
 	});
 

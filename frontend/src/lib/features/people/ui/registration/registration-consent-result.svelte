@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { ConsentSummary, type ConsentStaff } from '$lib/features/consent';
-	import { formatPersonName, type Evacuee } from '../../domain/people';
+	import type { Evacuee } from '../../domain/people';
 
 	let {
 		members,
@@ -16,9 +16,6 @@
 	const subject = $derived(
 		recorded.find((m) => m.consent?.given_by === 'self') ?? recorded[0] ?? null
 	);
-	const guardianNames = $derived(
-		recorded.filter((m) => m.consent?.given_by === 'guardian').map((m) => formatPersonName(m))
-	);
 </script>
 
 {#if subject?.consent}
@@ -26,7 +23,6 @@
 		<ConsentSummary
 			consent={subject.consent}
 			searchExcluded={subject.privacy.search_excluded}
-			{guardianNames}
 			{staff}
 		/>
 	</div>

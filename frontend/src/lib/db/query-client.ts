@@ -1,6 +1,9 @@
 import { MutationCache, QueryCache, QueryClient } from '@tanstack/svelte-query';
 import { classifyAuthFailure, shouldRetryQuery } from '$lib/auth/session-expiry';
 
+/** App-wide default `staleTime` for queries (ms). */
+export const DEFAULT_QUERY_STALE_TIME_MS = 60 * 1000;
+
 /** What the app decided about an auth-shaped failure (mirrors `authStore.handleAuthFailure`). */
 export type AuthFailureResolution = 'expired' | 'permission-denied' | 'ignored';
 
@@ -43,7 +46,7 @@ export function createAppQueryClient(options: AppQueryClientOptions): QueryClien
 		}),
 		defaultOptions: {
 			queries: {
-				staleTime: 60 * 1000,
+				staleTime: DEFAULT_QUERY_STALE_TIME_MS,
 				retry: shouldRetryQuery
 			},
 			mutations: { retry: 0 }

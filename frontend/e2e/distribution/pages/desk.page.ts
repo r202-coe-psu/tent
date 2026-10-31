@@ -4,19 +4,35 @@
  * Selectors follow what the UI exposes today — roles, accessible names, labels
  * and element ids (the feature has no `data-testid`). Tab buttons include their
  * badge text in the accessible name, so tabs are matched by a leading regex.
+ *
+ * The desk has two modes (food | supplies) and each mode numbers its own steps, so tabs are
+ * matched by label text with any step number. Opening a step that belongs to the other mode
+ * switches mode first; `receive` / `reconciliation` exist in both and stay in the current mode.
  */
 
 import { expect, type Locator, type Page } from '@playwright/test';
 import type { SeededRecipient, SeededTicket, SeededVolunteer } from '../distribution';
 
 export type DeskTab = 'receive' | 'food' | 'supplies' | 'returns' | 'reconciliation';
+export type DeskMode = 'food' | 'supplies';
 
 const TAB_NAME: Record<DeskTab, RegExp> = {
-	receive: /^1\. รับของถึงจุดแจก/,
-	food: /^2\. แจกอาหารปรุงสุก/,
-	supplies: /^3\. จ่ายพัสดุ/,
-	returns: /^4\. รับคืนสิ่งของ/,
-	reconciliation: /^5\. ปิดรอบ/
+	receive: /^\d\. รับของถึงจุดแจก/,
+	food: /^\d\. แจกอาหารปรุงสุก/,
+	supplies: /^\d\. จ่ายพัสดุ/,
+	returns: /^\d\. รับคืนสิ่งของ/,
+	reconciliation: /^\d\. ปิดรอบ/
+};
+
+const TAB_MODE: Partial<Record<DeskTab, DeskMode>> = {
+	food: 'food',
+	supplies: 'supplies',
+	returns: 'supplies'
+};
+
+const MODE_NAME: Record<DeskMode, RegExp> = {
+	food: /^อาหาร/,
+	supplies: /^สิ่งของ/
 };
 
 const TICKET_SELECT_LABEL: Partial<Record<DeskTab, string>> = {
@@ -41,15 +57,34 @@ export class DeskPage {
 		return this.page.getByRole('button', { name: TAB_NAME[tab] });
 	}
 
-	async openTab(tab: DeskTab): Promise<void> {
+	modeButton(mode: DeskMode): Locator {
+		return this.page
+			.getByRole('group', { name: 'โหมดงานของโต๊ะแจก' })
+			.getByRole('button', { name: MODE_NAME[mode] });
+	}
+
+	async switchMode(mode: DeskMode): Promise<void> {
+		const button = this.modeButton(mode);
+		if ((await button.getAttribute('aria-pressed')) !== 'true') await button.click();
+		await expect(button).toHaveAttribute('aria-pressed', 'true');
+	}
+
+	/** `mode` is only needed for `receive` / `reconciliation` of the non-default (food) mode. */
+	async openTab(tab: DeskTab, mode: DeskMode | undefined = TAB_MODE[tab]): Promise<void> {
+		if (mode) await this.switchMode(mode);
 		await this.tab(tab).click();
 	}
 
 	/** Restrict tabs 2/3/5 to one distribution point (the scenario's own). */
 	async selectPoint(point: string): Promise<void> {
 		const trigger = this.page.getByLabel('เลือกจุดแจก');
-		await trigger.click();
-		await this.page.getByRole('option', { name: point, exact: true }).click();
+		// Open with the keyboard: a mouse click's pointerup can land on an option of the list
+		// before bits-ui positions it (long point lists in a full run) and select that option.
+		await trigger.focus();
+		await trigger.press('Enter');
+		const listbox = this.page.getByRole('listbox');
+		await expect(listbox).toBeVisible();
+		await listbox.getByRole('option', { name: point, exact: true }).click();
 		await expect(trigger).toContainText(point);
 	}
 
@@ -76,7 +111,7 @@ export class DeskPage {
 	}
 
 	async receive(ticket: SeededTicket): Promise<void> {
-		await this.openTab('receive');
+		await this.openTab('receive', ticket.type);
 		await this.receiveCard(ticket)
 			.getByRole('button', { name: /ตรวจรับเข้าจุดแจก/ })
 			.click();
@@ -222,10 +257,6 @@ export class DeskPage {
 
 	nonPhysicalDialog(): Locator {
 		return this.page.getByRole('dialog', { name: /ตัดจำหน่ายรายการโดยไม่มีของคืน/ });
-	}
-
-	bulkDialog(): Locator {
-		return this.page.getByRole('dialog', { name: /จับคู่รายการยืมกับกองรับคืน/ });
 	}
 
 	// ── Tab 5 ────────────────────────────────────────────────────────────────

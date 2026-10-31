@@ -17,7 +17,8 @@
 	import { useItemMasters } from '$lib/features/catalog';
 	import {
 		canReturnLoanPhysical,
-		canPerformFrontlineDistribution
+		canPerformFrontlineDistribution,
+		canWriteBulkReturnEntry
 	} from '../../application/food-supplies/auth';
 	import type { DistributionLog } from '../../domain/food-supplies';
 	import RecipientSearchPicker from '../common/RecipientSearchPicker.svelte';
@@ -29,12 +30,12 @@
 		calculateLoanRemainingQty,
 		getLoanStatusBadge
 	} from '../model/loan-return';
+	import { formatLoanReference, loanReferenceLine } from '../model/loan-reference';
 	import { RETURN_ACTION_HELP } from '../model/bulk-return-copy';
 	import CounterReturnDialog from './CounterReturnDialog.svelte';
 	import NonPhysicalClearDialog from './NonPhysicalClearDialog.svelte';
-	import BulkGateClearDialog from './BulkGateClearDialog.svelte';
+	import AddBulkReturnEntriesDialog from '../bulk-return/AddBulkReturnEntriesDialog.svelte';
 	import { Button } from '$lib/components/ui/button/index.js';
-	import { formatThaiShortDate } from '$lib/utils/date';
 
 	interface Props {
 		shelterCode?: string;
@@ -53,6 +54,7 @@
 
 	const canFrontline = $derived(authContext ? canPerformFrontlineDistribution(authContext) : false);
 	const canReturnStock = $derived(authContext ? canReturnLoanPhysical(authContext) : false);
+	const canWriteBulkEntry = $derived(authContext ? canWriteBulkReturnEntry(authContext) : false);
 
 	// State
 	let recipientSelection = $state<FrontlineRecipientSelection | null>(null);
@@ -62,8 +64,8 @@
 	let selectedLogForClear = $state<DistributionLog | null>(null);
 	let clearDialogOpen = $state(false);
 
-	let selectedLogForBulkClear = $state<DistributionLog | null>(null);
-	let bulkClearDialogOpen = $state(false);
+	let bulkEntryItemId = $state<string | undefined>(undefined);
+	let bulkEntryDialogOpen = $state(false);
 
 	let showHistory = $state(false);
 
@@ -98,6 +100,11 @@
 		return log.item_id.replace(/^item_master:|^item:/, '');
 	}
 
+	function loanReference(log: DistributionLog) {
+		const ticket = ticketsQuery.data?.find((t) => t._id === log.ticket_id);
+		return formatLoanReference(log, ticket);
+	}
+
 	function handleOpenReturn(log: DistributionLog) {
 		selectedLogForReturn = log;
 		returnDialogOpen = true;
@@ -108,13 +115,13 @@
 		clearDialogOpen = true;
 	}
 
-	function handleOpenBulkClear(log: DistributionLog) {
-		selectedLogForBulkClear = log;
-		bulkClearDialogOpen = true;
+	function handleOpenBulkEntry(log: DistributionLog) {
+		bulkEntryItemId = log.item_id;
+		bulkEntryDialogOpen = true;
 	}
 </script>
 
-<div class="space-y-5 rounded-2xl border border-slate-200/80 bg-white p-6 shadow-xs">
+<div class="space-y-5 rounded-2xl border border-slate-200/80 bg-white p-4 shadow-xs sm:p-6">
 	<!-- Station Header -->
 	<div
 		class="flex flex-col gap-3 border-b border-slate-100 pb-4 sm:flex-row sm:items-center sm:justify-between"
@@ -238,7 +245,7 @@
 							<div class="flex items-start justify-between gap-2">
 								<div>
 									<h5 class="text-sm font-bold text-slate-900">{itemName}</h5>
-									<p class="font-mono text-2xs text-slate-400">{loan._id}</p>
+									<p class="text-2xs text-slate-500">{loanReferenceLine(loanReference(loan))}</p>
 								</div>
 								<span
 									class="shrink-0 rounded-full border px-2 py-0.5 text-2xs font-bold {statusBadge.badgeClass}"
@@ -265,8 +272,7 @@
 
 							<!-- Metadata -->
 							<div class="flex items-center justify-between text-2xs text-slate-400">
-								<span>วันที่ยืม: {formatThaiShortDate(loan.distributed_at)}</span>
-								<span>ผู้จ่าย: {loan.distributed_by}</span>
+								<span>ผู้จ่าย: {loanReference(loan).by}</span>
 							</div>
 						</div>
 
@@ -302,20 +308,21 @@
 								<p class="mt-1 px-1 text-2xs text-slate-500">{RETURN_ACTION_HELP.nonPhysical}</p>
 							</div>
 
-							<!-- Tertiary: CR-134 Bulk Gate Clearance -->
-							<div>
-								<Button
-									type="button"
-									variant="outline"
-									onclick={() => handleOpenBulkClear(loan)}
-									disabled={!canFrontline}
-									class="h-auto w-full rounded-xl border-purple-200 bg-purple-50 py-2 text-xs font-bold text-purple-800 hover:border-purple-300 hover:bg-purple-100 hover:text-purple-800"
-								>
-									<Archive class="h-3.5 w-3.5 text-purple-600" />
-									<span>จับคู่กับกองรับคืน</span>
-								</Button>
-								<p class="mt-1 px-1 text-2xs text-slate-500">{RETURN_ACTION_HELP.bulk}</p>
-							</div>
+							<!-- Tertiary: drop the item into a bulk return pool (#659) -->
+							{#if canWriteBulkEntry}
+								<div>
+									<Button
+										type="button"
+										variant="outline"
+										onclick={() => handleOpenBulkEntry(loan)}
+										class="h-auto min-h-11 w-full rounded-xl border-purple-200 bg-purple-50 py-2 text-xs font-bold text-purple-800 hover:border-purple-300 hover:bg-purple-100 hover:text-purple-800"
+									>
+										<Archive class="h-3.5 w-3.5 text-purple-600" />
+										<span>คืนเข้ากองรับคืน</span>
+									</Button>
+									<p class="mt-1 px-1 text-2xs text-slate-500">{RETURN_ACTION_HELP.bulk}</p>
+								</div>
+							{/if}
 						</div>
 					</div>
 				{/each}
@@ -349,7 +356,9 @@
 						>
 							<div>
 								<span class="font-bold text-slate-800">{resolveItemName(pastLoan)}</span>
-								<span class="ml-2 font-mono text-2xs text-slate-400">{pastLoan._id}</span>
+								<span class="ml-2 text-2xs text-slate-500">
+									{loanReferenceLine(loanReference(pastLoan))}
+								</span>
 								{#if isBulkCleared}
 									<p class="text-2xs text-purple-700">
 										จับคู่กับกองรับคืนแล้ว · ห้ามรับคืนเข้าคลังซ้ำ
@@ -392,6 +401,7 @@
 	bind:open={returnDialogOpen}
 	log={selectedLogForReturn}
 	itemName={selectedLogForReturn ? resolveItemName(selectedLogForReturn) : ''}
+	reference={selectedLogForReturn ? loanReferenceLine(loanReference(selectedLogForReturn)) : ''}
 	{shelterCode}
 	{canReturnStock}
 	onclose={() => {
@@ -404,6 +414,7 @@
 	bind:open={clearDialogOpen}
 	log={selectedLogForClear}
 	itemName={selectedLogForClear ? resolveItemName(selectedLogForClear) : ''}
+	reference={selectedLogForClear ? loanReferenceLine(loanReference(selectedLogForClear)) : ''}
 	{shelterCode}
 	canClearLoan={canFrontline}
 	onclose={() => {
@@ -411,14 +422,12 @@
 	}}
 />
 
-<!-- Bulk Gate Clearance Modal Dialog (Slice 5.5D) -->
-<BulkGateClearDialog
-	bind:open={bulkClearDialogOpen}
-	log={selectedLogForBulkClear}
-	itemName={selectedLogForBulkClear ? resolveItemName(selectedLogForBulkClear) : ''}
-	{shelterCode}
-	canClearLoan={canFrontline}
-	onclose={() => {
-		selectedLogForBulkClear = null;
-	}}
-/>
+<!-- Add to bulk return pool (#659): prefilled with the selected returner and the loan's item -->
+{#if canWriteBulkEntry}
+	<AddBulkReturnEntriesDialog
+		bind:open={bulkEntryDialogOpen}
+		{shelterCode}
+		initialReturner={recipientSelection}
+		initialItemId={bulkEntryItemId}
+	/>
+{/if}

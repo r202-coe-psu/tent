@@ -16,6 +16,7 @@
 		type Volunteer
 	} from '$lib/features/volunteers';
 	import CameraCodeScannerDialog from '$lib/components/camera-code-scanner-dialog.svelte';
+	import { createReadGuard } from '$lib/components/camera-code-scanner-state';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import type { FrontlineRecipientSelection } from '../model/frontline-handover';
@@ -57,6 +58,8 @@
 	let outsideNotes = $state('');
 	/** Whether the current pick came from the scanner — `next()` reopens it only then. */
 	let pickedByScan = false;
+	/** Drops a lookup that settles after the scanner was closed. */
+	const lookupGuard = createReadGuard();
 
 	const searchEnabled = $derived(!value && searchTerm.trim().length >= 2);
 	const evacueeSearchQuery = useSearchEvacuees(
@@ -116,8 +119,10 @@
 	}
 
 	async function handleScan(code: string) {
+		if (isLookingUp) return;
 		isLookingUp = true;
 		scanError = null;
+		const isLatest = lookupGuard.begin();
 		try {
 			const result = await resolveScannedRecipient(
 				code,
@@ -127,14 +132,22 @@
 					lookupVolunteer: (c) => lookupVolunteerByScanCode(c)
 				}
 			);
+			if (!isLatest()) return;
 			if (result.kind === 'evacuee') selectEvacuee(result.evacuee, true);
 			else if (result.kind === 'volunteer') selectVolunteer(result.volunteer, true);
 			else scanError = result.message;
 		} catch (err) {
+			if (!isLatest()) return;
 			scanError = formatDistributionError(err, 'เกิดข้อผิดพลาดในการค้นหา กรุณาลองใหม่อีกครั้ง');
 		} finally {
-			isLookingUp = false;
+			if (isLatest()) isLookingUp = false;
 		}
+	}
+
+	/** Scanner closed mid-lookup: discard the pending result and free the scan button. */
+	function cancelLookup() {
+		lookupGuard.cancel();
+		isLookingUp = false;
 	}
 
 	function outsideSelection(): FrontlineRecipientSelection {
@@ -189,7 +202,7 @@
 	{#if value}
 		<!-- Selected recipient -->
 		<div
-			class="flex items-center justify-between gap-3 rounded-lg border px-3 py-3 {value.recipientType ===
+			class="flex flex-col gap-3 rounded-lg border px-3 py-3 sm:flex-row sm:items-center sm:justify-between {value.recipientType ===
 			'outside'
 				? 'border-slate-200 bg-slate-50'
 				: 'border-emerald-200 bg-emerald-50/60'}"
@@ -211,12 +224,12 @@
 				</div>
 
 				<div class="min-w-0">
-					<p class="truncate text-base font-bold text-slate-900">{value.label}</p>
+					<p class="text-base font-bold break-words text-slate-900">{value.label}</p>
 					<div class="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-sm text-slate-600">
 						{#if value.recipientType === 'evacuee'}
 							{#if value.stayInfo}<span>{value.stayInfo}</span>{/if}
 							{#if value.phone}<span>โทร {value.phone}</span>{/if}
-							<span class="text-xs text-slate-400">{value.recipientId}</span>
+							<span class="text-xs break-all text-slate-400">{value.recipientId}</span>
 						{:else if value.recipientType === 'volunteer'}
 							<span>จิตอาสา{value.volunteerCode ? ` · ${value.volunteerCode}` : ''}</span>
 							{#if value.phone}<span>โทร {value.phone}</span>{/if}
@@ -233,7 +246,7 @@
 				onclick={handleClearSelection}
 				aria-label="เปลี่ยนผู้รับ"
 				{disabled}
-				class="min-h-11 shrink-0 rounded-lg text-sm font-semibold"
+				class="min-h-11 w-full shrink-0 rounded-lg text-sm font-semibold sm:w-auto"
 			>
 				<X class="size-4" aria-hidden="true" />
 				<span>เปลี่ยนคน</span>
@@ -400,5 +413,7 @@
 		: 'เล็งกล้องไปที่ QR บนบัตรผู้ประสบภัย หรือพิมพ์ / ยิงรหัสด้วยเครื่องสแกน'}
 	formats={SCAN_FORMATS}
 	manualInputMode="text"
+	busy={isLookingUp}
 	onScan={handleScan}
+	oncancel={cancelLookup}
 />

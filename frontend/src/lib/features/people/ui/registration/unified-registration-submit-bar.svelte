@@ -10,7 +10,9 @@
 		submittingLabel,
 		align = 'right',
 		/** When false, parent owns sticky positioning (e.g. bottom chrome dock). */
-		sticky = true
+		sticky = true,
+		/** Id of a message explaining why submit is disabled. */
+		describedBy
 	}: {
 		pending?: boolean;
 		submitDisabled?: boolean;
@@ -18,6 +20,7 @@
 		submittingLabel: string;
 		align?: 'right' | 'center';
 		sticky?: boolean;
+		describedBy?: string;
 	} = $props();
 </script>
 
@@ -31,6 +34,7 @@
 	<Button
 		type="submit"
 		disabled={pending || submitDisabled}
+		aria-describedby={describedBy}
 		class="h-11 w-full gap-2 rounded-xl text-base font-semibold shadow-xs sm:w-auto sm:min-w-56 sm:px-8"
 	>
 		{#if pending}

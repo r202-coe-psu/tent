@@ -2,9 +2,8 @@
 	import { Label } from '$lib/components/ui/label/index.js';
 	import { Textarea } from '$lib/components/ui/textarea/index.js';
 	import * as RadioGroup from '$lib/components/ui/radio-group/index.js';
-	import { resolveMasterCodes, useMasterData } from '$lib/features/master-data';
+	import { MasterTagInput, resolveMasterCodes, useMasterData } from '$lib/features/master-data';
 	import type { CareTrack } from '../../domain/people.js';
-	import MasterTagInput from './master-tag-input.svelte';
 
 	let {
 		care_track = $bindable<CareTrack>('normal'),

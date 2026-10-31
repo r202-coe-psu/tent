@@ -6,10 +6,39 @@
  * exports, whose import graph reaches browser-only packages such as `qrcode`.
  */
 
-export { receiveDonationInputSchema, isDonorEditable } from './domain/public-donation';
+export {
+	donationItemEditGate,
+	receiveDonationInputSchema,
+	isDonorEditable
+} from './domain/public-donation';
 export type { PublicDonationDoc, ScanDonationView } from './domain/public-donation';
 export { walkInIntakeInputSchema } from './domain/back-office';
 export type { PendingDonationRow } from './domain/back-office';
+export {
+	buildReceivedFindBody,
+	isAllowedDonationStatus,
+	RECEIVED_BOOKMARK_MAX_LENGTH,
+	RECEIVED_PAGE_SIZE
+} from './domain/donation-queue';
+export { maskDonorEmail, maskDonorName, maskDonorPhone } from './domain/donor-contact';
+export {
+	buildBookingRefFindBody,
+	buildLotLedgerFindBody,
+	buildPhoneFindBody,
+	buildReceivedViewQuery,
+	decodeSearchCursor,
+	DONATION_RECEIVED_VIEWS,
+	encodeSearchCursor,
+	LOT_LEDGER_PAGE_SIZE,
+	normalizeSearchQuery,
+	pageLotMatches,
+	receivedSearchInputSchema
+} from './domain/received-search';
+export type {
+	ReceivedSearchBy,
+	ReceivedSearchErrorCode,
+	SearchCursorState
+} from './domain/received-search';
 export {
 	createDonationRedirect,
 	donationRedirectInputSchema,
@@ -25,6 +54,7 @@ export {
 	slotModeForDelivery
 } from './domain/compute-slots';
 export { donationPreDeclarationInputSchema } from './domain/donation';
+export { toTrackingDonor, toTrackingLogistics, toTrackingReceivedSummary } from './domain/tracking';
 export {
 	combineLineRejectReasons,
 	donorRejectMessage,
@@ -39,3 +69,24 @@ export {
 	reviewDonationInputSchema
 } from './domain/item-review';
 export type { LineReviewResult } from './domain/item-review';
+
+// Domain — receiving point by point (CR-206)
+export {
+	allLinesRecorded,
+	closeDonationByPoints,
+	currentLinePoint,
+	hasPointReceipts,
+	isReceivedByPoint,
+	receivedLineNos,
+	recordedLineNos,
+	refusedReceivedLines,
+	type DonationCloseResult
+} from './domain/point-receipts';
+export {
+	DONATION_PHOTO_MAX_UPLOAD_BYTES,
+	donationPhotoIdsSchema,
+	rejectDonationPhotoDocs,
+	rejectDonationPhotoIds,
+	shelterAcceptsDonations
+} from './domain/donation-photos';
+export type { DonationPhotoErrorCode, StoredDonationPhoto } from './domain/donation-photos';

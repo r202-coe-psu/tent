@@ -65,6 +65,14 @@ describe('age / produced / expiry helpers', () => {
 	});
 });
 
+describe('bare-date expiry (CR-195)', () => {
+	it('counts down to 00:00 Bangkok of the next day', () => {
+		const now = Date.parse('2026-10-23T23:00:00+07:00');
+		expect(timeUntilExpiryMs('2026-10-23', now)).toBe(HOUR);
+		expect(timeUntilExpiryMs('2026-10-23', Date.parse('2026-10-24T01:00:00+07:00'))).toBe(-HOUR);
+	});
+});
+
 describe('summarizeItemLotAge', () => {
 	const now = Date.parse('2026-09-26T12:00:00.000Z');
 
@@ -79,6 +87,18 @@ describe('summarizeItemLotAge', () => {
 			...partial
 		};
 	}
+
+	it('picks the nearest expiry across bare dates and offset datetimes', () => {
+		const bangkokMorning = Date.parse('2026-10-23T08:00:00+07:00');
+		const summary = summarizeItemLotAge(
+			[
+				lot({ lot_ref: 'a', lot: { expiry: '2026-10-23' } }),
+				lot({ lot_ref: 'b', lot: { expiry: '2026-10-23T12:00:00+07:00' } })
+			],
+			bangkokMorning
+		);
+		expect(summary.untilExpiry).toBe('4 ชม.');
+	});
 
 	it('picks oldest received, nearest expiry, oldest produced among remaining lots', () => {
 		const summary = summarizeItemLotAge(

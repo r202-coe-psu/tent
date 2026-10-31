@@ -96,16 +96,19 @@ async def settle_donation_quota(doc: dict[str, Any], *, now: datetime) -> Decima
     # A whole-row save put the read items back over a donor's edit and released them.
     for _ in range(3):
         buffer = await DonationBuffer.find_one(
-            DonationBuffer.tracking_token_hash == token_hash
+            {"tracking_token_hash": token_hash, "synced_to_couch": True}
         )
         if buffer is None:
-            # Retention already purged the row — and released the quota on its way out.
+            # Retention already purged the row — and released the quota on its way out —
+            # or inbound has not synced it yet. Until it has, Mongo owns the row's status
+            # (a donor cancel there already released the quota); inbound catches up on
+            # the CouchDB doc right after it flips the flag.
             return Decimal(0)
         if buffer.status == new_status:
             # Nothing moved: a replay of a change already settled.
             return Decimal(0)
         before = await DonationBuffer.get_pymongo_collection().find_one_and_update(
-            {"_id": buffer.id, "status": buffer.status},
+            {"_id": buffer.id, "synced_to_couch": True, "status": buffer.status},
             {"$set": {"status": new_status}},
         )
         if before is not None:

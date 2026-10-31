@@ -6,10 +6,12 @@ export const usersKeys = {
 	list: () => [...usersKeys.all, 'list'] as const
 };
 
-export const useUsers = () =>
+/** `enabled` lets callers skip the request (`GET /api/v1/users` is SA/SM only → 403 otherwise). */
+export const useUsers = (enabled: () => boolean = () => true) =>
 	createQuery(() => ({
 		queryKey: usersKeys.list(),
-		queryFn: listUsers
+		queryFn: listUsers,
+		enabled: enabled()
 	}));
 
 export const useCreateUser = () => {
@@ -60,6 +62,7 @@ export const useUpdateUser = () => {
 			active?: boolean;
 			must_change_password?: boolean;
 			affiliation_tags?: string[];
+			permanent_roles?: string[];
 		}) => {
 			const { name, ...rest } = input;
 			return updateUser(name, rest);

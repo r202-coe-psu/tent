@@ -9,7 +9,7 @@
 
 {#if endpointStore.status === 'disconnected'}
 	<div
-		class="text-destructive-foreground flex items-center justify-between gap-4 bg-destructive px-4 py-2 text-sm"
+		class="flex items-center justify-between gap-4 bg-destructive px-4 py-2 text-sm text-destructive-foreground"
 		role="alert"
 	>
 		<span>เชื่อมต่อเซิร์ฟเวอร์ไม่ได้ — ตรวจสอบเครือข่ายแล้วลองอีกครั้ง</span>

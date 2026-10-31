@@ -10,6 +10,7 @@
  * Pure: no I/O, no Svelte. Safe to import from `+server.ts`.
  */
 import { z } from 'zod';
+import { isThaiMobilePhone } from '$lib/db/model';
 import type { components } from '$lib/api/openapi';
 import {
 	dormFieldsFor,
@@ -63,7 +64,7 @@ export const publicUnassignedRegistrationRequestSchema = z
 			}
 			return;
 		}
-		if (!/^0\d{8,9}$/.test(headPhone.replace(/[-\s]/g, ''))) {
+		if (!isThaiMobilePhone(headPhone)) {
 			ctx.addIssue({
 				code: 'custom',
 				path: ['members', 0, 'phone'],

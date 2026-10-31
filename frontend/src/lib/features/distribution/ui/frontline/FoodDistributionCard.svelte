@@ -3,15 +3,19 @@
 	import UtensilsCrossed from '@lucide/svelte/icons/utensils-crossed';
 	import AlertTriangle from '@lucide/svelte/icons/alert-triangle';
 	import AlertCircle from '@lucide/svelte/icons/alert-circle';
+	import Info from '@lucide/svelte/icons/info';
 	import Clock from '@lucide/svelte/icons/clock';
 	import CheckCircle2 from '@lucide/svelte/icons/check-circle-2';
 	import Loader from '@lucide/svelte/icons/loader';
 	import { qtyGte } from '$lib/utils/qty';
+	import { formatThaiTime } from '$lib/utils/date';
 	import { validatePositiveQuantity } from '../model/ticket-quantity';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Label } from '$lib/components/ui/label/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
-	import { useItemMasters } from '$lib/features/catalog';
+	import { itemAllergens, useItemMasters } from '$lib/features/catalog';
+	import { useMasterData } from '$lib/features/master-data';
+	import { useMedicalByEvacuee } from '$lib/features/people';
 	import {
 		resolveAuthenticatedAuthorContext,
 		useDistributionLogs,
@@ -21,14 +25,23 @@
 	import { canPerformFrontlineDistribution } from '../../application/food-supplies/auth';
 	import { lotExpiryStatus, type RequisitionTicket } from '../../domain/food-supplies';
 	import {
+		checkAllergenAdvisory,
 		checkDuplicateMealAdvisory,
 		checkMenuMatchAdvisory,
+		formatAllergyCodes,
 		formatMenuTags,
 		getItemCapacitySummary,
 		isIdentifiedRecipient,
+		NO_MEAL_REPEAT,
 		type FrontlineRecipientSelection
 	} from '../model/frontline-handover';
 	import { formatDistributionError } from '../model/distribution-error';
+	import {
+		HANDOVER_DEFAULT_QTY,
+		isHandoverDraft,
+		isOutsideNotesDraft,
+		type DeskDrafts
+	} from '../model/desk-draft';
 	import { getMealPeriodLabel } from '../model/ticket-status';
 	import RecipientSearchPicker from '../common/RecipientSearchPicker.svelte';
 	import QtyStepper from '../common/QtyStepper.svelte';
@@ -38,9 +51,11 @@
 	interface Props {
 		ticket: RequisitionTicket;
 		shelterCode?: string;
+		/** FR-DFS-05 — the page asks before a mode switch drops typed input. */
+		drafts?: DeskDrafts;
 	}
 
-	let { ticket, shelterCode }: Props = $props();
+	let { ticket, shelterCode, drafts }: Props = $props();
 
 	const recordFoodMutation = useRecordFoodDistribution();
 
@@ -61,13 +76,26 @@
 	// Item the user picked; the effective selection falls back to the first ticket item whenever
 	// the pick is empty or no longer on the ticket (e.g. parent switches active ticket).
 	let pickedItemId = $state('');
-	let qtyInput = $state('1');
+	let qtyInput = $state(HANDOVER_DEFAULT_QTY);
 	let recipientSelection = $state<FrontlineRecipientSelection | null>(null);
 	let notesInput = $state('');
 	let warningModalOpen = $state(false);
 	let localSubmitError = $state<string | null>(null);
 	let topUpDialogOpen = $state(false);
 	let picker = $state<ReturnType<typeof RecipientSearchPicker>>();
+
+	// Notes the last handover recorded for the walk-in the picker keeps selected.
+	let recordedOutsideNotes: string | undefined;
+
+	// The outside recipient's notes live in the picker but reach the card through the selection.
+	$effect(() =>
+		drafts?.track(
+			() =>
+				isHandoverDraft({ qtyInput, notesInput }) ||
+				(recipientSelection?.recipientType === 'outside' &&
+					isOutsideNotesDraft(recipientSelection.notes, recordedOutsideNotes))
+		)
+	);
 
 	function handleQtyBlur() {
 		const raw = qtyInput.trim();
@@ -113,7 +141,7 @@
 	const duplicatePreflight = $derived(
 		isIdentifiedRecipient(recipientSelection)
 			? checkDuplicateMealAdvisory(recipientLogs, ticket.meal)
-			: { isDuplicate: false, priorLog: null }
+			: NO_MEAL_REPEAT
 	);
 
 	// Advisory menu matching (CR-159 §C FR-MRM-04): menu tags come from
@@ -125,6 +153,38 @@
 	const menuPreflight = $derived(checkMenuMatchAdvisory(recipientSelection, selectedMenu));
 	const menuMismatchLabel = $derived(
 		menuPreflight.isMismatch ? formatMenuTags(menuPreflight.menuTags) : null
+	);
+
+	// Recipient allergy ↔ menu allergens (#607 FR-MRM-06..09): only evacuees carry a medical
+	// record. Codes come from the `allergy` master — global-only (CR-187), so the query never
+	// waits on a shelter context (a disabled query would stay pending and lock the desk).
+	const evacueeId = $derived(
+		recipientSelection?.recipientType === 'evacuee' ? recipientSelection.recipientId : ''
+	);
+	const medicalQuery = useMedicalByEvacuee(
+		() => evacueeId,
+		() => evacueeId !== ''
+	);
+	const allergyQuery = useMasterData(
+		() => 'allergy',
+		() => ({ scope: 'global' })
+	);
+	const allergyItems = $derived(allergyQuery.data?.items ?? []);
+	const allergenPreflight = $derived(
+		checkAllergenAdvisory(
+			recipientSelection,
+			medicalQuery.data?.allergies,
+			selectedMenu ? itemAllergens(selectedMenu) : [],
+			allergyItems
+		)
+	);
+	const recipientAllergyLabel = $derived(
+		formatAllergyCodes(allergenPreflight.recipientCodes, allergyItems)
+	);
+	const allergenConflictLabel = $derived(
+		allergenPreflight.conflicts.length > 0
+			? formatAllergyCodes(allergenPreflight.conflicts, allergyItems)
+			: null
 	);
 
 	// Ready-meal safety clock (FR-MQW-06 B): expiry of the lot dispatched for this item.
@@ -154,20 +214,30 @@
 	// The duplicate-meal and menu-match preflights need their data before a confirm; without it
 	// they read as "no warning" and the override dialog would be skipped. A failed load blocks the
 	// confirm too (fail closed) until a retry succeeds.
+	// The allergy check (#607 FR-MRM-10) needs the evacuee's medical record and the allergy master.
 	const needsRecipientLogs = $derived(isIdentifiedRecipient(recipientSelection));
+	const needsAllergyCheck = $derived(evacueeId !== '');
 	const preflightLoading = $derived(
-		itemMastersQuery.isPending || (needsRecipientLogs && recipientLogsQuery.isPending)
+		itemMastersQuery.isPending ||
+			(needsRecipientLogs && recipientLogsQuery.isPending) ||
+			(needsAllergyCheck && (medicalQuery.isPending || allergyQuery.isPending))
 	);
 	const preflightError = $derived(
-		itemMastersQuery.isError || (needsRecipientLogs && recipientLogsQuery.isError)
+		itemMastersQuery.isError ||
+			(needsRecipientLogs && recipientLogsQuery.isError) ||
+			(needsAllergyCheck && (medicalQuery.isError || allergyQuery.isError))
 	);
 	const preflightRetrying = $derived(
-		itemMastersQuery.isFetching || (needsRecipientLogs && recipientLogsQuery.isFetching)
+		itemMastersQuery.isFetching ||
+			(needsRecipientLogs && recipientLogsQuery.isFetching) ||
+			(needsAllergyCheck && (medicalQuery.isFetching || allergyQuery.isFetching))
 	);
 
 	function retryPreflight() {
 		if (itemMastersQuery.isError) void itemMastersQuery.refetch();
 		if (needsRecipientLogs && recipientLogsQuery.isError) void recipientLogsQuery.refetch();
+		if (needsAllergyCheck && medicalQuery.isError) void medicalQuery.refetch();
+		if (needsAllergyCheck && allergyQuery.isError) void allergyQuery.refetch();
 	}
 
 	const isQtyValid = $derived.by(() => {
@@ -199,8 +269,13 @@
 		}
 		if (preflightLoading || preflightError) return;
 
-		// Duplicate meal or menu mismatch: open the override warning modal (reason required)
-		if (duplicatePreflight.isDuplicate || menuPreflight.isMismatch) {
+		// Duplicate meal, menu mismatch, allergen conflict or unlisted allergy: open the override modal (reason required)
+		if (
+			duplicatePreflight.isDuplicate ||
+			menuPreflight.isMismatch ||
+			allergenPreflight.conflicts.length > 0 ||
+			allergenPreflight.recipientFreeText.length > 0
+		) {
 			warningModalOpen = true;
 			return;
 		}
@@ -246,7 +321,15 @@
 										: null,
 								menu: selectedMenu
 							}
-						: undefined
+						: undefined,
+					allergen_check:
+						recipientSelection.recipientType === 'evacuee'
+							? {
+									recipient_allergy_codes: allergenPreflight.recipientCodes,
+									menu_allergen_codes: allergenPreflight.menuCodes,
+									recipient_allergy_free_text: allergenPreflight.recipientFreeText
+								}
+							: undefined
 				},
 				shelterCode
 			});
@@ -254,8 +337,10 @@
 			toast.success(`บันทึกแจกอาหารสำเร็จ: ${selectedItem.item_name} จำนวน ${qtyRes.value} ชุด`);
 			// Reset for the next person; a scanned recipient reopens the scanner.
 			warningModalOpen = false;
-			qtyInput = '1';
+			qtyInput = HANDOVER_DEFAULT_QTY;
 			notesInput = '';
+			recordedOutsideNotes =
+				recipientSelection?.recipientType === 'outside' ? recipientSelection.notes : undefined;
 			picker?.next();
 		} catch (err) {
 			localSubmitError = formatDistributionError(
@@ -271,19 +356,19 @@
 	}
 </script>
 
-<div class="space-y-5 rounded-2xl border border-slate-200/80 bg-white p-6 shadow-xs">
+<div class="space-y-5 rounded-2xl border border-slate-200/80 bg-white p-4 shadow-xs sm:p-6">
 	<!-- Ticket & Meal Period Header -->
 	<div
 		class="flex flex-col gap-3 border-b border-slate-100 pb-4 sm:flex-row sm:items-center sm:justify-between"
 	>
-		<div class="flex items-center gap-3">
+		<div class="flex min-w-0 items-center gap-3">
 			<div
-				class="flex h-11 w-11 items-center justify-center rounded-xl border border-amber-200 bg-amber-50 text-amber-700 shadow-2xs"
+				class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-amber-200 bg-amber-50 text-amber-700 shadow-2xs"
 			>
 				<UtensilsCrossed class="h-6 w-6" />
 			</div>
-			<div>
-				<div class="flex items-center gap-2">
+			<div class="min-w-0">
+				<div class="flex flex-wrap items-center gap-2">
 					<span class="font-mono text-xs font-bold text-slate-500">{ticket.ticket_no}</span>
 					<span
 						class="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-2xs font-bold text-amber-900"
@@ -298,7 +383,7 @@
 						</span>
 					{/if}
 				</div>
-				<h3 class="text-base font-bold text-slate-900">
+				<h3 class="text-base font-bold break-words text-slate-900">
 					สถานีแจกจ่ายอาหาร · จุดบริการ {ticket.destination_location}
 				</h3>
 			</div>
@@ -328,7 +413,9 @@
 						: 'border-slate-200 bg-white hover:border-slate-300'}"
 				>
 					<div class="min-w-0 flex-1">
-						<p class="truncate text-base font-bold text-slate-900">{item.item_name}</p>
+						<p class="line-clamp-2 text-base font-bold break-words text-slate-900">
+							{item.item_name}
+						</p>
 						<p class="text-xs text-slate-500">
 							จัดสรร: <strong class="text-slate-700">{summary.allocatedQty}</strong> | แจกแล้ว:
 							<strong class="text-slate-700">{summary.distributedQty}</strong>
@@ -386,6 +473,60 @@
 	/>
 
 	{#if recipientSelection}
+		<!-- Recipient allergies (#607 FR-MRM-09) -->
+		{#if recipientAllergyLabel}
+			<div class="flex flex-wrap items-center gap-2 text-sm">
+				<span class="rounded-full border border-red-300 bg-red-50 px-3 py-1 font-bold text-red-800">
+					แพ้: {recipientAllergyLabel}
+				</span>
+			</div>
+		{/if}
+
+		<!-- Unlisted (free-text) allergies force an override on every menu (CR-191 FR-MRM-11) -->
+		{#if allergenPreflight.recipientFreeText.length > 0}
+			<div
+				class="flex items-start gap-2.5 rounded-xl border border-amber-200 bg-amber-50 p-3.5 text-sm text-amber-950"
+				role="alert"
+			>
+				<AlertTriangle class="mt-0.5 size-4 shrink-0 text-amber-600" aria-hidden="true" />
+				<div>
+					<p class="font-bold">
+						มีประวัติแพ้ (ไม่อยู่ในรายการ): {allergenPreflight.recipientFreeText.join(', ')}
+					</p>
+					<p class="mt-0.5 text-xs text-amber-800">ถ้ากดแจกต่อ ระบบจะขอเหตุผลก่อนบันทึก</p>
+				</div>
+			</div>
+		{/if}
+
+		<!-- Allergen conflict (#607 FR-MRM-08) -->
+		{#if allergenConflictLabel}
+			<div
+				class="flex items-start gap-2.5 rounded-xl border border-red-300 bg-red-50 p-3.5 text-sm text-red-950"
+				role="alert"
+			>
+				<AlertTriangle class="mt-0.5 size-4 shrink-0 text-red-600" aria-hidden="true" />
+				<div>
+					<p class="font-bold">
+						{selectedItem?.item_name ?? 'เมนูนี้'} มี {allergenConflictLabel} — ผู้รับแพ้
+					</p>
+					<p class="mt-0.5 text-xs text-red-800">ถ้ากดแจกต่อ ระบบจะขอเหตุผลก่อนบันทึก</p>
+				</div>
+			</div>
+		{:else if allergenPreflight.menuUnspecified}
+			<p class="flex items-center gap-2 text-sm text-slate-600">
+				<AlertCircle class="size-4 shrink-0" aria-hidden="true" />
+				<span>เมนูนี้ไม่ระบุสารก่อแพ้ — ตรวจสอบกับครัวก่อนแจก</span>
+			</p>
+		{/if}
+
+		<!-- Free-text menu allergens are not matched; show them so staff can compare by eye -->
+		{#if (recipientAllergyLabel || allergenPreflight.recipientFreeText.length > 0) && allergenPreflight.menuFreeText.length > 0}
+			<p class="flex items-center gap-2 text-sm text-slate-700">
+				<Info class="size-4 shrink-0" aria-hidden="true" />
+				<span>เมนูระบุ: {allergenPreflight.menuFreeText.join(', ')} — ระบบไม่ได้เทียบให้</span>
+			</p>
+		{/if}
+
 		<!-- Advisory Duplicate Meal Warning Banner -->
 		{#if duplicatePreflight.isDuplicate}
 			<div
@@ -394,9 +535,14 @@
 			>
 				<AlertTriangle class="mt-0.5 size-4 shrink-0 text-amber-600" aria-hidden="true" />
 				<div>
-					<p class="font-bold">คนนี้รับอาหารมื้อนี้ไปแล้ววันนี้</p>
+					<p class="font-bold">
+						รับมื้อนี้ไปแล้ว {duplicatePreflight.visits} ครั้ง รวม {duplicatePreflight.boxes} กล่อง
+						{#if duplicatePreflight.lastDistributedAt}
+							· ล่าสุด {formatThaiTime(duplicatePreflight.lastDistributedAt)}
+						{/if}
+					</p>
 					<p class="mt-0.5 text-xs text-amber-800">
-						มื้อ{ticket.meal ? getMealPeriodLabel(ticket.meal) : ''} · ถ้ากดแจกต่อ ระบบจะขอเหตุผลก่อนบันทึก
+						มื้อ{ticket.meal ? getMealPeriodLabel(ticket.meal) : ''} วันนี้ · ถ้ากดแจกต่อ ระบบจะขอเหตุผลก่อนบันทึก
 					</p>
 				</div>
 			</div>
@@ -426,7 +572,7 @@
 			>
 				<AlertCircle class="mt-0.5 size-4 shrink-0 text-red-600" aria-hidden="true" />
 				<div class="flex-1">
-					<p class="font-bold">ตรวจเมนูและประวัติการรับอาหารไม่สำเร็จ</p>
+					<p class="font-bold">ตรวจเมนู ประวัติการรับอาหาร และการแพ้ไม่สำเร็จ</p>
 					<p class="mt-0.5 text-xs">ยังบันทึกการแจกไม่ได้จนกว่าระบบจะตรวจได้ ลองใหม่อีกครั้ง</p>
 				</div>
 				<Button
@@ -447,7 +593,8 @@
 		<div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
 			<QtyStepper
 				id="food-qty-input"
-				label="จำนวนที่แจก"
+				label="จำนวนกล่อง"
+				hint="แจกหลายกล่องให้คนเดียวได้ เช่น รับแทนครอบครัว"
 				unit="ชุด"
 				bind:value={qtyInput}
 				max={capacitySummary.inHandQty}
@@ -508,14 +655,16 @@
 </div>
 
 <!-- Duplicate Meal / Menu Mismatch Override Warning Modal -->
-{#if ticket.meal && recipientSelection}
+{#if recipientSelection}
 	<MealEntitlementWarning
 		open={warningModalOpen}
 		meal={ticket.meal}
 		recipientLabel={recipientSelection.label}
-		isDuplicate={duplicatePreflight.isDuplicate}
-		priorDistributedAt={duplicatePreflight.priorLog?.distributed_at}
+		repeat={duplicatePreflight}
 		{menuMismatchLabel}
+		{allergenConflictLabel}
+		allergyFreeTextLabel={allergenPreflight.recipientFreeText.join(', ')}
+		menuName={selectedItem?.item_name}
 		onconfirm={handleOverrideConfirm}
 		oncancel={() => (warningModalOpen = false)}
 	/>

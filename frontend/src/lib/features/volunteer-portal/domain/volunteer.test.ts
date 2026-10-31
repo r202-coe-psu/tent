@@ -15,6 +15,7 @@ import {
 	trackingTokenHashFromPayload,
 	ticketStatusLabel,
 	volunteerApplySchema,
+	ticketFindSchema,
 	volunteerProfileUpdateSchema,
 	type PublicJob,
 	type ScheduleShift,
@@ -60,6 +61,15 @@ describe('volunteerApplySchema', () => {
 
 	it('rejects a phone that is not a Thai mobile number', () => {
 		expect(volunteerApplySchema.safeParse({ ...base, phone: '12345' }).success).toBe(false);
+	});
+
+	it.each(['022222222', '02-222-2222'])('rejects the 9-digit landline %s (#951)', (phone) => {
+		expect(volunteerApplySchema.safeParse({ ...base, phone }).success).toBe(false);
+		expect(ticketFindSchema.safeParse({ phone }).success).toBe(false);
+	});
+
+	it('normalises +66 mobiles for ticket lookup', () => {
+		expect(ticketFindSchema.parse({ phone: '+66 81-234-5678' }).phone).toBe('0812345678');
 	});
 });
 
@@ -223,6 +233,37 @@ describe('isJobApplicable', () => {
 		// The projection can lag behind the counter — the seat count is what decides, so a
 		// job still flagged `open` cannot be applied to once it is actually full.
 		expect(isJobApplicable(job({ slots_remaining: 0 }))).toBe(false);
+	});
+
+	describe('with shift rows (#972, FR-6)', () => {
+		const now = new Date('2026-10-28T20:00:00+07:00');
+		const shift = (id: string, date: string, remaining: number) => ({
+			shift_id: id,
+			date,
+			end_date: date,
+			start_time: '08:00',
+			end_time: '16:00',
+			station: null,
+			quota: 2,
+			slots_confirmed: 2 - remaining,
+			slots_remaining: remaining
+		});
+
+		it('accepts a job whose open shift has seats although the ended one is over-booked', () => {
+			const j = job({
+				slots_remaining: 0,
+				shifts: [shift('past', '2026-10-27', 0), shift('next', '2026-10-29', 2)]
+			});
+			expect(isJobApplicable(j, now)).toBe(true);
+		});
+
+		it('refuses a job whose only free seats are in an ended shift', () => {
+			const j = job({
+				slots_remaining: 2,
+				shifts: [shift('past', '2026-10-27', 2), shift('next', '2026-10-29', 0)]
+			});
+			expect(isJobApplicable(j, now)).toBe(false);
+		});
 	});
 
 	it('refuses a closed or cancelled job even while seats remain', () => {

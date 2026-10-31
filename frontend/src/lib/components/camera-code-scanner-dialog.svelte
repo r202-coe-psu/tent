@@ -7,6 +7,7 @@
 	import Keyboard from '@lucide/svelte/icons/keyboard';
 	import type { Html5QrcodeSupportedFormats } from 'html5-qrcode';
 	import CameraCodeScanner from './camera-code-scanner.svelte';
+	import { acceptRead, createReadGuard, scannerPhase } from './camera-code-scanner-state';
 
 	let {
 		open = $bindable(false),
@@ -14,7 +15,9 @@
 		hint = 'เล็งกล้องไปที่บาร์โค้ด หรือพิมพ์รหัสด้วยมือ / เครื่องสแกนบาร์โค้ด',
 		formats,
 		manualInputMode = 'numeric',
-		onScan
+		busy,
+		onScan,
+		oncancel
 	}: {
 		open?: boolean;
 		title?: string;
@@ -23,22 +26,53 @@
 		formats?: Html5QrcodeSupportedFormats[];
 		/** Keyboard for the typed fallback — `text` for alphanumeric codes such as QR payloads. */
 		manualInputMode?: 'numeric' | 'text';
-		/** Receives a camera read or a typed code; the dialog closes first. */
-		onScan: (code: string) => void;
+		/**
+		 * Pass while the caller resolves a read. When provided, the dialog stays open showing
+		 * progress until the promise `onScan` returns settles, then closes.
+		 */
+		busy?: boolean;
+		/** Receives a camera read or a typed code; without `busy` the dialog closes first. */
+		onScan: (code: string) => void | Promise<unknown>;
+		/** Called when the user closes the dialog while busy; the caller should drop the pending read. */
+		oncancel?: () => void;
 	} = $props();
 
 	let manualCode = $state('');
 
-	function deliver(code: string) {
-		const clean = code.trim();
+	const phase = $derived(scannerPhase(busy ?? false));
+	const readGuard = createReadGuard();
+
+	async function deliver(code: string) {
+		const clean = acceptRead(phase, code);
 		if (!clean) return;
 		manualCode = '';
+		if (busy === undefined) {
+			open = false;
+			onScan(clean);
+			return;
+		}
+		const isLatest = readGuard.begin();
+		try {
+			await onScan(clean);
+		} finally {
+			// A cancelled read must not close a dialog the user has since reopened.
+			if (isLatest()) open = false;
+		}
+	}
+
+	/** The user closed the dialog: drop any read in flight and tell the caller if it was busy. */
+	function handleUserClose() {
+		readGuard.cancel();
+		if (phase === 'busy') oncancel?.();
+	}
+
+	function cancelButton() {
 		open = false;
-		onScan(clean);
+		handleUserClose();
 	}
 </script>
 
-<Dialog.Root bind:open>
+<Dialog.Root bind:open onOpenChange={(next) => !next && handleUserClose()}>
 	<Dialog.Content class="flex w-full max-w-md flex-col gap-5 rounded-2xl p-6">
 		<Dialog.Header class="pr-6 text-left">
 			<Dialog.Title class="flex items-center gap-2 text-lg font-bold text-slate-900">
@@ -50,7 +84,7 @@
 
 		<!-- Mounted only while open so the camera is released when the dialog closes. -->
 		{#if open}
-			<CameraCodeScanner onScan={deliver} {formats} />
+			<CameraCodeScanner onScan={deliver} {formats} busy={phase === 'busy'} />
 		{/if}
 
 		<form
@@ -77,14 +111,18 @@
 					bind:value={manualCode}
 					class="h-11 flex-1"
 				/>
-				<Button type="submit" disabled={!manualCode.trim()} class="min-h-11 px-5 font-bold">
+				<Button
+					type="submit"
+					disabled={!manualCode.trim() || phase === 'busy'}
+					class="min-h-11 px-5 font-bold"
+				>
 					ตกลง
 				</Button>
 			</div>
 		</form>
 
 		<div class="flex justify-end border-t border-slate-200/80 pt-3">
-			<Button type="button" variant="outline" class="min-h-11" onclick={() => (open = false)}>
+			<Button type="button" variant="outline" class="min-h-11" onclick={cancelButton}>
 				ยกเลิก
 			</Button>
 		</div>

@@ -25,6 +25,7 @@
 	import { resolve } from '$app/paths';
 	import { useSkillOptions } from '../application/queries';
 	import { resolveSkillOption, type SkillOption } from '../domain/skill-catalog';
+	import { describeCheckEvent } from '../domain/check-event-source';
 	import type { Volunteer } from '../domain/volunteer.schema';
 	import type { ShiftAssignment, ShiftAssignmentStatus } from '../domain/shift-assignment.schema';
 	import type { Job } from '../domain/job.schema';
@@ -136,7 +137,7 @@
 					: 'bg-primary/60'}"
 		></div>
 		<Card.Content class="space-y-4">
-			<div class="flex items-start justify-between gap-3">
+			<div class="flex flex-col items-start gap-3 sm:flex-row sm:justify-between">
 				<div class="flex min-w-0 items-start gap-3">
 					<div
 						class="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-primary/10 text-lg font-bold text-primary"
@@ -144,19 +145,19 @@
 						{volunteer.first_name.charAt(0)}
 					</div>
 					<div class="min-w-0">
-						<h4 class="truncate text-base font-bold text-foreground">
+						<h4 class="text-base font-bold wrap-break-word text-foreground">
 							{fullName(volunteer)}
 							{#if volunteer.nickname}<span class="font-normal text-muted-foreground"
 									>({volunteer.nickname})</span
 								>{/if}
 						</h4>
 						<p
-							class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground"
+							class="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground"
 						>
-							{#if volunteer.phone}<span>{volunteer.phone}</span> •
+							{#if volunteer.phone}<span class="whitespace-nowrap">{volunteer.phone}</span>
 							{/if}
-							<span>ID: {volunteer.volunteer_code}</span> •
-							<span class="font-mono text-[11px]">{ticketCode(volunteer)}</span>
+							<span class="whitespace-nowrap">ID: {volunteer.volunteer_code}</span>
+							<span class="font-mono text-[11px] whitespace-nowrap">{ticketCode(volunteer)}</span>
 						</p>
 					</div>
 				</div>
@@ -261,9 +262,12 @@
 							<span class="font-bold"
 								>เช็คอินเข้างานแล้วเมื่อ: {formatTime(assignment.check_in_at)} น.</span
 							><br />
-							{assignment.check_in_method === 'manual_override'
-								? `บันทึกแทนโดย จนท. (${assignment.check_in_by ?? 'ไม่ระบุ'})`
-								: 'สแกนรายงานตัวเข้ากะด้วยตนเอง (Self-Service QR)'}
+							{describeCheckEvent({
+								kind: 'check_in',
+								method: assignment.check_in_method,
+								by: assignment.check_in_by,
+								volunteerName: volunteer ? fullName(volunteer) : ''
+							}).actorLine}
 						</p>
 					</div>
 				{:else if assignment.status === 'completed' && assignment.check_out_at}
@@ -273,9 +277,12 @@
 							<span class="font-bold"
 								>เช็คเอาต์ออกงานแล้วเมื่อ: {formatTime(assignment.check_out_at)} น.</span
 							><br />
-							{assignment.check_out_method === 'manual_override'
-								? `บันทึกแทนโดย จนท. (${assignment.check_out_by ?? 'ไม่ระบุ'})`
-								: `ดำเนินการโดย ${assignment.check_out_by ?? 'ไม่ระบุ'}`}
+							{describeCheckEvent({
+								kind: 'check_out',
+								method: assignment.check_out_method,
+								by: assignment.check_out_by,
+								volunteerName: volunteer ? fullName(volunteer) : ''
+							}).actorLine}
 						</p>
 					</div>
 				{:else if blockedByDispatch}
@@ -332,7 +339,7 @@
 
 				{#if assignment?.status === 'checked_in'}
 					<Button
-						class="h-11 flex-1 gap-1.5 rounded-xl bg-destructive text-sm font-bold text-white shadow-sm hover:bg-destructive/90"
+						class="h-auto min-h-11 flex-1 gap-1.5 rounded-xl bg-destructive py-2 text-sm font-bold whitespace-normal text-white shadow-sm hover:bg-destructive/90"
 						onclick={oncheckout}
 						disabled={checkOutPending}
 					>
@@ -344,26 +351,32 @@
 						กดยืนยันเช็คเอาต์ออกงาน (Check-Out)
 					</Button>
 				{:else if blockedByDispatch}
-					<Button disabled class="h-11 flex-1 rounded-xl text-sm font-bold">
+					<Button
+						disabled
+						class="h-auto min-h-11 flex-1 rounded-xl py-2 text-sm font-bold whitespace-normal"
+					>
 						<Lock class="mr-1.5 size-4" />
 						รอยืนยันการมอบหมายก่อนเช็คอิน
 					</Button>
 				{:else if blockedByIdentity}
-					<Button disabled class="h-11 flex-1 rounded-xl text-sm font-bold">
+					<Button
+						disabled
+						class="h-auto min-h-11 flex-1 rounded-xl py-2 text-sm font-bold whitespace-normal"
+					>
 						<Lock class="mr-1.5 size-4" />
 						รอยืนยันตัวตนก่อนเช็คอิน
 					</Button>
 				{:else if blockedByLateness}
 					<Button
 						disabled
-						class="h-11 flex-1 rounded-xl bg-rose-100 text-sm font-bold text-rose-700"
+						class="h-auto min-h-11 flex-1 rounded-xl bg-rose-100 py-2 text-sm font-bold whitespace-normal text-rose-700"
 					>
 						<AlertCircle class="mr-1.5 size-4" />
 						เลยเวลากะแล้ว เช็คอินไม่ได้
 					</Button>
 				{:else if notYetOnShift && isEarly}
 					<Button
-						class="h-11 flex-1 gap-1.5 rounded-xl bg-amber-500 text-sm font-bold text-white shadow-sm hover:bg-amber-600"
+						class="h-auto min-h-11 flex-1 gap-1.5 rounded-xl bg-amber-500 py-2 text-sm font-bold whitespace-normal text-white shadow-sm hover:bg-amber-600"
 						onclick={oncheckin}
 						disabled={checkInPending}
 					>
@@ -376,7 +389,7 @@
 					</Button>
 				{:else if notYetOnShift}
 					<Button
-						class="h-11 flex-1 gap-1.5 rounded-xl bg-emerald-500 text-sm font-bold text-white shadow-sm hover:bg-emerald-600"
+						class="h-auto min-h-11 flex-1 gap-1.5 rounded-xl bg-emerald-500 py-2 text-sm font-bold whitespace-normal text-white shadow-sm hover:bg-emerald-600"
 						onclick={oncheckin}
 						disabled={checkInPending}
 					>
@@ -391,7 +404,7 @@
 					<Button
 						href={resolve('/back-office/volunteers?tab=people')}
 						variant="outline"
-						class="h-11 flex-1 gap-1 rounded-xl text-sm font-bold"
+						class="h-auto min-h-11 flex-1 gap-1 rounded-xl py-2 text-sm font-bold whitespace-normal"
 					>
 						ดูโปรไฟล์เต็ม
 						<ChevronRight class="size-3.5" />
