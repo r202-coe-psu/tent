@@ -8,7 +8,6 @@ import {
 describe('validateFamilySearchQuery', () => {
 	it.each([
 		['0812345678', 'mobile phone (10 digits)'],
-		['082345678', 'landline (9 digits)'],
 		['081-234-5678', 'phone with dashes'],
 		['081 234 5678', 'phone with spaces'],
 		['+66812345678', '+66 international form'],
@@ -28,12 +27,19 @@ describe('validateFamilySearchQuery', () => {
 		expect(validateFamilySearchQuery(query)).toBeNull();
 	});
 
-	it.each(['08236', '0823', '12345', '12', '08123456789012', '0812345', '๐๘๒๓๖'])(
-		'flags %s as an incomplete phone',
-		(query) => {
-			expect(validateFamilySearchQuery(query)).toBe('incompletePhone');
-		}
-	);
+	it.each([
+		'08236',
+		'0823',
+		'12345',
+		'12',
+		'08123456789012',
+		'0812345',
+		'๐๘๒๓๖',
+		'021234567',
+		'02-123-4567'
+	])('flags %s as an incomplete phone', (query) => {
+		expect(validateFamilySearchQuery(query)).toBe('incompletePhone');
+	});
 
 	it.each([
 		'',

@@ -36,6 +36,7 @@
 		error = null,
 		onRetry,
 		actions,
+		received,
 		onViewDetails
 	}: {
 		requests: PendingDonationRow[];
@@ -46,10 +47,13 @@
 		filter?: DonationQueueFilter;
 		/** Top-right of the list — the scan and walk-in entry points. */
 		actions?: Snippet;
+		/** Body of the "รับแล้ว" filter (#821) — loaded page by page, so not part of `requests`. */
+		received?: Snippet;
 		onViewDetails: (request: PendingDonationRow) => void;
 	} = $props();
 
-	const STATUS_BADGE: Record<'pending' | 'awaiting', string> = {
+	const STATUS_BADGE: Record<'pending' | 'awaiting' | 'received', string> = {
+		received: 'border-emerald-200 bg-emerald-50 text-emerald-900',
 		pending: 'border-amber-200 bg-amber-50 text-amber-900',
 		awaiting: 'border-sky-200 bg-sky-50 text-sky-900'
 	};
@@ -189,9 +193,11 @@
 	>
 		{#each DONATION_QUEUE_FILTERS as option (option.value)}
 			{@const count =
-				option.value === 'all'
-					? requests.length
-					: requests.filter((r) => queueGroupOf(r.status) === option.value).length}
+				option.value === 'received'
+					? null
+					: option.value === 'all'
+						? requests.length
+						: requests.filter((r) => queueGroupOf(r.status) === option.value).length}
 			<Button
 				type="button"
 				size="sm"
@@ -201,247 +207,257 @@
 				onclick={() => (filter = option.value)}
 			>
 				{option.label}
-				<span class="tabular-nums opacity-80">({count})</span>
+				{#if count !== null}
+					<span class="tabular-nums opacity-80">({count})</span>
+				{/if}
 			</Button>
 		{/each}
 	</div>
 
-	<!-- Filter Bar -->
-	<div class="border-b border-border/60 bg-card p-4">
-		<div class="flex flex-col gap-3 md:flex-row md:items-center">
-			<!-- Search input -->
-			<div class="relative flex-1">
-				<Search
-					class="absolute top-1/2 left-3 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground"
-				/>
-				<Input
-					type="text"
-					placeholder="ค้นหาชื่อผู้บริจาค, รหัสคำขอ, หรือรายการสิ่งของ..."
-					bind:value={searchQuery}
-					class="h-9 rounded-xl pl-9 text-xs"
-				/>
-			</div>
+	{#if filter === 'received'}
+		{@render received?.()}
+	{:else}
+		<!-- Filter Bar -->
+		<div class="border-b border-border/60 bg-card p-4">
+			<div class="flex flex-col gap-3 md:flex-row md:items-center">
+				<!-- Search input -->
+				<div class="relative flex-1">
+					<Search
+						class="absolute top-1/2 left-3 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground"
+					/>
+					<Input
+						type="text"
+						placeholder="ค้นหาชื่อผู้บริจาค, รหัสคำขอ, หรือรายการสิ่งของ..."
+						bind:value={searchQuery}
+						class="h-9 rounded-xl pl-9 text-xs"
+					/>
+				</div>
 
-			<!-- Filter dropdowns -->
-			<div class="flex flex-wrap items-center gap-2">
-				<Select.Root type="single" bind:value={sourceFilter}>
-					<Select.Trigger
-						aria-label="กรองตามที่มา"
-						class="h-9 rounded-xl text-xs data-[size=default]:h-9"
-					>
-						{sourceLabel}
-					</Select.Trigger>
-					<Select.Content>
-						{#each SOURCE_OPTIONS as option (option.value)}
-							<Select.Item value={option.value} label={option.label} />
-						{/each}
-					</Select.Content>
-				</Select.Root>
+				<!-- Filter dropdowns -->
+				<div class="flex flex-wrap items-center gap-2">
+					<Select.Root type="single" bind:value={sourceFilter}>
+						<Select.Trigger
+							aria-label="กรองตามที่มา"
+							class="h-9 rounded-xl text-xs data-[size=default]:h-9"
+						>
+							{sourceLabel}
+						</Select.Trigger>
+						<Select.Content>
+							{#each SOURCE_OPTIONS as option (option.value)}
+								<Select.Item value={option.value} label={option.label} />
+							{/each}
+						</Select.Content>
+					</Select.Root>
 
-				<Select.Root type="single" bind:value={sortOrder}>
-					<Select.Trigger
-						aria-label="เรียงลำดับ"
-						class="h-9 rounded-xl text-xs data-[size=default]:h-9"
-					>
-						{sortLabel}
-					</Select.Trigger>
-					<Select.Content>
-						{#each SORT_OPTIONS as option (option.value)}
-							<Select.Item value={option.value} label={option.label} />
-						{/each}
-					</Select.Content>
-				</Select.Root>
+					<Select.Root type="single" bind:value={sortOrder}>
+						<Select.Trigger
+							aria-label="เรียงลำดับ"
+							class="h-9 rounded-xl text-xs data-[size=default]:h-9"
+						>
+							{sortLabel}
+						</Select.Trigger>
+						<Select.Content>
+							{#each SORT_OPTIONS as option (option.value)}
+								<Select.Item value={option.value} label={option.label} />
+							{/each}
+						</Select.Content>
+					</Select.Root>
+				</div>
 			</div>
 		</div>
-	</div>
 
-	<!-- Mobile cards (< md) -->
-	<div class="space-y-3 p-4 md:hidden">
-		{#if loading}
-			<div
-				class="rounded-xl border border-slate-200/80 bg-white p-8 text-center text-sm text-slate-500 shadow-2xs"
-			>
-				กำลังโหลดข้อมูล...
-			</div>
-		{:else if error}
-			{@render loadError()}
-		{:else if filteredRequests.length === 0}
-			<div
-				class="rounded-xl border border-slate-200/80 bg-white p-8 text-center text-sm text-slate-500 shadow-2xs"
-			>
-				ไม่มีรายการของบริจาคในสถานะนี้
-			</div>
-		{:else}
-			{#each pagedRequests as req (donationActionRef(req) ?? req.declared_at)}
-				<article class="space-y-3 rounded-xl border border-slate-200/80 bg-white p-4 shadow-2xs">
-					<div>
-						<div class="text-base font-bold text-slate-900">
-							{req.donor_name || 'ไม่ระบุชื่อ'}
-						</div>
-						<div class="mt-1.5 flex flex-wrap items-center gap-2 text-xs">
-							<Badge
-								variant="outline"
-								class="text-xs font-bold {STATUS_BADGE[queueGroupOf(req.status)]}"
-							>
-								{donationStatusLabel(req.status)}
-							</Badge>
-							<span class="font-semibold text-slate-500">{donationRefLabel(req)}</span>
-							<span class="text-slate-400">·</span>
-							<span class="text-slate-500">{formatRelativeTime(req.declared_at)}</span>
-						</div>
-					</div>
-
-					<div class="rounded-lg border border-slate-200/80 bg-slate-50/80 p-3">
-						<p class="text-xs font-semibold text-slate-500">รายการที่เสนอ</p>
-						<p class="mt-1 text-sm font-medium text-slate-800">{itemsSummary(req)}</p>
-					</div>
-
-					<div
-						class="inline-flex items-start gap-1.5 rounded-xl border border-sky-200 bg-sky-50 px-3 py-2 text-sm font-medium text-sky-900"
-					>
-						<Info class="mt-0.5 h-4 w-4 shrink-0 text-sky-700" />
-						<span>{getTriggerReason(req)}</span>
-					</div>
-
-					<Button
-						variant="outline"
-						type="button"
-						onclick={() => onViewDetails(req)}
-						class="min-h-11 w-full gap-1.5 rounded-xl border-sky-200 bg-sky-50 px-3.5 text-sm font-bold text-sky-900 hover:bg-sky-100"
-					>
-						<SlidersHorizontal class="h-4 w-4" />
-						จัดการ
-					</Button>
-				</article>
-			{/each}
-		{/if}
-	</div>
-
-	<!-- Desktop table (md+) -->
-	<div class="hidden overflow-x-auto md:block">
-		<Table.Root class="w-full border-collapse text-left">
-			<Table.Header>
-				<Table.Row
-					class="border-b border-border bg-muted/15 text-xs font-bold text-muted-foreground"
+		<!-- Mobile cards (< md) -->
+		<div class="space-y-3 p-4 md:hidden">
+			{#if loading}
+				<div
+					class="rounded-xl border border-slate-200/80 bg-white p-8 text-center text-sm text-slate-500 shadow-2xs"
 				>
-					<Table.Head class="px-6 py-4 text-xs font-bold text-foreground/80"
-						>ผู้ส่งและรหัสคำขอ (DONOR INFO)</Table.Head
-					>
-					<Table.Head class="px-6 py-4 text-xs font-bold text-foreground/80"
-						>รายการที่เสนอ (ITEMS PROPOSED)</Table.Head
-					>
-					<Table.Head class="px-6 py-4 text-xs font-bold text-foreground/80"
-						>ประเด็นการตรวจสอบ (TRIGGER REASON)</Table.Head
-					>
-					<Table.Head class="px-6 py-4 text-right text-xs font-bold text-foreground/80"
-						>การจัดการคำขอ (ACTION)</Table.Head
-					>
-				</Table.Row>
-			</Table.Header>
-			<Table.Body class="divide-y divide-border/60 text-xs">
-				{#if loading}
-					<Table.Row>
-						<Table.Cell colspan={4} class="px-6 py-12 text-center text-muted-foreground">
-							กำลังโหลดข้อมูล...
-						</Table.Cell>
-					</Table.Row>
-				{:else if error}
-					<Table.Row>
-						<Table.Cell colspan={4} class="px-6 py-8">{@render loadError()}</Table.Cell>
-					</Table.Row>
-				{:else if filteredRequests.length === 0}
-					<Table.Row>
-						<Table.Cell colspan={4} class="px-6 py-12 text-center text-muted-foreground">
-							ไม่มีรายการของบริจาคในสถานะนี้
-						</Table.Cell>
-					</Table.Row>
-				{:else}
-					{#each pagedRequests as req (donationActionRef(req) ?? req.declared_at)}
-						<Table.Row class="transition-colors hover:bg-muted/10">
-							<!-- Donor Info & Ref -->
-							<Table.Cell class="min-w-[240px] px-6 py-4">
-								<div class="text-sm font-bold text-foreground">
-									{req.donor_name || 'ไม่ระบุชื่อ'}
-								</div>
-								<div class="mt-1.5 flex flex-wrap items-center gap-2 text-2xs">
-									<Badge
-										variant="outline"
-										class="text-2xs font-bold {STATUS_BADGE[queueGroupOf(req.status)]}"
-									>
-										{donationStatusLabel(req.status)}
-									</Badge>
-									<span class="font-semibold text-muted-foreground">
-										{donationRefLabel(req)}
-									</span>
-									<span class="text-muted-foreground">·</span>
-									<span class="text-muted-foreground">
-										{formatRelativeTime(req.declared_at)}
-									</span>
-								</div>
-							</Table.Cell>
-
-							<!-- Items Proposed -->
-							<Table.Cell class="min-w-[260px] px-6 py-4 text-xs font-medium text-foreground">
-								{itemsSummary(req)}
-							</Table.Cell>
-
-							<!-- Trigger Reason -->
-							<Table.Cell class="min-w-[300px] px-6 py-4">
-								<div
-									class="inline-flex items-center gap-1.5 rounded-xl border border-blue-200 bg-blue-50/70 px-3 py-1.5 text-xs font-medium text-blue-700 dark:border-blue-900/50 dark:bg-blue-950/30 dark:text-blue-300"
-								>
-									<Info class="h-3.5 w-3.5 shrink-0 text-blue-600 dark:text-blue-400" />
-									<span>{getTriggerReason(req)}</span>
-								</div>
-							</Table.Cell>
-
-							<!-- Action Button -->
-							<Table.Cell class="px-6 py-4 text-right">
-								<Button
+					กำลังโหลดข้อมูล...
+				</div>
+			{:else if error}
+				{@render loadError()}
+			{:else if filteredRequests.length === 0}
+				<div
+					class="rounded-xl border border-slate-200/80 bg-white p-8 text-center text-sm text-slate-500 shadow-2xs"
+				>
+					ไม่มีรายการของบริจาคในสถานะนี้
+				</div>
+			{:else}
+				{#each pagedRequests as req (donationActionRef(req) ?? req.declared_at)}
+					<article class="space-y-3 rounded-xl border border-slate-200/80 bg-white p-4 shadow-2xs">
+						<div>
+							<div class="text-base font-bold text-slate-900">
+								{req.donor_name || 'ไม่ระบุชื่อ'}
+							</div>
+							<div class="mt-1.5 flex flex-wrap items-center gap-2 text-xs">
+								<Badge
 									variant="outline"
-									type="button"
-									onclick={() => onViewDetails(req)}
-									class="h-9 gap-1.5 rounded-xl border-blue-200 bg-blue-50/80 px-3.5 text-xs font-bold text-blue-700 hover:bg-blue-100 hover:text-blue-800 dark:border-blue-800 dark:bg-blue-950/40 dark:text-blue-300 dark:hover:bg-blue-900/60"
+									class="text-xs font-bold {STATUS_BADGE[queueGroupOf(req.status)]}"
 								>
-									<SlidersHorizontal class="h-3.5 w-3.5" />
-									จัดการ
-								</Button>
+									{donationStatusLabel(req.status)}
+								</Badge>
+								<span class="font-semibold text-slate-500">{donationRefLabel(req)}</span>
+								<span class="text-slate-400">·</span>
+								<span class="text-slate-500">{formatRelativeTime(req.declared_at)}</span>
+							</div>
+						</div>
+
+						<div class="rounded-lg border border-slate-200/80 bg-slate-50/80 p-3">
+							<p class="text-xs font-semibold text-slate-500">รายการที่เสนอ</p>
+							<p class="mt-1 text-sm font-medium text-slate-800">{itemsSummary(req)}</p>
+						</div>
+
+						<div
+							class="inline-flex items-start gap-1.5 rounded-xl border border-sky-200 bg-sky-50 px-3 py-2 text-sm font-medium text-sky-900"
+						>
+							<Info class="mt-0.5 h-4 w-4 shrink-0 text-sky-700" />
+							<span>{getTriggerReason(req)}</span>
+						</div>
+
+						<Button
+							variant="outline"
+							type="button"
+							onclick={() => onViewDetails(req)}
+							class="min-h-11 w-full gap-1.5 rounded-xl border-sky-200 bg-sky-50 px-3.5 text-sm font-bold text-sky-900 hover:bg-sky-100"
+						>
+							<SlidersHorizontal class="h-4 w-4" />
+							จัดการ
+						</Button>
+					</article>
+				{/each}
+			{/if}
+		</div>
+
+		<!-- Desktop table (md+) -->
+		<div class="hidden overflow-x-auto md:block">
+			<Table.Root class="w-full border-collapse text-left">
+				<Table.Header>
+					<Table.Row
+						class="border-b border-border bg-muted/15 text-xs font-bold text-muted-foreground"
+					>
+						<Table.Head class="px-6 py-4 text-xs font-bold text-foreground/80"
+							>ผู้ส่งและรหัสคำขอ (DONOR INFO)</Table.Head
+						>
+						<Table.Head class="px-6 py-4 text-xs font-bold text-foreground/80"
+							>รายการที่เสนอ (ITEMS PROPOSED)</Table.Head
+						>
+						<Table.Head class="px-6 py-4 text-xs font-bold text-foreground/80"
+							>ประเด็นการตรวจสอบ (TRIGGER REASON)</Table.Head
+						>
+						<Table.Head class="px-6 py-4 text-right text-xs font-bold text-foreground/80"
+							>การจัดการคำขอ (ACTION)</Table.Head
+						>
+					</Table.Row>
+				</Table.Header>
+				<Table.Body class="divide-y divide-border/60 text-xs">
+					{#if loading}
+						<Table.Row>
+							<Table.Cell colspan={4} class="px-6 py-12 text-center text-muted-foreground">
+								กำลังโหลดข้อมูล...
 							</Table.Cell>
 						</Table.Row>
-					{/each}
-				{/if}
-			</Table.Body>
-		</Table.Root>
-	</div>
+					{:else if error}
+						<Table.Row>
+							<Table.Cell colspan={4} class="px-6 py-8">{@render loadError()}</Table.Cell>
+						</Table.Row>
+					{:else if filteredRequests.length === 0}
+						<Table.Row>
+							<Table.Cell colspan={4} class="px-6 py-12 text-center text-muted-foreground">
+								ไม่มีรายการของบริจาคในสถานะนี้
+							</Table.Cell>
+						</Table.Row>
+					{:else}
+						{#each pagedRequests as req (donationActionRef(req) ?? req.declared_at)}
+							<Table.Row class="transition-colors hover:bg-muted/10">
+								<!-- Donor Info & Ref -->
+								<Table.Cell class="min-w-[240px] px-6 py-4">
+									<div class="text-sm font-bold text-foreground">
+										{req.donor_name || 'ไม่ระบุชื่อ'}
+									</div>
+									<div class="mt-1.5 flex flex-wrap items-center gap-2 text-2xs">
+										<Badge
+											variant="outline"
+											class="text-2xs font-bold {STATUS_BADGE[queueGroupOf(req.status)]}"
+										>
+											{donationStatusLabel(req.status)}
+										</Badge>
+										<span class="font-semibold text-muted-foreground">
+											{donationRefLabel(req)}
+										</span>
+										<span class="text-muted-foreground">·</span>
+										<span class="text-muted-foreground">
+											{formatRelativeTime(req.declared_at)}
+										</span>
+									</div>
+								</Table.Cell>
 
-	{#if filteredRequests.length > PAGE_SIZE}
-		<div
-			class="flex flex-col items-center justify-between gap-3 border-t border-border/60 p-4 sm:flex-row"
-		>
-			<p class="text-2xs text-muted-foreground">
-				แสดง {(safePage - 1) * PAGE_SIZE + 1}–{Math.min(
-					safePage * PAGE_SIZE,
-					filteredRequests.length
-				)}
-				จาก {filteredRequests.length} คำขอ
-			</p>
-			<Pagination.Root bind:page={currentPage} count={filteredRequests.length} perPage={PAGE_SIZE}>
-				{#snippet children({ pages })}
-					<Pagination.Content>
-						<Pagination.Previous />
-						{#each pages as p, i (p.type === 'page' ? `page-${p.value}` : `ellipsis-${i}`)}
-							<Pagination.Item>
-								{#if p.type === 'page'}
-									<Pagination.Link page={p} isActive={p.value === safePage} />
-								{:else}
-									<Pagination.Ellipsis />
-								{/if}
-							</Pagination.Item>
+								<!-- Items Proposed -->
+								<Table.Cell class="min-w-[260px] px-6 py-4 text-xs font-medium text-foreground">
+									{itemsSummary(req)}
+								</Table.Cell>
+
+								<!-- Trigger Reason -->
+								<Table.Cell class="min-w-[300px] px-6 py-4">
+									<div
+										class="inline-flex items-center gap-1.5 rounded-xl border border-blue-200 bg-blue-50/70 px-3 py-1.5 text-xs font-medium text-blue-700 dark:border-blue-900/50 dark:bg-blue-950/30 dark:text-blue-300"
+									>
+										<Info class="h-3.5 w-3.5 shrink-0 text-blue-600 dark:text-blue-400" />
+										<span>{getTriggerReason(req)}</span>
+									</div>
+								</Table.Cell>
+
+								<!-- Action Button -->
+								<Table.Cell class="px-6 py-4 text-right">
+									<Button
+										variant="outline"
+										type="button"
+										onclick={() => onViewDetails(req)}
+										class="h-9 gap-1.5 rounded-xl border-blue-200 bg-blue-50/80 px-3.5 text-xs font-bold text-blue-700 hover:bg-blue-100 hover:text-blue-800 dark:border-blue-800 dark:bg-blue-950/40 dark:text-blue-300 dark:hover:bg-blue-900/60"
+									>
+										<SlidersHorizontal class="h-3.5 w-3.5" />
+										จัดการ
+									</Button>
+								</Table.Cell>
+							</Table.Row>
 						{/each}
-						<Pagination.Next />
-					</Pagination.Content>
-				{/snippet}
-			</Pagination.Root>
+					{/if}
+				</Table.Body>
+			</Table.Root>
 		</div>
+
+		{#if filteredRequests.length > PAGE_SIZE}
+			<div
+				class="flex flex-col items-center justify-between gap-3 border-t border-border/60 p-4 sm:flex-row"
+			>
+				<p class="text-2xs text-muted-foreground">
+					แสดง {(safePage - 1) * PAGE_SIZE + 1}–{Math.min(
+						safePage * PAGE_SIZE,
+						filteredRequests.length
+					)}
+					จาก {filteredRequests.length} คำขอ
+				</p>
+				<Pagination.Root
+					bind:page={currentPage}
+					count={filteredRequests.length}
+					perPage={PAGE_SIZE}
+				>
+					{#snippet children({ pages })}
+						<Pagination.Content>
+							<Pagination.Previous />
+							{#each pages as p, i (p.type === 'page' ? `page-${p.value}` : `ellipsis-${i}`)}
+								<Pagination.Item>
+									{#if p.type === 'page'}
+										<Pagination.Link page={p} isActive={p.value === safePage} />
+									{:else}
+										<Pagination.Ellipsis />
+									{/if}
+								</Pagination.Item>
+							{/each}
+							<Pagination.Next />
+						</Pagination.Content>
+					{/snippet}
+				</Pagination.Root>
+			</div>
+		{/if}
 	{/if}
 </div>

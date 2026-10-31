@@ -15,6 +15,7 @@ import {
 	trackingTokenHashFromPayload,
 	ticketStatusLabel,
 	volunteerApplySchema,
+	ticketFindSchema,
 	volunteerProfileUpdateSchema,
 	type PublicJob,
 	type ScheduleShift,
@@ -60,6 +61,15 @@ describe('volunteerApplySchema', () => {
 
 	it('rejects a phone that is not a Thai mobile number', () => {
 		expect(volunteerApplySchema.safeParse({ ...base, phone: '12345' }).success).toBe(false);
+	});
+
+	it.each(['022222222', '02-222-2222'])('rejects the 9-digit landline %s (#951)', (phone) => {
+		expect(volunteerApplySchema.safeParse({ ...base, phone }).success).toBe(false);
+		expect(ticketFindSchema.safeParse({ phone }).success).toBe(false);
+	});
+
+	it('normalises +66 mobiles for ticket lookup', () => {
+		expect(ticketFindSchema.parse({ phone: '+66 81-234-5678' }).phone).toBe('0812345678');
 	});
 });
 

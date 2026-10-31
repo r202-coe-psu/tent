@@ -262,7 +262,7 @@ test.describe('Volunteer Access Portal (CR-092 หน้าจอ 6)', () => {
 		await openPortalTab(page);
 		await signIn(page, '12345');
 
-		await expect(page.getByText('เบอร์โทรศัพท์ไม่ถูกต้อง')).toBeVisible();
+		await expect(page.getByText('เบอร์โทรต้องเป็นตัวเลข 10 หลัก ขึ้นต้นด้วย 0')).toBeVisible();
 		await expect(signOutButton(page)).toHaveCount(0);
 	});
 

@@ -7,6 +7,11 @@ import {
 	canAccessMedicalScreening,
 	canAccessVolunteerBackoffice,
 	canAccessIncidents,
+	canAccessManagerPages,
+	canAccessWarehouse,
+	canAccessKitchen,
+	canAccessTickets,
+	canAccessEvacueeRegistration,
 	canAccessZoning,
 	canManageInShelters,
 	hasCapabilityAnywhere,
@@ -604,5 +609,45 @@ describe('isKioskStaffOnly', () => {
 		expect(isKioskStaffOnly(['system_admin'], 'A')).toBe(false);
 		expect(isKioskStaffOnly(['shelter:A'], 'A')).toBe(false);
 		expect(isKioskStaffOnly([], null)).toBe(false);
+	});
+});
+
+describe('page-guard predicates shared by guards and sidebar (#842)', () => {
+	const sh = (cap: string) => ['shelter:A', `A:${cap}`];
+	const SA = ['system_admin'];
+	const cases: [string, (r: readonly string[], s?: string | null) => boolean, string[]][] = [
+		['canAccessManagerPages', canAccessManagerPages, ['shelter_manager']],
+		[
+			'canAccessWarehouse',
+			canAccessWarehouse,
+			['shelter_manager', 'warehouse_staff', 'supply_coordinator']
+		],
+		['canAccessKitchen', canAccessKitchen, ['shelter_manager', 'kitchen_staff']],
+		[
+			'canAccessTickets',
+			canAccessTickets,
+			['shelter_manager', 'warehouse_staff', 'supply_coordinator', 'kitchen_staff']
+		],
+		[
+			'canAccessEvacueeRegistration',
+			canAccessEvacueeRegistration,
+			['shelter_manager', 'registration_staff']
+		]
+	];
+	const everyCap = [
+		'shelter_manager',
+		'warehouse_staff',
+		'supply_coordinator',
+		'kitchen_staff',
+		'registration_staff',
+		'distribution_staff',
+		'volunteer_coordinator'
+	];
+
+	it.each(cases)('%s admits exactly its capabilities in the shelter, and SA', (_n, fn, allowed) => {
+		expect(fn(SA, 'A')).toBe(true);
+		for (const cap of everyCap) expect(fn(sh(cap), 'A')).toBe(allowed.includes(cap));
+		for (const cap of everyCap) expect(fn(sh(cap), 'B')).toBe(false);
+		expect(fn([], 'A')).toBe(false);
 	});
 });

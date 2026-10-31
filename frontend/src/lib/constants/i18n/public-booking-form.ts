@@ -111,7 +111,7 @@ export const PUBLIC_BOOKING_FORM_I18N = {
 		familySearchClear: 'ล้างเบอร์โทร',
 		familySearchHint:
 			'หากมีสมาชิกในครอบครัวลงทะเบียนไว้แล้ว พิมพ์เบอร์ของสมาชิกคนใดก็ได้เพื่อค้นหาและเข้าร่วมครอบครัวเดียวกัน',
-		familySearchPhoneInvalid: 'เบอร์โทรไม่ถูกต้อง — ต้องขึ้นต้นด้วย 0 และมี 9–10 หลัก (หรือ +66)',
+		familySearchPhoneInvalid: 'เบอร์โทรไม่ถูกต้อง — ต้องขึ้นต้นด้วย 0 และมี 10 หลัก (หรือ +66)',
 		familySearchFound: 'พบครอบครัวที่ตรงกับเบอร์นี้แล้ว — เลื่อนลงเพื่อเลือกเข้าร่วม',
 		familySearchNotFound: 'ไม่พบเบอร์นี้ในระบบ',
 		summaryMembersExisting: (n: number) => `มีอยู่แล้ว ${n} คน`,
@@ -626,7 +626,7 @@ export const PUBLIC_BOOKING_FORM_I18N = {
 		familySearchClear: 'Clear phone',
 		familySearchHint:
 			'If a family member has already registered, enter any member’s phone number to find and join the same family',
-		familySearchPhoneInvalid: 'Invalid phone — must start with 0 and have 9–10 digits (or +66)',
+		familySearchPhoneInvalid: 'Invalid phone — must start with 0 and have 10 digits (or +66)',
 		familySearchFound: 'Found a matching family for this phone — scroll down to join',
 		familySearchNotFound: 'This phone number was not found in the system',
 		summaryMembersExisting: (n: number) => `Already registered: ${n}`,

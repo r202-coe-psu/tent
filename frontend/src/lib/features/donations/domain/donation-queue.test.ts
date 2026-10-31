@@ -1,7 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import type { PendingDonationRow } from './back-office';
 import {
+	buildReceivedFindBody,
+	DONATION_QUEUE_FILTERS,
+	DONATION_QUEUE_STATUSES,
+	DONATION_STATUS_ALLOWLIST,
 	filterDonationQueue,
+	isAllowedDonationStatus,
 	filterForLegacyTab,
 	mergeQueueResponses,
 	parseQueueFilter,
@@ -62,5 +67,65 @@ describe('mergeQueueResponses', () => {
 			[row({})]
 		]);
 		expect(merged.map((r) => r.booking_ref ?? r.donation_id)).toEqual(['DN-1', 'donation:w1']);
+	});
+});
+
+describe('received filter (#821)', () => {
+	const rows = [
+		row({ booking_ref: 'DN-1', status: 'pending_review' }),
+		row({ booking_ref: 'DN-2', status: 'declared' }),
+		row({ booking_ref: 'DN-3', status: 'received' })
+	];
+
+	it('E1: adds "รับแล้ว" after the existing filters, leaving them as they were', () => {
+		expect(DONATION_QUEUE_FILTERS.map((f) => f.value)).toEqual([
+			'all',
+			'pending',
+			'awaiting',
+			'received'
+		]);
+		expect(DONATION_QUEUE_FILTERS.at(-1)?.label).toBe('รับแล้ว');
+		expect(parseQueueFilter('received')).toBe('received');
+		expect(parseQueueFilter('bogus')).toBe('all');
+	});
+
+	it('E1c: the open queue statuses never include received', () => {
+		expect([...DONATION_QUEUE_STATUSES]).toEqual(['pending_review', 'verifying', 'declared']);
+	});
+
+	it('E8: "ทั้งหมด", pending and awaiting never contain a received row', () => {
+		for (const f of ['all', 'pending', 'awaiting'] as const) {
+			expect(filterDonationQueue(rows, f).map((r) => r.status)).not.toContain('received');
+		}
+		expect(filterDonationQueue(rows, 'all')).toHaveLength(2);
+		expect(queueGroupOf('received')).toBe('received');
+		expect(filterDonationQueue(rows, 'received').map((r) => r.booking_ref)).toEqual(['DN-3']);
+	});
+
+	it('E9: the status allowlist is the open statuses plus received', () => {
+		expect([...DONATION_STATUS_ALLOWLIST]).toEqual([
+			'pending_review',
+			'verifying',
+			'declared',
+			'received'
+		]);
+		expect(isAllowedDonationStatus('received')).toBe(true);
+		for (const bad of ['rejected', 'cancelled', '', 'RECEIVED', 'declared,received']) {
+			expect(isAllowedDonationStatus(bad)).toBe(false);
+		}
+	});
+
+	it('E6: the _find body is bounded, index-pinned, bookmark-paged and has no skip', () => {
+		const first = buildReceivedFindBody();
+		expect(first).toEqual({
+			selector: { type: 'donation', status: 'received' },
+			sort: [{ type: 'desc' }, { status: 'desc' }, { received_at: 'desc' }, { _id: 'desc' }],
+			use_index: ['_design/donation-received-list', 'donation-received-by-received-at'],
+			allow_fallback: false,
+			limit: 20
+		});
+		expect(buildReceivedFindBody('bm')).toMatchObject({ bookmark: 'bm' });
+		expect(buildReceivedFindBody(null)).not.toHaveProperty('bookmark');
+		expect(first).not.toHaveProperty('skip');
 	});
 });

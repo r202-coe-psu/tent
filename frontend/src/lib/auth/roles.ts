@@ -476,6 +476,43 @@ export function isWarehouseStaff(roles: readonly string[], shelterCode?: string 
 	);
 }
 
+/** Pages gated by `requireManager`: system_admin or shelter_manager of the shelter. */
+export function canAccessManagerPages(
+	roles: readonly string[],
+	shelterCode?: string | null
+): boolean {
+	return isSystemAdmin(roles) || isShelterManager(roles, shelterCode);
+}
+
+/** `requireWarehouseAccess`: SA, SM, or warehouse_staff / supply_coordinator of the shelter. */
+export function canAccessWarehouse(roles: readonly string[], shelterCode?: string | null): boolean {
+	return canAccessManagerPages(roles, shelterCode) || isWarehouseStaff(roles, shelterCode);
+}
+
+/** `requireKitchen`: SA, SM, or kitchen_staff of the shelter. */
+export function canAccessKitchen(roles: readonly string[], shelterCode?: string | null): boolean {
+	return (
+		canAccessManagerPages(roles, shelterCode) ||
+		hasStaffCapability(roles, 'kitchen_staff', shelterCode)
+	);
+}
+
+/** `requireTicketAccess`: warehouse side or kitchen_staff (plus SA/SM). */
+export function canAccessTickets(roles: readonly string[], shelterCode?: string | null): boolean {
+	return canAccessWarehouse(roles, shelterCode) || canAccessKitchen(roles, shelterCode);
+}
+
+/** `requireEvacueeRegistration`: SA, SM, or registration_staff of the shelter. */
+export function canAccessEvacueeRegistration(
+	roles: readonly string[],
+	shelterCode?: string | null
+): boolean {
+	return (
+		canAccessManagerPages(roles, shelterCode) ||
+		hasStaffCapability(roles, 'registration_staff', shelterCode)
+	);
+}
+
 /**
  * True when the roles hold a given staff capability (e.g. `kitchen_staff`).
  * With `shelterCode`, only that shelter; otherwise any shelter / legacy flat.

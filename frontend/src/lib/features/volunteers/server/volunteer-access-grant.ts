@@ -18,7 +18,8 @@ import {
 	readVolunteerGrants,
 	revokeCoordinatorGrant
 } from '$lib/server/user-service';
-import { normalizePhone } from '../domain/phone';
+import { normalizeThaiPhone } from '$lib/db/model';
+import { isVolunteerMobile } from '../domain/phone';
 import { identityVerificationStatus } from '../domain/verification';
 import { shelterRefs } from './public-schedule-action';
 
@@ -56,8 +57,6 @@ type VolunteerDoc = {
 };
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-/** A mobile (10 digits) or a landline (9 digits): what `_users.phone` accepts as contact. */
-const CONTACT_PHONE_RE = /^0\d{8,9}$/;
 
 const asString = (value: unknown): string => (typeof value === 'string' ? value.trim() : '');
 
@@ -102,7 +101,7 @@ async function identityVerifiedBy(
 	volunteer: VolunteerDoc
 ): Promise<NonNullable<RoleGrant['verified_by']> | null> {
 	if (isVerified(volunteer)) return verificationOf(volunteer);
-	const phone = volunteer.phone ? normalizePhone(volunteer.phone) : '';
+	const phone = volunteer.phone ? normalizeThaiPhone(volunteer.phone) : '';
 	const nationalIdHash =
 		volunteer.national_id_hash ||
 		(volunteer.national_id ? await sha256Hex(volunteer.national_id) : '');
@@ -176,7 +175,14 @@ export async function grantVolunteerAccessAsCoordinator(
 		throw new ServiceError('VALIDATION', 'อาสาสมัครต้องยืนยันตัวตนก่อนจึงจะออกสิทธิ์ได้');
 	}
 
-	const phone = volunteer.phone ? normalizePhone(volunteer.phone) : '';
+	const phone = volunteer.phone ? normalizeThaiPhone(volunteer.phone) : '';
+	// CR-210 FR-8: a filled phone must be a 10-digit mobile before access is issued.
+	if (phone && !isVolunteerMobile(phone)) {
+		throw new ServiceError(
+			'VALIDATION',
+			'เบอร์โทรศัพท์ในโปรไฟล์ไม่ใช่มือถือ 10 หลัก กรุณาแก้เบอร์ในโปรไฟล์ก่อนออกสิทธิ์'
+		);
+	}
 	const grant: RoleGrant = {
 		shelter_code: shelterCode,
 		role,
@@ -190,7 +196,7 @@ export async function grantVolunteerAccessAsCoordinator(
 		password,
 		display_name: `${volunteer.first_name ?? ''} ${volunteer.last_name ?? ''}`.trim() || email,
 		organization: volunteer.organization ?? null,
-		phone: CONTACT_PHONE_RE.test(phone) ? phone : null,
+		phone: phone || null,
 		volunteer_id: volunteerId,
 		linked_user_name: volunteer.user_name ?? null,
 		grant

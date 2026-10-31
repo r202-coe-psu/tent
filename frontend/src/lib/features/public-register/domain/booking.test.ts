@@ -2,6 +2,8 @@ import { describe, it, expect } from 'vitest';
 import { createEvacuee, createHousehold } from '$lib/features/people/server';
 import {
 	bookingCodeFrom,
+	bookingOptionalPhoneSchema,
+	bookingPhoneSchema,
 	evacueeIdFromBookingCode,
 	householdLabelFrom,
 	isCaptchaKeyConfigured,
@@ -600,5 +602,15 @@ describe('CR-112 / CR-113 alignment', () => {
 			number: 'ANON-01JABCDEFGHJKMNPQRSTVWXYZ0'
 		});
 		expect(evacuees[1].vulnerable_groups).toEqual(['child']);
+	});
+});
+
+describe('booking phone schemas (CR-210)', () => {
+	it('requires a 0-prefixed 10-digit mobile', () => {
+		expect(bookingPhoneSchema.safeParse('1234567890').success).toBe(false);
+		expect(bookingPhoneSchema.safeParse('022222222').success).toBe(false);
+		expect(bookingPhoneSchema.parse('+66812345678')).toBe('0812345678');
+		expect(bookingOptionalPhoneSchema.safeParse('1234567890').success).toBe(false);
+		expect(bookingOptionalPhoneSchema.safeParse('').success).toBe(true);
 	});
 });

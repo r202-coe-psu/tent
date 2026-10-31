@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { SHELTER_DASHBOARD_VIEWS } from './views';
+import { SHELTER_VIEW_MANIFEST } from './view-manifest';
 
 describe('SHELTER_DASHBOARD_VIEWS Map Functions', () => {
 	let emitted: { key: unknown; value: unknown }[] = [];
@@ -343,5 +344,105 @@ describe('SHELTER_DASHBOARD_VIEWS Map Functions', () => {
 		it('has no reduce (pairing happens in the BFF)', () => {
 			expect('reduce' in SHELTER_DASHBOARD_VIEWS.views.station_logs_by_station).toBe(false);
 		});
+	});
+
+	// #821 — received-donation search views (view manifest v7).
+	describe('donation_received_by_name', () => {
+		const mapFn = createMapFn(SHELTER_DASHBOARD_VIEWS.views.donation_received_by_name.map);
+		const donation = (name: unknown, over: Record<string, unknown> = {}) => ({
+			type: 'donation',
+			status: 'received',
+			received_at: '2026-10-20T03:00:00.000Z',
+			donor: { name },
+			...over
+		});
+		const keys = () => emitted.map((e) => e.key);
+
+		it('emits the whole name and each word, keyed with received_at, value null', () => {
+			mapFn(donation('สมชาย ใจดี'), mockEmit);
+			expect(emitted).toEqual([
+				{ key: ['สมชาย ใจดี', '2026-10-20T03:00:00.000Z'], value: null },
+				{ key: ['สมชาย', '2026-10-20T03:00:00.000Z'], value: null },
+				{ key: ['ใจดี', '2026-10-20T03:00:00.000Z'], value: null }
+			]);
+		});
+
+		it('emits a one-word name exactly once', () => {
+			mapFn(donation('สมชาย'), mockEmit);
+			expect(keys()).toEqual([['สมชาย', '2026-10-20T03:00:00.000Z']]);
+		});
+
+		it('emits a repeated word once', () => {
+			mapFn(donation('ดี ดี'), mockEmit);
+			expect(keys()).toEqual([
+				['ดี ดี', '2026-10-20T03:00:00.000Z'],
+				['ดี', '2026-10-20T03:00:00.000Z']
+			]);
+		});
+
+		it('normalizes NFKC, case and runs of spaces before emitting', () => {
+			// Fullwidth latin + a no-break space + double space: NFKC folds them.
+			mapFn(donation('  ＪＯＨＮ\u00a0  Smith '), mockEmit);
+			expect(keys()).toEqual([
+				['john smith', '2026-10-20T03:00:00.000Z'],
+				['john', '2026-10-20T03:00:00.000Z'],
+				['smith', '2026-10-20T03:00:00.000Z']
+			]);
+		});
+
+		it('ignores donations that are not received, or have no donor name', () => {
+			mapFn(donation('สมชาย', { status: 'declared' }), mockEmit);
+			mapFn({ type: 'evacuee', status: 'received', donor: { name: 'สมชาย' } }, mockEmit);
+			mapFn(donation(undefined), mockEmit);
+			mapFn(donation('   '), mockEmit);
+			mapFn({ type: 'donation', status: 'received' }, mockEmit);
+			expect(emitted).toEqual([]);
+		});
+
+		it('does not trip on a word that looks like an Object property', () => {
+			mapFn(donation('__proto__ constructor'), mockEmit);
+			expect(keys()).toHaveLength(3);
+		});
+	});
+
+	describe('donation_received_by_item', () => {
+		const mapFn = createMapFn(SHELTER_DASHBOARD_VIEWS.views.donation_received_by_item.map);
+		const donation = (items: unknown, over: Record<string, unknown> = {}) => ({
+			type: 'donation',
+			status: 'received',
+			received_at: '2026-10-20T03:00:00.000Z',
+			items,
+			...over
+		});
+
+		it('emits [item_id, received_at] once per distinct item of the donation', () => {
+			mapFn(
+				donation([
+					{ item_id: 'item_master:rice', qty: '1', unit: 'kg' },
+					{ item_id: 'item_master:rice', qty: '2', unit: 'kg' },
+					{ item_id: 'item_master:water', qty: '1', unit: 'ลัง' }
+				]),
+				mockEmit
+			);
+			expect(emitted).toEqual([
+				{ key: ['item_master:rice', '2026-10-20T03:00:00.000Z'], value: null },
+				{ key: ['item_master:water', '2026-10-20T03:00:00.000Z'], value: null }
+			]);
+		});
+
+		it('skips free_text lines and donations that are not received', () => {
+			mapFn(donation([{ free_text: 'น้ำดื่ม', qty: '1', unit: 'ลัง' }]), mockEmit);
+			mapFn(donation([{ item_id: 'item_master:rice' }], { status: 'declared' }), mockEmit);
+			mapFn(donation([]), mockEmit);
+			mapFn(donation(undefined), mockEmit);
+			expect(emitted).toEqual([]);
+		});
+	});
+
+	it('ships the received-donation search views in view manifest v7 (#821)', () => {
+		expect(SHELTER_VIEW_MANIFEST.version).toBe(7);
+		expect(Object.keys(SHELTER_VIEW_MANIFEST.views)).toEqual(
+			expect.arrayContaining(['donation_received_by_name', 'donation_received_by_item'])
+		);
 	});
 });

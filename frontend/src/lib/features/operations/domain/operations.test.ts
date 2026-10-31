@@ -96,6 +96,36 @@ describe('walkInDonationInputSchema phone', () => {
 	});
 });
 
+// #821 FR-11 / AC-7 — the stock receive form's walk-in donor may leave an email.
+describe('walkInDonationInputSchema email', () => {
+	const base = {
+		donor: { name: 'ผู้ใจบุญ', phone: '0800000000', phone_hash: 'h' },
+		kind: 'items' as const,
+		items: [{ item_id: 'item:rice', qty: 10, unit: 'kg' }],
+		tracking_token_hash: 'tok'
+	};
+	const make = (email?: string) =>
+		createWalkInDonation(
+			{ ...base, donor: { ...base.donor, ...(email === undefined ? {} : { email }) } },
+			ctx
+		);
+
+	it('stores a valid email on donor.email, trimmed', () => {
+		expect(make('  somchai@example.com ').donor.email).toBe('somchai@example.com');
+	});
+
+	it.each(['somchai', 'somchai@', '@example.com', 'a b@example.com', ''])('refuses %j', (email) => {
+		expect(() => make(email)).toThrow();
+		expect(
+			walkInDonationInputSchema.safeParse({ ...base, donor: { ...base.donor, email } }).success
+		).toBe(false);
+	});
+
+	it('without an email there is no donor.email key at all', () => {
+		expect('email' in make().donor).toBe(false);
+	});
+});
+
 describe('donation lifecycle (forward-only)', () => {
 	it('starts declared with a TTL and no received_at', () => {
 		const d = declaredItemsDonation();

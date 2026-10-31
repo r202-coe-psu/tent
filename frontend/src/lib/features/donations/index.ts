@@ -25,6 +25,12 @@ export type {
 export type { ReceiveDonationInput } from './domain/public-donation';
 export type { PendingDonationRow, WalkInIntakeInput } from './domain/back-office';
 export { walkInIntakeInputSchema, donationActionRef, donationRefLabel } from './domain/back-office';
+export { maskDonorName, maskDonorPhone, maskDonorEmail } from './domain/donor-contact';
+export {
+	RECEIVED_SEARCH_BY,
+	RECEIVED_SEARCH_Q_MAX,
+	type ReceivedSearchBy
+} from './domain/received-search';
 
 // Domain — redirect ticket (R-16.4 · CR-087)
 export type { DonationRedirect, DonationRedirectInput } from './domain/donation-redirect';
@@ -105,12 +111,19 @@ export {
 // Domain — back-office booking list (#617)
 export {
 	DONATION_QUEUE_FILTERS,
+	RECEIVED_PAGE_SIZE,
 	filterDonationQueue,
 	filterForLegacyTab,
 	parseQueueFilter,
 	queueGroupOf
 } from './domain/donation-queue';
 export type { DonationQueueFilter } from './domain/donation-queue';
+export type {
+	DonorContact,
+	ReceivedDonationsPage,
+	ReceivedSearchPage
+} from './data/back-office-queue';
+export { fetchDonorContact } from './data/back-office-queue';
 // Domain — per-line review (CR-174)
 export {
 	donationStatusFromLines,
@@ -218,7 +231,11 @@ export {
 	useUpdateCourierTracking,
 	useUpdateDonationItems,
 	donationQueueKeys,
-	useDonationQueue
+	useDonationQueue,
+	useReceivedDonations,
+	useReceivedSearch,
+	useRevealDonorContact,
+	type ReceivedSearchTerm
 } from './application/queries';
 
 // Donor photos (CR-175 donor photos)
