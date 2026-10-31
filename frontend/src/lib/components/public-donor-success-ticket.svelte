@@ -47,7 +47,9 @@
 	const pointGroups = $derived(
 		shelterQuery.data
 			? groupDropOffDestinations(donationStore.bookedItems, shelterQuery.data, {
-					anyPointName: t.anyPointGroupTitle
+					anyPointName: t.anyPointGroupTitle,
+					awaitingName: t.awaitingPointGroupTitle,
+					deliveryMethod: donationStore.deliveryMethod
 				})
 			: null
 	);

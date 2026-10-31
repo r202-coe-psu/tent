@@ -152,6 +152,8 @@ export const PUBLIC_DONATIONS_I18N = {
 		// CR-206 — drop-off point per line, set by staff (staff-assigned drop-off FR-AP-12)
 		dropOffPointsByStaffNote: 'จุดส่งของแต่ละรายการจะแจ้งในหน้าติดตาม',
 		anyPointGroupTitle: 'ส่งที่จุดรับบริจาคไหนของศูนย์ก็ได้',
+		awaitingPointGroupTitle: 'รอเจ้าหน้าที่กำหนดจุดส่ง',
+		awaitingPointGroupNote: 'ถ้านำของมาก่อนเจ้าหน้าที่ประเมิน ส่งที่จุดรับบริจาคไหนของศูนย์ก็ได้',
 		pointGroupPending: 'รอรับ',
 		pointGroupReceived: 'รับแล้ว',
 		pointGroupReceivedAtShelter: 'รับแล้วที่ศูนย์',
@@ -605,6 +607,9 @@ export const PUBLIC_DONATIONS_I18N = {
 		// CR-206 — drop-off point per line, set by staff (staff-assigned drop-off FR-AP-12)
 		dropOffPointsByStaffNote: 'The tracking page will tell you where to bring each item',
 		anyPointGroupTitle: 'Any drop-off point of the shelter',
+		awaitingPointGroupTitle: 'Waiting for staff to set the drop-off point',
+		awaitingPointGroupNote:
+			'If you bring it before staff review it, any drop-off point of the shelter takes it',
 		pointGroupPending: 'Awaiting',
 		pointGroupReceived: 'Received',
 		pointGroupReceivedAtShelter: 'Received at the shelter',
