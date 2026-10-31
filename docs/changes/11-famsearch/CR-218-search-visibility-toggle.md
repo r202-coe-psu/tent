@@ -1,14 +1,16 @@
 ---
-id: draft
+id: CR-218
 title: สวิตช์「แสดงในระบบค้นหาญาติ」บนหน้ารายละเอียดผู้เข้าพัก + audit `privacy_change`
-status: proposed
+status: approved
 date: 2026-10-31
+updated: 2026-11-01
 requested_by: owner (สรุป 2026-10-28 บน issue #790)
-decided_by:
+decided_by: kong
 layer: volatile
 affects:
   - docs/data/schema.md §2.12 `audit.action` (+`privacy_change`) · §1.1 `evacuee.consent` / `privacy.search_excluded` (กฎเปลี่ยนค่าหลังลงทะเบียน)
   - docs/features/pdpa-consent-block-spec.md (กฎ basic ⇒ search_excluded; ช่องทางเปลี่ยนค่าหลังลงทะเบียน)
+  - docs/data/schema-er-diagram.md (audit enum)
   - docs/task-breakdown/11-famsearch.md T-40 (DoD ข้อ "แก้ภายหลังได้ ... พร้อมประวัติการเปลี่ยน")
   - no schema_v bump (additive enum value; doc เดิมยัง valid)
   - frontend/src/lib/features/shared/domain/audit.ts (`auditActionSchema`)
@@ -16,12 +18,13 @@ affects:
   - frontend/src/lib/features/people/ui/household-form/household-form.svelte (bug fix)
 ---
 
-# draft-search-visibility-toggle — สวิตช์แสดง/ซ่อนในระบบค้นหาญาติ
+# CR-218 — สวิตช์แสดง/ซ่อนในระบบค้นหาญาติ
 
 > **สรุป (TL;DR):**
 >
 > - **เปลี่ยนอะไร:** เจ้าหน้าที่เปลี่ยน `privacy.search_excluded` ของผู้เข้าพักได้ทุกเวลาจากหน้ารายละเอียด (ตามที่เจ้าตัวขอ) โดยไม่ต้องลงทะเบียนซ้ำ; ทุกครั้งที่เปลี่ยนเขียน `audit` ใหม่ `action: privacy_change`
 > - **กฎ consent ที่เปลี่ยน:** doc ที่ `consent.mode = basic` เมื่อสวิตช์เป็น "แสดง" → `consent.mode` เป็น `full` พร้อมกันใน doc เดียว (หลังเจ้าตัวรับทราบข้อความ full notice)
+> - **ศูนย์ที่ปิดแล้ว (D-1):** ซ่อนได้ แต่สวิตช์ "แสดง" กดไม่ได้ พร้อมข้อความอธิบาย — ไม่แก้กติกา retention ของ CR-183
 > - **แก้บั๊ก:** ตัวเลือกหัวหน้า/สมาชิกใน household form เลิกกรอง `search_excluded` ออก (การซ่อนมีผลเฉพาะฝั่ง public)
 > - **ไม่ bump `schema_v`**, ไม่มี migration
 
@@ -37,7 +40,8 @@ affects:
 
 - เปลี่ยนได้ทุกเวลา; สิทธิ์ = ผู้ที่แก้โปรไฟล์ผู้เข้าพักได้อยู่แล้ว (`canEditProfile`) — **ไม่เพิ่มกฎสิทธิ์ใหม่**
 - ไม่มีช่องกรอกเหตุผล; กดสวิตช์ → dialog ยืนยันว่าเจ้าตัวเป็นผู้ขอ
-- เขียน evacuee + `audit` ใน `_bulk_docs` request เดียว; ถ้า evacuee ไม่สำเร็จ แสดง error; ถ้าเฉพาะ audit ไม่สำเร็จ เขียน audit ซ้ำอีก 1 ครั้ง และแสดง error ถ้ายังไม่สำเร็จ (ไม่เงียบ); ใช้ `_rev` ที่อ่านมา (ชนกัน = error)
+- เขียน evacuee + `audit` ใน `_bulk_docs` request เดียว; ถ้า evacuee ไม่สำเร็จ แสดง error; ถ้าเฉพาะ audit ไม่สำเร็จ เขียน audit ซ้ำอีก 1 ครั้ง และแสดง error ถ้ายังไม่สำเร็จ (ไม่เงียบ); อ่าน doc ล่าสุดก่อนเขียนทุกครั้ง จึงชน `_rev` ได้เฉพาะช่วงสั้นระหว่าง get กับ `_bulk_docs` (ชนกัน = error)
+- **ศูนย์ที่ปิดแล้ว (`operation_status = closed`, D-1):** สวิตช์เปลี่ยนเป็น "ซ่อน" ได้ตามปกติ แต่เปลี่ยนเป็น "แสดง" ไม่ได้ — สวิตช์ disabled และแสดงข้อความว่าศูนย์ปิดแล้วจึงเปิดการแสดงกลับไม่ได้. เหตุผล: worker ไม่เพิ่ม `public_persons` ใหม่ให้ศูนย์ที่ปิดแล้ว (CR-183, `worker/src/worker/couch/processor.py` `_process_closed_shelter_change`) การเปิดกลับจึงไม่มีผลกับ public plane
 - ค่าเดิมเท่ากับค่าที่ขอ → ไม่เขียนอะไร
 
 **2. `audit.action` เพิ่มค่า `privacy_change`** (schema.md §2.12)
@@ -79,7 +83,7 @@ after: เพิ่ม `privacy_change`
 
 **5. T-40 (`docs/task-breakdown/11-famsearch.md`)** — สถานะคง `⬜`→ เจ้าของโครงการตัดสินว่าจะขยับเป็น `🟡`/`✅` เมื่อ PR นี้ merge; DoD ข้อ "แก้ภายหลังได้ (โดยเจ้าตัวผ่านเจ้าหน้าที่) พร้อมประวัติการเปลี่ยน" ถูกตอบด้วย CR นี้ (สวิตช์ + `privacy_change`)
 
-## Edits ที่ตั้งใจจะทำหลัง owner approve (ยังไม่แก้ในไฟล์เหล่านี้)
+## Edits ที่ทำพร้อมการ approve (2026-11-01)
 
 - `docs/data/schema.md` §2.12 บรรทัด `action`: เพิ่ม `privacy_change` ใน enum + ย่อหน้าอธิบาย context ตามตารางข้อ 2
 - `docs/data/schema.md` §1.1 `consent` / `privacy`: เพิ่มกฎ "เจ้าหน้าที่เปลี่ยน `basic` → `full` ผ่านสวิตช์ได้ (field ที่เปลี่ยนตามข้อ 3)" และ decision-sync note + อัปเดต `updated:`
@@ -103,3 +107,8 @@ N/A — เพิ่มค่า enum อย่างเดียว ไม่�
 
 - 2026-10-28 — owner สรุปบน #790 (ข้อ 1–6, ต้องมี CR, ผู้ implement เป็นผู้ร่าง)
 - 2026-10-31 — proposed (ร่างโดยผู้ implement, รอ owner approve ก่อนแก้ schema.md / task-breakdown / `_index.md`)
+- 2026-11-01 — approved โดย kong พร้อม D-1
+
+### D-1 — ศูนย์ที่ปิดแล้ว ✅
+
+เลือก (ก): ในศูนย์ที่ปิดแล้ว สวิตช์ "แสดง" กดไม่ได้ พร้อมข้อความอธิบาย ส่วน "ซ่อน" ยังทำได้ (kong, 2026-11-01). เหตุผล: กรณีที่คนในศูนย์ที่ปิดแล้วขอกลับมาแสดงมีน้อย และไม่ต้องแก้กติกา "ไม่เพิ่มคนใหม่" ของ CR-183. ตัดทิ้ง: (ข) ให้ worker เพิ่มแถวกลับเมื่อ `search_excluded` true → false ก่อนถึง retention deadline (ต้องแก้ worker + CR-183) · (ค) อนุมัติโดยปล่อยเป็น known limitation (เจ้าหน้าที่เห็นว่าสำเร็จแต่ญาติยังค้นไม่เจอ). พบจาก QA ของ PR #1079 (ศูนย์ทดสอบที่ปิดแล้ว: ซ่อนแล้วแถวหายใน ~300 ms, เปิดกลับแล้วรอ 60 วินาทีแถวไม่กลับมา).
