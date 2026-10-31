@@ -254,7 +254,7 @@ test.describe('Donation form drop-off shelter (#814)', TAGS, () => {
 
 		await expect(page.locator('#shelter-select')).toHaveCount(0);
 		await expect(page.getByTestId('drop-off-shelter-name')).toHaveText(SH001_NAME);
-		await expect(page.getByTestId('drop-off-points-by-staff')).toHaveCount(0);
+		await expect(page.getByTestId('drop-off-groups')).toHaveCount(0);
 		await expect(page.getByTestId('drop-off-shelter-map')).toHaveCount(0);
 	});
 
@@ -266,8 +266,10 @@ test.describe('Donation form drop-off shelter (#814)', TAGS, () => {
 
 		await expect(page.getByTestId('drop-off-shelter-map')).toBeVisible({ timeout: 15_000 });
 		await expect(page.getByTestId('shelter-marker-SH001')).toBeVisible({ timeout: 15_000 });
-		await expect(page.getByTestId('drop-off-points-by-staff')).toHaveText(
-			'จุดส่งของแต่ละรายการจะแจ้งในหน้าติดตาม'
+		// The mocked card has no point of its own: step 3 says, read-only, that any point takes it
+		// (FR-AP-12).
+		await expect(page.getByTestId('drop-off-groups')).toContainText(
+			'ส่งที่จุดรับบริจาคไหนของศูนย์ก็ได้'
 		);
 		const pin = page.getByTestId('point-marker-point-gym');
 		await expect(pin).toBeVisible();
@@ -283,7 +285,7 @@ test.describe('Donation form drop-off shelter (#814)', TAGS, () => {
 		await openShelterStep(page);
 
 		await expect(page.getByTestId('drop-off-shelter-map')).toBeVisible({ timeout: 15_000 });
-		await expect(page.getByTestId('drop-off-points-by-staff')).toBeVisible();
+		await expect(page.getByTestId('drop-off-groups')).toBeVisible();
 		await expect(page.locator('[data-slot="select-trigger"]')).toHaveCount(0);
 
 		await expect(page.getByTestId('point-marker-point-med')).toBeVisible({ timeout: 15_000 });
@@ -295,7 +297,7 @@ test.describe('Donation form drop-off shelter (#814)', TAGS, () => {
 
 		await page.getByRole('button', { name: 'ส่งผ่านขนส่งพัสดุ' }).click();
 		await expect(page.getByTestId('drop-off-shelter-map')).toHaveCount(0);
-		await expect(page.getByTestId('drop-off-points-by-staff')).toHaveCount(0);
+		await expect(page.getByTestId('drop-off-groups')).toHaveCount(0);
 	});
 
 	test('without the shelters list the name stays and the map is dropped', async ({ page }) => {

@@ -17,6 +17,7 @@ import {
 	openInScanStation,
 	openPendingRow,
 	provisionShelter,
+	publicNeedsBoard,
 	reloadUntilVisible,
 	shelterDb,
 	suspendRecaptcha,
@@ -234,9 +235,9 @@ test.describe('Donation multi drop-off points (CR-206, A2)', { tag: ['@donation'
 			phone: '0867770030',
 			ledger
 		});
-		await expect(page.getByTestId('drop-off-points-by-staff')).toHaveText(
-			'จุดส่งของแต่ละรายการจะแจ้งในหน้าติดตาม'
-		);
+		// Step 3 shows, read-only, the point the card named (FR-AP-12); the donor picks none.
+		await expect(page.getByTestId('drop-off-group')).toHaveCount(1);
+		await expect(groupOf(page, GYM)).toContainText(needA.name);
 		await expect(page.locator('[data-slot="select-trigger"]')).toHaveCount(0);
 		const body = await submit();
 		expect(body.success, `booking POST failed: ${JSON.stringify(body)}`).toBe(true);
@@ -529,6 +530,57 @@ test.describe('Donation multi drop-off points (CR-206, A2)', { tag: ['@donation'
 			target_id: closed._id,
 			context: { closed_reason: 'staff_close', unrecorded_lines: [1] }
 		});
+	});
+
+	// Last of the bookings: a second campaign for the same item changes which campaign an
+	// API booking without a card picks, so it must not exist while the cases above run.
+	test('AC-AP-4: two campaigns ask for one item at different points; the card picked decides', async ({
+		page,
+		request
+	}) => {
+		const needClinic = await createCampaignViaUi(page, request, ws, shelter.code, {
+			item: ITEM_A,
+			target: 30,
+			notes: `e2e points clinic ${RUN_ID}`,
+			pointName: CLINIC.name
+		});
+		await clearSession(page);
+
+		// One board row per item + point (FR-AP-25, FR-AP-26).
+		const rows = (await publicNeedsBoard(request))
+			.find((s) => s.code === shelter.code)!
+			.needs.filter((n) => n.item_id === needA.item_id);
+		expect(rows.map((n) => n.drop_off_point_id).sort()).toEqual([CLINIC.id, GYM.id].sort());
+		expect(needClinic).toMatchObject({
+			drop_off_point_id: CLINIC.id,
+			drop_off_point_name: CLINIC.name
+		});
+
+		const { submit } = await fillBooking(page, {
+			shelter,
+			need: needClinic,
+			donorName: `E2E การ์ดห้องพยาบาล ${RUN_ID}`,
+			phone: '0867770034',
+			ledger
+		});
+		await expect(page.getByTestId('drop-off-group')).toHaveCount(1);
+		await expect(groupOf(page, CLINIC)).toContainText(needClinic.name);
+		const body = await submit();
+		expect(body.success, `booking POST failed: ${JSON.stringify(body)}`).toBe(true);
+		expect(body.items).toEqual([{ drop_off_point_id: CLINIC.id, review_status: 'approved' }]);
+
+		await expectReadyForDropoff(shelter.code, body.bookingRef!);
+		const booked = (await findDonation(shelter.code, body.bookingRef!)) as DonationDoc & {
+			campaign_id?: string;
+		};
+		expect(booked.items.map((i) => i.drop_off_point_id)).toEqual([CLINIC.id]);
+		const campaign = await couchReq(
+			'GET',
+			`/${shelterDb(shelter.code)}/${encodeURIComponent(booked.campaign_id!)}`
+		);
+		expect(
+			(campaign.data as { needs: { drop_off_point_id?: string }[] }).needs[0].drop_off_point_id
+		).toBe(CLINIC.id);
 	});
 
 	test('Z teardown leaves nothing of this run behind', async ({ request }) => {

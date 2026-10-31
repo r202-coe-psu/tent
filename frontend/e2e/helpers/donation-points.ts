@@ -142,8 +142,8 @@ export async function bookSelfDropoffViaApi(
 
 /**
  * The public wizard with two typed-in lines, brought to a shelter with drop-off points.
- * Step 3 offers no point to pick, only the note that the tracking page will say where each
- * line goes (FR-AP-11, FR-AP-12). Typed lines wait for staff review (`pending_review`).
+ * Step 3 offers no point to pick; it shows each typed line, read-only, in the group waiting
+ * for staff (FR-AP-11, FR-AP-12). Typed lines wait for staff review (`pending_review`).
  */
 export async function bookTypedAsDonor(
 	page: Page,
@@ -177,9 +177,10 @@ export async function bookTypedAsDonor(
 		page.getByRole('heading', { name: 'ส่วนที่ 3: ข้อมูลการจัดส่ง โลจิสติกส์' })
 	).toBeVisible();
 	await page.getByRole('button', { name: 'นำมาส่งด้วยตนเอง' }).click();
-	await expect(page.getByTestId('drop-off-points-by-staff')).toHaveText(
-		'จุดส่งของแต่ละรายการจะแจ้งในหน้าติดตาม'
-	);
+	// Typed lines wait for staff, read-only, before booking (FR-AP-12).
+	const awaiting = page.locator('[data-testid="drop-off-group"][data-point-id="?staff"]');
+	await expect(awaiting).toHaveText(/รอเจ้าหน้าที่กำหนดจุดส่ง/);
+	for (const itemName of opts.itemNames) await expect(awaiting).toContainText(itemName);
 	await expect(page.locator('[data-slot="select-trigger"]')).toHaveCount(0);
 	await page.getByRole('button', { name: 'รถยนต์' }).click();
 	const freeSlot = page.getByRole('button', { name: /^\d{2}:\d{2} - \d{2}:\d{2} ว่าง/ }).first();
