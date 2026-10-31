@@ -205,6 +205,7 @@
 	// --- Stage A: Form States ---
 	let selectedRecipeId = $state<string>('');
 	let recipeMode = $state<'bom' | 'custom'>('bom');
+	let isIngredientsManuallyEdited = $state(false);
 
 	function setRecipeMode(mode: 'bom' | 'custom') {
 		recipeMode = mode;
@@ -217,12 +218,15 @@
 	}
 	let menuLabel = $state('');
 	let allocatedTarget = $state(50);
-	// #802: save the hand-built ingredient list as a catalog recipe named after the menu label, at
-	// this batch's portions (custom mode, new batch only).
+	// #802: save this batch's ingredient list as a catalog recipe named after the menu label, at
+	// this batch's portions. New batch only: a hand-built list, or a BOM recipe whose ingredients
+	// were edited (an unedited BOM recipe would only duplicate itself).
 	let saveAsRecipe = $state(false);
 	// Survives a failed plan/ticket attempt so the retry links the recipe already saved.
 	let savedRecipeId = $state<string | null>(null);
-	const canSaveAsRecipe = $derived(recipeMode === 'custom' && !activePlan);
+	const canSaveAsRecipe = $derived(
+		!activePlan && (recipeMode === 'custom' || (!!selectedRecipeId && isIngredientsManuallyEdited))
+	);
 
 	function resetSaveAsRecipe() {
 		saveAsRecipe = false;
@@ -348,6 +352,7 @@
 		if (chosen?.label) {
 			menuLabel = chosen.label;
 		}
+		resetSaveAsRecipe();
 		isIngredientsManuallyEdited = false;
 		ingredientsList = calculateRecipeIngredients(target.value, allocatedTarget);
 	}
@@ -360,7 +365,6 @@
 	}
 
 	let ingredientsList = $state<IngredientRow[]>([]);
-	let isIngredientsManuallyEdited = $state(false);
 
 	let showAddIngredient = $state(false);
 	let newItemId = $state('');
@@ -395,6 +399,7 @@
 	});
 
 	function resetIngredientsToRecipe() {
+		saveAsRecipe = false;
 		isIngredientsManuallyEdited = false;
 		ingredientsList = calculateRecipeIngredients(selectedRecipeId, allocatedTarget);
 		showAddIngredient = false;
@@ -553,14 +558,12 @@
 						soft_food: targetTags.includes('soft_food') ? allocatedTarget : 0,
 						infant: targetTags.includes('infant') ? allocatedTarget : 0
 					},
-					recipes: chosenRecipe
-						? [{ recipe_id: chosenRecipe._id, planned_qty: allocatedTarget }]
-						: [
-								{
-									recipe_id: savedRecipeId ?? 'recipe:custom',
-									planned_qty: allocatedTarget
-								}
-							]
+					recipes: [
+						{
+							recipe_id: savedRecipeId ?? chosenRecipe?._id ?? 'recipe:custom',
+							planned_qty: allocatedTarget
+						}
+					]
 				},
 				ctx
 			});
@@ -966,20 +969,22 @@
 							<p class="mt-2 text-2xs text-muted-foreground">
 								กำหนดวัตถุดิบเองในตารางด้านขวา ไม่อ้างอิงสูตรจากฐานข้อมูล
 							</p>
-							{#if canSaveAsRecipe}
-								<label class="mt-2 flex cursor-pointer items-center gap-2">
-									<input
-										type="checkbox"
-										bind:checked={saveAsRecipe}
-										class="h-3.5 w-3.5 rounded border-gray-300 text-primary focus:ring-primary"
-									/>
-									<span class="text-xs">บันทึกเป็นสูตรใหม่</span>
-								</label>
-								{#if saveAsRecipe}
-									<p class="mt-1 text-2xs text-muted-foreground">
-										ใช้ชื่อเมนูที่แสดงเป็นชื่อสูตร และจำนวนจานที่ต้องการผลิตเป็นจำนวนจานมาตรฐาน
-									</p>
-								{/if}
+						{/if}
+						{#if canSaveAsRecipe}
+							<label class="mt-2 flex cursor-pointer items-center gap-2">
+								<input
+									type="checkbox"
+									bind:checked={saveAsRecipe}
+									class="h-3.5 w-3.5 rounded border-gray-300 text-primary focus:ring-primary"
+								/>
+								<span class="text-xs">บันทึกเป็นสูตรใหม่</span>
+							</label>
+							{#if saveAsRecipe}
+								<p class="mt-1 text-2xs text-muted-foreground">
+									{recipeMode === 'bom'
+										? 'ตั้งชื่อเมนูที่แสดงใหม่ให้ต่างจากสูตรเดิม ระบบจะใช้เป็นชื่อสูตร และใช้จำนวนจานที่ต้องการผลิตเป็นจำนวนจานมาตรฐาน'
+										: 'ใช้ชื่อเมนูที่แสดงเป็นชื่อสูตร และจำนวนจานที่ต้องการผลิตเป็นจำนวนจานมาตรฐาน'}
+								</p>
 							{/if}
 						{/if}
 					</div>

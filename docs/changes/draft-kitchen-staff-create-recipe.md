@@ -48,9 +48,11 @@ Issue #802 ขอให้บันทึกเป็นสูตรใหม่
 - `catalog` domain: เพิ่ม `canCreateShelterRecipe(roles, shelterCode?)`.
 - `catalog` application: `useCreateRecipe` ใช้ `canCreateShelterRecipe` เป็นเงื่อนไขเดียว
   (ไม่มี shelter = central catalog → system_admin เท่านั้น).
-- Production board Stage A โหมด "สร้างสูตรเอง": checkbox "บันทึกเป็นสูตรใหม่" อย่างเดียว ใช้ "ชื่อเมนูที่แสดง" เป็นชื่อสูตร
+- Production board Stage A (รอบใหม่) โหมด "สร้างสูตรเอง" และโหมด BOM ที่แก้วัตถุดิบจากสูตรเดิมแล้ว: checkbox
+  "บันทึกเป็นสูตรใหม่" อย่างเดียว ใช้ "ชื่อเมนูที่แสดง" เป็นชื่อสูตร
   และ "จำนวนจานที่ต้องการผลิต" เป็นจำนวนจานมาตรฐาน (ติ๊กแล้วไม่กรอกชื่อเมนู → toast ให้กรอก และยังไม่เปิดตั๋ว).
   บันทึกล้ม / ชื่อซ้ำ → toast แจ้ง แต่ยังเปิดตั๋วเบิกได้.
+  โหมด BOM: meal plan อ้างอิงสูตรใหม่ ถ้าไม่ได้บันทึก (ชื่อซ้ำ / ล้ม) อ้างอิงสูตรเดิม; สูตรเดิมไม่ถูกแก้.
 - หน้า catalog แท็บสูตรอาหาร (`/back-office/catalog?tab=recipe`): kitchen_staff เห็นปุ่ม "เพิ่มสูตรอาหาร" และเปิดฟอร์มสร้างได้
   (ใช้ `canCreateShelterRecipe`); ปุ่มแก้ไข / ลบยังซ่อนเหมือนเดิม.
 - `docs/prd/role-permission-matrix.md`: เพิ่มแถว Recipe (Create) (KS = scope) และ Recipe (Edit / Delete) (ไม่เปลี่ยน)

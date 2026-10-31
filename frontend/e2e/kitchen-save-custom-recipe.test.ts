@@ -126,6 +126,10 @@ async function openBoard(browserContext: BrowserContext): Promise<Page> {
 
 async function buildCustomBatch(page: Page, qty: string): Promise<void> {
 	await page.getByRole('tab', { name: 'สร้างสูตรเอง' }).click();
+	await addIngredient(page, qty);
+}
+
+async function addIngredient(page: Page, qty: string): Promise<void> {
 	await page.getByRole('button', { name: 'เพิ่มวัตถุดิบ' }).click();
 	await page.getByRole('combobox').filter({ hasText: '-- เลือกวัตถุดิบ --' }).click();
 	await page.locator('[data-slot="command-item"]').filter({ hasText: INGREDIENT }).click();
@@ -311,6 +315,43 @@ test.describe(
 
 			await expect(page.getByText('กรุณาระบุชื่อเมนูที่แสดง เพื่อใช้เป็นชื่อสูตร')).toBeVisible();
 			expect(await mealPlansOfRun(), 'no plan opened').toHaveLength(plansBefore);
+		});
+
+		test('an edited BOM recipe can be saved as a new recipe that the plan links', async ({
+			browser
+		}) => {
+			const context = await browser.newContext();
+			contexts.push(context);
+			const page = await openBoard(context);
+			const [base] = await recipesLabelled(RECIPE);
+			const variant = `${RECIPE} ดัดแปลง`;
+			const checkbox = page.getByRole('checkbox', { name: 'บันทึกเป็นสูตรใหม่' });
+
+			await page
+				.locator('select')
+				.filter({ hasText: '-- เลือกสูตรอาหาร (BOM) --' })
+				.selectOption(base._id);
+			await expect(page.getByRole('cell', { name: INGREDIENT, exact: true })).toBeVisible();
+			await expect(checkbox, 'an unedited BOM recipe offers no save').toHaveCount(0);
+
+			await addIngredient(page, '1');
+			await checkbox.check();
+			await page.getByLabel('ชื่อเมนูที่แสดง').fill(variant);
+			await page.getByRole('button', { name: 'สร้างใบเบิกวัตถุดิบ' }).click();
+
+			await expect(page.getByText(`บันทึกสูตร "${variant}" เรียบร้อยแล้ว`)).toBeVisible();
+			await expect(page.getByText(/เปิดตั๋วเบิกวัตถุดิบ .+ แล้ว/)).toBeVisible();
+
+			const [saved] = await recipesLabelled(variant);
+			expect(saved.standard_portions).toBe('10');
+			expect(saved.ingredients, '2 kg from the base recipe plus 1 kg added').toEqual([
+				{ item_master_id: ingredientId, quantity: '3', uom: 'kg' }
+			]);
+			const linked = (await mealPlansOfRun()).filter((p) => planRecipeId(p) === saved._id);
+			expect(linked, 'the plan links the new recipe, not the base').toHaveLength(1);
+			expect((await recipesLabelled(RECIPE))[0].ingredients, 'base recipe unchanged').toEqual(
+				base.ingredients
+			);
 		});
 
 		test('kitchen staff can add a recipe from the catalog page but not edit one', async ({
