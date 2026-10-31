@@ -88,18 +88,33 @@ describe('buildDonationLotRows (#821 FR-12)', () => {
 	it('shows no balance (null) for an item whose history cannot be replayed, and keeps the other items', () => {
 		const rice = receipt({ qty: '10' });
 		const brokenReceipt = receipt({ item_id: 'item_master:salt', qty: '1', unit: 'kg' });
-		const overdraw = row({
+		// An outflow that names the lot under another unit is corrupt history (fails closed, #855).
+		const unitMismatch = row({
 			item_id: 'item_master:salt',
 			reason: 'distribute',
-			qty: '-5',
+			qty: '-1',
+			unit: 'g',
 			lot_ref: brokenReceipt._id,
 			occurred_at: '2026-10-21T03:00:00.000Z'
 		});
 
-		const rows = buildDonationLotRows([rice, brokenReceipt], [rice, brokenReceipt, overdraw]);
+		const rows = buildDonationLotRows([rice, brokenReceipt], [rice, brokenReceipt, unitMismatch]);
 
 		expect(rows.find((r) => r.itemId === 'item_master:salt')?.remaining).toBeNull();
 		expect(rows.find((r) => r.itemId === 'item_master:rice')?.remaining).toBe('10');
+	});
+
+	it('shows the negative balance of an overdrawn lot (#855)', () => {
+		const salt = receipt({ item_id: 'item_master:salt', qty: '1', unit: 'kg' });
+		const overdraw = row({
+			item_id: 'item_master:salt',
+			reason: 'distribute',
+			qty: '-5',
+			lot_ref: salt._id,
+			occurred_at: '2026-10-21T03:00:00.000Z'
+		});
+
+		expect(buildDonationLotRows([salt], [salt, overdraw])[0].remaining).toBe('-4');
 	});
 
 	it('takes only donation receipts: other reasons and outbound rows are not lots of the donation', () => {
