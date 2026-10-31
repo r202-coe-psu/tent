@@ -22,6 +22,11 @@ export interface DonationItem {
 	 * `CATALOG_MISMATCH` — so the payload takes this, not the label above (R-15.4).
 	 */
 	unit_code?: string;
+	/**
+	 * Point of the board card this line came from (FR-AP-13): `null` = a card with no point,
+	 * undefined = a typed line. Sent as `need_drop_off_point_id` so the BFF picks that card's campaign.
+	 */
+	needDropOffPointId?: string | null;
 	condition?: string;
 	remark?: string;
 	/** UI-only hint: units still short on the need card this line came from. Never sent. */

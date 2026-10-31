@@ -30,6 +30,7 @@ export const PUBLIC_DONATIONS_I18N = {
 		highBadge: 'สำคัญ (High)',
 		normalBadge: 'ปกติ (Normal)',
 		openDonationBadge: 'เปิดรับบริจาค',
+		needDropOffPoint: 'จุดรับบริจาค: {name}',
 		needsCount: 'ต้องการ {count} รายการ',
 		needsCountWithProgress: 'ต้องการ {count} รายการ · คืบหน้าแล้ว {pct}% ของเป้าหมาย',
 		pendingShort: 'จอง',
@@ -150,7 +151,6 @@ export const PUBLIC_DONATIONS_I18N = {
 		dropOffNoShelter: 'ยังไม่ได้เลือกศูนย์ที่จะส่งของ',
 		dropOffBackToNeeds: 'กลับไปเลือกศูนย์',
 		// CR-206 — drop-off point per line, set by staff (staff-assigned drop-off FR-AP-12)
-		dropOffPointsByStaffNote: 'จุดส่งของแต่ละรายการจะแจ้งในหน้าติดตาม',
 		anyPointGroupTitle: 'ส่งที่จุดรับบริจาคไหนของศูนย์ก็ได้',
 		awaitingPointGroupTitle: 'รอเจ้าหน้าที่กำหนดจุดส่ง',
 		awaitingPointGroupNote: 'ถ้านำของมาก่อนเจ้าหน้าที่ประเมิน ส่งที่จุดรับบริจาคไหนของศูนย์ก็ได้',
@@ -485,6 +485,7 @@ export const PUBLIC_DONATIONS_I18N = {
 		highBadge: 'High',
 		normalBadge: 'Normal',
 		openDonationBadge: 'Open for Donations',
+		needDropOffPoint: 'Drop-off point: {name}',
 		needsCount: 'Needs {count} items',
 		needsCountWithProgress: 'Needs {count} items · {pct}% of target covered',
 		pendingShort: 'reserved',
@@ -605,7 +606,6 @@ export const PUBLIC_DONATIONS_I18N = {
 		dropOffNoShelter: 'No shelter selected for this donation yet',
 		dropOffBackToNeeds: 'Back to choose a shelter',
 		// CR-206 — drop-off point per line, set by staff (staff-assigned drop-off FR-AP-12)
-		dropOffPointsByStaffNote: 'The tracking page will tell you where to bring each item',
 		anyPointGroupTitle: 'Any drop-off point of the shelter',
 		awaitingPointGroupTitle: 'Waiting for staff to set the drop-off point',
 		awaitingPointGroupNote:

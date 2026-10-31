@@ -42,6 +42,37 @@ describe('fetchShelterNeeds', () => {
 		expect(needs[0]).toMatchObject({ name: 'ข้าวสาร', unit: 'kg' });
 	});
 
+	it('folds rows of one item at several drop-off points into one (CR-206 A2 FR-AP-29)', async () => {
+		mockFetch([
+			{
+				code: 'SH001',
+				name: 'ศูนย์ ก',
+				needs: [
+					{
+						item_id: 'item:rice',
+						name: 'ข้าวสาร',
+						unit: 'kg',
+						qty_needed: '30',
+						drop_off_point_id: 'a'
+					},
+					{
+						item_id: 'item:rice',
+						name: 'ข้าวสาร',
+						unit: 'kg',
+						qty_needed: '20.5',
+						drop_off_point_id: 'b'
+					},
+					{ item_id: 'item:soap', name: 'สบู่', unit: 'bar', qty_needed: '5' }
+				]
+			}
+		]);
+
+		const needs = await fetchShelterNeeds('SH001');
+
+		expect(needs.map((n) => n.item_id)).toEqual(['item:rice', 'item:soap']);
+		expect(Number(needs[0].qty_needed)).toBe(50.5);
+	});
+
 	it('never offers a need the shelter has closed — it takes no more (T-22)', async () => {
 		mockFetch(board);
 

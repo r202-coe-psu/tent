@@ -5,6 +5,7 @@ import {
 	AWAITING_STAFF_KEY,
 	currentDropOffPointIds,
 	groupDropOffDestinations,
+	groupFormLineDestinations,
 	hasLinePoints,
 	lineDestinationResolver,
 	withCampaignLinePoints,
@@ -325,5 +326,45 @@ describe('withCampaignLinePoints (staff-assigned drop-off FR-AP-8, FR-AP-9)', ()
 		expect(withCampaignLinePoints([sent], campaign('point-gym'), 'self_dropoff')).toEqual([
 			{ free_text: 'ผ้าห่ม', qty: '2', drop_off_point_id: null }
 		]);
+	});
+});
+
+describe('groupFormLineDestinations (FR-AP-12, FR-AP-12a)', () => {
+	const rice = { item_id: 'item:rice', needDropOffPointId: 'point-med' };
+	const oil = { item_id: 'item:oil', needDropOffPointId: 'point-gym' };
+	const typed = {};
+	const view = (groups: ReturnType<typeof groupFormLineDestinations>) =>
+		groups?.map((g) => [g.key, g.lineNos]);
+
+	it('puts a card line in its card point and a typed line awaiting staff (AC-AP-3, AC-AP-4h)', () => {
+		expect(view(groupFormLineDestinations([rice, typed, oil], SHELTER, OPTS))).toEqual([
+			['point-med', [0]],
+			['point-gym', [2]],
+			[AWAITING_STAFF_KEY, [1]]
+		]);
+	});
+
+	it('puts two typed lines in the awaiting-staff group (AC-AP-4h)', () => {
+		expect(view(groupFormLineDestinations([typed, typed], SHELTER, OPTS))).toEqual([
+			[AWAITING_STAFF_KEY, [0, 1]]
+		]);
+	});
+
+	it('puts a card with no point, or a point no longer offered, in the any-point group (AC-AP-4g)', () => {
+		const noPoint = { item_id: 'item:rice', needDropOffPointId: null };
+		const gone = { item_id: 'item:oil', needDropOffPointId: 'point-gone' };
+		const groups = groupFormLineDestinations([noPoint, gone], SHELTER, OPTS);
+
+		expect(view(groups)).toEqual([[ANY_POINT_KEY, [0, 1]]]);
+		expect(groups?.[0].point.name).toBe(ANY);
+		expect(groups?.[0].anyPoint).toBe(true);
+	});
+
+	it('shows no group for a parcel, a shelter without points, or no lines (FR-MP-4)', () => {
+		expect(groupFormLineDestinations([rice], SHELTER, { ...OPTS, deliveryMethod: 'parcel' })).toBe(
+			null
+		);
+		expect(groupFormLineDestinations([rice], { ...SHELTER, donation_points: [] }, OPTS)).toBe(null);
+		expect(groupFormLineDestinations([], SHELTER, OPTS)).toBe(null);
 	});
 });

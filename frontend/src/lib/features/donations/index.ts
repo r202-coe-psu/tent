@@ -89,6 +89,7 @@ export {
 	ANY_POINT_KEY,
 	currentDropOffPointIds,
 	groupDropOffDestinations,
+	groupFormLineDestinations,
 	hasLinePoints,
 	lineDestinationResolver,
 	withCurrentLinePoints
@@ -176,8 +177,10 @@ export type { DonationRejectReasonCode, RejectDonationInput } from './domain/rej
 // doc fetching lives in $lib/server/donation-docs (kept out of the client barrel).
 export {
 	computeNeeds,
+	filterCampaignsByCards,
 	pickCampaignForItems,
 	type CampaignPick,
+	type CardRequestedItem,
 	type RequestedItem
 } from './domain/compute-needs';
 export { carryItemIds, type BareItem } from './domain/carry-item-ids';

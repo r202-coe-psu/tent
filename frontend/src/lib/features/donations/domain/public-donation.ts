@@ -344,6 +344,8 @@ export function donationPayloadUnit(item: DonationUnitSource, fallback: string):
 /** One donor line as the wizard holds it; `needQty` is a hint and never leaves the form. */
 export type DonationPayloadLine = DonationUnitSource & {
 	item_id?: string;
+	/** Point of the board card this line came from (FR-AP-13); undefined for a typed line. */
+	needDropOffPointId?: string | null;
 	name: string;
 	category?: string;
 	amount: number;
@@ -362,6 +364,9 @@ export function buildDonationItemsPayload(
 ) {
 	return items.map((it) => ({
 		item_id: it.item_id || undefined,
+		...(it.needDropOffPointId !== undefined
+			? { need_drop_off_point_id: it.needDropOffPointId }
+			: {}),
 		free_text: it.name || t.unspecified,
 		category: it.category || undefined,
 		qty: it.amount,

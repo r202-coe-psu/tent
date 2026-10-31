@@ -20,6 +20,8 @@
 	import {
 		buildDonationItemsPayload,
 		buildDonationLogistics,
+		DropOffGroups,
+		groupFormLineDestinations,
 		pickedSlot,
 		publicDonationErrorMessage,
 		slotContextKey,
@@ -76,12 +78,30 @@
 	const hasShelter = $derived(Boolean(donationStore.shelterCode));
 
 	// The shelter's drop-off points, from its own detail — the same request the map makes
-	// (CR-205 FR-DP-18). Staff decide each line's point (staff-assigned drop-off FR-AP-11), so
-	// a self drop-off only shows where the points are and that the tracking page will say which.
+	// (CR-205 FR-DP-18). Staff decide each line's point (staff-assigned drop-off FR-AP-11): the
+	// donor sees, read-only, where each line will go — a card line at its card's point, any other
+	// line waiting for staff (FR-AP-12). Only a self drop-off has points (CR-206 FR-MP-4).
 	const shelterQuery = usePublicShelter(() => donationStore.shelterCode || null);
+	const pointGroups = $derived(
+		shelterQuery.data
+			? groupFormLineDestinations(donationStore.items, shelterQuery.data, {
+					anyPointName: t.anyPointGroupTitle,
+					awaitingName: t.awaitingPointGroupTitle,
+					deliveryMethod: donationStore.deliveryMethod
+				})
+			: null
+	);
 	const showDropOffPoints = $derived(
 		donationStore.deliveryMethod === 'self_dropoff' &&
 			(shelterQuery.data?.donation_points?.length ?? 0) > 0
+	);
+	// The map zooms to the first group that has a point; none → the shelter's own view.
+	const focusPointId = $derived(pointGroups?.find((group) => !group.anyPoint)?.key ?? null);
+	const lineNames = $derived(
+		donationStore.items.map(
+			(item) =>
+				`${item.name || t.unspecified} — ${item.amount} ${formatUnit(item.unit, units, langState.current)}`
+		)
 	);
 
 	// A window is picked for one shelter, day and queue: changing any of them, or the window
@@ -443,13 +463,16 @@
 						<DropOffShelterMap
 							shelterCode={donationStore.shelterCode}
 							shelterName={donationStore.selectedShelterName}
+							{focusPointId}
 						/>
-						<p
-							class="rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-sm font-semibold text-sky-900"
-							data-testid="drop-off-points-by-staff"
-						>
-							{t.dropOffPointsByStaffNote}
-						</p>
+						{#if pointGroups}
+							<DropOffGroups
+								groups={pointGroups}
+								{lineNames}
+								directions={false}
+								showPending={false}
+							/>
+						{/if}
 					{/if}
 				{:else}
 					<div class="flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-4">

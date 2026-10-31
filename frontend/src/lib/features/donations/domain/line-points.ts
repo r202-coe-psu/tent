@@ -173,6 +173,45 @@ export function groupDropOffDestinations(
 		});
 }
 
+/** A line as the booking form (step 3) holds it, before there is a booking to read from. */
+type FormLine = { item_id?: string | null; needDropOffPointId?: string | null };
+
+/**
+ * Where each line will go, shown read-only at step 3 before booking (staff-assigned drop-off
+ * FR-AP-12, FR-AP-12a). Same grouping as the ticket, fed from what the booking will give each
+ * line: a line made from a board card (`needDropOffPointId` set, `null` included) gets its
+ * card's point, or the "any point" group when that is `null` or no longer offered; every
+ * other line waits for staff. A booking whose lines all take any point still shows that one
+ * group here (AC-AP-4g), where the ticket shows the shelter alone.
+ * `null` when the delivery is not a self drop-off, the shelter has no point, or there is no line.
+ */
+export function groupFormLineDestinations(
+	lines: readonly FormLine[],
+	shelter: DropOffShelterSource,
+	opts: { anyPointName: string; awaitingName: string; deliveryMethod: string | null | undefined }
+): DropOffDestinationGroup[] | null {
+	if (opts.deliveryMethod !== 'self_dropoff' || lines.length === 0) return null;
+	const currentIds = currentDropOffPointIds(shelter);
+	if (currentIds.size === 0) return null;
+
+	const items = lines.map((line) =>
+		line.item_id && line.needDropOffPointId !== undefined
+			? { drop_off_point_id: line.needDropOffPointId, review_status: 'approved' }
+			: { drop_off_point_id: null, review_status: 'pending' }
+	);
+	const groups = groupDropOffDestinations(items, shelter, opts);
+	if (groups) return groups;
+	return [
+		{
+			key: ANY_POINT_KEY,
+			anyPoint: true,
+			point: lineDestinationResolver(shelter, opts.anyPointName)(null),
+			lineNos: items.map((_, lineNo) => lineNo),
+			status: 'pending'
+		}
+	];
+}
+
 /**
  * The lines as the box label groups them (FR-MP-14, FR-MP-16): a point the shelter no longer
  * offers reads as no point, so every such line lands on the one "any point" label.

@@ -11,7 +11,16 @@
 	import { usePublicShelter, usePublicShelters } from '../application/queries';
 	import ShelterMap from './shelter-map.svelte';
 
-	let { shelterCode, shelterName = '' }: { shelterCode: string; shelterName?: string } = $props();
+	let {
+		shelterCode,
+		shelterName = '',
+		focusPointId = null
+	}: {
+		shelterCode: string;
+		shelterName?: string;
+		/** Point to zoom the map to (the caller's first group with a point, CR-206 A2 FR-AP-12). */
+		focusPointId?: string | null;
+	} = $props();
 
 	const t = $derived(getTranslation(PUBLIC_DONATIONS_I18N, langState.current));
 	const sheltersQuery = usePublicShelters(() => ({}));
@@ -23,8 +32,12 @@
 	let mapFailed = $state(false);
 	// A tapped pin only names its point: staff, not the donor, decide where each line goes
 	// (staff-assigned drop-off FR-AP-11).
-	let focus = $state<MapPointFocus | null>(null);
+	let tapped = $state<MapPointFocus | null>(null);
 	let focusSeq = 0;
+	// A tap wins over the zoom the caller asked for; the zoom alone shows no note.
+	const focus = $derived<MapPointFocus | null>(
+		tapped ?? (focusPointId ? { pointId: focusPointId, zoom: true, seq: 0 } : null)
+	);
 
 	const shelter = $derived(
 		buildDonationMap(
@@ -49,7 +62,7 @@
 				]
 			: []
 	);
-	const focusedPoint = $derived(shelter?.points.find((point) => point.id === focus?.pointId));
+	const focusedPoint = $derived(shelter?.points.find((point) => point.id === tapped?.pointId));
 </script>
 
 {#if shelter && !mapFailed && !sheltersQuery.isError}
@@ -68,7 +81,7 @@
 				disablePopup
 				showLegend={false}
 				cooperativeGestures
-				onSelectPoint={(pointId) => (focus = { pointId, zoom: false, seq: ++focusSeq })}
+				onSelectPoint={(pointId) => (tapped = { pointId, zoom: false, seq: ++focusSeq })}
 				onLoadError={() => (mapFailed = true)}
 			/>
 		</div>

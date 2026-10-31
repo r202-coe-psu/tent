@@ -45,7 +45,7 @@ export {
 	isDonationRedirect
 } from './domain/donation-redirect';
 export type { DonationRedirect } from './domain/donation-redirect';
-export { computeNeeds, pickCampaignForItems } from './domain/compute-needs';
+export { computeNeeds, filterCampaignsByCards, pickCampaignForItems } from './domain/compute-needs';
 export { carryItemIds } from './domain/carry-item-ids';
 export {
 	computeSlotAvailability,

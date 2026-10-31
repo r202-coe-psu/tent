@@ -110,6 +110,9 @@ export const donationPreDeclarationInputSchema = z.object({
 				// item_id links the donation to a catalog item so needs_open can be reduced
 				// (schema.md §2.3 — item_id OR free_text). The board pre-fills item_id from a need card.
 				item_id: z.string().optional(),
+				// FR-AP-7a — the point of the board card the donor pressed. Only the BFF reads it,
+				// to pick the campaign; it is never stored or forwarded. Absent = not from a card.
+				need_drop_off_point_id: z.string().nullable().optional(),
 				free_text: z.string().min(1, 'Please enter an item name'),
 				category: z.string().optional(),
 				qty: qtyStrCoercePositiveSchema,

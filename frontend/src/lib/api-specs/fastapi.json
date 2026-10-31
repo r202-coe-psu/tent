@@ -507,7 +507,9 @@
 					"200": {
 						"description": "Successful Response",
 						"content": {
-							"application/json": { "schema": { "$ref": "#/components/schemas/NeedsListResponse" } }
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/ExternalNeedsListResponse" }
+							}
 						}
 					}
 				},
@@ -3764,6 +3766,37 @@
 				"required": ["name", "phone", "relation"],
 				"title": "EmergencyContactOut"
 			},
+			"ExternalNeedItemResponse": {
+				"properties": {
+					"item_id": { "type": "string", "title": "Item Id" },
+					"name": { "type": "string", "title": "Name" },
+					"qty_needed": { "type": "string", "title": "Qty Needed" },
+					"qty_target": { "type": "string", "title": "Qty Target", "default": "0" },
+					"on_hand": { "type": "string", "title": "On Hand", "default": "0" },
+					"reserved": { "type": "string", "title": "Reserved", "default": "0" },
+					"unit": { "type": "string", "title": "Unit" },
+					"status": { "type": "string", "title": "Status" },
+					"urgency": { "type": "string", "title": "Urgency", "default": "normal" },
+					"category": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Category" }
+				},
+				"type": "object",
+				"required": ["item_id", "name", "qty_needed", "unit", "status"],
+				"title": "ExternalNeedItemResponse",
+				"description": "One row per shelter + item_id: the `/external/v1/needs` shape (CR-206 A2 FR-AP-27)."
+			},
+			"ExternalNeedsListResponse": {
+				"properties": {
+					"shelters": {
+						"items": { "$ref": "#/components/schemas/ExternalShelterNeedsResponse" },
+						"type": "array",
+						"title": "Shelters"
+					},
+					"as_of": { "type": "string", "format": "date-time", "title": "As Of" }
+				},
+				"type": "object",
+				"required": ["shelters", "as_of"],
+				"title": "ExternalNeedsListResponse"
+			},
 			"ExternalSearchResponse": {
 				"properties": {
 					"results": {
@@ -3822,6 +3855,20 @@
 				"required": ["name", "status", "shelter_name"],
 				"title": "ExternalSearchResult",
 				"description": "`/external/v1/occupants` keeps the zone partners read (CR-183 FR-18 is public-only)."
+			},
+			"ExternalShelterNeedsResponse": {
+				"properties": {
+					"code": { "type": "string", "title": "Code" },
+					"name": { "type": "string", "title": "Name" },
+					"needs": {
+						"items": { "$ref": "#/components/schemas/ExternalNeedItemResponse" },
+						"type": "array",
+						"title": "Needs"
+					}
+				},
+				"type": "object",
+				"required": ["code", "name", "needs"],
+				"title": "ExternalShelterNeedsResponse"
 			},
 			"FamilyMember": {
 				"properties": {
@@ -4491,11 +4538,20 @@
 					"unit": { "type": "string", "title": "Unit" },
 					"status": { "type": "string", "title": "Status" },
 					"urgency": { "type": "string", "title": "Urgency", "default": "normal" },
-					"category": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Category" }
+					"category": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Category" },
+					"drop_off_point_id": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Drop Off Point Id"
+					},
+					"drop_off_point_name": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Drop Off Point Name"
+					}
 				},
 				"type": "object",
 				"required": ["item_id", "name", "qty_needed", "unit", "status"],
-				"title": "NeedItemResponse"
+				"title": "NeedItemResponse",
+				"description": "One donor-board card: shelter + item + drop-off point (CR-206 A2 FR-AP-26).\n\nSeveral cards of one shelter may share an ``item_id``."
 			},
 			"NeedsListResponse": {
 				"properties": {

@@ -1247,6 +1247,85 @@ describe('POST /api/public/v1/donations', () => {
 			expect(sentPoints()).toEqual(['point-gym', null]);
 		});
 
+		const sentBody = () => {
+			const [, init] = vi.mocked(fetch).mock.calls[0]!;
+			return JSON.parse(String((init as RequestInit).body)) as {
+				campaign_id: string | null;
+				items: Array<Record<string, unknown>>;
+			};
+		};
+		const gymAndMed = [
+			campaignDoc('donation_campaign:gym', 'point-gym'),
+			campaignDoc('donation_campaign:med', 'point-med')
+		];
+
+		it("books the campaign of the card's point, not the first (AC-AP-4)", async () => {
+			mockFastapiCreate();
+			const res = await book(
+				[{ ...RICE, need_drop_off_point_id: 'point-med' }],
+				undefined,
+				gymAndMed
+			);
+
+			expect(res.status).toBe(200);
+			expect(sentBody().campaign_id).toBe('donation_campaign:med');
+			expect(sentPoints()).toEqual(['point-med']);
+		});
+
+		it('never forwards need_drop_off_point_id to FastAPI (FR-AP-7a)', async () => {
+			mockFastapiCreate();
+			await book([{ ...RICE, need_drop_off_point_id: 'point-gym' }], undefined, gymAndMed);
+
+			expect(sentBody().items[0]).not.toHaveProperty('need_drop_off_point_id');
+		});
+
+		it('refuses with NEED_FULL when the card point is full, never moving to another point (AC-AP-4b)', async () => {
+			mockFastapiCreate();
+			const res = await book([{ ...RICE, need_drop_off_point_id: 'point-med' }], undefined, [
+				campaignDoc('donation_campaign:gym', 'point-gym'),
+				campaignDoc('donation_campaign:med', 'point-med', '1')
+			]);
+
+			expect(res.status).toBe(409);
+			expect(res.body).toMatchObject({ error: 'NEED_FULL', item_id: 'item:rice' });
+			expect(fetch).not.toHaveBeenCalled();
+		});
+
+		it('refuses with NEED_FULL when no campaign has the card point', async () => {
+			mockFastapiCreate();
+			const res = await book(
+				[{ ...RICE, need_drop_off_point_id: 'point-gone' }],
+				undefined,
+				gymAndMed
+			);
+
+			expect(res.status).toBe(409);
+			expect(res.body.error).toBe('NEED_FULL');
+			expect(fetch).not.toHaveBeenCalled();
+		});
+
+		it('matches a null card point to a need with no point', async () => {
+			mockFastapiCreate();
+			const res = await book([{ ...RICE, need_drop_off_point_id: null }], undefined, [
+				campaignDoc('donation_campaign:gym', 'point-gym'),
+				campaignDoc('donation_campaign:none', null)
+			]);
+
+			expect(res.status).toBe(200);
+			expect(sentBody().campaign_id).toBe('donation_campaign:none');
+		});
+
+		it('picks from every campaign when no line sends the key (AC-AP-4c)', async () => {
+			mockFastapiCreate();
+			await book([RICE], undefined, [
+				campaignDoc('donation_campaign:gym', 'point-gym', '1'),
+				campaignDoc('donation_campaign:med', 'point-med')
+			]);
+
+			// 5 kg does not fit the 1 kg gym campaign, so the old behaviour lands on med.
+			expect(sentBody().campaign_id).toBe('donation_campaign:med');
+		});
+
 		it('sends null for every line of a parcel (AC-AP-8)', async () => {
 			mockFastapiCreate();
 			await book([RICE, BLANKET], { delivery_method: 'parcel' });

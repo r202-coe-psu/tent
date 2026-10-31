@@ -51,6 +51,9 @@
 		on_hand?: number;
 		reserved?: number;
 		image?: string;
+		/** One row per item + drop-off point (CR-206 A2): `item_id` can repeat in a shelter. */
+		drop_off_point_id?: string | null;
+		drop_off_point_name?: string | null;
 	}
 
 	interface ShelterNeeds {
@@ -293,6 +296,16 @@
 		return donationNeedUrgency(n.urgency, n.qty_needed);
 	}
 
+	/** A card is an item at one drop-off point (FR-AP-28), so `item_id` alone is not a key. */
+	function needKey(n: Need): string {
+		return `${n.item_id}|${n.drop_off_point_id ?? ''}`;
+	}
+
+	/** Items a shelter asks for, counted once however many points it asks them at (FR-AP-29). */
+	function itemCount(needs: Need[]): number {
+		return new Set(needs.map((n) => n.item_id)).size;
+	}
+
 	function formatUnit(unit: string): string {
 		return formatUnitCatalog(unit, units, langState.current);
 	}
@@ -313,6 +326,8 @@
 		donationStore.items = [
 			newDonationItem({
 				item_id: need.item_id,
+				// FR-AP-13: the card's point, so the booking lands on this card's campaign.
+				needDropOffPointId: need.drop_off_point_id ?? null,
 				// The card's category comes from the CATALOG (`food`/`water`/`bedding`/…),
 				// which is a finer split than the five buckets the donor form shows — so it
 				// is folded, not copied. It used to fall back to `'food'`, which filed
@@ -402,7 +417,7 @@
 				{/if}
 
 				<div class="grid grid-cols-1 gap-4 md:grid-cols-2">
-					{#each selectedShelterDetail.needs as need, index (need.item_id || index)}
+					{#each selectedShelterDetail.needs as need (needKey(need))}
 						{@const itemName = formatItemName(need.raw_name || need.name || need.item_id)}
 						{#if need.status === 'closed'}
 							<!-- Overstocked Item Card -->
@@ -423,6 +438,11 @@
 										<span class="text-lg font-bold text-slate-600 line-through">
 											{itemName}
 										</span>
+										{#if need.drop_off_point_name}
+											<span class="text-xs text-slate-500" data-testid="need-drop-off-point">
+												{t.needDropOffPoint.replace('{name}', need.drop_off_point_name)}
+											</span>
+										{/if}
 										<span
 											class="mt-1 w-fit rounded-lg bg-slate-200 px-3 py-1.5 text-xs font-bold text-slate-600"
 										>
@@ -468,6 +488,11 @@
 												>
 													{itemName}
 												</span>
+												{#if need.drop_off_point_name}
+													<span class="text-xs text-slate-500" data-testid="need-drop-off-point">
+														{t.needDropOffPoint.replace('{name}', need.drop_off_point_name)}
+													</span>
+												{/if}
 												<div class="flex flex-wrap gap-1.5">
 													{#if isCritical}
 														<span
@@ -764,10 +789,10 @@
 										<p class="text-sm text-slate-500">{t.noUrgentItems}</p>
 									{:else}
 										<p class="text-xs font-semibold text-slate-500">
-											{t.needsCount.replace('{count}', String(openNeeds.length))}
+											{t.needsCount.replace('{count}', String(itemCount(openNeeds)))}
 										</p>
 										<ul class="space-y-3">
-											{#each openNeeds.slice(0, 3) as need, i (need.item_id || i)}
+											{#each openNeeds.slice(0, 3) as need (needKey(need))}
 												{@const target = need.qty_target ?? 0}
 												{@const onHand = Math.min(need.on_hand ?? 0, target)}
 												{@const reserved = Math.min(need.reserved ?? 0, target - onHand)}
@@ -778,6 +803,14 @@
 														<p class="truncate text-sm font-bold text-slate-800">
 															{formatItemName(need.raw_name || need.name || need.item_id)}
 														</p>
+														{#if need.drop_off_point_name}
+															<p
+																class="truncate text-xs text-slate-500"
+																data-testid="need-drop-off-point"
+															>
+																{t.needDropOffPoint.replace('{name}', need.drop_off_point_name)}
+															</p>
+														{/if}
 														<p class="text-xs text-slate-500">
 															{need.qty_needed > 0
 																? t.openForMore
@@ -925,9 +958,9 @@
 							<p class="mb-4 text-xs font-semibold text-[#86868b]">
 								{#if displayedNeeds.length > 0}
 									{overallPct === null
-										? t.needsCount.replace('{count}', String(displayedNeeds.length))
+										? t.needsCount.replace('{count}', String(itemCount(displayedNeeds)))
 										: t.needsCountWithProgress
-												.replace('{count}', String(displayedNeeds.length))
+												.replace('{count}', String(itemCount(displayedNeeds)))
 												.replace('{pct}', String(overallPct))}
 								{:else}
 									{t.shelterSufficient}
@@ -942,7 +975,7 @@
 									</div>
 								{/if}
 
-								{#each displayedNeeds.slice(0, 3) as need, i (need.item_id || i)}
+								{#each displayedNeeds.slice(0, 3) as need (needKey(need))}
 									{@const isCrit = needUrgency(need) === 'critical'}
 									{@const isHig = needUrgency(need) === 'high'}
 									{@const itemName = formatItemName(need.raw_name || need.name || need.item_id)}
@@ -970,6 +1003,14 @@
 															? `${t.highPrefix} ${itemName}`
 															: itemName}
 												</span>
+												{#if need.drop_off_point_name}
+													<span
+														class="truncate text-2xs font-normal text-slate-500"
+														data-testid="need-drop-off-point"
+													>
+														{t.needDropOffPoint.replace('{name}', need.drop_off_point_name)}
+													</span>
+												{/if}
 											</span>
 											<span
 												class="shrink-0 rounded bg-slate-100 px-1.5 py-0.5 text-2xs font-black whitespace-nowrap text-slate-600 shadow-xs"
