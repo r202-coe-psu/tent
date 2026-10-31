@@ -1,9 +1,51 @@
 import { paginateItems } from './paginate';
-import type { PaginatedResult, Repository } from './repository';
+import type { FindPageResult, PaginatedResult, Repository } from './repository';
+
+/** Dotted selector keys (`emergency_contact.phone`) resolve through nested objects, like Mango. */
+function valueAtPath(doc: Record<string, unknown>, path: string): unknown {
+	let cur: unknown = doc;
+	for (const part of path.split('.')) {
+		if (cur == null || typeof cur !== 'object') return undefined;
+		cur = (cur as Record<string, unknown>)[part];
+	}
+	return cur;
+}
+
+function matchesSelector(doc: Record<string, unknown>, selector: Record<string, unknown>): boolean {
+	for (const [key, cond] of Object.entries(selector)) {
+		const val = valueAtPath(doc, key);
+		if (cond && typeof cond === 'object' && !Array.isArray(cond)) {
+			for (const [op, opVal] of Object.entries(cond as Record<string, unknown>)) {
+				if (op === '$in') {
+					if (!Array.isArray(opVal) || !opVal.includes(val)) return false;
+				} else if (op === '$eq') {
+					if (val !== opVal) return false;
+				} else if (op === '$gte' || op === '$gt' || op === '$lte' || op === '$lt') {
+					// Range operators (Mango) — enough for ISO-string / number fields.
+					if (typeof val !== typeof opVal || val == null) return false;
+					const v = val as string | number;
+					const o = opVal as string | number;
+					if (op === '$gte' && !(v >= o)) return false;
+					if (op === '$gt' && !(v > o)) return false;
+					if (op === '$lte' && !(v <= o)) return false;
+					if (op === '$lt' && !(v < o)) return false;
+				} else if (val !== cond) {
+					return false;
+				}
+			}
+		} else if (val !== cond) {
+			return false;
+		}
+	}
+	return true;
+}
 
 /** In-memory {@link Repository} for unit tests — no network. */
 export function createInMemoryRepository(): Repository {
 	const store = new Map<string, { _id: string; _rev?: string } & Record<string, unknown>>();
+
+	const matchingDocs = (selector: Record<string, unknown>) =>
+		[...store.values()].filter((d) => matchesSelector(d, selector));
 
 	return {
 		async put<T extends { _id: string }>(doc: T): Promise<T> {
@@ -45,45 +87,18 @@ export function createInMemoryRepository(): Repository {
 			selector: Record<string, unknown>;
 			[key: string]: unknown;
 		}): Promise<T[]> {
-			const matchesSelector = (
-				doc: Record<string, unknown>,
-				selector: Record<string, unknown>
-			): boolean => {
-				for (const [key, cond] of Object.entries(selector)) {
-					const val = doc[key];
-					if (cond && typeof cond === 'object' && !Array.isArray(cond)) {
-						const condRecord = cond as Record<string, unknown>;
-						for (const [op, opVal] of Object.entries(condRecord)) {
-							if (op === '$in') {
-								if (!Array.isArray(opVal) || !opVal.includes(val)) {
-									return false;
-								}
-							} else if (op === '$eq') {
-								if (val !== opVal) return false;
-							} else if (op === '$gte' || op === '$gt' || op === '$lte' || op === '$lt') {
-								// Range operators (Mango) — enough for ISO-string / number fields.
-								if (typeof val !== typeof opVal || val == null) return false;
-								const v = val as string | number;
-								const o = opVal as string | number;
-								if (op === '$gte' && !(v >= o)) return false;
-								if (op === '$gt' && !(v > o)) return false;
-								if (op === '$lte' && !(v <= o)) return false;
-								if (op === '$lt' && !(v < o)) return false;
-							} else {
-								if (val !== cond) return false;
-							}
-						}
-					} else {
-						if (val !== cond) return false;
-					}
-				}
-				return true;
-			};
+			return matchingDocs(query.selector) as unknown as T[];
+		},
 
-			const docs = [...store.values()];
-			return docs.filter((d) =>
-				matchesSelector(d as Record<string, unknown>, query.selector)
-			) as unknown as T[];
+		async findPage<T>(query: {
+			selector: Record<string, unknown>;
+			[key: string]: unknown;
+		}): Promise<FindPageResult<T>> {
+			const limit = typeof query.limit === 'number' ? query.limit : 25;
+			const offset = typeof query.bookmark === 'string' ? Number(query.bookmark) || 0 : 0;
+			const matched = matchingDocs(query.selector).sort((a, b) => (a._id < b._id ? -1 : 1));
+			const docs = matched.slice(offset, offset + limit) as unknown as T[];
+			return { docs, bookmark: String(offset + docs.length) };
 		},
 
 		async bulkDocs<T extends { _id: string; _rev?: string }>(docs: T[]): Promise<T[]> {

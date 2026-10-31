@@ -15,6 +15,7 @@ import {
 	countDocsByType,
 	deleteDoc,
 	findDocs,
+	findDocsPage,
 	getDoc,
 	putDoc,
 	bulkDocs
@@ -48,8 +49,19 @@ export interface Repository {
 		pageSize: number
 	): Promise<PaginatedResult<T>>;
 	find<T>(query: { selector: Record<string, unknown>; [key: string]: unknown }): Promise<T[]>;
+	/**
+	 * One `_find` page plus the `bookmark` to continue it. Pass the previous page's `bookmark` in
+	 * `query.bookmark`; never page with `skip`. The caller decides exhaustion (a page shorter than
+	 * `limit` is the last one), because a bookmark is returned even when nothing is left.
+	 */
+	findPage<T>(query: {
+		selector: Record<string, unknown>;
+		[key: string]: unknown;
+	}): Promise<FindPageResult<T>>;
 	bulkDocs<T extends { _id: string; _rev?: string }>(docs: T[]): Promise<T[]>;
 }
+
+export type FindPageResult<T> = { docs: T[]; bookmark: string | null };
 
 /** Build a {@link Repository} bound to one remote CouchDB database. */
 export function createRemoteRepository(dbName: string): Repository {
@@ -95,6 +107,13 @@ export function createRemoteRepository(dbName: string): Repository {
 			[key: string]: unknown;
 		}): Promise<T[]> {
 			return findDocs<T>(dbName, query);
+		},
+
+		async findPage<T>(query: {
+			selector: Record<string, unknown>;
+			[key: string]: unknown;
+		}): Promise<FindPageResult<T>> {
+			return findDocsPage<T>(dbName, query);
 		},
 
 		async bulkDocs<T extends { _id: string; _rev?: string }>(docs: T[]): Promise<T[]> {
