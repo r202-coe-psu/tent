@@ -19,6 +19,8 @@
 	import { isCaptchaKeyConfigured } from '$lib/features/public-register';
 	import { languageStore } from '$lib/stores/language.svelte';
 	import { jobsI18n } from '$lib/features/volunteers/i18n/jobs.i18n';
+	import { normalizeThaiPhone } from '$lib/db/model';
+	import { isVolunteerMobile } from '$lib/utils/volunteer-phone';
 	import {
 		ApplyFailedError,
 		apiErrorCopy,
@@ -331,7 +333,7 @@
 			applicantCredential && 'phone' in applicantCredential
 				? applicantCredential.phone
 				: formData.phone;
-		return raw.replace(/\D/g, '');
+		return normalizeThaiPhone(raw);
 	}
 
 	async function submitApplication() {
@@ -424,7 +426,7 @@
 				firstName,
 				lastName,
 				fullName,
-				phone: formData.phone,
+				phone: normalizeThaiPhone(formData.phone),
 				email: formData.email,
 				skills: formData.skills,
 				trackingToken
@@ -516,17 +518,14 @@
 			showSubmitError(t.errLastName);
 			return;
 		}
-		if (!cleanApplicantPhone()) {
-			showSubmitError(t.errPhone);
-			return;
-		}
-		if (
-			isPortalApplicant &&
-			applicantCredential &&
-			'token' in applicantCredential &&
-			!/^0\d{8,9}$/.test(cleanApplicantPhone())
-		) {
-			showSubmitError('กรุณากรอกเบอร์โทรศัพท์ที่ใช้สมัครเดิมเพื่อสมัครงานอาสาสมัครจาก portal');
+		if (!isVolunteerMobile(cleanApplicantPhone())) {
+			const needsOriginalPhone =
+				isPortalApplicant && applicantCredential && 'token' in applicantCredential;
+			showSubmitError(
+				needsOriginalPhone
+					? 'กรุณากรอกเบอร์โทรศัพท์ที่ใช้สมัครเดิมเพื่อสมัครงานอาสาสมัครจาก portal'
+					: t.errPhone
+			);
 			return;
 		}
 		errorMessage = null;
@@ -849,11 +848,8 @@
 								type="tel"
 								required
 								bind:value={formData.phone}
-								oninput={(e) => {
-									formData.phone = e.currentTarget.value.replace(/\D/g, '').slice(0, 10);
-								}}
-								inputmode="numeric"
-								maxlength={10}
+								inputmode="tel"
+								maxlength={16}
 								placeholder="0812345678"
 								class="mt-1.5 w-full rounded-xl border border-amber-300 bg-white px-4 py-2.5 text-sm outline-hidden focus:border-primary focus:ring-1 focus:ring-primary"
 							/>
@@ -930,11 +926,8 @@
 												bind:value={formData.phone}
 												readonly={isPortalApplicant}
 												aria-readonly={isPortalApplicant}
-												oninput={(e) => {
-													formData.phone = e.currentTarget.value.replace(/\D/g, '').slice(0, 10);
-												}}
-												inputmode="numeric"
-												maxlength={10}
+												inputmode="tel"
+												maxlength={16}
 												placeholder="0812345678"
 												class="w-full rounded-xl border border-border bg-card px-4 py-2.5 text-sm outline-hidden transition-all focus:border-primary focus:ring-1 focus:ring-primary"
 											/>
