@@ -349,7 +349,7 @@ describe('grantVolunteerAccessAsCoordinator (#955)', () => {
 		['no expiry', { expires_on: '' }],
 		['an expiry past the 7-day ceiling', { expires_on: '2999-01-01' }],
 		['an expiry in the past', { expires_on: '2000-01-01' }],
-		['a role outside the four', { role: 'medical_staff' }],
+		['a role the coordinator may not grant', { role: 'kiosk_staff' }],
 		['a bad email', { email: 'bad' }],
 		['a weak password', { password: '0000000000' }]
 	])('rejects %s before calling the BFF', async (_label, over) => {

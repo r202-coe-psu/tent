@@ -12,7 +12,7 @@
  *     department, allowed URLs load, forbidden URLs bounce back to `/portal`.
  *
  * A third group (#955, #879 item 2) pins the limits of a `volunteer_coordinator` granting access:
- * own shelter, four roles, verified identity, a required expiry within 7 days, and the account
+ * own shelter, the coordinator roles (all staff roles but volunteer_coordinator / kiosk_staff), verified identity, a required expiry within 7 days, and the account
  * shape (`role_grants`). Expiry revocation by the worker is covered by worker unit tests.
  *
  * The table records the REAL guard behaviour. Permissions are not changed here (a change needs
@@ -496,8 +496,8 @@ test.describe('Volunteer access: coordinator limits (#955)', { tag: TAGS }, () =
 	});
 
 	for (const [label, over, status] of [
-		['a role outside the four (medical_staff)', { role: 'medical_staff' }, 403],
-		['a role above the four (shelter_manager)', { role: 'shelter_manager' }, 403],
+		['a role the coordinator may not grant (kiosk_staff)', { role: 'kiosk_staff' }, 403],
+		['a role above the coordinator (shelter_manager)', { role: 'shelter_manager' }, 403],
 		['another shelter', { shelter_code: 'SH002' }, 403],
 		['an expiry more than 7 days away', { expires_on: bangkokDate(8) }, 422],
 		['an expiry in the past', { expires_on: bangkokDate(-1) }, 422],

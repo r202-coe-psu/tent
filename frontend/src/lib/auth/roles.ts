@@ -48,14 +48,21 @@ export const STAFF_CAPABILITIES = [
 export type StaffCapability = (typeof STAFF_CAPABILITIES)[number];
 
 /**
- * The only roles a volunteer_coordinator may issue to a volunteer, each with an expiry
- * (draft-coordinator-limited-access-grant FR-2; #879 item 2).
+ * The roles a volunteer_coordinator may issue to a volunteer, each with an expiry: every staff
+ * capability except `volunteer_coordinator` and `kiosk_staff` (CR-213 FR-2 as amended by the
+ * draft in #1046, FR-1; #1044). `shelter_manager` is not a staff capability, so it stays out.
  */
 export const COORDINATOR_GRANTABLE_CAPABILITIES = [
 	'registration_staff',
+	TRIAGE_STAFF,
+	MEDICAL_STAFF,
 	'kitchen_staff',
+	SUPPLY_COORDINATOR,
+	WAREHOUSE_STAFF,
 	DISTRIBUTION_STAFF,
-	FACILITY_STAFF
+	PR_STAFF,
+	FACILITY_STAFF,
+	SECURITY_OFFICER
 ] as const satisfies readonly StaffCapability[];
 
 /** Every capability an SA may grant alongside the shelter scope. */

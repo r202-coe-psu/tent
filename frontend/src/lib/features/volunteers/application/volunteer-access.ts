@@ -148,7 +148,7 @@ async function linkVolunteerProfile(
 
 /**
  * A `volunteer_coordinator` grants limited, time-boxed access (#955). The BFF enforces every
- * rule (own shelter, 4 roles, verified identity incl. other shelters, 7-day expiry) and
+ * rule (own shelter, the coordinator roles, verified identity incl. other shelters, 7-day expiry) and
  * creates or extends the account; this then links the profile like {@link grantVolunteerAccess}.
  */
 export const coordinatorAccessSchema = z.object({

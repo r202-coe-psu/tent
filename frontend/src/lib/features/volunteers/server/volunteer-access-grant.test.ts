@@ -203,26 +203,29 @@ describe('grantVolunteerAccessAsCoordinator', () => {
 	});
 
 	describe('role', () => {
-		it.each([
-			'medical_staff',
-			'triage_staff',
-			'warehouse_staff',
-			'volunteer_coordinator',
-			'shelter_manager',
-			'system_admin',
-			undefined
-		])('rejects %s', async (role) => {
-			await expect(grant(body({ role }))).rejects.toMatchObject({ code: 'FORBIDDEN' });
-			expect(grantCoordinatorRole).not.toHaveBeenCalled();
-		});
-
-		it.each(['registration_staff', 'kitchen_staff', 'distribution_staff', 'facility_staff'])(
-			'allows %s',
+		it.each(['kiosk_staff', 'volunteer_coordinator', 'shelter_manager', 'system_admin', undefined])(
+			'rejects %s',
 			async (role) => {
-				await grant(body({ role }));
-				expect(grantCoordinatorRole).toHaveBeenCalled();
+				await expect(grant(body({ role }))).rejects.toMatchObject({ code: 'FORBIDDEN' });
+				expect(grantCoordinatorRole).not.toHaveBeenCalled();
 			}
 		);
+
+		it.each([
+			'registration_staff',
+			'triage_staff',
+			'medical_staff',
+			'kitchen_staff',
+			'supply_coordinator',
+			'warehouse_staff',
+			'distribution_staff',
+			'pr_staff',
+			'facility_staff',
+			'security_officer'
+		])('allows %s', async (role) => {
+			await grant(body({ role }));
+			expect(grantCoordinatorRole).toHaveBeenCalled();
+		});
 	});
 
 	describe('expiry', () => {
@@ -379,7 +382,7 @@ describe('revokeVolunteerAccessAsCoordinator', () => {
 
 	it.each([
 		['another shelter', input({ shelter_code: 'SH002' }), COORDINATOR],
-		['a role outside the four', input({ role: 'medical_staff' }), COORDINATOR],
+		['a role the coordinator may not grant', input({ role: 'kiosk_staff' }), COORDINATOR],
 		[
 			'a shelter manager',
 			input(),

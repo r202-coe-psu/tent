@@ -25,19 +25,23 @@ const grant = (role: string, code = 'SH001'): RoleGrant => ({
 });
 
 describe('coordinator grantable roles', () => {
-	it('allows exactly the four non-health, non-warehouse desk roles', () => {
+	it('allows every staff role except volunteer_coordinator and kiosk_staff (#1044)', () => {
 		expect([...COORDINATOR_GRANTABLE_CAPABILITIES].sort()).toEqual([
 			'distribution_staff',
 			'facility_staff',
 			'kitchen_staff',
-			'registration_staff'
+			'medical_staff',
+			'pr_staff',
+			'registration_staff',
+			'security_officer',
+			'supply_coordinator',
+			'triage_staff',
+			'warehouse_staff'
 		]);
 	});
 
 	it.each([
-		'medical_staff',
-		'triage_staff',
-		'warehouse_staff',
+		'kiosk_staff',
 		'volunteer_coordinator',
 		'shelter_manager',
 		'system_admin',
