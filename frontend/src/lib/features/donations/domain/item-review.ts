@@ -62,16 +62,27 @@ export function rejectRemainingLines<T extends DonationItem>(items: readonly T[]
 	);
 }
 
-/** One decision on a `pending` line, by its position in `items`. */
+/**
+ * One decision on a `pending` line, by its position in `items`. `drop_off_point_id` is the
+ * point staff send an approved line to; absent keeps the line's point.
+ */
 export const lineReviewDecisionSchema = z
 	.object({
 		index: z.number().int().min(0),
 		decision: z.enum(['approved', 'rejected']),
 		reason_code: donationRejectReasonCodeSchema.optional(),
-		note: rejectNoteSchema.optional()
+		note: rejectNoteSchema.optional(),
+		drop_off_point_id: z.string().min(1).nullable().optional()
 	})
 	.superRefine((value, ctx) => {
 		if (value.decision !== 'rejected') return;
+		if (value.drop_off_point_id !== undefined) {
+			ctx.addIssue({
+				code: 'custom',
+				path: ['drop_off_point_id'],
+				message: 'รายการที่ไม่รับไม่ต้องระบุจุดรับบริจาค'
+			});
+		}
 		if (!value.reason_code) {
 			ctx.addIssue({ code: 'custom', path: ['reason_code'], message: 'ต้องระบุเหตุผลที่ไม่รับ' });
 		}

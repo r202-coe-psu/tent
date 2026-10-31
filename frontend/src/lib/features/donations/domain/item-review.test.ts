@@ -5,6 +5,7 @@ import {
 	donationStatusFromLines,
 	hasLineReview,
 	isAutoApprovedLine,
+	lineReviewDecisionSchema,
 	rejectRemainingLines
 } from './item-review';
 
@@ -135,5 +136,37 @@ describe('applyLineReview (FR-9, FR-10)', () => {
 		expect(() => applyLineReview([typedLine], [{ index: 0, decision: 'rejected' }])).toThrow(
 			/without a reason/
 		);
+	});
+});
+
+describe('lineReviewDecisionSchema drop-off point (FR-AP-17 step 1)', () => {
+	it.each([
+		['a point', { drop_off_point_id: 'point-gym' }, true],
+		['null', { drop_off_point_id: null }, true],
+		['no key', {}, true]
+	])('accepts an approval with %s', (_label, point, expected) => {
+		expect(
+			lineReviewDecisionSchema.safeParse({ index: 0, decision: 'approved', ...point }).success
+		).toBe(expected);
+	});
+
+	it.each([
+		['a point', 'point-gym'],
+		['null', null]
+	])('refuses a refusal that names %s', (_label, point) => {
+		const parsed = lineReviewDecisionSchema.safeParse({
+			index: 0,
+			decision: 'rejected',
+			reason_code: 'damaged',
+			drop_off_point_id: point
+		});
+		expect(parsed.success).toBe(false);
+	});
+
+	it('still accepts a refusal without a point', () => {
+		expect(
+			lineReviewDecisionSchema.safeParse({ index: 0, decision: 'rejected', reason_code: 'damaged' })
+				.success
+		).toBe(true);
 	});
 });
