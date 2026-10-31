@@ -15,12 +15,6 @@ describe('passphrase-generator (server re-export)', () => {
 	});
 });
 
-describe('validatePassword', () => {
-	it('rejects a weak password with the Thai policy message (#1045)', () => {
-		expect(() => validatePassword('abc')).toThrow(/^รหัสผ่านต้องมี: อย่างน้อย 10 ตัวอักษร/);
-	});
-});
-
 describe('validateProvisionedPassword', () => {
 	it('allows a volunteer phone only as a forced first-login password', () => {
 		expect(

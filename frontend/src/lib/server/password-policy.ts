@@ -20,11 +20,10 @@ import { ServiceError } from '$lib/server/couch-admin';
  * @returns The trimmed password (safe to store).
  */
 export function validatePassword(raw: string): string {
-	const password = raw.trim();
-	// Thai, from the same rules the forms show, so the toast is readable (#1045).
-	const error = passwordPolicyError(password);
+	// Thai, from the same rules the forms show, so the toast is readable (#1045). It trims.
+	const error = passwordPolicyError(raw);
 	if (error) throw new ServiceError('VALIDATION', error);
-	return password;
+	return raw.trim();
 }
 
 /**

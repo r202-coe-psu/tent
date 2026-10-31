@@ -13,14 +13,6 @@ import { z } from 'zod';
 
 export const PASSWORD_MIN_LENGTH = 10;
 
-export const passwordSchema = z
-	.string()
-	.min(PASSWORD_MIN_LENGTH, `รหัสผ่านต้องมีอย่างน้อย ${PASSWORD_MIN_LENGTH} ตัวอักษร`)
-	.regex(/[A-Z]/, 'รหัสผ่านต้องมีตัวพิมพ์ใหญ่ (A-Z) อย่างน้อย 1 ตัว')
-	.regex(/[a-z]/, 'รหัสผ่านต้องมีตัวพิมพ์เล็ก (a-z) อย่างน้อย 1 ตัว')
-	.regex(/[0-9]/, 'รหัสผ่านต้องมีตัวเลข (0-9) อย่างน้อย 1 ตัว')
-	.regex(/[^A-Za-z0-9]/, 'รหัสผ่านต้องมีอักขระพิเศษ อย่างน้อย 1 ตัว');
-
 /** One rule of the password policy, worded for a checklist under the field (#1045). */
 export interface PasswordRule {
 	key: 'length' | 'upper' | 'lower' | 'digit' | 'special';
@@ -50,3 +42,12 @@ export function passwordPolicyError(raw: string): string | null {
 	const missing = PASSWORD_RULES.filter((rule) => !rule.test(password)).map((rule) => rule.label);
 	return missing.length > 0 ? `รหัสผ่านต้องมี: ${missing.join(', ')}` : null;
 }
+
+/**
+ * The password policy as a Zod schema for the forms, with the same Thai message as the server
+ * (`passwordPolicyError`): one wording for every field and toast (#1045).
+ */
+export const passwordSchema = z.string().superRefine((value, ctx) => {
+	const message = passwordPolicyError(value);
+	if (message) ctx.addIssue({ code: 'custom', message });
+});

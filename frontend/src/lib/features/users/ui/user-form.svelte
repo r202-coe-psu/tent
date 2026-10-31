@@ -1,5 +1,4 @@
 <script lang="ts">
-	import PasswordRuleChecklist from '$lib/components/password-rule-checklist.svelte';
 	import { untrack } from 'svelte';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import * as Form from '$lib/components/ui/form/index.js';
@@ -35,6 +34,7 @@
 	import { generateTemporaryPassphrase } from '$lib/auth/passphrase-generator';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Badge } from '$lib/components/ui/badge/index.js';
+	import PasswordRuleChecklist from '$lib/components/password-rule-checklist.svelte';
 	import Save from '@lucide/svelte/icons/save';
 	import UserCheck from '@lucide/svelte/icons/user-check';
 	import Users from '@lucide/svelte/icons/users';

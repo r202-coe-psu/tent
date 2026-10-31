@@ -280,6 +280,27 @@ describe('VolunteerAccessDialog password for an existing account', () => {
 		expect(document.body.textContent).not.toContain('การออกสิทธิ์ไม่เปลี่ยนรหัสผ่านเดิม');
 	});
 
+	it.each([
+		['the mobile', '0812345678'],
+		['the mobile with a trailing space', '0812345678 ']
+	])('shows no rule checklist for %s, which the policy accepts as a default', async (_l, value) => {
+		await render(COORDINATOR);
+		const input = passwordInput()!;
+		input.value = value;
+		input.dispatchEvent(new Event('input', { bubbles: true }));
+		await settle();
+		expect(document.body.querySelector('[aria-label="เงื่อนไขรหัสผ่าน"]')).toBeNull();
+	});
+
+	it('shows the rule checklist for any other password', async () => {
+		await render(COORDINATOR);
+		const input = passwordInput()!;
+		input.value = 'abc';
+		input.dispatchEvent(new Event('input', { bubbles: true }));
+		await settle();
+		expect(document.body.querySelector('[aria-label="เงื่อนไขรหัสผ่าน"]')).not.toBeNull();
+	});
+
 	it('still asks when a linked profile has no mobile to fall back on', async () => {
 		await render(COORDINATOR, { user_name: 'vol@example.com', phone: null });
 

@@ -219,6 +219,25 @@ test.describe('Volunteer Access Portal (CR-092 หน้าจอ 6)', () => {
 		await expect(page.getByText('เจ้าหน้าที่ช่วยลงทะเบียนผู้ประสบภัย')).toBeVisible();
 	});
 
+	for (const [label, size] of [
+		['phone', { width: 390, height: 844 }],
+		['desktop', { width: 1280, height: 900 }]
+	] as const) {
+		test(`the QR role card sits above the shift list on ${label} (#1064)`, async ({ page }) => {
+			await page.setViewportSize(size);
+			await mockPortalApi(page);
+			await openPortalTab(page);
+			await signIn(page, PHONE);
+
+			const card = page.getByRole('heading', { name: 'บัตรอาสาสมัครอัจฉริยะ (QR Role Card)' });
+			const list = page.getByRole('heading', { name: 'รายการงานอาสาสมัครของฉัน' });
+			await expect(card).toBeVisible();
+			await expect(list).toBeVisible();
+			const [cardBox, listBox] = [await card.boundingBox(), await list.boundingBox()];
+			expect(cardBox!.y).toBeLessThan(listBox!.y);
+		});
+	}
+
 	test('every number goes to the server — there is no built-in fixture session', async ({
 		page
 	}) => {
