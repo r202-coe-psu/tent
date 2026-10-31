@@ -11,6 +11,7 @@ import {
 	hasLinePoints,
 	lineDestinationResolver,
 	lineDropOffPointId,
+	withCampaignLinePoints,
 	withCurrentLinePoints
 } from './line-points';
 import type { DropOffShelterSource } from './drop-off';
@@ -252,5 +253,73 @@ describe('pickerForMapTap (owner 2026-10-30)', () => {
 
 	it('has nothing to fill without lines', () => {
 		expect(pickerForMapTap(null, [])).toBeNull();
+	});
+});
+
+describe('withCampaignLinePoints (staff-assigned drop-off FR-AP-8, FR-AP-9)', () => {
+	const rice = { item_id: 'item:rice', free_text: 'ข้าว' };
+	const blanket = { free_text: 'ผ้าห่ม' };
+	const campaign = (pointId: string | null | undefined) => ({
+		needs: [
+			{ item_id: 'item:rice', ...(pointId !== undefined ? { drop_off_point_id: pointId } : {}) }
+		]
+	});
+	const points = (lines: { drop_off_point_id: string | null }[]) =>
+		lines.map((line) => line.drop_off_point_id);
+
+	it('gives a campaign line its need point and a typed-in line none (AC-13)', () => {
+		expect(
+			points(withCampaignLinePoints([rice, blanket], campaign('point-gym'), 'self_dropoff'))
+		).toEqual(['point-gym', null]);
+	});
+
+	it('reads the need of the campaign picked for the booking, not another one (AC-4)', () => {
+		const campaignB = campaign('point-med');
+		expect(points(withCampaignLinePoints([rice], campaignB, 'self_dropoff'))).toEqual([
+			'point-med'
+		]);
+	});
+
+	it('uses the first need that asks for the item', () => {
+		const twice = {
+			needs: [
+				{ item_id: 'item:rice', drop_off_point_id: 'point-gym' },
+				{ item_id: 'item:rice', drop_off_point_id: 'point-med' }
+			]
+		};
+		expect(points(withCampaignLinePoints([rice], twice, 'self_dropoff'))).toEqual(['point-gym']);
+	});
+
+	it('copies a point the shelter may have dropped since, unchecked (D-5, AC-6)', () => {
+		expect(points(withCampaignLinePoints([rice], campaign('point-gone'), 'self_dropoff'))).toEqual([
+			'point-gone'
+		]);
+	});
+
+	it('writes null for a need with no point, or a v3 need with no key (AC-16)', () => {
+		expect(points(withCampaignLinePoints([rice], campaign(null), 'self_dropoff'))).toEqual([null]);
+		expect(points(withCampaignLinePoints([rice], campaign(undefined), 'self_dropoff'))).toEqual([
+			null
+		]);
+	});
+
+	it('writes null for every line of a booking with no campaign (AC-9)', () => {
+		expect(points(withCampaignLinePoints([rice, blanket], null, 'self_dropoff'))).toEqual([
+			null,
+			null
+		]);
+	});
+
+	it('writes null for every line of a parcel or a pickup (AC-8)', () => {
+		for (const method of ['parcel', 'shelter_pickup', undefined]) {
+			expect(points(withCampaignLinePoints([rice], campaign('point-gym'), method))).toEqual([null]);
+		}
+	});
+
+	it('overwrites whatever point the client sent, keeping the rest of the line (AC-5)', () => {
+		const sent = { ...blanket, qty: '2', drop_off_point_id: 'point-med' };
+		expect(withCampaignLinePoints([sent], campaign('point-gym'), 'self_dropoff')).toEqual([
+			{ free_text: 'ผ้าห่ม', qty: '2', drop_off_point_id: null }
+		]);
 	});
 });

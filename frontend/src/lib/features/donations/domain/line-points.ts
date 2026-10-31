@@ -71,6 +71,31 @@ export function pickerForMapTap(
 	return lineKeys[0] ?? null;
 }
 
+type CampaignPointSource = {
+	needs: readonly { item_id: string; drop_off_point_id?: string | null }[];
+};
+
+/**
+ * The point each line is booked to (draft CR "staff-assigned drop-off" FR-AP-8, FR-AP-9):
+ * staff, not the donor, decide it. A campaign line takes the point of the first need of the
+ * booking's own campaign that asks for its item; any other line waits for staff at review.
+ * Only a self drop-off has points (CR-206 FR-MP-4). The id is copied as staff set it, never
+ * checked against the shelter's points here (D-5, D-10): a point gone since reads as "any point".
+ */
+export function withCampaignLinePoints<T extends { item_id?: string | null }>(
+	lines: readonly T[],
+	campaign: CampaignPointSource | null | undefined,
+	deliveryMethod: string | null | undefined
+): (T & { drop_off_point_id: string | null })[] {
+	return lines.map((line) => {
+		const need =
+			deliveryMethod === 'self_dropoff' && line.item_id
+				? campaign?.needs.find((n) => n.item_id === line.item_id)
+				: undefined;
+		return { ...line, drop_off_point_id: need?.drop_off_point_id ?? null };
+	});
+}
+
 /** Ids of the points the shelter offers now (FR-MP-16) — the main point has none. */
 export function currentDropOffPointIds(shelter: DropOffShelterSource): Set<string> {
 	return new Set(
