@@ -100,6 +100,98 @@ describe('user-service', () => {
 		expect(saved.active).toBe(true);
 	});
 
+	it('stores a sha256 staff_token_hash for a user without volunteer_id and never the plaintext token', async () => {
+		await createUser({
+			name: 'staff01',
+			password: 'Password123!',
+			display_name: 'Staff One',
+			personnel_type: 'staff',
+			roles: ['shelter:SH001', 'registration_staff']
+		});
+
+		const saved = fakeUsersDb['org.couchdb.user:staff01'];
+		expect(saved.staff_token_hash).toMatch(/^[0-9a-f]{64}$/);
+		expect(JSON.stringify(saved)).not.toContain('TKT-STF-');
+	});
+
+	it('gives each new staff user a different staff_token_hash', async () => {
+		for (const name of ['staff_a', 'staff_b']) {
+			await createUser({
+				name,
+				password: 'Password123!',
+				display_name: name,
+				personnel_type: 'staff',
+				roles: ['shelter:SH001', 'registration_staff']
+			});
+		}
+
+		const a = fakeUsersDb['org.couchdb.user:staff_a'].staff_token_hash;
+		const b = fakeUsersDb['org.couchdb.user:staff_b'].staff_token_hash;
+		expect(a).not.toBe(b);
+	});
+
+	it('stores no staff_token_hash for a user linked to a volunteer', async () => {
+		await createUser({
+			name: 'vol01',
+			password: 'Password123!',
+			display_name: 'Vol One',
+			personnel_type: 'volunteer',
+			volunteer_id: 'vol:abc',
+			roles: ['shelter:SH001', 'registration_staff']
+		});
+
+		const saved = fakeUsersDb['org.couchdb.user:vol01'];
+		expect(saved).not.toHaveProperty('staff_token_hash');
+	});
+
+	it('stores no staff_token_hash for a volunteer-type user without volunteer_id', async () => {
+		await createUser({
+			name: 'vol02',
+			password: 'Password123!',
+			display_name: 'Vol Two',
+			personnel_type: 'volunteer',
+			roles: ['shelter:SH001', 'registration_staff']
+		});
+
+		const saved = fakeUsersDb['org.couchdb.user:vol02'];
+		expect(saved).not.toHaveProperty('staff_token_hash');
+	});
+
+	describe('staff card summary', () => {
+		const sa = { name: 'sa01', roles: ['system_admin'], isSA: true, shelterCode: null };
+		const hash = 'ab'.repeat(32);
+
+		it('reports has_staff_card true and never exposes the hash in the summary', async () => {
+			fakeUsersDb['org.couchdb.user:staff01'] = {
+				_id: 'org.couchdb.user:staff01',
+				_rev: '1-abc',
+				name: 'staff01',
+				type: 'user',
+				roles: ['shelter:SH001', 'registration_staff'],
+				staff_token_hash: hash
+			};
+
+			const listed = await listUsers(sa);
+			const row = listed.find((u) => u.name === 'staff01');
+			expect(row?.has_staff_card).toBe(true);
+			expect(JSON.stringify(listed)).not.toContain(hash);
+		});
+
+		it('reports has_staff_card false for a user without a staff_token_hash', async () => {
+			fakeUsersDb['org.couchdb.user:vol01'] = {
+				_id: 'org.couchdb.user:vol01',
+				_rev: '1-abc',
+				name: 'vol01',
+				type: 'user',
+				roles: ['shelter:SH001', 'registration_staff'],
+				volunteer_id: 'vol:abc'
+			};
+
+			const listed = await listUsers(sa);
+			expect(listed.find((u) => u.name === 'vol01')?.has_staff_card).toBe(false);
+		});
+	});
+
 	it('accepts a volunteer phone as a forced first-login password', async () => {
 		await createUser({
 			name: 'volunteer@example.com',
@@ -740,6 +832,27 @@ describe('user-service', () => {
 			]);
 		});
 
+		it('rejects staff_token_hash and volunteer_id and leaves the stored hash unchanged', async () => {
+			seedProfileUser('0816666666');
+			const key = 'org.couchdb.user:0816666666';
+			const hash = 'cd'.repeat(32);
+			fakeUsersDb[key].staff_token_hash = hash;
+
+			await expect(
+				updateOwnProfile('0816666666', {
+					display_name: 'ok',
+					staff_token_hash: 'ef'.repeat(32),
+					volunteer_id: 'vol:abc'
+				} as never)
+			).rejects.toMatchObject({
+				code: 'VALIDATION',
+				message: expect.stringContaining('staff_token_hash')
+			} satisfies Partial<ServiceError>);
+
+			expect(fakeUsersDb[key].staff_token_hash).toBe(hash);
+			expect(fakeUsersDb[key].volunteer_id).toBeUndefined();
+		});
+
 		it('rejects empty display_name after trim', async () => {
 			seedProfileUser('0814444444');
 			await expect(updateOwnProfile('0814444444', { display_name: '   ' })).rejects.toMatchObject({
@@ -768,6 +881,31 @@ describe('user-service', () => {
 			await expect(updateOwnProfile('missing-user', { display_name: 'x' })).rejects.toMatchObject({
 				code: 'VALIDATION'
 			});
+		});
+	});
+
+	describe('updateUser staff card', () => {
+		it('keeps staff_token_hash when display_name and roles change', async () => {
+			const sa = { name: 'sa01', roles: ['system_admin'], isSA: true, shelterCode: null };
+			await createUser({
+				name: 'staff01',
+				password: 'Password123!',
+				display_name: 'Before',
+				personnel_type: 'staff',
+				roles: ['shelter:SH001', 'registration_staff']
+			});
+			const hash = fakeUsersDb['org.couchdb.user:staff01'].staff_token_hash;
+			expect(hash).toMatch(/^[0-9a-f]{64}$/);
+
+			await updateUser(
+				'staff01',
+				{ display_name: 'After', roles: ['shelter:SH001', 'triage_staff'] },
+				sa
+			);
+
+			const saved = fakeUsersDb['org.couchdb.user:staff01'];
+			expect(saved.display_name).toBe('After');
+			expect(saved.staff_token_hash).toBe(hash);
 		});
 	});
 

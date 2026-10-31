@@ -21,7 +21,8 @@
 	import KioskBackButton from './kiosk-back-button.svelte';
 	import KioskInlineAlert from './kiosk-inline-alert.svelte';
 	import { KioskIdleTimeout, KIOSK_IDLE_TIMEOUT_MS } from './kiosk-idle-timeout.svelte.js';
-	import KioskLabelSheet, { type KioskLabelSheetItem } from './kiosk-label-sheet.svelte';
+	import type { KioskLabelSheetItem } from '../domain/kiosk-label-item';
+	import KioskLabelSheet from './kiosk-label-sheet.svelte';
 	import {
 		KIOSK_NOTICE_PRIMARY_ACTION,
 		KIOSK_NOTICE_SECONDARY_ACTION

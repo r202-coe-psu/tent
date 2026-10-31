@@ -76,6 +76,7 @@ describe('UserForm coordinator grants (#955)', () => {
 		name: 'vol@example.com',
 		roles: ['shelter:SH001', 'SH001:kitchen_staff', 'SH001:facility_staff'],
 		personnel_type: 'volunteer' as const,
+		has_staff_card: false,
 		role_grants: [
 			{
 				shelter_code: 'SH001',

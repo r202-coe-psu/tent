@@ -1,5 +1,6 @@
 <script lang="ts">
 	import Building2 from '@lucide/svelte/icons/building-2';
+	import IdCard from '@lucide/svelte/icons/id-card';
 	import RefreshCw from '@lucide/svelte/icons/refresh-cw';
 	import ShieldCheck from '@lucide/svelte/icons/shield-check';
 	import User from '@lucide/svelte/icons/user';
@@ -23,7 +24,9 @@
 		type PortalFeatures,
 		type PortalPreviewState
 	} from '$lib/features/portal';
+	import { MyCardDialog } from '$lib/features/me';
 	import { Badge } from '$lib/components/ui/badge';
+	import { Button } from '$lib/components/ui/button';
 	import * as Select from '$lib/components/ui/select';
 
 	const roles = $derived(authStore.user?.roles ?? []);
@@ -90,6 +93,8 @@
 		})
 	);
 
+	let myCardOpen = $state(false);
+
 	// Role display labels (Thai)
 	const userRoleLabels = $derived.by(() => {
 		if (isSA) return ['ผู้ดูแลระบบส่วนกลาง'];
@@ -146,6 +151,14 @@
 							{/each}
 						</div>
 					</div>
+					<Button
+						variant="outline"
+						size="sm"
+						class="ml-1 min-h-11 shrink-0 gap-1.5 sm:min-h-8"
+						onclick={() => (myCardOpen = true)}
+					>
+						<IdCard class="size-4" aria-hidden="true" /> ดูบัตรของฉัน
+					</Button>
 				</div>
 
 				<!-- Right: Active Shelter Context & Sync Status -->
@@ -232,6 +245,8 @@
 				</div>
 			</div>
 		</section>
+
+		<MyCardDialog bind:open={myCardOpen} shelterName={currentShelter?.name ?? null} />
 
 		<main>
 			<!-- Dev-server only: stripped from production builds (`dev` is false there). -->

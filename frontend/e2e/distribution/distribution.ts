@@ -685,9 +685,7 @@ export async function seedDistributionLog(
 		ticket_id: options.ticket.ticketId,
 		item_id: options.item.itemId,
 		qty: options.qty ?? '1',
-		recipient_type: options.recipient.recipientId.startsWith('volunteer:')
-			? 'volunteer'
-			: 'evacuee',
+		recipient_type: recipientTypeOf(options.recipient.recipientId),
 		recipient_id: options.recipient.recipientId,
 		...(options.meal ? { meal: options.meal } : {}),
 		is_returnable: returnable,
@@ -697,6 +695,12 @@ export async function seedDistributionLog(
 		distributed_by: scenario.user.name
 	});
 	return logId;
+}
+
+function recipientTypeOf(recipientId: string): 'evacuee' | 'volunteer' | 'staff' {
+	if (recipientId.startsWith('volunteer:')) return 'volunteer';
+	if (recipientId.startsWith('user:')) return 'staff';
+	return 'evacuee';
 }
 
 /** CouchDB request made as an application user (cookie session) — the VDU applies. */
