@@ -87,24 +87,22 @@ describe('buildDonationLotRows (#821 FR-12)', () => {
 
 	it('shows no balance (null) for an item whose history cannot be replayed, and keeps the other items', () => {
 		const rice = receipt({ qty: '10' });
-		const salt = receipt({ item_id: 'item_master:salt', qty: '1', unit: 'kg' });
-		// An outbound row naming a lot no row ever created: corrupt history, which the lot
-		// projection still refuses to replay (StockLotIntegrityError).
-		const orphanOutbound = row({
+		const brokenReceipt = receipt({ item_id: 'item_master:salt', qty: '1', unit: 'kg' });
+		const overdraw = row({
 			item_id: 'item_master:salt',
 			reason: 'distribute',
-			qty: '-1',
-			lot_ref: 'stock_ledger:missing',
+			qty: '-5',
+			lot_ref: 'stock_ledger:unknown-lot',
 			occurred_at: '2026-10-21T03:00:00.000Z'
 		});
 
-		const rows = buildDonationLotRows([rice, salt], [rice, salt, orphanOutbound]);
+		const rows = buildDonationLotRows([rice, brokenReceipt], [rice, brokenReceipt, overdraw]);
 
 		expect(rows.find((r) => r.itemId === 'item_master:salt')?.remaining).toBeNull();
 		expect(rows.find((r) => r.itemId === 'item_master:rice')?.remaining).toBe('10');
 	});
 
-	it('shows an overdrawn lot as a negative balance, not as unknown (#855)', () => {
+	it('shows a negative balance for a lot that was overdrawn (#855)', () => {
 		const salt = receipt({ item_id: 'item_master:salt', qty: '1', unit: 'kg' });
 		const overdraw = row({
 			item_id: 'item_master:salt',
@@ -114,7 +112,9 @@ describe('buildDonationLotRows (#821 FR-12)', () => {
 			occurred_at: '2026-10-21T03:00:00.000Z'
 		});
 
-		expect(buildDonationLotRows([salt], [salt, overdraw])[0].remaining).toBe('-4');
+		const rows = buildDonationLotRows([salt], [salt, overdraw]);
+
+		expect(rows[0].remaining).toBe('-4');
 	});
 
 	it('takes only donation receipts: other reasons and outbound rows are not lots of the donation', () => {
