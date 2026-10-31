@@ -183,10 +183,13 @@ function configureCheckInCouchMocks(
 		bulkRowErrorIds?: string[];
 		/** Someone else edits the household (bumping its rev) in this many of our writes of it. */
 		householdEdits?: number;
+		/** Someone else births this household after our `_all_docs` read, before our `_bulk_docs`. */
+		householdBornDuringBulk?: FixtureHousehold;
 	} = {}
 ): void {
 	bulkWrites = [];
 	failBulk = false;
+	let bornDuringBulk = options.householdBornDuringBulk;
 	let householdEdits = options.householdEdits ?? 0;
 	/** A write of an existing household conflicts when it is raced, or carries a stale `_rev`. */
 	const householdWriteConflicts = (doc: { _rev?: string }, index: number): boolean => {
@@ -213,6 +216,10 @@ function configureCheckInCouchMocks(
 				if (failBulk) throw Object.assign(new Error('couch down'), { status: 503 });
 				bulkWrites.push(...written);
 				return written.map((doc) => ({ ok: true, id: doc._id, rev: '1-log' })) as never;
+			}
+			if (bornDuringBulk) {
+				households.push(bornDuringBulk);
+				bornDuringBulk = undefined;
 			}
 			const mode = options.bulkDocs ?? 'ok';
 			if (mode === 'throw') throw Object.assign(new Error('couch down'), { status: 503 });
@@ -1608,6 +1615,12 @@ describe('checkInSelectedMembers kiosk claim of unassigned members', () => {
 			.filter((doc) => doc.type !== 'station_log');
 	}
 
+	function householdPutBodies(): Array<Record<string, unknown>> {
+		return putCalls()
+			.filter(([path]) => path.endsWith(`/${encodeURIComponent(reservedHouseholdId)}`))
+			.map(([, init]) => JSON.parse(String(init?.body)));
+	}
+
 	function putCalls() {
 		return mockAdminFetch.mock.calls.filter(([, init]) => init?.method === 'PUT');
 	}
@@ -1845,7 +1858,7 @@ describe('checkInSelectedMembers kiosk claim of unassigned members', () => {
 
 			await checkInSelectedMembers(shelterCode, first, [first, second], { deviceId });
 
-			const appended = bulkWrittenDocs().find((doc) => doc._id === reservedHouseholdId);
+			const [appended] = householdPutBodies();
 			expect(appended).toMatchObject({
 				_rev: '1-household',
 				status: 'pre_registered',
@@ -1855,6 +1868,39 @@ describe('checkInSelectedMembers kiosk claim of unassigned members', () => {
 			});
 			expect(bulkWrittenDocs().map((doc) => doc._id)).toContain(petImageId);
 			expect(households[0].pets).toEqual([existingPet, dogRow, catRow]);
+		});
+
+		it('appends the pets when someone else births the household between read and write', async () => {
+			const bornElsewhere = { ...existingHousehold(), pets: [] };
+			configureCheckInCouchMocks({ householdBornDuringBulk: bornElsewhere });
+			stubPetClaim();
+
+			const results = await checkInSelectedMembers(shelterCode, first, [first, second], {
+				deviceId
+			});
+
+			expect(results.map((result) => result.status)).toEqual(['checked_in', 'checked_in']);
+			expect(households).toHaveLength(1);
+			expect(households[0]).toMatchObject({ notes: 'kept', pets: [dogRow, catRow] });
+			expect(bulkWrittenDocs().map((doc) => doc._id)).toContain(petImageId);
+			expect(queueCalls(revertUrl)).toEqual([]);
+		});
+
+		it('logs the registration when a lost prepare may leave pets claimed (FR-KUC-12e)', async () => {
+			const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+			stubQueue([queueMember(0), queueMember(1)], () => {
+				throw new TypeError('fetch failed');
+			});
+
+			await expect(
+				checkInSelectedMembers(shelterCode, first, [first, second], { deviceId })
+			).rejects.toBeInstanceOf(KioskUnassignedUnavailableError);
+
+			expect(warn).toHaveBeenCalledWith(expect.stringContaining('pets may stay claimed'), {
+				registration_id: registrationId,
+				shelter_code: shelterCode
+			});
+			warn.mockRestore();
 		});
 
 		it('adds no pet twice when a repeat claim brings none', async () => {

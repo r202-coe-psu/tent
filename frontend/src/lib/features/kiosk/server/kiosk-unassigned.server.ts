@@ -194,7 +194,12 @@ async function errorCode(response: Response): Promise<string | null> {
 async function isPetClaimAllowed(shelterCode: string): Promise<boolean> {
 	try {
 		return isKioskPetClaimEnabled(await findMasterByCode(shelterCode));
-	} catch {
+	} catch (error) {
+		// Without this a registry outage reads as "the shelter takes no pets".
+		console.warn('[Kiosk Claim] Shelter registry read failed; pets stay open', {
+			shelter_code: shelterCode,
+			error: error instanceof Error ? error.name : 'unknown'
+		});
 		return false;
 	}
 }
@@ -234,6 +239,7 @@ async function revertQuietly(registrationId: string, body: RevertUnassignedClaim
 		console.warn('[Kiosk Claim] Revert failed; claim may be orphaned', {
 			registration_id: registrationId,
 			member_ids: body.member_ids,
+			pet_ids: body.pet_ids,
 			status: error instanceof KioskUnassignedUnavailableError ? (error.status ?? null) : null
 		});
 	}
@@ -279,12 +285,39 @@ function withAppendedPets(
 }
 
 /**
+ * FR-KUC-12c: append the claimed pets to a household already in Couch — re-read, merge, PUT —
+ * retrying on conflict. True once the PUT lands.
+ */
+async function appendPetsWithRetry(
+	dbName: string,
+	prepared: PreparedUnassignedClaim
+): Promise<boolean> {
+	const householdPath = `/${dbName}/${encodeURIComponent(prepared.household._id)}`;
+	let attempt = 0;
+	while (attempt <= HOUSEHOLD_APPEND_RETRIES) {
+		attempt++;
+		const latest = await adminFetch<Record<string, unknown>>(householdPath);
+		try {
+			await adminFetch(householdPath, {
+				method: 'PUT',
+				body: JSON.stringify(withAppendedPets(latest, prepared))
+			});
+			return true;
+		} catch (error) {
+			if (!isConflict(error)) throw error;
+		}
+	}
+	return false;
+}
+
+/**
  * Birth the prepared docs in one `_bulk_docs`; a conflict means they were already born. Docs
  * already in Couch are left out first, so a repair claim (FR-KUC-15) never writes the `image:` doc
  * prepare minted afresh for an evacuee that already exists (FR-KUC-10).
  *
- * A household already in Couch gets the claimed pets appended (FR-KUC-12c). For that doc a
- * conflict is a real failure, not "already born": it is re-read, merged and PUT again, twice more.
+ * The claimed pets ride on the household: a new one carries them, one already in Couch gets them
+ * appended (FR-KUC-12c). A new household that comes back `conflict` with pets was born by someone
+ * else meanwhile without them, so it also takes the append path.
  * Throws `PreparedClaimWriteError` carrying whether the household write (new or append) landed.
  */
 async function writePreparedClaim(
@@ -292,6 +325,7 @@ async function writePreparedClaim(
 	prepared: PreparedUnassignedClaim
 ): Promise<void> {
 	const householdId = prepared.household._id;
+	const hasPets = prepared.pets.length > 0;
 	// Unknown until the household write is known to be unneeded or to have landed.
 	let householdWritten = false;
 	try {
@@ -299,23 +333,18 @@ async function writePreparedClaim(
 			await findMissingDocIds(dbName, [householdId, ...prepared.evacuees.map((doc) => doc._id)])
 		);
 		const newHousehold = missing.has(householdId);
-		const appendPets = !newHousehold && prepared.pets.length > 0;
-		householdWritten = !newHousehold && !appendPets;
+		householdWritten = !newHousehold && !hasPets;
 
 		const evacuees = prepared.evacuees.filter((doc) => missing.has(doc._id));
 		const imageIds = new Set(
 			evacuees.map((doc) => doc.photo).filter((id): id is string => Boolean(id))
 		);
 		// Pet images only go with a household write (FR-KUC-12c); member images stay per evacuee.
-		if (newHousehold || appendPets) {
+		if (hasPets) {
 			for (const pet of prepared.pets) if (pet.image_url) imageIds.add(pet.image_url);
 		}
-		const current = appendPets
-			? await adminFetch<Record<string, unknown>>(`/${dbName}/${encodeURIComponent(householdId)}`)
-			: null;
 		const docs = [
 			...(newHousehold ? [prepared.household] : []),
-			...(current ? [withAppendedPets(current, prepared)] : []),
 			...evacuees,
 			...prepared.images
 				.filter((image) => imageIds.has(image.doc._id))
@@ -327,37 +356,23 @@ async function writePreparedClaim(
 					}
 				}))
 		];
-		if (docs.length === 0) return;
-		const rows = await adminFetch<Array<{ id?: string; error?: string }>>(`/${dbName}/_bulk_docs`, {
-			method: 'POST',
-			body: JSON.stringify({ docs })
-		});
-		if (!Array.isArray(rows)) throw new PreparedClaimWriteError(false);
-
-		const householdRow = rows.find((row) => row.id === householdId);
-		if (newHousehold) householdWritten = !householdRow?.error || householdRow.error === 'conflict';
-		else if (appendPets) householdWritten = Boolean(householdRow) && !householdRow?.error;
-		const failedRows = rows.some(
-			(row) => row.error && row.error !== 'conflict' && !(appendPets && row.id === householdId)
-		);
-
-		for (
-			let retry = 0;
-			appendPets && !householdWritten && retry < HOUSEHOLD_APPEND_RETRIES;
-			retry++
-		) {
-			const latest = await adminFetch<Record<string, unknown>>(
-				`/${dbName}/${encodeURIComponent(householdId)}`
+		let failedRows = false;
+		if (docs.length > 0) {
+			const rows = await adminFetch<Array<{ id?: string; error?: string }>>(
+				`/${dbName}/_bulk_docs`,
+				{ method: 'POST', body: JSON.stringify({ docs }) }
 			);
-			try {
-				await adminFetch(`/${dbName}/${encodeURIComponent(householdId)}`, {
-					method: 'PUT',
-					body: JSON.stringify(withAppendedPets(latest, prepared))
-				});
-				householdWritten = true;
-			} catch (error) {
-				if (!isConflict(error)) throw error;
+			if (!Array.isArray(rows)) throw new PreparedClaimWriteError(false);
+			if (newHousehold) {
+				const householdError = rows.find((row) => row.id === householdId)?.error;
+				const bornElsewhere = householdError === 'conflict' && hasPets;
+				householdWritten = !householdError || (householdError === 'conflict' && !bornElsewhere);
 			}
+			failedRows = rows.some((row) => row.error && row.error !== 'conflict');
+		}
+
+		if (hasPets && !householdWritten) {
+			householdWritten = await appendPetsWithRetry(dbName, prepared);
 		}
 		if (failedRows || !householdWritten) throw new PreparedClaimWriteError(householdWritten);
 	} catch (error) {
@@ -399,25 +414,27 @@ export async function claimUnassignedMembers(
 	);
 	if (toClaim.length === 0) return;
 
+	const base = { shelter_code: shelterCode, device_id: deviceId, member_ids: toClaim };
 	// The BFF does not know the pet ids until prepare answers, so this revert covers members only.
-	const revertBody = {
-		shelter_code: shelterCode,
-		device_id: deviceId,
-		member_ids: toClaim,
-		pet_ids: []
-	};
+	const revertBody = { ...base, pet_ids: [] };
+	const claimPets = await isPetClaimAllowed(shelterCode);
 	let prepared: PreparedUnassignedClaim;
 	try {
 		prepared = await prepareUnassignedClaim(registration.registration_id, {
-			shelter_code: shelterCode,
-			device_id: deviceId,
-			member_ids: toClaim,
-			claim_pets: await isPetClaimAllowed(shelterCode),
+			...base,
+			claim_pets: claimPets,
 			...(options.requiredPersonId ? { required_person_id: options.requiredPersonId } : {})
 		});
 	} catch (error) {
 		// A sent request may have marked the members before the response was lost.
 		if (error instanceof KioskUnassignedUnavailableError) {
+			if (claimPets) {
+				// FR-KUC-12e: pets it may have claimed are not reverted; staff fix them by registration.
+				console.warn('[Kiosk Claim] Prepare lost; pets may stay claimed without Couch', {
+					registration_id: registration.registration_id,
+					shelter_code: shelterCode
+				});
+			}
 			await revertQuietly(registration.registration_id, revertBody);
 		}
 		throw error;
