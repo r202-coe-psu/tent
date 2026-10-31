@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushSync, mount, tick, unmount } from 'svelte';
 import { grantExpiryRange } from '$lib/auth/role-grants';
 import type { Volunteer } from '../domain/volunteer.schema';
+import { toast } from 'svelte-sonner';
 import VolunteerAccessDialog from './volunteer-access-dialog.svelte';
 
 const mocks = vi.hoisted(() => ({
@@ -290,7 +291,7 @@ describe('VolunteerAccessDialog role radios (#1044, #1072)', () => {
 		expect(roleRadios()).toHaveLength(12);
 	});
 
-	it('refuses to save without a role, says why under the radios, and clears once one is picked', async () => {
+	it('refuses to save without a role with a toast and a note under the radios that clears once one is picked', async () => {
 		await render(COORDINATOR);
 		await fillCredentials();
 		await pickExpiry(grantExpiryRange().max);
@@ -301,6 +302,7 @@ describe('VolunteerAccessDialog role radios (#1044, #1072)', () => {
 		expect(
 			document.getElementById('volunteer-access-role-error-volunteer:001')?.textContent
 		).toContain('กรุณาเลือกตำแหน่งหน้าที่');
+		expect(toast.error).toHaveBeenCalledWith('กรุณาเลือกตำแหน่งหน้าที่');
 
 		await pickRole('warehouse_staff');
 		expect(document.getElementById('volunteer-access-role-error-volunteer:001')).toBeNull();

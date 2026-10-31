@@ -148,7 +148,9 @@
 			return;
 		}
 		if (!role) {
+			// Said twice: a toast for the save that did nothing, and under the radios until fixed.
 			roleError = ROLE_REQUIRED_MESSAGE;
+			toast.error(ROLE_REQUIRED_MESSAGE);
 			return;
 		}
 		if (limited) {
