@@ -28,6 +28,7 @@ from .review import REVIEW_FIELDS, item_edit_gate, review_edited_booking, review
 from .schemas import (
     DonationCancelResponse,
     DonationCourierPatchResponse,
+    DonationCreateItem,
     DonationCreateRequest,
     DonationCreateResponse,
     DonationItemInput,
@@ -280,6 +281,11 @@ def _line_key_error(code: str, line_key: str) -> HTTPException:
     )
 
 
+def _same_item(item_id: str | None, held_item_id: str | None) -> bool:
+    """Two lines name the same product; both without an ``item_id`` counts as the same."""
+    return (item_id or None) == (held_item_id or None)
+
+
 def _pair_held_lines(
     items: list[DonationItemInput], held: list[dict[str, Any]]
 ) -> list[DonationItemInput]:
@@ -287,7 +293,10 @@ def _pair_held_lines(
 
     A line sent with a ``line_key`` is that held line: it keeps the key and takes back the
     ``item_id`` and wizard-only fields the edit form cannot send, unless the request
-    carries its own. A line sent without one is new and gets a new key — so does every
+    carries its own. While its ``item_id`` is unchanged it also keeps the held line's
+    ``drop_off_point_id``, ``None`` included, whatever the request sent: the campaign or
+    staff chose that point, not the donor (FR-AP-15). A line sent without a key is new and
+    gets a new key — so does every
     line of a booking from before line keys, whose held lines have none to name. A key
     the booking does not hold, or one named twice, refuses the edit before quota moves.
     """
@@ -309,6 +318,8 @@ def _pair_held_lines(
             for name in ("item_id", *_WIZARD_ONLY_FIELDS)
             if not getattr(item, name) and line.get(name)
         }
+        if _same_item(update.get("item_id", item.item_id), line.get("item_id")):
+            update["drop_off_point_id"] = line.get("drop_off_point_id")
         paired.append(item.model_copy(update=update) if update else item)
     return paired
 
@@ -318,50 +329,21 @@ def _pair_held_lines(
 _NO_POINT_DELIVERY_METHODS = frozenset({"shelter_pickup", "parcel"})
 
 
-def _offered_point_ids(shelter: PublicShelter | None) -> set[str]:
-    return {point.id for point in shelter.donation_points} if shelter else set()
-
-
 def _drop_off_points(
     items: list[DonationItemInput],
     *,
     logistics: dict[str, Any] | None,
-    offered: set[str] | None,
-    strict: bool,
 ) -> list[DonationItemInput]:
-    """CR-206 FR-MP-2..FR-MP-4 — keep each line's drop-off point only where it can stand.
+    """CR-206 FR-MP-4 — a shelter pickup or a parcel reaches the shelter whole, so its
+    lines lose any point the client sent.
 
-    A shelter pickup or a parcel reaches the shelter whole, so its lines lose any point the
-    client sent. Otherwise a point must be one the shelter offers now: on create
-    (``strict``) one that is not refuses the booking before any quota moves (FR-MP-2,
-    FR-MP-3).
-
-    ``offered=None`` skips that check: the donor edit is reachable only through the BFF,
-    which already settled each point against the shelter doc in CouchDB (FR-MP-2a) and
-    nulls the ones no longer offered. The Mongo projection lags that doc, so checking it
-    here would drop a point staff added a moment ago.
+    The point itself is not checked against the shelter: the BFF is the only caller and
+    takes it from the campaign, and the Mongo projection lags CouchDB, so checking it
+    here would refuse a point staff added a moment ago.
     """
-    no_point = (logistics or {}).get("delivery_method") in _NO_POINT_DELIVERY_METHODS
-    kept = []
-    for item in items:
-        point_id = item.drop_off_point_id
-        if point_id is None:
-            kept.append(item)
-            continue
-        if not no_point and (offered is None or point_id in offered):
-            kept.append(item)
-            continue
-        if strict and not no_point:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail={
-                    "success": False,
-                    "error": "UNKNOWN_DROP_OFF_POINT",
-                    "drop_off_point_id": point_id,
-                },
-            )
-        kept.append(item.model_copy(update={"drop_off_point_id": None}))
-    return kept
+    if (logistics or {}).get("delivery_method") not in _NO_POINT_DELIVERY_METHODS:
+        return items
+    return [item.model_copy(update={"drop_off_point_id": None}) for item in items]
 
 
 def _wanted_by_item(items: list[DonationItemInput]) -> dict[str, Decimal]:
@@ -566,14 +548,12 @@ class DonationsUseCase:
                 },
             )
 
-        # CR-206 FR-MP-2..FR-MP-4 — before any quota moves, so a refused point holds nothing.
+        # CR-206 FR-MP-4
         payload = payload.model_copy(
             update={
                 "items": _drop_off_points(
                     payload.items,
                     logistics=payload.logistics,
-                    offered=_offered_point_ids(shelter),
-                    strict=True,
                 )
             }
         )
@@ -731,6 +711,13 @@ class DonationsUseCase:
             tracking_token=tracking_token,
             booking_ref=booking_ref,
             status=buffer.status,
+            items=[
+                DonationCreateItem(
+                    drop_off_point_id=item.get("drop_off_point_id"),
+                    review_status=item["review_status"],
+                )
+                for item in buffer.items_declared
+            ],
         )
 
     async def get_by_tracking_token(self, tracking_token: str) -> DonationTrackingResponse:
@@ -1017,14 +1004,10 @@ class DonationsUseCase:
         now = datetime.now(UTC)
         before = [dict(item) for item in buffer.items_declared]
         items = _pair_held_lines(_carry_item_ids(items, before), previous_items)
-        # CR-206 FR-MP-4 — a parcel or pickup carries no point. Which points the shelter
-        # offers (FR-MP-2a) the BFF has already settled from CouchDB, so the lagging Mongo
-        # projection is not consulted: it would drop a point staff added a moment ago.
+        # CR-206 FR-MP-4 — a parcel or pickup carries no point.
         items = _drop_off_points(
             items,
             logistics=buffer.logistics,
-            offered=None,
-            strict=False,
         )
 
         held = _held_by_item(before)

@@ -27,8 +27,9 @@ class DonationItemInput(BaseModel):
     line_key: str | None = None
     #: CR-206 FR-MP-1 — the drop-off point (``public_shelters.donation_points[].id``) the
     #: donor takes this line to. ``None`` = no point. Only ``self_dropoff`` keeps it
-    #: (FR-MP-4); on create an id the shelter does not offer is refused (FR-MP-2), on an
-    #: edit it is dropped to ``None`` (FR-MP-2a).
+    #: (FR-MP-4). The BFF sets it from the campaign need, never from the donor, and it is
+    #: not checked against ``public_shelters`` (FR-AP-10). On an edit a held line keeps its
+    #: own point while its ``item_id`` is unchanged (FR-AP-15).
     drop_off_point_id: str | None = None
 
 
@@ -98,6 +99,13 @@ class DonationCreateRequest(BaseModel):
         return _checked_vehicle_plate(value)
 
 
+class DonationCreateItem(BaseModel):
+    """One booked line as stored, so the ticket can group by point without a second read."""
+
+    drop_off_point_id: str | None
+    review_status: str
+
+
 class DonationCreateResponse(BaseModel):
     success: bool = True
     tracking_token: str
@@ -105,6 +113,8 @@ class DonationCreateResponse(BaseModel):
     #: The status the booking opened in (CR-174 FR-15): ``verifying`` when every line is
     #: in the campaign and the QR is good at once, else ``pending_review``.
     status: str
+    #: One per request line, same order (FR-AP-8a).
+    items: list[DonationCreateItem]
 
 
 class DonationTrackingResponse(BaseModel):
