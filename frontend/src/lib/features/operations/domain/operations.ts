@@ -424,6 +424,8 @@ export interface CampaignNeed {
 	qty_target: string; // qty_str
 	unit: string;
 	status?: 'open' | 'closed';
+	/** Drop-off point staff set for this need; lines booked against it inherit it. */
+	drop_off_point_id?: string | null;
 }
 
 export interface DonationCampaign extends BaseDoc {
