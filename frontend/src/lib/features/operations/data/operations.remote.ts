@@ -1,4 +1,11 @@
-import { allDocsByIds, bulkDocs, bulkDocsDetailed, getDoc, putDocStrict } from '$lib/db/couch-db';
+import {
+	allDocsByIds,
+	bulkDocs,
+	bulkDocsDetailed,
+	findDocsPage,
+	getDoc,
+	putDocStrict
+} from '$lib/db/couch-db';
 import { createRemoteRepository, type Repository } from '$lib/db/repository';
 import { getShelterCode, getShelterDb } from '$lib/db/shelter';
 import { now, touch, type AuthorContext } from '$lib/db/model';
@@ -131,6 +138,12 @@ export function assertReceiveAgainstCatalog(
 	}
 }
 
+/** Ledger rows of one donation: one per received line, so this is far above any real receipt. */
+const DONATION_LEDGER_LIMIT = 1000;
+
+/** Rows per `_find` round when a set of items' ledger history is read to the end. */
+const LEDGER_PAGE_LIMIT = 1000;
+
 /** Tries at closing a batch receipt while other writes keep moving its `_rev` (S-R14-1). */
 const MAX_CLOSE_ATTEMPTS = 3;
 
@@ -193,6 +206,49 @@ export class OperationsRemoteRepository implements OperationsRepository {
 	async listLedgerByItem(itemId: string): Promise<StockLedger[]> {
 		const ledger = await this.listLedger();
 		return ledger.filter((entry) => entry.item_id === itemId);
+	}
+
+	async listDonationLedger(donationId: string): Promise<StockLedger[]> {
+		const rows = await this.repo.find<StockLedger>({
+			// `item_id` is in the selector so the `['type','ref_id','item_id','reason']` index
+			// covers the query; `$gt: null` keeps every item.
+			selector: {
+				type: 'stock_ledger',
+				ref_id: donationId,
+				item_id: { $gt: null },
+				reason: 'donation'
+			},
+			limit: DONATION_LEDGER_LIMIT
+		});
+		return rows.filter(isStockLedger);
+	}
+
+	async listLedgerByItems(itemIds: readonly string[]): Promise<StockLedger[]> {
+		// One equality read per item, so CouchDB picks `ledger-type-itemid-idx` (`type` + `item_id`):
+		// an `$in` cannot range-scan that index and would read every `stock_ledger` row instead.
+		const perItem = await Promise.all(
+			[...new Set(itemIds)].map((itemId) => this.listLedgerOfItem(itemId))
+		);
+		return perItem.flat();
+	}
+
+	private async listLedgerOfItem(itemId: string): Promise<StockLedger[]> {
+		const rows: StockLedger[] = [];
+		let bookmark: string | null = null;
+		for (;;) {
+			const page: { docs: StockLedger[]; bookmark: string | null } =
+				await findDocsPage<StockLedger>(this.dbName, {
+					selector: { type: 'stock_ledger', item_id: itemId },
+					limit: LEDGER_PAGE_LIMIT,
+					...(bookmark ? { bookmark } : {})
+				});
+			rows.push(...page.docs.filter(isStockLedger));
+			// A short page is the end; a bookmark that does not move would loop forever.
+			if (page.docs.length < LEDGER_PAGE_LIMIT || !page.bookmark || page.bookmark === bookmark) {
+				return rows;
+			}
+			bookmark = page.bookmark;
+		}
 	}
 
 	async listLedgerRefDocs(refIds: readonly string[]): Promise<LedgerRefDoc[]> {
