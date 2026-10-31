@@ -215,6 +215,7 @@ export {
 	useMergeItems,
 	useCampaigns,
 	useStockLedgers,
+	useDonationLots,
 	useDonations,
 	useCreateCampaign,
 	useDonationSlotSchedule,
@@ -265,6 +266,7 @@ export { default as AdjustStockForm } from './ui/adjust-stock-form.svelte';
 export { default as CycleCountForm } from './ui/cycle-count-form.svelte';
 export { default as MergeItemDialog } from './ui/merge-item-dialog.svelte';
 export { default as ItemCombobox } from './ui/item-combobox.svelte';
+export { default as DonationLotsTable } from './ui/donation-lots-table.svelte';
 export { default as StoragePointSelect } from './ui/storage-point-select.svelte';
 export { default as TransferForm } from './ui/transfer-form.svelte';
 export { default as TransferList } from './ui/transfer-list.svelte';
@@ -284,6 +286,7 @@ export {
 	type LotScore,
 	type RankLotsOptions
 } from './domain/lot-priority';
+export { buildDonationLotRows, lotHistoryQuery, type DonationLotRow } from './domain/donation-lots';
 export { expiryInstant, isExpiryPassed } from './domain/expiry-instant';
 export {
 	planLotSplit,

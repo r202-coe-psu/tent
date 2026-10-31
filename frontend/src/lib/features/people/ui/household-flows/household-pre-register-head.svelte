@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { isThaiMobilePhone } from '$lib/db/model';
 	import { onDestroy } from 'svelte';
 	import { toast } from 'svelte-sonner';
 	import { Input } from '$lib/components/ui/input/index.js';
@@ -132,8 +133,7 @@
 			if (noPhone) {
 				$formData.phone = null;
 			} else {
-				const cleanPhone = ($formData.phone ?? '').replace(/\D/g, '');
-				if (cleanPhone.length !== 10) {
+				if (!isThaiMobilePhone($formData.phone)) {
 					$errors.phone = ['กรุณากรอกเบอร์โทรศัพท์ 10 หลัก หรือเลือก "ไม่มีเบอร์โทร"'];
 					toast.error('กรุณากรอกเบอร์โทรศัพท์ 10 หลัก หรือเลือก "ไม่มีเบอร์โทร"');
 					cancel();

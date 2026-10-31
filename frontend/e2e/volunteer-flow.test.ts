@@ -141,8 +141,11 @@ function mintToken(): string {
 		.toUpperCase()}`;
 }
 
+/** Mirrors `normalizeThaiPhone` in `src/lib/db/model.ts` (strips `[\s\-.()]`, `+66`/`66` → `0`). */
 function normalizePhone(value: string): string {
-	return value.replace(/[\s\-()]/g, '');
+	const compact = value.trim().replace(/[\s\-.()]/g, '');
+	const intl = /^\+?66(\d{8,9})$/.exec(compact);
+	return intl ? `0${intl[1]}` : compact;
 }
 
 /** Mirrors `src/lib/db/hash.ts#sha256Hex` so the mock's stored hash fields are

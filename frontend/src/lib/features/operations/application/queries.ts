@@ -33,6 +33,7 @@ import type { MergeItemsInput } from '../domain/item-merge';
 import type { DonationBatchLine } from '../domain/donation-batch';
 import type { CycleCountSubmission } from '../domain/cycle-count';
 import { countPendingTransfers } from '../domain/transfer-pending';
+import { buildDonationLotRows } from '../domain/donation-lots';
 import { labelledLedgerRefIds, ledgerRefLabels } from '../domain/ledger-ref';
 import { digestRefIds, resolveLedgerRefLabels, type LedgerRefLabels } from './ledger-ref-labels';
 import { retryUnlessForbidden } from './transfer-retry';
@@ -52,6 +53,8 @@ export const operationsKeys = {
 	stockLedgers: () => [...operationsKeys.all, 'stockLedgers', getShelterCode()] as const,
 	donations: () => [...operationsKeys.all, 'donations', getShelterCode()] as const,
 	ledger: () => [...operationsKeys.all, 'ledger'] as const,
+	donationLots: (donationId: string) =>
+		[...operationsKeys.all, 'donationLots', getShelterCode(), donationId] as const,
 	byItem: (id: string) => [...operationsKeys.ledger(), id] as const,
 	ledgerRefs: () => [...operationsKeys.all, 'ledgerRefs', getShelterCode()] as const,
 	ledgerRefsFor: (idsDigest: string) => [...operationsKeys.ledgerRefs(), idsDigest] as const,
@@ -163,6 +166,24 @@ export const useLedgerByItem = (itemId: () => string | undefined) =>
 		queryKey: operationsKeys.byItem(itemId() ?? ''),
 		queryFn: () => operationsRepository().listLedgerByItem(itemId() ?? ''),
 		enabled: !!itemId()
+	}));
+
+/**
+ * The lots one donation brought into stock, with what is left of each (#821 FR-12). Two reads,
+ * both bounded: the donation's own ledger rows, then the history of just those items to replay
+ * their per-lot balances. `staleTime: 0` — a balance read a minute ago is a wrong balance.
+ */
+export const useDonationLots = (donationId: () => string | undefined) =>
+	createQuery(() => ({
+		queryKey: operationsKeys.donationLots(donationId() ?? ''),
+		queryFn: async () => {
+			const repo = operationsRepository();
+			const receipts = await repo.listDonationLedger(donationId() ?? '');
+			const itemIds = [...new Set(receipts.map((row) => row.item_id))];
+			return buildDonationLotRows(receipts, await repo.listLedgerByItems(itemIds));
+		},
+		enabled: !!donationId(),
+		staleTime: 0
 	}));
 
 /**

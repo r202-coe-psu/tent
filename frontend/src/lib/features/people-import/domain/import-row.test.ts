@@ -98,6 +98,24 @@ describe('validateRow — cell resolution', () => {
 		expect(result.payload?.head.phone).toBe('0812345678');
 	});
 
+	it('normalises +66 and rejects a 9-digit landline (CR-210)', () => {
+		const intl = validateRow(minimalHead({ [H.phone]: '+66812345678' }), 1, emptyLookups());
+		expect(intl.payload?.head.phone).toBe('0812345678');
+
+		const landline = validateRow(minimalHead({ [H.phone]: '02-222-2222' }), 1, emptyLookups());
+		expect(landline.payload).toBeUndefined();
+		expect(landline.errors.map((e) => e.column)).toContain(H.phone);
+	});
+
+	it('rejects a 9-digit emergency phone', () => {
+		const result = validateRow(
+			minimalHead({ [H.emergency_name]: 'สมหญิง ใจดี', [H.emergency_phone]: '022222222' }),
+			1,
+			emptyLookups()
+		);
+		expect(result.errors.map((e) => e.column)).toContain(H.emergency_phone);
+	});
+
 	it('reads "ไม่มี" as no phone', () => {
 		const result = validateRow(minimalHead({ [H.phone]: 'ไม่มี' }), 1, emptyLookups());
 		expect(result.ok).toBe(true);

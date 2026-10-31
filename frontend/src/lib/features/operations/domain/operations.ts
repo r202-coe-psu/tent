@@ -1348,6 +1348,9 @@ export const walkInDonationInputSchema = z
 			name: z.string().trim().min(1),
 			phone: thaiMobilePhoneSchema,
 			phone_hash: z.string().min(1),
+			// Same rule as the back-office walk-in (`walkInIntakeInputSchema`): a blank is NOT an
+			// email — callers leave the key out, and nothing is stored (#821 FR-11).
+			email: z.string().trim().email().optional(),
 			tax_receipt: z.boolean().optional(),
 			tax_id: z.string().optional()
 		}),
