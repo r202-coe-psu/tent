@@ -1956,6 +1956,11 @@ describe('checkInSelectedMembers kiosk claim of unassigned members', () => {
 			expect(queueCalls(revertUrl)).toEqual([
 				{ shelter_code: shelterCode, device_id: deviceId, member_ids: [], pet_ids: petIds }
 			]);
+			// A rejected household is a failure, not "born elsewhere": no append read or PUT.
+			const householdPath = `/${encodeURIComponent(reservedHouseholdId)}`;
+			expect(mockAdminFetch.mock.calls.filter(([path]) => path.endsWith(householdPath))).toEqual(
+				[]
+			);
 		});
 
 		it('keeps the pets when only a member fails and the household was written', async () => {

@@ -371,7 +371,7 @@ async function writePreparedClaim(
 			failedRows = rows.some((row) => row.error && row.error !== 'conflict');
 		}
 
-		if (hasPets && !householdWritten) {
+		if (hasPets && !householdWritten && !failedRows) {
 			householdWritten = await appendPetsWithRetry(dbName, prepared);
 		}
 		if (failedRows || !householdWritten) throw new PreparedClaimWriteError(householdWritten);
