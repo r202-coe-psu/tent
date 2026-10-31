@@ -490,6 +490,9 @@ class UnassignedKioskPrepareRequest(BaseModel):
     device_id: str = Field(min_length=1)
     member_ids: list[str] = Field(min_length=1, max_length=20)
     required_person_id: str | None = None
+    # CR-189 A1: also claim every open pet of the registration (BFF sends false when the
+    # shelter does not accept pets).
+    claim_pets: bool = False
 
 
 class UnassignedKioskImage(BaseModel):
@@ -507,6 +510,9 @@ class UnassignedKioskPrepareResponse(BaseModel):
     household: dict
     evacuees: list[dict]
     images: list[UnassignedKioskImage]
+    # Pets claimed by *this* call only (CR-189 A1, FR-KUC-12b/12e) — never re-sent on a repeat.
+    pets: list[dict] = Field(default_factory=list)
+    pet_ids: list[str] = Field(default_factory=list)
 
 
 class UnassignedKioskRevertRequest(BaseModel):
@@ -514,11 +520,21 @@ class UnassignedKioskRevertRequest(BaseModel):
 
     shelter_code: str = Field(min_length=1)
     device_id: str = Field(min_length=1)
-    member_ids: list[str] = Field(min_length=1, max_length=20)
+    member_ids: list[str] = Field(default_factory=list, max_length=20)
+    # CR-189 A1: pets this kiosk claimed in the same prepare (FR-KUC-16a).
+    pet_ids: list[str] = Field(default_factory=list, max_length=20)
+
+    @model_validator(mode="after")
+    def _something_to_revert(self) -> UnassignedKioskRevertRequest:
+        # Pets alone are reverted when their members were already born in Couch.
+        if not self.member_ids and not self.pet_ids:
+            raise ValueError("member_ids or pet_ids is required")
+        return self
 
 
 class UnassignedKioskRevertResponse(BaseModel):
     reverted: list[str]
+    reverted_pets: list[str] = Field(default_factory=list)
 
 
 class UnassignedRegistrationStatsResponse(BaseModel):

@@ -5922,7 +5922,8 @@
 					"required_person_id": {
 						"anyOf": [{ "type": "string" }, { "type": "null" }],
 						"title": "Required Person Id"
-					}
+					},
+					"claim_pets": { "type": "boolean", "title": "Claim Pets", "default": false }
 				},
 				"type": "object",
 				"required": ["shelter_code", "device_id", "member_ids"],
@@ -5943,7 +5944,13 @@
 						"items": { "$ref": "#/components/schemas/UnassignedKioskImage" },
 						"type": "array",
 						"title": "Images"
-					}
+					},
+					"pets": {
+						"items": { "additionalProperties": true, "type": "object" },
+						"type": "array",
+						"title": "Pets"
+					},
+					"pet_ids": { "items": { "type": "string" }, "type": "array", "title": "Pet Ids" }
 				},
 				"type": "object",
 				"required": ["registration_id", "shelter_code", "household", "evacuees", "images"],
@@ -5957,18 +5964,28 @@
 						"items": { "type": "string" },
 						"type": "array",
 						"maxItems": 20,
-						"minItems": 1,
 						"title": "Member Ids"
+					},
+					"pet_ids": {
+						"items": { "type": "string" },
+						"type": "array",
+						"maxItems": 20,
+						"title": "Pet Ids"
 					}
 				},
 				"type": "object",
-				"required": ["shelter_code", "device_id", "member_ids"],
+				"required": ["shelter_code", "device_id"],
 				"title": "UnassignedKioskRevertRequest",
 				"description": "Kiosk claim revert — give back members this kiosk marked when the Couch write failed."
 			},
 			"UnassignedKioskRevertResponse": {
 				"properties": {
-					"reverted": { "items": { "type": "string" }, "type": "array", "title": "Reverted" }
+					"reverted": { "items": { "type": "string" }, "type": "array", "title": "Reverted" },
+					"reverted_pets": {
+						"items": { "type": "string" },
+						"type": "array",
+						"title": "Reverted Pets"
+					}
 				},
 				"type": "object",
 				"required": ["reverted"],

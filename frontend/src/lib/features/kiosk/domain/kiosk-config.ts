@@ -3,6 +3,7 @@ type KioskShelterConfig = {
 		kiosk_phone_check_in_enabled?: unknown;
 		kiosk_thaid_check_in_enabled?: unknown;
 		kiosk_walk_in_registration_enabled?: unknown;
+		allow_pets?: unknown;
 	} | null;
 } | null;
 
@@ -18,4 +19,9 @@ export function isKioskThaidCheckInEnabled(shelter: KioskShelterConfig): boolean
 
 export function isKioskWalkInRegistrationEnabled(shelter: KioskShelterConfig): boolean {
 	return shelter?.feature_flags?.kiosk_walk_in_registration_enabled === true;
+}
+
+/** FR-KUC-12a: the kiosk claim brings pets only to a shelter that takes them; non-true stays off. */
+export function isKioskPetClaimEnabled(shelter: KioskShelterConfig): boolean {
+	return shelter?.feature_flags?.allow_pets === true;
 }
