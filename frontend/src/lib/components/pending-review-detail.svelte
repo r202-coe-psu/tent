@@ -572,7 +572,7 @@
 												>
 													<Select.Trigger
 														id="review-line-{idx}-point"
-														class="h-11 w-full rounded-xl text-base data-[size=default]:h-11 sm:max-w-sm"
+														class="h-11 w-full rounded-xl text-base data-[size=default]:h-11"
 													>
 														<span class="truncate {picked ? '' : 'text-slate-500'}">
 															{picked?.name ?? 'เลือกจุดรับบริจาค'}
