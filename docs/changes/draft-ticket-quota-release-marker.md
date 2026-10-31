@@ -3,17 +3,20 @@ id: draft
 title: ยกเลิกการสมัครจากบัตรดิจิทัล — คืนโควตาครั้งเดียวพอดีเมื่อกดซ้ำหลังคืนโควตาล้ม (marker บนใบสมัคร + ledger บน job)
 status: proposed
 date: 2026-10-29
+updated: 2026-10-31
 requested_by: "#1003 (ผู้เปิด @Mhapong) — follow-up ของ D4 ใน CR-212 (review PR #999 B4)"
 decided_by: รอ approve (@Jackyzaz)
 layer: volatile
 affects:
   - docs/changes/06-A-volunteer/CR-212-ticket-cancel-rules.md (FR-3 แถว "รวมยกเลิกซ้ำ", FR-4 ทั้งข้อรวม "ข้อจำกัดที่รู้ — โควตาขาด 1", AC-2, AC-3)
   - docs/data/schema.md §2.18 `job_application` (+`quota_release_due_at`, +`quota_released_at`) · schema_v 3 → 4
-  - docs/data/schema.md §2.9 `shift_assignment` (+`cancel_application_id`) · schema_v 5 → 6 (หรือ 6 → 7 ถ้า CR ของ #885 merge ก่อน)
+  - docs/data/schema.md §2.9 `shift_assignment` (+`cancel_application_id`) · schema_v 5 → 6
   - docs/data/schema.md §2.17 `job` (+`released_application_ids`) · schema_v 3 → 4
   - frontend/src/lib/features/volunteers/server/public-ticket.ts (`cancelTicket`, `cancelLinkedAssignments`, `markApplicationCancelled`, `readCancellableApplication`, `isTicketCancellable`)
   - frontend/src/lib/features/volunteers/server/public-schedule-action.ts (`releaseJobQuota` รับ idempotency key)
   - frontend/src/routes/api/public/v1/volunteer/ticket/[token]/+server.ts (`can_cancel`)
+  - frontend/src/lib/features/volunteer-portal/ui/digital-pass.svelte (แสดงปุ่มยกเลิกตาม `can_cancel` อย่างเดียว — FR-7)
+  - frontend/src/lib/features/volunteers/data/job.remote.ts (`JobRemoteRepository#update` merge `released_application_ids` — FR-9)
   - frontend/src/lib/features/volunteers/domain/{job-application.schema.ts,shift-assignment.schema.ts,job.schema.ts} (Zod รับ field ใหม่ + schema_v ใหม่)
   - frontend/src/lib/features/volunteers/server/public-ticket.test.ts · public-schedule-action.test.ts · routes/api/public/v1/volunteer/ticket/[token]/ticket.test.ts
   - VDU frontend/src/lib/server/shelter-access-design.ts — ไม่เปลี่ยน (ดู Impact)
@@ -85,7 +88,8 @@ migration: เพิ่ม field แบบ optional ทั้งหมด อ่
 - **FR-6 การทำต่อไม่ตรวจเวลาเริ่มกะ:** กรณี "ทำต่อ" ใน FR-5 ไม่ใช้เงื่อนไขกะยังไม่เริ่มของ CR-212 FR-2 เพราะใบถูกยกเลิกไปแล้วก่อนกะเริ่ม เหลือแค่คืนโควตา
   - **ข้อจำกัดที่รู้ (เคาะ 2026-10-29):** ใบที่มีกะงานผูก (FR-3) ที่คืนโควตาล้มแล้วกะเริ่มก่อนกดซ้ำ ใบยัง `confirmed` จึงติด CR-212 FR-2 → 409 `SHIFT_STARTED` และกะขาด 1 ที่ — ระบบไม่แก้ให้ เจ้าหน้าที่ปรับตัวนับเอง (เกิดเมื่อคืนล้ม **และ** ไม่มีใครกดซ้ำก่อนกะเริ่มเท่านั้น)
 - **FR-7 GET `can_cancel`:** คืน `true` สำหรับใบในสถานะ "ทำต่อ" ของ FR-5 ด้วย (อ่านจากใบสมัครอย่างเดียว) เพื่อให้กดซ้ำได้หลังรีเฟรช
-  - บัตรแสดงปุ่มยกเลิกเดิม ไม่เพิ่ม field หรือข้อความใหม่ใน response / UI
+  - บัตรแสดงปุ่มยกเลิกเดิม ไม่เพิ่ม field หรือข้อความใหม่ใน response
+  - `digital-pass.svelte` แสดงปุ่มยกเลิกเมื่อ `ticket.can_cancel` เท่านั้น — ตัดเงื่อนไข `ticket.status !== 'cancelled'` ออก (ใบที่ไม่มีกะงานผูกในสถานะ "ทำต่อ" เป็น `cancelled` แล้ว เงื่อนไขเดิมจะซ่อนปุ่มหลังรีเฟรช) — `can_cancel` จาก BFF เป็นตัวตัดสินที่เดียว
 - **FR-8 คำขอพร้อมกัน:**
   - ยกเลิก 2 ครั้งพร้อมกัน ใบที่มีกะงานผูก: เขียนกะงานชนกัน ฝั่งที่แพ้อ่านใหม่เห็น `cancelled` ข้ามไป ทั้งคู่เห็นตราของใบนี้และเรียก FR-1 ฝั่งที่แพ้ `_rev` ของ `job` อ่านใหม่เจอ key แล้วไม่เขียน เขียนใบสมัครชนกัน ฝั่งที่แพ้ได้ 409 `NOT_CANCELLABLE`
   - ยกเลิก 2 ครั้งพร้อมกัน ใบที่ไม่มีกะงานผูก: ฝั่งที่แพ้การเขียนใบสมัครอ่านใหม่เจอสถานะ "ทำต่อ" จึงทำต่อ (FR-5) ledger กันคืนซ้ำ ทั้งคู่ได้สำเร็จ เมื่อมี `quota_released_at` แล้ว คำขอถัดไปได้ 409
@@ -94,7 +98,9 @@ migration: เพิ่ม field แบบ optional ทั้งหมด อ่
   - Zod `jobApplicationSchema`, `shiftAssignmentSchema`, `jobSchema` รับ field ใหม่ (optional) และ `schema_v` ใหม่ ไม่อย่างนั้น `parse` ตอนบันทึกของเจ้าหน้าที่จะตัด field ทิ้ง (ledger หาย = กดซ้ำคืนเกิน) และ `isJobApplication` จะกรองใบ v4 ออกจากรายการ
   - เจ้าหน้าที่ยกเลิกใบ (`JobApplicationRemoteRepository#cancel`): ทำได้เฉพาะ `pending_review` ไม่มีโควตา ไม่เปลี่ยน logic
   - เจ้าหน้าที่ถอดออกจากกะ (`ShiftAssignmentRemoteRepository#unassign`) และถอนตัวจาก portal (`applyPublicScheduleAction` withdraw): คืนโควตาเองต่อกะงาน ไม่เขียนตราและไม่ใช้ ledger — คงเดิม
-  - แก้ไขงาน / ตัวนับของเจ้าหน้าที่ (`JobRemoteRepository` `mutateQuota`, save): คง `released_application_ids` ไว้
+  - แก้ไขงาน / ตัวนับของเจ้าหน้าที่ (`JobRemoteRepository` `mutateQuota`, `update`): คง `released_application_ids` ไว้
+    - `update(job)` สร้างเอกสารจากฟอร์ม (`...job`) แล้วเขียนทับ `latest` — ต้อง merge `released_application_ids` = union ของ `latest.released_application_ids` กับ `job.released_application_ids` (ตัดซ้ำ) แบบเดียวกับที่คง `slots_confirmed` / `slots_dispatched` จาก `latest` ไม่อย่างนั้นฟอร์มที่เปิดค้างไว้ก่อน ticket cancel จะลบ ledger แล้วกดซ้ำคืนเกิน
+    - Zod `jobSchema`: `released_application_ids: z.array(z.string()).default([])` — doc ที่ไม่มี field ได้ `[]` (ความหมายเดียวกับไม่มีค่า) ไม่ต้อง null-check
 - **FR-10 นอกขอบเขต:** ถอนตัวจาก portal ที่คืนโควตาล้มหลังยกเลิกกะงานก็ขาด 1 แบบเดียวกัน (กดซ้ำได้ `SHIFT_NOT_WITHDRAWABLE`) — แก้ใน issue follow-up แยก ไม่อยู่ใน CR นี้
 
 ### CR-212 (before → after)
@@ -117,28 +123,28 @@ migration: เพิ่ม field แบบ optional ทั้งหมด อ่
 - **AC-4 (ledger):** เรียก `releaseJobQuota` ด้วย key เดิม 2 ครั้ง ตัวนับลด 1 ครั้ง และ `released_application_ids` มี key ครั้งเดียว · ไม่ส่ง key ทำงานแบบเดิม
 - **AC-5 (ถอนตัวมาก่อน):** กะงานถูกถอนตัวจาก portal แล้ว (ไม่มีตรา) ยกเลิกใบจากบัตร → ใบ `cancelled` โควตาไม่คืนเพิ่ม ไม่มี `quota_released_at`
 - **AC-6 (พร้อมกัน):** ยกเลิก 2 คำขอพร้อมกัน (ทั้งสองทาง) โควตาคืนรวม 1 ครั้ง
-- **AC-7 (เจ้าหน้าที่บันทึกทับ):** เจ้าหน้าที่แก้ไขงานหลัง ticket cancel แล้ว `released_application_ids` ยังอยู่ · รายการใบสมัครฝั่งเจ้าหน้าที่แสดงใบ schema_v 4 ครบ
+- **AC-7 (เจ้าหน้าที่บันทึกทับ):** เจ้าหน้าที่แก้ไขงานหลัง ticket cancel แล้ว `released_application_ids` ยังอยู่ รวมกรณีเปิดฟอร์มแก้ไขค้างไว้**ก่อน** ticket cancel แล้วบันทึกทีหลัง (`update` merge จาก `latest`) · รายการใบสมัครฝั่งเจ้าหน้าที่แสดงใบ schema_v 4 ครบ
 - **AC-8 (ใบ `pending_review`):** ยกเลิกแล้วไม่มี `quota_release_due_at` / `quota_released_at` และไม่แตะ `job`
-- **AC-9 (GET):** ใบในสถานะ "ทำต่อ" ได้ `can_cancel = true` และบัตรแสดงปุ่มยกเลิกเดิม (FR-7) · ใบที่คืนครบแล้วได้ `false`
+- **AC-9 (GET):** ใบในสถานะ "ทำต่อ" ได้ `can_cancel = true` และบัตรแสดงปุ่มยกเลิกเดิม แม้ใบเป็น `cancelled` แล้ว (ใบที่ไม่มีกะงานผูก) หลังรีเฟรชหน้า (FR-7) · ใบที่คืนครบแล้วได้ `false`
 - **AC-10 (กะเริ่มแล้ว — ข้อจำกัด FR-6):** ใบมีกะงานผูกที่คืนล้ม แล้วกดซ้ำหลังกะเริ่ม → 409 `SHIFT_STARTED` ไม่เขียนอะไร
 
 ## Impact
 
-- **code:** `public-ticket.ts` (FR-3–FR-7), `public-schedule-action.ts` `releaseJobQuota` (FR-1), GET `ticket/[token]/+server.ts` (FR-7), Zod 3 ไฟล์ใน `volunteers/domain/` (FR-9)
-- **test:** `public-ticket.test.ts` (AC-1–AC-3, AC-5, AC-6, AC-8), `public-schedule-action.test.ts` (AC-4), `ticket.test.ts` (AC-9), test ของ Zod / repository (AC-7)
+- **code:** `public-ticket.ts` (FR-3–FR-7), `public-schedule-action.ts` `releaseJobQuota` (FR-1), GET `ticket/[token]/+server.ts` (FR-7), `digital-pass.svelte` เงื่อนไขปุ่มยกเลิก (FR-7), `job.remote.ts` `update` merge ledger (FR-9), Zod 3 ไฟล์ใน `volunteers/domain/` (FR-9)
+- **test:** `public-ticket.test.ts` (AC-1–AC-3, AC-5, AC-6, AC-8), `public-schedule-action.test.ts` (AC-4), `ticket.test.ts` + dom test ของ `digital-pass` (AC-9), test ของ Zod / `job.remote` `update` (AC-7)
 - **VDU (`shelter-access-design.ts`):** ไม่เปลี่ยน — VDU ของ shelter DB ตรวจ `job_application` / `job` / `shift_assignment` แค่ envelope (`schema_v`, `shelter_code` ฯลฯ) และ type whitelist ไม่ตรวจ field หรือค่า `schema_v` ราย type field ใหม่จึงผ่านทั้ง public writer และ session ของเจ้าหน้าที่ ไม่ต้อง bump design version
   - ไม่เพิ่มกฎ VDU (write-once / append-only) — เจ้าหน้าที่แก้ตัวนับโควตาเองได้อยู่แล้ว กฎเพิ่มไม่ปิดช่องจริง
 - **worker / Mongo / FastAPI:** projector ของ 3 type เลือก field แบบ whitelist field ใหม่ไม่ถูก project ไม่ bump `PROJECTION_VERSION` ไม่ต้อง regenerate OpenAPI
 - **ขนาด ledger:** `released_application_ids` โตตามจำนวนใบที่ยกเลิกจากบัตรต่องาน (หลักสิบ) ไม่ต้องตัดทิ้ง
 - **CR-212:** แก้ FR-3, FR-4, AC-2, AC-3 ตามตาราง before → after เมื่อ draft นี้ approve
-- **ชน `schema_v` กับ CR ของ #885:** draft-shift-attendance-confirmation bump `shift_assignment` 5 → 6 เช่นกัน — CR ที่ merge ทีหลังใช้เลขถัดไป (6 → 7); ทั้งสองเป็น additive (field optional) ไม่ชนกันที่รูปร่าง doc
+- **`schema_v` ของ `shift_assignment`:** 5 → 6 — CR ของ #885 ที่เคย bump เลขเดียวกันถูกยกเลิกแล้ว (2026-10-30) จึงไม่ชน
 - **follow-up:** เปิด issue แยกสำหรับถอนตัวจาก portal ที่คืนโควตาล้ม (FR-10)
 
 ## Migration
 
-- **schema_v:** `job_application` 3 → 4, `shift_assignment` 5 → 6 (6 → 7 ถ้า CR ของ #885 merge ก่อน), `job` 3 → 4
+- **schema_v:** `job_application` 3 → 4, `shift_assignment` 5 → 6, `job` 3 → 4
   - Zod ทั้ง 3 type รับทั้งเวอร์ชันเดิมและใหม่ — `job` ปัจจุบันเป็น `z.literal(3)` ต้องรับ 4 **ใน PR เดียวกับทางเขียน** ไม่อย่างนั้นหน้างานของเจ้าหน้าที่ parse doc v4 ไม่ผ่าน
-  - writer ที่เขียน field ใหม่ (BFF ticket cancel) เขียนเวอร์ชันใหม่ · factory ของ frontend (`createJob` ฯลฯ) เขียนเวอร์ชันใหม่ · worker inbound (`volunteer_applications.py`) เขียนเวอร์ชันเดิมต่อได้ (ทาง legacy)
+  - writer ที่เขียน field ใหม่ (BFF ticket cancel) เขียนเวอร์ชันใหม่ · factory ของ frontend (`makeJob`, `makeJobApplication`, `makeShiftAssignment`) เขียนเวอร์ชันใหม่ · worker inbound (`volunteer_applications.py`) เขียนเวอร์ชันเดิมต่อได้ (ทาง legacy)
 - **doc เดิม:** ไม่ backfill — ไม่มี field = ไม่ค้างคืน / ไม่มีตรา / ledger ว่าง ซึ่งตรงกับพฤติกรรมเดิม
   - ใบที่ยกเลิกก่อน deploy และโควตาขาด 1 อยู่แล้ว (ข้อจำกัด D4) ระบบไม่แก้ให้ เจ้าหน้าที่ปรับตัวนับเอง
   - กะงานที่ `cancelled` ก่อน deploy ไม่มีตรา จึงไม่ถูกนับว่าค้างคืน (กันคืนเกินให้กะที่ถอนตัวไปแล้ว)
@@ -154,4 +160,5 @@ migration: เพิ่ม field แบบ optional ทั้งหมด อ่
   - FR-10 — ถอนตัวจาก portal คืนล้ม: issue follow-up แยก นอกขอบเขต (ตัดทิ้ง: ใช้ตรา + ledger กับ withdraw รอบนี้)
   - VDU — ไม่เพิ่มกฎ (ตัดทิ้ง: write-once / append-only)
   - schema_v — bump ทั้ง 3 type: `job_application` 3→4, `shift_assignment` 5→6, `job` 3→4; `job` Zod literal รับ 4 ใน PR เดียวกัน (ตัดทิ้ง: additive ไม่ bump)
+- 2026-10-31 — แก้ตาม review ของ @Jackyzaz (PR #1031): B1 `digital-pass.svelte` แสดงปุ่มตาม `can_cancel` อย่างเดียว (FR-7, AC-9) · W1 `JobRemoteRepository#update` merge `released_application_ids` แบบ union (FR-9, AC-7) · S1 ชื่อ factory `makeJob` / `makeJobApplication` / `makeShiftAssignment` · S2 `jobSchema` `.default([])` · N1 `save` → `update` · ตัดหมายเหตุชน `schema_v` กับ #885 (ยกเลิกแล้ว)
 - รอ approve จาก @Jackyzaz
