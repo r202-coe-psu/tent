@@ -4,6 +4,7 @@
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { toast } from 'svelte-sonner';
+	import { ServiceRequestError } from '$lib/api/service';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { FORCE_SETUP_ROUTE, LANDING_ROUTE, resolvePostLoginDestination } from '$lib/guards/auth';
@@ -97,9 +98,13 @@
 		} catch (err) {
 			// Server messages are Thai (password policy, missing answer); anything else falls back.
 			const message = err instanceof Error ? err.message : '';
-			serverError = /[\u0E00-\u0E7F]/.test(message)
-				? message
-				: 'ไม่สามารถบันทึกการตั้งค่าได้ กรุณาลองใหม่อีกครั้ง';
+			if (err instanceof ServiceRequestError && err.status === 401) {
+				serverError = 'เซสชันหมดอายุหรือยังไม่ได้เข้าสู่ระบบ กรุณาเข้าสู่ระบบใหม่';
+			} else {
+				serverError = /[\u0E00-\u0E7F]/.test(message)
+					? message
+					: 'ไม่สามารถบันทึกการตั้งค่าได้ กรุณาลองใหม่อีกครั้ง';
+			}
 		} finally {
 			loading = false;
 		}

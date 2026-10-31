@@ -109,6 +109,23 @@ describe('/force-setup errors under each field (#1065)', () => {
 		expect(mocks.toastError).not.toHaveBeenCalled();
 	});
 
+	it('asks to sign in again when the session is gone (401)', async () => {
+		const { ServiceRequestError } = await import('$lib/api/service');
+		mocks.submit.mockRejectedValue(new ServiceRequestError('Authentication required', 401));
+		await render();
+		const select = document.getElementById('security-question-select') as HTMLSelectElement;
+		select.value = 'high_school';
+		select.dispatchEvent(new Event('change', { bubbles: true }));
+		type('security-question-answer', 'โรงเรียน');
+		type('force-setup-new-password', 'Shelter-2569x');
+		type('force-setup-confirm-password', 'Shelter-2569x');
+		await submit();
+
+		expect(document.querySelector('[role="alert"]')?.textContent?.trim()).toBe(
+			'เซสชันหมดอายุหรือยังไม่ได้เข้าสู่ระบบ กรุณาเข้าสู่ระบบใหม่'
+		);
+	});
+
 	it('replaces an English server message with a Thai one', async () => {
 		mocks.submit.mockRejectedValue(new Error('Internal error'));
 		await render();
