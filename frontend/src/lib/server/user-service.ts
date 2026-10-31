@@ -693,6 +693,55 @@ export async function readVolunteerAccount(input: {
 	};
 }
 
+/** One volunteer account as the shelter's volunteer table shows it (#1044). */
+export type ShelterVolunteerAccount = {
+	volunteer_id: string;
+	name: string;
+	active: boolean;
+	/** Coordinator grants in this shelter, each with its expiry. */
+	grants: { role: string; expires_at: string }[];
+	/** Roles a manager gave in this shelter (no expiry). */
+	permanent_roles: string[];
+};
+
+/**
+ * The accounts linked to a shelter's volunteer profiles, read in one request (#1044). A profile
+ * whose `user_name` points at no account, or at an account linked to another volunteer, is left
+ * out. Kept even when it holds nothing in the shelter any more: that is the "expired" state.
+ */
+export async function readShelterVolunteerAccounts(
+	links: readonly { volunteer_id: string; name: string }[],
+	shelterCode: string
+): Promise<ShelterVolunteerAccount[]> {
+	if (links.length === 0) return [];
+	// `_all_docs` keys are raw doc ids; `userDocId` is URL-encoded for paths.
+	const idOf = (name: string) => `${USER_PREFIX}${name}`;
+	const res = await adminRaw('/_users/_all_docs?include_docs=true', 'POST', {
+		keys: [...new Set(links.map((link) => idOf(link.name)))]
+	});
+	if (res.status >= 400) throw serviceErrorFromCouch('read users', res.status, res.data);
+	const rows = (res.data as { rows?: { key: string; doc?: CouchUserDoc | null }[] })?.rows ?? [];
+	const docs = new Map(rows.flatMap((row) => (row.doc ? [[row.key, row.doc] as const] : [])));
+	return links.flatMap((link) => {
+		const doc = docs.get(idOf(link.name));
+		// An account without `volunteer_id` predates the link (#891): the profile's name decides.
+		if (!doc || (doc.volunteer_id && doc.volunteer_id !== link.volunteer_id)) return [];
+		const grants = (doc.role_grants ?? []).filter((g) => g.shelter_code === shelterCode);
+		const granted = new Set(grants.map((g) => g.role));
+		return [
+			{
+				volunteer_id: link.volunteer_id,
+				name: doc.name,
+				active: doc.active ?? true,
+				grants: grants.map((g) => ({ role: g.role, expires_at: g.expires_at })),
+				permanent_roles: capabilitiesForShelter(doc.roles ?? [], shelterCode).filter(
+					(role) => !granted.has(role)
+				)
+			}
+		];
+	});
+}
+
 /** List users, scoped: SA sees all; a manager sees users with their managed shelter scope. */
 export async function listUsers(caller: Caller): Promise<UserSummary[]> {
 	const bootstrap = bootstrapAdminName();

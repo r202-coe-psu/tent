@@ -263,6 +263,20 @@ test.describe('Volunteer access: grant dialog', { tag: TAGS }, () => {
 		await page.goto('/back-office/volunteers?tab=people');
 		await page.getByPlaceholder('ค้นหาชื่อ นามสกุล เบอร์โทร, รหัส...').fill(firstName);
 
+		// Access follows the identity check (#1044): until then the button opens that check.
+		await expect(page.getByTestId('volunteer-account-status')).toContainText('ยังไม่มีบัญชีระบบ');
+		await page.getByRole('button', { name: 'ยืนยันตัวตนก่อนออกสิทธิ์' }).click();
+		await expect(page.getByRole('dialog')).toBeVisible();
+		await page.keyboard.press('Escape');
+		const unverified = await getDocument(SHELTER_DB, volunteerId);
+		await putDocument(SHELTER_DB, {
+			...unverified,
+			identity_verified: true,
+			identity_verification: { status: 'verified', reviewed_by: manager.name }
+		});
+		await page.reload();
+		await page.getByPlaceholder('ค้นหาชื่อ นามสกุล เบอร์โทร, รหัส...').fill(firstName);
+
 		await grantDistributionStaff(page);
 		await expect(page.getByText(`สร้างบัญชี (${email}) และออกสิทธิ์แล้ว`)).toBeVisible();
 
@@ -276,6 +290,10 @@ test.describe('Volunteer access: grant dialog', { tag: TAGS }, () => {
 		// relinking an existing account without touching its password is unit-tested.
 		await expect(page.getByRole('link', { name: 'จัดการบัญชีผู้ใช้' })).toBeVisible();
 		await expect(page.getByRole('button', { name: 'ออกสิทธิ์ใช้งานระบบ' })).toHaveCount(0);
+		// The row says what the account may do here: a manager's role has no expiry.
+		await expect(page.getByTestId('volunteer-account-status')).toContainText(
+			/เจ้าหน้าที่แจกจ่าย\s*· ถาวร/
+		);
 		await page.context().close();
 
 		await seedSecurityQuestion(email);
@@ -505,6 +523,33 @@ test.describe('Volunteer access: coordinator limits (#955)', { tag: TAGS }, () =
 		).resolves.toMatchObject({ status: 200 });
 		const renewed = await getDocument('_users', `org.couchdb.user:${grantEmail}`);
 		expect(renewed?.role_grants as unknown[], 'renewed, not duplicated').toHaveLength(1);
+	});
+
+	test('the people tab shows the granted role with its last day, and offers to edit it', async ({
+		browser
+	}) => {
+		// The API grants above skip the client step that links the profile to the account.
+		const profile = await getDocument(SHELTER_DB, verifiedId);
+		await putDocument(SHELTER_DB, { ...profile, user_name: grantEmail });
+		const page = await openAs(browser, coordinator);
+		await page.goto('/back-office/volunteers?tab=people');
+		await page.getByPlaceholder('ค้นหาชื่อ นามสกุล เบอร์โทร, รหัส...').fill(`E2EV${RUN_ID}`);
+		const status = page.getByTestId('volunteer-account-status');
+		await expect(status).toContainText('มีบัญชีแล้ว');
+		await expect(status).toContainText('เจ้าหน้าที่ครัว');
+		await expect(status).toContainText('· ถึง');
+		await page.getByRole('button', { name: 'แก้ไขสิทธิ์ใช้งาน' }).click();
+		await expect(
+			page.getByRole('dialog').getByRole('radio', { name: 'เจ้าหน้าที่ครัว', exact: true })
+		).toBeChecked();
+		await page.keyboard.press('Escape');
+
+		// Not verified here: the button opens the identity check instead of the grant (#1044).
+		await page.getByPlaceholder('ค้นหาชื่อ นามสกุล เบอร์โทร, รหัส...').fill(`E2EU${RUN_ID}`);
+		await expect(page.getByRole('button', { name: 'ออกสิทธิ์ใช้งานระบบ' })).toHaveCount(0);
+		await page.getByRole('button', { name: 'ยืนยันตัวตนก่อนออกสิทธิ์' }).click();
+		await expect(page.getByText('ต้องยืนยันตัวตนอาสาสมัครก่อนจึงจะออกสิทธิ์ได้')).toBeVisible();
+		await page.context().close();
 	});
 
 	for (const [label, over, status] of [

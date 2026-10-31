@@ -77,17 +77,14 @@
 		limited ? COORDINATOR_GRANTABLE_CAPABILITIES : STAFF_CAPABILITIES
 	);
 	const expiryRange = $derived(grantExpiryRange());
-	// Identity verified in another shelter (same phone AND national ID) is only known to the
-	// server, so a volunteer with both may still be granted; one missing either cannot be.
+	// Access is given only once the identity is verified in this shelter (#1044), whoever grants.
+	// Revoking an existing grant stays open.
 	const unverifiedHere = $derived(identityVerificationStatus(volunteer) !== 'verified');
-	const canCheckElsewhere = $derived(
-		loginPhone !== null && Boolean(volunteer.national_id_hash || volunteer.national_id)
-	);
 	const blockedReason = $derived(
 		phoneBlocksAccess
 			? VOLUNTEER_ACCESS_PHONE_MESSAGE
-			: limited && unverifiedHere && !canCheckElsewhere
-				? 'อาสาสมัครยังไม่ยืนยันตัวตนในศูนย์นี้ และไม่มีเบอร์โทรหรือเลขบัตรประชาชนให้ตรวจผลยืนยันจากศูนย์อื่น จึงออกสิทธิ์ไม่ได้'
+			: unverifiedHere
+				? 'อาสาสมัครยังไม่ยืนยันตัวตนในศูนย์นี้ กรุณายืนยันตัวตนก่อนจึงจะออกสิทธิ์ได้'
 				: null
 	);
 	// The caller's own grants can be taken back here (FR-8); the BFF refuses anyone else's.
@@ -165,8 +162,8 @@
 	async function submit() {
 		if (pending) return;
 		submitError = null;
-		if (phoneBlocksAccess) {
-			toast.error(VOLUNTEER_ACCESS_PHONE_MESSAGE);
+		if (blockedReason) {
+			toast.error(blockedReason);
 			return;
 		}
 		if (!role) {
@@ -490,18 +487,12 @@
 					</p>
 				</div>
 
-				{#if blockedReason}
-					<p role="alert" class="text-sm font-medium text-destructive">{blockedReason}</p>
-				{:else if unverifiedHere}
-					<p class="rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs text-amber-800">
-						อาสาสมัครยังไม่ยืนยันตัวตนในศูนย์นี้
-						ระบบจะตรวจผลยืนยันจากศูนย์อื่นที่เบอร์โทรและเลขบัตรประชาชนตรงกัน หากไม่พบ
-						จะออกสิทธิ์ไม่ได้
-					</p>
-				{/if}
 				{#if submitError}
 					<p role="alert" class="text-sm font-medium text-destructive">{submitError}</p>
 				{/if}
+			{/if}
+			{#if blockedReason}
+				<p role="alert" class="text-sm font-medium text-destructive">{blockedReason}</p>
 			{/if}
 
 			<div class="space-y-3 rounded-xl border border-border p-4">

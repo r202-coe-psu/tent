@@ -3,12 +3,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const {
 	adminRaw,
 	grantCoordinatorRole,
+	readShelterVolunteerAccounts,
 	readVolunteerAccount,
 	revokeCoordinatorGrant,
 	shelterRefs
 } = vi.hoisted(() => ({
 	adminRaw: vi.fn(),
 	grantCoordinatorRole: vi.fn(),
+	readShelterVolunteerAccounts: vi.fn(),
 	readVolunteerAccount: vi.fn(),
 	revokeCoordinatorGrant: vi.fn(),
 	shelterRefs: vi.fn()
@@ -28,6 +30,7 @@ vi.mock('$lib/server/couch-admin', () => ({
 }));
 vi.mock('$lib/server/user-service', () => ({
 	grantCoordinatorRole,
+	readShelterVolunteerAccounts,
 	readVolunteerAccount,
 	revokeCoordinatorGrant
 }));
@@ -36,6 +39,7 @@ vi.mock('./public-schedule-action', () => ({ shelterRefs }));
 import { sha256Hex } from '$lib/db/hash';
 import {
 	grantVolunteerAccessAsCoordinator,
+	listShelterVolunteerAccounts,
 	listVolunteerGrantsAsCoordinator,
 	revokeVolunteerAccessAsCoordinator
 } from './volunteer-access-grant';
@@ -507,5 +511,60 @@ describe('listVolunteerGrantsAsCoordinator', () => {
 			list({ shelter_code: 'SH002', volunteer_id: 'volunteer:V1' })
 		).rejects.toMatchObject({ code: 'FORBIDDEN' });
 		expect(adminRaw).not.toHaveBeenCalled();
+	});
+});
+
+describe('listShelterVolunteerAccounts (#1044)', () => {
+	beforeEach(() => {
+		vi.clearAllMocks();
+		adminRaw.mockResolvedValue({
+			status: 200,
+			data: {
+				docs: [
+					{ _id: 'volunteer:V1', user_name: ' vol@example.com ' },
+					{ _id: 'volunteer:V2', user_name: '' }
+				]
+			}
+		});
+		readShelterVolunteerAccounts.mockResolvedValue([]);
+	});
+
+	it.each([
+		['a coordinator', COORDINATOR.roles],
+		['a shelter manager', ['shelter:SH001', 'SH001:shelter_manager']],
+		['a system admin', ['system_admin']]
+	])('reads the linked accounts of the shelter for %s', async (_who, roles) => {
+		await listShelterVolunteerAccounts({ roles }, { shelter_code: 'SH001' });
+		expect(adminRaw).toHaveBeenCalledWith(
+			expect.stringContaining('/_find'),
+			'POST',
+			expect.objectContaining({
+				selector: expect.objectContaining({ type: 'volunteer', shelter_code: 'SH001' })
+			})
+		);
+		expect(readShelterVolunteerAccounts).toHaveBeenCalledWith(
+			[{ volunteer_id: 'volunteer:V1', name: 'vol@example.com' }],
+			'SH001'
+		);
+	});
+
+	it.each([
+		['another shelter', COORDINATOR.roles, 'SH002'],
+		[
+			'a staff role without volunteer back-office',
+			['shelter:SH001', 'SH001:kitchen_staff'],
+			'SH001'
+		]
+	])('refuses %s with 403 and reads nothing', async (_why, roles, code) => {
+		await expect(
+			listShelterVolunteerAccounts({ roles }, { shelter_code: code })
+		).rejects.toMatchObject({ code: 'FORBIDDEN' });
+		expect(adminRaw).not.toHaveBeenCalled();
+	});
+
+	it('needs a shelter', async () => {
+		await expect(
+			listShelterVolunteerAccounts({ roles: COORDINATOR.roles }, { shelter_code: '' })
+		).rejects.toMatchObject({ code: 'VALIDATION' });
 	});
 });

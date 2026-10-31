@@ -202,54 +202,32 @@ describe('VolunteerAccessDialog for a volunteer_coordinator (#955)', () => {
 	});
 
 	it('shows the server refusal inline', async () => {
-		mocks.grantLimited.mockRejectedValue(
-			new Error('อาสาสมัครต้องยืนยันตัวตนก่อนจึงจะออกสิทธิ์ได้')
-		);
-		await render(COORDINATOR, {
-			national_id_hash: 'nid-hash-1',
-			identity_verified: false,
-			identity_verification: { status: 'pending' }
-		} as Partial<Volunteer>);
+		mocks.grantLimited.mockRejectedValue(new Error('ไม่พบข้อมูลอาสาสมัครในศูนย์นี้'));
+		await render(COORDINATOR);
 		await fillCredentials();
 		await pickRole('registration_staff');
 		await pickExpiry(grantExpiryRange().min);
 		saveButton().click();
 		await settle();
 
-		expect(document.body.textContent).toContain('อาสาสมัครต้องยืนยันตัวตนก่อนจึงจะออกสิทธิ์ได้');
-		expect(toast.error).toHaveBeenCalledWith('อาสาสมัครต้องยืนยันตัวตนก่อนจึงจะออกสิทธิ์ได้');
+		expect(document.body.textContent).toContain('ไม่พบข้อมูลอาสาสมัครในศูนย์นี้');
+		expect(toast.error).toHaveBeenCalledWith('ไม่พบข้อมูลอาสาสมัครในศูนย์นี้');
 	});
 
-	it('blocks an unverified volunteer with no phone, with the reason', async () => {
-		await render(COORDINATOR, {
-			phone: null,
-			identity_verified: false,
-			identity_verification: { status: 'pending' }
-		} as Partial<Volunteer>);
-
-		expect(document.body.textContent).toContain('ออกสิทธิ์ไม่ได้');
-		expect(saveButton().disabled).toBe(true);
-	});
-
-	it('blocks an unverified volunteer who has a phone but no national ID (the other shelter match needs both)', async () => {
-		await render(COORDINATOR, {
-			identity_verified: false,
-			identity_verification: { status: 'pending' }
-		} as Partial<Volunteer>);
-
-		expect(document.body.textContent).toContain('ออกสิทธิ์ไม่ได้');
-		expect(saveButton().disabled).toBe(true);
-	});
-
-	it('warns, but does not block, an unverified volunteer with a phone and national ID (other shelters are checked server-side)', async () => {
-		await render(COORDINATOR, {
+	// #1044: access follows the identity check in this shelter, whoever grants; a phone and
+	// national ID matching another shelter no longer stand in for it.
+	it.each([
+		['a coordinator', COORDINATOR],
+		['a shelter manager', MANAGER]
+	])('blocks %s from granting an unverified volunteer, with the reason', async (_who, roles) => {
+		await render(roles, {
 			national_id_hash: 'nid-hash-1',
 			identity_verified: false,
 			identity_verification: { status: 'pending' }
 		} as Partial<Volunteer>);
 
-		expect(document.body.textContent).toContain('ตรวจผลยืนยันจากศูนย์อื่น');
-		expect(saveButton().disabled).toBe(false);
+		expect(document.body.textContent).toContain('กรุณายืนยันตัวตนก่อนจึงจะออกสิทธิ์ได้');
+		expect(saveButton().disabled).toBe(true);
 	});
 });
 

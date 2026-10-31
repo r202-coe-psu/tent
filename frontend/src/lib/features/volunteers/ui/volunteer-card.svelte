@@ -11,29 +11,20 @@
 	 *     controlled-skill evidence; it does not approve a specific job.
 	 *   - Already verified → "จัดการข้อมูล" opens `volunteer-manage-dialog.svelte`
 	 *     (see its header comment for the fields it actually persists vs. stubs).
-	 *   - "ออกสิทธิ์ใช้งานระบบ" opens `volunteer-access-dialog.svelte`, which
-	 *     creates a CouchDB login through the authorized users API and links
-	 *     its username/email back to the volunteer profile.
+	 *   - The system-access button is `volunteer-access-actions.svelte` (give / edit / give
+	 *     again, identity first), shared with a job's applicants (#1044).
 	 * (Cross-shelter transfer was cut by CR-104 AC-104-10 — a volunteer now
 	 * applies directly to any shelter's jobs via the Job Board instead.)
 	 */
 	import Pencil from '@lucide/svelte/icons/pencil';
 	import SearchCheck from '@lucide/svelte/icons/search-check';
-	import KeyRound from '@lucide/svelte/icons/key-round';
 	import Trash2 from '@lucide/svelte/icons/trash-2';
 	import RotateCcw from '@lucide/svelte/icons/rotate-ccw';
 	import Phone from '@lucide/svelte/icons/phone';
 	import Lock from '@lucide/svelte/icons/lock';
 	import { toast } from 'svelte-sonner';
 	import { useQueryClient } from '@tanstack/svelte-query';
-	import { resolve } from '$app/paths';
-	import {
-		VOLUNTEER_COORDINATOR,
-		canAccessVolunteerBackoffice,
-		hasStaffCapability,
-		isShelterManager,
-		isSystemAdmin
-	} from '$lib/auth/roles';
+	import { canAccessVolunteerBackoffice } from '$lib/auth/roles';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
 	import { Button } from '$lib/components/ui/button/index.js';
@@ -43,7 +34,8 @@
 	import * as AlertDialog from '$lib/components/ui/alert-dialog/index.js';
 	import VolunteerManageDialog from './volunteer-manage-dialog.svelte';
 	import VolunteerQualificationDialog from './volunteer-qualification-dialog.svelte';
-	import VolunteerAccessDialog from './volunteer-access-dialog.svelte';
+	import VolunteerAccessActions from './volunteer-access-actions.svelte';
+	import VolunteerAccountBadge from './volunteer-account-badge.svelte';
 	import { useDeactivateVolunteer, useReactivateVolunteer } from '../application/queries';
 	import { resolveSkillOption, type SkillOption } from '../domain/skill-catalog';
 	import {
@@ -123,37 +115,9 @@
 	let manageDialogOpen = $state(false);
 	let qualificationDialogOpen = $state(false);
 	let qualificationFocusSkillCode = $state<string | null>(null);
-	let accessDialogOpen = $state(false);
-	// SM/SA grant any role; a volunteer_coordinator of this shelter grants a limited, timed one
-	// (#955). The BFF enforces both, so no other role sees a button that would 403.
-	const canGrantAccess = $derived.by(() => {
-		const roles = authStore.user?.roles ?? [];
-		const code = shelterStore.selectedShelterCode;
-		return (
-			isSystemAdmin(roles) ||
-			isShelterManager(roles, code) ||
-			hasStaffCapability(roles, VOLUNTEER_COORDINATOR, code)
-		);
-	});
 	// Re-activating a deactivated profile (#882, CR FR-12): SA / SM / volunteer_coordinator.
 	const canReactivate = $derived(
 		canAccessVolunteerBackoffice(authStore.user?.roles ?? [], shelterStore.selectedShelterCode)
-	);
-	const hasAccount = $derived(accessStatus.kind !== 'none');
-	// A linked account is managed on the users page, which only SA/SM can open. A coordinator
-	// keeps the dialog: it lists their grants to renew or revoke (#955 FR-8).
-	const managesOnUsersPage = $derived.by(() => {
-		const roles = authStore.user?.roles ?? [];
-		return (
-			hasAccount &&
-			(isSystemAdmin(roles) || isShelterManager(roles, shelterStore.selectedShelterCode))
-		);
-	});
-	// Only SA/SM can open the users page (and only they know the exact login to deep-link).
-	const manageAccountHref = $derived(
-		accessStatus.kind === 'none'
-			? '/back-office/users'
-			: `/back-office/users/${encodeURIComponent(accessStatus.loginName)}`
 	);
 	let deleteDialogOpen = $state(false);
 
@@ -319,33 +283,7 @@
 				</Badge>
 			{/if}
 
-			<!-- Account badges may wrap (a long role list): Badge is a fixed-height, overflow-hidden
-			     pill, so they take h-auto or the second line is cut off. -->
-			{#if accessStatus.kind === 'deactivated'}
-				<Badge
-					class="h-auto max-w-full justify-start gap-1 border-rose-200 bg-rose-50 text-left whitespace-normal text-rose-700"
-					variant="outline"
-				>
-					<KeyRound class="h-3 w-3 shrink-0" />
-					บัญชีถูกปิดใช้งาน
-				</Badge>
-			{:else if accessStatus.kind === 'linked'}
-				<Badge
-					class="h-auto max-w-full justify-start gap-1 border-emerald-300 bg-emerald-50 text-left whitespace-normal text-emerald-700"
-					variant="outline"
-				>
-					<KeyRound class="h-3 w-3 shrink-0" />
-					มีบัญชีแล้ว{accessStatus.roleLabels && accessStatus.roleLabels.length > 0
-						? ` · ${accessStatus.roleLabels.join(', ')}`
-						: ''}
-				</Badge>
-			{/if}
-			{#if accessStatus.kind !== 'none'}
-				<p class="text-xs break-all text-muted-foreground">{accessStatus.loginName}</p>
-				{#if accessStatus.roleLabels && accessStatus.roleLabels.length === 0}
-					<p class="text-[11px] text-amber-700">ยังไม่มีสิทธิ์ในศูนย์นี้</p>
-				{/if}
-			{/if}
+			<VolunteerAccountBadge status={accessStatus} />
 
 			{#if todayAssignment}
 				<p class="text-xs text-muted-foreground">{SHIFT_LABELS[todayAssignment.shift]}</p>
@@ -382,32 +320,9 @@
 				</Button>
 			{/if}
 
-			<div class="flex items-center gap-1.5">
-				{#if canGrantAccess}
-					{#if managesOnUsersPage}
-						<Button
-							size="sm"
-							variant="outline"
-							class="flex-1 gap-1.5"
-							href={resolve(manageAccountHref as '/back-office/users')}
-						>
-							<KeyRound class="h-3.5 w-3.5" />
-							จัดการบัญชีผู้ใช้
-						</Button>
-					{:else}
-						<Button
-							size="sm"
-							class="flex-1 gap-1.5 bg-primary-dark text-white hover:bg-primary-dark/90"
-							onclick={() => (accessDialogOpen = true)}
-						>
-							<KeyRound class="h-3.5 w-3.5" />
-							<!-- A linked account opens the same dialog as an edit (#1044): the dialog tells
-							     whether it holds a role here, or how the last one ended. -->
-							{volunteer.user_name ? 'จัดการสิทธิ์ใช้งาน' : 'ออกสิทธิ์ใช้งานระบบ'}
-						</Button>
-					{/if}
-				{/if}
+			<VolunteerAccessActions {volunteer} status={accessStatus} {shelterLine} />
 
+			<div class="flex items-center gap-1.5">
 				{#if volunteer.status === 'inactive' && canReactivate}
 					<Button
 						size="sm"
@@ -449,9 +364,6 @@
 	{shelterLine}
 	focusSkillCode={qualificationFocusSkillCode}
 />
-{#if canGrantAccess && !managesOnUsersPage}
-	<VolunteerAccessDialog bind:open={accessDialogOpen} {volunteer} {shelterLine} />
-{/if}
 
 <AlertDialog.Root bind:open={deleteDialogOpen}>
 	<AlertDialog.Content>

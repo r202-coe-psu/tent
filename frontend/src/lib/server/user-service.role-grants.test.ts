@@ -3,6 +3,7 @@ import * as couchAdmin from './couch-admin';
 import {
 	deleteUser,
 	grantCoordinatorRole,
+	readShelterVolunteerAccounts,
 	readVolunteerAccount,
 	revokeCoordinatorGrant,
 	updateUser,
@@ -81,6 +82,19 @@ describe('coordinator role grants on _users (#955)', () => {
 				return {
 					status: 200,
 					data: { rows: Object.values(db).map((doc) => ({ id: doc._id, doc })) }
+				};
+			}
+			if (method === 'POST' && clean === '/_users/_all_docs') {
+				// Keys are raw ids (`org.couchdb.user:a@b`); the fake stores them path-encoded.
+				const keys = (body as { keys: string[] }).keys;
+				const stored = (k: string) => db[`org.couchdb.user:${encodeURIComponent(k.slice(17))}`];
+				return {
+					status: 200,
+					data: {
+						rows: keys.map((k) =>
+							stored(k) ? { key: k, doc: stored(k) } : { key: k, error: 'not_found' }
+						)
+					}
 				};
 			}
 			const id = clean.slice('/_users/'.length);
@@ -540,6 +554,50 @@ describe('coordinator role grants on _users (#955)', () => {
 			expect(await read()).toEqual(none);
 			seed(EMAIL, { role_grants: [grant()], volunteer_id: 'volunteer:V2' });
 			expect(await read()).toEqual(none);
+		});
+	});
+
+	describe("reading a shelter's volunteer accounts for the tables (#1044)", () => {
+		it('returns each linked account with its roles here, an ended one included', async () => {
+			seed(EMAIL, {
+				roles: ['shelter:SH001', 'SH001:kitchen_staff', 'SH001:registration_staff'],
+				role_grants: [grant(), grant('kitchen_staff', { shelter_code: 'SH002' })]
+			});
+			seed('ended@example.com', { roles: [], role_grants: [], volunteer_id: 'volunteer:V3' });
+			seed('other@example.com', { volunteer_id: 'volunteer:V9', active: false });
+
+			const accounts = await readShelterVolunteerAccounts(
+				[
+					{ volunteer_id: 'volunteer:V1', name: EMAIL },
+					{ volunteer_id: 'volunteer:V3', name: 'ended@example.com' },
+					{ volunteer_id: 'volunteer:V4', name: 'other@example.com' },
+					{ volunteer_id: 'volunteer:V5', name: 'gone@example.com' }
+				],
+				'SH001'
+			);
+
+			expect(accounts).toEqual([
+				{
+					volunteer_id: 'volunteer:V1',
+					name: EMAIL,
+					active: true,
+					grants: [{ role: 'kitchen_staff', expires_at: grant().expires_at }],
+					permanent_roles: ['registration_staff']
+				},
+				{
+					volunteer_id: 'volunteer:V3',
+					name: 'ended@example.com',
+					active: true,
+					grants: [],
+					permanent_roles: []
+				}
+			]);
+		});
+
+		it('asks for nothing when no profile is linked', async () => {
+			vi.mocked(couchAdmin.adminRaw).mockClear();
+			expect(await readShelterVolunteerAccounts([], 'SH001')).toEqual([]);
+			expect(couchAdmin.adminRaw).not.toHaveBeenCalled();
 		});
 	});
 });

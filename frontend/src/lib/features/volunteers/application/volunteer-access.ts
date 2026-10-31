@@ -15,6 +15,7 @@ import { volunteerRepositoryFor } from '../data/volunteer.remote';
 import type { VolunteerRepository } from '../data/volunteer.repository';
 import { isVolunteerMobile } from '../domain/phone';
 import type { Volunteer } from '../domain/volunteer.schema';
+import type { VolunteerAccount } from '../domain/volunteer-access-status';
 
 /** No role is picked for the grant by default (#1072); saving without one says this. */
 export const ROLE_REQUIRED_MESSAGE = 'กรุณาเลือกตำแหน่งหน้าที่';
@@ -265,6 +266,17 @@ export function accessState(
 		return { kind: 'active', permanentRoles: view.permanent_roles };
 	}
 	return { kind: 'lapsed', lastEnded: view.last_ended };
+}
+
+/** Every volunteer account of the shelter with its roles there (#1044). */
+export async function fetchShelterVolunteerAccounts(
+	shelterCode: string
+): Promise<VolunteerAccount[]> {
+	const query = new URLSearchParams({ shelter_code: shelterCode });
+	const { accounts } = await serviceFetch<{ ok: true; accounts: VolunteerAccount[] }>(
+		`/api/v1/volunteer-access/accounts?${query}`
+	);
+	return accounts;
 }
 
 /** Take back a grant the caller issued: the role goes, the account and password stay. */

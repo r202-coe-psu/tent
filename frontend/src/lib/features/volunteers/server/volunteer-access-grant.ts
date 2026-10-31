@@ -15,9 +15,12 @@ import {
 import { shelterDbName } from '$lib/server/shelter-access-design';
 import {
 	grantCoordinatorRole,
+	readShelterVolunteerAccounts,
 	readVolunteerAccount,
-	revokeCoordinatorGrant
+	revokeCoordinatorGrant,
+	type ShelterVolunteerAccount
 } from '$lib/server/user-service';
+import { canAccessVolunteerBackoffice } from '$lib/auth/roles';
 import { normalizeThaiPhone } from '$lib/db/model';
 import { isVolunteerMobile } from '../domain/phone';
 import { identityVerificationStatus } from '../domain/verification';
@@ -321,4 +324,34 @@ export async function listVolunteerGrantsAsCoordinator(
 		permanent_roles: account.permanent_roles,
 		last_ended: holdsRole ? null : await lastGrantEnding(shelterCode, email)
 	};
+}
+
+/**
+ * Every volunteer account of a shelter with its roles there (#1044), so the people tab and a
+ * job's applicants show what each volunteer may do now — the coordinator included, who cannot
+ * read the users list. Open to whoever runs that shelter's volunteers (SA / SM / coordinator).
+ */
+export async function listShelterVolunteerAccounts(
+	caller: Pick<Caller, 'roles'>,
+	input: { shelter_code: unknown }
+): Promise<ShelterVolunteerAccount[]> {
+	const shelterCode = asString(input.shelter_code);
+	if (!shelterCode) throw new ServiceError('VALIDATION', 'shelter_code is required');
+	if (!canAccessVolunteerBackoffice(caller.roles, shelterCode)) {
+		throw new ServiceError('FORBIDDEN', 'Requires volunteer back-office access in this shelter');
+	}
+	const res = await adminRaw(`/${shelterDbName(shelterCode)}/_find`, 'POST', {
+		selector: { type: 'volunteer', shelter_code: shelterCode, user_name: { $type: 'string' } },
+		fields: ['_id', 'user_name'],
+		limit: 10000
+	});
+	if (res.status === 404) return [];
+	if (res.status >= 400) throw serviceErrorFromCouch('find volunteers', res.status, res.data);
+	const docs = ((res.data as { docs?: unknown[] } | null)?.docs ?? []) as VolunteerDoc[];
+	return readShelterVolunteerAccounts(
+		docs.flatMap((doc) =>
+			doc.user_name?.trim() ? [{ volunteer_id: doc._id, name: doc.user_name.trim() }] : []
+		),
+		shelterCode
+	);
 }
