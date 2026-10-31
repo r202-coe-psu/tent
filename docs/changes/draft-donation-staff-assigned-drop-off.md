@@ -15,7 +15,7 @@ affects:
   - docs/data/schema.md §2.4 `donation_campaign` — field ใหม่ `needs[].drop_off_point_id`
   - docs/data/schema.md §2.3 `donation` — ผู้เขียน `items[].drop_off_point_id` เปลี่ยนจากผู้บริจาคเป็นระบบ (จากแคมเปญ) และเจ้าหน้าที่ (ตอนประเมิน)
   - docs/data/api-contract.md §5 — `POST /public/v1/donations` (request ไม่รับจุดจาก client ผ่าน BFF · response เพิ่ม `items[]` · เลิก `400 UNKNOWN_DROP_OFF_POINT`) · `PATCH …/{tracking_token}/items` (ไม่รับจุดจาก client · คงจุดของรายการเดิม) · ข้อความ `drop_off_point_id` ที่ ~:860 · body ของ `POST /api/back-office/donations/[query]/approve`
-  - docs/changes/04-donation/CR-206-donation-multi-drop-off.md — superseded FR-MP-2 (ส่วนตรวจตอนจอง), FR-MP-2a (เฉพาะพฤติกรรมตอนแก้รายการ "BFF เขียน `null` ให้ id ที่ไม่อยู่" · นิยามจุดรับบริจาคปัจจุบันในข้อนี้ยังใช้), FR-MP-2b (ทั้งประโยค "FR-MP-2 ยังตรวจกับ Mongo" และประโยค "BFF ตรวจกับ shelter doc … เขียน `null`"), FR-MP-3, FR-MP-8 – FR-MP-12, FR-MP-15 (ตัวเลือกจุดใน dialog และ pointer ของ A1) · แก้ FR-MP-13 (กลุ่มของรายการที่บันทึกผลแล้วใช้จุดของ receipt · FR-AP-22a) / FR-MP-16 (กลุ่ม "รอเจ้าหน้าที่กำหนดจุดส่ง") · superseded AC-1 – AC-3, AC-13 (ข้อความ "ผู้บริจาคแก้รายการ … id ถูกเขียนเป็น null"), A1 acceptance ข้อ 2 · แก้ AC-4 (กติกา `null` ยังอยู่ แต่ client ไม่ส่ง id แล้ว)
+  - docs/changes/04-donation/CR-206-donation-multi-drop-off.md — superseded FR-MP-2 (ส่วนตรวจตอนจอง), FR-MP-2a (เฉพาะพฤติกรรมตอนแก้รายการ "BFF เขียน `null` ให้ id ที่ไม่อยู่" · นิยามจุดรับบริจาคปัจจุบันในข้อนี้ยังใช้), FR-MP-2b (ทั้งประโยค "FR-MP-2 ยังตรวจกับ Mongo" และประโยค "BFF ตรวจกับ shelter doc … เขียน `null`"), FR-MP-3, FR-MP-8 – FR-MP-12, FR-MP-15 (ตัวเลือกจุดใน dialog และ pointer ของ A1) · แก้ FR-MP-16 (กลุ่ม "รอเจ้าหน้าที่กำหนดจุดส่ง") · superseded AC-1 – AC-3, AC-13 (ข้อความ "ผู้บริจาคแก้รายการ … id ถูกเขียนเป็น null"), A1 acceptance ข้อ 2 · แก้ AC-4 (กติกา `null` ยังอยู่ แต่ client ไม่ส่ง id แล้ว)
   - docs/changes/00-baseline/CR-205-storage-drop-off-points.md FR-DP-18 / AC-12 — หมุดจุดยังแสดง แตะแล้วไม่เลือกจุด (FR-AP-11)
   - docs/features/public-tier-donation-spec.html — ฟอร์มจองขั้น 3 ไม่มีตัวเลือกจุด
   - frontend/src/lib/features/operations/domain/operations.ts (`CampaignNeed`, `campaignInputSchema`, `createCampaign`, `editNeed`)
@@ -130,10 +130,10 @@ affects:
 - **FR-AP-22a** — `groupDropOffDestinations` (`line-points.ts`):
   - เพิ่ม `opts.deliveryMethod` · กลุ่ม "รอ" ใช้เฉพาะ `self_dropoff` (หน้าติดตามเรียก function นี้กับ `parcel` ด้วย ผ่าน `needsDropOffDestination`)
   - key ใหม่ `AWAITING_STAFF_KEY` (แยกจาก `ANY_POINT_KEY` / `AT_SHELTER_KEY`) · เรียงกลุ่มนี้ไว้หลังกลุ่มอื่นทั้งหมด
-  - เพิ่ม `opts.awaitingName` (ชื่อกลุ่ม "รอเจ้าหน้าที่กำหนดจุดส่ง") · `point` ของกลุ่ม = `resolveDropOffPoint(shelter)` (ที่อยู่ศูนย์) · `anyPoint: true` (ซ่อนชื่อศูนย์ซ้ำเหมือนกลุ่ม "ไหนก็ได้")
-  - `drop-off-groups.svelte` แยกกลุ่มนี้ด้วย `key === AWAITING_STAFF_KEY` และแสดงข้อความตาม FR-AP-22 · ข้อความทั้งสองอยู่ใน `lib/constants/i18n/public-donations.ts`
-  - คืนกลุ่ม (ไม่ใช่ `null`) เมื่อมีรายการที่มีจุด **หรือ** มีรายการตาม FR-AP-22 **หรือ** มี `point_receipts`
-  - รายการที่บันทึกผลแล้วใน `point_receipts` จัดกลุ่มตาม `point_id` ของ receipt (`null` → `AT_SHELTER_KEY`) ไม่ใช่ `drop_off_point_id` ของรายการ · ไม่เข้ากลุ่ม "รอ" แม้ยัง `pending` · แก้กติกาเดิมของ CR-206 FR-MP-13 ที่ใช้จุดของรายการ (รายการที่ "รับรายการของจุดอื่น" ตาม FR-MP-21 จึงแสดงที่จุดที่รับจริง)
+  - เพิ่ม `opts.awaitingName` · `point` ของกลุ่ม = `{ ...resolveDropOffPoint(shelter), name: awaitingName }` (แบบเดียวกับกลุ่ม "ไหนก็ได้" ใน `lineDestinationResolver`) · `anyPoint: true` · `status: 'pending'`
+  - `drop-off-groups.svelte` แยกกลุ่มนี้ด้วย `key === AWAITING_STAFF_KEY` · แสดงข้อความตาม FR-AP-22 · ไม่แสดงป้ายสถานะ "รอรับ" · ชื่อกลุ่มและข้อความอยู่ใน `lib/constants/i18n/public-donations.ts`
+  - คืนกลุ่ม (ไม่ใช่ `null`) เมื่อมีรายการที่มีจุด **หรือ** มีรายการตาม FR-AP-22
+  - รายการที่บันทึกผลแล้วใน `point_receipts` จัดกลุ่มตามกติกาเดิมของ CR-206 (ไม่แก้): receipt `point_id` เป็น `null` → `AT_SHELTER_KEY` · อื่นๆ → จุดของรายการ หรือ `ANY_POINT_KEY` (`line-points.ts:165-168`) · ไม่เข้ากลุ่ม "รอ" แม้ยัง `pending`
   - รายการ `null` อื่นอยู่ในกลุ่ม "ส่งที่จุดรับบริจาคไหนของศูนย์ก็ได้" ตาม CR-206 FR-MP-16
 - **FR-AP-23** — หลังประเมิน ตั๋ว หน้าติดตาม และใบปะหน้าอ่าน `drop_off_point_id` ตาม CR-206 FR-MP-13, FR-MP-14, FR-MP-16 เดิม
 
@@ -209,7 +209,7 @@ affects:
 - **AC-12c** — ใบผสมจาก AC-13 (ข้าวมีจุดโรงยิม จึงรับทีละจุด) ยัง `pending_review` · หน้าสแกนรับข้าวและผ้าห่มที่โรงยิมไปก่อน แล้วเจ้าหน้าที่ประเมิน → ไม่ต้องเลือกจุดให้ผ้าห่ม · `items[i].drop_off_point_id` ของผ้าห่มไม่ถูกเขียน · ส่งจุดมาให้ผ้าห่ม → `422 INVALID_REVIEW`
 - **AC-13** — ใบผสม (ข้าวแคมเปญ + ผ้าห่มพิมพ์เอง) → ข้าวได้โรงยิมตอนจอง · ตั๋วแสดงกลุ่ม "โรงยิม" (ข้าว) และ "รอเจ้าหน้าที่กำหนดจุดส่ง" (ผ้าห่ม) เรียงตามนั้น · หน้าประเมินแสดงข้าวพร้อมจุดแบบ read-only · ผ้าห่มได้จุดตอนประเมิน
 - **AC-13a** — รายการแคมเปญที่ `pending` (counter `NOT_SEEDED`) และจุดยังอยู่ → หน้าประเมินเลือกจุดนั้นไว้ให้ · หน้าติดตามแสดงรายการในกลุ่มโรงยิม ไม่ใช่กลุ่ม "รอ" · หน้าสแกนจุดอื่นเห็นรายการนี้เป็นแถวล็อก (CR-206 FR-MP-19) · จุดถูกลบไปแล้ว → dropdown ว่าง และหน้าติดตามแสดงในกลุ่ม "รอ"
-- **AC-13b** — ใบผสมจาก AC-13 · หน้าสแกนรับผ้าห่มที่โรงยิมก่อนประเมิน (receipt `point_id` = โรงยิม · `items[1].drop_off_point_id` ยัง `null`) → หน้าติดตามแสดงผ้าห่มว่า "รับแล้ว" ในกลุ่มโรงยิม ไม่ใช่กลุ่ม "รอ" หรือ "ไหนก็ได้" · คิวประเมินมี `point_receipts` ของใบ · หน้าประเมินไม่แสดง dropdown ให้ผ้าห่ม
+- **AC-13b** — ใบผสมจาก AC-13 · หน้าสแกนรับผ้าห่มที่โรงยิมก่อนประเมิน → หน้าติดตามไม่แสดงผ้าห่มในกลุ่ม "รอเจ้าหน้าที่กำหนดจุดส่ง" · คิวประเมินมี `point_receipts` ของใบ · หน้าประเมินไม่แสดง dropdown ให้ผ้าห่ม
 
 **แก้รายการและข้อมูลเดิม**
 
@@ -298,4 +298,5 @@ affects:
 - 2026-10-31 — proposed (Kunanon Nusaeng) · ผู้ขอเลือก track เป็น CR ใหม่ (D-1) · D-2 – D-14 รอผู้อนุมัติ
 - 2026-10-31 — แก้ตาม `/pr-code-review` รอบ 1 (ก่อนเปิด PR): ตั๋วอ่านจุดจาก response (FR-AP-8a, 8b) · approve แบบไม่มี `lines` (FR-AP-17a) · แก้รายการคงจุดเดิมด้วย `line_key` ใน FastAPI (FR-AP-15) · BFF จองไม่อ่าน registry (D-10) · กติการายการที่รับก่อนประเมิน (D-13) · ลำดับเช็คของ approve · ฟอร์มแก้แคมเปญ (FR-AP-4a, 4b) · กลุ่ม "รอเจ้าหน้าที่กำหนดจุดส่ง" (FR-AP-22, 22a) · เพิ่ม D-9 – D-14 · เติม `affects` และ AC
 - 2026-10-31 — แก้ตาม `/pr-code-review` รอบ 2: กลุ่ม "รอ" เฉพาะรายการที่ไม่มีจุด · รายการ `pending` ที่มีจุดอยู่กลุ่มของจุดนั้น (FR-AP-22, 22b · ตรงกับ CR-206 FR-MP-19) · คิวประเมินมี `point_receipts` (FR-AP-20a) · ข้อ 1 ของ FR-AP-17 เป็น schema validation · คงจุดเดิมเฉพาะเมื่อ `item_id` ไม่เปลี่ยน (FR-AP-15) · ขอบเขตการอ่าน registry และ `503` ใน approve · นิยามจุดบนหน้า public · contract ของ `groupDropOffDestinations` (FR-AP-22a) · `bookedItems` (FR-AP-8b) · ใบไม่มี `line_key` (FR-AP-15c)
-- 2026-10-31 — แก้ตาม `/pr-code-review` รอบ 3: รายการที่บันทึกผลแล้วจัดกลุ่มตาม `point_id` ของ receipt (FR-AP-22a · แก้ CR-206 FR-MP-13) ให้ตรงกับ AC-13b · คง นิยามจุดปัจจุบันของ FR-MP-2a · ลำดับ parse ของ approve · การแสดงกลุ่ม "รอ" (`awaitingName`, `drop-off-groups.svelte`, i18n) · เทียบ `item_id` หลัง carry · ใบก่อน CR นี้ที่มีจุดผ่านข้อ 5 โดยตั้งใจ · ยอมรับรายการที่เพิ่มก่อนใบถึง CouchDB
+- 2026-10-31 — แก้ตาม `/pr-code-review` รอบ 3: รายการที่บันทึกผลแล้วจัดกลุ่มตาม `point_id` ของ receipt (FR-AP-22a · แก้ CR-206 FR-MP-13) ให้ตรงกับ AC-13b · คงนิยามจุดปัจจุบันของ FR-MP-2a · ลำดับ parse ของ approve · การแสดงกลุ่ม "รอ" (`awaitingName`, `drop-off-groups.svelte`, i18n) · เทียบ `item_id` หลัง carry · ใบก่อน CR นี้ที่มีจุดผ่านข้อ 5 โดยตั้งใจ · ยอมรับรายการที่เพิ่มก่อนใบถึง CouchDB
+- 2026-10-31 — แก้ตาม `/pr-code-review` รอบ 4: ถอยการแก้ CR-206 FR-MP-13 ของรอบ 3 · รายการที่บันทึกผลแล้วจัดกลุ่มตามกติกาเดิม · AC-13b เหลือเฉพาะสิ่งที่ CR นี้กำหนด (ไม่อยู่กลุ่ม "รอ" · คิวประเมิน · dropdown) · ชื่อและป้ายสถานะของกลุ่ม "รอ"
