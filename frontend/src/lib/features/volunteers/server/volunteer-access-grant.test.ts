@@ -1,13 +1,18 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { adminRaw, grantCoordinatorRole, readVolunteerGrants, revokeCoordinatorGrant, shelterRefs } =
-	vi.hoisted(() => ({
-		adminRaw: vi.fn(),
-		grantCoordinatorRole: vi.fn(),
-		readVolunteerGrants: vi.fn(),
-		revokeCoordinatorGrant: vi.fn(),
-		shelterRefs: vi.fn()
-	}));
+const {
+	adminRaw,
+	grantCoordinatorRole,
+	readVolunteerAccount,
+	revokeCoordinatorGrant,
+	shelterRefs
+} = vi.hoisted(() => ({
+	adminRaw: vi.fn(),
+	grantCoordinatorRole: vi.fn(),
+	readVolunteerAccount: vi.fn(),
+	revokeCoordinatorGrant: vi.fn(),
+	shelterRefs: vi.fn()
+}));
 
 vi.mock('$lib/server/couch-admin', () => ({
 	adminRaw,
@@ -23,7 +28,7 @@ vi.mock('$lib/server/couch-admin', () => ({
 }));
 vi.mock('$lib/server/user-service', () => ({
 	grantCoordinatorRole,
-	readVolunteerGrants,
+	readVolunteerAccount,
 	revokeCoordinatorGrant
 }));
 vi.mock('./public-schedule-action', () => ({ shelterRefs }));
@@ -420,18 +425,22 @@ describe('listVolunteerGrantsAsCoordinator', () => {
 
 	it("reads the profile's own account and marks the caller's grants", async () => {
 		couch(volunteer({ user_name: 'vol@example.com' }));
-		readVolunteerGrants.mockResolvedValue([
-			stored('staff03'),
-			{ ...stored('staff09'), role: 'facility_staff' }
-		]);
+		readVolunteerAccount.mockResolvedValue({
+			exists: true,
+			grants: [stored('staff03'), { ...stored('staff09'), role: 'facility_staff' }],
+			permanent_roles: ['registration_staff']
+		});
 		expect(await list()).toEqual({
 			email: 'vol@example.com',
+			has_account: true,
 			grants: [
 				{ role: 'kitchen_staff', expires_at: '2026-10-31T16:59:59.999Z', mine: true },
 				{ role: 'facility_staff', expires_at: '2026-10-31T16:59:59.999Z', mine: false }
-			]
+			],
+			permanent_roles: ['registration_staff'],
+			last_ended: null
 		});
-		expect(readVolunteerGrants).toHaveBeenCalledWith({
+		expect(readVolunteerAccount).toHaveBeenCalledWith({
 			name: 'vol@example.com',
 			volunteer_id: 'volunteer:V1',
 			shelter_code: 'SH001'
@@ -439,9 +448,59 @@ describe('listVolunteerGrantsAsCoordinator', () => {
 	});
 
 	it('has nothing to read for a profile without an account', async () => {
-		expect(await list()).toEqual({ email: null, grants: [] });
-		expect(readVolunteerGrants).not.toHaveBeenCalled();
+		expect(await list()).toEqual({
+			email: null,
+			has_account: false,
+			grants: [],
+			permanent_roles: [],
+			last_ended: null
+		});
+		expect(readVolunteerAccount).not.toHaveBeenCalled();
 	});
+
+	it('says the account is gone when the profile keeps a user_name without one', async () => {
+		couch(volunteer({ user_name: 'vol@example.com' }));
+		readVolunteerAccount.mockResolvedValue({ exists: false, grants: [], permanent_roles: [] });
+		expect(await list()).toMatchObject({ email: 'vol@example.com', has_account: false });
+	});
+
+	it.each([
+		['role_grant.expired', 'expired', 'worker'],
+		['role_grant.revoked', 'revoked', 'coord01']
+	])(
+		'tells how the last grant ended (%s) when the account holds nothing here (#1044)',
+		async (reason, ending, actor) => {
+			couch(volunteer({ user_name: 'vol@example.com' }));
+			readVolunteerAccount.mockResolvedValue({ exists: true, grants: [], permanent_roles: [] });
+			adminRaw.mockImplementation(async (path: string) =>
+				path.endsWith('/_find')
+					? {
+							status: 200,
+							data: {
+								docs: [
+									{
+										reason: 'role_grant.issued',
+										created_at: '2026-10-29T01:00:00.000Z',
+										context: { role: 'kitchen_staff', actor: 'coord01' }
+									},
+									{
+										reason,
+										created_at: '2026-10-31T17:00:00.000Z',
+										context: { role: 'kitchen_staff', actor }
+									}
+								].filter((d) => d.reason !== 'role_grant.issued')
+							}
+						}
+					: { status: 200, data: volunteer({ user_name: 'vol@example.com' }) }
+			);
+			expect((await list()).last_ended).toEqual({
+				role: 'kitchen_staff',
+				reason: ending,
+				at: '2026-10-31T17:00:00.000Z',
+				by: actor
+			});
+		}
+	);
 
 	it('refuses another shelter with 403 and reads nothing', async () => {
 		await expect(

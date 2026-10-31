@@ -11,7 +11,7 @@ const mocks = vi.hoisted(() => ({
 	grantLimited: vi.fn(),
 	grantFull: vi.fn(),
 	revoke: vi.fn(),
-	grants: null as { email: string | null; grants: unknown[] } | null
+	grants: null as Record<string, unknown> | null
 }));
 
 vi.mock('@tanstack/svelte-query', () => ({
@@ -308,6 +308,64 @@ describe('VolunteerAccessDialog role radios (#1044, #1072)', () => {
 
 		await pickRole('warehouse_staff');
 		expect(document.getElementById('volunteer-access-role-error-volunteer:001')).toBeNull();
+	});
+});
+
+describe('VolunteerAccessDialog says where the account stands (#1044)', () => {
+	const linked = { user_name: 'vol@example.com' } as Partial<Volunteer>;
+	const view = (over: Record<string, unknown>) => ({
+		email: 'vol@example.com',
+		has_account: true,
+		grants: [],
+		permanent_roles: [],
+		last_ended: null,
+		...over
+	});
+
+	it('reads as an edit when the account holds a role here', async () => {
+		mocks.grants = view({
+			grants: [{ role: 'kitchen_staff', expires_at: '2026-11-03T16:59:59.999Z', mine: true }]
+		});
+		await render(COORDINATOR, linked);
+		expect(document.body.textContent).toContain('แก้ไขสิทธิ์ใช้งานระบบ');
+		expect(document.body.textContent).toContain('มีสิทธิ์ในศูนย์นี้อยู่แล้ว');
+		expect(document.body.textContent).toContain('บันทึกการแก้ไขสิทธิ์');
+	});
+
+	it('says the last role expired, and offers to grant again', async () => {
+		mocks.grants = view({
+			last_ended: {
+				role: 'kitchen_staff',
+				reason: 'expired',
+				at: '2026-10-31T17:00:00.000Z',
+				by: 'worker'
+			}
+		});
+		await render(COORDINATOR, linked);
+		expect(document.body.textContent).toContain('ออกสิทธิ์ใช้งานระบบอีกครั้ง');
+		expect(document.body.textContent).toContain('ยังไม่มีสิทธิ์ในศูนย์นี้');
+		expect(document.body.textContent).toContain('หมดอายุเมื่อ');
+		expect(document.body.textContent).toContain('บันทึกและออกสิทธิ์อีกครั้ง');
+	});
+
+	it('says who revoked the last role', async () => {
+		mocks.grants = view({
+			last_ended: {
+				role: 'kitchen_staff',
+				reason: 'revoked',
+				at: '2026-10-31T17:00:00.000Z',
+				by: 'coord01'
+			}
+		});
+		await render(COORDINATOR, linked);
+		expect(document.body.textContent).toContain('ถูกถอนสิทธิ์เมื่อ');
+		expect(document.body.textContent).toContain('โดย coord01');
+	});
+
+	it('shows the roles a manager gave', async () => {
+		mocks.grants = view({ permanent_roles: ['registration_staff'] });
+		await render(COORDINATOR, linked);
+		expect(document.body.textContent).toContain('สิทธิ์ถาวรจากผู้จัดการศูนย์');
 	});
 });
 

@@ -3,7 +3,7 @@ import * as couchAdmin from './couch-admin';
 import {
 	deleteUser,
 	grantCoordinatorRole,
-	readVolunteerGrants,
+	readVolunteerAccount,
 	revokeCoordinatorGrant,
 	updateUser,
 	type CouchUserDoc
@@ -513,25 +513,33 @@ describe('coordinator role grants on _users (#955)', () => {
 			await expect(revoke({ role: 'kiosk_staff' })).rejects.toMatchObject({ code: 'FORBIDDEN' });
 		});
 	});
-	describe('reading a volunteer account grants for the dialog (FR-8)', () => {
+	describe('reading a volunteer account for the dialog (FR-8, #1044)', () => {
 		const read = (over: Record<string, unknown> = {}) =>
-			readVolunteerGrants({
+			readVolunteerAccount({
 				name: EMAIL,
 				volunteer_id: 'volunteer:V1',
 				shelter_code: 'SH001',
 				...over
 			});
 
-		it("returns only this shelter's grants", async () => {
+		it("returns only this shelter's grants and the roles a manager gave here", async () => {
 			const other = grant('kitchen_staff', { shelter_code: 'SH002' });
-			seed(EMAIL, { role_grants: [grant(), other] });
-			expect(await read()).toEqual([grant()]);
+			seed(EMAIL, {
+				roles: ['shelter:SH001', 'SH001:kitchen_staff', 'SH001:registration_staff'],
+				role_grants: [grant(), other]
+			});
+			expect(await read()).toEqual({
+				exists: true,
+				grants: [grant()],
+				permanent_roles: ['registration_staff']
+			});
 		});
 
-		it('has none for a missing account or one linked to another volunteer', async () => {
-			expect(await read()).toEqual([]);
+		it('counts a missing account or one linked to another volunteer as none', async () => {
+			const none = { exists: false, grants: [], permanent_roles: [] };
+			expect(await read()).toEqual(none);
 			seed(EMAIL, { role_grants: [grant()], volunteer_id: 'volunteer:V2' });
-			expect(await read()).toEqual([]);
+			expect(await read()).toEqual(none);
 		});
 	});
 });

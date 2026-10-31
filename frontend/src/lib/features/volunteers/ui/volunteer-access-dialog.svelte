@@ -35,6 +35,7 @@
 	import { errorMessage } from '$lib/utils/errors';
 	import {
 		ROLE_REQUIRED_MESSAGE,
+		accessState,
 		currentGrantRole,
 		VOLUNTEER_ACCESS_PHONE_MESSAGE,
 		accountPhone,
@@ -100,6 +101,27 @@
 	// it is recreated with that phone password and a forced change, never an unknown one.
 	const keepsPassword = $derived(Boolean(volunteer.user_name) && loginPhone !== null);
 	const grants = $derived(grantsQuery.data?.grants ?? []);
+	// Where the volunteer stands here (#1044): drives the title, the save label and the note.
+	const standing = $derived(limited ? accessState(grantsQuery.data ?? null) : accessState(null));
+	const title = $derived(
+		standing.kind === 'active'
+			? 'แก้ไขสิทธิ์ใช้งานระบบ'
+			: standing.kind === 'lapsed'
+				? 'ออกสิทธิ์ใช้งานระบบอีกครั้ง'
+				: 'ออกสิทธิ์ใช้งานระบบหลังบ้าน'
+	);
+	const saveLabel = $derived(
+		standing.kind === 'active'
+			? 'บันทึกการแก้ไขสิทธิ์'
+			: standing.kind === 'lapsed'
+				? 'บันทึกและออกสิทธิ์อีกครั้ง'
+				: 'บันทึกและออกสิทธิ์ใหม่'
+	);
+	const ENDED_HOW = {
+		expired: 'หมดอายุ',
+		revoked: 'ถูกถอนสิทธิ์',
+		verification_revoked: 'ถูกถอนเพราะผลยืนยันตัวตนถูกยกเลิก'
+	} as const;
 	let confirmRevoke = $state<string | null>(null);
 
 	let expiresOn = $state('');
@@ -258,12 +280,52 @@
 				<KeyRound class="h-4.5 w-4.5" />
 			</div>
 			<div class="min-w-0">
-				<Dialog.Title class="text-base font-bold">ออกสิทธิ์ใช้งานระบบหลังบ้าน</Dialog.Title>
+				<Dialog.Title class="text-base font-bold">{title}</Dialog.Title>
 				<p class="text-xs text-muted-foreground">{fullName} ({volunteer.volunteer_code})</p>
 			</div>
 		</div>
 
 		<div class="max-h-[70vh] space-y-5 overflow-y-auto px-6 py-5">
+			{#if standing.kind === 'active'}
+				<div
+					role="status"
+					class="rounded-xl border border-emerald-300 bg-emerald-50 p-3 text-sm text-emerald-800"
+				>
+					<p class="font-semibold">บัญชี ({grantedAccount}) มีสิทธิ์ในศูนย์นี้อยู่แล้ว</p>
+					<p class="mt-0.5 text-xs">
+						เลือกบทบาทและวันหมดอายุใหม่เพื่อแก้ไขหรือต่ออายุ บทบาทที่เลือกจะแทนที่บทบาทเดิม
+					</p>
+					{#if standing.permanentRoles.length > 0}
+						<p class="mt-1 text-xs">
+							สิทธิ์ถาวรจากผู้จัดการศูนย์: {standing.permanentRoles.map(roleOptionLabel).join(', ')}
+							(แก้ได้ที่หน้าผู้ใช้งาน)
+						</p>
+					{/if}
+				</div>
+			{:else if standing.kind === 'lapsed'}
+				<div
+					role="status"
+					class="rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900"
+				>
+					<p class="font-semibold">
+						บัญชี ({grantedAccount}) มีอยู่แล้ว แต่ยังไม่มีสิทธิ์ในศูนย์นี้
+					</p>
+					{#if standing.lastEnded}
+						<p class="mt-0.5 text-xs">
+							สิทธิ์ล่าสุด{standing.lastEnded.role
+								? ` (${roleOptionLabel(standing.lastEnded.role)})`
+								: ''}
+							{ENDED_HOW[standing.lastEnded.reason]}เมื่อ {formatThaiShortDate(
+								standing.lastEnded.at
+							)}
+							{#if standing.lastEnded.reason === 'revoked' && standing.lastEnded.by}
+								โดย {standing.lastEnded.by}
+							{/if}
+						</p>
+					{/if}
+					<p class="mt-0.5 text-xs">ออกสิทธิ์อีกครั้งได้เลย รหัสผ่านเดิมของบัญชีไม่เปลี่ยน</p>
+				</div>
+			{/if}
 			<div
 				class="space-y-3 rounded-xl border border-domain-volunteer-border bg-domain-volunteer-subtle p-3"
 			>
@@ -582,7 +644,7 @@
 					กำลังบันทึก...
 				{:else}
 					<Save class="h-4 w-4" />
-					บันทึกและออกสิทธิ์ใหม่
+					{saveLabel}
 				{/if}
 			</Button>
 		</div>

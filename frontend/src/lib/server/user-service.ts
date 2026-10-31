@@ -666,21 +666,31 @@ export async function revokeCoordinatorGrant(input: {
 }
 
 /**
- * The grants in one shelter on the account linked to a volunteer, for the coordinator dialog
- * (FR-8). Only the grants are returned, never the account doc. A missing account, or one linked
- * to another volunteer, has none.
+ * What the coordinator dialog may know about the account linked to a volunteer, in one shelter
+ * (FR-8, #1044): whether it exists, its grants there, and the roles a manager gave there (no
+ * grant). Never the account doc. A missing account, or one linked to another volunteer, counts as
+ * none.
  */
-export async function readVolunteerGrants(input: {
+export async function readVolunteerAccount(input: {
 	name: string;
 	volunteer_id: string;
 	shelter_code: string;
-}): Promise<RoleGrant[]> {
+}): Promise<{ exists: boolean; grants: RoleGrant[]; permanent_roles: string[] }> {
+	const none = { exists: false, grants: [], permanent_roles: [] };
 	const got = await adminRaw(`/_users/${userDocId(input.name)}`, 'GET');
-	if (got.status === 404) return [];
+	if (got.status === 404) return none;
 	if (got.status >= 400) throw serviceErrorFromCouch('read user', got.status, got.data);
 	const doc = got.data as CouchUserDoc;
-	if (doc.volunteer_id !== input.volunteer_id) return [];
-	return (doc.role_grants ?? []).filter((g) => g.shelter_code === input.shelter_code);
+	if (doc.volunteer_id !== input.volunteer_id) return none;
+	const grants = (doc.role_grants ?? []).filter((g) => g.shelter_code === input.shelter_code);
+	const granted = new Set(grants.map((g) => g.role));
+	return {
+		exists: true,
+		grants,
+		permanent_roles: capabilitiesForShelter(doc.roles ?? [], input.shelter_code).filter(
+			(role) => !granted.has(role)
+		)
+	};
 }
 
 /** List users, scoped: SA sees all; a manager sees users with their managed shelter scope. */

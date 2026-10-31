@@ -15,7 +15,7 @@ import {
 import { shelterDbName } from '$lib/server/shelter-access-design';
 import {
 	grantCoordinatorRole,
-	readVolunteerGrants,
+	readVolunteerAccount,
 	revokeCoordinatorGrant
 } from '$lib/server/user-service';
 import { normalizeThaiPhone } from '$lib/db/model';
@@ -234,32 +234,91 @@ export async function revokeVolunteerAccessAsCoordinator(
 /** A grant as the coordinator dialog shows it: `mine` grants are the ones the caller may revoke. */
 export type VolunteerGrantView = { role: string; expires_at: string; mine: boolean };
 
+/** How the volunteer's last grant in this shelter ended, for "หมดอายุ" vs "ถูกถอน" (#1044). */
+export type GrantEnding = {
+	role: string;
+	reason: 'expired' | 'revoked' | 'verification_revoked';
+	at: string;
+	/** Who took it back; `worker` for an expiry or a lapsed verification. */
+	by: string;
+};
+
+export type VolunteerAccessView = {
+	email: string | null;
+	/** The linked account exists (a profile may keep a `user_name` whose account was removed). */
+	has_account: boolean;
+	grants: VolunteerGrantView[];
+	/** Roles a manager gave in this shelter (no expiry); the coordinator cannot change them. */
+	permanent_roles: string[];
+	last_ended: GrantEnding | null;
+};
+
+const ENDING_REASONS = {
+	'role_grant.expired': 'expired',
+	'role_grant.revoked': 'revoked',
+	'role_grant.verification_revoked': 'verification_revoked'
+} as const;
+
+/** The newest grant-ending audit for this account in this shelter (FR-14 audits), or null. */
+async function lastGrantEnding(shelterCode: string, name: string): Promise<GrantEnding | null> {
+	const res = await adminRaw(`/${shelterDbName(shelterCode)}/_find`, 'POST', {
+		selector: {
+			type: 'audit',
+			target_id: `org.couchdb.user:${name}`,
+			reason: { $in: Object.keys(ENDING_REASONS) }
+		},
+		fields: ['reason', 'created_at', 'context'],
+		limit: 200
+	});
+	if (res.status === 404) return null;
+	if (res.status >= 400) throw serviceErrorFromCouch('find grant audits', res.status, res.data);
+	const docs = ((res.data as { docs?: unknown[] } | null)?.docs ?? []) as {
+		reason: keyof typeof ENDING_REASONS;
+		created_at: string;
+		context?: { role?: string; actor?: string };
+	}[];
+	const latest = docs.sort((a, b) => b.created_at.localeCompare(a.created_at))[0];
+	if (!latest) return null;
+	return {
+		role: latest.context?.role ?? '',
+		reason: ENDING_REASONS[latest.reason],
+		at: latest.created_at,
+		by: latest.context?.actor ?? ''
+	};
+}
+
 /**
- * The grants on the account linked to a volunteer of the coordinator's shelter (FR-8), so the
- * dialog can offer to revoke the caller's own. The account is the profile's `user_name`, read
- * server-side, so no other account can be probed.
+ * The account behind a volunteer profile, as the coordinator dialog shows it (FR-8, #1044): its
+ * grants here (`mine` = the caller's), roles a manager gave here, and — when it holds nothing
+ * here — how the last grant ended.
  */
 export async function listVolunteerGrantsAsCoordinator(
 	caller: Pick<Caller, 'name' | 'roles'>,
 	input: Pick<CoordinatorGrantInput, 'shelter_code' | 'volunteer_id'>
-): Promise<{ email: string | null; grants: VolunteerGrantView[] }> {
+): Promise<VolunteerAccessView> {
 	const shelterCode = coordinatorShelter(caller, input.shelter_code);
 	const volunteerId = asString(input.volunteer_id);
 	if (!volunteerId) throw new ServiceError('VALIDATION', 'volunteer_id is required');
 	const volunteer = await readVolunteer(shelterCode, volunteerId);
 	const email = volunteer.user_name ?? null;
-	if (!email) return { email: null, grants: [] };
-	const grants = await readVolunteerGrants({
+	const empty = { has_account: false, grants: [], permanent_roles: [], last_ended: null };
+	if (!email) return { email: null, ...empty };
+	const account = await readVolunteerAccount({
 		name: email,
 		volunteer_id: volunteerId,
 		shelter_code: shelterCode
 	});
+	if (!account.exists) return { email, ...empty };
+	const holdsRole = account.grants.length > 0 || account.permanent_roles.length > 0;
 	return {
 		email,
-		grants: grants.map((g) => ({
+		has_account: true,
+		grants: account.grants.map((g) => ({
 			role: g.role,
 			expires_at: g.expires_at,
 			mine: g.granted_by === caller.name
-		}))
+		})),
+		permanent_roles: account.permanent_roles,
+		last_ended: holdsRole ? null : await lastGrantEnding(shelterCode, email)
 	};
 }

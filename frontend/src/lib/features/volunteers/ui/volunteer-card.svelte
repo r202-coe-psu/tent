@@ -401,7 +401,9 @@
 							onclick={() => (accessDialogOpen = true)}
 						>
 							<KeyRound class="h-3.5 w-3.5" />
-							ออกสิทธิ์ใช้งานระบบ
+							<!-- A linked account opens the same dialog as an edit (#1044): the dialog tells
+							     whether it holds a role here, or how the last one ended. -->
+							{volunteer.user_name ? 'จัดการสิทธิ์ใช้งาน' : 'ออกสิทธิ์ใช้งานระบบ'}
 						</Button>
 					{/if}
 				{/if}

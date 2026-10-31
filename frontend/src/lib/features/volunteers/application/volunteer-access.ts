@@ -214,20 +214,57 @@ export function currentGrantRole<R extends string>(
 	return latest?.role ?? '';
 }
 
-/** The grants on the account the volunteer profile is linked to, as the coordinator sees them. */
+/** How the account's last grant here ended (from the audit), when it holds nothing here now. */
+export type GrantEnding = {
+	role: string;
+	reason: 'expired' | 'revoked' | 'verification_revoked';
+	at: string;
+	by: string;
+};
+
+/** The account behind a volunteer profile as the coordinator dialog sees it (#1044). */
+export type VolunteerAccessView = {
+	email: string | null;
+	has_account: boolean;
+	grants: VolunteerGrant[];
+	permanent_roles: string[];
+	last_ended: GrantEnding | null;
+};
+
+/** The account the volunteer profile is linked to, as the coordinator sees it. */
 export async function fetchVolunteerGrants(
 	volunteer: Pick<Volunteer, '_id' | 'shelter_code'>
-): Promise<{ email: string | null; grants: VolunteerGrant[] }> {
+): Promise<VolunteerAccessView> {
 	const query = new URLSearchParams({
 		shelter_code: volunteer.shelter_code,
 		volunteer_id: volunteer._id
 	});
-	const { email, grants } = await serviceFetch<{
-		ok: true;
-		email: string | null;
-		grants: VolunteerGrant[];
-	}>(`/api/v1/volunteer-access?${query}`);
-	return { email, grants };
+	const { email, has_account, grants, permanent_roles, last_ended } = await serviceFetch<
+		{ ok: true } & VolunteerAccessView
+	>(`/api/v1/volunteer-access?${query}`);
+	return { email, has_account, grants, permanent_roles, last_ended };
+}
+
+/**
+ * Where the volunteer stands, for the dialog's title, button and note (#1044): no account yet,
+ * an account holding a role here, or an account whose role here has ended.
+ */
+export type AccessState =
+	| { kind: 'none' }
+	| { kind: 'active'; permanentRoles: string[] }
+	| { kind: 'lapsed'; lastEnded: GrantEnding | null };
+
+export function accessState(
+	view: Pick<
+		VolunteerAccessView,
+		'has_account' | 'grants' | 'permanent_roles' | 'last_ended'
+	> | null
+): AccessState {
+	if (!view?.has_account) return { kind: 'none' };
+	if (view.grants.length > 0 || view.permanent_roles.length > 0) {
+		return { kind: 'active', permanentRoles: view.permanent_roles };
+	}
+	return { kind: 'lapsed', lastEnded: view.last_ended };
 }
 
 /** Take back a grant the caller issued: the role goes, the account and password stay. */

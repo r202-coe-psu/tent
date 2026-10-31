@@ -20,6 +20,7 @@ vi.mock('../data/volunteer.remote', () => ({
 }));
 
 import {
+	accessState,
 	accountPhone,
 	currentGrantRole,
 	grantVolunteerAccess,
@@ -410,5 +411,44 @@ describe('currentGrantRole (#1044)', () => {
 		expect(
 			currentGrantRole([{ role: 'kiosk_staff', expires_at: '2026-11-03T16:59:59.999Z' }], choices)
 		).toBe('');
+	});
+});
+
+describe('accessState (#1044)', () => {
+	const view = (over = {}) => ({
+		has_account: true,
+		grants: [],
+		permanent_roles: [],
+		last_ended: null,
+		...over
+	});
+
+	it('is none without a loaded view or an account', () => {
+		expect(accessState(null)).toEqual({ kind: 'none' });
+		expect(accessState(view({ has_account: false }))).toEqual({ kind: 'none' });
+	});
+
+	it('is active while the account holds a grant or a manager role here', () => {
+		expect(
+			accessState(
+				view({
+					grants: [{ role: 'kitchen_staff', expires_at: '2026-11-03T16:59:59.999Z', mine: true }]
+				})
+			)
+		).toEqual({ kind: 'active', permanentRoles: [] });
+		expect(accessState(view({ permanent_roles: ['registration_staff'] }))).toEqual({
+			kind: 'active',
+			permanentRoles: ['registration_staff']
+		});
+	});
+
+	it('is lapsed with how the last grant ended when it holds nothing here', () => {
+		const ended = {
+			role: 'kitchen_staff',
+			reason: 'revoked' as const,
+			at: '2026-10-31T17:00:00.000Z',
+			by: 'coord01'
+		};
+		expect(accessState(view({ last_ended: ended }))).toEqual({ kind: 'lapsed', lastEnded: ended });
 	});
 });
