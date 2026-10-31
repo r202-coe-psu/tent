@@ -179,6 +179,7 @@ describe('VolunteerAccessDialog for a volunteer_coordinator (#955)', () => {
 
 		expect(mocks.grantLimited).not.toHaveBeenCalled();
 		expect(document.body.textContent).toContain('กรุณาเลือกวันหมดอายุ');
+		expect(toast.error).toHaveBeenCalledWith('กรุณาเลือกวันหมดอายุ');
 	});
 
 	it('grants through the coordinator path once an expiry is chosen', async () => {
@@ -216,6 +217,7 @@ describe('VolunteerAccessDialog for a volunteer_coordinator (#955)', () => {
 		await settle();
 
 		expect(document.body.textContent).toContain('อาสาสมัครต้องยืนยันตัวตนก่อนจึงจะออกสิทธิ์ได้');
+		expect(toast.error).toHaveBeenCalledWith('อาสาสมัครต้องยืนยันตัวตนก่อนจึงจะออกสิทธิ์ได้');
 	});
 
 	it('blocks an unverified volunteer with no phone, with the reason', async () => {
@@ -356,6 +358,7 @@ describe('VolunteerAccessDialog revoking a grant (#955 FR-8)', () => {
 		await settle();
 
 		expect(document.body.textContent).toContain('ถอนได้เฉพาะสิทธิ์ที่ตนเองออกให้');
+		expect(toast.error).toHaveBeenCalledWith('ถอนได้เฉพาะสิทธิ์ที่ตนเองออกให้');
 	});
 });
 
@@ -389,6 +392,22 @@ describe('VolunteerAccessDialog password for an existing account', () => {
 
 		expect(passwordInput()?.value).toBe('0812345678');
 		expect(document.body.textContent).not.toContain('การออกสิทธิ์ไม่เปลี่ยนรหัสผ่านเดิม');
+	});
+
+	it('toasts a password that breaks the policy and does not save', async () => {
+		await render(COORDINATOR);
+		await fillCredentials();
+		const input = passwordInput()!;
+		input.value = 'abc';
+		input.dispatchEvent(new Event('input', { bubbles: true }));
+		await settle();
+		await pickRole('kitchen_staff');
+		await pickExpiry(grantExpiryRange().max);
+		saveButton().click();
+		await settle();
+
+		expect(mocks.grantLimited).not.toHaveBeenCalled();
+		expect(toast.error).toHaveBeenCalledWith(expect.stringContaining('รหัสผ่าน'));
 	});
 
 	it('still asks when a linked profile has no mobile to fall back on', async () => {

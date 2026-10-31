@@ -148,7 +148,7 @@
 			return;
 		}
 		if (!role) {
-			// Said twice: a toast for the save that did nothing, and under the radios until fixed.
+			// Every refusal is a toast (it fades) and stays written next to its field until fixed.
 			roleError = ROLE_REQUIRED_MESSAGE;
 			toast.error(ROLE_REQUIRED_MESSAGE);
 			return;
@@ -163,7 +163,10 @@
 			return;
 		}
 		passwordError = volunteerPasswordError(parsed.data.password, loginPhone);
-		if (passwordError) return;
+		if (passwordError) {
+			toast.error(passwordError);
+			return;
+		}
 		pending = true;
 		try {
 			const result = await grantVolunteerAccess(volunteer, parsed.data);
@@ -190,10 +193,14 @@
 		});
 		if (!parsed.success) {
 			submitError = parsed.error.issues[0]?.message ?? 'กรุณาตรวจสอบข้อมูล';
+			toast.error(submitError);
 			return;
 		}
 		passwordError = volunteerPasswordError(parsed.data.password, loginPhone);
-		if (passwordError) return;
+		if (passwordError) {
+			toast.error(passwordError);
+			return;
+		}
 		pending = true;
 		try {
 			const result = await grantVolunteerAccessAsCoordinator(volunteer, parsed.data);
@@ -209,6 +216,7 @@
 			open = false;
 		} catch (err) {
 			submitError = errorMessage(err);
+			toast.error(submitError);
 		} finally {
 			await refresh();
 		}
@@ -226,6 +234,7 @@
 			confirmRevoke = null;
 		} catch (err) {
 			submitError = errorMessage(err);
+			toast.error(submitError);
 		} finally {
 			await refresh();
 		}
