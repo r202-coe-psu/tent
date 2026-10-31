@@ -283,6 +283,7 @@ async def test_missing_scope_is_403_and_logged(client: AsyncClient, shelters: No
         {"cid": "19098001234ab"},
         {"phone": "12345"},
         {"phone": "1812345678"},
+        {"phone": "022222222"},  # 9-digit landline no longer accepted (CR-210)
         {"first_name": "   "},
         {"last_name": ""},
     ],

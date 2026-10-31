@@ -270,22 +270,29 @@ describe('user-service', () => {
 		).rejects.toMatchObject({ code: 'CONFLICT' });
 	});
 
-	it('stores a shared 9-digit landline as a contact phone only', async () => {
-		for (const name of ['vol_a', 'vol_b']) {
-			await createUser({
-				name,
+	it.each(['022222222', '02-222-2222'])('rejects a 9-digit landline %s (CR-210)', async (phone) => {
+		await expect(
+			createUser({
+				name: 'vol_a',
 				password: 'Password123!',
-				display_name: name,
+				display_name: 'vol_a',
 				personnel_type: 'volunteer',
-				phone: '022222222',
+				phone,
 				roles: ['shelter:SH001', 'registration_staff']
-			});
-		}
+			})
+		).rejects.toMatchObject({ code: 'VALIDATION' });
+	});
 
-		expect(fakeUsersDb['org.couchdb.user:vol_a'].phone).toBe('022222222');
-		expect(fakeUsersDb['org.couchdb.user:vol_b'].phone).toBe('022222222');
-		await expect(resolveLoginName('022222222')).resolves.toBe('022222222');
-		await expect(findUserNameByPhone('022222222')).resolves.toBeNull();
+	it('normalises a formatted mobile before storing it', async () => {
+		await createUser({
+			name: 'vol_b',
+			password: 'Password123!',
+			display_name: 'vol_b',
+			personnel_type: 'volunteer',
+			phone: '+66 81-234-5678',
+			roles: ['shelter:SH001', 'registration_staff']
+		});
+		expect(fakeUsersDb['org.couchdb.user:vol_b'].phone).toBe('0812345678');
 	});
 
 	it.each(['02222222', '12345678901', 'ไม่มี'])('rejects contact phone %s', async (phone) => {

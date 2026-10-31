@@ -34,6 +34,15 @@ def test_normalize_phone_plus66():
     assert normalize_phone("+66 81 234 5678") == "0812345678"
 
 
+def test_normalize_phone_matches_frontend_normalizer():
+    # frontend/src/lib/db/model.ts normalizeThaiPhone — hashes must agree (CR-210 FR-1)
+    assert normalize_phone("081.234.5678") == "0812345678"
+    assert normalize_phone("(081) 234-5678") == "0812345678"
+    assert normalize_phone("66812345678") == "0812345678"
+    assert normalize_phone("+66812345678") == "0812345678"
+    assert normalize_phone("02-222-2222") == "022222222"
+
+
 def test_national_id_hash_is_deterministic():
     assert national_id_hash("3900100244192") == national_id_hash("3900100244192")
 

@@ -13,6 +13,7 @@ affects:
   - docs/changes/14-kiosk/CR-165-kiosk-management-back-office.md
   - docs/changes/07-B-sop/CR-153-daily-sop-role-assessments.md
   - docs/changes/03-C-supply/CR-204-stock-distribute-shelter-manager.md
+  - docs/changes/05-D-kitchen/CR-217-kitchen-staff-recipe-write.md
 ---
 
 # Full-System Role Permission Matrix (R2-R4 & V10)
@@ -106,6 +107,7 @@ affects:
 | **Health Flags (Read)**                                                                     | ดูข้อมูลโรค/อาการคัดกรองเพื่อเตรียมงาน                                                                                                                                                     |  ✓  | scope | scope | scope | scope | scope | scope | scope | scope | scope |
 | **Meal Planning & Service**                                                                 | แผนอาหาร, บันทึกแจกจ่ายมื้ออาหาร                                                                                                                                                           |  ✓  | scope |   —   |   —   |   —   | scope |   —   |   —   |   —   |   —   |
 | **Kitchen Requisition**                                                                     | เบิกวัตถุดิบทำอาหารตัดสต็อก                                                                                                                                                                |  ✓  | scope |   —   |   —   |   —   | scope | scope |   —   |   —   |   —   |
+| **Recipe (Create / Edit / Delete)**                                                         | สร้าง / แก้ไข / ลบสูตรอาหาร (`recipe`) ในฐาน shelter ของศูนย์ตน (CR-217) · catalog กลางเป็นของ SA                                                                                          |  ✓  | scope |   —   |   —   |   —   | scope | scope |   —   |   —   |   —   |
 | **Inventory & Supply**                                                                      | รับของบริจาค, สต็อก                                                                                                                                                                        |  ✓  | scope |   —   |   —   |   —   |   —   | scope |   —   |   —   |   —   |
 | **Stock Distribution**                                                                      | เบิกจ่ายพัสดุออกจากคลังโดยตรง (ตัดจ่าย)                                                                                                                                                    |  ✓  | scope |   —   |   —   |   —   |   —   |  WS   |   —   |   —   |   —   |
 | **Volunteer Job Board**                                                                     | สร้างประกาศภารกิจงานอาสา, จัดกะ                                                                                                                                                            |  ✓  | scope |   —   |   —   |   —   |   —   |   —   | scope |   —   |   —   |
@@ -116,6 +118,8 @@ affects:
 | **Daily SOP (CouchDB read)**                                                                | อ่านเอกสารทุก Role ในฐาน shelter ตาม `_security` (ข้อจำกัดที่ทราบ)                                                                                                                         |  ✓  | scope | scope | scope | scope | scope | scope | scope | scope | scope |
 | **Daily SOP (Write)**                                                                       | บันทึกแบบประเมินของวันนี้                                                                                                                                                                  |  ✓  | scope |  own  |  own  |  own  |  own  |  own  |  own  |  own  |  own  |
 | **User Management**                                                                         | สร้าง/แก้ไขผู้ใช้ประจำศูนย์ตน                                                                                                                                                              |  ✓  | scope |   —   |   —   |   —   |   —   |   —   |   —   |   —   |   —   |
+
+> **CR-217 (2026-11-01, approved, #802)** — แถว Recipe: KS สร้าง แก้ไข และลบ `recipe` ในศูนย์ตนได้ (สร้างจาก production board หรือหน้า catalog); catalog กลาง (ไม่ระบุศูนย์) เป็นของ SA เท่านั้น. บังคับสิทธิ์ฝั่ง client เพราะ `validate_doc_update` ของ `shelter_*` ไม่ตรวจ role ของ `recipe` ([CR-217](../changes/05-D-kitchen/CR-217-kitchen-staff-recipe-write.md))
 
 > **CR-204 (2026-10-27, approved)** — แถว Stock Distribution: `WS` ในคอลัมน์ SC = เฉพาะ `{code}:warehouse_staff`; `supply_coordinator` ดูสต็อกและรับเข้าได้แต่เบิกจ่ายไม่ได้ (คง [CR-156](../changes/03-C-supply/CR-156-stock-redesign-amendment.md) §H FR-H1); SM ของศูนย์เบิกจ่ายได้ (GitHub #837)
 

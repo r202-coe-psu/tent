@@ -9,6 +9,7 @@
 
 import { z } from 'zod';
 import { makeDoc, type AuthorContext, type BaseDoc } from '$lib/db/model';
+import { optionalVolunteerMobileSchema, VOLUNTEER_PHONE_MESSAGE, isVolunteerMobile } from './phone';
 import { verificationRecordSchema, type VerificationRecord } from './verification';
 
 // ---------------------------------------------------------------------------
@@ -125,7 +126,7 @@ export const volunteerInputSchema = z.object({
 	first_name: z.string().trim().min(1, 'กรุณากรอกชื่อ'),
 	last_name: z.string().trim().min(1, 'กรุณากรอกนามสกุล'),
 	nickname: z.string().trim().optional(),
-	phone: z.string().trim().nullable(),
+	phone: optionalVolunteerMobileSchema,
 	email: z.string().trim().nullable().optional(),
 	skills: z.array(z.string()).default([]),
 	organization: z.string().trim().nullable().optional(),
@@ -137,8 +138,8 @@ export type VolunteerInput = z.input<typeof volunteerInputSchema>;
 
 /**
  * Walk-in front-desk form shape (CR-094 FR-VOL-10.1). Narrower than
- * `volunteerInputSchema`: `phone` is required here (front-desk staff always
- * capture it in person), and `email`/`national_id` bind to plain text
+ * `volunteerInputSchema`: `phone` is optional (blank → `null`, filled → 10-digit
+ * mobile, #951), and `email`/`national_id` bind to plain text
  * `Input`s so they use `''` — not `null` — as "not provided", converted to
  * `null` at submission time.
  */
@@ -146,7 +147,10 @@ export const walkInVolunteerFormSchema = z.object({
 	first_name: z.string().trim().min(1, 'กรุณากรอกชื่อ'),
 	last_name: z.string().trim().min(1, 'กรุณากรอกนามสกุล'),
 	nickname: z.string().trim().optional(),
-	phone: z.string().trim().min(1, 'กรุณากรอกเบอร์โทรศัพท์'),
+	phone: z
+		.string()
+		.trim()
+		.refine((v) => v === '' || isVolunteerMobile(v), VOLUNTEER_PHONE_MESSAGE),
 	email: z.string().trim().email('อีเมลไม่ถูกต้อง').optional().or(z.literal('')),
 	national_id: z
 		.string()

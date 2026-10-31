@@ -1038,7 +1038,7 @@ export function resolveAdjustReason(
 }
 
 /** Sum signed deltas per item — the `stock_balance` read model, computed client-side. */
-export function stockBalance(ledger: StockLedger[]): Map<string, string> {
+export function stockBalance(ledger: readonly StockLedger[]): Map<string, string> {
 	const balance = new Map<string, string>();
 	for (const entry of ledger) {
 		balance.set(entry.item_id, addQty(balance.get(entry.item_id) ?? '0', entry.qty));
@@ -1053,6 +1053,34 @@ export interface StockLotBalance {
 	qty: string;
 	lot?: StockLot;
 	received_at: Timestamp;
+}
+
+/** A lot whose projected balance is below zero (#855): shown with a warning, never issued from. */
+export function isNegativeLot(lot: Pick<StockLotBalance, 'qty'>): boolean {
+	return qtyGt('0', lot.qty);
+}
+
+export function negativeLots<T extends Pick<StockLotBalance, 'qty'>>(lots: readonly T[]): T[] {
+	return lots.filter(isNegativeLot);
+}
+
+/** The stock-table note for an item with an overdrawn lot (CR-216 FR-6a): the total nets the
+ * negative lot in, but only the positive lots can be issued — `A = -3, B = 10` is total 7,
+ * usable 10. Null when no lot is negative. */
+export function negativeLotSummary(
+	lots: readonly Pick<StockLotBalance, 'qty'>[]
+): { usable: string; negative: string } | null {
+	let usable = '0';
+	let negative = '0';
+	let anyNegative = false;
+	for (const lot of lots) {
+		if (qtyGt(lot.qty, 0)) usable = addQty(usable, lot.qty);
+		else if (isNegativeLot(lot)) {
+			anyNegative = true;
+			negative = addQty(negative, lot.qty);
+		}
+	}
+	return anyNegative ? { usable, negative } : null;
 }
 
 export class StockLotIntegrityError extends Error {
@@ -1097,7 +1125,10 @@ export function sortStockLotsByConsumptionOrder(
  * Project exact per-lot balances from ledger history. Explicit `lot_ref` rows
  * target that physical lot. A legacy inbound row uses its own `_id` as a
  * virtual reference; a legacy outbound row consumes eligible lots FEFO, then
- * FIFO (`occurred_at`, `_id`). Impossible histories fail closed.
+ * FIFO (`occurred_at`, `_id`). A lot overdrawn by a row naming it (or by the shortfall of a legacy row,
+ * attached to the last lot it consumed) goes negative instead of throwing (#855) — see
+ * {@link isNegativeLot}. Genuinely corrupt histories (identity changes, unknown lots, a legacy
+ * outbound with no lot to consume) still fail closed.
  */
 export function projectStockLotBalances(ledger: readonly StockLedger[]): StockLotBalance[] {
 	const balances = new Map<string, StockLotBalance>();
@@ -1131,17 +1162,29 @@ export function projectStockLotBalances(ledger: readonly StockLedger[]): StockLo
 		}
 
 		let remaining = qtyAbs(entry.qty);
-		const candidates = entry.lot_ref
-			? [balances.get(entry.lot_ref)].filter((lot): lot is StockLotBalance => Boolean(lot))
-			: [...balances.values()]
-					.filter(
-						(lot) => lot.item_id === entry.item_id && lot.unit === entry.unit && qtyGt(lot.qty, 0)
-					)
-					.sort(compareLotConsumptionOrder);
+		if (entry.lot_ref) {
+			// A row naming its lot is never clamped: an overdrawn lot goes negative (#855).
+			const lot = balances.get(entry.lot_ref);
+			if (lot) {
+				if (lot.item_id !== entry.item_id || lot.unit !== entry.unit) {
+					throw new StockLotIntegrityError(`Lot identity ${entry.lot_ref} changed item or unit`);
+				}
+				lot.qty = subQty(lot.qty, remaining);
+				continue;
+			}
+			throw new StockLotIntegrityError(
+				`Historical outbound ${entry._id} references unknown lot ${entry.lot_ref}`
+			);
+		}
 
+		let lastConsumed: StockLotBalance | undefined;
+		const candidates = [...balances.values()]
+			.filter(
+				(lot) => lot.item_id === entry.item_id && lot.unit === entry.unit && qtyGt(lot.qty, 0)
+			)
+			.sort(compareLotConsumptionOrder);
 		for (const lot of candidates) {
-			if (lot.item_id !== entry.item_id || lot.unit !== entry.unit) continue;
-			if (!qtyGt(lot.qty, 0)) continue;
+			lastConsumed = lot;
 			if (qtyGte(lot.qty, remaining)) {
 				lot.qty = subQty(lot.qty, remaining);
 				remaining = '0';
@@ -1152,10 +1195,14 @@ export function projectStockLotBalances(ledger: readonly StockLedger[]): StockLo
 		}
 
 		if (!qtyIsZero(remaining)) {
-			const target = entry.lot_ref ? ` lot ${entry.lot_ref}` : '';
-			throw new StockLotIntegrityError(
-				`Historical outbound ${entry._id} exceeds available${target} stock by ${remaining}`
-			);
+			// Shortfall of a legacy row (no lot_ref): attach it to the last lot it consumed so the
+			// history stays representable. With no lot to consume it cannot be placed (#855).
+			if (!lastConsumed) {
+				throw new StockLotIntegrityError(
+					`Historical outbound ${entry._id} exceeds available stock by ${remaining}`
+				);
+			}
+			lastConsumed.qty = subQty(lastConsumed.qty, remaining);
 		}
 	}
 
@@ -1191,6 +1238,29 @@ export function projectLotsByItem(ledger: readonly StockLedger[]): {
 		}
 	}
 	return { lots, brokenItemIds };
+}
+
+/**
+ * Stock a no-lot write-off can actually draw on, per item: the sum of lots with qty > 0 (#855).
+ * A negative lot counts as 0 — it is never netted against healthy lots, so `A = -3, B = 10`
+ * offers 10, not 7. An item whose history cannot be projected falls back to its plain total.
+ */
+export function usableStockByItem(ledger: readonly StockLedger[]): Map<string, string> {
+	const { lots, brokenItemIds } = projectLotsByItem(ledger);
+	const usable = new Map<string, string>();
+	for (const lot of lots) {
+		if (!qtyGt(lot.qty, 0)) continue;
+		usable.set(lot.item_id, addQty(usable.get(lot.item_id) ?? '0', lot.qty));
+	}
+	if (brokenItemIds.length > 0) {
+		// Never offer a negative total as stock on hand (CR-216 FR-9b).
+		const totals = stockBalance(ledger);
+		for (const id of brokenItemIds) {
+			const total = totals.get(id) ?? '0';
+			usable.set(id, qtyGt(total, 0) ? total : '0');
+		}
+	}
+	return usable;
 }
 
 /**
@@ -1237,6 +1307,11 @@ export function assertLotWriteOffsFit(
 				'ไม่พบล็อตที่เลือกในคลังของสินค้านี้แล้ว — ข้อมูลอาจเปลี่ยนไป กรุณาโหลดใหม่แล้วเลือกล็อตอีกครั้ง'
 			);
 		}
+		if (isNegativeLot(lot)) {
+			throw new LotWriteOffError(
+				`ล็อตที่เลือกติดลบ (${persistQty(lot.qty)} ${lot.unit}) ตัดยอดเพิ่มไม่ได้ — ต้องแก้ยอดล็อตนี้ก่อน`
+			);
+		}
 		if (!qtyGte(lot.qty, want.qty)) {
 			throw new LotWriteOffError(
 				`ล็อตที่เลือกคงเหลือ ${persistQty(lot.qty)} ${lot.unit} ไม่พอตัด ${want.qty} ${want.unit} — ยอดอาจเปลี่ยนไปแล้ว กรุณาโหลดใหม่`
@@ -1273,6 +1348,9 @@ export const walkInDonationInputSchema = z
 			name: z.string().trim().min(1),
 			phone: thaiMobilePhoneSchema,
 			phone_hash: z.string().min(1),
+			// Same rule as the back-office walk-in (`walkInIntakeInputSchema`): a blank is NOT an
+			// email — callers leave the key out, and nothing is stored (#821 FR-11).
+			email: z.string().trim().email().optional(),
 			tax_receipt: z.boolean().optional(),
 			tax_id: z.string().optional()
 		}),
