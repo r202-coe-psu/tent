@@ -20,6 +20,12 @@
 	import { langState } from '$lib/states/i18n.svelte';
 	import { getShelterCode } from '$lib/db/shelter';
 	import { persistQty, qtyGt } from '$lib/utils/qty';
+	import {
+		needPointToSave,
+		resolveNeedPointField,
+		useDonationPoints
+	} from '$lib/features/operations';
+	import NeedDropOffPointField from './need-drop-off-point-field.svelte';
 
 	interface Props {
 		onclose: () => void;
@@ -33,6 +39,7 @@
 			urgency?: 'critical' | 'important' | 'normal';
 			imageUrl?: string;
 			description?: string;
+			dropOffPointId: string | null;
 		}) => void;
 	}
 
@@ -71,6 +78,16 @@
 	] as const;
 
 	let urgency = $state<'critical' | 'important' | 'normal'>('critical');
+
+	// Staff, not donors, decide where this need's goods go (see need-drop-off-point.ts).
+	const donationPoints = useDonationPoints(() => getShelterCode());
+	const pointField = $derived(resolveNeedPointField(donationPoints.points));
+	let pointChoice = $state<string | null>(null);
+	const chosenPoint = $derived(pointChoice ?? pointField.value);
+	const pointToSave = $derived(needPointToSave(pointField, chosenPoint));
+	// Until the shelter doc is read the point list is empty, and saving then would
+	// store `null` for a shelter that does have points.
+	const canSave = $derived(donationPoints.isLoaded && pointToSave !== undefined);
 	let description = $state('');
 
 	// Same two sources the scan station and the hint below read, so all three agree on
@@ -174,6 +191,10 @@
 			toast.error('กรุณาระบุเหตุผลหรือรายละเอียดเพิ่มเติม');
 			return;
 		}
+		if (!canSave || pointToSave === undefined) {
+			toast.error('กรุณาเลือกจุดรับบริจาค');
+			return;
+		}
 
 		onsubmit({
 			itemId: selectedItemId,
@@ -183,7 +204,8 @@
 			category: category.trim() || 'ของใช้ทั่วไป',
 			unit: finalUnit,
 			urgency,
-			description: description.trim()
+			description: description.trim(),
+			dropOffPointId: pointToSave
 		});
 	}
 </script>
@@ -320,6 +342,14 @@
 				</Select.Root>
 			</div>
 
+			<NeedDropOffPointField
+				id="campaign-drop-off-point"
+				field={pointField}
+				points={donationPoints.points}
+				value={chosenPoint}
+				onchange={(id) => (pointChoice = id)}
+			/>
+
 			<!-- Reason / Details -->
 			<div>
 				<Label for="campaign-description" class="mb-1.5 text-xs font-bold text-foreground">
@@ -350,6 +380,7 @@
 
 			<Button
 				type="submit"
+				disabled={!canSave}
 				class="flex h-auto min-h-10 w-full items-center gap-2 rounded-xl bg-[#002D5B] px-6 py-2 text-xs font-bold whitespace-normal text-white shadow-sm hover:bg-[#001f3f] sm:w-auto dark:bg-blue-600 dark:hover:bg-blue-700"
 			>
 				<Megaphone class="h-4 w-4" />

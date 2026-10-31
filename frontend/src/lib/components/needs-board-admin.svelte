@@ -12,15 +12,19 @@
 	import * as Table from '$lib/components/ui/table/index.js';
 	import {
 		matchesStatusFilter,
+		needPointBadge,
 		parseCampaignNotes,
 		publicItemAggregate,
+		useDonationPoints,
 		type NeedCloseState,
 		type NeedItem,
 		type NeedStatusFilter
 	} from '$lib/features/operations';
 	import { addQty, formatQty, parseQty, qtyIsZero } from '$lib/utils/qty';
 	import { DEFAULT_ITEM_UNIT, formatUnit, useUnitsOfMeasure } from '$lib/features/catalog';
+	import { getShelterCode } from '$lib/db/shelter';
 	import { langState } from '$lib/states/i18n.svelte';
+	import MapPin from '@lucide/svelte/icons/map-pin';
 	import BoardSectionHeader from '$lib/components/board-section-header.svelte';
 
 	let {
@@ -41,6 +45,11 @@
 	const uid = $props.id();
 	const statusId = `${uid}-status`;
 	const sortId = `${uid}-sort`;
+
+	// Names each need's point and flags a stale one. Empty until the shelter doc loads,
+	// which flags nothing (`needPointBadge` is silent for a shelter without points).
+	const donationPointsQuery = useDonationPoints(() => getShelterCode());
+	const donationPoints = $derived(donationPointsQuery.points);
 
 	const unitsQuery = useUnitsOfMeasure();
 	const units = $derived(unitsQuery.data ?? []);
@@ -87,6 +96,7 @@
 		/** Badge, bar, buttons and filter all read this one value (#817). */
 		state: NeedCloseState;
 		isManualClosed: boolean;
+		dropOffPointId: string | null;
 		originalItem: NeedItem;
 		/** How many open campaigns share this item on the donor-facing board. */
 		sharedCampaigns: number;
@@ -116,6 +126,7 @@
 					showOnHome: item.showOnHome,
 					state: item.closeState,
 					isManualClosed: item.isManualClosed,
+					dropOffPointId: null,
 					originalItem: item,
 					sharedCampaigns: 0,
 					publicTotal: '0'
@@ -148,6 +159,7 @@
 						showOnHome: item.showOnHome,
 						state: need.closeState,
 						isManualClosed: need.isManualClosed,
+						dropOffPointId: need.dropOffPointId ?? null,
 						originalItem: item,
 						sharedCampaigns: aggregate.campaignCount,
 						publicTotal: aggregate.totalTarget
@@ -186,6 +198,29 @@
 	const safePage = $derived(Math.min(currentPage, pageCount));
 	const pagedRows = $derived(flatRows.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE));
 </script>
+
+{#snippet dropOffPointLine(row: FlatNeedRow)}
+	{@const badge = needPointBadge(donationPoints, row.dropOffPointId)}
+	{@const pointName = donationPoints.find((p) => p.id === row.dropOffPointId)?.name}
+	{#if row.itemId && (pointName || badge)}
+		<div class="mt-1.5 flex flex-wrap items-center gap-1.5 text-xs text-slate-600">
+			<MapPin class="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+			{#if pointName}
+				<span class="font-semibold">จุดรับบริจาค: {pointName}</span>
+			{/if}
+			{#if badge === 'unset'}
+				<Badge
+					variant="outline"
+					class="border-amber-200 bg-amber-50 text-xs font-bold text-amber-900">ยังไม่ระบุจุด</Badge
+				>
+			{:else if badge === 'deleted'}
+				<Badge variant="outline" class="border-red-200 bg-red-50 text-xs font-bold text-red-800"
+					>จุดถูกลบ</Badge
+				>
+			{/if}
+		</div>
+	{/if}
+{/snippet}
 
 <div class="space-y-4">
 	<!-- Main Container Card -->
@@ -308,6 +343,7 @@
 									{row.description}
 								</p>
 							{/if}
+							{@render dropOffPointLine(row)}
 							{#if row.sharedCampaigns > 1}
 								<Badge
 									class="mt-1 h-auto border border-sky-200 bg-sky-50 py-0.5 text-xs font-bold whitespace-normal text-sky-900"
@@ -484,6 +520,7 @@
 											{row.description}
 										</p>
 									{/if}
+									{@render dropOffPointLine(row)}
 									{#if row.sharedCampaigns > 1}
 										<Badge
 											class="mt-1.5 h-auto bg-blue-50 py-0.5 text-2xs font-bold whitespace-normal text-blue-700 dark:bg-blue-950/40 dark:text-blue-300"
