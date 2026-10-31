@@ -40,7 +40,9 @@
 	import UnifiedRegistrationSummaryCard from './unified-registration-summary-card.svelte';
 	import UnifiedRegistrationStepper from './unified-registration-stepper.svelte';
 	import ThaidActionButton from './thaid-action-button.svelte';
+	import ThaidMemberScanDialog from './thaid-member-scan-dialog.svelte';
 	import type { ThaiDAutofillProfile } from '../../domain/thaid-profile';
+	import { applyThaidToHead, canScanThaidForHead } from '../../domain/thaid-autofill';
 	import { fetchThaidRegistrationStatus } from '$lib/api/thaid-status';
 	import { readRegistrationStickyTopPx } from './registration-sticky-offset';
 	import { firstInvalidField, focusTargetFor } from './registration-focus';
@@ -105,6 +107,7 @@
 	import { createQuery } from '@tanstack/svelte-query';
 
 	type FormSectionId = 'address' | 'pets' | 'vehicles' | 'members';
+	type ActiveRegistrationItem = { kind: 'member' | 'pet'; index: number; total: number };
 
 	function safeQuery<T>(fn: () => T, fallback: T): T {
 		try {
@@ -127,6 +130,7 @@
 		submitAlign = 'right',
 		stickyTopOffset,
 		includeVehiclesAssets,
+		claimedPets = [],
 		enableUnassignedPhoto = false,
 		allowHouseholdJoin = false,
 		shelterCode = '',
@@ -156,6 +160,7 @@
 		submitAlign?: 'right' | 'center';
 		stickyTopOffset?: string;
 		includeVehiclesAssets?: boolean;
+		claimedPets?: Array<{ species: string; name?: string; count?: number; details?: string }>;
 		enableUnassignedPhoto?: boolean;
 		/** Report-in flows with no household must explicitly join or create. */
 		allowHouseholdJoin?: boolean;
@@ -200,9 +205,6 @@
 		}
 	})();
 	const summaryShelterName = $derived(shelterName || onsiteShelter?.data?.name || '');
-	const formStickyStyle = $derived(
-		stickyTopOffset ? `--registration-sticky-top: ${stickyTopOffset}` : undefined
-	);
 	const shelterPhotoEnabled = $derived(
 		channel === 'public' && !enableUnassignedPhoto && Boolean(shelterCode.trim())
 	);
@@ -322,10 +324,20 @@
 	let touched = $state(false);
 	let hasAutofilled = $state(false);
 	let activeSection = $state<FormSectionId>('address');
+	let activeRegistrationItem = $state<ActiveRegistrationItem | null>(null);
 	let scrollSpyPaused = $state(false);
 	let isVirtualKeyboardOpen = $state(false);
 	/** Mobile-only: summary sheet opened from chip near sticky CTA. */
 	let mobileSummaryOpen = $state(false);
+	const formStickyStyle = $derived(
+		[
+			stickyTopOffset ? `--registration-sticky-top: ${stickyTopOffset}` : '',
+			// Sticky section headers (sm+) sit below the member/pet position bar while it shows.
+			activeRegistrationItem && !readOnly ? '--registration-indicator-height: 2.5rem' : ''
+		]
+			.filter(Boolean)
+			.join('; ') || undefined
+	);
 
 	let petItems = $state<PetCardItem[]>(
 		untrack(() => parseInitialPets(household.pets as PetGroup[]).items)
@@ -361,6 +373,7 @@
 
 	/** Currently selected match chip from public residence match (for address prefill & pets). */
 	let selectedMatchChip = $state<ResidenceMatchChip | null>(null);
+	const readOnlyPets = $derived(selectedMatchChip ? (selectedMatchChip.pets ?? []) : claimedPets);
 	/**
 	 * Durable existing-member count for join UI (header badges / summary).
 	 * Captured at confirm time so it survives chip list refreshes / optional field loss.
@@ -392,8 +405,10 @@
 	let residenceSuggestCheckedEmpty = $state(false);
 	/** Public lookup request failed — not the same as "no family matched". */
 	let residenceSuggestFailed = $state(false);
-	/** Stay false until GET /api/public/v1/thaid/status confirms ON (public channel only). */
+	/** Stay false until GET /api/public/v1/thaid/status confirms ON. */
 	let thaidEnabled = $state(false);
+	/** Onsite head: cross-device QR scan, so the half-filled form never leaves the page (#588). */
+	let headScanOpen = $state(false);
 
 	const enableResidenceJoin = $derived(mode === 'create' || allowHouseholdJoin);
 	let householdDecision = $state<'join' | 'create' | null>(null);
@@ -605,9 +620,7 @@
 		hasJoinSelection ? Math.max(joinedFamilyMembers.length, resolvedExistingMemberCount ?? 0) : 0
 	);
 	const summaryExistingPetsCount = $derived(
-		hasJoinSelection
-			? (selectedMatchChip?.pets ?? []).reduce((sum, p) => sum + (Number(p.count) || 1), 0)
-			: 0
+		readOnlyPets.reduce((sum, p) => sum + (Number(p.count) || 1), 0)
 	);
 	const summaryTotalMembers = $derived(summaryExistingMemberCount + members.length);
 	const summaryTotalPets = $derived(summaryExistingPetsCount + petItems.length);
@@ -845,11 +858,13 @@
 			});
 		}
 
-		if (channel === 'public' && typeof window !== 'undefined') {
+		if (typeof window !== 'undefined') {
 			void fetchThaidRegistrationStatus().then((s) => {
 				thaidEnabled = s.enabled;
 			});
+		}
 
+		if (channel === 'public' && typeof window !== 'undefined') {
 			const params = new URLSearchParams(window.location.search);
 			const errorParam = params.get('error');
 			if (errorParam) {
@@ -958,6 +973,89 @@
 			return () => {
 				observer.disconnect();
 				scrollTarget.removeEventListener('scroll', syncActive);
+			};
+		};
+	}
+
+	function createRegistrationItemSpy(): import('svelte/attachments').Attachment {
+		return (node) => {
+			const scrollRoot = findScrollParent(node);
+			const scrollTarget: Element | Window = scrollRoot ?? window;
+			let frame = 0;
+
+			const syncActiveItem = () => {
+				frame = 0;
+				const rootRect = scrollRoot?.getBoundingClientRect();
+				const viewportTop = Math.max(0, rootRect?.top ?? 0);
+				const viewportBottom = Math.min(window.innerHeight, rootRect?.bottom ?? window.innerHeight);
+				const viewportHeight = Math.max(0, viewportBottom - viewportTop);
+				const readingLine = viewportTop + viewportHeight * 0.35;
+				const visibleItems = [...node.querySelectorAll<HTMLElement>('[data-registration-item]')]
+					.map((element) => {
+						const rect = element.getBoundingClientRect();
+						return {
+							rect,
+							kind: element.dataset.registrationItem,
+							index: Number(element.dataset.registrationIndex),
+							total: Number(element.dataset.registrationTotal),
+							distance: Math.abs((rect.top + rect.bottom) / 2 - readingLine)
+						};
+					})
+					.filter(
+						(item) =>
+							(item.kind === 'member' || item.kind === 'pet') &&
+							item.total > 1 &&
+							item.index > 0 &&
+							item.rect.bottom > viewportTop &&
+							item.rect.top < viewportBottom
+					);
+
+				const inReadingLine = visibleItems.find(
+					(item) => item.rect.top <= readingLine && item.rect.bottom >= readingLine
+				);
+				const active = inReadingLine ?? visibleItems.sort((a, b) => a.distance - b.distance)[0];
+				const next = active
+					? {
+							kind: active.kind as 'member' | 'pet',
+							index: active.index,
+							total: active.total
+						}
+					: null;
+
+				if (
+					activeRegistrationItem?.kind !== next?.kind ||
+					activeRegistrationItem?.index !== next?.index ||
+					activeRegistrationItem?.total !== next?.total
+				) {
+					activeRegistrationItem = next;
+				}
+			};
+
+			const scheduleSync = () => {
+				if (frame) cancelAnimationFrame(frame);
+				frame = requestAnimationFrame(syncActiveItem);
+			};
+			const mutations = new MutationObserver(scheduleSync);
+			mutations.observe(node, {
+				childList: true,
+				subtree: true,
+				attributes: true,
+				attributeFilter: [
+					'data-registration-item',
+					'data-registration-index',
+					'data-registration-total'
+				]
+			});
+			scrollTarget.addEventListener('scroll', scheduleSync, { passive: true });
+			window.addEventListener('resize', scheduleSync, { passive: true });
+			scheduleSync();
+
+			return () => {
+				mutations.disconnect();
+				scrollTarget.removeEventListener('scroll', scheduleSync);
+				window.removeEventListener('resize', scheduleSync);
+				if (frame) cancelAnimationFrame(frame);
+				activeRegistrationItem = null;
 			};
 		};
 	}
@@ -1165,38 +1263,16 @@
 		);
 	}
 
-	/** ThaiD mock/real autofill: populate head member + address from profile. */
+	/** ThaiD autofill: head member (index 0) + residence; joining a family keeps its residence. */
 	function handleThaiDAutofill(profile: ThaiDAutofillProfile) {
-		// Fill head member (index 0) personal info
-		const head = members[0];
-		if (head) {
-			head.first_name = profile.first_name;
-			head.last_name = profile.last_name;
-			head.nickname = profile.nickname;
-			head.gender = profile.gender;
-			head.birth_year = profile.birth_year > 0 ? profile.birth_year : undefined;
-			head.age = profile.age > 0 ? profile.age : undefined;
-			if (profile.phone) head.phone = profile.phone;
-			head.person_id = { cardType: 'national_id', number: profile.person_id };
-			head.vulnerable_groups = profile.vulnerable_groups;
-			head.special_needs = profile.special_needs;
-			head.medical_conditions = profile.medical_conditions;
-			members = [...members]; // trigger reactivity
-		}
-
-		// Fill address from ThaiD — reassign object to trigger reactive cascading selects
-		household = {
-			...household,
-			address_no: profile.address.address_no || household.address_no,
-			village_no: profile.address.village_no || household.village_no,
-			province: profile.address.province || household.province,
-			district: profile.address.district || household.district,
-			subdistrict: profile.address.subdistrict || household.subdistrict,
-			postal_code: profile.address.postal_code || household.postal_code
-		};
+		const next = applyThaidToHead({ members, household, hasJoinSelection }, profile);
+		members = next.members;
+		// Reassign the object to trigger the reactive cascading selects
+		household = next.household;
 
 		markDirty();
-		toast.success(t.thaidHeadFetchedToast(`${profile.first_name} ${profile.last_name}`));
+		const head = members[0];
+		toast.success(t.thaidHeadFetchedToast((head && formatPersonName(head)) || t.thaidScanHead));
 	}
 
 	$effect(() => {
@@ -1569,6 +1645,7 @@
 	onsubmit={handleSubmit}
 	oninput={markDirty}
 	{@attach createScrollSpy()}
+	{@attach createRegistrationItemSpy()}
 >
 	{#if visibleErrors.messages.length > 0}
 		<Alert.Root variant="destructive" class="border-destructive/40 bg-destructive/5" role="alert">
@@ -1612,7 +1689,7 @@
 				submittingLabel={t.submitting}
 				existingHeadName={summaryExistingHeadName}
 				existingMemberCount={summaryExistingMemberCount}
-				existingPets={selectedMatchChip?.pets ?? []}
+				existingPets={readOnlyPets}
 				newPets={petItems}
 				onNavigate={(id) => scrollToSection(id as FormSectionId)}
 			/>
@@ -1620,6 +1697,33 @@
 
 		<!-- Right Column: Form Area (Full width on mobile, 8-col on lg+) -->
 		<div class="space-y-6 lg:col-span-8">
+			<!-- Member/pet position, pinned under the public navbar. Zero-height sticky rail: the bar
+				spans the form column (full-bleed on mobile) and never shifts the layout. -->
+			{#if activeRegistrationItem && !readOnly}
+				<div
+					class="sticky top-(--public-navbar-offset,0px) z-40 mb-0! h-0 transition-[top] duration-200 ease-out motion-reduce:transition-none"
+				>
+					<div
+						class="absolute inset-x-0 top-0 flex h-10 items-center justify-between gap-3 border-b border-domain-registration-border bg-domain-registration-subtle px-4 text-sm text-domain-registration-text shadow-xs max-sm:-mx-4 sm:rounded-b-lg sm:border-x"
+						aria-live="off"
+					>
+						<span class="inline-flex min-w-0 items-center gap-2 font-semibold">
+							{#if activeRegistrationItem.kind === 'member'}
+								<Users class="size-4 shrink-0" aria-hidden="true" />
+								<span class="truncate">{t.sectionMembers}</span>
+							{:else}
+								<PawPrint class="size-4 shrink-0" aria-hidden="true" />
+								<span class="truncate">{t.sectionPets}</span>
+							{/if}
+						</span>
+						<span
+							class="shrink-0 rounded-md border border-domain-registration-border bg-white px-2 py-0.5 font-bold tabular-nums"
+						>
+							{activeRegistrationItem.index} / {activeRegistrationItem.total}
+						</span>
+					</div>
+				</div>
+			{/if}
 			<!-- Top Progress Stepper (Mobile & Desktop) -->
 			{#if channel !== 'public'}
 				<UnifiedRegistrationStepper
@@ -1635,13 +1739,24 @@
 				title={t.sectionAddress}
 				description={t.sectionAddressDesc}
 				icon={Home}
+				tone="blue"
+				mobileSurface="dark"
 			>
-				<!-- ThaiD Action Button: Public Pre-Register -->
-				{#if channel === 'public' && thaidEnabled}
+				<!-- ThaiD: public redirects to ThaiD; onsite scans a QR without leaving the page;
+						no head scan on onsite report-in (would overwrite the existing head) -->
+				{#if thaidEnabled && canScanThaidForHead({ channel, mode })}
 					<ThaidActionButton
 						shelterCode={shelterCode || (enableUnassignedPhoto ? 'unassigned' : '')}
 						disabled={fieldsLocked}
+						onConnect={channel === 'public' ? undefined : () => (headScanOpen = true)}
 					/>
+					{#if channel !== 'public'}
+						<ThaidMemberScanDialog
+							bind:open={headScanOpen}
+							memberLabel={t.thaidScanHead}
+							onscanned={handleThaiDAutofill}
+						/>
+					{/if}
 				{/if}
 
 				<!-- Quick Search & Merge Tool Bar (both Public and Onsite) -->
@@ -1984,7 +2099,7 @@
 				existingMembers={joinedFamilyMembers}
 				existingMemberCount={summaryExistingMemberCount}
 				primaryContactPhone={members[0]?.phone ?? null}
-				thaidEnabled={channel === 'public' && thaidEnabled}
+				{thaidEnabled}
 				onDirty={markDirty}
 			/>
 
@@ -1996,7 +2111,7 @@
 				{channel}
 				{enableUnassignedPhoto}
 				{shelterCode}
-				existingPets={selectedMatchChip?.pets ?? []}
+				existingPets={readOnlyPets}
 				petErrors={visibleErrors.pets}
 				{validationSeq}
 				onsync={onPetsSynced}
@@ -2099,7 +2214,7 @@
 							showSubmit={false}
 							existingHeadName={summaryExistingHeadName}
 							existingMemberCount={summaryExistingMemberCount}
-							existingPets={selectedMatchChip?.pets ?? []}
+							existingPets={readOnlyPets}
 							newPets={petItems}
 							onNavigate={(id) => {
 								mobileSummaryOpen = false;

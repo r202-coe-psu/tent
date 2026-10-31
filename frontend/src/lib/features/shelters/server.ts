@@ -25,12 +25,17 @@
  * `src/lib/server/**` without an eslint-disable.
  */
 
+export { listDonationPoints } from './domain/storage-points';
+
 export {
 	migrateShelterV2ToCurrent,
 	SHELTER_MASTER_SCHEMA_V,
 	isShelterBookable,
 	isShelterCancelled,
 	resolveOperationStatus,
+	DEFAULT_SITE_KIND,
+	HOST_HOUSE_SITE_KIND,
+	validateSiteKindChange,
 	createShelterSchema,
 	updateShelterSchema,
 	EMPTY_ADMISSION_POLICY,
@@ -42,6 +47,13 @@ export {
 	type Zone
 } from './domain/schema';
 
+export { nextClosedAt } from './domain/closed-at';
+export {
+	planClosedAtBackfill,
+	applyClosedAtBackfill,
+	type ClosedAtBackfill,
+	type ClosedAtSource
+} from './domain/closed-at-backfill';
 export { SHELTER_DASHBOARD_VIEWS } from './domain/views';
 export { SHELTER_VIEW_MANIFEST } from './domain/view-manifest';
 export type { ShelterViewManifest, CouchViewDefinition } from './domain/view-manifest';

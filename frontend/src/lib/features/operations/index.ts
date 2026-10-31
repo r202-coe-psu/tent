@@ -10,6 +10,9 @@ export type {
 	Donation,
 	Donor,
 	DonationItem,
+	DonationPointReceipt,
+	DonationPointReceiptItem,
+	DonationCloseReason,
 	DonationCampaign,
 	CampaignNeed,
 	CountedItem,
@@ -21,6 +24,8 @@ export type {
 	DonationSlot,
 	DonationSlotMode,
 	NeedAvailability,
+	NeedCloseState,
+	NeedStatusFilter,
 	StockLotBalance,
 	StockTransfer,
 	StockTransferItem,
@@ -61,6 +66,8 @@ export {
 	keyableDonations,
 	completeDonationReceipt,
 	isNeedCutOff,
+	needCloseState,
+	matchesStatusFilter,
 	forceCutOffNeed,
 	reopenNeed,
 	editNeed,
@@ -90,6 +97,9 @@ export {
 	StockLotIntegrityError,
 	LotWriteOffError,
 	projectLotsByItem,
+	isNegativeLot,
+	negativeLots,
+	negativeLotSummary,
 	TransferForbiddenError,
 	adjustInputSchema,
 	createAdjustEntry,
@@ -274,6 +284,7 @@ export {
 	type LotScore,
 	type RankLotsOptions
 } from './domain/lot-priority';
+export { expiryInstant, isExpiryPassed } from './domain/expiry-instant';
 export {
 	planLotSplit,
 	type LotAllocation,

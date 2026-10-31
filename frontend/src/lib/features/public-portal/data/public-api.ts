@@ -6,9 +6,11 @@
 import type {
 	FamilySearchResponse,
 	ListPublicSheltersParams,
+	PublicShelterDetail,
 	PublicShelterListResponse
 } from '../domain/types';
 import type { MasterLabelOption } from '../domain/master-labels';
+import type { SiteKindOption } from '../domain/site-kind';
 import { classifyPublicApiError, type PublicApiErrorKind } from '../domain/search-error';
 
 const SEARCH_FALLBACK = 'เกิดข้อผิดพลาดในการค้นหา';
@@ -85,6 +87,26 @@ export async function listPublicShelters(
 	return data as PublicShelterListResponse;
 }
 
+/** Single shelter by code. Throws `PublicApiError` on 404 / 503 so callers can degrade. */
+export async function getPublicShelter(
+	code: string,
+	fetchFn: typeof fetch = fetch
+): Promise<PublicShelterDetail> {
+	let response: Response;
+	try {
+		response = await fetchFn(`/api/public/v1/shelters/${encodeURIComponent(code)}`);
+	} catch {
+		throw new PublicApiError('unavailable', 'ไม่สามารถโหลดข้อมูลศูนย์พักพิงได้');
+	}
+	const data = (await response.json().catch(() => null)) as {
+		shelter?: PublicShelterDetail;
+	} | null;
+	if (!response.ok || !data?.shelter) {
+		throw publicApiError(data, response.status, 'ไม่สามารถโหลดข้อมูลศูนย์พักพิงได้');
+	}
+	return data.shelter;
+}
+
 export type { MasterLabelOption };
 
 /**
@@ -121,6 +143,21 @@ export async function fetchShelterTypeLabels(
 			shelterTypes?: MasterLabelOption[];
 		} | null;
 		return body?.types ?? body?.shelterTypes ?? [];
+	} catch {
+		return [];
+	}
+}
+
+/**
+ * Bilingual options for `master_data:site_kind` (public field `site_kind`),
+ * every status included — see the BFF for why `inactive` items are kept.
+ */
+export async function fetchSiteKinds(fetchFn: typeof fetch = fetch): Promise<SiteKindOption[]> {
+	try {
+		const response = await fetchFn('/api/public/v1/config/site-kinds');
+		if (!response.ok) return [];
+		const body = (await response.json().catch(() => null)) as { types?: SiteKindOption[] } | null;
+		return body?.types ?? [];
 	} catch {
 		return [];
 	}

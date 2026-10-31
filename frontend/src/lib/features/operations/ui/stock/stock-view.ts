@@ -1,5 +1,6 @@
 import { qtyGt } from '$lib/utils/qty';
 import { formatThaiShortDate } from '$lib/utils/date';
+import { expiryInstant } from '../../domain/expiry-instant';
 import { formatTimeUntilExpiry } from '../../domain/lot-age';
 import { DEFAULT_STORAGE_LABEL, type StoragePointRef } from '../../domain/lot-storage';
 import {
@@ -41,6 +42,8 @@ export interface StockDisplayRow extends StockRowBase {
 	coverDays: number | null;
 	/** Lots still holding stock. */
 	lotCount: number;
+	/** "ใช้ได้ N (ไม่นับล็อตติดลบ −M)" when a lot is overdrawn (CR-216 FR-6a); null otherwise. */
+	usableNote: string | null;
 	/** First storage point plus a "+N" count, or null when unspecified. */
 	locationLabel: string | null;
 }
@@ -158,7 +161,7 @@ function byEarliestExpiry(a: StockRowBase, b: StockRowBase): number {
 	if (a.earliestExpiry === b.earliestExpiry) return 0;
 	if (a.earliestExpiry === null) return 1;
 	if (b.earliestExpiry === null) return -1;
-	return Date.parse(a.earliestExpiry) - Date.parse(b.earliestExpiry);
+	return expiryInstant(a.earliestExpiry) - expiryInstant(b.earliestExpiry);
 }
 
 /** Sort a copy. `urgency` = rank, then earliest expiry, then name; `qty` = least first. */

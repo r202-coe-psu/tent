@@ -1,3 +1,4 @@
+import { normalizeSiteKind } from './site-kind';
 import type { FamilySearchResult, PublicShelterCardModel, PublicShelterItem } from './types';
 
 /** Normalize Mongo/API status for existing public UI color helpers. */
@@ -10,6 +11,11 @@ export function toUiShelterStatus(status: string | null | undefined): string {
 	if (s === 'standby' || s === 'prepare' || s === 'preparing' || s === 'ready') return 'PREPARE';
 	if (s === 'closed') return 'CLOSED';
 	return status.toUpperCase();
+}
+
+/** CR-183: a closed shelter keeps its people searchable for the retention window. */
+export function isShelterClosed(item: Pick<FamilySearchResult, 'shelter_status'>): boolean {
+	return item.shelter_status === 'closed';
 }
 
 /**
@@ -37,7 +43,7 @@ export function toPublicShelterCard(
 		id: code || itemId || name,
 		code,
 		name,
-		site_kind: item?.site_kind === 'host_house' ? 'host_house' : 'evacuation_center',
+		site_kind: normalizeSiteKind(item?.site_kind),
 		status: toUiShelterStatus(item?.status),
 		address,
 		distance: typeof distance === 'number' && !isNaN(distance) ? distance : 0,

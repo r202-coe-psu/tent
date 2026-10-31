@@ -2,6 +2,23 @@ export { default as PublicShelterCard } from './ui/public-shelter-card.svelte';
 export { default as PublicShelterMetricCard } from './ui/public-shelter-metric-card.svelte';
 export { default as ShelterFilterPanel } from './ui/shelter-filter-panel.svelte';
 export { default as ShelterMap } from './ui/shelter-map.svelte';
+export { default as DonationNeedsMap } from './ui/donation-needs-map.svelte';
+export { default as DropOffShelterMap } from './ui/drop-off-shelter-map.svelte';
+export { default as DonationPinBadge } from './ui/donation-pin-badge.svelte';
+export { DONATION_URGENCY_STYLE } from './ui/donation-urgency';
+export {
+	buildDonationMap,
+	DONATION_URGENCY_RANK,
+	donationNeedUrgency,
+	donationShelterUrgency,
+	type DonationMap,
+	type DonationMapNeed,
+	type DonationNeedUrgency,
+	type DonationMapPoint,
+	type DonationMapShelter,
+	type MapPointFocus,
+	type DonationNeedsEntry
+} from './domain/donation-map';
 export { default as PublicHeroMetrics } from './ui/public-hero-metrics.svelte';
 export { default as PublicPageShell } from './ui/public-page-shell.svelte';
 export { default as FamilySearchModal } from './ui/family-search-modal.svelte';
@@ -21,8 +38,22 @@ export type {
 	PublicShelterListResponse,
 	PublicSiteKind
 } from './domain/types';
-export { searchResultKey, toPublicShelterCard, toUiShelterStatus } from './domain/mappers';
+export {
+	isShelterClosed,
+	searchResultKey,
+	toPublicShelterCard,
+	toUiShelterStatus
+} from './domain/mappers';
 export { resolveMasterLabel, shelterTypeLabel, toLabelMap } from './domain/master-labels';
+export {
+	DEFAULT_SITE_KIND,
+	activeSiteKinds,
+	countBySiteKind,
+	isHostHouseKind,
+	siteKindLabel,
+	siteKindTiles,
+	type SiteKindOption
+} from './domain/site-kind';
 export {
 	isInShelterStatus,
 	publicStayStatusLabel,
@@ -33,6 +64,7 @@ export {
 	type StayStatusTone
 } from './domain/stay-status';
 export { default as StayStatusChip } from './ui/stay-status-chip.svelte';
+export { default as ShelterClosedBadge } from './ui/shelter-closed-badge.svelte';
 export {
 	FAMILY_SEARCH_MAX_LENGTH,
 	normalizeFamilySearchQuery,
@@ -43,16 +75,20 @@ export type { PublicApiErrorKind } from './domain/search-error';
 export {
 	familySearch,
 	PublicApiError,
+	getPublicShelter,
 	listPublicShelters,
 	fetchShelterTypes,
+	fetchSiteKinds,
 	type ShelterTypeOption
 } from './data/public-api';
 export {
 	publicPortalKeys,
 	useFamilySearchMutation,
+	usePublicShelter,
 	usePublicShelters,
 	useShelterTypeLabels,
 	useShelterTypeLabelMap,
+	useSiteKinds,
 	useVulnerableGroupLabels,
 	useVulnerableGroupLabelMap
 } from './application/queries';

@@ -139,6 +139,19 @@ export {
 } from './bulk-return-entry-void';
 
 export {
+	BULK_RETURN_LOAN_REOPEN_SCHEMA_V,
+	BULK_RETURN_LOAN_REOPEN_REASON_MAX,
+	bulkReturnLoanReopenIdSchema,
+	bulkReturnLoanReopenInputSchema,
+	bulkReturnLoanReopenDocSchema,
+	deriveLoanReopenId,
+	createBulkReturnLoanReopen,
+	canReopenEntryLoans,
+	type BulkReturnLoanReopenInput,
+	type BulkReturnLoanReopen
+} from './bulk-return-loan-reopen';
+
+export {
 	resolveBulkReturnEntries,
 	summarizePoolItems,
 	isPoolEmpty,
@@ -147,6 +160,7 @@ export {
 	findLateEntries,
 	findUnresolvedBulkReturnRefs,
 	buildSnapshotPins,
+	pinnedItemsSummary,
 	findSnapshotConflicts,
 	type SnapshotConflictKind,
 	type SnapshotPins,
@@ -164,6 +178,7 @@ export {
 	assessBulkReturnRefOnLoan,
 	findClosedBulkReturnLoanRefs,
 	findAppliedBulkReturnLoanRefs,
+	isBulkReturnRefRevertable,
 	findMissedLoanRefs,
 	type MissedBulkReturnLoanRef,
 	type BulkReturnLoanDriftReason,
@@ -175,6 +190,8 @@ export {
 
 export {
 	buildBulkReturnPoolOverview,
+	liveEntriesOf,
+	liveLoanRefCount,
 	type BulkReturnEventSet,
 	type BulkReturnPoolOverviewRow,
 	type BulkReturnPoolOverviewOptions

@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
+	buildDonationItemsPayload,
+	donationItemEditGate,
 	donationPayloadUnit,
 	donorUnitOptions,
 	isDonorEditable,
@@ -19,9 +21,9 @@ describe('isDonorEditable (T-21 / CR-080 / D-1)', () => {
 		expect(isDonorEditable('pending_review')).toBe(true);
 	});
 
-	// CR-174 FR-20..FR-23 — a campaign booking has its QR from the start; the donor can
-	// still cancel, fix the basket or add the courier number.
-	it('still lets the donor change a booking that has its QR', () => {
+	// CR-174 FR-20 / FR-22 — a campaign booking has its QR from the start; the donor can
+	// still cancel or add the courier number (the lines are fixed — CR-196).
+	it('still lets the donor cancel a booking that has its QR', () => {
 		expect(isDonorEditable('verifying')).toBe(true);
 	});
 
@@ -34,6 +36,36 @@ describe('isDonorEditable (T-21 / CR-080 / D-1)', () => {
 		expect(isDonorEditable('expired')).toBe(false);
 		expect(isDonorEditable('redirected')).toBe(false);
 		expect(isDonorEditable('rejected')).toBe(false);
+	});
+});
+
+/** CR-196 FR-LK-4 — the lines are the donor's only until anything is decided. */
+describe('donationItemEditGate', () => {
+	const pending = { review_status: 'pending' as const };
+
+	it('is open while every line still waits for review', () => {
+		expect(donationItemEditGate('pending_review', [pending, pending])).toBe('editable');
+		expect(donationItemEditGate('declared', [{}])).toBe('editable');
+	});
+
+	it('closes once one line is decided, by the campaign rule or by staff', () => {
+		expect(donationItemEditGate('pending_review', [{ review_status: 'approved' }, pending])).toBe(
+			'already_reviewed'
+		);
+		expect(donationItemEditGate('pending_review', [{ review_status: 'rejected' }, pending])).toBe(
+			'already_reviewed'
+		);
+	});
+
+	it('closes a booking with its QR, or refused, whatever its lines say', () => {
+		expect(donationItemEditGate('verifying', [{}])).toBe('already_reviewed');
+		expect(donationItemEditGate('rejected', [{}])).toBe('already_reviewed');
+	});
+
+	it('is closed for good once the booking is past drop-off', () => {
+		for (const status of ['received', 'cancelled', 'expired', 'redirected']) {
+			expect(donationItemEditGate(status, [pending])).toBe('closed');
+		}
 	});
 });
 
@@ -113,5 +145,45 @@ describe('linesMissingExpiry (perishable lot rule, schema.md §2.1)', () => {
 
 	it('falls back to the item id when the line has no display name', () => {
 		expect(linesMissingExpiry([{ item_id: 'item:egg', perishable: true }])).toEqual(['item:egg']);
+	});
+});
+
+describe('buildDonationItemsPayload', () => {
+	const t = { unspecified: 'ไม่ระบุ', defaultItemUnit: 'piece' };
+	const line = (amount: number) => ({ name: 'ข้าวสาร', unit: 'kg', amount, condition: 'new' });
+
+	it('sends the typed amount as qty', () => {
+		expect(buildDonationItemsPayload([line(3)], t)[0].qty).toBe(3);
+		expect(buildDonationItemsPayload([line(0.5)], t)[0].qty).toBe(0.5);
+	});
+
+	it('never coerces 0 to 1', () => {
+		expect(buildDonationItemsPayload([line(0)], t)[0].qty).toBe(0);
+	});
+
+	it('does not fabricate an item for an empty list', () => {
+		expect(buildDonationItemsPayload([], t)).toEqual([]);
+	});
+
+	it('keeps the existing mapping and never sends needQty', () => {
+		const item = { name: '', unit: '', amount: 5, condition: 'new', remark: '', needQty: 365 };
+		const [p] = buildDonationItemsPayload([item], t);
+		expect(p.free_text).toBe('ไม่ระบุ');
+		expect(p.item_id).toBeUndefined();
+		expect(p.unit).toBe('piece');
+		expect(p.condition).toBe('new');
+		expect(p.note).toBeUndefined();
+		expect(p).not.toHaveProperty('needQty');
+	});
+
+	// CR-206 FR-MP-1, FR-MP-11 — the form decides each line's point; the payload carries it as is.
+	it("sends each line's drop-off point, null included, and leaves it out when unset", () => {
+		const [picked, none, unset] = buildDonationItemsPayload(
+			[{ ...line(1), dropOffPointId: 'point-gym' }, { ...line(1), dropOffPointId: null }, line(1)],
+			t
+		);
+		expect(picked.drop_off_point_id).toBe('point-gym');
+		expect(none.drop_off_point_id).toBeNull();
+		expect(unset).not.toHaveProperty('drop_off_point_id');
 	});
 });

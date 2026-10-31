@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { searchResultKey, toPublicShelterCard, toUiShelterStatus } from './mappers';
+import {
+	isShelterClosed,
+	searchResultKey,
+	toPublicShelterCard,
+	toUiShelterStatus
+} from './mappers';
 import type { FamilySearchResult, PublicShelterItem } from './types';
 
 describe('toUiShelterStatus', () => {
@@ -64,6 +69,23 @@ describe('toPublicShelterCard', () => {
 		expect(card.site_kind).toBe('host_house');
 	});
 
+	it('keeps a master site_kind code the app has no special handling for', () => {
+		const card = toPublicShelterCard({
+			code: 'SH003',
+			name: 'โรงพยาบาลสนาม',
+			status: 'open',
+			capacity: 30,
+			site_kind: 'field_hospital'
+		});
+		expect(card.site_kind).toBe('field_hospital');
+	});
+
+	it('reads a missing or blank site_kind as evacuation_center', () => {
+		const base = { code: 'SH004', name: 'ไม่มีชนิด', status: 'open', capacity: 5 };
+		expect(toPublicShelterCard(base).site_kind).toBe('evacuation_center');
+		expect(toPublicShelterCard({ ...base, site_kind: '' }).site_kind).toBe('evacuation_center');
+	});
+
 	it('handles null, undefined, or empty shelter item gracefully without throwing', () => {
 		const emptyCard = toPublicShelterCard(null);
 		expect(emptyCard.id).toBe('ศูนย์พักพิง');
@@ -108,5 +130,19 @@ describe('searchResultKey', () => {
 
 	it('survives a null result', () => {
 		expect(searchResultKey(null as unknown as FamilySearchResult, 4)).toBe('result-4');
+	});
+});
+
+describe('isShelterClosed', () => {
+	it('is true only for a closed shelter', () => {
+		expect(isShelterClosed({ shelter_status: 'closed' })).toBe(true);
+		expect(isShelterClosed({ shelter_status: 'open' })).toBe(false);
+		expect(isShelterClosed({ shelter_status: 'full' })).toBe(false);
+		expect(isShelterClosed({ shelter_status: 'standby' })).toBe(false);
+	});
+
+	it('is false when the shelter status is unknown or absent', () => {
+		expect(isShelterClosed({ shelter_status: null })).toBe(false);
+		expect(isShelterClosed({})).toBe(false);
 	});
 });

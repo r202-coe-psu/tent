@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from contextlib import ExitStack
 from decimal import Decimal
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -12,11 +13,11 @@ from worker.couch.processor import process_change
 
 @pytest.fixture(autouse=True)
 def shelter_projected():
-    """Every shelter counts as listed in `public_shelters` unless a test says otherwise."""
+    """Every shelter counts as open in `public_shelters` unless a test says otherwise."""
     with patch(
-        "worker.couch.processor.is_shelter_projected",
+        "worker.couch.processor.projected_shelter_status",
         new_callable=AsyncMock,
-        return_value=True,
+        return_value="open",
     ) as projected:
         yield projected
 
@@ -555,7 +556,7 @@ async def test_process_registry_shelter_relisted_rescans_its_database(
 ):
     """Reverting `cancelled` (no public row yet) rebuilds the shelter DB's projections —
     its changes were skipped while it was hidden."""
-    shelter_projected.return_value = False
+    shelter_projected.return_value = None
     couch = AsyncMock()
     couch.database_exists.return_value = True
     change = {
@@ -617,7 +618,7 @@ async def test_process_change_skips_a_cancelled_shelters_database(
 ):
     """No public row (cancelled) → a shelter-DB change projects nothing, but the
     checkpoint still advances."""
-    shelter_projected.return_value = False
+    shelter_projected.return_value = None
     couch = AsyncMock()
     change = {
         "seq": 81,
@@ -642,3 +643,71 @@ async def test_process_change_skips_a_cancelled_shelters_database(
     apply_person.assert_not_awaited()
     refresh_occupants.assert_not_awaited()
     save_cp.assert_awaited_once_with("shelter_sh005", 81)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("status", "walk_in_reconciled", "settles"),
+    [
+        # CR-206 FR-MP-27c / AC-7: closed with a shortfall — hand it back now.
+        ("received", False, True),
+        # A received walk-in was just reconciled by reserve_walk_in_quota.
+        ("received", True, False),
+        ("verifying", False, False),
+        ("rejected", False, False),
+    ],
+)
+async def test_a_received_booking_settles_its_shortfall(
+    status: str, walk_in_reconciled: bool, settles: bool
+):
+    couch = AsyncMock()
+    doc = {
+        "_id": "donation:01MP",
+        "type": "donation",
+        "status": status,
+        "channel": "public",
+        "campaign_id": "donation_campaign:01",
+        "items": [{"item_id": "item:para", "qty": "10"}],
+    }
+    change = {"seq": 90, "id": "donation:01MP", "doc": doc}
+
+    with ExitStack() as stack:
+        for name in (
+            "save_checkpoint",
+            "apply_donation",
+            "apply_need",
+            "settle_donation_quota",
+        ):
+            stack.enter_context(
+                patch(f"worker.couch.processor.{name}", new_callable=AsyncMock)
+            )
+        stack.enter_context(
+            patch(
+                "worker.couch.processor.project_needs_for_shelter",
+                new_callable=AsyncMock,
+                return_value=[],
+            )
+        )
+        stack.enter_context(
+            patch(
+                "worker.couch.processor.project_donation",
+                return_value=("upsert", {"_id": "donation:01MP"}),
+            )
+        )
+        stack.enter_context(
+            patch(
+                "worker.couch.processor.reserve_walk_in_quota",
+                new_callable=AsyncMock,
+                return_value=walk_in_reconciled,
+            )
+        )
+        settle_shelved = stack.enter_context(
+            patch("worker.couch.processor.settle_shelved_quota", new_callable=AsyncMock)
+        )
+        await process_change(couch, "shelter_sh001", change)
+
+    if settles:
+        settle_shelved.assert_awaited_once()
+        assert settle_shelved.await_args.args == (couch, "SH001")
+    else:
+        settle_shelved.assert_not_awaited()

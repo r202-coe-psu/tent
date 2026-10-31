@@ -31,7 +31,7 @@
 		resolvePhotoPreviewUrl
 	} from './registration-photo-preview';
 	import * as Accordion from '$lib/components/ui/accordion/index.js';
-	import { createPetCard, getPetTitle, type PetCardItem } from './unified-registration-pets';
+	import { createPetCard, type PetCardItem } from './unified-registration-pets';
 
 	let {
 		petItems = $bindable<PetCardItem[]>(),
@@ -61,6 +61,14 @@
 
 	const t = $derived(getTranslation(PUBLIC_BOOKING_FORM_I18N, langState.current));
 	const totalPetCount = $derived(petItems.length);
+	const existingPetCount = $derived(
+		existingPets.reduce((sum, p) => sum + (Number(p.count) || 1), 0)
+	);
+	const petSlotsFull = $derived(existingPetCount + petItems.length >= PETS_MAX_COUNT);
+	const familyPetTotal = $derived(existingPetCount + totalPetCount);
+	/** Public numbers pets across the whole family (already registered + new). */
+	const petSequenceOffset = $derived(channel === 'public' ? existingPetCount : 0);
+	const petSequenceTotal = $derived(channel === 'public' ? familyPetTotal : totalPetCount);
 
 	let nextPetId = untrack(() => Math.max(0, ...petItems.map((p) => p.id), 0) + 1);
 	let uploadingPetId = $state<number | null>(null);
@@ -130,7 +138,7 @@
 
 	function addPet(species: 'dog' | 'cat' | 'other') {
 		if (pending) return;
-		if (petItems.length >= PETS_MAX_COUNT) {
+		if (petSlotsFull) {
 			toast.error(t.petMaxReached);
 			return;
 		}
@@ -226,21 +234,22 @@
 		notifySync();
 	}
 
-	function petTitle(item: PetCardItem): string {
-		return getPetTitle(item, petItems, {
-			dogTitle: t.dogTitle,
-			catTitle: t.catTitle,
-			otherPetTitle: t.otherPetTitle,
-			petIndexSuffix: t.petIndexSuffix
-		});
+	function petSpeciesLabel(item: PetCardItem): string {
+		if (item.species === 'dog') return t.dogTitle;
+		if (item.species === 'cat') return t.catTitle;
+		return item.customSpecies.trim() || t.otherPetTitle;
 	}
 </script>
 
-<section id="unified-pets" class="unified-reg-scroll-mt">
+<section
+	id="unified-pets"
+	data-surface="dark"
+	class="unified-reg-band unified-reg-scroll-mt max-sm:border-y"
+>
 	<Accordion.Root type="multiple" bind:value={accordionValue} class="w-full">
 		<Accordion.Item
 			value="pets"
-			class="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-2xs"
+			class="unified-reg-band-flat overflow-hidden rounded-2xl border border-amber-200 bg-amber-50/70 shadow-2xs"
 		>
 			<Accordion.Trigger
 				class="flex w-full items-center justify-between p-4 transition-colors hover:bg-slate-50/50 hover:no-underline sm:p-5"
@@ -300,7 +309,9 @@
 											? t.dogTitle
 											: ep.species === 'cat'
 												? t.catTitle
-												: ep.species}
+												: ep.species === 'other'
+													? t.otherPetTitle
+													: ep.species}
 										{#if ep.name}· {ep.name}{/if}
 									</span>
 									{#if ep.count && ep.count > 1}
@@ -320,7 +331,7 @@
 				>
 					<span class="text-xs font-medium text-foreground">
 						{totalPetCount > 0 ? t.petListTitle(totalPetCount) : t.addPetsTitle}
-						{#if petItems.length >= PETS_MAX_COUNT}
+						{#if petSlotsFull}
 							<span class="ml-1 font-normal text-amber-800">· {t.petMaxReached}</span>
 						{/if}
 					</span>
@@ -329,7 +340,7 @@
 							type="button"
 							variant="outline"
 							size="sm"
-							disabled={pending || petItems.length >= PETS_MAX_COUNT}
+							disabled={pending || petSlotsFull}
 							onclick={() => addPet('dog')}
 							class="h-8 gap-1 text-xs"
 						>
@@ -340,7 +351,7 @@
 							type="button"
 							variant="outline"
 							size="sm"
-							disabled={pending || petItems.length >= PETS_MAX_COUNT}
+							disabled={pending || petSlotsFull}
 							onclick={() => addPet('cat')}
 							class="h-8 gap-1 text-xs"
 						>
@@ -351,7 +362,7 @@
 							type="button"
 							variant="outline"
 							size="sm"
-							disabled={pending || petItems.length >= PETS_MAX_COUNT}
+							disabled={pending || petSlotsFull}
 							onclick={() => addPet('other')}
 							class="h-8 gap-1 text-xs"
 						>
@@ -373,7 +384,7 @@
 								type="button"
 								variant="outline"
 								size="sm"
-								disabled={pending || petItems.length >= PETS_MAX_COUNT}
+								disabled={pending || petSlotsFull}
 								onclick={() => addPet('dog')}
 								class="h-8 gap-1 text-xs"
 							>
@@ -384,7 +395,7 @@
 								type="button"
 								variant="outline"
 								size="sm"
-								disabled={pending || petItems.length >= PETS_MAX_COUNT}
+								disabled={pending || petSlotsFull}
 								onclick={() => addPet('cat')}
 								class="h-8 gap-1 text-xs"
 							>
@@ -395,7 +406,7 @@
 								type="button"
 								variant="outline"
 								size="sm"
-								disabled={pending || petItems.length >= PETS_MAX_COUNT}
+								disabled={pending || petSlotsFull}
 								onclick={() => addPet('other')}
 								class="h-8 gap-1 text-xs"
 							>
@@ -407,7 +418,15 @@
 				{:else}
 					<div class="space-y-2">
 						{#each petItems as pet, petIndex (pet.id)}
-							<div class="rounded-xl border border-slate-200/80 bg-white p-2.5 shadow-2xs sm:p-3">
+							<div
+								id="unified-pet-card-{pet.id}"
+								data-registration-item={channel === 'public' && familyPetTotal > 1
+									? 'pet'
+									: undefined}
+								data-registration-index={existingPetCount + petIndex + 1}
+								data-registration-total={familyPetTotal}
+								class="rounded-xl border border-slate-200/80 bg-white p-2.5 shadow-2xs sm:p-3"
+							>
 								<div class="mb-2 flex flex-wrap items-center justify-between gap-2">
 									<div class="flex min-w-0 items-center gap-2">
 										<span
@@ -418,14 +437,10 @@
 													? 'border-sky-200 bg-sky-50 text-sky-900'
 													: 'border-emerald-200 bg-emerald-50 text-emerald-900'}"
 										>
-											{pet.species === 'dog'
-												? t.dogTitle
-												: pet.species === 'cat'
-													? t.catTitle
-													: t.otherPetTitle}
+											{petSpeciesLabel(pet)}
 										</span>
-										<span class="truncate text-sm font-semibold text-foreground">
-											{petTitle(pet)}
+										<span class="truncate text-sm font-semibold text-foreground tabular-nums">
+											{`${t.petIndexSuffix} ${petSequenceOffset + petIndex + 1}/${petSequenceTotal}`}
 										</span>
 									</div>
 

@@ -476,18 +476,26 @@ export class BulkReturnReceiveInputError extends Error {
  * Pure validation + normalization of the receive rows against the submit snapshot. Returns one
  * `received_items` row per `items_summary` item (in snapshot order, `expected_qty` filled in).
  * Rules: exactly one row per item (no missing / extra / duplicate); `received_qty` a whole number
- * 0..expected; received == expected carries no reason/note; received < expected needs a reason, and
+ * 0..cap; received == expected carries no reason/note; received < expected needs a reason, and
  * `other` also needs a non-empty note. Notes are trimmed; a blank note counts as absent.
+ *
+ * `expected_qty` is always the snapshot `itemsSummary` qty (persisted invariant). The optional
+ * `receivable` summary (same items) holds the cap per item: the qty still countable in this pool.
+ * It is absent = `itemsSummary`. A receivable qty below the snapshot qty means the gap was already
+ * counted in another pool: receiving exactly the receivable qty is then recorded as `miscount` with
+ * a deterministic note (`นับซ้ำกับกองอื่น {gap} ชิ้น`) unless the caller sent its own reason/note.
  * Throws {@link BulkReturnReceiveInputError}.
  */
 export function buildBulkReturnReceivedItems(
 	itemsSummary: readonly BulkReturnPoolItemSummaryRow[],
-	rows: readonly BulkReturnReceivedRowInput[]
+	rows: readonly BulkReturnReceivedRowInput[],
+	receivable?: readonly BulkReturnPoolItemSummaryRow[]
 ): BulkReturnPoolReceivedItem[] {
 	const fail = (message: string): never => {
 		throw new BulkReturnReceiveInputError(message);
 	};
 	const expectedByItem = new Map(itemsSummary.map((row) => [row.item_id, row.qty]));
+	const capByItem = new Map((receivable ?? itemsSummary).map((row) => [row.item_id, row.qty]));
 	const rowByItem = new Map<string, BulkReturnReceivedRowInput>();
 	for (const row of rows) {
 		if (!expectedByItem.has(row.item_id)) {
@@ -506,14 +514,17 @@ export function buildBulkReturnReceivedItems(
 			return fail(`Received qty of ${item_id} must be a whole number of 0 or more`);
 		}
 		const received = parsedQty.data;
-		if (!qtyLte(received, expected)) {
+		const cap = capByItem.get(item_id) ?? expected;
+		if (!qtyLte(received, cap)) {
 			return fail(
-				`Received qty of ${item_id} (${received}) must not exceed expected (${expected})`
+				cap === expected
+					? `Received qty of ${item_id} (${received}) must not exceed expected (${expected})`
+					: `Received qty of ${item_id} (${received}) must not exceed the receivable qty (${cap}); the rest is counted in another pool`
 			);
 		}
 
-		const reason = row.discrepancy_reason;
-		const note = row.discrepancy_note?.trim() || undefined;
+		let reason = row.discrepancy_reason;
+		let note = row.discrepancy_note?.trim() || undefined;
 		const base = { item_id, expected_qty: expected, received_qty: received };
 
 		if (parseQty(received).eq(expected)) {
@@ -521,6 +532,11 @@ export function buildBulkReturnReceivedItems(
 				return fail(`Item ${item_id} was received in full and must not carry a discrepancy`);
 			}
 			return base;
+		}
+		if (reason === undefined && note === undefined && parseQty(received).eq(cap)) {
+			const gap = parseQty(expected).minus(cap).toString();
+			reason = 'miscount';
+			note = `นับซ้ำกับกองอื่น ${gap} ชิ้น`;
 		}
 		if (reason === undefined) {
 			return fail(`Item ${item_id} was received short: a discrepancy reason is required`);

@@ -23,7 +23,8 @@ _COUCH_TIMEOUT_SECONDS = 15.0
 _RELIGION_ALLOWED = frozenset({"buddhist", "muslim", "christian", "other", "unknown"})
 # Couch SoR schema versions at claim birth (CR-112 / CR-148 / schema.md) — keep local to birth.
 HOUSEHOLD_SCHEMA_V = 6
-IMAGE_SCHEMA_V = 1
+# 2: optional `purpose` / `donation_id` (CR-175 donor photos). A claim photo sets neither.
+IMAGE_SCHEMA_V = 2
 
 
 class CouchBirthError(Exception):

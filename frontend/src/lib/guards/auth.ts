@@ -14,8 +14,9 @@ import {
 	canAccessIncidents,
 	canAccessVolunteerBackoffice,
 	canAccessZoning,
+	canManageBanners,
 	canManageScanners,
-	isKioskStaffOnly,
+	kioskConfinement,
 	shelterCodeFromRoles
 } from '$lib/auth/roles';
 import { fetchAuthStatus, type AuthStatus } from '$lib/features/users';
@@ -129,8 +130,11 @@ export async function requireManager(fetchFn?: typeof fetch) {
 	}
 }
 
-/** The only back-office page a kiosk_staff-only user may open (FR-SBO-29). */
+/** The only back-office area a kiosk_staff-only user may open (FR-SBO-29). */
 export const KIOSK_STAFF_BACKOFFICE_ROUTE = '/back-office/kiosks';
+
+/** The only back-office area a pr_staff-only user may open (FR-SBO-29, issue #930). */
+export const PR_STAFF_BACKOFFICE_ROUTE = '/back-office/kiosks/banners';
 
 /**
  * Kiosk device management (`/back-office/kiosks`) guard — system_admin, or shelter_manager /
@@ -147,14 +151,33 @@ export async function requireKioskManagement(fetchFn?: typeof fetch) {
 }
 
 /**
- * Back-office layout gate — a user whose only capability in the selected shelter is kiosk_staff
- * may open the kiosk device page only (FR-SBO-29); every other back-office page sends them to the
- * portal like any other denied page. Call after {@link requireAuth}.
+ * Kiosk banner management (`/back-office/kiosks/banners/**`) guard — system_admin, or
+ * shelter_manager / kiosk_staff / pr_staff of the selected shelter (FR-SBO-29, issue #930). The
+ * banner BFF routes re-check scope per request.
+ */
+export async function requireBannerManagement(fetchFn?: typeof fetch) {
+	await requireAuth(fetchFn);
+	const roles = authStore.user?.roles ?? [];
+	const shelter = activeShelterCode(roles);
+	if (!isSystemAdmin(roles) && !(shelter && canManageBanners(roles, shelter))) {
+		throw redirect(302, resolve(LANDING_ROUTE));
+	}
+}
+
+/**
+ * Back-office layout gate — a user confined to the kiosk pages in the selected shelter (see
+ * {@link kioskConfinement}, FR-SBO-29, issue #930) may open only their area: `kiosk_staff` all of
+ * `/back-office/kiosks/**`, `pr_staff`-only just `/back-office/kiosks/banners/**`. Every other
+ * back-office page sends them to the portal like any other denied page. Call after
+ * {@link requireAuth}.
  */
 export function confineKioskStaffOnly(pathname: string) {
 	const roles = authStore.user?.roles ?? [];
-	if (!isKioskStaffOnly(roles, activeShelterCode(roles))) return;
-	const allowed = resolve(KIOSK_STAFF_BACKOFFICE_ROUTE);
+	const confinement = kioskConfinement(roles, activeShelterCode(roles));
+	if (confinement === null) return;
+	const allowed = resolve(
+		confinement === 'banners' ? PR_STAFF_BACKOFFICE_ROUTE : KIOSK_STAFF_BACKOFFICE_ROUTE
+	);
 	if (pathname === allowed || pathname.startsWith(`${allowed}/`)) return;
 	throw redirect(302, resolve(LANDING_ROUTE));
 }
@@ -162,9 +185,13 @@ export function confineKioskStaffOnly(pathname: string) {
 /**
  * Warehouse guard — system_admin, or in the active shelter shelter_manager or the warehouse
  * side: warehouse_staff or supply_coordinator (`isWarehouseStaff`; role-permission-matrix.md
- * §4). Redirects to / otherwise.
+ * §4). Otherwise redirects to `LANDING_ROUTE`, or to `options.deskFallback` when the user can open
+ * the Distribution Desk — see {@link warehouseDeniedDestination}.
  */
-export async function requireWarehouseAccess(fetchFn: typeof fetch = fetch) {
+export async function requireWarehouseAccess(
+	fetchFn: typeof fetch = fetch,
+	options?: { deskFallback?: DeskFallbackHref | null }
+) {
 	await requireAuth(fetchFn);
 	const roles = authStore.user?.roles ?? [];
 	const shelter = activeShelterCode(roles);
@@ -173,8 +200,29 @@ export async function requireWarehouseAccess(fetchFn: typeof fetch = fetch) {
 		!isShelterManager(roles, shelter) &&
 		!isWarehouseStaff(roles, shelter)
 	) {
-		throw redirect(302, resolve(LANDING_ROUTE));
+		throw redirect(302, resolve(warehouseDeniedDestination(roles, shelter, options?.deskFallback)));
 	}
+}
+
+/**
+ * Distribution Desk href (optional query) a route may offer as the warehouse-guard fallback.
+ * Must match `OnsiteDistributionHref` in distribution `ui/model/pool-url-state.ts` (the guard does
+ * not import the feature); a type check in `pool-url-state.test.ts` fails on drift.
+ */
+export type DeskFallbackHref = '/onsite/distribution' | `/onsite/distribution?${string}`;
+
+/**
+ * Where a user denied by {@link requireWarehouseAccess} goes: `deskFallback` (an app path with
+ * optional query, supplied by the route) when it is non-empty and the user can open the
+ * Distribution Desk, otherwise the landing route.
+ */
+export function warehouseDeniedDestination(
+	roles: readonly string[],
+	shelter: string | null,
+	deskFallback?: DeskFallbackHref | null
+): DeskFallbackHref | typeof LANDING_ROUTE {
+	if (deskFallback && canAccessDistributionDesk(roles, shelter)) return deskFallback;
+	return LANDING_ROUTE;
 }
 
 /**

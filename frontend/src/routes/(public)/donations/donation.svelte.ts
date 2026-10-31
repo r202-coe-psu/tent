@@ -1,6 +1,7 @@
 import { setContext, getContext, tick } from 'svelte';
 import { ulid } from '$lib/db/ulid';
 import { scrollAppToTop } from '$lib/utils/scroll-app-to-top';
+import { DonorPhotos } from '$lib/features/donations';
 
 export interface DonationItem {
 	id: string;
@@ -23,7 +24,34 @@ export interface DonationItem {
 	unit_code?: string;
 	condition?: string;
 	remark?: string;
-	image?: string;
+	/** UI-only hint: units still short on the need card this line came from. Never sent. */
+	needQty?: number;
+	/**
+	 * The drop-off point the donor picked for this line (CR-206 FR-MP-8). Unset = the default
+	 * (FR-MP-9); set on submit to the point actually booked, so the ticket groups by it.
+	 */
+	dropOffPointId?: string | null;
+}
+
+/**
+ * A fresh donation line. `amount` always starts at 0 (#822): the donor must type a
+ * quantity on purpose, and the shortfall from the need card is only shown as a hint.
+ */
+export function newDonationItem(
+	init: Partial<Omit<DonationItem, 'id' | 'amount' | 'needQty'>> & { qty_needed?: number } = {}
+): DonationItem {
+	const { qty_needed, ...rest } = init;
+	return {
+		id: ulid(),
+		category: 'food',
+		name: '',
+		unit: 'piece',
+		condition: 'new',
+		remark: '',
+		...rest,
+		amount: 0,
+		...(qty_needed !== undefined && qty_needed > 0 ? { needQty: qty_needed } : {})
+	};
 }
 
 export type TabStep = 'needs' | 'shelter-details' | 'form' | 'time' | 'ticket';
@@ -41,30 +69,36 @@ export class DonationStore {
 
 	deliveryMethod = $state<'self_dropoff' | 'parcel' | 'shelter_pickup'>('self_dropoff');
 	vehicleType = $state<'motorcycle' | 'car' | 'pickup' | 'truck' | undefined>(undefined);
+	/** Optional plate for a self drop-off. Kept when the donor switches method, never sent then. */
+	vehiclePlate = $state('');
 	slotDate = $state('');
 	slotTime = $state('');
+	/** The shelter / day / queue `slotTime` was picked for (`slotContextKey`). */
+	slotFor = $state('');
+	/** The plate the booking actually sent — what the ticket shows (CR-209 FR-3a). */
+	bookedVehiclePlate = $state('');
 	shelterCode = $state('');
 	courierTrackingNo = $state('');
 	eta = $state('');
 	pickupAddress = $state('');
 
-	items = $state<DonationItem[]>([
-		{
-			id: ulid(),
-			category: 'food',
-			name: '',
-			amount: 1,
-			unit: 'piece',
-			condition: 'new',
-			remark: '',
-			image: ''
-		}
-	]);
+	/**
+	 * Booking-level donor photos (CR-175 FR-1, FR-2) — unsolicited mode only, and bound to
+	 * `shelterCode`: an uploaded photo lives in that shelter's DB.
+	 */
+	photos = new DonorPhotos();
+
+	items = $state<DonationItem[]>([newDonationItem()]);
 
 	// ขั้น 3 — จุดส่งมอบ + วันเวลา (เก็บไว้โชว์บนตั๋ว)
 	selectedShelter = $state('');
 	selectedShelterName = $state('');
 	shelterLocked = $state(false); // true = มาจากการ์ด needs board → ล็อกศูนย์ปลายทาง (DN)
+	/**
+	 * The drop-off point last tapped on a map — the needs board or the step-3 map (CR-206
+	 * FR-MP-9): every line starts there. A point of another shelter is simply not offered.
+	 */
+	tappedPointId = $state<string | null>(null);
 	deliveryDate = $state('');
 
 	captchaToken = $state('');
@@ -86,16 +120,7 @@ export class DonationStore {
 	}
 
 	addItem() {
-		this.items.push({
-			id: ulid(),
-			category: 'food',
-			name: '',
-			amount: 1,
-			unit: 'piece',
-			condition: 'new',
-			remark: '',
-			image: ''
-		});
+		this.items.push(newDonationItem());
 	}
 
 	removeItem(id: string) {
@@ -113,8 +138,11 @@ export class DonationStore {
 		this.donorEmail = '';
 		this.deliveryMethod = 'self_dropoff';
 		this.vehicleType = undefined;
+		this.vehiclePlate = '';
 		this.slotDate = '';
 		this.slotTime = '';
+		this.slotFor = '';
+		this.bookedVehiclePlate = '';
 		this.shelterCode = '';
 		this.courierTrackingNo = '';
 		this.eta = '';
@@ -122,25 +150,16 @@ export class DonationStore {
 		this.selectedShelter = '';
 		this.selectedShelterName = '';
 		this.shelterLocked = false;
+		this.tappedPointId = null;
 		this.deliveryDate = '';
-		this.items = [
-			{
-				id: ulid(),
-				category: 'food',
-				name: '',
-				amount: 1,
-				unit: 'piece',
-				condition: 'new',
-				remark: '',
-				image: ''
-			}
-		];
+		this.items = [newDonationItem()];
 		this.captchaToken = '';
 		this.isSubmitting = false;
 		this.errorMessage = '';
 		this.trackingToken = '';
 		this.bookingRef = '';
 		this.bookingStatus = '';
+		this.photos.clear();
 	}
 }
 

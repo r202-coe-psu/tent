@@ -1,6 +1,7 @@
 import type { BulkReturnEntry } from './bulk-return-entry';
 import type { BulkReturnEntryMove } from './bulk-return-entry-move';
 import type { BulkReturnEntryVoid } from './bulk-return-entry-void';
+import type { BulkReturnLoanReopen } from './bulk-return-loan-reopen';
 import type { ClosedBulkReturnLoanRef } from './bulk-return-loan-drift';
 import type { BulkReturnPoolItemSummaryRow, BulkReturnPoolV3 } from './bulk-return-pool-v3';
 import {
@@ -8,6 +9,7 @@ import {
 	findLateEntries,
 	findSnapshotConflicts,
 	findUnresolvedBulkReturnRefs,
+	pinnedItemsSummary,
 	resolveBulkReturnEntries,
 	summarizePoolItems,
 	type ResolvedBulkReturnEntry,
@@ -24,6 +26,8 @@ export interface BulkReturnEventSet {
 	entries: BulkReturnEntry[];
 	moves: BulkReturnEntryMove[];
 	voids: BulkReturnEntryVoid[];
+	/** CR-193 §35 loan reopens of the entries read. */
+	loanReopens: BulkReturnLoanReopen[];
 	/** Docs the read left out because they failed validation (typed structurally: domain cannot import data). */
 	skipped: { _id: string; type: string; reason: string }[];
 }
@@ -56,6 +60,38 @@ export interface BulkReturnPoolOverviewRow {
 	 * overview read enriches it (one batched loan read).
 	 */
 	closed_loan_refs: ClosedBulkReturnLoanRef[];
+	/**
+	 * True when the overview's batched loan read failed and this non-cancelled row has live entries
+	 * with loan refs (`liveLoanRefCount > 0`), so `closed_loan_refs` is unknown (left empty) rather
+	 * than verified clean. The pure builder always sets `false`.
+	 */
+	loan_refs_unavailable: boolean;
+	/**
+	 * What the warehouse can receive from this pool: its submitted `items_summary` minus the qty of
+	 * entries that are in its `entry_ids` but pinned to ANOTHER pool (an entry double-counted by a
+	 * later pool is received by the earlier one only). `[]` for OPEN and CANCELLED pools: they have
+	 * no submitted snapshot to receive from.
+	 */
+	receivable_items_summary: BulkReturnPoolItemSummaryRow[];
+}
+
+/**
+ * Non-voided entries of a non-cancelled pool row; `[]` for a CANCELLED pool. The single source of
+ * the "live entries of a non-cancelled pool" rule (loan read, degrade flag and work queue count).
+ */
+export function liveEntriesOf(
+	row: Pick<BulkReturnPoolOverviewRow, 'pool' | 'entries'>
+): BulkReturnEntry[] {
+	if (row.pool.status === 'CANCELLED') return [];
+	return row.entries.filter((r) => !r.voided).map((r) => r.entry);
+}
+
+/**
+ * Loan refs of the live entries (`liveEntriesOf`) of a pool row; 0 for a CANCELLED pool. Single
+ * source for "does this row have live loan refs" (loan read degrade flag and work queue count).
+ */
+export function liveLoanRefCount(row: Pick<BulkReturnPoolOverviewRow, 'pool' | 'entries'>): number {
+	return liveEntriesOf(row).reduce((sum, entry) => sum + entry.loan_refs.length, 0);
 }
 
 export interface BulkReturnPoolOverviewOptions {
@@ -102,7 +138,12 @@ export function buildBulkReturnPoolOverview(
 				late_entries: late.filter((r) => r.pool_id === pool._id),
 				is_empty: live.length === 0,
 				unresolved_refs: unresolved.filter((ref) => ref.pool_ids.includes(pool._id)),
-				closed_loan_refs: []
+				closed_loan_refs: [],
+				loan_refs_unavailable: false,
+				receivable_items_summary:
+					pool.status === 'SUBMITTED' || pool.status === 'RECEIVED'
+						? pinnedItemsSummary(pool, events.entries, pins)
+						: []
 			};
 		});
 }

@@ -2,7 +2,7 @@
 title: Smart Shelter — Data Model (CouchDB remote-first) v3
 status: draft for review
 created: 2026-06-11
-updated: 2026-10-14
+updated: 2026-10-29
 note: ออกแบบใหม่ทั้งหมด — ไม่สืบทอดจาก docs/data v2.0 (retired 2026-06-11); decision sync 2026-06-15 เลือก MongoDB projection สำหรับ public tier และ EOC read-model
 ---
 
@@ -19,7 +19,7 @@ note: ออกแบบใหม่ทั้งหมด — ไม่สืบ
 | Medical masking | **ไม่มี** — staff ทุก role เห็น medical เต็ม (สถานการณ์ฉุกเฉิน) |
 | Registration minimum | `first_name` + `last_name` + `gender` (key ต้องมี; "ไม่ระบุ" → เก็บ `null` — decision sync 2026-10-09) + `phone` (กรอก "ไม่มี" ได้ → เก็บ `null`) |
 | Scale assumptions | ≤350 shelters · ≤20,000 คน/ศูนย์ (ใหญ่สุด) · ≤50 devices/ศูนย์ |
-| Retention | purge PII ≤3 เดือนหลังปิดศูนย์ · local db บน device อายุ 1 เดือน (SOP wipe) · PSU = data controller |
+| Retention | CouchDB (SoR): purge/anonymize PII ของ `evacuee`/`household`/`medical` เมื่อครบ 2 ปีหลังปิดศูนย์ (ตาม pdpa-consent-block-spec — [CR-194](../changes/01-core/CR-194-public-person-data-retention.md)); donor PII ใน `donation` ≤3 เดือน · public plane (Mongo `public_persons`): `closed_at` + `retention_months_after_close` (default 3 เดือน, CR-183) · local db บน device อายุ 1 เดือน (SOP wipe) · PSU = data controller |
 | EOC / Open API | deferred service แยก ใช้ **MongoDB projection** จาก Central CouchDB — ไม่มี operational doc type ในรุ่นนี้ |
 | Public tier | ทำงานบน **MongoDB projection** ที่ sync จาก central — ดู [couchdb-mongodb-sync](./couchdb-mongodb-sync.md) · [public-tier-flow-spec](../features/public-tier-flow-spec.html) |
 
@@ -149,7 +149,10 @@ State machine บน CouchDB = เขียน doc ใหม่ทั้ง doc 
                                           // (central_ops:counter:shelter) ตอน provisioning;
                                           // เป็นชื่อ db shelter_{code} + อ้างข้ามศูนย์ทุกที่ (shelter_code)
                                           // pattern ^SH\d{3,}$: 1–999 pad 3 หลัก, ≥1000 กว้างตามจริง (SH1000)
-  name, site_kind: "evacuation_center|host_house", status: "open|closed", capacity,
+  site_kind: "evacuation_center",         // req — code ของ master_data:site_kind (global-only; CR-198)
+                                          // seed: evacuation_center (default) | host_house; SA เพิ่มได้
+                                          // ต้อง active ตอนเขียน; doc ไม่มี field → evacuation_center
+  name, status: "open|closed", capacity,
   zones: [{ code, name, capacity }],
   area_m2: 1200,                          // opt — พื้นที่ปิดรวม m² (Sphere ≥3.5 m²/คน)
   facilities: {                           // opt — นับจริง ใช้คำนวณ Sphere ratio vs occupancy
@@ -225,14 +228,32 @@ design doc เดียวกัน deploy พร้อม db provisioning
 
 ## 7. Retention (PDPA — PSU เป็น data controller)
 
+**CouchDB (SoR)** — นาฬิกานับจาก `shelter.closed_at`; ข้อมูลส่วนบุคคลจากการลงทะเบียน (`evacuee`, `household`, `medical`) เก็บ 2 ปี (ตาม pdpa-consent-block-spec — [CR-194](../changes/01-core/CR-194-public-person-data-retention.md)); donor PII ใน `donation` ไม่อยู่ใน consent block จึงคง 3 เดือน:
+
 | ข้อมูล | นโยบาย |
 | --- | --- |
-| `medical` | purge ทันทีที่ครบ 3 เดือนหลัง `shelter.closed_at` (ลำดับแรก) |
-| `evacuee`, `household` | แทนที่ด้วย tombstone ไร้ PII (`{type, anonymized: true}`) ภายใน 3 เดือนหลังปิดศูนย์ |
+| `medical` | purge ทันทีที่ครบ 2 ปีหลัง `shelter.closed_at` (ลำดับแรก) |
+| `evacuee`, `household` | แทนที่ด้วย tombstone ไร้ PII (`{type, anonymized: true}`) เมื่อครบ 2 ปีหลังปิดศูนย์ |
 | `movement`, `screening`, ledger, audit | เก็บต่อได้ (อ้างถึงแค่ ULID — ไร้ PII หลัง tombstone) จนจบโครงการ |
-| donor PII ใน `donation` | ลบ name/phone ภายใน 3 เดือนหลังปิดศูนย์ (เหลือ hash + ยอด) |
+| donor PII ใน `donation` | ลบ `donor.name`/`phone`/`line_id`/`email` และ `logistics.vehicle_plate` ภายใน 3 เดือนหลังปิดศูนย์ (เหลือ `phone_hash` + ยอด) · **สถานะจริง (2026-10-29):** ยังไม่มีงานลบอัตโนมัติฝั่ง CouchDB — worker ลบเฉพาะ buffer ใน Mongo (`DonationBuffer`) และ projection สาธารณะ; PII ใน CouchDB `donation` ยังอยู่จนกว่าจะมีงานลบ |
 | local disconnected cache | ไม่ใช้ใน policy นี้ (status-only เมื่อไม่มี endpoint) |
-| edge server | wipe ทั้งเครื่อง (db + `_users` replica) เป็นขั้นตอนปิดศูนย์ — ก่อนนาฬิกา 3 เดือนเริ่มนับที่ central |
+| edge server | wipe ทั้งเครื่อง (db + `_users` replica) เป็นขั้นตอนปิดศูนย์ — ก่อนนาฬิกา 2 ปีเริ่มนับที่ central |
+
+**Public plane (MongoDB projection) ของศูนย์ปิด** ([CR-183](../changes/11-famsearch/CR-183-closed-shelter-search-retention.md)) —
+นาฬิกา retention = `shelter.closed_at` (server stamp ตอนเปลี่ยนเป็น `closed`, schema §3.1) +
+`config:app.retention_months_after_close` เดือน (default `3`):
+
+| Collection | เมื่อศูนย์เปลี่ยนเป็น `closed` | เมื่อ `now ≥ closed_at + retention_months_after_close` |
+| --- | --- | --- |
+| `public_shelters` | คงแถวไว้ `status = closed` ([ADR-0002](../adr/0002-partner-integration-architecture.md) Soft Delete) | คงแถวไว้ — retention ห้ามลบเพราะศูนย์ปิด |
+| `public_persons` | คงไว้ — ยังค้นเจอใน public search พร้อม `shelter_status = closed` | ลบทีละ doc พร้อม `_retention_audit` (`trigger: "scheduled"`, verify + idempotent) |
+| `public_needs`, `shelter_stocks`, `shelter_occupants` | ลบทันที (ข้อมูล operational ปัจจุบัน) | — |
+
+- `closed_at = null` บนศูนย์ `closed` → retention **ไม่ลบ** `public_persons` และ log warning (CR-183 D-5 —
+  ความเสี่ยงที่ยอมรับ: PII คงบน public plane เกินระยะ public plane ของ CR-183 จนกว่าจะแก้ข้อมูล; ศูนย์ legacy backfill ด้วย
+  `pnpm migrate:shelter-closed-at`)
+- เปิดศูนย์ใหม่ (`closed` → สถานะอื่น) → `closed_at = null` (นาฬิกาหยุด); ปิดใหม่ = นับใหม่
+- กฎนี้ครอบเฉพาะ Mongo projection — purge/anonymize ฝั่ง CouchDB ตามตารางด้านบนยังเป็นงาน T-43
 
 Purge จริงบน CouchDB ใช้ `_purge` ที่ central + บังคับ client ที่มี cache เก่าทำ refresh/resync ใหม่
 (replication checkpoint อาจถูก invalidate หลัง purge — ตั้งใจ)

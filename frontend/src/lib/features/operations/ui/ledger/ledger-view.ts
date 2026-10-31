@@ -1,7 +1,9 @@
 import { qtyGt } from '$lib/utils/qty';
 import { DISPLAY_LOCALE, DISPLAY_TIME_ZONE } from '$lib/utils/date';
 import { lotStorageName, type StoragePointRef } from '../../domain/lot-storage';
+import { shortLedgerRef } from '../../domain/ledger-ref';
 import {
+	BULK_RETURN_POOL_REF_PREFIX,
 	resolveAdjustReason,
 	type AdjustReason,
 	type LedgerReason,
@@ -24,7 +26,7 @@ export const LEDGER_GROUP_BY_REASON: Record<LedgerReason, LedgerGroup> = {
 	donation: 'in',
 	distribute: 'out',
 	requisition: 'out',
-	distribution_return: 'out',
+	distribution_return: 'in',
 	adjust: 'adjust',
 	transfer_out: 'transfer',
 	transfer_in: 'transfer'
@@ -72,24 +74,31 @@ export interface LedgerRow {
 	/** Signed quantity string, exactly as persisted. */
 	qty: string;
 	unit: string;
-	/** Destination (distribute / requisition) or the originating document. */
+	/** Adjust reason, destination (distribute / requisition) or the originating document's label. */
 	detail: string;
 	lotNo: string;
 	storage: string;
 	createdBy: string;
 	refId: string;
 	/** Deep link to the source document, when one exists (bulk return pool receives). */
-	refHref?: string;
+	refHref?: BulkReturnPoolLedgerHref;
 }
 
-const BULK_RETURN_POOL_REF_PREFIX = 'bulk_return_pool:';
+/** Deep link to a bulk return pool in the distribution back-office. */
+export type BulkReturnPoolLedgerHref = `/back-office/distribution?view=bulk_pools&pool=${string}`;
 
 /**
  * Link target for a ledger `ref_id` that points at a bulk return pool, else `undefined`.
+ * Receive-only: the `reason` gate is a render-side guard that mirrors `REF_PREFIX_BY_REASON.receive`
+ * (CR-193 §29), the write-side rule that allows this prefix for `receive` only.
  * Mirrors `bulkReturnPoolHref` of the distribution feature; inlined here because this module is
  * pure and must not import the distribution barrel (UI components, import cycle risk).
  */
-export function ledgerRefHref(refId: string | null | undefined): string | undefined {
+export function ledgerRefHref(
+	reason: LedgerReason,
+	refId: string | null | undefined
+): BulkReturnPoolLedgerHref | undefined {
+	if (reason !== 'receive') return undefined;
 	if (!refId || !refId.startsWith(BULK_RETURN_POOL_REF_PREFIX)) return undefined;
 	const poolId = refId.slice(BULK_RETURN_POOL_REF_PREFIX.length);
 	if (!poolId) return undefined;
@@ -101,6 +110,8 @@ export interface LedgerLookup {
 	itemName: (itemId: string) => string;
 	unitLabel: (unit: string) => string;
 	points: readonly StoragePointRef[];
+	/** Readable label of the doc a `ref_id` points at; unknown refs show `shortLedgerRef`. */
+	refLabel?: (refId: string) => string | undefined;
 }
 
 const pad = (n: number) => String(n).padStart(2, '0');
@@ -121,7 +132,7 @@ export function toLedgerRow(entry: StockLedger, lookup: LedgerLookup): LedgerRow
 	const valid = !Number.isNaN(date.getTime());
 	// A distribute/requisition row keeps its destination in `lot.note`, which
 	// `lotStorageName` would otherwise read as a legacy location.
-	const isOut = group === 'out' && entry.reason !== 'distribution_return';
+	const isOut = group === 'out';
 	const destination = isOut ? (entry.lot?.note?.trim() ?? '') : '';
 	const adjustReason = resolveAdjustReason(entry);
 	const adjustReasonLabel = adjustReason ? ADJUST_REASON_LABELS[adjustReason] : '';
@@ -129,8 +140,12 @@ export function toLedgerRow(entry: StockLedger, lookup: LedgerLookup): LedgerRow
 		? [adjustReasonLabel, entry.note?.trim()].filter(Boolean).join(' · ')
 		: '';
 	const lot = entry.lot && isOut ? { ...entry.lot, note: undefined } : entry.lot;
-	// Only when the row's detail text is the ref id itself (adjust / destination win otherwise).
-	const refHref = adjustDetail || destination ? undefined : ledgerRefHref(entry.ref_id);
+	const refDetail = entry.ref_id
+		? (lookup.refLabel?.(entry.ref_id) ?? shortLedgerRef(entry.ref_id))
+		: '';
+	// Adjust / destination text replaces the ref text as the row detail, so it wins over the ref link.
+	const refHref =
+		adjustDetail || destination ? undefined : ledgerRefHref(entry.reason, entry.ref_id);
 	return {
 		id: entry._id,
 		occurredAt: entry.occurred_at,
@@ -144,7 +159,7 @@ export function toLedgerRow(entry: StockLedger, lookup: LedgerLookup): LedgerRow
 		itemName: lookup.itemName(entry.item_id),
 		qty: entry.qty,
 		unit: lookup.unitLabel(entry.unit),
-		detail: adjustDetail || destination || (entry.ref_id ?? ''),
+		detail: adjustDetail || destination || refDetail,
 		lotNo: entry.lot?.lot_no ?? '',
 		storage: lotStorageName(lot, lookup.points) ?? '',
 		createdBy: entry.created_by,

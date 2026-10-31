@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { tick, untrack } from 'svelte';
 	import { toast } from 'svelte-sonner';
 	import Truck from '@lucide/svelte/icons/truck';
 	import UtensilsCrossed from '@lucide/svelte/icons/utensils-crossed';
@@ -10,6 +11,8 @@
 	import RotateCcw from '@lucide/svelte/icons/rotate-ccw';
 	import AlertCircle from '@lucide/svelte/icons/alert-circle';
 	import RefreshCw from '@lucide/svelte/icons/refresh-cw';
+	import { beforeNavigate, goto, replaceState } from '$app/navigation';
+	import { page } from '$app/state';
 	import { resolve } from '$app/paths';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
 	import { getShelterCode } from '$lib/db/shelter';
@@ -35,6 +38,23 @@
 	} from '../model/distribution-point';
 	import { filterDeskTickets } from '../model/ticket-filters';
 	import {
+		DESK_MODES,
+		DESK_MODE_IDS,
+		STEP_TITLES,
+		modePendingCount,
+		needsCloseOutAction,
+		isDeskMode,
+		resolveInitialMode,
+		stepAfterModeSwitch,
+		stepLabel,
+		ticketsForMode,
+		type DeskMode,
+		type StationTab
+	} from '../model/desk-mode';
+	import { readStoredDeskMode, storeDeskMode } from '../model/desk-mode-storage';
+	import { DeskDrafts } from '../model/desk-draft';
+	import { incomingLinkAction } from '../model/desk-link-gate';
+	import {
 		filterTicketsByServiceDay,
 		resolveServiceDay,
 		serviceDayOptions
@@ -48,13 +68,34 @@
 	import TicketStatusBadge from '../common/TicketStatusBadge.svelte';
 	import { formatDistributionError } from '../model/distribution-error';
 	import * as Select from '$lib/components/ui/select/index.js';
+	import * as AlertDialog from '$lib/components/ui/alert-dialog/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
 
+	import {
+		ONSITE_DISTRIBUTION_PATH,
+		onsiteDeskHref,
+		parseOnsiteDistributionParams
+	} from '../model/pool-url-state';
+
 	interface Props {
-		initialTab?: 'receive' | 'food' | 'supplies' | 'returns' | 'reconciliation';
+		/** Mode from the URL (`?mode=`, or forced by the tab); beats the remembered mode. */
+		initialMode?: DeskMode | null;
+		/** Active tab from the URL; local clicks override it until the next link. */
+		initialTab?: StationTab;
+		/** Bulk return pool to open on the returns tab (deep link). */
+		initialPoolId?: string | null;
+		/** Bumped on each real navigation, so following the same link again re-applies it. */
+		linkKey?: number;
 	}
 
-	let { initialTab = 'receive' }: Props = $props();
+	// Mode, tab and pool are re-applied whenever the link changes (new URL params or a new
+	// navigation).
+	let {
+		initialMode = null,
+		initialTab = 'receive',
+		initialPoolId = null,
+		linkKey = 0
+	}: Props = $props();
 
 	const currentShelterCode = $derived(shelterStore.selectedShelterCode ?? getShelterCode());
 
@@ -70,21 +111,194 @@
 
 	const canFrontline = $derived(authContext ? canPerformFrontlineDistribution(authContext) : false);
 
-	// activeTab is intentionally set once from the initialTab prop; user navigation controls it
-	// after mount. A closure breaks the Svelte reactivity chain so Svelte does not warn that
-	// only the initial prop value is captured.
-	let activeTab = $state<'receive' | 'food' | 'supplies' | 'returns' | 'reconciliation'>(
-		(function () {
-			return initialTab;
-		})()
-	);
+	// The link (props) sets mode / tab / pool; user actions override them locally. The URL is then
+	// written whole from this state (`writeUrl`). The props follow the route's parse of
+	// `page.state.deskSearch` (else `page.url`), so they track the desk's own writes; a real
+	// navigation clears `page.state`, so the link's URL applies again.
+	// `?mode=` beats the remembered mode (FR-DFS-07); the stored read is not a dependency.
+	// One link object: any prop or `linkKey` change makes a fresh one, so mode, tab and pool are
+	// applied together. `linkKey` re-derives it on a real navigation even when the parsed values
+	// are unchanged. Local state and the written URL agree, since every local change writes the URL.
+	// `explicit` is true when the link itself names a mode (FR-DFS-06).
+	const link = $derived.by(() => {
+		void linkKey;
+		const m = resolveInitialMode(initialMode, untrack(readStoredDeskMode));
+		return {
+			mode: m,
+			tab: stepAfterModeSwitch(initialTab, m),
+			pool: initialPoolId,
+			explicit: isDeskMode(initialMode)
+		};
+	});
+	// Local state: derived from the link, overridden by user actions until the next link. (Writable
+	// deriveds.) No gate effect is needed for FR-DFS-05: a mode-changing navigation with a draft is
+	// stopped in `beforeNavigate` below, before the props can change, so the link only ever reaches
+	// here once it is safe to apply. The desk's own shallow `replaceState` writes keep the mode, and
+	// the initial load has no draft.
+	let mode = $derived<DeskMode>(link.mode);
+	let activeTab = $derived<StationTab>(link.tab);
+	// Open bulk return pool; the local value keeps a closed pool closed when the user returns.
+	let selectedPoolId = $derived<string | null>(link.pool);
+
+	// FR-DFS-06: a link that names a mode is also the mode this device last used. Why an effect: it
+	// writes localStorage. It reads only `link`, so it re-runs once per link (also the same link again).
+	$effect(() => {
+		if (link.explicit) storeDeskMode(link.mode);
+	});
+
+	// One URL model: `?mode=&tab=[&pool=]`, always written whole. Shallow, so a goto does not
+	// cancel the phone scroll. Never called on initial load. Skipped once the user has navigated
+	// away (a late board callback or awaited receive must not overwrite another page's URL).
+	function writeUrl() {
+		if (page.url.pathname !== resolve(ONSITE_DISTRIBUTION_PATH)) return;
+		const href = onsiteDeskHref({ mode, tab: activeTab, pool: selectedPoolId });
+		// The query is kept in `page.state`: history restores it on Back, while `page.url` stays stale.
+		replaceState(resolve(href), { deskSearch: href.slice(href.indexOf('?') + 1) });
+	}
+
+	const steps = $derived(DESK_MODES[mode].steps);
+
+	let contentEl = $state<HTMLElement | null>(null);
+
+	// Phone only: the tab strip and selectors sit above the detail, so bring it into view after a
+	// user action. Called from handlers (never an effect) so initial load does not scroll.
+	async function scrollToContent() {
+		if (typeof window === 'undefined' || !window.matchMedia('(max-width: 1023.98px)').matches) {
+			return;
+		}
+		await tick();
+		const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+		contentEl?.scrollIntoView({ behavior: reduced ? 'auto' : 'smooth', block: 'start' });
+	}
+
+	const drafts = new DeskDrafts();
+	// FR-DFS-05: a switch unmounts the step's form, so typed input waits on this confirm.
+	// One confirm for both paths: the in-page switcher and a navigation that changes the mode.
+	type PendingSwitch =
+		| { kind: 'mode'; mode: DeskMode }
+		| { kind: 'nav'; mode: DeskMode; url: URL; popDelta: number | null };
+	let pendingSwitch = $state.raw<PendingSwitch | null>(null);
+	const pendingMode = $derived(pendingSwitch?.mode ?? null);
+
+	function selectMode(next: DeskMode) {
+		if (next === mode) return;
+		if (drafts.hasDraft()) {
+			pendingSwitch = { kind: 'mode', mode: next };
+			return;
+		}
+		switchMode(next);
+	}
+
+	// One-shot: the `href` of the navigation we re-run after a confirm, so it is not held again.
+	let bypassHref: string | null = null;
+
+	// FR-DFS-05 for navigations. A same-route navigation that changes the mode would unmount the
+	// step's form, so while a draft exists it is cancelled here and waits on the confirm. Cancelling
+	// leaves the URL and history exactly as they were: for a link nothing was pushed yet, and for
+	// popstate SvelteKit's `block` undoes the move with `history.go(-delta)`. Limit: SvelteKit can
+	// only cancel popstates it handles as navigations; a popstate within one navigation entry (the
+	// desk's own shallow writes) is not a navigation, never reaches here, and keeps the mode anyway.
+	// A popstate reads the target mode from `location`: kit sets `to.url` from the entry's original
+	// URL, but the browser is already on the entry, whose address is the desk's last write.
+	beforeNavigate((nav) => {
+		const bypass = bypassHref;
+		bypassHref = null;
+		if (nav.willUnload || nav.to === null) return;
+		if (nav.to.url.pathname !== resolve(ONSITE_DISTRIBUTION_PATH)) return;
+		if (bypass === nav.to.url.href) return;
+
+		const targetParams =
+			nav.type === 'popstate' ? new URL(location.href).searchParams : nav.to.url.searchParams;
+		const targetMode = resolveInitialMode(
+			parseOnsiteDistributionParams(targetParams).mode,
+			untrack(readStoredDeskMode)
+		);
+		const action = incomingLinkAction({
+			currentMode: mode,
+			linkMode: targetMode,
+			hasDraft: drafts.hasDraft()
+		});
+		if (action === 'apply') {
+			// Proceeds. Any open confirm is now stale (the user went elsewhere), so drop it.
+			pendingSwitch = null;
+			return;
+		}
+		nav.cancel();
+		pendingSwitch = {
+			kind: 'nav',
+			mode: targetMode,
+			url: nav.to.url,
+			popDelta: nav.type === 'popstate' && nav.delta !== undefined ? nav.delta : null
+		};
+	});
+
+	// Cancel (or closing the dialog). Nothing to undo: a held navigation was cancelled, so the
+	// URL, history position and draft are untouched. The desk URL is deliberately not rewritten.
+	function cancelPending() {
+		pendingSwitch = null;
+	}
+
+	function confirmPending() {
+		const held = pendingSwitch;
+		if (!held) return;
+		if (held.kind === 'mode') {
+			switchMode(held.mode);
+			return;
+		}
+		pendingSwitch = null;
+		// Re-run the navigation once; `bypassHref` keeps `beforeNavigate` from holding it again.
+		// A link push (`replaceState: false`) matches what the click would have done. Scroll is
+		// left at its default; the phone then brings the detail into view like any desk action.
+		bypassHref = held.url.href;
+		if (held.popDelta !== null) {
+			history.go(held.popDelta);
+			return;
+		}
+		const href = `${ONSITE_DISTRIBUTION_PATH}${held.url.search}${held.url.hash}`;
+		void goto(resolve(href as typeof ONSITE_DISTRIBUTION_PATH), { replaceState: false }).then(() =>
+			scrollToContent()
+		);
+	}
+
+	function switchMode(next: DeskMode) {
+		pendingSwitch = null;
+		mode = next;
+		activeTab = stepAfterModeSwitch(activeTab, next);
+		if (activeTab !== 'returns') selectedPoolId = null;
+		storeDeskMode(next);
+		writeUrl();
+		void scrollToContent();
+	}
+
+	function selectTab(tab: StationTab) {
+		activeTab = tab;
+		if (tab !== 'returns') selectedPoolId = null;
+		writeUrl();
+		void scrollToContent();
+	}
+
+	// Board callback (select / close); also fires after an awaited action, so it only writes.
+	function selectPool(poolId: string | null) {
+		selectedPoolId = poolId;
+		writeUrl();
+	}
+
+	function pickTicket(set: (id: string) => void) {
+		return (id: string) => {
+			set(id);
+			void scrollToContent();
+		};
+	}
 
 	// Fetch tickets for frontline station
 	const ticketsQuery = useRequisitionTickets(undefined, () => currentShelterCode);
 	const allTickets = $derived(filterDeskTickets(ticketsQuery.data ?? []));
 
+	// Every step sees only the current mode's tickets (food and supplies never mix).
+	const modeTickets = $derived(ticketsForMode(allTickets, mode));
+
 	// Categorize tickets by frontline workflow relevance
-	const inTransitTickets = $derived(allTickets.filter((t) => t.status === 'IN_TRANSIT'));
+	const inTransitTickets = $derived(modeTickets.filter((t) => t.status === 'IN_TRANSIT'));
 
 	// Desk tickets before the point filter. Tab badges count these, so a point picked on one tab
 	// never hides work from the badges shown while the filter itself is out of sight.
@@ -97,7 +311,7 @@
 	// DISTRIBUTING or post-distribution tickets needing close or submit, ordered by workflow
 	// progress so unfinished tickets surface first and COMPLETED ones sink to the bottom.
 	const allReconciliationTickets = $derived(
-		allTickets
+		modeTickets
 			.filter(
 				(t) =>
 					t.status === 'DISTRIBUTING' ||
@@ -165,12 +379,63 @@
 	// RETURN_PENDING_RECEIPT (waiting on the warehouse, not frontline), and COMPLETED.
 	// Counted before the point filter — it feeds a tab badge.
 	const reconciliationPendingActionCount = $derived(
-		allReconciliationTickets.filter(
-			(t) => t.status === 'SHIFT_CLOSED' || t.status === 'RETURN_COMPLETED'
-		).length
+		allReconciliationTickets.filter(needsCloseOutAction).length
 	);
 
 	let pickedReconciliationTicketId = $state<string>('');
+
+	const TAB_STYLE: Record<
+		StationTab,
+		{ Icon: typeof Truck; active: string; icon: string; badge: string }
+	> = {
+		receive: {
+			Icon: Truck,
+			active: 'border-sky-500 bg-sky-50/50 shadow-xs ring-2 ring-sky-500/20',
+			icon: 'bg-sky-600 text-white',
+			badge: 'bg-blue-100 text-blue-900'
+		},
+		food: {
+			Icon: UtensilsCrossed,
+			active: 'border-amber-500 bg-amber-50/50 shadow-xs ring-2 ring-amber-500/20',
+			icon: 'bg-amber-600 text-white',
+			badge: 'bg-amber-100 text-amber-900'
+		},
+		supplies: {
+			Icon: Package,
+			active: 'border-indigo-500 bg-indigo-50/50 shadow-xs ring-2 ring-indigo-500/20',
+			icon: 'bg-indigo-600 text-white',
+			badge: 'bg-indigo-100 text-indigo-900'
+		},
+		returns: {
+			Icon: RotateCcw,
+			active: 'border-emerald-500 bg-emerald-50/50 shadow-xs ring-2 ring-emerald-500/20',
+			icon: 'bg-emerald-600 text-white',
+			badge: ''
+		},
+		reconciliation: {
+			Icon: Lock,
+			active: 'border-teal-500 bg-teal-50/50 shadow-xs ring-2 ring-teal-500/20',
+			icon: 'bg-teal-600 text-white',
+			badge: 'bg-amber-100 text-amber-900'
+		}
+	};
+
+	const tabBadges = $derived<Record<StationTab, { text: string; pulse?: boolean } | null>>({
+		receive:
+			inTransitTickets.length > 0
+				? { text: `รอรับ ${inTransitTickets.length}`, pulse: true }
+				: null,
+		food: allDistributingFood.length > 0 ? { text: `เปิดแจก ${allDistributingFood.length}` } : null,
+		supplies:
+			allDistributingSupplies.length > 0
+				? { text: `เปิดแจก ${allDistributingSupplies.length}` }
+				: null,
+		returns: null,
+		reconciliation:
+			reconciliationPendingActionCount > 0
+				? { text: `รอดำเนินการ ${reconciliationPendingActionCount}` }
+				: null
+	});
 
 	// Falls back to the ticket open on the food tab, then the supplies tab, then the first one.
 	const selectedReconciliationTicketId = $derived(
@@ -202,16 +467,18 @@
 				shelterCode: currentShelterCode
 			});
 			toast.success(`ตรวจรับสินค้าเข้าจุดแจกจ่ายเรียบร้อยแล้ว: ${ticket.ticket_no}`);
-			// Show the received ticket: clear the point filter, then switch to its tab.
-			pickedPoint = null;
-			// If received food, switch tab to food; if supplies, switch to supplies
-			if (ticket.requisition_type === 'food') {
-				activeTab = 'food';
-				pickedFoodDay = ticketServiceDay(ticket);
-				pickedFoodTicketId = ticket._id;
-			} else if (ticket.requisition_type === 'supplies') {
-				activeTab = 'supplies';
-				pickedSuppliesTicketId = ticket._id;
+			// Show the received ticket in its tab, but only if the desk is still in its mode: the mode
+			// buttons stay enabled during the await, and a jump would mix modes (and the URL).
+			if (ticket.requisition_type === mode) {
+				pickedPoint = null;
+				if (ticket.requisition_type === 'food') {
+					selectTab('food');
+					pickedFoodDay = ticketServiceDay(ticket);
+					pickedFoodTicketId = ticket._id;
+				} else {
+					selectTab('supplies');
+					pickedSuppliesTicketId = ticket._id;
+				}
 			}
 		} catch (err) {
 			toast.error(formatDistributionError(err, 'ไม่สามารถตรวจรับสินค้าได้ กรุณาลองใหม่อีกครั้ง'));
@@ -221,7 +488,10 @@
 	}
 </script>
 
-<div class="mx-auto w-full max-w-6xl space-y-6 px-4 py-6 sm:px-6 sm:py-8">
+<!-- Phone: tall enough that the scroll anchor can reach the top while a tab is still loading -->
+<div
+	class="mx-auto w-full max-w-6xl space-y-6 px-4 py-6 max-lg:min-h-[calc(100dvh+18rem)] sm:px-6 sm:py-8"
+>
 	<!-- Back Navigation -->
 	<div>
 		<Button
@@ -246,9 +516,6 @@
 				<h1 class="text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
 					จุดแจกจ่ายพัสดุและอาหาร
 				</h1>
-				<p class="text-xs font-semibold tracking-wider text-slate-500 uppercase sm:text-sm">
-					Distribution Desk (Station 4)
-				</p>
 			</div>
 		</div>
 
@@ -268,149 +535,83 @@
 		</div>
 	</header>
 
-	<!-- Station Tabs (Operational modes) -->
-	<div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
-		<!-- Tab 1: Receive Cargo -->
-		<button
-			type="button"
-			onclick={() => (activeTab = 'receive')}
-			class="flex items-center justify-between rounded-xl border p-3.5 text-left transition-all {activeTab ===
-			'receive'
-				? 'border-sky-500 bg-sky-50/50 shadow-xs ring-2 ring-sky-500/20'
-				: 'border-slate-200 bg-white hover:border-slate-300'}"
-		>
-			<div class="flex items-center gap-3">
-				<div
-					class="flex h-9 w-9 items-center justify-center rounded-lg {activeTab === 'receive'
-						? 'bg-sky-600 text-white'
-						: 'bg-slate-100 text-slate-600'}"
-				>
-					<Truck class="h-4 w-4" />
-				</div>
-				<div>
-					<p class="text-xs font-bold text-slate-900">1. รับของถึงจุดแจก</p>
-					<p class="text-2xs text-slate-500">Confirm Cargo Arrival</p>
-				</div>
-			</div>
-			{#if inTransitTickets.length > 0}
-				<span
-					class="animate-pulse rounded-full bg-blue-100 px-2 py-0.5 text-2xs font-bold text-blue-900"
-				>
-					รอรับ {inTransitTickets.length}
-				</span>
-			{/if}
-		</button>
+	<!-- Lands with the tab strip just under the sticky shelter header, detail right below it -->
+	<div bind:this={contentEl} class="-mt-6 flow-root h-0 scroll-mt-10" aria-hidden="true"></div>
 
-		<!-- Tab 2: Food Handover -->
-		<button
-			type="button"
-			onclick={() => (activeTab = 'food')}
-			class="flex items-center justify-between rounded-xl border p-3.5 text-left transition-all {activeTab ===
-			'food'
-				? 'border-amber-500 bg-amber-50/50 shadow-xs ring-2 ring-amber-500/20'
-				: 'border-slate-200 bg-white hover:border-slate-300'}"
-		>
-			<div class="flex items-center gap-3">
-				<div
-					class="flex h-9 w-9 items-center justify-center rounded-lg {activeTab === 'food'
-						? 'bg-amber-600 text-white'
-						: 'bg-slate-100 text-slate-600'}"
-				>
-					<UtensilsCrossed class="h-4 w-4" />
-				</div>
-				<div>
-					<p class="text-xs font-bold text-slate-900">2. แจกอาหารปรุงสุก</p>
-					<p class="text-2xs text-slate-500">Ready Meal Handover</p>
-				</div>
-			</div>
-			{#if allDistributingFood.length > 0}
-				<span class="rounded-full bg-amber-100 px-2 py-0.5 text-2xs font-bold text-amber-900">
-					เปิดแจก {allDistributingFood.length}
-				</span>
-			{/if}
-		</button>
+	<!-- Mode switch: food and supplies work never share a screen -->
+	<div
+		role="group"
+		aria-label="โหมดงานของโต๊ะแจก"
+		class="grid grid-cols-2 gap-1 rounded-xl border border-slate-200 bg-slate-100/70 p-1 sm:max-w-sm"
+	>
+		{#each DESK_MODE_IDS as id (id)}
+			{@const isActive = mode === id}
+			{@const pending = isActive ? 0 : modePendingCount(allTickets, id)}
+			<button
+				type="button"
+				aria-pressed={isActive}
+				onclick={() => selectMode(id)}
+				class="flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-bold transition-all {isActive
+					? 'bg-white text-slate-900 shadow-xs ring-1 ring-slate-200'
+					: 'text-slate-600 hover:bg-white/60'}"
+			>
+				{DESK_MODES[id].label}
+				{#if pending > 0}
+					<span
+						class="rounded-full bg-amber-100 px-2 py-0.5 text-2xs font-bold whitespace-nowrap text-amber-900"
+					>
+						มีงาน {pending}
+					</span>
+				{/if}
+			</button>
+		{/each}
+	</div>
 
-		<!-- Tab 3: Supplies & Loans -->
-		<button
-			type="button"
-			onclick={() => (activeTab = 'supplies')}
-			class="flex items-center justify-between rounded-xl border p-3.5 text-left transition-all {activeTab ===
-			'supplies'
-				? 'border-indigo-500 bg-indigo-50/50 shadow-xs ring-2 ring-indigo-500/20'
-				: 'border-slate-200 bg-white hover:border-slate-300'}"
-		>
-			<div class="flex items-center gap-3">
-				<div
-					class="flex h-9 w-9 items-center justify-center rounded-lg {activeTab === 'supplies'
-						? 'bg-indigo-600 text-white'
-						: 'bg-slate-100 text-slate-600'}"
-				>
-					<Package class="h-4 w-4" />
+	<!-- Station Tabs: the steps of the current mode; every step stays visible on a phone -->
+	<div
+		class="grid grid-cols-2 gap-2 lg:gap-3 {steps.length === 3
+			? 'lg:grid-cols-3'
+			: 'lg:grid-cols-4'}"
+	>
+		{#each steps as tab, i (tab)}
+			{@const meta = TAB_STYLE[tab]}
+			{@const badge = tabBadges[tab]}
+			{@const isActive = activeTab === tab}
+			<button
+				type="button"
+				onclick={() => selectTab(tab)}
+				aria-pressed={isActive}
+				class="flex min-h-14 min-w-0 flex-wrap items-center justify-between gap-2 rounded-xl border p-2.5 text-left transition-all focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:outline-none lg:p-3.5 {i ===
+					steps.length - 1 && steps.length % 2 === 1
+					? 'col-span-2 lg:col-span-1'
+					: ''} {isActive ? meta.active : 'border-slate-200 bg-white hover:border-slate-300'}"
+			>
+				<div class="flex min-w-0 items-center gap-2 lg:gap-3">
+					<div
+						class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg {isActive
+							? meta.icon
+							: 'bg-slate-100 text-slate-600'}"
+					>
+						<meta.Icon class="h-4 w-4" />
+					</div>
+					<div class="min-w-0">
+						<p class="text-sm leading-snug font-bold text-slate-900 lg:text-xs">
+							{stepLabel(mode, tab)}
+						</p>
+						<p class="hidden text-2xs text-slate-500 lg:block">{STEP_TITLES[tab].subtitle}</p>
+					</div>
 				</div>
-				<div>
-					<p class="text-xs font-bold text-slate-900">3. จ่ายพัสดุ & ยืม-คืน</p>
-					<p class="text-2xs text-slate-500">Supplies & Loans</p>
-				</div>
-			</div>
-			{#if allDistributingSupplies.length > 0}
-				<span class="rounded-full bg-indigo-100 px-2 py-0.5 text-2xs font-bold text-indigo-900">
-					เปิดแจก {allDistributingSupplies.length}
-				</span>
-			{/if}
-		</button>
-
-		<!-- Tab 4: Return Loans -->
-		<button
-			type="button"
-			onclick={() => (activeTab = 'returns')}
-			class="flex items-center justify-between rounded-xl border p-3.5 text-left transition-all {activeTab ===
-			'returns'
-				? 'border-emerald-500 bg-emerald-50/50 shadow-xs ring-2 ring-emerald-500/20'
-				: 'border-slate-200 bg-white hover:border-slate-300'}"
-		>
-			<div class="flex items-center gap-3">
-				<div
-					class="flex h-9 w-9 items-center justify-center rounded-lg {activeTab === 'returns'
-						? 'bg-emerald-600 text-white'
-						: 'bg-slate-100 text-slate-600'}"
-				>
-					<RotateCcw class="h-4 w-4" />
-				</div>
-				<div>
-					<p class="text-xs font-bold text-slate-900">4. รับคืนสิ่งของ</p>
-					<p class="text-2xs text-slate-500">Loan Return Counter</p>
-				</div>
-			</div>
-		</button>
-
-		<!-- Tab 5: Shift Close & Returns -->
-		<button
-			type="button"
-			onclick={() => (activeTab = 'reconciliation')}
-			class="flex items-center justify-between rounded-xl border p-3.5 text-left transition-all {activeTab ===
-			'reconciliation'
-				? 'border-teal-500 bg-teal-50/50 shadow-xs ring-2 ring-teal-500/20'
-				: 'border-slate-200 bg-white hover:border-slate-300'}"
-		>
-			<div class="flex items-center gap-3">
-				<div
-					class="flex h-9 w-9 items-center justify-center rounded-lg {activeTab === 'reconciliation'
-						? 'bg-teal-600 text-white'
-						: 'bg-slate-100 text-slate-600'}"
-				>
-					<Lock class="h-4 w-4" />
-				</div>
-				<div>
-					<p class="text-xs font-bold text-slate-900">5. ปิดรอบ & คืนของ</p>
-					<p class="text-2xs text-slate-500">Shift Close & Returns</p>
-				</div>
-			</div>
-			{#if reconciliationPendingActionCount > 0}
-				<span class="rounded-full bg-amber-100 px-2 py-0.5 text-2xs font-bold text-amber-900">
-					รอดำเนินการ {reconciliationPendingActionCount}
-				</span>
-			{/if}
-		</button>
+				{#if badge}
+					<span
+						class="shrink-0 rounded-full px-2 py-0.5 text-2xs font-bold whitespace-nowrap {meta.badge} {badge.pulse
+							? 'animate-pulse'
+							: ''}"
+					>
+						{badge.text}
+					</span>
+				{/if}
+			</button>
+		{/each}
 	</div>
 
 	<!-- Distribution point filter (food / supplies / close-out tabs) -->
@@ -563,11 +764,11 @@
 					<p class="mt-1 max-w-md text-xs text-slate-500">
 						ตั๋วอาหารต้องได้รับการตรวจรับเข้าจุดแจกจ่ายก่อน จึงจะสามารถแจกจ่ายให้ผู้ประสบภัยได้
 					</p>
-					{#if inTransitTickets.some((t) => t.requisition_type === 'food')}
+					{#if inTransitTickets.length > 0}
 						<Button
 							type="button"
 							variant="outline"
-							onclick={() => (activeTab = 'receive')}
+							onclick={() => selectTab('receive')}
 							class="mt-4 h-auto rounded-xl border-sky-300 bg-sky-50 px-4 py-2 text-xs font-semibold text-sky-800 hover:bg-sky-100 hover:text-sky-800"
 						>
 							<Truck class="h-3.5 w-3.5" />
@@ -582,7 +783,7 @@
 						class="flex flex-col gap-2 rounded-xl border border-slate-200/80 bg-white p-3 shadow-2xs sm:flex-row sm:items-center"
 					>
 						{#if foodDayOptions.length > 2}
-							<div class="flex shrink-0 items-center gap-2">
+							<div class="flex flex-col gap-2 sm:shrink-0 sm:flex-row sm:items-center">
 								<label for="food-day-select" class="shrink-0 text-xs font-bold text-slate-700">
 									วันที่ให้บริการ:
 								</label>
@@ -590,7 +791,7 @@
 									<Select.Trigger
 										id="food-day-select"
 										aria-label="เลือกวันที่ให้บริการ"
-										class="h-9 w-40 rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-900 shadow-2xs focus-visible:ring-2 focus-visible:ring-amber-500"
+										class="h-11 w-full rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-900 shadow-2xs focus-visible:ring-2 focus-visible:ring-amber-500 sm:h-9 sm:w-40"
 									>
 										<span class="truncate">
 											{foodDayOptions.find((o) => o.value === foodDay)?.label ?? 'ทุกวัน'}
@@ -611,12 +812,14 @@
 							<div class="min-w-0 flex-1">
 								<Select.Root
 									type="single"
-									bind:value={() => selectedFoodTicketId, (v) => (pickedFoodTicketId = v)}
+									bind:value={
+										() => selectedFoodTicketId, pickTicket((v) => (pickedFoodTicketId = v))
+									}
 								>
 									<Select.Trigger
 										id="food-ticket-select"
 										aria-label="เลือกตั๋วอาหารที่ใช้งาน"
-										class="h-9 w-full min-w-0 rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-900 shadow-2xs focus-visible:ring-2 focus-visible:ring-amber-500"
+										class="h-11 w-full min-w-0 rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-900 shadow-2xs focus-visible:ring-2 focus-visible:ring-amber-500 sm:h-9"
 									>
 										<span class="truncate">
 											{#if activeFoodTicket}
@@ -638,7 +841,11 @@
 				{/if}
 
 				{#if activeFoodTicket}
-					<FoodDistributionCard ticket={activeFoodTicket} shelterCode={currentShelterCode} />
+					<FoodDistributionCard
+						ticket={activeFoodTicket}
+						shelterCode={currentShelterCode}
+						{drafts}
+					/>
 					<DistributionHistory ticket={activeFoodTicket} shelterCode={currentShelterCode} />
 				{/if}
 			{/if}
@@ -655,11 +862,11 @@
 					<p class="mt-1 max-w-md text-xs text-slate-500">
 						ตั๋วพัสดุต้องได้รับการตรวจรับเข้าจุดแจกจ่ายก่อน จึงจะสามารถแจกจ่ายหรือให้ยืมได้
 					</p>
-					{#if inTransitTickets.some((t) => t.requisition_type === 'supplies')}
+					{#if inTransitTickets.length > 0}
 						<Button
 							type="button"
 							variant="outline"
-							onclick={() => (activeTab = 'receive')}
+							onclick={() => selectTab('receive')}
 							class="mt-4 h-auto rounded-xl border-sky-300 bg-sky-50 px-4 py-2 text-xs font-semibold text-sky-800 hover:bg-sky-100 hover:text-sky-800"
 						>
 							<Truck class="h-3.5 w-3.5" />
@@ -671,7 +878,7 @@
 				<!-- Supplies Ticket Selector Bar -->
 				{#if distributingSuppliesTickets.length > 1}
 					<div
-						class="flex items-center gap-2 rounded-xl border border-slate-200/80 bg-white p-3 shadow-2xs"
+						class="flex flex-col gap-2 rounded-xl border border-slate-200/80 bg-white p-3 shadow-2xs sm:flex-row sm:items-center"
 					>
 						<label for="supplies-ticket-select" class="shrink-0 text-xs font-bold text-slate-700">
 							เลือกตั๋วพัสดุที่ใช้งาน:
@@ -679,12 +886,14 @@
 						<div class="min-w-0 flex-1">
 							<Select.Root
 								type="single"
-								bind:value={() => selectedSuppliesTicketId, (v) => (pickedSuppliesTicketId = v)}
+								bind:value={
+									() => selectedSuppliesTicketId, pickTicket((v) => (pickedSuppliesTicketId = v))
+								}
 							>
 								<Select.Trigger
 									id="supplies-ticket-select"
 									aria-label="เลือกตั๋วพัสดุที่ใช้งาน"
-									class="h-9 w-full min-w-0 rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-900 shadow-2xs focus-visible:ring-2 focus-visible:ring-indigo-500"
+									class="h-11 w-full min-w-0 rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-900 shadow-2xs focus-visible:ring-2 focus-visible:ring-indigo-500 sm:h-9"
 								>
 									<span class="truncate">
 										{#if activeSuppliesTicket}
@@ -708,6 +917,7 @@
 					<SuppliesDistributionCard
 						ticket={activeSuppliesTicket}
 						shelterCode={currentShelterCode}
+						{drafts}
 					/>
 					<DistributionHistory ticket={activeSuppliesTicket} shelterCode={currentShelterCode} />
 				{/if}
@@ -719,7 +929,11 @@
 			<LoanReturnCard shelterCode={currentShelterCode} />
 			<!-- Bulk return pools (#659): the desk adds / moves / voids entries; open / edit / cancel stay
 				 hidden (canManage). -->
-			<BulkReturnPoolBoard shelterCode={currentShelterCode ?? undefined} />
+			<BulkReturnPoolBoard
+				shelterCode={currentShelterCode ?? undefined}
+				initialPoolId={selectedPoolId}
+				onSelectedPoolChange={selectPool}
+			/>
 		</div>
 	{:else if activeTab === 'reconciliation'}
 		<!-- TAB 5: Shift Reconciliation & Close Surface -->
@@ -740,7 +954,7 @@
 				<!-- Reconciliation Ticket Selector Bar -->
 				{#if reconciliationEligibleTickets.length > 1}
 					<div
-						class="flex items-center gap-2 rounded-xl border border-slate-200/80 bg-white p-3 shadow-2xs"
+						class="flex flex-col items-stretch gap-2 rounded-xl border border-slate-200/80 bg-white p-3 shadow-2xs sm:flex-row sm:items-center"
 					>
 						<label
 							for="reconciliation-ticket-select"
@@ -752,7 +966,8 @@
 							<Select.Root
 								type="single"
 								bind:value={
-									() => selectedReconciliationTicketId, (v) => (pickedReconciliationTicketId = v)
+									() => selectedReconciliationTicketId,
+									pickTicket((v) => (pickedReconciliationTicketId = v))
 								}
 							>
 								<Select.Trigger
@@ -790,9 +1005,16 @@
 										>
 											<div class="flex w-full min-w-0 flex-col gap-0.5 text-left">
 												<span class="flex items-center justify-between gap-2">
-													<span class="truncate font-mono text-xs font-bold text-slate-900"
-														>{t.ticket_no}</span
-													>
+													<span class="flex min-w-0 items-center gap-1.5">
+														<span class="truncate font-mono text-xs font-bold text-slate-900"
+															>{t.ticket_no}</span
+														>
+														<span
+															class="shrink-0 rounded-full border border-slate-200 bg-slate-50 px-1.5 text-2xs font-bold text-slate-600"
+														>
+															{t.requisition_type === 'food' ? 'อาหาร' : 'สิ่งของ'}
+														</span>
+													</span>
 													<TicketStatusBadge status={t.status} class="shrink-0" />
 												</span>
 												<span class="truncate text-xs text-slate-500">
@@ -817,8 +1039,31 @@
 					shelterCode={currentShelterCode}
 					onShiftClosed={(t) => (pickedReconciliationTicketId = t._id)}
 					onReturnsSubmitted={(t) => (pickedReconciliationTicketId = t._id)}
+					{drafts}
 				/>
 			{/if}
 		</div>
 	{/if}
+
+	<AlertDialog.Root
+		open={pendingMode !== null}
+		onOpenChange={(open) => {
+			if (!open) cancelPending();
+		}}
+	>
+		<AlertDialog.Content class="max-w-md">
+			<AlertDialog.Header>
+				<AlertDialog.Title>
+					สลับไปโหมด{pendingMode ? DESK_MODES[pendingMode].label : ''}?
+				</AlertDialog.Title>
+				<AlertDialog.Description>
+					ยังมีข้อมูลที่กรอกไว้แต่ยังไม่ได้บันทึก ถ้าสลับโหมด ข้อมูลนี้จะหายไป
+				</AlertDialog.Description>
+			</AlertDialog.Header>
+			<AlertDialog.Footer>
+				<AlertDialog.Cancel>อยู่โหมดเดิม</AlertDialog.Cancel>
+				<AlertDialog.Action onclick={confirmPending}>สลับโหมด</AlertDialog.Action>
+			</AlertDialog.Footer>
+		</AlertDialog.Content>
+	</AlertDialog.Root>
 </div>

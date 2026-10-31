@@ -5,6 +5,7 @@
 	import { Checkbox } from '$lib/components/ui/checkbox/index.js';
 	import { Textarea } from '$lib/components/ui/textarea/index.js';
 	import type { MealPeriod } from '../../domain/food-supplies';
+	import type { MealRepeatSummary } from '../model/frontline-handover';
 	import { getMealPeriodLabel } from '../model/ticket-status';
 	import { formatThaiTime } from '$lib/utils/date';
 
@@ -12,9 +13,8 @@
 		open: boolean;
 		meal?: MealPeriod;
 		recipientLabel: string;
-		/** Recipient already got this meal period today. */
-		isDuplicate: boolean;
-		priorDistributedAt?: string;
+		/** What the recipient already got for this meal today; `isDuplicate` drives the warning. */
+		repeat: MealRepeatSummary;
 		/** Groups the menu targets when the recipient is not in any of them (menu matching). */
 		menuMismatchLabel?: string | null;
 		/** Allergens in the menu that the recipient is allergic to (#607), as Thai labels. */
@@ -30,8 +30,7 @@
 		open = false,
 		meal,
 		recipientLabel,
-		isDuplicate,
-		priorDistributedAt,
+		repeat,
 		menuMismatchLabel = null,
 		allergenConflictLabel = null,
 		allergyFreeTextLabel = null,
@@ -44,6 +43,7 @@
 	let overrideReason = $state('');
 	let error = $state<string | null>(null);
 
+	const isDuplicate = $derived(repeat.isDuplicate);
 	const warningCount = $derived(
 		[isDuplicate, !!menuMismatchLabel, !!allergenConflictLabel, !!allergyFreeTextLabel].filter(
 			Boolean
@@ -147,9 +147,13 @@
 						ผู้รับ <strong>{recipientLabel}</strong> ได้รับอาหารมื้อ
 						<strong class="text-amber-800">{getMealPeriodLabel(meal)}</strong> ในรอบวันแล้ว
 					</p>
-					{#if priorDistributedAt}
+					<p class="mt-1 font-semibold text-amber-900">
+						รับไปแล้ว {repeat.visits} ครั้ง รวม {repeat.boxes} กล่อง
+					</p>
+					{#if repeat.distributedAt.length > 0}
 						<p class="mt-1 text-2xs text-amber-700">
-							(เวลาที่รับล่าสุด: {formatThaiTime(priorDistributedAt)} น.)
+							เวลาที่รับ: {repeat.distributedAt.map((at) => formatThaiTime(at)).join(', ')} น. (ล่าสุด
+							{formatThaiTime(repeat.lastDistributedAt)} น.)
 						</p>
 					{/if}
 				</div>

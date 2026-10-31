@@ -194,13 +194,8 @@ export function useDonationNeedsBoard(options?: { onFormCreated?: () => void }) 
 		for (const camp of campaigns) {
 			const availabilities = deriveNeedAvailability(camp, donations, stockLedgers);
 			const needs: NeedItem['needs'] = [];
-			let allNeedsCutOff = true;
 
 			for (const avail of availabilities) {
-				if (!avail.is_cut_off) {
-					allNeedsCutOff = false;
-				}
-
 				needs.push({
 					itemId: avail.item_id,
 					name: itemDisplayName(avail.item_id),
@@ -211,13 +206,12 @@ export function useDonationNeedsBoard(options?: { onFormCreated?: () => void }) 
 					// Catalog first, stored second: `avail.unit` only answers while the
 					// catalog query is still loading or for an id it no longer carries.
 					unit: itemDisplayUnit(avail.item_id) || avail.unit,
-					isCutOff: avail.is_cut_off,
+					closeState: avail.close_state,
 					isManualClosed: avail.status === 'closed'
 				});
 			}
 
 			const isManualClosed = camp.status === 'closed';
-			const isCutOff = allNeedsCutOff || isManualClosed;
 
 			list.push({
 				id: camp._id,
@@ -225,7 +219,9 @@ export function useDonationNeedsBoard(options?: { onFormCreated?: () => void }) 
 				location: camp.notes || 'คลังช่วยเหลือภัยพิบัติ EOC',
 				needs: needs,
 				showOnHome: camp.visible_on_home !== false,
-				isCutOff: isCutOff,
+				// Not "every need cut off": a campaign whose needs all reached target is still
+				// open, and folding that in here is what let rows disagree (#817).
+				closeState: isManualClosed ? 'closed' : 'open',
 				isManualClosed: isManualClosed,
 				campaignDoc: camp
 			});

@@ -170,6 +170,25 @@ describe('/api/back-office/kiosk-banners/[id] (FR-KBR-10/12/13)', () => {
 		expect(mockDelete).toHaveBeenCalledWith(DOC_ID, '1-a');
 	});
 
+	it('lets pr_staff read, edit, patch and delete a banner of their own shelter', async () => {
+		mockSession.mockResolvedValue(SESSIONS.prA);
+		expect((await send.GET()).status).toBe(200);
+		expect((await send.PUT()).status).toBe(200);
+		expect((await send.PATCH()).status).toBe(200);
+		expect((await send.DELETE()).status).toBe(204);
+		expect(mockDelete).toHaveBeenCalledWith(DOC_ID, '1-a');
+	});
+
+	it.each(['GET', 'PUT', 'PATCH', 'DELETE'] as const)(
+		'%s returns 404 for pr_staff on a banner of another shelter and never writes',
+		async (m) => {
+			mockSession.mockResolvedValue(SESSIONS.prA);
+			mockGet.mockResolvedValue(record('SH002'));
+			expect((await send[m]()).status).toBe(404);
+			for (const w of writes()) expect(w).not.toHaveBeenCalled();
+		}
+	);
+
 	it('lets SA manage a banner of any shelter', async () => {
 		mockSession.mockResolvedValue(SESSIONS.admin);
 		mockGet.mockResolvedValue(record('SH002'));

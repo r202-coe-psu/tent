@@ -24,6 +24,7 @@ vi.mock('$lib/features/catalog', () => ({
 	canonicalizeUnitCode: (value: unknown) => value
 }));
 
+import { cancelBulkReturnPoolV3, receiveBulkReturnPoolV3 } from '../../domain/food-supplies';
 import { cancelBulkReturnPool, submitBulkReturnPool } from './bulk-return-pool-v3-lifecycle';
 import { addBulkReturnEntries } from './bulk-return-pool-v3-add-entry';
 import { moveBulkReturnEntry } from './bulk-return-pool-v3-move';
@@ -34,6 +35,7 @@ import {
 	listBulkReturnPoolClosedLoanRefs,
 	listReturnerOutstandingLoans
 } from './bulk-return-pool-v3-read';
+import { CannotConnectError, NetworkError } from '$lib/utils/errors';
 import { BulkReturnPoolNotEmptyError, WorkflowValidationError } from './errors';
 import {
 	createBulkReturnPoolV3Fixture,
@@ -52,10 +54,11 @@ describe('bulk return pool v3 workflows', () => {
 	let seedLoan: Fx['seedLoan'];
 	let add: Fx['add'];
 	let logRepo: Fx['logRepo'];
+	let poolRepo: Fx['poolRepo'];
 	let driftingLogRepo: Fx['driftingLogRepo'];
 
 	beforeEach(() => {
-		({ deps, nextOp, openPool, seedLoan, add, logRepo, driftingLogRepo } =
+		({ deps, nextOp, openPool, seedLoan, add, logRepo, poolRepo, driftingLogRepo } =
 			createBulkReturnPoolV3Fixture(couch));
 	});
 
@@ -122,6 +125,160 @@ describe('bulk return pool v3 workflows', () => {
 			expect(rows).toHaveLength(3);
 			expect(getMany).toHaveBeenCalledTimes(1);
 			expect(getMany.mock.calls[0][0].slice().sort()).toEqual([loanId(53), loanId(54)]);
+		});
+
+		it('marks rows with loan refs unavailable when the loan read fails, keeping the rest', async () => {
+			await seedLoan(55, { qty: '3' });
+			const withRef = await openPool('Gate A');
+			const noRef = await openPool('Gate B');
+			await openPool('Gate C');
+			await add(withRef._id, { type: 'evacuee', id: EVACUEE }, [{ item_id: 'item:cot', qty: '1' }]);
+			await add(noRef._id, { type: 'unspecified' }, [{ item_id: 'item:cot', qty: '1' }]);
+
+			const getMany = vi.spyOn(logRepo, 'getMany').mockRejectedValueOnce(new CannotConnectError());
+			const rows = await getBulkReturnPoolOverview({}, mgr, deps);
+			expect(getMany).toHaveBeenCalledTimes(1);
+			expect(rows).toHaveLength(3);
+			const a = rows.find((r) => r.pool._id === withRef._id)!;
+			const b = rows.find((r) => r.pool._id === noRef._id)!;
+			expect(a.loan_refs_unavailable).toBe(true);
+			expect(a.closed_loan_refs).toEqual([]);
+			expect(a.entry_count).toBe(1);
+			expect(a.items.map((i) => i.item_id)).toEqual(['item:cot']);
+			expect(b.loan_refs_unavailable).toBe(false);
+			expect(b.entry_count).toBe(1);
+			expect(rows.filter((r) => r.loan_refs_unavailable)).toHaveLength(1);
+		});
+
+		it('also degrades on a NetworkError', async () => {
+			await seedLoan(58, { qty: '3' });
+			const pool = await openPool('Gate A');
+			await add(pool._id, { type: 'evacuee', id: EVACUEE }, [{ item_id: 'item:cot', qty: '1' }]);
+			vi.spyOn(logRepo, 'getMany').mockRejectedValueOnce(new NetworkError());
+			const [row] = await getBulkReturnPoolOverview({}, mgr, deps);
+			expect(row.loan_refs_unavailable).toBe(true);
+			expect(row.closed_loan_refs).toEqual([]);
+		});
+
+		it('does not flag a cancelled pool when the loan read degrades', async () => {
+			await seedLoan(59, { qty: '3' });
+			const open = await openPool('Gate A');
+			const cancelled = await openPool('Gate B');
+			await add(open._id, { type: 'evacuee', id: EVACUEE }, [{ item_id: 'item:cot', qty: '1' }]);
+			// Non-empty pool with a live loan ref, forced to CANCELLED (the workflow refuses non-empty).
+			await add(cancelled._id, { type: 'evacuee', id: EVACUEE }, [
+				{ item_id: 'item:cot', qty: '1' }
+			]);
+			await poolRepo.mutateCAS(cancelled._id, (cur) => cancelBulkReturnPoolV3(cur, mgr));
+			vi.spyOn(logRepo, 'getMany').mockRejectedValueOnce(new CannotConnectError());
+			const rows = await getBulkReturnPoolOverview({ includeCancelled: true }, mgr, deps);
+			expect(rows.find((r) => r.pool._id === open._id)!.loan_refs_unavailable).toBe(true);
+			const cancelledRow = rows.find((r) => r.pool._id === cancelled._id)!;
+			expect(cancelledRow.pool.status).toBe('CANCELLED');
+			expect(cancelledRow.loan_refs_unavailable).toBe(false);
+		});
+
+		it('rejects when the loan read fails with a non-transport error', async () => {
+			await seedLoan(57, { qty: '3' });
+			const pool = await openPool('Gate A');
+			await add(pool._id, { type: 'evacuee', id: EVACUEE }, [{ item_id: 'item:cot', qty: '1' }]);
+			vi.spyOn(logRepo, 'getMany').mockRejectedValueOnce(new Error('boom'));
+			await expect(getBulkReturnPoolOverview({}, mgr, deps)).rejects.toThrow('boom');
+		});
+
+		it('leaves loan_refs_unavailable false on the success path', async () => {
+			await seedLoan(56, { qty: '3' });
+			const pool = await openPool('Gate A');
+			await add(pool._id, { type: 'evacuee', id: EVACUEE }, [{ item_id: 'item:cot', qty: '1' }]);
+			const rows = await getBulkReturnPoolOverview({}, mgr, deps);
+			expect(rows.every((r) => r.loan_refs_unavailable === false)).toBe(true);
+		});
+
+		it('still rejects when the pool read fails', async () => {
+			await openPool('Gate A');
+			vi.spyOn(poolRepo, 'list').mockRejectedValueOnce(new CannotConnectError('pools down'));
+			await expect(getBulkReturnPoolOverview({}, mgr, deps)).rejects.toBeInstanceOf(
+				CannotConnectError
+			);
+		});
+
+		describe('loan read scope (OPEN and SUBMITTED pools only)', () => {
+			const THIRD_EVACUEE = `evacuee:${U(4)}`;
+
+			/** Pool with one entry of `returner`, submitted and then received. */
+			async function receivedPoolOf(name: string, returner: string) {
+				const pool = await openPool(name);
+				await add(pool._id, { type: 'evacuee', id: returner }, [{ item_id: 'item:cot', qty: '1' }]);
+				await submitBulkReturnPool(pool._id, nextOp(), mgr, deps);
+				await poolRepo.mutateCAS(pool._id, (cur) =>
+					receiveBulkReturnPoolV3(
+						cur,
+						{
+							received_items: (cur.items_summary ?? []).map((r) => ({
+								item_id: r.item_id,
+								expected_qty: r.qty,
+								received_qty: r.qty
+							}))
+						},
+						mgr
+					)
+				);
+				return pool;
+			}
+
+			it('reads only the loans of OPEN and SUBMITTED pools, not of RECEIVED ones', async () => {
+				await seedLoan(60, { qty: '3' });
+				await seedLoan(61, { qty: '3', recipient: OTHER_EVACUEE });
+				await seedLoan(62, { qty: '3', recipient: THIRD_EVACUEE });
+				const open = await openPool('Gate Open');
+				await add(open._id, { type: 'evacuee', id: EVACUEE }, [{ item_id: 'item:cot', qty: '1' }]);
+				const submitted = await openPool('Gate Submitted');
+				await add(submitted._id, { type: 'evacuee', id: OTHER_EVACUEE }, [
+					{ item_id: 'item:cot', qty: '1' }
+				]);
+				await submitBulkReturnPool(submitted._id, nextOp(), mgr, deps);
+				const received = await receivedPoolOf('Gate Received', THIRD_EVACUEE);
+
+				const getMany = vi.spyOn(logRepo, 'getMany');
+				const rows = await getBulkReturnPoolOverview({}, mgr, deps);
+
+				expect(getMany).toHaveBeenCalledTimes(1);
+				expect(getMany.mock.calls[0][0].slice().sort()).toEqual([loanId(60), loanId(61)]);
+				const receivedRow = rows.find((r) => r.pool._id === received._id)!;
+				expect(receivedRow.pool.status).toBe('RECEIVED');
+				expect(receivedRow.closed_loan_refs).toEqual([]);
+				expect(receivedRow.entry_count).toBe(1);
+			});
+
+			it('reads no loans when only a RECEIVED pool has loan refs, and flags nothing', async () => {
+				await seedLoan(63, { qty: '3' });
+				const received = await receivedPoolOf('Gate Received', EVACUEE);
+				await openPool('Gate Open');
+
+				const getMany = vi.spyOn(logRepo, 'getMany');
+				const rows = await getBulkReturnPoolOverview({}, mgr, deps);
+
+				expect(getMany).not.toHaveBeenCalled();
+				expect(rows.find((r) => r.pool._id === received._id)!.loan_refs_unavailable).toBe(false);
+				expect(rows.every((r) => !r.loan_refs_unavailable)).toBe(true);
+			});
+
+			it('flags a RECEIVED pool with live refs as unavailable when the loan read fails', async () => {
+				await seedLoan(64, { qty: '3' });
+				await seedLoan(65, { qty: '3', recipient: OTHER_EVACUEE });
+				const open = await openPool('Gate Open');
+				await add(open._id, { type: 'evacuee', id: EVACUEE }, [{ item_id: 'item:cot', qty: '1' }]);
+				const received = await receivedPoolOf('Gate Received', OTHER_EVACUEE);
+				const empty = await openPool('Gate Empty');
+
+				vi.spyOn(logRepo, 'getMany').mockRejectedValueOnce(new CannotConnectError());
+				const rows = await getBulkReturnPoolOverview({}, mgr, deps);
+
+				const flag = (id: string) => rows.find((r) => r.pool._id === id)!.loan_refs_unavailable;
+				expect(flag(open._id)).toBe(true);
+				expect(flag(received._id)).toBe(true);
+				expect(flag(empty._id)).toBe(false);
+			});
 		});
 
 		it('does not read loans when no entry carries a loan ref', async () => {
