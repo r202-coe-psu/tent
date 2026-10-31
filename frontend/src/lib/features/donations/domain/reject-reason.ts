@@ -62,12 +62,15 @@ export function donorRejectMessage(code: DonationRejectReasonCode, note?: string
 
 /**
  * FR-12 — every line turned away at the counter rejects the whole booking. Its reason
- * is the lines' reasons joined (each once), and its code is theirs when they agree.
+ * is the lines' reasons joined (each once, a line with no words of its own — code `other`
+ * and no detail — adds nothing), and its code is theirs when they agree.
  */
 export function combineLineRejectReasons(
 	lines: readonly { reject_reason: string; reject_reason_code: DonationRejectReasonCode }[]
 ): { reject_reason: string; reject_reason_code: DonationRejectReasonCode } {
-	const reasons = [...new Set(lines.map((line) => line.reject_reason))];
+	const reasons = [...new Set(lines.map((line) => line.reject_reason))].filter(
+		(reason) => reason !== ''
+	);
 	const codes = new Set(lines.map((line) => line.reject_reason_code));
 	return {
 		reject_reason: truncate(reasons.join('; '), REJECT_REASON_MAX),

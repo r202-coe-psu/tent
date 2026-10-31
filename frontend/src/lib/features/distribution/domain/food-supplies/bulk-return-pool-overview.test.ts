@@ -3,7 +3,11 @@ import type { AuthorContext } from '$lib/db/model';
 import { createBulkReturnEntry } from './bulk-return-entry';
 import { createBulkReturnEntryMove } from './bulk-return-entry-move';
 import { createBulkReturnEntryVoid } from './bulk-return-entry-void';
-import { cancelBulkReturnPoolV3, createBulkReturnPoolV3 } from './bulk-return-pool-v3';
+import {
+	cancelBulkReturnPoolV3,
+	createBulkReturnPoolV3,
+	submitBulkReturnPoolV3
+} from './bulk-return-pool-v3';
 import {
 	buildBulkReturnPoolOverview,
 	liveEntriesOf,
@@ -94,6 +98,33 @@ describe('buildBulkReturnPoolOverview', () => {
 		// The pure builder never reads loans; the overview read fills this in.
 		expect(rows.every((r) => r.closed_loan_refs.length === 0)).toBe(true);
 		expect(rows.every((r) => r.loan_refs_unavailable === false)).toBe(true);
+	});
+
+	it('receivable_items_summary: the later pool excludes an entry the earlier pool already counted', () => {
+		const first = submitBulkReturnPoolV3(
+			poolOf(P1, 'A'),
+			{ items_summary: [{ item_id: 'item:cot', qty: '5' }], entry_ids: [e1._id] },
+			ctx,
+			'2026-01-01T00:00:00.000Z'
+		);
+		const second = submitBulkReturnPoolV3(
+			poolOf(P2, 'B'),
+			{ items_summary: [{ item_id: 'item:cot', qty: '6' }], entry_ids: [e1._id, e3._id] },
+			ctx,
+			'2026-01-02T00:00:00.000Z'
+		);
+		const rows = buildBulkReturnPoolOverview([first, second, poolOf(P3, 'C')], {
+			entries: [e1, e3],
+			moves: [],
+			voids: [],
+			loanReopens: [],
+			skipped: []
+		});
+		const byId = new Map(rows.map((r) => [r.pool._id, r]));
+		expect(byId.get(P1)!.receivable_items_summary).toEqual([{ item_id: 'item:cot', qty: '5' }]);
+		expect(byId.get(P2)!.receivable_items_summary).toEqual([{ item_id: 'item:cot', qty: '1' }]);
+		// OPEN pools have no submitted snapshot to receive from.
+		expect(byId.get(P3)!.receivable_items_summary).toEqual([]);
 	});
 
 	it('does not throw on an orphan void and lists it on the pool it names', () => {

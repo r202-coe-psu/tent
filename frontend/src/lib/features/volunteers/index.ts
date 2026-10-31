@@ -79,6 +79,8 @@ export {
 	createShiftAssignmentRepositoryForTest
 } from './data/shift-assignment.remote';
 
+export type { VolunteerNameRecord } from './data/volunteer-names.remote';
+
 // application — query-key factory + every hook
 export * from './application/queries';
 

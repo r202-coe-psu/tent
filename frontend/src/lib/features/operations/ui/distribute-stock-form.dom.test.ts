@@ -199,14 +199,14 @@ describe('distribute form: one batch, many lines (#837)', () => {
 	});
 
 	it('one item with a broken history does not stop another item from planning its lots (#569)', async () => {
-		// Water was dispatched for more than its only lot held, so its history cannot be replayed.
+		// Water was dispatched from a lot that never existed, so its history cannot be replayed.
 		ledgerRows = [
 			...LEDGER,
 			{
 				...inbound('WATER_OUT', WATER._id, '-150', 'ขวด'),
 				_id: 'stock_ledger:WATER_OUT',
 				reason: 'distribution',
-				lot_ref: LEDGER[1]._id,
+				lot_ref: 'stock_ledger:UNKNOWN',
 				occurred_at: '2026-10-02T00:00:00.000Z'
 			}
 		];

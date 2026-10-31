@@ -11,8 +11,11 @@
 		boxLabelPageCss,
 		buildBoxLabels,
 		canPrintBoxLabel,
+		hasLinePoints,
+		lineDestinationResolver,
 		resolveDropOffPoint,
-		useDonationTracking
+		useDonationTracking,
+		withCurrentLinePoints
 	} from '$lib/features/donations';
 	import { PublicPageShell, usePublicShelter } from '$lib/features/public-portal';
 	import { useUnitsOfMeasure } from '$lib/features/catalog';
@@ -43,7 +46,15 @@
 			code: donation.shelter_code,
 			name: donation.shelter_code
 		};
-		return buildBoxLabels(donation, () => resolveDropOffPoint(shelter));
+		if (!hasLinePoints(donation.items)) {
+			return buildBoxLabels(donation, () => resolveDropOffPoint(shelter));
+		}
+		// CR-206 FR-MP-14 — one label per point. A point the shelter no longer offers reads as no
+		// point, so those lines share one "any point" label with the shelter address (FR-MP-16).
+		return buildBoxLabels(
+			{ ...donation, items: withCurrentLinePoints(donation.items, shelter) },
+			lineDestinationResolver(shelter, t.anyPointGroupTitle)
+		);
 	});
 
 	// Every sheet of one booking carries the same booking ref, so one image serves them all.

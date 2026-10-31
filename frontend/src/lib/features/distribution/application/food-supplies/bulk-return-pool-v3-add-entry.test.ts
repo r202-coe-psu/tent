@@ -24,10 +24,21 @@ vi.mock('$lib/features/catalog', () => ({
 	canonicalizeUnitCode: (value: unknown) => value
 }));
 
-import { createBulkReturnEntry, submitBulkReturnPoolV3 } from '../../domain/food-supplies';
+import {
+	createBulkReturnEntry,
+	createBulkReturnEntryVoid,
+	poolSnapshotEntryIds,
+	resolveBulkReturnEntries,
+	submitBulkReturnPoolV3,
+	summarizePoolItems
+} from '../../domain/food-supplies';
 import { cancelBulkReturnPool } from './bulk-return-pool-v3-lifecycle';
-import { addBulkReturnEntries } from './bulk-return-pool-v3-add-entry';
+import {
+	addBulkReturnEntries,
+	findWrittenBulkReturnEntries
+} from './bulk-return-pool-v3-add-entry';
 import { moveBulkReturnEntry } from './bulk-return-pool-v3-move';
+import { POOL_FENCE_SETTLE_TIMEOUT_MS } from './bulk-return-pool-v3-shared';
 import { voidBulkReturnEntry } from './bulk-return-pool-v3-void';
 import {
 	getBulkReturnPoolOverview,
@@ -325,6 +336,45 @@ describe('bulk return pool v3 workflows', () => {
 			expect(loan?.applied_bulk_entry_ids).toBeUndefined();
 		});
 
+		it('waits the fence timeout once for replays into a pool whose submit lock never clears', async () => {
+			const pool = await openPool('Gate A');
+			const items = [
+				{ item_id: 'item:cot', qty: '2', operationUlid: nextOp() },
+				{ item_id: 'item:wheelchair', qty: '1', operationUlid: nextOp() }
+			];
+			const input = {
+				pool_id: pool._id,
+				returner: { type: 'unspecified' as const },
+				items
+			};
+			await addBulkReturnEntries(input, mgr, deps);
+			await lockPool(pool._id);
+
+			let t = 0;
+			const res = await addBulkReturnEntries(input, mgr, {
+				...deps,
+				fenceClock: {
+					now: () => t,
+					sleep: async (ms: number) => {
+						t += ms;
+					}
+				}
+			});
+
+			expect(res.results).toHaveLength(2);
+			for (const r of res.results) {
+				expect(r).toMatchObject({
+					replayed: true,
+					late: false,
+					loan_pending: true,
+					loansApplied: [],
+					loansSkipped: []
+				});
+			}
+			expect(t).toBeGreaterThan(0);
+			expect(t).toBeLessThanOrEqual(POOL_FENCE_SETTLE_TIMEOUT_MS);
+		});
+
 		it('lists a late entry in a SUBMITTED pool and lets it be moved to an OPEN pool', async () => {
 			const pool = await openPool('Gate A');
 			const target = await openPool('Gate B');
@@ -620,6 +670,391 @@ describe('bulk return pool v3 workflows', () => {
 			await seedLoan(47, { qty: '3' });
 			await add(pool._id, { type: 'evacuee', id: EVACUEE }, [{ item_id: 'item:cot', qty: '3' }]);
 			expect(await listBulkReturnPoolClosedLoanRefs(pool._id, mgr, deps)).toEqual([]);
+		});
+	});
+
+	describe('multi-line save after a fence timeout', () => {
+		/**
+		 * Line 1 (cot) is written, its fence times out (the submit lock never clears), then the submit
+		 * commits counting line 1. Line 2 (wheelchair) is never written.
+		 */
+		async function line1TimedOutThenSubmitted() {
+			const poolA = await openPool('Gate A');
+			const poolB = await openPool('Gate B');
+			await seedLoan(80, { qty: '3' });
+			const returner = { type: 'evacuee' as const, id: EVACUEE };
+			const items = [
+				{ item_id: 'item:cot', qty: '2', operationUlid: nextOp() },
+				{ item_id: 'item:wheelchair', qty: '1', operationUlid: nextOp() }
+			];
+			const input = { pool_id: poolA._id, returner, items };
+			let t = 0;
+			const racing = {
+				...deps,
+				poolRepo: racingPoolRepo(poolRepo, async (n) => {
+					if (n === 2) await lockPool(poolA._id);
+				}),
+				fenceClock: {
+					now: () => t,
+					sleep: async (ms: number) => {
+						t += ms;
+					}
+				}
+			};
+			const first = await addBulkReturnEntries(input, mgr, racing);
+			const events = await eventRepo.listForPool(poolA._id);
+			await poolRepo.mutateCAS(poolA._id, (cur) =>
+				submitBulkReturnPoolV3(
+					cur,
+					{
+						items_summary: summarizePoolItems(
+							events.entries,
+							events.moves,
+							poolA._id,
+							events.voids
+						),
+						entry_ids: poolSnapshotEntryIds(
+							resolveBulkReturnEntries(events.entries, events.moves, events.voids),
+							poolA._id
+						)
+					},
+					mgr
+				)
+			);
+			return { poolA, poolB, returner, items, input, first };
+		}
+
+		it('returns the written line as loan_pending and leaves the next line unwritten instead of throwing', async () => {
+			const { items, first } = await line1TimedOutThenSubmitted();
+
+			expect(first.results).toHaveLength(1);
+			expect(first.results[0]).toMatchObject({
+				late: false,
+				loan_pending: true,
+				loansApplied: [],
+				loansSkipped: []
+			});
+			expect(first.results[0].entry._id).toBe(`bulk_return_entry:${items[0].operationUlid}`);
+			expect(entryDocCount()).toBe(1);
+			expect((await logRepo.get(loanId(80)))?.applied_bulk_entry_ids ?? []).toEqual([]);
+		});
+
+		it('retry at the same (now submitted) pool cuts line 1 once on its own pool and blocks line 2 as closed', async () => {
+			const { poolA, input, items } = await line1TimedOutThenSubmitted();
+
+			const retry = await addBulkReturnEntries(input, mgr, deps);
+			const again = await addBulkReturnEntries(input, mgr, deps);
+
+			expect(retry.blocked).toEqual({ pool_id: poolA._id, reason: 'closed' });
+			expect(retry.results).toHaveLength(1);
+			expect(retry.results[0]).toMatchObject({ replayed: true, loansApplied: [loanId(80)] });
+			expect(retry.results[0].loan_pending).toBeUndefined();
+			expect(again.results[0].loansApplied).toEqual([loanId(80)]);
+			const loan = await logRepo.get(loanId(80));
+			expect(loan?.qty_returned).toBe('2');
+			expect(loan?.applied_bulk_entry_ids).toEqual([`bulk_return_entry:${items[0].operationUlid}`]);
+			expect(entryDocCount()).toBe(1);
+		});
+
+		it('line 2 alone can then be saved at another OPEN pool', async () => {
+			const { poolB, returner, items } = await line1TimedOutThenSubmitted();
+
+			const res = await addBulkReturnEntries(
+				{ pool_id: poolB._id, returner, items: [items[1]] },
+				mgr,
+				deps
+			);
+
+			expect(res.blocked).toBeUndefined();
+			expect(res.results).toHaveLength(1);
+			expect(res.results[0].entry.pool_id).toBe(poolB._id);
+			expect(res.results[0].replayed).toBe(false);
+		});
+
+		it('retry of both lines at another OPEN pool replays line 1 on its original pool and writes line 2 to the new pool', async () => {
+			const { poolA, poolB, returner, items } = await line1TimedOutThenSubmitted();
+
+			const res = await addBulkReturnEntries({ pool_id: poolB._id, returner, items }, mgr, deps);
+
+			expect(res.blocked).toBeUndefined();
+			expect(res.results.map((r) => r.entry._id)).toEqual(
+				items.map((i) => `bulk_return_entry:${i.operationUlid}`)
+			);
+			expect(res.results[0]).toMatchObject({ replayed: true, loansApplied: [loanId(80)] });
+			expect(res.results[0].entry.pool_id).toBe(poolA._id);
+			expect(res.results[1].replayed).toBe(false);
+			expect(res.results[1].entry.pool_id).toBe(poolB._id);
+			const loan = await logRepo.get(loanId(80));
+			expect(loan?.qty_returned).toBe('2');
+			expect(loan?.applied_bulk_entry_ids).toHaveLength(1);
+		});
+
+		it('still rejects a replayed operationUlid at another pool when the qty differs', async () => {
+			const { poolB, returner, items } = await line1TimedOutThenSubmitted();
+
+			await expect(
+				addBulkReturnEntries(
+					{ pool_id: poolB._id, returner, items: [{ ...items[0], qty: '3' }] },
+					mgr,
+					deps
+				)
+			).rejects.toBeInstanceOf(ConcurrencyCollisionError);
+		});
+	});
+
+	describe('a void racing the loan cut', () => {
+		const dropOff = (poolId: string, operationUlid: string) => ({
+			pool_id: poolId,
+			returner: { type: 'evacuee' as const, id: EVACUEE },
+			items: [{ item_id: 'item:cot', qty: '2', operationUlid }]
+		});
+
+		async function writeVoidOf(poolId: string, operationUlid: string) {
+			const entry = await eventRepo.getEntry(`bulk_return_entry:${operationUlid}`);
+			await eventRepo.createVoid(
+				createBulkReturnEntryVoid({ entry: entry!, pool_id: poolId }, mgr)
+			);
+		}
+
+		it('does not cut the loan when the void lands after the fence and before the loan CAS', async () => {
+			const pool = await openPool('Gate A');
+			await seedLoan(81, { qty: '3' });
+			const op = nextOp();
+			const racing = {
+				...deps,
+				logRepo: {
+					...driftingLogRepo(async () => {}),
+					mutateLogCAS: async (
+						...args: Parameters<typeof logRepo.mutateLogCAS>
+					): Promise<Awaited<ReturnType<typeof logRepo.mutateLogCAS>>> => {
+						await writeVoidOf(pool._id, op);
+						return logRepo.mutateLogCAS(...args);
+					}
+				}
+			};
+
+			const res = await addBulkReturnEntries(dropOff(pool._id, op), mgr, racing);
+
+			expect(res.results[0]).toMatchObject({ voided: true, loansApplied: [], loansSkipped: [] });
+			const loan = await logRepo.get(loanId(81));
+			expect(loan?.status).toBe('active');
+			expect(loan?.qty_returned ?? '0').toBe('0');
+			expect(loan?.applied_bulk_entry_ids ?? []).toEqual([]);
+		});
+
+		it('does not cut the loan when the void lands between a CAS conflict and its retry', async () => {
+			const pool = await openPool('Gate A');
+			await seedLoan(82, { qty: '3' });
+			const op = nextOp();
+			let attempts = 0;
+			const racing = {
+				...deps,
+				logRepo: {
+					...driftingLogRepo(async () => {}),
+					mutateLogCAS: (...[id, mutator, options]: Parameters<typeof logRepo.mutateLogCAS>) =>
+						logRepo.mutateLogCAS(id, mutator, {
+							beforeWrite: async (current) => {
+								await options?.beforeWrite?.(current);
+								if (++attempts !== 1) return;
+								// After the first read: bump the loan (forces a 409) and void the entry.
+								await logRepo.mutateLogCAS(id, (cur) => ({ ...cur, notes: 'touched' }));
+								await writeVoidOf(pool._id, op);
+							}
+						})
+				}
+			};
+
+			const res = await addBulkReturnEntries(dropOff(pool._id, op), mgr, racing);
+
+			expect(attempts).toBe(2);
+			expect(res.results[0]).toMatchObject({ voided: true, loansApplied: [] });
+			const loan = await logRepo.get(loanId(82));
+			expect(loan?.qty_returned ?? '0').toBe('0');
+			expect(loan?.applied_bulk_entry_ids ?? []).toEqual([]);
+		});
+
+		it('still cuts the loan when a void lands after the submit snapshot counted the entry (CR-193 §33)', async () => {
+			const pool = await openPool('Gate A');
+			await seedLoan(83, { qty: '3' });
+			const op = nextOp();
+			const entryId = `bulk_return_entry:${op}`;
+			let t = 0;
+			const racing = {
+				...deps,
+				poolRepo: racingPoolRepo(poolRepo, async (n) => {
+					if (n === 2) await lockPool(pool._id);
+				}),
+				fenceClock: {
+					now: () => t,
+					sleep: async (ms: number) => {
+						t += ms;
+						// The submit finishes counting the entry; a void is written only afterwards.
+						await poolRepo.mutateCAS(pool._id, (cur) =>
+							submitBulkReturnPoolV3(
+								cur,
+								{
+									items_summary: [{ item_id: 'item:cot', qty: '2' }],
+									entry_ids: [entryId]
+								},
+								mgr
+							)
+						);
+						await writeVoidOf(pool._id, op);
+					}
+				}
+			};
+
+			const res = await addBulkReturnEntries(dropOff(pool._id, op), mgr, racing);
+
+			expect(res.results[0].voided).toBeUndefined();
+			expect(res.results[0]).toMatchObject({ late: false, loansApplied: [loanId(83)] });
+			const loan = await logRepo.get(loanId(83));
+			expect(loan?.qty_returned).toBe('2');
+			expect(loan?.applied_bulk_entry_ids).toEqual([entryId]);
+		});
+
+		describe('replay of an already voided entry', () => {
+			/** The first add timed out at the fence (pool locked): entry written, loans untouched. */
+			async function pendingEntry(loanNo: number) {
+				const pool = await openPool('Gate A');
+				await seedLoan(loanNo, { qty: '3' });
+				const op = nextOp();
+				let t = 0;
+				const racing = {
+					...deps,
+					poolRepo: racingPoolRepo(poolRepo, async (n) => {
+						if (n === 2) await lockPool(pool._id);
+					}),
+					fenceClock: {
+						now: () => t,
+						sleep: async (ms: number) => {
+							t += ms;
+						}
+					}
+				};
+				const first = await addBulkReturnEntries(dropOff(pool._id, op), mgr, racing);
+				expect(first.results[0].loan_pending).toBe(true);
+				return { pool, op };
+			}
+
+			it('returns voided with no fence and no cut when the pool is OPEN and the entry not counted', async () => {
+				const { pool, op } = await pendingEntry(84);
+				await poolRepo.mutateCAS(pool._id, (cur) => ({ ...cur, lock: null }));
+				await writeVoidOf(pool._id, op);
+
+				const res = await addBulkReturnEntries(dropOff(pool._id, op), mgr, deps);
+
+				expect(res.results).toHaveLength(1);
+				expect(res.results[0]).toMatchObject({
+					replayed: true,
+					late: false,
+					voided: true,
+					loansApplied: [],
+					loansSkipped: []
+				});
+				expect(res.results[0].loan_pending).toBeUndefined();
+				const loan = await logRepo.get(loanId(84));
+				expect(loan?.qty_returned ?? '0').toBe('0');
+				expect(loan?.applied_bulk_entry_ids ?? []).toEqual([]);
+			});
+
+			it('returns voided (not loan_pending) when the pool lock outlives the fence timeout', async () => {
+				const { pool, op } = await pendingEntry(85);
+				await writeVoidOf(pool._id, op); // the pool is still locked
+				let t = 0;
+
+				const res = await addBulkReturnEntries(dropOff(pool._id, op), mgr, {
+					...deps,
+					fenceClock: {
+						now: () => t,
+						sleep: async (ms: number) => {
+							t += ms;
+						}
+					}
+				});
+
+				expect(res.results[0]).toMatchObject({ replayed: true, voided: true, loansApplied: [] });
+				expect(res.results[0].loan_pending).toBeUndefined();
+				expect(t).toBe(0); // no fence wait at all
+				expect((await logRepo.get(loanId(85)))?.applied_bulk_entry_ids ?? []).toEqual([]);
+			});
+
+			it('returns voided when the pool is SUBMITTED but its snapshot does not count the entry', async () => {
+				const { pool, op } = await pendingEntry(86);
+				await poolRepo.mutateCAS(pool._id, (cur) =>
+					submitBulkReturnPoolV3(
+						cur,
+						{
+							items_summary: [{ item_id: 'item:wheelchair', qty: '1' }],
+							entry_ids: [`bulk_return_entry:${U(999)}`]
+						},
+						mgr
+					)
+				);
+				await writeVoidOf(pool._id, op);
+
+				const res = await addBulkReturnEntries(dropOff(pool._id, op), mgr, deps);
+
+				expect(res.results[0]).toMatchObject({ voided: true, late: false, loansApplied: [] });
+				expect((await logRepo.get(loanId(86)))?.applied_bulk_entry_ids ?? []).toEqual([]);
+			});
+
+			it('ignores a void written after the snapshot counted the entry: fence, then cut the loans', async () => {
+				const { pool, op } = await pendingEntry(87);
+				const events = await eventRepo.listForPool(pool._id);
+				await poolRepo.mutateCAS(pool._id, (cur) =>
+					submitBulkReturnPoolV3(
+						cur,
+						{
+							items_summary: summarizePoolItems(
+								events.entries,
+								events.moves,
+								pool._id,
+								events.voids
+							),
+							entry_ids: poolSnapshotEntryIds(
+								resolveBulkReturnEntries(events.entries, events.moves, events.voids),
+								pool._id
+							)
+						},
+						mgr
+					)
+				);
+				await writeVoidOf(pool._id, op);
+
+				const res = await addBulkReturnEntries(dropOff(pool._id, op), mgr, deps);
+
+				expect(res.results[0].voided).toBeUndefined();
+				expect(res.results[0]).toMatchObject({
+					replayed: true,
+					late: false,
+					loansApplied: [loanId(87)]
+				});
+				const loan = await logRepo.get(loanId(87));
+				expect(loan?.qty_returned).toBe('2');
+				expect(loan?.applied_bulk_entry_ids).toEqual([`bulk_return_entry:${op}`]);
+			});
+		});
+	});
+
+	describe('findWrittenBulkReturnEntries', () => {
+		it('returns qty and item for written operationUlids and omits unwritten ones', async () => {
+			const pool = await openPool('Gate A');
+			const written = await add(pool._id, { type: 'unspecified' }, [
+				{ item_id: 'item:cot', qty: '4' }
+			]);
+			const ulid = written.results[0].entry._id.replace('bulk_return_entry:', '');
+			const unwritten = nextOp();
+
+			const found = await findWrittenBulkReturnEntries([ulid, unwritten], mgr, deps);
+
+			expect([...found.entries()]).toEqual([[ulid, { qty: '4', item_id: 'item:cot' }]]);
+		});
+
+		it('rejects an operationUlid that is not a ULID', async () => {
+			await expect(findWrittenBulkReturnEntries(['nope'], mgr, deps)).rejects.toBeInstanceOf(
+				WorkflowValidationError
+			);
 		});
 	});
 });

@@ -20,6 +20,7 @@
 	import Package from '@lucide/svelte/icons/package';
 	import CheckCircle2 from '@lucide/svelte/icons/circle-check';
 	import Circle from '@lucide/svelte/icons/circle';
+	import Info from '@lucide/svelte/icons/info';
 
 	import { Button } from '$lib/components/ui/button/index.js';
 	import * as Sheet from '$lib/components/ui/sheet/index.js';
@@ -48,7 +49,17 @@
 		type RejectDonationInput,
 		type ScanDonationView,
 		DonationPhotoStrip,
-		closedAtIntakeMessage
+		closedAtIntakeMessage,
+		canCloseByPoints,
+		defaultStoragePointId,
+		hasOtherPointLines,
+		linePointLabel,
+		namesDropOffPoints,
+		pointReceiptFields,
+		recordedAtLabel,
+		scanLineStates,
+		scanReceiveMode,
+		type NamedPoint
 	} from '$lib/features/donations';
 	import { useSupplyItems } from '$lib/features/supply';
 	import {
@@ -64,7 +75,7 @@
 	import { langState } from '$lib/states/i18n.svelte';
 	import { ulid } from '$lib/db/ulid';
 	import { getShelterCode } from '$lib/db/shelter';
-	import { useShelters } from '$lib/features/shelters';
+	import { listDonationPoints, useShelter, useShelters } from '$lib/features/shelters';
 	import {
 		isStoragePointChosen,
 		ItemCombobox,
@@ -74,6 +85,9 @@
 		useStoragePoints,
 		type StockFormItem
 	} from '$lib/features/operations';
+	import ReceivingPointSelect from './receiving-point-select.svelte';
+	import CloseDonationDialog from './close-donation-dialog.svelte';
+	import { readReceivingPoint, writeReceivingPoint } from './receiving-point-memory';
 
 	let {
 		initialQuery = '',
@@ -190,6 +204,33 @@
 		return storageLotFields(storagePoints.points.find((p) => p.id === pointId) ?? null);
 	}
 
+	// CR-206 FR-MP-18: the shelter's drop-off points, read from its CouchDB doc (the same
+	// query `useStoragePoints` reads), and the one this station receives for ("จุดที่ประจำ"),
+	// remembered per shelter on this device. No drop-off point → no selector, as before.
+	const shelterQuery = useShelter(() => getShelterCode());
+	const donationPoints = $derived<NamedPoint[]>(
+		listDonationPoints(shelterQuery.data).map((p) => ({ id: p.id, name: p.name.trim() }))
+	);
+	const donationPointIds = $derived(new Set(donationPoints.map((p) => p.id)));
+	/** Picks made on this screen, per shelter; otherwise what the device remembered. */
+	let pickedPoints = $state<Record<string, string | null>>({});
+	const chosenPointId = $derived.by(() => {
+		const shelter = getShelterCode();
+		const picked = shelter in pickedPoints ? pickedPoints[shelter] : readReceivingPoint(shelter);
+		return picked && donationPointIds.has(picked) ? picked : null;
+	});
+	/** FR-MP-18a: staff may look at a booking first, but not save before picking a point. */
+	const pointChoiceMissing = $derived(donationPoints.length > 0 && chosenPointId === null);
+
+	function chooseReceivingPoint(pointId: string | null) {
+		const shelter = getShelterCode();
+		pickedPoints[shelter] = pointId;
+		writeReceivingPoint(shelter, pointId);
+	}
+
+	/** "รับรายการของจุดอื่น" (FR-MP-21) — the donor brought another point's lines here. */
+	let otherPointsUnlocked = $state(false);
+
 	/** A stock item's name for the lot panel; the raw id only when it is no longer listed. */
 	function catalogName(itemId: string): string {
 		return (
@@ -248,8 +289,11 @@
 		unit: string;
 		item_id?: string;
 		expiry: string;
-		/** Chosen storage point id; '' = main store. */
-		storage_point_id: string;
+		/**
+		 * Storage point staff picked; '' = main store. `null` = not touched: the line follows
+		 * its default (`storageOf`), which moves with the receiving point (CR-206 FR-MP-20).
+		 */
+		storage_point_id: string | null;
 		diffReason: string;
 		verified: boolean;
 		/**
@@ -275,6 +319,48 @@
 	let scannedItems = $state<ScannedItem[]>([]);
 	let remarks = $state('');
 	let saving = $state(false);
+
+	// CR-206: how this booking is received here — whole (FR-MP-24), by the receiving point's
+	// lines (FR-MP-19), or every remaining line once the shelter has no point left (FR-MP-18b).
+	// `scannedItems[i]` is `items[i]`, so an index is the line's `line_no`.
+	// Until the shelter doc answers, no point reads as "no point left" (FR-MP-18b): hold the
+	// mode at whole and the save button off rather than guess.
+	const shelterPointsKnown = $derived(shelterQuery.isSuccess);
+	const receiveMode = $derived(
+		donationDoc && shelterPointsKnown ? scanReceiveMode(donationDoc, donationPointIds) : 'whole'
+	);
+	const byLine = $derived(receiveMode !== 'whole');
+	const lineStates = $derived(
+		donationDoc
+			? scanLineStates(donationDoc, {
+					currentPointIds: donationPointIds,
+					chosenPointId,
+					otherPointsUnlocked
+				})
+			: []
+	);
+	/** Show where each line goes (FR-MP-25) once the booking was split between points. */
+	const showLinePoints = $derived(byLine || namesDropOffPoints(donationDoc?.items));
+	const canUnlockOtherPoints = $derived(
+		receiveMode === 'by_point' && chosenPointId !== null && hasOtherPointLines(lineStates)
+	);
+	const isOpenLine = (idx: number) => lineStates[idx]?.kind === 'receivable';
+	/** FR-MP-26 / FR-MP-28: a point already recorded something and a line has no result yet. */
+	const canClose = $derived(!!donationDoc && canCloseByPoints(donationDoc));
+	const hasReceipts = $derived((donationDoc?.point_receipts?.length ?? 0) > 0);
+
+	/** The line's storage point: what staff picked, else its default (FR-MP-20, FR-MP-21). */
+	function storageOf(idx: number): string {
+		const picked = scannedItems[idx]?.storage_point_id;
+		if (picked !== null && picked !== undefined) return picked;
+		const state = lineStates[idx];
+		return state ? defaultStoragePointId(state, chosenPointId) : '';
+	}
+
+	/** A label staff can read for a line's destination point. */
+	function destinationName(pointId: string): string {
+		return linePointLabel({ drop_off_point_id: pointId }, donationPoints);
+	}
 	// UOM master data (CR-125): `base_unit` is stored as a canonical code, so every
 	// place this file SHOWS a unit runs it back through `formatUnit`.
 	const unitsOfMeasureQuery = useUnitsOfMeasure();
@@ -401,8 +487,19 @@
 	 * refuses these (`assertCountedAgainstCatalog`), so they have to block the button
 	 * rather than surface as a raw English error after the whole form is filled.
 	 */
-	const keptItems = $derived(scannedItems.filter((it) => !it.rejected));
-	const rejectedCount = $derived(scannedItems.length - keptItems.length);
+	/**
+	 * The lines this save records, with their `line_no`. A whole booking records every line,
+	 * as before. Point by point (CR-206 FR-MP-22) it is the receivable lines staff decided —
+	 * accepted or turned away; an undecided one stays open for a later receipt or "ปิดใบ".
+	 */
+	const scopeLines = $derived(
+		scannedItems.flatMap((it, idx) =>
+			!byLine || (isOpenLine(idx) && (it.verified || it.rejected)) ? [{ it, idx }] : []
+		)
+	);
+	const keptLines = $derived(scopeLines.filter(({ it }) => !it.rejected));
+	const keptItems = $derived(keptLines.map(({ it }) => it));
+	const rejectedCount = $derived(scopeLines.length - keptLines.length);
 
 	const scannedMissingExpiry = $derived(
 		linesMissingExpiry(
@@ -418,15 +515,17 @@
 	// Validation check for receiving into stock
 	const canReceive = $derived(
 		!otherShelterCode &&
-			scannedItems.length > 0 &&
+			!pointChoiceMissing &&
+			shelterPointsKnown &&
+			scopeLines.length > 0 &&
 			!storagePoints.isLoading &&
-			scannedItems.every((it) =>
+			scopeLines.every(({ it, idx }) =>
 				it.rejected
 					? hasRejectReason(it)
 					: it.verified &&
 						it.item_id &&
 						it.qty &&
-						isStoragePointChosen(it.storage_point_id, storagePoints.points)
+						isStoragePointChosen(storageOf(idx), storagePoints.points)
 			) &&
 			scannedMissingExpiry.length === 0
 	);
@@ -435,27 +534,37 @@
 	// waits on, ticked as staff complete it (it used to be a red error box listing
 	// what was still missing, which read as a failure before anything had been done).
 	const checkMapped = $derived(
-		scannedItems.length > 0 && keptItems.every((it) => it.item_id && it.qty)
+		scopeLines.length > 0 && keptItems.every((it) => it.item_id && it.qty)
 	);
 	const checkZoned = $derived(
-		scannedItems.length > 0 &&
-			keptItems.every((it) => isStoragePointChosen(it.storage_point_id, storagePoints.points))
+		scopeLines.length > 0 &&
+			keptLines.every(({ idx }) => isStoragePointChosen(storageOf(idx), storagePoints.points))
 	);
 	const checkRejectReasons = $derived(
-		scannedItems.filter((it) => it.rejected).every(hasRejectReason)
+		scopeLines.filter(({ it }) => it.rejected).every(({ it }) => hasRejectReason(it))
+	);
+	/** The lines staff decide here: all of them, or the receivable ones point by point. */
+	const decidableCount = $derived(
+		byLine ? scannedItems.filter((_, idx) => isOpenLine(idx)).length : scannedItems.length
 	);
 	// A line turned away with its reason counts as checked too.
 	const verifiedCount = $derived(
-		scannedItems.filter((it) => (it.rejected ? hasRejectReason(it) : it.verified)).length
+		scannedItems.filter(
+			(it, idx) => (!byLine || isOpenLine(idx)) && (it.rejected ? hasRejectReason(it) : it.verified)
+		).length
 	);
 	const hasPerishableLine = $derived(
 		keptItems.some((it) => it.item_id && isPerishable(it.item_id))
 	);
+	/** Red only when everything recorded is turned away (CR-172 FR-12). */
+	const refusesAll = $derived(scopeLines.length > 0 && keptItems.length === 0);
 	const receiveLabel = $derived(
 		rejectedCount === 0
 			? 'ยืนยันรับเข้าคลัง'
 			: keptItems.length === 0
-				? 'ปฏิเสธทั้งใบ'
+				? byLine
+					? `บันทึกไม่รับ ${rejectedCount} รายการ`
+					: 'ปฏิเสธทั้งใบ'
 				: `รับ ${keptItems.length} รายการ · ไม่รับ ${rejectedCount} รายการ`
 	);
 
@@ -567,6 +676,7 @@
 					return;
 				}
 				donationDoc = found;
+				otherPointsUnlocked = false;
 				bookingRef = donationDoc?.booking_ref || '';
 				actionRef = donationDoc?.booking_ref || query.trim();
 				donorName = donationDoc?.donor?.name || 'ไม่ระบุชื่อ';
@@ -592,7 +702,7 @@
 						unit: matched?.unit || it.unit || '',
 						item_id: matched?._id || it.item_id || '',
 						expiry: '',
-						storage_point_id: '',
+						storage_point_id: null,
 						diffReason: '',
 						verified: false,
 						// Refused at review (CR-174): it arrives turned away, with the same reason.
@@ -627,11 +737,63 @@
 		scannedItems = [];
 		remarks = '';
 		actionPanel = 'none';
+		otherPointsUnlocked = false;
+		closeOpen = false;
 		onClose?.();
 	}
 
+	/** Back to the scanner after the booking was saved or closed; the list refreshes. */
+	function finishBooking() {
+		scanState = 'idle';
+		searchQuery = '';
+		donationDoc = null;
+		remarks = '';
+		otherPointsUnlocked = false;
+		onSaved?.();
+	}
+
+	/** One line of the receive request's `items`, which carries every line in order (FR-MP-22). */
+	function requestLine(it: ScannedItem, idx: number, recorded: boolean) {
+		if (it.reviewReason !== undefined || (recorded && it.rejected)) {
+			return {
+				...(it.item_id ? { item_id: it.item_id } : { free_text: it.name }),
+				qty: '0',
+				unit: it.unit || it.declaredUnit,
+				rejected: true,
+				reject_reason_code: it.rejectCode,
+				// A review refusal is re-read from the doc by the server; the note only
+				// has to satisfy the request shape here.
+				...(it.reviewReason !== undefined
+					? { reject_note: (it.reviewReason || 'ไม่รับตั้งแต่ตอนประเมิน').slice(0, 400) }
+					: it.rejectNote.trim()
+						? { reject_note: it.rejectNote.trim() }
+						: {})
+			};
+		}
+		if (!recorded) {
+			// Not in `line_nos`: the route writes nothing for it, so it goes as declared.
+			return {
+				...(it.item_id ? { item_id: it.item_id } : { free_text: it.name }),
+				qty: it.declaredQty,
+				unit: it.unit || it.declaredUnit || 'piece'
+			};
+		}
+		const location = lotLocation(storageOf(idx));
+		return {
+			...(it.item_id ? { item_id: it.item_id } : { free_text: it.name }),
+			qty: it.qty,
+			unit: it.unit,
+			...(it.item_id && (it.expiry || location.storage_point_id)
+				? { lot: { ...(it.expiry ? { expiry: it.expiry } : {}), ...location } }
+				: {})
+		};
+	}
+
 	async function handleSaveScan() {
-		if (!actionRef || saving || otherShelterCode) return;
+		if (!actionRef || saving || otherShelterCode || !canReceive) return;
+		const lineNos = scopeLines.map(({ idx }) => idx);
+		const recorded = new Set(lineNos);
+		const pointName = chosenPointId ? destinationName(chosenPointId) : null;
 		saving = true;
 		try {
 			const res = await fetch(`/api/back-office/donations/${encodeURIComponent(actionRef)}`, {
@@ -640,34 +802,9 @@
 				body: JSON.stringify({
 					status: 'received',
 					expected_rev: donationDoc?.rev,
+					...pointReceiptFields(receiveMode, chosenPointId, lineNos),
 					...(remarks.trim() ? { remarks: remarks.trim() } : {}),
-					items: scannedItems.map((it) => {
-						if (it.rejected) {
-							return {
-								...(it.item_id ? { item_id: it.item_id } : { free_text: it.name }),
-								qty: '0',
-								unit: it.unit || it.declaredUnit,
-								rejected: true,
-								reject_reason_code: it.rejectCode,
-								// A review refusal is re-read from the doc by the server; the note only
-								// has to satisfy the request shape here.
-								...(it.reviewReason !== undefined
-									? { reject_note: (it.reviewReason || 'ไม่รับตั้งแต่ตอนประเมิน').slice(0, 400) }
-									: it.rejectNote.trim()
-										? { reject_note: it.rejectNote.trim() }
-										: {})
-							};
-						}
-						const location = lotLocation(it.storage_point_id);
-						return {
-							...(it.item_id ? { item_id: it.item_id } : { free_text: it.name }),
-							qty: it.qty,
-							unit: it.unit,
-							...(it.item_id && (it.expiry || location.storage_point_id)
-								? { lot: { ...(it.expiry ? { expiry: it.expiry } : {}), ...location } }
-								: {})
-						};
-					})
+					items: scannedItems.map((it, idx) => requestLine(it, idx, recorded.has(idx)))
 				})
 			});
 			const data = await res.json();
@@ -675,23 +812,54 @@
 				lastLots = (data.lots ?? []) as { item_id: string; lot_no: string | null }[];
 				const labels = lastLots.map((l) => l.lot_no).filter(Boolean);
 				const ref = bookingRef || actionRef;
-				// Every line turned away rejects the booking instead (CR-172 FR-12).
-				const refused = data.donation?.status === 'rejected';
-				toast.success(
-					refused
-						? `ปฏิเสธใบบริจาค ${ref} เรียบร้อยแล้ว (ไม่รับทุกรายการ)`
-						: labels.length
-							? `บันทึกรับเข้าคลังเรียบร้อยแล้ว (Ref. ${ref}) · เลขล็อต ${labels.join(', ')}`
-							: `บันทึกรับเข้าคลังเรียบร้อยแล้ว (Ref. ${ref})`
-				);
-				scanState = 'idle';
-				searchQuery = '';
-				donationDoc = null;
-				remarks = '';
-				onSaved?.();
+				const lots = labels.length ? ` · เลขล็อต ${labels.join(', ')}` : '';
+				const status = data.donation?.status;
+				if (byLine && status !== 'received' && status !== 'rejected') {
+					// FR-MP-23: other points still have lines — the booking stays open.
+					toast.success(
+						`บันทึกรับของ${pointName ? `ที่ ${pointName}` : ''}แล้ว (Ref. ${ref})${lots}`,
+						{ description: 'ใบนี้ยังรอรายการของจุดอื่น', duration: 8_000 }
+					);
+				} else {
+					// Every line turned away rejects the booking instead (CR-172 FR-12).
+					toast.success(
+						status === 'rejected'
+							? `ปฏิเสธใบบริจาค ${ref} เรียบร้อยแล้ว (ไม่รับทุกรายการ)`
+							: `บันทึกรับเข้าคลังเรียบร้อยแล้ว (Ref. ${ref})${lots}`
+					);
+				}
+				finishBooking();
 			} else if (data.error_code === 'DONATION_CHANGED') {
-				toast.error('ผู้บริจาคแก้ใบนี้หลังจากเปิดหน้าตรวจรับ', {
-					description: 'ค้นหาใบใหม่แล้วตรวจรายการอีกครั้ง — ยังไม่มีของเข้าคลัง',
+				toast.error(
+					byLine
+						? 'ใบนี้เปลี่ยนไปหลังจากเปิดหน้าตรวจรับ'
+						: 'ผู้บริจาคแก้ใบนี้หลังจากเปิดหน้าตรวจรับ',
+					{
+						description: byLine
+							? 'ผู้บริจาคแก้ใบ หรือจุดอื่นเพิ่งบันทึกรับ — ค้นหาใบใหม่แล้วตรวจอีกครั้ง ยังไม่มีของเข้าคลัง'
+							: 'ค้นหาใบใหม่แล้วตรวจรายการอีกครั้ง — ยังไม่มีของเข้าคลัง',
+						duration: 12_000
+					}
+				);
+			} else if (data.error_code === 'LINE_ALREADY_RECEIVED') {
+				// FR-MP-22e: the server's message names the point that recorded the line.
+				toast.error(data.error || 'มีรายการที่จุดอื่นรับไปแล้ว', {
+					description: 'ค้นหาใบใหม่เพื่อดูรายการที่ยังรอรับ',
+					duration: 12_000
+				});
+			} else if (data.error_code === 'DONATION_CLOSED') {
+				// FR-MP-23a / AC-22: the ledger rows are already written, the booking is not —
+				// unless this point refused every line it recorded, and wrote none.
+				toast.error(`ใบ ${bookingRef || actionRef} ถูกปิดไปก่อนบันทึกเสร็จ`, {
+					description: data.lots?.length
+						? 'ของที่สแกนครั้งนี้ลงคลังแล้ว แต่ไม่อยู่ในผลรับของของใบ — แจ้งผู้ดูแลคลังให้ตรวจสอบ ไม่ต้องสแกนซ้ำ'
+						: 'ผลที่บันทึกครั้งนี้ไม่อยู่ในใบ และไม่มีของเข้าคลังจากครั้งนี้',
+					duration: Number.POSITIVE_INFINITY
+				});
+				finishBooking();
+			} else if (data.error_code === 'DONATION_CONFLICT') {
+				toast.error(data.error || 'มีจุดอื่นบันทึกใบนี้พร้อมกัน', {
+					description: 'ค้นหาใบใหม่แล้วกดรับอีกครั้ง — ของที่บันทึกไปแล้วไม่ลงคลังซ้ำ',
 					duration: 12_000
 				});
 			} else if (data.error_code === 'CATALOG_MISMATCH') {
@@ -701,6 +869,53 @@
 				});
 			} else {
 				toast.error(data.error || 'บันทึกไม่สำเร็จ');
+			}
+		} catch {
+			toast.error('เกิดข้อผิดพลาดในการเชื่อมต่อเซิร์ฟเวอร์');
+		} finally {
+			saving = false;
+		}
+	}
+
+	// "ปิดใบ" (CR-206 FR-MP-26, FR-MP-27): lines no point recorded close as not delivered.
+	let closeOpen = $state(false);
+	const openLineNames = $derived(
+		donationDoc && canClose
+			? scannedItems.flatMap((it, idx) =>
+					lineStates[idx]?.kind === 'receivable' || lineStates[idx]?.kind === 'other_point'
+						? [{ lineNo: idx, name: it.name }]
+						: []
+				)
+			: []
+	);
+
+	async function handleCloseDonation() {
+		if (!actionRef || saving || otherShelterCode) return;
+		saving = true;
+		try {
+			const res = await fetch(`/api/back-office/donations/${encodeURIComponent(actionRef)}/close`, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ expected_rev: donationDoc?.rev })
+			});
+			const data = await res.json().catch(() => ({}));
+			if (data.success) {
+				closeOpen = false;
+				const ref = bookingRef || actionRef;
+				toast.success(
+					data.donation?.status === 'rejected'
+						? `ปิดใบ ${ref} แล้ว — ไม่มีรายการที่รับเข้าคลัง ใบจึงเป็นไม่รับ`
+						: `ปิดใบ ${ref} แล้ว — รายการที่ไม่มาส่งนับเป็นรับไม่ครบ`
+				);
+				finishBooking();
+			} else if (data.error_code === 'DONATION_CHANGED') {
+				closeOpen = false;
+				toast.error('ใบนี้เปลี่ยนไปหลังจากเปิดหน้าตรวจรับ', {
+					description: 'จุดอื่นอาจเพิ่งบันทึกรับ — ค้นหาใบใหม่แล้วดูรายการที่เหลืออีกครั้ง',
+					duration: 12_000
+				});
+			} else {
+				toast.error(data.error || 'ปิดใบไม่สำเร็จ');
 			}
 		} catch {
 			toast.error('เกิดข้อผิดพลาดในการเชื่อมต่อเซิร์ฟเวอร์');
@@ -970,18 +1185,61 @@
 						<div class="flex items-baseline justify-between gap-2">
 							<h3 class="text-base font-semibold text-slate-800">รายการที่ต้องตรวจรับ</h3>
 							<span class="text-sm text-slate-500 tabular-nums">
-								ตรวจแล้ว {verifiedCount} / {scannedItems.length} รายการ
+								ตรวจแล้ว {verifiedCount} / {decidableCount} รายการ
 							</span>
 						</div>
 
+						{#if receiveMode === 'no_point_left'}
+							<!-- FR-MP-18b: started at a point, but the shelter has none left. -->
+							<div
+								role="status"
+								data-testid="no-drop-off-point-banner"
+								class="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 p-4 text-base text-amber-900"
+							>
+								<Info class="mt-0.5 size-5 shrink-0 text-amber-600" aria-hidden="true" />
+								<p>ศูนย์ไม่มีจุดรับบริจาคแล้ว รับรายการที่เหลือเข้าสถานที่จัดเก็บที่เลือก</p>
+							</div>
+						{/if}
+
+						{#if canUnlockOtherPoints || otherPointsUnlocked}
+							<!-- FR-MP-21: the donor brought another point's lines to this one. -->
+							<div
+								class="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-sky-200 bg-white p-4 shadow-2xs"
+							>
+								<p class="text-sm text-slate-700">
+									{otherPointsUnlocked
+										? 'รับรายการของจุดอื่นได้แล้ว — เก็บเข้าจุดที่ประจำเป็นค่าเริ่มต้น'
+										: 'ผู้บริจาคนำรายการของจุดอื่นมาที่จุดนี้?'}
+								</p>
+								<Button
+									type="button"
+									variant="outline"
+									data-testid="unlock-other-points"
+									aria-pressed={otherPointsUnlocked}
+									disabled={saving || !!otherShelterCode}
+									onclick={() => (otherPointsUnlocked = !otherPointsUnlocked)}
+									class="min-h-11 gap-1.5 text-sm font-semibold text-sky-800"
+								>
+									<MapPin class="size-4" aria-hidden="true" />
+									{otherPointsUnlocked ? 'ล็อกรายการของจุดอื่น' : 'รับรายการของจุดอื่น'}
+								</Button>
+							</div>
+						{/if}
+
 						{#each scannedItems as item, idx (item.key)}
 							{@const diff = qtyDifference(item)}
+							{@const lineState = lineStates[idx]}
+							{@const locked = lineState?.kind === 'recorded' || lineState?.kind === 'other_point'}
 							<div
-								class="rounded-xl border bg-white shadow-2xs {item.rejected
-									? 'border-rose-200'
-									: item.verified
-										? 'border-emerald-200'
-										: 'border-slate-200/80'}"
+								data-testid="scan-line-{idx}"
+								data-line-state={lineState?.kind}
+								class="rounded-xl border bg-white shadow-2xs {locked
+									? 'border-slate-200/80'
+									: item.rejected
+										? 'border-rose-200'
+										: item.verified
+											? 'border-emerald-200'
+											: 'border-slate-200/80'}"
 							>
 								<!-- Item header -->
 								<div
@@ -994,7 +1252,17 @@
 										{formatUnit(item.declaredUnit, unitsOfMeasure, langState.current) ||
 											item.declaredUnit}
 									</span>
-									{#if diff && !item.rejected}
+									{#if showLinePoints && donationDoc}
+										<!-- FR-MP-25: which drop-off point the line goes to. -->
+										<span
+											data-testid="scan-line-{idx}-point"
+											class="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-0.5 text-xs font-semibold text-slate-700"
+										>
+											<MapPin class="h-3.5 w-3.5" aria-hidden="true" />
+											{linePointLabel(donationDoc.items[idx] ?? {}, donationPoints)}
+										</span>
+									{/if}
+									{#if diff && !item.rejected && !locked}
 										<span
 											class="ml-auto inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-0.5 text-xs font-semibold text-amber-900"
 										>
@@ -1006,7 +1274,29 @@
 									{/if}
 								</div>
 
-								{#if item.reviewReason !== undefined}
+								{#if lineState?.kind === 'recorded'}
+									<!-- FR-MP-19: some point already recorded this line. -->
+									<div class="p-4 sm:px-5">
+										<p
+											data-testid="scan-line-{idx}-recorded"
+											class="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm font-semibold text-emerald-900"
+										>
+											<CheckCircle2 class="h-4 w-4 shrink-0 text-emerald-600" aria-hidden="true" />
+											{recordedAtLabel(lineState.receiptPointId, storagePoints.points)}
+										</p>
+									</div>
+								{:else if lineState?.kind === 'other_point'}
+									<!-- FR-MP-19: another point's line — read-only until unlocked (FR-MP-21). -->
+									<div class="p-4 sm:px-5">
+										<p
+											data-testid="scan-line-{idx}-other-point"
+											class="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm font-semibold text-slate-700"
+										>
+											<MapPin class="h-4 w-4 shrink-0 text-slate-500" aria-hidden="true" />
+											ส่งที่ {destinationName(lineState.pointId)} — รับที่จุดนั้น
+										</p>
+									</div>
+								{:else if item.reviewReason !== undefined}
 									<!-- Refused at review: nothing to count and nothing to decide here. -->
 									<div class="p-4 sm:px-5">
 										<div class="rounded-xl border border-red-200 bg-white p-4">
@@ -1084,7 +1374,7 @@
 											<StoragePointSelect
 												id="storage-zone-{idx}"
 												points={storagePoints.points}
-												bind:value={item.storage_point_id}
+												bind:value={() => storageOf(idx), (next) => (item.storage_point_id = next)}
 											/>
 										</div>
 
@@ -1126,22 +1416,24 @@
 								{/if}
 
 								<!-- Decide the line right under what was counted: checked, or turned away. -->
-								<div class="rounded-b-xl border-t border-slate-100 bg-slate-50/60 p-4 sm:px-5">
-									<LineDecisionToggle
-										bind:value={
-											() => (item.rejected ? 'reject' : item.verified ? 'accept' : null),
-											(next) => {
-												item.verified = next === 'accept';
-												item.rejected = next === 'reject';
+								{#if !locked}
+									<div class="rounded-b-xl border-t border-slate-100 bg-slate-50/60 p-4 sm:px-5">
+										<LineDecisionToggle
+											bind:value={
+												() => (item.rejected ? 'reject' : item.verified ? 'accept' : null),
+												(next) => {
+													item.verified = next === 'accept';
+													item.rejected = next === 'reject';
+												}
 											}
-										}
-										acceptLabel="ผ่านการตรวจสอบแล้ว"
-										acceptHint="ของจริงตรงกับรายการ จำนวน และสภาพ"
-										rejectHint="ไม่เข้าคลัง แจ้งเหตุผลให้ผู้บริจาค"
-										groupLabel="ผลการตรวจรับ {item.name}"
-										disabled={saving || !!otherShelterCode || item.reviewReason !== undefined}
-									/>
-								</div>
+											acceptLabel="ผ่านการตรวจสอบแล้ว"
+											acceptHint="ของจริงตรงกับรายการ จำนวน และสภาพ"
+											rejectHint="ไม่เข้าคลัง แจ้งเหตุผลให้ผู้บริจาค"
+											groupLabel="ผลการตรวจรับ {item.name}"
+											disabled={saving || !!otherShelterCode || item.reviewReason !== undefined}
+										/>
+									</div>
+								{/if}
 							</div>
 						{/each}
 
@@ -1155,6 +1447,14 @@
 
 					<!-- Right: booking facts, memo, and the decision -->
 					<div class="space-y-4 lg:sticky lg:top-4 lg:col-span-5 lg:self-start">
+						{#if donationPoints.length > 0}
+							<ReceivingPointSelect
+								points={donationPoints}
+								value={chosenPointId}
+								onchange={chooseReceivingPoint}
+								disabled={saving}
+							/>
+						{/if}
 						<div class="space-y-3 rounded-xl border border-slate-200/80 bg-white p-4 shadow-2xs">
 							<h4 class="text-sm font-semibold text-slate-700">ข้อมูลการจอง</h4>
 							<dl class="space-y-2.5 text-sm">
@@ -1237,6 +1537,9 @@
 										<span>{text}</span>
 									</li>
 								{/snippet}
+								{#if donationPoints.length > 0}
+									{@render step(!pointChoiceMissing, 'เลือกจุดที่ประจำ')}
+								{/if}
 								{@render step(checkMapped, 'เลือกรายการในคลังและกรอกจำนวนรับจริงครบ')}
 								{#if storagePointRequired}
 									{@render step(checkZoned, 'เลือกสถานที่จัดเก็บครบทุกรายการ')}
@@ -1250,18 +1553,31 @@
 								{#if rejectedCount > 0}
 									{@render step(checkRejectReasons, 'ระบุเหตุผลของรายการที่ไม่รับครบ')}
 								{/if}
-								{@render step(
-									scannedItems.length > 0 && verifiedCount === scannedItems.length,
-									`ติ๊ก "ผ่านการตรวจสอบแล้ว" ครบ (${verifiedCount}/${scannedItems.length})`
-								)}
+								{#if byLine}
+									{@render step(
+										scopeLines.length > 0,
+										`เลือกผลรายการที่มาส่งอย่างน้อย 1 รายการ (${verifiedCount}/${decidableCount})`
+									)}
+								{:else}
+									{@render step(
+										scannedItems.length > 0 && verifiedCount === scannedItems.length,
+										`ติ๊ก "ผ่านการตรวจสอบแล้ว" ครบ (${verifiedCount}/${scannedItems.length})`
+									)}
+								{/if}
 							</ul>
+							{#if byLine}
+								<p class="text-sm text-slate-500">
+									รายการที่ยังไม่เลือกผลจะรอรับครั้งถัดไป หรือจนกว่าจะปิดใบ
+								</p>
+							{/if}
 
 							<div class="space-y-2">
 								<Button
 									type="button"
 									onclick={handleSaveScan}
 									disabled={saving || !canReceive}
-									class="h-12 w-full gap-2 text-base font-bold text-white {keptItems.length === 0
+									data-testid="scan-receive-submit"
+									class="h-12 w-full gap-2 text-base font-bold text-white {refusesAll
 										? 'bg-red-600 hover:bg-red-700'
 										: 'bg-emerald-600 hover:bg-emerald-700'}"
 								>
@@ -1288,15 +1604,34 @@
 								</Button>
 								-->
 
-								<Button
-									variant="outline"
-									type="button"
-									onclick={() => (rejectOpen = true)}
-									disabled={saving || !!otherShelterCode}
-									class="h-11 w-full border-red-200 text-sm font-semibold text-red-700 hover:bg-red-50 hover:text-red-800"
-								>
-									ปฏิเสธคำขอ
-								</Button>
+								{#if hasReceipts}
+									<!--
+									A point already received some lines (CR-206): the booking can no longer be
+									rejected (FR-MP-17a) — what did not come is closed with "ปิดใบ" instead.
+									-->
+									{#if canClose}
+										<Button
+											variant="outline"
+											type="button"
+											data-testid="close-donation-button"
+											onclick={() => (closeOpen = true)}
+											disabled={saving || !!otherShelterCode}
+											class="h-11 w-full border-red-200 text-sm font-semibold text-red-700 hover:bg-red-50 hover:text-red-800"
+										>
+											ปิดใบ (รายการที่เหลือไม่มาส่ง)
+										</Button>
+									{/if}
+								{:else}
+									<Button
+										variant="outline"
+										type="button"
+										onclick={() => (rejectOpen = true)}
+										disabled={saving || !!otherShelterCode}
+										class="h-11 w-full border-red-200 text-sm font-semibold text-red-700 hover:bg-red-50 hover:text-red-800"
+									>
+										ปฏิเสธคำขอ
+									</Button>
+								{/if}
 							</div>
 
 							{#if actionPanel === 'redirect'}
@@ -1451,6 +1786,18 @@
 						<p class="mb-6 max-w-sm text-sm leading-relaxed text-muted-foreground">
 							เปิดกล้องเพื่อสแกน QR Code ใบจองจากมือถือผู้บริจาค หรือค้นหาด้วยรหัสคำขอ
 						</p>
+
+						{#if donationPoints.length > 0}
+							<!-- CR-206 FR-MP-18: pick the station's point once; scanning works before it. -->
+							<div class="mb-6 w-full text-left">
+								<ReceivingPointSelect
+									id="receiving-point-select-idle"
+									points={donationPoints}
+									value={chosenPointId}
+									onchange={chooseReceivingPoint}
+								/>
+							</div>
+						{/if}
 
 						<!-- Primary actions. Stacked on a phone: side by side, the Thai labels wrap
 						     to three lines inside a 44px-tall button and the tap area collapses. -->
@@ -1882,6 +2229,14 @@
 		</div>
 	</Sheet.Content>
 </Sheet.Root>
+
+<CloseDonationDialog
+	bind:open={closeOpen}
+	bookingRef={bookingRef || actionRef}
+	openLines={openLineNames}
+	pending={saving}
+	onconfirm={handleCloseDonation}
+/>
 
 <RejectDonationDialog
 	bind:open={rejectOpen}
