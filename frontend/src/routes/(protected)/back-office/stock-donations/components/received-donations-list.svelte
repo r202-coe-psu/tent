@@ -18,6 +18,7 @@
 	import { ItemCombobox, useStockFormItems } from '$lib/features/operations';
 	import { formatUnit, useUnitsOfMeasure } from '$lib/features/catalog';
 	import { langState } from '$lib/states/i18n.svelte';
+	import { formatThaiDateTime } from '$lib/utils/date';
 
 	/** A submitted search: what the server is asked, plus what to call it on screen. */
 	export type SubmittedReceivedSearch = ReceivedSearchTerm & { label: string };
@@ -267,6 +268,12 @@
 						<span class="font-semibold text-slate-500">{donationRefLabel(row)}</span>
 						<span class="text-slate-400">·</span>
 						<span class="text-slate-500">{formatReceivedAgo(row.received_at)}</span>
+						{#if row.received_at}
+							<span class="text-slate-400">·</span>
+							<span class="text-slate-500 tabular-nums" data-testid="received-at"
+								>{formatThaiDateTime(row.received_at)}</span
+							>
+						{/if}
 					</div>
 				</div>
 
@@ -339,6 +346,12 @@
 								<span class="font-semibold text-muted-foreground">{donationRefLabel(row)}</span>
 								<span class="text-muted-foreground">·</span>
 								<span class="text-muted-foreground">{formatReceivedAgo(row.received_at)}</span>
+								{#if row.received_at}
+									<span class="text-muted-foreground">·</span>
+									<span class="text-muted-foreground tabular-nums" data-testid="received-at"
+										>{formatThaiDateTime(row.received_at)}</span
+									>
+								{/if}
 							</div>
 						</Table.Cell>
 
