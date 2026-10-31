@@ -235,6 +235,25 @@ export const usePatchEvacuee = () => {
 	}));
 };
 
+export const useSetSearchVisibility = () => {
+	const queryClient = useQueryClient();
+	return createMutation(() => ({
+		mutationFn: ({
+			evacueeId,
+			visible,
+			ctx
+		}: {
+			evacueeId: string;
+			visible: boolean;
+			ctx: AuthorContext;
+		}) => peopleRepository().setSearchVisibility(evacueeId, visible, ctx),
+		onSettled: (_saved, _err, { evacueeId }) => {
+			queryClient.invalidateQueries({ queryKey: peopleKeys.evacuees() });
+			queryClient.invalidateQueries({ queryKey: peopleKeys.evacuee(evacueeId) });
+		}
+	}));
+};
+
 export const useCheckInEvacuee = () => {
 	const qc = useQueryClient();
 	return createMutation(() => ({

@@ -2,7 +2,7 @@
 title: Smart Shelter — Database ER Diagram v3
 status: draft for review
 created: 2026-06-17
-updated: 2026-10-08 # CR-155 — shelter_incident replaces shelter_report
+updated: 2026-11-01 # CR-218 audit action privacy_change (+ created ที่ขาดไป); 2026-10-08 CR-155 — shelter_incident replaces shelter_report
 source: docs/data/schema.md
 ---
 
@@ -455,7 +455,7 @@ erDiagram
 
     AUDIT {
         string _id PK "audit:ulid"
-        enum action "duplicate_override retro_edit export purge conflict_resolved manual_adjust other"
+        enum action "duplicate_override retro_edit export purge conflict_resolved manual_adjust created privacy_change other"
         string target_type "req"
         string target_id FK "req"
         string reason "req"
