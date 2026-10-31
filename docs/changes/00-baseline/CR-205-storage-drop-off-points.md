@@ -3,7 +3,7 @@ id: CR-205 # renumbered from draft-storage-drop-off-points
 title: ใช้จุดเก็บของเป็นจุดรับบริจาค พร้อมพิกัดบนแผนที่ และส่งออก public
 status: approved
 date: 2026-10-27
-updated: 2026-10-29 # amendment: FR-DP-18 file pointers + PROJECTION_VERSION (approved 2026-10-28, Soravit Sukkarn, Team Lead)
+updated: 2026-10-31
 requested_by: "feedback จาก demo 2026-10-23 (epic #825) — issue #812"
 decided_by: Soravit Sukkarn (Team Lead)
 decision_date: 2026-10-28
@@ -201,3 +201,4 @@ Soravit Sukkarn (Team Lead) ตัดสิน D-1..D-4 ใน review ของ 
 - 2026-10-29 — amendment (PR #1004 · ยืนยันโดย Kunanon Nusaeng · ไม่เปลี่ยน rule): หลัง #995 (design A · decision sync 2026-10-28) แผนที่เลือกศูนย์แยกเป็น 2 ที่ — FR-DP-18 / AC-12 ใช้กับแผนที่ขั้น 1 ("เลือก" = ศูนย์ที่แตะหมุด) และแผนที่ขั้น 3 ("ล็อก") · แก้ชื่อไฟล์ใน affects / Impact (`donation-shelter-picker.svelte` ไม่มีแล้ว) · PROJECTION_VERSION ที่ใช้จริง 11 → 12 (CR-196 #956 merge ไปก่อนด้วยเลข 11) ไม่ใช่ 9 → 10
 - 2026-10-29 — ตัดสินช่องว่างใน CR (PR #1004 · ยืนยันโดย Kunanon Nusaeng · ไม่เปลี่ยน field/rule): (1) ที่อยู่ของจุด = ที่อยู่ศูนย์ — จุดไม่มี field ที่อยู่ของตัวเอง ตั๋ว/หน้าติดตาม/ใบปะหน้าใช้ชื่อ + พิกัด + `location_note` ของจุด กับที่อยู่ศูนย์ · (2) FR-DP-3 ปฏิเสธพิกัด (0,0) ทุกจุดเก็บ ไม่ว่าจะติ๊กรับบริจาคหรือไม่ · (3) worker ข้ามจุดที่ไม่มี `id` (จุดที่ติ๊กต้องบันทึกที่ schema_v 9 ซึ่งตั้ง `id` เสมอ) · (4) จุดที่ไม่มีประเภท worker ส่ง `types: []` ไม่ทิ้งจุด
 - 2026-10-29 — ตีความ FR-DP-10 ตอนนำเข้าซ้ำ (PR #1004 review W2 · ยืนยันโดย Kunanon Nusaeng · ไม่เปลี่ยน field): FR-DP-10 ("ไม่ติ๊ก + ไม่มีพิกัด") ใช้กับจุดที่**ยังไม่มี**ในศูนย์ · import แบบ `duplicate_action = update` จับคู่จุดจาก workbook กับจุดเดิมด้วยชื่อ (จุดเดิมแต่ละจุดจับได้ครั้งเดียว ตามลำดับ) → คง `id` และ `accepts_donations` / `lat` / `lng` / `location_note` เดิม · ชื่อ ประเภท พื้นที่มาจาก workbook · จุดชื่อใหม่ได้ `id` ใหม่และไม่ติ๊ก · จุดที่ workbook ไม่มีถูกลบเหมือนเดิม
+- 2026-10-31 — กระทบจาก [CR-206 Amendment A2](../04-donation/CR-206-donation-multi-drop-off.md) (proposed · #1056): FR-DP-18 / AC-12 — หมุดจุดยังแสดงบนแผนที่ขั้น 1 และขั้น 3 แต่แตะแล้วแสดงชื่อจุดอย่างเดียว ไม่เลือกจุดให้รายการ (A2 FR-AP-11) · ขั้น 3 แผนที่ซูมไปจุดของรายการแบบอ่านอย่างเดียว (FR-AP-12)
