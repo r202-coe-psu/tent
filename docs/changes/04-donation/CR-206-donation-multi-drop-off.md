@@ -3,14 +3,14 @@ id: CR-206 # renumbered from draft-donation-multi-drop-off
 title: บริจาคครั้งเดียวแยกส่งหลายจุดรับบริจาค — ระบุจุดต่อรายการ และรับของทีละจุด
 status: approved
 date: 2026-10-27
-updated: 2026-10-31 # amendment A2 proposed (staff-assigned drop-off points); A1 approved 2026-10-30
+updated: 2026-10-31 # amendment A2 proposed (staff-assigned drop-off points · board cards per item + point, #1056); A1 approved 2026-10-30
 requested_by: "Kunanon Nusaeng — feedback จาก demo 2026-10-23 (epic #825, issue #813)"
 decided_by: Soravit Sukkarn (Team Lead)
 decision_date: 2026-10-28
 layer: volatile
 depends_on: "CR-205-storage-drop-off-points (#812, PR #944 · อนุมัติ 2026-10-28 — ต่อยอด `donations/domain/drop-off.ts` ของ #926) — ต้อง implement ก่อน"
 affects:
-  - docs/data/schema.md §2.4 `donation_campaign` — **Amendment A2:** `needs[].drop_off_point_id` · donation_campaign schema_v 3 → 4 · §2.3 ผู้เขียน `items[].drop_off_point_id` (ระบบจากแคมเปญ / เจ้าหน้าที่ตอนประเมิน) · api-contract.md §5 (`POST` booking response `items[]`, ไม่มี `400 UNKNOWN_DROP_OFF_POINT`, body approve `lines[].drop_off_point_id`)
+  - docs/data/schema.md §2.4 `donation_campaign` — **Amendment A2:** `needs[].drop_off_point_id` · donation_campaign schema_v 3 → 4 · §2.3 ผู้เขียน `items[].drop_off_point_id` (ระบบจากแคมเปญ / เจ้าหน้าที่ตอนประเมิน) · api-contract.md §5 (`POST` booking request `items[].need_drop_off_point_id`, response `items[]`, ไม่มี `400 UNKNOWN_DROP_OFF_POINT`, body approve `lines[].drop_off_point_id`) · **Amendment A2:** couchdb-mongodb-sync.md `public_needs` (1 แถวต่อ ศูนย์ + `item_id` + `drop_off_point_id` · field `item_id`, `drop_off_point_id`) · api-contract.md `GET /public/v1/needs` (`drop_off_point_id`, `drop_off_point_name`) · `GET /external/v1/needs` shape เดิม · PROJECTION_VERSION 14 → 15
   - docs/data/schema.md §2.3 `donation` — field ใหม่ `items[].drop_off_point_id`, `point_receipts[]`, `received_summary.closed_by` / `closed_reason` · `received_summary` ของใบที่มีจุดเขียนตอนปิดใบ · กติการับของทีละจุด / ปิดใบ / หมดอายุ · donation schema_v 7 → เลขถัดไปตอน merge (ดู §ลำดับ schema_v)
   - docs/data/couchdb-mongodb-sync.md §3.2 `public_donations` (`items_declared[].drop_off_point_id`, `point_receipts[]`) · bump PROJECTION_VERSION
   - docs/data/api-contract.md §5 — `POST /public/v1/donations` (error ใหม่ `400 UNKNOWN_DROP_OFF_POINT`), `GET /public/v1/donations/{tracking_token}`, `PATCH /public/v1/donations/{tracking_token}/items`, `DELETE /public/v1/donations/{tracking_token}` (`409 GOODS_IN_STOCK` ครอบคลุมใบที่รับไปบางจุด)
@@ -363,22 +363,24 @@ Soravit Sukkarn (Team Lead) อนุมัติตามที่ผู้ข�
 [ ] ผู้บริจาคแก้รายการโดยเลือกจุดที่ศูนย์เพิ่งเพิ่ม (shelter doc มี Mongo ยังไม่ตาม) → จุดนั้นคงอยู่ · จุดที่ shelter doc ไม่รับแล้ว → `null` · `parcel` / `shelter_pickup` → `null` ทุกรายการ ·
 [ ] `approve` ที่ปฏิเสธรายการซึ่งจุดรับไปแล้ว → `409 LINE_ALREADY_RECEIVED` พร้อม `lines` และใบไม่เปลี่ยน · ปฏิเสธรายการที่จุดไม่รับ → สำเร็จ
 
-## Amendment A2 (2026-10-31) — เจ้าหน้าที่กำหนดจุดรับบริจาค (แคมเปญตั้งจุดตอนสร้างประกาศ · บริจาคเองเลือกจุดตอนประเมิน) · **proposed · รออนุมัติใน PR ของงาน 15**
+## Amendment A2 (2026-10-31) — เจ้าหน้าที่กำหนดจุดรับบริจาค (แคมเปญตั้งจุดตอนสร้างประกาศ · บริจาคเองเลือกจุดตอนประเมิน · ผู้บริจาคเห็นจุดจากการ์ดบนบอร์ด) · **proposed · รออนุมัติใน PR ของงาน 15** · issue #1056
 
 > **ที่มา:** ร่างเป็น CR ใหม่ใน PR #1053 (รีวิว `/pr-code-review` 5 รอบ) แล้ว team lead ตัดสิน (2026-10-31) ให้บันทึกเป็น amendment ใน amendment นี้ · ข้อความ FR เดิมด้านบนคงไว้ · ID ของ amendment นี้ใช้ `FR-AP-*`, `AC-AP-*`, `D-AP-*` ไม่ชนกับ `FR-MP-*`, `AC-*`, `D-*` ของ CR-206
+>
+> **ขอบเขตเทียบ issue #1056:** #1056 ระบุเฉพาะรายการแคมเปญ · การเลือกจุดตอนประเมินให้รายการบริจาคเอง (FR-AP-17 – FR-AP-20a) อยู่นอก #1056 แต่ team lead เห็นด้วยให้รวมใน amendment นี้ (2026-10-31) · #1056 ให้ผู้บริจาคเห็นจุดแบบอ่านอย่างเดียวก่อนจอง → บอร์ดแยกการ์ดตามของ + จุด (FR-AP-25 – FR-AP-31) แทนข้อเสนอเดิม "ไม่เห็นจุดก่อนจอง"
 >
 > **แทนที่ (superseded) ใน CR-206:** FR-MP-2 (ส่วนตรวจตอนจอง) · FR-MP-2a (เฉพาะพฤติกรรมตอนแก้รายการ "BFF เขียน `null` ให้ id ที่ไม่อยู่" · นิยามจุดรับบริจาคปัจจุบันยังใช้) · FR-MP-2b (ประโยค "FR-MP-2 ยังตรวจกับ Mongo" และ "BFF ตรวจกับ shelter doc … เขียน `null`") · FR-MP-3 · FR-MP-8 – FR-MP-12 · FR-MP-15 (ตัวเลือกจุดใน dialog และ pointer ของ A1) · AC-1 – AC-3 · AC-13 (ข้อความ "ผู้บริจาคแก้รายการ … id ถูกเขียนเป็น null") · Acceptance A1 ข้อ 2
 >
 > **แก้ (amended) ใน CR-206:** FR-MP-16 (เพิ่มกลุ่ม "รอเจ้าหน้าที่กำหนดจุดส่ง") · AC-4 (กติกา `null` ยังอยู่ แต่ client ไม่ส่ง id แล้ว) · อื่นๆ ใน CR-206 (รับของทีละจุด ปิดใบ หมดอายุ redirect การจัดกลุ่มรายการที่รับแล้ว) ไม่เปลี่ยน
 >
-> **กระทบ CR อื่น:** CR-205 FR-DP-18 / AC-12 — หมุดจุดยังแสดง แต่แตะแล้วไม่เลือกจุด (FR-AP-11)
+> **กระทบ CR อื่น:** CR-205 FR-DP-18 / AC-12 — หมุดจุดยังแสดง แต่แตะแล้วไม่เลือกจุด (FR-AP-11) · `public_needs` เดิม 1 แถวต่อ `{shelter}:{item_id}` (couchdb-mongodb-sync.md) → 1 แถวต่อของ + จุด (FR-AP-25)
 
 ### สรุป (TL;DR)
 
-- **เปลี่ยน:** ผู้บริจาคไม่เลือกจุดรับบริจาคอีกต่อไป · รายการจากแคมเปญได้จุดที่เจ้าหน้าที่ตั้งไว้ใน need ของแคมเปญตอนสร้างประกาศ · รายการที่บริจาคเอง เจ้าหน้าที่เลือกจุดให้ตอนประเมิน
-- **เพื่อ:** เจ้าหน้าที่รู้ว่าแต่ละจุดเก็บของอะไรได้ ผู้บริจาคไม่รู้ · ลดของไปผิดจุด
-- **dev ต้อง build:** field `needs[].drop_off_point_id` + dropdown ในฟอร์มแคมเปญ · BFF จองใส่จุดจากแคมเปญเอง และส่งจุดต่อรายการกลับให้ตั๋ว · FastAPI คงจุดของรายการเดิมตอนแก้ · dropdown จุดในหน้าประเมิน + body approve · ลบตัวเลือกจุดฝั่งผู้บริจาค
-- **กระทบ:** campaign schema_v 3 → 4 · donation schema_v และ PROJECTION_VERSION ไม่เปลี่ยน · แก้ CR-206 ฝั่งผู้บริจาค · ฝั่งรับของทีละจุดของ CR-206 ไม่เปลี่ยน
+- **เปลี่ยน:** ผู้บริจาคไม่เลือกจุดรับบริจาคอีกต่อไป · รายการจากแคมเปญได้จุดที่เจ้าหน้าที่ตั้งไว้ใน need ของแคมเปญตอนสร้างประกาศ · รายการที่บริจาคเอง เจ้าหน้าที่เลือกจุดให้ตอนประเมิน · บอร์ดผู้บริจาคแยกการ์ดตามของ + จุด ผู้บริจาคเห็นจุดของรายการแคมเปญแบบอ่านอย่างเดียวก่อนจอง
+- **เพื่อ:** เจ้าหน้าที่รู้ว่าแต่ละจุดเก็บของอะไรได้ ผู้บริจาคไม่รู้ · ลดของไปผิดจุด · ผู้บริจาครู้ก่อนจองว่าต้องนำของไปที่ไหน
+- **dev ต้อง build:** field `needs[].drop_off_point_id` + dropdown ในฟอร์มแคมเปญ · worker แยกแถว `public_needs` ตามจุด · บอร์ดแสดงการ์ดต่อของ + จุด · ขั้น 3 แสดงจุดต่อรายการแบบอ่านอย่างเดียว · BFF จองเลือกแคมเปญที่ตรงกับจุดของการ์ด แล้วใส่จุดจากแคมเปญเอง · FastAPI คงจุดของรายการเดิมตอนแก้ · dropdown จุดในหน้าประเมิน + body approve · ลบตัวเลือกจุดฝั่งผู้บริจาค
+- **กระทบ:** campaign schema_v 3 → 4 · PROJECTION_VERSION 14 → 15 (`public_needs`) · donation schema_v ไม่เปลี่ยน · `/external/v1/needs` shape เดิม · แก้ CR-206 ฝั่งผู้บริจาค · ฝั่งรับของทีละจุดของ CR-206 ไม่เปลี่ยน
 
 ### Why
 
@@ -386,6 +388,8 @@ Soravit Sukkarn (Team Lead) อนุมัติตามที่ผู้ข�
 - แคมเปญเป็นของที่เจ้าหน้าที่ประกาศขอเอง จึงรู้ตั้งแต่ตอนสร้างว่าของชิ้นนั้นต้องไปจุดไหน
 - ของที่ผู้บริจาคพิมพ์เองต้องผ่านหน้าประเมินอยู่แล้ว (CR-174 FR-2, FR-7) · เจ้าหน้าที่จึงเลือกจุดในขั้นเดียวกันได้โดยไม่เพิ่มขั้นตอน
 - ใบเก็บ `items[].drop_off_point_id` อยู่แล้ว (CR-206 FR-MP-1) และหน้าสแกนรับทีละจุดอ่าน field นี้ (CR-206 FR-MP-19) · amendment นี้เปลี่ยนผู้เขียน field ไม่เปลี่ยน shape ของใบ
+- #1056 ให้ผู้บริจาคเห็นจุดแบบอ่านอย่างเดียวก่อนจอง · บอร์ดเดิมรวมทุกแคมเปญของของชิ้นเดียวกันเป็นการ์ดเดียว และ BFF เลือกแคมเปญตอนจอง จึงบอกจุดก่อนจองไม่ได้เมื่อ 2 แคมเปญขอของชิ้นเดียวกันคนละจุด · แยกการ์ดตามของ + จุดทำให้การ์ดที่ผู้บริจาคกดบอกจุดได้แน่นอน
+- การ์ดส่ง `need_drop_off_point_id` ไปกับรายการเพื่อบอกว่ากดการ์ดไหน · BFF ใช้ค่านี้กรองแคมเปญเท่านั้น จุดที่เขียนลงรายการยังมาจาก need ของแคมเปญ (FR-AP-8) · ผู้บริจาคจึงเลือกได้แค่การ์ดที่เจ้าหน้าที่ประกาศไว้ ไม่ได้เลือกจุดเอง
 
 ### Requirements
 
@@ -398,6 +402,8 @@ Soravit Sukkarn (Team Lead) อนุมัติตามที่ผู้ข�
 - **ศูนย์มีจุด** = จุดปัจจุบันของศูนย์ ≥ 1
 - ใบเดียวมีทั้งรายการแคมเปญและรายการบริจาคเองได้ · กติกาทั้งหมดใช้ต่อรายการ ไม่ใช่ต่อใบ
 - ทุกที่ที่เขียน `drop_off_point_id` ให้เขียนค่า `null` ตรงๆ เมื่อไม่มีจุด (ไม่ละ key) · ตอนอ่าน ไม่มี key = `null`
+- **การ์ด** = แถวหนึ่งของ `public_needs` / การ์ดหนึ่งใบบนบอร์ดผู้บริจาค · key = ศูนย์ + `item_id` + `drop_off_point_id` ของ need (`null` เป็นค่าหนึ่งของ key) · need ของหลายแคมเปญที่ของและจุดตรงกันรวมเป็นการ์ดเดียว
+- **จุดของการ์ด** = `drop_off_point_id` ใน key ของการ์ด
 
 **แคมเปญ (back-office)**
 
@@ -414,7 +420,9 @@ Soravit Sukkarn (Team Lead) อนุมัติตามที่ผู้ข�
 **จอง (public)**
 
 - **FR-AP-7** — BFF `POST /api/public/v1/donations` ไม่อ่าน `items[].drop_off_point_id` จาก request · ลบ field ออกจาก zod input (`donation.ts`) และ `buildDonationItemsPayload` (`public-donation.ts`) · client ส่งมาไม่มีผล
-- **FR-AP-8** — BFF คำนวณจุดของแต่ละรายการหลังเลือกแคมเปญ (`pickCampaignForItems`) แล้วส่งต่อ FastAPI:
+- **FR-AP-7a** — zod input ของรายการเพิ่ม `need_drop_off_point_id: string | null` (optional) = จุดของการ์ดที่ผู้บริจาคกด (FR-AP-28) · ไม่ส่ง key = ไม่ได้มาจากการ์ด · ส่ง `null` = การ์ดที่ไม่มีจุด · ใช้เฉพาะรายการที่มี `item_id` · ไม่เขียนลงใบและไม่ส่งต่อ FastAPI
+- **FR-AP-7b** — ก่อน `pickCampaignForItems` BFF ตัดแคมเปญที่ไม่ตรงกับการ์ดออก: ทุกรายการที่ส่ง `need_drop_off_point_id` มา แคมเปญต้องมี need ที่ `item_id` ตรงกัน และ `drop_off_point_id` ของ need (ไม่มี key = `null`) เท่ากับค่านั้น · ไม่เหลือแคมเปญที่รับไหว → `409 NEED_FULL` พร้อม `item_id` เหมือนเดิม · **ห้ามย้ายไปแคมเปญของจุดอื่น** (D-AP-17) · ไม่มีรายการไหนส่ง key มา (client รุ่นเก่า, บริจาคเอง) → เลือกจากทุกแคมเปญเหมือนเดิม
+- **FR-AP-8** — BFF คำนวณจุดของแต่ละรายการหลังเลือกแคมเปญ (`pickCampaignForItems` บนแคมเปญที่เหลือจาก FR-AP-7b) แล้วส่งต่อ FastAPI:
   - `logistics.delivery_method` ไม่ใช่ `self_dropoff` → `null` ทุกรายการ (CR-206 FR-MP-4 เดิม)
   - รายการแคมเปญ → `drop_off_point_id` ของ need ใน**แคมเปญที่เลือกให้ใบ** (ไม่ใช่แคมเปญอื่นที่ขอของชิ้นเดียวกัน)
   - รายการบริจาคเอง → `null`
@@ -423,9 +431,15 @@ Soravit Sukkarn (Team Lead) อนุมัติตามที่ผู้ข�
 - **FR-AP-8b** — ฟอร์มจองเก็บ `items` ของ response ไว้ใน field ใหม่ `donationStore.bookedItems: { drop_off_point_id: string | null; review_status: string }[]` (เขียนพร้อม `trackingToken` / `bookingRef` / `bookingStatus` ใน `donor-time-selection-form.svelte` · ล้างพร้อม field เหล่านั้นตอนเริ่มใหม่) · ตั๋วหลังจอง (`public-donor-success-ticket.svelte`) จัดกลุ่มจาก `bookedItems` ไม่ใช่จาก `donationStore.items`
 - **FR-AP-9** — กติกา FR-AP-8 อยู่ใน pure function เดียวใน `features/donations/domain/line-points.ts` · BFF จองและ BFF แก้รายการใช้ร่วมกัน
 - **FR-AP-10** — FastAPI `create` เรียก `_drop_off_points` แบบเดียวกับ `update_items`: ไม่เทียบกับ `public_shelters.donation_points` · ไม่ตอบ `400 UNKNOWN_DROP_OFF_POINT` · ยังบังคับ `null` เมื่อวิธีส่งเป็น `parcel` / `shelter_pickup` · `DonationItemInput.drop_off_point_id` ยังรับค่าจาก BFF (D-AP-9) · ลบ branch `strict` และ `_offered_point_ids` ที่ไม่มีคนเรียกแล้ว และแก้ docstring ของ field
-- **FR-AP-11** — ฟอร์มจองขั้น 3 ไม่มี section "จุดส่งของแต่ละรายการ" · หมุดจุดรับบริจาคบนแผนที่ขั้น 1 และขั้น 3 (CR-205 FR-DP-18) ยังแสดง แต่แตะแล้วไม่เลือกจุดให้รายการ · แทน CR-206 FR-MP-8 – FR-MP-12 (D-AP-7)
-- **FR-AP-12** — ขั้น 3 แสดงข้อความ "จุดส่งของแต่ละรายการจะแจ้งในหน้าติดตาม" เมื่อศูนย์ที่เลือกมีจุด และวิธีส่งเป็น `self_dropoff` · ผู้บริจาคไม่เห็นจุดก่อนจอง (D-AP-7)
-- **FR-AP-13** — store ฟอร์มจอง (`donation.svelte.ts`) ไม่เก็บ `dropOffPointId` และ `tappedPointId`
+- **FR-AP-11** — ฟอร์มจองขั้น 3 ไม่มีตัวเลือกจุด (dropdown หรือแตะหมุดเพื่อเลือก) · หมุดจุดรับบริจาคบนแผนที่ขั้น 1 และขั้น 3 (CR-205 FR-DP-18) ยังแสดง แต่แตะแล้วแสดงชื่อจุดอย่างเดียว ไม่เลือกจุดให้รายการ · แทน CR-206 FR-MP-8 – FR-MP-12 (D-AP-7)
+- **FR-AP-12** — ขั้น 3 ของใบ `self_dropoff` ในศูนย์ที่มีจุด แสดงจุดของแต่ละรายการแบบอ่านอย่างเดียว ด้วยการจัดกลุ่มเดียวกับตั๋ว (`groupDropOffDestinations` + `drop-off-groups.svelte` · FR-AP-22a) (D-AP-7):
+  - รายการจากการ์ด → กลุ่มของจุดของการ์ด · จุดของการ์ดเป็น `null` หรือไม่อยู่ใน `public_shelters.donation_points` → กลุ่ม "ส่งที่จุดรับบริจาคไหนของศูนย์ก็ได้" (CR-206 FR-MP-16)
+  - รายการบริจาคเอง → กลุ่ม "รอเจ้าหน้าที่กำหนดจุดส่ง" (FR-AP-22)
+  - แผนที่ขั้น 3 ซูมไปหมุดของกลุ่มแรกที่มีจุด · ไม่มีกลุ่มที่มีจุด → มุมมองของศูนย์
+  - วิธีส่งไม่ใช่ `self_dropoff` → ไม่แสดงจุด (CR-206 FR-MP-4)
+  - ลบข้อความ "จุดส่งของแต่ละรายการจะแจ้งในหน้าติดตาม"
+- **FR-AP-12a** — จุดที่ขั้น 3 แสดงต้องเท่ากับจุดที่ใบได้หลังจอง: รายการจากการ์ดได้จุดของการ์ดเสมอ (FR-AP-7b, FR-AP-8) · ตั๋วยังจัดกลุ่มจาก response (FR-AP-8b) ไม่ใช่จาก store
+- **FR-AP-13** — store ฟอร์มจอง (`donation.svelte.ts`) ไม่เก็บ `dropOffPointId` และ `tappedPointId` · รายการที่สร้างจากการ์ดเก็บ `needDropOffPointId` (จุดของการ์ด) และ `buildDonationItemsPayload` ส่งเป็น `need_drop_off_point_id` (FR-AP-7a)
 
 **ผู้บริจาคแก้รายการ**
 
@@ -477,9 +491,25 @@ Soravit Sukkarn (Team Lead) อนุมัติตามที่ผู้ข�
   - รายการ `null` อื่นอยู่ในกลุ่ม "ส่งที่จุดรับบริจาคไหนของศูนย์ก็ได้" ตาม CR-206 FR-MP-16
 - **FR-AP-23** — หลังประเมิน ตั๋ว หน้าติดตาม และใบปะหน้าอ่าน `drop_off_point_id` ตาม CR-206 FR-MP-13, FR-MP-14, FR-MP-16 เดิม
 
+**บอร์ดผู้บริจาค (public)**
+
+- **FR-AP-25** — worker projector `public_needs` (`worker/src/worker/projectors/needs.py`) เขียน 1 แถวต่อการ์ด (ศูนย์ + `item_id` + `drop_off_point_id` ของ need):
+  - `_id` = `{shelter}:{item_id}@{drop_off_point_id}` · `null` ใช้ `-` แทน id (`{shelter}:{item_id}@-`)
+  - field ใหม่ `item_id: str` และ `drop_off_point_id: str | null` · FastAPI อ่าน `item_id` จาก field ไม่แยกจาก `_id`
+  - `qty_needed`, `qty_target`, `reserved` คิดจาก need ของการ์ดนั้นเท่านั้น ด้วยสูตรเดิมของ `compute_needs` / `need_breakdown` (ไม่แก้สองฟังก์ชันนี้ · เรียกกับแคมเปญที่กรอง `needs[]` เหลือจุดเดียว) · `on_hand` = ยอดคลังของของนั้นทั้งศูนย์ เหมือนเดิม · `urgency` = สูงสุดของแคมเปญที่มี need ในการ์ด
+  - การ์ดที่ `qty_needed ≤ 0` ถูกลบเหมือนเดิม
+- **FR-AP-25a** — แถวที่ไม่ตรงกับการ์ดปัจจุบันของศูนย์ต้องถูกลบ: แถวรูปแบบเดิม `{shelter}:{item_id}` · แถวของจุดที่ need ถูกแก้ไปจุดอื่น · แถวของแคมเปญที่ปิดหรือซ่อน
+- **FR-AP-25b** — PROJECTION_VERSION 14 → 15 · tent-model `PublicNeed` เพิ่ม `item_id` และ `drop_off_point_id` (default `None` ให้แถวเก่าโหลดได้)
+- **FR-AP-26** — FastAPI `GET /public/v1/needs`: `NeedItemResponse` เพิ่ม `drop_off_point_id: str | null` และ `drop_off_point_name: str | null` · ชื่ออ่านจาก `public_shelters.donation_points` ของศูนย์ · id เป็น `null` หรือไม่อยู่ในจุดของศูนย์ → ชื่อเป็น `null` · ศูนย์เดียวมีหลายแถวที่ `item_id` เดียวกันได้
+- **FR-AP-27** — FastAPI `GET /external/v1/needs` คง shape เดิม: 1 แถวต่อศูนย์ + `item_id` · ไม่มี field จุด · รวมแถวของ FR-AP-25 กลับ: `qty_needed`, `qty_target`, `reserved` = ผลรวม · `on_hand` = ค่าของแถวใดก็ได้ (เท่ากันทุกแถว) · `urgency` = สูงสุด · `status` = `open` เมื่อผลรวม `qty_needed` > 0 (D-AP-16)
+- **FR-AP-28** — บอร์ดผู้บริจาค (`public-donor-needs.svelte`) แสดงการ์ดต่อแถว · key ของ `{#each}` = `item_id` + `drop_off_point_id` · การ์ดที่ `drop_off_point_name` ไม่เป็น `null` แสดง "จุดรับบริจาค: {ชื่อ}" ใต้ชื่อของ · กดบริจาคจากการ์ด (`donateSingleNeed`) เก็บจุดของการ์ดลงรายการตาม FR-AP-13
+- **FR-AP-29** — ทุกที่ที่อ่าน `/api/public/v1/needs` ต้องไม่ถือว่า `item_id` ไม่ซ้ำในศูนย์เดียว: หน้าแรก `(public)/+page.ts`, `public-portal/domain/donation-map.ts`, `donations/data/public-needs.ts` · จำนวนของ / ความเร่งด่วนต่อศูนย์บนแผนที่นับต่อ `item_id` ไม่ใช่ต่อการ์ด
+- **FR-AP-30** — `/api/public/v1/needs` (BFF) ส่ง field ใหม่ต่อโดยไม่แปลง · regenerate OpenAPI (`fastapi.json`, `openapi.d.ts`)
+- **FR-AP-31** — ยอด "ต้องการอีก" ของการ์ด (FR-AP-25) ต้องตรงกับยอดที่ BFF ใช้ตรวจ `NEED_FULL` ของการ์ดนั้น (FR-AP-7b · `computeNeeds` บนแคมเปญที่ตรงกับการ์ด) · unit test ของ worker และของ BFF ใช้เคสเดียวกัน (2 แคมเปญขอข้าวคนละจุด, 2 แคมเปญขอข้าวจุดเดียวกัน) · ไม่แก้กติกา T-22 ใน `packages/needs-fixtures`
+
 **ไม่เปลี่ยน**
 
-- **FR-AP-24** — รับของทีละจุด ปิดใบ หมดอายุ redirect (CR-206 FR-MP-17a – FR-MP-30) · route `[query]/reject` (ปฏิเสธทั้งใบไม่แก้จุด) · walk-in (CR-206 FR-MP-7) · shape ของ `donation` · `public_donations` · `public_needs`
+- **FR-AP-24** — รับของทีละจุด ปิดใบ หมดอายุ redirect (CR-206 FR-MP-17a – FR-MP-30) · route `[query]/reject` (ปฏิเสธทั้งใบไม่แก้จุด) · walk-in (CR-206 FR-MP-7) · shape ของ `donation` · `public_donations` · counter โควต้า (`donation_need_counter` ต่อแคมเปญ + `item_id`)
 
 ### Change (before → after)
 
@@ -510,14 +540,22 @@ Soravit Sukkarn (Team Lead) อนุมัติตามที่ผู้ข�
 
 | endpoint | ก่อน | หลัง |
 | --- | --- | --- |
-| BFF `POST /api/public/v1/donations` request | รับ `items[].drop_off_point_id` | ไม่รับ (FR-AP-7) |
+| BFF `POST /api/public/v1/donations` request | รับ `items[].drop_off_point_id` | ไม่รับ (FR-AP-7) · เพิ่ม `items[].need_drop_off_point_id` ใช้กรองแคมเปญ (FR-AP-7a, FR-AP-7b) |
+| FastAPI `GET /public/v1/needs` (+ BFF `/api/public/v1/needs`) | 1 แถวต่อ `item_id` ในศูนย์ | 1 แถวต่อการ์ด · เพิ่ม `drop_off_point_id`, `drop_off_point_name` (FR-AP-26) |
+| FastAPI `GET /external/v1/needs` | 1 แถวต่อ `item_id` ในศูนย์ | ไม่เปลี่ยน shape · รวมแถวการ์ดกลับ (FR-AP-27) |
 | BFF `POST /api/public/v1/donations` response | `trackingToken`, `bookingRef`, `status` | เพิ่ม `items[]` (FR-AP-8a) |
 | FastAPI `POST /public/v1/donations` | `400 UNKNOWN_DROP_OFF_POINT` · response ไม่มี `items` | ไม่มี error นี้ (FR-AP-10) · response เพิ่ม `items[]` (FR-AP-8a) |
 | BFF `PATCH /api/public/v1/donations/{tracking_token}/items` | รับ `items[].drop_off_point_id` · อ่าน registry · `503` เมื่ออ่านไม่ได้ | ไม่รับ · ไม่อ่าน registry (FR-AP-15b) · `503 DONATION_UNAVAILABLE` เมื่ออ่านแคมเปญไม่ได้ (FR-AP-15a) |
 | FastAPI `PATCH /public/v1/donations/{tracking_token}/items` | ใช้จุดจาก request | รายการเดิมที่ `item_id` ไม่เปลี่ยนใช้จุดเดิม · รายการอื่นใช้จุดจาก request (FR-AP-15) |
 | `POST /api/back-office/donations/[query]/approve` | `lines[]` = `{index, decision, reason_code?, note?}` | เพิ่ม `drop_off_point_id?` · `422 UNKNOWN_DROP_OFF_POINT`, `422 POINT_REQUIRED`, `503 DONATION_UNAVAILABLE` (FR-AP-17, FR-AP-17a) |
 
-**Mongo** — ไม่เปลี่ยน · `donation_campaign` ไม่ถูก project เป็นแคมเปญ (worker พับเข้า `public_needs` ต่อ `{shelter}:{item_id}`) · ไม่ bump PROJECTION_VERSION
+**Mongo `public_needs`** — PROJECTION_VERSION 14 → 15 (FR-AP-25 – FR-AP-25b) · `public_donations` ไม่เปลี่ยน
+
+ตัวอย่าง (ศูนย์ SH001 · แคมเปญ ก ข้าว 20 กก. จุดโรงยิม · แคมเปญ ข ข้าว 50 กก. จุดโรงยิม · แคมเปญ ค ข้าว 30 กก. จุดอาคาร A · คลังไม่มีข้าว · ยังไม่มีใครจอง):
+
+- ก่อน: `{ _id: 'SH001:item:rice', qty_needed: 100, … }`
+- หลัง: `{ _id: 'SH001:item:rice@01J…GYM', item_id: 'item:rice', drop_off_point_id: '01J…GYM', qty_needed: 70, … }` และ `{ _id: 'SH001:item:rice@01J…BLDA', item_id: 'item:rice', drop_off_point_id: '01J…BLDA', qty_needed: 30, … }`
+- `/external/v1/needs` ยังได้ `{ item_id: 'item:rice', qty_needed: '100', … }` แถวเดียว
 
 ### Acceptance
 
@@ -531,8 +569,16 @@ Soravit Sukkarn (Team Lead) อนุมัติตามที่ผู้ข�
 
 **จอง**
 
-- **AC-AP-3** — ผู้บริจาคจองข้าวจากการ์ดบนบอร์ด → response มี `items[0].drop_off_point_id` = โรงยิม · ใบ `verifying` · ตั๋วแสดงกลุ่มโรงยิม · ฟอร์มจองไม่มีตัวเลือกจุด · ขั้น 3 แสดงข้อความตาม FR-AP-12
-- **AC-AP-4** — 2 แคมเปญขอข้าว (A จุดโรงยิม, B จุดห้องพยาบาล) · BFF เลือกแคมเปญ B ให้ใบ → รายการข้าวได้ห้องพยาบาล
+- **AC-AP-3** — ผู้บริจาคจองข้าวจากการ์ด "ข้าว · จุดรับบริจาค: โรงยิม" → ขั้น 3 แสดงข้าวในกลุ่มโรงยิมแบบอ่านอย่างเดียว และไม่มีตัวเลือกจุด · response มี `items[0].drop_off_point_id` = โรงยิม · ใบ `verifying` · ตั๋วแสดงกลุ่มโรงยิม
+- **AC-AP-4** — 2 แคมเปญขอข้าว (A จุดโรงยิม, B จุดห้องพยาบาล) → บอร์ดมี 2 การ์ด · จองจากการ์ดห้องพยาบาล → ใบผูกแคมเปญ B · รายการข้าวได้ห้องพยาบาล
+- **AC-AP-4a** — แคมเปญ ก และ ข ขอข้าวที่โรงยิมทั้งคู่ → บอร์ดมีการ์ดข้าว-โรงยิมใบเดียว · ยอด "ต้องการอีก" = ผลรวมของ ก และ ข
+- **AC-AP-4b** — การ์ดห้องพยาบาลเต็มระหว่างที่ผู้บริจาคกรอกฟอร์ม แต่การ์ดโรงยิมยังรับได้ → `409 NEED_FULL` · ใบไม่ถูกสร้าง · ไม่ย้ายไปแคมเปญโรงยิม
+- **AC-AP-4c** — request จองไม่มี `need_drop_off_point_id` (client รุ่นเก่า) → BFF เลือกแคมเปญจากทุกแคมเปญเหมือนก่อน amendment นี้ · รายการได้จุดตาม FR-AP-8
+- **AC-AP-4d** — แก้จุดของ need แคมเปญ ก จากโรงยิมเป็นอาคาร A → หลัง worker รอบถัดไป แถว `…@โรงยิม` ของ ก หายจาก `public_needs` (หรือลดยอด ถ้ายังมีแคมเปญอื่นที่โรงยิม) · มีแถว `…@อาคาร A`
+- **AC-AP-4e** — หลัง deploy ไม่มีแถว `_id` รูปแบบเดิม `{shelter}:{item_id}` เหลือใน `public_needs`
+- **AC-AP-4f** — `/external/v1/needs` ของศูนย์ใน AC-AP-4 ได้ข้าวแถวเดียว · `qty_needed` = ผลรวมของ 2 การ์ด · ไม่มี field จุด
+- **AC-AP-4g** — การ์ดของแคมเปญเก่าที่ need ไม่มีจุด ในศูนย์ที่มีจุด → การ์ดไม่แสดงชื่อจุด · ขั้น 3 แสดงรายการในกลุ่ม "ส่งที่จุดรับบริจาคไหนของศูนย์ก็ได้"
+- **AC-AP-4h** — บริจาคของอื่น (ไม่ได้มาจากการ์ด) 2 รายการแบบ `self_dropoff` ในศูนย์ที่มีจุด → ขั้น 3 แสดงทั้งสองรายการในกลุ่ม "รอเจ้าหน้าที่กำหนดจุดส่ง" · เลือก `parcel` → ขั้น 3 ไม่แสดงจุด
 - **AC-AP-5** — request จองส่ง `drop_off_point_id` มาเอง → ไม่มีผล · ใบได้จุดตาม FR-AP-8
 - **AC-AP-6** — จุดของ need ถูกเลิกติ๊กหลังสร้างแคมเปญ แล้วมีคนจอง → จองสำเร็จ · รายการเก็บ id นั้น · หน้าติดตามแสดงรายการในกลุ่ม "ส่งที่จุดรับบริจาคไหนของศูนย์ก็ได้" · ทุกจุดรับได้
 - **AC-AP-7** — จุดถูกสร้างใน CouchDB แต่ `public_shelters` ยังไม่อัปเดต แล้วแคมเปญใช้จุดนั้น → จองสำเร็จ ไม่ได้ `400` · รายการ `approved` แสดงบนตั๋วในกลุ่ม "ส่งที่จุดรับบริจาคไหนของศูนย์ก็ได้" จน projection ตามทัน แล้วหน้าติดตามแสดงกลุ่มของจุดนั้น
@@ -567,8 +613,11 @@ Soravit Sukkarn (Team Lead) อนุมัติตามที่ผู้ข�
   - `use_case.py` `_pair_held_lines`: copy `drop_off_point_id` ของรายการเดิมทุกครั้ง (รวม `null`) เมื่อ `item_id` ไม่เปลี่ยน (FR-AP-15) · ปัจจุบัน carry เฉพาะ field ที่ request ว่าง
   - `schemas.py` `DonationCreateResponse.items` · docstring ของ `DonationItemInput.drop_off_point_id`
   - `tests/test_donation_drop_off_points.py`: ลบเคส `UNKNOWN_DROP_OFF_POINT` ตอนจอง · เพิ่ม AC-AP-7, AC-AP-15 (ฝั่ง FastAPI)
+  - `modules/needs` (`schemas.py`, `use_case.py`): FR-AP-26 · `modules/external/router.py` `list_needs`: FR-AP-27 (แยก method ของ use case ให้ external) · test ใน `backend/tests/` ทั้งสอง endpoint
   - regenerate OpenAPI (`fastapi.json`, `openapi.d.ts`)
-- **worker / tent-model**: ไม่กระทบ
+- **worker / tent-model**
+  - `worker/src/worker/projectors/needs.py`: FR-AP-25, FR-AP-25a · `projection_version.py` 15 (FR-AP-25b) · test ของ projector
+  - `packages/tent-model/src/tent_model/public_need.py`: `item_id`, `drop_off_point_id` (FR-AP-25b)
 - **frontend back-office**
   - `operations/domain/operations.ts`: `CampaignNeed`, `campaignInputSchema`, `createCampaign` (schema_v 4), `editNeed` (FR-AP-4, FR-AP-4b)
   - `operations/application/use-donation-needs-board.svelte.ts`: ส่งจุดจากฟอร์มเข้า `createCampaign` / `editNeed`
@@ -583,14 +632,17 @@ Soravit Sukkarn (Team Lead) อนุมัติตามที่ผู้ข�
   - `donations/ui/drop-off-groups.svelte` + `lib/constants/i18n/public-donations.ts`: กลุ่ม "รอ" (FR-AP-22a)
   - `donations/domain/donation.ts`, `public-donation.ts` (`buildDonationItemsPayload`, ข้อความ error `UNKNOWN_DROP_OFF_POINT`): FR-AP-7, FR-AP-10
   - `donor-time-selection-form.svelte`, `drop-off-points-section.svelte`, `donation.svelte.ts`, `public-donor-needs.svelte`: FR-AP-11 – FR-AP-13 · `bookedItems` ตาม FR-AP-8b
-  - BFF `api/public/v1/donations/+server.ts`: FR-AP-8, FR-AP-8a
+  - `public-donor-needs.svelte`, `(public)/+page.ts`, `public-portal/domain/donation-map.ts`, `donations/data/public-needs.ts`: FR-AP-28, FR-AP-29
+  - `donations/domain/compute-needs.ts`: กรองแคมเปญตามการ์ด (FR-AP-7b) เป็น pure function + unit test
+  - BFF `api/public/v1/donations/+server.ts`: FR-AP-7a, FR-AP-7b, FR-AP-8, FR-AP-8a
   - `public-donor-success-ticket.svelte`: FR-AP-8b, FR-AP-22
   - `edit-donation-items-dialog.svelte` + BFF `…/[tracking_token]/items/+server.ts`: FR-AP-14, FR-AP-15a, FR-AP-15b
   - หน้าติดตาม `routes/(public)/donations/track/[token]/+page.svelte`: FR-AP-22
-- **e2e**: เขียน `donation-multi-drop-off.test.ts` ฝั่งผู้บริจาคใหม่ตาม AC-AP-3, AC-AP-9, AC-AP-10, AC-AP-13 · ใช้ `e2e/helpers/donation-points.ts` เดิม
+- **e2e**: เขียน `donation-multi-drop-off.test.ts` ฝั่งผู้บริจาคใหม่ตาม AC-AP-3, AC-AP-4, AC-AP-9, AC-AP-10, AC-AP-13 · ใช้ `e2e/helpers/donation-points.ts` เดิม · stack ต้องรัน worker ที่ PROJECTION_VERSION 15
 - **docs หลังอนุมัติ**
   - schema.md §2.4 (field ใหม่, schema_v 4, Migration) · §2.3 ย่อหน้า CR-206 (ใครเขียน `drop_off_point_id`)
-  - api-contract.md §5 (ตาราง API ข้างบน · ข้อความที่ ~:860) · public-tier-donation-spec.html
+  - api-contract.md §5 (ตาราง API ข้างบน · ข้อความที่ ~:860) · `GET /public/v1/needs` และ `GET /external/v1/needs` · public-tier-donation-spec.html (บอร์ดการ์ดต่อของ + จุด · ขั้น 3 แสดงจุดแบบอ่านอย่างเดียว)
+  - couchdb-mongodb-sync.md `public_needs` (`_id`, `item_id`, `drop_off_point_id`, PROJECTION_VERSION 15)
   - CR-206: Decision log ชี้มา amendment นี้ · ทำเครื่องหมาย FR / AC ที่ระบุใน `affects` ว่า superseded
   - CR-205: Decision log ของ FR-DP-18 / AC-AP-12 (หมุดแตะแล้วไม่เลือกจุด)
   - อัปเดต `updated:` ทุกไฟล์
@@ -600,7 +652,9 @@ Soravit Sukkarn (Team Lead) อนุมัติตามที่ผู้ข�
 - `needs[].drop_off_point_id` optional → แคมเปญเดิมไม่ backfill · อ่านเป็น `null` (AC-AP-16)
 - แคมเปญเดิมที่ยังเปิดในศูนย์ที่มีจุด → ใบใหม่ได้ `null` และรับที่จุดไหนก็ได้ (CR-206 FR-MP-19) จนเจ้าหน้าที่แก้ need (FR-AP-4a) · บอร์ดแสดงป้าย "ยังไม่ระบุจุด" (FR-AP-6) · หลัง deploy ควรให้เจ้าหน้าที่ตั้งจุดให้แคมเปญที่เปิดอยู่
 - ใบบริจาคเดิมคงจุดที่ผู้บริจาคเลือก · ไม่ migrate (AC-AP-17)
-- ไม่ re-project Mongo
+- **re-project `public_needs`:** worker ที่ PROJECTION_VERSION 15 รัน bootstrap เองตอนเริ่ม (`projection_version.py`) · projector ลบแถวรูปแบบเดิม `{shelter}:{item_id}` (FR-AP-25a, AC-AP-4e) · `public_donations` ไม่ต้อง re-project
+- **deploy:** worker, FastAPI และ frontend จาก commit เดียวกัน · FastAPI ต้องอ่านแถวเก่าที่ไม่มี `item_id` ได้ในช่วงก่อน bootstrap เสร็จ (fallback แยก `item_id` จาก `_id` และ `drop_off_point_id = null`)
+- client รุ่นเก่า (PWA cache) ที่ไม่ส่ง `need_drop_off_point_id` → BFF เลือกแคมเปญแบบเดิม (AC-AP-4c)
 
 ### ข้อตกลง
 
@@ -612,7 +666,7 @@ Soravit Sukkarn (Team Lead) อนุมัติตามที่ผู้ข�
 | D-AP-4 | แก้จุดของ need มีผลกับรายการที่จองแล้วไหม | ไม่มีผล รวมตอนผู้บริจาคแก้ใบ · จับคู่รายการเดิมด้วย `line_key` และ `item_id` ไม่เปลี่ยน | เสนอ | FR-AP-5, FR-AP-15 |
 | D-AP-5 | จุดของ need ถูกลบแล้วมีคนจอง | จองได้ · เก็บ id ไว้ · แสดงและรับแบบ "ไหนก็ได้" ตาม CR-206 FR-MP-16 / FR-MP-19 | เสนอ | FR-AP-8 |
 | D-AP-6 | เจ้าหน้าที่เปลี่ยนจุดของรายการที่อนุมัติแล้วได้ไหม | นอกขอบเขต · ใช้ "รับรายการของจุดอื่น" | เสนอ | FR-AP-21 |
-| D-AP-7 | ผู้บริจาคเห็นจุดก่อนจองไหม | ไม่เห็น · เห็นในตั๋วและหน้าติดตาม · หมุดจุด CR-205 ยังแสดงแต่แตะไม่เลือก | เสนอ | FR-AP-11, FR-AP-12 |
+| D-AP-7 | ผู้บริจาคเห็นจุดก่อนจองไหม | เห็นแบบอ่านอย่างเดียว ตาม #1056 · บอร์ดแสดงจุดบนการ์ด · ขั้น 3 แสดงจุดต่อรายการ · หมุดจุด CR-205 ยังแสดงแต่แตะไม่เลือก (เดิมเสนอ "ไม่เห็นก่อนจอง" · เปลี่ยนตาม #1056 2026-10-31) | เสนอ | FR-AP-11, FR-AP-12, FR-AP-28 |
 | D-AP-8 | bump donation schema_v ไหม | ไม่ bump (shape ไม่เปลี่ยน) | เสนอ | — |
 | D-AP-9 | FastAPI `create` ตรวจจุดกับ `public_shelters` ต่อไหม | เลิกตรวจ · เชื่อค่าจาก BFF (endpoint เรียกได้ผ่าน BFF เท่านั้น · กติกาเดียวกับ CR-206 FR-MP-2b ของ PATCH) | เสนอ | FR-AP-10 |
 | D-AP-10 | BFF จองตรวจจุดของ need กับ registry ไหม | ไม่ตรวจ · คง CR-017 §Decision A (route จองไม่อ่าน registry) · ใช้ D-AP-5 แทน | เสนอ | FR-AP-8 |
@@ -620,6 +674,9 @@ Soravit Sukkarn (Team Lead) อนุมัติตามที่ผู้ข�
 | D-AP-12 | approve แบบไม่ส่ง `lines` | ใบประเมินทีละรายการ ศูนย์มีจุด มีรายการไม่มีจุด → `422` · ใบก่อน schema_v 7 อนุมัติแบบเดิม จุดเป็น `null` | เสนอ | FR-AP-17a |
 | D-AP-13 | รายการที่หน้าสแกนรับไปก่อนประเมิน | ไม่บังคับจุดและไม่เขียนทับ · ส่งจุดมา → `422` | เสนอ | FR-AP-17 ข้อ 3 |
 | D-AP-14 | เข้า phase ปัจจุบัน หรือ backlog (change-management §5) | > [NEEDS DECISION: ผู้อนุมัติกำหนด] | รอ | — |
+| D-AP-15 | แยกการ์ดบนบอร์ดแบบไหน | ต่อของ + จุด · หลายแคมเปญที่ของและจุดตรงกันรวมเป็นการ์ดเดียว | เจ้าของงานเลือก 2026-10-31 · รอผู้อนุมัติ | FR-AP-25, FR-AP-28 |
+| D-AP-16 | `/external/v1/needs` เปลี่ยน shape ไหม | ไม่เปลี่ยน · รวมแถวการ์ดกลับเป็น 1 แถวต่อของ · ผลที่ยอมรับ: การ์ดที่ `qty_needed ≤ 0` ถูกลบ (FR-AP-25) จึงไม่หักลบกับการ์ดอื่น · ยอดรวมที่ภายนอกเห็นอาจสูงกว่าก่อน amendment นี้เมื่อจุดหนึ่งได้ของเกินเป้า | เจ้าของงานเลือก 2026-10-31 · รอผู้อนุมัติ | FR-AP-27 |
+| D-AP-17 | การ์ดที่ผู้บริจาคกดเต็มตอนส่ง แต่การ์ดของจุดอื่นยังรับได้ | `409 NEED_FULL` · ไม่ย้ายไปแคมเปญของจุดอื่น (ผู้บริจาคเห็นจุดเดิมไปแล้วในขั้น 3) | เสนอ | FR-AP-7b |
 
 ถ้า D-AP-2 หรือ D-AP-3 เลือก "ไม่บังคับ" ให้ตัด validation ใน FR-AP-3, FR-AP-4a, FR-AP-17 ข้อ 5, FR-AP-17a ข้อแรก และ AC-AP-1, AC-AP-2b, AC-AP-11, AC-AP-12b · FR อื่นคงเดิม
 
@@ -627,7 +684,11 @@ Soravit Sukkarn (Team Lead) อนุมัติตามที่ผู้ข�
 
 - **ตั้งจุดระดับแคมเปญ (1 แคมเปญ = 1 จุด)** — แคมเปญมีหลาย need ได้ (`needs[]` ≥ 1) และของต่างประเภทอาจไปคนละจุด · ฟอร์มปัจจุบันสร้างแคมเปญละ 1 need (`use-donation-needs-board.svelte.ts`) จึงใช้งานเหมือนกัน แต่ field ต่อ need ไม่ต้องย้ายข้อมูลถ้าฟอร์มรองรับหลาย need ทีหลัง
 - **ให้ผู้บริจาคเลือกต่อ แต่เจ้าหน้าที่แก้ได้** — ผู้บริจาคยังต้องเดาจุดเอง · คำขอระบุให้เจ้าหน้าที่เป็นคนกำหนด
-- **แสดงจุดของ need บนบอร์ดก่อนจอง** — `public_needs` รวมยอดหลายแคมเปญเป็นแถวเดียวต่อ `{shelter}:{item_id}` และ BFF เลือกแคมเปญตอนจอง · ต้องแก้ projector, model และ PROJECTION_VERSION · แยกเป็นงานอื่นถ้าต้องการ
+- **ไม่แสดงจุดก่อนจอง (แจ้งในตั๋ว)** — ข้อเสนอเดิมของ D-AP-7 · ขัด #1056 ที่ให้ผู้บริจาคเห็นจุดแบบอ่านอย่างเดียว
+- **แยกการ์ดต่อแคมเปญ** — 2 แคมเปญขอข้าวที่จุดเดียวกันจะเป็น 2 การ์ดหน้าตาเหมือนกัน · ผู้บริจาคแยกไม่ออก (D-AP-15)
+- **คงการ์ดเดียวต่อของ แสดงจุดเมื่อทุกแคมเปญของของนั้นใช้จุดเดียวกัน** — ยังบอกจุดก่อนจองไม่ได้เมื่อแคมเปญใช้คนละจุด ซึ่งเป็นกรณีที่ #1056 ต้องการ
+- **ให้ `/external/v1/needs` แยกแถวตามจุดด้วย** — เปลี่ยนสัญญากับหน่วยงานภายนอกโดยไม่มีคำขอจากฝั่งนั้น (D-AP-16)
+- **ย้ายไปแคมเปญของจุดอื่นเมื่อการ์ดเต็ม** — ผู้บริจาคเห็นจุดหนึ่งในขั้น 3 แต่ตั๋วบอกอีกจุด (D-AP-17)
 - **BFF จองอ่าน registry เพื่อล้างจุดที่ถูกลบ** — ขัด CR-017 §Decision A (route จองเคยดึง registry ทั้งก้อนทุกครั้งที่จอง) · ระบบรองรับ id ที่ไม่อยู่แล้วทั้งตอนแสดงและตอนรับ (CR-206 FR-MP-16 / FR-MP-19)
 - **ผู้บริจาคแก้รายการแล้วคำนวณจุดใหม่ทุกรายการ** — ขัด D-AP-4 · ผู้บริจาคที่ได้ตั๋วบอกจุดแล้วจะเห็นจุดเปลี่ยนเพราะแก้จำนวน
 - **คงการตรวจจุดใน FastAPI `create` กับ `public_shelters`** — projection ตามหลัง CouchDB · จุดที่เจ้าหน้าที่เพิ่งสร้างจะทำให้การจองล้ม (AC-AP-7)
