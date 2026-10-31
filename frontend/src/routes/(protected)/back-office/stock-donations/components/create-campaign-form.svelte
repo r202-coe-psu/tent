@@ -1,6 +1,7 @@
 <script lang="ts">
 	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
 	import Megaphone from '@lucide/svelte/icons/megaphone';
+	import Plus from '@lucide/svelte/icons/plus';
 	import PlusCircle from '@lucide/svelte/icons/plus-circle';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
@@ -12,11 +13,14 @@
 	import { useSupplyItems } from '$lib/features/supply';
 	import {
 		canonicalizeUnitCode,
+		canWriteShelterCatalog,
 		formatUnit,
 		mergeCatalogGenerations,
+		QuickCreateItemSheet,
 		useItemMasters,
 		useUnitsOfMeasure
 	} from '$lib/features/catalog';
+	import { authStore } from '$lib/stores/auth.svelte';
 	import { langState } from '$lib/states/i18n.svelte';
 	import { getShelterCode } from '$lib/db/shelter';
 	import { persistQty, qtyGt } from '$lib/utils/qty';
@@ -53,6 +57,26 @@
 	// themselves, so changing the item cannot undo their choice.
 	let categoryChoice = $state<string | null>(null);
 	let targetQty = $state('');
+
+	// Same gate and same sheet as the scan station's "เพิ่มสินค้าใหม่".
+	const canCreateItem = $derived(canWriteShelterCatalog(authStore.user?.roles ?? []));
+	let createOpen = $state(false);
+	let createName = $state('');
+
+	function openCreateItem() {
+		// `SearchSelect` keeps its search text private, so read the box itself — but only
+		// when nothing is picked, otherwise it just shows the picked item's label.
+		const typed = selectedItemId
+			? ''
+			: ((document.getElementById('campaign-item-title') as HTMLInputElement | null)?.value ?? '');
+		createName = typed.trim();
+		createOpen = true;
+	}
+
+	/** Created, or an existing similar item chosen instead: select it in the form. */
+	function pickCreatedItem(item: { _id: string }) {
+		selectedItemId = item._id;
+	}
 
 	const CATEGORY_OPTIONS = [
 		{ value: 'อาหารและเครื่องดื่ม', label: 'อาหารและเครื่องดื่ม (Food & Beverage)' },
@@ -234,10 +258,26 @@
 					class="h-10 rounded-xl text-xs"
 					controlProps={{ id: 'campaign-item-title' }}
 				/>
-				<p class="mt-1.5 text-3xs text-muted-foreground">
-					ประกาศผูกกับรหัสในแคตตาล็อกโดยตรง — ไม่ได้เดาจากชื่อที่พิมพ์อีกต่อไป ถ้ายังไม่มีรายการนี้
-					ให้สร้างในหน้าจัดการข้อมูลหลักก่อน
-				</p>
+				{#if canCreateItem}
+					<p class="mt-1.5 text-3xs text-muted-foreground">
+						ประกาศผูกกับรหัสในแคตตาล็อกโดยตรง — ไม่ได้เดาจากชื่อที่พิมพ์อีกต่อไป ไม่พบรายการ? กด
+						“เพิ่มสินค้าใหม่” ได้เลย
+					</p>
+					<Button
+						type="button"
+						variant="ghost"
+						class="mt-1 min-h-9 gap-1 px-2 text-sm font-semibold text-sky-800"
+						onclick={openCreateItem}
+					>
+						<Plus class="size-4" aria-hidden="true" />
+						เพิ่มสินค้าใหม่
+					</Button>
+				{:else}
+					<p class="mt-1.5 text-3xs text-muted-foreground">
+						ประกาศผูกกับรหัสในแคตตาล็อกโดยตรง — ไม่ได้เดาจากชื่อที่พิมพ์อีกต่อไป
+						ถ้ายังไม่มีรายการนี้ ให้สร้างในหน้าจัดการข้อมูลหลักก่อน
+					</p>
+				{/if}
 			</div>
 
 			<!-- Category -->
@@ -358,3 +398,13 @@
 		</div>
 	</form>
 </div>
+
+{#if canCreateItem}
+	<QuickCreateItemSheet
+		bind:open={createOpen}
+		shelterCode={getShelterCode()}
+		initialName={createName}
+		onCreated={pickCreatedItem}
+		onUseExisting={pickCreatedItem}
+	/>
+{/if}
