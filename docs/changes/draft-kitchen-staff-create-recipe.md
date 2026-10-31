@@ -11,6 +11,7 @@ affects:
   - frontend/src/lib/features/catalog/domain/catalog-permissions.ts
   - frontend/src/lib/features/catalog/application/queries.ts (useCreateRecipe)
   - frontend/src/lib/features/kitchen/ui/save-as-recipe-fields.svelte
+  - frontend/src/routes/(protected)/back-office/catalog/components/recipe-tab.svelte
   - frontend/src/routes/(protected)/back-office/kitchen/production-board/[session_id]/+page.svelte
 ---
 
@@ -50,6 +51,8 @@ Issue #802 ขอให้บันทึกเป็นสูตรใหม่
   (ไม่มี shelter = central catalog → system_admin เท่านั้น).
 - Production board Stage A โหมด "สร้างสูตรเอง": checkbox "บันทึกเป็นสูตรใหม่" + ชื่อสูตร + จำนวนจานมาตรฐาน.
   บันทึกล้ม / ชื่อซ้ำ → toast แจ้ง แต่ยังเปิดตั๋วเบิกได้.
+- หน้า catalog แท็บสูตรอาหาร (`/back-office/catalog?tab=recipe`): kitchen_staff เห็นปุ่ม "เพิ่มสูตรอาหาร" และเปิดฟอร์มสร้างได้
+  (ใช้ `canCreateShelterRecipe`); ปุ่มแก้ไข / ลบยังซ่อนเหมือนเดิม.
 - `docs/prd/role-permission-matrix.md`: เพิ่มแถว Recipe (Create) (KS = scope) และ Recipe (Edit / Delete) (ไม่เปลี่ยน)
   ไว้ก่อนอนุมัติ. ถ้าไม่อนุมัติ ให้ถอด 2 แถวนี้พร้อมสิทธิ์ใน `canCreateShelterRecipe`.
 
