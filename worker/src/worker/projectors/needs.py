@@ -1,4 +1,4 @@
-"""Project open donation needs → public_needs (one doc per item)."""
+"""Project open donation needs → public_needs (one doc per item + drop-off point)."""
 
 from __future__ import annotations
 
@@ -9,7 +9,9 @@ from worker.couch.client import CouchClient
 from worker.masking import shelter_db_name
 from worker.projectors.compute_needs import compute_needs, need_breakdown
 
-ProjectionAction = Literal["upsert", "delete"]
+#: ``prune`` = delete every ``public_needs`` row of ``payload["shelter_code"]`` whose
+#: ``_id`` is not in ``payload["keep_ids"]``.
+ProjectionAction = Literal["upsert", "delete", "prune"]
 
 
 async def _fetch_docs_by_prefix(
@@ -86,8 +88,6 @@ async def project_needs_for_shelter(
     if not await couch.database_exists(database):
         return []
 
-    # Read once and keep the unfiltered list: the delete pass below needs every item
-    # any campaign ever asked for, including the campaigns filtered out right here.
     all_campaigns = await _fetch_docs_by_prefix(couch, database, "donation_campaign:")
     # `visible_on_home` is the back-office "กำลังโชว์บนหน้าเว็บ / ซ่อนจากหน้าเว็บ" toggle
     # (schema.md §2.4, CR-034: "ควบคุมการโปรโมตแคมเปญบนหน้าแรก"). This projection is the
@@ -117,10 +117,13 @@ async def project_needs_for_shelter(
     ]
     catalog = await _load_catalog_map(couch, database)
 
-    # Highest urgency any open campaign attaches to the item. `qty_target` is NOT
-    # accumulated here — `need_breakdown` below already sums it, and does so skipping
-    # needs staff force-closed, which a plain sum over `needs[]` would still count.
-    urgency_by_item: dict[str, str] = {}
+    now = datetime.now(UTC)
+    actions: list[tuple[ProjectionAction, dict[str, Any] | None]] = []
+
+    # Card = shelter + item_id + the need's drop_off_point_id (missing key = null).
+    # Needs of several campaigns with the same key merge into one card (CR-206 A2).
+    card_keys: set[tuple[str, str | None]] = set()
+    urgency_by_card: dict[tuple[str, str | None], str] = {}
     for camp in campaigns:
         camp_urg = camp.get("urgency")
         if not camp_urg and "[ด่วน]" in (camp.get("notes") or ""):
@@ -132,47 +135,39 @@ async def project_needs_for_shelter(
             item_id = need.get("item_id")
             if not item_id:
                 continue
-            if camp_urg == "critical" or urgency_by_item.get(item_id) != "critical":
-                urgency_by_item[item_id] = camp_urg
+            key = (str(item_id), need.get("drop_off_point_id") or None)
+            card_keys.add(key)
+            # `qty_target` is NOT accumulated here — `need_breakdown` already sums it,
+            # skipping needs staff force-closed, which a plain sum would still count.
+            if camp_urg == "critical" or urgency_by_card.get(key) != "critical":
+                urgency_by_card[key] = camp_urg
 
-    remaining, _ = compute_needs(campaigns, donations, stock_ledgers)
-    # The terms behind the shortage, so the donor board can show what it is made of
-    # instead of inventing a target and a received figure of its own.
-    breakdown = need_breakdown(campaigns, donations, stock_ledgers)
-    now = datetime.now(UTC)
-    actions: list[tuple[ProjectionAction, dict[str, Any] | None]] = []
-
-    # Candidates: all items that were ever configured in any campaign in this shelter
-    candidate_item_ids = {
-        need["item_id"]
-        for c in all_campaigns
-        for need in (c.get("needs") or [])
-        if need.get("item_id")
-    }
-
-    # Retract any item no longer in `remaining` — campaign closed, or hidden with
-    # `visible_on_home`. Keyed exactly like the upsert below (`{shelter}:{item_id}`,
-    # the id carrying its own generation prefix). Re-adding `item:` here would aim the
-    # delete at `SH001:item:item_master:x` while the row lives at
-    # `SH001:item_master:x`, leaving the retracted need on the donor board forever.
-    for item_id in sorted(candidate_item_ids):
-        if item_id not in remaining:
-            actions.append(("delete", {"_id": f"{shelter_code}:{item_id}"}))
-
-    for item_id, qty_open in remaining.items():
+    keep_ids: list[str] = []
+    for item_id, point_id in sorted(card_keys, key=lambda k: (k[0], k[1] or "")):
+        # The shortage rule is pinned across three implementations, so it is not
+        # touched: run it on campaign copies whose needs[] hold only this card's point.
+        card_campaigns = [
+            {
+                **camp,
+                "needs": [
+                    need
+                    for need in camp.get("needs") or []
+                    if need.get("item_id") == item_id
+                    and (need.get("drop_off_point_id") or None) == point_id
+                ],
+            }
+            for camp in campaigns
+        ]
+        remaining, _ = compute_needs(card_campaigns, donations, stock_ledgers)
+        breakdown = need_breakdown(card_campaigns, donations, stock_ledgers)
         try:
-            qty_needed = float(qty_open)
+            qty_needed = float(remaining.get(item_id, 0))
         except TypeError, ValueError:
             qty_needed = 0.0
-        # The item id already carries its own generation prefix (`item:` or
-        # `item_master:` — schema.md §4.2). This used to strip `item:` and re-add it,
-        # which left `item_master:` ids doubled up as `SH001:item:item_master:x`.
-        # Legacy ids are unaffected: `item:water` produced `SH001:item:water` before
-        # and still does.
-        doc_id = f"{shelter_code}:{item_id}"
         if qty_needed <= 0:
-            actions.append(("delete", {"_id": doc_id}))
-            continue
+            continue  # not kept -> the prune below removes any row it had
+        doc_id = f"{shelter_code}:{item_id}@{point_id or '-'}"
+        keep_ids.append(doc_id)
         details = catalog.get(item_id, {})
         terms = breakdown.get(item_id, {})
         actions.append(
@@ -181,16 +176,24 @@ async def project_needs_for_shelter(
                 {
                     "_id": doc_id,
                     "shelter_code": shelter_code,
+                    "item_id": item_id,
+                    "drop_off_point_id": point_id,
                     "item_name": details.get("name", item_id),
                     "category": details.get("category", "other"),
                     "qty_needed": qty_needed,
                     "qty_target": terms.get("qty_target", 0.0),
                     "on_hand": terms.get("on_hand", 0.0),
                     "reserved": terms.get("reserved", 0.0),
-                    "urgency": urgency_by_item.get(item_id, "normal"),
+                    "urgency": urgency_by_card.get((item_id, point_id), "normal"),
                     "unit": details.get("unit", "unit"),
                     "updated_at": now,
                 },
             )
         )
+
+    # Retract everything else of this shelter: closed/hidden campaigns, a need whose
+    # point was edited (no CouchDB doc mentions the old point any more, so ids can't be
+    # derived from CouchDB), and legacy `{shelter}:{item_id}` rows. Applied last, after
+    # the upserts, by `apply_need`.
+    actions.append(("prune", {"shelter_code": shelter_code, "keep_ids": keep_ids}))
     return actions

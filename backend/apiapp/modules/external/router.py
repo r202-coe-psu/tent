@@ -14,7 +14,7 @@ from ..config.schemas import ConfigResponse
 from ..config.use_case import ConfigUseCase, get_config_use_case
 from ..evacuee.schemas import ApiErrorResponse, ExternalSearchResponse, SearchRequest
 from ..evacuee.use_case import EvacueeUseCase, get_evacuee_use_case
-from ..needs.schemas import NeedsListResponse
+from ..needs.schemas import ExternalNeedsListResponse
 from ..needs.use_case import NeedsUseCase, get_needs_use_case
 from ..shelter.schemas import ShelterDetailResponse
 from ..shelter.use_case import ShelterUseCase, get_shelter_use_case
@@ -45,13 +45,13 @@ async def get_shelter(
     return result
 
 
-@router.get("/needs", response_model=NeedsListResponse)
+@router.get("/needs", response_model=ExternalNeedsListResponse)
 async def list_needs(
     response: Response,
     use_case: NeedsUseCase = Depends(get_needs_use_case),  # noqa: B008
-) -> NeedsListResponse:
+) -> ExternalNeedsListResponse:
     response.headers["Cache-Control"] = CACHE_CONTROL
-    return await use_case.list_needs()
+    return await use_case.list_needs_external()
 
 
 @router.post(
