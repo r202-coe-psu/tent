@@ -64,6 +64,13 @@ import {
 } from '$lib/features/consent/server';
 import { autoHouseholdLabel } from '../domain/registration-shell';
 import {
+	evacueeSearchClauses,
+	matchesEvacueeSearchPlan,
+	parseEvacueeSearchQuery,
+	type EvacueeSearchCursor,
+	type EvacueeSearchPage
+} from '../domain/evacuee-search';
+import {
 	STATION_LOG_STALE_WINDOW_MS,
 	createStationLog,
 	hasOpenStationStart,
@@ -123,6 +130,9 @@ function consentWrite(
 	if (!registrantEvacueeId) throw new Error('ต้องมีสมาชิกอย่างน้อย 1 คน');
 	return bindConsent(plan, registrantEvacueeId);
 }
+
+const SEARCH_PAGE_SIZE = 20;
+const SEARCH_MAX_PAGE_SIZE = 50;
 
 /**
  * Remote CouchDB repository for the people feature. Writes go to the active
@@ -442,6 +452,49 @@ export class PeopleRemoteRepository implements PeopleRepository {
 			);
 		}
 		return results;
+	}
+
+	async searchEvacueesPage(
+		query: string,
+		opts: { cursor?: EvacueeSearchCursor | null; pageSize?: number } = {}
+	): Promise<EvacueeSearchPage> {
+		const plan = parseEvacueeSearchQuery(query);
+		if (plan.kind === 'empty') return { items: [], nextCursor: null };
+		if (plan.kind === 'scan') {
+			const doc = await this.repo.get<Evacuee>(plan.id);
+			return { items: isEvacuee(doc) ? [doc] : [], nextCursor: null };
+		}
+
+		const pageSize = Math.min(
+			Math.max(Math.trunc(opts.pageSize ?? SEARCH_PAGE_SIZE), 1),
+			SEARCH_MAX_PAGE_SIZE
+		);
+		const cursor = opts.cursor ?? null;
+		const open = evacueeSearchClauses(plan).filter(({ key }) => !cursor || key in cursor);
+		const pages = await Promise.all(
+			open.map(({ key, selector }) =>
+				this.repo.findPage<unknown>({
+					selector,
+					limit: pageSize,
+					...(cursor ? { bookmark: cursor[key] } : {})
+				})
+			)
+		);
+
+		const nextCursor: Record<string, string> = {};
+		const items = new Map<string, Evacuee>();
+		pages.forEach((page, i) => {
+			// Exhaustion is judged on the raw count: the post-filter drops rows but a full raw
+			// page can still have more behind it.
+			if (page.docs.length === pageSize && page.bookmark) nextCursor[open[i].key] = page.bookmark;
+			for (const doc of page.docs) {
+				if (isEvacuee(doc) && matchesEvacueeSearchPlan(doc, plan)) items.set(doc._id, doc);
+			}
+		});
+		return {
+			items: [...items.values()],
+			nextCursor: Object.keys(nextCursor).length > 0 ? nextCursor : null
+		};
 	}
 
 	createHousehold(input: HouseholdInput, ctx: AuthorContext): Promise<Household> {

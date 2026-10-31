@@ -15,6 +15,7 @@ import type {
 	MovementAction,
 	StayStatus
 } from '../domain/people';
+import type { EvacueeSearchCursor, EvacueeSearchPage } from '../domain/evacuee-search';
 import type { StationNumber } from '../domain/station-log';
 import type {
 	FamilyReportInPayload,
@@ -178,6 +179,14 @@ export interface PeopleRepository {
 	 * duplicate check across every member card. Keyed by the trimmed query.
 	 */
 	searchEvacueesMany(queries: readonly string[]): Promise<Map<string, Evacuee[]>>;
+	/**
+	 * Server-side (Mango) staff search, paged by CouchDB bookmark — never loads the shelter.
+	 * Pass the previous page's `nextCursor` to continue; `nextCursor: null` means exhausted.
+	 */
+	searchEvacueesPage(
+		query: string,
+		opts?: { cursor?: EvacueeSearchCursor | null; pageSize?: number }
+	): Promise<EvacueeSearchPage>;
 
 	/** Mint a screening from input + author context and persist it. */
 	createScreening(input: ScreeningInput, ctx: AuthorContext): Promise<Screening>;
