@@ -27,6 +27,7 @@ const row = (n: number): PendingDonationRow => ({
 	contact_masked: true,
 	item_count: 0,
 	items: [],
+	point_receipts: [],
 	received_at: '2026-10-20T03:00:00.000Z'
 });
 

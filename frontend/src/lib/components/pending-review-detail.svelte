@@ -34,10 +34,17 @@
 		type PendingDonationRow,
 		type RejectDonationInput,
 		DonationPhotoStrip,
+		currentLinePoint,
 		linePointLabel,
-		namesDropOffPoints
+		namesDropOffPoints,
+		recordedAtLabel
 	} from '$lib/features/donations';
-	import { listDonationPoints, useShelter, useShelters } from '$lib/features/shelters';
+	import {
+		listDonationPoints,
+		listStoragePoints,
+		useShelter,
+		useShelters
+	} from '$lib/features/shelters';
 	import { DonationLotsTable, useStockFormItems } from '$lib/features/operations';
 	import { formatUnit, useUnitsOfMeasure } from '$lib/features/catalog';
 	import { langState } from '$lib/states/i18n.svelte';
@@ -162,6 +169,24 @@
 		listDonationPoints(shelterQuery.data).map((p) => ({ id: p.id, name: p.name.trim() }))
 	);
 	const showLinePoints = $derived(namesDropOffPoints(declaredItems));
+	const donationPointIds = $derived(new Set(donationPoints.map((p) => p.id)));
+	// A receipt may name a point unticked since, so its name comes from every storage point.
+	const storagePoints = $derived(
+		listStoragePoints(shelterQuery.data).map((p) => ({ id: p.id, name: p.name.trim() }))
+	);
+
+	/** Draft CR FR-AP-20 — staff choose where each approved line goes, not the donor. */
+	const picksPoints = $derived(
+		request.delivery_method === 'self_dropoff' && donationPoints.length > 0
+	);
+	/** Line → the point that already recorded it at the scan station (FR-AP-17 step 3). */
+	const receiptPointByLine = $derived(
+		new Map(
+			request.point_receipts.flatMap((receipt) =>
+				receipt.line_nos.map((lineNo) => [lineNo, receipt.point_id] as const)
+			)
+		)
+	);
 
 	/**
 	 * CR-174 — a schema_v 7 booking is decided line by line: only `pending` lines take a
@@ -172,6 +197,8 @@
 		decision?: 'approved' | 'rejected';
 		code?: DonationRejectReasonCode;
 		note: string;
+		/** Point staff picked; absent = {@link defaultPoint}. */
+		point?: string;
 	};
 	let drafts = $state<Record<number, LineDraft>>({});
 	const pendingIndexes = $derived(
@@ -182,18 +209,49 @@
 		drafts[index] ??= { note: '' };
 		return drafts[index];
 	}
+	/** The only point (D-AP-11), else the line's point while the shelter still offers it. */
+	function defaultPoint(index: number): string {
+		if (donationPoints.length === 1) return donationPoints[0].id;
+		return currentLinePoint(declaredItems[index], donationPointIds) ?? '';
+	}
+	function pointAt(index: number): string {
+		return drafts[index]?.point ?? defaultPoint(index);
+	}
+	function choosesPoint(index: number): boolean {
+		return picksPoints && drafts[index]?.decision === 'approved' && !receiptPointByLine.has(index);
+	}
 	const lineDecisions = $derived(
 		pendingIndexes.map((index) =>
 			lineReviewDecisionSchema.safeParse({
 				index,
 				decision: drafts[index]?.decision,
 				reason_code: drafts[index]?.code,
-				note: drafts[index]?.note || undefined
+				note: drafts[index]?.note || undefined,
+				// An empty pick fails the schema, which keeps the confirm button disabled.
+				...(choosesPoint(index) ? { drop_off_point_id: pointAt(index) } : {})
 			})
 		)
 	);
-	const reviewComplete = $derived(lineDecisions.every((parsed) => parsed.success));
-	const REVIEW_INCOMPLETE = 'ตัดสินรายการที่รอประเมินให้ครบ และใส่เหตุผลของรายการที่ไม่รับ';
+	// Until the shelter doc is read, a self drop-off cannot tell whether an approved line needs a
+	// point, so the confirm button waits instead of letting the server answer POINT_REQUIRED.
+	const awaitsPoints = $derived(
+		request.delivery_method === 'self_dropoff' &&
+			!shelterQuery.isSuccess &&
+			pendingIndexes.some(
+				(index) => drafts[index]?.decision === 'approved' && !receiptPointByLine.has(index)
+			)
+	);
+	const reviewComplete = $derived(!awaitsPoints && lineDecisions.every((parsed) => parsed.success));
+	const reviewIncompleteHint = $derived.by(() => {
+		if (awaitsPoints) {
+			return shelterQuery.isError
+				? 'โหลดจุดรับบริจาคของศูนย์ไม่สำเร็จ ลองโหลดหน้านี้ใหม่'
+				: 'กำลังโหลดจุดรับบริจาคของศูนย์...';
+		}
+		return picksPoints
+			? 'ตัดสินรายการที่รอประเมินให้ครบ เลือกจุดรับบริจาคของรายการที่รับ และใส่เหตุผลของรายการที่ไม่รับ'
+			: 'ตัดสินรายการที่รอประเมินให้ครบ และใส่เหตุผลของรายการที่ไม่รับ';
+	});
 	/** Every line ends up refused, so saving rejects the booking (FR-6) — shown in red. */
 	const rejectsAll = $derived.by(() => {
 		if (!lineReview || !reviewComplete) return false;
@@ -212,8 +270,8 @@
 			return;
 		}
 		const lines = lineDecisions.flatMap((parsed) => (parsed.success ? [parsed.data] : []));
-		if (lines.length !== pendingIndexes.length) {
-			toast.error(REVIEW_INCOMPLETE);
+		if (!reviewComplete || lines.length !== pendingIndexes.length) {
+			toast.error(reviewIncompleteHint);
 			return;
 		}
 		onApprove(actionRef, memo.trim(), lines);
@@ -404,7 +462,7 @@
 									<p class="text-xl font-bold break-words text-slate-900">
 										{lineName(item, 'สิ่งของ')}
 									</p>
-									{#if cat || cond || !item.item_id || showLinePoints}
+									{#if cat || cond || !item.item_id || showLinePoints || receiptPointByLine.has(idx)}
 										<div class="flex flex-wrap items-center gap-2">
 											{#if cat}
 												<Badge
@@ -422,7 +480,16 @@
 													{cond}
 												</Badge>
 											{/if}
-											{#if showLinePoints}
+											{#if receiptPointByLine.has(idx) && item.review_status === 'pending'}
+												<Badge
+													variant="outline"
+													data-testid="review-line-{idx}-received"
+													class="gap-1 border-emerald-200 bg-emerald-50 text-sm font-semibold text-emerald-900"
+												>
+													<MapPin class="size-3.5" aria-hidden="true" />
+													{recordedAtLabel(receiptPointByLine.get(idx) ?? null, storagePoints)}
+												</Badge>
+											{:else if showLinePoints && !(picksPoints && item.review_status === 'pending')}
 												<Badge
 													variant="outline"
 													data-testid="review-line-{idx}-point"
@@ -502,6 +569,41 @@
 											groupLabel="ผลการประเมิน {lineName(item, 'รายการ')}"
 											disabled={saving}
 										/>
+										{#if choosesPoint(idx)}
+											{@const picked = donationPoints.find((p) => p.id === pointAt(idx))}
+											<div class="space-y-1.5">
+												<Label
+													for="review-line-{idx}-point"
+													class="text-sm font-semibold text-slate-700"
+												>
+													จุดรับบริจาคที่ให้ผู้บริจาคนำของไปส่ง
+													<span class="text-destructive">*</span>
+												</Label>
+												<Select.Root
+													type="single"
+													bind:value={() => pointAt(idx), (next) => (draftAt(idx).point = next)}
+													disabled={saving}
+												>
+													<Select.Trigger
+														id="review-line-{idx}-point"
+														class="h-11 w-full rounded-xl text-base data-[size=default]:h-11"
+													>
+														<span class="truncate {picked ? '' : 'text-slate-500'}">
+															{picked?.name ?? 'เลือกจุดรับบริจาค'}
+														</span>
+													</Select.Trigger>
+													<Select.Content>
+														{#each donationPoints as point (point.id)}
+															<Select.Item
+																value={point.id}
+																label={point.name}
+																class="min-h-11 py-2.5 text-base">{point.name}</Select.Item
+															>
+														{/each}
+													</Select.Content>
+												</Select.Root>
+											</div>
+										{/if}
 										{#if draft?.decision === 'rejected'}
 											<RejectReasonFields
 												bind:code={draft.code}
@@ -609,7 +711,7 @@
 				</Button>
 				{#if lineReview && !reviewComplete}
 					<p id="review-incomplete-hint" class="text-xs text-muted-foreground">
-						{REVIEW_INCOMPLETE}
+						{reviewIncompleteHint}
 					</p>
 				{/if}
 

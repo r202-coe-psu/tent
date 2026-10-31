@@ -43,6 +43,7 @@ const received: PendingDonationRow = {
 	contact_masked: true,
 	item_count: 1,
 	items: [{ item_id: 'item:rice', qty: '10', unit: 'kg' }],
+	point_receipts: [],
 	received_at: '2026-10-20T03:00:00.000Z'
 };
 

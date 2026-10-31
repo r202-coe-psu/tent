@@ -1246,16 +1246,16 @@ async def test_project_needs_for_shelter_visible_on_home_and_urgency():
     couch.iter_all_docs = mock_iter
 
     actions = await project_needs_for_shelter(couch, "SH001")
-    action_dict = {a[1]["_id"]: (a[0], a[1]) for a in actions}
+    action_dict = {a[1]["_id"]: (a[0], a[1]) for a in actions if a[0] == "upsert"}
+    (prune,) = [a[1] for a in actions if a[0] == "prune"]
 
-    # item:rice from hidden campaign must be deleted
-    assert "SH001:item:rice" in action_dict
-    assert action_dict["SH001:item:rice"][0] == "delete"
+    # item:rice from the hidden campaign has no card: the prune retracts it
+    assert "SH001:item:rice@-" not in action_dict
+    assert prune["keep_ids"] == ["SH001:item:water@-"]
 
     # item:water from visible campaign must be upserted with qty_target and urgency="critical"
-    assert "SH001:item:water" in action_dict
-    assert action_dict["SH001:item:water"][0] == "upsert"
-    payload = action_dict["SH001:item:water"][1]
+    assert "SH001:item:water@-" in action_dict
+    payload = action_dict["SH001:item:water@-"][1]
     assert payload["qty_target"] == 1000.0
     assert payload["qty_needed"] == 1000.0
     assert payload["urgency"] == "critical"

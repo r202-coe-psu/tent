@@ -424,6 +424,8 @@ export interface CampaignNeed {
 	qty_target: string; // qty_str
 	unit: string;
 	status?: 'open' | 'closed';
+	/** Drop-off point staff set for this need; lines booked against it inherit it. */
+	drop_off_point_id?: string | null;
 }
 
 export interface DonationCampaign extends BaseDoc {
@@ -1804,7 +1806,8 @@ export const campaignInputSchema = z.object({
 				item_id: z.string().min(1),
 				qty_target: qtyStrCoercePositiveSchema,
 				unit: unitCodeSchema,
-				status: z.enum(['open', 'closed']).optional().default('open')
+				status: z.enum(['open', 'closed']).optional().default('open'),
+				drop_off_point_id: z.string().min(1).nullable().optional().default(null)
 			})
 		)
 		.min(1, 'A campaign needs at least one item'),
@@ -1816,11 +1819,14 @@ export const campaignInputSchema = z.object({
 });
 export type CampaignInput = z.input<typeof campaignInputSchema>;
 
+/** CR-206 A2 FR-AP-1: `needs[].drop_off_point_id`. */
+export const DONATION_CAMPAIGN_SCHEMA_V = 4;
+
 export function createCampaign(input: CampaignInput, ctx: AuthorContext): DonationCampaign {
 	const d = campaignInputSchema.parse(input);
 	return makeDoc(
 		'donation_campaign',
-		3,
+		DONATION_CAMPAIGN_SCHEMA_V,
 		{
 			title: d.title,
 			needs: d.needs.map((n) => ({ ...n, qty_target: persistQty(n.qty_target) })),
@@ -2188,13 +2194,14 @@ export class CampaignUnitMismatchError extends Error {
  *
  * Targets the need by `item_id`, never by position: the board renders one row per
  * need, so editing "the first need" would rewrite a different item than the row the
- * user clicked. `status` is left untouched — closing/reopening is `forceCutOffNeed` /
+ * user clicked. `drop_off_point_id` is only written when the patch carries it (`null`
+ * clears it). `status` is left untouched — closing/reopening is `forceCutOffNeed` /
  * `reopenNeed`, which carry their own audit reason.
  */
 export function editNeed(
 	campaign: DonationCampaign,
 	itemId: string,
-	patch: { qty_target: string; unit?: string }
+	patch: { qty_target: string; unit?: string; drop_off_point_id?: string | null }
 ): DonationCampaign {
 	if (!campaign.needs.some((need) => need.item_id === itemId)) {
 		throw new Error(`Campaign ${campaign._id} has no need for ${itemId}`);
@@ -2207,7 +2214,10 @@ export function editNeed(
 				? {
 						...need,
 						qty_target: qtyTarget,
-						...(patch.unit?.trim() ? { unit: patch.unit.trim() } : {})
+						...(patch.unit?.trim() ? { unit: patch.unit.trim() } : {}),
+						...(patch.drop_off_point_id !== undefined
+							? { drop_off_point_id: patch.drop_off_point_id }
+							: {})
 					}
 				: need
 		),

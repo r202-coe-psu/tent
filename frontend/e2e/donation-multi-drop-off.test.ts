@@ -1,4 +1,4 @@
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect, type APIRequestContext, type Page } from '@playwright/test';
 import { CAN_WRITE, READ_ONLY_REASON } from './helpers/e2e-env';
 import { couchReq } from './helpers/couch';
 import { clearSession } from './helpers/login';
@@ -9,12 +9,15 @@ import {
 	createCampaignViaUi,
 	createWarehouseStaff,
 	expectReadyForDropoff,
+	fillBooking,
 	expectRunGone,
 	findDonation,
 	ledgerRowsFor,
 	openBackOffice,
 	openInScanStation,
+	openPendingRow,
 	provisionShelter,
+	publicNeedsBoard,
 	reloadUntilVisible,
 	shelterDb,
 	suspendRecaptcha,
@@ -25,24 +28,26 @@ import {
 	type Staff
 } from './helpers/donation-fullstack';
 import {
-	bookSplitAsDonor,
-	bookSplitViaApi,
+	approveWithPoints,
+	bookSelfDropoffViaApi,
+	bookTypedAsDonor,
+	reviewLine,
 	setDonationPoints,
-	type DonationPointSeed,
-	type SplitLine
+	type BookingLine,
+	type DonationPointSeed
 } from './helpers/donation-points';
 import { deriveDonationCloseAuditId } from '../src/lib/features/operations/domain/donation-batch';
 
 /**
- * CR-206 — one booking split across a shelter's drop-off points, against the REAL stack
- * (no route mocks), on this run's own `E2E Donation points …` shelter (README §4).
+ * CR-206 with Amendment A2 — one booking split across a shelter's drop-off points, against
+ * the REAL stack (no route mocks), on this run's own `E2E Donation points …` shelter
+ * (README §4).
  *
  * The shelter gets two drop-off points ("โรงยิม", "ห้องพยาบาล") straight on its registry
- * master (`setDonationPoints`). The campaign item has no `shelf_life_days`, so the scan
- * station receives it without an expiry. A booking binds one campaign and a campaign holds
- * one item, so a split campaign booking has two lines of that item, one per point; the
- * wizard books one campaign line at a time, so it comes from the BFF (`bookSplitViaApi`).
- * The wizard's per-line picker is driven with typed-in lines (AC-1).
+ * master (`setDonationPoints`). Staff, not the donor, decide where each line goes: the
+ * campaign need carries the gym (FR-AP-1), so a campaign line is booked to it, and a line
+ * of the donor's own waits for staff to give it a point at review (FR-AP-17). Neither item
+ * has a `shelf_life_days`, so the scan station receives them without an expiry.
  *
  * Teardown (`teardownRun`) cancels what is still open; a booking some point already
  * received answers 409 GOODS_IN_STOCK, which is why every booking this spec leaves open is
@@ -50,6 +55,9 @@ import { deriveDonationCloseAuditId } from '../src/lib/features/operations/domai
  */
 
 const ITEM_A = 'แปรงสีฟัน';
+/** In the catalog, not in the campaign: a line of the donor's own (staff-assigned drop-off). */
+const ITEM_B = 'ผ้าห่มกันหนาว';
+const AWAITING_GROUP = '?staff';
 
 const GYM: DonationPointSeed = {
 	id: `e2e-gym-${RUN_ID}`,
@@ -69,16 +77,16 @@ const ledger = new RunLedger('donation-multi-drop-off');
 let shelter: PublicShelter;
 let ws: Staff;
 let needA: PublicNeed;
-let unitA: string;
+let mixedLines: BookingLine[];
 let restoreRecaptcha: (() => Promise<void>) | undefined;
 
-// Booked in AC-1/AC-5 and carried through AC-9 and AC-6.
+// Booked in AC-AP-13 and carried through AC-5, AC-9 and AC-6.
 let main: Booking;
 
 type DonationDoc = {
 	_id: string;
 	status: string;
-	items: { drop_off_point_id?: string | null }[];
+	items: { drop_off_point_id?: string | null; review_status?: string }[];
 	point_receipts?: { point_id: string | null; line_nos: number[] }[];
 	received_summary?: {
 		items: unknown[];
@@ -90,10 +98,42 @@ type DonationDoc = {
 
 const donationOf = async (ref: string) => (await findDonation(shelter.code, ref)) as DonationDoc;
 
-const lines = (a: DonationPointSeed, b: DonationPointSeed): SplitLine[] => [
-	{ need: needA, unit: unitA, pointId: a.id },
-	{ need: needA, unit: unitA, pointId: b.id }
-];
+/**
+ * A campaign line (booked to the gym by its need) and a line of the donor's own, then staff
+ * send the donor's line to the clinic: the booking every receiving case starts from.
+ */
+async function bookSplitAcrossPoints(
+	page: Page,
+	request: APIRequestContext,
+	donorName: string,
+	phone: string
+): Promise<Booking> {
+	const booking = await bookSelfDropoffViaApi(request, {
+		shelter,
+		lines: mixedLines,
+		donorName,
+		phone,
+		ledger
+	});
+	await expect
+		.poll(async () => (await findDonation(shelter.code, booking.bookingRef))?.status, {
+			timeout: 30_000
+		})
+		.toBe('pending_review');
+	await openBackOffice(page, ws);
+	await approveWithPoints(page, booking.bookingRef, [{ line: ITEM_B, pointName: CLINIC.name }]);
+	await expectReadyForDropoff(shelter.code, booking.bookingRef);
+	return booking;
+}
+
+async function reviewAudit(donationId: string) {
+	const res = await couchReq('POST', `/${shelterDb(shelter.code)}/_find`, {
+		selector: { type: 'audit', target_id: donationId, action: 'manual_adjust' },
+		limit: 5
+	});
+	const docs = (res.data as { docs: { context?: { lines?: unknown[] } }[] }).docs;
+	return docs.find((doc) => doc.context?.lines);
+}
 
 /** The scan station of `ref`, working at `point` ("จุดที่ประจำ"). */
 async function scanAt(page: Page, ref: string, point: DonationPointSeed) {
@@ -135,7 +175,7 @@ test.afterEach(async ({ page }) => {
 	await clearSession(page);
 });
 
-test.describe('Donation multi drop-off points (CR-206)', { tag: ['@donation'] }, () => {
+test.describe('Donation multi drop-off points (CR-206, A2)', { tag: ['@donation'] }, () => {
 	test.describe.configure({ mode: 'serial', timeout: 240_000 });
 
 	test.beforeAll(async ({ request, browser }) => {
@@ -152,12 +192,18 @@ test.describe('Donation multi drop-off points (CR-206)', { tag: ['@donation'] },
 			needA = await createCampaignViaUi(page, request, ws, created.code, {
 				item: ITEM_A,
 				target: 50,
-				notes: `e2e points ${RUN_ID}`
+				notes: `e2e points ${RUN_ID}`,
+				pointName: GYM.name
 			});
 		} finally {
 			await context.close();
 		}
-		unitA = (await catalogItem(ITEM_A)).unit;
+		const itemA = await catalogItem(ITEM_A);
+		const itemB = await catalogItem(ITEM_B);
+		mixedLines = [
+			{ item_id: needA.item_id, name: needA.name, unit: itemA.unit },
+			{ item_id: itemB.id, name: ITEM_B, unit: itemB.unit }
+		];
 		shelter = { ...created, needs: [needA] };
 	});
 
@@ -168,50 +214,167 @@ test.describe('Donation multi drop-off points (CR-206)', { tag: ['@donation'] },
 		await teardownRun(request, ledger);
 	});
 
-	test('AC-1: the donor sends each line to its own point; the doc and the track page keep the split', async ({
+	test('AC-AP-3: a campaign line is booked to the point its need names; the donor picks none', async ({
+		page
+	}) => {
+		const campaigns = await couchReq('POST', `/${shelterDb(shelter.code)}/_find`, {
+			selector: { type: 'donation_campaign', 'needs.0.item_id': needA.item_id },
+			limit: 1
+		});
+		expect(
+			(campaigns.data as { docs: { schema_v: number; needs: unknown[] }[] }).docs[0]
+		).toMatchObject({
+			schema_v: 4,
+			needs: [expect.objectContaining({ drop_off_point_id: GYM.id })]
+		});
+
+		const { submit } = await fillBooking(page, {
+			shelter,
+			need: needA,
+			donorName: `E2E จุดจากแคมเปญ ${RUN_ID}`,
+			phone: '0867770030',
+			ledger
+		});
+		// Step 3 shows, read-only, the point the card named (FR-AP-12); the donor picks none.
+		await expect(page.getByTestId('drop-off-group')).toHaveCount(1);
+		await expect(groupOf(page, GYM)).toContainText(needA.name);
+		await expect(page.locator('[data-slot="select-trigger"]')).toHaveCount(0);
+		const body = await submit();
+		expect(body.success, `booking POST failed: ${JSON.stringify(body)}`).toBe(true);
+		expect(body.status).toBe('verifying');
+		expect(body.items).toEqual([{ drop_off_point_id: GYM.id, review_status: 'approved' }]);
+
+		await expect(page.getByRole('heading', { name: 'สำเร็จ! ตั๋วบริจาคของคุณ' })).toBeVisible();
+		await expect(page.getByTestId('drop-off-group')).toHaveCount(1);
+		await expect(groupOf(page, GYM)).toContainText(needA.name);
+
+		await expectReadyForDropoff(shelter.code, body.bookingRef!);
+		const booked = await donationOf(body.bookingRef!);
+		expect(booked.items.map((i) => i.drop_off_point_id)).toEqual([GYM.id]);
+	});
+
+	test('AC-AP-9, AC-AP-10: typed lines wait for staff, who send each to its own point', async ({
 		page
 	}) => {
 		const typedA = `น้ำดื่ม e2e ${RUN_ID}`;
 		const typedB = `ยาสามัญ e2e ${RUN_ID}`;
-		const { bookingRef, trackingToken } = await bookSplitAsDonor(page, {
+		const booking = await bookTypedAsDonor(page, {
 			shelter,
-			lines: [
-				{ itemName: typedA, pointName: GYM.name },
-				{ itemName: typedB, pointName: CLINIC.name }
-			],
-			donorName: `E2E หลายจุด ${RUN_ID}`,
+			itemNames: [typedA, typedB],
+			donorName: `E2E รอเจ้าหน้าที่ ${RUN_ID}`,
 			phone: '0867770031',
 			ledger
 		});
+		expect(booking.items).toEqual([
+			{ drop_off_point_id: null, review_status: 'pending' },
+			{ drop_off_point_id: null, review_status: 'pending' }
+		]);
+		const ticketGroup = page.getByTestId('drop-off-group');
+		await expect(ticketGroup).toHaveCount(1);
+		await expect(ticketGroup).toHaveAttribute('data-point-id', AWAITING_GROUP);
+		await expect(ticketGroup).toContainText('รอเจ้าหน้าที่กำหนดจุดส่ง');
+		await expect(ticketGroup.getByTestId('drop-off-group-awaiting-note')).toHaveText(
+			'ถ้านำของมาก่อนเจ้าหน้าที่ประเมิน ส่งที่จุดรับบริจาคไหนของศูนย์ก็ได้'
+		);
+		await expect(ticketGroup).toContainText(typedA);
+		await expect(ticketGroup).toContainText(typedB);
+		await expect(ticketGroup.getByTestId('drop-off-group-status')).toHaveCount(0);
 
 		await expect
-			.poll(async () => (await findDonation(shelter.code, bookingRef))?.status, {
+			.poll(async () => (await findDonation(shelter.code, booking.bookingRef))?.status, {
 				timeout: 30_000
 			})
 			.toBe('pending_review');
-		const booked = await donationOf(bookingRef);
-		expect(booked.items.map((i) => i.drop_off_point_id)).toEqual([GYM.id, CLINIC.id]);
+		expect(
+			(await donationOf(booking.bookingRef)).items.map((i) => i.drop_off_point_id ?? null)
+		).toEqual([null, null]);
 
-		await trackPage(page, trackingToken);
-		await expect(page.getByTestId('drop-off-groups')).toBeVisible();
+		await trackPage(page, booking.trackingToken);
+		const awaiting = page.locator(
+			`[data-testid="drop-off-group"][data-point-id="${AWAITING_GROUP}"]`
+		);
+		await expect(page.getByTestId('drop-off-group')).toHaveCount(1);
+		await expect(awaiting.getByTestId('drop-off-group-awaiting-note')).toBeVisible();
+		await expect(awaiting).toContainText(typedA);
+		await expect(awaiting).toContainText(typedB);
+
+		await openBackOffice(page, ws);
+		await approveWithPoints(page, booking.bookingRef, [
+			{ line: typedA, pointName: GYM.name },
+			{ line: typedB, pointName: CLINIC.name }
+		]);
+		await expectReadyForDropoff(shelter.code, booking.bookingRef);
+		const reviewed = await donationOf(booking.bookingRef);
+		expect(reviewed.items.map((i) => [i.review_status, i.drop_off_point_id])).toEqual([
+			['approved', GYM.id],
+			['approved', CLINIC.id]
+		]);
+		expect((await reviewAudit(reviewed._id))?.context?.lines).toEqual([
+			expect.objectContaining({ index: 0, decision: 'approved', drop_off_point_id: GYM.id }),
+			expect.objectContaining({ index: 1, decision: 'approved', drop_off_point_id: CLINIC.id })
+		]);
+
+		await trackPage(page, booking.trackingToken);
+		await reloadUntilVisible(page, groupOf(page, GYM));
 		await expect(page.getByTestId('drop-off-group')).toHaveCount(2);
 		await expect(groupOf(page, GYM)).toContainText(typedA);
 		await expect(groupOf(page, CLINIC)).toContainText(typedB);
 		await expect(page.getByTestId('drop-off-group-status')).toHaveText(['รอรับ', 'รอรับ']);
 	});
 
-	test('AC-5: staff at the gym receive only the gym line; the clinic line waits (FR-MP-18, 19, 20)', async ({
+	test('AC-AP-13: a mixed booking keeps the campaign point; staff give the other line one', async ({
 		page,
 		request
 	}) => {
-		main = await bookSplitViaApi(request, {
+		const booking = await bookSelfDropoffViaApi(request, {
 			shelter,
-			lines: lines(GYM, CLINIC),
+			lines: mixedLines,
 			donorName: `E2E รับทีละจุด ${RUN_ID}`,
 			phone: '0867770032',
 			ledger
 		});
+		expect(booking.items).toEqual([
+			{ drop_off_point_id: GYM.id, review_status: 'approved' },
+			{ drop_off_point_id: null, review_status: 'pending' }
+		]);
+		main = booking;
+
+		await trackPage(page, main.trackingToken);
+		await reloadUntilVisible(page, groupOf(page, GYM));
+		await expect(page.getByTestId('drop-off-group')).toHaveCount(2);
+		await expect(page.getByTestId('drop-off-group').first()).toHaveAttribute(
+			'data-point-id',
+			GYM.id
+		);
+		await expect(page.getByTestId('drop-off-group').last()).toHaveAttribute(
+			'data-point-id',
+			AWAITING_GROUP
+		);
+		await expect(groupOf(page, GYM)).toContainText(needA.name);
+		await expect(page.getByTestId('drop-off-group').last()).toContainText(ITEM_B);
+
+		await openBackOffice(page, ws);
+		await expect
+			.poll(async () => (await donationOf(main.bookingRef))?.status, { timeout: 30_000 })
+			.toBe('pending_review');
+		await openPendingRow(page, main.bookingRef);
+		// The campaign line is not reviewed: its point shows, read-only, and only the line of
+		// the donor's own takes a decision and a point.
+		await expect(page.getByTestId('review-line-0-point')).toContainText(GYM.name);
+		await expect(page.getByRole('group', { name: /^ผลการประเมิน/ })).toHaveCount(1);
+		await expect(reviewLine(page, ITEM_B)).toBeVisible();
+
+		await approveWithPoints(page, main.bookingRef, [{ line: ITEM_B, pointName: CLINIC.name }]);
 		await expectReadyForDropoff(shelter.code, main.bookingRef);
+		expect((await donationOf(main.bookingRef)).items.map((i) => i.drop_off_point_id)).toEqual([
+			GYM.id,
+			CLINIC.id
+		]);
+	});
+
+	test('AC-5: staff at the gym receive only the gym line; the clinic line waits (FR-MP-18, 19, 20)', async ({
+		page
+	}) => {
 		const before = await donationOf(main.bookingRef);
 		expect(before.items.map((i) => i.drop_off_point_id)).toEqual([GYM.id, CLINIC.id]);
 
@@ -318,14 +481,12 @@ test.describe('Donation multi drop-off points (CR-206)', { tag: ['@donation'] },
 		page,
 		request
 	}) => {
-		const { bookingRef } = await bookSplitViaApi(request, {
-			shelter,
-			lines: lines(GYM, CLINIC),
-			donorName: `E2E ปิดใบ ${RUN_ID}`,
-			phone: '0867770033',
-			ledger
-		});
-		await expectReadyForDropoff(shelter.code, bookingRef);
+		const { bookingRef } = await bookSplitAcrossPoints(
+			page,
+			request,
+			`E2E ปิดใบ ${RUN_ID}`,
+			'0867770033'
+		);
 
 		await scanAt(page, bookingRef, GYM);
 		await expect(page.getByTestId('close-donation-button')).toHaveCount(0);
@@ -336,7 +497,7 @@ test.describe('Donation multi drop-off points (CR-206)', { tag: ['@donation'] },
 		await expect(page.getByTestId('scan-line-0')).toHaveAttribute('data-line-state', 'recorded');
 		await page.getByTestId('close-donation-button').click();
 		const dialog = page.getByTestId('close-donation-dialog');
-		await expect(dialog).toContainText(needA.name);
+		await expect(dialog).toContainText(ITEM_B);
 		const closing = page.waitForResponse(
 			(r) =>
 				r.url().endsWith(`/api/back-office/donations/${bookingRef}/close`) &&
@@ -351,7 +512,12 @@ test.describe('Donation multi drop-off points (CR-206)', { tag: ['@donation'] },
 		expect(closed.received_summary).toMatchObject({ closed_reason: 'staff_close' });
 		expect(closed.received_summary?.closed_by).toBe(ws.name);
 		expect(closed.received_summary?.shortfalls).toEqual([
-			expect.objectContaining({ item_id: needA.item_id, declared: '2', counted: '1', short: '1' })
+			expect.objectContaining({
+				item_id: mixedLines[1].item_id,
+				declared: '1',
+				counted: '0',
+				short: '1'
+			})
 		]);
 		expect(await ledgerRowsFor(shelter.code, closed._id)).toHaveLength(1);
 
@@ -364,6 +530,57 @@ test.describe('Donation multi drop-off points (CR-206)', { tag: ['@donation'] },
 			target_id: closed._id,
 			context: { closed_reason: 'staff_close', unrecorded_lines: [1] }
 		});
+	});
+
+	// Last of the bookings: a second campaign for the same item changes which campaign an
+	// API booking without a card picks, so it must not exist while the cases above run.
+	test('AC-AP-4: two campaigns ask for one item at different points; the card picked decides', async ({
+		page,
+		request
+	}) => {
+		const needClinic = await createCampaignViaUi(page, request, ws, shelter.code, {
+			item: ITEM_A,
+			target: 30,
+			notes: `e2e points clinic ${RUN_ID}`,
+			pointName: CLINIC.name
+		});
+		await clearSession(page);
+
+		// One board row per item + point (FR-AP-25, FR-AP-26).
+		const rows = (await publicNeedsBoard(request))
+			.find((s) => s.code === shelter.code)!
+			.needs.filter((n) => n.item_id === needA.item_id);
+		expect(rows.map((n) => n.drop_off_point_id).sort()).toEqual([CLINIC.id, GYM.id].sort());
+		expect(needClinic).toMatchObject({
+			drop_off_point_id: CLINIC.id,
+			drop_off_point_name: CLINIC.name
+		});
+
+		const { submit } = await fillBooking(page, {
+			shelter,
+			need: needClinic,
+			donorName: `E2E การ์ดห้องพยาบาล ${RUN_ID}`,
+			phone: '0867770034',
+			ledger
+		});
+		await expect(page.getByTestId('drop-off-group')).toHaveCount(1);
+		await expect(groupOf(page, CLINIC)).toContainText(needClinic.name);
+		const body = await submit();
+		expect(body.success, `booking POST failed: ${JSON.stringify(body)}`).toBe(true);
+		expect(body.items).toEqual([{ drop_off_point_id: CLINIC.id, review_status: 'approved' }]);
+
+		await expectReadyForDropoff(shelter.code, body.bookingRef!);
+		const booked = (await findDonation(shelter.code, body.bookingRef!)) as DonationDoc & {
+			campaign_id?: string;
+		};
+		expect(booked.items.map((i) => i.drop_off_point_id)).toEqual([CLINIC.id]);
+		const campaign = await couchReq(
+			'GET',
+			`/${shelterDb(shelter.code)}/${encodeURIComponent(booked.campaign_id!)}`
+		);
+		expect(
+			(campaign.data as { needs: { drop_off_point_id?: string }[] }).needs[0].drop_off_point_id
+		).toBe(CLINIC.id);
 	});
 
 	test('Z teardown leaves nothing of this run behind', async ({ request }) => {

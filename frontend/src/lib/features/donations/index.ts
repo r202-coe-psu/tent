@@ -84,22 +84,14 @@ export {
 	resolveDropOffPoint
 } from './domain/drop-off';
 // Domain — drop-off point per line (CR-206)
-export type {
-	BookablePoint,
-	DropOffDestinationGroup,
-	DropOffGroupStatus
-} from './domain/line-points';
+export type { DropOffDestinationGroup, DropOffGroupStatus } from './domain/line-points';
 export {
 	ANY_POINT_KEY,
-	bookableDropOffPoints,
 	currentDropOffPointIds,
-	defaultDropOffPointId,
-	ALL_LINES_PICKER,
-	pickerForMapTap,
 	groupDropOffDestinations,
+	groupFormLineDestinations,
 	hasLinePoints,
 	lineDestinationResolver,
-	lineDropOffPointId,
 	withCurrentLinePoints
 } from './domain/line-points';
 // Domain — box label (#591)
@@ -185,8 +177,10 @@ export type { DonationRejectReasonCode, RejectDonationInput } from './domain/rej
 // doc fetching lives in $lib/server/donation-docs (kept out of the client barrel).
 export {
 	computeNeeds,
+	filterCampaignsByCards,
 	pickCampaignForItems,
 	type CampaignPick,
+	type CardRequestedItem,
 	type RequestedItem
 } from './domain/compute-needs';
 export { carryItemIds, type BareItem } from './domain/carry-item-ids';
@@ -263,7 +257,6 @@ export { default as RejectDonationDialog } from './ui/reject-donation-dialog.sve
 export { default as RejectReasonFields } from './ui/reject-reason-fields.svelte';
 export { default as DropOffCard } from './ui/drop-off-card.svelte';
 export { default as DropOffGroups } from './ui/drop-off-groups.svelte';
-export { default as DropOffPointsSection } from './ui/drop-off-points-section.svelte';
 export { default as BoxLabelSheet } from './ui/box-label-sheet.svelte';
 export { default as LineDecisionToggle } from './ui/line-decision-toggle.svelte';
 export { default as EditDonationItemsDialog } from './ui/edit-donation-items-dialog.svelte';

@@ -7,7 +7,9 @@ from datetime import datetime
 from pydantic import BaseModel
 
 
-class NeedItemResponse(BaseModel):
+class ExternalNeedItemResponse(BaseModel):
+    """One row per shelter + item_id: the `/external/v1/needs` shape (CR-206 A2 FR-AP-27)."""
+
     item_id: str
     name: str
     qty_needed: str
@@ -29,6 +31,20 @@ class NeedItemResponse(BaseModel):
     category: str | None = None
 
 
+class NeedItemResponse(ExternalNeedItemResponse):
+    """One donor-board card: shelter + item + drop-off point (CR-206 A2 FR-AP-26).
+
+    Several cards of one shelter may share an ``item_id``.
+    """
+
+    #: The drop-off point of the need (``donation_campaign.needs[].drop_off_point_id``);
+    #: ``None`` when the need has none.
+    drop_off_point_id: str | None = None
+    #: Name from ``public_shelters.donation_points``; ``None`` when the id is ``None`` or
+    #: no longer one of the shelter's points.
+    drop_off_point_name: str | None = None
+
+
 class ShelterNeedsResponse(BaseModel):
     code: str
     name: str
@@ -37,4 +53,15 @@ class ShelterNeedsResponse(BaseModel):
 
 class NeedsListResponse(BaseModel):
     shelters: list[ShelterNeedsResponse]
+    as_of: datetime
+
+
+class ExternalShelterNeedsResponse(BaseModel):
+    code: str
+    name: str
+    needs: list[ExternalNeedItemResponse]
+
+
+class ExternalNeedsListResponse(BaseModel):
+    shelters: list[ExternalShelterNeedsResponse]
     as_of: datetime

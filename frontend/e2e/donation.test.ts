@@ -254,11 +254,11 @@ test.describe('Donation form drop-off shelter (#814)', TAGS, () => {
 
 		await expect(page.locator('#shelter-select')).toHaveCount(0);
 		await expect(page.getByTestId('drop-off-shelter-name')).toHaveText(SH001_NAME);
-		await expect(page.getByTestId('drop-off-points-section')).toHaveCount(0);
+		await expect(page.getByTestId('drop-off-groups')).toHaveCount(0);
 		await expect(page.getByTestId('drop-off-shelter-map')).toHaveCount(0);
 	});
 
-	test("pins the locked shelter's only drop-off point from its detail (CR-205 FR-DP-18)", async ({
+	test("pins the locked shelter's drop-off point; a tap names it and picks nothing (CR-205 FR-DP-18, FR-AP-11)", async ({
 		page
 	}) => {
 		await mockDetail(page, [GYM_POINT]);
@@ -266,40 +266,38 @@ test.describe('Donation form drop-off shelter (#814)', TAGS, () => {
 
 		await expect(page.getByTestId('drop-off-shelter-map')).toBeVisible({ timeout: 15_000 });
 		await expect(page.getByTestId('shelter-marker-SH001')).toBeVisible({ timeout: 15_000 });
-		await expect(page.getByTestId('drop-off-single-point')).toContainText('โรงยิม');
+		// The mocked card has no point of its own: step 3 says, read-only, that any point takes it
+		// (FR-AP-12).
+		await expect(page.getByTestId('drop-off-groups')).toContainText(
+			'ส่งที่จุดรับบริจาคไหนของศูนย์ก็ได้'
+		);
 		const pin = page.getByTestId('point-marker-point-gym');
 		await expect(pin).toBeVisible();
 		await pin.click();
 		await expect(page.getByTestId('drop-off-point-note')).toContainText('เข้าทางประตู 2');
+		await expect(page.locator('[data-slot="select-trigger"]')).toHaveCount(0);
 	});
 
-	test('a tapped pin fills the dropdown, and a dropdown pick focuses its pin (CR-206)', async ({
+	test('the donor picks no point: pins only name themselves, and only a self drop-off shows them (FR-AP-11, FR-AP-12)', async ({
 		page
 	}) => {
 		await mockDetail(page, [GYM_POINT, MED_POINT]);
 		await openShelterStep(page);
 
-		const line = page.getByTestId('drop-off-point-line-0');
-		const trigger = line.locator('[data-slot="select-trigger"]');
-		await expect(trigger).toContainText('โรงยิม', { timeout: 15_000 });
+		await expect(page.getByTestId('drop-off-shelter-map')).toBeVisible({ timeout: 15_000 });
+		await expect(page.getByTestId('drop-off-groups')).toBeVisible();
+		await expect(page.locator('[data-slot="select-trigger"]')).toHaveCount(0);
 
-		// Before any tap, the map already shows the point the first line is on.
-		await expect(page.getByTestId('point-marker-point-gym')).toHaveClass(/is-selected/);
-
+		await expect(page.getByTestId('point-marker-point-med')).toBeVisible({ timeout: 15_000 });
 		await page.getByTestId('point-marker-point-med').click();
-		await expect(trigger).toContainText('ห้องพยาบาล');
 		await expect(page.getByTestId('drop-off-point-note')).toContainText('ชั้น 1 อาคาร B');
-		await expect(page.getByTestId('drop-off-point-applied')).toContainText('ใช้กับ:');
-
-		await trigger.click();
-		await page.getByRole('option', { name: 'โรงยิม' }).click();
-		await expect(trigger).toContainText('โรงยิม');
-		await expect(page.getByTestId('point-marker-point-gym')).toHaveClass(/is-selected/);
+		await page.getByTestId('point-marker-point-gym').click();
 		await expect(page.getByTestId('drop-off-point-note')).toContainText('เข้าทางประตู 2');
+		await expect(page.locator('[data-slot="select-trigger"]')).toHaveCount(0);
 
 		await page.getByRole('button', { name: 'ส่งผ่านขนส่งพัสดุ' }).click();
 		await expect(page.getByTestId('drop-off-shelter-map')).toHaveCount(0);
-		await expect(page.getByTestId('drop-off-points-section')).toHaveCount(0);
+		await expect(page.getByTestId('drop-off-groups')).toHaveCount(0);
 	});
 
 	test('without the shelters list the name stays and the map is dropped', async ({ page }) => {

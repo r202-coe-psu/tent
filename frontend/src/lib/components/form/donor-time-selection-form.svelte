@@ -18,15 +18,11 @@
 	import { today, type DateValue } from '@internationalized/date';
 	import { toast } from 'svelte-sonner';
 	import {
-		ALL_LINES_PICKER,
-		bookableDropOffPoints,
 		buildDonationItemsPayload,
 		buildDonationLogistics,
-		defaultDropOffPointId,
-		DropOffPointsSection,
-		lineDropOffPointId,
+		DropOffGroups,
+		groupFormLineDestinations,
 		pickedSlot,
-		pickerForMapTap,
 		publicDonationErrorMessage,
 		slotContextKey,
 		slotModeForDelivery,
@@ -34,11 +30,7 @@
 		VEHICLE_PLATE_MAX
 	} from '$lib/features/donations';
 	import { formatUnit, useUnitsOfMeasure } from '$lib/features/catalog';
-	import {
-		DropOffShelterMap,
-		usePublicShelter,
-		type MapPointFocus
-	} from '$lib/features/public-portal';
+	import { DropOffShelterMap, usePublicShelter } from '$lib/features/public-portal';
 	import { getDonationStore } from '../../../routes/(public)/donations/donation.svelte';
 	import { langState } from '$lib/states/i18n.svelte';
 	import { getTranslation } from '$lib/utils/i18n';
@@ -85,98 +77,32 @@
 	const timeSlots = $derived(slotsQuery.isSuccess ? slotsQuery.data : []);
 	const hasShelter = $derived(Boolean(donationStore.shelterCode));
 
-	// CR-206 — drop-off point per line. The points come from the shelter's own detail, the
-	// same request the map makes (FR-DP-18); only a self drop-off picks one (FR-MP-11).
+	// The shelter's drop-off points, from its own detail — the same request the map makes
+	// (CR-205 FR-DP-18). Staff decide each line's point (staff-assigned drop-off FR-AP-11): the
+	// donor sees, read-only, where each line will go — a card line at its card's point, any other
+	// line waiting for staff (FR-AP-12). Only a self drop-off has points (CR-206 FR-MP-4).
 	const shelterQuery = usePublicShelter(() => donationStore.shelterCode || null);
-	const bookablePoints = $derived(
-		bookableDropOffPoints(shelterQuery.data, donationStore.deliveryMethod)
+	const pointGroups = $derived(
+		shelterQuery.data
+			? groupFormLineDestinations(donationStore.items, shelterQuery.data, {
+					anyPointName: t.anyPointGroupTitle,
+					awaitingName: t.awaitingPointGroupTitle,
+					deliveryMethod: donationStore.deliveryMethod
+				})
+			: null
 	);
-	const defaultPointId = $derived(
-		defaultDropOffPointId(bookablePoints, donationStore.tappedPointId)
+	const showDropOffPoints = $derived(
+		donationStore.deliveryMethod === 'self_dropoff' &&
+			(shelterQuery.data?.donation_points?.length ?? 0) > 0
 	);
-	// Unpicked lines follow the default; a pick the shelter does not offer (another shelter's)
-	// falls back to it as well, so changing the shelter clears every pick (FR-MP-12).
-	const pointLines = $derived(
-		donationStore.items.map((item) => ({
-			key: item.id,
-			name: item.name || t.unspecified,
-			pointId: lineDropOffPointId(item.dropOffPointId, bookablePoints, defaultPointId)
-		}))
-	);
-	// Until the shelter's points load, a self drop-off cannot tell which points to send.
-	const pointsPending = $derived(
-		donationStore.deliveryMethod === 'self_dropoff' && hasShelter && shelterQuery.isPending
-	);
-
-	// The map shows only where there is a point to find: a self drop-off at a shelter with
-	// drop-off points (owner 2026-10-30). A shelter with none keeps just its name.
-	const showDropOffMap = $derived(bookablePoints.length > 0);
-	// The map and the dropdowns follow each other (owner 2026-10-30): a dropdown pick zooms the
-	// map to that pin, and a tapped pin fills the dropdown used last — the first line until one
-	// is used — panning only, so the other points stay in view.
-	let activePicker = $state<string | null>(null);
-	const mapTapPicker = $derived(
-		pickerForMapTap(
-			activePicker,
-			pointLines.map((line) => line.key)
+	// The map zooms to the first group that has a point; none → the shelter's own view.
+	const focusPointId = $derived(pointGroups?.find((group) => !group.anyPoint)?.key ?? null);
+	const lineNames = $derived(
+		donationStore.items.map(
+			(item) =>
+				`${item.name || t.unspecified} — ${item.amount} ${formatUnit(item.unit, units, langState.current)}`
 		)
 	);
-	let mapFocusRequest = $state<MapPointFocus | null>(null);
-	let focusSeq = 0;
-	let focusAppliedTo = $state<string | null>(null);
-	// Before any tap or pick, the map zooms to the point the tap target is on now: at the
-	// shelter's own zoom its points sit under the shelter pin and cannot be tapped.
-	const mapFocus = $derived.by((): MapPointFocus | null => {
-		if (mapFocusRequest) return mapFocusRequest;
-		const line = pointLines.find((l) => l.key === mapTapPicker) ?? pointLines[0];
-		return line?.pointId ? { pointId: line.pointId, zoom: true, seq: 0 } : null;
-	});
-	const mapFocusNote = $derived(
-		focusAppliedTo ? t.dropOffPointAppliedTo.replace('{name}', focusAppliedTo) : null
-	);
-
-	function focusMapOn(pointId: string, zoom: boolean, appliedTo: string | null) {
-		focusSeq += 1;
-		mapFocusRequest = { pointId, zoom, seq: focusSeq };
-		focusAppliedTo = appliedTo;
-	}
-
-	function setLinePoint(key: string, pointId: string) {
-		const item = donationStore.items.find((line) => line.id === key);
-		if (item) item.dropOffPointId = pointId;
-	}
-
-	function setAllLinesPoint(pointId: string) {
-		for (const item of donationStore.items) item.dropOffPointId = pointId;
-	}
-
-	function lineName(key: string): string | null {
-		return pointLines.find((line) => line.key === key)?.name ?? null;
-	}
-
-	function pickLinePoint(key: string, pointId: string) {
-		setLinePoint(key, pointId);
-		focusMapOn(pointId, true, lineName(key));
-	}
-
-	function pickAllLinesPoint(pointId: string) {
-		setAllLinesPoint(pointId);
-		focusMapOn(pointId, true, t.dropOffPointAllLines);
-	}
-
-	function tapMapPoint(pointId: string) {
-		donationStore.tappedPointId = pointId;
-		// One point fills every line by itself: nothing to say which line it went to.
-		if (bookablePoints.length < 2 || !bookablePoints.some((point) => point.id === pointId)) {
-			focusMapOn(pointId, false, null);
-		} else if (mapTapPicker === ALL_LINES_PICKER) {
-			setAllLinesPoint(pointId);
-			focusMapOn(pointId, false, t.dropOffPointAllLines);
-		} else if (mapTapPicker) {
-			setLinePoint(mapTapPicker, pointId);
-			focusMapOn(pointId, false, lineName(mapTapPicker));
-		}
-	}
 
 	// A window is picked for one shelter, day and queue: changing any of them, or the window
 	// filling or closing before submit, leaves nothing picked (`pickedSlot`).
@@ -292,12 +218,6 @@
 			courierTrackingNo: donationStore.courierTrackingNo
 		});
 
-		// The point each line is booked to — kept on the line so the ticket groups by it.
-		for (const [index, line] of pointLines.entries()) {
-			const item = donationStore.items[index];
-			if (item) item.dropOffPointId = line.pointId;
-		}
-
 		try {
 			const res = await fetch('/api/public/v1/donations', {
 				method: 'POST',
@@ -324,6 +244,7 @@
 				donationStore.trackingToken = data.trackingToken;
 				donationStore.bookingRef = data.bookingRef;
 				donationStore.bookingStatus = data.status ?? 'pending_review';
+				donationStore.bookedItems = data.items ?? [];
 				donationStore.slotDate = slotDateStr;
 				donationStore.bookedVehiclePlate = logistics?.vehicle_plate ?? '';
 				donationStore.goToStep('ticket');
@@ -538,14 +459,20 @@
 					<p class="text-base font-bold text-slate-900" data-testid="drop-off-shelter-name">
 						{donationStore.selectedShelterName || donationStore.shelterCode}
 					</p>
-					{#if showDropOffMap}
+					{#if showDropOffPoints}
 						<DropOffShelterMap
 							shelterCode={donationStore.shelterCode}
 							shelterName={donationStore.selectedShelterName}
-							focus={mapFocus}
-							focusNote={mapFocusNote}
-							onFocusPoint={tapMapPoint}
+							{focusPointId}
 						/>
+						{#if pointGroups}
+							<DropOffGroups
+								groups={pointGroups}
+								{lineNames}
+								directions={false}
+								showPending={false}
+							/>
+						{/if}
 					{/if}
 				{:else}
 					<div class="flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-4">
@@ -561,30 +488,6 @@
 					</div>
 				{/if}
 			</div>
-
-			<!-- 2.1 จุดส่งของแต่ละรายการ (CR-206 FR-MP-8 – FR-MP-11) -->
-			{#if hasShelter && donationStore.deliveryMethod === 'self_dropoff'}
-				{#if pointsPending}
-					<p
-						role="status"
-						class="flex items-center gap-2 text-sm font-bold text-slate-600"
-						data-testid="drop-off-points-loading"
-					>
-						<LoaderCircle class="h-4 w-4 animate-spin text-slate-500" />
-						{t.dropOffPointsLoading}
-					</p>
-				{:else}
-					<DropOffPointsSection
-						points={bookablePoints}
-						lines={pointLines}
-						idPrefix="booking-drop-off"
-						activePicker={mapTapPicker}
-						onPick={pickLinePoint}
-						onPickAll={pickAllLinesPoint}
-						onActivate={(picker) => (activePicker = picker)}
-					/>
-				{/if}
-			{/if}
 
 			<!-- 3. เลือกเวลา -->
 			{#if donationStore.deliveryMethod === 'self_dropoff' || donationStore.deliveryMethod === 'shelter_pickup'}
@@ -716,7 +619,6 @@
 			type="button"
 			disabled={donationStore.isSubmitting ||
 				!donationStore.shelterCode ||
-				pointsPending ||
 				((donationStore.deliveryMethod === 'self_dropoff' ||
 					donationStore.deliveryMethod === 'shelter_pickup') &&
 					!selectedSlot) ||

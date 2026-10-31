@@ -57,6 +57,9 @@ export type PublicNeed = {
 	urgency?: string;
 	on_hand?: string | number;
 	reserved?: string | number;
+	/** The card's drop-off point (CR-206 A2 FR-AP-26): one row per item + point. */
+	drop_off_point_id?: string | null;
+	drop_off_point_name?: string | null;
 };
 export type PublicShelter = { code: string; name: string; needs: PublicNeed[] };
 
@@ -227,14 +230,12 @@ export type Booking = { bookingRef: string; trackingToken: string };
  * landmark, and `.first()` would be the outermost wrapper — which holds EVERY card, so
  * its first button belongs to whichever shelter/need happens to be listed first.
  */
-function cardWith(page: Page, text: string, name: string) {
+function cardWith(page: Page, text: string, name: string, pointName?: string | null) {
 	const button = page.getByRole('button', { name });
-	return page
-		.locator('div')
-		.filter({ hasText: text })
-		.filter({ has: button })
-		.last()
-		.getByRole('button', { name });
+	let card = page.locator('div').filter({ hasText: text });
+	// One item can have a card per drop-off point (CR-206 A2 FR-AP-28): pick the point's.
+	if (pointName) card = card.filter({ has: page.getByText(`จุดรับบริจาค: ${pointName}`) });
+	return card.filter({ has: button }).last().getByRole('button', { name });
 }
 
 /** `item_master` id for a catalog name — ids are minted per seed (`item_master:<ulid>`). */
@@ -264,9 +265,14 @@ export async function openShelter(page: Page, shelter: Pick<PublicShelter, 'name
 }
 
 /** Public needs board → `shelter`'s card → the line for `itemName` (as the board prints it). */
-export async function openNeed(page: Page, shelter: Pick<PublicShelter, 'name'>, itemName: string) {
+export async function openNeed(
+	page: Page,
+	shelter: Pick<PublicShelter, 'name'>,
+	itemName: string,
+	pointName?: string | null
+) {
 	await openShelter(page, shelter);
-	await cardWith(page, itemName, 'บริจาครายการนี้').click();
+	await cardWith(page, itemName, 'บริจาครายการนี้', pointName).click();
 }
 
 /** An item the donor types in themselves ("บริจาคสิ่งของอื่นๆ") instead of picking a need card. */
@@ -275,7 +281,7 @@ export type UnsolicitedItem = { itemName: string; unitLabel: string };
 export type BookingOptions = {
 	shelter: Pick<PublicShelter, 'code' | 'name'>;
 	/** The need card to book against — or `unsolicited` to type the item in yourself. */
-	need?: Pick<PublicNeed, 'name'>;
+	need?: Pick<PublicNeed, 'name' | 'drop_off_point_name'>;
 	unsolicited?: UnsolicitedItem;
 	donorName: string;
 	phone: string;
@@ -288,8 +294,13 @@ export type BookingOptions = {
 	ledger: RunLedger;
 };
 
+/** One line of a booking as the BFF answers it: the point staff set for it (FR-AP-8a). */
+export type BookedLine = { drop_off_point_id: string | null; review_status: string };
+
 export type BookingResponse = Partial<Booking> & {
 	success: boolean;
+	status?: string;
+	items?: BookedLine[];
 	error?: string | { code: string; message: string };
 };
 
@@ -310,7 +321,7 @@ export async function fillBooking(
 		await page.getByRole('button', { name: 'บริจาคสิ่งของอื่นๆ' }).click();
 	} else {
 		if (!need) throw new Error('fillBooking needs either `need` or `unsolicited`');
-		await openNeed(page, shelter, need.name);
+		await openNeed(page, shelter, need.name, need.drop_off_point_name);
 	}
 
 	// Step 2 — donor + item. A need card brings its own name/unit; a typed item does not.
@@ -611,13 +622,14 @@ export function todayYmd() {
 export async function boardLineFor(
 	request: APIRequestContext,
 	shelterCode: string,
-	itemName: string
+	itemName: string,
+	pointName?: string
 ): Promise<PublicNeed | undefined> {
 	const res = await request.get('/api/public/v1/needs');
 	if (!res.ok()) return undefined;
 	return ((await res.json()) as PublicShelter[])
 		.find((s) => s.code === shelterCode)
-		?.needs.find((n) => n.name === itemName);
+		?.needs.find((n) => n.name === itemName && (!pointName || n.drop_off_point_name === pointName));
 }
 
 // Campaigns reach the public board through the worker's Mongo projection.
@@ -647,7 +659,7 @@ export async function createCampaignViaUi(
 	request: APIRequestContext,
 	staff: Staff,
 	shelterCode: string,
-	opts: { item: string; target: number; notes: string }
+	opts: { item: string; target: number; notes: string; pointName?: string }
 ): Promise<PublicNeed> {
 	await openBackOffice(page, staff);
 	await page.getByRole('tab', { name: 'จัดการความต้องการ' }).click();
@@ -659,12 +671,22 @@ export async function createCampaignViaUi(
 	await expect(page.getByText('เลือกรายการพัสดุก่อน')).toHaveCount(0);
 	await page.getByRole('textbox', { name: /จำนวนเป้าหมาย/ }).fill(String(opts.target));
 	await page.getByRole('textbox', { name: /เหตุผลหรือรายละเอียดเพิ่มเติม/ }).fill(opts.notes);
-	await page.getByRole('button', { name: 'ประกาศขอรับบริจาคผ่านหน้าเว็บสาธารณะ' }).click();
+	const save = page.getByRole('button', { name: 'ประกาศขอรับบริจาคผ่านหน้าเว็บสาธารณะ' });
+	if (opts.pointName) {
+		// A shelter with two or more drop-off points cannot post a need without one (FR-AP-3).
+		await expect(save).toBeDisabled();
+		await page.getByRole('button', { name: /^จุดรับบริจาค/ }).click();
+		await page.getByRole('option', { name: opts.pointName, exact: true }).click();
+	}
+	await save.click();
 	await expect(page.getByText(`เพิ่มประกาศความต้องการ "${opts.item}" สำเร็จ`)).toBeVisible();
 	await expect
-		.poll(async () => (await boardLineFor(request, shelterCode, opts.item))?.status, BOARD_SYNC)
+		.poll(
+			async () => (await boardLineFor(request, shelterCode, opts.item, opts.pointName))?.status,
+			BOARD_SYNC
+		)
 		.toBe('open');
-	return (await boardLineFor(request, shelterCode, opts.item))!;
+	return (await boardLineFor(request, shelterCode, opts.item, opts.pointName))!;
 }
 
 export type SlotMode = 'ผู้บริจาคมาส่งเอง' | 'รถศูนย์ไปรับ';

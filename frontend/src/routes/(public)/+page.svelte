@@ -112,7 +112,8 @@
 	const urgentItemsCount = $derived.by(() => {
 		let totalNeeds = 0;
 		for (const s of data.donationNeeds || []) {
-			totalNeeds += (s.needs || []).length;
+			// One item can have a row per drop-off point (CR-206 A2 FR-AP-29): count items.
+			totalNeeds += new Set((s.needs || []).map((n) => n.item_id)).size;
 		}
 		return totalNeeds;
 	});
@@ -142,7 +143,12 @@
 				? t.locationText(geo.subdistrict, geo.district, geo.province)
 				: t.defaultLocation;
 
-			const formattedNeeds = (s.needs || []).map((n) => formatItemName(n.name || n.item_id));
+			// An item asked at two drop-off points is two rows but one item (CR-206 A2 FR-AP-29).
+			const formattedNeeds = [
+				...new Map(
+					(s.needs || []).map((n) => [n.item_id, formatItemName(n.name || n.item_id)])
+				).values()
+			];
 
 			let totalQtyNeeded = 0;
 			let totalTarget = 0;

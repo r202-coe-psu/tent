@@ -142,6 +142,37 @@ describe('GET /api/back-office/donations (pending intake queue)', () => {
 		expect(byRef['DN-000001']).toEqual([]);
 	});
 
+	it('carries which lines a drop-off point recorded, and [] when none did (FR-AP-20a)', async () => {
+		const receipt = {
+			point_id: 'sp-gym',
+			line_nos: [0],
+			received_at: '2026-10-28T02:12:00.000Z',
+			received_by: 'gym-staff',
+			audit_id: 'audit:gym',
+			ledger_ids: ['stock_ledger:row-1'],
+			items: [{ line_no: 0, free_text: 'น้ำดื่ม', qty: '5', unit: 'ลัง' }]
+		};
+		const withReceipt = { doc: { ...sh001[0].doc, point_receipts: [receipt] } };
+		vi.mocked(adminRaw).mockImplementation((path: string, method: string) =>
+			Promise.resolve(
+				method === 'GET' && path.includes('/shelter_sh001/')
+					? { status: 200, data: { rows: [withReceipt, sh001[1]] } }
+					: { status: 404, data: {} }
+			)
+		);
+
+		const data = await (await GET(event())).json();
+		const byRef = Object.fromEntries(
+			data.donations.map((d: { booking_ref: string; point_receipts: unknown }) => [
+				d.booking_ref,
+				d.point_receipts
+			])
+		);
+
+		expect(byRef['DN-000002']).toEqual([{ point_id: 'sp-gym', line_nos: [0] }]);
+		expect(byRef['DN-000001']).toEqual([]);
+	});
+
 	it('never exposes the tracking token hash', async () => {
 		mockCouch();
 

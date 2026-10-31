@@ -24,15 +24,12 @@
 		shelters,
 		selectedCode,
 		onSelect,
-		onFocusPoint,
 		card
 	}: {
 		/** Shelters currently on the needs board (after search and filters), in board order. */
 		shelters: DonationNeedsEntry[];
 		selectedCode: string | null;
 		onSelect: (code: string | null) => void;
-		/** The donor tapped a drop-off point of the picked shelter (CR-206 FR-MP-9). */
-		onFocusPoint?: (pointId: string) => void;
 		/** What opens for the tapped shelter: over the map on wide screens, under it on phones. */
 		card: Snippet<[DonationMapShelter, DonationMapPin]>;
 	} = $props();
@@ -146,10 +143,7 @@
 					showLegend={false}
 					cooperativeGestures
 					onSelectShelter={(code) => onSelect(code || null)}
-					onSelectPoint={(id) => {
-						focusedPointId = id;
-						onFocusPoint?.(id);
-					}}
+					onSelectPoint={(id) => (focusedPointId = id)}
 					onLoadError={() => (mapFailed = true)}
 				/>
 			</div>

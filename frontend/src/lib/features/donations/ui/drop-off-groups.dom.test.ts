@@ -6,6 +6,7 @@ import { groupDropOffDestinations } from '../domain/line-points';
 import type { DropOffShelterSource } from '../domain/drop-off';
 
 const ANY = 'ส่งที่จุดรับบริจาคไหนของศูนย์ก็ได้';
+const AWAITING = 'รอเจ้าหน้าที่กำหนดจุดส่ง';
 const SHELTER: DropOffShelterSource = {
 	code: 'SH001',
 	name: 'ศูนย์พักพิงหาดใหญ่',
@@ -36,7 +37,7 @@ function render(
 			{ drop_off_point_id: 'point-gone' }
 		],
 		SHELTER,
-		{ anyPointName: ANY, pointReceipts }
+		{ anyPointName: ANY, awaitingName: AWAITING, deliveryMethod: 'self_dropoff', pointReceipts }
 	)!;
 	instance = mount(DropOffGroups, {
 		target: document.body,
@@ -97,5 +98,32 @@ describe('DropOffGroups (CR-206 FR-MP-13, FR-MP-16)', () => {
 	it('hides "awaiting" once the booking is closed', () => {
 		render([{ point_id: 'point-gym', line_nos: [0] }], { showPending: false });
 		expect(cards().map(statusOf)).toEqual(['รับแล้ว', null, null]);
+	});
+	// Staff-assigned drop-off FR-AP-22 — the lines staff have yet to give a point.
+	it('shows the awaiting-staff card last, with its note, the shelter address and no status (AC-AP-13)', () => {
+		const groups = groupDropOffDestinations(
+			[
+				{ drop_off_point_id: null, review_status: 'pending' },
+				{ drop_off_point_id: 'point-gym', review_status: 'approved' }
+			],
+			SHELTER,
+			{ anyPointName: ANY, awaitingName: AWAITING, deliveryMethod: 'self_dropoff' }
+		)!;
+		instance = mount(DropOffGroups, {
+			target: document.body,
+			props: { groups, lineNames: ['ผ้าห่ม', 'ข้าวสาร'] }
+		});
+		flushSync();
+
+		const [gym, awaiting] = cards();
+		expect(gym.textContent).toContain('ข้าวสาร');
+		expect(awaiting.textContent).toContain(AWAITING);
+		expect(awaiting.textContent).toContain('ผ้าห่ม');
+		expect(awaiting.textContent).toContain('1 ถ.เพชรเกษม');
+		expect(
+			awaiting.querySelector('[data-testid="drop-off-group-awaiting-note"]')?.textContent
+		).toContain('ส่งที่จุดรับบริจาคไหนของศูนย์ก็ได้');
+		expect(statusOf(awaiting)).toBeNull();
+		expect(statusOf(gym)).toBe('รอรับ');
 	});
 });

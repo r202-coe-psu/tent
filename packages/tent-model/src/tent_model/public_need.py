@@ -12,6 +12,10 @@ class PublicNeed(Document):
 
 	id: str = Field(alias="_id")
 	shelter_code: str
+	#: CR-206 A2: a row is one card = shelter + item_id + drop-off point. Optional so rows
+	#: projected before 15 (no such fields) still load.
+	item_id: str | None = None
+	drop_off_point_id: str | None = None
 	item_name: str
 	category: str
 	qty_needed: float

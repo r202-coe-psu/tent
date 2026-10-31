@@ -45,6 +45,9 @@ export type DonationNeedsEntry = {
 		qty_needed?: string | number;
 		status?: string;
 		urgency?: string;
+		/** A shelter can ask for one item at several points (CR-206 A2): rows share `item_id`. */
+		drop_off_point_id?: string | null;
+		drop_off_point_name?: string | null;
 	}>;
 };
 
@@ -123,20 +126,34 @@ export function donationShelterUrgency(
 }
 
 function toOpenNeeds(entry: DonationNeedsEntry): DonationMapNeed[] {
-	const open: DonationMapNeed[] = [];
+	// One row per item + drop-off point (CR-206 A2 FR-AP-25), so an item can repeat. The map
+	// counts items, not cards (FR-AP-29): rows of one `item_id` fold into one need that adds
+	// up what is short and keeps the most urgent level.
+	const byItem = new Map<string, DonationMapNeed>();
 	for (const need of entry.needs ?? []) {
 		if (need.status === 'closed' || !need.item_id) continue;
 		const qtyNeeded = Number(need.qty_needed) || 0;
-		open.push({
+		const urgency = donationNeedUrgency(need.urgency, qtyNeeded);
+		const seen = byItem.get(need.item_id);
+		if (seen) {
+			seen.qtyNeeded += qtyNeeded;
+			if (DONATION_URGENCY_RANK[urgency] < DONATION_URGENCY_RANK[seen.urgency]) {
+				seen.urgency = urgency;
+			}
+			continue;
+		}
+		byItem.set(need.item_id, {
 			itemId: need.item_id,
 			name: (need.name || need.item_id).replace(/^item:/, ''),
 			unit: need.unit ?? '',
 			qtyNeeded,
-			urgency: donationNeedUrgency(need.urgency, qtyNeeded)
+			urgency
 		});
 	}
 	// Array.prototype.sort is stable, so equal urgencies keep the board's order.
-	return open.sort((a, b) => DONATION_URGENCY_RANK[a.urgency] - DONATION_URGENCY_RANK[b.urgency]);
+	return [...byItem.values()].sort(
+		(a, b) => DONATION_URGENCY_RANK[a.urgency] - DONATION_URGENCY_RANK[b.urgency]
+	);
 }
 
 function areaLabelOf(shelter: PublicShelterItem | undefined): string {
