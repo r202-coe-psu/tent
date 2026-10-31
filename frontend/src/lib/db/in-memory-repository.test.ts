@@ -52,4 +52,18 @@ describe('createInMemoryRepository.findPage', () => {
 			await repo.put({ _id: `n:${String(i).padStart(2, '0')}`, type: 'n' });
 		expect((await repo.findPage({ selector: { type: 'n' } })).docs).toHaveLength(25);
 	});
+
+	it('compares string ranges like CouchDB ICU collation, not by code point', async () => {
+		const repo = createInMemoryRepository();
+		for (const [id, name] of [
+			['e:1', 'Somchai'],
+			['e:2', 'SOMBAT'],
+			['e:3', 'Mary']
+		])
+			await repo.put({ _id: id, type: 'e', name });
+		const page = await repo.findPage<{ _id: string }>({
+			selector: { type: 'e', name: { $gte: 'som', $lt: 'som\ufff0' } }
+		});
+		expect(page.docs.map((d) => d._id).sort()).toEqual(['e:1', 'e:2']);
+	});
 });

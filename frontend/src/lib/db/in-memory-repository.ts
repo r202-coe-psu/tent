@@ -11,6 +11,10 @@ function valueAtPath(doc: Record<string, unknown>, path: string): unknown {
 	return cur;
 }
 
+// CouchDB compares Mango string ranges with ICU collation, not code points: `Somchai` sits inside
+// [`som`, `som` + U+FFF0) and `เสือ` inside the `ส` range. A code-point fake hides those cases.
+const collate = new Intl.Collator('und').compare;
+
 function matchesSelector(doc: Record<string, unknown>, selector: Record<string, unknown>): boolean {
 	for (const [key, cond] of Object.entries(selector)) {
 		const val = valueAtPath(doc, key);
@@ -21,14 +25,15 @@ function matchesSelector(doc: Record<string, unknown>, selector: Record<string, 
 				} else if (op === '$eq') {
 					if (val !== opVal) return false;
 				} else if (op === '$gte' || op === '$gt' || op === '$lte' || op === '$lt') {
-					// Range operators (Mango) — enough for ISO-string / number fields.
 					if (typeof val !== typeof opVal || val == null) return false;
-					const v = val as string | number;
-					const o = opVal as string | number;
-					if (op === '$gte' && !(v >= o)) return false;
-					if (op === '$gt' && !(v > o)) return false;
-					if (op === '$lte' && !(v <= o)) return false;
-					if (op === '$lt' && !(v < o)) return false;
+					const cmp =
+						typeof val === 'string'
+							? collate(val, opVal as string)
+							: (val as number) - (opVal as number);
+					if (op === '$gte' && !(cmp >= 0)) return false;
+					if (op === '$gt' && !(cmp > 0)) return false;
+					if (op === '$lte' && !(cmp <= 0)) return false;
+					if (op === '$lt' && !(cmp < 0)) return false;
 				} else if (val !== cond) {
 					return false;
 				}
