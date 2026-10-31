@@ -156,7 +156,7 @@ describe('groupDropOffDestinations — lines awaiting staff (staff-assigned drop
 	const view = (groups: ReturnType<typeof groupDropOffDestinations>) =>
 		groups?.map((g) => [g.key, g.point.name, g.lineNos, g.status, g.anyPoint]) ?? null;
 
-	it('puts a typed-in line in an "awaiting staff" group after the campaign point (AC-13)', () => {
+	it('puts a typed-in line in an "awaiting staff" group after the campaign point (AC-AP-13)', () => {
 		expect(view(groupDropOffDestinations([rice, blanket], SHELTER, OPTS))).toEqual([
 			['point-gym', 'โรงยิม', [0], 'pending', false],
 			[AWAITING_STAFF_KEY, AWAITING, [1], 'pending', true]
@@ -172,13 +172,13 @@ describe('groupDropOffDestinations — lines awaiting staff (staff-assigned drop
 		]);
 	});
 
-	it('groups a booking with no point at all when its lines await staff (AC-9)', () => {
+	it('groups a booking with no point at all when its lines await staff (AC-AP-9)', () => {
 		const groups = groupDropOffDestinations([blanket, blanket], SHELTER, OPTS)!;
 		expect(view(groups)).toEqual([[AWAITING_STAFF_KEY, AWAITING, [0, 1], 'pending', true]]);
 		expect(groups[0].point).toMatchObject({ address: '1 ถ.เพชรเกษม', pointId: null });
 	});
 
-	it('has no awaiting group for a parcel (AC-9)', () => {
+	it('has no awaiting group for a parcel (AC-AP-9)', () => {
 		expect(
 			groupDropOffDestinations([blanket, blanket], SHELTER, { ...OPTS, deliveryMethod: 'parcel' })
 		).toBeNull();
@@ -189,21 +189,21 @@ describe('groupDropOffDestinations — lines awaiting staff (staff-assigned drop
 		expect(groupDropOffDestinations([blanket], noPoints, OPTS)).toBeNull();
 	});
 
-	it('keeps a pending line that has a point in that point group (FR-AP-22b, AC-13a)', () => {
+	it('keeps a pending line that has a point in that point group (FR-AP-22b, AC-AP-13a)', () => {
 		const notSeeded = { drop_off_point_id: 'point-gym', review_status: 'pending' };
 		expect(view(groupDropOffDestinations([notSeeded], SHELTER, OPTS))).toEqual([
 			['point-gym', 'โรงยิม', [0], 'pending', false]
 		]);
 	});
 
-	it('puts a pending line whose point is gone in the awaiting group (AC-13a)', () => {
+	it('puts a pending line whose point is gone in the awaiting group (AC-AP-13a)', () => {
 		const gone = { drop_off_point_id: 'point-gone', review_status: 'pending' };
 		expect(groupDropOffDestinations([gone], SHELTER, OPTS)!.map((g) => g.key)).toEqual([
 			AWAITING_STAFF_KEY
 		]);
 	});
 
-	it('keeps an approved line whose point is gone in the "any point" group (AC-6, AC-7)', () => {
+	it('keeps an approved line whose point is gone in the "any point" group (AC-AP-6, AC-AP-7)', () => {
 		const gone = { drop_off_point_id: 'point-gone', review_status: 'approved' };
 		expect(groupDropOffDestinations([gone, blanket], SHELTER, OPTS)!.map((g) => g.key)).toEqual([
 			ANY_POINT_KEY,
@@ -211,7 +211,7 @@ describe('groupDropOffDestinations — lines awaiting staff (staff-assigned drop
 		]);
 	});
 
-	it('leaves a line a point already recorded out of the awaiting group (AC-13b)', () => {
+	it('leaves a line a point already recorded out of the awaiting group (AC-AP-13b)', () => {
 		const groups = groupDropOffDestinations([rice, blanket], SHELTER, {
 			...OPTS,
 			pointReceipts: [{ point_id: 'point-gym', line_nos: [1] }]
@@ -271,13 +271,13 @@ describe('withCampaignLinePoints (staff-assigned drop-off FR-AP-8, FR-AP-9)', ()
 	const points = (lines: { drop_off_point_id: string | null }[]) =>
 		lines.map((line) => line.drop_off_point_id);
 
-	it('gives a campaign line its need point and a typed-in line none (AC-13)', () => {
+	it('gives a campaign line its need point and a typed-in line none (AC-AP-13)', () => {
 		expect(
 			points(withCampaignLinePoints([rice, blanket], campaign('point-gym'), 'self_dropoff'))
 		).toEqual(['point-gym', null]);
 	});
 
-	it('reads the need of the campaign picked for the booking, not another one (AC-4)', () => {
+	it('reads the need of the campaign picked for the booking, not another one (AC-AP-4)', () => {
 		const campaignB = campaign('point-med');
 		expect(points(withCampaignLinePoints([rice], campaignB, 'self_dropoff'))).toEqual([
 			'point-med'
@@ -294,33 +294,33 @@ describe('withCampaignLinePoints (staff-assigned drop-off FR-AP-8, FR-AP-9)', ()
 		expect(points(withCampaignLinePoints([rice], twice, 'self_dropoff'))).toEqual(['point-gym']);
 	});
 
-	it('copies a point the shelter may have dropped since, unchecked (D-5, AC-6)', () => {
+	it('copies a point the shelter may have dropped since, unchecked (D-AP-5, AC-AP-6)', () => {
 		expect(points(withCampaignLinePoints([rice], campaign('point-gone'), 'self_dropoff'))).toEqual([
 			'point-gone'
 		]);
 	});
 
-	it('writes null for a need with no point, or a v3 need with no key (AC-16)', () => {
+	it('writes null for a need with no point, or a v3 need with no key (AC-AP-16)', () => {
 		expect(points(withCampaignLinePoints([rice], campaign(null), 'self_dropoff'))).toEqual([null]);
 		expect(points(withCampaignLinePoints([rice], campaign(undefined), 'self_dropoff'))).toEqual([
 			null
 		]);
 	});
 
-	it('writes null for every line of a booking with no campaign (AC-9)', () => {
+	it('writes null for every line of a booking with no campaign (AC-AP-9)', () => {
 		expect(points(withCampaignLinePoints([rice, blanket], null, 'self_dropoff'))).toEqual([
 			null,
 			null
 		]);
 	});
 
-	it('writes null for every line of a parcel or a pickup (AC-8)', () => {
+	it('writes null for every line of a parcel or a pickup (AC-AP-8)', () => {
 		for (const method of ['parcel', 'shelter_pickup', undefined]) {
 			expect(points(withCampaignLinePoints([rice], campaign('point-gym'), method))).toEqual([null]);
 		}
 	});
 
-	it('overwrites whatever point the client sent, keeping the rest of the line (AC-5)', () => {
+	it('overwrites whatever point the client sent, keeping the rest of the line (AC-AP-5)', () => {
 		const sent = { ...blanket, qty: '2', drop_off_point_id: 'point-med' };
 		expect(withCampaignLinePoints([sent], campaign('point-gym'), 'self_dropoff')).toEqual([
 			{ free_text: 'ผ้าห่ม', qty: '2', drop_off_point_id: null }

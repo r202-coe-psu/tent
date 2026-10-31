@@ -90,7 +90,7 @@ export function reviewDropOffPoints(
 		};
 	}
 
-	// Step 3 (D-13) — a point already took this line in; naming another one contradicts it.
+	// Step 3 (D-AP-13) — a point already took this line in; naming another one contradicts it.
 	const recordedWithPoint = approved
 		.filter(
 			({ index, drop_off_point_id }) =>
@@ -110,7 +110,7 @@ export function reviewDropOffPoints(
 		.map(({ index }) => index);
 	if (unknown.length > 0) return { ok: false, code: 'UNKNOWN_DROP_OFF_POINT', lines: unknown };
 
-	// Step 5 (D-3) — sending nothing keeps the line's point; the shelter having points means
+	// Step 5 (D-AP-3) — sending nothing keeps the line's point; the shelter having points means
 	// every approved line must end with a current one.
 	const points = new Map<number, string | null>(
 		decided.map(({ index, drop_off_point_id }) => [

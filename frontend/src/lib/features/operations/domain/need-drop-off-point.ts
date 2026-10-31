@@ -1,6 +1,6 @@
 /**
  * Which drop-off point a campaign need gets, decided by staff when they write the
- * campaign (CR draft-donation-staff-assigned-drop-off FR-AP-2 – FR-AP-4a, FR-AP-6).
+ * campaign (CR-206 A2 FR-AP-2 – FR-AP-4a, FR-AP-6).
  * One rule for the create form, the edit form and the board, so they cannot drift.
  */
 

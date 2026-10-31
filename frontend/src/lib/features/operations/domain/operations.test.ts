@@ -2747,7 +2747,7 @@ describe('matchesStatusFilter', () => {
 	);
 });
 
-// Staff-assigned drop-off point (CR draft-donation-staff-assigned-drop-off FR-AP-1, 4, 4b).
+// Staff-assigned drop-off point (CR-206 A2 FR-AP-1, 4, 4b).
 describe('campaign need drop_off_point_id', () => {
 	const make = (point?: string | null) =>
 		createCampaign(

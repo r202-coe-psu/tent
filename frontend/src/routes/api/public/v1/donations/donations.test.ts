@@ -1214,7 +1214,7 @@ describe('POST /api/public/v1/donations', () => {
 			).map((item) => item.drop_off_point_id);
 		};
 
-		it('gives a campaign line its need point and a typed-in line null (AC-13)', async () => {
+		it('gives a campaign line its need point and a typed-in line null (AC-AP-13)', async () => {
 			mockFastapiCreate();
 			const res = await book([RICE, BLANKET]);
 
@@ -1222,7 +1222,7 @@ describe('POST /api/public/v1/donations', () => {
 			expect(sentPoints()).toEqual(['point-gym', null]);
 		});
 
-		it('takes the point of the campaign picked for the booking (AC-4)', async () => {
+		it('takes the point of the campaign picked for the booking (AC-AP-4)', async () => {
 			mockFastapiCreate();
 			await book([RICE], undefined, [
 				campaignDoc('donation_campaign:a', 'point-gym', '1'),
@@ -1236,7 +1236,7 @@ describe('POST /api/public/v1/donations', () => {
 			expect(sentPoints()).toEqual(['point-med']);
 		});
 
-		it('ignores a point the client sent (FR-AP-7, AC-5)', async () => {
+		it('ignores a point the client sent (FR-AP-7, AC-AP-5)', async () => {
 			mockFastapiCreate();
 			const res = await book([
 				{ ...RICE, drop_off_point_id: 'point-med' },
@@ -1247,14 +1247,14 @@ describe('POST /api/public/v1/donations', () => {
 			expect(sentPoints()).toEqual(['point-gym', null]);
 		});
 
-		it('sends null for every line of a parcel (AC-8)', async () => {
+		it('sends null for every line of a parcel (AC-AP-8)', async () => {
 			mockFastapiCreate();
 			await book([RICE, BLANKET], { delivery_method: 'parcel' });
 
 			expect(sentPoints()).toEqual([null, null]);
 		});
 
-		it('reads no registry for the points (D-10)', async () => {
+		it('reads no registry for the points (D-AP-10)', async () => {
 			mockFastapiCreate();
 			await book([RICE]);
 

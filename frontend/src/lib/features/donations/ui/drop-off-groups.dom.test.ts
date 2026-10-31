@@ -100,7 +100,7 @@ describe('DropOffGroups (CR-206 FR-MP-13, FR-MP-16)', () => {
 		expect(cards().map(statusOf)).toEqual(['รับแล้ว', null, null]);
 	});
 	// Staff-assigned drop-off FR-AP-22 — the lines staff have yet to give a point.
-	it('shows the awaiting-staff card last, with its note, the shelter address and no status (AC-13)', () => {
+	it('shows the awaiting-staff card last, with its note, the shelter address and no status (AC-AP-13)', () => {
 		const groups = groupDropOffDestinations(
 			[
 				{ drop_off_point_id: null, review_status: 'pending' },

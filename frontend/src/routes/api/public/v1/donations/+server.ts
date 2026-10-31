@@ -202,7 +202,7 @@ export const POST = async ({ request, getClientAddress }) => {
 		}
 
 		// 3.7 Drop-off point per line, set by staff (FR-AP-8): a campaign line takes its need's
-		// point from the campaign picked above. Not checked against the registry (D-10).
+		// point from the campaign picked above. Not checked against the registry (D-AP-10).
 		const items = withCampaignLinePoints(
 			parsed.data.items,
 			pickedCampaign,

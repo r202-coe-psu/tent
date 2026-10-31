@@ -20,7 +20,7 @@ type CampaignPointSource = {
  * staff, not the donor, decide it. A campaign line takes the point of the first need of the
  * booking's own campaign that asks for its item; any other line waits for staff at review.
  * Only a self drop-off has points (CR-206 FR-MP-4). The id is copied as staff set it, never
- * checked against the shelter's points here (D-5, D-10): a point gone since reads as "any point".
+ * checked against the shelter's points here (D-AP-5, D-AP-10): a point gone since reads as "any point".
  */
 export function withCampaignLinePoints<T extends { item_id?: string | null }>(
 	lines: readonly T[],

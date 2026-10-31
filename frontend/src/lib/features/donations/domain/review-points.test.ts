@@ -13,7 +13,7 @@ const DELETED = 'point-deleted';
 const TWO_POINTS = new Set([GYM, MED]);
 
 const line = (over: Partial<DonationItem>): DonationItem => ({ qty: '1', unit: 'piece', ...over });
-// AC-13: rice is a campaign line with the gym point, blankets were typed in by the donor.
+// AC-AP-13: rice is a campaign line with the gym point, blankets were typed in by the donor.
 const rice = line({ item_id: 'item:rice', review_status: 'approved', drop_off_point_id: GYM });
 const blanket = line({ free_text: 'ผ้าห่ม', review_status: 'pending', drop_off_point_id: null });
 const water = line({ free_text: 'น้ำดื่ม', review_status: 'pending', drop_off_point_id: null });
@@ -38,7 +38,7 @@ describe('reviewDropOffPoints (FR-AP-17)', () => {
 		[string, Partial<ReviewPointsInput>, ReadonlySet<string> | 'not_needed', ReviewPointsResult]
 	>([
 		[
-			'AC-10: writes the point staff chose for each approved line',
+			'AC-AP-10: writes the point staff chose for each approved line',
 			{
 				items: [blanket, water],
 				lines: [
@@ -53,19 +53,19 @@ describe('reviewDropOffPoints (FR-AP-17)', () => {
 			])
 		],
 		[
-			'AC-11: an approved line without a point in a shelter that has points',
+			'AC-AP-11: an approved line without a point in a shelter that has points',
 			{},
 			TWO_POINTS,
 			{ ok: false, code: 'POINT_REQUIRED', lines: [1] }
 		],
 		[
-			'AC-11: sending null counts as no point',
+			'AC-AP-11: sending null counts as no point',
 			{ lines: [{ index: 1, decision: 'approved', drop_off_point_id: null }] },
 			TWO_POINTS,
 			{ ok: false, code: 'POINT_REQUIRED', lines: [1] }
 		],
 		[
-			'AC-12: a point the shelter does not offer',
+			'AC-AP-12: a point the shelter does not offer',
 			{ lines: [{ index: 1, decision: 'approved', drop_off_point_id: DELETED }] },
 			TWO_POINTS,
 			{ ok: false, code: 'UNKNOWN_DROP_OFF_POINT', lines: [1] }
@@ -83,7 +83,7 @@ describe('reviewDropOffPoints (FR-AP-17)', () => {
 			{ ok: false, code: 'UNKNOWN_DROP_OFF_POINT', lines: [1] }
 		],
 		[
-			'AC-12: a refused line keeps its point and is not checked',
+			'AC-AP-12: a refused line keeps its point and is not checked',
 			{
 				items: [blanket, water],
 				lines: [
@@ -95,7 +95,7 @@ describe('reviewDropOffPoints (FR-AP-17)', () => {
 			ok([[1, GYM]])
 		],
 		[
-			'AC-12a: a parcel booking writes null whatever the body sent',
+			'AC-AP-12a: a parcel booking writes null whatever the body sent',
 			{
 				deliveryMethod: 'parcel',
 				lines: [{ index: 1, decision: 'approved', drop_off_point_id: DELETED }]
@@ -131,13 +131,13 @@ describe('reviewDropOffPoints (FR-AP-17)', () => {
 			ok([[1, null]])
 		],
 		[
-			'AC-12c: a line a point already received needs no point and is not written',
+			'AC-AP-12c: a line a point already received needs no point and is not written',
 			{ recordedLineNos: new Set([1]) },
 			'not_needed',
 			ok([])
 		],
 		[
-			'AC-12c: naming a point for a line a point already received',
+			'AC-AP-12c: naming a point for a line a point already received',
 			{
 				lines: [{ index: 1, decision: 'approved', drop_off_point_id: GYM }],
 				recordedLineNos: new Set([1])
@@ -168,7 +168,7 @@ describe('reviewDropOffPoints (FR-AP-17)', () => {
 			{ ok: false, code: 'INVALID_REVIEW', lines: [0] }
 		],
 		[
-			'AC-13a / D-3: sending nothing keeps a line that still has a current point',
+			'AC-AP-13a / D-AP-3: sending nothing keeps a line that still has a current point',
 			{
 				items: [line({ item_id: 'item:rice', review_status: 'pending', drop_off_point_id: GYM })],
 				lines: [{ index: 0, decision: 'approved' }]
@@ -177,7 +177,7 @@ describe('reviewDropOffPoints (FR-AP-17)', () => {
 			ok([[0, GYM]])
 		],
 		[
-			'AC-13a: a line whose point was deleted needs a new one',
+			'AC-AP-13a: a line whose point was deleted needs a new one',
 			{
 				items: [
 					line({ item_id: 'item:rice', review_status: 'pending', drop_off_point_id: DELETED })
@@ -219,7 +219,7 @@ describe('reviewDropOffPoints without lines (FR-AP-17a)', () => {
 		[string, Partial<ReviewPointsInput>, ReadonlySet<string> | 'not_needed', ReviewPointsResult]
 	>([
 		[
-			'AC-12b: a pending line with no point in a shelter that has points',
+			'AC-AP-12b: a pending line with no point in a shelter that has points',
 			{ lines: undefined },
 			TWO_POINTS,
 			{ ok: false, code: 'POINT_REQUIRED', lines: [1] }
@@ -264,7 +264,7 @@ describe('reviewDropOffPoints without lines (FR-AP-17a)', () => {
 			ok([])
 		],
 		[
-			'AC-12b: a booking from before schema_v 7 approves as before, points untouched',
+			'AC-AP-12b: a booking from before schema_v 7 approves as before, points untouched',
 			{
 				lines: undefined,
 				items: [line({ item_id: 'item:rice' }), line({ free_text: 'ผ้าห่ม' })]

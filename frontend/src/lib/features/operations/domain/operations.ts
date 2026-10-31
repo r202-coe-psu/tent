@@ -1816,7 +1816,7 @@ export const campaignInputSchema = z.object({
 });
 export type CampaignInput = z.input<typeof campaignInputSchema>;
 
-/** CR draft-donation-staff-assigned-drop-off FR-AP-1: `needs[].drop_off_point_id`. */
+/** CR-206 A2 FR-AP-1: `needs[].drop_off_point_id`. */
 export const DONATION_CAMPAIGN_SCHEMA_V = 4;
 
 export function createCampaign(input: CampaignInput, ctx: AuthorContext): DonationCampaign {

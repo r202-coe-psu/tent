@@ -485,7 +485,7 @@ describe('POST /api/back-office/donations/[query]/approve — drop-off points (F
 	const GYM = { id: 'sp-gym', name: 'โรงยิม' };
 	const MED = { id: 'sp-med', name: 'ห้องพยาบาล' };
 
-	/** AC-9: two typed-in self drop-off lines, no point yet. */
+	/** AC-AP-9: two typed-in self drop-off lines, no point yet. */
 	const selfDonated = {
 		...baseDonation,
 		schema_v: 11,
@@ -522,7 +522,7 @@ describe('POST /api/back-office/donations/[query]/approve — drop-off points (F
 		vi.mocked(readCurrentDonationPoints).mockResolvedValue([GYM, MED]);
 	});
 
-	it('AC-10: writes each chosen point with the review and audits it', async () => {
+	it('AC-AP-10: writes each chosen point with the review and audits it', async () => {
 		mockCouch(selfDonated);
 
 		const response = await POST(
@@ -546,7 +546,7 @@ describe('POST /api/back-office/donations/[query]/approve — drop-off points (F
 		});
 	});
 
-	it('AC-12: a refused line keeps its point and audits null', async () => {
+	it('AC-AP-12: a refused line keeps its point and audits null', async () => {
 		mockCouch({
 			...selfDonated,
 			items: [{ ...selfDonated.items![0], drop_off_point_id: 'sp-old' }, selfDonated.items![1]]
@@ -573,7 +573,7 @@ describe('POST /api/back-office/donations/[query]/approve — drop-off points (F
 
 	it.each([
 		[
-			'AC-11: an approved line without a point',
+			'AC-AP-11: an approved line without a point',
 			[
 				{ index: 0, decision: 'approved', drop_off_point_id: 'sp-gym' },
 				{ index: 1, decision: 'approved' }
@@ -582,7 +582,7 @@ describe('POST /api/back-office/donations/[query]/approve — drop-off points (F
 			[1]
 		],
 		[
-			'AC-12: a point the shelter does not offer',
+			'AC-AP-12: a point the shelter does not offer',
 			[
 				{ index: 0, decision: 'approved', drop_off_point_id: 'sp-gone' },
 				{ index: 1, decision: 'approved', drop_off_point_id: 'sp-med' }
@@ -603,7 +603,7 @@ describe('POST /api/back-office/donations/[query]/approve — drop-off points (F
 		expect(putBody()).toBeUndefined();
 	});
 
-	it('AC-12: a point sent with a refusal is an invalid review', async () => {
+	it('AC-AP-12: a point sent with a refusal is an invalid review', async () => {
 		mockCouch(selfDonated);
 
 		const response = await POST(
@@ -620,7 +620,7 @@ describe('POST /api/back-office/donations/[query]/approve — drop-off points (F
 		expect(putBody()).toBeUndefined();
 	});
 
-	it('AC-12a: a parcel booking gets null whatever was sent, without reading the points', async () => {
+	it('AC-AP-12a: a parcel booking gets null whatever was sent, without reading the points', async () => {
 		mockCouch({
 			...selfDonated,
 			logistics: { delivery_method: 'parcel' }
@@ -656,7 +656,7 @@ describe('POST /api/back-office/donations/[query]/approve — drop-off points (F
 		expect(readCurrentDonationPoints).not.toHaveBeenCalled();
 	});
 
-	it('AC-12b: approving without lines refuses a pending line with no point', async () => {
+	it('AC-AP-12b: approving without lines refuses a pending line with no point', async () => {
 		mockCouch(selfDonated);
 
 		const response = await POST(postEvent({}));
@@ -668,7 +668,7 @@ describe('POST /api/back-office/donations/[query]/approve — drop-off points (F
 		expect(putBody()).toBeUndefined();
 	});
 
-	it('AC-12b: a booking from before schema_v 7 approves as before, points null', async () => {
+	it('AC-AP-12b: a booking from before schema_v 7 approves as before, points null', async () => {
 		mockCouch({
 			...baseDonation,
 			logistics: { delivery_method: 'self_dropoff' }
@@ -681,7 +681,7 @@ describe('POST /api/back-office/donations/[query]/approve — drop-off points (F
 		expect(readCurrentDonationPoints).not.toHaveBeenCalled();
 	});
 
-	describe('AC-12c: a line a point received before review', () => {
+	describe('AC-AP-12c: a line a point received before review', () => {
 		const received = {
 			...selfDonated,
 			items: [

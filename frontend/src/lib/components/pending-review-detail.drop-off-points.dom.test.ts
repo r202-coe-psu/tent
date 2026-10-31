@@ -28,7 +28,7 @@ const GYM = point('sp-gym', 'โรงยิม');
 const MED = point('sp-med', 'ห้องพยาบาล');
 const shelterWith = (...points: object[]) => ({ common_areas: { sub_storage: points } });
 
-/** AC-9 — two lines the donor typed in, no point yet. */
+/** AC-AP-9 — two lines the donor typed in, no point yet. */
 const baseRow: PendingDonationRow = {
 	booking_ref: 'DN-000001',
 	rev: '1-abc',
@@ -120,14 +120,14 @@ afterEach(async () => {
 });
 
 describe('PendingReviewDetail drop-off point per line (FR-AP-20)', () => {
-	it('AC-10: staff pick a point for each approved line before confirming', async () => {
+	it('AC-AP-10: staff pick a point for each approved line before confirming', async () => {
 		await render(baseRow);
 		expect(pointPicker(0)).toBeNull();
 
 		await approve(0);
 		await approve(1);
 		expect(pointPicker(0)?.textContent).toContain('เลือกจุดรับบริจาค');
-		// AC-11: an approved line without a point cannot be confirmed.
+		// AC-AP-11: an approved line without a point cannot be confirmed.
 		expect(confirmButton().disabled).toBe(true);
 
 		await choosePoint(0, 'โรงยิม');
@@ -142,7 +142,7 @@ describe('PendingReviewDetail drop-off point per line (FR-AP-20)', () => {
 		]);
 	});
 
-	it('AC-2a / D-11: the only point is chosen for the line', async () => {
+	it('AC-AP-2a / D-AP-11: the only point is chosen for the line', async () => {
 		shelter.doc = shelterWith(GYM);
 		await render({ ...baseRow, items: [baseRow.items[0]], item_count: 1 });
 
@@ -155,7 +155,7 @@ describe('PendingReviewDetail drop-off point per line (FR-AP-20)', () => {
 		]);
 	});
 
-	it('AC-13a: a line that still has a current point starts on it', async () => {
+	it('AC-AP-13a: a line that still has a current point starts on it', async () => {
 		await render({
 			...baseRow,
 			items: [
@@ -176,7 +176,7 @@ describe('PendingReviewDetail drop-off point per line (FR-AP-20)', () => {
 		expect(confirmButton().disabled).toBe(false);
 	});
 
-	it('AC-13a: a line whose point was deleted starts empty', async () => {
+	it('AC-AP-13a: a line whose point was deleted starts empty', async () => {
 		await render({
 			...baseRow,
 			items: [
@@ -220,7 +220,7 @@ describe('PendingReviewDetail drop-off point per line (FR-AP-20)', () => {
 		expect(onApprove).toHaveBeenCalledWith('DN-000001', '', [{ index: 0, decision: 'approved' }]);
 	});
 
-	it('AC-13b: a line a point already received shows where, read-only, with no picker', async () => {
+	it('AC-AP-13b: a line a point already received shows where, read-only, with no picker', async () => {
 		await render({
 			...baseRow,
 			point_receipts: [{ point_id: 'sp-gym', line_nos: [0] }]
@@ -242,7 +242,7 @@ describe('PendingReviewDetail drop-off point per line (FR-AP-20)', () => {
 		]);
 	});
 
-	it('AC-13: an auto-approved campaign line keeps its point read-only', async () => {
+	it('AC-AP-13: an auto-approved campaign line keeps its point read-only', async () => {
 		await render({
 			...baseRow,
 			campaign_id: 'donation_campaign:c1',

@@ -66,7 +66,7 @@ afterEach(() => {
 
 // Staff-assigned drop-off FR-AP-8b, FR-AP-22 — the ticket groups the lines the booking returned.
 describe('success ticket drop-off groups', () => {
-	it('groups the booked lines: the campaign point, then the lines awaiting staff (AC-13)', async () => {
+	it('groups the booked lines: the campaign point, then the lines awaiting staff (AC-AP-13)', async () => {
 		store.deliveryMethod = 'self_dropoff';
 		store.bookedItems = [
 			{ drop_off_point_id: 'point-gym', review_status: 'approved' },
@@ -80,7 +80,7 @@ describe('success ticket drop-off groups', () => {
 		expect(cards[1].textContent).toContain('ผ้าห่ม');
 	});
 
-	it('shows the shelter alone for a parcel with nothing to group (AC-9)', async () => {
+	it('shows the shelter alone for a parcel with nothing to group (AC-AP-9)', async () => {
 		store.deliveryMethod = 'parcel';
 		store.bookedItems = [
 			{ drop_off_point_id: null, review_status: 'pending' },

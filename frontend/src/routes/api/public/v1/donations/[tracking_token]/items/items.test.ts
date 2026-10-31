@@ -606,7 +606,7 @@ describe('PATCH /api/public/v1/donations/[token]/items', () => {
 			).map((item) => item.drop_off_point_id);
 		};
 
-		it("writes every line's point from the booking's campaign over what the client sent (AC-14)", async () => {
+		it("writes every line's point from the booking's campaign over what the client sent (AC-AP-14)", async () => {
 			couchHas(dropOffDoc());
 			vi.mocked(readDonationCampaign).mockResolvedValue(campaign());
 			fastapiOk();
@@ -633,7 +633,7 @@ describe('PATCH /api/public/v1/donations/[token]/items', () => {
 			expect(sentPoints()).toEqual(['point-gym']);
 		});
 
-		it('reads a campaign closed since the booking (AC-14b)', async () => {
+		it('reads a campaign closed since the booking (AC-AP-14b)', async () => {
 			couchHas(dropOffDoc());
 			vi.mocked(readDonationCampaign).mockResolvedValue(campaign('closed'));
 			fastapiOk();
@@ -643,7 +643,7 @@ describe('PATCH /api/public/v1/donations/[token]/items', () => {
 			expect(sentPoints()).toEqual(['point-gym']);
 		});
 
-		it('stops before moving quota when the campaign cannot be read (AC-14b)', async () => {
+		it('stops before moving quota when the campaign cannot be read (AC-AP-14b)', async () => {
 			couchHas(dropOffDoc());
 			vi.mocked(readDonationCampaign).mockRejectedValue(
 				new CouchReadError('shelter_sh001', 'c1', 500)

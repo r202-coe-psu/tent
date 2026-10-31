@@ -167,7 +167,7 @@
 		drafts[index] ??= { note: '' };
 		return drafts[index];
 	}
-	/** The only point (D-11), else the line's point while the shelter still offers it. */
+	/** The only point (D-AP-11), else the line's point while the shelter still offers it. */
 	function defaultPoint(index: number): string {
 		if (donationPoints.length === 1) return donationPoints[0].id;
 		return currentLinePoint(declaredItems[index], donationPointIds) ?? '';
