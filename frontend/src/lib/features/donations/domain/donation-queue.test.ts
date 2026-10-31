@@ -15,6 +15,7 @@ const row = (over: Partial<PendingDonationRow>): PendingDonationRow => ({
 	donor_phone: null,
 	item_count: 1,
 	items: [],
+	point_receipts: [],
 	...over
 });
 
