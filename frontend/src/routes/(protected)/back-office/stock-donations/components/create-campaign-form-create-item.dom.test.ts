@@ -33,7 +33,7 @@ vi.mock('$lib/stores/auth.svelte', () => ({
 vi.mock('$lib/db/shelter', () => ({ getShelterCode: () => 'SH001' }));
 vi.mock('$lib/features/supply', () => ({ useSupplyItems: () => ({ data: [], isPending: false }) }));
 vi.mock('$lib/features/catalog', async (importOriginal) => {
-	const stub = (await import('$lib/test-stubs/quick-create-item-sheet-stub.svelte')).default;
+	const stub = (await import('./__fixtures__/quick-create-item-sheet.fixture.svelte')).default;
 	return {
 		...(await importOriginal<typeof import('$lib/features/catalog')>()),
 		useItemMasters: () => ({ data: masters, isPending: false }),
@@ -86,12 +86,11 @@ describe('create campaign form — create a master item', () => {
 		expect(document.body.textContent).toContain('ให้สร้างในหน้าจัดการข้อมูลหลักก่อน');
 	});
 
-	it('opens the sheet with the typed text as the item name', async () => {
+	it('opens the sheet with an empty name', async () => {
 		await render();
-		const input = q<HTMLInputElement>('#campaign-item-title')!;
-		input.value = 'น้ำมันพืช';
+		q<HTMLInputElement>('#campaign-item-title')!.value = 'น้ำมันพืช';
 		await click(addButton());
-		expect(q('[data-testid="sheet-stub"]')?.getAttribute('data-initial-name')).toBe('น้ำมันพืช');
+		expect(q('[data-testid="sheet-stub"]')?.getAttribute('data-initial-name')).toBe('');
 	});
 
 	it('selects the created item and keeps the other fields', async () => {

@@ -61,15 +61,9 @@
 	// Same gate and same sheet as the scan station's "เพิ่มสินค้าใหม่".
 	const canCreateItem = $derived(canWriteShelterCatalog(authStore.user?.roles ?? []));
 	let createOpen = $state(false);
-	let createName = $state('');
 
+	// `SearchSelect` does not expose its search text, so the sheet opens with an empty name.
 	function openCreateItem() {
-		// `SearchSelect` keeps its search text private, so read the box itself — but only
-		// when nothing is picked, otherwise it just shows the picked item's label.
-		const typed = selectedItemId
-			? ''
-			: ((document.getElementById('campaign-item-title') as HTMLInputElement | null)?.value ?? '');
-		createName = typed.trim();
 		createOpen = true;
 	}
 
@@ -403,7 +397,6 @@
 	<QuickCreateItemSheet
 		bind:open={createOpen}
 		shelterCode={getShelterCode()}
-		initialName={createName}
 		onCreated={pickCreatedItem}
 		onUseExisting={pickCreatedItem}
 	/>

@@ -4,7 +4,7 @@ import { flushSync, mount, tick, unmount } from 'svelte';
 import QuickCreateItemSheet from './quick-create-item-sheet.svelte';
 
 vi.mock('./quick-create-item.svelte', async () => ({
-	default: (await import('$lib/test-stubs/quick-create-item-stub.svelte')).default
+	default: (await import('./__fixtures__/quick-create-item.fixture.svelte')).default
 }));
 
 let instance: ReturnType<typeof mount> | null = null;
