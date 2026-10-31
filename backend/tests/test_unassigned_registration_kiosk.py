@@ -508,6 +508,30 @@ async def test_kiosk_prepare_with_claim_pets_mints_a_pet_id_for_a_legacy_pet(
     assert [p.pet_id for p in stored if p.status == "claimed"] == body["pet_ids"]
 
 
+async def test_minting_legacy_pet_ids_keeps_a_member_claimed_since_the_read(
+    client: AsyncClient,
+) -> None:
+    from apiapp.modules.unassigned_registrations.use_case import _mint_missing_pet_ids
+
+    stale = await _seed_family_with_pets(legacy_pet=True)
+    open_member = stale.members[0].reserved_evacuee_id
+    await UnassignedRegistration.get_pymongo_collection().update_one(
+        {"_id": stale.id, "members.reserved_evacuee_id": open_member},
+        {"$set": {"members.$.status": "claimed", "members.$.claimed_shelter_code": "SH002"}},
+    )
+
+    fresh = await _mint_missing_pet_ids(stale)
+
+    stored = await UnassignedRegistration.get(stale.id)
+    assert stored is not None
+    assert stored.members[0].status == "claimed"
+    assert stored.members[0].claimed_shelter_code == "SH002"
+    assert all(p.pet_id for p in stored.household.pets or [])
+    assert [p.pet_id for p in fresh.household.pets or []] == [
+        p.pet_id for p in stored.household.pets or []
+    ]
+
+
 async def test_kiosk_prepare_rejects_member_claimed_into_another_shelter_and_marks_nothing(
     client: AsyncClient, auth_headers: dict[str, str]
 ) -> None:

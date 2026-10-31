@@ -146,6 +146,31 @@ def _ensure_pet_ids(doc: UnassignedRegistration) -> bool:
     return changed
 
 
+async def _mint_missing_pet_ids(doc: UnassignedRegistration) -> UnassignedRegistration:
+    """Fill legacy pet rows (no pet_id / no status) in Mongo with targeted `$set`s, then re-read.
+
+    Never saves the whole doc, so a member or pet claimed since `doc` was read is not reopened.
+    Returns `doc` unchanged when no pet row is legacy.
+    """
+    pets = doc.household.pets or []
+    if all(pet.pet_id and pet.status for pet in pets):
+        return doc
+    collection = UnassignedRegistration.get_pymongo_collection()
+    for index, pet in enumerate(pets):
+        # Each `$set` matches nothing when another writer filled the field first.
+        if not pet.pet_id:
+            await collection.update_one(
+                {"_id": doc.id, f"household.pets.{index}.pet_id": None},
+                {"$set": {f"household.pets.{index}.pet_id": _new_pet_id()}},
+            )
+        if pet.status is None:
+            await collection.update_one(
+                {"_id": doc.id, f"household.pets.{index}.status": None},
+                {"$set": {f"household.pets.{index}.status": "open"}},
+            )
+    return await UnassignedRegistration.get(doc.id) or doc
+
+
 def _open_pets(doc: UnassignedRegistration) -> list[UnassignedPet]:
     return [p for p in (doc.household.pets or []) if p.is_open()]
 
@@ -981,11 +1006,10 @@ class UnassignedRegistrationsUseCase:
                 },
             )
 
-        if _ensure_pet_ids(doc):
-            try:
-                await doc.save()
-            except (PyMongoError, ConnectionError, TimeoutError, OSError) as exc:
-                raise _mongo_unavailable("claim") from exc
+        try:
+            doc = await _mint_missing_pet_ids(doc)
+        except (PyMongoError, ConnectionError, TimeoutError, OSError) as exc:
+            raise _mongo_unavailable("claim") from exc
 
         by_id = {m.reserved_evacuee_id: m for m in doc.members}
         by_pet_id = {p.pet_id: p for p in (doc.household.pets or []) if p.pet_id}
@@ -1268,6 +1292,11 @@ class UnassignedRegistrationsUseCase:
                     }
                 },
             )
+        if payload.claim_pets:
+            try:
+                doc = await _mint_missing_pet_ids(doc)
+            except (PyMongoError, ConnectionError, TimeoutError, OSError) as exc:
+                raise _mongo_unavailable("kiosk_prepare") from exc
 
         by_id = {m.reserved_evacuee_id: m for m in doc.members}
         if any(mid not in by_id for mid in member_ids):
@@ -1330,11 +1359,6 @@ class UnassignedRegistrationsUseCase:
         to_mark = [m for m in targets if m.status == "open"]
         now = datetime.now(UTC)
 
-        if payload.claim_pets and _ensure_pet_ids(doc):
-            try:
-                await doc.save()
-            except (PyMongoError, ConnectionError, TimeoutError, OSError) as exc:
-                raise _mongo_unavailable("kiosk_prepare") from exc
         pet_targets = _open_pets(doc) if payload.claim_pets else []
         pet_mark_ids = [p.pet_id for p in pet_targets if p.pet_id]
         pet_mark_id_set = set(pet_mark_ids)
