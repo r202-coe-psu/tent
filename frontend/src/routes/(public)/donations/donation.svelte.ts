@@ -26,12 +26,10 @@ export interface DonationItem {
 	remark?: string;
 	/** UI-only hint: units still short on the need card this line came from. Never sent. */
 	needQty?: number;
-	/**
-	 * The drop-off point the donor picked for this line (CR-206 FR-MP-8). Unset = the default
-	 * (FR-MP-9); set on submit to the point actually booked, so the ticket groups by it.
-	 */
-	dropOffPointId?: string | null;
 }
+
+/** One booked line as the booking answered it (staff-assigned drop-off FR-AP-8b). */
+export type BookedItem = { drop_off_point_id: string | null; review_status: string };
 
 /**
  * A fresh donation line. `amount` always starts at 0 (#822): the donor must type a
@@ -94,11 +92,6 @@ export class DonationStore {
 	selectedShelter = $state('');
 	selectedShelterName = $state('');
 	shelterLocked = $state(false); // true = มาจากการ์ด needs board → ล็อกศูนย์ปลายทาง (DN)
-	/**
-	 * The drop-off point last tapped on a map — the needs board or the step-3 map (CR-206
-	 * FR-MP-9): every line starts there. A point of another shelter is simply not offered.
-	 */
-	tappedPointId = $state<string | null>(null);
 	deliveryDate = $state('');
 
 	captchaToken = $state('');
@@ -108,6 +101,8 @@ export class DonationStore {
 	bookingRef = $state('');
 	/** Status FastAPI gave the booking (CR-174 FR-15) — `verifying` gets the QR on the ticket. */
 	bookingStatus = $state('');
+	/** Each line's point and review, in `items` order — what the ticket groups by. */
+	bookedItems = $state<BookedItem[]>([]);
 
 	/**
 	 * Move the wizard to `step` and bring its header into view. Steps are state on this
@@ -150,7 +145,6 @@ export class DonationStore {
 		this.selectedShelter = '';
 		this.selectedShelterName = '';
 		this.shelterLocked = false;
-		this.tappedPointId = null;
 		this.deliveryDate = '';
 		this.items = [newDonationItem()];
 		this.captchaToken = '';
@@ -159,6 +153,7 @@ export class DonationStore {
 		this.trackingToken = '';
 		this.bookingRef = '';
 		this.bookingStatus = '';
+		this.bookedItems = [];
 		this.photos.clear();
 	}
 }

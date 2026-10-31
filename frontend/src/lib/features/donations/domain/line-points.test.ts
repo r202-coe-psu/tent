@@ -1,16 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
-	ALL_LINES_PICKER,
 	ANY_POINT_KEY,
-	pickerForMapTap,
 	AT_SHELTER_KEY,
-	bookableDropOffPoints,
 	currentDropOffPointIds,
-	defaultDropOffPointId,
 	groupDropOffDestinations,
 	hasLinePoints,
 	lineDestinationResolver,
-	lineDropOffPointId,
 	withCampaignLinePoints,
 	withCurrentLinePoints
 } from './line-points';
@@ -33,68 +28,6 @@ const SHELTER: DropOffShelterSource = {
 	geo: { lat: 7.0086, lng: 100.4747 },
 	donation_points: [GYM, MED]
 };
-
-const POINTS = [
-	{ id: 'point-gym', name: 'โรงยิม' },
-	{ id: 'point-med', name: 'ห้องพยาบาล' }
-];
-
-describe('bookableDropOffPoints (FR-MP-8, FR-MP-11)', () => {
-	it('offers the shelter points to a donor who brings the goods', () => {
-		expect(bookableDropOffPoints(SHELTER, 'self_dropoff')).toEqual(POINTS);
-	});
-
-	it('offers none for a parcel or a shelter pickup (FR-MP-4)', () => {
-		expect(bookableDropOffPoints(SHELTER, 'parcel')).toEqual([]);
-		expect(bookableDropOffPoints(SHELTER, 'shelter_pickup')).toEqual([]);
-	});
-
-	it('offers none for a shelter with no point, or before its detail loads', () => {
-		expect(bookableDropOffPoints({ ...SHELTER, donation_points: [] }, 'self_dropoff')).toEqual([]);
-		expect(bookableDropOffPoints(undefined, 'self_dropoff')).toEqual([]);
-	});
-});
-
-describe('defaultDropOffPointId (FR-MP-9)', () => {
-	it('starts at the point the donor tapped on the map', () => {
-		expect(defaultDropOffPointId(POINTS, 'point-med')).toBe('point-med');
-	});
-
-	it('starts at the first point when nothing was tapped', () => {
-		expect(defaultDropOffPointId(POINTS, null)).toBe('point-gym');
-	});
-
-	it("ignores a tap on another shelter's point", () => {
-		expect(defaultDropOffPointId(POINTS, 'point-elsewhere')).toBe('point-gym');
-	});
-
-	it('has no default without points', () => {
-		expect(defaultDropOffPointId([], 'point-med')).toBeNull();
-	});
-});
-
-describe('lineDropOffPointId', () => {
-	it("keeps the donor's own pick", () => {
-		expect(lineDropOffPointId('point-med', POINTS, 'point-gym')).toBe('point-med');
-	});
-
-	it('falls back to the default without a pick', () => {
-		expect(lineDropOffPointId(undefined, POINTS, 'point-gym')).toBe('point-gym');
-	});
-
-	it('drops a pick the shelter does not offer — a pick made for another shelter (FR-MP-12)', () => {
-		expect(lineDropOffPointId('point-other-shelter', POINTS, 'point-gym')).toBe('point-gym');
-	});
-
-	it('fills in the only point without asking (FR-MP-10)', () => {
-		const one = [POINTS[0]];
-		expect(lineDropOffPointId(undefined, one, defaultDropOffPointId(one, null))).toBe('point-gym');
-	});
-
-	it('is null when there is no point to pick (FR-MP-11)', () => {
-		expect(lineDropOffPointId('point-med', [], null)).toBeNull();
-	});
-});
 
 describe('currentDropOffPointIds / hasLinePoints', () => {
 	it('lists only ticked points, not the main point', () => {
@@ -232,27 +165,6 @@ describe('withCurrentLinePoints', () => {
 			{ name: 'b', drop_off_point_id: null },
 			{ name: 'c', drop_off_point_id: null }
 		]);
-	});
-});
-
-describe('pickerForMapTap (owner 2026-10-30)', () => {
-	const keys = ['a', 'b', 'c'];
-
-	it('fills the first line before any dropdown is used', () => {
-		expect(pickerForMapTap(null, keys)).toBe('a');
-	});
-
-	it('fills the dropdown used last', () => {
-		expect(pickerForMapTap('c', keys)).toBe('c');
-		expect(pickerForMapTap(ALL_LINES_PICKER, keys)).toBe(ALL_LINES_PICKER);
-	});
-
-	it('falls back to the first line once the one used last is gone', () => {
-		expect(pickerForMapTap('gone', keys)).toBe('a');
-	});
-
-	it('has nothing to fill without lines', () => {
-		expect(pickerForMapTap(null, [])).toBeNull();
 	});
 });
 

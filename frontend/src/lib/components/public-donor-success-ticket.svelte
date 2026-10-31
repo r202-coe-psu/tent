@@ -42,14 +42,13 @@
 	const dropOffPoint = $derived(shelterQuery.data ? resolveDropOffPoint(shelterQuery.data) : null);
 	const directionsHref = $derived(dropOffPoint ? dropOffDirectionsUrl(dropOffPoint) : null);
 	// CR-206 FR-MP-13 — a booking split across drop-off points shows one card per point, each
-	// with its own directions; `null` keeps the one shelter destination as before.
+	// with its own directions; `null` keeps the one shelter destination as before. The points
+	// are the ones the booking answered with (staff-assigned drop-off FR-AP-8b).
 	const pointGroups = $derived(
 		shelterQuery.data
-			? groupDropOffDestinations(
-					donationStore.items.map((item) => ({ drop_off_point_id: item.dropOffPointId ?? null })),
-					shelterQuery.data,
-					{ anyPointName: t.anyPointGroupTitle }
-				)
+			? groupDropOffDestinations(donationStore.bookedItems, shelterQuery.data, {
+					anyPointName: t.anyPointGroupTitle
+				})
 			: null
 	);
 	const lineNames = $derived(

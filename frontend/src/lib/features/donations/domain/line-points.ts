@@ -1,7 +1,7 @@
 /**
- * Which drop-off point each line of a booking goes to, on the donor's side (CR-206). The
- * form picks one point per line (FR-MP-8 – FR-MP-12); the ticket, the tracking page and the
- * box label group the lines by it (FR-MP-13, FR-MP-14, FR-MP-16).
+ * Which drop-off point each line of a booking goes to (CR-206). Staff set it: from the
+ * campaign at booking, at review otherwise (staff-assigned drop-off FR-AP-8). The ticket, the
+ * tracking page and the box label group the lines by it (FR-MP-13, FR-MP-14, FR-MP-16).
  */
 import {
 	listDropOffPoints,
@@ -10,66 +10,6 @@ import {
 	type DropOffShelterSource
 } from './drop-off';
 import { currentLinePoint } from './point-receipts';
-
-/** A point a donor can book a line to: an entry of `public_shelters.donation_points`. */
-export type BookablePoint = { id: string; name: string };
-
-/**
- * The points a line may be booked to (FR-MP-8, FR-MP-11). Only a donor who brings the
- * goods picks a point: a parcel or a shelter pickup reaches the shelter whole (FR-MP-4).
- * `[]` also for a shelter with no ticked point — its lines carry no point.
- */
-export function bookableDropOffPoints(
-	shelter: Pick<DropOffShelterSource, 'donation_points'> | null | undefined,
-	deliveryMethod: string | null | undefined
-): BookablePoint[] {
-	if (deliveryMethod !== 'self_dropoff') return [];
-	return (shelter?.donation_points ?? []).map((point) => ({ id: point.id, name: point.name }));
-}
-
-/**
- * The point every line starts at (FR-MP-9): the one the donor tapped on the map, else the
- * first in the list. A tap on another shelter's map does not count here.
- */
-export function defaultDropOffPointId(
-	points: readonly BookablePoint[],
-	tappedPointId: string | null | undefined
-): string | null {
-	if (tappedPointId && points.some((point) => point.id === tappedPointId)) return tappedPointId;
-	return points[0]?.id ?? null;
-}
-
-/**
- * The point a line is booked to: the donor's own pick while the shelter still offers it,
- * else the default. `null` when there is no point to pick (FR-MP-11) — with one point that
- * point is filled in without asking (FR-MP-10). A pick made for another shelter is not in
- * `points`, so changing the shelter drops every pick (FR-MP-12).
- */
-export function lineDropOffPointId(
-	chosen: string | null | undefined,
-	points: readonly BookablePoint[],
-	defaultPointId: string | null
-): string | null {
-	if (points.length === 0) return null;
-	if (chosen && points.some((point) => point.id === chosen)) return chosen;
-	return defaultPointId;
-}
-
-/** Picker key of "ส่งทุกรายการที่จุดเดียวกัน"; a line's picker is keyed by the line's own key. */
-export const ALL_LINES_PICKER = '*all';
-
-/**
- * The picker a tap on the map fills (owner 2026-10-30): the one the donor used last, while it
- * is still on the form; before any is used, the first line's.
- */
-export function pickerForMapTap(
-	activePicker: string | null,
-	lineKeys: readonly string[]
-): string | null {
-	if (activePicker === ALL_LINES_PICKER) return activePicker;
-	if (activePicker !== null && lineKeys.includes(activePicker)) return activePicker;
-	return lineKeys[0] ?? null;
-}
 
 type CampaignPointSource = {
 	needs: readonly { item_id: string; drop_off_point_id?: string | null }[];

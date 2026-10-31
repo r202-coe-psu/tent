@@ -101,4 +101,13 @@ describe('donation item defaults (#822)', () => {
 		expect(store.items).toHaveLength(1);
 		expect(store.items[0].amount).toBe(0);
 	});
+	// Staff-assigned drop-off FR-AP-8b — the booked lines go with the booking they came from.
+	it('reset() forgets the booked lines with the tracking token', () => {
+		const store = new DonationStore();
+		store.trackingToken = 'TX-SH001-ABC';
+		store.bookedItems = [{ drop_off_point_id: 'point-gym', review_status: 'approved' }];
+		store.reset();
+		expect(store.trackingToken).toBe('');
+		expect(store.bookedItems).toEqual([]);
+	});
 });
