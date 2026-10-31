@@ -327,7 +327,7 @@ describe('coordinator role grants on _users (#955)', () => {
 	});
 
 	it('never grants a role outside the coordinator list', async () => {
-		await expect(grantCoordinatorRole(input(grant('medical_staff')))).rejects.toMatchObject({
+		await expect(grantCoordinatorRole(input(grant('kiosk_staff')))).rejects.toMatchObject({
 			code: 'FORBIDDEN'
 		});
 		expect(db[key(EMAIL)]).toBeUndefined();
@@ -473,7 +473,7 @@ describe('coordinator role grants on _users (#955)', () => {
 		});
 
 		it('refuses a role outside the coordinator list', async () => {
-			await expect(revoke({ role: 'medical_staff' })).rejects.toMatchObject({ code: 'FORBIDDEN' });
+			await expect(revoke({ role: 'kiosk_staff' })).rejects.toMatchObject({ code: 'FORBIDDEN' });
 		});
 	});
 	describe('reading a volunteer account grants for the dialog (FR-8)', () => {
