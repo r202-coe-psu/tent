@@ -37,7 +37,7 @@ export const POST: RequestHandler = async ({ request, fetch }) => {
 				: '';
 
 		if (!question_id || !raw_answer) {
-			throw new ServiceError('VALIDATION', 'Security question and answer are required');
+			throw new ServiceError('VALIDATION', 'กรุณาเลือกคำถามและกรอกคำตอบความปลอดภัย');
 		}
 
 		await setupSecurityQuestionAndResetPassword({
