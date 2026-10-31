@@ -397,20 +397,21 @@
 				<div class="space-y-1.5">
 					<label
 						for={`volunteer-access-expiry-${volunteer._id}`}
-						class="text-xs font-bold text-foreground"
+						class="block text-xs font-bold text-foreground"
 					>
 						วันหมดอายุของสิทธิ์ <span class="text-destructive">*</span>
 					</label>
-					<DatePicker
-						id={`volunteer-access-expiry-${volunteer._id}`}
-						bind:value={expiresOn}
-						min={expiryRange.min}
-						max={expiryRange.max}
-						disabled={pending}
-						placeholder="เลือกวันหมดอายุ"
-						format={formatThaiShortDate}
-						class="sm:max-w-xs"
-					/>
+					<div class="sm:max-w-xs">
+						<DatePicker
+							id={`volunteer-access-expiry-${volunteer._id}`}
+							bind:value={expiresOn}
+							min={expiryRange.min}
+							max={expiryRange.max}
+							disabled={pending}
+							placeholder="เลือกวันหมดอายุ"
+							format={formatThaiShortDate}
+						/>
+					</div>
 					<p class="text-[11px] text-muted-foreground">
 						เลือกได้ตั้งแต่วันนี้ถึง {MAX_GRANT_DAYS} วันข้างหน้า สิทธิ์หมดอายุตอนสิ้นวันที่เลือก ต่ออายุได้ด้วยการออกสิทธิ์ซ้ำ
 					</p>
