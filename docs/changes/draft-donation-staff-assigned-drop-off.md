@@ -15,13 +15,14 @@ affects:
   - docs/data/schema.md §2.4 `donation_campaign` — field ใหม่ `needs[].drop_off_point_id`
   - docs/data/schema.md §2.3 `donation` — ผู้เขียน `items[].drop_off_point_id` เปลี่ยนจากผู้บริจาคเป็นระบบ (จากแคมเปญ) และเจ้าหน้าที่ (ตอนประเมิน)
   - docs/data/api-contract.md §5 — `POST /public/v1/donations` (request ไม่รับจุดจาก client ผ่าน BFF · response เพิ่ม `items[]` · เลิก `400 UNKNOWN_DROP_OFF_POINT`) · `PATCH …/{tracking_token}/items` (ไม่รับจุดจาก client · คงจุดของรายการเดิม) · ข้อความ `drop_off_point_id` ที่ ~:860 · body ของ `POST /api/back-office/donations/[query]/approve`
-  - docs/changes/04-donation/CR-206-donation-multi-drop-off.md — superseded FR-MP-2 (ส่วนตรวจตอนจอง), FR-MP-2a, FR-MP-2b (ส่วน "FR-MP-2 ยังตรวจกับ Mongo"), FR-MP-3, FR-MP-8 – FR-MP-12, FR-MP-15 (ตัวเลือกจุดใน dialog) · แก้ FR-MP-13 / FR-MP-16 (กลุ่ม "รอเจ้าหน้าที่กำหนดจุดส่ง") · superseded AC-1 – AC-4, AC-13 (ข้อความ "ผู้บริจาคแก้รายการ … id ถูกเขียนเป็น null"), A1 acceptance ข้อ 2
+  - docs/changes/04-donation/CR-206-donation-multi-drop-off.md — superseded FR-MP-2 (ส่วนตรวจตอนจอง), FR-MP-2a, FR-MP-2b (ทั้งประโยค "FR-MP-2 ยังตรวจกับ Mongo" และประโยค "BFF ตรวจกับ shelter doc … เขียน `null`"), FR-MP-3, FR-MP-8 – FR-MP-12, FR-MP-15 (ตัวเลือกจุดใน dialog และ pointer ของ A1) · แก้ FR-MP-13 / FR-MP-16 (กลุ่ม "รอเจ้าหน้าที่กำหนดจุดส่ง") · superseded AC-1 – AC-3, AC-13 (ข้อความ "ผู้บริจาคแก้รายการ … id ถูกเขียนเป็น null"), A1 acceptance ข้อ 2 · แก้ AC-4 (กติกา `null` ยังอยู่ แต่ client ไม่ส่ง id แล้ว)
   - docs/changes/00-baseline/CR-205-storage-drop-off-points.md FR-DP-18 / AC-12 — หมุดจุดยังแสดง แตะแล้วไม่เลือกจุด (FR-AP-11)
   - docs/features/public-tier-donation-spec.html — ฟอร์มจองขั้น 3 ไม่มีตัวเลือกจุด
   - frontend/src/lib/features/operations/domain/operations.ts (`CampaignNeed`, `campaignInputSchema`, `createCampaign`, `editNeed`)
   - frontend/src/lib/features/operations/application/use-donation-needs-board.svelte.ts
   - frontend/src/routes/(protected)/back-office/stock-donations/components/create-campaign-form.svelte · edit-campaign-form.svelte · frontend/src/lib/components/needs-board-admin.svelte
-  - frontend/src/lib/features/donations/domain/line-points.ts · donation.ts · public-donation.ts · item-review.ts
+  - frontend/src/lib/features/donations/domain/line-points.ts · donation.ts · public-donation.ts · item-review.ts · back-office.ts (`PendingDonationRow`) · frontend/src/lib/features/donations/index.ts (export ที่ลบ)
+  - frontend/src/routes/api/back-office/donations/+server.ts (`toPendingRow`)
   - frontend/src/lib/components/form/donor-time-selection-form.svelte · frontend/src/lib/features/donations/ui/drop-off-points-section.svelte · edit-donation-items-dialog.svelte · frontend/src/routes/(public)/donations/donation.svelte.ts · frontend/src/lib/components/public-donor-needs.svelte
   - frontend/src/lib/components/public-donor-success-ticket.svelte · frontend/src/routes/(public)/donations/track/[token]/+page.svelte
   - frontend/src/routes/api/public/v1/donations/+server.ts · [tracking_token]/items/+server.ts
@@ -52,7 +53,8 @@ affects:
 
 - **รายการแคมเปญ** = รายการของใบที่มี `item_id` ตรงกับ need ในแคมเปญที่ผูกกับใบ (`donation.campaign_id`) · ถ้าแคมเปญมีหลาย need ที่ `item_id` เดียวกัน ใช้ need แรกในลำดับ `needs[]`
 - **รายการบริจาคเอง** = รายการอื่นทั้งหมด (ไม่มี `item_id`, `item_id` ไม่อยู่ในแคมเปญของใบ หรือใบไม่มี `campaign_id`)
-- **จุดปัจจุบันของศูนย์** = จุดรับบริจาคตามกติกา CR-206 FR-MP-2a: `common_areas.sub_storage[]` ของ shelter doc ใน CouchDB ที่ `accepts_donations = true` และมีพิกัด · ฝั่ง server อ่านจาก registry · ฝั่ง client อ่านจาก shelter doc ของศูนย์ที่เปิดอยู่
+- **จุดปัจจุบันของศูนย์** = จุดรับบริจาคตามกติกา CR-206 FR-MP-2a: `common_areas.sub_storage[]` ของ shelter doc ใน CouchDB ที่ `accepts_donations = true` และมีพิกัด · route ฝั่ง server อ่านจาก registry · หน้า back-office อ่านจาก shelter doc ของศูนย์ที่เปิดอยู่
+- **จุดของศูนย์บนหน้า public** (ฟอร์มจอง ตั๋ว หน้าติดตาม) = `public_shelters.donation_points` (projection · อาจตามหลัง CouchDB 1 รอบ worker) · ใช้ตัดสิน "ศูนย์มีจุด" และการจัดกลุ่มบนหน้า public · จุดที่สร้างใหม่และ projection ยังไม่ตามทัน แสดงในกลุ่ม "ส่งที่จุดรับบริจาคไหนของศูนย์ก็ได้" ชั่วคราว (CR-206 FR-MP-16)
 - **ศูนย์มีจุด** = จุดปัจจุบันของศูนย์ ≥ 1
 - ใบเดียวมีทั้งรายการแคมเปญและรายการบริจาคเองได้ · กติกาทั้งหมดใช้ต่อรายการ ไม่ใช่ต่อใบ
 - ทุกที่ที่เขียน `drop_off_point_id` ให้เขียนค่า `null` ตรงๆ เมื่อไม่มีจุด (ไม่ละ key) · ตอนอ่าน ไม่มี key = `null`
@@ -64,7 +66,7 @@ affects:
 - **FR-AP-2a** — ศูนย์มีจุดเดียว → เลือกจุดนั้นให้อัตโนมัติ (เปลี่ยนไม่ได้เพราะไม่มีตัวเลือกอื่น) · แทนเจตนาของ CR-206 FR-MP-10
 - **FR-AP-3** — ศูนย์มีจุด → ปุ่มบันทึกกดไม่ได้จนกว่าจะเลือกจุด (D-2)
 - **FR-AP-4** — ฟอร์มแก้แคมเปญ (`edit-campaign-form.svelte`) แก้จุดของ need ได้ · `editNeed` เขียน `drop_off_point_id` ได้เพิ่มจาก `qty_target` / `unit`
-- **FR-AP-4a** — ตอนแก้ ศูนย์มีจุด และ need เป็น `null` หรือจุดไม่อยู่ในจุดปัจจุบัน → dropdown ว่าง และปุ่มบันทึกกดไม่ได้จนกว่าจะเลือกจุด (D-2)
+- **FR-AP-4a** — ตอนแก้ ศูนย์มีจุด ≥ 2 และ need เป็น `null` หรือจุดไม่อยู่ในจุดปัจจุบัน → dropdown ว่าง และปุ่มบันทึกกดไม่ได้จนกว่าจะเลือกจุด (D-2) · ศูนย์มีจุดเดียว → เลือกจุดนั้นให้ตาม FR-AP-2a
 - **FR-AP-4b** — บันทึกการแก้แคมเปญเขียน `schema_v: 4` ให้ doc เสมอ (แคมเปญ v3 ที่ถูกแก้กลายเป็น v4)
 - **FR-AP-5** — แก้จุดของ need มีผลกับรายการที่จองหลังแก้เท่านั้น · รายการที่จองไปแล้วคง `drop_off_point_id` เดิม รวมถึงตอนผู้บริจาคแก้ใบนั้น (FR-AP-15) (D-4)
 - **FR-AP-6** — บอร์ดแคมเปญฝั่งเจ้าหน้าที่ (`needs-board-admin.svelte`) แสดงชื่อจุดของแต่ละ need · ศูนย์มีจุด และ need เป็น `null` → ป้าย "ยังไม่ระบุจุด" · `drop_off_point_id` ไม่อยู่ในจุดปัจจุบัน → ป้าย "จุดถูกลบ"
@@ -78,9 +80,9 @@ affects:
   - รายการบริจาคเอง → `null`
   - BFF **ไม่อ่าน registry และไม่ตรวจ** ว่าจุดของ need ยังอยู่ในจุดปัจจุบันหรือไม่ (คง CR-017 §Decision A) · id ที่ไม่อยู่แล้วแสดงและรับตาม CR-206 FR-MP-16 / FR-MP-19 (D-5, D-10)
 - **FR-AP-8a** — `DonationCreateResponse` (FastAPI) เพิ่ม `items: [{ drop_off_point_id: str | null, review_status: enum }]` เรียงตามลำดับรายการใน request · BFF ส่ง `items` ต่อใน response ของ `POST /api/public/v1/donations`
-- **FR-AP-8b** — ตั๋วหลังจอง (`public-donor-success-ticket.svelte`) จัดกลุ่มจุดจาก `items` ของ response (FR-AP-8a) ไม่ใช่จาก store ของฟอร์ม
+- **FR-AP-8b** — ฟอร์มจองเก็บ `items` ของ response ไว้ใน field ใหม่ `donationStore.bookedItems: { drop_off_point_id: string | null; review_status: string }[]` (เขียนพร้อม `trackingToken` / `bookingRef` / `bookingStatus` ใน `donor-time-selection-form.svelte` · ล้างพร้อม field เหล่านั้นตอนเริ่มใหม่) · ตั๋วหลังจอง (`public-donor-success-ticket.svelte`) จัดกลุ่มจาก `bookedItems` ไม่ใช่จาก `donationStore.items`
 - **FR-AP-9** — กติกา FR-AP-8 อยู่ใน pure function เดียวใน `features/donations/domain/line-points.ts` · BFF จองและ BFF แก้รายการใช้ร่วมกัน
-- **FR-AP-10** — FastAPI `create` เรียก `_drop_off_points` แบบเดียวกับ `update_items` (`strict=False`, `offered=None`): ไม่เทียบกับ `public_shelters.donation_points` · ไม่ตอบ `400 UNKNOWN_DROP_OFF_POINT` · ยังบังคับ `null` เมื่อวิธีส่งเป็น `parcel` / `shelter_pickup` · `DonationItemInput.drop_off_point_id` ยังรับค่าจาก BFF (D-9)
+- **FR-AP-10** — FastAPI `create` เรียก `_drop_off_points` แบบเดียวกับ `update_items`: ไม่เทียบกับ `public_shelters.donation_points` · ไม่ตอบ `400 UNKNOWN_DROP_OFF_POINT` · ยังบังคับ `null` เมื่อวิธีส่งเป็น `parcel` / `shelter_pickup` · `DonationItemInput.drop_off_point_id` ยังรับค่าจาก BFF (D-9) · ลบ branch `strict` และ `_offered_point_ids` ที่ไม่มีคนเรียกแล้ว และแก้ docstring ของ field
 - **FR-AP-11** — ฟอร์มจองขั้น 3 ไม่มี section "จุดส่งของแต่ละรายการ" · หมุดจุดรับบริจาคบนแผนที่ขั้น 1 และขั้น 3 (CR-205 FR-DP-18) ยังแสดง แต่แตะแล้วไม่เลือกจุดให้รายการ · แทน CR-206 FR-MP-8 – FR-MP-12 (D-7)
 - **FR-AP-12** — ขั้น 3 แสดงข้อความ "จุดส่งของแต่ละรายการจะแจ้งในหน้าติดตาม" เมื่อศูนย์ที่เลือกมีจุด และวิธีส่งเป็น `self_dropoff` · ผู้บริจาคไม่เห็นจุดก่อนจอง (D-7)
 - **FR-AP-13** — store ฟอร์มจอง (`donation.svelte.ts`) ไม่เก็บ `dropOffPointId` และ `tappedPointId`
@@ -88,39 +90,49 @@ affects:
 **ผู้บริจาคแก้รายการ**
 
 - **FR-AP-14** — dialog แก้รายการ (`edit-donation-items-dialog.svelte`) ไม่มีตัวเลือกจุด · แทนส่วน "ตัวเลือกจุดต่อรายการ" ของ CR-206 FR-MP-15
-- **FR-AP-15** — FastAPI `update_items` คงจุดของรายการเดิม: รายการที่จับคู่กับรายการเดิมด้วย `line_key` (CR-196 FR-LK-5, `_pair_held_lines`) ได้ `drop_off_point_id` ของรายการเดิม ไม่ว่า request ส่งอะไรมา
-- **FR-AP-15a** — รายการใหม่ (ไม่มี `line_key`): BFF `PATCH …/{tracking_token}/items` เขียน `drop_off_point_id` ตาม FR-AP-8 ด้วย `campaign_id` และ `delivery_method` ของใบใน CouchDB · อ่านแคมเปญด้วย id ไม่ว่าสถานะ `open` หรือ `closed` · ใบยังไม่ถึง CouchDB (ช่วง 1 รอบ inbound) → `null`
-- **FR-AP-15b** — BFF เขียน `drop_off_point_id` ทับทุกรายการใน payload ก่อนส่ง FastAPI (รายการเดิมด้วย ค่าใดก็ได้ เพราะ FastAPI ใช้ค่าเดิมตาม FR-AP-15) · ลบ `withOfferedPoints` และการอ่าน registry ใน route นี้
-- **FR-AP-16** — กติกาว่าใบไหนแก้รายการได้คงเดิม (CR-196 FR-LK-4, CR-206 FR-MP-17) · ใบที่แก้ได้มีแต่รายการ `pending` · รายการใหม่ที่ได้ `approved` อัตโนมัติหลังแก้เกิดได้เฉพาะรายการแคมเปญที่ counter พร้อมแล้ว (ก่อนหน้าเป็น `pending` เพราะ `NOT_SEEDED`)
+- **FR-AP-15** — FastAPI `update_items` คงจุดของรายการเดิม: รายการที่จับคู่กับรายการเดิมด้วย `line_key` (CR-196 FR-LK-5, `_pair_held_lines`) **และ** `item_id` ไม่เปลี่ยน (ทั้งคู่ไม่มี `item_id` นับว่าไม่เปลี่ยน) → ได้ `drop_off_point_id` ของรายการเดิม รวมค่า `null` ไม่ว่า request ส่งอะไรมา · `item_id` เปลี่ยน (ผู้บริจาคเลือกสินค้าให้แถวที่พิมพ์เอง) → ใช้ค่าใน request ตาม FR-AP-15a
+- **FR-AP-15a** — BFF `PATCH …/{tracking_token}/items` คำนวณ `drop_off_point_id` ของทุกรายการตาม FR-AP-8 ด้วย `campaign_id` และ `delivery_method` ของใบใน CouchDB · อ่านแคมเปญด้วย id แยกจากการอ่าน headroom (ที่กรองเฉพาะ `open`) ไม่ว่าสถานะ `open` หรือ `closed` · อ่านแคมเปญไม่ได้ → `503 DONATION_UNAVAILABLE` (เหมือนการอ่านแบบ strict เดิมของ route) · doc แคมเปญไม่มีแล้ว หรือใบยังไม่ถึง CouchDB (ช่วง 1 รอบ inbound) → `null`
+- **FR-AP-15b** — BFF เขียน `drop_off_point_id` ตาม FR-AP-15a ทับทุกรายการใน payload ก่อนส่ง FastAPI · FastAPI เลือกใช้ค่าเดิมหรือค่านี้ตาม FR-AP-15 · ลบ `withOfferedPoints` และการอ่าน registry ใน route นี้
+- **FR-AP-15c** — ใบที่รายการเดิมไม่มี `line_key` (สร้างก่อน donation schema_v 8 · CR-196 FR-LK-7) ทุกรายการนับเป็นรายการใหม่ จึงคำนวณจุดใหม่ตาม FR-AP-15a · ยอมรับได้เพราะใบรุ่นนั้นหมดอายุไปแล้วตาม TTL ของการจอง
+- **FR-AP-16** — กติกาว่าใบไหนแก้รายการได้คงเดิม (CR-196 FR-LK-4, CR-206 FR-MP-17) · ใบที่แก้ได้มีแต่รายการ `pending` · หลังแก้ รายการที่ได้ `approved` อัตโนมัติคือรายการแคมเปญที่ counter พร้อมแล้ว: รายการใหม่ หรือรายการเดิมที่ `item_id` เปลี่ยน → จุดตาม FR-AP-15a · รายการเดิมที่เป็นรายการแคมเปญอยู่แล้ว (ก่อนหน้า `pending` เพราะ `NOT_SEEDED`) → จุดเดิมตาม FR-AP-15
 
 **ประเมิน (back-office)**
 
-- **FR-AP-17** — body ของ `POST /api/back-office/donations/[query]/approve` · `lines[]` เพิ่ม `drop_off_point_id: str | null` (optional) · route เช็คตามลำดับนี้ หลังเช็คเดิมทั้งหมด (`INVALID_TRANSITION`, `INVALID_REVIEW`, `GOODS_IN_STOCK`, `LINE_ALREADY_RECEIVED`):
-  1. ส่ง `drop_off_point_id` (รวมค่า `null`) คู่กับ `decision: rejected` → `422 INVALID_REVIEW`
+- **FR-AP-17** — body ของ `POST /api/back-office/donations/[query]/approve` · `lines[]` เพิ่ม `drop_off_point_id: str | null` (optional)
+  1. **schema validation** (`lineReviewDecisionSchema` · ตอน parse body เหมือน `INVALID_REVIEW` เดิม ก่อนเช็คอื่นทั้งหมด): ส่ง `drop_off_point_id` (รวมค่า `null`) คู่กับ `decision: rejected` → `422 INVALID_REVIEW`
+  - ข้อ 2–5 เช็คหลังเช็คเดิมทั้งหมด (`INVALID_TRANSITION`, `INVALID_REVIEW`, `GOODS_IN_STOCK`, `LINE_ALREADY_RECEIVED`) ตามลำดับ:
   2. วิธีส่งไม่ใช่ `self_dropoff` → route เขียน `null` ให้ทุกรายการที่อนุมัติ ไม่สนค่าใน body และไม่เช็คข้อ 3–5
   3. รายการที่อยู่ใน `point_receipts[].line_nos` แล้ว (รับที่หน้าสแกนก่อนประเมิน) → ไม่บังคับจุดและไม่เขียนทับ · ส่ง `drop_off_point_id` มา → `422 INVALID_REVIEW` (D-13)
   4. ค่าที่ไม่ใช่ `null` ต้องอยู่ในจุดปัจจุบันของศูนย์ของใบ · ไม่อยู่ → `422 UNKNOWN_DROP_OFF_POINT`
   5. ศูนย์มีจุด · รายการที่อนุมัติไม่มีจุด → `422 POINT_REQUIRED` · "ไม่มีจุด" = ส่ง `null` หรือไม่ส่ง field และรายการเป็น `null` หรือจุดที่ไม่อยู่ในจุดปัจจุบัน · ไม่ส่ง field และรายการมีจุดปัจจุบันอยู่แล้ว (รายการแคมเปญ) = ใช้จุดเดิม (D-3)
   - error ใช้ key `error_code` เหมือน error อื่นของ route · `422 POINT_REQUIRED` / `UNKNOWN_DROP_OFF_POINT` เป็นชื่อเดียวกับ route รับของ (CR-206 FR-MP-22a) แต่เงื่อนไขต่างกัน
-  - อ่านจุดปัจจุบันไม่ได้ → `503 DONATION_UNAVAILABLE` · ไม่เขียนอะไร
+  - route อ่านจุดปัจจุบันเฉพาะเมื่อวิธีส่งเป็น `self_dropoff` และมีรายการที่ต้องเช็คตามข้อ 4–5 หรือ FR-AP-17a ข้อแรก · การปฏิเสธรายการและใบที่ไม่ใช่ `self_dropoff` ไม่อ่าน registry
+  - อ่านจุดปัจจุบันไม่ได้ (`findMasterByCode` throw `ServiceError`) → route map เป็น `503 DONATION_UNAVAILABLE` · ไม่เขียนอะไร
 - **FR-AP-17a** — body ไม่มี `lines` (D-12):
-  - ใบที่ประเมินทีละรายการ (มี `review_status`) · ศูนย์มีจุด · วิธีส่ง `self_dropoff` · มีรายการ `pending` ที่ไม่มีจุดปัจจุบัน → `422 POINT_REQUIRED`
+  - ใบที่ประเมินทีละรายการ (มี `review_status`) · ศูนย์มีจุด · วิธีส่ง `self_dropoff` · มีรายการ `pending` ที่ไม่มีจุดปัจจุบัน (ไม่นับรายการตาม FR-AP-17 ข้อ 3) → `422 POINT_REQUIRED` · กฎ `503` ของ FR-AP-17 ใช้ด้วย
   - ใบที่ประเมินทีละรายการ กรณีอื่น → อนุมัติรายการ `pending` ทั้งหมดเหมือนเดิม · จุดของรายการคงเดิม
   - ใบก่อน schema_v 7 (ไม่มี `review_status`) → อนุมัติทั้งใบเหมือนเดิม · ไม่บังคับและไม่เขียนจุด · รายการเป็น `null` จึงรับที่จุดไหนก็ได้ (CR-206 FR-MP-19)
 - **FR-AP-18** — route approve เขียน `items[i].drop_off_point_id` ของรายการที่อนุมัติใน PUT เดียวกับ `review_status` · รายการที่ปฏิเสธ รายการที่ไม่อยู่ใน `lines` และรายการตาม FR-AP-17 ข้อ 3 ไม่แก้จุด
-- **FR-AP-19** — audit ของการประเมินเพิ่ม `context.lines[].drop_off_point_id` (ค่าที่เขียนลงรายการ · `null` สำหรับรายการที่ปฏิเสธ)
+- **FR-AP-19** — audit ของการประเมินเพิ่ม `context.lines[].drop_off_point_id` = ค่าที่เขียนลงรายการ · รายการที่ปฏิเสธ และรายการตาม FR-AP-17 ข้อ 3 (ไม่เขียนจุด) = `null` · ทางไม่มี `lines` คง audit เดิม (`lines: []`)
 - **FR-AP-20** — หน้าประเมิน (`pending-review-detail.svelte`) มี dropdown จุดต่อรายการ `pending` ที่กดอนุมัติ · แสดงเมื่อศูนย์มีจุด และวิธีส่งเป็น `self_dropoff`
   - ตัวเลือก = จุดปัจจุบันของศูนย์ · ศูนย์มีจุดเดียว → เลือกให้อัตโนมัติ (D-11)
   - ค่าเริ่มต้น: รายการที่มีจุดปัจจุบันอยู่แล้ว (รายการแคมเปญ) = จุดนั้น · รายการอื่น หรือจุดเดิมไม่อยู่แล้ว = ว่าง
   - ปุ่มยืนยันกดไม่ได้จนทุกรายการที่อนุมัติมีจุด
   - รายการที่บันทึกผลที่หน้าสแกนแล้ว แสดงจุดที่รับแบบ read-only (FR-AP-17 ข้อ 3)
   - รายการ `approved` อยู่แล้ว (อนุมัติอัตโนมัติ) แสดงชื่อจุดแบบ read-only (CR-206 FR-MP-25 ไม่เปลี่ยน)
+- **FR-AP-20a** — แถวในคิวประเมิน (`PendingDonationRow` ใน `donations/domain/back-office.ts`) เพิ่ม `point_receipts: { point_id: string | null; line_nos: number[] }[]` · `toPendingRow` (`routes/api/back-office/donations/+server.ts`) copy จากใบ (ไม่มี key = `[]`) · หน้าประเมินใช้ field นี้ตัดสินรายการตาม FR-AP-17 ข้อ 3 และชื่อจุดที่รับ
 - **FR-AP-21** — เปลี่ยนจุดของรายการที่ `approved` แล้ว (รวมใบแคมเปญล้วนที่ขึ้น `verifying` ทันที) อยู่นอกขอบเขต · ผู้บริจาคนำของมาผิดจุดใช้ปุ่ม "รับรายการของจุดอื่น" (CR-206 FR-MP-21) (D-6)
 
 **หลังจอง (ฝั่งผู้บริจาค)**
 
-- **FR-AP-22** — ตั๋วและหน้าติดตาม: รายการ `pending` ของใบ `self_dropoff` ในศูนย์ที่มีจุด อยู่ในกลุ่ม "รอเจ้าหน้าที่กำหนดจุดส่ง" ไม่ว่ารายการจะมีจุดใส่ไว้ล่วงหน้าหรือไม่ (เจ้าหน้าที่เปลี่ยนได้ตอนประเมิน) · กลุ่มนี้แสดงข้อความ "ถ้านำของมาก่อนเจ้าหน้าที่ประเมิน ส่งที่จุดรับบริจาคไหนของศูนย์ก็ได้" และที่อยู่ศูนย์ (สอดคล้องกับ CR-206 FR-MP-19)
-- **FR-AP-22a** — `groupDropOffDestinations` (`line-points.ts`) คืนกลุ่ม (ไม่ใช่ `null`) เมื่อมีรายการที่มีจุด **หรือ** มีรายการตาม FR-AP-22 · รายการอื่นที่เป็น `null` อยู่ในกลุ่ม "ส่งที่จุดรับบริจาคไหนของศูนย์ก็ได้" ตาม CR-206 FR-MP-16
+- **FR-AP-22** — ตั๋วและหน้าติดตามของใบ `self_dropoff` ในศูนย์ที่มีจุด: รายการ `pending` ที่ยังไม่บันทึกผล และไม่มีจุด (`null` หรือจุดไม่อยู่ในจุดของศูนย์บนหน้า public) อยู่ในกลุ่ม "รอเจ้าหน้าที่กำหนดจุดส่ง" · กลุ่มนี้แสดงข้อความ "ถ้านำของมาก่อนเจ้าหน้าที่ประเมิน ส่งที่จุดรับบริจาคไหนของศูนย์ก็ได้" และที่อยู่ศูนย์ (ตรงกับ CR-206 FR-MP-19: รายการไม่ระบุจุด จุดไหนก็รับได้)
+- **FR-AP-22b** — รายการ `pending` ที่มีจุดอยู่แล้ว (รายการแคมเปญ `NOT_SEEDED`) อยู่ในกลุ่มของจุดนั้นตาม CR-206 FR-MP-13 · ถ้าเจ้าหน้าที่เปลี่ยนจุดตอนประเมิน หน้าติดตามแสดงจุดใหม่
+- **FR-AP-22a** — `groupDropOffDestinations` (`line-points.ts`):
+  - เพิ่ม `opts.deliveryMethod` · กลุ่ม "รอ" ใช้เฉพาะ `self_dropoff` (หน้าติดตามเรียก function นี้กับ `parcel` ด้วย ผ่าน `needsDropOffDestination`)
+  - key ใหม่ `AWAITING_STAFF_KEY` (แยกจาก `ANY_POINT_KEY` / `AT_SHELTER_KEY`) · เรียงกลุ่มนี้ไว้หลังกลุ่มอื่นทั้งหมด
+  - คืนกลุ่ม (ไม่ใช่ `null`) เมื่อมีรายการที่มีจุด **หรือ** มีรายการตาม FR-AP-22
+  - รายการที่บันทึกผลแล้วใน `point_receipts` จัดกลุ่มตามกติกาเดิม (จุดของรายการ หรือ `AT_SHELTER_KEY`) ไม่เข้ากลุ่ม "รอ" แม้ยัง `pending`
+  - รายการ `null` อื่นอยู่ในกลุ่ม "ส่งที่จุดรับบริจาคไหนของศูนย์ก็ได้" ตาม CR-206 FR-MP-16
 - **FR-AP-23** — หลังประเมิน ตั๋ว หน้าติดตาม และใบปะหน้าอ่าน `drop_off_point_id` ตาม CR-206 FR-MP-13, FR-MP-14, FR-MP-16 เดิม
 
 **ไม่เปลี่ยน**
@@ -181,24 +193,27 @@ affects:
 - **AC-4** — 2 แคมเปญขอข้าว (A จุดโรงยิม, B จุดห้องพยาบาล) · BFF เลือกแคมเปญ B ให้ใบ → รายการข้าวได้ห้องพยาบาล
 - **AC-5** — request จองส่ง `drop_off_point_id` มาเอง → ไม่มีผล · ใบได้จุดตาม FR-AP-8
 - **AC-6** — จุดของ need ถูกเลิกติ๊กหลังสร้างแคมเปญ แล้วมีคนจอง → จองสำเร็จ · รายการเก็บ id นั้น · หน้าติดตามแสดงรายการในกลุ่ม "ส่งที่จุดรับบริจาคไหนของศูนย์ก็ได้" · ทุกจุดรับได้
-- **AC-7** — จุดถูกสร้างใน CouchDB แต่ `public_shelters` ยังไม่อัปเดต แล้วแคมเปญใช้จุดนั้น → จองสำเร็จ ไม่ได้ `400`
+- **AC-7** — จุดถูกสร้างใน CouchDB แต่ `public_shelters` ยังไม่อัปเดต แล้วแคมเปญใช้จุดนั้น → จองสำเร็จ ไม่ได้ `400` · ตั๋วแสดงรายการในกลุ่ม "ส่งที่จุดรับบริจาคไหนของศูนย์ก็ได้" จน projection ตามทัน แล้วหน้าติดตามแสดงกลุ่มของจุดนั้น
 - **AC-8** — จอง `parcel` ของแคมเปญที่มีจุด → ทุกรายการ `null`
 
 **บริจาคเองและประเมิน**
 
-- **AC-9** — ผู้บริจาคบริจาคเอง 2 รายการ → ใบ `pending_review` · ทุกรายการ `null` · ตั๋วและหน้าติดตามแสดงกลุ่ม "รอเจ้าหน้าที่กำหนดจุดส่ง" พร้อมข้อความตาม FR-AP-22
+- **AC-9** — ศูนย์มีจุด · ผู้บริจาคบริจาคเอง 2 รายการแบบ `self_dropoff` → ใบ `pending_review` · ทุกรายการ `null` · ตั๋วและหน้าติดตามแสดงกลุ่ม "รอเจ้าหน้าที่กำหนดจุดส่ง" พร้อมข้อความตาม FR-AP-22 · บริจาคเองแบบ `parcel` → ไม่มีกลุ่ม "รอ"
 - **AC-10** — ต่อจาก AC-9 เจ้าหน้าที่อนุมัติรายการ 1 ไปโรงยิม รายการ 2 ไปห้องพยาบาล → `items[]` มีจุดตามที่เลือก · ใบ `verifying` · หน้าติดตามแสดง 2 กลุ่ม · ใบปะหน้า 2 ใบ · audit `context.lines[]` มี `drop_off_point_id` ตรงกัน
 - **AC-11** — อนุมัติโดยไม่เลือกจุดในศูนย์ที่มีจุด → `422 POINT_REQUIRED` · หน้าประเมินกดยืนยันไม่ได้
 - **AC-12** — อนุมัติพร้อมจุดที่ไม่อยู่ในศูนย์ → `422 UNKNOWN_DROP_OFF_POINT` · ส่งจุดคู่กับ `rejected` → `422 INVALID_REVIEW` · รายการที่ปฏิเสธไม่ถูกแก้จุด
 - **AC-12a** — อนุมัติใบ `parcel` พร้อมส่งจุดมา → รายการได้ `null` ไม่ได้ error
 - **AC-12b** — body ไม่มี `lines` สำหรับใบที่ประเมินทีละรายการ ในศูนย์ที่มีจุด และมีรายการ `pending` ที่ไม่มีจุด → `422 POINT_REQUIRED` · ใบก่อน schema_v 7 อนุมัติแบบเดิมได้ รายการเป็น `null`
 - **AC-12c** — ใบ `pending_review` ที่หน้าสแกนรับผ้าห่มที่โรงยิมไปก่อน แล้วเจ้าหน้าที่ประเมิน → ไม่ต้องเลือกจุดให้ผ้าห่ม · `items[i].drop_off_point_id` ของผ้าห่มไม่ถูกเขียน · ส่งจุดมาให้ผ้าห่ม → `422 INVALID_REVIEW`
-- **AC-13** — ใบผสม (ข้าวแคมเปญ + ผ้าห่มพิมพ์เอง) → ข้าวได้โรงยิมตอนจอง · หน้าประเมินแสดงข้าวพร้อมจุดแบบ read-only · ผ้าห่มได้จุดตอนประเมิน
-- **AC-13a** — รายการแคมเปญที่ `pending` (counter `NOT_SEEDED`) และจุดยังอยู่ → หน้าประเมินเลือกจุดนั้นไว้ให้ · จุดถูกลบไปแล้ว → dropdown ว่าง
+- **AC-13** — ใบผสม (ข้าวแคมเปญ + ผ้าห่มพิมพ์เอง) → ข้าวได้โรงยิมตอนจอง · ตั๋วแสดงกลุ่ม "โรงยิม" (ข้าว) และ "รอเจ้าหน้าที่กำหนดจุดส่ง" (ผ้าห่ม) เรียงตามนั้น · หน้าประเมินแสดงข้าวพร้อมจุดแบบ read-only · ผ้าห่มได้จุดตอนประเมิน
+- **AC-13a** — รายการแคมเปญที่ `pending` (counter `NOT_SEEDED`) และจุดยังอยู่ → หน้าประเมินเลือกจุดนั้นไว้ให้ · หน้าติดตามแสดงรายการในกลุ่มโรงยิม ไม่ใช่กลุ่ม "รอ" · หน้าสแกนจุดอื่นเห็นรายการนี้เป็นแถวล็อก (CR-206 FR-MP-19) · จุดถูกลบไปแล้ว → dropdown ว่าง และหน้าติดตามแสดงในกลุ่ม "รอ"
+- **AC-13b** — หน้าสแกนรับผ้าห่มที่โรงยิมก่อนประเมิน → หน้าติดตามแสดงผ้าห่มว่า "รับแล้ว" ในกลุ่มโรงยิม ไม่ใช่กลุ่ม "รอ" · คิวประเมินมี `point_receipts` ของใบ · หน้าประเมินไม่แสดง dropdown ให้ผ้าห่ม
 
 **แก้รายการและข้อมูลเดิม**
 
 - **AC-14** — ผู้บริจาคแก้ใบ `pending_review` ที่มีรายการแคมเปญ `NOT_SEEDED` (มีจุดโรงยิม) และเพิ่มรายการใหม่ → dialog ไม่มีตัวเลือกจุด · รายการเดิมคงโรงยิม · รายการใหม่ได้จุดตาม FR-AP-15a
+- **AC-14a** — ผู้บริจาคเลือกสินค้าในแคมเปญให้แถวผ้าห่มที่เคยพิมพ์เอง (`item_id` เปลี่ยน) → รายการได้จุดของ need ตาม FR-AP-15a ไม่คง `null` เดิม
+- **AC-14b** — แคมเปญของใบถูกปิดหลังจอง แล้วผู้บริจาคเพิ่มรายการของแคมเปญนั้น → รายการใหม่ได้จุดของ need · อ่านแคมเปญไม่ได้ → `503 DONATION_UNAVAILABLE` ไม่มีอะไรเปลี่ยน
 - **AC-15** — แก้จุดของ need จากโรงยิมเป็นห้องพยาบาล → ใบที่จองก่อนแก้ยังเป็นโรงยิม แม้ผู้บริจาคแก้รายการของใบนั้นภายหลัง · ใบที่จองหลังแก้เป็นห้องพยาบาล
 - **AC-16** — แคมเปญ `schema_v` 3 (ไม่มี key) → อ่านเป็น `null` · จองได้ · รายการได้ `null`
 - **AC-17** — ใบที่จองก่อน CR นี้ (ผู้บริจาคเลือกจุดเอง) → รับของทีละจุดได้เหมือนเดิม
@@ -206,9 +221,9 @@ affects:
 ## Impact
 
 - **backend**
-  - `use_case.py` `create`: `_drop_off_points` แบบ `strict=False, offered=None` (FR-AP-10) · ส่ง `items[]` ใน response (FR-AP-8a)
-  - `use_case.py` `_pair_held_lines`: carry `drop_off_point_id` ของรายการเดิม (FR-AP-15)
-  - `schemas.py` `DonationCreateResponse.items`
+  - `use_case.py` `create`: ไม่เทียบจุดกับ `public_shelters` (FR-AP-10) · ลบ branch `strict` ของ `_drop_off_points` และ `_offered_point_ids` · ส่ง `items[]` ใน response จาก `buffer.items_declared` (อ่านจุดด้วย `.get()` เพราะ `model_dump(exclude_none=True)` ตัด `null`) (FR-AP-8a)
+  - `use_case.py` `_pair_held_lines`: copy `drop_off_point_id` ของรายการเดิมทุกครั้ง (รวม `null`) เมื่อ `item_id` ไม่เปลี่ยน (FR-AP-15) · ปัจจุบัน carry เฉพาะ field ที่ request ว่าง
+  - `schemas.py` `DonationCreateResponse.items` · docstring ของ `DonationItemInput.drop_off_point_id`
   - `tests/test_donation_drop_off_points.py`: ลบเคส `UNKNOWN_DROP_OFF_POINT` ตอนจอง · เพิ่ม AC-7, AC-15 (ฝั่ง FastAPI)
   - regenerate OpenAPI (`fastapi.json`, `openapi.d.ts`)
 - **worker / tent-model**: ไม่กระทบ
@@ -219,10 +234,12 @@ affects:
   - `donations/domain/item-review.ts` (`lineReviewDecisionSchema`, `applyLineReview`): FR-AP-17, FR-AP-18
   - route `[query]/approve`: FR-AP-17 – FR-AP-19 · อ่านจุดปัจจุบันด้วย `readCurrentDonationPoints`
   - `pending-review-detail.svelte` + caller `stock-donations/+page.svelte`: FR-AP-20
+  - `donations/domain/back-office.ts` (`PendingDonationRow`) + `routes/api/back-office/donations/+server.ts` (`toPendingRow`): FR-AP-20a
 - **frontend public**
-  - `donations/domain/line-points.ts`: function ใหม่ตาม FR-AP-9 · `groupDropOffDestinations` ตาม FR-AP-22a · ลบ `defaultDropOffPointId`, `pickerForMapTap`, `ALL_LINES_PICKER` · เก็บ `bookableDropOffPoints`, `lineDropOffPointId`, `withCurrentLinePoints` ถ้ายังมี caller
+  - `donations/domain/line-points.ts`: function ใหม่ตาม FR-AP-9 · `groupDropOffDestinations` ตาม FR-AP-22a · ลบ `defaultDropOffPointId`, `pickerForMapTap`, `ALL_LINES_PICKER` และ export ใน `donations/index.ts` · เก็บ `bookableDropOffPoints`, `lineDropOffPointId`, `withCurrentLinePoints` ถ้ายังมี caller
+  - caller ของ `groupDropOffDestinations` ส่ง `deliveryMethod`: ตั๋ว, หน้าติดตาม
   - `donations/domain/donation.ts`, `public-donation.ts` (`buildDonationItemsPayload`, ข้อความ error `UNKNOWN_DROP_OFF_POINT`): FR-AP-7, FR-AP-10
-  - `donor-time-selection-form.svelte`, `drop-off-points-section.svelte`, `donation.svelte.ts`, `public-donor-needs.svelte`: FR-AP-11 – FR-AP-13
+  - `donor-time-selection-form.svelte`, `drop-off-points-section.svelte`, `donation.svelte.ts`, `public-donor-needs.svelte`: FR-AP-11 – FR-AP-13 · `bookedItems` ตาม FR-AP-8b
   - BFF `api/public/v1/donations/+server.ts`: FR-AP-8, FR-AP-8a
   - `public-donor-success-ticket.svelte`: FR-AP-8b, FR-AP-22
   - `edit-donation-items-dialog.svelte` + BFF `…/[tracking_token]/items/+server.ts`: FR-AP-14, FR-AP-15a, FR-AP-15b
@@ -249,7 +266,7 @@ affects:
 | D-1 | วิธี track | CR ไฟล์ใหม่ (ไฟล์นี้) | ผู้ขอเลือก 2026-10-31 · รอผู้อนุมัติยืนยัน | — |
 | D-2 | บังคับเลือกจุดตอนสร้าง / แก้แคมเปญ | บังคับเมื่อศูนย์มีจุด | เสนอ | FR-AP-3, FR-AP-4a |
 | D-3 | บังคับเลือกจุดตอนประเมิน | บังคับเมื่อศูนย์มีจุด และ `self_dropoff` · รายการบริจาคเองไม่มีค่าเริ่มต้น | เสนอ | FR-AP-17, FR-AP-20 |
-| D-4 | แก้จุดของ need มีผลกับรายการที่จองแล้วไหม | ไม่มีผล รวมตอนผู้บริจาคแก้ใบ · จับคู่รายการเดิมด้วย `line_key` | เสนอ | FR-AP-5, FR-AP-15 |
+| D-4 | แก้จุดของ need มีผลกับรายการที่จองแล้วไหม | ไม่มีผล รวมตอนผู้บริจาคแก้ใบ · จับคู่รายการเดิมด้วย `line_key` และ `item_id` ไม่เปลี่ยน | เสนอ | FR-AP-5, FR-AP-15 |
 | D-5 | จุดของ need ถูกลบแล้วมีคนจอง | จองได้ · เก็บ id ไว้ · แสดงและรับแบบ "ไหนก็ได้" ตาม CR-206 FR-MP-16 / FR-MP-19 | เสนอ | FR-AP-8 |
 | D-6 | เจ้าหน้าที่เปลี่ยนจุดของรายการที่อนุมัติแล้วได้ไหม | นอกขอบเขต · ใช้ "รับรายการของจุดอื่น" | เสนอ | FR-AP-21 |
 | D-7 | ผู้บริจาคเห็นจุดก่อนจองไหม | ไม่เห็น · เห็นในตั๋วและหน้าติดตาม · หมุดจุด CR-205 ยังแสดงแต่แตะไม่เลือก | เสนอ | FR-AP-11, FR-AP-12 |
@@ -277,3 +294,4 @@ affects:
 
 - 2026-10-31 — proposed (Kunanon Nusaeng) · ผู้ขอเลือก track เป็น CR ใหม่ (D-1) · D-2 – D-14 รอผู้อนุมัติ
 - 2026-10-31 — แก้ตาม `/pr-code-review` รอบ 1 (ก่อนเปิด PR): ตั๋วอ่านจุดจาก response (FR-AP-8a, 8b) · approve แบบไม่มี `lines` (FR-AP-17a) · แก้รายการคงจุดเดิมด้วย `line_key` ใน FastAPI (FR-AP-15) · BFF จองไม่อ่าน registry (D-10) · กติการายการที่รับก่อนประเมิน (D-13) · ลำดับเช็คของ approve · ฟอร์มแก้แคมเปญ (FR-AP-4a, 4b) · กลุ่ม "รอเจ้าหน้าที่กำหนดจุดส่ง" (FR-AP-22, 22a) · เพิ่ม D-9 – D-14 · เติม `affects` และ AC
+- 2026-10-31 — แก้ตาม `/pr-code-review` รอบ 2: กลุ่ม "รอ" เฉพาะรายการที่ไม่มีจุด · รายการ `pending` ที่มีจุดอยู่กลุ่มของจุดนั้น (FR-AP-22, 22b · ตรงกับ CR-206 FR-MP-19) · คิวประเมินมี `point_receipts` (FR-AP-20a) · ข้อ 1 ของ FR-AP-17 เป็น schema validation · คงจุดเดิมเฉพาะเมื่อ `item_id` ไม่เปลี่ยน (FR-AP-15) · ขอบเขตการอ่าน registry และ `503` ใน approve · นิยามจุดบนหน้า public · contract ของ `groupDropOffDestinations` (FR-AP-22a) · `bookedItems` (FR-AP-8b) · ใบไม่มี `line_key` (FR-AP-15c)
