@@ -6,7 +6,7 @@ date: 2026-10-24
 created: 2026-10-24
 updated: 2026-10-31
 amendments:
-  - A1 (2026-10-31, #1043) — kiosk claim สัตว์เลี้ยงพร้อมสมาชิก — proposed โดยทีม kiosk, รอ Team Leader อนุมัติ
+  - A1 (2026-10-31, #1043) — kiosk claim สัตว์เลี้ยงพร้อมสมาชิก — approved 2026-10-31 (feedback ตอน role play ให้เปลี่ยนเป็นแบบนี้)
 requested_by: ทีม kiosk SaktanuthPeak
 decided_by: Team Leader (Soravit) — approved 2026-10-24
 layer: volatile
@@ -32,7 +32,7 @@ affects:
 - **Build:** FastAPI service endpoints 3 ตัว (lookup / prepare / revert) + kiosk BFF fallback + claim-then-check-in
 - **กระทบ:** กฎ claim ใน `schema.md` §9.5 (เดิม staff-only) · ไม่ bump `schema_v`
 
-> **ส่วนที่ปรับ A1 (2026-10-31, #1043) — เสนอโดยทีม kiosk (proposed, รอ Team Leader อนุมัติ)**
+> **ส่วนที่ปรับ A1 (2026-10-31, #1043) — approved 2026-10-31 (มาจาก feedback ตอน role play ที่ให้เปลี่ยนเป็นแบบนี้)**
 >
 > - **เปลี่ยน:** kiosk claim **สัตว์เลี้ยง `open` ทั้งหมด** ของใบลงทะเบียนพร้อมสมาชิก (เดิม FR-KUC-12 ให้คง `open` รอเจ้าหน้าที่) → สัตว์ลง Couch `household.pets[]` พร้อมรูป
 > - **ทำไม:** เจ้าหน้าที่ลืม claim สัตว์จากคิวกลาง → สัตว์ไม่อยู่ใน `household.pets` ของศูนย์เลย
@@ -210,7 +210,8 @@ Prefix `/public/v1/unassigned-registrations` · Bearer `EXTERNAL_API_SECRET` ท
 - **Orphan claim:** BFF ตายหลัง `prepare` ก่อน Couch write/revert → Mongo `claimed` แต่ไม่มี Couch doc. ลดด้วย FR-KUC-15 (prepare ซ้ำศูนย์เดิม idempotent) + log `registration_id`/`member_ids` เมื่อ revert ล้ม
 - **Fail open → คนซ้ำ:** Mongo ล่มขณะเสียบบัตรของผู้ที่อยู่ในคิวกลาง → walk-in ซ้ำได้ (ยอมรับชั่วคราว; ทบทวนพร้อม edge)
 - **Response size:** รูปสมาชิก base64 ใน `prepare` _(A1: รวมรูปสัตว์ — `PETS_MAX_COUNT` จำกัดจำนวนแถว)_
-- _(A1)_ **สัตว์ค้าง claimed ไม่มีใน Couch:** BFF ตายหลัง mark หรือ prepare timeout → สัตว์ไม่ถูก revert และ prepare ซ้ำไม่ส่งซ้ำ (FR-KUC-12e); เจ้าหน้าที่เพิ่มเองที่หน้าครอบครัว — ยอมรับเพื่อไม่ bump Couch household schema
+- _(A1)_ **สัตว์ค้าง claimed ไม่มีใน Couch:** BFF ตายหลัง mark หรือ prepare timeout → สัตว์ไม่ถูก revert และ prepare ซ้ำไม่ส่งซ้ำ (FR-KUC-12e); เจ้าหน้าที่เพิ่มเองที่หน้าครอบครัว — ยอมรับเพื่อไม่ bump Couch household schema; BFF log `registration_id` + `shelter_code` เมื่อ prepare หาย และ log `pet_ids` เมื่อ revert ล้ม เพื่อให้เจ้าหน้าที่ตามแก้ได้
+- _(A1)_ **household เกิดพร้อมกันสองทาง:** `_all_docs` เห็นว่ายังไม่มี household แต่คนอื่น (kiosk อีกเครื่อง / Station 1) เขียนก่อน → `_bulk_docs` ตอบ `conflict` → ถ้ามีสัตว์ ไปทาง append (อ่านใหม่ → merge → PUT) ไม่นับว่า "เกิดแล้ว" เพื่อไม่ให้สัตว์หาย
 - _(A1)_ **รูปสัตว์ค้าง:** append household ล้มครบทุก retry หลังรูปสัตว์ลง Couch ใน bulk เดียวกันแล้ว → `image:` ไม่มีใครอ้าง (เลือกแบบนี้แทนเขียนรูปทีหลัง ซึ่งเสี่ยง pet ชี้รูปที่ไม่มี)
 - _(A1)_ **สัตว์ถูก claim ระหว่างอ่านกับ mark:** `_atomic_mark_claimed` ไม่ผ่าน → 409 `KIOSK_CLAIM_CONFLICT` เหมือนสมาชิก; สแกนใหม่แล้วผ่าน (สัตว์ไม่ `open` แล้ว)
 - **Smart-card citizen id มาจาก client:** FR-KUC-13 สำหรับบัตรอ้างค่าที่ kiosk ส่งมา (ThaiD ใช้ค่าจาก server)
@@ -228,4 +229,6 @@ N/A — ไม่เปลี่ยนรูปร่าง doc; `claimed_by` �
 - 2026-10-24 — ทีม kiosk: timeout เป็นค่าคงที่ในโค้ด (ไม่ใช่ env); เพิ่ม index evacuee id + ใช้ partial index ของ citizen id
 - 2026-10-24 — ทีม kiosk (ตาม review PR #838): primary ไม่ถูกเลือก → ใช้สมาชิกที่เลือกคนแรก (FR-KUC-07a); prepare ศูนย์เดิมคืน 200 ไม่ใช่ 409; ตัด evacuee ที่มีแล้วก่อน bulk write; revert แบบ atomic; FR-KUC-21 → FR-KUC-18a
 - 2026-10-24 — Team Leader (Soravit) approve CR-189: requested by ทีม kiosk SaktanuthPeak, รันเลข CR-189 จัดเข้าหมวด 14-kiosk
-- 2026-10-31 — A1 proposed (ทีม kiosk, #1043): claim สัตว์ `open` ทั้งหมดพร้อมรอบแรก, คงเลือกสมาชิกรายคน, ศูนย์ `allow_pets` ไม่เปิด → ข้ามสัตว์ (สมาชิก check-in ต่อ), ความจุสัตว์ = Station 3, ไม่ส่งสัตว์ซ้ำตอน prepare ซ้ำ (ไม่ bump Couch schema), `geo` ตัดออก — รอ Team Leader อนุมัติ
+- 2026-10-31 — A1 proposed (ทีม kiosk, #1043): claim สัตว์ `open` ทั้งหมดพร้อมรอบแรก, คงเลือกสมาชิกรายคน, ศูนย์ `allow_pets` ไม่เปิด → ข้ามสัตว์ (สมาชิก check-in ต่อ), ความจุสัตว์ = Station 3, ไม่ส่งสัตว์ซ้ำตอน prepare ซ้ำ (ไม่ bump Couch schema), `geo` ตัดออก
+- 2026-10-31 — A1 approved: มาจาก feedback ตอน role play ที่ให้เปลี่ยนเป็นแบบนี้ (kiosk ดึงสัตว์เข้า household พร้อมสมาชิก)
+- 2026-10-31 — ตาม review #1043: household `conflict` ตอนเกิดใหม่ที่มีสัตว์ → ไปทาง append; เติม `pet_id` ให้สัตว์ legacy ด้วย `$set` เฉพาะแถว (ไม่ save ทั้ง doc); BFF log เพิ่มเมื่อ prepare หาย / อ่าน registry ศูนย์ไม่ได้
