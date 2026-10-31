@@ -18,6 +18,8 @@
 		scaleRecipeIngredientQty,
 		getActiveTagsFromSession,
 		CountInputGuard,
+		CountFieldError,
+		COUNT_ERROR,
 		isCount,
 		isPositiveQty,
 		selectableCookingIngredients,
@@ -617,20 +619,17 @@
 	let serviceNotes = $state('');
 	let cookingStarted = $state(false);
 
-	const SERVICE_FIELD_ERROR = 'ต้องเป็นตัวเลขตั้งแต่ 0 ขึ้นไป';
 	// Outside-volunteer and outside-evacuee counts treat an empty box as 0.
 	const serviceFieldErrors = $derived({
-		yieldActual: isCount(yieldActualPortions, 0) ? null : SERVICE_FIELD_ERROR,
-		served: isCount(servedInShelter, 0) ? null : SERVICE_FIELD_ERROR,
-		waste: isCount(wastePortions, 0) ? null : SERVICE_FIELD_ERROR,
+		yieldActual: isCount(yieldActualPortions, 0) ? null : COUNT_ERROR,
+		served: isCount(servedInShelter, 0) ? null : COUNT_ERROR,
+		waste: isCount(wastePortions, 0) ? null : COUNT_ERROR,
 		extVolunteers:
 			!guard.unparsed['service-ext-volunteers'] && isCount(extVolunteers ?? 0, 0)
 				? null
-				: SERVICE_FIELD_ERROR,
+				: COUNT_ERROR,
 		extOutside:
-			!guard.unparsed['service-ext-outside'] && isCount(extOutside ?? 0, 0)
-				? null
-				: SERVICE_FIELD_ERROR
+			!guard.unparsed['service-ext-outside'] && isCount(extOutside ?? 0, 0) ? null : COUNT_ERROR
 	});
 	const serviceFormValid = $derived(Object.values(serviceFieldErrors).every((e) => e === null));
 
@@ -768,15 +767,6 @@
 <svelte:head>
 	<title>กระดานการผลิตอาหาร · SmartShelter</title>
 </svelte:head>
-
-{#snippet fieldError(id: string, message: string | null)}
-	{#if guard.messages[id]}
-		<p id="{id}-blocked" role="alert" class="mt-1 text-xs text-destructive">{guard.messages[id]}</p>
-	{/if}
-	{#if message}
-		<p id="{id}-error" role="alert" class="mt-1 text-xs text-destructive">{message}</p>
-	{/if}
-{/snippet}
 
 <div class="flex-1 space-y-4 overflow-auto p-4">
 	<!-- Header Banner -->
@@ -969,7 +959,11 @@
 							{@attach guard.attach('allocated-target')}
 							class="mt-1 text-xs font-bold"
 						/>
-						{@render fieldError('allocated-target', targetValid ? null : TARGET_ERROR)}
+						<CountFieldError
+							{guard}
+							id="allocated-target"
+							message={targetValid ? null : TARGET_ERROR}
+						/>
 					</div>
 
 					<!-- Target Group Selection -->
@@ -1090,18 +1084,19 @@
 													aria-invalid={!isPositiveQty(ing.needed)}
 													aria-describedby={isPositiveQty(ing.needed)
 														? undefined
-														: `ing-qty-${idx}-error`}
-													{@attach guard.attach(`ing-qty-${idx}`)}
+														: `ing-qty-${ing.item_id}-error`}
+													{@attach guard.attach(`ing-qty-${ing.item_id}`)}
 													class="h-8 w-24 [appearance:textfield] text-right text-sm font-semibold tabular-nums [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
 												/>
 												<span class="w-16 truncate text-left text-xs text-muted-foreground"
 													>{unitLabel(ing.unit)}</span
 												>
 											</div>
-											{@render fieldError(
-												`ing-qty-${idx}`,
-												isPositiveQty(ing.needed) ? null : QTY_ERROR
-											)}
+											<CountFieldError
+												{guard}
+												id={`ing-qty-${ing.item_id}`}
+												message={isPositiveQty(ing.needed) ? null : QTY_ERROR}
+											/>
 										</Table.Cell>
 										<Table.Cell class="text-right text-slate-700 tabular-nums">
 											{onHand}
@@ -1173,7 +1168,11 @@
 										{@attach guard.attach('new-ingredient-qty')}
 										class="mt-1 h-8 text-xs font-bold"
 									/>
-									{@render fieldError('new-ingredient-qty', newQtyValid ? null : QTY_ERROR)}
+									<CountFieldError
+										{guard}
+										id="new-ingredient-qty"
+										message={newQtyValid ? null : QTY_ERROR}
+									/>
 								</div>
 								<div class="sm:col-span-3">
 									<Label class="text-2xs text-muted-foreground">หน่วย</Label>
@@ -1544,10 +1543,17 @@
 									min="0"
 									bind:value={yieldActualPortions}
 									aria-invalid={!!serviceFieldErrors.yieldActual}
+									aria-describedby={serviceFieldErrors.yieldActual
+										? 'service-yield-error'
+										: undefined}
 									{@attach guard.attach('service-yield')}
 									class="mt-1 text-xs font-bold"
 								/>
-								{@render fieldError('service-yield', serviceFieldErrors.yieldActual)}
+								<CountFieldError
+									{guard}
+									id="service-yield"
+									message={serviceFieldErrors.yieldActual}
+								/>
 							</div>
 							<div>
 								<Label for="service-served" class="text-xs">แจกจ่ายในศูนย์</Label>
@@ -1557,10 +1563,11 @@
 									min="0"
 									bind:value={servedInShelter}
 									aria-invalid={!!serviceFieldErrors.served}
+									aria-describedby={serviceFieldErrors.served ? 'service-served-error' : undefined}
 									{@attach guard.attach('service-served')}
 									class="mt-1 text-xs"
 								/>
-								{@render fieldError('service-served', serviceFieldErrors.served)}
+								<CountFieldError {guard} id="service-served" message={serviceFieldErrors.served} />
 							</div>
 							<div>
 								<Label for="service-waste" class="text-xs">อาหารเหลือทิ้ง</Label>
@@ -1570,10 +1577,11 @@
 									min="0"
 									bind:value={wastePortions}
 									aria-invalid={!!serviceFieldErrors.waste}
+									aria-describedby={serviceFieldErrors.waste ? 'service-waste-error' : undefined}
 									{@attach guard.attach('service-waste')}
 									class="mt-1 text-xs"
 								/>
-								{@render fieldError('service-waste', serviceFieldErrors.waste)}
+								<CountFieldError {guard} id="service-waste" message={serviceFieldErrors.waste} />
 							</div>
 						</div>
 
@@ -1586,10 +1594,17 @@
 									min="0"
 									bind:value={extVolunteers}
 									aria-invalid={!!serviceFieldErrors.extVolunteers}
+									aria-describedby={serviceFieldErrors.extVolunteers
+										? 'service-ext-volunteers-error'
+										: undefined}
 									{@attach guard.attach('service-ext-volunteers')}
 									class="mt-1 text-xs"
 								/>
-								{@render fieldError('service-ext-volunteers', serviceFieldErrors.extVolunteers)}
+								<CountFieldError
+									{guard}
+									id="service-ext-volunteers"
+									message={serviceFieldErrors.extVolunteers}
+								/>
 							</div>
 							<div>
 								<Label for="service-ext-outside" class="text-xs">แจกผู้พักพิงภายนอก</Label>
@@ -1599,10 +1614,17 @@
 									min="0"
 									bind:value={extOutside}
 									aria-invalid={!!serviceFieldErrors.extOutside}
+									aria-describedby={serviceFieldErrors.extOutside
+										? 'service-ext-outside-error'
+										: undefined}
 									{@attach guard.attach('service-ext-outside')}
 									class="mt-1 text-xs"
 								/>
-								{@render fieldError('service-ext-outside', serviceFieldErrors.extOutside)}
+								<CountFieldError
+									{guard}
+									id="service-ext-outside"
+									message={serviceFieldErrors.extOutside}
+								/>
 							</div>
 						</div>
 

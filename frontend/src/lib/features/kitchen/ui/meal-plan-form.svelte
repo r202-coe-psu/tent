@@ -31,8 +31,9 @@
 	import { langState } from '$lib/states/i18n.svelte';
 	import { useSupplyItems } from '$lib/features/supply';
 	import { useStockBalance } from '$lib/features/operations';
-	import { isCount } from '../domain/count-input';
+	import { COUNT_ERROR, isCount } from '../domain/count-input';
 	import { CountInputGuard } from './count-input-guard.svelte';
+	import CountFieldError from './count-field-error.svelte';
 
 	// Edit draft if plan present; create if absent.
 	let {
@@ -195,7 +196,6 @@
 	});
 
 	const guard = new CountInputGuard();
-	const COUNT_ERROR = 'ต้องเป็นตัวเลขตั้งแต่ 0 ขึ้นไป';
 	const totalError = $derived(isCount(total, 1) ? null : 'ต้องมากกว่า 0');
 	const subCountErrors = $derived({
 		halal: isCount(halal, 0) ? null : COUNT_ERROR,
@@ -309,15 +309,6 @@
 		}
 	}
 </script>
-
-{#snippet fieldError(id: string, message: string | null)}
-	{#if guard.messages[id]}
-		<p id="{id}-blocked" role="alert" class="text-xs text-destructive">{guard.messages[id]}</p>
-	{/if}
-	{#if message}
-		<p id="{id}-error" role="alert" class="text-xs text-destructive">{message}</p>
-	{/if}
-{/snippet}
 
 <Dialog.Root bind:open>
 	<Dialog.Content class="max-h-[90dvh] overflow-y-auto p-4 sm:max-w-2xl sm:p-6">
@@ -434,10 +425,11 @@
 										</Button>
 									</div>
 								</div>
-								{@render fieldError(
-									`mp-qty-${i}`,
-									isQtyValid(row.qtyPerPerson) ? null : COUNT_ERROR
-								)}
+								<CountFieldError
+									{guard}
+									id={`mp-qty-${i}`}
+									message={isQtyValid(row.qtyPerPerson) ? null : COUNT_ERROR}
+								/>
 								{#if row.itemId && !currentUnresolved}
 									<p class="pl-0.5 text-xs text-muted-foreground">
 										ยอดคลังสแตนบาย ณ ศูนย์: <span class="font-medium text-foreground"
@@ -518,7 +510,7 @@
 					aria-describedby={totalError ? 'mp-total-error' : undefined}
 					{@attach guard.attach('mp-total')}
 				/>
-				{@render fieldError('mp-total', totalError)}
+				<CountFieldError {guard} id="mp-total" message={totalError} />
 			</div>
 
 			<div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
@@ -534,7 +526,7 @@
 						aria-describedby={subCountErrors.halal ? 'mp-halal-error' : undefined}
 						{@attach guard.attach('mp-halal')}
 					/>
-					{@render fieldError('mp-halal', subCountErrors.halal)}
+					<CountFieldError {guard} id="mp-halal" message={subCountErrors.halal} />
 				</div>
 				<div class="space-y-1.5">
 					<Label for="mp-soft" class="text-xs">อาหารอ่อน</Label>
@@ -548,7 +540,7 @@
 						aria-describedby={subCountErrors.softFood ? 'mp-soft-error' : undefined}
 						{@attach guard.attach('mp-soft')}
 					/>
-					{@render fieldError('mp-soft', subCountErrors.softFood)}
+					<CountFieldError {guard} id="mp-soft" message={subCountErrors.softFood} />
 				</div>
 				<div class="space-y-1.5">
 					<Label for="mp-infant" class="text-xs">ทารก</Label>
@@ -562,7 +554,7 @@
 						aria-describedby={subCountErrors.infant ? 'mp-infant-error' : undefined}
 						{@attach guard.attach('mp-infant')}
 					/>
-					{@render fieldError('mp-infant', subCountErrors.infant)}
+					<CountFieldError {guard} id="mp-infant" message={subCountErrors.infant} />
 				</div>
 			</div>
 

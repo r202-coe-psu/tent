@@ -30,8 +30,9 @@
 		type RequisitionTicket
 	} from '$lib/features/tickets';
 	import DatePicker from '$lib/components/date-picker.svelte';
-	import { isCount } from '../domain/count-input';
+	import { COUNT_ERROR, isCount } from '../domain/count-input';
 	import { CountInputGuard } from './count-input-guard.svelte';
+	import CountFieldError from './count-field-error.svelte';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { formatThaiShortDate } from '$lib/utils/date';
 	import { getShelterCode } from '$lib/db/shelter';
@@ -200,7 +201,6 @@
 	);
 
 	const guard = new CountInputGuard();
-	const COUNT_ERROR = 'ต้องเป็นตัวเลขตั้งแต่ 0 ขึ้นไป';
 	// An empty box counts as 0 (see formTotal); a negative or non-numeric value is an error.
 	const errorFor = (id: string, n: number | null) =>
 		!guard.unparsed[id] && isCount(n ?? 0, 0) ? null : COUNT_ERROR;
@@ -380,15 +380,6 @@
 		no_plan: 'border-border bg-muted text-muted-foreground'
 	};
 </script>
-
-{#snippet countError(id: string, message: string | null)}
-	{#if guard.messages[id]}
-		<p id="{id}-blocked" role="alert" class="mt-1 text-xs text-destructive">{guard.messages[id]}</p>
-	{/if}
-	{#if message}
-		<p id="{id}-error" role="alert" class="mt-1 text-xs text-destructive">{message}</p>
-	{/if}
-{/snippet}
 
 <div class="min-h-full bg-[#F8FAFC]">
 	<div class="mx-auto max-w-7xl space-y-6 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
@@ -1109,7 +1100,7 @@
 								aria-describedby={countErrors.regular ? 'count-regular-error' : undefined}
 								class="mt-1.5 h-8 text-sm"
 							/>
-							{@render countError('count-regular', countErrors.regular)}
+							<CountFieldError {guard} id="count-regular" message={countErrors.regular} />
 						</div>
 						<div class="rounded-lg border bg-background p-2.5 shadow-2xs">
 							<Label for="count-volunteer" class="text-xs font-medium text-foreground"
@@ -1125,7 +1116,7 @@
 								aria-describedby={countErrors.volunteer ? 'count-volunteer-error' : undefined}
 								class="mt-1.5 h-8 text-sm"
 							/>
-							{@render countError('count-volunteer', countErrors.volunteer)}
+							<CountFieldError {guard} id="count-volunteer" message={countErrors.volunteer} />
 						</div>
 					</div>
 
@@ -1144,7 +1135,7 @@
 								aria-describedby={countErrors.halal ? 'count-halal-error' : undefined}
 								class="mt-1.5 h-8 text-sm"
 							/>
-							{@render countError('count-halal', countErrors.halal)}
+							<CountFieldError {guard} id="count-halal" message={countErrors.halal} />
 						</div>
 						<div class="rounded-lg border bg-background p-2.5 shadow-2xs">
 							<Label for="count-soft-food" class="text-xs font-medium text-foreground"
@@ -1160,7 +1151,7 @@
 								aria-describedby={countErrors.softFood ? 'count-soft-food-error' : undefined}
 								class="mt-1.5 h-8 text-sm"
 							/>
-							{@render countError('count-soft-food', countErrors.softFood)}
+							<CountFieldError {guard} id="count-soft-food" message={countErrors.softFood} />
 						</div>
 						<div class="rounded-lg border bg-background p-2.5 shadow-2xs">
 							<Label for="count-infant" class="text-xs font-medium text-foreground"
@@ -1176,7 +1167,7 @@
 								aria-describedby={countErrors.infant ? 'count-infant-error' : undefined}
 								class="mt-1.5 h-8 text-sm"
 							/>
-							{@render countError('count-infant', countErrors.infant)}
+							<CountFieldError {guard} id="count-infant" message={countErrors.infant} />
 						</div>
 					</div>
 				</div>

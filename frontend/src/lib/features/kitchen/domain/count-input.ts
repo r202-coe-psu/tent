@@ -15,6 +15,9 @@ export function isPositiveQty(v: unknown): boolean {
 	return Number.isFinite(n) && n > 0;
 }
 
+/** Inline error under a count box that is empty, negative or below zero. */
+export const COUNT_ERROR = 'ต้องเป็นตัวเลขตั้งแต่ 0 ขึ้นไป';
+
 /** Why an edit to a count box is refused. */
 export type EditRejection = 'negative' | 'non-numeric';
 
