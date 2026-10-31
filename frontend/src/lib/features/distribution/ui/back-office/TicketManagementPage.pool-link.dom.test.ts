@@ -23,7 +23,6 @@ vi.mock('svelte-sonner', () => ({ toast: sonner }));
 vi.mock('./TicketGroupTabs.svelte', () => ({ default: () => {} }));
 vi.mock('./TicketFilters.svelte', () => ({ default: () => {} }));
 vi.mock('./TicketTable.svelte', () => ({ default: () => {} }));
-vi.mock('./CreateTicketDialog.svelte', () => ({ default: () => {} }));
 vi.mock('./TicketDetailShell.svelte', () => ({ default: () => {} }));
 vi.mock('$lib/components/ui/tabs/index.js', () => ({
 	Root: () => {},

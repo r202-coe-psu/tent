@@ -34,7 +34,6 @@
 	import TicketGroupTabs from './TicketGroupTabs.svelte';
 	import TicketFilters from './TicketFilters.svelte';
 	import TicketTable from './TicketTable.svelte';
-	import CreateTicketDialog from './CreateTicketDialog.svelte';
 	import TicketDetailShell from './TicketDetailShell.svelte';
 	import BulkReturnPoolBoard from '../bulk-return/BulkReturnPoolBoard.svelte';
 	import * as Tabs from '$lib/components/ui/tabs/index.js';
@@ -177,8 +176,6 @@
 		}
 	}
 
-	// Create dialog open state
-	let isCreateOpen = $state(false);
 	// View tab + open pool live in the URL (`?view=bulk_pools&pool=<id>`); foreign keys are preserved.
 	const poolUrl = $derived.by(() => {
 		try {
@@ -293,12 +290,6 @@
 			follow: false
 		});
 	}
-
-	function handleTicketCreated() {
-		// Post-create UX: activate "รอจัด / พร้อมส่ง" so PENDING_PICK is immediately visible
-		searchQuery = '';
-		updateFilters({ ...TICKET_URL_DEFAULTS, group: 'pending_ready' });
-	}
 </script>
 
 <svelte:head>
@@ -326,8 +317,7 @@
 			<!-- Action: Create Ticket (Guarded by RBAC canCreateTicket) -->
 			{#if activeView === 'tickets' && userCanCreate}
 				<Button
-					type="button"
-					onclick={() => (isCreateOpen = true)}
+					href={resolve('/back-office/distribution/new')}
 					class="h-auto shrink-0 gap-2 rounded-xl bg-[#0A2647] px-4 py-2.5 text-sm font-semibold text-white shadow-2xs hover:bg-[#051930]"
 				>
 					<Plus class="h-4 w-4" />
@@ -510,14 +500,6 @@
 		</div>
 	{/if}
 </div>
-
-<!-- Create Ticket Dialog (Stops strictly at PENDING_PICK) -->
-<CreateTicketDialog
-	bind:open={isCreateOpen}
-	{shelterCode}
-	onCreated={handleTicketCreated}
-	onClose={() => (isCreateOpen = false)}
-/>
 
 <!-- Ticket Detail Shell Modal (State-driven detail & lifecycle actions) -->
 {#if activeTicketId}

@@ -26,22 +26,24 @@ export class BackOfficePage {
 		const page = this.page;
 		await page.goto('/back-office/distribution');
 		await expect(page.getByRole('heading', { name: 'ระบบเบิกจ่ายพัสดุและอาหาร' })).toBeVisible();
-		await page.getByRole('button', { name: 'สร้างใบเบิกจ่าย' }).click();
-		const createDialog = page.getByRole('dialog', { name: /สร้างใบเบิกจ่ายพัสดุและอาหาร/ });
-		await createDialog.getByRole('radio', { name: /พัสดุและสิ่งของ/ }).click();
-		await createDialog.getByLabel(/จุดหมายปลายทาง/).click();
+		await page.getByRole('link', { name: 'สร้างใบเบิกจ่าย' }).click();
+		await expect(page).toHaveURL(/\/back-office\/distribution\/new/);
+		await expect(page.getByRole('heading', { name: /สร้างใบเบิกจ่ายพัสดุและอาหาร/ })).toBeVisible();
+		await page.getByRole('radio', { name: /พัสดุและสิ่งของ/ }).click();
+		await page.getByLabel(/จุดหมายปลายทาง/).click();
 		await page.getByRole('option', { name: /ระบุจุดหมายอื่น/ }).click();
-		await createDialog.getByPlaceholder(/พิมพ์ชื่อจุดหมายปลายทางที่ต้องการ/).fill(destination);
-		await createDialog.getByRole('button', { name: /เพิ่มรายการ/ }).click();
-		const picker = page.getByRole('dialog', { name: /เลือกรายการพัสดุ/ });
+		await page.getByPlaceholder(/พิมพ์ชื่อจุดหมายปลายทางที่ต้องการ/).fill(destination);
+		// The catalog picker is inline on the page (no nested dialog).
+		const picker = page.getByRole('region', { name: /เลือกรายการพัสดุ/ });
 		await picker.getByLabel(/ค้นหาชื่อรายการ/).fill(item.name);
 		await picker.getByLabel(/จำนวนที่ต้องการเบิก/).fill(requestedQty);
 		await picker.getByRole('button', { name: 'เลือก' }).click();
-		await createDialog.getByRole('button', { name: 'ยืนยันสร้างใบเบิกจ่าย' }).click();
-		// Scoped to the Sonner toast container — the closing dialog's own text also matches.
+		await page.getByRole('button', { name: 'ยืนยันสร้างใบเบิกจ่าย' }).click();
+		// Scoped to the Sonner toast container; the app then returns to the ticket list.
 		await expect(
 			page.locator('[data-sonner-toast]').filter({ hasText: /สร้างใบเบิกจ่าย.*สำเร็จ/ })
 		).toBeVisible();
+		await expect(page).toHaveURL(/\/back-office\/distribution(\?|$)/);
 
 		let ticketId = '';
 		await expect

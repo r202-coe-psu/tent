@@ -70,7 +70,7 @@ export function validatePositiveQuantity(
 export const validateIntegerQuantity = validatePositiveQuantity;
 
 /**
- * Constructs a single canonical ticket item for CreateTicketDialog.
+ * Constructs a single canonical ticket item for CreateTicketPage.
  * Ensures requested_qty and initial allocated_qty are identical positive whole-number Decimal strings.
  */
 export function buildCreateTicketItem(item: { master: ItemMaster; requested_qty: string }): {

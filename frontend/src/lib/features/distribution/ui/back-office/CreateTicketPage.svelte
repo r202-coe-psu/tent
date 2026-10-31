@@ -1,7 +1,11 @@
 <script lang="ts">
 	import type { ItemMaster } from '$lib/features/catalog';
 	import type { Flow2RequisitionType, MealPeriod } from '../../domain/food-supplies';
-	import { useCreateRequisitionTicket } from '../../application/queries';
+	import {
+		useCreateRequisitionTicket,
+		resolveAuthenticatedAuthorContext
+	} from '../../application/queries';
+	import { canCreateTicket } from '../../application/food-supplies/auth';
 	import { useShelter } from '$lib/features/shelters';
 	import { MEAL_PERIOD_LABELS } from '../model/ticket-status';
 	import {
@@ -17,14 +21,17 @@
 		CUSTOM_DESTINATION_SENTINEL
 	} from '../model/destination-selector';
 	import CatalogItemPicker from './CatalogItemPicker.svelte';
-	import * as Dialog from '$lib/components/ui/dialog/index.js';
 	import * as Select from '$lib/components/ui/select/index.js';
 	import * as RadioGroup from '$lib/components/ui/radio-group/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Textarea } from '$lib/components/ui/textarea/index.js';
 	import { toast } from 'svelte-sonner';
-	import Plus from '@lucide/svelte/icons/plus';
+	import { beforeNavigate, goto } from '$app/navigation';
+	import { resolve } from '$app/paths';
+	import { shelterStore } from '$lib/stores/shelter.svelte';
+	import { getShelterCode } from '$lib/db/shelter';
+	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
 	import Trash2 from '@lucide/svelte/icons/trash-2';
 	import AlertCircle from '@lucide/svelte/icons/alert-circle';
 	import Utensils from '@lucide/svelte/icons/utensils';
@@ -36,17 +43,25 @@
 		requested_qty: string;
 	}
 
-	interface Props {
-		open: boolean;
-		shelterCode: string;
-		onCreated: () => void;
-		onClose: () => void;
-	}
-
-	let { open = $bindable(false), shelterCode, onCreated, onClose }: Props = $props();
+	const shelterCode = $derived(shelterStore.selectedShelterCode ?? getShelterCode());
 
 	const createMutation = useCreateRequisitionTicket();
 	const shelterQuery = useShelter(() => shelterCode);
+
+	// RBAC: same gate as the list page's create button; direct URL visits by others bounce back.
+	const userCanCreate = $derived.by(() => {
+		try {
+			return canCreateTicket(resolveAuthenticatedAuthorContext(shelterCode));
+		} catch {
+			return false;
+		}
+	});
+	$effect(() => {
+		if (!userCanCreate) {
+			toast.error('คุณไม่มีสิทธิ์สร้างใบเบิกจ่าย');
+			backToList();
+		}
+	});
 
 	// Form states
 	let requisitionType = $state<Flow2RequisitionType>('food');
@@ -57,7 +72,6 @@
 	let meal = $state<MealPeriod | undefined>('breakfast');
 	let notes = $state('');
 	let selectedItems = $state<SelectedTicketItem[]>([]);
-	let pickerOpen = $state(false);
 
 	// Grouped destination options from shelter zones and food distribution points
 	const destinationOptions = $derived(buildDestinationOptionGroups(shelterQuery.data));
@@ -91,7 +105,6 @@
 			return;
 		}
 		selectedItems = [...selectedItems, { master, requested_qty: requestedQty }];
-		pickerOpen = false;
 	}
 
 	function handleRemoveItem(itemId: string) {
@@ -104,14 +117,34 @@
 		validatePositiveQuantity(raw);
 	}
 
-	function resetForm() {
-		requisitionType = 'food';
-		destinationSelection = '';
-		customDestinationText = '';
-		meal = 'breakfast';
-		notes = '';
-		selectedItems = [];
-		pickerOpen = false;
+	/** Set once the ticket is saved or the user cancels, so the navigation that follows skips the warning. */
+	let leaving = false;
+
+	const isDirty = $derived(
+		destinationSelection !== '' ||
+			customDestinationText.trim() !== '' ||
+			notes.trim() !== '' ||
+			selectedItems.length > 0
+	);
+
+	// Ask before leaving with unsaved input — a stray click used to be harmless in the modal,
+	// but a full page makes accidental back/sidebar navigation easy.
+	beforeNavigate((nav) => {
+		if (leaving || !isDirty) return;
+		// Refresh / closing the tab: the browser shows its own prompt when cancelled.
+		if (nav.type === 'leave') {
+			nav.cancel();
+			return;
+		}
+		if (!confirm('มีข้อมูลที่ยังไม่ได้บันทึก ต้องการออกจากหน้านี้หรือไม่?')) nav.cancel();
+	});
+
+	// Back to the list with "รอจัด / พร้อมส่ง" active so the new PENDING_PICK ticket is visible.
+	function backToList(group?: 'pending_ready') {
+		leaving = true;
+		void goto(
+			resolve(group ? '/back-office/distribution?group=pending_ready' : '/back-office/distribution')
+		);
 	}
 
 	async function handleSubmit() {
@@ -179,9 +212,7 @@
 			});
 
 			toast.success(`สร้างใบเบิกจ่าย ${ticketNo} สำเร็จ (รอจัดของ)`);
-			resetForm();
-			open = false;
-			onCreated();
+			backToList('pending_ready');
 		} catch (err) {
 			const msg = formatDistributionError(
 				err,
@@ -192,30 +223,31 @@
 	}
 </script>
 
-<Dialog.Root
-	bind:open
-	onOpenChange={(next) => {
-		if (!next) {
-			resetForm();
-			onClose();
-		}
-	}}
->
-	<Dialog.Content class="flex max-h-[90vh] flex-col overflow-hidden p-0 sm:max-w-[750px]">
-		<!-- Header -->
-		<div class="border-b border-slate-200/80 px-6 pt-6 pb-4">
-			<Dialog.Header>
-				<Dialog.Title class="text-xl font-bold text-slate-900">
-					สร้างใบเบิกจ่ายพัสดุและอาหาร
-				</Dialog.Title>
-				<Dialog.Description class="text-xs text-slate-500">
-					ออกตั๋วเบิกจ่ายใหม่เพื่อรอให้คลังสินค้าจัดของ โดยแยกหมวดหมู่อาหารปรุงสุกและพัสดุชัดเจน
-				</Dialog.Description>
-			</Dialog.Header>
+<svelte:head>
+	<title>สร้างใบเบิกจ่ายพัสดุและอาหาร · SmartShelter</title>
+</svelte:head>
+
+<div class="flex w-full flex-1 flex-col gap-4 bg-slate-50/50 p-4 sm:p-6 lg:p-8">
+	<div class="mx-auto flex w-full max-w-[860px] flex-col gap-4">
+		<div class="flex flex-col gap-2">
+			<Button
+				type="button"
+				variant="ghost"
+				onclick={() => backToList()}
+				class="h-auto w-fit gap-1.5 px-2 py-1 text-xs font-semibold text-slate-600"
+			>
+				<ArrowLeft class="h-3.5 w-3.5" />
+				<span>กลับไปรายการเบิกจ่าย</span>
+			</Button>
+			<h1 class="text-xl font-bold text-slate-900">สร้างใบเบิกจ่ายพัสดุและอาหาร</h1>
+			<p class="text-xs text-slate-500">
+				ออกตั๋วเบิกจ่ายใหม่เพื่อรอให้คลังสินค้าจัดของ โดยแยกหมวดหมู่อาหารปรุงสุกและพัสดุชัดเจน
+			</p>
 		</div>
 
-		<!-- Scrollable Form Body -->
-		<div class="flex-1 space-y-6 overflow-y-auto p-6">
+		<div
+			class="min-w-0 space-y-6 rounded-xl border border-slate-200/80 bg-white p-4 shadow-2xs sm:p-6"
+		>
 			<!-- Step 1: Requisition Type (Food XOR Supplies) -->
 			<fieldset class="m-0 space-y-2 border-0 p-0">
 				<legend class="text-sm font-semibold text-slate-700">
@@ -369,16 +401,6 @@
 						</h4>
 						<p class="text-xs text-slate-500">ระบุจำนวนที่ต้องการเบิกจ่ายจริง</p>
 					</div>
-
-					<Button
-						type="button"
-						variant="outline"
-						onclick={() => (pickerOpen = true)}
-						class="text-xs font-semibold text-[#0A2647] shadow-2xs hover:text-[#0A2647]"
-					>
-						<Plus class="h-3.5 w-3.5" />
-						<span>เพิ่มรายการ</span>
-					</Button>
 				</div>
 
 				{#if selectedItems.length === 0}
@@ -388,7 +410,7 @@
 						<Package class="mx-auto mb-2 h-8 w-8 text-slate-400" />
 						<p class="text-xs font-semibold text-slate-700">ยังไม่ได้เลือกรายการในตั๋วนี้</p>
 						<p class="mt-0.5 text-xs text-slate-500">
-							กดปุ่ม "เพิ่มรายการ" ด้านบนเพื่อค้นหาจากรายการสินค้า
+							เลือกจากรายการสินค้าด้านล่างเพื่อเพิ่มเข้าตั๋ว
 						</p>
 					</div>
 				{:else}
@@ -468,6 +490,14 @@
 				{/if}
 			</div>
 
+			<!-- Catalog picker (inline, replaces the nested modal) -->
+			<CatalogItemPicker
+				{shelterCode}
+				{requisitionType}
+				alreadySelectedItemIds={selectedItems.map((i) => i.master._id)}
+				onSelectItem={handleAddItem}
+			/>
+
 			<!-- Step 5: Notes -->
 			<div class="space-y-1.5">
 				<label for="ticket-notes" class="text-sm font-semibold text-slate-700">
@@ -485,7 +515,7 @@
 
 		<!-- Footer Actions -->
 		<div
-			class="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-slate-50/75 px-6 py-4"
+			class="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50/75 px-4 py-4 sm:px-6"
 		>
 			<div class="flex items-center gap-1.5 text-xs text-slate-500">
 				<AlertCircle class="h-3.5 w-3.5 text-slate-400" />
@@ -496,11 +526,7 @@
 				<Button
 					type="button"
 					variant="outline"
-					onclick={() => {
-						resetForm();
-						open = false;
-						onClose();
-					}}
+					onclick={() => backToList()}
 					class="text-xs font-semibold"
 				>
 					ยกเลิก
@@ -522,15 +548,5 @@
 				</Button>
 			</div>
 		</div>
-	</Dialog.Content>
-</Dialog.Root>
-
-<!-- Catalog Item Picker Modal -->
-<CatalogItemPicker
-	bind:open={pickerOpen}
-	{shelterCode}
-	{requisitionType}
-	alreadySelectedItemIds={selectedItems.map((i) => i.master._id)}
-	onSelectItem={handleAddItem}
-	onClose={() => (pickerOpen = false)}
-/>
+	</div>
+</div>

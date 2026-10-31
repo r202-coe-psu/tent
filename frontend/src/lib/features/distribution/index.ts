@@ -303,7 +303,7 @@ export { default as BulkReturnPoolBoard } from './ui/bulk-return/BulkReturnPoolB
 export { default as TicketGroupTabs } from './ui/back-office/TicketGroupTabs.svelte';
 export { default as TicketTable } from './ui/back-office/TicketTable.svelte';
 export { default as TicketFilters } from './ui/back-office/TicketFilters.svelte';
-export { default as CreateTicketDialog } from './ui/back-office/CreateTicketDialog.svelte';
+export { default as CreateTicketPage } from './ui/back-office/CreateTicketPage.svelte';
 export { default as CatalogItemPicker } from './ui/back-office/CatalogItemPicker.svelte';
 
 export {
