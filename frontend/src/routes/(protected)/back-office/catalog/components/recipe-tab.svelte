@@ -27,6 +27,7 @@
 		useDeleteRecipe,
 		useUpdateRecipe,
 		RecipeForm,
+		canCreateShelterRecipe,
 		MasterBadge,
 		MasterFilterBar,
 		MasterPager,
@@ -60,6 +61,8 @@
 		isSA ||
 			(basePath.includes('back-office') && (isShelterManager(roles) || isWarehouseStaff(roles)))
 	);
+	// Kitchen staff may add a shelter recipe but not edit or delete one (#802).
+	const canCreate = $derived(canCreateShelterRecipe(roles, shelterCode));
 
 	function canModifyRecipe(recipe: Recipe) {
 		if (basePath.includes('system-management')) {
@@ -199,7 +202,7 @@
 			<h2 class="text-lg font-bold text-slate-900">สูตรอาหารมาตรฐาน</h2>
 			<p class="text-sm text-slate-600">ใช้คำนวณวัตถุดิบที่ต้องเบิกจากคลัง</p>
 		</div>
-		{#if canWrite}
+		{#if canCreate}
 			<Button
 				type="button"
 				class="hidden min-h-11 gap-2 rounded-lg bg-[#0A2647] px-4 text-sm font-semibold text-white hover:bg-[#051930] md:inline-flex"
@@ -377,7 +380,7 @@
 	</div>
 </div>
 
-{#if canWrite}
+{#if canCreate}
 	<div
 		class="fixed inset-x-0 bottom-0 z-30 border-t border-slate-200 bg-white p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] md:hidden"
 	>
@@ -529,7 +532,7 @@
 				</Sheet.Description>
 			</Sheet.Header>
 			<div class="min-h-0 flex-1 overflow-y-auto p-4">
-				{#if canWrite}
+				{#if sheetMode === 'create' ? canCreate : canWrite}
 					{#key `${sheetMode}-${selectedId}`}
 						<RecipeForm
 							id={sheetMode === 'edit' ? selectedId : ''}

@@ -28,6 +28,7 @@ import type {
 	RecipeInput
 } from '../domain/catalog';
 import type { UnitOfMeasure, UnitOfMeasureInput } from '../domain/unit-of-measure';
+import { canCreateShelterRecipe } from '../domain/catalog-permissions';
 
 export const catalogKeys = {
 	all: ['catalog'] as const,
@@ -89,6 +90,8 @@ export const useItemCategory = (
 		enabled: !!id()
 	}));
 
+const UNAUTHORIZED_WRITE = 'Unauthorized: You do not have permission to write to this catalog.';
+
 function enforceWriteAccess(shelterCode?: string | null) {
 	const roles = authStore.user?.roles ?? [];
 	if (isSystemAdmin(roles)) return;
@@ -102,7 +105,7 @@ function enforceWriteAccess(shelterCode?: string | null) {
 		}
 	}
 
-	throw new Error('Unauthorized: You do not have permission to write to this catalog.');
+	throw new Error(UNAUTHORIZED_WRITE);
 }
 
 export const useCreateItemCategory = () => {
@@ -248,7 +251,9 @@ export const useCreateRecipe = () => {
 			ctx: AuthorContext;
 			shelterCode?: string;
 		}) => {
-			enforceWriteAccess(shelterCode);
+			if (!canCreateShelterRecipe(authStore.user?.roles ?? [], shelterCode)) {
+				throw new Error(UNAUTHORIZED_WRITE);
+			}
 			return catalogRepository().createRecipe(input, ctx, shelterCode);
 		},
 		onSuccess: () => {
