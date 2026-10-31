@@ -1,4 +1,5 @@
 <script lang="ts">
+	import PasswordRuleChecklist from '$lib/components/password-rule-checklist.svelte';
 	import * as Card from '$lib/components/ui/card/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import * as Form from '$lib/components/ui/form/index.js';
@@ -76,6 +77,9 @@
 								bind:value={$formData.password}
 								placeholder="Enter your password"
 							/>
+							{#if $formData.password}
+								<PasswordRuleChecklist password={$formData.password} />
+							{/if}
 						{/snippet}
 					</Form.Control>
 					<Form.FieldErrors />

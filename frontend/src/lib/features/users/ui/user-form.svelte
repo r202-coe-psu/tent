@@ -1,4 +1,5 @@
 <script lang="ts">
+	import PasswordRuleChecklist from '$lib/components/password-rule-checklist.svelte';
 	import { untrack } from 'svelte';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import * as Form from '$lib/components/ui/form/index.js';
@@ -759,6 +760,9 @@
 										สร้างรหัส
 									</Button>
 								</div>
+								{#if $formData.password}
+									<PasswordRuleChecklist password={$formData.password} />
+								{/if}
 							{/snippet}
 						</Form.Control>
 						<Form.FieldErrors />

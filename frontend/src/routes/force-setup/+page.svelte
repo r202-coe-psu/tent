@@ -9,15 +9,14 @@
 	import { FORCE_SETUP_ROUTE, LANDING_ROUTE, resolvePostLoginDestination } from '$lib/guards/auth';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { SECURITY_QUESTIONS } from '$lib/auth/security-questions';
-	import { PASSWORD_RULES, passwordPolicyError } from '$lib/auth/password-schema';
+	import { passwordPolicyError } from '$lib/auth/password-schema';
+	import PasswordRuleChecklist from '$lib/components/password-rule-checklist.svelte';
 	import { fetchAuthStatus, submitForceSetup } from '$lib/features/users';
 	import ShieldCheck from '@lucide/svelte/icons/shield-check';
 	import Lock from '@lucide/svelte/icons/lock';
 	import ShieldQuestion from '@lucide/svelte/icons/shield-question-mark';
 	import Eye from '@lucide/svelte/icons/eye';
 	import EyeOff from '@lucide/svelte/icons/eye-off';
-	import Check from '@lucide/svelte/icons/check';
-	import X from '@lucide/svelte/icons/x';
 
 	let currentUsername = $state('');
 	let mustChangePassword = $state(false);
@@ -27,10 +26,6 @@
 	let answer = $state('');
 	let showPassword = $state(false);
 	let loading = $state(false);
-
-	const passwordChecks = $derived(
-		PASSWORD_RULES.map((rule) => ({ ...rule, ok: rule.test(newPassword.trim()) }))
-	);
 
 	onMount(async () => {
 		try {
@@ -238,25 +233,7 @@
 							</Button>
 						</div>
 						{#if newPassword.length > 0 || mustChangePassword}
-							<ul
-								class="mt-2 grid grid-cols-1 gap-1 text-xs sm:grid-cols-2"
-								aria-label="เงื่อนไขรหัสผ่าน"
-							>
-								{#each passwordChecks as check (check.key)}
-									<li
-										class="flex items-center gap-1.5 {check.ok
-											? 'text-emerald-700'
-											: 'text-muted-foreground'}"
-									>
-										{#if check.ok}
-											<Check class="size-3.5 shrink-0" />
-										{:else}
-											<X class="size-3.5 shrink-0" />
-										{/if}
-										{check.label}
-									</li>
-								{/each}
-							</ul>
+							<PasswordRuleChecklist password={newPassword} class="mt-2" />
 						{/if}
 					</div>
 
