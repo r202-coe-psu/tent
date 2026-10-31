@@ -30,6 +30,9 @@
 		type RequisitionTicket
 	} from '$lib/features/tickets';
 	import DatePicker from '$lib/components/date-picker.svelte';
+	import { COUNT_ERROR, isCount } from '../domain/count-input';
+	import { CountInputGuard } from './count-input-guard.svelte';
+	import CountFieldError from './count-field-error.svelte';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { formatThaiShortDate } from '$lib/utils/date';
 	import { getShelterCode } from '$lib/db/shelter';
@@ -196,6 +199,19 @@
 			Number(countRegular || 0) +
 			Number(countVolunteer || 0)
 	);
+
+	const guard = new CountInputGuard();
+	// An empty box counts as 0 (see formTotal); a negative or non-numeric value is an error.
+	const errorFor = (id: string, n: number | null) =>
+		!guard.unparsed[id] && isCount(n ?? 0, 0) ? null : COUNT_ERROR;
+	const countErrors = $derived({
+		regular: errorFor('count-regular', countRegular),
+		volunteer: errorFor('count-volunteer', countVolunteer),
+		halal: errorFor('count-halal', countHalal),
+		softFood: errorFor('count-soft-food', countSoftFood),
+		infant: errorFor('count-infant', countInfant)
+	});
+	const countsValid = $derived(Object.values(countErrors).every((e) => e === null));
 
 	function openCreateDialog() {
 		const counts = mealHeadcount.data?.headcount;
@@ -1071,28 +1087,87 @@
 					<!-- Standard & Staff Groups -->
 					<div class="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
 						<div class="rounded-lg border bg-background p-2.5 shadow-2xs">
-							<Label class="text-xs font-medium text-foreground">อาหารทั่วไป</Label>
-							<Input type="number" min="0" bind:value={countRegular} class="mt-1.5 h-8 text-sm" />
+							<Label for="count-regular" class="text-xs font-medium text-foreground"
+								>อาหารทั่วไป</Label
+							>
+							<Input
+								id="count-regular"
+								type="number"
+								min="0"
+								bind:value={countRegular}
+								aria-invalid={!!countErrors.regular}
+								{@attach guard.attach('count-regular')}
+								aria-describedby={countErrors.regular ? 'count-regular-error' : undefined}
+								class="mt-1.5 h-8 text-sm"
+							/>
+							<CountFieldError {guard} id="count-regular" message={countErrors.regular} />
 						</div>
 						<div class="rounded-lg border bg-background p-2.5 shadow-2xs">
-							<Label class="text-xs font-medium text-foreground">เจ้าหน้าที่/อาสา</Label>
-							<Input type="number" min="0" bind:value={countVolunteer} class="mt-1.5 h-8 text-sm" />
+							<Label for="count-volunteer" class="text-xs font-medium text-foreground"
+								>เจ้าหน้าที่/อาสา</Label
+							>
+							<Input
+								id="count-volunteer"
+								type="number"
+								min="0"
+								bind:value={countVolunteer}
+								aria-invalid={!!countErrors.volunteer}
+								{@attach guard.attach('count-volunteer')}
+								aria-describedby={countErrors.volunteer ? 'count-volunteer-error' : undefined}
+								class="mt-1.5 h-8 text-sm"
+							/>
+							<CountFieldError {guard} id="count-volunteer" message={countErrors.volunteer} />
 						</div>
 					</div>
 
 					<!-- Dietary / Vulnerable Groups -->
 					<div class="grid grid-cols-1 gap-2.5 sm:grid-cols-3">
 						<div class="rounded-lg border bg-background p-2.5 shadow-2xs">
-							<Label class="text-xs font-medium text-foreground">อาหารฮาลาล</Label>
-							<Input type="number" min="0" bind:value={countHalal} class="mt-1.5 h-8 text-sm" />
+							<Label for="count-halal" class="text-xs font-medium text-foreground">อาหารฮาลาล</Label
+							>
+							<Input
+								id="count-halal"
+								type="number"
+								min="0"
+								bind:value={countHalal}
+								aria-invalid={!!countErrors.halal}
+								{@attach guard.attach('count-halal')}
+								aria-describedby={countErrors.halal ? 'count-halal-error' : undefined}
+								class="mt-1.5 h-8 text-sm"
+							/>
+							<CountFieldError {guard} id="count-halal" message={countErrors.halal} />
 						</div>
 						<div class="rounded-lg border bg-background p-2.5 shadow-2xs">
-							<Label class="text-xs font-medium text-foreground">อาหารอ่อน/ผู้สูงอายุ</Label>
-							<Input type="number" min="0" bind:value={countSoftFood} class="mt-1.5 h-8 text-sm" />
+							<Label for="count-soft-food" class="text-xs font-medium text-foreground"
+								>อาหารอ่อน/ผู้สูงอายุ</Label
+							>
+							<Input
+								id="count-soft-food"
+								type="number"
+								min="0"
+								bind:value={countSoftFood}
+								aria-invalid={!!countErrors.softFood}
+								{@attach guard.attach('count-soft-food')}
+								aria-describedby={countErrors.softFood ? 'count-soft-food-error' : undefined}
+								class="mt-1.5 h-8 text-sm"
+							/>
+							<CountFieldError {guard} id="count-soft-food" message={countErrors.softFood} />
 						</div>
 						<div class="rounded-lg border bg-background p-2.5 shadow-2xs">
-							<Label class="text-xs font-medium text-foreground">ทารก/เด็กอ่อน</Label>
-							<Input type="number" min="0" bind:value={countInfant} class="mt-1.5 h-8 text-sm" />
+							<Label for="count-infant" class="text-xs font-medium text-foreground"
+								>ทารก/เด็กอ่อน</Label
+							>
+							<Input
+								id="count-infant"
+								type="number"
+								min="0"
+								bind:value={countInfant}
+								aria-invalid={!!countErrors.infant}
+								{@attach guard.attach('count-infant')}
+								aria-describedby={countErrors.infant ? 'count-infant-error' : undefined}
+								class="mt-1.5 h-8 text-sm"
+							/>
+							<CountFieldError {guard} id="count-infant" message={countErrors.infant} />
 						</div>
 					</div>
 				</div>
@@ -1112,7 +1187,10 @@
 
 		<Dialog.Footer class="mt-2 gap-2 sm:gap-2">
 			<Button variant="outline" onclick={() => (createDialogOpen = false)}>ยกเลิก</Button>
-			<Button onclick={handleCreateSession} disabled={createSessionMutation.isPending}>
+			<Button
+				onclick={handleCreateSession}
+				disabled={createSessionMutation.isPending || !countsValid}
+			>
 				{createSessionMutation.isPending ? 'กำลังสร้าง...' : 'สร้างรอบมื้ออาหาร'}
 			</Button>
 		</Dialog.Footer>
