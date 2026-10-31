@@ -31,6 +31,7 @@
 	import { errorMessage } from '$lib/utils/errors';
 	import {
 		ROLE_REQUIRED_MESSAGE,
+		currentGrantRole,
 		VOLUNTEER_ACCESS_PHONE_MESSAGE,
 		accountPhone,
 		coordinatorAccessSchema,
@@ -109,6 +110,13 @@
 	let passwordError = $state<string | null>(null);
 
 	let lastOpenedId = $state<string | null>(null);
+	/** Editing an account that already holds a grant here starts on its current role (#1044). */
+	let roleSeededFor = $state<string | null>(null);
+	$effect(() => {
+		if (!open || roleSeededFor === volunteer._id || !grantsQuery.data) return;
+		roleSeededFor = volunteer._id;
+		if (!role) role = currentGrantRole(grants, roleChoices);
+	});
 	$effect(() => {
 		if (!open) {
 			lastOpenedId = null;
@@ -118,6 +126,7 @@
 		email = volunteer.user_name ?? volunteer.email ?? '';
 		role = '';
 		roleError = null;
+		roleSeededFor = null;
 		password = loginPhone ?? '';
 		expiresOn = '';
 		confirmRevoke = null;

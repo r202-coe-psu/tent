@@ -224,6 +224,21 @@ describe('VolunteerAccessDialog role radios (#1044, #1072)', () => {
 		);
 	});
 
+	it('starts on the current role when the account already holds a grant here', async () => {
+		mocks.grants = {
+			email: 'vol@example.com',
+			grants: [
+				{ role: 'kitchen_staff', expires_at: '2026-11-01T16:59:59.999Z', mine: true },
+				{ role: 'warehouse_staff', expires_at: '2026-11-03T16:59:59.999Z', mine: false }
+			]
+		};
+		await render(COORDINATOR, { user_name: 'vol@example.com' });
+		const checked = roleRadios().filter((r) => r.getAttribute('aria-checked') === 'true');
+		expect(checked.map((r) => r.id)).toEqual([
+			'volunteer-access-role-volunteer:001-warehouse_staff'
+		]);
+	});
+
 	it('offers a manager every staff role', async () => {
 		await render(MANAGER);
 		expect(roleRadios()).toHaveLength(12);

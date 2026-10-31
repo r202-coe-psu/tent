@@ -199,6 +199,21 @@ export async function grantVolunteerAccessAsCoordinator(
 /** A grant on the volunteer's account; `mine` ones are those the caller may revoke (FR-8). */
 export type VolunteerGrant = { role: string; expires_at: string; mine: boolean };
 
+/**
+ * The role to preselect when the account already holds grants here (#1044): the one that runs
+ * longest, i.e. the latest grant, if the caller may still give it. Empty when there is none, so
+ * a first grant starts with nothing picked (#1072).
+ */
+export function currentGrantRole<R extends string>(
+	grants: readonly Pick<VolunteerGrant, 'role' | 'expires_at'>[],
+	choices: readonly R[]
+): R | '' {
+	const latest = [...grants]
+		.filter((g): g is typeof g & { role: R } => (choices as readonly string[]).includes(g.role))
+		.sort((a, b) => Date.parse(b.expires_at) - Date.parse(a.expires_at))[0];
+	return latest?.role ?? '';
+}
+
 /** The grants on the account the volunteer profile is linked to, as the coordinator sees them. */
 export async function fetchVolunteerGrants(
 	volunteer: Pick<Volunteer, '_id' | 'shelter_code'>
