@@ -3482,6 +3482,23 @@
 				"type": "object",
 				"title": "DonationCourierPatchResponse"
 			},
+			"DonationCreateItem": {
+				"properties": {
+					"drop_off_point_id": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Drop Off Point Id"
+					},
+					"review_status": {
+						"type": "string",
+						"enum": ["approved", "pending"],
+						"title": "Review Status"
+					}
+				},
+				"type": "object",
+				"required": ["drop_off_point_id", "review_status"],
+				"title": "DonationCreateItem",
+				"description": "One booked line as stored, so the ticket can group by point without a second read."
+			},
 			"DonationCreateRequest": {
 				"properties": {
 					"shelter_code": { "type": "string", "title": "Shelter Code" },
@@ -3522,10 +3539,15 @@
 					"success": { "type": "boolean", "title": "Success", "default": true },
 					"tracking_token": { "type": "string", "title": "Tracking Token" },
 					"booking_ref": { "type": "string", "title": "Booking Ref" },
-					"status": { "type": "string", "title": "Status" }
+					"status": { "type": "string", "title": "Status" },
+					"items": {
+						"items": { "$ref": "#/components/schemas/DonationCreateItem" },
+						"type": "array",
+						"title": "Items"
+					}
 				},
 				"type": "object",
-				"required": ["tracking_token", "booking_ref", "status"],
+				"required": ["tracking_token", "booking_ref", "status", "items"],
 				"title": "DonationCreateResponse"
 			},
 			"DonationItemInput": {

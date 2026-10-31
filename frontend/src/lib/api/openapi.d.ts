@@ -1740,6 +1740,19 @@ export interface components {
 			 */
 			message: string;
 		};
+		/**
+		 * DonationCreateItem
+		 * @description One booked line as stored, so the ticket can group by point without a second read.
+		 */
+		DonationCreateItem: {
+			/** Drop Off Point Id */
+			drop_off_point_id: string | null;
+			/**
+			 * Review Status
+			 * @enum {string}
+			 */
+			review_status: 'approved' | 'pending';
+		};
 		/** DonationCreateRequest */
 		DonationCreateRequest: {
 			/** Shelter Code */
@@ -1772,6 +1785,8 @@ export interface components {
 			booking_ref: string;
 			/** Status */
 			status: string;
+			/** Items */
+			items: components['schemas']['DonationCreateItem'][];
 		};
 		/** DonationItemInput */
 		DonationItemInput: {

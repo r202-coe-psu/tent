@@ -103,7 +103,8 @@ class DonationCreateItem(BaseModel):
     """One booked line as stored, so the ticket can group by point without a second read."""
 
     drop_off_point_id: str | None
-    review_status: str
+    #: A new booking's lines are approved by the campaign rule or wait for staff (CR-174).
+    review_status: Literal["approved", "pending"]
 
 
 class DonationCreateResponse(BaseModel):
