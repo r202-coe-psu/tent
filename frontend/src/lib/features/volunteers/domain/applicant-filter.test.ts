@@ -209,6 +209,30 @@ describe('filterApplicantBoard', () => {
 		expect(at('2026-08-10T09:30:00.000Z', 'not_checked_in')).toEqual([]);
 	});
 
+	it('files an accepted standby shift under awaiting confirmation, not a dispatched one (#849)', () => {
+		const window = { start_ts: '2026-08-10T01:00:00.000Z', end_ts: '2026-08-10T09:00:00.000Z' };
+		const run2 = (dispatch_status: 'accepted' | 'dispatched') => {
+			const withStandby = [
+				assignments[0],
+				assignment(5, { status: 'standby', dispatch_status, duty_window: window }),
+				assignments[2]
+			];
+			const b = buildApplicantBoard({
+				jobId: JOB,
+				applications,
+				assignments: withStandby,
+				volunteers
+			});
+			return filterApplicantBoard(
+				b,
+				{ ...EMPTY_APPLICANT_FILTERS, attendance: 'awaiting_confirmation' },
+				{ ...ctx, assignments: withStandby, now: new Date('2026-08-10T09:30:00.000Z') }
+			).history.map((e) => e.key);
+		};
+		expect(run2('accepted')).toEqual([asg(5)]);
+		expect(run2('dispatched')).toEqual([]);
+	});
+
 	it('files a cancelled direct assignment under declined, not staff (#849)', () => {
 		const withCancelled = [
 			...assignments,
