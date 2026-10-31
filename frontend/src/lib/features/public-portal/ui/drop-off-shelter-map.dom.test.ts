@@ -8,6 +8,7 @@ import DropOffShelterMap from './drop-off-shelter-map.svelte';
 type MapProps = {
 	shelters: Array<{ code: string }>;
 	points: Array<{ id: string }>;
+	pointFocus: { pointId: string; zoom: boolean; seq: number } | null;
 	onSelectPoint: (id: string) => void;
 };
 
@@ -59,7 +60,14 @@ const point: PublicDonationPoint = {
 
 let instance: ReturnType<typeof mount> | null = null;
 
-async function render(props: { shelterCode?: string } = {}) {
+async function render(
+	props: {
+		shelterCode?: string;
+		focus?: { pointId: string; zoom: boolean; seq: number } | null;
+		focusNote?: string | null;
+		onFocusPoint?: (pointId: string) => void;
+	} = {}
+) {
 	instance = mount(DropOffShelterMap, {
 		target: document.body,
 		props: { shelterCode: 'SH001', shelterName: 'ศูนย์หาดใหญ่', ...props }
@@ -100,13 +108,35 @@ describe('DropOffShelterMap', () => {
 		await render();
 		expect(shelterQuery.code).toBe('SH001');
 		expect(map().points.map((p) => p.id)).toEqual(['p1']);
+	});
 
-		map().onSelectPoint('p1');
-		await tick();
-		flushSync();
+	it('names the point in focus under the map, with what it is used for', async () => {
+		shelterQuery.data = { donation_points: [point] };
+		await render({ focus: { pointId: 'p1', zoom: false, seq: 1 }, focusNote: 'ใช้กับ: ข้าวสาร' });
+
 		const note = document.body.querySelector('[data-testid="drop-off-point-note"]');
 		expect(note?.textContent).toContain('โรงยิม (ประตู 2)');
 		expect(note?.textContent).toContain('เข้าทางประตูด้านข้าง');
+		expect(note?.textContent).toContain('ใช้กับ: ข้าวสาร');
+		expect(note?.closest('[role="status"]')).not.toBeNull();
+	});
+
+	// CR-206 FR-MP-9 — the tapped point becomes the default drop-off point of every line.
+	it('reports a point tap to the booking form', async () => {
+		shelterQuery.data = { donation_points: [point] };
+		const onFocusPoint = vi.fn();
+		await render({ onFocusPoint });
+
+		map().onSelectPoint('p1');
+		expect(onFocusPoint).toHaveBeenCalledWith('p1');
+	});
+
+	it('hands the focus request to the map as is', async () => {
+		shelterQuery.data = { donation_points: [point] };
+		const focus = { pointId: 'p1', zoom: true, seq: 3 };
+		await render({ focus });
+
+		expect(map().pointFocus).toEqual(focus);
 	});
 
 	it('keeps the shelter pin alone when the detail has no points or fails', async () => {

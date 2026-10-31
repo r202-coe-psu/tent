@@ -39,9 +39,13 @@ const state = vi.hoisted(() => ({
 	// `null` makes resolveAuthenticatedAuthorContext throw (the board must fail closed).
 	authContext: null as { shelterCode: string; createdBy: string; roles: string[] } | null,
 	evacuees: [] as unknown[],
+	volunteers: [] as unknown[],
 	skippedDocs: [] as unknown[],
 	// Props the board passed to the (mocked) detail sheet; read lazily, they are getter-backed.
-	detailProps: null as { row?: BulkReturnPoolOverviewRow | null } | null
+	detailProps: null as {
+		row?: BulkReturnPoolOverviewRow | null;
+		returnerNames?: ReadonlyMap<string, string>;
+	} | null
 }));
 // Records the shelter code the board resolves the author context for.
 const authorContextCalls = vi.hoisted(() => vi.fn<(shelterCode?: string) => void>());
@@ -63,11 +67,31 @@ vi.mock('$lib/features/catalog', () => ({
 		]
 	})
 }));
-// Signature-agnostic on purpose: the board's call arguments for useEvacuees may change.
-vi.mock('$lib/features/people', () => ({
-	useEvacuees: () => ({ data: state.evacuees })
+// By-id name lookups: the mocks answer only for the ids and shelter the board asks for, like the
+// real hooks, and record every request.
+type NameLookup = { ids: string[]; shelterCode: string | undefined };
+const nameLookups = vi.hoisted(() => ({
+	evacuees: [] as NameLookup[],
+	volunteers: [] as NameLookup[]
 }));
-vi.mock('$lib/features/volunteers', () => ({ useVolunteers: () => ({ data: [] }) }));
+vi.mock('$lib/features/people', () => ({
+	useEvacueeNames: (ids: () => string[], shelterCode: () => string | undefined) => ({
+		get data() {
+			const wanted = ids();
+			nameLookups.evacuees.push({ ids: wanted, shelterCode: shelterCode() });
+			return (state.evacuees as { _id: string }[]).filter((p) => wanted.includes(p._id));
+		}
+	})
+}));
+vi.mock('$lib/features/volunteers', () => ({
+	useVolunteerNames: (ids: () => string[], shelterCode: () => string | undefined) => ({
+		get data() {
+			const wanted = ids();
+			nameLookups.volunteers.push({ ids: wanted, shelterCode: shelterCode() });
+			return (state.volunteers as { _id: string }[]).filter((p) => wanted.includes(p._id));
+		}
+	})
+}));
 // Backed by a reactive `$state` helper (read lazily in the getters, after imports resolve) so a
 // test can move the points from loading to loaded after mount.
 vi.mock('$lib/features/operations', () => ({
@@ -87,7 +111,10 @@ vi.mock('$app/paths', () => ({ resolve: (path: string) => path }));
 // Heavy children (own queries, sheets, dialogs) are out of scope for the board test.
 // Svelte 5 calls a component as `Component(anchor, props)`.
 vi.mock('./BulkReturnPoolDetail.svelte', () => ({
-	default: (_anchor: unknown, props: { row?: BulkReturnPoolOverviewRow | null }) => {
+	default: (
+		_anchor: unknown,
+		props: { row?: BulkReturnPoolOverviewRow | null; returnerNames?: ReadonlyMap<string, string> }
+	) => {
 		state.detailProps = props;
 	}
 }));
@@ -158,6 +185,7 @@ function makeRow(
 		unresolved_refs: [],
 		closed_loan_refs: [],
 		loan_refs_unavailable: opts.loanRefsUnavailable ?? false,
+		receivable_items_summary: [],
 		is_empty: entries.length === 0
 	};
 }
@@ -293,6 +321,9 @@ async function clickSwitch(id: string) {
 beforeEach(() => {
 	state.authContext = ADMIN;
 	state.evacuees = [];
+	state.volunteers = [];
+	nameLookups.evacuees.length = 0;
+	nameLookups.volunteers.length = 0;
 	state.skippedDocs = [];
 	resetStoragePointsMock();
 	state.detailProps = null;
@@ -407,6 +438,47 @@ describe('BulkReturnPoolBoard filters', () => {
 		await typeSearch('สมชาย');
 
 		expect(cardNames()).toEqual(['กองผ้าห่ม']);
+	});
+
+	it('asks for names only of the returners present in the pools, in the board shelter', async () => {
+		state.evacuees = [
+			{ _id: 'evacuee:somchai', first_name: 'สมชาย', last_name: 'ใจดี' },
+			{ _id: 'evacuee:not-in-pools', first_name: 'ไม่อยู่ในกอง', last_name: 'x' }
+		];
+		state.volunteers = [{ _id: 'volunteer:mani', first_name: 'มานี', last_name: 'มีนา' }];
+		await render(
+			{
+				data: [
+					makeRow(makePool('a', { name: 'กองผ้าห่ม' }), {
+						entries: [
+							resolved(
+								makeEntry('e1', { returner_type: 'evacuee', returner_id: 'evacuee:somchai' })
+							)
+						]
+					}),
+					makeRow(makePool('b', { name: 'กองอาหาร' }), {
+						entries: [
+							resolved(
+								makeEntry('e2', { returner_type: 'volunteer', returner_id: 'volunteer:mani' })
+							),
+							resolved(makeEntry('e3'))
+						]
+					})
+				]
+			},
+			{ shelterCode: 'SH007' }
+		);
+
+		const lastEvacuees = nameLookups.evacuees.at(-1);
+		const lastVolunteers = nameLookups.volunteers.at(-1);
+		expect(lastEvacuees).toEqual({ ids: ['evacuee:somchai'], shelterCode: 'SH007' });
+		expect(lastVolunteers).toEqual({ ids: ['volunteer:mani'], shelterCode: 'SH007' });
+		expect(nameLookups.evacuees.every((l) => !l.ids.includes('evacuee:not-in-pools'))).toBe(true);
+
+		// The looked-up names are searchable and reach the detail sheet.
+		await typeSearch('มานี');
+		expect(cardNames()).toEqual(['กองอาหาร']);
+		expect(state.detailProps?.returnerNames?.get('volunteer:mani')).toBe('จิตอาสา มานี มีนา');
 	});
 
 	it('finds no card by returner name when the evacuee roster is empty (negative control)', async () => {

@@ -74,7 +74,11 @@ async function settle() {
 }
 
 async function render(
-	props: { shelters?: DonationNeedsEntry[]; selectedCode?: string | null } = {}
+	props: {
+		shelters?: DonationNeedsEntry[];
+		selectedCode?: string | null;
+		onFocusPoint?: (pointId: string) => void;
+	} = {}
 ) {
 	instance = mount(DonationNeedsMap, {
 		target: document.body,
@@ -186,6 +190,19 @@ describe('DonationNeedsMap', () => {
 		const note = document.body.querySelector('[data-testid="donation-needs-map-point-note"]');
 		expect(note?.textContent).toContain('โรงยิม');
 		expect(note?.textContent).toContain('ประตู 2');
+	});
+
+	// CR-206 FR-MP-9 — the tapped point becomes the default drop-off point of every line.
+	it('reports a point tap to the donation wizard', async () => {
+		shelterQuery.data = {
+			donation_points: [{ id: 'p1', name: 'โรงยิม', geo: { lat: 7.01, lng: 100.41 } }]
+		};
+		const onFocusPoint = vi.fn();
+		await render({ selectedCode: 'SH002', onFocusPoint });
+
+		map().onSelectPoint('p1');
+		await settle();
+		expect(onFocusPoint).toHaveBeenCalledWith('p1');
 	});
 
 	it('closes the point note when another shelter is picked, so it does not reopen later', async () => {

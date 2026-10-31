@@ -44,6 +44,7 @@ export * from './domain/shift-assignment.schema';
 export * from './domain/quota';
 export * from './domain/capacity';
 export * from './domain/duty-window';
+export * from './domain/shift-closing';
 export * from './domain/collision';
 export * from './domain/assign-roster';
 export * from './domain/skills';
@@ -83,6 +84,8 @@ export {
 	ShiftAssignmentRemoteRepository,
 	createShiftAssignmentRepositoryForTest
 } from './data/shift-assignment.remote';
+
+export type { VolunteerNameRecord } from './data/volunteer-names.remote';
 
 // application — query-key factory + every hook
 export * from './application/queries';

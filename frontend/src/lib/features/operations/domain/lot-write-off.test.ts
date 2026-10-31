@@ -73,7 +73,7 @@ describe('assertLotWriteOffsFit — a history that cannot be replayed (#856)', (
 				reason: 'adjust',
 				adjust_reason: 'lost',
 				ref_id: null,
-				lot_ref: rice._id
+				lot_ref: 'stock_ledger:UNKNOWN'
 			},
 			ctx
 		);
@@ -81,6 +81,28 @@ describe('assertLotWriteOffsFit — a history that cannot be replayed (#856)', (
 
 		expect(attempt).toThrow(LotWriteOffError);
 		expect(attempt).toThrow('ประวัติคลังของสินค้านี้คำนวณยอดรายล็อตไม่ได้');
+	});
+});
+
+describe('assertLotWriteOffsFit — negative lot (#855)', () => {
+	it('refuses to cut more from a lot that is already negative, in Thai', () => {
+		const rice = inbound('item:rice', '5');
+		const other = inbound('item:rice', '50');
+		const overdrawn = createStockLedger(
+			{
+				item_id: 'item:rice',
+				qty: '-9',
+				unit: 'kg',
+				reason: 'adjust',
+				adjust_reason: 'lost',
+				ref_id: null,
+				lot_ref: rice._id
+			},
+			ctx
+		);
+		const ledger = [rice, other, overdrawn];
+		expect(() => assertLotWriteOffsFit(ledger, [writeOff(rice, '-1')])).toThrow(/ติดลบ/);
+		expect(() => assertLotWriteOffsFit(ledger, [writeOff(other, '-1')])).not.toThrow();
 	});
 });
 
@@ -95,7 +117,7 @@ describe('projectLotsByItem (#569)', () => {
 				reason: 'adjust',
 				adjust_reason: 'lost',
 				ref_id: null,
-				lot_ref: rice._id
+				lot_ref: 'stock_ledger:UNKNOWN'
 			},
 			ctx
 		);

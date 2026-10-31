@@ -97,6 +97,7 @@ export const POST: RequestHandler = async ({ request, getClientAddress }) => {
 				JOB_NOT_FOUND: 'ไม่พบงานที่ระบุในระบบ',
 				JOB_NOT_OPEN: 'งานนี้ปิดรับสมัครแล้ว',
 				JOB_FULL: 'งานนี้มีผู้สมัครเต็มจำนวนแล้ว',
+				SHIFT_CLOSED: 'กะเวลานี้สิ้นสุดแล้ว ปิดรับสมัคร',
 				SHIFT_NOT_FOUND: 'ไม่พบกะเวลาที่เลือก',
 				SHIFT_FULL: 'กะเวลานี้มีผู้สมัครเต็มจำนวนแล้ว',
 				SHIFT_ID_REQUIRED: 'กรุณาเลือกกะเวลาที่ต้องการปฏิบัติงาน',

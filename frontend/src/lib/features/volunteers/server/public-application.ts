@@ -29,6 +29,7 @@ import {
 import { shiftDutyWindow } from '../domain/duty-window';
 import { shiftKindFor } from '../domain/assign-roster';
 import { defaultShiftEndDate } from '../domain/shift-batch';
+import { isShiftOpen } from '../domain/shift-closing';
 import {
 	windowsOverlap,
 	type BookingWindow
@@ -103,6 +104,7 @@ export class PublicApplicationError extends Error {
 			| 'JOB_FULL'
 			| 'SHIFT_NOT_FOUND'
 			| 'SHIFT_FULL'
+			| 'SHIFT_CLOSED'
 			| 'SHIFT_ID_REQUIRED'
 			| 'SHIFT_DATE_AMBIGUOUS'
 			| 'DUPLICATE_APPLICATION'
@@ -254,6 +256,15 @@ export function selectedShift(job: CouchJob, input: DirectApplicationInput): Cou
 		return shifts[0];
 	}
 	throw new PublicApplicationError('SHIFT_ID_REQUIRED', 422);
+}
+
+/** {@link selectedShift}, refusing a shift that has already ended (#972). */
+function selectOpenShift(job: CouchJob, input: DirectApplicationInput): CouchJobShift | null {
+	const shift = selectedShift(job, input);
+	if (shift?.date && !isShiftOpen({ ...shift, date: shift.date })) {
+		throw new PublicApplicationError('SHIFT_CLOSED', 409);
+	}
+	return shift;
 }
 
 async function controlledSkills(shelterCode: string): Promise<Set<string>> {
@@ -501,7 +512,7 @@ export async function preflightPublicVolunteerApplication(
 	if (job.status !== 'open') throw new PublicApplicationError('JOB_NOT_OPEN', 409);
 	// A multi-shift request (#716) sends no shift here: each shift is judged at apply time,
 	// where one that fails is reported without stopping the others.
-	if (input.shift_id || input.shift_date) selectedShift(job, input);
+	if (input.shift_id || input.shift_date) selectOpenShift(job, input);
 	const hash = await sha256Hex(normalizeThaiPhone(input.phone));
 	const volunteers = await matchingVolunteers(shelterDbName(shelterCode), hash);
 	if (volunteers.length === 0) {
@@ -575,7 +586,7 @@ export async function applyPublicVolunteerApplication(
 	}
 	if (job.status !== 'open') throw new PublicApplicationError('JOB_NOT_OPEN', 409);
 
-	const selected = selectedShift(job, input);
+	const selected = selectOpenShift(job, input);
 	const verifiedShiftId = shiftId(selected);
 	const skills = [...new Set(input.skills.map((skill) => skill.trim()).filter(Boolean))];
 
@@ -857,7 +868,7 @@ export async function applyPublicVolunteerApplicationToShifts(
 		};
 		let selected: CouchJobShift | null;
 		try {
-			selected = selectedShift(job, shiftInput);
+			selected = selectOpenShift(job, shiftInput);
 		} catch (error) {
 			results.push(failedShift(requested.shift_id ?? null, error));
 			continue;

@@ -82,6 +82,9 @@ export {
 	type ReceiveBulkReturnPoolMutationInput
 } from './query/bulk-pool-v3-mutations';
 
+// Imperative read: which add-entry operationUlids already wrote an entry (retry of a partial save)
+export { findWrittenBulkReturnEntries } from './food-supplies/bulk-return-pool-v3-add-entry';
+
 // Ticket lifecycle mutations (Workflows 1–7)
 export {
 	useCreateRequisitionTicket,

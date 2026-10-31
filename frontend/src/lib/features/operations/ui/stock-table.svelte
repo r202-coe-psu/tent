@@ -59,7 +59,7 @@
 		STOCK_PAGE_SIZE,
 		type StockUrlState
 	} from './stock/stock-url-state';
-	import { projectLotsByItem } from '../domain/operations';
+	import { negativeLotSummary, negativeLots, projectLotsByItem } from '../domain/operations';
 	import {
 		dailyConsumption,
 		daysOfCover,
@@ -315,6 +315,16 @@
 		projected.brokenItemIds.map((id) => items.find((item) => item._id === id)?.name ?? id)
 	);
 
+	/** Items with an overdrawn lot (#855): still listed, flagged in red, never issued from. */
+	const negativeLotItems = $derived(
+		[...lotsByItem].flatMap(([itemId, lots]) => {
+			const negative = negativeLots(lots);
+			if (negative.length === 0) return [];
+			const name = items.find((item) => item._id === itemId)?.name ?? itemId;
+			return [`${name} (${negative.map((l) => `${l.qty} ${l.unit}`).join(', ')})`];
+		})
+	);
+
 	/** "Ever stocked" = at least one ledger row at this shelter; the rest are catalog-only. */
 	const everStocked = $derived(everStockedItemIds(ledger));
 
@@ -324,6 +334,7 @@
 			const override = overrideByItem.get(item._id);
 			const reorderThreshold = resolveReorderThreshold(occupancy, item, override);
 			const summary = stockSummaryByItem.get(item._id);
+			const negative = negativeLotSummary(lotsByItem.get(item._id) ?? []);
 			return {
 				_id: item._id,
 				name: item.name,
@@ -337,6 +348,9 @@
 				earliestExpiry: summary?.earliestExpiry ?? null,
 				storageKeys: summary?.storageKeys ?? [],
 				lotCount: summary?.lotCount ?? 0,
+				usableNote: negative
+					? `ใช้ได้ ${negative.usable} (ไม่นับล็อตติดลบ ${negative.negative})`
+					: null,
 				locationLabel: locationLabelByItem.get(item._id) ?? null,
 				coverDays: daysOfCover(qtyOnHand, dailyConsumption(occupancy, item, override)),
 				neverReceived: !everStocked.has(item._id),
@@ -458,6 +472,15 @@
 			class="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-900"
 		>
 			ประวัติคลังของ {brokenItemNames.join(', ')} ไม่สอดคล้องกัน จึงแสดงยอดรายล็อตไม่ได้ — กรุณาแจ้งผู้ดูแลระบบ
+		</p>
+	{/if}
+
+	{#if negativeLotItems.length > 0}
+		<p
+			role="alert"
+			class="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-900"
+		>
+			ล็อตนี้ยอดติดลบ — ต้องแก้ยอด: {negativeLotItems.join(', ')} (ห้ามเบิกจากล็อตนี้)
 		</p>
 	{/if}
 

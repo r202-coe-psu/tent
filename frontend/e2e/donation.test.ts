@@ -217,54 +217,93 @@ test.describe('Needs board shelter map (#814)', TAGS, () => {
 });
 
 /**
- * Every way into step 3 locks the shelter chosen on step 1, so step 3 only shows it:
- * the name read-only and a small map, with no shelter dropdown.
+ * Every way into step 3 locks the shelter chosen on step 1, so step 3 only shows it: the
+ * name read-only, with no shelter dropdown. The map is there only when there is a drop-off
+ * point to find (owner 2026-10-30): a self drop-off at a shelter with points.
  */
 test.describe('Donation form drop-off shelter (#814)', TAGS, () => {
-	test('shows the locked shelter read-only with its pin and no shelter dropdown', async ({
-		page
-	}) => {
-		await openShelterStep(page);
-
-		await expect(page.locator('#shelter-select')).toHaveCount(0);
-		await expect(page.getByTestId('drop-off-shelter-name')).toHaveText(SH001_NAME);
-		await expect(page.getByTestId('drop-off-shelter-map')).toBeVisible({ timeout: 15_000 });
-		await expect(page.getByTestId('shelter-marker-SH001')).toBeVisible({ timeout: 15_000 });
-	});
-
-	test("pins the locked shelter's drop-off points from its detail (CR-205 FR-DP-18)", async ({
-		page
-	}) => {
+	async function mockDetail(page: Page, donationPoints: object[]) {
 		await page.route('**/api/public/v1/shelters/SH001', (route) =>
 			route.fulfill({
 				status: 200,
 				contentType: 'application/json',
-				body: JSON.stringify({
-					shelter: {
-						...SHELTER_DETAIL,
-						donation_points: [
-							{
-								id: 'point-gym',
-								name: 'โรงยิม',
-								types: ['general'],
-								geo: { lat: 7.009, lng: 100.4752 },
-								location_note: 'เข้าทางประตู 2'
-							}
-						]
-					}
-				})
+				body: JSON.stringify({ shelter: { ...SHELTER_DETAIL, donation_points: donationPoints } })
 			})
 		);
+	}
+	const GYM_POINT = {
+		id: 'point-gym',
+		name: 'โรงยิม',
+		types: ['general'],
+		geo: { lat: 7.009, lng: 100.4752 },
+		location_note: 'เข้าทางประตู 2'
+	};
+	const MED_POINT = {
+		id: 'point-med',
+		name: 'ห้องพยาบาล',
+		types: ['medical'],
+		geo: { lat: 7.0082, lng: 100.4741 },
+		location_note: 'ชั้น 1 อาคาร B'
+	};
+
+	test('shows the locked shelter read-only, with no map while it has no drop-off point', async ({
+		page
+	}) => {
+		await mockDetail(page, []);
 		await openShelterStep(page);
 
+		await expect(page.locator('#shelter-select')).toHaveCount(0);
+		await expect(page.getByTestId('drop-off-shelter-name')).toHaveText(SH001_NAME);
+		await expect(page.getByTestId('drop-off-points-section')).toHaveCount(0);
+		await expect(page.getByTestId('drop-off-shelter-map')).toHaveCount(0);
+	});
+
+	test("pins the locked shelter's only drop-off point from its detail (CR-205 FR-DP-18)", async ({
+		page
+	}) => {
+		await mockDetail(page, [GYM_POINT]);
+		await openShelterStep(page);
+
+		await expect(page.getByTestId('drop-off-shelter-map')).toBeVisible({ timeout: 15_000 });
 		await expect(page.getByTestId('shelter-marker-SH001')).toBeVisible({ timeout: 15_000 });
+		await expect(page.getByTestId('drop-off-single-point')).toContainText('โรงยิม');
 		const pin = page.getByTestId('point-marker-point-gym');
 		await expect(pin).toBeVisible();
 		await pin.click();
 		await expect(page.getByTestId('drop-off-point-note')).toContainText('เข้าทางประตู 2');
 	});
 
+	test('a tapped pin fills the dropdown, and a dropdown pick focuses its pin (CR-206)', async ({
+		page
+	}) => {
+		await mockDetail(page, [GYM_POINT, MED_POINT]);
+		await openShelterStep(page);
+
+		const line = page.getByTestId('drop-off-point-line-0');
+		const trigger = line.locator('[data-slot="select-trigger"]');
+		await expect(trigger).toContainText('โรงยิม', { timeout: 15_000 });
+
+		// Before any tap, the map already shows the point the first line is on.
+		await expect(page.getByTestId('point-marker-point-gym')).toHaveClass(/is-selected/);
+
+		await page.getByTestId('point-marker-point-med').click();
+		await expect(trigger).toContainText('ห้องพยาบาล');
+		await expect(page.getByTestId('drop-off-point-note')).toContainText('ชั้น 1 อาคาร B');
+		await expect(page.getByTestId('drop-off-point-applied')).toContainText('ใช้กับ:');
+
+		await trigger.click();
+		await page.getByRole('option', { name: 'โรงยิม' }).click();
+		await expect(trigger).toContainText('โรงยิม');
+		await expect(page.getByTestId('point-marker-point-gym')).toHaveClass(/is-selected/);
+		await expect(page.getByTestId('drop-off-point-note')).toContainText('เข้าทางประตู 2');
+
+		await page.getByRole('button', { name: 'ส่งผ่านขนส่งพัสดุ' }).click();
+		await expect(page.getByTestId('drop-off-shelter-map')).toHaveCount(0);
+		await expect(page.getByTestId('drop-off-points-section')).toHaveCount(0);
+	});
+
 	test('without the shelters list the name stays and the map is dropped', async ({ page }) => {
+		await mockDetail(page, [GYM_POINT]);
 		await openShelterStep(page, 503);
 
 		await expect(page.getByTestId('drop-off-shelter-name')).toHaveText(SH001_NAME);

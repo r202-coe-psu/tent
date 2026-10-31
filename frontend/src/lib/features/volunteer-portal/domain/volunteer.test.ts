@@ -235,6 +235,37 @@ describe('isJobApplicable', () => {
 		expect(isJobApplicable(job({ slots_remaining: 0 }))).toBe(false);
 	});
 
+	describe('with shift rows (#972, FR-6)', () => {
+		const now = new Date('2026-10-28T20:00:00+07:00');
+		const shift = (id: string, date: string, remaining: number) => ({
+			shift_id: id,
+			date,
+			end_date: date,
+			start_time: '08:00',
+			end_time: '16:00',
+			station: null,
+			quota: 2,
+			slots_confirmed: 2 - remaining,
+			slots_remaining: remaining
+		});
+
+		it('accepts a job whose open shift has seats although the ended one is over-booked', () => {
+			const j = job({
+				slots_remaining: 0,
+				shifts: [shift('past', '2026-10-27', 0), shift('next', '2026-10-29', 2)]
+			});
+			expect(isJobApplicable(j, now)).toBe(true);
+		});
+
+		it('refuses a job whose only free seats are in an ended shift', () => {
+			const j = job({
+				slots_remaining: 2,
+				shifts: [shift('past', '2026-10-27', 2), shift('next', '2026-10-29', 0)]
+			});
+			expect(isJobApplicable(j, now)).toBe(false);
+		});
+	});
+
 	it('refuses a closed or cancelled job even while seats remain', () => {
 		expect(isJobApplicable(job({ status: 'closed' }))).toBe(false);
 		expect(isJobApplicable(job({ status: 'cancelled' }))).toBe(false);
