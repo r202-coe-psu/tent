@@ -34,7 +34,7 @@ note: decision-synced 2026-06-15 — task details and DoD maintained directly in
 **Description:** เก็บ consent ของผู้พักพิงว่ายินยอมให้ปรากฏในผลค้นหาสาธารณะหรือไม่ ตั้งแต่ขั้นลงทะเบียน โดยใช้ **opt-out policy** ที่ปิด K-15 แล้ว: default `privacy.search_excluded=false` และเปลี่ยนใจ opt-out ได้ทุกเมื่อ — กลุ่มเสี่ยง (เช่น ผู้หนีภัยความรุนแรงในครอบครัว) ต้องถูกซ่อนจากการค้นหาได้จริง
 
 **Definition of Done:**
-- บันทึก consent ต่อบุคคลตอนลงทะเบียนด้วย default `privacy.search_excluded=false` + แก้ภายหลังได้ (โดยเจ้าตัวผ่านเจ้าหน้าที่) พร้อมประวัติการเปลี่ยน — ทางแก้ภายหลังและประวัติกำหนดใน [CR-218](../changes/11-famsearch/CR-218-search-visibility-toggle.md) (สวิตช์บนหน้ารายละเอียดผู้เข้าพัก + `audit` `privacy_change`; ศูนย์ที่ปิดแล้วเปิดแสดงกลับไม่ได้). สถานะ T-40 ขยับเมื่อ PR #1079 merge
+- บันทึก consent ต่อบุคคลตอนลงทะเบียนด้วย default `privacy.search_excluded=false` + แก้ภายหลังได้ (โดยเจ้าตัวผ่านเจ้าหน้าที่) พร้อมประวัติการเปลี่ยน — ทางแก้ภายหลังและประวัติกำหนดใน [CR-218](../changes/11-famsearch/CR-218-search-visibility-toggle.md) (สวิตช์บนหน้ารายละเอียดผู้เข้าพัก + `audit` `privacy_change`; ศูนย์ที่ปิดแล้วเปิดแสดงกลับยังไม่มีผลกับ public — #1092). สถานะ T-40 ขยับเมื่อ PR #1079 merge
 - Opt-out มีผลทันทีกับ T-41 — record หายจากผลค้นหา (test ยืนยัน ไม่มี cache ค้าง)
 - ถ้อยคำขอ consent ตรงตาม FD-12 / ที่ DPIA (P-03) กำหนด และสื่อสารชัดว่าเป็น opt-out
 - Audit การเปลี่ยน consent ครบ + demo opt-out แล้วค้นไม่เจอ
