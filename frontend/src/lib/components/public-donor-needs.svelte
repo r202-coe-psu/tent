@@ -704,7 +704,6 @@
 					shelters={filteredShelters}
 					selectedCode={visibleMapSelectedCode}
 					onSelect={(code) => (mapSelectedCode = code)}
-					onFocusPoint={(pointId) => (donationStore.tappedPointId = pointId)}
 				>
 					{#snippet card(mapShelter, pin)}
 						{@const shelter = filteredShelters.find((s) => s.code === mapShelter.code)}

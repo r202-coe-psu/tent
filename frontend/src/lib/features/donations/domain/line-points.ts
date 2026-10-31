@@ -1,7 +1,7 @@
 /**
- * Which drop-off point each line of a booking goes to, on the donor's side (CR-206). The
- * form picks one point per line (FR-MP-8 – FR-MP-12); the ticket, the tracking page and the
- * box label group the lines by it (FR-MP-13, FR-MP-14, FR-MP-16).
+ * Which drop-off point each line of a booking goes to (CR-206). Staff set it: from the
+ * campaign at booking, at review otherwise (staff-assigned drop-off FR-AP-8). The ticket, the
+ * tracking page and the box label group the lines by it (FR-MP-13, FR-MP-14, FR-MP-16).
  */
 import {
 	listDropOffPoints,
@@ -11,64 +11,29 @@ import {
 } from './drop-off';
 import { currentLinePoint } from './point-receipts';
 
-/** A point a donor can book a line to: an entry of `public_shelters.donation_points`. */
-export type BookablePoint = { id: string; name: string };
+type CampaignPointSource = {
+	needs: readonly { item_id: string; drop_off_point_id?: string | null }[];
+};
 
 /**
- * The points a line may be booked to (FR-MP-8, FR-MP-11). Only a donor who brings the
- * goods picks a point: a parcel or a shelter pickup reaches the shelter whole (FR-MP-4).
- * `[]` also for a shelter with no ticked point — its lines carry no point.
+ * The point each line is booked to (draft CR "staff-assigned drop-off" FR-AP-8, FR-AP-9):
+ * staff, not the donor, decide it. A campaign line takes the point of the first need of the
+ * booking's own campaign that asks for its item; any other line waits for staff at review.
+ * Only a self drop-off has points (CR-206 FR-MP-4). The id is copied as staff set it, never
+ * checked against the shelter's points here (D-5, D-10): a point gone since reads as "any point".
  */
-export function bookableDropOffPoints(
-	shelter: Pick<DropOffShelterSource, 'donation_points'> | null | undefined,
+export function withCampaignLinePoints<T extends { item_id?: string | null }>(
+	lines: readonly T[],
+	campaign: CampaignPointSource | null | undefined,
 	deliveryMethod: string | null | undefined
-): BookablePoint[] {
-	if (deliveryMethod !== 'self_dropoff') return [];
-	return (shelter?.donation_points ?? []).map((point) => ({ id: point.id, name: point.name }));
-}
-
-/**
- * The point every line starts at (FR-MP-9): the one the donor tapped on the map, else the
- * first in the list. A tap on another shelter's map does not count here.
- */
-export function defaultDropOffPointId(
-	points: readonly BookablePoint[],
-	tappedPointId: string | null | undefined
-): string | null {
-	if (tappedPointId && points.some((point) => point.id === tappedPointId)) return tappedPointId;
-	return points[0]?.id ?? null;
-}
-
-/**
- * The point a line is booked to: the donor's own pick while the shelter still offers it,
- * else the default. `null` when there is no point to pick (FR-MP-11) — with one point that
- * point is filled in without asking (FR-MP-10). A pick made for another shelter is not in
- * `points`, so changing the shelter drops every pick (FR-MP-12).
- */
-export function lineDropOffPointId(
-	chosen: string | null | undefined,
-	points: readonly BookablePoint[],
-	defaultPointId: string | null
-): string | null {
-	if (points.length === 0) return null;
-	if (chosen && points.some((point) => point.id === chosen)) return chosen;
-	return defaultPointId;
-}
-
-/** Picker key of "ส่งทุกรายการที่จุดเดียวกัน"; a line's picker is keyed by the line's own key. */
-export const ALL_LINES_PICKER = '*all';
-
-/**
- * The picker a tap on the map fills (owner 2026-10-30): the one the donor used last, while it
- * is still on the form; before any is used, the first line's.
- */
-export function pickerForMapTap(
-	activePicker: string | null,
-	lineKeys: readonly string[]
-): string | null {
-	if (activePicker === ALL_LINES_PICKER) return activePicker;
-	if (activePicker !== null && lineKeys.includes(activePicker)) return activePicker;
-	return lineKeys[0] ?? null;
+): (T & { drop_off_point_id: string | null })[] {
+	return lines.map((line) => {
+		const need =
+			deliveryMethod === 'self_dropoff' && line.item_id
+				? campaign?.needs.find((n) => n.item_id === line.item_id)
+				: undefined;
+		return { ...line, drop_off_point_id: need?.drop_off_point_id ?? null };
+	});
 }
 
 /** Ids of the points the shelter offers now (FR-MP-16) — the main point has none. */
@@ -94,6 +59,9 @@ export const ANY_POINT_KEY = '*';
 
 /** Group key of lines recorded after the shelter had no drop-off point left (FR-MP-18b). */
 export const AT_SHELTER_KEY = '@shelter';
+
+/** Group key of lines waiting for staff to set their point at review (staff-assigned drop-off FR-AP-22). */
+export const AWAITING_STAFF_KEY = '?staff';
 
 /**
  * Where a group of lines goes. A point the shelter offers resolves to that point; `null`
@@ -121,7 +89,7 @@ export function lineDestinationResolver(
 export type DropOffGroupStatus = 'pending' | 'received' | 'received_at_shelter';
 
 export type DropOffDestinationGroup = {
-	/** The point id, or {@link ANY_POINT_KEY}. */
+	/** The point id, {@link ANY_POINT_KEY}, {@link AT_SHELTER_KEY} or {@link AWAITING_STAFF_KEY}. */
 	key: string;
 	anyPoint: boolean;
 	point: DropOffPoint;
@@ -141,47 +109,68 @@ type GroupSourceReceipt = { point_id: string | null; line_nos: readonly number[]
  * The booking's destinations, one group per point (FR-MP-13), with the lines no offered
  * point names in one "any point" group (FR-MP-16). A line recorded with no point (FR-MP-18b)
  * leaves its group for one "received at the shelter" group, which no other line joins.
+ * In a self drop-off to a shelter with points, a `pending` line with no point that no point
+ * has recorded waits for staff to set one at review: it goes in one "awaiting staff" group,
+ * shown last (staff-assigned drop-off FR-AP-22, FR-AP-22a).
  * Groups follow the order of their first line. A line staff refused at review is left out:
  * nothing of it is to be brought.
- * `null` when the booking names no point at all — it shows the shelter as before.
+ * `null` when the booking names no point and no line awaits one — it shows the shelter as before.
  */
 export function groupDropOffDestinations(
 	items: readonly GroupSourceItem[],
 	shelter: DropOffShelterSource,
-	opts: { anyPointName: string; pointReceipts?: readonly GroupSourceReceipt[] | null }
+	opts: {
+		anyPointName: string;
+		awaitingName: string;
+		deliveryMethod: string | null | undefined;
+		pointReceipts?: readonly GroupSourceReceipt[] | null;
+	}
 ): DropOffDestinationGroup[] | null {
-	if (!hasLinePoints(items)) return null;
-
 	const currentIds = currentDropOffPointIds(shelter);
-	const resolvePoint = lineDestinationResolver(shelter, opts.anyPointName);
 	const recordedAt = new Map<number, string | null>();
 	for (const receipt of opts.pointReceipts ?? []) {
 		for (const lineNo of receipt.line_nos) recordedAt.set(lineNo, receipt.point_id);
 	}
+	const awaitsStaff = opts.deliveryMethod === 'self_dropoff' && currentIds.size > 0;
+
+	const keyOf = (item: GroupSourceItem, lineNo: number): string => {
+		if (recordedAt.get(lineNo) === null) return AT_SHELTER_KEY;
+		const pointId = currentLinePoint(item, currentIds);
+		if (pointId !== null) return pointId;
+		const awaiting = awaitsStaff && item.review_status === 'pending' && !recordedAt.has(lineNo);
+		return awaiting ? AWAITING_STAFF_KEY : ANY_POINT_KEY;
+	};
 
 	const lineNosByKey = new Map<string, number[]>();
 	items.forEach((item, lineNo) => {
 		if (item.review_status === 'rejected') return;
-		const key =
-			recordedAt.get(lineNo) === null
-				? AT_SHELTER_KEY
-				: (currentLinePoint(item, currentIds) ?? ANY_POINT_KEY);
+		const key = keyOf(item, lineNo);
 		const group = lineNosByKey.get(key);
 		if (group) group.push(lineNo);
 		else lineNosByKey.set(key, [lineNo]);
 	});
+	if (!hasLinePoints(items) && !lineNosByKey.has(AWAITING_STAFF_KEY)) return null;
 
-	return [...lineNosByKey].map(([key, lineNos]): DropOffDestinationGroup => {
-		const pointId = key === ANY_POINT_KEY || key === AT_SHELTER_KEY ? null : key;
-		const recorded = lineNos.every((lineNo) => recordedAt.has(lineNo));
-		return {
-			key,
-			anyPoint: pointId === null,
-			point: key === AT_SHELTER_KEY ? resolveDropOffPoint(shelter) : resolvePoint(pointId),
-			lineNos,
-			status: !recorded ? 'pending' : key === AT_SHELTER_KEY ? 'received_at_shelter' : 'received'
-		};
-	});
+	const shelterPoint = resolveDropOffPoint(shelter);
+	const resolvePoint = lineDestinationResolver(shelter, opts.anyPointName);
+	const pointOf = (key: string): DropOffPoint => {
+		if (key === AT_SHELTER_KEY) return shelterPoint;
+		if (key === AWAITING_STAFF_KEY) return { ...shelterPoint, name: opts.awaitingName };
+		return resolvePoint(key === ANY_POINT_KEY ? null : key);
+	};
+
+	return [...lineNosByKey]
+		.sort(([a], [b]) => Number(a === AWAITING_STAFF_KEY) - Number(b === AWAITING_STAFF_KEY))
+		.map(([key, lineNos]): DropOffDestinationGroup => {
+			const recorded = lineNos.every((lineNo) => recordedAt.has(lineNo));
+			return {
+				key,
+				anyPoint: !currentIds.has(key),
+				point: pointOf(key),
+				lineNos,
+				status: !recorded ? 'pending' : key === AT_SHELTER_KEY ? 'received_at_shelter' : 'received'
+			};
+		});
 }
 
 /**

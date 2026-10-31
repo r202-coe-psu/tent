@@ -57,6 +57,7 @@ export {
 	refusedReceivedLines,
 	type DonationCloseResult
 } from './domain/point-receipts';
+export { withCampaignLinePoints } from './domain/line-points';
 export {
 	DONATION_PHOTO_MAX_UPLOAD_BYTES,
 	donationPhotoIdsSchema,

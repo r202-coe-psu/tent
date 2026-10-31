@@ -11,22 +11,7 @@
 	import { usePublicShelter, usePublicShelters } from '../application/queries';
 	import ShelterMap from './shelter-map.svelte';
 
-	let {
-		shelterCode,
-		shelterName = '',
-		focus = null,
-		focusNote = null,
-		onFocusPoint
-	}: {
-		shelterCode: string;
-		shelterName?: string;
-		/** The point in focus — set by the form for a tap here or a dropdown pick. */
-		focus?: MapPointFocus | null;
-		/** What the point in focus is used for, under its name (e.g. "ใช้กับ: ข้าวสาร"). */
-		focusNote?: string | null;
-		/** The donor tapped a drop-off point (CR-206 FR-MP-9). */
-		onFocusPoint?: (pointId: string) => void;
-	} = $props();
+	let { shelterCode, shelterName = '' }: { shelterCode: string; shelterName?: string } = $props();
 
 	const t = $derived(getTranslation(PUBLIC_DONATIONS_I18N, langState.current));
 	const sheltersQuery = usePublicShelters(() => ({}));
@@ -36,6 +21,10 @@
 	const points = $derived(donationMapPointsOf(shelterCode, shelterQuery.data?.donation_points));
 
 	let mapFailed = $state(false);
+	// A tapped pin only names its point: staff, not the donor, decide where each line goes
+	// (staff-assigned drop-off FR-AP-11).
+	let focus = $state<MapPointFocus | null>(null);
+	let focusSeq = 0;
 
 	const shelter = $derived(
 		buildDonationMap(
@@ -79,11 +68,11 @@
 				disablePopup
 				showLegend={false}
 				cooperativeGestures
-				onSelectPoint={(id) => onFocusPoint?.(id)}
+				onSelectPoint={(pointId) => (focus = { pointId, zoom: false, seq: ++focusSeq })}
 				onLoadError={() => (mapFailed = true)}
 			/>
 		</div>
-		<!-- A live region that is always there, so a tap or a pick is read out (owner 2026-10-30). -->
+		<!-- A live region that is always there, so a tap is read out (owner 2026-10-30). -->
 		<div role="status" aria-live="polite">
 			{#if focusedPoint}
 				<div
@@ -93,9 +82,6 @@
 					<p class="font-bold">{focusedPoint.label}</p>
 					{#if focusedPoint.description}
 						<p class="mt-0.5">{focusedPoint.description}</p>
-					{/if}
-					{#if focusNote}
-						<p class="mt-1 font-semibold" data-testid="drop-off-point-applied">{focusNote}</p>
 					{/if}
 				</div>
 			{/if}

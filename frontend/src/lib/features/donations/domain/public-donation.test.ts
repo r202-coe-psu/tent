@@ -176,14 +176,9 @@ describe('buildDonationItemsPayload', () => {
 		expect(p).not.toHaveProperty('needQty');
 	});
 
-	// CR-206 FR-MP-1, FR-MP-11 — the form decides each line's point; the payload carries it as is.
-	it("sends each line's drop-off point, null included, and leaves it out when unset", () => {
-		const [picked, none, unset] = buildDonationItemsPayload(
-			[{ ...line(1), dropOffPointId: 'point-gym' }, { ...line(1), dropOffPointId: null }, line(1)],
-			t
-		);
-		expect(picked.drop_off_point_id).toBe('point-gym');
-		expect(none.drop_off_point_id).toBeNull();
-		expect(unset).not.toHaveProperty('drop_off_point_id');
+	// Staff-assigned drop-off FR-AP-7 — the BFF decides each line's point, the donor sends none.
+	it('sends no drop-off point', () => {
+		const [p] = buildDonationItemsPayload([line(1)], t);
+		expect(p).not.toHaveProperty('drop_off_point_id');
 	});
 });

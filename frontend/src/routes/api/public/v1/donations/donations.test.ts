@@ -1178,15 +1178,28 @@ describe('POST /api/public/v1/donations', () => {
 		});
 	});
 
-	describe('drop-off point per line (CR-206)', () => {
-		const LINES = [
-			{ free_text: 'น้ำดื่ม', qty: 24, unit: 'bottle', drop_off_point_id: 'point-gym' },
-			{ free_text: 'ยาพารา', qty: 10, unit: 'pack', drop_off_point_id: 'point-med' }
-		];
+	describe('drop-off point per line, set by staff (FR-AP-8)', () => {
+		const RICE = { item_id: 'item:rice', free_text: 'ข้าวสาร', qty: 5, unit: 'kg' };
+		const BLANKET = { free_text: 'ผ้าห่ม', qty: 2, unit: 'piece' };
+		const campaignDoc = (id: string, pointId: string | null, qtyTarget = '100') => ({
+			_id: id,
+			type: 'donation_campaign',
+			status: 'open',
+			needs: [
+				{ item_id: 'item:rice', qty_target: qtyTarget, unit: 'kg', drop_off_point_id: pointId }
+			]
+		});
 
-		async function book(logistics: Record<string, unknown>, items: unknown = LINES) {
-			// Nothing booked, no campaigns — the booking only has to reach FastAPI.
-			vi.mocked(adminRaw).mockResolvedValue({ status: 200, data: { rows: [] } });
+		async function book(
+			items: unknown[],
+			logistics: Record<string, unknown> = { delivery_method: 'self_dropoff', vehicle: 'car' },
+			campaigns: unknown[] = [campaignDoc('donation_campaign:c1', 'point-gym')]
+		) {
+			vi.mocked(adminRaw).mockImplementation(async (path: string) =>
+				path.includes('donation_campaign:')
+					? { status: 200, data: { rows: campaigns.map((doc) => ({ doc })) } }
+					: { status: 200, data: { rows: [] } }
+			);
 			const response = await POST({
 				request: { json: () => Promise.resolve({ ...validPayload, items, logistics }) },
 				getClientAddress: () => '127.0.0.1'
@@ -1194,67 +1207,73 @@ describe('POST /api/public/v1/donations', () => {
 			return { status: response.status, body: await response.json() };
 		}
 
-		const sentItems = () => {
+		const sentPoints = () => {
 			const [, init] = vi.mocked(fetch).mock.calls[0]!;
-			return JSON.parse(String((init as RequestInit).body)).items as Array<Record<string, unknown>>;
+			return (
+				JSON.parse(String((init as RequestInit).body)).items as Array<Record<string, unknown>>
+			).map((item) => item.drop_off_point_id);
 		};
 
-		it('forwards the point of each line of a self drop-off (FR-MP-1, AC-1)', async () => {
+		it('gives a campaign line its need point and a typed-in line null (AC-13)', async () => {
 			mockFastapiCreate();
-			const res = await book({ delivery_method: 'self_dropoff', vehicle: 'car' });
+			const res = await book([RICE, BLANKET]);
 
 			expect(res.status).toBe(200);
-			expect(sentItems().map((item) => item.drop_off_point_id)).toEqual(['point-gym', 'point-med']);
+			expect(sentPoints()).toEqual(['point-gym', null]);
 		});
 
-		it('sends null for a line with no point', async () => {
+		it('takes the point of the campaign picked for the booking (AC-4)', async () => {
 			mockFastapiCreate();
-			await book({ delivery_method: 'self_dropoff', vehicle: 'car' }, [
-				{ free_text: 'น้ำดื่ม', qty: 24, unit: 'bottle' }
+			await book([RICE], undefined, [
+				campaignDoc('donation_campaign:a', 'point-gym', '1'),
+				campaignDoc('donation_campaign:b', 'point-med')
 			]);
 
-			expect(sentItems()[0].drop_off_point_id).toBeNull();
-		});
-
-		it('clears every point of a parcel whatever the client sent (FR-MP-4, AC-4)', async () => {
-			mockFastapiCreate();
-			const res = await book({ delivery_method: 'parcel' });
-
-			expect(res.status).toBe(200);
-			expect(sentItems().map((item) => item.drop_off_point_id)).toEqual([null, null]);
-		});
-
-		it('passes FastAPI UNKNOWN_DROP_OFF_POINT through (FR-MP-2, AC-2)', async () => {
-			vi.stubGlobal(
-				'fetch',
-				vi.fn().mockResolvedValue({
-					ok: false,
-					status: 400,
-					json: async () => ({
-						errors: [
-							{
-								success: false,
-								error: 'UNKNOWN_DROP_OFF_POINT',
-								drop_off_point_id: 'point-gym'
-							}
-						]
-					})
-				})
+			const [, init] = vi.mocked(fetch).mock.calls[0]!;
+			expect(JSON.parse(String((init as RequestInit).body)).campaign_id).toBe(
+				'donation_campaign:b'
 			);
-			const res = await book({ delivery_method: 'self_dropoff', vehicle: 'car' });
-
-			expect(res.status).toBe(400);
-			expect(res.body.error).toBe('UNKNOWN_DROP_OFF_POINT');
+			expect(sentPoints()).toEqual(['point-med']);
 		});
 
-		it('refuses a blank point id with 422 before FastAPI', async () => {
+		it('ignores a point the client sent (FR-AP-7, AC-5)', async () => {
 			mockFastapiCreate();
-			const res = await book({ delivery_method: 'self_dropoff', vehicle: 'car' }, [
-				{ free_text: 'น้ำดื่ม', qty: 24, unit: 'bottle', drop_off_point_id: '  ' }
+			const res = await book([
+				{ ...RICE, drop_off_point_id: 'point-med' },
+				{ ...BLANKET, drop_off_point_id: '  ' }
 			]);
 
-			expect(res.status).toBe(422);
-			expect(fetch).not.toHaveBeenCalled();
+			expect(res.status).toBe(200);
+			expect(sentPoints()).toEqual(['point-gym', null]);
+		});
+
+		it('sends null for every line of a parcel (AC-8)', async () => {
+			mockFastapiCreate();
+			await book([RICE, BLANKET], { delivery_method: 'parcel' });
+
+			expect(sentPoints()).toEqual([null, null]);
+		});
+
+		it('reads no registry for the points (D-10)', async () => {
+			mockFastapiCreate();
+			await book([RICE]);
+
+			const registryReads = vi
+				.mocked(adminRaw)
+				.mock.calls.map(([path]) => path)
+				.filter((path) => path.startsWith('/registry/') && !path.startsWith('/registry/config'));
+			expect(registryReads).toEqual([]);
+		});
+
+		it("returns each line's point and review from FastAPI (FR-AP-8a)", async () => {
+			const items = [
+				{ drop_off_point_id: 'point-gym', review_status: 'approved' },
+				{ drop_off_point_id: null, review_status: 'pending' }
+			];
+			mockFastapiCreate({ items });
+			const res = await book([RICE, BLANKET]);
+
+			expect(res.body.items).toEqual(items);
 		});
 	});
 });

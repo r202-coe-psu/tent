@@ -115,13 +115,7 @@ export const donationPreDeclarationInputSchema = z.object({
 				qty: qtyStrCoercePositiveSchema,
 				unit: z.string().min(1, 'Please enter a unit'),
 				condition: z.string().optional(),
-				note: z.string().optional(),
-				/**
-				 * The drop-off point this line goes to (CR-206 FR-MP-1) — `public_shelters.donation_points[].id`.
-				 * FastAPI checks it against the shelter (FR-MP-2, FR-MP-3); the BFF clears it for any
-				 * delivery but `self_dropoff` (FR-MP-4).
-				 */
-				drop_off_point_id: z.string().trim().min(1).max(64).nullable().optional()
+				note: z.string().optional()
 			})
 		)
 		.min(1, 'Please add at least one item to the donation'),
