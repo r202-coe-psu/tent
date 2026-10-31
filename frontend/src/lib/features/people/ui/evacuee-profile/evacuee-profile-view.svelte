@@ -62,6 +62,7 @@
 	import EvacueeProfileHealthCard from './evacuee-profile-health-card.svelte';
 	import EvacueeProfileHouseholdCard from './evacuee-profile-household-card.svelte';
 	import EvacueeProfileAssetsCard from './evacuee-profile-assets-card.svelte';
+	import EvacueeProfilePrivacyCard from './evacuee-profile-privacy-card.svelte';
 	import EvacueeZoneModal from './evacuee-zone-modal.svelte';
 	import EvacueeStatusModal from './evacuee-status-modal.svelte';
 	import EvacueeQrModal from './evacuee-qr-modal.svelte';
@@ -814,6 +815,7 @@
 						onOpenEdit={() => (showHealthModal = true)}
 					/>
 				</div>
+				<EvacueeProfilePrivacyCard {evacuee} readonly={profileReadonly} {getAuthorContext} />
 				<div class="space-y-4">
 					<EvacueeProfileHouseholdCard
 						{evacuee}

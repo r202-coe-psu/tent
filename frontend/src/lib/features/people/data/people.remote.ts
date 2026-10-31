@@ -1,3 +1,4 @@
+import { bulkDocsDetailed } from '$lib/db/couch-db';
 import { paginateItems } from '$lib/db/paginate';
 import { createRemoteRepository, type Repository, type PaginatedResult } from '$lib/db/repository';
 import { makeDocId, now, touch, type AuthorContext } from '$lib/db/model';
@@ -63,6 +64,7 @@ import {
 	type MemberConsentPlan
 } from '$lib/features/consent/server';
 import { autoHouseholdLabel } from '../domain/registration-shell';
+import { planSearchVisibilityChange } from '../domain/search-visibility';
 import {
 	STATION_LOG_STALE_WINDOW_MS,
 	createStationLog,
@@ -383,6 +385,31 @@ export class PeopleRemoteRepository implements PeopleRepository {
 		}
 		await this.refreshDerivedHouseholdStatus(saved.household_id);
 		return saved;
+	}
+
+	async setSearchVisibility(
+		evacueeId: string,
+		visible: boolean,
+		ctx: AuthorContext
+	): Promise<Evacuee | null> {
+		const latest = await this.repo.get<Evacuee>(evacueeId);
+		if (!latest) throw new Error('ไม่พบข้อมูลผู้ประสบภัย');
+		const plan = planSearchVisibilityChange(latest, visible, ctx);
+		if (!plan) return null;
+
+		const [evacueeOutcome, auditOutcome] = await bulkDocsDetailed(this.dbName, [
+			plan.evacuee,
+			plan.audit
+		]);
+		if (!evacueeOutcome.ok) {
+			throw new Error(
+				`บันทึกการแสดงในระบบค้นหาญาติไม่สำเร็จ (${evacueeOutcome.id}: ${evacueeOutcome.error})`
+			);
+		}
+		// _bulk_docs is not atomic: the change already landed, and a retry from the UI would be a
+		// no-op, so the audit entry gets one more attempt here instead of being lost.
+		if (!auditOutcome.ok) await this.repo.put(plan.audit);
+		return { ...plan.evacuee, _rev: evacueeOutcome.rev };
 	}
 
 	async patchEvacuee(id: string, patch: EvacueePatch): Promise<Evacuee> {
