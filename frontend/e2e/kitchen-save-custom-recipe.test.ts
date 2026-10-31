@@ -2,9 +2,10 @@
  * Production board "สร้างสูตรเอง" can save the hand-built ingredient list as a new recipe (#802)
  * against the real local CouchDB.
  *
- * A kitchen_staff-only user (no warehouse/manager role) ticks "บันทึกเป็นสูตรใหม่": the recipe is
- * written at its own standard portions, the meal plan points at it, and it shows up in the BOM
- * dropdown. Saving the same name again warns and still opens the ticket.
+ * A kitchen_staff-only user (no warehouse/manager role) ticks "บันทึกเป็นสูตรใหม่": the recipe takes
+ * the menu label as its name and the batch portions as its standard portions, the meal plan points
+ * at it, and it shows up in the BOM dropdown. Saving the same name again warns and still opens the
+ * ticket.
  *
  * Fixtures: one SH001-local food item master and one meal_session in shelter_sh001, written
  * straight to CouchDB. Teardown deletes only documents this run created and ends with a zero-leak
@@ -178,7 +179,7 @@ test.describe(
 			expect(leftovers, 'zero-leak: no documents from this run remain').toEqual([]);
 		});
 
-		test('kitchen staff saves the custom list as a recipe scaled to its standard portions', async ({
+		test('kitchen staff saves the custom list as a recipe named after the menu, at the batch portions', async ({
 			browser
 		}) => {
 			const context = await browser.newContext();
@@ -187,8 +188,7 @@ test.describe(
 
 			await buildCustomBatch(page, '2');
 			await page.getByRole('checkbox', { name: 'บันทึกเป็นสูตรใหม่' }).check();
-			await page.getByLabel('ชื่อสูตร').fill(RECIPE);
-			await page.getByLabel('จำนวนจานมาตรฐาน').fill('5');
+			await page.getByLabel('ชื่อเมนูที่แสดง').fill(RECIPE);
 			await page.getByRole('button', { name: 'สร้างใบเบิกวัตถุดิบ' }).click();
 
 			await expect(page.getByText(`บันทึกสูตร "${RECIPE}" เรียบร้อยแล้ว`)).toBeVisible();
@@ -198,9 +198,9 @@ test.describe(
 			expect(recipes, 'exactly one recipe saved').toHaveLength(1);
 			const [recipe] = recipes;
 			expect(recipe.created_by).toBe(KITCHEN.name);
-			expect(recipe.standard_portions).toBe('5');
-			expect(recipe.ingredients, '2 kg for 10 plates is 1 kg for 5').toEqual([
-				{ item_master_id: ingredientId, quantity: '1', uom: 'kg' }
+			expect(recipe.standard_portions, 'the batch portions').toBe('10');
+			expect(recipe.ingredients, 'stored as cooked').toEqual([
+				{ item_master_id: ingredientId, quantity: '2', uom: 'kg' }
 			]);
 
 			const plans = await mealPlansOfRun();
@@ -221,7 +221,7 @@ test.describe(
 
 			await buildCustomBatch(page, '1');
 			await page.getByRole('checkbox', { name: 'บันทึกเป็นสูตรใหม่' }).check();
-			await page.getByLabel('ชื่อสูตร').fill(`  ${RECIPE.toUpperCase()}  `);
+			await page.getByLabel('ชื่อเมนูที่แสดง').fill(`  ${RECIPE.toUpperCase()}  `);
 			await page.getByRole('button', { name: 'สร้างใบเบิกวัตถุดิบ' }).click();
 
 			await expect(page.getByText(/จึงไม่บันทึกซ้ำ/)).toBeVisible();
@@ -265,7 +265,7 @@ test.describe(
 
 			await buildCustomBatch(page, '1');
 			await page.getByRole('checkbox', { name: 'บันทึกเป็นสูตรใหม่' }).check();
-			await page.getByLabel('ชื่อสูตร').fill(retryRecipe);
+			await page.getByLabel('ชื่อเมนูที่แสดง').fill(retryRecipe);
 			const submit = page.getByRole('button', { name: 'สร้างใบเบิกวัตถุดิบ' });
 			await submit.click();
 			await expect(page.getByText(`บันทึกสูตร "${retryRecipe}" เรียบร้อยแล้ว`)).toBeVisible();
@@ -290,14 +290,27 @@ test.describe(
 			await page.getByRole('tab', { name: 'สร้างสูตรเอง' }).click();
 			const checkbox = page.getByRole('checkbox', { name: 'บันทึกเป็นสูตรใหม่' });
 			await checkbox.check();
-			await page.getByLabel('ชื่อสูตร').fill(RECIPE);
 
 			await page.getByRole('tab', { name: 'เลือกจากฐานสูตร (BOM)' }).click();
 			await page.getByRole('tab', { name: 'สร้างสูตรเอง' }).click();
 
 			await expect(checkbox).not.toBeChecked();
-			await checkbox.check();
-			await expect(page.getByLabel('ชื่อสูตร')).toHaveValue('');
+		});
+
+		test('saving as a recipe without a menu name asks for one and writes nothing', async ({
+			browser
+		}) => {
+			const context = await browser.newContext();
+			contexts.push(context);
+			const page = await openBoard(context);
+			const plansBefore = (await mealPlansOfRun()).length;
+
+			await buildCustomBatch(page, '1');
+			await page.getByRole('checkbox', { name: 'บันทึกเป็นสูตรใหม่' }).check();
+			await page.getByRole('button', { name: 'สร้างใบเบิกวัตถุดิบ' }).click();
+
+			await expect(page.getByText('กรุณาระบุชื่อเมนูที่แสดง เพื่อใช้เป็นชื่อสูตร')).toBeVisible();
+			expect(await mealPlansOfRun(), 'no plan opened').toHaveLength(plansBefore);
 		});
 
 		test('kitchen staff can add a recipe from the catalog page but not edit one', async ({

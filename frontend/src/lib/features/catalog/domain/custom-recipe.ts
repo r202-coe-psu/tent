@@ -1,6 +1,6 @@
 import { persistQty, type QtyValue } from '$lib/utils/qty';
 import type { RecipeInput } from './catalog';
-import { isPositiveQty, scaleQuantityToPortions } from './recipe-quantity';
+import { isPositiveQty } from './recipe-quantity';
 import { canonicalizeUnitCode, type FallbackUnitDef, type UnitOfMeasure } from './unit-of-measure';
 
 /** The production board does not ask for a cooking time; recipes require one. */
@@ -17,24 +17,20 @@ export type CustomRecipeIngredient = {
 export type CustomRecipeResult = { ok: true; input: RecipeInput } | { ok: false; reason: string };
 
 /**
- * Builds the recipe input for an ingredient list sized for `producedPortions`, persisted at
- * `standardPortions` (recipe quantities are always stored at the standard yield). Ingredient
- * units may be legacy Thai labels and are stored as canonical unit codes.
+ * Builds the recipe input for an ingredient list cooked for `portions` plates; the recipe is
+ * stored at that yield. Ingredient units may be legacy Thai labels and are stored as canonical
+ * unit codes.
  */
 export function customRecipeInput(args: {
 	label: string;
-	standardPortions: QtyValue;
-	producedPortions: QtyValue;
+	portions: QtyValue;
 	ingredients: readonly CustomRecipeIngredient[];
 	units?: readonly (UnitOfMeasure | FallbackUnitDef)[] | null;
 }): CustomRecipeResult {
 	const label = args.label.trim();
 	if (!label) return { ok: false, reason: 'กรุณาระบุชื่อสูตร' };
-	if (!isPositiveQty(args.standardPortions)) {
-		return { ok: false, reason: 'จำนวนจานมาตรฐานต้องมากกว่า 0' };
-	}
-	if (!isPositiveQty(args.producedPortions)) {
-		return { ok: false, reason: 'จำนวนจานเป้าหมายต้องมากกว่า 0' };
+	if (!isPositiveQty(args.portions)) {
+		return { ok: false, reason: 'จำนวนจานต้องมากกว่า 0' };
 	}
 
 	const ingredients: RecipeInput['ingredients'] = [];
@@ -43,18 +39,14 @@ export function customRecipeInput(args: {
 		if (!uom) {
 			return { ok: false, reason: `ไม่รู้จักหน่วย "${ingredient.uom}" ของ ${ingredient.name}` };
 		}
-		const quantity = scaleQuantityToPortions(
-			ingredient.quantity,
-			args.producedPortions,
-			args.standardPortions
-		);
-		if (!isPositiveQty(quantity)) {
-			return {
-				ok: false,
-				reason: `ปริมาณ ${ingredient.name} ต่อ ${persistQty(args.standardPortions)} จานน้อยเกินไป`
-			};
+		if (!isPositiveQty(ingredient.quantity)) {
+			return { ok: false, reason: `ปริมาณ ${ingredient.name} ต้องมากกว่า 0` };
 		}
-		ingredients.push({ item_master_id: ingredient.item_master_id, quantity, uom });
+		ingredients.push({
+			item_master_id: ingredient.item_master_id,
+			quantity: persistQty(ingredient.quantity),
+			uom
+		});
 	}
 
 	return {
@@ -62,7 +54,7 @@ export function customRecipeInput(args: {
 		input: {
 			label,
 			ingredients,
-			standard_portions: persistQty(args.standardPortions),
+			standard_portions: persistQty(args.portions),
 			standard_duration_hours: CUSTOM_RECIPE_DURATION_HOURS
 		}
 	};

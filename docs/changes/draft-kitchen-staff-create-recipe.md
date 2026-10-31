@@ -10,7 +10,6 @@ affects:
   - docs/prd/role-permission-matrix.md (catalog / recipe — create)
   - frontend/src/lib/features/catalog/domain/catalog-permissions.ts
   - frontend/src/lib/features/catalog/application/queries.ts (useCreateRecipe)
-  - frontend/src/lib/features/kitchen/ui/save-as-recipe-fields.svelte
   - frontend/src/routes/(protected)/back-office/catalog/components/recipe-tab.svelte
   - frontend/src/routes/(protected)/back-office/kitchen/production-board/[session_id]/+page.svelte
 ---
@@ -49,7 +48,8 @@ Issue #802 ขอให้บันทึกเป็นสูตรใหม่
 - `catalog` domain: เพิ่ม `canCreateShelterRecipe(roles, shelterCode?)`.
 - `catalog` application: `useCreateRecipe` ใช้ `canCreateShelterRecipe` เป็นเงื่อนไขเดียว
   (ไม่มี shelter = central catalog → system_admin เท่านั้น).
-- Production board Stage A โหมด "สร้างสูตรเอง": checkbox "บันทึกเป็นสูตรใหม่" + ชื่อสูตร + จำนวนจานมาตรฐาน.
+- Production board Stage A โหมด "สร้างสูตรเอง": checkbox "บันทึกเป็นสูตรใหม่" อย่างเดียว ใช้ "ชื่อเมนูที่แสดง" เป็นชื่อสูตร
+  และ "จำนวนจานที่ต้องการผลิต" เป็นจำนวนจานมาตรฐาน (ติ๊กแล้วไม่กรอกชื่อเมนู → toast ให้กรอก และยังไม่เปิดตั๋ว).
   บันทึกล้ม / ชื่อซ้ำ → toast แจ้ง แต่ยังเปิดตั๋วเบิกได้.
 - หน้า catalog แท็บสูตรอาหาร (`/back-office/catalog?tab=recipe`): kitchen_staff เห็นปุ่ม "เพิ่มสูตรอาหาร" และเปิดฟอร์มสร้างได้
   (ใช้ `canCreateShelterRecipe`); ปุ่มแก้ไข / ลบยังซ่อนเหมือนเดิม.

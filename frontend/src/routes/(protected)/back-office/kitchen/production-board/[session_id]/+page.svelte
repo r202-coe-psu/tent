@@ -20,8 +20,6 @@
 		selectableCookingIngredients,
 		TARGET_GROUP_LABELS,
 		MEAL_PERIOD_LABELS,
-		SaveAsRecipeFields,
-		emptySaveAsRecipeDraft,
 		type TargetGroupTag
 	} from '$lib/features/kitchen';
 	import {
@@ -210,7 +208,7 @@
 
 	function setRecipeMode(mode: 'bom' | 'custom') {
 		recipeMode = mode;
-		if (mode === 'bom') resetRecipeDraft();
+		if (mode === 'bom') resetSaveAsRecipe();
 		if (mode === 'custom' && selectedRecipeId) {
 			selectedRecipeId = '';
 			isIngredientsManuallyEdited = false;
@@ -219,14 +217,15 @@
 	}
 	let menuLabel = $state('');
 	let allocatedTarget = $state(50);
-	// #802: save the hand-built ingredient list as a catalog recipe (custom mode, new batch only).
-	let recipeDraft = $state(emptySaveAsRecipeDraft());
+	// #802: save the hand-built ingredient list as a catalog recipe named after the menu label, at
+	// this batch's portions (custom mode, new batch only).
+	let saveAsRecipe = $state(false);
 	// Survives a failed plan/ticket attempt so the retry links the recipe already saved.
 	let savedRecipeId = $state<string | null>(null);
 	const canSaveAsRecipe = $derived(recipeMode === 'custom' && !activePlan);
 
-	function resetRecipeDraft() {
-		recipeDraft = emptySaveAsRecipeDraft();
+	function resetSaveAsRecipe() {
+		saveAsRecipe = false;
 		savedRecipeId = null;
 	}
 	let targetTags = $state<TargetGroupTag[]>(['regular']);
@@ -303,7 +302,7 @@
 			allocatedTarget = count > 0 ? count : session?.target_headcount?.total || 50;
 			selectedRecipeId = '';
 			recipeMode = 'bom';
-			resetRecipeDraft();
+			resetSaveAsRecipe();
 			isIngredientsManuallyEdited = false;
 			ingredientsList = calculateRecipeIngredients('', allocatedTarget);
 			showAddIngredient = false;
@@ -457,7 +456,7 @@
 	// Saves the custom ingredient list as a shelter recipe. Never throws: the ticket must open
 	// even when the recipe can't be saved. Returns the saved recipe id, or null.
 	async function saveCustomRecipe(
-		fallbackLabel: string,
+		label: string,
 		ctx: { shelterCode: string; createdBy: string }
 	): Promise<string | null> {
 		const fail = (reason: string) => {
@@ -466,9 +465,8 @@
 		};
 		try {
 			const result = customRecipeInput({
-				label: recipeDraft.name.trim() || fallbackLabel,
-				standardPortions: recipeDraft.portions ?? allocatedTarget,
-				producedPortions: allocatedTarget,
+				label,
+				portions: allocatedTarget,
 				ingredients: ingredientsList.map((ing) => ({
 					item_master_id: ing.item_id,
 					name: getItemName(ing.item_id),
@@ -478,9 +476,9 @@
 				units: unitsQuery.data
 			});
 			if (!result.ok) return fail(result.reason);
-			const { label } = result.input;
-			if (findRecipeByLabel(recipes.data, label)) {
-				toast.warning(`มีสูตรชื่อ "${label}" อยู่แล้ว จึงไม่บันทึกซ้ำ`);
+			const recipeLabel = result.input.label;
+			if (findRecipeByLabel(recipes.data, recipeLabel)) {
+				toast.warning(`มีสูตรชื่อ "${recipeLabel}" อยู่แล้ว จึงไม่บันทึกซ้ำ`);
 				return null;
 			}
 			const saved = await createRecipeMutation.mutateAsync({
@@ -488,7 +486,7 @@
 				ctx,
 				shelterCode: ctx.shelterCode
 			});
-			toast.success(`บันทึกสูตร "${label}" เรียบร้อยแล้ว`);
+			toast.success(`บันทึกสูตร "${recipeLabel}" เรียบร้อยแล้ว`);
 			return saved._id;
 		} catch (err) {
 			return fail(err instanceof Error ? err.message : 'ไม่ทราบสาเหตุ');
@@ -517,6 +515,11 @@
 			toast.error('กรุณาระบุจำนวนวัตถุดิบให้มากกว่า 0 ทุกรายการ');
 			return;
 		}
+		const willSaveRecipe = canSaveAsRecipe && saveAsRecipe && !savedRecipeId;
+		if (willSaveRecipe && !menuLabel.trim()) {
+			toast.error('กรุณาระบุชื่อเมนูที่แสดง เพื่อใช้เป็นชื่อสูตร');
+			return;
+		}
 
 		const chosenRecipe = (recipes.data ?? []).find((r) => r._id === selectedRecipeId);
 		const finalLabel = menuLabel.trim() || chosenRecipe?.label || 'เมนูประกอบอาหาร';
@@ -526,7 +529,7 @@
 			createdBy: authStore.user?.name ?? 'kitchen_staff'
 		};
 
-		if (canSaveAsRecipe && recipeDraft.enabled && !savedRecipeId) {
+		if (willSaveRecipe) {
 			savedRecipeId = await saveCustomRecipe(finalLabel, ctx);
 		}
 
@@ -964,14 +967,27 @@
 								กำหนดวัตถุดิบเองในตารางด้านขวา ไม่อ้างอิงสูตรจากฐานข้อมูล
 							</p>
 							{#if canSaveAsRecipe}
-								<SaveAsRecipeFields bind:draft={recipeDraft} defaultPortions={allocatedTarget} />
+								<label class="mt-2 flex cursor-pointer items-center gap-2">
+									<input
+										type="checkbox"
+										bind:checked={saveAsRecipe}
+										class="h-3.5 w-3.5 rounded border-gray-300 text-primary focus:ring-primary"
+									/>
+									<span class="text-xs">บันทึกเป็นสูตรใหม่</span>
+								</label>
+								{#if saveAsRecipe}
+									<p class="mt-1 text-2xs text-muted-foreground">
+										ใช้ชื่อเมนูที่แสดงเป็นชื่อสูตร และจำนวนจานที่ต้องการผลิตเป็นจำนวนจานมาตรฐาน
+									</p>
+								{/if}
 							{/if}
 						{/if}
 					</div>
 
 					<div>
-						<Label class="text-xs">ชื่อเมนูที่แสดง</Label>
+						<Label for="menu-label" class="text-xs">ชื่อเมนูที่แสดง</Label>
 						<Input
+							id="menu-label"
 							bind:value={menuLabel}
 							placeholder="เช่น ข้าวต้มไก่ฮาลาล, ข้าวผัดไข่..."
 							class="mt-1 text-xs"

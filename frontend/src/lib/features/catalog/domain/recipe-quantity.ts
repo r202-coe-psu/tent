@@ -38,18 +38,6 @@ export function persistedQuantityFromPerPotion(
 	return positiveQty(parseQty(quantity).mul(portions), 'persistedQuantity');
 }
 
-/** Rescales a quantity sized for `fromPortions` to `toPortions`; may round to `'0'`. */
-export function scaleQuantityToPortions(
-	quantity: QtyValue,
-	fromPortions: QtyValue,
-	toPortions: QtyValue
-): string {
-	const amount = positiveQty(quantity, 'quantity');
-	const from = positiveQty(fromPortions, 'fromPortions');
-	const to = positiveQty(toPortions, 'toPortions');
-	return persistQty(parseQty(amount).mul(to).div(from));
-}
-
 /** Calculates the read-only total shown for a recipe's standard potion yield. */
 export function totalQuantityForPotions(
 	quantityPerPotion: QtyValue,

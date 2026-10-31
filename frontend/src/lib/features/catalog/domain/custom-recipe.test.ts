@@ -17,23 +17,22 @@ const rice: CustomRecipeIngredient = {
 function build(overrides: Partial<Parameters<typeof customRecipeInput>[0]> = {}) {
 	return customRecipeInput({
 		label: 'Soup',
-		standardPortions: 10,
-		producedPortions: 50,
+		portions: 50,
 		ingredients: [rice],
 		...overrides
 	});
 }
 
 describe('customRecipeInput', () => {
-	it('scales quantities from the produced portions to the standard portions', () => {
+	it('stores the ingredient list as cooked, at the batch portions', () => {
 		const result = build({ label: '  Fried rice ' });
 		expect(result).toEqual({
 			ok: true,
 			input: {
 				label: 'Fried rice',
-				standard_portions: '10',
+				standard_portions: '50',
 				standard_duration_hours: CUSTOM_RECIPE_DURATION_HOURS,
-				ingredients: [{ item_master_id: rice.item_master_id, quantity: '0.4', uom: 'kg' }]
+				ingredients: [{ item_master_id: rice.item_master_id, quantity: '2', uom: 'kg' }]
 			}
 		});
 	});
@@ -55,20 +54,13 @@ describe('customRecipeInput', () => {
 		});
 	});
 
-	it('explains a quantity that rounds to zero at the standard portions', () => {
-		const result = build({
-			standardPortions: 1,
-			producedPortions: 1000,
-			ingredients: [{ ...rice, quantity: '0.0001' }]
-		});
-		expect(result).toEqual({ ok: false, reason: 'ปริมาณ ข้าวสาร ต่อ 1 จานน้อยเกินไป' });
+	it('explains a quantity that is zero at stored precision', () => {
+		const result = build({ ingredients: [{ ...rice, quantity: '0.00001' }] });
+		expect(result).toEqual({ ok: false, reason: 'ปริมาณ ข้าวสาร ต้องมากกว่า 0' });
 	});
 
-	it.each([[0], [-1], [Number.NaN]])('reports invalid standard portions (%s)', (portions) => {
-		expect(build({ standardPortions: portions })).toEqual({
-			ok: false,
-			reason: 'จำนวนจานมาตรฐานต้องมากกว่า 0'
-		});
+	it.each([[0], [-1], [Number.NaN]])('reports invalid portions (%s)', (portions) => {
+		expect(build({ portions })).toEqual({ ok: false, reason: 'จำนวนจานต้องมากกว่า 0' });
 	});
 
 	it('reports a blank label', () => {
