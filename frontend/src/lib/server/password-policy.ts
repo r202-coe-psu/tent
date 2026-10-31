@@ -1,5 +1,6 @@
 /**
- * Server-side password policy — single source of truth.
+ * Server-side password policy. The rules and their Thai wording live in
+ * `$lib/auth/password-schema` (`PASSWORD_RULES`), shared with the forms.
  *
  * Rules (per พี่โบ๊ท):
  * - At least 10 characters (after trim)
@@ -9,13 +10,8 @@
  * - At least one special character (!@#$%^&*…)
  */
 
+import { passwordPolicyError } from '$lib/auth/password-schema';
 import { ServiceError } from '$lib/server/couch-admin';
-
-const MIN_LENGTH = 10;
-const HAS_UPPERCASE = /[A-Z]/;
-const HAS_LOWERCASE = /[a-z]/;
-const HAS_DIGIT = /[0-9]/;
-const HAS_SPECIAL = /[^A-Za-z0-9]/;
 
 /**
  * Validate a password against the policy and throw a `ServiceError('VALIDATION', …)`
@@ -25,18 +21,9 @@ const HAS_SPECIAL = /[^A-Za-z0-9]/;
  */
 export function validatePassword(raw: string): string {
 	const password = raw.trim();
-
-	const failures: string[] = [];
-	if (password.length < MIN_LENGTH) failures.push(`at least ${MIN_LENGTH} characters`);
-	if (!HAS_UPPERCASE.test(password)) failures.push('at least one uppercase letter (A-Z)');
-	if (!HAS_LOWERCASE.test(password)) failures.push('at least one lowercase letter (a-z)');
-	if (!HAS_DIGIT.test(password)) failures.push('at least one digit (0-9)');
-	if (!HAS_SPECIAL.test(password)) failures.push('at least one special character');
-
-	if (failures.length > 0) {
-		throw new ServiceError('VALIDATION', `Password must contain: ${failures.join(', ')}`);
-	}
-
+	// Thai, from the same rules the forms show, so the toast is readable (#1045).
+	const error = passwordPolicyError(password);
+	if (error) throw new ServiceError('VALIDATION', error);
 	return password;
 }
 

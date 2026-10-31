@@ -924,6 +924,95 @@
 	{:else}
 		<!-- ── SIGNED IN VOLUNTEER DASHBOARD ─────────────────────────────────── -->
 
+		<!-- QR ROLE CARD — first thing on the page on a phone and on desktop (#1045): staff scan it
+		     at check-in and at the distribution point, so it must not sit under the shift list.
+		     Stacked and centred on a phone; QR left of the details from `sm`. -->
+		<div class="rounded-3xl border border-border bg-card p-4 shadow-sm sm:p-6">
+			<div class="flex flex-col items-center gap-4 sm:flex-row sm:items-start sm:gap-6">
+				<div class="shrink-0 text-center">
+					{#if qrDataUrl}
+						<img
+							src={qrDataUrl}
+							alt="QR Code รหัสอาสาสมัคร: {currentVolunteer.volunteerCode}"
+							class="mx-auto size-44 rounded-xl border border-border bg-white p-2 shadow-xs sm:size-40"
+						/>
+					{:else if roleCardLoading}
+						<div
+							class="mx-auto flex size-44 items-center justify-center rounded-xl border border-border bg-white text-muted-foreground sm:size-40"
+						>
+							<QrCode class="size-20 animate-pulse" />
+						</div>
+					{:else if !hasScannableToken}
+						<div
+							class="mx-auto flex size-44 flex-col items-center justify-center gap-1.5 rounded-xl border border-border bg-white p-3 text-center text-muted-foreground sm:size-40"
+						>
+							<QrCode class="size-10" />
+							<p class="text-2xs leading-tight">เข้าสู่ระบบด้วยเบอร์โทร ไม่มี QR สำหรับเช็คอิน</p>
+						</div>
+					{/if}
+				</div>
+
+				<div class="flex w-full min-w-0 flex-1 flex-col gap-3 text-center sm:text-left">
+					<div>
+						<h4 class="text-sm font-bold text-foreground">บัตรอาสาสมัครอัจฉริยะ (QR Role Card)</h4>
+						<p class="mt-1 text-base font-black text-foreground">{currentVolunteer.name}</p>
+						<p class="text-xs font-semibold text-muted-foreground">
+							รหัสอาสาสมัคร: {currentVolunteer.volunteerCode}
+						</p>
+					</div>
+					<div class="flex flex-wrap justify-center gap-1 sm:justify-start">
+						<span
+							class="rounded px-1.5 py-0.5 text-2xs font-bold {currentVolunteer.verified
+								? 'bg-emerald-50 text-emerald-700'
+								: 'bg-amber-50 text-amber-800'}"
+						>
+							{currentVolunteer.verified ? '🟢 ยืนยันตัวตนแล้ว' : '🟡 ยังไม่ยืนยันตัวตน'}
+						</span>
+						<span
+							class="rounded px-1.5 py-0.5 text-2xs font-bold {currentVolunteer.statusType ===
+							'active'
+								? 'bg-emerald-50 text-emerald-700'
+								: 'bg-muted text-muted-foreground'}"
+						>
+							{currentVolunteer.statusType === 'active'
+								? '🟢 ปฏิบัติหน้าที่อยู่'
+								: '⚪ ยังไม่ปฏิบัติหน้าที่'}
+						</span>
+					</div>
+					<p class="text-2xs text-muted-foreground">
+						คุณสามารถรับสิทธิสวัสดิการ อาหารร้อน น้ำดื่ม และเวชภัณฑ์ที่เจ้าหน้าที่จัดเตรียมไว้
+						โดยใช้บัตรนี้แสดงต่อเจ้าหน้าที่ ณ จุดแจกจ่าย
+					</p>
+					{#if !hasScannableToken}
+						<p class="text-2xs text-muted-foreground">
+							ใช้ QR หรือรหัส Token ที่ได้รับตอนสมัครเพื่อเปิดบัตรที่เช็คอินได้
+						</p>
+					{/if}
+					<div class="flex flex-wrap justify-center gap-2 sm:justify-start">
+						<Button
+							type="button"
+							variant="outline"
+							size="sm"
+							class="min-h-11 grow gap-1.5 px-3 text-xs whitespace-nowrap sm:grow-0"
+							onclick={downloadRoleCardQr}
+							disabled={!qrDataUrl}
+						>
+							<Download class="size-4" /> ดาวน์โหลด QR
+						</Button>
+						<Button
+							type="button"
+							variant="outline"
+							size="sm"
+							class="min-h-11 grow gap-1.5 px-3 text-xs whitespace-nowrap sm:grow-0"
+							onclick={() => (isPassModalOpen = true)}
+						>
+							<Maximize2 class="size-4" /> ขยายบัตร
+						</Button>
+					</div>
+				</div>
+			</div>
+		</div>
+
 		<!-- TOP PROFILE HEADER CARD — stacked on a phone (actions as a full-width row), side
 		     by side from `sm` with the actions top-right; it used to stay stacked up to `lg`,
 		     leaving the actions stranded under a half-empty card on a tablet. -->
@@ -1360,99 +1449,6 @@
 								<span>ไม่มีการแชร์ข้อมูลส่วนบุคคลของผู้ประสบภัยเพื่อความปลอดภัยของระบบ</span>
 							</li>
 						</ul>
-					</div>
-
-					<!-- WIDGET 2: บัตรอาสาสมัครอัจฉริยะ (QR Role Card) -->
-					<div class="rounded-3xl border border-border bg-card p-4 shadow-sm sm:p-6">
-						<!-- Wraps rather than squeezes (#626): when the title and both buttons do not fit
-						     — a phone, or this card's narrow column on desktop — the buttons drop to
-						     their own line instead of breaking their labels. -->
-						<div class="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
-							<h4 class="min-w-0 flex-1 basis-48 text-sm font-bold text-foreground">
-								บัตรอาสาสมัครอัจฉริยะ (QR Role Card)
-							</h4>
-							<div class="flex w-full flex-wrap items-center gap-2 sm:w-auto">
-								<Button
-									type="button"
-									variant="outline"
-									size="sm"
-									class="min-h-11 grow gap-1.5 px-3 text-xs whitespace-nowrap sm:grow-0"
-									onclick={downloadRoleCardQr}
-									disabled={!qrDataUrl}
-								>
-									<Download class="size-4" /> ดาวน์โหลด QR
-								</Button>
-								<Button
-									type="button"
-									variant="outline"
-									size="sm"
-									class="min-h-11 grow gap-1.5 px-3 text-xs whitespace-nowrap sm:grow-0"
-									onclick={() => (isPassModalOpen = true)}
-								>
-									<Maximize2 class="size-4" /> ขยายบัตร
-								</Button>
-							</div>
-						</div>
-						<p class="mt-2 text-2xs text-muted-foreground">
-							คุณสามารถรับสิทธิสวัสดิการ อาหารร้อน น้ำดื่ม และเวชภัณฑ์ที่เจ้าหน้าที่จัดเตรียมไว้
-							โดยใช้บัตรนี้แสดงต่อเจ้าหน้าที่ ณ จุดแจกจ่าย
-						</p>
-
-						<!-- Mini QR Role Card, available for every resolved volunteer session. -->
-						<div
-							class="mt-4 rounded-2xl border border-border bg-muted/20 p-4 text-center transition-all hover:bg-muted/30"
-						>
-							{#if qrDataUrl}
-								<img
-									src={qrDataUrl}
-									alt="QR Code รหัสอาสาสมัคร: {currentVolunteer.volunteerCode}"
-									class="mx-auto size-28 rounded-xl border border-border bg-white p-1.5 shadow-xs"
-								/>
-							{:else if roleCardLoading}
-								<div
-									class="mx-auto flex size-28 items-center justify-center rounded-xl bg-white text-muted-foreground"
-								>
-									<QrCode class="size-16 animate-pulse" />
-								</div>
-							{:else if !hasScannableToken}
-								<div
-									class="mx-auto flex size-28 flex-col items-center justify-center gap-1 rounded-xl bg-white p-2 text-center text-muted-foreground"
-								>
-									<QrCode class="size-8" />
-									<p class="text-3xs leading-tight">
-										เข้าสู่ระบบด้วยเบอร์โทร ไม่มี QR สำหรับเช็คอิน
-									</p>
-								</div>
-							{/if}
-							<h5 class="mt-2.5 text-xs font-black text-foreground">{currentVolunteer.name}</h5>
-							<p class="text-2xs font-semibold text-muted-foreground">
-								รหัสอาสาสมัคร: {currentVolunteer.volunteerCode}
-							</p>
-							<div class="mt-2 flex justify-center gap-1">
-								<span
-									class="rounded px-1.5 py-0.5 text-3xs font-bold {currentVolunteer.verified
-										? 'bg-emerald-50 text-emerald-700'
-										: 'bg-amber-50 text-amber-800'}"
-								>
-									{currentVolunteer.verified ? '🟢 ยืนยันตัวตนแล้ว' : '🟡 ยังไม่ยืนยันตัวตน'}
-								</span>
-								<span
-									class="rounded px-1.5 py-0.5 text-3xs font-bold {currentVolunteer.statusType ===
-									'active'
-										? 'bg-emerald-50 text-emerald-700'
-										: 'bg-muted text-muted-foreground'}"
-								>
-									{currentVolunteer.statusType === 'active'
-										? '🟢 ปฏิบัติหน้าที่อยู่'
-										: '⚪ ยังไม่ปฏิบัติหน้าที่'}
-								</span>
-							</div>
-							{#if !hasScannableToken}
-								<p class="mt-2.5 text-3xs text-muted-foreground">
-									ใช้ QR หรือรหัส Token ที่ได้รับตอนสมัครเพื่อเปิดบัตรที่เช็คอินได้
-								</p>
-							{/if}
-						</div>
 					</div>
 
 					<Dialog.Root
