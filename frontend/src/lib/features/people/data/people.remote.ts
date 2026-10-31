@@ -214,7 +214,7 @@ export class PeopleRemoteRepository implements PeopleRepository {
 			const targetHousehold = await this.repo.get<Household>(parsedInput.household_id);
 			if (!targetHousehold) throw new Error('ไม่พบครัวเรือนปลายทาง');
 			if (!isActiveHouseholdStatus(migrateHouseholdV3ToV4(targetHousehold).status)) {
-				throw new Error('ไม่สามารถเพิ่มสมาชิกเข้าครัวเรือนที่ยกเลิกหรือเช็คเอาท์แล้ว');
+				throw new Error('ไม่สามารถเพิ่มสมาชิกเข้าครัวเรือนที่ยกเลิกหรือเช็คเอาต์แล้ว');
 			}
 		}
 
@@ -485,7 +485,7 @@ export class PeopleRemoteRepository implements PeopleRepository {
 				if (!targetDoc) throw new Error('ไม่พบครัวเรือนปลายทาง');
 				const target = migrateHouseholdV3ToV4(targetDoc);
 				if (!isActiveHouseholdStatus(target.status)) {
-					throw new Error('ไม่สามารถเพิ่มสมาชิกเข้าครัวเรือนที่ยกเลิกหรือเช็คเอาท์แล้ว');
+					throw new Error('ไม่สามารถเพิ่มสมาชิกเข้าครัวเรือนที่ยกเลิกหรือเช็คเอาต์แล้ว');
 				}
 
 				const memberDocs: Evacuee[] = [];

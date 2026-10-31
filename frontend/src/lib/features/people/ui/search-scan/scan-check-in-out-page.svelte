@@ -296,7 +296,7 @@
 		try {
 			reason = normalizeCheckoutRemark(checkoutReason);
 		} catch (err) {
-			checkoutReasonError = err instanceof Error ? err.message : 'ต้องระบุเหตุผลการเช็คเอาท์';
+			checkoutReasonError = err instanceof Error ? err.message : 'ต้องระบุเหตุผลการเช็คเอาต์';
 			return;
 		}
 		checkoutDialogOpen = false;
@@ -321,17 +321,17 @@
 			}
 
 			if (rejectedResults.length === 0) {
-				toast.success(`เช็คเอาท์สำเร็จ ${targets.length} คน`);
+				toast.success(`เช็คเอาต์สำเร็จ ${targets.length} คน`);
 			} else if (fulfilledResults.length > 0) {
 				toast.warning(
-					`เช็คเอาท์สำเร็จ ${fulfilledResults.length} คน, ล้มเหลว ${rejectedResults.length} คน`
+					`เช็คเอาต์สำเร็จ ${fulfilledResults.length} คน, ล้มเหลว ${rejectedResults.length} คน`
 				);
 			} else {
 				const firstError = rejectedResults[0];
-				toast.error(firstError instanceof Error ? firstError.message : 'เช็คเอาท์ไม่สำเร็จ');
+				toast.error(firstError instanceof Error ? firstError.message : 'เช็คเอาต์ไม่สำเร็จ');
 			}
 		} catch (err) {
-			toast.error(err instanceof Error ? err.message : 'เช็คเอาท์ไม่สำเร็จ');
+			toast.error(err instanceof Error ? err.message : 'เช็คเอาต์ไม่สำเร็จ');
 		}
 	}
 
@@ -536,7 +536,7 @@
 								>
 									<div class="mb-3 flex items-center justify-between">
 										<h5 class="text-xs font-bold text-slate-800 dark:text-slate-200">
-											จัดการเช็คอิน/เช็คเอาท์พร้อมกับครอบครัว
+											จัดการเช็คอิน/เช็คเอาต์พร้อมกับครอบครัว
 										</h5>
 										<label
 											class="flex cursor-pointer items-center gap-1.5 text-xs font-semibold text-[#003B71] select-none dark:text-blue-400"
@@ -650,7 +650,7 @@
 										{:else}
 											<LogOut class="size-4" />
 										{/if}
-										เช็คเอาท์
+										เช็คเอาต์
 									</Button>
 								{:else if canCheckIn}
 									<Button
@@ -756,13 +756,13 @@
 <Dialog.Root bind:open={checkoutDialogOpen}>
 	<Dialog.Content class="sm:max-w-md">
 		<Dialog.Header>
-			<Dialog.Title>เหตุผลการเช็คเอาท์</Dialog.Title>
+			<Dialog.Title>เหตุผลการเช็คเอาต์</Dialog.Title>
 			<Dialog.Description
 				>ระบุเหตุผลหรือหมายเหตุ (บังคับ) เช่น ออกไปธุระนอกพื้นที่</Dialog.Description
 			>
 		</Dialog.Header>
 		<div class="space-y-1.5">
-			<Label for="checkout-reason">เหตุผลการเช็คเอาท์</Label>
+			<Label for="checkout-reason">เหตุผลการเช็คเอาต์</Label>
 			<Input
 				id="checkout-reason"
 				bind:value={checkoutReason}
@@ -778,7 +778,7 @@
 			<Button type="button" variant="outline" onclick={() => (checkoutDialogOpen = false)}>
 				ยกเลิก
 			</Button>
-			<Button type="button" onclick={confirmCheckOut}>ยืนยันเช็คเอาท์</Button>
+			<Button type="button" onclick={confirmCheckOut}>ยืนยันเช็คเอาต์</Button>
 		</Dialog.Footer>
 	</Dialog.Content>
 </Dialog.Root>

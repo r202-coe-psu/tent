@@ -20,7 +20,7 @@
 		pre_registered: { label: 'ลงทะเบียนล่วงหน้า', variant: 'secondary' },
 		arriving: { label: 'กำลังเดินทางมา', variant: 'outline' },
 		checked_in: { label: 'เช็คอินแล้ว', variant: 'default' },
-		checked_out: { label: 'เช็คเอาท์แล้ว', variant: 'secondary' },
+		checked_out: { label: 'เช็คเอาต์แล้ว', variant: 'secondary' },
 		cancelled: { label: 'ยกเลิก', variant: 'destructive' },
 		merged: { label: 'รวมแล้ว', variant: 'secondary' }
 	};

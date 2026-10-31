@@ -312,7 +312,7 @@ async function scanAndSelectOnly(page: Page, payload: string, others: string[]):
 	await page.getByPlaceholder('กรอกรหัส หรือ สแกน QR...').fill(payload);
 	await page.getByRole('button', { name: 'ตกลง' }).click();
 	if (others.length > 0) {
-		await expect(page.getByText('จัดการเช็คอิน/เช็คเอาท์พร้อมกับครอบครัว')).toBeVisible({
+		await expect(page.getByText('จัดการเช็คอิน/เช็คเอาต์พร้อมกับครอบครัว')).toBeVisible({
 			timeout: 15_000
 		});
 	}
@@ -330,11 +330,11 @@ export async function checkOutByScan(
 	reason: string
 ): Promise<void> {
 	await scanAndSelectOnly(page, id, others);
-	await page.getByRole('button', { name: 'เช็คเอาท์', exact: true }).click();
-	const dialog = page.getByRole('dialog', { name: 'เหตุผลการเช็คเอาท์' });
-	await dialog.getByLabel('เหตุผลการเช็คเอาท์').fill(reason);
-	await dialog.getByRole('button', { name: 'ยืนยันเช็คเอาท์' }).click();
-	await expect(page.getByText('เช็คเอาท์สำเร็จ 1 คน')).toBeVisible({ timeout: 15_000 });
+	await page.getByRole('button', { name: 'เช็คเอาต์', exact: true }).click();
+	const dialog = page.getByRole('dialog', { name: 'เหตุผลการเช็คเอาต์' });
+	await dialog.getByLabel('เหตุผลการเช็คเอาต์').fill(reason);
+	await dialog.getByRole('button', { name: 'ยืนยันเช็คเอาต์' }).click();
+	await expect(page.getByText('เช็คเอาต์สำเร็จ 1 คน')).toBeVisible({ timeout: 15_000 });
 }
 
 /** Check in through the scan page; someone with no zone to return to gets the zone dialog. */

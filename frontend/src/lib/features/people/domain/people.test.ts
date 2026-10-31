@@ -959,7 +959,7 @@ describe('movement → current_stay', () => {
 		);
 		expect(canCheckOutEvacuee(e)).toBe(false);
 		expect(() => assertMovementAllowed(e, 'check_out', { reason: 'กลับบ้าน' })).toThrow(
-			/เช็คเอาท์/
+			/เช็คเอาต์/
 		);
 
 		const active = {

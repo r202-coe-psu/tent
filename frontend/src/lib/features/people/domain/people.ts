@@ -543,7 +543,7 @@ export function assertEvacueeHouseholdAssignment(
 		const targetHousehold = households.find((household) => household._id === targetHouseholdId);
 		if (!targetHousehold) throw new Error('ไม่พบครัวเรือนปลายทาง');
 		if (!isActiveHouseholdStatus(targetHousehold.status)) {
-			throw new Error('ไม่สามารถเพิ่มสมาชิกเข้าครัวเรือนที่ยกเลิกหรือเช็คเอาท์แล้ว');
+			throw new Error('ไม่สามารถเพิ่มสมาชิกเข้าครัวเรือนที่ยกเลิกหรือเช็คเอาต์แล้ว');
 		}
 	}
 
@@ -601,7 +601,7 @@ export function assertCheckoutDestination(
 	destination: CheckoutDestination | null | undefined
 ): void {
 	if (!destination) {
-		throw new Error('ต้องระบุปลายทางเมื่อเช็คเอาท์ครัวเรือน');
+		throw new Error('ต้องระบุปลายทางเมื่อเช็คเอาต์ครัวเรือน');
 	}
 	if (
 		(destination.type === 'transferred_shelter' || destination.type === 'referred_facility') &&
@@ -2005,12 +2005,12 @@ export function assertMovementAllowed(
 		throw new Error('การกลับจากลาชั่วคราวต้องเช็คอินใหม่ (ระบุโซน) — ไม่ใช้การกลับจากลาแบบเดิม');
 	}
 	if (action === 'check_out' && !canCheckOutEvacuee(evacuee)) {
-		throw new Error(`ไม่สามารถเช็คเอาท์จากสถานะ ${status} ได้`);
+		throw new Error(`ไม่สามารถเช็คเอาต์จากสถานะ ${status} ได้`);
 	}
 	if (action === 'check_out') {
 		const remark = (opts.reason ?? opts.notes ?? '').trim();
 		if (!remark) {
-			throw new Error('การเช็คเอาท์ต้องระบุเหตุผลหรือหมายเหตุ');
+			throw new Error('การเช็คเอาต์ต้องระบุเหตุผลหรือหมายเหตุ');
 		}
 	}
 	if (action === 'zone_change' && !canChangeEvacueeZone(evacuee)) {
@@ -2168,7 +2168,7 @@ export function resolveStatusChangeAction(
 export function normalizeCheckoutRemark(reason: string | null | undefined): string {
 	const remark = (reason ?? '').trim();
 	if (!remark) {
-		throw new Error('การเช็คเอาท์ต้องระบุเหตุผลหรือหมายเหตุ');
+		throw new Error('การเช็คเอาต์ต้องระบุเหตุผลหรือหมายเหตุ');
 	}
 	return remark;
 }

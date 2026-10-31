@@ -136,7 +136,7 @@ describe('PeopleRemoteRepository', () => {
 
 			await expect(
 				repo.createEvacuee(evInput({ household_id: household._id }), ctx)
-			).rejects.toThrow(/ยกเลิกหรือเช็คเอาท์แล้ว/);
+			).rejects.toThrow(/ยกเลิกหรือเช็คเอาต์แล้ว/);
 			expect(await repo.listEvacuees()).toHaveLength(0);
 		});
 
@@ -858,7 +858,7 @@ describe('check-in / check-out', () => {
 		it('rejects check-out when the evacuee is not active', async () => {
 			const evacuee = await repo.createEvacuee(evInput(), ctx);
 			await expect(repo.checkOutEvacuee(evacuee, ctx, { reason: 'กลับบ้าน' })).rejects.toThrow(
-				/เช็คเอาท์/
+				/เช็คเอาต์/
 			);
 			expect(await repo.listMovements()).toHaveLength(0);
 		});
