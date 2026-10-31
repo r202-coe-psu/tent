@@ -70,6 +70,25 @@ function typeInto(value: string) {
 }
 
 describe('ReceivedDonationsList', () => {
+	it('shows the real received date and time (Buddhist year, Bangkok time) in both layouts', () => {
+		mountList({ rows: [row(1)] });
+		const stamps = Array.from(document.body.querySelectorAll('[data-testid="received-at"]'));
+		// One in the mobile card, one in the desktop table row.
+		expect(stamps).toHaveLength(2);
+		for (const el of stamps) {
+			expect(el.textContent).toContain('20');
+			expect(el.textContent).toContain('ต.ค.');
+			expect(el.textContent).toContain('2569');
+			expect(el.textContent).toContain('10:00');
+		}
+		expect(text()).toContain('รับเมื่อ');
+	});
+
+	it('omits the date when received_at is missing', () => {
+		mountList({ rows: [{ ...row(1), received_at: null }] });
+		expect(document.body.querySelector('[data-testid="received-at"]')).toBeNull();
+	});
+
 	it('shows the contact exactly as the server sent it — no masking on the client (FR-10)', () => {
 		// A value the client would mask differently proves the row is displayed as it is.
 		mountList({ rows: [{ ...row(1), donor_name: 'สมชาย ใ****', donor_phone: 'xxx-xxx-1111' }] });
