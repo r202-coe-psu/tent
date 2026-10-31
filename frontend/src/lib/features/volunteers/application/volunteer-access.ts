@@ -16,10 +16,13 @@ import type { VolunteerRepository } from '../data/volunteer.repository';
 import { isVolunteerMobile } from '../domain/phone';
 import type { Volunteer } from '../domain/volunteer.schema';
 
+/** No role is picked for the grant by default (#1072); saving without one says this. */
+export const ROLE_REQUIRED_MESSAGE = 'กรุณาเลือกตำแหน่งหน้าที่';
+
 export const volunteerAccessSchema = z.object({
 	email: z.string().trim().toLowerCase().email('กรุณากรอกอีเมลให้ถูกต้อง'),
 	password: z.string().trim().min(1, 'กรุณากำหนดรหัสผ่าน'),
-	role: z.enum(STAFF_CAPABILITIES)
+	role: z.enum(STAFF_CAPABILITIES, { message: ROLE_REQUIRED_MESSAGE })
 });
 
 /** Thrown/shown when the profile phone is filled but not a 10-digit mobile (CR-210, #951). */
@@ -154,7 +157,7 @@ async function linkVolunteerProfile(
 export const coordinatorAccessSchema = z.object({
 	email: volunteerAccessSchema.shape.email,
 	password: volunteerAccessSchema.shape.password,
-	role: z.enum(COORDINATOR_GRANTABLE_CAPABILITIES),
+	role: z.enum(COORDINATOR_GRANTABLE_CAPABILITIES, { message: ROLE_REQUIRED_MESSAGE }),
 	/** `YYYY-MM-DD` (Asia/Bangkok), required, no default. */
 	expires_on: z.string().min(1, 'กรุณาเลือกวันหมดอายุ')
 });

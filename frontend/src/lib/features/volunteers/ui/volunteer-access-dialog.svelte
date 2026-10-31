@@ -13,7 +13,8 @@
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Badge } from '$lib/components/ui/badge/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
-	import * as Select from '$lib/components/ui/select/index.js';
+	import * as RadioGroup from '$lib/components/ui/radio-group/index.js';
+	import { Label } from '$lib/components/ui/label/index.js';
 	import {
 		COORDINATOR_GRANTABLE_CAPABILITIES,
 		STAFF_CAPABILITIES,
@@ -29,6 +30,7 @@
 	import { useVolunteerGrants, volunteerKeys } from '../application/queries';
 	import { errorMessage } from '$lib/utils/errors';
 	import {
+		ROLE_REQUIRED_MESSAGE,
 		VOLUNTEER_ACCESS_PHONE_MESSAGE,
 		accountPhone,
 		coordinatorAccessSchema,
@@ -100,7 +102,9 @@
 
 	let email = $state('');
 	let showPassword = $state(false);
-	let role = $state<StaffCapability>('registration_staff');
+	/** Empty until the grantor picks one: no role is preselected (#1072). */
+	let role = $state<StaffCapability | ''>('');
+	let roleError = $state<string | null>(null);
 	let password = $state('');
 	let passwordError = $state<string | null>(null);
 
@@ -112,7 +116,8 @@
 		}
 		if (lastOpenedId === volunteer._id) return;
 		email = volunteer.user_name ?? volunteer.email ?? '';
-		role = 'registration_staff';
+		role = '';
+		roleError = null;
 		password = loginPhone ?? '';
 		expiresOn = '';
 		confirmRevoke = null;
@@ -127,6 +132,10 @@
 		submitError = null;
 		if (phoneBlocksAccess) {
 			toast.error(VOLUNTEER_ACCESS_PHONE_MESSAGE);
+			return;
+		}
+		if (!role) {
+			roleError = ROLE_REQUIRED_MESSAGE;
 			return;
 		}
 		if (limited) {
@@ -258,20 +267,45 @@
 			</div>
 
 			<div class="space-y-1.5">
-				<p class="text-xs font-bold text-foreground">บทบาท/สิทธิ์ใช้งานระบบ (ROLE ASSIGNMENT)</p>
-				<Select.Root type="single" bind:value={role} disabled={pending}>
-					<Select.Trigger class="h-11 w-full rounded-xl bg-background px-3">
-						<span class="truncate">{roleOptionLabel(role)}</span>
-					</Select.Trigger>
-					<Select.Content>
-						{#each roleChoices as capability (capability)}
-							<Select.Item value={capability} label={roleOptionLabel(capability)} />
-						{/each}
-					</Select.Content>
-				</Select.Root>
+				<p
+					id={`volunteer-access-role-label-${volunteer._id}`}
+					class="text-xs font-bold text-foreground"
+				>
+					บทบาท/สิทธิ์ใช้งานระบบ (ROLE ASSIGNMENT) <span class="text-destructive">*</span>
+				</p>
+				<RadioGroup.Root
+					bind:value={role}
+					onValueChange={() => (roleError = null)}
+					disabled={pending}
+					aria-labelledby={`volunteer-access-role-label-${volunteer._id}`}
+					aria-invalid={roleError ? true : undefined}
+					aria-describedby={roleError ? `volunteer-access-role-error-${volunteer._id}` : undefined}
+					class="grid grid-cols-1 gap-2 sm:grid-cols-2"
+				>
+					{#each roleChoices as capability (capability)}
+						<Label
+							for={`volunteer-access-role-${volunteer._id}-${capability}`}
+							class="flex min-h-11 cursor-pointer items-center gap-2.5 rounded-xl border border-border bg-background px-3 py-2 text-sm font-medium text-foreground"
+						>
+							<RadioGroup.Item
+								id={`volunteer-access-role-${volunteer._id}-${capability}`}
+								value={capability}
+							/>
+							<span>{roleOptionLabel(capability)}</span>
+						</Label>
+					{/each}
+				</RadioGroup.Root>
+				{#if roleError}
+					<p
+						id={`volunteer-access-role-error-${volunteer._id}`}
+						class="text-sm font-medium text-destructive"
+					>
+						{roleError}
+					</p>
+				{/if}
 				<p class="text-[11px] text-muted-foreground">
 					{#if limited}
-						* ผู้ประสานงานออกสิทธิ์ได้เฉพาะ 4 บทบาทนี้ ในศูนย์พักพิงนี้
+						* ผู้ประสานงานออกสิทธิ์ได้เฉพาะบทบาทเหล่านี้ ในศูนย์พักพิงนี้
 						ถอนหรือย่นอายุได้เฉพาะสิทธิ์ที่ตนเองออก (สิทธิ์อื่นหมดอายุเอง หรือให้ผู้จัดการศูนย์ถอน)
 					{:else}
 						* บัญชีใช้สิทธิ์ที่เลือกในศูนย์พักพิงนี้ จัดการสิทธิ์เพิ่มเติมได้ผ่านหน้าผู้ใช้งาน

@@ -249,9 +249,8 @@ test.describe('Volunteer access: grant dialog', { tag: TAGS }, () => {
 	async function grantDistributionStaff(page: Page): Promise<void> {
 		await page.getByRole('button', { name: 'ออกสิทธิ์ใช้งานระบบ' }).click();
 		const dialog = page.getByRole('dialog');
-		// The dialog opens on registration_staff; its trigger is a button named after that role.
-		await dialog.getByRole('button', { name: 'เจ้าหน้าที่ลงทะเบียน' }).click();
-		await page.getByRole('option', { name: 'เจ้าหน้าที่แจกจ่าย', exact: true }).click();
+		// No role is preselected (#1072): the grantor picks one of the radios.
+		await dialog.getByRole('radio', { name: 'เจ้าหน้าที่แจกจ่าย', exact: true }).check();
 		await dialog.getByLabel('อีเมลสำหรับเข้าสู่ระบบ').fill(email);
 		await dialog.getByLabel(/รหัสผ่านสำหรับบัญชีใหม่/).fill(PASSWORD);
 		await dialog.getByRole('button', { name: 'บันทึกและออกสิทธิ์ใหม่' }).click();
@@ -444,6 +443,13 @@ test.describe('Volunteer access: coordinator limits (#955)', { tag: TAGS }, () =
 			.getByRole('dialog')
 			.getByLabel(/รหัสผ่านสำหรับบัญชีใหม่/)
 			.fill(PASSWORD);
+		await page.getByRole('dialog').getByRole('button', { name: 'บันทึกและออกสิทธิ์ใหม่' }).click();
+		// No role is preselected (#1072), so the role is asked for first.
+		await expect(page.getByText('กรุณาเลือกตำแหน่งหน้าที่')).toBeVisible();
+		await page
+			.getByRole('dialog')
+			.getByRole('radio', { name: 'เจ้าหน้าที่ลงทะเบียน', exact: true })
+			.check();
 		await page.getByRole('dialog').getByRole('button', { name: 'บันทึกและออกสิทธิ์ใหม่' }).click();
 		await expect(page.getByText('กรุณาเลือกวันหมดอายุ')).toBeVisible();
 		expect(

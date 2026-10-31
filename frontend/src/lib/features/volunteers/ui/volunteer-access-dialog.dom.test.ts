@@ -85,6 +85,18 @@ async function fill(input: HTMLInputElement, value: string) {
 	await settle();
 }
 
+const roleRadios = () =>
+	[...document.body.querySelectorAll<HTMLButtonElement>('[role="radio"]')].filter((r) =>
+		r.id.startsWith('volunteer-access-role-')
+	);
+
+async function pickRole(role: string) {
+	document.body
+		.querySelector<HTMLButtonElement>(`#volunteer-access-role-volunteer\\:001-${role}`)!
+		.click();
+	await settle();
+}
+
 async function fillCredentials() {
 	await fill(
 		document.body.querySelector<HTMLInputElement>('input[type="email"]')!,
@@ -123,6 +135,7 @@ describe('VolunteerAccessDialog for a volunteer_coordinator (#955)', () => {
 	it('refuses to save without an expiry and says why', async () => {
 		await render(COORDINATOR);
 		await fillCredentials();
+		await pickRole('registration_staff');
 		saveButton().click();
 		await settle();
 
@@ -133,6 +146,7 @@ describe('VolunteerAccessDialog for a volunteer_coordinator (#955)', () => {
 	it('grants through the coordinator path once an expiry is chosen', async () => {
 		await render(COORDINATOR);
 		await fillCredentials();
+		await pickRole('registration_staff');
 		await fill(expiryInput()!, grantExpiryRange().max);
 		saveButton().click();
 		await settle();
@@ -158,6 +172,7 @@ describe('VolunteerAccessDialog for a volunteer_coordinator (#955)', () => {
 			identity_verification: { status: 'pending' }
 		} as Partial<Volunteer>);
 		await fillCredentials();
+		await pickRole('registration_staff');
 		await fill(expiryInput()!, grantExpiryRange().min);
 		saveButton().click();
 		await settle();
@@ -195,6 +210,39 @@ describe('VolunteerAccessDialog for a volunteer_coordinator (#955)', () => {
 
 		expect(document.body.textContent).toContain('ตรวจผลยืนยันจากศูนย์อื่น');
 		expect(saveButton().disabled).toBe(false);
+	});
+});
+
+describe('VolunteerAccessDialog role radios (#1044, #1072)', () => {
+	it('offers the ten coordinator roles as radios, none picked', async () => {
+		await render(COORDINATOR);
+		const radios = roleRadios();
+		expect(radios).toHaveLength(10);
+		expect(radios.some((r) => r.getAttribute('aria-checked') === 'true')).toBe(false);
+		expect(radios.map((r) => r.id)).not.toContain(
+			'volunteer-access-role-volunteer:001-kiosk_staff'
+		);
+	});
+
+	it('offers a manager every staff role', async () => {
+		await render(MANAGER);
+		expect(roleRadios()).toHaveLength(12);
+	});
+
+	it('refuses to save without a role, says why under the radios, and clears once one is picked', async () => {
+		await render(COORDINATOR);
+		await fillCredentials();
+		await fill(expiryInput()!, grantExpiryRange().max);
+		saveButton().click();
+		await settle();
+
+		expect(mocks.grantLimited).not.toHaveBeenCalled();
+		expect(
+			document.getElementById('volunteer-access-role-error-volunteer:001')?.textContent
+		).toContain('กรุณาเลือกตำแหน่งหน้าที่');
+
+		await pickRole('warehouse_staff');
+		expect(document.getElementById('volunteer-access-role-error-volunteer:001')).toBeNull();
 	});
 });
 
