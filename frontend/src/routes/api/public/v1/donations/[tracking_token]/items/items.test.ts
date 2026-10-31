@@ -7,7 +7,7 @@ import {
 	CouchReadError,
 	fetchDocsStrict,
 	hasKeyedDonationStock,
-	readCurrentDonationPoints
+	readDonationCampaign
 } from '$lib/server/donation-docs';
 import { DONATION_SCHEMA_V } from '$lib/features/operations/server';
 
@@ -22,7 +22,7 @@ vi.mock('$lib/server/donation-docs', async (importOriginal) => {
 		findByTokenHash: actual.findByTokenHash,
 		fetchDocsStrict: vi.fn(async () => []),
 		hasKeyedDonationStock: vi.fn(async () => false),
-		readCurrentDonationPoints: vi.fn(async () => []),
+		readDonationCampaign: vi.fn(async () => null),
 		GOODS_IN_STOCK_ERROR: { success: false, error: 'GOODS_IN_STOCK', message: 'in stock' }
 	};
 });
@@ -92,7 +92,7 @@ describe('PATCH /api/public/v1/donations/[token]/items', () => {
 		vi.mocked(putAsPublicWriter).mockResolvedValue({ status: 201, data: {} });
 		vi.mocked(fetchDocsStrict).mockResolvedValue([]);
 		vi.mocked(hasKeyedDonationStock).mockResolvedValue(false);
-		vi.mocked(readCurrentDonationPoints).mockResolvedValue([]);
+		vi.mocked(readDonationCampaign).mockResolvedValue(null);
 	});
 
 	// Owner decision 2026-10-22 — goods already keyed for this booking: the donor can no
@@ -580,20 +580,25 @@ describe('PATCH /api/public/v1/donations/[token]/items', () => {
 		});
 	});
 
-	describe('drop-off point per line (CR-206)', () => {
+	describe('drop-off point per line, set by staff (FR-AP-15a, FR-AP-15b)', () => {
 		const dropOffDoc = (extra: Record<string, unknown> = {}) => ({
 			...couchDoc('pending_review'),
 			shelter_code: 'SH001',
+			campaign_id: 'c1',
 			logistics: { delivery_method: 'self_dropoff', vehicle: 'car' },
 			...extra
 		});
-		const pointLines = (...ids: Array<string | null>) =>
-			ids.map((id, n) => ({
-				free_text: `ของ ${n}`,
-				qty: '1',
-				unit: 'ชิ้น',
-				drop_off_point_id: id
-			}));
+		const campaign = (status: 'open' | 'closed' = 'open') =>
+			({
+				_id: 'c1',
+				type: 'donation_campaign',
+				status,
+				needs: [
+					{ item_id: 'item:rice', qty_target: '100', unit: 'kg', drop_off_point_id: 'point-gym' }
+				]
+			}) as never;
+		const RICE = { item_id: 'item:rice', free_text: 'ข้าวสาร', qty: '5', unit: 'kg' };
+		const BLANKET = { free_text: 'ผ้าห่ม', qty: '1', unit: 'piece' };
 		const sentPoints = () => {
 			const [, init] = vi.mocked(fetch).mock.calls[0]!;
 			return (
@@ -601,55 +606,51 @@ describe('PATCH /api/public/v1/donations/[token]/items', () => {
 			).map((item) => item.drop_off_point_id);
 		};
 
-		it('keeps an offered point and writes null for one the shelter dropped (FR-MP-2a, AC-13)', async () => {
+		it("writes every line's point from the booking's campaign over what the client sent (AC-14)", async () => {
 			couchHas(dropOffDoc());
-			vi.mocked(readCurrentDonationPoints).mockResolvedValue([{ id: 'point-gym', name: 'โรงยิม' }]);
+			vi.mocked(readDonationCampaign).mockResolvedValue(campaign());
 			fastapiOk();
 
-			const response = await call(pointLines('point-gym', 'point-gone', null));
+			const response = await call([
+				{ ...RICE, drop_off_point_id: null },
+				{ ...BLANKET, drop_off_point_id: 'point-med' }
+			]);
 
 			expect(response.status).toBe(200);
-			expect(readCurrentDonationPoints).toHaveBeenCalledWith('SH001');
-			expect(sentPoints()).toEqual(['point-gym', null, null]);
-		});
-
-		it('clears every point of a booking that is not a self drop-off (FR-MP-4)', async () => {
-			couchHas(dropOffDoc({ logistics: { delivery_method: 'parcel' } }));
-			fastapiOk();
-
-			await call(pointLines('point-gym'));
-
-			expect(readCurrentDonationPoints).not.toHaveBeenCalled();
-			expect(sentPoints()).toEqual([null]);
-		});
-
-		it('reads no registry when no line names a point, and leaves a line without the key alone', async () => {
-			couchHas(dropOffDoc());
-			fastapiOk();
-
-			await call([...pointLines(null), { free_text: 'ข้าว', qty: '1', unit: 'kg' }]);
-
-			expect(readCurrentDonationPoints).not.toHaveBeenCalled();
-			expect(sentPoints()).toEqual([null, undefined]);
-		});
-
-		it('checks the points by the token shelter before the booking reaches CouchDB', async () => {
-			couchHas(null);
-			vi.mocked(readCurrentDonationPoints).mockResolvedValue([{ id: 'point-gym', name: 'โรงยิม' }]);
-			fastapiOk();
-
-			await call(pointLines('point-gym', 'point-gone'));
-
-			expect(readCurrentDonationPoints).toHaveBeenCalledWith('SH001');
+			expect(readDonationCampaign).toHaveBeenCalledWith('shelter_sh001', 'c1');
 			expect(sentPoints()).toEqual(['point-gym', null]);
 		});
 
-		it('stops before moving quota when the shelter points cannot be read', async () => {
-			couchHas(dropOffDoc());
-			vi.mocked(readCurrentDonationPoints).mockRejectedValue(new Error('registry down'));
+		it('gives a point to a line the carried item_id makes a campaign line', async () => {
+			couchHas(
+				dropOffDoc({ items: [{ item_id: 'item:rice', qty: '5', unit: 'kg', line_key: 'k1' }] })
+			);
+			vi.mocked(readDonationCampaign).mockResolvedValue(campaign());
 			fastapiOk();
 
-			const response = await call(pointLines('point-gym'));
+			await call([{ line_key: 'k1', free_text: 'ข้าวสาร', qty: '6', unit: 'kg' }]);
+
+			expect(sentPoints()).toEqual(['point-gym']);
+		});
+
+		it('reads a campaign closed since the booking (AC-14b)', async () => {
+			couchHas(dropOffDoc());
+			vi.mocked(readDonationCampaign).mockResolvedValue(campaign('closed'));
+			fastapiOk();
+
+			await call([RICE]);
+
+			expect(sentPoints()).toEqual(['point-gym']);
+		});
+
+		it('stops before moving quota when the campaign cannot be read (AC-14b)', async () => {
+			couchHas(dropOffDoc());
+			vi.mocked(readDonationCampaign).mockRejectedValue(
+				new CouchReadError('shelter_sh001', 'c1', 500)
+			);
+			fastapiOk();
+
+			const response = await call([RICE]);
 
 			expect(response.status).toBe(503);
 			expect((await response.json()).error).toBe('DONATION_UNAVAILABLE');
@@ -657,14 +658,42 @@ describe('PATCH /api/public/v1/donations/[token]/items', () => {
 			expect(putAsPublicWriter).not.toHaveBeenCalled();
 		});
 
+		it('writes null when the campaign doc is gone', async () => {
+			couchHas(dropOffDoc());
+			fastapiOk();
+
+			await call([RICE]);
+
+			expect(sentPoints()).toEqual([null]);
+		});
+
+		it('writes null for every line before the booking reaches CouchDB', async () => {
+			couchHas(null);
+			fastapiOk();
+
+			await call([{ ...RICE, drop_off_point_id: 'point-gym' }]);
+
+			expect(readDonationCampaign).not.toHaveBeenCalled();
+			expect(sentPoints()).toEqual([null]);
+		});
+
+		it('writes null for every line of a booking that is not a self drop-off', async () => {
+			couchHas(dropOffDoc({ logistics: { delivery_method: 'parcel' } }));
+			vi.mocked(readDonationCampaign).mockResolvedValue(campaign());
+			fastapiOk();
+
+			await call([RICE]);
+
+			expect(sentPoints()).toEqual([null]);
+		});
+
 		it('writes the points FastAPI returned and stamps the current schema_v', async () => {
 			couchHas(dropOffDoc());
-			vi.mocked(readCurrentDonationPoints).mockResolvedValue([{ id: 'point-gym', name: 'โรงยิม' }]);
 			fastapiOk({
-				items: [{ free_text: 'ของ 0', qty: '1', unit: 'ชิ้น', drop_off_point_id: 'point-gym' }]
+				items: [{ ...RICE, drop_off_point_id: 'point-gym' }]
 			});
 
-			await call(pointLines('point-gym'));
+			await call([RICE]);
 
 			const [, , written] = vi.mocked(putAsPublicWriter).mock.calls[0]!;
 			const doc = written as { items: Array<Record<string, unknown>>; schema_v: number };
@@ -685,7 +714,7 @@ describe('PATCH /api/public/v1/donations/[token]/items', () => {
 			);
 			fastapiOk();
 
-			const response = await call(pointLines('point-gym'));
+			const response = await call([RICE]);
 
 			expect(response.status).toBe(409);
 			expect((await response.json()).error).toBe('GOODS_IN_STOCK');

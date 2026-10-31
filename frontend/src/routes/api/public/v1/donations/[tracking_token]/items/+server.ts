@@ -7,7 +7,8 @@ import {
 	carryItemIds,
 	computeNeeds,
 	donationItemEditGate,
-	pickCampaignForItems
+	pickCampaignForItems,
+	withCampaignLinePoints
 } from '$lib/features/donations/server';
 import type { DonationRevision, PublicDonationDoc } from '$lib/features/donations';
 import {
@@ -16,7 +17,7 @@ import {
 	findByTokenHash,
 	GOODS_IN_STOCK_ERROR,
 	hasKeyedDonationStock,
-	readCurrentDonationPoints
+	readDonationCampaign
 } from '$lib/server/donation-docs';
 import type { DonationCampaign, StockLedger } from '$lib/features/operations';
 import { DONATION_SCHEMA_V } from '$lib/features/operations/server';
@@ -31,34 +32,6 @@ function shelterCodeFromToken(token: string): string | null {
 function shelterDbFromToken(token: string): string | null {
 	const code = shelterCodeFromToken(token);
 	return code ? `shelter_${code.toLowerCase()}` : null;
-}
-
-type PointLine = { drop_off_point_id?: unknown };
-
-/**
- * CR-206 FR-MP-2a, FR-MP-4 — the point each edited line keeps. The dialog sends a point for
- * every line (FR-MP-15); one the shelter no longer offers (unticked or deleted since the
- * booking) becomes `null` rather than an error, and a booking that is not a self drop-off
- * keeps none. Points are read from the shelter doc in CouchDB, not the public projection.
- * A line sent without the key is left as it came.
- */
-async function withOfferedPoints<T extends PointLine>(
-	items: T[],
-	shelterCode: string | null,
-	picksPoints: boolean
-): Promise<T[]> {
-	const named = items.some(
-		(item) => typeof item.drop_off_point_id === 'string' && item.drop_off_point_id !== ''
-	);
-	const offered =
-		picksPoints && named && shelterCode
-			? new Set((await readCurrentDonationPoints(shelterCode)).map((point) => point.id))
-			: new Set<string>();
-	return items.map((item) => {
-		if (!item || typeof item !== 'object' || !('drop_off_point_id' in item)) return item;
-		const id = item.drop_off_point_id;
-		return { ...item, drop_off_point_id: typeof id === 'string' && offered.has(id) ? id : null };
-	});
 }
 
 /**
@@ -113,29 +86,26 @@ export const PATCH = async ({ params, request }) => {
 			return json(GOODS_IN_STOCK_ERROR, { status: 409 });
 		}
 
-		// Each line's drop-off point, checked against what the shelter offers now (FR-MP-2a).
-		// Before the booking reaches CouchDB its delivery method is unknown here; FastAPI
-		// clears the points of a parcel or a pickup itself (FR-MP-4).
-		let pointedItems: typeof payload.items;
-		try {
-			pointedItems = await withOfferedPoints(
-				payload.items,
-				latestDoc?.shelter_code ?? shelterCodeFromToken(tracking_token),
-				!latestDoc || latestDoc.logistics?.delivery_method === 'self_dropoff'
-			);
-		} catch (e) {
-			// The registry could not be read: nothing has moved yet, so the donor may retry.
-			console.error(e);
-			return json({ success: false, error: 'DONATION_UNAVAILABLE' }, { status: 503 });
-		}
-
 		// Restore any item_id the client dropped before anything is measured or moved.
 		// FastAPI does the same repair, but only after this check has already run — a bare
 		// line used to read as untracked here, sail through, and then be reserved against
 		// the identity FastAPI restored a moment later.
 		const resolvedItems: typeof payload.items = latestDoc
-			? carryItemIds(pointedItems, latestDoc.items ?? [])
-			: pointedItems;
+			? carryItemIds(payload.items, latestDoc.items ?? [])
+			: payload.items;
+
+		// Each line's point from the booking's own campaign (FR-AP-15a), read by id whether it
+		// is open or closed — the headroom read below sees open ones only. FastAPI keeps the
+		// point of a held line whose item did not change (FR-AP-15). A booking not yet in
+		// CouchDB has no campaign to read, so its lines get none.
+		const campaign = latestDoc?.campaign_id
+			? await readDonationCampaign(shelterDb, latestDoc.campaign_id)
+			: null;
+		const pointedItems = withCampaignLinePoints(
+			resolvedItems,
+			campaign,
+			latestDoc?.logistics?.delivery_method
+		);
 
 		// The same headroom check the create route makes. Without it an edit answers only
 		// to the atomic counter, which caps reserved_qty at qty_target and knows nothing
@@ -177,7 +147,7 @@ export const PATCH = async ({ params, request }) => {
 				// Staff decide lines in CouchDB, which FastAPI cannot read: send the booking as it
 				// is now, for FastAPI's own review gate and the line keys it holds (CR-196).
 				body: JSON.stringify({
-					items: resolvedItems,
+					items: pointedItems,
 					...(latestDoc
 						? { current_items: latestDoc.items ?? [], current_status: latestDoc.status }
 						: {})
