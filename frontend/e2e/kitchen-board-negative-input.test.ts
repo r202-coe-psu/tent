@@ -244,6 +244,10 @@ test.describe(
 			await seedBoard();
 		});
 
+		test.afterEach(async ({ page }) => {
+			await page.unrouteAll({ behavior: 'ignoreErrors' });
+		});
+
 		test.afterAll(async () => {
 			await cleanupOwnedDocuments();
 			const leftovers = (await allDocuments(SHELTER_DB))
@@ -369,8 +373,13 @@ test.describe(
 		});
 
 		test('stage C keeps typed counts when the plan changes on another device', async ({ page }) => {
-			const watchingChanges = page.waitForRequest((r) =>
-				r.url().includes(`/${SHELTER_DB}/_changes`)
+			// The first poll asks for `since=now`, so an edit racing it can land before "now" and be
+			// missed. A poll carrying a concrete seq is anchored: every later edit reaches the page.
+			const watchingChanges = page.waitForRequest(
+				(r) =>
+					r.url().includes(`/${SHELTER_DB}/_changes`) &&
+					new URL(r.url()).searchParams.get('since') !== 'now',
+				{ timeout: 20_000 }
 			);
 			await openBoard(page, `?plan_id=${encodeURIComponent(planId)}&stage=C`);
 			const fields = SERVICE_FIELDS.map((label) => numberUnderLabel(page, label));
@@ -387,7 +396,6 @@ test.describe(
 			for (const [i, field] of fields.entries()) {
 				await expect(field, `${SERVICE_FIELDS[i]} kept`).toHaveValue(typed[i]);
 			}
-			await page.unrouteAll({ behavior: 'ignoreErrors' });
 		});
 
 		test('stage C flags a minus typed on a virtual keyboard and blocks saving', async ({
