@@ -258,7 +258,7 @@ describe('pickerForMapTap (owner 2026-10-30)', () => {
 
 describe('withCampaignLinePoints (staff-assigned drop-off FR-AP-8, FR-AP-9)', () => {
 	const rice = { item_id: 'item:rice', free_text: 'ข้าว' };
-	const blanket = { free_text: 'ผ้าห่ม' };
+	const blanket: { item_id?: string; free_text: string } = { free_text: 'ผ้าห่ม' };
 	const campaign = (pointId: string | null | undefined) => ({
 		needs: [
 			{ item_id: 'item:rice', ...(pointId !== undefined ? { drop_off_point_id: pointId } : {}) }
