@@ -288,8 +288,13 @@ export type BookingOptions = {
 	ledger: RunLedger;
 };
 
+/** One line of a booking as the BFF answers it: the point staff set for it (FR-AP-8a). */
+export type BookedLine = { drop_off_point_id: string | null; review_status: string };
+
 export type BookingResponse = Partial<Booking> & {
 	success: boolean;
+	status?: string;
+	items?: BookedLine[];
 	error?: string | { code: string; message: string };
 };
 
@@ -647,7 +652,7 @@ export async function createCampaignViaUi(
 	request: APIRequestContext,
 	staff: Staff,
 	shelterCode: string,
-	opts: { item: string; target: number; notes: string }
+	opts: { item: string; target: number; notes: string; pointName?: string }
 ): Promise<PublicNeed> {
 	await openBackOffice(page, staff);
 	await page.getByRole('tab', { name: 'จัดการความต้องการ' }).click();
@@ -659,7 +664,14 @@ export async function createCampaignViaUi(
 	await expect(page.getByText('เลือกรายการพัสดุก่อน')).toHaveCount(0);
 	await page.getByRole('textbox', { name: /จำนวนเป้าหมาย/ }).fill(String(opts.target));
 	await page.getByRole('textbox', { name: /เหตุผลหรือรายละเอียดเพิ่มเติม/ }).fill(opts.notes);
-	await page.getByRole('button', { name: 'ประกาศขอรับบริจาคผ่านหน้าเว็บสาธารณะ' }).click();
+	const save = page.getByRole('button', { name: 'ประกาศขอรับบริจาคผ่านหน้าเว็บสาธารณะ' });
+	if (opts.pointName) {
+		// A shelter with two or more drop-off points cannot post a need without one (FR-AP-3).
+		await expect(save).toBeDisabled();
+		await page.getByRole('button', { name: /^จุดรับบริจาค/ }).click();
+		await page.getByRole('option', { name: opts.pointName, exact: true }).click();
+	}
+	await save.click();
 	await expect(page.getByText(`เพิ่มประกาศความต้องการ "${opts.item}" สำเร็จ`)).toBeVisible();
 	await expect
 		.poll(async () => (await boardLineFor(request, shelterCode, opts.item))?.status, BOARD_SYNC)

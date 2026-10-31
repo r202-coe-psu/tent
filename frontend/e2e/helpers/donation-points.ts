@@ -2,11 +2,12 @@ import { expect, type APIRequestContext, type Page } from '@playwright/test';
 import { DEFAULT_SLOT_WINDOWS } from '../../src/lib/features/donations/domain/compute-slots';
 import { couchReq, putDocument, type CouchDocument } from './couch';
 import {
+	openPendingRow,
 	openShelter,
 	todayYmd,
+	type BookedLine,
 	type Booking,
 	type BookingResponse,
-	type PublicNeed,
 	type PublicShelter,
 	type RunLedger
 } from './donation-fullstack';
@@ -81,37 +82,48 @@ export async function setDonationPoints(
 	);
 }
 
-export type SplitLine = {
-	need: Pick<PublicNeed, 'item_id' | 'name'>;
-	unit: string;
-	pointId: string;
-};
+/** A line as the BFF takes it: a catalog item (`item_id`) or one the donor typed in. */
+export type BookingLine = { item_id?: string; name: string; unit: string };
+
+export type PointBooking = Booking & { items: BookedLine[] };
+
+function recordBooking(
+	body: BookingResponse,
+	shelterCode: string,
+	ledger: RunLedger,
+	what: string
+): PointBooking {
+	expect(body.success, `${what} POST failed: ${JSON.stringify(body)}`).toBe(true);
+	const { bookingRef, trackingToken } = body as Booking;
+	ledger.add('bookings', { token: trackingToken, ref: bookingRef, shelter: shelterCode });
+	return { bookingRef, trackingToken, items: body.items ?? [] };
+}
 
 /**
- * A self drop-off booking whose lines go to different points, posted to the BFF the way
- * the wizard does. The wizard books one campaign line at a time, so a campaign booking
- * split across points (approved by the campaign rule, no review) has to come from here.
+ * A self drop-off booking posted to the BFF the way the wizard does. The wizard books
+ * either one campaign line or typed-in lines, so a booking that mixes a campaign line with
+ * a line of the donor's own (staff-assigned drop-off AC-AP-13) has to come from here. It
+ * sends no `drop_off_point_id`: the BFF sets each line's point (FR-AP-7, FR-AP-8).
  */
-export async function bookSplitViaApi(
+export async function bookSelfDropoffViaApi(
 	request: APIRequestContext,
 	opts: {
 		shelter: Pick<PublicShelter, 'code'>;
-		lines: readonly SplitLine[];
+		lines: readonly BookingLine[];
 		donorName: string;
 		phone: string;
 		ledger: RunLedger;
 	}
-): Promise<Booking> {
+): Promise<PointBooking> {
 	const res = await request.post('/api/public/v1/donations', {
 		data: {
 			shelter_code: opts.shelter.code,
 			donor: { name: opts.donorName, phone: opts.phone },
 			items: opts.lines.map((line) => ({
-				item_id: line.need.item_id,
-				free_text: line.need.name,
+				...(line.item_id ? { item_id: line.item_id } : { category: 'other', condition: 'new' }),
+				free_text: line.name,
 				qty: 1,
-				unit: line.unit,
-				drop_off_point_id: line.pointId
+				unit: line.unit
 			})),
 			logistics: {
 				delivery_method: 'self_dropoff',
@@ -120,43 +132,38 @@ export async function bookSplitViaApi(
 			}
 		}
 	});
-	const body = (await res.json()) as BookingResponse;
-	expect(body.success, `split booking POST failed: ${JSON.stringify(body)}`).toBe(true);
-	const { bookingRef, trackingToken } = body as Booking;
-	opts.ledger.add('bookings', {
-		token: trackingToken,
-		ref: bookingRef,
-		shelter: opts.shelter.code
-	});
-	return { bookingRef, trackingToken };
+	return recordBooking(
+		(await res.json()) as BookingResponse,
+		opts.shelter.code,
+		opts.ledger,
+		'self drop-off booking'
+	);
 }
 
 /**
- * The public wizard with two typed-in lines, each sent to the point in `picks` through its
- * own picker. Typed lines wait for staff review, so the booking lands in `pending_review`.
+ * The public wizard with two typed-in lines, brought to a shelter with drop-off points.
+ * Step 3 offers no point to pick, only the note that the tracking page will say where each
+ * line goes (FR-AP-11, FR-AP-12). Typed lines wait for staff review (`pending_review`).
  */
-export async function bookSplitAsDonor(
+export async function bookTypedAsDonor(
 	page: Page,
 	opts: {
 		shelter: Pick<PublicShelter, 'code' | 'name'>;
-		lines: readonly [
-			{ itemName: string; pointName: string },
-			{ itemName: string; pointName: string }
-		];
+		itemNames: readonly string[];
 		donorName: string;
 		phone: string;
 		ledger: RunLedger;
 	}
-): Promise<Booking> {
+): Promise<PointBooking> {
 	await openShelter(page, opts.shelter);
 	await page.getByRole('button', { name: 'บริจาคสิ่งของอื่นๆ' }).click();
 	await expect(page.getByRole('heading', { name: 'ส่วนที่ 1: ข้อมูลผู้บริจาค' })).toBeVisible();
 	await page.locator('#donor-name').fill(opts.donorName);
 	await page.locator('#donor-phone').fill(opts.phone);
 
-	await page.getByRole('button', { name: 'เพิ่มรายการสิ่งของ' }).click();
-	for (const [index, line] of opts.lines.entries()) {
-		await page.getByRole('textbox', { name: 'ประเภทสิ่งของ' }).nth(index).fill(line.itemName);
+	for (const [index, itemName] of opts.itemNames.entries()) {
+		if (index > 0) await page.getByRole('button', { name: 'เพิ่มรายการสิ่งของ' }).click();
+		await page.getByRole('textbox', { name: 'ประเภทสิ่งของ' }).nth(index).fill(itemName);
 		await page
 			.getByRole('button', { name: /^หน่วย/ })
 			.nth(index)
@@ -170,16 +177,10 @@ export async function bookSplitAsDonor(
 		page.getByRole('heading', { name: 'ส่วนที่ 3: ข้อมูลการจัดส่ง โลจิสติกส์' })
 	).toBeVisible();
 	await page.getByRole('button', { name: 'นำมาส่งด้วยตนเอง' }).click();
-	const section = page.getByTestId('drop-off-points-section');
-	await expect(section).toBeVisible();
-	for (const [index, line] of opts.lines.entries()) {
-		const trigger = section
-			.getByTestId(`drop-off-point-line-${index}`)
-			.locator('[data-slot="select-trigger"]');
-		await trigger.click();
-		await page.getByRole('option', { name: line.pointName, exact: true }).click();
-		await expect(trigger).toContainText(line.pointName);
-	}
+	await expect(page.getByTestId('drop-off-points-by-staff')).toHaveText(
+		'จุดส่งของแต่ละรายการจะแจ้งในหน้าติดตาม'
+	);
+	await expect(page.locator('[data-slot="select-trigger"]')).toHaveCount(0);
 	await page.getByRole('button', { name: 'รถยนต์' }).click();
 	const freeSlot = page.getByRole('button', { name: /^\d{2}:\d{2} - \d{2}:\d{2} ว่าง/ }).first();
 	await expect(freeSlot, `${opts.shelter.code} has no free drop-off slot`).toBeVisible();
@@ -189,14 +190,52 @@ export async function bookSplitAsDonor(
 		(r) => r.url().endsWith('/api/public/v1/donations') && r.request().method() === 'POST'
 	);
 	await page.getByRole('button', { name: 'ยืนยันการจองคิวบริจาค' }).click();
-	const body = (await (await posted).json()) as BookingResponse;
-	expect(body.success, `booking POST failed: ${JSON.stringify(body)}`).toBe(true);
-	const { bookingRef, trackingToken } = body as Booking;
-	opts.ledger.add('bookings', {
-		token: trackingToken,
-		ref: bookingRef,
-		shelter: opts.shelter.code
-	});
+	const booking = recordBooking(
+		(await (await posted).json()) as BookingResponse,
+		opts.shelter.code,
+		opts.ledger,
+		'typed booking'
+	);
 	await expect(page.getByRole('heading', { name: 'ส่งรายการรอเจ้าหน้าที่ตรวจสอบ' })).toBeVisible();
-	return { bookingRef, trackingToken };
+	return booking;
+}
+
+/** The review card of the line named `name` (its decision group is labelled by it). */
+export function reviewLine(page: Page, name: string) {
+	return page
+		.getByRole('listitem')
+		.filter({ has: page.getByRole('group', { name: `ผลการประเมิน ${name}` }) });
+}
+
+/**
+ * Staff accept each pending line in `picks` and send it to the point named there
+ * (FR-AP-20), then save. Confirm stays disabled while an accepted line has no point
+ * (AC-AP-11). Resolves once the approve POST answers OK.
+ */
+export async function approveWithPoints(
+	page: Page,
+	bookingRef: string,
+	picks: readonly { line: string; pointName: string }[]
+): Promise<void> {
+	await openPendingRow(page, bookingRef);
+	const save = page.getByRole('button', { name: 'บันทึกผลการประเมิน' });
+	for (const pick of picks) {
+		const line = reviewLine(page, pick.line);
+		await line.getByRole('button', { name: /^รับรายการนี้/ }).click();
+		await expect(save).toBeDisabled();
+		const trigger = line.getByRole('button', { name: /^จุดรับบริจาคที่ให้ผู้บริจาคนำของไปส่ง/ });
+		await expect(trigger).toContainText('เลือกจุดรับบริจาค');
+		await trigger.click();
+		await page.getByRole('option', { name: pick.pointName, exact: true }).click();
+		await expect(trigger).toContainText(pick.pointName);
+	}
+	await expect(save).toBeEnabled();
+	const approved = page.waitForResponse(
+		(r) =>
+			r.url().endsWith(`/api/back-office/donations/${bookingRef}/approve`) &&
+			r.request().method() === 'POST'
+	);
+	await save.click();
+	const res = await approved;
+	expect(res.ok(), `approve failed: ${await res.text()}`).toBe(true);
 }
