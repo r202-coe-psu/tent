@@ -18,7 +18,7 @@ import {
 	trackingTokenHashFromPayload
 } from '$lib/features/volunteer-portal/domain/volunteer';
 import { isWithinDutyWindow } from '../domain/duty-window';
-import { normalizePhone } from '../domain/phone';
+import { normalizeThaiPhone } from '$lib/db/model';
 
 const MAX_WRITE_RETRIES = 5;
 /** Assignment statuses still open: a check-in, withdraw or pass cancel may act on them. */
@@ -119,7 +119,7 @@ function filterPortalId(ids: Set<string>, portalId?: string): Set<string> {
 async function resolveIdentities(credential: PortalCredential): Promise<ResolvedIdentity[]> {
 	const refs = await shelterRefs();
 	const identities: ResolvedIdentity[] = [];
-	const phoneHash = credential.phone ? await sha256Hex(normalizePhone(credential.phone)) : null;
+	const phoneHash = credential.phone ? await sha256Hex(normalizeThaiPhone(credential.phone)) : null;
 	const trackingHash = credential.token ? await tokenHash(credential.token) : null;
 
 	for (const ref of refs) {

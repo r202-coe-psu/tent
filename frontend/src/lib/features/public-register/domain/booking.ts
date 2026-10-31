@@ -38,18 +38,18 @@ export const bookingShelterCodeSchema = z
 		'กรุณาเลือกศูนย์พักพิงจากรายการ'
 	);
 
-/** Thai mobile number, digits only. Unlike staff intake, "ไม่มี" is not an option. */
+/** Thai mobile number (CR-210: 10 digits, leading 0). Unlike staff intake, "ไม่มี" is not an option. */
 export const bookingPhoneSchema = z
 	.string({ error: 'กรุณากรอกเบอร์โทรศัพท์' })
 	.trim()
 	.transform(normalizeThaiPhone)
-	.pipe(z.string().regex(/^\d{10}$/, 'เบอร์โทรศัพท์ต้องเป็นตัวเลข 10 หลัก'));
+	.pipe(z.string().regex(/^0\d{9}$/, 'เบอร์โทรศัพท์ต้องเป็นตัวเลข 10 หลัก'));
 
 export const bookingOptionalPhoneSchema = z
 	.string()
 	.trim()
 	.transform(normalizeThaiPhone)
-	.refine((v) => v === '' || /^\d{10}$/.test(v), 'เบอร์โทรศัพท์ต้องเป็นตัวเลข 10 หลัก')
+	.refine((v) => v === '' || /^0\d{9}$/.test(v), 'เบอร์โทรศัพท์ต้องเป็นตัวเลข 10 หลัก')
 	.optional()
 	.nullable();
 
