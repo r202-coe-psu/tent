@@ -1,17 +1,18 @@
 ---
-id: draft
-title: ปิดศูนย์ → เช็คเอาต์ผู้พักพิงที่ยังค้าง / ยกเลิก pre-registered อัตโนมัติ (เหตุผล `shelter_closed`) พร้อม modal ยืนยันแบบพิมพ์รหัส+ชื่อศูนย์ · SA เท่านั้น
-status: proposed
+id: CR-219
+title: ปิดศูนย์ → เช็คเอาต์ผู้พักพิงที่ยังค้าง / ยกเลิก pre-registered อัตโนมัติ (เหตุผล `shelter_closed`) พร้อม modal ยืนยันแบบพิมพ์รหัส+ชื่อศูนย์ · SA หรือ SM ของศูนย์
+status: approved
 date: 2026-10-31
+updated: 2026-11-01
 requested_by: Dev Team B #979 — chip "เข้าพักแล้ว" ขัดกับป้าย "ศูนย์อพยพปิดแล้ว" · GitHub #986
-decided_by:
-layer: volatile # business rule ของ stay status + flow ปิดศูนย์ · role/permission (ปิดศูนย์ = SA)
+decided_by: kong
+layer: volatile # business rule ของ stay status + flow ปิดศูนย์
 affects:
   - docs/data/schema.md §1.3 household `checkout_destination.type` (enum +`shelter_closed`) · §1.4 movement `reason` (ค่า `shelter_closed`)
   - no schema_v bump (additive enum value; doc เดิมยัง valid)
   - docs/changes/00-baseline/CR-112-registration-foundation-schema-stay.md — movement guard (check_out จาก `temporary_leave`/`arriving`/`kiosk_registered` เฉพาะ system close) — แก้ผ่าน CR นี้ ไม่แก้ไฟล์ CR-112
-  - docs/changes/01-core/CR-183-closed-shelter-search-retention.md — ลำดับ: เช็คเอาต์ก่อน แล้วจึงตั้ง `closed` + `closed_at`; FR-10 (sync การแก้ไขหลังปิด) ใช้ต่อ ไม่ต้องแก้ worker
-  - role/permission: เปลี่ยน `operation_status` → `closed` = SA เท่านั้น (เดิม shelter manager หรือ SA)
+  - docs/changes/11-famsearch/CR-183-closed-shelter-search-retention.md — ลำดับ: เช็คเอาต์ก่อน แล้วจึงตั้ง `closed` + `closed_at`; FR-10 (sync การแก้ไขหลังปิด) ใช้ต่อ ไม่ต้องแก้ worker
+  - role/permission: ไม่เปลี่ยน — ปิด / เปิดศูนย์ = SA หรือ SM ของศูนย์ เหมือนเดิม (D-6)
   - frontend/src/lib/features/people/domain/people.ts (`checkoutDestinationSchema`, `SHELTER_CLOSE_CHECKOUT_STATUSES` / `SHELTER_CLOSE_CANCEL_STATUSES`, guard ของ system close)
   - frontend/src/lib/server/ (ใหม่: shelter-close service ผ่าน `couch-admin.ts`, `_bulk_docs`)
   - frontend/src/routes/api/back-office/shelter/[code]/+server.ts (PATCH: บล็อก `closed` ตรง) · ใหม่ `[code]/close/+server.ts` (GET preview / POST close)
@@ -27,7 +28,7 @@ affects:
 >
 > - **เปลี่ยนอะไร:** การปิดศูนย์ (`operation_status → closed`) ต้องปิดสถานะผู้พักพิงทุกคนที่ยังค้างในศูนย์ก่อน — `pre_registered` → `cancelled`, สถานะค้างอื่นทั้งหมด → `checked_out` — เหตุผล `shelter_closed`; เปิดศูนย์ใหม่ไม่คืนสถานะ
 > - **เพื่อใคร/ทำไม:** หลังปิดศูนย์ คนยังเป็น `active` ทั้งฝั่ง staff และ public search (SH001 ปิดแล้ว 452 คนยัง `active`) → ขัดกับป้าย "ศูนย์อพยพปิดแล้ว"
-> - **build:** server route ปิดศูนย์ (preview จำนวน + batch `_bulk_docs` ผ่าน movement ปกติ, idempotent) · modal ยืนยันที่ต้องพิมพ์ `<รหัส> <ชื่อศูนย์>` · จำกัดการปิดศูนย์ให้ SA
+> - **build:** server route ปิดศูนย์ (preview จำนวน + batch `_bulk_docs` ผ่าน movement ปกติ, idempotent) · modal ยืนยันที่ต้องพิมพ์ `<รหัส> <ชื่อศูนย์>` · ปิด / เปิดศูนย์ได้ทั้ง SA และ SM ของศูนย์
 > - **กระทบ:** household `checkout_destination.type` +`shelter_closed` (ไม่ bump `schema_v`) · movement guard ของ CR-112 · ลำดับปิดศูนย์ของ CR-183 · ไม่ต้องแก้ worker
 
 ---
@@ -40,7 +41,7 @@ affects:
 | P-2 | เช็คเอาต์ทำได้ทีละครอบครัว ไม่มีทางเช็คเอาต์ทั้งศูนย์ | `people/ui/search-scan/scan-check-in-out-page.svelte` (`handleBulkCheckOut`) |
 | P-3 | `check_out` อนุญาตเฉพาะ `active` / `room_confirmed` → `temporary_leave`, `arriving`, `kiosk_registered` เช็คเอาต์ไม่ได้ | `people/domain/people.ts` `CHECK_OUT_ELIGIBLE_STATUSES` |
 | P-4 | `checkout_destination.type` ไม่มีค่าที่สื่อว่า "ศูนย์ปิด" | `people/domain/people.ts` `checkoutDestinationSchema` · schema.md §1.3 |
-| P-5 | shelter manager ของศูนย์ปิดศูนย์ได้เอง (`requireShelterManagerOrSA`) | PATCH route บรรทัด 80 |
+| P-5 | PATCH ตั้ง `operation_status = closed` ได้ตรง ๆ โดยไม่ผ่านการเช็คเอาต์คน (`requireShelterManagerOrSA`) | PATCH route บรรทัด 80 |
 
 ---
 
@@ -91,8 +92,8 @@ affects:
 
 ### Role / permission
 
-- **FR-22** — การเปลี่ยน `operation_status` เป็น `closed` ทำได้เฉพาะ **SA** (route FR-7/FR-8 ใช้ guard SA-only). PATCH `/api/back-office/shelter/[code]` ที่ตั้ง `operation_status = closed` ตรง ๆ → `400` ให้ใช้ route ปิดศูนย์ (กัน bypass). การแก้ field อื่นของ shelter manager คงเดิม.
-- **FR-23** — UI: ผู้ใช้ที่ไม่ใช่ SA ไม่เห็นตัวเลือก "ปิดศูนย์ (Closed)" (ถ้าศูนย์ปิดอยู่แล้ว แสดงเป็นค่าปัจจุบันแบบอ่านอย่างเดียว).
+- **FR-22** — การเปลี่ยน `operation_status` เป็น `closed` และการเปิดกลับจาก `closed` เป็นค่าอื่น ทำได้โดย **SA** หรือ **shelter manager ของศูนย์นั้น** (route FR-7/FR-8 ใช้ guard `requireShelterManagerOrSA` เดิม; SM ศูนย์อื่น → `403`). PATCH `/api/back-office/shelter/[code]` ที่ตั้ง `operation_status = closed` ตรง ๆ → `400` ให้ใช้ route ปิดศูนย์ (กัน bypass). การแก้ field อื่นของ shelter manager คงเดิม.
+- **FR-23** — UI: SA และ SM ของศูนย์เห็นตัวเลือก "ปิดศูนย์ (Closed)" และเปิดศูนย์กลับได้; role อื่นไม่เห็นตัวเลือกนี้ (ถ้าศูนย์ปิดอยู่แล้ว แสดงเป็นค่าปัจจุบันแบบอ่านอย่างเดียว).
 
 ### Worker / public plane
 
@@ -115,7 +116,7 @@ affects:
 
 ## Acceptance
 
-- [ ] SA เลือก "ปิดศูนย์" แล้วกดบันทึก → modal ขึ้นพร้อมจำนวนแยกตามสถานะ (ตรงกับข้อมูลจริงตอนเปิด modal).
+- [ ] SA หรือ SM ของศูนย์เลือก "ปิดศูนย์" แล้วกดบันทึก → modal ขึ้นพร้อมจำนวนแยกตามสถานะ (ตรงกับข้อมูลจริงตอนเปิด modal).
 - [ ] พิมพ์ `<รหัส> <ชื่อศูนย์>` ไม่ตรง → ปุ่มยืนยันกดไม่ได้; POST ที่ `confirm_text` ผิด → `400`.
 - [ ] กด "ยกเลิก" → ไม่มีอะไรถูกเขียน ทั้งศูนย์และคน.
 - [ ] กดยืนยัน → ศูนย์ `closed` + `closed_at`; ไม่มีคนในศูนย์เหลือสถานะใน `SHELTER_CLOSE_CHECKOUT_STATUSES` / `SHELTER_CLOSE_CANCEL_STATUSES`.
@@ -123,7 +124,7 @@ affects:
 - [ ] คน `pre_registered` → `cancelled` ไม่มี movement, มี audit `reason = shelter_closed` ต่อ household; household ที่ทุกคน `pre_registered` → `cancelled`; household ผสม → `checked_out`.
 - [ ] จำลอง failure กลางทาง → ศูนย์ยังไม่ปิด, toast แจ้งจำนวนล้มเหลว; กดซ้ำ → ปิดได้ และไม่มี movement ซ้ำ.
 - [ ] ศูนย์ ~500 คนปิดสำเร็จโดยไม่ timeout.
-- [ ] shelter manager (ไม่ใช่ SA) ไม่เห็นตัวเลือกปิดศูนย์; เรียก route ปิดศูนย์ → `403`; PATCH `operation_status = closed` → `400`.
+- [ ] SM ของศูนย์ปิดและเปิดศูนย์กลับได้; SM ศูนย์อื่นหรือ role อื่นเรียก route ปิดศูนย์ → `403`; PATCH `operation_status = closed` ตรง ๆ → `400`.
 - [ ] `/search` ของคนในศูนย์ที่ปิดแสดง "เช็คเอาต์" คู่ป้าย "ศูนย์อพยพปิดแล้ว" ภายในรอบ sync.
 - [ ] ปิดแล้วเปิดศูนย์ใหม่ → คนที่ถูกปิดยังเป็น `checked_out` / `cancelled` ทั้ง staff และ `/search`; เช็คอินคนเดิมกลับเข้าศูนย์ได้ตามปกติ.
 - [ ] รัน `migrate:closed-shelter-checkout` → SH001 ไม่มีคนเหลือสถานะค้าง; `closed_at` ไม่เปลี่ยน; รันซ้ำแล้วไม่มี movement ซ้ำ; `--dry-run` ไม่เขียนอะไร.
@@ -141,7 +142,7 @@ affects:
 - **Code:** ตาม `affects:`. ไม่แตะ `_id` pattern / envelope / sync priority (stable core).
 - **CR-112:** เพิ่มข้อยกเว้น guard `check_out` จาก `temporary_leave` / `arriving` / `kiosk_registered` เฉพาะ system close; `pre_registered` ใช้ hold-cancel semantics เดิม.
 - **CR-183:** ใช้ `closed_at` stamp เดิม แต่ย้ายจุดเขียนไป route ปิดศูนย์ (FR-13); PATCH ตั้ง `closed` ตรงไม่ได้แล้ว.
-- **Role:** shelter manager เสียสิทธิ์ปิดศูนย์ (SA เท่านั้น).
+- **Role:** ไม่เปลี่ยน — SA และ SM ของศูนย์ยังปิด / เปิดศูนย์ได้ (D-6); ที่เปลี่ยนคือการปิดต้องผ่าน route ปิดศูนย์ (FR-22).
 
 ## Migration
 
@@ -154,6 +155,7 @@ affects:
 ## Decision log
 
 - 2026-10-31 — proposed (#986).
+- 2026-11-01 — approved โดย kong; แก้ D-6 ให้ SA และ SM ของศูนย์ปิด / เปิดศูนย์ได้.
 
 ### D-1 — แนวทาง ✅
 เช็คเอาต์อัตโนมัติเมื่อปิดศูนย์ พร้อม modal เตือน (owner, ใน #986).
@@ -174,7 +176,7 @@ affects:
 ไม่คืนสถานะ — คนคงเป็น `checked_out` และกลับเข้าศูนย์ผ่านเช็คอินปกติ (owner, 2026-10-31) → FR-25..FR-27. ตัดทิ้ง: คืนสถานะอัตโนมัติ (สร้าง `active` เท็จให้คนที่ไม่ได้กลับมา / ไปศูนย์อื่นแล้ว) · เช็คอินกลับแบบกลุ่ม (เป็น CR แยกได้ถ้าหน้างานต้องการ).
 
 ### D-6 — ใครทำได้ ✅
-SA เท่านั้นในตอนนี้ (owner, 2026-10-31) → FR-22, FR-23.
+SA หรือ shelter manager ของศูนย์นั้น ทั้งปิดและเปิดศูนย์กลับ (kong, 2026-11-01) → FR-22, FR-23. เปลี่ยนจากร่างเดิม (2026-10-31) ที่ให้ปิดได้เฉพาะ SA และไม่ได้ระบุว่าใครเปิดกลับได้.
 
 ### D-7 — ลำดับเมื่อเช็คเอาต์ล้มบางส่วน ✅
 เช็คเอาต์/ยกเลิกคนก่อน → นับใหม่ → เหลือ 0 จึงปิดศูนย์; ล้มบางส่วน = ไม่ปิดศูนย์ ให้กดซ้ำ (owner, 2026-10-31) → FR-13. เหตุผล: CouchDB ไม่มี transaction ข้าม doc — ศูนย์ `closed` แต่มีคนค้าง = ปัญหาเดิมของ #986; FR-12 รับประกันกดซ้ำไม่สร้าง movement ซ้ำ. ตัดทิ้ง: ปิดศูนย์ก่อน · ปิดศูนย์เสมอแม้ล้ม (ทั้งคู่ทิ้งคนค้างในศูนย์ปิด).
