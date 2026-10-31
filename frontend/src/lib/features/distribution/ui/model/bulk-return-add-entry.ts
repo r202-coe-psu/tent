@@ -114,18 +114,21 @@ export interface ReturnerResolution {
 export function resolveReturner(choice: ReturnerChoice): ReturnerResolution {
 	if (choice === 'unspecified') return { returner: { type: 'unspecified' } };
 	if (!choice) return { error: 'กรุณาระบุผู้คืน หรือเลือก "ไม่ระบุผู้คืน"' };
-	if (choice.recipientType === 'outside') {
+	if (choice.recipientType !== 'evacuee' && choice.recipientType !== 'volunteer') {
 		return {
-			error: 'บุคคลภายนอกคืนเข้ากองไม่ได้ กรุณาเลือกผู้พักพิงหรือจิตอาสา หรือเลือก "ไม่ระบุผู้คืน"'
+			error:
+				'บุคคลภายนอกและเจ้าหน้าที่คืนเข้ากองไม่ได้ กรุณาเลือกผู้พักพิงหรือจิตอาสา หรือเลือก "ไม่ระบุผู้คืน"'
 		};
 	}
 	return { returner: { type: choice.recipientType, id: choice.recipientId } };
 }
 
-/** Id used to load the outstanding loans; null for unspecified / not chosen / outside. */
+/** Id used to load the outstanding loans; null for unspecified / not chosen / outside / staff. */
 export function identifiedReturnerId(choice: ReturnerChoice): string | null {
 	if (!choice || choice === 'unspecified') return null;
-	return choice.recipientType === 'outside' ? null : choice.recipientId;
+	return choice.recipientType === 'evacuee' || choice.recipientType === 'volunteer'
+		? choice.recipientId
+		: null;
 }
 
 // ---------------------------------------------------------------------------

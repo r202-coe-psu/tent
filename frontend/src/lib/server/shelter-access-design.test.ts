@@ -4232,6 +4232,23 @@ describe('buildValidateDocUpdate', () => {
 				expect(() => compile()(validReturnableLog, null, DISTRIBUTION)).not.toThrow();
 			});
 
+			it('accepts a staff recipient only with a user: recipient_id', () => {
+				const staffLog = (recipient_id?: string | null): Doc => {
+					const log: Doc = { ...validFoodLog, recipient_type: 'staff' };
+					delete log.household_id;
+					if (recipient_id === undefined) delete log.recipient_id;
+					else log.recipient_id = recipient_id;
+					return log;
+				};
+				expect(() => compile()(staffLog('user:somchai'), null, DISTRIBUTION)).not.toThrow();
+				for (const bad of [undefined, null, 'user:', 'volunteer:x', 'evacuee:x']) {
+					expectForbidden(
+						() => compile()(staffLog(bad), null, DISTRIBUTION),
+						/staff recipient_id is required/
+					);
+				}
+			});
+
 			it('rejects hard-delete of distribution_log', () => {
 				expectForbidden(
 					() => compile()({ _id: validFoodLog._id, _deleted: true }, validFoodLog, DISTRIBUTION),

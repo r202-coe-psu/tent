@@ -595,6 +595,39 @@ describe('return-workflow', () => {
 		expect(ledgerEntry.unit).toBe('piece');
 	});
 
+	it('returns a staff loan at the counter so nothing stays outstanding (FR-SQR-32)', async () => {
+		const log = await logRepo.create(
+			{
+				ticket_id: 'requisition_ticket:01J00000000000000000000001',
+				item_id: 'item:fan',
+				qty: '1',
+				recipient_type: 'staff',
+				recipient_id: 'user:somchai',
+				is_returnable: true,
+				status: 'active',
+				is_override: false
+			},
+			POS_CTX
+		);
+
+		const result = await returnLoanAtCounter(
+			log._id,
+			{ qty_returned: '1', condition_on_return: 'READY' },
+			DST_CTX,
+			{
+				logRepo,
+				operationsRepo: opsRepo as unknown as OperationsRepository,
+				poolRepo,
+				claimRepo,
+				reservationRepo
+			}
+		);
+
+		expect(result.log.status).toBe('returned');
+		expect(result.log.qty_returned).toBe('1');
+		expect(result.ledgerEntryCreated).toBe(true);
+	});
+
 	it('does not duplicate inbound stock ledger entry on counter return retry', async () => {
 		const log = await logRepo.create(
 			{

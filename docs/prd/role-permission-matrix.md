@@ -2,7 +2,7 @@
 title: "Full-System Role Permission Matrix (R2-R4 & V10)"
 status: approved
 created: 2026-06-04
-updated: 2026-11-01 # CR-217 (approved 2026-11-01 โดย kong, #802) แถว Recipe (Create / Edit / Delete) KS = scope; 2026-10-29 #879 ข้อ 1 ตัดการส่งต่อผู้ป่วยออกจากคำอธิบาย MED; 2026-10-28 CR-203 (approved 2026-10-27, #930) pr_staff บทบาทที่ 12 + คอลัมน์ PR แถว kiosk; CR-204 แยกแถว Stock Distribution (WS/SM เบิกจ่าย, SC ไม่ได้); 2026-10-26 CR-153 แยก Daily SOP UI visibility กับ CouchDB read; 2026-10-24 CR-153 amendment Daily SOP Read = UI-visibility; 2026-10-20 CR-153 Daily SOP rows; CR-155 amend incident log เฉพาะ SA/SM/SO; 2026-10-18 CR-165 kiosk_staff แทน banner_staff (11th role) + CR-162 path `/back-office/kiosks/banners`; 2026-10-11 CR-162 banner_staff; เดิม: CR-093 (Compound Roles) & CR-104 (Volunteer Backoffice, 10-Role Taxonomy, Health Policy); decision sync 2026-10-10; CR-155 shelter_incident แทน shelter_report
+updated: 2026-10-30 # CR-211 (approved 2026-10-30, #1011) ตารางบัตร QR เจ้าหน้าที่ใต้ §3; 2026-10-29 #879 ข้อ 1 ตัดการส่งต่อผู้ป่วยออกจากคำอธิบาย MED; 2026-10-28 CR-203 (approved 2026-10-27, #930) pr_staff บทบาทที่ 12 + คอลัมน์ PR แถว kiosk; CR-204 แยกแถว Stock Distribution (WS/SM เบิกจ่าย, SC ไม่ได้); 2026-10-26 CR-153 แยก Daily SOP UI visibility กับ CouchDB read; 2026-10-24 CR-153 amendment Daily SOP Read = UI-visibility; 2026-10-20 CR-153 Daily SOP rows; CR-155 amend incident log เฉพาะ SA/SM/SO; 2026-10-18 CR-165 kiosk_staff แทน banner_staff (11th role) + CR-162 path `/back-office/kiosks/banners`; 2026-10-11 CR-162 banner_staff; เดิม: CR-093 (Compound Roles) & CR-104 (Volunteer Backoffice, 10-Role Taxonomy, Health Policy); decision sync 2026-10-10; CR-155 shelter_incident แทน shelter_report
 note: decision sync 2026-10-10 — VC may access /back-office/volunteers (job board/shifts), REG may access Station 2 medical screening; portal groups menus by department (ฝ่าย): ทะเบียน(REG; TRG/MED เห็นเฉพาะ Station 2), ครัว(KS), พัสดุและคลัง(SC, warehouse_staff alias), อาสาสมัคร(VC), รักษาความปลอดภัย(SO), อาคารสถานที่(FAC), บริหารศูนย์(SM), ส่วนกลาง(SA)
 closes: K-12 (A1 RBAC phase-blocker)
 affects:
@@ -128,6 +128,17 @@ affects:
 > **CR-153 (2026-10-20)** — เพิ่มแถว Daily SOP จดสิทธิ์ที่ CR-153 กำหนดไว้แล้ว ไม่เพิ่มสิทธิ์ใหม่. `own` = เฉพาะ Role ของตนในศูนย์ตน (SC รวม `warehouse_staff`); `scope` ในแถว Write = ทุก Role ในศูนย์ตน (SM); SA ทุกศูนย์; เขียนได้เฉพาะวันนี้ตามเวลา Asia/Bangkok
 >
 > **CR-153 amendment (2026-10-24)** — แถว Read เปลี่ยนเป็น UI-visibility: `own` = UI แสดงเฉพาะ Role ของตน (SC รวม `warehouse_staff`); SM `scope` และ SA เห็นครบ 9 Role. การอ่านเอกสารระดับ DB (CouchDB `_security`) ยังเป็นทั้งศูนย์สำหรับสมาชิก shelter — ไม่ใช่ access control; notes/observations จึงยังห้ามมีข้อมูลส่วนบุคคล
+
+### 3.1 บัตร QR เจ้าหน้าที่ ([CR-211](../changes/03-C-supply/CR-211-staff-qr-card.md))
+
+| การกระทำ                                                    | SA  |  SM   | `distribution_staff` | staff อื่น | หมายเหตุ                                                                                    |
+| :---------------------------------------------------------- | :-: | :---: | :------------------: | :--------: | :------------------------------------------------------------------------------------------ |
+| ดูบัตรของตัวเอง (portal "ดูบัตรของฉัน") / ดาวน์โหลด / พิมพ์ |  ✓  |   ✓   |          ✓           |     ✓      | user ที่มี `volunteer_id` เห็นบัตรจิตอาสาแทน · `active: false` ไม่เห็นบัตร                  |
+| ดู / พิมพ์บัตรของ user อื่น                                 |  ✓  | scope |          —           |     —      | SM: user ที่อยู่ในศูนย์ตนอย่างน้อย 1 ศูนย์ และไม่ใช่ SA/SM                                  |
+| หมุน QR (ออกใหม่, QR เก่าใช้ไม่ได้ทุกศูนย์)                 |  ✓  | scope |          —           |     —      | SM: ต้องดูแล**ทุก**ศูนย์ใน roles ของ user นั้น และไม่ใช่ SA/SM · หมุนของตัวเองไม่ได้        |
+| สแกน / resolve QR staff ที่หน้าแจก                          |  ✓  | scope |        scope         |     —      | ตาม `canAccessDistributionDesk` ของศูนย์นั้น · แจกได้เฉพาะเจ้าหน้าที่ที่มี role ในศูนย์นั้น |
+
+> scope = เฉพาะศูนย์ที่ถือ `{code}:shelter_manager` / `{code}:distribution_staff` · ปุ่มพิมพ์/หมุนบัตรซ่อนสำหรับ user ที่มี `volunteer_id` หรือ `personnel_type: volunteer`
 
 ---
 
