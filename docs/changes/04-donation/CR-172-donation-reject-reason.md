@@ -3,7 +3,7 @@ id: CR-172
 title: "เหตุผลปฏิเสธบนใบบริจาค + ไม่รับรายบรรทัดตอนตรวจรับ (แสดงบนหน้าติดตาม)"
 status: approved
 date: 2026-10-17
-updated: 2026-10-22
+updated: 2026-10-30 # แก้เพิ่มโดย CR-206 · amendment A1 approved (Soravit Sukkarn, Team Lead; review PR #1038)
 approved_at: 2026-10-18
 requested_by: "Kan"
 decided_by: "Soravit Sukkarn (Team Lead)"
@@ -52,7 +52,7 @@ migration: field ใหม่ทั้งหมด optional — doc เดิม
 - **FR-9** — ฟอร์มตรวจรับต้องมีสวิตช์ "ไม่รับรายการนี้" ต่อบรรทัด (เป็นการปฏิเสธทั้งบรรทัด All-or-Nothing ไม่รองรับ split qty) เปิดแล้วต้องเลือกเหตุผล (FR-2) และซ่อนช่องจำนวน/ที่เก็บ
 - **FR-10** — บรรทัดที่ไม่รับ: ไม่สร้างแถว `stock_ledger` ไม่มี lot และลงใน `received_summary.items[]` พร้อม `rejected: true` + `reject_reason` + `reject_reason_code`
 - **FR-11** — รับอย่างน้อย 1 บรรทัด → `status: received` (ไม่เพิ่มสถานะใหม่ ตาม CR-143 §B)
-- **FR-12** — ไม่รับทุกบรรทัด → `status: rejected` · `reject_reason` = รวมเหตุผลของทุกบรรทัด (คั่นด้วย `; ` และ truncate ไม่เกิน 500 ตัวอักษร) · `reject_reason_code` = ค่านั้นหากทุกบรรทัดตรงกัน หรือ `other` หากคละเหตุผล · `received_summary.items[]` เก็บเหตุผลรายบรรทัด · ไม่มีแถว ledger
+- **FR-12** — ไม่รับทุกบรรทัด → `status: rejected` · `reject_reason` = รวมเหตุผลของทุกบรรทัด (คั่นด้วย `; ` และ truncate ไม่เกิน 500 ตัวอักษร · ข้ามเหตุผลที่ว่าง — Amendment A1) · `reject_reason_code` = ค่านั้นหากทุกบรรทัดตรงกัน หรือ `other` หากคละเหตุผล · `received_summary.items[]` เก็บเหตุผลรายบรรทัด · ไม่มีแถว ledger
 - **FR-13** — "ไม่รับ" ≠ "ขาด": บรรทัดที่ `rejected: true` ไม่นับใน `shortfalls` (ทั้งฝั่ง backend คำนวณ shortfalls และ client fallback ในหน้าติดตาม)
 
 ### หน้าติดตามสถานะ (ประชาชน)
@@ -107,3 +107,20 @@ migration: field ใหม่ทั้งหมด optional — doc เดิม
 - 2026-10-17 — proposed (track ด้วย CR file แยก branch ตามที่เจ้าของโครงการกำหนด)
 - 2026-10-18 — approved by Soravit Sukkarn (Team Lead) — requested by Kan (รันเลข CR-172 ย้ายเข้าหมวด 04-donation)
 - 2026-10-21 — implement ใน branch `feat/donation-review-intake-flow` — donation schema_v 6 (worker inbound + walk-in), projector `public_donations` ส่ง `reject_reason`/`reject_reason_code` (PROJECTION_VERSION 6 → 7 — 6 ถูกใช้โดย CR-185 ใน develop แล้ว), `PublicDonation` + tracking response ของ FastAPI (OpenAPI ไม่เปลี่ยน — `donation` เป็น `dict`), อัปเดต schema.md §2.3 / couchdb-mongodb-sync.md §3.2 / api-contract.md §5 / public-tier-donation-spec.html และหมายเหตุใน CR-143 §B, CR-156 §I
+- 2026-10-30 — แก้เพิ่มโดย [CR-206](CR-206-donation-multi-drop-off.md): FR-12 — ใบที่รับทีละจุดคิดสถานะตอนปิดใบ: มีรายการที่รับจริง ≥ 1 → `received` · ไม่มี (ไม่รับทุกรายการ หรือไม่รับปนไม่มา) → `rejected` + `reject_reason` / `reject_reason_code` ระดับใบตาม FR-12 (FR-MP-27b)
+- 2026-10-30 — **Amendment A1 approved (Soravit Sukkarn (Team Lead), review PR #1038)** — ตามที่เสนอ (ผู้เสนอ implement ไว้แล้วใน PR #1038): FR-12 ข้ามเหตุผลรายบรรทัดที่ว่าง (W3) · track เป็น amendment ใน CR นี้ ไม่รันเลข CR ใหม่
+
+## Amendment A1 (2026-10-30) — เหตุผลรวมของ FR-12 ข้ามเหตุผลรายบรรทัดที่ว่าง · **approved 2026-10-30 (Soravit Sukkarn (Team Lead), review PR #1038)**
+
+> **สรุป:** ตอนรวมเหตุผลรายบรรทัดเป็น `reject_reason` ระดับใบ (FR-12) ให้ข้ามบรรทัดที่เหตุผลเป็นสตริงว่างก่อนต่อด้วย `; ` ·
+> ไม่เพิ่ม field · ไม่ bump `schema_v` · ไม่เปลี่ยน PROJECTION_VERSION. แก้ที่ `combineLineRejectReasons` (TS) และ `_combine_line_reject_reasons` (worker `donation_close.py`) ·
+> ข้อความ FR-12 ด้านบนแก้ในบรรทัดเดียวกัน
+
+**ปัญหา (พบใน review PR #1038):** บรรทัดที่เลือกเหตุผล `other` โดยไม่กรอกรายละเอียดมี `reject_reason` เป็น `""` (code `other` ใช้รายละเอียดอย่างเดียว — schema.md §2.3) ·
+การต่อทุกค่ารวมสตริงว่างทำให้ได้ `reject_reason` ที่มี `; ` นำหน้า/ซ้อน/ท้าย (เช่น `"หมดอายุ; "`) ที่ผู้บริจาคเห็นบนหน้าติดตาม
+
+- **FR-12 (แก้)** — `reject_reason` ระดับใบ = เหตุผลรายบรรทัด **ที่ไม่ว่าง** (ตัดซ้ำ) ต่อกันด้วย `"; "` แล้ว truncate ≤ 500 · บรรทัดที่เหตุผลว่างไม่เพิ่มอะไร · ทุกบรรทัดว่าง → `reject_reason` = `""` ·
+  `reject_reason_code` ไม่เปลี่ยน (ค่าเดียวถ้าทุกบรรทัดตรงกัน ไม่งั้น `other`) · ใช้กับทั้งฝั่ง TS และ worker (ปิดใบ CR-206 FR-MP-27b) ผ่าน fixture ชุดเดียวกัน (`packages/donation-close-fixtures`)
+
+**Acceptance A1:** [ ] 2 บรรทัด: `expired` + `other` ไม่มีรายละเอียด → `reject_reason` ไม่มี `; ` ส่วนเกิน · code = `other` ·
+[ ] ทุกบรรทัดเป็น `other` ไม่มีรายละเอียด → `reject_reason` ว่าง · [ ] TS และ worker ให้ผลตรงกันทุกเคสใน fixture

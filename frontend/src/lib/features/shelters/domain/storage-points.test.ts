@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
+	listDonationPoints,
 	listStoragePoints,
 	sortSubStorageTypes,
 	SUB_STORAGE_TYPE_LABELS,
 	subStorageTypeLabels
 } from './storage-points';
+import type { SubStorageType } from './schema';
 
 describe('listStoragePoints', () => {
 	it('returns [] for a missing shelter or missing common_areas', () => {
@@ -15,13 +17,22 @@ describe('listStoragePoints', () => {
 	});
 
 	it('keeps form order and drops rows that cannot be referenced', () => {
+		const row = (id: string, name: string, type: SubStorageType) => ({
+			id,
+			name,
+			types: [type],
+			accepts_donations: false,
+			lat: null,
+			lng: null,
+			location_note: null
+		});
 		const points = listStoragePoints({
 			common_areas: {
 				sub_storage: [
-					{ id: 'b', name: 'คลังยา', types: ['medical_supplies'] },
-					{ id: '', name: 'ไม่มีรหัส', types: ['general'] },
-					{ id: 'a', name: '  ', types: ['general'] },
-					{ id: 'c', name: 'สนามปิงปอง', types: ['food_dry'] }
+					row('b', 'คลังยา', 'medical_supplies'),
+					row('', 'ไม่มีรหัส', 'general'),
+					row('a', '  ', 'general'),
+					row('c', 'สนามปิงปอง', 'food_dry')
 				]
 			}
 		});
@@ -62,5 +73,39 @@ describe('subStorageTypeLabels', () => {
 			'อาหารแช่เย็น/แข็ง',
 			'น้ำดื่ม'
 		]);
+	});
+});
+
+describe('listDonationPoints (CR-205)', () => {
+	const point = (over: Record<string, unknown>) => ({
+		id: 'p',
+		name: 'จุด',
+		types: ['general'],
+		area_m2: null,
+		accepts_donations: false,
+		lat: null,
+		lng: null,
+		location_note: null,
+		...over
+	});
+
+	it('returns [] without a shelter', () => {
+		expect(listDonationPoints(undefined)).toEqual([]);
+		expect(listDonationPoints(null)).toEqual([]);
+	});
+
+	it('keeps only ticked points that have a real pin, in form order', () => {
+		const points = listDonationPoints({
+			common_areas: {
+				sub_storage: [
+					point({ id: 'a', accepts_donations: true, lat: 7, lng: 100 }),
+					point({ id: 'b', accepts_donations: true }),
+					point({ id: 'c', lat: 7, lng: 100 }),
+					point({ id: 'd', accepts_donations: true, lat: 0, lng: 0 }),
+					point({ id: 'e', accepts_donations: true, lat: 0, lng: 100 })
+				] as never
+			}
+		});
+		expect(points.map((p) => p.id)).toEqual(['a', 'e']);
 	});
 });

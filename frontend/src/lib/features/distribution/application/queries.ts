@@ -66,6 +66,7 @@ export {
 	useMoveBulkReturnEntry,
 	useApplyMissedBulkReturnLoanRefs,
 	useVoidBulkReturnEntry,
+	useReopenBulkReturnEntryLoans,
 	useCancelBulkReturnPool,
 	useSubmitBulkReturnPool,
 	useReceiveBulkReturnPool,
@@ -75,10 +76,14 @@ export {
 	type AddBulkReturnEntriesMutationInput,
 	type MoveBulkReturnEntryMutationInput,
 	type VoidBulkReturnEntryMutationInput,
+	type ReopenBulkReturnEntryLoansMutationInput,
 	type CancelBulkReturnPoolMutationInput,
 	type SubmitBulkReturnPoolMutationInput,
 	type ReceiveBulkReturnPoolMutationInput
 } from './query/bulk-pool-v3-mutations';
+
+// Imperative read: which add-entry operationUlids already wrote an entry (retry of a partial save)
+export { findWrittenBulkReturnEntries } from './food-supplies/bulk-return-pool-v3-add-entry';
 
 // Ticket lifecycle mutations (Workflows 1–7)
 export {

@@ -1,7 +1,6 @@
 <script lang="ts">
 	import MapPin from '@lucide/svelte/icons/map-pin';
 	import CalendarIcon from '@lucide/svelte/icons/calendar';
-	import Lock from '@lucide/svelte/icons/lock';
 	import Navigation from '@lucide/svelte/icons/navigation';
 	import Package from '@lucide/svelte/icons/package';
 	import CircleCheckBig from '@lucide/svelte/icons/circle-check-big';
@@ -13,19 +12,32 @@
 	import { Label } from '$lib/components/ui/label';
 	import { Input } from '$lib/components/ui/input';
 	import { Button } from '$lib/components/ui/button';
-	import * as Select from '$lib/components/ui/select';
 	import { Calendar } from '$lib/components/ui/calendar';
 	import { Popover, PopoverContent, PopoverTrigger } from '$lib/components/ui/popover';
 	import { today, type DateValue } from '@internationalized/date';
 	import { toast } from 'svelte-sonner';
-	import { onMount } from 'svelte';
 	import {
+		ALL_LINES_PICKER,
+		bookableDropOffPoints,
 		buildDonationItemsPayload,
+		buildDonationLogistics,
+		defaultDropOffPointId,
+		DropOffPointsSection,
+		lineDropOffPointId,
+		pickedSlot,
+		pickerForMapTap,
 		publicDonationErrorMessage,
+		slotContextKey,
 		slotModeForDelivery,
-		useDonationSlots
+		useDonationSlots,
+		VEHICLE_PLATE_MAX
 	} from '$lib/features/donations';
 	import { formatUnit, useUnitsOfMeasure } from '$lib/features/catalog';
+	import {
+		DropOffShelterMap,
+		usePublicShelter,
+		type MapPointFocus
+	} from '$lib/features/public-portal';
 	import { getDonationStore } from '../../../routes/(public)/donations/donation.svelte';
 	import { langState } from '$lib/states/i18n.svelte';
 	import { getTranslation } from '$lib/utils/i18n';
@@ -35,6 +47,10 @@
 	import { ensureRecaptchaLoaded } from '$lib/api/recaptcha-script';
 
 	const donationStore = getDonationStore();
+	// CR-175 FR-1 — photos ride only an unsolicited booking.
+	const donorPhotos = $derived(
+		donationStore.flowMode === 'unsolicited' ? donationStore.photos.photoIds : []
+	);
 	const unitsQuery = useUnitsOfMeasure();
 	const units = $derived(unitsQuery.data ?? []);
 	const siteKey = env.PUBLIC_RECAPTCHA_SITE_KEY || '';
@@ -43,7 +59,6 @@
 	// "Today" is the shelter's calendar day (Asia/Bangkok), not the donor device's: the BFF
 	// refuses `date < bangkokToday()`, so a device clock behind Bangkok must not send yesterday.
 	let selectedDate = $state<DateValue>(today(DISPLAY_TIME_ZONE));
-	let shelters = $state<Array<{ code: string; name: string }>>([]);
 	let isItemsModalOpen = $state(false);
 
 	const selectedDateStr = $derived(selectedDate ? selectedDate.toString() : '');
@@ -69,32 +84,112 @@
 	const timeSlots = $derived(slotsQuery.isSuccess ? slotsQuery.data : []);
 	const hasShelter = $derived(Boolean(donationStore.shelterCode));
 
-	// A window the donor picked earlier can fill or close before they submit — drop the
-	// selection instead of letting them send a booking the service will reject.
-	$effect(() => {
-		const picked = donationStore.slotTime;
-		if (!picked) return;
-		if (!timeSlots.some((slot) => slot.label === picked && slot.status === 'available')) {
-			donationStore.slotTime = '';
-		}
-	});
+	// CR-206 — drop-off point per line. The points come from the shelter's own detail, the
+	// same request the map makes (FR-DP-18); only a self drop-off picks one (FR-MP-11).
+	const shelterQuery = usePublicShelter(() => donationStore.shelterCode || null);
+	const bookablePoints = $derived(
+		bookableDropOffPoints(shelterQuery.data, donationStore.deliveryMethod)
+	);
+	const defaultPointId = $derived(
+		defaultDropOffPointId(bookablePoints, donationStore.tappedPointId)
+	);
+	// Unpicked lines follow the default; a pick the shelter does not offer (another shelter's)
+	// falls back to it as well, so changing the shelter clears every pick (FR-MP-12).
+	const pointLines = $derived(
+		donationStore.items.map((item) => ({
+			key: item.id,
+			name: item.name || t.unspecified,
+			pointId: lineDropOffPointId(item.dropOffPointId, bookablePoints, defaultPointId)
+		}))
+	);
+	// Until the shelter's points load, a self drop-off cannot tell which points to send.
+	const pointsPending = $derived(
+		donationStore.deliveryMethod === 'self_dropoff' && hasShelter && shelterQuery.isPending
+	);
 
-	onMount(async () => {
-		try {
-			const res = await fetch('/api/public/v1/needs');
-			if (res.ok) {
-				const data = await res.json();
-				if (Array.isArray(data)) {
-					shelters = data.map((s: { code: string; name: string }) => ({
-						code: s.code,
-						name: s.name
-					}));
-				}
-			}
-		} catch {
-			toast.error(t.errorLoadingShelters);
-		}
+	// The map shows only where there is a point to find: a self drop-off at a shelter with
+	// drop-off points (owner 2026-10-30). A shelter with none keeps just its name.
+	const showDropOffMap = $derived(bookablePoints.length > 0);
+	// The map and the dropdowns follow each other (owner 2026-10-30): a dropdown pick zooms the
+	// map to that pin, and a tapped pin fills the dropdown used last — the first line until one
+	// is used — panning only, so the other points stay in view.
+	let activePicker = $state<string | null>(null);
+	const mapTapPicker = $derived(
+		pickerForMapTap(
+			activePicker,
+			pointLines.map((line) => line.key)
+		)
+	);
+	let mapFocusRequest = $state<MapPointFocus | null>(null);
+	let focusSeq = 0;
+	let focusAppliedTo = $state<string | null>(null);
+	// Before any tap or pick, the map zooms to the point the tap target is on now: at the
+	// shelter's own zoom its points sit under the shelter pin and cannot be tapped.
+	const mapFocus = $derived.by((): MapPointFocus | null => {
+		if (mapFocusRequest) return mapFocusRequest;
+		const line = pointLines.find((l) => l.key === mapTapPicker) ?? pointLines[0];
+		return line?.pointId ? { pointId: line.pointId, zoom: true, seq: 0 } : null;
 	});
+	const mapFocusNote = $derived(
+		focusAppliedTo ? t.dropOffPointAppliedTo.replace('{name}', focusAppliedTo) : null
+	);
+
+	function focusMapOn(pointId: string, zoom: boolean, appliedTo: string | null) {
+		focusSeq += 1;
+		mapFocusRequest = { pointId, zoom, seq: focusSeq };
+		focusAppliedTo = appliedTo;
+	}
+
+	function setLinePoint(key: string, pointId: string) {
+		const item = donationStore.items.find((line) => line.id === key);
+		if (item) item.dropOffPointId = pointId;
+	}
+
+	function setAllLinesPoint(pointId: string) {
+		for (const item of donationStore.items) item.dropOffPointId = pointId;
+	}
+
+	function lineName(key: string): string | null {
+		return pointLines.find((line) => line.key === key)?.name ?? null;
+	}
+
+	function pickLinePoint(key: string, pointId: string) {
+		setLinePoint(key, pointId);
+		focusMapOn(pointId, true, lineName(key));
+	}
+
+	function pickAllLinesPoint(pointId: string) {
+		setAllLinesPoint(pointId);
+		focusMapOn(pointId, true, t.dropOffPointAllLines);
+	}
+
+	function tapMapPoint(pointId: string) {
+		donationStore.tappedPointId = pointId;
+		// One point fills every line by itself: nothing to say which line it went to.
+		if (bookablePoints.length < 2 || !bookablePoints.some((point) => point.id === pointId)) {
+			focusMapOn(pointId, false, null);
+		} else if (mapTapPicker === ALL_LINES_PICKER) {
+			setAllLinesPoint(pointId);
+			focusMapOn(pointId, false, t.dropOffPointAllLines);
+		} else if (mapTapPicker) {
+			setLinePoint(mapTapPicker, pointId);
+			focusMapOn(pointId, false, lineName(mapTapPicker));
+		}
+	}
+
+	// A window is picked for one shelter, day and queue: changing any of them, or the window
+	// filling or closing before submit, leaves nothing picked (`pickedSlot`).
+	const slotContext = $derived(
+		slotContextKey(donationStore.shelterCode, selectedDateStr, slotMode)
+	);
+	const selectedSlot = $derived(
+		pickedSlot({
+			slotTime: donationStore.slotTime,
+			slotFor: donationStore.slotFor,
+			context: slotContext,
+			slots: timeSlots
+		})
+	);
 
 	function handleConfirmBookingRequest() {
 		donationStore.errorMessage = '';
@@ -112,7 +207,7 @@
 		if (
 			(donationStore.deliveryMethod === 'self_dropoff' ||
 				donationStore.deliveryMethod === 'shelter_pickup') &&
-			(!selectedDate || !donationStore.slotTime)
+			(!selectedDate || !selectedSlot)
 		) {
 			donationStore.errorMessage = t.errSelectDateTime;
 			toast.error(donationStore.errorMessage);
@@ -139,11 +234,17 @@
 			return;
 		}
 
-		submitDonation();
+		// Read once, before reCAPTCHA's awaits: if the window fills meanwhile, the booking still
+		// carries the window that passed the check above, and the BFF answers SLOT_FULL.
+		submitDonation(selectedSlot, selectedDateStr || bangkokToday());
 	}
 
-	async function submitDonation() {
+	async function submitDonation(slotLabel: string, slotDateStr: string) {
 		donationStore.errorMessage = '';
+		if (donationStore.flowMode === 'unsolicited' && donationStore.photos.busy) {
+			toast.error(t.photoWaitUpload);
+			return;
+		}
 		donationStore.isSubmitting = true;
 		// E2E may inject a token; otherwise require real reCAPTCHA when enabled.
 		let token = window.__captchaToken || '';
@@ -177,25 +278,23 @@
 			}
 		}
 
-		let slotDateStr = selectedDate ? selectedDate.toString() : bangkokToday();
-		let fromTime = donationStore.slotTime.split('-')[0]?.trim() || '00:00';
-		let toTime = donationStore.slotTime.split('-')[1]?.trim() || '23:59';
+		const fromTime = slotLabel.split('-')[0]?.trim() || '00:00';
+		const toTime = slotLabel.split('-')[1]?.trim() || '23:59';
 
-		let logistics: Record<string, unknown> = {
-			delivery_method: donationStore.deliveryMethod
-		};
+		const logistics = buildDonationLogistics({
+			deliveryMethod: donationStore.deliveryMethod,
+			vehicleType: donationStore.vehicleType,
+			vehiclePlate: donationStore.vehiclePlate,
+			slot: { date: slotDateStr, from: fromTime, to: toTime },
+			pickupAddress: donationStore.pickupAddress,
+			eta: donationStore.eta,
+			courierTrackingNo: donationStore.courierTrackingNo
+		});
 
-		if (donationStore.deliveryMethod === 'self_dropoff') {
-			logistics.vehicle = donationStore.vehicleType;
-			logistics.slot = { date: slotDateStr, from: fromTime, to: toTime };
-		} else if (donationStore.deliveryMethod === 'shelter_pickup') {
-			logistics.slot = { date: slotDateStr, from: fromTime, to: toTime };
-			if (donationStore.pickupAddress) logistics.pickup_address = donationStore.pickupAddress;
-			if (donationStore.eta) logistics.eta = donationStore.eta;
-		} else if (donationStore.deliveryMethod === 'parcel') {
-			if (donationStore.eta) logistics.eta = donationStore.eta;
-			if (donationStore.courierTrackingNo)
-				logistics.courier_tracking_no = donationStore.courierTrackingNo;
+		// The point each line is booked to — kept on the line so the ticket groups by it.
+		for (const [index, line] of pointLines.entries()) {
+			const item = donationStore.items[index];
+			if (item) item.dropOffPointId = line.pointId;
 		}
 
 		try {
@@ -212,6 +311,7 @@
 					},
 					items: buildDonationItemsPayload(donationStore.items, t),
 					logistics: logistics,
+					...(donorPhotos.length > 0 ? { photos: donorPhotos } : {}),
 					...(token ? { captchaToken: token } : {})
 				})
 			});
@@ -224,6 +324,7 @@
 				donationStore.bookingRef = data.bookingRef;
 				donationStore.bookingStatus = data.status ?? 'pending_review';
 				donationStore.slotDate = slotDateStr;
+				donationStore.bookedVehiclePlate = logistics?.vehicle_plate ?? '';
 				donationStore.goToStep('ticket');
 				if (donationStore.reachedStep < 4) donationStore.reachedStep = 4;
 				toast.success(t.bookingSuccess);
@@ -395,6 +496,17 @@
 						</button>
 					{/each}
 				</div>
+				<div class="space-y-2">
+					<label class="block text-sm font-bold text-slate-800" for="vehicle-plate">
+						{t.vehiclePlateLabel}
+					</label>
+					<Input
+						id="vehicle-plate"
+						bind:value={donationStore.vehiclePlate}
+						maxlength={VEHICLE_PLATE_MAX}
+						placeholder={t.vehiclePlatePlaceholder}
+					/>
+				</div>
 			</div>
 		{/if}
 
@@ -415,44 +527,63 @@
 
 		<!-- 2. เลือกศูนย์ -->
 		<div class="space-y-6 rounded-2xl border border-slate-200 bg-slate-50 p-5">
-			<div>
-				<label
-					class="mb-3 block flex items-center gap-2 text-sm font-bold text-slate-800"
-					for="shelter-select"
-				>
+			<div class="space-y-3" data-testid="drop-off-shelter">
+				<span class="block flex items-center gap-2 text-sm font-bold text-slate-800">
 					<MapPin class="h-4 w-4 text-slate-500" />
-					{t.selectShelterLabel}
-					<span class="text-red-500">*</span>
-					{#if donationStore.shelterLocked}
-						<span
-							class="ml-2 inline-flex items-center gap-1 rounded-md bg-slate-200/60 px-2 py-0.5 text-xs font-semibold text-slate-600"
-						>
-							<Lock class="h-3 w-3" />
-							{t.shelterLockedBadge}
-						</span>
-					{/if}
-				</label>
+					{t.dropOffShelterLabel}
+				</span>
 
-				<Select.Root
-					type="single"
-					value={donationStore.shelterCode}
-					onValueChange={(v) => (donationStore.shelterCode = v)}
-					disabled={donationStore.shelterLocked}
-				>
-					<Select.Trigger
-						id="shelter-select"
-						class="w-full rounded-xl border-2 border-slate-200 p-4 text-base font-bold text-slate-800 shadow-2xs focus-visible:border-domain-donation disabled:bg-slate-100 disabled:text-slate-500 disabled:opacity-100 data-placeholder:text-base data-[size=default]:h-auto"
-					>
-						{shelters.find((s) => s.code === donationStore.shelterCode)?.name ??
-							t.selectShelterPlaceholder}
-					</Select.Trigger>
-					<Select.Content>
-						{#each shelters as shelter (shelter.code)}
-							<Select.Item value={shelter.code} label={shelter.name} />
-						{/each}
-					</Select.Content>
-				</Select.Root>
+				{#if hasShelter}
+					<p class="text-base font-bold text-slate-900" data-testid="drop-off-shelter-name">
+						{donationStore.selectedShelterName || donationStore.shelterCode}
+					</p>
+					{#if showDropOffMap}
+						<DropOffShelterMap
+							shelterCode={donationStore.shelterCode}
+							shelterName={donationStore.selectedShelterName}
+							focus={mapFocus}
+							focusNote={mapFocusNote}
+							onFocusPoint={tapMapPoint}
+						/>
+					{/if}
+				{:else}
+					<div class="flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-4">
+						<p class="text-sm font-bold text-slate-700">{t.dropOffNoShelter}</p>
+						<Button
+							type="button"
+							variant="outline"
+							class="h-11 self-start"
+							onclick={() => donationStore.goToStep('needs')}
+						>
+							{t.dropOffBackToNeeds}
+						</Button>
+					</div>
+				{/if}
 			</div>
+
+			<!-- 2.1 จุดส่งของแต่ละรายการ (CR-206 FR-MP-8 – FR-MP-11) -->
+			{#if hasShelter && donationStore.deliveryMethod === 'self_dropoff'}
+				{#if pointsPending}
+					<p
+						role="status"
+						class="flex items-center gap-2 text-sm font-bold text-slate-600"
+						data-testid="drop-off-points-loading"
+					>
+						<LoaderCircle class="h-4 w-4 animate-spin text-slate-500" />
+						{t.dropOffPointsLoading}
+					</p>
+				{:else}
+					<DropOffPointsSection
+						points={bookablePoints}
+						lines={pointLines}
+						idPrefix="booking-drop-off"
+						activePicker={mapTapPicker}
+						onPick={pickLinePoint}
+						onPickAll={pickAllLinesPoint}
+						onActivate={(picker) => (activePicker = picker)}
+					/>
+				{/if}
+			{/if}
 
 			<!-- 3. เลือกเวลา -->
 			{#if donationStore.deliveryMethod === 'self_dropoff' || donationStore.deliveryMethod === 'shelter_pickup'}
@@ -529,12 +660,14 @@
 						<div class="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
 							{#each timeSlots as slot (slot.from)}
 								{@const isFull = slot.status !== 'available'}
-								{@const isSelected = donationStore.slotTime === slot.label}
+								{@const isSelected = selectedSlot === slot.label}
 								<button
 									type="button"
 									disabled={isFull}
 									onclick={() => {
-										if (!isFull) donationStore.slotTime = slot.label;
+										if (isFull) return;
+										donationStore.slotTime = slot.label;
+										donationStore.slotFor = slotContext;
 									}}
 									class="flex flex-col items-center justify-center gap-1 rounded-xl border-2 p-3 transition-all
 									{isFull
@@ -582,9 +715,10 @@
 			type="button"
 			disabled={donationStore.isSubmitting ||
 				!donationStore.shelterCode ||
+				pointsPending ||
 				((donationStore.deliveryMethod === 'self_dropoff' ||
 					donationStore.deliveryMethod === 'shelter_pickup') &&
-					!donationStore.slotTime) ||
+					!selectedSlot) ||
 				(donationStore.deliveryMethod === 'shelter_pickup' && !donationStore.pickupAddress.trim())}
 			onclick={handleConfirmBookingRequest}
 			class="flex flex-1 cursor-pointer items-center justify-center gap-2 rounded-xl bg-domain-donation-strong py-4 text-lg font-bold text-white shadow-md transition-all hover:bg-domain-donation-text active:scale-95 disabled:opacity-50"

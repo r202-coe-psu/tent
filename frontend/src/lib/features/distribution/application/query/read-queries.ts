@@ -18,6 +18,7 @@ import {
 } from './repositories';
 import { calculateShiftReconciliation } from '../food-supplies/reconciliation-workflow';
 import { resolveDispatchedLotExpiry } from '../food-supplies/lot-expiry';
+import { DEFAULT_QUERY_STALE_TIME_MS } from '$lib/db/query-client';
 import { operationsRepository } from '$lib/features/operations';
 import { getReturnOperationState } from '../food-supplies/return-workflow';
 import {
@@ -176,7 +177,11 @@ export const useBulkReturnPoolOverview = (
 				const ctx = resolveAuthenticatedAuthorContext(shelterCode);
 				return getBulkReturnPoolOverview(resolvedOptions ?? {}, ctx);
 			},
-			enabled: isEnabled
+			enabled: isEnabled,
+			// A degraded overview (loan read failed) must be re-checked on focus/reconnect, so it is
+			// stale at once; otherwise keep the global default staleTime.
+			staleTime: (query) =>
+				query.state.data?.some((row) => row.loan_refs_unavailable) ? 0 : DEFAULT_QUERY_STALE_TIME_MS
 		};
 	});
 
@@ -204,8 +209,8 @@ export const useBulkReturnPoolClosedLoanRefs = (
 	});
 
 /**
- * Reads the refs of a SUBMITTED / RECEIVED pool's snapshot entries that were planned but never
- * applied to a loan that can still take them (fence timeout); empty for an OPEN pool.
+ * Reads the refs that were planned but never applied to a loan that can still take them (fence
+ * timeout): the snapshot entries of a SUBMITTED / RECEIVED pool, or the live entries of an OPEN pool.
  */
 export const useBulkReturnPoolMissedLoanRefs = (
 	poolId: MaybeGetter<string | null | undefined>,

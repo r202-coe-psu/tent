@@ -2,7 +2,8 @@ import type { components } from '$lib/api/openapi';
 
 export type FamilySearchResult = components['schemas']['SearchResult'];
 export type FamilySearchResponse = components['schemas']['SearchResponse'];
-export type PublicSiteKind = 'evacuation_center' | 'host_house';
+/** `master_data:site_kind` code (CR-198) — `evacuation_center`, `host_house`, or any code SA adds. */
+export type PublicSiteKind = string;
 export type PublicShelterItem = Omit<components['schemas']['ShelterItem'], 'site_kind'> & {
 	site_kind?: PublicSiteKind;
 	vulnerable_groups?: string[];
@@ -18,6 +19,8 @@ export type PublicShelterListResponse = Omit<
 	shelters: PublicShelterItem[];
 };
 export type PublicGeoPoint = components['schemas']['GeoPoint'];
+/** One ticked storage point of a shelter detail (CR-205 FR-DP-12). */
+export type PublicDonationPoint = components['schemas']['DonationPoint'];
 
 /** UI list/map shape derived from the public shelters API (no occupancy). */
 export type PublicShelterCardModel = {

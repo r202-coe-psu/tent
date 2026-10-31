@@ -10,6 +10,7 @@ import {
 	findUnresolvedBulkReturnRefs,
 	isLateEntry,
 	isPoolEmpty,
+	pinnedItemsSummary,
 	poolSnapshotEntryIds,
 	resolveBulkReturnEntries,
 	summarizePoolItems
@@ -462,5 +463,43 @@ describe('P1 -> P2 -> P3 move chain with P2 snapshotted in between', () => {
 			{ item_id: 'item_master:cot', qty: '5' }
 		]);
 		expect(summarizePoolItems([e1], moves, P2, [], pins)).toEqual([]);
+	});
+});
+
+describe('pinnedItemsSummary', () => {
+	const blanket = 'item_master:blanket';
+	const cot = 'item_master:cot';
+	const summary = [
+		{ item_id: blanket, qty: '7' },
+		{ item_id: cot, qty: '7' }
+	];
+	const pool = (entry_ids?: string[]) => ({ _id: P2, items_summary: summary, entry_ids });
+
+	it('subtracts entries pinned to another pool and keeps rows and order', () => {
+		const pins = new Map([[e1._id, P1]]);
+		expect(pinnedItemsSummary(pool([e1._id, e2._id, e3._id]), [e1, e2, e3], pins)).toEqual([
+			{ item_id: blanket, qty: '7' },
+			{ item_id: cot, qty: '2' }
+		]);
+	});
+
+	it('keeps entries pinned to this pool', () => {
+		const pins = new Map([[e1._id, P2]]);
+		expect(pinnedItemsSummary(pool([e1._id, e2._id, e3._id]), [e1, e2, e3], pins)).toEqual(summary);
+	});
+
+	it('keeps an entry id whose doc is unknown', () => {
+		const pins = new Map([[e1._id, P1]]);
+		expect(pinnedItemsSummary(pool([e1._id]), [], pins)).toEqual(summary);
+	});
+
+	it('floors the qty at 0 and keeps the row', () => {
+		const pins = new Map([[e3._id, P1]]);
+		const small = { _id: P2, items_summary: [{ item_id: blanket, qty: '3' }], entry_ids: [e3._id] };
+		expect(pinnedItemsSummary(small, [e3], pins)).toEqual([{ item_id: blanket, qty: '0' }]);
+	});
+
+	it('leaves the summary unchanged without entry_ids', () => {
+		expect(pinnedItemsSummary(pool(undefined), [e1], new Map([[e1._id, P1]]))).toEqual(summary);
 	});
 });

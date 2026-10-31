@@ -17,6 +17,7 @@ import {
 	applyBulkEntryToLog,
 	assessBulkReturnRefOnLoan,
 	buildSnapshotPins,
+	deriveLoanReopenId,
 	foldEntryMoves,
 	resolveBulkReturnEntries,
 	revertBulkEntryFromLog,
@@ -196,46 +197,68 @@ export async function applyRefToLoan(
 	return (await applyRefToLoanDetailed(logRepo, entry, ref, ctx)).skipped;
 }
 
-/** Like applyRefToLoan, but also reports whether this call newly wrote the apply. */
+/**
+ * Like applyRefToLoan, but also reports whether this call newly wrote the apply and whether the
+ * entry was found voided (then nothing is written: `skipped` is null and `written` false).
+ *
+ * `isEntryVoided` is awaited on every CAS attempt, after the loan was read and before the write is
+ * computed, so a void that lands between two attempts is seen by the retry. A void document written
+ * after that read but before the loan PUT is not seen: the void's own revert then finds nothing
+ * applied yet and the cut survives; that window is a single read-to-PUT round trip.
+ */
 export async function applyRefToLoanDetailed(
 	logRepo: DistributionLogRepository,
 	entry: BulkReturnEntry,
 	ref: BulkReturnEntryLoanRef,
-	ctx: AuthorContext
-): Promise<{ skipped: BulkReturnLoanSkipped | null; written: boolean }> {
+	ctx: AuthorContext,
+	isEntryVoided?: () => Promise<boolean>
+): Promise<{ skipped: BulkReturnLoanSkipped | null; written: boolean; voided: boolean }> {
 	let skipped = null as BulkReturnLoanSkipped | null;
 	let written = false;
+	let voided = false;
 	try {
-		await logRepo.mutateLogCAS(ref.distribution_log_id, (current) => {
-			skipped = null; // the mutator may run again on a CAS retry
-			written = false;
-			const assessment = assessBulkReturnRefOnLoan(current, ref, entry._id);
-			if (assessment.status === 'already_applied') return current;
-			if (assessment.status === 'skip') {
-				skipped = {
-					distribution_log_id: ref.distribution_log_id,
-					qty: ref.qty,
-					reason: assessment.reason,
-					...(assessment.outstanding !== undefined ? { outstanding: assessment.outstanding } : {})
-				};
-				return current; // same reference: the repository writes nothing
-			}
-			written = true;
-			return applyBulkEntryToLog(
-				current,
-				{ entry_id: entry._id, qty: ref.qty },
-				ctx.createdBy,
-				now()
-			);
-		});
+		await logRepo.mutateLogCAS(
+			ref.distribution_log_id,
+			(current) => {
+				skipped = null; // the mutator may run again on a CAS retry
+				written = false;
+				if (voided) return current;
+				const assessment = assessBulkReturnRefOnLoan(current, ref, entry._id);
+				if (assessment.status === 'already_applied') return current;
+				if (assessment.status === 'skip') {
+					skipped = {
+						distribution_log_id: ref.distribution_log_id,
+						qty: ref.qty,
+						reason: assessment.reason,
+						...(assessment.outstanding !== undefined ? { outstanding: assessment.outstanding } : {})
+					};
+					return current; // same reference: the repository writes nothing
+				}
+				written = true;
+				return applyBulkEntryToLog(
+					current,
+					{ entry_id: entry._id, qty: ref.qty },
+					ctx.createdBy,
+					now()
+				);
+			},
+			isEntryVoided
+				? {
+						beforeWrite: async () => {
+							voided = await isEntryVoided();
+						}
+					}
+				: undefined
+		);
 	} catch (err) {
 		if (!(err instanceof NotFoundError)) throw err;
 		return {
 			skipped: { distribution_log_id: ref.distribution_log_id, qty: ref.qty, reason: 'missing' },
-			written: false
+			written: false,
+			voided: false
 		};
 	}
-	return { skipped, written };
+	return { skipped, written, voided };
 }
 
 export async function revertRefOnLoan(
@@ -267,6 +290,26 @@ export async function revertRefOnLoan(
 }
 
 /**
+ * Apply-side half of the reopen race (CR-193 §35). Call AFTER the apply CAS writes of `entry`:
+ * re-reads the entry's loan reopen doc and, if one exists, reverts every ref in `appliedRefs` (the
+ * refs THIS call wrote) with the idempotent `revertRefOnLoan`. Returns true when it reopened.
+ * Together with the reopen's final sweep, every apply CAS is either before that sweep (reverted
+ * there) or followed by this re-read, which then sees the doc (the reopen writes it before its
+ * sweep), so a reopened loan is never left cut.
+ */
+export async function revertAppliedRefsIfReopened(
+	eventRepo: BulkReturnEventRepository,
+	logRepo: DistributionLogRepository,
+	entry: BulkReturnEntry,
+	appliedRefs: readonly BulkReturnEntryLoanRef[],
+	ctx: AuthorContext
+): Promise<boolean> {
+	if (!(await eventRepo.getLoanReopen(deriveLoanReopenId(entry._id)))) return false;
+	for (const ref of appliedRefs) await revertRefOnLoan(logRepo, entry, ref, ctx);
+	return true;
+}
+
+/**
  * An entry whose move chain has a gap is omitted from the resolved fold, so its current pool is
  * unknowable: writing a move/void now would target the wrong pool or seq. Reject until it syncs.
  */
@@ -286,6 +329,27 @@ export function assertEntryNotPendingSync(
 }
 
 /**
+ * Unique pool ids the events reference: entry.pool_id, move from/to and void pool_id. `ownPoolId`
+ * is removed when given.
+ */
+export function referencedPoolIds(
+	events: {
+		entries: readonly Pick<BulkReturnEntry, 'pool_id'>[];
+		moves: readonly Pick<BulkReturnEntryMove, 'from_pool_id' | 'to_pool_id'>[];
+		voids: readonly { pool_id: string }[];
+	},
+	ownPoolId?: string
+): string[] {
+	const poolIds = new Set<string>([
+		...events.entries.map((e) => e.pool_id),
+		...events.moves.flatMap((m) => [m.from_pool_id, m.to_pool_id]),
+		...events.voids.map((v) => v.pool_id)
+	]);
+	if (ownPoolId !== undefined) poolIds.delete(ownPoolId);
+	return [...poolIds];
+}
+
+/**
  * Snapshot pins (entry id -> closed pool that counted it) for the pools the events reference:
  * entry.pool_id, move from/to and void pool_id. `ownPoolId` is left out when the caller already
  * knows it is OPEN (an OPEN pool pins nothing); omit it to include that pool too.
@@ -299,14 +363,9 @@ export async function loadSnapshotPins(
 	},
 	ownPoolId?: string
 ): Promise<Map<string, string>> {
-	const poolIds = new Set<string>([
-		...events.entries.map((e) => e.pool_id),
-		...events.moves.flatMap((m) => [m.from_pool_id, m.to_pool_id]),
-		...events.voids.map((v) => v.pool_id)
-	]);
-	if (ownPoolId !== undefined) poolIds.delete(ownPoolId);
 	// Scoped reads (CR-193 §18): only the pools the events name, never a whole-shelter list.
-	const pools = await Promise.all([...poolIds].map((id) => poolRepo.get(id)));
+	const ids = referencedPoolIds(events, ownPoolId);
+	const pools = await Promise.all(ids.map((id) => poolRepo.get(id)));
 	return buildSnapshotPins(pools.filter((p): p is BulkReturnPoolV3 => p !== null));
 }
 
@@ -324,14 +383,20 @@ export async function loadSnapshotPinsForWrite(
 	},
 	ownPoolId?: string
 ): Promise<Map<string, string>> {
-	const poolIds = new Set<string>([
-		...events.entries.map((e) => e.pool_id),
-		...events.moves.flatMap((m) => [m.from_pool_id, m.to_pool_id]),
-		...events.voids.map((v) => v.pool_id)
-	]);
-	if (ownPoolId !== undefined) poolIds.delete(ownPoolId);
-	const ids = [...poolIds];
+	const ids = referencedPoolIds(events, ownPoolId);
 	const pools = await Promise.all(ids.map((id) => poolRepo.get(id)));
+	return snapshotPinsFromReadPools(ids, pools);
+}
+
+/**
+ * Builds the pins from pools that were already read (`pools[i]` is the read of `ids[i]`), with the
+ * same fail-closed rule as `loadSnapshotPinsForWrite`: any null read throws
+ * `DistributionDataIntegrityError` naming those ids.
+ */
+export function snapshotPinsFromReadPools(
+	ids: readonly string[],
+	pools: readonly (BulkReturnPoolV3 | null)[]
+): Map<string, string> {
 	const unreadable = ids.filter((_, i) => pools[i] === null);
 	if (unreadable.length > 0) {
 		throw new DistributionDataIntegrityError(unreadable, 'referenced bulk return pool unreadable');

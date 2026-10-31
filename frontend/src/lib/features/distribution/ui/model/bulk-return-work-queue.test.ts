@@ -2,13 +2,14 @@ import { describe, expect, it } from 'vitest';
 import { compoundCapabilityRole } from '$lib/auth/roles';
 import type { BulkReturnPoolOverviewRow } from '../../domain/food-supplies';
 import {
+	WORK_QUEUE_COPY,
 	flaggedPools,
 	formatWaitingAge,
 	openPoolsAtPoint,
-	rowNeedsAttention,
 	waitingForReceive,
 	workQueuesFor
 } from './bulk-return-work-queue';
+import { receivedHideCutoff, rowNeedsAttention } from './bulk-return-pool-v3';
 
 const HOUR = 3_600_000;
 const NOW = new Date('2026-01-10T12:00:00.000Z');
@@ -18,11 +19,15 @@ function row(
 	status: string,
 	opts: {
 		submitted_at?: string;
+		received_at?: string;
 		created_at?: string;
 		late?: number;
 		unresolved?: number;
 		closed?: number;
 		conflicts?: number;
+		loanUnavailable?: boolean;
+		/** Entries as `{ refs: loan ref count, voided }`. */
+		entries?: { refs: number; voided?: boolean }[];
 	} = {}
 ): BulkReturnPoolOverviewRow {
 	return {
@@ -31,15 +36,20 @@ function row(
 			status,
 			name: id,
 			submitted_at: opts.submitted_at,
+			received_at: opts.received_at,
 			created_at: opts.created_at ?? '2026-01-01T00:00:00.000Z'
 		},
 		entry_count: 0,
 		items: [],
-		entries: [],
+		entries: (opts.entries ?? []).map((e, i) => ({
+			entry: { _id: `${id}-e${i}`, loan_refs: Array.from({ length: e.refs }) },
+			voided: e.voided ?? false
+		})),
 		late_entries: Array.from({ length: opts.late ?? 0 }),
 		is_empty: true,
 		unresolved_refs: Array.from({ length: opts.unresolved ?? 0 }),
 		closed_loan_refs: Array.from({ length: opts.closed ?? 0 }),
+		loan_refs_unavailable: opts.loanUnavailable ?? false,
 		snapshot_conflicts: Array.from({ length: opts.conflicts ?? 0 }, (_, i) => ({
 			entry_id: `e${i}`,
 			kind: 'void'
@@ -93,6 +103,89 @@ describe('flaggedPools', () => {
 		expect(out[0].reasons).toEqual([{ reason: 'snapshot_conflict', count: 2 }]);
 	});
 
+	it('flags a pool whose loan refs could not be checked, counting live loan refs only', () => {
+		const d = row('d', 'OPEN', {
+			loanUnavailable: true,
+			entries: [{ refs: 2 }, { refs: 1 }, { refs: 5, voided: true }]
+		});
+		expect(rowNeedsAttention(d)).toBe(true);
+		const out = flaggedPools([d, row('clean', 'OPEN')]);
+		expect(out).toHaveLength(1);
+		expect(out[0].reasons).toEqual([{ reason: 'loan_unknown', count: 3 }]);
+		expect(WORK_QUEUE_COPY.reasonLabels.loan_unknown).toBe('ตรวจยอดยืมไม่ได้');
+	});
+
+	it('still excludes a cancelled pool whose loan refs could not be checked', () => {
+		const c = row('c', 'CANCELLED', { loanUnavailable: true, entries: [{ refs: 1 }] });
+		expect(flaggedPools([c])).toEqual([]);
+	});
+
+	describe('RECEIVED pools and the age window', () => {
+		const cutoff = receivedHideCutoff(NOW);
+		const old = new Date(cutoff.getTime() - HOUR).toISOString();
+		const recent = new Date(cutoff.getTime() + HOUR).toISOString();
+		const flaggedIds = (rows: BulkReturnPoolOverviewRow[]) =>
+			flaggedPools(rows, { hideReceivedBefore: cutoff }).map((f) => f.row.pool._id);
+
+		it('drops an old RECEIVED pool with a closed loan, late entries or an unknown loan state', () => {
+			expect(
+				flaggedIds([
+					row('closed', 'RECEIVED', { received_at: old, closed: 1 }),
+					row('late', 'RECEIVED', { received_at: old, late: 1 }),
+					row('unknown', 'RECEIVED', {
+						received_at: old,
+						loanUnavailable: true,
+						entries: [{ refs: 1 }]
+					})
+				])
+			).toEqual([]);
+		});
+
+		it('keeps a recently received pool flagged, including an outage-flagged one', () => {
+			expect(
+				flaggedIds([
+					row('closed', 'RECEIVED', { received_at: recent, closed: 1 }),
+					row('unknown', 'RECEIVED', {
+						received_at: recent,
+						loanUnavailable: true,
+						entries: [{ refs: 1 }]
+					})
+				]).sort()
+			).toEqual(['closed', 'unknown']);
+			const [unknown] = flaggedPools(
+				[
+					row('u', 'RECEIVED', {
+						received_at: recent,
+						loanUnavailable: true,
+						entries: [{ refs: 2 }]
+					})
+				],
+				{ hideReceivedBefore: cutoff }
+			);
+			expect(unknown.reasons).toEqual([{ reason: 'loan_unknown', count: 2 }]);
+		});
+
+		it('keeps a RECEIVED pool exactly at the cutoff and one without received_at', () => {
+			expect(
+				flaggedIds([
+					row('edge', 'RECEIVED', { received_at: cutoff.toISOString(), late: 1 }),
+					row('no-date', 'RECEIVED', { late: 1 })
+				]).sort()
+			).toEqual(['edge', 'no-date']);
+		});
+
+		it('never ages out OPEN or SUBMITTED pools and drops nothing without a cutoff', () => {
+			expect(
+				flaggedIds([row('o', 'OPEN', { late: 1 }), row('s', 'SUBMITTED', { late: 1 })]).sort()
+			).toEqual(['o', 's']);
+			expect(
+				flaggedPools([row('r', 'RECEIVED', { received_at: old, late: 1 })]).map(
+					(f) => f.row.pool._id
+				)
+			).toEqual(['r']);
+		});
+	});
+
 	it('sorts by most reasons, then oldest created_at', () => {
 		const out = flaggedPools([
 			row('one-new', 'OPEN', { late: 1, created_at: '2026-01-05T00:00:00.000Z' }),
@@ -128,11 +221,32 @@ describe('workQueuesFor', () => {
 				roles: [`shelter:${code}`, compoundCapabilityRole(code, 'shelter_manager')],
 				shelterCode: code
 			})
-		).toEqual(['waiting_receive', 'flagged']);
+		).toEqual(['waiting_receive', 'flagged', 'my_point']);
 		expect(workQueuesFor({ roles: ['system_admin'], shelterCode: code })).toEqual([
 			'waiting_receive',
-			'flagged'
+			'flagged',
+			'my_point'
 		]);
+		expect(
+			workQueuesFor({
+				roles: [
+					`shelter:${code}`,
+					compoundCapabilityRole(code, 'shelter_manager'),
+					compoundCapabilityRole(code, 'distribution_staff')
+				],
+				shelterCode: code
+			})
+		).toEqual(['waiting_receive', 'flagged', 'my_point']);
+		expect(
+			workQueuesFor({
+				roles: [
+					`shelter:${code}`,
+					compoundCapabilityRole(code, 'warehouse_staff'),
+					compoundCapabilityRole(code, 'distribution_staff')
+				],
+				shelterCode: code
+			})
+		).toEqual(['waiting_receive', 'my_point']);
 		expect(
 			workQueuesFor({
 				roles: [`shelter:${code}`, compoundCapabilityRole(code, 'warehouse_staff')],

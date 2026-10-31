@@ -12,6 +12,7 @@ export { CountInputGuard } from './ui/count-input-guard.svelte';
 export {
 	calculateMealIngredients,
 	calculateMealIngredientsFromRecipe,
+	scaleRecipeIngredientQty,
 	calculateMealIngredientsFromCustom,
 	resolveItemMasterStock,
 	toRequisitionInput,

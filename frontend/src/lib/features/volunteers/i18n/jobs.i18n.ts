@@ -35,6 +35,7 @@ export interface JobsTranslations {
 	tagOpen: string;
 	tagNearFull: string;
 	tagFull: string;
+	tagClosed: string;
 	shiftsAndQuota: string;
 	shiftsUnit: string;
 	moreShiftsPrefix: string;
@@ -181,6 +182,7 @@ export const jobsI18n: Record<LanguageCode, JobsTranslations> = {
 		tagOpen: 'เปิดรับสมัคร',
 		tagNearFull: 'ใกล้เต็ม',
 		tagFull: 'เต็มแล้ว',
+		tagClosed: 'ปิดรับแล้ว',
 		shiftsAndQuota: 'รอบกะเวลาและโควตาปฏิบัติงาน',
 		shiftsUnit: 'กะ',
 		moreShiftsPrefix: 'ยังมีอีก',
@@ -328,6 +330,7 @@ export const jobsI18n: Record<LanguageCode, JobsTranslations> = {
 		tagOpen: 'Open',
 		tagNearFull: 'Almost Full',
 		tagFull: 'Full',
+		tagClosed: 'Closed',
 		shiftsAndQuota: 'Shifts & Capacity Quota',
 		shiftsUnit: 'shifts',
 		moreShiftsPrefix: 'Plus',

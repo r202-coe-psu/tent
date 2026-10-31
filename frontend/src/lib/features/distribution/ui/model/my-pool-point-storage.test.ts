@@ -5,6 +5,7 @@ import {
 	clearMyPoolPoint,
 	myPoolPointKey,
 	readMyPoolPoint,
+	resolveMyPoolPoint,
 	writeMyPoolPoint
 } from './my-pool-point-storage';
 
@@ -64,5 +65,34 @@ describe('my pool point storage', () => {
 		});
 		expect(() => writeMyPoolPoint('S1', 'a')).not.toThrow();
 		expect(() => clearMyPoolPoint('S1')).not.toThrow();
+	});
+});
+
+describe('resolveMyPoolPoint', () => {
+	const points = [{ id: 'sp:1' }, { id: 'sp:2' }];
+
+	it('keeps null', () => {
+		expect(resolveMyPoolPoint(null, points, true)).toBeNull();
+	});
+
+	it('keeps the unspecified sentinel even when it is not a listed point', () => {
+		expect(resolveMyPoolPoint(MY_POOL_POINT_UNSPECIFIED, points, true)).toBe('unspecified');
+		expect(resolveMyPoolPoint(MY_POOL_POINT_UNSPECIFIED, [], true)).toBe('unspecified');
+	});
+
+	it('keeps an unknown id while the points are not loaded', () => {
+		expect(resolveMyPoolPoint('sp:gone', [], false)).toBe('sp:gone');
+	});
+
+	it('keeps an id that is in the loaded list', () => {
+		expect(resolveMyPoolPoint('sp:2', points, true)).toBe('sp:2');
+	});
+
+	it('resolves an id missing from the loaded list to null', () => {
+		expect(resolveMyPoolPoint('sp:gone', points, true)).toBeNull();
+	});
+
+	it('resolves any id to null when the loaded list is empty', () => {
+		expect(resolveMyPoolPoint('sp:1', [], true)).toBeNull();
 	});
 });

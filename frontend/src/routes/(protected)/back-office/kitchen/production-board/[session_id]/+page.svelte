@@ -15,6 +15,7 @@
 		useMealServiceReceipts,
 		mealServiceReceiptOutcome,
 		sumHeadcountByTags,
+		scaleRecipeIngredientQty,
 		getActiveTagsFromSession,
 		CountInputGuard,
 		isCount,
@@ -51,7 +52,7 @@
 	import { Label } from '$lib/components/ui/label';
 	import { Textarea } from '$lib/components/ui/textarea';
 	import { toast } from 'svelte-sonner';
-	import { qtyGt } from '$lib/utils/qty';
+	import { addQty, persistQty, qtyGt, qtyLte } from '$lib/utils/qty';
 	import { formatThaiDateTime, formatThaiShortDate } from '$lib/utils/date';
 	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
 	import ChefHat from '@lucide/svelte/icons/chef-hat';
@@ -78,6 +79,10 @@
 	const services = useMealServices();
 	const serviceReceipts = useMealServiceReceipts();
 	const tickets = useTickets();
+	// Cached tickets from another kitchen page may predate an edit made elsewhere; only data
+	// fetched after this page mounted is trusted to decide prefill and whether a plan has a ticket.
+	const mountedAt = Date.now();
+	const ticketsFresh = $derived(tickets.dataUpdatedAt >= mountedAt);
 	const recipes = useRecipes(() => getShelterCode());
 	const itemMasters = useItemMasters(() => getShelterCode());
 	const unitsQuery = useUnitsOfMeasure();
@@ -242,8 +247,10 @@
 	// Pre-fill form when activePlan changes
 	let lastLoadedPlanId = $state<string | null>(null);
 
+	// Waits for fresh tickets: prefilling from the recipe or a stale ticket first would let
+	// "บันทึกการแก้ไข" overwrite the ticket's saved requested_qty.
 	$effect(() => {
-		if (activePlan && activePlan._id !== lastLoadedPlanId) {
+		if (activePlan && ticketsFresh && activePlan._id !== lastLoadedPlanId) {
 			lastLoadedPlanId = activePlan._id;
 			menuLabel = activePlan.label ?? '';
 			allocatedTarget = activePlan.allocated_target ?? activePlan.headcount?.total ?? 50;
@@ -258,11 +265,8 @@
 			selectedRecipeId = planRecipeId && planRecipeId !== 'recipe:custom' ? planRecipeId : '';
 			recipeMode = selectedRecipeId ? 'bom' : 'custom';
 			cookingStarted = !!activePlan.cooking_started_at;
-			const ticketForPlan = (tickets.data ?? []).find(
-				(t) => t.meal_plan_id === activePlan._id && t.status !== 'CANCELLED'
-			);
-			if (ticketForPlan?.items && ticketForPlan.items.length > 0) {
-				ingredientsList = ticketForPlan.items.map((it) => {
+			if (activeTicket?.items && activeTicket.items.length > 0) {
+				ingredientsList = activeTicket.items.map((it) => {
 					const master = (itemMasters.data ?? []).find((m) => m._id === it.item_id);
 					return {
 						item_id: it.item_id,
@@ -351,23 +355,18 @@
 	const newQtyValid = $derived(isPositiveQty(newQty));
 	const ingredientsValid = $derived(ingredientsList.every((ing) => isPositiveQty(ing.needed)));
 
-	function calculateRecipeIngredients(recipeId: string, portions: number): IngredientRow[] {
+	function calculateRecipeIngredients(recipeId: string, portions: number | null): IngredientRow[] {
 		const recipe = (recipes.data ?? []).find((r) => r._id === recipeId);
 		if (!recipe) {
 			return [];
 		}
 
-		// Scale ingredients
-		const baseServings = Math.max(parseFloat(recipe.standard_portions) || 1, 1);
-		const factor = portions / baseServings;
-
 		return (recipe.ingredients ?? []).map((ing) => {
 			const itemMaster = (itemMasters.data ?? []).find((m) => m._id === ing.item_master_id);
-			const scaledQty = Math.round(Number(ing.quantity || 0) * factor * 100) / 100;
 			return {
 				item_id: ing.item_master_id,
 				name: itemMaster?.name || ing.item_master_id,
-				needed: String(scaledQty),
+				needed: scaleRecipeIngredientQty(ing.quantity, recipe.standard_portions, portions),
 				unit: ing.uom || itemMaster?.base_unit || 'kg'
 			};
 		});
@@ -412,16 +411,16 @@
 	}
 
 	function confirmAddIngredient() {
-		if (!newItemId || !newQty || Number(newQty) <= 0) {
+		if (!newItemId || newQty == null || newQty === '' || qtyLte(newQty, 0)) {
 			toast.error('กรุณาระบุวัตถุดิบและจำนวนที่ถูกต้อง');
 			return;
 		}
 		const master = (itemMasters.data ?? []).find((m) => m._id === newItemId);
 		const existingIndex = ingredientsList.findIndex((it) => it.item_id === newItemId);
 		if (existingIndex >= 0) {
-			const current = Number(ingredientsList[existingIndex].needed) || 0;
-			ingredientsList[existingIndex].needed = String(
-				Math.round((current + Number(newQty)) * 100) / 100
+			ingredientsList[existingIndex].needed = addQty(
+				ingredientsList[existingIndex].needed || '0',
+				newQty
 			);
 		} else {
 			ingredientsList = [
@@ -429,7 +428,7 @@
 				{
 					item_id: newItemId,
 					name: master?.name || newItemId,
-					needed: String(newQty),
+					needed: persistQty(newQty),
 					unit: newUnit || master?.base_unit || 'kg'
 				}
 			];
@@ -457,7 +456,9 @@
 			toast.error('กรุณาระบุวัตถุดิบอย่างน้อย 1 รายการ');
 			return;
 		}
-		const hasInvalidQty = ingredientsList.some((ing) => Number(ing.needed) <= 0);
+		const hasInvalidQty = ingredientsList.some(
+			(ing) => ing.needed == null || ing.needed === '' || qtyLte(ing.needed, 0)
+		);
 		if (hasInvalidQty) {
 			toast.error('กรุณาระบุจำนวนวัตถุดิบให้มากกว่า 0 ทุกรายการ');
 			return;
@@ -544,7 +545,9 @@
 			toast.error('กรุณาระบุวัตถุดิบอย่างน้อย 1 รายการ');
 			return;
 		}
-		const hasInvalidQty = ingredientsList.some((ing) => Number(ing.needed) <= 0);
+		const hasInvalidQty = ingredientsList.some(
+			(ing) => ing.needed == null || ing.needed === '' || qtyLte(ing.needed, 0)
+		);
 		if (hasInvalidQty) {
 			toast.error('กรุณาระบุจำนวนวัตถุดิบให้มากกว่า 0 ทุกรายการ');
 			return;
@@ -1232,12 +1235,24 @@
 			</Card.Root>
 		</div>
 
-		{#if !activeTicket}
+		{#if tickets.isError && !ticketsFresh}
+			<!-- Without tickets we can't tell whether this meal already has one, and creating would open a second plan and ticket for it. -->
+			<div
+				class="flex items-center justify-between gap-3 rounded-xl border border-red-200 bg-red-50 p-4 text-red-900"
+			>
+				<div class="flex items-center gap-2 text-sm font-semibold">
+					<AlertCircle class="h-5 w-5 shrink-0 text-red-600" />
+					โหลดข้อมูลใบเบิกไม่สำเร็จ
+				</div>
+				<Button variant="outline" size="sm" onclick={() => tickets.refetch()}>ลองใหม่</Button>
+			</div>
+		{:else if !activeTicket}
 			<div class="rounded-xl border border-primary/20 bg-primary/5 p-4">
 				<Button
 					class="w-full gap-2 font-semibold shadow-sm"
 					onclick={handleCreateRequisition}
-					disabled={createMealPlanMutation.isPending ||
+					disabled={!ticketsFresh ||
+						createMealPlanMutation.isPending ||
 						createTicketMutation.isPending ||
 						!targetValid ||
 						!ingredientsValid}

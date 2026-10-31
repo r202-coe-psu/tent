@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
+	import { SvelteSet } from 'svelte/reactivity';
 	import { toast } from 'svelte-sonner';
 	import AlertCircle from '@lucide/svelte/icons/alert-circle';
 	import AlertTriangle from '@lucide/svelte/icons/alert-triangle';
@@ -22,6 +23,7 @@
 	import { formatThaiShortDate } from '$lib/utils/date';
 	import {
 		createStableOperationId,
+		findWrittenBulkReturnEntries,
 		resolveAuthenticatedAuthorContext,
 		useAddBulkReturnEntries,
 		useBulkReturnPoolOverview,
@@ -32,6 +34,7 @@
 	import type { FrontlineRecipientSelection } from '../model/frontline-handover';
 	import { formatDistributionError } from '../model/distribution-error';
 	import { resolveItemDisplay } from '../model/bulk-return-pool-v3';
+	import { ADD_ENTRY_COPY } from '../model/bulk-return-copy';
 	import {
 		LATE_RESULT_WARNING,
 		NO_OUTSTANDING_LOAN_WARNING,
@@ -44,12 +47,16 @@
 		identifiedReturnerId,
 		linesFromOutstandingLoans,
 		listOpenPools,
+		loanPendingWarning,
 		outstandingLoanRows,
+		remainingLinesMessage,
 		removeLine,
 		resolveDefaultPoolId,
 		resolveReturner,
 		summarizeAddResult,
+		ulidsNeedingWrittenLookup,
 		validateAddEntryLines,
+		wroteIntoPool,
 		type AddEntriesSummary,
 		type AddEntryLine,
 		type ReturnerChoice
@@ -99,9 +106,18 @@
 
 	// Initial values are read once on mount (the parent remounts this form for every open).
 	let pickedPoolId = $state(untrack(() => initialPoolId ?? ''));
-	// Last-used pool on this device for this shelter; only a default, never overrides a pick.
+	// The logged-in user's name; '' when there is no session (nothing is remembered then).
+	function currentUserName(): string {
+		try {
+			return resolveAuthenticatedAuthorContext(shelterCode).createdBy;
+		} catch {
+			return '';
+		}
+	}
+	// Last-used pool of this user on this device for this shelter; only a default, never overrides
+	// a pick.
 	const rememberedPoolId = untrack(() =>
-		shelterCode ? readLastBulkReturnPool(shelterCode) : null
+		shelterCode ? readLastBulkReturnPool(shelterCode, currentUserName()) : null
 	);
 	let returnerSelection = $state<FrontlineRecipientSelection | null>(
 		untrack(() => (initialReturner?.recipientType === 'outside' ? null : initialReturner))
@@ -190,24 +206,74 @@
 	}
 
 	// "คืนทั้งหมด": replaces the lines with one line per outstanding item (qty stays editable).
-	// Existing lines of the same item keep their operationUlid (a retry after a failed save must not
-	// write a second entry).
+	// A line keeps its operationUlid only while its qty is unchanged. A line whose ULID was sent in
+	// an earlier save is checked against the saved entries first: one that was already written keeps
+	// its written qty and ULID, so the retry replays it instead of colliding or counting twice.
 	let returnAllSkippedNote = $state<string | null>(null);
+	let returnAllChecking = $state(false);
+	// operationUlids sent in a save attempt of this dialog (only these can already be written).
+	const sentUlids = new SvelteSet<string>();
+	// Lines must not change while a save or the "คืนทั้งหมด" lookup is in flight.
+	const busy = $derived(addMutation.isPending || returnAllChecking);
 
-	function handleReturnAll() {
+	async function handleReturnAll() {
+		if (returnAllChecking) return;
+		const current = lines;
+		// The returner and their loans are fixed at click time; the lookup below must not mix in a
+		// returner picked while it runs.
+		const startReturnerId = returnerId;
+		const startLoanRows = loanRows;
+		const eligible = new Set(catalog.map((item) => item._id));
+		const toCheck = ulidsNeedingWrittenLookup(startLoanRows, eligible, current, sentUlids);
+		let written = new Map<string, { qty: string }>();
+		let lookupFailed = false;
+		if (toCheck.length > 0) {
+			returnAllChecking = true;
+			try {
+				written = await findWrittenBulkReturnEntries(
+					toCheck,
+					resolveAuthenticatedAuthorContext(shelterCode)
+				);
+			} catch {
+				// Not knowing whether they were written, those lines stay exactly as they are.
+				lookupFailed = true;
+				toast.error(ADD_ENTRY_COPY.writtenLookupFailed);
+			} finally {
+				returnAllChecking = false;
+			}
+		}
+		// Normally unreachable: the returner picker is disabled while `busy` (this lookup runs), so
+		// the returner cannot change meanwhile. The guard only protects against a stale lookup.
+		if (returnerId !== startReturnerId) return;
 		const result = linesFromOutstandingLoans(
-			loanRows,
-			new Set(catalog.map((item) => item._id)),
+			startLoanRows,
+			eligible,
 			(preset) => addLine([], createStableOperationId, preset)[0],
-			lines
+			current,
+			written
 		);
-		if (result.lines.length > 0) lines = result.lines;
+		const unchanged = new Map<string, AddEntryLine>(
+			lookupFailed
+				? current
+						.filter((line) => toCheck.includes(line.operationUlid))
+						.map((line) => [line.item_id, line])
+				: []
+		);
+		if (result.lines.length > 0) {
+			lines = result.lines.map((line) => unchanged.get(line.item_id) ?? line);
+		}
 		returnAllSkippedNote =
 			result.skippedItemIds.length > 0
 				? `ข้าม ${result.skippedItemIds.length} รายการที่เลือกในแคตตาล็อกไม่ได้: ${result.skippedItemIds
 						.map((id) => resolveItemDisplay(id, catalog).name)
 						.join(', ')}`
 				: null;
+		if (result.keptAtWrittenQtyItemIds.length > 0) {
+			const names = result.keptAtWrittenQtyItemIds
+				.map((id) => resolveItemDisplay(id, catalog).name)
+				.join(', ');
+			toast.info(ADD_ENTRY_COPY.keptAtWrittenQty(names));
+		}
 	}
 
 	function handleOpenChange(next: boolean) {
@@ -224,6 +290,14 @@
 		if (summary.noOutstandingLoan) toast.warning(NO_OUTSTANDING_LOAN_WARNING);
 		if (summary.lateEntries.length > 0) toast.warning(LATE_RESULT_WARNING);
 		if (summary.relocated.length > 0) toast.info('บางรายการถูกย้ายไปกองอื่นแล้ว ไม่ได้บันทึกซ้ำ');
+		if (summary.voidedCount > 0) toast.info(ADD_ENTRY_COPY.voided(summary.voidedCount));
+		if (summary.loansReopenedCount > 0) {
+			toast.info(ADD_ENTRY_COPY.loansReopened(summary.loansReopenedCount));
+		}
+		if (summary.loanPendingItemIds.length > 0) {
+			const names = summary.loanPendingItemIds.map((id) => resolveItemDisplay(id, catalog).name);
+			toast.warning(loanPendingWarning(names));
+		}
 		if (summary.unallocated.length > 0) {
 			const detail = summary.unallocated
 				.map((u) => `${resolveItemDisplay(u.item_id, catalog).name} ${u.qty}`)
@@ -232,7 +306,12 @@
 		}
 	}
 
+	// Set before the save is awaited and cleared when it settles: a second submit that lands before
+	// the pending state re-renders the buttons must not start another save.
+	let saveInFlight = false;
+
 	async function handleSubmit() {
+		if (saveInFlight || addMutation.isPending || returnAllChecking) return;
 		submitError = null;
 		showErrors = true;
 		if (!canWrite) {
@@ -265,22 +344,30 @@
 			submitError = 'กรุณาตรวจสอบรายการสินค้าอีกครั้ง';
 			return;
 		}
+		// Everything read after the await comes from here, never from `selectedPool` / `openPools`:
+		// while the save waits on the pool fence the live overview can already show this pool as
+		// locked or SUBMITTED, which drops it from `openPools`.
+		const submittedPoolId = input.pool_id;
+		const userName = currentUserName();
+		for (const item of input.items) sentUlids.add(item.operationUlid);
+		saveInFlight = true;
 		try {
 			const result = await addMutation.mutateAsync({ input, shelterCode });
 			const summary = summarizeAddResult(result);
-			if (shelterCode && summary.savedCount + summary.replayedCount > 0) {
-				writeLastBulkReturnPool(shelterCode, selectedPool._id);
+			// A replay into another pool must not make that pool the remembered default.
+			if (shelterCode && wroteIntoPool(result, submittedPoolId)) {
+				writeLastBulkReturnPool(shelterCode, userName, submittedPoolId);
 			}
 			reportSummary(summary);
-			// A late entry stops the workflow: the lines that were not written stay for a retry.
+			// Written lines (loan-pending ones included) leave the form; the lines that were not
+			// written (late entry, blocked pool, stopped at a pending loan) stay for a retry.
 			lines = dropWrittenLines(lines, result);
 			// Relocated lines stay (flagged) so the dialog only closes when every line was written.
 			if (lines.length === 0) {
 				open = false;
 				onsuccess?.(summary);
 			} else if (activeLines(lines).length > 0) {
-				submitError =
-					'บางรายการยังไม่ได้บันทึก เพราะกองนี้ไม่รับของแล้ว กรุณาเลือกกองอื่นที่เปิดรับ แล้วกดบันทึกอีกครั้ง';
+				submitError = remainingLinesMessage(summary, result, submittedPoolId);
 			}
 		} catch (err) {
 			// Line operationUlids are kept, so pressing save again is an idempotent retry.
@@ -291,6 +378,8 @@
 			);
 			submitError = message;
 			toast.error(message);
+		} finally {
+			saveInFlight = false;
 		}
 	}
 </script>
@@ -395,7 +484,7 @@
 						ผู้คืน <span class="text-red-600">*</span>
 					</p>
 					<div class="flex min-h-11 items-center gap-2">
-						<Switch id="add-entry-unspecified" bind:checked={unspecified} />
+						<Switch id="add-entry-unspecified" bind:checked={unspecified} disabled={busy} />
 						<Label for="add-entry-unspecified" class="text-sm font-medium text-slate-700">
 							ไม่ระบุผู้คืน
 						</Label>
@@ -403,7 +492,7 @@
 					<RecipientSearchPicker
 						bind:value={returnerSelection}
 						allowOutside={false}
-						disabled={unspecified}
+						disabled={unspecified || busy}
 					/>
 					{#if showErrors && !returnerResolution.returner && returnerResolution.error}
 						<p role="alert" class="text-xs font-medium text-red-700">{returnerResolution.error}</p>
@@ -448,7 +537,7 @@
 									<Button
 										type="button"
 										variant="outline"
-										disabled={addMutation.isPending}
+										disabled={busy}
 										onclick={handleReturnAll}
 										class="min-h-11 w-full gap-2 sm:w-auto"
 									>
@@ -493,7 +582,7 @@
 										<Select.Root
 											type="single"
 											bind:value={line.item_id}
-											disabled={Boolean(line.relocated)}
+											disabled={Boolean(line.relocated) || busy}
 										>
 											<Select.Trigger
 												id="add-entry-item-{line.lineId}"
@@ -522,7 +611,7 @@
 											inputmode="numeric"
 											autocomplete="off"
 											bind:value={line.qty}
-											disabled={Boolean(line.relocated)}
+											disabled={Boolean(line.relocated) || busy}
 											aria-invalid={Boolean(lineError)}
 											placeholder="0"
 											class="h-11 text-base tabular-nums sm:h-10 sm:text-sm"
@@ -531,7 +620,7 @@
 									<Button
 										type="button"
 										variant="outline"
-										disabled={(lines.length === 1 && !line.relocated) || addMutation.isPending}
+										disabled={(lines.length === 1 && !line.relocated) || busy}
 										onclick={() => (lines = removeLine(lines, line.lineId))}
 										class="min-h-11 w-full gap-2 sm:w-auto"
 									>
@@ -565,7 +654,7 @@
 						<Button
 							type="button"
 							variant="outline"
-							disabled={addMutation.isPending}
+							disabled={busy}
 							onclick={() => (lines = addLine(lines, createStableOperationId))}
 							class="min-h-11 w-full gap-2 sm:w-auto"
 						>
@@ -603,6 +692,7 @@
 				<Button
 					type="submit"
 					disabled={addMutation.isPending ||
+						returnAllChecking ||
 						!canWrite ||
 						openPools.length === 0 ||
 						poolScanStatus === 'not_found'}
