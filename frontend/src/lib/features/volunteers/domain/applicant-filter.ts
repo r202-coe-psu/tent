@@ -7,9 +7,14 @@
  */
 
 import { applicantAttendance, awaitingAttendanceConfirmation } from './applicant-attendance';
-import type { ApplicantBoard, ApplicantHistoryEntry } from './applicant-board';
+import {
+	applicationPerson,
+	applicationShiftId,
+	type ApplicantBoard,
+	type ApplicantHistoryEntry,
+	type ApplicantPerson
+} from './applicant-board';
 import type { ApplicantGroup } from './applicant-queue';
-import type { JobApplication } from './job-application.schema';
 import type { ShiftAssignment } from './shift-assignment.schema';
 import type { Volunteer } from './volunteer.schema';
 
@@ -61,15 +66,17 @@ export interface FilteredApplicantBoard {
 }
 
 const digits = (value: string) => value.replace(/\D/g, '');
+/** A volunteer code without its dashes and spaces: "v013", "V 013" and "v-013" all find V-013. */
+const compactCode = (value: string) => value.toLowerCase().replace(/[\s-]/g, '');
 
-function matchesSearch(
-	query: string,
-	person: { name: string | null; phone: string | null; code: string | null }
-): boolean {
+function matchesSearch(query: string, person: ApplicantPerson): boolean {
 	if (!query) return true;
 	const q = query.toLowerCase();
 	if (person.name?.toLowerCase().includes(q)) return true;
-	if (person.code?.toLowerCase().includes(q)) return true;
+	if (person.code) {
+		const qCode = compactCode(q);
+		if (qCode !== '' && compactCode(person.code).includes(qCode)) return true;
+	}
 	if (!person.phone) return false;
 	if (person.phone.toLowerCase().includes(q)) return true;
 	// A phone-shaped query ("081-234") also matches a phone stored without the dashes.
@@ -100,23 +107,6 @@ function bucketOf(assignment: ShiftAssignment, now: Date): ApplicantAttendanceFi
 		default:
 			return null;
 	}
-}
-
-function applicationShiftId(application: JobApplication): string | null {
-	return application.shift_id ?? application.selected_shift.shift_id ?? null;
-}
-
-function applicationPerson(
-	application: JobApplication,
-	volunteers: ReadonlyMap<string, Volunteer>
-) {
-	const { applicant } = application;
-	const volunteer = application.volunteer_id ? volunteers.get(application.volunteer_id) : null;
-	return {
-		name: `${applicant.first_name} ${applicant.last_name}`.trim(),
-		phone: applicant.phone,
-		code: volunteer?.volunteer_code ?? null
-	};
 }
 
 function statusAllows(status: ApplicantStatusFilter, entry: ApplicantHistoryEntry): boolean {
