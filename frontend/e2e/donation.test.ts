@@ -1110,7 +1110,7 @@ test.describe('Box label for a booking the shelter accepted (#591)', TAGS, () =>
 		await expect(label.getByRole('img')).toBeVisible();
 	});
 
-	test('the printed page is a single A6 sheet', async ({ page }) => {
+	test('the printed page is a single A6 sheet with the label on it', async ({ page }) => {
 		await mockTrack(page, 'verifying');
 		await mockShelter(page);
 
@@ -1118,7 +1118,16 @@ test.describe('Box label for a booking the shelter accepted (#591)', TAGS, () =>
 		await expect(page.getByTestId('box-label-preview').getByRole('img')).toBeVisible();
 		await page.emulateMedia({ media: 'print' });
 
+		// Other features' global print rules must not hide the label (#1057).
+		const printCopy = page.locator('body > .box-label-print');
+		await expect(printCopy.getByTestId('box-label-ref')).toBeVisible();
+		await expect(printCopy.getByTestId('box-label-ref')).toHaveText(BOOKING_REF);
+		await expect(printCopy.locator('img')).toBeVisible();
+		expect(await printCopy.evaluate((el) => getComputedStyle(el).display)).not.toBe('none');
+
 		const pdf = await page.pdf({ preferCSSPageSize: true });
+		// A blank A6 page is under 1 KB; the real label is ~30 KB.
+		expect(pdf.length).toBeGreaterThan(10_000);
 		const pages = pdf.toString('latin1').match(/\/Type\s*\/Page[^s]/g) ?? [];
 		expect(pages).toHaveLength(1);
 		// MediaBox is in points and Chrome rounds to whole CSS pixels: A6 is 297.6 x 419.5.
