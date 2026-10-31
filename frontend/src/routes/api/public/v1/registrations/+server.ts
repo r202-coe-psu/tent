@@ -1,6 +1,7 @@
 import { json } from '@sveltejs/kit';
 import { env } from '$env/dynamic/private';
 import { z } from 'zod';
+import { isThaiMobilePhone } from '$lib/db/model';
 import type { RequestHandler } from './$types';
 
 import {
@@ -93,7 +94,7 @@ export const POST: RequestHandler = async ({ request, getClientAddress }) => {
 					}
 					return;
 				}
-				if (!/^0\d{8,9}$/.test(headPhone.replace(/[-\s]/g, ''))) {
+				if (!isThaiMobilePhone(headPhone)) {
 					ctx.addIssue({
 						code: 'custom',
 						path: ['members', 0, 'phone'],

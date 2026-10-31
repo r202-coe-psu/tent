@@ -11,6 +11,12 @@
 
 // domain
 export * from './domain/volunteer.schema';
+export {
+	isVolunteerMobile,
+	volunteerMobileSchema,
+	optionalVolunteerMobileSchema,
+	VOLUNTEER_PHONE_MESSAGE
+} from './domain/phone';
 export * from './domain/job.schema';
 // `makeJobApplication` is deliberately NOT re-exported: it takes a free-form
 // `status`, so exposing it would let callers outside the slice mint a

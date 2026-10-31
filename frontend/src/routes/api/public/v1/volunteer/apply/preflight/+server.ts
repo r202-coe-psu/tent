@@ -1,6 +1,7 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { z } from 'zod';
+import { volunteerMobileSchema } from '$lib/utils/volunteer-phone';
 import {
 	preflightPublicVolunteerApplication,
 	PublicApplicationError
@@ -13,11 +14,7 @@ const schema = z.object({
 	shelter_code: z.string().trim().min(1).optional(),
 	first_name: z.string().trim().min(1),
 	last_name: z.string().trim().min(1),
-	phone: z
-		.string()
-		.trim()
-		.transform((value) => value.replace(/\D/g, ''))
-		.pipe(z.string().regex(/^0\d{8,9}$/, 'เบอร์โทรศัพท์ไม่ถูกต้อง')),
+	phone: volunteerMobileSchema,
 	email: z.string().optional(),
 	skills: z.array(z.string().trim().min(1)).default([]),
 	shift_id: z.string().trim().min(1).optional(),

@@ -18,11 +18,15 @@ import {
 	buildValidateDocUpdate,
 	BULK_RETURN_ENTRY_MANGO_INDEXES,
 	DAILY_SOP_ROLE_MANGO_INDEX,
+	DONATION_RECEIVED_MANGO_INDEX,
+	DONATION_RECEIVED_PHONE_MANGO_INDEX,
+	DONATION_BOOKING_REF_MANGO_INDEX,
 	DONATION_PHOTO_ORPHAN_MANGO_INDEX,
 	PEOPLE_MANGO_INDEXES,
 	REFERRAL_MANGO_INDEXES,
 	KIOSK_LOOKUP_MANGO_INDEXES,
 	REQUISITION_TICKET_MANGO_INDEXES,
+	STOCK_LEDGER_LOT_NO_MANGO_INDEX,
 	TRANSFER_LEDGER_MANGO_INDEXES
 } from './shelter-access-design';
 import {
@@ -45,10 +49,14 @@ import { deployShelterViewsFn } from '$lib/features/shelters/server/deploy';
 export {
 	BULK_RETURN_ENTRY_MANGO_INDEXES,
 	DAILY_SOP_ROLE_MANGO_INDEX,
+	DONATION_RECEIVED_MANGO_INDEX,
+	DONATION_RECEIVED_PHONE_MANGO_INDEX,
+	DONATION_BOOKING_REF_MANGO_INDEX,
 	KIOSK_LOOKUP_MANGO_INDEXES,
 	PEOPLE_MANGO_INDEXES,
 	REFERRAL_MANGO_INDEXES,
 	REQUISITION_TICKET_MANGO_INDEXES,
+	STOCK_LEDGER_LOT_NO_MANGO_INDEX,
 	TRANSFER_LEDGER_MANGO_INDEXES
 } from './shelter-access-design';
 
@@ -601,5 +609,27 @@ export async function deployDailySopRoleMangoIndexes(db: string): Promise<void> 
 			'INTERNAL',
 			`Mango index ${DAILY_SOP_ROLE_MANGO_INDEX.name} deploy failed (${res.status}): ${detail.reason ?? detail.error ?? 'unknown'}`
 		);
+	}
+}
+
+/**
+ * Idempotent deploy of the indexes behind the back-office "รับแล้ว" list and its search (#821):
+ * the list index, the phone and booking-ref indexes, and the `stock_ledger` lot-number index.
+ */
+export async function deployDonationReceivedMangoIndex(db: string): Promise<void> {
+	for (const def of [
+		DONATION_RECEIVED_MANGO_INDEX,
+		DONATION_RECEIVED_PHONE_MANGO_INDEX,
+		DONATION_BOOKING_REF_MANGO_INDEX,
+		STOCK_LEDGER_LOT_NO_MANGO_INDEX
+	]) {
+		const res = await adminRaw(`/${db}/_index`, 'POST', def);
+		if (res.status >= 400) {
+			const detail = (res.data as { reason?: string; error?: string } | null) ?? {};
+			throw new ServiceError(
+				'INTERNAL',
+				`Mango index ${def.name} deploy failed (${res.status}): ${detail.reason ?? detail.error ?? 'unknown'}`
+			);
+		}
 	}
 }
