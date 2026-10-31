@@ -288,6 +288,26 @@ describe('buildValidateDocUpdate', () => {
 				index: { fields: ['type', 'card_snapshot.address_no'] },
 				name: 'evacuee-type-card-address-no-idx',
 				type: 'json'
+			},
+			{
+				index: { fields: ['type', 'first_name'] },
+				name: 'evacuee-type-first-name-idx',
+				type: 'json'
+			},
+			{
+				index: { fields: ['type', 'last_name'] },
+				name: 'evacuee-type-last-name-idx',
+				type: 'json'
+			},
+			{
+				index: { fields: ['type', 'nickname'] },
+				name: 'evacuee-type-nickname-idx',
+				type: 'json'
+			},
+			{
+				index: { fields: ['type', 'emergency_contact.phone'] },
+				name: 'evacuee-type-emergency-phone-idx',
+				type: 'json'
 			}
 		]);
 		for (const definition of KIOSK_LOOKUP_MANGO_INDEXES) {

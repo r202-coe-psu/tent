@@ -161,7 +161,10 @@ const DAILY_SOP_ROLE_VDU_CONTRACT = JSON.stringify({
 	}))
 });
 
-/** Mango indexes for kiosk pre-registration lookup and report-in (FR-KPC-62..65). */
+/**
+ * Mango indexes for kiosk pre-registration lookup and report-in (FR-KPC-62..65), and for the
+ * staff server-side evacuee search (#554: name / nickname / emergency phone prefix ranges).
+ */
 export const KIOSK_LOOKUP_MANGO_INDEXES = [
 	{
 		index: { fields: ['type', 'phone'] },
@@ -183,6 +186,26 @@ export const KIOSK_LOOKUP_MANGO_INDEXES = [
 		index: { fields: ['type', 'card_snapshot.address_no'] },
 		name: 'evacuee-type-card-address-no-idx',
 		type: 'json' as const
+	},
+	{
+		index: { fields: ['type', 'first_name'] },
+		name: 'evacuee-type-first-name-idx',
+		type: 'json' as const
+	},
+	{
+		index: { fields: ['type', 'last_name'] },
+		name: 'evacuee-type-last-name-idx',
+		type: 'json' as const
+	},
+	{
+		index: { fields: ['type', 'nickname'] },
+		name: 'evacuee-type-nickname-idx',
+		type: 'json' as const
+	},
+	{
+		index: { fields: ['type', 'emergency_contact.phone'] },
+		name: 'evacuee-type-emergency-phone-idx',
+		type: 'json' as const
 	}
 ];
 
@@ -195,7 +218,11 @@ export const KIOSK_LOOKUP_WARMUP_SELECTORS: Readonly<Record<string, Record<strin
 	'evacuee-type-phone-idx': { type: 'evacuee', phone: '__warmup__' },
 	'evacuee-type-person-id-idx': { type: 'evacuee', 'person_id.number': '__warmup__' },
 	'evacuee-type-household-idx': { type: 'evacuee', household_id: '__warmup__' },
-	'evacuee-type-card-address-no-idx': { type: 'evacuee', 'card_snapshot.address_no': '__warmup__' }
+	'evacuee-type-card-address-no-idx': { type: 'evacuee', 'card_snapshot.address_no': '__warmup__' },
+	'evacuee-type-first-name-idx': { type: 'evacuee', first_name: '__warmup__' },
+	'evacuee-type-last-name-idx': { type: 'evacuee', last_name: '__warmup__' },
+	'evacuee-type-nickname-idx': { type: 'evacuee', nickname: '__warmup__' },
+	'evacuee-type-emergency-phone-idx': { type: 'evacuee', 'emergency_contact.phone': '__warmup__' }
 };
 
 /** Mango index definitions required by stock_transfer list/find (CR-059). */
