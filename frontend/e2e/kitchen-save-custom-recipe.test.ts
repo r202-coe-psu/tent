@@ -299,5 +299,36 @@ test.describe(
 			await checkbox.check();
 			await expect(page.getByLabel('ชื่อสูตร')).toHaveValue('');
 		});
+
+		test('kitchen staff can add a recipe from the catalog page but not edit one', async ({
+			browser
+		}) => {
+			const context = await browser.newContext();
+			contexts.push(context);
+			const page = await context.newPage();
+			await routeBrowserCouchThroughApp(page);
+			await injectSession(page, KITCHEN, session);
+			await page.goto('/back-office/catalog?tab=recipe');
+			await expect(page.getByRole('heading', { name: 'สูตรอาหารมาตรฐาน' })).toBeVisible({
+				timeout: 20_000
+			});
+
+			await page.getByRole('button', { name: 'เพิ่มสูตรอาหาร' }).click();
+			const sheet = page.getByRole('dialog');
+			await expect(
+				sheet.getByRole('heading', { name: 'เพิ่มสูตรอาหารมาตรฐาน (BOM)' })
+			).toBeVisible();
+			await expect(sheet.getByText('คุณไม่มีสิทธิ์เข้าถึงส่วนนี้')).toHaveCount(0);
+			await page.keyboard.press('Escape');
+			await expect(sheet).toHaveCount(0);
+
+			await page.getByPlaceholder('ค้นหาชื่อสูตร / วัตถุดิบ').fill(RECIPE);
+			await page
+				.getByRole('row')
+				.filter({ has: page.getByText(RECIPE, { exact: true }) })
+				.click();
+			await expect(sheet.getByText(RECIPE).first()).toBeVisible();
+			await expect(sheet.getByRole('button', { name: 'แก้ไข' })).toHaveCount(0);
+		});
 	}
 );
