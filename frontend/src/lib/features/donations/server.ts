@@ -44,6 +44,7 @@ export {
 	reviewDonationInputSchema
 } from './domain/item-review';
 export type { LineReviewResult } from './domain/item-review';
+export { needsCurrentDropOffPoints, reviewDropOffPoints } from './domain/review-points';
 
 // Domain — receiving point by point (CR-206)
 export {

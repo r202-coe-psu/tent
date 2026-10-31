@@ -8,15 +8,18 @@ import {
 	routeErrorResponse as toRouteError,
 	staleDecisionResponse
 } from '$lib/server/donation-intake';
-import { hasKeyedDonationStock } from '$lib/server/donation-docs';
+import { hasKeyedDonationStock, readCurrentDonationPoints } from '$lib/server/donation-docs';
 import {
 	allLinesRecorded,
 	applyLineReview,
 	closeDonationByPoints,
 	hasLineReview,
 	hasPointReceipts,
+	needsCurrentDropOffPoints,
+	recordedLineNos,
 	refusedReceivedLines,
 	reviewDonationInputSchema,
+	reviewDropOffPoints,
 	type LineReviewResult,
 	type PublicDonationDoc
 } from '$lib/features/donations/server';
@@ -27,6 +30,17 @@ function routeErrorResponse(e: unknown) {
 	const { message, status } = toRouteError(e);
 	return json({ success: false, error: message }, { status });
 }
+
+const linesLabel = (lines: number[]) => lines.map((n) => n + 1).join(', ');
+
+const POINT_ERRORS = {
+	INVALID_REVIEW: (lines: number[]) =>
+		`รายการที่ ${linesLabel(lines)} จุดรับบริจาครับของไว้แล้ว — ไม่ต้องเลือกจุดรับบริจาค`,
+	UNKNOWN_DROP_OFF_POINT: (lines: number[]) =>
+		`จุดรับบริจาคของรายการที่ ${linesLabel(lines)} ไม่มีในศูนย์แล้ว — โหลดหน้าใหม่แล้วเลือกจุดอีกครั้ง`,
+	POINT_REQUIRED: (lines: number[]) =>
+		`เลือกจุดรับบริจาคให้รายการที่ ${linesLabel(lines)} ก่อนอนุมัติ`
+} as const;
 
 /**
  * R-16.2 — review a `pending_review` donation. Moves it off the "รอการประเมิน" tab;
@@ -151,10 +165,50 @@ export const POST: RequestHandler = async ({ params, request }) => {
 			);
 		}
 
+		// Draft CR FR-AP-17 steps 2–5 / FR-AP-17a — staff give each approved line its point.
+		const pointInput = {
+			items,
+			lines,
+			deliveryMethod: donation.logistics?.delivery_method,
+			recordedLineNos: recordedLineNos(donation)
+		};
+		let currentPointIds: ReadonlySet<string> | 'not_needed' = 'not_needed';
+		if (needsCurrentDropOffPoints(pointInput)) {
+			try {
+				const current = await readCurrentDonationPoints(donation.shelter_code);
+				currentPointIds = new Set(current.map((point) => point.id));
+			} catch {
+				return json(
+					{
+						success: false,
+						error_code: 'DONATION_UNAVAILABLE',
+						error: 'อ่านจุดรับบริจาคของศูนย์ไม่ได้ — ลองใหม่อีกครั้ง'
+					},
+					{ status: 503 }
+				);
+			}
+		}
+		const pointed = reviewDropOffPoints({ ...pointInput, currentPointIds });
+		if (!pointed.ok) {
+			return json(
+				{
+					success: false,
+					error_code: pointed.code,
+					error: POINT_ERRORS[pointed.code](pointed.lines),
+					lines: pointed.lines
+				},
+				{ status: 422 }
+			);
+		}
+		const { points } = pointed;
+
 		const nowStr = new Date().toISOString();
 		let updated: PublicDonationDoc = {
 			...donation,
-			items: outcome.items,
+			items: outcome.items.map((item, index) => {
+				const point = points.get(index);
+				return point === undefined ? item : { ...item, drop_off_point_id: point };
+			}),
 			status: outcome.status,
 			...(outcome.reject_reason !== undefined
 				? { reject_reason: outcome.reject_reason, reject_reason_code: outcome.reject_reason_code }
@@ -199,7 +253,8 @@ export const POST: RequestHandler = async ({ params, request }) => {
 								lines: (lines ?? []).map(({ index, decision, reason_code }) => ({
 									index,
 									decision,
-									reason_code: reason_code ?? null
+									reason_code: reason_code ?? null,
+									drop_off_point_id: points.get(index) ?? null
 								}))
 							}
 						: {})
