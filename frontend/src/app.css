@@ -664,7 +664,7 @@
 	}
 	@media (min-width: 640px) {
 		.unified-reg-section-header {
-			top: var(--registration-sticky-top);
+			top: calc(var(--registration-sticky-top) + var(--registration-indicator-height, 0px));
 		}
 	}
 	.unified-reg-bottom-chrome {
@@ -818,4 +818,26 @@
 /* reCAPTCHA v3 — hide badge; branding text shown in booking/donations forms instead */
 .grecaptcha-badge {
 	visibility: hidden;
+}
+
+/*
+ * Public pre-register — mobile only: section bands go edge-to-edge (no side offset) and
+ * alternate light / solid surfaces. Unlayered so it overrides the per-section tone utilities.
+ */
+@media (max-width: 639px) {
+	.unified-reg-bleed .unified-reg-band {
+		@apply -mx-4 mb-0 rounded-none border-x-0 border-slate-200 shadow-none;
+	}
+	.unified-reg-bleed .unified-reg-band[data-surface='light'] {
+		@apply bg-card;
+	}
+	.unified-reg-bleed .unified-reg-band[data-surface='dark'] {
+		@apply bg-slate-200/70;
+	}
+	/* Flatten nested chrome so the band itself is the only container. */
+	.unified-reg-bleed .unified-reg-band .unified-reg-section-header,
+	.unified-reg-bleed .unified-reg-band > .form-section-card,
+	.unified-reg-bleed .unified-reg-band-flat {
+		@apply rounded-none border-0 bg-transparent p-0 shadow-none;
+	}
 }

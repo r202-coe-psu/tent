@@ -7,7 +7,6 @@
 	import ShieldAlert from '@lucide/svelte/icons/shield-alert';
 	import HeartPulse from '@lucide/svelte/icons/heart-pulse';
 	import Trash2 from '@lucide/svelte/icons/trash-2';
-	import QrCode from '@lucide/svelte/icons/qr-code';
 	import ContactRound from '@lucide/svelte/icons/contact-round';
 	import MapPin from '@lucide/svelte/icons/map-pin';
 	import { onDestroy, onMount, untrack } from 'svelte';
@@ -76,6 +75,7 @@
 		fieldErrors,
 		isJoiningExistingHousehold = false,
 		numberOffset = 0,
+		sequenceTotal,
 		primaryContactPhone = null,
 		validationSeq = 0,
 		onRemove,
@@ -95,6 +95,8 @@
 		isJoiningExistingHousehold?: boolean;
 		/** Members already in the joined family — new cards are numbered after them. */
 		numberOffset?: number;
+		/** Public registration total, including known members in the joined family. */
+		sequenceTotal?: number;
 		primaryContactPhone?: string | null;
 		/** Bumped by the form on every failed submit — re-opens a collapsed section holding an error. */
 		validationSeq?: number;
@@ -106,8 +108,17 @@
 	const t = $derived(getTranslation(PUBLIC_BOOKING_FORM_I18N, langState.current));
 	// Joining keeps the family's existing head; a new card is never the primary contact.
 	const isPrimary = $derived(index === 0 && !isJoiningExistingHousehold);
+	const sequenceNumber = $derived(numberOffset + index + 1);
+	/** Public: fold the family position into the title ("สมาชิกคนที่ 2/5") instead of a second badge. */
+	const sequenceSuffix = $derived(
+		channel === 'public' && sequenceTotal && sequenceTotal > 1 ? `/${sequenceTotal}` : ''
+	);
 	const title = $derived(
-		isPrimary ? t.primaryContactCardTitle : `${t.memberNum} ${numberOffset + index + 1}`
+		isPrimary
+			? sequenceSuffix
+				? `${t.memberNum} ${sequenceNumber}${sequenceSuffix} (${t.primaryContact})`
+				: t.primaryContactCardTitle
+			: `${t.memberNum} ${sequenceNumber}${sequenceSuffix}`
 	);
 	const photoInputId = $derived(`unified-member-photo-${index}`);
 	const showPhotoUpload = $derived(photoUpload !== 'none');
@@ -159,7 +170,11 @@
 					? 'border border-border bg-muted/40 text-muted-foreground'
 					: isNewReportInMember
 						? 'border border-emerald-300 bg-emerald-50/50'
-						: 'border border-border/60 bg-card'
+						: cn(
+								'border border-border/60 bg-card',
+								// Public mobile: alternate surfaces so each person reads as a separate block.
+								channel === 'public' && sequenceNumber % 2 === 0 && 'max-sm:bg-slate-100'
+							)
 		)
 	);
 
@@ -794,7 +809,7 @@
 					onclick={onScanThaiD}
 					class="h-9 gap-1.5 border-primary/30 text-xs text-primary hover:bg-primary/10"
 				>
-					<QrCode class="size-3.5" />
+					<img src="/thaid-logo.png" alt="" class="size-4 rounded object-contain" />
 					<span>{t.memberScanThaid}</span>
 				</Button>
 			{/if}

@@ -50,6 +50,8 @@
 		SNAPSHOT_CONFLICT_WARNING_TESTID,
 		VOID_SNAPSHOT_CONFLICT_TOAST,
 		groupMissedLoanRefsByEntry,
+		missedLoanApplyToast,
+		missedLoanLockedNotice,
 		snapshotConflictEntryIds,
 		LATE_BADGE_CLASS,
 		LATE_ENTRY_GUIDANCE,
@@ -73,6 +75,7 @@
 		type BulkReturnPoolRow,
 		type PoolCatalogItem
 	} from '../model/bulk-return-pool-v3';
+	import { MISSED_LOAN_LOCKED_NOTICE_TESTID } from '../model/bulk-return-copy';
 	import { formatSkippedDocIds } from '../model/bulk-return-skipped-docs';
 	import { ticketHref } from '../model/pool-url-state';
 	import { liveSummaryRows, submittedSummaryRows } from '../model/bulk-return-lifecycle';
@@ -151,13 +154,21 @@
 		() => shelterCode
 	);
 	const appliedRefsByEntry = $derived(groupAppliedLoanRefsByEntry(appliedRefsQuery.data ?? []));
-	// Snapshot entries of a submitted / received pool whose loans were never cut (CR-193 §34).
+	// Entries of an OPEN, SUBMITTED or RECEIVED pool whose loans were never cut (CR-193 §34).
+	// An OPEN pool is repaired while it is unlocked; a cancelled pool has nothing to repair.
 	const missedRefsQuery = useBulkReturnPoolMissedLoanRefs(
 		() => row?.pool._id ?? null,
 		() => shelterCode,
-		() => row?.pool.status === 'SUBMITTED' || row?.pool.status === 'RECEIVED'
+		() =>
+			row?.pool.status === 'OPEN' ||
+			row?.pool.status === 'SUBMITTED' ||
+			row?.pool.status === 'RECEIVED'
 	);
 	const missedRefsByEntry = $derived(groupMissedLoanRefsByEntry(missedRefsQuery.data ?? []));
+	// An OPEN pool holding a lock returns no missed refs; say so instead of hiding the repair box.
+	const missedLockedNotice = $derived(
+		row ? missedLoanLockedNotice(row.pool, missedRefsQuery.data) : null
+	);
 	const applyMissedMutation = useApplyMissedBulkReturnLoanRefs();
 	// Entries whose void / move was written after the submit snapshot (no effect; CR-193 §33).
 	const conflictEntryIds = $derived(snapshotConflictEntryIds(row));
@@ -241,12 +252,8 @@
 				input: { entry_id: entryId, pool_id: row.pool._id },
 				shelterCode
 			});
-			const applied = result.loansApplied.length;
-			if (applied === 0 && result.loansSkipped.length > 0) {
-				toast.warning('ยอดยืมถูกปิดไปแล้ว ตัดเพิ่มไม่ได้');
-			} else {
-				toast.success(`ตัดยอดยืมแล้ว ${applied} รายการ`);
-			}
+			const outcome = missedLoanApplyToast(result);
+			toast[outcome.kind](outcome.message);
 		} catch (err) {
 			toast.error(formatDistributionError(err, 'ตัดยอดยืมไม่สำเร็จ กรุณาลองใหม่อีกครั้ง'));
 		}
@@ -436,6 +443,16 @@
 							ยังไม่มีรายการในกองนี้
 						</p>
 					{:else}
+						{#if missedLockedNotice}
+							<div
+								role="status"
+								data-testid={MISSED_LOAN_LOCKED_NOTICE_TESTID}
+								class="mb-3 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-2.5 text-sm text-amber-900"
+							>
+								<AlertTriangle class="mt-0.5 h-4 w-4 shrink-0 text-amber-600" aria-hidden="true" />
+								<p>{missedLockedNotice}</p>
+							</div>
+						{/if}
 						<ul class="space-y-3">
 							{#each entries as live (live.entry._id)}
 								{@const entry = live.entry}

@@ -26,6 +26,11 @@ export interface DonationItem {
 	remark?: string;
 	/** UI-only hint: units still short on the need card this line came from. Never sent. */
 	needQty?: number;
+	/**
+	 * The drop-off point the donor picked for this line (CR-206 FR-MP-8). Unset = the default
+	 * (FR-MP-9); set on submit to the point actually booked, so the ticket groups by it.
+	 */
+	dropOffPointId?: string | null;
 }
 
 /**
@@ -64,8 +69,14 @@ export class DonationStore {
 
 	deliveryMethod = $state<'self_dropoff' | 'parcel' | 'shelter_pickup'>('self_dropoff');
 	vehicleType = $state<'motorcycle' | 'car' | 'pickup' | 'truck' | undefined>(undefined);
+	/** Optional plate for a self drop-off. Kept when the donor switches method, never sent then. */
+	vehiclePlate = $state('');
 	slotDate = $state('');
 	slotTime = $state('');
+	/** The shelter / day / queue `slotTime` was picked for (`slotContextKey`). */
+	slotFor = $state('');
+	/** The plate the booking actually sent — what the ticket shows (CR-209 FR-3a). */
+	bookedVehiclePlate = $state('');
 	shelterCode = $state('');
 	courierTrackingNo = $state('');
 	eta = $state('');
@@ -83,6 +94,11 @@ export class DonationStore {
 	selectedShelter = $state('');
 	selectedShelterName = $state('');
 	shelterLocked = $state(false); // true = มาจากการ์ด needs board → ล็อกศูนย์ปลายทาง (DN)
+	/**
+	 * The drop-off point last tapped on a map — the needs board or the step-3 map (CR-206
+	 * FR-MP-9): every line starts there. A point of another shelter is simply not offered.
+	 */
+	tappedPointId = $state<string | null>(null);
 	deliveryDate = $state('');
 
 	captchaToken = $state('');
@@ -122,8 +138,11 @@ export class DonationStore {
 		this.donorEmail = '';
 		this.deliveryMethod = 'self_dropoff';
 		this.vehicleType = undefined;
+		this.vehiclePlate = '';
 		this.slotDate = '';
 		this.slotTime = '';
+		this.slotFor = '';
+		this.bookedVehiclePlate = '';
 		this.shelterCode = '';
 		this.courierTrackingNo = '';
 		this.eta = '';
@@ -131,6 +150,7 @@ export class DonationStore {
 		this.selectedShelter = '';
 		this.selectedShelterName = '';
 		this.shelterLocked = false;
+		this.tappedPointId = null;
 		this.deliveryDate = '';
 		this.items = [newDonationItem()];
 		this.captchaToken = '';

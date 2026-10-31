@@ -188,14 +188,40 @@ export function confineKioskStaffOnly(pathname: string) {
 /**
  * Warehouse guard — system_admin, or in the active shelter shelter_manager or the warehouse
  * side: warehouse_staff or supply_coordinator (`isWarehouseStaff`; role-permission-matrix.md
- * §4). Redirects to / otherwise.
+ * §4). Otherwise redirects to `LANDING_ROUTE`, or to `options.deskFallback` when the user can open
+ * the Distribution Desk — see {@link warehouseDeniedDestination}.
  */
-export async function requireWarehouseAccess(fetchFn: typeof fetch = fetch) {
+export async function requireWarehouseAccess(
+	fetchFn: typeof fetch = fetch,
+	options?: { deskFallback?: DeskFallbackHref | null }
+) {
 	await requireAuth(fetchFn);
 	const roles = authStore.user?.roles ?? [];
-	if (!canAccessWarehouse(roles, activeShelterCode(roles))) {
-		throw redirect(302, resolve(LANDING_ROUTE));
+	const shelter = activeShelterCode(roles);
+	if (!canAccessWarehouse(roles, shelter)) {
+		throw redirect(302, resolve(warehouseDeniedDestination(roles, shelter, options?.deskFallback)));
 	}
+}
+
+/**
+ * Distribution Desk href (optional query) a route may offer as the warehouse-guard fallback.
+ * Must match `OnsiteDistributionHref` in distribution `ui/model/pool-url-state.ts` (the guard does
+ * not import the feature); a type check in `pool-url-state.test.ts` fails on drift.
+ */
+export type DeskFallbackHref = '/onsite/distribution' | `/onsite/distribution?${string}`;
+
+/**
+ * Where a user denied by {@link requireWarehouseAccess} goes: `deskFallback` (an app path with
+ * optional query, supplied by the route) when it is non-empty and the user can open the
+ * Distribution Desk, otherwise the landing route.
+ */
+export function warehouseDeniedDestination(
+	roles: readonly string[],
+	shelter: string | null,
+	deskFallback?: DeskFallbackHref | null
+): DeskFallbackHref | typeof LANDING_ROUTE {
+	if (deskFallback && canAccessDistributionDesk(roles, shelter)) return deskFallback;
+	return LANDING_ROUTE;
 }
 
 /**

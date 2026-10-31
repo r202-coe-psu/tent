@@ -1,6 +1,10 @@
 <script lang="ts">
-	import { useMasterData, formatMasterLabel } from '$lib/features/master-data';
-	import { SITE_KIND_LABELS } from '../domain/schema';
+	import {
+		useMasterData,
+		formatMasterLabel,
+		formatMasterLabelByCode
+	} from '$lib/features/master-data';
+	import { HOST_HOUSE_SITE_KIND } from '../domain/schema';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import Pencil from '@lucide/svelte/icons/pencil';
 	import Trash2 from '@lucide/svelte/icons/trash-2';
@@ -34,6 +38,12 @@
 		const item = items.find((i) => i.code === code);
 		return item ? formatMasterLabel(item, 'th') : '—';
 	};
+
+	// CR-198: site kind labels come from the global master, resolved without a status filter so a
+	// deactivated kind keeps its label (FR-10).
+	const siteKindQuery = useMasterData(() => 'site_kind');
+	const siteKindLabel = (code: string) =>
+		formatMasterLabelByCode(code, siteKindQuery.data?.items ?? []);
 
 	const projectLevelLabel: Record<ProjectLevel, string> = {
 		community: 'ระดับชุมชน',
@@ -91,17 +101,17 @@
 						<td class="px-3.5 py-2.5 align-middle">
 							<div class="flex flex-col items-start gap-1">
 								<!-- Site Kind Badge -->
-								{#if shelter.site_kind === 'host_house'}
+								{#if shelter.site_kind === HOST_HOUSE_SITE_KIND}
 									<span
 										class="inline-flex items-center rounded-full border border-purple-200 bg-purple-50 px-2 py-0.5 text-xs font-semibold text-purple-900"
 									>
-										{SITE_KIND_LABELS.host_house}
+										{siteKindLabel(shelter.site_kind)}
 									</span>
 								{:else}
 									<span
 										class="inline-flex items-center rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 text-xs font-semibold text-sky-900"
 									>
-										{SITE_KIND_LABELS.evacuation_center}
+										{siteKindLabel(shelter.site_kind)}
 									</span>
 								{/if}
 

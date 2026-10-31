@@ -31,7 +31,10 @@ import {
 	type AddEntryLine,
 	type OutstandingLoanRow
 } from '../../ui/model/bulk-return-add-entry';
-import { addBulkReturnEntries } from './bulk-return-pool-v3-add-entry';
+import {
+	addBulkReturnEntries,
+	findWrittenBulkReturnEntries
+} from './bulk-return-pool-v3-add-entry';
 import {
 	createBulkReturnPoolV3Fixture,
 	dist,
@@ -122,6 +125,66 @@ describe('bulk return pool v3 — "return all" re-fill after a failed save', () 
 		const loan = await logRepo.get(loanId(80));
 		expect(loan?.qty_returned).toBe('3');
 		expect(loan?.applied_bulk_entry_ids).toEqual([retry.results[0].entry._id]);
+	});
+
+	it('keeps the written qty when the outstanding total changed: retry replays, loans counted once', async () => {
+		const pool = await openPool('Gate A');
+		await seedLoan(80, { qty: '3' });
+
+		// staff typed 2 for the cot; the first save wrote that entry, then failed mid-batch
+		const lines = addLine([], nextOp, { item_id: 'item:cot', qty: '2' });
+		await failedFirstSave(pool._id, lines);
+		expect(entryDocCount()).toBe(1);
+
+		// "return all" now yields 3 (the outstanding loan); the lookup finds line X already written
+		const written = await findWrittenBulkReturnEntries(
+			lines.map((l) => l.operationUlid),
+			dist,
+			deps
+		);
+		expect(written.get(lines[0].operationUlid)).toMatchObject({ qty: '2', item_id: 'item:cot' });
+		const refilled = linesFromOutstandingLoans(
+			rows,
+			new Set(['item:cot']),
+			(preset) => addLine([], nextOp, preset)[0],
+			lines,
+			written
+		);
+		expect(refilled.keptAtWrittenQtyItemIds).toEqual(['item:cot']);
+		expect(refilled.lines).toEqual(lines);
+
+		// saving again replays the written entry (no ConcurrencyCollisionError, no second entry)
+		const retry = await addBulkReturnEntries(
+			buildAddEntriesInput({
+				poolId: pool._id,
+				returner: { type: 'evacuee', id: EVACUEE },
+				lines: refilled.lines
+			})!,
+			dist,
+			deps
+		);
+
+		expect(entryDocCount()).toBe(1);
+		expect(retry.results).toHaveLength(1);
+		expect(retry.results[0].replayed).toBe(true);
+		expect(retry.results[0].loansApplied).toEqual([loanId(80)]);
+		const loan = await logRepo.get(loanId(80));
+		expect(loan?.qty_returned).toBe('2');
+		expect(loan?.applied_bulk_entry_ids).toEqual([retry.results[0].entry._id]);
+	});
+
+	it('mints a new ulid for a changed qty when no entry was written', () => {
+		const lines = addLine([], nextOp, { item_id: 'item:cot', qty: '2' });
+		const refilled = linesFromOutstandingLoans(
+			rows,
+			new Set(['item:cot']),
+			(preset) => addLine([], nextOp, preset)[0],
+			lines,
+			new Map()
+		);
+		expect(refilled.lines[0].qty).toBe('3');
+		expect(refilled.lines[0].operationUlid).not.toBe(lines[0].operationUlid);
+		expect(refilled.keptAtWrittenQtyItemIds).toEqual([]);
 	});
 
 	it('without currentLines the re-fill mints new ulids (what would write a second entry)', async () => {

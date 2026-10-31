@@ -10,6 +10,7 @@ import {
 import {
 	ADJUST_NOTE_MAX_LENGTH,
 	createAdjustEntry,
+	negativeLots,
 	projectLotsByItem,
 	type StockLedger,
 	type StockLot
@@ -64,6 +65,8 @@ export interface StorageGroup {
  */
 export function buildCycleCountLots(ledger: readonly StockLedger[]): {
 	lots: CycleCountLot[];
+	/** Overdrawn lots (#855): shown read-only with a warning, not countable until corrected. */
+	negativeLots: { lot_ref: string; item_id: string; unit: string; qty: string }[];
 	brokenItemIds: string[];
 } {
 	const { lots: projected, brokenItemIds } = projectLotsByItem(ledger);
@@ -82,7 +85,13 @@ export function buildCycleCountLots(ledger: readonly StockLedger[]): {
 			received_at: lot.received_at,
 			system_qty: persistQty(lot.qty)
 		}));
-	return { lots, brokenItemIds };
+	const negative = negativeLots(projected).map((lot) => ({
+		lot_ref: lot.lot_ref,
+		item_id: lot.item_id,
+		unit: lot.unit,
+		qty: persistQty(lot.qty)
+	}));
+	return { lots, negativeLots: negative, brokenItemIds };
 }
 
 /** Storage points that hold stock, in the order the counter would walk them (main store first). */
