@@ -270,7 +270,8 @@ test.describe('Volunteer access: grant dialog', { tag: TAGS }, () => {
 		await page.keyboard.press('Escape');
 		const unverified = await getDocument(SHELTER_DB, volunteerId);
 		await putDocument(SHELTER_DB, {
-			...unverified,
+			...unverified!,
+			_id: volunteerId,
 			identity_verified: true,
 			identity_verification: { status: 'verified', reviewed_by: manager.name }
 		});
@@ -530,7 +531,7 @@ test.describe('Volunteer access: coordinator limits (#955)', { tag: TAGS }, () =
 	}) => {
 		// The API grants above skip the client step that links the profile to the account.
 		const profile = await getDocument(SHELTER_DB, verifiedId);
-		await putDocument(SHELTER_DB, { ...profile, user_name: grantEmail });
+		await putDocument(SHELTER_DB, { ...profile!, _id: verifiedId, user_name: grantEmail });
 		const page = await openAs(browser, coordinator);
 		await page.goto('/back-office/volunteers?tab=people');
 		await page.getByPlaceholder('ค้นหาชื่อ นามสกุล เบอร์โทร, รหัส...').fill(`E2EV${RUN_ID}`);
