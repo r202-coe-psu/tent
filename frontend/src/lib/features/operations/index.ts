@@ -239,6 +239,15 @@ export {
 } from './application/queries';
 export { useDonationNeedsBoard } from './application/use-donation-needs-board.svelte';
 export { useStoragePoints } from './application/use-storage-points.svelte';
+export { useDonationPoints } from './application/use-donation-points.svelte';
+export {
+	resolveNeedPointField,
+	needPointToSave,
+	needPointBadge,
+	type NeedDropOffPointOption,
+	type NeedPointField,
+	type NeedPointBadge
+} from './domain/need-drop-off-point';
 export { useStockFormItems } from './application/use-stock-form-items.svelte';
 export {
 	toStockFormItems,

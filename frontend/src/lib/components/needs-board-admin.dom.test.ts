@@ -9,7 +9,26 @@ vi.mock('$lib/features/catalog', async (importOriginal) => ({
 	useUnitsOfMeasure: () => ({ data: [] })
 }));
 
-type NeedFixture = { itemId: string; name: string; closeState: NeedCloseState; manual?: boolean };
+const donationPoints = vi.hoisted(() => ({
+	list: [] as { id: string; name: string }[]
+}));
+vi.mock('$lib/features/operations', async (importOriginal) => ({
+	...(await importOriginal<typeof import('$lib/features/operations')>()),
+	useDonationPoints: () => ({
+		get points() {
+			return donationPoints.list;
+		},
+		isLoaded: true
+	})
+}));
+
+type NeedFixture = {
+	itemId: string;
+	name: string;
+	closeState: NeedCloseState;
+	manual?: boolean;
+	point?: string | null;
+};
 
 function campaign(
 	id: string,
@@ -50,7 +69,8 @@ function campaign(
 			remaining: n.closeState === 'open' ? '90' : '0',
 			unit: 'kg',
 			closeState: n.closeState,
-			isManualClosed: !!n.manual
+			isManualClosed: !!n.manual,
+			dropOffPointId: n.point ?? null
 		})),
 		campaignDoc: doc
 	};
@@ -75,6 +95,7 @@ afterEach(() => {
 	if (instance) unmount(instance);
 	instance = null;
 	document.body.innerHTML = '';
+	donationPoints.list = [];
 	vi.clearAllMocks();
 });
 
@@ -266,5 +287,49 @@ describe('Special Request button (#818)', () => {
 
 		button.click();
 		expect(callbacks.onAddRequest).toHaveBeenCalledOnce();
+	});
+});
+
+describe('needs board drop-off point (FR-AP-6)', () => {
+	const gym = { id: 'p-gym', name: 'โรงยิม' };
+	const med = { id: 'p-med', name: 'ห้องพยาบาล' };
+
+	it('shows the point name and no badge for a current point', async () => {
+		donationPoints.list = [gym, med];
+		await render([
+			campaign('c1', [{ itemId: 'item:rice', name: 'ข้าว', closeState: 'open', point: 'p-gym' }])
+		]);
+		for (const row of [cards()[0], tableRows()[0]]) {
+			expect(text(row)).toContain('จุดรับบริจาค: โรงยิม');
+			expect(text(row)).not.toContain('ยังไม่ระบุจุด');
+			expect(text(row)).not.toContain('จุดถูกลบ');
+		}
+	});
+
+	it('badges a null need "ยังไม่ระบุจุด" when the shelter has points', async () => {
+		donationPoints.list = [gym, med];
+		await render([campaign('c1', [{ itemId: 'item:rice', name: 'ข้าว', closeState: 'open' }])]);
+		for (const row of [cards()[0], tableRows()[0]]) {
+			expect(text(row)).toContain('ยังไม่ระบุจุด');
+		}
+	});
+
+	it('badges a point that is no longer current "จุดถูกลบ"', async () => {
+		donationPoints.list = [gym];
+		await render([
+			campaign('c1', [{ itemId: 'item:rice', name: 'ข้าว', closeState: 'open', point: 'p-gone' }])
+		]);
+		for (const row of [cards()[0], tableRows()[0]]) {
+			expect(text(row)).toContain('จุดถูกลบ');
+			expect(text(row)).not.toContain('ยังไม่ระบุจุด');
+		}
+	});
+
+	it('shows nothing for a null need when the shelter has no points', async () => {
+		await render([campaign('c1', [{ itemId: 'item:rice', name: 'ข้าว', closeState: 'open' }])]);
+		for (const row of [cards()[0], tableRows()[0]]) {
+			expect(text(row)).not.toContain('ยังไม่ระบุจุด');
+			expect(text(row)).not.toContain('จุดรับบริจาค');
+		}
 	});
 });

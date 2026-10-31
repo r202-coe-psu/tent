@@ -15,6 +15,7 @@ import {
 import {
 	CampaignUnitMismatchError,
 	createCampaign as buildCampaign,
+	DONATION_CAMPAIGN_SCHEMA_V,
 	isDonationCampaign,
 	isStockLedger,
 	isDonation,
@@ -1119,8 +1120,10 @@ export class OperationsRemoteRepository implements OperationsRepository {
 			);
 		}
 		await this.validateCampaignUnits(campaign, existing);
+		// Any save re-stamps the doc, so a v3 campaign that staff touch becomes v4 (FR-AP-4b).
 		const merged = {
 			...campaign,
+			schema_v: DONATION_CAMPAIGN_SCHEMA_V,
 			_rev: existing._rev
 		};
 
