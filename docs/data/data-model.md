@@ -2,7 +2,7 @@
 title: Smart Shelter — Data Model (CouchDB remote-first) v3
 status: draft for review
 created: 2026-06-11
-updated: 2026-10-29
+updated: 2026-11-01
 note: ออกแบบใหม่ทั้งหมด — ไม่สืบทอดจาก docs/data v2.0 (retired 2026-06-11); decision sync 2026-06-15 เลือก MongoDB projection สำหรับ public tier และ EOC read-model
 ---
 
@@ -51,8 +51,14 @@ device app  ⇄ WAN ⇄  central (CouchDB)
 | `catalog` | ✓ master | ✓ replica | no disconnected read cache (status-only when unreachable) | app read จาก central (pull/read-through) | central → edge; app read จาก edge เฉพาะ outage |
 | `_users` | ✓ master | ✓ **filtered replica** (เฉพาะ user ของศูนย์ตน) | — | central `_session` | central → edge (selector by role `shelter:{id}`) เพื่อ fallback login |
 | `central_ops` | ✓ เท่านั้น | — | — | central-only service/read model & cross-tenant store | — (search_audit, export_job, `counter:shelter`, `referral`, `referral_close_job`, `referral_close_lock` — CR-168) |
+| `printing_devices` | ✓ เท่านั้น | — | no browser access | server-side เท่านั้น ด้วย service user `printing_service` (เครื่องพิมพ์ `print_device`, registry `printing_db`, `print_housekeeping`) — [CR-222](../changes/14-kiosk/CR-222-station-print-server.md) | — (ไม่ replicate, worker ไม่ sync เข้า MongoDB) |
+| `printing_{shelter_code}` | ✓ เท่านั้น (สร้างตอนเพิ่มเครื่องพิมพ์แรกของศูนย์) | — | no disconnected read cache | คิวงานพิมพ์ `print_job` ของศูนย์: staff สร้างงานด้วย cookie ตัวเองผ่าน BFF (VDU บังคับ) · Pi / housekeeping ผ่าน BFF ด้วย `printing_service` — CR-222 | — (ไม่ replicate, worker ไม่ sync เข้า MongoDB · WAN ล่ม = พิมพ์ผ่านเครื่องพิมพ์ไม่ได้ ใช้พรีวิว PDF แทน) |
 
 - 1 ศูนย์ = 1 db → ปิดศูนย์ = หยุด replication + purge ทั้ง db ที่ central, ล้าง edge server ทั้งเครื่อง
+- **ปิดศูนย์ (`closed` หรือ `cancelled`) — งานพิมพ์ ([CR-222](../changes/14-kiosk/CR-222-station-print-server.md) O-11):** ทำทันทีไม่รอ DB ว่าง ตามลำดับ
+  (1) ตั้งเครื่องพิมพ์ทุกเครื่องของศูนย์เป็น `inactive` (งาน `pending` / `printing` → `failed (printer_inactive)`) → (2) ลบ DB `printing_{shelter_code}`
+  → (3) ลบ `printing_db:{SHELTER_CODE}` ออกจาก `printing_devices` · รันซ้ำได้ · ระหว่างยังไม่มี flow ปิดศูนย์ในระบบ ops รัน
+  `frontend/scripts/close-shelter-printing.ts <CODE>` (dry-run เป็นค่าเริ่มต้น, `--confirm` เพื่อทำจริง) — schema.md §10.5
 - ศูนย์ 20,000 คน: traffic ปกติวิ่งกับ **central**; ถ้า WAN/central ล่มระหว่าง onboarding จึง failover ไป
   **LAN กับ edge fallback** — ใช้ retry/backoff ที่ระดับ client และจัด batch ที่ระดับ edge⇄central replicator
 - edge→central ตอน WAN กลับมาหลังขาดนาน: backlog จากช่วง LAN fallback ไหลเป็น batch อัตโนมัติ (checkpoint ของ
@@ -223,6 +229,16 @@ design doc เดียวกัน deploy พร้อม db provisioning
 - `validate_doc_update` ต่อ shelter db บังคับ: type whitelist, append-only types ปฏิเสธ update/delete,
   ตาราง role→type ที่เขียนได้ (ตาม role-permission-matrix; public/API redaction ทำใน service layer) —
   design docs ชุดเดียว deploy ทั้ง central และ edge เพราะ edge อาจรับ write ตอน LAN fallback
+- **Station print server ([CR-222](../changes/14-kiosk/CR-222-station-print-server.md), schema.md §10.5):**
+  - `printing_devices._security`: admins / members `names = ["printing_service"]` — browser และ staff อ่าน/เขียนไม่ได้
+  - `printing_{shelter_code}._security`: admins `names = ["printing_service"]` · members `names = ["printing_service"]`,
+    `roles = ["shelter:{CODE}", "system_admin"]` + VDU `_design/print_access` — staff สร้างงาน `pending` ได้อย่างเดียว ตาม role ของ `source`
+    (`walk_in` / `evacuee_qr` → `{CODE}:registration_staff` | `{CODE}:shelter_manager` · `test` → `{CODE}:shelter_manager` · หรือ `system_admin`);
+    `printing_service` เปลี่ยนสถานะตาม state machine และลบได้เฉพาะงาน terminal
+  - service user `printing_service`: CouchDB user ไม่มี role, เป็น DB admin เฉพาะสอง DB นี้ · env ฝั่ง server `COUCHDB_PRINTING_SERVICE_URL` ·
+    ไม่ตั้ง env นอก dev → route ของ printer ตอบ `503` (ห้าม fallback ไป server admin) · server admin ใช้เฉพาะตอน provision / ลบ DB
+  - Pi ไม่มี CouchDB user — ยืนยันตัวกับ BFF ด้วย device secret (`x-device-id` + `x-device-secret`, เก็บแค่ SHA-256 hash ใน `print_device`)
+  - ข้อจำกัดที่ยอมรับ: staff ที่มี `shelter:{CODE}` อ่านงานทุกงานของศูนย์ (รวมรูป label ระหว่างงานยังไม่จบ) ผ่าน `/couch` ได้ — ระดับเดียวกับ `shelter_{code}`
 - edge server = เครื่องของโครงการ อยู่ในศูนย์: disk encryption + อยู่ในวงจร wipe ตอนปิดศูนย์
 - device ไม่เก็บ `_users`; disconnected policy เป็น status-only จึงไม่ใช้ read-only local cache เมื่อไม่มี endpoint ให้เชื่อมต่อ
 
@@ -238,6 +254,8 @@ design doc เดียวกัน deploy พร้อม db provisioning
 | donor PII ใน `donation` | ลบ `donor.name`/`phone`/`line_id`/`email` และ `logistics.vehicle_plate` ภายใน 3 เดือนหลังปิดศูนย์ (เหลือ `phone_hash` + ยอด) · **สถานะจริง (2026-10-29):** ยังไม่มีงานลบอัตโนมัติฝั่ง CouchDB — worker ลบเฉพาะ buffer ใน Mongo (`DonationBuffer`) และ projection สาธารณะ; PII ใน CouchDB `donation` ยังอยู่จนกว่าจะมีงานลบ |
 | local disconnected cache | ไม่ใช้ใน policy นี้ (status-only เมื่อไม่มี endpoint) |
 | edge server | wipe ทั้งเครื่อง (db + `_users` replica) เป็นขั้นตอนปิดศูนย์ — ก่อนนาฬิกา 2 ปีเริ่มนับที่ central |
+| `print_job` + รูป label (`printing_{shelter_code}`, [CR-222](../changes/14-kiosk/CR-222-station-print-server.md)) | **ไม่ใช้นาฬิกาปิดศูนย์:** รูป label (ชื่อ-นามสกุล, โซน, checklist, QR) ถูกเอาออกใน write เดียวกับที่งานไปสถานะ terminal (≤ 120 วิ + lease) · revision เก่าที่ยังมีรูปหายเมื่อ `_compact` รอบถัดไป (≤ ~1 ชม.) · doc ที่ไม่มีรูปลบเมื่อ `finished_at` เก่ากว่า **7 วัน** — housekeeping ทุกชั่วโมงลบด้วย `printing_service` ผ่าน `_bulk_docs` (`_deleted: true`, ทีละ ≤ 100 doc, ≤ 50 รอบต่อครั้ง) แล้ว `_compact` เสมอ (แม้ไม่มีอะไรถูกลบ) · ไม่ใช้ `_purge` เพราะ CouchDB 3.5 ต้องใช้ server admin — tombstone เหลือแค่ `_id` / `_rev` · ปิดศูนย์ → ลบทั้ง DB (§1) |
+| `print_device` (`printing_devices`) | ไม่มีข้อมูลบุคคล · ลบเมื่อลบเครื่องใน back-office · ปิดศูนย์ตั้ง `inactive` แต่ไม่ลบ doc · `_compact` ทุกชั่วโมงเพื่อทิ้ง revision ของ heartbeat |
 
 **Public plane (MongoDB projection) ของศูนย์ปิด** ([CR-183](../changes/11-famsearch/CR-183-closed-shelter-search-retention.md)) —
 นาฬิกา retention = `shelter.closed_at` (server stamp ตอนเปลี่ยนเป็น `closed`, schema §3.1) +
