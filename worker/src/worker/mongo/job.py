@@ -52,7 +52,22 @@ async def apply_job(
 async def apply_job_application(
     action: Literal["upsert", "delete", "ignore"], payload: dict[str, Any]
 ) -> None:
+    previous = None
+    if action == "delete" and payload.get("_id"):
+        previous = await PublicJobApplication.get(payload["_id"])
     await apply_document(PublicJobApplication, action, payload)
+    # The shift counter counts confirmed applications too, so it must follow them. A ticket
+    # cancel writes the assignment before the application (CR-212 / CR-220): reconciling only
+    # on the assignment left the counter one too high, and a cancel without an assignment
+    # never reconciled it at all.
+    if action == "upsert":
+        job_id = payload.get("job_id")
+        shift_id = payload.get("shift_id")
+    else:
+        job_id = previous.job_id if previous else None
+        shift_id = previous.shift_id if previous else None
+    if job_id and shift_id:
+        await sync_job_shift_slot(job_id=str(job_id), shift_id=str(shift_id))
 
 
 async def apply_shift_assignment(
