@@ -18,6 +18,7 @@
 	import { Label } from '$lib/components/ui/label/index.js';
 	import * as Popover from '$lib/components/ui/popover/index.js';
 	import DatePicker from '$lib/components/date-picker.svelte';
+	import PasswordRuleChecklist from '$lib/components/password-rule-checklist.svelte';
 	import {
 		COORDINATOR_GRANTABLE_CAPABILITIES,
 		STAFF_CAPABILITIES,
@@ -589,6 +590,11 @@
 								สร้างรหัส
 							</Button>
 						</div>
+						<!-- The volunteer's own mobile is accepted as a one-time default; any other password
+						     must meet the policy, so only then show the checklist (#1045). -->
+						{#if password.trim() && password.trim() !== loginPhone}
+							<PasswordRuleChecklist {password} />
+						{/if}
 						{#if passwordError}
 							<p
 								id={`volunteer-access-password-error-${volunteer._id}`}

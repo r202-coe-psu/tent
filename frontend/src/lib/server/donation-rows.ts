@@ -56,7 +56,11 @@ export function toPendingRow(d: PublicDonationDoc): PendingDonationRow {
 		pickup_address: d.logistics?.pickup_address ?? null,
 		donor_note: donorNote,
 		is_unsolicited: isUnsolicited,
-		photos: d.photos ?? []
+		photos: d.photos ?? [],
+		point_receipts: (d.point_receipts ?? []).map(({ point_id, line_nos }) => ({
+			point_id,
+			line_nos
+		}))
 	};
 }
 

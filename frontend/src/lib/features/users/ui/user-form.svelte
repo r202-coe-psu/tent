@@ -36,6 +36,7 @@
 	import { generateTemporaryPassphrase } from '$lib/auth/passphrase-generator';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Badge } from '$lib/components/ui/badge/index.js';
+	import PasswordRuleChecklist from '$lib/components/password-rule-checklist.svelte';
 	import Save from '@lucide/svelte/icons/save';
 	import UserCheck from '@lucide/svelte/icons/user-check';
 	import Users from '@lucide/svelte/icons/users';
@@ -717,6 +718,9 @@
 										สร้างรหัส
 									</Button>
 								</div>
+								{#if $formData.password}
+									<PasswordRuleChecklist password={$formData.password} />
+								{/if}
 							{/snippet}
 						</Form.Control>
 						<Form.FieldErrors />

@@ -21,6 +21,12 @@
 		useUnitsOfMeasure
 	} from '$lib/features/catalog';
 	import { getShelterCode } from '$lib/db/shelter';
+	import {
+		needPointToSave,
+		resolveNeedPointField,
+		useDonationPoints
+	} from '$lib/features/operations';
+	import NeedDropOffPointField from './need-drop-off-point-field.svelte';
 
 	interface Props {
 		item: NeedItem;
@@ -35,6 +41,7 @@
 			urgency: 'critical' | 'important' | 'normal';
 			imageUrl: string;
 			description: string;
+			dropOffPointId: string | null;
 		}) => void;
 	}
 
@@ -78,6 +85,17 @@
 	// would silently erase an `imageUrl` an existing campaign already carries.
 	let imageUrl = $state(seed.notes.imageUrl ?? '');
 	let description = $state(seed.notes.description ?? '');
+
+	// A null or no-longer-current stored point starts empty when there are several to
+	// choose from, so a save cannot keep a point that has been removed (FR-AP-4a).
+	const donationPoints = useDonationPoints(() => getShelterCode());
+	const pointField = $derived(
+		resolveNeedPointField(donationPoints.points, editedNeed?.dropOffPointId)
+	);
+	let pointChoice = $state<string | null>(null);
+	const chosenPoint = $derived(pointChoice ?? pointField.value);
+	const pointToSave = $derived(needPointToSave(pointField, chosenPoint));
+	const canSave = $derived(donationPoints.isLoaded && pointToSave !== undefined);
 
 	// What donors already pledged against this need. Read-only: it is derived from
 	// donation docs, and lowering the target below it is what Force Cut-off is for.
@@ -170,6 +188,11 @@
 			return;
 		}
 
+		if (!canSave || pointToSave === undefined) {
+			toast.error('กรุณาเลือกจุดรับบริจาค');
+			return;
+		}
+
 		onsubmit({
 			title: campaignTitle.trim(),
 			category: category.trim(),
@@ -177,7 +200,8 @@
 			target: persistQty(targetQty),
 			urgency,
 			imageUrl: imageUrl.trim(),
-			description: description.trim()
+			description: description.trim(),
+			dropOffPointId: pointToSave
 		});
 	}
 </script>
@@ -324,6 +348,14 @@
 			</Select.Root>
 		</div>
 
+		<NeedDropOffPointField
+			id="edit-item-drop-off-point"
+			field={pointField}
+			points={donationPoints.points}
+			value={chosenPoint}
+			onchange={(id) => (pointChoice = id)}
+		/>
+
 		<!-- Row 4: Reason / Details -->
 		<div>
 			<Label for="edit-item-details" class="mb-1.5 text-xs font-bold text-foreground">
@@ -354,6 +386,7 @@
 
 			<Button
 				type="submit"
+				disabled={!canSave}
 				class="flex h-10 items-center gap-2 rounded-xl bg-[#002D5B] px-6 text-xs font-bold text-white shadow-sm hover:bg-[#001f3f] dark:bg-blue-600 dark:hover:bg-blue-700"
 			>
 				<Save class="h-4 w-4" />

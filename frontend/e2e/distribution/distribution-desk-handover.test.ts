@@ -554,10 +554,12 @@ test.describe('Tab 2 — ready-meal handover (plan §4.4)', { tag: DESK_TAGS }, 
 		await expect(desk.itemButton(item.name)).toContainText('หมดแล้ว');
 
 		await page.getByRole('button', { name: /ประวัติการแจกของตั๋วนี้/ }).click();
-		const showAll = page.getByRole('button', { name: 'แสดงทั้งหมด (21)' });
-		await expect(showAll).toBeVisible();
-		await showAll.click();
-		await expect(page.getByRole('button', { name: 'แสดงน้อยลง' })).toBeVisible();
+		const showMore = page.getByRole('button', { name: 'แสดงเพิ่มอีก 1 รายการ (เหลือ 1)' });
+		await expect(showMore).toBeVisible();
+		await showMore.click();
+		await expect(showMore).toBeHidden();
+		await page.getByRole('button', { name: 'แสดงน้อยลง' }).click();
+		await expect(showMore).toBeVisible();
 	});
 
 	test('T2-13 a failed duplicate/menu preflight blocks the confirm until a retry succeeds', async ({

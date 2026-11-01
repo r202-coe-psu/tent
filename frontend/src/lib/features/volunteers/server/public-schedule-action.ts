@@ -441,6 +441,53 @@ function isValidTokenHash(value: unknown): value is string {
 }
 
 /**
+ * Role-card credential of one volunteer document: the stored hash when present, a
+ * backfilled hash for legacy plaintext, otherwise a freshly minted token. Never rotates
+ * an existing hash.
+ */
+export async function ensureRoleCardToken(
+	dbName: string,
+	current: CouchDoc
+): Promise<RoleCardTokenResult> {
+	if (isValidTokenHash(current.tracking_token_hash)) {
+		return {
+			token: roleCardPayloadFromHash(current.tracking_token_hash),
+			generated: false
+		};
+	}
+
+	// Seed/legacy documents may still have the original plaintext. Preserve it and
+	// backfill the hash so later role-card reads use the volunteer hash path.
+	if (typeof current.tracking_token === 'string' && current.tracking_token.trim()) {
+		const legacyToken = current.tracking_token.trim().toUpperCase();
+		const updated = {
+			...current,
+			tracking_token_hash: await sha256Hex(legacyToken),
+			updated_at: new Date().toISOString(),
+			updated_by: 'volunteer_portal'
+		};
+		const put = await putAsPublicWriter(dbName, current._id, updated);
+		if (put.status >= 200 && put.status < 300) {
+			return { token: legacyToken, generated: false };
+		}
+		throw new PublicScheduleError('ROLE_CARD_WRITE_FAILED', 503);
+	}
+
+	const token = formatMintedTicketToken(randomBytes(TRACKING_TOKEN_RANDOM_BYTES));
+	const updated = {
+		...current,
+		tracking_token_hash: await sha256Hex(token),
+		updated_at: new Date().toISOString(),
+		updated_by: 'volunteer_portal'
+	};
+	const put = await putAsPublicWriter(dbName, current._id, updated);
+	if (put.status >= 200 && put.status < 300) {
+		return { token, generated: true };
+	}
+	throw new PublicScheduleError('ROLE_CARD_WRITE_FAILED', 503);
+}
+
+/**
  * Resolve the role-card credential from the volunteer document itself.
  *
  * A stored SHA-256 cannot be reversed into the original bearer token. When the hash is
@@ -460,44 +507,7 @@ export async function readOrMintRoleCardToken(
 		for (const volunteerId of identity.volunteerIds) {
 			const currentResult = await getAsPublicWriter(identity.ref.dbName, volunteerId);
 			if (currentResult.status !== 200 || !currentResult.data) continue;
-			const current = currentResult.data as CouchDoc;
-
-			if (isValidTokenHash(current.tracking_token_hash)) {
-				return {
-					token: roleCardPayloadFromHash(current.tracking_token_hash),
-					generated: false
-				};
-			}
-
-			// Seed/legacy documents may still have the original plaintext. Preserve it and
-			// backfill the hash so later role-card reads use the volunteer hash path.
-			if (typeof current.tracking_token === 'string' && current.tracking_token.trim()) {
-				const legacyToken = current.tracking_token.trim().toUpperCase();
-				const updated = {
-					...current,
-					tracking_token_hash: await sha256Hex(legacyToken),
-					updated_at: new Date().toISOString(),
-					updated_by: 'volunteer_portal'
-				};
-				const put = await putAsPublicWriter(identity.ref.dbName, volunteerId, updated);
-				if (put.status >= 200 && put.status < 300) {
-					return { token: legacyToken, generated: false };
-				}
-				throw new PublicScheduleError('ROLE_CARD_WRITE_FAILED', 503);
-			}
-
-			const token = formatMintedTicketToken(randomBytes(TRACKING_TOKEN_RANDOM_BYTES));
-			const updated = {
-				...current,
-				tracking_token_hash: await sha256Hex(token),
-				updated_at: new Date().toISOString(),
-				updated_by: 'volunteer_portal'
-			};
-			const put = await putAsPublicWriter(identity.ref.dbName, volunteerId, updated);
-			if (put.status >= 200 && put.status < 300) {
-				return { token, generated: true };
-			}
-			throw new PublicScheduleError('ROLE_CARD_WRITE_FAILED', 503);
+			return ensureRoleCardToken(identity.ref.dbName, currentResult.data as CouchDoc);
 		}
 	}
 
