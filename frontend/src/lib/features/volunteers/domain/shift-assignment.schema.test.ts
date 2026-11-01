@@ -91,6 +91,35 @@ describe('shiftAssignmentSchema', () => {
 
 	it('accepts legacy v3 and rejects unsupported schema versions', () => {
 		expect(shiftAssignmentSchema.safeParse({ ...validDoc(), schema_v: 2 }).success).toBe(false);
+		expect(shiftAssignmentSchema.safeParse({ ...validDoc(), schema_v: 7 }).success).toBe(false);
+	});
+
+	describe('CR-220 — schema_v 6 and cancel_application_id', () => {
+		it('accepts v5 and v6', () => {
+			expect(shiftAssignmentSchema.safeParse({ ...validDoc(), schema_v: 5 }).success).toBe(true);
+			expect(shiftAssignmentSchema.safeParse({ ...validDoc(), schema_v: 6 }).success).toBe(true);
+		});
+
+		it('keeps cancel_application_id through parse (a staff save must not strip the stamp)', () => {
+			const parsed = shiftAssignmentSchema.parse({
+				...validDoc(),
+				schema_v: 6,
+				status: 'cancelled',
+				cancel_application_id: 'job_application:01AAAAAAAAAAAAAAAAAAAAAAAA'
+			});
+			expect(parsed.cancel_application_id).toBe('job_application:01AAAAAAAAAAAAAAAAAAAAAAAA');
+		});
+
+		it('treats cancel_application_id as optional and nullable', () => {
+			expect(shiftAssignmentSchema.safeParse(validDoc()).success).toBe(true);
+			expect(
+				shiftAssignmentSchema.safeParse({ ...validDoc(), cancel_application_id: null }).success
+			).toBe(true);
+		});
+
+		it('isShiftAssignment accepts a v6 doc', () => {
+			expect(isShiftAssignment({ ...validDoc(), schema_v: 6 })).toBe(true);
+		});
 	});
 
 	describe('F12 — job_id legacy migration sentinel', () => {
@@ -266,7 +295,7 @@ describe('makeShiftAssignment', () => {
 	it('defaults to status assigned, check_in_method/check_out_method qr, all check-in/out fields null', () => {
 		const a = makeShiftAssignment(baseInput, ctx);
 		expect(a._id).toMatch(/^shift_assignment:/);
-		expect(a.schema_v).toBe(5);
+		expect(a.schema_v).toBe(6);
 		expect(a.status).toBe('assigned');
 		expect(a.check_in_method).toBe('qr');
 		expect(a.check_in_at).toBeNull();

@@ -296,10 +296,23 @@ async function updateVolunteerAttendance(
 	throw new PublicScheduleError('WRITE_FAILED', 409);
 }
 
+/** `job` schema_v that introduced `released_application_ids` (CR-220). */
+const JOB_LEDGER_SCHEMA_V = 4;
+
+/**
+ * Give one confirmed slot back to the job (and its shift).
+ *
+ * `idempotencyKey` (CR-220: the `job_application` `_id` of a ticket cancel) makes the release
+ * once-only per key: every attempt re-reads the job, and a key already in
+ * `released_application_ids` writes nothing and succeeds; otherwise the counters and the
+ * key move in the same `_rev`-guarded write, so a retry after a lost response cannot release
+ * twice. Without a key (portal withdraw) the ledger is left untouched.
+ */
 export async function releaseJobQuota(
 	dbName: string,
 	assignment: CouchDoc,
-	now: string
+	now: string,
+	idempotencyKey?: string
 ): Promise<void> {
 	if (typeof assignment.job_id !== 'string') throw new PublicScheduleError('WRITE_FAILED', 502);
 	for (let attempt = 0; attempt < MAX_WRITE_RETRIES; attempt++) {
@@ -307,6 +320,12 @@ export async function releaseJobQuota(
 		if (jobResult.status !== 200 || !jobResult.data)
 			throw new PublicScheduleError('WRITE_FAILED', 502);
 		const job = structuredClone(jobResult.data) as CouchDoc;
+		const released = Array.isArray(job.released_application_ids)
+			? (job.released_application_ids as unknown[]).filter(
+					(id): id is string => typeof id === 'string'
+				)
+			: [];
+		if (idempotencyKey && released.includes(idempotencyKey)) return;
 		const shifts = Array.isArray(job.shifts) ? (job.shifts as CouchDoc[]) : [];
 		const shiftId = typeof assignment.shift_id === 'string' ? assignment.shift_id : null;
 		const shift = shifts.find((item) => item.shift_id === shiftId || item.id === shiftId);
@@ -321,6 +340,10 @@ export async function releaseJobQuota(
 		job.slots_remaining = Number(job.slots_remaining ?? 0) + 1;
 		job.status = 'open';
 		job.updated_at = now;
+		if (idempotencyKey) {
+			job.released_application_ids = [...released, idempotencyKey];
+			job.schema_v = Math.max(Number(job.schema_v ?? 0), JOB_LEDGER_SCHEMA_V);
+		}
 		const put = await putAsPublicWriter(dbName, assignment.job_id, job);
 		if (put.status === 409) continue;
 		if (put.status >= 400) throw new PublicScheduleError('WRITE_FAILED', 502);

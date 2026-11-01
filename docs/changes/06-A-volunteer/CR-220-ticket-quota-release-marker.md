@@ -1,9 +1,9 @@
 ---
 id: CR-220 # renumbered from draft-ticket-quota-release-marker
 title: ยกเลิกการสมัครจากบัตรดิจิทัล — คืนโควตาครั้งเดียวพอดีเมื่อกดซ้ำหลังคืนโควตาล้ม (marker บนใบสมัคร + ledger บน job)
-status: approved
+status: done
 date: 2026-10-29
-updated: 2026-11-01 # approved by Soravit Sukkarn (Team Lead)
+updated: 2026-11-01 # approved by Soravit Sukkarn (Team Lead); implemented in the same change (#1003)
 requested_by: "#1003 (ผู้เปิด @Mhapong) — follow-up ของ D4 ใน CR-212 (review PR #999 B4)"
 decided_by: Soravit Sukkarn (Team Lead)
 decision_date: 2026-11-01
@@ -163,3 +163,4 @@ migration: เพิ่ม field แบบ optional ทั้งหมด อ่
   - schema_v — bump ทั้ง 3 type: `job_application` 3→4, `shift_assignment` 5→6, `job` 3→4; `job` Zod literal รับ 4 ใน PR เดียวกัน (ตัดทิ้ง: additive ไม่ bump)
 - 2026-10-31 — แก้ตาม review ของ @Jackyzaz (PR #1031): B1 `digital-pass.svelte` แสดงปุ่มตาม `can_cancel` อย่างเดียว (FR-7, AC-9) · W1 `JobRemoteRepository#update` merge `released_application_ids` แบบ union (FR-9, AC-7) · S1 ชื่อ factory `makeJob` / `makeJobApplication` / `makeShiftAssignment` · S2 `jobSchema` `.default([])` · N1 `save` → `update` · ตัดหมายเหตุชน `schema_v` กับ #885 (ยกเลิกแล้ว)
 - 2026-11-01 — approved by Soravit Sukkarn (Team Lead) · รันเลข CR-220 (renumbered from draft-ticket-quota-release-marker) ย้ายเข้า 06-A-volunteer/
+- 2026-11-01 — done: implement ตาม CR นี้ (#1003) — `releaseJobQuota` รับ key, `cancelTicket` (FR-3–FR-6), GET `can_cancel` + `digital-pass.svelte` (FR-7), Zod 3 type + `job.remote` `update` merge ledger (FR-9), อัปเดต `schema.md` §2.9/§2.17/§2.18 และ CR-212

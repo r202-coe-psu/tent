@@ -91,6 +91,53 @@ describe('GET /api/public/v1/volunteer/ticket/[token]', () => {
 		expect(appQuery.selector?.$or?.some((selector) => '_id' in selector)).toBe(false);
 	});
 
+	describe('can_cancel for an application cancelled with its quota release still due (CR-220 FR-7)', () => {
+		const cancelledApp = (extra: Record<string, unknown>) => ({
+			_id: 'job_application:app_resume',
+			type: 'job_application',
+			tracking_token: 'app_resume',
+			job_id: 'job:job-1',
+			status: 'cancelled',
+			applicant: { first_name: 'สมชาย', last_name: 'ใจดี', phone: '0812345678' },
+			// Long past: a normal cancel would be refused, resuming a release is not.
+			selected_shift: { date: '2026-06-13', start_time: '08:00', end_time: '12:00' },
+			created_at: '2026-06-12T10:00:00Z',
+			...extra
+		});
+
+		async function canCancel(app: Record<string, unknown>) {
+			const adminRawMock = vi.mocked(adminRaw);
+			adminRawMock.mockResolvedValueOnce({ status: 404, data: {} });
+			adminRawMock.mockResolvedValueOnce({ status: 200, data: { docs: [app] } });
+			adminRawMock.mockResolvedValueOnce({ status: 200, data: { title: 'งานทดสอบ' } });
+			const res = await GET(makeEvent('app_resume'));
+			expect(res.status).toBe(200);
+			return (await res.json()).ticket as { can_cancel: boolean; status: string };
+		}
+
+		it('is true while the release is due, so the pass offers the button again after a refresh', async () => {
+			const ticket = await canCancel(
+				cancelledApp({ quota_release_due_at: '2026-06-12T11:00:00Z' })
+			);
+			expect(ticket.status).toBe('cancelled');
+			expect(ticket.can_cancel).toBe(true);
+		});
+
+		it('is false once the quota was released', async () => {
+			const ticket = await canCancel(
+				cancelledApp({
+					quota_release_due_at: '2026-06-12T11:00:00Z',
+					quota_released_at: '2026-06-12T11:00:01Z'
+				})
+			);
+			expect(ticket.can_cancel).toBe(false);
+		});
+
+		it('is false for any other cancelled application', async () => {
+			expect((await canCancel(cancelledApp({}))).can_cancel).toBe(false);
+		});
+	});
+
 	it('does not treat an internal CouchDB document id as a public ticket credential', async () => {
 		const adminRawMock = vi.mocked(adminRaw);
 		adminRawMock.mockResolvedValueOnce({ status: 404, data: {} });
