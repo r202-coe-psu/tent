@@ -1,5 +1,6 @@
 import { adminRaw } from '$lib/server/couch-admin';
 import type { PublicDonationDoc } from '$lib/features/donations';
+import type { DonationCampaign } from '$lib/features/operations';
 import type { StoredDonationPhoto } from '$lib/features/donations/server';
 import { listDonationPoints } from '$lib/features/shelters/server';
 import { findMasterByCode } from '$lib/server/shelters.admin';
@@ -71,6 +72,21 @@ export async function fetchDocsStrict<T>(dbName: string, prefix: string): Promis
 	if (res.status >= 400) throw new CouchReadError(dbName, prefix, res.status);
 	const rows = (res.data as { rows?: { doc: T }[] })?.rows ?? [];
 	return rows.map((r) => r.doc).filter(Boolean);
+}
+
+/**
+ * One campaign by `_id`, open or closed. `null` when it is gone or the shelter has no
+ * database; any other failure throws {@link CouchReadError}.
+ */
+export async function readDonationCampaign(
+	dbName: string,
+	campaignId: string
+): Promise<DonationCampaign | null> {
+	const res = await adminRaw(`/${dbName}/${encodeURIComponent(campaignId)}`, 'GET');
+	if (res.status === 404) return null;
+	if (res.status >= 400) throw new CouchReadError(dbName, campaignId, res.status);
+	const doc = res.data as DonationCampaign | null;
+	return doc?.type === 'donation_campaign' ? doc : null;
 }
 
 /**

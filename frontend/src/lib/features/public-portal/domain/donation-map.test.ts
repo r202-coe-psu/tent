@@ -290,3 +290,44 @@ describe('donationMapPointsOf', () => {
 		expect(donationMapPointsOf('SH001', undefined)).toEqual([]);
 	});
 });
+
+describe('one item at several drop-off points (CR-206 A2 FR-AP-29)', () => {
+	const rows: DonationNeedsEntry['needs'] = [
+		{
+			item_id: 'item:rice',
+			name: 'ข้าวสาร',
+			unit: 'kg',
+			qty_needed: '30',
+			urgency: 'normal',
+			status: 'open',
+			drop_off_point_id: 'point-gym',
+			drop_off_point_name: 'โรงยิม'
+		},
+		{
+			item_id: 'item:rice',
+			name: 'ข้าวสาร',
+			unit: 'kg',
+			qty_needed: '20',
+			urgency: 'critical',
+			status: 'open',
+			drop_off_point_id: 'point-med',
+			drop_off_point_name: 'ห้องพยาบาล'
+		},
+		{ item_id: 'item:soap', name: 'สบู่', unit: 'bar', qty_needed: '5', status: 'open' }
+	];
+
+	it('counts the item once on the map and keeps its most urgent level', () => {
+		const { onMap } = buildDonationMap(
+			[needsEntry('SH001', { needs: rows })],
+			[publicShelter('SH001')],
+			null
+		);
+
+		expect(onMap[0].needs.map((n) => n.itemId)).toEqual(['item:rice', 'item:soap']);
+		expect(onMap[0].needs[0]).toMatchObject({ qtyNeeded: 50, urgency: 'critical' });
+	});
+
+	it('rates the shelter by its most urgent open row', () => {
+		expect(donationShelterUrgency(rows)).toBe('critical');
+	});
+});
