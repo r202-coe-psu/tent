@@ -31,6 +31,30 @@ async function find<T>(selector: Record<string, unknown>, limit: number): Promis
 	return (data as { docs: T[] }).docs;
 }
 
+const PAGE_SIZE = 100;
+/** Upper bound on pages (5000 devices) so a misbehaving bookmark cannot loop forever. */
+const MAX_PAGES = 50;
+
+/** Every doc matching `selector`, `PAGE_SIZE` per request, following the `_find` bookmark. */
+async function findAll<T>(selector: Record<string, unknown>): Promise<T[]> {
+	await ensurePrintingDevicesDb();
+	const all: T[] = [];
+	let bookmark: string | undefined;
+	for (let page = 0; page < MAX_PAGES; page += 1) {
+		const { status, data } = await printingRaw(`${DB}/_find`, 'POST', {
+			selector,
+			limit: PAGE_SIZE,
+			...(bookmark ? { bookmark } : {})
+		});
+		if (status !== 200) throw new PrintDependencyError();
+		const result = data as { docs: T[]; bookmark?: string };
+		all.push(...result.docs);
+		if (result.docs.length < PAGE_SIZE || !result.bookmark) break;
+		bookmark = result.bookmark;
+	}
+	return all;
+}
+
 async function putDevice(doc: PrintDeviceDoc): Promise<PrintDeviceWriteResult> {
 	await ensurePrintingDevicesDb();
 	const { status, data } = await printingRaw(`${DB}/${encodeURIComponent(doc._id)}`, 'PUT', doc);
@@ -61,7 +85,7 @@ export const printDeviceRepository: PrintDeviceLookup &
 	},
 
 	listDevices(shelterCode) {
-		return find<PrintDeviceDoc>({ type: 'print_device', shelter_code: shelterCode }, 100);
+		return findAll<PrintDeviceDoc>({ type: 'print_device', shelter_code: shelterCode });
 	},
 
 	async deleteDevice(doc) {

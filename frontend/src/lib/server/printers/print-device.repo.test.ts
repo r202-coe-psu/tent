@@ -135,6 +135,41 @@ describe('print device repository (printing_devices via printing_service)', () =
 		});
 	});
 
+	it('pages through a shelter with more than 100 devices using the bookmark', async () => {
+		const page = (n: number) =>
+			Array.from({ length: n }, (_, i) => device({ _id: `print_device:d-${i}` }));
+		reply(
+			{ status: 200, data: { docs: page(100), bookmark: 'b1' } },
+			{ status: 200, data: { docs: page(100), bookmark: 'b2' } },
+			{ status: 200, data: { docs: page(7), bookmark: 'b3' } }
+		);
+
+		const docs = await printDeviceRepository.listDevices('SH01');
+
+		expect(docs).toHaveLength(207);
+		expect(calls.map((c) => (c.body as { bookmark?: string }).bookmark)).toEqual([
+			undefined,
+			'b1',
+			'b2'
+		]);
+	});
+
+	it('stops at an empty page after a full one', async () => {
+		reply(
+			{
+				status: 200,
+				data: {
+					docs: Array.from({ length: 100 }, () => device()),
+					bookmark: 'b1'
+				}
+			},
+			{ status: 200, data: { docs: [], bookmark: 'b1' } }
+		);
+
+		expect(await printDeviceRepository.listDevices('SH01')).toHaveLength(100);
+		expect(calls).toHaveLength(2);
+	});
+
 	it('lists devices in a scope with $in, or every shelter for a null scope', async () => {
 		reply({ status: 200, data: { docs: [] } }, { status: 200, data: { docs: [] } });
 
