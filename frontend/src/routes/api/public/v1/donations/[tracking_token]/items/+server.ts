@@ -34,6 +34,41 @@ function shelterDbFromToken(token: string): string | null {
 	return code ? `shelter_${code.toLowerCase()}` : null;
 }
 
+/** The intake buffer could not be read, so nothing was changed anywhere — the donor may retry. */
+class BufferReadError extends Error {}
+
+/**
+ * The booking as FastAPI's intake buffer holds it, for a booking CouchDB has not seen yet:
+ * the campaign it was made under and how it is delivered, which decide each line's point.
+ * `null` when FastAPI has no such booking — the PATCH below then answers 404 itself.
+ */
+async function readBufferedBooking(
+	trackingToken: string
+): Promise<{ campaignId: string | null; deliveryMethod: string | null } | null> {
+	let res: Response;
+	try {
+		res = await fetch(
+			`${fastapiBaseUrl()}/public/v1/donations/${encodeURIComponent(trackingToken)}`,
+			{ headers: fastapiServiceHeaders() }
+		);
+	} catch {
+		throw new BufferReadError('FastAPI unavailable');
+	}
+	if (res.status === 404) return null;
+	if (!res.ok) throw new BufferReadError(`FastAPI answered ${res.status}`);
+	const body = (await res.json().catch(() => ({}))) as {
+		donation?: { campaign_id?: unknown; logistics?: { delivery_method?: unknown } | null };
+	};
+	const donation = body.donation;
+	return {
+		campaignId: typeof donation?.campaign_id === 'string' ? donation.campaign_id : null,
+		deliveryMethod:
+			typeof donation?.logistics?.delivery_method === 'string'
+				? donation.logistics.delivery_method
+				: null
+	};
+}
+
 /**
  * Donor edits the items on their own booking (CR-080).
  *
@@ -97,15 +132,18 @@ export const PATCH = async ({ params, request }) => {
 		// Each line's point from the booking's own campaign (FR-AP-15a), read by id whether it
 		// is open or closed — the headroom read below sees open ones only. FastAPI keeps the
 		// point of a held line whose item did not change (FR-AP-15). A booking not yet in
-		// CouchDB has no campaign to read, so its lines get none.
-		const campaign = latestDoc?.campaign_id
-			? await readDonationCampaign(shelterDb, latestDoc.campaign_id)
+		// CouchDB still names its campaign and delivery in the intake buffer, so a campaign
+		// line added now gets its point at once rather than none for good.
+		const booked = latestDoc
+			? {
+					campaignId: latestDoc.campaign_id ?? null,
+					deliveryMethod: latestDoc.logistics?.delivery_method ?? null
+				}
+			: await readBufferedBooking(tracking_token);
+		const campaign = booked?.campaignId
+			? await readDonationCampaign(shelterDb, booked.campaignId)
 			: null;
-		const pointedItems = withCampaignLinePoints(
-			resolvedItems,
-			campaign,
-			latestDoc?.logistics?.delivery_method
-		);
+		const pointedItems = withCampaignLinePoints(resolvedItems, campaign, booked?.deliveryMethod);
 
 		// The same headroom check the create route makes. Without it an edit answers only
 		// to the atomic counter, which caps reserved_qty at qty_target and knows nothing
@@ -245,7 +283,7 @@ export const PATCH = async ({ params, request }) => {
 
 		return json({ success: true, message: 'Donation items updated', revisions, status });
 	} catch (e) {
-		if (e instanceof CouchReadError) {
+		if (e instanceof CouchReadError || e instanceof BufferReadError) {
 			console.error(e);
 			return json({ success: false, error: 'DONATION_UNAVAILABLE' }, { status: 503 });
 		}

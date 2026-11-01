@@ -322,3 +322,15 @@ async def test_tracking_reports_point_receipts_reduced(
     assert tracked["donation"]["point_receipts"] == [
         {"point_id": _GYM, "line_nos": [0], "received_at": "2026-10-28T02:12:00.000Z"}
     ]
+
+
+async def test_tracking_reports_the_campaign_the_booking_was_made_under(
+    client: AsyncClient, two_point_shelter: PublicShelter, auth_headers: dict[str, str]
+) -> None:
+    created = await _post(client, auth_headers, [_WATER])
+    token = created.json()["tracking_token"]
+
+    tracked = (await client.get(f"/public/v1/donations/{token}", headers=auth_headers)).json()
+
+    assert tracked["donation"]["campaign_id"] == "donation_campaign:c1"
+    assert tracked["donation"]["logistics"] == {"delivery_method": "self_dropoff"}

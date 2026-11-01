@@ -497,6 +497,7 @@ def _tracking_payload(
     expires_at: datetime | None = None,
     revisions: list[dict[str, Any]] | None = None,
     point_receipts: list[DonationPointReceipt] | None = None,
+    campaign_id: str | None = None,
 ) -> dict[str, Any]:
     payload: dict[str, Any] = {
         "status": status_value,
@@ -517,6 +518,10 @@ def _tracking_payload(
         # CR-206 FR-MP-13 — which lines each drop-off point has recorded, so the ticket
         # shows a point "รับแล้ว". Point, lines and time only (§Change).
         "point_receipts": [receipt.model_dump() for receipt in point_receipts or []],
+        # The campaign the booking was made under, from the intake buffer — the BFF reads the
+        # campaign's needs with it to give a line added before the booking reaches CouchDB its
+        # point (staff-assigned drop-off FR-AP-15a). The BFF does not pass it on to the donor.
+        "campaign_id": campaign_id,
     }
     return payload
 
@@ -743,6 +748,7 @@ class DonationsUseCase:
                     expires_at=buffer.expires_at if buffer else None,
                     revisions=list(buffer.revisions) if buffer else [],
                     point_receipts=list(donation.point_receipts),
+                    campaign_id=buffer.campaign_id if buffer else None,
                 )
             )
 
@@ -764,6 +770,7 @@ class DonationsUseCase:
                 logistics=dict(buffer.logistics) if buffer.logistics else None,
                 expires_at=buffer.expires_at,
                 revisions=list(buffer.revisions),
+                campaign_id=buffer.campaign_id,
             )
         )
 
