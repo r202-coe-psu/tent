@@ -236,6 +236,9 @@ describe('scan-station point by point (CR-206)', () => {
 		expect(document.querySelector('[data-testid="other-point-warning"]')).toBeNull();
 		expect(document.body.textContent).toContain('เลือกจุดที่ประจำก่อนจึงจะตรวจรับได้');
 		expect(document.body.textContent).not.toContain('0 / 0');
+		// The receive checklist too (it once read "(0/0)" here).
+		expect(document.body.textContent).not.toContain('(0/0)');
+		expect(document.body.textContent).toContain('(หลังเลือกจุดที่ประจำ)');
 		expect(
 			document.querySelector('[data-testid="scan-line-0-needs-point"]')?.textContent
 		).toContain('เลือกจุดที่ประจำก่อนจึงจะตรวจรับรายการนี้ได้');

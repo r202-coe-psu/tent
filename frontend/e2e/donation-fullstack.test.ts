@@ -823,7 +823,8 @@ test.describe('Donation full-stack: donor and staff', { tag: ['@critical', '@don
 		await openInScanStation(page, bookingRef);
 		const wrongShelter = page.getByRole('alert').filter({ hasText: 'ใบนี้จองส่งไปศูนย์' });
 		await expect(wrongShelter).toContainText('SH001');
-		await expect(page.getByRole('button', { name: 'ยืนยันรับเข้าคลัง' })).toBeDisabled();
+		// SH001 has drop-off points, so the save button reads "เลือกจุดที่ประจำก่อน" here.
+		await expect(page.getByTestId('scan-receive-submit')).toBeDisabled();
 		await expect(page.getByRole('button', { name: 'ปฏิเสธคำขอ' })).toBeDisabled();
 
 		await openBackOffice(page, admin, shelter.code);

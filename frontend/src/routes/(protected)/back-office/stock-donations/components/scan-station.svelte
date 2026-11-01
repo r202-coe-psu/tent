@@ -1241,7 +1241,11 @@
 								class="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 p-4 text-base text-amber-900"
 							>
 								<TriangleAlert class="mt-0.5 size-5 shrink-0 text-amber-600" aria-hidden="true" />
-								<p>เลือกจุดที่ประจำก่อน แล้วจึงตรวจรับรายการได้ (ตัวเลือกอยู่ด้านขวา)</p>
+								<p>
+									เลือกจุดที่ประจำก่อน แล้วจึงตรวจรับรายการได้ (ตัวเลือกอยู่<span class="lg:hidden"
+										>ด้านล่าง</span
+									><span class="hidden lg:inline">ด้านขวา</span>)
+								</p>
 							</div>
 						{:else if otherPointCount > 0}
 							<!-- Another point's lines are locked here (FR-MP-19); FR-MP-21 unlocks them. -->
@@ -1627,9 +1631,11 @@
 								{#if byLine}
 									{@render step(
 										scopeLines.length > 0,
-										decidableCount === 0 && otherPointCount > 0
-											? 'ไม่มีรายการของจุดนี้ — รับที่จุดอื่น หรือกด "รับรายการของจุดอื่น"'
-											: `เลือกผลรายการที่มาส่งอย่างน้อย 1 รายการ (${verifiedCount}/${decidableCount})`
+										pointChoiceMissing
+											? 'เลือกผลรายการที่มาส่งอย่างน้อย 1 รายการ (หลังเลือกจุดที่ประจำ)'
+											: decidableCount === 0 && otherPointCount > 0
+												? 'ไม่มีรายการของจุดนี้ — รับที่จุดอื่น หรือกด "รับรายการของจุดอื่น"'
+												: `เลือกผลรายการที่มาส่งอย่างน้อย 1 รายการ (${verifiedCount}/${decidableCount})`
 									)}
 								{:else}
 									{@render step(
