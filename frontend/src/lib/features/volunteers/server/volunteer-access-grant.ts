@@ -48,6 +48,7 @@ type VolunteerDoc = {
 	first_name?: string;
 	last_name?: string;
 	phone?: string | null;
+	status?: string;
 	phone_hash?: string | null;
 	national_id?: string | null;
 	national_id_hash?: string | null;
@@ -89,6 +90,25 @@ const isVerified = (doc: VolunteerDoc): boolean =>
 		identity_verification: doc.identity_verification as never
 	}) === 'verified';
 
+const UNVERIFIED_MESSAGE = 'อาสาสมัครต้องยืนยันตัวตนก่อนจึงจะออกสิทธิ์ได้';
+
+/**
+ * A system account is created for a volunteer profile only once the profile is identity-verified
+ * in the shelter(s) whose roles the account is given (CR-221 FR-3, every grantor): the SA / SM
+ * path (`POST /api/v1/users` with `volunteer_id`) checks it here, as the UI's check alone is not a
+ * rule. Another shelter's check does not stand in; a profile missing from a shelter is 422 too.
+ * 422 and nothing written otherwise.
+ */
+export async function assertVolunteerVerifiedForAccess(
+	shelterCodes: readonly string[],
+	volunteerId: string
+): Promise<void> {
+	for (const shelterCode of shelterCodes) {
+		const volunteer = await readVolunteer(shelterCode, volunteerId);
+		if (!isVerified(volunteer)) throw new ServiceError('VALIDATION', UNVERIFIED_MESSAGE);
+	}
+}
+
 /**
  * The shelter a coordinator acts in, read from their session roles (`capabilitiesForShelter`,
  * compound or legacy flat), never trusted from the body (FR-1). A body shelter the caller holds no
@@ -108,6 +128,20 @@ function coordinatorShelter(caller: Pick<Caller, 'roles'>, requested: unknown): 
 		throw new ServiceError('FORBIDDEN', 'Requires volunteer_coordinator in this shelter');
 	}
 	return code;
+}
+
+/** The volunteer's own account already holds a coordinator grant in this shelter. */
+async function holdsGrantHere(
+	shelterCode: string,
+	volunteer: VolunteerDoc,
+	email: string
+): Promise<boolean> {
+	const account = await readVolunteerAccount({
+		name: volunteer.user_name || email,
+		volunteer_id: volunteer._id,
+		shelter_code: shelterCode
+	});
+	return account.exists && account.grants.length > 0;
 }
 
 /**
@@ -136,11 +170,18 @@ export async function grantVolunteerAccessAsCoordinator(
 	if (!volunteerId) throw new ServiceError('VALIDATION', 'volunteer_id is required');
 
 	const volunteer = await readVolunteer(shelterCode, volunteerId);
-	// Verified in this shelter only (CR FR-3, #1044): another shelter's check does not stand in.
-	if (!isVerified(volunteer)) {
-		throw new ServiceError('VALIDATION', 'อาสาสมัครต้องยืนยันตัวตนก่อนจึงจะออกสิทธิ์ได้');
+	// A closed profile is reopened first (CR-221 FR-21); 422 is `VALIDATION` in this service.
+	if (volunteer.status === 'inactive') {
+		throw new ServiceError('VALIDATION', 'เปิดใช้งานอาสาสมัครก่อนจึงจะออกสิทธิ์ได้');
 	}
-	const verifiedBy = verificationOf(volunteer);
+	// Verified in this shelter only (CR FR-3, #1044): another shelter's check does not stand in.
+	// Editing a grant the account already holds here needs no new check (FR-3, last line); a new
+	// grant, or a re-grant on a lapsed account, does.
+	const verified = isVerified(volunteer);
+	if (!verified && !(await holdsGrantHere(shelterCode, volunteer, email))) {
+		throw new ServiceError('VALIDATION', UNVERIFIED_MESSAGE);
+	}
+	const verifiedBy = verified ? verificationOf(volunteer) : undefined;
 
 	const phone = volunteer.phone ? normalizeThaiPhone(volunteer.phone) : '';
 	// CR-210 FR-8: a filled phone must be a 10-digit mobile before access is issued.
@@ -156,7 +197,7 @@ export async function grantVolunteerAccessAsCoordinator(
 		expires_at: grantExpiresAt(input.expires_on as string),
 		granted_by: caller.name,
 		granted_at: now.toISOString(),
-		verified_by: verifiedBy
+		...(verifiedBy ? { verified_by: verifiedBy } : {})
 	};
 	return grantCoordinatorRole({
 		name: email,
@@ -171,9 +212,9 @@ export async function grantVolunteerAccessAsCoordinator(
 }
 
 /**
- * A coordinator takes back a grant they issued (FR-8). Same caller scope as the grant; the
- * account is named like the grant names it (`email` + `volunteer_id`). Only a grant the caller
- * issued can go: anything else is 403 and nothing is written.
+ * A coordinator takes back a coordinator grant in their shelter (CR-221 FR-17), whoever issued it.
+ * Same caller scope as the grant; the account is named like the grant names it (`email` +
+ * `volunteer_id`). A role a manager gave (no grant) is 403 and nothing is written.
  */
 export async function revokeVolunteerAccessAsCoordinator(
 	caller: Pick<Caller, 'name' | 'roles'>,
@@ -198,7 +239,7 @@ export async function revokeVolunteerAccessAsCoordinator(
 	});
 }
 
-/** A grant as the coordinator dialog shows it: `mine` grants are the ones the caller may revoke. */
+/** A grant as the coordinator dialog shows it; `mine` (issued by the caller) is display-only (FR-17). */
 export type VolunteerGrantView = { role: string; expires_at: string; mine: boolean };
 
 /** How the volunteer's last grant in this shelter ended, for "หมดอายุ" vs "ถูกถอน" (#1044). */

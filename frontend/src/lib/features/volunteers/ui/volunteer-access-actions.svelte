@@ -50,6 +50,14 @@
 		isManager && status.kind !== 'none' && (status.kind !== 'lapsed' || isSystemAdmin(roles))
 	);
 	const managerCannotReach = $derived(isManager && !managesOnUsersPage && status.kind === 'lapsed');
+	// A closed profile is reopened first (card button "เปิดใช้งานอีกครั้ง"): no access button
+	// (CR-221 FR-9, FR-21). An account an admin disabled gives a coordinator nothing to press:
+	// a save would be refused (FR-9, FR-23).
+	const profileClosed = $derived(volunteer.status === 'inactive');
+	const accountSuspended = $derived(status.kind === 'deactivated' && !isManager);
+	const hidesAccessButton = $derived(
+		!managesOnUsersPage && !managerCannotReach && (profileClosed || accountSuspended)
+	);
 	const verified = $derived(identityVerificationStatus(volunteer) === 'verified');
 	const label = $derived(
 		status.kind === 'active'
@@ -94,6 +102,10 @@
 			<p class="text-xs text-muted-foreground">
 				ให้ผู้ประสานงานจิตอาสาออกสิทธิ์อีกครั้ง หรือผู้ดูแลระบบจัดการบัญชี
 			</p>
+		{:else if accountSuspended}
+			<p class="text-xs text-muted-foreground">บัญชีถูกระงับโดยผู้ดูแลระบบ</p>
+		{:else if profileClosed}
+			<!-- Nothing here: the card's "เปิดใช้งานอีกครั้ง" is the way back. -->
 		{:else if needsVerification}
 			<Button
 				size="sm"
@@ -126,7 +138,7 @@
 		{/if}
 	</div>
 
-	{#if !managesOnUsersPage && !managerCannotReach}
+	{#if !managesOnUsersPage && !managerCannotReach && !hidesAccessButton}
 		<VolunteerAccessDialog bind:open={accessOpen} {volunteer} {shelterLine} />
 	{/if}
 	<VolunteerQualificationDialog bind:open={verifyOpen} {volunteer} {shelterLine} />

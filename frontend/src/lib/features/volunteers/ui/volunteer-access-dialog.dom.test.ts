@@ -105,6 +105,11 @@ const saveButton = () =>
 		b.textContent?.includes('บันทึกและออกสิทธิ์ใหม่')
 	)!;
 
+const titleText = () =>
+	document.body.querySelector('[data-slot="dialog-title"]')?.textContent?.trim();
+const buttonText = (text: string) =>
+	[...document.body.querySelectorAll('button')].find((b) => b.textContent?.trim().includes(text));
+
 async function fill(input: HTMLInputElement, value: string) {
 	input.value = value;
 	input.dispatchEvent(new Event('input', { bubbles: true }));
@@ -305,9 +310,39 @@ describe('VolunteerAccessDialog says where the account stands (#1044)', () => {
 			grants: [{ role: 'kitchen_staff', expires_at: '2026-11-03T16:59:59.999Z', mine: true }]
 		});
 		await render(COORDINATOR, linked);
-		expect(document.body.textContent).toContain('แก้ไขสิทธิ์ใช้งานระบบ');
+		expect(titleText()).toBe('แก้ไขสิทธิ์');
 		expect(document.body.textContent).toContain('มีสิทธิ์ในศูนย์นี้อยู่แล้ว');
-		expect(document.body.textContent).toContain('บันทึกการแก้ไขสิทธิ์');
+		expect(buttonText('บันทึกการแก้ไข')).toBeDefined();
+	});
+
+	it('titles a new grant "ออกสิทธิ์ใช้งานระบบ" and keeps its save label', async () => {
+		await render(COORDINATOR);
+		expect(titleText()).toBe('ออกสิทธิ์ใช้งานระบบ');
+		expect(buttonText('บันทึกและออกสิทธิ์ใหม่')).toBeDefined();
+	});
+
+	it('lets an unverified profile whose account holds a grant here be edited (FR-3)', async () => {
+		mocks.grants = view({
+			grants: [{ role: 'kitchen_staff', expires_at: '2026-11-03T16:59:59.999Z', mine: true }]
+		});
+		await render(COORDINATOR, {
+			...linked,
+			identity_verified: false,
+			identity_verification: { status: 'pending' }
+		} as Partial<Volunteer>);
+		expect(document.body.textContent).not.toContain('ยังไม่ยืนยันตัวตนในศูนย์นี้');
+		expect(buttonText('บันทึกการแก้ไข')!.disabled).toBe(false);
+	});
+
+	it('still blocks an unverified profile whose account lapsed here', async () => {
+		mocks.grants = view({});
+		await render(COORDINATOR, {
+			...linked,
+			identity_verified: false,
+			identity_verification: { status: 'pending' }
+		} as Partial<Volunteer>);
+		expect(document.body.textContent).toContain('ยังไม่ยืนยันตัวตนในศูนย์นี้');
+		expect(buttonText('ออกสิทธิ์อีกครั้ง')!.disabled).toBe(true);
 	});
 
 	it('says the last role expired, and offers to grant again', async () => {
@@ -320,10 +355,10 @@ describe('VolunteerAccessDialog says where the account stands (#1044)', () => {
 			}
 		});
 		await render(COORDINATOR, linked);
-		expect(document.body.textContent).toContain('ออกสิทธิ์ใช้งานระบบอีกครั้ง');
+		expect(titleText()).toBe('ออกสิทธิ์อีกครั้ง');
 		expect(document.body.textContent).toContain('ยังไม่มีสิทธิ์ในศูนย์นี้');
 		expect(document.body.textContent).toContain('หมดอายุเมื่อ');
-		expect(document.body.textContent).toContain('บันทึกและออกสิทธิ์อีกครั้ง');
+		expect(buttonText('ออกสิทธิ์อีกครั้ง')).toBeDefined();
 	});
 
 	it('says who revoked the last role', async () => {
@@ -340,10 +375,26 @@ describe('VolunteerAccessDialog says where the account stands (#1044)', () => {
 		expect(document.body.textContent).toContain('โดย coord01');
 	});
 
-	it('shows the roles a manager gave', async () => {
+	it('shows the roles a manager gave, disabled with a note, and cannot be saved (FR-16)', async () => {
 		mocks.grants = view({ permanent_roles: ['registration_staff'] });
 		await render(COORDINATOR, linked);
 		expect(document.body.textContent).toContain('สิทธิ์ถาวรจากผู้จัดการศูนย์');
+		const radio = document.body.querySelector<HTMLButtonElement>(
+			'#volunteer-access-role-volunteer\\:001-registration_staff'
+		)!;
+		expect(radio.hasAttribute('disabled') || radio.getAttribute('aria-disabled') === 'true').toBe(
+			true
+		);
+		expect(document.body.textContent).toContain(
+			'ผู้จัดการศูนย์เป็นผู้ให้ แก้ไขได้ที่หน้าผู้ใช้งาน'
+		);
+		expect(buttonText('บันทึกการแก้ไข')!.disabled).toBe(true);
+	});
+
+	it('blocks saving, with the reason, for a closed profile (FR-21)', async () => {
+		await render(COORDINATOR, { status: 'inactive' } as Partial<Volunteer>);
+		expect(document.body.textContent).toContain('เปิดใช้งานอาสาสมัครก่อนจึงจะออกสิทธิ์ได้');
+		expect(saveButton().disabled).toBe(true);
 	});
 });
 
@@ -370,15 +421,22 @@ describe('VolunteerAccessDialog revoking a grant (#955 FR-8)', () => {
 		});
 	});
 
-	it("offers no revoke for another coordinator's grant", async () => {
+	it("offers a revoke for another coordinator's grant too (FR-17)", async () => {
 		mocks.grants = {
 			email: 'vol@example.com',
 			grants: [{ role: 'kitchen_staff', expires_at: EXPIRES, mine: false }]
 		};
 		await render(COORDINATOR);
+		expect(button('ถอนสิทธิ์')).toBeDefined();
 
-		expect(document.body.textContent).toContain('ออกโดยผู้ประสานงานคนอื่น');
-		expect(button('ถอนสิทธิ์')).toBeUndefined();
+		button('ถอนสิทธิ์')!.click();
+		await settle();
+		button('ยืนยันถอนสิทธิ์')!.click();
+		await settle();
+		expect(mocks.revoke).toHaveBeenCalledWith(expect.objectContaining({ _id: volunteer._id }), {
+			email: 'vol@example.com',
+			role: 'kitchen_staff'
+		});
 	});
 
 	it('shows the server refusal inline', async () => {
@@ -386,15 +444,15 @@ describe('VolunteerAccessDialog revoking a grant (#955 FR-8)', () => {
 			email: 'vol@example.com',
 			grants: [{ role: 'kitchen_staff', expires_at: EXPIRES, mine: true }]
 		};
-		mocks.revoke.mockRejectedValue(new Error('ถอนได้เฉพาะสิทธิ์ที่ตนเองออกให้'));
+		mocks.revoke.mockRejectedValue(new Error('ไม่พบสิทธิ์ที่ผู้ประสานงานถอนได้ในศูนย์นี้'));
 		await render(COORDINATOR);
 		button('ถอนสิทธิ์')!.click();
 		await settle();
 		button('ยืนยันถอนสิทธิ์')!.click();
 		await settle();
 
-		expect(document.body.textContent).toContain('ถอนได้เฉพาะสิทธิ์ที่ตนเองออกให้');
-		expect(toast.error).toHaveBeenCalledWith('ถอนได้เฉพาะสิทธิ์ที่ตนเองออกให้');
+		expect(document.body.textContent).toContain('ไม่พบสิทธิ์ที่ผู้ประสานงานถอนได้ในศูนย์นี้');
+		expect(toast.error).toHaveBeenCalledWith('ไม่พบสิทธิ์ที่ผู้ประสานงานถอนได้ในศูนย์นี้');
 	});
 });
 

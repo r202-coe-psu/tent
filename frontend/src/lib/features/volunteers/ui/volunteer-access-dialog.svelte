@@ -61,6 +61,11 @@
 		shelterLine: string;
 	} = $props();
 
+	/** FR-21 / FR-9: a closed profile is reopened first (card button "เปิดใช้งานอีกครั้ง"). */
+	const INACTIVE_PROFILE_MESSAGE = 'เปิดใช้งานอาสาสมัครก่อนจึงจะออกสิทธิ์ได้';
+	/** FR-16: a role a shelter manager gave cannot be changed by a coordinator. */
+	const MANAGER_GIVEN_NOTE = 'ผู้จัดการศูนย์เป็นผู้ให้ แก้ไขได้ที่หน้าผู้ใช้งาน';
+
 	const queryClient = useQueryClient();
 	let pending = $state(false);
 
@@ -78,17 +83,12 @@
 		limited ? COORDINATOR_GRANTABLE_CAPABILITIES : STAFF_CAPABILITIES
 	);
 	const expiryRange = $derived(grantExpiryRange());
-	// Access is given only once the identity is verified in this shelter (#1044), whoever grants.
-	// Revoking an existing grant stays open.
+	// Access is first given, or given again, only once the identity is verified in this shelter
+	// (#1044), whoever grants. Editing or revoking a grant the account already holds stays open
+	// (CR-221 FR-3), so `blockedReason` below checks it only while the account is not `active`.
 	const unverifiedHere = $derived(identityVerificationStatus(volunteer) !== 'verified');
-	const blockedReason = $derived(
-		phoneBlocksAccess
-			? VOLUNTEER_ACCESS_PHONE_MESSAGE
-			: unverifiedHere
-				? 'อาสาสมัครยังไม่ยืนยันตัวตนในศูนย์นี้ กรุณายืนยันตัวตนก่อนจึงจะออกสิทธิ์ได้'
-				: null
-	);
-	// The caller's own grants can be taken back here (FR-8); the BFF refuses anyone else's.
+	// Any grant in this shelter can be taken back here, whoever issued it (FR-17); a role a manager
+	// gave has no grant and is changed on the users page (FR-16).
 	const grantsQuery = useVolunteerGrants(
 		() => volunteer,
 		() => open && limited
@@ -101,18 +101,36 @@
 	const grants = $derived(grantsQuery.data?.grants ?? []);
 	// Where the volunteer stands here (#1044): drives the title, the save label and the note.
 	const standing = $derived(limited ? accessState(grantsQuery.data ?? null) : accessState(null));
+	// Roles a manager gave here: shown but not selectable, and the server refuses a save while the
+	// account holds one (FR-4, FR-16); revoking a grant stays open.
+	const permanentRoles = $derived(standing.kind === 'active' ? standing.permanentRoles : []);
+	const holdsManagerRole = $derived(limited && permanentRoles.length > 0);
+	// A closed profile is reopened before it can be given access (CR-221 FR-21, FR-9).
+	const profileClosed = $derived(volunteer.status === 'inactive');
+	const blockedReason = $derived(
+		profileClosed
+			? INACTIVE_PROFILE_MESSAGE
+			: phoneBlocksAccess
+				? VOLUNTEER_ACCESS_PHONE_MESSAGE
+				: unverifiedHere && standing.kind !== 'active'
+					? 'อาสาสมัครยังไม่ยืนยันตัวตนในศูนย์นี้ กรุณายืนยันตัวตนก่อนจึงจะออกสิทธิ์ได้'
+					: holdsManagerRole
+						? MANAGER_GIVEN_NOTE
+						: null
+	);
+	// Copy per FR-14.
 	const title = $derived(
 		standing.kind === 'active'
-			? 'แก้ไขสิทธิ์ใช้งานระบบ'
+			? 'แก้ไขสิทธิ์'
 			: standing.kind === 'lapsed'
-				? 'ออกสิทธิ์ใช้งานระบบอีกครั้ง'
-				: 'ออกสิทธิ์ใช้งานระบบหลังบ้าน'
+				? 'ออกสิทธิ์อีกครั้ง'
+				: 'ออกสิทธิ์ใช้งานระบบ'
 	);
 	const saveLabel = $derived(
 		standing.kind === 'active'
-			? 'บันทึกการแก้ไขสิทธิ์'
+			? 'บันทึกการแก้ไข'
 			: standing.kind === 'lapsed'
-				? 'บันทึกและออกสิทธิ์อีกครั้ง'
+				? 'ออกสิทธิ์อีกครั้ง'
 				: 'บันทึกและออกสิทธิ์ใหม่'
 	);
 	const ENDED_HOW = {
@@ -137,11 +155,6 @@
 	/** Editing an account that already holds a grant here starts on its current role (#1044). */
 	let roleSeededFor = $state<string | null>(null);
 	$effect(() => {
-		if (!open || roleSeededFor === volunteer._id || !grantsQuery.data) return;
-		roleSeededFor = volunteer._id;
-		if (!role) role = currentGrantRole(grants, roleChoices);
-	});
-	$effect(() => {
 		if (!open) {
 			lastOpenedId = null;
 			return;
@@ -158,6 +171,11 @@
 		passwordError = null;
 		showPassword = false;
 		lastOpenedId = volunteer._id;
+	});
+	$effect(() => {
+		if (!open || roleSeededFor === volunteer._id || !grantsQuery.data) return;
+		roleSeededFor = volunteer._id;
+		if (!role) role = currentGrantRole(grants, roleChoices);
 	});
 
 	async function submit() {
@@ -377,8 +395,16 @@
 								<RadioGroup.Item
 									id={`volunteer-access-role-${volunteer._id}-${capability}`}
 									value={capability}
+									disabled={permanentRoles.includes(capability)}
 								/>
-								<span>{roleOptionLabel(capability)}</span>
+								<span class="flex min-w-0 flex-col">
+									<span>{roleOptionLabel(capability)}</span>
+									{#if permanentRoles.includes(capability)}
+										<span class="text-[11px] font-normal text-muted-foreground"
+											>{MANAGER_GIVEN_NOTE}</span
+										>
+									{/if}
+								</span>
 							</Label>
 							<!-- Same wording as the users page role picker (STAFF_CAPABILITY_DESCRIPTIONS). -->
 							<Popover.Root>
@@ -406,8 +432,9 @@
 				{/if}
 				<p class="text-[11px] text-muted-foreground">
 					{#if limited}
-						* ผู้ประสานงานออกสิทธิ์ได้เฉพาะบทบาทเหล่านี้ ในศูนย์พักพิงนี้
-						ถอนหรือย่นอายุได้เฉพาะสิทธิ์ที่ตนเองออก (สิทธิ์อื่นหมดอายุเอง หรือให้ผู้จัดการศูนย์ถอน)
+						* ผู้ประสานงานออกสิทธิ์ได้เฉพาะบทบาทเหล่านี้ ในศูนย์พักพิงนี้ แก้ไข ต่ออายุ ย่นอายุ
+						หรือถอนสิทธิ์ที่ออกให้ในศูนย์นี้ได้ ไม่ว่าใครเป็นผู้ออก (สิทธิ์ที่ผู้จัดการศูนย์ให้
+						ให้ผู้จัดการศูนย์แก้ไข)
 					{:else}
 						* บัญชีใช้สิทธิ์ที่เลือกในศูนย์พักพิงนี้ จัดการสิทธิ์เพิ่มเติมได้ผ่านหน้าผู้ใช้งาน
 					{/if}
@@ -424,11 +451,11 @@
 							<li class="flex flex-wrap items-center justify-between gap-2 py-2 text-xs">
 								<div class="min-w-0">
 									<p class="font-semibold text-foreground">{roleOptionLabel(grant.role)}</p>
-									<p class="text-muted-foreground">{grantExpiryLabel(grant)}</p>
+									<p class="text-muted-foreground">
+										{grantExpiryLabel(grant)}{grant.mine ? ' · ออกโดยคุณ' : ''}
+									</p>
 								</div>
-								{#if !grant.mine}
-									<span class="text-muted-foreground">ออกโดยผู้ประสานงานคนอื่น</span>
-								{:else if confirmRevoke === grant.role}
+								{#if confirmRevoke === grant.role}
 									<div class="flex gap-2">
 										<Button
 											type="button"

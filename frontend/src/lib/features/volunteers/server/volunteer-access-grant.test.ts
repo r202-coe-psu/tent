@@ -35,6 +35,7 @@ vi.mock('$lib/server/user-service', () => ({
 
 import { sha256Hex } from '$lib/db/hash';
 import {
+	assertVolunteerVerifiedForAccess,
 	grantVolunteerAccessAsCoordinator,
 	listShelterVolunteerAccounts,
 	listVolunteerGrantsAsCoordinator,
@@ -95,6 +96,7 @@ const grant = (input = body(), caller: { name: string; roles: string[] } = COORD
 beforeEach(() => {
 	vi.clearAllMocks();
 	grantCoordinatorRole.mockResolvedValue({ created: true, unchanged: false });
+	readVolunteerAccount.mockResolvedValue({ exists: false, grants: [], permanent_roles: [] });
 	couch(volunteer());
 });
 
@@ -247,6 +249,22 @@ describe('grantVolunteerAccessAsCoordinator', () => {
 		});
 	});
 
+	describe('closed profile (CR-221 FR-21)', () => {
+		it('rejects (422) an inactive profile, even a verified one, and grants nothing', async () => {
+			couch(volunteer({ status: 'inactive' }));
+			await expect(grant()).rejects.toMatchObject({
+				code: 'VALIDATION',
+				message: 'เปิดใช้งานอาสาสมัครก่อนจึงจะออกสิทธิ์ได้'
+			});
+			expect(grantCoordinatorRole).not.toHaveBeenCalled();
+		});
+
+		it('grants an active profile', async () => {
+			couch(volunteer({ status: 'active' }));
+			await expect(grant()).resolves.toBeDefined();
+		});
+	});
+
 	describe('identity verification', () => {
 		it('rejects (422) a volunteer not verified here', async () => {
 			couch(unverified());
@@ -272,6 +290,40 @@ describe('grantVolunteerAccessAsCoordinator', () => {
 				expect.anything(),
 				expect.anything()
 			);
+		});
+
+		describe('editing a grant the account already holds (FR-3: no re-verification)', () => {
+			const holds = (grants: { role: string; expires_at: string }[]) =>
+				readVolunteerAccount.mockResolvedValue({ exists: true, grants, permanent_roles: [] });
+
+			it('allows an unverified profile whose account holds a grant here, with no verified_by', async () => {
+				couch(unverified({ user_name: 'vol@example.com' }));
+				holds([{ role: 'kitchen_staff', expires_at: '2026-10-30T16:59:59.999Z' }]);
+				await expect(grant()).resolves.toBeDefined();
+				expect(readVolunteerAccount).toHaveBeenCalledWith(
+					expect.objectContaining({ name: 'vol@example.com', shelter_code: 'SH001' })
+				);
+				const passed = grantCoordinatorRole.mock.calls[0][0].grant;
+				expect(passed.verified_by).toBeUndefined();
+			});
+
+			it('still rejects (422) a lapsed account: no grant here any more', async () => {
+				couch(unverified({ user_name: 'vol@example.com' }));
+				holds([]);
+				await expect(grant()).rejects.toMatchObject({ code: 'VALIDATION' });
+				expect(grantCoordinatorRole).not.toHaveBeenCalled();
+			});
+
+			it('still rejects (422) a new grant, where there is no account', async () => {
+				couch(unverified());
+				readVolunteerAccount.mockResolvedValue({ exists: false, grants: [], permanent_roles: [] });
+				await expect(grant()).rejects.toMatchObject({ code: 'VALIDATION' });
+			});
+
+			it('does not look the account up for a verified profile', async () => {
+				await grant();
+				expect(readVolunteerAccount).not.toHaveBeenCalled();
+			});
 		});
 
 		it('records the verification here on the grant', async () => {
@@ -301,6 +353,37 @@ describe('grantVolunteerAccessAsCoordinator', () => {
 	});
 });
 
+describe('assertVolunteerVerifiedForAccess (CR-221 FR-3, SA / SM path)', () => {
+	it('passes a profile verified in the shelter', async () => {
+		await expect(
+			assertVolunteerVerifiedForAccess(['SH001'], 'volunteer:V1')
+		).resolves.toBeUndefined();
+	});
+
+	it('rejects (422) a profile not verified in the shelter', async () => {
+		couch(unverified());
+		await expect(assertVolunteerVerifiedForAccess(['SH001'], 'volunteer:V1')).rejects.toMatchObject(
+			{
+				code: 'VALIDATION',
+				message: 'อาสาสมัครต้องยืนยันตัวตนก่อนจึงจะออกสิทธิ์ได้'
+			}
+		);
+	});
+
+	it('rejects (422) a profile that is not in the shelter at all', async () => {
+		await expect(assertVolunteerVerifiedForAccess(['SH002'], 'volunteer:V1')).rejects.toMatchObject(
+			{
+				code: 'VALIDATION'
+			}
+		);
+	});
+
+	it('checks nothing for roles in no shelter', async () => {
+		await expect(assertVolunteerVerifiedForAccess([], 'volunteer:V1')).resolves.toBeUndefined();
+		expect(adminRaw).not.toHaveBeenCalled();
+	});
+});
+
 describe('revokeVolunteerAccessAsCoordinator', () => {
 	const input = (over: Record<string, unknown> = {}) => ({
 		shelter_code: 'SH001',
@@ -319,7 +402,7 @@ describe('revokeVolunteerAccessAsCoordinator', () => {
 		);
 	});
 
-	it('hands the account, shelter, role and the caller as the issuer to the service', async () => {
+	it('hands the account, shelter, role and the caller as the actor to the service', async () => {
 		await revoke();
 		expect(revokeCoordinatorGrant).toHaveBeenCalledWith({
 			name: 'vol@example.com',
