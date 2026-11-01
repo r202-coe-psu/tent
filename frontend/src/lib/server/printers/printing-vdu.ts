@@ -17,8 +17,9 @@ const PRINTING_SERVICE_USER = 'printing_service';
  * Must stay ES5 (CouchDB's JS engine): `var`, no arrow functions, no template literals, `indexOf`.
  *
  * - `_admin`: unrestricted (provisioning / migration); everyone else may not touch design docs.
- * - `printing_service`: update-only, immutable origin fields, forward-only status transitions,
- *   terminal writes carry `finished_at` and drop the label attachments (PDPA).
+ * - `printing_service`: never creates; updates keep origin fields immutable, status moves forward
+ *   only, terminal writes carry `finished_at` and drop the label attachments (PDPA). It may delete
+ *   only terminal jobs (retention; CouchDB `_purge` needs server admin, so delete + `_compact`).
  * - staff (anyone else): create-only, a `pending` job stamped with their own name, for their own
  *   shelter, with the role the job `source` requires, and exactly `label_count` PNG labels.
  */
@@ -67,7 +68,10 @@ export function buildPrintingValidateDocUpdate(): string {
 
   if (userCtx.name === SERVICE_USER) {
     if (!oldDoc) deny('printing_service cannot create documents');
-    if (newDoc._deleted) deny('printing_service cannot delete documents');
+    if (newDoc._deleted) {
+      if (oldDoc.type === 'print_job' && isTerminal(oldDoc.status)) return;
+      deny('printing_service may only delete finished print jobs');
+    }
     if (oldDoc.type !== 'print_job' || newDoc.type !== 'print_job') {
       deny('printing_service may only update print jobs');
     }

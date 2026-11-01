@@ -93,6 +93,12 @@ describe('print_access VDU: staff create', () => {
 		expect(verdict(tombstone, stored(), ctx(REG))).toEqual(REJECTED);
 	});
 
+	it.each(['printed', 'failed', 'expired'])('rejects deleting a %s job', (status) => {
+		const old = stored({ status, finished_at: '2026-11-01T00:03:00.000Z' });
+		const tombstone = { _id: old._id, _rev: '2-x', _deleted: true };
+		expect(verdict(tombstone, old, ctx(REG))).toEqual(REJECTED);
+	});
+
 	it('rejects a system_admin editing a job', () => {
 		expect(verdict(newJob({ _rev: '2-x' }), stored(), ctx(['system_admin']))).toEqual(REJECTED);
 	});
@@ -242,6 +248,9 @@ describe('print_access VDU: printing_service', () => {
 		return next;
 	}
 
+	/** What CouchDB passes as newDoc on a delete: only id, rev and the flag. */
+	const deletion = (old: Doc): Doc => ({ _id: old._id, _rev: '2-x', _deleted: true });
+
 	it('may claim a pending job (pending -> printing) keeping its attachments', () => {
 		expect(verdict(claimed(), stored(), SERVICE)).toEqual(ACCEPTED);
 	});
@@ -296,9 +305,27 @@ describe('print_access VDU: printing_service', () => {
 		expect(verdict(newJob({ created_by: 'printing_service' }), null, SERVICE)).toEqual(REJECTED);
 	});
 
-	it('rejects deleting a job', () => {
-		const tombstone = { _id: claimed()._id, _rev: '2-x', _deleted: true };
-		expect(verdict(tombstone, claimed(), SERVICE)).toEqual(REJECTED);
+	it('rejects deleting a printing job', () => {
+		expect(verdict(deletion(claimed()), claimed(), SERVICE)).toEqual(REJECTED);
+	});
+
+	it('rejects deleting a pending job', () => {
+		expect(verdict(deletion(stored()), stored(), SERVICE)).toEqual(REJECTED);
+	});
+
+	it.each(['printed', 'failed', 'expired'])('may delete a %s job (retention)', (status) => {
+		const old = finish(claimed(), status);
+		expect(verdict(deletion(old), old, SERVICE)).toEqual(ACCEPTED);
+	});
+
+	it('rejects deleting when there is no stored doc', () => {
+		const tombstone = { _id: 'print_job:01J0000000000000000000000A', _rev: '1-a', _deleted: true };
+		expect(verdict(tombstone, null, SERVICE)).toEqual(REJECTED);
+	});
+
+	it('rejects deleting a terminal doc that is not a print_job', () => {
+		const old = { _id: 'print_device:dev-1', _rev: '1-a', type: 'print_device', status: 'printed' };
+		expect(verdict(deletion(old), old, SERVICE)).toEqual(REJECTED);
 	});
 
 	it('rejects a type change', () => {
