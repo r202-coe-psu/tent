@@ -611,6 +611,59 @@ GET /api/v1/kiosk/banners/{id}/image?exp={unix_sec}&sig={hex}
 | ------ | ------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `POST` | `/api/internal/referral-close/worker/next` | `Authorization: Bearer <REFERRAL_WORKER_TOKEN>` (constant-time compare) · claim/ประมวลผลไม่เกิน 1 batch ต่อ request (proposed default 50) · `204` เมื่อไม่มีงาน · ไม่ตั้ง token → API ไม่รับ job ใหม่ |
 
+### 2.5 บัตร QR เจ้าหน้าที่ ([CR-211](../changes/03-C-supply/CR-211-staff-qr-card.md))
+
+> **สถานะ:** approved 2026-10-30 (#1011) · auth = central `_session` cookie · error shape ตามสัญญาข้างต้น ·
+> ทุก response ตอบ `cache-control: no-store` · ไม่คืน `staff_token_hash`, `phone`, `email` หรือ `_users` doc ทั้งก้อน
+
+QR payload ของเจ้าหน้าที่ = `TKT-STF-HASH-` + `staff_token_hash` เป็น hex **ตัวใหญ่** (ไม่เก็บ — สร้างตอนแสดง).
+ผู้รับ payload ต้อง `trim` + `toUpperCase` ก่อนเทียบ prefix และ hex ต้องเป็น `[0-9A-F]{64}`.
+user ที่มี `volunteer_id` ใช้ QR จิตอาสา (`TKT-VOL-HASH-…`, CR-127) แทน.
+
+| Method | Path | Auth | Request | Response |
+| ------ | ---- | ---- | ------- | -------- |
+| `GET` | `/api/v1/me/card` | `_session` ของตัวเอง | — | บัตรของตัวเอง (ด้านล่าง) |
+| `GET` | `/api/v1/users/staff-card?name=` | `system_admin` หรือ `shelter_manager` ที่มีศูนย์ใดศูนย์หนึ่งของ user | — | `{ name, display_name, position, roles[], payload }` สำหรับพิมพ์ |
+| `POST` | `/api/v1/users/staff-card/rotate` | `system_admin` หรือ `shelter_manager` ที่ดูแล**ทุก**ศูนย์ใน roles ของ user · หมุนของตัวเองไม่ได้ | `{ name }` | รูปเดียวกับ `staff-card` พร้อม payload ใหม่ · QR เก่าใช้ไม่ได้ทันทีทุกศูนย์ |
+| `POST` | `/api/v1/users/staff-card/resolve` | `_session` + `canAccessDistributionDesk(roles, shelter_code)` — `system_admin`, `shelter_manager` / `distribution_staff` ของศูนย์นั้น (ใช้ roles จาก `_session` ไม่เชื่อ body) | `{ payload, shelter_code }` | ผู้รับสำหรับหน้าแจก (ด้านล่าง) |
+
+`staff-card` / `rotate` ของ `shelter_manager` ใช้ได้เฉพาะ user ที่ไม่ใช่ `system_admin` หรือ manager (เหมือนกติกาจัดการ user ใน §3).
+`rotate` เขียนด้วย `_rev` เดิมและไม่แตะ field อื่น.
+
+**`GET /api/v1/me/card`:**
+
+```json
+{ "kind": "staff", "payload": "TKT-STF-HASH-…", "display_name": "…", "position": "…", "roles": ["…"] }
+{ "kind": "volunteer", "payload": "TKT-VOL-HASH-…", "display_name": "…", "volunteer_code": "V-012", "roles": ["…"] }
+{ "kind": "none", "reason": "no_token | volunteer_unlinked | inactive | server_admin" }
+```
+
+- `active: false` → `kind: "none"`, `reason: "inactive"`
+- มี `volunteer_id` → ตรวจลิงก์สองทาง (`volunteer.user_name === session.name`) ก่อนคืน QR จิตอาสา · ไม่ตรง → `volunteer_unlinked` ·
+  ยังไม่มี `tracking_token_hash` → ออกครั้งแรกได้ตาม CR-127 · มีแล้ว → ห้ามออกใหม่
+- ไม่มี `staff_token_hash` (รวม `personnel_type: "volunteer"` ที่ไม่มี `volunteer_id`) → `no_token` · endpoint นี้**ห้ามออก token staff**
+
+**`POST /api/v1/users/staff-card/resolve`:**
+
+```json
+{ "kind": "staff", "recipient_id": "user:staff01", "display_name": "…", "role_label": "…", "position": "…" }
+{ "kind": "volunteer", "recipient_id": "volunteer:01J…", "display_name": "…", "role_label": "…" }
+```
+
+ลำดับการตรวจ: สิทธิ์ผู้เรียกของศูนย์ → รูปแบบ payload → `_find` บน `_users` ด้วย hash ตัวเล็ก (ไม่สร้าง index) →
+`active` → user มี role ของศูนย์นั้น (`shelter:{code}`, `{code}:{capability}` หรือ `system_admin`).
+หน้าแจกบันทึก `distribution_log.recipient_type` ตาม `kind` และ `recipient_id` ตามที่คืน (schema.md §2.30).
+ไม่มี rate limit ใน application layer — ใช้ nginx `limit_req` ต่อ IP (CR-188).
+
+| Status | Code | เมื่อ |
+| ------ | ---- | ----- |
+| 403 | `FORBIDDEN` | ผู้เรียกไม่มีสิทธิ์หน้าแจกของศูนย์นั้น · user ถูกปิดใช้งาน (`active: false`) |
+| 422 | `VALIDATION` | ไม่ส่ง `payload`/`shelter_code` · payload ไม่ใช่รูปแบบบัตร staff |
+| 404 | `NOT_FOUND` | ไม่พบ hash **หรือ** user ไม่มี role ในศูนย์นั้น — **message เดียวกันทั้งสองกรณี** (ไม่บอกว่ามี hash ในศูนย์อื่น) |
+| 409 | `CONFLICT` | hash ซ้ำมากกว่า 1 user · user มี `volunteer_id` แต่ลิงก์สองทางไม่ตรง |
+
+ชื่อผู้รับ `user:{name}` ในประวัติการแจกแสดงผ่านรายชื่อเจ้าหน้าที่ของศูนย์ที่มีอยู่แล้ว (fallback แสดง username) — ไม่มี endpoint ใหม่.
+
 ## 3. Provisioning (system_admin เท่านั้น)
 
 ```
