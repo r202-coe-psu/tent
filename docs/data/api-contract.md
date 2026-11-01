@@ -664,6 +664,65 @@ user ที่มี `volunteer_id` ใช้ QR จิตอาสา (`TKT-VOL
 
 ชื่อผู้รับ `user:{name}` ในประวัติการแจกแสดงผ่านรายชื่อเจ้าหน้าที่ของศูนย์ที่มีอยู่แล้ว (fallback แสดง username) — ไม่มี endpoint ใหม่.
 
+### 2.6 บัญชีจิตอาสา — ผู้ประสานงานออก / แก้ / ถอนสิทธิ์ ([CR-213](../changes/06-A-volunteer/CR-213-coordinator-limited-access-grant.md), [CR-221](../changes/06-A-volunteer/CR-221-coordinator-grant-edit-and-roles.md))
+
+> **สถานะ:** CR-221 approved 2026-11-01 (#1044) · auth = central `_session` cookie · ศูนย์ตรวจกับ role ใน session (ไม่เชื่อ body) ·
+> error shape ตามสัญญาข้างต้น (`VALIDATION` = 422)
+
+| Method   | Path                                                   | Auth                                                                                     | Request                                                             | Response                                                                                                                                                                    |
+| -------- | ------------------------------------------------------ | ---------------------------------------------------------------------------------------- | ------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET`    | `/api/v1/volunteer-access/accounts?shelter_code=`      | `system_admin` / `shelter_manager` / `volunteer_coordinator` ของศูนย์นั้น · อื่น ๆ `403` | —                                                                   | `{ ok: true, accounts }` (ด้านล่าง)                                                                                                                                         |
+| `GET`    | `/api/v1/volunteer-access?shelter_code=&volunteer_id=` | `volunteer_coordinator` ของศูนย์นั้น                                                     | —                                                                   | บัญชีของโปรไฟล์: `{ email, has_account, grants[{ role, expires_at, mine }], permanent_roles[], last_ended }` (`mine` = ผู้เรียกเป็นผู้ออก — แสดงผลเท่านั้น ไม่ใช้ตัดสิทธิ์) |
+| `POST`   | `/api/v1/volunteer-access`                             | `volunteer_coordinator` ของศูนย์นั้น                                                     | `{ shelter_code, volunteer_id, email, password, role, expires_on }` | `{ ok: true, created, unchanged, name }`                                                                                                                                    |
+| `DELETE` | `/api/v1/volunteer-access`                             | `volunteer_coordinator` ของศูนย์นั้น                                                     | `{ shelter_code, volunteer_id, email, role }`                       | `{ ok: true }`                                                                                                                                                              |
+
+**`GET /api/v1/volunteer-access/accounts`** (CR-221 FR-6) — 1 request ต่อหน้า: แท็บรายชื่อ, แท็บผู้สมัครของงาน และหน้า "บัญชีจิตอาสา".
+นับเฉพาะบัญชีที่ผูก 2 ทาง: โปรไฟล์ใน `shelter_{code}` มี `user_name` = บัญชี **และ** บัญชีเป็น `personnel_type: "volunteer"` ที่ `volunteer_id` ชี้กลับโปรไฟล์นั้น (FR-7).
+ไม่คืนรหัสผ่าน, MFA, ข้อมูลติดต่อ, role ของศูนย์อื่น หรือบัญชีเจ้าหน้าที่.
+
+```json
+{
+  "ok": true,
+  "accounts": [
+    {
+      "volunteer_id": "volunteer:01J…",
+      "name": "vol@example.com",
+      "active": true,
+      "grants": [
+        { "role": "kitchen_staff", "expires_at": "2026-11-03T16:59:59.999Z" }
+      ],
+      "permanent_roles": ["registration_staff"]
+    }
+  ]
+}
+```
+
+- `name` = username (อีเมล) ที่ใช้ login · `active` = `_users.active`
+- `grants` = grant ของ VC ในศูนย์นี้ (มีวันหมด) · `permanent_roles` = role ในศูนย์นี้ที่ SM ให้ (ไม่มีวันหมด)
+- บัญชีที่ไม่มีทั้งสองอย่างยังอยู่ในรายการ (สถานะ "สิ้นสุดแล้ว")
+
+**`POST /api/v1/volunteer-access`** — ออกสิทธิ์ครั้งแรก ต่ออายุ ย่นอายุ หรือเปลี่ยน role ในคำขอเดียว (CR-221 FR-17, FR-18):
+
+- `role` ต้องอยู่ใน 10 role ที่ VC ออกได้ (`registration_staff`, `triage_staff`, `medical_staff`, `kitchen_staff`, `supply_coordinator`, `warehouse_staff`, `distribution_staff`, `pr_staff`, `facility_staff`, `security_officer`) · role อื่น `403`
+- `expires_on` (`YYYY-MM-DD`, Asia/Bangkok) บังคับ ตั้งแต่วันนี้ถึง +7 วัน
+- role เดิมของบัญชีในศูนย์นี้ → ต่ออายุ (`role_grant.renewed`) หรือย่นอายุ (`role_grant.shortened`) กับ grant ใดก็ได้ในศูนย์ ไม่ต้องเป็นผู้ออก · grant คง `granted_by` / `granted_at` ของผู้ออกเดิม
+- role ใหม่ → **แทนที่** ทุก grant ของศูนย์นี้ใน `PUT` `_users` ครั้งเดียว: ถอด `SHxxx:<role เดิม>` + grant เดิม เพิ่ม `SHxxx:<role ใหม่>` + grant ใหม่ (`granted_by` = ผู้เรียก) · `shelter:SHxxx` คงอยู่ · audit `role_grant.revoked` (grant เดิม แต่ละตัว) + `role_grant.issued`
+- audit ของการถอน / แก้ grant ที่ผู้อื่นออก: `actor` = ผู้เรียก, `context.granted_by` = ผู้ออกเดิม
+- บัญชีเดิมต้องเป็นบัญชีจิตอาสาของโปรไฟล์นี้ที่ active และไม่ใช่ SA / SM / VC · ไม่เปลี่ยนรหัสผ่านเดิม · สร้างบัญชีใหม่เมื่อยังไม่มี (บังคับเปลี่ยนรหัสผ่านครั้งแรก)
+
+| Status | Code         | เมื่อ                                                                                                                                                                                                                                     |
+| ------ | ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 403    | `FORBIDDEN`  | ผู้เรียกไม่ใช่ VC ของศูนย์ที่ระบุ · role นอก 10 รายการ · บัญชีเดิมออกสิทธิ์ผ่าน VC ไม่ได้ (เจ้าหน้าที่ / อีกโปรไฟล์ / ปิดใช้งาน / SA / SM / VC / ตัวผู้เรียกเอง) · บัญชีมี role ที่ SM ให้ (ไม่มี grant) ในศูนย์นี้ — แก้ที่หน้าผู้ใช้งาน |
+| 422    | `VALIDATION` | โปรไฟล์ยังไม่ยืนยันตัวตน**ในศูนย์นี้** — "อาสาสมัครต้องยืนยันตัวตนก่อนจึงจะออกสิทธิ์ได้" (ผลยืนยันของศูนย์อื่นใช้แทนไม่ได้; **ยกเว้น**แก้ grant ที่บัญชีมีอยู่แล้วในศูนย์นี้ ไม่ต้องยืนยันซ้ำ — CR-221 FR-3)                              |
+| 422    | `VALIDATION` | โปรไฟล์ `status: inactive` — "เปิดใช้งานอาสาสมัครก่อนจึงจะออกสิทธิ์ได้" (FR-21)                                                                                                                                                           |
+| 422    | `VALIDATION` | `expires_on` ขาด / นอกช่วง · อีเมลไม่ถูกต้อง · เบอร์ในโปรไฟล์ไม่ใช่มือถือ 10 หลัก · ไม่พบโปรไฟล์ในศูนย์นี้                                                                                                                                |
+| 409    | `CONFLICT`   | โปรไฟล์มีบัญชีอื่นแล้ว · `_users` เปลี่ยนระหว่างอ่านกับเขียน (โหลดใหม่)                                                                                                                                                                   |
+
+**`DELETE /api/v1/volunteer-access`** — ถอน grant ใดก็ได้ของศูนย์ตัวเอง ไม่ต้องเป็นผู้ออก (FR-17): ถอด role + grant (และ `shelter:SHxxx` เมื่อเป็น role สุดท้ายของศูนย์) บัญชีและรหัสผ่านอยู่ต่อ · role ถาวรจาก SM (ไม่มี grant) / ไม่พบ grant → `403`.
+
+**`POST /api/v1/users` ที่มี `volunteer_id`** (เส้นทาง SA / SM ออกสิทธิ์ให้จิตอาสา): โปรไฟล์ต้องยืนยันตัวตนในศูนย์ของ role ที่ให้ — ไม่ผ่าน `422 VALIDATION` "อาสาสมัครต้องยืนยันตัวตนก่อนจึงจะออกสิทธิ์ได้" (CR-221 FR-3).
+**`PUT /api/v1/users` field `active`** ของบัญชี `personnel_type: "volunteer"`: เปลี่ยนได้เฉพาะ `system_admin` — SM ได้ `403` "บัญชีจิตอาสาใช้การถอนสิทธิ์ในศูนย์แทนการปิดบัญชี" (FR-23).
+
 ## 3. Provisioning (system_admin เท่านั้น)
 
 ```
