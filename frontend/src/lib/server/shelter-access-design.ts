@@ -74,6 +74,19 @@ export const DAILY_SOP_ROLE_MANGO_INDEX = {
 };
 
 /**
+ * Index behind the volunteer access dialog's "how did the last grant end" lookup (CR-221, #1044):
+ * the `audit` docs of one account (`target_id`) by `reason` (`role_grant.revoked` / `.expired` /
+ * `.verification_revoked`), read by `lastGrantEnding`. Audit docs grow without bound, so the query
+ * must not scan them all.
+ */
+export const ROLE_GRANT_AUDIT_MANGO_INDEX = {
+	index: { fields: ['type', 'target_id', 'reason'] },
+	ddoc: 'role-grant-audit-target',
+	name: 'role-grant-audit-by-target',
+	type: 'json' as const
+};
+
+/**
  * Index behind the back-office "รับแล้ว" list (#821): received donations, newest first,
  * `_id` as the tie-breaker. The route queries with `allow_fallback: false`, so a shelter
  * DB without this index answers 503 instead of being scanned.
