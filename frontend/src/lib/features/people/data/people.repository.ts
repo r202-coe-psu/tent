@@ -133,8 +133,9 @@ export interface PeopleRepository {
 	patchEvacuee(id: string, patch: EvacueePatch): Promise<Evacuee>;
 	/**
 	 * Show or hide a person in the relative search at the person's request (T-40). Writes the
-	 * evacuee and its `privacy_change` audit entry in one request and throws when either fails
-	 * (a stale `_rev` included). Resolves to `null` when the visibility already matches.
+	 * evacuee and its `privacy_change` audit entry in one request and throws when either fails.
+	 * It re-reads the evacuee first, so a `_rev` conflict only happens in the short gap before
+	 * `_bulk_docs`. Resolves to `null` when the visibility already matches.
 	 */
 	setSearchVisibility(
 		evacueeId: string,

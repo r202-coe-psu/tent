@@ -4,7 +4,7 @@
 	import * as AlertDialog from '$lib/components/ui/alert-dialog/index.js';
 	import { Switch } from '$lib/components/ui/switch/index.js';
 	import { Label } from '$lib/components/ui/label/index.js';
-	import { CONSENT_COPY } from '$lib/features/consent/server';
+	import { CONSENT_COPY } from '$lib/features/consent';
 	import type { AuthorContext } from '$lib/db/model';
 	import type { Evacuee } from '../../domain/people';
 	import { showingNeedsFullNotice } from '../../domain/search-visibility';
