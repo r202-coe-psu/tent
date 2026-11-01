@@ -10,6 +10,7 @@ export { default as KioskBackButton } from './ui/kiosk-back-button.svelte';
 export { default as KioskNoticePanel } from './ui/kiosk-notice-panel.svelte';
 export { default as KioskInlineAlert } from './ui/kiosk-inline-alert.svelte';
 export { default as KioskLabelSheet } from './ui/kiosk-label-sheet.svelte';
+export { default as KioskLabelCard } from './ui/kiosk-label-card.svelte';
 export { default as KioskDeviceInfo } from './ui/kiosk-device-info.svelte';
 export { default as KioskPrintStatus } from './ui/kiosk-print-status.svelte';
 export { default as KioskBusyStatus } from './ui/kiosk-busy-status.svelte';

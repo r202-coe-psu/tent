@@ -165,6 +165,20 @@ describe('buildDonationItemsPayload', () => {
 		expect(buildDonationItemsPayload([], t)).toEqual([]);
 	});
 
+	it("sends the card's point as need_drop_off_point_id only when defined (FR-AP-13)", () => {
+		const [withPoint, withNull, typed] = buildDonationItemsPayload(
+			[
+				{ ...line(1), needDropOffPointId: 'point-gym' },
+				{ ...line(1), needDropOffPointId: null },
+				line(1)
+			],
+			t
+		);
+		expect(withPoint.need_drop_off_point_id).toBe('point-gym');
+		expect(withNull).toHaveProperty('need_drop_off_point_id', null);
+		expect(typed).not.toHaveProperty('need_drop_off_point_id');
+	});
+
 	it('keeps the existing mapping and never sends needQty', () => {
 		const item = { name: '', unit: '', amount: 5, condition: 'new', remark: '', needQty: 365 };
 		const [p] = buildDonationItemsPayload([item], t);
@@ -176,14 +190,9 @@ describe('buildDonationItemsPayload', () => {
 		expect(p).not.toHaveProperty('needQty');
 	});
 
-	// CR-206 FR-MP-1, FR-MP-11 — the form decides each line's point; the payload carries it as is.
-	it("sends each line's drop-off point, null included, and leaves it out when unset", () => {
-		const [picked, none, unset] = buildDonationItemsPayload(
-			[{ ...line(1), dropOffPointId: 'point-gym' }, { ...line(1), dropOffPointId: null }, line(1)],
-			t
-		);
-		expect(picked.drop_off_point_id).toBe('point-gym');
-		expect(none.drop_off_point_id).toBeNull();
-		expect(unset).not.toHaveProperty('drop_off_point_id');
+	// Staff-assigned drop-off FR-AP-7 — the BFF decides each line's point, the donor sends none.
+	it('sends no drop-off point', () => {
+		const [p] = buildDonationItemsPayload([line(1)], t);
+		expect(p).not.toHaveProperty('drop_off_point_id');
 	});
 });

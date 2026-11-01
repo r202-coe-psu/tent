@@ -25,6 +25,9 @@ export type PublicNeedItem = {
 	status?: string;
 	category?: string;
 	urgency?: 'critical' | 'important' | 'normal' | string;
+	/** One row per item + drop-off point (CR-206 A2): `item_id` can repeat in a shelter. */
+	drop_off_point_id?: string | null;
+	drop_off_point_name?: string | null;
 	target?: number;
 	received?: number;
 };
