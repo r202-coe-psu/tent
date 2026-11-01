@@ -25,6 +25,7 @@
 	} from '../domain/food-sphere-table';
 	import type { DocAlertStatus } from '../domain/replenishment-calc';
 	import DocStatusBadge from './doc-status-badge.svelte';
+	import PeopleTotalTooltip from './people-total-tooltip.svelte';
 	import { qtyGt } from '$lib/utils/qty';
 
 	// Icons
@@ -75,9 +76,6 @@
 	const staffCount = $derived(peopleQuery.data?.staff ?? 0);
 	const volunteerCount = $derived(peopleQuery.data?.volunteers ?? 0);
 	const effectiveOccupancy = $derived(evacueeCount + staffCount + volunteerCount);
-	const peopleBreakdown = $derived(
-		`ผู้ประสบภัย ${evacueeCount} · เจ้าหน้าที่ ${staffCount} · จิตอาสา ${volunteerCount} = ${effectiveOccupancy} คน`
-	);
 
 	const isLoading = $derived(
 		itemMastersQuery.isLoading ||
@@ -297,6 +295,15 @@
 		return '';
 	}
 </script>
+
+{#snippet peopleTotal()}
+	<PeopleTotalTooltip
+		total={effectiveOccupancy}
+		evacuees={evacueeCount}
+		staff={staffCount}
+		volunteers={volunteerCount}
+	/>
+{/snippet}
 
 <div class="space-y-4 sm:space-y-6">
 	<!-- Summary KPI Cards -->
@@ -539,7 +546,7 @@
 					แสดง {filteredGroups.reduce((acc, g) => acc + g.items.length, 0)} รายการใน {filteredGroups.length}
 					กลุ่ม
 					{#if effectiveOccupancy > 0}
-						<span class="ml-1 text-muted-foreground">· {peopleBreakdown}</span>
+						<span class="ml-1">· {@render peopleTotal()}</span>
 					{/if}
 				</div>
 			</div>
@@ -689,7 +696,7 @@
 												</span>
 											{/if}
 											<span class="text-[11px] text-muted-foreground">
-												ฐานคำนวณ: <strong class="text-foreground">{peopleBreakdown}</strong>
+												ฐานคำนวณ: {@render peopleTotal()}
 											</span>
 										</div>
 
@@ -837,7 +844,7 @@
 															</span>
 														{/if}
 														<span class="text-[11px] text-muted-foreground">
-															ฐานคำนวณ: <strong class="text-foreground">{peopleBreakdown}</strong>
+															ฐานคำนวณ: {@render peopleTotal()}
 														</span>
 													</div>
 												</td>
