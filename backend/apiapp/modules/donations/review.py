@@ -12,21 +12,15 @@ stays in ``use_case.py``.
 
 from __future__ import annotations
 
-from collections.abc import Collection, Mapping, Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
-from decimal import Decimal, InvalidOperation
 from typing import Any, Literal
 
 ReviewStatus = Literal["approved", "pending", "rejected"]
+ItemEditGate = Literal["editable", "already_reviewed", "closed"]
 
 #: The three per-line fields CR-174 FR-1 adds to ``donation.items[]``.
 REVIEW_FIELDS = ("review_status", "review_reason_code", "review_reason")
-
-#: The fields of ``DonationItemInput`` — everything the donor can change on a line. A line
-#: equal to an old one on all of these was not edited (FR-18a). The edit form sends back
-#: only item_id/free_text/qty/unit; ``update_items`` re-attaches the rest from the held
-#: line first (``_carry_line_details``), or no line would ever match.
-MATCH_FIELDS = ("item_id", "category", "free_text", "qty", "unit", "condition", "note")
 
 #: Status a booking takes when it has no lines at all. Nothing to approve, so it waits for
 #: a person exactly as every booking did before CR-174.
@@ -41,7 +35,6 @@ class ReviewOutcome:
     #: The booking status read off those lines.
     status: str
     #: Index into ``items`` of every line approved automatically by this call (FR-26).
-    #: A line that kept an approval it already had is not counted.
     auto_approved_lines: list[int] = field(default_factory=list)
 
 
@@ -67,30 +60,15 @@ def booking_status(items: Sequence[Mapping[str, Any]]) -> str:
     return "pending_review"
 
 
-def _with_review(
-    item: Mapping[str, Any],
-    review_status: str,
-    reason_code: Any = None,
-    reason: Any = None,
-) -> dict[str, Any]:
-    row = {key: value for key, value in item.items() if key not in REVIEW_FIELDS}
-    row["review_status"] = review_status
-    # The two reason fields are written only on a rejection (FR-1).
-    if review_status == "rejected":
-        if reason_code is not None:
-            row["review_reason_code"] = reason_code
-        if reason is not None:
-            row["review_reason"] = reason
-    return row
-
-
 def _without_review(item: Mapping[str, Any]) -> dict[str, Any]:
     return {key: value for key, value in item.items() if key not in REVIEW_FIELDS}
 
 
 def _auto_review(item: Mapping[str, Any], reserved: bool) -> dict[str, Any]:
     """FR-2: a line holding a reservation in the campaign is approved; any other waits."""
-    return _with_review(item, "approved" if reserved else "pending")
+    row = _without_review(item)
+    row["review_status"] = "approved" if reserved else "pending"
+    return row
 
 
 def review_new_booking(
@@ -107,94 +85,49 @@ def review_new_booking(
     )
 
 
-def _normalised(value: Any, *, numeric: bool) -> Any:
-    # The edit form trims what it sends back; the donate wizard does not. Unstripped, a name
-    # typed with a trailing space read as edited on the first edit and lost its review.
-    if isinstance(value, str):
-        value = value.strip()
-    # FR-18a: an empty value and a missing field are the same thing.
-    if value is None or value == "":
-        return None
-    if numeric:
-        try:
-            # normalize() so 5, "5", "5.0" and 5.00 all compare equal.
-            return Decimal(str(value)).normalize()
-        except InvalidOperation, TypeError, ValueError:
-            return str(value)
-    return value
+#: CR-196 FR-LK-4 — what a donor's item edit meets, by booking status. ``verifying`` (the QR
+#: is out) and ``rejected`` already carry a review's outcome; received, cancelled, expired
+#: and redirected bookings are no longer the donor's at all.
+_ITEM_EDIT_BY_STATUS: Mapping[str, ItemEditGate] = {
+    "declared": "editable",
+    "pending_review": "editable",
+    "verifying": "already_reviewed",
+    "rejected": "already_reviewed",
+}
+
+#: A line the campaign rule or a person has decided. ``pending`` is still waiting.
+_DECIDED = frozenset({"approved", "rejected"})
 
 
-def line_key(item: Mapping[str, Any]) -> tuple[Any, ...]:
-    """What makes two lines "the same line" for FR-18a."""
-    return tuple(_normalised(item.get(name), numeric=name == "qty") for name in MATCH_FIELDS)
+def item_edit_gate(status: str, items: Sequence[Mapping[str, Any]]) -> ItemEditGate:
+    """CR-196 FR-LK-4 — whether the donor may still change this booking's lines.
 
-
-def _has_review(items: Sequence[Mapping[str, Any]]) -> bool:
-    return any(item.get("review_status") for item in items)
+    Once anything was decided — a campaign line approved automatically, or staff deciding
+    a line — the lines are fixed: an edit could otherwise re-pair a refused line with an
+    approved one and come out approved (review #783 H1). The donor cancels and books
+    again, or tells staff at drop-off. Mirrors ``donationItemEditGate`` on the BFF.
+    """
+    gate = _ITEM_EDIT_BY_STATUS.get(status, "closed")
+    if gate == "editable" and any(item.get("review_status") in _DECIDED for item in items):
+        return "already_reviewed"
+    return gate
 
 
 def review_edited_booking(
     *,
-    previous_items: Sequence[Mapping[str, Any]],
     previous_status: str,
     items: Sequence[Mapping[str, Any]],
     reserved: Sequence[bool],
-    hold_for_review: Collection[int] = (),
 ) -> ReviewOutcome:
-    """FR-18 / FR-18a / FR-18c — re-review a basket the donor just edited.
+    """FR-18 — review a basket the donor just edited. ``reserved[i]``: line ``i`` holds quota.
 
-    ``previous_items``/``previous_status`` are the booking as it stood before the edit
-    (from CouchDB when the BFF sent it, else the Mongo copies). ``items`` is the new
-    basket and ``reserved[i]`` whether line ``i`` holds quota after this edit.
-
-    A new line equal to an unused old line on every ``MATCH_FIELDS`` field keeps that old
-    line's result, rejected included; each old line can be claimed once, so two identical
-    new lines do not both inherit one approval. Every other line is judged by FR-2, except
-    the indexes in ``hold_for_review``: lines that could not be told apart from an old one,
-    which wait for staff whatever they hold.
+    ``item_edit_gate`` lets only a booking nothing was decided on reach an edit, so there
+    is no earlier result to keep: every line is judged by FR-2 like a new booking. A
+    ``declared`` booking (from before schema_v 7) was never put to review and stays there
+    without review fields (FR-18c).
     """
-    if len(items) != len(reserved):
-        raise ValueError("reserved must have one flag per line")
-
-    legacy = not _has_review(previous_items)
-
-    if legacy and previous_status == "declared":
-        # FR-18c: a booking still at `declared` was never put to review. Leave it there.
+    if previous_status == "declared":
+        if len(items) != len(reserved):
+            raise ValueError("reserved must have one flag per line")
         return ReviewOutcome(items=[_without_review(item) for item in items], status="declared")
-
-    if legacy and previous_status == "verifying":
-        # FR-18c: staff approved the whole booking, which is every line.
-        previous = [_with_review(item, "approved") for item in previous_items]
-    elif legacy:
-        # FR-18c: `pending_review` (or anything else) from before schema_v 7 — nothing was
-        # judged per line yet, so every line is judged now, exactly like a new booking.
-        previous = []
-    else:
-        previous = [dict(item) for item in previous_items]
-
-    unclaimed: dict[tuple[Any, ...], list[Mapping[str, Any]]] = {}
-    for item in previous:
-        unclaimed.setdefault(line_key(item), []).append(item)
-
-    rows: list[dict[str, Any]] = []
-    auto_approved: list[int] = []
-    for index, (item, held) in enumerate(zip(items, reserved, strict=True)):
-        candidates = unclaimed.get(line_key(item))
-        if candidates:
-            match = candidates.pop(0)
-            if match.get("review_status"):
-                rows.append(
-                    _with_review(
-                        item,
-                        str(match["review_status"]),
-                        match.get("review_reason_code"),
-                        match.get("review_reason"),
-                    )
-                )
-                continue
-        row = _auto_review(item, held and index not in hold_for_review)
-        if row["review_status"] == "approved":
-            auto_approved.append(index)
-        rows.append(row)
-
-    return ReviewOutcome(items=rows, status=booking_status(rows), auto_approved_lines=auto_approved)
+    return review_new_booking(items, reserved)

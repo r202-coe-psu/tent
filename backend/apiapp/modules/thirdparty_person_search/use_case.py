@@ -127,7 +127,7 @@ class ThirdPartyPersonSearchUseCase:
 
         persons = await self._evacuee.find_persons(parsed, exclude_statuses=_EXCLUDED_STATUSES)
         # No household lookup (#736 decision 4); `family_members` is dropped from the item.
-        results = await self._evacuee.build_results(persons, include_family=False)
+        results = await self._evacuee.build_external_results(persons, include_family=False)
         items = [
             PersonSearchItem(
                 **r.model_dump(exclude={"family_members", "checked_in_at"}),

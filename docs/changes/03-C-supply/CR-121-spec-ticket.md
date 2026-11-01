@@ -3,7 +3,7 @@ id: CR-121
 title: ระบบตั๋วเบิกจ่ายพัสดุและอาหาร 4-in-1 (RequisitionTicket) พร้อมระบบแจกจ่ายหน้างานและติดตามของยืม (DistributionLog)
 status: approved
 date: 2026-09-12
-updated: 2026-10-21 # CR-179 FR-SEC-01 Step 2 เพิ่ม warehouse_staff/supply_coordinator
+updated: 2026-10-29 # หมายเหตุ CR-208 ใต้ AC-DST-06.1 (ของเหลือคืนเข้า lot ต้นทาง)
 requested_by: "Team Leader (ฝ่ายปฏิบัติการหน้างาน โรงครัว และคลังสินค้า)"
 decided_by: Project Owner
 layer: stable
@@ -668,6 +668,7 @@ export interface MealService extends BaseDoc {
 #### FR-DST-06: การตรวจรับคืนเข้าสต็อกคลังและกระทบยอดส่วนต่าง (WMS Discrepancy Reconciliation)
 - **คำสั่ง:** เจ้าหน้าที่คลังเปิดดูตั๋วสถานะ `RETURN_PENDING_RECEIPT` ที่ `/back-office/supply` ตรวจนับของจริงเทียบกับยอดที่หน้างานส่งมา หากพบยอดคลาดเคลื่อน/ของหาย ให้แก้ไขตัวเลขรับเข้าจริง และกดปุ่ม `[ 📦 ยืนยันตรวจรับของคืนเข้าคลัง ]`
 - **AC-DST-06.1:** ระบบต้องบันทึก `stock_ledger` รับของสภาพดีกลับเข้าคลัง (`qty: returned_qty`, `reason: 'receive'`, `ref_id: ticket._id`, `lot: { note: 'distribution_return' }`) โดยระบุ `ref_id` ชี้ไปยัง `requisition_ticket` และห้ามมีฟิลด์ `notes` ระดับบนของ `stock_ledger`
+  - > **แก้โดย [CR-208](CR-208-lot-return-warehouse.md) (approved 2026-10-28):** บันทึก `reason: 'distribution_return'`, `ref_id: ticket._id`, `lot_ref` = lot ต้นทาง 1 แถวต่อ (ชนิด, lot) ตามกติกาแบ่งยอด CR-208 §2; ยอดที่ระบุ lot ต้นทางไม่ได้ยังลง `reason: 'receive'` + `lot: { note: 'distribution_return' }` เป็น lot ใหม่ (CR-208 §1.1); ห้ามมี `notes` ระดับบน — คงเดิม
 - **AC-DST-06.2:** ส่วนต่างที่หายไปต้องบันทึกลงใน `TicketItem.discrepancy_qty` และแจ้งเตือนไปยังผู้จัดการคลัง
 - **AC-DST-06.3:** ปรับสถานะตั๋วเป็น `RETURN_COMPLETED` จบวงจรการเบิกจ่ายสมบูรณ์ 100%
 

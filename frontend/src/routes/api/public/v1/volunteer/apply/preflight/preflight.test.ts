@@ -100,6 +100,16 @@ describe('POST /api/public/v1/volunteer/apply/preflight', () => {
 		expect(preflightPublicVolunteerApplication).not.toHaveBeenCalled();
 	});
 
+	it.each(['022222222', '02-222-2222', 'ไม่มี'])(
+		'rejects a non-mobile phone "%s"',
+		async (phone) => {
+			const response = await POST(makeEvent({ ...input, phone }));
+
+			expect(response.status).toBe(400);
+			expect(preflightPublicVolunteerApplication).not.toHaveBeenCalled();
+		}
+	);
+
 	it('rejects a body that is not JSON', async () => {
 		const response = await POST(makeEvent('{not json'));
 

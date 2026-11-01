@@ -53,7 +53,9 @@ export type ReferralTimeline = z.infer<typeof referralTimelineSchema>;
 
 export const evacueeSummarySchema = z.object({
 	first_name: z.string().min(1),
-	last_name: z.string().min(1),
+	// May be empty: registration accepts a mononym (people `last_name` defaults to ''), so the
+	// summary snapshot must too, or such evacuees cannot be referred.
+	last_name: z.string(),
 	gender: z.string().optional()
 });
 export type EvacueeSummary = z.infer<typeof evacueeSummarySchema>;
@@ -207,13 +209,50 @@ export type ReferralInput = z.infer<typeof rawReferralInputSchema>;
 // Query / Filter Schemas
 // ---------------------------------------------------------------------------
 
+export const referralDirectionFilterSchema = z.enum(['outgoing', 'incoming']);
+
 export const referralFilterSchema = z.object({
 	status: referralStatusSchema.optional(),
 	evacuee_id: z.string().optional(),
 	limit: z.number().int().positive().max(1000).default(50),
 	skip: z.number().int().nonnegative().default(0),
-	sort: z.enum(['created_at_desc', 'created_at_asc']).default('created_at_desc')
+	sort: z.enum(['created_at_desc', 'created_at_asc']).default('created_at_desc'),
+	/** Omitted = legacy `$or` over both directions (used for `evacuee_id` lookups). */
+	direction: referralDirectionFilterSchema.optional(),
+	/** Opaque Mango bookmark from the previous page; never combined with `skip`. */
+	bookmark: z.string().max(2000).optional()
 });
+
+const DEFAULT_LIST_LIMIT = 50;
+const MAX_LIST_LIMIT = 200;
+
+/**
+ * Query string of `GET /api/back-office/referral`. Empty values count as absent; `limit` must be
+ * an integer in 1–200 (default 50). Anything else is rejected (the BFF answers 400).
+ */
+export const referralListQuerySchema = z.object({
+	limit: z
+		.string()
+		.regex(/^\d+$/, 'limit must be an integer')
+		.transform(Number)
+		.pipe(z.number().int().min(1).max(MAX_LIST_LIMIT))
+		.optional()
+		.transform((n) => n ?? DEFAULT_LIST_LIMIT),
+	bookmark: z.string().max(2000).optional(),
+	status: referralStatusSchema.optional(),
+	direction: referralDirectionFilterSchema.optional(),
+	sort: z.enum(['created_at_desc', 'created_at_asc']).optional(),
+	evacuee_id: z.string().optional()
+});
+
+export type ReferralDirectionFilter = z.infer<typeof referralDirectionFilterSchema>;
+
+/** One server page of the referral list (Mango bookmark paging). */
+export type ReferralPage = {
+	items: Referral[];
+	bookmark: string | null;
+	hasMore: boolean;
+};
 
 export type ReferralFilter = z.input<typeof referralFilterSchema>;
 export type ParsedReferralFilter = z.infer<typeof referralFilterSchema>;

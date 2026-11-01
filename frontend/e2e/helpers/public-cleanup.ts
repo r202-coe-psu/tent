@@ -11,8 +11,9 @@
  * worker, FastAPI on :9000).
  */
 
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
+import { nextClosedAt } from '../../src/lib/features/shelters/domain/closed-at';
 import { bootstrapAdminSession, couchReq } from './couch';
 import { appBaseUrl, IS_REMOTE } from './e2e-env';
 
@@ -62,8 +63,10 @@ export async function publicShelterStatus(code: string): Promise<string | undefi
 
 /**
  * Remove a shelter an E2E run created through the UI:
- *  1. set it `closed` and wait for the projection (the row the worker keeps in
- *     Mongo after a delete then reads "closed", not "open");
+ *  1. set it `closed` (stamping `closed_at` like the app does, so a run whose
+ *     later steps fail still ages out of public search) and wait for the
+ *     projection (the row the worker keeps in Mongo after a delete then reads
+ *     "closed", not "open");
  *  2. delete the registry master — the worker cascades that to the shelter's
  *     public persons and needs;
  *  3. delete its CouchDB database;
@@ -82,10 +85,17 @@ export async function teardownShelter(code: string): Promise<void> {
 			throw new Error(`Refusing to tear down non-E2E shelter ${code} ("${doc.name}")`);
 		}
 		const path = `/registry/${encodeURIComponent(String(doc._id))}`;
+		const now = new Date().toISOString();
 		const closed = await couchReq('PUT', path, {
 			...doc,
 			operation_status: 'closed',
-			updated_at: new Date().toISOString()
+			closed_at: nextClosedAt(
+				(doc.operation_status as string | undefined) ?? null,
+				'closed',
+				doc.closed_at as string | null | undefined,
+				now
+			),
+			updated_at: now
 		});
 		if (closed.status >= 400) throw new Error(`close ${code} failed (HTTP ${closed.status})`);
 		await waitForProjection(
@@ -277,62 +287,96 @@ export async function deleteUnassignedRegistration(id: string): Promise<void> {
  * worker after a failed serial test, which wipes module state — the ledger survives that (and
  * a crashed run), so the next teardown deletes exactly the ids this suite created, never
  * anything found by searching.
+ *
+ * One file per suite (`LEDGER_DIR/<suite>.json`). Suites run on parallel workers, so a purge may
+ * only ever see what its own suite recorded — a shared ledger let one suite's `beforeAll` delete
+ * another suite's live shelter. `suite` is a stable id, normally the spec file's basename
+ * (e.g. `'onsite-stations-flow'`). Suites that spread over several workers must give each worker
+ * its own id (see `distribution/fixtures.ts`) so two writers never share a file.
  */
-const LEDGER_PATH = 'node_modules/.cache/pre-register-e2e-created.json';
+const LEDGER_DIR = 'node_modules/.cache/e2e-created';
 
 interface Ledger {
 	queue: string[];
 	shelters: string[];
 }
 
-function readLedger(): Ledger {
+const ledgerPath = (suite: string) => `${LEDGER_DIR}/${suite.replace(/[^\w.-]/g, '_')}.json`;
+
+function parseLedger(path: string): Ledger {
 	try {
-		const raw = JSON.parse(readFileSync(LEDGER_PATH, 'utf8')) as Partial<Ledger>;
+		const raw = JSON.parse(readFileSync(path, 'utf8')) as Partial<Ledger>;
 		return { queue: raw.queue ?? [], shelters: raw.shelters ?? [] };
 	} catch {
 		return { queue: [], shelters: [] };
 	}
 }
 
-function writeLedger(ledger: Ledger): void {
-	mkdirSync(dirname(LEDGER_PATH), { recursive: true });
-	writeFileSync(LEDGER_PATH, JSON.stringify(ledger));
+function readLedger(suite: string): Ledger {
+	return parseLedger(ledgerPath(suite));
 }
 
-export function recordCreatedQueueId(id: string): void {
-	const ledger = readLedger();
-	if (!ledger.queue.includes(id)) writeLedger({ ...ledger, queue: [...ledger.queue, id] });
-}
-
-export function recordCreatedShelter(code: string): void {
-	const ledger = readLedger();
-	if (!ledger.shelters.includes(code)) {
-		writeLedger({ ...ledger, shelters: [...ledger.shelters, code] });
+function writeLedger(suite: string, ledger: Ledger): void {
+	const path = ledgerPath(suite);
+	if (ledger.queue.length === 0 && ledger.shelters.length === 0) {
+		rmSync(path, { force: true });
+		return;
 	}
+	mkdirSync(dirname(path), { recursive: true });
+	// write + rename so a concurrent reader never sees a half-written file
+	const tmp = `${path}.${process.pid}.tmp`;
+	writeFileSync(tmp, JSON.stringify(ledger));
+	renameSync(tmp, path);
 }
 
-/** Drop a shelter code from the ledger once it has been torn down. */
-export function forgetCreatedShelter(code: string): void {
-	const ledger = readLedger();
-	if (ledger.shelters.includes(code)) {
-		writeLedger({ ...ledger, shelters: ledger.shelters.filter((c) => c !== code) });
+export function recordCreatedQueueId(id: string, suite: string): void {
+	const ledger = readLedger(suite);
+	if (!ledger.queue.includes(id)) writeLedger(suite, { ...ledger, queue: [...ledger.queue, id] });
+}
+
+export function recordCreatedShelter(code: string, suite: string): void {
+	const ledger = readLedger(suite);
+	if (!ledger.shelters.includes(code)) {
+		writeLedger(suite, { ...ledger, shelters: [...ledger.shelters, code] });
 	}
 }
 
 /**
- * Delete everything the ledger (plus `extraQueueIds`) lists, and the registrations that
- * carry this run's `marker`, then empty the ledger. Shelters go through `teardownShelter`,
- * which refuses anything that is not an `E2E …` shelter.
+ * Drop a shelter code from every suite's ledger once it has been torn down. A code is unique to
+ * the suite that created it, so no suite needs to be named — and `teardownShelter` (which does
+ * not know its caller's suite) can call this.
+ */
+export function forgetCreatedShelter(code: string): void {
+	let files: string[];
+	try {
+		files = readdirSync(LEDGER_DIR).filter((f) => f.endsWith('.json'));
+	} catch {
+		return;
+	}
+	for (const file of files) {
+		const suite = file.slice(0, -'.json'.length);
+		const ledger = readLedger(suite);
+		if (ledger.shelters.includes(code)) {
+			writeLedger(suite, { ...ledger, shelters: ledger.shelters.filter((c) => c !== code) });
+		}
+	}
+}
+
+/**
+ * Delete everything `suite`'s ledger (plus `extraQueueIds`) lists, and the registrations that
+ * carry this run's `marker`, then empty that ledger. Other suites' ledgers are never touched.
+ * Shelters go through `teardownShelter`, which refuses anything that is not an `E2E …` shelter.
  *
  * On a remote target without `E2E_FASTAPI_URL` the central queue is unreachable: the marker
  * sweep is skipped when nothing was queued (suites that never touch the queue, e.g. onsite),
  * and a run that did queue documents fails loudly rather than leave them behind silently.
  */
 export async function purgeCreatedData(
+	suite: string,
 	marker: string,
 	extraQueueIds: Iterable<string> = []
 ): Promise<{ queue: string[]; shelters: string[] }> {
-	const ledger = readLedger();
+	const ledger = readLedger(suite);
 	const queue = new Set<string>([...ledger.queue, ...extraQueueIds]);
 	const queueReachable = !IS_REMOTE || Boolean(process.env.E2E_FASTAPI_URL);
 	if (!queueReachable && queue.size > 0) {
@@ -345,6 +389,7 @@ export async function purgeCreatedData(
 	}
 	for (const id of queue) await deleteUnassignedRegistration(id);
 	for (const code of ledger.shelters) await teardownShelter(code);
-	writeLedger({ queue: [], shelters: [] });
+	// teardownShelter forgets what it removed; whatever it could not remove stays for the next purge
+	writeLedger(suite, { queue: [], shelters: readLedger(suite).shelters });
 	return { queue: [...queue], shelters: ledger.shelters };
 }

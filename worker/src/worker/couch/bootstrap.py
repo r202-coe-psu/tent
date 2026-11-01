@@ -6,6 +6,8 @@ import logging
 from datetime import UTC, datetime
 from typing import Any
 
+import httpx
+
 from worker.couch.checkpoint import (
     get_checkpoint,
     get_projection_version,
@@ -24,6 +26,7 @@ from worker.mongo import (
     apply_shelter,
     apply_shift_assignment,
     apply_volunteer,
+    delete_closed_shelter_operations,
     delete_jobs_for_shelter,
     delete_needs_for_shelter,
     delete_occupants_for_shelter,
@@ -36,12 +39,18 @@ from worker.mongo import (
 )
 from worker.mongo.on_hand import refresh_on_hand
 from worker.projection_version import PROJECTION_VERSION
+from worker.projectors.config import APP_CONFIG_ID
 from worker.projectors.donation import project_donation
 from worker.projectors.donation_need_counter import plan_need_counters
 from worker.projectors.evacuee import project_evacuee
 from worker.projectors.job import project_job, project_job_application
 from worker.projectors.needs import project_needs_for_shelter
-from worker.projectors.shelter import is_shelter_open, project_shelter
+from worker.projectors.shelter import (
+    RetentionPhase,
+    classify_registry_shelter,
+    parse_retention_months,
+    project_shelter,
+)
 from worker.projectors.shift_assignment import project_shift_assignment
 from worker.projectors.volunteer import project_volunteer
 
@@ -60,7 +69,13 @@ async def _load_households(
     return households
 
 
-async def bootstrap_database(couch: CouchClient, database: str) -> None:
+async def bootstrap_database(
+    couch: CouchClient, database: str, *, persons_only: bool = False
+) -> None:
+    """Project every doc of one database.
+
+    ``persons_only`` is for a closed shelter in its retention window: it stays
+    searchable, but its needs, stocks and occupants are gone for good (CR-183 FR-4)."""
     if not await couch.database_exists(database):
         logger.warning("Database %s does not exist — skipping bootstrap", database)
         return
@@ -85,6 +100,10 @@ async def bootstrap_database(couch: CouchClient, database: str) -> None:
                     await delete_stocks_for_shelter(code)
                     # Cancelled shelter: its postings leave the volunteer board too.
                     await delete_jobs_for_shelter(code)
+                elif payload and payload["status"] == "closed":
+                    await delete_closed_shelter_operations(
+                        str(payload["_id"]), trigger="shelter_closed"
+                    )
             elif doc_type == "announcement":
                 from worker.mongo.announcement import apply_announcement
                 from worker.projectors.announcement import project_announcement
@@ -105,6 +124,20 @@ async def bootstrap_database(couch: CouchClient, database: str) -> None:
         return
 
     households = await _load_households(couch, database)
+
+    if persons_only:
+        async for doc in couch.iter_all_docs(database):
+            if doc.get("type") == "evacuee":
+                household_id = doc.get("household_id")
+                household = households.get(household_id) if household_id else None
+                action, payload = project_evacuee(
+                    doc, shelter_code=shelter_code, household=household
+                )
+                await apply_person(action, payload)
+                await sync_booking_stay(doc)
+        await save_checkpoint(database, seq)
+        logger.info("Bootstrap complete for %s, persons only (seq=%s)", database, seq)
+        return
 
     async for doc in couch.iter_all_docs(database):
         doc_type = doc.get("type")
@@ -181,17 +214,36 @@ async def bootstrap_database(couch: CouchClient, database: str) -> None:
     logger.info("Bootstrap complete for %s (seq=%s)", database, seq)
 
 
-async def list_open_shelter_codes(couch: CouchClient) -> list[str]:
+async def read_retention_months(couch: CouchClient) -> int:
+    """``config:app.retention_months_after_close`` read straight from the registry —
+    it is not in the public allow-list (CR-183 FR-6). Falls back to the default."""
+    try:
+        config_app = await couch.get_doc(REGISTRY_DB, APP_CONFIG_ID)
+    except httpx.HTTPError, ValueError:
+        logger.warning("Could not read %s — using the default retention", APP_CONFIG_ID)
+        config_app = None
+    return parse_retention_months(config_app)
+
+
+async def list_listened_shelters(
+    couch: CouchClient, *, now: datetime | None = None
+) -> dict[str, RetentionPhase]:
+    """Registry shelters whose DB is tailed, with their phase (CR-183 FR-7).
+    ``RetentionPhase.is_bootstrapped`` narrows this to the ones a scan rebuilds."""
     if not await couch.database_exists(REGISTRY_DB):
-        return []
-    codes: list[str] = []
+        return {}
+    retention_months = await read_retention_months(couch)
+    now = now or datetime.now(UTC)
+    listened: dict[str, RetentionPhase] = {}
     async for doc in couch.iter_all_docs(REGISTRY_DB):
-        if doc.get("type") != "shelter":
+        if doc.get("type") != "shelter" or not doc.get("code"):
             continue
-        code = doc.get("code")
-        if code and is_shelter_open(doc):
-            codes.append(str(code))
-    return sorted(set(codes))
+        phase = classify_registry_shelter(
+            doc, retention_months=retention_months, now=now
+        )
+        if phase.is_listened:
+            listened[str(doc["code"])] = phase
+    return dict(sorted(listened.items()))
 
 
 async def list_all_shelter_codes(couch: CouchClient) -> list[str]:
@@ -219,15 +271,21 @@ async def bootstrap_all(couch: CouchClient) -> None:
     """
     logger.info("Starting bootstrap scan (projection version %s)", PROJECTION_VERSION)
     await bootstrap_database(couch, REGISTRY_DB)
-    open_codes = await list_open_shelter_codes(couch)
-    for code in open_codes:
-        await bootstrap_database(couch, shelter_db_name(code))
-    # Closed shelters have no `_changes` listener, but EXT-005/007 still serve their
-    # rows — recompute those so a projector change (e.g. #791) reaches them too.
+    listened = await list_listened_shelters(couch)
+    for code, phase in listened.items():
+        if not phase.is_bootstrapped:
+            continue
+        await bootstrap_database(
+            couch,
+            shelter_db_name(code),
+            persons_only=phase is RetentionPhase.CLOSED_WITHIN_RETENTION,
+        )
+    # Shelters without a full scan still serve EXT-005 counts — recompute those so a
+    # projector change (e.g. #791, PDPA D8) reaches them too. Not their occupant list:
+    # a closed shelter has none (CR-183 FR-4).
     for code in await list_all_shelter_codes(couch):
-        if code not in open_codes:
+        if listened.get(code) is not RetentionPhase.OPEN:
             await refresh_occupancy(couch, code)
-            await refresh_shelter_occupants(couch, code)
     await save_projection_version(PROJECTION_VERSION)
     logger.info("Bootstrap finished (projection version %s stored)", PROJECTION_VERSION)
 

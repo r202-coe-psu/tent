@@ -292,12 +292,14 @@ export {
 
 export type { PeopleRepository, EvacueeFilters, HouseholdFilters } from './data/people.repository';
 export { peopleRepository, isRegistrationCompensationIncomplete } from './data/people.remote';
+export type { EvacueeNameRecord } from './data/evacuee-names.remote';
 export { getShelterCode, getShelterDb } from '$lib/db/shelter';
 
 // Application — TanStack Query hooks + changes-feed live-query wiring
 export {
 	peopleKeys,
 	useEvacuees,
+	useEvacueeNames,
 	useEvacuee,
 	usePendingScreeningEvacuees,
 	useEvacueesPaginated,

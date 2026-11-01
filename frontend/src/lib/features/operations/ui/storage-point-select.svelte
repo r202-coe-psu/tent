@@ -45,7 +45,16 @@
 	<Select.Content>
 		<Select.Item value="" label={UNSPECIFIED_LABEL} />
 		{#each points as point (point.id)}
-			<Select.Item value={point.id} label={`📍 ${point.name}`} />
+			<Select.Item value={point.id} label={`📍 ${point.name}`}>
+				<span class="flex min-w-0 flex-col">
+					<span class="truncate">📍 {point.name}</span>
+					{#if point.typeLabels?.length}
+						<span class="truncate text-xs text-muted-foreground">
+							{point.typeLabels.join(', ')}
+						</span>
+					{/if}
+				</span>
+			</Select.Item>
 		{/each}
 	</Select.Content>
 </Select.Root>

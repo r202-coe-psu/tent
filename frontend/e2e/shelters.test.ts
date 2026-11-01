@@ -15,6 +15,9 @@
  * [Create] SA can fill the form and submit a new shelter (incl. food point)
  * [Edit]   form pre-fills from the loaded shelter and PATCHes on save
  * [Edit]   optional zone short name pre-fills, edits (≤10 chars) and PATCHes
+ * [Storage] storage point types: multi-select saved in enum order (mouse + keyboard), the last
+ *          type cannot be cleared, a legacy single `type` reads back as one chip, a new point
+ *          starts with none and blocks save (#647, CR-199)
  * [Nav]    all sections visible; sidebar click scrolls to section
  */
 
@@ -27,7 +30,7 @@ import {
 	SA_ROLES,
 	SM_SH001_ROLES
 } from './helpers/couch';
-import { injectSession, clearSession } from './helpers/login';
+import { injectSession, clearSession, routeBrowserCouchThroughApp } from './helpers/login';
 
 const RUN_ID = Date.now().toString(36) + Math.random().toString(36).substring(2, 6);
 const SA = {
@@ -57,6 +60,13 @@ test.beforeAll(async () => {
 test.afterAll(async () => {
 	await deleteCouchUser(SA.name);
 	await deleteCouchUser(SM.name);
+});
+
+// The test build calls CouchDB cross-origin, so the back-office "Offline" banner shows in the
+// sticky header and intercepts clicks on buttons scrolled beneath it (e.g. "บันทึกข้อมูล").
+// Registered first so each test's own registry/BFF mocks still take precedence.
+test.beforeEach(async ({ page }) => {
+	await routeBrowserCouchThroughApp(page);
 });
 
 test.afterEach(async ({ page }) => {
@@ -203,6 +213,7 @@ test.describe('Shelter Form — Create', () => {
 		await page.goto('http://localhost:4173/back-office/shelters/create');
 
 		await expect(page.getByRole('heading', { name: new RegExp(BASIC_INFO_HEADING) })).toBeVisible();
+		await expect(page.getByText('ประเภทอาคาร', { exact: true })).toBeVisible();
 		await page.getByLabel('ชื่อศูนย์พักพิง').fill('ศูนย์พักพิงทดสอบ E2E');
 
 		await sectionNav(page, CAPACITY_HEADING).click();
@@ -214,6 +225,7 @@ test.describe('Shelter Form — Create', () => {
 		await page.getByRole('button', { name: /เพิ่มจุดแจกอาหาร/ }).click();
 		await page.getByLabel('ชื่อจุดแจกอาหาร').fill('จุดแจกหน้าโรงครัว');
 
+		await expect(page.getByText(/Offline — ไม่สามารถเชื่อมต่อ/)).toBeHidden();
 		await page.getByRole('button', { name: 'บันทึกข้อมูล' }).click();
 
 		await page.waitForURL(
@@ -332,6 +344,277 @@ test.describe('Shelter Form — Edit', () => {
 		const body = getPatchBody() as { zones: { code: string; short_name?: string | null }[] };
 		expect(body.zones.find((z) => z.code === 'Z1')?.short_name ?? null).toBe(null);
 		expect(body.zones.find((z) => z.code === 'Z2')?.short_name).toBe('M1ABCDEFGH');
+	});
+});
+
+const STORAGE_HEADING = 'จุดเก็บของ';
+
+/** A shelter in edit mode with the given storage points (schema_v 8 unless overridden). */
+function storageShelter(subStorage: unknown[], schemaV = 8): Record<string, unknown> {
+	return {
+		schema_v: schemaV,
+		name: 'ศูนย์พักพิงจุดเก็บของ',
+		operation_status: 'standby',
+		capacity: 80,
+		shelter_type: null,
+		project_level: null,
+		location: {},
+		contact: {},
+		facilities: {},
+		common_areas: { sub_storage: subStorage },
+		utilities: { communications: [] },
+		risk: {},
+		zones: [],
+		food_distribution_points: []
+	};
+}
+
+type StoragePatch = { common_areas: { sub_storage: { id: string; types: string[] }[] } };
+
+test.describe('Shelter Form — Storage point types (#647)', () => {
+	test('multi-select saves types in enum order, whatever the click order', async ({ page }) => {
+		const CODE = 'SH904';
+		const { getPatchBody } = await mockShelterDetail(
+			page,
+			CODE,
+			storageShelter([{ id: 'sp-1', name: 'ห้องเก็บของ 1', types: ['general'], area_m2: null }])
+		);
+		await injectSession(page, SA, sessions[SA.name]);
+		await page.goto(`http://localhost:4173/back-office/shelters/edit/${CODE}`);
+		await sectionNav(page, STORAGE_HEADING).click();
+
+		const group = page.getByRole('group', { name: /ประเภทของที่เก็บได้/ });
+		await expect(group.getByRole('button', { name: 'ทั่วไป' })).toHaveAttribute(
+			'aria-pressed',
+			'true'
+		);
+
+		// Click in reverse table order: น้ำดื่ม → ยา → อาหารเด็ก
+		await group.getByRole('button', { name: 'น้ำดื่ม' }).click();
+		await group.getByRole('button', { name: 'ยา', exact: true }).click();
+		await group.getByRole('button', { name: 'อาหารเด็ก' }).click();
+		// Keyboard: Space toggles the focused chip off
+		await group.getByRole('button', { name: 'ทั่วไป' }).focus();
+		await page.keyboard.press('Space');
+		await expect(group.getByRole('button', { name: 'ทั่วไป' })).toHaveAttribute(
+			'aria-pressed',
+			'false'
+		);
+
+		const patched = page.waitForResponse(
+			(res) =>
+				res.request().method() === 'PATCH' && res.url().endsWith(`/api/back-office/shelter/${CODE}`)
+		);
+		await page.getByRole('button', { name: 'บันทึกข้อมูล' }).click();
+		await patched;
+
+		const body = getPatchBody() as StoragePatch;
+		expect(body.common_areas.sub_storage[0].types).toEqual([
+			'baby_food',
+			'medical_supplies',
+			'drinking_water'
+		]);
+	});
+
+	test('the last type cannot be cleared — a toast says why and the chip stays on', async ({
+		page
+	}) => {
+		const CODE = 'SH905';
+		await mockShelterDetail(
+			page,
+			CODE,
+			storageShelter([{ id: 'sp-1', name: 'ห้องเก็บของ 1', types: ['food_dry'], area_m2: null }])
+		);
+		await injectSession(page, SA, sessions[SA.name]);
+		await page.goto(`http://localhost:4173/back-office/shelters/edit/${CODE}`);
+		await sectionNav(page, STORAGE_HEADING).click();
+
+		const chip = page
+			.getByRole('group', { name: /ประเภทของที่เก็บได้/ })
+			.getByRole('button', { name: 'อาหารแห้ง' });
+		await chip.click();
+		await expect(page.getByText('ต้องเลือกอย่างน้อย 1 ประเภท')).toBeVisible();
+		await expect(chip).toHaveAttribute('aria-pressed', 'true');
+
+		// Same refusal from the keyboard
+		await chip.focus();
+		await page.keyboard.press('Enter');
+		await expect(chip).toHaveAttribute('aria-pressed', 'true');
+	});
+
+	test('a legacy single `type` (schema_v 7) reads back as one chip and saves as `types`', async ({
+		page
+	}) => {
+		const CODE = 'SH906';
+		const { getPatchBody } = await mockShelterDetail(
+			page,
+			CODE,
+			storageShelter(
+				[{ id: 'sp-1', name: 'ห้องยาเดิม', type: 'medical_supplies', area_m2: null }],
+				7
+			)
+		);
+		await injectSession(page, SA, sessions[SA.name]);
+		await page.goto(`http://localhost:4173/back-office/shelters/edit/${CODE}`);
+		await sectionNav(page, STORAGE_HEADING).click();
+
+		const group = page.getByRole('group', { name: /ประเภทของที่เก็บได้/ });
+		await expect(group.getByRole('button', { name: 'ยา', exact: true })).toHaveAttribute(
+			'aria-pressed',
+			'true'
+		);
+		await expect(group.locator('[aria-pressed="true"]')).toHaveCount(1);
+
+		const patched = page.waitForResponse(
+			(res) =>
+				res.request().method() === 'PATCH' && res.url().endsWith(`/api/back-office/shelter/${CODE}`)
+		);
+		await page.getByRole('button', { name: 'บันทึกข้อมูล' }).click();
+		await patched;
+
+		const point = (getPatchBody() as StoragePatch).common_areas.sub_storage[0];
+		expect(point.types).toEqual(['medical_supplies']);
+		expect(point).not.toHaveProperty('type');
+	});
+
+	test('a new point starts with no type and blocks save until one is picked', async ({ page }) => {
+		const CODE = 'SH907';
+		const { getPatchBody } = await mockShelterDetail(page, CODE, storageShelter([]));
+		await injectSession(page, SA, sessions[SA.name]);
+		await page.goto(`http://localhost:4173/back-office/shelters/edit/${CODE}`);
+		await sectionNav(page, STORAGE_HEADING).click();
+
+		await page.getByRole('button', { name: 'เพิ่มจุดเก็บของ' }).click();
+		await page.getByLabel('ชื่อจุดเก็บของ').fill('ห้องเรียน 3');
+		const group = page.getByRole('group', { name: /ประเภทของที่เก็บได้/ });
+		await expect(group.locator('[aria-pressed="true"]')).toHaveCount(0);
+
+		await page.getByRole('button', { name: 'บันทึกข้อมูล' }).click();
+		await expect(
+			page.locator('[data-fs-field-error]').filter({ hasText: 'เลือกอย่างน้อย 1 ประเภท' })
+		).toBeVisible();
+		expect(getPatchBody()).toBeNull();
+
+		await group.getByRole('button', { name: 'อาหารปรุงสุก' }).click();
+		const patched = page.waitForResponse(
+			(res) =>
+				res.request().method() === 'PATCH' && res.url().endsWith(`/api/back-office/shelter/${CODE}`)
+		);
+		await page.getByRole('button', { name: 'บันทึกข้อมูล' }).click();
+		await patched;
+		const point = (getPatchBody() as StoragePatch).common_areas.sub_storage[0];
+		expect(point.types).toEqual(['cooked_food']);
+	});
+});
+
+type DropOffPatch = {
+	common_areas: {
+		sub_storage: {
+			accepts_donations: boolean;
+			lat: number | null;
+			lng: number | null;
+			location_note: string | null;
+		}[];
+	};
+};
+
+test.describe('Shelter Form — Donation drop-off points (CR-205)', () => {
+	const gym = { id: 'sp-1', name: 'โรงยิม', types: ['general'], area_m2: null };
+
+	async function openStorage(page: import('@playwright/test').Page, code: string) {
+		await injectSession(page, SA, sessions[SA.name]);
+		await page.goto(`http://localhost:4173/back-office/shelters/edit/${code}`);
+		await sectionNav(page, STORAGE_HEADING).click();
+	}
+
+	async function pin(page: import('@playwright/test').Page, lat: string, lng: string) {
+		await page.getByRole('button', { name: 'ปักหมุดตำแหน่ง' }).click();
+		const dialog = page.getByRole('dialog');
+		await dialog.getByLabel('ละติจูด (Latitude)').fill(lat);
+		await dialog.getByLabel('ลองจิจูด (Longitude)').fill(lng);
+		await page.getByRole('button', { name: 'ยืนยันปักหมุด' }).click();
+	}
+
+	const save = (page: import('@playwright/test').Page, code: string) => {
+		const patched = page.waitForResponse(
+			(res) =>
+				res.request().method() === 'PATCH' && res.url().endsWith(`/api/back-office/shelter/${code}`)
+		);
+		return page
+			.getByRole('button', { name: 'บันทึกข้อมูล' })
+			.click()
+			.then(() => patched);
+	};
+
+	test('a schema_v 8 point with no new keys saves as not accepting donations', async ({ page }) => {
+		const CODE = 'SH910';
+		const { getPatchBody } = await mockShelterDetail(page, CODE, storageShelter([gym]));
+		await openStorage(page, CODE);
+		await expect(page.getByRole('checkbox', { name: 'ใช้เป็นจุดรับบริจาค' })).not.toBeChecked();
+
+		await save(page, CODE);
+		const body = getPatchBody() as DropOffPatch;
+		expect(body.common_areas.sub_storage[0]).toMatchObject({
+			accepts_donations: false,
+			lat: null,
+			lng: null,
+			location_note: null
+		});
+	});
+
+	test('tick + pin + note saves all four fields; unticking keeps the pin', async ({ page }) => {
+		const CODE = 'SH911';
+		const { getPatchBody } = await mockShelterDetail(page, CODE, storageShelter([gym]));
+		await openStorage(page, CODE);
+
+		await page.getByRole('checkbox', { name: 'ใช้เป็นจุดรับบริจาค' }).click();
+		await pin(page, '7.0086', '100.4747');
+		await expect(page.getByText('พิกัดปัจจุบัน: 7.0086, 100.4747')).toBeVisible();
+		await page.getByLabel('คำอธิบายตำแหน่งสำหรับผู้มาส่ง').fill('  ประตู 2 ข้างโรงยิม ');
+
+		await save(page, CODE);
+		expect((getPatchBody() as DropOffPatch).common_areas.sub_storage[0]).toMatchObject({
+			accepts_donations: true,
+			lat: 7.0086,
+			lng: 100.4747,
+			location_note: 'ประตู 2 ข้างโรงยิม'
+		});
+
+		await page.getByRole('checkbox', { name: 'ใช้เป็นจุดรับบริจาค' }).click();
+		await save(page, CODE);
+		expect((getPatchBody() as DropOffPatch).common_areas.sub_storage[0]).toMatchObject({
+			accepts_donations: false,
+			lat: 7.0086,
+			lng: 100.4747,
+			location_note: 'ประตู 2 ข้างโรงยิม'
+		});
+	});
+
+	test('ticking without a pin blocks save with the error on that row', async ({ page }) => {
+		const CODE = 'SH912';
+		const { getPatchBody } = await mockShelterDetail(page, CODE, storageShelter([gym]));
+		await openStorage(page, CODE);
+
+		await page.getByRole('checkbox', { name: 'ใช้เป็นจุดรับบริจาค' }).click();
+		await page.getByRole('button', { name: 'บันทึกข้อมูล' }).click();
+		await expect(
+			page.locator('[data-fs-field-error]').filter({ hasText: 'จุดรับบริจาคต้องปักหมุดตำแหน่ง' })
+		).toBeVisible();
+		expect(getPatchBody()).toBeNull();
+	});
+
+	test('a (0, 0) pin is refused with the error on that row', async ({ page }) => {
+		const CODE = 'SH913';
+		const { getPatchBody } = await mockShelterDetail(page, CODE, storageShelter([gym]));
+		await openStorage(page, CODE);
+
+		await page.getByRole('checkbox', { name: 'ใช้เป็นจุดรับบริจาค' }).click();
+		await pin(page, '0', '0');
+		await page.getByRole('button', { name: 'บันทึกข้อมูล' }).click();
+		await expect(
+			page.locator('[data-fs-field-error]').filter({ hasText: 'พิกัด 0, 0 ไม่ใช่ตำแหน่งจริง' })
+		).toBeVisible();
+		expect(getPatchBody()).toBeNull();
 	});
 });
 

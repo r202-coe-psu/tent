@@ -4,6 +4,8 @@
  * - FR-MRM-00 A / FR-MRM-04 A — in V1; a mismatch needs an override with a reason.
  * - FR-MRM-01 VEGAN B — VEGAN is not derived for recipients and a VEGAN tag on a menu is
  *   ignored, so anyone may take a VEGAN menu without an override.
+ * - HALAL (#801, CR-159 decision log 2026-10-26) — a HALAL tag on a menu is ignored like VEGAN:
+ *   anyone may eat halal food, so a non-muslim taking a HALAL menu needs no override.
  * - FR-MRM-01 age — CR-130 age buckets via `ageBucketForBirthYear` (the demographics
  *   dashboard's): `<1` INFANT, `1-5` + `6-11` CHILD, `60+` ELDERLY.
  */
@@ -86,10 +88,9 @@ export function deriveRecipientMenuTags(
 	return tags;
 }
 
-/** Tags a menu targets. Empty = general menu (`dietary = []`, `age_group ∈ {ALL, unset}`). */
+/** Tags a menu targets — age groups only, `dietary` never restricts. Empty = general menu. */
 export function menuTargetTags(item: MenuTagSource): MenuTargetTag[] {
 	const tags: MenuTargetTag[] = [];
-	if ((item.dietary ?? []).includes('HALAL')) tags.push('HALAL');
 	if (item.age_group === 'INFANT' || item.age_group === 'CHILD' || item.age_group === 'ELDERLY') {
 		tags.push(item.age_group);
 	}

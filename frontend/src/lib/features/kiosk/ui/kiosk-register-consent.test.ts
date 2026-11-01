@@ -11,12 +11,35 @@ describe('KioskRegisterConsent', () => {
 		});
 
 		expect(body.indexOf('ยินยอมให้อ่านข้อมูลจากบัตรประชาชน')).toBeGreaterThan(-1);
-		expect(body.indexOf('ความยินยอมของท่าน')).toBeGreaterThan(
+		expect(body.indexOf('ข้อตกลงและความยินยอม')).toBeGreaterThan(
 			body.indexOf('ยินยอมให้อ่านข้อมูลจากบัตรประชาชน')
 		);
+		expect(body).toContain('ยอมรับทั้งหมด');
 		expect(body).toContain('ยืนยัน');
-		expect(body).toContain('ไม่ยินยอม');
 		expect(body).toContain('ยกเลิก');
+		expect(body).not.toContain('ไม่ยินยอม');
+	});
+
+	it('disables the confirm button until the first consent is ticked', () => {
+		const { body } = render(KioskRegisterConsent, {
+			props: { onconsent: noop, oncancel: noop }
+		});
+		const confirmButton = body.match(/<button[^>]*>(?:<!---->)?ยืนยัน(?:<!---->)?<\/button>/);
+
+		expect(confirmButton).not.toBeNull();
+		expect(confirmButton?.[0]).toContain('disabled');
+		expect(body).toContain('กรุณายินยอมข้อแรกก่อนบันทึก');
+	});
+
+	it('does not link to the term and policy pages on the kiosk', () => {
+		const { body } = render(KioskRegisterConsent, {
+			props: { onconsent: noop, oncancel: noop }
+		});
+
+		expect(body).not.toContain('href="/term"');
+		expect(body).not.toContain('href="/policy"');
+		expect(body).not.toContain('ข้อตกลงการใช้งาน');
+		expect(body).not.toContain('นโยบายความเป็นส่วนตัว');
 	});
 
 	it('names ThaiD as the source for a ThaiD walk-in', () => {

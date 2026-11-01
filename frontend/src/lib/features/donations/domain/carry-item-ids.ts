@@ -1,5 +1,6 @@
 /** A line as the edit form sends it: `item_id` is whatever the client was handed. */
 export type BareItem = {
+	line_key?: string | null;
 	item_id?: string | null;
 	free_text?: string | null;
 	item_name?: string | null;
@@ -20,21 +21,26 @@ export type BareItem = {
  * target with the pre-check live and working.
  *
  * So both halves resolve identity the same way, from this booking's own record rather
- * than from the request. This is not the free-text heuristic the public side rejected:
- * nothing is inferred from arbitrary words, the name is only matched against the handful
- * of lines this donation already has, and an unmatched line stays untracked as before.
+ * than from the request. A line carrying a `line_key` (CR-196) names its held line
+ * exactly. Only a line without one — new, or from a booking made before line keys — falls
+ * back to the name, matched against the handful of lines this donation already has; an
+ * unmatched line stays untracked as before.
  */
 export function carryItemIds<T extends BareItem>(items: T[], held: BareItem[]): T[] {
+	const byKey = new Map<string, string>();
 	const byName = new Map<string, string>();
 	for (const line of held) {
+		if (!line.item_id) continue;
+		if (line.line_key) byKey.set(line.line_key, line.item_id);
 		const name = String(line.free_text ?? line.item_name ?? '').trim();
-		if (name && line.item_id && !byName.has(name)) byName.set(name, line.item_id);
+		if (name && !byName.has(name)) byName.set(name, line.item_id);
 	}
-	if (byName.size === 0) return items;
 
 	return items.map((item) => {
 		if (item.item_id) return item;
-		const carried = byName.get(String(item.free_text ?? item.item_name ?? '').trim());
+		const carried = item.line_key
+			? byKey.get(item.line_key)
+			: byName.get(String(item.free_text ?? item.item_name ?? '').trim());
 		return carried ? { ...item, item_id: carried } : item;
 	});
 }

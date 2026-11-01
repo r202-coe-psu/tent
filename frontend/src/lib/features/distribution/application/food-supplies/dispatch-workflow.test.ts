@@ -699,6 +699,28 @@ describe('dispatch-workflow', () => {
 			expect(rows[1]._id).not.toBe(legacyId);
 		});
 
+		it('writes a noon datetime expiry before a bare date of the same Bangkok day (CR-195)', async () => {
+			const ticket = await readyTicket('item:water', '5');
+			const bareDate = seedLot('item:water', '3', { expiry: '2030-06-01' });
+			const noon = seedLot('item:water', '2', { expiry: '2030-06-01T12:00:00+07:00' });
+
+			await dispatchTicket(
+				ticket._id,
+				{
+					item_lots: {
+						'item:water': [
+							{ lot_ref: bareDate, qty: '3' },
+							{ lot_ref: noon, qty: '2' }
+						]
+					}
+				},
+				WH_CTX,
+				deps()
+			);
+
+			expect(distributeRows().map((r) => r.lot_ref)).toEqual([noon, bareDate]);
+		});
+
 		it('rejects dispatch when an item has no lot and writes nothing', async () => {
 			const ticket = await readyTicket('item:water', '5');
 			seedLot('item:water', '5');

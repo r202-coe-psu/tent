@@ -6,6 +6,8 @@
  * `is_expired_warning: true`.
  */
 
+import { expiryInstant } from '$lib/features/operations';
+
 export interface LotExpiryStatus {
 	/** ISO expiry of the dispatched lot. */
 	expiry: string;
@@ -20,7 +22,7 @@ export function lotExpiryStatus(
 	now: number = Date.now()
 ): LotExpiryStatus | null {
 	if (!expiry) return null;
-	const at = new Date(expiry).getTime();
+	const at = expiryInstant(expiry);
 	if (Number.isNaN(at)) return null;
 	const msLeft = at - now;
 	return {

@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
 	addQty,
+	formatQty,
 	parseQty,
 	persistQty,
 	qtyAbs,
@@ -78,5 +79,22 @@ describe('Zod qty schemas', () => {
 
 	it('coerces number at boundary to string', () => {
 		expect(qtyStrCoercePositiveSchema.parse(7.5)).toBe('7.5');
+	});
+});
+
+describe('formatQty', () => {
+	it('groups thousands so large amounts read at a glance', () => {
+		expect(formatQty('1234567')).toBe('1,234,567');
+		expect(formatQty('12500.5')).toBe('12,500.5');
+	});
+
+	it('keeps small and fractional amounts as they are', () => {
+		expect(formatQty('0')).toBe('0');
+		expect(formatQty('999')).toBe('999');
+		expect(formatQty('0.1234')).toBe('0.1234');
+	});
+
+	it('rounds past the quantity scale instead of showing float noise', () => {
+		expect(formatQty('1000.00005')).toBe('1,000.0001');
 	});
 });

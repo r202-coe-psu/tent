@@ -21,6 +21,9 @@ import {
 	selectActiveShelter
 } from './helpers/staff-ui';
 
+/** Id of this spec's created-data ledger (see helpers/public-cleanup.ts). */
+const LEDGER_SUITE = 'back-office-evacuee-management';
+
 test.describe.configure({ mode: 'serial' });
 
 const SHELTER_NAME = `E2E ศูนย์ทดสอบ J5 ${RUN_ID}`;
@@ -63,7 +66,7 @@ test.describe(
 				subdistrict: 'คอหงส์',
 				capacity: 40
 			});
-			recordCreatedShelter(shelterCode);
+			recordCreatedShelter(shelterCode, LEDGER_SUITE);
 			await selectActiveShelter(page, shelterCode);
 			await registerHouseholdViaUi(page, {
 				houseNo: 'จ5/1',

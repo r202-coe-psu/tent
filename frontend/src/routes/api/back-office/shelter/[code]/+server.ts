@@ -1,6 +1,7 @@
 import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import {
+	ServiceError,
 	serviceError,
 	requireShelterScopeOrSA,
 	requireShelterManagerOrSA
@@ -10,8 +11,11 @@ import {
 	EMPTY_ADMISSION_POLICY,
 	EMPTY_LUGGAGE_POLICY,
 	EMPTY_PARKING_POLICY,
-	DEFAULT_SHELTER_FEATURE_FLAGS
+	DEFAULT_SHELTER_FEATURE_FLAGS,
+	DEFAULT_SITE_KIND,
+	validateSiteKindChange
 } from '$lib/features/shelters/server';
+import { readMasterDoc } from '$lib/server/master-data-server';
 import { findMasterByCode, migrate, nowIso, updateMaster } from '$lib/server/shelters.admin';
 
 export const prerender = false;
@@ -30,7 +34,7 @@ export const GET: RequestHandler = async ({ request, params }) => {
 		return json({
 			code: migrated.code,
 			name: migrated.name,
-			site_kind: migrated.site_kind ?? 'evacuation_center',
+			site_kind: migrated.site_kind ?? DEFAULT_SITE_KIND,
 			db: `shelter_${migrated.code.toLowerCase()}`,
 			operation_status: migrated.operation_status ?? 'standby',
 			capacity: migrated.capacity ?? 0,
@@ -77,15 +81,27 @@ export const PATCH: RequestHandler = async ({ request, params }) => {
 
 		const body = (await request.json().catch(() => ({}))) as unknown;
 		const input = updateShelterSchema.parse(body);
+		// zod 4 `.partial()` still fills field `.default()`s, so a body without
+		// `operation_status` or `feature_flags` would reset them; patch only what was sent.
+		const sent = body !== null && typeof body === 'object' ? body : {};
+		const patch = Object.fromEntries(Object.entries(input).filter(([key]) => key in sent));
+
+		const siteKindItems = input.site_kind ? ((await readMasterDoc('site_kind'))?.items ?? []) : [];
 
 		// updateMaster re-reads the doc + retries 409s internally
-		// (skill: couchdb-pouchdb-bestpractices §3).
-		await updateMaster(code, () => ({
-			patch: {
-				...input,
-				updated_at: nowIso()
+		// (skill: couchdb-pouchdb-bestpractices §3) and owns `closed_at`.
+		await updateMaster(code, (current) => {
+			if (input.site_kind) {
+				// FR-8: compared with the stored kind of the doc being written, so a retry sees the winner's value.
+				const siteKindError = validateSiteKindChange(
+					input.site_kind,
+					siteKindItems,
+					current.site_kind
+				);
+				if (siteKindError) throw new ServiceError('VALIDATION', siteKindError);
 			}
-		}));
+			return { patch: { ...patch, updated_at: nowIso() } };
+		});
 
 		return json({ ok: true, code });
 	} catch (e) {

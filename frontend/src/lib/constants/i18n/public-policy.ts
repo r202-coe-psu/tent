@@ -4,7 +4,7 @@ export const PUBLIC_POLICY_I18N = {
 		ownerLine: 'แพลตฟอร์ม Smart Shelters · มหาวิทยาลัยสงขลานครินทร์',
 		title: 'นโยบายความเป็นส่วนตัว',
 		intro:
-			'นโยบายนี้อธิบายว่ามหาวิทยาลัยสงขลานครินทร์ (ต่อไปเรียกว่า “มหาวิทยาลัยฯ”) ใช้ข้อมูลส่วนบุคคลของท่านในแพลตฟอร์ม Smart Shelters อย่างไร โดยสรุปคือ มหาวิทยาลัยฯ เก็บชื่อ เลขประจำตัวประชาชน ที่อยู่ เบอร์โทรศัพท์ สมาชิกในครอบครัว ความต้องการสิ่งของ และข้อมูลสุขภาพเท่าที่จำเป็น เพื่อลงทะเบียนเข้าศูนย์พักพิง จัดที่พัก อาหารและสิ่งของ ดูแลผู้ป่วยและกลุ่มเปราะบาง และช่วยให้ญาติตามหากันได้ ข้อมูลจะส่งต่อเฉพาะหน่วยงานช่วยเหลือ สถานพยาบาล และหน่วยงานเยียวยาเท่าที่จำเป็น และไม่นำไปใช้เพื่อการค้า มหาวิทยาลัยฯ เก็บข้อมูลไว้จนถึงวันที่ 31 ธันวาคม พ.ศ. 2569 แล้วจึงลบหรือทำให้ระบุตัวบุคคลไม่ได้ ท่านขอดู ขอแก้ไข ขอลบ หรือถอนความยินยอมได้ทุกเมื่อ และไม่ว่าท่านจะให้ความยินยอมหรือไม่ ท่านยังเข้าพักในศูนย์และได้รับความช่วยเหลือขั้นพื้นฐานได้ตามปกติ',
+			'นโยบายนี้อธิบายว่ามหาวิทยาลัยสงขลานครินทร์ (ต่อไปเรียกว่า “มหาวิทยาลัยฯ”) ใช้ข้อมูลส่วนบุคคลของท่านในแพลตฟอร์ม Smart Shelters อย่างไร โดยสรุปคือ มหาวิทยาลัยฯ เก็บชื่อ เลขประจำตัวประชาชน ที่อยู่ เบอร์โทรศัพท์ สมาชิกในครอบครัว ความต้องการสิ่งของ และข้อมูลสุขภาพเท่าที่จำเป็น เพื่อลงทะเบียนเข้าศูนย์พักพิง จัดที่พัก อาหารและสิ่งของ ดูแลผู้ป่วยและกลุ่มเปราะบาง และช่วยให้ญาติตามหากันได้ ข้อมูลจะส่งต่อเฉพาะหน่วยงานช่วยเหลือ สถานพยาบาล และหน่วยงานเยียวยาเท่าที่จำเป็น และไม่นำไปใช้เพื่อการค้า มหาวิทยาลัยฯ เก็บข้อมูลไว้จนถึงวันที่ 31 ธันวาคม พ.ศ. 2569 แล้วจึงลบหรือทำให้ระบุตัวบุคคลไม่ได้ ท่านขอดู ขอแก้ไข ขอลบ หรือถอนความยินยอมได้ทุกเมื่อ',
 		collectionIntro: 'รายละเอียดแต่ละเรื่องมีดังนี้',
 		sections: [
 			{
@@ -53,8 +53,7 @@ export const PUBLIC_POLICY_I18N = {
 				body: 'หากมีคำถามเกี่ยวกับข้อมูลส่วนบุคคล ติดต่อมหาวิทยาลัยฯ ได้ทางอีเมล Thanathip.l@psu.ac.th หรือติดต่อด้วยตนเองที่จุดลงทะเบียนของศูนย์พักพิง'
 			}
 		],
-		closing:
-			'การไม่ให้ความยินยอมหรือการถอนความยินยอมไม่มีผลต่อสิทธิในการเข้าพักในศูนย์และการได้รับความช่วยเหลือขั้นพื้นฐาน ได้แก่ ที่พัก อาหาร และน้ำดื่ม ท่านเปลี่ยนใจได้ทุกเมื่อที่จุดลงทะเบียนของศูนย์พักพิง',
+		closing: 'ท่านเปลี่ยนใจหรือถอนความยินยอมได้ทุกเมื่อที่จุดลงทะเบียนของศูนย์พักพิง',
 		footerLink: 'นโยบายความเป็นส่วนตัว'
 	},
 	en: {
@@ -62,7 +61,7 @@ export const PUBLIC_POLICY_I18N = {
 		ownerLine: 'Smart Shelters platform · Prince of Songkla University',
 		title: 'Privacy Policy',
 		intro:
-			'This policy explains how Prince of Songkla University (the “University”) uses your personal data on the Smart Shelters platform. In short, the University collects your name, national ID number, address, phone number, family members, needs for supplies, and health information only as needed. It uses them to register you at a shelter, arrange accommodation, food and supplies, care for patients and vulnerable people, and help relatives find each other. Data is shared only with relief agencies, healthcare providers, and compensation agencies as needed, and is never used commercially. The University keeps the data until 31 December 2026 (B.E. 2569), then deletes it or makes it anonymous. You can ask to see, correct, or delete your data, or withdraw consent, at any time. Whether or not you consent, you can still stay at the shelter and receive basic assistance as usual.',
+			'This policy explains how Prince of Songkla University (the “University”) uses your personal data on the Smart Shelters platform. In short, the University collects your name, national ID number, address, phone number, family members, needs for supplies, and health information only as needed. It uses them to register you at a shelter, arrange accommodation, food and supplies, care for patients and vulnerable people, and help relatives find each other. Data is shared only with relief agencies, healthcare providers, and compensation agencies as needed, and is never used commercially. The University keeps the data until 31 December 2026 (B.E. 2569), then deletes it or makes it anonymous. You can ask to see, correct, or delete your data, or withdraw consent, at any time.',
 		collectionIntro: 'The details are as follows.',
 		sections: [
 			{
@@ -112,7 +111,7 @@ export const PUBLIC_POLICY_I18N = {
 			}
 		],
 		closing:
-			'Not consenting, or withdrawing consent, does not affect your right to stay at the shelter or to receive basic assistance such as shelter, food, and drinking water. You can change your mind at any time at the shelter registration desk.',
+			'You can change your mind or withdraw consent at any time at the shelter registration desk.',
 		footerLink: 'Privacy Policy'
 	}
 } as const;

@@ -105,6 +105,21 @@ describe('buildLotRows', () => {
 		expect(row.storageName).toBe('ห้องเย็น');
 	});
 
+	it("shows what the lot's storage point can hold (#647 AC3)", () => {
+		const points = [{ id: 'sp1', name: 'ห้องเย็น', typeLabels: ['อาหารแช่เย็น/แข็ง', 'ยา'] }];
+		const rows = buildLotRows(
+			[
+				lot({ lot_ref: 'a', lot: { storage_point_id: 'sp1' } }),
+				lot({ lot_ref: 'b', lot: { storage_point_id: 'gone', storage_zone: 'จุดที่ลบแล้ว' } }),
+				lot({ lot_ref: 'c' })
+			],
+			points,
+			NOW
+		);
+		const types = Object.fromEntries(rows.map((r) => [r.lotRef, r.storageTypes]));
+		expect(types).toEqual({ a: 'อาหารแช่เย็น/แข็ง, ยา', b: null, c: null });
+	});
+
 	it('puts a lot expiring in 3 days before long-stored dry stock without expiry (AC-A3)', () => {
 		const rows = buildLotRows(
 			[
@@ -139,5 +154,21 @@ describe('buildLotRows', () => {
 		const itemsById = new Map([['item_master:rice', { shelf_life_days: 5 }]]);
 		const [row] = buildLotRows([lot({ lot_ref: 'a', received_at: iso(-1) })], [], NOW, itemsById);
 		expect(row.reason).toBe('อายุเก็บรักษาเหลือ 4 วัน (เร่งด่วน)');
+	});
+
+	it('#855: lists a negative lot last, flagged, never as next', () => {
+		const rows = buildLotRows(
+			[
+				lot({ lot_ref: 'neg', qty: '-3', lot: { expiry: iso(1) } }),
+				lot({ lot_ref: 'ok', lot: { expiry: iso(30) } })
+			],
+			[],
+			NOW
+		);
+		expect(rows.map((r) => [r.lotRef, r.isNegative, r.isNext])).toEqual([
+			['ok', false, true],
+			['neg', true, false]
+		]);
+		expect(rows[1].qty).toBe('-3');
 	});
 });

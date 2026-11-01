@@ -52,7 +52,8 @@ describe('buildPreviewRoles', () => {
 		['security_officer', 'SH001:security_officer'],
 		['facility_staff', 'SH001:facility_staff'],
 		['distribution_staff', 'SH001:distribution_staff'],
-		['kiosk_staff', 'SH001:kiosk_staff']
+		['kiosk_staff', 'SH001:kiosk_staff'],
+		['pr_staff', 'SH001:pr_staff']
 	] as const)('gives %s the shelter scope and the compound capability', (role, compound) => {
 		expect(buildPreviewRoles(role, SH, SA)).toEqual(['shelter:SH001', compound]);
 	});
@@ -68,8 +69,28 @@ describe('buildPreviewRoles', () => {
 	});
 
 	it('covers every role offered by the picker', () => {
-		expect(PORTAL_PREVIEW_ROLES).toHaveLength(13);
+		expect(PORTAL_PREVIEW_ROLES).toHaveLength(14);
 		expect(PORTAL_PREVIEW_ROLES[0].value).toBe('system_admin');
+	});
+});
+
+describe('previewing pr_staff', () => {
+	it('yields only the PR department with the kiosk banners', () => {
+		const { roles, features } = resolvePortalPreview({
+			realRoles: SA,
+			shelterCode: SH,
+			features: ON,
+			preview: previewOf('pr_staff')
+		});
+		const views = filterPortalMenu({ roles, shelterCode: SH, features });
+		expect(views.map((v) => v.id)).toEqual(['pr']);
+		expect(views[0].items.map((i) => i.item.id)).toEqual(['kiosk-banners']);
+	});
+
+	it('is offered in the picker after kiosk_staff as ประชาสัมพันธ์', () => {
+		const values = PORTAL_PREVIEW_ROLES.map((o) => o.value);
+		expect(values.indexOf('pr_staff')).toBe(values.indexOf('kiosk_staff') + 1);
+		expect(portalPreviewRoleLabel('pr_staff')).toBe('ประชาสัมพันธ์');
 	});
 });
 

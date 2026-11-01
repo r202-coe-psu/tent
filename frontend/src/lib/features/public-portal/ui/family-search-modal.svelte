@@ -12,6 +12,7 @@
 	import { familySearch, PublicApiError } from '../data/public-api';
 	import { searchResultKey } from '../domain/mappers';
 	import { normalizeFamilySearchQuery, validateFamilySearchQuery } from '../domain/search-input';
+	import ShelterClosedBadge from './shelter-closed-badge.svelte';
 	import StayStatusChip from './stay-status-chip.svelte';
 	import type { FamilySearchResult } from '../domain/types';
 
@@ -150,9 +151,10 @@
 									({genderLabel(result.gender)})
 								</span>
 							</p>
-							<p class="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
+							<p class="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
 								<MapPin class="h-3 w-3" />
 								{result.shelter_name ?? t.noShelter}
+								<ShelterClosedBadge shelterStatus={result.shelter_status} />
 							</p>
 							<p class="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
 								<Clock class="h-3 w-3" />

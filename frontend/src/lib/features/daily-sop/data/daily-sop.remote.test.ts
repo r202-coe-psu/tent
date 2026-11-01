@@ -226,6 +226,11 @@ describe('Daily SOP role repository', () => {
 				parameter: { key: 'm2_per_person_living', value: '3.5' }
 			}
 		});
+		expect(Object.keys(result.controls[0].metric_spec ?? {}).sort()).toEqual([
+			'fields',
+			'parameter',
+			'threshold'
+		]);
 		expect(result.controls[0]).not.toHaveProperty('check_method');
 		expect(result.controls[0]).not.toHaveProperty('pass_criteria');
 		expect(result.controls[0]).not.toHaveProperty('record_values');

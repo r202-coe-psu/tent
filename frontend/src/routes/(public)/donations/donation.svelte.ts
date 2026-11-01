@@ -1,6 +1,7 @@
 import { setContext, getContext, tick } from 'svelte';
 import { ulid } from '$lib/db/ulid';
 import { scrollAppToTop } from '$lib/utils/scroll-app-to-top';
+import { DonorPhotos } from '$lib/features/donations';
 
 export interface DonationItem {
 	id: string;
@@ -21,9 +22,39 @@ export interface DonationItem {
 	 * `CATALOG_MISMATCH` — so the payload takes this, not the label above (R-15.4).
 	 */
 	unit_code?: string;
+	/**
+	 * Point of the board card this line came from (FR-AP-13): `null` = a card with no point,
+	 * undefined = a typed line. Sent as `need_drop_off_point_id` so the BFF picks that card's campaign.
+	 */
+	needDropOffPointId?: string | null;
 	condition?: string;
 	remark?: string;
-	image?: string;
+	/** UI-only hint: units still short on the need card this line came from. Never sent. */
+	needQty?: number;
+}
+
+/** One booked line as the booking answered it (staff-assigned drop-off FR-AP-8b). */
+export type BookedItem = { drop_off_point_id: string | null; review_status: string };
+
+/**
+ * A fresh donation line. `amount` always starts at 0 (#822): the donor must type a
+ * quantity on purpose, and the shortfall from the need card is only shown as a hint.
+ */
+export function newDonationItem(
+	init: Partial<Omit<DonationItem, 'id' | 'amount' | 'needQty'>> & { qty_needed?: number } = {}
+): DonationItem {
+	const { qty_needed, ...rest } = init;
+	return {
+		id: ulid(),
+		category: 'food',
+		name: '',
+		unit: 'piece',
+		condition: 'new',
+		remark: '',
+		...rest,
+		amount: 0,
+		...(qty_needed !== undefined && qty_needed > 0 ? { needQty: qty_needed } : {})
+	};
 }
 
 export type TabStep = 'needs' | 'shelter-details' | 'form' | 'time' | 'ticket';
@@ -41,25 +72,26 @@ export class DonationStore {
 
 	deliveryMethod = $state<'self_dropoff' | 'parcel' | 'shelter_pickup'>('self_dropoff');
 	vehicleType = $state<'motorcycle' | 'car' | 'pickup' | 'truck' | undefined>(undefined);
+	/** Optional plate for a self drop-off. Kept when the donor switches method, never sent then. */
+	vehiclePlate = $state('');
 	slotDate = $state('');
 	slotTime = $state('');
+	/** The shelter / day / queue `slotTime` was picked for (`slotContextKey`). */
+	slotFor = $state('');
+	/** The plate the booking actually sent — what the ticket shows (CR-209 FR-3a). */
+	bookedVehiclePlate = $state('');
 	shelterCode = $state('');
 	courierTrackingNo = $state('');
 	eta = $state('');
 	pickupAddress = $state('');
 
-	items = $state<DonationItem[]>([
-		{
-			id: ulid(),
-			category: 'food',
-			name: '',
-			amount: 1,
-			unit: 'piece',
-			condition: 'new',
-			remark: '',
-			image: ''
-		}
-	]);
+	/**
+	 * Booking-level donor photos (CR-175 FR-1, FR-2) — unsolicited mode only, and bound to
+	 * `shelterCode`: an uploaded photo lives in that shelter's DB.
+	 */
+	photos = new DonorPhotos();
+
+	items = $state<DonationItem[]>([newDonationItem()]);
 
 	// ขั้น 3 — จุดส่งมอบ + วันเวลา (เก็บไว้โชว์บนตั๋ว)
 	selectedShelter = $state('');
@@ -74,6 +106,8 @@ export class DonationStore {
 	bookingRef = $state('');
 	/** Status FastAPI gave the booking (CR-174 FR-15) — `verifying` gets the QR on the ticket. */
 	bookingStatus = $state('');
+	/** Each line's point and review, in `items` order — what the ticket groups by. */
+	bookedItems = $state<BookedItem[]>([]);
 
 	/**
 	 * Move the wizard to `step` and bring its header into view. Steps are state on this
@@ -86,16 +120,7 @@ export class DonationStore {
 	}
 
 	addItem() {
-		this.items.push({
-			id: ulid(),
-			category: 'food',
-			name: '',
-			amount: 1,
-			unit: 'piece',
-			condition: 'new',
-			remark: '',
-			image: ''
-		});
+		this.items.push(newDonationItem());
 	}
 
 	removeItem(id: string) {
@@ -113,8 +138,11 @@ export class DonationStore {
 		this.donorEmail = '';
 		this.deliveryMethod = 'self_dropoff';
 		this.vehicleType = undefined;
+		this.vehiclePlate = '';
 		this.slotDate = '';
 		this.slotTime = '';
+		this.slotFor = '';
+		this.bookedVehiclePlate = '';
 		this.shelterCode = '';
 		this.courierTrackingNo = '';
 		this.eta = '';
@@ -123,24 +151,15 @@ export class DonationStore {
 		this.selectedShelterName = '';
 		this.shelterLocked = false;
 		this.deliveryDate = '';
-		this.items = [
-			{
-				id: ulid(),
-				category: 'food',
-				name: '',
-				amount: 1,
-				unit: 'piece',
-				condition: 'new',
-				remark: '',
-				image: ''
-			}
-		];
+		this.items = [newDonationItem()];
 		this.captchaToken = '';
 		this.isSubmitting = false;
 		this.errorMessage = '';
 		this.trackingToken = '';
 		this.bookingRef = '';
 		this.bookingStatus = '';
+		this.bookedItems = [];
+		this.photos.clear();
 	}
 }
 

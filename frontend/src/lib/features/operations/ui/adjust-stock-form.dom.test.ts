@@ -225,7 +225,7 @@ describe('adjust form lots (#569)', () => {
 	});
 
 	it('says the history is inconsistent, tied to the lot picker', async () => {
-		ledger.current = [INBOUND, { ...DISPATCH, qty: '-5000' }];
+		ledger.current = [INBOUND, { ...DISPATCH, lot_ref: 'stock_ledger:UNKNOWN' }];
 		await render();
 
 		const alert = document.getElementById('lot-integrity-error');

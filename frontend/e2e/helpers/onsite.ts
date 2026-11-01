@@ -206,14 +206,20 @@ export async function expectStay(
 	status: string,
 	zoneName?: string
 ): Promise<void> {
-	await searchStation1(desk, p.nationalId);
-	const hit = desk
-		.getByRole('listitem')
-		.filter({ hasText: fullName(p) })
-		.first();
-	await expect(hit).toBeVisible({ timeout: 20_000 });
-	await expect(hit).toContainText(`สถานะ: ${status}`);
-	if (zoneName) await expect(hit).toContainText(`โซน ${zoneName}`);
+	// The hit list renders only after BOTH the local and the central-pool search settle, so a slow
+	// pool search (BFF -> FastAPI) hides a perfectly good local hit. Wait for the spinner to clear,
+	// and if the hit is still absent re-issue the search instead of waiting on a stale one.
+	await expect(async () => {
+		await searchStation1(desk, p.nationalId);
+		await expect(desk.getByText('กำลังค้นหา...')).toHaveCount(0, { timeout: 25_000 });
+		const hit = desk
+			.getByRole('listitem')
+			.filter({ hasText: fullName(p) })
+			.first();
+		await expect(hit).toBeVisible({ timeout: 10_000 });
+		await expect(hit).toContainText(`สถานะ: ${status}`, { timeout: 5_000 });
+		if (zoneName) await expect(hit).toContainText(`โซน ${zoneName}`, { timeout: 5_000 });
+	}).toPass({ timeout: 75_000, intervals: [1_000, 3_000] });
 }
 
 export interface ScreeningFill {

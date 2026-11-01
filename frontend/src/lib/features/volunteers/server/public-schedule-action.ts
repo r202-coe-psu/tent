@@ -18,9 +18,11 @@ import {
 	trackingTokenHashFromPayload
 } from '$lib/features/volunteer-portal/domain/volunteer';
 import { isWithinDutyWindow } from '../domain/duty-window';
-import { normalizePhone } from '../domain/phone';
+import { normalizeThaiPhone } from '$lib/db/model';
 
 const MAX_WRITE_RETRIES = 5;
+/** Assignment statuses still open: a check-in, withdraw or pass cancel may act on them. */
+export const LIVE_ASSIGNMENT_STATUSES = ['assigned', 'standby'];
 
 type CouchDoc = {
 	_id: string;
@@ -87,7 +89,7 @@ function assignmentDbFallback(): ShelterRef[] {
 	return [{ dbName: shelterDbName('SH001'), code: 'SH001', name: 'ศูนย์พักพิงหลัก (SH001)' }];
 }
 
-async function shelterRefs(): Promise<ShelterRef[]> {
+export async function shelterRefs(): Promise<ShelterRef[]> {
 	const refs = new Map<string, ShelterRef>();
 	for (const ref of assignmentDbFallback()) refs.set(ref.dbName, ref);
 	try {
@@ -117,7 +119,7 @@ function filterPortalId(ids: Set<string>, portalId?: string): Set<string> {
 async function resolveIdentities(credential: PortalCredential): Promise<ResolvedIdentity[]> {
 	const refs = await shelterRefs();
 	const identities: ResolvedIdentity[] = [];
-	const phoneHash = credential.phone ? await sha256Hex(normalizePhone(credential.phone)) : null;
+	const phoneHash = credential.phone ? await sha256Hex(normalizeThaiPhone(credential.phone)) : null;
 	const trackingHash = credential.token ? await tokenHash(credential.token) : null;
 
 	for (const ref of refs) {
@@ -232,9 +234,9 @@ async function writeAssignment(
 			}
 		}
 		const allowed =
-			(action === 'check_in' && ['assigned', 'standby'].includes(String(current.status))) ||
+			(action === 'check_in' && LIVE_ASSIGNMENT_STATUSES.includes(String(current.status))) ||
 			(action === 'check_out' && current.status === 'checked_in') ||
-			(action === 'withdraw' && ['assigned', 'standby'].includes(String(current.status)));
+			(action === 'withdraw' && LIVE_ASSIGNMENT_STATUSES.includes(String(current.status)));
 		if (!allowed) throw actionError(action);
 
 		const next = applyAssignmentAction(current, action, now);
@@ -294,7 +296,11 @@ async function updateVolunteerAttendance(
 	throw new PublicScheduleError('WRITE_FAILED', 409);
 }
 
-async function releaseJobQuota(dbName: string, assignment: CouchDoc, now: string): Promise<void> {
+export async function releaseJobQuota(
+	dbName: string,
+	assignment: CouchDoc,
+	now: string
+): Promise<void> {
 	if (typeof assignment.job_id !== 'string') throw new PublicScheduleError('WRITE_FAILED', 502);
 	for (let attempt = 0; attempt < MAX_WRITE_RETRIES; attempt++) {
 		const jobResult = await getAsPublicWriter(dbName, assignment.job_id);
@@ -435,6 +441,53 @@ function isValidTokenHash(value: unknown): value is string {
 }
 
 /**
+ * Role-card credential of one volunteer document: the stored hash when present, a
+ * backfilled hash for legacy plaintext, otherwise a freshly minted token. Never rotates
+ * an existing hash.
+ */
+export async function ensureRoleCardToken(
+	dbName: string,
+	current: CouchDoc
+): Promise<RoleCardTokenResult> {
+	if (isValidTokenHash(current.tracking_token_hash)) {
+		return {
+			token: roleCardPayloadFromHash(current.tracking_token_hash),
+			generated: false
+		};
+	}
+
+	// Seed/legacy documents may still have the original plaintext. Preserve it and
+	// backfill the hash so later role-card reads use the volunteer hash path.
+	if (typeof current.tracking_token === 'string' && current.tracking_token.trim()) {
+		const legacyToken = current.tracking_token.trim().toUpperCase();
+		const updated = {
+			...current,
+			tracking_token_hash: await sha256Hex(legacyToken),
+			updated_at: new Date().toISOString(),
+			updated_by: 'volunteer_portal'
+		};
+		const put = await putAsPublicWriter(dbName, current._id, updated);
+		if (put.status >= 200 && put.status < 300) {
+			return { token: legacyToken, generated: false };
+		}
+		throw new PublicScheduleError('ROLE_CARD_WRITE_FAILED', 503);
+	}
+
+	const token = formatMintedTicketToken(randomBytes(TRACKING_TOKEN_RANDOM_BYTES));
+	const updated = {
+		...current,
+		tracking_token_hash: await sha256Hex(token),
+		updated_at: new Date().toISOString(),
+		updated_by: 'volunteer_portal'
+	};
+	const put = await putAsPublicWriter(dbName, current._id, updated);
+	if (put.status >= 200 && put.status < 300) {
+		return { token, generated: true };
+	}
+	throw new PublicScheduleError('ROLE_CARD_WRITE_FAILED', 503);
+}
+
+/**
  * Resolve the role-card credential from the volunteer document itself.
  *
  * A stored SHA-256 cannot be reversed into the original bearer token. When the hash is
@@ -454,44 +507,7 @@ export async function readOrMintRoleCardToken(
 		for (const volunteerId of identity.volunteerIds) {
 			const currentResult = await getAsPublicWriter(identity.ref.dbName, volunteerId);
 			if (currentResult.status !== 200 || !currentResult.data) continue;
-			const current = currentResult.data as CouchDoc;
-
-			if (isValidTokenHash(current.tracking_token_hash)) {
-				return {
-					token: roleCardPayloadFromHash(current.tracking_token_hash),
-					generated: false
-				};
-			}
-
-			// Seed/legacy documents may still have the original plaintext. Preserve it and
-			// backfill the hash so later role-card reads use the volunteer hash path.
-			if (typeof current.tracking_token === 'string' && current.tracking_token.trim()) {
-				const legacyToken = current.tracking_token.trim().toUpperCase();
-				const updated = {
-					...current,
-					tracking_token_hash: await sha256Hex(legacyToken),
-					updated_at: new Date().toISOString(),
-					updated_by: 'volunteer_portal'
-				};
-				const put = await putAsPublicWriter(identity.ref.dbName, volunteerId, updated);
-				if (put.status >= 200 && put.status < 300) {
-					return { token: legacyToken, generated: false };
-				}
-				throw new PublicScheduleError('ROLE_CARD_WRITE_FAILED', 503);
-			}
-
-			const token = formatMintedTicketToken(randomBytes(TRACKING_TOKEN_RANDOM_BYTES));
-			const updated = {
-				...current,
-				tracking_token_hash: await sha256Hex(token),
-				updated_at: new Date().toISOString(),
-				updated_by: 'volunteer_portal'
-			};
-			const put = await putAsPublicWriter(identity.ref.dbName, volunteerId, updated);
-			if (put.status >= 200 && put.status < 300) {
-				return { token, generated: true };
-			}
-			throw new PublicScheduleError('ROLE_CARD_WRITE_FAILED', 503);
+			return ensureRoleCardToken(identity.ref.dbName, currentResult.data as CouchDoc);
 		}
 	}
 

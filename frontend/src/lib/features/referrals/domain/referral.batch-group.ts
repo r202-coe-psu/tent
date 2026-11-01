@@ -21,6 +21,15 @@ export type ReferralListGroup = {
 	createdAt: string;
 };
 
+/** ISO bounds `[start, end)` of the 2-minute create bucket that contains `createdAt`. */
+export function referralBatchBucketBounds(createdAt: string): { start: string; end: string } {
+	const t = Math.floor(new Date(createdAt).getTime() / BATCH_TIME_BUCKET_MS);
+	return {
+		start: new Date(t * BATCH_TIME_BUCKET_MS).toISOString(),
+		end: new Date((t + 1) * BATCH_TIME_BUCKET_MS).toISOString()
+	};
+}
+
 /** Fingerprint shared template fields + creator + coarse create time. */
 export function referralBatchKey(r: Referral): string {
 	const t = Math.floor(new Date(r.created_at).getTime() / BATCH_TIME_BUCKET_MS);

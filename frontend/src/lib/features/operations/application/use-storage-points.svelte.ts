@@ -1,4 +1,4 @@
-import { listStoragePoints, useShelter } from '$lib/features/shelters';
+import { listStoragePoints, subStorageTypeLabels, useShelter } from '$lib/features/shelters';
 import type { StoragePointRef } from '../domain/lot-storage';
 
 /**
@@ -10,7 +10,11 @@ import type { StoragePointRef } from '../domain/lot-storage';
 export function useStoragePoints(shelterCode: () => string) {
 	const shelterQuery = useShelter(shelterCode);
 	const points = $derived<StoragePointRef[]>(
-		listStoragePoints(shelterQuery.data).map((p) => ({ id: p.id, name: p.name.trim() }))
+		listStoragePoints(shelterQuery.data).map((p) => ({
+			id: p.id,
+			name: p.name.trim(),
+			typeLabels: subStorageTypeLabels(p.types ?? [])
+		}))
 	);
 	return {
 		get points() {
@@ -18,6 +22,14 @@ export function useStoragePoints(shelterCode: () => string) {
 		},
 		get isLoading() {
 			return shelterQuery.isLoading;
+		},
+		/**
+		 * True once the shelter doc has been read (the last successful data is kept through
+		 * a failed refetch), so the points list is authoritative and a missing id can be
+		 * treated as deleted.
+		 */
+		get isLoaded() {
+			return shelterQuery.data != null;
 		}
 	};
 }

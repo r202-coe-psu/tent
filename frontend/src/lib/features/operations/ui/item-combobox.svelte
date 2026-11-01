@@ -275,16 +275,16 @@
 			}}
 			onkeydown={handleInputKeydown}
 			class={cn(
-				'flex min-h-11 w-full rounded-md border border-input bg-background px-3 py-2 pr-28 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-none disabled:cursor-not-allowed disabled:bg-muted disabled:font-bold disabled:text-muted-foreground disabled:opacity-100',
+				'flex min-h-11 w-full rounded-md border border-input bg-white px-3 py-2 pr-36 text-sm shadow-xs ring-offset-background placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-none disabled:cursor-not-allowed disabled:bg-muted disabled:font-bold disabled:text-muted-foreground disabled:opacity-100',
 				className
 			)}
 		/>
-		<div class="absolute top-1/2 right-1 flex -translate-y-1/2 items-center gap-0.5">
+		<div class="absolute top-1/2 right-1 flex -translate-y-1/2 items-center">
 			{#if selectedItem && !disabled}
 				<Button
 					type="button"
 					variant="ghost"
-					class="min-h-9 min-w-9 px-2 text-sm font-semibold text-muted-foreground hover:text-foreground"
+					class="min-h-10 min-w-10 px-2 text-sm font-semibold text-muted-foreground hover:text-foreground"
 					onclick={(e) => {
 						e.preventDefault();
 						e.stopPropagation();
@@ -299,7 +299,7 @@
 				<Button
 					type="button"
 					variant="ghost"
-					class="min-h-9 min-w-9 px-2 text-muted-foreground hover:text-foreground"
+					class="min-h-10 min-w-10 px-2 text-muted-foreground hover:text-foreground"
 					onclick={(e) => {
 						e.preventDefault();
 						e.stopPropagation();
@@ -311,7 +311,7 @@
 				</Button>
 			{/if}
 			<Combobox.Trigger
-				class="inline-flex min-h-9 min-w-9 items-center justify-center rounded-md text-muted-foreground hover:bg-muted disabled:pointer-events-none"
+				class="inline-flex min-h-10 min-w-10 items-center justify-center rounded-md text-muted-foreground hover:bg-muted disabled:pointer-events-none"
 				{disabled}
 			>
 				<ChevronsUpDownIcon class="size-4 opacity-50" />

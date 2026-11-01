@@ -1,5 +1,6 @@
 import type { StockLedger } from '$lib/features/operations';
 import {
+	isExpiryPassed,
 	isLotExpired,
 	lotPriorityReason,
 	planLotSplit,
@@ -34,11 +35,7 @@ export function isLotDateExpired(
 	expiryDateStr: string | undefined,
 	referenceDate: Date = new Date()
 ): boolean {
-	if (!expiryDateStr) return false;
-	const expiry = new Date(expiryDateStr);
-	if (isNaN(expiry.getTime())) return false;
-	// FR-A4: a lot whose expiry is at or before now is expired.
-	return expiry.getTime() <= referenceDate.getTime();
+	return isExpiryPassed(expiryDateStr, referenceDate.getTime());
 }
 
 /** Per-lot remaining balances (> 0) of one item, projected from ledger history. */

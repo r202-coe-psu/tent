@@ -96,7 +96,7 @@ describe('planMemberConsents', () => {
 		mode: 'full' as const,
 		health: true,
 		search_visible: true,
-		guardian_for: ['b'],
+		guardian_for: [],
 		verbal: false,
 		...mintConsentStamp()
 	};
@@ -111,6 +111,6 @@ describe('planMemberConsents', () => {
 			'staff',
 			[false, false, true]
 		);
-		expect(plans.map((p) => p?.consent.given_by)).toEqual(['self', 'guardian', undefined]);
+		expect(plans.map((p) => p?.consent.given_by)).toEqual(['self', 'household_member', undefined]);
 	});
 });

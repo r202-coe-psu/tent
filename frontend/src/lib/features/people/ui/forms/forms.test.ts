@@ -12,7 +12,7 @@ import {
 	ZoneSelectionFields
 } from './index.js';
 import { languageStore } from '$lib/stores/language.svelte';
-import MasterTagInput from './master-tag-input.svelte';
+import { MasterTagInput } from '$lib/features/master-data';
 
 const MOCK_MASTER_ITEMS: Record<string, { code: string; label_th: string; label_en: string }[]> = {
 	chronic_disease: [{ code: 'diabetes', label_th: 'เบาหวาน', label_en: 'Diabetes' }],

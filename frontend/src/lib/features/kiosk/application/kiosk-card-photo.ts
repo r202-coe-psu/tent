@@ -1,6 +1,6 @@
 import { compressImage } from '$lib/utils/image-compress';
+import { detectImageMime } from '$lib/features/images/server';
 import {
-	detectImageMime,
 	MAX_KIOSK_FULL_PHOTO_BYTES,
 	MAX_KIOSK_THUMB_PHOTO_BYTES,
 	type KioskPhotoMime,

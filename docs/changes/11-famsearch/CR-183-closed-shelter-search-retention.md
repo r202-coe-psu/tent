@@ -10,13 +10,13 @@ affects:
   - docs/data/data-model.md §7 Retention (+ แถว Mongo projection ของศูนย์ปิด)
   - docs/data/schema.md §3.1 shelter `closed_at` (stamp rule) · §3.2 `config:app.retention_months_after_close`
   - docs/data/couchdb-mongodb-sync.md §3.2 (`public_shelters` comment บรรทัด 125) · ตารางลบ/retention (บรรทัด 288) · listener scope
-  - docs/data/api-contract.md `POST /public/v1/occupants` · `/external/v1/occupants` (+`shelter_status` ใน response)
+  - docs/data/api-contract.md `POST /public/v1/occupants` · `/external/v1/occupants` (+`shelter_status` ใน response; external คง `care_zone` / `zone_name` — hotfix 2026-10-28)
   - docs/changes/01-core/CR-017-dashboard-api-architecture.md Decision D (แถว "ปิดศูนย์") — ถูกแทนบางส่วน
   - docs/task-breakdown/01-core.md T-43 (RoPA/retention) — cross-ref
   - no schema_v bump (CouchDB shape ไม่เปลี่ยน; `closed_at` มีใน schema อยู่แล้ว)
-  - worker PROJECTION_VERSION 5 → 6 (worker/src/worker/projection_version.py)
+  - worker PROJECTION_VERSION 9 → 10 (worker/src/worker/projection_version.py)
   - worker/src/worker/retention/job.py · couch/processor.py · couch/bootstrap.py · listeners/registry.py · projectors/shelter.py
-  - backend/apiapp/modules/evacuee/schemas.py · use_case.py · backend/tests/ (+ลบ `care_zone` / `zone_name` จาก `SearchResult`)
+  - backend/apiapp/modules/evacuee/schemas.py · use_case.py · external/router.py · backend/tests/ (+ลบ `care_zone` / `zone_name` จาก `SearchResult`; `ExternalSearchResult` คงไว้)
   - frontend/src/lib/api/fastapi.json · openapi.d.ts · features/public-portal (domain/mappers.ts, ui/family-search-modal.svelte) · routes/(public)/search/+page.svelte (เอาคอลัมน์โซนออก) · i18n TH/EN
   - frontend/src/lib/features/shelters (stamp `closed_at` ตอนเปลี่ยนเป็น `closed`)
   - frontend/scripts/migrate-shelter-closed-at.ts + `package.json` `migrate:shelter-closed-at` (backfill `closed_at` ศูนย์ legacy)
@@ -29,7 +29,7 @@ affects:
 > - **เปลี่ยนอะไร:** ปิดศูนย์ (`operation_status = closed`) แล้ว **ไม่ลบ** `public_persons` / `public_shelters` ทันที — คงไว้จนครบ `retention_months_after_close` (default 3 เดือน) นับจาก `closed_at` แล้วจึงลบ `public_persons` พร้อม audit
 > - **เพื่อใคร:** ญาติที่ค้นหาคนหลังศูนย์ปิดต้องรู้ว่าคนนั้นเคยอยู่ศูนย์ไหน — ตอนนี้ค้นไม่เจอภายใน ~5 นาทีหลังปิด
 > - **build:** worker retention ลบตามเวลาแทนลบทันที + ฟัง/rescan DB ของศูนย์ปิดที่ยังอยู่ในระยะ · FastAPI ส่ง `shelter_status` · UI แสดงป้าย "ศูนย์อพยพปิดแล้ว" · staff UI stamp `closed_at` · migration script backfill `closed_at` ศูนย์ที่ปิดไปแล้ว
-> - **กระทบ:** data-model §7, schema.md §3.1, api-contract occupants (ลบ `care_zone` / `zone_name` — breaking ต่อ partner) · ไม่ bump `schema_v` · `PROJECTION_VERSION` 5→6
+> - **กระทบ:** data-model §7, schema.md §3.1, api-contract occupants (ลบ `care_zone` / `zone_name` จาก public search เท่านั้น — `/external/v1/occupants` คงไว้, ไม่ breaking ต่อ partner) · ไม่ bump `schema_v` · `PROJECTION_VERSION` 9→10
 
 ---
 
@@ -70,7 +70,7 @@ affects:
 ### Projection
 
 - **FR-11** — _(ถอนออก 2026-10-22: ไม่เพิ่ม field `closed_seen_at` — ศูนย์ legacy ได้ `closed_at` จาก migration script FR-22 แทน)_
-- **FR-12** — bump `PROJECTION_VERSION` 5 → 6 เพื่อให้ worker รัน `bootstrap_all` หนึ่งครั้งหลัง deploy (scan DB ศูนย์ปิดตาม FR-8 / D-3) — shape ของ projection ไม่เปลี่ยน.
+- **FR-12** — bump `PROJECTION_VERSION` 9 → 10 เพื่อให้ worker รัน `bootstrap_all` หนึ่งครั้งหลัง deploy (scan DB ศูนย์ปิดตาม FR-8 / D-3) — shape ของ projection ไม่เปลี่ยน.
 - **FR-13** — แก้ docstring/คอมเมนต์ที่ล้าสมัยใน `retention/job.py` และ `projectors/shelter.py` ให้ตรง FR-1..FR-5.
 - **FR-24** — projector ถ้า `closed_at` มีค่าแต่ parse ไม่ได้ ให้ log error พร้อม `shelter_code` และไม่ตั้ง `closed_at` เป็น `null` ใน payload ที่ upsert (คงค่าเดิมใน Mongo).
 
@@ -84,8 +84,8 @@ affects:
 
 - **FR-16** — `SearchResult` เพิ่ม `shelter_status: "open" | "closed" | "full" | "standby" | null` จาก `public_shelters.status` ของ `person.shelter_code` (join ใน `_load_shelters` ที่มีอยู่) — ไม่มีแถวศูนย์ = `null`.
 - **FR-17** — `FamilyMember` เพิ่ม `shelter_status` แบบเดียวกัน.
-- **FR-18** — ลบ `care_zone` และ `zone_name` ออกจาก `SearchResult` (ไม่ส่ง field ใน response เลย) — มีผลกับ**ทุกศูนย์** ทั้งเปิดและปิด (D-2). ลบ `_resolve_zone_name` ที่ไม่มีผู้ใช้แล้ว. Projection `public_persons.care_zone` ไม่แก้ใน CR นี้.
-- **FR-19** — `/external/v1/occupants` ใช้ use case เดียวกัน → ได้ `shelter_status` เพิ่ม และ**ไม่มี** `care_zone` / `zone_name` แล้ว (FR-18 = breaking change ของ response) — ต้องแจ้ง partner ใน api-contract พร้อมวันที่มีผล.
+- **FR-18** — ลบ `care_zone` และ `zone_name` ออกจาก `SearchResult` ของ `POST /public/v1/occupants` (ไม่ส่ง field ใน response เลย) — มีผลกับ**ทุกศูนย์** ทั้งเปิดและปิด (D-2). `_resolve_zone_name` คงไว้ให้ partner endpoint (FR-19, EXT-012). Projection `public_persons.care_zone` ไม่แก้ใน CR นี้.
+- **FR-19** — `/external/v1/occupants` ใช้กติกาค้นเดียวกัน → ได้ `shelter_status` เพิ่ม (additive) และ**ยังคง** `care_zone` / `zone_name` ทุกศูนย์ทั้งเปิดและปิด (`ExternalSearchResult` — ค่าเดิมก่อน CR นี้) — ไม่มี breaking change ต่อ partner _(แก้ 2026-10-28 — เดิม: ลบ field ตาม FR-18; ดู Decision log)_.
 
 ### Frontend (public portal)
 
@@ -118,8 +118,8 @@ affects:
 - [ ] ปิด → เปิดใหม่ (ทั้งก่อนและหลังครบ retention) → ค้นคนเดิมเจอครบภายในรอบ sync โดยไม่ restart worker (#645).
 - [ ] ศูนย์ปิด: แก้ evacuee เป็น `search_excluded = true` → หายจากผลค้นหาภายในรอบ sync.
 - [ ] ปิดศูนย์จาก staff UI → registry doc มี `closed_at`; เปิดใหม่ → `closed_at = null`.
-- [ ] Response ของ `POST /public/v1/occupants` และ `/external/v1/occupants` ไม่มี key `care_zone` / `zone_name` ทั้งศูนย์เปิดและปิด; หน้า `/search` ไม่แสดงโซน.
-- [ ] Tests: `worker/tests/` (retention ตามเวลา, `closed_at = null` → ไม่ลบ, listener/bootstrap scope, rescan ตอน closed→open, ลบ occupants ตอนปิด) · `backend/tests/` (`shelter_status` ใน result + family member, ไม่มี key zone) · frontend domain/mapper (`shelter_status` → ป้าย) · shelters domain (stamp/clear `closed_at`).
+- [ ] Response ของ `POST /public/v1/occupants` ไม่มี key `care_zone` / `zone_name` ทั้งศูนย์เปิดและปิด; หน้า `/search` ไม่แสดงโซน. `/external/v1/occupants` ยังมี `care_zone` / `zone_name` (ชื่อโซน) ทั้งศูนย์เปิดและปิด.
+- [ ] Tests: `worker/tests/` (retention ตามเวลา, `closed_at = null` → ไม่ลบ, listener/bootstrap scope, rescan ตอน closed→open, ลบ occupants ตอนปิด) · `backend/tests/` (`shelter_status` ใน result + family member, ไม่มี key zone ใน public / มี zone ใน external) · frontend domain/mapper (`shelter_status` → ป้าย) · shelters domain (stamp/clear `closed_at`).
 
 ---
 
@@ -137,7 +137,7 @@ affects:
 | Privacy | `public_persons` ของศูนย์ปิดเปิดเผยต่อได้ ≤ `retention_months_after_close` — rate limit + `SearchAudit` เดิมยังครอบ |
 | Sync worker | listener/bootstrap ครอบศูนย์ปิดในระยะ retention → จำนวน listener และเวลา bootstrap เพิ่มตามจำนวนศูนย์ปิด — **แตะ CR-017 "registry ตรวจจับเปิด/ปิดศูนย์ → เริ่ม/หยุด listener" ยืนยันโดย kong แล้ว (D-4) — CR-017 Decision D ต้องอัปเดตตอน implement** |
 | Public `/shelters` | ศูนย์ปิดคงอยู่ในรายการด้วย `status = closed` ถาวร (เดิมหายหลัง ≤5 นาที) — UI รองรับ `closed` อยู่แล้วตาม enum §9.1 |
-| Partner API | EXT-002/003 เห็นศูนย์ปิด (`location_status = closed`) ตาม ADR-0002; `/external/v1/occupants` ได้ field `shelter_status` เพิ่ม (additive) และ**ลบ** `care_zone` / `zone_name` (breaking — partner ที่อ่าน field นี้ต้องปรับ) |
+| Partner API | EXT-002/003 เห็นศูนย์ปิด (`location_status = closed`) ตาม ADR-0002; `/external/v1/occupants` ได้ field `shelter_status` เพิ่ม (additive) และคง `care_zone` / `zone_name` ไว้ — ไม่ breaking (แก้ 2026-10-28) |
 | draft-shelter-cancelled-status | ไม่ขัด — `cancelled` ยังลบทุก projection ทันทีและไม่ถูกฟัง |
 | CouchDB | ไม่มี purge/anonymize job ฝั่ง CouchDB ใน CR นี้ (ยังเป็นงาน T-43) |
 | `closed_at = null` (D-5) | ยอมรับความเสี่ยงตาม D-5: ศูนย์ที่ยังเป็น `null` คง PII บน public plane เกิน §7 — ลดโอกาสด้วย FR-14 (PATCH), FR-23 (import), FR-24 (projector) |
@@ -148,8 +148,8 @@ affects:
 - **ลำดับ deploy:**
   1. รัน `pnpm migrate:shelter-closed-at` (dry-run) → ตรวจรายงาน.
   2. รัน `pnpm migrate:shelter-closed-at --write --confirm` **ก่อน** deploy worker ใหม่ — ไม่งั้นศูนย์ legacy จะไม่มีนาฬิกา retention (ไม่ถูกลบ) จนกว่าจะ backfill.
-  3. deploy worker (`PROJECTION_VERSION` 6) → bootstrap.
-- **Mongo:** `PROJECTION_VERSION` 6 → full bootstrap หลัง deploy; ด้วย FR-8 bootstrap scan เฉพาะศูนย์ที่ยังอยู่ในระยะ retention (รวมค่าที่ backfill ใน FR-22) จึง **ฟื้น `public_persons` ของศูนย์ที่ปิดภายใน 3 เดือน** ที่ถูกลบโดย retention เดิม (D-3). ศูนย์ที่เลยระยะแล้วไม่ถูกฟื้น.
+  3. deploy worker (`PROJECTION_VERSION` 10) → bootstrap.
+- **Mongo:** `PROJECTION_VERSION` 10 → full bootstrap หลัง deploy; ด้วย FR-8 bootstrap scan เฉพาะศูนย์ที่ยังอยู่ในระยะ retention (รวมค่าที่ backfill ใน FR-22) จึง **ฟื้น `public_persons` ของศูนย์ที่ปิดภายใน 3 เดือน** ที่ถูกลบโดย retention เดิม (D-3). ศูนย์ที่เลยระยะแล้วไม่ถูกฟื้น.
 - **Rollback:** revert worker → retention เดิมลบศูนย์ปิดทั้งหมดในรอบถัดไป (ไม่มีข้อมูลเสีย — CouchDB ยังเป็น SoR).
 
 ## Decision log
@@ -166,3 +166,4 @@ affects:
 - **D-5 — ศูนย์ `closed` ที่ `closed_at = null`** — ✅ ตัดสิน 2026-10-22 (ยืนยันโดย kong): คงกฎเดิมใน FR-5 — retention ไม่ลบ `public_persons` และ log warning. ความเสี่ยงที่ยอมรับ: ข้อมูลคนของศูนย์ที่ไม่มีเวลาปิดจะคงอยู่บน public plane เกินนโยบาย §7 จนกว่าจะแก้ข้อมูล เพื่อลดจำนวนเคสนี้ CR กำหนด FR-14 (PATCH), FR-23 (import) และ FR-24 (projector). ทางเลือกที่ไม่เลือก: ถือว่า `null` เป็นหมดระยะแล้วลบผ่าน audit.
 - 2026-10-22 — FR-23: import ห้ามตั้งสถานะ `closed` (ปฏิเสธแถว) แทนการ stamp `closed_at` เป็นเวลานำเข้า — ปิดศูนย์ได้จากหน้า staff เท่านั้น (ยืนยันโดย kong). ทางเลือกที่ไม่เลือก: stamp เวลานำเข้า (คงข้อมูลเกินจริงเมื่อนำเข้าย้อนหลัง) · เพิ่มคอลัมน์วันที่ปิด (ต้องแก้ schema §3.1).
 - 2026-10-22 — FR-22 fallback `source = now`: ใช้ตามที่เขียนไว้ — คนรันตรวจรายงาน dry-run (มี `source` ทุกรายการ) ก่อนสั่ง `--write --confirm` ไม่เพิ่มด่านกั้น (ยืนยันโดย kong). เหตุผล: `updated_at` เป็นค่าบังคับของ shelter รายการ `now` จึงน่าจะมีน้อย. ทางเลือกที่ไม่เลือก: บังคับ flag `--allow-now` · ตั้งเวลาย้อนหลังให้ถือว่าหมดระยะ.
+- 2026-10-28 — **hotfix หลัง merge #979** (สั่งโดย owner ในแชต): `/external/v1/occupants` คืน `care_zone` / `zone_name` กลับมา (FR-19) เพื่อไม่ให้ partner พัง — FR-18 / D-2 คงไว้สำหรับ `POST /public/v1/occupants` และหน้า `/search` เท่านั้น. แก้ `PROJECTION_VERSION` ใน frontmatter/FR-12/Migration จาก 5→6 เป็น 9→10 ให้ตรงโค้ด (ตาม review #979). ทางเลือกที่ไม่เลือก: คงการลบใน external แล้วแจ้ง partner ก่อน deploy.

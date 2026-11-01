@@ -3,26 +3,47 @@
 		useRequisitionTickets,
 		resolveAuthenticatedAuthorContext
 	} from '../../application/queries';
-	import { canCreateTicket } from '../../application/food-supplies/auth';
-	import type { RequisitionType } from '../../domain/food-supplies';
+	import {
+		canCreateTicket,
+		canDispatchTicket,
+		canReceiveWarehouseReturns,
+		canPerformFrontlineDistribution
+	} from '../../application/food-supplies/auth';
 	import {
 		type TicketWorkflowGroupId,
-		type TicketSortDirection,
 		computeTicketGroupCounts,
-		filterAndSortRequisitionTickets
+		constrainStatusesToGroup,
+		filterAndSortRequisitionTickets,
+		followUpStatusesFor,
+		statusesForGroup
 	} from '../model/ticket-filters';
+	import {
+		TICKET_URL_DEFAULTS,
+		mergeTicketParams,
+		parseTicketParams,
+		serializeTicketParams,
+		type TicketUrlState
+	} from '../model/ticket-url-state';
+	import {
+		mergePoolParams,
+		parsePoolParams,
+		type DistributionView,
+		type PoolUrlState
+	} from '../model/pool-url-state';
+	import { untrack } from 'svelte';
 	import TicketGroupTabs from './TicketGroupTabs.svelte';
 	import TicketFilters from './TicketFilters.svelte';
 	import TicketTable from './TicketTable.svelte';
 	import CreateTicketDialog from './CreateTicketDialog.svelte';
 	import TicketDetailShell from './TicketDetailShell.svelte';
-	import BulkPoolManager from './BulkPoolManager.svelte';
+	import BulkReturnPoolBoard from '../bulk-return/BulkReturnPoolBoard.svelte';
 	import * as Tabs from '$lib/components/ui/tabs/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
 	import { getShelterCode } from '$lib/db/shelter';
 	import { page } from '$app/state';
 	import { goto } from '$app/navigation';
+	import { resolve } from '$app/paths';
 	import Plus from '@lucide/svelte/icons/plus';
 	import Truck from '@lucide/svelte/icons/truck';
 	import RefreshCw from '@lucide/svelte/icons/refresh-cw';
@@ -50,7 +71,7 @@
 			// Opens the global non-dismissable login modal (no-op when already open).
 			authStore.markNeedsReauth();
 		} else {
-			goto('/login');
+			void goto(resolve('/login'));
 		}
 	}
 
@@ -70,7 +91,19 @@
 		try {
 			const url = new URL(page.url);
 			url.searchParams.set('ticketId', id);
-			goto(url, { replaceState: false, keepFocus: true, noScroll: true });
+			const search = url.searchParams.toString();
+			const query = search ? `?${search}` : '';
+			void goto(
+				resolve(
+					`/back-office/distribution${query}` as
+						'/back-office/distribution' | `/back-office/distribution?${string}`
+				),
+				{
+					replaceState: false,
+					keepFocus: true,
+					noScroll: true
+				}
+			);
 		} catch {
 			if (typeof window !== 'undefined') {
 				const url = new URL(window.location.href);
@@ -85,7 +118,19 @@
 		try {
 			const url = new URL(page.url);
 			url.searchParams.delete('ticketId');
-			goto(url, { replaceState: false, keepFocus: true, noScroll: true });
+			const search = url.searchParams.toString();
+			const query = search ? `?${search}` : '';
+			void goto(
+				resolve(
+					`/back-office/distribution${query}` as
+						'/back-office/distribution' | `/back-office/distribution?${string}`
+				),
+				{
+					replaceState: false,
+					keepFocus: true,
+					noScroll: true
+				}
+			);
 		} catch {
 			if (typeof window !== 'undefined') {
 				const url = new URL(window.location.href);
@@ -95,26 +140,97 @@
 		}
 	}
 
-	// Filter states
-	let activeGroup = $state<TicketWorkflowGroupId>('all');
-	let selectedType = $state<RequisitionType | 'all'>('all');
-	let selectedDestination = $state<string | 'all'>('all');
-	let searchQuery = $state('');
-	let sortDirection = $state<TicketSortDirection>('desc');
+	// Filter state lives in the URL (replaceState); foreign keys such as ticketId are preserved.
+	const urlState = $derived.by(() => {
+		try {
+			return parseTicketParams(page.url.searchParams);
+		} catch {
+			return TICKET_URL_DEFAULTS;
+		}
+	});
+	const activeGroup = $derived(urlState.group);
+	const selectedType = $derived(urlState.type);
+	const selectedDestination = $derived(urlState.dest);
+	const selectedStatuses = $derived(urlState.status);
+	const createdFrom = $derived(urlState.from);
+	const createdTo = $derived(urlState.to);
+	const followUp = $derived(urlState.follow);
+	const sortDirection = $derived(urlState.sort);
+	// Local copy so typing is never delayed by navigation; written through to `?q=`.
+	let searchQuery = $state(untrack(() => urlState.q));
+
+	function updateFilters(patch: Partial<TicketUrlState>) {
+		const next = { ...urlState, ...patch };
+		next.status = constrainStatusesToGroup(next.status, next.group);
+		try {
+			const qs = mergeTicketParams(page.url.searchParams, next).toString();
+			if (qs === page.url.searchParams.toString()) return;
+			void goto(
+				resolve(
+					`/back-office/distribution${qs ? `?${qs}` : ''}` as
+						'/back-office/distribution' | `/back-office/distribution?${string}`
+				),
+				{ replaceState: true, keepFocus: true, noScroll: true }
+			);
+		} catch {
+			// page.url unavailable — nothing to persist
+		}
+	}
 
 	// Create dialog open state
 	let isCreateOpen = $state(false);
-	let activeView = $state<'tickets' | 'bulk_pools'>('tickets');
-
-	// RBAC: Check create capability from authoritative session context
-	const userCanCreate = $derived.by(() => {
+	// View tab + open pool live in the URL (`?view=bulk_pools&pool=<id>`); foreign keys are preserved.
+	const poolUrl = $derived.by(() => {
 		try {
-			const ctx = resolveAuthenticatedAuthorContext(shelterCode);
-			return canCreateTicket(ctx);
+			return parsePoolParams(page.url.searchParams);
 		} catch {
-			return false;
+			return { view: 'tickets', pool: null } satisfies PoolUrlState;
 		}
 	});
+	// Writable derived: the local value shows the tab at once, then re-syncs with the URL.
+	let activeView = $derived<DistributionView>(poolUrl.view);
+
+	function updatePoolParams(next: PoolUrlState) {
+		try {
+			const qs = mergePoolParams(page.url.searchParams, next).toString();
+			if (qs === page.url.searchParams.toString()) return;
+			void goto(
+				resolve(
+					`/back-office/distribution${qs ? `?${qs}` : ''}` as
+						'/back-office/distribution' | `/back-office/distribution?${string}`
+				),
+				{ replaceState: true, keepFocus: true, noScroll: true }
+			);
+		} catch {
+			// page.url unavailable — nothing to persist
+		}
+	}
+
+	function handleViewChange(value: string) {
+		const view: DistributionView = value === 'bulk_pools' ? 'bulk_pools' : 'tickets';
+		activeView = view;
+		updatePoolParams({ view, pool: null });
+	}
+
+	// RBAC: Check create capability from authoritative session context
+	const authorContext = $derived.by(() => {
+		try {
+			return resolveAuthenticatedAuthorContext(shelterCode);
+		} catch {
+			return null;
+		}
+	});
+	const userCanCreate = $derived(authorContext ? canCreateTicket(authorContext) : false);
+	const followUpStatuses = $derived(
+		authorContext
+			? followUpStatusesFor({
+					canWarehouse:
+						canDispatchTicket(authorContext) || canReceiveWarehouseReturns(authorContext),
+					canFrontline: canPerformFrontlineDistribution(authorContext)
+				})
+			: []
+	);
+	const statusOptions = $derived(statusesForGroup(activeGroup));
 
 	// Group counts derived from the shared mapping
 	const groupCounts = $derived(computeTicketGroupCounts(tickets));
@@ -132,13 +248,20 @@
 
 	// Filtered & sorted tickets (default: created_at newest-first)
 	const filteredTickets = $derived.by(() => {
+		const base =
+			followUp && followUpStatuses.length > 0
+				? tickets.filter((t) => followUpStatuses.includes(t.status))
+				: tickets;
 		return filterAndSortRequisitionTickets(
-			tickets,
+			base,
 			{
 				groupId: activeGroup,
 				requisitionType: selectedType,
 				destination: selectedDestination,
-				search: searchQuery
+				search: searchQuery,
+				statuses: selectedStatuses,
+				createdFrom,
+				createdTo
 			},
 			{
 				field: 'created_at',
@@ -147,24 +270,34 @@
 		);
 	});
 
+	// Changes whenever the filtered input changes, so the table returns to page 1.
+	const filterKey = $derived(
+		serializeTicketParams({ ...urlState, q: searchQuery, sort: 'desc' }).toString()
+	);
+
 	// Handle Group Tab change
 	function handleSelectGroup(group: TicketWorkflowGroupId) {
-		activeGroup = group;
+		updateFilters({ group });
 	}
 
 	function handleResetFilters() {
 		searchQuery = '';
-		selectedType = 'all';
-		selectedDestination = 'all';
+		updateFilters({
+			q: '',
+			type: 'all',
+			dest: 'all',
+			group: 'all',
+			status: [],
+			from: '',
+			to: '',
+			follow: false
+		});
 	}
 
 	function handleTicketCreated() {
 		// Post-create UX: activate "รอจัด / พร้อมส่ง" so PENDING_PICK is immediately visible
-		activeGroup = 'pending_ready';
-		selectedType = 'all';
 		searchQuery = '';
-		selectedDestination = 'all';
-		sortDirection = 'desc';
+		updateFilters({ ...TICKET_URL_DEFAULTS, group: 'pending_ready' });
 	}
 </script>
 
@@ -202,7 +335,7 @@
 				</Button>
 			{/if}
 
-			<Tabs.Root bind:value={activeView}>
+			<Tabs.Root value={activeView} onValueChange={handleViewChange}>
 				<Tabs.List
 					class="h-auto w-fit rounded-xl border border-slate-200 bg-white p-1 shadow-2xs"
 					aria-label="มุมมองงานกระจายของ"
@@ -225,10 +358,16 @@
 	</div>
 
 	{#if activeView === 'bulk_pools'}
-		<BulkPoolManager {shelterCode} />
+		<BulkReturnPoolBoard
+			{shelterCode}
+			initialPoolId={poolUrl.pool}
+			onSelectedPoolChange={(pool) => updatePoolParams({ view: 'bulk_pools', pool })}
+		/>
 	{:else}
 		<!-- Overview KPI Counters (Single source of truth with workflow groups) -->
-		<div class="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+		<div
+			class="flex flex-wrap justify-center gap-3 *:basis-[calc(50%-0.375rem)] sm:*:basis-[calc(33.333%-0.5rem)] lg:flex-nowrap lg:*:min-w-0 lg:*:flex-1 lg:*:basis-0"
+		>
 			<!-- 1. All -->
 			<div class="rounded-xl border border-slate-200/80 bg-white p-4 shadow-2xs">
 				<div class="flex items-center justify-between">
@@ -278,9 +417,7 @@
 			</div>
 
 			<!-- 5. Completed -->
-			<div
-				class="col-span-2 rounded-xl border border-slate-200/80 bg-white p-4 shadow-2xs sm:col-span-1"
-			>
+			<div class="rounded-xl border border-slate-200/80 bg-white p-4 shadow-2xs">
 				<div class="flex items-center justify-between">
 					<span class="text-xs font-semibold text-slate-700">เสร็จสมบูรณ์</span>
 					<CheckCircle2 class="h-4 w-4 text-emerald-600" />
@@ -303,10 +440,23 @@
 				requisitionType={selectedType}
 				destination={selectedDestination}
 				destinations={availableDestinations}
-				onSearchChange={(val) => (searchQuery = val)}
-				onTypeChange={(type) => (selectedType = type)}
-				onDestinationChange={(dest) => (selectedDestination = dest)}
+				onSearchChange={(val) => {
+					searchQuery = val;
+					updateFilters({ q: val });
+				}}
+				onTypeChange={(type) => updateFilters({ type })}
+				onDestinationChange={(dest) => updateFilters({ dest })}
 				onResetFilters={handleResetFilters}
+				{statusOptions}
+				statuses={selectedStatuses}
+				onStatusesChange={(status) => updateFilters({ status })}
+				{createdFrom}
+				{createdTo}
+				onCreatedFromChange={(from) => updateFilters({ from })}
+				onCreatedToChange={(to) => updateFilters({ to })}
+				followUpAvailable={followUpStatuses.length > 0}
+				{followUp}
+				onFollowUpChange={(follow) => updateFilters({ follow })}
 			/>
 
 			<!-- Content: Loading, Error, or Table -->
@@ -352,7 +502,8 @@
 				<TicketTable
 					tickets={filteredTickets}
 					{sortDirection}
-					onToggleSort={() => (sortDirection = sortDirection === 'desc' ? 'asc' : 'desc')}
+					resetKey={filterKey}
+					onToggleSort={() => updateFilters({ sort: sortDirection === 'desc' ? 'asc' : 'desc' })}
 					onViewTicket={(ticket) => handleOpenDetail(ticket._id)}
 				/>
 			{/if}

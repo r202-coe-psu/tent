@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { onMount, untrack } from 'svelte';
 	import type {
 		ReadinessItemStatus,
 		ReadinessSectionId,
@@ -39,7 +39,7 @@
 
 	const repo = getShelterReadinessRepository();
 
-	let assessments = $state<ShelterReadinessAssessmentDoc[]>(initialAssessments);
+	let assessments = $state<ShelterReadinessAssessmentDoc[]>(untrack(() => initialAssessments));
 
 	onMount(() => {
 		refreshList();

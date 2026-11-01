@@ -18,11 +18,22 @@ export interface ApplicantQueue {
 }
 
 /**
+ * A pending application whose volunteer profile staff deactivated (#882): the public apply
+ * flow holds it for review instead of reactivating the profile, so the queue says why.
+ */
+export function isHeldForInactiveProfile(
+	application: Pick<JobApplication, 'status'>,
+	volunteer: { status?: string } | null | undefined
+): boolean {
+	return application.status === 'pending_review' && volunteer?.status === 'inactive';
+}
+
+/**
  * `reviewed_at` is optional on the schema and is `null` on documents written
  * before CR-094, and `cancelled` applications are never reviewed at all — so
  * the sort falls back to `updated_at`, which every document has.
  */
-function decidedAt(application: JobApplication): string {
+export function decidedAt(application: JobApplication): string {
 	return application.reviewed_at ?? application.updated_at;
 }
 
@@ -59,7 +70,7 @@ export interface ApplicantGroup {
 	applications: JobApplication[];
 }
 
-function applicantKey(application: JobApplication): string {
+export function applicantKey(application: JobApplication): string {
 	return application.volunteer_id ?? `phone:${application.applicant.phone_hash}`;
 }
 

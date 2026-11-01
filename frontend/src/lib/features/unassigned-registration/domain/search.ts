@@ -81,6 +81,20 @@ export const openPetHitSchema = z.object({
 export type PersonIdHit = z.infer<typeof personIdHitSchema>;
 export type OpenMemberHit = z.infer<typeof openMemberHitSchema>;
 export type OpenPetHit = z.infer<typeof openPetHitSchema>;
+
+export type PetSummarySource = {
+	species: OpenPetHit['species'];
+	count: number;
+	notes?: string | null;
+	has_cage?: boolean;
+};
+
+export type ClaimedPetSummary = {
+	species: OpenPetHit['species'];
+	count: number;
+	details?: string;
+};
+
 export type OpenMemberStatus = OpenMemberHit['status'];
 
 const CARD_TYPE_LABELS: Record<PersonIdHit['cardType'], string> = {
@@ -154,6 +168,29 @@ export function formatOpenPetLabel(pet: OpenPetHit): string {
 	const countPart = pet.count > 1 ? ` ×${pet.count}` : '';
 	const notes = pet.notes?.trim();
 	return notes ? `${species}${countPart} (${notes})` : `${species}${countPart}`;
+}
+
+export function petsLeftBehind(
+	openPets: readonly OpenPetHit[],
+	selectedPetIds: readonly string[]
+): OpenPetHit[] {
+	const selected = new Set(selectedPetIds);
+	return openPets.filter((pet) => !selected.has(pet.pet_id));
+}
+
+export function totalOpenPetCount(pets: readonly OpenPetHit[]): number {
+	return pets.reduce((sum, pet) => sum + pet.count, 0);
+}
+
+export function claimedPetSummaries(pets: readonly PetSummarySource[]): ClaimedPetSummary[] {
+	return pets.map((pet) => {
+		const details = [pet.notes?.trim(), pet.has_cage ? 'มีกรง' : '']
+			.filter((part): part is string => Boolean(part))
+			.join(' · ');
+		return details
+			? { species: pet.species, count: pet.count, details }
+			: { species: pet.species, count: pet.count };
+	});
 }
 
 /** Thai-locale date+time for claim registration header. */

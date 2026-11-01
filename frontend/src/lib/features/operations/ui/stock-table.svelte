@@ -24,7 +24,7 @@
 	} from '$lib/features/catalog';
 	import { langState } from '$lib/states/i18n.svelte';
 	import { authStore } from '$lib/stores/auth.svelte';
-	import { isSystemAdmin, hasCapabilityInShelter, WAREHOUSE_STAFF } from '$lib/auth/roles';
+	import { isSystemAdmin, canDistributeStock } from '$lib/auth/roles';
 	import { useShelters } from '$lib/features/shelters';
 	import { getShelterCode } from '$lib/db/shelter';
 	import * as Table from '$lib/components/ui/table/index.js';
@@ -47,6 +47,7 @@
 		clampPage,
 		filterRows,
 		hiddenCatalogCount,
+		locationOptions,
 		pageSlice,
 		sortRows,
 		visibleRows,
@@ -58,7 +59,7 @@
 		STOCK_PAGE_SIZE,
 		type StockUrlState
 	} from './stock/stock-url-state';
-	import { projectLotsByItem } from '../domain/operations';
+	import { negativeLotSummary, negativeLots, projectLotsByItem } from '../domain/operations';
 	import {
 		dailyConsumption,
 		daysOfCover,
@@ -99,7 +100,7 @@
 	const roles = $derived(authStore.user?.roles ?? []);
 	const isSA = $derived(isSystemAdmin(roles));
 	const currentShelter = $derived(getShelterCode());
-	const canDistribute = $derived(hasCapabilityInShelter(roles, currentShelter, WAREHOUSE_STAFF));
+	const canDistribute = $derived(canDistributeStock(roles, currentShelter));
 	let showOverall = $state(false);
 
 	const sheltersQuery = useShelters();
@@ -237,23 +238,23 @@
 	const lotsByItem = $derived(projected.byItem);
 
 	/**
-	 * Location filter options from the lots still on the shelf, keyed by `lotStorageKey` so a
-	 * renamed storage point stays one option (draft-shelter-storage-points). Lots, not raw rows:
-	 * an empty lot is not a place to filter by, and an outbound or return row's `lot.note` may
-	 * hold a distribution destination ("อาคารยิมเนเซียม 1"), which is no place in the store (#569).
+	 * Location filter options, keyed by `lotStorageKey` so a renamed storage point stays one option
+	 * (draft-shelter-storage-points). Configured points plus lots still on the shelf, not raw rows:
+	 * an empty lot is not a place to filter by, and an outbound or return row's `lot.note` may hold
+	 * a distribution destination ("อาคารยิมเนเซียม 1"), which is no place in the store (#569).
 	 */
-	const uniqueLocations = $derived.by(() => {
-		const locations = new SvelteMap<string, string>();
-		for (const lots of lotsByItem.values()) {
-			for (const lot of lots) {
-				if (!qtyGt(lot.qty, 0)) continue;
-				const key = lotStorageKey(lot.lot);
-				const name = lotStorageName(lot.lot, storagePoints.points);
-				if (key && name && !locations.has(key)) locations.set(key, name);
-			}
-		}
-		return Array.from(locations, ([value, label]) => ({ value, label }));
-	});
+	const uniqueLocations = $derived(
+		locationOptions(
+			storagePoints.points,
+			Array.from(lotsByItem.values())
+				.flat()
+				.filter((lot) => qtyGt(lot.qty, 0))
+				.map((lot) => ({
+					key: lotStorageKey(lot.lot),
+					name: lotStorageName(lot.lot, storagePoints.points)
+				}))
+		)
+	);
 
 	/** Shelf life / storage type per item, for the lot order shown in the detail panel. */
 	const lotPriorityItems = $derived(toLotPriorityItems(itemMastersQuery.data ?? []));
@@ -314,6 +315,16 @@
 		projected.brokenItemIds.map((id) => items.find((item) => item._id === id)?.name ?? id)
 	);
 
+	/** Items with an overdrawn lot (#855): still listed, flagged in red, never issued from. */
+	const negativeLotItems = $derived(
+		[...lotsByItem].flatMap(([itemId, lots]) => {
+			const negative = negativeLots(lots);
+			if (negative.length === 0) return [];
+			const name = items.find((item) => item._id === itemId)?.name ?? itemId;
+			return [`${name} (${negative.map((l) => `${l.qty} ${l.unit}`).join(', ')})`];
+		})
+	);
+
 	/** "Ever stocked" = at least one ledger row at this shelter; the rest are catalog-only. */
 	const everStocked = $derived(everStockedItemIds(ledger));
 
@@ -323,6 +334,7 @@
 			const override = overrideByItem.get(item._id);
 			const reorderThreshold = resolveReorderThreshold(occupancy, item, override);
 			const summary = stockSummaryByItem.get(item._id);
+			const negative = negativeLotSummary(lotsByItem.get(item._id) ?? []);
 			return {
 				_id: item._id,
 				name: item.name,
@@ -336,6 +348,9 @@
 				earliestExpiry: summary?.earliestExpiry ?? null,
 				storageKeys: summary?.storageKeys ?? [],
 				lotCount: summary?.lotCount ?? 0,
+				usableNote: negative
+					? `ใช้ได้ ${negative.usable} (ไม่นับล็อตติดลบ ${negative.negative})`
+					: null,
 				locationLabel: locationLabelByItem.get(item._id) ?? null,
 				coverDays: daysOfCover(qtyOnHand, dailyConsumption(occupancy, item, override)),
 				neverReceived: !everStocked.has(item._id),
@@ -457,6 +472,15 @@
 			class="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-900"
 		>
 			ประวัติคลังของ {brokenItemNames.join(', ')} ไม่สอดคล้องกัน จึงแสดงยอดรายล็อตไม่ได้ — กรุณาแจ้งผู้ดูแลระบบ
+		</p>
+	{/if}
+
+	{#if negativeLotItems.length > 0}
+		<p
+			role="alert"
+			class="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-900"
+		>
+			ล็อตนี้ยอดติดลบ — ต้องแก้ยอด: {negativeLotItems.join(', ')} (ห้ามเบิกจากล็อตนี้)
 		</p>
 	{/if}
 
@@ -696,7 +720,12 @@
 				{quickActionDescription}
 			</Sheet.Description>
 		</Sheet.Header>
-		<div class="min-h-0 flex-1 overflow-y-auto p-4 sm:p-6">
+		<div
+			class={[
+				'min-h-0 flex-1',
+				quickActionKind === 'distribute' ? 'flex flex-col' : 'overflow-y-auto p-4 sm:p-6'
+			]}
+		>
 			{#if quickActionKind === 'receive'}
 				<ReceiveStockForm preselectedItemId={quickActionItemId} onsuccess={onMovementSuccess} />
 			{:else if quickActionKind === 'distribute'}

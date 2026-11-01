@@ -65,6 +65,61 @@ export const SHELTER_DASHBOARD_VIEWS = {
 			}`,
 			reduce: '_count'
 		},
+		// #658: per-pool item totals over the append-only entry/move/void event log.
+		// A void subtracts the entry from the pool it resolved to at void time (nets it out).
+		// value = [qty, entry_count]; a move subtracts from the source pool and adds to the target.
+		// group_level=1 -> per pool, 2 -> per item, 3 -> per entry (net count 1 = present).
+		bulk_return_pool_item_totals: {
+			map: `function (doc) {
+				if (doc.type === 'bulk_return_entry') {
+					emit([doc.pool_id, doc.item_id, doc._id], [parseFloat(doc.qty), 1]);
+				} else if (doc.type === 'bulk_return_entry_move') {
+					var moved = parseFloat(doc.qty);
+					emit([doc.from_pool_id, doc.item_id, doc.entry_id], [-moved, -1]);
+					emit([doc.to_pool_id, doc.item_id, doc.entry_id], [moved, 1]);
+					} else if (doc.type === 'bulk_return_entry_void') {
+						emit([doc.pool_id, doc.item_id, doc.entry_id], [-parseFloat(doc.qty), -1]);
+				}
+			}`,
+			reduce: '_sum'
+		},
+		// #821 (view manifest v7): the "รับแล้ว" search by donor name and by item. A Mango index
+		// cannot match one word of `donor.name` or one entry of `items[]`; a view emits one row
+		// per key. Each key at most once per donation, so a paged read never repeats a document.
+		// Key = [searched value, received_at], value null (the document comes via include_docs).
+		donation_received_by_name: {
+			// The normalization is `normalizeDonorNameKey` (donations/domain/received-search.ts):
+			// NFKC, lowercase, trim, collapse runs of whitespace. Keep the two in step.
+			map: `function (doc) {
+				if (doc.type !== 'donation' || doc.status !== 'received') return;
+				if (!doc.donor || typeof doc.donor.name !== 'string') return;
+				var whole = doc.donor.name.normalize('NFKC').toLowerCase().trim().replace(/\\s+/g, ' ');
+				if (!whole) return;
+				var receivedAt = doc.received_at || '';
+				var keys = [whole].concat(whole.split(' '));
+				var seen = {};
+				for (var i = 0; i < keys.length; i++) {
+					var k = keys[i];
+					if (!k || seen['k:' + k]) continue;
+					seen['k:' + k] = true;
+					emit([k, receivedAt], null);
+				}
+			}`
+		},
+		donation_received_by_item: {
+			map: `function (doc) {
+				if (doc.type !== 'donation' || doc.status !== 'received') return;
+				if (!doc.items || !doc.items.length) return;
+				var receivedAt = doc.received_at || '';
+				var seen = {};
+				for (var i = 0; i < doc.items.length; i++) {
+					var itemId = doc.items[i] && doc.items[i].item_id;
+					if (typeof itemId !== 'string' || !itemId || seen['i:' + itemId]) continue;
+					seen['i:' + itemId] = true;
+					emit([itemId, receivedAt], null);
+				}
+			}`
+		},
 		station_logs_by_station: {
 			// CR-192: raw per-event rows; start/complete pairing happens in the BFF (a map cannot
 			// join across docs). Date-first key so the range is filtered inside CouchDB.

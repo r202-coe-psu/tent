@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { SHELTER_DASHBOARD_VIEWS } from './views';
+import { SHELTER_VIEW_MANIFEST } from './view-manifest';
 
 describe('SHELTER_DASHBOARD_VIEWS Map Functions', () => {
 	let emitted: { key: unknown; value: unknown }[] = [];
@@ -202,6 +203,96 @@ describe('SHELTER_DASHBOARD_VIEWS Map Functions', () => {
 			});
 		});
 	});
+
+	describe('bulk_return_pool_item_totals', () => {
+		const view = SHELTER_DASHBOARD_VIEWS.views.bulk_return_pool_item_totals;
+		const mapFn = createMapFn(view.map);
+		const P1 = 'bulk_return_pool:01J00000000000000000000001';
+		const P2 = 'bulk_return_pool:01J00000000000000000000002';
+		const E1 = 'bulk_return_entry:01J00000000000000000000003';
+
+		it('uses the built-in _sum reduce', () => {
+			expect(view.reduce).toBe('_sum');
+		});
+
+		it('ignores other doc types', () => {
+			mapFn({ type: 'bulk_return_pool', _id: P1 }, mockEmit);
+			expect(emitted).toHaveLength(0);
+		});
+
+		it('emits [qty, 1] keyed by [pool, item, entry] for an entry', () => {
+			mapFn(
+				{ type: 'bulk_return_entry', _id: E1, pool_id: P1, item_id: 'item:cot', qty: '3' },
+				mockEmit
+			);
+			expect(emitted).toEqual([{ key: [P1, 'item:cot', E1], value: [3, 1] }]);
+		});
+
+		it('emits a negative row for the source pool and a positive row for the target on a move', () => {
+			mapFn(
+				{
+					type: 'bulk_return_entry_move',
+					_id: `bulk_return_entry_move:01J00000000000000000000003:0001`,
+					entry_id: E1,
+					from_pool_id: P1,
+					to_pool_id: P2,
+					item_id: 'item:cot',
+					qty: '3'
+				},
+				mockEmit
+			);
+			expect(emitted).toEqual([
+				{ key: [P1, 'item:cot', E1], value: [-3, -1] },
+				{ key: [P2, 'item:cot', E1], value: [3, 1] }
+			]);
+		});
+
+		it('emits a negative row for the resolved pool on a void so the entry nets out', () => {
+			mapFn(
+				{
+					type: 'bulk_return_entry_void',
+					_id: 'bulk_return_entry_void:01J00000000000000000000003',
+					entry_id: E1,
+					pool_id: P1,
+					item_id: 'item:cot',
+					qty: '3'
+				},
+				mockEmit
+			);
+			expect(emitted).toEqual([{ key: [P1, 'item:cot', E1], value: [-3, -1] }]);
+		});
+
+		it('nets an entry and its void to zero under the same key', () => {
+			mapFn(
+				{ type: 'bulk_return_entry', _id: E1, pool_id: P1, item_id: 'item:cot', qty: '3' },
+				mockEmit
+			);
+			mapFn(
+				{
+					type: 'bulk_return_entry_void',
+					_id: 'bulk_return_entry_void:01J00000000000000000000003',
+					entry_id: E1,
+					pool_id: P1,
+					item_id: 'item:cot',
+					qty: '3'
+				},
+				mockEmit
+			);
+			const total = emitted.reduce(
+				(sum, row) => {
+					const [qty, count] = row.value as [number, number];
+					return [sum[0] + qty, sum[1] + count];
+				},
+				[0, 0]
+			);
+			expect(emitted.map((row) => row.key)).toEqual([
+				[P1, 'item:cot', E1],
+				[P1, 'item:cot', E1]
+			]);
+			expect(total).toEqual([0, 0]);
+		});
+	});
+
 	describe('station_logs_by_station (CR-192)', () => {
 		const mapFn = createMapFn(SHELTER_DASHBOARD_VIEWS.views.station_logs_by_station.map);
 		const log = (over: Record<string, unknown> = {}) => ({
@@ -253,5 +344,105 @@ describe('SHELTER_DASHBOARD_VIEWS Map Functions', () => {
 		it('has no reduce (pairing happens in the BFF)', () => {
 			expect('reduce' in SHELTER_DASHBOARD_VIEWS.views.station_logs_by_station).toBe(false);
 		});
+	});
+
+	// #821 — received-donation search views (view manifest v7).
+	describe('donation_received_by_name', () => {
+		const mapFn = createMapFn(SHELTER_DASHBOARD_VIEWS.views.donation_received_by_name.map);
+		const donation = (name: unknown, over: Record<string, unknown> = {}) => ({
+			type: 'donation',
+			status: 'received',
+			received_at: '2026-10-20T03:00:00.000Z',
+			donor: { name },
+			...over
+		});
+		const keys = () => emitted.map((e) => e.key);
+
+		it('emits the whole name and each word, keyed with received_at, value null', () => {
+			mapFn(donation('สมชาย ใจดี'), mockEmit);
+			expect(emitted).toEqual([
+				{ key: ['สมชาย ใจดี', '2026-10-20T03:00:00.000Z'], value: null },
+				{ key: ['สมชาย', '2026-10-20T03:00:00.000Z'], value: null },
+				{ key: ['ใจดี', '2026-10-20T03:00:00.000Z'], value: null }
+			]);
+		});
+
+		it('emits a one-word name exactly once', () => {
+			mapFn(donation('สมชาย'), mockEmit);
+			expect(keys()).toEqual([['สมชาย', '2026-10-20T03:00:00.000Z']]);
+		});
+
+		it('emits a repeated word once', () => {
+			mapFn(donation('ดี ดี'), mockEmit);
+			expect(keys()).toEqual([
+				['ดี ดี', '2026-10-20T03:00:00.000Z'],
+				['ดี', '2026-10-20T03:00:00.000Z']
+			]);
+		});
+
+		it('normalizes NFKC, case and runs of spaces before emitting', () => {
+			// Fullwidth latin + a no-break space + double space: NFKC folds them.
+			mapFn(donation('  ＪＯＨＮ\u00a0  Smith '), mockEmit);
+			expect(keys()).toEqual([
+				['john smith', '2026-10-20T03:00:00.000Z'],
+				['john', '2026-10-20T03:00:00.000Z'],
+				['smith', '2026-10-20T03:00:00.000Z']
+			]);
+		});
+
+		it('ignores donations that are not received, or have no donor name', () => {
+			mapFn(donation('สมชาย', { status: 'declared' }), mockEmit);
+			mapFn({ type: 'evacuee', status: 'received', donor: { name: 'สมชาย' } }, mockEmit);
+			mapFn(donation(undefined), mockEmit);
+			mapFn(donation('   '), mockEmit);
+			mapFn({ type: 'donation', status: 'received' }, mockEmit);
+			expect(emitted).toEqual([]);
+		});
+
+		it('does not trip on a word that looks like an Object property', () => {
+			mapFn(donation('__proto__ constructor'), mockEmit);
+			expect(keys()).toHaveLength(3);
+		});
+	});
+
+	describe('donation_received_by_item', () => {
+		const mapFn = createMapFn(SHELTER_DASHBOARD_VIEWS.views.donation_received_by_item.map);
+		const donation = (items: unknown, over: Record<string, unknown> = {}) => ({
+			type: 'donation',
+			status: 'received',
+			received_at: '2026-10-20T03:00:00.000Z',
+			items,
+			...over
+		});
+
+		it('emits [item_id, received_at] once per distinct item of the donation', () => {
+			mapFn(
+				donation([
+					{ item_id: 'item_master:rice', qty: '1', unit: 'kg' },
+					{ item_id: 'item_master:rice', qty: '2', unit: 'kg' },
+					{ item_id: 'item_master:water', qty: '1', unit: 'ลัง' }
+				]),
+				mockEmit
+			);
+			expect(emitted).toEqual([
+				{ key: ['item_master:rice', '2026-10-20T03:00:00.000Z'], value: null },
+				{ key: ['item_master:water', '2026-10-20T03:00:00.000Z'], value: null }
+			]);
+		});
+
+		it('skips free_text lines and donations that are not received', () => {
+			mapFn(donation([{ free_text: 'น้ำดื่ม', qty: '1', unit: 'ลัง' }]), mockEmit);
+			mapFn(donation([{ item_id: 'item_master:rice' }], { status: 'declared' }), mockEmit);
+			mapFn(donation([]), mockEmit);
+			mapFn(donation(undefined), mockEmit);
+			expect(emitted).toEqual([]);
+		});
+	});
+
+	it('ships the received-donation search views in view manifest v7 (#821)', () => {
+		expect(SHELTER_VIEW_MANIFEST.version).toBe(7);
+		expect(Object.keys(SHELTER_VIEW_MANIFEST.views)).toEqual(
+			expect.arrayContaining(['donation_received_by_name', 'donation_received_by_item'])
+		);
 	});
 });

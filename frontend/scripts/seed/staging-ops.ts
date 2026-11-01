@@ -212,7 +212,7 @@ export async function seedStagingOps(): Promise<void> {
 				{
 					donor: {
 						name: 'บริษัท ซีพีเอฟ จำกัด',
-						phone: '022222222',
+						phone: '0812222222',
 						phone_hash: 'mock-hash-cpf'
 					},
 					kind: 'items',

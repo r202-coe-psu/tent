@@ -3,6 +3,10 @@ import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { authorizeReferral, resolveShelterCode, handleEndpointError } from '../../_auth';
 import { CouchDbReferralServerRepository } from '$lib/features/referrals/server/referral.server-repository';
+import {
+	ReferralConflictError,
+	transitionWithRetry
+} from '$lib/features/referrals/server/referral.transition-retry';
 import { referralStatusSchema } from '$lib/features/referrals/domain/referral.schema';
 
 export const prerender = false;
@@ -12,7 +16,7 @@ export const prerender = false;
  * Transition the referral state with conflict (409) retry.
  *
  * Capacity referrals (all transitions) use this BFF path:
- * - `sent` mirrors the doc into the destination shelter DB (inbox)
+ * - `sent` writes the referral doc in `central_ops` only (no copy in the destination DB)
  * - `accepted`/`rejected` require the **destination** shelter scope (DoD)
  * - `accepted` runs cross-DB transfer via adminRaw before status write
  */
@@ -41,39 +45,22 @@ export const PATCH: RequestHandler = async ({ request, params, url }) => {
 
 		const repo = new CouchDbReferralServerRepository('central_ops', shelterCode);
 
-		const MAX_RETRIES = 3;
-		let lastError: { message?: string } | null = null;
-
-		for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
-			try {
-				const updated = await repo.transition(id, nextStatus, caller.name, reason, shelterCode);
-				return json(updated);
-			} catch (e: unknown) {
-				const err = e as { status?: number; message?: string };
-				// CouchDB put returns 409 conflict
-				const isConflict =
-					err.status === 409 ||
-					err.message?.includes('409') ||
-					err.message?.includes('conflict') ||
-					err.message?.includes('Conflict');
-
-				if (isConflict) {
-					lastError = err;
-					// Wait 50ms before retrying to mitigate write contention
-					await new Promise((resolve) => setTimeout(resolve, 50));
-					continue; // retry
-				}
-				throw e; // throw other errors immediately
+		try {
+			const updated = await transitionWithRetry(
+				repo,
+				id,
+				nextStatus,
+				caller.name,
+				reason,
+				shelterCode
+			);
+			return json(updated);
+		} catch (e: unknown) {
+			if (e instanceof ReferralConflictError) {
+				return json({ error: e.message, details: e.details }, { status: 409 });
 			}
+			throw e;
 		}
-
-		return json(
-			{
-				error: `Conflict: transition failed after ${MAX_RETRIES} attempts`,
-				details: lastError?.message
-			},
-			{ status: 409 }
-		);
 	} catch (e: unknown) {
 		if (e instanceof Error && e.message.includes('Invalid referral transition')) {
 			return json({ error: e.message }, { status: 422 });

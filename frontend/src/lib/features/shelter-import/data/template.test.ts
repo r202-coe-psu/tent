@@ -3,7 +3,10 @@ import { H, normalizeHeader, ZONE_SHEET_NAME } from '../domain/columns';
 import { parseShelterWorkbook } from './parse';
 import { buildShelterTemplateBlob } from './template';
 
-const MASTERS = { shelter_type: [{ value: 'school', label: 'โรงเรียน' }] };
+const MASTERS = {
+	shelter_type: [{ value: 'school', label: 'โรงเรียน' }],
+	site_kind: [{ value: 'evacuation_center', label: 'ศูนย์อพยพ' }]
+};
 
 async function generateAndParse() {
 	const blob = await buildShelterTemplateBlob(MASTERS, { withSample: true });
@@ -19,6 +22,20 @@ describe('normalizeHeader', () => {
 
 	it('leaves an unmarked header untouched', () => {
 		expect(normalizeHeader('จังหวัด')).toBe('จังหวัด');
+	});
+
+	it('reads the retired shelter-type header as the current ประเภทอาคาร column', () => {
+		expect(normalizeHeader('ประเภทศูนย์พักพิง')).toBe('ประเภทอาคาร');
+		expect(normalizeHeader('ประเภทศูนย์พักพิง *')).toBe('ประเภทอาคาร');
+	});
+
+	it('keeps the current shelter-type header as is, with or without the marker', () => {
+		expect(normalizeHeader('ประเภทอาคาร')).toBe('ประเภทอาคาร');
+		expect(normalizeHeader('ประเภทอาคาร *')).toBe('ประเภทอาคาร');
+	});
+
+	it('does not mistake Object.prototype keys for retired headers', () => {
+		expect(normalizeHeader('constructor')).toBe('constructor');
 	});
 
 	it('reduces a standalone marker cell to an empty (ignored) header', () => {

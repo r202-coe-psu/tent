@@ -2,7 +2,9 @@
 export {
 	operationStatusSchema,
 	siteKindSchema,
-	SITE_KIND_LABELS,
+	DEFAULT_SITE_KIND,
+	HOST_HOUSE_SITE_KIND,
+	validateSiteKindChange,
 	resolveOperationStatus,
 	isShelterBookable,
 	isShelterCancelled,
@@ -112,7 +114,13 @@ export {
 	type PolicySyncSlice
 } from './domain/feature-flag-policy-sync';
 
-export { SUB_STORAGE_TYPE_LABELS, listStoragePoints } from './domain/storage-points';
+export {
+	SUB_STORAGE_TYPE_LABELS,
+	listDonationPoints,
+	listStoragePoints,
+	sortSubStorageTypes,
+	subStorageTypeLabels
+} from './domain/storage-points';
 
 export {
 	sumZoneCapacities,

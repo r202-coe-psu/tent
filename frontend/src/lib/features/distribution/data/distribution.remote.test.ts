@@ -15,6 +15,8 @@ let revCounters: Map<string, number>;
 let beforeStrictWrite: ((doc: InMemoryDoc) => Promise<void> | void) | undefined;
 let stockLedgerProjectionReads: number;
 let getDocCalls: string[];
+/** Order of getDoc(reservation) vs ledger reads during approval (#855). */
+let readLog: string[] = [];
 let couchCallCount: number;
 
 function nextRev(id: string): string {
@@ -36,6 +38,7 @@ vi.mock('$lib/db/couch-db', async () => {
 		getDoc: async <T extends { _id: string }>(_dbName: string, id: string): Promise<T | null> => {
 			couchCallCount += 1;
 			getDocCalls.push(id);
+			readLog.push(`getDoc:${id.split(':')[0]}`);
 			const doc = store.get(id);
 			if (!doc) return null;
 			return JSON.parse(JSON.stringify(doc)) as T;
@@ -96,7 +99,10 @@ vi.mock('$lib/db/couch-db', async () => {
 			guard: (d: unknown) => d is T
 		): Promise<T[]> => {
 			couchCallCount += 1;
-			if (type === 'stock_ledger') stockLedgerProjectionReads += 1;
+			if (type === 'stock_ledger') {
+				stockLedgerProjectionReads += 1;
+				readLog.push('ledger');
+			}
 			const results: T[] = [];
 			for (const doc of store.values()) {
 				if (doc.type === type && guard(doc)) {
@@ -1933,6 +1939,45 @@ describe('DistributionRemoteRepository (Phase 3A)', () => {
 		});
 	});
 
+	describe('approval claim read order (#855)', () => {
+		it('reads the reservation doc before the ledger on every claim attempt', async () => {
+			const inbound = await seedInboundLot('item:rice', 100);
+			const request = await repo.createRequest(
+				{
+					purpose: 'Daily emergency rations',
+					active_headcount_snapshot: '50',
+					buffer_percent: 10,
+					items: [
+						{
+							item_id: 'item:rice',
+							requested_qty: '55',
+							unit: 'kg',
+							distribution_type_snapshot: 'one_time',
+							target_qty_snapshot: '55'
+						}
+					]
+				},
+				distributionCtx
+			);
+			readLog = [];
+			await repo.approveRequest(
+				request._id,
+				[{ item_id: 'item:rice', lot_ref: inbound._id, qty: '55' }],
+				warehouseCtx
+			);
+			// The claim loop is the first reader of the reservation doc; the ledger read that
+			// follows it must never come before it.
+			const firstReservation = readLog.indexOf('getDoc:stock_lot_reservation');
+			expect(firstReservation).toBeGreaterThanOrEqual(0);
+			const claimLedgerRead = readLog.indexOf('ledger', firstReservation);
+			expect(claimLedgerRead).toBeGreaterThan(firstReservation);
+			expect(readLog.slice(firstReservation, firstReservation + 2)).toEqual([
+				'getDoc:stock_lot_reservation',
+				'ledger'
+			]);
+		});
+	});
+
 	describe('T3A-04: Multi-Lot Allocation with Canonical Sorting', () => {
 		it('sorts allocations by lot_ref ascending and item_id ascending deterministically', async () => {
 			const lotB = await seedInboundLot('item:rice', 50, 'kg', 'L-260829-002');
@@ -1973,6 +2018,99 @@ describe('DistributionRemoteRepository (Phase 3A)', () => {
 			expect(batch.allocations[0].allocation_ledger_id).toMatch(/:0$/);
 			expect(batch.allocations[1].lot_ref).toBe(secondLot);
 			expect(batch.allocations[1].allocation_ledger_id).toMatch(/:1$/);
+		});
+	});
+
+	describe('approval ignores another item with an impossible lot history', () => {
+		function seedBrokenItem(itemId: string): string {
+			const lotId = 'stock_ledger:01J20000000000000000000B01';
+			const base = {
+				schema_v: 3,
+				shelter_code: 'SH001',
+				type: 'stock_ledger',
+				item_id: itemId,
+				unit: 'kg',
+				ref_id: null,
+				created_by: 'tester'
+			};
+			// An outbound dated before the inbound of the lot it names cannot be replayed.
+			const rows = [
+				{
+					...base,
+					_id: 'stock_ledger:01J20000000000000000000B00',
+					qty: '-3',
+					reason: 'distribute',
+					lot_ref: lotId,
+					occurred_at: '2026-01-01T00:00:00.000Z'
+				},
+				{
+					...base,
+					_id: lotId,
+					qty: '10',
+					reason: 'receive',
+					lot_ref: lotId,
+					occurred_at: '2026-01-02T00:00:00.000Z'
+				}
+			];
+			for (const row of rows) {
+				const stamp = '2026-01-02T00:00:00.000Z';
+				store.set(row._id, {
+					...row,
+					created_at: stamp,
+					updated_at: stamp,
+					_rev: nextRev(row._id)
+				});
+			}
+			return lotId;
+		}
+
+		const riceRequest = () =>
+			repo.createRequest(
+				{
+					purpose: 'Healthy item distribution',
+					active_headcount_snapshot: '80',
+					buffer_percent: 10,
+					items: [
+						{
+							item_id: 'item:rice',
+							requested_qty: '40',
+							unit: 'kg',
+							distribution_type_snapshot: 'one_time',
+							target_qty_snapshot: '44'
+						}
+					]
+				},
+				distributionCtx
+			);
+
+		it("approves a healthy item although another item's history cannot be replayed", async () => {
+			const lot = await seedInboundLot('item:rice', 50, 'kg', 'L-260829-001');
+			seedBrokenItem('item:broken');
+			const req = await riceRequest();
+
+			const batch = await repo.approveRequest(
+				req._id,
+				[{ item_id: 'item:rice', lot_ref: lot._id, qty: '40' }],
+				warehouseCtx
+			);
+
+			expect(batch.status).toBe('active');
+			expect(batch.allocations.map((a) => [a.item_id, a.lot_ref, a.qty])).toEqual([
+				['item:rice', lot._id, '40']
+			]);
+		});
+
+		it('still refuses to approve from the item whose own history is impossible', async () => {
+			const brokenLot = seedBrokenItem('item:rice');
+			const req = await riceRequest();
+
+			await expect(
+				repo.approveRequest(
+					req._id,
+					[{ item_id: 'item:rice', lot_ref: brokenLot, qty: '5' }],
+					warehouseCtx
+				)
+			).rejects.toThrow(/Historical outbound/);
 		});
 	});
 

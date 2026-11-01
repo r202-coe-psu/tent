@@ -3,12 +3,9 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Literal
 
 from pydantic import BaseModel, Field
-from tent_model.public_shelter import GeoJsonPoint, GeoPoint
-
-SiteKind = Literal["evacuation_center", "host_house"]
+from tent_model.public_shelter import DonationPoint, GeoJsonPoint, GeoPoint
 
 
 class ShelterListCapacityDetail(BaseModel):
@@ -19,7 +16,10 @@ class ShelterListCapacityDetail(BaseModel):
 class ShelterItem(BaseModel):
     code: str = Field(description="Shelter code, e.g. SH001")
     name: str
-    site_kind: SiteKind = Field(default="evacuation_center")
+    site_kind: str = Field(
+        default="evacuation_center",
+        description="Master code from master_data:site_kind (e.g. evacuation_center, host_house)",
+    )
     status: str
     capacity: int = 0
     geo: GeoPoint | None = None
@@ -96,7 +96,10 @@ class ShelterZoneDetail(BaseModel):
 class ShelterDetail(BaseModel):
     id: str
     name: str
-    site_kind: SiteKind = Field(default="evacuation_center")
+    site_kind: str = Field(
+        default="evacuation_center",
+        description="Master code from master_data:site_kind (e.g. evacuation_center, host_house)",
+    )
     status: str
     admin_type: str
     address: str
@@ -116,6 +119,9 @@ class ShelterDetail(BaseModel):
     contact: ShelterContactDetail
     faq: list[ShelterFaqDetail]
     accepts_pre_registration: bool = False
+    # CR-205: ticked storage points with a pin, projected by the worker. [] = the shelter's
+    # own location is the only drop-off point. Detail only; the list does not carry it.
+    donation_points: list[DonationPoint] = Field(default_factory=list)
 
 
 class ShelterDetailResponse(BaseModel):

@@ -11,6 +11,12 @@
 
 // domain
 export * from './domain/volunteer.schema';
+export {
+	isVolunteerMobile,
+	volunteerMobileSchema,
+	optionalVolunteerMobileSchema,
+	VOLUNTEER_PHONE_MESSAGE
+} from './domain/phone';
 export * from './domain/job.schema';
 // `makeJobApplication` is deliberately NOT re-exported: it takes a free-form
 // `status`, so exposing it would let callers outside the slice mint a
@@ -38,6 +44,7 @@ export * from './domain/shift-assignment.schema';
 export * from './domain/quota';
 export * from './domain/capacity';
 export * from './domain/duty-window';
+export * from './domain/shift-closing';
 export * from './domain/collision';
 export * from './domain/assign-roster';
 export * from './domain/skills';
@@ -46,11 +53,7 @@ export * from './domain/applicant-queue';
 export * from './domain/shift-roster';
 export * from './domain/volunteer-code';
 export * from './domain/hub-metrics';
-export {
-	extractScanCode,
-	parseVolunteerScanCode,
-	type VolunteerScanCode
-} from './domain/scan-code';
+export { parseVolunteerScanCode, type VolunteerScanCode } from './domain/scan-code';
 
 // data — repository interfaces/filters + remote adapter factories
 export * from './data/volunteer.repository';
@@ -77,6 +80,8 @@ export {
 	ShiftAssignmentRemoteRepository,
 	createShiftAssignmentRepositoryForTest
 } from './data/shift-assignment.remote';
+
+export type { VolunteerNameRecord } from './data/volunteer-names.remote';
 
 // application — query-key factory + every hook
 export * from './application/queries';

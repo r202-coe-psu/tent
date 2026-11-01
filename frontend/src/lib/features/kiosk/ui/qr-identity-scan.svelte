@@ -18,6 +18,7 @@
 	import { selectCameraId } from '../domain/kiosk-camera';
 	import { qrInputPlan, type KioskHardware } from '../domain/kiosk-hardware';
 	import { createKeyboardWedge } from '../domain/keyboard-wedge';
+	import { parseKioskQr } from '../domain/kiosk-qr';
 	import KioskPreRegisteredCheckIn from './kiosk-pre-registered-check-in.svelte';
 	import { KioskIdleTimeout, KIOSK_IDLE_TIMEOUT_MS } from './kiosk-idle-timeout.svelte.js';
 	import type { KioskContextQuery } from '../domain/display-context';
@@ -45,7 +46,6 @@
 		void goto(resolve(`/kiosk${contextQuery}`));
 	});
 	const cameraReaderId = 'kiosk-registration-qr-reader';
-	const tokenPattern = /^evacuee:[0-7][0-9A-HJKMNP-TV-Z]{25}$/i;
 
 	onMount(() => {
 		// Starts as soon as the camera is up, not only after a scan resolves `gate` — otherwise an
@@ -102,15 +102,15 @@
 		if (now - lastScanTime < 1500) return;
 		lastScanTime = now;
 
-		const token = decodedValue.trim();
-		if (!tokenPattern.test(token)) {
+		const qr = parseKioskQr(decodedValue);
+		if (qr.kind === 'invalid') {
 			scanNotice = 'QR นี้ใช้รายงานตัวไม่ได้';
 			return;
 		}
 
 		scanNotice = '';
 		cameraError = '';
-		gate = { source: 'qr', token: `evacuee:${token.slice(token.indexOf(':') + 1).toUpperCase()}` };
+		gate = { source: 'qr', token: qr.kind === 'evacuee' ? qr.token : qr.registration_id };
 		if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(100);
 	}
 

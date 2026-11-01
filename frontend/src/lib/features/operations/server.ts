@@ -40,6 +40,7 @@ export {
 	transferInputSchema,
 	transferStatusSchema,
 	transferFilterSchema,
+	TRANSFER_IDS_PER_REQUEST,
 	receivedItemSchema,
 	nextLotNos,
 	lotDateStamp,
@@ -48,6 +49,9 @@ export {
 } from './domain/operations';
 
 export type {
+	DonationPointReceipt,
+	DonationPointReceiptItem,
+	DonationCloseReason,
 	CountedItem,
 	Donation,
 	DonationItem,
@@ -79,6 +83,7 @@ export {
 } from './domain/donation-slot';
 
 export {
+	deriveDonationCloseAuditId,
 	deriveDonationReceiptAuditId,
 	deriveDonationReceiptLineId,
 	donationShortfall,

@@ -99,6 +99,9 @@ class Settings(BaseSettings):
     def configure_logging(self) -> None:
         """Configure application logging"""
         logging.getLogger().handlers = [InterceptHandler()]
+        # The root logger stays at WARNING, which dropped every stdlib `logger.info` in the
+        # app before it reached loguru. Lower only our own tree so libraries stay quiet.
+        logging.getLogger("apiapp").setLevel(self.LOGGING_LEVEL)
         for logger_name in self.LOGGERS:
             logging_logger = logging.getLogger(logger_name)
             logging_logger.handlers = [InterceptHandler(level=self.LOGGING_LEVEL)]

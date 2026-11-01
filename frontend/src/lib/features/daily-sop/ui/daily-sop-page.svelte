@@ -2,7 +2,7 @@
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
-	import { onMount } from 'svelte';
+	import { onMount, tick } from 'svelte';
 	import { SvelteURLSearchParams } from 'svelte/reactivity';
 	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
 	import CheckCircle2 from '@lucide/svelte/icons/circle-check';
@@ -37,9 +37,10 @@
 		canCompleteRoleDraft,
 		createEmptyRoleDraft,
 		dailySopBangkokDate,
-		dailySopReviewDates,
+		historyNeedsMorePages,
 		hasRoleDraftInput,
 		metricParameterForQuestion,
+		notesRequired,
 		metricForQuestion,
 		questionText,
 		requiredForMetric,
@@ -54,6 +55,7 @@
 		roleUsesShelterCapacity,
 		roleUsesStockCheck,
 		summarizeRoleDraft,
+		visibleHistoryDates,
 		type DailySopRoleAssessment,
 		type DailySopRoleControlDraft,
 		type DailySopRoleCode,
@@ -82,7 +84,7 @@
 		isHistoricalDate
 			? 'วันย้อนหลังดูได้อย่างเดียว'
 			: isCurrentDate
-				? 'ดูสถานะทุกตำแหน่งได้ · ประเมินได้เฉพาะตำแหน่งที่ได้รับมอบหมาย'
+				? 'แสดงเฉพาะตำแหน่งที่บัญชีนี้ประเมินได้'
 				: 'ดูผลประเมินได้ถึงวันที่ปัจจุบันเท่านั้น'
 	);
 	const landingView = $derived(page.url.searchParams.get('view') === 'roles' ? 'roles' : 'days');
@@ -100,6 +102,8 @@
 	let isSaving = $state(false);
 	let saveSuccessOpen = $state(false);
 	let savedAssessment = $state<DailySopRoleAssessment | null>(null);
+	/** Context the success dialog belongs to; it never shows for another user/role/date. */
+	let savedContextKey = $state('');
 	let baseAssessment = $state<DailySopRoleAssessment | null>(null);
 	let baseDraft = $state<DailySopRoleDraft | null>(null);
 	let revisionConflict = $state(false);
@@ -126,7 +130,7 @@
 	);
 	const canEditSelectedRole = $derived(Boolean(isCurrentDate && canAssessSelectedRole));
 	const canOpenSelectedRole = $derived(
-		Boolean(selectedRole && (isHistoricalDate || isCurrentDate))
+		Boolean(selectedRole && canAssessSelectedRole && (isHistoricalDate || isCurrentDate))
 	);
 	const occupancyQuery = useDashboardOccupancy(
 		() => shelterCode,
@@ -142,14 +146,15 @@
 			: null
 	);
 	const selectedQuery = useDailySopRoleAssessment(() => selectedId);
+	/** Session + role context; a change discards the open form state (CR-153 access loss). */
+	const formContextKey = $derived(
+		`${user?.name ?? ''}|${[...userRoles].sort().join(',')}|${selectedId ?? ''}`
+	);
 	const saveMutation = useSaveDailySopRoleAssessment();
 	const roleRows = $derived.by(() => rowsForDate(date));
 	const dailySummary = $derived.by(() => summarizeRows(roleRows));
 	const dayRows = $derived.by(() => {
-		return dailySopReviewDates(
-			historyRows.map((item) => item.assessment_date),
-			today
-		).map((assessmentDate) => {
+		return visibleHistoryDates(historyRows, availableRoles, today).map((assessmentDate) => {
 			const roles = rowsForDate(assessmentDate);
 			return {
 				date: assessmentDate,
@@ -162,11 +167,16 @@
 			};
 		});
 	});
+	const historyNeedsMore = $derived(
+		historyNeedsMorePages(historyRows, availableRoles, Boolean(historyQuery.hasNextPage))
+	);
 	const activeAssessment = $derived(selectedQuery.data ?? null);
 	const stockShelterCode = $derived(activeAssessment?.shelter_code ?? shelterCode);
 	const stockQuery = useDailySopStockStatus(
 		() => stockShelterCode,
-		() => Boolean(selectedRole && roleUsesStockCheck(selectedRole.code)) && stockPanelOpen
+		() =>
+			Boolean(selectedRole && canAssessSelectedRole && roleUsesStockCheck(selectedRole.code)) &&
+			stockPanelOpen
 	);
 	const isLoadingAssessment = $derived(Boolean(selectedId && selectedQuery.isLoading));
 	const effectiveDraft = $derived(draft);
@@ -193,7 +203,6 @@
 			selectedRole &&
 			isCurrentDate &&
 			!revisionConflict &&
-			hasRoleDraftInput(effectiveDraft, selectedRole.code) &&
 			questions.every((question) => {
 				const answer = effectiveDraft[question.id];
 				const parameterMissing =
@@ -207,14 +216,7 @@
 					!activeAssessment &&
 					!sopRatioQuery.isSuccess &&
 					!sopRatioQuery.isError;
-				return (
-					!parameterUnresolved &&
-					(!parameterUnavailable ||
-						(answer?.status === 'Pending' && Boolean(answer.notes.trim()))) &&
-					(!answer ||
-						(answer.status !== 'Fail' && answer.status !== 'Pending') ||
-						Boolean(answer.notes.trim()))
-				);
+				return !parameterUnresolved && (!parameterUnavailable || answer?.status === 'Pending');
 			})
 		)
 	);
@@ -266,6 +268,7 @@
 
 	$effect(() => {
 		const id = selectedId;
+		const contextKey = formContextKey;
 		const role = selectedRole;
 		const assessment = selectedQuery.data;
 		if (!id || !role) {
@@ -281,13 +284,13 @@
 			metricFieldsTouched = {};
 			return;
 		}
-		if (isLoadingAssessment || hydratedId === id) return;
+		if (isLoadingAssessment || hydratedId === contextKey) return;
 		baseAssessment = assessment ?? null;
 		baseDraft = cloneRoleDraft(
 			assessment ? roleDraftFromAssessment(assessment) : createEmptyRoleDraft(role.code)
 		);
 		draft = cloneRoleDraft(baseDraft);
-		hydratedId = id;
+		hydratedId = contextKey;
 		revisionConflict = false;
 		latestConflictAssessment = undefined;
 		mergeChoices = {};
@@ -345,7 +348,7 @@
 		const current = draft[id];
 		if (!current) return;
 		draft = { ...draft, [id]: { ...current, status } };
-		if (status === 'Fail' || status === 'Pending') detailsOpen[id] = true;
+		if (status === 'Fail' || notesRequired(status)) detailsOpen[id] = true;
 	}
 
 	function setText(id: string, key: 'notes' | 'observations', text: string): void {
@@ -493,12 +496,7 @@
 		if (!selectedRole) return null;
 		for (const question of questions) {
 			const answer = effectiveDraft[question.id];
-			if (
-				answer &&
-				(answer.status === 'Fail' || answer.status === 'Pending') &&
-				!answer.notes.trim()
-			)
-				return question.id;
+			if (answer && notesRequired(answer.status) && !answer.notes.trim()) return question.id;
 		}
 		return null;
 	}
@@ -511,13 +509,17 @@
 		}
 		const missingNoteId = missingNoteQuestionId();
 		if (missingNoteId) {
-			const question = questions.find((item) => item.id === missingNoteId);
-			toast.error(`กรุณาระบุหมายเหตุ: ${question?.id ?? missingNoteId}`);
+			const position = questions.findIndex((item) => item.id === missingNoteId) + 1;
+			detailsOpen[missingNoteId] = true;
+			toast.error(`ข้อ ${position}: กรุณาระบุข้อมูลที่ยังรอ`);
+			await tick();
 			document
 				.getElementById(`role-question-${missingNoteId}`)
 				?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+			document.getElementById(`daily-sop-${missingNoteId}-notes`)?.focus({ preventScroll: true });
 			return;
 		}
+		const saveContextKey = formContextKey;
 		if (!hasRoleDraftInput(effectiveDraft, selectedRole.code)) {
 			toast.error('กรุณาบันทึกผลประเมินหรือค่าที่ประเมินได้อย่างน้อยหนึ่งข้อ');
 			return;
@@ -551,7 +553,10 @@
 					sopRatios: sopRatios ?? undefined
 				}
 			});
+			// The user, shelter, date or role changed while saving: never touch the new form.
+			if (formContextKey !== saveContextKey) return;
 			savedAssessment = saved;
+			savedContextKey = saveContextKey;
 			baseAssessment = saved;
 			const savedDraft = cloneRoleDraft(roleDraftFromAssessment(saved));
 			baseDraft = savedDraft;
@@ -565,6 +570,7 @@
 			}
 			saveSuccessOpen = true;
 		} catch (error) {
+			if (formContextKey !== saveContextKey) return;
 			if (
 				error instanceof ConflictError ||
 				(typeof error === 'object' &&
@@ -662,8 +668,28 @@
 	</title>
 </svelte:head>
 
-{#if (!selectedRole && landingView === 'roles') || (selectedRole && !canOpenSelectedRole)}
-	<StaffPageShell title="ความคืบหน้าวันที่ {formatAssessmentDate(date)}" description={viewHint}>
+{#if selectedRole && !canAssessSelectedRole}
+	<StaffPageShell title="แบบประเมินการดำเนินงานประจำวัน">
+		<div
+			class="space-y-3 rounded-xl border bg-card p-4"
+			role="alert"
+			data-testid="daily-sop-role-no-access"
+		>
+			<p class="text-sm">บัญชีนี้ไม่สามารถเปิดแบบประเมินของตำแหน่งนี้ได้</p>
+			<Button
+				variant="outline"
+				class="min-h-11 gap-2 px-3"
+				onclick={() => updateUrl(null, date, 'roles')}
+			>
+				<ArrowLeft class="size-4" aria-hidden="true" /> กลับภาพรวม
+			</Button>
+		</div>
+	</StaffPageShell>
+{:else if (!selectedRole && landingView === 'roles') || (selectedRole && !canOpenSelectedRole)}
+	<StaffPageShell
+		title="รายการประเมินประจำวันที่ {formatAssessmentDate(date)}"
+		description={viewHint}
+	>
 		{#snippet meta()}
 			<Button
 				variant="outline"
@@ -744,6 +770,13 @@
 							ลองอีกครั้ง
 						</Button>
 					</div>
+				{:else if roleRows.length === 0}
+					<div
+						class="rounded-xl border bg-card p-4 text-sm text-muted-foreground"
+						data-testid="daily-sop-no-roles"
+					>
+						บัญชีนี้ยังไม่มีแบบประเมินที่สามารถทำได้ในศูนย์นี้
+					</div>
 				{:else}
 					<div class="role-progress-table" role="table" aria-label="ผลประเมินแยกตามตำแหน่ง">
 						<div class="role-progress-header" role="row">
@@ -820,9 +853,7 @@
 							type="button"
 							disabled={historyQuery.isFetchingNextPage}
 							onclick={() => historyQuery.fetchNextPage()}
-							>{historyQuery.isFetchingNextPage
-								? 'กำลังโหลด...'
-								: 'โหลดผลประเมินวันก่อนหน้า'}</button
+							>{historyQuery.isFetchingNextPage ? 'กำลังโหลด...' : 'โหลดเพิ่มเติม'}</button
 						>
 					{/if}
 				{/if}
@@ -831,7 +862,7 @@
 	</StaffPageShell>
 {:else if !selectedRole}
 	<StaffPageShell
-		title="ประเมินมาตรฐานประจำวัน"
+		title="แบบประเมินการดำเนินงานประจำวัน"
 		description="เลือกวันที่จากรายการด้านล่าง เพื่อดูความคืบหน้าแยกตามหน้าที่"
 	>
 		<div class="space-y-4" data-testid="daily-sop-days-view">
@@ -852,6 +883,13 @@
 					>
 						ลองอีกครั้ง
 					</button>
+				</div>
+			{:else if availableRoles.length === 0}
+				<div
+					class="rounded-xl border bg-card p-4 text-sm text-muted-foreground"
+					data-testid="daily-sop-no-roles"
+				>
+					บัญชีนี้ยังไม่มีแบบประเมินที่สามารถทำได้ในศูนย์นี้
 				</div>
 			{:else}
 				<div class="overflow-hidden rounded-xl border bg-card" data-testid="daily-sop-day-list">
@@ -925,15 +963,17 @@
 					{/each}
 				</div>
 				{#if historyQuery.hasNextPage}
-					<p class="text-sm text-muted-foreground">
-						วันที่เก่าที่สุดที่แสดงอาจยังโหลดไม่ครบทุกหน้าที่ — โหลดเพิ่มเพื่อดูครบ
+					<p class="text-sm text-muted-foreground" data-testid="daily-sop-history-needs-more">
+						{historyNeedsMore
+							? 'ยังไม่พบประวัติที่เกี่ยวข้อง กด “โหลดเพิ่มเติม” เพื่อตรวจสอบวันก่อนหน้า'
+							: 'วันที่เก่าที่สุดที่แสดงอาจยังโหลดไม่ครบทุกหน้าที่ — โหลดเพิ่มเพื่อดูครบ'}
 					</p>
 					<button
 						class="min-h-11 rounded-md border bg-background px-4 text-sm font-semibold hover:bg-muted disabled:opacity-50"
 						type="button"
 						disabled={historyQuery.isFetchingNextPage}
 						onclick={() => historyQuery.fetchNextPage()}
-						>{historyQuery.isFetchingNextPage ? 'กำลังโหลด...' : 'โหลดวันก่อนหน้า'}</button
+						>{historyQuery.isFetchingNextPage ? 'กำลังโหลด...' : 'โหลดเพิ่มเติม'}</button
 					>
 				{/if}
 			{/if}
@@ -1165,6 +1205,7 @@
 							{@const requirement = requiredForMetric(metric, displayedMetricValues)}
 							<section
 								id={`role-question-${question.id}`}
+								data-question-id={question.id}
 								class="grid scroll-mt-6 grid-cols-1 gap-y-3 border-b p-3 last:border-b-0 sm:p-4 md:grid-cols-[minmax(0,1fr)_repeat(2,minmax(5rem,6rem))] md:items-start md:gap-x-4"
 							>
 								<div class="col-start-1 row-start-1 flex min-w-0 items-start gap-2 sm:gap-3">
@@ -1173,10 +1214,7 @@
 										>{index + 1}</span
 									>
 									<div class="min-w-0 flex-1">
-										<p class="text-xs font-semibold tracking-wide text-muted-foreground sm:text-sm">
-											{question.id}
-										</p>
-										<h3 class="mt-1 text-sm leading-relaxed font-medium sm:text-base">
+										<h3 class="text-sm leading-relaxed font-medium sm:text-base">
 											{question.text}
 										</h3>
 										{#if parameterUnavailable}
@@ -1185,8 +1223,8 @@
 												role="status"
 											>
 												{#if sopRatioQuery.isError}
-													โหลดค่ากำหนดของศูนย์ไม่สำเร็จ เลือก “รอข้อมูล” พร้อมระบุหมายเหตุ
-													หรือลองโหลดใหม่
+													โหลดข้อมูลเกณฑ์ของศูนย์ไม่สำเร็จ โปรดลองอีกครั้ง หากยังไม่มีข้อมูลให้เลือก
+													“รอข้อมูล” และระบุสิ่งที่ขาด
 												{:else}
 													ไม่พบค่ากำหนดของศูนย์สำหรับข้อนี้ จึงยังประเมินไม่ได้
 												{/if}
@@ -1208,11 +1246,11 @@
 												<p>กำลังโหลดค่ากำหนดของศูนย์</p>
 											</div>
 										{/if}
-										{#if savedControl || isDirty}
+										{#if savedControl?.status || isDirty}
 											<div
 												class="mt-2 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs leading-relaxed text-muted-foreground sm:text-sm"
 											>
-												{#if savedControl}
+												{#if savedControl?.status}
 													<span
 														>บันทึกล่าสุดโดย {savedControl.checked_by_name ||
 															savedControl.checked_by}</span
@@ -1290,17 +1328,17 @@
 									class="col-span-full row-start-3 mt-1 rounded-lg border bg-muted/20 px-3 py-1.5 md:row-start-2 md:mt-0 md:px-4"
 									open={detailsOpen[question.id] ??
 										(answer?.status === 'Fail' ||
-											answer?.status === 'Pending' ||
+											notesRequired(answer?.status) ||
 											(question.id === DAILY_SOP_CAPACITY_QUESTION_ID && calculated !== null) ||
 											question.id === DAILY_SOP_STOCK_QUESTION_ID)}
 									ontoggle={(event) => (detailsOpen[question.id] = event.currentTarget.open)}
 								>
 									<summary class="min-h-11 cursor-pointer py-3 text-xs font-medium sm:text-sm">
-										{#if answer?.status === 'Fail' || answer?.status === 'Pending'}
-											รายละเอียดและหมายเหตุ
-											<span class="font-normal text-destructive">— ต้องระบุหมายเหตุ</span>
+										{#if notesRequired(answer?.status)}
+											ระบุข้อมูลที่ยังรอ
+											<span class="font-normal text-destructive">(จำเป็น)</span>
 										{:else}
-											รายละเอียดและบันทึกเพิ่มเติม
+											รายละเอียดเพิ่มเติม
 											<span class="font-normal text-muted-foreground">(ไม่บังคับ)</span>
 										{/if}
 									</summary>
@@ -1337,12 +1375,12 @@
 											<div class="rounded-lg border border-sky-200 bg-sky-50/60 p-3 md:col-span-2">
 												<div class="flex flex-wrap items-center justify-between gap-2">
 													<p class="text-sm font-semibold">
-														ค่าที่กรอกเพื่อประกอบการพิจารณา
+														ข้อมูลตัวเลขสำหรับตรวจสอบ
 														<span class="font-normal text-muted-foreground">(ไม่บังคับ)</span>
 													</p>
 													{#if canEditSelectedRole && systemMetricValues && Object.keys(systemMetricValues).length > 0}
 														<span class="text-xs text-muted-foreground">
-															ค่าในช่องที่มาจากระบบเป็นค่าแนะนำ จะบันทึกเมื่อประเมินหรือแก้ไขข้อนี้
+															ระบบกรอกข้อมูลบางส่วนให้แล้ว โปรดตรวจสอบและแก้ไขหากไม่ตรงกับข้อมูลจริง
 														</span>
 													{/if}
 												</div>
@@ -1372,12 +1410,6 @@
 														</label>
 													{/each}
 												</div>
-												<p
-													class="mt-2 text-xs text-muted-foreground"
-													data-testid="metric-threshold"
-												>
-													เกณฑ์: {metric.threshold}
-												</p>
 												{#if requirement}
 													<p class="mt-1 text-sm" data-testid="metric-required">
 														ต้องการอย่างน้อย {requirement.amount}
@@ -1385,18 +1417,22 @@
 													</p>
 												{/if}
 												{#if calculated !== null}
-													<p class="mt-2 text-sm font-medium">
-														ผลคำนวณประกอบการพิจารณา: {calculated ? 'ผ่านเกณฑ์' : 'ไม่ผ่านเกณฑ์'}
+													<p class="mt-2 text-sm font-medium" data-testid="metric-result">
+														ผลตรวจสอบจากตัวเลข: {calculated ? metric.passText : metric.failText}
 													</p>
+													{@const hint = metric.hint(displayedMetricValues)}
+													{#if hint}
+														<p class="mt-1 text-sm" data-testid="metric-hint">{hint}</p>
+													{/if}
 													<p class="mt-1 text-xs text-muted-foreground">
-														ผู้ประเมินเป็นผู้เลือกสถานะเอง
+														ตัวเลขช่วยตรวจสอบเบื้องต้น โปรดดูสถานการณ์จริงก่อนเลือกผล
 													</p>
 												{/if}
 											</div>
 										{/if}
 										<label class="grid gap-1.5 text-sm">
 											<span
-												>รายละเอียดที่พบ <span class="font-normal text-muted-foreground"
+												>สิ่งที่พบจากการตรวจ <span class="font-normal text-muted-foreground"
 													>(ถ้ามี)</span
 												></span
 											>
@@ -1412,10 +1448,10 @@
 										</label>
 										<label class="grid gap-1.5 text-sm">
 											<span>
-												หมายเหตุ
-												{#if answer?.status === 'Fail' || answer?.status === 'Pending'}
-													<span class="text-destructive">(จำเป็น)</span>
+												{#if notesRequired(answer?.status)}
+													ข้อมูลที่ยังรอ <span class="text-destructive">(จำเป็น)</span>
 												{:else}
+													หมายเหตุเพิ่มเติม
 													<span class="font-normal text-muted-foreground">(ถ้ามี)</span>
 												{/if}
 											</span>
@@ -1423,19 +1459,22 @@
 												id={'daily-sop-' + question.id + '-notes'}
 												rows={3}
 												disabled={!canEditSelectedRole || revisionConflict}
-												class={(answer?.status === 'Fail' || answer?.status === 'Pending') &&
-												!answer?.notes.trim()
+												class={notesRequired(answer?.status) && !answer?.notes.trim()
 													? 'border-destructive'
 													: ''}
+												aria-invalid={notesRequired(answer?.status) && !answer?.notes.trim()}
 												value={answer?.notes ?? ''}
 												oninput={(event) =>
 													setText(question.id, 'notes', event.currentTarget.value)}
 												placeholder={answer?.status === 'Pending'
-													? 'ระบุว่ารออะไร เพราะอะไร และใคร/เมื่อไรต้องติดตาม'
+													? 'ระบุข้อมูลที่ยังขาด เหตุผลที่ต้องรอ และผู้รับผิดชอบติดตาม'
 													: answer?.status === 'Fail'
-														? 'ระบุสิ่งที่พบ จุดที่ไม่ผ่าน และการแก้ไขหรือผู้รับผิดชอบ'
+														? 'เช่น พบปัญหาอะไร ดำเนินการแก้อย่างไร หรือใครรับผิดชอบ'
 														: 'บันทึกเพิ่มเติม (ถ้ามี)'}
 											/>
+											{#if notesRequired(answer?.status) && !answer?.notes.trim()}
+												<span class="text-xs text-destructive">กรุณาระบุข้อมูลที่ยังรอ</span>
+											{/if}
 										</label>
 									</div>
 								</details>
@@ -1446,7 +1485,7 @@
 
 				{#if canEditSelectedRole}
 					<div
-						class="sticky bottom-[var(--testing-banner-height)] z-20 -mx-4 -mb-[calc(9rem+env(safe-area-inset-bottom))] border-t bg-background/95 px-3 py-2 backdrop-blur sm:-mx-6 sm:-mb-28 sm:px-4 sm:py-3"
+						class="fixed inset-x-0 bottom-[var(--testing-banner-height)] z-20 border-t bg-background/95 px-3 pt-2 pb-[calc(0.5rem+env(safe-area-inset-bottom,0px))] backdrop-blur sm:px-4 sm:pt-3 sm:pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))] lg:sticky lg:inset-x-auto lg:-mx-6 lg:-mb-28"
 					>
 						<div
 							class="mx-auto grid max-w-6xl grid-cols-1 items-center gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:gap-3"
@@ -1478,7 +1517,7 @@
 							{/if}
 							<div class="grid gap-2 sm:flex sm:justify-end">
 								<Button
-									class="min-h-12 w-full gap-2 px-3 py-2 text-sm sm:min-h-11 sm:w-auto sm:px-4"
+									class="min-h-12 w-full gap-2 px-3 py-2 text-sm sm:w-auto sm:px-4"
 									disabled={!canSave || isSaving}
 									onclick={save}
 								>
@@ -1498,7 +1537,7 @@
 	</StaffPageShell>
 {/if}
 
-{#if selectedRole && roleUsesStockCheck(selectedRole.code)}
+{#if selectedRole && canAssessSelectedRole && roleUsesStockCheck(selectedRole.code)}
 	<DailySopStockPanel
 		bind:open={stockPanelOpen}
 		shelterCode={stockShelterCode}
@@ -1514,47 +1553,51 @@
 	/>
 {/if}
 
-<Dialog.Root bind:open={saveSuccessOpen}>
-	<Dialog.Content data-testid="role-save-success-dialog">
-		<Dialog.Header class="text-left">
-			<div
-				class="mb-1 flex size-11 items-center justify-center rounded-full bg-emerald-100 text-emerald-800"
-			>
-				<CheckCircle2 class="size-5" aria-hidden="true" />
-			</div>
-			<Dialog.Title>
-				{savedAssessment?.status === 'Completed' ? 'บันทึกผลประเมินแล้ว' : 'บันทึกความคืบหน้าแล้ว'}
-			</Dialog.Title>
-			<Dialog.Description>
-				{selectedRole ? roleDisplayLabel(selectedRole.key) : ''} · {formatAssessmentDate(
-					savedAssessment?.assessment_date ?? date
-				)}
-			</Dialog.Description>
-			<p class="text-sm text-muted-foreground">
-				บันทึกโดย {savedAssessment?.assessor_name ?? user?.display_name?.trim() ?? user?.name} · เวลา
-				{formatAssessmentTime(savedAssessment?.updated_at ?? new Date().toISOString())}
-			</p>
-		</Dialog.Header>
-		<Dialog.Footer class="flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-			<Button
-				variant="outline"
-				class="min-h-12 w-full px-4 sm:min-h-11 sm:w-auto"
-				onclick={() => (saveSuccessOpen = false)}
-			>
-				ทำต่อหน้านี้
-			</Button>
-			<Button
-				class="min-h-12 w-full px-4 sm:min-h-11 sm:w-auto"
-				onclick={() => {
-					saveSuccessOpen = false;
-					updateUrl(null, date, 'roles');
-				}}
-			>
-				กลับภาพรวม
-			</Button>
-		</Dialog.Footer>
-	</Dialog.Content>
-</Dialog.Root>
+{#if canAssessSelectedRole && savedContextKey === formContextKey}
+	<Dialog.Root bind:open={saveSuccessOpen}>
+		<Dialog.Content data-testid="role-save-success-dialog">
+			<Dialog.Header class="text-left">
+				<div
+					class="mb-1 flex size-11 items-center justify-center rounded-full bg-emerald-100 text-emerald-800"
+				>
+					<CheckCircle2 class="size-5" aria-hidden="true" />
+				</div>
+				<Dialog.Title>
+					{savedAssessment?.status === 'Completed'
+						? 'บันทึกผลประเมินแล้ว'
+						: 'บันทึกความคืบหน้าแล้ว'}
+				</Dialog.Title>
+				<Dialog.Description>
+					{selectedRole ? roleDisplayLabel(selectedRole.key) : ''} · {formatAssessmentDate(
+						savedAssessment?.assessment_date ?? date
+					)}
+				</Dialog.Description>
+				<p class="text-sm text-muted-foreground">
+					บันทึกโดย {savedAssessment?.assessor_name ?? user?.display_name?.trim() ?? user?.name} · เวลา
+					{formatAssessmentTime(savedAssessment?.updated_at ?? new Date().toISOString())}
+				</p>
+			</Dialog.Header>
+			<Dialog.Footer class="flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+				<Button
+					variant="outline"
+					class="min-h-12 w-full px-4 sm:min-h-11 sm:w-auto"
+					onclick={() => (saveSuccessOpen = false)}
+				>
+					ทำต่อหน้านี้
+				</Button>
+				<Button
+					class="min-h-12 w-full px-4 sm:min-h-11 sm:w-auto"
+					onclick={() => {
+						saveSuccessOpen = false;
+						updateUrl(null, date, 'roles');
+					}}
+				>
+					กลับภาพรวม
+				</Button>
+			</Dialog.Footer>
+		</Dialog.Content>
+	</Dialog.Root>
+{/if}
 
 <style>
 	.role-progress-table {

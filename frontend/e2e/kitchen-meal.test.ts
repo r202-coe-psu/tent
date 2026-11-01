@@ -280,18 +280,17 @@ function planRow(card: Locator, batch: Batch) {
 		.last();
 }
 
-/** One row of the session card's 5-group target table: group, target, cooked, status. */
+/** One row of the session card's group target table: group, target, received, status (#770). */
 async function expectGroupProgress(
 	card: Locator,
 	group: string,
 	target: number,
-	cooked: number,
-	status: 'ครบแล้ว' | 'ยังไม่ครบ'
+	received: number
 ): Promise<void> {
 	const cells = card.getByRole('row').filter({ hasText: group }).getByRole('cell');
 	await expect(cells.nth(1)).toHaveText(String(target));
-	await expect(cells.nth(2)).toHaveText(String(cooked));
-	await expect(cells.nth(3)).toContainText(status);
+	await expect(cells.nth(2)).toHaveText(String(received));
+	await expect(cells.nth(3)).toHaveText(received >= target ? 'ครบ' : `ขาด ${target - received}`);
 }
 
 /** Kitchen: add one production batch to the session and open its requisition ticket. */
@@ -587,8 +586,8 @@ test.describe(
 				await expect(toast(kitchen, 'สร้างรอบมื้ออาหารสำเร็จ')).toBeVisible({ timeout: 15_000 });
 				const card = await findSessionCard(kitchen);
 				await expect(card.getByText(`เป้าหมายรวม: ${total} คน`)).toBeVisible();
-				await expectGroupProgress(card, REGULAR_LABEL, REGULAR_HEADCOUNT, 0, 'ยังไม่ครบ');
-				await expectGroupProgress(card, HALAL_LABEL, HALAL_HEADCOUNT, 0, 'ยังไม่ครบ');
+				await expectGroupProgress(card, REGULAR_LABEL, REGULAR_HEADCOUNT, 0);
+				await expectGroupProgress(card, HALAL_LABEL, HALAL_HEADCOUNT, 0);
 			});
 
 			await test.step('kitchen adds batch A (ทั่วไป) and opens its ticket', async () => {
@@ -638,15 +637,10 @@ test.describe(
 				const card = await findSessionCard(kitchen);
 				await expect(planRow(card, BATCH_A)).toContainText('รับเข้าคลังแล้ว', { timeout: 15_000 });
 				await expect(planRow(card, BATCH_B)).toContainText('วัตถุดิบพร้อมปรุง');
-				await expectGroupProgress(
-					card,
-					REGULAR_LABEL,
-					REGULAR_HEADCOUNT,
-					BATCH_A.actualYield,
-					'ครบแล้ว'
-				);
-				await expectGroupProgress(card, HALAL_LABEL, HALAL_HEADCOUNT, 0, 'ยังไม่ครบ');
-				await expect(card.getByText('4/5 กลุ่มครบ')).toBeVisible();
+				await expectGroupProgress(card, REGULAR_LABEL, REGULAR_HEADCOUNT, BATCH_A.actualYield);
+				await expectGroupProgress(card, HALAL_LABEL, HALAL_HEADCOUNT, 0);
+				// Badge + total row; groups with no target are not counted (#770).
+				await expect(card.getByText('1/2 กลุ่มครบ')).toHaveCount(2);
 				await expect(card.getByText('กำลังดำเนินการ')).toBeVisible();
 			});
 
@@ -663,21 +657,9 @@ test.describe(
 						timeout: 15_000
 					});
 				}
-				await expectGroupProgress(
-					card,
-					REGULAR_LABEL,
-					REGULAR_HEADCOUNT,
-					BATCH_A.actualYield,
-					'ครบแล้ว'
-				);
-				await expectGroupProgress(
-					card,
-					HALAL_LABEL,
-					HALAL_HEADCOUNT,
-					BATCH_B.actualYield,
-					'ครบแล้ว'
-				);
-				await expect(card.getByText('5/5 กลุ่มครบ')).toBeVisible();
+				await expectGroupProgress(card, REGULAR_LABEL, REGULAR_HEADCOUNT, BATCH_A.actualYield);
+				await expectGroupProgress(card, HALAL_LABEL, HALAL_HEADCOUNT, BATCH_B.actualYield);
+				await expect(card.getByText('2/2 กลุ่มครบ')).toHaveCount(2);
 				await expect(card.getByText('เสร็จสิ้นแล้ว')).toBeVisible();
 				await expect(card.getByRole('tab', { name: /สรุปบริการของมื้อนี้ \(2\)/ })).toBeVisible();
 			});

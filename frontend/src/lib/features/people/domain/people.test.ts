@@ -3,6 +3,7 @@ import { describe, it, expect } from 'vitest';
 import { mintConsentStamp } from '$lib/features/consent/server';
 import type { EvacueeConsentWrite } from './people';
 import {
+	EWAR_SYMPTOM_GROUPS,
 	ewarSymptomLabel,
 	canScanCheckIn,
 	needsIntakeBeforeStay,
@@ -52,6 +53,7 @@ import {
 	householdPreRegisterAddressFormSchema,
 	householdPostArrivalAddressFormSchema,
 	evacueePersonalEditFormSchema,
+	evacueeEmergencyEditFormSchema,
 	evacueeHealthEditFormSchema,
 	formatPersonName,
 	stayStatusSchema,
@@ -597,6 +599,21 @@ describe('station1EvacueeInputSchema emergency contact', () => {
 				])
 			);
 		}
+	});
+
+	it('normalises a formatted emergency phone and rejects a 9-digit landline (CR-210)', () => {
+		const ok = station1EvacueeInputSchema.safeParse({
+			...base,
+			emergency_contact: { name: 'มานี', phone: '081-234-5678', relation: 'มารดา' }
+		});
+		expect(ok.success).toBe(true);
+		if (ok.success) expect(ok.data.emergency_contact?.phone).toBe('0812345678');
+
+		const landline = station1EvacueeInputSchema.safeParse({
+			...base,
+			emergency_contact: { name: 'มานี', phone: '022222222', relation: 'มารดา' }
+		});
+		expect(landline.success).toBe(false);
 	});
 
 	it('accepts a complete emergency contact on Station 1', () => {
@@ -1908,6 +1925,79 @@ describe('ewarSymptomLabel', () => {
 	});
 });
 
+describe('EWAR_SYMPTOM_GROUPS curated order (#605)', () => {
+	const groupTitles = EWAR_SYMPTOM_GROUPS.map((g) => g.title);
+	const idsOf = (title: string) =>
+		EWAR_SYMPTOM_GROUPS.find((g) => g.title === title)?.symptoms.map((s) => s.id);
+	const allIds = EWAR_SYMPTOM_GROUPS.flatMap((g) => g.symptoms.map((s) => s.id));
+
+	it('puts the groups staff meet most often first', () => {
+		expect(groupTitles).toEqual([
+			'อาการเฝ้าระวังทั่วไปและเหตุฉุกเฉินอื่นๆ',
+			'กลุ่มอาการทางเดินหายใจ',
+			'กลุ่มอาการทางเดินอาหาร',
+			'กลุ่มโรคที่มีพาหะนำโรค',
+			'กลุ่มโรคติดต่อรุนแรงและไข้ออกผื่น',
+			'กลุ่มอาการตับอักเสบ',
+			'กลุ่มอาการทางระบบประสาทและอื่นๆ'
+		]);
+	});
+
+	it('orders the symptoms inside every group as the medical draft asks', () => {
+		expect(idsOf('อาการเฝ้าระวังทั่วไปและเหตุฉุกเฉินอื่นๆ')).toEqual([
+			'high_fever',
+			'trauma',
+			'chemical_poisoning'
+		]);
+		expect(idsOf('กลุ่มอาการทางเดินหายใจ')).toEqual(['acute_respiratory']);
+		expect(idsOf('กลุ่มอาการทางเดินอาหาร')).toEqual([
+			'acute_watery_diarrhea',
+			'acute_bloody_diarrhea',
+			'typhoid'
+		]);
+		expect(idsOf('กลุ่มโรคที่มีพาหะนำโรค')).toEqual(['dengue', 'malaria']);
+		expect(idsOf('กลุ่มโรคติดต่อรุนแรงและไข้ออกผื่น')).toEqual([
+			'measles',
+			'pertussis',
+			'meningitis',
+			'diphtheria'
+		]);
+		expect(idsOf('กลุ่มอาการตับอักเสบ')).toEqual(['acute_jaundice_syndrome', 'Hepatitis A or E']);
+		expect(idsOf('กลุ่มอาการทางระบบประสาทและอื่นๆ')).toEqual([
+			'acute_haemorrhagic_fever_syndrome',
+			'tetanus',
+			'acute_flaccid_paralysis'
+		]);
+	});
+
+	it('keeps every persisted symptom id, listed exactly once', () => {
+		expect([...allIds].sort()).toEqual(
+			[
+				'Hepatitis A or E',
+				'acute_bloody_diarrhea',
+				'acute_flaccid_paralysis',
+				'acute_haemorrhagic_fever_syndrome',
+				'acute_jaundice_syndrome',
+				'acute_respiratory',
+				'acute_watery_diarrhea',
+				'chemical_poisoning',
+				'dengue',
+				'diphtheria',
+				'high_fever',
+				'malaria',
+				'measles',
+				'meningitis',
+				'pertussis',
+				'tetanus',
+				'trauma',
+				'typhoid'
+			].sort()
+		);
+		expect(new Set(allIds).size).toBe(allIds.length);
+		expect(new Set(groupTitles).size).toBe(groupTitles.length);
+	});
+});
+
 describe('scan check-in gate (every person goes through Station 2/3)', () => {
 	const stay = (status: StayStatus) => ({ current_stay: { status, zone: 'Z5', since: '' } });
 
@@ -2079,5 +2169,36 @@ describe('evacuee booking_ref (CR-169, schema_v 14)', () => {
 		expect(out).toEqual(base);
 		expect(input.booking_ref).toBe('BK-X');
 		expect(withoutBookingRef(base)).toEqual(base);
+	});
+});
+
+describe('evacuee edit forms require a 10-digit mobile (CR-210)', () => {
+	const personal = (phone: string) =>
+		evacueePersonalEditFormSchema.safeParse({
+			firstName: 'A',
+			lastName: 'B',
+			nickname: '',
+			birthYear: '',
+			age: '',
+			gender: 'other',
+			phone,
+			noPhone: false,
+			cardType: 'other',
+			cardNumber: '',
+			country: 'TH',
+			religion: 'unknown'
+		});
+
+	it('rejects a 10-digit number that is not a 0-prefixed mobile', () => {
+		expect(personal('1234567890').success).toBe(false);
+		expect(personal('0812345678').success).toBe(true);
+		expect(personal('081-234-5678').success).toBe(true);
+	});
+
+	it('rejects a non-0 emergency phone', () => {
+		const run = (phone: string) =>
+			evacueeEmergencyEditFormSchema.safeParse({ name: 'N', phone, relation: 'R' }).success;
+		expect(run('1234567890')).toBe(false);
+		expect(run('0812345678')).toBe(true);
 	});
 });

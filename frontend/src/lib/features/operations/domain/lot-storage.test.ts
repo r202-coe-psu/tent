@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
 	DEFAULT_STORAGE_LABEL,
+	lotDisplayName,
 	lotStorageKey,
 	lotStorageLabel,
 	lotLocationFields,
@@ -49,6 +50,14 @@ describe('lotStorageLabel', () => {
 	it('uses คลังหลัก for an unspecified lot', () => {
 		expect(lotStorageLabel({})).toBe(DEFAULT_STORAGE_LABEL);
 		expect(lotStorageLabel({ storage_zone: 'ห้อง 9' })).toBe('ห้อง 9');
+	});
+});
+
+describe('lotDisplayName', () => {
+	it('adds the lot number after the place when there is one', () => {
+		expect(lotDisplayName({ storage_zone: 'ห้อง 9', lot_no: 'L-01' })).toBe('ห้อง 9 · L-01');
+		expect(lotDisplayName({ storage_zone: 'ห้อง 9' })).toBe('ห้อง 9');
+		expect(lotDisplayName(undefined)).toBe(DEFAULT_STORAGE_LABEL);
 	});
 });
 

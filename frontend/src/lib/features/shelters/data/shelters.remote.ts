@@ -6,6 +6,7 @@ import {
 	EMPTY_LUGGAGE_POLICY,
 	EMPTY_PARKING_POLICY,
 	DEFAULT_SHELTER_FEATURE_FLAGS,
+	DEFAULT_SITE_KIND,
 	isShelterMasterDoc,
 	migrateShelterV2ToCurrent,
 	type ShelterMaster
@@ -23,7 +24,7 @@ function masterToBasic(master: ShelterMaster): ShelterBasic {
 	return {
 		code: master.code,
 		name: master.name,
-		site_kind: master.site_kind ?? 'evacuation_center',
+		site_kind: master.site_kind ?? DEFAULT_SITE_KIND,
 		operation_status: master.operation_status ?? 'standby',
 		capacity: master.capacity ?? 0,
 		province: master.province ?? null
@@ -34,7 +35,7 @@ function masterToSummary(master: ShelterMaster): ShelterSummary {
 	return {
 		code: master.code,
 		name: master.name,
-		site_kind: master.site_kind ?? 'evacuation_center',
+		site_kind: master.site_kind ?? DEFAULT_SITE_KIND,
 		db: shelterDbName(master.code),
 		operation_status: master.operation_status ?? 'standby',
 		capacity: master.capacity ?? 0,
