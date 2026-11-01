@@ -1,10 +1,11 @@
 ---
-id: draft
+id: CR-223
 title: ฐานจำนวนคนของการวิเคราะห์เสบียง = ผู้ประสบภัย + staff + จิตอาสา (ใช้กติกาเดียวกับครัว)
-status: proposed
+status: approved
 date: 2026-11-01
+updated: 2026-11-02
 requested_by: feedback หน้างาน (#1068) — ทีมตอบแนวทางใน issue 2026-11-01
-decided_by: <เจ้าของโครงการ>
+decided_by: kong
 layer: volatile
 affects:
   - docs/changes/05-D-kitchen/CR-130-food-sphere-target-segments.md ข้อ 3 (Total headcounts = Effective occupancy)
@@ -15,7 +16,7 @@ affects:
   - frontend/src/lib/features/sop-ratios/application/shelter-people-queries.ts
 ---
 
-# ฐานจำนวนคนของการวิเคราะห์เสบียง = ผู้ประสบภัย + staff + จิตอาสา
+# CR-223 — ฐานจำนวนคนของการวิเคราะห์เสบียง = ผู้ประสบภัย + staff + จิตอาสา
 
 > **สรุป:** แท็บวิเคราะห์เสบียง (Food Sphere) เปลี่ยนฐานคำนวณจาก "ผู้ประสบภัยเท่านั้น" เป็น "ทุกคนที่อยู่ในศูนย์ตอนนี้" โดยใช้ฟังก์ชันเดียวกับที่ครัวใช้อยู่แล้ว และบันทึกกติกาการนับของครัวจาก #960 ย้อนหลังไว้ในที่เดียว
 
@@ -99,3 +100,8 @@ staff และจิตอาสา **ไม่กระจายตามส�
 
 `daily_calc.occupancy_snapshot` (CR-036/CR-042, engine คนละตัว) **ไม่อยู่ในขอบเขตของ CR นี้**
 และยังคงนิยามเดิมตาม `docs/features/daily-sop-resource-calc-flow.md` DS-E3
+
+## Decision log
+
+- 2026-11-01 — proposed (#1068, PR #1102)
+- 2026-11-02 — approved โดย kong ตามที่ร่าง (รวมการแสดงผลยอดรวม + tooltip และการถอดป้าย "อัตราครองเตียง" ในแท็บนี้) · เรื่องใน "สิ่งที่ยังไม่ตัดสินใน CR นี้" ยังเปิดเป็น issue แยก

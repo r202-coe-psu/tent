@@ -54,7 +54,7 @@ affects:
 1. ฟังก์ชันคำนวณความต้องการเสบียง (`headcountsFromAgeGroups`) ต้องจับคู่กลุ่มอายุจาก Demographics (`<1`, `1-5`, `6-11`, `12-19`, `20-59`, `60+`, `unknown`) เข้าสู่ `TargetSegment` โดยตรง
 2. ประชากรในกลุ่ม `unknown` (ไม่ระบุอายุ) ให้นับรวมเข้ากลุ่ม `ALL`
 3. ประชากรทุกคนต้องถูกนับรวมเพียงครั้งเดียว (Total headcounts = Effective occupancy)
-4. **แก้ไข 2026-11-01 (#1068, ดู `draft-shelter-people-base-for-stock.md`):** Effective occupancy ของแท็บวิเคราะห์เสบียงคือ **ผู้ประสบภัย + staff ประจำศูนย์ + จิตอาสาที่เช็คอิน** ไม่ใช่ผู้ประสบภัยอย่างเดียว ใช้กติกาเดียวกับครัว (`countShelterPeople` ใน `shared/domain/shelter-people.ts`) โดย staff และจิตอาสาไม่กระจายตามสัดส่วนอายุ แต่ตกลงที่กลุ่ม `ALL`
+4. **แก้ไข 2026-11-01 (#1068, [CR-223](../03-C-supply/CR-223-shelter-people-base-for-stock.md)):** Effective occupancy ของแท็บวิเคราะห์เสบียงคือ **ผู้ประสบภัย + staff ประจำศูนย์ + จิตอาสาที่เช็คอิน** ไม่ใช่ผู้ประสบภัยอย่างเดียว ใช้กติกาเดียวกับครัว (`countShelterPeople` ใน `shared/domain/shelter-people.ts`) โดย staff และจิตอาสาไม่กระจายตามสัดส่วนอายุ แต่ตกลงที่กลุ่ม `ALL`
 
 ### FR-03: Bump `schema_v` ของ `food_sphere_standard` 1 → 2
 1. `food_sphere_standard` ต้องใช้ `schema_v: 2` เนื่องจากรูปเอกสารที่ persist เปลี่ยน 2 จุด: ค่าที่อนุญาตของ `target_segment` และ `_id` ที่ฝังรหัสกลุ่มไว้ (`food_sphere_standard:{target_segment}:{req_group_id}`)
