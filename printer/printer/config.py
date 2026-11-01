@@ -1,5 +1,6 @@
 import ipaddress
 import os
+import re
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
@@ -68,6 +69,19 @@ def _positive_int(environ: Mapping[str, str], name: str, default: int) -> int:
     return value
 
 
+_QUEUE_NAME = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_-]{0,126}")
+
+
+def _printer_name(environ: Mapping[str, str]) -> str:
+    """CUPS queue names: letters, digits, `_` and `-` only, at most 127 characters."""
+    value = environ.get("PRINTER_NAME", "").strip() or "tent_xprinter"
+    if not _QUEUE_NAME.fullmatch(value):
+        raise ConfigError(
+            "PRINTER_NAME must be a CUPS queue name: 1-127 characters of A-Z a-z 0-9 _ -"
+        )
+    return value
+
+
 _TRUE_WORDS = frozenset({"1", "true", "yes"})
 _FALSE_WORDS = frozenset({"0", "false", "no"})
 
@@ -88,7 +102,7 @@ def load_config(environ: Mapping[str, str]) -> Config:
         base_url=_base_url(environ),
         device_id=_required(environ, "DEVICE_ID"),
         device_secret=_required(environ, "DEVICE_SECRET"),
-        printer_name=environ.get("PRINTER_NAME", "").strip() or "tent_xprinter",
+        printer_name=_printer_name(environ),
         ppi=_positive_int(environ, "PRINT_PPI", 203),
         job_timeout_sec=_positive_int(environ, "PRINT_JOB_TIMEOUT_SEC", 30),
         idle_backoff_sec=_positive_int(environ, "IDLE_BACKOFF_SEC", 5),

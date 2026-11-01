@@ -148,7 +148,7 @@ def test_host_kind_is_required_and_must_be_standalone_or_kiosk(setup, kind):
     assert planned(result) == []
 
 
-@pytest.mark.parametrize("queue", ["bad name", "q;rm -rf /", "a/b", "$(id)", ""])
+@pytest.mark.parametrize("queue", ["bad name", "q;rm -rf /", "a/b", "$(id)", "", "my.queue", "-q"])
 def test_invalid_queue_name_is_rejected_before_anything_is_planned(setup, queue):
     result = setup("--host-kind", "standalone", "--queue", queue)
 
@@ -158,9 +158,9 @@ def test_invalid_queue_name_is_rejected_before_anything_is_planned(setup, queue)
 
 
 def test_queue_name_comes_from_printer_name_in_the_env_file_and_is_validated(setup, env_file):
-    env_file.write_text(ENV_TEXT.replace("PRINTER_NAME=tent_xprinter", 'PRINTER_NAME="my.queue-2"'))
+    env_file.write_text(ENV_TEXT.replace("PRINTER_NAME=tent_xprinter", 'PRINTER_NAME="my_queue-2"'))
     result = setup("--host-kind", "standalone")
-    assert "lpadmin -p my.queue-2 -o printer-error-policy=abort-job" in planned(result)
+    assert "lpadmin -p my_queue-2 -o printer-error-policy=abort-job" in planned(result)
 
     env_file.write_text(ENV_TEXT.replace("PRINTER_NAME=tent_xprinter", "PRINTER_NAME=bad name"))
     result = setup("--host-kind", "standalone")

@@ -100,7 +100,7 @@ if ! $QUEUE_GIVEN; then
     done
     QUEUE="${QUEUE:-tent_xprinter}"
 fi
-[[ "$QUEUE" =~ ^[A-Za-z0-9_.-]+$ ]] || die "ชื่อ queue '$QUEUE' ใช้ได้เฉพาะ A-Z a-z 0-9 _ . -"
+[[ "$QUEUE" =~ ^[A-Za-z0-9_][A-Za-z0-9_-]{0,126}$ ]] || die "ชื่อ queue '$QUEUE' ใช้ได้เฉพาะ A-Z a-z 0-9 _ - (ห้ามขึ้นต้นด้วย -, ยาวไม่เกิน 127)"
 
 # --- --status: read-only report ---------------------------------------------------
 if $STATUS_ONLY; then

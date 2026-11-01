@@ -199,3 +199,16 @@ def test_read_env_file_parses_keys_quotes_comments_and_export(tmp_path):
 
 def test_read_env_file_returns_empty_when_file_is_missing(tmp_path):
     assert read_env_file(tmp_path / "missing.env") == {}
+
+
+@pytest.mark.parametrize(
+    "bad", ["my queue", "q;rm -rf", "a/b", "-dash", "ก", "x" * 128, "q\nname", "q#1", "q@host"]
+)
+def test_printer_name_rejects_names_cups_would_not_accept(bad):
+    with pytest.raises(ConfigError, match="PRINTER_NAME"):
+        load_config({**VALID_ENV, "PRINTER_NAME": bad})
+
+
+@pytest.mark.parametrize("good", ["tent_xprinter", "XP-365B", "q1", "a" * 127])
+def test_printer_name_accepts_cups_queue_name_charset(good):
+    assert load_config({**VALID_ENV, "PRINTER_NAME": good}).printer_name == good
