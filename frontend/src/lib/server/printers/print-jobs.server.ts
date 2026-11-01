@@ -8,7 +8,7 @@ import type { PrintJobCreateInput } from '$lib/features/printers/domain/print-jo
 import { isPrinterOnline } from '$lib/features/printers/domain/printer-status';
 // eslint-disable-next-line no-restricted-imports -- server-safe domain rule; feature barrel will pull client UI/query code
 import { JOB_TTL_SEC } from '$lib/features/printers/domain/print-job-timing';
-import type { PrintDeviceDoc } from './device-credentials';
+import { PrintShelterDbMissingError, type PrintDeviceDoc } from './device-credentials';
 import type { PrintJobDoc } from './print-queue.server';
 
 /** Write side of the `printing` DB: one PUT, the doc already carries its `_attachments`. */
@@ -33,6 +33,11 @@ export interface CreatePrintJobDeps {
 	storeFor: (shelterCode: string) => PrintJobCreator;
 	devices: PrintDeviceReader;
 	newId?: () => string;
+	/**
+	 * Recreate `printing_{code}` (ignoring any per-process memo). Called once when the write finds
+	 * the DB missing, e.g. dropped by another process; without it that failure surfaces as a 503.
+	 */
+	reprovisionShelterDb?: (shelterCode: string) => Promise<void>;
 }
 
 export class PrinterNotFoundError extends Error {
@@ -58,6 +63,20 @@ function toAttachments(labels: readonly string[]): NonNullable<PrintJobDoc['_att
 	);
 }
 
+async function writeJob(
+	deps: CreatePrintJobDeps,
+	shelterCode: string,
+	job: PrintJobDoc
+): Promise<void> {
+	try {
+		await deps.storeFor(shelterCode).createJob(job);
+	} catch (error) {
+		if (!(error instanceof PrintShelterDbMissingError) || !deps.reprovisionShelterDb) throw error;
+		await deps.reprovisionShelterDb(shelterCode);
+		await deps.storeFor(shelterCode).createJob(job);
+	}
+}
+
 /** Queue a print job: a `pending` doc with the label PNGs attached, expiring after 120 s. */
 export async function createPrintJob(
 	deps: CreatePrintJobDeps,
@@ -74,7 +93,7 @@ export async function createPrintJob(
 
 	const jobId = (deps.newId ?? ulid)();
 	const expiresAt = new Date(now.getTime() + JOB_TTL_SEC * 1000).toISOString();
-	await deps.storeFor(device.shelter_code).createJob({
+	const job: PrintJobDoc = {
 		_id: `print_job:${jobId}`,
 		type: 'print_job',
 		schema_v: 1,
@@ -92,7 +111,8 @@ export async function createPrintJob(
 		printed: 0,
 		error_code: null,
 		_attachments: toAttachments(input.labels)
-	});
+	};
+	await writeJob(deps, device.shelter_code, job);
 	return { job_id: jobId, shelter_code: device.shelter_code, expires_at: expiresAt };
 }
 

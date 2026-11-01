@@ -10,6 +10,7 @@ import {
 	closeShelterPrinting,
 	ensurePrintingDevicesDb,
 	ensureShelterPrintingDb,
+	reprovisionShelterPrintingDb,
 	resetPrintingProvisionForTests,
 	type CloseShelterPrintingDeps
 } from './printing-provision';
@@ -281,6 +282,35 @@ describe('ensureShelterPrintingDb', () => {
 		calls.length = 0;
 		await ensureShelterPrintingDb('sh001');
 		expect(calls).toEqual([]);
+	});
+
+	it('reprovisioning ignores the memo, so a database dropped by another process is recreated', async () => {
+		await ensureShelterPrintingDb('SH001');
+		calls.length = 0;
+
+		await reprovisionShelterPrintingDb('sh001');
+
+		expect(requests()[0]).toBe('PUT /printing_sh001');
+		expect(requests()).toContain('PUT /printing_devices/printing_db%3ASH001');
+		calls.length = 0;
+		// ...and the fresh result is memoized again.
+		await ensureShelterPrintingDb('SH001');
+		expect(calls).toEqual([]);
+	});
+
+	it('reprovisioning does not memoize a failure', async () => {
+		await ensureShelterPrintingDb('SH001');
+		fakeCouch(({ method, path }) =>
+			method === 'PUT' && path === '/printing_sh001' ? { status: 500 } : undefined
+		);
+
+		await expect(reprovisionShelterPrintingDb('SH001')).rejects.toBeInstanceOf(
+			PrintDependencyError
+		);
+		fakeCouch();
+		calls.length = 0;
+		await ensureShelterPrintingDb('SH001');
+		expect(requests()[0]).toBe('PUT /printing_sh001');
 	});
 
 	it('provisions another shelter on its own but reuses the devices db', async () => {

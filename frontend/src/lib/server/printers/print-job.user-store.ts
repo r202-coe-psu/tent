@@ -1,7 +1,7 @@
 import { userRaw } from '$lib/server/couch-as-user';
 // eslint-disable-next-line no-restricted-imports -- server-safe domain rule; feature barrel pulls client UI/query code
 import { printingDbName } from '$lib/features/printers/domain/printing-db';
-import { PrintDependencyError } from './device-credentials';
+import { PrintDependencyError, PrintShelterDbMissingError } from './device-credentials';
 import type { PrintJobCreator, PrintJobReader } from './print-jobs.server';
 import type { PrintJobDoc } from './print-queue.server';
 
@@ -25,6 +25,7 @@ export function userJobStore(
 				'PUT',
 				doc
 			);
+			if (status === 404) throw new PrintShelterDbMissingError();
 			if (status !== 201 && status !== 202) throw new PrintDependencyError();
 		},
 

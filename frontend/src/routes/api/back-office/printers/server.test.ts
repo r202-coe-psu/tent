@@ -4,7 +4,7 @@ import type { RequestEvent } from './$types';
 import { readSessionUserCtx } from '$lib/server/couch-admin';
 import { printDeviceRepository } from '$lib/server/printers/print-device.repo';
 import { printJobStoreFor } from '$lib/server/printers/print-job.service-store';
-import { ensureShelterPrintingDb } from '$lib/server/printers/printing-provision';
+import { reprovisionShelterPrintingDb } from '$lib/server/printers/printing-provision';
 import { scannerDeviceRepository } from '$lib/server/scanners/device-repository';
 import { ScannerDependencyError } from '$lib/server/scanners/device-credentials';
 import { SESSIONS } from '$lib/server/scanners/test-sessions';
@@ -31,7 +31,7 @@ vi.mock('$lib/server/printers/print-job.service-store', () => ({
 }));
 
 vi.mock('$lib/server/printers/printing-provision', () => ({
-	ensureShelterPrintingDb: vi.fn()
+	reprovisionShelterPrintingDb: vi.fn()
 }));
 
 vi.mock('$lib/server/scanners/device-repository', () => ({
@@ -42,7 +42,7 @@ const mockSession = vi.mocked(readSessionUserCtx);
 const mockCreate = vi.mocked(printDeviceRepository.createDevice);
 const mockList = vi.mocked(printDeviceRepository.listDevicesInScope);
 const mockLastJob = vi.mocked(jobStore.lastJobOf);
-const mockEnsureDb = vi.mocked(ensureShelterPrintingDb);
+const mockEnsureDb = vi.mocked(reprovisionShelterPrintingDb);
 const mockScanner = vi.mocked(scannerDeviceRepository.getDeviceByDeviceId);
 
 const input = {

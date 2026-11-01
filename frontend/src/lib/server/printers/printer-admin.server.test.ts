@@ -551,6 +551,29 @@ describe('deletePrinter', () => {
 		expect(jobs.docs.get('print_job:O')).toMatchObject({ status: 'pending' });
 	});
 
+	it('sets the printer inactive before failing its jobs, so nothing new is claimed meanwhile', async () => {
+		const { store, docs } = fakeStore([deviceDoc({})]);
+		const jobs = fakeJobs([
+			jobDoc(printerId, {
+				_id: 'print_job:P',
+				status: 'pending',
+				finished_at: null,
+				error_code: null
+			})
+		]);
+		const statusWhenJobFailed: string[] = [];
+		const put = jobs.put;
+		jobs.put = async (doc) => {
+			statusWhenJobFailed.push(docs.get(printerId)?.status ?? 'gone');
+			return put(doc);
+		};
+
+		await deletePrinter({ devices: store, jobsFor: () => jobs }, printerId, NOW);
+
+		expect(statusWhenJobFailed).toEqual(['inactive']);
+		expect(docs.has(printerId)).toBe(false);
+	});
+
 	it('fails every open job, not just the first page of the query', async () => {
 		const { store } = fakeStore([deviceDoc({})]);
 		const open = Array.from({ length: 5 }, (_, i) =>
@@ -750,6 +773,67 @@ describe('per-shelter job stores', () => {
 		);
 
 		expect(shelters).toEqual(['SH002']);
+	});
+});
+
+describe('updatePrinter reactivation', () => {
+	it('provisions the shelter print DB before the printer goes active (the DB may have been closed)', async () => {
+		const original = deviceDoc({ status: 'inactive' });
+		const { store, docs } = fakeStore([original]);
+		const events: string[] = [];
+		const statusAtEnsure: string[] = [];
+
+		await updatePrinter(
+			{
+				...updateDeps(store, fakeJobs()),
+				ensureShelterDb: async (code: string) => {
+					events.push(`ensure:${code}`);
+					statusAtEnsure.push(docs.get(original._id)?.status ?? '?');
+				}
+			},
+			original._id,
+			{ status: 'active' },
+			NOW
+		);
+
+		expect(events).toEqual(['ensure:SH001']);
+		expect(statusAtEnsure).toEqual(['inactive']);
+		expect(docs.get(original._id)).toMatchObject({ status: 'active' });
+	});
+
+	it('leaves the printer inactive when provisioning fails', async () => {
+		const original = deviceDoc({ status: 'inactive' });
+		const { store, docs } = fakeStore([original]);
+
+		await expect(
+			updatePrinter(
+				{
+					...updateDeps(store, fakeJobs()),
+					ensureShelterDb: async () => {
+						throw new Error('couch down');
+					}
+				},
+				original._id,
+				{ status: 'active' },
+				NOW
+			)
+		).rejects.toThrow('couch down');
+		expect(docs.get(original._id)).toMatchObject({ status: 'inactive' });
+	});
+
+	it('does not provision for other edits or for deactivation', async () => {
+		const original = deviceDoc({});
+		const { store } = fakeStore([original]);
+		const events: string[] = [];
+		const deps = {
+			...updateDeps(store, fakeJobs()),
+			ensureShelterDb: async (code: string) => void events.push(code)
+		};
+
+		await updatePrinter(deps, original._id, { name: 'x' }, NOW);
+		await updatePrinter(deps, original._id, { status: 'inactive' }, NOW);
+
+		expect(events).toEqual([]);
 	});
 });
 

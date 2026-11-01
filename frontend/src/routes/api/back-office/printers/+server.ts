@@ -7,7 +7,7 @@ import {
 } from '$lib/server/printers/printer-admin.server';
 import { printDeviceRepository } from '$lib/server/printers/print-device.repo';
 import { printJobStoreFor } from '$lib/server/printers/print-job.service-store';
-import { ensureShelterPrintingDb } from '$lib/server/printers/printing-provision';
+import { reprovisionShelterPrintingDb } from '$lib/server/printers/printing-provision';
 import { scannerDeviceRepository } from '$lib/server/scanners/device-repository';
 import {
 	assertCanCreatePrinterFor,
@@ -52,7 +52,7 @@ export const POST: RequestHandler = async ({ request }) => {
 			{
 				store: printDeviceRepository,
 				scanners: scannerDeviceRepository,
-				ensureShelterDb: ensureShelterPrintingDb
+				ensureShelterDb: reprovisionShelterPrintingDb
 			},
 			parsed.data,
 			caller.name,

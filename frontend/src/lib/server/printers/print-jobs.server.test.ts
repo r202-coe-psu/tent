@@ -10,7 +10,7 @@ import {
 	type PrintJobCreator,
 	type PrintDeviceReader
 } from './print-jobs.server';
-import type { PrintDeviceDoc } from './device-credentials';
+import { PrintShelterDbMissingError, type PrintDeviceDoc } from './device-credentials';
 import type { PrintJobDoc } from './print-queue.server';
 
 // 8 PNG magic bytes + 00 00 00 0D, and the same with a different tail.
@@ -107,6 +107,79 @@ describe('createPrintJob', () => {
 				}
 			}
 		]);
+	});
+
+	describe('when the shelter print DB is missing (dropped by another process)', () => {
+		const label = { printer_id: device._id, source: 'walk_in' as const, labels: [LABEL_A] };
+		const now = new Date('2026-10-22T03:00:00.000Z');
+
+		it('reprovisions the DB once and retries the write', async () => {
+			const { deps, caller, created } = setup();
+			const events: string[] = [];
+			let attempts = 0;
+			const storeFor = deps.storeFor;
+			deps.storeFor = (code) => {
+				const store = storeFor(code);
+				return {
+					async createJob(doc) {
+						attempts += 1;
+						events.push(`create:${attempts}`);
+						if (attempts === 1) throw new PrintShelterDbMissingError();
+						await store.createJob(doc);
+					}
+				};
+			};
+
+			const result = await createPrintJob(
+				{
+					...deps,
+					reprovisionShelterDb: async (code) => void events.push(`reprovision:${code}`)
+				},
+				caller,
+				label,
+				now
+			);
+
+			expect(events).toEqual(['create:1', 'reprovision:SH001', 'create:2']);
+			expect(created).toHaveLength(1);
+			expect(result.job_id).toBe('01JB0000000000000000000009');
+		});
+
+		it('gives up after one retry when the DB is still missing', async () => {
+			const { deps, caller } = setup();
+			let reprovisions = 0;
+			let attempts = 0;
+			deps.storeFor = () => ({
+				async createJob() {
+					attempts += 1;
+					throw new PrintShelterDbMissingError();
+				}
+			});
+
+			await expect(
+				createPrintJob(
+					{ ...deps, reprovisionShelterDb: async () => void (reprovisions += 1) },
+					caller,
+					label,
+					now
+				)
+			).rejects.toBeInstanceOf(PrintShelterDbMissingError);
+			expect(attempts).toBe(2);
+			expect(reprovisions).toBe(1);
+		});
+
+		it('rethrows without a reprovision hook', async () => {
+			const { deps, caller } = setup();
+			deps.storeFor = () => ({
+				async createJob() {
+					throw new PrintShelterDbMissingError();
+				}
+			});
+
+			await expect(createPrintJob(deps, caller, label, now)).rejects.toBeInstanceOf(
+				PrintShelterDbMissingError
+			);
+		});
 	});
 
 	it('rejects an offline printer and stores no job', async () => {

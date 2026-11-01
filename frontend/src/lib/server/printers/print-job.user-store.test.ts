@@ -7,7 +7,11 @@ vi.mock('$lib/server/couch-as-user', async (importOriginal) => ({
 }));
 
 import { CouchUserError } from '$lib/server/couch-as-user';
-import { PrintDependencyError, type PrintDeviceDoc } from './device-credentials';
+import {
+	PrintDependencyError,
+	PrintShelterDbMissingError,
+	type PrintDeviceDoc
+} from './device-credentials';
 import { createPrintJob } from './print-jobs.server';
 import { userJobStore } from './print-job.user-store';
 import type { PrintJobDoc } from './print-queue.server';
@@ -89,6 +93,17 @@ describe('user job store: createJob', () => {
 		await expect(userJobStore(COOKIE, 'SH01').createJob(job())).rejects.toBeInstanceOf(
 			PrintDependencyError
 		);
+	});
+
+	it('reports a missing shelter db (404) as PrintShelterDbMissingError, still a dependency failure', async () => {
+		reply({ status: 404, data: { error: 'not_found', reason: 'Database does not exist.' } });
+
+		const error = await userJobStore(COOKIE, 'SH01')
+			.createJob(job())
+			.catch((e: unknown) => e);
+
+		expect(error).toBeInstanceOf(PrintShelterDbMissingError);
+		expect(error).toBeInstanceOf(PrintDependencyError);
 	});
 
 	it('lets CouchDB permission errors reach the route (401/403 mapping)', async () => {

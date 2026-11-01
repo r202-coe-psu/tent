@@ -26,7 +26,18 @@ export class PrintDependencyError extends Error {
 	}
 }
 
-/** `print_device:{device_id}` doc in DB `printing` (print-server-implementation-plan §3.2). */
+/**
+ * `printing_{code}` does not exist (never provisioned, or dropped by `close-shelter-printing` in
+ * another process). Still a 503 for callers that do not recover from it.
+ */
+export class PrintShelterDbMissingError extends PrintDependencyError {
+	constructor() {
+		super();
+		this.name = 'PrintShelterDbMissingError';
+	}
+}
+
+/** `print_device:{device_id}` doc in DB `printing_devices` (CR-222). */
 export interface PrintDeviceDoc {
 	_id: string;
 	_rev?: string;

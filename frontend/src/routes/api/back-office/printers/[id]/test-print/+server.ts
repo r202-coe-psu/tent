@@ -2,6 +2,7 @@ import type { RequestHandler } from './$types';
 import { queueTestPrint } from '$lib/server/printers/printer-admin.server';
 import { printDeviceRepository } from '$lib/server/printers/print-device.repo';
 import { userJobStore } from '$lib/server/printers/print-job.user-store';
+import { reprovisionShelterPrintingDb } from '$lib/server/printers/printing-provision';
 import { requirePrinterManager } from '$lib/server/printers/printer-access';
 import { assertPrinterInScope, noStoreJson, printerAdminError, printerDocId } from '../../_http';
 
@@ -20,7 +21,8 @@ export const POST: RequestHandler = async ({ request, params }) => {
 		const queued = await queueTestPrint(
 			{
 				devices: printDeviceRepository,
-				storeFor: (shelterCode) => userJobStore(cookie, shelterCode)
+				storeFor: (shelterCode) => userJobStore(cookie, shelterCode),
+				reprovisionShelterDb: reprovisionShelterPrintingDb
 			},
 			printerId,
 			{ name: caller.name, roles: caller.roles },

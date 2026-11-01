@@ -7,6 +7,7 @@ import {
 } from '$lib/server/printers/printer-admin.server';
 import { printDeviceRepository } from '$lib/server/printers/print-device.repo';
 import { printJobStoreFor } from '$lib/server/printers/print-job.service-store';
+import { reprovisionShelterPrintingDb } from '$lib/server/printers/printing-provision';
 import { scannerDeviceRepository } from '$lib/server/scanners/device-repository';
 import { requirePrinterManager } from '$lib/server/printers/printer-access';
 import {
@@ -19,7 +20,6 @@ import {
 
 export const prerender = false;
 
-/** Rename / re-station / (de)activate a printer. Body is validated before the printer is read. */
 /** Delete a printer; its pending/printing jobs become `failed (printer_deleted)` first. */
 export const DELETE: RequestHandler = async ({ request, params }) => {
 	try {
@@ -37,6 +37,7 @@ export const DELETE: RequestHandler = async ({ request, params }) => {
 	}
 };
 
+/** Rename / re-station / (de)activate a printer. Body is validated before the printer is read. */
 export const PATCH: RequestHandler = async ({ request, params }) => {
 	try {
 		const caller = await requirePrinterManager(request);
@@ -57,7 +58,8 @@ export const PATCH: RequestHandler = async ({ request, params }) => {
 				{
 					devices: printDeviceRepository,
 					jobsFor: printJobStoreFor,
-					scanners: scannerDeviceRepository
+					scanners: scannerDeviceRepository,
+					ensureShelterDb: reprovisionShelterPrintingDb
 				},
 				printerId,
 				parsed.data,

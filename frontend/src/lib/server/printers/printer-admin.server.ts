@@ -310,11 +310,17 @@ export interface DeletePrinterDeps {
 
 export interface UpdatePrinterDeps extends DeletePrinterDeps {
 	scanners: KioskDeviceReader;
+	/**
+	 * Provision `printing_{code}` (fresh, not memoized) before a printer is reactivated: the shelter
+	 * DB may have been dropped while the printer was inactive (O-11), and job creation would 503.
+	 */
+	ensureShelterDb?: (shelterCode: string) => Promise<void>;
 }
 
 /**
  * Deactivating also fails the printer's open jobs (`printer_inactive`). The device is written
- * inactive first, so no new job can be queued or claimed while they are being closed.
+ * inactive first, so no new job can be queued or claimed while they are being closed. Activating
+ * provisions the shelter's print DB first, so the printer is never active without one.
  */
 export async function updatePrinter(
 	deps: UpdatePrinterDeps,
@@ -332,6 +338,11 @@ export async function updatePrinter(
 			);
 		}
 		await assertKioskDeviceInShelter(deps.scanners, current.shelter_code, patch.kiosk_device_id);
+	}
+	if (patch.status === 'active' && deps.ensureShelterDb) {
+		const current = await deps.devices.getDevice(printerId);
+		if (!current) throw new PrintDeviceNotFoundError();
+		await deps.ensureShelterDb(current.shelter_code);
 	}
 	const doc = await mutateDevice(deps.devices, printerId, now, (current) => ({
 		...current,
@@ -364,6 +375,8 @@ export interface TestPrintDeps {
 	storeFor: (shelterCode: string) => PrintJobCreator;
 	devices: PrintDeviceReader;
 	newId?: () => string;
+	/** See {@link CreatePrintJobDeps.reprovisionShelterDb}. */
+	reprovisionShelterDb?: (shelterCode: string) => Promise<void>;
 }
 
 /**
@@ -385,7 +398,10 @@ export function queueTestPrint(
 	);
 }
 
-/** Fail the printer's pending/printing jobs (`printer_deleted`, labels dropped), then delete it. */
+/**
+ * Set the printer inactive (so nothing new is queued or claimed), fail its pending/printing jobs
+ * (`printer_deleted`, labels dropped), then delete it.
+ */
 export async function deletePrinter(
 	deps: DeletePrinterDeps,
 	printerId: string,
@@ -394,6 +410,17 @@ export async function deletePrinter(
 	const device = await deps.devices.getDevice(printerId);
 	if (!device) throw new PrintDeviceNotFoundError();
 
+	if (device.status !== 'inactive') {
+		try {
+			await mutateDevice(deps.devices, printerId, now, (current) => ({
+				...current,
+				status: 'inactive'
+			}));
+		} catch (error) {
+			if (error instanceof PrintDeviceNotFoundError) return; // deleted concurrently: nothing left to do
+			throw error;
+		}
+	}
 	await failOpenJobs(deps.jobsFor(device.shelter_code), printerId, 'printer_deleted', now);
 
 	for (let attempt = 0; attempt < MAX_WRITE_ATTEMPTS; attempt += 1) {

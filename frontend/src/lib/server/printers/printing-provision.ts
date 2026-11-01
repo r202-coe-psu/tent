@@ -163,6 +163,17 @@ export async function ensureShelterPrintingDb(shelterCode: string): Promise<void
 	return provisioned;
 }
 
+/**
+ * Provision `printing_{code}` again, ignoring the per-process memo. The memo goes stale when
+ * another process (`scripts/close-shelter-printing.ts`) drops the DB, so a request that finds it
+ * missing, a new printer, or a printer reactivation calls this instead of {@link ensureShelterPrintingDb}.
+ */
+export function reprovisionShelterPrintingDb(shelterCode: string): Promise<void> {
+	printingDbName(shelterCode); // throws for an invalid code before touching the memo
+	shelterDbs.delete(shelterCode.toUpperCase());
+	return ensureShelterPrintingDb(shelterCode);
+}
+
 /** Test-only: forget which databases this process has provisioned. */
 export function resetPrintingProvisionForTests(): void {
 	devicesDb = null;

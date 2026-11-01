@@ -5,6 +5,7 @@ import { readSessionUserCtx } from '$lib/server/couch-admin';
 import { createPrintJob } from '$lib/server/printers/print-jobs.server';
 import { printDeviceRepository } from '$lib/server/printers/print-device.repo';
 import { userJobStore } from '$lib/server/printers/print-job.user-store';
+import { reprovisionShelterPrintingDb } from '$lib/server/printers/printing-provision';
 // eslint-disable-next-line no-restricted-imports -- server-safe domain schema; feature barrel will pull client UI/query code
 import { printJobCreateInputSchema } from '$lib/features/printers/domain/print-job.schema';
 
@@ -25,7 +26,8 @@ export const POST: RequestHandler = async ({ request }) => {
 		const created = await createPrintJob(
 			{
 				devices: printDeviceRepository,
-				storeFor: (shelterCode) => userJobStore(cookie, shelterCode)
+				storeFor: (shelterCode) => userJobStore(cookie, shelterCode),
+				reprovisionShelterDb: reprovisionShelterPrintingDb
 			},
 			{ name, roles },
 			parsed.data,

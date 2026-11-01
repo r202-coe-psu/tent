@@ -5,6 +5,7 @@ import { readSessionUserCtx } from '$lib/server/couch-admin';
 import type { PrintDeviceDoc } from '$lib/server/printers/device-credentials';
 import { printDeviceRepository } from '$lib/server/printers/print-device.repo';
 import { printJobStoreFor } from '$lib/server/printers/print-job.service-store';
+import { reprovisionShelterPrintingDb } from '$lib/server/printers/printing-provision';
 import { scannerDeviceRepository } from '$lib/server/scanners/device-repository';
 import { SESSIONS } from '$lib/server/scanners/test-sessions';
 
@@ -30,7 +31,7 @@ vi.mock('$lib/server/printers/print-job.service-store', () => ({
 }));
 
 vi.mock('$lib/server/printers/printing-provision', () => ({
-	ensureShelterPrintingDb: vi.fn()
+	reprovisionShelterPrintingDb: vi.fn()
 }));
 
 vi.mock('$lib/server/scanners/device-repository', () => ({
@@ -106,6 +107,18 @@ describe('PATCH /api/back-office/printers/[id]', () => {
 		expect(mockUpdate).toHaveBeenCalledTimes(1);
 		expect(mockUpdate.mock.calls[0][0]).toMatchObject({ name: 'ใหม่', status: 'inactive' });
 		expect(mockUpdate.mock.calls[0][0].updated_at).not.toBe(device.updated_at);
+	});
+
+	it('provisions the shelter print DB when a printer is reactivated, not on other edits', async () => {
+		mockGet.mockResolvedValue({ ...device, status: 'inactive' });
+		vi.mocked(reprovisionShelterPrintingDb).mockResolvedValue(undefined);
+
+		await patch('printer-sh001-reg1', { name: 'ใหม่' });
+		expect(reprovisionShelterPrintingDb).not.toHaveBeenCalled();
+
+		const response = await patch('printer-sh001-reg1', { status: 'active' });
+		expect(response.status).toBe(200);
+		expect(reprovisionShelterPrintingDb).toHaveBeenCalledWith('SH001');
 	});
 
 	it('answers 404 NOT_FOUND for an unknown printer or a malformed id, writing nothing', async () => {
