@@ -8,6 +8,7 @@
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { useEvacueeNames } from '$lib/features/people';
 	import { useVolunteerNames } from '$lib/features/volunteers';
+	import { useShelterStaffDirectory } from '$lib/features/users';
 	import { useDistributionLogs } from '../../application/queries';
 	import type { DistributionLog, RequisitionTicket } from '../../domain/food-supplies';
 	import {
@@ -21,6 +22,7 @@
 		type HistoryFilter
 	} from '../model/distribution-history';
 	import { getLoanStatusBadge } from '../model/loan-return';
+	import { staffRecipientLabel } from '../model/staff-recipient-label';
 
 	interface Props {
 		ticket: RequisitionTicket;
@@ -52,8 +54,28 @@
 		() => recipientIds.volunteerIds,
 		() => shelterCode
 	);
+	const staffIds = $derived(
+		open
+			? [
+					...new Set(
+						logs.flatMap((log) =>
+							log.recipient_type === 'staff' && log.recipient_id ? [log.recipient_id] : []
+						)
+					)
+				]
+			: []
+	);
+	const staffDirectoryQuery = useShelterStaffDirectory(() =>
+		staffIds.length > 0 ? shelterCode : null
+	);
 	const names = $derived(
-		historyRecipientNames([...(evacueeNamesQuery.data ?? []), ...(volunteerNamesQuery.data ?? [])])
+		new Map([
+			...historyRecipientNames([
+				...(evacueeNamesQuery.data ?? []),
+				...(volunteerNamesQuery.data ?? [])
+			]),
+			...staffIds.map((id) => [id, staffRecipientLabel(id, staffDirectoryQuery.data)] as const)
+		])
 	);
 
 	const summary = $derived(summarizeHistory(logs));
@@ -96,6 +118,7 @@
 		{ label: string; className: string }
 	> = {
 		volunteer: { label: 'จิตอาสา', className: 'border-violet-200 bg-violet-50 text-violet-800' },
+		staff: { label: 'เจ้าหน้าที่', className: 'border-amber-200 bg-amber-50 text-amber-800' },
 		outside: { label: 'บุคคลภายนอก', className: 'border-slate-200 bg-slate-50 text-slate-700' }
 	};
 </script>

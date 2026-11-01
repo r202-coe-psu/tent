@@ -20,7 +20,7 @@
 		canPerformFrontlineDistribution,
 		canWriteBulkReturnEntry
 	} from '../../application/food-supplies/auth';
-	import type { DistributionLog } from '../../domain/food-supplies';
+	import type { DistributionLog, DistributionRecipientType } from '../../domain/food-supplies';
 	import RecipientSearchPicker from '../common/RecipientSearchPicker.svelte';
 	import type { FrontlineRecipientSelection } from '../model/frontline-handover';
 	import { formatDistributionError } from '../model/distribution-error';
@@ -57,6 +57,12 @@
 	const canWriteBulkEntry = $derived(authContext ? canWriteBulkReturnEntry(authContext) : false);
 
 	// State
+	const RECIPIENT_TYPE_LABEL: Record<DistributionRecipientType, string> = {
+		evacuee: 'ผู้ประสบภัย',
+		volunteer: 'จิตอาสา',
+		staff: 'เจ้าหน้าที่',
+		outside: 'บุคคลภายนอก'
+	};
 	let recipientSelection = $state<FrontlineRecipientSelection | null>(null);
 	let selectedLogForReturn = $state<DistributionLog | null>(null);
 	let returnDialogOpen = $state(false);
@@ -166,7 +172,7 @@
 	</div>
 
 	<!-- Recipient Search Picker Reused Component -->
-	<RecipientSearchPicker bind:value={recipientSelection} allowOutside={false} />
+	<RecipientSearchPicker bind:value={recipientSelection} allowOutside={false} allowStaff />
 
 	<!-- Loan List & Operations Surface -->
 	{#if !recipientSelection}
@@ -218,7 +224,7 @@
 			<CheckCircle2 class="mb-2 h-10 w-10 text-emerald-500" />
 			<p class="text-sm font-bold text-slate-800">ไม่มีรายการสิ่งของยืม-คืนที่ค้างส่ง</p>
 			<p class="mt-0.5 text-xs text-slate-500">
-				{recipientSelection.recipientType === 'volunteer' ? 'จิตอาสา' : 'ผู้ประสบภัย'}
+				{RECIPIENT_TYPE_LABEL[recipientSelection.recipientType]}
 				<strong class="text-slate-700">{recipientSelection.label}</strong>
 				ไม่มีรายการพัสดุที่ต้องส่งคืนในขณะนี้
 			</p>
