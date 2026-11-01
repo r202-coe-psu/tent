@@ -5,15 +5,13 @@ const {
 	grantCoordinatorRole,
 	readShelterVolunteerAccounts,
 	readVolunteerAccount,
-	revokeCoordinatorGrant,
-	shelterRefs
+	revokeCoordinatorGrant
 } = vi.hoisted(() => ({
 	adminRaw: vi.fn(),
 	grantCoordinatorRole: vi.fn(),
 	readShelterVolunteerAccounts: vi.fn(),
 	readVolunteerAccount: vi.fn(),
-	revokeCoordinatorGrant: vi.fn(),
-	shelterRefs: vi.fn()
+	revokeCoordinatorGrant: vi.fn()
 }));
 
 vi.mock('$lib/server/couch-admin', () => ({
@@ -34,7 +32,6 @@ vi.mock('$lib/server/user-service', () => ({
 	readVolunteerAccount,
 	revokeCoordinatorGrant
 }));
-vi.mock('./public-schedule-action', () => ({ shelterRefs }));
 
 import { sha256Hex } from '$lib/db/hash';
 import {
@@ -76,14 +73,6 @@ const unverified = (over: Record<string, unknown> = {}) =>
 
 /** `shelter_sh001` holds `local`; `others` maps another shelter DB to its phone matches. */
 function couch(local: Record<string, unknown>, others: Record<string, unknown[]> = {}) {
-	shelterRefs.mockResolvedValue([
-		{ dbName: 'shelter_sh001', code: 'SH001', name: 'SH001' },
-		...Object.keys(others).map((dbName) => ({
-			dbName,
-			code: dbName.replace('shelter_', '').toUpperCase(),
-			name: dbName
-		}))
-	]);
 	adminRaw.mockImplementation(async (path: string, _method?: string, body?: unknown) => {
 		if (path === '/shelter_sh001/volunteer%3AV1') return { status: 200, data: local };
 		const db = path.split('/')[1];
@@ -259,92 +248,44 @@ describe('grantVolunteerAccessAsCoordinator', () => {
 	});
 
 	describe('identity verification', () => {
-		it('rejects (422) a volunteer not verified here and with no phone to look up', async () => {
-			couch(unverified({ phone: null }));
+		it('rejects (422) a volunteer not verified here', async () => {
+			couch(unverified());
 			await expect(grant()).rejects.toMatchObject({ code: 'VALIDATION' });
 			expect(grantCoordinatorRole).not.toHaveBeenCalled();
 		});
 
-		it('rejects when no other shelter has a verified profile with the same phone and national ID', async () => {
-			couch(unverified(), {
-				shelter_sh002: [
-					unverified({ shelter_code: 'SH002', phone_hash: 'x', national_id_hash: 'y' })
-				]
-			});
-			await expect(grant()).rejects.toMatchObject({ code: 'VALIDATION' });
-		});
-
-		it('accepts a profile verified in another shelter with the same phone_hash and national_id_hash', async () => {
-			const phoneHash = await sha256Hex('0812345678');
+		// #1044: another shelter's check no longer stands in, even with the same phone and ID.
+		it('rejects a volunteer verified only in another shelter, without looking there', async () => {
 			couch(unverified(), {
 				shelter_sh002: [
 					volunteer({
 						_id: 'volunteer:V9',
 						shelter_code: 'SH002',
-						phone_hash: phoneHash,
+						phone_hash: await sha256Hex('0812345678'),
 						national_id_hash: 'nid-hash-1'
 					})
 				]
 			});
-			await expect(grant()).resolves.toBeDefined();
-			expect(adminRaw).toHaveBeenCalledWith('/shelter_sh002/_find', 'POST', {
-				selector: { type: 'volunteer', phone_hash: phoneHash, national_id_hash: 'nid-hash-1' },
-				limit: 20
-			});
+			await expect(grant()).rejects.toMatchObject({ code: 'VALIDATION' });
+			expect(adminRaw).not.toHaveBeenCalledWith(
+				expect.stringContaining('_find'),
+				expect.anything(),
+				expect.anything()
+			);
+		});
+
+		it('records the verification here on the grant', async () => {
+			await grant();
 			expect(grantCoordinatorRole).toHaveBeenCalledWith(
 				expect.objectContaining({
 					grant: expect.objectContaining({
 						verified_by: {
-							shelter_code: 'SH002',
-							volunteer_id: 'volunteer:V9',
+							shelter_code: 'SH001',
+							volunteer_id: 'volunteer:V1',
 							reviewed_by: 'staff03'
 						}
 					})
 				})
-			);
-		});
-
-		it('rejects (422) a profile verified elsewhere that matches the phone only', async () => {
-			const phoneHash = await sha256Hex('0812345678');
-			couch(unverified(), {
-				shelter_sh002: [
-					volunteer({
-						_id: 'volunteer:V9',
-						shelter_code: 'SH002',
-						phone_hash: phoneHash,
-						national_id_hash: 'someone-else'
-					})
-				]
-			});
-			await expect(grant()).rejects.toMatchObject({ code: 'VALIDATION' });
-			expect(grantCoordinatorRole).not.toHaveBeenCalled();
-		});
-
-		it('uses this shelter only when the profile has no national ID', async () => {
-			couch(unverified({ national_id_hash: null }), {
-				shelter_sh002: [
-					volunteer({
-						shelter_code: 'SH002',
-						phone_hash: await sha256Hex('0812345678'),
-						national_id_hash: null
-					})
-				]
-			});
-			await expect(grant()).rejects.toMatchObject({ code: 'VALIDATION' });
-			expect(adminRaw).not.toHaveBeenCalledWith(
-				expect.stringContaining('_find'),
-				expect.anything(),
-				expect.anything()
-			);
-		});
-
-		it('does not look elsewhere when the volunteer is verified here', async () => {
-			couch(volunteer(), { shelter_sh002: [] });
-			await grant();
-			expect(adminRaw).not.toHaveBeenCalledWith(
-				expect.stringContaining('_find'),
-				expect.anything(),
-				expect.anything()
 			);
 		});
 

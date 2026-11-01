@@ -1,4 +1,3 @@
-import { sha256Hex } from '$lib/db/hash';
 import {
 	coordinatorShelterCodes,
 	grantExpiresAt,
@@ -24,7 +23,6 @@ import { canAccessVolunteerBackoffice } from '$lib/auth/roles';
 import { normalizeThaiPhone } from '$lib/db/model';
 import { isVolunteerMobile } from '../domain/phone';
 import { identityVerificationStatus } from '../domain/verification';
-import { shelterRefs } from './public-schedule-action';
 
 /** What the coordinator sends to take a grant back. */
 export type CoordinatorRevokeInput = Pick<
@@ -79,11 +77,8 @@ async function readVolunteer(shelterCode: string, volunteerId: string): Promise<
 }
 
 /** Where the verification lives and who marked it verified (`reviewed_by`, null when unknown). */
-const verificationOf = (
-	doc: VolunteerDoc,
-	shelterCode: string = doc.shelter_code as string
-): NonNullable<RoleGrant['verified_by']> => ({
-	shelter_code: shelterCode,
+const verificationOf = (doc: VolunteerDoc): NonNullable<RoleGrant['verified_by']> => ({
+	shelter_code: doc.shelter_code as string,
 	volunteer_id: doc._id,
 	reviewed_by: doc.identity_verification?.reviewed_by ?? null
 });
@@ -93,38 +88,6 @@ const isVerified = (doc: VolunteerDoc): boolean =>
 		identity_verified: doc.identity_verified === true,
 		identity_verification: doc.identity_verification as never
 	}) === 'verified';
-
-/**
- * The profile that proves the volunteer's identity, or `null`: this shelter's own verified
- * profile, else another shelter's verified profile with the same `phone_hash` AND
- * `national_id_hash` (draft-coordinator-limited-access-grant FR-3). A phone alone is not enough
- * to lend another shelter's verification, and a profile without a national ID counts only here.
- */
-async function identityVerifiedBy(
-	volunteer: VolunteerDoc
-): Promise<NonNullable<RoleGrant['verified_by']> | null> {
-	if (isVerified(volunteer)) return verificationOf(volunteer);
-	const phone = volunteer.phone ? normalizeThaiPhone(volunteer.phone) : '';
-	const nationalIdHash =
-		volunteer.national_id_hash ||
-		(volunteer.national_id ? await sha256Hex(volunteer.national_id) : '');
-	if (!phone || !nationalIdHash) return null;
-	const phoneHash = await sha256Hex(phone);
-	for (const ref of await shelterRefs()) {
-		if (ref.code === volunteer.shelter_code) continue;
-		const res = await adminRaw(`/${ref.dbName}/_find`, 'POST', {
-			selector: { type: 'volunteer', phone_hash: phoneHash, national_id_hash: nationalIdHash },
-			limit: 20
-		});
-		if (res.status === 404) continue;
-		if (res.status >= 400)
-			throw serviceErrorFromCouch('find volunteer profiles', res.status, res.data);
-		const docs = (res.data as { docs?: VolunteerDoc[] } | null)?.docs ?? [];
-		const match = docs.find(isVerified);
-		if (match) return verificationOf(match, ref.code);
-	}
-	return null;
-}
 
 /**
  * The shelter a coordinator acts in, read from their session roles (`capabilitiesForShelter`,
@@ -150,7 +113,7 @@ function coordinatorShelter(caller: Pick<Caller, 'roles'>, requested: unknown): 
 /**
  * A `volunteer_coordinator` gives a volunteer system access (#955, #879 item 2). Every rule is
  * enforced here, not in the UI: own shelter only (from the session), the coordinator roles (`COORDINATOR_GRANTABLE_CAPABILITIES`), identity
- * verified (here, or in another shelter by phone and national ID), and a required expiry within
+ * verified in this shelter, and a required expiry within
  * 7 days. Authorization runs first; the existing-account rules run in `grantCoordinatorRole`.
  */
 export async function grantVolunteerAccessAsCoordinator(
@@ -173,10 +136,11 @@ export async function grantVolunteerAccessAsCoordinator(
 	if (!volunteerId) throw new ServiceError('VALIDATION', 'volunteer_id is required');
 
 	const volunteer = await readVolunteer(shelterCode, volunteerId);
-	const verifiedBy = await identityVerifiedBy(volunteer);
-	if (!verifiedBy) {
+	// Verified in this shelter only (CR FR-3, #1044): another shelter's check does not stand in.
+	if (!isVerified(volunteer)) {
 		throw new ServiceError('VALIDATION', 'อาสาสมัครต้องยืนยันตัวตนก่อนจึงจะออกสิทธิ์ได้');
 	}
+	const verifiedBy = verificationOf(volunteer);
 
 	const phone = volunteer.phone ? normalizeThaiPhone(volunteer.phone) : '';
 	// CR-210 FR-8: a filled phone must be a 10-digit mobile before access is issued.
