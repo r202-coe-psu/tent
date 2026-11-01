@@ -4,12 +4,14 @@
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { toast } from 'svelte-sonner';
+	import { ServiceRequestError } from '$lib/api/service';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { FORCE_SETUP_ROUTE, LANDING_ROUTE, resolvePostLoginDestination } from '$lib/guards/auth';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { SECURITY_QUESTIONS } from '$lib/auth/security-questions';
-	import { fetchAuthStatus, submitForceSetup } from '$lib/features/users';
+	import PasswordRuleChecklist from '$lib/components/password-rule-checklist.svelte';
+	import { fetchAuthStatus, forceSetupFieldErrors, submitForceSetup } from '$lib/features/users';
 	import ShieldCheck from '@lucide/svelte/icons/shield-check';
 	import Lock from '@lucide/svelte/icons/lock';
 	import ShieldQuestion from '@lucide/svelte/icons/shield-question-mark';
@@ -20,10 +22,26 @@
 	let mustChangePassword = $state(false);
 	let newPassword = $state('');
 	let confirmPassword = $state('');
-	let questionId = $state(SECURITY_QUESTIONS[0].id);
+	let questionId = $state('');
 	let answer = $state('');
 	let showPassword = $state(false);
 	let loading = $state(false);
+	/** Errors show after the first submit and stay, live, until the field is fixed (#1065). */
+	let submitted = $state(false);
+	/** A server refusal, in Thai, kept on screen instead of a toast. */
+	let serverError = $state<string | null>(null);
+
+	const errors = $derived(
+		submitted
+			? forceSetupFieldErrors({
+					questionId,
+					answer,
+					newPassword,
+					confirmPassword,
+					mustChangePassword
+				})
+			: {}
+	);
 
 	onMount(async () => {
 		try {
@@ -44,20 +62,9 @@
 	async function handleSubmit(e: SubmitEvent) {
 		e.preventDefault();
 
-		if (mustChangePassword && !newPassword) {
-			toast.error('กรุณากรอกรหัสผ่านใหม่');
-			return;
-		}
-
-		if (newPassword && newPassword !== confirmPassword) {
-			toast.error('รหัสผ่านใหม่และการยืนยันรหัสผ่านไม่ตรงกัน');
-			return;
-		}
-
-		if (!answer.trim()) {
-			toast.error('กรุณากรอกคำตอบความปลอดภัย');
-			return;
-		}
+		submitted = true;
+		serverError = null;
+		if (Object.keys(errors).length > 0) return;
 
 		loading = true;
 		try {
@@ -89,7 +96,15 @@
 			}
 			await goto(resolve(dest));
 		} catch (err) {
-			toast.error(err instanceof Error ? err.message : 'ไม่สามารถบันทึกการตั้งค่าได้');
+			// Server messages are Thai (password policy, missing answer); anything else falls back.
+			const message = err instanceof Error ? err.message : '';
+			if (err instanceof ServiceRequestError && err.status === 401) {
+				serverError = 'เซสชันหมดอายุหรือยังไม่ได้เข้าสู่ระบบ กรุณาเข้าสู่ระบบใหม่';
+			} else {
+				serverError = /[\u0E00-\u0E7F]/.test(message)
+					? message
+					: 'ไม่สามารถบันทึกการตั้งค่าได้ กรุณาลองใหม่อีกครั้ง';
+			}
 		} finally {
 			loading = false;
 		}
@@ -121,7 +136,7 @@
 		</Card.Header>
 
 		<Card.Content class="p-6">
-			<form onsubmit={handleSubmit} class="space-y-5">
+			<form onsubmit={handleSubmit} class="space-y-5" novalidate>
 				<!-- Section 1: Security Question (Primary) -->
 				<div class="space-y-3 rounded-xl border border-blue-100 bg-blue-50/50 p-4">
 					<h4
@@ -143,11 +158,22 @@
 							bind:value={questionId}
 							class="h-10 w-full rounded-md border border-input bg-white px-3 text-sm"
 							disabled={loading}
+							aria-invalid={errors.question ? true : undefined}
+							aria-describedby={errors.question ? 'security-question-select-error' : undefined}
 						>
+							<option value="" disabled>— เลือกคำถาม —</option>
 							{#each SECURITY_QUESTIONS as q (q.id)}
 								<option value={q.id}>{q.label}</option>
 							{/each}
 						</select>
+						{#if errors.question}
+							<p
+								id="security-question-select-error"
+								class="mt-1 text-xs font-medium text-destructive"
+							>
+								{errors.question}
+							</p>
+						{/if}
 					</div>
 
 					<div>
@@ -164,8 +190,17 @@
 							placeholder="พิมพ์คำตอบที่คุณจำได้แม่นยำ"
 							class="h-10 bg-white text-sm"
 							disabled={loading}
-							required
+							aria-invalid={errors.answer ? true : undefined}
+							aria-describedby={errors.answer ? 'security-question-answer-error' : undefined}
 						/>
+						{#if errors.answer}
+							<p
+								id="security-question-answer-error"
+								class="mt-1 text-xs font-medium text-destructive"
+							>
+								{errors.answer}
+							</p>
+						{/if}
 					</div>
 				</div>
 
@@ -207,7 +242,8 @@
 									: 'เว้นว่างไว้หากใช้รหัสผ่านเดิม'}
 								class="h-10 bg-white pr-10 text-sm"
 								disabled={loading}
-								required={mustChangePassword}
+								aria-invalid={errors.newPassword ? true : undefined}
+								aria-describedby={errors.newPassword ? 'force-setup-new-password-error' : undefined}
 							/>
 							<Button
 								type="button"
@@ -223,6 +259,17 @@
 								{/if}
 							</Button>
 						</div>
+						{#if errors.newPassword}
+							<p
+								id="force-setup-new-password-error"
+								class="mt-1 text-xs font-medium text-destructive"
+							>
+								{errors.newPassword}
+							</p>
+						{/if}
+						{#if newPassword.length > 0 || mustChangePassword}
+							<PasswordRuleChecklist password={newPassword} class="mt-2" />
+						{/if}
 					</div>
 
 					{#if newPassword.length > 0 || mustChangePassword}
@@ -240,15 +287,35 @@
 								placeholder="กรอกรหัสผ่านใหม่อีกครั้ง"
 								class="h-10 bg-white text-sm"
 								disabled={loading}
-								required={newPassword.length > 0 || mustChangePassword}
+								aria-invalid={errors.confirmPassword ? true : undefined}
+								aria-describedby={errors.confirmPassword
+									? 'force-setup-confirm-password-error'
+									: undefined}
 							/>
+							{#if errors.confirmPassword}
+								<p
+									id="force-setup-confirm-password-error"
+									class="mt-1 text-xs font-medium text-destructive"
+								>
+									{errors.confirmPassword}
+								</p>
+							{/if}
 						</div>
 					{/if}
 				</div>
 
+				{#if serverError}
+					<p
+						role="alert"
+						class="rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm font-medium text-destructive"
+					>
+						{serverError}
+					</p>
+				{/if}
+
 				<Button
 					type="submit"
-					disabled={loading || !answer.trim() || (mustChangePassword && !newPassword)}
+					disabled={loading}
 					class="h-11 w-full bg-[#0f2d5c] font-bold text-white hover:bg-[#0a1e3f]"
 				>
 					{#if loading}กำลังบันทึก...{:else}บันทึกและเข้าสู่ระบบ{/if}
