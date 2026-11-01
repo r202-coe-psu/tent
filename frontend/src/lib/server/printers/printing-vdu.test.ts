@@ -167,6 +167,15 @@ describe('print_access VDU: staff create', () => {
 		expect(verdict(newJob({ source: 'constructor' }), null, ctx(SM))).toEqual(REJECTED);
 	});
 
+	it.each([
+		['created_at', 12345],
+		['created_at', null],
+		['expires_at', { $date: 'x' }],
+		['expires_at', undefined]
+	])('rejects a job whose %s is %j (not an ISO string)', (field, value) => {
+		expect(verdict(newJob({ [field]: value }), null, ctx(REG))).toEqual(REJECTED);
+	});
+
 	it('rejects a printer_id outside print_device:', () => {
 		expect(verdict(newJob({ printer_id: 'dev-1' }), null, ctx(REG))).toEqual(REJECTED);
 	});
@@ -261,6 +270,15 @@ describe('print_access VDU: printing_service', () => {
 
 	it.each(['expired', 'failed'])('may close a pending job as %s', (status) => {
 		expect(verdict(finish(stored(), status), stored(), SERVICE)).toEqual(ACCEPTED);
+	});
+
+	it.each([3, -1, 1.5, '2', null])('rejects a terminal write with printed = %j', (printed) => {
+		// label_count is 2: printed must be an integer within 0..label_count
+		expect(verdict(finish(claimed(), 'failed', { printed }), claimed(), SERVICE)).toEqual(REJECTED);
+	});
+
+	it.each([0, 1, 2])('accepts a terminal write with printed = %j within label_count', (printed) => {
+		expect(verdict(finish(claimed(), 'failed', { printed }), claimed(), SERVICE)).toEqual(ACCEPTED);
 	});
 
 	it('rejects pending -> printed', () => {

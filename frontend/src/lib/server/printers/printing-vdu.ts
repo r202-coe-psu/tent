@@ -18,7 +18,7 @@ const PRINTING_SERVICE_USER = 'printing_service';
  *
  * - `_admin`: unrestricted (provisioning / migration); everyone else may not touch design docs.
  * - `printing_service`: never creates; updates keep origin fields immutable, status moves forward
- *   only, terminal writes carry `finished_at` and drop the label attachments (PDPA). It may delete
+ *   only, `printed` stays within 0..`label_count`, terminal writes carry `finished_at` and drop the label attachments (PDPA). It may delete
  *   only terminal jobs (retention; CouchDB `_purge` needs server admin, so delete + `_compact`).
  * - staff (anyone else): create-only, a `pending` job stamped with their own name, for their own
  *   shelter, with the role the job `source` requires, and exactly `label_count` PNG labels.
@@ -89,6 +89,12 @@ export function buildPrintingValidateDocUpdate(): string {
     if (next.indexOf(newDoc.status) === -1) {
       deny('invalid status transition ' + oldDoc.status + ' -> ' + newDoc.status);
     }
+    if (typeof newDoc.printed !== 'undefined') {
+      var printed = newDoc.printed;
+      if (typeof printed !== 'number' || printed % 1 !== 0 || printed < 0 || printed > newDoc.label_count) {
+        deny('printed must be an integer from 0 to label_count');
+      }
+    }
     if (isTerminal(newDoc.status)) {
       if (!newDoc.finished_at) deny('terminal job needs finished_at');
       if (newDoc._attachments && hasKeys(newDoc._attachments)) {
@@ -125,6 +131,9 @@ export function buildPrintingValidateDocUpdate(): string {
   }
 
   if (!startsWith(newDoc.printer_id, 'print_device:')) deny('printer_id must be a print_device');
+  if (typeof newDoc.created_at !== 'string' || typeof newDoc.expires_at !== 'string') {
+    deny('created_at and expires_at must be strings');
+  }
 
   var count = newDoc.label_count;
   if (typeof count !== 'number' || count % 1 !== 0 || count < 1 || count > MAX_LABELS) {
