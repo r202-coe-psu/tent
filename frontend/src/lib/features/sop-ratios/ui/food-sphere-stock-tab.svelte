@@ -13,6 +13,7 @@
 	} from '$lib/features/operations';
 	import { useFoodSphereStandards } from '../application/food-sphere-queries';
 	import { useRequirementGroups } from '../application/requirement-group-queries';
+	import { useShelterPeopleCounts } from '../application/shelter-people-queries';
 	import { useReplenishmentPolicies } from '../application/replenishment-queries';
 	import { headcountsFromAgeGroups } from '../domain/food-sphere-calc';
 	import { useDashboardDemographics, useDashboardOccupancy } from '$lib/features/dashboard';
@@ -66,8 +67,16 @@
 	const demographicsQuery = useDashboardDemographics(() => cleanShelterCode);
 	const occupancyQuery = useDashboardOccupancy(() => cleanShelterCode);
 
-	const effectiveOccupancy = $derived(
-		occupancy > 0 ? occupancy : (occupancyQuery.data?.in_shelter ?? 0)
+	const peopleQuery = useShelterPeopleCounts(() => cleanShelterCode);
+	const evacueeCount = $derived(
+		peopleQuery.data?.evacuees ??
+			(occupancy > 0 ? occupancy : (occupancyQuery.data?.in_shelter ?? 0))
+	);
+	const staffCount = $derived(peopleQuery.data?.staff ?? 0);
+	const volunteerCount = $derived(peopleQuery.data?.volunteers ?? 0);
+	const effectiveOccupancy = $derived(evacueeCount + staffCount + volunteerCount);
+	const peopleBreakdown = $derived(
+		`ผู้ประสบภัย ${evacueeCount} · staff ${staffCount} · จิตอาสา ${volunteerCount} = ${effectiveOccupancy} คน`
 	);
 
 	const isLoading = $derived(
@@ -530,9 +539,8 @@
 					แสดง {filteredGroups.reduce((acc, g) => acc + g.items.length, 0)} รายการใน {filteredGroups.length}
 					กลุ่ม
 					{#if effectiveOccupancy > 0}
-						<span class="ml-1 font-semibold text-primary"
-							>· อัตราครองเตียง {effectiveOccupancy} คน</span
-						>
+						<span class="ml-1 font-semibold text-primary">· อัตราครองเตียง {evacueeCount} คน</span>
+						<span class="ml-1 text-muted-foreground">· {peopleBreakdown}</span>
 					{/if}
 				</div>
 			</div>
@@ -682,7 +690,7 @@
 												</span>
 											{/if}
 											<span class="text-[11px] text-muted-foreground">
-												ผู้ประสบภัย: <strong class="text-foreground">{effectiveOccupancy}</strong> คน
+												ฐานคำนวณ: <strong class="text-foreground">{peopleBreakdown}</strong>
 											</span>
 										</div>
 
@@ -830,9 +838,7 @@
 															</span>
 														{/if}
 														<span class="text-[11px] text-muted-foreground">
-															ผู้ประสบภัย: <strong class="text-foreground"
-																>{effectiveOccupancy}</strong
-															> คน
+															ฐานคำนวณ: <strong class="text-foreground">{peopleBreakdown}</strong>
 														</span>
 													</div>
 												</td>
