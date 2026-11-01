@@ -70,16 +70,21 @@
 		if (data) onStatus?.(data);
 	});
 
-	/** Resolves on the job's final status, or on `printing` (Pi claimed it) when `untilClaimed`. */
-	function waitForJob(untilClaimed: boolean): Promise<PrintJobOutcome> {
+	/**
+	 * Resolves on the job's final status, or on `printing` (Pi claimed it) when `untilClaimed`.
+	 * Resolves `null` as soon as `signal` aborts (cancel button / unmount), dropping every timer.
+	 */
+	function waitForJob(untilClaimed: boolean, signal: AbortSignal): Promise<PrintJobOutcome | null> {
 		return new Promise((resolve) => {
-			const settle = (outcome: PrintJobOutcome) => {
+			const settle = (outcome: PrintJobOutcome | null) => {
 				clearTimeout(timer);
 				clearTimeout(hintTimer);
+				signal.removeEventListener('abort', onAbort);
 				onStatus = null;
 				pickupLate = false;
 				resolve(outcome);
 			};
+			const onAbort = () => settle(null);
 			// The status query stops polling after the same window; a job still pending then is lost.
 			const timer = setTimeout(
 				() => settle({ status: 'timeout', printed: 0, error_code: null }),
@@ -91,7 +96,18 @@
 					settle({ status: data.status, printed: data.printed, error_code: data.error_code });
 				}
 			};
+			if (signal.aborted) settle(null);
+			else signal.addEventListener('abort', onAbort, { once: true });
 		});
+	}
+
+	// One controller per print run. Aborted by the cancel button (reason 'cancel') or when the
+	// component goes away (reason 'unmount'): the send loop then stops creating further jobs.
+	let runAbort: AbortController | null = null;
+	$effect(() => () => runAbort?.abort('unmount'));
+
+	function handleCancel() {
+		runAbort?.abort('cancel');
 	}
 
 	// Chunks still to send. Non-null only after a failure, so the retry resumes where it stopped
@@ -116,21 +132,33 @@
 			return;
 		}
 		const printer = chosen;
+		const abort = new AbortController();
+		runAbort = abort;
 		running = true;
 		if (!unsent) {
 			progressTotal = labelCount;
 			printedTotal = 0;
 			try {
 				const labels = await renderLabels();
+				if (abort.signal.aborted) return finishAborted(abort.signal);
 				progressTotal = labels.length;
 				unsent = chunkLabels(labels);
 			} catch {
+				if (abort.signal.aborted) return finishAborted(abort.signal);
 				running = false;
 				toast.error(t.renderFailed);
 				return;
 			}
 		}
-		await sendUnsent(printer);
+		await sendUnsent(printer, abort.signal);
+	}
+
+	/** Cancel/unmount: free the button; only a cancel the user asked for is announced. */
+	function finishAborted(signal: AbortSignal) {
+		if (signal.reason === 'unmount') return;
+		job = undefined;
+		running = false;
+		toast.info(t.cancelled);
 	}
 
 	function sendErrorMessage(error: unknown, printerName: string): string {
@@ -141,10 +169,14 @@
 		return t.sendFailed(printerName);
 	}
 
-	async function sendUnsent(printer: { id: string; name: string }) {
+	async function sendUnsent(printer: { id: string; name: string }, signal: AbortSignal) {
 		sendingTo = printer.name;
 		const pending = [...(unsent ?? [])];
 		while (pending.length > 0) {
+			if (signal.aborted) {
+				unsent = pending;
+				return finishAborted(signal);
+			}
 			let created;
 			try {
 				created = await createJob.mutateAsync({
@@ -154,17 +186,28 @@
 				});
 			} catch (error) {
 				unsent = pending;
+				if (signal.aborted) return finishAborted(signal);
 				running = false;
 				toast.error(sendErrorMessage(error, printer.name));
 				return;
+			}
+			if (signal.aborted) {
+				// The job just created may still print, so it is not queued again on retry.
+				unsent = pending.length > 1 ? pending.slice(1) : null;
+				return finishAborted(signal);
 			}
 			job = { jobId: created.job_id, shelterCode: created.shelter_code };
 			// Earlier chunks must finish first (the next one is only queued then, so it cannot expire
 			// waiting behind them). The last chunk counts as sent once the Pi claims it: a failure after
 			// that is checked at the printer, not on the tablet.
 			const last = pending.length === 1;
-			const outcome = await waitForJob(last);
+			const outcome = await waitForJob(last, signal);
 			job = undefined;
+			if (!outcome) {
+				// Aborted while waiting: the job in flight may still print, so only later chunks stay.
+				unsent = pending.length > 1 ? pending.slice(1) : null;
+				return finishAborted(signal);
+			}
 			printedTotal += outcome.printed;
 			const sent = outcome.status === 'printed' || (last && outcome.status === 'printing');
 			if (!sent) {
@@ -201,6 +244,11 @@
 			{#if running}<LoaderCircle class="mr-1.5 size-4 animate-spin" />{/if}
 			{buttonLabel}
 		</Button>
+		{#if running}
+			<Button type="button" variant="outline" class={buttonClass} onclick={handleCancel}>
+				{t.cancel}
+			</Button>
+		{/if}
 		{#if notPickedUp}
 			<p class="text-sm text-muted-foreground" role="status">{t.notPickedUp(sendingTo)}</p>
 		{/if}

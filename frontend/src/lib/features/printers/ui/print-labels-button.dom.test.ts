@@ -15,7 +15,7 @@ const api = vi.hoisted(() => ({
 	createPrintJob: vi.fn(),
 	getPrintJobStatus: vi.fn()
 }));
-const toast = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn() }));
+const toast = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn(), info: vi.fn() }));
 const session = vi.hoisted(() => ({ roles: [] as string[] }));
 
 vi.mock('$lib/stores/auth.svelte', () => ({
@@ -344,6 +344,70 @@ describe('PrintLabelsButton', () => {
 		expect(api.createPrintJob).toHaveBeenCalledTimes(1);
 		expect(toast.success).not.toHaveBeenCalled();
 		expect(mainButton().disabled).toBe(true);
+	});
+
+	it('cancels a multi-chunk print: stops sending, frees the button and keeps the unsent chunk', async () => {
+		stationPrinter.set('SH001', 'p1');
+		api.createPrintJob.mockResolvedValue({
+			job_id: 'job-1',
+			shelter_code: 'SH001',
+			expires_at: '2026-10-22T04:00:00Z'
+		});
+		api.getPrintJobStatus.mockResolvedValue({
+			status: 'printing',
+			printed: 0,
+			label_count: 20,
+			error_code: null
+		});
+		await render({
+			printers: [printer('p1')],
+			labelCount: 25,
+			renderLabels: async () => labels(25)
+		});
+
+		mainButton().click();
+		await settle();
+		const cancel = buttons().find((b) => b.textContent?.trim() === 'ยกเลิก');
+		expect(cancel).toBeDefined();
+		cancel?.click();
+		await settle();
+
+		expect(api.createPrintJob).toHaveBeenCalledTimes(1);
+		expect(toast.info).toHaveBeenCalledTimes(1);
+		expect(toast.success).not.toHaveBeenCalled();
+		expect(mainButton().disabled).toBe(false);
+		expect(mainButton().textContent).toContain('พิมพ์อีกครั้ง');
+		expect(buttons().some((b) => b.textContent?.trim() === 'ยกเลิก')).toBe(false);
+	});
+
+	it('does not poll or announce anything when unmounted while a job is being created', async () => {
+		stationPrinter.set('SH001', 'p1');
+		let release: (value: unknown) => void = () => {};
+		api.createPrintJob.mockImplementation(
+			() =>
+				new Promise((resolve) => {
+					release = resolve;
+				})
+		);
+		await render({
+			printers: [printer('p1')],
+			labelCount: 25,
+			renderLabels: async () => labels(25)
+		});
+
+		mainButton().click();
+		await settle();
+		unmount(instance as ReturnType<typeof mount>);
+		instance = null;
+		release({ job_id: 'job-1', shelter_code: 'SH001', expires_at: '2026-10-22T04:00:00Z' });
+		await settle();
+		await new Promise((resolve) => setTimeout(resolve, 50));
+
+		expect(api.createPrintJob).toHaveBeenCalledTimes(1);
+		expect(api.getPrintJobStatus).not.toHaveBeenCalled();
+		expect(toast.info).not.toHaveBeenCalled();
+		expect(toast.error).not.toHaveBeenCalled();
+		expect(toast.success).not.toHaveBeenCalled();
 	});
 
 	it('toasts the reason for a failed job, stops sending and offers to print again', async () => {
