@@ -1,7 +1,7 @@
 /**
- * CouchDB server-admin client for the printing ops scripts (`close-shelter-printing`,
- * `migrate-printing-poc`). Runs under plain `tsx` (no SvelteKit runtime), so it cannot import
- * `$lib/server/couch-admin`; it shares only the pure credential parsing and the `AdminRaw` type.
+ * CouchDB server-admin client for the printing ops script (`close-shelter-printing`). Runs under
+ * plain `tsx` (no SvelteKit runtime), so it cannot import `$lib/server/couch-admin`; it shares only
+ * the pure credential parsing and the `AdminRaw` type.
  * Needs COUCHDB_ADMIN_URL (environment or frontend/.env): http://admin:<password>@<host>:<port>
  */
 import { existsSync, readFileSync } from 'node:fs';
