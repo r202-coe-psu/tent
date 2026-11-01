@@ -24,6 +24,9 @@ const featureBarrelPatterns = [
 	}
 ];
 
+const printerAdminImportMessage =
+	'Printer code must not use the CouchDB server admin: go through `printing_service` (`$lib/server/couch-printing-service`), or the caller session (`$lib/server/couch-as-user`). Only printing-provision.ts provisions databases.';
+
 export default ts.config(
 	includeIgnoreFile(gitignorePath),
 	// Vendored shadcn-svelte primitives — generated, not hand-maintained.
@@ -83,11 +86,19 @@ export default ts.config(
 						{
 							name: '$lib/server/couch-admin',
 							importNames: ['adminRaw', 'adminAttachment', 'adminFetch'],
-							message:
-								'Printer code must not use the CouchDB server admin: go through `printing_service` (`$lib/server/couch-printing-service`), or the caller session (`$lib/server/couch-as-user`). Only printing-provision.ts provisions databases.'
+							message: printerAdminImportMessage
 						}
 					],
-					patterns: featureBarrelPatterns
+					// `paths` only matches the exact `$lib/server/couch-admin` specifier; the group also
+					// catches relative spellings (`../couch-admin`, `../../server/couch-admin`).
+					patterns: [
+						...featureBarrelPatterns,
+						{
+							group: ['**/couch-admin', '**/couch-admin.*'],
+							importNames: ['adminRaw', 'adminAttachment', 'adminFetch'],
+							message: printerAdminImportMessage
+						}
+					]
 				}
 			]
 		}
