@@ -7,8 +7,9 @@ Timestamps (`created_at`, `expires_at`) use THIS machine's UTC clock because the
 clock is not available here; the real BFF uses the server clock. Keep this machine's clock close
 to the BFF's, or P4 (TTL expiry) results are skewed.
 
-Labels come from `--png FILE` (repeatable) or `--count N` generated test labels: 640x480 1-bit
-PNG (80x60 mm at 203 dpi), black border, big label index plus a small job sequence number top-left.
+Labels come from `--png FILE` (repeatable) or `--count N` generated test labels: 639x479 1-bit
+PNG (80x60 mm at 203 dpi, rounded down like the frontend `kioskLabelDots()`), black border, big
+label index plus a small job sequence number top-left.
 `--wait` polls each job doc until printed/failed/expired and prints a latency table; "claim_s" is
 enqueue -> first time seen `printing`, "total_s" is enqueue -> terminal (includes CUPS finishing
 the physical print, so it is an upper bound for P1). With --repeat, median and p95 are printed.
@@ -33,7 +34,8 @@ import httpx
 DB = "printing"
 TERMINAL = {"printed", "failed", "expired"}
 CROCKFORD = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
-WIDTH, HEIGHT = 640, 480
+# Must equal frontend `kioskLabelDots()`: the staff API rejects any other label size (FR-12a).
+WIDTH, HEIGHT = 639, 479
 
 # 5x7 block digits, one string per row, '#' = black.
 DIGITS = {
@@ -93,9 +95,11 @@ def make_label_png(index: int, job_seq: int) -> bytes:
     raw = bytearray()
     for row in pixels:
         raw.append(0)  # filter: none
-        for start in range(0, WIDTH, 8):
+        # Pad each row to whole bytes with white (1) bits: 639 dots is not a multiple of 8.
+        padded = bytes(row) + b"\x01" * (-WIDTH % 8)
+        for start in range(0, len(padded), 8):
             byte = 0
-            for bit in row[start : start + 8]:
+            for bit in padded[start : start + 8]:
                 byte = (byte << 1) | bit
             raw.append(byte)
     header = struct.pack(">IIBBBBB", WIDTH, HEIGHT, 1, 0, 0, 0, 0)

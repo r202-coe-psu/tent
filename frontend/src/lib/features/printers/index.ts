@@ -1,5 +1,6 @@
 export * from './domain/print-device.schema';
 export * from './domain/print-job.schema';
+export * from './domain/label-png';
 export * from './domain/print-job-status';
 export * from './domain/printer-status';
 export * from './domain/printers.i18n';

@@ -4,6 +4,7 @@ import { POST } from './+server';
 import type { RequestEvent } from './$types';
 import { requireShelterScopeOrSA } from '$lib/server/couch-admin';
 import { printDeviceRepository, printJobStore } from '$lib/server/printers/printer-server';
+import { labelPngBase64 } from '$lib/testing/label-png';
 import { PrintDependencyError, type PrintDeviceDoc } from '$lib/server/printers/device-credentials';
 
 vi.mock('$lib/server/couch-admin', async () => {
@@ -17,8 +18,8 @@ vi.mock('$lib/server/printers/printer-server', () => ({
 	printJobStore: { createJob: vi.fn() }
 }));
 
-// 8 PNG magic bytes + 00 00 00 0D
-const LABEL = 'iVBORw0KGgoAAAAN';
+// A valid 639x479 label PNG header
+const LABEL = labelPngBase64();
 
 describe('POST /api/staff/v1/print-jobs', () => {
 	const mockAuth = vi.mocked(requireShelterScopeOrSA);
@@ -161,7 +162,8 @@ describe('POST /api/staff/v1/print-jobs', () => {
 
 	it.each([
 		['zero labels', { labels: [] }],
-		['a non-PNG label', { labels: ['aGVsbG8gd29ybGQh'] }]
+		['a non-PNG label', { labels: ['aGVsbG8gd29ybGQh'] }],
+		['a PNG that is not label-sized', { labels: [labelPngBase64({ width: 640, height: 480 })] }]
 	])('answers 422 INVALID_LABELS for %s and stores nothing', async (_name, override) => {
 		const response = await post({
 			printer_id: 'print_device:printer-sh001-reg1',
@@ -227,11 +229,7 @@ describe('POST /api/staff/v1/print-jobs', () => {
 	});
 
 	it('accepts 20 labels of ~50 KB each (a ~1 MB job)', async () => {
-		const png = Buffer.concat([
-			Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
-			Buffer.alloc(51198 - 8)
-		]);
-		const label = png.toString('base64');
+		const label = labelPngBase64({ size: 51198 });
 
 		const response = await post({
 			printer_id: 'print_device:printer-sh001-reg1',

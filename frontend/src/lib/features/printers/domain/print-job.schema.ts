@@ -1,39 +1,21 @@
 import { z } from 'zod';
+import { base64DecodedBytes, isPrintableLabel, MAX_LABEL_PNG_BYTES } from './label-png';
 
+export const MAX_LABEL_BYTES = MAX_LABEL_PNG_BYTES;
 export const MAX_LABELS_PER_JOB = 20;
-export const MAX_LABEL_BYTES = 64 * 1024;
 export const MAX_JOB_BYTES = 1024 * 1024;
 
 export const printJobSourceSchema = z.enum(['walk_in', 'evacuee_qr']);
 export type PrintJobSource = z.infer<typeof printJobSourceSchema>;
 
-const PNG_MAGIC = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
-const BASE64 = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/;
-
-/** Decoded size of a well-formed base64 string, without decoding it. */
-export function base64DecodedBytes(base64: string): number {
-	const padding = base64.endsWith('==') ? 2 : base64.endsWith('=') ? 1 : 0;
-	return (base64.length / 4) * 3 - padding;
-}
-
-function startsWithPngMagic(base64: string): boolean {
-	// 12 base64 chars cover the first 9 bytes. Zod runs every refinement even after one failed,
-	// so this must not throw on input the BASE64 check already rejected.
-	try {
-		const head = atob(base64.slice(0, 12));
-		return PNG_MAGIC.every((byte, i) => head.charCodeAt(i) === byte);
-	} catch {
-		return false;
-	}
-}
-
-/** One label: well-formed base64 of a PNG, at most 64 KB once decoded. */
+/**
+ * One label: base64 of a PNG of at most 64 KB whose IHDR is exactly one label in size (639x479)
+ * and in an allowed bit depth / colour type (see `label-png.ts`).
+ */
 export const printLabelSchema = z
 	.string()
-	.refine((value) => BASE64.test(value), 'Label is not valid base64')
-	.refine((value) => base64DecodedBytes(value) >= PNG_MAGIC.length, 'Label is too short')
 	.refine((value) => base64DecodedBytes(value) <= MAX_LABEL_BYTES, 'Label exceeds 64 KB')
-	.refine((value) => startsWithPngMagic(value), 'Label is not a PNG');
+	.refine(isPrintableLabel, 'Label is not a valid label-size PNG');
 
 export const printJobCreateInputSchema = z.object({
 	printer_id: z.string().min(1),

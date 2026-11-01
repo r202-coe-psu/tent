@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
+import { labelPngBase64, labelPngBytes, toBase64 } from '$lib/testing/label-png';
 import { printJobCreateInputSchema } from './print-job.schema';
 
-// 8 PNG magic bytes (89 50 4E 47 0D 0A 1A 0A) + 00 00 00 0D
-const PNG_LABEL = 'iVBORw0KGgoAAAAN';
+// A valid 639x479 RGBA label PNG header (only the header is inspected, see label-png.ts)
+const PNG_LABEL = labelPngBase64();
 
 describe('printJobCreateInputSchema', () => {
 	it('accepts a printer, a source and PNG labels', () => {
@@ -16,13 +17,9 @@ describe('printJobCreateInputSchema', () => {
 	});
 });
 
-const PNG_MAGIC_BYTES = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
-
-/** A PNG-prefixed label whose decoded size is exactly `bytes` (bytes must be a multiple of 3). */
+/** A label PNG whose decoded size is exactly `bytes` (bytes must be a multiple of 3). */
 function labelOfBytes(bytes: number): string {
-	return Buffer.concat([PNG_MAGIC_BYTES, Buffer.alloc(bytes - PNG_MAGIC_BYTES.length)]).toString(
-		'base64'
-	);
+	return labelPngBase64({ size: bytes });
 }
 
 describe('printJobCreateInputSchema rejections', () => {
@@ -39,6 +36,8 @@ describe('printJobCreateInputSchema rejections', () => {
 		['21 labels', Array<string>(21).fill(PNG_LABEL)],
 		['a label that is not base64', ['not base64!!']],
 		['a label without the PNG magic', [Buffer.from('GIF89a-not-a-png').toString('base64')]],
+		['a 640x480 PNG', [toBase64(labelPngBytes({ width: 640, height: 480 }))]],
+		['a palette PNG', [toBase64(labelPngBytes({ colorType: 3 }))]],
 		['a label of 64 KB + 3 bytes', [labelOfBytes(64 * 1024 + 3)]],
 		// 17 x 63 KB = 1071 KB > 1 MB, each label alone is fine
 		['labels totalling over 1 MB', Array<string>(17).fill(labelOfBytes(63 * 1024))]
