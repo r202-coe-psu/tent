@@ -1,18 +1,23 @@
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 import { POST } from './+server';
 import type { RequestEvent } from './$types';
-import { printDeviceRepository, printJobStore } from '$lib/server/printers/printer-server';
+import { printDeviceRepository } from '$lib/server/printers/print-device.repo';
+import { printJobStoreFor } from '$lib/server/printers/print-job.service-store';
 import { hashPrintSecret, PrintDependencyError } from '$lib/server/printers/device-credentials';
 
-vi.mock('$lib/server/printers/printer-server', () => ({
-	printDeviceRepository: { getDeviceByDeviceId: vi.fn(), updateDevice: vi.fn() },
-	printJobStore: { get: vi.fn(), put: vi.fn() }
+vi.mock('$lib/server/printers/print-device.repo', () => ({
+	printDeviceRepository: { getDeviceByDeviceId: vi.fn(), updateDevice: vi.fn() }
+}));
+vi.mock('$lib/server/printers/print-job.service-store', () => ({
+	printJobStoreFor: vi.fn()
 }));
 
 describe('POST /api/v1/printer/jobs/[id]/result', () => {
 	const mockGetDevice = vi.mocked(printDeviceRepository.getDeviceByDeviceId);
-	const mockGetJob = vi.mocked(printJobStore.get);
-	const mockPut = vi.mocked(printJobStore.put);
+	const jobStore = { get: vi.fn(), put: vi.fn() };
+	const mockStoreFor = vi.mocked(printJobStoreFor);
+	const mockGetJob = jobStore.get;
+	const mockPut = jobStore.put;
 	const secret = 'sk_print_result_secret';
 	const ULID = '01JB0000000000000000000001';
 
@@ -60,6 +65,7 @@ describe('POST /api/v1/printer/jobs/[id]/result', () => {
 
 	beforeEach(() => {
 		vi.resetAllMocks();
+		mockStoreFor.mockReturnValue(jobStore as unknown as ReturnType<typeof printJobStoreFor>);
 		mockGetDevice.mockResolvedValue(device());
 		mockGetJob.mockResolvedValue(printingJob());
 		mockPut.mockResolvedValue({ ok: true, rev: '3-c' });
@@ -95,6 +101,7 @@ describe('POST /api/v1/printer/jobs/[id]/result', () => {
 		expect(response.status).toBe(200);
 		expect(response.headers.get('cache-control')).toBe('no-store');
 		expect(await response.json()).toEqual({ status: 'printed' });
+		expect(mockStoreFor).toHaveBeenCalledWith('SH001');
 		expect(mockGetJob).toHaveBeenCalledWith(`print_job:${ULID}`);
 		expect(mockPut).toHaveBeenCalledWith(
 			expect.objectContaining({

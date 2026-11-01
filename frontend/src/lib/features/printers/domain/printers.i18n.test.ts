@@ -19,12 +19,23 @@ describe('printJobOutcomeMessage', () => {
 		['lease_expired', 'เครื่อง โต๊ะ 1 ไม่ส่งผลการพิมพ์กลับมา ตรวจสอบเครื่องแล้วพิมพ์อีกครั้ง'],
 		['printer_inactive', 'เครื่อง โต๊ะ 1 ถูกปิดใช้งาน งานพิมพ์ถูกยกเลิก กรุณาเลือกเครื่องอื่น'],
 		['printer_deleted', 'เครื่อง โต๊ะ 1 ถูกลบออกจากระบบ งานพิมพ์ถูกยกเลิก กรุณาเลือกเครื่องอื่น'],
+		['invalid_label', 'รูป label ไม่ถูกต้อง — ลองพิมพ์ใหม่จากหน้านี้'],
 		[null, 'พิมพ์ที่เครื่อง โต๊ะ 1 ไม่สำเร็จ'],
 		['something_new', 'พิมพ์ที่เครื่อง โต๊ะ 1 ไม่สำเร็จ']
 	])('explains a failed job with error_code %s', (error_code, expected) => {
 		expect(
 			printJobOutcomeMessage({ status: 'failed', printed: 0, error_code }, 'โต๊ะ 1', 'th')
 		).toBe(expected);
+	});
+
+	it('explains invalid_label in English', () => {
+		expect(
+			printJobOutcomeMessage(
+				{ status: 'failed', printed: 0, error_code: 'invalid_label' },
+				'Desk 1',
+				'en'
+			)
+		).toBe('The label image is invalid. Try printing again from this page.');
 	});
 
 	it('tells how many labels already came out when a job failed part-way', () => {

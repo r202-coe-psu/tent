@@ -143,6 +143,7 @@ export const PRINTERS_I18N = {
 				`เครื่อง ${printer} ถูกปิดใช้งาน งานพิมพ์ถูกยกเลิก กรุณาเลือกเครื่องอื่น`,
 			printer_deleted: (printer: string) =>
 				`เครื่อง ${printer} ถูกลบออกจากระบบ งานพิมพ์ถูกยกเลิก กรุณาเลือกเครื่องอื่น`,
+			invalid_label: () => 'รูป label ไม่ถูกต้อง — ลองพิมพ์ใหม่จากหน้านี้',
 			unknown: (printer: string) => `พิมพ์ที่เครื่อง ${printer} ไม่สำเร็จ`
 		}
 	},
@@ -292,6 +293,7 @@ export const PRINTERS_I18N = {
 				`${printer} was deactivated and the job was cancelled. Pick another printer.`,
 			printer_deleted: (printer: string) =>
 				`${printer} was removed and the job was cancelled. Pick another printer.`,
+			invalid_label: () => 'The label image is invalid. Try printing again from this page.',
 			unknown: (printer: string) => `Printing at ${printer} failed.`
 		}
 	}

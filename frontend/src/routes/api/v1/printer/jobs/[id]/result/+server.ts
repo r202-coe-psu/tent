@@ -2,7 +2,8 @@ import { json } from '@sveltejs/kit';
 import { z } from 'zod';
 import type { RequestHandler } from './$types';
 import { PrintJobConflictError, reportResult } from '$lib/server/printers/print-queue.server';
-import { printDeviceRepository, printJobStore } from '$lib/server/printers/printer-server';
+import { printDeviceRepository } from '$lib/server/printers/print-device.repo';
+import { printJobStoreFor } from '$lib/server/printers/print-job.service-store';
 import {
 	authenticateRequest,
 	errorResponse,
@@ -27,7 +28,7 @@ export const POST: RequestHandler = async ({ request, params }) => {
 		if (!body.success) return validationFailed();
 
 		const status = await reportResult(
-			printJobStore,
+			printJobStoreFor(principal.shelter_code),
 			principal.registry_id,
 			params.id,
 			body.data,

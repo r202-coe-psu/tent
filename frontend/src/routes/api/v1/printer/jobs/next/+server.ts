@@ -1,9 +1,10 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { recordHeartbeat } from '$lib/server/printers/device-heartbeat';
-import { sweepIfDue } from '$lib/server/printers/lazy-sweep';
+import { sweepIfDue } from '$lib/server/printers/print-housekeeping.server';
 import { waitForNextJob } from '$lib/server/printers/print-queue.server';
-import { printDeviceRepository, printJobStore } from '$lib/server/printers/printer-server';
+import { printDeviceRepository } from '$lib/server/printers/print-device.repo';
+import { printJobStoreFor } from '$lib/server/printers/print-job.service-store';
 import {
 	authenticateRequest,
 	errorResponse,
@@ -24,10 +25,12 @@ export const POST: RequestHandler = async ({ request }) => {
 			queue_state: queueState,
 			now: new Date()
 		});
-		await sweepIfDue(printJobStore, new Date());
+		const store = printJobStoreFor(principal.shelter_code);
+		await sweepIfDue(store, principal.shelter_code, new Date());
 		if (queueState !== 'ready') return new Response(null, { status: 204, headers: noStoreHeaders });
 
-		const claimed = await waitForNextJob(printJobStore, principal.registry_id, {
+		const claimed = await waitForNextJob(store, principal.registry_id, {
+			shelterCode: principal.shelter_code,
 			now: () => new Date(),
 			waitMs: WAIT_MS,
 			signal: request.signal

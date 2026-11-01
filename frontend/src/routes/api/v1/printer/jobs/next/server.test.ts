@@ -1,27 +1,34 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { POST } from './+server';
 import type { RequestEvent } from './$types';
-import { printDeviceRepository, printJobStore } from '$lib/server/printers/printer-server';
-import { resetLazySweep } from '$lib/server/printers/lazy-sweep';
+import { printDeviceRepository } from '$lib/server/printers/print-device.repo';
+import { printJobStoreFor } from '$lib/server/printers/print-job.service-store';
+import { labelPngBase64 } from '$lib/testing/label-png';
+import { resetSweepThrottle } from '$lib/server/printers/print-housekeeping.server';
 import { hashPrintSecret, PrintDependencyError } from '$lib/server/printers/device-credentials';
 
-vi.mock('$lib/server/printers/printer-server', () => ({
-	printDeviceRepository: { getDeviceByDeviceId: vi.fn(), updateDevice: vi.fn() },
-	printJobStore: {
-		findJobs: vi.fn(),
-		put: vi.fn(),
-		getLabels: vi.fn(),
-		pendingCursor: vi.fn(),
-		waitForPending: vi.fn()
-	}
+vi.mock('$lib/server/printers/print-device.repo', () => ({
+	printDeviceRepository: { getDeviceByDeviceId: vi.fn(), updateDevice: vi.fn() }
+}));
+vi.mock('$lib/server/printers/print-job.service-store', () => ({
+	printJobStoreFor: vi.fn()
 }));
 
 describe('POST /api/v1/printer/jobs/next', () => {
 	const mockGetDevice = vi.mocked(printDeviceRepository.getDeviceByDeviceId);
 	const mockUpdateDevice = vi.mocked(printDeviceRepository.updateDevice);
-	const mockFindJobs = vi.mocked(printJobStore.findJobs);
-	const mockPut = vi.mocked(printJobStore.put);
-	const mockGetLabels = vi.mocked(printJobStore.getLabels);
+	const printJobStore = {
+		findJobs: vi.fn(),
+		put: vi.fn(),
+		getWithLabels: vi.fn(),
+		pendingCursor: vi.fn(),
+		waitForPending: vi.fn()
+	};
+	const mockStoreFor = vi.mocked(printJobStoreFor);
+	const mockFindJobs = printJobStore.findJobs;
+	const mockPut = printJobStore.put;
+	const mockGetWithLabels = printJobStore.getWithLabels;
+	const LABEL = labelPngBase64();
 	const secret = 'sk_print_jobs_next_secret';
 
 	const device = () => ({
@@ -67,7 +74,8 @@ describe('POST /api/v1/printer/jobs/next', () => {
 
 	beforeEach(() => {
 		vi.resetAllMocks();
-		resetLazySweep();
+		resetSweepThrottle();
+		mockStoreFor.mockReturnValue(printJobStore as unknown as ReturnType<typeof printJobStoreFor>);
 		mockUpdateDevice.mockResolvedValue({ ok: true, rev: '2-b' });
 		vi.useFakeTimers({ toFake: ['Date'] });
 		vi.setSystemTime(new Date('2026-10-22T03:01:00.000Z'));
@@ -98,9 +106,9 @@ describe('POST /api/v1/printer/jobs/next', () => {
 	function storeUntouched() {
 		expect(mockFindJobs).not.toHaveBeenCalled();
 		expect(mockPut).not.toHaveBeenCalled();
-		expect(mockGetLabels).not.toHaveBeenCalled();
-		expect(vi.mocked(printJobStore.pendingCursor)).not.toHaveBeenCalled();
-		expect(vi.mocked(printJobStore.waitForPending)).not.toHaveBeenCalled();
+		expect(mockGetWithLabels).not.toHaveBeenCalled();
+		expect(printJobStore.pendingCursor).not.toHaveBeenCalled();
+		expect(printJobStore.waitForPending).not.toHaveBeenCalled();
 		expect(mockUpdateDevice).not.toHaveBeenCalled();
 	}
 
@@ -111,7 +119,10 @@ describe('POST /api/v1/printer/jobs/next', () => {
 			pendingJob('01JB0000000000000000000001', '2026-10-22T03:00:01.000Z')
 		]);
 		mockPut.mockResolvedValue({ ok: true, rev: '2-b' });
-		mockGetLabels.mockResolvedValue(['AAA=', 'BBB=']);
+		mockGetWithLabels.mockImplementation(async (id: string) => ({
+			doc: pendingJob(id.slice('print_job:'.length), '2026-10-22T03:00:01.000Z'),
+			labels: [LABEL, LABEL]
+		}));
 
 		const response = await POST(request());
 		const data = await response.json();
@@ -125,8 +136,9 @@ describe('POST /api/v1/printer/jobs/next', () => {
 				lease_sec: 100,
 				lease_until: '2026-10-22T03:02:40.000Z'
 			},
-			labels: ['AAA=', 'BBB=']
+			labels: [LABEL, LABEL]
 		});
+		expect(mockStoreFor).toHaveBeenCalledWith('SH001');
 		expect(mockFindJobs).toHaveBeenCalledWith({
 			status: 'pending',
 			printerId: 'print_device:printer-sh001-reg1'
@@ -192,8 +204,8 @@ describe('POST /api/v1/printer/jobs/next', () => {
 
 				expect(response.status).toBe(204);
 				expect(response.headers.get('cache-control')).toBe('no-store');
-				expect(vi.mocked(printJobStore.pendingCursor)).not.toHaveBeenCalled();
-				expect(vi.mocked(printJobStore.waitForPending)).not.toHaveBeenCalled();
+				expect(printJobStore.pendingCursor).not.toHaveBeenCalled();
+				expect(printJobStore.waitForPending).not.toHaveBeenCalled();
 				expect(mockPut).not.toHaveBeenCalled();
 				expect(mockUpdateDevice).toHaveBeenCalledWith(
 					expect.objectContaining({

@@ -1,19 +1,24 @@
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 import { POST } from './+server';
 import type { RequestEvent } from './$types';
-import { printDeviceRepository, printJobStore } from '$lib/server/printers/printer-server';
+import { printDeviceRepository } from '$lib/server/printers/print-device.repo';
+import { printJobStoreFor } from '$lib/server/printers/print-job.service-store';
 import { hashPrintSecret, PrintDependencyError } from '$lib/server/printers/device-credentials';
 
-vi.mock('$lib/server/printers/printer-server', () => ({
-	printDeviceRepository: { getDeviceByDeviceId: vi.fn(), updateDevice: vi.fn() },
-	printJobStore: { findJobs: vi.fn(), put: vi.fn() }
+vi.mock('$lib/server/printers/print-device.repo', () => ({
+	printDeviceRepository: { getDeviceByDeviceId: vi.fn(), updateDevice: vi.fn() }
+}));
+vi.mock('$lib/server/printers/print-job.service-store', () => ({
+	printJobStoreFor: vi.fn()
 }));
 
 describe('POST /api/v1/printer/hello', () => {
 	const mockGetDevice = vi.mocked(printDeviceRepository.getDeviceByDeviceId);
 	const mockUpdateDevice = vi.mocked(printDeviceRepository.updateDevice);
-	const mockFindJobs = vi.mocked(printJobStore.findJobs);
-	const mockPut = vi.mocked(printJobStore.put);
+	const jobStore = { findJobs: vi.fn(), put: vi.fn() };
+	const mockStoreFor = vi.mocked(printJobStoreFor);
+	const mockFindJobs = jobStore.findJobs;
+	const mockPut = jobStore.put;
 	const secret = 'sk_print_hello_secret';
 
 	const device = () => ({
@@ -59,6 +64,7 @@ describe('POST /api/v1/printer/hello', () => {
 
 	beforeEach(() => {
 		vi.resetAllMocks();
+		mockStoreFor.mockReturnValue(jobStore as unknown as ReturnType<typeof printJobStoreFor>);
 		mockUpdateDevice.mockResolvedValue({ ok: true, rev: '2-b' });
 		mockFindJobs.mockResolvedValue([]);
 		mockPut.mockResolvedValue({ ok: true, rev: '3-c' });
@@ -117,6 +123,7 @@ describe('POST /api/v1/printer/hello', () => {
 
 		await POST(request());
 
+		expect(mockStoreFor).toHaveBeenCalledWith('SH001');
 		expect(mockFindJobs).toHaveBeenCalledWith({
 			status: 'printing',
 			printerId: 'print_device:printer-sh001-reg1'
@@ -147,6 +154,34 @@ describe('POST /api/v1/printer/hello', () => {
 				queue_state: 'ready',
 				agent_version: '0.1.0'
 			})
+		);
+	});
+
+	it('rejects an agent_version longer than 64 characters with 422 VALIDATION and writes nothing', async () => {
+		mockGetDevice.mockResolvedValue(device());
+
+		const response = await POST(
+			request({ body: JSON.stringify({ agent_version: 'v'.repeat(65), queue_state: 'ready' }) })
+		);
+
+		expect(response.status).toBe(422);
+		expect(response.headers.get('cache-control')).toBe('no-store');
+		expect((await response.json()).error.code).toBe('VALIDATION');
+		expect(mockFindJobs).not.toHaveBeenCalled();
+		expect(mockPut).not.toHaveBeenCalled();
+		expect(mockUpdateDevice).not.toHaveBeenCalled();
+	});
+
+	it('accepts an agent_version of exactly 64 characters', async () => {
+		mockGetDevice.mockResolvedValue(device());
+
+		const response = await POST(
+			request({ body: JSON.stringify({ agent_version: 'v'.repeat(64), queue_state: 'ready' }) })
+		);
+
+		expect(response.status).toBe(200);
+		expect(mockUpdateDevice).toHaveBeenCalledWith(
+			expect.objectContaining({ agent_version: 'v'.repeat(64) })
 		);
 	});
 
