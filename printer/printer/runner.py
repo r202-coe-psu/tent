@@ -139,7 +139,7 @@ def _report(
 
 _QUEUE_HINTS = {
     "missing": "check PRINTER_NAME / lpstat -p",
-    "disabled": "run cupsenable {queue} (needs lpadmin) or check paper/power",
+    "disabled": "check paper/power; see README 'Queue-enable rights'",
 }
 
 

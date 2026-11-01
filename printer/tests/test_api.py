@@ -283,3 +283,11 @@ def test_malformed_success_body_raises_server_error(response, call):
 
     with pytest.raises(ServerError, match="malformed"):
         calls[call]()
+
+
+def test_429_raises_server_error_so_the_agent_backs_off():
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(429, json={"error": {"code": "RATE_LIMITED", "message": "slow"}})
+
+    with pytest.raises(ServerError):
+        client_with(handler).next_job("ready")

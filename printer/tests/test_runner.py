@@ -447,3 +447,20 @@ def test_queue_not_ready_is_logged_once_per_state_change_with_queue_name(agent, 
     assert [(r.levelname, r.getMessage()) for r in queue_logs] == [
         ("WARNING", "printer queue tent_xprinter is missing - check PRINTER_NAME / lpstat -p"),
     ]
+
+
+def test_disabled_queue_hint_points_to_readme_and_never_suggests_lpadmin(agent, fake_cups, caplog):
+    caplog.set_level(logging.INFO, logger="printer")
+    fake_cups.set(
+        "lpstat_p", out="printer tent_xprinter disabled since Sun Oct 18 21:00:00 2026 -\n"
+    )
+
+    agent.run(max_iterations=1)
+
+    [message] = [
+        r.getMessage()
+        for r in caplog.records
+        if r.name == "printer" and "tent_xprinter is disabled" in r.getMessage()
+    ]
+    assert "lpadmin" not in message
+    assert "README" in message

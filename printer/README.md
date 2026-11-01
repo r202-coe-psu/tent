@@ -32,8 +32,9 @@ sha256sum ~/printer-driver-xprinter_3.13.55_all.deb
 
 **ลงทะเบียนเครื่อง:** back-office → **จัดการเครื่องพิมพ์** → เพิ่มเครื่อง แล้วจด `DEVICE_ID` / `DEVICE_SECRET` (secret แสดงครั้งเดียว)
 
-**เครือข่าย:** Pi ต้องเข้าถึง URL ของระบบได้ — ระหว่างทดสอบกับ dev server ใช้ IP วง LAN/Wi-Fi ของเครื่อง dev (เช่น `http://192.168.1.42:5173`)
-ไม่ใช่ IP ของ docker bridge (`172.17.x` / `172.18.x`) ตรวจจาก Pi ด้วย `curl -I <URL>`
+**เครือข่าย:** Pi ต้องเข้าถึง URL ของระบบได้ด้วย `https://` (เช่น `https://tent.example.org`) ตรวจจาก Pi ด้วย `curl -I <URL>`
+agent ไม่ยอมรับ `http://` ไปยัง IP วง LAN — `http://` ใช้ได้เฉพาะ loopback (รัน agent บนเครื่องเดียวกับ dev server)
+ถ้าทดสอบกับ dev server คนละเครื่อง ให้วาง HTTPS reverse proxy หน้า dev server แล้วใช้ URL `https://` นั้น
 
 ### 1. ตั้ง CUPS queue ของ XP-365B
 
@@ -61,7 +62,7 @@ cp .env.example .env && chmod 600 .env
 
 | ตัวแปร | ค่า |
 |---|---|
-| `TENT_BASE_URL` | URL ของระบบ — ต้องเป็น `https://` ยกเว้น `http://` ไปยัง localhost/LAN |
+| `TENT_BASE_URL` | URL ของระบบ — ต้องเป็น `https://` · `http://` ใช้ได้เฉพาะ loopback (`localhost`, `127.0.0.0/8`, `::1`) สำหรับ dev · IP วง LAN (`192.168.x`, `10.x`, `172.16–31.x`) และ link-local (`169.254.x`) ใช้ `http://` ไม่ได้ |
 | `DEVICE_ID` / `DEVICE_SECRET` | จาก back-office |
 | `PRINTER_NAME` | ชื่อ CUPS queue จากขั้นที่ 1 (`tent_xprinter`) |
 | `BOOT_SLIP` | `1` = พิมพ์สลิป (ชื่อเครื่อง, device, shelter, IP) ทุกครั้งที่ agent เริ่ม · `0` = ปิด |
@@ -116,9 +117,20 @@ log มี job id / จำนวน label / error code แต่ไม่มี 
 |---|---|
 | `device auth failed` / 401 ซ้ำ ๆ | `DEVICE_ID`/`DEVICE_SECRET` ผิด หรือ secret ถูกออกใหม่ — ใส่ค่าล่าสุดใน `.env` แล้ว `sudo systemctl restart tent-printer-autostart` |
 | `printer queue … is missing` | ชื่อ `PRINTER_NAME` ไม่ตรงกับ `lpstat -p` หรือยังไม่ได้ทำขั้นที่ 1 |
-| `printer queue … is disabled` | CUPS ปิด queue (มักหลังกระดาษหมด/ปิดเครื่อง): `sudo cupsenable tent_xprinter` แล้วตรวจกระดาษ/ไฟ |
+| `printer queue … is disabled` | CUPS ปิด queue (มักหลังกระดาษหมด/ปิดเครื่อง): ตรวจกระดาษ/ไฟ แล้วดู [สิทธิ์เปิด queue](#สิทธิ์เปิด-queue-queue-enable-rights) |
 | `boot slip not printed: lp failed` | ส่งงานเข้า CUPS ไม่ได้ — ลอง `echo test \| lp -d tent_xprinter -` เพื่อดู error จริง |
 | `hello failed: …` / `poll failed: …` | `TENT_BASE_URL` ผิด หรือเครื่องอยู่คนละวงแลน — `curl -I <TENT_BASE_URL>` จากเครื่องนี้ |
 | งานขึ้น `printer_timeout` | เครื่องพิมพ์ไม่ตอบใน `PRINT_JOB_TIMEOUT_SEC` — ปิดอยู่/กระดาษหมด ดู `lpstat -p` |
 | label ขนาดเพี้ยน | `PRINT_PPI` ต้องเป็น 203 และม้วนจริงเป็น 80×60 mm (รัน `setup_printer.sh` ใหม่ถ้าเปลี่ยนม้วน) |
 | service ล้มวนซ้ำ ๆ ทันทีหลังเริ่ม | ดู `journalctl -u tent-printer-autostart -n 50` — มักเป็น `.env` ผิด หรือ Python ต่ำกว่า 3.11 |
+
+## สิทธิ์เปิด queue (Queue-enable rights)
+
+agent ไม่ได้รับสิทธิ์ `lpadmin` — เมื่อ CUPS ปิด queue (มักหลังกระดาษหมด/ปิดเครื่อง) agent จะรายงานสถานะ `disabled`
+และรอ ผู้ดูแลต้องตรวจกระดาษ/ไฟ แล้วเปิด queue เองด้วยบัญชีที่มีสิทธิ์:
+
+```bash
+sudo cupsenable tent_xprinter
+```
+
+กลไกให้ agent เปิด queue เองยังรอผลทดสอบกับเครื่องจริง
