@@ -6,10 +6,16 @@ import { PrintApiError } from '../data/printers.api';
 import EditPrinterDialog from './edit-printer-dialog.svelte';
 
 const updateMutateAsync = vi.fn();
+const rotateMutateAsync = vi.fn();
+const rotateReset = vi.fn();
 const toast = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn() }));
 vi.mock('../application/queries', () => ({
 	useUpdatePrinterDevice: () => ({ mutateAsync: updateMutateAsync, isPending: false }),
-	useRotatePrinterSecret: () => ({ mutateAsync: vi.fn(), isPending: false }),
+	useRotatePrinterSecret: () => ({
+		mutateAsync: rotateMutateAsync,
+		reset: rotateReset,
+		isPending: false
+	}),
 	useTestPrintPrinter: () => ({ mutateAsync: vi.fn(), isPending: false }),
 	useDeletePrinterDevice: () => ({ mutateAsync: vi.fn(), isPending: false })
 }));
@@ -128,5 +134,24 @@ describe('EditPrinterDialog kiosk link', () => {
 		await settle();
 
 		expect(toast.error).toHaveBeenCalledWith('ไม่พบตู้ kiosk นี้ในศูนย์ของเครื่องพิมพ์');
+	});
+
+	it('hands the rotated secret to the page and resets the mutation so it is not kept', async () => {
+		const result = { device: printer(), secret: 'sk_print_new' };
+		rotateMutateAsync.mockResolvedValue(result);
+		const onrotated = vi.fn();
+		instance = mount(EditPrinterDialog, {
+			target: document.body,
+			props: { open: true, printer: printer(), kioskDevices, onrotated }
+		});
+		await settle();
+
+		[...document.body.querySelectorAll('button')]
+			.find((b) => b.textContent?.replace(/\s+/g, ' ').trim() === 'ออก Secret ใหม่')
+			?.click();
+		await settle();
+
+		expect(onrotated).toHaveBeenCalledWith(result);
+		expect(rotateReset).toHaveBeenCalledTimes(1);
 	});
 });

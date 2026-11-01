@@ -105,6 +105,8 @@
 			toast.success(t.edit.rotateDone);
 			open = false;
 			onrotated?.(result);
+			// The secret now lives only in the reveal dialog; drop the mutation's own copy.
+			rotateMutation.reset();
 		} catch (err) {
 			toast.error(errorText(err));
 		}

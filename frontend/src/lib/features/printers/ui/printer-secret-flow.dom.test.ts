@@ -4,8 +4,9 @@ import { flushSync, mount, tick, unmount } from 'svelte';
 import Harness from './__fixtures__/printer-secret-flow-harness.svelte';
 
 const mutateAsync = vi.fn();
+const reset = vi.fn();
 vi.mock('../application/queries', () => ({
-	useCreatePrinterDevice: () => ({ mutateAsync, isPending: false })
+	useCreatePrinterDevice: () => ({ mutateAsync, reset, isPending: false })
 }));
 vi.mock('svelte-sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
