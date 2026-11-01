@@ -8,6 +8,7 @@
 	 */
 	import KeyRound from '@lucide/svelte/icons/key-round';
 	import SearchCheck from '@lucide/svelte/icons/search-check';
+	import UserPen from '@lucide/svelte/icons/user-pen';
 	import { toast } from 'svelte-sonner';
 	import { resolve } from '$app/paths';
 	import { canAccessVolunteerBackoffice, isShelterManager, isSystemAdmin } from '$lib/auth/roles';
@@ -101,6 +102,17 @@
 			>
 				<SearchCheck class="h-3.5 w-3.5" />
 				ยืนยันตัวตนก่อนออกสิทธิ์
+			</Button>
+		{:else if status.kind === 'active'}
+			<!-- Editing an existing role reads as a secondary action, unlike giving access. -->
+			<Button
+				size="sm"
+				variant="outline"
+				class="gap-1.5 border-primary-dark/40 text-primary-dark hover:bg-primary-dark/5"
+				onclick={openAccess}
+			>
+				<UserPen class="h-3.5 w-3.5" />
+				{label}
 			</Button>
 		{:else}
 			<Button
