@@ -34,4 +34,7 @@ per deploy, so batch related projector changes into one bump per release when po
 #: through instead of coercing values outside the two seeded ones to ``evacuation_center``).
 #: 14 — CR-206: ``public_donations.items_declared[].drop_off_point_id`` and
 #: ``public_donations.point_receipts[]`` (``point_id``, ``line_nos``, ``received_at``).
-PROJECTION_VERSION: int = 14
+#: 15 — CR-206 A2: ``public_needs`` is one row per shelter + ``item_id`` +
+#: ``drop_off_point_id`` (``_id`` = ``{shelter}:{item_id}@{point_id|-}``; new fields
+#: ``item_id``, ``drop_off_point_id``); legacy ``{shelter}:{item_id}`` rows are pruned.
+PROJECTION_VERSION: int = 15

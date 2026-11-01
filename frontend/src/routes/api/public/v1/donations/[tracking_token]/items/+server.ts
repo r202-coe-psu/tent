@@ -7,7 +7,8 @@ import {
 	carryItemIds,
 	computeNeeds,
 	donationItemEditGate,
-	pickCampaignForItems
+	pickCampaignForItems,
+	withCampaignLinePoints
 } from '$lib/features/donations/server';
 import type { DonationRevision, PublicDonationDoc } from '$lib/features/donations';
 import {
@@ -16,7 +17,7 @@ import {
 	findByTokenHash,
 	GOODS_IN_STOCK_ERROR,
 	hasKeyedDonationStock,
-	readCurrentDonationPoints
+	readDonationCampaign
 } from '$lib/server/donation-docs';
 import type { DonationCampaign, StockLedger } from '$lib/features/operations';
 import { DONATION_SCHEMA_V } from '$lib/features/operations/server';
@@ -33,32 +34,41 @@ function shelterDbFromToken(token: string): string | null {
 	return code ? `shelter_${code.toLowerCase()}` : null;
 }
 
-type PointLine = { drop_off_point_id?: unknown };
+/** The intake buffer could not be read, so nothing was changed anywhere — the donor may retry. */
+class BufferReadError extends Error {}
 
 /**
- * CR-206 FR-MP-2a, FR-MP-4 — the point each edited line keeps. The dialog sends a point for
- * every line (FR-MP-15); one the shelter no longer offers (unticked or deleted since the
- * booking) becomes `null` rather than an error, and a booking that is not a self drop-off
- * keeps none. Points are read from the shelter doc in CouchDB, not the public projection.
- * A line sent without the key is left as it came.
+ * The booking as FastAPI's intake buffer holds it, for a booking CouchDB has not seen yet:
+ * the campaign it was made under and how it is delivered, which decide each line's point.
+ * `null` when FastAPI has no such booking — the PATCH below then answers 404 itself.
  */
-async function withOfferedPoints<T extends PointLine>(
-	items: T[],
-	shelterCode: string | null,
-	picksPoints: boolean
-): Promise<T[]> {
-	const named = items.some(
-		(item) => typeof item.drop_off_point_id === 'string' && item.drop_off_point_id !== ''
-	);
-	const offered =
-		picksPoints && named && shelterCode
-			? new Set((await readCurrentDonationPoints(shelterCode)).map((point) => point.id))
-			: new Set<string>();
-	return items.map((item) => {
-		if (!item || typeof item !== 'object' || !('drop_off_point_id' in item)) return item;
-		const id = item.drop_off_point_id;
-		return { ...item, drop_off_point_id: typeof id === 'string' && offered.has(id) ? id : null };
-	});
+async function readBufferedBooking(
+	trackingToken: string
+): Promise<{ campaignId: string | null; deliveryMethod: string | null } | null> {
+	let res: Response;
+	try {
+		res = await fetch(
+			`${fastapiBaseUrl()}/public/v1/donations/${encodeURIComponent(trackingToken)}`,
+			{ headers: fastapiServiceHeaders() }
+		);
+	} catch {
+		throw new BufferReadError('FastAPI unavailable');
+	}
+	if (res.status === 404) return null;
+	if (!res.ok) throw new BufferReadError(`FastAPI answered ${res.status}`);
+	const body = (await res.json().catch(() => null)) as {
+		donation?: { campaign_id?: unknown; logistics?: { delivery_method?: unknown } | null };
+	} | null;
+	const donation = body?.donation;
+	// A 2xx without the booking is not "no campaign": refuse rather than write null points.
+	if (!donation) throw new BufferReadError('FastAPI answered without a donation');
+	return {
+		campaignId: typeof donation.campaign_id === 'string' ? donation.campaign_id : null,
+		deliveryMethod:
+			typeof donation.logistics?.delivery_method === 'string'
+				? donation.logistics.delivery_method
+				: null
+	};
 }
 
 /**
@@ -113,29 +123,29 @@ export const PATCH = async ({ params, request }) => {
 			return json(GOODS_IN_STOCK_ERROR, { status: 409 });
 		}
 
-		// Each line's drop-off point, checked against what the shelter offers now (FR-MP-2a).
-		// Before the booking reaches CouchDB its delivery method is unknown here; FastAPI
-		// clears the points of a parcel or a pickup itself (FR-MP-4).
-		let pointedItems: typeof payload.items;
-		try {
-			pointedItems = await withOfferedPoints(
-				payload.items,
-				latestDoc?.shelter_code ?? shelterCodeFromToken(tracking_token),
-				!latestDoc || latestDoc.logistics?.delivery_method === 'self_dropoff'
-			);
-		} catch (e) {
-			// The registry could not be read: nothing has moved yet, so the donor may retry.
-			console.error(e);
-			return json({ success: false, error: 'DONATION_UNAVAILABLE' }, { status: 503 });
-		}
-
 		// Restore any item_id the client dropped before anything is measured or moved.
 		// FastAPI does the same repair, but only after this check has already run — a bare
 		// line used to read as untracked here, sail through, and then be reserved against
 		// the identity FastAPI restored a moment later.
 		const resolvedItems: typeof payload.items = latestDoc
-			? carryItemIds(pointedItems, latestDoc.items ?? [])
-			: pointedItems;
+			? carryItemIds(payload.items, latestDoc.items ?? [])
+			: payload.items;
+
+		// Each line's point from the booking's own campaign (FR-AP-15a), read by id whether it
+		// is open or closed — the headroom read below sees open ones only. FastAPI keeps the
+		// point of a held line whose item did not change (FR-AP-15). A booking not yet in
+		// CouchDB still names its campaign and delivery in the intake buffer, so a campaign
+		// line added now gets its point at once rather than none for good.
+		const booked = latestDoc
+			? {
+					campaignId: latestDoc.campaign_id ?? null,
+					deliveryMethod: latestDoc.logistics?.delivery_method ?? null
+				}
+			: await readBufferedBooking(tracking_token);
+		const campaign = booked?.campaignId
+			? await readDonationCampaign(shelterDb, booked.campaignId)
+			: null;
+		const pointedItems = withCampaignLinePoints(resolvedItems, campaign, booked?.deliveryMethod);
 
 		// The same headroom check the create route makes. Without it an edit answers only
 		// to the atomic counter, which caps reserved_qty at qty_target and knows nothing
@@ -177,7 +187,7 @@ export const PATCH = async ({ params, request }) => {
 				// Staff decide lines in CouchDB, which FastAPI cannot read: send the booking as it
 				// is now, for FastAPI's own review gate and the line keys it holds (CR-196).
 				body: JSON.stringify({
-					items: resolvedItems,
+					items: pointedItems,
 					...(latestDoc
 						? { current_items: latestDoc.items ?? [], current_status: latestDoc.status }
 						: {})
@@ -275,7 +285,7 @@ export const PATCH = async ({ params, request }) => {
 
 		return json({ success: true, message: 'Donation items updated', revisions, status });
 	} catch (e) {
-		if (e instanceof CouchReadError) {
+		if (e instanceof CouchReadError || e instanceof BufferReadError) {
 			console.error(e);
 			return json({ success: false, error: 'DONATION_UNAVAILABLE' }, { status: 503 });
 		}
