@@ -59,7 +59,7 @@ function couchDoc(status = 'declared') {
  * CouchDB has not seen yet. Only the PATCH is what a test asserts on, so the GET is a
  * separate answer — a booking with no campaign unless a test says otherwise.
  */
-let buffered: { status: number; body: Record<string, unknown> };
+let buffered: { status: number; body: Record<string, unknown> | string };
 const bufferHolds = (donation: Record<string, unknown>) => {
 	buffered = { status: 200, body: { success: true, donation } };
 };
@@ -72,7 +72,14 @@ function stubFastapi(patch: { ok: boolean; status: number; body: Record<string, 
 				init?.method === 'PATCH'
 					? patch
 					: { ok: buffered.status < 400, status: buffered.status, body: buffered.body };
-			return { ok: answer.ok, status: answer.status, json: async () => answer.body };
+			return {
+				ok: answer.ok,
+				status: answer.status,
+				json: async () => {
+					if (typeof answer.body === 'string') throw new SyntaxError('Unexpected token');
+					return answer.body;
+				}
+			};
 		})
 	);
 }
@@ -767,6 +774,24 @@ describe('PATCH /api/public/v1/donations/[token]/items', () => {
 				expect(vi.mocked(fetch).mock.calls.some(([, init]) => init?.method === 'PATCH')).toBe(
 					false
 				);
+			});
+
+			it.each([
+				['a body without the donation', { status: 200, body: {} }],
+				['a body that is not JSON', { status: 200, body: '<html>bad gateway</html>' }]
+			])('stops before moving quota when the buffer answers with %s', async (_label, reply) => {
+				couchHas(null);
+				buffered = reply as typeof buffered;
+				fastapiOk();
+
+				const response = await call([RICE]);
+
+				expect(response.status).toBe(503);
+				expect((await response.json()).error).toBe('DONATION_UNAVAILABLE');
+				expect(vi.mocked(fetch).mock.calls.some(([, init]) => init?.method === 'PATCH')).toBe(
+					false
+				);
+				expect(readDonationCampaign).not.toHaveBeenCalled();
 			});
 
 			it('leaves the 404 to the PATCH when FastAPI has no such booking', async () => {

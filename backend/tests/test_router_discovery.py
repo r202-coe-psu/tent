@@ -75,9 +75,28 @@ def test_router_import_error_is_logged_and_others_still_load(
     assert "not_a_real_dependency_xyz" in joined
 
 
+def test_router_runtime_error_is_logged_and_others_still_load(
+    modules_pkg: Path, error_logs: list[str]
+) -> None:
+    _write(modules_pkg / "a" / "__init__.py")
+    _write(modules_pkg / "a" / "router.py", 'raise RuntimeError("x")\n')
+    _write(modules_pkg / "b" / "__init__.py")
+    _write(
+        modules_pkg / "b" / "router.py",
+        "from fastapi import APIRouter\nrouter = APIRouter()\n",
+    )
+
+    names = [name for name, _ in _discover_routers(modules_pkg.name)]
+
+    assert names == ["b"]
+    joined = "\n".join(error_logs)
+    assert f"{modules_pkg.name}.a.router" in joined
+    assert "RuntimeError" in joined
+
+
 def test_real_modules_all_import() -> None:
     """Guards against a module silently dropping out of the app (stale deps, bad imports)."""
     modules_dir = Path(__file__).parent.parent / "apiapp" / "modules"
-    expected = sum(1 for p in modules_dir.glob("*/router.py"))
+    expected = len(list(modules_dir.glob("*/router.py")))
 
     assert len(_discover_routers()) >= expected

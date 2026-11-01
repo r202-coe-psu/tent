@@ -56,14 +56,16 @@ async function readBufferedBooking(
 	}
 	if (res.status === 404) return null;
 	if (!res.ok) throw new BufferReadError(`FastAPI answered ${res.status}`);
-	const body = (await res.json().catch(() => ({}))) as {
+	const body = (await res.json().catch(() => null)) as {
 		donation?: { campaign_id?: unknown; logistics?: { delivery_method?: unknown } | null };
-	};
-	const donation = body.donation;
+	} | null;
+	const donation = body?.donation;
+	// A 2xx without the booking is not "no campaign": refuse rather than write null points.
+	if (!donation) throw new BufferReadError('FastAPI answered without a donation');
 	return {
-		campaignId: typeof donation?.campaign_id === 'string' ? donation.campaign_id : null,
+		campaignId: typeof donation.campaign_id === 'string' ? donation.campaign_id : null,
 		deliveryMethod:
-			typeof donation?.logistics?.delivery_method === 'string'
+			typeof donation.logistics?.delivery_method === 'string'
 				? donation.logistics.delivery_method
 				: null
 	};

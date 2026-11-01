@@ -920,8 +920,8 @@ FastAPI อ่าน `public_donations` (fallback intake buffer เมื่อ 
 - ~~`POST`: id ที่ไม่ใช่ `null` ต้องอยู่ใน `public_shelters.donation_points` ของ `shelter_code` ไม่งั้น
   `400 UNKNOWN_DROP_OFF_POINT` และโควต้าไม่ขยับ (FR-MP-2, FR-MP-3)~~ → แทนด้วย A2 FR-AP-10
 - `delivery_method` = `parcel` หรือ `shelter_pickup` → ระบบเขียน `null` ทุกรายการ ไม่ว่า client ส่งอะไรมา (FR-MP-4)
-- `PATCH …/items`: id ที่ไม่อยู่ในจุดรับบริจาคปัจจุบันของศูนย์ → **BFF** เขียน `null` ไม่ตอบ error (FR-MP-2a ·
-  BFF อ่านจุดจาก shelter doc ใน CouchDB) · FastAPI **ไม่ตรวจจุดกับ `public_shelters`** — endpoint เรียกได้ผ่าน BFF เท่านั้น (internal Bearer) และ projection ใน Mongo ตามหลัง shelter doc (FR-MP-2b) · FastAPI ยังบังคับ FR-MP-4 (`parcel` / `shelter_pickup` → `null`) · request ส่ง `drop_off_point_id` ของทุกรายการ (FR-MP-15)
+- ~~`PATCH …/items`: id ที่ไม่อยู่ในจุดรับบริจาคปัจจุบันของศูนย์ → **BFF** เขียน `null` ไม่ตอบ error (FR-MP-2a ·
+  BFF อ่านจุดจาก shelter doc ใน CouchDB) · FastAPI **ไม่ตรวจจุดกับ `public_shelters`** — endpoint เรียกได้ผ่าน BFF เท่านั้น (internal Bearer) และ projection ใน Mongo ตามหลัง shelter doc (FR-MP-2b) · FastAPI ยังบังคับ FR-MP-4 (`parcel` / `shelter_pickup` → `null`) · request ส่ง `drop_off_point_id` ของทุกรายการ (FR-MP-15)~~ → แทนด้วย A2 FR-AP-15a, FR-AP-15b
 - ใบที่มี `point_receipts` ไม่ว่าง (จุดใดจุดหนึ่งรับไปแล้ว) → `PATCH …/items` และ `DELETE` ตอบ `409 GOODS_IN_STOCK` (FR-MP-17)
 
 `GET /public/v1/donations/{tracking_token}` ของ FastAPI ส่ง `campaign_id` ของใบด้วย (เฉพาะ BFF `…/items` ใช้หาแคมเปญของใบที่ยังไม่ sync เข้า CouchDB — FR-AP-15a · BFF ไม่ส่งต่อให้ผู้บริจาค) · ส่ง `items[].drop_off_point_id` และ `point_receipts[]` (เฉพาะ `point_id`,
