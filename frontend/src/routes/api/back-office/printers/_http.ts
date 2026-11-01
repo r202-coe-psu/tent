@@ -30,6 +30,7 @@ const SERVICE_STATUS: Record<ServiceError['code'], number> = {
 	FORBIDDEN: 403,
 	VALIDATION: 422,
 	CONFLICT: 409,
+	NOT_FOUND: 404,
 	INTERNAL: 500
 };
 
