@@ -26,6 +26,7 @@ import {
 	REFERRAL_MANGO_INDEXES,
 	KIOSK_LOOKUP_MANGO_INDEXES,
 	REQUISITION_TICKET_MANGO_INDEXES,
+	ROLE_GRANT_AUDIT_MANGO_INDEX,
 	STOCK_LEDGER_LOT_NO_MANGO_INDEX,
 	TRANSFER_LEDGER_MANGO_INDEXES
 } from './shelter-access-design';
@@ -56,6 +57,7 @@ export {
 	PEOPLE_MANGO_INDEXES,
 	REFERRAL_MANGO_INDEXES,
 	REQUISITION_TICKET_MANGO_INDEXES,
+	ROLE_GRANT_AUDIT_MANGO_INDEX,
 	STOCK_LEDGER_LOT_NO_MANGO_INDEX,
 	TRANSFER_LEDGER_MANGO_INDEXES
 } from './shelter-access-design';
@@ -596,6 +598,18 @@ export async function deployDonationPhotoMangoIndex(db: string): Promise<void> {
 		throw new ServiceError(
 			'INTERNAL',
 			`Mango index ${DONATION_PHOTO_ORPHAN_MANGO_INDEX.name} deploy failed (${res.status}): ${detail.reason ?? detail.error ?? 'unknown'}`
+		);
+	}
+}
+
+/** Idempotent deploy of the audit index behind the access dialog's "last grant ended" lookup. */
+export async function deployRoleGrantAuditMangoIndex(db: string): Promise<void> {
+	const res = await adminRaw(`/${db}/_index`, 'POST', ROLE_GRANT_AUDIT_MANGO_INDEX);
+	if (res.status >= 400) {
+		const detail = (res.data as { reason?: string; error?: string } | null) ?? {};
+		throw new ServiceError(
+			'INTERNAL',
+			`Mango index ${ROLE_GRANT_AUDIT_MANGO_INDEX.name} deploy failed (${res.status}): ${detail.reason ?? detail.error ?? 'unknown'}`
 		);
 	}
 }
