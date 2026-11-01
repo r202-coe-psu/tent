@@ -101,9 +101,17 @@ describe('printer admin api', () => {
 
 		fetchMock.mockReset();
 		fetchMock.mockResolvedValueOnce(
-			respond(201, { job_id: 'job1', expires_at: '2026-10-22T03:05:00.000Z' })
+			respond(201, {
+				job_id: 'job1',
+				shelter_code: 'SH001',
+				expires_at: '2026-10-22T03:05:00.000Z'
+			})
 		);
-		expect((await testPrintPrinter('printer-sh001-reg1')).job_id).toBe('job1');
+		expect(await testPrintPrinter('printer-sh001-reg1')).toEqual({
+			job_id: 'job1',
+			shelter_code: 'SH001',
+			expires_at: '2026-10-22T03:05:00.000Z'
+		});
 		[url, init] = call();
 		expect(url).toBe('/api/back-office/printers/printer-sh001-reg1/test-print');
 		expect(init.method).toBe('POST');

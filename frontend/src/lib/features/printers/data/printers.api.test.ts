@@ -79,12 +79,20 @@ describe('createPrintJob', () => {
 
 	it('posts the job as JSON and returns the job id and expiry', async () => {
 		fetchMock.mockResolvedValueOnce(
-			respond(201, { job_id: 'print_job:01J', expires_at: '2026-10-22T03:02:00.000Z' })
+			respond(201, {
+				job_id: 'print_job:01J',
+				shelter_code: 'SH001',
+				expires_at: '2026-10-22T03:02:00.000Z'
+			})
 		);
 
 		const result = await createPrintJob(input);
 
-		expect(result).toEqual({ job_id: 'print_job:01J', expires_at: '2026-10-22T03:02:00.000Z' });
+		expect(result).toEqual({
+			job_id: 'print_job:01J',
+			shelter_code: 'SH001',
+			expires_at: '2026-10-22T03:02:00.000Z'
+		});
 		const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
 		expect(url).toBe('/api/staff/v1/print-jobs');
 		expect(init.method).toBe('POST');
@@ -105,13 +113,13 @@ describe('createPrintJob', () => {
 });
 
 describe('getPrintJobStatus', () => {
-	it('gets the status of an encoded job id', async () => {
+	it('gets the status of an encoded job id scoped to the encoded shelter code', async () => {
 		const body = { status: 'printing', printed: 1, label_count: 4, error_code: null };
 		fetchMock.mockResolvedValueOnce(respond(200, body));
 
-		expect(await getPrintJobStatus('print_job:01J')).toEqual(body);
+		expect(await getPrintJobStatus('print_job:01J', 'SH 001')).toEqual(body);
 		const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit | undefined];
-		expect(url).toBe('/api/staff/v1/print-jobs/print_job%3A01J');
+		expect(url).toBe('/api/staff/v1/print-jobs/print_job%3A01J?shelter_code=SH%20001');
 		expect(init?.method ?? 'GET').toBe('GET');
 	});
 
@@ -120,6 +128,6 @@ describe('getPrintJobStatus', () => {
 			respond(200, { status: 'paused', printed: 0, label_count: 4, error_code: null })
 		);
 
-		await expect(getPrintJobStatus('print_job:01J')).rejects.toThrow();
+		await expect(getPrintJobStatus('print_job:01J', 'SH001')).rejects.toThrow();
 	});
 });

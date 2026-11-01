@@ -101,6 +101,8 @@ export type PrinterSecretResponse = z.infer<typeof printerSecretResponseSchema>;
 
 export const printerTestPrintResponseSchema = z.object({
 	job_id: z.string(),
+	/** Shelter of the job's DB `printing_{code}`, as for the staff create response. */
+	shelter_code: z.string().min(1),
 	expires_at: z.string()
 });
 export type PrinterTestPrintResponse = z.infer<typeof printerTestPrintResponseSchema>;

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { printJobOutcomeMessage } from './printers.i18n';
+import { printerAdminErrorMessage, printJobOutcomeMessage } from './printers.i18n';
 
 describe('printJobOutcomeMessage', () => {
 	it('reports how many labels were printed and where', () => {
@@ -54,5 +54,28 @@ describe('printJobOutcomeMessage', () => {
 		const result = { status, printed: 0, error_code: null };
 		expect(printJobOutcomeMessage(result, 'โต๊ะ 1', 'th')).toBe('เครื่อง โต๊ะ 1 ไม่ตอบ');
 		expect(printJobOutcomeMessage(result, 'Desk 1', 'en')).toBe('Desk 1 is not responding');
+	});
+});
+
+describe('printerAdminErrorMessage', () => {
+	it.each([
+		['KIOSK_DEVICE_NOT_FOUND', 'ไม่พบตู้ kiosk นี้ในศูนย์ของเครื่องพิมพ์'],
+		['KIOSK_DEVICE_REQUIRES_KIOSK_HOST', 'เลือกตู้ kiosk ได้เฉพาะเครื่องที่ติดตั้งในตู้ kiosk']
+	])('explains the %s kiosk link error in Thai', (code, expected) => {
+		expect(printerAdminErrorMessage(code, 'th')).toBe(expected);
+	});
+
+	it('explains the kiosk link errors in English', () => {
+		expect(printerAdminErrorMessage('KIOSK_DEVICE_NOT_FOUND', 'en')).toBe(
+			'That kiosk was not found in the printer shelter.'
+		);
+		expect(printerAdminErrorMessage('KIOSK_DEVICE_REQUIRES_KIOSK_HOST', 'en')).toBe(
+			'A kiosk can only be linked to a printer installed inside a kiosk.'
+		);
+	});
+
+	it('returns null for a code it has no copy for so the caller keeps the server message', () => {
+		expect(printerAdminErrorMessage('SOMETHING_ELSE', 'th')).toBeNull();
+		expect(printerAdminErrorMessage(null, 'th')).toBeNull();
 	});
 });

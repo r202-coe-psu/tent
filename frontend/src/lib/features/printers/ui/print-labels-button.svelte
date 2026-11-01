@@ -1,6 +1,7 @@
 <script lang="ts">
 	import LoaderCircle from '@lucide/svelte/icons/loader-circle';
 	import { Button } from '$lib/components/ui/button/index.js';
+	import { authStore } from '$lib/stores/auth.svelte';
 	import { endpointStore } from '$lib/stores/endpoint.svelte';
 	import { languageStore } from '$lib/stores/language.svelte';
 	import { getTranslation } from '$lib/utils/i18n';
@@ -9,6 +10,7 @@
 	import { PrintApiError } from '../data/printers.api';
 	import { stationPrinter } from '../application/station-printer.svelte';
 	import { chunkLabels } from '../domain/chunk-labels';
+	import { canPrintSource } from '../domain/print-permission';
 	import { isTerminalJobStatus, PRINT_JOB_POLL_TIMEOUT_MS } from '../domain/print-job-status';
 	import { PRINT_JOB_PICKUP_HINT_MS } from '../domain/print-job-timing';
 	import {
@@ -37,7 +39,10 @@
 
 	const t = $derived(getTranslation(PRINTERS_I18N, languageStore.current));
 
-	const printersQuery = useShelterPrinters(() => shelterCode);
+	// FR-29a: without the right role the printer UI is hidden (the caller keeps its PDF preview).
+	const canPrint = $derived(canPrintSource(authStore.user?.roles ?? [], shelterCode, source));
+
+	const printersQuery = useShelterPrinters(() => (canPrint ? shelterCode : undefined));
 	const printers = $derived(printersQuery.data?.printers ?? []);
 	const disconnected = $derived(endpointStore.status === 'disconnected');
 	const chosenId = $derived(stationPrinter.get(shelterCode));
@@ -48,9 +53,9 @@
 	let pickerOpen = $state(false);
 	let running = $state(false);
 	let progressTotal = $state(0);
-	let jobId = $state<string>();
+	let job = $state<{ jobId: string; shelterCode: string }>();
 
-	const statusQuery = usePrintJobStatus(() => jobId);
+	const statusQuery = usePrintJobStatus(() => job);
 
 	// Set while the job waits longer than a healthy Pi takes to claim it; cleared when it settles.
 	let pickupLate = $state(false);
@@ -128,6 +133,14 @@
 		await sendUnsent(printer);
 	}
 
+	function sendErrorMessage(error: unknown, printerName: string): string {
+		if (error instanceof PrintApiError) {
+			if (error.code === 'PRINTER_OFFLINE') return t.printerOffline(printerName);
+			if (error.code === 'FORBIDDEN') return t.forbidden;
+		}
+		return t.sendFailed(printerName);
+	}
+
 	async function sendUnsent(printer: { id: string; name: string }) {
 		sendingTo = printer.name;
 		const pending = [...(unsent ?? [])];
@@ -142,20 +155,16 @@
 			} catch (error) {
 				unsent = pending;
 				running = false;
-				toast.error(
-					error instanceof PrintApiError && error.code === 'PRINTER_OFFLINE'
-						? t.printerOffline(printer.name)
-						: t.sendFailed(printer.name)
-				);
+				toast.error(sendErrorMessage(error, printer.name));
 				return;
 			}
-			jobId = created.job_id;
+			job = { jobId: created.job_id, shelterCode: created.shelter_code };
 			// Earlier chunks must finish first (the next one is only queued then, so it cannot expire
 			// waiting behind them). The last chunk counts as sent once the Pi claims it: a failure after
 			// that is checked at the printer, not on the tablet.
 			const last = pending.length === 1;
 			const outcome = await waitForJob(last);
-			jobId = undefined;
+			job = undefined;
 			printedTotal += outcome.printed;
 			const sent = outcome.status === 'printed' || (last && outcome.status === 'printing');
 			if (!sent) {
@@ -186,7 +195,7 @@
 	}
 </script>
 
-{#if printers.length > 0}
+{#if canPrint && printers.length > 0}
 	<div class="flex flex-col gap-1">
 		<Button type="button" class={buttonClass} disabled={blocked} onclick={handleClick}>
 			{#if running}<LoaderCircle class="mr-1.5 size-4 animate-spin" />{/if}

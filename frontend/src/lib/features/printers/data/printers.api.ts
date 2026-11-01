@@ -53,7 +53,13 @@ export async function createPrintJob(input: PrintJobCreateInput): Promise<PrintJ
 	return printJobCreateResponseSchema.parse(payload);
 }
 
-export async function getPrintJobStatus(jobId: string): Promise<PrintJobStatusResponse> {
-	const payload = await request(`/api/staff/v1/print-jobs/${encodeURIComponent(jobId)}`);
+/** `shelterCode` comes from the create response; the BFF needs it to open `printing_{code}`. */
+export async function getPrintJobStatus(
+	jobId: string,
+	shelterCode: string
+): Promise<PrintJobStatusResponse> {
+	const payload = await request(
+		`/api/staff/v1/print-jobs/${encodeURIComponent(jobId)}?shelter_code=${encodeURIComponent(shelterCode)}`
+	);
 	return printJobStatusResponseSchema.parse(payload);
 }

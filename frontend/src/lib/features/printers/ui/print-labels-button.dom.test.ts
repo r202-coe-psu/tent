@@ -16,6 +16,15 @@ const api = vi.hoisted(() => ({
 	getPrintJobStatus: vi.fn()
 }));
 const toast = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn() }));
+const session = vi.hoisted(() => ({ roles: [] as string[] }));
+
+vi.mock('$lib/stores/auth.svelte', () => ({
+	authStore: {
+		get user() {
+			return { name: 'staff', roles: session.roles };
+		}
+	}
+}));
 
 vi.mock('../data/printers.api', async (importOriginal) => ({
 	...(await importOriginal<typeof import('../data/printers.api')>()),
@@ -70,6 +79,7 @@ const buttons = () => [...document.body.querySelectorAll<HTMLButtonElement>('but
 
 beforeEach(() => {
 	vi.clearAllMocks();
+	session.roles = ['shelter:SH001', 'SH001:registration_staff'];
 	localStorage.clear();
 	stationPrinter.set('SH001', null);
 	endpointStore.markConnected();
@@ -86,6 +96,63 @@ describe('PrintLabelsButton', () => {
 		await render({ printers: [] });
 
 		expect(buttons()).toHaveLength(0);
+	});
+
+	it('renders nothing for staff who may not print this source in the shelter', async () => {
+		session.roles = ['shelter:SH001', 'SH001:kiosk_staff'];
+
+		await render({ printers: [printer('p1')] });
+
+		expect(buttons()).toHaveLength(0);
+	});
+
+	it('renders nothing for registration staff of another shelter', async () => {
+		session.roles = ['shelter:SH002', 'SH002:registration_staff'];
+
+		await render({ printers: [printer('p1')] });
+
+		expect(buttons()).toHaveLength(0);
+	});
+
+	it('shows the button to a system admin in any shelter', async () => {
+		session.roles = ['system_admin'];
+
+		await render({ printers: [printer('p1')] });
+
+		expect(buttons()).toHaveLength(1);
+	});
+
+	it('tells the user they may not print when the server answers 403', async () => {
+		stationPrinter.set('SH001', 'p1');
+		api.createPrintJob.mockRejectedValue(new PrintApiError('no', 403, 'FORBIDDEN'));
+		await render({ printers: [printer('p1')] });
+
+		mainButton().click();
+		await vi.waitFor(() => expect(toast.error).toHaveBeenCalledTimes(1));
+
+		expect(toast.error).toHaveBeenCalledWith('คุณไม่มีสิทธิ์พิมพ์ฉลากในศูนย์นี้');
+		expect(mainButton().disabled).toBe(false);
+	});
+
+	it('explains an invalid_label failure from the job status', async () => {
+		stationPrinter.set('SH001', 'p1');
+		api.createPrintJob.mockResolvedValue({
+			job_id: 'job-1',
+			shelter_code: 'SH001',
+			expires_at: '2026-10-22T04:00:00Z'
+		});
+		api.getPrintJobStatus.mockResolvedValue({
+			status: 'failed',
+			printed: 0,
+			label_count: 1,
+			error_code: 'invalid_label'
+		});
+		await render({ printers: [printer('p1')] });
+
+		mainButton().click();
+		await vi.waitFor(() => expect(toast.error).toHaveBeenCalledTimes(1));
+
+		expect(toast.error).toHaveBeenCalledWith('รูป label ไม่ถูกต้อง — ลองพิมพ์ใหม่จากหน้านี้');
 	});
 
 	it('disables the button and points to the PDF preview while the app is disconnected', async () => {
@@ -139,7 +206,11 @@ describe('PrintLabelsButton', () => {
 
 	it('renders lazily on click, sends one job and ignores a second click while printing', async () => {
 		stationPrinter.set('SH001', 'p1');
-		api.createPrintJob.mockResolvedValue({ job_id: 'job-1', expires_at: '2026-10-22T04:00:00Z' });
+		api.createPrintJob.mockResolvedValue({
+			job_id: 'job-1',
+			shelter_code: 'SH001',
+			expires_at: '2026-10-22T04:00:00Z'
+		});
 		api.getPrintJobStatus.mockResolvedValue({
 			status: 'printing',
 			printed: 0,
@@ -166,11 +237,33 @@ describe('PrintLabelsButton', () => {
 		expect(mainButton().textContent).toContain('กำลังพิมพ์ 0/45…');
 	});
 
+	it('polls the job with the shelter code the server returned when it created the job', async () => {
+		stationPrinter.set('SH001', 'p1');
+		api.createPrintJob.mockResolvedValue({
+			job_id: 'job-1',
+			shelter_code: 'SH009',
+			expires_at: '2026-10-22T04:00:00Z'
+		});
+		api.getPrintJobStatus.mockResolvedValue({
+			status: 'printing',
+			printed: 0,
+			label_count: 1,
+			error_code: null
+		});
+		await render({ printers: [printer('p1')] });
+
+		mainButton().click();
+		await vi.waitFor(() => expect(toast.success).toHaveBeenCalledTimes(1));
+
+		expect(api.getPrintJobStatus).toHaveBeenCalledWith('job-1', 'SH009');
+	});
+
 	it('sends 45 labels as three sequential jobs and toasts the total once the last is claimed', async () => {
 		stationPrinter.set('SH001', 'p1');
 		let created = 0;
 		api.createPrintJob.mockImplementation(async () => ({
 			job_id: `job-${++created}`,
+			shelter_code: 'SH001',
 			expires_at: '2026-10-22T04:00:00Z'
 		}));
 		const sizes: Record<string, number> = { 'job-1': 20, 'job-2': 20, 'job-3': 5 };
@@ -200,7 +293,11 @@ describe('PrintLabelsButton', () => {
 
 	it('toasts "sent" and frees the button as soon as the printer claims the last job', async () => {
 		stationPrinter.set('SH001', 'p1');
-		api.createPrintJob.mockResolvedValue({ job_id: 'job-1', expires_at: '2026-10-22T04:00:00Z' });
+		api.createPrintJob.mockResolvedValue({
+			job_id: 'job-1',
+			shelter_code: 'SH001',
+			expires_at: '2026-10-22T04:00:00Z'
+		});
 		api.getPrintJobStatus.mockResolvedValue({
 			status: 'printing',
 			printed: 0,
@@ -224,6 +321,7 @@ describe('PrintLabelsButton', () => {
 		let created = 0;
 		api.createPrintJob.mockImplementation(async () => ({
 			job_id: `job-${++created}`,
+			shelter_code: 'SH001',
 			expires_at: '2026-10-22T04:00:00Z'
 		}));
 		api.getPrintJobStatus.mockResolvedValue({
@@ -250,7 +348,11 @@ describe('PrintLabelsButton', () => {
 
 	it('toasts the reason for a failed job, stops sending and offers to print again', async () => {
 		stationPrinter.set('SH001', 'p1');
-		api.createPrintJob.mockResolvedValue({ job_id: 'job-1', expires_at: '2026-10-22T04:00:00Z' });
+		api.createPrintJob.mockResolvedValue({
+			job_id: 'job-1',
+			shelter_code: 'SH001',
+			expires_at: '2026-10-22T04:00:00Z'
+		});
 		api.getPrintJobStatus.mockResolvedValue({
 			status: 'failed',
 			printed: 0,
@@ -280,6 +382,7 @@ describe('PrintLabelsButton', () => {
 		let created = 0;
 		api.createPrintJob.mockImplementation(async () => ({
 			job_id: `job-${++created}`,
+			shelter_code: 'SH001',
 			expires_at: '2026-10-22T04:00:00Z'
 		}));
 		api.getPrintJobStatus.mockImplementation(async (jobId: string) =>
@@ -309,7 +412,11 @@ describe('PrintLabelsButton', () => {
 	it('hints that the printer has not picked up the job, without offering a retry yet', async () => {
 		vi.useFakeTimers();
 		stationPrinter.set('SH001', 'p1');
-		api.createPrintJob.mockResolvedValue({ job_id: 'job-1', expires_at: '2026-10-22T04:00:00Z' });
+		api.createPrintJob.mockResolvedValue({
+			job_id: 'job-1',
+			shelter_code: 'SH001',
+			expires_at: '2026-10-22T04:00:00Z'
+		});
 		api.getPrintJobStatus.mockResolvedValue({
 			status: 'pending',
 			printed: 0,
@@ -332,7 +439,11 @@ describe('PrintLabelsButton', () => {
 	it('gives up with a not-responding toast when the printer never claims the job', async () => {
 		vi.useFakeTimers();
 		stationPrinter.set('SH001', 'p1');
-		api.createPrintJob.mockResolvedValue({ job_id: 'job-1', expires_at: '2026-10-22T04:00:00Z' });
+		api.createPrintJob.mockResolvedValue({
+			job_id: 'job-1',
+			shelter_code: 'SH001',
+			expires_at: '2026-10-22T04:00:00Z'
+		});
 		api.getPrintJobStatus.mockResolvedValue({
 			status: 'pending',
 			printed: 0,
@@ -352,7 +463,11 @@ describe('PrintLabelsButton', () => {
 
 	it('treats an expired job as the printer not responding', async () => {
 		stationPrinter.set('SH001', 'p1');
-		api.createPrintJob.mockResolvedValue({ job_id: 'job-1', expires_at: '2026-10-22T04:00:00Z' });
+		api.createPrintJob.mockResolvedValue({
+			job_id: 'job-1',
+			shelter_code: 'SH001',
+			expires_at: '2026-10-22T04:00:00Z'
+		});
 		api.getPrintJobStatus.mockResolvedValue({
 			status: 'expired',
 			printed: 0,

@@ -18,7 +18,8 @@ export const PRINT_JOB_POLL_INTERVAL_MS = 1_000;
 export const printerKeys = {
 	all: ['printers'] as const,
 	list: (shelterCode: string) => [...printerKeys.all, 'list', shelterCode] as const,
-	job: (jobId: string) => [...printerKeys.all, 'job', jobId] as const,
+	job: (shelterCode: string, jobId: string) =>
+		[...printerKeys.all, 'job', shelterCode, jobId] as const,
 	adminList: (shelterCode?: string) => [...printerKeys.all, 'admin', shelterCode ?? 'all'] as const
 };
 
@@ -43,22 +44,26 @@ export const useCreatePrintJob = () =>
 
 /**
  * Polls a job every second until it is printed/failed/expired or `PRINT_JOB_POLL_TIMEOUT_MS` has
- * passed since the job id was first seen. Then the query simply stops; the caller treats a
+ * passed since the job id was first seen. The shelter code is the one the create response
+ * returned (the status route needs it). Then the query simply stops; the caller treats a
  * still-open status as a timeout.
  */
-export const usePrintJobStatus = (jobId: () => string | undefined) => {
+export const usePrintJobStatus = (
+	job: () => { jobId: string; shelterCode: string } | undefined
+) => {
 	let trackedJobId: string | undefined;
 	let startedAtMs = Date.now();
 	return createQuery(() => {
-		const id = jobId();
+		const current = job();
+		const id = current?.jobId;
 		if (id !== trackedJobId) {
 			trackedJobId = id;
 			startedAtMs = Date.now();
 		}
 		return {
-			queryKey: printerKeys.job(id ?? ''),
-			queryFn: () => getPrintJobStatus(id as string),
-			enabled: !!id,
+			queryKey: printerKeys.job(current?.shelterCode ?? '', id ?? ''),
+			queryFn: () => getPrintJobStatus(id as string, current?.shelterCode as string),
+			enabled: !!current,
 			refetchInterval: (query) =>
 				shouldKeepPolling({
 					status: query.state.data?.status,

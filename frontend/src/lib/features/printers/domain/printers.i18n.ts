@@ -16,6 +16,7 @@ export const PRINTERS_I18N = {
 		retry: 'พิมพ์อีกครั้ง',
 		renderFailed: 'สร้างภาพฉลากไม่สำเร็จ',
 		sendFailed: (printer: string) => `ส่งงานพิมพ์ไปที่ ${printer} ไม่สำเร็จ`,
+		forbidden: 'คุณไม่มีสิทธิ์พิมพ์ฉลากในศูนย์นี้',
 		online: 'ออนไลน์',
 		offline: 'ออฟไลน์',
 		disconnectedHint: 'พิมพ์ผ่านเครื่องพิมพ์ไม่ได้ขณะออฟไลน์ — ใช้พรีวิว PDF',
@@ -40,6 +41,8 @@ export const PRINTERS_I18N = {
 			manageSr: (name: string) => `เครื่อง ${name}`,
 			inactive: 'ปิดใช้งาน',
 			noStation: 'ไม่ระบุจุดบริการ',
+			noKioskLink: 'ยังไม่ผูกกับตู้',
+			kioskLink: (name: string) => `ตู้ ${name}`,
 			neverSeen: 'ยังไม่เคยเชื่อมต่อ',
 			secretPrefix: (prefix: string) => `Secret ${prefix}…`,
 			localIps: (ips: readonly string[]) => `IP ${ips.join(', ')}`,
@@ -70,6 +73,9 @@ export const PRINTERS_I18N = {
 				stationPlaceholder: 'เช่น ลงทะเบียน',
 				hostKind: 'รูปแบบการติดตั้ง',
 				hostKinds: { standalone: 'Pi แยกเครื่อง', kiosk: 'ติดตั้งในตู้ kiosk' },
+				kioskDevice: 'ตู้ kiosk ที่ติดตั้ง',
+				kioskDeviceNone: 'ยังไม่ผูกกับตู้',
+				kioskDeviceHint: 'เลือกเครื่องสแกนของศูนย์นี้ที่เครื่องพิมพ์ติดตั้งอยู่ (ผูกทีหลังได้)',
 				cancel: 'ยกเลิก',
 				submit: 'สร้างและรับ Secret',
 				submitting: 'กำลังบันทึก...',
@@ -101,6 +107,9 @@ export const PRINTERS_I18N = {
 				infoSection: 'ข้อมูลเครื่อง',
 				name: 'ชื่อเครื่อง',
 				station: 'จุดบริการ',
+				kioskDevice: 'ตู้ kiosk ที่ติดตั้ง',
+				kioskDeviceNone: 'ยังไม่ผูกกับตู้',
+				kioskDeviceHint: 'เปลี่ยนหรือเลือก "ยังไม่ผูกกับตู้" เพื่อยกเลิกการผูก',
 				activeLabel: 'เปิดใช้งานเครื่อง',
 				activeOn: 'Active — รับงานพิมพ์ได้',
 				activeOff: 'Inactive — ไม่รับงานพิมพ์จนกว่าจะเปิดอีกครั้ง',
@@ -128,6 +137,10 @@ export const PRINTERS_I18N = {
 				saveFailed: 'ไม่สามารถบันทึกการตั้งค่าเครื่องได้',
 				actionFailed: 'ดำเนินการไม่สำเร็จ'
 			}
+		},
+		adminErrors: {
+			KIOSK_DEVICE_NOT_FOUND: 'ไม่พบตู้ kiosk นี้ในศูนย์ของเครื่องพิมพ์',
+			KIOSK_DEVICE_REQUIRES_KIOSK_HOST: 'เลือกตู้ kiosk ได้เฉพาะเครื่องที่ติดตั้งในตู้ kiosk'
 		},
 		failed: {
 			printer_timeout: (printer: string) =>
@@ -166,6 +179,7 @@ export const PRINTERS_I18N = {
 		retry: 'Print again',
 		renderFailed: 'Could not render the labels.',
 		sendFailed: (printer: string) => `Could not send the print job to ${printer}.`,
+		forbidden: 'You are not allowed to print labels in this shelter.',
 		online: 'Online',
 		offline: 'Offline',
 		disconnectedHint: 'Cannot print through a label printer while offline. Use the PDF preview.',
@@ -190,6 +204,8 @@ export const PRINTERS_I18N = {
 			manageSr: (name: string) => `printer ${name}`,
 			inactive: 'Disabled',
 			noStation: 'No station',
+			noKioskLink: 'Not linked to a kiosk',
+			kioskLink: (name: string) => `Kiosk ${name}`,
 			neverSeen: 'Never connected',
 			secretPrefix: (prefix: string) => `Secret ${prefix}…`,
 			localIps: (ips: readonly string[]) => `IP ${ips.join(', ')}`,
@@ -220,6 +236,9 @@ export const PRINTERS_I18N = {
 				stationPlaceholder: 'e.g. Registration',
 				hostKind: 'Installation',
 				hostKinds: { standalone: 'Standalone Pi', kiosk: 'Inside a kiosk' },
+				kioskDevice: 'Kiosk it is installed in',
+				kioskDeviceNone: 'Not linked to a kiosk',
+				kioskDeviceHint: 'Pick the shelter scanner this printer sits in (can be linked later)',
 				cancel: 'Cancel',
 				submit: 'Create and get Secret',
 				submitting: 'Saving...',
@@ -251,6 +270,9 @@ export const PRINTERS_I18N = {
 				infoSection: 'Printer details',
 				name: 'Printer name',
 				station: 'Station',
+				kioskDevice: 'Kiosk it is installed in',
+				kioskDeviceNone: 'Not linked to a kiosk',
+				kioskDeviceHint: 'Change it, or pick "Not linked to a kiosk" to unlink',
 				activeLabel: 'Enable printer',
 				activeOn: 'Active — accepts print jobs',
 				activeOff: 'Inactive — no print jobs until enabled again',
@@ -279,6 +301,11 @@ export const PRINTERS_I18N = {
 				actionFailed: 'Action failed'
 			}
 		},
+		adminErrors: {
+			KIOSK_DEVICE_NOT_FOUND: 'That kiosk was not found in the printer shelter.',
+			KIOSK_DEVICE_REQUIRES_KIOSK_HOST:
+				'A kiosk can only be linked to a printer installed inside a kiosk.'
+		},
 		failed: {
 			printer_timeout: (printer: string) =>
 				`${printer} did not finish printing in time. Check paper and power.`,
@@ -306,6 +333,18 @@ export interface PrintJobOutcome {
 	status: PrintJobStatus | 'timeout';
 	printed: number;
 	error_code: string | null;
+}
+
+/**
+ * Copy for the back-office printer errors the dialogs explain themselves (the kiosk link 422s);
+ * `null` for any other code, so the caller falls back to the server message.
+ */
+export function printerAdminErrorMessage(
+	code: string | null,
+	lang: PrintersI18nLang
+): string | null {
+	const table: Readonly<Record<string, string>> = PRINTERS_I18N[lang].adminErrors;
+	return code !== null && Object.hasOwn(table, code) ? table[code] : null;
 }
 
 function failureMessage(
