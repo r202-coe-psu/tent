@@ -295,7 +295,9 @@ def main(argv: list[str] | None = None) -> int:
         with admin_client(url) as http:
             response = http.get(_doc_url(f"print_device:{args.device_id}"))
             if response.status_code != 200:
-                raise SystemExit(f"print_device {args.device_id} not found (run provision_poc.py)")
+                raise SystemExit(
+                    f"print_device {args.device_id} not found (create the printer in back-office first)"
+                )
             device = response.json()
             job_seq = 0
             for _ in range(args.repeat):

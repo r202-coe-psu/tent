@@ -3,7 +3,7 @@
 # Tent print agent - installer for a Raspberry Pi / kiosk machine
 # ------------------------------------------------------------------------------
 # Usage: sudo ./setup_printer_server.sh --env-file FILE --host-kind standalone|kiosk [options]
-#   --env-file FILE     .env ของ agent (ได้จากสคริปต์ provision) — บังคับ; จะถูกวางเป็น <prefix>/.env (600)
+#   --env-file FILE     .env ของ agent (DEVICE_ID / DEVICE_SECRET จากหน้า back-office Printers) — บังคับ; จะถูกวางเป็น <prefix>/.env (600)
 #   --host-kind KIND    standalone = Pi แยก | kiosk = ใช้ queue ร่วมกับเครื่อง kiosk — บังคับ
 #   --queue NAME        ชื่อ CUPS queue (default: PRINTER_NAME ใน --env-file หรือ tent_xprinter)
 #   --prefix DIR        ที่ติดตั้ง (default: /opt/tent/printer)
@@ -87,7 +87,7 @@ fi
 [[ "$PREFIX" =~ ^/[A-Za-z0-9_./-]+$ ]] || die "--prefix ต้องเป็น path เต็มที่ใช้ได้เฉพาะ A-Z a-z 0-9 _ . / -"
 
 if ! $STATUS_ONLY; then
-    [ -n "$ENV_FILE" ] || die "--env-file จำเป็น: ระบุไฟล์ .env ของ agent (DEVICE_ID / DEVICE_SECRET จากสคริปต์ provision)"
+    [ -n "$ENV_FILE" ] || die "--env-file จำเป็น: ระบุไฟล์ .env ของ agent (DEVICE_ID / DEVICE_SECRET จากหน้า back-office Printers)"
     [ -f "$ENV_FILE" ] || die "ไม่พบไฟล์ --env-file: $ENV_FILE"
 fi
 
@@ -139,7 +139,7 @@ else
 fi
 
 # 2) Code + locked dependencies. Code and .venv stay root-owned: the agent cannot rewrite itself.
-#    scripts/ (provision_poc.py, enqueue.py hold CouchDB admin credentials) is deliberately NOT copied.
+#    scripts/ (enqueue.py holds CouchDB admin credentials) is deliberately NOT copied.
 info "[2/6] ติดตั้งโค้ดที่ $PREFIX"
 run install -d -m 0755 "$PREFIX"
 run rsync -a --delete --exclude=__pycache__ "$SCRIPT_DIR/printer/" "$PREFIX/printer/"
