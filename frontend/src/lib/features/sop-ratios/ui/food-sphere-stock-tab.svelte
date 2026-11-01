@@ -76,7 +76,7 @@
 	const volunteerCount = $derived(peopleQuery.data?.volunteers ?? 0);
 	const effectiveOccupancy = $derived(evacueeCount + staffCount + volunteerCount);
 	const peopleBreakdown = $derived(
-		`ผู้ประสบภัย ${evacueeCount} · staff ${staffCount} · จิตอาสา ${volunteerCount} = ${effectiveOccupancy} คน`
+		`ผู้ประสบภัย ${evacueeCount} · เจ้าหน้าที่ ${staffCount} · จิตอาสา ${volunteerCount} = ${effectiveOccupancy} คน`
 	);
 
 	const isLoading = $derived(
@@ -539,7 +539,6 @@
 					แสดง {filteredGroups.reduce((acc, g) => acc + g.items.length, 0)} รายการใน {filteredGroups.length}
 					กลุ่ม
 					{#if effectiveOccupancy > 0}
-						<span class="ml-1 font-semibold text-primary">· อัตราครองเตียง {evacueeCount} คน</span>
 						<span class="ml-1 text-muted-foreground">· {peopleBreakdown}</span>
 					{/if}
 				</div>
