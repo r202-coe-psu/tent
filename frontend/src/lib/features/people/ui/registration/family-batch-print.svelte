@@ -166,14 +166,18 @@
 		<div class="flex flex-col gap-2 sm:flex-row sm:justify-end">
 			<!-- Only here (not in the shared nextActions): one instance = one print state, no double print. -->
 			{#if total > 0}
-				<PrintLabelsButton
-					{shelterCode}
-					labelCount={total}
-					source="walk_in"
-					renderLabels={renderFamilyLabels}
-					label={`พิมพ์ทั้งครอบครัว (${total} ใบ)`}
-					buttonClass="min-h-11"
-				/>
+				<!-- Keyed by the family: the button keeps unsent chunks for Retry, which must not outlive a
+				     change of members (it would print the old labels). -->
+				{#key `${household._id}:${members.map((m) => m._id).join(',')}`}
+					<PrintLabelsButton
+						{shelterCode}
+						labelCount={total}
+						source="walk_in"
+						renderLabels={renderFamilyLabels}
+						label={`พิมพ์ทั้งครอบครัว (${total} ใบ)`}
+						buttonClass="min-h-11"
+					/>
+				{/key}
 			{/if}
 			{@render nextActions()}
 		</div>
