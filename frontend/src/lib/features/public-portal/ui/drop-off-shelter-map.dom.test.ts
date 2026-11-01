@@ -63,9 +63,6 @@ let instance: ReturnType<typeof mount> | null = null;
 async function render(
 	props: {
 		shelterCode?: string;
-		focus?: { pointId: string; zoom: boolean; seq: number } | null;
-		focusNote?: string | null;
-		onFocusPoint?: (pointId: string) => void;
 	} = {}
 ) {
 	instance = mount(DropOffShelterMap, {
@@ -110,33 +107,20 @@ describe('DropOffShelterMap', () => {
 		expect(map().points.map((p) => p.id)).toEqual(['p1']);
 	});
 
-	it('names the point in focus under the map, with what it is used for', async () => {
+	// Staff-assigned drop-off FR-AP-11 — a tap names the point and picks nothing.
+	it('names a tapped point under the map and highlights its pin', async () => {
 		shelterQuery.data = { donation_points: [point] };
-		await render({ focus: { pointId: 'p1', zoom: false, seq: 1 }, focusNote: 'ใช้กับ: ข้าวสาร' });
+		await render();
+		expect(map().pointFocus).toBeNull();
+
+		map().onSelectPoint('p1');
+		flushSync();
 
 		const note = document.body.querySelector('[data-testid="drop-off-point-note"]');
 		expect(note?.textContent).toContain('โรงยิม (ประตู 2)');
 		expect(note?.textContent).toContain('เข้าทางประตูด้านข้าง');
-		expect(note?.textContent).toContain('ใช้กับ: ข้าวสาร');
 		expect(note?.closest('[role="status"]')).not.toBeNull();
-	});
-
-	// CR-206 FR-MP-9 — the tapped point becomes the default drop-off point of every line.
-	it('reports a point tap to the booking form', async () => {
-		shelterQuery.data = { donation_points: [point] };
-		const onFocusPoint = vi.fn();
-		await render({ onFocusPoint });
-
-		map().onSelectPoint('p1');
-		expect(onFocusPoint).toHaveBeenCalledWith('p1');
-	});
-
-	it('hands the focus request to the map as is', async () => {
-		shelterQuery.data = { donation_points: [point] };
-		const focus = { pointId: 'p1', zoom: true, seq: 3 };
-		await render({ focus });
-
-		expect(map().pointFocus).toEqual(focus);
+		expect(map().pointFocus).toMatchObject({ pointId: 'p1', zoom: false });
 	});
 
 	it('keeps the shelter pin alone when the detail has no points or fails', async () => {

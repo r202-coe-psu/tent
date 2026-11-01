@@ -1,6 +1,8 @@
 import { hashSecurityAnswer } from '$lib/server/security-questions';
+import { isValidStaffTokenHash } from '$lib/features/users/server';
 import { ensurePrintingService } from '$lib/server/ensure-printing-service';
 import { ensurePublicWriter } from '$lib/server/ensure-public-writer';
+import { mintStaffTokenHash } from '$lib/server/staff-card-token';
 import { couchReq, env } from './couch';
 import { SH001_CODE } from './types';
 
@@ -164,6 +166,10 @@ export async function seedUsers(): Promise<void> {
 
 		if (!existingDoc) {
 			userDoc.password = SEED_STAFF_PASSWORD;
+		}
+
+		if (!userDoc.volunteer_id && !isValidStaffTokenHash(userDoc.staff_token_hash)) {
+			userDoc.staff_token_hash = await mintStaffTokenHash();
 		}
 
 		const { status } = await couchReq('PUT', `/_users/${docId}`, userDoc);

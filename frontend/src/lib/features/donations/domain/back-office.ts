@@ -66,6 +66,8 @@ export interface PendingDonationRow {
 	received_items?: Array<{ item_id?: string; free_text?: string; qty: string; unit: string }>;
 	/** Donor photos, `image:{ulid}` in `shelter_code`'s DB (CR-175 donor photos FR-12). */
 	photos?: string[];
+	/** Lines a drop-off point already recorded, and where: review gives those no point (FR-AP-20a). */
+	point_receipts: { point_id: string | null; line_nos: number[] }[];
 }
 
 /**

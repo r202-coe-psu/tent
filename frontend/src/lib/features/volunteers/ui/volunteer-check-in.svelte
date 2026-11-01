@@ -12,7 +12,7 @@
 	 * — the scan input, search box, result panel and recent feed are each
 	 * their own `volunteer-*.svelte` component, composed here.
 	 *
-	 *   - A scanned/typed code is normalized by `extractScanCode` (../domain/scan-code.ts)
+	 *   - A scanned/typed code is normalized by `extractScanCode` ($lib/utils/scan-code.ts)
 	 *     before matching, since the one QR volunteers actually carry — the public
 	 *     digital pass (`volunteer-portal/ui/digital-pass.svelte`) — encodes a full
 	 *     ticket URL (`.../volunteer/ticket/TKT-VOL-xxx`), not a bare code; this
@@ -66,7 +66,7 @@
 		findVolunteerByTrackingToken
 	} from '../application/queries';
 	import { DEFAULT_GRACE_MINUTES } from '../domain/duty-window';
-	import { extractScanCode } from '../domain/scan-code';
+	import { extractScanCode } from '$lib/utils/scan-code';
 	import type { Volunteer } from '../domain/volunteer.schema';
 	import type { ShiftAssignment } from '../domain/shift-assignment.schema';
 
