@@ -3,7 +3,8 @@ import { error } from '@sveltejs/kit';
 import { GET } from './+server';
 import type { RequestEvent } from './$types';
 import { requireShelterScopeOrSA } from '$lib/server/couch-admin';
-import { printJobStore } from '$lib/server/printers/printer-server';
+import { CouchUserError } from '$lib/server/couch-as-user';
+import { userJobStore } from '$lib/server/printers/print-job.user-store';
 import type { PrintJobDoc } from '$lib/server/printers/print-queue.server';
 
 vi.mock('$lib/server/couch-admin', async () => {
@@ -12,14 +13,12 @@ vi.mock('$lib/server/couch-admin', async () => {
 	return { ...actual, requireShelterScopeOrSA: vi.fn() };
 });
 
-vi.mock('$lib/server/printers/printer-server', () => ({
-	printDeviceRepository: {},
-	printJobStore: { get: vi.fn() }
-}));
+vi.mock('$lib/server/printers/print-job.user-store', () => ({ userJobStore: vi.fn() }));
 
 describe('GET /api/staff/v1/print-jobs/[id]', () => {
 	const mockAuth = vi.mocked(requireShelterScopeOrSA);
-	const mockGet = vi.mocked(printJobStore.get);
+	const mockUserJobStore = vi.mocked(userJobStore);
+	const mockGet = vi.fn();
 
 	const job: PrintJobDoc = {
 		_id: 'print_job:01JB0000000000000000000009',
@@ -49,15 +48,17 @@ describe('GET /api/staff/v1/print-jobs/[id]', () => {
 			isSA: false,
 			shelterCode: 'SH001'
 		});
-		mockGet.mockImplementation(async (id) => (id === job._id ? job : null));
+		mockGet.mockReset();
+		mockGet.mockImplementation(async (id: string) => (id === job._id ? job : null));
+		mockUserJobStore.mockReturnValue({ createJob: vi.fn(), get: mockGet });
 	});
 
-	async function get(id: string): Promise<Response> {
+	async function get(id: string, query = '?shelter_code=SH001'): Promise<Response> {
+		const url = new URL(`http://localhost/api/staff/v1/print-jobs/${id}${query}`);
 		return GET({
 			params: { id },
-			request: new Request(`http://localhost/api/staff/v1/print-jobs/${id}`, {
-				headers: { cookie: 'AuthSession=staff-a' }
-			})
+			url,
+			request: new Request(url, { headers: { cookie: 'AuthSession=staff-a' } })
 		} as unknown as RequestEvent);
 	}
 
@@ -65,6 +66,8 @@ describe('GET /api/staff/v1/print-jobs/[id]', () => {
 		const response = await get('01JB0000000000000000000009');
 
 		expect(response.status).toBe(200);
+		expect(mockAuth).toHaveBeenCalledWith('AuthSession=staff-a', 'SH001');
+		expect(mockUserJobStore).toHaveBeenCalledWith('AuthSession=staff-a', 'SH001');
 		expect(response.headers.get('cache-control')).toBe('no-store');
 		expect(await response.json()).toEqual({
 			status: 'failed',
@@ -117,5 +120,37 @@ describe('GET /api/staff/v1/print-jobs/[id]', () => {
 
 		expect(response.status).toBe(401);
 		expect((await response.json()).error.code).toBe('UNAUTHENTICATED');
+	});
+
+	it.each([
+		['missing', ''],
+		['empty', '?shelter_code='],
+		['not a shelter code', '?shelter_code=../printing_devices']
+	])('answers 422 VALIDATION when shelter_code is %s', async (_name, query) => {
+		const response = await get('01JB0000000000000000000009', query);
+
+		expect(response.status).toBe(422);
+		expect((await response.json()).error.code).toBe('VALIDATION');
+		expect(mockUserJobStore).not.toHaveBeenCalled();
+	});
+
+	it("answers 403 FORBIDDEN for a shelter outside the caller's scope without reading", async () => {
+		mockAuth.mockImplementation(async (_cookie, code) => error(403, `Caller not in "${code}"`));
+
+		const response = await get('01JB0000000000000000000009', '?shelter_code=SH002');
+
+		expect(response.status).toBe(403);
+		expect(mockUserJobStore).not.toHaveBeenCalled();
+	});
+
+	it('answers 403 FORBIDDEN when CouchDB refuses the caller session', async () => {
+		mockGet.mockRejectedValue(new CouchUserError('FORBIDDEN', 'Not permitted', 'secret reason'));
+
+		const response = await get('01JB0000000000000000000009');
+
+		expect(response.status).toBe(403);
+		expect(await response.json()).toEqual({
+			error: { code: 'FORBIDDEN', message: 'Not permitted' }
+		});
 	});
 });

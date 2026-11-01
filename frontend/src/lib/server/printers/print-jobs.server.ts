@@ -1,4 +1,7 @@
 import { ulid } from '$lib/db/ulid';
+import { ServiceError } from '$lib/server/couch-admin';
+// eslint-disable-next-line no-restricted-imports -- server-safe domain rule; feature barrel will pull client UI/query code
+import { canPrintSource } from '$lib/features/printers/domain/print-permission';
 // eslint-disable-next-line no-restricted-imports -- server-safe domain schema; feature barrel will pull client UI/query code
 import type { PrintJobCreateInput } from '$lib/features/printers/domain/print-job.schema';
 // eslint-disable-next-line no-restricted-imports -- server-safe domain rule; feature barrel will pull client UI/query code
@@ -21,12 +24,13 @@ export interface PrintDeviceReader {
 export interface PrintJobCaller {
 	/** `_users` name of the logged-in staff member. */
 	name: string;
-	/** Rejects (route: 401/403) unless the caller may act on this shelter. */
-	assertShelterAccess(shelterCode: string): Promise<void>;
+	/** `_session` roles; decide (with the job source) whether they may print on the shelter. */
+	roles: readonly string[];
 }
 
 export interface CreatePrintJobDeps {
-	store: PrintJobCreator;
+	/** Built only after the device lookup: the job DB is the device's shelter, as the caller. */
+	storeFor: (shelterCode: string) => PrintJobCreator;
 	devices: PrintDeviceReader;
 	newId?: () => string;
 }
@@ -60,15 +64,17 @@ export async function createPrintJob(
 	caller: PrintJobCaller,
 	input: Omit<PrintJobCreateInput, 'source'> & { source: PrintJobDoc['source'] },
 	now: Date
-): Promise<{ job_id: string; expires_at: string }> {
+): Promise<{ job_id: string; shelter_code: string; expires_at: string }> {
 	const device = await deps.devices.getDevice(input.printer_id);
 	if (!device || device.status !== 'active') throw new PrinterNotFoundError();
-	await caller.assertShelterAccess(device.shelter_code);
+	if (!canPrintSource(caller.roles, device.shelter_code, input.source)) {
+		throw new ServiceError('FORBIDDEN', 'Not allowed to print on this shelter');
+	}
 	if (!isPrinterOnline(device, now)) throw new PrinterOfflineError();
 
 	const jobId = (deps.newId ?? ulid)();
 	const expiresAt = new Date(now.getTime() + JOB_TTL_SEC * 1000).toISOString();
-	await deps.store.createJob({
+	await deps.storeFor(device.shelter_code).createJob({
 		_id: `print_job:${jobId}`,
 		type: 'print_job',
 		schema_v: 1,
@@ -87,7 +93,7 @@ export async function createPrintJob(
 		error_code: null,
 		_attachments: toAttachments(input.labels)
 	});
-	return { job_id: jobId, expires_at: expiresAt };
+	return { job_id: jobId, shelter_code: device.shelter_code, expires_at: expiresAt };
 }
 
 export class PrintJobNotFoundError extends Error {

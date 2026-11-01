@@ -1,30 +1,33 @@
-import { error } from '@sveltejs/kit';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { POST } from './+server';
 import type { RequestEvent } from './$types';
-import { requireShelterScopeOrSA } from '$lib/server/couch-admin';
-import { printDeviceRepository, printJobStore } from '$lib/server/printers/printer-server';
+import { readSessionUserCtx } from '$lib/server/couch-admin';
+import { CouchUserError } from '$lib/server/couch-as-user';
+import { printDeviceRepository } from '$lib/server/printers/print-device.repo';
+import { userJobStore } from '$lib/server/printers/print-job.user-store';
 import { labelPngBase64 } from '$lib/testing/label-png';
 import { PrintDependencyError, type PrintDeviceDoc } from '$lib/server/printers/device-credentials';
 
 vi.mock('$lib/server/couch-admin', async () => {
 	const actual =
 		await vi.importActual<typeof import('$lib/server/couch-admin')>('$lib/server/couch-admin');
-	return { ...actual, requireShelterScopeOrSA: vi.fn() };
+	return { ...actual, readSessionUserCtx: vi.fn() };
 });
 
-vi.mock('$lib/server/printers/printer-server', () => ({
-	printDeviceRepository: { getDevice: vi.fn() },
-	printJobStore: { createJob: vi.fn() }
+vi.mock('$lib/server/printers/print-device.repo', () => ({
+	printDeviceRepository: { getDevice: vi.fn() }
 }));
+
+vi.mock('$lib/server/printers/print-job.user-store', () => ({ userJobStore: vi.fn() }));
 
 // A valid 639x479 label PNG header
 const LABEL = labelPngBase64();
 
 describe('POST /api/staff/v1/print-jobs', () => {
-	const mockAuth = vi.mocked(requireShelterScopeOrSA);
+	const mockSession = vi.mocked(readSessionUserCtx);
 	const mockGetDevice = vi.mocked(printDeviceRepository.getDevice);
-	const mockCreateJob = vi.mocked(printJobStore.createJob);
+	const mockUserJobStore = vi.mocked(userJobStore);
+	const mockCreateJob = vi.fn();
 
 	const device: PrintDeviceDoc = {
 		_id: 'print_device:printer-sh001-reg1',
@@ -51,14 +54,14 @@ describe('POST /api/staff/v1/print-jobs', () => {
 		vi.clearAllMocks();
 		vi.useFakeTimers();
 		vi.setSystemTime(new Date('2026-10-22T03:00:00.000Z'));
-		mockAuth.mockResolvedValue({
+		mockSession.mockResolvedValue({
 			name: 'staff-a',
-			roles: ['shelter:SH001'],
-			isSA: false,
-			shelterCode: 'SH001'
+			roles: ['shelter:SH001', 'SH001:registration_staff']
 		});
 		mockGetDevice.mockResolvedValue(device);
+		mockCreateJob.mockReset();
 		mockCreateJob.mockResolvedValue(undefined);
+		mockUserJobStore.mockReturnValue({ createJob: mockCreateJob, get: vi.fn() });
 	});
 
 	afterEach(() => {
@@ -84,9 +87,15 @@ describe('POST /api/staff/v1/print-jobs', () => {
 
 		expect(response.status).toBe(201);
 		expect(response.headers.get('cache-control')).toBe('no-store');
-		const body = (await response.json()) as { job_id: string; expires_at: string };
+		const body = (await response.json()) as {
+			job_id: string;
+			shelter_code: string;
+			expires_at: string;
+		};
 		expect(body.job_id).toMatch(/^[0-9A-HJKMNP-TV-Z]{26}$/);
+		expect(body.shelter_code).toBe('SH001');
 		expect(body.expires_at).toBe('2026-10-22T03:02:00.000Z');
+		expect(mockUserJobStore).toHaveBeenCalledWith('AuthSession=staff-a', 'SH001');
 
 		expect(mockCreateJob).toHaveBeenCalledTimes(1);
 		expect(mockCreateJob.mock.calls[0][0]).toEqual({
@@ -194,7 +203,7 @@ describe('POST /api/staff/v1/print-jobs', () => {
 	});
 
 	it('answers 401 UNAUTHENTICATED for an anonymous caller', async () => {
-		mockAuth.mockImplementation(async () => error(401, 'Authentication required'));
+		mockSession.mockResolvedValue({ name: null, roles: [] });
 
 		const response = await post({
 			printer_id: 'print_device:printer-sh001-reg1',
@@ -210,12 +219,11 @@ describe('POST /api/staff/v1/print-jobs', () => {
 		expect(mockCreateJob).not.toHaveBeenCalled();
 	});
 
-	it('answers 403 FORBIDDEN when the caller is outside the printer shelter scope', async () => {
-		mockAuth.mockImplementation(async (_cookie, code) =>
-			code === undefined
-				? { name: 'staff-b', roles: ['shelter:SH002'], isSA: false, shelterCode: 'SH002' }
-				: error(403, `Caller is not in shelter "${code}" scope`)
-		);
+	it.each([
+		['a role that may not print', ['shelter:SH001', 'SH001:kitchen_staff']],
+		["another shelter's role", ['shelter:SH002', 'SH002:registration_staff']]
+	])('answers 403 FORBIDDEN for %s and stores nothing', async (_name, roles) => {
+		mockSession.mockResolvedValue({ name: 'staff-b', roles });
 
 		const response = await post({
 			printer_id: 'print_device:printer-sh001-reg1',
@@ -226,6 +234,51 @@ describe('POST /api/staff/v1/print-jobs', () => {
 		expect(response.status).toBe(403);
 		expect((await response.json()).error.code).toBe('FORBIDDEN');
 		expect(mockCreateJob).not.toHaveBeenCalled();
+	});
+
+	it('lets a system admin print on any shelter', async () => {
+		mockSession.mockResolvedValue({ name: 'sa-user', roles: ['system_admin'] });
+
+		const response = await post({
+			printer_id: 'print_device:printer-sh001-reg1',
+			source: 'walk_in',
+			labels: [LABEL]
+		});
+
+		expect(response.status).toBe(201);
+		expect(mockCreateJob.mock.calls[0][0].created_by).toBe('sa-user');
+	});
+
+	it('answers 403 FORBIDDEN, leaking no CouchDB reason, when the validation hook refuses', async () => {
+		mockCreateJob.mockRejectedValue(
+			new CouchUserError('FORBIDDEN', 'Not permitted', 'forbidden: vdu said no')
+		);
+
+		const response = await post({
+			printer_id: 'print_device:printer-sh001-reg1',
+			source: 'walk_in',
+			labels: [LABEL]
+		});
+
+		expect(response.status).toBe(403);
+		expect(await response.json()).toEqual({
+			error: { code: 'FORBIDDEN', message: 'Not permitted' }
+		});
+	});
+
+	it('answers 401 UNAUTHENTICATED when CouchDB rejects the session', async () => {
+		mockCreateJob.mockRejectedValue(
+			new CouchUserError('UNAUTHENTICATED', 'Authentication required')
+		);
+
+		const response = await post({
+			printer_id: 'print_device:printer-sh001-reg1',
+			source: 'walk_in',
+			labels: [LABEL]
+		});
+
+		expect(response.status).toBe(401);
+		expect((await response.json()).error.code).toBe('UNAUTHENTICATED');
 	});
 
 	it('accepts 20 labels of ~50 KB each (a ~1 MB job)', async () => {

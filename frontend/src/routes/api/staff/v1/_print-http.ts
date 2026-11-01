@@ -1,5 +1,6 @@
 /** Error envelope + domain-error mapping shared by the staff print routes (plan §4.2). */
 import { isHttpError, json } from '@sveltejs/kit';
+import { ServiceError } from '$lib/server/couch-admin';
 import {
 	DEPENDENCY_UNAVAILABLE,
 	PrintDependencyError
@@ -24,6 +25,14 @@ export function printErrorResponse(e: unknown): Response {
 	if (e instanceof PrintJobForbiddenError) return envelope(403, 'FORBIDDEN', e.message);
 	if (e instanceof PrintDependencyError) {
 		return envelope(503, DEPENDENCY_UNAVAILABLE, e.message);
+	}
+	// Covers CouchUserError (the caller's own CouchDB session) and the FORBIDDEN from createPrintJob.
+	// Only `message` is rendered: `couchReason` / `description` stay in server logs.
+	if (e instanceof ServiceError && e.code === 'UNAUTHENTICATED') {
+		return envelope(401, 'UNAUTHENTICATED', e.message);
+	}
+	if (e instanceof ServiceError && e.code === 'FORBIDDEN') {
+		return envelope(403, 'FORBIDDEN', e.message);
 	}
 	if (isHttpError(e) && e.status === 401) return envelope(401, 'UNAUTHENTICATED', e.body.message);
 	if (isHttpError(e) && e.status === 403) return envelope(403, 'FORBIDDEN', e.body.message);

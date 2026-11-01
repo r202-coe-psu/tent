@@ -1,9 +1,10 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { envelope, printErrorResponse } from '../_print-http';
-import { requireShelterScopeOrSA } from '$lib/server/couch-admin';
+import { readSessionUserCtx } from '$lib/server/couch-admin';
 import { createPrintJob } from '$lib/server/printers/print-jobs.server';
-import { printDeviceRepository, printJobStore } from '$lib/server/printers/printer-server';
+import { printDeviceRepository } from '$lib/server/printers/print-device.repo';
+import { userJobStore } from '$lib/server/printers/print-job.user-store';
 // eslint-disable-next-line no-restricted-imports -- server-safe domain schema; feature barrel will pull client UI/query code
 import { printJobCreateInputSchema } from '$lib/features/printers/domain/print-job.schema';
 
@@ -14,19 +15,19 @@ const noStoreHeaders = { 'cache-control': 'no-store', pragma: 'no-cache' };
 export const POST: RequestHandler = async ({ request }) => {
 	try {
 		const cookie = request.headers.get('cookie');
-		const caller = await requireShelterScopeOrSA(cookie);
+		const { name, roles } = await readSessionUserCtx(cookie);
+		if (!name) return envelope(401, 'UNAUTHENTICATED', 'Authentication required');
 		const body: unknown = await request.json().catch(() => null);
 		const parsed = printJobCreateInputSchema.safeParse(body);
 		if (!parsed.success) return envelope(422, 'INVALID_LABELS', 'Invalid print job request');
 
+		// The job is written with the caller's own session: `_security` + the validation hook decide.
 		const created = await createPrintJob(
-			{ store: printJobStore, devices: printDeviceRepository },
 			{
-				name: caller.name,
-				assertShelterAccess: async (shelterCode) => {
-					await requireShelterScopeOrSA(cookie, shelterCode);
-				}
+				devices: printDeviceRepository,
+				storeFor: (shelterCode) => userJobStore(cookie, shelterCode)
 			},
+			{ name, roles },
 			parsed.data,
 			new Date()
 		);

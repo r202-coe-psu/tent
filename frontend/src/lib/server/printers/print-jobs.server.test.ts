@@ -40,34 +40,35 @@ const device: PrintDeviceDoc = {
 
 function setup(printer: PrintDeviceDoc = device) {
 	const created: PrintJobDoc[] = [];
-	const store: PrintJobCreator = {
-		async createJob(doc) {
-			created.push(doc);
-		}
-	};
+	const storesBuiltFor: string[] = [];
 	const devices: PrintDeviceReader = {
 		async getDevice(printerId) {
 			return printerId === printer._id ? printer : null;
 		}
 	};
-	const authorizedShelters: string[] = [];
-	const caller = {
-		name: 'staff-a',
-		async assertShelterAccess(code: string) {
-			authorizedShelters.push(code);
-		}
-	};
+	const caller = { name: 'staff-a', roles: ['shelter:SH001', 'SH001:registration_staff'] };
 	return {
 		created,
-		authorizedShelters,
+		storesBuiltFor,
 		caller,
-		deps: { store, devices, newId: () => '01JB0000000000000000000009' }
+		deps: {
+			storeFor(shelterCode: string): PrintJobCreator {
+				storesBuiltFor.push(shelterCode);
+				return {
+					async createJob(doc) {
+						created.push(doc);
+					}
+				};
+			},
+			devices,
+			newId: () => '01JB0000000000000000000009'
+		}
 	};
 }
 
 describe('createPrintJob', () => {
 	it('stores a pending job with its labels attached for an online printer', async () => {
-		const { deps, caller, created, authorizedShelters } = setup();
+		const { deps, caller, created, storesBuiltFor } = setup();
 
 		const result = await createPrintJob(
 			deps,
@@ -78,9 +79,10 @@ describe('createPrintJob', () => {
 
 		expect(result).toEqual({
 			job_id: '01JB0000000000000000000009',
+			shelter_code: 'SH001',
 			expires_at: '2026-10-22T03:02:00.000Z'
 		});
-		expect(authorizedShelters).toEqual(['SH001']);
+		expect(storesBuiltFor).toEqual(['SH001']);
 		expect(created).toEqual([
 			{
 				_id: 'print_job:01JB0000000000000000000009',
@@ -136,6 +138,62 @@ describe('createPrintJob', () => {
 			)
 		).rejects.toBeInstanceOf(PrinterNotFoundError);
 		expect(created).toEqual([]);
+	});
+
+	it.each([
+		['a role that may not print this source', ['shelter:SH001', 'SH001:kitchen_staff']],
+		['a role of another shelter', ['shelter:SH002', 'SH002:registration_staff']],
+		['a shelter scope without a capability', ['shelter:SH001']]
+	])('forbids %s and stores no job', async (_name, roles) => {
+		const { deps, created, storesBuiltFor } = setup();
+
+		await expect(
+			createPrintJob(
+				deps,
+				{ name: 'staff-b', roles },
+				{ printer_id: device._id, source: 'walk_in', labels: [LABEL_A] },
+				new Date('2026-10-22T03:00:00.000Z')
+			)
+		).rejects.toMatchObject({ code: 'FORBIDDEN' });
+		expect(created).toEqual([]);
+		expect(storesBuiltFor).toEqual([]);
+	});
+
+	it('lets a system admin print on any shelter', async () => {
+		const { deps, created } = setup();
+
+		await createPrintJob(
+			deps,
+			{ name: 'sa-user', roles: ['system_admin'] },
+			{ printer_id: device._id, source: 'walk_in', labels: [LABEL_A] },
+			new Date('2026-10-22T03:00:00.000Z')
+		);
+
+		expect(created).toHaveLength(1);
+		expect(created[0].created_by).toBe('sa-user');
+	});
+
+	it('only a shelter manager or SA may queue a test print', async () => {
+		const { deps } = setup();
+		const input = { printer_id: device._id, source: 'test' as const, labels: [LABEL_A] };
+		const at = new Date('2026-10-22T03:00:00.000Z');
+
+		await expect(
+			createPrintJob(
+				deps,
+				{ name: 'reg', roles: ['shelter:SH001', 'SH001:registration_staff'] },
+				input,
+				at
+			)
+		).rejects.toMatchObject({ code: 'FORBIDDEN' });
+		await expect(
+			createPrintJob(
+				deps,
+				{ name: 'sm', roles: ['shelter:SH001', 'SH001:shelter_manager'] },
+				input,
+				at
+			)
+		).resolves.toMatchObject({ shelter_code: 'SH001' });
 	});
 });
 

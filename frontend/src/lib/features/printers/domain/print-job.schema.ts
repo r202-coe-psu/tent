@@ -37,6 +37,8 @@ export type PrintJobStatus = z.infer<typeof printJobStatusSchema>;
 
 export const printJobCreateResponseSchema = z.object({
 	job_id: z.string(),
+	/** Shelter of the job's DB `printing_{code}`; the status poll needs it (`?shelter_code=`). */
+	shelter_code: z.string().min(1),
 	expires_at: z.string()
 });
 export type PrintJobCreateResponse = z.infer<typeof printJobCreateResponseSchema>;

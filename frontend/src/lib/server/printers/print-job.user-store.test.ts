@@ -110,11 +110,11 @@ describe('user job store: createJob', () => {
 
 		await createPrintJob(
 			{
-				store: userJobStore(COOKIE, 'SH01'),
+				storeFor: (shelterCode: string) => userJobStore(COOKIE, shelterCode),
 				devices: { getDevice: () => Promise.resolve(device) },
 				newId: () => 'JOB1'
 			},
-			{ name: 'staff', assertShelterAccess: () => Promise.resolve() },
+			{ name: 'staff', roles: ['shelter:SH01', 'SH01:registration_staff'] },
 			{ printer_id: 'print_device:pi-1', source: 'walk_in', labels: ['AAAA', 'BBBB'] },
 			new Date('2026-11-01T00:00:10.000Z')
 		);

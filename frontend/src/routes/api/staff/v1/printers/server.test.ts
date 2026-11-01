@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { GET } from './+server';
 import type { RequestEvent } from './$types';
 import { requireShelterScopeOrSA } from '$lib/server/couch-admin';
-import { printDeviceRepository } from '$lib/server/printers/printer-server';
+import { printDeviceRepository } from '$lib/server/printers/print-device.repo';
 import type { PrintDeviceDoc } from '$lib/server/printers/device-credentials';
 
 vi.mock('$lib/server/couch-admin', async () => {
@@ -12,9 +12,8 @@ vi.mock('$lib/server/couch-admin', async () => {
 	return { ...actual, requireShelterScopeOrSA: vi.fn() };
 });
 
-vi.mock('$lib/server/printers/printer-server', () => ({
-	printDeviceRepository: { listDevices: vi.fn() },
-	printJobStore: {}
+vi.mock('$lib/server/printers/print-device.repo', () => ({
+	printDeviceRepository: { listDevices: vi.fn() }
 }));
 
 describe('GET /api/staff/v1/printers', () => {

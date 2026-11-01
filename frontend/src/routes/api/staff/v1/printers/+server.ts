@@ -3,7 +3,7 @@ import type { RequestHandler } from './$types';
 import { envelope, printErrorResponse } from '../_print-http';
 import { requireShelterScopeOrSA } from '$lib/server/couch-admin';
 import { listShelterPrinters } from '$lib/server/printers/print-jobs.server';
-import { printDeviceRepository } from '$lib/server/printers/printer-server';
+import { printDeviceRepository } from '$lib/server/printers/print-device.repo';
 
 export const prerender = false;
 

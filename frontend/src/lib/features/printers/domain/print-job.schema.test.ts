@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { labelPngBase64, labelPngBytes, toBase64 } from '$lib/testing/label-png';
-import { printJobCreateInputSchema } from './print-job.schema';
+import { printJobCreateInputSchema, printJobCreateResponseSchema } from './print-job.schema';
 
 // A valid 639x479 RGBA label PNG header (only the header is inspected, see label-png.ts)
 const PNG_LABEL = labelPngBase64();
@@ -55,5 +55,26 @@ describe('printJobCreateInputSchema rejections', () => {
 
 	it('rejects an empty printer_id', () => {
 		expect(parse({ printer_id: '' })).toBe(false);
+	});
+});
+
+describe('printJobCreateResponseSchema', () => {
+	it('carries the shelter of the job so the poller can address its DB', () => {
+		const parsed = printJobCreateResponseSchema.parse({
+			job_id: '01JB0000000000000000000009',
+			shelter_code: 'SH001',
+			expires_at: '2026-10-22T03:02:00.000Z'
+		});
+
+		expect(parsed.shelter_code).toBe('SH001');
+	});
+
+	it('rejects a response without shelter_code', () => {
+		expect(
+			printJobCreateResponseSchema.safeParse({
+				job_id: '01JB0000000000000000000009',
+				expires_at: '2026-10-22T03:02:00.000Z'
+			}).success
+		).toBe(false);
 	});
 });
