@@ -289,10 +289,12 @@ describe('shelter print job store: retention', () => {
 			]
 		});
 
-		await printJobStoreFor('SH01').purge([
+		const removed = await printJobStoreFor('SH01').purge([
 			job({ _id: 'print_job:a', _rev: '1-a' }),
 			job({ _id: 'print_job:b', _rev: '1-b' })
 		]);
+
+		expect(removed).toBe(1); // b conflicted: only the actual deletions are reported
 
 		expect(calls).toHaveLength(1);
 		expect(calls[0]).toMatchObject({

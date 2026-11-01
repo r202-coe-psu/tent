@@ -120,7 +120,9 @@ export async function claimNextJob(
 			continue;
 		}
 		const read = await store.getWithLabels(candidate._id);
-		if (!read) continue;
+		// Re-read state wins over the `findJobs` snapshot: a sweeper, `failInFlight` or a second poll
+		// of this printer may have moved the job since (claiming it again would print it twice).
+		if (!read || read.doc.status !== 'pending') continue;
 		if (!isClaimable(read, printerId, opts.shelterCode)) {
 			await store.put(terminal(read.doc, 'failed', opts.now, { error_code: 'invalid_label' }));
 			continue;
@@ -205,9 +207,9 @@ export async function reportResult(
 	}
 	const errorCode = result.error_code ?? null;
 	const status = errorCode === null ? 'printed' : 'failed';
-	const written = await store.put(
-		terminal(doc, status, now, { printed: result.printed, error_code: errorCode })
-	);
+	// The agent's count is untrusted: a job never prints more labels than it holds.
+	const printed = Math.min(Math.max(0, Math.trunc(result.printed)), doc.label_count);
+	const written = await store.put(terminal(doc, status, now, { printed, error_code: errorCode }));
 	if ('conflict' in written) throw new PrintJobConflictError();
 	return status;
 }
@@ -259,9 +261,10 @@ export interface PrintJobRetentionStore {
 	 * Remove the docs at their `_rev` (`_bulk_docs` `_deleted`: CouchDB `_purge` needs the server
 	 * admin, which `printing_service` must not hold). The tombstone drops the doc body; the old
 	 * revisions still carrying label images go at the `compact` that follows. Called with at most
-	 * `PURGE_BATCH_SIZE` docs.
+	 * `PURGE_BATCH_SIZE` docs. Resolves to how many CouchDB actually removed (a stale `_rev` is
+	 * skipped, not an error).
 	 */
-	purge(docs: PrintJobDoc[]): Promise<void>;
+	purge(docs: PrintJobDoc[]): Promise<number>;
 	/** Start `_compact`, dropping old revisions that still carry label images. */
 	compact(): Promise<void>;
 }
@@ -286,11 +289,15 @@ export async function applyRetention(store: PrintJobRetentionStore, now: Date): 
 		for (let round = 0; round < MAX_PURGE_BATCHES; round += 1) {
 			const docs = await store.findFinishedBefore(cutoff);
 			if (docs.length === 0) break;
+			let removedInRound = 0;
 			for (let i = 0; i < docs.length; i += PURGE_BATCH_SIZE) {
 				const batch = docs.slice(i, i + PURGE_BATCH_SIZE);
-				await store.purge(batch);
-				purged += batch.length;
+				const removed = await store.purge(batch);
+				purged += removed;
+				removedInRound += removed;
 			}
+			// Nothing removable (every `_rev` stale): the next find would return the same docs.
+			if (removedInRound === 0) break;
 		}
 	} finally {
 		await store.compact();

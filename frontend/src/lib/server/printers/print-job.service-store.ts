@@ -195,9 +195,7 @@ export function printJobStoreFor(shelterCode: string): PrintJobServiceStore {
 		 * jobs are deleted (`_bulk_docs` tombstones) and the `compact` that follows drops the old
 		 * revisions carrying label images.
 		 */
-		async purge(docs) {
-			await removeFinished(docs);
-		},
+		purge: removeFinished,
 
 		async compact() {
 			const { status } = await printingRaw(`${db}/_compact`, 'POST', {});

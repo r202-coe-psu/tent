@@ -342,6 +342,24 @@ describe('claimNextJob rechecks the job it hands out (FR-11, FR-12, FR-12a)', ()
 		expect(stored.get(BAD)).toMatchObject({ status: 'failed', error_code: 'invalid_label' });
 	});
 
+	it.each(['printing', 'failed', 'expired'] as const)(
+		'skips a candidate that is no longer pending when re-read (status %s) and claims the next one',
+		async (status) => {
+			const { store, stored } = badThenGood({}, labelsOf(2));
+			const read = store.getWithLabels;
+			store.getWithLabels = async (id) => {
+				const found = await read(id);
+				return found && id === BAD ? { ...found, doc: { ...found.doc, status } } : found;
+			};
+
+			const claimed = await claim(store);
+
+			// Another actor moved BAD between the find and the read: it must not be claimed again or rewritten.
+			expect(stored.get(BAD)).toMatchObject({ status: 'pending' });
+			expect(claimed?.job.id).toBe('01JB0000000000000000000002');
+		}
+	);
+
 	it('expires a job whose forged expires_at is far in the future once created_at + 120 s has passed', async () => {
 		const { store, stored } = badThenGood(
 			{ expires_at: '2099-01-01T00:00:00.000Z', created_at: '2026-10-22T02:58:00.000Z' },
@@ -523,6 +541,14 @@ describe('reportResult', () => {
 			finished_at: '2026-10-22T03:01:40.000Z'
 		});
 		expect(doc).not.toHaveProperty('_attachments');
+	});
+
+	it('caps the reported printed count at label_count', async () => {
+		const { store, stored } = fakeStore([printingJob()], {});
+
+		await reportResult(store, PRINTER, ULID, { printed: 99 }, NOW);
+
+		expect(stored.get(`print_job:${ULID}`)).toMatchObject({ status: 'printed', printed: 2 });
 	});
 
 	it('marks the job failed with the reported error_code and the count printed so far', async () => {
@@ -730,6 +756,7 @@ describe('applyRetention', () => {
 			async purge(batchDocs) {
 				calls.push(`purge:${batchDocs.length}`);
 				for (const d of batchDocs) stored.delete(d._id);
+				return batchDocs.length;
 			},
 			async compact() {
 				calls.push('compact');
@@ -776,6 +803,27 @@ describe('applyRetention', () => {
 		expect(await applyRetention(store, NOW)).toBe(250);
 		expect(stored.size).toBe(0);
 		expect(calls).toEqual(['purge:100', 'purge:100', 'purge:50', 'compact']);
+	});
+
+	it('counts what the store reports as removed, not the batch size', async () => {
+		const { store, calls } = fakeRetentionStore(
+			[
+				finished('01JB0000000000000000000001', 'printed', '2026-10-01T00:00:00.000Z'),
+				finished('01JB0000000000000000000002', 'printed', '2026-10-01T00:00:00.000Z')
+			],
+			5
+		);
+		// One of the two docs had a stale _rev: CouchDB reports a conflict for it and keeps it.
+		let round = 0;
+		store.purge = async (batchDocs) => {
+			calls.push(`purge:${batchDocs.length}`);
+			round += 1;
+			return round === 1 ? 1 : 0;
+		};
+
+		expect(await applyRetention(store, NOW)).toBe(1);
+		// The stale doc is found again, but a round that removed nothing ends the loop.
+		expect(calls).toEqual(['purge:2', 'purge:2', 'compact']);
 	});
 
 	it('still compacts when a purge fails, then reports the failure', async () => {

@@ -58,7 +58,8 @@ function isRetentionDue(state: PrintHousekeepingState | null, now: Date): boolea
 
 /**
  * One housekeeping pass over every registered shelter. A shelter that fails is recorded and the
- * loop goes on (FR-20); retention still compacts a DB whose removal failed. Never throws: the
+ * loop goes on (FR-20); retention (and its compact) runs even when that shelter's sweep failed,
+ * and still compacts a DB whose removal failed. Never throws: the
  * outcome is the returned counts plus the `print_housekeeping` doc.
  */
 export async function runHousekeeping({
@@ -94,23 +95,35 @@ export async function runHousekeeping({
 	}
 
 	for (const code of shelters) {
+		let store: PrintJobStore & PrintJobRetentionStore;
 		try {
-			const store = storeFor(code);
+			store = storeFor(code);
+		} catch (error) {
+			fail(code, error);
+			continue;
+		}
+		// Separate try blocks: a failed sweep must not skip retention and its compact (FR-19, FR-20).
+		try {
 			const { failed, expired } = await sweepJobs(store, now);
 			result.swept += failed + expired;
-			if (!retentionDue) continue;
-			// Counted at the port so a failed removal still reports what was removed and compacted.
-			const counting: PrintJobRetentionStore = {
-				findFinishedBefore: (cutoff) => store.findFinishedBefore(cutoff),
-				async purge(docs) {
-					await store.purge(docs);
-					result.purged += docs.length;
-				},
-				async compact() {
-					await store.compact();
-					result.compacted += 1;
-				}
-			};
+		} catch (error) {
+			fail(code, error);
+		}
+		if (!retentionDue) continue;
+		// Counted at the port so a failed removal still reports what was removed and compacted.
+		const counting: PrintJobRetentionStore = {
+			findFinishedBefore: (cutoff) => store.findFinishedBefore(cutoff),
+			async purge(docs) {
+				const removed = await store.purge(docs);
+				result.purged += removed;
+				return removed;
+			},
+			async compact() {
+				await store.compact();
+				result.compacted += 1;
+			}
+		};
+		try {
 			await applyRetention(counting, now);
 		} catch (error) {
 			fail(code, error);

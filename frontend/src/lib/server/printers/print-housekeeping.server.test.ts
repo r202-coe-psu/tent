@@ -70,6 +70,7 @@ function fakeShelterDb(
 			calls.push(`purge:${batch.length}`);
 			if (opts.failRemove) throw new Error('bulk_docs rejected');
 			for (const d of batch) stored.delete(d._id);
+			return batch.length;
 		},
 		async compact() {
 			calls.push('compact');
@@ -204,6 +205,45 @@ describe('runHousekeeping', () => {
 		expect(b.stored.size).toBe(0);
 		expect(result).toEqual({ swept: 0, purged: 1, compacted: 3, errors: 1 });
 		expect(dev.written[0].last_error).toContain('SH001');
+	});
+
+	it('still applies retention and compacts a shelter DB whose sweep failed (FR-19)', async () => {
+		const a = fakeShelterDb([finishedLongAgo('01JB0000000000000000000001')], { failFind: true });
+		const dev = fakeDevices(null);
+
+		const result = await runHousekeeping({
+			listShelters: async () => ['SH001'],
+			storeFor: () => a.store,
+			devices: dev.devices,
+			now: NOW
+		});
+
+		expect(a.calls).toEqual(['purge:1', 'compact']);
+		expect(result).toEqual({ swept: 0, purged: 1, compacted: 2, errors: 1 });
+		expect(dev.written[0].last_error).toContain('couch down');
+	});
+
+	it('counts purged jobs from what the store reports removed, not the batch size', async () => {
+		const a = fakeShelterDb([
+			finishedLongAgo('01JB0000000000000000000001'),
+			finishedLongAgo('01JB0000000000000000000002')
+		]);
+		let round = 0;
+		a.store.purge = async (batch) => {
+			a.calls.push(`purge:${batch.length}`);
+			round += 1;
+			return round === 1 ? 1 : 0; // the other doc had a stale _rev
+		};
+		const dev = fakeDevices(null);
+
+		const result = await runHousekeeping({
+			listShelters: async () => ['SH001'],
+			storeFor: () => a.store,
+			devices: dev.devices,
+			now: NOW
+		});
+
+		expect(result.purged).toBe(1);
 	});
 
 	it('writes last_run_at, last_retention_at and an empty last_error after a clean run', async () => {
