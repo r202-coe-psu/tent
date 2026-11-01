@@ -34,6 +34,10 @@
 	 * opens. Picking a job still assigns the walk-in to it either way; only the
 	 * immediate check-in is gated.
 	 *
+	 * Section 1 starts with an optional "ค้นหาคนในศูนย์" box
+	 * (`walk-in-evacuee-search.svelte`, #1062) that copies a picked evacuee of the active
+	 * shelter into the form fields; see `fillFromEvacuee` for the overwrite rule.
+	 *
 	 * `identity_verified` is left at the domain factory's default (`false`,
 	 * `makeVolunteer`) even though staff are presumably checking an ID card in
 	 * person at the desk — also flagged for the CR (should `source: 'walk_in'`
@@ -57,6 +61,7 @@
 	import { getShelterCode } from '$lib/db/shelter';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
 	import { useShelter } from '$lib/features/shelters';
+	import type { Evacuee } from '$lib/features/people';
 	import {
 		walkInVolunteerFormSchema,
 		type WalkInVolunteerFormValues
@@ -64,6 +69,8 @@
 	import { shiftKindFor } from '../domain/assign-roster';
 	import { isWithinDutyWindow } from '../domain/duty-window';
 	import { toSkillCode } from '../domain/skill-catalog';
+	import { evacueeToWalkInPrefill, type WalkInPrefill } from '../domain/walk-in-prefill';
+	import WalkInEvacueeSearch from './walk-in-evacuee-search.svelte';
 	import JobShiftPicker, { type JobShiftSelection } from './job-shift-picker.svelte';
 	import {
 		useCreateWalkInVolunteer,
@@ -184,7 +191,31 @@
 
 	const { form: formData, errors, submitting } = form;
 
+	/** What the last pick wrote, so a second pick does not leave the first person's data behind. */
+	let lastPrefill: WalkInPrefill = {};
+
+	/**
+	 * Copy a picked shelter evacuee into the form (#1062, UI-only — no link, no schema change).
+	 * Overwrite rule: the five identity fields (first/last name, nickname, phone, national_id)
+	 * are overwritten with whatever the evacuee HAS. A field the evacuee lacks keeps what the
+	 * operator typed, but is cleared when it still holds the previous pick's value. `email`,
+	 * skills, job/shift and the check-in box are never touched.
+	 */
+	function fillFromEvacuee(evacuee: Evacuee) {
+		const next = evacueeToWalkInPrefill(evacuee);
+		const stale = (Object.keys(lastPrefill) as (keyof WalkInPrefill)[]).filter(
+			(key) => !(key in next) && $formData[key] === lastPrefill[key]
+		);
+		$formData = {
+			...$formData,
+			...Object.fromEntries(stale.map((key) => [key, ''])),
+			...next
+		};
+		lastPrefill = next;
+	}
+
 	function reset() {
+		lastPrefill = {};
 		$formData = emptyValues();
 		selectedSkills = [];
 		jobShiftSelection = null;
@@ -223,6 +254,7 @@
 		<form method="POST" use:form.enhance class="max-h-[70vh] space-y-6 overflow-y-auto px-6 py-5">
 			<div class="space-y-3">
 				<p class="text-xs font-bold text-foreground">1. ข้อมูลบุคคล (PERSONAL INFO)</p>
+				<WalkInEvacueeSearch onpick={fillFromEvacuee} {shelterLabel} />
 				<div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
 					<Form.Field {form} name="first_name">
 						<Form.Control>
