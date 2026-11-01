@@ -34,9 +34,15 @@ export interface BulkReturnPoolOverviewQuery {
 	includeCancelled?: boolean;
 }
 
+/** Pools whose loans the overview reads: OPEN and SUBMITTED (not RECEIVED, not CANCELLED). */
+function isLoanCheckedPool(row: BulkReturnPoolOverviewRow): boolean {
+	return row.pool.status === 'OPEN' || row.pool.status === 'SUBMITTED';
+}
+
 /**
  * Pool list read model: per-pool entries, per-item totals, late entries, emptiness. A batched loan
- * read that fails with a transport failure does not fail the overview: rows with loan refs get
+ * read (OPEN and SUBMITTED pools only) that fails with a transport failure does not fail the
+ * overview: every non-cancelled row with live loan refs, RECEIVED included, gets
  * `loan_refs_unavailable: true`.
  */
 export async function getBulkReturnPoolOverview(
@@ -50,8 +56,10 @@ export async function getBulkReturnPoolOverview(
 		includeCancelled: options.includeCancelled
 	});
 
-	// Closed-loan-mid-flight: ONE batched loan read for every live entry of every non-cancelled pool.
-	const liveByRow = rows.map(liveEntriesOf);
+	// Closed-loan-mid-flight: ONE batched loan read for the live entries of the pools not yet closed
+	// (OPEN and SUBMITTED). RECEIVED pools are never loan-checked here: their `closed_loan_refs`
+	// stays empty (the pool detail runs its own per-pool read).
+	const liveByRow = rows.map((row) => (isLoanCheckedPool(row) ? liveEntriesOf(row) : []));
 	const loanIds = [
 		...new Set(
 			liveByRow.flatMap((live) =>
@@ -68,6 +76,7 @@ export async function getBulkReturnPoolOverview(
 		return null;
 	});
 	if (!loans) {
+		// A failed read leaves every non-cancelled row with live refs unverified, RECEIVED included.
 		return rows.map((row) => ({ ...row, loan_refs_unavailable: liveLoanRefCount(row) > 0 }));
 	}
 	const found = new Map(loans.items.map((loan) => [loan._id, loan]));

@@ -15,6 +15,8 @@ let revCounters: Map<string, number>;
 let beforeStrictWrite: ((doc: InMemoryDoc) => Promise<void> | void) | undefined;
 let stockLedgerProjectionReads: number;
 let getDocCalls: string[];
+/** Order of getDoc(reservation) vs ledger reads during approval (#855). */
+let readLog: string[] = [];
 let couchCallCount: number;
 
 function nextRev(id: string): string {
@@ -36,6 +38,7 @@ vi.mock('$lib/db/couch-db', async () => {
 		getDoc: async <T extends { _id: string }>(_dbName: string, id: string): Promise<T | null> => {
 			couchCallCount += 1;
 			getDocCalls.push(id);
+			readLog.push(`getDoc:${id.split(':')[0]}`);
 			const doc = store.get(id);
 			if (!doc) return null;
 			return JSON.parse(JSON.stringify(doc)) as T;
@@ -96,7 +99,10 @@ vi.mock('$lib/db/couch-db', async () => {
 			guard: (d: unknown) => d is T
 		): Promise<T[]> => {
 			couchCallCount += 1;
-			if (type === 'stock_ledger') stockLedgerProjectionReads += 1;
+			if (type === 'stock_ledger') {
+				stockLedgerProjectionReads += 1;
+				readLog.push('ledger');
+			}
 			const results: T[] = [];
 			for (const doc of store.values()) {
 				if (doc.type === type && guard(doc)) {
@@ -1930,6 +1936,45 @@ describe('DistributionRemoteRepository (Phase 3A)', () => {
 			expect(
 				getDocCalls.filter((id) => id === batch.allocations[0].allocation_ledger_id)
 			).toHaveLength(1);
+		});
+	});
+
+	describe('approval claim read order (#855)', () => {
+		it('reads the reservation doc before the ledger on every claim attempt', async () => {
+			const inbound = await seedInboundLot('item:rice', 100);
+			const request = await repo.createRequest(
+				{
+					purpose: 'Daily emergency rations',
+					active_headcount_snapshot: '50',
+					buffer_percent: 10,
+					items: [
+						{
+							item_id: 'item:rice',
+							requested_qty: '55',
+							unit: 'kg',
+							distribution_type_snapshot: 'one_time',
+							target_qty_snapshot: '55'
+						}
+					]
+				},
+				distributionCtx
+			);
+			readLog = [];
+			await repo.approveRequest(
+				request._id,
+				[{ item_id: 'item:rice', lot_ref: inbound._id, qty: '55' }],
+				warehouseCtx
+			);
+			// The claim loop is the first reader of the reservation doc; the ledger read that
+			// follows it must never come before it.
+			const firstReservation = readLog.indexOf('getDoc:stock_lot_reservation');
+			expect(firstReservation).toBeGreaterThanOrEqual(0);
+			const claimLedgerRead = readLog.indexOf('ledger', firstReservation);
+			expect(claimLedgerRead).toBeGreaterThan(firstReservation);
+			expect(readLog.slice(firstReservation, firstReservation + 2)).toEqual([
+				'getDoc:stock_lot_reservation',
+				'ledger'
+			]);
 		});
 	});
 

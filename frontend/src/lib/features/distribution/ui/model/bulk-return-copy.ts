@@ -45,6 +45,31 @@ export const BULK_GATE_CLEAR_EXPLANATION = {
 	body: 'ใช้เมื่อพัสดุของผู้ยืมถูกเก็บคืนเข้ากองรับคืนแล้ว แต่ยังไม่ได้ระบุว่าเป็นของผู้ยืมรายใด ระบบจะนำจำนวนจากกองนั้นมาปิดภาระยืมของรายการนี้ โดยไม่รับของเข้าคลังซ้ำ'
 } as const;
 
+// "รับของเข้ากอง" (add entries) — what is left to do after a save that did not finish everything.
+export const ADD_ENTRY_COPY = {
+	/** Appended to the MISSED_LOAN_WARNING sentence naming the items. */
+	loanPendingWhere: 'ทำได้ที่หน้ากอง กด "ตัดยอดยืมที่ค้าง"',
+	voided: (count: number) => `${count} รายการถูกยกเลิกไปแล้ว จึงไม่ได้ตัดยอดยืม`,
+	loansReopened: (count: number) => `${count} รายการถูกเปิดยอดยืมกลับแล้ว จึงไม่ได้ตัดยอดยืม`,
+	keptAtWrittenQty: (names: string) =>
+		`บางรายการบันทึกไปแล้วด้วยจำนวนเดิม จึงคงจำนวนเดิมไว้: ${names}`,
+	writtenLookupFailed:
+		'ตรวจสอบรายการที่บันทึกไปแล้วไม่สำเร็จ จึงไม่ได้ปรับจำนวนของรายการที่เคยส่งไปแล้ว กรุณาลองใหม่อีกครั้ง',
+	remainingClosed:
+		'บางรายการยังไม่ได้บันทึก เพราะกองนี้ปิดรับของแล้ว กรุณาเลือกกองอื่นที่เปิดรับ แล้วกดบันทึกอีกครั้ง',
+	remainingLocked:
+		'บางรายการยังไม่ได้บันทึก เพราะกองนี้กำลังถูกส่งเข้าคลังหรือยกเลิกอยู่ กรุณารอสักครู่ แล้วกดบันทึกอีกครั้ง',
+	remainingLoanPending:
+		'บางรายการยังไม่ได้บันทึก เพราะระบบหยุดไว้ที่รายการที่ตัดยอดยืมไม่ทัน (กองกำลังถูกส่งเข้าคลังหรือยกเลิก) กรุณารอสักครู่ แล้วกดบันทึกอีกครั้ง',
+	remainingNotAccepting:
+		'บางรายการยังไม่ได้บันทึก เพราะกองนี้ไม่รับของแล้ว กรุณาเลือกกองอื่นที่เปิดรับ แล้วกดบันทึกอีกครั้ง'
+} as const;
+
+/** Pool-level notice: the missed-loan repair is unavailable while an OPEN pool holds a lock. */
+export const MISSED_LOAN_LOCKED_NOTICE =
+	'กองนี้กำลังถูกส่งเข้าคลังหรือยกเลิกอยู่ ตัดยอดยืมที่ค้างได้หลังเสร็จ';
+export const MISSED_LOAN_LOCKED_NOTICE_TESTID = 'bulk-return-missed-loan-locked-notice';
+
 /** Toast when a `?pool=` deep link names a pool that is not in the loaded overview. */
 export const BULK_RETURN_POOL_NOT_FOUND_TOAST = 'ไม่พบกองนี้ อาจถูกลบหรืออยู่ศูนย์อื่น';
 

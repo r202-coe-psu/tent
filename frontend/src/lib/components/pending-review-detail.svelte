@@ -4,6 +4,7 @@
 	import User from '@lucide/svelte/icons/user';
 	import Phone from '@lucide/svelte/icons/phone';
 	import Mail from '@lucide/svelte/icons/mail';
+	import Eye from '@lucide/svelte/icons/eye';
 	import Info from '@lucide/svelte/icons/info';
 	import FileText from '@lucide/svelte/icons/file-text';
 	import Truck from '@lucide/svelte/icons/truck';
@@ -26,15 +27,25 @@
 		hasLineReview,
 		isAutoApprovedLine,
 		lineReviewDecisionSchema,
+		useRevealDonorContact,
 		type DonationRejectReasonCode,
+		type DonorContact,
 		type LineReviewDecision,
 		type PendingDonationRow,
 		type RejectDonationInput,
 		DonationPhotoStrip,
+		currentLinePoint,
 		linePointLabel,
-		namesDropOffPoints
+		namesDropOffPoints,
+		recordedAtLabel
 	} from '$lib/features/donations';
-	import { listDonationPoints, useShelter, useShelters } from '$lib/features/shelters';
+	import {
+		listDonationPoints,
+		listStoragePoints,
+		useShelter,
+		useShelters
+	} from '$lib/features/shelters';
+	import { DonationLotsTable, useStockFormItems } from '$lib/features/operations';
 	import { formatUnit, useUnitsOfMeasure } from '$lib/features/catalog';
 	import { langState } from '$lib/states/i18n.svelte';
 	import { DISPLAY_LOCALE, DISPLAY_TIME_ZONE } from '$lib/utils/date';
@@ -42,6 +53,7 @@
 	let {
 		request,
 		saving = false,
+		readonly = false,
 		onBack,
 		onApprove,
 		onReject,
@@ -49,6 +61,8 @@
 	}: {
 		request: PendingDonationRow;
 		saving?: boolean;
+		/** A received donation (#821): shows the booking and donor, offers no decision. */
+		readonly?: boolean;
 		onBack: () => void;
 		/** `lines` decides every pending line of a per-line reviewed booking (CR-174). */
 		onApprove: (bookingRef: string, memo: string, lines?: LineReviewDecision[]) => void;
@@ -59,6 +73,36 @@
 	// A walk-in has no `booking_ref`; the doc id is what addresses it (see
 	// `donationActionRef`). Bailing out on a missing ref left those donations stuck.
 	const actionRef = $derived(donationActionRef(request));
+
+	// A received donation (#821) arrives with the donor contact MASKED by the server; the full
+	// values are fetched on request, one donation at a time, and every request is audited
+	// (FR-10a/b). The review queue keeps showing the contact in full — reviewers call donors as
+	// part of the decision (FR-7).
+	const revealMutation = useRevealDonorContact();
+	let revealed = $state<DonorContact | null>(null);
+	const showContact = $derived(!readonly || revealed !== null);
+	const contact = $derived<DonorContact>(
+		readonly && revealed
+			? revealed
+			: {
+					name: request.donor_name || null,
+					phone: request.donor_phone,
+					email: request.donor_email ?? null
+				}
+	);
+	// Retention removed the contact (FR-10c): nothing left to show once it was asked for.
+	const contactRemoved = $derived(
+		revealed !== null && !revealed.name && !revealed.phone && !revealed.email
+	);
+
+	async function revealContact() {
+		if (!actionRef || revealMutation.isPending) return;
+		try {
+			revealed = await revealMutation.mutateAsync(actionRef);
+		} catch (e) {
+			toast.error(e instanceof Error ? e.message : 'โหลดข้อมูลติดต่อไม่สำเร็จ');
+		}
+	}
 
 	let memo = $state('');
 	let actionPanel = $state<'none' | 'redirect'>('none');
@@ -111,6 +155,11 @@
 	}
 
 	const declaredItems = $derived(request.items ?? []);
+	// A walk-in line carries only `item_id`: name it from the catalog instead of the raw id.
+	const stockItems = useStockFormItems(() => request.shelter_code);
+	const itemNameById = $derived(new Map(stockItems.items.map((item) => [item._id, item.name])));
+	const lineName = (item: { free_text?: string; item_id?: string }, fallback: string) =>
+		item.free_text ?? (item.item_id && itemNameById.get(item.item_id)) ?? item.item_id ?? fallback;
 
 	// CR-206 FR-MP-25: the drop-off point of each line, resolved against the shelter's current
 	// points in its CouchDB doc. Shown only for a booking split between points; a point
@@ -120,6 +169,24 @@
 		listDonationPoints(shelterQuery.data).map((p) => ({ id: p.id, name: p.name.trim() }))
 	);
 	const showLinePoints = $derived(namesDropOffPoints(declaredItems));
+	const donationPointIds = $derived(new Set(donationPoints.map((p) => p.id)));
+	// A receipt may name a point unticked since, so its name comes from every storage point.
+	const storagePoints = $derived(
+		listStoragePoints(shelterQuery.data).map((p) => ({ id: p.id, name: p.name.trim() }))
+	);
+
+	/** Draft CR FR-AP-20 — staff choose where each approved line goes, not the donor. */
+	const picksPoints = $derived(
+		request.delivery_method === 'self_dropoff' && donationPoints.length > 0
+	);
+	/** Line → the point that already recorded it at the scan station (FR-AP-17 step 3). */
+	const receiptPointByLine = $derived(
+		new Map(
+			request.point_receipts.flatMap((receipt) =>
+				receipt.line_nos.map((lineNo) => [lineNo, receipt.point_id] as const)
+			)
+		)
+	);
 
 	/**
 	 * CR-174 — a schema_v 7 booking is decided line by line: only `pending` lines take a
@@ -130,6 +197,8 @@
 		decision?: 'approved' | 'rejected';
 		code?: DonationRejectReasonCode;
 		note: string;
+		/** Point staff picked; absent = {@link defaultPoint}. */
+		point?: string;
 	};
 	let drafts = $state<Record<number, LineDraft>>({});
 	const pendingIndexes = $derived(
@@ -140,18 +209,49 @@
 		drafts[index] ??= { note: '' };
 		return drafts[index];
 	}
+	/** The only point (D-AP-11), else the line's point while the shelter still offers it. */
+	function defaultPoint(index: number): string {
+		if (donationPoints.length === 1) return donationPoints[0].id;
+		return currentLinePoint(declaredItems[index], donationPointIds) ?? '';
+	}
+	function pointAt(index: number): string {
+		return drafts[index]?.point ?? defaultPoint(index);
+	}
+	function choosesPoint(index: number): boolean {
+		return picksPoints && drafts[index]?.decision === 'approved' && !receiptPointByLine.has(index);
+	}
 	const lineDecisions = $derived(
 		pendingIndexes.map((index) =>
 			lineReviewDecisionSchema.safeParse({
 				index,
 				decision: drafts[index]?.decision,
 				reason_code: drafts[index]?.code,
-				note: drafts[index]?.note || undefined
+				note: drafts[index]?.note || undefined,
+				// An empty pick fails the schema, which keeps the confirm button disabled.
+				...(choosesPoint(index) ? { drop_off_point_id: pointAt(index) } : {})
 			})
 		)
 	);
-	const reviewComplete = $derived(lineDecisions.every((parsed) => parsed.success));
-	const REVIEW_INCOMPLETE = 'ตัดสินรายการที่รอประเมินให้ครบ และใส่เหตุผลของรายการที่ไม่รับ';
+	// Until the shelter doc is read, a self drop-off cannot tell whether an approved line needs a
+	// point, so the confirm button waits instead of letting the server answer POINT_REQUIRED.
+	const awaitsPoints = $derived(
+		request.delivery_method === 'self_dropoff' &&
+			!shelterQuery.isSuccess &&
+			pendingIndexes.some(
+				(index) => drafts[index]?.decision === 'approved' && !receiptPointByLine.has(index)
+			)
+	);
+	const reviewComplete = $derived(!awaitsPoints && lineDecisions.every((parsed) => parsed.success));
+	const reviewIncompleteHint = $derived.by(() => {
+		if (awaitsPoints) {
+			return shelterQuery.isError
+				? 'โหลดจุดรับบริจาคของศูนย์ไม่สำเร็จ ลองโหลดหน้านี้ใหม่'
+				: 'กำลังโหลดจุดรับบริจาคของศูนย์...';
+		}
+		return picksPoints
+			? 'ตัดสินรายการที่รอประเมินให้ครบ เลือกจุดรับบริจาคของรายการที่รับ และใส่เหตุผลของรายการที่ไม่รับ'
+			: 'ตัดสินรายการที่รอประเมินให้ครบ และใส่เหตุผลของรายการที่ไม่รับ';
+	});
 	/** Every line ends up refused, so saving rejects the booking (FR-6) — shown in red. */
 	const rejectsAll = $derived.by(() => {
 		if (!lineReview || !reviewComplete) return false;
@@ -170,8 +270,8 @@
 			return;
 		}
 		const lines = lineDecisions.flatMap((parsed) => (parsed.success ? [parsed.data] : []));
-		if (lines.length !== pendingIndexes.length) {
-			toast.error(REVIEW_INCOMPLETE);
+		if (!reviewComplete || lines.length !== pendingIndexes.length) {
+			toast.error(reviewIncompleteHint);
 			return;
 		}
 		onApprove(actionRef, memo.trim(), lines);
@@ -251,7 +351,9 @@
 				<ClipboardCheck class="h-5 w-5" />
 			</div>
 			<h2 class="text-base font-bold text-white md:text-lg">
-				{donationRefLabel(request)} - พิจารณาคำขอรับบริจาค (Pending Review)
+				{donationRefLabel(request)} - {readonly
+					? 'รายละเอียดการรับบริจาค'
+					: 'พิจารณาคำขอรับบริจาค (Pending Review)'}
 			</h2>
 		</div>
 	</div>
@@ -272,28 +374,47 @@
 					</span>
 					<div class="min-w-0 space-y-1.5">
 						<p class="text-lg font-bold break-words text-slate-900">
-							{request.donor_name || 'ไม่ระบุชื่อ'}
+							{contact.name || 'ไม่ระบุชื่อ'}
 						</p>
-						<p class="flex items-center gap-2 text-base text-slate-700">
-							<Phone class="size-4 shrink-0 text-slate-400" aria-hidden="true" />
-							<span class="sr-only">เบอร์โทร</span>
-							{#if request.donor_phone}
-								<a
-									href="tel:{request.donor_phone}"
-									class="font-semibold text-sky-800 tabular-nums underline-offset-2 hover:underline"
-								>
-									{request.donor_phone}
-								</a>
-							{:else}
-								<span class="text-slate-500">ไม่ระบุเบอร์โทร</span>
-							{/if}
-						</p>
-						{#if request.donor_email}
-							<p class="flex items-center gap-2 text-sm break-all text-slate-600">
-								<Mail class="size-4 shrink-0 text-slate-400" aria-hidden="true" />
-								<span class="sr-only">อีเมล</span>
-								{request.donor_email}
+						{#if contactRemoved}
+							<p class="text-sm text-slate-600">ข้อมูลติดต่อถูกลบตามนโยบายการเก็บข้อมูล</p>
+						{:else}
+							<p class="flex items-center gap-2 text-base text-slate-700">
+								<Phone class="size-4 shrink-0 text-slate-400" aria-hidden="true" />
+								<span class="sr-only">เบอร์โทร</span>
+								{#if contact.phone && showContact}
+									<a
+										href="tel:{contact.phone}"
+										class="font-semibold text-sky-800 tabular-nums underline-offset-2 hover:underline"
+									>
+										{contact.phone}
+									</a>
+								{:else if contact.phone}
+									<span class="font-semibold text-slate-700 tabular-nums">{contact.phone}</span>
+								{:else}
+									<span class="text-slate-500">ไม่ระบุเบอร์โทร</span>
+								{/if}
 							</p>
+							{#if contact.email}
+								<p class="flex items-center gap-2 text-sm break-all text-slate-600">
+									<Mail class="size-4 shrink-0 text-slate-400" aria-hidden="true" />
+									<span class="sr-only">อีเมล</span>
+									{contact.email}
+								</p>
+							{/if}
+						{/if}
+						{#if !showContact}
+							<!-- Received donations (#821): the full contact only on request, and audited. -->
+							<Button
+								type="button"
+								variant="outline"
+								class="min-h-11"
+								disabled={revealMutation.isPending}
+								onclick={revealContact}
+							>
+								<Eye class="size-4" aria-hidden="true" />
+								{revealMutation.isPending ? 'กำลังโหลด...' : 'แสดงข้อมูลติดต่อ'}
+							</Button>
 						{/if}
 					</div>
 				</div>
@@ -339,9 +460,9 @@
 							<li class="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 p-4 sm:px-5">
 								<div class="min-w-0 space-y-2">
 									<p class="text-xl font-bold break-words text-slate-900">
-										{item.free_text ?? item.item_id ?? 'สิ่งของ'}
+										{lineName(item, 'สิ่งของ')}
 									</p>
-									{#if cat || cond || !item.item_id || showLinePoints}
+									{#if cat || cond || !item.item_id || showLinePoints || receiptPointByLine.has(idx)}
 										<div class="flex flex-wrap items-center gap-2">
 											{#if cat}
 												<Badge
@@ -359,7 +480,16 @@
 													{cond}
 												</Badge>
 											{/if}
-											{#if showLinePoints}
+											{#if receiptPointByLine.has(idx) && item.review_status === 'pending'}
+												<Badge
+													variant="outline"
+													data-testid="review-line-{idx}-received"
+													class="gap-1 border-emerald-200 bg-emerald-50 text-sm font-semibold text-emerald-900"
+												>
+													<MapPin class="size-3.5" aria-hidden="true" />
+													{recordedAtLabel(receiptPointByLine.get(idx) ?? null, storagePoints)}
+												</Badge>
+											{:else if showLinePoints && !(picksPoints && item.review_status === 'pending')}
 												<Badge
 													variant="outline"
 													data-testid="review-line-{idx}-point"
@@ -415,7 +545,7 @@
 										</span>
 									</p>
 								</div>
-								{#if item.review_status === 'pending'}
+								{#if !readonly && item.review_status === 'pending'}
 									{@const draft = drafts[idx]}
 									<div class="w-full space-y-3 border-t border-slate-100 pt-4">
 										<LineDecisionToggle
@@ -436,9 +566,44 @@
 											}
 											acceptLabel="รับรายการนี้"
 											acceptHint="ผู้บริจาคนำมาส่งได้"
-											groupLabel="ผลการประเมิน {item.free_text ?? item.item_id ?? 'รายการ'}"
+											groupLabel="ผลการประเมิน {lineName(item, 'รายการ')}"
 											disabled={saving}
 										/>
+										{#if choosesPoint(idx)}
+											{@const picked = donationPoints.find((p) => p.id === pointAt(idx))}
+											<div class="space-y-1.5">
+												<Label
+													for="review-line-{idx}-point"
+													class="text-sm font-semibold text-slate-700"
+												>
+													จุดรับบริจาคที่ให้ผู้บริจาคนำของไปส่ง
+													<span class="text-destructive">*</span>
+												</Label>
+												<Select.Root
+													type="single"
+													bind:value={() => pointAt(idx), (next) => (draftAt(idx).point = next)}
+													disabled={saving}
+												>
+													<Select.Trigger
+														id="review-line-{idx}-point"
+														class="h-11 w-full rounded-xl text-base data-[size=default]:h-11"
+													>
+														<span class="truncate {picked ? '' : 'text-slate-500'}">
+															{picked?.name ?? 'เลือกจุดรับบริจาค'}
+														</span>
+													</Select.Trigger>
+													<Select.Content>
+														{#each donationPoints as point (point.id)}
+															<Select.Item
+																value={point.id}
+																label={point.name}
+																class="min-h-11 py-2.5 text-base">{point.name}</Select.Item
+															>
+														{/each}
+													</Select.Content>
+												</Select.Root>
+											</div>
+										{/if}
 										{#if draft?.decision === 'rejected'}
 											<RejectReasonFields
 												bind:code={draft.code}
@@ -503,46 +668,54 @@
 			</div>
 		</div>
 
+		<!-- A received donation: the lots it put into stock, and what is left of each (#821). -->
+		{#if readonly && request.donation_id}
+			<DonationLotsTable donationId={request.donation_id} shelterCode={request.shelter_code} />
+		{/if}
+
 		<!-- Staff Review Memo Textarea -->
-		<div class="space-y-2">
-			<Label for="internal-review-memo" class="text-sm font-semibold text-slate-700">
-				บันทึกความเห็นของเจ้าหน้าที่ประจำศูนย์ (Internal Review Memo)
-			</Label>
-			<Textarea
-				id="internal-review-memo"
-				rows={3}
-				placeholder="เขียนวิเคราะห์ความจุคลัง หรือข้อตกลงพิเศษในการรับของ เช่น โซนตู้แช่สำรองไฟ ฯลฯ"
-				bind:value={memo}
-				class="rounded-xl p-3.5 text-base"
-			/>
-		</div>
+		{#if !readonly}
+			<div class="space-y-2">
+				<Label for="internal-review-memo" class="text-sm font-semibold text-slate-700">
+					บันทึกความเห็นของเจ้าหน้าที่ประจำศูนย์ (Internal Review Memo)
+				</Label>
+				<Textarea
+					id="internal-review-memo"
+					rows={3}
+					placeholder="เขียนวิเคราะห์ความจุคลัง หรือข้อตกลงพิเศษในการรับของ เช่น โซนตู้แช่สำรองไฟ ฯลฯ"
+					bind:value={memo}
+					class="rounded-xl p-3.5 text-base"
+				/>
+			</div>
+		{/if}
 	</div>
 
 	<!-- Bottom Action Bar Footer -->
-	<div
-		class="flex flex-col-reverse items-stretch justify-between gap-3 border-t border-border/60 bg-muted/5 p-4 sm:flex-row sm:items-center md:px-8"
-	>
-		<div class="flex flex-wrap items-center gap-2.5">
-			<!-- Approve Button -->
-			<Button
-				type="button"
-				onclick={submitReview}
-				disabled={saving || (lineReview && !reviewComplete)}
-				aria-describedby={lineReview && !reviewComplete ? 'review-incomplete-hint' : undefined}
-				class="h-10 gap-1.5 rounded-xl px-5 text-xs font-bold text-white shadow-xs {rejectsAll
-					? 'bg-red-600 hover:bg-red-700'
-					: 'bg-emerald-600 hover:bg-emerald-700'}"
-			>
-				<Check class="h-4 w-4" />
-				{saving ? 'กำลังดำเนินการ...' : approveLabel}
-			</Button>
-			{#if lineReview && !reviewComplete}
-				<p id="review-incomplete-hint" class="text-xs text-muted-foreground">
-					{REVIEW_INCOMPLETE}
-				</p>
-			{/if}
+	{#if !readonly}
+		<div
+			class="flex flex-col-reverse items-stretch justify-between gap-3 border-t border-border/60 bg-muted/5 p-4 sm:flex-row sm:items-center md:px-8"
+		>
+			<div class="flex flex-wrap items-center gap-2.5">
+				<!-- Approve Button -->
+				<Button
+					type="button"
+					onclick={submitReview}
+					disabled={saving || (lineReview && !reviewComplete)}
+					aria-describedby={lineReview && !reviewComplete ? 'review-incomplete-hint' : undefined}
+					class="h-10 gap-1.5 rounded-xl px-5 text-xs font-bold text-white shadow-xs {rejectsAll
+						? 'bg-red-600 hover:bg-red-700'
+						: 'bg-emerald-600 hover:bg-emerald-700'}"
+				>
+					<Check class="h-4 w-4" />
+					{saving ? 'กำลังดำเนินการ...' : approveLabel}
+				</Button>
+				{#if lineReview && !reviewComplete}
+					<p id="review-incomplete-hint" class="text-xs text-muted-foreground">
+						{reviewIncompleteHint}
+					</p>
+				{/if}
 
-			<!--
+				<!--
 			Redirect ("ประสานงานส่งต่อ") is hidden for now: the centre does not hand donations
 			off to another shelter yet, so offering the action would promise a workflow that
 			has no receiving end. The panel below, `handleConfirmRedirect` and the
@@ -559,22 +732,23 @@
 				ประสานงานส่งต่อ
 			</Button>
 			-->
-		</div>
+			</div>
 
-		<!-- Reject Button -->
-		<Button
-			variant="outline"
-			type="button"
-			onclick={() => (rejectOpen = true)}
-			disabled={saving}
-			class="h-10 rounded-xl border-rose-200 bg-rose-50/70 px-5 text-xs font-bold text-rose-600 hover:bg-rose-100 hover:text-rose-700 dark:border-rose-900/50 dark:bg-rose-950/20 dark:hover:bg-rose-900/40"
-		>
-			ปฏิเสธคำขอ
-		</Button>
-	</div>
+			<!-- Reject Button -->
+			<Button
+				variant="outline"
+				type="button"
+				onclick={() => (rejectOpen = true)}
+				disabled={saving}
+				class="h-10 rounded-xl border-rose-200 bg-rose-50/70 px-5 text-xs font-bold text-rose-600 hover:bg-rose-100 hover:text-rose-700 dark:border-rose-900/50 dark:bg-rose-950/20 dark:hover:bg-rose-900/40"
+			>
+				ปฏิเสธคำขอ
+			</Button>
+		</div>
+	{/if}
 
 	<!-- Expandable Reroute / Redirect Section (Screenshot 4) -->
-	{#if actionPanel === 'redirect'}
+	{#if !readonly && actionPanel === 'redirect'}
 		<div
 			class="animate-in border-t border-border/60 bg-muted/10 p-6 fade-in slide-in-from-top-2 md:p-8"
 		>
@@ -635,9 +809,11 @@
 	{/if}
 </div>
 
-<RejectDonationDialog
-	bind:open={rejectOpen}
-	bookingRef={request.booking_ref || actionRef || undefined}
-	pending={saving}
-	onconfirm={handleConfirmReject}
-/>
+{#if !readonly}
+	<RejectDonationDialog
+		bind:open={rejectOpen}
+		bookingRef={request.booking_ref || actionRef || undefined}
+		pending={saving}
+		onconfirm={handleConfirmReject}
+	/>
+{/if}

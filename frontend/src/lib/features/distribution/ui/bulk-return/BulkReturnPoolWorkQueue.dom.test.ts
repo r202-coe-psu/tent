@@ -21,6 +21,7 @@ function row(
 	opts: {
 		point?: string;
 		submitted_at?: string;
+		received_at?: string;
 		late?: number;
 		entry_count?: number;
 		loanRefsUnavailable?: boolean;
@@ -32,6 +33,7 @@ function row(
 			status,
 			name: `pool-${id}`,
 			submitted_at: opts.submitted_at,
+			received_at: opts.received_at,
 			location_storage_point_id: opts.point,
 			created_at: '2026-01-01T00:00:00.000Z'
 		} satisfies Partial<BulkReturnPoolV3> as BulkReturnPoolV3,
@@ -47,7 +49,8 @@ function row(
 		unresolved_refs: [],
 		closed_loan_refs: [],
 		loan_refs_unavailable: opts.loanRefsUnavailable ?? false,
-		snapshot_conflicts: []
+		snapshot_conflicts: [],
+		receivable_items_summary: []
 	};
 }
 
@@ -217,6 +220,17 @@ describe('BulkReturnPoolWorkQueue', () => {
 			expect(poolNamesIn('bulk-queue-flagged')).toEqual(['pool-lu']);
 			const btn = buttonsIn(document.body).find((b) => b.textContent?.includes('pool-lu'));
 			expect(normalize(btn?.textContent)).toContain(WORK_QUEUE_COPY.reasonLabels.loan_unknown);
+		});
+
+		it('keeps a recently received flagged pool but drops one received before the age window', async () => {
+			await render({
+				queues: ['flagged'],
+				rows: [
+					row('recent', 'RECEIVED', { received_at: '2026-01-08T00:00:00.000Z', late: 1 }),
+					row('stale', 'RECEIVED', { received_at: '2025-12-01T00:00:00.000Z', late: 1 })
+				]
+			});
+			expect(poolNamesIn('bulk-queue-flagged')).toEqual(['pool-recent']);
 		});
 
 		it('shows empty-state copy when nothing qualifies', async () => {

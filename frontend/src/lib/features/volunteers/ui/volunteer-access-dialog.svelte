@@ -14,6 +14,7 @@
 	import { Badge } from '$lib/components/ui/badge/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import * as Select from '$lib/components/ui/select/index.js';
+	import PasswordRuleChecklist from '$lib/components/password-rule-checklist.svelte';
 	import {
 		COORDINATOR_GRANTABLE_CAPABILITIES,
 		STAFF_CAPABILITIES,
@@ -29,10 +30,12 @@
 	import { useVolunteerGrants, volunteerKeys } from '../application/queries';
 	import { errorMessage } from '$lib/utils/errors';
 	import {
-		accountPhones,
+		VOLUNTEER_ACCESS_PHONE_MESSAGE,
+		accountPhone,
 		coordinatorAccessSchema,
 		grantVolunteerAccess,
 		grantVolunteerAccessAsCoordinator,
+		hasInvalidAccessPhone,
 		revokeVolunteerGrant,
 		volunteerAccessSchema,
 		volunteerPasswordError
@@ -53,8 +56,8 @@
 	const queryClient = useQueryClient();
 	let pending = $state(false);
 
-	const phones = $derived(accountPhones(volunteer.phone));
-	const loginPhone = $derived(phones.login);
+	const loginPhone = $derived(accountPhone(volunteer.phone));
+	const phoneBlocksAccess = $derived(hasInvalidAccessPhone(volunteer.phone));
 	const fullName = $derived(`${volunteer.first_name} ${volunteer.last_name}`.trim());
 
 	// A coordinator (not SM/SA) grants a limited role with a required expiry (#955); the BFF
@@ -71,13 +74,14 @@
 	// server, so a volunteer with both may still be granted; one missing either cannot be.
 	const unverifiedHere = $derived(identityVerificationStatus(volunteer) !== 'verified');
 	const canCheckElsewhere = $derived(
-		accountPhones(volunteer.phone).contact !== null &&
-			Boolean(volunteer.national_id_hash || volunteer.national_id)
+		loginPhone !== null && Boolean(volunteer.national_id_hash || volunteer.national_id)
 	);
 	const blockedReason = $derived(
-		limited && unverifiedHere && !canCheckElsewhere
-			? 'อาสาสมัครยังไม่ยืนยันตัวตนในศูนย์นี้ และไม่มีเบอร์โทรหรือเลขบัตรประชาชนให้ตรวจผลยืนยันจากศูนย์อื่น จึงออกสิทธิ์ไม่ได้'
-			: null
+		phoneBlocksAccess
+			? VOLUNTEER_ACCESS_PHONE_MESSAGE
+			: limited && unverifiedHere && !canCheckElsewhere
+				? 'อาสาสมัครยังไม่ยืนยันตัวตนในศูนย์นี้ และไม่มีเบอร์โทรหรือเลขบัตรประชาชนให้ตรวจผลยืนยันจากศูนย์อื่น จึงออกสิทธิ์ไม่ได้'
+				: null
 	);
 	// The caller's own grants can be taken back here (FR-8); the BFF refuses anyone else's.
 	const grantsQuery = useVolunteerGrants(
@@ -122,6 +126,10 @@
 	async function submit() {
 		if (pending) return;
 		submitError = null;
+		if (phoneBlocksAccess) {
+			toast.error(VOLUNTEER_ACCESS_PHONE_MESSAGE);
+			return;
+		}
 		if (limited) {
 			await submitLimited();
 			return;
@@ -453,6 +461,11 @@
 								สร้างรหัส
 							</Button>
 						</div>
+						<!-- The volunteer's own mobile is accepted as a one-time default; any other password
+						     must meet the policy, so only then show the checklist (#1045). -->
+						{#if password.trim() && password.trim() !== loginPhone}
+							<PasswordRuleChecklist {password} />
+						{/if}
 						{#if passwordError}
 							<p
 								id={`volunteer-access-password-error-${volunteer._id}`}
@@ -469,11 +482,11 @@
 							</p>
 						{:else}
 							<p class="text-[11px] text-muted-foreground">
-								{phones.contact
-									? 'เบอร์โทรศัพท์ของอาสาสมัครไม่ใช่มือถือ 10 หลัก จะบันทึกลงบัญชีเป็นเบอร์ติดต่อ แต่ใช้เข้าสู่ระบบหรือเป็นรหัสผ่านเริ่มต้นไม่ได้'
-									: 'อาสาสมัครไม่มีเบอร์มือถือ 10 หลัก จึงใช้เบอร์เป็นรหัสผ่านเริ่มต้นไม่ได้'}
-								กรุณาตั้งรหัสผ่านเองหรือกด "สร้างรหัส" (อย่างน้อย 10 ตัวอักษร พร้อมตัวพิมพ์ใหญ่ ตัวพิมพ์เล็ก
-								ตัวเลข และอักขระพิเศษ) บัญชีนี้ใช้อีเมลเข้าสู่ระบบเท่านั้น และเมื่อเข้าสู่ระบบครั้งแรกจะต้องตั้งรหัสผ่านใหม่และคำถามความปลอดภัยเหมือนบัญชีอื่น
+								อาสาสมัครไม่มีเบอร์มือถือ 10 หลัก จึงใช้เบอร์เป็นรหัสผ่านเริ่มต้นไม่ได้
+								และบัญชีจะไม่มีเบอร์ กรุณาตั้งรหัสผ่านเองหรือกด "สร้างรหัส" (อย่างน้อย 10 ตัวอักษร
+								พร้อมตัวพิมพ์ใหญ่ ตัวพิมพ์เล็ก ตัวเลข และอักขระพิเศษ)
+								บัญชีนี้ใช้อีเมลเข้าสู่ระบบเท่านั้น
+								และเมื่อเข้าสู่ระบบครั้งแรกจะต้องตั้งรหัสผ่านใหม่และคำถามความปลอดภัยเหมือนบัญชีอื่น
 							</p>
 						{/if}
 						<p class="text-[11px] text-muted-foreground">

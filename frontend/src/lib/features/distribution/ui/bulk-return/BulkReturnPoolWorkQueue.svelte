@@ -2,7 +2,7 @@
 	import AlertTriangle from '@lucide/svelte/icons/alert-triangle';
 	import Clock from '@lucide/svelte/icons/clock';
 	import type { BulkReturnPoolOverviewRow } from '../../domain/food-supplies';
-	import { LATE_BADGE_CLASS } from '../model/bulk-return-pool-v3';
+	import { LATE_BADGE_CLASS, receivedHideCutoff } from '../model/bulk-return-pool-v3';
 	import {
 		WORK_QUEUE_COPY,
 		flaggedPools,
@@ -40,7 +40,12 @@
 	}: Props = $props();
 
 	const waiting = $derived(queues.includes('waiting_receive') ? waitingForReceive(rows, now) : []);
-	const flagged = $derived(queues.includes('flagged') ? flaggedPools(rows) : []);
+	// RECEIVED pools stay in the flagged queue only within the board's received-age window.
+	const flagged = $derived(
+		queues.includes('flagged')
+			? flaggedPools(rows, { hideReceivedBefore: receivedHideCutoff(now) })
+			: []
+	);
 	const atMyPoint = $derived(
 		queues.includes('my_point') && myPoint ? openPoolsAtPoint(rows, myPoint) : []
 	);

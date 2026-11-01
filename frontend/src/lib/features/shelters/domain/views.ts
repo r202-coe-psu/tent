@@ -83,6 +83,43 @@ export const SHELTER_DASHBOARD_VIEWS = {
 			}`,
 			reduce: '_sum'
 		},
+		// #821 (view manifest v7): the "รับแล้ว" search by donor name and by item. A Mango index
+		// cannot match one word of `donor.name` or one entry of `items[]`; a view emits one row
+		// per key. Each key at most once per donation, so a paged read never repeats a document.
+		// Key = [searched value, received_at], value null (the document comes via include_docs).
+		donation_received_by_name: {
+			// The normalization is `normalizeDonorNameKey` (donations/domain/received-search.ts):
+			// NFKC, lowercase, trim, collapse runs of whitespace. Keep the two in step.
+			map: `function (doc) {
+				if (doc.type !== 'donation' || doc.status !== 'received') return;
+				if (!doc.donor || typeof doc.donor.name !== 'string') return;
+				var whole = doc.donor.name.normalize('NFKC').toLowerCase().trim().replace(/\\s+/g, ' ');
+				if (!whole) return;
+				var receivedAt = doc.received_at || '';
+				var keys = [whole].concat(whole.split(' '));
+				var seen = {};
+				for (var i = 0; i < keys.length; i++) {
+					var k = keys[i];
+					if (!k || seen['k:' + k]) continue;
+					seen['k:' + k] = true;
+					emit([k, receivedAt], null);
+				}
+			}`
+		},
+		donation_received_by_item: {
+			map: `function (doc) {
+				if (doc.type !== 'donation' || doc.status !== 'received') return;
+				if (!doc.items || !doc.items.length) return;
+				var receivedAt = doc.received_at || '';
+				var seen = {};
+				for (var i = 0; i < doc.items.length; i++) {
+					var itemId = doc.items[i] && doc.items[i].item_id;
+					if (typeof itemId !== 'string' || !itemId || seen['i:' + itemId]) continue;
+					seen['i:' + itemId] = true;
+					emit([itemId, receivedAt], null);
+				}
+			}`
+		},
 		station_logs_by_station: {
 			// CR-192: raw per-event rows; start/complete pairing happens in the BFF (a map cannot
 			// join across docs). Date-first key so the range is filtered inside CouchDB.

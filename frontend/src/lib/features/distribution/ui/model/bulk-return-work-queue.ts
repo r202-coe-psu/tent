@@ -71,10 +71,38 @@ export function waitingForReceive(
 		.map(({ row, ageMs }) => ({ row, ageMs }));
 }
 
-/** Non-cancelled pools needing attention; most reasons first, then oldest `created_at`. */
-export function flaggedPools(rows: readonly BulkReturnPoolOverviewRow[]): FlaggedPool[] {
+export interface FlaggedPoolsOptions {
+	/**
+	 * RECEIVED pools with `received_at` strictly before this instant leave the queue (same cutoff as
+	 * the board's old-received hiding, see `receivedHideCutoff`). A RECEIVED pool without a valid
+	 * `received_at` stays. Omitted: no RECEIVED pool is dropped by age.
+	 */
+	hideReceivedBefore?: Date;
+}
+
+/** RECEIVED pool received strictly before `cutoff`; a missing/invalid `received_at` never is. */
+function isReceivedBefore(row: BulkReturnPoolOverviewRow, cutoff: Date | undefined): boolean {
+	const { status, received_at } = row.pool;
+	if (status !== 'RECEIVED' || !cutoff || !received_at) return false;
+	const receivedMs = Date.parse(received_at);
+	return !Number.isNaN(receivedMs) && receivedMs < cutoff.getTime();
+}
+
+/**
+ * Non-cancelled pools needing attention, RECEIVED ones only within the age window
+ * (`hideReceivedBefore`); most reasons first, then oldest `created_at`.
+ */
+export function flaggedPools(
+	rows: readonly BulkReturnPoolOverviewRow[],
+	options: FlaggedPoolsOptions = {}
+): FlaggedPool[] {
 	return rows
-		.filter((row) => row.pool.status !== 'CANCELLED' && rowNeedsAttention(row))
+		.filter(
+			(row) =>
+				row.pool.status !== 'CANCELLED' &&
+				!isReceivedBefore(row, options.hideReceivedBefore) &&
+				rowNeedsAttention(row)
+		)
 		.map((row) => {
 			const reasons: FlaggedPool['reasons'] = [];
 			if (row.late_entries.length > 0)

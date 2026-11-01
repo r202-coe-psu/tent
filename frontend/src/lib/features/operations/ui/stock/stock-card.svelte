@@ -63,6 +63,11 @@
 			</span>
 			<StatusBadges {badges} />
 		</span>
+		{#if row.usableNote}
+			<span class="mt-1 block text-xs font-semibold text-red-800 tabular-nums"
+				>{row.usableNote}</span
+			>
+		{/if}
 		<span class="mt-2 block">
 			<StockBar onHand={row.qtyOnHand} threshold={row.reorderThreshold} {caption} />
 		</span>
