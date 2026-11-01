@@ -12,6 +12,7 @@ import {
 /** One remaining lot as the item detail panel renders it. */
 export interface LotRow {
 	lotRef: string;
+	lotNo: string | null;
 	qty: string;
 	unit: string;
 	storageName: string | null;
@@ -59,6 +60,7 @@ export function buildLotRows(
 	let nextAssigned = false;
 	const negatives = lots.filter(isNegativeLot).map((lot): LotRow => ({
 		lotRef: lot.lot_ref,
+		lotNo: lot.lot?.lot_no ?? null,
 		qty: lot.qty,
 		unit: lot.unit,
 		storageName: lotStorageName(lot.lot, points),
@@ -77,6 +79,7 @@ export function buildLotRows(
 		if (isNext) nextAssigned = true;
 		return {
 			lotRef: lot.lot_ref,
+			lotNo: lot.lot?.lot_no ?? null,
 			qty: lot.qty,
 			unit: lot.unit,
 			storageName: lotStorageName(lot.lot, points),

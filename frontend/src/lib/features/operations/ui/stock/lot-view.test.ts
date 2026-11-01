@@ -172,3 +172,37 @@ describe('buildLotRows', () => {
 		expect(rows[1].qty).toBe('-3');
 	});
 });
+
+describe('buildLotRows lot number (#1069)', () => {
+	it('carries the lot number through so the card can show it', () => {
+		const rows = buildLotRows(
+			[lot({ lot_ref: 'a', lot: { lot_no: 'L-261020-001', expiry: iso(5) } })],
+			[],
+			NOW
+		);
+
+		expect(rows[0].lotNo).toBe('L-261020-001');
+	});
+
+	it('is null for a row written before lot numbers existed', () => {
+		const rows = buildLotRows([lot({ lot_ref: 'legacy', lot: { expiry: iso(5) } })], [], NOW);
+
+		expect(rows[0].lotNo).toBeNull();
+	});
+
+	it('is null when the row has no lot block at all', () => {
+		const rows = buildLotRows([lot({ lot_ref: 'bare' })], [], NOW);
+
+		expect(rows[0].lotNo).toBeNull();
+	});
+
+	it('keeps the number on an overdrawn lot, which is the one staff must go and fix', () => {
+		const rows = buildLotRows(
+			[lot({ lot_ref: 'neg', qty: '-2', lot: { lot_no: 'L-261020-009' } })],
+			[],
+			NOW
+		);
+
+		expect(rows[0]).toMatchObject({ isNegative: true, lotNo: 'L-261020-009' });
+	});
+});
