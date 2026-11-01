@@ -34,7 +34,6 @@
 		rejectedLineReasons,
 		needsDropOffDestination,
 		resolveDropOffPoint,
-		bookableDropOffPoints,
 		groupDropOffDestinations,
 		CancelDonationDialog,
 		DropOffCard,
@@ -80,11 +79,14 @@
 	const showDirections = $derived(!isTerminalDonationStatus(status));
 
 	// CR-206 FR-MP-13, FR-MP-16 — a booking split across drop-off points: one card per point
-	// with what each point has taken. `null` (no line names a point) keeps the shelter card.
+	// with what each point has taken, and the lines staff have yet to give a point (staff-
+	// assigned drop-off FR-AP-22). `null` (no line has or awaits a point) keeps the shelter card.
 	const pointGroups = $derived(
 		donation && shelterQuery.data
 			? groupDropOffDestinations(donation.items, shelterQuery.data, {
 					anyPointName: t.anyPointGroupTitle,
+					awaitingName: t.awaitingPointGroupTitle,
+					deliveryMethod: donation.logistics?.delivery_method,
 					pointReceipts: donation.point_receipts
 				})
 			: null
@@ -92,10 +94,6 @@
 	const lineNames = $derived(donation ? donation.items.map((item) => item.item_name) : []);
 	// "รับแล้ว" stays true on a received booking; on one turned away or cancelled it would mislead.
 	const showReceivedGroups = $derived(!isTerminalDonationStatus(status) || status === 'received');
-	// The points the edit dialog offers each line (FR-MP-15).
-	const editPoints = $derived(
-		bookableDropOffPoints(shelterQuery.data, donation?.logistics?.delivery_method)
-	);
 	// FR-MP-17 — once a point recorded a receipt the donor can neither cancel nor edit.
 	const startedAtPoint = $derived(donation ? isStartedAtPoint(donation) : false);
 
@@ -635,7 +633,6 @@
 				{token}
 				shelterCode={donation.shelter_code}
 				items={donation.items}
-				dropOffPoints={editPoints}
 				onSaved={() => trackingQuery.refetch()}
 			/>
 		{/if}
