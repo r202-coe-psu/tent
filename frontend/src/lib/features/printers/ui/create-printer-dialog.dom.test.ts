@@ -5,9 +5,10 @@ import { PrintApiError } from '../data/printers.api';
 import CreatePrinterDialog from './create-printer-dialog.svelte';
 
 const mutateAsync = vi.fn();
+const reset = vi.fn();
 const toast = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn() }));
 vi.mock('../application/queries', () => ({
-	useCreatePrinterDevice: () => ({ mutateAsync, isPending: false })
+	useCreatePrinterDevice: () => ({ mutateAsync, reset, isPending: false })
 }));
 vi.mock('svelte-sonner', () => ({ toast }));
 
@@ -57,6 +58,23 @@ afterEach(async () => {
 	instance = null;
 	await new Promise((resolve) => setTimeout(resolve, 50));
 	document.body.innerHTML = '';
+});
+
+describe('CreatePrinterDialog secret handling', () => {
+	it('resets the mutation once the secret is handed off so it is not kept in memory', async () => {
+		submit().click();
+		await settle();
+
+		expect(mutateAsync).toHaveBeenCalledTimes(1);
+		expect(reset).toHaveBeenCalledTimes(1);
+	});
+
+	it('submits when Enter submits the form', async () => {
+		field('printer-name').form?.requestSubmit();
+		await settle();
+
+		expect(mutateAsync).toHaveBeenCalledTimes(1);
+	});
 });
 
 describe('CreatePrinterDialog kiosk link', () => {

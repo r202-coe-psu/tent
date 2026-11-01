@@ -82,6 +82,8 @@
 			toast.success(t.create.success);
 			handleOpenChange(false);
 			oncreated(created);
+			// The secret now lives only in the reveal dialog; drop the mutation's own copy.
+			createMutation.reset();
 		} catch (err) {
 			toast.error(
 				err instanceof PrintApiError && err.status === 409
@@ -103,89 +105,98 @@
 			</Dialog.Description>
 		</Dialog.Header>
 
-		<div class="grid gap-4 py-4">
-			<div class="grid gap-2">
-				<Label for="printer-device-id" class="text-sm font-semibold">
-					{t.create.deviceId} <span class="text-destructive">*</span>
-				</Label>
-				<Input
-					id="printer-device-id"
-					bind:value={deviceId}
-					placeholder={t.create.deviceIdPlaceholder}
-					autocomplete="off"
-				/>
-				<p class="text-xs text-muted-foreground">{t.create.deviceIdHint}</p>
-			</div>
-
-			<div class="grid gap-2">
-				<Label for="printer-name" class="text-sm font-semibold">
-					{t.create.name} <span class="text-destructive">*</span>
-				</Label>
-				<Input
-					id="printer-name"
-					bind:value={name}
-					placeholder={t.create.namePlaceholder}
-					maxlength={80}
-				/>
-			</div>
-
-			{#if fixedShelterCode === null}
+		<form
+			onsubmit={(event) => {
+				event.preventDefault();
+				void handleCreate();
+			}}
+		>
+			<div class="grid gap-4 py-4">
 				<div class="grid gap-2">
-					<span class="text-sm font-semibold">
-						ศูนย์พักพิง <span class="text-destructive">*</span>
-					</span>
-					<ShelterScopeSelect
-						allowedCodes={null}
-						bind:value={pickedShelterCode}
-						ariaLabel="ศูนย์พักพิงประจำเครื่องพิมพ์"
-					/>
-				</div>
-			{/if}
-
-			<div class="grid gap-2">
-				<Label for="printer-station" class="text-sm font-semibold">{t.create.station}</Label>
-				<Input
-					id="printer-station"
-					bind:value={station}
-					placeholder={t.create.stationPlaceholder}
-				/>
-			</div>
-
-			<div class="grid gap-2">
-				<Label for="printer-host-kind" class="text-sm font-semibold">{t.create.hostKind}</Label>
-				<select
-					id="printer-host-kind"
-					class="h-11 rounded-md border border-input bg-background px-3 text-sm"
-					value={hostKind}
-					onchange={(event) => (hostKind = event.currentTarget.value as PrintHostKind)}
-				>
-					<option value="standalone">{t.create.hostKinds.standalone}</option>
-					<option value="kiosk">{t.create.hostKinds.kiosk}</option>
-				</select>
-			</div>
-
-			{#if hostKind === 'kiosk' && shelterCode}
-				<div class="grid gap-2">
-					<Label for="printer-kiosk-device" class="text-sm font-semibold">
-						{t.create.kioskDevice}
+					<Label for="printer-device-id" class="text-sm font-semibold">
+						{t.create.deviceId} <span class="text-destructive">*</span>
 					</Label>
-					<KioskDeviceSelect
-						id="printer-kiosk-device"
-						bind:value={kioskDeviceId}
-						devices={kioskDevices}
-						{shelterCode}
-						noneLabel={t.create.kioskDeviceNone}
+					<Input
+						id="printer-device-id"
+						bind:value={deviceId}
+						placeholder={t.create.deviceIdPlaceholder}
+						autocomplete="off"
 					/>
-					<p class="text-xs text-muted-foreground">{t.create.kioskDeviceHint}</p>
+					<p class="text-xs text-muted-foreground">{t.create.deviceIdHint}</p>
 				</div>
-			{/if}
-		</div>
 
-		<Dialog.Footer class="gap-2 sm:gap-0">
-			<Button variant="outline" onclick={() => handleOpenChange(false)}>{t.create.cancel}</Button>
-			<Button onclick={handleCreate} disabled={createMutation.isPending}>
-				{createMutation.isPending ? t.create.submitting : t.create.submit}
-			</Button>
-		</Dialog.Footer>
+				<div class="grid gap-2">
+					<Label for="printer-name" class="text-sm font-semibold">
+						{t.create.name} <span class="text-destructive">*</span>
+					</Label>
+					<Input
+						id="printer-name"
+						bind:value={name}
+						placeholder={t.create.namePlaceholder}
+						maxlength={80}
+					/>
+				</div>
+
+				{#if fixedShelterCode === null}
+					<div class="grid gap-2">
+						<span class="text-sm font-semibold">
+							{t.create.shelter} <span class="text-destructive">*</span>
+						</span>
+						<ShelterScopeSelect
+							allowedCodes={null}
+							bind:value={pickedShelterCode}
+							ariaLabel={t.create.shelterAria}
+						/>
+					</div>
+				{/if}
+
+				<div class="grid gap-2">
+					<Label for="printer-station" class="text-sm font-semibold">{t.create.station}</Label>
+					<Input
+						id="printer-station"
+						bind:value={station}
+						placeholder={t.create.stationPlaceholder}
+					/>
+				</div>
+
+				<div class="grid gap-2">
+					<Label for="printer-host-kind" class="text-sm font-semibold">{t.create.hostKind}</Label>
+					<select
+						id="printer-host-kind"
+						class="h-11 rounded-md border border-input bg-background px-3 text-sm"
+						value={hostKind}
+						onchange={(event) => (hostKind = event.currentTarget.value as PrintHostKind)}
+					>
+						<option value="standalone">{t.create.hostKinds.standalone}</option>
+						<option value="kiosk">{t.create.hostKinds.kiosk}</option>
+					</select>
+				</div>
+
+				{#if hostKind === 'kiosk' && shelterCode}
+					<div class="grid gap-2">
+						<Label for="printer-kiosk-device" class="text-sm font-semibold">
+							{t.create.kioskDevice}
+						</Label>
+						<KioskDeviceSelect
+							id="printer-kiosk-device"
+							bind:value={kioskDeviceId}
+							devices={kioskDevices}
+							{shelterCode}
+							noneLabel={t.create.kioskDeviceNone}
+						/>
+						<p class="text-xs text-muted-foreground">{t.create.kioskDeviceHint}</p>
+					</div>
+				{/if}
+			</div>
+
+			<Dialog.Footer class="gap-2 sm:gap-0">
+				<Button type="button" variant="outline" onclick={() => handleOpenChange(false)}>
+					{t.create.cancel}
+				</Button>
+				<Button type="submit" disabled={createMutation.isPending}>
+					{createMutation.isPending ? t.create.submitting : t.create.submit}
+				</Button>
+			</Dialog.Footer>
+		</form>
 	</Dialog.Content>
 </Dialog.Root>
