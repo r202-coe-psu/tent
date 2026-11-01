@@ -69,6 +69,7 @@ export {
 	type PackagingUomOption,
 	type PackagingSource,
 	mergeCatalogGenerations,
+	mergedCatalogIdFor,
 	type CatalogEntry,
 	// Expiry requirement (CR-143 §D)
 	requiresExpiry,

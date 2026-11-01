@@ -3,7 +3,12 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { flushSync, mount, tick, unmount } from 'svelte';
 import CreateCampaignForm from './create-campaign-form.svelte';
 
-const mocks = vi.hoisted(() => ({ roles: ['system_admin'] as string[] }));
+const mocks = vi.hoisted(() => ({
+	roles: ['system_admin'] as string[],
+	/** Legacy `item:` rows (`useSupplyItems`); they win a name clash in the picker. */
+	supply: [] as { _id: string; name: string; unit: string; category: string }[],
+	toastInfo: vi.fn()
+}));
 
 const masters = [
 	{
@@ -22,7 +27,9 @@ const masters = [
 	}
 ];
 
-vi.mock('svelte-sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
+vi.mock('svelte-sonner', () => ({
+	toast: { success: vi.fn(), error: vi.fn(), info: mocks.toastInfo }
+}));
 vi.mock('$lib/stores/auth.svelte', () => ({
 	authStore: {
 		get user() {
@@ -31,7 +38,9 @@ vi.mock('$lib/stores/auth.svelte', () => ({
 	}
 }));
 vi.mock('$lib/db/shelter', () => ({ getShelterCode: () => 'SH001' }));
-vi.mock('$lib/features/supply', () => ({ useSupplyItems: () => ({ data: [], isPending: false }) }));
+vi.mock('$lib/features/supply', () => ({
+	useSupplyItems: () => ({ data: mocks.supply, isPending: false })
+}));
 vi.mock('$lib/features/catalog', async (importOriginal) => {
 	const stub = (await import('./__fixtures__/quick-create-item-sheet.fixture.svelte')).default;
 	return {
@@ -70,6 +79,8 @@ afterEach(() => {
 	instance = null;
 	document.body.innerHTML = '';
 	mocks.roles = ['system_admin'];
+	mocks.supply = [];
+	mocks.toastInfo.mockClear();
 });
 
 describe('create campaign form — create a master item', () => {
@@ -117,5 +128,25 @@ describe('create campaign form — create a master item', () => {
 		await click(addButton());
 		await click(q('[data-testid="stub-existing"]'));
 		expect(q<HTMLInputElement>('#campaign-item-title')!.value).toContain('ข้าวสาร');
+	});
+
+	it('selects the legacy row when the new item is named like one', async () => {
+		mocks.supply = [{ _id: 'item:fish-sauce', name: 'น้ำปลา', unit: 'bottle', category: 'food' }];
+		await render();
+		await click(addButton());
+		await click(q('[data-testid="stub-created"]'));
+
+		expect(q<HTMLInputElement>('#campaign-item-title')!.value).toBe('น้ำปลา (ขวด)');
+		expect(mocks.toastInfo).toHaveBeenCalledWith(expect.stringContaining('น้ำปลา'));
+	});
+
+	it('selects the legacy twin of an existing item without a notice', async () => {
+		mocks.supply = [{ _id: 'item:rice', name: 'ข้าวสาร', unit: 'kg', category: 'food' }];
+		await render();
+		await click(addButton());
+		await click(q('[data-testid="stub-existing"]'));
+
+		expect(q<HTMLInputElement>('#campaign-item-title')!.value).toContain('ข้าวสาร');
+		expect(mocks.toastInfo).not.toHaveBeenCalled();
 	});
 });

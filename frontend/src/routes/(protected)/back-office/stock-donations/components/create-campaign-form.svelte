@@ -16,6 +16,7 @@
 		canWriteShelterCatalog,
 		formatUnit,
 		mergeCatalogGenerations,
+		mergedCatalogIdFor,
 		QuickCreateItemSheet,
 		useItemMasters,
 		useUnitsOfMeasure
@@ -67,9 +68,23 @@
 		createOpen = true;
 	}
 
-	/** Created, or an existing similar item chosen instead: select it in the form. */
-	function pickCreatedItem(item: { _id: string }) {
-		selectedItemId = item._id;
+	/**
+	 * Select an item from the sheet. A master named like a legacy row is merged out of
+	 * `catalogItems`, so the row the picker shows for that name is selected instead.
+	 */
+	function selectFromSheet(item: { _id: string; name: string }): string {
+		selectedItemId = mergedCatalogIdFor(catalogItems, item);
+		return selectedItemId;
+	}
+
+	function pickCreatedItem(item: { _id: string; name: string }) {
+		if (selectFromSheet(item) !== item._id) {
+			toast.info(`มี “${item.name}” ในแคตตาล็อกอยู่แล้ว — เลือกรายการเดิมให้แทน`);
+		}
+	}
+
+	function pickExistingItem(item: { _id: string; name: string }) {
+		selectFromSheet(item);
 	}
 
 	const CATEGORY_OPTIONS = [
@@ -398,6 +413,6 @@
 		bind:open={createOpen}
 		shelterCode={getShelterCode()}
 		onCreated={pickCreatedItem}
-		onUseExisting={pickCreatedItem}
+		onUseExisting={pickExistingItem}
 	/>
 {/if}
