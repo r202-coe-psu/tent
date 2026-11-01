@@ -1,15 +1,16 @@
 ---
-id: draft
+id: CR-221 # renumbered from draft-coordinator-grant-edit-and-roles
 title: ผู้ประสานงานจิตอาสาจัดการบัญชีจิตอาสาได้ครบวงจร — 10 ตำแหน่ง, แก้สิทธิ์, หน้าบัญชีจิตอาสา, พากลับมา, สถานะใน portal และ 1 บัญชีใช้ได้หลายศูนย์
-status: proposed
+status: approved
 date: 2026-10-30
-updated: 2026-11-01
+updated: 2026-11-01 # approved by Soravit Sukkarn (Team Lead)
 requested_by: "@mhapong จากการทดสอบ CR-213 บน develop (2026-10-30) — #1044, #1045"
-decided_by: "รอ @Jackyzaz approve"
+decided_by: Soravit Sukkarn (Team Lead)
+decision_date: 2026-11-01
 layer: stable
 amends: CR-213 (FR-2, FR-3, FR-5, FR-7, FR-8, FR-10, FR-11, FR-12)
 affects:
-  - docs/changes/06-A-volunteer/CR-213-coordinator-limited-access-grant.md (ใส่หมายเหตุ "แก้โดย CR นี้" ที่ FR-2, FR-3, FR-5, FR-7, FR-8, FR-10, FR-11, FR-12)
+  - docs/changes/06-A-volunteer/CR-213-coordinator-limited-access-grant.md (ใส่หมายเหตุ "แก้โดย CR-221" ที่ FR-2, FR-3, FR-5, FR-7, FR-8, FR-10, FR-11, FR-12)
   - docs/data/schema.md §6 `_users` (เพิ่ม `volunteer_profiles`; `_design/tent_guard` ป้องกัน field นี้) — Part B
   - docs/data/api-contract.md (`GET /api/v1/volunteer-access/accounts` ใหม่, `POST` / `DELETE /api/v1/volunteer-access`, `PUT /api/v1/users` field `active`)
   - docs/prd/role-permission-matrix.md (แถว User Management / VC)
@@ -29,7 +30,7 @@ affects:
   - tests: role-grants, volunteer-access-grant, user-service, users-guard-design, volunteer-access-dialog / volunteer-card dom, หน้า accounts, worker test_role_grants, frontend/e2e/volunteer-access-roles.test.ts
 ---
 
-# ผู้ประสานงานจิตอาสาจัดการบัญชีจิตอาสาได้ครบวงจร
+# CR-221 — ผู้ประสานงานจิตอาสาจัดการบัญชีจิตอาสาได้ครบวงจร
 
 > **สรุป (TL;DR):**
 >
@@ -231,3 +232,4 @@ affects:
   - บัญชี `lapsed`: VC เป็นผู้พากลับมา SM ไม่มีปุ่ม (FR-9) — ตัดทาง "SM ออกสิทธิ์อีกครั้งจาก dialog" เพราะต้องเพิ่ม API ให้ SM แตะบัญชีที่ไม่มี scope ศูนย์แล้ว
   - FR-6 ระบุ response ตามที่ทำจริง (`grants` + `permanent_roles` แทน `role` ตัวเดียว)
 - 2026-10-30 — ยกเว้น `volunteer_coordinator` (กันตั้งต่อเป็นทอด), `kiosk_staff`, `shelter_manager` ตามคำขอ
+- 2026-11-01 — approved โดย Soravit Sukkarn (Team Lead) เป็น CR-221
