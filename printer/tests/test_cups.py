@@ -224,3 +224,44 @@ def test_submit_returns_none_when_lp_hangs_past_command_timeout(fake_cups):
     fake_cups.set("lp", out="request id is tent_xprinter-42 (1 file(s))\n", sleep=3)
 
     assert Cups("tent_xprinter", 203, command_timeout=0.2).submit(PNG) is None
+
+
+def test_wait_done_keeps_waiting_when_lpstat_fails_transiently_instead_of_giving_up(fake_cups):
+    """A failed lpstat is unknown, not "job gone": CUPS may still be printing."""
+    fake_cups.set("lpstat_pending", out=PENDING_42)
+    fake_cups.set_nth("lpstat_pending", 1, out="", rc=1)
+    fake_cups.set_nth("lpstat_pending", 2, out="", rc=1)
+    fake_cups.set_nth("lpstat_pending", 3, out="")
+    fake_cups.set("lpstat_completed", out=COMPLETED)
+    clock = FakeClock()
+
+    assert cups_with(clock).wait_done("tent_xprinter-42", timeout_sec=30) == "completed"
+    assert len(clock.sleeps) == 2
+
+
+def test_wait_done_times_out_when_lpstat_keeps_failing(fake_cups):
+    fake_cups.set("lpstat_pending", out="", rc=1)
+    clock = FakeClock()
+
+    result = cups_with(clock).wait_done("tent_xprinter-42", timeout_sec=1, poll_sec=0.25)
+
+    assert result == "timeout"
+
+
+def test_wait_done_does_not_call_a_job_aborted_when_the_completed_listing_cannot_be_read(
+    fake_cups,
+):
+    fake_cups.set("lpstat_pending", out="")
+    fake_cups.set_nth("lpstat_completed", 1, out="", rc=1)
+    fake_cups.set("lpstat_completed", out=COMPLETED)
+    clock = FakeClock()
+
+    assert cups_with(clock).wait_done("tent_xprinter-42", timeout_sec=30) == "completed"
+    assert len(clock.sleeps) == 1
+
+
+def test_wait_done_times_out_when_the_completed_listing_never_becomes_readable(fake_cups):
+    fake_cups.set("lpstat_pending", out="")
+    fake_cups.set("lpstat_completed", out="", rc=1)
+
+    assert cups_with(FakeClock()).wait_done("tent_xprinter-42", timeout_sec=1) == "timeout"

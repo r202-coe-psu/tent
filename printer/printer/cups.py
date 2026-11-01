@@ -74,14 +74,23 @@ class Cups:
         return self.queue_state()
 
     def wait_done(self, job_id: str, timeout_sec: float, poll_sec: float = 0.2) -> str:
+        """completed | aborted | timeout. A CUPS command that fails to answer is "unknown": keep
+        asking until the deadline instead of calling the job over, so a hiccup in lpstat can
+        never turn a job CUPS is still printing into a failure the server would retry."""
         deadline = self._monotonic() + timeout_sec
         while True:
-            pending = self._run(["lpstat", "-W", "not-completed", "-o", self.printer_name])
-            if pending is None or not _lists_job(pending[1], job_id):
-                break
+            outcome = self._outcome(job_id)
+            if outcome is not None:
+                return outcome
             if self._monotonic() >= deadline:
                 return "timeout"
             self._sleep(poll_sec)
+
+    def _outcome(self, job_id: str) -> str | None:
+        """The final outcome of the job, or None while it is running or CUPS cannot say."""
+        pending = self._run(["lpstat", "-W", "not-completed", "-o", self.printer_name])
+        if pending is None or pending[0] != 0 or _lists_job(pending[1], job_id):
+            return None
         # job-state is authoritative; the "Alerts:" text is only a fallback when cupsd's IPP
         # endpoint can't be read (CUPS 2.3.3 shows processing-to-stop-point on printed jobs).
         state = self._job_state(job_id)
@@ -90,7 +99,9 @@ class Cups:
         if state in ("aborted", "canceled"):
             return "aborted"
         completed = self._run(["lpstat", "-l", "-W", "completed", "-o", self.printer_name])
-        alerts = _alerts_for(completed[1], job_id) if completed else ""
+        if completed is None or completed[0] != 0:
+            return None
+        alerts = _alerts_for(completed[1], job_id)
         return "completed" if "job-completed-successfully" in alerts else "aborted"
 
     def cancel(self, job_id: str) -> None:
