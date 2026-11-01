@@ -1,11 +1,12 @@
 ---
-id: draft
+id: CR-220 # renumbered from draft-ticket-quota-release-marker
 title: ยกเลิกการสมัครจากบัตรดิจิทัล — คืนโควตาครั้งเดียวพอดีเมื่อกดซ้ำหลังคืนโควตาล้ม (marker บนใบสมัคร + ledger บน job)
-status: proposed
+status: approved
 date: 2026-10-29
-updated: 2026-10-31
+updated: 2026-11-01 # approved by Soravit Sukkarn (Team Lead)
 requested_by: "#1003 (ผู้เปิด @Mhapong) — follow-up ของ D4 ใน CR-212 (review PR #999 B4)"
-decided_by: รอ approve (@Jackyzaz)
+decided_by: Soravit Sukkarn (Team Lead)
+decision_date: 2026-11-01
 layer: volatile
 affects:
   - docs/changes/06-A-volunteer/CR-212-ticket-cancel-rules.md (FR-3 แถว "รวมยกเลิกซ้ำ", FR-4 ทั้งข้อรวม "ข้อจำกัดที่รู้ — โควตาขาด 1", AC-2, AC-3)
@@ -25,7 +26,7 @@ why: กดยกเลิกซ้ำหลังคืนโควตาล้
 migration: เพิ่ม field แบบ optional ทั้งหมด อ่าน doc เดิมโดยถือว่าไม่มี marker (ความหมายเดียวกับพฤติกรรมเดิม) ไม่ backfill — ดู §Migration
 ---
 
-# draft-ticket-quota-release-marker — คืนโควตาครั้งเดียวพอดีเมื่อยกเลิกบัตรซ้ำ
+# CR-220 — คืนโควตาครั้งเดียวพอดีเมื่อยกเลิกบัตรซ้ำ
 
 > **สรุป (TL;DR):**
 >
@@ -136,7 +137,7 @@ migration: เพิ่ม field แบบ optional ทั้งหมด อ่
   - ไม่เพิ่มกฎ VDU (write-once / append-only) — เจ้าหน้าที่แก้ตัวนับโควตาเองได้อยู่แล้ว กฎเพิ่มไม่ปิดช่องจริง
 - **worker / Mongo / FastAPI:** projector ของ 3 type เลือก field แบบ whitelist field ใหม่ไม่ถูก project ไม่ bump `PROJECTION_VERSION` ไม่ต้อง regenerate OpenAPI
 - **ขนาด ledger:** `released_application_ids` โตตามจำนวนใบที่ยกเลิกจากบัตรต่องาน (หลักสิบ) ไม่ต้องตัดทิ้ง
-- **CR-212:** แก้ FR-3, FR-4, AC-2, AC-3 ตามตาราง before → after เมื่อ draft นี้ approve
+- **CR-212:** แก้ FR-3, FR-4, AC-2, AC-3 ตามตาราง before → after เมื่อ CR นี้ approved
 - **`schema_v` ของ `shift_assignment`:** 5 → 6 — CR ของ #885 ที่เคย bump เลขเดียวกันถูกยกเลิกแล้ว (2026-10-30) จึงไม่ชน
 - **follow-up:** เปิด issue แยกสำหรับถอนตัวจาก portal ที่คืนโควตาล้ม (FR-10)
 
@@ -161,4 +162,4 @@ migration: เพิ่ม field แบบ optional ทั้งหมด อ่
   - VDU — ไม่เพิ่มกฎ (ตัดทิ้ง: write-once / append-only)
   - schema_v — bump ทั้ง 3 type: `job_application` 3→4, `shift_assignment` 5→6, `job` 3→4; `job` Zod literal รับ 4 ใน PR เดียวกัน (ตัดทิ้ง: additive ไม่ bump)
 - 2026-10-31 — แก้ตาม review ของ @Jackyzaz (PR #1031): B1 `digital-pass.svelte` แสดงปุ่มตาม `can_cancel` อย่างเดียว (FR-7, AC-9) · W1 `JobRemoteRepository#update` merge `released_application_ids` แบบ union (FR-9, AC-7) · S1 ชื่อ factory `makeJob` / `makeJobApplication` / `makeShiftAssignment` · S2 `jobSchema` `.default([])` · N1 `save` → `update` · ตัดหมายเหตุชน `schema_v` กับ #885 (ยกเลิกแล้ว)
-- รอ approve จาก @Jackyzaz
+- 2026-11-01 — approved by Soravit Sukkarn (Team Lead) · รันเลข CR-220 (renumbered from draft-ticket-quota-release-marker) ย้ายเข้า 06-A-volunteer/
