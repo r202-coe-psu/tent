@@ -169,6 +169,18 @@ describe('sortRows', () => {
 		expect(sortRows([a, b, c], 'urgency').map((r) => r._id)).toEqual(['c', 'b', 'a']);
 	});
 
+	it('AC-X9: orders a bare-date expiry after an earlier instant on the same Bangkok day', () => {
+		const dateOnly = row({ _id: 'a', name: 'ก', status: 'low', earliestExpiry: '2026-10-23' });
+		const noon = row({
+			_id: 'b',
+			name: 'ข',
+			status: 'low',
+			earliestExpiry: '2026-10-23T12:00:00+07:00'
+		});
+		expect(sortRows([dateOnly, noon], 'urgency').map((r) => r._id)).toEqual(['b', 'a']);
+		expect(sortRows([noon, dateOnly], 'urgency').map((r) => r._id)).toEqual(['b', 'a']);
+	});
+
 	it('sorts by name in Thai order and by least stock first', () => {
 		const a = row({ _id: 'a', name: 'ข', qtyOnHand: '5' });
 		const b = row({ _id: 'b', name: 'ก', qtyOnHand: '50' });

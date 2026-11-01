@@ -72,6 +72,9 @@
 			>
 			<span class="text-xs text-slate-500">{row.unitLabel}</span>
 		</p>
+		{#if row.usableNote}
+			<p class="mt-0.5 text-xs font-semibold text-red-800 tabular-nums">{row.usableNote}</p>
+		{/if}
 		<div class="mt-1.5">
 			<StockBar onHand={row.qtyOnHand} threshold={row.reorderThreshold} {caption} />
 		</div>

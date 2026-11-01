@@ -23,6 +23,7 @@
 		type CycleCountEntry,
 		type CycleCountLineResult
 	} from '../domain/cycle-count';
+	import { expiryInstant, isExpiryPassed } from '../domain/expiry-instant';
 	import { ADJUST_NOTE_MAX_LENGTH, type StockLedger } from '../domain/operations';
 
 	let {
@@ -47,6 +48,12 @@
 	const groups = $derived(groupLotsByStorage(counted.lots, storagePoints.points));
 	const brokenItemNames = $derived(
 		counted.brokenItemIds.map((id) => itemsById.get(id)?.name ?? id).join(', ')
+	);
+	const negativeLotNotes = $derived(
+		counted.negativeLots.map((lot) => ({
+			key: lot.lot_ref,
+			text: `${itemsById.get(lot.item_id)?.name ?? lot.item_id} ${lot.qty} ${lot.unit}`
+		}))
 	);
 
 	/**
@@ -77,10 +84,9 @@
 
 	function formatExpiry(expiry: string | undefined): string {
 		if (!expiry) return 'ไม่ระบุวันหมดอายุ';
-		const date = new Date(expiry);
-		if (Number.isNaN(date.getTime())) return expiry;
+		if (Number.isNaN(expiryInstant(expiry))) return expiry;
 		const label = formatThaiShortDate(expiry) || expiry;
-		return date.getTime() <= Date.now() ? `หมดอายุแล้ว ${label}` : `หมดอายุ ${label}`;
+		return isExpiryPassed(expiry, Date.now()) ? `หมดอายุแล้ว ${label}` : `หมดอายุ ${label}`;
 	}
 
 	function startCount(storageKey: string) {
@@ -169,6 +175,20 @@
 	>
 		ไม่ได้รวมในการตรวจนับ เพราะประวัติคลังคำนวณยอดรายล็อตไม่ได้: {brokenItemNames} — กรุณาแจ้งผู้ดูแลระบบ
 	</p>
+{/if}
+
+{#if negativeLotNotes.length > 0}
+	<div
+		class="mb-4 rounded-xl border border-red-200 bg-red-50 p-3 text-xs font-semibold text-red-900"
+		role="alert"
+	>
+		<p>ล็อตนี้ยอดติดลบ — ต้องแก้ยอด (ไม่ถูกรวมในการตรวจนับ และห้ามเบิกจากล็อตนี้):</p>
+		<ul class="mt-1 list-disc pl-5">
+			{#each negativeLotNotes as negative (negative.key)}
+				<li class="tabular-nums">{negative.text}</li>
+			{/each}
+		</ul>
+	</div>
 {/if}
 
 {#if activeGroupLabel === null}

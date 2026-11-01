@@ -3,38 +3,54 @@
 	import * as Table from '$lib/components/ui/table/index.js';
 	import { Badge } from '$lib/components/ui/badge/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
-	import { Input } from '$lib/components/ui/input/index.js';
+	import { Checkbox } from '$lib/components/ui/checkbox/index.js';
+	import { Textarea } from '$lib/components/ui/textarea/index.js';
 	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
 	import AlertTriangle from '@lucide/svelte/icons/alert-triangle';
 	import Ban from '@lucide/svelte/icons/ban';
 	import CheckCircle2 from '@lucide/svelte/icons/check-circle-2';
 	import XCircle from '@lucide/svelte/icons/x-circle';
 	import Archive from '@lucide/svelte/icons/archive';
+	import RotateCw from '@lucide/svelte/icons/rotate-cw';
 	import Send from '@lucide/svelte/icons/send';
+	import Undo2 from '@lucide/svelte/icons/undo-2';
 	import Clock from '@lucide/svelte/icons/clock';
 	import User from '@lucide/svelte/icons/user';
+	import type { Component } from 'svelte';
 	import { useQueryClient } from '@tanstack/svelte-query';
 	import { toast } from 'svelte-sonner';
-	import { useEvacuees, zoneLabel } from '$lib/features/people';
+	import { SvelteSet } from 'svelte/reactivity';
 	import { getShelterCode } from '$lib/db/shelter';
-	import { shelterStore } from '$lib/stores/shelter.svelte';
-	import { useShelter } from '$lib/features/shelters';
 	import type { Referral, ReferralStatus } from '../domain/referral.schema';
-	import type { ReferralBatchFailure } from '../data/referral.repository';
-	import { canTransition } from '../domain/referral.transitions';
+	import type {
+		ReferralBatchFailure,
+		ReferralBulkTransitionResult
+	} from '../data/referral.repository';
 	import {
-		canActorRespond,
+		REFERRAL_ACTIONS,
+		REFERRAL_REASON_MAX_LENGTH,
+		getCommonActions,
+		getReferralActions,
+		getRowSelectability,
+		getSelectAllIds,
+		type ReferralActionKey,
+		type ReferralActionMeta
+	} from '../domain/referral.bulk-actions';
+	import {
 		isIncomingCapacityReferral,
 		isOutgoingCapacityReferral
 	} from '../domain/referral.authorization';
-	import { useTransitionReferral } from '../application/queries';
+	import { useBulkTransition } from '../application/queries';
+	import ReferralConfirmDialog from './referral-confirm-dialog.svelte';
 	import {
 		formatReferralDate,
 		getKindLabel,
 		getStatusBadgeVariant,
 		getStatusLabel,
 		getUrgencyLabel,
-		getUrgencyStyle
+		getUrgencyStyle,
+		isRowActivationKey,
+		resolveEvacueeName
 	} from './referral.ui-helpers';
 
 	let {
@@ -48,25 +64,19 @@
 		referrals: Referral[];
 		failed?: ReferralBatchFailure[];
 		onBack?: () => void;
-		/** `created` = post-create result; `view` = open batch from list */
+		/** `created` = post-create result; `view` = open batch from list (selection + bulk actions) */
 		mode?: 'created' | 'view';
 		onSelectReferral?: (id: string) => void;
 		selectedId?: string | null;
 	} = $props();
 
 	const queryClient = useQueryClient();
-	const transitionMutation = useTransitionReferral(queryClient);
-	const evacueesQuery = useEvacuees();
-	const shelterQuery = useShelter(() => shelterStore.selectedShelterCode ?? getShelterCode());
-	const shelterZones = $derived(shelterQuery.data?.zones ?? []);
+	const bulk = useBulkTransition(queryClient);
+	const progress = bulk.progress;
 	const actorShelter = $derived(getShelterCode());
 
-	/** Local status overrides after transitions (avoids $effect ↔ $state write). */
-	let overrides = $state<Record<string, Referral>>({});
-	let responseReasonInput = $state('');
-	let pendingAction = $state<{ to: 'accepted' | 'rejected'; ids: string[] } | null>(null);
-
-	const items = $derived(referrals.map((r) => overrides[r._id] ?? r));
+	/** Members straight from the parent's query; transitions patch that cache, so no local copy. */
+	const items = $derived(referrals);
 
 	const sample = $derived(items[0] ?? null);
 
@@ -91,123 +101,161 @@
 		items.some((r) => isOutgoingCapacityReferral(r, actorShelter) && r.status === 'sent')
 	);
 
-	function canCancelDraft(referral: Referral): boolean {
-		if (!canTransition(referral.status, 'closed') || referral.status !== 'draft') {
-			return false;
-		}
-		if (referral.referral_type === 'capacity') {
-			return isOutgoingCapacityReferral(referral, actorShelter);
-		}
-		return true;
-	}
-
-	function canSend(referral: Referral): boolean {
-		return (
-			canTransition(referral.status, 'sent') &&
-			(referral.referral_type !== 'capacity' || isOutgoingCapacityReferral(referral, actorShelter))
-		);
-	}
-
-	function canAccept(referral: Referral): boolean {
-		return canActorRespond(referral, actorShelter) && canTransition(referral.status, 'accepted');
-	}
-
-	function canReject(referral: Referral): boolean {
-		return canActorRespond(referral, actorShelter) && canTransition(referral.status, 'rejected');
-	}
-
-	function canCloseNonDraft(referral: Referral): boolean {
-		return (
-			canTransition(referral.status, 'closed') &&
-			referral.status !== 'draft' &&
-			(referral.referral_type !== 'capacity' || isOutgoingCapacityReferral(referral, actorShelter))
-		);
-	}
-
-	function hasRowActions(referral: Referral): boolean {
-		return (
-			canCancelDraft(referral) || canSend(referral) || canAccept(referral) || canReject(referral)
-		);
-	}
-
-	const sendable = $derived(items.filter(canSend));
-	const acceptable = $derived(items.filter(canAccept));
-	const rejectable = $derived(items.filter(canReject));
-	const cancelableDrafts = $derived(items.filter(canCancelDraft));
-	const closeable = $derived(items.filter(canCloseNonDraft));
-
-	const showBatchActions = $derived(
-		sendable.length > 0 ||
-			acceptable.length > 0 ||
-			rejectable.length > 0 ||
-			cancelableDrafts.length > 0 ||
-			closeable.length > 0
+	/** Display names by referral id, built once per `items` change (from each `evacuee_summary`). */
+	const nameById = $derived(
+		new Map(items.map((r) => [r._id, resolveEvacueeName(r.evacuee_summary)] as const))
 	);
 
-	function evacueeName(evacueeId: string, referral?: Referral): string {
-		const found = evacueesQuery.data?.find((e) => e._id === evacueeId);
-		if (found) return `${found.first_name} ${found.last_name}`;
-		if (referral?.evacuee_summary) {
-			return `${referral.evacuee_summary.first_name} ${referral.evacuee_summary.last_name}`;
+	function evacueeName(referral: Referral): string {
+		return nameById.get(referral._id) ?? resolveEvacueeName(referral.evacuee_summary);
+	}
+
+	// --- Selection (batch page only): one status at a time, only rows that have an action. ---
+	const selectionEnabled = $derived(mode === 'view');
+	const selected = new SvelteSet<string>();
+
+	const actionsById = $derived(
+		new Map(items.map((r) => [r._id, getReferralActions(r, actorShelter)] as const))
+	);
+	const selectedStatus = $derived<ReferralStatus | null>(
+		items.find((r) => selected.has(r._id))?.status ?? null
+	);
+	const selectedItems = $derived(
+		items.filter((r) => selected.has(r._id) && r.status === selectedStatus)
+	);
+	const commonActions = $derived(getCommonActions(selectedItems, actorShelter));
+	const selectAllIds = $derived(getSelectAllIds(items, selectedStatus, actorShelter));
+	const allSelected = $derived(
+		selectAllIds.length > 0 && selectAllIds.every((id) => selected.has(id))
+	);
+	const selectAllStatus = $derived(items.find((r) => r._id === selectAllIds[0])?.status ?? null);
+
+	function toggle(id: string, checked: boolean) {
+		if (checked) selected.add(id);
+		else selected.delete(id);
+	}
+
+	function clearSelection() {
+		selected.clear();
+	}
+
+	function toggleAll() {
+		const ids = selectAllIds;
+		const everySelected = allSelected;
+		selected.clear();
+		if (!everySelected) for (const id of ids) selected.add(id);
+	}
+
+	// --- Actions: every one (bulk or single row) confirms, then goes through the bulk hook. ---
+	const confirmTitles: Record<ReferralActionKey, string> = {
+		send: 'ยืนยันการส่งตัว',
+		cancel_draft: 'ยืนยันการยกเลิกร่าง',
+		withdraw: 'ยืนยันการถอนคำขอ',
+		close: 'ยืนยันการปิดรายการ',
+		accept: 'ยืนยันการตอบรับ',
+		reject: 'ยืนยันการปฏิเสธ'
+	};
+	const confirmLabels: Record<ReferralActionKey, string> = {
+		send: 'ส่งตัว',
+		cancel_draft: 'ยกเลิกร่าง',
+		withdraw: 'ถอนคำขอ',
+		close: 'ปิดรายการ',
+		accept: 'ยืนยันตอบรับ',
+		reject: 'ยืนยันปฏิเสธ'
+	};
+	const actionIcons: Record<ReferralActionKey, Component> = {
+		send: Send,
+		cancel_draft: Ban,
+		withdraw: Undo2,
+		close: Archive,
+		accept: CheckCircle2,
+		reject: XCircle
+	};
+	const actionClasses: Record<ReferralActionKey, string> = {
+		send: '',
+		accept: 'bg-emerald-600 text-white hover:bg-emerald-700',
+		reject: 'border-rose-300 text-rose-600 hover:bg-rose-50',
+		cancel_draft: 'border-rose-300 text-rose-700 hover:bg-rose-50',
+		withdraw: 'border-rose-300 text-rose-700 hover:bg-rose-50',
+		close: 'border-slate-300 text-slate-700 hover:bg-slate-50'
+	};
+
+	type ConfirmRequest = { action: ReferralActionMeta; ids: string[]; names: string[] };
+	let confirmOpen = $state(false);
+	let confirmRequest = $state.raw<ConfirmRequest | null>(null);
+	let reasonInput = $state('');
+	/** Action of the run whose progress/result the bar shows (kept for the retry toast). */
+	let runAction = $state.raw<ReferralActionMeta | null>(null);
+
+	function askConfirm(action: ReferralActionMeta, list: Referral[]) {
+		reasonInput = '';
+		confirmRequest = { action, ids: list.map((r) => r._id), names: list.map(evacueeName) };
+		confirmOpen = true;
+	}
+
+	function notify(action: ReferralActionMeta, result: ReferralBulkTransitionResult | undefined) {
+		if (!result) return;
+		if (result.failed.length === 0) {
+			toast.success(`${action.toastLabel}สำเร็จ ${result.succeeded.length} รายการ`);
+			progress.reset();
+		} else {
+			toast.error(
+				`${action.toastLabel}สำเร็จ ${progress.succeeded} / ล้มเหลว ${progress.failed.length} จาก ${progress.total}`
+			);
 		}
-		return evacueeId;
 	}
 
-	function evacueeZone(evacueeId: string): string {
-		const found = evacueesQuery.data?.find((e) => e._id === evacueeId);
-		return zoneLabel(found?.current_stay?.zone, shelterZones);
+	async function execute(ids: string[], action: ReferralActionMeta, reason?: string) {
+		runAction = action;
+		try {
+			notify(action, await bulk.run(ids, action.to, reason));
+		} catch (e) {
+			toast.error(e instanceof Error ? e.message : 'เกิดข้อผิดพลาดในการเปลี่ยนสถานะ');
+		}
 	}
 
-	async function runBatchTransition(
-		ids: string[],
-		to: ReferralStatus,
-		label: string,
-		reason?: string
-	) {
-		await toast.promise(
-			(async () => {
-				let succeeded = 0;
-				let failedCount = 0;
-				for (const id of ids) {
-					try {
-						const updated = await transitionMutation.mutateAsync({ id, to, reason });
-						overrides = { ...overrides, [updated._id]: updated };
-						succeeded++;
-					} catch {
-						failedCount++;
-					}
-				}
-				return { succeeded, failedCount, total: ids.length };
-			})(),
-			{
-				loading: `กำลัง${label} ${ids.length} รายการ...`,
-				success: (r) =>
-					r.failedCount === 0
-						? `${label}สำเร็จ ${r.succeeded} รายการ`
-						: `${label}สำเร็จ ${r.succeeded} / ล้มเหลว ${r.failedCount} จาก ${r.total}`,
-				error: (err) => (err instanceof Error ? err.message : 'เกิดข้อผิดพลาดในการเปลี่ยนสถานะ')
-			}
-		);
+	async function retryFailed() {
+		const action = runAction;
+		if (!action) return;
+		try {
+			notify(action, await bulk.retryFailed());
+		} catch (e) {
+			toast.error(e instanceof Error ? e.message : 'เกิดข้อผิดพลาดในการเปลี่ยนสถานะ');
+		}
 	}
 
-	function triggerActionWithReason(to: 'accepted' | 'rejected', ids: string[]) {
-		pendingAction = { to, ids };
-		responseReasonInput = '';
+	/** Starts the run without awaiting it, so the dialog closes and the sticky bar shows progress. */
+	function confirmRun() {
+		const request = confirmRequest;
+		if (!request) return;
+		const reason = request.action.asksReason ? reasonInput.trim() || undefined : undefined;
+		clearSelection();
+		void execute(request.ids, request.action, reason);
 	}
 
-	async function submitWithReason() {
-		if (!pendingAction) return;
-		const { to, ids } = pendingAction;
-		const label = to === 'accepted' ? 'ตอบรับ' : 'ปฏิเสธ';
-		await runBatchTransition(ids, to, label, responseReasonInput.trim());
-		pendingAction = null;
-		responseReasonInput = '';
-	}
-
-	async function cancelDraft(referral: Referral) {
-		await runBatchTransition([referral._id], 'closed', 'ยกเลิกร่าง');
-	}
+	const busy = $derived(bulk.mutation.isPending);
+	const showBar = $derived(
+		selectionEnabled && (selectedItems.length > 0 || progress.phase !== 'idle')
+	);
 </script>
+
+{#snippet actionButton(
+	action: ReferralActionMeta,
+	onclick: (e: MouseEvent) => void,
+	compact: boolean
+)}
+	{@const Icon = actionIcons[action.key]}
+	<Button
+		size={compact ? 'sm' : 'default'}
+		variant={action.key === 'send' || action.key === 'accept' ? 'default' : 'outline'}
+		class="gap-1.5 {compact ? '' : 'h-11 px-4'} {actionClasses[action.key]}"
+		disabled={busy}
+		{onclick}
+	>
+		<Icon class="h-4 w-4" />
+		{action.label}
+	</Button>
+{/snippet}
 
 <div class="flex flex-col pb-4">
 	<div class="space-y-6">
@@ -253,7 +301,7 @@
 				class="rounded-lg border border-emerald-300 bg-emerald-50 px-4 py-3 text-sm text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-100"
 				role="status"
 			>
-				คำขอย้ายเข้าจากศูนย์ <span class="font-mono font-semibold">{sample.shelter_code}</span>
+				คำขอย้ายเข้าจากศูนย์ <span class="font-semibold tabular-nums">{sample.shelter_code}</span>
 				({incomingSent.length} คน) — ตอบรับแล้วระบบจะย้ายผู้เข้าพักเข้าศูนย์นี้ (occupancy สองฝั่งจะอัปเดตหลังตอบรับเท่านั้น)
 			</div>
 		{/if}
@@ -264,7 +312,7 @@
 				role="status"
 			>
 				รอศูนย์ปลายทาง
-				<span class="font-mono font-semibold">{sample.to_shelter_code}</span>
+				<span class="font-semibold tabular-nums">{sample.to_shelter_code}</span>
 				ตอบรับหรือปฏิเสธ — การย้ายศูนย์จะเกิดขึ้นเมื่อปลายทางกดตอบรับเท่านั้น
 			</div>
 		{/if}
@@ -282,7 +330,7 @@
 					</div>
 					<div class="space-y-1">
 						<p class="text-xs font-medium text-muted-foreground">ปลายทาง</p>
-						<p class="font-mono text-sm font-semibold">{destinationLabel}</p>
+						<p class="text-sm font-semibold tabular-nums">{destinationLabel}</p>
 					</div>
 					<div class="space-y-1">
 						<p class="text-xs font-medium text-muted-foreground">ความเร่งด่วน</p>
@@ -441,7 +489,7 @@
 				<ul class="list-inside list-disc space-y-1 text-xs">
 					{#each failed as item (item.evacuee_id)}
 						<li>
-							<span class="font-medium">{evacueeName(item.evacuee_id)}</span>
+							<span class="font-medium tabular-nums">{item.evacuee_id}</span>
 							— {item.error}
 						</li>
 					{/each}
@@ -450,12 +498,32 @@
 		{/if}
 
 		{#if items.length > 0}
+			{#if selectionEnabled && selectAllIds.length > 0}
+				<div class="flex min-h-11 flex-wrap items-center gap-x-4 gap-y-1">
+					<label class="inline-flex min-h-11 cursor-pointer items-center gap-2 text-sm font-medium">
+						<Checkbox
+							checked={allSelected}
+							indeterminate={selected.size > 0 && !allSelected}
+							disabled={busy}
+							onCheckedChange={toggleAll}
+						/>
+						เลือกทั้งหมด
+						<span class="font-normal text-muted-foreground tabular-nums">
+							({selectAllIds.length}{selectAllStatus
+								? ` · ${getStatusLabel(selectAllStatus)}`
+								: ''})
+						</span>
+					</label>
+				</div>
+			{/if}
 			<div class="overflow-hidden rounded-lg border border-border/80">
 				<Table.Root>
 					<Table.Header>
 						<Table.Row class="bg-muted/40 hover:bg-muted/40">
+							{#if selectionEnabled}
+								<Table.Head class="w-12"><span class="sr-only">เลือก</span></Table.Head>
+							{/if}
 							<Table.Head class="font-semibold text-foreground">ชื่อผู้เข้าพัก</Table.Head>
-							<Table.Head class="font-semibold text-foreground">โซน</Table.Head>
 							<Table.Head class="font-semibold text-foreground">สถานะ</Table.Head>
 							<Table.Head class="font-semibold text-foreground">สร้างเมื่อ</Table.Head>
 							<Table.Head class="font-semibold text-foreground">ID</Table.Head>
@@ -464,17 +532,51 @@
 					</Table.Header>
 					<Table.Body>
 						{#each items as referral (referral._id)}
+							{@const rowActions = actionsById.get(referral._id) ?? []}
+							{@const selectability = getRowSelectability(referral, selectedStatus, actorShelter)}
 							<Table.Row
-								class="transition-colors hover:bg-muted/20
+								class="transition-colors hover:bg-muted/20 focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:outline-none focus-visible:ring-inset
 							{onSelectReferral ? 'cursor-pointer' : ''}
 							{selectedId === referral._id ? 'bg-primary/5 ring-1 ring-primary/20 ring-inset' : ''}"
+								tabindex={onSelectReferral ? 0 : undefined}
+								aria-selected={onSelectReferral ? selectedId === referral._id : undefined}
 								onclick={() => onSelectReferral?.(referral._id)}
+								onkeydown={(e) => {
+									if (
+										isRowActivationKey({ key: e.key, isOwnTarget: e.target === e.currentTarget })
+									) {
+										e.preventDefault();
+										onSelectReferral?.(referral._id);
+									}
+								}}
 							>
+								{#if selectionEnabled}
+									<Table.Cell class="w-12">
+										{#if selectability !== 'no-actions'}
+											<Checkbox
+												class="relative size-5 before:absolute before:-inset-3 before:content-['']"
+												checked={selected.has(referral._id)}
+												disabled={busy || selectability === 'other-status'}
+												aria-label="เลือก {evacueeName(referral)}"
+												aria-describedby={selectability === 'other-status'
+													? `sel-hint-${referral._id}`
+													: undefined}
+												onclick={(e) => e.stopPropagation()}
+												onCheckedChange={(checked) => toggle(referral._id, checked === true)}
+											/>
+										{/if}
+									</Table.Cell>
+								{/if}
 								<Table.Cell class="font-semibold text-foreground">
-									{evacueeName(referral.evacuee_id, referral)}
-								</Table.Cell>
-								<Table.Cell class="text-muted-foreground">
-									{evacueeZone(referral.evacuee_id)}
+									{evacueeName(referral)}
+									{#if selectionEnabled && selectability === 'other-status'}
+										<span
+											id="sel-hint-{referral._id}"
+											class="block text-xs font-normal text-muted-foreground"
+										>
+											สถานะต่างจากที่เลือก
+										</span>
+									{/if}
 								</Table.Cell>
 								<Table.Cell>
 									<span
@@ -489,73 +591,24 @@
 									{formatReferralDate(referral.created_at)}
 								</Table.Cell>
 								<Table.Cell
-									class="max-w-[10rem] truncate font-mono text-xs text-muted-foreground"
+									class="max-w-[10rem] truncate text-xs text-muted-foreground tabular-nums"
 									title={referral._id}
 								>
 									{referral._id}
 								</Table.Cell>
 								<Table.Cell class="text-center">
-									{#if hasRowActions(referral)}
+									{#if rowActions.length > 0}
 										<div class="flex flex-wrap items-center justify-center gap-1.5">
-											{#if canSend(referral)}
-												<Button
-													size="sm"
-													variant="default"
-													class="gap-1"
-													disabled={transitionMutation.isPending}
-													onclick={(e) => {
+											{#each rowActions as key (key)}
+												{@render actionButton(
+													REFERRAL_ACTIONS[key],
+													(e) => {
 														e.stopPropagation();
-														runBatchTransition([referral._id], 'sent', 'ส่งตัว');
-													}}
-												>
-													<Send class="h-3.5 w-3.5" />
-													ส่ง
-												</Button>
-											{/if}
-											{#if canAccept(referral)}
-												<Button
-													size="sm"
-													class="gap-1 bg-emerald-600 text-white hover:bg-emerald-700"
-													disabled={transitionMutation.isPending}
-													onclick={(e) => {
-														e.stopPropagation();
-														triggerActionWithReason('accepted', [referral._id]);
-													}}
-												>
-													<CheckCircle2 class="h-3.5 w-3.5" />
-													ตอบรับ
-												</Button>
-											{/if}
-											{#if canReject(referral)}
-												<Button
-													size="sm"
-													variant="outline"
-													class="gap-1 border-rose-300 text-rose-600 hover:bg-rose-50"
-													disabled={transitionMutation.isPending}
-													onclick={(e) => {
-														e.stopPropagation();
-														triggerActionWithReason('rejected', [referral._id]);
-													}}
-												>
-													<XCircle class="h-3.5 w-3.5" />
-													ปฏิเสธ
-												</Button>
-											{/if}
-											{#if canCancelDraft(referral)}
-												<Button
-													size="sm"
-													variant="outline"
-													class="gap-1.5 border-rose-300 text-rose-700 hover:bg-rose-50"
-													disabled={transitionMutation.isPending}
-													onclick={(e) => {
-														e.stopPropagation();
-														cancelDraft(referral);
-													}}
-												>
-													<Ban class="h-3.5 w-3.5" />
-													ยกเลิกร่าง
-												</Button>
-											{/if}
+														askConfirm(REFERRAL_ACTIONS[key], [referral]);
+													},
+													true
+												)}
+											{/each}
 										</div>
 									{:else}
 										<span class="text-xs text-muted-foreground">—</span>
@@ -571,138 +624,117 @@
 		{/if}
 	</div>
 
-	{#if showBatchActions || pendingAction}
+	{#if showBar}
 		<div
-			class="shrink-0 border-t border-border/80 bg-background/95 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur-md supports-[backdrop-filter]:bg-background/90"
+			class="sticky bottom-0 z-10 mt-4 border-t border-border/80 bg-background/95 px-3 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur-md supports-[backdrop-filter]:bg-background/90"
 		>
 			<div class="space-y-3">
-				{#if pendingAction}
-					<div class="space-y-3 rounded-lg border border-primary/40 bg-primary/5 p-3">
-						<h4 class="text-sm font-semibold text-foreground">
-							ระบุเหตุผลการ{pendingAction.to === 'accepted' ? 'ตอบรับ' : 'ปฏิเสธ'} (Response Reason)
-							{#if pendingAction.ids.length > 1}
-								<span class="font-normal text-muted-foreground">
-									— {pendingAction.ids.length} รายการ
-								</span>
+				{#if progress.phase !== 'idle'}
+					<div class="space-y-2 rounded-lg border border-border/80 bg-card p-3">
+						<p aria-live="polite" class="text-sm font-semibold tabular-nums">
+							สำเร็จ {progress.succeeded} / {progress.total}
+							{#if progress.failed.length > 0}
+								<span class="font-normal text-rose-700"> · ล้มเหลว {progress.failed.length}</span>
 							{/if}
-						</h4>
-						<Input
-							type="text"
-							placeholder="ระบุเหตุผลหรือคำอธิบายประกอบการพิจารณา..."
-							bind:value={responseReasonInput}
-						/>
-						<div class="flex justify-end gap-2">
-							<Button
-								variant="ghost"
-								size="sm"
-								disabled={transitionMutation.isPending}
-								onclick={() => (pendingAction = null)}
-							>
-								ยกเลิก
-							</Button>
-							<Button
-								size="sm"
-								variant={pendingAction.to === 'accepted' ? 'default' : 'destructive'}
-								disabled={transitionMutation.isPending}
-								onclick={submitWithReason}
-							>
-								ยืนยันการ{pendingAction.to === 'accepted' ? 'ตอบรับ' : 'ปฏิเสธ'}
-							</Button>
+						</p>
+						<div
+							role="progressbar"
+							aria-label="ความคืบหน้า"
+							aria-valuemin={0}
+							aria-valuemax={progress.total}
+							aria-valuenow={progress.succeeded + progress.failed.length}
+							class="h-2 w-full overflow-hidden rounded-full bg-muted"
+						>
+							<div
+								class="h-full bg-primary transition-[width]"
+								style:width="{Math.round(progress.fraction * 100)}%"
+							></div>
 						</div>
+						{#if progress.phase === 'done' && progress.failed.length > 0}
+							<ul
+								class="max-h-40 list-inside list-disc space-y-1 overflow-y-auto text-xs text-rose-900"
+							>
+								{#each progress.failed as item (item.id)}
+									<li>
+										<span class="font-medium">{nameById.get(item.id) ?? item.id}</span>
+										— {item.error}
+									</li>
+								{/each}
+							</ul>
+							<div class="flex flex-wrap justify-end gap-2">
+								<Button
+									variant="ghost"
+									class="h-11 px-4"
+									disabled={busy}
+									onclick={() => progress.reset()}
+								>
+									ปิดผลลัพธ์
+								</Button>
+								<Button class="h-11 gap-1.5 px-4" disabled={busy} onclick={retryFailed}>
+									<RotateCw class="h-4 w-4" />
+									ลองใหม่เฉพาะที่ล้มเหลว ({progress.failed.length})
+								</Button>
+							</div>
+						{/if}
 					</div>
 				{/if}
 
-				{#if showBatchActions}
-					<div class="flex flex-wrap items-center justify-end gap-2.5">
-						{#if sendable.length > 0}
-							<Button
-								size="sm"
-								variant="default"
-								class="gap-1.5"
-								disabled={transitionMutation.isPending}
-								onclick={() =>
-									runBatchTransition(
-										sendable.map((r) => r._id),
-										'sent',
-										'ส่งตัว'
-									)}
-							>
-								<Send class="h-4 w-4" />
-								ส่งทั้งหมด ({sendable.length})
+				{#if selectedItems.length > 0 && progress.phase !== 'running'}
+					<div class="flex flex-wrap items-center justify-between gap-2.5">
+						<div class="flex flex-wrap items-center gap-2">
+							<p class="text-sm font-semibold tabular-nums">
+								{selectedItems.length} รายการที่เลือก
+								{#if selectedStatus}
+									<span class="font-normal text-muted-foreground">
+										· {getStatusLabel(selectedStatus)}
+									</span>
+								{/if}
+							</p>
+							<Button variant="ghost" class="h-11 px-4" disabled={busy} onclick={clearSelection}>
+								ล้างการเลือก
 							</Button>
-						{/if}
-
-						{#if acceptable.length > 0}
-							<Button
-								size="sm"
-								class="gap-1.5 bg-emerald-600 text-white hover:bg-emerald-700"
-								disabled={transitionMutation.isPending}
-								onclick={() =>
-									triggerActionWithReason(
-										'accepted',
-										acceptable.map((r) => r._id)
-									)}
-							>
-								<CheckCircle2 class="h-4 w-4" />
-								ตอบรับทั้งหมด ({acceptable.length})
-							</Button>
-						{/if}
-
-						{#if rejectable.length > 0}
-							<Button
-								size="sm"
-								variant="outline"
-								class="gap-1.5 border-rose-300 text-rose-600 hover:bg-rose-50"
-								disabled={transitionMutation.isPending}
-								onclick={() =>
-									triggerActionWithReason(
-										'rejected',
-										rejectable.map((r) => r._id)
-									)}
-							>
-								<XCircle class="h-4 w-4" />
-								ปฏิเสธทั้งหมด ({rejectable.length})
-							</Button>
-						{/if}
-
-						{#if cancelableDrafts.length > 0}
-							<Button
-								size="sm"
-								variant="outline"
-								class="gap-1.5 border-rose-300 text-rose-700 hover:bg-rose-50"
-								disabled={transitionMutation.isPending}
-								onclick={() =>
-									runBatchTransition(
-										cancelableDrafts.map((r) => r._id),
-										'closed',
-										'ยกเลิกร่าง'
-									)}
-							>
-								<Ban class="h-4 w-4" />
-								ยกเลิกร่างทั้งหมด ({cancelableDrafts.length})
-							</Button>
-						{/if}
-
-						{#if closeable.length > 0}
-							<Button
-								size="sm"
-								variant="outline"
-								class="gap-1.5 border-slate-300 text-slate-700 hover:bg-slate-50"
-								disabled={transitionMutation.isPending}
-								onclick={() =>
-									runBatchTransition(
-										closeable.map((r) => r._id),
-										'closed',
-										'ปิดรายการ'
-									)}
-							>
-								<Archive class="h-4 w-4" />
-								ปิดทั้งหมด ({closeable.length})
-							</Button>
-						{/if}
+						</div>
+						<div class="flex flex-wrap items-center justify-end gap-2.5">
+							{#each commonActions as action (action.key)}
+								{@render actionButton(action, () => askConfirm(action, selectedItems), false)}
+							{/each}
+						</div>
 					</div>
 				{/if}
 			</div>
 		</div>
+	{/if}
+	{#if confirmRequest}
+		<ReferralConfirmDialog
+			bind:open={confirmOpen}
+			title={confirmTitles[confirmRequest.action.key]}
+			names={confirmRequest.names}
+			count={confirmRequest.ids.length}
+			confirmLabel="{confirmLabels[confirmRequest.action.key]} {confirmRequest.ids.length} รายการ"
+			destructive={confirmRequest.action.destructive}
+			pending={busy}
+			onConfirm={confirmRun}
+		>
+			{#if confirmRequest.action.asksReason}
+				<div class="space-y-1.5">
+					<label for="bulk-reason" class="text-sm font-medium text-slate-900">
+						เหตุผล (ไม่บังคับ)
+						{#if confirmRequest.ids.length > 1}
+							<span class="font-normal text-slate-600">— ใช้กับทุกรายการ</span>
+						{/if}
+					</label>
+					<Textarea
+						id="bulk-reason"
+						rows={3}
+						maxlength={REFERRAL_REASON_MAX_LENGTH}
+						placeholder="ระบุเหตุผลหรือคำอธิบายประกอบการพิจารณา..."
+						bind:value={reasonInput}
+					/>
+					<p class="text-right text-xs text-slate-600 tabular-nums">
+						{reasonInput.length}/{REFERRAL_REASON_MAX_LENGTH}
+					</p>
+				</div>
+			{/if}
+		</ReferralConfirmDialog>
 	{/if}
 </div>

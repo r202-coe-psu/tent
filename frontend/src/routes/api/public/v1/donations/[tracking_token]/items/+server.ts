@@ -6,8 +6,9 @@ import { fastapiBaseUrl, fastapiServiceHeaders } from '$lib/server/fastapi';
 import {
 	carryItemIds,
 	computeNeeds,
-	isDonorEditable,
-	pickCampaignForItems
+	donationItemEditGate,
+	pickCampaignForItems,
+	withCampaignLinePoints
 } from '$lib/features/donations/server';
 import type { DonationRevision, PublicDonationDoc } from '$lib/features/donations';
 import {
@@ -15,17 +16,59 @@ import {
 	fetchDocsStrict,
 	findByTokenHash,
 	GOODS_IN_STOCK_ERROR,
-	hasKeyedDonationStock
+	hasKeyedDonationStock,
+	readDonationCampaign
 } from '$lib/server/donation-docs';
 import type { DonationCampaign, StockLedger } from '$lib/features/operations';
 import { DONATION_SCHEMA_V } from '$lib/features/operations/server';
 import { createAuditEntry } from '$lib/features/shared';
 
-function shelterDbFromToken(token: string): string | null {
+function shelterCodeFromToken(token: string): string | null {
 	const match = token.match(/^TX-([A-Z0-9]+)-/);
 	if (!match) return null;
-	const code = match[1] === 'DON' ? 'SH001' : match[1];
-	return `shelter_${code.toLowerCase()}`;
+	return match[1] === 'DON' ? 'SH001' : match[1];
+}
+
+function shelterDbFromToken(token: string): string | null {
+	const code = shelterCodeFromToken(token);
+	return code ? `shelter_${code.toLowerCase()}` : null;
+}
+
+/** The intake buffer could not be read, so nothing was changed anywhere — the donor may retry. */
+class BufferReadError extends Error {}
+
+/**
+ * The booking as FastAPI's intake buffer holds it, for a booking CouchDB has not seen yet:
+ * the campaign it was made under and how it is delivered, which decide each line's point.
+ * `null` when FastAPI has no such booking — the PATCH below then answers 404 itself.
+ */
+async function readBufferedBooking(
+	trackingToken: string
+): Promise<{ campaignId: string | null; deliveryMethod: string | null } | null> {
+	let res: Response;
+	try {
+		res = await fetch(
+			`${fastapiBaseUrl()}/public/v1/donations/${encodeURIComponent(trackingToken)}`,
+			{ headers: fastapiServiceHeaders() }
+		);
+	} catch {
+		throw new BufferReadError('FastAPI unavailable');
+	}
+	if (res.status === 404) return null;
+	if (!res.ok) throw new BufferReadError(`FastAPI answered ${res.status}`);
+	const body = (await res.json().catch(() => null)) as {
+		donation?: { campaign_id?: unknown; logistics?: { delivery_method?: unknown } | null };
+	} | null;
+	const donation = body?.donation;
+	// A 2xx without the booking is not "no campaign": refuse rather than write null points.
+	if (!donation) throw new BufferReadError('FastAPI answered without a donation');
+	return {
+		campaignId: typeof donation.campaign_id === 'string' ? donation.campaign_id : null,
+		deliveryMethod:
+			typeof donation.logistics?.delivery_method === 'string'
+				? donation.logistics.delivery_method
+				: null
+	};
 }
 
 /**
@@ -63,16 +106,20 @@ export const PATCH = async ({ params, request }) => {
 
 		// Check the system of record before moving anything. FastAPI guards on the intake
 		// buffer, which follows CouchDB a few seconds behind; refusing here first means a
-		// donor whose booking staff just picked up never has quota moved and rolled back.
+		// donor whose booking staff just reviewed never has quota moved and rolled back.
 		const latestDoc = await findByTokenHash(shelterDb, trackingTokenHash);
-		if (latestDoc && !isDonorEditable(latestDoc.status)) {
+		const gate = latestDoc && donationItemEditGate(latestDoc.status, latestDoc.items ?? []);
+		if (gate === 'already_reviewed') {
+			return json({ success: false, error: 'ALREADY_REVIEWED' }, { status: 400 });
+		}
+		if (latestDoc && gate === 'closed') {
 			return json(
 				{ success: false, error: `Cannot edit a donation in status "${latestDoc.status}"` },
 				{ status: 400 }
 			);
 		}
 		// Goods already keyed: moving lines would re-number them under the stock rows.
-		if (latestDoc && (await hasKeyedDonationStock(shelterDb, latestDoc._id))) {
+		if (latestDoc && (await hasKeyedDonationStock(shelterDb, latestDoc))) {
 			return json(GOODS_IN_STOCK_ERROR, { status: 409 });
 		}
 
@@ -83,6 +130,22 @@ export const PATCH = async ({ params, request }) => {
 		const resolvedItems: typeof payload.items = latestDoc
 			? carryItemIds(payload.items, latestDoc.items ?? [])
 			: payload.items;
+
+		// Each line's point from the booking's own campaign (FR-AP-15a), read by id whether it
+		// is open or closed — the headroom read below sees open ones only. FastAPI keeps the
+		// point of a held line whose item did not change (FR-AP-15). A booking not yet in
+		// CouchDB still names its campaign and delivery in the intake buffer, so a campaign
+		// line added now gets its point at once rather than none for good.
+		const booked = latestDoc
+			? {
+					campaignId: latestDoc.campaign_id ?? null,
+					deliveryMethod: latestDoc.logistics?.delivery_method ?? null
+				}
+			: await readBufferedBooking(tracking_token);
+		const campaign = booked?.campaignId
+			? await readDonationCampaign(shelterDb, booked.campaignId)
+			: null;
+		const pointedItems = withCampaignLinePoints(resolvedItems, campaign, booked?.deliveryMethod);
 
 		// The same headroom check the create route makes. Without it an edit answers only
 		// to the atomic counter, which caps reserved_qty at qty_target and knows nothing
@@ -121,10 +184,10 @@ export const PATCH = async ({ params, request }) => {
 			{
 				method: 'PATCH',
 				headers: fastapiServiceHeaders({ 'Content-Type': 'application/json' }),
-				// CR-174 FR-18 — staff decide lines in CouchDB, which FastAPI cannot read: send
-				// the booking as it is now so a line nobody touched keeps its decision.
+				// Staff decide lines in CouchDB, which FastAPI cannot read: send the booking as it
+				// is now, for FastAPI's own review gate and the line keys it holds (CR-196).
 				body: JSON.stringify({
-					items: resolvedItems,
+					items: pointedItems,
 					...(latestDoc
 						? { current_items: latestDoc.items ?? [], current_status: latestDoc.status }
 						: {})
@@ -222,7 +285,7 @@ export const PATCH = async ({ params, request }) => {
 
 		return json({ success: true, message: 'Donation items updated', revisions, status });
 	} catch (e) {
-		if (e instanceof CouchReadError) {
+		if (e instanceof CouchReadError || e instanceof BufferReadError) {
 			console.error(e);
 			return json({ success: false, error: 'DONATION_UNAVAILABLE' }, { status: 503 });
 		}

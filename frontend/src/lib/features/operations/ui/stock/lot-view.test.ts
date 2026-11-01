@@ -155,4 +155,20 @@ describe('buildLotRows', () => {
 		const [row] = buildLotRows([lot({ lot_ref: 'a', received_at: iso(-1) })], [], NOW, itemsById);
 		expect(row.reason).toBe('อายุเก็บรักษาเหลือ 4 วัน (เร่งด่วน)');
 	});
+
+	it('#855: lists a negative lot last, flagged, never as next', () => {
+		const rows = buildLotRows(
+			[
+				lot({ lot_ref: 'neg', qty: '-3', lot: { expiry: iso(1) } }),
+				lot({ lot_ref: 'ok', lot: { expiry: iso(30) } })
+			],
+			[],
+			NOW
+		);
+		expect(rows.map((r) => [r.lotRef, r.isNegative, r.isNext])).toEqual([
+			['ok', false, true],
+			['neg', true, false]
+		]);
+		expect(rows[1].qty).toBe('-3');
+	});
 });

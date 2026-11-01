@@ -4,6 +4,8 @@
  */
 
 export type {
+	ClaimedPetSummary,
+	PetSummarySource,
 	OpenMemberHit,
 	OpenMemberStatus,
 	OpenPetHit,
@@ -19,8 +21,12 @@ export type {
 	UnassignedRegistrationClaimResponse
 } from './domain/claim';
 
-export type { UnassignedRegistrationReview } from './domain/review';
+export type { PetCapCheck, UnassignedRegistrationReview } from './domain/review';
 export {
+	countPetGroups,
+	petsForReportIn,
+	petsOverCapAfterClaim,
+	petsOverCapForConfirm,
 	unassignedHouseholdToUnifiedInput,
 	unassignedMemberToUnifiedMember,
 	unassignedPhotoUrl,
@@ -32,6 +38,7 @@ export {
 	CLAIM_FLOW_STATUS_GUIDANCE,
 	UNASSIGNED_QUEUE_BADGE_LABEL,
 	UNASSIGNED_QUEUE_BADGE_SHORT,
+	claimedPetSummaries,
 	formatClaimCreatedAt,
 	formatOpenMemberCardType,
 	formatOpenMemberDemographicsLine,
@@ -40,7 +47,9 @@ export {
 	formatOpenMemberName,
 	formatOpenMemberVulnerableGroup,
 	formatOpenPetLabel,
-	isOnlineRequiredError
+	isOnlineRequiredError,
+	petsLeftBehind,
+	totalOpenPetCount
 } from './domain/search';
 export {
 	pickReportInEvacueeId,

@@ -4,7 +4,7 @@
  * against the active shelter database.
  *
  * Each image doc has two attachments:
- *   - "full"  — compressed WebP (max 1024px)
+ *   - "full"  — compressed WebP (max 1024px by default)
  *   - "thumb" — square-cropped WebP thumbnail (200px)
  */
 
@@ -19,7 +19,7 @@ import {
 import { makeDoc, type AuthorContext } from '$lib/db/model';
 import { getShelterDb } from '$lib/db/shelter';
 import { compressImage, type CompressOptions } from '$lib/utils/image-compress';
-import { isImageDoc, type ImageDoc, type ImageSummary } from '../domain/image';
+import { IMAGE_SCHEMA_V, isImageDoc, type ImageDoc, type ImageSummary } from '../domain/image';
 import type { ImageRepository } from './image.repository';
 
 function toSummary(doc: ImageDoc): ImageSummary {
@@ -51,7 +51,7 @@ export class ImageRemoteRepository implements ImageRepository {
 
 		const doc = makeDoc(
 			'image',
-			1,
+			IMAGE_SCHEMA_V,
 			{
 				filename: file.name,
 				content_type: compressed.full.type || 'image/webp',

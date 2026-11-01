@@ -1,11 +1,15 @@
 import { ulid } from '$lib/db/ulid';
+import { nextClosedAt } from '../domain/closed-at';
 import { SHELTER_MASTER_SCHEMA_V, type Shelter, type ShelterMaster } from '../domain/schema';
 import { SHELTER_CAPABILITIES, shelterScopeRole } from '$lib/auth/roles';
 import { adminRaw, ServiceError } from '$lib/server/couch-admin';
 import { CENTRAL_WRITE_POLICY_DESIGN, hasWritePolicy } from '$lib/server/central-db-security';
 import {
 	SHELTER_REGISTRY_DB,
+	deployBulkReturnEntryMangoIndexes,
 	deployDailySopRoleMangoIndexes,
+	deployDonationReceivedMangoIndex,
+	deployDonationPhotoMangoIndex,
 	deployPeopleMangoIndexes,
 	deployRegistryDesign,
 	deployReferralMangoIndexes,
@@ -393,8 +397,16 @@ async function provisionShelterUnlocked(
 	await deployRequisitionTicketMangoIndexes(db);
 	steps.push({ step: 'requisition-ticket-mango', status: 200 });
 	await assertActive?.();
+	await deployBulkReturnEntryMangoIndexes(db);
+	steps.push({ step: 'bulk-return-entry-mango', status: 200 });
+	await assertActive?.();
 	await deployDailySopRoleMangoIndexes(db);
 	steps.push({ step: 'daily-sop-role-mango', status: 200 });
+	await assertActive?.();
+	await deployDonationReceivedMangoIndex(db);
+	steps.push({ step: 'donation-received-mango', status: 200 });
+	await deployDonationPhotoMangoIndex(db);
+	steps.push({ step: 'donation-photo-mango', status: 200 });
 
 	await assertActive?.();
 	const registry = await adminRaw(`/${SHELTER_REGISTRY_DB}`, 'PUT');
@@ -424,6 +436,7 @@ async function provisionShelterUnlocked(
 			schema_v: SHELTER_MASTER_SCHEMA_V,
 			code,
 			...input,
+			closed_at: nextClosedAt(null, input.operation_status, undefined, ts),
 			created_at: ts,
 			updated_at: ts
 		};

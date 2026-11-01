@@ -1,4 +1,4 @@
-import { allDocsByType, getDoc, putDoc } from '$lib/db/couch-db';
+import { allDocsByIds, allDocsByType, getDoc, putDoc } from '$lib/db/couch-db';
 import { now, type AuthorContext } from '$lib/db/model';
 import { parseQty, qtyLte } from '$lib/utils/qty';
 import {
@@ -11,7 +11,11 @@ import {
 	type DistributionLogStatus,
 	type ReturnCondition
 } from '../../domain/food-supplies';
+import { parseDocsOrSkip, type SkippedDoc } from './parse-or-skip';
 import { NotFoundError, resolveShelterDbName, retryCas } from './shared';
+
+/** Ids per `_all_docs` keys request in `getMany`. */
+const GET_MANY_CHUNK_SIZE = 100;
 
 export interface DistributionLogListFilter {
 	ticket_id?: string;
@@ -19,6 +23,32 @@ export interface DistributionLogListFilter {
 	item_id?: string;
 	status?: DistributionLogStatus;
 	is_returnable?: boolean;
+}
+
+/**
+ * Whether a malformed raw doc could match `filter`. A filtered field that cannot be read (wrong type
+ * or absent) counts as matching: it may be the very doc the caller is looking for.
+ */
+function rawMatchesFilter(raw: unknown, filter?: DistributionLogListFilter): boolean {
+	if (!filter) return true;
+	const doc = (typeof raw === 'object' && raw !== null ? raw : {}) as Record<string, unknown>;
+	const stringField = (key: 'ticket_id' | 'item_id' | 'status', want: string | undefined) =>
+		!want || typeof doc[key] !== 'string' || doc[key] === want;
+	if (!stringField('ticket_id', filter.ticket_id)) return false;
+	if (!stringField('item_id', filter.item_id)) return false;
+	if (!stringField('status', filter.status)) return false;
+	if (
+		filter.is_returnable !== undefined &&
+		typeof doc.is_returnable === 'boolean' &&
+		doc.is_returnable !== filter.is_returnable
+	)
+		return false;
+	if (filter.recipient_id !== undefined) {
+		const recipient = doc.recipient_id;
+		const readable = recipient === null || typeof recipient === 'string';
+		if (readable && recipient !== filter.recipient_id) return false;
+	}
+	return true;
 }
 
 export type PhysicalReturnReason = 'routine' | 'bulk_dropoff';
@@ -37,16 +67,40 @@ export interface RecordClearInput {
 	notes: string;
 }
 
+export interface MutateLogCasOptions {
+	/** Async hook run on every CAS attempt after the read and before the mutator (see `mutateLogCAS`). */
+	beforeWrite?: (current: DistributionLog) => Promise<void>;
+}
+
 export interface DistributionLogRepository {
 	create(
 		logInput: DistributionLogInput | DistributionLog,
 		ctx: AuthorContext
 	): Promise<DistributionLog>;
 	get(logId: string): Promise<DistributionLog | null>;
+	/** Valid logs matching `filter`; malformed docs are skipped (see `listWithSkipped`). */
 	list(filter?: DistributionLogListFilter): Promise<DistributionLog[]>;
+	/**
+	 * Like `list`, plus the malformed docs that could match `filter` (matched on their raw fields; an
+	 * unreadable filtered field counts as matching). Write paths use it to fail closed.
+	 */
+	listWithSkipped(
+		filter?: DistributionLogListFilter
+	): Promise<{ items: DistributionLog[]; skipped: SkippedDoc[] }>;
+	/**
+	 * Batch get by id (`_all_docs` keys, chunked). Ids with no doc are simply absent from `items`;
+	 * malformed docs are reported in `skipped` instead of failing the read.
+	 */
+	getMany(ids: readonly string[]): Promise<{ items: DistributionLog[]; skipped: SkippedDoc[] }>;
+	/**
+	 * Read -> mutate -> put with `_rev` (409 re-reads and retries). The mutator is synchronous and
+	 * may run again on a retry. `options.beforeWrite` is awaited on EVERY attempt, right after the
+	 * log was read and before the mutator runs, for checks that need I/O against that fresh read.
+	 */
 	mutateLogCAS(
 		logId: string,
-		mutator: (current: DistributionLog) => DistributionLog
+		mutator: (current: DistributionLog) => DistributionLog,
+		options?: MutateLogCasOptions
 	): Promise<DistributionLog>;
 	recordReturn(
 		logId: string,
@@ -85,37 +139,68 @@ export class DistributionLogRemoteRepository implements DistributionLogRepositor
 		return distributionLogDocSchema.parse(raw);
 	}
 
+	async getMany(
+		ids: readonly string[]
+	): Promise<{ items: DistributionLog[]; skipped: SkippedDoc[] }> {
+		const unique = [...new Set(ids)];
+		const raws: unknown[] = [];
+		for (let i = 0; i < unique.length; i += GET_MANY_CHUNK_SIZE) {
+			raws.push(
+				...(await allDocsByIds<DistributionLog>(
+					this.dbName,
+					unique.slice(i, i + GET_MANY_CHUNK_SIZE),
+					(d): d is DistributionLog => typeof d === 'object' && d !== null
+				))
+			);
+		}
+		return parseDocsOrSkip<DistributionLog>(raws, distributionLogDocSchema);
+	}
+
 	async list(filter?: DistributionLogListFilter): Promise<DistributionLog[]> {
+		return (await this.listWithSkipped(filter)).items;
+	}
+
+	async listWithSkipped(
+		filter?: DistributionLogListFilter
+	): Promise<{ items: DistributionLog[]; skipped: SkippedDoc[] }> {
 		const docs = await allDocsByType<DistributionLog>(
 			this.dbName,
 			'distribution_log',
 			(d): d is DistributionLog =>
 				typeof d === 'object' && d !== null && (d as { type?: string }).type === 'distribution_log'
 		);
-		const parsed = docs.map((d) => distributionLogDocSchema.parse(d));
-		return parsed.filter((log) => {
-			if (filter?.ticket_id && log.ticket_id !== filter.ticket_id) return false;
-			if (filter?.item_id && log.item_id !== filter.item_id) return false;
-			if (filter?.status && log.status !== filter.status) return false;
-			if (filter?.is_returnable !== undefined && log.is_returnable !== filter.is_returnable)
-				return false;
-			if (filter?.recipient_id !== undefined && log.recipient_id !== filter.recipient_id)
-				return false;
-			return true;
-		});
+		const { items, skipped } = parseDocsOrSkip<DistributionLog>(docs, distributionLogDocSchema);
+		const rawById = new Map(docs.map((d) => [(d as { _id?: unknown })._id, d]));
+		return {
+			items: items.filter((log) => {
+				if (filter?.ticket_id && log.ticket_id !== filter.ticket_id) return false;
+				if (filter?.item_id && log.item_id !== filter.item_id) return false;
+				if (filter?.status && log.status !== filter.status) return false;
+				if (filter?.is_returnable !== undefined && log.is_returnable !== filter.is_returnable)
+					return false;
+				if (filter?.recipient_id !== undefined && log.recipient_id !== filter.recipient_id)
+					return false;
+				return true;
+			}),
+			skipped: skipped.filter((s) => rawMatchesFilter(rawById.get(s._id), filter))
+		};
 	}
 
 	async mutateLogCAS(
 		logId: string,
-		mutator: (current: DistributionLog) => DistributionLog
+		mutator: (current: DistributionLog) => DistributionLog,
+		options?: MutateLogCasOptions
 	): Promise<DistributionLog> {
 		return retryCas(async () => {
 			const current = await this.get(logId);
 			if (!current) {
 				throw new NotFoundError(`Distribution log ${logId} not found`);
 			}
+			await options?.beforeWrite?.(current);
 
 			const computed = mutator(current);
+			// Same reference = "nothing to write" (e.g. an already-applied bulk entry); mirrors the pool repo.
+			if (computed === current) return current;
 			assertDistributionLogIssuanceImmutable(current, computed);
 
 			const next = distributionLogDocSchema.parse({

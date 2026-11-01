@@ -19,7 +19,7 @@ const PY_TRIM = new RegExp(`^[${PY_WS}]+|[${PY_WS}]+$`, 'gu');
 const SEPARATORS = new RegExp(`[${PY_WS}-]+`, 'gu');
 const PHONE_SEPARATORS = new RegExp(`[${PY_WS}\\-()]+`, 'gu');
 const DIGITS_ONLY = /^\p{Nd}+$/u;
-const THAI_PHONE = /^0\p{Nd}{8,9}$/u;
+const THAI_PHONE = /^0\p{Nd}{9}$/u;
 const NATIONAL_ID_LENGTH = 13;
 
 /** Mirror `MIN_NAME_WORD_GRAPHEMES` / `MAX_NAME_WORDS` in backend/apiapp/utils/search_query.py (CR-166). */

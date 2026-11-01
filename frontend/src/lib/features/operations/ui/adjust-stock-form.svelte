@@ -16,6 +16,7 @@
 	import { toast } from 'svelte-sonner';
 	import { subQty, qtyAbs, qtyGt, persistQty } from '$lib/utils/qty';
 	import { projectLotsByItem } from '../domain/operations';
+	import { isExpiryPassed } from '../domain/expiry-instant';
 	import { formatThaiShortDate } from '$lib/utils/date';
 	import {
 		ADJUST_NOTE_MAX_LENGTH,
@@ -69,9 +70,7 @@
 	const balanceByItemId = $derived(balanceQuery.data ?? new Map<string, string>());
 
 	function isExpired(expiry: string): boolean {
-		if (!expiry) return false;
-		const ms = Date.parse(expiry);
-		return !Number.isNaN(ms) && ms <= Date.now();
+		return isExpiryPassed(expiry, Date.now());
 	}
 
 	// Each physical lot of the selected item at the balance the stock table shows (#569):

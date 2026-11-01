@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { POST } from './+server';
 import { adminRaw, requireShelterScopeOrSA } from '$lib/server/couch-admin';
+import { sha256Hex } from '$lib/db/hash';
 
 type PostEvent = Parameters<typeof POST>[0];
 
@@ -144,6 +145,51 @@ describe('POST /api/back-office/donations (walk-in intake)', () => {
 		expect(donor.phone).toBe('0800000001');
 		expect(donor.phone_hash).not.toBe('0800000001');
 		expect(donor.phone_hash).toMatch(/^[0-9a-f]{64}$/);
+	});
+
+	it('stores the normalized phone and hashes it identically across formats', async () => {
+		const hashes: string[] = [];
+		for (const phone of ['089-123-4567', '+66891234567', '0891234567']) {
+			mockCouch();
+			const res = await POST(event({ ...validBody, donor: { name: 'ก', phone } }));
+			expect(res.status).toBe(200);
+			const donor = docsOfType('donation')[0].donor as { phone: string; phone_hash: string };
+			expect(donor.phone).toBe('0891234567');
+			hashes.push(donor.phone_hash);
+		}
+		expect(new Set(hashes).size).toBe(1);
+		expect(hashes[0]).toBe(await sha256Hex('0891234567'));
+	});
+
+	it('rejects every invalid phone sent directly with 422 and writes nothing', async () => {
+		for (const phone of [
+			'12345',
+			'089123456',
+			'08912345678',
+			'1891234567',
+			'08912abc67',
+			'๐๘๙๑๒๓๔๕๖๗',
+			'0066891234567'
+		]) {
+			mockCouch();
+			const res = await POST(event({ ...validBody, donor: { name: 'ก', phone } }));
+			expect(res.status).toBe(422);
+			expect(written).toBeNull();
+		}
+	});
+
+	it('B-R/B3 a walk-in without a phone still saves with a null phone and a nonce hash', async () => {
+		const hashes: string[] = [];
+		for (const phone of [undefined, '']) {
+			mockCouch();
+			const res = await POST(event({ ...validBody, donor: { name: 'ก', phone } }));
+			expect(res.status).toBe(200);
+			const donor = docsOfType('donation')[0].donor as { phone: null; phone_hash: string };
+			expect(donor.phone).toBeNull();
+			expect(donor.phone_hash).toMatch(/^[0-9a-f]{64}$/);
+			hashes.push(donor.phone_hash);
+		}
+		expect(hashes[0]).not.toBe(hashes[1]);
 	});
 
 	it('rejects a unit that is not the catalog base unit — nothing is written', async () => {

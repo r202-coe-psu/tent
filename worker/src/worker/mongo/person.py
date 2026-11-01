@@ -13,6 +13,10 @@ async def apply_person(action: str, payload: dict[str, Any] | None) -> None:
     await apply_document(PublicPerson, action, payload)
 
 
+async def is_person_projected(person_id: str) -> bool:
+    return await PublicPerson.get(person_id) is not None
+
+
 async def delete_persons_for_shelter(shelter_code: str) -> None:
     await PublicPerson.find(PublicPerson.shelter_code == shelter_code).delete()
 

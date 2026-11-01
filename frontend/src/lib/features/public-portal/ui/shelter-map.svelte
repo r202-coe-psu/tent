@@ -11,8 +11,15 @@
 	} from 'maplibre-gl';
 	import MapPin from '@lucide/svelte/icons/map-pin';
 	import type { PublicSiteKind } from '../domain/types';
+	import type { DonationMapPoint, MapPointFocus } from '../domain/donation-map';
 	import { shelterTypeLabel, toLabelMap } from '../domain/master-labels';
-	import { useShelterTypeLabelMap } from '../application/queries';
+	import { useShelterTypeLabelMap, useSiteKinds } from '../application/queries';
+	import {
+		HOST_HOUSE_SITE_KIND,
+		isHostHouseKind,
+		shelterPinKind,
+		siteKindLabel
+	} from '../domain/site-kind';
 	import { DEFAULT_MAP_STYLE, DEFAULT_MAP_CENTER, DEFAULT_MAP_ZOOM } from '$lib/constants/maps';
 	import { Button } from '$lib/components/ui/button';
 	import { langState } from '$lib/states/i18n.svelte';
@@ -37,13 +44,16 @@
 		code?: string;
 		name: string;
 		status: string;
-		capacity: number;
-		distance: number;
+		capacity?: number;
+		/** Null when there is no search origin to measure from. */
+		distance?: number | null;
 		site_kind?: PublicSiteKind;
 		type?: string;
 		admin_type?: string | null;
 		geo?: ShelterGeo | null;
 		accepts_pre_registration?: boolean;
+		/** Draws a numbered pin in these colours instead of the status-coloured glyph pin. */
+		pin?: { label: string; fill: string; text: string };
 	}
 
 	type ShelterMarkerItem = {
@@ -62,8 +72,14 @@
 		center = DEFAULT_MAP_CENTER,
 		zoom = DEFAULT_MAP_ZOOM,
 		selectedId = null,
+		pointFocus = null,
 		disablePopup = false,
+		points = [],
+		showLegend = true,
+		cooperativeGestures = false,
 		onSelectShelter,
+		onSelectPoint,
+		onLoadError,
 		onLocationPick
 	}: {
 		shelters?: Shelter[];
@@ -74,16 +90,29 @@
 		zoom?: number;
 		/** Currently selected shelter ID to sync with list */
 		selectedId?: string | null;
+		/** The drop-off point in focus: its pin is highlighted, and each new request moves the map. */
+		pointFocus?: MapPointFocus | null;
 		/** When true (e.g. mobile view), marker click only triggers selection without showing map popup */
 		disablePopup?: boolean;
+		/** Extra pins that are not shelters (drop-off points); drawn smaller than shelter pins. */
+		points?: DonationMapPoint[];
+		/** The legend describes the shelter-browsing map; embedded pickers turn it off. */
+		showLegend?: boolean;
+		/** In a scrolling page, a one-finger drag scrolls the page instead of panning the map. */
+		cooperativeGestures?: boolean;
 		/** Callback when user clicks a shelter pin */
 		onSelectShelter?: (shelterId: string) => void;
+		onSelectPoint?: (pointId: string) => void;
+		/** MapLibre failed to load or start (no WebGL, blocked chunk). Without it the error is rethrown. */
+		onLoadError?: () => void;
 		/** Called when the user places a search-origin pin on the map. */
 		onLocationPick?: (lat: number, lng: number) => void;
 	} = $props();
 
 	const shelterTypeLabelsQuery = useShelterTypeLabelMap();
 	const shelterTypeLabels = $derived(toLabelMap(shelterTypeLabelsQuery.data, langState.current));
+	const siteKindsQuery = useSiteKinds();
+	const shelterPinLegendKind = $derived(shelterPinKind(siteKindsQuery.data));
 
 	const SEARCH_RADIUS_SOURCE = 'search-radius';
 	const SEARCH_RADIUS_FILL = 'search-radius-fill';
@@ -100,6 +129,7 @@
 	let activePopup: MapLibrePopup | null = null;
 	let markersLayer: MapLibreMarker[] = [];
 	let shelterMarkerMap = new SvelteMap<string, ShelterMarkerItem>();
+	let pointMarkerMap = new SvelteMap<string, { el: HTMLElement; lng: number; lat: number }>();
 	let L: MapLibreNamespace | null = null;
 	let mapLoaded = $state(false);
 	let placingPin = $state(false);
@@ -216,7 +246,7 @@
 	}
 
 	function getSiteKindText(siteKind: PublicSiteKind | undefined): string {
-		return siteKind === 'host_house' ? t.hostHouse : t.evacCenter;
+		return siteKindLabel(siteKind, siteKindsQuery.data, langState.current);
 	}
 
 	/** Classic teardrop pin — building/tent glyph in the head. Tip at bottom. */
@@ -240,8 +270,26 @@
 		</svg>`;
 	}
 
+	/** Small round-headed pin for a drop-off point, so it never reads as a second shelter. */
+	function dropOffPointPinSvg(): string {
+		return `<svg class="marker-pin" width="20" height="28" viewBox="0 0 20 28" aria-hidden="true" style="display:block;filter:drop-shadow(0 1px 2px rgba(15,23,42,0.12));cursor:pointer;">
+			<path d="M10 1.5C5.3 1.5 1.5 5.3 1.5 10c0 5.9 7.2 15.4 8.1 16.5a0.5 0.5 0 0 0 0.8 0C11.3 25.4 18.5 15.9 18.5 10 18.5 5.3 14.7 1.5 10 1.5z" fill="${CERULEAN}" stroke="#ffffff" stroke-width="1.8" stroke-linejoin="round"/>
+			<path d="M6.8 8.6L10 6.6l3.2 2v4.4H6.8z M10 9.4v3.6" fill="none" stroke="#ffffff" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
+		</svg>`;
+	}
+
+	/** Teardrop pin with a number in the head, matched to the same number on a list card. */
+	function numberedPinSvg(pin: { label: string; fill: string; text: string }): string {
+		const label = pin.label.replace(/[^0-9A-Za-z+]/g, '').slice(0, 3);
+		const fontSize = label.length > 2 ? 9 : 12;
+		return `<svg class="marker-pin" width="30" height="40" viewBox="0 0 30 40" aria-hidden="true" style="display:block;filter:drop-shadow(0 1px 2px rgba(15,23,42,0.25));cursor:pointer;transition:transform 0.2s,filter 0.2s;">
+			<path d="M15 1.5C8.1 1.5 2.5 7.1 2.5 14c0 8.2 10.2 22.8 12.1 25.2a0.6 0.6 0 0 0 0.8 0C17.3 36.8 27.5 22.2 27.5 14 27.5 7.1 21.9 1.5 15 1.5z" fill="${pin.fill}" stroke="#ffffff" stroke-width="2" stroke-linejoin="round"/>
+			<text x="15" y="14.5" text-anchor="middle" dominant-baseline="central" font-family="'IBM Plex Sans Thai',sans-serif" font-size="${fontSize}" font-weight="700" fill="${pin.text}">${label}</text>
+		</svg>`;
+	}
+
 	function getShelterPinSvg(siteKind: PublicSiteKind | undefined, fill: string): string {
-		return siteKind === 'host_house' ? hostHousePinSvg(fill) : evacCenterPinSvg(fill);
+		return isHostHouseKind(siteKind) ? hostHousePinSvg(fill) : evacCenterPinSvg(fill);
 	}
 
 	function translateAdminType(type: string): string {
@@ -249,6 +297,15 @@
 	}
 
 	onMount(async () => {
+		try {
+			await startMap();
+		} catch (error) {
+			if (!onLoadError) throw error;
+			onLoadError();
+		}
+	});
+
+	async function startMap() {
 		const maplibre = await import('maplibre-gl');
 		const namespace = maplibre.default as unknown as MapLibreNamespace;
 		L = namespace;
@@ -264,7 +321,15 @@
 			container: mapElement,
 			style: DEFAULT_MAP_STYLE,
 			center: initialCenter,
-			zoom
+			zoom,
+			...(cooperativeGestures && {
+				cooperativeGestures: true,
+				locale: {
+					'CooperativeGesturesHandler.WindowsHelpText': t.gestureDesktop,
+					'CooperativeGesturesHandler.MacHelpText': t.gestureMac,
+					'CooperativeGesturesHandler.MobileHelpText': t.gestureMobile
+				}
+			})
 		});
 		mapInstance = map;
 
@@ -301,7 +366,7 @@
 			});
 			ro.observe(mapElement);
 		}
-	});
+	}
 
 	let ro: ResizeObserver | null = null;
 
@@ -346,6 +411,7 @@
 		// Re-render popups when master-data labels arrive.
 		void shelterTypeLabelsQuery.data;
 		void shelterTypeLabels;
+		void siteKindsQuery.data;
 
 		closeActivePopup();
 		// Clear old markers
@@ -355,6 +421,7 @@
 		});
 		markersLayer = [];
 		shelterMarkerMap.clear();
+		pointMarkerMap.clear();
 
 		const bounds = new lib.LngLatBounds();
 		let hasMarkers = false;
@@ -412,7 +479,9 @@
 				bounds.extend(lngLat);
 
 				const color = getStatusColorCode(shelter.status);
-				const pinSvg = getShelterPinSvg(shelter.site_kind, color);
+				const pinSvg = shelter.pin
+					? numberedPinSvg(shelter.pin)
+					: getShelterPinSvg(shelter.site_kind, color);
 				const shelterId = shelter.id || shelter.code || '';
 				const shelterCode = shelter.code || shelter.id || '';
 				const canBook =
@@ -424,6 +493,7 @@
 				// Do not apply position: relative to the root element,
 				// as it overrides MapLibre's .maplibregl-marker class (which uses position: absolute).
 				el.className = 'custom-shelter-marker';
+				el.dataset.testid = `shelter-marker-${shelterCode || shelterId}`;
 				el.innerHTML = `
 					<div style="position:relative;display:flex;flex-direction:column;align-items:center;width:30px;">
 						${pinSvg}
@@ -481,12 +551,17 @@
 								<span>${t.status}</span>
 								<strong style="color:${color};">${getStatusText(shelter.status)}</strong>
 							</div>
+							${
+								shelter.capacity != null
+									? `
 							<div style="display:flex;justify-content:space-between;margin-bottom:2px;">
 								<span>${t.capacity}</span>
 								<strong>${shelter.capacity} ${t.people}</strong>
-							</div>
+							</div>`
+									: ''
+							}
 							${
-								shelter.distance > 0
+								shelter.distance != null && shelter.distance > 0
 									? `
 							<div style="display:flex;justify-content:space-between;">
 								<span>${t.distance}</span>
@@ -538,6 +613,33 @@
 					shelterMarkerMap.set(shelter.code, markerItem);
 				}
 			});
+		}
+
+		// 3. Draw extra points (drop-off points)
+		for (const point of points) {
+			const lng = Number(point.geo?.lng);
+			const lat = Number(point.geo?.lat);
+			if (!Number.isFinite(lng) || !Number.isFinite(lat)) continue;
+
+			hasMarkers = true;
+			bounds.extend([lng, lat]);
+
+			const el = document.createElement('div');
+			el.className = 'custom-point-marker';
+			el.dataset.testid = `point-marker-${point.id}`;
+			el.setAttribute('role', 'img');
+			el.setAttribute('aria-label', point.label);
+			el.innerHTML = dropOffPointPinSvg();
+			el.addEventListener('click', (ev) => {
+				ev.stopPropagation();
+				onSelectPoint?.(point.id);
+			});
+
+			const marker = new lib.Marker({ element: el, anchor: 'bottom' })
+				.setLngLat([lng, lat])
+				.addTo(map);
+			markersLayer.push(marker);
+			pointMarkerMap.set(point.id, { el, lng, lat });
 		}
 
 		if (!selectedId) {
@@ -611,6 +713,23 @@
 			closeActivePopup();
 		}
 	});
+
+	// Declared after the shelter selection above, so a focused point wins the camera over the
+	// shelter both effects ease to when the markers are redrawn.
+	$effect(() => {
+		if (!mapLoaded || !mapInstance) return;
+		const focus = pointFocus;
+		for (const [id, item] of pointMarkerMap) {
+			item.el.classList.toggle('is-selected', id === focus?.pointId);
+		}
+		const target = focus ? pointMarkerMap.get(focus.pointId) : undefined;
+		if (!focus || !target) return;
+		mapInstance.easeTo({
+			center: [target.lng, target.lat],
+			zoom: focus.zoom ? Math.max(mapInstance.getZoom(), 17) : mapInstance.getZoom(),
+			duration: 400
+		});
+	});
 </script>
 
 <svelte:head>
@@ -648,79 +767,83 @@
 {/if}
 
 <!-- Legend overlay -->
-<div
-	class="pointer-events-auto absolute bottom-4 left-1/2 z-10 hidden -translate-x-1/2 items-center gap-4 rounded-full border border-border/80 bg-card/95 px-4 py-2 text-2xs font-medium shadow-md backdrop-blur-md sm:flex"
->
-	<div class="flex items-center gap-2">
-		<span class="font-bold text-foreground">{t.siteKindLabel}:</span>
-		<div class="flex items-center gap-1.5">
-			<svg
-				width="14"
-				height="18"
-				viewBox="0 0 30 40"
-				aria-hidden="true"
-				class="shrink-0 drop-shadow-xs"
-			>
-				<path
-					d="M15 1.5C8.1 1.5 2.5 7.1 2.5 14c0 8.2 10.2 22.8 12.1 25.2a0.6 0.6 0 0 0 0.8 0C17.3 36.8 27.5 22.2 27.5 14 27.5 7.1 21.9 1.5 15 1.5z"
-					fill="none"
-					stroke="currentColor"
-					class="text-foreground"
-					stroke-width="2.5"
-					stroke-linejoin="round"
-				/>
-			</svg>
-			<span class="text-muted-foreground">{t.evacCenter}</span>
+{#if showLegend}
+	<div
+		class="pointer-events-auto absolute bottom-4 left-1/2 z-10 hidden -translate-x-1/2 items-center gap-4 rounded-full border border-border/80 bg-card/95 px-4 py-2 text-2xs font-medium shadow-md backdrop-blur-md sm:flex"
+	>
+		<div class="flex items-center gap-2">
+			<span class="font-bold text-foreground">{t.siteKindLabel}:</span>
+			<div class="flex items-center gap-1.5">
+				<svg
+					width="14"
+					height="18"
+					viewBox="0 0 30 40"
+					aria-hidden="true"
+					class="shrink-0 drop-shadow-xs"
+				>
+					<path
+						d="M15 1.5C8.1 1.5 2.5 7.1 2.5 14c0 8.2 10.2 22.8 12.1 25.2a0.6 0.6 0 0 0 0.8 0C17.3 36.8 27.5 22.2 27.5 14 27.5 7.1 21.9 1.5 15 1.5z"
+						fill="none"
+						stroke="currentColor"
+						class="text-foreground"
+						stroke-width="2.5"
+						stroke-linejoin="round"
+					/>
+				</svg>
+				<span class="text-muted-foreground"
+					>{shelterPinLegendKind ? getSiteKindText(shelterPinLegendKind) : t.otherSiteKinds}</span
+				>
+			</div>
+			<div class="flex items-center gap-1.5">
+				<svg
+					width="14"
+					height="18"
+					viewBox="0 0 30 40"
+					aria-hidden="true"
+					class="shrink-0 drop-shadow-xs"
+				>
+					<path
+						d="M15 1.5L3.5 11.2v11.3c0 1.3 1.1 2.3 2.3 2.3h18.4c1.2 0 2.3-1 2.3-2.3V11.2L15 1.5z"
+						fill="none"
+						stroke="currentColor"
+						class="text-foreground"
+						stroke-width="2.5"
+						stroke-linejoin="round"
+					/>
+					<path
+						d="M15 24.8L11.5 35.5c-0.4 1.15 0.75 2.15 1.7 1.4L15 34.8l1.8 2.1c0.95 0.75 2.1-0.25 1.7-1.4L15 24.8z"
+						fill="none"
+						stroke="currentColor"
+						class="text-foreground"
+						stroke-width="2"
+						stroke-linejoin="round"
+					/>
+				</svg>
+				<span class="text-muted-foreground">{getSiteKindText(HOST_HOUSE_SITE_KIND)}</span>
+			</div>
 		</div>
-		<div class="flex items-center gap-1.5">
-			<svg
-				width="14"
-				height="18"
-				viewBox="0 0 30 40"
-				aria-hidden="true"
-				class="shrink-0 drop-shadow-xs"
-			>
-				<path
-					d="M15 1.5L3.5 11.2v11.3c0 1.3 1.1 2.3 2.3 2.3h18.4c1.2 0 2.3-1 2.3-2.3V11.2L15 1.5z"
-					fill="none"
-					stroke="currentColor"
-					class="text-foreground"
-					stroke-width="2.5"
-					stroke-linejoin="round"
-				/>
-				<path
-					d="M15 24.8L11.5 35.5c-0.4 1.15 0.75 2.15 1.7 1.4L15 34.8l1.8 2.1c0.95 0.75 2.1-0.25 1.7-1.4L15 24.8z"
-					fill="none"
-					stroke="currentColor"
-					class="text-foreground"
-					stroke-width="2"
-					stroke-linejoin="round"
-				/>
-			</svg>
-			<span class="text-muted-foreground">{t.hostHouse}</span>
+		<div class="h-4 w-px bg-border"></div>
+		<div class="flex items-center gap-2">
+			<span class="font-bold text-foreground">{t.shelterStatus}:</span>
+			<div class="flex items-center gap-1.5">
+				<div class="h-2.5 w-2.5 rounded-full border border-white bg-[#16A34A] shadow-xs"></div>
+				<span class="text-muted-foreground">{t.statusOpen}</span>
+			</div>
+			<div class="flex items-center gap-1.5">
+				<div class="h-2.5 w-2.5 rounded-full border border-white bg-[#F59E0B] shadow-xs"></div>
+				<span class="text-muted-foreground">{t.statusStandby}</span>
+			</div>
+			<div class="flex items-center gap-1.5">
+				<div class="h-2.5 w-2.5 rounded-full border border-white bg-[#DC2626] shadow-xs"></div>
+				<span class="text-muted-foreground">{t.statusFull}</span>
+			</div>
+			<div class="flex items-center gap-1.5">
+				<div class="h-2.5 w-2.5 rounded-full border border-white bg-[#94A3B8] shadow-xs"></div>
+				<span class="text-muted-foreground">{t.statusClosed}</span>
+			</div>
 		</div>
 	</div>
-	<div class="h-4 w-px bg-border"></div>
-	<div class="flex items-center gap-2">
-		<span class="font-bold text-foreground">{t.shelterStatus}:</span>
-		<div class="flex items-center gap-1.5">
-			<div class="h-2.5 w-2.5 rounded-full border border-white bg-[#16A34A] shadow-xs"></div>
-			<span class="text-muted-foreground">{t.statusOpen}</span>
-		</div>
-		<div class="flex items-center gap-1.5">
-			<div class="h-2.5 w-2.5 rounded-full border border-white bg-[#F59E0B] shadow-xs"></div>
-			<span class="text-muted-foreground">{t.statusStandby}</span>
-		</div>
-		<div class="flex items-center gap-1.5">
-			<div class="h-2.5 w-2.5 rounded-full border border-white bg-[#DC2626] shadow-xs"></div>
-			<span class="text-muted-foreground">{t.statusFull}</span>
-		</div>
-		<div class="flex items-center gap-1.5">
-			<div class="h-2.5 w-2.5 rounded-full border border-white bg-[#94A3B8] shadow-xs"></div>
-			<span class="text-muted-foreground">{t.statusClosed}</span>
-		</div>
-	</div>
-</div>
+{/if}
 
 <style>
 	:global(.maplibregl-popup-content) {
@@ -763,6 +886,12 @@
 	}
 	:global(.custom-shelter-marker.is-selected) {
 		z-index: 50 !important;
+	}
+	/* A ring, not a bigger or raised pin: drop-off points of one shelter sit close together, and
+	   a pin grown or lifted over its neighbour would take that neighbour's taps. */
+	:global(.custom-point-marker.is-selected svg) {
+		filter: drop-shadow(0 0 1.5px #0f172a) drop-shadow(0 0 1.5px #0f172a)
+			drop-shadow(0 0 6px rgba(2, 132, 199, 0.9)) !important;
 	}
 	:global(.custom-shelter-marker.is-selected .marker-pin) {
 		transform: scale(1.18) !important;

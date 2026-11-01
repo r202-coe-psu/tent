@@ -1,11 +1,21 @@
 import { json } from '@sveltejs/kit';
+import {
+	scannerServerRepository,
+	type PersistedScannerDevice
+} from '$lib/features/kiosk-devices/server';
 import { ServiceError } from '$lib/server/couch-admin';
 import {
+	authenticateScannerDevice,
+	DEPENDENCY_UNAVAILABLE,
+	DEVICE_AUTH_FAILED,
+	ScannerAuthError,
 	ScannerConflictError,
 	ScannerDependencyError,
 	ScannerDeviceNotFoundError
 } from './device-credentials';
+import { verifyDeviceStaffPin } from './staff-pin';
 import { StaffPinNotSetError, StaffPinUnavailableError } from './staff-pin-store';
+import { staffPinThrottle, type StaffPinThrottleResult } from './staff-pin-throttle';
 
 /** Every staff-PIN response may carry a PIN or its set/verify state — never cache it. */
 export const STAFF_PIN_NO_STORE = { 'cache-control': 'no-store', pragma: 'no-cache' } as const;
@@ -64,4 +74,76 @@ export function staffPinAdminError(error: unknown): Response {
 		);
 	}
 	return staffPinJson(errorBody('INTERNAL', 'Unexpected server error'), 500);
+}
+
+/** The `pin` field of the body, whatever its shape; a malformed one is checked as a wrong PIN. */
+function suppliedPin(body: unknown): unknown {
+	return body && typeof body === 'object' ? (body as { pin?: unknown }).pin : undefined;
+}
+
+const PIN_CHECK_UNAVAILABLE = errorBody(DEPENDENCY_UNAVAILABLE, 'บริการตรวจสอบ PIN ไม่พร้อมใช้งาน');
+
+/**
+ * A kiosk request carrying the staff PIN of *this* device (CR-158): authenticate the scanner's
+ * device credentials, then check the body's `pin` in the device's `staffPinThrottle` queue — so
+ * every route asking for the PIN shares one guessing budget and the same errors. `onOk` answers
+ * only once the PIN matched. `audit` gets one outcome per check and must never be given the PIN.
+ */
+export async function withDeviceStaffPin(
+	request: Request,
+	audit: (deviceId: string, outcome: string) => void,
+	onOk: (device: PersistedScannerDevice) => Promise<Response>
+): Promise<Response> {
+	let device: PersistedScannerDevice | null = null;
+	try {
+		await authenticateScannerDevice(
+			request.headers.get('x-device-id') ?? '',
+			request.headers.get('x-device-secret') ?? '',
+			{
+				// Capture the doc authentication already loaded, so the PIN check needs no 2nd read.
+				getDeviceByDeviceId: async (deviceId) => {
+					device = await scannerServerRepository.getDeviceByDeviceId(deviceId);
+					return device;
+				}
+			}
+		);
+	} catch (error) {
+		if (error instanceof ScannerAuthError) {
+			return staffPinJson(errorBody(DEVICE_AUTH_FAILED, 'ไม่สามารถยืนยันเครื่อง kiosk ได้'), 401);
+		}
+		return staffPinJson(PIN_CHECK_UNAVAILABLE, 503);
+	}
+	const authenticated = device as PersistedScannerDevice | null;
+	if (!authenticated) return staffPinJson(PIN_CHECK_UNAVAILABLE, 503);
+
+	const pin = suppliedPin(await request.json().catch(() => null));
+
+	let result: StaffPinThrottleResult;
+	try {
+		result = await staffPinThrottle.run(authenticated.device_id, async () => {
+			const checked = await verifyDeviceStaffPin(authenticated, pin);
+			audit(authenticated.device_id, checked.kind);
+			return checked;
+		});
+	} catch (error) {
+		audit(
+			authenticated.device_id,
+			error instanceof StaffPinUnavailableError ? 'unavailable' : 'error'
+		);
+		return staffPinJson(PIN_CHECK_UNAVAILABLE, 503);
+	}
+	switch (result.kind) {
+		case 'busy':
+			audit(authenticated.device_id, 'busy');
+			return staffPinJson(errorBody('RATE_LIMITED', 'กำลังตรวจ PIN อยู่ กรุณารอสักครู่'), 429);
+		case 'wrong':
+			return staffPinJson(errorBody('staff_pin_invalid', 'PIN ไม่ถูกต้อง'), 401);
+		case 'not_set':
+			return staffPinJson(
+				errorBody('staff_pin_not_set', 'ยังข้ามขั้นตอนนี้ไม่ได้ กรุณาติดต่อผู้ดูแลระบบ'),
+				409
+			);
+		case 'ok':
+			return onOk(authenticated);
+	}
 }

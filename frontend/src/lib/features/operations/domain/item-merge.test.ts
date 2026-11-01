@@ -185,13 +185,13 @@ describe('AC-F1 — merge A (2 lots, 24 + 6) into B', () => {
 		expect(plan.legs.map((l) => l.sourceQty)).toEqual(['6']);
 	});
 
-	it('FR-F2 — returns the source deactivated with merged_into and schema_v 5', async () => {
+	it('FR-F2 — returns the source deactivated with merged_into and the current schema_v', async () => {
 		const plan = await planItemMerge(input());
 		expect(plan.source).toMatchObject({
 			_id: 'item_master:A',
 			merged_into: 'item_master:B',
 			deactivated: true,
-			schema_v: 5
+			schema_v: 6
 		});
 	});
 

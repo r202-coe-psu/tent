@@ -1,3 +1,4 @@
+import { DEFAULT_SITE_KIND } from '$lib/features/shelters/server';
 import type { RowValidation } from './import-row';
 
 /**
@@ -14,6 +15,8 @@ export function normalizeShelterName(name: string): string {
 export interface ExistingShelter {
 	code: string;
 	name: string;
+	/** Stored kind; a shelter without one reads as {@link DEFAULT_SITE_KIND}. */
+	site_kind?: string;
 }
 
 export interface DuplicateMatch {
@@ -21,6 +24,7 @@ export interface DuplicateMatch {
 	name: string;
 	existingCode: string;
 	existingName: string;
+	existingSiteKind: string;
 }
 
 /**
@@ -47,7 +51,8 @@ export function findExistingDuplicates(
 			row: v.row,
 			name: v.name,
 			existingCode: match.code,
-			existingName: match.name
+			existingName: match.name,
+			existingSiteKind: match.site_kind ?? DEFAULT_SITE_KIND
 		});
 	}
 	return matches;

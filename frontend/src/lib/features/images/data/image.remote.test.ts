@@ -103,6 +103,9 @@ describe('ImageRemoteRepository.saveImage', () => {
 		expect(savedDoc?.type).toBe('image');
 		expect(savedDoc?.shelter_code).toBe('SH001');
 		expect(savedDoc?.created_by).toBe('tester');
+		// CR-175 AC-11 — a staff photo is schema_v 2 and never a donation photo.
+		expect(savedDoc?.schema_v).toBe(2);
+		expect(savedDoc).not.toHaveProperty('purpose');
 
 		const stored = attachments.get(summary._id);
 		expect(await stored?.get('full')?.text()).toBe('full-bytes');

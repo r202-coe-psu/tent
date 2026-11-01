@@ -54,13 +54,44 @@ describe('savePublicBookingImage', () => {
 		expect(docId).toBe(result.photo_id);
 		expect(doc).toMatchObject({
 			type: 'image',
-			schema_v: 1,
+			schema_v: 2,
 			shelter_code: 'SH001',
 			created_by: 'public',
 			filename: 'face.webp'
 		});
+		// A booking face photo is not a donation photo: the orphan sweep must never see it (AC-11).
+		expect(doc).not.toHaveProperty('purpose');
 		expect(putAttachmentAsPublicWriter).toHaveBeenCalledTimes(2);
 		expect(deleteAsPublicWriter).not.toHaveBeenCalled();
+	});
+
+	it('stamps purpose on a donation photo', async () => {
+		vi.mocked(putAsPublicWriter).mockResolvedValue({
+			status: 201,
+			data: { ok: true, rev: '1-a' }
+		});
+		vi.mocked(putAttachmentAsPublicWriter).mockResolvedValue({
+			status: 201,
+			id: 'image:X',
+			rev: '2-b'
+		});
+
+		await savePublicBookingImage({
+			shelterCode: 'SH001',
+			full: new Blob(['full'], { type: 'image/webp' }),
+			filename: 'box.webp',
+			contentType: 'image/webp',
+			width: 1600,
+			height: 1200,
+			originalSize: 4_000_000,
+			compressedSize: 300_000,
+			thumbnailSize: 9_000,
+			purpose: 'donation'
+		});
+
+		const [, , doc] = vi.mocked(putAsPublicWriter).mock.calls[0];
+		expect(doc).toMatchObject({ type: 'image', schema_v: 2, purpose: 'donation' });
+		expect(doc).not.toHaveProperty('donation_id');
 	});
 
 	it('rolls back the image doc when an attachment PUT fails', async () => {

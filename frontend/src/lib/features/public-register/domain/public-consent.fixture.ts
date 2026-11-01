@@ -11,13 +11,17 @@ export function webConsentBody(
 	memberCount: number,
 	decision: Partial<ConsentDecision> = {}
 ): PublicConsentBody {
-	const shared = { guardian_for: [], verbal: false, ...WEB_CONSENT_STAMP };
-	const consent =
-		decision.mode === 'basic'
-			? { mode: 'basic', ...shared, ...decision }
-			: { mode: 'full', health: true, search_visible: true, ...shared, ...decision };
+	const consent: ConsentDecision = {
+		mode: 'full',
+		health: true,
+		search_visible: true,
+		guardian_for: [],
+		verbal: false,
+		...WEB_CONSENT_STAMP,
+		...decision
+	};
 	return {
-		consent: consent as ConsentDecision,
+		consent,
 		consent_member_keys: Array.from({ length: memberCount }, (_, i) => `m${i}`)
 	};
 }

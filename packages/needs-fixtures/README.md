@@ -45,9 +45,8 @@ Add an entry to `cases.json` and both suites pick it up — no code change. Give
 `why` field a reason a reader will believe; these cases are the record of what the
 rule means.
 
-Cases stay inside the **common domain** of the three implementations: every donation
-carries an explicit `campaign_id` and every item an explicit `item_id`. Outside it the
-copies differ on purpose — `calculateReserved` attributes a campaign-less donation to
-every campaign and infers an item from free text, which the donation side dropped
-deliberately to stop a substring guess binding a booking to the wrong campaign. Those
-differences are intended and are covered by each side's own tests.
+A donation with no `campaign_id` is owed to no campaign, and a line with no `item_id`
+(free text) to no item — in all three copies. `calculateReserved` used to attribute the
+first to every campaign and guess the second from the text, so the back-office board
+counted bookings the public board and the quota counter did not (#689). The two cases
+at the end of `cases.json` hold that line.

@@ -471,3 +471,28 @@ async def test_shelved_settle_retries_once_after_a_conflict() -> None:
 async def test_shelved_settle_gives_up_after_the_second_conflict() -> None:
     calls = await _shelved_reconcile_calls(_report(conflicted=1), _report(conflicted=1))
     assert calls == 2
+
+
+async def test_unsynced_buffer_is_left_alone(db: None) -> None:
+    """Mongo owns an unsynced row: FastAPI's cancel already released its quota, and a
+    stale CouchDB status must not revert it or release again."""
+    await _seed()
+    await reserve_quota(
+        shelter_code=SHELTER,
+        campaign_id=CAMPAIGN,
+        item_id="item:rice",
+        qty=Decimal(6),
+        now=datetime.now(UTC),
+    )
+    await _buffer(status="cancelled")
+    await DonationBuffer.get_pymongo_collection().update_one(
+        {"_id": DONATION_ID}, {"$set": {"synced_to_couch": False}}
+    )
+
+    released = await settle_donation_quota(
+        _doc("pending_review"), now=datetime.now(UTC)
+    )
+
+    assert released == Decimal(0)
+    assert await _current_status() == "cancelled"
+    assert await _reserved() == Decimal(6)

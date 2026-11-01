@@ -285,6 +285,47 @@ describe('receiveDonationBatch — complete receipts (CR-143 FR-B4)', () => {
 	});
 });
 
+describe('receiveDonationBatch — bookings split across drop-off points (CR-206 FR-MP-24a)', () => {
+	it('AC-19: refuses a booking whose lines name a drop-off point, keying nothing', async () => {
+		donation = {
+			...donation,
+			items: donation.items!.map((item, i) =>
+				i === 1 ? { ...item, drop_off_point_id: 'sp-med' } : item
+			)
+		};
+		docs.set(donation._id, clone(donation) as unknown as Doc);
+
+		await expect(repo.receiveDonationBatch(donation, fullCount(), ctx)).rejects.toThrow(
+			'ใบนี้แยกส่งหลายจุด — รับที่หน้าสแกน'
+		);
+		expect(ledgerRows()).toHaveLength(0);
+		expect(bulkCalls).toHaveLength(0);
+		expect(storedDonation().status).toBe(donation.status);
+	});
+
+	it('refuses a booking a point started receiving since the page was opened', async () => {
+		docs.set(donation._id, {
+			...(clone(donation) as unknown as Doc),
+			point_receipts: [
+				{
+					point_id: 'sp-gym',
+					line_nos: [0],
+					received_at: '2026-10-28T02:00:00.000Z',
+					received_by: 'staff',
+					audit_id: 'audit:X',
+					ledger_ids: [],
+					items: [{ line_no: 0, item_id: 'item:rice', qty: '0', unit: 'kg', rejected: true }]
+				}
+			]
+		});
+
+		await expect(repo.receiveDonationBatch(donation, fullCount(), ctx)).rejects.toThrow(
+			/แยกส่งหลายจุด/
+		);
+		expect(bulkCalls).toHaveLength(0);
+	});
+});
+
 describe('receiveDonationBatch — validation writes nothing (CR-143 FR-D2)', () => {
 	it('rejects a perishable line without lot.expiry before any row is written', async () => {
 		mockGetItem.mockImplementation(async (id) =>

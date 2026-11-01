@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { familySearch, PublicApiError, publicApiError } from './public-api';
+import { familySearch, getPublicShelter, PublicApiError, publicApiError } from './public-api';
 
 const FALLBACK = 'เกิดข้อผิดพลาดในการค้นหา';
 
@@ -82,5 +82,50 @@ describe('familySearch', () => {
 			Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ results: [] }) })
 		);
 		await expect(familySearch('สมชาย')).resolves.toEqual({ results: [] });
+	});
+});
+
+describe('getPublicShelter', () => {
+	function fetchStub(response: unknown) {
+		return vi.fn(() => Promise.resolve(response)) as unknown as typeof fetch;
+	}
+
+	it('unwraps the shelter and encodes the code in the path', async () => {
+		const shelter = { id: 'SH 001', name: 'ศูนย์ A', address: 'ที่อยู่', geo: { lat: 1, lng: 2 } };
+		const fetchFn = fetchStub({ ok: true, status: 200, json: () => Promise.resolve({ shelter }) });
+		await expect(getPublicShelter('SH 001', fetchFn)).resolves.toEqual(shelter);
+		expect(fetchFn).toHaveBeenCalledWith('/api/public/v1/shelters/SH%20001');
+	});
+
+	it('throws PublicApiError on 404', async () => {
+		const fetchFn = fetchStub({
+			ok: false,
+			status: 404,
+			json: () => Promise.resolve({ error: 'Shelter not found' })
+		});
+		await expect(getPublicShelter('NOPE', fetchFn)).rejects.toBeInstanceOf(PublicApiError);
+	});
+
+	it('maps 503 to unavailable', async () => {
+		const fetchFn = fetchStub({
+			ok: false,
+			status: 503,
+			json: () => Promise.resolve({ error: 'Shelter not found' })
+		});
+		await expect(getPublicShelter('SH001', fetchFn)).rejects.toMatchObject({
+			kind: 'unavailable'
+		});
+	});
+
+	it('treats a 200 without a shelter as a failure', async () => {
+		const fetchFn = fetchStub({ ok: true, status: 200, json: () => Promise.resolve({}) });
+		await expect(getPublicShelter('SH001', fetchFn)).rejects.toBeInstanceOf(PublicApiError);
+	});
+
+	it('turns a network failure into unavailable', async () => {
+		const fetchFn = vi.fn(() =>
+			Promise.reject(new TypeError('Failed to fetch'))
+		) as unknown as typeof fetch;
+		await expect(getPublicShelter('SH001', fetchFn)).rejects.toMatchObject({ kind: 'unavailable' });
 	});
 });

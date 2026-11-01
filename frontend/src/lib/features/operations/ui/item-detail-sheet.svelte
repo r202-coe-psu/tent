@@ -30,7 +30,7 @@
 	}: {
 		open?: boolean;
 		row: StockDisplayRow | undefined;
-		/** Every lot of this item (zero-qty lots are dropped here). */
+		/** Every lot of this item (zero-qty lots are dropped here; negative lots are shown with a warning, #855). */
 		lots: readonly StockLotBalance[];
 		/** Shelf life / storage type per item — feeds the lot order and its reason. */
 		itemsById?: ReadonlyMap<string, LotPriorityItem>;
@@ -74,6 +74,11 @@
 							{row.qtyOnHand}
 							<span class="text-xs font-normal text-slate-500">{row.unitLabel}</span>
 						</dd>
+						{#if row.usableNote}
+							<dd class="mt-0.5 text-xs font-semibold text-red-800 tabular-nums">
+								{row.usableNote}
+							</dd>
+						{/if}
 					</div>
 					<div class="rounded-xl border border-slate-200/80 bg-slate-50 p-2.5">
 						<dt class="text-xs text-slate-500">เกณฑ์</dt>
@@ -142,7 +147,7 @@
 								<ul class="space-y-2.5">
 									{#each lotRows as lot, index (lot.lotRef)}
 										<li
-											class="rounded-xl border p-3 {lot.isExpired
+											class="rounded-xl border p-3 {lot.isExpired || lot.isNegative
 												? 'border-red-200 bg-red-50/40'
 												: 'border-slate-200/80 bg-white'}"
 										>
@@ -153,7 +158,13 @@
 													>
 													<span class="text-sm text-slate-500">{lot.unit}</span>
 												</p>
-												{#if lot.isNext}
+												{#if lot.isNegative}
+													<span
+														class="rounded-full bg-red-100 px-2.5 py-1 text-xs font-semibold text-red-800 ring-1 ring-red-300"
+													>
+														ล็อตนี้ยอดติดลบ — ต้องแก้ยอด
+													</span>
+												{:else if lot.isNext}
 													<span
 														class="rounded-full bg-teal-50 px-2.5 py-1 text-xs font-semibold text-teal-900 ring-1 ring-teal-200"
 													>
@@ -184,11 +195,13 @@
 												<p class="mt-0.5 text-xs text-slate-500">{lot.clockLine}</p>
 											{/if}
 											<p
-												class="mt-1 text-xs font-medium {lot.isExpired
+												class="mt-1 text-xs font-medium {lot.isExpired || lot.isNegative
 													? 'text-red-800'
 													: 'text-teal-900'}"
 											>
-												{lot.isExpired ? '' : `ลำดับที่ ${index + 1}: `}{lot.reason}
+												{lot.isExpired || lot.isNegative
+													? ''
+													: `ลำดับที่ ${index + 1}: `}{lot.reason}
 											</p>
 										</li>
 									{/each}

@@ -13,6 +13,9 @@
 	import NeedsBoardAdmin from '$lib/components/needs-board-admin.svelte';
 	import PendingReviewBoard from '$lib/components/pending-review-board.svelte';
 	import PendingReviewDetail from '$lib/components/pending-review-detail.svelte';
+	import ReceivedDonationsList, {
+		type SubmittedReceivedSearch
+	} from './components/received-donations-list.svelte';
 	import ScanStation from './components/scan-station.svelte';
 	import CreateCampaignForm from './components/create-campaign-form.svelte';
 	import EditCampaignForm from './components/edit-campaign-form.svelte';
@@ -20,6 +23,7 @@
 	import DonationSlotsManager from './components/donation-slots-manager.svelte';
 	import { useDonationNeedsBoard, type NeedItem } from '$lib/features/operations';
 	import { useQueryClient } from '@tanstack/svelte-query';
+	import { resolveShelterCode } from '$lib/db/shelter';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import User from '@lucide/svelte/icons/user';
 	import {
@@ -29,6 +33,8 @@
 		parseQueueFilter,
 		queueGroupOf,
 		useDonationQueue,
+		useReceivedDonations,
+		useReceivedSearch,
 		type DonationQueueFilter,
 		type LineReviewDecision,
 		type PendingDonationRow,
@@ -96,6 +102,23 @@
 	const pendingCount = $derived(
 		queueRows.filter((row) => queueGroupOf(row.status) === 'pending').length
 	);
+	// "รับแล้ว" (#821) — fetched only while that filter is open, for the shelter the page
+	// works in. Never part of `queueRows`, so "ทั้งหมด" and the badge stay the open queue.
+	// A submitted search (FR-8) replaces the plain list in the same place: it asks the server
+	// for the whole shelter, one type at a time, and pages by the cursor the server issues.
+	let activeSearch = $state<SubmittedReceivedSearch | null>(null);
+	const receivedOpen = $derived(activeSubTab === 'list' && queueFilter === 'received');
+	const receivedQuery = useReceivedDonations(
+		() => resolveShelterCode() ?? '',
+		() => receivedOpen && activeSearch === null
+	);
+	const searchQuery = useReceivedSearch(
+		() => resolveShelterCode() ?? '',
+		() => (receivedOpen && activeSearch ? { by: activeSearch.by, q: activeSearch.q } : null)
+	);
+	// The one query the list shows right now.
+	const shownReceived = $derived(activeSearch ? searchQuery : receivedQuery);
+	const receivedRows = $derived(shownReceived.data?.pages.flatMap((p) => p.donations) ?? []);
 	const refreshQueue = () => queryClient.invalidateQueries({ queryKey: donationQueueKeys.all });
 
 	/** What the list tab shows: the list, a booking under review, or the counter. */
@@ -104,6 +127,10 @@
 	let pendingActionSaving = $state(false);
 
 	function openRow(row: PendingDonationRow) {
+		if (row.status === 'received') {
+			selectedPendingRequest = row;
+			return;
+		}
 		if (queueGroupOf(row.status) === 'pending') {
 			selectedPendingRequest = row;
 			return;
@@ -119,6 +146,7 @@
 	}
 
 	function setQueueFilter(filter: DonationQueueFilter) {
+		activeSearch = null;
 		const params = new SvelteURLSearchParams(page.url.searchParams);
 		params.set('tab', 'list');
 		params.set('filter', filter);
@@ -141,6 +169,7 @@
 		viewState = 'list';
 		selectedPendingRequest = null;
 		station = null;
+		activeSearch = null;
 	}
 
 	async function handleApprovePending(
@@ -168,7 +197,9 @@
 				toast.success(
 					data.donation?.status === 'rejected'
 						? `ปฏิเสธคำขอ ${bookingRef} แล้ว (ไม่รับทุกรายการ)`
-						: `บันทึกผลการประเมิน ${bookingRef} แล้ว — รอผู้บริจาคนำส่ง`
+						: data.donation?.status === 'received'
+							? `บันทึกผลการประเมิน ${bookingRef} แล้ว — ทุกรายการมีผลครบ ปิดใบแล้ว`
+							: `บันทึกผลการประเมิน ${bookingRef} แล้ว — รอผู้บริจาคนำส่ง`
 				);
 				selectedPendingRequest = null;
 				await refreshQueue();
@@ -271,13 +302,15 @@
 		     domain read as one control. Built on the Tabs primitive rather than supply's
 		     bare <button>s: identical geometry, but the list keeps its tablist role and
 		     arrow-key navigation. -->
+		<!-- Below sm the three tabs share the width as equal columns, so none sits hidden
+		     behind a scrollbar the donor-desk staff can't see. -->
 		<div class="flex w-full scrollbar-none overflow-x-auto pb-1 sm:pb-0">
 			<Tabs.List
-				class="inline-flex h-auto min-w-max justify-start rounded-xl border border-border/40 bg-muted/60 p-1 shadow-sm"
+				class="grid h-auto w-full grid-cols-3 rounded-xl border border-border/40 bg-muted/60 p-1 shadow-sm sm:inline-flex sm:w-auto sm:min-w-max sm:justify-start"
 			>
 				<Tabs.Trigger
 					value="list"
-					class="flex shrink-0 items-center gap-2 rounded-lg border border-transparent px-3.5 py-2 text-xs font-semibold tracking-wide text-muted-foreground transition-all duration-300 hover:text-foreground active:scale-[0.98] data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm md:px-5 md:py-2.5"
+					class="flex min-w-0 flex-col items-center justify-center gap-1 rounded-lg border border-transparent px-1.5 py-2 text-center text-xs leading-tight font-semibold tracking-wide whitespace-normal text-muted-foreground transition-all duration-300 hover:text-foreground active:scale-[0.98] data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm sm:shrink-0 sm:flex-row sm:gap-2 sm:px-3.5 sm:whitespace-nowrap md:px-5 md:py-2.5"
 				>
 					<ClipboardList class="h-4 w-4" />
 					รายการของบริจาค
@@ -293,7 +326,7 @@
 
 				<Tabs.Trigger
 					value="needs"
-					class="flex shrink-0 items-center gap-2 rounded-lg border border-transparent px-3.5 py-2 text-xs font-semibold tracking-wide text-muted-foreground transition-all duration-300 hover:text-foreground active:scale-[0.98] data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm md:px-5 md:py-2.5"
+					class="flex min-w-0 flex-col items-center justify-center gap-1 rounded-lg border border-transparent px-1.5 py-2 text-center text-xs leading-tight font-semibold tracking-wide whitespace-normal text-muted-foreground transition-all duration-300 hover:text-foreground active:scale-[0.98] data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm sm:shrink-0 sm:flex-row sm:gap-2 sm:px-3.5 sm:whitespace-nowrap md:px-5 md:py-2.5"
 				>
 					<Megaphone class="h-4 w-4" />
 					จัดการความต้องการ
@@ -302,7 +335,7 @@
 				<!-- DN-5 — the queue the public wizard books into (schema.md §2.13). -->
 				<Tabs.Trigger
 					value="slots"
-					class="flex shrink-0 items-center gap-2 rounded-lg border border-transparent px-3.5 py-2 text-xs font-semibold tracking-wide text-muted-foreground transition-all duration-300 hover:text-foreground active:scale-[0.98] data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm md:px-5 md:py-2.5"
+					class="flex min-w-0 flex-col items-center justify-center gap-1 rounded-lg border border-transparent px-1.5 py-2 text-center text-xs leading-tight font-semibold tracking-wide whitespace-normal text-muted-foreground transition-all duration-300 hover:text-foreground active:scale-[0.98] data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm sm:shrink-0 sm:flex-row sm:gap-2 sm:px-3.5 sm:whitespace-nowrap md:px-5 md:py-2.5"
 				>
 					<CalendarClock class="h-4 w-4" />
 					ช่วงเวลารับของ
@@ -322,6 +355,7 @@
 				<PendingReviewDetail
 					request={selectedPendingRequest}
 					saving={pendingActionSaving}
+					readonly={selectedPendingRequest.status === 'received'}
 					onBack={() => (selectedPendingRequest = null)}
 					onApprove={handleApprovePending}
 					onReject={handleRejectPending}
@@ -336,6 +370,22 @@
 					bind:filter={() => queueFilter, setQueueFilter}
 					onViewDetails={openRow}
 				>
+					{#snippet received()}
+						<ReceivedDonationsList
+							rows={receivedRows}
+							shelterCode={resolveShelterCode() ?? ''}
+							searchTerm={activeSearch}
+							loading={shownReceived.isPending}
+							error={shownReceived.error?.message ?? null}
+							hasMore={shownReceived.hasNextPage}
+							loadingMore={shownReceived.isFetchingNextPage}
+							onLoadMore={() => shownReceived.fetchNextPage()}
+							onRetry={() => shownReceived.refetch()}
+							onSearch={(term) => (activeSearch = term)}
+							onClearSearch={() => (activeSearch = null)}
+							onViewDetails={openRow}
+						/>
+					{/snippet}
 					{#snippet actions()}
 						<Button
 							type="button"

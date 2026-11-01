@@ -35,6 +35,7 @@ export interface JobsTranslations {
 	tagOpen: string;
 	tagNearFull: string;
 	tagFull: string;
+	tagClosed: string;
 	shiftsAndQuota: string;
 	shiftsUnit: string;
 	moreShiftsPrefix: string;
@@ -181,6 +182,7 @@ export const jobsI18n: Record<LanguageCode, JobsTranslations> = {
 		tagOpen: 'เปิดรับสมัคร',
 		tagNearFull: 'ใกล้เต็ม',
 		tagFull: 'เต็มแล้ว',
+		tagClosed: 'ปิดรับแล้ว',
 		shiftsAndQuota: 'รอบกะเวลาและโควตาปฏิบัติงาน',
 		shiftsUnit: 'กะ',
 		moreShiftsPrefix: 'ยังมีอีก',
@@ -292,7 +294,7 @@ export const jobsI18n: Record<LanguageCode, JobsTranslations> = {
 		errApplyGeneric: 'เกิดข้อผิดพลาดในการส่งใบสมัคร',
 		errFirstName: 'กรุณากรอกชื่อจริง',
 		errLastName: 'กรุณากรอกนามสกุล',
-		errPhone: 'กรุณากรอกเบอร์โทรศัพท์มือถือ 10 หลัก'
+		errPhone: 'เบอร์โทรต้องเป็นตัวเลข 10 หลัก ขึ้นต้นด้วย 0'
 	},
 	en: {
 		pageTitle: 'Volunteer Job Board — Smart Shelter',
@@ -328,6 +330,7 @@ export const jobsI18n: Record<LanguageCode, JobsTranslations> = {
 		tagOpen: 'Open',
 		tagNearFull: 'Almost Full',
 		tagFull: 'Full',
+		tagClosed: 'Closed',
 		shiftsAndQuota: 'Shifts & Capacity Quota',
 		shiftsUnit: 'shifts',
 		moreShiftsPrefix: 'Plus',
@@ -440,6 +443,6 @@ export const jobsI18n: Record<LanguageCode, JobsTranslations> = {
 		errApplyGeneric: 'An error occurred while submitting your application',
 		errFirstName: 'Please enter your first name',
 		errLastName: 'Please enter your last name',
-		errPhone: 'Please enter a valid 10-digit mobile phone number'
+		errPhone: 'Phone must be a 10-digit number starting with 0'
 	}
 };

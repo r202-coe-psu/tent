@@ -138,18 +138,44 @@ export function sanitizePhoneTyping(value: string): string {
 	return digits.slice(0, digits.startsWith('66') ? 11 : 10);
 }
 
-/** Thai-friendly phone field: empty / 「ไม่มี」→ null; `+66` normalized; otherwise digits only. */
+/** System-wide phone rule (CR-210 FR-1/FR-6): 10-digit mobile, no landlines. */
+export const THAI_MOBILE_PHONE_MESSAGE = 'เบอร์โทรต้องเป็นตัวเลข 10 หลัก ขึ้นต้นด้วย 0';
+const THAI_MOBILE_PHONE_RE = /^0\d{9}$/;
+
+/** True when `value` normalises (`normalizeThaiPhone`) to a 10-digit mobile `^0\d{9}$`. */
+export function isThaiMobilePhone(value: string | null | undefined): boolean {
+	return THAI_MOBILE_PHONE_RE.test(normalizeThaiPhone(value ?? ''));
+}
+
+/** Required mobile: outputs the normalised 10-digit number (the form `phone_hash` is computed from). */
+export const requiredThaiMobilePhoneSchema = z
+	.string({ error: THAI_MOBILE_PHONE_MESSAGE })
+	.transform(normalizeThaiPhone)
+	.pipe(z.string().regex(THAI_MOBILE_PHONE_RE, THAI_MOBILE_PHONE_MESSAGE));
+
+/** Optional mobile: empty / null → null; `+66` normalized; anything else must be a 10-digit mobile. */
 export const phoneSchema = z
-	.union([
-		z.null(),
-		z.literal(''),
-		z
-			.string({ error: 'กรุณากรอกเบอร์โทรศัพท์' })
-			.trim()
-			.transform(normalizeThaiPhone)
-			.pipe(z.string().regex(/^[0-9]+$/, 'กรุณากรอกเบอร์โทรศัพท์เป็นตัวเลขเท่านั้น'))
-	])
-	.transform((val): string | null => (val === '' || val === null ? null : val));
+	.string({ error: 'กรุณากรอกเบอร์โทรศัพท์' })
+	.nullable()
+	.transform((value) => value?.trim() || null)
+	.pipe(requiredThaiMobilePhoneSchema.nullable());
+
+/**
+ * Walk-in donor phone: blank / missing → null; otherwise normalized (`+66…` → `0…`,
+ * separators dropped) and required to be exactly `^0\d{9}$`. It does NOT sanitize: letters and
+ * Thai digits are rejected (`sanitizePhoneTyping` is for typing only). Feeds `phone_hash`, so
+ * the same number must always normalize to the same string.
+ */
+export const thaiMobilePhoneSchema = z
+	.string()
+	.nullish()
+	.transform((val) => normalizeThaiPhone(val ?? ''))
+	.pipe(
+		z.union([
+			z.literal('').transform((): null => null),
+			z.string().regex(THAI_MOBILE_PHONE_RE, THAI_MOBILE_PHONE_MESSAGE)
+		])
+	);
 
 /**
  * Reusable enum for the registration channel.

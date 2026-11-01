@@ -33,7 +33,7 @@
 	import { formatThaiShortDate } from '$lib/utils/date';
 	import { SvelteMap } from 'svelte/reactivity';
 	import { applicantAttendance } from '../domain/applicant-attendance';
-	import { APPLICATION_STATUS_META } from '../domain/applicant-queue';
+	import { APPLICATION_STATUS_META, isHeldForInactiveProfile } from '../domain/applicant-queue';
 	import ShiftAttendanceAction from './shift-attendance-action.svelte';
 	import { resolveSkillOption, type SkillOption } from '../domain/skill-catalog';
 	import { checkRequiredSkills } from '../domain/required-skills';
@@ -106,6 +106,9 @@
 	const reviewReasons = $derived([
 		...new Set(applications.flatMap((item) => item.review_reasons ?? []))
 	]);
+	const heldForInactiveProfile = $derived(
+		pending.some((item) => isHeldForInactiveProfile(item, volunteer))
+	);
 	const identityStatus = $derived(volunteer ? identityVerificationStatus(volunteer) : null);
 	const skills = $derived.by<{ key: string; label: string; controlled: boolean }[]>(() => {
 		const map = new SvelteMap<string, { key: string; label: string; controlled: boolean }>();
@@ -232,6 +235,13 @@
 		{:else}
 			<span class="rounded-md bg-muted px-1.5 py-0.5 text-muted-foreground ring-1 ring-border">
 				ยืนยันตัวตน: ยังไม่มีข้อมูลอาสาในระบบ
+			</span>
+		{/if}
+		{#if heldForInactiveProfile}
+			<span
+				class="rounded-md bg-amber-50 px-1.5 py-0.5 font-medium text-amber-800 ring-1 ring-amber-200"
+			>
+				โปรไฟล์นี้ถูกปิดใช้งาน
 			</span>
 		{/if}
 		{#each openReasons as reason (reason)}

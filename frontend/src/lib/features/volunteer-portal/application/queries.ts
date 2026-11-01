@@ -51,8 +51,9 @@ export function useFindTicketsMutation() {
 export function useCancelTicketMutation() {
 	const queryClient = useQueryClient();
 	return createMutation(() => ({
-		mutationFn: (token: string) => cancelTicket(token),
-		onSuccess: (_data, token: string) => {
+		mutationFn: (input: { token: string; applicationId: string }) =>
+			cancelTicket(input.token, input.applicationId),
+		onSuccess: (_data, { token }) => {
 			void queryClient.invalidateQueries({ queryKey: volunteerPortalKeys.ticket(token) });
 		}
 	}));

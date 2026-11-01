@@ -56,6 +56,9 @@ import {
 	pinActiveShelter
 } from './helpers/staff-ui';
 
+/** Id of this spec's created-data ledger (see helpers/public-cleanup.ts). */
+const LEDGER_SUITE = 'onsite-stations-flow';
+
 test.describe.configure({ mode: 'serial' });
 test.use({ actionTimeout: 15_000 });
 
@@ -103,7 +106,7 @@ test.afterAll(async () => {
 		await teardownShelter(shelterCode).catch(() => undefined);
 		shelterCode = undefined;
 	}
-	await purgeCreatedData(LAST_NAME);
+	await purgeCreatedData(LEDGER_SUITE, LAST_NAME);
 	if (registrar) await deleteCouchUser(registrar.name).catch(() => undefined);
 	if (medic) await deleteCouchUser(medic.name).catch(() => undefined);
 });
@@ -132,7 +135,7 @@ test.describe(
 				capacity: 40,
 				acceptsPreRegistration: true
 			});
-			recordCreatedShelter(shelterCode);
+			recordCreatedShelter(shelterCode, LEDGER_SUITE);
 
 			await configureOnsiteShelterViaUi(page, shelterCode, {
 				enableMedicalScreening: true,
@@ -236,7 +239,11 @@ test.describe(
 
 				await desk.goto(`/onsite/zoning/${ids[head.firstName]}`);
 				await expect(desk.getByText('Station 3', { exact: true })).toBeVisible({ timeout: 20_000 });
-				await desk.waitForLoadState('networkidle');
+				// `networkidle` never settles (CouchDB `_changes` long-polls stay open): wait for the
+				// confirm button the next step branches on instead.
+				await expect(desk.getByRole('button', { name: 'ยืนยันถึงโซน', exact: true })).toBeVisible({
+					timeout: 20_000
+				});
 				const confirmHousehold = desk.getByRole('button', { name: 'ยืนยันทั้งครัวเรือน' });
 				if (await confirmHousehold.isVisible().catch(() => false)) {
 					await confirmHousehold.click();
@@ -268,7 +275,7 @@ test.describe(
 		test('Z teardown leaves no E2E shelter or staff of this run', async () => {
 			test.setTimeout(240_000);
 			const code = shelterCode;
-			const created = await purgeCreatedData(LAST_NAME);
+			const created = await purgeCreatedData(LEDGER_SUITE, LAST_NAME);
 			if (code && !created.shelters.includes(code)) {
 				await teardownShelter(code);
 				created.shelters.push(code);

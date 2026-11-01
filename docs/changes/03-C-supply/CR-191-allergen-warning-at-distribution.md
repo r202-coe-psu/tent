@@ -3,7 +3,8 @@ id: CR-191
 title: CR-191 — เตือนสารก่อแพ้ตอนแจกอาหาร — item_master.allergens เป็น code + กติกาเทียบกับ medical.allergies
 status: approved
 date: 2026-10-24
-updated: 2026-10-25
+updated: 2026-10-27
+note: decision sync 2026-10-27 (kong) — ผู้รับที่มีประวัติแพ้ free text → เตือน + override พร้อมเหตุผลทุกครั้ง ไม่ว่าเมนูใด (FR-MRM-11); ข้อความแพ้เติมนำหน้า `override_reason` — ไม่เพิ่ม field ใน `distribution_log`
 requested_by: feedback หน้างาน (ข้อ 6) — issue #607 (ต่อจาก CR-187 / #648)
 decided_by: kong (approved 2026-10-25)
 layer: volatile
@@ -64,10 +65,12 @@ affects:
   ใช้ modal override เดิมของรับซ้ำ/เมนูไม่ตรงกลุ่ม; workflow ปฏิเสธถ้าชนแต่ไม่ override
 - **FR-MRM-09** — การแสดงผลบนการ์ดผู้รับ:
   - ผู้รับมีอาการแพ้ที่เป็น code → badge แดง "แพ้: อาหารทะเล, ไข่"
-  - ผู้รับมีอาการแพ้เป็น free text → "มีประวัติแพ้: ‹ข้อความ›" ให้เจ้าหน้าที่อ่านเอง (ไม่ match)
+  - ผู้รับมีอาการแพ้เป็น free text → "มีประวัติแพ้: ‹ข้อความ›" ให้เจ้าหน้าที่อ่านเอง (ไม่ match) — แก้โดย
+    FR-MRM-11: ต้อง override + เหตุผลด้วย
   - ผู้รับมีอาการแพ้ แต่เมนูไม่ระบุสารก่อแพ้ → "เมนูนี้ไม่ระบุสารก่อแพ้" (แจ้งเฉยๆ ไม่ต้อง override)
 - **FR-MRM-10** — ข้อมูลสุขภาพของผู้รับยังโหลดไม่เสร็จ/โหลดไม่สำเร็จ → ปุ่มยืนยันแจกถูกล็อก (fail closed)
   เหมือน preflight เดิม (FR-MRM-04)
+- **FR-MRM-11** — (decision sync 2026-10-27, kong) ผู้รับ `evacuee` ที่มี `medical.allergies` เป็น free text อย่างน้อย 1 ค่า → แสดงคำเตือน "มีประวัติแพ้ (ไม่อยู่ในรายการ): ‹ข้อความ›" และ **ต้อง override + เหตุผล ทุกครั้ง ไม่ว่าเมนูใด** (ใช้ modal เดียวกับ FR-MRM-08); ระบบเติมข้อความแพ้นำหน้า `override_reason` รูปแบบ `แพ้ (ไม่อยู่ในรายการ): ‹ข้อความ, …› — ‹เหตุผลที่กรอก›`; **ไม่เพิ่ม field** ใน `distribution_log` (`allergen_conflicts` ยังเก็บเฉพาะ code); workflow ปฏิเสธถ้ามี free text แต่ไม่ override
 
 ### Requirements — บันทึก
 
@@ -92,7 +95,9 @@ affects:
       log มี `allergen_conflicts: ["egg"]`
 - [ ] นางบีรับข้าวมันไก่ (ไม่มีสารก่อแพ้ที่ตรง) → แจกปกติ
 - [ ] ผู้รับเป็นจิตอาสา/บุคคลภายนอก → ไม่เช็คการแพ้
-- [ ] ผู้รับมีประวัติแพ้ free text → แสดง "มีประวัติแพ้: …" ไม่บังคับ override
+- [ ] ผู้รับมีประวัติแพ้ free text → แสดงคำเตือน "มีประวัติแพ้ (ไม่อยู่ในรายการ): …" และต้อง override + เหตุผล
+      ทุกเมนู; log มี `is_override: true` และ `override_reason` ขึ้นต้นด้วย `แพ้ (ไม่อยู่ในรายการ): …`
+      (แทนข้อเดิม "ไม่บังคับ override" — decision sync 2026-10-27)
 - [ ] unit test: กติกา conflict, reader ข้อความเดิม, workflow ปฏิเสธเมื่อไม่ override
 
 ## Impact
@@ -123,3 +128,6 @@ affects:
 - 2026-10-24 — proposed (#607). Owner เคาะแล้ว: พบแพ้ = **เตือน + override ได้** (ไม่ห้ามแจกเด็ดขาด);
   track ด้วย CR ไฟล์บน branch `docs/`
 - 2026-10-25 — approved โดย kong เป็น CR-191; เคาะ `allergen_conflicts` opt ไม่ bump และคงข้อความเดิมเป็น free text ใน array ตามที่เสนอ
+- 2026-10-27 — decision sync (kong, review PR #844): ผู้รับที่มีประวัติแพ้ free text → เตือน + override พร้อมเหตุผล
+  **ทุกครั้ง ไม่ว่าเมนูใด** (FR-MRM-11, แก้ FR-MRM-09 / Acceptance); log ใช้ทาง B — ไม่เพิ่ม field, เติมข้อความแพ้
+  นำหน้า `override_reason`; free text ยังไม่ match อัตโนมัติ (FR-MRM-07 คงเดิม)

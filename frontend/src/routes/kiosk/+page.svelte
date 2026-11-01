@@ -7,7 +7,7 @@
 		readKioskDisplayQuery,
 		IdentityMethodSelector,
 		KioskBannerAttract,
-		KioskTestPrint
+		KioskDeviceInfo
 	} from '$lib/features/kiosk';
 	let { data }: PageProps = $props();
 
@@ -27,5 +27,5 @@
 	reprintEnabled={data.phoneCheckInEnabled}
 	thaidCheckInEnabled={data.thaidCheckInEnabled}
 />
-<KioskTestPrint />
+<KioskDeviceInfo />
 <KioskBannerAttract mode="live" />

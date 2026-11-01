@@ -81,7 +81,7 @@ Freshness : ทุก response แนบ "as_of": ISO-8601</code></pre></div></s
         <tr><td>DN</td><td>donation_campaign (aggregate needs)</td><td>donation (pre-declaration)</td></tr>
         <tr><td>PUB</td><td>occupancy / donation views (aggregate)</td><td>—</td></tr>
       </tbody></table></div><ul>
-        <li><strong>Retention (เคาะ 2026-06-11):</strong> ข้อมูลส่วนบุคคลถูกลบ/anonymize ภายใน <strong>3 เดือนหลังปิดศูนย์</strong>; local db บนมือถืออาสามีอายุ <strong>1 เดือน</strong> + มี SOP สั่งลบข้อมูลบน device; <strong>PSU เป็น data controller</strong> ในระยะนี้</li>
+        <li><strong>Retention (เคาะ 2026-06-11; แก้ 2026-10-25):</strong> สองนาฬิกา — public search ค้นเจอได้ถึง <strong>3 เดือนหลังปิดศูนย์</strong> (CR-183); ข้อมูลส่วนบุคคลใน CouchDB ถูกลบ/anonymize เมื่อครบ <strong>2 ปีหลังปิดศูนย์</strong> (pdpa-consent-block-spec, CR-194); local db บนมือถืออาสามีอายุ <strong>1 เดือน</strong> + มี SOP สั่งลบข้อมูลบน device; <strong>PSU เป็น data controller</strong> ในระยะนี้</li>
         <li><strong>Operating assumptions (เคาะ 2026-06-11):</strong> ≤350 shelters · ศูนย์ใหญ่สุด ≤20,000 คน · ≤50 devices/ศูนย์ — ใช้เป็นฐาน sizing ของ rate-limit, index และ replication design</li>
       </ul></div></section>
 

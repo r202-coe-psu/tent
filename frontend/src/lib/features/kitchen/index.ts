@@ -11,6 +11,7 @@ export { default as YieldReceiptLines } from './ui/yield-receipt-lines.svelte';
 export {
 	calculateMealIngredients,
 	calculateMealIngredientsFromRecipe,
+	scaleRecipeIngredientQty,
 	calculateMealIngredientsFromCustom,
 	resolveItemMasterStock,
 	toRequisitionInput,
@@ -45,6 +46,9 @@ export type {
 // Application — receive-stock form draft (survives the "create new item" detour)
 export { saveYieldDraft, loadYieldDraft, clearYieldDraft } from './application/yield-draft';
 
+// Application — production board ingredient picker (food and drinking water only)
+export { selectableCookingIngredients } from './application/cooking-ingredients';
+
 // Domain — warehouse receipt of cooked food into stock
 export {
 	KITCHEN_YIELD_SHELF_LIFE_HOURS,
@@ -73,7 +77,7 @@ export {
 	deriveSessionHeadcountFromOccupancy,
 	SOFT_FOOD_NEEDS
 } from './domain/occupancy';
-export type { OccupantView } from './domain/occupancy';
+export type { OccupantView, ShelterPeopleCounts } from './domain/occupancy';
 
 // Domain — documents
 export type {
@@ -149,7 +153,7 @@ export {
 	useDeleteMealSession,
 	useMealPlans,
 	useOccupancyHeadcount,
-	useActiveEvacueeDietCounts,
+	useShelterMealHeadcount,
 	useCreateMealPlan,
 	useCreateMealPlanCalc,
 	useConfirmMealPlan,

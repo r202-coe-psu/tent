@@ -136,6 +136,30 @@ export interface paths {
 		patch?: never;
 		trace?: never;
 	};
+	'/public/v1/donations/lookup-by-phone': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		get?: never;
+		put?: never;
+		/**
+		 * Lookup Donations By Phone
+		 * @description Phone number alone → every booking of it still in the buffer (CR-173).
+		 *
+		 *     Full access: each item carries its ``tracking_token``. Guarding against number
+		 *     enumeration is the BFF's captcha plus nginx's rate limit (CR-188); this logs every call
+		 *     and alerts on volume without refusing any. The BFF sends the donor's IP as ``X-Real-IP``.
+		 */
+		post: operations['lookup_donations_by_phone_public_v1_donations_lookup_by_phone_post'];
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
 	'/public/v1/donations/{tracking_token}': {
 		parameters: {
 			query?: never;
@@ -1716,6 +1740,19 @@ export interface components {
 			 */
 			message: string;
 		};
+		/**
+		 * DonationCreateItem
+		 * @description One booked line as stored, so the ticket can group by point without a second read.
+		 */
+		DonationCreateItem: {
+			/** Drop Off Point Id */
+			drop_off_point_id: string | null;
+			/**
+			 * Review Status
+			 * @enum {string}
+			 */
+			review_status: 'approved' | 'pending';
+		};
 		/** DonationCreateRequest */
 		DonationCreateRequest: {
 			/** Shelter Code */
@@ -1730,6 +1767,8 @@ export interface components {
 				[key: string]: unknown;
 			} | null;
 			slot_hold?: components['schemas']['SlotHold'] | null;
+			/** Photos */
+			photos?: string[];
 			/** Captchatoken */
 			captchaToken?: string | null;
 		};
@@ -1746,6 +1785,8 @@ export interface components {
 			booking_ref: string;
 			/** Status */
 			status: string;
+			/** Items */
+			items: components['schemas']['DonationCreateItem'][];
 		};
 		/** DonationItemInput */
 		DonationItemInput: {
@@ -1763,6 +1804,10 @@ export interface components {
 			condition?: string | null;
 			/** Note */
 			note?: string | null;
+			/** Line Key */
+			line_key?: string | null;
+			/** Drop Off Point Id */
+			drop_off_point_id?: string | null;
 		};
 		/** DonationItemsPatchRequest */
 		DonationItemsPatchRequest: {
@@ -1806,6 +1851,74 @@ export interface components {
 			status: string;
 			/** Auto Approved Lines */
 			auto_approved_lines?: number[];
+		};
+		/**
+		 * DonationPhoneLookupItem
+		 * @description One booking of the number — enough to tell them apart and open the full ticket.
+		 */
+		DonationPhoneLookupItem: {
+			/** Tracking Token */
+			tracking_token: string;
+			/** Booking Ref */
+			booking_ref: string;
+			/** Status */
+			status: string;
+			/** Shelter Code */
+			shelter_code: string;
+			/** Shelter Name */
+			shelter_name?: string | null;
+			/** Delivery Method */
+			delivery_method?: string | null;
+			slot?: components['schemas']['DonationPhoneLookupSlot'] | null;
+			/** Item Count */
+			item_count: number;
+			/** Created At */
+			created_at: string;
+		};
+		/**
+		 * DonationPhoneLookupRequest
+		 * @description CR-173 FR-1 — the phone travels in the body only, never in the URL.
+		 */
+		DonationPhoneLookupRequest: {
+			/** Phone */
+			phone: string;
+		};
+		/**
+		 * DonationPhoneLookupResponse
+		 * @description Same shape whether the number has bookings or not (CR-173 FR-5).
+		 */
+		DonationPhoneLookupResponse: {
+			/**
+			 * Success
+			 * @default true
+			 */
+			success: boolean;
+			/** Items */
+			items?: components['schemas']['DonationPhoneLookupItem'][];
+		};
+		/** DonationPhoneLookupSlot */
+		DonationPhoneLookupSlot: {
+			/** Date */
+			date?: string | null;
+			/** From */
+			from?: string | null;
+			/** To */
+			to?: string | null;
+		};
+		/**
+		 * DonationPoint
+		 * @description A storage point ticked as a donation drop-off point, with a pin (CR-205).
+		 */
+		DonationPoint: {
+			/** Id */
+			id: string;
+			/** Name */
+			name: string;
+			/** Types */
+			types?: string[];
+			geo: components['schemas']['GeoPoint'];
+			/** Location Note */
+			location_note?: string | null;
 		};
 		/**
 		 * DonationTrackSearchRequest
@@ -1879,6 +1992,105 @@ export interface components {
 			/** Relation */
 			relation: string;
 		};
+		/**
+		 * ExternalNeedItemResponse
+		 * @description One row per shelter + item_id: the `/external/v1/needs` shape (CR-206 A2 FR-AP-27).
+		 */
+		ExternalNeedItemResponse: {
+			/** Item Id */
+			item_id: string;
+			/** Name */
+			name: string;
+			/** Qty Needed */
+			qty_needed: string;
+			/**
+			 * Qty Target
+			 * @default 0
+			 */
+			qty_target: string;
+			/**
+			 * On Hand
+			 * @default 0
+			 */
+			on_hand: string;
+			/**
+			 * Reserved
+			 * @default 0
+			 */
+			reserved: string;
+			/** Unit */
+			unit: string;
+			/** Status */
+			status: string;
+			/**
+			 * Urgency
+			 * @default normal
+			 */
+			urgency: string;
+			/** Category */
+			category?: string | null;
+		};
+		/** ExternalNeedsListResponse */
+		ExternalNeedsListResponse: {
+			/** Shelters */
+			shelters: components['schemas']['ExternalShelterNeedsResponse'][];
+			/**
+			 * As Of
+			 * Format: date-time
+			 */
+			as_of: string;
+		};
+		/** ExternalSearchResponse */
+		ExternalSearchResponse: {
+			/** Results */
+			results: components['schemas']['ExternalSearchResult'][];
+			/** Count */
+			count: number;
+			/**
+			 * As Of
+			 * Format: date-time
+			 */
+			as_of: string;
+		};
+		/**
+		 * ExternalSearchResult
+		 * @description `/external/v1/occupants` keeps the zone partners read (CR-183 FR-18 is public-only).
+		 */
+		ExternalSearchResult: {
+			/** Name */
+			name: string;
+			/** Status */
+			status: string;
+			/** National Id */
+			national_id?: string | null;
+			/** Gender */
+			gender?: string | null;
+			/** Shelter Name */
+			shelter_name: string;
+			/** Shelter Address */
+			shelter_address?: string | null;
+			/** Origin Address */
+			origin_address?: string | null;
+			/** Checked In At */
+			checked_in_at?: string | null;
+			/** Shelter Status */
+			shelter_status?: ('open' | 'closed' | 'full' | 'standby') | null;
+			/** Family Members */
+			family_members?: components['schemas']['FamilyMember'][];
+			/** Care Zone */
+			care_zone?: string | null;
+			/** Zone Name */
+			zone_name?: string | null;
+		};
+		/** ExternalShelterNeedsResponse */
+		ExternalShelterNeedsResponse: {
+			/** Code */
+			code: string;
+			/** Name */
+			name: string;
+			/** Needs */
+			needs: components['schemas']['ExternalNeedItemResponse'][];
+		};
 		/** FamilyMember */
 		FamilyMember: {
 			/** Name */
@@ -1887,6 +2099,8 @@ export interface components {
 			status: string;
 			/** Shelter Name */
 			shelter_name: string;
+			/** Shelter Status */
+			shelter_status?: ('open' | 'closed' | 'full' | 'standby') | null;
 		};
 		/** FaqItem */
 		FaqItem: {
@@ -2367,7 +2581,12 @@ export interface components {
 			/** Search Excluded */
 			search_excluded: boolean;
 		};
-		/** NeedItemResponse */
+		/**
+		 * NeedItemResponse
+		 * @description One donor-board card: shelter + item + drop-off point (CR-206 A2 FR-AP-26).
+		 *
+		 *     Several cards of one shelter may share an ``item_id``.
+		 */
 		NeedItemResponse: {
 			/** Item Id */
 			item_id: string;
@@ -2401,6 +2620,10 @@ export interface components {
 			urgency: string;
 			/** Category */
 			category?: string | null;
+			/** Drop Off Point Id */
+			drop_off_point_id?: string | null;
+			/** Drop Off Point Name */
+			drop_off_point_name?: string | null;
 		};
 		/** NeedsListResponse */
 		NeedsListResponse: {
@@ -3080,10 +3303,8 @@ export interface components {
 			origin_address?: string | null;
 			/** Checked In At */
 			checked_in_at?: string | null;
-			/** Care Zone */
-			care_zone?: string | null;
-			/** Zone Name */
-			zone_name?: string | null;
+			/** Shelter Status */
+			shelter_status?: ('open' | 'closed' | 'full' | 'standby') | null;
 			/** Family Members */
 			family_members?: components['schemas']['FamilyMember'][];
 		};
@@ -3116,10 +3337,10 @@ export interface components {
 			name: string;
 			/**
 			 * Site Kind
+			 * @description Master code from master_data:site_kind (e.g. evacuation_center, host_house)
 			 * @default evacuation_center
-			 * @enum {string}
 			 */
-			site_kind: 'evacuation_center' | 'host_house';
+			site_kind: string;
 			/** Status */
 			status: string;
 			/** Admin Type */
@@ -3161,6 +3382,8 @@ export interface components {
 			 * @default false
 			 */
 			accepts_pre_registration: boolean;
+			/** Donation Points */
+			donation_points?: components['schemas']['DonationPoint'][];
 		};
 		/** ShelterDetailResponse */
 		ShelterDetailResponse: {
@@ -3211,10 +3434,10 @@ export interface components {
 			name: string;
 			/**
 			 * Site Kind
+			 * @description Master code from master_data:site_kind (e.g. evacuation_center, host_house)
 			 * @default evacuation_center
-			 * @enum {string}
 			 */
-			site_kind: 'evacuation_center' | 'host_house';
+			site_kind: string;
 			/** Status */
 			status: string;
 			/**
@@ -4658,6 +4881,39 @@ export interface operations {
 			};
 		};
 	};
+	lookup_donations_by_phone_public_v1_donations_lookup_by_phone_post: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		requestBody: {
+			content: {
+				'application/json': components['schemas']['DonationPhoneLookupRequest'];
+			};
+		};
+		responses: {
+			/** @description Successful Response */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['DonationPhoneLookupResponse'];
+				};
+			};
+			/** @description Validation Error */
+			422: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['HTTPValidationError'];
+				};
+			};
+		};
+	};
 	get_donation_public_v1_donations__tracking_token__get: {
 		parameters: {
 			query?: never;
@@ -4878,7 +5134,7 @@ export interface operations {
 					[name: string]: unknown;
 				};
 				content: {
-					'application/json': components['schemas']['NeedsListResponse'];
+					'application/json': components['schemas']['ExternalNeedsListResponse'];
 				};
 			};
 		};
@@ -4902,7 +5158,7 @@ export interface operations {
 					[name: string]: unknown;
 				};
 				content: {
-					'application/json': components['schemas']['SearchResponse'];
+					'application/json': components['schemas']['ExternalSearchResponse'];
 				};
 			};
 			/** @description Unprocessable Content */
@@ -5026,7 +5282,7 @@ export interface operations {
 				district?: string | null;
 				subdistrict?: string | null;
 				status?: string | null;
-				site_kind?: ('evacuation_center' | 'host_house') | null;
+				site_kind?: string | null;
 				/** @description User latitude */
 				lat?: number | null;
 				/** @description User longitude */

@@ -115,6 +115,53 @@ describe('ReferralRemoteRepository — capacity via BFF', () => {
 		expect(mockRepoPut).not.toHaveBeenCalled();
 	});
 
+	it('skips malformed docs in a list response and warns with the dropped count', async () => {
+		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+		fetchMock.mockResolvedValue({
+			ok: true,
+			json: async () => ({
+				items: [capacitySent, { _id: 'referral:broken', type: 'referral' }],
+				bookmark: 'bm',
+				has_more: false
+			})
+		});
+
+		const result = await repo.list();
+
+		expect(result).toEqual([capacitySent]);
+		expect(warn).toHaveBeenCalledWith(expect.stringContaining('skipped 1 malformed referral doc'));
+		warn.mockRestore();
+	});
+
+	it('listPage sends direction/bookmark and maps has_more to hasMore', async () => {
+		fetchMock.mockResolvedValue({
+			ok: true,
+			json: async () => ({ items: [capacitySent], bookmark: 'bm-2', has_more: true })
+		});
+
+		const page = await repo.listPage({ direction: 'incoming', status: 'sent', bookmark: 'bm-1' });
+
+		const url = new URL(fetchMock.mock.calls[0]![0] as string, 'http://x');
+		expect(url.searchParams.get('direction')).toBe('incoming');
+		expect(url.searchParams.get('status')).toBe('sent');
+		expect(url.searchParams.get('bookmark')).toBe('bm-1');
+		expect(url.searchParams.has('skip')).toBe(false);
+		expect(page).toEqual({ items: [capacitySent], bookmark: 'bm-2', hasMore: true });
+	});
+
+	it('does not warn when every list row is a valid referral', async () => {
+		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+		fetchMock.mockResolvedValue({
+			ok: true,
+			json: async () => ({ items: [capacitySent], bookmark: null, has_more: false })
+		});
+
+		await repo.list();
+
+		expect(warn).not.toHaveBeenCalled();
+		warn.mockRestore();
+	});
+
 	it('delegates all transitions (including non-capacity) to BFF', async () => {
 		const medicalSent: Referral = {
 			...capacitySent,
@@ -134,6 +181,123 @@ describe('ReferralRemoteRepository — capacity via BFF', () => {
 			expect.objectContaining({ method: 'PATCH', credentials: 'include' })
 		);
 		expect(result.status).toBe('accepted');
+	});
+
+	it('getBatch calls the batch BFF with the encoded id and drops malformed docs', async () => {
+		fetchMock.mockResolvedValue({
+			ok: true,
+			status: 200,
+			json: async () => ({ items: [capacitySent, { junk: true }] })
+		});
+		const items = await repo.getBatch('referral:a b');
+		expect(items).toEqual([capacitySent]);
+		expect(fetchMock.mock.calls[0]![0]).toBe(
+			'/api/back-office/referral/referral%3Aa%20b/batch?shelter_code=SH001'
+		);
+	});
+
+	it('getBatch returns [] on 404 and throws on other failures', async () => {
+		fetchMock.mockResolvedValueOnce({ ok: false, status: 404, statusText: 'Not Found' });
+		expect(await repo.getBatch('referral:x')).toEqual([]);
+		fetchMock.mockResolvedValueOnce({ ok: false, status: 500, statusText: 'Boom' });
+		await expect(repo.getBatch('referral:x')).rejects.toThrow('Failed to get referral batch');
+	});
+});
+
+describe('ReferralRemoteRepository.bulkTransition', () => {
+	const fetchMock = vi.fn();
+	const repo = new ReferralRemoteRepository();
+
+	beforeEach(() => {
+		vi.clearAllMocks();
+		vi.stubGlobal('fetch', fetchMock);
+	});
+
+	it('POSTs ids, status and reason once and returns the per-id result', async () => {
+		const saved: Referral = {
+			_id: 'referral:1',
+			type: 'referral',
+			schema_v: 2,
+			shelter_code: 'SH001',
+			created_at: '2026-07-11T05:00:00.000Z',
+			updated_at: '2026-07-11T05:00:00.000Z',
+			created_by: 'Staff A',
+			evacuee_id: 'evacuee:01F8MECHEVACUEEID1234567',
+			referral_type: 'medical-emergency',
+			to_org: { name: 'General Hospital', kind: 'hospital' },
+			reason: 'r',
+			urgency: 'normal',
+			status: 'closed',
+			timeline: {}
+		} as Referral;
+		const result = { succeeded: [saved], failed: [{ id: 'referral:2', error: 'nope' }] };
+		fetchMock.mockResolvedValue({ ok: true, json: async () => result });
+
+		await expect(
+			repo.bulkTransition(['referral:1', 'referral:2'], 'closed', 'ปิด')
+		).resolves.toEqual(result);
+
+		expect(fetchMock).toHaveBeenCalledTimes(1);
+		const [url, init] = fetchMock.mock.calls[0];
+		expect(url).toBe('/api/back-office/referral/bulk-transition?shelter_code=SH001');
+		expect(init).toMatchObject({ method: 'POST', credentials: 'include' });
+		expect(JSON.parse(init.body)).toEqual({
+			ids: ['referral:1', 'referral:2'],
+			to: 'closed',
+			reason: 'ปิด'
+		});
+	});
+
+	it('throws the server error message on a non-2xx response', async () => {
+		fetchMock.mockResolvedValue({
+			ok: false,
+			status: 422,
+			json: async () => ({ error: 'ids must not exceed 200 items' })
+		});
+		await expect(repo.bulkTransition(['referral:1'], 'closed')).rejects.toThrow(
+			'ids must not exceed 200 items'
+		);
+	});
+
+	it('keeps valid succeeded docs, drops malformed ones and warns with the count', async () => {
+		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+		const valid = {
+			_id: 'referral:1',
+			type: 'referral',
+			schema_v: 2,
+			shelter_code: 'SH001',
+			created_at: '2026-07-11T05:00:00.000Z',
+			updated_at: '2026-07-11T05:00:00.000Z',
+			created_by: 'Staff A',
+			evacuee_id: 'evacuee:01F8MECHEVACUEEID1234567',
+			referral_type: 'medical-emergency',
+			to_org: { name: 'General Hospital', kind: 'hospital' },
+			reason: 'r',
+			urgency: 'normal',
+			status: 'closed',
+			timeline: {}
+		};
+		fetchMock.mockResolvedValue({
+			ok: true,
+			json: async () => ({
+				succeeded: [valid, { _id: 'referral:2' }],
+				failed: [{ id: 'referral:3', error: 'nope' }]
+			})
+		});
+
+		const result = await repo.bulkTransition(['referral:1', 'referral:2', 'referral:3'], 'closed');
+
+		expect(result.succeeded).toEqual([valid]);
+		expect(result.failed).toEqual([{ id: 'referral:3', error: 'nope' }]);
+		expect(warn).toHaveBeenCalledWith(
+			'[referrals] skipped 1 malformed referral doc(s) in bulk transition response'
+		);
+		warn.mockRestore();
+	});
+
+	it('throws on a malformed success payload', async () => {
+		fetchMock.mockResolvedValue({ ok: true, json: async () => ({ succeeded: 'x' }) });
+		await expect(repo.bulkTransition(['referral:1'], 'closed')).rejects.toThrow('invalid result');
 	});
 });
 

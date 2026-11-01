@@ -5,6 +5,7 @@ import {
 	type Timestamp,
 	makeDoc,
 	now,
+	isThaiMobilePhone,
 	normalizeThaiPhone,
 	phoneSchema,
 	registeredViaSchema
@@ -780,8 +781,8 @@ export const emergencyContactRequiredSchema = z.object(
 			.min(1, 'กรุณากรอกชื่อ-นามสกุลผู้ติดต่อฉุกเฉิน'),
 		phone: z
 			.string({ error: 'กรุณากรอกเบอร์ติดต่อฉุกเฉิน' })
-			.trim()
-			.regex(/^\d{10}$/, 'กรุณากรอกเบอร์ติดต่อฉุกเฉินให้ครบ 10 หลัก'),
+			.transform(normalizeThaiPhone)
+			.pipe(z.string().regex(/^0\d{9}$/, 'กรุณากรอกเบอร์ติดต่อฉุกเฉินให้ครบ 10 หลัก')),
 		relation: z
 			.string({ error: 'กรุณาระบุความสัมพันธ์ของผู้ติดต่อฉุกเฉิน' })
 			.trim()
@@ -1220,7 +1221,7 @@ export const evacueePersonalEditFormSchema = z
 		religionOther: z.string().trim().max(RELIGION_OTHER_MAX).default('')
 	})
 	.superRefine((data, ctx) => {
-		if (!data.noPhone && digitsOnly(data.phone).length !== 10) {
+		if (!data.noPhone && !isThaiMobilePhone(data.phone)) {
 			ctx.addIssue({
 				code: 'custom',
 				path: ['phone'],
@@ -1292,7 +1293,7 @@ export const evacueeEmergencyEditFormSchema = z
 		if (!hasContact) return;
 		if (!data.name)
 			ctx.addIssue({ code: 'custom', path: ['name'], message: 'กรุณากรอกชื่อผู้ติดต่อ' });
-		if (digitsOnly(data.phone).length !== 10) {
+		if (!isThaiMobilePhone(data.phone)) {
 			ctx.addIssue({ code: 'custom', path: ['phone'], message: 'กรุณากรอกเบอร์โทร 10 หลัก' });
 		}
 		if (!data.relation)

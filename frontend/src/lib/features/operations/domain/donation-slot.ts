@@ -29,12 +29,7 @@ export const SLOT_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const HHMM = SLOT_TIME_PATTERN;
 const YMD = SLOT_DATE_PATTERN;
 
-/** `YYYY-MM-DD` that exists on the calendar (rejects `2026-02-31`). */
-export function isRealCalendarDate(value: string): boolean {
-	if (!SLOT_DATE_PATTERN.test(value)) return false;
-	const parsed = new Date(`${value}T00:00:00Z`);
-	return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
-}
+export { isRealCalendarDate } from './expiry-instant';
 
 export const donationSlotInputSchema = z
 	.object({

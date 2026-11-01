@@ -1,5 +1,5 @@
 import Fuse from 'fuse.js';
-import type { ItemMaster } from './catalog';
+import { itemAllergens, type ItemMaster } from './catalog';
 import { isBaseUnitRow } from './item-barcode';
 
 /** Collapse case and whitespace so "นม UHT 250" and "นมuht250" compare alike. */
@@ -82,7 +82,7 @@ export function missingOptionalFields(item: ItemMaster): string[] {
 	if (typeClass === 'CONSUMABLE') {
 		if (item.shelf_life_days == null) missing.push('อายุเก็บรักษา');
 		if (!item.storage_type) missing.push('การเก็บรักษา');
-		if (!item.allergens?.trim() && item.category !== FUEL_ENERGY_CATEGORY_ID) {
+		if (itemAllergens(item).length === 0 && item.category !== FUEL_ENERGY_CATEGORY_ID) {
 			missing.push('สารก่อภูมิแพ้');
 		}
 	}

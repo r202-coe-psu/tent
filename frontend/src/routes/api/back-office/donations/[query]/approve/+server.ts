@@ -8,11 +8,18 @@ import {
 	routeErrorResponse as toRouteError,
 	staleDecisionResponse
 } from '$lib/server/donation-intake';
-import { hasKeyedDonationStock } from '$lib/server/donation-docs';
+import { hasKeyedDonationStock, readCurrentDonationPoints } from '$lib/server/donation-docs';
 import {
+	allLinesRecorded,
 	applyLineReview,
+	closeDonationByPoints,
 	hasLineReview,
+	hasPointReceipts,
+	needsCurrentDropOffPoints,
+	recordedLineNos,
+	refusedReceivedLines,
 	reviewDonationInputSchema,
+	reviewDropOffPoints,
 	type LineReviewResult,
 	type PublicDonationDoc
 } from '$lib/features/donations/server';
@@ -23,6 +30,17 @@ function routeErrorResponse(e: unknown) {
 	const { message, status } = toRouteError(e);
 	return json({ success: false, error: message }, { status });
 }
+
+const linesLabel = (lines: number[]) => lines.map((n) => n + 1).join(', ');
+
+const POINT_ERRORS = {
+	INVALID_REVIEW: (lines: number[]) =>
+		`รายการที่ ${linesLabel(lines)} จุดรับบริจาครับของไว้แล้ว — ไม่ต้องเลือกจุดรับบริจาค`,
+	UNKNOWN_DROP_OFF_POINT: (lines: number[]) =>
+		`จุดรับบริจาคของรายการที่ ${linesLabel(lines)} ไม่มีในศูนย์แล้ว — โหลดหน้าใหม่แล้วเลือกจุดอีกครั้ง`,
+	POINT_REQUIRED: (lines: number[]) =>
+		`เลือกจุดรับบริจาคให้รายการที่ ${linesLabel(lines)} ก่อนอนุมัติ`
+} as const;
 
 /**
  * R-16.2 — review a `pending_review` donation. Moves it off the "รอการประเมิน" tab;
@@ -120,7 +138,7 @@ export const POST: RequestHandler = async ({ params, request }) => {
 		// Refusing every line rejects the booking — the same guard as the reject route: a
 		// `pending_review` receipt can key rows and fail to close, and rejecting it then
 		// hands the quota back with the goods on the shelf.
-		if (outcome.status === 'rejected' && (await hasKeyedDonationStock(dbName, donation._id))) {
+		if (outcome.status === 'rejected' && (await hasKeyedDonationStock(dbName, donation))) {
 			return json(
 				{
 					success: false,
@@ -132,26 +150,111 @@ export const POST: RequestHandler = async ({ params, request }) => {
 			);
 		}
 
+		// CR-206 — a line a point already took in cannot be refused afterwards: the receipt
+		// and `received_summary` would count goods the donor reads as turned away.
+		const refusedReceived = refusedReceivedLines(donation, lines ?? []);
+		if (refusedReceived.length > 0) {
+			return json(
+				{
+					success: false,
+					error_code: 'LINE_ALREADY_RECEIVED',
+					error: `รายการที่ ${refusedReceived.map((n) => n + 1).join(', ')} จุดรับบริจาครับของไว้แล้ว — ปฏิเสธไม่ได้`,
+					lines: refusedReceived
+				},
+				{ status: 409 }
+			);
+		}
+
+		// Draft CR FR-AP-17 steps 2–5 / FR-AP-17a — staff give each approved line its point.
+		const pointInput = {
+			items,
+			lines,
+			deliveryMethod: donation.logistics?.delivery_method,
+			recordedLineNos: recordedLineNos(donation)
+		};
+		let currentPointIds: ReadonlySet<string> | 'not_needed' = 'not_needed';
+		if (needsCurrentDropOffPoints(pointInput)) {
+			try {
+				const current = await readCurrentDonationPoints(donation.shelter_code);
+				currentPointIds = new Set(current.map((point) => point.id));
+			} catch {
+				return json(
+					{
+						success: false,
+						error_code: 'DONATION_UNAVAILABLE',
+						error: 'อ่านจุดรับบริจาคของศูนย์ไม่ได้ — ลองใหม่อีกครั้ง'
+					},
+					{ status: 503 }
+				);
+			}
+		}
+		const pointed = reviewDropOffPoints({ ...pointInput, currentPointIds });
+		if (!pointed.ok) {
+			return json(
+				{
+					success: false,
+					error_code: pointed.code,
+					error: POINT_ERRORS[pointed.code](pointed.lines),
+					lines: pointed.lines
+				},
+				{ status: 422 }
+			);
+		}
+		const { points } = pointed;
+
+		const nowStr = new Date().toISOString();
+		let updated: PublicDonationDoc = {
+			...donation,
+			items: outcome.items.map((item, index) => {
+				const point = points.get(index);
+				return point === undefined ? item : { ...item, drop_off_point_id: point };
+			}),
+			status: outcome.status,
+			...(outcome.reject_reason !== undefined
+				? { reject_reason: outcome.reject_reason, reject_reason_code: outcome.reject_reason_code }
+				: {}),
+			...(lineReview ? { schema_v: Math.max(donation.schema_v ?? 0, DONATION_SCHEMA_V) } : {}),
+			updated_at: nowStr
+		};
+		// CR-206 FR-MP-23 — refusing the last line no point recorded leaves nothing to receive:
+		// close the booking here, or it waits for its expiry with no "ปิดใบ" to press.
+		if (outcome.status !== 'rejected' && hasPointReceipts(updated) && allLinesRecorded(updated)) {
+			const closed = closeDonationByPoints(updated, {
+				closedBy: caller.name,
+				closedReason: 'all_points',
+				now: nowStr
+			});
+			if (closed.status !== 'rejected' || canTransitionDonation(outcome.status, 'rejected')) {
+				updated = { ...updated, ...closed };
+			}
+		}
+		const closedReason = updated.received_summary?.closed_reason ?? null;
+		const ref = donation.booking_ref ?? donation._id;
+
 		const ctx = { shelterCode: donation.shelter_code, createdBy: caller.name };
 		const audit: AuditEntry = createAuditEntry(
 			{
 				action: 'manual_adjust',
 				target_type: 'donation',
 				target_id: donation._id,
-				reason:
-					outcome.status === 'rejected'
-						? `ปฏิเสธทุกรายการที่รอประเมิน (${donation.booking_ref ?? donation._id})`
-						: `อนุมัติคำขอบริจาคเข้าสู่การตรวจรับ (${donation.booking_ref ?? donation._id})`,
+				reason: closedReason
+					? `ประเมินรายการสุดท้ายแล้ว ปิดใบที่รับทีละจุด (${ref})`
+					: updated.status === 'rejected'
+						? `ปฏิเสธทุกรายการที่รอประเมิน (${ref})`
+						: `อนุมัติคำขอบริจาคเข้าสู่การตรวจรับ (${ref})`,
 				context: {
 					booking_ref: donation.booking_ref ?? null,
 					approved_by: caller.name,
 					memo: memo ?? null,
+					status: updated.status,
+					...(closedReason ? { closed_reason: closedReason } : {}),
 					...(lineReview
 						? {
 								lines: (lines ?? []).map(({ index, decision, reason_code }) => ({
 									index,
 									decision,
-									reason_code: reason_code ?? null
+									reason_code: reason_code ?? null,
+									drop_off_point_id: points.get(index) ?? null
 								}))
 							}
 						: {})
@@ -164,18 +267,6 @@ export const POST: RequestHandler = async ({ params, request }) => {
 		if (appendRes.status >= 400) {
 			throw new Error(`Failed to write audit trail: ${JSON.stringify(appendRes.data)}`);
 		}
-
-		const nowStr = new Date().toISOString();
-		const updated: PublicDonationDoc = {
-			...donation,
-			items: outcome.items,
-			status: outcome.status,
-			...(outcome.reject_reason !== undefined
-				? { reject_reason: outcome.reject_reason, reject_reason_code: outcome.reject_reason_code }
-				: {}),
-			...(lineReview ? { schema_v: Math.max(donation.schema_v ?? 0, DONATION_SCHEMA_V) } : {}),
-			updated_at: nowStr
-		};
 
 		const saveRes = await adminRaw(`/${dbName}/${donation._id}`, 'PUT', updated);
 		if (saveRes.status === 409) {

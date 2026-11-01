@@ -218,8 +218,8 @@ async def test_delete_jobs_for_shelter_drops_only_that_shelters_postings(
     assert [row["_id"] async for row in collection.find({})] == ["kept"]
 
 
-async def test_is_shelter_projected(db: None) -> None:
-    from worker.mongo.shelter import is_shelter_projected
+async def test_projected_shelter_status(db: None) -> None:
+    from worker.mongo.shelter import projected_shelter_status
 
     await PublicShelter(
         id="SH920",
@@ -231,5 +231,5 @@ async def test_is_shelter_projected(db: None) -> None:
         updated_at=datetime.now(UTC),
     ).insert()
 
-    assert await is_shelter_projected("SH920") is True
-    assert await is_shelter_projected("SH921") is False
+    assert await projected_shelter_status("SH920") == "open"
+    assert await projected_shelter_status("SH921") is None

@@ -27,7 +27,8 @@ const RUN_ID = `si_${Date.now().toString(36)}_${Math.random().toString(36).subst
 const SHELTER_DB = 'shelter_sh001';
 const CATALOG_DB = 'catalog';
 
-const DISTRIBUTE_FORBIDDEN_HINT = 'ต้องมีสิทธิ์เจ้าหน้าที่คลัง (warehouse_staff) จึงจะเบิกจ่ายได้';
+const DISTRIBUTE_FORBIDDEN_HINT =
+	'ต้องมีสิทธิ์เจ้าหน้าที่คลัง (warehouse_staff) หรือผู้จัดการศูนย์ (shelter_manager) จึงจะเบิกจ่ายได้';
 
 /**
  * A disabled button has `pointer-events: none`, so its reason lives on the wrapper around it
@@ -63,7 +64,19 @@ const REG_STAFF: TestUser = {
 	display_name: 'Registration Staff E2E'
 };
 
-const testUsernames = new Set<string>([WH_STAFF.name, COORD_STAFF.name, REG_STAFF.name]);
+const SHELTER_MGR: TestUser = {
+	name: `shelter_mgr_${RUN_ID}`,
+	password: 'Password1!',
+	roles: ['shelter:SH001', 'shelter_manager'],
+	display_name: 'Shelter Manager E2E'
+};
+
+const testUsernames = new Set<string>([
+	WH_STAFF.name,
+	COORD_STAFF.name,
+	REG_STAFF.name,
+	SHELTER_MGR.name
+]);
 const ownedShelterDocIds = new Set<string>();
 const ownedCatalogDocIds = new Set<string>();
 const sessions: Record<string, string> = {};
@@ -81,7 +94,7 @@ test.describe('Stock Inventory & Warehouse Operations (/back-office/supply)', ()
 
 	test.beforeAll(async () => {
 		// 1. Create and setup test users
-		for (const user of [WH_STAFF, COORD_STAFF, REG_STAFF]) {
+		for (const user of [WH_STAFF, COORD_STAFF, REG_STAFF, SHELTER_MGR]) {
 			await createCouchUser(user);
 			await seedSecurityQuestion(user.name);
 			sessions[user.name] = await couchLogin(user.name, user.password);
@@ -484,5 +497,44 @@ test.describe('Stock Inventory & Warehouse Operations (/back-office/supply)', ()
 		await expect(page.getByRole('row').filter({ hasText: item1Name })).toBeVisible({
 			timeout: 10_000
 		});
+	});
+
+	test('shelter manager can distribute stock directly (#837)', async ({ page }) => {
+		await routeBrowserCouchThroughApp(page);
+		await injectSession(page, SHELTER_MGR, sessions[SHELTER_MGR.name]);
+		await page.goto('/back-office/supply');
+
+		await expect(page.getByRole('heading', { name: 'คลังของศูนย์' })).toBeVisible({
+			timeout: 10_000
+		});
+		await expect(page.getByRole('button', { name: 'เบิกจ่าย', exact: true })).toBeEnabled();
+
+		await page.getByPlaceholder('ค้นหาชื่อ / SKU / สแกนบาร์โค้ด').fill(item1Name);
+		const row = page.getByRole('row').filter({ hasText: item1Name });
+		await expect(row).toBeVisible({ timeout: 10_000 });
+		await row.getByRole('button', { name: `เบิก ${item1Name}` }).click();
+
+		const form = page.getByRole('dialog');
+		await expect(form.getByText(DISTRIBUTE_FORBIDDEN_HINT)).toHaveCount(0);
+		await form.locator('input[id^="distribute-qty-"]').fill('2');
+		await form.getByLabel('ปลายทาง / ผู้รับ').fill(`E2E SM ${RUN_ID}`);
+		await form.getByRole('button', { name: /^เบิก 2 / }).click();
+		// A rejected write keeps the sheet open with an error toast; success closes it.
+		await expect(form).toBeHidden({ timeout: 15_000 });
+
+		// The row landed through the VDU (reservation claim + ledger write) as the manager.
+		await expect
+			.poll(
+				async () =>
+					(await allDocuments(SHELTER_DB)).filter(
+						(d) =>
+							d.type === 'stock_ledger' &&
+							d.reason === 'distribute' &&
+							d.item_id === item1Id &&
+							d.created_by === SHELTER_MGR.name
+					).length,
+				{ timeout: 15_000 }
+			)
+			.toBe(1);
 	});
 });

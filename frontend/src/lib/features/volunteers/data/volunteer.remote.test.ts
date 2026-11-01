@@ -226,6 +226,23 @@ describe('VolunteerRemoteRepository', () => {
 		});
 	});
 
+	it('reactivate() marks an inactive volunteer active again', async () => {
+		const repo = createVolunteerRepositoryForTest('shelter_sh001');
+		const created = await repo.create(baseInput, ctx);
+		await repo.deactivate(created._id);
+
+		const reactivated = await repo.reactivate(created._id);
+
+		expect(reactivated.status).toBe('active');
+		expect(await repo.get(created._id)).toMatchObject({ _id: created._id, status: 'active' });
+	});
+
+	it('reactivate() throws for a document that does not exist', async () => {
+		const repo = createVolunteerRepositoryForTest('shelter_sh001');
+
+		await expect(repo.reactivate('volunteer:missing')).rejects.toThrow('ไม่พบข้อมูลอาสาสมัคร');
+	});
+
 	it('deactivate() throws for a document that does not exist', async () => {
 		const repo = createVolunteerRepositoryForTest('shelter_sh001');
 

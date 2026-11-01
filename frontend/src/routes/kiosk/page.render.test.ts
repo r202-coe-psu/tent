@@ -26,4 +26,22 @@ describe('kiosk home page', () => {
 		expect(body).toContain('aria-labelledby="method-title"');
 		expect(body).not.toContain('kiosk-banner-attract');
 	});
+
+	it('has no separate round test-print button: test print lives in the device-info panel', () => {
+		const { body } = render(Page, {
+			props: {
+				params: {},
+				data: {
+					queryClient: new QueryClient(),
+					qrCheckInEnabled: true,
+					phoneCheckInEnabled: true,
+					thaidCheckInEnabled: false,
+					walkInRegistrationEnabled: false
+				}
+			}
+		});
+
+		expect(body).not.toContain('kiosk-test-print-button');
+		expect(body).toContain('kiosk-device-info-button');
+	});
 });
