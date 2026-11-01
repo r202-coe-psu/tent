@@ -2,10 +2,9 @@
 /**
  * Referral volume seed for the #552 paging acceptance run.
  *
- * Usage: pnpm seed:referrals [SHELTER_CODE] [--count N] [--reset] [--delete]
+ * Usage: pnpm seed:referrals [SHELTER_CODE] [--count N] [--delete]
  *   SHELTER_CODE   default SH001 — the shelter the list page is opened as
  *   --count N      how many referrals to write (default 500)
- *   --reset        delete this script's docs first, then write --count again
  *   --delete       delete this script's docs and stop
  *
  * Rows split evenly between the outgoing tab (`shelter_code` = this shelter) and the
@@ -183,7 +182,9 @@ async function deleteSeeded(db: string, shelterCode: string): Promise<number> {
 	if (rows.length === 0) return 0;
 	await bulkDocsBatched(
 		db,
-		rows.map((row) => ({ _id: row.id, _rev: row.value.rev, _deleted: true }))
+		rows.map((row) => ({ _id: row.id, _rev: row.value.rev, _deleted: true })),
+		150,
+		{ allowConflicts: false }
 	);
 	return rows.length;
 }
@@ -213,9 +214,8 @@ export async function main(argv: string[] = process.argv): Promise<void> {
 	const args = argv.slice(2);
 	if (args.includes('--help') || args.includes('-h')) {
 		console.log(
-			'Usage: pnpm seed:referrals [SHELTER_CODE] [--count N] [--reset] [--delete]\n' +
-				'  --count N   rows to write (default 500)\n' +
-				'  --reset     delete this script’s rows first, then write them again\n' +
+			'Usage: pnpm seed:referrals [SHELTER_CODE] [--count N] [--delete]\n' +
+				'  --count N   rows to write, replacing this script’s earlier rows (default 500)\n' +
 				'  --delete    delete this script’s rows and stop'
 		);
 		return;
@@ -226,7 +226,6 @@ export async function main(argv: string[] = process.argv): Promise<void> {
 	const shelterCode = (args.find((a) => !a.startsWith('--')) ?? DEFAULT_SHELTER).toUpperCase();
 	const evacueeDb = shelterDbName(shelterCode);
 	const wantsDelete = args.includes('--delete');
-	const wantsReset = args.includes('--reset');
 	const count = args.some((a) => a.startsWith('--count')) ? parseCount(args) : DEFAULT_COUNT;
 
 	console.log(`CouchDB: ${displayCouchUrl()}`);
@@ -234,11 +233,9 @@ export async function main(argv: string[] = process.argv): Promise<void> {
 		`Shelter: ${shelterCode} — referrals in ${REFERRAL_DB}, evacuees from ${evacueeDb}\n`
 	);
 
-	if (wantsDelete || wantsReset) {
-		const removed = await deleteSeeded(REFERRAL_DB, shelterCode);
-		console.log(`ลบรายการที่ seed ไว้ ${removed} รายการ`);
-		if (wantsDelete) return;
-	}
+	const removed = await deleteSeeded(REFERRAL_DB, shelterCode);
+	if (removed > 0) console.log(`ลบรายการที่ seed ไว้ ${removed} รายการ`);
+	if (wantsDelete) return;
 
 	const [evacuees, peers] = await Promise.all([
 		readEvacuees(evacueeDb),
@@ -262,7 +259,7 @@ export async function main(argv: string[] = process.argv): Promise<void> {
 		}
 	}
 
-	await bulkDocsBatched(REFERRAL_DB, docs);
+	await bulkDocsBatched(REFERRAL_DB, docs, 150, { allowConflicts: false });
 
 	console.log(`เขียน referral ${docs.length} รายการ อ้างอิงผู้ประสบภัย ${evacuees.length} คน`);
 	console.log(`ศูนย์ปลายทาง/ต้นทางฝั่งตรงข้าม: ${peers.join(', ')}\n`);
