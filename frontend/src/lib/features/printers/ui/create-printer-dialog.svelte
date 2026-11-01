@@ -8,22 +8,27 @@
 	import { languageStore } from '$lib/stores/language.svelte';
 	import { getTranslation } from '$lib/utils/i18n';
 	import { PrintApiError } from '../data/printers.api';
+	import type { KioskDeviceRef } from '../domain/kiosk-link';
 	import {
 		printerCreateInputSchema,
 		type PrintHostKind,
 		type PrinterSecretResponse
 	} from '../domain/print-device.schema';
-	import { PRINTERS_I18N } from '../domain/printers.i18n';
+	import { PRINTERS_I18N, printerAdminErrorMessage } from '../domain/printers.i18n';
 	import { useCreatePrinterDevice } from '../application/queries';
+	import KioskDeviceSelect from './kiosk-device-select.svelte';
 
 	let {
 		open = $bindable(false),
 		fixedShelterCode,
+		kioskDevices = [],
 		oncreated
 	}: {
 		open?: boolean;
 		/** `null` = system admin picks any shelter; a code = locked to that shelter. */
 		fixedShelterCode: string | null;
+		/** Scanner devices a kiosk printer can be linked to (filtered to the chosen shelter). */
+		kioskDevices?: readonly KioskDeviceRef[];
 		/** The one-time secret leaves through here; the page must not keep it past the reveal dialog. */
 		oncreated: (created: PrinterSecretResponse) => void;
 	} = $props();
@@ -35,6 +40,7 @@
 	let name = $state('');
 	let station = $state('');
 	let hostKind = $state<PrintHostKind>('standalone');
+	let kioskDeviceId = $state<string | null>(null);
 	let pickedShelterCode = $state<string | undefined>(undefined);
 
 	const shelterCode = $derived(fixedShelterCode ?? pickedShelterCode);
@@ -44,6 +50,7 @@
 		name = '';
 		station = '';
 		hostKind = 'standalone';
+		kioskDeviceId = null;
 		pickedShelterCode = undefined;
 	}
 
@@ -62,7 +69,9 @@
 			name,
 			shelter_code: shelterCode.toUpperCase(),
 			station: station.trim() || null,
-			host_kind: hostKind
+			host_kind: hostKind,
+			// A link only makes sense for a kiosk host; switching back drops a stale pick.
+			...(hostKind === 'kiosk' && kioskDeviceId ? { kiosk_device_id: kioskDeviceId } : {})
 		});
 		if (!parsed.success) {
 			toast.error(parsed.error.issues[0]?.message ?? t.create.invalid);
@@ -77,9 +86,9 @@
 			toast.error(
 				err instanceof PrintApiError && err.status === 409
 					? t.create.conflict
-					: err instanceof Error
-						? err.message
-						: t.create.failed
+					: ((err instanceof PrintApiError
+							? printerAdminErrorMessage(err.code, languageStore.current)
+							: null) ?? (err instanceof Error ? err.message : t.create.failed))
 			);
 		}
 	}
@@ -147,12 +156,29 @@
 				<select
 					id="printer-host-kind"
 					class="h-11 rounded-md border border-input bg-background px-3 text-sm"
-					bind:value={hostKind}
+					value={hostKind}
+					onchange={(event) => (hostKind = event.currentTarget.value as PrintHostKind)}
 				>
 					<option value="standalone">{t.create.hostKinds.standalone}</option>
 					<option value="kiosk">{t.create.hostKinds.kiosk}</option>
 				</select>
 			</div>
+
+			{#if hostKind === 'kiosk' && shelterCode}
+				<div class="grid gap-2">
+					<Label for="printer-kiosk-device" class="text-sm font-semibold">
+						{t.create.kioskDevice}
+					</Label>
+					<KioskDeviceSelect
+						id="printer-kiosk-device"
+						bind:value={kioskDeviceId}
+						devices={kioskDevices}
+						{shelterCode}
+						noneLabel={t.create.kioskDeviceNone}
+					/>
+					<p class="text-xs text-muted-foreground">{t.create.kioskDeviceHint}</p>
+				</div>
+			{/if}
 		</div>
 
 		<Dialog.Footer class="gap-2 sm:gap-0">

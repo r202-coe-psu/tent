@@ -10,15 +10,19 @@
 	import { cn } from '$lib/utils/shadcn';
 	import { getTranslation } from '$lib/utils/i18n';
 	import { formatThaiShortDate } from '$lib/utils/date';
+	import { kioskLinkName, type KioskDeviceRef } from '../domain/kiosk-link';
 	import type { PrinterAdminItem, PrinterSecretResponse } from '../domain/print-device.schema';
 	import { PRINTERS_I18N } from '../domain/printers.i18n';
 	import EditPrinterDialog from './edit-printer-dialog.svelte';
 
 	let {
 		printers = [],
+		kioskDevices = [],
 		onrotated
 	}: {
 		printers: readonly PrinterAdminItem[];
+		/** Scanner devices of the listed shelter(s): names the kiosk a printer is linked to. */
+		kioskDevices?: readonly KioskDeviceRef[];
 		/** A secret was rotated in the edit dialog: the page shows it once. */
 		onrotated?: (result: PrinterSecretResponse) => void;
 	} = $props();
@@ -82,6 +86,12 @@
 						<td class="px-6 py-4">
 							<span class="font-semibold text-slate-900">{printer.shelter_code}</span>
 							<span class="block text-xs text-slate-500">{printer.station ?? a.noStation}</span>
+							{#if printer.host_kind === 'kiosk'}
+								{@const kioskName = kioskLinkName(printer.kiosk_device_id, kioskDevices)}
+								<span class="block text-xs text-slate-500">
+									{kioskName ? a.kioskLink(kioskName) : a.noKioskLink}
+								</span>
+							{/if}
 						</td>
 						<td class="px-6 py-4">
 							<div class="flex flex-wrap items-center gap-1.5">
@@ -130,6 +140,6 @@
 
 {#if editPrinter}
 	{#key editSession}
-		<EditPrinterDialog bind:open={editOpen} printer={editPrinter} {onrotated} />
+		<EditPrinterDialog bind:open={editOpen} printer={editPrinter} {kioskDevices} {onrotated} />
 	{/key}
 {/if}

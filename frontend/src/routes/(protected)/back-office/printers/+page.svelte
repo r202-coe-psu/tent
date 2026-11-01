@@ -15,6 +15,7 @@
 		usePrinterAdminList,
 		type PrinterSecretResponse
 	} from '$lib/features/printers';
+	import { useScannerDevices } from '$lib/features/kiosk-devices';
 
 	const t = $derived(getTranslation(PRINTERS_I18N, languageStore.current).admin);
 
@@ -22,6 +23,9 @@
 	const activeShelter = $derived(shelterStore.selectedShelterCode ?? getShelterCode());
 
 	const printersQuery = usePrinterAdminList(() => activeShelter);
+	/** Scanners of the shelter: lets kiosk printers be linked to and named after their kiosk. */
+	const kioskDevicesQuery = useScannerDevices(() => activeShelter);
+	const kioskDevices = $derived(kioskDevicesQuery.data ?? []);
 
 	let createOpen = $state(false);
 	let revealOpen = $state(false);
@@ -67,7 +71,11 @@
 				{printersQuery.error instanceof Error ? printersQuery.error.message : t.loadFailed}
 			</div>
 		{:else}
-			<PrinterAdminList {printers} onrotated={(result) => handleSecret(result, 'rotated')} />
+			<PrinterAdminList
+				{printers}
+				{kioskDevices}
+				onrotated={(result) => handleSecret(result, 'rotated')}
+			/>
 		{/if}
 	</div>
 </StaffPageShell>
@@ -75,6 +83,7 @@
 <CreatePrinterDialog
 	bind:open={createOpen}
 	fixedShelterCode={activeShelter}
+	{kioskDevices}
 	oncreated={(created) => handleSecret(created, 'created')}
 />
 <RevealPrinterSecretDialog

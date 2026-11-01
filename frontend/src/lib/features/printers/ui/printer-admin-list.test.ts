@@ -29,8 +29,10 @@ const printer = (id: string, over: Partial<PrinterAdminItem> = {}): PrinterAdmin
 	...over
 });
 
-const html = (printers: PrinterAdminItem[]) =>
-	render(PrinterAdminList, { props: { printers } }).body;
+const html = (
+	printers: PrinterAdminItem[],
+	kioskDevices: { device_id: string; name: string; shelter_code: string }[] = []
+) => render(PrinterAdminList, { props: { printers, kioskDevices } }).body;
 
 describe('PrinterAdminList', () => {
 	it('shows name, station, online state, queue state and the last job of each printer', () => {
@@ -72,6 +74,20 @@ describe('PrinterAdminList', () => {
 
 		expect(body).toContain('IP 192.168.1.50, 10.0.0.7');
 		expect(body).toContain('ยังไม่ทราบ IP');
+	});
+
+	it('names the kiosk a kiosk printer is built into, and says when it is not linked yet', () => {
+		const body = html(
+			[
+				printer('k-1', { host_kind: 'kiosk', kiosk_device_id: 'kiosk-a' }),
+				printer('k-2', { host_kind: 'kiosk', kiosk_device_id: null }),
+				printer('pi-1', { host_kind: 'standalone' })
+			],
+			[{ device_id: 'kiosk-a', name: 'ตู้หน้าศูนย์', shelter_code: 'SH001' }]
+		);
+
+		expect(body).toContain('ตู้ ตู้หน้าศูนย์');
+		expect(body.match(/ยังไม่ผูกกับตู้/g)).toHaveLength(1);
 	});
 
 	it('has one จัดการ button per printer', () => {

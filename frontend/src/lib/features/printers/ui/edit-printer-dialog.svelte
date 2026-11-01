@@ -18,12 +18,14 @@
 	import { languageStore } from '$lib/stores/language.svelte';
 	import { getTranslation } from '$lib/utils/i18n';
 	import { PrintApiError } from '../data/printers.api';
+	import type { KioskDeviceRef } from '../domain/kiosk-link';
 	import type {
 		PrinterAdminSummary,
 		PrinterPatch,
 		PrinterSecretResponse
 	} from '../domain/print-device.schema';
-	import { PRINTERS_I18N } from '../domain/printers.i18n';
+	import { PRINTERS_I18N, printerAdminErrorMessage } from '../domain/printers.i18n';
+	import KioskDeviceSelect from './kiosk-device-select.svelte';
 	import {
 		useDeletePrinterDevice,
 		useRotatePrinterSecret,
@@ -34,11 +36,14 @@
 	let {
 		open = $bindable(false),
 		printer,
+		kioskDevices = [],
 		onrotated
 	}: {
 		open?: boolean;
 		/** Mounted per printer (keyed by the list), so the form starts from this printer's values. */
 		printer: PrinterAdminSummary;
+		/** Scanner devices to link a kiosk printer to (filtered to the printer's shelter). */
+		kioskDevices?: readonly KioskDeviceRef[];
 		/** A new secret was issued: the page shows it once in the reveal dialog. */
 		onrotated?: (result: PrinterSecretResponse) => void;
 	} = $props();
@@ -56,6 +61,8 @@
 	let station = $state(printer.station ?? '');
 	// svelte-ignore state_referenced_locally
 	let active = $state(printer.status === 'active');
+	// svelte-ignore state_referenced_locally
+	let kioskDeviceId = $state<string | null>(printer.kiosk_device_id ?? null);
 	let confirmDeleteOpen = $state(false);
 
 	/** Only the changed fields; `null` when nothing changed (or the name is blank). */
@@ -65,6 +72,9 @@
 		if (station.trim() !== (printer.station ?? '')) next.station = station.trim() || null;
 		const status = active ? 'active' : 'inactive';
 		if (status !== printer.status) next.status = status;
+		if (printer.host_kind === 'kiosk' && kioskDeviceId !== (printer.kiosk_device_id ?? null)) {
+			next.kiosk_device_id = kioskDeviceId;
+		}
 		return Object.keys(next).length > 0 ? next : null;
 	});
 	const busy = $derived(
@@ -75,6 +85,8 @@
 	);
 
 	const errorText = (err: unknown) => (err instanceof Error ? err.message : t.edit.actionFailed);
+	const kioskLinkError = (err: unknown) =>
+		err instanceof PrintApiError ? printerAdminErrorMessage(err.code, languageStore.current) : null;
 
 	async function save() {
 		if (!patch) return;
@@ -83,7 +95,7 @@
 			toast.success(t.edit.saved(patch.name ?? printer.name));
 			open = false;
 		} catch (err) {
-			toast.error(err instanceof Error ? err.message : t.edit.saveFailed);
+			toast.error(kioskLinkError(err) ?? (err instanceof Error ? err.message : t.edit.saveFailed));
 		}
 	}
 
@@ -168,6 +180,21 @@
 					</Label>
 					<Input id="edit-printer-station" class="h-11" bind:value={station} />
 				</div>
+				{#if printer.host_kind === 'kiosk'}
+					<div class="grid gap-2">
+						<Label for="edit-printer-kiosk" class="text-sm font-semibold text-slate-700">
+							{t.edit.kioskDevice}
+						</Label>
+						<KioskDeviceSelect
+							id="edit-printer-kiosk"
+							bind:value={kioskDeviceId}
+							devices={kioskDevices}
+							shelterCode={printer.shelter_code}
+							noneLabel={t.edit.kioskDeviceNone}
+						/>
+						<p class="text-xs text-slate-500">{t.edit.kioskDeviceHint}</p>
+					</div>
+				{/if}
 				<div
 					class="flex items-center justify-between gap-4 rounded-xl border border-slate-200/80 bg-slate-50/60 p-4"
 				>
@@ -272,7 +299,7 @@
 		<AlertDialog.Footer>
 			<AlertDialog.Cancel disabled={deleteMutation.isPending}>{t.edit.cancel}</AlertDialog.Cancel>
 			<AlertDialog.Action
-				class="text-destructive-foreground bg-destructive hover:bg-destructive/90"
+				class="bg-destructive text-destructive-foreground hover:bg-destructive/90"
 				disabled={deleteMutation.isPending}
 				onclick={remove}
 			>
