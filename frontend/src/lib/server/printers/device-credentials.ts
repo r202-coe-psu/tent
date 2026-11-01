@@ -1,4 +1,8 @@
-import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
+import {
+	generateDeviceSecret,
+	hashDeviceSecret,
+	verifyDeviceSecret
+} from '$lib/server/device-auth/secret';
 
 export const DEVICE_AUTH_FAILED = 'DEVICE_AUTH_FAILED' as const;
 export const DEPENDENCY_UNAVAILABLE = 'DEPENDENCY_UNAVAILABLE' as const;
@@ -59,17 +63,11 @@ export interface PrintDevicePrincipal {
 }
 
 export function generatePrintSecret(): string {
-	return `sk_print_${randomBytes(32).toString('hex')}`;
+	return generateDeviceSecret('sk_print_');
 }
 
 export function hashPrintSecret(secret: string): string {
-	return createHash('sha256').update(secret, 'utf8').digest('hex');
-}
-
-function hasMatchingSecret(secret: string, persistedHash: string): boolean {
-	const supplied = createHash('sha256').update(secret, 'utf8').digest();
-	const stored = Buffer.from(persistedHash, 'hex');
-	return stored.length === supplied.length && timingSafeEqual(supplied, stored);
+	return hashDeviceSecret(secret);
 }
 
 /** Unknown, wrong, and inactive devices intentionally share PrintAuthError. */
@@ -84,7 +82,7 @@ export async function authenticatePrintDeviceDoc(
 	if (!device || device.device_id !== deviceId || device.status !== 'active') {
 		throw new PrintAuthError();
 	}
-	if (!hasMatchingSecret(secret, device.secret_hash)) throw new PrintAuthError();
+	if (!verifyDeviceSecret(secret, device.secret_hash)) throw new PrintAuthError();
 	return device;
 }
 
