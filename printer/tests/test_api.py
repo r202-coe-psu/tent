@@ -10,6 +10,7 @@ from printer.api import (
     Hello,
     JobConflictError,
     NetworkError,
+    RejectedError,
     ServerError,
 )
 from printer.config import Config
@@ -291,3 +292,59 @@ def test_429_raises_server_error_so_the_agent_backs_off():
 
     with pytest.raises(ServerError):
         client_with(handler).next_job("ready")
+
+
+def _claim_with_lease(lease_sec) -> httpx.Response:
+    return httpx.Response(
+        200,
+        json={
+            "job": {
+                "id": "print_job:01J9ZABC",
+                "label_count": 1,
+                "lease_sec": lease_sec,
+                "lease_until": "2026-10-22T10:01:35.000Z",
+            },
+            "labels": [LABEL_1_B64],
+        },
+    )
+
+
+@pytest.mark.parametrize("bad", ["60", "abc", [], {}, True, 0, -5, 10**9, 1.5])
+def test_next_job_ignores_an_unusable_lease_sec_so_the_agent_falls_back(bad):
+    job = client_with(lambda request: _claim_with_lease(bad)).next_job("ready")
+
+    assert job is not None
+    assert job.lease_sec is None
+
+
+@pytest.mark.parametrize("bad", ["60", None, True, 0, -1, 10**9, 2.5])
+def test_hello_rejects_an_unusable_lease_sec_as_a_malformed_response(bad):
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "device": {"device_id": "d", "name": "n", "shelter_code": "SH001"},
+                "config": {"wait_sec": 25, "lease_sec": bad},
+            },
+        )
+
+    with pytest.raises(ServerError, match="malformed"):
+        client_with(handler).hello("0.1.0", "ready")
+
+
+@pytest.mark.parametrize("status", [400, 403, 404, 410, 413, 422])
+def test_definitive_client_errors_are_marked_as_rejected(status):
+    client = client_with(lambda request: httpx.Response(status, json={}))
+
+    with pytest.raises(RejectedError):
+        client.report_result("print_job:01J9ZABC", 1, None)
+
+
+@pytest.mark.parametrize("status", [408, 425, 429, 500, 503])
+def test_transient_statuses_are_plain_server_errors_that_may_be_retried(status):
+    client = client_with(lambda request: httpx.Response(status, json={}))
+
+    with pytest.raises(ServerError) as excinfo:
+        client.report_result("print_job:01J9ZABC", 1, None)
+
+    assert not isinstance(excinfo.value, RejectedError)

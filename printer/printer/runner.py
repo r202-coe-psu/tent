@@ -1,8 +1,17 @@
 import logging
+import random
 from collections.abc import Callable
 
 from printer import VERSION
-from printer.api import AuthError, BffClient, Hello, JobConflictError, NetworkError, ServerError
+from printer.api import (
+    AuthError,
+    BffClient,
+    Hello,
+    JobConflictError,
+    NetworkError,
+    RejectedError,
+    ServerError,
+)
 from printer.config import Config
 from printer.cups import Cups
 from printer.netinfo import local_ips as default_local_ips
@@ -10,17 +19,24 @@ from printer.netinfo import local_ips as default_local_ips
 log = logging.getLogger("printer")
 
 
-class _Backoff:
-    """Exponential delay 1, 2, 4, ... capped at max_sec."""
+# Share of each delay that jitter may take off, so a fleet of agents does not retry in lockstep.
+_JITTER_SHARE = 0.2
+# A poll that returns sooner than this (an immediate 204) pauses so the loop cannot spin.
+MIN_POLL_SEC = 1.0
 
-    def __init__(self, max_sec: float) -> None:
+
+class _Backoff:
+    """Exponential delay 1, 2, 4, ... capped at max_sec, shortened by up to 20% of jitter."""
+
+    def __init__(self, max_sec: float, jitter: Callable[[], float] = random.random) -> None:
         self._max = max_sec
+        self._jitter = jitter
         self._next = 1.0
 
     def next(self) -> float:
         delay = min(self._next, self._max)
         self._next *= 2
-        return delay
+        return delay * (1 - _JITTER_SHARE * self._jitter())
 
     def reset(self) -> None:
         self._next = 1.0
@@ -33,8 +49,9 @@ def _hello(
     sleep: Callable[[float], None],
     agent_version: str,
     local_ips: Callable[[], list[str]],
+    jitter: Callable[[], float],
 ) -> Hello:
-    backoff = _Backoff(config.error_backoff_max_sec)
+    backoff = _Backoff(config.error_backoff_max_sec, jitter)
     while True:
         try:
             return api.hello(
@@ -118,9 +135,10 @@ def _report(
     backoff_max_sec: float,
     monotonic: Callable[[], float],
     deadline: float,
+    jitter: Callable[[], float],
 ) -> None:
     """Retry only the report (never the print) until the claim's lease budget is spent."""
-    backoff = _Backoff(backoff_max_sec)
+    backoff = _Backoff(backoff_max_sec, jitter)
     while True:
         try:
             api.report_result(job_id, printed=printed, error_code=error_code)
@@ -128,6 +146,9 @@ def _report(
             return
         except JobConflictError:
             log.warning("job %s result dropped: job is no longer ours", job_id)
+            return
+        except RejectedError as exc:
+            log.error("job %s result rejected by server, not retrying: %s", job_id, exc)
             return
         except (AuthError, NetworkError, ServerError) as exc:
             if monotonic() >= deadline:
@@ -164,11 +185,12 @@ def run(
     max_iterations: int | None = None,
     agent_version: str = VERSION,
     local_ips: Callable[[], list[str]] = default_local_ips,
+    jitter: Callable[[], float] = random.random,
 ) -> None:
-    hello = _hello(config, api, cups, sleep, agent_version, local_ips)
+    hello = _hello(config, api, cups, sleep, agent_version, local_ips, jitter)
     if config.boot_slip:
         _print_boot_slip(cups, hello, agent_version, local_ips)
-    backoff = _Backoff(config.error_backoff_max_sec)
+    backoff = _Backoff(config.error_backoff_max_sec, jitter)
     iterations = 0
     last_state: str | None = None
     while max_iterations is None or iterations < max_iterations:
@@ -177,12 +199,15 @@ def run(
             state = cups.ensure_enabled()
             _log_queue_change(cups.printer_name, state, last_state)
             last_state = state
+            polled_at = monotonic()
             claimed = api.next_job(queue_state=state)
             claimed_at = monotonic()
             backoff.reset()
             if claimed is None:
                 if state != "ready":
                     sleep(config.idle_backoff_sec)
+                elif claimed_at - polled_at < MIN_POLL_SEC:
+                    sleep(MIN_POLL_SEC - (claimed_at - polled_at))
                 continue
             log.info("job %s claimed labels=%d", claimed.id, len(claimed.labels))
             lease_sec = claimed.lease_sec or hello.lease_sec
@@ -202,6 +227,7 @@ def run(
                 config.error_backoff_max_sec,
                 monotonic,
                 deadline=claimed_at + lease_sec,
+                jitter=jitter,
             )
         except AuthError:
             log.error("device auth failed - check DEVICE_ID / DEVICE_SECRET")

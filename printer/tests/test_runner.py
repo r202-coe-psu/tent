@@ -1,6 +1,7 @@
 import base64
 import json
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass, field, replace
 
 import httpx
@@ -84,6 +85,8 @@ class Server:
     scripts: dict[str, list] = field(
         default_factory=lambda: {"hello": [], "next": [], "result": []}
     )
+    # Called when the default empty long poll answers (a real one takes ~25 s to time out).
+    on_idle_poll: Callable[[], None] = lambda: None
 
     def script(self, kind: str, *items: httpx.Response | Exception) -> None:
         self.scripts[kind].extend(items)
@@ -100,6 +103,8 @@ class Server:
             "next": httpx.Response(204),
             "result": httpx.Response(200, json={"status": "printed"}),
         }
+        if kind == "next" and not self.scripts[kind]:
+            self.on_idle_poll()
         item = self.scripts[kind].pop(0) if self.scripts[kind] else defaults[kind]
         if isinstance(item, Exception):
             raise item
@@ -118,6 +123,7 @@ class Agent:
             "tent_xprinter", 203, sleep=self.cups_clock.sleep, monotonic=self.cups_clock.monotonic
         )
         api = BffClient(self.config, transport=httpx.MockTransport(self.server.handler))
+        kwargs.setdefault("jitter", lambda: 0.0)
         run(
             self.config,
             api,
@@ -132,7 +138,8 @@ class Agent:
 @pytest.fixture
 def agent(fake_cups) -> Agent:
     fake_cups.set("lpstat_p", out=IDLE)
-    return Agent(Server(), FakeClock())
+    clock = FakeClock()
+    return Agent(Server(on_idle_poll=lambda: setattr(clock, "now", clock.now + 25)), clock)
 
 
 def test_hello_is_sent_with_agent_version_queue_state_and_ips_before_first_poll(agent):
@@ -255,10 +262,17 @@ def test_empty_poll_with_queue_not_ready_sleeps_idle_backoff_and_reports_state(a
     assert agent.clock.sleeps == [5, 5]
 
 
-def test_empty_poll_with_queue_ready_polls_again_immediately(agent):
+def test_instant_empty_polls_pause_briefly_instead_of_spinning(agent):
+    agent.server.on_idle_poll = lambda: None
     agent.run(max_iterations=3)
 
     assert agent.server.paths() == [HELLO, NEXT, NEXT, NEXT]
+    assert agent.clock.sleeps == [1.0, 1.0, 1.0]
+
+
+def test_empty_poll_after_a_full_long_poll_does_not_sleep(agent):
+    agent.run(max_iterations=2)
+
     assert agent.clock.sleeps == []
 
 
@@ -284,7 +298,8 @@ def test_poll_errors_back_off_exponentially_and_a_successful_poll_resets_it(agen
 
     agent.run(max_iterations=5)
 
-    assert agent.clock.sleeps == [1, 2, 4, 1]
+    # the instant 204 pauses 1 s, then the next error restarts the backoff at 1
+    assert agent.clock.sleeps == [1, 2, 4, 1, 1]
 
 
 def test_poll_error_backoff_is_capped_at_error_backoff_max_sec(agent):
@@ -464,3 +479,39 @@ def test_disabled_queue_hint_points_to_readme_and_never_suggests_lpadmin(agent, 
     ]
     assert "lpadmin" not in message
     assert "README" in message
+
+
+def test_report_result_is_not_retried_on_a_definitive_client_error(agent, fake_cups):
+    prepare_printed_job(fake_cups, agent)
+    agent.server.script("result", httpx.Response(404, json={}))
+
+    agent.run(max_iterations=2)
+
+    assert agent.server.paths() == [HELLO, NEXT, RESULT, NEXT]
+    assert len(fake_cups.calls("lp")) == 1
+
+
+def test_report_result_still_retries_429_and_408(agent, fake_cups):
+    prepare_printed_job(fake_cups, agent)
+    agent.server.script("result", httpx.Response(429, json={}), httpx.Response(408, json={}))
+
+    agent.run(max_iterations=1)
+
+    assert agent.server.paths() == [HELLO, NEXT, RESULT, RESULT, RESULT]
+
+
+def test_non_numeric_lease_sec_from_the_server_does_not_crash_the_agent(agent, fake_cups):
+    prepare_printed_job(fake_cups, agent)
+    agent.server.script("next", job_response(LABEL_1, lease_sec="soon"))  # type: ignore[arg-type]
+
+    agent.run(max_iterations=1)
+
+    assert agent.server.requests[-1] == (RESULT, {"printed": 1})
+
+
+def test_backoff_has_jitter_that_never_exceeds_the_cap(agent):
+    agent.server.script("next", *[error_503() for _ in range(8)])
+
+    agent.run(max_iterations=8, jitter=lambda: 1.0)
+
+    assert agent.clock.sleeps == pytest.approx([0.8 * d for d in [1, 2, 4, 8, 16, 32, 60, 60]])

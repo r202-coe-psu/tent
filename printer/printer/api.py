@@ -17,6 +17,10 @@ class ServerError(Exception):
     pass
 
 
+class RejectedError(ServerError):
+    """A definitive 4xx: the server understood and refused, so repeating the request is futile."""
+
+
 class NetworkError(Exception):
     pass
 
@@ -32,6 +36,20 @@ def _parsing() -> Iterator[None]:
         yield
     except (ValueError, KeyError, TypeError) as exc:  # JSONDecodeError, binascii.Error: ValueError
         raise ServerError(f"malformed server response: {type(exc).__name__}") from None
+
+
+# 408 (timeout), 425 (too early) and 429 (rate limit) say "try again later"; other 4xx do not.
+_RETRYABLE_CLIENT_STATUSES = frozenset({408, 425, 429})
+_MIN_LEASE_SEC = 1
+_MAX_LEASE_SEC = 3600
+
+
+def _lease_sec(value: object) -> int | None:
+    """A usable lease length, or None. bool is an int subclass but never a lease."""
+    if isinstance(value, int) and not isinstance(value, bool):
+        if _MIN_LEASE_SEC <= value <= _MAX_LEASE_SEC:
+            return value
+    return None
 
 
 @dataclass(frozen=True)
@@ -78,12 +96,15 @@ class BffClient:
         )
         with _parsing():
             body = response.json()
+            lease_sec = _lease_sec(body["config"]["lease_sec"])
+            if lease_sec is None:
+                raise ValueError("lease_sec out of range")
             return Hello(
                 device_id=body["device"]["device_id"],
                 name=body["device"]["name"],
                 shelter_code=body["device"]["shelter_code"],
                 wait_sec=body["config"]["wait_sec"],
-                lease_sec=body["config"]["lease_sec"],
+                lease_sec=lease_sec,
             )
 
     def report_result(self, job_id: str, printed: int, error_code: str | None) -> str:
@@ -103,6 +124,11 @@ class BffClient:
             raise AuthError("device authentication failed")
         if response.status_code == 409 and path.endswith("/result"):
             raise JobConflictError("job is no longer claimed by this device")
+        if (
+            400 <= response.status_code < 500
+            and response.status_code not in _RETRYABLE_CLIENT_STATUSES
+        ):
+            raise RejectedError(f"server rejected request {response.status_code}")
         if not response.is_success:
             raise ServerError(f"server error {response.status_code}")
         return response
@@ -120,5 +146,7 @@ class BffClient:
                 label_count=job["label_count"],
                 lease_until=job["lease_until"],
                 labels=tuple(base64.b64decode(label) for label in body["labels"]),
-                lease_sec=job.get("lease_sec"),
+                # An unusable lease is dropped (the caller falls back to hello's), never fatal:
+                # the job is already `printing` on the server.
+                lease_sec=_lease_sec(job.get("lease_sec")),
             )
