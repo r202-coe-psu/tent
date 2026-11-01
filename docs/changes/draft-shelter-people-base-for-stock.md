@@ -11,6 +11,7 @@ affects:
   - frontend/src/lib/features/shared/domain/shelter-people.ts (ย้ายมาจาก kitchen)
   - frontend/src/lib/features/kitchen/domain/occupancy.ts
   - frontend/src/lib/features/sop-ratios/ui/food-sphere-stock-tab.svelte
+  - frontend/src/lib/features/sop-ratios/ui/people-total-tooltip.svelte
   - frontend/src/lib/features/sop-ratios/application/shelter-people-queries.ts
 ---
 
@@ -63,13 +64,23 @@ staff และจิตอาสา **ไม่กระจายตามส�
 
 ### 4. การแสดงผล
 
-แสดงที่มาของตัวเลขให้เห็นแทนที่จะบอกแค่ยอดรวม
+แถบสรุปและบรรทัด "ฐานคำนวณ" แสดงยอดรวม
 
 ```
-ผู้ประสบภัย 300 · staff 20 · จิตอาสา 15 = 335 คน
+ทั้งหมด 335 คน
 ```
 
-ป้าย **"อัตราครองเตียง" ยังเป็นผู้ประสบภัยอย่างเดียวเหมือนเดิม** เพราะเป็นตัวชี้วัดความจุที่นอน ไม่ใช่ฐานการกิน
+ที่มาของตัวเลขอยู่ใน tooltip ของยอดรวม เปิดได้จากการชี้เมาส์ การแตะบนจอสัมผัส และการโฟกัสด้วยคีย์บอร์ด
+
+```
+ผู้ประสบภัย 300 คน
+เจ้าหน้าที่ 20 คน
+จิตอาสา 15 คน
+```
+
+ถอดป้าย **"อัตราครองเตียง"** ออกจากแถบสรุปของแท็บนี้ เพราะป้ายแสดงจำนวนผู้ประสบภัยซ้ำกับแถวด้านบน และเป็นจำนวนคน ไม่ใช่อัตราต่อเตียงตามชื่อ
+
+ป้ายชื่อเดียวกันในหน้าข้อมูลศูนย์สาธารณะ (`public-shelter-details.ts`) ไม่อยู่ในขอบเขตของ CR นี้
 
 ## สิ่งที่ยังไม่ตัดสินใน CR นี้
 
