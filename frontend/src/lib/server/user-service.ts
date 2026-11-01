@@ -494,11 +494,12 @@ function assertGrantableTarget(existing: CouchUserDoc, volunteerId: string, acto
 
 /**
  * Give a volunteer one time-limited staff role on their account (#955). Creates the account on
- * first grant; on a re-grant it only adds the role and the grant (or renews or shortens the
- * grant) and never touches the password. A role the account already holds without a grant (given
- * by a shelter manager) is left alone. Who may grant, and what, is decided by the caller except
- * the target-account rules, which are enforced here before any write. The audit is written after
- * the `_users` write succeeds (FR-14).
+ * first grant; on a re-grant it renews or shortens the grant of the same role, or replaces the
+ * coordinator grants in this shelter with the new role (#1044), and never touches the password.
+ * A role the account already holds without a grant (given by a shelter manager) is left alone.
+ * Who may grant, and what, is decided by the caller except the target-account rules, which are
+ * enforced here before any write. The audit is written after the `_users` write succeeds
+ * (FR-14).
  */
 export async function grantCoordinatorRole(input: {
 	name: string;
@@ -567,23 +568,46 @@ export async function grantCoordinatorRole(input: {
 	const roles = existing.roles ?? [];
 	const previous = grantFor(existing.role_grants, code, grant.role);
 	const hasRole = hasCapabilityInShelter(roles, code, grant.role);
-	// A manager gave this role: nothing to add, and nothing a coordinator may change.
-	if (hasRole && !previous) return { created: false, unchanged: true, name };
-	// Another coordinator's grant may be renewed but not cut short. A renewal keeps the issuer, so
-	// the renewer cannot then revoke or shorten it (FR-8); the audit records who renewed.
+	// A volunteer account holds one role per shelter (CR-221 FR-4): a role a manager gave (no
+	// grant) here is not the coordinator's to change or to add a second one beside (FR-16, FR-17).
+	if (
+		capabilitiesForShelter(roles, code).some(
+			(cap) => grantFor(existing.role_grants, code, cap) === null
+		)
+	) {
+		throw new ServiceError('FORBIDDEN', 'ผู้จัดการศูนย์เป็นผู้ให้ แก้ไขได้ที่หน้าผู้ใช้งาน');
+	}
+	// Any coordinator of the shelter may renew or shorten any grant here (CR-221 FR-17); the issuer
+	// stays on the grant and the audit records the caller as `actor`.
 	const shortened =
 		previous !== null && Date.parse(grant.expires_at) < Date.parse(previous.expires_at);
-	if (previous && shortened && previous.granted_by !== actor) {
-		throw new ServiceError('FORBIDDEN', 'ย่นอายุได้เฉพาะสิทธิ์ที่ตนเองออกให้');
-	}
-	const nextRoles = hasRole
-		? roles
-		: mergeShelterAssignment(roles, code, [...capabilitiesForShelter(roles, code), grant.role]);
+	// A volunteer holds one coordinator role per shelter (draft CR #1046 FR-4, FR-18): picking
+	// another role replaces the coordinator grants here in this same write, so the shelter scope
+	// never lapses in between. Roles a manager gave (no grant) stay as they are.
+	const replaced = (existing.role_grants ?? []).filter(
+		(g) => g.shelter_code === code && g.role !== grant.role
+	);
+	const replacedRoles = new Set(replaced.map((g) => g.role));
+	const keptCapabilities = capabilitiesForShelter(roles, code).filter(
+		(cap) => !replacedRoles.has(cap)
+	);
+	const nextRoles =
+		hasRole && replaced.length === 0
+			? roles
+			: mergeShelterAssignment(roles, code, [
+					...keptCapabilities.filter((cap) => cap !== grant.role),
+					grant.role
+				]);
+	// Editing a grant needs no new identity check (CR-221 FR-3), so `grant` may carry none: the
+	// grant keeps the verification it was issued under.
+	const inheritedVerification = previous?.verified_by ?? replaced[0]?.verified_by;
+	const base = {
+		...grant,
+		...(grant.verified_by || !inheritedVerification ? {} : { verified_by: inheritedVerification })
+	};
 	const role_grants = [
-		...(existing.role_grants ?? []).filter((g) => g.shelter_code !== code || g.role !== grant.role),
-		previous
-			? { ...grant, granted_by: previous.granted_by, granted_at: previous.granted_at }
-			: grant
+		...(existing.role_grants ?? []).filter((g) => g.shelter_code !== code),
+		previous ? { ...base, granted_by: previous.granted_by, granted_at: previous.granted_at } : base
 	];
 	const res = await adminRaw(`/_users/${userDocId(name)}`, 'PUT', {
 		...existing,
@@ -592,6 +616,17 @@ export async function grantCoordinatorRole(input: {
 		role_grants
 	});
 	assertGrantWritten('grant volunteer role', res);
+	for (const old of replaced) {
+		await recordRoleGrantAudit({
+			shelter_code: code,
+			user_name: name,
+			reason: 'role_grant.revoked',
+			role: old.role,
+			expires_at: old.expires_at,
+			actor,
+			granted_by: old.granted_by
+		});
+	}
 	await recordRoleGrantAudit({
 		shelter_code: code,
 		user_name: name,
@@ -604,16 +639,18 @@ export async function grantCoordinatorRole(input: {
 		expires_at: grant.expires_at,
 		...(previous ? { previous_expires_at: previous.expires_at } : {}),
 		actor,
-		verified_by: grant.verified_by
+		...(previous ? { granted_by: previous.granted_by } : {}),
+		verified_by: base.verified_by
 	});
 	return { created: false, unchanged: false, name };
 }
 
 /**
- * A coordinator takes back a grant they issued (FR-8): the role and its grant go, and the
- * shelter scope with the last role there, as the worker sweep does for an expiry. A role without
- * a grant (given by a manager) or another coordinator's grant is 403 and stays. The account and
- * password stay.
+ * A coordinator takes back any coordinator grant in their shelter (CR-221 FR-17), not only one
+ * they issued: the role and its grant go, and the shelter scope with the last role there, as the
+ * worker sweep does for an expiry. A role without a grant (given by a manager) is 403 and stays.
+ * The audit records the caller as `actor` and the original issuer as `granted_by`. The account
+ * and password stay.
  */
 export async function revokeCoordinatorGrant(input: {
 	name: string;
@@ -629,8 +666,8 @@ export async function revokeCoordinatorGrant(input: {
 	const doc = await readUserDoc(await storedUserName(input.name), 'read user');
 	const name = doc.name;
 	const grant = grantFor(doc.role_grants, code, role);
-	if (doc.volunteer_id !== volunteer_id || !grant || grant.granted_by !== actor) {
-		throw new ServiceError('FORBIDDEN', 'ถอนได้เฉพาะสิทธิ์ที่ตนเองออกให้');
+	if (doc.volunteer_id !== volunteer_id || !grant) {
+		throw new ServiceError('FORBIDDEN', 'ไม่พบสิทธิ์ที่ผู้ประสานงานถอนได้ในศูนย์นี้');
 	}
 	const next = withoutGrantedRole(doc.roles ?? [], doc.role_grants, code, role);
 	const res = await adminRaw(`/_users/${userDocId(name)}`, 'PUT', {
@@ -646,26 +683,89 @@ export async function revokeCoordinatorGrant(input: {
 		reason: 'role_grant.revoked',
 		role,
 		expires_at: grant.expires_at,
-		actor
+		actor,
+		granted_by: grant.granted_by
 	});
 }
 
 /**
- * The grants in one shelter on the account linked to a volunteer, for the coordinator dialog
- * (FR-8). Only the grants are returned, never the account doc. A missing account, or one linked
- * to another volunteer, has none.
+ * What the coordinator dialog may know about the account linked to a volunteer, in one shelter
+ * (FR-8, #1044): whether it exists, its grants there, and the roles a manager gave there (no
+ * grant). Never the account doc. A missing account, or one linked to another volunteer, counts as
+ * none.
  */
-export async function readVolunteerGrants(input: {
+export async function readVolunteerAccount(input: {
 	name: string;
 	volunteer_id: string;
 	shelter_code: string;
-}): Promise<RoleGrant[]> {
+}): Promise<{ exists: boolean; grants: RoleGrant[]; permanent_roles: string[] }> {
+	const none = { exists: false, grants: [], permanent_roles: [] };
 	const got = await adminRaw(`/_users/${userDocId(input.name)}`, 'GET');
-	if (got.status === 404) return [];
+	if (got.status === 404) return none;
 	if (got.status >= 400) throw serviceErrorFromCouch('read user', got.status, got.data);
 	const doc = got.data as CouchUserDoc;
-	if (doc.volunteer_id !== input.volunteer_id) return [];
-	return (doc.role_grants ?? []).filter((g) => g.shelter_code === input.shelter_code);
+	if (doc.volunteer_id !== input.volunteer_id) return none;
+	const grants = (doc.role_grants ?? []).filter((g) => g.shelter_code === input.shelter_code);
+	const granted = new Set(grants.map((g) => g.role));
+	return {
+		exists: true,
+		grants,
+		permanent_roles: capabilitiesForShelter(doc.roles ?? [], input.shelter_code).filter(
+			(role) => !granted.has(role)
+		)
+	};
+}
+
+/** One volunteer account as the shelter's volunteer table shows it (#1044). */
+export type ShelterVolunteerAccount = {
+	volunteer_id: string;
+	name: string;
+	active: boolean;
+	/** Coordinator grants in this shelter, each with its expiry. */
+	grants: { role: string; expires_at: string }[];
+	/** Roles a manager gave in this shelter (no expiry). */
+	permanent_roles: string[];
+};
+
+/**
+ * The accounts linked to a shelter's volunteer profiles, read in one request (#1044). A profile
+ * whose `user_name` points at no account, or at an account linked to another volunteer, is left
+ * out. Kept even when it holds nothing in the shelter any more: that is the "expired" state.
+ */
+export async function readShelterVolunteerAccounts(
+	links: readonly { volunteer_id: string; name: string }[],
+	shelterCode: string
+): Promise<ShelterVolunteerAccount[]> {
+	if (links.length === 0) return [];
+	// `_all_docs` keys are raw doc ids; `userDocId` is URL-encoded for paths.
+	const idOf = (name: string) => `${USER_PREFIX}${name}`;
+	const res = await adminRaw('/_users/_all_docs?include_docs=true', 'POST', {
+		keys: [...new Set(links.map((link) => idOf(link.name)))]
+	});
+	if (res.status >= 400) throw serviceErrorFromCouch('read users', res.status, res.data);
+	const rows = (res.data as { rows?: { key: string; doc?: CouchUserDoc | null }[] })?.rows ?? [];
+	const docs = new Map(rows.flatMap((row) => (row.doc ? [[row.key, row.doc] as const] : [])));
+	return links.flatMap((link) => {
+		const doc = docs.get(idOf(link.name));
+		// Only the volunteer's own volunteer account counts (CR-221 FR-6, FR-7), as in
+		// `readVolunteerAccount`: never a staff account a profile's `user_name` happens to name.
+		if (!doc || doc.personnel_type !== 'volunteer' || doc.volunteer_id !== link.volunteer_id) {
+			return [];
+		}
+		const grants = (doc.role_grants ?? []).filter((g) => g.shelter_code === shelterCode);
+		const granted = new Set(grants.map((g) => g.role));
+		return [
+			{
+				volunteer_id: link.volunteer_id,
+				name: doc.name,
+				active: doc.active ?? true,
+				grants: grants.map((g) => ({ role: g.role, expires_at: g.expires_at })),
+				permanent_roles: capabilitiesForShelter(doc.roles ?? [], shelterCode).filter(
+					(role) => !granted.has(role)
+				)
+			}
+		];
+	});
 }
 
 /** List users, scoped: SA sees all; a manager sees users with their managed shelter scope. */
@@ -796,6 +896,17 @@ export async function updateUser(
 
 	if (isProtectedBootstrapAdmin(doc, bootstrapAdminName())) {
 		rejectBootstrapMutation(caller, name, 'update');
+	}
+
+	// A volunteer account is closed whole by a system admin only (CR-221 FR-23); a manager takes the
+	// volunteer's role in the shelter back instead. An unchanged `active` echoed by a form is fine.
+	if (
+		!caller.isSA &&
+		input.active !== undefined &&
+		doc.personnel_type === 'volunteer' &&
+		input.active !== (doc.active ?? true)
+	) {
+		throw new ServiceError('FORBIDDEN', 'บัญชีจิตอาสาใช้การถอนสิทธิ์ในศูนย์แทนการปิดบัญชี');
 	}
 
 	let nextRoles = input.roles;
