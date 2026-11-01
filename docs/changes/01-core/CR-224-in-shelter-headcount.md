@@ -1,10 +1,11 @@
 ---
-id: draft
+id: CR-224
 title: ยอดคนในศูนย์ (in-shelter headcount) — นิยามเดียว active + room_confirmed ให้ทุกหน้าใช้ร่วมกัน
-status: proposed
+status: approved
 date: 2026-10-20
+updated: 2026-11-02
 requested_by: ทีม dev (issue #593 — headcount 3 หน้าไม่นับ room_confirmed; พบระหว่างทำ CR-170)
-decided_by: project owner (@Fishcanwalk — อนุมัติแนวทาง "in_shelter ทุกจุด + CR ใหม่ + PR เดียว" 2026-10-20)
+decided_by: kong (อนุมัติ CR 2026-11-02) · แนวทางอนุมัติโดย @Fishcanwalk 2026-10-20
 layer: volatile
 affects:
   - docs/data/schema.md §evacuee "Occupancy metrics (CR-112)" — แถว Kitchen / SOP
@@ -22,7 +23,7 @@ affects:
   - no schema_v bump (ไม่เปลี่ยนรูปร่าง doc ที่ persist)
 ---
 
-# ยอดคนในศูนย์ (in-shelter headcount) — นิยามเดียวให้ทุกหน้าใช้ร่วมกัน
+# CR-224 — ยอดคนในศูนย์ (in-shelter headcount) นิยามเดียวให้ทุกหน้าใช้ร่วมกัน
 
 > **สรุป (TL;DR):**
 >
@@ -115,3 +116,5 @@ N/A — ไม่เปลี่ยนรูปร่าง doc ที่ persis
   แจ้งฝ่ายคลังและครัว
 - 2026-10-20 — proposed (draft); ขอบเขตขยายจาก 3 จุดใน issue เป็น 6 จุด (เพิ่ม dashboard, แผนอาหาร, `daily_calc`);
   ตัด worker `occupancy_total` ออก — สัญญา partner EXT-005 (CR-111)
+- 2026-10-20 — implement และ merge ใน PR #720 (merge โดย @Fishcanwalk) ขณะที่ CR ยังเป็น draft
+- 2026-11-02 — approved โดย kong ตามที่ implement แล้ว; ให้เลข CR-224 (พบระหว่างรีวิว PR #1102 ที่ CR-223 อ้าง draft นี้)
