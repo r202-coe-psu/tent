@@ -1,4 +1,5 @@
 import { hashSecurityAnswer } from '$lib/server/security-questions';
+import { ensurePrintingService } from '$lib/server/ensure-printing-service';
 import { ensurePublicWriter } from '$lib/server/ensure-public-writer';
 import { couchReq, env } from './couch';
 import { SH001_CODE } from './types';
@@ -108,6 +109,23 @@ async function seedPublicWriter(): Promise<void> {
 	);
 }
 
+async function seedPrintingService(): Promise<void> {
+	const result = await ensurePrintingService(
+		couchReq,
+		process.env.COUCHDB_PRINTING_SERVICE_URL ?? env.COUCHDB_PRINTING_SERVICE_URL
+	);
+	if (result.outcome === 'skipped') {
+		console.log('  – _users: COUCHDB_PRINTING_SERVICE_URL unset — printing service not seeded');
+		return;
+	}
+	if (result.outcome === 'invalid_format') {
+		throw new Error('COUCHDB_PRINTING_SERVICE_URL is set but invalid (missing password?)');
+	}
+	console.log(
+		`  ✓ _users: printing service "${result.username}" (${result.outcome === 'created' ? 'created' : 'already exists'})`
+	);
+}
+
 /** Staging/local test logins — not part of prod master init. */
 export async function seedUsers(): Promise<void> {
 	let created = 0;
@@ -170,4 +188,5 @@ export async function seedUsers(): Promise<void> {
 	);
 
 	await seedPublicWriter();
+	await seedPrintingService();
 }

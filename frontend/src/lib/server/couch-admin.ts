@@ -35,6 +35,15 @@ function adminConfig(): { base: string; authHeader: string; user: string } {
 	};
 }
 
+/**
+ * Central CouchDB origin (no credentials, no trailing slash) — the same base
+ * `readSessionUserCtx` uses to forward a caller's cookie. Safe to hand to code
+ * that must not hold admin credentials.
+ */
+export function centralCouchBase(): string {
+	return adminConfig().base;
+}
+
 /** Username of the CouchDB server admin from `COUCHDB_ADMIN_URL` (typically `admin`). */
 export function bootstrapAdminName(): string {
 	return adminConfig().user;
