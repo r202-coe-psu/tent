@@ -13,6 +13,14 @@ vi.mock('$lib/features/catalog', async (importOriginal) => ({
 	...(await importOriginal<typeof import('$lib/features/catalog')>()),
 	useUnitsOfMeasure: () => ({ data: [] })
 }));
+vi.mock('$lib/features/donations', async (importOriginal) => ({
+	...(await importOriginal<typeof import('$lib/features/donations')>()),
+	useRevealDonorContact: () => ({ mutateAsync: vi.fn(), isPending: false })
+}));
+vi.mock('$lib/features/operations', () => ({
+	DonationLotsTable: () => {},
+	useStockFormItems: () => ({ items: [] })
+}));
 vi.mock('svelte-sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
 const baseRow: PendingDonationRow = {

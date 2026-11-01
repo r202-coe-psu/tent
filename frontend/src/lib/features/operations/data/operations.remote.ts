@@ -1,4 +1,11 @@
-import { allDocsByIds, bulkDocs, bulkDocsDetailed, getDoc, putDocStrict } from '$lib/db/couch-db';
+import {
+	allDocsByIds,
+	bulkDocs,
+	bulkDocsDetailed,
+	findDocsPage,
+	getDoc,
+	putDocStrict
+} from '$lib/db/couch-db';
 import { createRemoteRepository, type Repository } from '$lib/db/repository';
 import { getShelterCode, getShelterDb } from '$lib/db/shelter';
 import { now, touch, type AuthorContext } from '$lib/db/model';
@@ -34,6 +41,7 @@ import {
 	createDistributeEntry,
 	createAdjustEntry,
 	projectStockLotBalances,
+	usableStockByItem,
 	assertLotWriteOffsFit,
 	type DonationCampaign,
 	type CampaignInput,
@@ -130,6 +138,12 @@ export function assertReceiveAgainstCatalog(
 	}
 }
 
+/** Ledger rows of one donation: one per received line, so this is far above any real receipt. */
+const DONATION_LEDGER_LIMIT = 1000;
+
+/** Rows per `_find` round when a set of items' ledger history is read to the end. */
+const LEDGER_PAGE_LIMIT = 1000;
+
 /** Tries at closing a batch receipt while other writes keep moving its `_rev` (S-R14-1). */
 const MAX_CLOSE_ATTEMPTS = 3;
 
@@ -192,6 +206,49 @@ export class OperationsRemoteRepository implements OperationsRepository {
 	async listLedgerByItem(itemId: string): Promise<StockLedger[]> {
 		const ledger = await this.listLedger();
 		return ledger.filter((entry) => entry.item_id === itemId);
+	}
+
+	async listDonationLedger(donationId: string): Promise<StockLedger[]> {
+		const rows = await this.repo.find<StockLedger>({
+			// `item_id` is in the selector so the `['type','ref_id','item_id','reason']` index
+			// covers the query; `$gt: null` keeps every item.
+			selector: {
+				type: 'stock_ledger',
+				ref_id: donationId,
+				item_id: { $gt: null },
+				reason: 'donation'
+			},
+			limit: DONATION_LEDGER_LIMIT
+		});
+		return rows.filter(isStockLedger);
+	}
+
+	async listLedgerByItems(itemIds: readonly string[]): Promise<StockLedger[]> {
+		// One equality read per item, so CouchDB picks `ledger-type-itemid-idx` (`type` + `item_id`):
+		// an `$in` cannot range-scan that index and would read every `stock_ledger` row instead.
+		const perItem = await Promise.all(
+			[...new Set(itemIds)].map((itemId) => this.listLedgerOfItem(itemId))
+		);
+		return perItem.flat();
+	}
+
+	private async listLedgerOfItem(itemId: string): Promise<StockLedger[]> {
+		const rows: StockLedger[] = [];
+		let bookmark: string | null = null;
+		for (;;) {
+			const page: { docs: StockLedger[]; bookmark: string | null } =
+				await findDocsPage<StockLedger>(this.dbName, {
+					selector: { type: 'stock_ledger', item_id: itemId },
+					limit: LEDGER_PAGE_LIMIT,
+					...(bookmark ? { bookmark } : {})
+				});
+			rows.push(...page.docs.filter(isStockLedger));
+			// A short page is the end; a bookmark that does not move would loop forever.
+			if (page.docs.length < LEDGER_PAGE_LIMIT || !page.bookmark || page.bookmark === bookmark) {
+				return rows;
+			}
+			bookmark = page.bookmark;
+		}
 	}
 
 	async listLedgerRefDocs(refIds: readonly string[]): Promise<LedgerRefDoc[]> {
@@ -643,6 +700,11 @@ export class OperationsRemoteRepository implements OperationsRepository {
 		const maxRetries = 5;
 		let acquired = false;
 		for (let attempt = 0; attempt <= maxRetries; attempt++) {
+			// Read the reservation doc BEFORE the ledger (#855). A claimer appends its ledger row and
+			// only then releases its claim; reading the ledger first let us miss that row while the
+			// claim was already gone from the doc we read next — its quantity was then deducted
+			// nowhere. This order sees the claim, the row, or both, never neither.
+			const rawRes = await getDoc<{ _id: string }>(this.dbName, resId);
 			const ledger = await this.listLedger();
 			// Lots never cross items: replay only this item's rows so another item's impossible
 			// history cannot block a healthy distribute (same scope as the write-off check).
@@ -670,7 +732,6 @@ export class OperationsRemoteRepository implements OperationsRepository {
 			const physicalBalance = selectedLot.qty;
 
 			let resDoc: StockLotReservation;
-			const rawRes = await getDoc<{ _id: string }>(this.dbName, resId);
 			if (!rawRes) {
 				resDoc = createStockLotReservation(
 					{ lot_ref: lotRef, pending_claims: [] },
@@ -725,7 +786,7 @@ export class OperationsRemoteRepository implements OperationsRepository {
 
 			if (qtyGt(requestedQty, availableForClaim)) {
 				throw new InsufficientStockError(
-					`Insufficient stock in lot ${lotRef} for item ${entry.item_id} (requested ${requestedQty}, have ${availableForClaim})`
+					`Insufficient stock in lot ${lotRef} for item ${entry.item_id} (requested ${requestedQty}, have ${qtyGt(availableForClaim, 0) ? availableForClaim : '0'})`
 				);
 			}
 
@@ -888,7 +949,7 @@ export class OperationsRemoteRepository implements OperationsRepository {
 		} else if (qtyLte(entry.qty, 0)) {
 			// No lot named (an older caller): the projection takes it from the item's lots in
 			// consumption order, so the item's total is what it has to fit.
-			const balances = await this.getBalance();
+			const balances = usableStockByItem(await this.listLedger());
 			const currentQty = balances.get(entry.item_id) ?? '0';
 			const requestedQty = qtyAbs(entry.qty);
 
@@ -986,7 +1047,7 @@ export class OperationsRemoteRepository implements OperationsRepository {
 				}
 			}
 			if (writeOffs.size > 0) {
-				const balances = await this.getBalance();
+				const balances = usableStockByItem(await this.listLedger());
 				for (const [itemId, total] of writeOffs) {
 					const have = balances.get(itemId) ?? '0';
 					if (!qtyGte(have, total)) {

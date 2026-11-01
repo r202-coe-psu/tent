@@ -108,6 +108,12 @@ describe('grantVolunteerAccessAsCoordinator', () => {
 		);
 	});
 
+	it('refuses a profile whose phone is not a 10-digit mobile (CR-210 FR-8)', async () => {
+		couch(volunteer({ phone: '022222222' }));
+		await expect(grant()).rejects.toMatchObject({ code: 'VALIDATION' });
+		expect(grantCoordinatorRole).not.toHaveBeenCalled();
+	});
+
 	it('grants a verified volunteer one role with an expiry at the end of the chosen Bangkok day', async () => {
 		await expect(grant()).resolves.toEqual({ created: true, unchanged: false });
 		expect(grantCoordinatorRole).toHaveBeenCalledWith(

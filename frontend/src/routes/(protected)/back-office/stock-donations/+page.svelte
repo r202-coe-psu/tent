@@ -13,6 +13,9 @@
 	import NeedsBoardAdmin from '$lib/components/needs-board-admin.svelte';
 	import PendingReviewBoard from '$lib/components/pending-review-board.svelte';
 	import PendingReviewDetail from '$lib/components/pending-review-detail.svelte';
+	import ReceivedDonationsList, {
+		type SubmittedReceivedSearch
+	} from './components/received-donations-list.svelte';
 	import ScanStation from './components/scan-station.svelte';
 	import CreateCampaignForm from './components/create-campaign-form.svelte';
 	import EditCampaignForm from './components/edit-campaign-form.svelte';
@@ -20,6 +23,7 @@
 	import DonationSlotsManager from './components/donation-slots-manager.svelte';
 	import { useDonationNeedsBoard, type NeedItem } from '$lib/features/operations';
 	import { useQueryClient } from '@tanstack/svelte-query';
+	import { resolveShelterCode } from '$lib/db/shelter';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import User from '@lucide/svelte/icons/user';
 	import {
@@ -29,6 +33,8 @@
 		parseQueueFilter,
 		queueGroupOf,
 		useDonationQueue,
+		useReceivedDonations,
+		useReceivedSearch,
 		type DonationQueueFilter,
 		type LineReviewDecision,
 		type PendingDonationRow,
@@ -96,6 +102,23 @@
 	const pendingCount = $derived(
 		queueRows.filter((row) => queueGroupOf(row.status) === 'pending').length
 	);
+	// "รับแล้ว" (#821) — fetched only while that filter is open, for the shelter the page
+	// works in. Never part of `queueRows`, so "ทั้งหมด" and the badge stay the open queue.
+	// A submitted search (FR-8) replaces the plain list in the same place: it asks the server
+	// for the whole shelter, one type at a time, and pages by the cursor the server issues.
+	let activeSearch = $state<SubmittedReceivedSearch | null>(null);
+	const receivedOpen = $derived(activeSubTab === 'list' && queueFilter === 'received');
+	const receivedQuery = useReceivedDonations(
+		() => resolveShelterCode() ?? '',
+		() => receivedOpen && activeSearch === null
+	);
+	const searchQuery = useReceivedSearch(
+		() => resolveShelterCode() ?? '',
+		() => (receivedOpen && activeSearch ? { by: activeSearch.by, q: activeSearch.q } : null)
+	);
+	// The one query the list shows right now.
+	const shownReceived = $derived(activeSearch ? searchQuery : receivedQuery);
+	const receivedRows = $derived(shownReceived.data?.pages.flatMap((p) => p.donations) ?? []);
 	const refreshQueue = () => queryClient.invalidateQueries({ queryKey: donationQueueKeys.all });
 
 	/** What the list tab shows: the list, a booking under review, or the counter. */
@@ -104,6 +127,10 @@
 	let pendingActionSaving = $state(false);
 
 	function openRow(row: PendingDonationRow) {
+		if (row.status === 'received') {
+			selectedPendingRequest = row;
+			return;
+		}
 		if (queueGroupOf(row.status) === 'pending') {
 			selectedPendingRequest = row;
 			return;
@@ -119,6 +146,7 @@
 	}
 
 	function setQueueFilter(filter: DonationQueueFilter) {
+		activeSearch = null;
 		const params = new SvelteURLSearchParams(page.url.searchParams);
 		params.set('tab', 'list');
 		params.set('filter', filter);
@@ -141,6 +169,7 @@
 		viewState = 'list';
 		selectedPendingRequest = null;
 		station = null;
+		activeSearch = null;
 	}
 
 	async function handleApprovePending(
@@ -326,6 +355,7 @@
 				<PendingReviewDetail
 					request={selectedPendingRequest}
 					saving={pendingActionSaving}
+					readonly={selectedPendingRequest.status === 'received'}
 					onBack={() => (selectedPendingRequest = null)}
 					onApprove={handleApprovePending}
 					onReject={handleRejectPending}
@@ -340,6 +370,22 @@
 					bind:filter={() => queueFilter, setQueueFilter}
 					onViewDetails={openRow}
 				>
+					{#snippet received()}
+						<ReceivedDonationsList
+							rows={receivedRows}
+							shelterCode={resolveShelterCode() ?? ''}
+							searchTerm={activeSearch}
+							loading={shownReceived.isPending}
+							error={shownReceived.error?.message ?? null}
+							hasMore={shownReceived.hasNextPage}
+							loadingMore={shownReceived.isFetchingNextPage}
+							onLoadMore={() => shownReceived.fetchNextPage()}
+							onRetry={() => shownReceived.refetch()}
+							onSearch={(term) => (activeSearch = term)}
+							onClearSearch={() => (activeSearch = null)}
+							onViewDetails={openRow}
+						/>
+					{/snippet}
 					{#snippet actions()}
 						<Button
 							type="button"

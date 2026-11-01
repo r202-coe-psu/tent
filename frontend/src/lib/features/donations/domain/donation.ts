@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { type BaseDoc } from '$lib/db/model';
+import { thaiMobilePhoneSchema, type BaseDoc } from '$lib/db/model';
 import type { DonationStatus } from '$lib/features/operations';
 import { isRealCalendarDate, SLOT_TIME_PATTERN } from '$lib/features/operations/server';
 import { qtyStrCoercePositiveSchema } from '$lib/utils/qty';
@@ -100,7 +100,7 @@ export const donationPreDeclarationInputSchema = z.object({
 	shelter_code: z.string().regex(/^[A-Za-z0-9_-]{1,20}$/, 'Invalid shelter code.'),
 	donor: z.object({
 		name: z.string().min(1, 'Name is required'),
-		phone: z.string().min(1, 'Phone is required'),
+		phone: thaiMobilePhoneSchema, // CR-210: 10-digit mobile, normalised
 		line_id: z.string().optional(),
 		email: z.string().email().optional().or(z.literal(''))
 	}),

@@ -1,16 +1,23 @@
-import type {
-	DonationRejectReasonCode,
-	PublicDonationDoc,
-	ScanDonationView
+import {
+	maskDonorEmail,
+	maskDonorName,
+	maskDonorPhone,
+	type DonationRejectReasonCode,
+	type PublicDonationDoc,
+	type ScanDonationView
 } from '$lib/features/donations/server';
 
 /**
  * Project a raw donation doc to the redacted view the scan station needs (no
- * tracking_token_hash, phone_hash, timestamps). Full phone kept for warehouse staff;
- * `_rev` goes out as `rev` and comes back as `expected_rev` (CR-174 FR-25). Shared by the
+ * tracking_token_hash, phone_hash, timestamps). Full phone kept for warehouse staff while
+ * the goods are still on their way; `_rev` goes out as `rev` and comes back as `expected_rev`
+ * (CR-174 FR-25). A RECEIVED donation's contact is masked: its full values leave only through
+ * `POST …/contact`, which writes an audit row (CR-214 FR-8b / FR-10a). The scan station turns
+ * a received booking away anyway, so nothing there needs the full contact. Shared by the
  * receive route and the close route (CR-206 FR-MP-26) so both answer with the same shape.
  */
 export function toScanView(d: PublicDonationDoc): ScanDonationView {
+	const masked = d.status === 'received';
 	return {
 		// CR-174 FR-25 — the counter sends it back so a booking the donor changed while
 		// the boxes were being counted is refused instead of received as it was.
@@ -18,11 +25,17 @@ export function toScanView(d: PublicDonationDoc): ScanDonationView {
 		booking_ref: d.booking_ref,
 		shelter_code: d.shelter_code,
 		status: d.status,
-		donor: {
-			name: d.donor?.name ?? '',
-			phone: d.donor?.phone ?? null,
-			email: d.donor?.email ?? null
-		},
+		donor: masked
+			? {
+					name: maskDonorName(d.donor?.name),
+					phone: d.donor?.phone ? maskDonorPhone(d.donor.phone) : null,
+					email: maskDonorEmail(d.donor?.email)
+				}
+			: {
+					name: d.donor?.name ?? '',
+					phone: d.donor?.phone ?? null,
+					email: d.donor?.email ?? null
+				},
 		items: (d.items ?? []).map((it) => ({
 			item_id: it.item_id,
 			free_text: it.free_text,

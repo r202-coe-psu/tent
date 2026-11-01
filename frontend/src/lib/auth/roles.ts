@@ -285,6 +285,14 @@ export function hasCapabilityInShelter(
 	return false;
 }
 
+/** Frontline distribution (receive, handover/scan, shift close) in `shelterCode` (CR-161 R3). */
+export function canDistributeInShelter(roles: readonly string[], shelterCode: string): boolean {
+	return (
+		hasCapabilityInShelter(roles, shelterCode, DISTRIBUTION_STAFF) ||
+		hasCapabilityInShelter(roles, shelterCode, SHELTER_MANAGER)
+	);
+}
+
 /** Build CouchDB `roles[]` from per-shelter assignments (always compound form). */
 export function rolesFromAssignments(assignments: readonly ShelterAssignment[]): string[] {
 	const out: string[] = [];
@@ -473,6 +481,43 @@ export function isWarehouseStaff(roles: readonly string[], shelterCode?: string 
 	return (
 		hasStaffCapability(roles, WAREHOUSE_STAFF, shelterCode) ||
 		hasStaffCapability(roles, SUPPLY_COORDINATOR, shelterCode)
+	);
+}
+
+/** Pages gated by `requireManager`: system_admin or shelter_manager of the shelter. */
+export function canAccessManagerPages(
+	roles: readonly string[],
+	shelterCode?: string | null
+): boolean {
+	return isSystemAdmin(roles) || isShelterManager(roles, shelterCode);
+}
+
+/** `requireWarehouseAccess`: SA, SM, or warehouse_staff / supply_coordinator of the shelter. */
+export function canAccessWarehouse(roles: readonly string[], shelterCode?: string | null): boolean {
+	return canAccessManagerPages(roles, shelterCode) || isWarehouseStaff(roles, shelterCode);
+}
+
+/** `requireKitchen`: SA, SM, or kitchen_staff of the shelter. */
+export function canAccessKitchen(roles: readonly string[], shelterCode?: string | null): boolean {
+	return (
+		canAccessManagerPages(roles, shelterCode) ||
+		hasStaffCapability(roles, 'kitchen_staff', shelterCode)
+	);
+}
+
+/** `requireTicketAccess`: warehouse side or kitchen_staff (plus SA/SM). */
+export function canAccessTickets(roles: readonly string[], shelterCode?: string | null): boolean {
+	return canAccessWarehouse(roles, shelterCode) || canAccessKitchen(roles, shelterCode);
+}
+
+/** `requireEvacueeRegistration`: SA, SM, or registration_staff of the shelter. */
+export function canAccessEvacueeRegistration(
+	roles: readonly string[],
+	shelterCode?: string | null
+): boolean {
+	return (
+		canAccessManagerPages(roles, shelterCode) ||
+		hasStaffCapability(roles, 'registration_staff', shelterCode)
 	);
 }
 

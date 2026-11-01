@@ -89,6 +89,25 @@ export function staffAssignments(
 	return jobAssignments.filter((a) => !claimed.has(a._id));
 }
 
+/** The shift an application is for: the confirmed `shift_id`, else the one the applicant chose. */
+export function applicationShiftId(application: JobApplication): string | null {
+	return application.shift_id ?? application.selected_shift.shift_id ?? null;
+}
+
+/** Who applied, as the board shows and searches them. */
+export function applicationPerson(
+	application: JobApplication,
+	volunteers: ReadonlyMap<string, Volunteer>
+): ApplicantPerson {
+	const { applicant } = application;
+	const volunteer = application.volunteer_id ? volunteers.get(application.volunteer_id) : null;
+	return {
+		name: `${applicant.first_name} ${applicant.last_name}`.trim(),
+		phone: applicant.phone,
+		code: volunteer?.volunteer_code ?? null
+	};
+}
+
 function applicationEntry(
 	application: JobApplication,
 	volunteers: ReadonlyMap<string, Volunteer>
@@ -96,7 +115,6 @@ function applicationEntry(
 	const volunteer = application.volunteer_id
 		? (volunteers.get(application.volunteer_id) ?? null)
 		: null;
-	const { applicant } = application;
 	return {
 		kind: 'application',
 		application,
@@ -105,12 +123,8 @@ function applicationEntry(
 		facet: application.status as Exclude<HistoryFacet, 'staff_assigned'>,
 		personKey: applicantKey(application),
 		volunteer,
-		person: {
-			name: `${applicant.first_name} ${applicant.last_name}`.trim(),
-			phone: applicant.phone,
-			code: volunteer?.volunteer_code ?? null
-		},
-		shiftId: application.shift_id ?? application.selected_shift.shift_id ?? null,
+		person: applicationPerson(application, volunteers),
+		shiftId: applicationShiftId(application),
 		date: application.selected_shift.date
 	};
 }

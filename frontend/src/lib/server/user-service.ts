@@ -16,6 +16,7 @@ import {
 	rolesFromAssignments,
 	shelterCodeFromRoles
 } from '$lib/auth/roles';
+import { normalizeThaiPhone, THAI_MOBILE_PHONE_MESSAGE } from '$lib/db/model';
 import {
 	grantFor,
 	isCoordinatorGrantableRole,
@@ -31,6 +32,8 @@ import {
 	getSecurityQuestionLabel
 } from '$lib/server/security-questions';
 import { generateTemporaryPassphrase } from '$lib/server/passphrase-generator';
+import { mintStaffTokenHash } from '$lib/server/staff-card-token';
+import { isValidStaffTokenHash } from '$lib/features/users/server';
 
 /**
  * User service — the ONLY module that writes CouchDB `_users` with admin creds.
@@ -85,6 +88,8 @@ export interface UserSummary {
 	active?: boolean;
 	must_change_password?: boolean;
 	has_security_question?: boolean;
+	/** True when a staff card token hash is stored; the hash itself is never returned. */
+	has_staff_card: boolean;
 	affiliation_tags?: string[];
 	/** Time-limited roles issued by a volunteer coordinator (#955). Absent = none. */
 	role_grants?: RoleGrant[];
@@ -129,6 +134,7 @@ export interface CouchUserDoc {
 	email?: string | null;
 	notes?: string | null;
 	volunteer_id?: string | null;
+	staff_token_hash?: string;
 	duty_window?: {
 		start_ts: string;
 		end_ts: string;
@@ -187,6 +193,7 @@ function toSummary(doc: CouchUserDoc): UserSummary {
 		active: doc.active ?? true,
 		must_change_password: doc.must_change_password ?? false,
 		has_security_question: Boolean(doc.security_question?.answer_hash),
+		has_staff_card: isValidStaffTokenHash(doc.staff_token_hash),
 		affiliation_tags: doc.affiliation_tags ?? [],
 		role_grants: doc.role_grants ?? [],
 		mfa_enrolled: Boolean(google || thaid),
@@ -273,20 +280,18 @@ async function readUserDoc(name: string, action: string): Promise<CouchUserDoc> 
 	return got.data as CouchUserDoc;
 }
 
+/** Account phone = a 10-digit mobile that also signs in (CR-210 — landlines no longer accepted). */
 const PHONE_LOGIN_RE = /^0\d{9}$/;
-/** A mobile (10 digits) or a landline (9 digits) — users `contactPhoneSchema`. */
-const CONTACT_PHONE_RE = /^0\d{8,9}$/;
 
 function normalizePhone(value: string | null | undefined): string | null {
 	if (value == null) return null;
-	const trimmed = value.trim();
-	return trimmed.length > 0 ? trimmed : null;
+	const normalized = normalizeThaiPhone(value);
+	return normalized.length > 0 ? normalized : null;
 }
 
 /**
- * A set phone must be a mobile or a landline. A mobile signs in (`resolveLoginName`), so it must
- * be unique across `_users.phone` and must not collide with another account's CouchDB `name`.
- * A landline is contact-only and may be shared (one household number for several volunteers).
+ * A set phone must be a 10-digit mobile. It signs in (`resolveLoginName`), so it must be unique
+ * across `_users.phone` and must not collide with another account's CouchDB `name` (FR-5).
  */
 async function assertPhoneAvailable(
 	phone: string | null,
@@ -294,10 +299,9 @@ async function assertPhoneAvailable(
 ): Promise<string | null> {
 	const normalized = normalizePhone(phone);
 	if (!normalized) return null;
-	if (!CONTACT_PHONE_RE.test(normalized)) {
-		throw new ServiceError('VALIDATION', 'เบอร์โทรศัพท์ต้องเป็นตัวเลข 9–10 หลักขึ้นต้นด้วย 0');
+	if (!PHONE_LOGIN_RE.test(normalized)) {
+		throw new ServiceError('VALIDATION', THAI_MOBILE_PHONE_MESSAGE);
 	}
-	if (!PHONE_LOGIN_RE.test(normalized)) return normalized;
 
 	const docs = await fetchAllUserDocs();
 	for (const doc of docs) {
@@ -409,6 +413,9 @@ export async function createUser(input: {
 		email: email ?? null,
 		notes: notes ?? null,
 		volunteer_id: volunteer_id ?? null,
+		...(volunteer_id || personnel_type === 'volunteer'
+			? {}
+			: { staff_token_hash: await mintStaffTokenHash() }),
 		duty_window: duty_window ?? null,
 		active,
 		must_change_password,
