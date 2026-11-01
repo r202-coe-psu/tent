@@ -136,6 +136,31 @@ describe('GET /api/public/v1/volunteer/ticket/[token]', () => {
 		it('is false for any other cancelled application', async () => {
 			expect((await canCancel(cancelledApp({}))).can_cancel).toBe(false);
 		});
+		it("shows the application still owed its quota on a volunteer's permanent token, ahead of an upcoming one", async () => {
+			const adminRawMock = vi.mocked(adminRaw);
+			const upcoming = {
+				...cancelledApp({}),
+				_id: 'job_application:app_upcoming',
+				tracking_token: 'app_upcoming',
+				status: 'confirmed',
+				selected_shift: { date: '2099-01-01', start_time: '08:00', end_time: '12:00' }
+			};
+			const owed = cancelledApp({ quota_release_due_at: '2026-06-12T11:00:00Z' });
+			adminRawMock.mockResolvedValueOnce({ status: 404, data: {} });
+			adminRawMock.mockResolvedValueOnce({ status: 200, data: { docs: [] } });
+			adminRawMock.mockResolvedValueOnce({
+				status: 200,
+				data: { docs: [{ _id: 'volunteer:v1', type: 'volunteer' }] }
+			});
+			adminRawMock.mockResolvedValueOnce({ status: 200, data: { docs: [upcoming, owed] } });
+			adminRawMock.mockResolvedValue({ status: 200, data: { title: 'งานทดสอบ' } });
+
+			const res = await GET(makeEvent('TKT-VOL-PERMANENT'));
+			expect(res.status).toBe(200);
+			const ticket = (await res.json()).ticket as { application_id: string; can_cancel: boolean };
+			expect(ticket.application_id).toBe('job_application:app_resume');
+			expect(ticket.can_cancel).toBe(true);
+		});
 	});
 
 	it('does not treat an internal CouchDB document id as a public ticket credential', async () => {

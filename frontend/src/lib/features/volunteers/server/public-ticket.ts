@@ -94,13 +94,16 @@ const shiftStartKey = (app: TicketApplicationDoc) =>
 	`${shiftDate(app)}T${app.selected_shift?.start_time || '00:00'}`;
 
 /**
- * Which application a volunteer's permanent token stands for: the cancellable one that
+ * Which application a volunteer's permanent token stands for: one still owed its quota
+ * (CR-220: the pass must offer to finish that release), else the cancellable one that
  * starts soonest, else the most recent one (by shift date, then created_at).
  */
 function pickVolunteerApplication(
 	apps: TicketApplicationDoc[],
 	now = new Date()
 ): TicketApplicationDoc | undefined {
+	const owed = apps.find(isQuotaReleasePending);
+	if (owed) return owed;
 	const upcoming = apps
 		.filter((app) => isTicketCancellable(app, now))
 		.sort((a, b) => shiftStartKey(a).localeCompare(shiftStartKey(b)));
