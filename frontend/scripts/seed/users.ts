@@ -121,7 +121,12 @@ async function seedPrintingService(): Promise<void> {
 		return;
 	}
 	if (result.outcome === 'invalid_format') {
-		throw new Error('COUCHDB_PRINTING_SERVICE_URL is set but invalid (missing password?)');
+		// An old .env without COUCHDB_PRINTING_SERVICE_PASSWORD yields an empty password here;
+		// printing is optional for seed data, so warn instead of failing the whole seed.
+		console.warn(
+			'  ⚠ _users: COUCHDB_PRINTING_SERVICE_URL invalid (missing password?) — printing service not seeded'
+		);
+		return;
 	}
 	console.log(
 		`  ✓ _users: printing service "${result.username}" (${result.outcome === 'created' ? 'created' : 'already exists'})`
