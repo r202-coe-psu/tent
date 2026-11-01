@@ -15,6 +15,8 @@ import {
 	toPrinterSummary,
 	updatePrinter,
 	PrintDeviceConflictError,
+	printDeviceInputSchema,
+	printDevicePatchSchema,
 	type PrintDeviceAdminStore,
 	type PrintDeviceInput
 } from './printer-admin.server';
@@ -70,6 +72,45 @@ function fakeJobs(seed: PrintJobDoc[] = [], pageSize = Infinity) {
 	};
 }
 
+/** Scanner registry slice: `kiosk-a` is in SH001, `kiosk-b` in SH002. */
+const scanners = {
+	async getDeviceByDeviceId(deviceId: string) {
+		const shelters: Record<string, string> = { 'kiosk-a': 'SH001', 'kiosk-b': 'SH002' };
+		return deviceId in shelters ? { shelter_code: shelters[deviceId] } : null;
+	}
+};
+
+/** `createPrinter` deps over `store`; `events` records provisioning and the device write in order. */
+function createDeps(store: PrintDeviceAdminStore, events: string[] = []) {
+	return {
+		store: {
+			...store,
+			createDevice: async (doc: PrintDeviceDoc) => {
+				events.push('create');
+				return store.createDevice(doc);
+			}
+		},
+		scanners,
+		ensureShelterDb: async (shelterCode: string) => void events.push(`ensure:${shelterCode}`)
+	};
+}
+
+/** `updatePrinter` deps; `jobs` is the store of whichever shelter is asked for (see `shelters`). */
+function updateDeps(
+	store: PrintDeviceAdminStore,
+	jobs: ReturnType<typeof fakeJobs>,
+	shelters: string[] = []
+) {
+	return {
+		devices: store,
+		scanners,
+		jobsFor: (shelterCode: string) => {
+			shelters.push(shelterCode);
+			return jobs;
+		}
+	};
+}
+
 const input: PrintDeviceInput = {
 	device_id: 'printer-sh001-reg1',
 	name: 'จุดลงทะเบียน 1',
@@ -82,7 +123,7 @@ describe('createPrinter', () => {
 	it('registers an active printer and returns its secret once, stored only as hash + prefix', async () => {
 		const { store, docs } = fakeStore();
 
-		const { device, secret } = await createPrinter(store, input, 'sa-user', NOW);
+		const { device, secret } = await createPrinter(createDeps(store), input, 'sa-user', NOW);
 
 		expect(secret).toMatch(/^sk_print_[0-9a-f]{64}$/);
 		expect(device).toEqual({
@@ -92,6 +133,7 @@ describe('createPrinter', () => {
 			shelter_code: 'SH001',
 			station: 'โต๊ะ 1',
 			host_kind: 'standalone',
+			kiosk_device_id: null,
 			status: 'active',
 			secret_prefix: secret.slice(0, 16),
 			last_seen_at: null,
@@ -124,11 +166,11 @@ describe('createPrinter', () => {
 
 	it('rejects an existing device_id and leaves the stored printer untouched', async () => {
 		const { store, docs } = fakeStore();
-		const first = await createPrinter(store, input, 'sa-user', NOW);
+		const first = await createPrinter(createDeps(store), input, 'sa-user', NOW);
 		const before = structuredClone(docs.get('print_device:printer-sh001-reg1'));
 
 		await expect(
-			createPrinter(store, { ...input, name: 'ซ้ำ' }, 'other', NOW)
+			createPrinter(createDeps(store), { ...input, name: 'ซ้ำ' }, 'other', NOW)
 		).rejects.toBeInstanceOf(PrintDeviceConflictError);
 
 		expect(docs.get('print_device:printer-sh001-reg1')).toEqual(before);
@@ -214,11 +256,11 @@ describe('listPrinters', () => {
 						return [offline, online];
 					}
 				},
-				jobs: {
-					async lastJobOf(printerId) {
+				jobsFor: () => ({
+					async lastJobOf(printerId: string) {
 						return printerId === online._id ? jobDoc(printerId, { _attachments: { x: 1 } }) : null;
 					}
-				}
+				})
 			},
 			['SH001', 'SH002'],
 			NOW
@@ -249,7 +291,7 @@ describe('updatePrinter', () => {
 		const { store, docs } = fakeStore([original]);
 
 		const summary = await updatePrinter(
-			{ devices: store, jobs: fakeJobs() },
+			updateDeps(store, fakeJobs()),
 			original._id,
 			{ name: 'จุดลงทะเบียน 2', station: null, status: 'inactive' },
 			NOW
@@ -274,7 +316,7 @@ describe('updatePrinter', () => {
 		const { store } = fakeStore();
 
 		await expect(
-			updatePrinter({ devices: store, jobs: fakeJobs() }, 'print_device:nope', { name: 'x' }, NOW)
+			updatePrinter(updateDeps(store, fakeJobs()), 'print_device:nope', { name: 'x' }, NOW)
 		).rejects.toBeInstanceOf(PrintDeviceNotFoundError);
 	});
 
@@ -288,7 +330,7 @@ describe('updatePrinter', () => {
 				last_seen_at: '2026-10-22T02:59:59.000Z'
 			});
 
-		await updatePrinter({ devices: store, jobs: fakeJobs() }, original._id, { name: 'ใหม่' }, NOW);
+		await updatePrinter(updateDeps(store, fakeJobs()), original._id, { name: 'ใหม่' }, NOW);
 
 		expect(docs.get(original._id)).toMatchObject({
 			name: 'ใหม่',
@@ -312,7 +354,7 @@ describe('updatePrinter', () => {
 			return put(doc);
 		};
 
-		await updatePrinter({ devices: store, jobs }, original._id, { status: 'inactive' }, NOW);
+		await updatePrinter(updateDeps(store, jobs), original._id, { status: 'inactive' }, NOW);
 
 		for (const id of ['print_job:P', 'print_job:R']) {
 			expect(jobs.docs.get(id)).toMatchObject({
@@ -339,8 +381,8 @@ describe('updatePrinter', () => {
 			})
 		]);
 
-		await updatePrinter({ devices: store, jobs }, original._id, { name: 'ใหม่' }, NOW);
-		await updatePrinter({ devices: store, jobs }, original._id, { status: 'active' }, NOW);
+		await updatePrinter(updateDeps(store, jobs), original._id, { name: 'ใหม่' }, NOW);
+		await updatePrinter(updateDeps(store, jobs), original._id, { status: 'active' }, NOW);
 
 		expect(jobs.docs.get('print_job:P')).toMatchObject({ status: 'pending' });
 	});
@@ -349,7 +391,7 @@ describe('updatePrinter', () => {
 describe('rotatePrinterSecret', () => {
 	it('issues a new secret and the old one stops authenticating at once', async () => {
 		const { store, docs } = fakeStore();
-		const created = await createPrinter(store, input, 'sa-user', NOW);
+		const created = await createPrinter(createDeps(store), input, 'sa-user', NOW);
 		const id = 'print_device:printer-sh001-reg1';
 		const lookup = { getDeviceByDeviceId: async () => docs.get(id) ?? null };
 
@@ -382,19 +424,38 @@ describe('rotatePrinterSecret', () => {
 
 describe('queueTestPrint', () => {
 	const printerId = 'print_device:printer-sh001-reg1';
+	const manager = { name: 'sm-a', roles: ['shelter:SH001', 'SH001:shelter_manager'] };
 
-	it('queues a one-label test job carrying only the built-in label', async () => {
+	function testPrintDeps(devices: { getDevice: () => Promise<PrintDeviceDoc | null> }) {
 		const created: PrintJobDoc[] = [];
-		const devices = { getDevice: async () => deviceDoc({}) };
+		const storesBuiltFor: string[] = [];
+		return {
+			created,
+			storesBuiltFor,
+			deps: {
+				devices,
+				newId: () => 'JOB1',
+				storeFor: (shelterCode: string) => {
+					storesBuiltFor.push(shelterCode);
+					return { createJob: async (doc: PrintJobDoc) => void created.push(doc) };
+				}
+			}
+		};
+	}
 
-		const result = await queueTestPrint(
-			{ store: { createJob: async (doc) => void created.push(doc) }, devices, newId: () => 'JOB1' },
-			printerId,
-			'sm-a',
-			NOW
-		);
+	it('queues a one-label test job carrying only the built-in label, written as the caller', async () => {
+		const { deps, created, storesBuiltFor } = testPrintDeps({
+			getDevice: async () => deviceDoc({})
+		});
 
-		expect(result).toEqual({ job_id: 'JOB1', expires_at: '2026-10-22T03:02:00.000Z' });
+		const result = await queueTestPrint(deps, printerId, manager, NOW);
+
+		expect(result).toEqual({
+			job_id: 'JOB1',
+			shelter_code: 'SH001',
+			expires_at: '2026-10-22T03:02:00.000Z'
+		});
+		expect(storesBuiltFor).toEqual(['SH001']);
 		expect(created).toHaveLength(1);
 		expect(created[0]).toMatchObject({
 			_id: 'print_job:JOB1',
@@ -412,19 +473,27 @@ describe('queueTestPrint', () => {
 	});
 
 	it('refuses an offline printer and queues nothing', async () => {
-		const created: PrintJobDoc[] = [];
-		const devices = {
+		const { deps, created } = testPrintDeps({
 			getDevice: async () => deviceDoc({ last_seen_at: '2026-10-22T02:55:00.000Z' })
-		};
+		});
+
+		await expect(queueTestPrint(deps, printerId, manager, NOW)).rejects.toBeInstanceOf(
+			PrinterOfflineError
+		);
+		expect(created).toEqual([]);
+	});
+
+	it('refuses a caller who is not a shelter manager of the shelter, even if they can print', async () => {
+		const { deps, created } = testPrintDeps({ getDevice: async () => deviceDoc({}) });
 
 		await expect(
 			queueTestPrint(
-				{ store: { createJob: async (doc) => void created.push(doc) }, devices },
+				deps,
 				printerId,
-				'sm-a',
+				{ name: 'reg-a', roles: ['shelter:SH001', 'SH001:registration_staff'] },
 				NOW
 			)
-		).rejects.toBeInstanceOf(PrinterOfflineError);
+		).rejects.toMatchObject({ code: 'FORBIDDEN' });
 		expect(created).toEqual([]);
 	});
 });
@@ -466,7 +535,7 @@ describe('deletePrinter', () => {
 			return deleteDevice(doc);
 		};
 
-		await deletePrinter({ devices: store, jobs }, printerId, NOW);
+		await deletePrinter({ devices: store, jobsFor: () => jobs }, printerId, NOW);
 
 		expect(docs.has(printerId)).toBe(false);
 		for (const id of ['print_job:P', 'print_job:R']) {
@@ -494,7 +563,7 @@ describe('deletePrinter', () => {
 		);
 		const jobs = fakeJobs(open, 2);
 
-		await deletePrinter({ devices: store, jobs }, printerId, NOW);
+		await deletePrinter({ devices: store, jobsFor: () => jobs }, printerId, NOW);
 
 		expect([...jobs.docs.values()].map((job) => job.status)).toEqual(Array(5).fill('failed'));
 	});
@@ -503,7 +572,7 @@ describe('deletePrinter', () => {
 		const { store } = fakeStore();
 
 		await expect(
-			deletePrinter({ devices: store, jobs: fakeJobs([]) }, printerId, NOW)
+			deletePrinter({ devices: store, jobsFor: () => fakeJobs([]) }, printerId, NOW)
 		).rejects.toBeInstanceOf(PrintDeviceNotFoundError);
 	});
 
@@ -512,8 +581,218 @@ describe('deletePrinter', () => {
 		const { store, docs, state } = fakeStore([original]);
 		state.beforeNextUpdate = () => docs.set(original._id, { ...original, _rev: '4-d' });
 
-		await deletePrinter({ devices: store, jobs: fakeJobs([]) }, printerId, NOW);
+		await deletePrinter({ devices: store, jobsFor: () => fakeJobs([]) }, printerId, NOW);
 
 		expect(docs.has(printerId)).toBe(false);
+	});
+});
+
+describe('printDeviceInputSchema kiosk link', () => {
+	const parse = (override: object) => printDeviceInputSchema.safeParse({ ...input, ...override });
+
+	it('accepts a kiosk printer with the scanner device it sits in', () => {
+		const result = parse({ host_kind: 'kiosk', kiosk_device_id: 'kiosk-a' });
+
+		expect(result.success && result.data.kiosk_device_id).toBe('kiosk-a');
+	});
+
+	it('accepts a kiosk printer without a link yet, and a plain standalone printer', () => {
+		expect(parse({ host_kind: 'kiosk' }).success).toBe(true);
+		expect(parse({ host_kind: 'standalone' }).success).toBe(true);
+	});
+
+	it('rejects a kiosk_device_id on a standalone printer', () => {
+		const result = parse({ host_kind: 'standalone', kiosk_device_id: 'kiosk-a' });
+
+		expect(result.success).toBe(false);
+		expect(!result.success && result.error.issues[0]?.message).toBe(
+			'kiosk_device_id requires host_kind "kiosk"'
+		);
+	});
+});
+
+describe('printDevicePatchSchema kiosk link', () => {
+	it('accepts linking a scanner device or clearing the link', () => {
+		expect(printDevicePatchSchema.safeParse({ kiosk_device_id: 'kiosk-a' }).success).toBe(true);
+		expect(printDevicePatchSchema.safeParse({ kiosk_device_id: null }).success).toBe(true);
+	});
+});
+
+describe('createPrinter kiosk link and provisioning', () => {
+	const kioskInput: PrintDeviceInput = {
+		...input,
+		device_id: 'printer-sh001-kiosk-a',
+		host_kind: 'kiosk',
+		kiosk_device_id: 'kiosk-a'
+	};
+
+	it('links a kiosk printer to the scanner device of the same shelter', async () => {
+		const { store, docs } = fakeStore();
+
+		const { device } = await createPrinter(createDeps(store), kioskInput, 'sa-user', NOW);
+
+		expect(device).toMatchObject({ host_kind: 'kiosk', kiosk_device_id: 'kiosk-a' });
+		expect(docs.get('print_device:printer-sh001-kiosk-a')).toMatchObject({
+			kiosk_device_id: 'kiosk-a'
+		});
+	});
+
+	it('stores no link for a standalone printer', async () => {
+		const { store, docs } = fakeStore();
+
+		const { device } = await createPrinter(createDeps(store), input, 'sa-user', NOW);
+
+		expect(device.kiosk_device_id).toBeNull();
+		expect(docs.get('print_device:printer-sh001-reg1')).toMatchObject({ kiosk_device_id: null });
+	});
+
+	it.each([
+		['does not exist', 'kiosk-zzz'],
+		['belongs to another shelter', 'kiosk-b']
+	])('rejects a scanner device that %s, writing and provisioning nothing', async (_n, id) => {
+		const { store, docs } = fakeStore();
+		const events: string[] = [];
+
+		await expect(
+			createPrinter(createDeps(store, events), { ...kioskInput, kiosk_device_id: id }, 'sa', NOW)
+		).rejects.toMatchObject({
+			name: 'PrintDeviceValidationError',
+			code: 'KIOSK_DEVICE_NOT_FOUND'
+		});
+		expect(events).toEqual([]);
+		expect(docs.size).toBe(0);
+	});
+
+	it('provisions the shelter printing DB before the device is written (FR-4)', async () => {
+		const { store } = fakeStore();
+		const events: string[] = [];
+
+		await createPrinter(createDeps(store, events), input, 'sa-user', NOW);
+
+		expect(events).toEqual(['ensure:SH001', 'create']);
+	});
+
+	it('writes no device when provisioning the shelter DB fails', async () => {
+		const { store, docs } = fakeStore();
+		const deps = createDeps(store);
+		deps.ensureShelterDb = async () => {
+			throw new Error('couch down');
+		};
+
+		await expect(createPrinter(deps, input, 'sa-user', NOW)).rejects.toThrow('couch down');
+		expect(docs.size).toBe(0);
+	});
+});
+
+describe('toPrinterSummary kiosk link', () => {
+	it('carries the linked scanner device, and null for a device written before the link existed', () => {
+		expect(toPrinterSummary(deviceDoc({ kiosk_device_id: 'kiosk-a' }), NOW).kiosk_device_id).toBe(
+			'kiosk-a'
+		);
+		expect(toPrinterSummary(deviceDoc({}), NOW).kiosk_device_id).toBeNull();
+	});
+});
+
+describe('per-shelter job stores', () => {
+	const sh2 = deviceDoc({
+		_id: 'print_device:printer-sh002-a',
+		device_id: 'printer-sh002-a',
+		shelter_code: 'SH002'
+	});
+
+	it('listPrinters reads each printer last job from its own shelter store', async () => {
+		const asked: string[] = [];
+		await listPrinters(
+			{
+				devices: { listDevicesInScope: async () => [deviceDoc({}), sh2] },
+				jobsFor: (shelterCode) => ({
+					async lastJobOf() {
+						asked.push(shelterCode);
+						return null;
+					}
+				})
+			},
+			null,
+			NOW
+		);
+
+		expect(asked.sort()).toEqual(['SH001', 'SH002']);
+	});
+
+	it('deactivating closes jobs in the store of the printer shelter', async () => {
+		const { store } = fakeStore([sh2]);
+		const shelters: string[] = [];
+
+		await updatePrinter(
+			updateDeps(store, fakeJobs(), shelters),
+			sh2._id,
+			{ status: 'inactive' },
+			NOW
+		);
+
+		expect(shelters).toEqual(['SH002']);
+	});
+
+	it('deleting closes jobs in the store of the printer shelter', async () => {
+		const { store } = fakeStore([sh2]);
+		const shelters: string[] = [];
+
+		await deletePrinter(
+			{
+				devices: store,
+				jobsFor: (shelterCode) => {
+					shelters.push(shelterCode);
+					return fakeJobs();
+				}
+			},
+			sh2._id,
+			NOW
+		);
+
+		expect(shelters).toEqual(['SH002']);
+	});
+});
+
+describe('updatePrinter kiosk link', () => {
+	const kiosk = () =>
+		deviceDoc({ host_kind: 'kiosk', kiosk_device_id: null, shelter_code: 'SH001' });
+
+	it('links a kiosk printer to a scanner device of its shelter, and clears the link', async () => {
+		const original = kiosk();
+		const { store, docs } = fakeStore([original]);
+
+		await updatePrinter(
+			updateDeps(store, fakeJobs()),
+			original._id,
+			{ kiosk_device_id: 'kiosk-a' },
+			NOW
+		);
+		expect(docs.get(original._id)).toMatchObject({ kiosk_device_id: 'kiosk-a' });
+
+		await updatePrinter(
+			updateDeps(store, fakeJobs()),
+			original._id,
+			{ kiosk_device_id: null },
+			NOW
+		);
+		expect(docs.get(original._id)).toMatchObject({ kiosk_device_id: null });
+	});
+
+	it.each([
+		['a scanner device of another shelter', kiosk(), 'kiosk-b', 'KIOSK_DEVICE_NOT_FOUND'],
+		['an unknown scanner device', kiosk(), 'kiosk-zzz', 'KIOSK_DEVICE_NOT_FOUND'],
+		[
+			'a standalone printer',
+			deviceDoc({ host_kind: 'standalone' }),
+			'kiosk-a',
+			'KIOSK_DEVICE_REQUIRES_KIOSK_HOST'
+		]
+	])('rejects linking %s and changes nothing', async (_n, original, id, code) => {
+		const { store, docs } = fakeStore([original]);
+
+		await expect(
+			updatePrinter(updateDeps(store, fakeJobs()), original._id, { kiosk_device_id: id }, NOW)
+		).rejects.toMatchObject({ code });
+		expect(docs.get(original._id)).toEqual(original);
 	});
 });

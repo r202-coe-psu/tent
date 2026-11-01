@@ -5,7 +5,9 @@ import {
 	printDevicePatchSchema,
 	updatePrinter
 } from '$lib/server/printers/printer-admin.server';
-import { printDeviceRepository, printJobStore } from '$lib/server/printers/printer-server';
+import { printDeviceRepository } from '$lib/server/printers/print-device.repo';
+import { printJobStoreFor } from '$lib/server/printers/print-job.service-store';
+import { scannerDeviceRepository } from '$lib/server/scanners/device-repository';
 import { requirePrinterManager } from '$lib/server/printers/printer-access';
 import {
 	assertPrinterInScope,
@@ -25,7 +27,7 @@ export const DELETE: RequestHandler = async ({ request, params }) => {
 		const printerId = printerDocId(params.id);
 		assertPrinterInScope(caller, await printDeviceRepository.getDevice(printerId));
 		await deletePrinter(
-			{ devices: printDeviceRepository, jobs: printJobStore },
+			{ devices: printDeviceRepository, jobsFor: printJobStoreFor },
 			printerId,
 			new Date()
 		);
@@ -52,7 +54,11 @@ export const PATCH: RequestHandler = async ({ request, params }) => {
 		assertPrinterInScope(caller, await printDeviceRepository.getDevice(printerId));
 		return noStoreJson(
 			await updatePrinter(
-				{ devices: printDeviceRepository, jobs: printJobStore },
+				{
+					devices: printDeviceRepository,
+					jobsFor: printJobStoreFor,
+					scanners: scannerDeviceRepository
+				},
 				printerId,
 				parsed.data,
 				new Date()

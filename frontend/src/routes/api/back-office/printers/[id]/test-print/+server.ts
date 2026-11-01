@@ -1,21 +1,29 @@
 import type { RequestHandler } from './$types';
 import { queueTestPrint } from '$lib/server/printers/printer-admin.server';
-import { printDeviceRepository, printJobStore } from '$lib/server/printers/printer-server';
+import { printDeviceRepository } from '$lib/server/printers/print-device.repo';
+import { userJobStore } from '$lib/server/printers/print-job.user-store';
 import { requirePrinterManager } from '$lib/server/printers/printer-access';
 import { assertPrinterInScope, noStoreJson, printerAdminError, printerDocId } from '../../_http';
 
 export const prerender = false;
 
-/** Queue a one-label test print (built-in label, no personal data); the printer must be online. */
+/**
+ * Queue a one-label test print (built-in label, no personal data); the printer must be online.
+ * The job is written with the caller's own session, so the DB's validation hook has the final say.
+ */
 export const POST: RequestHandler = async ({ request, params }) => {
 	try {
+		const cookie = request.headers.get('cookie');
 		const caller = await requirePrinterManager(request);
 		const printerId = printerDocId(params.id);
 		assertPrinterInScope(caller, await printDeviceRepository.getDevice(printerId));
 		const queued = await queueTestPrint(
-			{ store: printJobStore, devices: printDeviceRepository },
+			{
+				devices: printDeviceRepository,
+				storeFor: (shelterCode) => userJobStore(cookie, shelterCode)
+			},
 			printerId,
-			caller.name,
+			{ name: caller.name, roles: caller.roles },
 			new Date()
 		);
 		return noStoreJson(queued, 201);

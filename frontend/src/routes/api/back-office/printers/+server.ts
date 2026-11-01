@@ -5,7 +5,10 @@ import {
 	listPrinters,
 	printDeviceInputSchema
 } from '$lib/server/printers/printer-admin.server';
-import { printDeviceRepository, printJobStore } from '$lib/server/printers/printer-server';
+import { printDeviceRepository } from '$lib/server/printers/print-device.repo';
+import { printJobStoreFor } from '$lib/server/printers/print-job.service-store';
+import { ensureShelterPrintingDb } from '$lib/server/printers/printing-provision';
+import { scannerDeviceRepository } from '$lib/server/scanners/device-repository';
 import {
 	assertCanCreatePrinterFor,
 	requirePrinterManager
@@ -23,7 +26,7 @@ export const GET: RequestHandler = async ({ request, url }) => {
 			throw new ServiceError('FORBIDDEN', 'Not a shelter_manager of this shelter');
 		}
 		const list = await listPrinters(
-			{ devices: printDeviceRepository, jobs: printJobStore },
+			{ devices: printDeviceRepository, jobsFor: printJobStoreFor },
 			scope,
 			new Date()
 		);
@@ -46,7 +49,11 @@ export const POST: RequestHandler = async ({ request }) => {
 		assertCanCreatePrinterFor(caller, parsed.data.shelter_code);
 
 		const created = await createPrinter(
-			printDeviceRepository,
+			{
+				store: printDeviceRepository,
+				scanners: scannerDeviceRepository,
+				ensureShelterDb: ensureShelterPrintingDb
+			},
 			parsed.data,
 			caller.name,
 			new Date()

@@ -37,6 +37,8 @@ export interface PrintDeviceDoc {
 	shelter_code: string;
 	station: string | null;
 	host_kind: 'standalone' | 'kiosk';
+	/** Scanner device (`device_id`) the printer is built into; absent on docs from before the link. */
+	kiosk_device_id?: string | null;
 	secret_hash: string;
 	secret_prefix: string;
 	status: 'active' | 'inactive';

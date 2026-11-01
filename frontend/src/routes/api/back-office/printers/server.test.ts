@@ -2,7 +2,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { GET, POST } from './+server';
 import type { RequestEvent } from './$types';
 import { readSessionUserCtx } from '$lib/server/couch-admin';
-import { printDeviceRepository, printJobStore } from '$lib/server/printers/printer-server';
+import { printDeviceRepository } from '$lib/server/printers/print-device.repo';
+import { printJobStoreFor } from '$lib/server/printers/print-job.service-store';
+import { ensureShelterPrintingDb } from '$lib/server/printers/printing-provision';
+import { scannerDeviceRepository } from '$lib/server/scanners/device-repository';
+import { ScannerDependencyError } from '$lib/server/scanners/device-credentials';
 import { SESSIONS } from '$lib/server/scanners/test-sessions';
 
 vi.mock('$lib/server/couch-admin', async () => {
@@ -11,21 +15,35 @@ vi.mock('$lib/server/couch-admin', async () => {
 	return { ...actual, readSessionUserCtx: vi.fn() };
 });
 
-vi.mock('$lib/server/printers/printer-server', () => ({
+vi.mock('$lib/server/printers/print-device.repo', () => ({
 	printDeviceRepository: {
 		createDevice: vi.fn(),
 		getDevice: vi.fn(),
 		updateDevice: vi.fn(),
 		deleteDevice: vi.fn(),
 		listDevicesInScope: vi.fn()
-	},
-	printJobStore: { findJobs: vi.fn(), put: vi.fn(), createJob: vi.fn(), lastJobOf: vi.fn() }
+	}
+}));
+
+const jobStore = vi.hoisted(() => ({ findJobs: vi.fn(), put: vi.fn(), lastJobOf: vi.fn() }));
+vi.mock('$lib/server/printers/print-job.service-store', () => ({
+	printJobStoreFor: vi.fn(() => jobStore)
+}));
+
+vi.mock('$lib/server/printers/printing-provision', () => ({
+	ensureShelterPrintingDb: vi.fn()
+}));
+
+vi.mock('$lib/server/scanners/device-repository', () => ({
+	scannerDeviceRepository: { getDeviceByDeviceId: vi.fn() }
 }));
 
 const mockSession = vi.mocked(readSessionUserCtx);
 const mockCreate = vi.mocked(printDeviceRepository.createDevice);
 const mockList = vi.mocked(printDeviceRepository.listDevicesInScope);
-const mockLastJob = vi.mocked(printJobStore.lastJobOf);
+const mockLastJob = vi.mocked(jobStore.lastJobOf);
+const mockEnsureDb = vi.mocked(ensureShelterPrintingDb);
+const mockScanner = vi.mocked(scannerDeviceRepository.getDeviceByDeviceId);
 
 const input = {
 	device_id: 'printer-sh001-reg1',
@@ -40,6 +58,7 @@ describe('POST /api/back-office/printers', () => {
 		vi.clearAllMocks();
 		mockSession.mockResolvedValue(SESSIONS.admin);
 		mockCreate.mockResolvedValue({ ok: true, rev: '1-a' });
+		mockEnsureDb.mockResolvedValue(undefined);
 	});
 
 	async function post(body: unknown): Promise<Response> {
@@ -63,6 +82,7 @@ describe('POST /api/back-office/printers', () => {
 			id: 'print_device:printer-sh001-reg1',
 			device_id: 'printer-sh001-reg1',
 			shelter_code: 'SH001',
+			kiosk_device_id: null,
 			status: 'active',
 			secret_prefix: data.secret.slice(0, 16),
 			online: false
@@ -71,6 +91,70 @@ describe('POST /api/back-office/printers', () => {
 		expect(mockCreate).toHaveBeenCalledTimes(1);
 		expect(mockCreate.mock.calls[0][0]).toMatchObject({ created_by: 'sa-user' });
 		expect(JSON.stringify(mockCreate.mock.calls[0][0])).not.toContain(data.secret);
+	});
+
+	it('provisions the shelter printing DB before writing the device', async () => {
+		const order: string[] = [];
+		mockEnsureDb.mockImplementation(async (code) => void order.push(`ensure:${code}`));
+		mockCreate.mockImplementation(async () => {
+			order.push('create');
+			return { ok: true, rev: '1-a' };
+		});
+
+		await post(input);
+
+		expect(order).toEqual(['ensure:SH001', 'create']);
+	});
+
+	it('links a kiosk printer to the scanner device of its shelter', async () => {
+		mockScanner.mockResolvedValue({ shelter_code: 'SH001' } as never);
+
+		const response = await post({ ...input, host_kind: 'kiosk', kiosk_device_id: 'kiosk-a' });
+
+		expect(response.status).toBe(201);
+		expect(mockScanner).toHaveBeenCalledWith('kiosk-a');
+		expect((await response.json()).device).toMatchObject({
+			host_kind: 'kiosk',
+			kiosk_device_id: 'kiosk-a'
+		});
+		expect(mockCreate.mock.calls[0][0]).toMatchObject({ kiosk_device_id: 'kiosk-a' });
+	});
+
+	it.each([
+		['does not exist', null],
+		['is in another shelter', { shelter_code: 'SH002' }]
+	])('answers 422 KIOSK_DEVICE_NOT_FOUND when the scanner device %s', async (_n, scanner) => {
+		mockScanner.mockResolvedValue(scanner as never);
+
+		const response = await post({ ...input, host_kind: 'kiosk', kiosk_device_id: 'kiosk-a' });
+
+		expect(response.status).toBe(422);
+		expect(response.headers.get('cache-control')).toBe('no-store');
+		expect(await response.json()).toEqual({
+			error: { code: 'KIOSK_DEVICE_NOT_FOUND', message: 'Kiosk device not found in this shelter' }
+		});
+		expect(mockCreate).not.toHaveBeenCalled();
+		expect(mockEnsureDb).not.toHaveBeenCalled();
+	});
+
+	it('answers 422 VALIDATION for a standalone printer with a kiosk_device_id', async () => {
+		const response = await post({ ...input, host_kind: 'standalone', kiosk_device_id: 'kiosk-a' });
+
+		expect(response.status).toBe(422);
+		expect(await response.json()).toEqual({
+			error: { code: 'VALIDATION', message: 'kiosk_device_id requires host_kind "kiosk"' }
+		});
+		expect(mockCreate).not.toHaveBeenCalled();
+	});
+
+	it('answers 503 DEPENDENCY_UNAVAILABLE when the scanner registry is down', async () => {
+		mockScanner.mockRejectedValue(new ScannerDependencyError());
+
+		const response = await post({ ...input, host_kind: 'kiosk', kiosk_device_id: 'kiosk-a' });
+
+		expect(response.status).toBe(503);
+		expect((await response.json()).error.code).toBe('DEPENDENCY_UNAVAILABLE');
+		expect(mockCreate).not.toHaveBeenCalled();
 	});
 
 	it('returns 403 and creates nothing when the caller cannot manage the target shelter', async () => {
@@ -168,6 +252,7 @@ describe('GET /api/back-office/printers', () => {
 		expect(response.status).toBe(200);
 		expect(response.headers.get('cache-control')).toBe('no-store');
 		expect(mockList).toHaveBeenCalledWith(null);
+		expect(vi.mocked(printJobStoreFor)).toHaveBeenCalledWith('SH001');
 		const data = await response.json();
 		expect(typeof data.server_time).toBe('string');
 		expect(data.printers).toHaveLength(1);
@@ -177,6 +262,7 @@ describe('GET /api/back-office/printers', () => {
 			shelter_code: 'SH001',
 			station: null,
 			host_kind: 'standalone',
+			kiosk_device_id: null,
 			status: 'active',
 			secret_prefix: 'sk_print_01234567',
 			queue_state: 'ready',

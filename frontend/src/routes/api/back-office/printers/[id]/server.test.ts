@@ -3,7 +3,9 @@ import { DELETE, PATCH } from './+server';
 import type { RequestEvent } from './$types';
 import { readSessionUserCtx } from '$lib/server/couch-admin';
 import type { PrintDeviceDoc } from '$lib/server/printers/device-credentials';
-import { printDeviceRepository, printJobStore } from '$lib/server/printers/printer-server';
+import { printDeviceRepository } from '$lib/server/printers/print-device.repo';
+import { printJobStoreFor } from '$lib/server/printers/print-job.service-store';
+import { scannerDeviceRepository } from '$lib/server/scanners/device-repository';
 import { SESSIONS } from '$lib/server/scanners/test-sessions';
 
 vi.mock('$lib/server/couch-admin', async () => {
@@ -12,23 +14,36 @@ vi.mock('$lib/server/couch-admin', async () => {
 	return { ...actual, readSessionUserCtx: vi.fn() };
 });
 
-vi.mock('$lib/server/printers/printer-server', () => ({
+vi.mock('$lib/server/printers/print-device.repo', () => ({
 	printDeviceRepository: {
 		createDevice: vi.fn(),
 		getDevice: vi.fn(),
 		updateDevice: vi.fn(),
 		deleteDevice: vi.fn(),
 		listDevicesInScope: vi.fn()
-	},
-	printJobStore: { findJobs: vi.fn(), put: vi.fn(), createJob: vi.fn(), lastJobOf: vi.fn() }
+	}
+}));
+
+const jobStore = vi.hoisted(() => ({ findJobs: vi.fn(), put: vi.fn(), lastJobOf: vi.fn() }));
+vi.mock('$lib/server/printers/print-job.service-store', () => ({
+	printJobStoreFor: vi.fn(() => jobStore)
+}));
+
+vi.mock('$lib/server/printers/printing-provision', () => ({
+	ensureShelterPrintingDb: vi.fn()
+}));
+
+vi.mock('$lib/server/scanners/device-repository', () => ({
+	scannerDeviceRepository: { getDeviceByDeviceId: vi.fn() }
 }));
 
 const mockSession = vi.mocked(readSessionUserCtx);
 const mockGet = vi.mocked(printDeviceRepository.getDevice);
 const mockUpdate = vi.mocked(printDeviceRepository.updateDevice);
 const mockDelete = vi.mocked(printDeviceRepository.deleteDevice);
-const mockFindJobs = vi.mocked(printJobStore.findJobs);
-const mockPutJob = vi.mocked(printJobStore.put);
+const mockFindJobs = vi.mocked(jobStore.findJobs);
+const mockPutJob = vi.mocked(jobStore.put);
+const mockScanner = vi.mocked(scannerDeviceRepository.getDeviceByDeviceId);
 
 const device: PrintDeviceDoc = {
 	_id: 'print_device:printer-sh001-reg1',
@@ -140,6 +155,48 @@ describe('PATCH /api/back-office/printers/[id]', () => {
 	});
 });
 
+describe('PATCH kiosk link and per-shelter job store', () => {
+	const patch = (id: string, body: unknown) => PATCH(event(id, 'PATCH', body));
+
+	it('links a kiosk printer to a scanner device of its shelter', async () => {
+		mockGet.mockResolvedValue({ ...device, host_kind: 'kiosk' });
+		mockScanner.mockResolvedValue({ shelter_code: 'SH001' } as never);
+
+		const response = await patch('printer-sh001-reg1', { kiosk_device_id: 'kiosk-a' });
+
+		expect(response.status).toBe(200);
+		expect(await response.json()).toMatchObject({ kiosk_device_id: 'kiosk-a' });
+		expect(mockUpdate.mock.calls[0][0]).toMatchObject({ kiosk_device_id: 'kiosk-a' });
+	});
+
+	it('answers 422 KIOSK_DEVICE_NOT_FOUND for a scanner device of another shelter', async () => {
+		mockGet.mockResolvedValue({ ...device, host_kind: 'kiosk' });
+		mockScanner.mockResolvedValue({ shelter_code: 'SH002' } as never);
+
+		const response = await patch('printer-sh001-reg1', { kiosk_device_id: 'kiosk-b' });
+
+		expect(response.status).toBe(422);
+		expect((await response.json()).error.code).toBe('KIOSK_DEVICE_NOT_FOUND');
+		expect(mockUpdate).not.toHaveBeenCalled();
+	});
+
+	it('answers 422 KIOSK_DEVICE_REQUIRES_KIOSK_HOST for a standalone printer', async () => {
+		const response = await patch('printer-sh001-reg1', { kiosk_device_id: 'kiosk-a' });
+
+		expect(response.status).toBe(422);
+		expect((await response.json()).error.code).toBe('KIOSK_DEVICE_REQUIRES_KIOSK_HOST');
+		expect(mockUpdate).not.toHaveBeenCalled();
+	});
+
+	it('deactivating closes jobs in the store of the printer shelter', async () => {
+		mockGet.mockResolvedValue({ ...device, shelter_code: 'SH002' });
+
+		await patch('printer-sh001-reg1', { status: 'inactive' });
+
+		expect(vi.mocked(printJobStoreFor)).toHaveBeenCalledWith('SH002');
+	});
+});
+
 describe('DELETE /api/back-office/printers/[id]', () => {
 	const del = (id: string) => DELETE(event(id, 'DELETE'));
 
@@ -182,6 +239,7 @@ describe('DELETE /api/back-office/printers/[id]', () => {
 		});
 		expect(mockPutJob.mock.calls[0][0]).not.toHaveProperty('_attachments');
 		expect(mockDelete).toHaveBeenCalledWith(device);
+		expect(vi.mocked(printJobStoreFor)).toHaveBeenCalledWith('SH001');
 	});
 
 	it('answers 404 for an unknown printer and for one outside the manager scope, deleting nothing', async () => {

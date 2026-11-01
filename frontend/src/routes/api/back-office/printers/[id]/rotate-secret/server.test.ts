@@ -3,7 +3,7 @@ import { POST } from './+server';
 import type { RequestEvent } from './$types';
 import { readSessionUserCtx } from '$lib/server/couch-admin';
 import { hashPrintSecret, type PrintDeviceDoc } from '$lib/server/printers/device-credentials';
-import { printDeviceRepository } from '$lib/server/printers/printer-server';
+import { printDeviceRepository } from '$lib/server/printers/print-device.repo';
 import { SESSIONS } from '$lib/server/scanners/test-sessions';
 
 vi.mock('$lib/server/couch-admin', async () => {
@@ -12,7 +12,7 @@ vi.mock('$lib/server/couch-admin', async () => {
 	return { ...actual, readSessionUserCtx: vi.fn() };
 });
 
-vi.mock('$lib/server/printers/printer-server', () => ({
+vi.mock('$lib/server/printers/print-device.repo', () => ({
 	printDeviceRepository: { getDevice: vi.fn(), updateDevice: vi.fn() }
 }));
 

@@ -5,8 +5,10 @@ import { PrintDependencyError } from '$lib/server/printers/device-credentials';
 import { PrinterNotFoundError, PrinterOfflineError } from '$lib/server/printers/print-jobs.server';
 import {
 	PrintDeviceConflictError,
-	PrintDeviceNotFoundError
+	PrintDeviceNotFoundError,
+	PrintDeviceValidationError
 } from '$lib/server/printers/printer-admin.server';
+import { ScannerDependencyError } from '$lib/server/scanners/device-credentials';
 import { callerCanManage, type ScopedCaller } from '$lib/server/shelter-capability-access';
 
 const noStoreHeaders = { 'cache-control': 'no-store', pragma: 'no-cache' };
@@ -55,7 +57,10 @@ export function printerAdminError(e: unknown): Response {
 	if (e instanceof PrinterOfflineError) return envelope(409, 'PRINTER_OFFLINE', e.message);
 	if (e instanceof PrinterNotFoundError) return envelope(404, 'NOT_FOUND', e.message);
 	if (e instanceof PrintDeviceNotFoundError) return envelope(404, 'NOT_FOUND', e.message);
+	if (e instanceof PrintDeviceValidationError) return envelope(422, e.code, e.message);
 	if (e instanceof PrintDeviceConflictError) return envelope(409, 'CONFLICT', e.message);
-	if (e instanceof PrintDependencyError) return envelope(503, 'DEPENDENCY_UNAVAILABLE', e.message);
+	if (e instanceof PrintDependencyError || e instanceof ScannerDependencyError) {
+		return envelope(503, 'DEPENDENCY_UNAVAILABLE', e.message);
+	}
 	return envelope(500, 'INTERNAL', 'Unexpected server error');
 }

@@ -34,6 +34,8 @@ export const printerAdminSummarySchema = z.object({
 	shelter_code: z.string(),
 	station: z.string().nullable(),
 	host_kind: printHostKindSchema,
+	/** Scanner device a kiosk printer is built into; null/absent for standalone or not linked yet. */
+	kiosk_device_id: z.string().nullable().optional(),
 	status: printDeviceStatusSchema,
 	secret_prefix: z.string(),
 	last_seen_at: z.string().nullable(),
@@ -64,19 +66,29 @@ export const printerAdminListResponseSchema = z.object({
 export type PrinterAdminListResponse = z.infer<typeof printerAdminListResponseSchema>;
 
 /** Mirrors the BFF `printDeviceInputSchema` (device id `[a-z0-9-]{3,63}`). */
-export const printerCreateInputSchema = z.object({
-	device_id: z.string().regex(/^[a-z0-9][a-z0-9-]{2,62}$/, 'Device ID must match [a-z0-9-]{3,63}'),
-	name: z.string().trim().min(1, 'Name is required').max(80, 'Name is too long'),
-	shelter_code: z.string().min(1),
-	station: z.string().trim().nullish(),
-	host_kind: printHostKindSchema
-});
+export const printerCreateInputSchema = z
+	.object({
+		device_id: z
+			.string()
+			.regex(/^[a-z0-9][a-z0-9-]{2,62}$/, 'Device ID must match [a-z0-9-]{3,63}'),
+		name: z.string().trim().min(1, 'Name is required').max(80, 'Name is too long'),
+		shelter_code: z.string().min(1),
+		station: z.string().trim().nullish(),
+		host_kind: printHostKindSchema,
+		/** Scanner `device_id` of the kiosk the printer sits in; only allowed for `host_kind: 'kiosk'`. */
+		kiosk_device_id: z.string().trim().min(1).nullish()
+	})
+	.refine((value) => !value.kiosk_device_id || value.host_kind === 'kiosk', {
+		message: 'kiosk_device_id requires host_kind "kiosk"',
+		path: ['kiosk_device_id']
+	});
 export type PrinterCreateInput = z.infer<typeof printerCreateInputSchema>;
 
 export const printerPatchSchema = z.object({
 	name: z.string().trim().min(1).max(80).optional(),
 	station: z.string().trim().nullable().optional(),
-	status: printDeviceStatusSchema.optional()
+	status: printDeviceStatusSchema.optional(),
+	kiosk_device_id: z.string().trim().min(1).nullable().optional()
 });
 export type PrinterPatch = z.infer<typeof printerPatchSchema>;
 

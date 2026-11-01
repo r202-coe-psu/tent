@@ -4,7 +4,12 @@ import { shelterCodeSchema } from '$lib/db/model';
 import { isPrinterOnline } from '$lib/features/printers/domain/printer-status';
 import { generatePrintSecret, hashPrintSecret, type PrintDeviceDoc } from './device-credentials';
 import type { PrintDeviceWriteResult } from './device-heartbeat';
-import { createPrintJob, type PrintDeviceReader, type PrintJobCreator } from './print-jobs.server';
+import {
+	createPrintJob,
+	type PrintDeviceReader,
+	type PrintJobCaller,
+	type PrintJobCreator
+} from './print-jobs.server';
 import {
 	terminal,
 	type PrintJobDoc,
@@ -15,6 +20,9 @@ import { TEST_LABEL_PNG_BASE64 } from './test-label';
 
 /** Back-office printer management (plan §4.3): registry CRUD over `print_device` docs. */
 
+const kioskDeviceIdSchema = z.string().trim().min(1, 'Kiosk device ID is required');
+const KIOSK_LINK_NEEDS_KIOSK = 'kiosk_device_id requires host_kind "kiosk"';
+
 export const printDeviceInputSchema = z
 	.object({
 		device_id: z
@@ -23,9 +31,15 @@ export const printDeviceInputSchema = z
 		name: z.string().trim().min(1, 'Name is required').max(80, 'Name is too long'),
 		shelter_code: shelterCodeSchema,
 		station: z.string().trim().nullish(),
-		host_kind: z.enum(['standalone', 'kiosk'])
+		host_kind: z.enum(['standalone', 'kiosk']),
+		/** `device_id` of the scanner device (`scanner_device:{id}`) the printer sits in (FR-5a). */
+		kiosk_device_id: kioskDeviceIdSchema.nullish()
 	})
-	.strict();
+	.strict()
+	.refine((value) => !value.kiosk_device_id || value.host_kind === 'kiosk', {
+		message: KIOSK_LINK_NEEDS_KIOSK,
+		path: ['kiosk_device_id']
+	});
 export type PrintDeviceInput = z.infer<typeof printDeviceInputSchema>;
 
 export interface PrinterSummary {
@@ -35,6 +49,8 @@ export interface PrinterSummary {
 	shelter_code: string;
 	station: string | null;
 	host_kind: PrintDeviceDoc['host_kind'];
+	/** Scanner device the printer is built into; null for standalone or not linked yet. */
+	kiosk_device_id: string | null;
 	status: PrintDeviceDoc['status'];
 	secret_prefix: string;
 	last_seen_at: string | null;
@@ -62,6 +78,17 @@ export class PrintDeviceConflictError extends Error {
 	}
 }
 
+/** A request that is well-formed but names something that does not fit (route: 422 with `code`). */
+export class PrintDeviceValidationError extends Error {
+	constructor(
+		readonly code: 'KIOSK_DEVICE_NOT_FOUND' | 'KIOSK_DEVICE_REQUIRES_KIOSK_HOST',
+		message: string
+	) {
+		super(message);
+		this.name = 'PrintDeviceValidationError';
+	}
+}
+
 export class PrintDeviceNotFoundError extends Error {
 	constructor() {
 		super('Printer not found');
@@ -73,7 +100,8 @@ export const printDevicePatchSchema = z
 	.object({
 		name: z.string().trim().min(1, 'Name is required').max(80, 'Name is too long').optional(),
 		station: z.string().trim().nullable().optional(),
-		status: z.enum(['active', 'inactive']).optional()
+		status: z.enum(['active', 'inactive']).optional(),
+		kiosk_device_id: kioskDeviceIdSchema.nullable().optional()
 	})
 	.strict()
 	.refine((value) => Object.keys(value).length > 0, { message: 'Nothing to update' });
@@ -87,6 +115,7 @@ export function toPrinterSummary(doc: PrintDeviceDoc, now: Date): PrinterSummary
 		shelter_code: doc.shelter_code,
 		station: doc.station,
 		host_kind: doc.host_kind,
+		kiosk_device_id: doc.kiosk_device_id ?? null,
 		status: doc.status,
 		secret_prefix: doc.secret_prefix,
 		last_seen_at: doc.last_seen_at,
@@ -99,13 +128,48 @@ export function toPrinterSummary(doc: PrintDeviceDoc, now: Date): PrinterSummary
 
 const SECRET_PREFIX_LENGTH = 16;
 
+/** Scanner registry slice used to check a kiosk printer's link; the real adapter is the scanner repo. */
+export interface KioskDeviceReader {
+	getDeviceByDeviceId(deviceId: string): Promise<{ shelter_code: string } | null>;
+}
+
+/**
+ * The linked scanner device must exist in the printer's own shelter. A device of another shelter
+ * reads as missing, so the answer never confirms a scanner id outside the caller's shelter.
+ */
+async function assertKioskDeviceInShelter(
+	scanners: KioskDeviceReader,
+	shelterCode: string,
+	kioskDeviceId: string
+): Promise<void> {
+	const scanner = await scanners.getDeviceByDeviceId(kioskDeviceId);
+	if (!scanner || scanner.shelter_code !== shelterCode) {
+		throw new PrintDeviceValidationError(
+			'KIOSK_DEVICE_NOT_FOUND',
+			'Kiosk device not found in this shelter'
+		);
+	}
+}
+
+export interface CreatePrinterDeps {
+	store: PrintDeviceAdminStore;
+	scanners: KioskDeviceReader;
+	/** Provision `printing_{code}` (idempotent) so the shelter DB exists before its first printer (FR-4). */
+	ensureShelterDb: (shelterCode: string) => Promise<void>;
+}
+
 /** Register a printer; the plaintext secret is returned here and never stored (hash + prefix only). */
 export async function createPrinter(
-	store: PrintDeviceAdminStore,
+	deps: CreatePrinterDeps,
 	input: PrintDeviceInput,
 	actor: string,
 	now: Date
 ): Promise<{ device: PrinterSummary; secret: string }> {
+	const kioskDeviceId = input.kiosk_device_id || null;
+	if (kioskDeviceId)
+		await assertKioskDeviceInShelter(deps.scanners, input.shelter_code, kioskDeviceId);
+	await deps.ensureShelterDb(input.shelter_code);
+
 	const secret = generatePrintSecret();
 	const iso = now.toISOString();
 	const doc: PrintDeviceDoc = {
@@ -117,6 +181,7 @@ export async function createPrinter(
 		shelter_code: input.shelter_code,
 		station: input.station || null,
 		host_kind: input.host_kind,
+		kiosk_device_id: kioskDeviceId,
 		secret_hash: hashPrintSecret(secret),
 		secret_prefix: secret.slice(0, SECRET_PREFIX_LENGTH),
 		status: 'active',
@@ -127,7 +192,7 @@ export async function createPrinter(
 		updated_at: iso,
 		created_by: actor
 	};
-	if ('conflict' in (await store.createDevice(doc))) throw new PrintDeviceConflictError();
+	if ('conflict' in (await deps.store.createDevice(doc))) throw new PrintDeviceConflictError();
 	return { device: toPrinterSummary(doc, now), secret };
 }
 
@@ -154,7 +219,8 @@ export interface PrintJobLastReader {
 
 export interface PrinterListDeps {
 	devices: PrintDeviceScopeLister;
-	jobs: PrintJobLastReader;
+	/** Job store of one shelter: each shelter has its own `printing_{code}` DB. */
+	jobsFor: (shelterCode: string) => PrintJobLastReader;
 }
 
 export async function listPrinters(
@@ -168,7 +234,7 @@ export async function listPrinters(
 	);
 	const printers = await Promise.all(
 		sorted.map(async (doc): Promise<PrinterListItem> => {
-			const job = await deps.jobs.lastJobOf(doc._id);
+			const job = await deps.jobsFor(doc.shelter_code).lastJobOf(doc._id);
 			return {
 				...toPrinterSummary(doc, now),
 				last_job: job && {
@@ -236,9 +302,14 @@ async function failOpenJobs(
 	}
 }
 
-export interface UpdatePrinterDeps {
+export interface DeletePrinterDeps {
 	devices: PrintDeviceAdminStore;
-	jobs: PrinterJobCloser;
+	/** Job store of one shelter: the printer's open jobs live in its shelter DB. */
+	jobsFor: (shelterCode: string) => PrinterJobCloser;
+}
+
+export interface UpdatePrinterDeps extends DeletePrinterDeps {
+	scanners: KioskDeviceReader;
 }
 
 /**
@@ -251,14 +322,26 @@ export async function updatePrinter(
 	patch: PrintDevicePatch,
 	now: Date
 ): Promise<PrinterSummary> {
+	if (patch.kiosk_device_id) {
+		const current = await deps.devices.getDevice(printerId);
+		if (!current) throw new PrintDeviceNotFoundError();
+		if (current.host_kind !== 'kiosk') {
+			throw new PrintDeviceValidationError(
+				'KIOSK_DEVICE_REQUIRES_KIOSK_HOST',
+				KIOSK_LINK_NEEDS_KIOSK
+			);
+		}
+		await assertKioskDeviceInShelter(deps.scanners, current.shelter_code, patch.kiosk_device_id);
+	}
 	const doc = await mutateDevice(deps.devices, printerId, now, (current) => ({
 		...current,
 		...(patch.name !== undefined ? { name: patch.name } : {}),
+		...(patch.kiosk_device_id !== undefined ? { kiosk_device_id: patch.kiosk_device_id } : {}),
 		...(patch.station !== undefined ? { station: patch.station || null } : {}),
 		...(patch.status !== undefined ? { status: patch.status } : {})
 	}));
 	if (patch.status === 'inactive')
-		await failOpenJobs(deps.jobs, printerId, 'printer_inactive', now);
+		await failOpenJobs(deps.jobsFor(doc.shelter_code), printerId, 'printer_inactive', now);
 	return toPrinterSummary(doc, now);
 }
 
@@ -277,27 +360,30 @@ export async function rotatePrinterSecret(
 }
 
 export interface TestPrintDeps {
-	store: PrintJobCreator;
+	/** Job DB of the printer's shelter, written as the caller (their session cookie). */
+	storeFor: (shelterCode: string) => PrintJobCreator;
 	devices: PrintDeviceReader;
 	newId?: () => string;
 }
 
-/** Queue a 1-label test job (built-in label, no personal data) on the printer. */
+/**
+ * Queue a 1-label test job (built-in label, no personal data) on the printer. Written with the
+ * caller's own session, so `canPrintSource(..., 'test')` and the DB's validation hook both require
+ * a shelter manager of the shelter (or SA).
+ */
 export function queueTestPrint(
 	deps: TestPrintDeps,
 	printerId: string,
-	actor: string,
+	caller: PrintJobCaller,
 	now: Date
-): Promise<{ job_id: string; expires_at: string }> {
+): Promise<{ job_id: string; shelter_code: string; expires_at: string }> {
 	return createPrintJob(
 		deps,
-		{ name: actor, assertShelterAccess: async () => {} }, // the route already checked the scope
+		caller,
 		{ printer_id: printerId, source: 'test', labels: [TEST_LABEL_PNG_BASE64] },
 		now
 	);
 }
-
-export type DeletePrinterDeps = UpdatePrinterDeps;
 
 /** Fail the printer's pending/printing jobs (`printer_deleted`, labels dropped), then delete it. */
 export async function deletePrinter(
@@ -305,9 +391,10 @@ export async function deletePrinter(
 	printerId: string,
 	now: Date
 ): Promise<void> {
-	if (!(await deps.devices.getDevice(printerId))) throw new PrintDeviceNotFoundError();
+	const device = await deps.devices.getDevice(printerId);
+	if (!device) throw new PrintDeviceNotFoundError();
 
-	await failOpenJobs(deps.jobs, printerId, 'printer_deleted', now);
+	await failOpenJobs(deps.jobsFor(device.shelter_code), printerId, 'printer_deleted', now);
 
 	for (let attempt = 0; attempt < MAX_WRITE_ATTEMPTS; attempt += 1) {
 		const current = await deps.devices.getDevice(printerId);

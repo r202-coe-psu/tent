@@ -1,6 +1,6 @@
 import type { RequestHandler } from './$types';
 import { rotatePrinterSecret } from '$lib/server/printers/printer-admin.server';
-import { printDeviceRepository } from '$lib/server/printers/printer-server';
+import { printDeviceRepository } from '$lib/server/printers/print-device.repo';
 import { requirePrinterManager } from '$lib/server/printers/printer-access';
 import { assertPrinterInScope, noStoreJson, printerAdminError, printerDocId } from '../../_http';
 
