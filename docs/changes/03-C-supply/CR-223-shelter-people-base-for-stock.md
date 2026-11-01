@@ -35,7 +35,7 @@ affects:
 
 | กลุ่ม | นับใคร |
 | --- | --- |
-| ผู้ประสบภัย | `in_shelter` — `current_stay.status` เป็น `active` หรือ `room_confirmed` (ตาม draft-in-shelter-headcount) |
+| ผู้ประสบภัย | `in_shelter` — `current_stay.status` เป็น `active` หรือ `room_confirmed` (ตาม [CR-224](../01-core/CR-224-in-shelter-headcount.md)) |
 | จิตอาสา | ที่ `checked_in` และ `current_shelter_code` ตรงกับศูนย์นี้ |
 | staff | บัญชีที่มี capability ของศูนย์นี้ เป็น active และไม่ใช่ `personnel_type = volunteer` (`listShelterStaff`) |
 
