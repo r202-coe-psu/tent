@@ -31,6 +31,7 @@ sha256sum ~/printer-driver-xprinter_3.13.55_all.deb
 ```
 
 **ลงทะเบียนเครื่อง:** back-office → **จัดการเครื่องพิมพ์** → เพิ่มเครื่อง แล้วจด `DEVICE_ID` / `DEVICE_SECRET` (secret แสดงครั้งเดียว)
+ค่าสองตัวนี้ออกจากหน้า Printers ของ back-office เท่านั้น — สคริปต์ provision เดิมถูกลบแล้ว ไม่มีทางออกค่าด้วยมือจาก Pi
 
 **เครือข่าย:** Pi ต้องเข้าถึง URL ของระบบได้ด้วย `https://` (เช่น `https://tent.example.org`) ตรวจจาก Pi ด้วย `curl -I <URL>`
 agent ไม่ยอมรับ `http://` ไปยัง IP วง LAN — `http://` ใช้ได้เฉพาะ loopback (รัน agent บนเครื่องเดียวกับ dev server)
@@ -64,7 +65,7 @@ cp .env.example .env && chmod 600 .env
 |---|---|
 | `TENT_BASE_URL` | URL ของระบบ — ต้องเป็น `https://` · `http://` ใช้ได้เฉพาะ loopback (`localhost`, `127.0.0.0/8`, `::1`) สำหรับ dev · IP วง LAN (`192.168.x`, `10.x`, `172.16–31.x`) และ link-local (`169.254.x`) ใช้ `http://` ไม่ได้ |
 | `DEVICE_ID` / `DEVICE_SECRET` | จาก back-office |
-| `PRINTER_NAME` | ชื่อ CUPS queue จากขั้นที่ 1 (`tent_xprinter`) |
+| `PRINTER_NAME` | ชื่อ CUPS queue จากขั้นที่ 1 (`tent_xprinter`) · ใช้ได้เฉพาะ `A-Z a-z 0-9 _ -` ยาวไม่เกิน 127 ตัว และห้ามขึ้นต้นด้วย `-` — ผิดรูปแบบ agent จะไม่เริ่ม |
 | `BOOT_SLIP` | `1` = พิมพ์สลิป (ชื่อเครื่อง, device, shelter, IP) ทุกครั้งที่ agent เริ่ม · `0` = ปิด |
 
 ตัวเลือกอื่นดูใน [`.env.example`](.env.example) · คอมเมนต์ต้องอยู่บรรทัดของตัวเอง (ห้ามต่อท้ายค่า)
@@ -86,6 +87,37 @@ cp .env.example .env && chmod 600 .env
 
 service รัน `./run.sh` จากโฟลเดอร์นี้ด้วย user ปัจจุบัน ไม่ต้องมีจอหรือ login และ restart เองใน 5 วินาทีถ้า agent ล้ม
 **อย่ารัน `./run.sh` เองขณะ service ทำงานอยู่** — จะมี agent สองตัวแย่งงานกัน (`--disable` ก่อน)
+
+### 5. ติดตั้งเป็น service สำหรับเครื่องจริง (`setup_printer_server.sh`)
+
+สคริปต์นี้ติดตั้ง agent ไว้ที่ `/opt/tent/printer` รันด้วย system user `tent-printer` (ไม่มี login/home, group `lp`) ผ่าน systemd unit `tent-printer`
+โค้ดและ `.venv` เป็นของ root (agent แก้ตัวเองไม่ได้) และ `.env` เป็น mode 600 owner `tent-printer` — **ต้องมี CUPS queue จากขั้นที่ 1 อยู่ก่อน**
+
+```bash
+cd ~/tent/printer
+cp .env.example ~/agent.env && chmod 600 ~/agent.env      # ใส่ TENT_BASE_URL, DEVICE_ID, DEVICE_SECRET (จากหน้า Printers ของ back-office), PRINTER_NAME
+sudo ./setup_printer_server.sh --env-file ~/agent.env --host-kind standalone
+```
+
+| ตัวเลือก | ความหมาย |
+|---|---|
+| `--env-file FILE` | `.env` ของ agent (บังคับ) — ถูกคัดลอกไปเป็น `<prefix>/.env` |
+| `--host-kind standalone\|kiosk` | `standalone` = Pi แยก (สคริปต์ตั้ง `printer-error-policy=abort-job` ให้ queue) · `kiosk` = ใช้ queue ร่วมกับเครื่อง kiosk (ไม่แตะ error policy และเตือนถ้า kiosk ตั้ง `PRINTER_BACKEND=escpos`) (บังคับ) |
+| `--queue NAME` / `--prefix DIR` | ชื่อ CUPS queue (default: `PRINTER_NAME` ใน `--env-file`) / ที่ติดตั้ง (default `/opt/tent/printer`) |
+| `--dry-run` | พิมพ์คำสั่งที่จะรันโดยไม่เขียนอะไร ไม่ต้องเป็น root — ลองก่อนรันจริงได้ |
+| `--status` | ดูสถานะ unit / queue / log 5 บรรทัดล่าสุด แล้วออก (ไม่แก้อะไร) |
+
+```bash
+sudo ./setup_printer_server.sh --env-file ~/agent.env --host-kind standalone --dry-run   # ดูแผนก่อน
+sudo ./setup_printer_server.sh --status                                                  # ตรวจหลังติดตั้ง
+journalctl -u tent-printer -f                                                            # log สด
+```
+
+รันซ้ำได้เพื่ออัปเดตโค้ด/`.env` (สคริปต์ restart service ให้เอง) · ให้ใช้ **อย่างใดอย่างหนึ่ง** ระหว่างขั้นที่ 4 (`tent-printer-autostart`) กับขั้นนี้ (`tent-printer`) — ถ้ารันทั้งสองจะมี agent สองตัวแย่งงานกัน
+
+> **ห้ามใช้ `--allow-cupsenable` ตอนนี้:** ตัวเลือกนี้เพิ่ม `tent-printer` เข้า group `lpadmin` ซึ่ง CR-222 FR-42 ห้ามไว้ (`lpadmin` ให้สิทธิ์แก้/ลบ queue ทั้งหมด ไม่ใช่แค่ `cupsenable`)
+> ยังไม่ได้ปรับสคริปต์ จนกว่าจะผ่านการทดสอบ S0-7 บนเครื่องจริง (gate O-5) ว่าสิทธิ์ที่แคบกว่าพอ — group `lp` หรือ policy ใน `cupsd.conf`
+> (sudoers ใช้ไม่ได้ เพราะ unit ตั้ง `NoNewPrivileges`) ดู [สิทธิ์เปิด queue](#สิทธิ์เปิด-queue-queue-enable-rights)
 
 ### Restart
 
@@ -126,11 +158,13 @@ log มี job id / จำนวน label / error code แต่ไม่มี 
 
 ## สิทธิ์เปิด queue (Queue-enable rights)
 
-agent ไม่ได้รับสิทธิ์ `lpadmin` — เมื่อ CUPS ปิด queue (มักหลังกระดาษหมด/ปิดเครื่อง) agent จะรายงานสถานะ `disabled`
-และรอ ผู้ดูแลต้องตรวจกระดาษ/ไฟ แล้วเปิด queue เองด้วยบัญชีที่มีสิทธิ์:
+โดย default agent **ไม่ได้รับสิทธิ์ `lpadmin`** (สคริปต์ติดตั้งไม่ใส่ `tent-printer` ใน group นี้) — เมื่อ CUPS ปิด queue (มักหลังกระดาษหมด/ปิดเครื่อง)
+agent จะรายงานสถานะ `disabled` และรอ ผู้ดูแลต้องตรวจกระดาษ/ไฟ แล้วเปิด queue เองด้วยบัญชีที่มีสิทธิ์:
 
 ```bash
 sudo cupsenable tent_xprinter
 ```
 
-กลไกให้ agent เปิด queue เองยังรอผลทดสอบกับเครื่องจริง
+กลไกให้ agent เปิด queue เองยังรอผลทดสอบ S0-7 กับเครื่องจริง (gate O-5 ใน CR-222 — ต้องผ่านก่อน merge PR โค้ด):
+ถอดกระดาษจนคิวถูก disable แล้วดูว่า agent enable คืนเองได้ด้วยสิทธิ์ที่แคบกว่า `lpadmin` (group `lp` หรือ policy ใน `cupsd.conf`) หรือไม่
+ตัวเลือก `--allow-cupsenable` ของ `setup_printer_server.sh` ปัจจุบันใช้ `lpadmin` ซึ่งขัดกับ FR-42 จึง **อย่าใช้** จนกว่าผลทดสอบจะออกและสคริปต์ถูกแก้ตามผล
