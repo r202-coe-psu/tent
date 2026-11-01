@@ -4,10 +4,14 @@ const adminRaw = vi.hoisted(() => vi.fn());
 vi.mock('$lib/server/couch-admin', () => ({ adminRaw }));
 
 import { PrintDependencyError } from './device-credentials';
+import type { PrintDeviceDoc } from './device-credentials';
+import type { PrintJobDoc } from './print-queue.server';
 import {
+	closeShelterPrinting,
 	ensurePrintingDevicesDb,
 	ensureShelterPrintingDb,
-	resetPrintingProvisionForTests
+	resetPrintingProvisionForTests,
+	type CloseShelterPrintingDeps
 } from './printing-provision';
 import { buildPrintingValidateDocUpdate } from './printing-vdu';
 
@@ -308,5 +312,192 @@ describe('ensureShelterPrintingDb', () => {
 		);
 		await expect(ensureShelterPrintingDb('SH001')).rejects.toBeInstanceOf(PrintDependencyError);
 		expect(requests().some((r) => r.includes('printing_db'))).toBe(false);
+	});
+});
+
+describe('closeShelterPrinting', () => {
+	const NOW = new Date('2026-10-31T03:00:00.000Z');
+
+	function deviceDoc(deviceId: string, overrides: Partial<PrintDeviceDoc> = {}): PrintDeviceDoc {
+		return {
+			_id: `print_device:${deviceId}`,
+			_rev: '1-a',
+			type: 'print_device',
+			schema_v: 1,
+			device_id: deviceId,
+			name: deviceId,
+			shelter_code: 'SH001',
+			station: null,
+			host_kind: 'standalone',
+			kiosk_device_id: null,
+			secret_hash: 'h',
+			secret_prefix: 'sk_print_aaaaaaaa',
+			status: 'active',
+			last_seen_at: null,
+			queue_state: 'unknown',
+			agent_version: null,
+			created_at: '2026-10-01T00:00:00.000Z',
+			updated_at: '2026-10-01T00:00:00.000Z',
+			created_by: 'sa',
+			...overrides
+		};
+	}
+
+	function pendingJob(id: string, printerId: string): PrintJobDoc {
+		return {
+			_id: id,
+			_rev: '1-j',
+			type: 'print_job',
+			schema_v: 1,
+			shelter_code: 'SH001',
+			printer_id: printerId,
+			status: 'pending',
+			label_count: 1,
+			source: 'walk_in',
+			created_at: '2026-10-31T02:59:00.000Z',
+			created_by: 'staff',
+			expires_at: '2026-10-31T03:01:00.000Z',
+			claimed_at: null,
+			lease_until: null,
+			finished_at: null,
+			printed: 0,
+			error_code: null
+		};
+	}
+
+	/** Fakes for the two ports `updatePrinter` needs; every write is also recorded in `events`. */
+	function fakeShelter(devices: PrintDeviceDoc[], jobs: PrintJobDoc[], events: string[]) {
+		const deviceDocs = new Map(devices.map((d) => [d._id, d]));
+		const jobDocs = new Map(jobs.map((j) => [j._id, j]));
+		const deps: CloseShelterPrintingDeps = {
+			now: () => NOW,
+			devices: {
+				async listDevices(code) {
+					return [...deviceDocs.values()].filter((d) => d.shelter_code === code);
+				},
+				async getDevice(id) {
+					return structuredClone(deviceDocs.get(id) ?? null);
+				},
+				async updateDevice(doc) {
+					events.push(`device ${doc._id} -> ${doc.status}`);
+					deviceDocs.set(doc._id, { ...doc, _rev: '2-b' });
+					return { ok: true, rev: '2-b' };
+				},
+				async createDevice() {
+					throw new Error('unused');
+				},
+				async deleteDevice() {
+					throw new Error('unused');
+				}
+			},
+			jobsFor: () => ({
+				async findJobs({ status, printerId }) {
+					return [...jobDocs.values()].filter(
+						(j) => j.status === status && j.printer_id === printerId
+					);
+				},
+				async put(doc) {
+					events.push(`job ${doc._id} -> ${doc.status} (${doc.error_code})`);
+					jobDocs.set(doc._id, { ...doc, _rev: '2-j' });
+					return { ok: true, rev: '2-j' };
+				}
+			})
+		};
+		return { deps, deviceDocs, jobDocs };
+	}
+
+	it('deactivates the shelter printers and fails their open jobs before deleting the db and its registry doc', async () => {
+		const events: string[] = [];
+		fakeCouch((call) => {
+			if (call.method === 'GET' && call.path === '/printing_devices/printing_db%3ASH001')
+				return { status: 200, data: { _id: 'printing_db:SH001', _rev: '3-r' } };
+			if (call.method === 'DELETE') {
+				events.push(`${call.method} ${call.path}`);
+				return { status: 200 };
+			}
+			return undefined;
+		});
+		const { deps } = fakeShelter(
+			[deviceDoc('pi-a'), deviceDoc('pi-b', { shelter_code: 'SH002' })],
+			[pendingJob('print_job:1', 'print_device:pi-a')],
+			events
+		);
+
+		await closeShelterPrinting('SH001', deps);
+
+		expect(events).toEqual([
+			'device print_device:pi-a -> inactive',
+			'job print_job:1 -> failed (printer_inactive)',
+			'DELETE /printing_sh001',
+			'DELETE /printing_devices/printing_db%3ASH001?rev=3-r'
+		]);
+	});
+
+	it('is a no-op on a rerun: a db and registry doc that are already gone (404) are fine', async () => {
+		const events: string[] = [];
+		fakeCouch(({ method }) =>
+			method === 'DELETE' || method === 'GET' ? { status: 404 } : undefined
+		);
+		const { deps } = fakeShelter([], [], events);
+
+		await expect(closeShelterPrinting('SH001', deps)).resolves.toMatchObject({
+			db: 'printing_sh001',
+			registryId: 'printing_db:SH001',
+			printerIds: []
+		});
+		expect(requests()).toEqual([
+			'DELETE /printing_sh001',
+			'GET /printing_devices/printing_db%3ASH001'
+		]);
+	});
+
+	it('still fails open jobs of printers that were already inactive', async () => {
+		const events: string[] = [];
+		fakeCouch(({ method }) =>
+			method === 'DELETE' || method === 'GET' ? { status: 404 } : undefined
+		);
+		const { deps } = fakeShelter(
+			[deviceDoc('pi-a', { status: 'inactive' })],
+			[pendingJob('print_job:1', 'print_device:pi-a')],
+			events
+		);
+
+		await closeShelterPrinting('SH001', deps);
+
+		expect(events).toContain('job print_job:1 -> failed (printer_inactive)');
+	});
+
+	it('deletes nothing when a printer cannot be deactivated', async () => {
+		const events: string[] = [];
+		fakeCouch();
+		const { deps } = fakeShelter([deviceDoc('pi-a')], [], events);
+		deps.devices.updateDevice = async () => {
+			throw new PrintDependencyError();
+		};
+
+		await expect(closeShelterPrinting('SH001', deps)).rejects.toBeInstanceOf(PrintDependencyError);
+		expect(requests()).toEqual([]);
+	});
+
+	it('throws for an invalid shelter code before any request', async () => {
+		fakeCouch();
+		const { deps } = fakeShelter([], [], []);
+
+		await expect(closeShelterPrinting('../_users', deps)).rejects.toThrow(/Invalid shelter code/);
+		expect(requests()).toEqual([]);
+	});
+
+	it('lets the shelter be provisioned again after it was closed', async () => {
+		await ensureShelterPrintingDb('SH001');
+		fakeCouch(({ method }) =>
+			method === 'DELETE' || method === 'GET' ? { status: 404 } : undefined
+		);
+		await closeShelterPrinting('SH001', fakeShelter([], [], []).deps);
+		calls.length = 0;
+		fakeCouch();
+
+		await ensureShelterPrintingDb('SH001');
+
+		expect(requests()[0]).toBe('PUT /printing_sh001');
 	});
 });

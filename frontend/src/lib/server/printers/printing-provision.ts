@@ -2,6 +2,14 @@ import { adminRaw } from '$lib/server/couch-admin';
 // eslint-disable-next-line no-restricted-imports -- server-safe domain rule; feature barrel pulls client UI/query code
 import { PRINTING_DEVICES_DB, printingDbName } from '$lib/features/printers/domain/printing-db';
 import { PrintDependencyError } from './device-credentials';
+import { closeShelterPrintingWith, type ShelterCloseReport } from './printing-close';
+import {
+	updatePrinter,
+	type KioskDeviceReader,
+	type PrinterJobCloser,
+	type PrintDeviceAdminStore
+} from './printer-admin.server';
+import type { PrintDeviceLister } from './print-jobs.server';
 import { buildPrintingValidateDocUpdate } from './printing-vdu';
 
 /**
@@ -159,4 +167,58 @@ export async function ensureShelterPrintingDb(shelterCode: string): Promise<void
 export function resetPrintingProvisionForTests(): void {
 	devicesDb = null;
 	shelterDbs.clear();
+}
+
+export interface CloseShelterPrintingDeps {
+	/** Device registry (`printing_devices`); defaults to {@link printDeviceRepository}. */
+	devices: PrintDeviceAdminStore & PrintDeviceLister;
+	/** Job store of one shelter; defaults to {@link printJobStoreFor}. */
+	jobsFor: (shelterCode: string) => PrinterJobCloser;
+	now?: () => Date;
+}
+
+/** Deactivating never links a scanner, so the kiosk lookup is never reached. */
+const NO_SCANNERS: KioskDeviceReader = { getDeviceByDeviceId: async () => null };
+
+/**
+ * Real adapters, imported on demand: `print-device.repo` itself imports this module for
+ * `ensurePrintingDevicesDb`, so a top-level import would be a cycle.
+ */
+async function defaultCloseDeps(): Promise<CloseShelterPrintingDeps> {
+	const [{ printDeviceRepository }, { printJobStoreFor }] = await Promise.all([
+		import('./print-device.repo'),
+		import('./print-job.service-store')
+	]);
+	return { devices: printDeviceRepository, jobsFor: printJobStoreFor };
+}
+
+/**
+ * Close a shelter's printing (O-11): its printers go `inactive` through `updatePrinter` (open jobs
+ * become `failed (printer_inactive)`), then `printing_{code}` and its registry doc are deleted.
+ * Immediate and idempotent; the same for `closed` and `cancelled` shelters. Throws for a code that
+ * cannot form a database name, before any request.
+ */
+export async function closeShelterPrinting(
+	shelterCode: string,
+	deps?: CloseShelterPrintingDeps
+): Promise<ShelterCloseReport> {
+	const { devices, jobsFor, now = () => new Date() } = deps ?? (await defaultCloseDeps());
+	const report = await closeShelterPrintingWith(
+		{
+			admin: (path, method, body) => adminRaw(path, method, body),
+			printerIds: async (code) => (await devices.listDevices(code)).map((device) => device._id),
+			async deactivate(printerId) {
+				await updatePrinter(
+					{ devices, jobsFor, scanners: NO_SCANNERS },
+					printerId,
+					{ status: 'inactive' },
+					now()
+				);
+			}
+		},
+		shelterCode
+	);
+	// The next printer of this shelter must provision `printing_{code}` afresh, not hit the memo.
+	shelterDbs.delete(report.code);
+	return report;
 }
