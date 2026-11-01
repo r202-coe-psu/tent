@@ -31,14 +31,14 @@ def _required(environ: Mapping[str, str], name: str) -> str:
 
 
 def _is_trusted_plaintext_host(hostname: str) -> bool:
-    """Plain HTTP is only allowed to loopback / private-LAN hosts; a DNS name must use HTTPS."""
+    """Plain HTTP is only allowed to loopback (dev); every other host must use HTTPS."""
     if hostname == "localhost":
         return True
     try:
         address = ipaddress.ip_address(hostname)
     except ValueError:
         return False
-    return address.is_loopback or address.is_private or address.is_link_local
+    return address.is_loopback
 
 
 def _base_url(environ: Mapping[str, str]) -> str:
@@ -50,7 +50,8 @@ def _base_url(environ: Mapping[str, str]) -> str:
     if parts.scheme == "http" and _is_trusted_plaintext_host(hostname):
         return value.rstrip("/")
     raise ConfigError(
-        "TENT_BASE_URL must be https://, or http:// only for localhost / private-LAN hosts"
+        "TENT_BASE_URL must be https:// (http:// is allowed only for loopback: "
+        "localhost, 127.0.0.0/8, ::1) - use https:// for any other host"
     )
 
 

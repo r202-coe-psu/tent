@@ -52,16 +52,31 @@ def test_printer_name_defaults_to_tent_xprinter():
 @pytest.mark.parametrize(
     "base_url",
     [
-        "http://192.168.1.10:5173",
-        "http://127.0.0.1",
+        "http://127.0.0.1:5173",
+        "http://127.1.2.3",
+        "http://[::1]:5173",
         "http://localhost:5173",
-        "http://10.0.0.5",
-        "http://169.254.1.1",
         "https://tent.example.org",
+        "https://192.168.1.10",
     ],
 )
-def test_base_url_accepts_https_or_http_on_local_hosts(base_url):
+def test_base_url_accepts_https_or_http_on_loopback_only(base_url):
     assert load_config({**VALID_ENV, "TENT_BASE_URL": base_url}).base_url == base_url
+
+
+@pytest.mark.parametrize(
+    "base_url",
+    [
+        "http://192.168.1.10",
+        "http://10.0.0.5",
+        "http://172.16.0.9",
+        "http://169.254.1.1",
+        "http://[fe80::1]",
+    ],
+)
+def test_base_url_rejects_plaintext_http_to_private_and_link_local_hosts(base_url):
+    with pytest.raises(ConfigError, match="use https://"):
+        load_config({**VALID_ENV, "TENT_BASE_URL": base_url})
 
 
 @pytest.mark.parametrize(
