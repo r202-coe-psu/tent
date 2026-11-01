@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
 	import { toast } from 'svelte-sonner';
+	import { isThaiMobilePhone, normalizeThaiPhone } from '$lib/db/model';
 	import Camera from '@lucide/svelte/icons/camera';
 	import Trash2 from '@lucide/svelte/icons/trash-2';
 	import X from '@lucide/svelte/icons/x';
@@ -216,7 +217,7 @@
 			return;
 		}
 
-		if (!noPhone && digits(phone).length !== 10) {
+		if (!noPhone && !isThaiMobilePhone(phone)) {
 			toast.error('กรุณากรอกเบอร์โทรศัพท์ 10 หลัก หรือเลือกไม่มีเบอร์โทร');
 			return;
 		}
@@ -247,7 +248,7 @@
 				birthYear: parsedBirthYear,
 				age: parsedAge,
 				gender: validation.data.gender,
-				phone: validation.data.noPhone ? null : digits(validation.data.phone),
+				phone: validation.data.noPhone ? null : normalizeThaiPhone(validation.data.phone),
 				cardType: validation.data.cardType,
 				cardNumber:
 					validation.data.cardType === 'national_id'

@@ -176,7 +176,10 @@
 			</Tabs.Content>
 
 			<Tabs.Content value="applicants" class="pt-4">
-				<JobApplicantsTab {job} />
+				<!-- Keyed so the tab's filters start fresh on another job (#1013). -->
+				{#key job._id}
+					<JobApplicantsTab {job} />
+				{/key}
 			</Tabs.Content>
 		</Tabs.Root>
 	{/if}

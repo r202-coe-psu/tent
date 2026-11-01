@@ -27,7 +27,10 @@ export const KIOSK_STAFF = 'kiosk_staff';
 /** Manages the kiosk banners of one shelter, but not its kiosk devices (issue #930). */
 export const PR_STAFF = 'pr_staff';
 
-/** Capability roles a shelter_manager or coordinator is allowed to grant (per CR-104 §2.1). */
+/**
+ * Capability roles a shelter_manager may grant (per CR-104 §2.1). A volunteer_coordinator may
+ * grant only {@link COORDINATOR_GRANTABLE_CAPABILITIES}, never all of these.
+ */
 export const STAFF_CAPABILITIES = [
 	'registration_staff',
 	TRIAGE_STAFF,
@@ -43,6 +46,17 @@ export const STAFF_CAPABILITIES = [
 	PR_STAFF
 ] as const;
 export type StaffCapability = (typeof STAFF_CAPABILITIES)[number];
+
+/**
+ * The only roles a volunteer_coordinator may issue to a volunteer, each with an expiry
+ * (draft-coordinator-limited-access-grant FR-2; #879 item 2).
+ */
+export const COORDINATOR_GRANTABLE_CAPABILITIES = [
+	'registration_staff',
+	'kitchen_staff',
+	DISTRIBUTION_STAFF,
+	FACILITY_STAFF
+] as const satisfies readonly StaffCapability[];
 
 /** Every capability an SA may grant alongside the shelter scope. */
 export const SHELTER_CAPABILITIES = [...STAFF_CAPABILITIES, SHELTER_MANAGER] as const;
@@ -271,6 +285,14 @@ export function hasCapabilityInShelter(
 	return false;
 }
 
+/** Frontline distribution (receive, handover/scan, shift close) in `shelterCode` (CR-161 R3). */
+export function canDistributeInShelter(roles: readonly string[], shelterCode: string): boolean {
+	return (
+		hasCapabilityInShelter(roles, shelterCode, DISTRIBUTION_STAFF) ||
+		hasCapabilityInShelter(roles, shelterCode, SHELTER_MANAGER)
+	);
+}
+
 /** Build CouchDB `roles[]` from per-shelter assignments (always compound form). */
 export function rolesFromAssignments(assignments: readonly ShelterAssignment[]): string[] {
 	const out: string[] = [];
@@ -459,6 +481,43 @@ export function isWarehouseStaff(roles: readonly string[], shelterCode?: string 
 	return (
 		hasStaffCapability(roles, WAREHOUSE_STAFF, shelterCode) ||
 		hasStaffCapability(roles, SUPPLY_COORDINATOR, shelterCode)
+	);
+}
+
+/** Pages gated by `requireManager`: system_admin or shelter_manager of the shelter. */
+export function canAccessManagerPages(
+	roles: readonly string[],
+	shelterCode?: string | null
+): boolean {
+	return isSystemAdmin(roles) || isShelterManager(roles, shelterCode);
+}
+
+/** `requireWarehouseAccess`: SA, SM, or warehouse_staff / supply_coordinator of the shelter. */
+export function canAccessWarehouse(roles: readonly string[], shelterCode?: string | null): boolean {
+	return canAccessManagerPages(roles, shelterCode) || isWarehouseStaff(roles, shelterCode);
+}
+
+/** `requireKitchen`: SA, SM, or kitchen_staff of the shelter. */
+export function canAccessKitchen(roles: readonly string[], shelterCode?: string | null): boolean {
+	return (
+		canAccessManagerPages(roles, shelterCode) ||
+		hasStaffCapability(roles, 'kitchen_staff', shelterCode)
+	);
+}
+
+/** `requireTicketAccess`: warehouse side or kitchen_staff (plus SA/SM). */
+export function canAccessTickets(roles: readonly string[], shelterCode?: string | null): boolean {
+	return canAccessWarehouse(roles, shelterCode) || canAccessKitchen(roles, shelterCode);
+}
+
+/** `requireEvacueeRegistration`: SA, SM, or registration_staff of the shelter. */
+export function canAccessEvacueeRegistration(
+	roles: readonly string[],
+	shelterCode?: string | null
+): boolean {
+	return (
+		canAccessManagerPages(roles, shelterCode) ||
+		hasStaffCapability(roles, 'registration_staff', shelterCode)
 	);
 }
 

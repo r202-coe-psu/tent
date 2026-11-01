@@ -54,6 +54,12 @@ export function stepAfterModeSwitch(current: StationTab, mode: DeskMode): Statio
 	return steps.includes(current) ? current : steps[0];
 }
 
+/** The one mode that owns a step, or `null` when both modes have it (receive, reconciliation). */
+export function modeOwningStep(tab: StationTab): DeskMode | null {
+	const owners = DESK_MODE_IDS.filter((id) => DESK_MODES[id].steps.includes(tab));
+	return owners.length === 1 ? owners[0] : null;
+}
+
 /** Post-distribution tickets waiting on a direct frontline close-out action. */
 export function needsCloseOutAction(ticket: { status: RequisitionTicketStatus }): boolean {
 	return ticket.status === 'SHIFT_CLOSED' || ticket.status === 'RETURN_COMPLETED';

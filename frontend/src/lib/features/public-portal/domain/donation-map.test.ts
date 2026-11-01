@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+	donationMapPointsOf,
 	buildDonationMap,
 	donationNeedUrgency,
 	donationShelterUrgency,
@@ -246,5 +247,46 @@ describe('donationShelterUrgency', () => {
 
 	it('counts a need without an item_id, so the pin matches the card badge', () => {
 		expect(donationShelterUrgency([{ name: 'ไม่มีรหัส', urgency: 'critical' }])).toBe('critical');
+	});
+});
+
+describe('donationMapPointsOf', () => {
+	it('turns each ticked point of the detail into a pin of that shelter', () => {
+		expect(
+			donationMapPointsOf('SH001', [
+				{ id: 'p1', name: 'โรงยิม', geo: { lat: 7.01, lng: 100.41 }, location_note: ' ประตู 2 ' },
+				{ id: 'p2', name: 'ห้องพยาบาล', geo: { lat: 7.02, lng: 100.42 }, location_note: null }
+			])
+		).toEqual([
+			{
+				id: 'p1',
+				shelterCode: 'SH001',
+				geo: { lat: 7.01, lng: 100.41 },
+				label: 'โรงยิม',
+				description: 'ประตู 2'
+			},
+			{
+				id: 'p2',
+				shelterCode: 'SH001',
+				geo: { lat: 7.02, lng: 100.42 },
+				label: 'ห้องพยาบาล',
+				description: undefined
+			}
+		]);
+	});
+
+	it('skips a point at (0,0) or out of range rather than pin it off the map', () => {
+		expect(
+			donationMapPointsOf('SH001', [
+				{ id: 'zero', name: 'ศูนย์', geo: { lat: 0, lng: 0 } },
+				{ id: 'far', name: 'นอกโลก', geo: { lat: 7, lng: 200 } },
+				{ id: 'ok', name: 'โรงยิม', geo: { lat: 7.01, lng: 100.41 } }
+			]).map((p) => p.id)
+		).toEqual(['ok']);
+	});
+
+	it('adds no pin for a shelter without ticked points (FR-DP-18)', () => {
+		expect(donationMapPointsOf('SH001', [])).toEqual([]);
+		expect(donationMapPointsOf('SH001', undefined)).toEqual([]);
 	});
 });

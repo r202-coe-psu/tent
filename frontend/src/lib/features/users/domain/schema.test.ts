@@ -24,8 +24,11 @@ describe('phoneSchema and usernameSchema', () => {
 		expect(phoneSchema.safeParse('081234567A').success).toBe(false);
 	});
 
-	it('accepts a 9-digit landline as a contact phone but not as a login phone', () => {
-		expect(contactPhoneSchema.safeParse('022222222').success).toBe(true);
+	it('rejects a 9-digit landline as a contact phone and login phone (CR-210)', () => {
+		expect(contactPhoneSchema.safeParse('022222222').success).toBe(false);
+		expect(contactPhoneSchema.safeParse('02-222-2222').success).toBe(false);
+		expect(contactPhoneSchema.parse('081-234-5678')).toBe('0812345678');
+		expect(contactPhoneSchema.parse('+66812345678')).toBe('0812345678');
 		expect(contactPhoneSchema.safeParse('0812345678').success).toBe(true);
 		expect(contactPhoneSchema.safeParse('02222222').success).toBe(false);
 		expect(phoneSchema.safeParse('022222222').success).toBe(false);
@@ -36,6 +39,25 @@ describe('phoneSchema and usernameSchema', () => {
 		expect(usernameSchema.safeParse('admin').success).toBe(true);
 		expect(usernameSchema.safeParse('0812345678').success).toBe(true);
 		expect(usernameSchema.safeParse('ab').success).toBe(false); // < 3 chars
+	});
+});
+
+describe('editUserSchema username', () => {
+	const base = {
+		password: '',
+		display_name: 'อาสา',
+		capabilities: ['system_admin' as const]
+	};
+
+	it('keeps an existing email-style name, which createUserSchema still refuses', () => {
+		expect(editUserSchema.safeParse({ ...base, username: 'test03@gmail.com' }).success).toBe(true);
+		expect(
+			createUserSchema.safeParse({
+				...base,
+				password: validPassword,
+				username: 'test03@gmail.com'
+			}).success
+		).toBe(false);
 	});
 });
 

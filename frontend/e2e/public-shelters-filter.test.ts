@@ -159,12 +159,15 @@ test.describe(
 			await page.getByRole('button', { name: 'ชนิดสถานที่' }).click();
 			await page.getByRole('option', { name: 'บ้านพี่เลี้ยง' }).click();
 			await expect(page).toHaveURL(/site_kind=host_house/);
+			// The closed trigger shows the master label, not the raw code (CR-198 FR-16).
+			await expect(page.getByRole('button', { name: 'ชนิดสถานที่' })).toHaveText('บ้านพี่เลี้ยง');
 			await expect(page.getByRole('heading', { name: HOST_NEAR.name })).toBeVisible();
 			await expect(page.getByRole('heading', { name: MARKER })).toHaveCount(1);
 
 			await page.getByRole('button', { name: 'ชนิดสถานที่' }).click();
 			await page.getByRole('option', { name: 'ศูนย์อพยพ' }).click();
 			await expect(page).toHaveURL(/site_kind=evacuation_center/);
+			await expect(page.getByRole('button', { name: 'ชนิดสถานที่' })).toHaveText('ศูนย์อพยพ');
 			await expect(page.getByRole('heading', { name: EVAC_FAR.name })).toBeVisible();
 			await expect(page.getByRole('heading', { name: MARKER })).toHaveCount(1);
 		});

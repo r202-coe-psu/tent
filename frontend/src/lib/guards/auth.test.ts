@@ -41,7 +41,9 @@ import {
 	requireKioskManagement,
 	requireMedicalScreening,
 	requireVolunteerBackoffice,
-	LANDING_ROUTE
+	requireWarehouseAccess,
+	LANDING_ROUTE,
+	type DeskFallbackHref
 } from './auth';
 
 describe('resolvePostLoginDestination (CR-124)', () => {
@@ -252,6 +254,49 @@ describe('requireDistributionDesk (Station 4 route guard)', () => {
 			status: 302,
 			location: '/login'
 		});
+	});
+});
+
+describe('requireWarehouseAccess desk fallback (bulk pool links)', () => {
+	const deskFallback: DeskFallbackHref = '/onsite/distribution?mode=supplies&tab=returns&pool=p1';
+
+	async function outcome(roles: string[], fallback?: DeskFallbackHref | null) {
+		mocks.user = { roles };
+		mocks.selectedShelterCode = 'SH001';
+		try {
+			await requireWarehouseAccess(undefined, { deskFallback: fallback });
+			return 'pass';
+		} catch (e) {
+			return (e as { status: number; location: string }).status === 302
+				? (e as { location: string }).location
+				: 'error';
+		}
+	}
+
+	it('sends distribution_staff to the desk when a fallback is given', async () => {
+		expect(await outcome(['shelter:SH001', 'SH001:distribution_staff'], deskFallback)).toBe(
+			deskFallback
+		);
+	});
+
+	it('sends distribution_staff to the landing route without a fallback', async () => {
+		const roles = ['shelter:SH001', 'SH001:distribution_staff'];
+		expect(await outcome(roles)).toBe(LANDING_ROUTE);
+		expect(await outcome(roles, null)).toBe(LANDING_ROUTE);
+	});
+
+	it('does not redirect SA, SM or warehouse-side staff', async () => {
+		expect(await outcome(['system_admin'], deskFallback)).toBe('pass');
+		expect(await outcome(['shelter:SH001', 'SH001:shelter_manager'], deskFallback)).toBe('pass');
+		for (const cap of ['warehouse_staff', 'supply_coordinator']) {
+			expect(await outcome(['shelter:SH001', `SH001:${cap}`], deskFallback)).toBe('pass');
+		}
+	});
+
+	it('sends users without desk access to the landing route', async () => {
+		expect(await outcome(['shelter:SH001', 'SH001:kitchen_staff'], deskFallback)).toBe(
+			LANDING_ROUTE
+		);
 	});
 });
 

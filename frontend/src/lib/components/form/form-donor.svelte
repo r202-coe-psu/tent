@@ -7,6 +7,7 @@
 	import AlertCircle from '@lucide/svelte/icons/alert-circle';
 	import { tick } from 'svelte';
 	import { toast } from 'svelte-sonner';
+	import { isThaiMobilePhone } from '$lib/db/model';
 	import * as Select from '$lib/components/ui/select';
 	import { getDonationStore } from '../../../routes/(public)/donations/donation.svelte';
 	import {
@@ -82,10 +83,9 @@
 		}
 
 		// 2. Validate donor phone
-		const phoneRegex = /^0[0-9]{9}$/;
 		if (!donationStore.donorPhone.trim()) {
 			validationErrors.push(t.valPhone);
-		} else if (!phoneRegex.test(donationStore.donorPhone.trim())) {
+		} else if (!isThaiMobilePhone(donationStore.donorPhone)) {
 			validationErrors.push(t.valPhoneInvalid);
 		}
 

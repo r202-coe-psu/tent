@@ -5,11 +5,13 @@ import {
 	toPublicShelterCard,
 	type PublicShelterListResponse,
 	type PublicShelterItem,
-	type MasterLabelOption
+	type MasterLabelOption,
+	countBySiteKind
 } from '$lib/features/public-portal';
 import { formatMasterLabel } from '$lib/features/master-data';
 
-const SITE_KINDS = new Set(['evacuation_center', 'host_house']);
+/** `site_kind` is any master code (CR-198); only the code shape is checked here. */
+const SITE_KIND_CODE = /^[a-z0-9_]+$/;
 
 function haversineKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
 	const R = 6371;
@@ -33,9 +35,7 @@ export const load: PageLoad = async ({ url, fetch }) => {
 	const typeFilter = url.searchParams.get('type') || '';
 	const statusParam = url.searchParams.getAll('status').join(',') || '';
 	const siteKindParam = url.searchParams.get('site_kind') || '';
-	const siteKind = SITE_KINDS.has(siteKindParam)
-		? (siteKindParam as 'evacuation_center' | 'host_house')
-		: undefined;
+	const siteKind = SITE_KIND_CODE.test(siteKindParam) ? siteKindParam : undefined;
 	const distance = url.searchParams.get('distance') ?? '5';
 	const user_lat = url.searchParams.get('user_lat') || '';
 	const user_lng = url.searchParams.get('user_lng') || '';
@@ -142,8 +142,6 @@ export const load: PageLoad = async ({ url, fetch }) => {
 	}
 
 	const openCount = shelters.filter((s) => s.status === 'OPEN' || s.status === 'FULL').length;
-	const evacCenterCount = shelters.filter((s) => s.site_kind === 'evacuation_center').length;
-	const hostHouseCount = shelters.filter((s) => s.site_kind === 'host_house').length;
 
 	const available_types = Array.from(
 		new Set(
@@ -160,8 +158,7 @@ export const load: PageLoad = async ({ url, fetch }) => {
 		summary: {
 			shelters_total: shelters.length,
 			shelters_open: openCount,
-			evac_centers: evacCenterCount,
-			host_houses: hostHouseCount
+			counts_by_site_kind: countBySiteKind(shelters)
 		},
 		filters: {
 			search,

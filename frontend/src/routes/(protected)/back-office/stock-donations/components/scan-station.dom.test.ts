@@ -8,15 +8,35 @@ const toastMock = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn(), info: vi
 const empty = { data: [] as unknown[], isLoading: false };
 
 vi.mock('$lib/features/supply', () => ({ useSupplyItems: () => empty }));
-vi.mock('$lib/features/shelters', () => ({ useShelters: () => empty }));
+// The shelter doc the station reads its drop-off points from (CR-206 FR-MP-18).
+const shelterDoc = vi.hoisted(() => ({ current: undefined as unknown, ready: true }));
+vi.mock('$lib/features/shelters', async (importOriginal) => ({
+	...(await importOriginal<typeof import('$lib/features/shelters')>()),
+	useShelters: () => empty,
+	useShelter: () => ({
+		get data() {
+			return shelterDoc.current;
+		},
+		get isSuccess() {
+			return shelterDoc.ready;
+		},
+		isLoading: false
+	})
+}));
 vi.mock('$lib/features/catalog', async (importOriginal) => ({
 	...(await importOriginal<typeof import('$lib/features/catalog')>()),
 	useItemMasters: () => empty,
 	useUnitsOfMeasure: () => empty
 }));
+const storagePointList = vi.hoisted(() => ({ current: [] as { id: string; name: string }[] }));
 vi.mock('$lib/features/operations', async (importOriginal) => ({
 	...(await importOriginal<typeof import('$lib/features/operations')>()),
-	useStoragePoints: () => ({ points: [] })
+	useStoragePoints: () => ({
+		get points() {
+			return storagePointList.current;
+		},
+		isLoading: false
+	})
 }));
 vi.mock('$lib/db/shelter', () => ({ getShelterCode: () => 'SH001' }));
 vi.mock('$app/paths', () => ({ resolve: (path: string) => path }));
@@ -52,6 +72,11 @@ const save = () =>
 afterEach(async () => {
 	vi.unstubAllGlobals();
 	toastMock.error.mockReset();
+	toastMock.success.mockReset();
+	shelterDoc.current = undefined;
+	shelterDoc.ready = true;
+	storagePointList.current = [];
+	localStorage.clear();
 	if (instance) unmount(instance);
 	instance = null;
 	await new Promise((resolve) => setTimeout(resolve, 50));
@@ -118,5 +143,372 @@ describe('scan-station walk-in', () => {
 		save().click();
 		await settle();
 		expect(toastMock.error).toHaveBeenCalledWith(expect.stringContaining('รายการสิ่งของ'));
+	});
+});
+
+// ── CR-206: receiving one booking point by point ────────────────────────────────────────
+
+const GYM = { id: 'pt-gym', name: 'โรงยิม' };
+const MED = { id: 'pt-med', name: 'ห้องพยาบาล' };
+const STORE3 = { id: 'pt-store3', name: 'ห้องเก็บของ 3' };
+
+/** A drop-off point as the shelter doc carries it: ticked, with a pin (CR-205). */
+const dropOffPoint = (point: { id: string; name: string }) => ({
+	...point,
+	types: ['general'],
+	accepts_donations: true,
+	lat: 7.0,
+	lng: 100.5
+});
+
+/** AC-1: water to the gym, medicine to the infirmary. */
+function splitBooking(extra: Record<string, unknown> = {}) {
+	return {
+		rev: '3-abc',
+		booking_ref: 'DN-206',
+		shelter_code: 'SH001',
+		status: 'verifying',
+		donor: { name: 'สมชาย', phone: null },
+		items: [
+			{ item_id: 'item:water', qty: '24', unit: 'bottle', drop_off_point_id: GYM.id },
+			{ item_id: 'item:paracetamol', qty: '10', unit: 'pack', drop_off_point_id: MED.id }
+		],
+		...extra
+	};
+}
+
+type FetchCall = [string, RequestInit | undefined];
+
+function stubApi(
+	donation: unknown,
+	post: unknown = { success: true, donation: { status: 'verifying' } }
+) {
+	const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+		const body = init?.method === 'POST' ? post : { success: true, donation };
+		return new Response(JSON.stringify(body), { status: 200 });
+	});
+	vi.stubGlobal('fetch', fetchMock);
+	return fetchMock;
+}
+
+async function openBooking() {
+	instance = mount(ScanStation, { target: document.body, props: { initialQuery: 'DN-206' } });
+	for (let i = 0; i < 5; i++) {
+		await settle();
+		await new Promise((resolve) => setTimeout(resolve, 0));
+	}
+}
+
+const line = (idx: number) =>
+	document.querySelector<HTMLElement>(`[data-testid="scan-line-${idx}"]`)!;
+const buttonIn = (root: ParentNode, text: string) =>
+	[...root.querySelectorAll<HTMLButtonElement>('button')].find((b) =>
+		b.textContent?.includes(text)
+	)!;
+const submit = () =>
+	document.querySelector<HTMLButtonElement>('[data-testid="scan-receive-submit"]')!;
+const postBody = (fetchMock: ReturnType<typeof stubApi>) => {
+	const call = (fetchMock.mock.calls as FetchCall[]).find(([, init]) => init?.method === 'POST');
+	return call ? { url: call[0], body: JSON.parse(String(call[1]?.body)) } : null;
+};
+
+describe('scan-station point by point (CR-206)', () => {
+	it('shows the bookings lines but keeps save off until a point is picked (FR-MP-18a)', async () => {
+		shelterDoc.current = { common_areas: { sub_storage: [dropOffPoint(GYM), dropOffPoint(MED)] } };
+		storagePointList.current = [GYM, MED];
+		stubApi(splitBooking());
+		await openBooking();
+
+		expect(document.querySelector('[data-testid="receiving-point"]')).not.toBeNull();
+		expect(line(0).dataset.lineState).toBe('other_point');
+		expect(line(1).dataset.lineState).toBe('other_point');
+		expect(submit().disabled).toBe(true);
+	});
+
+	it('records only the gyms line and sends point_id + line_nos (AC-5)', async () => {
+		shelterDoc.current = { common_areas: { sub_storage: [dropOffPoint(GYM), dropOffPoint(MED)] } };
+		storagePointList.current = [GYM, MED];
+		localStorage.setItem('stock-donations:receiving-point:SH001', GYM.id);
+		const fetchMock = stubApi(splitBooking());
+		await openBooking();
+
+		expect(line(0).dataset.lineState).toBe('receivable');
+		expect(line(1).dataset.lineState).toBe('other_point');
+		expect(
+			document.querySelector('[data-testid="scan-line-1-other-point"]')?.textContent
+		).toContain('ส่งที่ ห้องพยาบาล');
+		expect(document.querySelector('[data-testid="scan-line-1-point"]')?.textContent).toContain(
+			'ห้องพยาบาล'
+		);
+		expect(buttonIn(line(1), 'ผ่านการตรวจสอบแล้ว')).toBeUndefined();
+
+		buttonIn(line(0), 'ผ่านการตรวจสอบแล้ว').click();
+		await settle();
+		expect(submit().disabled).toBe(false);
+		submit().click();
+		await settle();
+		await new Promise((resolve) => setTimeout(resolve, 0));
+
+		const sent = postBody(fetchMock)!;
+		expect(sent.url).toBe('/api/back-office/donations/DN-206');
+		expect(sent.body).toMatchObject({
+			status: 'received',
+			expected_rev: '3-abc',
+			point_id: GYM.id,
+			line_nos: [0]
+		});
+		expect(sent.body.items).toHaveLength(2);
+		// FR-MP-20: shelved at the line's own point unless staff change it.
+		expect(sent.body.items[0].lot).toMatchObject({ storage_point_id: GYM.id });
+		expect(sent.body.items[1]).toEqual({ item_id: 'item:paracetamol', qty: '10', unit: 'pack' });
+	});
+
+	it('unlocks another points line and shelves it at the chosen point (AC-10)', async () => {
+		shelterDoc.current = { common_areas: { sub_storage: [dropOffPoint(GYM), dropOffPoint(MED)] } };
+		storagePointList.current = [GYM, MED];
+		localStorage.setItem('stock-donations:receiving-point:SH001', GYM.id);
+		const fetchMock = stubApi(splitBooking());
+		await openBooking();
+
+		document.querySelector<HTMLButtonElement>('[data-testid="unlock-other-points"]')!.click();
+		await settle();
+		expect(line(1).dataset.lineState).toBe('receivable');
+		buttonIn(line(1), 'ผ่านการตรวจสอบแล้ว').click();
+		await settle();
+		submit().click();
+		await settle();
+		await new Promise((resolve) => setTimeout(resolve, 0));
+
+		const sent = postBody(fetchMock)!;
+		expect(sent.body).toMatchObject({ point_id: GYM.id, line_nos: [1] });
+		expect(sent.body.items[1].lot).toMatchObject({ storage_point_id: GYM.id });
+	});
+
+	it('shows a recorded line as received at its point, and offers ปิดใบ (FR-MP-19, FR-MP-26)', async () => {
+		shelterDoc.current = { common_areas: { sub_storage: [dropOffPoint(GYM), dropOffPoint(MED)] } };
+		storagePointList.current = [GYM, MED];
+		stubApi(
+			splitBooking({
+				point_receipts: [
+					{
+						point_id: GYM.id,
+						line_nos: [0],
+						received_at: '2026-10-28T09:12:00+07:00',
+						received_by: 'a'
+					}
+				]
+			})
+		);
+		await openBooking();
+
+		expect(line(0).dataset.lineState).toBe('recorded');
+		expect(document.querySelector('[data-testid="scan-line-0-recorded"]')?.textContent).toContain(
+			'รับแล้วที่ โรงยิม'
+		);
+		expect(document.querySelector('[data-testid="close-donation-button"]')).not.toBeNull();
+		// A started booking is closed, not rejected (FR-MP-17a).
+		expect(buttonIn(document.body, 'ปฏิเสธคำขอ')).toBeUndefined();
+	});
+
+	it('closes the booking through the close route after confirming (FR-MP-26, FR-MP-27)', async () => {
+		shelterDoc.current = { common_areas: { sub_storage: [dropOffPoint(GYM), dropOffPoint(MED)] } };
+		storagePointList.current = [GYM, MED];
+		const fetchMock = stubApi(
+			splitBooking({
+				point_receipts: [
+					{
+						point_id: GYM.id,
+						line_nos: [0],
+						received_at: '2026-10-28T09:12:00+07:00',
+						received_by: 'a'
+					}
+				]
+			}),
+			{ success: true, donation: { status: 'received' } }
+		);
+		await openBooking();
+
+		document.querySelector<HTMLButtonElement>('[data-testid="close-donation-button"]')!.click();
+		await settle();
+		const dialog = document.querySelector('[data-testid="close-donation-dialog"]')!;
+		expect(dialog.textContent).toContain('paracetamol');
+		document.querySelector<HTMLButtonElement>('[data-testid="close-donation-confirm"]')!.click();
+		await settle();
+		await new Promise((resolve) => setTimeout(resolve, 0));
+
+		const sent = postBody(fetchMock)!;
+		expect(sent.url).toBe('/api/back-office/donations/DN-206/close');
+		expect(sent.body).toEqual({ expected_rev: '3-abc' });
+		expect(toastMock.success).toHaveBeenCalledWith(expect.stringContaining('ปิดใบ DN-206 แล้ว'));
+	});
+
+	it('offers no ปิดใบ before any point recorded (FR-MP-28)', async () => {
+		shelterDoc.current = { common_areas: { sub_storage: [dropOffPoint(GYM), dropOffPoint(MED)] } };
+		stubApi(splitBooking());
+		await openBooking();
+		expect(document.querySelector('[data-testid="close-donation-button"]')).toBeNull();
+		expect(buttonIn(document.body, 'ปฏิเสธคำขอ')).toBeDefined();
+	});
+
+	it('receives the rest with point_id null once no point is left (FR-MP-18b, AC-23)', async () => {
+		shelterDoc.current = { common_areas: { sub_storage: [{ ...STORE3, types: ['general'] }] } };
+		storagePointList.current = [STORE3];
+		stubApi(
+			splitBooking({
+				point_receipts: [
+					{
+						point_id: GYM.id,
+						line_nos: [0],
+						received_at: '2026-10-28T09:12:00+07:00',
+						received_by: 'a'
+					}
+				]
+			})
+		);
+		await openBooking();
+
+		expect(document.querySelector('[data-testid="receiving-point"]')).toBeNull();
+		expect(
+			document.querySelector('[data-testid="no-drop-off-point-banner"]')?.textContent
+		).toContain('ศูนย์ไม่มีจุดรับบริจาคแล้ว รับรายการที่เหลือเข้าสถานที่จัดเก็บที่เลือก');
+		expect(line(1).dataset.lineState).toBe('receivable');
+
+		buttonIn(line(1), 'ผ่านการตรวจสอบแล้ว').click();
+		await settle();
+		// The storage location is staff's pick here (FR-MP-20 has no point to start from).
+		expect(submit().disabled).toBe(true);
+	});
+
+	it('reads no "no point left" while the shelter doc is still loading', async () => {
+		shelterDoc.ready = false;
+		stubApi(
+			splitBooking({
+				point_receipts: [
+					{
+						point_id: GYM.id,
+						line_nos: [0],
+						received_at: '2026-10-28T09:12:00+07:00',
+						received_by: 'a'
+					}
+				]
+			})
+		);
+		await openBooking();
+
+		expect(document.querySelector('[data-testid="no-drop-off-point-banner"]')).toBeNull();
+		expect(submit().disabled).toBe(true);
+	});
+
+	it('sends point_id null with the remaining lines (FR-MP-18b)', async () => {
+		// A shelter with no storage point at all receives into the main store.
+		const fetchMock = stubApi(
+			splitBooking({
+				point_receipts: [
+					{
+						point_id: GYM.id,
+						line_nos: [0],
+						received_at: '2026-10-28T09:12:00+07:00',
+						received_by: 'a'
+					}
+				]
+			})
+		);
+		await openBooking();
+
+		buttonIn(line(1), 'ผ่านการตรวจสอบแล้ว').click();
+		await settle();
+		submit().click();
+		await settle();
+		await new Promise((resolve) => setTimeout(resolve, 0));
+
+		expect(postBody(fetchMock)!.body).toMatchObject({ point_id: null, line_nos: [1] });
+	});
+
+	it('keeps the whole-booking flow without point fields (FR-MP-24)', async () => {
+		const fetchMock = stubApi(
+			splitBooking({
+				items: [{ item_id: 'item:water', qty: '24', unit: 'bottle' }]
+			})
+		);
+		await openBooking();
+
+		expect(document.querySelector('[data-testid="receiving-point"]')).toBeNull();
+		buttonIn(line(0), 'ผ่านการตรวจสอบแล้ว').click();
+		await settle();
+		submit().click();
+		await settle();
+		await new Promise((resolve) => setTimeout(resolve, 0));
+
+		const sent = postBody(fetchMock)!;
+		expect(sent.body).not.toHaveProperty('point_id');
+		expect(sent.body).not.toHaveProperty('line_nos');
+	});
+
+	it.each([
+		{ lots: [{ item_id: 'item:water', lot_no: 'L1' }], says: 'ลงคลังแล้ว' },
+		{ lots: [], says: 'ไม่มีของเข้าคลัง' }
+	])(
+		'tells staff whether goods went in when the booking closed under them (AC-22): $says',
+		async ({ lots, says }) => {
+			shelterDoc.current = {
+				common_areas: { sub_storage: [dropOffPoint(GYM), dropOffPoint(MED)] }
+			};
+			storagePointList.current = [GYM, MED];
+			localStorage.setItem('stock-donations:receiving-point:SH001', MED.id);
+			stubApi(splitBooking(), {
+				success: false,
+				error_code: 'DONATION_CLOSED',
+				error: 'closed',
+				lots
+			});
+			await openBooking();
+
+			buttonIn(line(1), 'ผ่านการตรวจสอบแล้ว').click();
+			await settle();
+			submit().click();
+			await settle();
+			await new Promise((resolve) => setTimeout(resolve, 0));
+
+			expect(toastMock.error).toHaveBeenCalledWith(
+				expect.stringContaining('ถูกปิดไปก่อนบันทึกเสร็จ'),
+				expect.objectContaining({ description: expect.stringContaining(says) })
+			);
+		}
+	);
+});
+
+describe('scan-station vehicle plate (CR-209 FR-3b, AC-8)', () => {
+	const booking = (logistics: Record<string, unknown>) => ({
+		success: true,
+		donation: {
+			booking_ref: 'DN-000010',
+			shelter_code: 'SH001',
+			status: 'verifying',
+			donor: { name: 'ผู้บริจาค', phone: '0812345678', email: null },
+			items: [{ item_id: 'item:rice', qty: '5', unit: 'kg' }],
+			logistics
+		}
+	});
+
+	async function open(logistics: Record<string, unknown>) {
+		vi.stubGlobal(
+			'fetch',
+			vi.fn().mockResolvedValue({ ok: true, json: async () => booking(logistics) })
+		);
+		instance = mount(ScanStation, { target: document.body, props: { initialQuery: 'DN-000010' } });
+		await settle();
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		await settle();
+	}
+
+	it('shows the plate next to the vehicle on a v10 booking that has one', async () => {
+		await open({ delivery_method: 'self_dropoff', vehicle: 'car', vehicle_plate: 'กข 1234' });
+		expect(document.body.textContent).toContain('ทะเบียน กข 1234');
+	});
+
+	it('shows no plate line on a booking without one (doc from before v10)', async () => {
+		await open({ delivery_method: 'self_dropoff', vehicle: 'car' });
+		expect(document.body.textContent).toContain('วิธีส่ง / ยานพาหนะ');
+		expect(document.body.textContent).not.toContain('ทะเบียน ');
 	});
 });

@@ -59,4 +59,17 @@ describe('combineLineRejectReasons (FR-12)', () => {
 			])
 		).toEqual({ reject_reason: 'หมดอายุ; ชำรุดเสียหาย', reject_reason_code: 'other' });
 	});
+
+	it('leaves out a line that has no words of its own (code other, no detail)', () => {
+		expect(
+			combineLineRejectReasons([
+				{ reject_reason: 'หมดอายุ', reject_reason_code: 'expired' },
+				{ reject_reason: '', reject_reason_code: 'other' }
+			])
+		).toEqual({ reject_reason: 'หมดอายุ', reject_reason_code: 'other' });
+		expect(combineLineRejectReasons([{ reject_reason: '', reject_reason_code: 'other' }])).toEqual({
+			reject_reason: '',
+			reject_reason_code: 'other'
+		});
+	});
 });

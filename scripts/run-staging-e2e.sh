@@ -128,6 +128,22 @@ for env_name in E2E_BASE_URL E2E_ADMIN_USERNAME E2E_ADMIN_PASSWORD E2E_USERNAME 
 	fi
 done
 
+# A run killed before its teardown (Jenkins timeout, abortPrevious) leaves its E2E shelters and
+# staff behind for good: the created-data ledger lives in the discarded container. Sweep them
+# before this run creates its own — Jenkins never runs two of these at once. Best effort: a
+# failed sweep is logged, never fails the run. Set SKIP_E2E_CLEANUP=true to skip it.
+if [[ "${remote_writes_enabled}" == true && "${SKIP_E2E_CLEANUP:-}" != 'true' ]]; then
+	printf 'Sweeping E2E residue from earlier runs (pnpm cleanup:e2e --confirm)...\n'
+	if ! docker run --rm \
+		"${docker_env_args[@]}" \
+		--env HOME=/tmp \
+		"${IMAGE_NAME}" \
+		./node_modules/.bin/tsx --tsconfig .svelte-kit/tsconfig.json \
+		scripts/cleanup-e2e-residue.ts --confirm; then
+		printf 'Warning: E2E residue sweep failed; continuing with the suite.\n' >&2
+	fi
+fi
+
 set +e
 docker run --name "${CONTAINER_NAME}" \
 	--ipc=host \

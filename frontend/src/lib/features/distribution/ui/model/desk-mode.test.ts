@@ -3,6 +3,7 @@ import type { RequisitionTicketStatus } from '../../domain/food-supplies';
 import {
 	DESK_MODES,
 	isDeskMode,
+	modeOwningStep,
 	modePendingCount,
 	needsCloseOutAction,
 	resolveInitialMode,
@@ -33,6 +34,19 @@ describe('desk mode steps', () => {
 
 	it('leaves a step the mode does not have unnumbered', () => {
 		expect(stepLabel('food', 'returns')).toBe('รับคืนสิ่งของ');
+	});
+});
+
+describe('modeOwningStep', () => {
+	it('names the one mode that has the step', () => {
+		expect(modeOwningStep('food')).toBe('food');
+		expect(modeOwningStep('supplies')).toBe('supplies');
+		expect(modeOwningStep('returns')).toBe('supplies');
+	});
+
+	it('is null for steps both modes have', () => {
+		expect(modeOwningStep('receive')).toBeNull();
+		expect(modeOwningStep('reconciliation')).toBeNull();
 	});
 });
 

@@ -1,6 +1,8 @@
 import { adminRaw } from '$lib/server/couch-admin';
 import type { PublicDonationDoc } from '$lib/features/donations';
 import type { StoredDonationPhoto } from '$lib/features/donations/server';
+import { listDonationPoints } from '$lib/features/shelters/server';
+import { findMasterByCode } from '$lib/server/shelters.admin';
 
 /**
  * Fetch all docs of a given type (by `_id` prefix) from a shelter database via
@@ -72,13 +74,19 @@ export async function fetchDocsStrict<T>(dbName: string, prefix: string): Promis
 }
 
 /**
- * True once any goods of this booking are in the shelter's stock (a `donation` ledger row
- * points at it). From then on the donor may no longer edit or cancel it (owner decision
- * 2026-10-22, narrowing CR-174 FR-20/21): an interrupted receipt would otherwise leave
- * goods in stock for lines that moved or a booking that no longer exists.
+ * True once the shelter has started taking this booking in: a `donation` ledger row points at
+ * it, or a drop-off point recorded a receipt (CR-206 FR-MP-17a — a point that turned every
+ * line away keys no row). From then on the donor may no longer edit or cancel it (owner
+ * decision 2026-10-22, narrowing CR-174 FR-20/21), nor staff redirect or reject it: an
+ * interrupted receipt would otherwise leave goods in stock for lines that moved or a booking
+ * that no longer exists.
  */
-export async function hasKeyedDonationStock(dbName: string, donationId: string): Promise<boolean> {
-	return (await keyedDonationRowIds(dbName, donationId, 1)).length > 0;
+export async function hasKeyedDonationStock(
+	dbName: string,
+	donation: { _id: string; point_receipts?: readonly unknown[] | null }
+): Promise<boolean> {
+	if ((donation.point_receipts ?? []).length > 0) return true;
+	return (await keyedDonationRowIds(dbName, donation._id, 1)).length > 0;
 }
 
 /** Ids of the `donation` ledger rows pointing at this booking, at most `limit` of them. */
@@ -103,6 +111,24 @@ export async function keyedDonationRowIds(
 		throw new CouchReadError(dbName, 'stock_ledger (ref_id)', res.status);
 	}
 	return ((res.data as { docs?: { _id: string }[] }).docs ?? []).map((doc) => doc._id);
+}
+
+/** A drop-off point as staff set it up now — `id` and the name staff and donors read. */
+export type CurrentDonationPoint = { id: string; name: string };
+
+/**
+ * The shelter's drop-off points as they are now (CR-206 FR-MP-2a): `sub_storage[]` ticked
+ * `accepts_donations` with a pin, read from the registry doc — not the public projection,
+ * which lags behind the worker. `[]` for an unknown shelter.
+ */
+export async function readCurrentDonationPoints(
+	shelterCode: string
+): Promise<CurrentDonationPoint[]> {
+	const master = await findMasterByCode(shelterCode);
+	return listDonationPoints(master ?? undefined).map((point) => ({
+		id: point.id,
+		name: point.name.trim()
+	}));
 }
 
 /** The refusal a donor gets once the shelter has started taking the goods in. */

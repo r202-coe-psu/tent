@@ -184,6 +184,15 @@ describe('filterApplicantBoard', () => {
 		expect(run({ search: 'nobody' })).toEqual({ pending: [], history: [] });
 	});
 
+	it('finds a volunteer code typed without the dash or in another case (#1013)', () => {
+		for (const search of ['v006', 'V006', 'v-006', 'V 006']) {
+			expect(run({ search }).history).toEqual([asg(6)]);
+		}
+		expect(run({ search: 'v001' }).pending).toEqual([app(1)]);
+		// A lone dash compacts to nothing; it must not match every code.
+		expect(run({ search: '-' })).toEqual({ pending: [], history: [] });
+	});
+
 	it('filters by attendance over accepted shifts only', () => {
 		expect(run({ attendance: 'working' })).toEqual({ pending: [], history: [app(3)] });
 		expect(run({ attendance: 'not_checked_in' })).toEqual({ pending: [], history: [asg(5)] });

@@ -2,13 +2,7 @@
 	import MapPin from '@lucide/svelte/icons/map-pin';
 	import type { SuperForm } from 'sveltekit-superforms';
 	import type { SuperFormData } from 'sveltekit-superforms/client';
-	import {
-		DEFAULT_SHELTER_FEATURE_FLAGS,
-		SITE_KIND_LABELS,
-		type Shelter,
-		type ProjectLevel,
-		type SiteKind
-	} from '../domain/schema';
+	import { DEFAULT_SHELTER_FEATURE_FLAGS, type Shelter, type ProjectLevel } from '../domain/schema';
 	import {
 		applyAllowAssets,
 		applyAllowPets,
@@ -21,7 +15,11 @@
 	import * as Select from '$lib/components/ui/select/index.js';
 	import * as AlertDialog from '$lib/components/ui/alert-dialog/index.js';
 	import SearchSelect from '$lib/components/search-select.svelte';
-	import { useMasterData, formatMasterLabel } from '$lib/features/master-data';
+	import {
+		useMasterData,
+		formatMasterLabel,
+		formatMasterLabelByCode
+	} from '$lib/features/master-data';
 	import { langState } from '$lib/states/i18n.svelte';
 	import { useProvinces, useDistricts, useSubdistricts } from '../application/queries';
 	import LocationMapPicker from './location-map-picker.svelte';
@@ -57,11 +55,6 @@
 		$formData.operation_status = value as Shelter['operation_status'];
 	}
 
-	const siteKindOptions: { value: SiteKind; label: string }[] = [
-		{ value: 'evacuation_center', label: SITE_KIND_LABELS.evacuation_center },
-		{ value: 'host_house', label: SITE_KIND_LABELS.host_house }
-	];
-
 	const projectLevelOptions: { value: ProjectLevel; label: string }[] = [
 		{ value: 'community', label: 'ระดับชุมชน (จุดพักพิงย่อย/บ้านพี่เลี้ยง)' },
 		{ value: 'lao', label: 'ระดับ อปท. (ศูนย์พักพิงหลักของเทศบาล)' },
@@ -80,6 +73,16 @@
 			}))
 	);
 
+	// CR-198: dropdown offers active kinds only; the trigger resolves against every item so a
+	// stored code that was deactivated since still shows its label (FR-8).
+	const siteKindQuery = useMasterData(() => 'site_kind');
+	const siteKindItems = $derived(siteKindQuery.data?.items ?? []);
+	const siteKindOptions = $derived(
+		siteKindItems
+			.filter((i) => i.status === 'active')
+			.map((i) => ({ value: i.code, label: formatMasterLabel(i, langState.current) }))
+	);
+
 	// Seed configured default (master_data `is_default`) for shelter_type when untouched.
 	// A new shelter starts empty → gets the default; an existing shelter already
 	// has values (superForm initialises synchronously) so the once/only-when-empty
@@ -92,6 +95,18 @@
 		if (!$formData.shelter_type) {
 			const d = stItems.find((i) => i.is_default && i.status === 'active');
 			if (d) $formData.shelter_type = d.code;
+		}
+	});
+
+	// Same once/only-when-empty seeding for site_kind (CR-198 FR-9).
+	let siteKindSeeded = false;
+	$effect(() => {
+		const items = siteKindQuery.data?.items;
+		if (!items || siteKindSeeded) return;
+		siteKindSeeded = true;
+		if (!$formData.site_kind) {
+			const d = items.find((i) => i.is_default && i.status === 'active');
+			if (d) $formData.site_kind = d.code;
 		}
 	});
 
@@ -255,8 +270,9 @@
 					<Form.Label>ชนิดสถานที่<span class="text-destructive">*</span></Form.Label>
 					<Select.Root type="single" bind:value={$formData.site_kind} {disabled}>
 						<Select.Trigger {...props} class={selectTriggerClass}>
-							{siteKindOptions.find((o) => o.value === $formData.site_kind)?.label ??
-								'— เลือกชนิดสถานที่ —'}
+							{$formData.site_kind
+								? formatMasterLabelByCode($formData.site_kind, siteKindItems, langState.current)
+								: '— เลือกชนิดสถานที่ —'}
 						</Select.Trigger>
 						<Select.Content>
 							{#each siteKindOptions as opt (opt.value)}

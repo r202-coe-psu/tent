@@ -25,7 +25,7 @@
 	<Table.Cell class="max-w-64 px-4 py-3 [overflow-wrap:anywhere] whitespace-normal text-slate-800">
 		{#if row.refHref}
 			<a
-				href={resolve(row.refHref as '/')}
+				href={resolve(row.refHref)}
 				title="เปิดกองรับคืน"
 				class="underline underline-offset-2 hover:text-slate-950"
 			>

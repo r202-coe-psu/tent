@@ -351,7 +351,7 @@
 	{/if}
 </svelte:head>
 
-<div class="space-y-5">
+<div class="unified-reg-bleed space-y-5">
 	<!-- Guidance banner -->
 	<div
 		class="flex items-start gap-3 rounded-xl border border-primary/20 bg-primary/5 p-4 text-sm text-foreground shadow-2xs"
@@ -368,7 +368,10 @@
 	</div>
 
 	<!-- ── 1. ศูนย์พักพิงและผู้ติดต่อหลัก ───────────────────────────────── -->
-	<section class="space-y-5 rounded-2xl border border-border/60 bg-card p-5 shadow-2xs sm:p-6">
+	<section
+		data-surface="light"
+		class="unified-reg-band space-y-5 rounded-2xl border border-sky-200 bg-sky-50/70 p-5 shadow-2xs sm:p-6"
+	>
 		<div class="flex items-center gap-2.5 border-b border-border/60 pb-3">
 			<MapPin class="size-5 text-primary" />
 			<h3 class="text-base font-bold text-foreground sm:text-lg">{t.step1Title}</h3>

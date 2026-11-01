@@ -79,7 +79,7 @@ export const POST: RequestHandler = async ({ params, request }) => {
 		// A `verifying` booking whose receipt keyed rows but never closed: rejecting it would
 		// hand the quota back and tell the donor "not accepted" with the goods on the shelf.
 		// The same rule the donor's cancel follows (owner decision 2026-10-22).
-		if (await hasKeyedDonationStock(dbName, donation._id)) {
+		if (await hasKeyedDonationStock(dbName, donation)) {
 			return json(
 				{
 					success: false,

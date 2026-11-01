@@ -25,12 +25,11 @@ export async function createShelterViaUi(page: Page, shelter: ShelterForm): Prom
 	await page.goto('/system-management/shelters/create');
 	await page.getByRole('textbox', { name: 'ชื่อศูนย์พักพิง *' }).fill(shelter.name);
 	await page.getByRole('button', { name: 'ชนิดสถานที่ *' }).click();
+	// Labels come from the seeded master_data:site_kind (CR-198).
 	await page
 		.getByRole('option', {
-			name:
-				shelter.siteKind === 'host_house'
-					? 'บ้านพี่เลี้ยง (Host House)'
-					: 'ศูนย์อพยพ (Evacuation Center)'
+			name: shelter.siteKind === 'host_house' ? 'บ้านพี่เลี้ยง' : 'ศูนย์อพยพ',
+			exact: true
 		})
 		.click();
 	await page.getByRole('button', { name: 'สถานะการปฏิบัติการ (Operating Status)' }).click();

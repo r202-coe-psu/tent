@@ -193,6 +193,210 @@ async function fillMinimalUnifiedRegistration(
 	}
 }
 
+const OPEN_PET_DOG = {
+	pet_id: 'pet:01JUNASSIGNEDPET1',
+	status: 'open' as const,
+	species: 'dog' as const,
+	count: 1,
+	notes: 'ชื่อ หมาดำ',
+	has_cage: false
+};
+
+const OPEN_PET_CAT = {
+	pet_id: 'pet:01JUNASSIGNEDPET2',
+	status: 'open' as const,
+	species: 'cat' as const,
+	count: 2,
+	notes: 'ชื่อ ส้มโอ',
+	has_cage: true
+};
+
+const REPORT_IN_EVACUEE = {
+	_id: 'evacuee:01JUNASSIGNEDM1',
+	_rev: '1-mock',
+	type: 'evacuee',
+	schema_v: 10,
+	first_name: 'คิวกลาง',
+	last_name: 'หนึ่ง',
+	gender: 'female',
+	phone: '0822222222',
+	person_id: { cardType: 'national_id', number: '9876543210987' },
+	current_stay: { status: 'pre_registered', zone: null, since: '2026-09-09T04:00:00.000Z' },
+	privacy: { search_excluded: false },
+	shelter_code: 'SH001',
+	household_id: UNASSIGNED_HIT.reserved_household_id
+};
+
+const UNASSIGNED_REVIEW = {
+	id: UNASSIGNED_HIT.id,
+	reserved_household_id: UNASSIGNED_HIT.reserved_household_id,
+	registered_via: 'web' as const,
+	status: 'open',
+	created_at: UNASSIGNED_HIT.created_at,
+	housing_type: 'owned_house',
+	residence_landmark: null,
+	address_no: '99/1',
+	village_no: '3',
+	subdistrict: 'บ้านพรุ',
+	district: 'หาดใหญ่',
+	province: 'สงขลา',
+	postal_code: '90250',
+	label: null,
+	open_members: [UNASSIGNED_HIT.open_members[0]],
+	open_pets: [OPEN_PET_DOG, OPEN_PET_CAT]
+};
+
+function reportInUrl(petIds: string[]) {
+	const params = new URLSearchParams({
+		memberIds: UNASSIGNED_HIT.open_members[0].reserved_evacuee_id,
+		petIds: petIds.join(','),
+		shelterCode: 'SH001'
+	});
+	return `/onsite/unassigned/${UNASSIGNED_HIT.id}/report-in?${params.toString()}`;
+}
+
+function petsClaimWrites(petIds: readonly string[]) {
+	return [OPEN_PET_DOG, OPEN_PET_CAT]
+		.filter((pet) => petIds.includes(pet.pet_id))
+		.map((pet) => ({
+			species: pet.species,
+			count: pet.count,
+			notes: pet.notes,
+			...(pet.has_cage ? { has_cage: true } : {})
+		}));
+}
+
+function reservedHousehold(pets: unknown[]) {
+	return {
+		_id: UNASSIGNED_HIT.reserved_household_id,
+		_rev: '1-mock',
+		type: 'household',
+		schema_v: 6,
+		label: 'ครอบครัวคิวกลาง หนึ่ง',
+		head_evacuee_id: UNASSIGNED_HIT.open_members[0].reserved_evacuee_id,
+		status: 'pre_registered',
+		checkout_destination: null,
+		municipality_zone: null,
+		community: null,
+		pets,
+		assets: null,
+		vehicles: [],
+		housing_type: 'owned_house',
+		residence_landmark: null,
+		address_no: '99/1',
+		village_no: '3',
+		subdistrict: 'บ้านพรุ',
+		district: 'หาดใหญ่',
+		province: 'สงขลา',
+		postal_code: '90250',
+		shelter_code: 'SH001',
+		created_by: 'e2e',
+		created_at: '2026-09-09T03:00:00.000Z',
+		updated_at: '2026-09-09T03:00:00.000Z'
+	};
+}
+
+async function setupReportInPage(
+	page: Page,
+	authSession: string,
+	opts: { petsAlreadyOnHousehold?: unknown[] } = {}
+) {
+	await setupPage(page, STAFF, authSession, {
+		seedDocs: [REPORT_IN_EVACUEE],
+		unassignedResults: [UNASSIGNED_HIT]
+	});
+
+	let household: Record<string, unknown> = reservedHousehold(opts.petsAlreadyOnHousehold ?? []);
+	let revCounter = 1;
+	const writes: Record<string, unknown>[] = [];
+
+	await page.route('**/api/staff/v1/unassigned-registrations/*/review**', async (route) => {
+		await route.fulfill({
+			status: 200,
+			contentType: 'application/json',
+			body: JSON.stringify(UNASSIGNED_REVIEW)
+		});
+	});
+
+	await page.route('**/api/staff/v1/unassigned-registrations/*/claim', async (route) => {
+		if (route.request().method() !== 'POST') return route.continue();
+		const body = route.request().postDataJSON() as { member_ids?: string[]; pet_ids?: string[] };
+		const claimedPetIds = body.pet_ids ?? [];
+		const memberIds = body.member_ids ?? [];
+		household = reservedHousehold([
+			...(opts.petsAlreadyOnHousehold ?? []),
+			...petsClaimWrites(claimedPetIds)
+		]);
+		await route.fulfill({
+			status: 200,
+			contentType: 'application/json',
+			body: JSON.stringify({
+				success: true,
+				id: UNASSIGNED_HIT.id,
+				deleted: false,
+				shelter_code: 'SH001',
+				household_id: UNASSIGNED_HIT.reserved_household_id,
+				evacuee_ids: memberIds,
+				claimed: UNASSIGNED_REVIEW.open_members
+					.filter((m) => memberIds.includes(m.reserved_evacuee_id))
+					.map((m) => ({
+						reserved_evacuee_id: m.reserved_evacuee_id,
+						status: 'claimed' as const,
+						first_name: m.first_name,
+						last_name: m.last_name
+					})),
+				claimed_pets: [OPEN_PET_DOG, OPEN_PET_CAT]
+					.filter((pet) => claimedPetIds.includes(pet.pet_id))
+					.map((pet) => ({
+						pet_id: pet.pet_id,
+						status: 'claimed' as const,
+						species: pet.species,
+						count: pet.count
+					})),
+				remaining_open: [],
+				remaining_open_pets: [OPEN_PET_DOG, OPEN_PET_CAT].filter(
+					(pet) => !claimedPetIds.includes(pet.pet_id)
+				)
+			})
+		});
+	});
+
+	await page.route(
+		(url) => decodeURIComponent(url.pathname).endsWith(`/${UNASSIGNED_HIT.reserved_household_id}`),
+		async (route) => {
+			if (route.request().method() !== 'GET') {
+				await route.fallback();
+				return;
+			}
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify(household)
+			});
+		}
+	);
+
+	await page.route(`**/${SHELTER_DB}/**`, async (route) => {
+		const req = route.request();
+		if (req.method() === 'POST' || req.method() === 'PUT') {
+			const body = (req.postDataJSON() ?? {}) as Record<string, unknown> & {
+				docs?: Record<string, unknown>[];
+			};
+			const written = Array.isArray(body.docs) ? body.docs : body._id ? [body] : [];
+			for (const doc of written) {
+				writes.push(doc);
+				if (doc._id === UNASSIGNED_HIT.reserved_household_id) {
+					revCounter += 1;
+					household = { ...doc, _rev: `${revCounter}-mock` };
+				}
+			}
+		}
+		await route.fallback();
+	});
+
+	return { writes };
+}
+
 test.describe('Phase 2 intake pipeline (#252)', { tag: ['@onsite', '@regression'] }, () => {
 	let staffSession: string;
 	let managerSession: string;
@@ -418,6 +622,66 @@ test.describe('Phase 2 intake pipeline (#252)', { tag: ['@onsite', '@regression'
 			new RegExp(`/onsite/unassigned/${UNASSIGNED_HIT.id}/report-in\\?.*memberIds=`),
 			{ timeout: 15_000 }
 		);
+	});
+
+	// ── Seam 2 continued: Report-in page pets (#798) ─────────────────────────
+
+	test('Report-in warns about the open pets the claim leaves behind and shows the ticked one in step 3', async ({
+		page
+	}) => {
+		await setupReportInPage(page, staffSession);
+		await page.goto(reportInUrl([OPEN_PET_DOG.pet_id]));
+
+		await expect(page.getByRole('heading', { name: 'ตรวจสอบก่อนรับเข้าศูนย์' })).toBeVisible({
+			timeout: 15_000
+		});
+
+		await expect(
+			page.getByRole('heading', { name: 'ยังมีสัตว์เลี้ยง 2 ตัวที่ไม่ได้เลือก' })
+		).toBeVisible();
+		await expect(page.getByText('แมว ×2 (ชื่อ ส้มโอ) · มีกรง')).toBeVisible();
+
+		await page
+			.getByRole('button', { name: /^สัตว์เลี้ยง/ })
+			.first()
+			.click();
+		await expect(
+			page.getByText('สัตว์เลี้ยงเดิมของครอบครัวที่ลงทะเบียนแล้ว (1 รายการ)')
+		).toBeVisible();
+	});
+
+	test('Report-in confirm writes both the claimed pets and the one staff typed in step 3', async ({
+		page
+	}) => {
+		const { writes } = await setupReportInPage(page, staffSession);
+		await page.goto(reportInUrl([OPEN_PET_DOG.pet_id, OPEN_PET_CAT.pet_id]));
+
+		await expect(page.getByRole('heading', { name: 'ตรวจสอบก่อนรับเข้าศูนย์' })).toBeVisible({
+			timeout: 15_000
+		});
+		await expect(page.getByRole('heading', { name: /ไม่ได้เลือก/ })).toHaveCount(0);
+
+		await page
+			.getByRole('button', { name: /^สัตว์เลี้ยง/ })
+			.first()
+			.click();
+		await page.getByRole('button', { name: 'สัตว์อื่นๆ', exact: true }).click();
+		await page.getByPlaceholder('เช่น นกแก้ว, กระต่าย, ชูก้าไรเดอร์').fill('นกเขา');
+
+		await acceptFullConsent(page);
+		await page.getByRole('button', { name: 'ยืนยันรายงานตัวและพิมพ์บัตร' }).last().click();
+
+		await expect(page.getByRole('heading', { name: 'ลงทะเบียนสำเร็จ' })).toBeVisible({
+			timeout: 20_000
+		});
+
+		const household = writes.filter((doc) => doc.type === 'household').at(-1);
+		const pets = (household?.pets ?? []) as { species: string; count: number; notes?: string }[];
+		expect(pets.map((pet) => `${pet.species}:${pet.count}:${pet.notes ?? ''}`)).toEqual([
+			'dog:1:ชื่อ หมาดำ',
+			'cat:2:ชื่อ ส้มโอ',
+			'other:1:นกเขา'
+		]);
 	});
 
 	// ── Seam 1 / 3: Medical Screening simplified form reachable when flag ON ─

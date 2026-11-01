@@ -5,7 +5,7 @@ status: approved
 date: 2026-10-25
 approved_at: 2026-10-26
 created: 2026-10-25
-updated: 2026-10-29
+updated: 2026-10-30 # แก้เพิ่มโดย CR-206
 requested_by: "Kunanon Nusaeng"
 decided_by: "Soravit Sukkarn (Team Lead)"
 layer: volatile
@@ -128,3 +128,4 @@ migration: optional field, ไม่ backfill — ใบที่ประเม
 - 2026-10-29 — amendment (review PR #956 Warning 1–2), ยืนยันโดย Kunanon Nusaeng:
   1. FR-LK-4: `review_status: 'pending'` = ยังไม่ประเมิน · `approved`/`rejected` = ประเมินแล้ว รวมรายการที่อนุมัติอัตโนมัติจากการ์ดแคมเปญตอนจอง (ตรงกับข้อ 2 ด้านบน) — ข้อความเดิม "ทุกรายการยังไม่มี `review_status`" ใช้ไม่ได้จริง เพราะ FastAPI stamp `pending` ให้ทุกรายการตั้งแต่ schema_v 7
   2. PROJECTION_VERSION ที่ใช้จริงคือ 10 → 11 (develop อยู่ที่ 10 ตอน implement) ไม่ใช่ 7 → 8
+- 2026-10-30 — แก้เพิ่มโดย [CR-206](CR-206-donation-multi-drop-off.md): FR-LK-10 — ใบที่มี `point_receipts` ไม่ว่าง (จุดใดจุดหนึ่งรับไปแล้ว) ผู้บริจาคยกเลิกไม่ได้ (`409 GOODS_IN_STOCK`) แม้สถานะอยู่ใน `{declared, pending_review, verifying}` (FR-MP-17)

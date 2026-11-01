@@ -93,7 +93,24 @@ async function mockMasterData(page: Page): Promise<void> {
 							status: 'active'
 						}
 					]
-				: [];
+				: type === 'site_kind'
+					? [
+							{
+								code: 'evacuation_center',
+								label_th: 'ศูนย์อพยพ',
+								label_en: 'Evacuation Center',
+								is_default: true,
+								status: 'active'
+							},
+							{
+								code: 'host_house',
+								label_th: 'บ้านพี่เลี้ยง',
+								label_en: 'Host House',
+								is_default: false,
+								status: 'active'
+							}
+						]
+					: [];
 		await route.fulfill({
 			status: 200,
 			contentType: 'application/json',

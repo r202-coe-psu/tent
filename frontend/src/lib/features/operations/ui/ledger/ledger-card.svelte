@@ -36,7 +36,7 @@
 					<dd class="min-w-0 [overflow-wrap:anywhere]">
 						{#if row.refHref}
 							<a
-								href={resolve(row.refHref as '/')}
+								href={resolve(row.refHref)}
 								title="เปิดกองรับคืน"
 								class="underline underline-offset-2"
 							>

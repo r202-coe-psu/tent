@@ -18,3 +18,4 @@
 <output data-testid="types">
 	{JSON.stringify(($formData.common_areas.sub_storage ?? []).map((p) => p.types))}
 </output>
+<output data-testid="points">{JSON.stringify($formData.common_areas.sub_storage ?? [])}</output>

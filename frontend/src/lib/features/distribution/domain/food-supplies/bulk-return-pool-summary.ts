@@ -1,4 +1,4 @@
-import { addQty } from '$lib/utils/qty';
+import { addQty, qtyGt, subQty } from '$lib/utils/qty';
 import type { BulkReturnEntry } from './bulk-return-entry';
 import { foldEntryMoves, type BulkReturnEntryMove } from './bulk-return-entry-move';
 import type { BulkReturnEntryVoid } from './bulk-return-entry-void';
@@ -52,6 +52,29 @@ export function buildSnapshotPins(
 		}
 	}
 	return pins;
+}
+
+/** items_summary minus the qty of entries in pool.entry_ids that are pinned to ANOTHER pool. Rows are kept (qty floored at '0'), same order. An entry id whose doc is not in `entries` is kept as counted here. */
+export function pinnedItemsSummary(
+	pool: Pick<BulkReturnPoolV3, '_id' | 'items_summary' | 'entry_ids'>,
+	entries: readonly Pick<BulkReturnEntry, '_id' | 'item_id' | 'qty'>[],
+	pins: SnapshotPins
+): BulkReturnPoolItemSummaryRow[] {
+	const rows = pool.items_summary ?? [];
+	const entryById = new Map(entries.map((e) => [e._id, e]));
+	const excluded = new Map<string, string>();
+	for (const id of pool.entry_ids ?? []) {
+		const owner = pins.get(id);
+		const entry = entryById.get(id);
+		if (owner === undefined || owner === pool._id || !entry) continue;
+		excluded.set(entry.item_id, addQty(excluded.get(entry.item_id) ?? '0', entry.qty));
+	}
+	return rows.map((row) => {
+		const sub = excluded.get(row.item_id);
+		if (sub === undefined) return row;
+		const left = subQty(row.qty, sub);
+		return { ...row, qty: qtyGt(left, 0) ? left : '0' };
+	});
 }
 
 /** Entries whose move/void was written after their snapshot pool closed (no effect applied). */

@@ -14,6 +14,9 @@ COPY e2e ./e2e
 # Some e2e helpers import pure modules from src/lib (e.g. utils/qty, db/ulid);
 # Playwright loads every test file before grep filtering, so they must exist in the image.
 COPY src/lib ./src/lib
+# `cleanup:e2e` — run by scripts/run-staging-e2e.sh before the suite to sweep an aborted run's residue.
+COPY scripts/cleanup-e2e-residue.ts scripts/t31-seed-support.ts ./scripts/
+COPY scripts/seed/couch.ts ./scripts/seed/
 
 COPY tsconfig.json ./
 RUN pnpm exec svelte-kit sync

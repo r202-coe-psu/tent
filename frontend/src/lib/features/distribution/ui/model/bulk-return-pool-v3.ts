@@ -12,7 +12,11 @@ import {
 	type BulkReturnPoolV3Status
 } from '../../domain/food-supplies';
 import type { UpdateBulkReturnPoolHeaderPatch } from '../../application/food-supplies/bulk-return-pool-v3-lifecycle';
-import { BULK_RETURN_REOPEN_BLOCKED_COPY } from './bulk-return-copy';
+import {
+	ADD_ENTRY_COPY,
+	BULK_RETURN_REOPEN_BLOCKED_COPY,
+	MISSED_LOAN_LOCKED_NOTICE
+} from './bulk-return-copy';
 
 /**
  * #659 — pure view-model helpers for the bulk return pool v3 board (list / detail / dialogs).
@@ -583,6 +587,37 @@ export function groupMissedLoanRefsByEntry(
 	return byEntry;
 }
 
+/**
+ * Notice for an OPEN pool that holds a lock (SUBMIT / CANCEL in flight): the missed-loan query
+ * returns [] there, so the repair box would silently vanish. Only shown once the data has loaded
+ * and is empty; undefined (not loaded / disabled / error) yields null.
+ */
+export function missedLoanLockedNotice(
+	pool: Pick<BulkReturnPoolV3, 'status' | 'lock'>,
+	missedRefs: readonly MissedBulkReturnLoanRef[] | undefined
+): string | null {
+	if (pool.status !== 'OPEN' || !pool.lock) return null;
+	if (!missedRefs || missedRefs.length > 0) return null;
+	return MISSED_LOAN_LOCKED_NOTICE;
+}
+
+/**
+ * Toast for the "ตัดยอดยืมที่ค้าง" action. A voided entry (OPEN pool repair raced with a void)
+ * touched no loan, so it is reported as such rather than as "0 applied".
+ */
+export function missedLoanApplyToast(result: {
+	loansApplied: readonly unknown[];
+	loansSkipped: readonly unknown[];
+	voided?: true;
+}): { kind: 'info' | 'warning' | 'success'; message: string } {
+	if (result.voided) return { kind: 'info', message: ADD_ENTRY_COPY.voided(1) };
+	const applied = result.loansApplied.length;
+	if (applied === 0 && result.loansSkipped.length > 0) {
+		return { kind: 'warning', message: 'ยอดยืมถูกปิดไปแล้ว ตัดเพิ่มไม่ได้' };
+	}
+	return { kind: 'success', message: `ตัดยอดยืมแล้ว ${applied} รายการ` };
+}
+
 /** Entry ids of a row whose void / move had no effect (written after the submit snapshot). */
 export function snapshotConflictEntryIds(
 	row: Pick<BulkReturnPoolOverviewRow, 'snapshot_conflicts'> | null
@@ -699,7 +734,32 @@ type RosterPerson = {
 	nickname?: string | null;
 };
 
-/** Returner id → display name from the shelter rosters (volunteers prefixed "จิตอาสา "). */
+/**
+ * Distinct returner ids named by the entries of the rows (live, voided and late ones), split by id
+ * prefix. These are the only people whose names the board looks up.
+ */
+export function poolReturnerIds(rows: readonly BulkReturnPoolOverviewRow[]): {
+	evacueeIds: string[];
+	volunteerIds: string[];
+} {
+	const evacuees = new Set<string>();
+	const volunteers = new Set<string>();
+	for (const row of rows) {
+		for (const { entry } of [...row.entries, ...row.late_entries]) {
+			const id = entry.returner_id;
+			if (!id) continue;
+			if (id.startsWith('evacuee:')) evacuees.add(id);
+			else if (id.startsWith('volunteer:')) volunteers.add(id);
+		}
+	}
+	return { evacueeIds: [...evacuees].sort(), volunteerIds: [...volunteers].sort() };
+}
+
+/**
+ * Returner id → display name from the looked-up name records (evacuee "first last (nickname)",
+ * volunteers prefixed "จิตอาสา "). A returner without a record has no entry (the fallback label
+ * applies).
+ */
 export function buildReturnerNames(
 	evacuees: readonly RosterPerson[],
 	volunteers: readonly RosterPerson[]

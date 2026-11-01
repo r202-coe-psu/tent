@@ -94,4 +94,46 @@ describe('UnifiedRegistrationSummaryCard', () => {
 		expect(result.body).toMatch(/ผู้ติดต่อหลัก:[\s\S]*?สมชาย ใ\*\*\*\*/);
 		expect(result.body).not.toContain('ยังไม่ได้ระบุชื่อ');
 	});
+
+	describe('pets row', () => {
+		const renderCard = (props: Record<string, unknown> = {}) =>
+			render(UnifiedRegistrationSummaryCard, {
+				props: {
+					household: householdToUnifiedInput(null),
+					members: [{ ...blankUnifiedMember(), first_name: 'สมชาย' }],
+					activeSection: 'address',
+					onNavigate: vi.fn(),
+					...props
+				}
+			}).body;
+
+		it('shows the row as empty when the family brought no pets', () => {
+			const body = renderCard();
+
+			expect(body).toContain('สัตว์เลี้ยง');
+			expect(body).toMatch(/สัตว์เลี้ยง[\s\S]{0,200}ไม่มี/);
+		});
+
+		it('counts existing pets by their count, not by how many rows they take', () => {
+			const body = renderCard({ existingPets: [{ species: 'dog', count: 2 }] });
+
+			expect(body).toMatch(/2\s*(<!---->)?\s*ตัว/);
+		});
+
+		it('names the pets a claim is bringing in so the row never reads empty', () => {
+			const body = renderCard({ existingPets: [{ species: 'dog', count: 1 }] });
+
+			expect(body).toContain('สุนัข');
+			expect(body).not.toMatch(/สัตว์เลี้ยง[\s\S]{0,200}ไม่มี/);
+		});
+
+		it('adds newly entered pets to the same total', () => {
+			const body = renderCard({
+				existingPets: [{ species: 'dog', count: 2 }],
+				newPets: [{ species: 'cat' }]
+			});
+
+			expect(body).toMatch(/3\s*(<!---->)?\s*ตัว/);
+		});
+	});
 });

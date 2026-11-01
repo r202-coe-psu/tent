@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
+	buildDonationLogistics,
 	donationPreDeclarationInputSchema,
 	donorCategoryFromCatalog,
 	isDonationPreDeclaration,
@@ -30,6 +31,80 @@ describe('donationPreDeclarationInputSchema', () => {
 			logistics: { delivery_method: 'parcel', vehicle: 'car' }
 		});
 		expect(result.success).toBe(false);
+	});
+
+	describe('logistics.vehicle_plate', () => {
+		const withLogistics = (logistics: Record<string, unknown>) =>
+			donationPreDeclarationInputSchema.safeParse({ ...baseValid, logistics });
+
+		it('accepts a plate on self_dropoff, including a motorcycle', () => {
+			const car = withLogistics({
+				delivery_method: 'self_dropoff',
+				vehicle: 'car',
+				vehicle_plate: 'กข 1234'
+			});
+			expect(car.success && car.data.logistics.vehicle_plate).toBe('กข 1234');
+			expect(
+				withLogistics({
+					delivery_method: 'self_dropoff',
+					vehicle: 'motorcycle',
+					vehicle_plate: '1กก 9999 เชียงใหม่'
+				}).success
+			).toBe(true);
+		});
+
+		it('allows exactly 40 characters and rejects 41', () => {
+			const ok = withLogistics({
+				delivery_method: 'self_dropoff',
+				vehicle: 'car',
+				vehicle_plate: 'ก'.repeat(40)
+			});
+			expect(ok.success).toBe(true);
+			const tooLong = withLogistics({
+				delivery_method: 'self_dropoff',
+				vehicle: 'car',
+				vehicle_plate: 'ก'.repeat(41)
+			});
+			expect(tooLong.success).toBe(false);
+			if (!tooLong.success) {
+				expect(tooLong.error.issues[0]).toMatchObject({
+					message: 'ทะเบียนรถยาวเกินไป',
+					path: ['logistics', 'vehicle_plate']
+				});
+			}
+		});
+
+		it('trims, and a blank plate is omitted rather than rejected', () => {
+			const trimmed = withLogistics({
+				delivery_method: 'self_dropoff',
+				vehicle: 'car',
+				vehicle_plate: '  กข 1234  '
+			});
+			expect(trimmed.success && trimmed.data.logistics.vehicle_plate).toBe('กข 1234');
+			const blank = withLogistics({
+				delivery_method: 'self_dropoff',
+				vehicle: 'car',
+				vehicle_plate: '   '
+			});
+			expect(blank.success && JSON.stringify(blank.data.logistics)).not.toContain('vehicle_plate');
+		});
+
+		it('rejects a plate on parcel and on shelter_pickup', () => {
+			for (const delivery_method of ['parcel', 'shelter_pickup']) {
+				const r = withLogistics({ delivery_method, vehicle_plate: 'กข 1234' });
+				expect(r.success).toBe(false);
+				if (!r.success) {
+					expect(r.error.issues[0]!.path).toEqual(['logistics', 'vehicle_plate']);
+				}
+			}
+		});
+
+		it('keeps the existing vehicle rule: allowed on shelter_pickup, still refused on parcel', () => {
+			expect(withLogistics({ delivery_method: 'shelter_pickup', vehicle: 'truck' }).success).toBe(
+				true
+			);
+			expect(withLogistics({ delivery_method: 'parcel', vehicle: 'car' }).success).toBe(false);
+		});
 	});
 
 	it('passes validation without captchaToken (BFF enforces when enabled)', () => {
@@ -249,5 +324,60 @@ describe('donorCategoryFromCatalog', () => {
 
 	it('tolerates case and padding from hand-maintained catalog rows', () => {
 		expect(donorCategoryFromCatalog(' Bedding ')).toBe('clothing');
+	});
+});
+
+describe('buildDonationLogistics (CR-209 FR-2a, AC-5)', () => {
+	const slot = { date: '2026-11-01', from: '09:00', to: '10:00' };
+	const form = {
+		vehicleType: 'car' as const,
+		vehiclePlate: '  กข 1234  ',
+		slot,
+		pickupAddress: 'บ้านเลขที่ 1',
+		eta: '2026-11-01T02:00:00Z',
+		courierTrackingNo: 'TH123'
+	};
+
+	it('sends the trimmed plate on self_dropoff', () => {
+		expect(buildDonationLogistics({ ...form, deliveryMethod: 'self_dropoff' })).toEqual({
+			delivery_method: 'self_dropoff',
+			vehicle: 'car',
+			vehicle_plate: 'กข 1234',
+			slot
+		});
+	});
+
+	it('leaves the plate out when it is blank after trim', () => {
+		const out = buildDonationLogistics({
+			...form,
+			vehiclePlate: '   ',
+			deliveryMethod: 'self_dropoff'
+		});
+		expect(out).not.toHaveProperty('vehicle_plate');
+	});
+
+	it('never sends a typed plate once the donor switches to another method', () => {
+		const pickup = buildDonationLogistics({ ...form, deliveryMethod: 'shelter_pickup' });
+		const parcel = buildDonationLogistics({ ...form, deliveryMethod: 'parcel' });
+		expect(pickup).not.toHaveProperty('vehicle_plate');
+		expect(parcel).not.toHaveProperty('vehicle_plate');
+		expect(pickup).toEqual({
+			delivery_method: 'shelter_pickup',
+			slot,
+			pickup_address: 'บ้านเลขที่ 1',
+			eta: '2026-11-01T02:00:00Z'
+		});
+		expect(parcel).toEqual({
+			delivery_method: 'parcel',
+			eta: '2026-11-01T02:00:00Z',
+			courier_tracking_no: 'TH123'
+		});
+	});
+
+	it('switching back to self_dropoff sends the plate the form kept', () => {
+		buildDonationLogistics({ ...form, deliveryMethod: 'parcel' });
+		expect(buildDonationLogistics({ ...form, deliveryMethod: 'self_dropoff' }).vehicle_plate).toBe(
+			'กข 1234'
+		);
 	});
 });

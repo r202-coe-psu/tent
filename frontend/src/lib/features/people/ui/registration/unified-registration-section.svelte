@@ -15,6 +15,8 @@
 		badges,
 		icon: Icon,
 		bodyClass = '',
+		tone = 'blue',
+		mobileSurface = 'light',
 		actions,
 		children
 	}: {
@@ -27,6 +29,9 @@
 		icon: Component<{ class?: string }>;
 		/** Extra classes on the body card (omit card when empty for member lists). */
 		bodyClass?: string;
+		tone?: 'blue' | 'teal' | 'violet';
+		/** Mobile band surface inside `.unified-reg-bleed` (public pre-register). */
+		mobileSurface?: 'light' | 'dark';
 		actions?: Snippet;
 		children: Snippet;
 	} = $props();
@@ -40,7 +45,16 @@
 	});
 </script>
 
-<section {id} class="unified-reg-scroll-mt space-y-3">
+<section
+	{id}
+	data-surface={mobileSurface}
+	class="unified-reg-band unified-reg-scroll-mt space-y-3 rounded-2xl border p-4 shadow-2xs sm:p-5 {tone ===
+	'teal'
+		? 'border-teal-200 bg-teal-50/70'
+		: tone === 'violet'
+			? 'border-violet-200 bg-violet-50/70'
+			: 'border-sky-200 bg-sky-50/70'}"
+>
 	<div class="unified-reg-section-header">
 		<div class="unified-reg-section-header-main">
 			<Icon class="mt-0.5 size-5 shrink-0 text-primary" />
