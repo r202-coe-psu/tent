@@ -1,39 +1,40 @@
 ---
-id: draft
+id: CR-222
 title: Station print server — staff สั่งพิมพ์ label QR ผ่าน BFF ไปเครื่องพิมพ์ที่ต่อ Raspberry Pi
-status: proposed
+status: approved
 date: 2026-10-27
-updated: 2026-10-29
-requested_by: ทีม kiosk
-decided_by: Project Owner (รอเคาะ)
+updated: 2026-11-01
+requested_by: Project Owner
+decided_by: Project Owner (review รอบ 3 PR #932, 2026-10-31)
 layer: stable-core
 affects:
-  - docs/data/schema.md §10 (ใหม่) — DB `printing_devices` (`print_device` §10.1, `printing_db` §10.3) + DB `printing_{shelter_code}` (`print_job` §10.2) · schema_v 1 ทุก type (doc type ใหม่ ไม่มี bump) · §7 เพิ่มแถว DB ทั้งสอง — ยังไม่แก้ รอ approve
-  - docs/data/data-model.md §1 ตาราง DB (เพิ่ม `printing_devices` + `printing_{shelter_code}` — central only) · §6 `_security` / VDU / service user `printing_service` — ยังไม่แก้ รอ approve
-  - docs/data/api-contract.md (`/api/v1/printer/*`, `/api/staff/v1/printers`, `/api/staff/v1/print-jobs*`, `/api/back-office/printers*`, `/api/internal/printers/housekeeping`) — ยังไม่แก้ รอ approve
+  - docs/data/schema.md §10 (ใหม่) — DB `printing_devices` (`print_device` §10.1, `printing_db` §10.2, `print_housekeeping` §10.3) + DB `printing_{shelter_code}` (`print_job` §10.4) · `_security` / VDU / index §10.5 · schema_v 1 ทุก type (doc type ใหม่ ไม่มี bump) · §7 แถว index ของ DB ทั้งสอง · §8 สรุป VDU ของ `printing_{code}` — แก้พร้อม PR โค้ด
+  - docs/data/data-model.md §1 ตาราง DB (เพิ่ม `printing_devices` + `printing_{shelter_code}` — central only) + ขั้นตอนปิดศูนย์ (O-11) · §6 `_security` / VDU / service user `printing_service` · §7 retention ของ `print_job` + รูป label — แก้พร้อม PR โค้ด
+  - docs/data/api-contract.md §2.5 (`/api/v1/printer/*`, `/api/staff/v1/printers`, `/api/staff/v1/print-jobs*`, `/api/back-office/printers*`, `/api/internal/printers/housekeeping`) — แก้พร้อม PR โค้ด
   - role/permission: `PRINTER_MANAGER_CAPABILITIES = [shelter_manager]` + สิทธิ์สั่งพิมพ์ตาม `source` (FR-29a) (frontend/src/lib/auth/roles.ts) · CouchDB user ใหม่ `printing_service` (ไม่มี role ใน `_users`)
   - frontend/src/lib/server/printers/** · frontend/src/lib/server/device-auth/** (ใหม่, ใช้ร่วมกับ scanners) · frontend/src/routes/api/{v1/printer,staff/v1/printers,staff/v1/print-jobs,back-office/printers,internal/printers}/**
   - frontend/src/lib/features/printers/** (feature ใหม่) · frontend/src/routes/(protected)/back-office/printers/**
   - frontend/src/lib/features/people/ui/registration/family-batch-print.svelte · ui/evacuee-profile/evacuee-qr-modal.svelte · domain/evacuee-qr-label.ts
   - frontend/src/hooks.server.ts (เลิกตั้ง housekeeping timer) · docker-compose*.yml (container `print-housekeeping`) · nginx/snippets/rate-limit.conf (`limit_conn` ของ Pi)
   - printer/** (Pi agent ใหม่, Python, systemd `tent-printer`)
+  - frontend/src/lib/utils/label-size.ts (ย้าย `kioskLabelDots` / `KIOSK_LABEL_MM` ออกจาก feature `kiosk` ให้ printers ใช้ร่วม — kiosk re-export ชื่อเดิม) · frontend/src/lib/server/couch-printing-service.ts · couch-as-user.ts · ensure-printing-service.ts (+ `scripts/seed/users.ts`, `scripts/redeploy-access.ts`) · frontend/scripts/close-shelter-printing.ts · frontend/server/print-housekeeping.mjs · frontend/eslint.config.js (ห้าม route ของ printer import server admin) · nginx/nginx.conf (block `/api/internal/printers/`)
 related:
-  - docs/plans/print-server-poc.md (สรุป POC + security) — ยังไม่อยู่ใน PR ต้องเพิ่มตาม review ข้อ 5
   - review PR #932 โดย net-lynx (2026-10-27) รอบ 1 (ความเสี่ยง 15 ข้อ) + รอบ 2 (ใช้ user credential เป็นหลัก)
 ---
 
-# draft-print-server — Station print server
+# CR-222 — Station print server
 
 > **สรุป (TL;DR)**
 >
 > - **เปลี่ยนอะไร:** staff กด "พิมพ์ทั้งครอบครัว" / "พิมพ์ที่ <เครื่อง>" แล้ว label QR 80×60 mm ออกที่เครื่องพิมพ์ของจุดนั้นทันที ไม่มี print dialog ไม่ต้องลง driver บน tablet
 > - **ทำงานยังไง:** tablet ส่ง PNG ไปที่ staff BFF → BFF ตรวจแล้ว **เขียนงานด้วย cookie ของ staff** ลง DB ของศูนย์ **`printing_{shelter_code}`** (VDU บังคับ) → Pi agent (`printer/`) long-poll device BFF → BFF claim งานด้วย service user **`printing_service`** และตรวจ label ซ้ำก่อนส่ง → พิมพ์ผ่าน CUPS → รายงานผล
 > - **build:** DB `printing_devices` (เครื่อง, service user เท่านั้น) + `printing_{shelter_code}` (งาน, staff ของศูนย์ + VDU) · route 4 กลุ่ม (Pi / staff / back-office / internal) · container `print-housekeeping` · feature `printers` · Pi agent · สิทธิ์จัดการเครื่อง = SA + `shelter_manager`
-> - **ข้อจำกัด:** WAN ล่ม → พิมพ์ผ่านเครื่องพิมพ์ไม่ได้ ใช้พรีวิว PDF เดิมแทน · staff ในศูนย์เดียวกันอ่านงานพิมพ์ของกันได้ผ่าน `/couch` (FR-31) · ยังมีข้อเปิด O-10..O-12 ให้ PO เคาะ
+> - **ข้อจำกัด:** WAN ล่ม → พิมพ์ผ่านเครื่องพิมพ์ไม่ได้ ใช้พรีวิว PDF เดิมแทน · staff ในศูนย์เดียวกันอ่านงานพิมพ์ของกันได้ผ่าน `/couch` (FR-31)
+> - **ก่อน merge PR โค้ด:** ผ่าน Acceptance `cupsenable` (O-5) · O-10 ทดสอบแล้ว 2026-11-01 (VDU เห็น `length` → FR-51 บังคับ ≤ 64 KB)
 
-ที่มาและทางเลือกที่ตัดทิ้ง: §Why · สถานะ build: POC บน branch `poc-print-server` ตรงกับฉบับ 2026-10-27 — ส่วนที่ปรับ 2026-10-29 ข้างล่าง **ยังไม่ได้ implement**
+ที่มาและทางเลือกที่ตัดทิ้ง: §Why · สถานะ build: implement ตามฉบับนี้บน branch `poc-print-server` (PR โค้ดแยกจาก PR นี้) — ยังไม่ merge
 
-> **ส่วนที่ปรับ 2026-10-29 — เสนอโดยทีม kiosk ตาม review PR #932 (proposed)**
+> **ส่วนที่ปรับ 2026-10-29 — ทีม kiosk เสนอตาม review PR #932 · Project Owner ตัดสินข้อเปิดแล้ว 2026-10-31 (review รอบ 3) · approved**
 >
 > - **แยก DB (review รอบ 1 ข้อ 6 + รอบ 2):** `print_device` ย้ายไป `printing_devices` · คิวงานแยกเป็น `printing_{shelter_code}` ต่อศูนย์ — heartbeat ไม่ปลุก `_changes` ของงาน และ feed ของ Pi ถูกปลุกเฉพาะงานของศูนย์ตัวเอง (FR-1..4, FR-50)
 > - **credential (รอบ 2):** งานที่ staff สั่ง (สร้างงาน, ดูสถานะ, test-print) เขียน/อ่านด้วย cookie ของ staff · งานของ Pi, housekeeping, จัดการเครื่อง ใช้ service user `printing_service` (admin เฉพาะ DB printing) · server admin ใช้เฉพาะตอน provision DB (FR-2, FR-2a)
@@ -61,17 +62,23 @@ related:
   | staff สร้างงาน (`POST /api/staff/v1/print-jobs`) · ดูสถานะ (`GET /api/staff/v1/print-jobs/{id}`) · test-print | `AuthSession` ของผู้เรียก (helper เขียนในนามของ user ใหม่ใน `$lib/server/`) |
   | tablet ดูรายการเครื่อง (`GET /api/staff/v1/printers`)                                                         | `printing_service` (เครื่องอยู่ `printing_devices` ที่ staff อ่านไม่ได้)    |
   | Pi: `hello` / `jobs/next` / `result` / heartbeat · claim                                                      | `printing_service`                                                          |
-  | housekeeping: sweep / `_purge` / `_compact`                                                                   | `printing_service`                                                          |
+  | housekeeping: sweep / ลบงานเก่า / `_compact`                                                                  | `printing_service`                                                          |
   | สร้าง / แก้ / rotate secret / ลบเครื่อง                                                                       | `printing_service`                                                          |
   | สร้าง DB + `_security` + VDU + index                                                                          | server admin (`$lib/server/couch-admin.ts`) เฉพาะตอน provision (FR-4)       |
 
   `printing_service` เป็น CouchDB user ไม่มี role, เป็น admin เฉพาะ DB ใน FR-2 — ถ้าโค้ด printer ถูกเจาะก็แตะ DB อื่นไม่ได้; credential อยู่ใน env ฝั่ง server เท่านั้น
 
+  _(เพิ่ม 2026-10-31 — ทีมเสนอ)_
+  - env `COUCHDB_PRINTING_SERVICE_URL` (`http://printing_service:<pw>@couchdb:5984`) — ห้ามขึ้นต้น `PUBLIC_` · user ถูกสร้างแบบ idempotent โดย `pnpm seed` และ `pnpm redeploy:access` แบบเดียวกับ `public_writer`
+  - ไม่ได้ตั้ง env นอก dev → route ของ printer ตอบ 503 `DEPENDENCY_UNAVAILABLE` (fail closed) **ห้าม** fallback ไป server admin · dev เท่านั้นที่ fallback ได้พร้อม warn
+  - server admin ใช้ได้ที่ module provision เดียว (สร้าง / ลบ DB ตาม FR-4) · route ของ printer ห้าม import `$lib/server/couch-admin` (บังคับด้วย ESLint)
+  - ชื่อ DB สร้างจาก `shelter_code` ที่ผ่าน `^[A-Z0-9]+$` เท่านั้น
+
 - **FR-3** — `_revs_limit`: `printing_devices` = 10 (heartbeat สร้าง ~4,320 revision ต่อเครื่องต่อวัน) · `printing_{code}` = 100. _(ปรับ 2026-10-29)_
 - **FR-4** — provision แบบ idempotent ด้วย server admin: _(ปรับ 2026-10-29)_
   - `printing_devices` + `_security` + index — ครั้งแรกที่ route ใด ๆ ใช้
   - `printing_{code}` + `_security` + design doc VDU + index — ตอนสร้างเครื่องแรกของศูนย์ (lazy) แล้วเขียน `printing_db:{code}` ลง `printing_devices` เป็น registry ให้ housekeeping วนครบทุก DB แม้เครื่องถูกลบหมดแล้ว
-  - ลบ `printing_{code}` ตอนปิดศูนย์ (O-11)
+  - ปิดศูนย์ (`closed` หรือ `cancelled`) — ทำใน checklist ปิดศูนย์เดิม (`data-model.md` §1) **ทันที** ไม่รอ DB ว่าง ตามลำดับ: (1) ตั้งเครื่องทุกเครื่องของศูนย์เป็น `inactive` (FR-15 → งานค้างเป็น `failed (printer_inactive)`) → (2) ลบ `printing_{code}` → (3) ลบ `printing_db:{code}` ออกจาก `printing_devices` (O-11) · idempotent (รันซ้ำได้) · จนกว่าจะมี flow ปิดศูนย์ในระบบ ops รัน script `close-shelter-printing` (dry-run เป็นค่าเริ่มต้น) ตาม checklist _(script: ทีมเสนอ 2026-10-31)_
   - housekeeping ไม่สร้าง DB ให้ server ที่ยังไม่มีเครื่องพิมพ์
 - **FR-5** — `print_device:{device_id}` (ใน `printing_devices`): `device_id` ตรง `^[a-z0-9][a-z0-9-]{2,62}$`, `name` 1–80 ตัว, ผูก `shelter_code`, `station` (nullable), `host_kind` ∈ `standalone`/`kiosk`.
 - **FR-5a** — `host_kind: kiosk` → ตู้นั้นมี **2 credential แยกกัน** (scanner device + print device) สิทธิ์ต่างกันและ revoke แยกได้ · `print_device` มี `kiosk_device_id` (nullable, เฉพาะ `kiosk`) ชี้ scanner device ของตู้เดียวกัน · หน้า back-office แสดงว่าเครื่องไหนอยู่ตู้เดียวกัน. _(ใหม่ 2026-10-29)_
@@ -87,7 +94,7 @@ related:
 - **FR-12** — งานที่หมดอายุตาม FR-12a ระหว่าง claim → `expired` ทันที ไม่ส่งให้ Pi.
 - **FR-12a** — ตรวจซ้ำตอน claim (ด้วย `printing_service` + นาฬิกา server) เพราะงานอาจถูกเขียนตรงเข้า DB โดยไม่ผ่าน BFF: _(ใหม่ 2026-10-29)_
   - **เวลา:** ไม่เชื่อ `created_at`/`expires_at` ที่มากับ doc — `created_at` อยู่ในอนาคตเกิน 5 วิ หรืออายุจริง `min(expires_at, created_at + 120 วิ)` เลยแล้ว → `expired`
-  - **label:** จำนวน attachment = `label_count` (1–20) · ทุกรูปมี PNG magic bytes, ≤ 64 KB, IHDR width/height = `kioskLabelDots()` และ bit depth / color type ตรงกับที่ renderer ใช้ — ไม่ผ่าน → `failed (invalid_label)` ไม่ส่งรูปให้ Pi
+  - **label:** จำนวน attachment = `label_count` (1–20) · ทุกรูปมี PNG magic bytes, ≤ 64 KB, IHDR width/height = `kioskLabelDots()` และ (bit depth, color type) อยู่ใน whitelist ของ FR-29 — ไม่ผ่าน → `failed (invalid_label)` ไม่ส่งรูปให้ Pi
   - `printer_id` ต้องเป็นเครื่องที่ poll อยู่ และ `shelter_code` ของเครื่องต้องตรงกับ DB
 - **FR-13** — `error_code` ฝั่ง agent: `printer_timeout` · `queue_disabled` · `lp_failed`; ฝั่ง server: `agent_restart` · `lease_expired` · `printer_inactive` · `printer_deleted` · `invalid_label` _(เพิ่ม 2026-10-29)_.
 - **FR-14** — Pi เรียก `hello` → งาน `printing` ทั้งหมดของเครื่องนั้นเป็น `failed (agent_restart)` (ความเสี่ยง DoS ยอมรับใน §Compromise ข้อ 3).
@@ -98,13 +105,13 @@ related:
 
 - **FR-17** — container `print-housekeeping` (image เดียวกับ frontend แบบ `import-worker`) เรียก `POST /api/internal/printers/housekeeping` ทุก 30 วิ (`SWEEP_INTERVAL_SEC`) ด้วย `Authorization: Bearer <PRINT_HOUSEKEEPING_TOKEN>` (env ฝั่ง server เท่านั้น) · BFF **ไม่ตั้ง timer เอง** (`hooks.server.ts` ไม่มี `init` ของ printer) เพื่อไม่ให้รันซ้ำทุก process / replica · route วนทุก `printing_{code}` ตาม registry `printing_db:*` (FR-4): `printing` ที่เลย `lease_until` → `failed (lease_expired)`; `pending` ที่หมดอายุตาม FR-12a → `expired`. sweep เฉพาะ DB ของเครื่องตอน Pi poll ยังคงไว้. _(ปรับ 2026-10-29)_
 - **FR-17a** — บันทึก `last_run_at` / `last_retention_at` / `last_error` ลง doc `print_housekeeping` ใน `printing_devices` · container healthcheck = unhealthy เมื่อเรียกสำเร็จครั้งล่าสุดเกิน 2 นาที (กัน purge หยุดเงียบ). _(ใหม่ 2026-10-29)_
-- **FR-18** — retention ทุกชั่วโมง ต่อ `printing_{code}`: `_purge` งาน terminal ที่ `finished_at` เก่ากว่า **7 วัน** (O-1) ทีละ ≤ 100 doc, สูงสุด 50 รอบต่อครั้ง.
-- **FR-19** — หลัง purge ต้องสั่ง `_compact` **เสมอ** (แม้ไม่มีอะไรถูก purge หรือ purge ล้มเหลว) เพราะ revision ก่อน terminal write ยังมีรูป label · compact `printing_devices` ทุกชั่วโมงด้วย (revision ของ heartbeat). _(ปรับ 2026-10-29)_
+- **FR-18** — retention ทุกชั่วโมง ต่อ `printing_{code}`: ลบงาน terminal ที่ `finished_at` เก่ากว่า **7 วัน** (O-1) ด้วย `printing_service` ผ่าน `_bulk_docs` (`_deleted: true`) ทีละ ≤ 100 doc, สูงสุด 50 รอบต่อครั้ง · ไม่ใช้ `_purge` เพราะ CouchDB 3.5 ต้องใช้ server admin · tombstone เหลือแค่ `_id` / `_rev` ไม่มีข้อมูลบุคคล. _(ปรับ 2026-11-01 — ทีมเสนอ)_
+- **FR-19** — หลังลบต้องสั่ง `_compact` **เสมอ** (แม้ไม่มีอะไรถูกลบหรือการลบล้มเหลว) เพราะ revision ก่อน terminal write ยังมีรูป label · compact `printing_devices` ทุกชั่วโมงด้วย (revision ของ heartbeat). _(ปรับ 2026-10-29)_
 - **FR-20** — sweep / retention ที่ล้มเหลวไม่ทำให้ request ของ Pi ล้ม; รอบถัดไปลองใหม่; DB หนึ่งล้มไม่หยุด DB อื่น.
 
 ### API — Pi (`/api/v1/printer/*`, header `x-device-id` + `x-device-secret`)
 
-- **FR-21** — `POST /hello` body `{agent_version, queue_state, local_ips[]}` → ทำ FR-14, บันทึก heartbeat (บังคับเขียน), ตอบ `{device: {device_id, name, shelter_code}, server_time, config: {wait_sec: 25, lease_sec}}` (`lease_sec` = lease ของงาน 1 label ใช้เป็นค่า fallback).
+- **FR-21** — `POST /hello` body `{agent_version, queue_state, local_ips[]}` → ทำ FR-14, บันทึก heartbeat (บังคับเขียน), ตอบ `{device: {device_id, name, shelter_code}, server_time, config: {wait_sec: 25, lease_sec}}` (`lease_sec` = lease ของงาน 1 label ใช้เป็นค่า fallback) · `agent_version` ≤ 64 ตัว เกิน → 422 _(เพิ่ม 2026-10-31 — ทีมเสนอ)_.
 - **FR-22** — `POST /jobs/next` body `{queue_state}` → heartbeat (throttle) + sweep DB ของศูนย์ถ้าถึงรอบ; `queue_state ≠ ready` → 204 ทันที; ไม่งั้น long-poll ≤ 25 วิ ผ่าน `_changes` ของ `printing_{code}` แล้วตอบ `{job: {id, label_count, lease_sec, lease_until}, labels[]}` หรือ 204.
 - **FR-23** — `POST /jobs/{id}/result` body `{printed: int≥0, error_code?}` → `printed` ถ้าไม่มี `error_code` ไม่งั้น `failed`; งานต้องเป็น `printing` ของเครื่องนี้ ไม่งั้น 409 `JOB_CONFLICT`; body ผิด → 422.
 - **FR-24** — heartbeat เขียน `last_seen_at`/`queue_state`/`agent_version`/`local_ips` ลง `printing_devices` อย่างมากครั้งละ 20 วิ เว้นแต่ค่าเปลี่ยน; ชน `_rev` → ทิ้ง (poll ถัดไปเขียนใหม่). `local_ips` เก็บเฉพาะ IPv4/IPv6 ที่ถูกต้อง ≤ 8 ค่า. heartbeat **ไม่แตะ** `printing_{code}`.
@@ -116,23 +123,26 @@ related:
 ### API — tablet (`/api/staff/v1/*`, cookie `_session`)
 
 - **FR-28** — `GET /printers?shelter_code=` → เครื่อง `active` ของศูนย์ เรียงตามชื่อ `{id, name, station, online, queue_state, last_seen_at}` — ไม่มี secret/hash/`local_ips`; ต้องมี scope ศูนย์นั้นหรือเป็น SA.
-- **FR-29** — `POST /print-jobs` body `{printer_id, source: walk_in|evacuee_qr, labels[]}`: labels 1–20 รูป, แต่ละรูป base64 ถูกต้อง + PNG magic bytes + ≤ 64 KB + **IHDR width/height = `kioskLabelDots()` และ bit depth / color type ตรงกับ renderer**, รวม ≤ 1 MB (ผิด → 422 `INVALID_LABELS`); ผู้เรียกต้องผ่าน FR-29a สำหรับศูนย์**ของเครื่องพิมพ์**; เครื่องไม่มี/inactive → 404; offline → ปฏิเสธ ไม่เข้าคิว; ผ่านแล้ว PUT ลง `printing_{code}` ด้วย cookie ของผู้เรียก (FR-2a); สำเร็จ → 201 `{job_id, shelter_code, expires_at}`. _(ปรับ 2026-10-29)_
+- **FR-29** — `POST /print-jobs` body `{printer_id, source: walk_in|evacuee_qr, labels[]}`: labels 1–20 รูป, แต่ละรูป base64 ถูกต้อง + PNG magic bytes + ≤ 64 KB + **IHDR width/height = `kioskLabelDots()` (639×479) และ (bit depth, color type) ∈ {(8,6), (8,2), (8,0), (1,0)}** (whitelist ทีมเสนอ 2026-11-01 — ยืนยันกับ browser ของ tablet จริงก่อน merge PR โค้ด), รวม ≤ 1 MB (ผิด → 422 `INVALID_LABELS`); ผู้เรียกต้องผ่าน FR-29a สำหรับศูนย์**ของเครื่องพิมพ์**; เครื่องไม่มี/inactive → 404; offline → ปฏิเสธ ไม่เข้าคิว; ผ่านแล้ว PUT ลง `printing_{code}` ด้วย cookie ของผู้เรียก (FR-2a); สำเร็จ → 201 `{job_id, shelter_code, expires_at}`. _(ปรับ 2026-10-29)_
 - **FR-29a** — สิทธิ์สั่งพิมพ์ตาม `source` (บังคับทั้งที่ BFF และ VDU): _(ใหม่ 2026-10-29, แทน O-2 เดิม)_
 
-  | `source`     | ใครสั่งได้                                                                    |
-  | ------------ | ----------------------------------------------------------------------------- |
-  | `walk_in`    | `registration_staff` หรือ `shelter_manager` ของศูนย์เครื่อง · SA              |
-  | `evacuee_qr` | `registration_staff` หรือ `shelter_manager` ของศูนย์เครื่อง · SA              |
-  | `test`       | `shelter_manager` ของศูนย์เครื่อง · SA (ผ่าน back-office test-print เท่านั้น) |
+  | `source`     | role ใน `userCtx.roles` ที่ต้องมีอย่างน้อยหนึ่งตัว                                           |
+  | ------------ | -------------------------------------------------------------------------------------------- |
+  | `walk_in`    | `{CODE}:registration_staff` · `{CODE}:shelter_manager` · `system_admin`                      |
+  | `evacuee_qr` | `{CODE}:registration_staff` · `{CODE}:shelter_manager` · `system_admin`                      |
+  | `test`       | `{CODE}:shelter_manager` · `system_admin` (ผ่าน back-office test-print เท่านั้น)              |
 
-  `walk_in` / `evacuee_qr` ใช้ role ชุดเดียวกับ guard `requireEvacueeRegistration` ของหน้าที่ปุ่มพิมพ์อยู่ (walk-in, โปรไฟล์ผู้อพยพ) · role คือของ staff ที่สั่งพิมพ์ (`userCtx.roles`) ไม่ใช่ของเครื่อง
+  - `{CODE}` = `shelter_code` **ตัวใหญ่**ของเครื่อง / ของ DB (`printing_sh001` → `SH001`) · role ของศูนย์อื่น (เช่น `SH002:registration_staff`) ไม่นับ · ไม่ใช่ `system_admin` ต้องมี `shelter:{CODE}` ด้วย (ประตู `_security`, FR-2)
+  - VDU เช็ค string เหล่านี้ตรงๆ (เรียก `hasStaffCapability` ไม่ได้) · BFF ใช้ชุดเดียวกัน — ตรงกับ guard `requireEvacueeRegistration` ของหน้าที่ปุ่มพิมพ์อยู่ (walk-in, โปรไฟล์ผู้อพยพ)
+  - role คือของ staff ที่สั่งพิมพ์ ไม่ใช่ของเครื่อง
+  - ไม่รับ role แบบ flat ที่ไม่มี prefix ศูนย์ (เช่น `registration_staff` เฉยๆ) ทั้งที่ BFF และ VDU ให้ตรงกัน — ก่อน deploy ต้องย้าย user ที่ยังเป็น flat (ถ้ามี) _(เพิ่ม 2026-10-31 — ทีมเสนอ)_
 
 - **FR-30** — "online" = `active` + `queue_state = ready` + `last_seen_at` ภายใน 90 วิ ตามนาฬิกา server.
 - **FR-31** — `GET /print-jobs/{id}?shelter_code=` → `{status, printed, label_count, error_code}` อ่านจาก `printing_{code}` ด้วย cookie ของผู้เรียก; BFF ตอบเฉพาะคนที่สร้างงาน (`created_by`) หรือ SA. **ข้อจำกัด:** CouchDB กันการอ่านระดับ doc ไม่ได้ — staff ที่มี role `shelter:{CODE}` อ่านงานทุกงานของศูนย์ (รวมรูป label ระหว่าง `pending`/`printing`) ได้ตรงผ่าน `/couch` ระดับเปิดเผยเท่ากับ `shelter_{code}` ที่อ่านได้อยู่แล้ว. _(ปรับ 2026-10-29)_
 
 ### API — back-office (`/api/back-office/printers*`)
 
-- **FR-32** — `GET` รายการเครื่องใน scope + `online` + `local_ips` + `secret_prefix` + `kiosk_device_id` + งานล่าสุด 1 งาน · `POST` สร้างเครื่อง (provision `printing_{code}` ถ้ายังไม่มี) คืน secret (`sk_print_` + 64 hex) **ครั้งเดียว** · `PATCH /{id}` แก้ `name`/`station`/`status` · `POST /{id}/rotate-secret` คืน secret ใหม่ครั้งเดียว · `POST /{id}/test-print` (label ทดสอบในตัว ไม่มีข้อมูลคน, `source: test`, เขียนด้วย cookie ของผู้เรียก) · `DELETE /{id}`.
+- **FR-32** — `GET` รายการเครื่องใน scope + `online` + `local_ips` + `secret_prefix` + `kiosk_device_id` + งานล่าสุด 1 งาน · `POST` สร้างเครื่อง (provision `printing_{code}` ถ้ายังไม่มี) คืน secret (`sk_print_` + 64 hex) **ครั้งเดียว** · `PATCH /{id}` แก้ `name`/`station`/`status` · `POST /{id}/rotate-secret` คืน secret ใหม่ครั้งเดียว · `POST /{id}/test-print` (label ทดสอบในตัว 639×479 1-bit ไม่มีข้อมูลคน, `source: test`, เขียนด้วย cookie ของผู้เรียก) · `DELETE /{id}`.
 - **FR-33** — ทุก route ต้องเป็น SA หรือ `shelter_manager` ของศูนย์ของเครื่อง (`PRINTER_MANAGER_CAPABILITIES`, O-3); `kiosk_staff` จัดการไม่ได้.
 - **FR-34** — แก้ device doc แบบ read-modify-write retry ≤ 4 ครั้งเมื่อชน `_rev` (heartbeat เขียนทับบ่อย) โดยคงค่า heartbeat ล่าสุด.
 
@@ -165,20 +175,21 @@ related:
 - **FR-49** — ตอนนี้ใช้ `_changes` longpoll หนึ่งเส้นต่อหนึ่ง poll ของ Pi · เมื่อถึงเกณฑ์ที่ตั้งจาก load test (Acceptance) ให้เปลี่ยนเป็น `_changes` continuous เส้นเดียวต่อ process ต่อ `printing_{code}` แล้วกระจาย event ตาม `printer_id` (claim ยัง query DB + guard `_rev` เหมือนเดิม). _(ใหม่ 2026-10-29)_
 - **FR-50** — heartbeat และการแก้เครื่องเขียนเฉพาะ `printing_devices` จึงไม่ทำให้ `update_seq` ของ `printing_{code}` ขยับตอนไม่มีงาน. _(ใหม่ 2026-10-29)_
 - **FR-51** — VDU ของ `printing_{code}` (design doc ที่ provision ใน FR-4): _(ใหม่ 2026-10-29)_
-  - `userCtx.name == "printing_service"` → แก้ได้เฉพาะ `print_job` ที่มีอยู่แล้ว ตาม state machine FR-8 (ห้ามออกจาก terminal) และ write ไป terminal ต้องมี `finished_at` และไม่มี `_attachments` (FR-9)
+  - `userCtx.name == "printing_service"` → แก้ได้เฉพาะ `print_job` ที่มีอยู่แล้ว ตาม state machine FR-8 (ห้ามออกจาก terminal) และ write ไป terminal ต้องมี `finished_at` และไม่มี `_attachments` (FR-9) · ลบ (`_deleted`) ได้เฉพาะงานที่ `oldDoc.status` เป็น terminal (retention FR-18) _(เพิ่ม 2026-11-01 — ทีมเสนอ)_
   - ผู้ใช้อื่น:
     - สร้าง doc ใหม่เท่านั้น — มี `oldDoc` หรือ `_deleted` → reject (กันการแก้ / ลบ / เพิ่ม attachment ทีหลังด้วย `PUT /db/doc/att`)
     - `_id` ขึ้นต้น `print_job:`, `type: print_job`, `schema_v: 1`, `status: pending`
     - `created_by == userCtx.name`
-    - `shelter_code` ตรงกับชื่อ DB (`userCtx.db` = `printing_` + `shelter_code` ตัวเล็ก) และผู้ใช้มี role `shelter:{CODE}` หรือ `system_admin`
-    - role ตรงกับ `source` ตาม FR-29a
+    - `shelter_code` ตรงกับชื่อ DB (`userCtx.db` = `printing_` + `shelter_code` ตัวเล็ก) · ให้ `{CODE}` = `shelter_code` ตัวใหญ่
+    - `userCtx.roles` มี `system_admin` หรือมีทั้ง `shelter:{CODE}` และ role ตาม `source` ใน FR-29a: `walk_in` / `evacuee_qr` → `{CODE}:registration_staff` หรือ `{CODE}:shelter_manager` · `test` → `{CODE}:shelter_manager` · `source` อื่น → reject
     - `printer_id` ขึ้นต้น `print_device:` · `label_count` เป็นจำนวนเต็ม 1–20
-    - `_attachments` มีจำนวนเท่ากับ `label_count`, ชื่อ `label-000.png` … เรียงต่อกัน, `content_type: image/png` และ (ถ้า VDU เห็น `length` ของ attachment — O-10) แต่ละรูป ≤ 64 KB
+    - `_attachments` มีจำนวนเท่ากับ `label_count`, ชื่อ `label-000.png` … เรียงต่อกัน, `content_type: image/png`
+    - ขนาดต่อรูป: `length` ของแต่ละ attachment ≤ 65536 byte (O-10 ทดสอบแล้ว 2026-11-01 บน CouchDB 3.5.2: VDU เห็น stub `{content_type, revpos, length, stub}` ทั้ง inline base64 และ multipart) · ไม่มี `length` → reject · **ไม่**ตั้ง `max_attachment_size` ระดับ server
   - VDU **ตรวจไม่ได้**: byte / IHDR ของ PNG, เครื่องมีอยู่และ online, เวลาจริง → ปิดด้วย FR-12a ตอน claim
 
 ## Flow
 
-แผนภาพตามสเปกที่ปรับ 2026-10-29 (โค้ดบน `poc-print-server` ยังเป็นฉบับเดิม). ถ้าแผนภาพกับ FR ไม่ตรงกัน ให้ถือ FR เป็นหลัก
+แผนภาพตามสเปกฉบับนี้. ถ้าแผนภาพกับ FR ไม่ตรงกัน ให้ถือ FR เป็นหลัก
 
 ### ภาพรวม
 
@@ -192,7 +203,7 @@ flowchart LR
     F --> G[BFF เขียน printed / failed<br/>+ ลบรูป label]
     G --> H([tablet เห็นผลจากการ poll])
     C -. ไม่มีใครรับใน 120 วิ .-> X[expired]
-    C -. ทุกชั่วโมง .-> R[purge งานที่จบเกิน 7 วัน<br/>+ compact]
+    C -. ทุกชั่วโมง .-> R[ลบงานที่จบเกิน 7 วัน<br/>+ compact]
     P[Pi heartbeat] --> DV[(printing_devices<br/>printing_service เท่านั้น)]
 ```
 
@@ -335,7 +346,7 @@ stateDiagram-v2
     expired --> [*]
     note right of printed
         ทุกสถานะจบ: ลบรูป label ทันที
-        purge doc หลัง 7 วัน + compact
+        ลบ doc หลัง 7 วัน + compact
     end note
 ```
 
@@ -352,8 +363,8 @@ flowchart TD
     S1 --> RT{ครบ 1 ชม.<br/>จาก retention ล่าสุด?}
     RT -- ไม่ --> W
     RT -- ใช่ --> R1[หางาน terminal ที่ finished_at เก่ากว่า 7 วัน]
-    R1 --> R2[_purge ทีละ ≤ 100 · สูงสุด 50 รอบ]
-    R2 --> R3[_compact เสมอ<br/>แม้ purge ล้มเหลว]
+    R1 --> R2[ลบด้วย _deleted ทีละ ≤ 100 · สูงสุด 50 รอบ]
+    R2 --> R3[_compact เสมอ<br/>แม้การลบล้มเหลว]
     R3 --> R4[_compact printing_devices]
     R4 --> W[บันทึก last_run_at / last_error<br/>ใน doc print_housekeeping]
     W --> E([จบรอบ · healthcheck ดูเวลาสำเร็จล่าสุด])
@@ -362,22 +373,28 @@ flowchart TD
 
 ## Acceptance
 
-- [ ] `printing_devices` และ `printing_{code}` ถูกสร้างพร้อม `_security` ตาม FR-2, `_revs_limit` ตาม FR-3, VDU และ index ครบ §10.4; browser ด้วย cookie staff อ่าน `printing_devices` ไม่ได้
-- [ ] `printing_service` เขียน DB อื่นนอกจาก FR-2 ไม่ได้ (403)
+- [x] **ก่อนเริ่ม PR โค้ด (O-10):** ทดสอบกับ CouchDB 3.5.2 (version เดียวกับ production) 2026-11-01 — `newDoc._attachments[*]` ใน VDU มี `length` (ไม่มี `data`) → ใช้แขนง "บังคับ ≤ 64 KB" ของ FR-51
+- [ ] `printing_devices` และ `printing_{code}` ถูกสร้างพร้อม `_security` ตาม FR-2, `_revs_limit` ตาม FR-3, VDU และ index ครบตาม `schema.md` §10.5; browser ด้วย cookie staff อ่าน `printing_devices` ไม่ได้
+- [ ] `printing_service` แตะ DB อื่นนอกจาก FR-2 ไม่ได้ — ทดสอบครบ: สร้าง DB ใหม่ (401) · อ่าน `shelter_{code}` (403) · เขียน `registry` (403) · อ่าน `_users` / `_all_dbs` (401) · ลบ DB (401) — endpoint ระดับ server ตอบ 401 ส่วน DB ที่ไม่มีสิทธิ์ตอบ 403 (ผล spike 2026-11-01 ผ่านทุกข้อ) · `_compact` / `_index` ของ `printing_{code}` ทำได้ด้วยสิทธิ์ DB admin · `_purge` ทำไม่ได้ (ต้อง server admin) → retention ใช้ FR-18
+- [ ] ไม่ได้ตั้ง `COUCHDB_PRINTING_SERVICE_URL` บน staging / production → route ของ printer ตอบ 503 ไม่ใช้ server admin แทน
+- [ ] ESLint fail เมื่อ route ของ printer import `$lib/server/couch-admin` (ยกเว้น module provision)
 - [ ] สร้างเครื่องแล้วเห็น secret ครั้งเดียว; doc มีแค่ `secret_hash` + `secret_prefix`
 - [ ] secret ผิด / เครื่องไม่มี / inactive → 401 body เดียวกัน
 - [ ] staff ศูนย์ B สั่งพิมพ์ไปเครื่องของศูนย์ A ผ่าน BFF ไม่ได้ (403) และ **PUT `print_job` ลง `printing_{a}` ตรงผ่าน `/couch` ไม่ได้** (403 จาก `_security` / VDU)
 - [ ] VDU reject: staff แก้ / ลบงาน, สร้างงานที่ `status ≠ pending`, `created_by` ไม่ใช่ตัวเอง, role ไม่ตรง `source`, จำนวน attachment ไม่ตรง `label_count`
 - [ ] PUT งานตรงผ่าน `/couch` ด้วย PNG ผิดขนาด (IHDR ไม่ตรง) → VDU รับได้ แต่ตอน claim งานเป็น `failed (invalid_label)` และไม่ออกที่เครื่องพิมพ์ · `created_at` / `expires_at` ปลอมไปอนาคต → งานยังหมดอายุตามนาฬิกา server
-- [ ] `walk_in` ด้วย role ที่ไม่ใช่ `registration_staff` / `shelter_manager` → 403 ทั้งที่ BFF และ VDU
-- [ ] งานที่จบแล้วไม่มี `_attachments`; งานที่จบเกิน 7 วันถูก purge และ DB ถูก compact
+- [ ] `walk_in` ด้วย role ที่ไม่ใช่ `{CODE}:registration_staff` / `{CODE}:shelter_manager` (เช่น `SH001:kitchen_staff`) → 403 ทั้งที่ BFF และ VDU
+- [ ] **role ของศูนย์อื่น:** user ที่มี `shelter:SH001` + `SH002:registration_staff` (ไม่มี `SH001:registration_staff`) PUT `print_job` `source: walk_in` ลง `printing_sh001` → VDU reject · ผ่าน BFF → 403
+- [ ] `test` ด้วย `{CODE}:registration_staff` (ไม่มี `{CODE}:shelter_manager`) → VDU reject
+- [ ] งานที่จบแล้วไม่มี `_attachments`; งานที่จบเกิน 7 วันถูกลบ (FR-18) และ DB ถูก compact
 - [ ] housekeeping รันครั้งเดียวต่อรอบแม้ frontend มีหลาย process / replica · หยุด container `print-housekeeping` เกิน 2 นาที → healthcheck เป็น unhealthy · `hooks.server.ts` ไม่ตั้ง timer ของ printer
 - [ ] heartbeat ไม่ทำให้ `update_seq` ของ `printing_{code}` ขยับตอนไม่มีงาน
 - [ ] สั่งพิมพ์ไปเครื่อง offline → ปฏิเสธทันที ไม่เกิดงาน
 - [ ] agent ตั้ง `TENT_BASE_URL=http://192.168.x.x` → ไม่ start (config error) · `http://127.0.0.1` ได้
 - [ ] เปิด long-poll พร้อมกันเกิน 2 เส้นด้วย `x-device-id` เดียว → เส้นที่เกินได้ 429
 - [ ] ทดสอบบนเครื่องจริง (Pi + XP-365B): ปิด Pi เกิน 120 วิ แล้วเปิด → งานเก่าเป็น `expired` ไม่พิมพ์ออกมา · ถอดกระดาษระหว่างพิมพ์ → งาน `failed` ไม่หลุดออกมาทีหลัง และงานถัดไปพิมพ์ได้โดยไม่ต้อง SSH · รัน agent 2 ตัวด้วย device เดียวกัน → แต่ละงานพิมพ์ครั้งเดียว · secret ผิด → 401 และ agent backoff · rotate secret ขณะ agent ทำงาน → 401 ทันที
-- [ ] **`cupsenable` (O-5):** ถอดกระดาษจนคิว CUPS ถูก disable แล้ว agent enable คืนได้เองด้วยสิทธิ์ตาม FR-42 โดย `tent-printer` ไม่อยู่ใน group `lpadmin` — บันทึกว่าใช้ `lp` หรือ polkit / sudoers
+- [ ] **ปิดศูนย์ (O-11):** ปิดศูนย์ที่มีเครื่องพิมพ์ (ทั้ง `closed` และ `cancelled`) → เครื่องทุกเครื่องเป็น `inactive`, งานค้างเป็น `failed (printer_inactive)`, `printing_{code}` ถูกลบ และไม่มี `printing_db:{code}` เหลือใน `printing_devices` · housekeeping รอบถัดไปไม่ error
+- [ ] **ต้องผ่านก่อน merge PR โค้ด — `cupsenable` (O-5):** ถอดกระดาษจนคิว CUPS ถูก disable แล้ว agent enable คืนได้เองด้วยสิทธิ์ตาม FR-42 โดย `tent-printer` ไม่อยู่ใน group `lpadmin` — บันทึกว่าใช้ `lp` หรือ polkit / sudoers
 - [ ] ครอบครัว > 20 คน → แบ่งงาน พิมพ์ครบตามลำดับ; ล้มกลางทาง → retry ไม่พิมพ์คนที่ออกแล้วซ้ำ
 - [ ] **load test:** agent จำลอง 100 ตัว (10 ศูนย์ × 10 เครื่อง) poll ต่อเนื่อง 30 นาที พร้อมงานจำลอง 1 งาน/นาที/เครื่อง
   - งานทุกงานพิมพ์ครั้งเดียว ไม่มี `expired` ที่เกิดจาก server ช้า
@@ -400,33 +417,33 @@ flowchart TD
 - **ข้อมูลส่วนบุคคล:** label มีชื่อ-นามสกุล, โซน, checklist การรับเข้า และ QR (`evacuee._id`) — รูปอยู่ใน `printing_{code}` ระหว่างงานยังไม่จบ (≤ 120 วิ + lease) และยังค้างใน revision เก่า**สูงสุดประมาณ 1 ชม. หลังงานจบ** จนกว่า compact รอบถัดไป (FR-19); doc ที่ไม่มีรูปเก็บ 7 วัน · ระหว่างนั้น staff ที่มี role `shelter:{CODE}` อ่านได้ผ่าน `/couch` (FR-31). _(ปรับ 2026-10-29)_
 - **Security:** browser เขียน `printing_{code}` ได้ตรง (ภายใต้ VDU) — การตรวจที่ VDU ทำไม่ได้ย้ายไปบังคับตอน claim (FR-12a) · ถ้าโค้ด printer ถูกเจาะ ได้แค่สิทธิ์ของ `printing_service` ไม่ถึง DB อื่น.
 - **ไม่กระทบ** DB อื่น, worker, MongoDB, public plane, kiosk scanner flow (นอกจากย้าย hash/compare secret ไป helper กลางแบบไม่เปลี่ยนพฤติกรรม).
-- **Ops:** ต้องติดตั้ง Pi ต่อจุดบริการ + ส่ง `.env` ให้เครื่อง · ตั้ง user `printing_service` + `PRINT_HOUSEKEEPING_TOKEN` + container `print-housekeeping` · server ที่ไม่มีเครื่องพิมพ์ไม่ถูกสร้าง DB · ปิดศูนย์ต้องลบ `printing_{code}` (O-11).
+- **Ops:** ต้องติดตั้ง Pi ต่อจุดบริการ + ส่ง `.env` ให้เครื่อง · ตั้ง user `printing_service` + `PRINT_HOUSEKEEPING_TOKEN` + container `print-housekeeping` · server ที่ไม่มีเครื่องพิมพ์ไม่ถูกสร้าง DB · checklist ปิดศูนย์ (`closed` / `cancelled`) เพิ่ม 3 ขั้น: เครื่องทั้งหมดเป็น `inactive` → ลบ `printing_{code}` → ลบ `printing_db:{code}` ทำทันทีไม่รอ DB ว่าง (FR-4, O-11).
 - **WAN ล่ม:** พิมพ์ผ่านเครื่องพิมพ์ไม่ได้ (BFF อยู่ central) — ใช้พรีวิว PDF.
 
 ## Migration
 
 - doc type ใหม่ทั้งหมด (schema_v 1) — ไม่มี backfill, ไม่มี bump ของ type อื่น.
 - `printing_devices` สร้างเองตอนใช้งานครั้งแรก · `printing_{code}` สร้างตอนเพิ่มเครื่องแรกของศูนย์ (FR-4) — ไม่ต้องรัน provisioning script นอกจากสร้าง user `printing_service` ครั้งเดียว.
-- **เฉพาะ server ที่เคยรัน POC (DB `printing` เดิม):** copy doc `print_device:*` ไป `printing_devices` (คง `secret_hash` → Pi ไม่ต้องเปลี่ยน secret) แล้วสร้าง `printing_{code}` + registry ของศูนย์ที่มีเครื่อง แล้วลบ DB `printing` (งานในคิวเป็นข้อมูลชั่วคราว ไม่ย้าย) · ยังไม่มี production.
+- **เฉพาะ server ที่เคยรัน build ก่อนหน้า (DB `printing` เดิม):** ลบ DB `printing` ด้วยมือ แล้วสร้างเครื่องใหม่ใน back-office (ได้ secret ใหม่ → ใส่ `.env` ของ Pi ใหม่) · งานในคิวเป็นข้อมูลชั่วคราว ไม่ย้าย · ไม่มี script migration (ยังไม่มี production) _(ปรับ 2026-11-01 — ทีมเสนอ)_
 
-## ข้อเสนอของทีม (O-1..O-12)
+## ข้อตัดสิน (O-1..O-12)
 
-คำตอบทั้งหมดเป็น **ข้อเสนอของทีม** รอ PO เคาะ · O-1..O-9 เดิม = as-built บน `poc-print-server` ยกเว้นข้อที่ระบุว่าปรับ
+ทีม kiosk เสนอ · **Project Owner ตัดสินแล้วทุกข้อ 2026-10-31** (review รอบ 3) · CR approved — O-1..O-4, O-6..O-9 รับตามที่ทีมเสนอ · O-5, O-10..O-12 ตามคอลัมน์ "ข้อตัดสิน" ที่ต่างจากข้อเสนอ · O-1..O-9 เดิม = as-built บน `poc-print-server` ยกเว้นข้อที่ระบุว่าปรับ
 
 | #    | คำถาม                         | ข้อเสนอของทีม                                                                                                                                                   |
 | ---- | ----------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| O-1  | เก็บประวัติงานพิมพ์นานเท่าไร  | 7 วัน แล้ว purge + compact · รูป label ลบทันทีที่งานจบ                                                                                                          |
+| O-1  | เก็บประวัติงานพิมพ์นานเท่าไร  | 7 วัน แล้วลบ + compact (FR-18) · รูป label ลบทันทีที่งานจบ                                                                                                           |
 | O-2  | ใครสั่งพิมพ์ได้               | **ปรับ 2026-10-29:** ตาม `source` (FR-29a) — เดิม staff ทุกคนที่มี scope ศูนย์ของเครื่อง                                                                        |
 | O-3  | ใครจัดการเครื่อง              | SA + `shelter_manager` (ไม่รวม `kiosk_staff` ต่างจาก scanner)                                                                                                   |
 | O-4  | WAN ล่ม                       | ไม่รองรับ — ใช้พรีวิว PDF เดิม (BFF ที่ edge เป็น CR แยก)                                                                                                       |
-| O-5  | สิทธิ์ `cupsenable` ของ agent | **ปรับ 2026-10-29:** ทดสอบบน Pi ก่อน approve — group `lp` ถ้าพอ ไม่งั้น polkit / sudoers เฉพาะคิวนี้ ไม่ใช้ group `lpadmin` (as-built ใช้ `lpadmin` แบบ opt-in) |
+| O-5  | สิทธิ์ `cupsenable` ของ agent | group `lp` ถ้าพอ ไม่งั้น polkit / sudoers เฉพาะคิวนี้ ไม่ใช้ group `lpadmin` (as-built ใช้ `lpadmin` แบบ opt-in) · **ข้อตัดสิน:** ไม่ต้องทดสอบก่อน approve CR — เป็น Acceptance ที่**ต้องผ่านก่อน merge PR โค้ด** · ถ้าพบว่าต้องใช้ `lpadmin` จริง → เปิด CR แก้ FR-42 |
 | O-6  | TTL / lease                   | TTL 120 วิ · lease 90 + 5×label · online ภายใน 90 วิ                                                                                                            |
 | O-7  | ขนาดงาน                       | ≤ 20 label/งาน, ≤ 64 KB/รูป, ≤ 1 MB/งาน, IHDR ตรงขนาด label — มากกว่านั้นแบ่งงานที่ tablet                                                                      |
 | O-8  | ข้อมูลบน label                | ชื่อ-นามสกุล, โซน, checklist, QR (`_id`) — เหมือน label kiosk                                                                                                   |
 | O-9  | ส่ง secret ไปที่ Pi           | admin copy ใส่ `.env` เอง (ยังไม่มี pairing code) · **ปรับ 2026-10-29:** `https://` เท่านั้น — `http://` เฉพาะ loopback (dev)                                   |
-| O-10 | VDU เห็นขนาด attachment ไหม   | **ใหม่:** ต้องทดสอบกับ CouchDB ว่า `newDoc._attachments[*]` ใน VDU มี `length` ถ้าไม่มี ขนาดต่อรูปบังคับที่ BFF + claim (FR-12a) เท่านั้น                       |
-| O-11 | ลบ `printing_{code}` ตอนไหน   | **ใหม่:** ตอนปิดศูนย์ใน flow ปิดศูนย์เดิม — ระหว่างนี้ housekeeping ยัง purge ตาม registry จน DB ว่าง                                                           |
-| O-12 | `requested_by` ของ CR         | **ใหม่:** review ข้อ 15 ให้แก้ให้ตรง — รอ PO ระบุว่าใครเป็นผู้ขอ                                                                                                |
+| O-10 | VDU เห็นขนาด attachment ไหม   | **ข้อตัดสิน:** ทดสอบกับ CouchDB ที่ใช้จริง**ก่อนเริ่ม PR โค้ด** · เห็น `length` → บังคับ ≤ 64 KB ใน FR-51 · ไม่เห็น → ตัดเงื่อนไขขนาดออกจาก FR-51 + ใช้แถว O-10 ใน §Compromise · **ไม่**ตั้ง `max_attachment_size` ระดับ server · **ผลทดสอบ 2026-11-01 (CouchDB 3.5.2):** VDU เห็น `length` → FR-51 บังคับ ≤ 64 KB, ไม่มีแถว O-10 ใน §Compromise |
+| O-11 | ลบ `printing_{code}` ตอนไหน   | **ข้อตัดสิน:** ใน checklist ปิดศูนย์เดิม (`data-model.md` §1) ทั้ง `closed` และ `cancelled`: เครื่องทุกเครื่องเป็น `inactive` (FR-15) → ลบ `printing_{code}` → ลบ `printing_db:{code}` · ทำทันที ไม่รอ DB ว่าง (FR-4) |
+| O-12 | `requested_by` ของ CR         | **ข้อตัดสิน:** `Project Owner` (แก้ frontmatter แล้ว) |
 
 ## Compromise (ความเสี่ยงที่ยังเหลือ)
 
@@ -435,8 +452,9 @@ flowchart TD
 | 3   | `hello` fail งาน `printing` ทั้งหมดของเครื่อง → ใช้ทำ DoS ได้    | ต้องมี secret ของเครื่องก่อน และกระทบแค่เครื่องนั้น                                                                        | ก่อน production (ไม่อยู่ใน CR นี้): จำกัดความถี่ `hello` + เตือนในหน้า admin เมื่อ secret ถูกใช้ซ้อน (IP สลับไปมา) |
 | 6   | `_changes` หนึ่งเส้นต่อหนึ่ง poll                                | 100 เครื่องยังห่างเพดานหลายเท่า (ประเมิน ~500 selector evaluation/วิ หลังแยก DB)                                           | FR-49 เมื่อถึงเกณฑ์จาก load test                                                                                   |
 | 11  | WAN ล่มพิมพ์ไม่ได้ (O-4)                                         | ใช้พรีวิว PDF แทนได้                                                                                                       | CR แยกเรื่อง BFF ที่ edge                                                                                          |
-| —   | staff ในศูนย์อ่านงานพิมพ์ของกันได้ผ่าน `/couch` (FR-31)          | ระดับเท่ากับ `shelter_{code}` ที่อ่านได้อยู่แล้ว · รูปอยู่ไม่เกิน TTL + lease                                              | —                                                                                                                  |
+| —   | staff ในศูนย์อ่านงานพิมพ์ของกันได้ผ่าน `/couch` (FR-31)          | ระดับเท่ากับ `shelter_{code}` ที่อ่านได้อยู่แล้ว · รูปค้างใน revision เก่าได้ประมาณ 1 ชม. หลังงานจบจนกว่า compact (§Impact, FR-19) | —                                                                                                                  |
 | —   | staff เขียนงานตรงข้าม BFF ได้ (ไม่ผ่าน rate limit / เช็ค online) | VDU จำกัดรูปแบบ + FR-12a กันรูปผิดและเวลาปลอม → ส่งได้แค่ label ขนาดถูกต้องไปเครื่องในศูนย์ตัวเอง เท่ากับที่ทำผ่าน BFF ได้ | —                                                                                                                  |
+| —   | `printing_service` เป็น DB admin ของ DB printing จึงแก้ `_design` (VDU) และ `_security` ของ DB เหล่านั้นได้ — CouchDB ไม่รัน VDU กับ design doc ของ DB admin (ทดสอบ 2026-11-01) | credential อยู่ใน env ฝั่ง server เท่านั้น · หลุดแล้วยังแตะ DB อื่นไม่ได้ (Acceptance) · FR-12a ตอน claim ยังกันรูปผิดขนาด / เวลาปลอม · ลดเป็น member จะทำให้ `_compact` / `_index` ต้องใช้ server admin (ขัด FR-2a) | — |
 
 ความเสี่ยงที่เหลือแม้แก้ครบ: ถ้า Pi ถูกขโมย ผู้ขโมยจะได้งานในคิวของเครื่องนั้นจนกว่าจะ revoke — ไม่ลามไปศูนย์อื่น
 
@@ -461,3 +479,7 @@ flowchart TD
 | 2026-10-27 | เขียน draft CR ใหม่จากโค้ด (ฉบับเดิมหายจาก working tree หลัง merge `develop`) · เพิ่ม §Flow (flowchart / state diagram)                                                                                                                                                         |
 | 2026-10-27 | review PR #932 (net-lynx): รอบ 1 ความเสี่ยง 15 ข้อ (เปลี่ยน O-2, O-9, แยก DB เครื่อง) · รอบ 2 ใช้ user credential เป็นหลัก + DB ต่อศูนย์ + service user — แตะ stable core ต้องให้ project owner ยืนยัน                                                                          |
 | 2026-10-29 | ทีมปรับ draft ตาม review ทั้งสองรอบ (proposed) + เสนอเพิ่ม FR-12a ตรวจ label/เวลาซ้ำตอน claim เพราะ browser เขียน DB ได้ · `layer` เป็น stable-core · ข้อ 13 (helper `device-auth` กลาง) ทำใน PR โค้ด · เพิ่ม O-10..O-12 · `evacuee_qr` ใช้ role ชุดเดียวกับ `walk_in` (FR-29a) |
+| 2026-10-31 | **Project Owner ตัดสินข้อเปิด (review รอบ 3) และให้ approve CR ใน PR #932:** รับ stable core — DB ต่อศูนย์ `printing_{code}` + staff เขียนด้วย cookie ภายใต้ VDU + `printing_service` แทน server admin · รับข้อแลก FR-31 และ staff เขียนข้าม BFF (ปิดด้วย FR-12a) · track ด้วย CR file ฉบับนี้ (เลข CR + ย้ายไป `14-kiosk/` ทำตอนจองเลข) · O-5 เป็น gate ก่อน merge PR โค้ด · O-10 ทดสอบก่อนเริ่ม PR โค้ด ไม่ตั้ง `max_attachment_size` · O-11 ลบ DB ทันทีใน checklist ปิดศูนย์ (`closed` + `cancelled`) · O-12 `requested_by` = Project Owner · รับชื่อ/ค่าที่ทีมเสนอทั้งหมด (`printing_service`, `PRINT_HOUSEKEEPING_TOKEN`, `kiosk_device_id`, `printing_db:{code}`, `print_housekeeping`, `_revs_limit` 10 / 100, clock skew 5 วิ) · ตัดไฟล์ POC — CR เป็นแหล่งเดียว (ตาราง S1–S16 ทำใหม่ตอน PR โค้ดถ้ายังต้องการ) · FR-29a / FR-51 ระบุ role string แบบ scoped · แก้ `schema.md` §6/§7/§8/§10, `data-model.md` §1/§6/§7, `api-contract.md` §2.5 ไปพร้อม PR โค้ด (ไม่อยู่ใน PR นี้) |
+| 2026-10-31 | ทีมเสนอเพิ่มหลัง review รอบ 3 (รอ owner ดูตอน approve PR) — ไม่เปลี่ยนคำตัดสินเดิม: FR-2a ชื่อ env `COUCHDB_PRINTING_SERVICE_URL` + fail closed 503 + server admin เฉพาะ module provision (ESLint) + regex ชื่อ DB · FR-4 script `close-shelter-printing` จนกว่าจะมี flow ปิดศูนย์ · FR-21 `agent_version` ≤ 64 ตัว · FR-29a ไม่รับ role แบบ flat · Acceptance: 403 ของ `printing_service` ครบทุกทาง + สิทธิ์ `_purge` / `_compact` + fail closed + ESLint |
+| 2026-11-01 | **approved เป็น CR-222** (ย้ายไป `14-kiosk/`, `requested_by` / `decided_by` = Project Owner) · spec docs (`schema.md` §6/§7/§8/§10, `data-model.md` §1/§6/§7, `api-contract.md`) แก้พร้อม PR โค้ดตามที่ตกลง 2026-10-31 — ไม่อยู่ใน PR นี้ (ต่างจาก review รอบ 3 ข้อ 4) |
+| 2026-11-01 | ทีมเสนอหลังทดสอบบน CouchDB 3.5.2 (spike Phase 0) — รอ owner ดูตอน approve PR: O-10 VDU เห็น `length` → FR-51 บังคับ ≤ 64 KB และตัดแถว O-10 ใน §Compromise · `_purge` ต้องใช้ server admin → FR-18 / FR-2a / FR-51 เปลี่ยน retention เป็นลบด้วย `_deleted` + compact โดย `printing_service` · DB admin แก้ `_design` / `_security` ได้ → เพิ่มแถวใน §Compromise · Acceptance บันทึก 401/403 จริง · FR-29 whitelist (bit depth, color type) + test label 639×479 · §Migration ลบ DB `printing` ด้วยมือ ไม่มี script |
