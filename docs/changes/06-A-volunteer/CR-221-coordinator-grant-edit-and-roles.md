@@ -3,7 +3,7 @@ id: CR-221 # renumbered from draft-coordinator-grant-edit-and-roles
 title: ผู้ประสานงานจิตอาสาจัดการบัญชีจิตอาสาได้ครบวงจร — 10 ตำแหน่ง, แก้สิทธิ์, หน้าบัญชีจิตอาสา, พากลับมา, สถานะใน portal และ 1 บัญชีใช้ได้หลายศูนย์
 status: approved
 date: 2026-10-30
-updated: 2026-11-01 # approved by Soravit Sukkarn (Team Lead)
+updated: 2026-11-02 # Amendment A1 proposed (FR-4, FR-16, FR-20, FR-23, FR-32 — SM ให้จิตอาสาหลาย role) · 2026-11-01 approved by Soravit Sukkarn (Team Lead)
 requested_by: "@mhapong จากการทดสอบ CR-213 บน develop (2026-10-30) — #1044, #1045"
 decided_by: Soravit Sukkarn (Team Lead)
 decision_date: 2026-11-01
@@ -19,7 +19,8 @@ affects:
   - frontend/src/lib/auth/roles.ts (`COORDINATOR_GRANTABLE_CAPABILITIES`), frontend/src/lib/auth/role-grants.ts
   - frontend/src/lib/server/user-service.ts (`grantCoordinatorRole`, `revokeCoordinatorGrant`, `updateUser` field `active`)
   - frontend/src/lib/features/volunteers (server/volunteer-access-grant.ts, application/volunteer-access.ts, ui/volunteer-access-dialog.svelte, ui/volunteer-card.svelte, หน้าใหม่ volunteer-accounts)
-  - frontend/src/lib/features/users (ui/user-form.svelte: ซ่อน / ปิดสวิตช์ `active` สำหรับ SM เมื่อบัญชีเป็นจิตอาสา และเลือก role ได้ 1 ตัวต่อศูนย์ — FR-4, FR-23)
+  - frontend/src/lib/features/users (ui/user-form.svelte: ซ่อน / ปิดสวิตช์ `active` สำหรับ SM เมื่อบัญชีเป็นจิตอาสา — FR-23; ~~เลือก role ได้ 1 ตัวต่อศูนย์~~ ตัดโดย Amendment A1)
+  - **Amendment A1:** frontend/src/lib/features/volunteers/ui/volunteer-card.svelte (A1-6 ปุ่มปิดโปรไฟล์ของ VC), frontend/src/lib/server/user-service.ts (`grantCoordinatorRole`: ออก grant ข้าง role ถาวรของ SM ได้), frontend/src/lib/features/volunteers/ui/volunteer-access-dialog.svelte (FR-16 ใหม่), frontend/src/lib/server/user-service.role-grants.test.ts, volunteer-access-dialog.dom.test.ts
   - frontend/src/routes/api/v1/volunteer-access/** (เพิ่ม `accounts`), frontend/src/routes/api/public/v1/volunteer/access-status/ (Part C), frontend/src/lib/features/volunteer-portal (Part C)
   - frontend/src/lib/features/volunteers/ui/roster-row.svelte (FR-24, FR-25), ui/job-applicants-tab.svelte + ui/job-applicant-row.svelte (FR-25), ui/volunteer-account-badge.svelte + ui/volunteer-access-actions.svelte (ป้ายและปุ่มที่ใช้ร่วมกัน), frontend/src/routes/(protected)/back-office/volunteers/accounts/
   - frontend/src/lib/components/backoffice-navbar/static.ts (เมนูใหม่ ใช้ `canAccessVolunteerBackoffice` ตาม #1020)
@@ -35,7 +36,7 @@ affects:
 > **สรุป (TL;DR):**
 >
 > - **ยืนยันตัวตนก่อน:** ผู้ออกสิทธิ์ทุกคน (SA / SM / VC) ออกสิทธิ์ได้เฉพาะจิตอาสาที่ยืนยันตัวตน**ในศูนย์นี้**แล้ว ผลยืนยันจากศูนย์อื่นใช้แทนไม่ได้
-> - **role + แก้สิทธิ์:** `volunteer_coordinator` (VC) ออกได้ 10 role (ทุกตำแหน่งยกเว้น ผู้ประสานงานจิตอาสา, ดูแลตู้ Kiosk, ผู้จัดการศูนย์) จิตอาสามีได้ 1 role ต่อศูนย์ VC แก้ role / วันหมดอายุ และถอนสิทธิ์ที่ VC คนไหนก็ได้ออกในศูนย์ตัวเอง
+> - **role + แก้สิทธิ์:** `volunteer_coordinator` (VC) ออกได้ 10 role (ทุกตำแหน่งยกเว้น ผู้ประสานงานจิตอาสา, ดูแลตู้ Kiosk, ผู้จัดการศูนย์) จิตอาสามี role ที่ VC ออกได้ 1 role ต่อศูนย์ (SM ให้ role ถาวรได้หลาย role — Amendment A1) VC แก้ role / วันหมดอายุ และถอนสิทธิ์ที่ VC คนไหนก็ได้ออกในศูนย์ตัวเอง
 > - **หน้า + ปุ่ม:** เมนูใหม่ "บัญชีจิตอาสา" แสดงบัญชีจิตอาสาของศูนย์ (รวมบัญชีที่สิทธิ์สิ้นสุดแล้ว); แท็บรายชื่อและแท็บผู้สมัครของงานแสดงตำแหน่งปัจจุบันของบัญชี + ปุ่มตามสถานะ (ออกสิทธิ์ / แก้ไขสิทธิ์ / ออกสิทธิ์อีกครั้ง)
 > - **วงจรชีวิต:** ปิดโปรไฟล์ = ถอนสิทธิ์ในศูนย์นั้น (worker ≤ 5 นาที); VC พาคนกลับมาได้เองโดยไม่ผ่าน SM/SA; ปิดทั้งบัญชีจิตอาสาได้เฉพาะ SA
 > - **หลายศูนย์ (Part B):** จิตอาสา 1 คน = 1 บัญชี ใช้ได้หลายศูนย์ role ต่างกันต่อศูนย์ VC ของศูนย์ใหม่ผูกบัญชีเดิมได้เองเมื่อเบอร์มือถือและเลขบัตรตรงกัน
@@ -43,6 +44,24 @@ affects:
 > - **layer: stable** (auth / `_users` / worker) ต้อง review ก่อน approve · โค้ด 3 PR: Part A → Part C → Part B
 
 ---
+
+## Amendment A1 (2026-11-02, proposed — รอ @Jackyzaz approve)
+
+> **สรุป:** SM ให้บัญชีจิตอาสามี role ถาวรได้**หลาย role ต่อศูนย์** (เหมือนบัญชีเจ้าหน้าที่) · VC ยังออก grant แบบมีวันหมดได้ **1 role ต่อศูนย์** และออก**ข้าง** role ถาวรของ SM ได้ (ไม่แตะ role ของ SM) · VC ปิดโปรไฟล์ของจิตอาสาที่มี role ถาวรจาก SM ไม่ได้ · แก้ FR-4, FR-16, FR-20, FR-23, FR-32 · ไม่เปลี่ยน schema / `schema_v`
+
+- **A1-1 (แก้ FR-4):** บัญชี `personnel_type: volunteer` ในศูนย์หนึ่งมี role ถาวรจาก SM ได้ 0..n role และ grant จาก VC ได้ 0..1 grant · การแทนที่ grant ของ VC (FR-18) ยังเป็นแบบเดิม (เปลี่ยน role = แทนที่ grant เดิมของศูนย์นี้) และไม่แตะ role ถาวร
+- **A1-2 (แก้ FR-16):** บัญชีที่มี role ถาวรจาก SM ในศูนย์นี้: VC เห็น role ถาวรในรายการ (radio ของ role นั้น disabled + "ผู้จัดการศูนย์เป็นผู้ให้ แก้ไขได้ที่หน้าผู้ใช้งาน") และ**ออก / แก้ / ถอน grant ของ VC ได้ตามปกติ** · `POST /api/v1/volunteer-access` ด้วย role ที่บัญชีมีอยู่แล้วเป็น role ถาวร → 422 "ตำแหน่งนี้ผู้จัดการศูนย์ให้ไว้แล้ว" ไม่เขียนอะไร · `DELETE` role ถาวรยัง 403 (FR-17)
+  - **grant สิ้นสุด = ถอนเฉพาะ role ของ grant:** grant ของ VC หมดอายุ (worker sweep), ถูกถอน, ถูกแทนที่ด้วย role อื่น หรือถูกถอนเพราะปิดโปรไฟล์ / ผลยืนยันตัวตนถูกยกเลิก → ถอดเฉพาะ `SHxxx:<role ของ grant>` และ grant นั้น · role ถาวรจาก SM และ `shelter:SHxxx` คงอยู่ บัญชียังใช้งานในศูนย์ด้วย role ถาวรได้ต่อ
+  - เหตุที่ห้ามออก grant ซ้ำกับ role ถาวร: compound role เป็นค่าเดียวกัน (`SHxxx:<role>`) ถ้าปล่อยให้มี grant ทับ เมื่อ grant หมดอายุ role ถาวรจะหลุดไปด้วย
+- **A1-3 (แก้ FR-23):** ตัดข้อ "ตำแหน่งหน้าที่ของศูนย์เลือกได้ 1 role (FR-4)" ในหน้าแก้ไขผู้ใช้ของ SM · ข้อซ่อนสวิตช์ `active` คงเดิม
+- **A1-4 (แก้ FR-32, Part B):** SM ออกสิทธิ์จากการ์ดให้บัญชีเดิมได้หลาย role ในศูนย์ของ SM (ไม่ตรวจ "1 role ต่อศูนย์")
+- **A1-6 (แก้ FR-20):** โปรไฟล์ที่บัญชีมี role ถาวรจาก SM ในศูนย์นี้ **VC ปิดโปรไฟล์ไม่ได้** — ปุ่มปิดใช้งานของ VC ถูก disabled พร้อมเหตุผล "จิตอาสามีสิทธิ์ถาวรจากผู้จัดการศูนย์ ให้ผู้จัดการศูนย์ปิดหรือถอนสิทธิ์ก่อน" · SM / SA ปิดได้ตามเดิม (dialog ยังเตือนเรื่อง role ถาวร) · โปรไฟล์ที่มีเฉพาะ grant ของ VC: VC ปิดได้ตามเดิม (worker ถอน grant)
+  - กติกานี้ตรวจที่ UI เท่านั้น: การปิดโปรไฟล์เขียน `shelter_{code}` ตรงด้วย session ของผู้ใช้ และ VDU ของ shelter DB อ่าน `_users` ไม่ได้ (บันทึกเป็นข้อจำกัดที่รู้)
+- **A1-5 (การแสดงผล):** หน้าบัญชีจิตอาสา (FR-8) และป้ายในตาราง (FR-9) แสดงทุก role (ถาวร + grant) · portal (FR-26, FR-28) ยังคืน `role_label` ตัวเดียวตามกติกาเดิม (role ถาวรมาก่อน) ไม่เปลี่ยน response
+
+**Why (A1):** owner (@mhapong) 2026-11-02 — SM ต้องให้จิตอาสาทำหลายหน้าที่ในศูนย์ได้เหมือนเจ้าหน้าที่ประจำ ส่วนสิทธิ์ชั่วคราวของ VC คุม 1 role ต่อศูนย์ไว้เพื่อให้แก้ / ถอนง่าย
+
+**Code impact (A1):** #1086 (merge แล้ว) ทำให้ `grantCoordinatorRole` ปฏิเสธ (403) เมื่อบัญชีมี role ถาวรของ SM และ dialog บล็อกการบันทึก → ต้องแก้เป็น A1-2 ใน PR ถัดไป · SM form ไม่ต้องแก้ (เป็น checkbox อยู่แล้ว)
 
 ## Why
 
@@ -63,7 +82,7 @@ affects:
 - **FR-3:** กติกา CR-213 คงเดิม: ศูนย์ตัวเอง (FR-1), วันหมดไม่เกินสิ้นวันที่ +7 (FR-4), audit (FR-15)
   - **ยืนยันตัวตน (แก้ CR-213 FR-3):** ออกสิทธิ์ได้เฉพาะโปรไฟล์ที่ยืนยันตัวตน**ในศูนย์ที่ออกสิทธิ์**แล้ว ใช้กับผู้ออกสิทธิ์ทุกคน (SA / SM / VC) ผลยืนยันของโปรไฟล์ศูนย์อื่น (เบอร์ + เลขบัตรตรงกัน) **ใช้แทนไม่ได้** · `POST /api/v1/volunteer-access` ตอบ 422 "อาสาสมัครต้องยืนยันตัวตนก่อนจึงจะออกสิทธิ์ได้" · `verified_by` ของ grant = โปรไฟล์ในศูนย์นี้
   - การถอน / แก้ grant ที่มีอยู่ไม่ต้องยืนยันซ้ำ
-- **FR-4 1 role ต่อศูนย์ (เฉพาะจิตอาสา):** บัญชี `personnel_type: volunteer` มี role ได้ไม่เกิน 1 role ต่อศูนย์ (ทั้งที่ VC ออกและที่ SM ให้) และอยู่ได้หลายศูนย์ (Part B)
+- **FR-4 1 role ต่อศูนย์ (เฉพาะจิตอาสา):** ~~บัญชี `personnel_type: volunteer` มี role ได้ไม่เกิน 1 role ต่อศูนย์ (ทั้งที่ VC ออกและที่ SM ให้)~~ **แก้โดย Amendment A1-1:** grant ของ VC ไม่เกิน 1 ต่อศูนย์ · role ถาวรจาก SM ได้หลาย role · อยู่ได้หลายศูนย์ (Part B)
   - บัญชีเจ้าหน้าที่ (ไม่ใช่จิตอาสา) ไม่เปลี่ยน: อยู่ได้หลายศูนย์และมีหลาย role ต่อศูนย์ จัดการผ่านหน้าผู้ใช้งานโดย SM/SA ตามเดิม
 
 ### A2 — หน้า "บัญชีจิตอาสา" และ endpoint
@@ -106,7 +125,7 @@ affects:
 - **FR-15 ยังไม่ยืนยันตัวตน (FR-3):** ใช้กับผู้ออกสิทธิ์ทุกคน
   - การ์ด / แถว: ปุ่มเป็น "ยืนยันตัวตนก่อนออกสิทธิ์" กดแล้ว toast "ต้องยืนยันตัวตนอาสาสมัครก่อนจึงจะออกสิทธิ์ได้" และเปิด dialog ตรวจตัวตน (ตรวจสอบ & อนุมัติ) ยืนยันแล้วปุ่มกลับเป็น "ออกสิทธิ์ใช้งานระบบ"
   - dialog: ปุ่มบันทึกถูกปิดพร้อมเหตุผล; server ปฏิเสธ (422) แสดง toast
-- **FR-16 role ของ SM:** สถานะ `active` ที่ role ในศูนย์นี้เป็น role ถาวรจาก SM: VC เห็น role และ "ผู้จัดการศูนย์เป็นผู้ให้ แก้ไขได้ที่หน้าผู้ใช้งาน" บันทึกไม่ได้
+- **FR-16 role ของ SM:** ~~สถานะ `active` ที่ role ในศูนย์นี้เป็น role ถาวรจาก SM: VC เห็น role และ "ผู้จัดการศูนย์เป็นผู้ให้ แก้ไขได้ที่หน้าผู้ใช้งาน" บันทึกไม่ได้~~ **แก้โดย Amendment A1-2:** VC เห็น role ถาวร (radio disabled + ข้อความเดิม) และออก / แก้ / ถอน grant ของ VC ข้าง role นั้นได้
 
 ### A5 — แก้และถอนสิทธิ์ (แก้ CR-213 FR-7, FR-8)
 
@@ -122,10 +141,11 @@ affects:
 
 - **FR-20 ปิดโปรไฟล์ = ถอนสิทธิ์:** worker sweep (CR-213 FR-12) ถอนทุก grant ในศูนย์ `SHxxx` ของบัญชีที่โปรไฟล์ที่ผูกในศูนย์นั้นมี `status: inactive` audit `role_grant.revoked` `actor: worker` `context.cause: profile_inactive` (≤ 5 นาที ตาม CR-213 FR-13)
   - role ถาวรจาก SM ไม่ถูกแตะ; dialog ยืนยันการปิดโปรไฟล์เตือน "ยังมีสิทธิ์ที่ผู้จัดการศูนย์ให้ ต้องให้ผู้จัดการศูนย์ถอน" เมื่อมี
+  - **Amendment A1-6:** โปรไฟล์ที่มี role ถาวรจาก SM: VC ปิดไม่ได้ (ปุ่ม disabled + เหตุผล) SM / SA ปิดได้
 - **FR-21 ห้ามออกสิทธิ์ให้โปรไฟล์ที่ปิด:** `POST /api/v1/volunteer-access` ตอบ 422 "เปิดใช้งานอาสาสมัครก่อนจึงจะออกสิทธิ์ได้"
 - **FR-22 พากลับมา:** ถอน / หมดอายุ / ปิดแล้วเปิดโปรไฟล์ใหม่ → สถานะ `lapsed` → VC "ออกสิทธิ์อีกครั้ง" ด้วย role เดิมหรือใหม่ + วันหมดใหม่ ให้บัญชีเดิม (รหัสผ่านเดิม) ไม่ผ่าน SM/SA; ต้องยืนยันตัวตนในศูนย์นี้ (FR-3) และ CR-213 FR-7 ยังใช้
 - **FR-23 ปิดทั้งบัญชีจิตอาสา:** `PUT /api/v1/users` เปลี่ยน `active` ของบัญชี `personnel_type: volunteer` ได้เฉพาะ SA (SM ได้ 403 "บัญชีจิตอาสาใช้การถอนสิทธิ์ในศูนย์แทนการปิดบัญชี"); บัญชีเจ้าหน้าที่ทั่วไปเหมือนเดิม; VC เปิดบัญชีที่ SA ปิดไม่ได้ (CR-213 FR-7 เดิม)
-  - หน้าแก้ไขผู้ใช้ (`user-form.svelte`) ของ SM: บัญชีจิตอาสาไม่แสดงสวิตช์ `active` (SA ยังเห็น) และตำแหน่งหน้าที่ของศูนย์เลือกได้ 1 role (FR-4) — SM จึงไม่กดบันทึกแล้วติด 403
+  - หน้าแก้ไขผู้ใช้ (`user-form.svelte`) ของ SM: บัญชีจิตอาสาไม่แสดงสวิตช์ `active` (SA ยังเห็น) — SM จึงไม่กดบันทึกแล้วติด 403 · ~~และตำแหน่งหน้าที่ของศูนย์เลือกได้ 1 role (FR-4)~~ ตัดโดย Amendment A1-3
 
 ### A7 — ยืนยันตัวตนและออกสิทธิ์จากหน้ากะ
 
@@ -156,7 +176,7 @@ affects:
   - บัญชีที่มี `volunteer_coordinator` หรือ `shelter_manager` ในศูนย์ใด: VC ผูกและออกสิทธิ์ให้ไม่ได้ (CR-213 FR-7) **SM ของศูนย์ที่จะให้ทำงาน (SH002) เป็นผู้ผูกและออก role ของ SH002 เอง** ไม่ต้องผ่าน SA; SM แตะได้เฉพาะ role ของศูนย์ตัวเอง
   - บัญชี `system_admin`: ไม่ผูก
 - **FR-31 แยกต่อศูนย์:** ผู้ออกสิทธิ์ใน SH002 ต้องมี `volunteer_coordinator` (หรือ SM / SA) ใน SH002 เอง ศูนย์อ่านจาก session (CR-213 FR-1) VC ของ SH001 ออกสิทธิ์ใน SH002 ไม่ได้ (403); VC / SM ของ SH002 อ่าน แก้ ถอน ได้เฉพาะ role / grant ของ SH002; ปิดโปรไฟล์ SH002 ถอนเฉพาะ SH002; หน้า "บัญชีจิตอาสา" ไม่แสดง role ของศูนย์อื่น
-- **FR-32 SM ออกสิทธิ์จากการ์ด:** เลิกเงื่อนไข "บัญชีเดิมต้องมี scope 1 ศูนย์ + 1 capability" ตรวจเฉพาะ role ในศูนย์ของ SM (FR-4)
+- **FR-32 SM ออกสิทธิ์จากการ์ด:** เลิกเงื่อนไข "บัญชีเดิมต้องมี scope 1 ศูนย์ + 1 capability" ตรวจเฉพาะ role ในศูนย์ของ SM ~~(FR-4)~~ — หลาย role ได้ (Amendment A1-4)
 - **FR-33 1 บัญชีต่อคน:** สร้างบัญชีจิตอาสาใหม่ถูกปฏิเสธเมื่อมีบัญชีจิตอาสาเดิมที่ตรงตาม FR-30 (ให้ผูกแทน)
 
 ### schema.md §6 `_users` — เพิ่ม field (Part B)
@@ -178,6 +198,8 @@ affects:
 - [ ] "แก้ไขสิทธิ์": username อ่านอย่างเดียว ไม่มีรหัสผ่าน radio เลือก role ปัจจุบัน วันหมดว่างพร้อม "เดิม: …" บันทึกไม่ได้ถ้าไม่เลือกวัน
 - [ ] VC เปลี่ยน role ครัว → คลัง: บัญชีมี `shelter:SH001` + `SH001:warehouse_staff` เท่านั้น audit `revoked` + `issued`
 - [ ] VC คนที่ 2 ถอนและแก้ grant ที่ VC คนแรกออกได้ audit บันทึกทั้งผู้ทำและผู้ออกเดิม; แตะ role ถาวรของ SM ได้ 403
+- [ ] (A1) SM ให้บัญชีจิตอาสา `registration_staff` + `kitchen_staff` ถาวรในศูนย์เดียวได้ · VC ออก grant `warehouse_staff` 3 วันข้าง 2 role นั้นได้ (บัญชีมี 3 role) · VC ออก `kitchen_staff` ซ้ำกับ role ถาวรได้ 422 · ถอน grant แล้ว role ถาวร 2 ตัวยังอยู่ · grant หมดอายุ (worker) แล้ว role ถาวร 2 ตัวและ `shelter:SHxxx` ยังอยู่ login เข้าหน้าของ role ถาวรได้
+- [ ] (A1-6) VC เห็นปุ่มปิดโปรไฟล์ของจิตอาสาที่มี role ถาวรจาก SM เป็น disabled พร้อมเหตุผล · SM ปิดได้ · จิตอาสาที่มีเฉพาะ grant ของ VC: VC ปิดได้
 - [ ] ปิดโปรไฟล์: ภายในรอบ sweep บัญชีไม่มี role ในศูนย์; เปิดโปรไฟล์แล้ว VC "ออกสิทธิ์อีกครั้ง" ด้วย role ใหม่ login รหัสผ่านเดิมได้ ไม่ใช้ SM/SA
 - [ ] ออกสิทธิ์ให้โปรไฟล์ที่ปิดได้ 422
 - [ ] SM เปลี่ยน `active` ของบัญชีจิตอาสาได้ 403; SA ทำได้; การ์ดแสดง "บัญชีถูกระงับโดยผู้ดูแลระบบ"
@@ -203,6 +225,7 @@ affects:
 - **ยืนยันตัวตนในศูนย์นี้ (FR-3):** จิตอาสาที่ไปช่วยศูนย์ใหม่ต้องให้ VC / SM ของศูนย์นั้นตรวจบัตรและยืนยันก่อนทุกครั้ง แลกกับการที่ผู้ออกสิทธิ์เห็นตัวจริงเอง
 - **VC อ่านรายชื่อบัญชีจิตอาสา (FR-6):** VC เห็น username และตำแหน่งในศูนย์ตัวเองของบัญชีที่ผูกกับโปรไฟล์จิตอาสาของศูนย์ (เดิมเห็นเฉพาะ SA / SM ผ่านหน้าผู้ใช้งาน)
 - **ข้อมูลข้ามศูนย์ (FR-30):** VC SH002 เห็น username ของบัญชีเดิม (เป็นอีเมลของจิตอาสาเอง) ไม่เห็น role หรือข้อมูลของ SH001
+- **Amendment A1:** จิตอาสาที่ SM ให้หลาย role ได้สิทธิ์กว้างเท่าเจ้าหน้าที่ประจำในศูนย์นั้น (SM ตัดสินใจเองเหมือนบัญชีเจ้าหน้าที่) · grant ชั่วคราวของ VC ยังจำกัด 1 role
 - **deploy:** Part A: restart worker · Part C: ไม่มี · Part B: `pnpm sync:central` → restart worker → backfill
 - **ลำดับ:** merge #984 และ #1020 ก่อน Part A
 
@@ -233,3 +256,4 @@ affects:
   - FR-6 ระบุ response ตามที่ทำจริง (`grants` + `permanent_roles` แทน `role` ตัวเดียว)
 - 2026-10-30 — ยกเว้น `volunteer_coordinator` (กันตั้งต่อเป็นทอด), `kiosk_staff`, `shelter_manager` ตามคำขอ
 - 2026-11-01 — approved โดย Soravit Sukkarn (Team Lead) เป็น CR-221
+- 2026-11-02 — **Amendment A1** proposed — owner (@mhapong): SM ต้องให้จิตอาสาได้หลายสิทธิ์ในศูนย์ (ตอบ "1 C") · VC ออก grant ข้าง role ของ SM ได้ (ตอบ "ข") · บันทึกเป็น Amendment ใน CR-221 (ตอบ "A") · ตัดทาง "SM form ให้จิตอาสาเลือกได้ 1 role" และ "VC ห้ามออกสิทธิ์ให้บัญชีที่มี role ของ SM" (FR-16 เดิม) · VC ปิดโปรไฟล์ที่มี role ถาวรไม่ได้ (A1-6) · grant ของ VC สิ้นสุดแล้วถอนเฉพาะ role ของ grant role ถาวรคงอยู่ (A1-2)
