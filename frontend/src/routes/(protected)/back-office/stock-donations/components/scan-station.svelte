@@ -53,8 +53,7 @@
 		canCloseByPoints,
 		defaultStoragePointId,
 		otherPointLineCount,
-		scanCounterLabel,
-		scanIdleSubmitLabel,
+		scanStatus,
 		linePointLabel,
 		namesDropOffPoints,
 		pointReceiptFields,
@@ -560,20 +559,46 @@
 	);
 	/** Red only when everything recorded is turned away (CR-172 FR-12). */
 	const refusesAll = $derived(scopeLines.length > 0 && keptItems.length === 0);
-	const counterLabel = $derived(
-		scanCounterLabel({
+	const status = $derived(
+		scanStatus({
+			wrongShelter: !!otherShelterCode,
+			needsPoint: pointChoiceMissing,
 			verified: verifiedCount,
 			decidable: decidableCount,
-			otherPointCount,
-			needsPoint: pointChoiceMissing
+			otherPointCount
 		})
 	);
+	const counterLabel = $derived.by(() => {
+		switch (status.kind) {
+			case 'wrong_shelter':
+				return 'ใบนี้เป็นของศูนย์อื่น';
+			case 'needs_point':
+				return 'เลือกจุดที่ประจำก่อนจึงจะตรวจรับได้';
+			case 'none_here':
+				return `ตรวจแล้ว 0 / 0 รายการ · อีก ${status.otherPointCount} รายการอยู่จุดอื่น`;
+			case 'progress': {
+				const base = `ตรวจแล้ว ${status.verified} / ${status.decidable} รายการ`;
+				return status.otherPointCount > 0
+					? `${base} · อีก ${status.otherPointCount} รายการอยู่จุดอื่น`
+					: base;
+			}
+		}
+	});
+	/** The save button's text while there is nothing to save yet; `null` once there is. */
+	const idleSubmitLabel = $derived.by(() => {
+		switch (status.kind) {
+			case 'wrong_shelter':
+				return 'ใบนี้เป็นของศูนย์อื่น';
+			case 'needs_point':
+				return 'เลือกจุดที่ประจำก่อน';
+			case 'none_here':
+				return 'ไม่มีรายการของจุดนี้ให้รับ';
+			case 'progress':
+				return null;
+		}
+	});
 	const receiveLabel = $derived(
-		scanIdleSubmitLabel({
-			needsPoint: pointChoiceMissing,
-			noneToSave: scopeLines.length === 0,
-			otherPointCount
-		}) ??
+		idleSubmitLabel ??
 			(rejectedCount === 0
 				? 'ยืนยันรับเข้าคลัง'
 				: keptItems.length === 0
@@ -1233,7 +1258,7 @@
 							</Button>
 						{/snippet}
 
-						{#if pointChoiceMissing}
+						{#if pointChoiceMissing && !otherShelterCode}
 							<!-- FR-MP-18a: no line can be ticked before the recorder's point is chosen. -->
 							<div
 								role="status"
@@ -1368,7 +1393,9 @@
 											class="flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm font-semibold text-amber-900"
 										>
 											<MapPin class="h-4 w-4 shrink-0 text-amber-600" aria-hidden="true" />
-											เลือกจุดที่ประจำก่อนจึงจะตรวจรับรายการนี้ได้
+											{otherShelterCode
+												? 'ใบนี้เป็นของศูนย์อื่น — สลับศูนย์ก่อนตรวจรับรายการนี้'
+												: 'เลือกจุดที่ประจำก่อนจึงจะตรวจรับรายการนี้ได้'}
 										</p>
 									</div>
 								{:else if item.reviewReason !== undefined}
@@ -1640,7 +1667,9 @@
 								{:else}
 									{@render step(
 										scannedItems.length > 0 && verifiedCount === scannedItems.length,
-										`ติ๊ก "ผ่านการตรวจสอบแล้ว" ครบ (${verifiedCount}/${scannedItems.length})`
+										pointChoiceMissing
+											? 'เลือกจุดที่ประจำก่อน จึงจะติ๊ก "ผ่านการตรวจสอบแล้ว" ได้'
+											: `ติ๊ก "ผ่านการตรวจสอบแล้ว" ครบ (${verifiedCount}/${scannedItems.length})`
 									)}
 								{/if}
 							</ul>

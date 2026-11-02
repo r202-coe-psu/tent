@@ -3,16 +3,14 @@ import {
 	ANY_DROP_OFF_POINT_LABEL,
 	canCloseByPoints,
 	defaultStoragePointId,
-	hasOtherPointLines,
 	linePointLabel,
 	namesDropOffPoints,
 	otherPointLineCount,
 	pointReceiptFields,
 	recordedAtLabel,
-	scanCounterLabel,
-	scanIdleSubmitLabel,
 	scanLineStates,
 	scanReceiveMode,
+	scanStatus,
 	type PointScanSource
 } from './point-scan';
 
@@ -63,7 +61,7 @@ describe('scanLineStates (FR-MP-19, FR-MP-21)', () => {
 		]);
 	});
 
-	it('locks every unrecorded line, any-point ones too, until a point is chosen (FR-MP-18a)', () => {
+	it('locks every unrecorded line, any-point ones too, until a point is chosen (owner decision #1059)', () => {
 		expect(states(split, null, true).map((s) => s.kind)).toEqual([
 			'needs_point',
 			'needs_point',
@@ -100,33 +98,54 @@ describe('scanLineStates (FR-MP-19, FR-MP-21)', () => {
 		expect(otherPointLineCount(states(started, GYM))).toBe(0);
 	});
 
-	it('words the counter with the other-point count, never a bare 0 / 0 (#1059)', () => {
-		const base = { verified: 0, decidable: 0, otherPointCount: 0, needsPoint: false };
-		expect(scanCounterLabel({ ...base, otherPointCount: 3 })).toBe(
-			'ตรวจแล้ว 0 / 0 รายการ · อีก 3 รายการอยู่จุดอื่น'
-		);
-		expect(
-			scanCounterLabel({ verified: 1, decidable: 2, otherPointCount: 1, needsPoint: false })
-		).toBe('ตรวจแล้ว 1 / 2 รายการ · อีก 1 รายการอยู่จุดอื่น');
-		expect(scanCounterLabel({ ...base, verified: 1, decidable: 2 })).toBe('ตรวจแล้ว 1 / 2 รายการ');
-		const needs = scanCounterLabel({ ...base, needsPoint: true, otherPointCount: 2 });
-		expect(needs).toBe('เลือกจุดที่ประจำก่อนจึงจะตรวจรับได้');
-		expect(needs).not.toContain('0 / 0');
-	});
+	describe('scanStatus', () => {
+		const base = {
+			wrongShelter: false,
+			needsPoint: false,
+			verified: 0,
+			decidable: 0,
+			otherPointCount: 0
+		};
 
-	it('words the idle save button', () => {
-		expect(scanIdleSubmitLabel({ needsPoint: true, noneToSave: true, otherPointCount: 1 })).toBe(
-			'เลือกจุดที่ประจำก่อน'
-		);
-		expect(scanIdleSubmitLabel({ needsPoint: false, noneToSave: true, otherPointCount: 2 })).toBe(
-			'ไม่มีรายการของจุดนี้ให้รับ'
-		);
-		expect(
-			scanIdleSubmitLabel({ needsPoint: false, noneToSave: false, otherPointCount: 2 })
-		).toBeNull();
-		expect(
-			scanIdleSubmitLabel({ needsPoint: false, noneToSave: true, otherPointCount: 0 })
-		).toBeNull();
+		it('asks for a point before anything else, never a bare 0 / 0 (#1059)', () => {
+			expect(scanStatus({ ...base, needsPoint: true, otherPointCount: 2 })).toEqual({
+				kind: 'needs_point'
+			});
+		});
+
+		it('puts another shelter ahead of the missing point', () => {
+			expect(scanStatus({ ...base, wrongShelter: true, needsPoint: true })).toEqual({
+				kind: 'wrong_shelter'
+			});
+		});
+
+		it('reports none_here only when nothing is decidable and other points have lines', () => {
+			expect(scanStatus({ ...base, otherPointCount: 3 })).toEqual({
+				kind: 'none_here',
+				otherPointCount: 3
+			});
+			expect(scanStatus({ ...base, decidable: 1, otherPointCount: 1 })).toEqual({
+				kind: 'progress',
+				verified: 0,
+				decidable: 1,
+				otherPointCount: 1
+			});
+			expect(scanStatus({ ...base })).toEqual({
+				kind: 'progress',
+				verified: 0,
+				decidable: 0,
+				otherPointCount: 0
+			});
+		});
+
+		it('reports progress with the other-point count', () => {
+			expect(scanStatus({ ...base, verified: 1, decidable: 2 })).toEqual({
+				kind: 'progress',
+				verified: 1,
+				decidable: 2,
+				otherPointCount: 0
+			});
+		});
 	});
 
 	it('unlocks another point’s unrecorded line on "รับรายการของจุดอื่น" (AC-10)', () => {
@@ -162,12 +181,6 @@ describe('scanLineStates (FR-MP-19, FR-MP-21)', () => {
 			{ kind: 'receivable', pointId: null, borrowed: false },
 			{ kind: 'receivable', pointId: null, borrowed: false }
 		]);
-	});
-
-	it('tells when another point has lines left', () => {
-		expect(hasOtherPointLines(states(split, GYM))).toBe(true);
-		expect(hasOtherPointLines(states(split, GYM, true))).toBe(true);
-		expect(hasOtherPointLines(states({ items: [{ drop_off_point_id: GYM }] }, GYM))).toBe(false);
 	});
 });
 
