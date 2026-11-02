@@ -332,6 +332,21 @@ def test_hello_rejects_an_unusable_lease_sec_as_a_malformed_response(bad):
         client_with(handler).hello("0.1.0", "ready")
 
 
+@pytest.mark.parametrize("bad", ["25", None, True, -1, 40, 2.5])
+def test_hello_rejects_an_unusable_wait_sec_as_a_malformed_response(bad):
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "device": {"device_id": "d", "name": "n", "shelter_code": "SH001"},
+                "config": {"wait_sec": bad, "lease_sec": 60},
+            },
+        )
+
+    with pytest.raises(ServerError, match="malformed"):
+        client_with(handler).hello("0.1.0", "ready")
+
+
 @pytest.mark.parametrize("status", [400, 403, 404, 410, 413, 422])
 def test_definitive_client_errors_are_marked_as_rejected(status):
     client = client_with(lambda request: httpx.Response(status, json={}))

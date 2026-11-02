@@ -42,14 +42,24 @@ def _parsing() -> Iterator[None]:
 _RETRYABLE_CLIENT_STATUSES = frozenset({408, 425, 429})
 _MIN_LEASE_SEC = 1
 _MAX_LEASE_SEC = 3600
+_HTTP_TIMEOUT_SEC = 40.0
+
+
+def _int_in(value: object, low: int, high: float) -> int | None:
+    """value if it is an int in [low, high], else None. bool is an int subclass but never counts."""
+    if isinstance(value, int) and not isinstance(value, bool) and low <= value <= high:
+        return value
+    return None
 
 
 def _lease_sec(value: object) -> int | None:
-    """A usable lease length, or None. bool is an int subclass but never a lease."""
-    if isinstance(value, int) and not isinstance(value, bool):
-        if _MIN_LEASE_SEC <= value <= _MAX_LEASE_SEC:
-            return value
-    return None
+    """A usable lease length, or None."""
+    return _int_in(value, _MIN_LEASE_SEC, _MAX_LEASE_SEC)
+
+
+def _wait_sec(value: object) -> int | None:
+    """A long-poll wait the server can answer within our HTTP timeout, or None."""
+    return _int_in(value, 0, _HTTP_TIMEOUT_SEC - 1)
 
 
 @dataclass(frozen=True)
@@ -79,7 +89,7 @@ class BffClient:
                 "x-device-id": config.device_id,
                 "x-device-secret": config.device_secret,
             },
-            timeout=40.0,
+            timeout=_HTTP_TIMEOUT_SEC,
             transport=transport,
         )
 
@@ -99,11 +109,14 @@ class BffClient:
             lease_sec = _lease_sec(body["config"]["lease_sec"])
             if lease_sec is None:
                 raise ValueError("lease_sec out of range")
+            wait_sec = _wait_sec(body["config"]["wait_sec"])
+            if wait_sec is None:
+                raise ValueError("wait_sec out of range")
             return Hello(
                 device_id=body["device"]["device_id"],
                 name=body["device"]["name"],
                 shelter_code=body["device"]["shelter_code"],
-                wait_sec=body["config"]["wait_sec"],
+                wait_sec=wait_sec,
                 lease_sec=lease_sec,
             )
 
