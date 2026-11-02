@@ -82,7 +82,11 @@ describe('volunteerAccessStatus', () => {
 describe('closeProfileAccessNotice (CR-221 FR-20)', () => {
 	const notice = (over: Partial<VolunteerAccount>) =>
 		closeProfileAccessNotice(volunteerAccessStatus(vol, [account(over)]));
-	const GRANT = { role: 'kitchen_staff', expires_at: '2026-11-03T16:59:59.999Z' };
+	const GRANT = {
+		role: 'kitchen_staff',
+		expires_at: '2026-11-03T16:59:59.999Z',
+		granted_by: 'coord01'
+	};
 
 	it('says the grants are revoked and a manager-given role is kept', () => {
 		expect(notice({ grants: [GRANT], permanent_roles: ['registration_staff'] })).toEqual({

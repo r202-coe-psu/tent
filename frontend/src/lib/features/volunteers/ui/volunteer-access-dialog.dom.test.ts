@@ -12,7 +12,8 @@ const mocks = vi.hoisted(() => ({
 	grantLimited: vi.fn(),
 	grantFull: vi.fn(),
 	revoke: vi.fn(),
-	grants: null as Record<string, unknown> | null
+	grants: null as Record<string, unknown> | null,
+	grantsError: false
 }));
 
 vi.mock('@tanstack/svelte-query', () => ({
@@ -37,6 +38,9 @@ vi.mock('../application/queries', () => ({
 	useVolunteerGrants: () => ({
 		get data() {
 			return mocks.grants;
+		},
+		get isError() {
+			return mocks.grantsError;
 		}
 	})
 }));
@@ -141,6 +145,7 @@ beforeEach(() => {
 	mocks.grantLimited.mockResolvedValue({ created: true, unchanged: false });
 	mocks.revoke.mockResolvedValue(undefined);
 	mocks.grants = null;
+	mocks.grantsError = false;
 });
 
 afterEach(async () => {
@@ -372,7 +377,7 @@ describe('VolunteerAccessDialog says where the account stands (#1044)', () => {
 			}
 		});
 		await render(COORDINATOR, linked);
-		expect(document.body.textContent).toContain('ถูกถอนสิทธิ์เมื่อ');
+		expect(document.body.textContent).toContain('ถูกถอนเมื่อ');
 		expect(document.body.textContent).toContain('โดย coord01');
 	});
 
@@ -387,7 +392,7 @@ describe('VolunteerAccessDialog says where the account stands (#1044)', () => {
 			}
 		});
 		await render(COORDINATOR, linked);
-		expect(document.body.textContent).toContain('ถูกถอนสิทธิ์เพราะปิดโปรไฟล์เมื่อ');
+		expect(document.body.textContent).toContain('ถูกถอนเพราะปิดโปรไฟล์เมื่อ');
 		expect(document.body.textContent).toContain('โดยระบบ');
 		expect(document.body.textContent).not.toContain('worker');
 	});
@@ -596,6 +601,49 @@ describe('VolunteerAccessDialog username and old expiry (CR-221 FR-10, FR-13)', 
 			expect(document.body.textContent).toContain(EXISTS_NOTE);
 		}
 	);
+
+	describe.each([
+		['is still loading', false],
+		['failed', true]
+	])('while the coordinator grants view %s', (_state, failed) => {
+		beforeEach(() => {
+			mocks.grants = null;
+			mocks.grantsError = failed;
+		});
+
+		it('falls back to the profile link: read-only username, no email or password input', async () => {
+			await render(COORDINATOR, linked);
+			expect(existingUsername()).toBe('vol@example.com');
+			expect(emailInput()).toBeNull();
+			expect(passwordInput()).toBeNull();
+			expect(document.body.textContent).toContain(EXISTS_NOTE);
+		});
+
+		it('labels the read-only username', async () => {
+			await render(COORDINATOR, linked);
+			const username = document.body.querySelector('[data-testid="existing-username"]')!;
+			const label = document.getElementById(username.getAttribute('aria-labelledby')!);
+			expect(label?.textContent).toContain('Username เข้าสู่ระบบ');
+		});
+
+		it('saves as an existing account: no password sent or asked for', async () => {
+			await render(COORDINATOR, linked);
+			await pickRole('kitchen_staff');
+			await pickExpiry(grantExpiryRange().max);
+			saveButton().click();
+			await settle();
+			expect(mocks.grantLimited).toHaveBeenCalledWith(
+				expect.objectContaining({ _id: volunteer._id }),
+				expect.objectContaining({ email: 'vol@example.com', password: '', account_exists: true })
+			);
+		});
+
+		it('still shows the inputs for a profile with no linked account', async () => {
+			await render(COORDINATOR);
+			expect(emailInput()).not.toBeNull();
+			expect(passwordInput()).not.toBeNull();
+		});
+	});
 
 	it('keeps the email and password inputs when there is no account', async () => {
 		await render(COORDINATOR);

@@ -127,7 +127,7 @@
 	const queryClient = useQueryClient();
 	const deactivateMutation = useDeactivateVolunteer(queryClient);
 	// CR-221 FR-20: closing the profile takes the coordinator grants away (worker sweep, about 5
-	// minutes) but not a role a shelter manager gave.
+	// minutes; reopening before it runs keeps them) but not a role a shelter manager gave.
 	const closeNotice = $derived(closeProfileAccessNotice(accessStatus));
 	const reactivateMutation = useReactivateVolunteer(queryClient);
 
@@ -383,7 +383,7 @@
 		</AlertDialog.Header>
 		{#if closeNotice.revokesGrants}
 			<p class="text-sm text-muted-foreground" data-testid="close-revokes-grants">
-				สิทธิ์ใช้งานระบบที่ผู้ประสานงานออกให้จะถูกถอนอัตโนมัติภายในประมาณ 5 นาที
+				ถ้าไม่เปิดใช้งานคืนภายใน 5 นาที สิทธิ์ใช้งานระบบที่ผู้ประสานงานออกให้จะถูกถอนอัตโนมัติ
 			</p>
 		{/if}
 		{#if closeNotice.keepsManagerRole}

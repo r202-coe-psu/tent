@@ -1,7 +1,7 @@
 """Tests for the coordinator role-grant expiry sweep (#955)."""
 
 from datetime import UTC, datetime
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, call
 
 import pytest
 
@@ -278,7 +278,10 @@ async def test_sweep_looks_at_the_profile_of_another_shelter():
     verified = {**VERIFIED, "_id": "volunteer:V9"}
     couch, store = _couch([doc], {("SH002", "volunteer:V9"): verified})
     assert await expire_role_grants(couch, now=NOW) == 0
-    couch.get_doc.assert_any_await("shelter_sh002", "volunteer:V9")
+    # The verifying profile (other shelter) and the account's own linked profile (closed check).
+    assert sorted(couch.get_doc.await_args_list) == sorted(
+        [call("shelter_sh002", "volunteer:V9"), call("shelter_sh001", "volunteer:V1")]
+    )
     assert store[doc["_id"]] == doc
 
 
@@ -526,3 +529,30 @@ async def test_an_expired_grant_keeps_its_expired_reason_on_a_closed_profile():
     ((_, audit),) = couch.audits
     assert audit["reason"] == "role_grant.expired"
     assert "cause" not in audit["context"]
+
+
+async def test_a_profile_that_is_both_verifier_and_linked_is_read_once():
+    # VERIFIER is also the account's own ``volunteer_id``: one read serves both rules.
+    doc = _user(
+        ["shelter:SH001", "SH001:kitchen_staff"], [_grant("kitchen_staff", FUTURE)]
+    )
+    couch, store = _couch([doc], {VERIFIER: _profile()})
+    assert await expire_role_grants(couch, now=NOW) == 1
+    assert couch.get_doc.await_args_list == [call("shelter_sh001", "volunteer:V1")]
+    ((_, audit),) = couch.audits
+    assert audit["reason"] == "role_grant.revoked"
+    assert store[doc["_id"]]["role_grants"] == []
+
+
+async def test_each_distinct_profile_is_read_once_across_accounts():
+    docs = [
+        _user(
+            ["shelter:SH001", "SH001:kitchen_staff"],
+            [_grant("kitchen_staff", FUTURE)],
+            name=f"vol{i}@example.com",
+        )
+        for i in range(3)
+    ]
+    couch, _ = _couch(docs, {VERIFIER: {**VERIFIED, "_id": "volunteer:V1"}})
+    await expire_role_grants(couch, now=NOW)
+    assert couch.get_doc.await_args_list == [call("shelter_sh001", "volunteer:V1")]

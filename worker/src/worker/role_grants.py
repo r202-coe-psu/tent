@@ -36,10 +36,10 @@ USER_PREFIX = "org.couchdb.user:"
 
 REASON_EXPIRED = "role_grant.expired"
 REASON_VERIFICATION_REVOKED = "role_grant.verification_revoked"
-#: A closed profile ends the grant like a manual revoke; ``context.cause`` tells them apart.
-REASON_PROFILE_INACTIVE = "role_grant.revoked"
+#: The same reason a manual revoke writes; ``context.cause`` tells a closed profile apart.
+REASON_REVOKED = "role_grant.revoked"
 CAUSE_PROFILE_INACTIVE = "profile_inactive"
-CAUSES = {REASON_PROFILE_INACTIVE: CAUSE_PROFILE_INACTIVE}
+CAUSES = {REASON_REVOKED: CAUSE_PROFILE_INACTIVE}
 
 ACTOR = "worker"
 AUDIT_ATTEMPTS = 3
@@ -116,7 +116,7 @@ def grants_to_revoke(
             isinstance(grant, dict)
             and (grant.get("shelter_code"), doc.get("name")) in closed
         ):
-            out.append((grant, REASON_PROFILE_INACTIVE))
+            out.append((grant, REASON_REVOKED))
         elif (profile := verified_by(grant)) is not None and profile in unverified:
             out.append((grant, REASON_VERIFICATION_REVOKED))
     return out
@@ -232,26 +232,39 @@ async def write_grant_audit(couch: CouchClient, audit: dict[str, Any]) -> bool:
     return False
 
 
-async def _unverified_profiles(
-    couch: CouchClient, wanted: set[Profile]
-) -> set[Profile]:
-    """The profiles among ``wanted`` that are missing or no longer identity-verified.
+async def _read_profiles(
+    couch: CouchClient, profiles: Collection[Profile]
+) -> dict[Profile, dict[str, Any] | None]:
+    """Each distinct profile read once: ``None`` when it is missing.
 
-    A read that fails says nothing about verification, so that profile is left alone and
-    its grants survive this round.
+    A read that fails leaves the profile out, which says nothing about it: neither the
+    verification rule nor the closed-profile rule acts on it this round.
     """
-    unverified: set[Profile] = set()
-    for code, volunteer_id in sorted(wanted):
+    read: dict[Profile, dict[str, Any] | None] = {}
+    for code, volunteer_id in sorted(profiles):
         try:
-            profile = await couch.get_doc(shelter_db_name(code), volunteer_id)
+            read[(code, volunteer_id)] = await couch.get_doc(
+                shelter_db_name(code), volunteer_id
+            )
         except Exception:
             logger.exception(
                 "Could not read volunteer %s/%s - skipping", code, volunteer_id
             )
-            continue
-        if not is_identity_verified(profile):
-            unverified.add((code, volunteer_id))
-    return unverified
+    return read
+
+
+def _unverified_profiles(
+    wanted: Collection[Profile], profiles: dict[Profile, dict[str, Any] | None]
+) -> set[Profile]:
+    """The profiles among ``wanted`` that are missing or no longer identity-verified.
+
+    A profile that could not be read is not in ``profiles``: its grants survive this round.
+    """
+    return {
+        profile
+        for profile in wanted
+        if profile in profiles and not is_identity_verified(profiles[profile])
+    }
 
 
 def _closed_profile_links(
@@ -281,23 +294,17 @@ def _closed_profile_links(
     return wanted
 
 
-async def _closed_profiles(
-    couch: CouchClient, wanted: dict[Profile, list[str]]
+def _closed_profiles(
+    wanted: dict[Profile, list[str]], profiles: dict[Profile, dict[str, Any] | None]
 ) -> set[ClosedLink]:
     """``(shelter, account name)`` pairs whose two-way linked profile is ``status: inactive``.
 
-    A read that fails, a missing profile, or a profile that does not name the account back
-    says nothing about closing, so those grants survive this round.
+    A profile that could not be read, is missing, or does not name the account back says
+    nothing about closing, so those grants survive this round.
     """
     closed: set[ClosedLink] = set()
     for (code, volunteer_id), names in sorted(wanted.items()):
-        try:
-            profile = await couch.get_doc(shelter_db_name(code), volunteer_id)
-        except Exception:
-            logger.exception(
-                "Could not read volunteer %s/%s - skipping", code, volunteer_id
-            )
-            continue
+        profile = profiles.get((code, volunteer_id))
         if (
             isinstance(profile, dict)
             and profile.get("type") == "volunteer"
@@ -350,8 +357,11 @@ async def expire_role_grants(couch: CouchClient, *, now: datetime) -> int:
         if not _is_expired(grant, now=now)
         and (profile := verified_by(grant)) is not None
     }
-    unverified = await _unverified_profiles(couch, wanted)
-    closed = await _closed_profiles(couch, _closed_profile_links(users, now=now))
+    links = _closed_profile_links(users, now=now)
+    # One read per distinct profile serves both the verification and the closed-profile rule.
+    profiles = await _read_profiles(couch, {*wanted, *links})
+    unverified = _unverified_profiles(wanted, profiles)
+    closed = _closed_profiles(links, profiles)
 
     total = 0
     for doc in users:

@@ -48,6 +48,7 @@
 		volunteerAccessSchema,
 		volunteerPasswordError
 	} from '../application/volunteer-access';
+	import { accessEndingParts } from '../domain/volunteer-access-status';
 	import { identityVerificationStatus } from '../domain/verification';
 	import type { Volunteer } from '../domain/volunteer.schema';
 
@@ -106,8 +107,13 @@
 	// account holds one (FR-4, FR-16); revoking a grant stays open.
 	const permanentRoles = $derived(standing.kind === 'active' ? standing.permanentRoles : []);
 	// CR-221 FR-10: an account that already exists (standing `active` / `lapsed`; for SM / SA, the
-	// profile's link) shows its username read-only and asks for no password.
-	const accountExists = $derived(limited ? standing.kind !== 'none' : linkedAccountKnown);
+	// profile's link) shows its username read-only and asks for no password. Until the grants view
+	// has answered (loading or failed) a coordinator falls back to the profile's own link, as SM / SA
+	// do, so a linked profile never flashes an editable email and a password; the save path reads
+	// the same value, so it asks for no password then either (the server keeps an existing one).
+	const accountExists = $derived(
+		limited && grantsQuery.data ? standing.kind !== 'none' : linkedAccountKnown
+	);
 	// CR-221 FR-13: the grant being edited, shown as "เดิม: …" under the expiry picker, which
 	// itself starts empty so the expiry is chosen again on every edit.
 	const currentGrant = $derived(
@@ -144,11 +150,9 @@
 				? 'ออกสิทธิ์อีกครั้ง'
 				: 'บันทึกและออกสิทธิ์ใหม่'
 	);
-	const ENDED_HOW = {
-		expired: 'หมดอายุ',
-		revoked: 'ถูกถอนสิทธิ์',
-		verification_revoked: 'ถูกถอนเพราะผลยืนยันตัวตนถูกยกเลิก'
-	} as const;
+	const lastEndedParts = $derived(
+		standing.kind === 'lapsed' ? accessEndingParts(standing.lastEnded) : null
+	);
 	let confirmRevoke = $state<string | null>(null);
 
 	let expiresOn = $state('');
@@ -338,16 +342,12 @@
 					<p class="font-semibold">
 						บัญชี ({grantedAccount}) มีอยู่แล้ว แต่ยังไม่มีสิทธิ์ในศูนย์นี้
 					</p>
-					{#if standing.lastEnded}
+					{#if standing.lastEnded && lastEndedParts}
 						<p class="mt-0.5 text-xs">
 							สิทธิ์ล่าสุด{standing.lastEnded.role
 								? ` (${roleOptionLabel(standing.lastEnded.role)})`
 								: ''}
-							{standing.lastEnded.cause === 'profile_inactive'
-								? 'ถูกถอนสิทธิ์เพราะปิดโปรไฟล์'
-								: ENDED_HOW[standing.lastEnded.reason]}เมื่อ {formatThaiShortDate(
-								standing.lastEnded.at
-							)}
+							{lastEndedParts.how}เมื่อ {formatThaiShortDate(standing.lastEnded.at)}
 							{#if standing.lastEnded.reason === 'revoked' && standing.lastEnded.by}
 								<!-- The sweep revokes as `worker`; staff read that as the system. -->
 								โดย{standing.lastEnded.by === 'worker' ? 'ระบบ' : ` ${standing.lastEnded.by}`}
@@ -553,11 +553,16 @@
 
 				{#if accountExists}
 					<div class="space-y-1.5">
-						<span class="flex items-center gap-1.5 text-xs font-semibold text-foreground">
+						<span
+							id={`volunteer-access-username-label-${volunteer._id}`}
+							class="flex items-center gap-1.5 text-xs font-semibold text-foreground"
+						>
 							<Mail class="h-3.5 w-3.5" />
 							Username เข้าสู่ระบบ
 						</span>
 						<p
+							id={`volunteer-access-username-${volunteer._id}`}
+							aria-labelledby={`volunteer-access-username-label-${volunteer._id}`}
 							data-testid="existing-username"
 							class="min-h-11 rounded-lg border border-border bg-muted px-3 py-2.5 text-sm font-medium break-all text-foreground"
 						>

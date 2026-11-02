@@ -277,33 +277,65 @@ const ENDING_REASONS = {
 	'role_grant.verification_revoked': 'verification_revoked'
 } as const;
 
-/** The newest grant-ending audit for this account in this shelter (FR-14 audits), or null. */
-async function lastGrantEnding(shelterCode: string, name: string): Promise<GrantEnding | null> {
-	const res = await adminRaw(`/${shelterDbName(shelterCode)}/_find`, 'POST', {
-		selector: {
-			type: 'audit',
-			target_id: `org.couchdb.user:${name}`,
-			reason: { $in: Object.keys(ENDING_REASONS) }
-		},
-		fields: ['reason', 'created_at', 'context'],
-		limit: 200
-	});
-	if (res.status === 404) return null;
-	if (res.status >= 400) throw serviceErrorFromCouch('find grant audits', res.status, res.data);
-	const docs = ((res.data as { docs?: unknown[] } | null)?.docs ?? []) as {
-		reason: keyof typeof ENDING_REASONS;
-		created_at: string;
-		context?: { role?: string; actor?: string; cause?: string };
-	}[];
-	const latest = docs.sort((a, b) => b.created_at.localeCompare(a.created_at))[0];
-	if (!latest) return null;
-	return {
-		role: latest.context?.role ?? '',
-		reason: ENDING_REASONS[latest.reason],
-		at: latest.created_at,
-		by: latest.context?.actor ?? '',
-		...(latest.context?.cause ? { cause: latest.context.cause } : {})
-	};
+type GrantEndingAudit = {
+	reason: keyof typeof ENDING_REASONS;
+	created_at: string;
+	target_id: string;
+	context?: { role?: string; actor?: string; cause?: string };
+};
+
+const userDocId = (name: string) => `org.couchdb.user:${name}`;
+const AUDIT_PAGE_SIZE = 1000;
+
+/**
+ * The newest grant-ending audit (FR-14 audits) of each given account in this shelter, keyed by
+ * account name; accounts with none are absent. One `_find` (paged by bookmark, so a long history
+ * never hides the newest ending) for however many accounts, on the `role-grant-audit-by-target`
+ * index (`type`, `target_id`, `reason`). That index cannot order by `created_at`, so the newest is
+ * picked here.
+ */
+async function lastGrantEndings(
+	shelterCode: string,
+	names: readonly string[]
+): Promise<Map<string, GrantEnding>> {
+	const newest = new Map<string, GrantEndingAudit>();
+	if (names.length === 0) return new Map();
+	let bookmark: string | undefined;
+	for (;;) {
+		const res = await adminRaw(`/${shelterDbName(shelterCode)}/_find`, 'POST', {
+			selector: {
+				type: 'audit',
+				target_id: { $in: names.map(userDocId) },
+				reason: { $in: Object.keys(ENDING_REASONS) }
+			},
+			fields: ['reason', 'created_at', 'target_id', 'context'],
+			limit: AUDIT_PAGE_SIZE,
+			...(bookmark ? { bookmark } : {})
+		});
+		if (res.status === 404) return new Map();
+		if (res.status >= 400) throw serviceErrorFromCouch('find grant audits', res.status, res.data);
+		const data = res.data as { docs?: GrantEndingAudit[]; bookmark?: string } | null;
+		const docs = data?.docs ?? [];
+		for (const doc of docs) {
+			const seen = newest.get(doc.target_id);
+			if (!seen || doc.created_at > seen.created_at) newest.set(doc.target_id, doc);
+		}
+		if (docs.length < AUDIT_PAGE_SIZE || !data?.bookmark || data.bookmark === bookmark) break;
+		bookmark = data.bookmark;
+	}
+	const endings = new Map<string, GrantEnding>();
+	for (const name of names) {
+		const latest = newest.get(userDocId(name));
+		if (!latest) continue;
+		endings.set(name, {
+			role: latest.context?.role ?? '',
+			reason: ENDING_REASONS[latest.reason],
+			at: latest.created_at,
+			by: latest.context?.actor ?? '',
+			...(latest.context?.cause ? { cause: latest.context.cause } : {})
+		});
+	}
+	return endings;
 }
 
 /**
@@ -339,7 +371,9 @@ export async function listVolunteerGrantsAsCoordinator(
 			mine: g.granted_by === caller.name
 		})),
 		permanent_roles: account.permanent_roles,
-		last_ended: holdsRole ? null : await lastGrantEnding(shelterCode, email)
+		last_ended: holdsRole
+			? null
+			: ((await lastGrantEndings(shelterCode, [email])).get(email) ?? null)
 	};
 }
 
@@ -372,12 +406,21 @@ export async function listShelterVolunteerAccounts(
 		shelterCode
 	);
 	// An account that holds nothing here says how its last role ended (expired / revoked, when),
-	// so the tables show more than "สิ้นสุดแล้ว" (#1044). One audit read per such account.
-	return Promise.all(
-		accounts.map(async (account) =>
-			account.grants.length > 0 || account.permanent_roles.length > 0
-				? account
-				: { ...account, last_ended: await lastGrantEnding(shelterCode, account.name) }
-		)
+	// so the tables show more than "สิ้นสุดแล้ว" (#1044). One audit read for all of them.
+	const idle = accounts.filter((a) => a.grants.length === 0 && a.permanent_roles.length === 0);
+	// A failed audit read must not blank every badge: the accounts come back without the ending.
+	const endings = await lastGrantEndings(
+		shelterCode,
+		idle.map((a) => a.name)
+	).catch((error: unknown) => {
+		console.error('[volunteer-access] grant audits not read; last_ended left empty', {
+			shelter_code: shelterCode,
+			error
+		});
+		return new Map<string, GrantEnding>();
+	});
+	const idleSet = new Set(idle);
+	return accounts.map((account) =>
+		idleSet.has(account) ? { ...account, last_ended: endings.get(account.name) ?? null } : account
 	);
 }
