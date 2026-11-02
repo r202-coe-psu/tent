@@ -2,18 +2,23 @@
  * Volunteer system access (#841) — the role a volunteer is granted really opens the pages the
  * users-page role picker (`ROLE_OPTIONS` in `user-form.svelte`) promises, and nothing else.
  *
- * Two groups, both on SH001 with per-run accounts and a per-run volunteer doc (nothing seeded is
+ * Three groups, all on SH001 with per-run accounts and a per-run volunteer doc (nothing seeded is
  * touched; no shelter policy is changed):
  *  1. One grant through the real "ออกสิทธิ์ใช้งานระบบ" dialog (`distribution_staff`): `_users`
  *     roles are compound, a retry relinks without touching the password, and the new account
  *     signs in and reaches `/onsite/distribution`.
  *  2. A table for every `STAFF_CAPABILITIES` role. Accounts are created directly with
  *     `rolesFromAssignments` (the roles the dialog writes). Per role: `/portal` shows only its
- *     department, allowed URLs load, forbidden URLs bounce back to `/portal`.
- *
- * A third group (#955, #879 item 2) pins the limits of a `volunteer_coordinator` granting access:
- * own shelter, the coordinator roles (all staff roles but volunteer_coordinator / kiosk_staff), verified identity, a required expiry within 7 days, and the account
- * shape (`role_grants`). Expiry revocation by the worker is covered by worker unit tests.
+ *     department, allowed URLs load, forbidden URLs bounce back to `/portal`, and the back-office
+ *     sidebar (#1037) offers exactly the back-office URLs of `allowed`, so a menu the guard
+ *     bounces (or a reachable page with no menu) fails the run. A page whose access is a
+ *     still-open spec question is listed in `sidebarPendingSpec` and left out of that comparison.
+ *     The same page and sidebar checks run for `shelter_manager` and `system_admin`, which are
+ *     not `STAFF_CAPABILITIES` (`MANAGEMENT_ACCESS`).
+ *  3. (#955, #879 item 2) The limits of a `volunteer_coordinator` granting access: own shelter,
+ *     the coordinator roles (all staff roles but volunteer_coordinator / kiosk_staff), verified
+ *     identity, a required expiry within 7 days, and the account shape (`role_grants`). Expiry
+ *     revocation by the worker is covered by worker unit tests.
  *
  * The table records the REAL guard behaviour. Permissions are not changed here (a change needs
  * a CR).
@@ -60,6 +65,12 @@ interface RoleAccess {
 	allowed: string[];
 	/** URLs of other departments (real guard behaviour). */
 	forbidden: string[];
+	/**
+	 * Back-office pages whose access for this role is an open spec question (see the row's comment).
+	 * They are neither asserted as reachable nor as bounced, and are left out of the sidebar
+	 * comparison. Remove the entry once the decision lands.
+	 */
+	sidebarPendingSpec?: string[];
 }
 
 /** Role to pages, one row per `STAFF_CAPABILITIES` entry. */
@@ -94,13 +105,17 @@ const ROLE_ACCESS: RoleAccess[] = [
 	{
 		role: 'supply_coordinator',
 		portalDepartments: ['supply'],
+		// `/back-office/distribution` is deliberately in neither list. #1037 / CR-204: SC may view
+		// stock and receive it but may not issue it, yet the menu and the guard still admit SC today
+		// ("SC sees the menu today; spec says SC cannot issue; awaiting Team Lead"). Pinning either
+		// outcome here would lock a permission the spec has not settled.
 		allowed: [
 			'/back-office/supply',
 			'/back-office/stock-donations',
-			'/back-office/distribution',
 			'/back-office/tickets/kitchen'
 		],
-		forbidden: ['/back-office/kitchen']
+		forbidden: ['/back-office/kitchen'],
+		sidebarPendingSpec: ['/back-office/distribution']
 	},
 	{
 		role: 'warehouse_staff',
@@ -154,6 +169,44 @@ const ROLE_ACCESS: RoleAccess[] = [
 	}
 ];
 
+/** Every back-office page the sidebar can offer to a shelter manager or system admin. */
+const MANAGEMENT_PAGES = [
+	'/back-office/evacuee-management',
+	'/back-office/volunteers',
+	'/back-office/referrals',
+	'/back-office/supply',
+	'/back-office/stock-donations',
+	'/back-office/distribution',
+	'/back-office/tickets/kitchen',
+	'/back-office/kitchen',
+	'/back-office/incidents',
+	'/back-office/shelters',
+	'/back-office/users',
+	'/back-office/kiosks',
+	'/back-office/kiosks/banners',
+	'/back-office/master-data'
+];
+
+/**
+ * `shelter_manager` (SH001) and `system_admin` are not `STAFF_CAPABILITIES`, so they sit outside
+ * `ROLE_ACCESS`. Both pass every guard (`canAccessManagerPages` and its supersets), so both reach
+ * all of `MANAGEMENT_PAGES`; the list is checked against the guards by loading each page.
+ */
+const MANAGEMENT_ACCESS: { role: 'shelter_manager' | 'system_admin'; roles: string[] }[] = [
+	{
+		role: 'shelter_manager',
+		roles: rolesFromAssignments([{ shelter_code: SHELTER, capabilities: ['shelter_manager'] }])
+	},
+	{ role: 'system_admin', roles: ['system_admin'] }
+];
+
+const managementUser = (role: string, roles: string[]): TestUser => ({
+	name: `e2e_vaccess_${RUN_ID}_${role}_mgmt`,
+	password: PASSWORD,
+	roles,
+	display_name: `E2E Access ${role}`
+});
+
 const roleUser = (role: StaffCapability): TestUser => ({
 	name: `e2e_vaccess_${RUN_ID}_${role}`,
 	password: PASSWORD,
@@ -201,20 +254,27 @@ const UNGUARDED_PAGES = [
 ];
 
 /**
- * The back-office paths the sidebar offers this role (#1037), groups opened one by one in case
- * they behave as an accordion. Opened on the role's first back-office page, else on an unguarded
- * one, so roles with no back-office page of their own are checked too.
+ * The back-office paths the sidebar offers a role (#1037), groups opened one by one in case they
+ * behave as an accordion. Opened on the role's first back-office page, else on an unguarded one,
+ * so roles with no back-office page of their own are checked too. `pendingSpec` pages are dropped.
  */
-async function sidebarPaths(page: Page, row: RoleAccess): Promise<string[]> {
+async function sidebarPaths(
+	page: Page,
+	allowed: readonly string[],
+	pendingSpec: readonly string[] = []
+): Promise<string[]> {
 	await page.goto(
-		row.allowed.find((url) => url.startsWith('/back-office/')) ?? '/back-office/dailysop'
+		allowed.find((url) => url.startsWith('/back-office/')) ?? '/back-office/dailysop'
 	);
 	const sidebar = page.getByTestId('backoffice-sidebar');
 	await expect(sidebar).toBeVisible();
 	// The sidebar starts as a collapsed rail, which renders no group children; open it first.
+	// Wait until the toggle has rendered in either state: a bare `isVisible()` is a snapshot.
 	const expand = sidebar.getByRole('button', { name: 'ขยายแถบเมนู' });
+	const collapse = sidebar.getByRole('button', { name: 'ย่อแถบเมนู' });
+	await expect(expand.or(collapse)).toBeVisible();
 	if (await expand.isVisible()) await expand.click();
-	await expect(sidebar.getByRole('button', { name: 'ย่อแถบเมนู' })).toBeVisible();
+	await expect(collapse).toBeVisible();
 	const seen = new Set<string>();
 	const opened = new Set<string>();
 	const collect = async () => {
@@ -225,17 +285,21 @@ async function sidebarPaths(page: Page, row: RoleAccess): Promise<string[]> {
 	};
 	await collect();
 	for (let round = 0; round < 20; round++) {
-		const closed = sidebar.locator('button[aria-expanded="false"]');
-		const titles = await closed.evaluateAll((els) =>
+		// Group buttons carry `title` = label and show the label as their text, so the accessible
+		// name is that label. Other collapsed buttons (the shelter switcher) have no `title`.
+		const closed = sidebar.locator('button[aria-expanded="false"][title]');
+		const names = await closed.evaluateAll((els) =>
 			els.map((el) => el.getAttribute('title') ?? '')
 		);
-		const next = titles.find((title) => title !== '' && !opened.has(title));
+		const next = names.find((name) => name !== '' && !opened.has(name));
 		if (next === undefined) break;
 		opened.add(next);
-		await sidebar.locator(`button[aria-expanded="false"][title="${next}"]`).click();
+		await sidebar.getByRole('button', { name: next, exact: true, expanded: false }).click();
 		await collect();
 	}
-	return [...seen].filter((path) => !UNGUARDED_PAGES.includes(path)).sort();
+	return [...seen]
+		.filter((path) => !UNGUARDED_PAGES.includes(path) && !pendingSpec.includes(path))
+		.sort();
 }
 
 async function expectLoads(page: Page, url: string): Promise<void> {
@@ -392,10 +456,30 @@ test.describe('Volunteer access: every staff role', { tag: TAGS }, () => {
 			for (const url of row.allowed) await expectLoads(page, url);
 			for (const url of row.forbidden) await expectBouncedToPortal(page, url);
 			// #1037: the sidebar offers exactly the back-office pages the guards let this role open.
-			expect(await sidebarPaths(page, row), 'sidebar menus').toEqual(
-				row.allowed.filter((url) => url.startsWith('/back-office/')).sort()
-			);
+			expect(
+				await sidebarPaths(page, row.allowed, row.sidebarPendingSpec),
+				'sidebar menus'
+			).toEqual(row.allowed.filter((url) => url.startsWith('/back-office/')).sort());
 			await page.context().close();
+		});
+	}
+
+	for (const { role, roles } of MANAGEMENT_ACCESS) {
+		test(`${role} reaches every management page and the sidebar offers exactly those`, async ({
+			browser
+		}) => {
+			const user = managementUser(role, roles);
+			await createStaffAccount(user);
+			try {
+				const page = await openAs(browser, user);
+				for (const url of MANAGEMENT_PAGES) await expectLoads(page, url);
+				expect(await sidebarPaths(page, MANAGEMENT_PAGES), 'sidebar menus').toEqual(
+					[...MANAGEMENT_PAGES].sort()
+				);
+				await page.context().close();
+			} finally {
+				await deleteCouchUser(user.name);
+			}
 		});
 	}
 
