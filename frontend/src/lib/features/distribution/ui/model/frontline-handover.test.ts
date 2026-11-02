@@ -34,12 +34,24 @@ describe('frontline-handover model helpers', () => {
 		volunteerCode: 'V-001'
 	};
 
+	const staffRecipient: FrontlineRecipientSelection = {
+		recipientType: 'staff',
+		recipientId: 'user:somchai',
+		label: 'สมชาย เจ้าหน้าที่'
+	};
+
 	describe('isIdentifiedRecipient', () => {
 		it('names evacuees and volunteers but not outside people', () => {
 			expect(isIdentifiedRecipient(evacueeRecipient)).toBe(true);
 			expect(isIdentifiedRecipient(volunteerRecipient)).toBe(true);
 			expect(isIdentifiedRecipient(outsideRecipient)).toBe(false);
 			expect(isIdentifiedRecipient(null)).toBe(false);
+		});
+	});
+
+	describe('isIdentifiedRecipient for staff', () => {
+		it('names a staff member so a repeat meal can be caught', () => {
+			expect(isIdentifiedRecipient(staffRecipient)).toBe(true);
 		});
 	});
 
@@ -60,6 +72,11 @@ describe('frontline-handover model helpers', () => {
 		it('lets a volunteer receive consumables and borrow returnable items (FR-LON-01)', () => {
 			expect(canRecipientReceiveItem(volunteerRecipient, false)).toBe(true);
 			expect(canRecipientReceiveItem(volunteerRecipient, true)).toBe(true);
+		});
+
+		it('lets staff receive consumables and borrow returnable items (FR-SQR-32)', () => {
+			expect(canRecipientReceiveItem(staffRecipient, false)).toBe(true);
+			expect(canRecipientReceiveItem(staffRecipient, true)).toBe(true);
 		});
 
 		it('forbids null recipient', () => {
@@ -83,6 +100,15 @@ describe('frontline-handover model helpers', () => {
 		it('returns null when a volunteer borrows a returnable item (FR-LON-01)', () => {
 			expect(getRecipientValidationErrorMessage(volunteerRecipient, false)).toBeNull();
 			expect(getRecipientValidationErrorMessage(volunteerRecipient, true)).toBeNull();
+		});
+
+		it('returns null when staff borrow a returnable item (FR-SQR-32)', () => {
+			expect(getRecipientValidationErrorMessage(staffRecipient, false)).toBeNull();
+			expect(getRecipientValidationErrorMessage(staffRecipient, true)).toBeNull();
+		});
+
+		it('names staff among the valid borrowers when outside picks a returnable item', () => {
+			expect(getRecipientValidationErrorMessage(outsideRecipient, true)).toContain('เจ้าหน้าที่');
 		});
 
 		it('returns error message when recipient is not selected', () => {
@@ -293,6 +319,12 @@ describe('frontline-handover model helpers', () => {
 			expect(checkMenuMatchAdvisory(volunteerRecipient, infantMenu).isMismatch).toBe(true);
 		});
 
+		it('treats staff as untagged like a volunteer: general and HALAL menus pass, tagged menus flag', () => {
+			expect(checkMenuMatchAdvisory(staffRecipient, generalMenu).isMismatch).toBe(false);
+			expect(checkMenuMatchAdvisory(staffRecipient, halalMenu).isMismatch).toBe(false);
+			expect(checkMenuMatchAdvisory(staffRecipient, infantMenu).isMismatch).toBe(true);
+		});
+
 		it('stays silent without a recipient or a known menu', () => {
 			expect(checkMenuMatchAdvisory(null, infantMenu).isMismatch).toBe(false);
 			expect(checkMenuMatchAdvisory(evacueeRecipient, undefined).isMismatch).toBe(false);
@@ -386,8 +418,8 @@ describe('frontline-handover model helpers', () => {
 			);
 		});
 
-		it('skips volunteers and outside recipients', () => {
-			for (const recipient of [volunteerRecipient, outsideRecipient, null]) {
+		it('skips volunteers, staff and outside recipients', () => {
+			for (const recipient of [volunteerRecipient, staffRecipient, outsideRecipient, null]) {
 				expect(checkAllergenAdvisory(recipient, ['egg'], ['egg'], allergyItems).conflicts).toEqual(
 					[]
 				);

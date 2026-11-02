@@ -74,6 +74,19 @@ export const DAILY_SOP_ROLE_MANGO_INDEX = {
 };
 
 /**
+ * Index behind the volunteer access dialog's "how did the last grant end" lookup (CR-221, #1044):
+ * the `audit` docs of one account (`target_id`) by `reason` (`role_grant.revoked` / `.expired` /
+ * `.verification_revoked`), read by `lastGrantEnding`. Audit docs grow without bound, so the query
+ * must not scan them all.
+ */
+export const ROLE_GRANT_AUDIT_MANGO_INDEX = {
+	index: { fields: ['type', 'target_id', 'reason'] },
+	ddoc: 'role-grant-audit-target',
+	name: 'role-grant-audit-by-target',
+	type: 'json' as const
+};
+
+/**
  * Index behind the back-office "รับแล้ว" list (#821): received donations, newest first,
  * `_id` as the tie-breaker. The route queries with `allow_fallback: false`, so a shelter
  * DB without this index answers 503 instead of being scanned.
@@ -2265,7 +2278,7 @@ ${consentVduClause()}
     if (typeof newDoc.is_returnable !== 'boolean') {
       throw { forbidden: 'distribution_log requires boolean is_returnable' };
     }
-    if (['evacuee', 'volunteer', 'outside'].indexOf(newDoc.recipient_type) === -1) {
+    if (['evacuee', 'volunteer', 'staff', 'outside'].indexOf(newDoc.recipient_type) === -1) {
       throw { forbidden: 'Invalid recipient_type: ' + newDoc.recipient_type };
     }
     if (newDoc.recipient_type === 'evacuee' && (typeof newDoc.recipient_id !== 'string' || newDoc.recipient_id.indexOf('evacuee:') !== 0)) {
@@ -2273,6 +2286,9 @@ ${consentVduClause()}
     }
     if (newDoc.recipient_type === 'volunteer' && (typeof newDoc.recipient_id !== 'string' || newDoc.recipient_id.indexOf('volunteer:') !== 0)) {
       throw { forbidden: 'volunteer recipient_id is required' };
+    }
+    if (newDoc.recipient_type === 'staff' && (typeof newDoc.recipient_id !== 'string' || newDoc.recipient_id.indexOf('user:') !== 0 || newDoc.recipient_id.length <= 5)) {
+      throw { forbidden: 'staff recipient_id is required' };
     }
     if (newDoc.recipient_type === 'outside' && typeof newDoc.recipient_id !== 'undefined' && newDoc.recipient_id !== null) {
       throw { forbidden: 'outside recipients must not carry recipient_id' };

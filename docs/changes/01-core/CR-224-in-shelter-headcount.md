@@ -1,10 +1,11 @@
 ---
-id: draft
+id: CR-224
 title: ยอดคนในศูนย์ (in-shelter headcount) — นิยามเดียว active + room_confirmed ให้ทุกหน้าใช้ร่วมกัน
-status: proposed
+status: approved
 date: 2026-10-20
+updated: 2026-11-02
 requested_by: ทีม dev (issue #593 — headcount 3 หน้าไม่นับ room_confirmed; พบระหว่างทำ CR-170)
-decided_by: project owner (@Fishcanwalk — อนุมัติแนวทาง "in_shelter ทุกจุด + CR ใหม่ + PR เดียว" 2026-10-20)
+decided_by: kong (อนุมัติ CR 2026-11-02) · แนวทางอนุมัติโดย @Fishcanwalk 2026-10-20
 layer: volatile
 affects:
   - docs/data/schema.md §evacuee "Occupancy metrics (CR-112)" — แถว Kitchen / SOP
@@ -22,7 +23,7 @@ affects:
   - no schema_v bump (ไม่เปลี่ยนรูปร่าง doc ที่ persist)
 ---
 
-# ยอดคนในศูนย์ (in-shelter headcount) — นิยามเดียวให้ทุกหน้าใช้ร่วมกัน
+# CR-224 — ยอดคนในศูนย์ (in-shelter headcount) นิยามเดียวให้ทุกหน้าใช้ร่วมกัน
 
 > **สรุป (TL;DR):**
 >
@@ -30,7 +31,7 @@ affects:
 >   `$lib/features/shared` (`IN_SHELTER_STATUSES`, `isInShelterStayStatus`, `countInShelter`)
 > - ทุก headcount ที่ใช้คำนวณความจุ / คลัง / อาหาร / SOP ต้องใช้นิยามนี้ (6 จุด ดู FR-3)
 > - กลับคำตัดสินเดิม: CR-112 / CR-035 / CR-022 ให้ Kitchen / SOP นับ `active` อย่างเดียว
-> - **ไม่เปลี่ยน:** `occupancy_total` ฝั่ง public (สัญญา partner EXT-005), Forecast / Present / In-zone ของ CR-112 ·
+> - **ไม่เปลี่ยน:** Forecast / Present / In-zone ของ CR-112 (partner `occupancy_total` ย้ายมาใช้นิยามนี้แล้ว — decision sync 2026-11-02) ·
 >   ไม่ bump `schema_v`
 
 ---
@@ -76,8 +77,10 @@ affects:
 
 ### ไม่อยู่ในนิยามนี้ (ไม่เปลี่ยน)
 
-- **FR-6** — `public_shelters.occupancy_total` (worker `projectors/occupancy.py`) คง `active` อย่างเดียว — เป็นสัญญา
-  partner EXT-005 ตาม CR-111; หน้า `/shelters` ฝั่ง public ใช้ `occupancy` (Forecast) และ `present` ของ CR-112 อยู่แล้ว
+- **FR-6** — ~~`public_shelters.occupancy_total` (worker `projectors/occupancy.py`) คง `active` อย่างเดียว — เป็นสัญญา
+  partner EXT-005 ตาม CR-111~~ **ทับโดย decision sync 2026-11-02:** partner `occupancy_total` / breakdown (EXT-005)
+  และรายชื่อ EXT-007 นับ In-shelter (`active` + `room_confirmed`) ผ่าน worker `IN_SHELTER_STATUSES`; หน้า `/shelters`
+  ฝั่ง public ยังใช้ `occupancy` (Forecast) และ `present` ของ CR-112
 - **FR-7** — Forecast / Present / In-zone ของ CR-112 และ `presentFromCounts` ใน system overview คงเดิม
   (Present รวม `temporary_leave` โดยเจตนา — คนออกชั่วคราวยังจองที่นอน)
 - **FR-8** — `distribution_request.active_headcount_snapshot` คงเดิม (เจ้าหน้าที่กรอกเองตอนสร้างคำขอ ไม่ได้คำนวณ)
@@ -89,7 +92,7 @@ affects:
 - [ ] headcount ของแผนอาหารนับ `room_confirmed` (unit test)
 - [ ] `daily_calc` ที่สร้างใหม่บันทึก `occupancy_snapshot` ตามนิยามใหม่; `daily_calc` เดิมไม่ถูกแก้ย้อนหลัง
 - [ ] unit test ของ `$lib/features/shared` ครอบคลุมทุก stay status (10 ค่าใน `stayStatusSchema`)
-- [ ] `occupancy_total` ของ public plane ไม่เปลี่ยน
+- [ ] partner `occupancy_total` (EXT-005) และรายชื่อ EXT-007 นับ `active` + `room_confirmed` (decision sync 2026-11-02)
 
 ## Impact
 
@@ -115,3 +118,7 @@ N/A — ไม่เปลี่ยนรูปร่าง doc ที่ persis
   แจ้งฝ่ายคลังและครัว
 - 2026-10-20 — proposed (draft); ขอบเขตขยายจาก 3 จุดใน issue เป็น 6 จุด (เพิ่ม dashboard, แผนอาหาร, `daily_calc`);
   ตัด worker `occupancy_total` ออก — สัญญา partner EXT-005 (CR-111)
+- 2026-10-20 — implement และ merge ใน PR #720 (merge โดย @Fishcanwalk) ขณะที่ CR ยังเป็น draft
+- 2026-11-02 — approved โดย kong ตามที่ implement แล้ว; ให้เลข CR-224 (พบระหว่างรีวิว PR #1102 ที่ CR-223 อ้าง draft นี้)
+- 2026-11-02 — decision sync (owner): partner EXT-005 `occupancy_total` และ EXT-007 ใช้ In-shelter ด้วย — ยอด API ไม่ตรงกับหน้า staff
+  เพราะคนที่ยืนยันโซน (`room_confirmed`) หายจาก API; FR-6 ถูกทับ

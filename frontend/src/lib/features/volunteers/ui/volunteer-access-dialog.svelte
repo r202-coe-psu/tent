@@ -9,14 +9,20 @@
 	import RefreshCw from '@lucide/svelte/icons/refresh-cw';
 	import Save from '@lucide/svelte/icons/save';
 	import UserMinus from '@lucide/svelte/icons/user-minus';
+	import Info from '@lucide/svelte/icons/info';
 	import * as Dialog from '$lib/components/ui/dialog/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Badge } from '$lib/components/ui/badge/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
-	import * as Select from '$lib/components/ui/select/index.js';
+	import * as RadioGroup from '$lib/components/ui/radio-group/index.js';
+	import { Label } from '$lib/components/ui/label/index.js';
+	import * as Popover from '$lib/components/ui/popover/index.js';
+	import DatePicker from '$lib/components/date-picker.svelte';
+	import PasswordRuleChecklist from '$lib/components/password-rule-checklist.svelte';
 	import {
 		COORDINATOR_GRANTABLE_CAPABILITIES,
 		STAFF_CAPABILITIES,
+		STAFF_CAPABILITY_DESCRIPTIONS,
 		isShelterManager,
 		isSystemAdmin,
 		roleOptionLabel,
@@ -29,6 +35,9 @@
 	import { useVolunteerGrants, volunteerKeys } from '../application/queries';
 	import { errorMessage } from '$lib/utils/errors';
 	import {
+		ROLE_REQUIRED_MESSAGE,
+		accessState,
+		currentGrantRole,
 		VOLUNTEER_ACCESS_PHONE_MESSAGE,
 		accountPhone,
 		coordinatorAccessSchema,
@@ -52,6 +61,11 @@
 		shelterLine: string;
 	} = $props();
 
+	/** FR-21 / FR-9: a closed profile is reopened first (card button "เปิดใช้งานอีกครั้ง"). */
+	const INACTIVE_PROFILE_MESSAGE = 'เปิดใช้งานอาสาสมัครก่อนจึงจะออกสิทธิ์ได้';
+	/** FR-16: a role a shelter manager gave cannot be changed by a coordinator. */
+	const MANAGER_GIVEN_NOTE = 'ผู้จัดการศูนย์เป็นผู้ให้ แก้ไขได้ที่หน้าผู้ใช้งาน';
+
 	const queryClient = useQueryClient();
 	let pending = $state(false);
 
@@ -69,20 +83,12 @@
 		limited ? COORDINATOR_GRANTABLE_CAPABILITIES : STAFF_CAPABILITIES
 	);
 	const expiryRange = $derived(grantExpiryRange());
-	// Identity verified in another shelter (same phone AND national ID) is only known to the
-	// server, so a volunteer with both may still be granted; one missing either cannot be.
+	// Access is first given, or given again, only once the identity is verified in this shelter
+	// (#1044), whoever grants. Editing or revoking a grant the account already holds stays open
+	// (CR-221 FR-3), so `blockedReason` below checks it only while the account is not `active`.
 	const unverifiedHere = $derived(identityVerificationStatus(volunteer) !== 'verified');
-	const canCheckElsewhere = $derived(
-		loginPhone !== null && Boolean(volunteer.national_id_hash || volunteer.national_id)
-	);
-	const blockedReason = $derived(
-		phoneBlocksAccess
-			? VOLUNTEER_ACCESS_PHONE_MESSAGE
-			: limited && unverifiedHere && !canCheckElsewhere
-				? 'อาสาสมัครยังไม่ยืนยันตัวตนในศูนย์นี้ และไม่มีเบอร์โทรหรือเลขบัตรประชาชนให้ตรวจผลยืนยันจากศูนย์อื่น จึงออกสิทธิ์ไม่ได้'
-				: null
-	);
-	// The caller's own grants can be taken back here (FR-8); the BFF refuses anyone else's.
+	// Any grant in this shelter can be taken back here, whoever issued it (FR-17); a role a manager
+	// gave has no grant and is changed on the users page (FR-16).
 	const grantsQuery = useVolunteerGrants(
 		() => volunteer,
 		() => open && limited
@@ -93,6 +99,45 @@
 	// it is recreated with that phone password and a forced change, never an unknown one.
 	const keepsPassword = $derived(Boolean(volunteer.user_name) && loginPhone !== null);
 	const grants = $derived(grantsQuery.data?.grants ?? []);
+	// Where the volunteer stands here (#1044): drives the title, the save label and the note.
+	const standing = $derived(limited ? accessState(grantsQuery.data ?? null) : accessState(null));
+	// Roles a manager gave here: shown but not selectable, and the server refuses a save while the
+	// account holds one (FR-4, FR-16); revoking a grant stays open.
+	const permanentRoles = $derived(standing.kind === 'active' ? standing.permanentRoles : []);
+	const holdsManagerRole = $derived(limited && permanentRoles.length > 0);
+	// A closed profile is reopened before it can be given access (CR-221 FR-21, FR-9).
+	const profileClosed = $derived(volunteer.status === 'inactive');
+	const blockedReason = $derived(
+		profileClosed
+			? INACTIVE_PROFILE_MESSAGE
+			: phoneBlocksAccess
+				? VOLUNTEER_ACCESS_PHONE_MESSAGE
+				: unverifiedHere && standing.kind !== 'active'
+					? 'อาสาสมัครยังไม่ยืนยันตัวตนในศูนย์นี้ กรุณายืนยันตัวตนก่อนจึงจะออกสิทธิ์ได้'
+					: holdsManagerRole
+						? MANAGER_GIVEN_NOTE
+						: null
+	);
+	// Copy per FR-14.
+	const title = $derived(
+		standing.kind === 'active'
+			? 'แก้ไขสิทธิ์'
+			: standing.kind === 'lapsed'
+				? 'ออกสิทธิ์อีกครั้ง'
+				: 'ออกสิทธิ์ใช้งานระบบ'
+	);
+	const saveLabel = $derived(
+		standing.kind === 'active'
+			? 'บันทึกการแก้ไข'
+			: standing.kind === 'lapsed'
+				? 'ออกสิทธิ์อีกครั้ง'
+				: 'บันทึกและออกสิทธิ์ใหม่'
+	);
+	const ENDED_HOW = {
+		expired: 'หมดอายุ',
+		revoked: 'ถูกถอนสิทธิ์',
+		verification_revoked: 'ถูกถอนเพราะผลยืนยันตัวตนถูกยกเลิก'
+	} as const;
 	let confirmRevoke = $state<string | null>(null);
 
 	let expiresOn = $state('');
@@ -100,11 +145,15 @@
 
 	let email = $state('');
 	let showPassword = $state(false);
-	let role = $state<StaffCapability>('registration_staff');
+	/** Empty until the grantor picks one: no role is preselected (#1072). */
+	let role = $state<StaffCapability | ''>('');
+	let roleError = $state<string | null>(null);
 	let password = $state('');
 	let passwordError = $state<string | null>(null);
 
 	let lastOpenedId = $state<string | null>(null);
+	/** Editing an account that already holds a grant here starts on its current role (#1044). */
+	let roleSeededFor = $state<string | null>(null);
 	$effect(() => {
 		if (!open) {
 			lastOpenedId = null;
@@ -112,7 +161,9 @@
 		}
 		if (lastOpenedId === volunteer._id) return;
 		email = volunteer.user_name ?? volunteer.email ?? '';
-		role = 'registration_staff';
+		role = '';
+		roleError = null;
+		roleSeededFor = null;
 		password = loginPhone ?? '';
 		expiresOn = '';
 		confirmRevoke = null;
@@ -121,12 +172,23 @@
 		showPassword = false;
 		lastOpenedId = volunteer._id;
 	});
+	$effect(() => {
+		if (!open || roleSeededFor === volunteer._id || !grantsQuery.data) return;
+		roleSeededFor = volunteer._id;
+		if (!role) role = currentGrantRole(grants, roleChoices);
+	});
 
 	async function submit() {
 		if (pending) return;
 		submitError = null;
-		if (phoneBlocksAccess) {
-			toast.error(VOLUNTEER_ACCESS_PHONE_MESSAGE);
+		if (blockedReason) {
+			toast.error(blockedReason);
+			return;
+		}
+		if (!role) {
+			// Every refusal is a toast (it fades) and stays written next to its field until fixed.
+			roleError = ROLE_REQUIRED_MESSAGE;
+			toast.error(ROLE_REQUIRED_MESSAGE);
 			return;
 		}
 		if (limited) {
@@ -139,7 +201,10 @@
 			return;
 		}
 		passwordError = volunteerPasswordError(parsed.data.password, loginPhone);
-		if (passwordError) return;
+		if (passwordError) {
+			toast.error(passwordError);
+			return;
+		}
 		pending = true;
 		try {
 			const result = await grantVolunteerAccess(volunteer, parsed.data);
@@ -166,10 +231,14 @@
 		});
 		if (!parsed.success) {
 			submitError = parsed.error.issues[0]?.message ?? 'กรุณาตรวจสอบข้อมูล';
+			toast.error(submitError);
 			return;
 		}
 		passwordError = volunteerPasswordError(parsed.data.password, loginPhone);
-		if (passwordError) return;
+		if (passwordError) {
+			toast.error(passwordError);
+			return;
+		}
 		pending = true;
 		try {
 			const result = await grantVolunteerAccessAsCoordinator(volunteer, parsed.data);
@@ -185,6 +254,7 @@
 			open = false;
 		} catch (err) {
 			submitError = errorMessage(err);
+			toast.error(submitError);
 		} finally {
 			await refresh();
 		}
@@ -202,6 +272,7 @@
 			confirmRevoke = null;
 		} catch (err) {
 			submitError = errorMessage(err);
+			toast.error(submitError);
 		} finally {
 			await refresh();
 		}
@@ -225,12 +296,52 @@
 				<KeyRound class="h-4.5 w-4.5" />
 			</div>
 			<div class="min-w-0">
-				<Dialog.Title class="text-base font-bold">ออกสิทธิ์ใช้งานระบบหลังบ้าน</Dialog.Title>
+				<Dialog.Title class="text-base font-bold">{title}</Dialog.Title>
 				<p class="text-xs text-muted-foreground">{fullName} ({volunteer.volunteer_code})</p>
 			</div>
 		</div>
 
 		<div class="max-h-[70vh] space-y-5 overflow-y-auto px-6 py-5">
+			{#if standing.kind === 'active'}
+				<div
+					role="status"
+					class="rounded-xl border border-emerald-300 bg-emerald-50 p-3 text-sm text-emerald-800"
+				>
+					<p class="font-semibold">บัญชี ({grantedAccount}) มีสิทธิ์ในศูนย์นี้อยู่แล้ว</p>
+					<p class="mt-0.5 text-xs">
+						เลือกบทบาทและวันหมดอายุใหม่เพื่อแก้ไขหรือต่ออายุ บทบาทที่เลือกจะแทนที่บทบาทเดิม
+					</p>
+					{#if standing.permanentRoles.length > 0}
+						<p class="mt-1 text-xs">
+							สิทธิ์ถาวรจากผู้จัดการศูนย์: {standing.permanentRoles.map(roleOptionLabel).join(', ')}
+							(แก้ได้ที่หน้าผู้ใช้งาน)
+						</p>
+					{/if}
+				</div>
+			{:else if standing.kind === 'lapsed'}
+				<div
+					role="status"
+					class="rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900"
+				>
+					<p class="font-semibold">
+						บัญชี ({grantedAccount}) มีอยู่แล้ว แต่ยังไม่มีสิทธิ์ในศูนย์นี้
+					</p>
+					{#if standing.lastEnded}
+						<p class="mt-0.5 text-xs">
+							สิทธิ์ล่าสุด{standing.lastEnded.role
+								? ` (${roleOptionLabel(standing.lastEnded.role)})`
+								: ''}
+							{ENDED_HOW[standing.lastEnded.reason]}เมื่อ {formatThaiShortDate(
+								standing.lastEnded.at
+							)}
+							{#if standing.lastEnded.reason === 'revoked' && standing.lastEnded.by}
+								โดย {standing.lastEnded.by}
+							{/if}
+						</p>
+					{/if}
+					<p class="mt-0.5 text-xs">ออกสิทธิ์อีกครั้งได้เลย รหัสผ่านเดิมของบัญชีไม่เปลี่ยน</p>
+				</div>
+			{/if}
 			<div
 				class="space-y-3 rounded-xl border border-domain-volunteer-border bg-domain-volunteer-subtle p-3"
 			>
@@ -258,21 +369,72 @@
 			</div>
 
 			<div class="space-y-1.5">
-				<p class="text-xs font-bold text-foreground">บทบาท/สิทธิ์ใช้งานระบบ (ROLE ASSIGNMENT)</p>
-				<Select.Root type="single" bind:value={role} disabled={pending}>
-					<Select.Trigger class="h-11 w-full rounded-xl bg-background px-3">
-						<span class="truncate">{roleOptionLabel(role)}</span>
-					</Select.Trigger>
-					<Select.Content>
-						{#each roleChoices as capability (capability)}
-							<Select.Item value={capability} label={roleOptionLabel(capability)} />
-						{/each}
-					</Select.Content>
-				</Select.Root>
+				<p
+					id={`volunteer-access-role-label-${volunteer._id}`}
+					class="text-xs font-bold text-foreground"
+				>
+					บทบาท/สิทธิ์ใช้งานระบบ (ROLE ASSIGNMENT) <span class="text-destructive">*</span>
+				</p>
+				<RadioGroup.Root
+					bind:value={role}
+					onValueChange={() => (roleError = null)}
+					disabled={pending}
+					aria-labelledby={`volunteer-access-role-label-${volunteer._id}`}
+					aria-invalid={roleError ? true : undefined}
+					aria-describedby={roleError ? `volunteer-access-role-error-${volunteer._id}` : undefined}
+					class="grid grid-cols-1 gap-2 sm:grid-cols-2"
+				>
+					{#each roleChoices as capability (capability)}
+						<div
+							class="flex min-h-11 items-center gap-1 rounded-xl border border-border bg-background pr-1"
+						>
+							<Label
+								for={`volunteer-access-role-${volunteer._id}-${capability}`}
+								class="flex min-h-11 min-w-0 flex-1 cursor-pointer items-center gap-2.5 px-3 py-2 text-sm font-medium text-foreground"
+							>
+								<RadioGroup.Item
+									id={`volunteer-access-role-${volunteer._id}-${capability}`}
+									value={capability}
+									disabled={permanentRoles.includes(capability)}
+								/>
+								<span class="flex min-w-0 flex-col">
+									<span>{roleOptionLabel(capability)}</span>
+									{#if permanentRoles.includes(capability)}
+										<span class="text-[11px] font-normal text-muted-foreground"
+											>{MANAGER_GIVEN_NOTE}</span
+										>
+									{/if}
+								</span>
+							</Label>
+							<!-- Same wording as the users page role picker (STAFF_CAPABILITY_DESCRIPTIONS). -->
+							<Popover.Root>
+								<Popover.Trigger
+									type="button"
+									class="inline-flex size-9 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+									aria-label={`รายละเอียด${roleOptionLabel(capability)}`}
+								>
+									<Info class="size-4" />
+								</Popover.Trigger>
+								<Popover.Content class="max-w-[280px] p-3 text-sm" align="end" side="top">
+									{STAFF_CAPABILITY_DESCRIPTIONS[capability]}
+								</Popover.Content>
+							</Popover.Root>
+						</div>
+					{/each}
+				</RadioGroup.Root>
+				{#if roleError}
+					<p
+						id={`volunteer-access-role-error-${volunteer._id}`}
+						class="text-sm font-medium text-destructive"
+					>
+						{roleError}
+					</p>
+				{/if}
 				<p class="text-[11px] text-muted-foreground">
 					{#if limited}
-						* ผู้ประสานงานออกสิทธิ์ได้เฉพาะ 4 บทบาทนี้ ในศูนย์พักพิงนี้
-						ถอนหรือย่นอายุได้เฉพาะสิทธิ์ที่ตนเองออก (สิทธิ์อื่นหมดอายุเอง หรือให้ผู้จัดการศูนย์ถอน)
+						* ผู้ประสานงานออกสิทธิ์ได้เฉพาะบทบาทเหล่านี้ ในศูนย์พักพิงนี้ แก้ไข ต่ออายุ ย่นอายุ
+						หรือถอนสิทธิ์ที่ออกให้ในศูนย์นี้ได้ ไม่ว่าใครเป็นผู้ออก (สิทธิ์ที่ผู้จัดการศูนย์ให้
+						ให้ผู้จัดการศูนย์แก้ไข)
 					{:else}
 						* บัญชีใช้สิทธิ์ที่เลือกในศูนย์พักพิงนี้ จัดการสิทธิ์เพิ่มเติมได้ผ่านหน้าผู้ใช้งาน
 					{/if}
@@ -289,11 +451,11 @@
 							<li class="flex flex-wrap items-center justify-between gap-2 py-2 text-xs">
 								<div class="min-w-0">
 									<p class="font-semibold text-foreground">{roleOptionLabel(grant.role)}</p>
-									<p class="text-muted-foreground">{grantExpiryLabel(grant)}</p>
+									<p class="text-muted-foreground">
+										{grantExpiryLabel(grant)}{grant.mine ? ' · ออกโดยคุณ' : ''}
+									</p>
 								</div>
-								{#if !grant.mine}
-									<span class="text-muted-foreground">ออกโดยผู้ประสานงานคนอื่น</span>
-								{:else if confirmRevoke === grant.role}
+								{#if confirmRevoke === grant.role}
 									<div class="flex gap-2">
 										<Button
 											type="button"
@@ -333,37 +495,32 @@
 				<div class="space-y-1.5">
 					<label
 						for={`volunteer-access-expiry-${volunteer._id}`}
-						class="text-xs font-bold text-foreground"
+						class="block text-xs font-bold text-foreground"
 					>
 						วันหมดอายุของสิทธิ์ <span class="text-destructive">*</span>
 					</label>
-					<Input
-						id={`volunteer-access-expiry-${volunteer._id}`}
-						type="date"
-						bind:value={expiresOn}
-						min={expiryRange.min}
-						max={expiryRange.max}
-						required
-						disabled={pending}
-						class="h-11 sm:max-w-xs"
-					/>
+					<div class="sm:max-w-xs">
+						<DatePicker
+							id={`volunteer-access-expiry-${volunteer._id}`}
+							bind:value={expiresOn}
+							min={expiryRange.min}
+							max={expiryRange.max}
+							disabled={pending}
+							placeholder="เลือกวันหมดอายุ"
+							format={formatThaiShortDate}
+						/>
+					</div>
 					<p class="text-[11px] text-muted-foreground">
 						เลือกได้ตั้งแต่วันนี้ถึง {MAX_GRANT_DAYS} วันข้างหน้า สิทธิ์หมดอายุตอนสิ้นวันที่เลือก ต่ออายุได้ด้วยการออกสิทธิ์ซ้ำ
 					</p>
 				</div>
 
-				{#if blockedReason}
-					<p role="alert" class="text-sm font-medium text-destructive">{blockedReason}</p>
-				{:else if unverifiedHere}
-					<p class="rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs text-amber-800">
-						อาสาสมัครยังไม่ยืนยันตัวตนในศูนย์นี้
-						ระบบจะตรวจผลยืนยันจากศูนย์อื่นที่เบอร์โทรและเลขบัตรประชาชนตรงกัน หากไม่พบ
-						จะออกสิทธิ์ไม่ได้
-					</p>
-				{/if}
 				{#if submitError}
 					<p role="alert" class="text-sm font-medium text-destructive">{submitError}</p>
 				{/if}
+			{/if}
+			{#if blockedReason}
+				<p role="alert" class="text-sm font-medium text-destructive">{blockedReason}</p>
 			{/if}
 
 			<div class="space-y-3 rounded-xl border border-border p-4">
@@ -460,6 +617,11 @@
 								สร้างรหัส
 							</Button>
 						</div>
+						<!-- The volunteer's own mobile is accepted as a one-time default; any other password
+						     must meet the policy, so only then show the checklist (#1045). -->
+						{#if password.trim() && password.trim() !== loginPhone}
+							<PasswordRuleChecklist {password} />
+						{/if}
 						{#if passwordError}
 							<p
 								id={`volunteer-access-password-error-${volunteer._id}`}
@@ -506,7 +668,7 @@
 					กำลังบันทึก...
 				{:else}
 					<Save class="h-4 w-4" />
-					บันทึกและออกสิทธิ์ใหม่
+					{saveLabel}
 				{/if}
 			</Button>
 		</div>

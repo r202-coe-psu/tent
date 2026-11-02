@@ -1,7 +1,8 @@
 """Project shelter evacuee docs → shelter_occupants (EXT-007, ADR 0002 §6).
 
 Extracts and masks occupant data for authorized partner read plane with PDPA compliance.
-Only active evacuees (current_stay.status == 'active') are projected, and never one
+Only evacuees in the shelter (`IN_SHELTER_STATUSES`: `active` + `room_confirmed`) are
+projected, and never one
 with `privacy.search_excluded` (opt-out / basic consent, #791) — they still count in
 the EXT-005 occupancy aggregates.
 """
@@ -10,6 +11,8 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from typing import Any
+
+from worker.projectors.occupancy import IN_SHELTER_STATUSES, resolve_age
 
 
 def _parse_datetime(value: Any) -> datetime | None:
@@ -45,37 +48,6 @@ def compute_age_range(age: float | None) -> str:
     return "60+"
 
 
-BIRTH_YEAR_ERA_OFFSET = 543  # ค.ศ. → พ.ศ.
-MIN_VALID_AGE = 0
-MAX_VALID_AGE = 130
-
-
-def resolve_age(doc: dict[str, Any]) -> float | None:
-    """Registration only ever stores `age` when staff type it in directly (CR-057) —
-    every evacuee otherwise carries `birth_year` (พ.ศ.), so that's the field to fall
-    back to rather than reporting every occupant as "unknown".
-
-    A staff typo (negative `age`, or a `birth_year` in the future / implausibly far
-    in the past) must not silently project as a valid bracket — reject out-of-range
-    values here instead of letting `compute_age_range` bucket them."""
-    age = doc.get("age")
-    if (
-        isinstance(age, (int, float))
-        and not isinstance(age, bool)
-        and MIN_VALID_AGE <= age <= MAX_VALID_AGE
-    ):
-        return age
-
-    birth_year = doc.get("birth_year")
-    if isinstance(birth_year, (int, float)) and not isinstance(birth_year, bool):
-        current_year_be = datetime.now(UTC).year + BIRTH_YEAR_ERA_OFFSET
-        calculated_age = current_year_be - birth_year
-        if MIN_VALID_AGE <= calculated_age <= MAX_VALID_AGE:
-            return calculated_age
-
-    return None
-
-
 def mask_occupant_name(first_name: str | None, last_name: str | None) -> str:
     """Masks name according to ODT convention (e.g. 'สมชาย ใ.')."""
     fn = (first_name or "").strip()
@@ -90,9 +62,9 @@ def mask_occupant_name(first_name: str | None, last_name: str | None) -> str:
 def project_shelter_occupant(
     doc: dict[str, Any], shelter_code: str
 ) -> dict[str, Any] | None:
-    """Projects an active evacuee doc to a ShelterOccupant payload.
+    """Projects an in-shelter evacuee doc to a ShelterOccupant payload.
 
-    Returns None if the doc is not an active evacuee or is search-excluded;
+    Returns None if the doc is not an in-shelter evacuee or is search-excluded;
     `refresh_shelter_occupants` then purges any existing row for it.
     """
     if doc.get("type") != "evacuee":
@@ -107,7 +79,7 @@ def project_shelter_occupant(
         return None
 
     current_stay = doc.get("current_stay") or {}
-    if current_stay.get("status") != "active":
+    if current_stay.get("status") not in IN_SHELTER_STATUSES:
         return None
 
     raw_id = doc_id.replace("evacuee:", "")

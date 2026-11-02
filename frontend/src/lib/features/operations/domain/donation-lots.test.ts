@@ -92,7 +92,7 @@ describe('buildDonationLotRows (#821 FR-12)', () => {
 			item_id: 'item_master:salt',
 			reason: 'distribute',
 			qty: '-5',
-			lot_ref: brokenReceipt._id,
+			lot_ref: 'stock_ledger:unknown-lot',
 			occurred_at: '2026-10-21T03:00:00.000Z'
 		});
 
@@ -100,6 +100,21 @@ describe('buildDonationLotRows (#821 FR-12)', () => {
 
 		expect(rows.find((r) => r.itemId === 'item_master:salt')?.remaining).toBeNull();
 		expect(rows.find((r) => r.itemId === 'item_master:rice')?.remaining).toBe('10');
+	});
+
+	it('shows a negative balance for a lot that was overdrawn (#855)', () => {
+		const salt = receipt({ item_id: 'item_master:salt', qty: '1', unit: 'kg' });
+		const overdraw = row({
+			item_id: 'item_master:salt',
+			reason: 'distribute',
+			qty: '-5',
+			lot_ref: salt._id,
+			occurred_at: '2026-10-21T03:00:00.000Z'
+		});
+
+		const rows = buildDonationLotRows([salt], [salt, overdraw]);
+
+		expect(rows[0].remaining).toBe('-4');
 	});
 
 	it('takes only donation receipts: other reasons and outbound rows are not lots of the donation', () => {

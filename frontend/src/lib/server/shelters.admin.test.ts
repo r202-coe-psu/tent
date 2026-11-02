@@ -10,6 +10,7 @@ vi.mock('./couch-admin', async (importOriginal) => ({
 import {
 	buildSecurityMutationLock,
 	deployDonationReceivedMangoIndex,
+	deployRoleGrantAuditMangoIndex,
 	updateMaster
 } from './shelters.admin';
 
@@ -155,6 +156,31 @@ describe('deployDonationReceivedMangoIndex (#821)', () => {
 
 		await expect(deployDonationReceivedMangoIndex('shelter_sh001')).rejects.toThrow(
 			'donation-received-phone'
+		);
+	});
+});
+
+describe('deployRoleGrantAuditMangoIndex (CR-221)', () => {
+	beforeEach(() => adminRawMock.mockReset());
+
+	it('posts the audit-by-target index to the shelter database', async () => {
+		adminRawMock.mockResolvedValue({ status: 200, data: { result: 'created' } });
+		await deployRoleGrantAuditMangoIndex('shelter_sh001');
+		expect(adminRawMock).toHaveBeenCalledWith(
+			'/shelter_sh001/_index',
+			'POST',
+			expect.objectContaining({
+				ddoc: 'role-grant-audit-target',
+				name: 'role-grant-audit-by-target',
+				index: { fields: ['type', 'target_id', 'reason'] }
+			})
+		);
+	});
+
+	it('fails, naming the index, when CouchDB refuses it', async () => {
+		adminRawMock.mockResolvedValue({ status: 500, data: { reason: 'boom' } });
+		await expect(deployRoleGrantAuditMangoIndex('shelter_sh001')).rejects.toThrow(
+			'role-grant-audit-by-target'
 		);
 	});
 });
