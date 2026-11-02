@@ -171,7 +171,7 @@ export async function bookTypedAsDonor(
 		await page.getByRole('option', { name: 'กล่อง', exact: true }).click();
 		await page.getByRole('spinbutton', { name: 'ปริมาณ' }).nth(index).fill('1');
 	}
-	await page.getByRole('button', { name: 'ถัดไป: เลือกจุดส่งมอบ' }).click();
+	await page.getByRole('button', { name: 'ถัดไป: นัดหมายการส่งของบริจาค' }).click();
 
 	await expect(
 		page.getByRole('heading', { name: 'ส่วนที่ 3: ข้อมูลการจัดส่ง โลจิสติกส์' })
