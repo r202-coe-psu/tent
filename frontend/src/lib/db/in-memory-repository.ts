@@ -1,5 +1,5 @@
 import { paginateItems } from './paginate';
-import type { PaginatedResult, Repository } from './repository';
+import type { PageByTypeOptions, PaginatedResult, Repository } from './repository';
 
 /** In-memory {@link Repository} for unit tests — no network. */
 export function createInMemoryRepository(): Repository {
@@ -35,9 +35,14 @@ export function createInMemoryRepository(): Repository {
 			type: string,
 			guard: (d: unknown) => d is T,
 			page: number,
-			pageSize: number
+			pageSize: number,
+			options?: PageByTypeOptions
 		): Promise<PaginatedResult<T>> {
-			const matched = await this.allByType(type, guard);
+			// Mirror `_all_docs`: rows come back in `_id` order, reversed when descending.
+			const matched = (await this.allByType(type, guard)).sort((a, b) =>
+				a._id < b._id ? -1 : a._id > b._id ? 1 : 0
+			);
+			if (options?.descending) matched.reverse();
 			return paginateItems(matched, page, pageSize);
 		},
 
