@@ -4,6 +4,7 @@ import {
 	CUSTOM_RECIPE_DURATION_HOURS,
 	customRecipeInput,
 	findRecipeByLabel,
+	isSameRecipeInput,
 	type CustomRecipeIngredient
 } from './custom-recipe';
 
@@ -82,5 +83,27 @@ describe('findRecipeByLabel', () => {
 		expect(findRecipeByLabel(recipes, 'Curry')).toBeUndefined();
 		expect(findRecipeByLabel(recipes, '   ')).toBeUndefined();
 		expect(findRecipeByLabel(undefined, 'Soup')).toBeUndefined();
+	});
+});
+
+describe('isSameRecipeInput', () => {
+	function input(overrides: Partial<Parameters<typeof customRecipeInput>[0]> = {}) {
+		const result = build(overrides);
+		if (!result.ok) throw new Error(result.reason);
+		return result.input;
+	}
+
+	it('matches the same batch rebuilt, quantity formatting aside', () => {
+		expect(isSameRecipeInput(input(), input({ ingredients: [{ ...rice, quantity: 2 }] }))).toBe(
+			true
+		);
+	});
+
+	it.each([
+		['an ingredient quantity', { ingredients: [{ ...rice, quantity: '5' }] }],
+		['the portions', { portions: 60 }],
+		['the label', { label: 'Stew' }]
+	])('tells apart a change to %s', (_, overrides) => {
+		expect(isSameRecipeInput(input(), input(overrides))).toBe(false);
 	});
 });

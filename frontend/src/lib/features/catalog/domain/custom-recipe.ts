@@ -69,3 +69,8 @@ export function findRecipeByLabel<T extends { label: string }>(
 	if (!key) return undefined;
 	return recipes?.find((recipe) => recipe.label.trim().toLocaleLowerCase() === key);
 }
+
+/** Whether two {@link customRecipeInput} results would store the same recipe. */
+export function isSameRecipeInput(a: RecipeInput, b: RecipeInput): boolean {
+	return JSON.stringify(a) === JSON.stringify(b);
+}

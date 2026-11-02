@@ -37,8 +37,12 @@
 		formatUnit,
 		useUnitsOfMeasure,
 		useCreateRecipe,
+		useUpdateRecipe,
 		customRecipeInput,
-		findRecipeByLabel
+		findRecipeByLabel,
+		isSameRecipeInput,
+		type Recipe,
+		type RecipeInput
 	} from '$lib/features/catalog';
 	import { langState } from '$lib/states/i18n.svelte';
 	import { useSupplyItems } from '$lib/features/supply';
@@ -95,6 +99,7 @@
 
 	const createMealPlanMutation = useCreateMealPlan();
 	const createRecipeMutation = useCreateRecipe();
+	const updateRecipeMutation = useUpdateRecipe();
 	const startCookingMutation = useStartMealPlanCooking();
 	const updateConfirmedMealPlanMutation = useUpdateConfirmedMealPlan();
 	const createTicketMutation = useCreateTicket();
@@ -222,15 +227,16 @@
 	// this batch's portions. New batch only: a hand-built list, or a BOM recipe whose ingredients
 	// were edited (an unedited BOM recipe would only duplicate itself).
 	let saveAsRecipe = $state(false);
-	// Survives a failed plan/ticket attempt so the retry links the recipe already saved.
-	let savedRecipeId = $state<string | null>(null);
+	// The recipe this form saved. Survives a failed plan/ticket attempt so a retry updates it to the
+	// list being requested instead of saving a duplicate or linking stale quantities.
+	let savedRecipe = $state.raw<{ doc: Recipe; input: RecipeInput } | null>(null);
 	const canSaveAsRecipe = $derived(
 		!activePlan && (recipeMode === 'custom' || (!!selectedRecipeId && isIngredientsManuallyEdited))
 	);
 
 	function resetSaveAsRecipe() {
 		saveAsRecipe = false;
-		savedRecipeId = null;
+		savedRecipe = null;
 	}
 	let targetTags = $state<TargetGroupTag[]>(['regular']);
 	let isEveryone = $state(false);
@@ -458,14 +464,15 @@
 		toast.success(`เพิ่ม ${master?.name || 'วัตถุดิบ'} เรียบร้อยแล้ว`);
 	}
 
-	// Saves the custom ingredient list as a shelter recipe. Never throws: the ticket must open
-	// even when the recipe can't be saved. Returns the saved recipe id, or null.
+	// Saves the custom ingredient list as a shelter recipe, or brings the recipe an earlier failed
+	// attempt saved up to date with it. Never throws: the ticket must open even when the recipe
+	// can't be saved. Returns the id of a recipe matching the list, or null.
 	async function saveCustomRecipe(
 		label: string,
 		ctx: { shelterCode: string; createdBy: string }
 	): Promise<string | null> {
 		const fail = (reason: string) => {
-			toast.error(`บันทึกสูตรไม่สำเร็จ: ${reason} (ยังเปิดตั๋วเบิกต่อให้)`);
+			toast.error(`บันทึกสูตรไม่สำเร็จ: ${reason} (ระบบยังเปิดใบเบิกให้ตามปกติ)`);
 			return null;
 		};
 		try {
@@ -481,18 +488,25 @@
 				units: unitsQuery.data
 			});
 			if (!result.ok) return fail(result.reason);
-			const recipeLabel = result.input.label;
-			if (findRecipeByLabel(recipes.data, recipeLabel)) {
-				toast.warning(`มีสูตรชื่อ "${recipeLabel}" อยู่แล้ว จึงไม่บันทึกซ้ำ`);
+			const { input } = result;
+			const previous = savedRecipe;
+			if (previous && isSameRecipeInput(previous.input, input)) return previous.doc._id;
+
+			const existing = findRecipeByLabel(recipes.data, input.label);
+			if (existing && existing._id !== previous?.doc._id) {
+				toast.warning(`มีสูตรชื่อ "${existing.label}" อยู่แล้ว จึงไม่บันทึกซ้ำ`);
 				return null;
 			}
-			const saved = await createRecipeMutation.mutateAsync({
-				input: result.input,
-				ctx,
-				shelterCode: ctx.shelterCode
-			});
-			toast.success(`บันทึกสูตร "${recipeLabel}" เรียบร้อยแล้ว`);
-			return saved._id;
+			const doc = previous
+				? await updateRecipeMutation.mutateAsync({ ...previous.doc, ...input })
+				: await createRecipeMutation.mutateAsync({
+						input,
+						ctx,
+						shelterCode: ctx.shelterCode
+					});
+			savedRecipe = { doc, input };
+			toast.success(`บันทึกสูตร "${input.label}" เรียบร้อยแล้ว`);
+			return doc._id;
 		} catch (err) {
 			return fail(err instanceof Error ? err.message : 'ไม่ทราบสาเหตุ');
 		}
@@ -520,7 +534,7 @@
 			toast.error('กรุณาระบุจำนวนวัตถุดิบให้มากกว่า 0 ทุกรายการ');
 			return;
 		}
-		const willSaveRecipe = canSaveAsRecipe && saveAsRecipe && !savedRecipeId;
+		const willSaveRecipe = canSaveAsRecipe && saveAsRecipe;
 		if (willSaveRecipe && !menuLabel.trim()) {
 			toast.error('กรุณาระบุชื่อเมนูที่แสดง เพื่อใช้เป็นชื่อสูตร');
 			return;
@@ -534,9 +548,7 @@
 			createdBy: authStore.user?.name ?? 'kitchen_staff'
 		};
 
-		if (willSaveRecipe) {
-			savedRecipeId = await saveCustomRecipe(finalLabel, ctx);
-		}
+		const savedRecipeId = willSaveRecipe ? await saveCustomRecipe(finalLabel, ctx) : null;
 
 		try {
 			// Plan and ticket are separate features now (CR-121/CR-141) — created

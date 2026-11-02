@@ -128,6 +128,7 @@ export { canWriteShelterRecipe, canWriteShelterCatalog } from './domain/catalog-
 export {
 	customRecipeInput,
 	findRecipeByLabel,
+	isSameRecipeInput,
 	type CustomRecipeIngredient
 } from './domain/custom-recipe';
 export {
