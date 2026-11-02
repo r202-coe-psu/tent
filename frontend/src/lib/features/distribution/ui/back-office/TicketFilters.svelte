@@ -150,62 +150,65 @@
 
 		<!-- Multi-select status filter -->
 		{#if onStatusesChange}
-			<DropdownMenu.Root>
-				<DropdownMenu.Trigger>
-					{#snippet child({ props })}
-						<Button
-							{...props}
-							type="button"
-							variant="outline"
-							aria-label="กรองตามสถานะ"
-							class="h-9 gap-1 rounded-lg px-2.5 text-sm font-normal shadow-2xs"
-						>
-							<span>สถานะ{statuses.length > 0 ? ` (${statuses.length})` : ''}</span>
-							<ChevronDown class="h-4 w-4 text-slate-400" aria-hidden="true" />
-						</Button>
-					{/snippet}
-				</DropdownMenu.Trigger>
-				<DropdownMenu.Content align="start" class="min-w-[200px]">
-					{#each statusOptions as status (status)}
-						<DropdownMenu.CheckboxItem
-							checked={statuses.includes(status)}
-							closeOnSelect={false}
-							onCheckedChange={(checked) => toggleStatus(status, checked)}
-						>
-							{TICKET_STATUS_LABELS[status]}
-						</DropdownMenu.CheckboxItem>
-					{/each}
-				</DropdownMenu.Content>
-			</DropdownMenu.Root>
-		{/if}
-
-		{#if onCreatedFromChange}
 			<div class="flex items-center gap-1.5">
-				<label for="created-from-filter" class="shrink-0 text-xs font-semibold text-slate-600">
-					ตั้งแต่วันที่
-				</label>
-				<DatePicker
-					id="created-from-filter"
-					class="!h-9 w-[132px]"
-					bind:value={() => createdFrom, (v) => onCreatedFromChange?.(v)}
-				/>
+				<span class="shrink-0 text-xs font-semibold text-slate-600">สถานะ:</span>
+				<DropdownMenu.Root>
+					<DropdownMenu.Trigger>
+						{#snippet child({ props })}
+							<Button
+								{...props}
+								type="button"
+								variant="outline"
+								aria-label="กรองตามสถานะ"
+								class="h-9 gap-1 rounded-lg px-2.5 text-sm font-normal shadow-2xs"
+							>
+								<span>{statuses.length > 0 ? `เลือก ${statuses.length} สถานะ` : 'ทุกสถานะ'}</span>
+								<ChevronDown class="h-4 w-4 text-slate-400" aria-hidden="true" />
+							</Button>
+						{/snippet}
+					</DropdownMenu.Trigger>
+					<DropdownMenu.Content align="start" class="min-w-[200px]">
+						{#each statusOptions as status (status)}
+							<DropdownMenu.CheckboxItem
+								checked={statuses.includes(status)}
+								closeOnSelect={false}
+								onCheckedChange={(checked) => toggleStatus(status, checked)}
+							>
+								{TICKET_STATUS_LABELS[status]}
+							</DropdownMenu.CheckboxItem>
+						{/each}
+					</DropdownMenu.Content>
+				</DropdownMenu.Root>
 			</div>
 		{/if}
-		{#if onCreatedToChange}
+
+		{#if onCreatedFromChange || onCreatedToChange}
 			<div class="flex items-center gap-1.5">
-				<label for="created-to-filter" class="shrink-0 text-xs font-semibold text-slate-600">
-					ถึงวันที่
-				</label>
-				<DatePicker
-					id="created-to-filter"
-					class="!h-9 w-[132px]"
-					bind:value={() => createdTo, (v) => onCreatedToChange?.(v)}
-				/>
+				<span class="shrink-0 text-xs font-semibold text-slate-600">วันที่สร้าง:</span>
+				{#if onCreatedFromChange}
+					<DatePicker
+						id="created-from-filter"
+						ariaLabel="ตั้งแต่วันที่"
+						class="!h-9 w-[150px]"
+						bind:value={() => createdFrom, (v) => onCreatedFromChange?.(v)}
+					/>
+				{/if}
+				{#if onCreatedFromChange && onCreatedToChange}
+					<span class="text-slate-400" aria-hidden="true">–</span>
+				{/if}
+				{#if onCreatedToChange}
+					<DatePicker
+						id="created-to-filter"
+						ariaLabel="ถึงวันที่"
+						class="!h-9 w-[150px]"
+						bind:value={() => createdTo, (v) => onCreatedToChange?.(v)}
+					/>
+				{/if}
 			</div>
 		{/if}
 
 		<!-- Follow-up toggle + reset stay together on one line -->
-		<div class="flex items-center gap-2">
+		<div class="ml-auto flex items-center gap-2">
 			<!-- Needs follow-up toggle (role-based) -->
 			{#if followUpAvailable && onFollowUpChange}
 				<Button
@@ -215,7 +218,7 @@
 					onclick={() => onFollowUpChange(!followUp)}
 					class="h-9 rounded-lg px-2.5 text-sm shadow-2xs"
 				>
-					ต้องติดตาม
+					รอดำเนินการ
 				</Button>
 			{/if}
 
