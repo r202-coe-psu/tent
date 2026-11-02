@@ -21,7 +21,13 @@ describe('volunteerAccessStatus', () => {
 	it('lists a grant with its expiry and a permanent role without one', () => {
 		const s = volunteerAccessStatus(vol, [
 			account({
-				grants: [{ role: 'distribution_staff', expires_at: '2026-11-03T16:59:59.999Z' }],
+				grants: [
+					{
+						role: 'distribution_staff',
+						expires_at: '2026-11-03T16:59:59.999Z',
+						granted_by: 'coord@x.com'
+					}
+				],
 				permanent_roles: ['registration_staff']
 			})
 		]);

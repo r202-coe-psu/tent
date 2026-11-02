@@ -14,8 +14,8 @@ export type VolunteerAccount = {
 	volunteer_id: string;
 	name: string;
 	active: boolean;
-	/** Coordinator grants here, each ending at `expires_at`. */
-	grants: readonly { role: string; expires_at: string }[];
+	/** Coordinator grants here, each ending at `expires_at`, issued by `granted_by` (CR-221 FR-8). */
+	grants: readonly { role: string; expires_at: string; granted_by: string }[];
 	/** Roles a manager gave here (no expiry). */
 	permanent_roles: readonly string[];
 	/** Only when it holds nothing here: how its last role here ended (#1044). */
