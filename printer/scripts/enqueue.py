@@ -1,4 +1,9 @@
-"""Phase 0 PoC: simulate the staff API by writing `print_job` docs straight into DB `printing`.
+"""Dev tool: simulate the staff API by writing `print_job` docs straight into CouchDB.
+
+The device (`print_device:{id}`) is read from DB `printing_devices`; each job is written to the
+device's shelter DB `printing_{shelter_code}` (lower case), as the BFF does. This uses the SERVER
+ADMIN credentials, so it bypasses the VDU (validate_doc_update) and the BFF's checks (role/source
+rules, printer-online check, label validation). Development use only, never against production.
 
     COUCHDB_ADMIN_URL=http://user:pass@localhost:5984 \\
         uv run python scripts/enqueue.py --device-id printer-poc-1 --count 3 --wait
@@ -31,7 +36,7 @@ from urllib.parse import quote, unquote, urlsplit, urlunsplit
 
 import httpx
 
-DB = "printing"
+DEVICES_DB = "printing_devices"
 TERMINAL = {"printed", "failed", "expired"}
 CROCKFORD = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
 # Must equal frontend `kioskLabelDots()`: the staff API rejects any other label size (FR-12a).
@@ -121,21 +126,26 @@ def admin_client(url: str) -> httpx.Client:
     return httpx.Client(base_url=base, auth=auth, timeout=15.0)
 
 
-def _doc_url(doc_id: str) -> str:
-    return f"/{DB}/{quote(doc_id, safe='')}"
+def shelter_db(shelter_code: str) -> str:
+    """Per-shelter job DB, like frontend `printingDbName()`."""
+    return f"printing_{shelter_code.lower()}"
 
 
-def enqueue_job(
-    http: httpx.Client,
+def _doc_url(db: str, doc_id: str) -> str:
+    return f"/{db}/{quote(doc_id, safe='')}"
+
+
+def build_job_doc(
     device: dict,
     pngs: list[bytes],
     ttl_sec: int,
     source: str,
-) -> str:
-    now = datetime.now(UTC)
-    doc_id = f"print_job:{new_ulid()}"
-    doc = {
-        "_id": doc_id,
+    job_id: str,
+    now: datetime,
+) -> dict:
+    """A `pending` print_job doc, same shape as the BFF's `createPrintJob` writes."""
+    return {
+        "_id": f"print_job:{job_id}",
         "type": "print_job",
         "schema_v": 1,
         "shelter_code": device["shelter_code"],
@@ -159,14 +169,24 @@ def enqueue_job(
             for i, png in enumerate(pngs)
         },
     }
-    response = http.put(_doc_url(doc_id), json=doc)
+
+
+def enqueue_job(
+    http: httpx.Client,
+    device: dict,
+    pngs: list[bytes],
+    ttl_sec: int,
+    source: str,
+) -> str:
+    doc = build_job_doc(device, pngs, ttl_sec, source, new_ulid(), datetime.now(UTC))
+    response = http.put(_doc_url(shelter_db(device["shelter_code"]), doc["_id"]), json=doc)
     if response.status_code not in (201, 202):
         raise SystemExit(f"enqueue failed: HTTP {response.status_code} {response.text[:200]}")
-    return doc_id
+    return doc["_id"]
 
 
 def wait_for_jobs(
-    http: httpx.Client, started: dict[str, float], timeout_sec: float
+    http: httpx.Client, db: str, started: dict[str, float], timeout_sec: float
 ) -> list[dict[str, object]]:
     """Poll until every job is terminal (or timeout). `started` maps job id -> monotonic start."""
     claimed_at: dict[str, float] = {}
@@ -176,7 +196,7 @@ def wait_for_jobs(
         for doc_id, t0 in started.items():
             if doc_id in results:
                 continue
-            response = http.get(_doc_url(doc_id))
+            response = http.get(_doc_url(db, doc_id))
             if response.status_code != 200:
                 continue
             doc = response.json()
@@ -243,7 +263,7 @@ def print_stats(rows: list[dict[str, object]]) -> None:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Simulate the staff API: write print_job docs into DB `printing`. "
+        description="Simulate the staff API: write print_job docs into DB printing_{shelter}. "
         "Needs env COUCHDB_ADMIN_URL=http://user:pass@host:5984. created_at/expires_at use the "
         "LOCAL UTC clock of this machine (CouchDB server time is not available).",
     )
@@ -293,7 +313,7 @@ def main(argv: list[str] | None = None) -> int:
     rows: list[dict[str, object]] = []
     try:
         with admin_client(url) as http:
-            response = http.get(_doc_url(f"print_device:{args.device_id}"))
+            response = http.get(_doc_url(DEVICES_DB, f"print_device:{args.device_id}"))
             if response.status_code != 200:
                 raise SystemExit(
                     f"print_device {args.device_id} not found "
@@ -310,7 +330,11 @@ def main(argv: list[str] | None = None) -> int:
                     started[doc_id] = time.monotonic()
                     print(f"enqueued {doc_id} ({len(pngs)} labels)")
                 if args.wait:
-                    rows.extend(wait_for_jobs(http, started, args.wait_timeout))
+                    rows.extend(
+                        wait_for_jobs(
+                            http, shelter_db(device["shelter_code"]), started, args.wait_timeout
+                        )
+                    )
     except httpx.TransportError as exc:
         print(f"cannot reach CouchDB: {type(exc).__name__}", file=sys.stderr)
         return 1
