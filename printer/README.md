@@ -38,7 +38,8 @@ COUCHDB_PRINTING_SERVICE_PASSWORD=<openssl rand -hex 24>
 PRINT_HOUSEKEEPING_TOKEN=<openssl rand -hex 32>
 ```
 
-ถ้ารัน `pnpm dev` นอก docker ต้องใส่ค่าเดียวกันใน `frontend/.env` ด้วย:
+เครื่องที่จะรันสคริปต์สร้าง user (ข้างล่าง) และเครื่องที่รัน `pnpm dev` นอก docker ต้องมีค่าเดียวกันใน `frontend/.env` ด้วย
+ถ้าไม่ตั้ง `COUCHDB_PRINTING_SERVICE_URL` สคริปต์จะข้ามการสร้าง user ไป (ขึ้นแค่ `⚠️ COUCHDB_PRINTING_SERVICE_URL unset — skipping user`)
 
 ```bash
 COUCHDB_PRINTING_SERVICE_URL=http://printing_service:<รหัสเดียวกัน>@localhost:5984
@@ -48,8 +49,12 @@ PRINT_HOUSEKEEPING_TOKEN=<token เดียวกัน>
 จากนั้นสร้าง user ใน CouchDB ด้วยรหัสนั้น:
 
 ```bash
-cd frontend && pnpm redeploy:access     # หรือ pnpm seed
+cd frontend
+pnpm redeploy:access                    # dry-run: ต้องเห็น would create _users "printing_service"
+pnpm redeploy:access --write --confirm  # สร้างจริง
 ```
+
+ห้ามใช้ `pnpm seed` บน deployment จริง เพราะจะใส่ mock data (~1k people) ลงไปด้วย
 
 - user `printing_service` ถูกสร้างแบบไม่มี role ส่วนสิทธิ์ admin ของ DB `printing_devices` และ `printing_{code}` server ใส่ให้เองตอนสร้าง DB
 - ถ้าจะเปลี่ยนรหัสทีหลัง ต้องแก้ทั้ง `.env` และรหัสของ user ใน CouchDB ให้ตรงกัน เพราะสคริปต์จะข้าม user ที่มีอยู่แล้ว ไม่ทับรหัสเดิม
@@ -194,7 +199,7 @@ log มี job id / จำนวน label / error code แต่ไม่มี 
 | log / อาการ | สาเหตุ / วิธีแก้ |
 |---|---|
 | `device auth failed` / 401 ซ้ำ ๆ | `DEVICE_ID`/`DEVICE_SECRET` ผิด, secret ถูก rotate, หรือเครื่องถูกตั้งเป็น inactive ใน back-office (server ตอบ 401 เหมือนกันทุกกรณี) ตรวจสถานะเครื่องใน back-office แล้วใส่ค่าล่าสุดใน `/opt/tent/printer/.env` แล้ว `sudo systemctl restart tent-printer` |
-| 429 ซ้ำ ๆ | มี agent มากกว่าหนึ่งตัวใช้ `DEVICE_ID` เดียวกันจาก IP เดียวกัน (nginx ให้ไม่เกิน 2 connection) ดูข้อ "agent สองตัว" ด้านล่าง |
+| 429 ซ้ำ ๆ | มี agent มากกว่าหนึ่งตัวใช้ `DEVICE_ID` เดียวกัน (nginx ให้ไม่เกิน 2 connection ต่อเครื่อง) ดูข้อ "agent สองตัว" ด้านล่าง |
 | `printer queue … is missing` | `PRINTER_NAME` ไม่ตรงกับ `lpstat -p` หรือยังไม่ได้ทำขั้นที่ 3 |
 | `printer queue … is disabled` | CUPS ปิด queue (มักเกิดหลังกระดาษหมดหรือปิดเครื่อง) ตรวจกระดาษ/ไฟ แล้วดู [สิทธิ์เปิด queue](#สิทธิ์เปิด-queue-queue-enable-rights) |
 | `boot slip not printed: lp failed` | ส่งงานเข้า CUPS ไม่ได้ ลอง `echo test \| lp -d tent_xprinter -` เพื่อดู error จริง |
