@@ -4,11 +4,12 @@ title: Kiosk check-in claim ผู้ลงทะเบียนแบบไม�
 status: approved
 date: 2026-10-24
 created: 2026-10-24
-updated: 2026-10-31
+updated: 2026-11-02
 amendments:
-  - A1 (2026-10-31, #1043) — kiosk claim สัตว์เลี้ยงพร้อมสมาชิก — approved 2026-10-31 (feedback ตอน role play ให้เปลี่ยนเป็นแบบนี้)
+  - A1 (2026-10-31, #1043) — kiosk claim สัตว์เลี้ยงพร้อมสมาชิก — approved 2026-10-31 (feedback ตอน role play ให้เปลี่ยนเป็นแบบนี้) · ยืนยันโดย Soravit Sukkarn, Team Lead 2026-11-02
+  - A2 (2026-11-02, review PR #1052) — ปิดช่องโหว่ claim สัตว์ของ A1 (สัตว์ legacy, ผลเขียนกำกวม, รูปอ่านไม่ได้) — approved 2026-11-02 by Soravit Sukkarn, Team Lead (แก้ตามข้อเสนอใน review PR #1052)
 requested_by: ทีม kiosk SaktanuthPeak
-decided_by: Team Leader (Soravit) — approved 2026-10-24
+decided_by: Team Leader (Soravit) — approved 2026-10-24 · A1 + A2 approved 2026-11-02 by Soravit Sukkarn, Team Lead
 layer: volatile
 affects:
   - docs/data/schema.md §9.5 (Claim rule — actor staff → staff | kiosk; `claimed_by` = `kiosk:{device_id}`; Indexes + `by_member_evacuee_id`)
@@ -32,13 +33,21 @@ affects:
 - **Build:** FastAPI service endpoints 3 ตัว (lookup / prepare / revert) + kiosk BFF fallback + claim-then-check-in
 - **กระทบ:** กฎ claim ใน `schema.md` §9.5 (เดิม staff-only) · ไม่ bump `schema_v`
 
-> **ส่วนที่ปรับ A1 (2026-10-31, #1043) — approved 2026-10-31 (มาจาก feedback ตอน role play ที่ให้เปลี่ยนเป็นแบบนี้)**
+> **ส่วนที่ปรับ A1 (2026-10-31, #1043) — approved 2026-10-31 (มาจาก feedback ตอน role play ที่ให้เปลี่ยนเป็นแบบนี้) · ยืนยันโดย Soravit Sukkarn, Team Lead 2026-11-02**
 >
 > - **เปลี่ยน:** kiosk claim **สัตว์เลี้ยง `open` ทั้งหมด** ของใบลงทะเบียนพร้อมสมาชิก (เดิม FR-KUC-12 ให้คง `open` รอเจ้าหน้าที่) → สัตว์ลง Couch `household.pets[]` พร้อมรูป
 > - **ทำไม:** เจ้าหน้าที่ลืม claim สัตว์จากคิวกลาง → สัตว์ไม่อยู่ใน `household.pets` ของศูนย์เลย
 > - **ข้ามสัตว์** เมื่อศูนย์ไม่รับสัตว์ (`feature_flags.allow_pets` ไม่เป็น `true`) — สมาชิกยัง check-in ได้
 > - **ไม่ทำ:** `household.geo` (ฟอร์ม pre-registration ไม่ได้ส่งพิกัด และ Couch `household` ไม่มี field นี้), ไม่แสดงสัตว์บนจอ kiosk, ไม่เปลี่ยน Couch schema
 > - ข้อที่แก้/เพิ่ม: FR-KUC-12 (แก้), FR-KUC-12a–12f (ใหม่), FR-KUC-16a (ขยายถึงสัตว์), ตาราง endpoints, Out of scope, Acceptance, Risks, Decision log
+
+> **ส่วนที่ปรับ A2 (2026-11-02, review PR #1052) — approved 2026-11-02 by Soravit Sukkarn, Team Lead (ทีม kiosk แก้ตามข้อเสนอใน review)**
+>
+> - **สัตว์ legacy:** แถวที่ไม่มีทั้ง `pet_id` และ `status` ใน Mongo ต้อง claim ได้ทั้ง kiosk และเจ้าหน้าที่ — เติมค่าโดยดูแถวที่เก็บจริง (model เติม `status = open` ตอนอ่าน จึงดูจาก model ไม่ได้)
+> - **ผลเขียน household กำกวม** (network error / timeout หลังส่ง household) → ไม่ revert สัตว์ + log (FR-KUC-12d)
+> - **อ่านรูปจาก GridFS ไม่ได้** → claim ต่อโดยไม่มีรูป ไม่ตอบ 5xx หลัง mark
+> - **ไม่ทำ:** บังคับเพดานสัตว์ ≤10 ตอน append — บันทึกเป็น known gap (Risks)
+> - ข้อที่แก้/เพิ่ม: FR-KUC-12d (เพิ่มข้อย่อย), FR-KUC-12e (อ้างถึง), Acceptance, Risks, Decision log
 
 ## Requirements
 
@@ -88,8 +97,10 @@ affects:
   - append โดน `conflict` (มีคนแก้ household ระหว่างนั้น) → GET ใหม่แล้วลองซ้ำได้อีก 2 ครั้ง; ยังไม่ได้ = ล้ม (FR-KUC-12d)
   - `image:` ของสัตว์เขียนใน `_bulk_docs` เดียวกับ household (ใหม่หรือ append) เท่านั้น — ไม่มีการเขียน household เลย (มีแล้วและไม่มีสัตว์ใหม่) → ไม่เขียนรูปสัตว์; ถ้า household ล้มหลังรูปลงไปแล้ว รูปอาจค้าง (Risks) แต่ไม่มี pet ที่ชี้รูปที่ไม่มีอยู่
 - **FR-KUC-12d** — Rollback: household (ใหม่หรือ append) เขียนไม่สำเร็จ → revert `pet_ids` ของรอบนี้ร่วมกับสมาชิกที่ยังไม่เกิดใน Couch แล้วแจ้ง `KIOSK_CLAIM_FAILED` (ไม่มีใคร check-in)
+  - สมาชิกที่ Couch รับแล้วคง `claimed` (`_bulk_docs` ไม่ atomic) — revert เฉพาะสมาชิกที่ยังไม่เกิด
+  - _(A2)_ ผลการเขียน household กำกวม (ส่ง `_bulk_docs` ที่มี household หรือ PUT append ไปแล้ว แต่ได้ network error / timeout ไม่มี HTTP status) → **ไม่ revert สัตว์** (Couch อาจรับไปแล้ว; revert แล้ว prepare รอบหน้าจะ append ซ้ำ) และ log `registration_id` + `shelter_code` ตาม FR-KUC-12e
 - **FR-KUC-12e** — `prepare` ซ้ำ (FR-KUC-15): claim และคืนเฉพาะสัตว์ที่ยัง `open`; สัตว์ที่ `claimed` เข้าศูนย์นี้แล้ว **ไม่ส่งซ้ำ** (Couch pet ไม่มี id จึงตรวจซ้ำไม่ได้) → ไม่มีสัตว์ซ้ำใน `household.pets`
-  - กรณี mark สัตว์แล้วแต่ไม่ได้เขียน Couch และ revert ไม่ได้ (BFF ตาย / prepare timeout) → สัตว์ค้าง `claimed` โดยไม่มีใน Couch; เจ้าหน้าที่เพิ่มสัตว์เองที่หน้าครอบครัว (Risks)
+  - กรณี mark สัตว์แล้วแต่ไม่ได้เขียน Couch และ revert ไม่ได้ (BFF ตาย / prepare timeout / ผลเขียน household กำกวม FR-KUC-12d) → สัตว์ค้าง `claimed` โดยไม่มีใน Couch; เจ้าหน้าที่เพิ่มสัตว์เองที่หน้าครอบครัว (Risks)
   - prepare timeout (FR-KUC-19c): BFF ไม่รู้ `pet_ids` → revert เฉพาะสมาชิก
 - **FR-KUC-12f** — `document_status` = `closed` เมื่อหลัง claim ไม่มีสมาชิกและสัตว์ `open` เหลือ; revert ที่เปิดสมาชิกหรือสัตว์คืน → `open`
 - **FR-KUC-13** — Smart-card / ThaiD: citizen id ต้องตรงกับ `person_id` ของสมาชิกคนใดคนหนึ่งในใบลงทะเบียน มิฉะนั้น reject ก่อน mark claimed (`PERSON_MISMATCH`)
@@ -173,7 +184,10 @@ Prefix `/public/v1/unassigned-registrations` · Bearer `EXTERNAL_API_SECRET` ท
 - [ ] _(A1)_ คนที่ 3 มาเช็คอินภายหลัง → household เดิมไม่มีสัตว์ซ้ำ
 - [ ] _(A1)_ เจ้าหน้าที่ claim สมาชิกไปก่อน (household เกิดแล้ว ไม่มีสัตว์) → kiosk claim คนที่เหลือ → สัตว์ถูก append เข้า `pets[]` เดิม field อื่นของ household ไม่เปลี่ยน
 - [ ] _(A1)_ ศูนย์ `allow_pets = false` → สมาชิก check-in ได้, สัตว์คง `open`
-- [ ] _(A1)_ Couch เขียน household ไม่สำเร็จ → ทั้งสมาชิกและสัตว์กลับเป็น `open`
+- [ ] _(A1)_ Couch เขียน household ไม่สำเร็จ → สัตว์และสมาชิกที่ยังไม่เกิดใน Couch กลับเป็น `open`; สมาชิกที่ Couch รับแล้วคง `claimed`
+- [ ] _(A2)_ ผลเขียน household กำกวม (network error / timeout) → สัตว์คง `claimed` และ BFF log `registration_id` + `shelter_code`
+- [ ] _(A2)_ สัตว์ legacy ที่ไม่มีทั้ง `pet_id` และ `status` ใน Mongo → kiosk prepare และ staff claim ได้ 200
+- [ ] _(A2)_ อ่านรูปสัตว์ / สมาชิกจาก GridFS ล้ม → claim ต่อโดยไม่มีรูป (ไม่ 5xx หลัง mark)
 - [ ] _(A1)_ claim ครบทุกคนและทุกตัว → `document_status = closed`
 
 ## Why
@@ -213,6 +227,9 @@ Prefix `/public/v1/unassigned-registrations` · Bearer `EXTERNAL_API_SECRET` ท
 - _(A1)_ **สัตว์ค้าง claimed ไม่มีใน Couch:** BFF ตายหลัง mark หรือ prepare timeout → สัตว์ไม่ถูก revert และ prepare ซ้ำไม่ส่งซ้ำ (FR-KUC-12e); เจ้าหน้าที่เพิ่มเองที่หน้าครอบครัว — ยอมรับเพื่อไม่ bump Couch household schema; BFF log `registration_id` + `shelter_code` เมื่อ prepare หาย และ log `pet_ids` เมื่อ revert ล้ม เพื่อให้เจ้าหน้าที่ตามแก้ได้
 - _(A1)_ **household เกิดพร้อมกันสองทาง:** `_all_docs` เห็นว่ายังไม่มี household แต่คนอื่น (kiosk อีกเครื่อง / Station 1) เขียนก่อน → `_bulk_docs` ตอบ `conflict` → ถ้ามีสัตว์ ไปทาง append (อ่านใหม่ → merge → PUT) ไม่นับว่า "เกิดแล้ว" เพื่อไม่ให้สัตว์หาย
 - _(A1)_ **รูปสัตว์ค้าง:** append household ล้มครบทุก retry หลังรูปสัตว์ลง Couch ใน bulk เดียวกันแล้ว → `image:` ไม่มีใครอ้าง (เลือกแบบนี้แทนเขียนรูปทีหลัง ซึ่งเสี่ยง pet ชี้รูปที่ไม่มี)
+- _(A2)_ **ผลเขียน household กำกวม:** network error / timeout หลังส่ง household → ไม่รู้ว่า Couch รับหรือยัง จึงไม่ revert สัตว์ (FR-KUC-12d) → ถ้า Couch ไม่ได้รับจริง สัตว์ค้าง `claimed` แบบเดียวกับ orphan ข้างบน; เลือกแบบนี้แทน revert เพราะ Couch pet ไม่มี id ถ้า revert แล้ว Couch รับไปแล้ว prepare รอบหน้าจะ append สัตว์ซ้ำ
+- _(A2)_ **อ่านรูปจาก GridFS ล้มหลัง mark:** `prepare` โหลดรูปหลัง `_atomic_mark_claimed` → อ่านรูปล้ม (Mongo error / timeout) จะข้ามรูปนั้นแล้วตอบ 200 (log warning) ไม่ตอบ 5xx ที่ทำให้ BFF revert สมาชิกแต่ทิ้งสัตว์ค้าง `claimed`; ผลคือ evacuee / pet อาจเกิดใน Couch โดยไม่มีรูป
+- _(A2)_ **เพดานสัตว์ ≤10 ตัวต่อครัวเรือน (CR-148) ไม่ถูกบังคับตอน append:** Mongo บังคับเพดานต่อใบลงทะเบียนแล้ว แต่ append เข้า household ที่มีสัตว์ของตัวเองอยู่แล้วใน Couch ไม่ได้รวมจำนวนเดิม → household อาจเกิน 10 ได้; claim ของเจ้าหน้าที่ (`couch_birth.py` append) เป็นแบบเดียวกัน — known gap รอทีมตัดสินว่าเกินแล้วจะทำอย่างไร (ปฏิเสธ / ตัด / ยอมให้เกิน)
 - _(A1)_ **สัตว์ถูก claim ระหว่างอ่านกับ mark:** `_atomic_mark_claimed` ไม่ผ่าน → 409 `KIOSK_CLAIM_CONFLICT` เหมือนสมาชิก; สแกนใหม่แล้วผ่าน (สัตว์ไม่ `open` แล้ว)
 - **Smart-card citizen id มาจาก client:** FR-KUC-13 สำหรับบัตรอ้างค่าที่ kiosk ส่งมา (ThaiD ใช้ค่าจาก server)
 - **Stale identity keys:** revert คำนวณ `open_*` จากเอกสารที่อ่านก่อน update; kiosk อื่น claim สมาชิกในครอบครัวเดียวกันในช่วงสั้นนั้นอาจทิ้ง key ค้าง (ผล: ลงทะเบียน identity นั้นซ้ำไม่ได้จนกว่าจะแก้). ลดด้วย atomic update ใน FR-KUC-16a
@@ -231,4 +248,6 @@ N/A — ไม่เปลี่ยนรูปร่าง doc; `claimed_by` �
 - 2026-10-24 — Team Leader (Soravit) approve CR-189: requested by ทีม kiosk SaktanuthPeak, รันเลข CR-189 จัดเข้าหมวด 14-kiosk
 - 2026-10-31 — A1 proposed (ทีม kiosk, #1043): claim สัตว์ `open` ทั้งหมดพร้อมรอบแรก, คงเลือกสมาชิกรายคน, ศูนย์ `allow_pets` ไม่เปิด → ข้ามสัตว์ (สมาชิก check-in ต่อ), ความจุสัตว์ = Station 3, ไม่ส่งสัตว์ซ้ำตอน prepare ซ้ำ (ไม่ bump Couch schema), `geo` ตัดออก
 - 2026-10-31 — A1 approved: มาจาก feedback ตอน role play ที่ให้เปลี่ยนเป็นแบบนี้ (kiosk ดึงสัตว์เข้า household พร้อมสมาชิก)
-- 2026-10-31 — ตาม review #1043: household `conflict` ตอนเกิดใหม่ที่มีสัตว์ → ไปทาง append; เติม `pet_id` ให้สัตว์ legacy ด้วย `$set` เฉพาะแถว (ไม่ save ทั้ง doc); BFF log เพิ่มเมื่อ prepare หาย / อ่าน registry ศูนย์ไม่ได้
+- 2026-10-31 — ตาม review PR #1052: household `conflict` ตอนเกิดใหม่ที่มีสัตว์ → ไปทาง append; เติม `pet_id` ให้สัตว์ legacy ด้วย `$set` เฉพาะแถว (ไม่ save ทั้ง doc); BFF log เพิ่มเมื่อ prepare หาย / อ่าน registry ศูนย์ไม่ได้
+- 2026-11-02 — A2 proposed (ทีม kiosk แก้ตามข้อเสนอใน review ของ Team Leader, PR #1052): เติม `pet_id` / `status` ของสัตว์ legacy โดยดูจากแถวที่เก็บจริงใน Mongo (model เติม `status = open` ตอนอ่าน); ผลเขียน household กำกวม → ไม่ revert สัตว์ + log (FR-KUC-12d); อ่านรูป GridFS ล้ม → claim ต่อโดยไม่มีรูป; เพดานสัตว์ ≤10 ตอน append บันทึกเป็น known gap
+- 2026-11-02 — Soravit Sukkarn, Team Lead approve A1 (ยืนยันการอนุมัติ 2026-10-31) และ A2
