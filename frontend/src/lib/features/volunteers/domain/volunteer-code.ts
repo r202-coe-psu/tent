@@ -38,3 +38,12 @@ export function nextVolunteerCode(existingCodes: readonly string[]): string {
 export function compactVolunteerCode(value: string): string {
 	return value.toLowerCase().replace(/[\s-]/g, '');
 }
+
+/**
+ * Whether a typed search finds a volunteer code: "v013" and "V 013" find V-013.
+ * A query of only dashes/spaces never matches (it would otherwise hit every code).
+ */
+export function matchesVolunteerCode(code: string, query: string): boolean {
+	const needle = compactVolunteerCode(query);
+	return needle !== '' && compactVolunteerCode(code).includes(needle);
+}

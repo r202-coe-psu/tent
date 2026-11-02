@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { compactVolunteerCode, nextVolunteerCode, formatVolunteerCode } from './volunteer-code';
+import {
+	compactVolunteerCode,
+	formatVolunteerCode,
+	matchesVolunteerCode,
+	nextVolunteerCode
+} from './volunteer-code';
 
 describe('formatVolunteerCode', () => {
 	it('zero-pads to 3 digits', () => {
@@ -62,4 +67,21 @@ describe('compactVolunteerCode (#1013)', () => {
 	it('leaves nothing of a lone dash or spaces', () => {
 		expect(compactVolunteerCode(' - ')).toBe('');
 	});
+});
+
+describe('matchesVolunteerCode (#1087)', () => {
+	it.each(['V-013', 'v-013', 'v013', 'V 013', '013', 'v-0'])('finds V-013 with %s', (query) => {
+		expect(matchesVolunteerCode('V-013', query)).toBe(true);
+	});
+
+	it('does not find a different code', () => {
+		expect(matchesVolunteerCode('V-013', 'v014')).toBe(false);
+	});
+
+	it.each(['', '-', ' - ', '   '])(
+		'matches nothing for the dash/space-only query "%s"',
+		(query) => {
+			expect(matchesVolunteerCode('V-013', query)).toBe(false);
+		}
+	);
 });

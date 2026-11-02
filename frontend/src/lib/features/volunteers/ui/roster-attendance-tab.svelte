@@ -54,6 +54,7 @@
 		useJobs
 	} from '../application/queries';
 	import { ASSIGNED_STATUSES } from '../domain/hub-metrics';
+	import { matchesVolunteerCode } from '../domain/volunteer-code';
 	import type {
 		ShiftAssignment,
 		ShiftAssignmentStatus,
@@ -103,7 +104,7 @@
 		if (!needle) return true;
 		return (
 			`${v.first_name} ${v.last_name}`.toLowerCase().includes(needle) ||
-			v.volunteer_code.toLowerCase().includes(needle) ||
+			matchesVolunteerCode(v.volunteer_code, needle) ||
 			(v.phone ?? '').includes(needle)
 		);
 	}

@@ -7,7 +7,7 @@
  */
 
 import { applicantAttendance, awaitingAttendanceConfirmation } from './applicant-attendance';
-import { compactVolunteerCode } from './volunteer-code';
+import { matchesVolunteerCode } from './volunteer-code';
 import {
 	applicationPerson,
 	applicationShiftId,
@@ -72,10 +72,7 @@ function matchesSearch(query: string, person: ApplicantPerson): boolean {
 	if (!query) return true;
 	const q = query.toLowerCase();
 	if (person.name?.toLowerCase().includes(q)) return true;
-	if (person.code) {
-		const qCode = compactVolunteerCode(q);
-		if (qCode !== '' && compactVolunteerCode(person.code).includes(qCode)) return true;
-	}
+	if (person.code && matchesVolunteerCode(person.code, q)) return true;
 	if (!person.phone) return false;
 	if (person.phone.toLowerCase().includes(q)) return true;
 	// A phone-shaped query ("081-234") also matches a phone stored without the dashes.

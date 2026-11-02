@@ -1101,10 +1101,10 @@ test.describe('Volunteer end-to-end operational flow', () => {
 			}, href);
 			await page.locator('#e2e-next-job').click();
 		};
-		const search = page.getByPlaceholder('ค้นหาชื่อ นามสกุล เบอร์โทร, รหัส V-xxx');
+		const search = page.getByRole('searchbox', { name: 'ค้นหาผู้สมัคร' });
 		const openApplicants = async () => {
-			const tab = page.getByRole('tab', { name: /ผู้สมัคร/ });
-			if ((await tab.getAttribute('aria-selected')) !== 'true') await tab.click();
+			// Clicking the already-selected tab is a no-op, so no state read is needed.
+			await page.getByRole('tab', { name: /ผู้สมัคร/ }).click();
 			await expect(search).toBeVisible();
 		};
 
@@ -1117,11 +1117,80 @@ test.describe('Volunteer end-to-end operational flow', () => {
 		await openApplicants();
 		await search.fill('v013');
 		await expect(search).toHaveValue('v013');
+		// A non-search filter is changed too, so the reset below covers every filter, not just search.
+		const statusFilter = page.getByRole('button', { name: 'สถานะการพิจารณา (เจ้าหน้าที่)' });
+		const statusDefault = await statusFilter.innerText();
+		await statusFilter.click();
+		await page.getByRole('option').nth(1).click();
+		await expect(statusFilter).not.toHaveText(statusDefault);
 
 		await followLink(jobUrl(jobB));
 		await expect(page.getByRole('heading', { name: jobB.title })).toBeVisible();
 		await openApplicants();
 		await expect(search).toHaveValue('');
+		await expect(statusFilter).toHaveText(statusDefault);
+	});
+
+	test('the assign roster search finds a volunteer by code with or without the dash (#1087)', async ({
+		page
+	}) => {
+		const volunteerDoc = (n: number, firstName: string, lastName: string) => ({
+			_id: `volunteer:e2eflow${RUN_ID}roster${n}`,
+			type: 'volunteer',
+			schema_v: 4,
+			shelter_code: 'SH001',
+			created_at: '2026-09-01T00:00:00.000Z',
+			updated_at: '2026-09-01T00:00:00.000Z',
+			created_by: 'volunteer-flow-e2e',
+			first_name: firstName,
+			last_name: lastName,
+			phone: `089000000${n}`,
+			email: null,
+			skills: [],
+			organization: null,
+			status: 'active',
+			user_name: null,
+			checked_in: false,
+			current_shelter_code: null,
+			volunteer_code: `V-01${n}`,
+			identity_verified: true,
+			identity_verification: {
+				status: 'verified',
+				reviewed_at: null,
+				reviewed_by: null,
+				notes: null
+			},
+			source: 'walk_in',
+			personnel_type: 'volunteer'
+		});
+		const first = volunteerDoc(3, 'สมชาย', 'ใจดีรอสเตอร์');
+		const second = volunteerDoc(4, 'สมหญิง', 'รักงานรอสเตอร์');
+		const world = new World([SECOND_JOB, first, second]);
+		await mockCouch(page, world);
+		await mockPublicApi(page, world);
+		await injectSession(page, ADMIN, adminSession);
+
+		await page.goto(
+			`${BASE}/back-office/volunteers/jobs/${encodeURIComponent(SECOND_JOB._id)}/assign`
+		);
+		await expect(page.getByRole('heading', { name: /มอบหมายอาสาเข้ากะ/ })).toBeVisible();
+		const rowOf = (doc: typeof first) => page.locator('li', { hasText: doc.last_name });
+		await expect(rowOf(first)).toBeVisible();
+		await expect(rowOf(second)).toBeVisible();
+
+		const search = page.getByRole('textbox', { name: 'ค้นหาอาสาสมัคร' });
+		await search.fill('v013');
+		await expect(rowOf(first)).toBeVisible();
+		await expect(rowOf(second)).toHaveCount(0);
+
+		await search.fill('V 014');
+		await expect(rowOf(second)).toBeVisible();
+		await expect(rowOf(first)).toHaveCount(0);
+
+		// Only dashes/spaces must not match every code.
+		await search.fill(' - ');
+		await expect(rowOf(first)).toHaveCount(0);
+		await expect(rowOf(second)).toHaveCount(0);
 	});
 
 	test('one applicant with several pending shifts is one card, approved together (#716)', async ({
