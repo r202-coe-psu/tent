@@ -938,6 +938,36 @@ def test_aggregate_occupancy_age_buckets():
     assert breakdown["elderly_over_60"] == 1
 
 
+def test_aggregate_occupancy_counts_room_confirmed_as_in_shelter():
+    """decision sync 2026-11-02: in shelter = active + room_confirmed (staff in-shelter.ts)."""
+    total, breakdown = aggregate_occupancy(
+        [
+            _active_evacuee(_id="e1"),
+            _active_evacuee(_id="e2", current_stay={"status": "room_confirmed"}),
+            _active_evacuee(_id="e3", current_stay={"status": "temporary_leave"}),
+            _active_evacuee(_id="e4", current_stay={"status": "arriving"}),
+        ]
+    )
+    assert total == 2
+    assert breakdown["male"] == 2
+
+
+def test_aggregate_occupancy_age_buckets_fall_back_to_birth_year():
+    """Registration stores `birth_year` (พ.ศ.), not `age` — buckets must use it."""
+    year_be = datetime.now(UTC).year + 543
+    total, breakdown = aggregate_occupancy(
+        [
+            _active_evacuee(_id="e1", birth_year=year_be - 2),
+            _active_evacuee(_id="e2", birth_year=year_be - 70),
+            _active_evacuee(_id="e3", birth_year=year_be - 30),
+            _active_evacuee(_id="e4", birth_year=year_be + 5),  # future = unknown age
+        ]
+    )
+    assert total == 4
+    assert breakdown["child_under_5"] == 1
+    assert breakdown["elderly_over_60"] == 1
+
+
 def test_aggregate_occupancy_special_needs_tags_are_case_insensitive():
     total, breakdown = aggregate_occupancy(
         [
