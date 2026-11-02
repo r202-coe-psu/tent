@@ -1119,6 +1119,20 @@ test.describe('Box label for a booking the shelter accepted (#591)', TAGS, () =>
 
 		await page.goto(`/donations/track/${TOKEN}/label`);
 		await expect(page.getByTestId('box-label-preview').getByRole('img')).toBeVisible();
+
+		// The build's shared CSS chunks put the kiosk label's print rules on this page too: that
+		// is how #1057 blanked the label. If they stop loading, this test proves nothing.
+		const kioskPrintRulesLoaded = await page.evaluate(() =>
+			[...document.styleSheets].some((sheet) => {
+				try {
+					return [...sheet.cssRules].some((rule) => rule.cssText.includes('kiosk-print-area'));
+				} catch {
+					return false; // cross-origin sheet (fonts)
+				}
+			})
+		);
+		expect(kioskPrintRulesLoaded).toBe(true);
+
 		await page.emulateMedia({ media: 'print' });
 
 		// Other features' global print rules must not hide the label (#1057).
