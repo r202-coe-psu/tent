@@ -8,7 +8,6 @@
 #   --queue NAME        ชื่อ CUPS queue (default: PRINTER_NAME ใน --env-file หรือ tent_xprinter)
 #   --prefix DIR        ที่ติดตั้ง (default: /opt/tent/printer)
 #   --kiosk-env FILE    .env ของ kiosk ที่จะตรวจ PRINTER_BACKEND (default: /home/*/tent/kiosk/.env)
-#   --allow-cupsenable  เพิ่ม tent-printer เข้ากลุ่ม lpadmin เพื่อให้สั่ง cupsenable ได้ (O-5; default ปิด)
 #   --unit-dir DIR      ที่วาง systemd unit (default: /etc/systemd/system)
 #   --dry-run           พิมพ์คำสั่งที่จะรัน แทนการรันจริง (ไม่ต้องเป็น root, ไม่เขียนอะไร)
 #   --status            แสดงสถานะ unit / queue / log 5 บรรทัดล่าสุด แล้วออก (ไม่แก้อะไร)
@@ -44,7 +43,6 @@ QUEUE_GIVEN=false
 KIOSK_ENV=""
 PREFIX="$DEFAULT_PREFIX"
 UNIT_DIR=/etc/systemd/system
-ALLOW_CUPSENABLE=false
 
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -56,8 +54,8 @@ while [ $# -gt 0 ]; do
     --prefix) PREFIX="${2-}"; shift $(($# > 1 ? 2 : 1)) ;;
     --kiosk-env) KIOSK_ENV="${2-}"; shift $(($# > 1 ? 2 : 1)) ;;
     --unit-dir) UNIT_DIR="${2-}"; shift $(($# > 1 ? 2 : 1)) ;;
-    --allow-cupsenable) ALLOW_CUPSENABLE=true; shift ;;
-    -h | --help) sed -n '2,15p' "$0"; exit 0 ;;
+    --allow-cupsenable) die "--allow-cupsenable ถูกถอดออกแล้ว: CR-222 FR-42 ห้ามให้ agent อยู่ใน group lpadmin — เปิด queue เองด้วย sudo cupsenable (ดู README)" ;;
+    -h | --help) sed -n '2,14p' "$0"; exit 0 ;;
     *) die "ไม่รู้จัก option: $1 (ดู --help)" ;;
     esac
 done
@@ -175,13 +173,10 @@ else
     done
 fi
 
-# 5) cupsenable rights (O-5 still open: off unless asked)
+# 5) cupsenable rights: never lpadmin (CR-222 FR-42). Queue re-enable stays manual until the
+#    S0-7 hardware test shows a narrower right (group lp / cupsd.conf policy) is enough.
 info "[5/6] สิทธิ์ cupsenable"
-if $ALLOW_CUPSENABLE; then
-    run usermod -aG lpadmin "$SERVICE_USER"
-else
-    echo "   ไม่ให้สิทธิ์ cupsenable (ใส่ --allow-cupsenable ถ้าต้องการ) — agent จะรายงาน queue_state=disabled ให้ server แทน"
-fi
+echo "   ไม่ให้สิทธิ์ cupsenable (FR-42 ห้าม lpadmin) — queue ถูก disable เมื่อไร agent รายงาน queue_state=disabled; เปิดคืนด้วย sudo cupsenable $QUEUE"
 
 # 6) systemd unit (the shipped unit hardcodes /opt/tent/printer; rewrite it for --prefix)
 info "[6/6] systemd unit"

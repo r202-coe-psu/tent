@@ -103,11 +103,12 @@ def test_standalone_host_ignores_the_kiosk_env(setup, tmp_path):
     assert "escpos" not in result.stdout
 
 
-def test_allow_cupsenable_adds_the_agent_user_to_the_lpadmin_group(setup):
+def test_allow_cupsenable_is_rejected_and_plans_nothing(setup):
     result = setup("--host-kind", "standalone", "--allow-cupsenable")
 
-    assert result.returncode == 0, result.stderr
-    assert "usermod -aG lpadmin tent-printer" in planned(result)
+    assert result.returncode != 0
+    assert "FR-42" in result.stderr
+    assert planned(result) == []
 
 
 def test_cupsenable_rights_are_not_granted_by_default(setup):
@@ -178,7 +179,7 @@ def test_queue_option_overrides_the_env_file_and_defaults_to_tent_xprinter(setup
 
 
 def test_env_file_contents_are_never_printed(setup):
-    for args in (["--host-kind", "standalone"], ["--host-kind", "kiosk", "--allow-cupsenable"]):
+    for args in (["--host-kind", "standalone"], ["--host-kind", "kiosk"]):
         result = setup(*args)
 
         assert result.returncode == 0, result.stderr
@@ -241,7 +242,7 @@ def test_unit_is_installed_with_the_prefix_then_enabled_and_started(setup, tmp_p
 
 
 def test_steps_run_in_install_order(setup):
-    result = setup("--host-kind", "standalone", "--allow-cupsenable")
+    result = setup("--host-kind", "standalone")
     plan = planned(result)
 
     def at(prefix: str) -> int:
@@ -253,7 +254,6 @@ def test_steps_run_in_install_order(setup):
         < at("uv sync")
         < at("install -m 600")
         < at("lpadmin -p")
-        < at("usermod")
         < at("sed")
         < at("systemctl daemon-reload")
         < at("systemctl enable")
