@@ -4,6 +4,7 @@ vi.mock('$env/dynamic/private', () => ({
 	env: { COUCHDB_ADMIN_URL: 'http://admin:password@couchdb.test' }
 }));
 import {
+	adminRaw,
 	assertCanGrant,
 	authorizeUserWrite,
 	isProtectedBootstrapAdmin,
@@ -223,5 +224,39 @@ describe('authorizeUserWrite (generic /api/v1/users gate)', () => {
 		await expect(asRoles(['shelter:SH001', 'SH001:shelter_manager'])).resolves.toMatchObject({
 			name: 'u'
 		});
+	});
+});
+
+describe('adminRaw signal forwarding', () => {
+	afterEach(() => vi.unstubAllGlobals());
+
+	it('forwards init.signal to fetch and resolves with status + body', async () => {
+		const fetchMock = vi.fn(async () => Response.json({ _id: 'x' }, { status: 200 }));
+		vi.stubGlobal('fetch', fetchMock);
+		const ctrl = new AbortController();
+
+		await expect(adminRaw('/db/x', 'GET', undefined, { signal: ctrl.signal })).resolves.toEqual({
+			status: 200,
+			data: { _id: 'x' }
+		});
+		expect(fetchMock.mock.calls[0][1]).toMatchObject({ signal: ctrl.signal });
+	});
+
+	it('rejects when the caller signal aborts while the request is pending', async () => {
+		vi.stubGlobal(
+			'fetch',
+			vi.fn(
+				(_url: string, init: RequestInit) =>
+					new Promise((_resolve, reject) => {
+						init.signal?.addEventListener('abort', () => reject(init.signal?.reason));
+					})
+			)
+		);
+		const ctrl = new AbortController();
+
+		const pending = adminRaw('/db/x', 'GET', undefined, { signal: ctrl.signal });
+		ctrl.abort(new DOMException('The operation timed out.', 'TimeoutError'));
+
+		await expect(pending).rejects.toMatchObject({ name: 'TimeoutError' });
 	});
 });
