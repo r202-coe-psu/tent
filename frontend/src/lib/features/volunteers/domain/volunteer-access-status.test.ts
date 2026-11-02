@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-	accessEndingLabel,
+	accessEndingParts,
 	closeProfileAccessNotice,
 	hasVolunteerAccount,
 	volunteerAccessStatus,
@@ -111,7 +111,7 @@ describe('closeProfileAccessNotice (CR-221 FR-20)', () => {
 	});
 });
 
-describe('accessEndingLabel (#1044)', () => {
+describe('accessEndingParts (#1044)', () => {
 	const ending = (over: Record<string, unknown> = {}) => ({
 		role: 'warehouse_staff',
 		reason: 'revoked' as const,
@@ -121,20 +121,21 @@ describe('accessEndingLabel (#1044)', () => {
 	});
 
 	it.each([
-		[{ reason: 'expired' }, 'เคยเป็น เจ้าหน้าที่คลัง · หมดอายุ'],
-		[{}, 'เคยเป็น เจ้าหน้าที่คลัง · ถูกถอน'],
-		[{ cause: 'profile_inactive' }, 'เคยเป็น เจ้าหน้าที่คลัง · ถูกถอนเพราะปิดโปรไฟล์'],
+		[{ reason: 'expired' }, 'เคยเป็น เจ้าหน้าที่คลัง', 'หมดอายุ'],
+		[{}, 'เคยเป็น เจ้าหน้าที่คลัง', 'ถูกถอน'],
+		[{ cause: 'profile_inactive' }, 'เคยเป็น เจ้าหน้าที่คลัง', 'ถูกถอนเพราะปิดโปรไฟล์'],
 		[
 			{ reason: 'verification_revoked' },
-			'เคยเป็น เจ้าหน้าที่คลัง · ถูกถอนเพราะผลยืนยันตัวตนถูกยกเลิก'
+			'เคยเป็น เจ้าหน้าที่คลัง',
+			'ถูกถอนเพราะผลยืนยันตัวตนถูกยกเลิก'
 		],
-		[{ role: '' }, 'ถูกถอน']
-	])('describes %o', (over, label) => {
-		expect(accessEndingLabel(ending(over) as never)).toBe(label);
+		[{ role: '' }, null, 'ถูกถอน']
+	])('describes %o', (over, role, how) => {
+		expect(accessEndingParts(ending(over) as never)).toEqual({ role, how });
 	});
 
 	it('is null without an ending', () => {
-		expect(accessEndingLabel(null)).toBeNull();
+		expect(accessEndingParts(null)).toBeNull();
 	});
 
 	it('carries the ending onto a lapsed status', () => {

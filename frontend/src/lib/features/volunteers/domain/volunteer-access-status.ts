@@ -96,8 +96,13 @@ export function closeProfileAccessNotice(status: VolunteerAccessStatus): {
 	};
 }
 
-/** "เคยเป็น <role> · หมดอายุ / ถูกถอน …" for an account whose role here ended, or null. */
-export function accessEndingLabel(ending: AccessEnding | null | undefined): string | null {
+/**
+ * How an account's role here ended, split for display (#1044): the role it had ("เคยเป็น …",
+ * null when the audit does not say) and how it ended ("หมดอายุ", "ถูกถอน…"). Null without one.
+ */
+export function accessEndingParts(
+	ending: AccessEnding | null | undefined
+): { role: string | null; how: string } | null {
 	if (!ending) return null;
 	const how =
 		ending.reason === 'expired'
@@ -107,6 +112,5 @@ export function accessEndingLabel(ending: AccessEnding | null | undefined): stri
 				: ending.cause === 'profile_inactive'
 					? 'ถูกถอนเพราะปิดโปรไฟล์'
 					: 'ถูกถอน';
-	const role = ending.role ? `เคยเป็น ${roleOptionLabel(ending.role)} · ` : '';
-	return `${role}${how}`;
+	return { role: ending.role ? `เคยเป็น ${roleOptionLabel(ending.role)}` : null, how };
 }
