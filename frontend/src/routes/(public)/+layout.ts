@@ -11,37 +11,48 @@ export interface PublicLayoutConfig {
 
 type PublicLayoutConfigResponse = PublicLayoutConfig & { faqs?: FaqItem[] };
 
+/**
+ * SvelteKit (ssr = false) mounts no public route until this load settles, so a hung BFF call
+ * would blank every public page. Keep above the BFF's own upstream bounds (announcements 3s,
+ * faqs 2s + 2s) so the BFF answers first; past this we render without announcements/FAQs.
+ */
+const PUBLIC_LAYOUT_FETCH_TIMEOUT_MS = 5_000;
+
+type LayoutFetch = Parameters<LayoutLoad>[0]['fetch'];
+
+/** JSON body of `url`, or null on non-OK / timeout / network failure (never throws). */
+async function fetchJsonOrNull<T>(fetch: LayoutFetch, url: string): Promise<T | null> {
+	try {
+		const res = await fetch(url, { signal: AbortSignal.timeout(PUBLIC_LAYOUT_FETCH_TIMEOUT_MS) });
+		return res.ok ? ((await res.json()) as T) : null;
+	} catch (e) {
+		console.error('Failed to fetch layout data', url, e);
+		return null;
+	}
+}
+
 export const load = (async ({ fetch }) => {
 	let announcements: Announcement[] = [];
 	let configData: PublicLayoutConfig = {};
 	let faqs: FaqItem[] = [];
 
-	try {
-		const [annRes, configRes] = await Promise.all([
-			fetch('/api/public/v1/announcements'),
-			fetch('/api/public/v1/config/faqs?category=public')
-		]);
-		const [annData, rawConfig] = await Promise.all([
-			annRes.ok ? annRes.json() : null,
-			configRes.ok ? configRes.json() : null
-		]);
+	const [annData, rawConfig] = await Promise.all([
+		fetchJsonOrNull<{ items?: Announcement[] }>(fetch, '/api/public/v1/announcements'),
+		fetchJsonOrNull<PublicLayoutConfigResponse>(fetch, '/api/public/v1/config/faqs?category=public')
+	]);
 
-		if (annData) {
-			announcements = (annData.items as Announcement[]) || [];
-		}
+	if (annData) {
+		announcements = annData.items || [];
+	}
 
-		if (rawConfig) {
-			const cfg = rawConfig as PublicLayoutConfigResponse;
-			configData = {
-				phone_number: cfg.phone_number || '',
-				line_oa_url: cfg.line_oa_url || '',
-				facebook_url: cfg.facebook_url || '',
-				footer_logos: cfg.footer_logos || []
-			};
-			faqs = cfg.faqs || [];
-		}
-	} catch (e) {
-		console.error('Failed to fetch layout data', e);
+	if (rawConfig) {
+		configData = {
+			phone_number: rawConfig.phone_number || '',
+			line_oa_url: rawConfig.line_oa_url || '',
+			facebook_url: rawConfig.facebook_url || '',
+			footer_logos: rawConfig.footer_logos || []
+		};
+		faqs = rawConfig.faqs || [];
 	}
 
 	return {

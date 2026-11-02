@@ -8,6 +8,12 @@ import {
 	type PublicPortalConfigRaw
 } from '$lib/server/public-portal/footer-logos.server';
 
+/**
+ * Per-upstream bound. CouchDB and the FastAPI fallback can run back to back, so
+ * twice this must stay below the public layout's own fetch timeout.
+ */
+const UPSTREAM_TIMEOUT_MS = 2_000;
+
 const CONFIG_DOC_PATH = '/registry/config:public_portal';
 
 export const GET: RequestHandler = async ({ url, fetch }) => {
@@ -15,7 +21,9 @@ export const GET: RequestHandler = async ({ url, fetch }) => {
 
 	// 1. Try CouchDB directly (canonical operational store for public-portal-config)
 	try {
-		const { status, data } = await adminRaw(CONFIG_DOC_PATH, 'GET');
+		const { status, data } = await adminRaw(CONFIG_DOC_PATH, 'GET', undefined, {
+			signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS)
+		});
 		if (status === 200 && data) {
 			const config = data as {
 				faqs?: Record<string, FaqItem[]> | FaqItem[];
@@ -58,7 +66,8 @@ export const GET: RequestHandler = async ({ url, fetch }) => {
 	try {
 		const apiRes = await fetch(`${fastapiBaseUrl()}/public/v1/config/faqs`, {
 			method: 'GET',
-			headers: fastapiServiceHeaders()
+			headers: fastapiServiceHeaders(),
+			signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS)
 		});
 
 		if (apiRes.ok) {

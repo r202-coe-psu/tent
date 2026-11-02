@@ -109,4 +109,42 @@ describe('GET /api/public/v1/config/faqs', () => {
 		const data = await res.json();
 		expect(data.faqs[0].id).toBe('fastapi-1');
 	});
+
+	it('passes an abort signal to adminRaw and falls back to FastAPI when CouchDB times out', async () => {
+		vi.spyOn(console, 'warn').mockImplementation(() => {});
+		vi.mocked(adminRaw).mockRejectedValueOnce(
+			new DOMException('The operation timed out.', 'TimeoutError')
+		);
+		const mockFetch = vi.fn().mockResolvedValueOnce({
+			ok: true,
+			json: async () => ({ faqs: [{ id: 'fastapi-1' }] })
+		});
+
+		const res = await GET({
+			url: new URL('http://localhost/api/public/v1/config/faqs'),
+			fetch: mockFetch
+		} as unknown as GetEvent);
+
+		const adminInit = vi.mocked(adminRaw).mock.calls[0][3];
+		expect(adminInit?.signal).toBeInstanceOf(AbortSignal);
+		expect((mockFetch.mock.calls[0][1] as RequestInit).signal).toBeInstanceOf(AbortSignal);
+		expect(res.status).toBe(200);
+		expect((await res.json()).faqs[0].id).toBe('fastapi-1');
+	});
+
+	it('returns empty faqs with 500 when both CouchDB and FastAPI time out', async () => {
+		vi.spyOn(console, 'warn').mockImplementation(() => {});
+		vi.spyOn(console, 'error').mockImplementation(() => {});
+		const timeout = new DOMException('The operation timed out.', 'TimeoutError');
+		vi.mocked(adminRaw).mockRejectedValueOnce(timeout);
+		const mockFetch = vi.fn().mockRejectedValueOnce(timeout);
+
+		const res = await GET({
+			url: new URL('http://localhost/api/public/v1/config/faqs'),
+			fetch: mockFetch
+		} as unknown as GetEvent);
+
+		expect(res.status).toBe(500);
+		expect(await res.json()).toEqual({ faqs: [] });
+	});
 });

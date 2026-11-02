@@ -2,11 +2,15 @@ import { json } from '@sveltejs/kit';
 import { fastapiBaseUrl, fastapiServiceHeaders } from '$lib/server/fastapi';
 import type { RequestHandler } from './$types';
 
+/** Upstream bound; must stay below the public layout's own fetch timeout. */
+const UPSTREAM_TIMEOUT_MS = 3_000;
+
 export const GET: RequestHandler = async ({ fetch }) => {
 	try {
 		const apiRes = await fetch(`${fastapiBaseUrl()}/public/v1/announcements`, {
 			method: 'GET',
-			headers: fastapiServiceHeaders()
+			headers: fastapiServiceHeaders(),
+			signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS)
 		});
 
 		if (apiRes.ok) {
