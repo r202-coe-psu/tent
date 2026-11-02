@@ -344,9 +344,9 @@ export class KitchenRemoteRepository implements KitchenRepository {
 
 	private async allocateLotNos(count: number, when: Date = new Date()): Promise<string[]> {
 		const prefix = `L-${lotDateStamp(when)}-`;
-		let existing: string[];
+		let rows: { lot?: { lot_no?: string } }[];
 		try {
-			const rows = await this.repo.find<{ lot?: { lot_no?: string } }>({
+			rows = await this.repo.find<{ lot?: { lot_no?: string } }>({
 				selector: {
 					type: 'stock_ledger',
 					'lot.lot_no': { $gte: prefix, $lt: `${prefix}\ufff0` }
@@ -354,12 +354,12 @@ export class KitchenRemoteRepository implements KitchenRepository {
 				fields: ['lot.lot_no'],
 				limit: LOT_NO_LOOKUP_LIMIT
 			});
-			existing = rows
-				.map((row) => row.lot?.lot_no)
-				.filter((lot): lot is string => typeof lot === 'string');
-		} catch {
-			existing = [];
+		} catch (cause) {
+			throw new Error('ออกเลขล็อตไม่สำเร็จ กรุณาลองยืนยันรับเข้าใหม่อีกครั้ง', { cause });
 		}
+		const existing = rows
+			.map((row) => row.lot?.lot_no)
+			.filter((lot): lot is string => typeof lot === 'string');
 		return nextLotNos(existing, when, count);
 	}
 

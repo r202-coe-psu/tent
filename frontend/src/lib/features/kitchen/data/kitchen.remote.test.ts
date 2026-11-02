@@ -868,6 +868,32 @@ describe('KitchenRemoteRepository.confirmMealServiceReceiptWithYield (cooked foo
 		expect(row.lot?.lot_no).toBe(`L-${stamp}-008`);
 	});
 
+	it('refuses to receive when the lot number lookup fails, rather than restarting at 001 (#1070)', async () => {
+		const stamp = new Date().toISOString().slice(2, 10).replaceAll('-', '');
+		await memoryRepo.put({
+			_id: 'stock_ledger:earlier',
+			type: 'stock_ledger',
+			schema_v: 6,
+			item_id: 'item_master:Z',
+			qty: '1',
+			unit: 'box',
+			reason: 'donation',
+			ref_id: null,
+			occurred_at: new Date().toISOString(),
+			lot: { lot_no: `L-${stamp}-001` }
+		} as never);
+		const service = await recordService();
+		const find = vi.spyOn(memoryRepo, 'find').mockRejectedValueOnce(new Error('couch is down'));
+
+		await expect(
+			repo.confirmMealServiceReceiptWithYield(service, [resolved('item_master:A', '10')], ctx)
+		).rejects.toThrow('ออกเลขล็อตไม่สำเร็จ');
+
+		expect(await ledgerRows()).toHaveLength(0);
+		expect(await repo.listMealServiceReceipts()).toHaveLength(0);
+		find.mockRestore();
+	});
+
 	it('keeps the lot number a half-finished attempt already wrote (#1070)', async () => {
 		const service = await recordService();
 		const lines = [resolved('item_master:A', '10')];
