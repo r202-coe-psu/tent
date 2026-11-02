@@ -63,7 +63,9 @@
 	const notPickedUp = $derived(running && pickupLate && statusQuery.data?.status !== 'printing');
 
 	// The send loop awaits one job at a time; this effect hands it every status update and the
-	// wait started by `waitForJob` decides which one settles the job.
+	// wait started by `waitForJob` decides which one settles the job. Settling writes state
+	// (`pickupLate`) from inside the effect on purpose: it bridges the query into the awaited
+	// Promise, and `$derived` cannot resolve a Promise.
 	let onStatus: ((data: NonNullable<typeof statusQuery.data>) => void) | null = null;
 	$effect(() => {
 		const data = statusQuery.data;
