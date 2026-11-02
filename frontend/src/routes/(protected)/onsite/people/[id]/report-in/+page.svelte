@@ -8,7 +8,6 @@
 	import AlertTriangle from '@lucide/svelte/icons/alert-triangle';
 	import Lock from '@lucide/svelte/icons/lock';
 	import { Button } from '$lib/components/ui/button';
-	import { Badge } from '$lib/components/ui/badge';
 	import * as Card from '$lib/components/ui/card';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { getShelterCode } from '$lib/db/shelter';
@@ -240,7 +239,6 @@
 		<div class="mb-2 flex flex-wrap items-center gap-2">
 			<ClipboardList class="size-6 text-primary" />
 			<h1 class="text-2xl font-bold md:text-3xl">รายงานตัวผู้ประสบภัย</h1>
-			<Badge variant="outline">Station 1 · Report-in</Badge>
 		</div>
 		<p class="mb-4 text-sm text-muted-foreground md:mb-6">
 			{alreadyReportedIn
