@@ -1,6 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { mockCreateOrMergeUser } = vi.hoisted(() => ({ mockCreateOrMergeUser: vi.fn() }));
+const { mockCreateOrMergeUser, mockAssertVerified } = vi.hoisted(() => ({
+	mockCreateOrMergeUser: vi.fn(),
+	mockAssertVerified: vi.fn()
+}));
 
 vi.mock('$lib/server/couch-admin', () => ({
 	authorizeUserWrite: vi.fn(async () => ({ name: 'sa', roles: ['system_admin'], isSA: true })),
@@ -22,6 +25,9 @@ vi.mock('$lib/server/user-service', () => ({
 	deleteUser: vi.fn(),
 	listUsers: vi.fn(),
 	updateUser: vi.fn()
+}));
+vi.mock('$lib/features/volunteers/server/volunteer-access-grant', () => ({
+	assertVolunteerVerifiedForAccess: mockAssertVerified
 }));
 vi.mock('$lib/server/password-policy', () => ({
 	validateProvisionedPassword: vi.fn((p: string) => p)
@@ -61,4 +67,37 @@ describe('POST /api/v1/users — CR-141 FR-23', () => {
 			);
 		}
 	);
+});
+
+describe('POST /api/v1/users with volunteer_id — CR-221 FR-3', () => {
+	const body = {
+		name: 'vol@example.com',
+		display_name: 'Vol',
+		password: 'Temp-Pass-123',
+		roles: ['shelter:SH001', 'SH001:kitchen_staff'],
+		personnel_type: 'volunteer'
+	};
+
+	beforeEach(() => {
+		vi.clearAllMocks();
+		mockCreateOrMergeUser.mockResolvedValue({ merged: false });
+		mockAssertVerified.mockResolvedValue(undefined);
+	});
+
+	it('checks the profile is verified in the shelters of the granted roles', async () => {
+		await post({ ...body, volunteer_id: 'volunteer:V1' });
+		expect(mockAssertVerified).toHaveBeenCalledWith(['SH001'], 'volunteer:V1');
+		expect(mockCreateOrMergeUser).toHaveBeenCalled();
+	});
+
+	it('answers the 422 and creates nothing when the profile is not verified', async () => {
+		mockAssertVerified.mockRejectedValue(new Error('unverified'));
+		await expect(post({ ...body, volunteer_id: 'volunteer:V1' })).rejects.toThrow('unverified');
+		expect(mockCreateOrMergeUser).not.toHaveBeenCalled();
+	});
+
+	it('leaves an account without a volunteer profile unchecked', async () => {
+		await post({ ...body, personnel_type: 'staff' });
+		expect(mockAssertVerified).not.toHaveBeenCalled();
+	});
 });

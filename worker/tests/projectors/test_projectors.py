@@ -938,6 +938,36 @@ def test_aggregate_occupancy_age_buckets():
     assert breakdown["elderly_over_60"] == 1
 
 
+def test_aggregate_occupancy_counts_room_confirmed_as_in_shelter():
+    """decision sync 2026-11-02: in shelter = active + room_confirmed (staff in-shelter.ts)."""
+    total, breakdown = aggregate_occupancy(
+        [
+            _active_evacuee(_id="e1"),
+            _active_evacuee(_id="e2", current_stay={"status": "room_confirmed"}),
+            _active_evacuee(_id="e3", current_stay={"status": "temporary_leave"}),
+            _active_evacuee(_id="e4", current_stay={"status": "arriving"}),
+        ]
+    )
+    assert total == 2
+    assert breakdown["male"] == 2
+
+
+def test_aggregate_occupancy_age_buckets_fall_back_to_birth_year():
+    """Registration stores `birth_year` (พ.ศ.), not `age` — buckets must use it."""
+    year_be = datetime.now(UTC).year + 543
+    total, breakdown = aggregate_occupancy(
+        [
+            _active_evacuee(_id="e1", birth_year=year_be - 2),
+            _active_evacuee(_id="e2", birth_year=year_be - 70),
+            _active_evacuee(_id="e3", birth_year=year_be - 30),
+            _active_evacuee(_id="e4", birth_year=year_be + 5),  # future = unknown age
+        ]
+    )
+    assert total == 4
+    assert breakdown["child_under_5"] == 1
+    assert breakdown["elderly_over_60"] == 1
+
+
 def test_aggregate_occupancy_special_needs_tags_are_case_insensitive():
     total, breakdown = aggregate_occupancy(
         [
@@ -1246,16 +1276,16 @@ async def test_project_needs_for_shelter_visible_on_home_and_urgency():
     couch.iter_all_docs = mock_iter
 
     actions = await project_needs_for_shelter(couch, "SH001")
-    action_dict = {a[1]["_id"]: (a[0], a[1]) for a in actions}
+    action_dict = {a[1]["_id"]: (a[0], a[1]) for a in actions if a[0] == "upsert"}
+    (prune,) = [a[1] for a in actions if a[0] == "prune"]
 
-    # item:rice from hidden campaign must be deleted
-    assert "SH001:item:rice" in action_dict
-    assert action_dict["SH001:item:rice"][0] == "delete"
+    # item:rice from the hidden campaign has no card: the prune retracts it
+    assert "SH001:item:rice@-" not in action_dict
+    assert prune["keep_ids"] == ["SH001:item:water@-"]
 
     # item:water from visible campaign must be upserted with qty_target and urgency="critical"
-    assert "SH001:item:water" in action_dict
-    assert action_dict["SH001:item:water"][0] == "upsert"
-    payload = action_dict["SH001:item:water"][1]
+    assert "SH001:item:water@-" in action_dict
+    payload = action_dict["SH001:item:water@-"][1]
     assert payload["qty_target"] == 1000.0
     assert payload["qty_needed"] == 1000.0
     assert payload["urgency"] == "critical"

@@ -207,7 +207,9 @@ export function useDonationNeedsBoard(options?: { onFormCreated?: () => void }) 
 					// catalog query is still loading or for an id it no longer carries.
 					unit: itemDisplayUnit(avail.item_id) || avail.unit,
 					closeState: avail.close_state,
-					isManualClosed: avail.status === 'closed'
+					isManualClosed: avail.status === 'closed',
+					dropOffPointId:
+						camp.needs.find((n) => n.item_id === avail.item_id)?.drop_off_point_id ?? null
 				});
 			}
 
@@ -330,6 +332,7 @@ export function useDonationNeedsBoard(options?: { onFormCreated?: () => void }) 
 		urgency?: 'critical' | 'important' | 'normal';
 		imageUrl?: string;
 		description?: string;
+		dropOffPointId: string | null;
 	}) {
 		// The picker supplies the id, but the unit written onto the need comes from the
 		// CATALOG, never from the form — an item with no Item Master row has no standard
@@ -360,7 +363,8 @@ export function useDonationNeedsBoard(options?: { onFormCreated?: () => void }) 
 					item_id: item.itemId,
 					qty_target: input.target,
 					unit,
-					status: 'open' as const
+					status: 'open' as const,
+					drop_off_point_id: input.dropOffPointId
 				}
 			],
 			notes: buildCampaignNotes(input),
@@ -407,6 +411,7 @@ export function useDonationNeedsBoard(options?: { onFormCreated?: () => void }) 
 			urgency?: 'critical' | 'important' | 'normal';
 			imageUrl?: string;
 			description?: string;
+			dropOffPointId: string | null;
 		}
 	) {
 		const targetItem = derivedItems.find((i) => i.id === compoundId);
@@ -417,7 +422,8 @@ export function useDonationNeedsBoard(options?: { onFormCreated?: () => void }) 
 		try {
 			updatedCampaign = editNeed(camp, itemId, {
 				qty_target: updated.target,
-				unit: updated.unit
+				unit: updated.unit,
+				drop_off_point_id: updated.dropOffPointId
 			});
 		} catch (err) {
 			toast.error(err instanceof Error ? err.message : 'ไม่สามารถบันทึกการแก้ไขได้');

@@ -3,10 +3,12 @@ import { env } from '$env/dynamic/private';
 import {
 	donationPreDeclarationInputSchema,
 	computeNeeds,
+	filterCampaignsByCards,
 	pickCampaignForItems,
 	DEFAULT_SLOT_WINDOWS,
 	slotAvailabilityFor,
 	slotModeForDelivery,
+	withCampaignLinePoints,
 	rejectDonationPhotoDocs,
 	rejectDonationPhotoIds,
 	type DonationPhotoErrorCode
@@ -96,8 +98,17 @@ export const POST = async ({ request, getClientAddress }) => {
 		// count, so an outage there must refuse the booking (503) instead of reading as
 		// "nothing booked yet" and letting a full window or need be overbooked.
 		const [campaigns, donations, stockLedgers] = await Promise.all([
+			// A campaign staff hid from the site takes no public booking (owner 2026-10-31, CR-206
+			// A2 D-AP-18): the worker leaves it off the board, so counting it here would book
+			// against a quota no card shows (FR-AP-31).
 			fetchDocs<DonationCampaign>(dbName, 'donation_campaign:').then((docs) =>
-				docs.filter((c) => c && c.type === 'donation_campaign' && c.status === 'open')
+				docs.filter(
+					(c) =>
+						c &&
+						c.type === 'donation_campaign' &&
+						c.status === 'open' &&
+						c.visible_on_home !== false
+				)
 			),
 			fetchDocsStrict<PublicDonationDoc>(dbName, 'donation:').then((docs) =>
 				docs.filter((d) => d && d.type === 'donation')
@@ -109,18 +120,33 @@ export const POST = async ({ request, getClientAddress }) => {
 			)
 		]);
 
-		const { campaignRemaining } = computeNeeds(campaigns, donations, stockLedgers);
+		// FR-AP-7b: only campaigns matching the card(s) the donor pressed may take the booking;
+		// never fall back to another point's campaign (D-AP-17).
+		const cardCampaigns = filterCampaignsByCards(campaigns, parsed.data.items);
+		const { campaignRemaining } = computeNeeds(cardCampaigns, donations, stockLedgers);
 
 		// 3.5 Best-effort re-check needs_open vs ยอดที่ขอ → NEED_FULL (CR-005 DN-4)
 		// หมายเหตุ: read→decide→write ยังไม่ atomic จริง (ไม่มี validate_doc_update/optimistic lock)
 		// — atomicity เต็มรูปเป็นงาน T-02; ชั้นที่กันจริงคือ donation_need_counter (CR-047)
 		// เลือก campaign ที่รับไหวจริง ไม่ใช่ตัวแรกที่บังเอิญขอ item นี้ — ยอดรวมข้ามแคมเปญ
 		// จองในใบเดียวไม่ได้ เพราะ donation หนึ่งใบผูก campaign_id ได้ตัวเดียว
+		// A pressed card no open campaign carries any more reads as full, not as "untracked".
+		const orphanCard =
+			cardCampaigns.length === 0
+				? parsed.data.items.find((it) => it.item_id && it.need_drop_off_point_id !== undefined)
+				: undefined;
+		if (orphanCard) {
+			return json(
+				{ success: false, error: 'NEED_FULL', item_id: orphanCard.item_id },
+				{ status: 409 }
+			);
+		}
 		const pick = pickCampaignForItems(campaignRemaining, parsed.data.items);
 		if (!pick.ok) {
 			return json({ success: false, error: 'NEED_FULL', item_id: pick.itemId }, { status: 409 });
 		}
 		const resolvedCampaignId = pick.campaignId;
+		const pickedCampaign = cardCampaigns.find((c) => c._id === resolvedCampaignId) ?? null;
 
 		// 3.6 Re-check the chosen window: full or closed → SLOT_FULL.
 		// Not atomic on its own — two submits can both read the last place free before
@@ -199,15 +225,14 @@ export const POST = async ({ request, getClientAddress }) => {
 			}
 		}
 
-		// 3.7 Drop-off point per line (CR-206): only a donor who brings the goods picks one. A
-		// parcel or a shelter pickup reaches the shelter whole, so its lines carry no point
-		// whatever the client sent (FR-MP-4). FastAPI checks the rest against the shelter's
-		// points and answers 400 UNKNOWN_DROP_OFF_POINT before any quota moves (FR-MP-2, FR-MP-3).
-		const picksPoints = parsed.data.logistics.delivery_method === 'self_dropoff';
-		const items = parsed.data.items.map((item) => ({
-			...item,
-			drop_off_point_id: picksPoints ? (item.drop_off_point_id ?? null) : null
-		}));
+		// 3.7 Drop-off point per line, set by staff (FR-AP-8): a campaign line takes its need's
+		// point from the campaign picked above. Not checked against the registry (D-AP-10).
+		// `need_drop_off_point_id` only picked the campaign (FR-AP-7a) — undefined drops it from the JSON.
+		const items = withCampaignLinePoints(
+			parsed.data.items,
+			pickedCampaign,
+			parsed.data.logistics.delivery_method
+		).map((line) => ({ ...line, need_drop_off_point_id: undefined }));
 
 		// 4. Persist via FastAPI → MongoDB donations buffer (inbound worker → CouchDB)
 		const apiRes = await fetch(`${fastapiBaseUrl()}/public/v1/donations`, {
@@ -236,6 +261,7 @@ export const POST = async ({ request, getClientAddress }) => {
 			tracking_token: string;
 			booking_ref: string;
 			status?: string;
+			items?: { drop_off_point_id: string | null; review_status: string }[];
 		};
 
 		return json({
@@ -244,6 +270,8 @@ export const POST = async ({ request, getClientAddress }) => {
 			bookingRef: created.booking_ref,
 			// CR-174 FR-15 — `verifying` when every line is a campaign line: the ticket shows the QR.
 			status: created.status ?? 'pending_review',
+			// FR-AP-8a — each line's point and review, for the ticket to group by.
+			items: created.items ?? [],
 			as_of: new Date().toISOString()
 		});
 	} catch (e) {

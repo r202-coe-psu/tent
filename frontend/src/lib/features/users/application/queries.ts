@@ -1,9 +1,14 @@
 import { createMutation, createQuery, useQueryClient } from '@tanstack/svelte-query';
 import { createUser, deleteUser, listUsers, updateUser } from '../data/users.api';
+import { listShelterStaff } from '../data/staff-directory.api';
 
 export const usersKeys = {
 	all: ['users'] as const,
 	list: () => [...usersKeys.all, 'list'] as const
+};
+
+export const shelterStaffDirectoryKeys = {
+	list: (shelterCode: string) => ['shelter-staff-directory', shelterCode] as const
 };
 
 /** `enabled` lets callers skip the request (`GET /api/v1/users` is SA/SM only → 403 otherwise). */
@@ -13,6 +18,17 @@ export const useUsers = (enabled: () => boolean = () => true) =>
 		queryFn: listUsers,
 		enabled: enabled()
 	}));
+
+export const useShelterStaffDirectory = (shelterCode: () => string | null | undefined) =>
+	createQuery(() => {
+		const code = shelterCode();
+		return {
+			queryKey: shelterStaffDirectoryKeys.list(code ?? ''),
+			queryFn: () => listShelterStaff(code ?? ''),
+			enabled: Boolean(code),
+			staleTime: 5 * 60_000
+		};
+	});
 
 export const useCreateUser = () => {
 	const queryClient = useQueryClient();
