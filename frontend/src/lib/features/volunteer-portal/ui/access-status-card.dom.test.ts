@@ -43,13 +43,21 @@ describe('AccessStatusCard', () => {
 		expect(loginLink()).toBeNull();
 	});
 
-	it('says the same for a lapsed account', () => {
-		render({ rows: [row({ status: 'lapsed' })] });
+	it('says since when a lapsed account has had no access', () => {
+		render({ rows: [row({ status: 'lapsed', expires_at: '2026-11-01T17:00:00.000Z' })] });
 
 		expect(host.textContent).toContain(
-			'ยังไม่ได้รับสิทธิ์ใช้งานระบบ — ติดต่อผู้ประสานงานจิตอาสาของศูนย์'
+			'สิทธิ์ใช้งานระบบหมดอายุตั้งแต่วันที่ 2/11/2569 — ติดต่อผู้ประสานงานจิตอาสาของศูนย์'
 		);
 		expect(loginLink()).toBeNull();
+	});
+
+	it('still says it ended when the date is unknown', () => {
+		render({ rows: [row({ status: 'lapsed', expires_at: null })] });
+
+		expect(host.textContent).toContain(
+			'สิทธิ์ใช้งานระบบหมดอายุแล้ว — ติดต่อผู้ประสานงานจิตอาสาของศูนย์'
+		);
 	});
 
 	it('shows the role, the end date and the staff login button when active', () => {

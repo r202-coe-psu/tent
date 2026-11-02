@@ -26,6 +26,9 @@
 				? t.activeUntil(row.role_label, formatThaiShortDate(row.expires_at))
 				: t.activePermanent(row.role_label);
 		}
+		if (row.status === 'lapsed') {
+			return t.lapsed(row.expires_at ? formatThaiShortDate(row.expires_at) : null);
+		}
 		return t.none;
 	}
 </script>

@@ -10,6 +10,7 @@ import {
 	type ShelterVolunteerAccount
 } from '$lib/server/user-service';
 import { PublicScheduleError, resolveIdentities } from './public-schedule-action';
+import { lastGrantEnding } from './volunteer-access-grant';
 import type { ResolvedIdentity } from './public-schedule-action';
 
 /**
@@ -72,12 +73,20 @@ async function shelterStatus(identity: ResolvedIdentity): Promise<PortalAccessSt
 	// `readShelterVolunteerAccounts` enforces the two-way link (FR-7): the account must be a
 	// volunteer account whose `volunteer_id` is this profile.
 	const accounts = await readShelterVolunteerAccounts(links, ref.code);
-	const standing = accounts
-		.map(accountStanding)
-		.reduce<Standing>(
-			(best, next) => (STATUS_RANK[next.status] > STATUS_RANK[best.status] ? next : best),
-			{ status: 'none', role_label: null, expires_at: null }
-		);
+	const standings = await Promise.all(
+		accounts.map(async (account) => {
+			const standing = accountStanding(account);
+			if (standing.status !== 'lapsed') return standing;
+			// A lapsed account says since when it has had no access here (the last grant-ending
+			// audit), in `expires_at`: no new field, and still no account name (FR-28).
+			const ending = await lastGrantEnding(ref.code, account.name);
+			return ending ? { ...standing, expires_at: ending.at } : standing;
+		})
+	);
+	const standing = standings.reduce<Standing>(
+		(best, next) => (STATUS_RANK[next.status] > STATUS_RANK[best.status] ? next : best),
+		{ status: 'none', role_label: null, expires_at: null }
+	);
 	return {
 		shelter_code: ref.code,
 		shelter_name: ref.name,

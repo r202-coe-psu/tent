@@ -268,7 +268,10 @@ const ENDING_REASONS = {
 } as const;
 
 /** The newest grant-ending audit for this account in this shelter (FR-14 audits), or null. */
-async function lastGrantEnding(shelterCode: string, name: string): Promise<GrantEnding | null> {
+export async function lastGrantEnding(
+	shelterCode: string,
+	name: string
+): Promise<GrantEnding | null> {
 	const res = await adminRaw(`/${shelterDbName(shelterCode)}/_find`, 'POST', {
 		selector: {
 			type: 'audit',

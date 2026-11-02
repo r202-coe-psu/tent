@@ -5,7 +5,9 @@ const state = vi.hoisted(() => ({
 	admin: vi.fn(),
 	users: new Map<string, Record<string, unknown>>(),
 	/** shelter db → volunteer profile docs the public writer can read */
-	profiles: new Map<string, Record<string, unknown>[]>()
+	profiles: new Map<string, Record<string, unknown>[]>(),
+	/** shelter db → grant-ending audit docs */
+	audits: new Map<string, Record<string, unknown>[]>()
 }));
 
 vi.mock('$lib/db/hash', () => ({
@@ -68,6 +70,7 @@ beforeEach(() => {
 	state.admin.mockReset();
 	state.users.clear();
 	state.profiles.clear();
+	state.audits.clear();
 	state.profiles.set('shelter_sh001', [profile('volunteer:A1', null)]);
 
 	state.admin.mockImplementation(async (path: string, _method: string, body?: unknown) => {
@@ -87,6 +90,14 @@ beforeEach(() => {
 			return {
 				status: 200,
 				data: { rows: keys.map((key) => ({ key, doc: state.users.get(key) ?? null })) }
+			};
+		}
+		if (path.endsWith('/_find')) {
+			const db = path.split('/')[1];
+			const target = (body as { selector: { target_id: string } }).selector.target_id;
+			return {
+				status: 200,
+				data: { docs: (state.audits.get(db) ?? []).filter((a) => a.target_id === target) }
 			};
 		}
 		throw new Error(`unexpected admin call ${path}`);
@@ -169,6 +180,29 @@ describe('readPublicAccessStatus — status per shelter', () => {
 		});
 		const { access } = await readPublicAccessStatus(phone);
 		expect(access[0]).toMatchObject({ status: 'lapsed', role_label: null, expires_at: null });
+	});
+
+	it('says since when a lapsed account has had no access, still without the account name', async () => {
+		link('shelter_sh001', 'volunteer:A1', EMAIL_A);
+		state.audits.set('shelter_sh001', [
+			{
+				type: 'audit',
+				target_id: `org.couchdb.user:${EMAIL_A}`,
+				reason: 'role_grant.expired',
+				created_at: '2026-11-01T17:00:00.000Z',
+				context: { role: 'kitchen_staff', actor: 'worker' }
+			}
+		]);
+		const result = await readPublicAccessStatus(phone);
+		expect(result.access[0]).toEqual({
+			shelter_code: 'SH001',
+			shelter_name: 'ศูนย์หลัก',
+			status: 'lapsed',
+			role_label: null,
+			expires_at: '2026-11-01T17:00:00.000Z'
+		});
+		expect(JSON.stringify(result)).not.toContain(EMAIL_A);
+		expect(JSON.stringify(result)).not.toContain('worker');
 	});
 
 	it('is account_disabled for a suspended account even when it still holds a role', async () => {
