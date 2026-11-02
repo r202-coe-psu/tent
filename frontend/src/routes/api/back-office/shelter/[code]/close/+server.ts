@@ -22,6 +22,7 @@ import { closeShelterPeople, previewShelterClose } from '$lib/server/shelter-clo
 import type { CouchReq } from '$lib/server/ensure-public-writer';
 import {
 	matchesShelterCloseConfirm,
+	resolveOperationStatus,
 	shelterCloseRequestSchema,
 	type ShelterCloseResult
 } from '$lib/features/shelters/server';
@@ -68,7 +69,9 @@ export const POST: RequestHandler = async ({ request, params }) => {
 
 		// FR-13: close the registry only when every stay was closed out.
 		const closed = run.failed.length === 0 && run.remaining.total === 0;
-		if (closed) {
+		// A repeat close of an already-closed shelter leaves the registry alone — rewriting it
+		// would only bump `_rev` and make the worker re-project an unchanged shelter.
+		if (closed && resolveOperationStatus(shelter) !== 'closed') {
 			await updateMaster(shelter.code, () => ({
 				patch: { operation_status: 'closed', updated_at: nowIso() }
 			}));

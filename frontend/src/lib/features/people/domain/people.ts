@@ -230,8 +230,8 @@ export const MANUAL_HOUSEHOLD_STATUS_TRANSITIONS: Readonly<
 };
 
 /**
- * `shelter_closed` (CR-219 FR-1) is written only by the shelter-close flow — the normal
- * checkout dropdown offers {@link MANUAL_CHECKOUT_DESTINATION_TYPES} instead.
+ * `shelter_closed` (CR-219 FR-1) is written only by the shelter-close flow — a manual checkout
+ * destination picker must not offer it.
  */
 export const checkoutDestinationTypeSchema = z.enum([
 	'returned_home',
@@ -241,14 +241,6 @@ export const checkoutDestinationTypeSchema = z.enum([
 	'shelter_closed'
 ]);
 export type CheckoutDestinationType = z.infer<typeof checkoutDestinationTypeSchema>;
-
-/** Destination types a staff member may pick when checking a household out by hand. */
-export const MANUAL_CHECKOUT_DESTINATION_TYPES = [
-	'returned_home',
-	'transferred_shelter',
-	'referred_facility',
-	'other'
-] as const satisfies readonly CheckoutDestinationType[];
 
 /** Movement `reason` / audit `reason` / `checkout_destination.type` of the shelter-close flow (CR-219 D-4). */
 export const SHELTER_CLOSED_REASON = 'shelter_closed';

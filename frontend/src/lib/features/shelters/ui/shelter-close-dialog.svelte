@@ -2,8 +2,8 @@
 	import { toast } from 'svelte-sonner';
 	import Loader2 from '@lucide/svelte/icons/loader-2';
 	import TriangleAlert from '@lucide/svelte/icons/triangle-alert';
-	// Pure entry, not the people barrel: people UI imports the shelters barrel (cycle).
-	import { STATUS_LABELS } from '$lib/features/people/server';
+	// Pure client-safe entry, not the people barrel: people UI imports the shelters barrel (cycle).
+	import { STATUS_LABELS } from '$lib/features/people/pure';
 	import * as AlertDialog from '$lib/components/ui/alert-dialog/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';

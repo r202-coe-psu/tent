@@ -40,8 +40,7 @@ export {
 	buildShelterCloseCancel,
 	buildShelterCloseCancelAudit,
 	deriveShelterCloseHousehold,
-	stayStatusSchema,
-	STATUS_LABELS
+	stayStatusSchema
 } from './domain/people';
 
 export {

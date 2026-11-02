@@ -75,14 +75,30 @@ describe('buildBackfillSummaryAudit', () => {
 
 	it('is null when nothing changed and nothing failed (idempotent re-run)', () => {
 		expect(
-			buildBackfillSummaryAudit(target, { checked_out: 0, cancelled: 0, failed: [] })
+			buildBackfillSummaryAudit(target, {
+				checked_out: 0,
+				cancelled: 0,
+				households_repaired: 0,
+				failed: []
+			})
 		).toBeNull();
+	});
+
+	it('is written when the run only repaired households (FR-30a)', () => {
+		const audit = buildBackfillSummaryAudit(target, {
+			checked_out: 0,
+			cancelled: 0,
+			households_repaired: 3,
+			failed: []
+		});
+		expect(audit?.context).toMatchObject({ checked_out: 0, cancelled: 0, households_repaired: 3 });
 	});
 
 	it('records the backfill context on the shelter', () => {
 		const audit = buildBackfillSummaryAudit(target, {
 			checked_out: 450,
 			cancelled: 2,
+			households_repaired: 4,
 			failed: [{ evacuee_id: 'evacuee:1', error: 'boom' }]
 		});
 		expect(audit).toMatchObject({
@@ -98,7 +114,8 @@ describe('buildBackfillSummaryAudit', () => {
 				shelter_closed_at: '2026-10-01T00:00:00Z',
 				checked_out: 450,
 				cancelled: 2,
-				failed: 1
+				failed: 1,
+				households_repaired: 4
 			}
 		});
 	});
@@ -106,7 +123,7 @@ describe('buildBackfillSummaryAudit', () => {
 	it('stores a null shelter_closed_at when the registry has none', () => {
 		const audit = buildBackfillSummaryAudit(
 			{ code: 'SH001', closed_at: null },
-			{ checked_out: 1, cancelled: 0, failed: [] }
+			{ checked_out: 1, cancelled: 0, households_repaired: 0, failed: [] }
 		);
 		expect(audit?.context).toMatchObject({ shelter_closed_at: null });
 	});
@@ -116,6 +133,7 @@ describe('buildBackfillSummaryAudit', () => {
 			buildBackfillSummaryAudit(target, {
 				checked_out: 0,
 				cancelled: 0,
+				households_repaired: 0,
 				failed: [{ evacuee_id: 'evacuee:1', error: 'x' }]
 			})
 		).not.toBeNull();

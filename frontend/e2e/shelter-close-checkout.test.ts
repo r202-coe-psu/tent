@@ -184,13 +184,29 @@ async function pickStatus(page: Page, label: string): Promise<void> {
 	await page.getByRole('option', { name: label }).click();
 }
 
+/**
+ * Codes of registry masters named {@link SHELTER_NAME}. Covers a run that failed inside
+ * `createShelterViaUi` after the save landed but before the edit URL (and so the code) showed.
+ */
+async function shelterCodesNamed(name: string): Promise<string[]> {
+	const res = await couchReq('GET', '/registry/_all_docs?include_docs=true');
+	if (res.status >= 400) return [];
+	const rows = (res.data as { rows?: { doc?: { name?: unknown; code?: unknown } }[] }).rows ?? [];
+	return rows.flatMap(({ doc }) =>
+		doc?.name === name && typeof doc.code === 'string' ? [doc.code] : []
+	);
+}
+
 test.afterAll(async () => {
 	test.setTimeout(180_000);
 	if (!CAN_WRITE || !liveWritesStarted) return;
-	if (shelterCode) {
-		await teardownShelter(shelterCode).catch(() => undefined);
-		shelterCode = undefined;
+	const codes = new Set(await shelterCodesNamed(SHELTER_NAME).catch(() => []));
+	if (shelterCode) codes.add(shelterCode);
+	for (const code of codes) {
+		recordCreatedShelter(code, LEDGER_SUITE);
+		await teardownShelter(code).catch((err) => console.warn(`teardown ${code} failed:`, err));
 	}
+	shelterCode = undefined;
 	for (const user of users.values()) await deleteCouchUser(user.name).catch(() => undefined);
 });
 

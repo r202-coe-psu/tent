@@ -13,7 +13,6 @@ import {
 	createMovement,
 	deriveShelterCloseHousehold,
 	isShelterCloseAffectedStatus,
-	MANUAL_CHECKOUT_DESTINATION_TYPES,
 	movementReasonLabel,
 	SHELTER_CLOSE_CANCEL_STATUSES,
 	SHELTER_CLOSE_CHECKOUT_STATUSES,
@@ -39,15 +38,8 @@ function evacueeIn(status: StayStatus, householdId: string | null = 'household:H
 }
 
 describe('CR-219 FR-1 — checkout destination shelter_closed', () => {
-	it('accepts shelter_closed in the schema but keeps it out of the manual dropdown', () => {
+	it('accepts shelter_closed in the schema', () => {
 		expect(checkoutDestinationSchema.safeParse({ type: 'shelter_closed' }).success).toBe(true);
-		expect(MANUAL_CHECKOUT_DESTINATION_TYPES).not.toContain('shelter_closed');
-		expect(MANUAL_CHECKOUT_DESTINATION_TYPES).toEqual([
-			'returned_home',
-			'transferred_shelter',
-			'referred_facility',
-			'other'
-		]);
 	});
 
 	it('labels the shelter_closed reason and passes free text through (FR-21)', () => {

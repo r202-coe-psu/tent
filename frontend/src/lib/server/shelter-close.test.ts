@@ -4,6 +4,7 @@ import {
 	chunkByHousehold,
 	closeShelterPeople,
 	countShelterClose,
+	countStaleHouseholds,
 	previewShelterClose,
 	SHELTER_CLOSE_CHUNK_SIZE
 } from './shelter-close';
@@ -299,9 +300,87 @@ describe('closeShelterPeople', () => {
 		const before = couch.docs.size;
 
 		const again = await closeShelterPeople(couch.req, 'SH001', opts);
-		expect(again).toMatchObject({ checked_out: 0, cancelled: 0, failed: [] });
+		expect(again).toMatchObject({
+			checked_out: 0,
+			cancelled: 0,
+			households_repaired: 0,
+			failed: []
+		});
 		expect(couch.docs.size).toBe(before);
 		expect(couch.byType('movement')).toHaveLength(1);
+	});
+
+	describe('re-run after a run that stopped before its household writes (FR-12)', () => {
+		it('re-derives a household whose members were already checked out', async () => {
+			const h = addHousehold('checked_in');
+			addEvacuee('checked_out', h);
+			addEvacuee('checked_out', h);
+			expect(await countStaleHouseholds(couch.req, 'SH001')).toBe(1);
+			const run = await closeShelterPeople(couch.req, 'SH001', opts);
+			expect(run).toMatchObject({
+				checked_out: 0,
+				cancelled: 0,
+				households_repaired: 1,
+				failed: []
+			});
+			expect(run.remaining.total).toBe(0);
+			expect(await countStaleHouseholds(couch.req, 'SH001')).toBe(0);
+			expect(couch.docs.get(h)).toMatchObject({
+				status: 'checked_out',
+				checkout_destination: { type: 'shelter_closed' }
+			});
+			expect(couch.byType('movement')).toHaveLength(0);
+		});
+
+		it('repairs the household a failed first run left behind, then the re-run is clean', async () => {
+			const h = addHousehold('checked_in');
+			addEvacuee('active', h);
+			addEvacuee('room_confirmed', h);
+			couch.beforeWrite = (doc) =>
+				doc._id === h ? { error: 'forbidden', reason: 'household write refused' } : null;
+			const first = await closeShelterPeople(couch.req, 'SH001', opts);
+			expect(first.failed).toHaveLength(1);
+			expect(couch.docs.get(h)!.status).toBe('checked_in');
+
+			couch.beforeWrite = () => null;
+			const again = await closeShelterPeople(couch.req, 'SH001', opts);
+			expect(again).toMatchObject({ checked_out: 0, households_repaired: 1, failed: [] });
+			expect(couch.docs.get(h)).toMatchObject({
+				status: 'checked_out',
+				checkout_destination: { type: 'shelter_closed' }
+			});
+			expect(couch.byType('movement')).toHaveLength(2);
+		});
+
+		it('counts only households whose members are all closed out already', async () => {
+			const settled = addHousehold('checked_in');
+			addEvacuee('checked_out', settled);
+			const pending = addHousehold('pre_registered');
+			addEvacuee('checked_out', pending);
+			addEvacuee('active', pending); // the main run derives this one, not the repair
+			expect(await countStaleHouseholds(couch.req, 'SH001')).toBe(1);
+			const run = await closeShelterPeople(couch.req, 'SH001', opts);
+			expect(run.households_repaired).toBe(1);
+			expect(couch.docs.get(pending)!.status).toBe('checked_out');
+		});
+
+		it('reports a stale household it cannot write, so the shelter stays open', async () => {
+			const h = addHousehold('checked_in');
+			const id = addEvacuee('checked_out', h);
+			couch.beforeWrite = (doc) => (doc._id === h ? { error: 'forbidden' } : null);
+			const run = await closeShelterPeople(couch.req, 'SH001', opts);
+			expect(run.failed).toEqual([{ evacuee_id: id, error: `household ${h}: forbidden` }]);
+		});
+
+		it('leaves a household checked out by hand without a destination alone', async () => {
+			const h = addHousehold('checked_out');
+			addEvacuee('checked_out', h);
+			const rev = couch.docs.get(h)!._rev;
+			expect(await countStaleHouseholds(couch.req, 'SH001')).toBe(0);
+			const run = await closeShelterPeople(couch.req, 'SH001', opts);
+			expect(run.households_repaired).toBe(0);
+			expect(couch.docs.get(h)).toMatchObject({ _rev: rev, checkout_destination: null });
+		});
 	});
 
 	it('retries a 409 after re-fetching the doc (FR-11)', async () => {

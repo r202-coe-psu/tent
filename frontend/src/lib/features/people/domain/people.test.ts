@@ -78,7 +78,6 @@ import {
 	groupPetsBySpecies,
 	petSpeciesLabel,
 	checkoutDestinationTypeSchema,
-	MANUAL_CHECKOUT_DESTINATION_TYPES,
 	SHELTER_CLOSED_REASON,
 	SHELTER_CLOSED_REASON_LABEL,
 	movementReasonLabel
@@ -2222,11 +2221,7 @@ describe('shelter-closed checkout display (CR-219 FR-1, FR-21)', () => {
 		expect(movementReasonLabel(undefined)).toBe('');
 	});
 
-	it('accepts shelter_closed as a stored destination but never offers it manually', () => {
+	it('accepts shelter_closed as a stored destination', () => {
 		expect(checkoutDestinationTypeSchema.safeParse('shelter_closed').success).toBe(true);
-		expect(MANUAL_CHECKOUT_DESTINATION_TYPES).not.toContain('shelter_closed');
-		for (const type of MANUAL_CHECKOUT_DESTINATION_TYPES) {
-			expect(checkoutDestinationTypeSchema.safeParse(type).success).toBe(true);
-		}
 	});
 });

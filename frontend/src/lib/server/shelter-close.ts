@@ -8,7 +8,9 @@
  * Writes go through the people domain (`buildShelterCloseCheckout` → `applyMovementToStay`,
  * `deriveShelterCloseHousehold` → `deriveHouseholdStatus`) — never a direct status set.
  * Per chunk the order is evacuees → movements of the evacuees that saved → cancel audits →
- * households. A household's members are kept in one chunk so it is derived once.
+ * households. A household's members are kept in one chunk so it is derived once. After the
+ * last chunk, every household whose stored status no longer matches its members is re-derived,
+ * so a re-run repairs households an earlier, interrupted run left behind.
  *
  * Registry write (`operation_status = closed`) is the caller's job, after
  * {@link closeShelterPeople} reports zero failures and zero remaining (FR-13).
@@ -45,6 +47,11 @@ export interface ShelterCloseFailure {
 export interface ShelterCloseRun {
 	checked_out: number;
 	cancelled: number;
+	/**
+	 * Households whose stored status no longer matched their members and were re-derived after
+	 * the chunks — the repair of an earlier, interrupted run (FR-12a). 0 on a clean run.
+	 */
+	households_repaired: number;
 	failed: ShelterCloseFailure[];
 	/** FR-13 re-count after the writes — must be `total = 0` before the registry is closed. */
 	remaining: ShelterClosePreview;
@@ -186,6 +193,51 @@ export async function previewShelterClose(
 		total += value;
 	}
 	return { by_status, total };
+}
+
+/**
+ * A household the stale pass would re-derive: its members' derived status differs from the
+ * stored one. Returns the doc to write, or `null` (also for a household with no members found,
+ * so moved-away members never cancel it). A household checked out by hand without a destination
+ * already matches, so it is never relabelled `shelter_closed`.
+ */
+function staleHouseholdNext(household: Household, memberStatuses: readonly StayStatus[]) {
+	if (memberStatuses.length === 0) return null;
+	const next = deriveShelterCloseHousehold(household, memberStatuses);
+	return next && next.status !== household.status ? next : null;
+}
+
+function statusesByHousehold(evacuees: readonly Evacuee[]): Map<string, StayStatus[]> {
+	const out = new Map<string, StayStatus[]>();
+	for (const e of evacuees) {
+		const status = e.current_stay?.status;
+		if (!e.household_id || !status) continue;
+		out.set(e.household_id, [...(out.get(e.household_id) ?? []), status]);
+	}
+	return out;
+}
+
+/**
+ * Dry-run count of households a close would repair (FR-31a; the FR-12a repair): those
+ * whose stored status no longer matches members that are already closed out. Households with a
+ * member still affected are left to the main run, which derives them anyway.
+ */
+export async function countStaleHouseholds(couchReq: CouchReq, code: string): Promise<number> {
+	const db = shelterDbName(code);
+	const byHousehold = statusesByHousehold(await listEvacuees(couchReq, db));
+	const settled = [...byHousehold].filter(
+		([, statuses]) => !statuses.some((status) => isShelterCloseAffectedStatus(status))
+	);
+	let count = 0;
+	for (const ids of chunk(
+		settled.map(([hh]) => hh),
+		SHELTER_CLOSE_CHUNK_SIZE
+	)) {
+		for (const hh of await getDocs<Household>(couchReq, db, ids)) {
+			if (staleHouseholdNext(hh, byHousehold.get(hh._id) ?? [])) count += 1;
+		}
+	}
+	return count;
 }
 
 // ------------------------------------------------------------------ writes
@@ -381,10 +433,79 @@ async function rollbackCheckouts(
 }
 
 /**
- * Re-derive every household touched by the chunk (FR-5, FR-6b) and add one cancel audit per
- * household with cancelled members (FR-6a). Member statuses are read fresh (by id, one request)
- * so a member changed by someone else during the run is derived from its current stay, not the
- * snapshot taken when the run started. `memberIds` maps household → member ids from that snapshot.
+ * Re-derive `householdIds` from their members as they are now (FR-5, FR-6b). Member statuses
+ * are read fresh (by id, one request) so a member changed by someone else during the run is
+ * derived from its current stay, not the snapshot taken when the run started. `memberIds` maps
+ * household → member ids from that snapshot; `reportAs` names the evacuee a failure is filed
+ * under. With `staleOnly`, a household is written only when its derived status differs from the
+ * stored one (see {@link staleHouseholdNext}). Returns the households that could not be derived
+ * (already added to `failed`) and how many were written.
+ */
+async function deriveHouseholds(
+	couchReq: CouchReq,
+	db: string,
+	householdIds: readonly string[],
+	memberIds: Map<string, string[]>,
+	reportAs: (householdId: string) => string,
+	failed: ShelterCloseFailure[],
+	staleOnly = false
+): Promise<{ unresolved: Set<string>; written: number }> {
+	const unresolved = new Set<string>();
+	let written = 0;
+	const fail = (hh: string, error: string) => {
+		unresolved.add(hh);
+		failed.push({ evacuee_id: reportAs(hh), error: `household ${hh}: ${error}` });
+	};
+	let pending = [...householdIds];
+	for (let attempt = 0; pending.length > 0; attempt++) {
+		const last = attempt >= SHELTER_CLOSE_MAX_RETRIES;
+		let households: Household[];
+		let fresh: Evacuee[];
+		try {
+			households = await getDocs<Household>(couchReq, db, pending);
+			fresh = await getDocs<Evacuee>(
+				couchReq,
+				db,
+				pending.flatMap((hh) => memberIds.get(hh) ?? [])
+			);
+		} catch (err) {
+			if (!last) continue;
+			const why = err instanceof Error ? err.message : String(err);
+			for (const hh of pending) fail(hh, why);
+			return { unresolved, written };
+		}
+		const statusesOf = (householdId: string) =>
+			fresh
+				.filter((m) => m.household_id === householdId && m.current_stay?.status)
+				.map((m) => m.current_stay.status);
+		const writes: Household[] = [];
+		for (const hh of households) {
+			const statuses = statusesOf(hh._id);
+			const next = staleOnly
+				? staleHouseholdNext(hh, statuses)
+				: deriveShelterCloseHousehold(hh, statuses);
+			if (next) writes.push(next);
+		}
+		if (writes.length === 0) return { unresolved, written };
+		const rows = await bulkDocsRows(couchReq, db, writes);
+		const retry: string[] = [];
+		for (const [i, hh] of writes.entries()) {
+			const row = rows[i];
+			if (row?.ok) {
+				written += 1;
+				continue;
+			}
+			if (isRetryable(row) && !last) retry.push(hh._id);
+			else fail(hh._id, rowError(row));
+		}
+		pending = retry;
+	}
+	return { unresolved, written };
+}
+
+/**
+ * Add one cancel audit per household with cancelled members (FR-6a), then re-derive every
+ * household touched by the chunk. Returns the households that could not be derived.
  */
 async function writeHouseholds(
 	couchReq: CouchReq,
@@ -394,7 +515,7 @@ async function writeHouseholds(
 	ctx: AuthorContext,
 	auditContext: Record<string, unknown>,
 	failed: ShelterCloseFailure[]
-): Promise<void> {
+): Promise<Set<string>> {
 	const cancelledBy = new Map<string, string[]>();
 	const memberOf = new Map<string, string>();
 	for (const p of saved) {
@@ -419,50 +540,15 @@ async function writeHouseholds(
 		});
 	}
 
-	let pending = [...memberOf.keys()];
-	for (let attempt = 0; pending.length > 0; attempt++) {
-		const last = attempt >= SHELTER_CLOSE_MAX_RETRIES;
-		let households: Household[];
-		let fresh: Evacuee[];
-		try {
-			households = await getDocs<Household>(couchReq, db, pending);
-			fresh = await getDocs<Evacuee>(
-				couchReq,
-				db,
-				pending.flatMap((hh) => memberIds.get(hh) ?? [])
-			);
-		} catch (err) {
-			if (!last) continue;
-			const why = err instanceof Error ? err.message : String(err);
-			for (const hh of pending) {
-				failed.push({ evacuee_id: memberOf.get(hh) ?? hh, error: `household ${hh}: ${why}` });
-			}
-			return;
-		}
-		const statusesOf = (householdId: string) =>
-			fresh
-				.filter((m) => m.household_id === householdId && m.current_stay?.status)
-				.map((m) => m.current_stay.status);
-		const writes: Household[] = [];
-		for (const hh of households) {
-			const next = deriveShelterCloseHousehold(hh, statusesOf(hh._id));
-			if (next) writes.push(next);
-		}
-		if (writes.length === 0) return;
-		const rows = await bulkDocsRows(couchReq, db, writes);
-		const retry: string[] = [];
-		for (const [i, hh] of writes.entries()) {
-			const row = rows[i];
-			if (row?.ok) continue;
-			if (isRetryable(row) && !last) retry.push(hh._id);
-			else
-				failed.push({
-					evacuee_id: memberOf.get(hh._id) ?? hh._id,
-					error: `household ${hh._id}: ${rowError(row)}`
-				});
-		}
-		pending = retry;
-	}
+	const { unresolved } = await deriveHouseholds(
+		couchReq,
+		db,
+		[...memberOf.keys()],
+		memberIds,
+		(hh) => memberOf.get(hh) ?? hh,
+		failed
+	);
+	return unresolved;
 }
 
 /**
@@ -493,6 +579,8 @@ export async function closeShelterPeople(
 	const failed: ShelterCloseFailure[] = [];
 	let checked_out = 0;
 	let cancelled = 0;
+	/** Households already reported in `failed` this run — the stale pass does not repeat them. */
+	const reported = new Set<string>();
 
 	for (const group of chunkByHousehold(targets, SHELTER_CLOSE_CHUNK_SIZE)) {
 		const planned: Planned[] = [];
@@ -531,9 +619,37 @@ export async function closeShelterPeople(
 			else cancelled += 1;
 		}
 
-		await writeHouseholds(couchReq, db, saved, memberIds, ctx, options.auditContext ?? {}, failed);
+		const unresolved = await writeHouseholds(
+			couchReq,
+			db,
+			saved,
+			memberIds,
+			ctx,
+			options.auditContext ?? {},
+			failed
+		);
+		for (const hh of unresolved) reported.add(hh);
+	}
+
+	// FR-12a: a run that stopped after its evacuee writes (household 409s, a failed household
+	// read, a crash mid-chunk) leaves households un-derived, and a re-run skips their members —
+	// they are closed out already. Re-derive every household whose stored status no longer
+	// matches its members, so the shelter is not closed over a stale `checked_in` household.
+	const stale = [...memberIds.keys()].filter((hh) => !reported.has(hh));
+	let households_repaired = 0;
+	for (const ids of chunk(stale, SHELTER_CLOSE_CHUNK_SIZE)) {
+		const { written } = await deriveHouseholds(
+			couchReq,
+			db,
+			ids,
+			memberIds,
+			(hh) => memberIds.get(hh)?.[0] ?? hh,
+			failed,
+			true
+		);
+		households_repaired += written;
 	}
 
 	const remaining = await previewShelterClose(couchReq, code);
-	return { checked_out, cancelled, failed, remaining };
+	return { checked_out, cancelled, households_repaired, failed, remaining };
 }

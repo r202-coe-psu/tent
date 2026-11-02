@@ -106,15 +106,23 @@ export function selectClosedShelters(
 }
 
 /**
- * FR-30: one audit per shelter in that shelter's DB. `null` when the run changed nothing and
- * failed nothing, so an idempotent re-run (FR-31) writes nothing at all.
+ * FR-30 / FR-30a: one audit per shelter in that shelter's DB, including the households the run
+ * repaired (FR-12a). `null` when the run changed nothing and failed nothing, so an idempotent
+ * re-run (FR-31) writes nothing at all.
  */
 export function buildBackfillSummaryAudit(
 	target: ClosedShelterTarget,
-	run: Pick<ShelterCloseRun, 'checked_out' | 'cancelled' | 'failed'>,
+	run: Pick<ShelterCloseRun, 'checked_out' | 'cancelled' | 'households_repaired' | 'failed'>,
 	createdBy: string = BACKFILL_CREATED_BY
 ): AuditEntry | null {
-	if (run.checked_out === 0 && run.cancelled === 0 && run.failed.length === 0) return null;
+	if (
+		run.checked_out === 0 &&
+		run.cancelled === 0 &&
+		run.households_repaired === 0 &&
+		run.failed.length === 0
+	) {
+		return null;
+	}
 	const ctx: AuthorContext = { shelterCode: target.code.toUpperCase(), createdBy };
 	return createAuditEntry(
 		{
@@ -127,7 +135,8 @@ export function buildBackfillSummaryAudit(
 				shelter_closed_at: target.closed_at,
 				checked_out: run.checked_out,
 				cancelled: run.cancelled,
-				failed: run.failed.length
+				failed: run.failed.length,
+				households_repaired: run.households_repaired
 			}
 		},
 		ctx

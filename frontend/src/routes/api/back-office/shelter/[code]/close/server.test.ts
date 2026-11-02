@@ -70,6 +70,7 @@ beforeEach(() => {
 	close.mockReset().mockResolvedValue({
 		checked_out: 3,
 		cancelled: 1,
+		households_repaired: 0,
 		failed: [],
 		remaining: { by_status: {}, total: 0 }
 	});
@@ -114,6 +115,17 @@ describe('POST /api/back-office/shelter/[code]/close (FR-8..FR-14)', () => {
 		expect(close.mock.invocationCallOrder[0]).toBeLessThan(update.mock.invocationCallOrder[0]);
 	});
 
+	it('re-runs the check-out but leaves an already-closed registry untouched', async () => {
+		findMaster.mockResolvedValueOnce({
+			...master,
+			operation_status: 'closed'
+		} as unknown as ShelterMaster);
+		const res = await call(POST, 'POST', { confirm_text: CONFIRM });
+		expect((await res.json()).closed).toBe(true);
+		expect(close).toHaveBeenCalledTimes(1);
+		expect(update).not.toHaveBeenCalled();
+	});
+
 	it('accepts extra whitespace in the confirm text but stays case-sensitive (FR-17)', async () => {
 		expect((await call(POST, 'POST', { confirm_text: '  SH001   ศูนย์ วัดกลาง ' })).status).toBe(
 			200
@@ -140,6 +152,7 @@ describe('POST /api/back-office/shelter/[code]/close (FR-8..FR-14)', () => {
 		close.mockResolvedValueOnce({
 			checked_out: 2,
 			cancelled: 1,
+			households_repaired: 0,
 			failed: [{ evacuee_id: 'evacuee:X', error: 'conflict' }],
 			remaining: { by_status: { active: 1 }, total: 1 }
 		});
@@ -157,6 +170,7 @@ describe('POST /api/back-office/shelter/[code]/close (FR-8..FR-14)', () => {
 		close.mockResolvedValueOnce({
 			checked_out: 3,
 			cancelled: 0,
+			households_repaired: 0,
 			failed: [],
 			remaining: { by_status: { pre_registered: 1 }, total: 1 }
 		});

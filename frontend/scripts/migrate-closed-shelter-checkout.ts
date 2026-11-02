@@ -17,7 +17,10 @@
  * audits are stamped with the run time (no backdating). The registry is NEVER written: the shelter
  * stays `closed` and `closed_at` is untouched (CR-183 retention clock). Each shelter that changed
  * something (or failed) gets one summary audit in its own DB with
- * `context = { backfill, shelter_closed_at, checked_out, cancelled, failed }`.
+ * `context = { backfill, shelter_closed_at, checked_out, cancelled, failed, households_repaired }`.
+ * Households whose stored status no longer matches their (already closed-out) members are
+ * re-derived too (FR-12a); the dry-run counts them and both modes print the number per shelter
+ * (FR-31a).
  *
  * Idempotent: a re-run only touches people still in an affected status, and writes no audit when
  * nothing changed. Exits non-zero if any evacuee failed, a shelter DB could not be read, or people
@@ -34,7 +37,11 @@ import {
 	parseBackfillArgs,
 	selectClosedShelters
 } from '$lib/server/closed-shelter-checkout-backfill';
-import { closeShelterPeople, previewShelterClose } from '$lib/server/shelter-close';
+import {
+	closeShelterPeople,
+	countStaleHouseholds,
+	previewShelterClose
+} from '$lib/server/shelter-close';
 import { shelterDbName } from '$lib/server/shelter-access-design';
 
 function loadEnv(): Record<string, string> {
@@ -150,15 +157,19 @@ async function main(): Promise<void> {
 	let totalAffected = 0;
 	let totalCheckedOut = 0;
 	let totalCancelled = 0;
+	let totalHouseholds = 0;
 
 	for (const shelter of shelters) {
 		const label = `${shelter.code} (closed_at: ${shelter.closed_at ?? 'none'})`;
 		try {
 			if (DRY_RUN) {
 				const preview = await previewShelterClose(couchReq, shelter.code);
+				const stale = await countStaleHouseholds(couchReq, shelter.code);
 				totalAffected += preview.total;
+				totalHouseholds += stale;
 				console.log(
-					`${label}\n  would close out ${preview.total} (${describeCounts(preview.by_status)})`
+					`${label}\n  would close out ${preview.total} (${describeCounts(preview.by_status)})` +
+						` · repair ${stale} household(s)`
 				);
 				continue;
 			}
@@ -169,8 +180,9 @@ async function main(): Promise<void> {
 			});
 			totalCheckedOut += run.checked_out;
 			totalCancelled += run.cancelled;
+			totalHouseholds += run.households_repaired;
 			console.log(
-				`${label}\n  checked_out=${run.checked_out} cancelled=${run.cancelled} failed=${run.failed.length} remaining=${run.remaining.total}`
+				`${label}\n  checked_out=${run.checked_out} cancelled=${run.cancelled} households_repaired=${run.households_repaired} failed=${run.failed.length} remaining=${run.remaining.total}`
 			);
 			for (const f of run.failed) console.log(`    ✗ ${f.evacuee_id}: ${f.error}`);
 			problems += run.failed.length + (run.remaining.total > 0 ? 1 : 0);
@@ -195,8 +207,8 @@ async function main(): Promise<void> {
 
 	console.log(
 		DRY_RUN
-			? `\nTotal that would be closed out: ${totalAffected}`
-			: `\nTotal: checked_out=${totalCheckedOut} cancelled=${totalCancelled} problems=${problems}`
+			? `\nTotal that would be closed out: ${totalAffected} · households to repair: ${totalHouseholds}`
+			: `\nTotal: checked_out=${totalCheckedOut} cancelled=${totalCancelled} households_repaired=${totalHouseholds} problems=${problems}`
 	);
 	if (problems > 0) process.exitCode = 1;
 }
