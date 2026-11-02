@@ -141,21 +141,26 @@ async function addIngredient(page: Page, qty: string): Promise<void> {
 	await expect(page.getByRole('cell', { name: INGREDIENT, exact: true })).toBeVisible();
 }
 
-async function failNextPlanWrite(page: Page): Promise<void> {
+/** Fails PUTs of `docType` docs: the next one with a 403 policy rejection, or every one with a 500. */
+async function failWrites(page: Page, docType: string, status: 403 | 500): Promise<void> {
 	let pending = true;
 	await page.route(
-		(url) => url.pathname.includes('meal_plan'),
+		(url) => url.pathname.includes(docType),
 		async (route) => {
 			if (pending && route.request().method() === 'PUT') {
-				pending = false;
+				pending = status === 500;
 				await route.fulfill({
-					status: 403,
+					status,
 					contentType: 'application/json',
 					headers: {
 						'access-control-allow-origin': new URL(page.url()).origin,
 						'access-control-allow-credentials': 'true'
 					},
-					body: JSON.stringify({ error: 'forbidden', reason: 'e2e: plan write rejected' })
+					body: JSON.stringify(
+						status === 403
+							? { error: 'forbidden', reason: 'e2e: plan write rejected' }
+							: { error: 'internal_server_error', reason: 'e2e: server error' }
+					)
 				});
 				return;
 			}
@@ -271,7 +276,7 @@ test.describe(
 			contexts.push(context);
 			const page = await openBoard(context);
 			const retryRecipe = `${RECIPE} retry`;
-			await failNextPlanWrite(page);
+			await failWrites(page, 'meal_plan', 403);
 
 			await buildCustomBatch(page, '1');
 			await page.getByRole('checkbox', { name: 'บันทึกเป็นสูตรใหม่' }).check();
@@ -279,7 +284,9 @@ test.describe(
 			const submit = page.getByRole('button', { name: 'สร้างใบเบิกวัตถุดิบ' });
 			await submit.click();
 			await expect(page.getByText(`บันทึกสูตร "${retryRecipe}" เรียบร้อยแล้ว`)).toBeVisible();
-			await expect(page.getByText('e2e: plan write rejected')).toBeVisible();
+			await expect(
+				page.getByText('เปิดใบเบิกไม่สำเร็จ: ระบบปฏิเสธการบันทึก (e2e: plan write rejected)')
+			).toBeVisible();
 
 			await expect(submit).toBeEnabled();
 			await submit.click();
@@ -299,14 +306,16 @@ test.describe(
 			contexts.push(context);
 			const page = await openBoard(context);
 			const editedRecipe = `${RECIPE} edited`;
-			await failNextPlanWrite(page);
+			await failWrites(page, 'meal_plan', 403);
 
 			await buildCustomBatch(page, '1');
 			await page.getByRole('checkbox', { name: 'บันทึกเป็นสูตรใหม่' }).check();
 			await page.getByLabel('ชื่อเมนูที่แสดง').fill(editedRecipe);
 			const submit = page.getByRole('button', { name: 'สร้างใบเบิกวัตถุดิบ' });
 			await submit.click();
-			await expect(page.getByText('e2e: plan write rejected')).toBeVisible();
+			await expect(
+				page.getByText('เปิดใบเบิกไม่สำเร็จ: ระบบปฏิเสธการบันทึก (e2e: plan write rejected)')
+			).toBeVisible();
 
 			await page
 				.getByRole('row')
@@ -325,6 +334,33 @@ test.describe(
 			]);
 			const linked = (await mealPlansOfRun()).filter((p) => planRecipeId(p) === recipes[0]._id);
 			expect(linked, 'the retried plan links the updated recipe').toHaveLength(1);
+		});
+
+		test('a server error saving the recipe says so in Thai and still opens the ticket', async ({
+			browser
+		}) => {
+			const context = await browser.newContext();
+			contexts.push(context);
+			const page = await openBoard(context);
+			const failedRecipe = `${RECIPE} server error`;
+			await failWrites(page, 'recipe', 500);
+
+			await buildCustomBatch(page, '1');
+			await page.getByRole('checkbox', { name: 'บันทึกเป็นสูตรใหม่' }).check();
+			await page.getByLabel('ชื่อเมนูที่แสดง').fill(failedRecipe);
+			await page.getByRole('button', { name: 'สร้างใบเบิกวัตถุดิบ' }).click();
+
+			await expect(
+				page.getByText(
+					'บันทึกสูตรไม่สำเร็จ: ติดต่อเซิร์ฟเวอร์ไม่ได้ กรุณาลองใหม่อีกครั้ง (ระบบยังเปิดใบเบิกให้ตามปกติ)'
+				)
+			).toBeVisible();
+			await expect(page.getByText(/เปิดตั๋วเบิกวัตถุดิบ .+ แล้ว/)).toBeVisible();
+			expect(await recipesLabelled(failedRecipe), 'no recipe written').toHaveLength(0);
+			const custom = (await mealPlansOfRun()).filter((p) => p.label === failedRecipe);
+			expect(custom.map(planRecipeId), 'the plan falls back to a one-off recipe').toEqual([
+				'recipe:custom'
+			]);
 		});
 
 		test('switching to BOM mode and back clears the save-as-recipe choice', async ({ browser }) => {

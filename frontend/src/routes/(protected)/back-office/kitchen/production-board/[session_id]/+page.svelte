@@ -20,6 +20,7 @@
 		selectableCookingIngredients,
 		TARGET_GROUP_LABELS,
 		MEAL_PERIOD_LABELS,
+		kitchenErrorReason,
 		type TargetGroupTag
 	} from '$lib/features/kitchen';
 	import {
@@ -508,7 +509,7 @@
 			toast.success(`บันทึกสูตร "${input.label}" เรียบร้อยแล้ว`);
 			return doc._id;
 		} catch (err) {
-			return fail(err instanceof Error ? err.message : 'ไม่ทราบสาเหตุ');
+			return fail(kitchenErrorReason(err));
 		}
 	}
 
@@ -599,8 +600,7 @@
 			currentStage = 'B';
 			toast.success(`เปิดตั๋วเบิกวัตถุดิบ ${ticket.ticket_no} แล้ว — รอคลังจัดของและอนุมัติ`);
 		} catch (err) {
-			const msg = err instanceof Error ? err.message : 'ไม่สามารถเปิดตั๋วเบิกได้';
-			toast.error(msg);
+			toast.error(`เปิดใบเบิกไม่สำเร็จ: ${kitchenErrorReason(err)}`);
 		}
 	}
 
@@ -668,8 +668,7 @@
 
 			toast.success('บันทึกการแก้ไขแล้ว');
 		} catch (err) {
-			const msg = err instanceof Error ? err.message : 'ไม่สามารถบันทึกการแก้ไขได้';
-			toast.error(msg);
+			toast.error(`บันทึกการแก้ไขไม่สำเร็จ: ${kitchenErrorReason(err)}`);
 		}
 	}
 
@@ -685,7 +684,7 @@
 			currentStage = 'C';
 			toast.success('ยืนยันรับวัตถุดิบแล้ว — เข้าสู่ขั้นตอนเริ่มปรุงอาหาร');
 		} catch (err) {
-			toast.error(err instanceof Error ? err.message : 'ยืนยันรับวัตถุดิบไม่สำเร็จ');
+			toast.error(`ยืนยันรับวัตถุดิบไม่สำเร็จ: ${kitchenErrorReason(err)}`);
 		}
 	}
 
@@ -804,8 +803,7 @@
 			toast.success('บันทึกผลการผลิตและแจกจ่ายสำเร็จแล้ว!');
 			goto(resolve('/back-office/kitchen'));
 		} catch (err) {
-			const msg = err instanceof Error ? err.message : 'ไม่สามารถบันทึกผลการผลิตได้';
-			toast.error(msg);
+			toast.error(`บันทึกผลการผลิตไม่สำเร็จ: ${kitchenErrorReason(err)}`);
 		}
 	}
 
@@ -819,7 +817,7 @@
 			cookingStarted = true;
 			toast.success('เริ่มปรุงอาหารแล้ว');
 		} catch (err) {
-			toast.error(err instanceof Error ? err.message : 'เริ่มปรุงอาหารไม่สำเร็จ');
+			toast.error(`เริ่มปรุงอาหารไม่สำเร็จ: ${kitchenErrorReason(err)}`);
 		}
 	}
 </script>
