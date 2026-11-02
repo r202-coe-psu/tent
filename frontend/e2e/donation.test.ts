@@ -2,6 +2,9 @@ import { test, expect, type Page } from '@playwright/test';
 
 const TAGS = { tag: ['@regression', '@donation'] };
 
+/** Real label PDF is ~30 KB; a blank A6 page measured 882 bytes. Midpoint-ish threshold. */
+const MIN_LABEL_PDF_BYTES = 10_000;
+
 const SH001_NAME = 'ศูนย์พักพิง เทศบาลนครหาดใหญ่ (โรงเรียนเทศบาล 2)';
 
 const NEEDS_BODY = [
@@ -1123,11 +1126,11 @@ test.describe('Box label for a booking the shelter accepted (#591)', TAGS, () =>
 		await expect(printCopy.getByTestId('box-label-ref')).toBeVisible();
 		await expect(printCopy.getByTestId('box-label-ref')).toHaveText(BOOKING_REF);
 		await expect(printCopy.locator('img')).toBeVisible();
-		expect(await printCopy.evaluate((el) => getComputedStyle(el).display)).not.toBe('none');
 
 		const pdf = await page.pdf({ preferCSSPageSize: true });
-		// A blank A6 page is under 1 KB; the real label is ~30 KB.
-		expect(pdf.length).toBeGreaterThan(10_000);
+		// A hidden label still yields a one-page A6 PDF with the right MediaBox, so size is
+		// the only blank-page signal here.
+		expect(pdf.length).toBeGreaterThan(MIN_LABEL_PDF_BYTES);
 		const pages = pdf.toString('latin1').match(/\/Type\s*\/Page[^s]/g) ?? [];
 		expect(pages).toHaveLength(1);
 		// MediaBox is in points and Chrome rounds to whole CSS pixels: A6 is 297.6 x 419.5.

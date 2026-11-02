@@ -91,8 +91,16 @@
 
 <style>
 	@media print {
+		/* Scoped to bodies that contain the label, so other print pages are untouched (#1057). */
 		:global(body:where(:has(.pool-qr-label)) *) {
 			visibility: hidden;
+			transition: none !important;
+		}
+		/* `visibility: hidden` keeps layout height and can print a trailing blank page.
+		   The dialog is portalled to a direct child of <body>: collapse every body child
+		   that does not contain the label (app root, overlay) and keep the one that does. */
+		:global(body:where(:has(.pool-qr-label)) > *:not(:has(.pool-qr-label))) {
+			display: none !important;
 		}
 		:global(.pool-qr-label),
 		:global(.pool-qr-label *) {
