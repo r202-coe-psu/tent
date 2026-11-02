@@ -2,7 +2,7 @@ import { test, expect, type Page } from '@playwright/test';
 
 const TAGS = { tag: ['@regression', '@donation'] };
 
-/** Real label PDF is ~30 KB; a blank A6 page measured 882 bytes. Midpoint-ish threshold. */
+/** A real label PDF is ~30 KB and a blank A6 page measured 882 bytes: far from both. */
 const MIN_LABEL_PDF_BYTES = 10_000;
 
 const SH001_NAME = 'ศูนย์พักพิง เทศบาลนครหาดใหญ่ (โรงเรียนเทศบาล 2)';

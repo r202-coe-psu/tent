@@ -200,8 +200,9 @@
 
 <style>
 	/*
-		Print QR-only: deliberately thinner than a wristband/ID-card print. Shelter booking needs the gate scanner to read
-		`evacuee:{ulid}`; unassigned tickets encode the Mongo registration id only
+		Print QR-only: deliberately thinner than a wristband/ID-card print. Shelter
+		booking needs the gate scanner to read `evacuee:{ulid}`; unassigned tickets
+		encode the Mongo registration id only
 		(queue reference — not Station-1 Person QR until claim). Plus the holder's
 		name as a human-readable fallback.
 
