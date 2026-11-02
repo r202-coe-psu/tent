@@ -3,7 +3,7 @@ id: CR-222
 title: Station print server — staff สั่งพิมพ์ label QR ผ่าน BFF ไปเครื่องพิมพ์ที่ต่อ Raspberry Pi
 status: approved
 date: 2026-10-27
-updated: 2026-11-01
+updated: 2026-11-02
 requested_by: Project Owner
 decided_by: Project Owner (review รอบ 3 PR #932, 2026-10-31)
 layer: stable-core
@@ -42,7 +42,7 @@ related:
 > - **PNG (รอบ 1 ข้อ 1):** ตรวจ IHDR ให้ตรงขนาด label เป๊ะ ทั้งที่ BFF ตอนสร้างและตอน claim (FR-29, FR-12a)
 > - **สิทธิ์สั่งพิมพ์ตาม `source` (รอบ 1 ข้อ 8, O-2):** FR-29a
 > - **housekeeping (รอบ 1 ข้อ 4):** ย้ายจาก timer ใน `hooks.server.ts` ไป container `print-housekeeping` + `last_run_at` + healthcheck (FR-17, FR-17a)
-> - **Pi:** `TENT_BASE_URL` ต้องเป็น `https://` ยกเว้น loopback (รอบ 1 ข้อ 2, O-9) · nginx `limit_conn` ≤ 2 ต่อ `x-device-id` (ข้อ 7) · สิทธิ์ `cupsenable` ต้องทดสอบบน Pi (ข้อ 12, O-5) · `host_kind: kiosk` มี 2 credential แยก (ข้อ 14)
+> - **Pi:** `TENT_BASE_URL` ต้องเป็น `https://` ยกเว้น loopback (รอบ 1 ข้อ 2, O-9) · nginx `limit_conn` ≤ 2 ต่อคู่ `x-device-id` + IP ของ client (ข้อ 7) · สิทธิ์ `cupsenable` ต้องทดสอบบน Pi (ข้อ 12, O-5) · `host_kind: kiosk` มี 2 credential แยก (ข้อ 14)
 > - **เอกสาร:** §Impact รูป label ค้างได้ ~1 ชม. หลังงานจบ (ข้อ 9) · FR-31 อ่อนลง · เพิ่ม FR-49 (`_changes` เส้นเดียวต่อ process) · Acceptance load test · §Compromise
 
 ---
@@ -118,7 +118,7 @@ related:
 - **FR-25** — auth ไม่ผ่าน (ไม่มีเครื่อง / secret ผิด / `inactive`) → 401 `DEVICE_AUTH_FAILED` แบบเดียวกันทุกกรณี; DB ใช้ไม่ได้ → 503 `DEPENDENCY_UNAVAILABLE`; response ไม่มีรายละเอียด upstream หรือ secret.
 - **FR-26** — เทียบ secret ด้วย SHA-256 + `timingSafeEqual` ผ่าน helper กลาง `$lib/server/device-auth/` ที่ใช้ร่วมกับ scanner (ไม่เปลี่ยนพฤติกรรม). _(ปรับ 2026-10-29)_
 - **FR-27** — ทุก response ของ route printer มี `cache-control: no-store`.
-- **FR-27a** — nginx จำกัด connection พร้อมกัน ≤ 2 ต่อ `x-device-id` ที่ `/api/v1/printer/` (`limit_conn`, ตามแนว CR-188) เกิน → 429 · agent ถือ 429 เป็น error แล้ว backoff (FR-41). _(ใหม่ 2026-10-29)_
+- **FR-27a** — nginx จำกัด connection พร้อมกัน ≤ 2 ต่อคู่ `x-device-id` + IP ของ client (`$binary_remote_addr`) ที่ `/api/v1/printer/` (`limit_conn`, ตามแนว CR-188) เกิน → 429 · agent ถือ 429 เป็น error แล้ว backoff (FR-41) · ไม่ใช้ `x-device-id` อย่างเดียวเป็น key เพราะ device id ไม่ใช่ความลับ (`GET /api/staff/v1/printers` คืนให้ทุก tablet) ใครรู้ id ก็จอง connection จน Pi ตัวจริงโดน 429 ได้ · ต้องตั้ง `real_ip_*` ให้ nginx เห็น IP จริงเมื่ออยู่หลัง proxy. _(ใหม่ 2026-10-29, ปรับ 2026-11-02)_
 
 ### API — tablet (`/api/staff/v1/*`, cookie `_session`)
 
@@ -142,7 +142,7 @@ related:
 
 ### API — back-office (`/api/back-office/printers*`)
 
-- **FR-32** — `GET` รายการเครื่องใน scope + `online` + `local_ips` + `secret_prefix` + `kiosk_device_id` + งานล่าสุด 1 งาน · `POST` สร้างเครื่อง (provision `printing_{code}` ถ้ายังไม่มี) คืน secret (`sk_print_` + 64 hex) **ครั้งเดียว** · `PATCH /{id}` แก้ `name`/`station`/`status` · `POST /{id}/rotate-secret` คืน secret ใหม่ครั้งเดียว · `POST /{id}/test-print` (label ทดสอบในตัว 639×479 1-bit ไม่มีข้อมูลคน, `source: test`, เขียนด้วย cookie ของผู้เรียก) · `DELETE /{id}`.
+- **FR-32** — `GET` รายการเครื่องใน scope + `online` + `local_ips` + `secret_prefix` + `kiosk_device_id` + งานล่าสุด 1 งาน · `POST` สร้างเครื่อง (provision `printing_{code}` ถ้ายังไม่มี) คืน secret (`sk_print_` + 64 hex) **ครั้งเดียว** · `PATCH /{id}` แก้ `name`/`station`/`status`/`kiosk_device_id` (string = ผูกตู้ตามกติกาเดียวกับตอนสร้าง: เฉพาะ `host_kind: kiosk` + scanner device ศูนย์เดียวกัน · `null` = ถอดตู้; FR-5a / FR-48) _(ปรับ 2026-11-02)_ · `POST /{id}/rotate-secret` คืน secret ใหม่ครั้งเดียว · `POST /{id}/test-print` (label ทดสอบในตัว 639×479 1-bit ไม่มีข้อมูลคน, `source: test`, เขียนด้วย cookie ของผู้เรียก) · `DELETE /{id}`.
 - **FR-33** — ทุก route ต้องเป็น SA หรือ `shelter_manager` ของศูนย์ของเครื่อง (`PRINTER_MANAGER_CAPABILITIES`, O-3); `kiosk_staff` จัดการไม่ได้.
 - **FR-34** — แก้ device doc แบบ read-modify-write retry ≤ 4 ครั้งเมื่อชน `_rev` (heartbeat เขียนทับบ่อย) โดยคงค่า heartbeat ล่าสุด.
 
@@ -483,3 +483,4 @@ flowchart TD
 | 2026-10-31 | ทีมเสนอเพิ่มหลัง review รอบ 3 (รอ owner ดูตอน approve PR) — ไม่เปลี่ยนคำตัดสินเดิม: FR-2a ชื่อ env `COUCHDB_PRINTING_SERVICE_URL` + fail closed 503 + server admin เฉพาะ module provision (ESLint) + regex ชื่อ DB · FR-4 script `close-shelter-printing` จนกว่าจะมี flow ปิดศูนย์ · FR-21 `agent_version` ≤ 64 ตัว · FR-29a ไม่รับ role แบบ flat · Acceptance: 403 ของ `printing_service` ครบทุกทาง + สิทธิ์ `_purge` / `_compact` + fail closed + ESLint |
 | 2026-11-01 | **approved เป็น CR-222** (ย้ายไป `14-kiosk/`, `requested_by` / `decided_by` = Project Owner) · spec docs (`schema.md` §6/§7/§8/§10, `data-model.md` §1/§6/§7, `api-contract.md`) แก้พร้อม PR โค้ดตามที่ตกลง 2026-10-31 — ไม่อยู่ใน PR นี้ (ต่างจาก review รอบ 3 ข้อ 4) |
 | 2026-11-01 | ทีมเสนอหลังทดสอบบน CouchDB 3.5.2 (spike Phase 0) — รอ owner ดูตอน approve PR: O-10 VDU เห็น `length` → FR-51 บังคับ ≤ 64 KB และตัดแถว O-10 ใน §Compromise · `_purge` ต้องใช้ server admin → FR-18 / FR-2a / FR-51 เปลี่ยน retention เป็นลบด้วย `_deleted` + compact โดย `printing_service` · DB admin แก้ `_design` / `_security` ได้ → เพิ่มแถวใน §Compromise · Acceptance บันทึก 401/403 จริง · FR-29 whitelist (bit depth, color type) + test label 639×479 · §Migration ลบ DB `printing` ด้วยมือ ไม่มี script |
+| 2026-11-02 | ทีมเสนอหลัง local review ของ PR โค้ด — รอ owner ยืนยันตอน approve PR: FR-32 `PATCH` รับ `kiosk_device_id` (ผูก / ถอดตู้ตาม FR-5a / FR-48 — โค้ดรับอยู่แล้ว, ปิด `[NEEDS DECISION]` ใน `api-contract.md` §2.6) · FR-27a key ของ `limit_conn` เป็น `x-device-id` + IP ของ client เพราะ device id ไม่ใช่ความลับ · O-5 ยังเป็น gate ก่อน merge (ยังไม่ได้ทดสอบบน Pi) |
