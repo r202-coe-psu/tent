@@ -37,4 +37,7 @@ per deploy, so batch related projector changes into one bump per release when po
 #: 15 — CR-206 A2: ``public_needs`` is one row per shelter + ``item_id`` +
 #: ``drop_off_point_id`` (``_id`` = ``{shelter}:{item_id}@{point_id|-}``; new fields
 #: ``item_id``, ``drop_off_point_id``); legacy ``{shelter}:{item_id}`` rows are pruned.
-PROJECTION_VERSION: int = 15
+#: 16 — decision sync 2026-11-02: EXT-005 ``occupancy_total`` / ``occupancy_breakdown`` and
+#: EXT-007 ``shelter_occupants`` count ``active`` + ``room_confirmed``; breakdown ages fall
+#: back to ``birth_year`` (``resolve_age``).
+PROJECTION_VERSION: int = 16

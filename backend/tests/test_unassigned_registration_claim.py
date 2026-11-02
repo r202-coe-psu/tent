@@ -1280,3 +1280,32 @@ def test_claim_photo_is_image_schema_v2_without_a_donation_purpose():
     assert doc["schema_v"] == 2
     assert "purpose" not in doc
     assert "donation_id" not in doc
+
+
+async def test_legacy_pet_stored_without_pet_id_or_status_is_claimable(
+    authed_client: AsyncClient,
+    couch_birth: InMemoryCouchBirth,
+) -> None:
+    from tent_model.unassigned_registration import UnassignedPet
+
+    doc = await _seed_two_member_registration()
+    doc.household.pets = [UnassignedPet(pet_id=f"pet:{new_ulid()}", species="dog", count=1)]
+    await doc.save()
+    await UnassignedRegistration.get_pymongo_collection().update_one(
+        {"_id": doc.id},
+        {"$unset": {"household.pets.0.pet_id": "", "household.pets.0.status": ""}},
+    )
+
+    people = await authed_client.post(
+        f"/staff/v1/unassigned-registrations/{doc.id}/claim",
+        json={"member_ids": [doc.members[0].reserved_evacuee_id]},
+    )
+    assert people.status_code == 200
+    minted = people.json()["remaining_open_pets"][0]["pet_id"]
+
+    pets_claim = await authed_client.post(
+        f"/staff/v1/unassigned-registrations/{doc.id}/claim",
+        json={"pet_ids": [minted]},
+    )
+    assert pets_claim.status_code == 200
+    assert couch_birth.docs_for("SH001")[doc.reserved_household_id]["pets"][0]["species"] == "dog"
