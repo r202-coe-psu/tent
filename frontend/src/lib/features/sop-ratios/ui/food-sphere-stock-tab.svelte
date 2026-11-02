@@ -76,6 +76,7 @@
 	const staffCount = $derived(peopleQuery.data?.staff ?? 0);
 	const volunteerCount = $derived(peopleQuery.data?.volunteers ?? 0);
 	const effectiveOccupancy = $derived(evacueeCount + staffCount + volunteerCount);
+	const peopleBaseFailed = $derived(peopleQuery.isError);
 
 	const isLoading = $derived(
 		itemMastersQuery.isLoading ||
@@ -302,6 +303,7 @@
 		evacuees={evacueeCount}
 		staff={staffCount}
 		volunteers={volunteerCount}
+		failed={peopleBaseFailed}
 	/>
 {/snippet}
 
@@ -547,6 +549,11 @@
 					กลุ่ม
 					{#if effectiveOccupancy > 0}
 						<span class="ml-1">· {@render peopleTotal()}</span>
+					{/if}
+					{#if peopleBaseFailed}
+						<span class="ml-1 font-medium text-destructive">
+							· โหลดจำนวนเจ้าหน้าที่และจิตอาสาไม่สำเร็จ ฐานคำนวณนี้ต่ำกว่าความเป็นจริง
+						</span>
 					{/if}
 				</div>
 			</div>
