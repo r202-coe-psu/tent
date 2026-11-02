@@ -76,7 +76,12 @@ import {
 	migratePetGroup,
 	migratePetGroups,
 	groupPetsBySpecies,
-	petSpeciesLabel
+	petSpeciesLabel,
+	checkoutDestinationTypeSchema,
+	MANUAL_CHECKOUT_DESTINATION_TYPES,
+	SHELTER_CLOSED_REASON,
+	SHELTER_CLOSED_REASON_LABEL,
+	movementReasonLabel
 } from './people';
 import type { AuthorContext } from '$lib/db/model';
 import type { ScreeningInput, StayStatus } from './people';
@@ -2200,5 +2205,28 @@ describe('evacuee edit forms require a 10-digit mobile (CR-210)', () => {
 			evacueeEmergencyEditFormSchema.safeParse({ name: 'N', phone, relation: 'R' }).success;
 		expect(run('1234567890')).toBe(false);
 		expect(run('0812345678')).toBe(true);
+	});
+});
+
+describe('shelter-closed checkout display (CR-219 FR-1, FR-21)', () => {
+	it('maps the shelter_closed reason to its Thai label', () => {
+		expect(SHELTER_CLOSED_REASON).toBe('shelter_closed');
+		expect(movementReasonLabel('shelter_closed')).toBe('ศูนย์ปิด');
+		expect(movementReasonLabel(SHELTER_CLOSED_REASON)).toBe(SHELTER_CLOSED_REASON_LABEL);
+	});
+
+	it('passes free-text reasons through and blanks empty ones', () => {
+		expect(movementReasonLabel('ญาติมารับ')).toBe('ญาติมารับ');
+		expect(movementReasonLabel('')).toBe('');
+		expect(movementReasonLabel(null)).toBe('');
+		expect(movementReasonLabel(undefined)).toBe('');
+	});
+
+	it('accepts shelter_closed as a stored destination but never offers it manually', () => {
+		expect(checkoutDestinationTypeSchema.safeParse('shelter_closed').success).toBe(true);
+		expect(MANUAL_CHECKOUT_DESTINATION_TYPES).not.toContain('shelter_closed');
+		for (const type of MANUAL_CHECKOUT_DESTINATION_TYPES) {
+			expect(checkoutDestinationTypeSchema.safeParse(type).success).toBe(true);
+		}
 	});
 });

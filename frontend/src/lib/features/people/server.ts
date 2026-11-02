@@ -28,7 +28,20 @@ export {
 	isBirthYearBEValid,
 	MAX_AGE_YEARS,
 	PETS_MAX_COUNT,
-	totalPetCount
+	totalPetCount,
+	SHELTER_CLOSE_CHECKOUT_STATUSES,
+	SHELTER_CLOSE_CANCEL_STATUSES,
+	SHELTER_CLOSE_AFFECTED_STATUSES,
+	SHELTER_CLOSED_REASON,
+	isShelterCloseAffectedStatus,
+	isShelterCloseCancelStatus,
+	isShelterCloseCheckoutStatus,
+	buildShelterCloseCheckout,
+	buildShelterCloseCancel,
+	buildShelterCloseCancelAudit,
+	deriveShelterCloseHousehold,
+	stayStatusSchema,
+	STATUS_LABELS
 } from './domain/people';
 
 export {
@@ -68,7 +81,14 @@ export {
 
 export { registeredViaSchema } from '$lib/db/model';
 
-export type { Evacuee, EvacueeInput, Household, HouseholdInput, StayStatus } from './domain/people';
+export type {
+	Evacuee,
+	EvacueeInput,
+	Household,
+	HouseholdInput,
+	Movement,
+	StayStatus
+} from './domain/people';
 export type {
 	FamilyRegistrationPlan,
 	FamilyRegistrationMode,
