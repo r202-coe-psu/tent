@@ -343,11 +343,14 @@
 							สิทธิ์ล่าสุด{standing.lastEnded.role
 								? ` (${roleOptionLabel(standing.lastEnded.role)})`
 								: ''}
-							{ENDED_HOW[standing.lastEnded.reason]}เมื่อ {formatThaiShortDate(
+							{standing.lastEnded.cause === 'profile_inactive'
+								? 'ถูกถอนสิทธิ์เพราะปิดโปรไฟล์'
+								: ENDED_HOW[standing.lastEnded.reason]}เมื่อ {formatThaiShortDate(
 								standing.lastEnded.at
 							)}
 							{#if standing.lastEnded.reason === 'revoked' && standing.lastEnded.by}
-								โดย {standing.lastEnded.by}
+								<!-- The sweep revokes as `worker`; staff read that as the system. -->
+								โดย{standing.lastEnded.by === 'worker' ? 'ระบบ' : ` ${standing.lastEnded.by}`}
 							{/if}
 						</p>
 					{/if}

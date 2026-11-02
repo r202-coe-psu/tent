@@ -376,6 +376,22 @@ describe('VolunteerAccessDialog says where the account stands (#1044)', () => {
 		expect(document.body.textContent).toContain('โดย coord01');
 	});
 
+	it('says the system revoked it when the profile was closed, never "worker"', async () => {
+		mocks.grants = view({
+			last_ended: {
+				role: 'warehouse_staff',
+				reason: 'revoked',
+				at: '2026-11-02T07:06:06.813Z',
+				by: 'worker',
+				cause: 'profile_inactive'
+			}
+		});
+		await render(COORDINATOR, linked);
+		expect(document.body.textContent).toContain('ถูกถอนสิทธิ์เพราะปิดโปรไฟล์เมื่อ');
+		expect(document.body.textContent).toContain('โดยระบบ');
+		expect(document.body.textContent).not.toContain('worker');
+	});
+
 	it('shows the roles a manager gave, disabled with a note, and cannot be saved (FR-16)', async () => {
 		mocks.grants = view({ permanent_roles: ['registration_staff'] });
 		await render(COORDINATOR, linked);

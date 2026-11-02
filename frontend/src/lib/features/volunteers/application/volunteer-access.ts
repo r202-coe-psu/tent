@@ -245,6 +245,8 @@ export type GrantEnding = {
 	reason: 'expired' | 'revoked' | 'verification_revoked';
 	at: string;
 	by: string;
+	/** Why the worker revoked it, when it says (`profile_inactive`, CR-221 FR-20). */
+	cause?: string;
 };
 
 /** The account behind a volunteer profile as the coordinator dialog sees it (#1044). */
