@@ -42,6 +42,9 @@ function mockPutDoc<T extends { _id: string; _rev?: string }>(doc: T, strict = f
 	}
 }
 
+/** Order of the reads distributeStock makes (#855). */
+const readLog: string[] = [];
+
 function mockGetDoc<T extends { _id: string }>(id: string): T | null {
 	const found = couchDocs.get(id);
 	if (!found) return null;
@@ -116,7 +119,10 @@ vi.mock('$lib/db/couch-db', async (importOriginal) => {
 	const actual = await importOriginal<typeof import('$lib/db/couch-db')>();
 	return {
 		...actual,
-		getDoc: async <T extends { _id: string }>(_dbName: string, id: string) => mockGetDoc<T>(id),
+		getDoc: async <T extends { _id: string }>(_dbName: string, id: string) => {
+			readLog.push(`getDoc:${id.split(':')[0]}`);
+			return mockGetDoc<T>(id);
+		},
 		putDocStrict: async (_dbName: string, doc: { _id: string; _rev?: string }) =>
 			mockPutDoc(doc, true),
 		bulkDocs: async (_dbName: string, docs: { _id: string }[]) => {
@@ -439,6 +445,40 @@ describe('OperationsRemoteRepository', () => {
 
 			const balance = await repo.getBalance();
 			expect(balance.get('item:soap')).toBe('30');
+		});
+
+		it('reads the reservation doc before the ledger on every attempt (#855)', async () => {
+			mockGetItem.mockResolvedValue({ unit: 'bar' } as SupplyItem);
+			const inbound = await repo.receiveStock(
+				{ item_id: 'item:soap', qty: 50, unit: 'bar', source: 'donation', ref_id: DONATION_REF },
+				ctx
+			);
+			const listLedger = repo.listLedger.bind(repo);
+			const spy = vi.spyOn(repo, 'listLedger').mockImplementation(async () => {
+				readLog.push('listLedger');
+				return listLedger();
+			});
+			readLog.length = 0;
+			try {
+				await repo.distributeStock(
+					{
+						item_id: 'item:soap',
+						qty: 5,
+						unit: 'bar',
+						ref_id: DISTRIBUTION_BATCH_REF,
+						lot_ref: inbound._id,
+						note: 'Tent A'
+					},
+					ctx
+				);
+			} finally {
+				spy.mockRestore();
+			}
+			const firstReservation = readLog.indexOf('getDoc:stock_lot_reservation');
+			const firstLedger = readLog.indexOf('listLedger');
+			expect(firstReservation).toBeGreaterThanOrEqual(0);
+			expect(firstLedger).toBeGreaterThanOrEqual(0);
+			expect(firstReservation).toBeLessThan(firstLedger);
 		});
 
 		it('throws an error if attempting to distribute more than available stock', async () => {
@@ -1266,6 +1306,42 @@ describe('OperationsRemoteRepository', () => {
 			await expect(repo.receiveWalkInDonation(walkIn, receive, ctx)).rejects.toThrow();
 			expect(await repo.listDonations()).toHaveLength(0);
 		});
+
+		// #821 FR-11 / AC-7
+		it('stores a valid donor email on donor.email', async () => {
+			mockGetItem.mockResolvedValue({ unit: 'kg' } as SupplyItem);
+
+			const { donation } = await repo.receiveWalkInDonation(
+				{ ...walkIn, donor: { ...walkIn.donor, email: 'somchai@example.com' } },
+				receive,
+				ctx
+			);
+
+			expect(donation.donor.email).toBe('somchai@example.com');
+			expect((await repo.listDonations())[0].donor.email).toBe('somchai@example.com');
+		});
+
+		it('refuses a malformed donor email and writes nothing', async () => {
+			mockGetItem.mockResolvedValue({ unit: 'kg' } as SupplyItem);
+
+			await expect(
+				repo.receiveWalkInDonation(
+					{ ...walkIn, donor: { ...walkIn.donor, email: 'not-an-email' } },
+					receive,
+					ctx
+				)
+			).rejects.toThrow();
+			expect(await repo.listDonations()).toHaveLength(0);
+			expect(await repo.listLedger()).toHaveLength(0);
+		});
+
+		it('keeps no donor.email key when none was given', async () => {
+			mockGetItem.mockResolvedValue({ unit: 'kg' } as SupplyItem);
+
+			const { donation } = await repo.receiveWalkInDonation(walkIn, receive, ctx);
+
+			expect('email' in donation.donor).toBe(false);
+		});
 	});
 });
 
@@ -1528,6 +1604,24 @@ describe('OperationsRemoteRepository.updateCampaign', () => {
 			reason: 'อัปเดตชื่อแคมเปญเพื่อความชัดเจน',
 			created_by: 'tester'
 		});
+	});
+
+	it('re-stamps a v3 campaign as schema_v 4 on any update (FR-AP-4b)', async () => {
+		const created = await repo.createCampaign(
+			{
+				title: 'น้ำดื่ม',
+				needs: [{ item_id: 'item:water', qty_target: 100, unit: 'bottle' }]
+			},
+			ctx
+		);
+		const v3 = { ...created, schema_v: 3 };
+		await memoryRepo.put(v3);
+		const stale = (await repo.getCampaign(created._id))!;
+
+		const result = await repo.updateCampaign({ ...stale, visible_on_home: false });
+
+		expect(result.schema_v).toBe(4);
+		expect((await repo.getCampaign(created._id))?.schema_v).toBe(4);
 	});
 
 	it('refuses to update a campaign this shelter database does not hold', async () => {

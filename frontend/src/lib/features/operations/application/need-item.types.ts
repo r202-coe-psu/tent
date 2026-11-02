@@ -21,6 +21,8 @@ export interface NeedItem {
 		/** The one value a board row's badge, bar, buttons and filter read (#817). */
 		closeState: NeedCloseState;
 		isManualClosed: boolean;
+		/** Staff-assigned drop-off point; `null` when unset (FR-AP-1). */
+		dropOffPointId: string | null;
 	}[];
 	campaignDoc: DonationCampaign;
 }

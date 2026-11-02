@@ -40,6 +40,11 @@ import {
 	projectStockLotBalances,
 	sortStockLotsByConsumptionOrder,
 	StockLotIntegrityError,
+	isNegativeLot,
+	negativeLots,
+	negativeLotSummary,
+	projectLotsByItem,
+	usableStockByItem,
 	createTransfer,
 	dispatchTransfer,
 	receiveTransfer,
@@ -88,6 +93,36 @@ describe('walkInDonationInputSchema phone', () => {
 		expect(parse('080-000-0000').data?.donor.phone).toBe('0800000000');
 		expect(parse(null).data?.donor.phone).toBeNull();
 		expect(parse('12345').success).toBe(false);
+	});
+});
+
+// #821 FR-11 / AC-7 — the stock receive form's walk-in donor may leave an email.
+describe('walkInDonationInputSchema email', () => {
+	const base = {
+		donor: { name: 'ผู้ใจบุญ', phone: '0800000000', phone_hash: 'h' },
+		kind: 'items' as const,
+		items: [{ item_id: 'item:rice', qty: 10, unit: 'kg' }],
+		tracking_token_hash: 'tok'
+	};
+	const make = (email?: string) =>
+		createWalkInDonation(
+			{ ...base, donor: { ...base.donor, ...(email === undefined ? {} : { email }) } },
+			ctx
+		);
+
+	it('stores a valid email on donor.email, trimmed', () => {
+		expect(make('  somchai@example.com ').donor.email).toBe('somchai@example.com');
+	});
+
+	it.each(['somchai', 'somchai@', '@example.com', 'a b@example.com', ''])('refuses %j', (email) => {
+		expect(() => make(email)).toThrow();
+		expect(
+			walkInDonationInputSchema.safeParse({ ...base, donor: { ...base.donor, email } }).success
+		).toBe(false);
+	});
+
+	it('without an email there is no donor.email key at all', () => {
+		expect('email' in make().donor).toBe(false);
 	});
 });
 
@@ -2390,13 +2425,94 @@ describe('projectStockLotBalances', () => {
 		]);
 	});
 
-	it('fails closed for impossible legacy history', () => {
+	it('attaches the shortfall of a legacy outbound row to the last lot it consumed (#855)', () => {
+		const balances = projectStockLotBalances([
+			legacyInbound('A', '2', '2026-01-01T00:00:00Z'),
+			legacyOutbound('OUT', '3', '2026-02-01T00:00:00Z')
+		]);
+		expect(balances).toHaveLength(1);
+		expect(balances[0].qty).toBe('-1');
+		expect(isNegativeLot(balances[0])).toBe(true);
+	});
+
+	it('lets a lot_ref outbound row overdraw its lot without clamping (#855)', () => {
+		const a = inbound('A', '5', '2026-01-01T00:00:00Z');
+		const b = inbound('B', '9', '2026-01-02T00:00:00Z');
+		const out = createDistributeEntry(
+			{
+				note: 'x',
+				item_id: 'item:rice',
+				qty: '8',
+				unit: 'kg',
+				ref_id: 'requisition_ticket:TICKET1',
+				lot_ref: a.lot_ref!,
+				occurred_at: '2026-02-01T00:00:00Z'
+			},
+			ctx,
+			'OUT-OVER'
+		);
+		const balances = projectStockLotBalances([a, b, out]);
+		expect(balances.find((l) => l.lot_ref === a.lot_ref)?.qty).toBe('-3');
+		expect(balances.find((l) => l.lot_ref === b.lot_ref)?.qty).toBe('9');
+		expect(negativeLots(balances).map((l) => l.lot_ref)).toEqual([a.lot_ref]);
+	});
+
+	it('still fails closed when a legacy outbound has no lot to consume', () => {
 		expect(() =>
-			projectStockLotBalances([
-				legacyInbound('A', '2', '2026-01-01T00:00:00Z'),
-				legacyOutbound('OUT', '3', '2026-02-01T00:00:00Z')
-			])
+			projectStockLotBalances([legacyOutbound('OUT', '3', '2026-02-01T00:00:00Z')])
 		).toThrow(StockLotIntegrityError);
+	});
+
+	it('still fails closed for an outbound naming an unknown lot', () => {
+		const a = inbound('A', '5', '2026-02-01T00:00:00Z');
+		const out = { ...legacyOutbound('OUT', '1', '2026-01-01T00:00:00Z'), lot_ref: a.lot_ref };
+		expect(() => projectStockLotBalances([a, out])).toThrow(StockLotIntegrityError);
+	});
+
+	it('usableStockByItem counts a negative lot as 0, never netting it (#855)', () => {
+		const a = inbound('A', '5', '2026-01-01T00:00:00Z');
+		const b = inbound('B', '10', '2026-01-02T00:00:00Z');
+		const out = createDistributeEntry(
+			{
+				note: 'x',
+				item_id: 'item:rice',
+				qty: '8',
+				unit: 'kg',
+				ref_id: 'requisition_ticket:TICKET1',
+				lot_ref: a.lot_ref!,
+				occurred_at: '2026-02-01T00:00:00Z'
+			},
+			ctx,
+			'OUT-OVER'
+		);
+		expect(stockBalance([a, b, out]).get('item:rice')).toBe('7');
+		expect(usableStockByItem([a, b, out]).get('item:rice')).toBe('10');
+	});
+
+	it('usableStockByItem never offers a negative total for an item it cannot project (CR-216 FR-9b)', () => {
+		const out = legacyOutbound('OUT', '3', '2026-02-01T00:00:00Z');
+		expect(stockBalance([out]).get(out.item_id)).toBe('-3');
+		expect(usableStockByItem([out]).get(out.item_id)).toBe('0');
+	});
+
+	it('negativeLotSummary splits usable stock from the overdrawn lots (CR-216 FR-6a)', () => {
+		expect(negativeLotSummary([{ qty: '-3' }, { qty: '10' }])).toEqual({
+			usable: '10',
+			negative: '-3'
+		});
+		expect(negativeLotSummary([{ qty: '-1' }, { qty: '-2' }, { qty: '0' }])).toEqual({
+			usable: '0',
+			negative: '-3'
+		});
+		expect(negativeLotSummary([{ qty: '4' }, { qty: '0' }])).toBeNull();
+	});
+
+	it('projectLotsByItem reports a negative lot as a lot, not as a broken item', () => {
+		const a = inbound('A', '2', '2026-01-01T00:00:00Z');
+		const out = legacyOutbound('OUT', '3', '2026-02-01T00:00:00Z');
+		const { lots, brokenItemIds } = projectLotsByItem([a, out]);
+		expect(brokenItemIds).toEqual([]);
+		expect(lots.map((l) => l.qty)).toEqual(['-1']);
 	});
 });
 
@@ -2659,4 +2775,59 @@ describe('matchesStatusFilter', () => {
 			expect(matchesStatusFilter(state, show, 'closed')).toBe(closed);
 		}
 	);
+});
+
+// Staff-assigned drop-off point (CR-206 A2 FR-AP-1, 4, 4b).
+describe('campaign need drop_off_point_id', () => {
+	const make = (point?: string | null) =>
+		createCampaign(
+			{
+				title: 'ข้าว',
+				needs: [
+					{
+						item_id: 'item:rice',
+						qty_target: 10,
+						unit: 'kg',
+						...(point === undefined ? {} : { drop_off_point_id: point })
+					}
+				]
+			},
+			ctx
+		);
+
+	it('writes schema_v 4 and the chosen point', () => {
+		const c = make('p-gym');
+		expect(c.schema_v).toBe(4);
+		expect(c.needs[0].drop_off_point_id).toBe('p-gym');
+	});
+
+	it('writes null explicitly, never omits the key, when there is no point', () => {
+		for (const c of [make(), make(null)]) {
+			expect(c.needs[0]).toHaveProperty('drop_off_point_id', null);
+		}
+	});
+
+	it('refuses an empty-string point', () => {
+		expect(() => make('')).toThrow();
+	});
+
+	it('editNeed sets, changes and clears the point only when the patch carries it', () => {
+		const set = editNeed(make(null), 'item:rice', { qty_target: '10', drop_off_point_id: 'p-med' });
+		expect(set.needs[0].drop_off_point_id).toBe('p-med');
+		expect(
+			editNeed(set, 'item:rice', { qty_target: '10', drop_off_point_id: null }).needs[0]
+				.drop_off_point_id
+		).toBeNull();
+		expect(editNeed(set, 'item:rice', { qty_target: '12' }).needs[0].drop_off_point_id).toBe(
+			'p-med'
+		);
+	});
+
+	it('reads a v3 need without the key as no point', () => {
+		const v3 = { ...make(), schema_v: 3 } as DonationCampaign;
+		delete (v3.needs[0] as { drop_off_point_id?: string | null }).drop_off_point_id;
+		expect(v3.needs[0].drop_off_point_id ?? null).toBeNull();
+		const edited = editNeed(v3, 'item:rice', { qty_target: '10', drop_off_point_id: 'p-gym' });
+		expect(edited.needs[0].drop_off_point_id).toBe('p-gym');
+	});
 });

@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
 	import { toast } from 'svelte-sonner';
+	import { isThaiMobilePhone, normalizeThaiPhone } from '$lib/db/model';
 	import X from '@lucide/svelte/icons/x';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { evacueeEmergencyEditFormSchema, type Evacuee } from '$lib/features/people';
@@ -64,10 +65,6 @@
 		lastOpenedEvacueeId = evacuee._id;
 	});
 
-	function digits(value: string): string {
-		return value.replace(/\D/g, '');
-	}
-
 	async function save() {
 		$formData = { name, phone, relation };
 		const validation = await validateForm({ update: true, focusOnError: true });
@@ -78,7 +75,7 @@
 		const contactProvided = Boolean(
 			validation.data.name || validation.data.phone || validation.data.relation
 		);
-		if (contactProvided && (!name.trim() || digits(phone).length !== 10 || !relation.trim())) {
+		if (contactProvided && (!name.trim() || !isThaiMobilePhone(phone) || !relation.trim())) {
 			toast.error('กรุณากรอกชื่อ เบอร์โทร 10 หลัก และความสัมพันธ์ให้ครบ');
 			return;
 		}
@@ -89,7 +86,7 @@
 				emergencyContact: contactProvided
 					? {
 							name: validation.data.name,
-							phone: digits(validation.data.phone),
+							phone: normalizeThaiPhone(validation.data.phone),
 							relation: validation.data.relation
 						}
 					: undefined

@@ -57,6 +57,7 @@ const volunteerRepo = {
 	create: vi.fn(),
 	update: vi.fn(),
 	deactivate: vi.fn(),
+	reactivate: vi.fn(),
 	setCheckedIn: vi.fn()
 };
 /** Shelter code the last `volunteerRepositoryFor()` call asked for — `undefined` = active shelter. */
@@ -122,6 +123,7 @@ import {
 	useCreateJob,
 	useUpdateJob,
 	useDeactivateVolunteer,
+	useReactivateVolunteer,
 	useDispatchVolunteers,
 	useReviewApplication,
 	useCheckIn,
@@ -344,6 +346,13 @@ describe('mutation invalidation map', () => {
 			seed: () => volunteerRepo.deactivate.mockResolvedValue({ status: 'inactive' }),
 			run: (qc) => useDeactivateVolunteer(qc).mutate('volunteer:1'),
 			afterRun: () => expect(volunteerRepo.deactivate).toHaveBeenCalledWith('volunteer:1'),
+			keys: () => [volunteerKeys.volunteersAll(), volunteerKeys.hubMetrics()]
+		},
+		{
+			name: 'useReactivateVolunteer invalidates volunteers + hubMetrics',
+			seed: () => volunteerRepo.reactivate.mockResolvedValue({ status: 'active' }),
+			run: (qc) => useReactivateVolunteer(qc).mutate('volunteer:1'),
+			afterRun: () => expect(volunteerRepo.reactivate).toHaveBeenCalledWith('volunteer:1'),
 			keys: () => [volunteerKeys.volunteersAll(), volunteerKeys.hubMetrics()]
 		},
 		{

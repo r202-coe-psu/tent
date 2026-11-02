@@ -147,13 +147,24 @@ describe('buildCycleCountLots — the stock table balance (#569)', () => {
 		expect(planCycleCount(entries, 'count-1').lines).toEqual([]);
 	});
 
-	it('skips only the item whose history cannot be replayed, and says which', () => {
-		const broken = receive('item:salt', '1', POINT_A);
-		const { lots, brokenItemIds } = buildCycleCountLots([
+	it('shows an overdrawn lot read-only instead of skipping its item (#855)', () => {
+		const salt = receive('item:salt', '1', POINT_A);
+		const { lots, negativeLots, brokenItemIds } = buildCycleCountLots([
 			water,
-			broken,
-			outbound(broken, '-5', { lot_ref: broken._id })
+			salt,
+			outbound(salt, '-5', { lot_ref: salt._id })
 		]);
+		expect(lots.map((l) => l.item_id)).toEqual(['item:water']);
+		expect(negativeLots).toEqual([
+			{ lot_ref: salt._id, item_id: 'item:salt', unit: expect.any(String), qty: '-4' }
+		]);
+		expect(brokenItemIds).toEqual([]);
+	});
+
+	it('still skips an item whose history is corrupt (unknown lot), and says which', () => {
+		const ghost = receive('item:salt', '1', POINT_A);
+		const row = outbound(ghost, '-1', { lot_ref: 'stock_ledger:UNKNOWN' });
+		const { lots, brokenItemIds } = buildCycleCountLots([water, ghost, row]);
 		expect(lots.map((l) => l.item_id)).toEqual(['item:water']);
 		expect(brokenItemIds).toEqual(['item:salt']);
 	});

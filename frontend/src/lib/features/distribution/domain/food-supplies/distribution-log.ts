@@ -23,7 +23,7 @@ import type { TicketItem } from './requisition-ticket';
 export const DISTRIBUTION_LOG_SCHEMA_V = 2;
 const distributionLogSchemaVSchema = z.union([z.literal(1), z.literal(2)]);
 
-export const distributionRecipientTypeSchema = z.enum(['evacuee', 'volunteer', 'outside']);
+export const distributionRecipientTypeSchema = z.enum(['evacuee', 'volunteer', 'staff', 'outside']);
 export type DistributionRecipientType = z.infer<typeof distributionRecipientTypeSchema>;
 
 export const distributionLogStatusSchema = z.enum([
@@ -114,6 +114,16 @@ function validateDistributionLog(
 			code: 'custom',
 			path: ['recipient_id'],
 			message: 'volunteer recipient_id is required'
+		});
+	}
+	if (
+		log.recipient_type === 'staff' &&
+		(!recipientId || !recipientId.startsWith('user:') || recipientId.length === 'user:'.length)
+	) {
+		ctx.addIssue({
+			code: 'custom',
+			path: ['recipient_id'],
+			message: 'staff recipient_id is required'
 		});
 	}
 	if (log.recipient_type === 'outside' && recipientId != null) {

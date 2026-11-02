@@ -121,6 +121,18 @@ describe('POST /api/public/v1/volunteer/apply compatibility adapter', () => {
 		expect(verifyToken).toHaveBeenCalledWith('captcha-token', '127.0.0.1', 'volunteer_apply');
 	});
 
+	it.each(['022222222', '02-222-2222', 'ไม่มี'])(
+		'rejects a non-mobile phone "%s" before reaching the service',
+		async (phone) => {
+			const response = await POST(
+				makeEvent({ ...input, applicant: { ...input.applicant, phone } })
+			);
+
+			expect(response.status).toBe(400);
+			expect(applyPublicVolunteerApplication).not.toHaveBeenCalled();
+		}
+	);
+
 	it('preserves direct CouchDB business error codes', async () => {
 		vi.mocked(applyPublicVolunteerApplication).mockRejectedValue(
 			new PublicApplicationError('SHIFT_FULL', 409)

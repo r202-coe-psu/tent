@@ -1,6 +1,12 @@
 import { afterEach, describe, it, expect, vi } from 'vitest';
 import { SOP_RATIO_KEYS, SOP_RATIO_KIND } from '$lib/features/sop-ratios/server';
 import {
+	buildBookingRefFindBody,
+	buildLotLedgerFindBody,
+	buildPhoneFindBody,
+	buildReceivedFindBody
+} from '$lib/features/donations/server';
+import {
 	DAILY_SOP_ROLES,
 	canAssessRole,
 	metricForQuestion,
@@ -17,6 +23,11 @@ import { planPublicConsent } from '$lib/features/public-register/server';
 import {
 	buildValidateDocUpdate,
 	DAILY_SOP_ROLE_MANGO_INDEX,
+	DONATION_RECEIVED_MANGO_INDEX,
+	DONATION_RECEIVED_PHONE_MANGO_INDEX,
+	DONATION_BOOKING_REF_MANGO_INDEX,
+	ROLE_GRANT_AUDIT_MANGO_INDEX,
+	STOCK_LEDGER_LOT_NO_MANGO_INDEX,
 	DONATION_PHOTO_ORPHAN_MANGO_INDEX,
 	KIOSK_LOOKUP_MANGO_INDEXES,
 	BULK_RETURN_ENTRY_MANGO_INDEXES,
@@ -320,7 +331,12 @@ describe('buildValidateDocUpdate', () => {
 			REQUISITION_TICKET_MANGO_INDEXES,
 			BULK_RETURN_ENTRY_MANGO_INDEXES,
 			[DAILY_SOP_ROLE_MANGO_INDEX],
-			[DONATION_PHOTO_ORPHAN_MANGO_INDEX]
+			[DONATION_RECEIVED_MANGO_INDEX],
+			[DONATION_RECEIVED_PHONE_MANGO_INDEX],
+			[DONATION_BOOKING_REF_MANGO_INDEX],
+			[STOCK_LEDGER_LOT_NO_MANGO_INDEX],
+			[DONATION_PHOTO_ORPHAN_MANGO_INDEX],
+			[ROLE_GRANT_AUDIT_MANGO_INDEX]
 		];
 		const byName = new Map<string, string>();
 		for (const { name, index } of lists.flat()) {
@@ -328,6 +344,67 @@ describe('buildValidateDocUpdate', () => {
 			expect(byName.get(name) ?? definition, name).toBe(definition);
 			byName.set(name, definition);
 		}
+	});
+
+	it('defines the received-donations index the "รับแล้ว" list queries (#821)', () => {
+		expect(DONATION_RECEIVED_MANGO_INDEX).toEqual({
+			index: {
+				fields: [{ type: 'desc' }, { status: 'desc' }, { received_at: 'desc' }, { _id: 'desc' }]
+			},
+			ddoc: 'donation-received-list',
+			name: 'donation-received-by-received-at',
+			type: 'json'
+		});
+		// The route's use_index must name exactly what is deployed.
+		const body = buildReceivedFindBody();
+		expect(body.use_index).toEqual([
+			`_design/${DONATION_RECEIVED_MANGO_INDEX.ddoc}`,
+			DONATION_RECEIVED_MANGO_INDEX.name
+		]);
+		expect(body.sort).toEqual(DONATION_RECEIVED_MANGO_INDEX.index.fields);
+	});
+
+	it('defines the phone, booking-ref and lot-number search indexes of the "รับแล้ว" search (#821)', () => {
+		expect(DONATION_RECEIVED_PHONE_MANGO_INDEX).toEqual({
+			index: { fields: ['type', 'status', 'donor.phone_hash', 'received_at'] },
+			ddoc: 'donation-received-phone',
+			name: 'donation-received-phone',
+			type: 'json'
+		});
+		expect(STOCK_LEDGER_LOT_NO_MANGO_INDEX).toEqual({
+			index: { fields: ['type', 'lot.lot_no'] },
+			ddoc: 'stock-ledger-lot-no',
+			name: 'stock-ledger-lot-no',
+			type: 'json'
+		});
+		// The route's use_index must name exactly what is deployed.
+		expect(buildPhoneFindBody('h').use_index).toEqual([
+			`_design/${DONATION_RECEIVED_PHONE_MANGO_INDEX.ddoc}`,
+			DONATION_RECEIVED_PHONE_MANGO_INDEX.name
+		]);
+		expect(DONATION_BOOKING_REF_MANGO_INDEX).toEqual({
+			index: { fields: ['type', 'booking_ref'] },
+			ddoc: 'donation-booking-ref',
+			name: 'donation-booking-ref',
+			type: 'json'
+		});
+		expect(buildBookingRefFindBody('DN-306892').use_index).toEqual([
+			`_design/${DONATION_BOOKING_REF_MANGO_INDEX.ddoc}`,
+			DONATION_BOOKING_REF_MANGO_INDEX.name
+		]);
+		expect(buildLotLedgerFindBody('L-261029-001').use_index).toEqual([
+			`_design/${STOCK_LEDGER_LOT_NO_MANGO_INDEX.ddoc}`,
+			STOCK_LEDGER_LOT_NO_MANGO_INDEX.name
+		]);
+	});
+
+	it('indexes the audit docs of one account by reason for the last-grant-ended lookup (CR-221)', () => {
+		expect(ROLE_GRANT_AUDIT_MANGO_INDEX).toEqual({
+			index: { fields: ['type', 'target_id', 'reason'] },
+			ddoc: 'role-grant-audit-target',
+			name: 'role-grant-audit-by-target',
+			type: 'json'
+		});
 	});
 
 	it('indexes only donor photos no booking has bound, by age (CR-175 FR-16)', () => {
@@ -4164,6 +4241,23 @@ describe('buildValidateDocUpdate', () => {
 			it('allows valid consumable and returnable distribution_log creation', () => {
 				expect(() => compile()(validFoodLog, null, DISTRIBUTION)).not.toThrow();
 				expect(() => compile()(validReturnableLog, null, DISTRIBUTION)).not.toThrow();
+			});
+
+			it('accepts a staff recipient only with a user: recipient_id', () => {
+				const staffLog = (recipient_id?: string | null): Doc => {
+					const log: Doc = { ...validFoodLog, recipient_type: 'staff' };
+					delete log.household_id;
+					if (recipient_id === undefined) delete log.recipient_id;
+					else log.recipient_id = recipient_id;
+					return log;
+				};
+				expect(() => compile()(staffLog('user:somchai'), null, DISTRIBUTION)).not.toThrow();
+				for (const bad of [undefined, null, 'user:', 'volunteer:x', 'evacuee:x']) {
+					expectForbidden(
+						() => compile()(staffLog(bad), null, DISTRIBUTION),
+						/staff recipient_id is required/
+					);
+				}
 			});
 
 			it('rejects hard-delete of distribution_log', () => {

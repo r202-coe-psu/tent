@@ -60,7 +60,7 @@ _REQUIRED_SCOPE = "booking-write"
 # #751 - EOC override: rides on `booking-write`, skips every acceptance condition (incl. closed).
 _BYPASS_SCOPE = "booking-bypass"
 _BANGKOK_TZ = ZoneInfo("Asia/Bangkok")
-_PHONE_RE = re.compile(r"^0\d{8,9}$")
+_PHONE_RE = re.compile(r"^0\d{9}$")
 _CID_RE = re.compile(r"^[0-9]{13}$")
 _MAX_CANCEL_REASON = 200
 _MAX_IDEMPOTENCY_KEY = 255
@@ -260,7 +260,7 @@ def _validate_person(raw: BookingPersonInput, prefix: str) -> tuple[_Person, lis
     if person.cid and (not _CID_RE.match(person.cid) or not is_valid_thai_national_id(person.cid)):
         problems.append(f"{prefix}cid must be 13 digits with a valid checksum.")
     if person.phone and not _PHONE_RE.match(person.phone):
-        problems.append(f"{prefix}phone must be a 9–10 digit Thai number.")
+        problems.append(f"{prefix}phone must be a 10-digit Thai mobile number.")
     return person, missing, problems
 
 

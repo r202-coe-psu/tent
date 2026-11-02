@@ -131,6 +131,17 @@ export interface PeopleRepository {
 	updateEvacuee(evacuee: Evacuee): Promise<Evacuee>;
 	/** Merge section-owned evacuee fields into the latest persisted revision. */
 	patchEvacuee(id: string, patch: EvacueePatch): Promise<Evacuee>;
+	/**
+	 * Show or hide a person in the relative search at the person's request (T-40). Writes the
+	 * evacuee and its `privacy_change` audit entry in one request and throws when either fails.
+	 * It re-reads the evacuee first, so a `_rev` conflict only happens in the short gap before
+	 * `_bulk_docs`. Resolves to `null` when the visibility already matches.
+	 */
+	setSearchVisibility(
+		evacueeId: string,
+		visible: boolean,
+		ctx: AuthorContext
+	): Promise<Evacuee | null>;
 	/** Mint a household from form input + author context and persist it. */
 	createHousehold(input: HouseholdInput, ctx: AuthorContext): Promise<Household>;
 	/** Every household in this shelter database. */

@@ -149,6 +149,8 @@ export interface VolunteerRepository {
 	update(volunteer: Volunteer): Promise<Volunteer>;
 	/** Soft-delete a volunteer profile by marking it inactive using the latest CouchDB `_rev`. */
 	deactivate(id: string): Promise<Volunteer>;
+	/** Undo `deactivate` (#882): marks the profile active again using the latest `_rev`. */
+	reactivate(id: string): Promise<Volunteer>;
 	/** Record the reusable identity decision without changing job applications. */
 	reviewIdentity(
 		id: string,

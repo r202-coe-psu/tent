@@ -33,8 +33,11 @@
 	import { formatThaiShortDate } from '$lib/utils/date';
 	import { SvelteMap } from 'svelte/reactivity';
 	import { applicantAttendance } from '../domain/applicant-attendance';
-	import { APPLICATION_STATUS_META } from '../domain/applicant-queue';
+	import { APPLICATION_STATUS_META, isHeldForInactiveProfile } from '../domain/applicant-queue';
 	import ShiftAttendanceAction from './shift-attendance-action.svelte';
+	import VolunteerAccessActions from './volunteer-access-actions.svelte';
+	import VolunteerAccountBadge from './volunteer-account-badge.svelte';
+	import type { VolunteerAccessStatus } from '../domain/volunteer-access-status';
 	import { resolveSkillOption, type SkillOption } from '../domain/skill-catalog';
 	import { checkRequiredSkills } from '../domain/required-skills';
 	import {
@@ -59,7 +62,9 @@
 		requiredSkills = [],
 		assignments,
 		today,
-		onreview
+		onreview,
+		accessStatus = null,
+		shelterLine = '—'
 	}: {
 		/** One applicant's applications for this job, in shift order; never empty. */
 		applications: JobApplication[];
@@ -84,6 +89,10 @@
 		/** `YYYY-MM-DD` in Asia/Bangkok — only a shift dated today can be checked in. */
 		today: string;
 		onreview: (applications: JobApplication[], decision: 'confirmed' | 'rejected') => void;
+		/** The linked profile's system account here (#1044); `null` without a profile. */
+		accessStatus?: VolunteerAccessStatus | null;
+		/** Shelter name for the access and identity dialogs. */
+		shelterLine?: string;
 	} = $props();
 
 	/** The newest application carries the applicant's latest details (skills only grow). */
@@ -106,6 +115,9 @@
 	const reviewReasons = $derived([
 		...new Set(applications.flatMap((item) => item.review_reasons ?? []))
 	]);
+	const heldForInactiveProfile = $derived(
+		pending.some((item) => isHeldForInactiveProfile(item, volunteer))
+	);
 	const identityStatus = $derived(volunteer ? identityVerificationStatus(volunteer) : null);
 	const skills = $derived.by<{ key: string; label: string; controlled: boolean }[]>(() => {
 		const map = new SvelteMap<string, { key: string; label: string; controlled: boolean }>();
@@ -234,12 +246,34 @@
 				ยืนยันตัวตน: ยังไม่มีข้อมูลอาสาในระบบ
 			</span>
 		{/if}
+		{#if heldForInactiveProfile}
+			<span
+				class="rounded-md bg-amber-50 px-1.5 py-0.5 font-medium text-amber-800 ring-1 ring-amber-200"
+			>
+				โปรไฟล์นี้ถูกปิดใช้งาน
+			</span>
+		{/if}
 		{#each openReasons as reason (reason)}
 			<span class="rounded-md bg-sky-50 px-1.5 py-0.5 font-medium text-sky-700 ring-1 ring-sky-200">
 				{JOB_APPLICATION_REVIEW_REASON_LABEL[reason]}
 			</span>
 		{/each}
 	</div>
+
+	{#if volunteer && accessStatus}
+		<div
+			class="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border bg-background px-3 py-2"
+		>
+			<div class="flex min-w-0 flex-wrap items-center gap-1.5 text-xs">
+				<span class="font-semibold text-muted-foreground">บัญชีระบบ:</span>
+				<VolunteerAccountBadge status={accessStatus} showLogin={false} />
+				{#if accessStatus.kind !== 'none'}
+					<span class="break-all text-muted-foreground">{accessStatus.loginName}</span>
+				{/if}
+			</div>
+			<VolunteerAccessActions {volunteer} status={accessStatus} {shelterLine} />
+		</div>
+	{/if}
 
 	<ul class="space-y-1.5" aria-label="กะที่สมัคร">
 		{#each applications as application (application._id)}
