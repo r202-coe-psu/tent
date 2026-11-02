@@ -46,7 +46,7 @@ affects:
 > - **สัตว์ legacy:** แถวที่ไม่มีทั้ง `pet_id` และ `status` ใน Mongo ต้อง claim ได้ทั้ง kiosk และเจ้าหน้าที่ — เติมค่าโดยดูแถวที่เก็บจริง (model เติม `status = open` ตอนอ่าน จึงดูจาก model ไม่ได้)
 > - **ผลเขียน household กำกวม** (network error / timeout หลังส่ง household) → ไม่ revert สัตว์ + log (FR-KUC-12d)
 > - **อ่านรูปจาก GridFS ไม่ได้** → claim ต่อโดยไม่มีรูป ไม่ตอบ 5xx หลัง mark
-> - **ไม่ทำ:** บังคับเพดานสัตว์ ≤10 ตอน append — บันทึกเป็น known gap (Risks)
+> - **เพดานสัตว์ ≤10 (CR-148) ใช้กับใบลงทะเบียนเท่านั้น:** append เข้า household ใน Couch รับสัตว์ที่ claim ได้ทั้งหมดแม้รวมแล้วเกิน 10 ตัว — ไม่ตัด ไม่ปฏิเสธ (เหมือน claim ของเจ้าหน้าที่)
 > - ข้อที่แก้/เพิ่ม: FR-KUC-12d (เพิ่มข้อย่อย), FR-KUC-12e (อ้างถึง), Acceptance, Risks, Decision log
 
 ## Requirements
@@ -229,7 +229,7 @@ Prefix `/public/v1/unassigned-registrations` · Bearer `EXTERNAL_API_SECRET` ท
 - _(A1)_ **รูปสัตว์ค้าง:** append household ล้มครบทุก retry หลังรูปสัตว์ลง Couch ใน bulk เดียวกันแล้ว → `image:` ไม่มีใครอ้าง (เลือกแบบนี้แทนเขียนรูปทีหลัง ซึ่งเสี่ยง pet ชี้รูปที่ไม่มี)
 - _(A2)_ **ผลเขียน household กำกวม:** network error / timeout หลังส่ง household → ไม่รู้ว่า Couch รับหรือยัง จึงไม่ revert สัตว์ (FR-KUC-12d) → ถ้า Couch ไม่ได้รับจริง สัตว์ค้าง `claimed` แบบเดียวกับ orphan ข้างบน; เลือกแบบนี้แทน revert เพราะ Couch pet ไม่มี id ถ้า revert แล้ว Couch รับไปแล้ว prepare รอบหน้าจะ append สัตว์ซ้ำ
 - _(A2)_ **อ่านรูปจาก GridFS ล้มหลัง mark:** `prepare` โหลดรูปหลัง `_atomic_mark_claimed` → อ่านรูปล้ม (Mongo error / timeout) จะข้ามรูปนั้นแล้วตอบ 200 (log warning) ไม่ตอบ 5xx ที่ทำให้ BFF revert สมาชิกแต่ทิ้งสัตว์ค้าง `claimed`; ผลคือ evacuee / pet อาจเกิดใน Couch โดยไม่มีรูป
-- _(A2)_ **เพดานสัตว์ ≤10 ตัวต่อครัวเรือน (CR-148) ไม่ถูกบังคับตอน append:** Mongo บังคับเพดานต่อใบลงทะเบียนแล้ว แต่ append เข้า household ที่มีสัตว์ของตัวเองอยู่แล้วใน Couch ไม่ได้รวมจำนวนเดิม → household อาจเกิน 10 ได้; claim ของเจ้าหน้าที่ (`couch_birth.py` append) เป็นแบบเดียวกัน — known gap รอทีมตัดสินว่าเกินแล้วจะทำอย่างไร (ปฏิเสธ / ตัด / ยอมให้เกิน)
+- _(A2)_ **household ใน Couch อาจมีสัตว์เกิน 10 ตัว:** เพดาน ≤10 (CR-148) บังคับที่ใบลงทะเบียน (Mongo) เท่านั้น; append เข้า household ที่มีสัตว์อยู่แล้วรับทั้งหมดโดยไม่รวมจำนวนเดิม (kiosk และ claim ของเจ้าหน้าที่ `couch_birth.py` เหมือนกัน) — ทีม kiosk เลือกยอมให้เกิน เพื่อไม่ให้สัตว์ที่มาจริงตกหล่นจาก household
 - _(A1)_ **สัตว์ถูก claim ระหว่างอ่านกับ mark:** `_atomic_mark_claimed` ไม่ผ่าน → 409 `KIOSK_CLAIM_CONFLICT` เหมือนสมาชิก; สแกนใหม่แล้วผ่าน (สัตว์ไม่ `open` แล้ว)
 - **Smart-card citizen id มาจาก client:** FR-KUC-13 สำหรับบัตรอ้างค่าที่ kiosk ส่งมา (ThaiD ใช้ค่าจาก server)
 - **Stale identity keys:** revert คำนวณ `open_*` จากเอกสารที่อ่านก่อน update; kiosk อื่น claim สมาชิกในครอบครัวเดียวกันในช่วงสั้นนั้นอาจทิ้ง key ค้าง (ผล: ลงทะเบียน identity นั้นซ้ำไม่ได้จนกว่าจะแก้). ลดด้วย atomic update ใน FR-KUC-16a
@@ -251,3 +251,4 @@ N/A — ไม่เปลี่ยนรูปร่าง doc; `claimed_by` �
 - 2026-10-31 — ตาม review PR #1052: household `conflict` ตอนเกิดใหม่ที่มีสัตว์ → ไปทาง append; เติม `pet_id` ให้สัตว์ legacy ด้วย `$set` เฉพาะแถว (ไม่ save ทั้ง doc); BFF log เพิ่มเมื่อ prepare หาย / อ่าน registry ศูนย์ไม่ได้
 - 2026-11-02 — A2 proposed (ทีม kiosk แก้ตามข้อเสนอใน review ของ Team Leader, PR #1052): เติม `pet_id` / `status` ของสัตว์ legacy โดยดูจากแถวที่เก็บจริงใน Mongo (model เติม `status = open` ตอนอ่าน); ผลเขียน household กำกวม → ไม่ revert สัตว์ + log (FR-KUC-12d); อ่านรูป GridFS ล้ม → claim ต่อโดยไม่มีรูป; เพดานสัตว์ ≤10 ตอน append บันทึกเป็น known gap
 - 2026-11-02 — Soravit Sukkarn, Team Lead approve A1 (ยืนยันการอนุมัติ 2026-10-31) และ A2
+- 2026-11-02 — ทีม kiosk: เพดานสัตว์ ≤10 ใช้กับใบลงทะเบียนเท่านั้น — append เข้า household ใน Couch รับทั้งหมดแม้เกิน 10 (ไม่ตัด / ไม่ปฏิเสธ) แทน known gap เดิม
