@@ -186,9 +186,9 @@
 			<div class="flex items-center gap-1.5">
 				<span class="shrink-0 text-xs font-semibold text-slate-600">วันที่สร้าง:</span>
 				{#if onCreatedFromChange}
+					<label for="created-from-filter" class="sr-only">ตั้งแต่วันที่</label>
 					<DatePicker
 						id="created-from-filter"
-						ariaLabel="ตั้งแต่วันที่"
 						class="!h-9 w-[150px]"
 						bind:value={() => createdFrom, (v) => onCreatedFromChange?.(v)}
 					/>
@@ -197,9 +197,9 @@
 					<span class="text-slate-400" aria-hidden="true">–</span>
 				{/if}
 				{#if onCreatedToChange}
+					<label for="created-to-filter" class="sr-only">ถึงวันที่</label>
 					<DatePicker
 						id="created-to-filter"
-						ariaLabel="ถึงวันที่"
 						class="!h-9 w-[150px]"
 						bind:value={() => createdTo, (v) => onCreatedToChange?.(v)}
 					/>
