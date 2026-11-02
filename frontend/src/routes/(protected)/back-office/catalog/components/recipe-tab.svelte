@@ -27,7 +27,7 @@
 		useDeleteRecipe,
 		useUpdateRecipe,
 		RecipeForm,
-		canCreateShelterRecipe,
+		canWriteShelterRecipe,
 		MasterBadge,
 		MasterFilterBar,
 		MasterPager,
@@ -62,7 +62,7 @@
 			(basePath.includes('back-office') && (isShelterManager(roles) || isWarehouseStaff(roles)))
 	);
 	// Kitchen staff may add a shelter recipe but not edit or delete one (#802).
-	const canCreate = $derived(canCreateShelterRecipe(roles, shelterCode));
+	const canCreate = $derived(canWriteShelterRecipe(roles, shelterCode));
 
 	function canModifyRecipe(recipe: Recipe) {
 		if (basePath.includes('system-management')) {

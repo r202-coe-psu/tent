@@ -15,13 +15,11 @@ export function canWriteShelterCatalog(roles: readonly string[]): boolean {
 }
 
 /**
- * The only policy for creating a recipe: system admin anywhere; without a `shelterCode` (central
- * catalog) nobody else. In a shelter: its shelter manager, warehouse staff, or kitchen staff.
- * Kitchen staff may create only, so the production board can save the recipe they just built
- * (#802). Recipe update and delete go through `enforceWriteAccess`; {@link canWriteShelterCatalog}
- * is only a UI hint.
+ * The only policy for writing (create, update, delete) a recipe: system admin anywhere; without a
+ * `shelterCode` (central catalog) nobody else. In a shelter: its shelter manager, warehouse staff,
+ * or kitchen staff (#802, CR-217). {@link canWriteShelterCatalog} is only a UI hint.
  */
-export function canCreateShelterRecipe(
+export function canWriteShelterRecipe(
 	roles: readonly string[],
 	shelterCode: string | null | undefined
 ): boolean {
