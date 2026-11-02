@@ -42,9 +42,14 @@ export function jobConflict(): Response {
 	);
 }
 
-/** PrintAuthError -> 401, anything else -> 503 (details are never echoed to the device). */
+/**
+ * PrintAuthError -> 401, anything else -> 503. Details are never echoed to the device; they go to
+ * the server log so a misconfigured or unreachable dependency is not silent.
+ */
 export function errorResponse(error: unknown): Response {
-	return error instanceof PrintAuthError ? failedAuth() : unavailable();
+	if (error instanceof PrintAuthError) return failedAuth();
+	console.error('[printing] pi request failed:', error instanceof Error ? error.message : error);
+	return unavailable();
 }
 
 export async function authenticateRequest(

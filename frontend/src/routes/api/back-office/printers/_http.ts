@@ -73,5 +73,6 @@ export function printerAdminError(e: unknown): Response {
 		console.error('[printing] dependency unavailable:', e instanceof Error ? e.message : e);
 		return envelope(503, 'DEPENDENCY_UNAVAILABLE', DEPENDENCY_MESSAGE);
 	}
+	console.error('[printing] admin request failed:', e instanceof Error ? e.message : e);
 	return envelope(500, 'INTERNAL', 'Unexpected server error');
 }

@@ -8,8 +8,10 @@ const UNAVAILABLE = {
 };
 
 describe('printerAdminError: dependency failures (FR-25, FR-27)', () => {
+	let logged: ReturnType<typeof vi.spyOn>;
+
 	beforeEach(() => {
-		vi.spyOn(console, 'error').mockImplementation(() => {});
+		logged = vi.spyOn(console, 'error').mockImplementation(() => {});
 	});
 	afterEach(() => {
 		vi.restoreAllMocks();
@@ -44,5 +46,11 @@ describe('printerAdminError: dependency failures (FR-25, FR-27)', () => {
 
 		expect(response.status).toBe(500);
 		expect((await response.json()).error.code).toBe('INTERNAL');
+	});
+
+	it('logs the cause of an unknown error for the operator', () => {
+		printerAdminError(new Error('bug'));
+
+		expect(logged).toHaveBeenCalledWith('[printing] admin request failed:', 'bug');
 	});
 });
