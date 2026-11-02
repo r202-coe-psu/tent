@@ -4008,7 +4008,7 @@ export interface components {
 		};
 		/**
 		 * UnassignedKioskRevertRequest
-		 * @description Kiosk claim revert — give back members this kiosk marked when the Couch write failed.
+		 * @description Kiosk claim revert — give back members and pets this kiosk marked when Couch failed.
 		 */
 		UnassignedKioskRevertRequest: {
 			/** Shelter Code */

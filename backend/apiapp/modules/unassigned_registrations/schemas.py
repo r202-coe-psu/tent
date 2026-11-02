@@ -516,7 +516,7 @@ class UnassignedKioskPrepareResponse(BaseModel):
 
 
 class UnassignedKioskRevertRequest(BaseModel):
-    """Kiosk claim revert — give back members this kiosk marked when the Couch write failed."""
+    """Kiosk claim revert — give back members and pets this kiosk marked when Couch failed."""
 
     shelter_code: str = Field(min_length=1)
     device_id: str = Field(min_length=1)
