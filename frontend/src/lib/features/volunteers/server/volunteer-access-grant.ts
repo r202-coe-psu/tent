@@ -239,8 +239,16 @@ export async function revokeVolunteerAccessAsCoordinator(
 	});
 }
 
-/** A grant as the coordinator dialog shows it; `mine` (issued by the caller) is display-only (FR-17). */
-export type VolunteerGrantView = { role: string; expires_at: string; mine: boolean };
+/**
+ * A grant as the coordinator dialog shows it; `mine` (issued by the caller) is display-only
+ * (FR-17). `granted_by` is the original issuer, shown as "ออกโดย …" beside the old expiry (FR-13).
+ */
+export type VolunteerGrantView = {
+	role: string;
+	expires_at: string;
+	granted_by: string;
+	mine: boolean;
+};
 
 /** How the volunteer's last grant in this shelter ended, for "หมดอายุ" vs "ถูกถอน" (#1044). */
 export type GrantEnding = {
@@ -324,6 +332,7 @@ export async function listVolunteerGrantsAsCoordinator(
 		grants: account.grants.map((g) => ({
 			role: g.role,
 			expires_at: g.expires_at,
+			granted_by: g.granted_by,
 			mine: g.granted_by === caller.name
 		})),
 		permanent_roles: account.permanent_roles,

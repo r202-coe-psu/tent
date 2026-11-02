@@ -47,6 +47,8 @@ def _user(roles, grants, name="vol@example.com"):
         "roles": roles,
         "shelter_id": "SH001",
         "role_grants": grants,
+        "personnel_type": "volunteer",
+        "volunteer_id": "volunteer:V1",
         "derived_key": "keep",
     }
 
@@ -276,7 +278,7 @@ async def test_sweep_looks_at_the_profile_of_another_shelter():
     verified = {**VERIFIED, "_id": "volunteer:V9"}
     couch, store = _couch([doc], {("SH002", "volunteer:V9"): verified})
     assert await expire_role_grants(couch, now=NOW) == 0
-    couch.get_doc.assert_awaited_once_with("shelter_sh002", "volunteer:V9")
+    couch.get_doc.assert_any_await("shelter_sh002", "volunteer:V9")
     assert store[doc["_id"]] == doc
 
 
@@ -297,7 +299,8 @@ async def test_a_grant_without_verified_by_is_only_checked_for_expiry():
     )
     couch, _ = _couch([doc], {})
     assert await expire_role_grants(couch, now=NOW) == 0
-    couch.get_doc.assert_not_awaited()
+    # Only the account's own profile is read (closed-profile rule), no verifier.
+    couch.get_doc.assert_awaited_once_with("shelter_sh001", "volunteer:V1")
 
 
 # --- audit (FR-14, AC-4) ---
@@ -385,3 +388,141 @@ async def test_a_failed_audit_does_not_undo_the_revocation(no_retry_delay):
     couch.bulk_docs = AsyncMock(side_effect=RuntimeError("couch down"))
     assert await expire_role_grants(couch, now=NOW) == 1
     assert store[doc["_id"]]["roles"] == []
+
+
+# --- closed profile (CR-221 FR-20) ---
+
+NAME = "vol@example.com"
+
+
+def _profile(status="inactive", user_name=NAME, **extra):
+    return {
+        **VERIFIED,
+        "shelter_code": "SH001",
+        "status": status,
+        "user_name": user_name,
+        **extra,
+    }
+
+
+def test_a_closed_shelter_takes_only_that_shelters_grants():
+    doc = _user(
+        [
+            "shelter:SH001",
+            "SH001:kitchen_staff",
+            "shelter:SH002",
+            "SH002:kitchen_staff",
+        ],
+        [
+            _grant("kitchen_staff", FUTURE),
+            _grant("kitchen_staff", FUTURE, code="SH002", verified_by=None),
+        ],
+    )
+    out = revoke_expired_grants(doc, now=NOW, closed={("SH001", NAME)})
+    assert out["roles"] == ["shelter:SH002", "SH002:kitchen_staff"]
+    assert [g["shelter_code"] for g in out["role_grants"]] == ["SH002"]
+    assert out["shelter_id"] == "SH002"
+
+
+async def test_sweep_revokes_every_grant_of_a_closed_profile_and_audits_it():
+    doc = _user(
+        ["shelter:SH001", "SH001:kitchen_staff", "SH001:facility_staff"],
+        [_grant("kitchen_staff", FUTURE), _grant("facility_staff", FUTURE)],
+    )
+    couch, store = _couch([doc], {VERIFIER: _profile()})
+
+    assert await expire_role_grants(couch, now=NOW) == 1
+
+    assert store[doc["_id"]]["roles"] == []
+    assert store[doc["_id"]]["role_grants"] == []
+    assert store[doc["_id"]]["name"] == NAME
+    assert [(db, a["context"]["role"]) for db, a in couch.audits] == [
+        ("shelter_sh001", "kitchen_staff"),
+        ("shelter_sh001", "facility_staff"),
+    ]
+    for _, audit in couch.audits:
+        assert audit["reason"] == "role_grant.revoked"
+        assert audit["created_by"] == "worker"
+        assert audit["context"]["actor"] == "worker"
+        assert audit["context"]["cause"] == "profile_inactive"
+        assert audit["shelter_code"] == "SH001"
+
+
+async def test_sweep_leaves_an_active_profile_alone():
+    doc = _user(
+        ["shelter:SH001", "SH001:kitchen_staff"], [_grant("kitchen_staff", FUTURE)]
+    )
+    couch, store = _couch([doc], {VERIFIER: _profile(status="active")})
+    assert await expire_role_grants(couch, now=NOW) == 0
+    assert store[doc["_id"]] == doc
+    assert couch.audits == []
+
+
+async def test_sweep_never_touches_a_role_a_manager_gave_when_the_profile_closes():
+    doc = _user(
+        ["shelter:SH001", "SH001:kitchen_staff", "SH001:facility_staff"],
+        [_grant("kitchen_staff", FUTURE)],
+    )
+    couch, store = _couch([doc], {VERIFIER: _profile()})
+    assert await expire_role_grants(couch, now=NOW) == 1
+    assert store[doc["_id"]]["roles"] == ["shelter:SH001", "SH001:facility_staff"]
+    assert len(couch.audits) == 1
+
+
+async def test_a_profile_closed_in_another_shelter_does_not_touch_this_one():
+    doc = _user(
+        ["shelter:SH001", "SH001:kitchen_staff"], [_grant("kitchen_staff", FUTURE)]
+    )
+    # The account's volunteer_id is read in SH001 only; SH002's closed profile is not looked at.
+    couch, store = _couch(
+        [doc],
+        {
+            VERIFIER: _profile(status="active"),
+            ("SH002", "volunteer:V1"): _profile(shelter_code="SH002"),
+        },
+    )
+    assert await expire_role_grants(couch, now=NOW) == 0
+    assert store[doc["_id"]] == doc
+
+
+async def test_a_closed_profile_that_does_not_link_back_is_ignored():
+    doc = _user(
+        ["shelter:SH001", "SH001:kitchen_staff"], [_grant("kitchen_staff", FUTURE)]
+    )
+    for profile in (
+        _profile(user_name="someone@else.com"),
+        _profile(user_name=None),
+    ):
+        couch, store = _couch([doc], {VERIFIER: profile})
+        assert await expire_role_grants(couch, now=NOW) == 0
+        assert store[doc["_id"]] == doc
+    # The account must point at the profile as well (two-way link).
+    other = {**doc, "volunteer_id": "volunteer:V2"}
+    couch, store = _couch([other], {VERIFIER: _profile()})
+    assert await expire_role_grants(couch, now=NOW) == 0
+    # A staff account is not a volunteer account.
+    staff = {**doc, "personnel_type": "staff"}
+    couch, store = _couch([staff], {VERIFIER: _profile()})
+    assert await expire_role_grants(couch, now=NOW) == 0
+
+
+async def test_an_unreadable_profile_does_not_close_the_grant():
+    doc = _user(
+        ["shelter:SH001", "SH001:kitchen_staff"],
+        [_grant("kitchen_staff", FUTURE, verified_by=None)],
+    )
+    couch, store = _couch([doc], {})
+    couch.get_doc = AsyncMock(side_effect=RuntimeError("couch down"))
+    assert await expire_role_grants(couch, now=NOW) == 0
+    assert store[doc["_id"]] == doc
+
+
+async def test_an_expired_grant_keeps_its_expired_reason_on_a_closed_profile():
+    doc = _user(
+        ["shelter:SH001", "SH001:kitchen_staff"], [_grant("kitchen_staff", PAST)]
+    )
+    couch, _ = _couch([doc], {VERIFIER: _profile()})
+    await expire_role_grants(couch, now=NOW)
+    ((_, audit),) = couch.audits
+    assert audit["reason"] == "role_grant.expired"
+    assert "cause" not in audit["context"]

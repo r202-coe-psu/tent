@@ -2,6 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushSync, mount, tick, unmount } from 'svelte';
 import { grantExpiryRange } from '$lib/auth/role-grants';
+import { formatThaiShortDate } from '$lib/utils/date';
 import type { Volunteer } from '../domain/volunteer.schema';
 import { toast } from 'svelte-sonner';
 import VolunteerAccessDialog from './volunteer-access-dialog.svelte';
@@ -474,6 +475,15 @@ describe('VolunteerAccessDialog password for an existing account', () => {
 	])(
 		'hides the password when the profile is linked (%s): the account keeps its own',
 		async (_who, roles) => {
+			// A coordinator learns the account exists from the grants view (FR-10); SM / SA from
+			// the profile's own link.
+			mocks.grants = {
+				email: 'vol@example.com',
+				has_account: true,
+				grants: [],
+				permanent_roles: [],
+				last_ended: null
+			};
 			await render(roles, { user_name: 'vol@example.com' });
 
 			expect(passwordInput()).toBeNull();
@@ -529,5 +539,125 @@ describe('VolunteerAccessDialog password for an existing account', () => {
 		await render(COORDINATOR, { user_name: 'vol@example.com', phone: null });
 
 		expect(passwordInput()).not.toBeNull();
+	});
+});
+
+describe('VolunteerAccessDialog username and old expiry (CR-221 FR-10, FR-13)', () => {
+	const linked = { user_name: 'vol@example.com' } as Partial<Volunteer>;
+	const GRANT = {
+		role: 'kitchen_staff',
+		expires_at: '2026-11-03T16:59:59.999Z',
+		granted_by: 'coord01',
+		mine: false
+	};
+	const view = (over: Record<string, unknown>) => ({
+		email: 'vol@example.com',
+		has_account: true,
+		grants: [],
+		permanent_roles: [],
+		last_ended: null,
+		...over
+	});
+	const EXISTS_NOTE = 'บัญชีนี้มีอยู่แล้ว การออกสิทธิ์ไม่เปลี่ยนรหัสผ่านเดิม';
+	const emailInput = () => document.body.querySelector('input[type="email"]');
+	const passwordInput = () => document.body.querySelector('[id^="volunteer-access-password-"]');
+	const existingUsername = () =>
+		document.body.querySelector('[data-testid="existing-username"]')?.textContent?.trim();
+	const previousExpiry = () =>
+		document.body.querySelector('[data-testid="previous-expiry"]')?.textContent;
+
+	it.each([
+		['active', view({ grants: [GRANT] })],
+		['lapsed', view({})]
+	])(
+		'shows the username read-only, with the note and no password, when the account is %s',
+		async (_standing, grants) => {
+			mocks.grants = grants;
+			await render(COORDINATOR, linked);
+			expect(existingUsername()).toBe('vol@example.com');
+			expect(emailInput()).toBeNull();
+			expect(passwordInput()).toBeNull();
+			expect(document.body.textContent).toContain(EXISTS_NOTE);
+		}
+	);
+
+	it('keeps the email and password inputs when there is no account', async () => {
+		await render(COORDINATOR);
+		expect(existingUsername()).toBeUndefined();
+		expect(emailInput()).not.toBeNull();
+		expect(passwordInput()).not.toBeNull();
+		expect(document.body.textContent).not.toContain(EXISTS_NOTE);
+	});
+
+	it('keeps the inputs when the profile names an account that is gone', async () => {
+		mocks.grants = view({ has_account: false });
+		await render(COORDINATOR, linked);
+		expect(emailInput()).not.toBeNull();
+		expect(passwordInput()).not.toBeNull();
+	});
+
+	it('edits an existing account without a password and passes its username', async () => {
+		mocks.grants = view({ grants: [GRANT] });
+		await render(COORDINATOR, linked);
+		await pickExpiry(grantExpiryRange().max);
+		buttonText('บันทึกการแก้ไข')!.click();
+		await settle();
+
+		expect(mocks.grantLimited).toHaveBeenCalledWith(
+			expect.objectContaining({ _id: volunteer._id }),
+			expect.objectContaining({
+				email: 'vol@example.com',
+				role: 'kitchen_staff',
+				expires_on: grantExpiryRange().max,
+				account_exists: true
+			})
+		);
+	});
+
+	it('shows a shelter manager the linked username read-only too, and still grants with it', async () => {
+		mocks.grantFull.mockResolvedValue({ created: false });
+		await render(MANAGER, linked);
+		expect(existingUsername()).toBe('vol@example.com');
+		expect(emailInput()).toBeNull();
+		expect(passwordInput()).toBeNull();
+		await pickRole('warehouse_staff');
+		saveButton().click();
+		await settle();
+		expect(mocks.grantFull).toHaveBeenCalledWith(
+			expect.objectContaining({ _id: volunteer._id }),
+			expect.objectContaining({ email: 'vol@example.com', role: 'warehouse_staff' })
+		);
+	});
+
+	it('shows the old expiry and the issuer for an active account, with the picker still empty and required', async () => {
+		mocks.grants = view({ grants: [GRANT] });
+		await render(COORDINATOR, linked);
+		expect(previousExpiry()).toContain('เดิม: หมดอายุสิ้นวันที่');
+		expect(previousExpiry()).toContain(formatThaiShortDate(GRANT.expires_at));
+		expect(previousExpiry()).toContain('ออกโดย coord01');
+		expect(expiryButton()!.textContent).toContain('เลือกวันหมดอายุ');
+
+		buttonText('บันทึกการแก้ไข')!.click();
+		await settle();
+		expect(mocks.grantLimited).not.toHaveBeenCalled();
+		expect(toast.error).toHaveBeenCalledWith('กรุณาเลือกวันหมดอายุ');
+	});
+
+	it('shows the latest grant when the account holds several', async () => {
+		mocks.grants = view({
+			grants: [
+				{ ...GRANT, role: 'facility_staff', expires_at: '2026-11-01T16:59:59.999Z' },
+				{ ...GRANT, granted_by: 'coord02' }
+			]
+		});
+		await render(COORDINATOR, linked);
+		expect(previousExpiry()).toContain(formatThaiShortDate(GRANT.expires_at));
+		expect(previousExpiry()).toContain('ออกโดย coord02');
+	});
+
+	it('shows no old expiry for a lapsed account or a new grant', async () => {
+		mocks.grants = view({});
+		await render(COORDINATOR, linked);
+		expect(previousExpiry()).toBeUndefined();
 	});
 });

@@ -43,7 +43,10 @@
 		identityVerificationStatus,
 		skillVerificationStatus
 	} from '../domain/verification';
-	import type { VolunteerAccessStatus } from '../domain/volunteer-access-status';
+	import {
+		closeProfileAccessNotice,
+		type VolunteerAccessStatus
+	} from '../domain/volunteer-access-status';
 	import type { Volunteer, VolunteerSource } from '../domain/volunteer.schema';
 	import type { ShiftAssignment, ShiftKind } from '../domain/shift-assignment.schema';
 
@@ -123,6 +126,9 @@
 
 	const queryClient = useQueryClient();
 	const deactivateMutation = useDeactivateVolunteer(queryClient);
+	// CR-221 FR-20: closing the profile takes the coordinator grants away (worker sweep, about 5
+	// minutes) but not a role a shelter manager gave.
+	const closeNotice = $derived(closeProfileAccessNotice(accessStatus));
 	const reactivateMutation = useReactivateVolunteer(queryClient);
 
 	function openQualificationAudit(skillCode?: string) {
@@ -375,6 +381,20 @@
 				<code class="text-xs">inactive</code> และเก็บประวัติไว้ในระบบ อาสาสมัครจะไม่สามารถรับงานใหม่ได้จนกว่าจะเปิดใช้งานอีกครั้ง
 			</AlertDialog.Description>
 		</AlertDialog.Header>
+		{#if closeNotice.revokesGrants}
+			<p class="text-sm text-muted-foreground" data-testid="close-revokes-grants">
+				สิทธิ์ใช้งานระบบที่ผู้ประสานงานออกให้จะถูกถอนอัตโนมัติภายในประมาณ 5 นาที
+			</p>
+		{/if}
+		{#if closeNotice.keepsManagerRole}
+			<p
+				role="alert"
+				class="text-sm font-medium text-destructive"
+				data-testid="close-keeps-manager-role"
+			>
+				ยังมีสิทธิ์ที่ผู้จัดการศูนย์ให้ ต้องให้ผู้จัดการศูนย์ถอน
+			</p>
+		{/if}
 		<AlertDialog.Footer>
 			<AlertDialog.Cancel disabled={deactivateMutation.isPending}>ยกเลิก</AlertDialog.Cancel>
 			<AlertDialog.Action

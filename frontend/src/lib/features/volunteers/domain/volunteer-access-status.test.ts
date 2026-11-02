@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
+	closeProfileAccessNotice,
 	hasVolunteerAccount,
 	volunteerAccessStatus,
 	type VolunteerAccount
@@ -68,5 +69,40 @@ describe('volunteerAccessStatus', () => {
 				kind: 'none'
 			});
 		});
+	});
+});
+
+describe('closeProfileAccessNotice (CR-221 FR-20)', () => {
+	const notice = (over: Partial<VolunteerAccount>) =>
+		closeProfileAccessNotice(volunteerAccessStatus(vol, [account(over)]));
+	const GRANT = { role: 'kitchen_staff', expires_at: '2026-11-03T16:59:59.999Z' };
+
+	it('says the grants are revoked and a manager-given role is kept', () => {
+		expect(notice({ grants: [GRANT], permanent_roles: ['registration_staff'] })).toEqual({
+			revokesGrants: true,
+			keepsManagerRole: true
+		});
+	});
+
+	it('flags only grants when the manager gave nothing', () => {
+		expect(notice({ grants: [GRANT] })).toEqual({ revokesGrants: true, keepsManagerRole: false });
+	});
+
+	it('flags only the manager-given role when there is no grant', () => {
+		expect(notice({ permanent_roles: ['registration_staff'] })).toEqual({
+			revokesGrants: false,
+			keepsManagerRole: true
+		});
+	});
+
+	it.each([
+		['no account', closeProfileAccessNotice({ kind: 'none' })],
+		['a lapsed account', closeProfileAccessNotice({ kind: 'lapsed', loginName: 'a@x.com' })],
+		[
+			'roles not known yet',
+			closeProfileAccessNotice({ kind: 'active', loginName: 'a@x.com', roles: null })
+		]
+	])('has nothing to say for %s', (_what, result) => {
+		expect(result).toEqual({ revokesGrants: false, keepsManagerRole: false });
 	});
 });

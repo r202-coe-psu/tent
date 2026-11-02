@@ -462,8 +462,18 @@ describe('listVolunteerGrantsAsCoordinator', () => {
 			email: 'vol@example.com',
 			has_account: true,
 			grants: [
-				{ role: 'kitchen_staff', expires_at: '2026-10-31T16:59:59.999Z', mine: true },
-				{ role: 'facility_staff', expires_at: '2026-10-31T16:59:59.999Z', mine: false }
+				{
+					role: 'kitchen_staff',
+					expires_at: '2026-10-31T16:59:59.999Z',
+					granted_by: 'staff03',
+					mine: true
+				},
+				{
+					role: 'facility_staff',
+					expires_at: '2026-10-31T16:59:59.999Z',
+					granted_by: 'staff09',
+					mine: false
+				}
 			],
 			permanent_roles: ['registration_staff'],
 			last_ended: null

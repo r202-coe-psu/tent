@@ -66,3 +66,20 @@ export function volunteerAccessStatus(
 export function hasVolunteerAccount(status: VolunteerAccessStatus): boolean {
 	return status.kind !== 'none';
 }
+
+/**
+ * What closing the profile does to the account's access here (CR-221 FR-20): coordinator grants
+ * are revoked by the worker sweep, a role a shelter manager gave (no expiry) is not touched and
+ * only the manager can take it back. Roles unknown (`null`) or no account: nothing to say.
+ */
+export function closeProfileAccessNotice(status: VolunteerAccessStatus): {
+	revokesGrants: boolean;
+	keepsManagerRole: boolean;
+} {
+	const roles =
+		status.kind === 'active' || status.kind === 'deactivated' ? (status.roles ?? []) : [];
+	return {
+		revokesGrants: roles.some((r) => r.expiresAt !== null),
+		keepsManagerRole: roles.some((r) => r.expiresAt === null)
+	};
+}
