@@ -365,6 +365,7 @@ export const TICKET_DISTRIBUTION_MANGO_INDEXES = [
  *  - **forward-only** `donation.status` — `received` may not fall back to `declared`
  *    (schema.md §2.3 state machine).
  *  - **role gate** on `stock_ledger` — only warehouse staff / managers may move stock.
+ *  - **role gate** on `recipe` — SM, warehouse, supply and kitchen staff of this shelter (CR-217).
  *
  * `_admin` bypasses so provisioning/seed writes are not blocked. NOTE: the
  * back-office intake route writes with admin credentials, so it does NOT pass
@@ -452,6 +453,13 @@ ${consentVduClause()}
   function canWriteBulkReturnEntry() {
     return canManageBulkReturnPool() || isRole('distribution_staff');
   }
+  // CR-217: shelter recipes are written (create, update, delete) by SM, WH, SC and KS of this
+  // shelter (+ SA via isRole), the same set as canWriteShelterRecipe on the client.
+  function canWriteRecipe() {
+    return isRole('shelter_manager') || isRole('warehouse_staff') ||
+      isRole('supply_coordinator') || isRole('kitchen_staff');
+  }
+  var RECIPE_WRITE_FORBIDDEN = 'Only shelter managers, warehouse, supply or kitchen staff of this shelter can write recipe';
   function sameObjectExcept(previousObject, nextObject, ignoredFields) {
     var keys = {};
     var previousKeys = Object.keys(previousObject || {});
@@ -511,6 +519,9 @@ ${consentVduClause()}
     if (oldDoc && oldDoc.type === 'item_category' && oldDoc.is_protected === true) {
       throw { forbidden: 'Cannot delete system protected category: ' + oldDoc._id };
     }
+    if (oldDoc && oldDoc.type === 'recipe' && !canWriteRecipe()) {
+      throw { forbidden: RECIPE_WRITE_FORBIDDEN };
+    }
     if (oldDoc && oldDoc.type === 'distribution_batch' && oldDoc.status === 'closed') {
       throw { forbidden: 'Closed distribution_batch cannot be modified' };
     }
@@ -565,6 +576,9 @@ ${consentVduClause()}
   require('created_at');
   require('updated_at');
   require('created_by');
+  if (newDoc.type === 'recipe' && !canWriteRecipe()) {
+    throw { forbidden: RECIPE_WRITE_FORBIDDEN };
+  }
   if (newDoc.shelter_code !== '${code}') {
     throw { forbidden: 'shelter_code must be ${code}' };
   }
