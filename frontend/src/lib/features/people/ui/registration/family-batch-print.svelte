@@ -8,7 +8,7 @@
 	import ArrowRight from '@lucide/svelte/icons/arrow-right';
 	import UserPlus from '@lucide/svelte/icons/user-plus';
 	import { Button } from '$lib/components/ui/button/index.js';
-	import { PrintLabelsButton } from '$lib/features/printers';
+	import { PRINTERS_I18N, PrintLabelsButton } from '$lib/features/printers';
 	import { renderKioskQrLabelPng } from '$lib/features/kiosk';
 	import StationCompletionSummary from '../shared/station-completion-summary.svelte';
 	import { peopleKeys } from '../../application/queries';
@@ -55,6 +55,7 @@
 
 	const queryClient = safeQuery(() => useQueryClient(), null);
 	const qrT = $derived(getTranslation(EVACUEE_QR_MODAL_I18N, languageStore.current));
+	const printersT = $derived(getTranslation(PRINTERS_I18N, languageStore.current));
 	const shelterCode = $derived(shelterStore.selectedShelterCode ?? getShelterCode());
 
 	/**
@@ -174,7 +175,7 @@
 						labelCount={total}
 						source="walk_in"
 						renderLabels={renderFamilyLabels}
-						label={`พิมพ์ทั้งครอบครัว (${total} ใบ)`}
+						label={printersT.printFamily(total)}
 						buttonClass="min-h-11"
 					/>
 				{/key}

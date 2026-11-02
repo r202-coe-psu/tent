@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { printerAdminErrorMessage, printJobOutcomeMessage } from './printers.i18n';
+import { PRINTERS_I18N, printerAdminErrorMessage, printJobOutcomeMessage } from './printers.i18n';
+
+describe('printFamily', () => {
+	it('labels the whole-family print button with the number of labels', () => {
+		expect(PRINTERS_I18N.th.printFamily(4)).toBe('พิมพ์ทั้งครอบครัว (4 ใบ)');
+		expect(PRINTERS_I18N.en.printFamily(4)).toBe('Print whole family (4 labels)');
+		expect(PRINTERS_I18N.en.printFamily(1)).toBe('Print whole family (1 label)');
+	});
+});
 
 describe('printJobOutcomeMessage', () => {
 	it('reports how many labels were printed and where', () => {

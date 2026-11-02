@@ -13,6 +13,7 @@ export const PRINTERS_I18N = {
 		printAt: (count: number, printer: string) =>
 			count === 1 ? `พิมพ์ที่ ${printer}` : `พิมพ์ ${count} ใบที่ ${printer}`,
 		printingProgress: (done: number, total: number) => `กำลังพิมพ์ ${done}/${total}…`,
+		printFamily: (count: number) => `พิมพ์ทั้งครอบครัว (${count} ใบ)`,
 		retry: 'พิมพ์อีกครั้ง',
 		cancel: 'ยกเลิก',
 		cancelled:
@@ -186,6 +187,8 @@ export const PRINTERS_I18N = {
 		printAt: (count: number, printer: string) =>
 			count === 1 ? `Print at ${printer}` : `Print ${count} labels at ${printer}`,
 		printingProgress: (done: number, total: number) => `Printing ${done}/${total}…`,
+		printFamily: (count: number) =>
+			`Print whole family (${count} ${count === 1 ? 'label' : 'labels'})`,
 		retry: 'Print again',
 		cancel: 'Cancel',
 		cancelled:
