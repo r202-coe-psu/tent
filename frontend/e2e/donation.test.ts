@@ -2,6 +2,9 @@ import { test, expect, type Page } from '@playwright/test';
 
 const TAGS = { tag: ['@regression', '@donation'] };
 
+/** A real label PDF is ~30 KB and a blank A6 page measured 882 bytes: far from both. */
+const MIN_LABEL_PDF_BYTES = 10_000;
+
 const SH001_NAME = 'ศูนย์พักพิง เทศบาลนครหาดใหญ่ (โรงเรียนเทศบาล 2)';
 
 const NEEDS_BODY = [
@@ -1108,15 +1111,38 @@ test.describe('Box label for a booking the shelter accepted (#591)', TAGS, () =>
 		await expect(label.getByRole('img')).toBeVisible();
 	});
 
-	test('the printed page is a single A6 sheet', async ({ page }) => {
+	test('the printed page is a single A6 sheet with the label on it', async ({ page }) => {
 		await mockTrack(page, 'verifying');
 		await mockShelter(page);
 
 		await page.goto(`/donations/track/${TOKEN}/label`);
 		await expect(page.getByTestId('box-label-preview').getByRole('img')).toBeVisible();
+
+		// The build's shared CSS chunks put the kiosk label's print rules on this page too: that
+		// is how #1057 blanked the label. If they stop loading, this test proves nothing.
+		const kioskPrintRulesLoaded = await page.evaluate(() =>
+			[...document.styleSheets].some((sheet) => {
+				try {
+					return [...sheet.cssRules].some((rule) => rule.cssText.includes('kiosk-print-area'));
+				} catch {
+					return false; // cross-origin sheet (fonts)
+				}
+			})
+		);
+		expect(kioskPrintRulesLoaded).toBe(true);
+
 		await page.emulateMedia({ media: 'print' });
 
+		// Other features' global print rules must not hide the label (#1057).
+		const printCopy = page.locator('body > .box-label-print');
+		await expect(printCopy.getByTestId('box-label-ref')).toBeVisible();
+		await expect(printCopy.getByTestId('box-label-ref')).toHaveText(BOOKING_REF);
+		await expect(printCopy.locator('img')).toBeVisible();
+
 		const pdf = await page.pdf({ preferCSSPageSize: true });
+		// A hidden label still yields a one-page A6 PDF with the right MediaBox, so size is
+		// the only blank-page signal here.
+		expect(pdf.length).toBeGreaterThan(MIN_LABEL_PDF_BYTES);
 		const pages = pdf.toString('latin1').match(/\/Type\s*\/Page[^s]/g) ?? [];
 		expect(pages).toHaveLength(1);
 		// MediaBox is in points and Chrome rounds to whole CSS pixels: A6 is 297.6 x 419.5.
