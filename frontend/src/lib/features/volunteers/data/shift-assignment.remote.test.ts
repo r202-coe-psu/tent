@@ -203,6 +203,131 @@ describe('ShiftAssignmentRemoteRepository', () => {
 		);
 	});
 
+	/** Shape the worker writes for public applications: only `check_out_by/method/reason` missing. */
+	function workerDoc(
+		id: string,
+		jobId: string,
+		volunteerId: string,
+		overrides: Record<string, unknown> = {}
+	) {
+		return {
+			_id: id,
+			type: 'shift_assignment',
+			schema_v: 4,
+			shelter_code: 'SH001',
+			created_at: '2026-08-27T00:00:00.000Z',
+			updated_at: '2026-08-27T00:00:00.000Z',
+			created_by: 'public_apply',
+			job_id: jobId,
+			shift_id: 's1',
+			volunteer_id: volunteerId,
+			date: '2026-08-27',
+			shift: 'morning',
+			station: 'ครัว',
+			duty_window: assignmentInput(jobId, volunteerId).duty_window,
+			check_in_at: null,
+			check_out_at: null,
+			check_in_by: null,
+			status: 'assigned',
+			dispatch_status: null,
+			check_in_method: 'qr',
+			check_in_reason: null,
+			...overrides
+		};
+	}
+
+	it('list() and get() normalize worker-written docs missing check_out_* (#1014)', async () => {
+		const { assignments, job, volunteer } = await setup();
+		await memoryRepo.put(workerDoc('shift_assignment:worker', job._id, volunteer._id));
+
+		const listed = await assignments.list({ jobId: job._id });
+		expect(listed.map((x) => x._id)).toEqual(['shift_assignment:worker']);
+		expect(listed[0]).toMatchObject({
+			check_in_method: 'qr',
+			check_out_by: null,
+			check_out_method: 'qr',
+			check_out_reason: null
+		});
+		expect(await assignments.get('shift_assignment:worker')).toMatchObject({
+			check_out_method: 'qr'
+		});
+	});
+
+	it('list() does not overwrite check_out_* values that are present', async () => {
+		const { assignments, job, volunteer } = await setup();
+		await memoryRepo.put(
+			workerDoc('shift_assignment:done', job._id, volunteer._id, {
+				schema_v: 5,
+				status: 'completed',
+				check_out_by: 'staff-9',
+				check_out_method: 'manual_override',
+				check_out_reason: 'ลืมสแกน'
+			})
+		);
+		expect((await assignments.list())[0]).toMatchObject({
+			check_out_by: 'staff-9',
+			check_out_method: 'manual_override',
+			check_out_reason: 'ลืมสแกน'
+		});
+	});
+
+	it('list() still drops a doc with an unknown check_out_method', async () => {
+		const { assignments, job, volunteer } = await setup();
+		await memoryRepo.put(
+			workerDoc('shift_assignment:bad', job._id, volunteer._id, { check_out_method: 'telepathy' })
+		);
+		expect(await assignments.list()).toEqual([]);
+	});
+
+	it('a legacy worker row counts toward shift capacity (quota 2)', async () => {
+		const { volunteers, assignments, job, volunteer } = await setup();
+		const second = await volunteers.create({ ...volunteerInput, phone: '0899999999' }, ctx);
+		const third = await volunteers.create({ ...volunteerInput, phone: '0877777777' }, ctx);
+		await memoryRepo.put(workerDoc('shift_assignment:w1', job._id, volunteer._id));
+		await memoryRepo.put(workerDoc('shift_assignment:w2', job._id, second._id));
+
+		await expect(assignments.assign(assignmentInput(job._id, third._id), ctx)).rejects.toThrow(
+			'กะนี้เต็มแล้ว (2/2 คน)'
+		);
+	});
+
+	it('a legacy worker row blocks a duplicate dispatch of the same volunteer/shift', async () => {
+		const { assignments, job, volunteer } = await setup();
+		await memoryRepo.put(workerDoc('shift_assignment:w1', job._id, volunteer._id));
+
+		await expect(
+			assignments.dispatch(assignmentInput(job._id, volunteer._id), ctx)
+		).rejects.toThrow('ถูกมอบหมายในกะนี้แล้ว');
+	});
+
+	it('checkIn()/checkOut() on a legacy worker row succeed and persist the full v5 shape', async () => {
+		const { volunteers, assignments, job, volunteer } = await setup();
+		await memoryRepo.put(workerDoc('shift_assignment:w1', job._id, volunteer._id));
+
+		const checkedIn = await assignments.checkIn('shift_assignment:w1', 'staff-1');
+		expect(checkedIn).toMatchObject({
+			status: 'checked_in',
+			check_in_by: 'staff-1',
+			check_out_by: null,
+			check_out_method: 'qr',
+			check_out_reason: null
+		});
+		expect((await volunteers.get(volunteer._id))?.checked_in).toBe(true);
+
+		await memoryRepo.put(workerDoc('shift_assignment:w2', job._id, volunteer._id));
+		const checkedOut = await assignments.checkOut('shift_assignment:w2', 'staff-2');
+		expect(checkedOut).toMatchObject({
+			status: 'completed',
+			check_in_method: 'qr',
+			check_in_reason: null,
+			check_out_by: 'staff-2',
+			check_out_method: 'qr',
+			check_out_reason: null
+		});
+		const stored = await memoryRepo.get<{ _id: string }>('shift_assignment:w2');
+		expect(stored).toMatchObject({ check_out_by: 'staff-2', check_out_method: 'qr' });
+	});
+
 	it('assign() rolls the assignment back when the quota move fails', async () => {
 		const { jobs, volunteers, assignments, job, volunteer } = await setup();
 		const second = await volunteers.create({ ...volunteerInput, phone: '0899999999' }, ctx);

@@ -4,6 +4,7 @@ import { touch, type AuthorContext } from '$lib/db/model';
 import { sameDutyWindow } from '../domain/duty-window';
 import {
 	isShiftAssignment,
+	normalizeLegacyShiftAssignment,
 	shiftAssignmentSchema,
 	makeShiftAssignment,
 	type CheckInMethod,
@@ -100,7 +101,9 @@ export class ShiftAssignmentRemoteRepository implements ShiftAssignmentRepositor
 	}
 
 	async list(filter?: ShiftAssignmentFilter): Promise<ShiftAssignment[]> {
-		let all = await this.repo.allByType('shift_assignment', isShiftAssignment);
+		let all = (await this.repo.allByType('shift_assignment', isShiftAssignment)).map(
+			normalizeLegacyShiftAssignment
+		);
 		if (filter?.volunteerId) all = all.filter((a) => a.volunteer_id === filter.volunteerId);
 		if (filter?.jobId) all = all.filter((a) => a.job_id === filter.jobId);
 		if (filter?.date) all = all.filter((a) => a.date === filter.date);
@@ -118,7 +121,7 @@ export class ShiftAssignmentRemoteRepository implements ShiftAssignmentRepositor
 	async get(id: string): Promise<ShiftAssignment | null> {
 		const doc = await this.repo.get<ShiftAssignment>(id);
 		if (doc === null) return null;
-		return isShiftAssignment(doc) ? doc : null;
+		return isShiftAssignment(doc) ? normalizeLegacyShiftAssignment(doc) : null;
 	}
 
 	async dispatch(input: ShiftAssignmentInput, ctx: AuthorContext): Promise<ShiftAssignment> {
