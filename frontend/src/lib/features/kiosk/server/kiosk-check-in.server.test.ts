@@ -185,6 +185,8 @@ function configureCheckInCouchMocks(
 		householdEdits?: number;
 		/** Someone else births this household after our `_all_docs` read, before our `_bulk_docs`. */
 		householdBornDuringBulk?: FixtureHousehold;
+		/** Our household PUT lands in Couch, then the response is lost (no HTTP status). */
+		householdPutLost?: boolean;
 	} = {}
 ): void {
 	bulkWrites = [];
@@ -281,6 +283,7 @@ function configureCheckInCouchMocks(
 					throw Object.assign(new Error('conflict'), { status: 409 });
 				}
 				Object.assign(households[householdIndex], updated, { _rev: '2-household' });
+				if (options.householdPutLost) throw new TypeError('fetch failed');
 			} else {
 				throw Object.assign(new Error('not found'), { status: 404 });
 			}
@@ -1943,6 +1946,25 @@ describe('checkInSelectedMembers kiosk claim of unassigned members', () => {
 				{ shelter_code: shelterCode, device_id: deviceId, member_ids: [], pet_ids: petIds }
 			]);
 			expect(households[0].pets).toEqual([existingPet]);
+		});
+
+		it('keeps the pets claimed and logs when the household append response is lost (FR-KUC-12e)', async () => {
+			const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+			configureCheckInCouchMocks({ householdPutLost: true });
+			households.push(existingHousehold());
+			stubPetClaim();
+
+			await expect(
+				checkInSelectedMembers(shelterCode, first, [first, second], { deviceId })
+			).rejects.toBeInstanceOf(KioskUnassignedClaimFailedError);
+
+			expect(households[0].pets).toEqual([existingPet, dogRow, catRow]);
+			expect(queueCalls(revertUrl)).toEqual([]);
+			expect(warn).toHaveBeenCalledWith(expect.stringContaining('pets may stay claimed'), {
+				registration_id: registrationId,
+				shelter_code: shelterCode
+			});
+			warn.mockRestore();
 		});
 
 		it('reverts the pets with the claim when a new household is rejected', async () => {

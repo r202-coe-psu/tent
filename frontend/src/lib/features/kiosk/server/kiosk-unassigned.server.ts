@@ -257,9 +257,12 @@ async function findMissingDocIds(dbName: string, docIds: string[]): Promise<stri
 	return docIds.filter((id) => !present.has(id));
 }
 
-/** The Couch write failed; `householdWritten` says whether the household (and so its pets) landed. */
+/**
+ * The Couch write failed. `household` says whether the household (and so its pets) landed:
+ * `unknown` when a household write lost its response, so Couch may have taken it.
+ */
 class PreparedClaimWriteError extends Error {
-	constructor(readonly householdWritten: boolean) {
+	constructor(readonly household: 'written' | 'not_written' | 'unknown') {
 		super('Couch rejected the claimed documents');
 		this.name = 'PreparedClaimWriteError';
 	}
@@ -267,8 +270,12 @@ class PreparedClaimWriteError extends Error {
 
 const HOUSEHOLD_APPEND_RETRIES = 2;
 
+function httpStatus(error: unknown): unknown {
+	return (error as { status?: unknown } | null)?.status;
+}
+
 function isConflict(error: unknown): boolean {
-	return (error as { status?: unknown } | null)?.status === 409;
+	return httpStatus(error) === 409;
 }
 
 /** FR-KUC-12c: the Couch household with the claimed pets after its own, every other field kept. */
@@ -286,11 +293,12 @@ function withAppendedPets(
 
 /**
  * FR-KUC-12c: append the claimed pets to a household already in Couch — re-read, merge, PUT —
- * retrying on conflict. True once the PUT lands.
+ * retrying on conflict. True once the PUT lands; `onPut` fires as each PUT is sent.
  */
 async function appendPetsWithRetry(
 	dbName: string,
-	prepared: PreparedUnassignedClaim
+	prepared: PreparedUnassignedClaim,
+	onPut: () => void
 ): Promise<boolean> {
 	const householdPath = `/${dbName}/${encodeURIComponent(prepared.household._id)}`;
 	let attempt = 0;
@@ -298,6 +306,7 @@ async function appendPetsWithRetry(
 		attempt++;
 		const latest = await adminFetch<Record<string, unknown>>(householdPath);
 		try {
+			onPut();
 			await adminFetch(householdPath, {
 				method: 'PUT',
 				body: JSON.stringify(withAppendedPets(latest, prepared))
@@ -328,6 +337,8 @@ async function writePreparedClaim(
 	const hasPets = prepared.pets.length > 0;
 	// Unknown until the household write is known to be unneeded or to have landed.
 	let householdWritten = false;
+	// Set once a request carrying the household (or its pets) is sent.
+	let householdSent = false;
 	try {
 		const missing = new Set(
 			await findMissingDocIds(dbName, [householdId, ...prepared.evacuees.map((doc) => doc._id)])
@@ -358,11 +369,12 @@ async function writePreparedClaim(
 		];
 		let failedRows = false;
 		if (docs.length > 0) {
+			householdSent ||= newHousehold;
 			const rows = await adminFetch<Array<{ id?: string; error?: string }>>(
 				`/${dbName}/_bulk_docs`,
 				{ method: 'POST', body: JSON.stringify({ docs }) }
 			);
-			if (!Array.isArray(rows)) throw new PreparedClaimWriteError(false);
+			if (!Array.isArray(rows)) throw new PreparedClaimWriteError('not_written');
 			if (newHousehold) {
 				const householdError = rows.find((row) => row.id === householdId)?.error;
 				const bornElsewhere = householdError === 'conflict' && hasPets;
@@ -372,13 +384,20 @@ async function writePreparedClaim(
 		}
 
 		if (hasPets && !householdWritten && !failedRows) {
-			householdWritten = await appendPetsWithRetry(dbName, prepared);
+			householdWritten = await appendPetsWithRetry(dbName, prepared, () => {
+				householdSent = true;
+			});
 		}
-		if (failedRows || !householdWritten) throw new PreparedClaimWriteError(householdWritten);
+		if (failedRows || !householdWritten) {
+			throw new PreparedClaimWriteError(householdWritten ? 'written' : 'not_written');
+		}
 	} catch (error) {
-		throw error instanceof PreparedClaimWriteError
-			? error
-			: new PreparedClaimWriteError(householdWritten);
+		if (error instanceof PreparedClaimWriteError) throw error;
+		// No HTTP status (network error, timeout): Couch may have taken a household write.
+		const lost = householdSent && !householdWritten && httpStatus(error) === undefined;
+		throw new PreparedClaimWriteError(
+			householdWritten ? 'written' : lost ? 'unknown' : 'not_written'
+		);
 	}
 }
 
@@ -446,8 +465,15 @@ export async function claimUnassignedMembers(
 		// `_bulk_docs` is not atomic: keep the claim of anyone Couch did take, so Mongo matches Couch.
 		const unborn = await findMissingDocIds(dbName, toClaim).catch(() => toClaim);
 		// FR-KUC-12d: pets follow the household; once it is in Couch they stay claimed.
-		const petIds =
-			error instanceof PreparedClaimWriteError && error.householdWritten ? [] : prepared.pet_ids;
+		const household = error instanceof PreparedClaimWriteError ? error.household : 'not_written';
+		if (household === 'unknown' && prepared.pet_ids.length > 0) {
+			// FR-KUC-12e: Couch may hold the pets; reopening them risks a second append next claim.
+			console.warn('[Kiosk Claim] Household write lost; pets may stay claimed without Couch', {
+				registration_id: registration.registration_id,
+				shelter_code: shelterCode
+			});
+		}
+		const petIds = household === 'not_written' ? prepared.pet_ids : [];
 		if (unborn.length > 0 || petIds.length > 0) {
 			await revertQuietly(registration.registration_id, {
 				...revertBody,
