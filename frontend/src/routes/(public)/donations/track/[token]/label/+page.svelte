@@ -201,10 +201,12 @@
 	}
 
 	@media print {
-		:global(body) {
+		/* Scoped: SvelteKit keeps this stylesheet after navigating away, so unscoped
+		   body rules would hide other print pages in the same tab (#1057). */
+		:global(body:where(:has(.box-label-print))) {
 			margin: 0 !important;
 		}
-		:global(body > :not(.box-label-print)) {
+		:global(body:where(:has(.box-label-print)) > :not(.box-label-print)) {
 			display: none !important;
 		}
 		.box-label-print {

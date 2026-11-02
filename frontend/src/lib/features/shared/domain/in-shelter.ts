@@ -7,10 +7,11 @@
  * both are physically here, sleep here and eat here. Every headcount that sizes a
  * shelter's capacity, stock, meals or SOP needs counts exactly these — the evacuee
  * dashboard's `in_shelter` (CR-170), the shelter list, supply, the Sphere food tab, the
- * kitchen meal plan and `daily_calc.occupancy_snapshot`.
+ * kitchen meal plan and `daily_calc.occupancy_snapshot`. The worker mirrors it as
+ * `IN_SHELTER_STATUSES` for partner EXT-005 `occupancy_total` and the EXT-007 occupant list
+ * (decision sync 2026-11-02) — change both together.
  *
- * Not this definition, on purpose: the public plane's `occupancy_total` (partner EXT-005
- * contract, `active` only per CR-111) and CR-112's Forecast / Present / In-zone metrics.
+ * Not this definition, on purpose: CR-112's Forecast / Present / In-zone metrics.
  *
  * Deliberately not included: `arriving` / `pre_registered` / `kiosk_registered` (still in
  * intake), `temporary_leave` (away — CR-112 "Present" counts it for system overview only),

@@ -715,7 +715,13 @@ describe('coordinator role grants on _users (#955)', () => {
 					volunteer_id: 'volunteer:V1',
 					name: EMAIL,
 					active: true,
-					grants: [{ role: 'kitchen_staff', expires_at: grant().expires_at }],
+					grants: [
+						{
+							role: 'kitchen_staff',
+							expires_at: grant().expires_at,
+							granted_by: grant().granted_by
+						}
+					],
 					permanent_roles: ['registration_staff']
 				},
 				{
@@ -726,6 +732,30 @@ describe('coordinator role grants on _users (#955)', () => {
 					permanent_roles: []
 				}
 			]);
+		});
+
+		it('names who issued each grant here, and nothing more of the grant (CR-221 FR-8)', async () => {
+			seed(EMAIL, {
+				roles: ['shelter:SH001', 'SH001:kitchen_staff', 'SH001:facility_staff'],
+				role_grants: [
+					grant('kitchen_staff'),
+					grant('facility_staff', {
+						granted_by: 'coord-other',
+						verified_by: { shelter_code: 'SH001', volunteer_id: 'volunteer:V1' }
+					})
+				]
+			});
+
+			const [account] = await readShelterVolunteerAccounts(
+				[{ volunteer_id: 'volunteer:V1', name: EMAIL }],
+				'SH001'
+			);
+
+			expect(account.grants).toEqual([
+				{ role: 'kitchen_staff', expires_at: grant().expires_at, granted_by: 'staff03' },
+				{ role: 'facility_staff', expires_at: grant().expires_at, granted_by: 'coord-other' }
+			]);
+			expect(account.permanent_roles).toEqual([]);
 		});
 
 		it('leaves out a staff account, or one with no volunteer link, that a profile names (R2)', async () => {

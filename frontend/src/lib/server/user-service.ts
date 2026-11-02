@@ -721,8 +721,8 @@ export type ShelterVolunteerAccount = {
 	volunteer_id: string;
 	name: string;
 	active: boolean;
-	/** Coordinator grants in this shelter, each with its expiry. */
-	grants: { role: string; expires_at: string }[];
+	/** Coordinator grants in this shelter, each with its expiry and who issued it. */
+	grants: { role: string; expires_at: string; granted_by: string }[];
 	/** Roles a manager gave in this shelter (no expiry). */
 	permanent_roles: string[];
 };
@@ -759,7 +759,11 @@ export async function readShelterVolunteerAccounts(
 				volunteer_id: link.volunteer_id,
 				name: doc.name,
 				active: doc.active ?? true,
-				grants: grants.map((g) => ({ role: g.role, expires_at: g.expires_at })),
+				grants: grants.map((g) => ({
+					role: g.role,
+					expires_at: g.expires_at,
+					granted_by: g.granted_by
+				})),
 				permanent_roles: capabilitiesForShelter(doc.roles ?? [], shelterCode).filter(
 					(role) => !granted.has(role)
 				)
