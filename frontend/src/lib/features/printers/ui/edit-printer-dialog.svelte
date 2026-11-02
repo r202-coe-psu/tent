@@ -64,6 +64,7 @@
 	// svelte-ignore state_referenced_locally
 	let kioskDeviceId = $state<string | null>(printer.kiosk_device_id ?? null);
 	let confirmDeleteOpen = $state(false);
+	let confirmRotateOpen = $state(false);
 
 	/** Only the changed fields; `null` when nothing changed (or the name is blank). */
 	const patch = $derived.by((): PrinterPatch | null => {
@@ -103,6 +104,7 @@
 		try {
 			const result = await rotateMutation.mutateAsync(printer.device_id);
 			toast.success(t.edit.rotateDone);
+			confirmRotateOpen = false;
 			open = false;
 			onrotated?.(result);
 			// The secret now lives only in the reveal dialog; drop the mutation's own copy.
@@ -224,7 +226,7 @@
 						variant="outline"
 						class="min-h-11 gap-1.5"
 						disabled={busy}
-						onclick={rotate}
+						onclick={() => (confirmRotateOpen = true)}
 					>
 						<KeyRound class="h-4 w-4" />
 						{t.edit.rotate}
@@ -288,6 +290,28 @@
 		</Dialog.Footer>
 	</Dialog.Content>
 </Dialog.Root>
+
+<AlertDialog.Root bind:open={confirmRotateOpen}>
+	<AlertDialog.Content class="max-w-md">
+		<AlertDialog.Header>
+			<AlertDialog.Title>{t.edit.rotateConfirmTitle}</AlertDialog.Title>
+			<AlertDialog.Description class="space-y-2 pt-2 text-sm">
+				<span class="block">{t.edit.rotateConfirmBody(printer.name)}</span>
+				<span class="block font-medium text-destructive">{t.edit.rotateConfirmWarning}</span>
+			</AlertDialog.Description>
+		</AlertDialog.Header>
+		<AlertDialog.Footer>
+			<AlertDialog.Cancel disabled={rotateMutation.isPending}>{t.edit.cancel}</AlertDialog.Cancel>
+			<AlertDialog.Action
+				class="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+				disabled={rotateMutation.isPending}
+				onclick={rotate}
+			>
+				{rotateMutation.isPending ? t.edit.rotating : t.edit.rotate}
+			</AlertDialog.Action>
+		</AlertDialog.Footer>
+	</AlertDialog.Content>
+</AlertDialog.Root>
 
 <AlertDialog.Root bind:open={confirmDeleteOpen}>
 	<AlertDialog.Content class="max-w-md">

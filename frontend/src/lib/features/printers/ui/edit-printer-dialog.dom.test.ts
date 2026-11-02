@@ -136,19 +136,52 @@ describe('EditPrinterDialog kiosk link', () => {
 		expect(toast.error).toHaveBeenCalledWith('ไม่พบตู้ kiosk นี้ในศูนย์ของเครื่องพิมพ์');
 	});
 
-	it('hands the rotated secret to the page and resets the mutation so it is not kept', async () => {
-		const result = { device: printer(), secret: 'sk_print_new' };
-		rotateMutateAsync.mockResolvedValue(result);
-		const onrotated = vi.fn();
+	const rotateButton = (root: ParentNode = document.body) =>
+		[...root.querySelectorAll('button')].find(
+			(b) => b.textContent?.replace(/\s+/g, ' ').trim() === 'ออก Secret ใหม่'
+		);
+	const confirmDialog = () => document.body.querySelector('[role="alertdialog"]');
+
+	async function mountWithRotate(onrotated = vi.fn()) {
 		instance = mount(EditPrinterDialog, {
 			target: document.body,
 			props: { open: true, printer: printer(), kioskDevices, onrotated }
 		});
 		await settle();
+		return onrotated;
+	}
 
-		[...document.body.querySelectorAll('button')]
-			.find((b) => b.textContent?.replace(/\s+/g, ' ').trim() === 'ออก Secret ใหม่')
+	it('asks for confirmation before issuing a new secret', async () => {
+		await mountWithRotate();
+
+		rotateButton()?.click();
+		await settle();
+
+		expect(rotateMutateAsync).not.toHaveBeenCalled();
+		expect(confirmDialog()?.textContent).toContain('เครื่อง Pi จะออฟไลน์');
+	});
+
+	it('does not issue a secret when the confirmation is cancelled', async () => {
+		await mountWithRotate();
+		rotateButton()?.click();
+		await settle();
+
+		[...(confirmDialog()?.querySelectorAll('button') ?? [])]
+			.find((b) => b.textContent?.trim() === 'ยกเลิก')
 			?.click();
+		await settle();
+
+		expect(rotateMutateAsync).not.toHaveBeenCalled();
+	});
+
+	it('hands the rotated secret to the page and resets the mutation so it is not kept', async () => {
+		const result = { device: printer(), secret: 'sk_print_new' };
+		rotateMutateAsync.mockResolvedValue(result);
+		const onrotated = await mountWithRotate();
+
+		rotateButton()?.click();
+		await settle();
+		rotateButton(confirmDialog() ?? undefined)?.click();
 		await settle();
 
 		expect(onrotated).toHaveBeenCalledWith(result);

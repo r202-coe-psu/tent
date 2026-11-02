@@ -121,6 +121,11 @@ export const PRINTERS_I18N = {
 				connectionSection: 'การเชื่อมต่อและทดสอบ',
 				rotate: 'ออก Secret ใหม่',
 				rotateHint: 'เครื่องเดิมที่ใช้ Secret เก่าจะเชื่อมต่อไม่ได้ทันที',
+				rotateConfirmTitle: 'ยืนยันการออก Secret ใหม่',
+				rotateConfirmBody: (name: string) => `ออก Device Secret ใหม่ให้เครื่อง ${name}`,
+				rotateConfirmWarning:
+					'Secret เก่าจะใช้ไม่ได้ทันที เครื่อง Pi จะออฟไลน์จนกว่าจะนำ Secret ใหม่ไปติดตั้งในไฟล์ .env และรีสตาร์ทโปรแกรม printer',
+				rotating: 'กำลังออก Secret...',
 				rotateDone: 'ออก Device Secret ใหม่แล้ว',
 				testPrint: 'พิมพ์ทดสอบ',
 				testPrintHint: 'ส่งฉลากทดสอบ (ไม่มีข้อมูลบุคคล) ไปที่เครื่องนี้',
@@ -289,6 +294,11 @@ export const PRINTERS_I18N = {
 				connectionSection: 'Connection and test',
 				rotate: 'Issue a new Secret',
 				rotateHint: 'The Pi using the old secret is cut off immediately',
+				rotateConfirmTitle: 'Issue a new Secret?',
+				rotateConfirmBody: (name: string) => `Issue a new Device Secret for ${name}.`,
+				rotateConfirmWarning:
+					'The old secret stops working immediately. The Pi stays offline until the new secret is installed in its .env and the printer program is restarted.',
+				rotating: 'Issuing...',
 				rotateDone: 'New Device Secret issued',
 				testPrint: 'Test print',
 				testPrintHint: 'Send a test label (no personal data) to this printer',
