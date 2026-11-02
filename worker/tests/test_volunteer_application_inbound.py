@@ -69,6 +69,7 @@ def test_shift_assignment_doc_carries_every_required_method_field() -> None:
     doc = _shift_assignment_doc(_application(), now="2026-09-09T00:00:00Z")
 
     assert doc["_id"] == "shift_assignment:01APP"
+    assert doc["schema_v"] == 5
     assert doc["check_in_method"] == "qr"
     assert doc["check_in_reason"] is None
     assert doc["check_in_by"] is None
