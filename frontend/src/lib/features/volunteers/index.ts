@@ -114,7 +114,6 @@ export { default as RosterAttendanceTab } from './ui/roster-attendance-tab.svelt
 export { default as RosterLiveAttendanceBar } from './ui/roster-live-attendance-bar.svelte';
 export { default as RosterScanBar } from './ui/roster-scan-bar.svelte';
 export { default as RosterRow } from './ui/roster-row.svelte';
-export { default as RosterManualCheckinDialog } from './ui/roster-manual-checkin-dialog.svelte';
 export { default as RosterAuditTrailDialog } from './ui/roster-audit-trail-dialog.svelte';
 
 // ui — On-Site (จุดเช็คอินอาสาสมัครหน้างาน, /onsite/volunteer-check-in)

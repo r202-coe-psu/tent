@@ -86,18 +86,27 @@
 
 	const busy = $derived(resolving || mutation.isPending);
 
-	$effect(() => {
-		if (!open) {
+	// Every way of closing (cancel, success, Esc, outside click) goes through here so the next
+	// open starts clean.
+	function setOpen(next: boolean) {
+		open = next;
+		if (!next) {
 			reason = '';
 			scanError = null;
 		}
-	});
+	}
+
+	/** The inline text is the field hint; the toast is the project's feedback channel. */
+	function showScanError(message: string) {
+		scanError = message;
+		toast.error(message);
+	}
 
 	async function confirm(method: CheckInMethod, manualReason?: string) {
 		try {
 			await mutation.mutateAsync({ id: assignment._id, method, reason: manualReason });
 			toast.success(`${copy.done} ${personName} แล้ว`);
-			open = false;
+			setOpen(false);
 		} catch (err) {
 			toast.error(err instanceof Error ? err.message : copy.failed);
 		}
@@ -108,16 +117,26 @@
 		resolving = true;
 		scanError = null;
 		try {
-			const scanned = await lookupVolunteerByScanCode(raw).catch(() => null);
+			let scanned: Volunteer | null;
+			try {
+				scanned = await lookupVolunteerByScanCode(raw);
+			} catch {
+				// A network/repository failure says nothing about the QR itself.
+				if (open)
+					showScanError('ค้นหาอาสาสมัครจาก QR ไม่สำเร็จ — ตรวจสอบการเชื่อมต่อแล้วลองสแกนใหม่');
+				return;
+			}
 			// Staff may have cancelled while the lookup ran; never write after that.
 			if (!open) return;
 			const result = matchCheckInScan(assignment.volunteer_id, scanned);
 			if (result.kind === 'match') {
 				await confirm('qr');
 			} else if (result.kind === 'mismatch') {
-				scanError = `QR นี้เป็นของ ${result.scannedName} (${result.scannedCode}) ไม่ใช่ ${personName}`;
+				showScanError(
+					`QR นี้เป็นของ ${result.scannedName} (${result.scannedCode}) ไม่ใช่ ${personName}`
+				);
 			} else {
-				scanError = `ไม่พบอาสาสมัครจาก QR นี้ — โปรดสแกน QR ของ ${personName}`;
+				showScanError(`ไม่พบอาสาสมัครจาก QR นี้ — โปรดสแกน QR ของ ${personName}`);
 			}
 		} finally {
 			resolving = false;
@@ -132,7 +151,7 @@
 	}
 </script>
 
-<Dialog.Root bind:open>
+<Dialog.Root {open} onOpenChange={setOpen}>
 	<Dialog.Content class="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-md">
 		<Dialog.Header>
 			<Dialog.Title class="flex items-center gap-2">
@@ -199,12 +218,12 @@
 		</section>
 
 		<div class="flex justify-end gap-2">
-			<Button variant="outline" disabled={mutation.isPending} onclick={() => (open = false)}>
+			<Button variant="outline" disabled={mutation.isPending} onclick={() => setOpen(false)}>
 				ยกเลิก
 			</Button>
 			<Button
 				class={mode === 'check_out'
-					? 'gap-1.5 bg-amber-500 text-white hover:bg-amber-600'
+					? 'gap-1.5 bg-amber-700 text-white hover:bg-amber-800'
 					: 'gap-1.5 bg-emerald-600 text-white hover:bg-emerald-700'}
 				disabled={!reason.trim() || busy}
 				onclick={confirmManual}

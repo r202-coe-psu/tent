@@ -343,6 +343,68 @@ describe('ShiftAssignmentRemoteRepository', () => {
 		expect(withReason.check_out_reason).toBe('ลืมสแกนออกก่อนกลับ');
 	});
 
+	it('checkIn() refuses an assignment that is already checked in and keeps the first record', async () => {
+		const { assignments, job, volunteer } = await setup();
+		const assignment = await assignments.dispatch(assignmentInput(job._id, volunteer._id), ctx);
+		const first = await assignments.checkIn(assignment._id, 'staff-1');
+
+		await expect(assignments.checkIn(assignment._id, 'staff-2')).rejects.toThrow(
+			'อาสาสมัครเช็คอินไปแล้ว'
+		);
+
+		const stored = await assignments.get(assignment._id);
+		expect(stored?.check_in_by).toBe('staff-1');
+		expect(stored?.check_in_at).toBe(first.check_in_at);
+	});
+
+	it('checkIn() refuses a completed assignment', async () => {
+		const { assignments, job, volunteer } = await setup();
+		const assignment = await assignments.dispatch(assignmentInput(job._id, volunteer._id), ctx);
+		await assignments.checkIn(assignment._id, 'staff-1');
+		await assignments.checkOut(assignment._id, 'staff-1');
+
+		await expect(assignments.checkIn(assignment._id, 'staff-2')).rejects.toThrow(
+			/ไม่อยู่ในสถานะที่เช็คอินได้/
+		);
+		expect((await assignments.get(assignment._id))?.status).toBe('completed');
+	});
+
+	it('checkOut() refuses a second check-out and keeps the first by/at/method/reason', async () => {
+		const { assignments, job, volunteer } = await setup();
+		const assignment = await assignments.dispatch(assignmentInput(job._id, volunteer._id), ctx);
+		await assignments.checkIn(assignment._id, 'staff-1');
+		const first = await assignments.checkOut(
+			assignment._id,
+			'staff-A',
+			'manual_override',
+			'ลืมสแกนออก'
+		);
+
+		await expect(assignments.checkOut(assignment._id, 'staff-B')).rejects.toThrow(
+			'อาสาสมัครเช็คเอาต์ไปแล้ว'
+		);
+
+		const stored = await assignments.get(assignment._id);
+		expect(stored?.check_out_by).toBe('staff-A');
+		expect(stored?.check_out_at).toBe(first.check_out_at);
+		expect(stored?.check_out_method).toBe('manual_override');
+		expect(stored?.check_out_reason).toBe('ลืมสแกนออก');
+	});
+
+	it('checkOut() refuses an assignment that was never checked in and writes nothing', async () => {
+		const { volunteers, assignments, job, volunteer } = await setup();
+		const assignment = await assignments.dispatch(assignmentInput(job._id, volunteer._id), ctx);
+
+		await expect(assignments.checkOut(assignment._id, 'staff-2')).rejects.toThrow(
+			'ยังไม่ได้เช็คอิน'
+		);
+
+		const stored = await assignments.get(assignment._id);
+		expect(stored?.status).toBe(assignment.status);
+		expect(stored?.check_out_at).toBeNull();
+		expect((await volunteers.get(volunteer._id))?.checked_in).toBe(false);
+	});
+
 	it('list() filters by volunteerId/jobId/date/status', async () => {
 		const { assignments, job, volunteer } = await setup();
 		await assignments.dispatch(assignmentInput(job._id, volunteer._id), ctx);

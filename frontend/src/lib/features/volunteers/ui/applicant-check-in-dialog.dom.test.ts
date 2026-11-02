@@ -190,7 +190,7 @@ describe('ApplicantCheckInDialog', () => {
 			expect(alert?.textContent).toContain('QR นี้เป็นของ สมชาย ใจดี (V-002) ไม่ใช่ สมชาย ใจดี');
 		});
 
-		it('refuses a QR that matches nobody', async () => {
+		it('refuses a QR that matches nobody, inline and by toast', async () => {
 			lookup.mockResolvedValue(null);
 			await render();
 			await scan('hello');
@@ -199,15 +199,27 @@ describe('ApplicantCheckInDialog', () => {
 			expect(document.body.querySelector('[role="alert"]')?.textContent).toContain(
 				'ไม่พบอาสาสมัคร'
 			);
+			expect(toast.error).toHaveBeenCalledWith(expect.stringContaining('ไม่พบอาสาสมัคร'));
 		});
 
-		it('treats a failing lookup as an unknown QR', async () => {
+		it('says the lookup failed, not that the QR is unknown, when the lookup throws', async () => {
 			lookup.mockRejectedValue(new Error('offline'));
 			await render();
 			await scan('TKT-VOL-X');
 
 			expect(mutateAsync).not.toHaveBeenCalled();
-			expect(document.body.querySelector('[role="alert"]')).not.toBeNull();
+			const alert = document.body.querySelector('[role="alert"]')?.textContent ?? '';
+			expect(alert).toContain('ค้นหาอาสาสมัครจาก QR ไม่สำเร็จ');
+			expect(alert).not.toContain('ไม่พบอาสาสมัคร');
+			expect(toast.error).toHaveBeenCalledWith(expect.stringContaining('ไม่สำเร็จ'));
+		});
+
+		it('toasts a QR of another volunteer', async () => {
+			lookup.mockResolvedValue({ ...volunteer, _id: 'volunteer:002', volunteer_code: 'V-002' });
+			await render();
+			await scan('V-002');
+
+			expect(toast.error).toHaveBeenCalledWith(expect.stringContaining('V-002'));
 		});
 	});
 });
@@ -238,6 +250,80 @@ describe('ApplicantCheckInDialog in check_out mode (#1089)', () => {
 		});
 		expect(mutateAsync).not.toHaveBeenCalled();
 		expect(toast.success).toHaveBeenCalledWith('เช็คเอาต์ออกงาน สมชาย ใจดี แล้ว');
+	});
+
+	it('shows who, the code, the shift and when they checked in', async () => {
+		await render('check_out');
+		const text = document.body.textContent ?? '';
+		expect(text).toContain('สมชาย ใจดี');
+		expect(text).toContain('V-001');
+		expect(text).toContain('2026-09-05 · 08:00 - 16:00 น.');
+		expect(text).toContain('เช็คอินเมื่อ');
+	});
+
+	it('closes without writing on ยกเลิก and stops the camera', async () => {
+		await render('check_out');
+		expect(camera.stop).not.toHaveBeenCalled();
+
+		button('ยกเลิก').click();
+		await settle();
+
+		expect(checkOutAsync).not.toHaveBeenCalled();
+		expect(mutateAsync).not.toHaveBeenCalled();
+		expect(camera.stop).toHaveBeenCalled();
+	});
+
+	it('reports a failed check-out and leaves the dialog open', async () => {
+		checkOutAsync.mockRejectedValue(new Error('อาสาสมัครเช็คเอาต์ไปแล้ว'));
+		await render('check_out');
+		await typeReason('กลับก่อนเวลา');
+		button('ยืนยันเช็คเอาต์').click();
+		await settle();
+
+		expect(toast.error).toHaveBeenCalledWith('อาสาสมัครเช็คเอาต์ไปแล้ว');
+		expect(toast.success).not.toHaveBeenCalled();
+		expect(document.body.querySelector('[role="dialog"]')).not.toBeNull();
+		expect(camera.stop).not.toHaveBeenCalled();
+	});
+
+	it('reports a failed scan check-out without closing', async () => {
+		lookup.mockResolvedValue(volunteer);
+		checkOutAsync.mockRejectedValue(new Error('บันทึกไม่สำเร็จ'));
+		await render('check_out');
+		await scan('TKT-VOL-ABC');
+
+		expect(toast.error).toHaveBeenCalledWith('บันทึกไม่สำเร็จ');
+		expect(document.body.querySelector('[role="dialog"]')).not.toBeNull();
+	});
+
+	it('refuses a QR that matches nobody', async () => {
+		lookup.mockResolvedValue(null);
+		await render('check_out');
+		await scan('hello');
+
+		expect(checkOutAsync).not.toHaveBeenCalled();
+		expect(document.body.querySelector('[role="alert"]')?.textContent).toContain('ไม่พบอาสาสมัคร');
+	});
+
+	it('says the lookup failed when it throws, and writes nothing', async () => {
+		lookup.mockRejectedValue(new Error('offline'));
+		await render('check_out');
+		await scan('TKT-VOL-X');
+
+		expect(checkOutAsync).not.toHaveBeenCalled();
+		const alert = document.body.querySelector('[role="alert"]')?.textContent ?? '';
+		expect(alert).toContain('ค้นหาอาสาสมัครจาก QR ไม่สำเร็จ');
+		expect(toast.error).toHaveBeenCalled();
+	});
+
+	it('stops the camera when the dialog closes after a successful check-out', async () => {
+		lookup.mockResolvedValue(volunteer);
+		await render('check_out');
+		await scan('TKT-VOL-ABC');
+		await settle();
+
+		expect(checkOutAsync).toHaveBeenCalledOnce();
+		expect(camera.stop).toHaveBeenCalled();
 	});
 
 	it('refuses a QR of another volunteer', async () => {
