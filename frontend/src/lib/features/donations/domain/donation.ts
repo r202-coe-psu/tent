@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { type BaseDoc } from '$lib/db/model';
+import { thaiMobilePhoneSchema, type BaseDoc } from '$lib/db/model';
 import type { DonationStatus } from '$lib/features/operations';
 import { isRealCalendarDate, SLOT_TIME_PATTERN } from '$lib/features/operations/server';
 import { qtyStrCoercePositiveSchema } from '$lib/utils/qty';
@@ -100,7 +100,7 @@ export const donationPreDeclarationInputSchema = z.object({
 	shelter_code: z.string().regex(/^[A-Za-z0-9_-]{1,20}$/, 'Invalid shelter code.'),
 	donor: z.object({
 		name: z.string().min(1, 'Name is required'),
-		phone: z.string().min(1, 'Phone is required'),
+		phone: thaiMobilePhoneSchema, // CR-210: 10-digit mobile, normalised
 		line_id: z.string().optional(),
 		email: z.string().email().optional().or(z.literal(''))
 	}),
@@ -110,18 +110,15 @@ export const donationPreDeclarationInputSchema = z.object({
 				// item_id links the donation to a catalog item so needs_open can be reduced
 				// (schema.md §2.3 — item_id OR free_text). The board pre-fills item_id from a need card.
 				item_id: z.string().optional(),
+				// FR-AP-7a — the point of the board card the donor pressed. Only the BFF reads it,
+				// to pick the campaign; it is never stored or forwarded. Absent = not from a card.
+				need_drop_off_point_id: z.string().nullable().optional(),
 				free_text: z.string().min(1, 'Please enter an item name'),
 				category: z.string().optional(),
 				qty: qtyStrCoercePositiveSchema,
 				unit: z.string().min(1, 'Please enter a unit'),
 				condition: z.string().optional(),
-				note: z.string().optional(),
-				/**
-				 * The drop-off point this line goes to (CR-206 FR-MP-1) — `public_shelters.donation_points[].id`.
-				 * FastAPI checks it against the shelter (FR-MP-2, FR-MP-3); the BFF clears it for any
-				 * delivery but `self_dropoff` (FR-MP-4).
-				 */
-				drop_off_point_id: z.string().trim().min(1).max(64).nullable().optional()
+				note: z.string().optional()
 			})
 		)
 		.min(1, 'Please add at least one item to the donation'),

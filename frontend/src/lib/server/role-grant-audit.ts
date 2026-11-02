@@ -22,6 +22,8 @@ export type RoleGrantAudit = {
 	actor: string;
 	/** On issue / renew / shorten: the verified profile and who verified it (FR-14). */
 	verified_by?: RoleGrant['verified_by'];
+	/** On a revoke / renew / shorten / replace of an existing grant: who issued it (CR-221 FR-19). */
+	granted_by?: string;
 };
 
 export const AUDIT_WRITE_ATTEMPTS = 3;
@@ -43,6 +45,7 @@ export async function recordRoleGrantAudit(input: RoleGrantAudit): Promise<boole
 			? { previous_expires_at: input.previous_expires_at }
 			: {}),
 		actor: input.actor,
+		...(input.granted_by ? { granted_by: input.granted_by } : {}),
 		...(input.verified_by ? { verified_by: input.verified_by } : {})
 	};
 	// One `_id` for every attempt: a retry after a write that did land answers 409, not a second audit.

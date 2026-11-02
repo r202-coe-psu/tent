@@ -150,4 +150,21 @@ describe('public application review safeguards', () => {
 		});
 		expect(state.put).not.toHaveBeenCalled();
 	});
+	it('holds an application on an inactive profile for review without reactivating it', async () => {
+		const inactive = { ...volunteer, status: 'inactive' };
+		state.find.mockImplementation(async (_db: string, selector: Record<string, unknown>) => ({
+			status: 200,
+			data: { docs: selector.type === 'volunteer' ? [inactive] : [] }
+		}));
+
+		const result = await applyPublicVolunteerApplication('job:target', input);
+
+		expect(result.status).toBe('pending_review');
+		const docs = state.put.mock.calls.map((call) => call[2] as Record<string, unknown>);
+		const application = docs.find((doc) => doc.type === 'job_application');
+		expect(application).toMatchObject({ status: 'pending_review', volunteer_id: inactive._id });
+		const profile = docs.filter((doc) => doc.type === 'volunteer');
+		expect(profile).toHaveLength(1);
+		expect(profile[0]).toMatchObject({ _id: inactive._id, status: 'inactive' });
+	});
 });

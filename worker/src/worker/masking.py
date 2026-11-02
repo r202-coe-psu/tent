@@ -85,14 +85,17 @@ def mask_passport(passport_id: str) -> str:
     return f"{value[0]}...{value[-2:]}{'*' * max(0, len(value) - 4)}"
 
 
+_INTL_PHONE = re.compile(r"^\+?66(\d{8,9})$")
+
+
 def normalize_phone(phone: str) -> str:
-    """Digit-only Thai local form — strips spaces/dashes; ``+66`` → leading ``0``."""
-    digits = re.sub(r"[\s\-()]+", "", phone)
-    if digits.startswith("+66"):
-        digits = f"0{digits[3:]}"
-    elif digits.startswith("66") and len(digits) >= 11:
-        digits = f"0{digits[2:]}"
-    return digits
+    """Digit-only Thai local form — strips spaces/dashes/dots/parentheses; ``+66``/``66`` → ``0``.
+
+    Must match ``normalizeThaiPhone`` in ``frontend/src/lib/db/model.ts`` so ``phone_hash`` agrees.
+    """
+    compact = re.sub(r"[\s\-.()]+", "", phone.strip())
+    intl = _INTL_PHONE.fullmatch(compact)
+    return f"0{intl.group(1)}" if intl else compact
 
 
 def phone_hash(phone: str | None) -> str | None:

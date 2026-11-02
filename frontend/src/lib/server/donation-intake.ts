@@ -65,9 +65,11 @@ export function shelterDb(code: string): string {
  * it those donations could be listed but never opened, approved, or received.
  */
 export async function findDonationByQuery(
-	query: string
+	query: string,
+	/** Limit the lookup to these shelters (a non-SA caller's own); default every shelter. */
+	onlyShelters?: readonly string[]
 ): Promise<{ donation: PublicDonationDoc; dbName: string } | null> {
-	const shelterCodes = await listShelterCodes();
+	const shelterCodes = onlyShelters ? [...onlyShelters] : await listShelterCodes();
 
 	const tokenHash = await sha256Hex(query);
 
@@ -82,6 +84,40 @@ export async function findDonationByQuery(
 		if (match) return { donation: match, dbName };
 	}
 	return null;
+}
+
+/**
+ * The ONE shelter a "รับแล้ว" read is about (#821 FR-9a) — shared by the list
+ * (`GET ?status=received`) and the search (`POST received/search`) so both answer alike.
+ *
+ * A CouchDB bookmark cannot span databases, and a masked list that mixed shelters would hide
+ * which one a row belongs to, so the answer is exactly one shelter:
+ * - system admin: must name it (400 without); it must be registered (404) — the code lands in
+ *   a CouchDB path under admin credentials, so `x/../../_users` is not let through;
+ * - everyone else: their own shelter; naming another one is a 403.
+ *
+ * Returns the code, or the `Response` to send back (400 / 404). A caller with no shelter at
+ * all, or asking for another one, is thrown as a 403 like the rest of this surface.
+ */
+export async function resolveReceivedShelter(
+	caller: Caller,
+	requested: string | null | undefined
+): Promise<{ code: string } | { response: Response }> {
+	const wanted = requested?.trim() || null;
+	if (caller.isSA) {
+		if (!wanted) {
+			return {
+				response: json({ success: false, error: 'shelter is required' }, { status: 400 })
+			};
+		}
+		if (!(await listShelterCodes()).includes(wanted)) {
+			return { response: json({ success: false, error: 'Unknown shelter' }, { status: 404 }) };
+		}
+		return { code: wanted };
+	}
+	if (!caller.shelterCode) throw error(403, 'No shelter scope');
+	if (wanted && wanted !== caller.shelterCode) throw error(403, 'Forbidden');
+	return { code: caller.shelterCode };
 }
 
 /** Shelter-scope isolation: non-SA callers only touch their own shelter's donations. */

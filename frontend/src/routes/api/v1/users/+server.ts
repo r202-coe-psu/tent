@@ -8,6 +8,8 @@ import {
 } from '$lib/server/couch-admin';
 import { createOrMergeUser, deleteUser, listUsers, updateUser } from '$lib/server/user-service';
 import { validateProvisionedPassword } from '$lib/server/password-policy';
+import { shelterCodesFromRoles } from '$lib/auth/roles';
+import { assertVolunteerVerifiedForAccess } from '$lib/features/volunteers/server/volunteer-access-grant';
 
 // Service plane `/api/v1/*` — dev BFF mirroring the canonical contract
 // (api-contract.md §2/§3) so it is a drop-in swap for the future FastAPI.
@@ -104,6 +106,10 @@ export const POST: RequestHandler = async ({ request }) => {
 			throw new ServiceError('VALIDATION', 'display_name must be at least 1 character');
 
 		assertCanGrant(caller, roles);
+		// An account linked to a volunteer profile needs the profile verified in the shelter it is
+		// given roles in (CR-221 FR-3): the SA / SM grant path creates its account here.
+		if (volunteer_id)
+			await assertVolunteerVerifiedForAccess(shelterCodesFromRoles(roles), volunteer_id);
 		const result = await createOrMergeUser(
 			{
 				name,
