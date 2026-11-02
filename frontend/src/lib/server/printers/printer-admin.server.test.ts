@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 // eslint-disable-next-line no-restricted-imports -- server-safe domain schema; feature barrel pulls client UI/query code
 import { printLabelSchema } from '$lib/features/printers/domain/print-job.schema';
 import { PrinterOfflineError } from './print-jobs.server';
@@ -878,5 +878,27 @@ describe('updatePrinter kiosk link', () => {
 			updatePrinter(updateDeps(store, fakeJobs()), original._id, { kiosk_device_id: id }, NOW)
 		).rejects.toMatchObject({ code });
 		expect(docs.get(original._id)).toEqual(original);
+	});
+
+	it('reads the printer once when linking and reactivating in one patch', async () => {
+		const original = { ...kiosk(), status: 'inactive' as const };
+		const { store, docs } = fakeStore([original]);
+		const getDevice = vi.spyOn(store, 'getDevice');
+		const ensured: string[] = [];
+
+		await updatePrinter(
+			{
+				...updateDeps(store, fakeJobs()),
+				ensureShelterDb: async (code: string) => void ensured.push(code)
+			},
+			original._id,
+			{ kiosk_device_id: 'kiosk-a', status: 'active' },
+			NOW
+		);
+
+		// one pre-check read + one read inside mutateDevice
+		expect(getDevice).toHaveBeenCalledTimes(2);
+		expect(ensured).toEqual(['SH001']);
+		expect(docs.get(original._id)).toMatchObject({ kiosk_device_id: 'kiosk-a', status: 'active' });
 	});
 });

@@ -328,21 +328,20 @@ export async function updatePrinter(
 	patch: PrintDevicePatch,
 	now: Date
 ): Promise<PrinterSummary> {
-	if (patch.kiosk_device_id) {
+	const ensureShelterDb = patch.status === 'active' ? deps.ensureShelterDb : undefined;
+	if (patch.kiosk_device_id || ensureShelterDb) {
 		const current = await deps.devices.getDevice(printerId);
 		if (!current) throw new PrintDeviceNotFoundError();
-		if (current.host_kind !== 'kiosk') {
-			throw new PrintDeviceValidationError(
-				'KIOSK_DEVICE_REQUIRES_KIOSK_HOST',
-				KIOSK_LINK_NEEDS_KIOSK
-			);
+		if (patch.kiosk_device_id) {
+			if (current.host_kind !== 'kiosk') {
+				throw new PrintDeviceValidationError(
+					'KIOSK_DEVICE_REQUIRES_KIOSK_HOST',
+					KIOSK_LINK_NEEDS_KIOSK
+				);
+			}
+			await assertKioskDeviceInShelter(deps.scanners, current.shelter_code, patch.kiosk_device_id);
 		}
-		await assertKioskDeviceInShelter(deps.scanners, current.shelter_code, patch.kiosk_device_id);
-	}
-	if (patch.status === 'active' && deps.ensureShelterDb) {
-		const current = await deps.devices.getDevice(printerId);
-		if (!current) throw new PrintDeviceNotFoundError();
-		await deps.ensureShelterDb(current.shelter_code);
+		if (ensureShelterDb) await ensureShelterDb(current.shelter_code);
 	}
 	const doc = await mutateDevice(deps.devices, printerId, now, (current) => ({
 		...current,
