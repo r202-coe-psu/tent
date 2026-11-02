@@ -229,6 +229,12 @@ export class ShiftAssignmentRemoteRepository implements ShiftAssignmentRepositor
 	): Promise<ShiftAssignment> {
 		const latest = await this.repo.get<ShiftAssignment>(id);
 		if (!latest) throw new Error(`ไม่พบตารางเข้าเวร: ${id}`);
+		// Another staff device may have moved this assignment since the screen loaded; never
+		// overwrite their check-in/out (and its actor/method audit) with a stale click.
+		if (latest.status === 'checked_in') throw new Error('อาสาสมัครเช็คอินไปแล้ว');
+		if (latest.status !== 'assigned' && latest.status !== 'standby') {
+			throw new Error('ตารางเข้าเวรนี้ไม่อยู่ในสถานะที่เช็คอินได้');
+		}
 		if (method === 'manual_override' && !reason) {
 			throw new Error('กรุณาระบุเหตุผลเมื่อเช็คอินแทน (Manual Override)');
 		}
@@ -254,6 +260,10 @@ export class ShiftAssignmentRemoteRepository implements ShiftAssignmentRepositor
 	): Promise<ShiftAssignment> {
 		const latest = await this.repo.get<ShiftAssignment>(id);
 		if (!latest) throw new Error(`ไม่พบตารางเข้าเวร: ${id}`);
+		// Same stale-screen guard as `checkIn`: a second check-out must not replace the first
+		// one's `check_out_by/at/method`.
+		if (latest.status === 'completed') throw new Error('อาสาสมัครเช็คเอาต์ไปแล้ว');
+		if (latest.status !== 'checked_in') throw new Error('ยังไม่ได้เช็คอิน');
 		if (method === 'manual_override' && !reason) {
 			throw new Error('กรุณาระบุเหตุผลเมื่อเช็คเอาต์แทน (Manual Override)');
 		}
