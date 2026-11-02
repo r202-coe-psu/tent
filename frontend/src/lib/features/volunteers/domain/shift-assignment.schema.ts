@@ -91,14 +91,14 @@ export interface ShiftAssignment extends BaseDoc {
 	status: ShiftAssignmentStatus;
 	/** CR-094 §3.2 — set while a dispatch offer is outstanding / being decided. */
 	dispatch_status?: DispatchStatus | null;
-	/** Legacy docs (e.g. worker-written v4) omit this: missing/null means unknown ("ไม่ระบุ"). CR-094 §3.2 — `manual_override` requires `check_in_reason`. */
-	check_in_method?: CheckInMethod | null;
+	/** CR-094 §3.2 — default `qr`; `manual_override` requires `check_in_reason`. */
+	check_in_method: CheckInMethod;
 	/** CR-094 §3.2 — required when `check_in_method === 'manual_override'` (FR-VOL-11.2). */
-	check_in_reason?: string | null;
-	/** Missing/null on legacy docs = unknown. CR-108 — `manual_override` requires `check_out_reason`. */
-	check_out_method?: CheckInMethod | null;
+	check_in_reason: string | null;
+	/** CR-108 — default `qr`; `manual_override` requires `check_out_reason`. */
+	check_out_method: CheckInMethod;
 	/** CR-108 — required when `check_out_method === 'manual_override'`. */
-	check_out_reason?: string | null;
+	check_out_reason: string | null;
 }
 
 /** F12 — schema.md §2.9 v1 → v2 migration writes `job_id: 'legacy'` on rows that predate the `job` link; new writes must still use `job:{ulid}`. */
@@ -106,7 +106,25 @@ const jobIdSchema = z.string().refine((v) => v === 'legacy' || v.startsWith('job
 	message: 'job_id ต้องขึ้นต้นด้วย job: (หรือเป็น "legacy" สำหรับข้อมูลเก่า)'
 });
 
-export const shiftAssignmentSchema = z
+/**
+ * schema.md §2.9 "Migration (schema_v 4 → 5)": docs older than v5 (e.g. worker-written v4) lack
+ * `check_out_by/method/reason`; fill the documented defaults (null / 'qr' / null) on read.
+ * Fills missing keys only — present values (even null) are never overwritten.
+ */
+export function normalizeLegacyShiftAssignment<T>(doc: T): T {
+	if (typeof doc !== 'object' || doc === null || Array.isArray(doc)) return doc;
+	const d = doc as Record<string, unknown>;
+	const defaults: Record<string, unknown> = {
+		check_out_by: null,
+		check_out_method: 'qr',
+		check_out_reason: null
+	};
+	const missing = Object.keys(defaults).filter((k) => d[k] === undefined);
+	if (missing.length === 0) return doc;
+	return { ...d, ...Object.fromEntries(missing.map((k) => [k, defaults[k]])) } as T;
+}
+
+const shiftAssignmentDocSchema = z
 	.object({
 		_id: z.string().startsWith('shift_assignment:'),
 		_rev: z.string().optional(),
@@ -129,11 +147,10 @@ export const shiftAssignmentSchema = z
 		check_out_by: z.string().nullable().optional(),
 		status: shiftAssignmentStatusSchema,
 		dispatch_status: dispatchStatusSchema.nullable().optional(),
-		// Legacy docs omit these keys (docs/data/schema.md migration notes) — read as null.
-		check_in_method: checkInMethodSchema.nullish(),
-		check_in_reason: z.string().nullable().optional(),
-		check_out_method: checkInMethodSchema.nullish(),
-		check_out_reason: z.string().nullable().optional()
+		check_in_method: checkInMethodSchema,
+		check_in_reason: z.string().nullable(),
+		check_out_method: checkInMethodSchema,
+		check_out_reason: z.string().nullable()
 	})
 	.refine(
 		(d) =>
@@ -153,6 +170,12 @@ export const shiftAssignmentSchema = z
 			path: ['check_out_reason']
 		}
 	);
+
+/** Same contract as the doc schema; legacy docs are normalized (defaults filled) before parsing. */
+export const shiftAssignmentSchema = z.preprocess(
+	normalizeLegacyShiftAssignment,
+	shiftAssignmentDocSchema
+);
 
 export const isShiftAssignment = (d: unknown): d is ShiftAssignment =>
 	shiftAssignmentSchema.safeParse(d).success;
