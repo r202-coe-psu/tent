@@ -525,6 +525,49 @@ describe('PrintLabelsButton', () => {
 		expect(mainButton().textContent).toContain('พิมพ์อีกครั้ง');
 	});
 
+	it('stops waiting and offers a retry when the status route keeps failing', async () => {
+		vi.useFakeTimers();
+		stationPrinter.set('SH001', 'p1');
+		api.createPrintJob.mockResolvedValue({
+			job_id: 'job-1',
+			shelter_code: 'SH001',
+			expires_at: '2026-10-22T04:00:00Z'
+		});
+		api.getPrintJobStatus.mockRejectedValue(new PrintApiError('forbidden', 403, 'FORBIDDEN'));
+		await render({ printers: [printer('p1')] });
+
+		mainButton().click();
+		await vi.advanceTimersByTimeAsync(10_000);
+
+		expect(toast.error).toHaveBeenCalledWith('เครื่อง เครื่อง-p1 ไม่ตอบ');
+		expect(mainButton().textContent).toContain('พิมพ์อีกครั้ง');
+		expect(mainButton().disabled).toBe(false);
+	});
+
+	it('keeps waiting through a one-off status failure', async () => {
+		vi.useFakeTimers();
+		stationPrinter.set('SH001', 'p1');
+		api.createPrintJob.mockResolvedValue({
+			job_id: 'job-1',
+			shelter_code: 'SH001',
+			expires_at: '2026-10-22T04:00:00Z'
+		});
+		api.getPrintJobStatus
+			.mockRejectedValueOnce(new Error('network'))
+			.mockRejectedValueOnce(new Error('network'))
+			.mockResolvedValueOnce({ status: 'pending', printed: 0, label_count: 1, error_code: null })
+			.mockRejectedValueOnce(new Error('network'))
+			.mockRejectedValueOnce(new Error('network'))
+			.mockResolvedValue({ status: 'printed', printed: 1, label_count: 1, error_code: null });
+		await render({ printers: [printer('p1')] });
+
+		mainButton().click();
+		await vi.advanceTimersByTimeAsync(10_000);
+
+		expect(toast.error).not.toHaveBeenCalled();
+		expect(toast.success).toHaveBeenCalledTimes(1);
+	});
+
 	it('treats an expired job as the printer not responding', async () => {
 		stationPrinter.set('SH001', 'p1');
 		api.createPrintJob.mockResolvedValue({

@@ -11,7 +11,11 @@
 	import { stationPrinter } from '../application/station-printer.svelte';
 	import { chunkLabels } from '../domain/chunk-labels';
 	import { canPrintSource } from '../domain/print-permission';
-	import { isTerminalJobStatus, PRINT_JOB_POLL_TIMEOUT_MS } from '../domain/print-job-status';
+	import {
+		isTerminalJobStatus,
+		PRINT_JOB_POLL_TIMEOUT_MS,
+		trackStatusErrors
+	} from '../domain/print-job-status';
 	import { PRINT_JOB_PICKUP_HINT_MS } from '../domain/print-job-timing';
 	import {
 		PRINTERS_I18N,
@@ -66,14 +70,27 @@
 	// wait started by `waitForJob` decides which one settles the job. Settling writes state
 	// (`pickupLate`) from inside the effect on purpose: it bridges the query into the awaited
 	// Promise, and `$derived` cannot resolve a Promise.
-	let onStatus: ((data: NonNullable<typeof statusQuery.data>) => void) | null = null;
+	interface StatusUpdate {
+		data: typeof statusQuery.data;
+		/** Bumped by every successful / failed fetch (a refetch after an error resets `isError`). */
+		dataUpdatedAt: number;
+		errorUpdatedAt: number;
+	}
+	let onStatus: ((update: StatusUpdate) => void) | null = null;
 	$effect(() => {
-		const data = statusQuery.data;
-		if (data) onStatus?.(data);
+		// Read first: `onStatus?.(...)` skips its arguments while null, which would track nothing.
+		const update: StatusUpdate = {
+			data: statusQuery.data,
+			dataUpdatedAt: statusQuery.dataUpdatedAt,
+			errorUpdatedAt: statusQuery.errorUpdatedAt
+		};
+		onStatus?.(update);
 	});
 
 	/**
 	 * Resolves on the job's final status, or on `printing` (Pi claimed it) when `untilClaimed`.
+	 * Resolves `timeout` early when the status route fails several times in a row (403/404, network
+	 * down), so a dead status poll does not spin until the poll timeout.
 	 * Resolves `null` as soon as `signal` aborts (cancel button / unmount), dropping every timer.
 	 */
 	function waitForJob(untilClaimed: boolean, signal: AbortSignal): Promise<PrintJobOutcome | null> {
@@ -93,9 +110,27 @@
 				PRINT_JOB_POLL_TIMEOUT_MS
 			);
 			const hintTimer = setTimeout(() => (pickupLate = true), PRINT_JOB_PICKUP_HINT_MS);
-			onStatus = (data) => {
-				if (isTerminalJobStatus(data.status) || (untilClaimed && data.status === 'printing')) {
+			let consecutiveErrors = 0;
+			let seenDataAt = 0;
+			let seenErrorAt = 0;
+			onStatus = ({ data, dataUpdatedAt, errorUpdatedAt }) => {
+				if (
+					data &&
+					(isTerminalJobStatus(data.status) || (untilClaimed && data.status === 'printing'))
+				) {
 					settle({ status: data.status, printed: data.printed, error_code: data.error_code });
+					return;
+				}
+				// Each fetch result counts once, however often the effect re-runs.
+				if (dataUpdatedAt !== seenDataAt) {
+					seenDataAt = dataUpdatedAt;
+					consecutiveErrors = trackStatusErrors(consecutiveErrors, false).consecutive;
+				}
+				if (errorUpdatedAt !== seenErrorAt) {
+					seenErrorAt = errorUpdatedAt;
+					const tracked = trackStatusErrors(consecutiveErrors, true);
+					consecutiveErrors = tracked.consecutive;
+					if (tracked.giveUp) settle({ status: 'timeout', printed: 0, error_code: null });
 				}
 			};
 			if (signal.aborted) settle(null);
