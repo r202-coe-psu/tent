@@ -141,7 +141,7 @@
 					first_name: data.first_name,
 					last_name: data.last_name,
 					nickname: data.nickname || undefined,
-					phone: data.phone,
+					phone: data.phone || null,
 					email: data.email || null,
 					skills: selectedSkills,
 					organization: null,
@@ -257,7 +257,7 @@
 					<Form.Field {form} name="phone">
 						<Form.Control>
 							{#snippet children({ props })}
-								<Form.Label>เบอร์โทรศัพท์ <span class="text-destructive">*</span></Form.Label>
+								<Form.Label>เบอร์มือถือ (ทางเลือก / Optional)</Form.Label>
 								<Input
 									{...props}
 									bind:value={$formData.phone}

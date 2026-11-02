@@ -7,12 +7,18 @@
 	import { getTranslation } from '$lib/utils/i18n';
 	import { PUBLIC_DONATIONS_I18N } from '$lib/constants/i18n';
 	import { dropOffDirectionsUrl } from '../domain/drop-off';
-	import type { DropOffDestinationGroup, DropOffGroupStatus } from '../domain/line-points';
+	import {
+		AWAITING_STAFF_KEY,
+		type DropOffDestinationGroup,
+		type DropOffGroupStatus
+	} from '../domain/line-points';
 
 	/**
 	 * A booking split across drop-off points, one card per point (CR-206 FR-MP-13): where to
 	 * go, what to bring there, and whether that point has taken it. Lines whose point is gone
-	 * share the "any point" card with the shelter address (FR-MP-16).
+	 * share the "any point" card with the shelter address (FR-MP-16). Lines staff have yet to
+	 * give a point share the "awaiting staff" card, which has no status of its own
+	 * (staff-assigned drop-off FR-AP-22, FR-AP-22a).
 	 */
 	let {
 		groups,
@@ -47,6 +53,7 @@
 <ul class="mt-1 space-y-3" data-testid="drop-off-groups">
 	{#each groups as group (group.key)}
 		{@const href = directions ? dropOffDirectionsUrl(group.point) : null}
+		{@const awaiting = group.key === AWAITING_STAFF_KEY}
 		<li
 			class="space-y-2 rounded-xl border border-slate-200 bg-white p-3 shadow-2xs"
 			data-testid="drop-off-group"
@@ -59,7 +66,7 @@
 						<p class="text-xs text-slate-500">{group.point.shelterName}</p>
 					{/if}
 				</div>
-				{#if showStatus(group.status)}
+				{#if !awaiting && showStatus(group.status)}
 					<span
 						class="inline-flex shrink-0 items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-semibold {group.status ===
 						'pending'
@@ -76,6 +83,11 @@
 					</span>
 				{/if}
 			</div>
+			{#if awaiting}
+				<p class="text-sm text-slate-700" data-testid="drop-off-group-awaiting-note">
+					{t.awaitingPointGroupNote}
+				</p>
+			{/if}
 			{#if group.point.address}
 				<p class="text-xs text-slate-500">{group.point.address}</p>
 			{/if}

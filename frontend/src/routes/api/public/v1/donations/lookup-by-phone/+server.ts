@@ -1,7 +1,7 @@
 import { json } from '@sveltejs/kit';
 import { env } from '$env/dynamic/private';
 import type { RequestHandler } from './$types';
-import { normalizeThaiPhone } from '$lib/db/model';
+import { isThaiMobilePhone, normalizeThaiPhone } from '$lib/db/model';
 import { ReCaptchaProvider } from '$lib/server/security/captcha';
 import { verifyRecaptchaOrSkip } from '$lib/server/security/recaptcha-gate';
 import { fastapiBaseUrl, fastapiServiceHeaders } from '$lib/server/fastapi';
@@ -9,9 +9,6 @@ import { fastapiBaseUrl, fastapiServiceHeaders } from '$lib/server/fastapi';
 const captchaProvider = new ReCaptchaProvider(
 	env.RECAPTCHA_PROJECT_ID || env.SECRET_RECAPTCHA_KEY || 'smart-shelter-508719'
 );
-
-/** A Thai mobile or landline once separators and `+66` are gone. */
-const THAI_PHONE = /^0\d{8,9}$/;
 
 /**
  * POST /api/public/v1/donations/lookup-by-phone — CR-173.
@@ -29,7 +26,7 @@ export const POST: RequestHandler = async ({ request, getClientAddress }) => {
 		captcha_token?: unknown;
 	} | null;
 	const phone = typeof body?.phone === 'string' ? normalizeThaiPhone(body.phone) : '';
-	if (!THAI_PHONE.test(phone)) {
+	if (!isThaiMobilePhone(phone)) {
 		return json({ success: false, error: 'INVALID_PHONE' }, { status: 422 });
 	}
 

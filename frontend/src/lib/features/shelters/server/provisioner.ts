@@ -8,10 +8,12 @@ import {
 	SHELTER_REGISTRY_DB,
 	deployBulkReturnEntryMangoIndexes,
 	deployDailySopRoleMangoIndexes,
+	deployDonationReceivedMangoIndex,
 	deployDonationPhotoMangoIndex,
 	deployPeopleMangoIndexes,
 	deployRegistryDesign,
 	deployReferralMangoIndexes,
+	deployRoleGrantAuditMangoIndex,
 	deployKioskLookupMangoIndexes,
 	deployRequisitionTicketMangoIndexes,
 	deployShelterViews,
@@ -402,8 +404,12 @@ async function provisionShelterUnlocked(
 	await deployDailySopRoleMangoIndexes(db);
 	steps.push({ step: 'daily-sop-role-mango', status: 200 });
 	await assertActive?.();
+	await deployDonationReceivedMangoIndex(db);
+	steps.push({ step: 'donation-received-mango', status: 200 });
 	await deployDonationPhotoMangoIndex(db);
 	steps.push({ step: 'donation-photo-mango', status: 200 });
+	await deployRoleGrantAuditMangoIndex(db);
+	steps.push({ step: 'role-grant-audit-mango', status: 200 });
 
 	await assertActive?.();
 	const registry = await adminRaw(`/${SHELTER_REGISTRY_DB}`, 'PUT');

@@ -8,6 +8,8 @@
  * into stock (`toCountedItems` drops free-text lines at intake).
  */
 
+import { addQty } from '$lib/utils/qty';
+
 export type PublicShelterNeed = {
 	item_id: string;
 	name: string;
@@ -43,16 +45,25 @@ export async function fetchShelterNeeds(shelterCode: string): Promise<PublicShel
 	);
 	const needs = Array.isArray(shelter?.needs) ? (shelter.needs as RawNeed[]) : [];
 
-	return (
-		needs
-			// A closed need takes no more (T-22), so it must not be offerable in an edit.
-			.filter((need) => need?.status !== 'closed' && typeof need?.item_id === 'string')
-			.map((need) => ({
-				item_id: String(need.item_id),
-				name: String(need.name ?? need.item_id),
-				unit: String(need.unit ?? ''),
-				qty_needed: String(need.qty_needed ?? '0'),
-				...(typeof need.category === 'string' ? { category: need.category } : {})
-			}))
-	);
+	// The board has one row per item + drop-off point (CR-206 A2), so an item can repeat.
+	// A donor edit picks an item, not a card: rows of one `item_id` fold into one, summed.
+	const byItem = new Map<string, PublicShelterNeed>();
+	for (const need of needs) {
+		// A closed need takes no more (T-22), so it must not be offerable in an edit.
+		if (need?.status === 'closed' || typeof need?.item_id !== 'string') continue;
+		const qty = String(need.qty_needed ?? '0');
+		const seen = byItem.get(need.item_id);
+		if (seen) {
+			seen.qty_needed = addQty(seen.qty_needed, qty);
+			continue;
+		}
+		byItem.set(need.item_id, {
+			item_id: need.item_id,
+			name: String(need.name ?? need.item_id),
+			unit: String(need.unit ?? ''),
+			qty_needed: qty,
+			...(typeof need.category === 'string' ? { category: need.category } : {})
+		});
+	}
+	return [...byItem.values()];
 }

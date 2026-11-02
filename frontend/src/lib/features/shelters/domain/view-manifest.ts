@@ -38,7 +38,8 @@ export const SHELTER_VIEW_MANIFEST: ShelterViewManifest = {
 	// v4 (CR-170 amend): registrations_by_date_status also emits the `preregister` series.
 	// v5 (CR-192): adds the station_logs_by_station view (station_log start/complete events).
 	// v6 (#658): bulk_return_pool_item_totals (entry / move / void).
-	version: 6,
+	// v7 (#821): donation_received_by_name / donation_received_by_item (received-donation search).
+	version: 7,
 	designName: 'app',
 	views: SHELTER_DASHBOARD_VIEWS.views
 };
