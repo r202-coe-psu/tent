@@ -133,6 +133,7 @@ export { default as VolunteerApprovalChips } from './ui/volunteer-approval-chips
 export type { ApprovalChip } from './ui/volunteer-approval-chips.svelte';
 export { default as VolunteerCard } from './ui/volunteer-card.svelte';
 export { default as VolunteerManageDialog } from './ui/volunteer-manage-dialog.svelte';
+export { default as VolunteerAccountsPage } from './ui/volunteer-accounts-page.svelte';
 export { default as VolunteerAccessDialog } from './ui/volunteer-access-dialog.svelte';
 export { default as WalkInRegistrationDialog } from './ui/walk-in-registration-dialog.svelte';
 export { default as JobShiftPicker, type JobShiftSelection } from './ui/job-shift-picker.svelte';
