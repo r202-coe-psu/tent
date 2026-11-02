@@ -314,7 +314,15 @@ describe('ShiftAssignmentRemoteRepository', () => {
 		});
 		expect((await volunteers.get(volunteer._id))?.checked_in).toBe(true);
 
-		await memoryRepo.put(workerDoc('shift_assignment:w2', job._id, volunteer._id));
+		// Check-out needs a checked-in row (#1090 guard): a legacy row the worker wrote, then
+		// checked in before v5, still lacks the check-out fields.
+		await memoryRepo.put(
+			workerDoc('shift_assignment:w2', job._id, volunteer._id, {
+				status: 'checked_in',
+				check_in_at: '2026-08-27T01:00:00.000Z',
+				check_in_by: 'staff-1'
+			})
+		);
 		const checkedOut = await assignments.checkOut('shift_assignment:w2', 'staff-2');
 		expect(checkedOut).toMatchObject({
 			status: 'completed',
