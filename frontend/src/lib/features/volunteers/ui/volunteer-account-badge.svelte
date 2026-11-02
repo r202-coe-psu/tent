@@ -7,7 +7,7 @@
 	import KeyRound from '@lucide/svelte/icons/key-round';
 	import { Badge } from '$lib/components/ui/badge/index.js';
 	import { formatThaiShortDate } from '$lib/utils/date';
-	import type { VolunteerAccessStatus } from '../domain/volunteer-access-status';
+	import { accessEndingParts, type VolunteerAccessStatus } from '../domain/volunteer-access-status';
 
 	let {
 		status,
@@ -17,6 +17,8 @@
 		/** Print the login username under the badges. */
 		showLogin?: boolean;
 	} = $props();
+
+	const ended = $derived(status.kind === 'lapsed' ? accessEndingParts(status.lastEnded) : null);
 
 	// Badge is a fixed-height, overflow-hidden pill: these may wrap, so they take h-auto.
 	const wrap = 'h-auto max-w-full justify-start gap-1 text-left whitespace-normal';
@@ -38,6 +40,23 @@
 			<KeyRound class="h-3 w-3 shrink-0" />
 			มีบัญชี · สิทธิ์ในศูนย์นี้สิ้นสุดแล้ว
 		</Badge>
+		{#if ended && status.lastEnded}
+			<!-- Two deliberate lines (role, then how · when) rather than wrapping mid-phrase. -->
+			<Badge
+				variant="outline"
+				class="{wrap} flex-col items-start gap-0 border-amber-200 bg-background text-amber-900"
+			>
+				{#if ended.role}
+					<span>{ended.role}</span>
+				{/if}
+				<span>
+					{ended.how}
+					<span class="font-normal whitespace-nowrap text-muted-foreground">
+						· เมื่อ {formatThaiShortDate(status.lastEnded.at)}
+					</span>
+				</span>
+			</Badge>
+		{/if}
 	{:else}
 		<Badge variant="outline" class="{wrap} border-emerald-300 bg-emerald-50 text-emerald-700">
 			<KeyRound class="h-3 w-3 shrink-0" />
