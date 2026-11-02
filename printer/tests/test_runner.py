@@ -515,3 +515,26 @@ def test_backoff_has_jitter_that_never_exceeds_the_cap(agent):
     agent.run(max_iterations=8, jitter=lambda: 1.0)
 
     assert agent.clock.sleeps == pytest.approx([0.8 * d for d in [1, 2, 4, 8, 16, 32, 60, 60]])
+
+
+def test_stop_requested_mid_job_finishes_and_reports_the_job_then_exits_without_polling_again(
+    agent, fake_cups
+):
+    fake_cups.set("lp", out=LP_OK)
+    fake_cups.set("lpstat_completed", out=COMPLETED_42)
+    agent.server.script("next", job_response(LABEL_1, LABEL_2))
+
+    # SIGTERM lands once the job is claimed: the flag is up while its labels are printing.
+    agent.run(max_iterations=5, should_stop=lambda: NEXT in agent.server.paths())
+
+    assert fake_cups.lp_stdins() == [LABEL_1, LABEL_2]
+    assert agent.server.requests[-1] == (RESULT, {"printed": 2})
+    assert agent.server.paths() == [HELLO, NEXT, RESULT]
+
+
+def test_stop_requested_while_hello_keeps_failing_gives_up_instead_of_retrying(agent):
+    agent.server.script("hello", httpx.ConnectError("down"))
+
+    agent.run(max_iterations=5, should_stop=lambda: len(agent.server.requests) >= 1)
+
+    assert agent.server.paths() == [HELLO]

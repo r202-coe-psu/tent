@@ -50,9 +50,11 @@ def _hello(
     agent_version: str,
     local_ips: Callable[[], list[str]],
     jitter: Callable[[], float],
-) -> Hello:
+    should_stop: Callable[[], bool],
+) -> Hello | None:
+    """The server's hello answer, or None when asked to stop before one arrived."""
     backoff = _Backoff(config.error_backoff_max_sec, jitter)
-    while True:
+    while not should_stop():
         try:
             return api.hello(
                 agent_version=agent_version,
@@ -62,6 +64,7 @@ def _hello(
         except (AuthError, NetworkError, ServerError) as exc:
             log.error("hello failed: %s", exc)
             sleep(backoff.next())
+    return None
 
 
 def _boot_slip_text(hello: Hello, agent_version: str, ips: list[str]) -> str:
@@ -186,14 +189,19 @@ def run(
     agent_version: str = VERSION,
     local_ips: Callable[[], list[str]] = default_local_ips,
     jitter: Callable[[], float] = random.random,
+    should_stop: Callable[[], bool] = lambda: False,
 ) -> None:
-    hello = _hello(config, api, cups, sleep, agent_version, local_ips, jitter)
+    hello = _hello(config, api, cups, sleep, agent_version, local_ips, jitter, should_stop)
+    if hello is None:
+        return
     if config.boot_slip:
         _print_boot_slip(cups, hello, agent_version, local_ips)
     backoff = _Backoff(config.error_backoff_max_sec, jitter)
     iterations = 0
     last_state: str | None = None
-    while max_iterations is None or iterations < max_iterations:
+    # `should_stop` (SIGTERM) is only read here, between jobs: a claimed job always prints and
+    # reports, because the result API has no error code for "agent stopped midway".
+    while not should_stop() and (max_iterations is None or iterations < max_iterations):
         iterations += 1
         try:
             state = cups.ensure_enabled()

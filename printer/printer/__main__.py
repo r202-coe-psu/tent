@@ -1,7 +1,9 @@
 import logging
 import os
+import signal
 import sys
 import time
+from types import FrameType
 
 from printer.api import BffClient
 from printer.config import ConfigError, load_config, read_env_file
@@ -18,12 +20,25 @@ def main() -> None:
         raise SystemExit(2) from None
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
     logging.getLogger("httpx").setLevel(logging.WARNING)  # one line per long-poll is noise
+    stopping = False
+
+    def request_stop(signum: int, _frame: FrameType | None) -> None:
+        nonlocal stopping
+        stopping = True
+        logging.getLogger("printer").info(
+            "signal %d: finishing the current job, then exiting", signum
+        )
+
+    # systemd stops the unit with SIGTERM; without a handler it would kill a job mid-print.
+    signal.signal(signal.SIGTERM, request_stop)
+    signal.signal(signal.SIGINT, request_stop)
     run(
         config,
         BffClient(config),
         Cups(config.printer_name, config.ppi),
         sleep=time.sleep,
         monotonic=time.monotonic,
+        should_stop=lambda: stopping,
     )
 
 
