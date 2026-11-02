@@ -1,21 +1,22 @@
 ---
-id: draft
+id: CR-225
 title: แท็บผู้สมัคร — "รอยืนยันการเข้างาน" ไม่นับคำเชิญที่จิตอาสายังไม่ตอบ (`assigned` + `dispatched`)
-status: proposed
+status: approved
 date: 2026-11-02
 updated: 2026-11-02
 requested_by: "review ของ @Jackyzaz ใน PR #1032 (#849)"
-decided_by: "รอ @Jackyzaz approve"
+decided_by: Soravit Sukkarn (Team Lead)
+decision_date: 2026-11-02
 layer: volatile
 amends: CR-207 (FR-1, FR-2)
 affects:
-  - docs/changes/06-A-volunteer/CR-207-applicant-tab-filters-and-counts.md (FR-1 bullet แรก, FR-2 — ใส่หมายเหตุ "แก้โดย CR นี้" เมื่อ approve)
+  - docs/changes/06-A-volunteer/CR-207-applicant-tab-filters-and-counts.md (FR-1 bullet แรก, FR-2)
   - frontend/src/lib/features/volunteers/domain/applicant-attendance.ts (`awaitingAttendanceConfirmation`)
   - frontend/src/lib/features/volunteers/domain/applicant-attendance.test.ts, applicant-filter.test.ts
   - ไม่เปลี่ยน schema / ไม่ bump `schema_v` (คำนวณตอนแสดงผล)
 ---
 
-# "รอยืนยันการเข้างาน" ไม่นับคำเชิญที่ยังไม่ตอบ
+# CR-225 — "รอยืนยันการเข้างาน" ไม่นับคำเชิญที่ยังไม่ตอบ
 
 > **สรุป (TL;DR):**
 >
@@ -35,22 +36,22 @@ affects:
 - **FR-1 (แก้ CR-207 FR-1 bullet แรก):** "รอยืนยันการเข้างาน" = `shift_assignment` ที่ยังไม่เช็คอิน, ไม่ใช่กะ `flex`, `now ≥ duty_window.end_ts + 30 นาที` และ (
   - `status = assigned` **และ `dispatch_status ≠ dispatched`** (รวม `accepted`, `declined`, ไม่มีค่า) หรือ
   - `status = standby` และ `dispatch_status = accepted` (เดิม)
-  )
+    )
 - **FR-2 (แก้ CR-207 FR-2):** กะ `assigned` + `dispatched` อยู่ใน "ยังไม่เช็คอิน" เสมอจนกว่าจะเช็คอิน (เหมือนกะ `standby` ที่ `dispatch_status ≠ accepted`)
 - **ไม่เปลี่ยน:** ปุ่มเช็คอินในแท็บผู้สมัคร / ตารางกะ (`assignmentAttendance`) ใช้กฎของตัวเอง ไม่ได้ใช้ predicate นี้ · ไม่มีการเขียนเอกสาร · ตัวนับบนการ์ดด้านบนไม่ใช้ predicate นี้
 
 ### CR-207 (before → after)
 
-| ข้อ | ก่อน | หลัง |
-| --- | --- | --- |
+| ข้อ  | ก่อน                                                                           | หลัง                                                                                                                |
+| ---- | ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------- |
 | FR-1 | `status = assigned` หรือ (`status = standby` และ `dispatch_status = accepted`) | (`status = assigned` และ `dispatch_status ≠ dispatched`) หรือ (`status = standby` และ `dispatch_status = accepted`) |
-| FR-2 | กะ `standby` ที่ `dispatch_status ≠ accepted` อยู่ใน "ยังไม่เช็คอิน" เสมอ | + กะ `assigned` + `dispatched` อยู่ใน "ยังไม่เช็คอิน" เสมอ |
+| FR-2 | กะ `standby` ที่ `dispatch_status ≠ accepted` อยู่ใน "ยังไม่เช็คอิน" เสมอ      | + กะ `assigned` + `dispatched` อยู่ใน "ยังไม่เช็คอิน" เสมอ                                                          |
 
 ## Acceptance
 
-- [ ] กะ `assigned` + `dispatched` ที่พ้น `end_ts` + 30 นาทีและยังไม่เช็คอิน: ตัวกรอง "รอยืนยันการเข้างาน" ไม่แสดง · ตัวกรอง "ยังไม่เช็คอิน" แสดง
-- [ ] กะ `assigned` ที่ `dispatch_status` เป็น `accepted` / `declined` / ไม่มีค่า: เข้า "รอยืนยันการเข้างาน" ที่ `end_ts` + 30 นาทีเหมือนเดิม
-- [ ] กะ `standby` + `accepted`: เหมือนเดิม
+- [x] กะ `assigned` + `dispatched` ที่พ้น `end_ts` + 30 นาทีและยังไม่เช็คอิน: ตัวกรอง "รอยืนยันการเข้างาน" ไม่แสดง · ตัวกรอง "ยังไม่เช็คอิน" แสดง
+- [x] กะ `assigned` ที่ `dispatch_status` เป็น `accepted` / `declined` / ไม่มีค่า: เข้า "รอยืนยันการเข้างาน" ที่ `end_ts` + 30 นาทีเหมือนเดิม
+- [x] กะ `standby` + `accepted`: เหมือนเดิม
 
 ## Impact
 
@@ -64,4 +65,5 @@ affects:
 ## Decision log
 
 - 2026-10-29 — CR-207 แก้ FR-1 ให้นับ `standby` + `accepted` · decision log ระบุ `assigned` + `dispatched` คือคำเชิญที่ยังไม่ตอบ
-- 2026-11-02 — review ของ @Jackyzaz ใน #1032 ชี้ว่า FR-1 ยังนับ `assigned` ทุกแบบ · owner (@mhapong) เลือกไม่นับคำเชิญที่ยังไม่ตอบ และเลือกบันทึกเป็น draft CR ใหม่ (ไม่แก้ไฟล์ CR-207 ตรง)
+- 2026-11-02 — review ของ @Jackyzaz ใน #1032 ชี้ว่า FR-1 ยังนับ `assigned` ทุกแบบ · owner (@mhapong) เลือกไม่นับคำเชิญที่ยังไม่ตอบ และบันทึกเป็น draft CR เพื่อ amend CR-207
+- 2026-11-02 — approved โดย Soravit Sukkarn (Team Lead) เป็น CR-225 (PR #1032)
