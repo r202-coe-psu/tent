@@ -140,9 +140,6 @@ def _ensure_pet_ids(doc: UnassignedRegistration) -> bool:
         if not pet.pet_id:
             pet.pet_id = _new_pet_id()
             changed = True
-        if pet.status is None:
-            pet.status = "open"
-            changed = True
     return changed
 
 
@@ -150,20 +147,22 @@ async def _mint_missing_pet_ids(doc: UnassignedRegistration) -> UnassignedRegist
     """Fill legacy pet rows (no pet_id / no status) in Mongo with targeted `$set`s, then re-read.
 
     Never saves the whole doc, so a member or pet claimed since `doc` was read is not reopened.
+    Reads the stored rows because `UnassignedPet` fills a missing status with "open".
     Returns `doc` unchanged when no pet row is legacy.
     """
-    pets = doc.household.pets or []
-    if all(pet.pet_id and pet.status for pet in pets):
-        return doc
     collection = UnassignedRegistration.get_pymongo_collection()
-    for index, pet in enumerate(pets):
+    raw = await collection.find_one({"_id": doc.id}, {"household.pets": 1})
+    stored = ((raw or {}).get("household") or {}).get("pets") or []
+    if all(row.get("pet_id") and row.get("status") for row in stored):
+        return doc
+    for index, row in enumerate(stored):
         # Each `$set` matches nothing when another writer filled the field first.
-        if not pet.pet_id:
+        if not row.get("pet_id"):
             await collection.update_one(
                 {"_id": doc.id, f"household.pets.{index}.pet_id": None},
                 {"$set": {f"household.pets.{index}.pet_id": _new_pet_id()}},
             )
-        if pet.status is None:
+        if row.get("status") is None:
             await collection.update_one(
                 {"_id": doc.id, f"household.pets.{index}.status": None},
                 {"$set": {f"household.pets.{index}.status": "open"}},
@@ -1607,8 +1606,21 @@ async def _load_couch_image_payload(
     actor: str,
     now: datetime,
 ) -> CouchImagePayload | None:
-    """GridFS photo → Couch `image:{ulid}` doc + bytes; None when the GridFS row is gone."""
-    loaded = await load_unassigned_photo(photo_ref)
+    """GridFS photo → Couch `image:{ulid}` doc + bytes; None when the GridFS row is gone.
+
+    A failed read also gives None: the caller has already marked the claim, so it goes on
+    without the photo rather than failing with the claim half done.
+    """
+    try:
+        loaded = await load_unassigned_photo(photo_ref)
+    except PyMongoError, ConnectionError, TimeoutError, OSError:
+        logger.warning(
+            "Unassigned claim: GridFS photo read failed for %s (%s)",
+            label,
+            photo_ref,
+            exc_info=True,
+        )
+        return None
     if loaded is None:
         logger.warning(
             "Unassigned claim: GridFS photo missing for %s (%s)",

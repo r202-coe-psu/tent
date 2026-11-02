@@ -909,3 +909,51 @@ async def test_kiosk_revert_requires_service_bearer(client: AsyncClient) -> None
         json={"shelter_code": "SH001", "device_id": "kiosk-7", "member_ids": ["evacuee:x"]},
     )
     assert response.status_code == 401
+
+
+async def _strip_pet_id_and_status_in_mongo(registration_id: str, index: int) -> None:
+    """Make a pet row look like a pre-CR-148 write: no `pet_id` and no `status` stored."""
+    await UnassignedRegistration.get_pymongo_collection().update_one(
+        {"_id": registration_id},
+        {"$unset": {f"household.pets.{index}.pet_id": "", f"household.pets.{index}.status": ""}},
+    )
+
+
+async def test_kiosk_prepare_claims_a_legacy_pet_stored_without_pet_id_or_status(
+    client: AsyncClient, auth_headers: dict[str, str]
+) -> None:
+    doc = await _seed_family_with_pets()
+    await _strip_pet_id_and_status_in_mongo(doc.id, 1)
+    selected = doc.members[0].reserved_evacuee_id
+
+    response = await _prepare(client, auth_headers, doc.id, member_ids=[selected], claim_pets=True)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert len(body["pet_ids"]) == 2
+    stored = await _stored_pets(doc.id)
+    assert [p.pet_id for p in stored if p.status == "claimed"] == body["pet_ids"]
+
+
+async def test_kiosk_prepare_claims_a_pet_without_its_photo_when_the_photo_read_fails(
+    client: AsyncClient, auth_headers: dict[str, str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from pymongo.errors import PyMongoError
+
+    from apiapp.modules.unassigned_registrations import use_case as use_case_module
+
+    async def failing_load(photo_id: str) -> None:
+        raise PyMongoError("gridfs chunk read failed")
+
+    monkeypatch.setattr(use_case_module, "load_unassigned_photo", failing_load)
+    doc = await _seed_family_with_pets()
+    dog, cat, _ = doc.household.pets or []
+    selected = doc.members[0].reserved_evacuee_id
+
+    response = await _prepare(client, auth_headers, doc.id, member_ids=[selected], claim_pets=True)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["pet_ids"] == [dog.pet_id, cat.pet_id]
+    assert body["images"] == []
+    assert all("image_url" not in pet for pet in body["pets"])
