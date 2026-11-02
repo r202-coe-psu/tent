@@ -5,7 +5,8 @@
  * A kitchen_staff-only user (no warehouse/manager role) ticks "บันทึกเป็นสูตรใหม่": the recipe takes
  * the menu label as its name and the batch portions as its standard portions, the meal plan points
  * at it, and it shows up in the BOM dropdown. Saving the same name again warns and still opens the
- * ticket.
+ * ticket. On the catalog page the same user edits and deletes the shelter's recipes but not central
+ * ones (CR-217).
  *
  * Fixtures: one SH001-local food item master and one meal_session in shelter_sh001, written
  * straight to CouchDB. Teardown deletes only documents this run created and ends with a zero-leak
@@ -30,6 +31,7 @@ import { CAN_WRITE, LOCAL_RUN_ID, READ_ONLY_REASON } from './helpers/e2e-env';
 import { injectSession } from './helpers/login';
 
 const SHELTER_DB = 'shelter_sh001';
+const CATALOG_DB = 'catalog';
 const RUN = `${LOCAL_RUN_ID}${ulid().slice(-4).toLowerCase()}`;
 const TODAY = new Date().toISOString().slice(0, 10);
 
@@ -393,7 +395,7 @@ test.describe(
 			);
 		});
 
-		test('kitchen staff can add a recipe from the catalog page but not edit one', async ({
+		test('kitchen staff add, edit and delete shelter recipes from the catalog page, not central ones', async ({
 			browser
 		}) => {
 			const context = await browser.newContext();
@@ -415,13 +417,47 @@ test.describe(
 			await page.keyboard.press('Escape');
 			await expect(sheet).toHaveCount(0);
 
-			await page.getByPlaceholder('ค้นหาชื่อสูตร / วัตถุดิบ').fill(RECIPE);
-			await page
-				.getByRole('row')
-				.filter({ has: page.getByText(RECIPE, { exact: true }) })
-				.click();
-			await expect(sheet.getByText(RECIPE).first()).toBeVisible();
+			const search = page.getByPlaceholder('ค้นหาชื่อสูตร / วัตถุดิบ');
+			const openRecipe = async (label: string) => {
+				await search.fill(label);
+				await page
+					.getByRole('row')
+					.filter({ has: page.getByText(label, { exact: true }) })
+					.click();
+				await expect(sheet.getByText(label).first()).toBeVisible();
+			};
+
+			const shelterIds = new Set((await allDocuments(SHELTER_DB)).map((d) => d._id));
+			const central = (await allDocuments(CATALOG_DB)).find(
+				(d) => d.type === 'recipe' && !d.shelter_code && !d.deactivated && !shelterIds.has(d._id)
+			);
+			expect(central, 'the local catalog seeds a central recipe').toBeDefined();
+			await openRecipe(String(central!.label));
 			await expect(sheet.getByRole('button', { name: 'แก้ไข' })).toHaveCount(0);
+			await expect(sheet.getByRole('button', { name: 'ลบ' })).toHaveCount(0);
+			await page.keyboard.press('Escape');
+			await expect(sheet).toHaveCount(0);
+
+			await openRecipe(RECIPE);
+			await sheet.getByRole('button', { name: 'แก้ไข' }).click();
+			await expect(sheet.getByText('คุณไม่มีสิทธิ์เข้าถึงส่วนนี้')).toHaveCount(0);
+			await sheet.getByLabel('ยอดกำลังผลิตมาตรฐาน (Portions)').fill('12');
+			await sheet.getByRole('button', { name: 'บันทึกการแก้ไข' }).click();
+			await expect
+				.poll(async () => (await recipesLabelled(RECIPE))[0]?.standard_portions, {
+					message: 'the edit is saved'
+				})
+				.toBe('12');
+
+			await sheet.getByRole('button', { name: 'ลบ' }).click();
+			await page.getByRole('button', { name: 'ยืนยันการลบ' }).click();
+			await expect(
+				page.getByText(`เปลี่ยนสถานะสูตรอาหาร "${RECIPE}" เป็นปิดการใช้งานแล้ว`)
+			).toBeVisible();
+			const [deleted] = await recipesLabelled(RECIPE);
+			expect(deleted.deactivated, 'a recipe a meal plan uses is deactivated, not removed').toBe(
+				true
+			);
 		});
 	}
 );

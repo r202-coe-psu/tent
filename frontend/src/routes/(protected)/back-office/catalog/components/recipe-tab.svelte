@@ -61,14 +61,14 @@
 		isSA ||
 			(basePath.includes('back-office') && (isShelterManager(roles) || isWarehouseStaff(roles)))
 	);
-	// Kitchen staff may add a shelter recipe but not edit or delete one (#802).
 	const canCreate = $derived(canWriteShelterRecipe(roles, shelterCode));
 
+	// Kitchen staff edit and delete only their own shelter's recipes, never a central one (CR-217).
 	function canModifyRecipe(recipe: Recipe) {
 		if (basePath.includes('system-management')) {
 			return isSA && !recipe.shelter_code;
 		}
-		return canWrite;
+		return canWrite || canWriteShelterRecipe(roles, recipe.shelter_code);
 	}
 
 	/** Delete / reset / reactivate only apply to the recipe's own scope (central vs this shelter). */
@@ -532,7 +532,7 @@
 				</Sheet.Description>
 			</Sheet.Header>
 			<div class="min-h-0 flex-1 overflow-y-auto p-4">
-				{#if sheetMode === 'create' ? canCreate : canWrite}
+				{#if sheetMode === 'create' ? canCreate : !!selected && canModifyRecipe(selected)}
 					{#key `${sheetMode}-${selectedId}`}
 						<RecipeForm
 							id={sheetMode === 'edit' ? selectedId : ''}
