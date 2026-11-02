@@ -75,7 +75,10 @@ export function applicantAttendance(
 	return live.length === 1 ? assignmentAttendance(live[0], identityVerified, today) : NONE;
 }
 
-/** #849 (CR-207 FR-1) — minutes after a shift ends before an unchecked-in `assigned` or accepted `standby` row needs staff to confirm. */
+/**
+ * #849 (CR-207 FR-1) — minutes after a shift ends before an unchecked-in accepted row
+ * (`assigned` but not `dispatched`, or `standby` + `accepted`) needs staff to confirm.
+ */
 export const ATTENDANCE_CONFIRM_AFTER_MINUTES = 30;
 
 /**
@@ -85,9 +88,10 @@ export const ATTENDANCE_CONFIRM_AFTER_MINUTES = 30;
  */
 export function awaitingAttendanceConfirmation(assignment: ShiftAssignment, now: Date): boolean {
 	if (assignment.shift === 'flex') return false;
-	// Accepted shifts are written as `standby` + `dispatch_status: 'accepted'` (assign / public apply).
+	// Accepted shifts are written as `standby` + `accepted` (assign / public apply).
+	// `assigned` + `dispatched` is an invite the volunteer has not answered: not awaiting.
 	const open =
-		assignment.status === 'assigned' ||
+		(assignment.status === 'assigned' && assignment.dispatch_status !== 'dispatched') ||
 		(assignment.status === 'standby' && assignment.dispatch_status === 'accepted');
 	if (!open) return false;
 	const end = Date.parse(assignment.duty_window?.end_ts ?? '');

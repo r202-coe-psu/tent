@@ -257,9 +257,23 @@ describe('awaitingAttendanceConfirmation', () => {
 		expect(awaitingAttendanceConfirmation(standby(null), atThreshold)).toBe(false);
 	});
 
-	it('still counts an assigned row whatever its dispatch_status', () => {
+	it('does not count an assigned row the volunteer has not answered (dispatched)', () => {
 		const dispatched = assignment({ status: 'assigned', dispatch_status: 'dispatched' });
-		expect(awaitingAttendanceConfirmation(dispatched, atThreshold)).toBe(true);
+		expect(awaitingAttendanceConfirmation(dispatched, atThreshold)).toBe(false);
+	});
+
+	it.each(['accepted', 'declined', null, undefined] as const)(
+		'still counts an assigned row with dispatch_status %s',
+		(dispatch_status) => {
+			const row = assignment({ status: 'assigned', dispatch_status });
+			expect(awaitingAttendanceConfirmation(row, justBefore)).toBe(false);
+			expect(awaitingAttendanceConfirmation(row, atThreshold)).toBe(true);
+		}
+	);
+
+	it('counts an accepted standby row once the window has passed', () => {
+		const row = assignment({ status: 'standby', dispatch_status: 'accepted' });
+		expect(awaitingAttendanceConfirmation(row, atThreshold)).toBe(true);
 	});
 
 	it('never counts a flex standby row, accepted or not', () => {
