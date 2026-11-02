@@ -5,9 +5,6 @@ import { PRINT_SOURCE_CAPABILITIES } from '$lib/features/printers/domain/print-p
 // eslint-disable-next-line no-restricted-imports -- server-safe domain rule; feature barrel pulls client UI/query code
 import { MAX_LABEL_PNG_BYTES } from '$lib/features/printers/domain/label-png';
 
-/** CouchDB user that claims / finishes / expires jobs (never creates them). */
-const PRINTING_SERVICE_USER = 'printing_service';
-
 /**
  * JS source of `_design/print_access` `validate_doc_update` for every `printing_{code}` database
  * (FR-1..4 / FR-51). One source fits all shelters: the CODE is derived at runtime from
@@ -17,15 +14,16 @@ const PRINTING_SERVICE_USER = 'printing_service';
  * Must stay ES5 (CouchDB's JS engine): `var`, no arrow functions, no template literals, `indexOf`.
  *
  * - `_admin`: unrestricted (provisioning / migration); everyone else may not touch design docs.
- * - `printing_service`: never creates; updates keep origin fields immutable, status moves forward
+ * - the service user (`serviceUserName`, the CouchDB login of `COUCHDB_PRINTING_SERVICE_URL`; claims /
+ *   finishes / expires jobs): never creates; updates keep origin fields immutable, status moves forward
  *   only, `printed` stays within 0..`label_count`, terminal writes carry `finished_at` and drop the label attachments (PDPA). It may delete
  *   only terminal jobs (retention; CouchDB `_purge` needs server admin, so delete + `_compact`).
  * - staff (anyone else): create-only, a `pending` job stamped with their own name, for their own
  *   shelter, with the role the job `source` requires, and exactly `label_count` PNG labels.
  */
-export function buildPrintingValidateDocUpdate(): string {
+export function buildPrintingValidateDocUpdate(serviceUserName: string): string {
 	const capabilities = JSON.stringify(PRINT_SOURCE_CAPABILITIES);
-	const serviceUser = JSON.stringify(PRINTING_SERVICE_USER);
+	const serviceUser = JSON.stringify(serviceUserName);
 	return `function (newDoc, oldDoc, userCtx, secObj) {
   var CAPABILITIES = ${capabilities};
   var SERVICE_USER = ${serviceUser};

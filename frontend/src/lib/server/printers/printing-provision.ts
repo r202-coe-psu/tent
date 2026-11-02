@@ -1,4 +1,5 @@
 import { adminRaw } from '$lib/server/couch-admin';
+import { requirePrintingServiceName } from '$lib/server/couch-printing-service';
 // eslint-disable-next-line no-restricted-imports -- server-safe domain rule; feature barrel pulls client UI/query code
 import { PRINTING_DEVICES_DB, printingDbName } from '$lib/features/printers/domain/printing-db';
 import { PrintDependencyError } from './device-credentials';
@@ -19,9 +20,11 @@ import { buildPrintingValidateDocUpdate } from './printing-vdu';
  * - `printing_devices`: devices + registry docs + housekeeping; only `printing_service` can reach it.
  * - `printing_{code}`: one print-job DB per shelter; `printing_service` plus the shelter's staff
  *   (`shelter:{CODE}`, `system_admin`) may read, and `_design/print_access` limits what they write.
+ *
+ * `printing_service` here is the CouchDB login of `COUCHDB_PRINTING_SERVICE_URL`
+ * ({@link requirePrintingServiceName}); an unknown name fails closed before any request.
  */
 
-const PRINTING_SERVICE_USER = 'printing_service';
 const DEVICES_REVS_LIMIT = 10;
 const SHELTER_REVS_LIMIT = 100;
 const DESIGN_DOC = '_design/print_access';
@@ -69,8 +72,8 @@ async function createIndexes(
 }
 
 /** Install `_design/print_access`; rewrites only when the stored VDU differs from the current one. */
-async function ensureDesignDoc(db: string): Promise<void> {
-	const validateDocUpdate = buildPrintingValidateDocUpdate();
+async function ensureDesignDoc(db: string, serviceUser: string): Promise<void> {
+	const validateDocUpdate = buildPrintingValidateDocUpdate(serviceUser);
 	const path = `/${db}/${DESIGN_DOC}`;
 	const existing = await adminRaw(path, 'GET');
 	if (existing.status !== 200 && existing.status !== 404) throw new PrintDependencyError();
@@ -92,12 +95,13 @@ async function ensureDesignDoc(db: string): Promise<void> {
 let devicesDb: Promise<void> | null = null;
 
 async function provisionDevicesDb(): Promise<void> {
+	const serviceUser = requirePrintingServiceName();
 	await putDb(PRINTING_DEVICES_DB);
 	await putSettings(
 		PRINTING_DEVICES_DB,
 		{
-			admins: { names: [PRINTING_SERVICE_USER], roles: [] },
-			members: { names: [PRINTING_SERVICE_USER], roles: [] }
+			admins: { names: [serviceUser], roles: [] },
+			members: { names: [serviceUser], roles: [] }
 		},
 		DEVICES_REVS_LIMIT
 	);
@@ -116,16 +120,17 @@ export function ensurePrintingDevicesDb(): Promise<void> {
 const shelterDbs = new Map<string, Promise<void>>();
 
 async function provisionShelterDb(code: string, db: string): Promise<void> {
+	const serviceUser = requirePrintingServiceName();
 	await putDb(db);
 	await putSettings(
 		db,
 		{
-			admins: { names: [PRINTING_SERVICE_USER], roles: [] },
-			members: { names: [PRINTING_SERVICE_USER], roles: [`shelter:${code}`, 'system_admin'] }
+			admins: { names: [serviceUser], roles: [] },
+			members: { names: [serviceUser], roles: [`shelter:${code}`, 'system_admin'] }
 		},
 		SHELTER_REVS_LIMIT
 	);
-	await ensureDesignDoc(db);
+	await ensureDesignDoc(db, serviceUser);
 	await createIndexes(db, JOB_INDEXES);
 
 	await ensurePrintingDevicesDb();

@@ -20,6 +20,23 @@ export function printingServiceName(): string | null {
 	return couchUserFromUrl(env.COUCHDB_PRINTING_SERVICE_URL);
 }
 
+const DEV_FALLBACK_SERVICE_USER = 'printing_service';
+
+/**
+ * The username `_security` and the print VDU must grant — the one `printingRaw` actually logs in
+ * as. Unset env in dev mirrors `printingRaw`'s admin fallback (conventional name); anywhere else,
+ * and for a malformed value, it throws {@link PrintDependencyError} so provisioning never writes
+ * a name the runtime credentials would not match.
+ */
+export function requirePrintingServiceName(): string {
+	if (!env.COUCHDB_PRINTING_SERVICE_URL && dev) return DEV_FALLBACK_SERVICE_USER;
+	const name = printingServiceName();
+	if (!name) {
+		throw new PrintDependencyError('COUCHDB_PRINTING_SERVICE_URL is missing or invalid');
+	}
+	return name;
+}
+
 /**
  * Raw request as `printing_service` — returns status + parsed body (`null` for a
  * non-JSON body), never throws on HTTP error. Same contract as `adminRaw`.

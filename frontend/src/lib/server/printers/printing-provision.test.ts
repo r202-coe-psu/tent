@@ -2,6 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const adminRaw = vi.hoisted(() => vi.fn());
 vi.mock('$lib/server/couch-admin', () => ({ adminRaw }));
+const requirePrintingServiceName = vi.hoisted(() => vi.fn<() => string>());
+vi.mock('$lib/server/couch-printing-service', () => ({ requirePrintingServiceName }));
 
 import { PrintDependencyError } from './device-credentials';
 import type { PrintDeviceDoc } from './device-credentials';
@@ -59,6 +61,8 @@ beforeEach(() => {
 	calls = [];
 	adminRaw.mockReset();
 	resetPrintingProvisionForTests();
+	requirePrintingServiceName.mockReset();
+	requirePrintingServiceName.mockReturnValue('printing_service');
 	fakeCouch();
 });
 
@@ -86,6 +90,23 @@ describe('ensurePrintingDevicesDb', () => {
 			{ index: { fields: ['type', 'shelter_code'] }, name: 'print-device-shelter', type: 'json' },
 			{ index: { fields: ['type'] }, name: 'print-doc-type', type: 'json' }
 		]);
+	});
+
+	it('grants the configured service user name instead of printing_service', async () => {
+		requirePrintingServiceName.mockReturnValue('print_bot');
+		await ensurePrintingDevicesDb();
+		expect(bodyOf('PUT', '/printing_devices/_security')).toEqual({
+			admins: { names: ['print_bot'], roles: [] },
+			members: { names: ['print_bot'], roles: [] }
+		});
+	});
+
+	it('fails closed without writing anything when the service user name is unknown', async () => {
+		requirePrintingServiceName.mockImplementation(() => {
+			throw new PrintDependencyError('COUCHDB_PRINTING_SERVICE_URL is missing');
+		});
+		await expect(ensurePrintingDevicesDb()).rejects.toBeInstanceOf(PrintDependencyError);
+		expect(adminRaw).not.toHaveBeenCalled();
 	});
 
 	it('treats an already existing db (412) as success', async () => {
@@ -160,6 +181,53 @@ describe('ensureShelterPrintingDb', () => {
 		});
 	});
 
+	it('grants the configured service user name, in _security and in the VDU', async () => {
+		requirePrintingServiceName.mockReturnValue('print_bot');
+		await ensureShelterPrintingDb('SH001');
+		expect(bodyOf('PUT', '/printing_sh001/_security')).toEqual({
+			admins: { names: ['print_bot'], roles: [] },
+			members: { names: ['print_bot'], roles: ['shelter:SH001', 'system_admin'] }
+		});
+		expect(bodyOf('PUT', '/printing_sh001/_design/print_access')).toEqual({
+			language: 'javascript',
+			validate_doc_update: buildPrintingValidateDocUpdate('print_bot')
+		});
+	});
+
+	it('rewrites a design doc that still names the old service user, so a renamed user gets a new VDU', async () => {
+		requirePrintingServiceName.mockReturnValue('print_bot');
+		fakeCouch(({ method, path }) =>
+			method === 'GET' && path === '/printing_sh001/_design/print_access'
+				? {
+						status: 200,
+						data: {
+							_id: '_design/print_access',
+							_rev: '3-abc',
+							language: 'javascript',
+							validate_doc_update: buildPrintingValidateDocUpdate('printing_service')
+						}
+					}
+				: undefined
+		);
+		await ensureShelterPrintingDb('SH001');
+		expect(bodyOf('PUT', '/printing_sh001/_design/print_access')).toEqual({
+			_rev: '3-abc',
+			language: 'javascript',
+			validate_doc_update: buildPrintingValidateDocUpdate('print_bot')
+		});
+	});
+
+	it('fails closed without writing anything when the service user name is unknown, and retries later', async () => {
+		requirePrintingServiceName.mockImplementation(() => {
+			throw new PrintDependencyError('COUCHDB_PRINTING_SERVICE_URL is missing');
+		});
+		await expect(ensureShelterPrintingDb('SH001')).rejects.toBeInstanceOf(PrintDependencyError);
+		expect(adminRaw).not.toHaveBeenCalled();
+
+		requirePrintingServiceName.mockReturnValue('printing_service');
+		await expect(ensureShelterPrintingDb('SH001')).resolves.toBeUndefined();
+	});
+
 	it('keeps 100 revisions on the shelter db', async () => {
 		await ensureShelterPrintingDb('SH001');
 		expect(bodyOf('PUT', '/printing_sh001/_revs_limit')).toBe(100);
@@ -183,7 +251,7 @@ describe('ensureShelterPrintingDb', () => {
 		await ensureShelterPrintingDb('SH001');
 		expect(bodyOf('PUT', '/printing_sh001/_design/print_access')).toEqual({
 			language: 'javascript',
-			validate_doc_update: buildPrintingValidateDocUpdate()
+			validate_doc_update: buildPrintingValidateDocUpdate('printing_service')
 		});
 	});
 
@@ -227,7 +295,7 @@ describe('ensureShelterPrintingDb', () => {
 							_id: '_design/print_access',
 							_rev: '3-abc',
 							language: 'javascript',
-							validate_doc_update: buildPrintingValidateDocUpdate()
+							validate_doc_update: buildPrintingValidateDocUpdate('printing_service')
 						}
 					}
 				: undefined
@@ -254,7 +322,7 @@ describe('ensureShelterPrintingDb', () => {
 		expect(bodyOf('PUT', '/printing_sh001/_design/print_access')).toEqual({
 			_rev: '3-abc',
 			language: 'javascript',
-			validate_doc_update: buildPrintingValidateDocUpdate()
+			validate_doc_update: buildPrintingValidateDocUpdate('printing_service')
 		});
 	});
 

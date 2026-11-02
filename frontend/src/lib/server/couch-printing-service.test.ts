@@ -15,7 +15,11 @@ vi.mock('$app/environment', () => ({
 vi.mock('$lib/server/couch-admin', () => ({ adminRaw: mocks.adminRaw }));
 
 import { PrintDependencyError } from '$lib/server/printers/device-credentials';
-import { printingRaw, printingServiceName } from './couch-printing-service';
+import {
+	printingRaw,
+	printingServiceName,
+	requirePrintingServiceName
+} from './couch-printing-service';
 
 const SERVICE_URL = 'http://printing_service:s3cret@couchdb:5984';
 const EXPECTED_BASIC = `Basic ${Buffer.from('printing_service:s3cret').toString('base64')}`;
@@ -115,5 +119,32 @@ describe('printingServiceName', () => {
 		expect(printingServiceName()).toBe('printing_service');
 		mocks.env.COUCHDB_PRINTING_SERVICE_URL = undefined;
 		expect(printingServiceName()).toBeNull();
+	});
+});
+
+describe('requirePrintingServiceName', () => {
+	beforeEach(() => {
+		mocks.env.COUCHDB_PRINTING_SERVICE_URL = undefined;
+		mocks.dev = true;
+	});
+
+	it('is the username from the env URL, even when it is not printing_service', () => {
+		mocks.env.COUCHDB_PRINTING_SERVICE_URL = 'http://print_bot:s3cret@couchdb:5984';
+		mocks.dev = false;
+		expect(requirePrintingServiceName()).toBe('print_bot');
+	});
+
+	it('falls back to printing_service in dev when the env var is unset, like printingRaw', () => {
+		expect(requirePrintingServiceName()).toBe('printing_service');
+	});
+
+	it('fails closed with PrintDependencyError outside dev when the env var is unset', () => {
+		mocks.dev = false;
+		expect(() => requirePrintingServiceName()).toThrow(PrintDependencyError);
+	});
+
+	it('fails closed on a malformed env var even in dev', () => {
+		mocks.env.COUCHDB_PRINTING_SERVICE_URL = 'http://printing_service:@couchdb:5984';
+		expect(() => requirePrintingServiceName()).toThrow(PrintDependencyError);
 	});
 });

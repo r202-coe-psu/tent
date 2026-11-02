@@ -12,15 +12,17 @@ interface UserCtx {
 type Vdu = (newDoc: Doc, oldDoc: Doc | null, userCtx: UserCtx, secObj: unknown) => void;
 
 /** Compile the generated source exactly the way CouchDB's JS engine receives it. */
-const vdu = new Function('return ' + buildPrintingValidateDocUpdate())() as Vdu;
+const compile = (serviceUser: string) =>
+	new Function('return ' + buildPrintingValidateDocUpdate(serviceUser))() as Vdu;
+const vdu = compile('printing_service');
 
 const ACCEPTED = { ok: true };
 const REJECTED = { forbidden: expect.any(String) as unknown };
 
 /** CouchDB reports a VDU rejection as a thrown `{forbidden}` object; anything else is a bug. */
-function verdict(newDoc: Doc, oldDoc: Doc | null, userCtx: UserCtx): unknown {
+function verdict(newDoc: Doc, oldDoc: Doc | null, userCtx: UserCtx, rules: Vdu = vdu): unknown {
 	try {
-		vdu(newDoc, oldDoc, userCtx, { admins: {}, members: {} });
+		rules(newDoc, oldDoc, userCtx, { admins: {}, members: {} });
 		return ACCEPTED;
 	} catch (error) {
 		if (typeof error === 'object' && error !== null && 'forbidden' in error) return error;
@@ -240,6 +242,30 @@ describe('print_access VDU: staff create', () => {
 	it('rejects a design doc from staff, even a system_admin', () => {
 		const ddoc = { _id: '_design/x', views: {} };
 		expect(verdict(ddoc, null, ctx(['system_admin']))).toEqual(REJECTED);
+	});
+});
+
+describe('print_access VDU: configured service user name', () => {
+	const custom = compile('print_bot');
+	const claimed = (): Doc =>
+		stored({
+			status: 'printing',
+			claimed_at: '2026-11-01T00:01:00.000Z',
+			lease_until: '2026-11-01T00:02:00.000Z'
+		});
+	const finished = (): Doc => {
+		const next: Doc = { ...claimed(), status: 'printed', finished_at: '2026-11-01T00:03:00.000Z' };
+		delete next._attachments;
+		return next;
+	};
+
+	it('gives the service rules to the configured name', () => {
+		expect(verdict(finished(), claimed(), ctx([], 'print_bot'), custom)).toEqual(ACCEPTED);
+		expect(verdict(newJob(), null, ctx([], 'print_bot'), custom)).toEqual(REJECTED);
+	});
+
+	it('treats the default name as an ordinary staff user once another name is configured', () => {
+		expect(verdict(finished(), claimed(), ctx([], 'printing_service'), custom)).toEqual(REJECTED);
 	});
 });
 
