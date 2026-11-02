@@ -231,7 +231,7 @@ describe('adminRaw signal forwarding', () => {
 	afterEach(() => vi.unstubAllGlobals());
 
 	it('forwards init.signal to fetch and resolves with status + body', async () => {
-		const fetchMock = vi.fn(async () => Response.json({ _id: 'x' }, { status: 200 }));
+		const fetchMock = vi.fn<typeof fetch>(async () => Response.json({ _id: 'x' }, { status: 200 }));
 		vi.stubGlobal('fetch', fetchMock);
 		const ctrl = new AbortController();
 
