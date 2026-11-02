@@ -3,6 +3,7 @@ import {
 	applyToJob,
 	applyScheduleAction,
 	cancelTicket,
+	fetchAccessStatus,
 	fetchJobs,
 	fetchProfile,
 	fetchRoleCardToken,
@@ -25,6 +26,8 @@ export const volunteerPortalKeys = {
 		[...volunteerPortalKeys.all, 'schedule', credential] as const,
 	tickets: (credential: PortalCredential) =>
 		[...volunteerPortalKeys.all, 'tickets', credential] as const,
+	accessStatus: (credential: PortalCredential) =>
+		[...volunteerPortalKeys.all, 'access-status', credential] as const,
 	profile: (credential: PortalCredential) =>
 		[...volunteerPortalKeys.all, 'profile', credential] as const,
 	skills: (shelterCode?: string) =>
@@ -70,6 +73,16 @@ export function useVolunteerSchedule(credential: () => PortalCredential | null) 
 	return createQuery(() => ({
 		queryKey: volunteerPortalKeys.schedule(credential() ?? { phone: '' }),
 		queryFn: () => fetchSchedule(credential()!),
+		enabled: credential() !== null,
+		staleTime: 0
+	}));
+}
+
+/** The signed-in volunteer's staff-system access per shelter (CR-221 FR-26). `null` = signed out. */
+export function useVolunteerAccessStatus(credential: () => PortalCredential | null) {
+	return createQuery(() => ({
+		queryKey: volunteerPortalKeys.accessStatus(credential() ?? { phone: '' }),
+		queryFn: () => fetchAccessStatus(credential()!),
 		enabled: credential() !== null,
 		staleTime: 0
 	}));

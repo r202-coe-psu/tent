@@ -37,7 +37,7 @@ type ShelterRef = {
 	name: string;
 };
 
-type ResolvedIdentity = {
+export type ResolvedIdentity = {
 	ref: ShelterRef;
 	volunteerIds: Set<string>;
 };
@@ -62,6 +62,7 @@ export class PublicScheduleError extends Error {
 			| 'ROLE_CARD_NOT_FOUND'
 			| 'ROLE_CARD_WRITE_FAILED'
 			| 'WRITE_FAILED'
+			| 'ACCESS_STATUS_UNAVAILABLE'
 			| 'SCHEDULE_UNAVAILABLE',
 		readonly httpStatus = 409
 	) {
@@ -116,7 +117,11 @@ function filterPortalId(ids: Set<string>, portalId?: string): Set<string> {
 	return ids.has(portalId) ? new Set([portalId]) : new Set();
 }
 
-async function resolveIdentities(credential: PortalCredential): Promise<ResolvedIdentity[]> {
+/**
+ * The volunteer profiles a portal credential opens, per shelter. Shared with the access-status
+ * read so both answer for exactly the same profiles.
+ */
+export async function resolveIdentities(credential: PortalCredential): Promise<ResolvedIdentity[]> {
 	const refs = await shelterRefs();
 	const identities: ResolvedIdentity[] = [];
 	const phoneHash = credential.phone ? await sha256Hex(normalizeThaiPhone(credential.phone)) : null;

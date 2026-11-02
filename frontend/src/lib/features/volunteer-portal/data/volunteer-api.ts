@@ -6,6 +6,7 @@
  * (CR-063).
  */
 import type {
+	PortalAccessStatus,
 	PortalCredential,
 	PublicJob,
 	PublicJobFilter,
@@ -51,6 +52,7 @@ const ERROR_COPY: Record<string, string> = {
 	CANCEL_FAILED: 'ยกเลิกการสมัครไม่สำเร็จ กรุณาลองใหม่อีกครั้ง',
 	RATE_LIMITED: 'ส่งคำขอถี่เกินไป กรุณารอสักครู่แล้วลองใหม่',
 	VOLUNTEER_NOT_FOUND: 'ไม่พบเบอร์โทรศัพท์นี้ในระบบอาสาสมัคร กรุณาตรวจสอบเบอร์ที่ใช้สมัครอีกครั้ง',
+	ACCESS_STATUS_UNAVAILABLE: 'ไม่สามารถตรวจสอบสิทธิ์ใช้งานระบบได้ กรุณาลองใหม่อีกครั้ง',
 	ACCESS_UNAVAILABLE: 'ไม่สามารถตรวจสอบข้อมูลจิตอาสาได้ กรุณาลองใหม่อีกครั้ง',
 	ROLE_CARD_NOT_FOUND: 'ไม่พบข้อมูล role card ของอาสาสมัคร',
 	ROLE_CARD_WRITE_FAILED: 'ไม่สามารถสร้าง QR Role Card ได้ กรุณาลองใหม่อีกครั้ง'
@@ -136,6 +138,25 @@ export async function fetchSchedule(credential: PortalCredential): Promise<Sched
 		throw apiError(data, response.status, 'ไม่สามารถโหลดตารางงานได้');
 	}
 	return (data as { shifts?: ScheduleShift[] }).shifts ?? [];
+}
+
+/**
+ * Whether the signed-in volunteer may use the staff system, per shelter they have a profile in
+ * (CR-221 FR-26). Rows carry no account name by design (FR-28).
+ */
+export async function fetchAccessStatus(
+	credential: PortalCredential
+): Promise<PortalAccessStatus[]> {
+	const response = await fetch('/api/public/v1/volunteer/access-status', {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify(credential)
+	});
+	const data = await readJson(response);
+	if (!response.ok || !data) {
+		throw apiError(data, response.status, 'ไม่สามารถตรวจสอบสิทธิ์ใช้งานระบบได้');
+	}
+	return (data as { access?: PortalAccessStatus[] }).access ?? [];
 }
 
 export async function respondToDispatch(
