@@ -17,6 +17,7 @@ import {
 	loanPendingWarning,
 	remainingLinesMessage,
 	summarizeAddResult,
+	type ReturnerChoice,
 	wroteIntoPool,
 	ulidsNeedingWrittenLookup,
 	validateAddEntryLines,
@@ -314,6 +315,18 @@ describe('resolveReturner', () => {
 		expect(
 			resolveReturner({ recipientType: 'outside', recipientId: null, label: 'x' }).error
 		).toBeTruthy();
+	});
+
+	it('rejects a staff recipient as a returner because staff only receive consumables', () => {
+		const staff: ReturnerChoice = {
+			recipientType: 'staff',
+			recipientId: 'user:somchai',
+			label: 'Somchai'
+		};
+		const resolved = resolveReturner(staff);
+		expect(resolved.error).toBeTruthy();
+		expect(resolved.returner).toBeUndefined();
+		expect(identifiedReturnerId(staff)).toBeNull();
 	});
 
 	it('exposes the id only for identified returners', () => {

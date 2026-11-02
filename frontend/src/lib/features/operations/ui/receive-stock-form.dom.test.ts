@@ -115,3 +115,40 @@ describe('receive-stock walk-in phone', () => {
 		expect(errorEl()).toBeNull();
 	});
 });
+
+// #821 FR-11 — optional walk-in email.
+describe('receive-stock walk-in email', () => {
+	const emailInput = () => document.getElementById('walkin-donor-email') as HTMLInputElement;
+	const emailError = () => document.querySelector('[data-testid="walkin-email-error"]');
+
+	it('offers an optional email field next to the phone', async () => {
+		await openWalkIn();
+
+		expect(emailInput()).not.toBeNull();
+		expect(document.body.textContent).toContain('อีเมล (ไม่บังคับ)');
+		expect(emailInput().required).toBe(false);
+	});
+
+	it('shows nothing for a blank email, even after leaving the field', async () => {
+		await openWalkIn();
+
+		emailInput().dispatchEvent(new Event('blur'));
+		await settle();
+
+		expect(emailError()).toBeNull();
+	});
+
+	it('flags a malformed email once the field is left, and clears it when fixed', async () => {
+		await openWalkIn();
+
+		await type(emailInput(), 'not-an-email');
+		expect(emailError()).toBeNull();
+		emailInput().dispatchEvent(new Event('blur'));
+		await settle();
+		expect(emailError()?.textContent?.trim()).toBeTruthy();
+		expect(emailInput().getAttribute('aria-describedby')).toBe(emailError()!.id);
+
+		await type(emailInput(), ' somchai@example.com ');
+		expect(emailError()).toBeNull();
+	});
+});

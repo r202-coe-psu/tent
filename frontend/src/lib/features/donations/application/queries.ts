@@ -1,5 +1,17 @@
-import { createMutation, createQuery, useQueryClient } from '@tanstack/svelte-query';
-import { fetchDonationQueue } from '../data/back-office-queue';
+import {
+	createInfiniteQuery,
+	createMutation,
+	createQuery,
+	useQueryClient
+} from '@tanstack/svelte-query';
+import {
+	fetchDonationQueue,
+	fetchDonorContact,
+	fetchReceivedDonationsPage,
+	searchReceivedDonations,
+	type ReceivedSearchPage
+} from '../data/back-office-queue';
+import type { ReceivedSearchBy } from '../domain/received-search';
 import {
 	cancelDonation,
 	fetchDonationTracking,
@@ -123,5 +135,71 @@ export function useDonationQueue() {
 	return createQuery(() => ({
 		queryKey: donationQueueKeys.all,
 		queryFn: fetchDonationQueue
+	}));
+}
+
+/**
+ * The "รับแล้ว" list (#821) — one shelter, paged by CouchDB bookmark. Only runs while that
+ * filter is open; `useDonationQueue` above never reads `received`.
+ */
+export function useReceivedDonations(shelterCode: () => string, enabled: () => boolean) {
+	return createInfiniteQuery(() => ({
+		queryKey: [...donationQueueKeys.all, 'received', shelterCode()] as const,
+		queryFn: ({ pageParam }) => fetchReceivedDonationsPage(shelterCode(), pageParam),
+		initialPageParam: null as string | null,
+		getNextPageParam: (last) => (last.hasMore ? (last.bookmark ?? undefined) : undefined),
+		enabled: enabled()
+	}));
+}
+
+/** What the search box asked for: one type, one exact value (#821 FR-8). */
+export type ReceivedSearchTerm = { by: ReceivedSearchBy; q: string };
+
+/**
+ * Server-side search of the "รับแล้ว" list (#821 FR-8), paged by the cursor the server hands
+ * out. Runs only for a submitted term (`term()` non-null): typing alone asks nothing. The term
+ * is in the key, so a new search starts at the first page, and an old one is not served again as
+ * fresh — a stale list of names is the thing this screen must not show.
+ */
+export function useReceivedSearch(
+	shelterCode: () => string,
+	term: () => ReceivedSearchTerm | null
+) {
+	return createInfiniteQuery(() => {
+		const current = term();
+		return {
+			queryKey: [
+				...donationQueueKeys.all,
+				'received-search',
+				shelterCode(),
+				current?.by ?? '',
+				current?.q ?? ''
+			] as const,
+			queryFn: ({ pageParam }: { pageParam: string | null }) =>
+				searchReceivedDonations({
+					shelterCode: shelterCode(),
+					by: current!.by,
+					q: current!.q,
+					cursor: pageParam
+				}),
+			initialPageParam: null as string | null,
+			getNextPageParam: (last: ReceivedSearchPage) =>
+				last.hasMore ? (last.cursor ?? undefined) : undefined,
+			enabled: current !== null,
+			retry: false,
+			gcTime: 0
+		};
+	});
+}
+
+/**
+ * Full donor contact of one donation (#821 FR-10a). A mutation, not a query: every call writes
+ * an audit row on the server, so it must run on a press, never on render, a refocus or a retry,
+ * and the answer is not kept in the query cache.
+ */
+export function useRevealDonorContact() {
+	return createMutation(() => ({
+		mutationFn: (ref: string) => fetchDonorContact(ref),
+		retry: false
 	}));
 }

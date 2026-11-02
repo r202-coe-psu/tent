@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { computeNeeds, pickCampaignForItems } from './compute-needs';
+import { computeNeeds, filterCampaignsByCards, pickCampaignForItems } from './compute-needs';
 import { forceCutOffNeed, isDonationOutstanding } from '$lib/features/operations';
 import type {
 	StockLedger,
@@ -544,5 +544,59 @@ describe('force cut-off leaves bookings already in the queue alone (R-22.2)', ()
 		const { campaignRemaining } = computeNeeds([closed], bookings());
 		const pick = pickCampaignForItems(campaignRemaining, [{ item_id: 'item:rice', qty: '1' }]);
 		expect(pick).toEqual({ ok: false, itemId: 'item:rice' });
+	});
+});
+
+describe('filterCampaignsByCards (FR-AP-7b)', () => {
+	const gym = { item_id: 'item:rice', drop_off_point_id: 'point-gym' };
+	const med = { item_id: 'item:rice', drop_off_point_id: 'point-med' };
+	const none = { item_id: 'item:rice' };
+	const cs = [
+		{ _id: 'gym', needs: [gym] },
+		{ _id: 'med', needs: [med] },
+		{ _id: 'none', needs: [none] },
+		{ _id: 'both', needs: [gym, { item_id: 'item:oil', drop_off_point_id: 'point-gym' }] }
+	];
+	const ids = (list: { _id: string }[]) => list.map((c) => c._id);
+
+	it('keeps every campaign when no line carries the key', () => {
+		expect(ids(filterCampaignsByCards(cs, [{ item_id: 'item:rice', qty: 1 }]))).toEqual([
+			'gym',
+			'med',
+			'none',
+			'both'
+		]);
+	});
+
+	it('keeps only campaigns whose need has the same item and point', () => {
+		const items = [{ item_id: 'item:rice', qty: 1, need_drop_off_point_id: 'point-gym' }];
+		expect(ids(filterCampaignsByCards(cs, items))).toEqual(['gym', 'both']);
+	});
+
+	it('matches null to a need with no point or a missing key, and only to it', () => {
+		const items = [{ item_id: 'item:rice', qty: 1, need_drop_off_point_id: null }];
+		expect(ids(filterCampaignsByCards(cs, items))).toEqual(['none']);
+	});
+
+	it('requires every card line to match the same campaign', () => {
+		const items = [
+			{ item_id: 'item:rice', qty: 1, need_drop_off_point_id: 'point-gym' },
+			{ item_id: 'item:oil', qty: 1, need_drop_off_point_id: 'point-gym' }
+		];
+		expect(ids(filterCampaignsByCards(cs, items))).toEqual(['both']);
+	});
+
+	it('leaves lines without the key out of the filter', () => {
+		const items = [
+			{ item_id: 'item:rice', qty: 1, need_drop_off_point_id: 'point-med' },
+			{ item_id: 'item:oil', qty: 1 },
+			{ qty: 1 }
+		];
+		expect(ids(filterCampaignsByCards(cs, items))).toEqual(['med']);
+	});
+
+	it('returns nothing when no campaign has the point (no fallback to another point)', () => {
+		const items = [{ item_id: 'item:rice', qty: 1, need_drop_off_point_id: 'point-x' }];
+		expect(filterCampaignsByCards(cs, items)).toEqual([]);
 	});
 });

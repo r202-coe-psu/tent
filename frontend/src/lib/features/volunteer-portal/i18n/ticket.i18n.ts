@@ -112,7 +112,7 @@ export const ticketI18n: Record<LanguageCode, TicketTranslations> = {
 		finderPhonePlaceholder: 'กรอกเบอร์โทรศัพท์ที่ใช้สมัคร',
 		finderPhoneLabel: 'เบอร์โทรศัพท์',
 		finderSearch: 'ค้นหา',
-		finderInvalidPhone: 'เบอร์โทรศัพท์ไม่ถูกต้อง',
+		finderInvalidPhone: 'เบอร์โทรต้องเป็นตัวเลข 10 หลัก ขึ้นต้นด้วย 0',
 		finderSearchFailed: 'ค้นหาตั๋วไม่สำเร็จ',
 		finderPhoneNotFound:
 			'ไม่พบเบอร์โทรศัพท์นี้ในระบบอาสาสมัคร กรุณาตรวจสอบเบอร์ที่ใช้สมัครอีกครั้ง',
@@ -175,7 +175,7 @@ export const ticketI18n: Record<LanguageCode, TicketTranslations> = {
 		finderPhonePlaceholder: 'Phone number you applied with',
 		finderPhoneLabel: 'Phone number',
 		finderSearch: 'Search',
-		finderInvalidPhone: 'Invalid phone number',
+		finderInvalidPhone: 'Phone must be a 10-digit number starting with 0',
 		finderSearchFailed: 'Could not search for tickets',
 		finderPhoneNotFound:
 			'This phone number is not registered as a volunteer. Please check the number you applied with.',

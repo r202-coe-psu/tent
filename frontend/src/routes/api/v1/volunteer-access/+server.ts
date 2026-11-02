@@ -33,7 +33,8 @@ export const GET: RequestHandler = async ({ request, url }) => {
 
 /**
  * POST — grant `role` until the end of `expires_on` to a volunteer of the coordinator's shelter.
- * Posting again renews it, or shortens it (an earlier `expires_on`, only for the caller's grants).
+ * Posting again renews it, or shortens it (an earlier `expires_on`), for any grant in the shelter
+ * (CR-221 FR-17); another role replaces the shelter's grants.
  */
 export const POST: RequestHandler = async ({ request }) => {
 	try {
@@ -57,7 +58,7 @@ export const POST: RequestHandler = async ({ request }) => {
 	}
 };
 
-/** DELETE — take back a grant the caller issued: the role goes, the account and password stay. */
+/** DELETE — take back any coordinator grant in the shelter (FR-17): the role goes, the account and password stay. */
 export const DELETE: RequestHandler = async ({ request }) => {
 	try {
 		const { name, roles } = await readSessionUserCtx(request.headers.get('cookie'));

@@ -8,6 +8,7 @@
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Label } from '$lib/components/ui/label/index.js';
 	import { defaults, superForm } from 'sveltekit-superforms';
+	import { z } from 'zod';
 	import { zod4 } from 'sveltekit-superforms/adapters';
 	import {
 		keyableDonations,
@@ -118,6 +119,7 @@
 	let isWalkInOpen = $state(false);
 	let walkInDonorName = $state('');
 	let walkInDonorPhone = $state('');
+	let walkInDonorEmail = $state('');
 
 	const items = $derived(stockItems.items);
 	const unitOptions = $derived(selectedItem ? itemSelectableUoms(selectedItem) : []);
@@ -214,7 +216,9 @@
 					toast.error(problem);
 					// Mark the phone too, so a bad number shows alongside a missing name.
 					if (phoneError) phoneTouched = true;
+					if (emailError) emailTouched = true;
 					if (problem === phoneError) document.getElementById('walkin-donor-phone')?.focus();
+					else if (problem === emailError) document.getElementById('walkin-donor-email')?.focus();
 					return;
 				}
 				await handleWalkInCommit(validated.data);
@@ -472,8 +476,25 @@
 	 */
 	function walkInError(): string | null {
 		if (!walkInDonorName.trim()) return 'ระบุชื่อผู้บริจาค';
-		return phoneError;
+		return phoneError ?? emailError;
 	}
+
+	/**
+	 * Optional email (#821 FR-11): blank saves nothing, otherwise the same Zod rule as the
+	 * back-office walk-in (`z.string().trim().email().optional()`) — checked again by
+	 * `walkInDonationInputSchema` when the donation is created.
+	 */
+	const walkInEmail = $derived(
+		z
+			.string()
+			.trim()
+			.email('รูปแบบอีเมลไม่ถูกต้อง')
+			.optional()
+			.safeParse(walkInDonorEmail.trim() === '' ? undefined : walkInDonorEmail)
+	);
+	const emailError = $derived(walkInEmail.success ? null : walkInEmail.error.issues[0].message);
+	let emailTouched = $state(false);
+	const shownEmailError = $derived(emailTouched ? emailError : null);
 
 	/** Same rule the walk-in schema enforces; UX only on this direct-to-CouchDB path. */
 	const walkInPhone = $derived(thaiMobilePhoneSchema.safeParse(walkInDonorPhone));
@@ -494,7 +515,13 @@
 			sha256Hex(ulid())
 		]);
 		return {
-			donor: { name: walkInDonorName.trim(), phone, phone_hash: phoneHash },
+			donor: {
+				name: walkInDonorName.trim(),
+				phone,
+				phone_hash: phoneHash,
+				// Blank = no `donor.email` key.
+				...(walkInEmail.success && walkInEmail.data ? { email: walkInEmail.data } : {})
+			},
 			kind: 'items',
 			items: [{ item_id: data.item_id, qty: data.qty, unit: data.unit }],
 			campaign_id: null,
@@ -506,7 +533,9 @@
 		isWalkInOpen = false;
 		walkInDonorName = '';
 		walkInDonorPhone = '';
+		walkInDonorEmail = '';
 		phoneTouched = false;
+		emailTouched = false;
 	}
 </script>
 
@@ -681,6 +710,31 @@
 								data-testid="walkin-phone-error"
 							>
 								{shownPhoneError}
+							</p>
+						{/if}
+					</div>
+					<div class="sm:col-span-2">
+						<Label for="walkin-donor-email" class="mb-1.5 block text-xs font-medium">
+							อีเมล (ไม่บังคับ)
+						</Label>
+						<Input
+							id="walkin-donor-email"
+							type="email"
+							placeholder="เช่น somchai@example.com"
+							autocomplete="off"
+							bind:value={walkInDonorEmail}
+							onblur={() => (emailTouched = true)}
+							aria-invalid={shownEmailError ? true : undefined}
+							aria-describedby={shownEmailError ? 'walkin-donor-email-error' : undefined}
+							class="min-h-11"
+						/>
+						{#if shownEmailError}
+							<p
+								id="walkin-donor-email-error"
+								class="mt-1 text-xs text-destructive"
+								data-testid="walkin-email-error"
+							>
+								{shownEmailError}
 							</p>
 						{/if}
 					</div>

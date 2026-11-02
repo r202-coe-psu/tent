@@ -1306,6 +1306,42 @@ describe('OperationsRemoteRepository', () => {
 			await expect(repo.receiveWalkInDonation(walkIn, receive, ctx)).rejects.toThrow();
 			expect(await repo.listDonations()).toHaveLength(0);
 		});
+
+		// #821 FR-11 / AC-7
+		it('stores a valid donor email on donor.email', async () => {
+			mockGetItem.mockResolvedValue({ unit: 'kg' } as SupplyItem);
+
+			const { donation } = await repo.receiveWalkInDonation(
+				{ ...walkIn, donor: { ...walkIn.donor, email: 'somchai@example.com' } },
+				receive,
+				ctx
+			);
+
+			expect(donation.donor.email).toBe('somchai@example.com');
+			expect((await repo.listDonations())[0].donor.email).toBe('somchai@example.com');
+		});
+
+		it('refuses a malformed donor email and writes nothing', async () => {
+			mockGetItem.mockResolvedValue({ unit: 'kg' } as SupplyItem);
+
+			await expect(
+				repo.receiveWalkInDonation(
+					{ ...walkIn, donor: { ...walkIn.donor, email: 'not-an-email' } },
+					receive,
+					ctx
+				)
+			).rejects.toThrow();
+			expect(await repo.listDonations()).toHaveLength(0);
+			expect(await repo.listLedger()).toHaveLength(0);
+		});
+
+		it('keeps no donor.email key when none was given', async () => {
+			mockGetItem.mockResolvedValue({ unit: 'kg' } as SupplyItem);
+
+			const { donation } = await repo.receiveWalkInDonation(walkIn, receive, ctx);
+
+			expect('email' in donation.donor).toBe(false);
+		});
 	});
 });
 
@@ -1568,6 +1604,24 @@ describe('OperationsRemoteRepository.updateCampaign', () => {
 			reason: 'อัปเดตชื่อแคมเปญเพื่อความชัดเจน',
 			created_by: 'tester'
 		});
+	});
+
+	it('re-stamps a v3 campaign as schema_v 4 on any update (FR-AP-4b)', async () => {
+		const created = await repo.createCampaign(
+			{
+				title: 'น้ำดื่ม',
+				needs: [{ item_id: 'item:water', qty_target: 100, unit: 'bottle' }]
+			},
+			ctx
+		);
+		const v3 = { ...created, schema_v: 3 };
+		await memoryRepo.put(v3);
+		const stale = (await repo.getCampaign(created._id))!;
+
+		const result = await repo.updateCampaign({ ...stale, visible_on_home: false });
+
+		expect(result.schema_v).toBe(4);
+		expect((await repo.getCampaign(created._id))?.schema_v).toBe(4);
 	});
 
 	it('refuses to update a campaign this shelter database does not hold', async () => {
