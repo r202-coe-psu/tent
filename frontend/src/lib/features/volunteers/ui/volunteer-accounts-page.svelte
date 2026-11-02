@@ -11,6 +11,10 @@
 	import Clock from '@lucide/svelte/icons/clock';
 	import Inbox from '@lucide/svelte/icons/inbox';
 	import Search from '@lucide/svelte/icons/search';
+	import RotateCcw from '@lucide/svelte/icons/rotate-ccw';
+	import { toast } from 'svelte-sonner';
+	import { useQueryClient } from '@tanstack/svelte-query';
+	import { Button } from '$lib/components/ui/button/index.js';
 	import StaffPageShell from '$lib/components/staff-page-shell.svelte';
 	import { resolve } from '$app/paths';
 	import { canAccessVolunteerBackoffice } from '$lib/auth/roles';
@@ -26,7 +30,11 @@
 	import VolunteerAccessActions from './volunteer-access-actions.svelte';
 	import VolunteerAccountBadge from './volunteer-account-badge.svelte';
 	import { createMinuteClock } from './minute-clock.svelte';
-	import { useShelterVolunteerAccounts, useVolunteers } from '../application/queries';
+	import {
+		useReactivateVolunteer,
+		useShelterVolunteerAccounts,
+		useVolunteers
+	} from '../application/queries';
 	import {
 		ACCOUNT_LIST_FILTERS,
 		MANAGER_ISSUER_LABEL,
@@ -53,6 +61,22 @@
 		() => canRead
 	);
 	const volunteersQuery = useVolunteers();
+
+	// A closed profile reopens here too (#984 rule: SA / SM / coordinator, the same as `canRead`),
+	// so its access can be given again without going back to the people tab.
+	const reactivateMutation = useReactivateVolunteer(useQueryClient());
+	let reopeningId = $state<string | null>(null);
+
+	function reopen(volunteer: { _id: string; first_name: string; last_name: string }) {
+		const name = `${volunteer.first_name} ${volunteer.last_name}`.trim();
+		reopeningId = volunteer._id;
+		reactivateMutation.mutate(volunteer._id, {
+			onSuccess: () => toast.success(`เปิดใช้งานอาสาสมัคร ${name} อีกครั้งแล้ว`),
+			onError: (error) =>
+				toast.error(error instanceof Error ? error.message : 'เปิดใช้งานอาสาสมัครไม่สำเร็จ'),
+			onSettled: () => (reopeningId = null)
+		});
+	}
 
 	const { now } = createMinuteClock();
 
@@ -225,10 +249,19 @@
 										status={row.status}
 										{shelterLine}
 									/>
-									{#if row.profileClosed}
-										<p class="text-xs text-muted-foreground">
-											เปิดโปรไฟล์ใหม่ได้ที่แท็บรายชื่อและการอนุมัติ
-										</p>
+									{#if row.profileClosed && canRead}
+										<Button
+											size="sm"
+											variant="outline"
+											class="gap-1.5 border-emerald-300 text-emerald-700 hover:bg-emerald-50"
+											disabled={reopeningId !== null}
+											onclick={() => reopen(row.volunteer)}
+										>
+											<RotateCcw class="h-3.5 w-3.5" />
+											{reopeningId === row.volunteer._id
+												? 'กำลังเปิดใช้งาน...'
+												: 'เปิดใช้งานอีกครั้ง'}
+										</Button>
 									{/if}
 								</Table.Cell>
 							</Table.Row>

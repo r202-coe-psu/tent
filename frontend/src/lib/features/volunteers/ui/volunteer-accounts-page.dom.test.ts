@@ -7,6 +7,7 @@ import VolunteerAccountsPage from './volunteer-accounts-page.svelte';
 
 const mocks = vi.hoisted(() => ({
 	roles: [] as string[],
+	reactivate: vi.fn(),
 	accounts: { data: undefined, isPending: false, error: null } as {
 		data: unknown;
 		isPending: boolean;
@@ -34,8 +35,10 @@ vi.mock('$lib/features/shelters', () => ({
 }));
 vi.mock('../application/queries', () => ({
 	useShelterVolunteerAccounts: () => mocks.accounts,
-	useVolunteers: () => mocks.volunteers
+	useVolunteers: () => mocks.volunteers,
+	useReactivateVolunteer: () => ({ mutate: mocks.reactivate })
 }));
+vi.mock('@tanstack/svelte-query', () => ({ useQueryClient: () => ({}) }));
 // The dialogs have their own tests; here only which button each row offers matters.
 vi.mock('./volunteer-access-dialog.svelte', () => ({ default: function Stub() {} }));
 vi.mock('./volunteer-qualification-dialog.svelte', () => ({ default: function Stub() {} }));
@@ -150,6 +153,23 @@ describe('VolunteerAccountsPage (CR-221 FR-8)', () => {
 		expect(rowOf('อารีย์ ใจงาม').textContent).toContain('บัญชีถูกปิดใช้งาน');
 	});
 
+	it('reopens a closed profile from its row', async () => {
+		await render();
+		const buttons = [...rowOf('วิชัย เก่งกล้า').querySelectorAll('button')].filter((b) =>
+			b.textContent?.includes('เปิดใช้งานอีกครั้ง')
+		);
+		expect(buttons).toHaveLength(1);
+		buttons[0].click();
+		expect(mocks.reactivate).toHaveBeenCalledTimes(1);
+		const [id] = mocks.reactivate.mock.calls[0];
+		expect(id).toBe(
+			(mocks.volunteers.data as { _id: string; first_name: string }[]).find(
+				(v) => v.first_name === 'วิชัย'
+			)?._id
+		);
+		expect(rowOf('สมชาย ใจดี').textContent).not.toContain('เปิดใช้งานอีกครั้ง');
+	});
+
 	it('shows a coordinator grant with its end date and issuer', async () => {
 		await render();
 		const text = rowOf('สมชาย ใจดี').textContent ?? '';
@@ -179,7 +199,7 @@ describe('VolunteerAccountsPage (CR-221 FR-8)', () => {
 		expect(rowOf('สมชาย ใจดี').textContent).toContain('แก้ไขสิทธิ์ใช้งาน');
 		// A closed profile gets no grant button, only the note where to reopen it.
 		expect(rowOf('วิชัย เก่งกล้า').textContent).not.toContain('ออกสิทธิ์อีกครั้ง');
-		expect(rowOf('วิชัย เก่งกล้า').textContent).toContain('เปิดโปรไฟล์ใหม่ได้ที่');
+		expect(rowOf('วิชัย เก่งกล้า').textContent).toContain('เปิดใช้งานอีกครั้ง');
 		expect(rowOf('อารีย์ ใจงาม').textContent).toContain('บัญชีถูกระงับโดยผู้ดูแลระบบ');
 	});
 
