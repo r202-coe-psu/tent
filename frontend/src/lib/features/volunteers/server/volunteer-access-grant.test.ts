@@ -596,6 +596,59 @@ describe('listShelterVolunteerAccounts (#1044)', () => {
 		expect(adminRaw).not.toHaveBeenCalled();
 	});
 
+	it('says how the last role ended for an account that holds nothing here', async () => {
+		const account = (name: string, grants: unknown[] = []) => ({
+			volunteer_id: `volunteer:${name}`,
+			name,
+			active: true,
+			grants,
+			permanent_roles: []
+		});
+		readShelterVolunteerAccounts.mockResolvedValue([
+			account('held@example.com', [
+				{ role: 'kitchen_staff', expires_at: '2026-11-03T16:59:59.999Z' }
+			]),
+			account('ended@example.com')
+		]);
+		adminRaw.mockImplementation(async (_path: string, _method: string, body?: unknown) => {
+			const selector = (body as { selector?: { type?: string } } | undefined)?.selector;
+			if (selector?.type === 'audit') {
+				return {
+					status: 200,
+					data: {
+						docs: [
+							{
+								reason: 'role_grant.revoked',
+								created_at: '2026-11-02T07:06:06.813Z',
+								context: { role: 'warehouse_staff', actor: 'worker', cause: 'profile_inactive' }
+							}
+						]
+					}
+				};
+			}
+			return { status: 200, data: { docs: [] } };
+		});
+
+		const accounts = await listShelterVolunteerAccounts(
+			{ roles: COORDINATOR.roles },
+			{ shelter_code: 'SH001' }
+		);
+
+		expect(accounts[0]).not.toHaveProperty('last_ended');
+		expect(accounts[1].last_ended).toEqual({
+			role: 'warehouse_staff',
+			reason: 'revoked',
+			at: '2026-11-02T07:06:06.813Z',
+			by: 'worker',
+			cause: 'profile_inactive'
+		});
+		// One audit read, for the account that holds nothing.
+		const auditReads = adminRaw.mock.calls.filter(
+			(call) => (call[2] as { selector?: { type?: string } })?.selector?.type === 'audit'
+		);
+		expect(auditReads).toHaveLength(1);
+	});
+
 	it('needs a shelter', async () => {
 		await expect(
 			listShelterVolunteerAccounts({ roles: COORDINATOR.roles }, { shelter_code: '' })

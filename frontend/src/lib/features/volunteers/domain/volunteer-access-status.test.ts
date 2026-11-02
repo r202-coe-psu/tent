@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
+	accessEndingLabel,
 	closeProfileAccessNotice,
 	hasVolunteerAccount,
 	volunteerAccessStatus,
@@ -40,7 +41,7 @@ describe('volunteerAccessStatus', () => {
 
 	it('is lapsed when the account holds nothing here any more', () => {
 		const s = volunteerAccessStatus(vol, [account()]);
-		expect(s).toEqual({ kind: 'lapsed', loginName: 'a@x.com' });
+		expect(s).toEqual({ kind: 'lapsed', loginName: 'a@x.com', lastEnded: null });
 		expect(hasVolunteerAccount(s)).toBe(true);
 	});
 
@@ -97,12 +98,56 @@ describe('closeProfileAccessNotice (CR-221 FR-20)', () => {
 
 	it.each([
 		['no account', closeProfileAccessNotice({ kind: 'none' })],
-		['a lapsed account', closeProfileAccessNotice({ kind: 'lapsed', loginName: 'a@x.com' })],
+		[
+			'a lapsed account',
+			closeProfileAccessNotice({ kind: 'lapsed', loginName: 'a@x.com', lastEnded: null })
+		],
 		[
 			'roles not known yet',
 			closeProfileAccessNotice({ kind: 'active', loginName: 'a@x.com', roles: null })
 		]
 	])('has nothing to say for %s', (_what, result) => {
 		expect(result).toEqual({ revokesGrants: false, keepsManagerRole: false });
+	});
+});
+
+describe('accessEndingLabel (#1044)', () => {
+	const ending = (over: Record<string, unknown> = {}) => ({
+		role: 'warehouse_staff',
+		reason: 'revoked' as const,
+		at: '2026-11-02T07:06:06.813Z',
+		by: 'worker',
+		...over
+	});
+
+	it.each([
+		[{ reason: 'expired' }, 'เคยเป็น เจ้าหน้าที่คลัง · หมดอายุ'],
+		[{}, 'เคยเป็น เจ้าหน้าที่คลัง · ถูกถอน'],
+		[{ cause: 'profile_inactive' }, 'เคยเป็น เจ้าหน้าที่คลัง · ถูกถอนเพราะปิดโปรไฟล์'],
+		[
+			{ reason: 'verification_revoked' },
+			'เคยเป็น เจ้าหน้าที่คลัง · ถูกถอนเพราะผลยืนยันตัวตนถูกยกเลิก'
+		],
+		[{ role: '' }, 'ถูกถอน']
+	])('describes %o', (over, label) => {
+		expect(accessEndingLabel(ending(over) as never)).toBe(label);
+	});
+
+	it('is null without an ending', () => {
+		expect(accessEndingLabel(null)).toBeNull();
+	});
+
+	it('carries the ending onto a lapsed status', () => {
+		const s = volunteerAccessStatus({ _id: 'V-011', user_name: 'a@x.com' }, [
+			{
+				volunteer_id: 'V-011',
+				name: 'a@x.com',
+				active: true,
+				grants: [],
+				permanent_roles: [],
+				last_ended: ending()
+			}
+		]);
+		expect(s).toEqual({ kind: 'lapsed', loginName: 'a@x.com', lastEnded: ending() });
 	});
 });

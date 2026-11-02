@@ -257,6 +257,8 @@ export type GrantEnding = {
 	at: string;
 	/** Who took it back; `worker` for an expiry or a lapsed verification. */
 	by: string;
+	/** Why the worker revoked it, when it says (`profile_inactive`, CR-221 FR-20). */
+	cause?: string;
 };
 
 export type VolunteerAccessView = {
@@ -291,7 +293,7 @@ async function lastGrantEnding(shelterCode: string, name: string): Promise<Grant
 	const docs = ((res.data as { docs?: unknown[] } | null)?.docs ?? []) as {
 		reason: keyof typeof ENDING_REASONS;
 		created_at: string;
-		context?: { role?: string; actor?: string };
+		context?: { role?: string; actor?: string; cause?: string };
 	}[];
 	const latest = docs.sort((a, b) => b.created_at.localeCompare(a.created_at))[0];
 	if (!latest) return null;
@@ -299,7 +301,8 @@ async function lastGrantEnding(shelterCode: string, name: string): Promise<Grant
 		role: latest.context?.role ?? '',
 		reason: ENDING_REASONS[latest.reason],
 		at: latest.created_at,
-		by: latest.context?.actor ?? ''
+		by: latest.context?.actor ?? '',
+		...(latest.context?.cause ? { cause: latest.context.cause } : {})
 	};
 }
 
@@ -348,7 +351,7 @@ export async function listVolunteerGrantsAsCoordinator(
 export async function listShelterVolunteerAccounts(
 	caller: Pick<Caller, 'roles'>,
 	input: { shelter_code: unknown }
-): Promise<ShelterVolunteerAccount[]> {
+): Promise<(ShelterVolunteerAccount & { last_ended?: GrantEnding | null })[]> {
 	const shelterCode = asString(input.shelter_code);
 	if (!shelterCode) throw new ServiceError('VALIDATION', 'shelter_code is required');
 	if (!canAccessVolunteerBackoffice(caller.roles, shelterCode)) {
@@ -362,10 +365,19 @@ export async function listShelterVolunteerAccounts(
 	if (res.status === 404) return [];
 	if (res.status >= 400) throw serviceErrorFromCouch('find volunteers', res.status, res.data);
 	const docs = ((res.data as { docs?: unknown[] } | null)?.docs ?? []) as VolunteerDoc[];
-	return readShelterVolunteerAccounts(
+	const accounts = await readShelterVolunteerAccounts(
 		docs.flatMap((doc) =>
 			doc.user_name?.trim() ? [{ volunteer_id: doc._id, name: doc.user_name.trim() }] : []
 		),
 		shelterCode
+	);
+	// An account that holds nothing here says how its last role ended (expired / revoked, when),
+	// so the tables show more than "สิ้นสุดแล้ว" (#1044). One audit read per such account.
+	return Promise.all(
+		accounts.map(async (account) =>
+			account.grants.length > 0 || account.permanent_roles.length > 0
+				? account
+				: { ...account, last_ended: await lastGrantEnding(shelterCode, account.name) }
+		)
 	);
 }

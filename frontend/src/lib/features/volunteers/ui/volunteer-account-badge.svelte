@@ -7,7 +7,7 @@
 	import KeyRound from '@lucide/svelte/icons/key-round';
 	import { Badge } from '$lib/components/ui/badge/index.js';
 	import { formatThaiShortDate } from '$lib/utils/date';
-	import type { VolunteerAccessStatus } from '../domain/volunteer-access-status';
+	import { accessEndingLabel, type VolunteerAccessStatus } from '../domain/volunteer-access-status';
 
 	let {
 		status,
@@ -17,6 +17,10 @@
 		/** Print the login username under the badges. */
 		showLogin?: boolean;
 	} = $props();
+
+	const endedLabel = $derived(
+		status.kind === 'lapsed' ? accessEndingLabel(status.lastEnded) : null
+	);
 
 	// Badge is a fixed-height, overflow-hidden pill: these may wrap, so they take h-auto.
 	const wrap = 'h-auto max-w-full justify-start gap-1 text-left whitespace-normal';
@@ -38,6 +42,14 @@
 			<KeyRound class="h-3 w-3 shrink-0" />
 			มีบัญชี · สิทธิ์ในศูนย์นี้สิ้นสุดแล้ว
 		</Badge>
+		{#if endedLabel && status.lastEnded}
+			<Badge variant="outline" class="{wrap} border-amber-200 bg-background text-amber-900">
+				{endedLabel}
+				<span class="font-normal text-muted-foreground">
+					· เมื่อ {formatThaiShortDate(status.lastEnded.at)}
+				</span>
+			</Badge>
+		{/if}
 	{:else}
 		<Badge variant="outline" class="{wrap} border-emerald-300 bg-emerald-50 text-emerald-700">
 			<KeyRound class="h-3 w-3 shrink-0" />

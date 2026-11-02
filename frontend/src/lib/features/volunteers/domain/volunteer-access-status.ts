@@ -18,6 +18,18 @@ export type VolunteerAccount = {
 	grants: readonly { role: string; expires_at: string }[];
 	/** Roles a manager gave here (no expiry). */
 	permanent_roles: readonly string[];
+	/** Only when it holds nothing here: how its last role here ended (#1044). */
+	last_ended?: AccessEnding | null;
+};
+
+/** How the account's last role in the shelter ended, from the grant audits. */
+export type AccessEnding = {
+	role: string;
+	reason: 'expired' | 'revoked' | 'verification_revoked';
+	/** When it ended (ISO). */
+	at: string;
+	by: string;
+	cause?: string;
 };
 
 /** A role the account holds here; `expiresAt` is null for a manager's permanent role. */
@@ -28,7 +40,7 @@ export type VolunteerAccessStatus =
 	/** Holds a role here. `roles` is `null` while the accounts are not known yet. */
 	| { kind: 'active'; loginName: string; roles: AccessRole[] | null }
 	/** Has an account but nothing here any more: the grant expired or was revoked. */
-	| { kind: 'lapsed'; loginName: string }
+	| { kind: 'lapsed'; loginName: string; lastEnded: AccessEnding | null }
 	| { kind: 'deactivated'; loginName: string; roles: AccessRole[] };
 
 export function accountRoles(account: Pick<VolunteerAccount, 'grants' | 'permanent_roles'>) {
@@ -60,7 +72,7 @@ export function volunteerAccessStatus(
 	if (!account.active) return { kind: 'deactivated', loginName: account.name, roles };
 	return roles.length > 0
 		? { kind: 'active', loginName: account.name, roles }
-		: { kind: 'lapsed', loginName: account.name };
+		: { kind: 'lapsed', loginName: account.name, lastEnded: account.last_ended ?? null };
 }
 
 export function hasVolunteerAccount(status: VolunteerAccessStatus): boolean {
@@ -82,4 +94,19 @@ export function closeProfileAccessNotice(status: VolunteerAccessStatus): {
 		revokesGrants: roles.some((r) => r.expiresAt !== null),
 		keepsManagerRole: roles.some((r) => r.expiresAt === null)
 	};
+}
+
+/** "เคยเป็น <role> · หมดอายุ / ถูกถอน …" for an account whose role here ended, or null. */
+export function accessEndingLabel(ending: AccessEnding | null | undefined): string | null {
+	if (!ending) return null;
+	const how =
+		ending.reason === 'expired'
+			? 'หมดอายุ'
+			: ending.reason === 'verification_revoked'
+				? 'ถูกถอนเพราะผลยืนยันตัวตนถูกยกเลิก'
+				: ending.cause === 'profile_inactive'
+					? 'ถูกถอนเพราะปิดโปรไฟล์'
+					: 'ถูกถอน';
+	const role = ending.role ? `เคยเป็น ${roleOptionLabel(ending.role)} · ` : '';
+	return `${role}${how}`;
 }
