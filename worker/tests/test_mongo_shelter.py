@@ -173,8 +173,8 @@ async def test_refresh_occupancy_counts_every_stay_status_including_search_exclu
         "room_confirmed": 1,
         "pre_registered": 1,
     }
-    # EXT-005 semantics unchanged: `active` only.
-    assert reloaded.occupancy_total == 1
+    # EXT-005: in shelter = active + room_confirmed (decision sync 2026-11-02).
+    assert reloaded.occupancy_total == 2
 
 
 async def test_refresh_occupancy_no_op_when_shelter_row_missing(db: None) -> None:

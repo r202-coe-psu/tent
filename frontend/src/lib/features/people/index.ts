@@ -344,6 +344,7 @@ export {
 	usePatchMedical,
 	useDeleteMedical,
 	usePatchEvacuee,
+	useSetSearchVisibility,
 	useMedicals,
 	useMedicalByEvacuee,
 	useMovements,

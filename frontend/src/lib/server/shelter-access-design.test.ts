@@ -26,6 +26,7 @@ import {
 	DONATION_RECEIVED_MANGO_INDEX,
 	DONATION_RECEIVED_PHONE_MANGO_INDEX,
 	DONATION_BOOKING_REF_MANGO_INDEX,
+	ROLE_GRANT_AUDIT_MANGO_INDEX,
 	STOCK_LEDGER_LOT_NO_MANGO_INDEX,
 	DONATION_PHOTO_ORPHAN_MANGO_INDEX,
 	KIOSK_LOOKUP_MANGO_INDEXES,
@@ -334,7 +335,8 @@ describe('buildValidateDocUpdate', () => {
 			[DONATION_RECEIVED_PHONE_MANGO_INDEX],
 			[DONATION_BOOKING_REF_MANGO_INDEX],
 			[STOCK_LEDGER_LOT_NO_MANGO_INDEX],
-			[DONATION_PHOTO_ORPHAN_MANGO_INDEX]
+			[DONATION_PHOTO_ORPHAN_MANGO_INDEX],
+			[ROLE_GRANT_AUDIT_MANGO_INDEX]
 		];
 		const byName = new Map<string, string>();
 		for (const { name, index } of lists.flat()) {
@@ -394,6 +396,15 @@ describe('buildValidateDocUpdate', () => {
 			`_design/${STOCK_LEDGER_LOT_NO_MANGO_INDEX.ddoc}`,
 			STOCK_LEDGER_LOT_NO_MANGO_INDEX.name
 		]);
+	});
+
+	it('indexes the audit docs of one account by reason for the last-grant-ended lookup (CR-221)', () => {
+		expect(ROLE_GRANT_AUDIT_MANGO_INDEX).toEqual({
+			index: { fields: ['type', 'target_id', 'reason'] },
+			ddoc: 'role-grant-audit-target',
+			name: 'role-grant-audit-by-target',
+			type: 'json'
+		});
 	});
 
 	it('indexes only donor photos no booking has bound, by age (CR-175 FR-16)', () => {
