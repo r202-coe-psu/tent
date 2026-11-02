@@ -179,6 +179,10 @@
 												{/if}
 											</div>
 											<p class="mt-1.5 text-sm text-slate-700">
+												{#if lot.lotNo}<span class="font-semibold text-slate-900 tabular-nums"
+														>{lot.lotNo}</span
+													>{:else}<span class="text-slate-500">ไม่มีเลขล็อต</span>{/if}
+												<span class="text-slate-400" aria-hidden="true">·</span>
 												{#if lot.expiry}หมดอายุ <span class="tabular-nums">{lot.expiry}</span
 													>{:else}
 													<span class="text-slate-500">ไม่ระบุวันหมดอายุ</span>
