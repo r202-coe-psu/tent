@@ -62,7 +62,7 @@ describe('evacueeToWalkInPrefill', () => {
 		}
 	});
 
-	it('trims a last_name-less evacuee without inventing a value', () => {
+	it('omits last_name when the evacuee has none, without inventing a value', () => {
 		expect(evacueeToWalkInPrefill({ ...full, last_name: '' }).last_name).toBeUndefined();
 	});
 

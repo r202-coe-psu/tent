@@ -36,7 +36,10 @@
 	 *
 	 * Section 1 starts with an optional "ค้นหาคนในศูนย์" box
 	 * (`walk-in-evacuee-search.svelte`, #1062) that copies a picked evacuee of the active
-	 * shelter into the form fields; see `fillFromEvacuee` for the overwrite rule.
+	 * shelter into the form fields; see `fillFromEvacuee` for the overwrite rule. It is shown only
+	 * to users who pass `canAccessEvacueeRegistration` (SA / SM / registration staff) — the
+	 * volunteer coordinator may open this dialog but must not see evacuee data, and gets the
+	 * plain manual-entry form.
 	 *
 	 * `identity_verified` is left at the domain factory's default (`false`,
 	 * `makeVolunteer`) even though staff are presumably checking an ID card in
@@ -61,7 +64,8 @@
 	import { getShelterCode } from '$lib/db/shelter';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
 	import { useShelter } from '$lib/features/shelters';
-	import type { Evacuee } from '$lib/features/people';
+	import { authStore } from '$lib/stores/auth.svelte';
+	import { canAccessEvacueeRegistration } from '$lib/auth/roles';
 	import {
 		walkInVolunteerFormSchema,
 		type WalkInVolunteerFormValues
@@ -69,8 +73,8 @@
 	import { shiftKindFor } from '../domain/assign-roster';
 	import { isWithinDutyWindow } from '../domain/duty-window';
 	import { toSkillCode } from '../domain/skill-catalog';
-	import { evacueeToWalkInPrefill, type WalkInPrefill } from '../domain/walk-in-prefill';
-	import WalkInEvacueeSearch from './walk-in-evacuee-search.svelte';
+	import type { WalkInPrefill } from '../domain/walk-in-prefill';
+	import WalkInEvacueeSearch, { type WalkInPick } from './walk-in-evacuee-search.svelte';
 	import JobShiftPicker, { type JobShiftSelection } from './job-shift-picker.svelte';
 	import {
 		useCreateWalkInVolunteer,
@@ -85,6 +89,10 @@
 	const shelterCode = $derived(shelterStore.selectedShelterCode ?? getShelterCode());
 	const shelterQuery = useShelter(() => shelterCode);
 	const shelterLabel = $derived(shelterQuery.data?.name ?? shelterCode);
+	/** The evacuee roster is not VC data (role matrix): only registration staff / SM / SA may search it. */
+	const canSearchEvacuees = $derived(
+		canAccessEvacueeRegistration(authStore.user?.roles ?? [], shelterCode)
+	);
 
 	/**
 	 * Master Data `volunteer_skills`, effective for this shelter (CR-100).
@@ -201,8 +209,7 @@
 	 * operator typed, but is cleared when it still holds the previous pick's value. `email`,
 	 * skills, job/shift and the check-in box are never touched.
 	 */
-	function fillFromEvacuee(evacuee: Evacuee) {
-		const next = evacueeToWalkInPrefill(evacuee);
+	function fillFromEvacuee({ prefill: next }: WalkInPick) {
 		const stale = (Object.keys(lastPrefill) as (keyof WalkInPrefill)[]).filter(
 			(key) => !(key in next) && $formData[key] === lastPrefill[key]
 		);
@@ -254,7 +261,9 @@
 		<form method="POST" use:form.enhance class="max-h-[70vh] space-y-6 overflow-y-auto px-6 py-5">
 			<div class="space-y-3">
 				<p class="text-xs font-bold text-foreground">1. ข้อมูลบุคคล (PERSONAL INFO)</p>
-				<WalkInEvacueeSearch onpick={fillFromEvacuee} {shelterLabel} />
+				{#if canSearchEvacuees}
+					<WalkInEvacueeSearch onpick={fillFromEvacuee} {shelterLabel} />
+				{/if}
 				<div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
 					<Form.Field {form} name="first_name">
 						<Form.Control>

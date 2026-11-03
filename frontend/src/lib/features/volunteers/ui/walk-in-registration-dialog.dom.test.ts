@@ -2,11 +2,23 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushSync, mount, tick, unmount } from 'svelte';
 import type { Evacuee } from '$lib/features/people';
+import { toast } from 'svelte-sonner';
 import WalkInRegistrationDialog from './walk-in-registration-dialog.svelte';
 
+const MANAGER = ['shelter:SH001', 'SH001:shelter_manager'];
+const REGISTRATION = ['shelter:SH001', 'SH001:registration_staff'];
+const COORDINATOR = ['shelter:SH001', 'SH001:volunteer_coordinator'];
+
 const mocks = vi.hoisted(() => ({
+	roles: [] as string[],
 	evacuees: [] as unknown[],
 	searchTerms: [] as string[],
+	/** Every read of the search query's `enabled()` — a hook that never runs records nothing. */
+	enabledReads: [] as boolean[],
+	/** The live `query()` / `enabled()` closures the component handed to the hook. */
+	gate: null as { query: () => string; enabled: () => boolean } | null,
+	hookCalls: 0,
+	searchError: false,
 	createMutateAsync: vi.fn()
 }));
 
@@ -37,6 +49,13 @@ vi.mock('$app/forms', async (importOriginal) => ({
 }));
 vi.mock('@tanstack/svelte-query', () => ({ useQueryClient: () => ({}) }));
 vi.mock('svelte-sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
+vi.mock('$lib/stores/auth.svelte', () => ({
+	authStore: {
+		get user() {
+			return { name: 'u', roles: mocks.roles };
+		}
+	}
+}));
 vi.mock('$lib/db/shelter', () => ({ getShelterCode: () => 'SH001' }));
 vi.mock('$lib/stores/shelter.svelte', () => ({ shelterStore: { selectedShelterCode: 'SH001' } }));
 vi.mock('$lib/features/shelters', () => ({
@@ -44,13 +63,22 @@ vi.mock('$lib/features/shelters', () => ({
 }));
 vi.mock('$lib/features/people', async (importOriginal) => ({
 	...(await importOriginal<typeof import('$lib/features/people')>()),
-	useSearchEvacuees: (query: () => string, enabled: () => boolean) => ({
-		get data() {
-			mocks.searchTerms.push(query());
-			return enabled() ? mocks.evacuees : undefined;
-		},
-		isFetching: false
-	})
+	useSearchEvacuees: (query: () => string, enabled: () => boolean) => {
+		mocks.hookCalls++;
+		mocks.gate = { query, enabled };
+		return {
+			get data() {
+				mocks.searchTerms.push(query());
+				const on = enabled();
+				mocks.enabledReads.push(on);
+				return on && !mocks.searchError ? mocks.evacuees : undefined;
+			},
+			get isError() {
+				return enabled() && mocks.searchError;
+			},
+			isFetching: false
+		};
+	}
 }));
 vi.mock('../application/queries', () => ({
 	useCreateWalkInVolunteer: () => ({ mutateAsync: mocks.createMutateAsync, isPending: false }),
@@ -98,6 +126,11 @@ async function render() {
 
 const searchBox = () =>
 	document.body.querySelector('#walk-in-evacuee-search') as HTMLInputElement | null;
+const clearButton = () =>
+	[...document.body.querySelectorAll<HTMLButtonElement>('button')].find((b) =>
+		b.textContent?.includes('ล้างคำค้น')
+	) ?? null;
+const errorMessage = () => document.body.querySelector('[data-testid="walk-in-evacuee-error"]');
 const field = (name: string) =>
 	document.body.querySelector(`input[name="${name}"]`) as HTMLInputElement;
 const hits = () => [
@@ -122,7 +155,13 @@ async function search(text: string) {
 
 beforeEach(() => {
 	mocks.evacuees = [somchai, noExtras];
+	mocks.roles = MANAGER;
 	mocks.searchTerms = [];
+	mocks.enabledReads = [];
+	mocks.hookCalls = 0;
+	mocks.gate = null;
+	mocks.searchError = false;
+	vi.mocked(toast.error).mockClear();
 	mocks.createMutateAsync.mockReset();
 	mocks.createMutateAsync.mockResolvedValue({ _id: 'volunteer:9', volunteer_code: 'V-009' });
 });
@@ -231,11 +270,169 @@ describe('WalkInRegistrationDialog — search shelter evacuees (#1062)', () => {
 		});
 	});
 
-	it('does not search for fewer than 2 characters', async () => {
+	it('does not enable the query for fewer than 2 characters', async () => {
 		await render();
 		await typeInto(searchBox()!, 'ส');
 		await new Promise((resolve) => setTimeout(resolve, 400));
 		await settle();
 		expect(hits()).toHaveLength(0);
+		// The hook's own gate: a 1-char term must leave the query disabled, 2 chars enable it.
+		expect(mocks.gate!.query()).toBe('ส');
+		expect(mocks.gate!.enabled()).toBe(false);
+		expect(mocks.enabledReads.every((on) => !on)).toBe(true);
+		await search('สม');
+		expect(mocks.gate!.query()).toBe('สม');
+		expect(mocks.gate!.enabled()).toBe(true);
+	});
+
+	it('does not submit the registration form when Enter is pressed in the search box', async () => {
+		await render();
+		const submitted = vi.fn();
+		document.body.querySelector('form')!.addEventListener('submit', submitted);
+		const enter = new KeyboardEvent('keydown', {
+			key: 'Enter',
+			bubbles: true,
+			cancelable: true
+		});
+		searchBox()!.dispatchEvent(enter);
+		expect(enter.defaultPrevented).toBe(true);
+		expect(submitted).not.toHaveBeenCalled();
+		expect(mocks.createMutateAsync).not.toHaveBeenCalled();
+	});
+
+	it('clears the term and the results with a 44px clear button', async () => {
+		await render();
+		expect(clearButton()).toBeNull();
+		await search('สม');
+		const clear = clearButton()!;
+		expect(clear.className).toContain('size-11');
+		clear.click();
+		await settle();
+		expect(searchBox()!.value).toBe('');
+		expect(hits()).toHaveLength(0);
+		expect(clearButton()).toBeNull();
+	});
+
+	it('shows a failed search as an error, not as "no match", and toasts', async () => {
+		await render();
+		mocks.searchError = true;
+		await typeInto(searchBox()!, 'สม');
+		await vi.waitFor(() => expect(errorMessage()).not.toBeNull(), { timeout: 2000 });
+		expect(errorMessage()!.textContent).toContain('ค้นหาผู้พักพิงไม่สำเร็จ');
+		expect(document.body.textContent).not.toContain('ไม่พบผู้พักพิงที่ตรงกับคำค้น');
+		expect(toast.error).toHaveBeenCalled();
+	});
+
+	it('still says "no match" for an empty result that is not an error', async () => {
+		await render();
+		mocks.evacuees = [];
+		await typeInto(searchBox()!, 'xx');
+		await vi.waitFor(() => expect(document.body.textContent).toContain('ไม่พบผู้พักพิง'), {
+			timeout: 2000
+		});
+		expect(errorMessage()).toBeNull();
+		expect(toast.error).not.toHaveBeenCalled();
+	});
+
+	it('announces results and status through a polite live region', async () => {
+		await render();
+		const live = document.body
+			.querySelector('#walk-in-evacuee-search')!
+			.closest('div.space-y-2')!
+			.querySelector('[aria-live="polite"]');
+		expect(live).not.toBeNull();
+		await search('สม');
+		expect(live!.querySelectorAll('[data-testid="walk-in-evacuee-hit"]').length).toBe(2);
+		hits()[0].click();
+		await settle();
+		expect(live!.textContent).toContain('เติมข้อมูลจาก สมชาย ใจดี');
+	});
+
+	it('says how many matches are hidden when results are cut to 8', async () => {
+		await render();
+		mocks.evacuees = Array.from({ length: 11 }, (_, i) => ({
+			...somchai,
+			_id: `evacuee:${100 + i}`
+		}));
+		await search('สม');
+		expect(hits()).toHaveLength(8);
+		expect(
+			document.body.querySelector('[data-testid="walk-in-evacuee-more"]')!.textContent
+		).toContain('มีอีก 3 รายการ — พิมพ์คำค้นให้ละเอียดขึ้น');
+	});
+
+	it('does not show the "more" hint when everything fits', async () => {
+		await render();
+		await search('สม');
+		expect(document.body.querySelector('[data-testid="walk-in-evacuee-more"]')).toBeNull();
+	});
+
+	it('tells which fields a pick filled', async () => {
+		await render();
+		mocks.evacuees = [somchai];
+		await search('สม');
+		hits()[0].click();
+		await settle();
+		const text = document.body.querySelector('[data-testid="walk-in-evacuee-picked"]')!.textContent;
+		for (const label of ['ชื่อ', 'นามสกุล', 'ชื่อเล่น', 'เบอร์โทร', 'เลขบัตรประชาชน']) {
+			expect(text).toContain(label);
+		}
+		expect(document.body.querySelector('[data-testid="walk-in-evacuee-phone-skipped"]')).toBeNull();
+	});
+
+	it('says so when a non-mobile phone was not copied', async () => {
+		await render();
+		mocks.evacuees = [{ ...somchai, phone: '074-123456' }];
+		await search('สม');
+		hits()[0].click();
+		await settle();
+		expect(field('phone').value).toBe('');
+		expect(
+			document.body.querySelector('[data-testid="walk-in-evacuee-phone-skipped"]')!.textContent
+		).toContain('ไม่ใช่เบอร์มือถือ');
+		expect(
+			document.body.querySelector('[data-testid="walk-in-evacuee-picked"]')!.textContent
+		).not.toContain('เบอร์โทร');
+	});
+});
+
+describe('WalkInRegistrationDialog — who may search evacuees (#1062)', () => {
+	it.each([
+		['shelter manager', MANAGER],
+		['registration staff', REGISTRATION],
+		['system admin', ['system_admin']]
+	])('shows the search box to %s', async (_name, roles) => {
+		mocks.roles = roles;
+		await render();
+		expect(searchBox()).not.toBeNull();
+		expect(mocks.hookCalls).toBe(1);
+	});
+
+	it.each([
+		['volunteer coordinator', COORDINATOR],
+		['no roles', []],
+		['registration staff of another shelter', ['shelter:SH002', 'SH002:registration_staff']]
+	])('hides the search box and never queries evacuees for %s', async (_name, roles) => {
+		mocks.roles = roles;
+		await render();
+		expect(searchBox()).toBeNull();
+		expect(document.body.textContent).not.toContain('ค้นหาคนในศูนย์');
+		expect(mocks.hookCalls).toBe(0);
+		expect(mocks.gate).toBeNull();
+		expect(mocks.enabledReads).toHaveLength(0);
+		expect(mocks.searchTerms).toHaveLength(0);
+	});
+
+	it('lets the coordinator register by hand exactly as before', async () => {
+		mocks.roles = COORDINATOR;
+		await render();
+		await typeInto(field('first_name'), 'มานะ');
+		await typeInto(field('last_name'), 'อดทน');
+		submitForm();
+		await vi.waitFor(() => expect(mocks.createMutateAsync).toHaveBeenCalledTimes(1));
+		expect(mocks.createMutateAsync.mock.calls[0][0]).toMatchObject({
+			first_name: 'มานะ',
+			source: 'walk_in'
+		});
 	});
 });
