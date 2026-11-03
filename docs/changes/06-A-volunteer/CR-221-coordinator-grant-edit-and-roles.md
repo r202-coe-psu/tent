@@ -66,7 +66,7 @@ affects:
   - [ ] บัญชีที่สิทธิ์สิ้นสุดแล้ว (หมดอายุ / ถอน / ยืนยันตัวตนหมดอายุ): portal ขึ้น "สิทธิ์ใช้งานระบบสิ้นสุดตั้งแต่วันที่ …" ไม่มีปุ่มเข้าสู่ระบบ
   - [ ] บัญชีที่ถูก SA ระงับ: response และการ์ดเหมือนโปรไฟล์ที่ไม่มีบัญชีทุกอย่าง (`status: none`, ไม่มี role, ไม่มีวันที่)
   - [ ] grant ที่ `expires_at` ผ่านแล้วแต่ worker ยังไม่ถอน: การ์ดขึ้น "สิ้นสุด" ไม่ขึ้นปุ่มเข้าสู่ระบบ
-- **Decision log:** 2026-11-03 — owner (@mhapong): เก็บวันที่สิ้นสุดในการ์ด `lapsed` ด้วยคำว่า "สิ้นสุดตั้งแต่วันที่" ทุกเหตุผล; ไม่ส่ง `account_disabled` ใน public endpoint (บัญชีระงับตอบเป็น `none`); ไม่เพิ่ม rate limiter — รอ @Jackyzaz approve
+- **Decision log:** 2026-11-03 — owner (@mhapong): เก็บวันที่สิ้นสุดในการ์ด `lapsed` ด้วยคำว่า "สิ้นสุดตั้งแต่วันที่" ทุกเหตุผล; ไม่ส่ง `account_disabled` ใน public endpoint (บัญชีระงับตอบเป็น `none`); ไม่เพิ่ม rate limiter; grant ที่ `expires_at` ผ่านแล้วนับเป็น `lapsed` แม้ worker ยังไม่ถอน (ยืนยันโดย owner หลัง review ของ #1116) · endpoint บันทึกใน `docs/data/api-contract.md` §2.7 — รอ @Jackyzaz approve
 
 ---
 
