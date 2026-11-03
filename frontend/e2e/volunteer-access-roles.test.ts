@@ -177,10 +177,15 @@ const ROLE_ACCESS: RoleAccess[] = [
 	}
 ];
 
-/** Every back-office page the sidebar can offer to a shelter manager or system admin. */
+/**
+ * Every back-office page the sidebar can offer to a shelter manager or system admin. Mirrors
+ * `src/lib/components/backoffice-navbar/static.ts`: a menu added, removed or re-guarded there must
+ * be changed here too, or the sidebar equality check below fails.
+ */
 const MANAGEMENT_PAGES = [
 	'/back-office/evacuee-management',
 	'/back-office/volunteers',
+	'/back-office/volunteers/accounts',
 	'/back-office/referrals',
 	'/back-office/supply',
 	'/back-office/stock-donations',
@@ -271,9 +276,11 @@ async function sidebarPaths(
 	allowed: readonly string[],
 	pendingSpec: readonly string[] = []
 ): Promise<string[]> {
-	await page.goto(
-		allowed.find((url) => url.startsWith('/back-office/')) ?? '/back-office/dailysop'
-	);
+	const url = allowed.find((u) => u.startsWith('/back-office/')) ?? '/back-office/dailysop';
+	await page.goto(url);
+	// A 500 or a guard redirect would otherwise surface only as "sidebar not found".
+	await expect(page.locator('main').first()).toBeVisible();
+	expect(pathOf(page), `${url} should load before its sidebar is read`).toBe(url);
 	const sidebar = page.getByTestId('backoffice-sidebar');
 	await expect(sidebar).toBeVisible();
 	// The sidebar starts as a collapsed rail, which renders no group children; open it first.
@@ -292,13 +299,14 @@ async function sidebarPaths(
 		for (const href of hrefs) seen.add(new URL(href, 'http://localhost').pathname);
 	};
 	await collect();
+	// Menu groups are the collapsed (`aria-expanded=false`) buttons that are not popup triggers: the
+	// account menu opens a popup (`aria-haspopup`) and the shelter switcher is a combobox, so
+	// neither is a group button. A group button's text is its label, i.e. its accessible name.
+	const closed = sidebar
+		.getByRole('button', { expanded: false })
+		.and(sidebar.locator(':not([aria-haspopup])'));
 	for (let round = 0; round < 20; round++) {
-		// Group buttons carry `title` = label and show the label as their text, so the accessible
-		// name is that label. Other collapsed buttons (the shelter switcher) have no `title`.
-		const closed = sidebar.locator('button[aria-expanded="false"][title]');
-		const names = await closed.evaluateAll((els) =>
-			els.map((el) => el.getAttribute('title') ?? '')
-		);
+		const names = await closed.evaluateAll((els) => els.map((el) => (el.textContent ?? '').trim()));
 		const next = names.find((name) => name !== '' && !opened.has(name));
 		if (next === undefined) break;
 		opened.add(next);
@@ -477,8 +485,8 @@ test.describe('Volunteer access: every staff role', { tag: TAGS }, () => {
 			browser
 		}) => {
 			const user = managementUser(role, roles);
-			await createStaffAccount(user);
 			try {
+				await createStaffAccount(user);
 				const page = await openAs(browser, user);
 				for (const url of MANAGEMENT_PAGES) await expectLoads(page, url);
 				expect(await sidebarPaths(page, MANAGEMENT_PAGES), 'sidebar menus').toEqual(
