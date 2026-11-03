@@ -327,6 +327,13 @@ describe('scan-station point by point (CR-206)', () => {
 		expect(
 			document.querySelector('[data-testid="scan-line-0-needs-point"]')?.textContent
 		).toContain('ใบนี้เป็นของศูนย์อื่น');
+
+		// The checklist blames the shelter too: no "pick a point" step, no point-first wording.
+		const checklist = [...document.querySelectorAll('h4')].find(
+			(h) => h.textContent === 'ก่อนรับเข้าคลัง'
+		)!.parentElement!.textContent!;
+		expect(checklist).toContain('ใบนี้เป็นของศูนย์อื่น — สลับศูนย์ก่อนตรวจรับ');
+		expect(checklist).not.toContain('เลือกจุดที่ประจำ');
 	});
 
 	it('words the whole-booking checklist as "pick a point" while locked, with no count (#1059)', async () => {

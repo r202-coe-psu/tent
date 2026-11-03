@@ -597,6 +597,23 @@
 				return null;
 		}
 	});
+	/** The checklist's "decide the lines" step, worded from `status` like the counter. */
+	const decideStepLabel = $derived.by(() => {
+		switch (status.kind) {
+			case 'wrong_shelter':
+				return 'ใบนี้เป็นของศูนย์อื่น — สลับศูนย์ก่อนตรวจรับ';
+			case 'needs_point':
+				return byLine
+					? 'เลือกผลรายการที่มาส่งอย่างน้อย 1 รายการ (หลังเลือกจุดที่ประจำ)'
+					: 'เลือกจุดที่ประจำก่อน จึงจะติ๊ก "ผ่านการตรวจสอบแล้ว" ได้';
+			case 'none_here':
+				return 'ไม่มีรายการของจุดนี้ — รับที่จุดอื่น หรือกด "รับรายการของจุดอื่น"';
+			case 'progress':
+				return byLine
+					? `เลือกผลรายการที่มาส่งอย่างน้อย 1 รายการ (${status.verified}/${status.decidable})`
+					: `ติ๊ก "ผ่านการตรวจสอบแล้ว" ครบ (${status.verified}/${status.decidable})`;
+		}
+	});
 	const receiveLabel = $derived(
 		idleSubmitLabel ??
 			(rejectedCount === 0
@@ -1639,7 +1656,7 @@
 										<span>{text}</span>
 									</li>
 								{/snippet}
-								{#if donationPoints.length > 0}
+								{#if donationPoints.length > 0 && status.kind !== 'wrong_shelter'}
 									{@render step(!pointChoiceMissing, 'เลือกจุดที่ประจำ')}
 								{/if}
 								{@render step(checkMapped, 'เลือกรายการในคลังและกรอกจำนวนรับจริงครบ')}
@@ -1656,20 +1673,11 @@
 									{@render step(checkRejectReasons, 'ระบุเหตุผลของรายการที่ไม่รับครบ')}
 								{/if}
 								{#if byLine}
-									{@render step(
-										scopeLines.length > 0,
-										pointChoiceMissing
-											? 'เลือกผลรายการที่มาส่งอย่างน้อย 1 รายการ (หลังเลือกจุดที่ประจำ)'
-											: decidableCount === 0 && otherPointCount > 0
-												? 'ไม่มีรายการของจุดนี้ — รับที่จุดอื่น หรือกด "รับรายการของจุดอื่น"'
-												: `เลือกผลรายการที่มาส่งอย่างน้อย 1 รายการ (${verifiedCount}/${decidableCount})`
-									)}
+									{@render step(scopeLines.length > 0, decideStepLabel)}
 								{:else}
 									{@render step(
 										scannedItems.length > 0 && verifiedCount === scannedItems.length,
-										pointChoiceMissing
-											? 'เลือกจุดที่ประจำก่อน จึงจะติ๊ก "ผ่านการตรวจสอบแล้ว" ได้'
-											: `ติ๊ก "ผ่านการตรวจสอบแล้ว" ครบ (${verifiedCount}/${scannedItems.length})`
+										decideStepLabel
 									)}
 								{/if}
 							</ul>

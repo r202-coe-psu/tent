@@ -52,7 +52,8 @@ export function scanReceiveMode(
  *   = any point); `borrowed` = another point's line unlocked by "รับรายการของจุดอื่น" (FR-MP-21).
  * - `other_point` — another point's line, read-only until unlocked (FR-MP-19).
  * - `needs_point` — the shelter has drop-off points but staff have not chosen theirs yet
- *   (FR-MP-18a, owner decision #1059): nothing can be ticked, so we do not yet know which lines are "another point's".
+ *   (FR-MP-18a, owner decision #1059): nothing can be ticked, so we do not yet know which
+ *   lines are "another point's".
  */
 export type ScanLineState =
 	| { kind: 'recorded'; receiptPointId: string | null }
