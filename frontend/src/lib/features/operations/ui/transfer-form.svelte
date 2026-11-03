@@ -242,7 +242,7 @@
 						<Input
 							{...props}
 							type="number"
-							min="0.01"
+							min={unitDimension.resolve($formData.unit) === 'count' ? '1' : '0.01'}
 							step={qtyInputStep(unitDimension.resolve($formData.unit))}
 							placeholder="ระบุจำนวน"
 							bind:value={$formData.qty}

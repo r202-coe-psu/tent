@@ -815,7 +815,7 @@
 							bind:ref={qtyInput}
 							type="number"
 							placeholder="0"
-							min="0.01"
+							min={unitDimension.resolve($formData.unit) === 'count' ? '1' : '0.01'}
 							step={qtyInputStep(unitDimension.resolve($formData.unit))}
 							bind:value={$formData.qty}
 							class="min-h-11 font-mono font-bold"

@@ -280,7 +280,7 @@
 							type="number"
 							inputmode={requiresWholeQty(lineDimension) ? 'numeric' : 'decimal'}
 							placeholder="0"
-							min="0.01"
+							min={lineDimension === 'count' ? '1' : '0.01'}
 							step={qtyInputStep(lineDimension)}
 							value={line.qty}
 							oninput={(event) => (line.qty = event.currentTarget.value)}
