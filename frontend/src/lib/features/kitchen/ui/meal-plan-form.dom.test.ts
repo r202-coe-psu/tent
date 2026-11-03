@@ -2,6 +2,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { flushSync, mount, tick, unmount } from 'svelte';
 import MealPlanForm from './meal-plan-form.svelte';
+import { COUNT_ERROR } from '../domain/count-input';
 
 const OCCUPANCY = { total: 20, halal: 2, soft_food: 1, infant: 1 };
 const SOP = { _id: 'sop_profile:1', version: 1, name: 'SOP' };
@@ -105,6 +106,23 @@ async function paste(id: string, text: string) {
 }
 
 describe('meal plan form numeric inputs (#803)', () => {
+	it('flags a per-person quantity the box cannot parse and blocks saving', async () => {
+		await renderValid();
+		Object.defineProperty(box('mp-qty-0'), 'validity', {
+			configurable: true,
+			get: () => ({ badInput: true })
+		});
+		await enter('mp-qty-0', '');
+
+		expect(alerts()).toEqual([NON_NUMERIC, COUNT_ERROR]);
+		expect(submit().disabled).toBe(true);
+
+		delete (box('mp-qty-0') as { validity?: ValidityState }).validity;
+		await enter('mp-qty-0', '1');
+		expect(alerts()).toEqual([]);
+		expect(submit().disabled).toBe(false);
+	});
+
 	it('clamps a negative per-person quantity on an added row to 0 and says so', async () => {
 		await renderValid();
 		const addRow = [...document.body.querySelectorAll('button')].find((b) =>

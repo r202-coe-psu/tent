@@ -202,12 +202,14 @@
 		softFood: isCount(softFood, 0) ? null : COUNT_ERROR,
 		infant: isCount(infant, 0) ? null : COUNT_ERROR
 	});
-	// An empty per-person box counts as 0 and the row is skipped; a negative value is an error.
-	const isQtyValid = (qty: number | null) => isCount(qty ?? 0, 0);
+	// An empty per-person box counts as 0 and the row is skipped; a negative or unparsable value is
+	// an error.
+	const isQtyValid = (qty: number | null, i: number) =>
+		!guard.unparsed[`mp-qty-${i}`] && isCount(qty ?? 0, 0);
 	const numbersValid = $derived(
 		totalError === null &&
 			Object.values(subCountErrors).every((e) => e === null) &&
-			customRows.every((row) => isQtyValid(row.qtyPerPerson))
+			customRows.every((row, i) => isQtyValid(row.qtyPerPerson, i))
 	);
 
 	// Validate sub-counts do not exceed total.
@@ -405,8 +407,8 @@
 											class="min-h-11 w-full sm:min-h-9 sm:w-28"
 											placeholder="ต่อคน"
 											aria-label="ปริมาณต่อคน"
-											aria-invalid={!isQtyValid(row.qtyPerPerson)}
-											aria-describedby={isQtyValid(row.qtyPerPerson)
+											aria-invalid={!isQtyValid(row.qtyPerPerson, i)}
+											aria-describedby={isQtyValid(row.qtyPerPerson, i)
 												? undefined
 												: `mp-qty-${i}-error`}
 											{@attach guard.attach(`mp-qty-${i}`)}
@@ -428,7 +430,7 @@
 								<CountFieldError
 									{guard}
 									id={`mp-qty-${i}`}
-									message={isQtyValid(row.qtyPerPerson) ? null : COUNT_ERROR}
+									message={isQtyValid(row.qtyPerPerson, i) ? null : COUNT_ERROR}
 								/>
 								{#if row.itemId && !currentUnresolved}
 									<p class="pl-0.5 text-xs text-muted-foreground">
