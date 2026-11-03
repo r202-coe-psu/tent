@@ -27,6 +27,8 @@ import {
 import { UlidReservation } from '$lib/db/ulid-reservation';
 import { mintConsentStamp } from '$lib/features/consent/server';
 import type { EvacueeInput, Medical } from '../domain/people';
+import type { EvacueeSort } from '../domain/evacuee-sort';
+import type { EvacueeFilters } from './people.repository';
 import {
 	createKioskEvacueeFromCard,
 	createKioskWalkInHousehold,
@@ -617,6 +619,83 @@ describe('PeopleRemoteRepository', () => {
 
 			const ids = await repo.listMatchingEvacueeIds('', { status: 'active' });
 			expect(ids).toEqual([active._id]);
+		});
+	});
+
+	describe('listEvacueesPaginated sort (#1061)', () => {
+		async function seed(names: [string, string][]) {
+			const saved = [];
+			for (const [first_name, last_name] of names) {
+				saved.push(await repo.createEvacuee(evInput({ first_name, last_name }), ctx));
+			}
+			return saved;
+		}
+
+		async function allPages(
+			pageSize: number,
+			search?: string,
+			filters?: EvacueeFilters,
+			sort?: EvacueeSort
+		) {
+			const first = await repo.listEvacueesPaginated(1, pageSize, search, filters, sort);
+			const rest = [];
+			for (let page = 2; page <= first.totalPages; page++) {
+				rest.push(await repo.listEvacueesPaginated(page, pageSize, search, filters, sort));
+			}
+			return [first, ...rest].flatMap((p) => p.items.map((e) => e.first_name));
+		}
+
+		it('defaults to newest-registered first on the unfiltered server-paged path', async () => {
+			await seed([
+				['A', 'One'],
+				['B', 'Two'],
+				['C', 'Three']
+			]);
+			const page = vi.spyOn(memoryRepo, 'pageByType');
+
+			expect(await allPages(2)).toEqual(['C', 'B', 'A']);
+			expect(page).toHaveBeenCalledWith('evacuee', expect.any(Function), 1, 2, {
+				descending: true
+			});
+		});
+
+		it('pages oldest-first server-side (ascending _all_docs)', async () => {
+			await seed([
+				['A', 'One'],
+				['B', 'Two'],
+				['C', 'Three']
+			]);
+			const page = vi.spyOn(memoryRepo, 'pageByType');
+
+			expect(await allPages(2, '', {}, 'oldest')).toEqual(['A', 'B', 'C']);
+			expect(page).toHaveBeenCalledWith('evacuee', expect.any(Function), 2, 2, {
+				descending: false
+			});
+		});
+
+		it('sorts by Thai name ก–ฮ across pages with no filter', async () => {
+			await seed([
+				['สมชาย', 'ใจดี'],
+				['เอกชัย', 'มั่นคง'],
+				['กมล', 'ศรีสุข']
+			]);
+			expect(await allPages(2, '', {}, 'name')).toEqual(['กมล', 'สมชาย', 'เอกชัย']);
+		});
+
+		it('keeps the chosen order on the client-paged path (search / filter)', async () => {
+			await seed([
+				['ข้อ', 'Match'],
+				['Other', 'Skip'],
+				['กมล', 'Match'],
+				['ฉัตร', 'Match']
+			]);
+
+			expect(await allPages(2, 'Match')).toEqual(['ฉัตร', 'กมล', 'ข้อ']);
+			expect(await allPages(2, 'Match', {}, 'oldest')).toEqual(['ข้อ', 'กมล', 'ฉัตร']);
+			expect(await allPages(2, 'Match', {}, 'name')).toEqual(['กมล', 'ข้อ', 'ฉัตร']);
+
+			const preRegistered = { status: 'pre_registered' as const };
+			expect(await allPages(10, '', preRegistered)).toEqual(['ฉัตร', 'กมล', 'Other', 'ข้อ']);
 		});
 	});
 
