@@ -131,6 +131,8 @@ pnpm exec lefthook run pre-push
 - `pnpm seed` — Staging/local full seed (alias ของ `seed:staging`: ~1,000 ผู้เข้าพัก + ops)
 - `pnpm seed:master` — Platform init เท่านั้น (`master_data` + catalog/SOP/config) — ใช้ร่วม prod/staging
 - `pnpm seed:staging` — Full staging demo (master + users + 3 ศูนย์ + volume people)
+- `pnpm seed:bulk-evacuees --shelter=SH001 --count=100000` — เพิ่มผู้อพยพจำนวนมากเข้าศูนย์ (ใส่ `--count` เองได้ ถ้าไม่ใส่จะถามในเทอร์มินัล, ค่าเริ่มต้น 100000) ใช้ id prefix `seed-bulk:` จึงไม่ชนกับ staging volume; รันซ้ำได้ ข้ามชุดที่เขียนครบแล้ว และไม่ลดจำนวนที่มีอยู่
+- `pnpm unseed:bulk-evacuees --shelter=SH001` — dry-run นับ bulk evacuee (`seed-bulk:`) ใน shelter นั้น; เพิ่ม `--confirm` เพื่อลบเฉพาะชุดนี้ (staging volume ไม่ถูกลบ)
 - `pnpm unseed --confirm` — Wipe all CouchDB databases except `_users`
 - `pnpm unseed:master-data --confirm` — ลบเฉพาะเอกสาร `master_data:*` ใน `registry` (ไม่กระทบ shelter, catalog, หรือ users)
 - `pnpm unseed:master --confirm` — ลบ `master_data`, `config`, และฐานข้อมูล `catalog`
