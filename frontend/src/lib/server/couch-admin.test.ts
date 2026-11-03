@@ -11,8 +11,10 @@ import {
 	ServiceError,
 	serviceError,
 	serviceErrorFromCouch,
+	serviceOrHttpError,
 	type Caller
 } from './couch-admin';
+import { error } from '@sveltejs/kit';
 
 const sa: Caller = { name: 'sa', roles: ['system_admin'], isSA: true, shelterCode: null };
 const couchAdmin: Caller = { name: 'admin', roles: ['_admin'], isSA: true, shelterCode: null };
@@ -223,5 +225,36 @@ describe('authorizeUserWrite (generic /api/v1/users gate)', () => {
 		await expect(asRoles(['shelter:SH001', 'SH001:shelter_manager'])).resolves.toMatchObject({
 			name: 'u'
 		});
+	});
+});
+
+describe('serviceOrHttpError', () => {
+	function thrown(fn: () => never): unknown {
+		try {
+			fn();
+		} catch (e) {
+			return e;
+		}
+	}
+
+	it.each([
+		[400, 'VALIDATION'],
+		[401, 'UNAUTHENTICATED'],
+		[403, 'FORBIDDEN'],
+		[404, 'NOT_FOUND']
+	] as const)(
+		'keeps a SvelteKit %i and wraps it in the contract envelope',
+		async (status, code) => {
+			const res = serviceOrHttpError(thrown(() => error(status, 'เหตุผล')));
+			expect(res.status).toBe(status);
+			expect(await res.json()).toEqual({ error: { code, message: 'เหตุผล' } });
+		}
+	);
+
+	it('defers to serviceError for everything else', async () => {
+		const res = serviceOrHttpError(new ServiceError('CONFLICT', 'ชน'));
+		expect(res.status).toBe(409);
+		expect(await res.json()).toEqual({ error: { code: 'CONFLICT', message: 'ชน' } });
+		expect(serviceOrHttpError(new Error('x')).status).toBe(500);
 	});
 });
