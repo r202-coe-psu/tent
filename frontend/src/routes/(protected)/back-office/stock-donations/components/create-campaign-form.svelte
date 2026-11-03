@@ -23,7 +23,7 @@
 	} from '$lib/features/catalog';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { langState } from '$lib/states/i18n.svelte';
-	import { getShelterCode } from '$lib/db/shelter';
+	import { getShelterCode, resolveShelterCode } from '$lib/db/shelter';
 	import { persistQty, qtyGt } from '$lib/utils/qty';
 
 	interface Props {
@@ -60,7 +60,11 @@
 	let targetQty = $state('');
 
 	// Same gate and same sheet as the scan station's "เพิ่มสินค้าใหม่".
-	const canCreateItem = $derived(canWriteShelterCatalog(authStore.user?.roles ?? []));
+	// `null` = no shelter resolved: hide the way in rather than write to the 'SH001' guess.
+	const createShelterCode = $derived(resolveShelterCode());
+	const canCreateItem = $derived(
+		canWriteShelterCatalog(authStore.user?.roles ?? []) && createShelterCode !== null
+	);
 	let createOpen = $state(false);
 
 	// `SearchSelect` does not expose its search text, so the sheet opens with an empty name.
@@ -263,7 +267,9 @@
 					bind:value={selectedItemId}
 					loading={catalogLoading}
 					placeholder="พิมพ์เพื่อค้นหารายการในแคตตาล็อก..."
-					emptyText="ไม่พบรายการนี้ในแคตตาล็อก — สร้างในหน้าจัดการข้อมูลหลักก่อน"
+					emptyText={canCreateItem
+						? 'ไม่พบรายการนี้ในแคตตาล็อก — กด “เพิ่มสินค้าใหม่” ด้านล่าง'
+						: 'ไม่พบรายการนี้ในแคตตาล็อก — สร้างในหน้าจัดการข้อมูลหลักก่อน'}
 					class="h-10 rounded-xl text-xs"
 					controlProps={{ id: 'campaign-item-title' }}
 				/>
@@ -408,10 +414,10 @@
 	</form>
 </div>
 
-{#if canCreateItem}
+{#if canCreateItem && createShelterCode}
 	<QuickCreateItemSheet
 		bind:open={createOpen}
-		shelterCode={getShelterCode()}
+		shelterCode={createShelterCode}
 		onCreated={pickCreatedItem}
 		onUseExisting={pickExistingItem}
 	/>

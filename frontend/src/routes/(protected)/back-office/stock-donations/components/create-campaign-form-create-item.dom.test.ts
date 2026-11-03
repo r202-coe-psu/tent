@@ -7,6 +7,8 @@ const mocks = vi.hoisted(() => ({
 	roles: ['system_admin'] as string[],
 	/** Legacy `item:` rows (`useSupplyItems`); they win a name clash in the picker. */
 	supply: [] as { _id: string; name: string; unit: string; category: string }[],
+	/** What `resolveShelterCode` returns; `null` = no shelter selected or scoped. */
+	shelter: 'SH001' as string | null,
 	toastInfo: vi.fn()
 }));
 
@@ -37,7 +39,10 @@ vi.mock('$lib/stores/auth.svelte', () => ({
 		}
 	}
 }));
-vi.mock('$lib/db/shelter', () => ({ getShelterCode: () => 'SH001' }));
+vi.mock('$lib/db/shelter', () => ({
+	getShelterCode: () => mocks.shelter ?? 'SH001',
+	resolveShelterCode: () => mocks.shelter
+}));
 vi.mock('$lib/features/supply', () => ({
 	useSupplyItems: () => ({ data: mocks.supply, isPending: false })
 }));
@@ -80,6 +85,7 @@ afterEach(() => {
 	document.body.innerHTML = '';
 	mocks.roles = ['system_admin'];
 	mocks.supply = [];
+	mocks.shelter = 'SH001';
 	mocks.toastInfo.mockClear();
 });
 
@@ -92,6 +98,13 @@ describe('create campaign form — create a master item', () => {
 
 	it('shows no button and keeps the old helper text without permission', async () => {
 		mocks.roles = ['volunteer'];
+		await render();
+		expect(addButton()).toBeUndefined();
+		expect(document.body.textContent).toContain('ให้สร้างในหน้าจัดการข้อมูลหลักก่อน');
+	});
+
+	it('shows no button when no shelter resolves, instead of creating in SH001', async () => {
+		mocks.shelter = null;
 		await render();
 		expect(addButton()).toBeUndefined();
 		expect(document.body.textContent).toContain('ให้สร้างในหน้าจัดการข้อมูลหลักก่อน');
