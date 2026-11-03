@@ -22,7 +22,7 @@ import type { Job, JobShift } from './job.schema';
 import type { Volunteer } from './volunteer.schema';
 import { isControlledSkill } from './skills';
 import { hasAnyRequiredSkill, type SkillOption } from './skill-catalog';
-import { matchesVolunteerCode } from './volunteer-code';
+import { matchesVolunteerSearch, volunteerSearchFields } from './volunteer-search';
 
 // ---------------------------------------------------------------------------
 // Row state
@@ -194,29 +194,14 @@ export interface AssignRosterFilters {
 	eligibility?: EligibilityFilter;
 }
 
-/** Name / nickname / phone / volunteer code — the search box's placeholder promise. */
-function matchesSearch(candidate: AssignCandidate, needle: string): boolean {
-	const v = candidate.volunteer;
-	if (
-		[`${v.first_name} ${v.last_name}`, v.nickname, v.phone].some(
-			(field) => typeof field === 'string' && field.toLowerCase().includes(needle)
-		)
-	) {
-		return true;
-	}
-	// "v013" and "V 013" find V-013, as on the applicants tab (#1013).
-	return matchesVolunteerCode(v.volunteer_code, needle);
-}
-
 export function filterAssignRoster(
 	candidates: readonly AssignCandidate[],
 	filters: AssignRosterFilters = {}
 ): AssignCandidate[] {
 	const { search = '', skill = 'all', availability = 'all', eligibility = 'all' } = filters;
-	const needle = search.trim().toLowerCase();
 
 	return candidates.filter((c) => {
-		if (needle && !matchesSearch(c, needle)) return false;
+		if (!matchesVolunteerSearch(volunteerSearchFields(c.volunteer), search)) return false;
 		if (skill === 'match' && !c.skillMatch) return false;
 		// "พร้อมปฏิบัติงาน" = free for this shift; "เวลาไม่ชนกะ" is the weaker
 		// test — it keeps volunteers already assigned to THIS shift, hiding only
