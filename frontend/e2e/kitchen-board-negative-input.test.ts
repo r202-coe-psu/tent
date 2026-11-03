@@ -80,7 +80,11 @@ const ownedIds = new Set<string>();
 const startSeq = new Map<string, string>();
 
 function runDocuments(db: string): Promise<CouchDocument[]> {
-	return documentsChangedSince(db, startSeq.get(db) ?? 'now');
+	const since = startSeq.get(db);
+	if (since === undefined) {
+		throw new Error(`No start sequence for ${db}: cannot find this run's documents`);
+	}
+	return documentsChangedSince(db, since);
 }
 let authSession = '';
 let sessionId = '';
