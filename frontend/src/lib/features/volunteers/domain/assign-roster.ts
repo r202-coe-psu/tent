@@ -22,6 +22,7 @@ import type { Job, JobShift } from './job.schema';
 import type { Volunteer } from './volunteer.schema';
 import { isControlledSkill } from './skills';
 import { hasAnyRequiredSkill, type SkillOption } from './skill-catalog';
+import { matchesVolunteerCode } from './volunteer-code';
 
 // ---------------------------------------------------------------------------
 // Row state
@@ -196,9 +197,15 @@ export interface AssignRosterFilters {
 /** Name / nickname / phone / volunteer code — the search box's placeholder promise. */
 function matchesSearch(candidate: AssignCandidate, needle: string): boolean {
 	const v = candidate.volunteer;
-	return [`${v.first_name} ${v.last_name}`, v.nickname, v.phone, v.volunteer_code].some(
-		(field) => typeof field === 'string' && field.toLowerCase().includes(needle)
-	);
+	if (
+		[`${v.first_name} ${v.last_name}`, v.nickname, v.phone].some(
+			(field) => typeof field === 'string' && field.toLowerCase().includes(needle)
+		)
+	) {
+		return true;
+	}
+	// "v013" and "V 013" find V-013, as on the applicants tab (#1013).
+	return matchesVolunteerCode(v.volunteer_code, needle);
 }
 
 export function filterAssignRoster(
