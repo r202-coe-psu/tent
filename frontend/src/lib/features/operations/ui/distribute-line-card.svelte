@@ -3,8 +3,25 @@
 	import * as Select from '$lib/components/ui/select/index.js';
 	import { Label } from '$lib/components/ui/label/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
-	import { itemMasterUnit, itemSelectableUoms, qtyFromBaseUnit } from '$lib/features/catalog';
-	import { addQty, persistQty, qtyGt, qtyGte, qtyIsZero, qtyLte, subQty } from '$lib/utils/qty';
+	import {
+		itemMasterUnit,
+		itemSelectableUoms,
+		qtyFromBaseUnit,
+		qtyInputStep,
+		requiresWholeQty,
+		WHOLE_QTY_MESSAGE,
+		type Dimension
+	} from '$lib/features/catalog';
+	import {
+		addQty,
+		parseQty,
+		persistQty,
+		qtyGt,
+		qtyGte,
+		qtyIsZero,
+		qtyLte,
+		subQty
+	} from '$lib/utils/qty';
 	import AlertTriangle from '@lucide/svelte/icons/triangle-alert';
 	import CheckCircle2 from '@lucide/svelte/icons/circle-check';
 	import Minus from '@lucide/svelte/icons/minus';
@@ -45,6 +62,7 @@
 		storagePoints,
 		labels,
 		unitLabel,
+		unitDimension,
 		disabled,
 		removable,
 		onremove
@@ -65,6 +83,7 @@
 		storagePoints: readonly StoragePointRef[];
 		labels: BatchReportLabels;
 		unitLabel: (code: string) => string;
+		unitDimension: (unit: string) => Dimension | undefined;
 		disabled: boolean;
 		removable: boolean;
 		onremove: () => void;
@@ -85,13 +104,17 @@
 	const stock = $derived(item ? (balanceByItemId.get(item._id) ?? '0') : '0');
 
 	const maxBase = $derived(availableForLine(line.lot, itemLots, priorityItems, Date.now()));
+	const lineDimension = $derived(unitDimension(line.unit));
+	// A count unit cannot issue part of a unit, so "all" is the whole units that fit (#805).
 	const maxQtyInUnit = $derived.by(() => {
 		if (!item || !line.unit) return '0';
+		let max: string;
 		try {
-			return qtyFromBaseUnit(maxBase, line.unit, item);
+			max = qtyFromBaseUnit(maxBase, line.unit, item);
 		} catch {
-			return maxBase;
+			max = maxBase;
 		}
+		return requiresWholeQty(lineDimension) ? persistQty(parseQty(max).floor()) : max;
 	});
 	const expiredLots = $derived(
 		itemLots.filter((lot) => isLotExpired(lot, Date.now(), priorityItems.get(lot.item_id)))
@@ -255,10 +278,10 @@
 						<Input
 							id="distribute-qty-{line.key}"
 							type="number"
-							inputmode="decimal"
+							inputmode={requiresWholeQty(lineDimension) ? 'numeric' : 'decimal'}
 							placeholder="0"
 							min="0.01"
-							step="any"
+							step={qtyInputStep(lineDimension)}
 							value={line.qty}
 							oninput={(event) => (line.qty = event.currentTarget.value)}
 							onkeydown={(event) => {
@@ -495,6 +518,8 @@
 					{baseUnitLabel} จึงยังบันทึกไม่ได้
 				</span>
 			</p>
+		{:else if verdict.kind === 'incomplete' && verdict.missing === 'whole'}
+			<p class="text-sm font-semibold text-red-700" role="alert">{WHOLE_QTY_MESSAGE}</p>
 		{:else if verdict.kind === 'incomplete' && verdict.missing === 'unit'}
 			<p class="text-sm font-semibold text-red-700" role="alert">
 				หน่วยที่เลือกไม่ถูกต้องสำหรับสินค้านี้
