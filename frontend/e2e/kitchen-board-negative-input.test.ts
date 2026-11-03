@@ -372,6 +372,25 @@ test.describe(
 			}
 		});
 
+		test('stage C outside handouts count an empty box as 0 and still allow saving', async ({
+			page
+		}) => {
+			await openBoard(page, `?plan_id=${encodeURIComponent(planId)}&stage=C`);
+			const save = page.getByRole('button', { name: RECORD_SERVICE });
+			const errors = page.getByRole('alert').filter({ hasText: SERVICE_ERROR });
+
+			await expect(numberUnderLabel(page, SERVICE_FIELDS[0])).toHaveValue('20', {
+				timeout: 20_000
+			});
+			for (const label of SERVICE_FIELDS.slice(3)) {
+				const input = numberUnderLabel(page, label);
+				await input.fill('3');
+				await input.fill('');
+				await expect(errors, `${label} empty shows no error`).toHaveCount(0);
+				await expect(save, `${label} empty still saves`).toBeEnabled();
+			}
+		});
+
 		test('stage C keeps typed counts when the plan changes on another device', async ({ page }) => {
 			// The first poll asks for `since=now`, so an edit racing it can land before "now" and be
 			// missed. A poll carrying a concrete seq is anchored: every later edit reaches the page.
