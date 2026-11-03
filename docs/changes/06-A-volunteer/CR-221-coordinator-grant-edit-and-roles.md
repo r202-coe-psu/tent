@@ -3,7 +3,7 @@ id: CR-221 # renumbered from draft-coordinator-grant-edit-and-roles
 title: ผู้ประสานงานจิตอาสาจัดการบัญชีจิตอาสาได้ครบวงจร — 10 ตำแหน่ง, แก้สิทธิ์, หน้าบัญชีจิตอาสา, พากลับมา, สถานะใน portal และ 1 บัญชีใช้ได้หลายศูนย์
 status: approved
 date: 2026-10-30
-updated: 2026-11-01 # approved by Soravit Sukkarn (Team Lead)
+updated: 2026-11-03 # approved by Soravit Sukkarn (Team Lead) 2026-11-01; Amendment A2 proposed 2026-11-03 (รอ @Jackyzaz approve)
 requested_by: "@mhapong จากการทดสอบ CR-213 บน develop (2026-10-30) — #1044, #1045"
 decided_by: Soravit Sukkarn (Team Lead)
 decision_date: 2026-11-01
@@ -41,6 +41,32 @@ affects:
 > - **หลายศูนย์ (Part B):** จิตอาสา 1 คน = 1 บัญชี ใช้ได้หลายศูนย์ role ต่างกันต่อศูนย์ VC ของศูนย์ใหม่ผูกบัญชีเดิมได้เองเมื่อเบอร์มือถือและเลขบัตรตรงกัน
 > - **portal (Part C):** จิตอาสาเห็นใน portal ว่าได้รับสิทธิ์แล้วหรือยัง (role + วันหมด ไม่แสดงชื่อบัญชี)
 > - **layer: stable** (auth / `_users` / worker) ต้อง review ก่อน approve · โค้ด 3 PR: Part A → Part C → Part B
+
+---
+
+## Amendment A2 (2026-11-03, proposed — รอ @Jackyzaz approve)
+
+> Amendment A1 อยู่ใน PR #1123 (ยังไม่อยู่บน `develop`) จึงวาง A2 ไว้ตรงนี้ · A2 แก้เฉพาะ Part C (FR-26, FR-28); FR-27 และส่วนอื่นของ CR ไม่เปลี่ยน
+
+- **ที่มา:** review ของ PR #1116 (#1044, Part C) เจอว่าโค้ดที่ทำแล้วแสดงวันที่สิ้นสุดในแถว `lapsed` และคืน `account_disabled` ให้คนที่รู้แค่เบอร์ ซึ่งไม่ตรงกับ FR-26 / FR-28 เดิม owner ตัดสิน 2026-11-03 ให้แก้ spec ตามนี้
+
+| ข้อ | ก่อน (approved 2026-11-01) | หลัง (A2) |
+| --- | --- | --- |
+| FR-26 ข้อความ `lapsed` | เหมือน "ยังไม่มีบัญชี": "ยังไม่ได้รับสิทธิ์ใช้งานระบบ — ติดต่อผู้ประสานงานจิตอาสาของศูนย์" | แยกจาก `none`: "สิทธิ์ใช้งานระบบสิ้นสุดตั้งแต่วันที่ dd/mm/yyyy — ติดต่อผู้ประสานงานจิตอาสาของศูนย์" ใช้คำว่า "สิ้นสุด" กับทุกเหตุผล (หมดอายุ, ถูกถอน, ยืนยันตัวตนหมดอายุ) ไม่ใช้คำว่า "หมดอายุ"; ไม่ทราบวัน: "สิทธิ์ใช้งานระบบสิ้นสุดแล้ว — ติดต่อผู้ประสานงานจิตอาสาของศูนย์" (EN: "System access ended on <date> — contact the shelter volunteer coordinator" / "System access has ended — contact the shelter volunteer coordinator") |
+| FR-26 ข้อความ `account_disabled` | "บัญชีถูกระงับ — ติดต่อผู้ดูแลระบบ" | **ตัดออก** บัญชีที่ถูกระงับแสดงเหมือน `none` |
+| FR-28 `status` | `none` / `lapsed` / `active` / `account_disabled` | `none` / `lapsed` / `active` เท่านั้น บัญชีที่ถูกระงับ (`_users.active: false`) ตอบเป็น `none` ไม่มี `role_label` ไม่มี `expires_at` |
+| FR-28 `expires_at` | วันหมดของ grant (`active`) หรือ `null` | `active`: วันหมดของ grant (role ถาวร `null`) · `lapsed`: **วันที่สิทธิ์ในศูนย์นี้สิ้นสุด** (วันหมดของ grant ที่ worker ยังไม่ถอน หรือเวลาของ audit การสิ้นสุดล่าสุด) `null` เมื่อไม่ทราบ · `none`: `null` |
+| FR-28 grant ที่หมดแล้ว | ไม่ระบุ | grant ที่ `expires_at` ผ่านแล้วไม่นับเป็นสิทธิ์ แม้ worker ยังไม่ได้ถอน (นับเป็น `lapsed`) |
+
+- **Why:**
+  - **owner ตัดสิน (2026-11-03):** จิตอาสาควรรู้ว่าสิทธิ์เคยมีและสิ้นสุดเมื่อไร จึงเก็บวันที่ไว้ แต่ใช้คำที่ถูกกับทุกเหตุผล (เดิมเขียน "หมดอายุ" ทั้งที่อาจถูกถอน)
+  - **privacy:** portal เข้าได้ด้วยเบอร์ (เดาได้ — เหมือน `ticket/find`) คนที่รู้แค่เบอร์จึงต้องไม่รู้ว่าบัญชีถูก SA ระงับ ตอบเหมือน "ไม่มีสิทธิ์" ส่วนวันที่สิ้นสุดและ role ที่แสดงมีเท่าที่ FR-28 กำหนด ไม่มี username / อีเมล / ผู้ออก
+  - **ไม่เพิ่ม rate limit** ในงานนี้ (owner ตัดสิน)
+- **Acceptance (เพิ่ม Part C):**
+  - [ ] บัญชีที่สิทธิ์สิ้นสุดแล้ว (หมดอายุ / ถอน / ยืนยันตัวตนหมดอายุ): portal ขึ้น "สิทธิ์ใช้งานระบบสิ้นสุดตั้งแต่วันที่ …" ไม่มีปุ่มเข้าสู่ระบบ
+  - [ ] บัญชีที่ถูก SA ระงับ: response และการ์ดเหมือนโปรไฟล์ที่ไม่มีบัญชีทุกอย่าง (`status: none`, ไม่มี role, ไม่มีวันที่)
+  - [ ] grant ที่ `expires_at` ผ่านแล้วแต่ worker ยังไม่ถอน: การ์ดขึ้น "สิ้นสุด" ไม่ขึ้นปุ่มเข้าสู่ระบบ
+- **Decision log:** 2026-11-03 — owner (@mhapong): เก็บวันที่สิ้นสุดในการ์ด `lapsed` ด้วยคำว่า "สิ้นสุดตั้งแต่วันที่" ทุกเหตุผล; ไม่ส่ง `account_disabled` ใน public endpoint (บัญชีระงับตอบเป็น `none`); ไม่เพิ่ม rate limiter; grant ที่ `expires_at` ผ่านแล้วนับเป็น `lapsed` แม้ worker ยังไม่ถอน (ยืนยันโดย owner หลัง review ของ #1116) · endpoint บันทึกใน `docs/data/api-contract.md` §2.7 — รอ @Jackyzaz approve
 
 ---
 
@@ -135,11 +161,12 @@ affects:
 ## Change — Part C (PR 2): portal จิตอาสาแสดงสถานะสิทธิ์
 
 - **FR-26:** หน้า portal จิตอาสา (หลังเข้าด้วยเบอร์หรือ token ตั๋ว) แสดงการ์ด "สิทธิ์ใช้งานระบบ" ของแต่ละศูนย์ที่จิตอาสามีโปรไฟล์
-  - ยังไม่มีบัญชี / `lapsed`: "ยังไม่ได้รับสิทธิ์ใช้งานระบบ — ติดต่อผู้ประสานงานจิตอาสาของศูนย์"
+  - ยังไม่มีบัญชี (`none`): "ยังไม่ได้รับสิทธิ์ใช้งานระบบ — ติดต่อผู้ประสานงานจิตอาสาของศูนย์"
+  - `lapsed` (แก้โดย Amendment A2): "สิทธิ์ใช้งานระบบสิ้นสุดตั้งแต่วันที่ dd/mm/yyyy — ติดต่อผู้ประสานงานจิตอาสาของศูนย์" (ไม่ทราบวัน: "สิทธิ์ใช้งานระบบสิ้นสุดแล้ว — …")
   - `active`: "<ชื่อ role> · หมดอายุสิ้นวันที่ dd/mm/yyyy" (role ถาวร: ไม่แสดงวันหมด) + ปุ่ม "เข้าสู่ระบบเจ้าหน้าที่" → `/login`
-  - `account_disabled`: "บัญชีถูกระงับ — ติดต่อผู้ดูแลระบบ"
+  - ~~`account_disabled`: "บัญชีถูกระงับ — ติดต่อผู้ดูแลระบบ"~~ ตัดออก — แก้โดย Amendment A2 (บัญชีที่ถูกระงับแสดงเหมือน `none`)
 - **FR-27 endpoint:** `POST /api/public/v1/volunteer/access-status` รับ credential เดียวกับ `/api/public/v1/volunteer/schedule` (เบอร์หรือ token ตั๋ว) หาโปรไฟล์จาก `phone_hash` แล้วหาบัญชีด้วยการผูก 2 ทาง (FR-7) ฝั่ง server ด้วย admin credential
-- **FR-28 ข้อมูลที่คืน:** `[{ shelter_code, shelter_name, status, role_label | null, expires_at | null }]` เท่านั้น **ห้ามคืน username / อีเมล / ผู้ออก** (portal เข้าได้ด้วยเบอร์ คนที่รู้เบอร์ไม่ควรรู้ชื่อบัญชี)
+- **FR-28 ข้อมูลที่คืน** (แก้โดย Amendment A2: `status` = `none` / `lapsed` / `active` ไม่มี `account_disabled`; `expires_at` ของ `lapsed` = วันที่สิทธิ์สิ้นสุด): `[{ shelter_code, shelter_name, status, role_label | null, expires_at | null }]` เท่านั้น **ห้ามคืน username / อีเมล / ผู้ออก** (portal เข้าได้ด้วยเบอร์ คนที่รู้เบอร์ไม่ควรรู้ชื่อบัญชี)
 
 ## Change — Part B (PR 3): 1 บัญชีหลายศูนย์
 

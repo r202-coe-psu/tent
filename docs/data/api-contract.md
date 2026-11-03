@@ -724,6 +724,19 @@ user ที่มี `volunteer_id` ใช้ QR จิตอาสา (`TKT-VOL
 **`POST /api/v1/users` ที่มี `volunteer_id`** (เส้นทาง SA / SM ออกสิทธิ์ให้จิตอาสา): โปรไฟล์ต้องยืนยันตัวตนในศูนย์ของ role ที่ให้ — ไม่ผ่าน `422 VALIDATION` "อาสาสมัครต้องยืนยันตัวตนก่อนจึงจะออกสิทธิ์ได้" (CR-221 FR-3).
 **`PUT /api/v1/users` field `active`** ของบัญชี `personnel_type: "volunteer"`: เปลี่ยนได้เฉพาะ `system_admin` — SM ได้ `403` "บัญชีจิตอาสาใช้การถอนสิทธิ์ในศูนย์แทนการปิดบัญชี" (FR-23).
 
+### 2.7 สถานะสิทธิ์ใช้งานระบบใน portal จิตอาสา ([CR-221](../changes/06-A-volunteer/CR-221-coordinator-grant-edit-and-roles.md) Part C, Amendment A2)
+
+BFF ของ SvelteKit (ไม่ผ่าน FastAPI) · anonymous · ใช้ credential เดียวกับ `POST /api/public/v1/volunteer/schedule`
+
+| Method | Path                                         | Body (credential เดียวกับ schedule)                  | Response                                                                                          |
+| ------ | -------------------------------------------- | ----------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| `POST` | `/api/public/v1/volunteer/access-status`     | `{ phone }` หรือ `{ token }` (+ `portal_id` ถ้ามี)     | `{ success: true, access: [{ shelter_code, shelter_name, status, role_label, expires_at }] }`    |
+
+- `status` = `none` / `lapsed` / `active` เท่านั้น — บัญชีที่ถูกระงับตอบเป็น `none` (ไม่บอกคนที่รู้แค่เบอร์ว่าบัญชีถูกระงับ, Amendment A2)
+- `expires_at`: `active` = วันหมดของ grant (role ถาวร `null`) · `lapsed` = วันที่สิทธิ์ในศูนย์นี้สิ้นสุด (`null` เมื่อไม่ทราบ) · `none` = `null` · grant ที่ `expires_at` ผ่านแล้วนับเป็น `lapsed` แม้ worker ยังไม่ถอน
+- **ห้ามคืน** username / อีเมล / ผู้ออก / ข้อมูลอื่นของบัญชี (FR-28)
+- error: body ไม่ถูกต้อง `422` · อ่านข้อมูลศูนย์ใดไม่สำเร็จ `503 ACCESS_STATUS_UNAVAILABLE` (ไม่คืนแถว) · `Cache-Control: no-store`
+
 ## 3. Provisioning (system_admin เท่านั้น)
 
 ```
