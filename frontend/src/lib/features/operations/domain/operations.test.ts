@@ -96,6 +96,36 @@ describe('walkInDonationInputSchema phone', () => {
 	});
 });
 
+// #821 FR-11 / AC-7 — the stock receive form's walk-in donor may leave an email.
+describe('walkInDonationInputSchema email', () => {
+	const base = {
+		donor: { name: 'ผู้ใจบุญ', phone: '0800000000', phone_hash: 'h' },
+		kind: 'items' as const,
+		items: [{ item_id: 'item:rice', qty: 10, unit: 'kg' }],
+		tracking_token_hash: 'tok'
+	};
+	const make = (email?: string) =>
+		createWalkInDonation(
+			{ ...base, donor: { ...base.donor, ...(email === undefined ? {} : { email }) } },
+			ctx
+		);
+
+	it('stores a valid email on donor.email, trimmed', () => {
+		expect(make('  somchai@example.com ').donor.email).toBe('somchai@example.com');
+	});
+
+	it.each(['somchai', 'somchai@', '@example.com', 'a b@example.com', ''])('refuses %j', (email) => {
+		expect(() => make(email)).toThrow();
+		expect(
+			walkInDonationInputSchema.safeParse({ ...base, donor: { ...base.donor, email } }).success
+		).toBe(false);
+	});
+
+	it('without an email there is no donor.email key at all', () => {
+		expect('email' in make().donor).toBe(false);
+	});
+});
+
 describe('donation lifecycle (forward-only)', () => {
 	it('starts declared with a TTL and no received_at', () => {
 		const d = declaredItemsDonation();
@@ -2745,4 +2775,59 @@ describe('matchesStatusFilter', () => {
 			expect(matchesStatusFilter(state, show, 'closed')).toBe(closed);
 		}
 	);
+});
+
+// Staff-assigned drop-off point (CR-206 A2 FR-AP-1, 4, 4b).
+describe('campaign need drop_off_point_id', () => {
+	const make = (point?: string | null) =>
+		createCampaign(
+			{
+				title: 'ข้าว',
+				needs: [
+					{
+						item_id: 'item:rice',
+						qty_target: 10,
+						unit: 'kg',
+						...(point === undefined ? {} : { drop_off_point_id: point })
+					}
+				]
+			},
+			ctx
+		);
+
+	it('writes schema_v 4 and the chosen point', () => {
+		const c = make('p-gym');
+		expect(c.schema_v).toBe(4);
+		expect(c.needs[0].drop_off_point_id).toBe('p-gym');
+	});
+
+	it('writes null explicitly, never omits the key, when there is no point', () => {
+		for (const c of [make(), make(null)]) {
+			expect(c.needs[0]).toHaveProperty('drop_off_point_id', null);
+		}
+	});
+
+	it('refuses an empty-string point', () => {
+		expect(() => make('')).toThrow();
+	});
+
+	it('editNeed sets, changes and clears the point only when the patch carries it', () => {
+		const set = editNeed(make(null), 'item:rice', { qty_target: '10', drop_off_point_id: 'p-med' });
+		expect(set.needs[0].drop_off_point_id).toBe('p-med');
+		expect(
+			editNeed(set, 'item:rice', { qty_target: '10', drop_off_point_id: null }).needs[0]
+				.drop_off_point_id
+		).toBeNull();
+		expect(editNeed(set, 'item:rice', { qty_target: '12' }).needs[0].drop_off_point_id).toBe(
+			'p-med'
+		);
+	});
+
+	it('reads a v3 need without the key as no point', () => {
+		const v3 = { ...make(), schema_v: 3 } as DonationCampaign;
+		delete (v3.needs[0] as { drop_off_point_id?: string | null }).drop_off_point_id;
+		expect(v3.needs[0].drop_off_point_id ?? null).toBeNull();
+		const edited = editNeed(v3, 'item:rice', { qty_target: '10', drop_off_point_id: 'p-gym' });
+		expect(edited.needs[0].drop_off_point_id).toBe('p-gym');
+	});
 });

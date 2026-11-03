@@ -206,6 +206,31 @@ describe('Back-office GET & POST /api/back-office/donations/[query]', () => {
 		expect(data.donation).not.toHaveProperty('_id');
 	});
 
+	it('GET masks the contact of a RECEIVED donation — full values only via POST /contact (CR-214 FR-8b, FR-10a)', async () => {
+		mockCouch({
+			...baseDonation,
+			status: 'received',
+			donor: { ...baseDonation.donor, email: 'john.donor@example.com' }
+		});
+
+		const response = await GET({
+			params: { query: 'DN-999999' },
+			request: { headers: { get: () => 'session-cookie' } }
+		} as unknown as GetEvent);
+
+		const data = await response.json();
+		expect(response.status).toBe(200);
+		expect(data.donation.donor).toEqual({
+			name: 'John Do****r',
+			phone: 'xxx-xxx-5678',
+			email: 'j***r@example.com'
+		});
+		const raw = JSON.stringify(data);
+		for (const full of ['Donor', '0812345678', 'john.donor@example.com']) {
+			expect(raw).not.toContain(full);
+		}
+	});
+
 	it('GET carries the donor photos for the scan station (FR-12)', async () => {
 		const photos = ['image:01K8PHXTX00000000000000001'];
 		mockCouch({ ...baseDonation, photos });

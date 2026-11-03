@@ -7,7 +7,12 @@ vi.mock('./couch-admin', async (importOriginal) => ({
 	adminRaw: adminRawMock
 }));
 
-import { buildSecurityMutationLock, updateMaster } from './shelters.admin';
+import {
+	buildSecurityMutationLock,
+	deployDonationReceivedMangoIndex,
+	deployRoleGrantAuditMangoIndex,
+	updateMaster
+} from './shelters.admin';
 
 describe('buildSecurityMutationLock', () => {
 	it('writes a regular CouchDB type field instead of the reserved _type member', () => {
@@ -94,5 +99,88 @@ describe('updateMaster closed_at (CR-183 FR-14/FR-15)', () => {
 			{ closed_at: forged }
 		);
 		expect(kept.closed_at).toBe(STAMP);
+	});
+});
+
+describe('deployDonationReceivedMangoIndex (#821)', () => {
+	beforeEach(() => adminRawMock.mockReset());
+
+	it('creates the list, phone, booking-ref and ledger lot-number indexes on the shelter database', async () => {
+		adminRawMock.mockResolvedValue({ status: 200, data: { result: 'created' } });
+
+		await deployDonationReceivedMangoIndex('shelter_sh001');
+
+		const posted = adminRawMock.mock.calls.map(([path, method, body]) => ({
+			path,
+			method,
+			ddoc: body.ddoc,
+			name: body.name,
+			fields: body.index.fields
+		}));
+		expect(posted).toEqual([
+			{
+				path: '/shelter_sh001/_index',
+				method: 'POST',
+				ddoc: 'donation-received-list',
+				name: 'donation-received-by-received-at',
+				fields: [{ type: 'desc' }, { status: 'desc' }, { received_at: 'desc' }, { _id: 'desc' }]
+			},
+			{
+				path: '/shelter_sh001/_index',
+				method: 'POST',
+				ddoc: 'donation-received-phone',
+				name: 'donation-received-phone',
+				fields: ['type', 'status', 'donor.phone_hash', 'received_at']
+			},
+			{
+				path: '/shelter_sh001/_index',
+				method: 'POST',
+				ddoc: 'donation-booking-ref',
+				name: 'donation-booking-ref',
+				fields: ['type', 'booking_ref']
+			},
+			{
+				path: '/shelter_sh001/_index',
+				method: 'POST',
+				ddoc: 'stock-ledger-lot-no',
+				name: 'stock-ledger-lot-no',
+				fields: ['type', 'lot.lot_no']
+			}
+		]);
+	});
+
+	it('fails, naming the index, when CouchDB refuses one', async () => {
+		adminRawMock
+			.mockResolvedValueOnce({ status: 200, data: { result: 'exists' } })
+			.mockResolvedValueOnce({ status: 500, data: { reason: 'boom' } });
+
+		await expect(deployDonationReceivedMangoIndex('shelter_sh001')).rejects.toThrow(
+			'donation-received-phone'
+		);
+	});
+});
+
+describe('deployRoleGrantAuditMangoIndex (CR-221)', () => {
+	beforeEach(() => adminRawMock.mockReset());
+
+	it('posts the audit-by-target index to the shelter database', async () => {
+		adminRawMock.mockResolvedValue({ status: 200, data: { result: 'created' } });
+		await deployRoleGrantAuditMangoIndex('shelter_sh001');
+		expect(adminRawMock).toHaveBeenCalledWith(
+			'/shelter_sh001/_index',
+			'POST',
+			expect.objectContaining({
+				ddoc: 'role-grant-audit-target',
+				name: 'role-grant-audit-by-target',
+				index: { fields: ['type', 'target_id', 'reason'] }
+			})
+		);
+	});
+
+	it('fails, naming the index, when CouchDB refuses it', async () => {
+		adminRawMock.mockResolvedValue({ status: 500, data: { reason: 'boom' } });
+		await expect(deployRoleGrantAuditMangoIndex('shelter_sh001')).rejects.toThrow(
+			'role-grant-audit-by-target'
+		);
 	});
 });

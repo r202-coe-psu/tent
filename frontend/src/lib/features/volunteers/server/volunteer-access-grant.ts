@@ -1,4 +1,3 @@
-import { sha256Hex } from '$lib/db/hash';
 import {
 	coordinatorShelterCodes,
 	grantExpiresAt,
@@ -15,12 +14,15 @@ import {
 import { shelterDbName } from '$lib/server/shelter-access-design';
 import {
 	grantCoordinatorRole,
-	readVolunteerGrants,
-	revokeCoordinatorGrant
+	readShelterVolunteerAccounts,
+	readVolunteerAccount,
+	revokeCoordinatorGrant,
+	type ShelterVolunteerAccount
 } from '$lib/server/user-service';
-import { normalizePhone } from '../domain/phone';
+import { canAccessVolunteerBackoffice } from '$lib/auth/roles';
+import { normalizeThaiPhone } from '$lib/db/model';
+import { isVolunteerMobile } from '../domain/phone';
 import { identityVerificationStatus } from '../domain/verification';
-import { shelterRefs } from './public-schedule-action';
 
 /** What the coordinator sends to take a grant back. */
 export type CoordinatorRevokeInput = Pick<
@@ -46,6 +48,7 @@ type VolunteerDoc = {
 	first_name?: string;
 	last_name?: string;
 	phone?: string | null;
+	status?: string;
 	phone_hash?: string | null;
 	national_id?: string | null;
 	national_id_hash?: string | null;
@@ -56,8 +59,6 @@ type VolunteerDoc = {
 };
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-/** A mobile (10 digits) or a landline (9 digits): what `_users.phone` accepts as contact. */
-const CONTACT_PHONE_RE = /^0\d{8,9}$/;
 
 const asString = (value: unknown): string => (typeof value === 'string' ? value.trim() : '');
 
@@ -77,11 +78,8 @@ async function readVolunteer(shelterCode: string, volunteerId: string): Promise<
 }
 
 /** Where the verification lives and who marked it verified (`reviewed_by`, null when unknown). */
-const verificationOf = (
-	doc: VolunteerDoc,
-	shelterCode: string = doc.shelter_code as string
-): NonNullable<RoleGrant['verified_by']> => ({
-	shelter_code: shelterCode,
+const verificationOf = (doc: VolunteerDoc): NonNullable<RoleGrant['verified_by']> => ({
+	shelter_code: doc.shelter_code as string,
 	volunteer_id: doc._id,
 	reviewed_by: doc.identity_verification?.reviewed_by ?? null
 });
@@ -92,36 +90,23 @@ const isVerified = (doc: VolunteerDoc): boolean =>
 		identity_verification: doc.identity_verification as never
 	}) === 'verified';
 
+const UNVERIFIED_MESSAGE = 'อาสาสมัครต้องยืนยันตัวตนก่อนจึงจะออกสิทธิ์ได้';
+
 /**
- * The profile that proves the volunteer's identity, or `null`: this shelter's own verified
- * profile, else another shelter's verified profile with the same `phone_hash` AND
- * `national_id_hash` (draft-coordinator-limited-access-grant FR-3). A phone alone is not enough
- * to lend another shelter's verification, and a profile without a national ID counts only here.
+ * A system account is created for a volunteer profile only once the profile is identity-verified
+ * in the shelter(s) whose roles the account is given (CR-221 FR-3, every grantor): the SA / SM
+ * path (`POST /api/v1/users` with `volunteer_id`) checks it here, as the UI's check alone is not a
+ * rule. Another shelter's check does not stand in; a profile missing from a shelter is 422 too.
+ * 422 and nothing written otherwise.
  */
-async function identityVerifiedBy(
-	volunteer: VolunteerDoc
-): Promise<NonNullable<RoleGrant['verified_by']> | null> {
-	if (isVerified(volunteer)) return verificationOf(volunteer);
-	const phone = volunteer.phone ? normalizePhone(volunteer.phone) : '';
-	const nationalIdHash =
-		volunteer.national_id_hash ||
-		(volunteer.national_id ? await sha256Hex(volunteer.national_id) : '');
-	if (!phone || !nationalIdHash) return null;
-	const phoneHash = await sha256Hex(phone);
-	for (const ref of await shelterRefs()) {
-		if (ref.code === volunteer.shelter_code) continue;
-		const res = await adminRaw(`/${ref.dbName}/_find`, 'POST', {
-			selector: { type: 'volunteer', phone_hash: phoneHash, national_id_hash: nationalIdHash },
-			limit: 20
-		});
-		if (res.status === 404) continue;
-		if (res.status >= 400)
-			throw serviceErrorFromCouch('find volunteer profiles', res.status, res.data);
-		const docs = (res.data as { docs?: VolunteerDoc[] } | null)?.docs ?? [];
-		const match = docs.find(isVerified);
-		if (match) return verificationOf(match, ref.code);
+export async function assertVolunteerVerifiedForAccess(
+	shelterCodes: readonly string[],
+	volunteerId: string
+): Promise<void> {
+	for (const shelterCode of shelterCodes) {
+		const volunteer = await readVolunteer(shelterCode, volunteerId);
+		if (!isVerified(volunteer)) throw new ServiceError('VALIDATION', UNVERIFIED_MESSAGE);
 	}
-	return null;
 }
 
 /**
@@ -145,10 +130,24 @@ function coordinatorShelter(caller: Pick<Caller, 'roles'>, requested: unknown): 
 	return code;
 }
 
+/** The volunteer's own account already holds a coordinator grant in this shelter. */
+async function holdsGrantHere(
+	shelterCode: string,
+	volunteer: VolunteerDoc,
+	email: string
+): Promise<boolean> {
+	const account = await readVolunteerAccount({
+		name: volunteer.user_name || email,
+		volunteer_id: volunteer._id,
+		shelter_code: shelterCode
+	});
+	return account.exists && account.grants.length > 0;
+}
+
 /**
  * A `volunteer_coordinator` gives a volunteer system access (#955, #879 item 2). Every rule is
- * enforced here, not in the UI: own shelter only (from the session), four roles, identity
- * verified (here, or in another shelter by phone and national ID), and a required expiry within
+ * enforced here, not in the UI: own shelter only (from the session), the coordinator roles (`COORDINATOR_GRANTABLE_CAPABILITIES`), identity
+ * verified in this shelter, and a required expiry within
  * 7 days. Authorization runs first; the existing-account rules run in `grantCoordinatorRole`.
  */
 export async function grantVolunteerAccessAsCoordinator(
@@ -160,7 +159,7 @@ export async function grantVolunteerAccessAsCoordinator(
 
 	const role = input.role;
 	if (!isCoordinatorGrantableRole(role)) {
-		throw new ServiceError('FORBIDDEN', 'A coordinator may only grant a desk staff role');
+		throw new ServiceError('FORBIDDEN', 'A coordinator may not grant this role');
 	}
 	const expiryError = grantExpiryError(input.expires_on, now);
 	if (expiryError) throw new ServiceError('VALIDATION', expiryError);
@@ -171,26 +170,41 @@ export async function grantVolunteerAccessAsCoordinator(
 	if (!volunteerId) throw new ServiceError('VALIDATION', 'volunteer_id is required');
 
 	const volunteer = await readVolunteer(shelterCode, volunteerId);
-	const verifiedBy = await identityVerifiedBy(volunteer);
-	if (!verifiedBy) {
-		throw new ServiceError('VALIDATION', 'อาสาสมัครต้องยืนยันตัวตนก่อนจึงจะออกสิทธิ์ได้');
+	// A closed profile is reopened first (CR-221 FR-21); 422 is `VALIDATION` in this service.
+	if (volunteer.status === 'inactive') {
+		throw new ServiceError('VALIDATION', 'เปิดใช้งานอาสาสมัครก่อนจึงจะออกสิทธิ์ได้');
 	}
+	// Verified in this shelter only (CR FR-3, #1044): another shelter's check does not stand in.
+	// Editing a grant the account already holds here needs no new check (FR-3, last line); a new
+	// grant, or a re-grant on a lapsed account, does.
+	const verified = isVerified(volunteer);
+	if (!verified && !(await holdsGrantHere(shelterCode, volunteer, email))) {
+		throw new ServiceError('VALIDATION', UNVERIFIED_MESSAGE);
+	}
+	const verifiedBy = verified ? verificationOf(volunteer) : undefined;
 
-	const phone = volunteer.phone ? normalizePhone(volunteer.phone) : '';
+	const phone = volunteer.phone ? normalizeThaiPhone(volunteer.phone) : '';
+	// CR-210 FR-8: a filled phone must be a 10-digit mobile before access is issued.
+	if (phone && !isVolunteerMobile(phone)) {
+		throw new ServiceError(
+			'VALIDATION',
+			'เบอร์โทรศัพท์ในโปรไฟล์ไม่ใช่มือถือ 10 หลัก กรุณาแก้เบอร์ในโปรไฟล์ก่อนออกสิทธิ์'
+		);
+	}
 	const grant: RoleGrant = {
 		shelter_code: shelterCode,
 		role,
 		expires_at: grantExpiresAt(input.expires_on as string),
 		granted_by: caller.name,
 		granted_at: now.toISOString(),
-		verified_by: verifiedBy
+		...(verifiedBy ? { verified_by: verifiedBy } : {})
 	};
 	return grantCoordinatorRole({
 		name: email,
 		password,
 		display_name: `${volunteer.first_name ?? ''} ${volunteer.last_name ?? ''}`.trim() || email,
 		organization: volunteer.organization ?? null,
-		phone: CONTACT_PHONE_RE.test(phone) ? phone : null,
+		phone: phone || null,
 		volunteer_id: volunteerId,
 		linked_user_name: volunteer.user_name ?? null,
 		grant
@@ -198,9 +212,9 @@ export async function grantVolunteerAccessAsCoordinator(
 }
 
 /**
- * A coordinator takes back a grant they issued (FR-8). Same caller scope as the grant; the
- * account is named like the grant names it (`email` + `volunteer_id`). Only a grant the caller
- * issued can go: anything else is 403 and nothing is written.
+ * A coordinator takes back a coordinator grant in their shelter (CR-221 FR-17), whoever issued it.
+ * Same caller scope as the grant; the account is named like the grant names it (`email` +
+ * `volunteer_id`). A role a manager gave (no grant) is 403 and nothing is written.
  */
 export async function revokeVolunteerAccessAsCoordinator(
 	caller: Pick<Caller, 'name' | 'roles'>,
@@ -209,7 +223,7 @@ export async function revokeVolunteerAccessAsCoordinator(
 	const shelterCode = coordinatorShelter(caller, input.shelter_code);
 	const role = input.role;
 	if (!isCoordinatorGrantableRole(role)) {
-		throw new ServiceError('FORBIDDEN', 'A coordinator may only revoke a desk staff role');
+		throw new ServiceError('FORBIDDEN', 'A coordinator may not revoke this role');
 	}
 	const email = asString(input.email).toLowerCase();
 	const volunteerId = asString(input.volunteer_id);
@@ -225,35 +239,188 @@ export async function revokeVolunteerAccessAsCoordinator(
 	});
 }
 
-/** A grant as the coordinator dialog shows it: `mine` grants are the ones the caller may revoke. */
-export type VolunteerGrantView = { role: string; expires_at: string; mine: boolean };
+/**
+ * A grant as the coordinator dialog shows it; `mine` (issued by the caller) is display-only
+ * (FR-17). `granted_by` is the original issuer, shown as "ออกโดย …" beside the old expiry (FR-13).
+ */
+export type VolunteerGrantView = {
+	role: string;
+	expires_at: string;
+	granted_by: string;
+	mine: boolean;
+};
+
+/** How the volunteer's last grant in this shelter ended, for "หมดอายุ" vs "ถูกถอน" (#1044). */
+export type GrantEnding = {
+	role: string;
+	reason: 'expired' | 'revoked' | 'verification_revoked';
+	at: string;
+	/** Who took it back; `worker` for an expiry or a lapsed verification. */
+	by: string;
+	/** Why the worker revoked it, when it says (`profile_inactive`, CR-221 FR-20). */
+	cause?: string;
+};
+
+export type VolunteerAccessView = {
+	email: string | null;
+	/** The linked account exists (a profile may keep a `user_name` whose account was removed). */
+	has_account: boolean;
+	grants: VolunteerGrantView[];
+	/** Roles a manager gave in this shelter (no expiry); the coordinator cannot change them. */
+	permanent_roles: string[];
+	last_ended: GrantEnding | null;
+};
+
+const ENDING_REASONS = {
+	'role_grant.expired': 'expired',
+	'role_grant.revoked': 'revoked',
+	'role_grant.verification_revoked': 'verification_revoked'
+} as const;
+
+type GrantEndingAudit = {
+	reason: keyof typeof ENDING_REASONS;
+	created_at: string;
+	target_id: string;
+	context?: { role?: string; actor?: string; cause?: string };
+};
+
+const userDocId = (name: string) => `org.couchdb.user:${name}`;
+const AUDIT_PAGE_SIZE = 1000;
 
 /**
- * The grants on the account linked to a volunteer of the coordinator's shelter (FR-8), so the
- * dialog can offer to revoke the caller's own. The account is the profile's `user_name`, read
- * server-side, so no other account can be probed.
+ * The newest grant-ending audit (FR-14 audits) of each given account in this shelter, keyed by
+ * account name; accounts with none are absent. One `_find` (paged by bookmark, so a long history
+ * never hides the newest ending) for however many accounts, on the `role-grant-audit-by-target`
+ * index (`type`, `target_id`, `reason`). That index cannot order by `created_at`, so the newest is
+ * picked here.
+ */
+async function lastGrantEndings(
+	shelterCode: string,
+	names: readonly string[]
+): Promise<Map<string, GrantEnding>> {
+	const newest = new Map<string, GrantEndingAudit>();
+	if (names.length === 0) return new Map();
+	let bookmark: string | undefined;
+	for (;;) {
+		const res = await adminRaw(`/${shelterDbName(shelterCode)}/_find`, 'POST', {
+			selector: {
+				type: 'audit',
+				target_id: { $in: names.map(userDocId) },
+				reason: { $in: Object.keys(ENDING_REASONS) }
+			},
+			fields: ['reason', 'created_at', 'target_id', 'context'],
+			limit: AUDIT_PAGE_SIZE,
+			...(bookmark ? { bookmark } : {})
+		});
+		if (res.status === 404) return new Map();
+		if (res.status >= 400) throw serviceErrorFromCouch('find grant audits', res.status, res.data);
+		const data = res.data as { docs?: GrantEndingAudit[]; bookmark?: string } | null;
+		const docs = data?.docs ?? [];
+		for (const doc of docs) {
+			const seen = newest.get(doc.target_id);
+			if (!seen || doc.created_at > seen.created_at) newest.set(doc.target_id, doc);
+		}
+		if (docs.length < AUDIT_PAGE_SIZE || !data?.bookmark || data.bookmark === bookmark) break;
+		bookmark = data.bookmark;
+	}
+	const endings = new Map<string, GrantEnding>();
+	for (const name of names) {
+		const latest = newest.get(userDocId(name));
+		if (!latest) continue;
+		endings.set(name, {
+			role: latest.context?.role ?? '',
+			reason: ENDING_REASONS[latest.reason],
+			at: latest.created_at,
+			by: latest.context?.actor ?? '',
+			...(latest.context?.cause ? { cause: latest.context.cause } : {})
+		});
+	}
+	return endings;
+}
+
+/**
+ * The account behind a volunteer profile, as the coordinator dialog shows it (FR-8, #1044): its
+ * grants here (`mine` = the caller's), roles a manager gave here, and — when it holds nothing
+ * here — how the last grant ended.
  */
 export async function listVolunteerGrantsAsCoordinator(
 	caller: Pick<Caller, 'name' | 'roles'>,
 	input: Pick<CoordinatorGrantInput, 'shelter_code' | 'volunteer_id'>
-): Promise<{ email: string | null; grants: VolunteerGrantView[] }> {
+): Promise<VolunteerAccessView> {
 	const shelterCode = coordinatorShelter(caller, input.shelter_code);
 	const volunteerId = asString(input.volunteer_id);
 	if (!volunteerId) throw new ServiceError('VALIDATION', 'volunteer_id is required');
 	const volunteer = await readVolunteer(shelterCode, volunteerId);
 	const email = volunteer.user_name ?? null;
-	if (!email) return { email: null, grants: [] };
-	const grants = await readVolunteerGrants({
+	const empty = { has_account: false, grants: [], permanent_roles: [], last_ended: null };
+	if (!email) return { email: null, ...empty };
+	const account = await readVolunteerAccount({
 		name: email,
 		volunteer_id: volunteerId,
 		shelter_code: shelterCode
 	});
+	if (!account.exists) return { email, ...empty };
+	const holdsRole = account.grants.length > 0 || account.permanent_roles.length > 0;
 	return {
 		email,
-		grants: grants.map((g) => ({
+		has_account: true,
+		grants: account.grants.map((g) => ({
 			role: g.role,
 			expires_at: g.expires_at,
+			granted_by: g.granted_by,
 			mine: g.granted_by === caller.name
-		}))
+		})),
+		permanent_roles: account.permanent_roles,
+		last_ended: holdsRole
+			? null
+			: ((await lastGrantEndings(shelterCode, [email])).get(email) ?? null)
 	};
+}
+
+/**
+ * Every volunteer account of a shelter with its roles there (#1044), so the people tab and a
+ * job's applicants show what each volunteer may do now — the coordinator included, who cannot
+ * read the users list. Open to whoever runs that shelter's volunteers (SA / SM / coordinator).
+ */
+export async function listShelterVolunteerAccounts(
+	caller: Pick<Caller, 'roles'>,
+	input: { shelter_code: unknown }
+): Promise<(ShelterVolunteerAccount & { last_ended?: GrantEnding | null })[]> {
+	const shelterCode = asString(input.shelter_code);
+	if (!shelterCode) throw new ServiceError('VALIDATION', 'shelter_code is required');
+	if (!canAccessVolunteerBackoffice(caller.roles, shelterCode)) {
+		throw new ServiceError('FORBIDDEN', 'Requires volunteer back-office access in this shelter');
+	}
+	const res = await adminRaw(`/${shelterDbName(shelterCode)}/_find`, 'POST', {
+		selector: { type: 'volunteer', shelter_code: shelterCode, user_name: { $type: 'string' } },
+		fields: ['_id', 'user_name'],
+		limit: 10000
+	});
+	if (res.status === 404) return [];
+	if (res.status >= 400) throw serviceErrorFromCouch('find volunteers', res.status, res.data);
+	const docs = ((res.data as { docs?: unknown[] } | null)?.docs ?? []) as VolunteerDoc[];
+	const accounts = await readShelterVolunteerAccounts(
+		docs.flatMap((doc) =>
+			doc.user_name?.trim() ? [{ volunteer_id: doc._id, name: doc.user_name.trim() }] : []
+		),
+		shelterCode
+	);
+	// An account that holds nothing here says how its last role ended (expired / revoked, when),
+	// so the tables show more than "สิ้นสุดแล้ว" (#1044). One audit read for all of them.
+	const idle = accounts.filter((a) => a.grants.length === 0 && a.permanent_roles.length === 0);
+	// A failed audit read must not blank every badge: the accounts come back without the ending.
+	const endings = await lastGrantEndings(
+		shelterCode,
+		idle.map((a) => a.name)
+	).catch((error: unknown) => {
+		console.error('[volunteer-access] grant audits not read; last_ended left empty', {
+			shelter_code: shelterCode,
+			error
+		});
+		return new Map<string, GrantEnding>();
+	});
+	const idleSet = new Set(idle);
+	return accounts.map((account) =>
+		idleSet.has(account) ? { ...account, last_ended: endings.get(account.name) ?? null } : account
+	);
 }

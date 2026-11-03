@@ -74,6 +74,70 @@ export const DAILY_SOP_ROLE_MANGO_INDEX = {
 };
 
 /**
+ * Index behind the volunteer access dialog's "how did the last grant end" lookup (CR-221, #1044):
+ * the `audit` docs of one account (`target_id`) by `reason` (`role_grant.revoked` / `.expired` /
+ * `.verification_revoked`), read by `lastGrantEndings` with `target_id: { $in: [...] }` and paged by
+ * bookmark. It does not order by `created_at` (the newest is picked in code), so the deployed
+ * definition stays as is. Audit docs grow without bound, so the query must not scan them all.
+ */
+export const ROLE_GRANT_AUDIT_MANGO_INDEX = {
+	index: { fields: ['type', 'target_id', 'reason'] },
+	ddoc: 'role-grant-audit-target',
+	name: 'role-grant-audit-by-target',
+	type: 'json' as const
+};
+
+/**
+ * Index behind the back-office "รับแล้ว" list (#821): received donations, newest first,
+ * `_id` as the tie-breaker. The route queries with `allow_fallback: false`, so a shelter
+ * DB without this index answers 503 instead of being scanned.
+ */
+export const DONATION_RECEIVED_MANGO_INDEX = {
+	index: {
+		fields: [{ type: 'desc' }, { status: 'desc' }, { received_at: 'desc' }, { _id: 'desc' }]
+	},
+	ddoc: 'donation-received-list',
+	name: 'donation-received-by-received-at',
+	type: 'json' as const
+};
+
+/**
+ * Index behind the "รับแล้ว" search by donor phone (#821 FR-8 `phone`): `donor.phone_hash`
+ * equality inside the received donations, newest first. `phone_hash` outlives the retention
+ * wipe of the raw phone, so a donation stays findable by number after `donor.phone` is gone.
+ */
+export const DONATION_RECEIVED_PHONE_MANGO_INDEX = {
+	index: { fields: ['type', 'status', 'donor.phone_hash', 'received_at'] },
+	ddoc: 'donation-received-phone',
+	name: 'donation-received-phone',
+	type: 'json' as const
+};
+
+/**
+ * Index behind the "รับแล้ว" search by booking reference (#821 FR-8 `booking_ref`): equality on
+ * `booking_ref` among the donations. A shelter DB had no `booking_ref` index before (the unique
+ * one lives in Mongo), so without it the search could only filter the received list in memory.
+ */
+export const DONATION_BOOKING_REF_MANGO_INDEX = {
+	index: { fields: ['type', 'booking_ref'] },
+	ddoc: 'donation-booking-ref',
+	name: 'donation-booking-ref',
+	type: 'json' as const
+};
+
+/**
+ * Index behind the "รับแล้ว" search by lot number (#821 FR-8 `lot`, FR-13): the `stock_ledger`
+ * rows carrying one `lot.lot_no`. `lot_no` is a label, not a key — several rows and donations
+ * may share it — so the route reads every row of the label, not the first.
+ */
+export const STOCK_LEDGER_LOT_NO_MANGO_INDEX = {
+	index: { fields: ['type', 'lot.lot_no'] },
+	ddoc: 'stock-ledger-lot-no',
+	name: 'stock-ledger-lot-no',
+	type: 'json' as const
+};
+
+/**
  * Donor photos no booking has bound yet (CR-175 donor photos FR-16). Partial: a photo
  * leaves the index the moment the worker writes its `donation_id`, so the sweep never
  * re-reads bound photos. CouchDB never picks a partial index on its own, so the worker
@@ -2215,7 +2279,7 @@ ${consentVduClause()}
     if (typeof newDoc.is_returnable !== 'boolean') {
       throw { forbidden: 'distribution_log requires boolean is_returnable' };
     }
-    if (['evacuee', 'volunteer', 'outside'].indexOf(newDoc.recipient_type) === -1) {
+    if (['evacuee', 'volunteer', 'staff', 'outside'].indexOf(newDoc.recipient_type) === -1) {
       throw { forbidden: 'Invalid recipient_type: ' + newDoc.recipient_type };
     }
     if (newDoc.recipient_type === 'evacuee' && (typeof newDoc.recipient_id !== 'string' || newDoc.recipient_id.indexOf('evacuee:') !== 0)) {
@@ -2223,6 +2287,9 @@ ${consentVduClause()}
     }
     if (newDoc.recipient_type === 'volunteer' && (typeof newDoc.recipient_id !== 'string' || newDoc.recipient_id.indexOf('volunteer:') !== 0)) {
       throw { forbidden: 'volunteer recipient_id is required' };
+    }
+    if (newDoc.recipient_type === 'staff' && (typeof newDoc.recipient_id !== 'string' || newDoc.recipient_id.indexOf('user:') !== 0 || newDoc.recipient_id.length <= 5)) {
+      throw { forbidden: 'staff recipient_id is required' };
     }
     if (newDoc.recipient_type === 'outside' && typeof newDoc.recipient_id !== 'undefined' && newDoc.recipient_id !== null) {
       throw { forbidden: 'outside recipients must not carry recipient_id' };
