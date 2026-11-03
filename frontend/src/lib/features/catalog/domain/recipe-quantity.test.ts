@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+	isPositiveQty,
 	persistedQuantityFromPerPotion,
 	quantityPerPotionFromPersisted,
 	totalQuantityForPotions
@@ -29,5 +30,18 @@ describe('recipe quantity conversion', () => {
 		['1', '-1']
 	])('rejects non-positive quantity values (%s, %s)', (quantity, portions) => {
 		expect(() => totalQuantityForPotions(quantity, portions)).toThrow(/must be greater than 0/);
+	});
+});
+
+describe('isPositiveQty', () => {
+	it.each([
+		['1', true],
+		['0.0001', true],
+		['0.00001', false],
+		['0', false],
+		['-1', false],
+		[Number.NaN, false]
+	])('%s -> %s', (value, expected) => {
+		expect(isPositiveQty(value)).toBe(expected);
 	});
 });

@@ -155,24 +155,40 @@ async function linkVolunteerProfile(
  * rule (own shelter, the coordinator roles, verified identity incl. other shelters, 7-day expiry) and
  * creates or extends the account; this then links the profile like {@link grantVolunteerAccess}.
  */
-export const coordinatorAccessSchema = z.object({
-	email: volunteerAccessSchema.shape.email,
-	password: volunteerAccessSchema.shape.password,
-	role: z.enum(COORDINATOR_GRANTABLE_CAPABILITIES, { message: ROLE_REQUIRED_MESSAGE }),
-	/** `YYYY-MM-DD` (Asia/Bangkok), required, no default. */
-	expires_on: z.string().min(1, 'กรุณาเลือกวันหมดอายุ')
-});
+export const coordinatorAccessSchema = z
+	.object({
+		email: volunteerAccessSchema.shape.email,
+		/** Not asked for when the account exists (CR-221 FR-10): the server keeps its password. */
+		password: z.string().trim(),
+		role: z.enum(COORDINATOR_GRANTABLE_CAPABILITIES, { message: ROLE_REQUIRED_MESSAGE }),
+		/** `YYYY-MM-DD` (Asia/Bangkok), required, no default. */
+		expires_on: z.string().min(1, 'กรุณาเลือกวันหมดอายุ'),
+		/** The linked account already exists (standing `active` / `lapsed`): no password. */
+		account_exists: z.boolean().optional()
+	})
+	.superRefine((value, ctx) => {
+		if (!value.account_exists && value.password === '') {
+			ctx.addIssue({
+				code: 'custom',
+				path: ['password'],
+				message: 'กรุณากำหนดรหัสผ่าน'
+			});
+		}
+	});
 
 export async function grantVolunteerAccessAsCoordinator(
 	volunteer: Volunteer,
 	input: z.infer<typeof coordinatorAccessSchema>
 ): Promise<{ created: boolean; unchanged: boolean }> {
-	const { email, password, role, expires_on } = coordinatorAccessSchema.parse(input);
+	const { email, password, role, expires_on, account_exists } =
+		coordinatorAccessSchema.parse(input);
 	const expiryError = grantExpiryError(expires_on);
 	if (expiryError) throw new Error(expiryError);
 	if (hasInvalidAccessPhone(volunteer.phone)) throw new Error(VOLUNTEER_ACCESS_PHONE_MESSAGE);
-	const passwordError = volunteerPasswordError(password, accountPhone(volunteer.phone));
-	if (passwordError) throw new Error(passwordError);
+	if (!account_exists) {
+		const passwordError = volunteerPasswordError(password, accountPhone(volunteer.phone));
+		if (passwordError) throw new Error(passwordError);
+	}
 	const repository = volunteerRepositoryFor(volunteer.shelter_code);
 	const profile = await repository.get(volunteer._id);
 	if (!profile) throw new Error('ไม่พบข้อมูลอาสาสมัคร กรุณาโหลดข้อมูลใหม่');
@@ -197,8 +213,16 @@ export async function grantVolunteerAccessAsCoordinator(
 	return { created: result.created, unchanged: result.unchanged };
 }
 
-/** A grant on the volunteer's account; `mine` ones are those the caller may revoke (FR-8). */
-export type VolunteerGrant = { role: string; expires_at: string; mine: boolean };
+/**
+ * A grant on the volunteer's account (`mine`: issued by the caller, display only). `granted_by`
+ * is the original issuer, for "ออกโดย …" next to the old expiry (CR-221 FR-13).
+ */
+export type VolunteerGrant = {
+	role: string;
+	expires_at: string;
+	granted_by?: string;
+	mine: boolean;
+};
 
 /**
  * The role to preselect when the account already holds grants here (#1044): the one that runs
@@ -221,6 +245,8 @@ export type GrantEnding = {
 	reason: 'expired' | 'revoked' | 'verification_revoked';
 	at: string;
 	by: string;
+	/** Why the worker revoked it, when it says (`profile_inactive`, CR-221 FR-20). */
+	cause?: string;
 };
 
 /** The account behind a volunteer profile as the coordinator dialog sees it (#1044). */

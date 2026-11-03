@@ -38,6 +38,7 @@
 	} from '../application/queries';
 	import { hasPendingControlledSkill, identityVerificationStatus } from '../domain/verification';
 	import { skillMatches } from '../domain/skill-catalog';
+	import { matchesVolunteerCode } from '../domain/volunteer-code';
 	import { hasVolunteerAccount, volunteerAccessStatus } from '../domain/volunteer-access-status';
 	import type { PersonnelType, Volunteer, VolunteerSource } from '../domain/volunteer.schema';
 	import type { ShiftAssignment, ShiftAssignmentStatus } from '../domain/shift-assignment.schema';
@@ -104,7 +105,7 @@
 			v.first_name.toLowerCase().includes(needle) ||
 			v.last_name.toLowerCase().includes(needle) ||
 			(v.phone ?? '').includes(needle) ||
-			v.volunteer_code.toLowerCase().includes(needle)
+			matchesVolunteerCode(v.volunteer_code, needle)
 		);
 	}
 

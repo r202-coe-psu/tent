@@ -7,7 +7,6 @@
 	import { untrack } from 'svelte';
 
 	import { Button } from '$lib/components/ui/button';
-	import { Badge } from '$lib/components/ui/badge';
 	import * as Card from '$lib/components/ui/card';
 
 	import {
@@ -191,12 +190,6 @@
 						ฟอร์มคัดกรองผู้เข้าพัก
 					{/if}
 				</h1>
-				<Badge
-					variant="outline"
-					class="border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
-				>
-					Station 2
-				</Badge>
 			</div>
 			{#if evacuee}
 				<p class="mt-0.5 text-xs text-muted-foreground">

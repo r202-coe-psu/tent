@@ -34,6 +34,7 @@ import {
 	isStockLedger,
 	type StockLedger
 } from '$lib/features/operations';
+import { lotDateStamp, nextLotNos } from '$lib/features/operations/server';
 import {
 	kitchenYieldExpiry,
 	mergeYieldLines,
@@ -45,6 +46,9 @@ import type {
 	CreatePendingRequisitionParams,
 	ApproveRequisitionOptions
 } from './kitchen.repository';
+
+const LOT_NO_LOOKUP_LIMIT = 10_000;
+const MEAL_SERVICE_LEDGER_LIMIT = 200;
 
 export class KitchenRemoteRepository implements KitchenRepository {
 	private readonly dbName: string;
@@ -338,6 +342,27 @@ export class KitchenRemoteRepository implements KitchenRepository {
 		return this.repo.put(createMealServiceReceipt(mealServiceId, 'confirmed', ctx));
 	}
 
+	private async allocateLotNos(count: number, when: Date = new Date()): Promise<string[]> {
+		const prefix = `L-${lotDateStamp(when)}-`;
+		let rows: { lot?: { lot_no?: string } }[];
+		try {
+			rows = await this.repo.find<{ lot?: { lot_no?: string } }>({
+				selector: {
+					type: 'stock_ledger',
+					'lot.lot_no': { $gte: prefix, $lt: `${prefix}\ufff0` }
+				},
+				fields: ['lot.lot_no'],
+				limit: LOT_NO_LOOKUP_LIMIT
+			});
+		} catch (cause) {
+			throw new Error('ออกเลขล็อตไม่สำเร็จ กรุณาลองยืนยันรับเข้าใหม่อีกครั้ง', { cause });
+		}
+		const existing = rows
+			.map((row) => row.lot?.lot_no)
+			.filter((lot): lot is string => typeof lot === 'string');
+		return nextLotNos(existing, when, count);
+	}
+
 	async confirmMealServiceReceiptWithYield(
 		service: MealService,
 		lines: readonly ResolvedYieldLine[],
@@ -352,8 +377,9 @@ export class KitchenRemoteRepository implements KitchenRepository {
 		// exactly one derived id. A later retry of this call derives the same ids.
 		const merged = mergeYieldLines(lines);
 		const expiry = kitchenYieldExpiry(service);
+		const lotNos = await this.allocateLotNos(merged.length);
 		const entries = await Promise.all(
-			merged.map(async (line) =>
+			merged.map(async (line, index) =>
 				createStockLedger(
 					{
 						item_id: line.item_id,
@@ -363,6 +389,7 @@ export class KitchenRemoteRepository implements KitchenRepository {
 						ref_id: service._id,
 						lot: {
 							expiry,
+							lot_no: lotNos[index],
 							note: line.item_name,
 							...storageLotFields(line.storage_point ?? null)
 						}
@@ -400,6 +427,19 @@ export class KitchenRemoteRepository implements KitchenRepository {
 		const receipt = createMealServiceReceipt(service._id, 'confirmed', ctx);
 		await bulkDocs(this.dbName, [...pending, receipt]);
 		return { receipt, ledger: [...received, ...pending] };
+	}
+
+	async listMealServiceLedger(mealServiceId: string): Promise<StockLedger[]> {
+		const rows = await this.repo.find<StockLedger>({
+			selector: {
+				type: 'stock_ledger',
+				ref_id: mealServiceId,
+				item_id: { $gt: null },
+				reason: 'receive'
+			},
+			limit: MEAL_SERVICE_LEDGER_LIMIT
+		});
+		return rows.filter(isStockLedger);
 	}
 
 	async rejectMealServiceReceipt(
