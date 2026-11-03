@@ -54,12 +54,14 @@ affects:
 - FR-10 — เพิ่มฟังก์ชัน pure ใน `features/dashboard/domain` รับ rows จาก FR-7 กับ `zones[]` ของ shelter แล้วคืน `ZoneOccupancy[]` ต่อโซน: `code`, `name`, `count`, `capacity`, `percent`, `level` (`normal` | `warning` | `full`), `closed`
 - FR-11 — `count` รวมเฉพาะสถานะ Present (FR-1) ส่วนสถานะอื่นใน rows ไม่นับ
 - FR-12 — `level` = `full` เมื่อ `count ≥ capacity`, `warning` เมื่อ `count ≥ 80%` ของ `capacity`, นอกนั้น `normal` (เกณฑ์เดียวกับ `shelter-occupancy-cell`)
+- FR-12a — `percent` = `round(count / capacity × 100)` และ**ไม่ clamp** เช่น 12 / 10 คน = `120` เพื่อให้เห็นว่าโซนล้นเท่าไร ส่วนความกว้างแท่งใน UI clamp ที่ 100% (FR-15)
+- FR-12b — ถ้า `capacity ≤ 0` (`zoneSchema` บังคับ `capacity > 0` จึงไม่ควรเกิด เป็นแค่การป้องกัน) ให้ `percent = 0` และ `level = 'full'` ห้าม throw
 - FR-13 — โซนที่ไม่มีคนเลยต้องอยู่ในผลลัพธ์ด้วย `count = 0`
 - FR-14 — `closed = true` เมื่อ zone `status = 'closed'`
 
 **UI**
 
-- FR-15 — แท็บ "ภาพรวม" (`dashboard-tab.svelte`) มี widget "ความเต็มรายโซน" แสดงทุกโซนของศูนย์ที่เลือก เป็นแท่งแนวนอนหนึ่งแท่งต่อโซน พร้อม label `N / capacity` และ %
+- FR-15 — แท็บ "ภาพรวม" (`dashboard-tab.svelte`) มี widget "ความเต็มรายโซน" แสดงทุกโซนของศูนย์ที่เลือก เป็นแท่งแนวนอนหนึ่งแท่งต่อโซน พร้อม label `N / capacity` และ `percent` (แสดงเกิน 100% ได้) โดยความกว้างแท่ง clamp ที่ 100%
 - FR-16 — แท่งใช้สีตาม `level`: `warning` เป็นสีเหลือง, `full` เป็นสีแดง
 - FR-17 — โซนที่ `closed` แสดงจางพร้อมป้าย "ปิด"
 - FR-18 — widget ใช้ TanStack Query hook ใหม่ใน `features/dashboard/application` และ export ผ่าน barrel `$lib/features/dashboard`
@@ -71,7 +73,7 @@ affects:
 - [ ] โซนที่ไม่มีคนแสดง `0 / capacity`
 - [ ] BFF ไม่ส่ง PII และคืน 500 พร้อมข้อความเมื่อ view ยังไม่ deploy
 - [ ] Tests:
-  - domain: rows + zones → `ZoneOccupancy[]` (สถานะที่นับ, เกณฑ์ 80/100%, โซนว่าง, โซนปิด)
+  - domain: rows + zones → `ZoneOccupancy[]` (สถานะที่นับ, เกณฑ์ 80/100%, โซนว่าง, โซนปิด, โซนล้น `percent > 100`, `capacity ≤ 0`)
   - view map: emit `[zone, status]` ถูก และข้าม doc ที่ `zone = null`
   - BFF `server.test.ts`: สิทธิ์และ shelter scope, path ของ view, 500 เมื่อ view ยังไม่ deploy
 - [ ] ทุกไฟล์ `.svelte` ที่แก้ผ่าน `svelte-autofixer`
@@ -99,3 +101,4 @@ affects:
 
 - 2026-11-03 — proposed (grill #1135: นับด้วย Present, แท่งแนวนอนต่อโซน, view + BFF, โซนปิดแสดงจาง, track ด้วย CR ไฟล์)
 - 2026-11-03 — approved by Soravit Sukkarn (Team Lead)
+- 2026-11-03 — review PR #1138: เพิ่ม FR-12a (`percent` ไม่ clamp, แท่ง clamp 100%) และ FR-12b (`capacity ≤ 0` fallback)
