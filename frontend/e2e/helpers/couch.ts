@@ -242,6 +242,33 @@ export async function allDocuments(db: string): Promise<CouchDocument[]> {
 	return rows.flatMap((row) => (row.doc ? [row.doc] : []));
 }
 
+/** The database's current update sequence, to pass later to `documentsChangedSince`. */
+export async function updateSeq(db: string): Promise<string> {
+	const res = await couchReq('GET', `/${db}`);
+	const seq = (res.data as { update_seq?: unknown } | null)?.update_seq;
+	if (res.status >= 400 || seq === undefined) {
+		throw new Error(`Could not read the update sequence of ${db} (HTTP ${res.status})`);
+	}
+	return String(seq);
+}
+
+/**
+ * Live documents written to `db` after `since`. Reads the changes feed, so the cost grows with
+ * what the run wrote, not with the size of the database.
+ */
+export async function documentsChangedSince(db: string, since: string): Promise<CouchDocument[]> {
+	const res = await couchReq(
+		'GET',
+		`/${db}/_changes?include_docs=true&since=${encodeURIComponent(since)}`
+	);
+	if (res.status >= 400 || !res.data || typeof res.data !== 'object') {
+		throw new Error(`Could not read changes of ${db} (HTTP ${res.status})`);
+	}
+	const results =
+		(res.data as { results?: Array<{ deleted?: boolean; doc?: CouchDocument }> }).results ?? [];
+	return results.flatMap((row) => (row.doc && !row.deleted ? [row.doc] : []));
+}
+
 export async function deleteDocument(db: string, doc: CouchDocument): Promise<void> {
 	const rev = doc._rev;
 	if (typeof rev !== 'string') return;

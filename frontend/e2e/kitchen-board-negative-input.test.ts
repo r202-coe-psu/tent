@@ -18,15 +18,16 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
 import { ulid } from '../src/lib/db/ulid';
 import {
-	allDocuments,
 	couchLogin,
 	createCouchUser,
 	deleteCouchUser,
 	deleteDocument,
+	documentsChangedSince,
 	getDocument,
 	putDocument,
 	routeBrowserCouchThroughApp,
 	seedSecurityQuestion,
+	updateSeq,
 	type CouchDocument,
 	type TestUser
 } from './helpers/couch';
@@ -76,6 +77,11 @@ type NegativeMode = 'key' | 'paste' | 'fill';
 const NEGATIVE_MODES: NegativeMode[] = ['key', 'paste', 'fill'];
 
 const ownedIds = new Set<string>();
+const startSeq = new Map<string, string>();
+
+function runDocuments(db: string): Promise<CouchDocument[]> {
+	return documentsChangedSince(db, startSeq.get(db) ?? 'now');
+}
 let authSession = '';
 let sessionId = '';
 let planId = '';
@@ -159,7 +165,7 @@ async function cleanupOwnedDocuments(): Promise<void> {
 	const errors: unknown[] = [];
 	for (const db of [SHELTER_DB, CATALOG_DB]) {
 		for (let pass = 0; pass < 3; pass += 1) {
-			const owned = (await allDocuments(db)).filter(isOwned);
+			const owned = (await runDocuments(db)).filter(isOwned);
 			if (owned.length === 0) break;
 			const results = await Promise.allSettled(owned.map((doc) => deleteDocument(db, doc)));
 			for (const result of results) {
@@ -238,6 +244,7 @@ test.describe(
 		test.setTimeout(90_000);
 
 		test.beforeAll(async () => {
+			for (const db of [SHELTER_DB, CATALOG_DB]) startSeq.set(db, await updateSeq(db));
 			await createCouchUser(KITCHEN);
 			await seedSecurityQuestion(KITCHEN.name);
 			authSession = await couchLogin(KITCHEN.name, KITCHEN.password);
@@ -250,8 +257,8 @@ test.describe(
 
 		test.afterAll(async () => {
 			await cleanupOwnedDocuments();
-			const leftovers = (await allDocuments(SHELTER_DB))
-				.concat(await allDocuments(CATALOG_DB))
+			const leftovers = (await runDocuments(SHELTER_DB))
+				.concat(await runDocuments(CATALOG_DB))
 				.filter(isOwned)
 				.map((d) => d._id);
 			expect(leftovers, 'zero-leak: no documents from this run remain').toEqual([]);

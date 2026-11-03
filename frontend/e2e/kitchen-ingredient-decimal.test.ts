@@ -23,15 +23,16 @@ import {
 } from '@playwright/test';
 import { ulid } from '../src/lib/db/ulid';
 import {
-	allDocuments,
 	couchLogin,
 	createCouchUser,
 	deleteCouchUser,
 	deleteDocument,
+	documentsChangedSince,
 	getDocument,
 	putDocument,
 	routeBrowserCouchThroughApp,
 	seedSecurityQuestion,
+	updateSeq,
 	type CouchDocument,
 	type TestUser
 } from './helpers/couch';
@@ -57,6 +58,11 @@ const RECIPE = `E2E สูตรทศนิยม ${RUN}`;
 const SESSION_NAME = `E2E มื้อทศนิยม ${RUN}`;
 
 const ownedIds = new Set<string>();
+const startSeq = new Map<string, string>();
+
+function runDocuments(db: string): Promise<CouchDocument[]> {
+	return documentsChangedSince(db, startSeq.get(db) ?? 'now');
+}
 const contexts: BrowserContext[] = [];
 let session = '';
 let sessionId = '';
@@ -104,7 +110,7 @@ async function cleanupOwnedDocuments(): Promise<void> {
 	const errors: unknown[] = [];
 	for (const db of [SHELTER_DB, CATALOG_DB]) {
 		for (let pass = 0; pass < 3; pass += 1) {
-			const owned = (await allDocuments(db)).filter(isOwned);
+			const owned = (await runDocuments(db)).filter(isOwned);
 			if (owned.length === 0) break;
 			const results = await Promise.allSettled(owned.map((doc) => deleteDocument(db, doc)));
 			for (const result of results) {
@@ -170,6 +176,7 @@ test.describe(
 		test.setTimeout(90_000);
 
 		test.beforeAll(async () => {
+			for (const db of [SHELTER_DB, CATALOG_DB]) startSeq.set(db, await updateSeq(db));
 			await createCouchUser(KITCHEN);
 			await seedSecurityQuestion(KITCHEN.name);
 			session = await couchLogin(KITCHEN.name, KITCHEN.password);
@@ -216,7 +223,7 @@ test.describe(
 
 		test.afterAll(async () => {
 			await cleanupOwnedDocuments();
-			const leftovers = [...(await allDocuments(SHELTER_DB)), ...(await allDocuments(CATALOG_DB))]
+			const leftovers = [...(await runDocuments(SHELTER_DB)), ...(await runDocuments(CATALOG_DB))]
 				.filter(isOwned)
 				.map((d) => d._id);
 			expect(leftovers, 'zero-leak: no documents from this run remain').toEqual([]);
@@ -278,7 +285,7 @@ test.describe(
 			await expect(submit).toBeEnabled();
 			await qtyInput(bom, EIGHTH).clear();
 			await expect(submit).toBeDisabled();
-			const tickets = (await allDocuments(SHELTER_DB)).filter(
+			const tickets = (await runDocuments(SHELTER_DB)).filter(
 				(d) => d.type === 'requisition_ticket' && d.created_by === KITCHEN.name
 			);
 			expect(tickets, 'no requisition ticket was written').toEqual([]);
@@ -290,7 +297,7 @@ test.describe(
 
 		async function createTicketWithEditedQty(browser: Browser): Promise<CouchDocument> {
 			const before = new Set(
-				(await allDocuments(SHELTER_DB)).filter(isKitchenTicket).map((d) => d._id)
+				(await runDocuments(SHELTER_DB)).filter(isKitchenTicket).map((d) => d._id)
 			);
 			const { page, bom } = await openBoardWithRecipe(browser);
 			await expect(qtyInput(bom, EIGHTH)).toHaveValue('0.125', { timeout: 15_000 });
@@ -298,7 +305,7 @@ test.describe(
 			await page.getByRole('button', { name: 'สร้างใบเบิกวัตถุดิบ' }).click();
 			await expect(toast(page, /เปิดตั๋วเบิกวัตถุดิบ .+ แล้ว/)).toBeVisible();
 
-			const created = (await allDocuments(SHELTER_DB)).filter(
+			const created = (await runDocuments(SHELTER_DB)).filter(
 				(d) => isKitchenTicket(d) && !before.has(d._id)
 			);
 			expect(created, 'exactly one requisition ticket was written').toHaveLength(1);
