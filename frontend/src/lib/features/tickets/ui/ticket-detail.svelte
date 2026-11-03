@@ -41,7 +41,14 @@
 		type DispatchLotAllocation
 	} from '$lib/features/distribution';
 	import { useMealPlans, toMealPlanMap } from '$lib/features/kitchen';
-	import { useRecipes, formatUnit, useItemMasters, useUnitsOfMeasure } from '$lib/features/catalog';
+	import {
+		useRecipes,
+		formatUnit,
+		useItemMasters,
+		useUnitsOfMeasure,
+		useUnitDimensionResolver,
+		wholeQtyError
+	} from '$lib/features/catalog';
 	import { ticketActionsFor } from '../domain/ticket-actions';
 	import { langState } from '$lib/states/i18n.svelte';
 
@@ -50,6 +57,7 @@
 	const unitsQuery = useUnitsOfMeasure();
 	const units = $derived(unitsQuery.data ?? []);
 	const unitLabel = (code: string) => formatUnit(code, units, langState.current);
+	const unitDimensions = useUnitDimensionResolver();
 
 	const ticketQuery = useTicket(() => id);
 	const ticket = $derived(ticketQuery.data ?? null);
@@ -149,7 +157,11 @@
 			(item.allocated_qty === '0' ? item.requested_qty : item.allocated_qty)
 		);
 	}
+	function draftWholeError(item: TicketItem): string | undefined {
+		return wholeQtyError(draftFor(item), unitDimensions.resolve(item.unit));
+	}
 	function parseDraft(item: TicketItem): string | null {
+		if (draftWholeError(item)) return null;
 		const parsed = qtyStrCoerceNonNegativeSchema.safeParse(draftFor(item).trim());
 		return parsed.success ? persistQty(parsed.data) : null;
 	}
@@ -533,6 +545,7 @@
 							{@const awaitingPick = ticket.status === 'PENDING_PICK' && !pending}
 							{@const parsed = parseDraft(item)}
 							{@const stockShort = stockShortBy(item)}
+							{@const wholeError = pending ? draftWholeError(item) : undefined}
 							{@const draftZero = pending && parsed !== null && !qtyGt(parsed, 0)}
 							{@const draftShort =
 								pending && parsed !== null && qtyGt(parsed, 0) && qtyGt(item.requested_qty, parsed)}
@@ -553,6 +566,15 @@
 											<span class="tabular-nums"
 												>สต็อกไม่พอ ขาด {stockShort} {unitLabel(item.unit)}</span
 											>
+										</p>
+									{/if}
+									{#if wholeError}
+										<p
+											class="mt-0.5 flex items-center gap-1 text-sm font-semibold text-red-800"
+											role="alert"
+										>
+											<CircleAlert class="h-4 w-4 shrink-0" />
+											{wholeError}
 										</p>
 									{/if}
 									{#if draftZero}
@@ -608,7 +630,9 @@
 											<Input
 												id="alloc-{item.item_id}"
 												class="h-11 w-28 text-right text-base font-semibold tabular-nums sm:h-10"
-												inputmode="decimal"
+												inputmode={unitDimensions.resolve(item.unit) === 'count'
+													? 'numeric'
+													: 'decimal'}
 												aria-invalid={parsed === null || !!stockShort}
 												value={draftFor(item)}
 												oninput={(e) => (allocDraft[item.item_id] = e.currentTarget.value)}
