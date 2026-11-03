@@ -258,19 +258,26 @@ test.describe(
 			await expect(qtyInput(bom, THIRD)).toHaveValue('0.3333');
 		});
 
-		test('an emptied quantity box is rejected with a toast and opens no ticket', async ({
+		test('an emptied quantity box shows an inline error, blocks submit and opens no ticket', async ({
 			browser
 		}) => {
 			const { page, bom } = await openBoardWithRecipe(browser);
 			const pageErrors: string[] = [];
 			page.on('pageerror', (e) => pageErrors.push(e.message));
 			await expect(qtyInput(bom, EIGHTH)).toBeVisible({ timeout: 15_000 });
+			const submit = page.getByRole('button', { name: 'สร้างใบเบิกวัตถุดิบ' });
+			await expect(submit).toBeEnabled();
 
 			await qtyInput(bom, EIGHTH).clear();
-			await page.getByRole('button', { name: 'สร้างใบเบิกวัตถุดิบ' }).click();
 
-			await expect(toast(page, 'กรุณาระบุจำนวนวัตถุดิบให้มากกว่า 0 ทุกรายการ')).toBeVisible();
-			await expect(page.getByRole('button', { name: 'สร้างใบเบิกวัตถุดิบ' })).toBeEnabled();
+			await expect(qtyInput(bom, EIGHTH)).toHaveAccessibleDescription('จำนวนต้องมากกว่า 0');
+			await expect(submit).toBeDisabled();
+
+			await qtyInput(bom, EIGHTH).fill('0.125');
+			await expect(qtyInput(bom, EIGHTH)).not.toHaveAccessibleDescription('จำนวนต้องมากกว่า 0');
+			await expect(submit).toBeEnabled();
+			await qtyInput(bom, EIGHTH).clear();
+			await expect(submit).toBeDisabled();
 			const tickets = (await allDocuments(SHELTER_DB)).filter(
 				(d) => d.type === 'requisition_ticket' && d.created_by === KITCHEN.name
 			);
