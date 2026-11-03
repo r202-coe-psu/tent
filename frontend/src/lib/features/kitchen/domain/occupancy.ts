@@ -1,4 +1,12 @@
 import { isInShelterStayStatus } from '$lib/features/shared';
+
+export {
+	countShelterPeople,
+	totalShelterPeople,
+	type ShelterPeopleCounts,
+	type StaffUserView,
+	type VolunteerPresenceView
+} from '$lib/features/shared';
 import type { MealPlanHeadcount, MealSessionHeadcount } from './kitchen';
 
 /** Minimal representation of an occupant required for kitchen headcount calculations. */
@@ -27,48 +35,6 @@ export function deriveHeadcountFromOccupancy(
 		halal: present.filter((o) => o.religion === 'muslim').length,
 		soft_food: present.filter((o) => hasNeed(o, SOFT_FOOD_NEEDS)).length,
 		infant: present.filter((o) => hasNeed(o, ['infant'])).length
-	};
-}
-
-/** Minimal volunteer fields required to decide who is on site at a shelter. */
-export interface VolunteerPresenceView {
-	checked_in: boolean;
-	current_shelter_code?: string | null;
-	/** Linked staff account of a Staff-Capable Volunteer. */
-	user_name?: string | null;
-}
-
-/** Minimal staff-user fields required for kitchen headcount calculations. */
-export interface StaffUserView {
-	name: string;
-}
-
-export interface ShelterPeopleCounts {
-	evacuees: number;
-	staff: number;
-	volunteers: number;
-}
-
-/**
- * Counts the people the kitchen cooks for at one shelter. Volunteers count only while checked in
- * here. A staff user linked to a volunteer profile counts only as that volunteer, never as staff,
- * so a Staff-Capable Volunteer is not counted twice.
- */
-export function countShelterPeople(
-	shelterCode: string,
-	occupants: readonly OccupantView[],
-	volunteers: readonly VolunteerPresenceView[],
-	staffUsers: readonly StaffUserView[]
-): ShelterPeopleCounts {
-	const linkedUserNames = new Set(volunteers.map((v) => v.user_name).filter(Boolean));
-	const staffNames = new Set(
-		staffUsers.map((u) => u.name).filter((name) => !linkedUserNames.has(name))
-	);
-	return {
-		evacuees: occupants.filter((o) => isInShelterStayStatus(o.current_stay?.status)).length,
-		staff: staffNames.size,
-		volunteers: volunteers.filter((v) => v.checked_in && v.current_shelter_code === shelterCode)
-			.length
 	};
 }
 
