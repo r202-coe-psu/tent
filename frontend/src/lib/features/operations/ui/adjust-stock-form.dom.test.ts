@@ -68,10 +68,16 @@ vi.mock('../application/use-stock-form-items.svelte', () => ({
 vi.mock('../application/use-storage-points.svelte', () => ({
 	useStoragePoints: () => ({ points: [] })
 }));
-vi.mock('$lib/features/catalog', async (importOriginal) => ({
-	...(await importOriginal<typeof import('$lib/features/catalog')>()),
-	useUnitsOfMeasure: () => ({ data: [] })
-}));
+vi.mock('$lib/features/catalog', async (importOriginal) => {
+	const actual = await importOriginal<typeof import('$lib/features/catalog')>();
+	return {
+		...actual,
+		useUnitsOfMeasure: () => ({ data: [] }),
+		useUnitDimensionResolver: () => ({
+			resolve: (unit: string) => actual.resolveUnitDimension(unit)
+		})
+	};
+});
 vi.mock('$lib/db/shelter', () => ({ getShelterCode: () => 'SH001' }));
 vi.mock('$app/navigation', () => ({
 	goto: vi.fn(),
@@ -259,5 +265,32 @@ describe('adjust form lots (#569)', () => {
 
 		expect(adjust.mutateAsync).not.toHaveBeenCalled();
 		expect(toastMock.error).toHaveBeenCalledWith('ล็อตที่เลือกไม่มีคงเหลือแล้ว กรุณาเลือกล็อตใหม่');
+	});
+});
+
+describe('adjust form whole numbers for count units (#805)', () => {
+	const FRACTIONAL = { ...INBOUND, qty: '2.5' };
+
+	it('writes off a legacy fractional remainder by counting the whole number', async () => {
+		ledger.current = [FRACTIONAL];
+		await render();
+		await chooseLot('คงเหลือ 2.5');
+
+		await fillAndSubmit('2', 'เสียหาย / เน่าเสีย');
+
+		expect(submittedInput()).toMatchObject({ qty: '-0.5', lot_ref: INBOUND._id });
+		expect(toastMock.error).not.toHaveBeenCalled();
+	});
+
+	it('refuses a fractional counted quantity and says why', async () => {
+		ledger.current = [FRACTIONAL];
+		await render();
+		await chooseLot('คงเหลือ 2.5');
+
+		await fillAndSubmit('1.5', 'เสียหาย / เน่าเสีย');
+
+		expect(adjust.mutateAsync).not.toHaveBeenCalled();
+		expect(document.getElementById('new-qty')?.getAttribute('aria-invalid')).toBe('true');
+		expect(document.body.textContent).toContain('หน่วยนับต้องเป็นจำนวนเต็ม');
 	});
 });

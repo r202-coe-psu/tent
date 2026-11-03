@@ -5,7 +5,13 @@
 	import * as Field from '$lib/components/ui/field/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Textarea } from '$lib/components/ui/textarea/index.js';
-	import { formatUnit, useUnitsOfMeasure } from '$lib/features/catalog';
+	import {
+		formatUnit,
+		qtyInputStep,
+		useUnitDimensionResolver,
+		useUnitsOfMeasure,
+		wholeQtyError
+	} from '$lib/features/catalog';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { getShelterCode } from '$lib/db/shelter';
 	import { useLedger, useAdjustStock, useStockBalance } from '../application/queries';
@@ -53,6 +59,7 @@
 	const storagePoints = useStoragePoints(() => getShelterCode());
 	const unitsQuery = useUnitsOfMeasure();
 	const units = $derived(unitsQuery.data ?? []);
+	const unitDimension = useUnitDimensionResolver();
 
 	let selectedItemId = $state('');
 	let selectedItem = $state<StockFormItem | null>(null);
@@ -128,6 +135,11 @@
 	const currentLot = $derived(itemLots.find((l) => l.key === selectedLotKey));
 	const currentLotQty = $derived(currentLot ? currentLot.qty : '0');
 	const systemQty = $derived(selectedLotKey === 'new' ? '0' : currentLotQty);
+
+	// The counted quantity is what the user types, so it is what must be whole. The delta is
+	// computed and may stay fractional: counting 0 against 0.5 bottle is how that remainder is written off.
+	const itemDimension = $derived(unitDimension.resolve(selectedItem?.unit));
+	const newQtyError = $derived(wholeQtyError(newQtyInput, itemDimension));
 
 	// Delta Calculation
 	const deltaQty = $derived.by(() => {
@@ -231,6 +243,10 @@
 		}
 		if (!newQtyInput || isNaN(Number(newQtyInput)) || Number(newQtyInput) < 0) {
 			toast.error('กรุณาระบุจำนวนใหม่ที่ถูกต้อง (ต้องไม่ติดลบ)');
+			return;
+		}
+		if (newQtyError) {
+			toast.error(newQtyError);
 			return;
 		}
 		if (deltaQty === '0') {
@@ -418,8 +434,9 @@
 								type="number"
 								placeholder="0"
 								min="0"
-								step="any"
+								step={qtyInputStep(itemDimension)}
 								bind:value={newQtyInput}
+								aria-invalid={newQtyError ? 'true' : undefined}
 								class="min-h-11 border-sky-200 bg-white pr-14 font-mono text-lg font-bold"
 							/>
 							<span
@@ -428,6 +445,11 @@
 								{unitLabel}
 							</span>
 						</div>
+						{#if newQtyError}
+							<p class="mt-1.5 text-xs font-semibold text-destructive" role="alert">
+								{newQtyError}
+							</p>
+						{/if}
 					</div>
 
 					<div
