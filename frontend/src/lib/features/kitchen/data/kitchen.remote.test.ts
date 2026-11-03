@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { LOT_NO_PATTERN } from '$lib/features/operations/server';
+import { LOT_NO_PATTERN, lotDateStamp } from '$lib/features/operations/server';
 import { createInMemoryRepository } from '$lib/db/in-memory-repository';
 
 vi.mock('$lib/db/shelter', () => ({
@@ -847,7 +847,7 @@ describe('KitchenRemoteRepository.confirmMealServiceReceiptWithYield (cooked foo
 	});
 
 	it('continues the day sequence after lot numbers already on the ledger (#1070)', async () => {
-		const stamp = new Date().toISOString().slice(2, 10).replaceAll('-', '');
+		const stamp = lotDateStamp(new Date());
 		await memoryRepo.put({
 			_id: 'stock_ledger:earlier',
 			type: 'stock_ledger',
@@ -869,7 +869,7 @@ describe('KitchenRemoteRepository.confirmMealServiceReceiptWithYield (cooked foo
 	});
 
 	it('refuses to receive when the lot number lookup fails, rather than restarting at 001 (#1070)', async () => {
-		const stamp = new Date().toISOString().slice(2, 10).replaceAll('-', '');
+		const stamp = lotDateStamp(new Date());
 		await memoryRepo.put({
 			_id: 'stock_ledger:earlier',
 			type: 'stock_ledger',
