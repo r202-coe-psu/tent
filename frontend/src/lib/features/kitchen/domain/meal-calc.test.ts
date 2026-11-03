@@ -518,23 +518,24 @@ describe('getActiveTagsFromSession', () => {
 });
 
 describe('scaleRecipeIngredientQty', () => {
-	it('keeps a fractional quantity exact at 1:1 scale', () => {
-		expect(scaleRecipeIngredientQty('0.125', '1', 1)).toBe('0.125');
+	it('keeps a whole quantity exact at 1:1 scale', () => {
+		expect(scaleRecipeIngredientQty('3', '1', 1)).toBe('3');
 	});
 
-	it('scales without float noise', () => {
-		expect(scaleRecipeIngredientQty('0.1', '1', 3)).toBe('0.3');
-		expect(scaleRecipeIngredientQty('0.7', '1', 3)).toBe('2.1');
+	it('rounds a fractional result up to a whole number', () => {
+		expect(scaleRecipeIngredientQty('0.125', '1', 1)).toBe('1');
+		expect(scaleRecipeIngredientQty('1', '100', 150)).toBe('2');
+		expect(scaleRecipeIngredientQty('12.3', '1', 7)).toBe('87');
+	});
+
+	it('scales without float noise before rounding up', () => {
+		expect(scaleRecipeIngredientQty('0.1', '1', 30)).toBe('3');
+		expect(scaleRecipeIngredientQty('0.7', '1', 10)).toBe('7');
 	});
 
 	it('scales by portions over standard portions', () => {
-		expect(scaleRecipeIngredientQty('2.5', '10', 25)).toBe('6.25');
-		expect(scaleRecipeIngredientQty('1', '3', 1)).toBe('0.3333');
-	});
-
-	it('rounds half up at 4 decimal places', () => {
-		expect(scaleRecipeIngredientQty('0.00005', '1', 1)).toBe('0.0001');
-		expect(scaleRecipeIngredientQty('0.00004', '1', 1)).toBe('0');
+		expect(scaleRecipeIngredientQty('2.5', '10', 25)).toBe('7');
+		expect(scaleRecipeIngredientQty('2', '10', 25)).toBe('5');
 	});
 
 	it('treats a base under 1 portion as 1', () => {

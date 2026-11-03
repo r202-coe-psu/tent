@@ -1,6 +1,6 @@
 import Decimal from 'decimal.js';
 import { persistQty, qtyGte, qtyLte, roundQty, subQty } from '$lib/utils/qty';
-import type { Recipe, ItemMaster } from '$lib/features/catalog';
+import { roundUpQty, type Recipe, type ItemMaster } from '$lib/features/catalog';
 import type { SupplyItem } from '$lib/features/supply';
 import type {
 	KitchenRequisitionInput,
@@ -143,9 +143,9 @@ export function calculateMealIngredientsFromRecipe(
 }
 
 /**
- * Scales one recipe ingredient quantity (`qty_str`) to a portion count, returned as a qty string
- * (4 dp, ROUND_HALF_UP). A recipe base under 1 portion is treated as 1. `portions` comes straight
- * from a number input, so an emptied box (`null`) scales to 0.
+ * Scales one recipe ingredient quantity (`qty_str`) to a portion count and rounds it up to a whole
+ * number for every unit, as a qty string. A recipe base under 1 portion is treated as 1.
+ * `portions` comes straight from a number input, so an emptied box (`null`) scales to 0.
  */
 export function scaleRecipeIngredientQty(
 	quantity: string,
@@ -154,7 +154,7 @@ export function scaleRecipeIngredientQty(
 ): string {
 	if (portions == null) return '0';
 	const base = Decimal.max(new Decimal(standardPortions || 1), 1);
-	return persistQty(new Decimal(quantity || 0).mul(portions).div(base));
+	return persistQty(roundUpQty(new Decimal(quantity || 0).mul(portions).div(base)));
 }
 
 export interface CustomIngredientInput {
