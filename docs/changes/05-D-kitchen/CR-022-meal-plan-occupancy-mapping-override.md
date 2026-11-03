@@ -63,3 +63,4 @@ N/A — ไม่มีการเปลี่ยนรูปร่าง persi
 - 2026-07-01 — approved โดย project owner; mapping = religion+special_needs, handoff = pure input
   adapter (T-26 UI แยก task), P-02 = เก็บ sub-count เป็น metadata (recipe calc ยังคิดข้าวรวม);
   tracking = CR file
+- 2026-11-02 — headcount source (`checked_in` / `active`) ถูกแทนด้วยยอดคนในศูนย์ `active` + `room_confirmed` ตาม [CR-224](../01-core/CR-224-in-shelter-headcount.md)

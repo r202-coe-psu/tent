@@ -113,7 +113,11 @@ const ROLE_ACCESS: RoleAccess[] = [
 		role: 'kiosk_staff',
 		portalDepartments: ['management'],
 		allowed: ['/back-office/kiosks', '/back-office/kiosks/banners'],
-		forbidden: ['/back-office/volunteers', '/back-office/supply']
+		forbidden: [
+			'/back-office/volunteers',
+			'/back-office/volunteers/accounts',
+			'/back-office/supply'
+		]
 	},
 	{
 		// CR-203 (#930): confined to the banner pages.
@@ -131,7 +135,11 @@ const ROLE_ACCESS: RoleAccess[] = [
 	{
 		role: 'volunteer_coordinator',
 		portalDepartments: ['volunteer'],
-		allowed: ['/back-office/volunteers', '/onsite/volunteer-check-in'],
+		allowed: [
+			'/back-office/volunteers',
+			'/back-office/volunteers/accounts',
+			'/onsite/volunteer-check-in'
+		],
 		forbidden: ['/back-office/supply']
 	},
 	{

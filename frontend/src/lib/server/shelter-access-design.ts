@@ -76,8 +76,9 @@ export const DAILY_SOP_ROLE_MANGO_INDEX = {
 /**
  * Index behind the volunteer access dialog's "how did the last grant end" lookup (CR-221, #1044):
  * the `audit` docs of one account (`target_id`) by `reason` (`role_grant.revoked` / `.expired` /
- * `.verification_revoked`), read by `lastGrantEnding`. Audit docs grow without bound, so the query
- * must not scan them all.
+ * `.verification_revoked`), read by `lastGrantEndings` with `target_id: { $in: [...] }` and paged by
+ * bookmark. It does not order by `created_at` (the newest is picked in code), so the deployed
+ * definition stays as is. Audit docs grow without bound, so the query must not scan them all.
  */
 export const ROLE_GRANT_AUDIT_MANGO_INDEX = {
 	index: { fields: ['type', 'target_id', 'reason'] },
@@ -365,6 +366,7 @@ export const TICKET_DISTRIBUTION_MANGO_INDEXES = [
  *  - **forward-only** `donation.status` — `received` may not fall back to `declared`
  *    (schema.md §2.3 state machine).
  *  - **role gate** on `stock_ledger` — only warehouse staff / managers may move stock.
+ *  - **role gate** on `recipe` — SM, warehouse, supply and kitchen staff of this shelter (CR-217).
  *
  * `_admin` bypasses so provisioning/seed writes are not blocked. NOTE: the
  * back-office intake route writes with admin credentials, so it does NOT pass
@@ -452,6 +454,13 @@ ${consentVduClause()}
   function canWriteBulkReturnEntry() {
     return canManageBulkReturnPool() || isRole('distribution_staff');
   }
+  // CR-217: shelter recipes are written (create, update, delete) by SM, WH, SC and KS of this
+  // shelter (+ SA via isRole), the same set as canWriteShelterRecipe on the client.
+  function canWriteRecipe() {
+    return isRole('shelter_manager') || isRole('warehouse_staff') ||
+      isRole('supply_coordinator') || isRole('kitchen_staff');
+  }
+  var RECIPE_WRITE_FORBIDDEN = 'Only shelter managers, warehouse, supply or kitchen staff of this shelter can write recipe';
   function sameObjectExcept(previousObject, nextObject, ignoredFields) {
     var keys = {};
     var previousKeys = Object.keys(previousObject || {});
@@ -511,6 +520,9 @@ ${consentVduClause()}
     if (oldDoc && oldDoc.type === 'item_category' && oldDoc.is_protected === true) {
       throw { forbidden: 'Cannot delete system protected category: ' + oldDoc._id };
     }
+    if (oldDoc && oldDoc.type === 'recipe' && !canWriteRecipe()) {
+      throw { forbidden: RECIPE_WRITE_FORBIDDEN };
+    }
     if (oldDoc && oldDoc.type === 'distribution_batch' && oldDoc.status === 'closed') {
       throw { forbidden: 'Closed distribution_batch cannot be modified' };
     }
@@ -565,6 +577,9 @@ ${consentVduClause()}
   require('created_at');
   require('updated_at');
   require('created_by');
+  if (newDoc.type === 'recipe' && !canWriteRecipe()) {
+    throw { forbidden: RECIPE_WRITE_FORBIDDEN };
+  }
   if (newDoc.shelter_code !== '${code}') {
     throw { forbidden: 'shelter_code must be ${code}' };
   }

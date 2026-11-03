@@ -22,7 +22,7 @@
 	 * Deliberately out of scope for this pass (owner instruction 2026-08-29 —
 	 * mock up only, no real hardware build yet):
 	 *   - "สแกนรับเข้างาน" camera scan — see `roster-scan-bar.svelte`.
-	 * Everything else (the roster list's 1-click check-in/out, manual override,
+	 * Everything else (the roster list's scan-dialog check-in/out, manual override,
 	 * and the audit trail) is wired to real `shift_assignment` data/mutations —
 	 * see `roster-row.svelte` / `roster-audit-trail-dialog.svelte`.
 	 *
@@ -44,6 +44,7 @@
 	} from './roster-live-attendance-bar.svelte';
 	import RosterScanBar from './roster-scan-bar.svelte';
 	import RosterRow from './roster-row.svelte';
+	import { createMinuteClock } from './minute-clock.svelte';
 	import RosterAuditTrailDialog from './roster-audit-trail-dialog.svelte';
 	import {
 		useHubMetrics,
@@ -54,6 +55,7 @@
 		useJobs
 	} from '../application/queries';
 	import { ASSIGNED_STATUSES } from '../domain/hub-metrics';
+	import { matchesVolunteerCode } from '../domain/volunteer-code';
 	import type {
 		ShiftAssignment,
 		ShiftAssignmentStatus,
@@ -72,8 +74,10 @@
 		completed: new Set(['completed'])
 	};
 
+	// One ticking clock so `today` (the row's check-in date gate) rolls over at Bangkok midnight.
+	const { now } = createMinuteClock();
 	let dateFilter = $state(todayDateString());
-	const isToday = $derived(dateFilter === todayDateString());
+	const isToday = $derived(dateFilter === todayDateString(now));
 
 	const hubMetrics = useHubMetrics();
 	const attendanceQuery = useTodayAttendance(() => dateFilter);
@@ -103,7 +107,7 @@
 		if (!needle) return true;
 		return (
 			`${v.first_name} ${v.last_name}`.toLowerCase().includes(needle) ||
-			v.volunteer_code.toLowerCase().includes(needle) ||
+			matchesVolunteerCode(v.volunteer_code, needle) ||
 			(v.phone ?? '').includes(needle)
 		);
 	}
@@ -169,8 +173,8 @@
 				Live On-Site Tracking
 			</Badge>
 			<p class="mt-1.5 max-w-2xl text-xs text-muted-foreground">
-				ติดตามสถานะรายงานตัวเข้ากะสดประจำวัน พร้อมระบบสแกน QR 1-Click และ "เช็คอินแทน (Manual
-				Override)" ที่มี Audit Trail สมบูรณ์
+				ติดตามสถานะรายงานตัวเข้ากะสดประจำวัน เช็คอิน/เช็คเอาต์ด้วยการสแกน QR ของอาสาสมัคร
+				หรือโดยไม่สแกนพร้อมระบุเหตุผล (Manual Override) ที่มี Audit Trail สมบูรณ์
 			</p>
 		</div>
 
@@ -252,6 +256,7 @@
 						{assignment}
 						{volunteer}
 						jobTitle={jobTitleById.get(assignment.job_id)}
+						today={todayDateString(now)}
 						onhistory={(volunteerId) => openAudit(volunteerId)}
 					/>
 				{/if}
