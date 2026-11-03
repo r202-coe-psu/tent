@@ -21,7 +21,10 @@
 		useUnitsOfMeasure,
 		itemSelectableUoms,
 		defaultIssueUom,
-		qtyToBaseUnit
+		qtyToBaseUnit,
+		qtyInputStep,
+		useUnitDimensionResolver,
+		wholeQtyError
 	} from '$lib/features/catalog';
 	import { langState } from '$lib/states/i18n.svelte';
 	import { toast } from 'svelte-sonner';
@@ -36,6 +39,7 @@
 	const createMutation = useCreateTransfer();
 	const unitsQuery = useUnitsOfMeasure();
 	const units = $derived(unitsQuery.data ?? []);
+	const unitDimension = useUnitDimensionResolver();
 	// Not `useShelters()`: that list is scoped to the caller's own shelter for everyone but
 	// system_admin, so after dropping our own shelter nothing would be left (#570).
 	const destinationsQuery = useTransferDestinations();
@@ -60,13 +64,18 @@
 	// Interim single-item form schema — the domain's `transferInputSchema` takes an `items[]`
 	// array (split-lot allocation across multiple lots/items is out of scope this round; see
 	// CR-059's "field ละเอียด" note). Mapped into a one-item TransferInput on submit.
-	const transferFormSchema = z.object({
-		to_shelter: z.string().trim().min(1, 'กรุณาระบุศูนย์ปลายทาง'),
-		item_id: z.string().trim().min(1, 'กรุณาระบุสินค้า'),
-		qty: z.coerce.number().positive('จำนวนต้องมากกว่า 0'),
-		unit: z.string().trim().min(1, 'กรุณาระบุหน่วยนับ'),
-		notes: z.string().trim().optional()
-	});
+	const transferFormSchema = z
+		.object({
+			to_shelter: z.string().trim().min(1, 'กรุณาระบุศูนย์ปลายทาง'),
+			item_id: z.string().trim().min(1, 'กรุณาระบุสินค้า'),
+			qty: z.coerce.number().positive('จำนวนต้องมากกว่า 0'),
+			unit: z.string().trim().min(1, 'กรุณาระบุหน่วยนับ'),
+			notes: z.string().trim().optional()
+		})
+		.superRefine((d, ctx) => {
+			const message = wholeQtyError(d.qty, unitDimension.resolve(d.unit));
+			if (message) ctx.addIssue({ code: 'custom', path: ['qty'], message });
+		});
 
 	const form = superForm(defaults(zod4(transferFormSchema)), {
 		SPA: true,
@@ -234,7 +243,7 @@
 							{...props}
 							type="number"
 							min="0.01"
-							step="any"
+							step={qtyInputStep(unitDimension.resolve($formData.unit))}
 							placeholder="ระบุจำนวน"
 							bind:value={$formData.qty}
 							class="min-h-11 font-mono font-bold"

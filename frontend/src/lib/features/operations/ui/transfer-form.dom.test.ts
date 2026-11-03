@@ -20,10 +20,16 @@ vi.mock('../application/queries', () => ({
 vi.mock('../application/use-stock-form-items.svelte', () => ({
 	useStockFormItems: () => ({ items: [] })
 }));
-vi.mock('$lib/features/catalog', async (importOriginal) => ({
-	...(await importOriginal<typeof import('$lib/features/catalog')>()),
-	useUnitsOfMeasure: () => ({ data: [] })
-}));
+vi.mock('$lib/features/catalog', async (importOriginal) => {
+	const actual = await importOriginal<typeof import('$lib/features/catalog')>();
+	return {
+		...actual,
+		useUnitsOfMeasure: () => ({ data: [] }),
+		useUnitDimensionResolver: () => ({
+			resolve: (unit: string) => actual.resolveUnitDimension(unit)
+		})
+	};
+});
 vi.mock('$lib/db/shelter', () => ({ getShelterCode: () => 'SH001' }));
 vi.mock('$app/navigation', () => ({
 	goto: vi.fn(),
