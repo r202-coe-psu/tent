@@ -3,7 +3,7 @@ id: CR-213
 title: ผู้ประสานงานจิตอาสาออกสิทธิ์ใช้งานระบบให้จิตอาสาได้แบบจำกัด role และมีวันหมดอายุ
 status: approved
 date: 2026-10-27
-updated: 2026-11-01 # amend FR-2, FR-3, FR-5, FR-7, FR-8, FR-10, FR-11, FR-12 โดย CR-221 (coordinator-grant-edit-and-roles)
+updated: 2026-11-03 # FR-10 หมายเหตุ CR-221 Amendment A1 (proposed) · 2026-11-01 amend FR-2, FR-3, FR-5, FR-7, FR-8, FR-10, FR-11, FR-12 โดย CR-221 (coordinator-grant-edit-and-roles)
 requested_by: "@net-lynx ใน #879 ข้อ 2 (2026-10-27) + ผู้รับงาน (@Mhapong) ตัดสินรายละเอียด"
 decided_by: Soravit Sukkarn (Team Lead)
 layer: stable
@@ -88,7 +88,7 @@ affects:
 ### FR — SM/SA, การหมดอายุ และการป้องกัน
 
 - **FR-9:** SM/SA ให้ได้ทุก role ไม่มีวันหมดอายุเหมือนเดิม
-- **FR-10:** *(แก้โดย [CR-221](CR-221-coordinator-grant-edit-and-roles.md) FR-4, FR-23 — SM ซ่อนสวิตช์ active ของบัญชีจิตอาสา และเลือกได้ 1 role ต่อศูนย์)* หน้าแก้ไขผู้ใช้แสดงวันหมดอายุของ role ที่มาจาก grant
+- **FR-10:** *(แก้โดย [CR-221](CR-221-coordinator-grant-edit-and-roles.md) FR-4, FR-23 — SM ซ่อนสวิตช์ active ของบัญชีจิตอาสา และเลือกได้ 1 role ต่อศูนย์)* *(แก้โดย [CR-221](CR-221-coordinator-grant-edit-and-roles.md) Amendment A1: role ถาวรจาก SM ได้หลาย role ต่อศูนย์)* หน้าแก้ไขผู้ใช้แสดงวันหมดอายุของ role ที่มาจาก grant
   - บันทึกฟอร์มโดยคง role ไว้ grant ยังอยู่
   - ตัวเลือก "ไม่มีวันหมด" ลบ grant ของ role นั้น ทำให้ role ถาวร (ส่ง `permanent_roles` ใน `PUT /api/v1/users`; SM ลบได้เฉพาะ grant ของศูนย์ตัวเอง)
   - ถอน role ใน form ลบ grant ของ role นั้นด้วย
