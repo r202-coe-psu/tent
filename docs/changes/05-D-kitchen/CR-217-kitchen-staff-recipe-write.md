@@ -3,7 +3,7 @@ id: CR-217
 title: kitchen_staff สร้าง แก้ไข และลบ recipe ของศูนย์ตัวเองได้ (production board และหน้า catalog)
 status: approved
 date: 2026-10-29
-updated: 2026-11-01
+updated: 2026-11-02 # Amendment A1 approved 2026-11-02 (recipe role gate in shelter `validate_doc_update`, PR #1076 · kong)
 requested_by: feedback หน้างาน (roleplay 23/10/2569) — issue #802
 decided_by: kong
 layer: volatile
@@ -13,6 +13,7 @@ affects:
   - frontend/src/lib/features/catalog/application/queries.ts (useCreateRecipe, useUpdateRecipe, useDeleteRecipe)
   - frontend/src/routes/(protected)/back-office/catalog/components/recipe-tab.svelte
   - frontend/src/routes/(protected)/back-office/kitchen/production-board/[session_id]/+page.svelte
+  - frontend/src/lib/server/shelter-access-design.ts (`validate_doc_update` ของ `shelter_*`) — **Amendment A1**
 ---
 
 # CR-217 — `kitchen_staff` สร้าง แก้ไข และลบ `recipe` ของศูนย์ตัวเองได้
@@ -45,8 +46,9 @@ Issue #802 ขอให้บันทึกเป็นสูตรใหม่
 | สร้าง / แก้ไข `item_master`, `item_category` | system_admin, shelter_manager, warehouse_staff                        | ไม่เปลี่ยน                           |
 
 - `kitchen_staff` แก้ไข / ลบได้ทุก recipe ของศูนย์ตัวเอง ไม่จำกัดเฉพาะสูตรที่ตัวเองสร้าง.
-- CouchDB `validate_doc_update` ของ `shelter_*` รับ `recipe` อยู่แล้วโดยไม่จำกัด role → ไม่ต้องแก้ design doc.
-  ขอบเขตการบังคับสิทธิ์จึงเป็นฝั่ง client เหมือนเอกสาร catalog อื่น.
+- ~~CouchDB `validate_doc_update` ของ `shelter_*` รับ `recipe` อยู่แล้วโดยไม่จำกัด role → ไม่ต้องแก้ design doc.
+  ขอบเขตการบังคับสิทธิ์จึงเป็นฝั่ง client เหมือนเอกสาร catalog อื่น.~~ — **แทนที่ด้วย Amendment A1**: บังคับทั้งฝั่ง
+  client และ `validate_doc_update`.
 
 ## Impact
 
@@ -63,6 +65,22 @@ Issue #802 ขอให้บันทึกเป็นสูตรใหม่
   และปุ่มแก้ไข / ลบ บนสูตรของศูนย์ตัวเอง (สูตรจาก catalog กลางยังแก้ / ลบไม่ได้).
 - `docs/prd/role-permission-matrix.md`: แถว Recipe (Create / Edit / Delete) KS = scope.
 
+## Amendment A1 — ตรวจ role ของ `recipe` ใน `validate_doc_update` (approved 2026-11-02 โดย kong)
+
+**เหตุผล.** CR เดิมบังคับสิทธิ์ฝั่ง client อย่างเดียว ผู้ใช้ที่ login เข้าศูนย์ได้ทุก role (เช่น `registration_staff`)
+จึงเขียน `recipe` ตรงเข้า CouchDB ได้โดยไม่ผ่านหน้าเว็บ รีวิว PR #1076 ชี้ว่า CR นี้เพิ่ม role ที่สี่ที่เขียนสูตรได้
+จึงควรปิดช่องนี้ไปพร้อมกัน.
+
+- **FR-A1-1** — `validate_doc_update` ของ `shelter_<code>` รับการสร้าง แก้ไข และลบ `recipe` เฉพาะ `system_admin`,
+  `shelter_manager`, `warehouse_staff`, `supply_coordinator` และ `kitchen_staff` **ของศูนย์ `<code>`** (ตรวจด้วย
+  `isRole()` แบบเดียวกับ `stock_ledger`) · role อื่นได้ `403 forbidden`
+- **FR-A1-2** — การลบตรวจจาก `oldDoc.type === 'recipe'` เพราะ doc ที่ลบไม่มี `type`
+- **FR-A1-3** — ชุด role ต้องตรงกับ `canWriteShelterRecipe` ฝั่ง client (`catalog-permissions.ts`) · `_admin` (seed /
+  provisioning) ข้ามได้ตามเดิม
+- **Deploy** — ต้อง redeploy `_design/access` ของทุกศูนย์หลัง merge: `pnpm redeploy:access --write --confirm`
+  (จาก `frontend/`) · ก่อน redeploy ศูนย์เดิมยังรับ `recipe` จากทุก role
+- **ไม่เปลี่ยน** — catalog กลาง (`catalog` DB) และ `schema_v` ของ `recipe`
+
 ## Migration
 
 N/A — ไม่มีการเปลี่ยนรูปเอกสาร.
@@ -72,3 +90,5 @@ N/A — ไม่มีการเปลี่ยนรูปเอกสาร
 - 2026-10-29 — proposed (`draft-kitchen-staff-create-recipe`) ระหว่าง implement #802: kitchen_staff สร้าง recipe ได้อย่างเดียว.
 - 2026-11-01 — approved โดย kong พร้อมขยายขอบเขต: kitchen_staff ของศูนย์เดียวกัน **แก้ไข / ลบ** recipe ได้ด้วย
   (เดิมเสนอให้สร้างได้อย่างเดียว). โค้ดใน PR #1076 ต้องปรับตาม (update / delete guard + ปุ่มแก้ไข / ลบในหน้า catalog).
+- 2026-11-02 — Amendment A1 approved โดย kong: ตรวจ role ของ `recipe` ใน `validate_doc_update` ของ `shelter_*`
+  ด้วย (เดิมบังคับฝั่ง client อย่างเดียว) ตามข้อสังเกตในรีวิว PR #1076.

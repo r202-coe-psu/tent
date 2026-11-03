@@ -177,3 +177,4 @@ export {
 	useRejectMealServiceReceipt,
 	startKitchenLiveQuery
 } from './application/queries';
+export { kitchenErrorReason } from './domain/kitchen-error';
