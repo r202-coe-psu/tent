@@ -153,3 +153,72 @@ async def test_bootstrap_settles_quota_after_the_shelf_balance():
         "settle_shelved_quota",
     ]
     assert settled.await_args.args == (couch, "SH001")
+
+
+@pytest.mark.asyncio
+async def test_bootstrap_reconciles_each_shift_counter_once():
+    """CR-220 — applications now move the public shift counter, but bootstrap replays
+    every document: it must reconcile once per (job, shift), after the scan."""
+    app = {"type": "job_application", "job_id": "job:1", "shift_id": "shift:a"}
+    couch = _couch(
+        [
+            {**app, "_id": "job_application:1"},
+            {**app, "_id": "job_application:2"},
+            {**app, "_id": "job_application:3", "shift_id": "shift:b"},
+            {
+                "_id": "shift_assignment:1",
+                "type": "shift_assignment",
+                "job_id": "job:1",
+                "shift_id": "shift:a",
+            },
+        ]
+    )
+
+    cp, person, donation, need, needs_for, occ, stock, occs, settle = _patches()
+    with (
+        cp,
+        person,
+        donation,
+        need,
+        needs_for,
+        occ,
+        stock,
+        occs,
+        settle,
+        patch(
+            "worker.couch.bootstrap.project_job_application",
+            side_effect=lambda doc, **_: (
+                "upsert",
+                {
+                    "_id": doc["_id"],
+                    "job_id": doc["job_id"],
+                    "shift_id": doc["shift_id"],
+                },
+            ),
+        ),
+        patch(
+            "worker.couch.bootstrap.project_shift_assignment",
+            side_effect=lambda doc, **_: (
+                "upsert",
+                {
+                    "_id": doc["_id"],
+                    "job_id": doc["job_id"],
+                    "shift_id": doc["shift_id"],
+                },
+            ),
+        ),
+        patch("worker.mongo.job.apply_document", new_callable=AsyncMock),
+        patch(
+            "worker.couch.bootstrap.sync_job_shift_slot", new_callable=AsyncMock
+        ) as sync,
+        patch(
+            "worker.mongo.job.sync_job_shift_slot", new_callable=AsyncMock
+        ) as inline_sync,
+    ):
+        await bootstrap_database(couch, "shelter_sh001")
+
+    inline_sync.assert_not_awaited()
+    assert [c.kwargs for c in sync.await_args_list] == [
+        {"job_id": "job:1", "shift_id": "shift:a"},
+        {"job_id": "job:1", "shift_id": "shift:b"},
+    ]

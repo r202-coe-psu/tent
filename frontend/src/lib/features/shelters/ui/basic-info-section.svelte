@@ -9,6 +9,7 @@
 		applyAllowVehicles,
 		patchFeatureFlags
 	} from '../domain/feature-flag-policy-sync';
+	import { selectableOperationStatuses } from '../domain/shelter-close-flow';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Switch } from '$lib/components/ui/switch/index.js';
 	import * as Form from '$lib/components/ui/form/index.js';
@@ -27,11 +28,17 @@
 	let {
 		form,
 		formData,
-		disabled = false
+		disabled = false,
+		canClose = true,
+		storedStatus
 	}: {
 		form: SuperForm<Shelter>;
 		formData: SuperFormData<Shelter>;
 		disabled?: boolean;
+		/** CR-219 FR-23: may this user choose "closed" (SA / manager of this shelter)? */
+		canClose?: boolean;
+		/** Operation status as stored (edit mode); undefined while creating. */
+		storedStatus?: string;
 	} = $props();
 
 	const operationStatusOptions: { value: Shelter['operation_status']; label: string }[] = [
@@ -41,6 +48,12 @@
 		{ value: 'closed', label: 'ปิดศูนย์ (Closed)' },
 		{ value: 'cancelled', label: 'ยกเลิกศูนย์ (Cancelled)' }
 	];
+
+	const visibleOperationStatusOptions = $derived(
+		selectableOperationStatuses(operationStatusOptions, { canClose, currentStatus: storedStatus })
+	);
+	// FR-23: a closed shelter shows its value read-only to anyone who cannot reopen/close it.
+	const operationStatusLocked = $derived(!canClose && storedStatus === 'closed');
 
 	// draft-shelter-cancelled-status: cancelling hides the shelter from every public page and the
 	// external API, so the switch to `cancelled` is confirmed first. Other changes apply at once.
@@ -292,14 +305,14 @@
 					<Select.Root
 						type="single"
 						bind:value={() => $formData.operation_status, selectOperationStatus}
-						{disabled}
+						disabled={disabled || operationStatusLocked}
 					>
 						<Select.Trigger {...props} class={selectTriggerClass}>
 							{operationStatusOptions.find((o) => o.value === $formData.operation_status)?.label ??
 								'— เลือกสถานะ —'}
 						</Select.Trigger>
 						<Select.Content>
-							{#each operationStatusOptions as opt (opt.value)}
+							{#each visibleOperationStatusOptions as opt (opt.value)}
 								<Select.Item value={opt.value} label={opt.label} />
 							{/each}
 						</Select.Content>

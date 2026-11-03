@@ -37,7 +37,7 @@ type ShelterRef = {
 	name: string;
 };
 
-type ResolvedIdentity = {
+export type ResolvedIdentity = {
 	ref: ShelterRef;
 	volunteerIds: Set<string>;
 };
@@ -62,6 +62,7 @@ export class PublicScheduleError extends Error {
 			| 'ROLE_CARD_NOT_FOUND'
 			| 'ROLE_CARD_WRITE_FAILED'
 			| 'WRITE_FAILED'
+			| 'ACCESS_STATUS_UNAVAILABLE'
 			| 'SCHEDULE_UNAVAILABLE',
 		readonly httpStatus = 409
 	) {
@@ -116,7 +117,11 @@ function filterPortalId(ids: Set<string>, portalId?: string): Set<string> {
 	return ids.has(portalId) ? new Set([portalId]) : new Set();
 }
 
-async function resolveIdentities(credential: PortalCredential): Promise<ResolvedIdentity[]> {
+/**
+ * The volunteer profiles a portal credential opens, per shelter. Shared with the access-status
+ * read so both answer for exactly the same profiles.
+ */
+export async function resolveIdentities(credential: PortalCredential): Promise<ResolvedIdentity[]> {
 	const refs = await shelterRefs();
 	const identities: ResolvedIdentity[] = [];
 	const phoneHash = credential.phone ? await sha256Hex(normalizeThaiPhone(credential.phone)) : null;
@@ -296,10 +301,23 @@ async function updateVolunteerAttendance(
 	throw new PublicScheduleError('WRITE_FAILED', 409);
 }
 
+/** `job` schema_v that introduced `released_application_ids` (CR-220). */
+const JOB_LEDGER_SCHEMA_V = 4;
+
+/**
+ * Give one confirmed slot back to the job (and its shift).
+ *
+ * `idempotencyKey` (CR-220: the `job_application` `_id` of a ticket cancel) makes the release
+ * once-only per key: every attempt re-reads the job, and a key already in
+ * `released_application_ids` writes nothing and succeeds; otherwise the counters and the
+ * key move in the same `_rev`-guarded write, so a retry after a lost response cannot release
+ * twice. Without a key (portal withdraw) the ledger is left untouched.
+ */
 export async function releaseJobQuota(
 	dbName: string,
 	assignment: CouchDoc,
-	now: string
+	now: string,
+	idempotencyKey?: string
 ): Promise<void> {
 	if (typeof assignment.job_id !== 'string') throw new PublicScheduleError('WRITE_FAILED', 502);
 	for (let attempt = 0; attempt < MAX_WRITE_RETRIES; attempt++) {
@@ -307,6 +325,12 @@ export async function releaseJobQuota(
 		if (jobResult.status !== 200 || !jobResult.data)
 			throw new PublicScheduleError('WRITE_FAILED', 502);
 		const job = structuredClone(jobResult.data) as CouchDoc;
+		const released = Array.isArray(job.released_application_ids)
+			? (job.released_application_ids as unknown[]).filter(
+					(id): id is string => typeof id === 'string'
+				)
+			: [];
+		if (idempotencyKey && released.includes(idempotencyKey)) return;
 		const shifts = Array.isArray(job.shifts) ? (job.shifts as CouchDoc[]) : [];
 		const shiftId = typeof assignment.shift_id === 'string' ? assignment.shift_id : null;
 		const shift = shifts.find((item) => item.shift_id === shiftId || item.id === shiftId);
@@ -317,10 +341,19 @@ export async function releaseJobQuota(
 				shift.slots_remaining = Number(shift.slots_remaining ?? 0) + 1;
 			}
 		}
-		job.slots_confirmed = Math.max(Number(job.slots_confirmed ?? 0) - 1, 0);
-		job.slots_remaining = Number(job.slots_remaining ?? 0) + 1;
-		job.status = 'open';
+		// Free a seat only when one is still counted (a staff reconcile may have zeroed it), and
+		// reopen only a job that was full: a closed or paused job stays as it is.
+		const jobConfirmed = Number(job.slots_confirmed ?? 0);
+		if (jobConfirmed > 0) {
+			job.slots_confirmed = jobConfirmed - 1;
+			job.slots_remaining = Number(job.slots_remaining ?? 0) + 1;
+			if (job.status === 'full') job.status = 'open';
+		}
 		job.updated_at = now;
+		if (idempotencyKey) {
+			job.released_application_ids = [...released, idempotencyKey];
+			job.schema_v = Math.max(Number(job.schema_v ?? 0), JOB_LEDGER_SCHEMA_V);
+		}
 		const put = await putAsPublicWriter(dbName, assignment.job_id, job);
 		if (put.status === 409) continue;
 		if (put.status >= 400) throw new PublicScheduleError('WRITE_FAILED', 502);

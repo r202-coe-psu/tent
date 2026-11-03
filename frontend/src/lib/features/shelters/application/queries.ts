@@ -10,7 +10,14 @@ import {
 	type SubscribeDataChangesHandle
 } from '$lib/db/subscribe-data-changes';
 import { sheltersRepository, SHELTER_REGISTRY_DB } from '../data/shelters.remote';
-import { createShelter, updateShelter, closeZone, reopenZone } from '../data/shelters.api';
+import {
+	createShelter,
+	updateShelter,
+	closeZone,
+	reopenZone,
+	getShelterClosePreview,
+	closeShelter
+} from '../data/shelters.api';
 import { listProvinces, listDistricts, listSubdistricts } from '../data/thailand-location.api';
 import type { Shelter } from '../domain/schema';
 
@@ -18,7 +25,8 @@ export const sheltersKeys = {
 	all: ['shelters'] as const,
 	list: () => [...sheltersKeys.all, 'list'] as const,
 	search: () => [...sheltersKeys.all, 'search'] as const,
-	detail: (code: string) => [...sheltersKeys.all, 'detail', code] as const
+	detail: (code: string) => [...sheltersKeys.all, 'detail', code] as const,
+	closePreview: (code: string) => [...sheltersKeys.all, 'close-preview', code] as const
 };
 
 export const useShelters = () =>
@@ -102,6 +110,35 @@ export const useUpdateShelter = () => {
 		},
 		onError: (err: Error) => {
 			toast.error(err.message || 'เกิดข้อผิดพลาดในการอัปเดตข้อมูล');
+		}
+	}));
+};
+
+/** CR-219 FR-7: live preview of who the close touches; fetched only while the modal is open. */
+export const useShelterClosePreview = (code: () => string, enabled: () => boolean) =>
+	createQuery(() => ({
+		queryKey: sheltersKeys.closePreview(code()),
+		queryFn: () => getShelterClosePreview(code()),
+		enabled: !!code() && enabled(),
+		staleTime: 0,
+		gcTime: 0,
+		refetchOnWindowFocus: false
+	}));
+
+/**
+ * CR-219 FR-8: close the shelter (check out everyone first). Toasting is left to the caller —
+ * the result decides between success and the "failed N" message. Only list/search caches are
+ * refreshed here; the caller refreshes the detail (the edit form re-seeds itself from it, so a
+ * refetch mid-save would drop the user's other edits).
+ */
+export const useCloseShelter = () => {
+	const queryClient = useQueryClient();
+	return createMutation(() => ({
+		mutationFn: ({ code, confirmText }: { code: string; confirmText: string }) =>
+			closeShelter(code, confirmText),
+		onSettled: () => {
+			queryClient.invalidateQueries({ queryKey: sheltersKeys.list() });
+			queryClient.invalidateQueries({ queryKey: sheltersKeys.search() });
 		}
 	}));
 };

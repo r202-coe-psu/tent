@@ -348,7 +348,7 @@
 						</button>
 					</div>
 
-					{#if ticket.status !== 'cancelled' && ticket.can_cancel}
+					{#if ticket.can_cancel}
 						<Button
 							variant="outline"
 							class="h-auto w-full rounded-xl border-destructive/40 px-4 py-2.5 text-xs font-semibold whitespace-normal text-destructive hover:bg-destructive/10 hover:text-destructive"
