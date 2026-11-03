@@ -16,6 +16,7 @@ import type {
 	StayStatus
 } from '../domain/people';
 import type { StationNumber } from '../domain/station-log';
+import type { EvacueeSort } from '../domain/evacuee-sort';
 import type {
 	FamilyReportInPayload,
 	RegistrationConsent,
@@ -118,12 +119,16 @@ export interface PeopleRepository {
 	listEvacuees(): Promise<Evacuee[]>;
 	/** Members linked to one household, resolved through the household_id Mango index. */
 	listHouseholdMembers(householdId: string): Promise<Evacuee[]>;
-	/** Paginated list of evacuees — optional `search` filters before paging. */
+	/**
+	 * Paginated list of evacuees — optional `search` filters before paging. `sort` defaults to
+	 * newest-registered first (#1061).
+	 */
 	listEvacueesPaginated(
 		page: number,
 		pageSize: number,
 		search?: string,
-		filters?: EvacueeFilters
+		filters?: EvacueeFilters,
+		sort?: EvacueeSort
 	): Promise<PaginatedResult<Evacuee>>;
 	/** One evacuee by `_id`, or `null` when absent. */
 	getEvacuee(id: string): Promise<Evacuee | null>;

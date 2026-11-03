@@ -1252,6 +1252,48 @@ describe('buildValidateDocUpdate', () => {
 		);
 	});
 
+	describe('recipe role gate (CR-217)', () => {
+		const recipe = (over: Doc = {}): Doc => ({
+			...envelope,
+			schema_v: 4,
+			_id: 'recipe:01J',
+			type: 'recipe',
+			label: 'ข้าวผัด',
+			ingredients: [{ item_master_id: 'item_master:rice', quantity: '2', uom: 'kg' }],
+			standard_portions: '10',
+			standard_duration_hours: '1',
+			...over
+		});
+		const deletion = { _id: 'recipe:01J', _rev: '1-a', _deleted: true };
+		const SUPPLY: UserCtx = { name: 'sc', roles: ['shelter:SH001', 'SH001:supply_coordinator'] };
+		const OTHER_KITCHEN: UserCtx = { name: 'kt2', roles: ['shelter:SH002', 'SH002:kitchen_staff'] };
+
+		it.each([
+			['kitchen staff', KITCHEN],
+			['warehouse staff', WAREHOUSE],
+			['a supply coordinator', SUPPLY],
+			['a shelter manager', MANAGER],
+			['a system admin', ADMIN]
+		])('lets %s create, update and delete a recipe', (_, user) => {
+			expect(() => compile()(recipe(), null, user)).not.toThrow();
+			expect(() => compile()(recipe({ label: 'ข้าวผัดไก่' }), recipe(), user)).not.toThrow();
+			expect(() => compile()(deletion, recipe(), user)).not.toThrow();
+		});
+
+		it.each([
+			['registration staff', REGISTRATION],
+			['distribution staff', DISTRIBUTION],
+			['kitchen staff of another shelter', OTHER_KITCHEN]
+		])('rejects %s creating, updating or deleting a recipe', (_, user) => {
+			expectForbidden(() => compile()(recipe(), null, user), /can write recipe/);
+			expectForbidden(
+				() => compile()(recipe({ label: 'ข้าวผัดไก่' }), recipe(), user),
+				/can write recipe/
+			);
+			expectForbidden(() => compile()(deletion, recipe(), user), /can write recipe/);
+		});
+	});
+
 	it('accepts a new stock_ledger entry from warehouse staff', () => {
 		expect(() => compile()(ledger(), null, WAREHOUSE)).not.toThrow();
 	});
