@@ -27,7 +27,15 @@
 		type CustomIngredientInput
 	} from '$lib/features/kitchen';
 	import { useActiveSopProfile } from '$lib/features/sop-ratios';
-	import { useRecipes, useItemMasters, formatUnit, useUnitsOfMeasure } from '$lib/features/catalog';
+	import {
+		useRecipes,
+		useItemMasters,
+		formatUnit,
+		useUnitsOfMeasure,
+		useUnitDimensionResolver,
+		qtyInputStep,
+		wholeQtyError
+	} from '$lib/features/catalog';
 	import { langState } from '$lib/states/i18n.svelte';
 	import { useSupplyItems } from '$lib/features/supply';
 	import { useStockBalance } from '$lib/features/operations';
@@ -68,6 +76,13 @@
 	const unitsQuery = useUnitsOfMeasure();
 	const units = $derived(unitsQuery.data ?? []);
 	const unitLabel = (code: string) => formatUnit(code, units, langState.current);
+	const unitDimension = useUnitDimensionResolver();
+	const rowQtyError = (row: { unit: string; qtyPerPerson: number }) =>
+		wholeQtyError(row.qtyPerPerson, unitDimension.resolve(row.unit));
+	const customQtyValid = $derived(
+		!(sourceMode === 'custom' || isLockedEdit) ||
+			!customRows.some((row) => row.itemId && rowQtyError(row))
+	);
 	const supplyItems = useSupplyItems();
 	const stockBalance = useStockBalance();
 	// Filter supply items in "food" category.
@@ -362,6 +377,8 @@
 							{#each customRows as row, i (i)}
 								{@const currentUnresolved =
 									row.itemId && !foodSupplyItems.some((item) => item._id === row.itemId)}
+								{@const rowDim = unitDimension.resolve(row.unit)}
+								{@const qtyError = row.itemId ? rowQtyError(row) : undefined}
 								<div class="flex flex-col gap-2 sm:flex-row sm:items-center">
 									<select
 										bind:value={row.itemId}
@@ -381,8 +398,8 @@
 									<div class="flex items-center gap-2">
 										<Input
 											type="number"
-											min="0"
-											step="any"
+											min={qtyInputStep(rowDim) === '1' ? '1' : '0'}
+											step={qtyInputStep(rowDim)}
 											class="min-h-11 w-full sm:min-h-9 sm:w-28"
 											placeholder="ต่อคน"
 											bind:value={row.qtyPerPerson}
@@ -400,6 +417,9 @@
 										</Button>
 									</div>
 								</div>
+								{#if qtyError}
+									<p class="pl-0.5 text-xs text-destructive">{qtyError}</p>
+								{/if}
 								{#if row.itemId && !currentUnresolved}
 									<p class="pl-0.5 text-xs text-muted-foreground">
 										ยอดคลังสแตนบาย ณ ศูนย์: <span class="font-medium text-foreground"
@@ -599,6 +619,7 @@
 						!sopProfile.data ||
 						!subCountsValid ||
 						!overrideReasonValid ||
+						!customQtyValid ||
 						(sourceMode === 'recipe' && !isLockedEdit && !recipeId) ||
 						((sourceMode === 'custom' || isLockedEdit) && customIngredients.length === 0)}
 				>
