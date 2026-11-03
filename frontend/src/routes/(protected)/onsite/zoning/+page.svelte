@@ -659,12 +659,6 @@
 				<div class="flex flex-wrap items-center gap-x-2 gap-y-1">
 					<MapPin class="size-6 shrink-0 text-station-3" />
 					<h1 class="text-2xl font-bold tracking-tight text-slate-900 md:text-3xl">จัดสรรที่พัก</h1>
-					<Badge
-						variant="outline"
-						class="border-station-3-border bg-station-3-subtle font-semibold text-station-3-text"
-					>
-						Station 3
-					</Badge>
 				</div>
 				<p class="mt-0.5 text-xs text-slate-500">
 					เลือกคนจากคิว「พร้อมจัดโซน」(เรียงตามเวลารอ — รอนานสุดก่อน) หรือสแกน Handover / Person QR

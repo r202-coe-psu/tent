@@ -62,6 +62,8 @@ export const kitchenKeys = {
 	mealServices: () => [...kitchenKeys.all, 'meal_services', getShelterCode()] as const,
 	mealServiceReceipts: () =>
 		[...kitchenKeys.all, 'meal_service_receipts', getShelterCode()] as const,
+	mealServiceLedger: (id: string) =>
+		[...kitchenKeys.all, 'meal_service_ledger', getShelterCode(), id] as const,
 	occupancy: () => [...kitchenKeys.all, 'occupancy', getShelterCode()] as const,
 	dietCounts: () => [...kitchenKeys.all, 'diet_counts', getShelterCode()] as const
 };
@@ -406,6 +408,16 @@ export const useMealServiceReceipts = () =>
 		queryKey: kitchenKeys.mealServiceReceipts(),
 		refetchOnMount: 'always',
 		queryFn: () => kitchenRepository().listMealServiceReceipts()
+	}));
+
+export const useMealServiceLedger = (
+	mealServiceId: () => string,
+	enabled: () => boolean = () => true
+) =>
+	createQuery(() => ({
+		queryKey: kitchenKeys.mealServiceLedger(mealServiceId()),
+		enabled: Boolean(mealServiceId()) && enabled(),
+		queryFn: () => kitchenRepository().listMealServiceLedger(mealServiceId())
 	}));
 
 export const useConfirmMealServiceReceipt = () =>

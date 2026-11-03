@@ -3977,6 +3977,11 @@ export interface components {
 			member_ids: string[];
 			/** Required Person Id */
 			required_person_id?: string | null;
+			/**
+			 * Claim Pets
+			 * @default false
+			 */
+			claim_pets: boolean;
 		};
 		/** UnassignedKioskPrepareResponse */
 		UnassignedKioskPrepareResponse: {
@@ -3994,10 +3999,16 @@ export interface components {
 			}[];
 			/** Images */
 			images: components['schemas']['UnassignedKioskImage'][];
+			/** Pets */
+			pets?: {
+				[key: string]: unknown;
+			}[];
+			/** Pet Ids */
+			pet_ids?: string[];
 		};
 		/**
 		 * UnassignedKioskRevertRequest
-		 * @description Kiosk claim revert — give back members this kiosk marked when the Couch write failed.
+		 * @description Kiosk claim revert — give back members and pets this kiosk marked when Couch failed.
 		 */
 		UnassignedKioskRevertRequest: {
 			/** Shelter Code */
@@ -4005,12 +4016,16 @@ export interface components {
 			/** Device Id */
 			device_id: string;
 			/** Member Ids */
-			member_ids: string[];
+			member_ids?: string[];
+			/** Pet Ids */
+			pet_ids?: string[];
 		};
 		/** UnassignedKioskRevertResponse */
 		UnassignedKioskRevertResponse: {
 			/** Reverted */
 			reverted: string[];
+			/** Reverted Pets */
+			reverted_pets?: string[];
 		};
 		/**
 		 * UnassignedPhotoUploadResponse
