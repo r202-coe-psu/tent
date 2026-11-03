@@ -112,6 +112,7 @@
 	// Receive lines. Seeded once per meal_service: from the draft kept across the
 	// "create new item" detour, else one line carrying the kitchen's whole yield.
 	let lines = $state<YieldDraftLine[]>([]);
+	let linesInvalid = $state(false);
 	let seededFor: string | null = null;
 
 	function blankLine(qty = ''): YieldDraftLine {
@@ -163,6 +164,10 @@
 		const parsed = yieldReceiptInputSchema.safeParse(input);
 		if (!parsed.success) {
 			toast.error(parsed.error.issues[0]?.message ?? 'กรอกรายการรับเข้าไม่ครบ');
+			return;
+		}
+		if (linesInvalid) {
+			toast.error('จำนวนของหน่วยนับต้องเป็นจำนวนเต็ม');
 			return;
 		}
 		try {
@@ -341,6 +346,7 @@
 						<h4 class="text-sm font-bold text-sky-950">ดำเนินการตรวจรับมอบเสบียง</h4>
 						<YieldReceiptLines
 							bind:lines
+							onvaliditychange={(invalid) => (linesInvalid = invalid)}
 							points={storagePoints.points}
 							expectedTotal={activeService.actual_yield}
 							disabled={!canReceiveStock || confirmYieldMutation.isPending}
@@ -353,7 +359,7 @@
 						{/if}
 						<Button
 							class="w-full gap-2 bg-emerald-600 font-semibold text-white hover:bg-emerald-700"
-							disabled={!canReceiveStock || confirmYieldMutation.isPending}
+							disabled={!canReceiveStock || confirmYieldMutation.isPending || linesInvalid}
 							onclick={handleConfirmServiceReceipt}
 						>
 							<PackageCheck class="h-4 w-4" />
