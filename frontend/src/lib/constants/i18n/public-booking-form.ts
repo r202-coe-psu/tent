@@ -154,8 +154,6 @@ export const PUBLIC_BOOKING_FORM_I18N = {
 		submitting: 'กำลังบันทึกข้อมูล…',
 		submitConfirm: 'ยืนยันการลงทะเบียน',
 		submitOnsite: 'บันทึกลงทะเบียนทั้งครอบครัว',
-		unassignedDisclaimerAck: 'เข้าใจว่าข้อมูลจะรอในคิวจนกว่าเจ้าหน้าที่ศูนย์จะยืนยัน',
-		unassignedDisclaimerRequired: 'กรุณายืนยันการรับทราบเงื่อนไขการใช้งานระบบก่อนส่งข้อมูล',
 		capacityAvailable: (available: number, capacity: number, unit: string) =>
 			`ว่าง ${available} / ${capacity} ${unit}`,
 		shelterNotBookable: 'ศูนย์นี้ยังไม่เปิดรับลงทะเบียนล่วงหน้าจากหน้าสาธารณะ',
@@ -669,9 +667,6 @@ export const PUBLIC_BOOKING_FORM_I18N = {
 		submitting: 'Saving...',
 		submitConfirm: 'Confirm Registration',
 		submitOnsite: 'Save family registration',
-		unassignedDisclaimerAck:
-			'I understand my information waits in the queue until shelter staff confirm it.',
-		unassignedDisclaimerRequired: 'Please acknowledge the system terms before submitting.',
 		capacityAvailable: (available: number, capacity: number, unit: string) =>
 			`${available} / ${capacity} ${unit} free`,
 		shelterNotBookable: 'This shelter is not accepting public pre-registration yet.',
