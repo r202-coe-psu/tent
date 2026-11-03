@@ -79,10 +79,6 @@
 	const unitDimension = useUnitDimensionResolver();
 	const rowQtyError = (row: { unit: string; qtyPerPerson: number }) =>
 		wholeQtyError(row.qtyPerPerson, unitDimension.resolve(row.unit));
-	const customQtyValid = $derived(
-		!(sourceMode === 'custom' || isLockedEdit) ||
-			!customRows.some((row) => row.itemId && rowQtyError(row))
-	);
 	const supplyItems = useSupplyItems();
 	const stockBalance = useStockBalance();
 	// Filter supply items in "food" category.
@@ -157,6 +153,10 @@
 	}
 
 	const isLockedEdit = $derived(isEdit && sourceMode === 'recipe');
+	const customQtyValid = $derived(
+		!(sourceMode === 'custom' || isLockedEdit) ||
+			!customRows.some((row) => row.itemId && rowQtyError(row))
+	);
 
 	$effect(() => {
 		if (!open) {
