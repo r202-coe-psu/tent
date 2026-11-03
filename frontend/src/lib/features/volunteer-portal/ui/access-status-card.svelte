@@ -20,22 +20,22 @@
 	const t = $derived(accessStatusI18n[languageStore.current]);
 
 	function statusText(row: PortalAccessStatus): string {
-		if (row.status === 'account_disabled') return t.disabled;
-		if (row.status === 'active' && row.role_label) {
-			return row.expires_at
-				? t.activeUntil(row.role_label, formatThaiShortDate(row.expires_at))
-				: t.activePermanent(row.role_label);
+		const date = row.expires_at ? formatThaiShortDate(row.expires_at) : null;
+		switch (row.status) {
+			case 'active':
+				if (!row.role_label) return t.activeUnlabelled(date);
+				return date ? t.activeUntil(row.role_label, date) : t.activePermanent(row.role_label);
+			case 'lapsed':
+				return t.lapsed(date);
+			default:
+				return t.none;
 		}
-		if (row.status === 'lapsed') {
-			return t.lapsed(row.expires_at ? formatThaiShortDate(row.expires_at) : null);
-		}
-		return t.none;
 	}
 </script>
 
 {#if loading || error || rows.length > 0}
 	<div
-		class="rounded-3xl border border-border bg-card p-6 shadow-sm"
+		class="rounded-2xl border border-border bg-card p-6 shadow-sm"
 		data-testid="access-status-card"
 	>
 		<h4 class="flex items-center gap-2 text-sm font-bold text-foreground">
@@ -44,15 +44,15 @@
 		</h4>
 
 		{#if loading}
-			<p class="mt-3.5 text-xs text-muted-foreground">{t.loading}</p>
+			<p class="mt-3.5 text-sm text-muted-foreground">{t.loading}</p>
 		{:else if error}
-			<p class="mt-3.5 text-xs text-destructive" role="alert">{t.loadError}</p>
+			<p class="mt-3.5 text-sm text-destructive" role="alert">{t.loadError}</p>
 		{:else}
 			<ul class="mt-3.5 space-y-3">
 				{#each rows as row (row.shelter_code)}
-					<li class="space-y-2 rounded-2xl border border-border bg-muted/30 p-3.5">
-						<p class="text-xs font-bold text-foreground">{row.shelter_name}</p>
-						<p class="text-xs leading-relaxed text-muted-foreground" data-status={row.status}>
+					<li class="space-y-2 rounded-xl border border-border bg-muted/30 p-3.5">
+						<p class="text-sm font-bold text-foreground">{row.shelter_name}</p>
+						<p class="text-sm leading-relaxed text-muted-foreground" data-status={row.status}>
 							{statusText(row)}
 						</p>
 						{#if row.status === 'active'}

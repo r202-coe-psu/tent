@@ -591,11 +591,12 @@ export const dispatchRespondSchema = z.object({
 export type DispatchRespondInput = z.infer<typeof dispatchRespondSchema>;
 
 /**
- * Where a volunteer stands on staff-system access in one shelter (CR-221 FR-26): `none` =
- * no linked account, `lapsed` = account with nothing left in this shelter, `active`,
- * `account_disabled` = a system admin suspended the account.
+ * Where a volunteer stands on staff-system access in one shelter (CR-221 FR-26): `none` = no
+ * linked account, or an account the public answer must not tell apart from it (a suspended
+ * account: phone-only callers must not learn that, Amendment A2); `lapsed` = account with
+ * nothing left in this shelter; `active`.
  */
-export type PortalAccessStatusCode = 'none' | 'lapsed' | 'active' | 'account_disabled';
+export type PortalAccessStatusCode = 'none' | 'lapsed' | 'active';
 
 /**
  * One shelter's row of the portal's "สิทธิ์ใช้งานระบบ" card. Exactly these keys and no more
@@ -608,6 +609,9 @@ export type PortalAccessStatus = {
 	status: PortalAccessStatusCode;
 	/** Display label of the role shown; `null` unless `active`. */
 	role_label: string | null;
-	/** ISO instant the grant ends; `null` for a permanent role and for any non-`active` status. */
+	/**
+	 * `active`: ISO instant the grant ends (`null` for a permanent role). `lapsed`: when access
+	 * here ended (`null` when unknown). `null` for `none`.
+	 */
 	expires_at: string | null;
 };

@@ -43,12 +43,13 @@ describe('AccessStatusCard', () => {
 		expect(loginLink()).toBeNull();
 	});
 
-	it('says since when a lapsed account has had no access', () => {
+	it('says since when access ended, whatever the reason', () => {
 		render({ rows: [row({ status: 'lapsed', expires_at: '2026-11-01T17:00:00.000Z' })] });
 
 		expect(host.textContent).toContain(
-			'สิทธิ์ใช้งานระบบหมดอายุตั้งแต่วันที่ 2/11/2569 — ติดต่อผู้ประสานงานจิตอาสาของศูนย์'
+			'สิทธิ์ใช้งานระบบสิ้นสุดตั้งแต่วันที่ 2/11/2569 — ติดต่อผู้ประสานงานจิตอาสาของศูนย์'
 		);
+		expect(host.textContent).not.toContain('หมดอายุ');
 		expect(loginLink()).toBeNull();
 	});
 
@@ -56,7 +57,7 @@ describe('AccessStatusCard', () => {
 		render({ rows: [row({ status: 'lapsed', expires_at: null })] });
 
 		expect(host.textContent).toContain(
-			'สิทธิ์ใช้งานระบบหมดอายุแล้ว — ติดต่อผู้ประสานงานจิตอาสาของศูนย์'
+			'สิทธิ์ใช้งานระบบสิ้นสุดแล้ว — ติดต่อผู้ประสานงานจิตอาสาของศูนย์'
 		);
 	});
 
@@ -84,11 +85,21 @@ describe('AccessStatusCard', () => {
 		expect(loginLink()).not.toBeNull();
 	});
 
-	it('tells a suspended account to contact the administrator, with no login button', () => {
-		render({ rows: [row({ status: 'account_disabled' })] });
+	it('does not blame a missing role label on the volunteer: an active row with none still says there is access', () => {
+		render({ rows: [row({ status: 'active', role_label: null, expires_at: null })] });
 
-		expect(host.textContent).toContain('บัญชีถูกระงับ — ติดต่อผู้ดูแลระบบ');
-		expect(loginLink()).toBeNull();
+		expect(host.textContent).toContain('มีสิทธิ์ใช้งานระบบ');
+		expect(host.textContent).not.toContain('ยังไม่ได้รับสิทธิ์');
+		expect(loginLink()).not.toBeNull();
+	});
+
+	it('keeps the card at rounded-2xl and the status text above text-xs', () => {
+		render({ rows: [row({ status: 'none' })] });
+
+		expect(host.querySelector('[data-testid="access-status-card"]')?.className).toContain(
+			'rounded-2xl'
+		);
+		expect(host.querySelector('[data-status]')?.className).toContain('text-sm');
 	});
 
 	it('gives each shelter its own status and button', () => {

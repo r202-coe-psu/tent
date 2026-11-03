@@ -23,7 +23,11 @@ vi.mock('$lib/server/couch-admin', async (importOriginal) => ({
 	adminRaw: state.admin
 }));
 
-import { readPublicAccessStatus } from './public-access-status';
+import { accountStanding, readPublicAccessStatus } from './public-access-status';
+import { PublicScheduleError } from './public-schedule-action';
+
+/** The moment the tests run at; grants are expired or live relative to it. */
+const NOW = Date.parse('2026-11-03T05:00:00.000Z');
 
 const EMAIL_A = 'somchai.secret@example.org';
 const EMAIL_B = 'somying.secret@example.org';
@@ -53,6 +57,10 @@ function account(
 		active: true,
 		roles: [],
 		role_grants: [],
+		// What a real `_users` doc carries: the public path must never read these.
+		password_scheme: 'pbkdf2',
+		derived_key: 'DERIVED-KEY-SECRET',
+		salt: 'SALT-SECRET',
 		...over
 	};
 }
@@ -65,7 +73,14 @@ const grant = (shelter: string, role: string, expires_at: string) => ({
 	granted_at: '2026-10-30T00:00:00.000Z'
 });
 
+let auditFails = false;
+const auditReads = () =>
+	state.admin.mock.calls.filter(
+		([path]) => String(path).startsWith('/shelter_') && String(path).endsWith('/_find')
+	).length;
+
 beforeEach(() => {
+	auditFails = false;
 	state.find.mockReset();
 	state.admin.mockReset();
 	state.users.clear();
@@ -85,19 +100,30 @@ beforeEach(() => {
 				}
 			};
 		}
-		if (path === '/_users/_all_docs?include_docs=true') {
-			const keys = (body as { keys: string[] }).keys;
-			return {
-				status: 200,
-				data: { rows: keys.map((key) => ({ key, doc: state.users.get(key) ?? null })) }
+		if (path === '/_users/_find') {
+			const { selector, fields } = body as {
+				selector: { _id: { $in: string[] } };
+				fields: string[];
 			};
+			// Mirror `fields`: a field that is not asked for never comes back.
+			const docs = selector._id.$in.flatMap((id) => {
+				const doc = state.users.get(id);
+				return doc
+					? [Object.fromEntries(fields.filter((f) => f in doc).map((f) => [f, doc[f]]))]
+					: [];
+			});
+			return { status: 200, data: { docs } };
 		}
 		if (path.endsWith('/_find')) {
+			if (auditFails) return { status: 500, data: { error: 'boom' } };
 			const db = path.split('/')[1];
-			const target = (body as { selector: { target_id: string } }).selector.target_id;
+			const { $in: targets } = (body as { selector: { target_id: { $in: string[] } } }).selector
+				.target_id;
 			return {
 				status: 200,
-				data: { docs: (state.audits.get(db) ?? []).filter((a) => a.target_id === target) }
+				data: {
+					docs: (state.audits.get(db) ?? []).filter((a) => targets.includes(a.target_id as string))
+				}
 			};
 		}
 		throw new Error(`unexpected admin call ${path}`);
@@ -132,7 +158,7 @@ const phone = { phone: '0812345678' };
 
 describe('readPublicAccessStatus — status per shelter', () => {
 	it('is none when the profile has no linked account', async () => {
-		const { access } = await readPublicAccessStatus(phone);
+		const { access } = await readPublicAccessStatus(phone, NOW);
 		expect(access).toEqual([
 			{
 				shelter_code: 'SH001',
@@ -146,7 +172,7 @@ describe('readPublicAccessStatus — status per shelter', () => {
 
 	it('is none when user_name names no account', async () => {
 		state.profiles.set('shelter_sh001', [profile('volunteer:A1', EMAIL_A)]);
-		const { access } = await readPublicAccessStatus(phone);
+		const { access } = await readPublicAccessStatus(phone, NOW);
 		expect(access[0].status).toBe('none');
 	});
 
@@ -155,7 +181,7 @@ describe('readPublicAccessStatus — status per shelter', () => {
 			roles: ['shelter:SH001', 'SH001:kitchen_staff'],
 			role_grants: [grant('SH001', 'kitchen_staff', '2026-11-05T16:59:59.999Z')]
 		});
-		const { access } = await readPublicAccessStatus(phone);
+		const { access } = await readPublicAccessStatus(phone, NOW);
 		expect(access[0]).toMatchObject({
 			status: 'active',
 			role_label: 'เจ้าหน้าที่ครัว',
@@ -167,9 +193,24 @@ describe('readPublicAccessStatus — status per shelter', () => {
 		link('shelter_sh001', 'volunteer:A1', EMAIL_A, {
 			roles: ['shelter:SH001', 'SH001:kitchen_staff']
 		});
-		const { access } = await readPublicAccessStatus(phone);
+		const { access } = await readPublicAccessStatus(phone, NOW);
 		expect(access[0]).toMatchObject({ status: 'active', expires_at: null });
 		expect(access[0].role_label).toBeTruthy();
+	});
+
+	it('is lapsed, not active, when every grant has passed its expiry but the worker has not swept it', async () => {
+		link('shelter_sh001', 'volunteer:A1', EMAIL_A, {
+			roles: ['shelter:SH001', 'SH001:kitchen_staff'],
+			role_grants: [grant('SH001', 'kitchen_staff', '2026-11-02T16:59:59.999Z')]
+		});
+		const { access } = await readPublicAccessStatus(phone, NOW);
+		// Dated by the grant that ended; no audit read was needed.
+		expect(access[0]).toMatchObject({
+			status: 'lapsed',
+			role_label: null,
+			expires_at: '2026-11-02T16:59:59.999Z'
+		});
+		expect(auditReads()).toBe(0);
 	});
 
 	it('is lapsed when the account holds nothing in this shelter', async () => {
@@ -178,7 +219,36 @@ describe('readPublicAccessStatus — status per shelter', () => {
 			roles: ['shelter:SH002', 'SH002:kitchen_staff'],
 			role_grants: [grant('SH002', 'kitchen_staff', '2026-11-05T16:59:59.999Z')]
 		});
-		const { access } = await readPublicAccessStatus(phone);
+		const { access } = await readPublicAccessStatus(phone, NOW);
+		expect(access[0]).toMatchObject({ status: 'lapsed', role_label: null, expires_at: null });
+	});
+
+	it('words the lapsed date for every reason a grant can end (expired, revoked, verification lapsed)', async () => {
+		for (const reason of [
+			'role_grant.expired',
+			'role_grant.revoked',
+			'role_grant.verification_revoked'
+		]) {
+			state.audits.clear();
+			link('shelter_sh001', 'volunteer:A1', EMAIL_A);
+			state.audits.set('shelter_sh001', [
+				{
+					type: 'audit',
+					target_id: `org.couchdb.user:${EMAIL_A}`,
+					reason,
+					created_at: '2026-11-01T17:00:00.000Z',
+					context: { role: 'kitchen_staff', actor: 'coord' }
+				}
+			]);
+			const { access } = await readPublicAccessStatus(phone, NOW);
+			expect(access[0]).toMatchObject({ status: 'lapsed', expires_at: '2026-11-01T17:00:00.000Z' });
+		}
+	});
+
+	it('keeps the card when the audit read fails: lapsed with no date', async () => {
+		link('shelter_sh001', 'volunteer:A1', EMAIL_A);
+		auditFails = true;
+		const { access } = await readPublicAccessStatus(phone, NOW);
 		expect(access[0]).toMatchObject({ status: 'lapsed', role_label: null, expires_at: null });
 	});
 
@@ -193,7 +263,7 @@ describe('readPublicAccessStatus — status per shelter', () => {
 				context: { role: 'kitchen_staff', actor: 'worker' }
 			}
 		]);
-		const result = await readPublicAccessStatus(phone);
+		const result = await readPublicAccessStatus(phone, NOW);
 		expect(result.access[0]).toEqual({
 			shelter_code: 'SH001',
 			shelter_name: 'ศูนย์หลัก',
@@ -205,18 +275,54 @@ describe('readPublicAccessStatus — status per shelter', () => {
 		expect(JSON.stringify(result)).not.toContain('worker');
 	});
 
-	it('is account_disabled for a suspended account even when it still holds a role', async () => {
+	it('answers a suspended account exactly like no account: none, no role, no date', async () => {
+		const none = (await readPublicAccessStatus(phone, NOW)).access[0];
+
+		// Suspended while it still holds a live grant, a permanent role and an audit trail.
 		link('shelter_sh001', 'volunteer:A1', EMAIL_A, {
 			active: false,
-			roles: ['shelter:SH001', 'SH001:kitchen_staff'],
-			role_grants: [grant('SH001', 'kitchen_staff', '2026-11-05T16:59:59.999Z')]
+			roles: ['shelter:SH001', 'SH001:kitchen_staff', 'SH001:warehouse_staff'],
+			role_grants: [grant('SH001', 'warehouse_staff', '2026-11-05T16:59:59.999Z')]
 		});
-		const { access } = await readPublicAccessStatus(phone);
-		expect(access[0]).toMatchObject({
-			status: 'account_disabled',
+		state.audits.set('shelter_sh001', [
+			{
+				type: 'audit',
+				target_id: `org.couchdb.user:${EMAIL_A}`,
+				reason: 'role_grant.expired',
+				created_at: '2026-11-01T17:00:00.000Z'
+			}
+		]);
+		const suspended = (await readPublicAccessStatus(phone, NOW)).access[0];
+
+		expect(suspended).toEqual(none);
+		expect(suspended).toEqual({
+			shelter_code: 'SH001',
+			shelter_name: 'ศูนย์หลัก',
+			status: 'none',
 			role_label: null,
 			expires_at: null
 		});
+		expect(JSON.stringify(suspended)).not.toContain('disabled');
+	});
+
+	it('does not let a suspended account hide the live access of another profile in the shelter', async () => {
+		state.profiles.set('shelter_sh001', [
+			profile('volunteer:A1', EMAIL_A),
+			profile('volunteer:A2', EMAIL_B)
+		]);
+		state.users.set(
+			`org.couchdb.user:${EMAIL_A}`,
+			account(EMAIL_A, 'volunteer:A1', {
+				active: false,
+				roles: ['shelter:SH001', 'SH001:kitchen_staff']
+			})
+		);
+		state.users.set(
+			`org.couchdb.user:${EMAIL_B}`,
+			account(EMAIL_B, 'volunteer:A2', { roles: ['shelter:SH001', 'SH001:warehouse_staff'] })
+		);
+		const { access } = await readPublicAccessStatus(phone, NOW);
+		expect(access[0]).toMatchObject({ status: 'active', role_label: 'เจ้าหน้าที่คลัง' });
 	});
 
 	it('answers one row per shelter with a profile, sorted by code', async () => {
@@ -225,7 +331,7 @@ describe('readPublicAccessStatus — status per shelter', () => {
 			roles: ['shelter:SH002', 'SH002:warehouse_staff'],
 			role_grants: [grant('SH002', 'warehouse_staff', '2026-11-04T16:59:59.999Z')]
 		});
-		const { access } = await readPublicAccessStatus(phone);
+		const { access } = await readPublicAccessStatus(phone, NOW);
 		expect(access.map((row) => [row.shelter_code, row.status])).toEqual([
 			['SH001', 'none'],
 			['SH002', 'active']
@@ -234,7 +340,7 @@ describe('readPublicAccessStatus — status per shelter', () => {
 
 	it('answers an empty list when the credential opens no profile', async () => {
 		state.profiles.clear();
-		const { access } = await readPublicAccessStatus(phone);
+		const { access } = await readPublicAccessStatus(phone, NOW);
 		expect(access).toEqual([]);
 	});
 });
@@ -248,7 +354,7 @@ describe('readPublicAccessStatus — one role shown among several', () => {
 				grant('SH001', 'warehouse_staff', '2026-11-06T16:59:59.999Z')
 			]
 		});
-		const { access } = await readPublicAccessStatus(phone);
+		const { access } = await readPublicAccessStatus(phone, NOW);
 		expect(access[0].expires_at).toBe('2026-11-06T16:59:59.999Z');
 		expect(access[0].role_label).toBe('เจ้าหน้าที่คลัง');
 	});
@@ -259,9 +365,84 @@ describe('readPublicAccessStatus — one role shown among several', () => {
 			// kitchen_staff has no grant: a manager gave it.
 			role_grants: [grant('SH001', 'warehouse_staff', '2026-11-06T16:59:59.999Z')]
 		});
-		const { access } = await readPublicAccessStatus(phone);
+		const { access } = await readPublicAccessStatus(phone, NOW);
 		expect(access[0]).toMatchObject({ status: 'active', expires_at: null });
 		expect(access[0].role_label).toBe('เจ้าหน้าที่ครัว');
+	});
+});
+
+describe('accountStanding — only grants still in force count', () => {
+	const base = {
+		volunteer_id: 'volunteer:A1',
+		name: EMAIL_A,
+		active: true,
+		permanent_roles: [] as string[]
+	};
+	const g = (role: string, expires_at: string) => ({ role, expires_at, granted_by: ISSUER });
+
+	it('is lapsed, dated by the newest one, when every grant has expired', () => {
+		expect(
+			accountStanding(
+				{
+					...base,
+					grants: [
+						g('kitchen_staff', '2026-11-01T16:59:59.999Z'),
+						g('warehouse_staff', '2026-11-02T16:59:59.999Z')
+					]
+				},
+				NOW
+			)
+		).toEqual({ status: 'lapsed', role_label: null, expires_at: '2026-11-02T16:59:59.999Z' });
+	});
+
+	it('is active with the live grant when an expired one sits beside it', () => {
+		expect(
+			accountStanding(
+				{
+					...base,
+					grants: [
+						g('kitchen_staff', '2026-11-01T16:59:59.999Z'),
+						g('warehouse_staff', '2026-11-05T16:59:59.999Z')
+					]
+				},
+				NOW
+			)
+		).toEqual({
+			status: 'active',
+			role_label: 'เจ้าหน้าที่คลัง',
+			expires_at: '2026-11-05T16:59:59.999Z'
+		});
+	});
+
+	it('is active and permanent when an expired grant sits beside a permanent role', () => {
+		expect(
+			accountStanding(
+				{
+					...base,
+					permanent_roles: ['kitchen_staff'],
+					grants: [g('warehouse_staff', '2026-11-01T16:59:59.999Z')]
+				},
+				NOW
+			)
+		).toEqual({ status: 'active', role_label: 'เจ้าหน้าที่ครัว', expires_at: null });
+	});
+
+	it('counts a grant ending exactly now as ended', () => {
+		expect(
+			accountStanding({ ...base, grants: [g('kitchen_staff', new Date(NOW).toISOString())] }, NOW)
+				.status
+		).toBe('lapsed');
+	});
+
+	it('shows the same permanent role whatever order they are listed in', () => {
+		const roles = ['warehouse_staff', 'kitchen_staff'];
+		const forward = accountStanding({ ...base, permanent_roles: roles, grants: [] }, NOW);
+		const backward = accountStanding(
+			{ ...base, permanent_roles: [...roles].reverse(), grants: [] },
+			NOW
+		);
+		expect(forward).toEqual(backward);
+		expect(forward.role_label).toBe('เจ้าหน้าที่ครัว');
 	});
 });
 
@@ -271,7 +452,7 @@ describe('readPublicAccessStatus — two-way link (CR-221 FR-7)', () => {
 			volunteer_id: 'volunteer:OTHER',
 			roles: ['shelter:SH001', 'SH001:kitchen_staff']
 		});
-		const { access } = await readPublicAccessStatus(phone);
+		const { access } = await readPublicAccessStatus(phone, NOW);
 		expect(access[0].status).toBe('none');
 	});
 
@@ -280,8 +461,77 @@ describe('readPublicAccessStatus — two-way link (CR-221 FR-7)', () => {
 			personnel_type: 'staff',
 			roles: ['shelter:SH001', 'SH001:kitchen_staff']
 		});
-		const { access } = await readPublicAccessStatus(phone);
+		const { access } = await readPublicAccessStatus(phone, NOW);
 		expect(access[0].status).toBe('none');
+	});
+});
+
+describe('readPublicAccessStatus — what is read', () => {
+	it('reads the grant audits once per shelter for all lapsed accounts', async () => {
+		state.profiles.set('shelter_sh001', [
+			profile('volunteer:A1', EMAIL_A),
+			profile('volunteer:A2', EMAIL_B)
+		]);
+		for (const [email, id] of [
+			[EMAIL_A, 'volunteer:A1'],
+			[EMAIL_B, 'volunteer:A2']
+		]) {
+			state.users.set(`org.couchdb.user:${email}`, account(email, id));
+		}
+		state.audits.set('shelter_sh001', [
+			{
+				type: 'audit',
+				target_id: `org.couchdb.user:${EMAIL_A}`,
+				reason: 'role_grant.revoked',
+				created_at: '2026-11-01T17:00:00.000Z'
+			},
+			{
+				type: 'audit',
+				target_id: `org.couchdb.user:${EMAIL_B}`,
+				reason: 'role_grant.expired',
+				created_at: '2026-11-02T17:00:00.000Z'
+			}
+		]);
+		await readPublicAccessStatus(phone, NOW);
+		expect(auditReads()).toBe(1);
+	});
+
+	it('reads _users with _find and a field list: never a hash, salt or key', async () => {
+		link('shelter_sh001', 'volunteer:A1', EMAIL_A, {
+			roles: ['shelter:SH001', 'SH001:kitchen_staff']
+		});
+		await readPublicAccessStatus(phone, NOW);
+
+		const userReads = state.admin.mock.calls.filter(([path]) => String(path).startsWith('/_users'));
+		expect(userReads.map(([path]) => path)).toEqual(['/_users/_find']);
+		const { fields } = userReads[0][2] as { fields: string[] };
+		expect(fields).toEqual(
+			expect.arrayContaining(['name', 'active', 'roles', 'role_grants', 'volunteer_id'])
+		);
+		for (const secret of ['derived_key', 'salt', 'password_scheme', 'password', 'iterations']) {
+			expect(fields).not.toContain(secret);
+		}
+	});
+
+	it('answers 503 with no rows when one shelter fails, even if another one read fine', async () => {
+		state.profiles.set('shelter_sh002', [profile('volunteer:B1', null)]);
+		link('shelter_sh001', 'volunteer:A1', EMAIL_A, {
+			roles: ['shelter:SH001', 'SH001:kitchen_staff']
+		});
+		link('shelter_sh002', 'volunteer:B1', EMAIL_B, {
+			roles: ['shelter:SH002', 'SH002:kitchen_staff']
+		});
+		const real = state.find.getMockImplementation()!;
+		// Fails only the per-shelter link read, not the identity lookup that finds the profiles.
+		state.find.mockImplementation(async (db: string, selector: Record<string, unknown>) => {
+			if (db === 'shelter_sh002' && '_id' in selector) throw new Error('couch down');
+			return real(db, selector);
+		});
+
+		const error = await readPublicAccessStatus(phone, NOW).catch((e: unknown) => e);
+
+		expect(error).toBeInstanceOf(PublicScheduleError);
+		expect(error).toMatchObject({ code: 'ACCESS_STATUS_UNAVAILABLE', httpStatus: 503 });
 	});
 });
 
@@ -295,7 +545,7 @@ describe('readPublicAccessStatus — privacy (CR-221 FR-28)', () => {
 		state.profiles.set('shelter_sh002', [profile('volunteer:B1', null)]);
 		link('shelter_sh002', 'volunteer:B1', EMAIL_B, { active: false });
 
-		const result = await readPublicAccessStatus(phone);
+		const result = await readPublicAccessStatus(phone, NOW);
 		for (const row of result.access) {
 			expect(Object.keys(row).sort()).toEqual(
 				['expires_at', 'role_label', 'shelter_code', 'shelter_name', 'status'].sort()

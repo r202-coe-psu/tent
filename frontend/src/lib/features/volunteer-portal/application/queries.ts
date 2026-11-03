@@ -78,7 +78,10 @@ export function useVolunteerSchedule(credential: () => PortalCredential | null) 
 	}));
 }
 
-/** The signed-in volunteer's staff-system access per shelter (CR-221 FR-26). `null` = signed out. */
+/**
+ * The signed-in volunteer's staff-system access per shelter (CR-221 FR-26). `null` = signed out:
+ * the query is disabled and never fetches (its key then holds an empty phone, a placeholder only).
+ */
 export function useVolunteerAccessStatus(credential: () => PortalCredential | null) {
 	return createQuery(() => ({
 		queryKey: volunteerPortalKeys.accessStatus(credential() ?? { phone: '' }),
