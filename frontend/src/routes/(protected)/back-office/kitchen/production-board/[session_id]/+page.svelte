@@ -39,6 +39,9 @@
 		useUnitsOfMeasure,
 		useCreateRecipe,
 		useUpdateRecipe,
+		useUnitDimensionResolver,
+		qtyInputStep,
+		wholeQtyError,
 		customRecipeInput,
 		findRecipeByLabel,
 		isSameRecipeInput,
@@ -93,6 +96,7 @@
 	const unitsQuery = useUnitsOfMeasure();
 	const units = $derived(unitsQuery.data ?? []);
 	const unitLabel = (code: string) => formatUnit(code, units, langState.current);
+	const dimensions = useUnitDimensionResolver();
 	const supplyItems = useSupplyItems();
 	const stock = useStockBalance();
 
@@ -413,6 +417,11 @@
 		toast.info('คืนค่าวัตถุดิบตามสูตรและจำนวนจานเรียบร้อยแล้ว');
 	}
 
+	const ingredientQtyError = (ing: IngredientRow) =>
+		wholeQtyError(ing.needed, dimensions.resolve(ing.unit));
+	const newQtyStep = $derived(qtyInputStep(dimensions.resolve(newUnit)));
+	const newQtyError = $derived(wholeQtyError(newQty, dimensions.resolve(newUnit)));
+
 	function removeIngredient(index: number) {
 		isIngredientsManuallyEdited = true;
 		ingredientsList = ingredientsList.filter((_, i) => i !== index);
@@ -437,6 +446,10 @@
 	function confirmAddIngredient() {
 		if (!newItemId || newQty == null || newQty === '' || qtyLte(newQty, 0)) {
 			toast.error('กรุณาระบุวัตถุดิบและจำนวนที่ถูกต้อง');
+			return;
+		}
+		if (newQtyError) {
+			toast.error(newQtyError);
 			return;
 		}
 		const master = (itemMasters.data ?? []).find((m) => m._id === newItemId);
@@ -535,6 +548,10 @@
 			toast.error('กรุณาระบุจำนวนวัตถุดิบให้มากกว่า 0 ทุกรายการ');
 			return;
 		}
+		if (ingredientsList.some((ing) => ingredientQtyError(ing))) {
+			toast.error('จำนวนวัตถุดิบหน่วยนับต้องเป็นจำนวนเต็ม');
+			return;
+		}
 		const willSaveRecipe = canSaveAsRecipe && saveAsRecipe;
 		if (willSaveRecipe && !menuLabel.trim()) {
 			toast.error('กรุณาระบุชื่อเมนูที่แสดง เพื่อใช้เป็นชื่อสูตร');
@@ -631,6 +648,10 @@
 		);
 		if (hasInvalidQty) {
 			toast.error('กรุณาระบุจำนวนวัตถุดิบให้มากกว่า 0 ทุกรายการ');
+			return;
+		}
+		if (ingredientsList.some((ing) => ingredientQtyError(ing))) {
+			toast.error('จำนวนวัตถุดิบหน่วยนับต้องเป็นจำนวนเต็ม');
 			return;
 		}
 
@@ -1143,7 +1164,7 @@
 											<div class="flex items-center justify-end gap-1">
 												<Input
 													type="number"
-													step="any"
+													step={qtyInputStep(dimensions.resolve(ing.unit))}
 													min="0"
 													bind:value={ing.needed}
 													oninput={() => {
@@ -1155,6 +1176,11 @@
 													>{unitLabel(ing.unit)}</span
 												>
 											</div>
+											{#if ingredientQtyError(ing)}
+												<p class="mt-1 text-xs font-semibold text-destructive">
+													{ingredientQtyError(ing)}
+												</p>
+											{/if}
 										</Table.Cell>
 										<Table.Cell class="text-right text-slate-700 tabular-nums">
 											{onHand}
@@ -1214,12 +1240,15 @@
 									<Label class="text-2xs text-muted-foreground">จำนวน</Label>
 									<Input
 										type="number"
-										step="any"
-										min="0.01"
+										step={newQtyStep}
+										min={newQtyStep === '1' ? '1' : '0.01'}
 										bind:value={newQty}
 										placeholder="0"
 										class="mt-1 h-8 text-xs font-bold"
 									/>
+									{#if newQtyError}
+										<p class="mt-1 text-xs font-semibold text-destructive">{newQtyError}</p>
+									{/if}
 								</div>
 								<div class="sm:col-span-3">
 									<Label class="text-2xs text-muted-foreground">หน่วย</Label>
@@ -1249,7 +1278,11 @@
 									size="sm"
 									class="h-7 gap-1 text-xs"
 									onclick={confirmAddIngredient}
-									disabled={!newItemId || newQty == null || newQty === '' || qtyLte(newQty, 0)}
+									disabled={!newItemId ||
+										newQty == null ||
+										newQty === '' ||
+										qtyLte(newQty, 0) ||
+										!!newQtyError}
 								>
 									<Plus class="h-3 w-3" />
 									เพิ่มวัตถุดิบนี้
