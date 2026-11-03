@@ -55,7 +55,17 @@ export function createInMemoryRepository(): Repository {
 				selector: Record<string, unknown>
 			): boolean => {
 				for (const [key, cond] of Object.entries(selector)) {
-					const val = doc[key];
+					const val = key.includes('.')
+						? key
+								.split('.')
+								.reduce<unknown>(
+									(acc, part) =>
+										acc && typeof acc === 'object'
+											? (acc as Record<string, unknown>)[part]
+											: undefined,
+									doc
+								)
+						: doc[key];
 					if (cond && typeof cond === 'object' && !Array.isArray(cond)) {
 						const condRecord = cond as Record<string, unknown>;
 						for (const [op, opVal] of Object.entries(condRecord)) {
@@ -66,6 +76,13 @@ export function createInMemoryRepository(): Repository {
 							} else if (op === '$eq') {
 								if (val !== opVal) return false;
 							} else if (op === '$gte' || op === '$gt' || op === '$lte' || op === '$lt') {
+								// Mango sorts null below every value, so `{ $gt: null }` is how a
+								// selector says "this field is present", which is what the covering
+								// indexes rely on.
+								if (opVal === null) {
+									if ((op === '$gt' || op === '$gte') && val == null) return false;
+									continue;
+								}
 								// Range operators (Mango) — enough for ISO-string / number fields.
 								if (typeof val !== typeof opVal || val == null) return false;
 								const v = val as string | number;
