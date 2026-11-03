@@ -28,7 +28,10 @@
 		itemSelectableUoms,
 		defaultInventoryUom,
 		toLedgerQtyUnit,
-		shelfLifeExpiryLabel
+		shelfLifeExpiryLabel,
+		useUnitDimensionResolver,
+		qtyInputStep,
+		wholeQtyError
 	} from '$lib/features/catalog';
 	import {
 		applyExpiryAutofill,
@@ -80,6 +83,7 @@
 	const storagePoints = useStoragePoints(() => getShelterCode());
 	const unitsQuery = useUnitsOfMeasure();
 	const units = $derived(unitsQuery.data ?? []);
+	const unitDimension = useUnitDimensionResolver();
 	const receiveMutation = useReceiveStock();
 	const donationsQuery = useDonations();
 	const ledgersQuery = useStockLedgers();
@@ -183,9 +187,14 @@
 		isWalkInOpen = true;
 	}
 
+	const receiveFormSchema = receiveInputSchema.superRefine((d, ctx) => {
+		const message = wholeQtyError(d.qty, unitDimension.resolve(d.unit));
+		if (message) ctx.addIssue({ code: 'custom', path: ['qty'], message });
+	});
+
 	const form = superForm(defaults({ source: 'manual' }, zod4(receiveInputSchema)), {
 		SPA: true,
-		validators: zod4(receiveInputSchema),
+		validators: zod4(receiveFormSchema),
 		resetForm: true,
 		onUpdate: async ({ form: validated, cancel }) => {
 			// In walk-in mode `ref_id` is legitimately empty: the donation does not
@@ -807,7 +816,7 @@
 							type="number"
 							placeholder="0"
 							min="0.01"
-							step="any"
+							step={qtyInputStep(unitDimension.resolve($formData.unit))}
 							bind:value={$formData.qty}
 							class="min-h-11 font-mono font-bold"
 						/>
