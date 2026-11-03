@@ -1,6 +1,7 @@
 /**
  * Shift assignment domain schema — CR-107 (`shift_assignment` schema_v 3 → 4),
- * CR-108 (schema_v 4 → 5: check-out actor + manual-override reason).
+ * CR-108 (schema_v 4 → 5: check-out actor + manual-override reason),
+ * CR-220 (schema_v 5 → 6: `cancel_application_id` stamp from the ticket cancel).
  *
  * Pure TypeScript / Zod — no I/O, no PouchDB, no Svelte.
  */
@@ -73,7 +74,7 @@ export const SHIFT_WINDOWS: Readonly<
 
 export interface ShiftAssignment extends BaseDoc {
 	type: 'shift_assignment';
-	schema_v: 3 | 4 | 5;
+	schema_v: 3 | 4 | 5 | 6;
 	/** F12 — `job:{ulid}`, or the migration sentinel `'legacy'` (schema.md §2.9 v1 → v2 migration note). */
 	job_id: string;
 	/** Stable identity of the concrete row in job.shifts[]. Optional only on legacy v3 rows. */
@@ -99,6 +100,12 @@ export interface ShiftAssignment extends BaseDoc {
 	check_out_method: CheckInMethod;
 	/** CR-108 — required when `check_out_method === 'manual_override'`. */
 	check_out_reason: string | null;
+	/**
+	 * CR-220 — `job_application:{ulid}` whose ticket cancel cancelled this assignment. Written
+	 * with `status: cancelled` by the public ticket cancel only; its absence means the quota
+	 * of this assignment was handled by another path (portal withdraw, staff unassign).
+	 */
+	cancel_application_id?: string | null;
 }
 
 /** F12 — schema.md §2.9 v1 → v2 migration writes `job_id: 'legacy'` on rows that predate the `job` link; new writes must still use `job:{ulid}`. */
@@ -129,7 +136,7 @@ const shiftAssignmentDocSchema = z
 		_id: z.string().startsWith('shift_assignment:'),
 		_rev: z.string().optional(),
 		type: z.literal('shift_assignment'),
-		schema_v: z.union([z.literal(3), z.literal(4), z.literal(5)]),
+		schema_v: z.union([z.literal(3), z.literal(4), z.literal(5), z.literal(6)]),
 		shelter_code: z.string().min(1),
 		created_at: z.string(),
 		updated_at: z.string(),
@@ -150,7 +157,8 @@ const shiftAssignmentDocSchema = z
 		check_in_method: checkInMethodSchema,
 		check_in_reason: z.string().nullable(),
 		check_out_method: checkInMethodSchema,
-		check_out_reason: z.string().nullable()
+		check_out_reason: z.string().nullable(),
+		cancel_application_id: z.string().nullable().optional()
 	})
 	.refine(
 		(d) =>
@@ -229,7 +237,7 @@ export function makeShiftAssignment(
 	const check_out_method = fields.check_out_method ?? 'qr';
 	const doc = makeDoc(
 		'shift_assignment',
-		5,
+		6,
 		{
 			job_id: d.job_id,
 			shift_id: d.shift_id,

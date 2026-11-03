@@ -20,7 +20,11 @@ vi.mock('$lib/server/couch-public-writer', () => ({
 
 vi.mock('$lib/server/couch-admin', () => ({ adminRaw: state.admin }));
 
-import { applyPublicScheduleAction, readPublicVolunteerSchedule } from './public-schedule-action';
+import {
+	applyPublicScheduleAction,
+	readPublicVolunteerSchedule,
+	releaseJobQuota
+} from './public-schedule-action';
 
 const volunteer = {
 	_id: 'volunteer:01TEST',
@@ -186,4 +190,100 @@ describe('public schedule CouchDB path', () => {
 			check_in_at: '2026-09-09T08:01:00.000Z'
 		});
 	});
+});
+
+describe('releaseJobQuota ledger (CR-220)', () => {
+	const NOW = '2026-10-27T03:00:00.000Z';
+	const owner = { _id: 'job_application:a1', job_id: 'job:01TEST', shift_id: 'shift:s1' };
+	const seedJob = (extra: Record<string, unknown> = {}) =>
+		state.docs.set(job._id, {
+			...job,
+			schema_v: 3,
+			status: 'full',
+			slots_confirmed: 2,
+			slots_remaining: 0,
+			shifts: [{ shift_id: 'shift:s1', slots_confirmed: 2, slots_remaining: 0 }],
+			...extra
+		});
+	const stored = () => state.docs.get(job._id) as Record<string, unknown>;
+
+	it('with a key: releases once and records the key in the same write (AC-4)', async () => {
+		seedJob();
+		await releaseJobQuota('shelter_sh001', owner, NOW, owner._id);
+		await releaseJobQuota('shelter_sh001', owner, NOW, owner._id);
+
+		expect(stored()).toMatchObject({
+			slots_confirmed: 1,
+			slots_remaining: 1,
+			status: 'open',
+			schema_v: 4,
+			released_application_ids: [owner._id],
+			shifts: [{ shift_id: 'shift:s1', slots_confirmed: 1, slots_remaining: 1 }]
+		});
+		// The first call wrote the job, the second only read it.
+		expect(state.put).toHaveBeenCalledTimes(1);
+	});
+
+	it('with a key already in the ledger: success without a write (AC-4)', async () => {
+		seedJob({ released_application_ids: [owner._id], schema_v: 4 });
+		await releaseJobQuota('shelter_sh001', owner, NOW, owner._id);
+		expect(state.put).not.toHaveBeenCalled();
+		expect(stored()).toMatchObject({ slots_confirmed: 2, slots_remaining: 0 });
+	});
+
+	it('keeps the other ids and adds a new one', async () => {
+		seedJob({ released_application_ids: ['job_application:other'], schema_v: 4 });
+		await releaseJobQuota('shelter_sh001', owner, NOW, owner._id);
+		expect(stored().released_application_ids).toEqual(['job_application:other', owner._id]);
+		expect(stored()).toMatchObject({ slots_confirmed: 1 });
+	});
+
+	it('a 409 re-reads the job: a key a rival just recorded is not released again (AC-4)', async () => {
+		seedJob();
+		state.put.mockImplementationOnce(async () => {
+			// A rival release of the same key lands first.
+			seedJob({
+				slots_confirmed: 1,
+				slots_remaining: 1,
+				released_application_ids: [owner._id],
+				schema_v: 4
+			});
+			return { status: 409, data: null };
+		});
+		await releaseJobQuota('shelter_sh001', owner, NOW, owner._id);
+		expect(state.put).toHaveBeenCalledTimes(1);
+		expect(stored()).toMatchObject({ slots_confirmed: 1, slots_remaining: 1 });
+	});
+
+	it('without a key: behaves as before and leaves the ledger and schema_v alone (AC-4)', async () => {
+		seedJob();
+		await releaseJobQuota('shelter_sh001', owner, NOW);
+		await releaseJobQuota('shelter_sh001', owner, NOW);
+		expect(stored()).toMatchObject({ slots_confirmed: 0, slots_remaining: 2, schema_v: 3 });
+		expect(stored().released_application_ids).toBeUndefined();
+	});
+
+	it('frees no seat when the counter is already 0, but still records the key', async () => {
+		seedJob({
+			slots_confirmed: 0,
+			slots_remaining: 2,
+			shifts: [{ shift_id: 'shift:s1', slots_confirmed: 0, slots_remaining: 2 }]
+		});
+		await releaseJobQuota('shelter_sh001', owner, NOW, owner._id);
+		expect(stored()).toMatchObject({
+			slots_confirmed: 0,
+			slots_remaining: 2,
+			released_application_ids: [owner._id],
+			shifts: [{ shift_id: 'shift:s1', slots_confirmed: 0, slots_remaining: 2 }]
+		});
+	});
+
+	it.each(['closed', 'paused'])(
+		'leaves a %s job as it is while freeing the seat',
+		async (status) => {
+			seedJob({ status });
+			await releaseJobQuota('shelter_sh001', owner, NOW, owner._id);
+			expect(stored()).toMatchObject({ status, slots_confirmed: 1, slots_remaining: 1 });
+		}
+	);
 });

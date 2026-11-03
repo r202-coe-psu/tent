@@ -84,6 +84,32 @@ describe('coordinator role grants on _users (#955)', () => {
 					data: { rows: Object.values(db).map((doc) => ({ id: doc._id, doc })) }
 				};
 			}
+			if (method === 'POST' && clean === '/_users/_find') {
+				// Mirror `selector._id.$in` and `fields`: only the asked-for fields come back.
+				const { selector, fields } = body as {
+					selector: { _id: { $in: string[] } };
+					fields: string[];
+				};
+				const stored = (k: string) => db[`org.couchdb.user:${encodeURIComponent(k.slice(17))}`];
+				return {
+					status: 200,
+					data: {
+						docs: selector._id.$in.flatMap((k) =>
+							stored(k)
+								? [
+										{
+											...Object.fromEntries(
+												fields.map((f) => [f, stored(k)[f as keyof FakeUserDoc]])
+											),
+											// Couch answers the raw id, not the path-encoded key the fake stores.
+											_id: k
+										}
+									]
+								: []
+						)
+					}
+				};
+			}
 			if (method === 'POST' && clean === '/_users/_all_docs') {
 				// Keys are raw ids (`org.couchdb.user:a@b`); the fake stores them path-encoded.
 				const keys = (body as { keys: string[] }).keys;
@@ -732,6 +758,33 @@ describe('coordinator role grants on _users (#955)', () => {
 					permanent_roles: []
 				}
 			]);
+		});
+
+		it('reads the same accounts with _find and a field list when narrow: no hash, salt or key loaded', async () => {
+			seed(EMAIL, {
+				roles: ['shelter:SH001', 'SH001:kitchen_staff', 'SH001:registration_staff'],
+				role_grants: [grant()]
+			});
+			seed('staff@example.com', { personnel_type: 'staff', volunteer_id: 'volunteer:V6' });
+			const links = [
+				{ volunteer_id: 'volunteer:V1', name: EMAIL },
+				{ volunteer_id: 'volunteer:V6', name: 'staff@example.com' },
+				{ volunteer_id: 'volunteer:V5', name: 'gone@example.com' }
+			];
+			const spy = vi.mocked(couchAdmin.adminRaw);
+
+			const wide = await readShelterVolunteerAccounts(links, 'SH001');
+			spy.mockClear();
+			const narrow = await readShelterVolunteerAccounts(links, 'SH001', { narrow: true });
+
+			expect(narrow).toEqual(wide);
+			expect(narrow.map((a) => a.name)).toEqual([EMAIL]);
+			const [path, method, body] = spy.mock.calls[0];
+			expect([path, method]).toEqual(['/_users/_find', 'POST']);
+			const { fields } = body as { fields: string[] };
+			for (const secret of ['derived_key', 'salt', 'password_scheme', 'password']) {
+				expect(fields).not.toContain(secret);
+			}
 		});
 
 		it('names who issued each grant here, and nothing more of the grant (CR-221 FR-8)', async () => {
