@@ -21,6 +21,7 @@ describe('isPositiveQty', () => {
 	it('accepts positive decimals as numbers or strings', () => {
 		expect(isPositiveQty('0.25')).toBe(true);
 		expect(isPositiveQty(3)).toBe(true);
+		expect(isPositiveQty(' 5')).toBe(true);
 	});
 
 	it('rejects zero, negatives, empty and non-numeric input', () => {
@@ -30,6 +31,13 @@ describe('isPositiveQty', () => {
 		expect(isPositiveQty('')).toBe(false);
 		expect(isPositiveQty(null)).toBe(false);
 		expect(isPositiveQty('abc')).toBe(false);
+	});
+
+	it('judges a quantity by the 4 dp value that is saved, as the submit check does', () => {
+		expect(isPositiveQty('0.00001')).toBe(false);
+		expect(isPositiveQty(0.00004)).toBe(false);
+		expect(isPositiveQty('0.00005')).toBe(true);
+		expect(isPositiveQty('0.0001')).toBe(true);
 	});
 });
 

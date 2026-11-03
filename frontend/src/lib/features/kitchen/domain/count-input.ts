@@ -1,3 +1,5 @@
+import { qtyGt } from '$lib/utils/qty';
+
 /**
  * Validity of numeric form inputs. A `type="number"` input binds `null` once emptied and accepts
  * typed or pasted negatives despite `min`, so the browser cannot be trusted to reject them.
@@ -8,11 +10,14 @@ export function isCount(n: number | null | undefined, min: number): boolean {
 	return typeof n === 'number' && Number.isFinite(n) && n >= min;
 }
 
-/** True for a quantity (number or numeric string, decimals allowed) strictly above zero. */
+/**
+ * True for a quantity (number or numeric string, decimals allowed) still above zero once rounded
+ * to the saved 4 dp, so `0.00001` fails here just as it fails the submit check.
+ */
 export function isPositiveQty(v: unknown): boolean {
-	if (v === null || v === undefined || v === '') return false;
+	if ((typeof v !== 'number' && typeof v !== 'string') || v === '') return false;
 	const n = Number(v);
-	return Number.isFinite(n) && n > 0;
+	return Number.isFinite(n) && qtyGt(n, 0);
 }
 
 /** Inline error under a count box that is empty, negative or below zero. */

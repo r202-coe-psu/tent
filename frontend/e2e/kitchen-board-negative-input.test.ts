@@ -496,6 +496,15 @@ test.describe(
 				await expect(create).toBeEnabled();
 			});
 
+			await test.step('an amount that rounds to 0 at 4 dp is flagged like 0', async () => {
+				await amount.fill('0.00001');
+				await expect(errors).toHaveCount(1);
+				await expect(create).toBeDisabled();
+				await amount.fill('0.0001');
+				await expect(errors).toHaveCount(0);
+				await expect(create).toBeEnabled();
+			});
+
 			await test.step('emptied amount is flagged and blocks the requisition', async () => {
 				await amount.selectText();
 				await page.keyboard.press('Backspace');
