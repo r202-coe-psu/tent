@@ -3,7 +3,7 @@ id: CR-219
 title: ปิดศูนย์ → เช็คเอาต์ผู้พักพิงที่ยังค้าง / ยกเลิก pre-registered อัตโนมัติ (เหตุผล `shelter_closed`) พร้อม modal ยืนยันแบบพิมพ์รหัส+ชื่อศูนย์ · SA หรือ SM ของศูนย์
 status: approved
 date: 2026-10-31
-updated: 2026-11-02
+updated: 2026-11-03
 requested_by: Dev Team B #979 — chip "เข้าพักแล้ว" ขัดกับป้าย "ศูนย์อพยพปิดแล้ว" · GitHub #986
 decided_by: kong
 layer: volatile # business rule ของ stay status + flow ปิดศูนย์
@@ -161,6 +161,7 @@ affects:
 - 2026-10-31 — proposed (#986).
 - 2026-11-01 — approved โดย kong; แก้ D-6 ให้ SA และ SM ของศูนย์ปิด / เปิดศูนย์ได้.
 - 2026-11-02 — เพิ่ม FR-12a, FR-30a, FR-31a (D-9) จากรีวิว PR #1117; ข้อเดิมไม่แก้.
+- 2026-11-03 — D-9 approved โดย kong (รวมผลข้างเคียงที่ household สถานะไม่ตรงอยู่ก่อนปิดศูนย์ได้ `shelter_closed`).
 
 ### D-1 — แนวทาง ✅
 เช็คเอาต์อัตโนมัติเมื่อปิดศูนย์ พร้อม modal เตือน (owner, ใน #986).
@@ -189,5 +190,5 @@ SA หรือ shelter manager ของศูนย์นั้น ทั้�
 ### D-8 — Backfill ศูนย์ที่ปิดไปแล้ว ✅
 script ครั้งเดียวใช้ service เดียวกัน (owner, 2026-10-31) → FR-28..FR-31. movement ใช้เวลาที่รันจริง + เก็บ `closed_at` เดิมใน audit (ไม่ backdate — บางศูนย์ `closed_at` ว่าง). ตัดทิ้ง: ปุ่ม UI สำหรับศูนย์ปิดแล้ว (งานเพิ่ม) · ปล่อยไว้ (ข้อมูลขัดกันต่อ).
 
-### D-9 — ซ่อม household ที่ค้างจากรอบที่ล้ม ⏳ รอ kong ยืนยัน
+### D-9 — ซ่อม household ที่ค้างจากรอบที่ล้ม ✅
 เพิ่มจากรีวิว PR #1117 (2026-11-02, บันทึกใน CR-219 ตามที่ dev team ขอ) → FR-12a, FR-30a, FR-31a. เหตุผล: FR-12 ข้ามคนที่ปิดไปแล้ว ถ้ารอบก่อนเขียน evacuee + movement สำเร็จแต่ household ล้ม รอบถัดไปจะไม่กลับมา derive household นั้น → ศูนย์ปิดได้ทั้งที่ household ยังเป็น `checked_in` (QA: ศูนย์ 500 คน ค้าง 19 household). การซ่อมนี้เขียนข้อมูลในทุกศูนย์ที่ backfill จึงต้องเห็นได้ใน dry-run, log และ audit. ผลข้างเคียงที่ต้องยอมรับ: household ที่สถานะไม่ตรงอยู่แล้วก่อนปิดศูนย์ (เช่น เก็บเป็น `checked_in` แต่สมาชิกเป็น `transferred` / `deceased` หมดแล้ว) จะถูก derive เป็น `checked_out` และได้ `checkout_destination = { type: 'shelter_closed' }` ทั้งที่การปิดศูนย์ไม่ใช่สาเหตุ — backfill ทำแบบนี้ทุกศูนย์ที่ปิดแล้ว. ตัดทิ้ง: ซ่อมเฉพาะ household ที่ `checkout_destination` ว่าง (จะติดป้าย `shelter_closed` ให้ household ที่เช็คเอาต์ด้วยมือ) · ไม่บันทึกจำนวนใน audit (ศูนย์ที่มีแค่ household ถูกซ่อมจะไม่มี audit เลย).
