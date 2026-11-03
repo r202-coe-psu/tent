@@ -9,7 +9,7 @@ layer: volatile
 affects:
   - frontend/src/lib/features/catalog/domain/unit-quantity.ts (ใหม่ — กฎจุดเดียว)
   - frontend/src/lib/features/catalog/application (resolver หน่วย → dimension สำหรับฟอร์ม)
-  - frontend/src/lib/features/kitchen/domain/meal-calc.ts (ปัดขึ้นผ่านกฎกลาง)
+  - frontend/src/lib/features/kitchen/domain/meal-calc.ts (ปัดขึ้นทุกหน่วยอยู่แล้ว — ไม่เปลี่ยน)
   - ฟอร์มครัว — recipe, meal plan, production board, ตั๋วเบิก
   - ฟอร์มคลัง/บริจาค — รับของ, รับบริจาค, แก้รายการบริจาค, โอน, แจกจ่าย, เลือก lot, ปรับสต็อก
 ---
@@ -58,7 +58,7 @@ affects:
 ## Impact
 
 - **Code:** domain helper ใหม่ใน `catalog/domain` + export ผ่าน barrel; ฟอร์มตามรายการใน FR-2;
-  `kitchen/domain/meal-calc.ts` เรียก helper ปัดขึ้นกลาง
+  `kitchen/domain/meal-calc.ts` ปัดขึ้นทุกหน่วยอยู่แล้ว ไม่ต้องแก้ (`roundUpQty` ใช้กับจุดคำนวณใหม่)
 - **Test:** unit test ของกฎ (count / mass / ไม่รู้ dimension / ปัดขึ้น) + test ของฟอร์มที่มี
 - **Docs:** ไม่เปลี่ยน `docs/data/schema.md` — รูปร่าง doc เหมือนเดิม แค่ validation เข้มขึ้นตอนบันทึก
 
