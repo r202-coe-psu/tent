@@ -148,7 +148,7 @@
 		{#if ticket.status === 'PENDING_PICK'}
 			<!-- PENDING_PICK Workflow Actions (Slice 5.2) -->
 			<div class="space-y-4">
-				<div class="flex flex-wrap items-center gap-3">
+				<div class="flex flex-wrap items-center justify-end gap-3">
 					<!-- Action 1: Allocate Quantities -->
 					{#if canAllocate}
 						<Button
@@ -210,7 +210,7 @@
 			</div>
 		{:else if ticket.status === 'READY_FOR_DISPATCH'}
 			<div class="space-y-4">
-				<div class="flex flex-wrap items-center gap-3">
+				<div class="flex flex-wrap items-center justify-end gap-3">
 					{#if canDispatch}
 						<Button
 							type="button"
@@ -254,7 +254,7 @@
 			</div>
 		{:else if ticket.status === 'IN_TRANSIT'}
 			<div class="space-y-4">
-				<div class="flex flex-wrap items-center gap-3">
+				<div class="flex flex-wrap items-center justify-end gap-3">
 					{#if canReceive}
 						<Button
 							type="button"
@@ -307,7 +307,7 @@
 					</div>
 				</div>
 
-				<div class="flex items-center gap-3">
+				<div class="flex items-center justify-end gap-3">
 					<Button
 						href="/onsite/distribution"
 						variant="outline"
@@ -332,7 +332,7 @@
 			</div>
 		{:else if ticket.status === 'RETURN_PENDING_RECEIPT'}
 			<div class="space-y-4">
-				<div class="flex flex-wrap items-center gap-3">
+				<div class="flex flex-wrap items-center justify-end gap-3">
 					{#if canReceiveReturns}
 						<Button
 							type="button"
@@ -366,7 +366,7 @@
 			</div>
 		{:else if ticket.status === 'RETURN_COMPLETED'}
 			<div class="space-y-4">
-				<div class="flex flex-wrap items-center gap-3">
+				<div class="flex flex-wrap items-center justify-end gap-3">
 					{#if canReceiveReturns}
 						<Button
 							type="button"

@@ -95,7 +95,10 @@ describe('VolunteerAccessActions (CR-221 FR-9)', () => {
 	it.each([
 		['no account', { kind: 'none' } as VolunteerAccessStatus],
 		['an active account', active],
-		['a lapsed account', { kind: 'lapsed', loginName: 'vol@example.com' } as VolunteerAccessStatus]
+		[
+			'a lapsed account',
+			{ kind: 'lapsed', loginName: 'vol@example.com', lastEnded: null } as VolunteerAccessStatus
+		]
 	])(
 		'gives a coordinator no grant or edit button for a closed profile (%s)',
 		async (_l, status) => {

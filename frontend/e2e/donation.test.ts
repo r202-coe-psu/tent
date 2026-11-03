@@ -79,7 +79,7 @@ async function fillDonorStep(page: Page) {
 	await page.locator('#donor-phone').fill('0899999999');
 	// The quantity starts at 0 since #941; step 3 opens only for a positive one.
 	await page.locator('input[id^="amount-"]').first().fill('1');
-	await page.getByRole('button', { name: 'ถัดไป: เลือกจุดส่งมอบ' }).click();
+	await page.getByRole('button', { name: 'ถัดไป: นัดหมายการส่งของบริจาค' }).click();
 	await expect(
 		page.getByRole('heading', { name: 'ส่วนที่ 3: ข้อมูลการจัดส่ง โลจิสติกส์' })
 	).toBeVisible();
@@ -411,7 +411,7 @@ test.describe('Public Donation & Queue Booking Wizard (T-60)', TAGS, () => {
 		await qty.fill('12');
 
 		// Click Next to Step 3
-		await page.getByRole('button', { name: 'ถัดไป: เลือกจุดส่งมอบ' }).click();
+		await page.getByRole('button', { name: 'ถัดไป: นัดหมายการส่งของบริจาค' }).click();
 
 		// Step 3: Logistics & Time selection
 		await expect(
@@ -888,7 +888,7 @@ test.describe('Donor wizard layout and step scrolling (#619, #620)', TAGS, () =>
 		await page.locator('#donor-phone').fill('0899999999');
 		await page.locator('input[id^="amount-"]').first().fill('1');
 
-		const next = page.getByRole('button', { name: 'ถัดไป: เลือกจุดส่งมอบ' });
+		const next = page.getByRole('button', { name: 'ถัดไป: นัดหมายการส่งของบริจาค' });
 		await next.scrollIntoViewIfNeeded();
 		expect(await scrollY(page)).toBeGreaterThan(0);
 		await next.click();
