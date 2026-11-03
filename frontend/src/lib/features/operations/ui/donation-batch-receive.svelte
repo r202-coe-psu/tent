@@ -9,8 +9,11 @@
 		defaultInventoryUom,
 		formatUnit,
 		shelfLifeExpiryLabel,
+		qtyInputStep,
 		toLedgerQtyUnit,
-		useUnitsOfMeasure
+		useUnitDimensionResolver,
+		useUnitsOfMeasure,
+		WHOLE_QTY_MESSAGE
 	} from '$lib/features/catalog';
 	import { langState } from '$lib/states/i18n.svelte';
 	import { authStore } from '$lib/stores/auth.svelte';
@@ -70,6 +73,7 @@
 	const stockItems = useStockFormItems(() => getShelterCode());
 	const storagePoints = useStoragePoints(() => getShelterCode());
 	const unitsQuery = useUnitsOfMeasure();
+	const unitDimension = useUnitDimensionResolver();
 	const ledgersQuery = useStockLedgers();
 	const balanceQuery = useStockBalance();
 	const receiveMutation = useReceiveDonationBatch();
@@ -182,6 +186,8 @@
 	}
 
 	const requires = (line: BatchLineDraft) => itemById.get(line.item_id)?.requiresExpiry ?? false;
+	const problemOf = (line: BatchLineDraft) =>
+		draftProblem(line, requires(line), unitDimension.resolve(line.unit));
 
 	/** qty/unit as the ledger stores them: the item's base unit (schema.md §2.1). */
 	function toBase(qty: string, unit: string, itemId: string): { qty: string; unit: string } {
@@ -225,8 +231,9 @@
 	});
 
 	function problemText(line: BatchLineDraft): string | null {
-		const problem = attempted ? draftProblem(line, requires(line)) : null;
+		const problem = attempted ? problemOf(line) : null;
 		if (problem === 'qty') return 'ระบุจำนวนที่รับจริง (ใส่ 0 ถ้าไม่ได้รับ)';
+		if (problem === 'whole') return WHOLE_QTY_MESSAGE;
 		if (problem === 'item') return 'เลือกสินค้าให้ตรงกับรายการนี้ก่อนบันทึก';
 		if (problem === 'expiry') return 'สินค้านี้ต้องระบุวันหมดอายุ';
 		return null;
@@ -234,7 +241,7 @@
 
 	async function submit() {
 		attempted = true;
-		if (lines.some((line) => draftProblem(line, requires(line)))) {
+		if (lines.some((line) => problemOf(line))) {
 			toast.error('กรุณาตรวจสอบรายการที่มีเครื่องหมายแจ้งเตือน');
 			return;
 		}
@@ -429,9 +436,9 @@
 							<Input
 								id="batch-qty-{line.line_no}"
 								type="number"
-								inputmode="decimal"
+								inputmode={unitDimension.resolve(line.unit) === 'count' ? 'numeric' : 'decimal'}
 								min="0"
-								step="any"
+								step={qtyInputStep(unitDimension.resolve(line.unit))}
 								placeholder="0"
 								value={line.qty}
 								oninput={(event) => {
