@@ -111,6 +111,7 @@
 </script>
 
 <aside
+	data-testid="backoffice-sidebar"
 	class="sticky top-0 z-20 hidden h-[var(--app-shell-height)] shrink-0 flex-col self-start border-r border-sidebar-border bg-card text-foreground transition-[width] duration-200 lg:flex {collapsed
 		? 'w-16'
 		: 'w-72'}"
