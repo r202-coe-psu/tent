@@ -44,13 +44,17 @@ function mockFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Respon
 		const includeDocs = params.get('include_docs') !== 'false';
 		const limit = limitRaw != null ? Number(limitRaw) : undefined;
 		const skip = skipRaw != null ? Number(skipRaw) : 0;
+		// CouchDB `descending=true` walks from startkey down to endkey.
+		const descending = params.get('descending') === 'true';
+		const [lo, hi] = descending ? [endkey, startkey] : [startkey, endkey];
 
 		let docs = [...db.values()]
 			.filter((doc) => {
 				const id = (doc as { _id: string })._id;
-				return id >= startkey && id <= endkey;
+				return id >= lo && id <= hi;
 			})
 			.sort((a, b) => (a as { _id: string })._id.localeCompare((b as { _id: string })._id));
+		if (descending) docs.reverse();
 
 		if (skip > 0) docs = docs.slice(skip);
 		if (limit != null && Number.isFinite(limit)) docs = docs.slice(0, limit);
@@ -186,6 +190,21 @@ describe('createRemoteRepository', () => {
 
 		const page3 = await repo.pageByType('note', isNote, 3, 2);
 		expect(page3.items).toHaveLength(1);
+	});
+
+	it('pageByType descending returns newest _id first across pages', async () => {
+		const ids: string[] = [];
+		for (let i = 0; i < 5; i++) {
+			ids.push((await repo.put(newNote(`n${i}`)))._id);
+		}
+		const newestFirst = [...ids].sort().reverse();
+
+		const page1 = await repo.pageByType('note', isNote, 1, 2, { descending: true });
+		const page2 = await repo.pageByType('note', isNote, 2, 2, { descending: true });
+		const page3 = await repo.pageByType('note', isNote, 3, 2, { descending: true });
+
+		expect(page1.total).toBe(5);
+		expect([...page1.items, ...page2.items, ...page3.items].map((n) => n._id)).toEqual(newestFirst);
 	});
 
 	it('put with a live _rev updates instead of conflicting', async () => {

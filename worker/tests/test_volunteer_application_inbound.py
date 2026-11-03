@@ -6,7 +6,11 @@ from tent_model.volunteer_application_buffer import (
     SelectedShiftBuffer,
 )
 
-from worker.inbound.volunteer_applications import _application_doc, _volunteer_doc
+from worker.inbound.volunteer_applications import (
+    _application_doc,
+    _shift_assignment_doc,
+    _volunteer_doc,
+)
 
 
 def _application(**overrides: object) -> SimpleNamespace:
@@ -58,3 +62,18 @@ def test_application_keeps_its_own_token_and_identity() -> None:
     assert doc["volunteer_id"] == "volunteer:01VOL"
     assert doc["tracking_token_hash"] == "token-hash"
     assert doc["status"] == "pending_review"
+
+
+def test_shift_assignment_doc_carries_every_required_method_field() -> None:
+    # schema.md §2.9: check_*_method / check_*_reason are required; check_*_by nullable (#1014).
+    doc = _shift_assignment_doc(_application(), now="2026-09-09T00:00:00Z")
+
+    assert doc["_id"] == "shift_assignment:01APP"
+    assert doc["schema_v"] == 5
+    assert doc["check_in_method"] == "qr"
+    assert doc["check_in_reason"] is None
+    assert doc["check_in_by"] is None
+    assert doc["check_out_at"] is None
+    assert doc["check_out_by"] is None
+    assert doc["check_out_method"] == "qr"
+    assert doc["check_out_reason"] is None

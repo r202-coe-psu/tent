@@ -48,6 +48,7 @@
 		volunteerAccessSchema,
 		volunteerPasswordError
 	} from '../application/volunteer-access';
+	import { accessEndingParts } from '../domain/volunteer-access-status';
 	import { identityVerificationStatus } from '../domain/verification';
 	import type { Volunteer } from '../domain/volunteer.schema';
 
@@ -94,16 +95,32 @@
 		() => open && limited
 	);
 	const grantedAccount = $derived(grantsQuery.data?.email ?? null);
-	// A linked profile already has an account: the server keeps its password, so the field is
-	// hidden. Only while the phone default stands in: should the account turn out to be gone,
-	// it is recreated with that phone password and a forced change, never an unknown one.
-	const keepsPassword = $derived(Boolean(volunteer.user_name) && loginPhone !== null);
+	// SM / SA do not read the grants view, so their only sign of an existing account is the
+	// profile's `user_name`; they treat it as existing only while the phone default stands in:
+	// should the account turn out to be gone, it is recreated with that phone password and a
+	// forced change, never an unknown one.
+	const linkedAccountKnown = $derived(Boolean(volunteer.user_name) && loginPhone !== null);
 	const grants = $derived(grantsQuery.data?.grants ?? []);
 	// Where the volunteer stands here (#1044): drives the title, the save label and the note.
 	const standing = $derived(limited ? accessState(grantsQuery.data ?? null) : accessState(null));
 	// Roles a manager gave here: shown but not selectable, and the server refuses a save while the
 	// account holds one (FR-4, FR-16); revoking a grant stays open.
 	const permanentRoles = $derived(standing.kind === 'active' ? standing.permanentRoles : []);
+	// CR-221 FR-10: an account that already exists (standing `active` / `lapsed`; for SM / SA, the
+	// profile's link) shows its username read-only and asks for no password. Until the grants view
+	// has answered (loading or failed) a coordinator falls back to the profile's own link, as SM / SA
+	// do, so a linked profile never flashes an editable email and a password; the save path reads
+	// the same value, so it asks for no password then either (the server keeps an existing one).
+	const accountExists = $derived(
+		limited && grantsQuery.data ? standing.kind !== 'none' : linkedAccountKnown
+	);
+	// CR-221 FR-13: the grant being edited, shown as "เดิม: …" under the expiry picker, which
+	// itself starts empty so the expiry is chosen again on every edit.
+	const currentGrant = $derived(
+		standing.kind === 'active'
+			? ([...grants].sort((a, b) => Date.parse(b.expires_at) - Date.parse(a.expires_at))[0] ?? null)
+			: null
+	);
 	const holdsManagerRole = $derived(limited && permanentRoles.length > 0);
 	// A closed profile is reopened before it can be given access (CR-221 FR-21, FR-9).
 	const profileClosed = $derived(volunteer.status === 'inactive');
@@ -133,11 +150,9 @@
 				? 'ออกสิทธิ์อีกครั้ง'
 				: 'บันทึกและออกสิทธิ์ใหม่'
 	);
-	const ENDED_HOW = {
-		expired: 'หมดอายุ',
-		revoked: 'ถูกถอนสิทธิ์',
-		verification_revoked: 'ถูกถอนเพราะผลยืนยันตัวตนถูกยกเลิก'
-	} as const;
+	const lastEndedParts = $derived(
+		standing.kind === 'lapsed' ? accessEndingParts(standing.lastEnded) : null
+	);
 	let confirmRevoke = $state<string | null>(null);
 
 	let expiresOn = $state('');
@@ -225,16 +240,17 @@
 	async function submitLimited() {
 		const parsed = coordinatorAccessSchema.safeParse({
 			email,
-			password,
+			password: accountExists ? '' : password,
 			role,
-			expires_on: expiresOn
+			expires_on: expiresOn,
+			account_exists: accountExists
 		});
 		if (!parsed.success) {
 			submitError = parsed.error.issues[0]?.message ?? 'กรุณาตรวจสอบข้อมูล';
 			toast.error(submitError);
 			return;
 		}
-		passwordError = volunteerPasswordError(parsed.data.password, loginPhone);
+		passwordError = accountExists ? null : volunteerPasswordError(parsed.data.password, loginPhone);
 		if (passwordError) {
 			toast.error(passwordError);
 			return;
@@ -326,16 +342,15 @@
 					<p class="font-semibold">
 						บัญชี ({grantedAccount}) มีอยู่แล้ว แต่ยังไม่มีสิทธิ์ในศูนย์นี้
 					</p>
-					{#if standing.lastEnded}
+					{#if standing.lastEnded && lastEndedParts}
 						<p class="mt-0.5 text-xs">
 							สิทธิ์ล่าสุด{standing.lastEnded.role
 								? ` (${roleOptionLabel(standing.lastEnded.role)})`
 								: ''}
-							{ENDED_HOW[standing.lastEnded.reason]}เมื่อ {formatThaiShortDate(
-								standing.lastEnded.at
-							)}
+							{lastEndedParts.how}เมื่อ {formatThaiShortDate(standing.lastEnded.at)}
 							{#if standing.lastEnded.reason === 'revoked' && standing.lastEnded.by}
-								โดย {standing.lastEnded.by}
+								<!-- The sweep revokes as `worker`; staff read that as the system. -->
+								โดย{standing.lastEnded.by === 'worker' ? 'ระบบ' : ` ${standing.lastEnded.by}`}
 							{/if}
 						</p>
 					{/if}
@@ -510,6 +525,13 @@
 							format={formatThaiShortDate}
 						/>
 					</div>
+					{#if currentGrant}
+						<p class="text-xs font-medium text-foreground" data-testid="previous-expiry">
+							เดิม: {grantExpiryLabel(currentGrant)}{currentGrant.granted_by
+								? ` · ออกโดย ${currentGrant.granted_by}`
+								: ''}
+						</p>
+					{/if}
 					<p class="text-[11px] text-muted-foreground">
 						เลือกได้ตั้งแต่วันนี้ถึง {MAX_GRANT_DAYS} วันข้างหน้า สิทธิ์หมดอายุตอนสิ้นวันที่เลือก ต่ออายุได้ด้วยการออกสิทธิ์ซ้ำ
 					</p>
@@ -529,32 +551,24 @@
 					กำหนดบัญชีผู้ใช้งานระบบ (AUTHENTICATION &amp; CREDENTIALS)
 				</p>
 
-				<div class="space-y-1.5">
-					<div class="flex flex-wrap items-center justify-between gap-2">
-						<span class="flex items-center gap-1.5 text-xs font-semibold text-foreground">
+				{#if accountExists}
+					<div class="space-y-1.5">
+						<span
+							id={`volunteer-access-username-label-${volunteer._id}`}
+							class="flex items-center gap-1.5 text-xs font-semibold text-foreground"
+						>
 							<Mail class="h-3.5 w-3.5" />
-							อีเมลสำหรับใช้เป็น Username เข้าสู่ระบบ <span class="text-destructive">*</span>
+							Username เข้าสู่ระบบ
 						</span>
-						<Badge variant="outline" class="border-amber-300 text-[10px] text-amber-700">
-							กรอกอีเมลเพื่ออัปเดตลงโปรไฟล์อัตโนมัติ
-						</Badge>
+						<p
+							id={`volunteer-access-username-${volunteer._id}`}
+							aria-labelledby={`volunteer-access-username-label-${volunteer._id}`}
+							data-testid="existing-username"
+							class="min-h-11 rounded-lg border border-border bg-muted px-3 py-2.5 text-sm font-medium break-all text-foreground"
+						>
+							{email}
+						</p>
 					</div>
-					<Input
-						type="email"
-						bind:value={email}
-						disabled={pending}
-						autocomplete="off"
-						aria-label="อีเมลสำหรับเข้าสู่ระบบ"
-						class="h-11"
-						placeholder="เช่น volunteer@example.com หรือ volunteer@gmail.com"
-					/>
-					<p class="text-[11px] text-muted-foreground">
-						* เมื่อบันทึก ระบบจะใช้อีเมลนี้เป็น Username เข้าสู่ระบบ
-						และบันทึกอัปเดตลงในโปรไฟล์จิตอาสาให้อัตโนมัติ
-					</p>
-				</div>
-
-				{#if keepsPassword && !passwordError}
 					<p
 						class="flex items-center gap-1.5 rounded-lg border border-border p-3 text-xs text-muted-foreground"
 					>
@@ -562,6 +576,31 @@
 						บัญชีนี้มีอยู่แล้ว การออกสิทธิ์ไม่เปลี่ยนรหัสผ่านเดิม
 					</p>
 				{:else}
+					<div class="space-y-1.5">
+						<div class="flex flex-wrap items-center justify-between gap-2">
+							<span class="flex items-center gap-1.5 text-xs font-semibold text-foreground">
+								<Mail class="h-3.5 w-3.5" />
+								อีเมลสำหรับใช้เป็น Username เข้าสู่ระบบ <span class="text-destructive">*</span>
+							</span>
+							<Badge variant="outline" class="border-amber-300 text-[10px] text-amber-700">
+								กรอกอีเมลเพื่ออัปเดตลงโปรไฟล์อัตโนมัติ
+							</Badge>
+						</div>
+						<Input
+							type="email"
+							bind:value={email}
+							disabled={pending}
+							autocomplete="off"
+							aria-label="อีเมลสำหรับเข้าสู่ระบบ"
+							class="h-11"
+							placeholder="เช่น volunteer@example.com หรือ volunteer@gmail.com"
+						/>
+						<p class="text-[11px] text-muted-foreground">
+							* เมื่อบันทึก ระบบจะใช้อีเมลนี้เป็น Username เข้าสู่ระบบ
+							และบันทึกอัปเดตลงในโปรไฟล์จิตอาสาให้อัตโนมัติ
+						</p>
+					</div>
+
 					<div class="space-y-1.5 rounded-lg border border-border p-3">
 						<label
 							for={`volunteer-access-password-${volunteer._id}`}

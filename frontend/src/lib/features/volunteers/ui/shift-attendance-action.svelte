@@ -14,7 +14,6 @@
 	import type { ShiftAssignmentStatus } from '../domain/shift-assignment.schema';
 	import type { Volunteer } from '../domain/volunteer.schema';
 	import ApplicantCheckInDialog from './applicant-check-in-dialog.svelte';
-	import ApplicantCheckOutDialog from './applicant-check-out-dialog.svelte';
 	import VolunteerQualificationDialog from './volunteer-qualification-dialog.svelte';
 
 	let {
@@ -106,8 +105,10 @@
 		{shiftLabel}
 	/>
 {:else if attendance.kind === 'check-out'}
-	<ApplicantCheckOutDialog
+	<!-- Check-out scans like check-in (#1089): the same dialog in check_out mode. -->
+	<ApplicantCheckInDialog
 		bind:open={checkOutOpen}
+		mode="check_out"
 		assignment={attendance.assignment}
 		{volunteer}
 		{personName}

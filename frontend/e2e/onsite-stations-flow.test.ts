@@ -228,7 +228,7 @@ test.describe(
 
 			await test.step('Station 3: zone both (companion), confirm arrival', async () => {
 				await desk.goto(`/onsite/zoning/${ids[head.firstName]}`);
-				await expect(desk.getByText('Station 3', { exact: true })).toBeVisible({ timeout: 20_000 });
+				await expect(desk.getByText('สถานี 3', { exact: true })).toBeVisible({ timeout: 20_000 });
 				await desk.locator('div.grid button', { hasText: ZONE_NAME }).first().click();
 				const companion = desk.getByRole('checkbox').first();
 				if (await companion.isVisible().catch(() => false)) await companion.click();
@@ -238,7 +238,7 @@ test.describe(
 				await expectStay(desk, member, STAY_STATUS.active, ZONE_NAME);
 
 				await desk.goto(`/onsite/zoning/${ids[head.firstName]}`);
-				await expect(desk.getByText('Station 3', { exact: true })).toBeVisible({ timeout: 20_000 });
+				await expect(desk.getByText('สถานี 3', { exact: true })).toBeVisible({ timeout: 20_000 });
 				// `networkidle` never settles (CouchDB `_changes` long-polls stay open): wait for the
 				// confirm button the next step branches on instead.
 				await expect(desk.getByRole('button', { name: 'ยืนยันถึงโซน', exact: true })).toBeVisible({
