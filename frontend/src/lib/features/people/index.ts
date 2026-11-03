@@ -210,6 +210,15 @@ export {
 } from './domain/row-selection';
 
 export {
+	EVACUEE_SORTS,
+	EVACUEE_SORT_LABELS,
+	DEFAULT_EVACUEE_SORT,
+	isEvacueeSort,
+	sortEvacuees,
+	type EvacueeSort
+} from './domain/evacuee-sort';
+
+export {
 	REPORT_IN_CTA_LABEL,
 	NEW_REGISTRATION_CTA_LABEL,
 	INTAKE_SEARCH_PLACEHOLDER,

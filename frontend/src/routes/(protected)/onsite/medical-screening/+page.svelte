@@ -253,12 +253,6 @@
 						<h1 class="text-2xl font-bold tracking-tight text-foreground">
 							จุดตรวจคัดกรองผู้เข้าพัก
 						</h1>
-						<Badge
-							variant="outline"
-							class="border-station-2-border bg-station-2-subtle text-station-2-text"
-						>
-							Station 2
-						</Badge>
 					</div>
 					<p class="mt-0.5 text-xs text-muted-foreground">
 						เปิดฟอร์มคัดกรองได้ 3 ทาง: เลือกคนจากคิวรอตรวจ · ค้นหาชื่อ/เบอร์/เลขบัตร · สแกน QR

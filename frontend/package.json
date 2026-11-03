@@ -36,6 +36,7 @@
 		"seed:staging": "tsx --tsconfig .svelte-kit/tsconfig.json scripts/seed-staging.ts",
 		"seed:scanner": "tsx --tsconfig .svelte-kit/tsconfig.json scripts/seed-scanner.ts",
 		"seed:distribution": "tsx --tsconfig .svelte-kit/tsconfig.json scripts/seed-distribution.ts",
+		"seed:referrals": "tsx --tsconfig .svelte-kit/tsconfig.json scripts/seed-referrals.ts",
 		"verify:resource-calc-seed": "tsx --tsconfig .svelte-kit/tsconfig.json scripts/verify-t31-seed.ts",
 		"seed:thailand": "tsx --tsconfig .svelte-kit/tsconfig.json scripts/seed-thailand-location.ts",
 		"seed:delete-dashboard": "tsx --tsconfig .svelte-kit/tsconfig.json scripts/seed-staging.ts --delete-dashboard",

@@ -337,6 +337,33 @@ describe('grantVolunteerAccessAsCoordinator (#955)', () => {
 		);
 	});
 
+	it('needs no password for an account that already exists (CR-221 FR-10)', async () => {
+		mocks.serviceFetch.mockResolvedValue({ ok: true, created: false, unchanged: false });
+		await expect(
+			grantVolunteerAccessAsCoordinator(volunteer, {
+				...coordinatorInput,
+				password: '',
+				account_exists: true
+			})
+		).resolves.toEqual({ created: false, unchanged: false });
+		const [, init] = mocks.serviceFetch.mock.calls[0];
+		expect(JSON.parse(init.body)).toEqual({
+			shelter_code: 'SH001',
+			volunteer_id: volunteer._id,
+			email: input.email,
+			password: '',
+			role: input.role,
+			expires_on: max
+		});
+	});
+
+	it('still asks for a password when the account is new', async () => {
+		await expect(
+			grantVolunteerAccessAsCoordinator(volunteer, { ...coordinatorInput, password: '' })
+		).rejects.toThrow();
+		expect(mocks.serviceFetch).not.toHaveBeenCalled();
+	});
+
 	it('re-checks the stored profile phone: a landline saved meanwhile stops the grant (CR-210)', async () => {
 		mocks.get.mockResolvedValueOnce({ ...volunteer, phone: '022222222' });
 		await expect(grantVolunteerAccessAsCoordinator(volunteer, coordinatorInput)).rejects.toThrow();

@@ -54,3 +54,12 @@ export { default as ThaidSettings } from './ui/thaid-settings.svelte';
 export { default as PasswordLoginSettings } from './ui/password-login-settings.svelte';
 export { default as SystemBannerSettings } from './ui/system-banner-settings.svelte';
 export { default as KioskScreenPicker } from './ui/kiosk-screen-picker.svelte';
+
+export {
+	countShelterPeople,
+	totalShelterPeople,
+	type ShelterOccupantView,
+	type ShelterPeopleCounts,
+	type StaffUserView,
+	type VolunteerPresenceView
+} from './domain/shelter-people';

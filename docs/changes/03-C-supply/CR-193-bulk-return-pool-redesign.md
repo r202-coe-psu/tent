@@ -3,7 +3,7 @@ id: CR-193
 title: CR-193 — ออกแบบ bulk_return_pool ใหม่เป็น "กองรวมตอนรับของคืน" (pool header + entry/move/void event log)
 status: approved
 date: 2026-10-22
-updated: 2026-10-30
+updated: 2026-11-02
 requested_by: feedback ระบบคลัง & เบิกของ ข้อ 4–5 (GitHub #657, #658)
 decided_by: kong (decisions 2026-10-22 — https://github.com/r202-coe-psu/tent/pull/768#issuecomment-6339918664; approved 2026-10-25)
 layer: stable
@@ -20,6 +20,7 @@ affects:
   - (ข้อ 35 — kong approve 2026-10-28, #919) doc type ใหม่ `bulk_return_loan_reopen` v1 (append-only) · docs/data/schema.md §2.31.4 + §8 ข้อ 19 · frontend/src/lib/server/shelter-access-design.ts (VDU rule 14e) · application `food-supplies/auth.ts` (`canReopenBulkReturnLoan`), `bulk-return-pool-v3-loan-reopen.ts`, `bulk-return-pool-v3-missed-loans.ts` · domain `bulk-return-loan-reopen.ts`, `bulk-return-pool-timeline.ts` · UI `ReopenBulkReturnLoanDialog.svelte`, หน้ากอง, timeline
   - (ข้อ 36 — kong ตัดสิน 2026-10-28) #976: application `bulk-return-pool-v3-read.ts` (loan read degrade → `loan_refs_unavailable`) · domain `bulk-return-pool-overview.ts` (`loan_refs_unavailable`, `liveEntriesOf` / `liveLoanRefCount`) · application `query/read-queries.ts` + `$lib/db/query-client.ts` (overview re-checks at once while degraded — staleTime 0) · UI model `bulk-return-pool-v3.ts` / `bulk-return-work-queue.ts` (ตัวกรองบอร์ด/คิวงาน) · `BulkReturnPoolBoard.svelte` (banner/ป้าย) · จุดของฉัน (#977) · timeline หน้ากอง (#978) · คิวงานตาม role + redirect ลิงก์กอง (#980) — ไม่มี schema change
   - (ข้อ 37 — kong approve 2026-10-30) #950: application bulk-return-pool-v3-{lifecycle,add-entry,shared,missed-loans,read}.ts · data distribution-log.repository.ts (mutateLogCAS beforeWrite) · domain bulk-return-pool-{summary,v3,overview}.ts · people/volunteers ค้นชื่อตาม id · UI ฟอร์มรับของ / ตรวจรับ / หน้ากอง / บอร์ด / คิวงาน · localStorage lastBulkReturnPool — ไม่มี schema change
+  - (decision sync 2026-11-02 — kong, ข้อ 22) ป้ายปุ่มตัวกรองหน้าใบเบิก "ต้องติดตาม" → "รอดำเนินการ" — copy ใน UI เท่านั้น: frontend/src/lib/features/distribution/ui/back-office/TicketFilters.svelte · ความหมายของปุ่ม (สถานะตามบทบาท) ไม่เปลี่ยน — ไม่มี schema change
 ---
 
 # CR-193 — ออกแบบ bulk_return_pool ใหม่เป็นกองรวมตอนรับของคืน
@@ -318,7 +319,7 @@ D1–D5 ข้างบนยังมีผลตามเดิม (ปรั�
 
 ### 22. ตัวกรองหน้าใบเบิก (เพิ่ม 2026-10-26)
 
-- **ตัดสิน:** ช่วงวันที่**สร้าง** · เลือกหลายสถานะ (จำกัดในแท็บกลุ่มที่เลือก) · ปุ่ม "ต้องติดตาม" ตามบทบาท
+- **ตัดสิน:** ช่วงวันที่**สร้าง** · เลือกหลายสถานะ (จำกัดในแท็บกลุ่มที่เลือก) · ปุ่ม "ต้องติดตาม" ตามบทบาท (เปลี่ยนป้ายเป็น "รอดำเนินการ" — decision sync 2026-11-02)
   (คลัง: รอจัด, พร้อมส่ง, รอตรวจรับคืน, ตรวจรับคืนแล้ว · หน้างาน: กำลังนำส่ง) · เก็บตัวกรองทั้งหมดใน URL · เปลี่ยนตัวกรองแล้วกลับหน้า 1
 - **เหตุผล:** ใบเบิกไม่มี timestamp ตอนปล่อยของ (มีแค่ `dispatched_by`/`updated_at`) จึงกรองวันที่ปล่อยไม่ได้ ·
   สถานะที่ "ต้องติดตาม" อ้างตามปุ่มที่ `TicketActionPanel` แสดงให้แต่ละบทบาท

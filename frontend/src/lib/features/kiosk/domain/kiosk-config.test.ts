@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+	isKioskPetClaimEnabled,
 	isKioskPhoneCheckInEnabled,
 	isKioskThaidCheckInEnabled,
 	isKioskWalkInRegistrationEnabled
@@ -48,5 +49,15 @@ describe('isKioskThaidCheckInEnabled', () => {
 		).toBe(false);
 		expect(isKioskThaidCheckInEnabled({ feature_flags: {} })).toBe(false);
 		expect(isKioskThaidCheckInEnabled(null)).toBe(false);
+	});
+});
+
+describe('isKioskPetClaimEnabled', () => {
+	it('is enabled only when the shelter allow_pets flag is exactly true (fail closed)', () => {
+		expect(isKioskPetClaimEnabled({ feature_flags: { allow_pets: true } })).toBe(true);
+		expect(isKioskPetClaimEnabled({ feature_flags: { allow_pets: false } })).toBe(false);
+		expect(isKioskPetClaimEnabled({ feature_flags: { allow_pets: 'true' } })).toBe(false);
+		expect(isKioskPetClaimEnabled({ feature_flags: {} })).toBe(false);
+		expect(isKioskPetClaimEnabled(null)).toBe(false);
 	});
 });

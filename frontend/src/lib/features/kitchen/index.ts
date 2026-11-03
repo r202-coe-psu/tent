@@ -171,6 +171,7 @@ export {
 	useMealServices,
 	useRecordMealService,
 	useMealServiceReceipts,
+	useMealServiceLedger,
 	useConfirmMealServiceReceipt,
 	useConfirmMealServiceYield,
 	useRejectMealServiceReceipt,
