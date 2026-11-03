@@ -398,7 +398,7 @@
 									<div class="flex items-center gap-2">
 										<Input
 											type="number"
-											min={qtyInputStep(rowDim) === '1' ? '1' : '0'}
+											min="0"
 											step={qtyInputStep(rowDim)}
 											class="min-h-11 w-full sm:min-h-9 sm:w-28"
 											placeholder="ต่อคน"
