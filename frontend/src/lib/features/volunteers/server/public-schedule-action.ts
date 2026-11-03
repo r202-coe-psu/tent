@@ -336,9 +336,14 @@ export async function releaseJobQuota(
 				shift.slots_remaining = Number(shift.slots_remaining ?? 0) + 1;
 			}
 		}
-		job.slots_confirmed = Math.max(Number(job.slots_confirmed ?? 0) - 1, 0);
-		job.slots_remaining = Number(job.slots_remaining ?? 0) + 1;
-		job.status = 'open';
+		// Free a seat only when one is still counted (a staff reconcile may have zeroed it), and
+		// reopen only a job that was full: a closed or paused job stays as it is.
+		const jobConfirmed = Number(job.slots_confirmed ?? 0);
+		if (jobConfirmed > 0) {
+			job.slots_confirmed = jobConfirmed - 1;
+			job.slots_remaining = Number(job.slots_remaining ?? 0) + 1;
+			if (job.status === 'full') job.status = 'open';
+		}
 		job.updated_at = now;
 		if (idempotencyKey) {
 			job.released_application_ids = [...released, idempotencyKey];

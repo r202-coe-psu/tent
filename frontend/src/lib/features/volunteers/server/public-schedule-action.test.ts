@@ -262,4 +262,28 @@ describe('releaseJobQuota ledger (CR-220)', () => {
 		expect(stored()).toMatchObject({ slots_confirmed: 0, slots_remaining: 2, schema_v: 3 });
 		expect(stored().released_application_ids).toBeUndefined();
 	});
+
+	it('frees no seat when the counter is already 0, but still records the key', async () => {
+		seedJob({
+			slots_confirmed: 0,
+			slots_remaining: 2,
+			shifts: [{ shift_id: 'shift:s1', slots_confirmed: 0, slots_remaining: 2 }]
+		});
+		await releaseJobQuota('shelter_sh001', owner, NOW, owner._id);
+		expect(stored()).toMatchObject({
+			slots_confirmed: 0,
+			slots_remaining: 2,
+			released_application_ids: [owner._id],
+			shifts: [{ shift_id: 'shift:s1', slots_confirmed: 0, slots_remaining: 2 }]
+		});
+	});
+
+	it.each(['closed', 'paused'])(
+		'leaves a %s job as it is while freeing the seat',
+		async (status) => {
+			seedJob({ status });
+			await releaseJobQuota('shelter_sh001', owner, NOW, owner._id);
+			expect(stored()).toMatchObject({ status, slots_confirmed: 1, slots_remaining: 1 });
+		}
+	);
 });
