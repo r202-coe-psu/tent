@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
 	calculateMealIngredients,
 	calculateMealIngredientsFromRecipe,
+	calculateMealIngredientsFromCustom,
 	scaleRecipeIngredientQty,
 	resolveItemMasterStock,
 	toRequisitionInput,
@@ -550,5 +551,29 @@ describe('scaleRecipeIngredientQty', () => {
 
 	it('returns 0 for an emptied portions box instead of throwing', () => {
 		expect(scaleRecipeIngredientQty('2', '1', null)).toBe('0');
+	});
+});
+
+describe('calculateMealIngredientsFromCustom — round up per person', () => {
+	it('rounds up without float noise (300 × 0.07 = 21, not 22)', () => {
+		const result = calculateMealIngredientsFromCustom(
+			[{ item_id: 'supply_item:SAUCE', unit: 'bottle', qty_per_person: 0.07 }],
+			headcount(300),
+			SOP_ID,
+			SOP_VERSION,
+			AS_OF
+		);
+		expect(result.recipes[0].planned_qty).toBe(21);
+	});
+
+	it('rounds a fractional need up to the next whole unit (150 × 0.01 = 1.5 → 2)', () => {
+		const result = calculateMealIngredientsFromCustom(
+			[{ item_id: 'supply_item:SAUCE', unit: 'bottle', qty_per_person: 0.01 }],
+			headcount(150),
+			SOP_ID,
+			SOP_VERSION,
+			AS_OF
+		);
+		expect(result.recipes[0].planned_qty).toBe(2);
 	});
 });

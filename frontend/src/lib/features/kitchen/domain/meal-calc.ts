@@ -1,6 +1,6 @@
 import Decimal from 'decimal.js';
 import { persistQty, qtyGte, qtyLte, roundQty, subQty } from '$lib/utils/qty';
-import { roundUpQty, type Recipe, type ItemMaster } from '$lib/features/catalog';
+import type { Recipe, ItemMaster } from '$lib/features/catalog';
 import type { SupplyItem } from '$lib/features/supply';
 import type {
 	KitchenRequisitionInput,
@@ -63,7 +63,7 @@ export function calculateMealIngredients(
 		throw new Error('calculateMealIngredients: riceGPerMeal must be > 0');
 	}
 
-	const riceGrams = Math.ceil(headcount.total * riceGPerMeal);
+	const riceGrams = new Decimal(headcount.total).mul(riceGPerMeal).ceil().toNumber();
 	const recipes: MealPlanRecipe[] = [{ recipe_id: RICE_RECIPE_ID, planned_qty: riceGrams }];
 
 	return {
@@ -154,7 +154,7 @@ export function scaleRecipeIngredientQty(
 ): string {
 	if (portions == null) return '0';
 	const base = Decimal.max(new Decimal(standardPortions || 1), 1);
-	return persistQty(roundUpQty(new Decimal(quantity || 0).mul(portions).div(base)));
+	return persistQty(new Decimal(quantity || 0).mul(portions).div(base).ceil());
 }
 
 export interface CustomIngredientInput {
@@ -183,7 +183,7 @@ export function calculateMealIngredientsFromCustom(
 
 	const recipes: MealPlanRecipe[] = items.map((i) => ({
 		recipe_id: i.item_id,
-		planned_qty: Math.ceil(headcount.total * i.qty_per_person),
+		planned_qty: new Decimal(headcount.total).mul(i.qty_per_person).ceil().toNumber(),
 		unit: i.unit
 	}));
 
