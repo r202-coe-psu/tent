@@ -26,7 +26,12 @@
 		zoneLabel,
 		StayStatusBadge,
 		STATUS_LABELS,
+		EVACUEE_SORTS,
+		EVACUEE_SORT_LABELS,
+		DEFAULT_EVACUEE_SORT,
+		isEvacueeSort,
 		type Evacuee,
+		type EvacueeSort,
 		type StayStatus
 	} from '$lib/features/people';
 	import { authStore } from '$lib/stores/auth.svelte';
@@ -47,6 +52,7 @@
 	let selectedType = $state('');
 	let selectedZone = $state('');
 	let selectedStatus = $state('');
+	let selectedSort = $state<EvacueeSort>(DEFAULT_EVACUEE_SORT);
 	let selectedIds = $state<string[]>([]);
 	let isSelectingAllMatching = $state(false);
 	let isBulkCancelling = $state(false);
@@ -59,6 +65,8 @@
 		value,
 		label: STATUS_LABELS[value] ?? value
 	}));
+
+	const sortOptions = EVACUEE_SORTS.map((value) => ({ value, label: EVACUEE_SORT_LABELS[value] }));
 
 	const masterVulnerableItems = $derived(vulnerableGroupQuery.data?.items ?? []);
 
@@ -102,7 +110,8 @@
 		() => currentPage,
 		() => PAGE_SIZE,
 		() => search,
-		() => filters
+		() => filters,
+		() => selectedSort
 	);
 
 	const checkIn = useCheckInEvacuee();
@@ -133,6 +142,12 @@
 	function resetPageOnFilter() {
 		currentPage = 1;
 		clearSelection();
+	}
+
+	// Sorting reorders the same set, so the selection stays; only the page resets.
+	function handleSortChange(value: string) {
+		selectedSort = isEvacueeSort(value) ? value : DEFAULT_EVACUEE_SORT;
+		currentPage = 1;
 	}
 
 	function toggleId(id: string, checked: boolean | 'indeterminate') {
@@ -271,8 +286,8 @@
 	</div>
 
 	<!-- Filters -->
-	<div class="grid w-full grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
-		<div class="w-full min-w-0 space-y-2">
+	<div class="grid w-full grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-6">
+		<div class="w-full min-w-0 space-y-2 md:col-span-2">
 			<label for="evacuee-search" class="text-xs font-semibold text-foreground">ค้นหา</label>
 			<div class="relative">
 				<Search
@@ -373,6 +388,28 @@
 				<Select.Content>
 					<Select.Item value="" label="ทุกสถานะ" />
 					{#each statusOptions as option (option.value)}
+						<Select.Item value={option.value} label={option.label} />
+					{/each}
+				</Select.Content>
+			</Select.Root>
+		</div>
+
+		<div class="w-full min-w-0 space-y-2">
+			<label
+				id="evacuee-sort-label"
+				for="evacuee-sort"
+				class="text-xs font-semibold text-foreground">เรียง</label
+			>
+			<Select.Root type="single" value={selectedSort} onValueChange={handleSortChange}>
+				<Select.Trigger
+					id="evacuee-sort"
+					class="h-11 w-full min-w-0 rounded-xl bg-background px-3 shadow-xs"
+					aria-labelledby="evacuee-sort-label"
+				>
+					<span class="truncate">{EVACUEE_SORT_LABELS[selectedSort]}</span>
+				</Select.Trigger>
+				<Select.Content>
+					{#each sortOptions as option (option.value)}
 						<Select.Item value={option.value} label={option.label} />
 					{/each}
 				</Select.Content>

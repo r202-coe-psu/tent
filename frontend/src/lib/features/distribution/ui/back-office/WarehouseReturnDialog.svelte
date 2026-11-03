@@ -125,7 +125,7 @@
 	}}
 >
 	<Dialog.Content
-		class="flex max-h-[92vh] flex-col overflow-hidden p-0 sm:max-w-[720px] lg:max-w-[840px]"
+		class="flex max-h-[92vh] flex-col overflow-hidden p-0 sm:max-w-[800px] lg:max-w-[960px]"
 	>
 		<!-- Header -->
 		<div class="border-b border-slate-200/80 bg-white px-6 pt-6 pb-4">
@@ -174,11 +174,11 @@
 			</div>
 
 			<div class="overflow-x-auto rounded-xl border border-slate-200/80 bg-white shadow-2xs">
-				<table class="w-full min-w-[640px] text-left text-sm">
+				<table class="w-full min-w-[760px] text-left text-sm">
 					<thead
 						class="border-b border-slate-200 bg-slate-50/75 text-2xs font-semibold tracking-wider text-slate-600 uppercase"
 					>
-						<tr>
+						<tr class="whitespace-nowrap">
 							<th scope="col" class="py-2.5 pr-2 pl-4">ชื่อรายการ</th>
 							<th scope="col" class="px-2 py-2.5 text-center">ประเภท</th>
 							<th scope="col" class="px-2 py-2.5 text-right">จัดสรร</th>
@@ -197,11 +197,16 @@
 								<!-- Item Details -->
 								<td class="py-3 pr-2 pl-4">
 									<div class="font-bold text-slate-900">{preview.itemName}</div>
-									<div class="font-mono text-2xs text-slate-400">ID: {preview.itemId}</div>
+									<div
+										class="max-w-[220px] truncate font-mono text-2xs text-slate-400"
+										title={preview.itemId}
+									>
+										ID: {preview.itemId}
+									</div>
 								</td>
 
 								<!-- Type Badge -->
-								<td class="px-2 py-3 text-center">
+								<td class="px-2 py-3 text-center whitespace-nowrap">
 									<span
 										class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold {getReturnableBadgeClass(
 											item?.returnable
@@ -255,7 +260,7 @@
 								</td>
 
 								<!-- Discrepancy -->
-								<td class="py-3 pr-4 pl-2 text-right">
+								<td class="py-3 pr-4 pl-2 text-right whitespace-nowrap">
 									{#if preview.hasDiscrepancy}
 										<span
 											class="inline-flex items-center rounded-md border border-amber-300 bg-amber-50 px-2 py-1 text-xs font-bold text-amber-800 tabular-nums"

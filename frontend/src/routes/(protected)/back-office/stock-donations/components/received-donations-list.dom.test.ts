@@ -71,6 +71,41 @@ function typeInto(value: string) {
 }
 
 describe('ReceivedDonationsList', () => {
+	it('shows the received_at date and time (Buddhist year, Bangkok time) in both layouts', () => {
+		// declared_at / eta fall on other days (PendingDonationRow has no updated_at): they must not be what is shown.
+		mountList({
+			rows: [
+				{ ...row(1), declared_at: '2026-10-05T03:00:00.000Z', eta: '2026-10-25T03:00:00.000Z' }
+			]
+		});
+		const stamps = Array.from(document.body.querySelectorAll('time[data-testid="received-at"]'));
+		// One in the mobile card, one in the desktop table row.
+		expect(stamps).toHaveLength(2);
+		for (const el of stamps) {
+			expect(el.textContent).toMatch(/20 ต\.ค\. 2569 10:00/);
+			expect(el.getAttribute('datetime')).toBe('2026-10-20T03:00:00.000Z');
+		}
+		expect(text()).toContain('รับเมื่อ');
+		expect(text()).not.toMatch(/5 ต\.ค\. 2569/);
+		expect(text()).not.toMatch(/25 ต\.ค\. 2569/);
+	});
+
+	it('uses Bangkok time across midnight, whatever the machine time zone is', () => {
+		// 18:30Z is still 19 Oct in UTC and New York, but already 01:30 on 20 Oct in Bangkok.
+		mountList({ rows: [{ ...row(1), received_at: '2026-10-19T18:30:00.000Z' }] });
+		const stamps = Array.from(document.body.querySelectorAll('[data-testid="received-at"]'));
+		expect(stamps).toHaveLength(2);
+		for (const el of stamps) {
+			expect(el.textContent).toMatch(/20 ต\.ค\. 2569 01:30/);
+		}
+		expect(text()).not.toMatch(/19 ต\.ค\. 2569/);
+	});
+
+	it('omits the date when received_at is missing', () => {
+		mountList({ rows: [{ ...row(1), received_at: null }] });
+		expect(document.body.querySelector('[data-testid="received-at"]')).toBeNull();
+	});
+
 	it('shows the contact exactly as the server sent it — no masking on the client (FR-10)', () => {
 		// A value the client would mask differently proves the row is displayed as it is.
 		mountList({ rows: [{ ...row(1), donor_name: 'สมชาย ใ****', donor_phone: 'xxx-xxx-1111' }] });

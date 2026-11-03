@@ -76,8 +76,9 @@ export const DAILY_SOP_ROLE_MANGO_INDEX = {
 /**
  * Index behind the volunteer access dialog's "how did the last grant end" lookup (CR-221, #1044):
  * the `audit` docs of one account (`target_id`) by `reason` (`role_grant.revoked` / `.expired` /
- * `.verification_revoked`), read by `lastGrantEnding`. Audit docs grow without bound, so the query
- * must not scan them all.
+ * `.verification_revoked`), read by `lastGrantEndings` with `target_id: { $in: [...] }` and paged by
+ * bookmark. It does not order by `created_at` (the newest is picked in code), so the deployed
+ * definition stays as is. Audit docs grow without bound, so the query must not scan them all.
  */
 export const ROLE_GRANT_AUDIT_MANGO_INDEX = {
 	index: { fields: ['type', 'target_id', 'reason'] },
