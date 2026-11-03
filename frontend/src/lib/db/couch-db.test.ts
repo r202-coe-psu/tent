@@ -48,13 +48,17 @@ function mockFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Respon
 		const includeDocs = url.searchParams.get('include_docs') !== 'false';
 		const limit = limitRaw != null ? Number(limitRaw) : undefined;
 		const skip = skipRaw != null ? Number(skipRaw) : 0;
+		// CouchDB `descending=true` walks from startkey down to endkey.
+		const descending = url.searchParams.get('descending') === 'true';
+		const [lo, hi] = descending ? [endkey, startkey] : [startkey, endkey];
 
 		let docs = [...store.values()]
 			.filter((doc) => {
 				const docId = (doc as { _id: string })._id;
-				return docId >= startkey && docId <= endkey;
+				return docId >= lo && docId <= hi;
 			})
 			.sort((a, b) => (a as { _id: string })._id.localeCompare((b as { _id: string })._id));
+		if (descending) docs.reverse();
 
 		if (skip > 0) docs = docs.slice(skip);
 		if (limit != null && Number.isFinite(limit)) docs = docs.slice(0, limit);
@@ -185,6 +189,40 @@ describe('allDocsByTypePage / countDocsByType', () => {
 		});
 		expect(page2.items.map((d) => d._id)).toEqual(['evacuee:03', 'evacuee:04']);
 		expect(page2.nextCursor).toBeNull();
+	});
+
+	it('pages newest-first with descending and resumes downward via afterId', async () => {
+		const fetchSpy = vi.fn(mockFetch);
+		vi.stubGlobal('fetch', fetchSpy);
+
+		const page1 = await allDocsByTypePage('testdb', 'evacuee', isEvacuee, {
+			limit: 2,
+			descending: true
+		});
+		expect(page1.items.map((d) => d._id)).toEqual(['evacuee:04', 'evacuee:03']);
+		expect(page1.nextCursor).toBe('evacuee:03');
+
+		const firstUrl = new URL(String(fetchSpy.mock.calls[0][0]));
+		expect(firstUrl.searchParams.get('descending')).toBe('true');
+		expect(JSON.parse(firstUrl.searchParams.get('startkey')!)).toBe('evacuee:\ufff0');
+		expect(JSON.parse(firstUrl.searchParams.get('endkey')!)).toBe('evacuee:');
+
+		const page2 = await allDocsByTypePage('testdb', 'evacuee', isEvacuee, {
+			limit: 2,
+			descending: true,
+			afterId: page1.nextCursor!
+		});
+		expect(page2.items.map((d) => d._id)).toEqual(['evacuee:02', 'evacuee:01']);
+		expect(page2.nextCursor).toBeNull();
+	});
+
+	it('pages newest-first with skip (offset paging)', async () => {
+		const page2 = await allDocsByTypePage('testdb', 'evacuee', isEvacuee, {
+			limit: 3,
+			skip: 3,
+			descending: true
+		});
+		expect(page2.items.map((d) => d._id)).toEqual(['evacuee:01']);
 	});
 
 	it('countDocsByType counts the prefix without include_docs bodies', async () => {

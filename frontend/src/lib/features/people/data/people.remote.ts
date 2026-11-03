@@ -65,6 +65,7 @@ import {
 } from '$lib/features/consent/server';
 import { autoHouseholdLabel } from '../domain/registration-shell';
 import { planSearchVisibilityChange } from '../domain/search-visibility';
+import { DEFAULT_EVACUEE_SORT, sortEvacuees, type EvacueeSort } from '../domain/evacuee-sort';
 import {
 	STATION_LOG_STALE_WINDOW_MS,
 	createStationLog,
@@ -304,15 +305,18 @@ export class PeopleRemoteRepository implements PeopleRepository {
 		page: number,
 		pageSize: number,
 		search?: string,
-		filters?: EvacueeFilters
+		filters?: EvacueeFilters,
+		sort: EvacueeSort = DEFAULT_EVACUEE_SORT
 	): Promise<PaginatedResult<Evacuee>> {
-		// Unfiltered: limited `_all_docs` page (server-side). Filters/search still need a
-		// full prefix scan until Mango indexes are provisioned.
-		if (!hasEvacueeClientFilters(search, filters)) {
-			return this.repo.pageByType('evacuee', isEvacuee, page, pageSize);
+		// Unfiltered newest/oldest: limited `_all_docs` page (server-side, `_id` = ULID order).
+		// Filters/search and name order still need a full prefix scan until Mango indexes exist.
+		if (sort !== 'name' && !hasEvacueeClientFilters(search, filters)) {
+			return this.repo.pageByType('evacuee', isEvacuee, page, pageSize, {
+				descending: sort === 'newest'
+			});
 		}
 		const matched = await this.filterEvacuees(search, filters);
-		return paginateItems(matched, page, pageSize);
+		return paginateItems(sortEvacuees(matched, sort), page, pageSize);
 	}
 
 	async listMatchingEvacueeIds(search?: string, filters?: EvacueeFilters): Promise<string[]> {
