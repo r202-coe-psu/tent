@@ -16,6 +16,9 @@
 		useUnitsOfMeasure
 	} from '../application/queries';
 	import { formatUnit } from '../domain/unit-of-measure';
+	import { qtyInputStep } from '../domain/unit-quantity';
+	import { useUnitDimensionResolver } from '../application/use-unit-dimension-resolver.svelte';
+	import { recipeIngredientQtyIssues } from './recipe-ingredient-qty';
 	import { langState } from '$lib/states/i18n.svelte';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { getShelterCode } from '$lib/db/shelter';
@@ -49,6 +52,16 @@
 	const itemMastersQuery = useItemMasters(() => shelterCode ?? null);
 	const unitsQuery = useUnitsOfMeasure();
 	const units = $derived(unitsQuery.data ?? []);
+	const dimensions = useUnitDimensionResolver();
+
+	const wholeQtySchema = recipeInputSchema.superRefine((data, ctx) => {
+		for (const { index, message } of recipeIngredientQtyIssues(
+			data.ingredients,
+			dimensions.resolve
+		)) {
+			ctx.addIssue({ code: 'custom', message, path: ['ingredients', index, 'quantity'] });
+		}
+	});
 
 	const form = superForm(
 		defaults(zod4(recipeInputSchema), {
@@ -63,7 +76,7 @@
 		{
 			SPA: true,
 			dataType: 'json',
-			validators: zod4(recipeInputSchema),
+			validators: zod4(wholeQtySchema),
 			resetForm: false,
 			onUpdate: async ({ form: validated }) => {
 				if (!validated.valid) return;
@@ -125,7 +138,7 @@
 			}
 		}
 	);
-	const { form: formData, submitting } = form;
+	const { form: formData, errors, submitting } = form;
 
 	let populatedId = $state<string | null>(null);
 
@@ -233,7 +246,7 @@
 								<span class="text-xs font-bold text-blue-700 dark:text-blue-400">ปริมาณ</span>
 								<Input
 									type="number"
-									step="any"
+									step={qtyInputStep(dimensions.resolve(conv.uom))}
 									min={0}
 									value={conv.quantity}
 									oninput={(e) => {
@@ -242,6 +255,9 @@
 									}}
 									class="h-12 rounded-xl border-slate-200/80 bg-white text-center dark:border-zinc-800 dark:bg-zinc-950"
 								/>
+								{#each $errors.ingredients?.[index]?.quantity ?? [] as message (message)}
+									<p class="text-xs font-semibold text-destructive">{message}</p>
+								{/each}
 							</div>
 
 							<!-- หน่วย -->
