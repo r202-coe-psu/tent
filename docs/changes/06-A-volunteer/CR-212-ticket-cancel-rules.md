@@ -3,7 +3,7 @@ id: CR-212 # renumbered from draft-ticket-cancel-rules
 title: ยกเลิกการสมัครจากบัตรดิจิทัล — กติกาใหม่ (สถานะ, ก่อนเริ่มกะ, token ถาวรของจิตอาสา) และ BFF เขียน CouchDB เอง
 status: approved
 date: 2026-10-28
-updated: 2026-11-01 # amend FR-3, FR-4, AC-2, AC-3 โดย CR-220 (ticket-quota-release-marker)
+updated: 2026-11-03 # amend FR-3, FR-4, AC-2, AC-3 โดย CR-220 (ticket-quota-release-marker); AC-3 เติมข้อยกเว้น SHIFT_STARTED (แก้โดย CR-220)
 requested_by: "#967 (ผู้รับงาน @Mhapong) + review ของ @Jackyzaz ใน PR #966 (ขอ doc amend)"
 decided_by: Soravit Sukkarn (Team Lead)
 decision_date: 2026-10-29
@@ -116,7 +116,7 @@ affects:
 
 - **AC-1:** token ถาวรที่มีใบอนาคต 2 ใบ เปิดบัตรแล้วเห็นใบที่เริ่มเร็วกว่า ยกเลิกแล้วรีเฟรชจะเห็นใบถัดไป · ถ้ามีกะที่กำลังทำอยู่ด้วย บัตรไม่เลือกกะนั้น
 - **AC-2:** ใบ `confirmed` ยกเลิกแล้วโควตาคืน 1 ครั้ง ยกเลิกซ้ำได้ 409 และโควตาไม่เปลี่ยน (คงเดิมเมื่อคืนสำเร็จในครั้งแรก — CR-220 ตรวจเพิ่มด้วย `released_application_ids` / `quota_released_at`)
-- **AC-3:** คืนโควตาล้ม ได้ 502 และกดซ้ำแล้วโควตาคืนครบ 1 ที่ ไม่เกินและไม่ขาดไม่ว่ากดซ้ำกี่ครั้ง (แก้โดย [CR-220](CR-220-ticket-quota-release-marker.md) AC-1–AC-3; เดิมอาจขาด 1 ตามข้อจำกัดที่รู้ใน FR-4)
+- **AC-3:** คืนโควตาล้ม ได้ 502 และกดซ้ำก่อนกะเริ่มแล้วโควตาคืนครบ 1 ที่ ไม่เกินและไม่ขาดไม่ว่ากดซ้ำกี่ครั้ง · ข้อยกเว้นที่รู้: ใบที่มีกะงานผูกซึ่งคืนล้มแล้วกะเริ่มก่อนกดซ้ำ ได้ 409 `SHIFT_STARTED` และโควตาขาด 1 ที่ (ตาม FR-4 และ [CR-220](CR-220-ticket-quota-release-marker.md) FR-6 / AC-10) (แก้โดย [CR-220](CR-220-ticket-quota-release-marker.md) AC-1–AC-3, AC-10; เดิมอาจขาด 1 ตามข้อจำกัดที่รู้ใน FR-4)
   - ใบที่ไม่มีกะงานผูก: ใบสมัครเป็น `cancelled` + `quota_release_due_at` กดซ้ำสำเร็จและได้ `quota_released_at` ถ้ากดซ้ำอีกได้ 409 `NOT_CANCELLABLE`
   - ใบที่มีกะงานผูก: ใบสมัครยังเป็นสถานะเดิม กดซ้ำสำเร็จ คืนโควตาครบ 1 ที่ ใบเป็น `cancelled` + `quota_released_at` กดซ้ำอีกได้ 409
 - **AC-4:** กะที่เริ่มแล้ว และใบที่ไม่มีวันกะ ได้ `can_cancel = false` และ cancel ได้ 409 `SHIFT_STARTED`

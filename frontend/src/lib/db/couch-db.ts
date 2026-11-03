@@ -55,6 +55,8 @@ export type DocsByTypePageOptions = {
 	afterId?: string;
 	/** Offset within the type prefix — slow for large offsets; prefer `afterId`. */
 	skip?: number;
+	/** Walk the prefix newest-first (`_id` descending). `afterId` then resumes downward. */
+	descending?: boolean;
 };
 
 export type DocsByTypePageResult<T> = {
@@ -330,9 +332,12 @@ export async function allDocsByTypePage<T extends { _id: string }>(
 	const limit = options.limit;
 	if (limit < 1) return { items: [], nextCursor: null };
 
-	const { endkey } = typePrefixKeys(type);
+	const prefix = typePrefixKeys(type);
+	const descending = options.descending === true;
 	const afterId = options.afterId;
-	const startkey = JSON.stringify(afterId ?? `${type}:`);
+	// Descending swaps the range ends: CouchDB walks from startkey down to endkey.
+	const startkey = afterId ? JSON.stringify(afterId) : descending ? prefix.endkey : prefix.startkey;
+	const endkey = descending ? prefix.startkey : prefix.endkey;
 	let skip = options.skip ?? 0;
 	if (afterId) skip += 1;
 
@@ -342,6 +347,9 @@ export async function allDocsByTypePage<T extends { _id: string }>(
 		`endkey=${encodeURIComponent(endkey)}`,
 		`limit=${limit + 1}`
 	];
+	if (descending) {
+		params.push('descending=true');
+	}
 	if (afterId) {
 		params.push(`startkey_docid=${encodeURIComponent(afterId)}`);
 	}

@@ -356,7 +356,6 @@
 				<h1 class="text-xl font-bold">
 					{isAwaitingConfirm ? 'ยืนยันถึงโซน' : isRezone ? 'ย้ายโซนที่พัก' : 'จัดสรรที่พัก'}
 				</h1>
-				<Badge variant="outline">Station 3</Badge>
 			</div>
 		</div>
 	</div>

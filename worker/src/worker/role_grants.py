@@ -1,14 +1,16 @@
 """Revoke time-limited staff roles that a volunteer coordinator granted (#955, #879 item 2).
 
-A coordinator grants a volunteer one of four staff roles until the end of a chosen day. The
+A coordinator grants a volunteer a staff role (CR-221: one of ten) until the end of a chosen day. The
 grant lives on the ``_users`` doc as ``role_grants: [{shelter_code, role, expires_at,
 verified_by, ...}]`` next to the compound role ``SHxxx:<role>`` it created. This sweep removes
-only the roles whose grant has expired or whose ``verified_by`` volunteer profile is no longer
-``identity_verification.status == verified``, and keeps the account so the next grant needs no
-new password. Each revocation is written as an ``audit`` doc into ``shelter_{code}``.
+only the roles whose grant has expired, whose ``verified_by`` volunteer profile is no longer
+``identity_verification.status == verified``, or whose shelter's volunteer profile of that
+account was closed (``status: inactive``, CR-221 FR-20), and keeps the account so the next
+grant needs no new password. Each revocation is written as an ``audit`` doc into
+``shelter_{code}``.
 
 Never touched: roles without a grant (given by a shelter manager), other shelters' roles, and
-other grants. ``shelter:SHxxx`` goes only when no ``SHxxx:<role>`` is left for that shelter.
+other grants (a closed profile in SH001 takes only SH001's grants). ``shelter:SHxxx`` goes only when no ``SHxxx:<role>`` is left for that shelter.
 
 The sweep writes ``_users`` with the worker's CouchDB admin credential (draft CR FR-12); the
 ``_users/_design/tent_guard`` validation lets only an admin touch ``role_grants``.
@@ -34,6 +36,10 @@ USER_PREFIX = "org.couchdb.user:"
 
 REASON_EXPIRED = "role_grant.expired"
 REASON_VERIFICATION_REVOKED = "role_grant.verification_revoked"
+#: The same reason a manual revoke writes; ``context.cause`` tells a closed profile apart.
+REASON_REVOKED = "role_grant.revoked"
+CAUSE_PROFILE_INACTIVE = "profile_inactive"
+CAUSES = {REASON_REVOKED: CAUSE_PROFILE_INACTIVE}
 
 ACTOR = "worker"
 AUDIT_ATTEMPTS = 3
@@ -41,6 +47,8 @@ AUDIT_RETRY_DELAY_SECONDS = 0.5
 
 #: (shelter_code, volunteer_id) of a volunteer profile.
 Profile = tuple[str, str]
+#: (shelter_code, account name) whose linked volunteer profile in that shelter is closed.
+ClosedLink = tuple[str, str]
 
 
 def _is_expired(grant: Any, *, now: datetime) -> bool:
@@ -93,8 +101,10 @@ def grants_to_revoke(
     *,
     now: datetime,
     unverified: Collection[Profile] = (),
+    closed: Collection[ClosedLink] = (),
 ) -> list[tuple[dict[str, Any], str]]:
-    """``(grant, audit reason)`` for every grant that has expired or lost its verification."""
+    """``(grant, audit reason)`` for every grant that has expired, whose shelter profile was
+    closed, or that lost its verification."""
     grants = doc.get("role_grants")
     if not isinstance(grants, list):
         return []
@@ -102,6 +112,11 @@ def grants_to_revoke(
     for grant in grants:
         if _is_expired(grant, now=now):
             out.append((grant, REASON_EXPIRED))
+        elif (
+            isinstance(grant, dict)
+            and (grant.get("shelter_code"), doc.get("name")) in closed
+        ):
+            out.append((grant, REASON_REVOKED))
         elif (profile := verified_by(grant)) is not None and profile in unverified:
             out.append((grant, REASON_VERIFICATION_REVOKED))
     return out
@@ -140,9 +155,10 @@ def revoke_expired_grants(
     *,
     now: datetime,
     unverified: Collection[Profile] = (),
+    closed: Collection[ClosedLink] = (),
 ) -> dict[str, Any] | None:
     """The user doc without its lapsed grants and their roles, or ``None`` if none lapsed."""
-    revoked = grants_to_revoke(doc, now=now, unverified=unverified)
+    revoked = grants_to_revoke(doc, now=now, unverified=unverified, closed=closed)
     return apply_revocations(doc, revoked) if revoked else None
 
 
@@ -177,6 +193,7 @@ def build_grant_audit(
             "role": grant.get("role"),
             "expires_at": grant.get("expires_at"),
             "actor": ACTOR,
+            **({"cause": CAUSES[reason]} if reason in CAUSES else {}),
         },
         "occurred_at": stamp,
     }
@@ -215,26 +232,88 @@ async def write_grant_audit(couch: CouchClient, audit: dict[str, Any]) -> bool:
     return False
 
 
-async def _unverified_profiles(
-    couch: CouchClient, wanted: set[Profile]
-) -> set[Profile]:
-    """The profiles among ``wanted`` that are missing or no longer identity-verified.
+async def _read_profiles(
+    couch: CouchClient, profiles: Collection[Profile]
+) -> dict[Profile, dict[str, Any] | None]:
+    """Each distinct profile read once: ``None`` when it is missing.
 
-    A read that fails says nothing about verification, so that profile is left alone and
-    its grants survive this round.
+    A read that fails leaves the profile out, which says nothing about it: neither the
+    verification rule nor the closed-profile rule acts on it this round.
     """
-    unverified: set[Profile] = set()
-    for code, volunteer_id in sorted(wanted):
+    read: dict[Profile, dict[str, Any] | None] = {}
+    for code, volunteer_id in sorted(profiles):
         try:
-            profile = await couch.get_doc(shelter_db_name(code), volunteer_id)
+            read[(code, volunteer_id)] = await couch.get_doc(
+                shelter_db_name(code), volunteer_id
+            )
         except Exception:
             logger.exception(
                 "Could not read volunteer %s/%s - skipping", code, volunteer_id
             )
+    return read
+
+
+def _unverified_profiles(
+    wanted: Collection[Profile], profiles: dict[Profile, dict[str, Any] | None]
+) -> set[Profile]:
+    """The profiles among ``wanted`` that are missing or no longer identity-verified.
+
+    A profile that could not be read is not in ``profiles``: its grants survive this round.
+    """
+    return {
+        profile
+        for profile in wanted
+        if profile in profiles and not is_identity_verified(profiles[profile])
+    }
+
+
+def _closed_profile_links(
+    users: list[dict[str, Any]], *, now: datetime
+) -> dict[Profile, list[str]]:
+    """Profiles to read for the closed-profile rule: ``(shelter, volunteer_id)`` -> account names.
+
+    Only a volunteer account counts, and only through its ``volunteer_id`` (CR-221 FR-7: the
+    profile must name the account back, checked once the profile is read).
+    """
+    wanted: dict[Profile, list[str]] = {}
+    for doc in users:
+        name, volunteer_id = doc.get("name"), doc.get("volunteer_id")
+        if (
+            doc.get("personnel_type") != "volunteer"
+            or not isinstance(name, str)
+            or not isinstance(volunteer_id, str)
+            or not volunteer_id
+        ):
             continue
-        if not is_identity_verified(profile):
-            unverified.add((code, volunteer_id))
-    return unverified
+        for grant in doc["role_grants"]:
+            code = grant.get("shelter_code") if isinstance(grant, dict) else None
+            if isinstance(code, str) and code and not _is_expired(grant, now=now):
+                names = wanted.setdefault((code, volunteer_id), [])
+                if name not in names:
+                    names.append(name)
+    return wanted
+
+
+def _closed_profiles(
+    wanted: dict[Profile, list[str]], profiles: dict[Profile, dict[str, Any] | None]
+) -> set[ClosedLink]:
+    """``(shelter, account name)`` pairs whose two-way linked profile is ``status: inactive``.
+
+    A profile that could not be read, is missing, or does not name the account back says
+    nothing about closing, so those grants survive this round.
+    """
+    closed: set[ClosedLink] = set()
+    for (code, volunteer_id), names in sorted(wanted.items()):
+        profile = profiles.get((code, volunteer_id))
+        if (
+            isinstance(profile, dict)
+            and profile.get("type") == "volunteer"
+            and profile.get("status") == "inactive"
+            and isinstance(profile.get("user_name"), str)
+            and profile["user_name"].strip() in names
+        ):
+            closed.add((code, profile["user_name"].strip()))
+    return closed
 
 
 async def _revoke(
@@ -243,13 +322,16 @@ async def _revoke(
     *,
     now: datetime,
     unverified: Collection[Profile],
+    closed: Collection[ClosedLink],
 ) -> list[tuple[dict[str, Any], str]] | None:
     """Write one account's revocations; the grants removed, or ``None`` if nothing changed."""
     revoked: list[tuple[dict[str, Any], str]] = []
 
     async def mutate(current: dict[str, Any]) -> dict[str, Any] | None:
         # Re-derived from the fresh doc on every attempt; the last plan is the one written.
-        revoked[:] = grants_to_revoke(current, now=now, unverified=unverified)
+        revoked[:] = grants_to_revoke(
+            current, now=now, unverified=unverified, closed=closed
+        )
         return apply_revocations(current, revoked) if revoked else None
 
     try:
@@ -275,13 +357,19 @@ async def expire_role_grants(couch: CouchClient, *, now: datetime) -> int:
         if not _is_expired(grant, now=now)
         and (profile := verified_by(grant)) is not None
     }
-    unverified = await _unverified_profiles(couch, wanted)
+    links = _closed_profile_links(users, now=now)
+    # One read per distinct profile serves both the verification and the closed-profile rule.
+    profiles = await _read_profiles(couch, {*wanted, *links})
+    unverified = _unverified_profiles(wanted, profiles)
+    closed = _closed_profiles(links, profiles)
 
     total = 0
     for doc in users:
-        if not grants_to_revoke(doc, now=now, unverified=unverified):
+        if not grants_to_revoke(doc, now=now, unverified=unverified, closed=closed):
             continue
-        revoked = await _revoke(couch, doc["_id"], now=now, unverified=unverified)
+        revoked = await _revoke(
+            couch, doc["_id"], now=now, unverified=unverified, closed=closed
+        )
         if revoked is None:
             continue
         total += 1

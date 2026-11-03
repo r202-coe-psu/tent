@@ -337,7 +337,7 @@ export async function fillBooking(
 	}
 	await page.getByRole('spinbutton', { name: 'ปริมาณ' }).fill(String(opts.qty ?? 1));
 	if (opts.photos?.length) await attachDonorPhotos(page, opts.photos);
-	await page.getByRole('button', { name: 'ถัดไป: เลือกจุดส่งมอบ' }).click();
+	await page.getByRole('button', { name: 'ถัดไป: นัดหมายการส่งของบริจาค' }).click();
 
 	// Step 3 — logistics. The destination is locked to the card's shelter.
 	await expect(

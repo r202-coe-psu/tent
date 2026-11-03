@@ -333,14 +333,20 @@ async function releaseApplicationQuota(
  * (now or by an earlier request): each of them means the application still owes its quota
  * unless the job ledger says it was given back. Assignments cancelled without the stamp
  * (portal withdraw, staff unassign, legacy) are matched but never counted: their own path
- * gave the quota back.
+ * gave the quota back. `heldSeat` counts the stamped ones that held a confirmed seat (not an
+ * unanswered dispatch offer, which sits in `slots_dispatched`): a staff direct assignment
+ * holds one even while the application is still `pending_review`.
  */
 async function cancelLinkedAssignments(
 	dbName: string,
 	app: TicketApplicationDoc,
 	nowIso: string
-): Promise<{ stamped: number; matched: number }> {
-	const result = { stamped: 0, matched: 0 };
+): Promise<{ stamped: number; heldSeat: number; matched: number }> {
+	const result = { stamped: 0, heldSeat: 0, matched: 0 };
+	const countStamped = (doc: Doc) => {
+		result.stamped++;
+		if (doc.dispatch_status !== 'dispatched') result.heldSeat++;
+	};
 	if (!app.volunteer_id) return result;
 	const found = await findAsPublicWriter(
 		dbName,
@@ -363,7 +369,7 @@ async function cancelLinkedAssignments(
 	for (const assignment of linked) {
 		result.matched++;
 		if (!LIVE_ASSIGNMENT_STATUSES.includes(String(assignment.status))) {
-			if (cancelledByThisApplication(assignment)) result.stamped++;
+			if (cancelledByThisApplication(assignment)) countStamped(assignment);
 			continue;
 		}
 		let settled = false;
@@ -384,7 +390,7 @@ async function cancelLinkedAssignments(
 			// Moved on concurrently: nothing left to cancel here. Ours (a rival cancel of this
 			// same application) still counts; a withdraw or unassign already gave its quota back.
 			if (!LIVE_ASSIGNMENT_STATUSES.includes(String(doc.status))) {
-				if (cancelledByThisApplication(doc)) result.stamped++;
+				if (cancelledByThisApplication(doc)) countStamped(doc);
 				settled = true;
 				break;
 			}
@@ -398,7 +404,7 @@ async function cancelLinkedAssignments(
 			);
 			if (put.status === 409) continue;
 			if (put.status >= 400) throw new TicketCancelError('WRITE_FAILED', 502);
-			result.stamped++;
+			countStamped(doc);
 			settled = true;
 		}
 		if (!settled) throw new TicketCancelError('WRITE_FAILED', 409);
@@ -454,7 +460,12 @@ export async function cancelTicket(
 		if (owesQuota || outcome === 'resume') await finishQuotaRelease(dbName, app, now);
 		return;
 	}
-	const release = owesQuota && assignments.stamped > 0;
+	// A `confirmed` application owes its quota once an assignment of its own was cancelled. A
+	// `pending_review` one owes nothing itself, but a live assignment (staff assigned the
+	// volunteer directly) holds a confirmed seat that nobody else gives back, so cancelling
+	// that assignment releases it through the same ledger (CR-220 FR-11).
+	const release =
+		!!app.job_id && assignments.stamped > 0 && (owesQuota || assignments.heldSeat > 0);
 	if (release) await releaseApplicationQuota(dbName, app, now);
 	await markApplicationCancelled(dbName, app._id, now, status, { quotaReleased: release });
 }

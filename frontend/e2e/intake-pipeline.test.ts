@@ -430,7 +430,7 @@ test.describe('Phase 2 intake pipeline (#252)', { tag: ['@onsite', '@regression'
 		await expect(page.getByRole('heading', { name: 'ทะเบียนผู้ประสบภัย' })).toBeVisible({
 			timeout: 15_000
 		});
-		await expect(page.getByText('Station 1')).toBeVisible();
+		await expect(page.getByText('สถานี 1', { exact: true })).toBeVisible();
 
 		const search = page.getByLabel(INTAKE_SEARCH_PLACEHOLDER);
 		await search.fill('สมชายไม่มีในระบบ');

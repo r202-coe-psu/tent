@@ -113,7 +113,25 @@ const jobIdSchema = z.string().refine((v) => v === 'legacy' || v.startsWith('job
 	message: 'job_id ต้องขึ้นต้นด้วย job: (หรือเป็น "legacy" สำหรับข้อมูลเก่า)'
 });
 
-export const shiftAssignmentSchema = z
+/**
+ * schema.md §2.9 "Migration (schema_v 4 → 5)": docs older than v5 (e.g. worker-written v4) lack
+ * `check_out_by/method/reason`; fill the documented defaults (null / 'qr' / null) on read.
+ * Fills missing keys only — present values (even null) are never overwritten.
+ */
+export function normalizeLegacyShiftAssignment<T>(doc: T): T {
+	if (typeof doc !== 'object' || doc === null || Array.isArray(doc)) return doc;
+	const d = doc as Record<string, unknown>;
+	const defaults: Record<string, unknown> = {
+		check_out_by: null,
+		check_out_method: 'qr',
+		check_out_reason: null
+	};
+	const missing = Object.keys(defaults).filter((k) => d[k] === undefined);
+	if (missing.length === 0) return doc;
+	return { ...d, ...Object.fromEntries(missing.map((k) => [k, defaults[k]])) } as T;
+}
+
+const shiftAssignmentDocSchema = z
 	.object({
 		_id: z.string().startsWith('shift_assignment:'),
 		_rev: z.string().optional(),
@@ -160,6 +178,12 @@ export const shiftAssignmentSchema = z
 			path: ['check_out_reason']
 		}
 	);
+
+/** Same contract as the doc schema; legacy docs are normalized (defaults filled) before parsing. */
+export const shiftAssignmentSchema = z.preprocess(
+	normalizeLegacyShiftAssignment,
+	shiftAssignmentDocSchema
+);
 
 export const isShiftAssignment = (d: unknown): d is ShiftAssignment =>
 	shiftAssignmentSchema.safeParse(d).success;

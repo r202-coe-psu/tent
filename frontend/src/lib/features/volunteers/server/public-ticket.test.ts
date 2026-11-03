@@ -144,13 +144,64 @@ describe('cancelTicket', () => {
 		expect(get('job:j1')).toMatchObject({ slots_confirmed: 1 });
 	});
 
-	it('pending_review cancels without touching quota', async () => {
+	it('pending_review with a live staff-assigned seat releases that seat once (CR-220 FR-11)', async () => {
+		// Staff assigned the volunteer directly while the application was still pending: the
+		// roster reconcile counted the assignment (`job` fixture: 1 confirmed), so cancelling
+		// it from the pass has to give the seat back.
 		seed('pending_review');
 		await cancelTicket('APPTOKEN', 'job_application:a1', NOW);
-		expect(get('job_application:a1').status).toBe('cancelled');
+		expect(get('job_application:a1')).toMatchObject({
+			status: 'cancelled',
+			quota_released_at: NOW.toISOString()
+		});
 		expect(get('job_application:a1').quota_release_due_at).toBeUndefined();
+		expect(get('shift_assignment:x1')).toMatchObject({
+			status: 'cancelled',
+			cancel_application_id: 'job_application:a1'
+		});
+		expect(get('job:j1')).toMatchObject({
+			...JOB_RELEASED,
+			released_application_ids: ['job_application:a1']
+		});
+		await expect(cancelTicket('APPTOKEN', 'job_application:a1', NOW)).rejects.toMatchObject({
+			code: 'NOT_CANCELLABLE'
+		});
+		expect(get('job:j1')).toMatchObject(JOB_RELEASED);
+	});
+
+	it('pending_review with a staff-assigned seat: a failed release is retried and releases once', async () => {
+		seed('pending_review');
+		const restore = failPut('job:j1');
+		try {
+			await expect(cancelTicket('APPTOKEN', 'job_application:a1', NOW)).rejects.toMatchObject({
+				code: 'WRITE_FAILED',
+				httpStatus: 502
+			});
+		} finally {
+			restore();
+		}
+		expect(get('job_application:a1').status).toBe('pending_review');
+		expect(get('shift_assignment:x1').status).toBe('cancelled');
+		await cancelTicket('APPTOKEN', 'job_application:a1', NOW);
+		expect(get('job:j1')).toMatchObject({
+			...JOB_RELEASED,
+			released_application_ids: ['job_application:a1']
+		});
+		expect(get('job_application:a1').status).toBe('cancelled');
+	});
+
+	it('pending_review whose assignment is an unanswered dispatch offer releases no confirmed seat', async () => {
+		// An offer sits in slots_dispatched, never in slots_confirmed: nothing to give back here.
+		seed('pending_review');
+		db.docs.set('shift_assignment:x1', {
+			...get('shift_assignment:x1'),
+			dispatch_status: 'dispatched'
+		});
+		await cancelTicket('APPTOKEN', 'job_application:a1', NOW);
+		expect(get('shift_assignment:x1').status).toBe('cancelled');
+		expect(get('job_application:a1').status).toBe('cancelled');
 		expect(get('job_application:a1').quota_released_at).toBeUndefined();
-		expect(get('job:j1')).toMatchObject({ slots_confirmed: 1, slots_remaining: 0, status: 'full' });
+		expect(get('job:j1')).toMatchObject(JOB_UNTOUCHED);
 		expect(get('job:j1').released_application_ids).toBeUndefined();
 	});
 
@@ -721,5 +772,126 @@ describe('canCancelTicket', () => {
 		expect(canCancelTicket(app({ status: 'rejected', quota_release_due_at: due }), NOW)).toBe(
 			false
 		);
+	});
+});
+
+/**
+ * A fake that behaves like CouchDB for the documents these tests touch: every PUT must carry
+ * the current `_rev` or it is a 409, so two interleaved cancels really do conflict instead of
+ * silently overwriting each other (the default mock accepts any write).
+ */
+function enforceRevisions() {
+	const revs = new Map<string, number>();
+	const revOf = (id: string) => `${revs.get(id) ?? 1}-fake`;
+	const stats = { conflicts: 0 };
+	const realGet = vi.mocked(getAsPublicWriter).getMockImplementation()!;
+	const realPut = vi.mocked(putAsPublicWriter).getMockImplementation()!;
+	vi.mocked(getAsPublicWriter).mockImplementation(async (d, id) => {
+		const res = await realGet(d, id);
+		return res.status === 200
+			? { ...res, data: { ...(res.data as Record<string, unknown>), _rev: revOf(id) } }
+			: res;
+	});
+	vi.mocked(putAsPublicWriter).mockImplementation(async (d, id, doc) => {
+		if ((doc as Record<string, unknown>)._rev !== revOf(id)) {
+			stats.conflicts++;
+			return { status: 409, data: null };
+		}
+		const { _rev: _ignored, ...stored } = doc as Record<string, unknown>;
+		void _ignored;
+		revs.set(id, (revs.get(id) ?? 1) + 1);
+		return realPut(d, id, stored);
+	});
+	return {
+		stats,
+		restore: () => {
+			vi.mocked(getAsPublicWriter).mockImplementation(realGet);
+			vi.mocked(putAsPublicWriter).mockImplementation(realPut);
+		}
+	};
+}
+
+describe('cancelTicket with _rev-enforcing storage', () => {
+	it.each([
+		['linked assignment', true],
+		['no assignment', false]
+	])('two simultaneous cancels (%s) release the quota exactly once', async (_label, linked) => {
+		seed('confirmed');
+		if (!linked) db.docs.delete('shift_assignment:x1');
+		const fake = enforceRevisions();
+		try {
+			const results = await Promise.allSettled([
+				cancelTicket('APPTOKEN', 'job_application:a1', NOW),
+				cancelTicket('APPTOKEN', 'job_application:a1', NOW)
+			]);
+			// A rival may lose with 409 NOT_CANCELLABLE; nothing else is an acceptable failure.
+			for (const r of results) {
+				if (r.status === 'rejected') expect(r.reason).toMatchObject({ code: 'NOT_CANCELLABLE' });
+			}
+			expect(results.some((r) => r.status === 'fulfilled')).toBe(true);
+			// The fake must actually have refused a stale write, or this proves nothing.
+			expect(fake.stats.conflicts).toBeGreaterThan(0);
+		} finally {
+			fake.restore();
+		}
+		expect(get('job_application:a1').status).toBe('cancelled');
+		expect(get('job_application:a1').quota_released_at).toBeDefined();
+		expect(get('job:j1')).toMatchObject({
+			...JOB_RELEASED,
+			released_application_ids: ['job_application:a1']
+		});
+		expect(get('job:j1').shifts).toEqual([
+			{ shift_id: 'shift:s1', slots_confirmed: 0, slots_remaining: 1 }
+		]);
+	});
+});
+
+describe('re-booking after a cancel (CR-220 ledger is per application)', () => {
+	it('a new application for the same job releases its own quota; the old key does not block it', async () => {
+		seed('confirmed');
+		await cancelTicket('APPTOKEN', 'job_application:a1', NOW);
+		expect(get('job:j1')).toMatchObject({
+			...JOB_RELEASED,
+			released_application_ids: ['job_application:a1']
+		});
+
+		// Same volunteer books the same shift again: a new application and assignment, and the
+		// seat is taken again.
+		db.docs.set('job_application:a2', {
+			...get('job_application:a1'),
+			_id: 'job_application:a2',
+			tracking_token_hash: 'APP2TOKEN-hash',
+			status: 'confirmed',
+			quota_released_at: undefined
+		});
+		db.docs.set('shift_assignment:x2', {
+			...get('shift_assignment:x1'),
+			_id: 'shift_assignment:x2',
+			status: 'assigned',
+			cancel_application_id: undefined
+		});
+		db.docs.set('job:j1', {
+			...get('job:j1'),
+			...JOB_UNTOUCHED,
+			shifts: [{ shift_id: 'shift:s1', slots_confirmed: 1, slots_remaining: 0 }]
+		});
+
+		await cancelTicket('APP2TOKEN', 'job_application:a2', NOW);
+		expect(get('job_application:a2')).toMatchObject({
+			status: 'cancelled',
+			quota_released_at: NOW.toISOString()
+		});
+		// a1's stamped assignment (x1) is not a2's: only x2 is cancelled for a2.
+		expect(get('shift_assignment:x2')).toMatchObject({
+			status: 'cancelled',
+			cancel_application_id: 'job_application:a2'
+		});
+		expect(get('job:j1')).toMatchObject({
+			...JOB_RELEASED,
+			released_application_ids: ['job_application:a1', 'job_application:a2']
+		});
+		expect(get('job:j1').shifts).toEqual([
+			{ shift_id: 'shift:s1', slots_confirmed: 0, slots_remaining: 1 }
+		]);
 	});
 });
