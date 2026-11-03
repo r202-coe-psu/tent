@@ -11,6 +11,7 @@
 	import type { StockLotBalance } from '../domain/operations';
 	import { useStoragePoints } from '../application/use-storage-points.svelte';
 	import LedgerTable from './ledger-table.svelte';
+	import LotFractionWriteOff from './stock/lot-fraction-write-off.svelte';
 	import DisabledReason from './stock/disabled-reason.svelte';
 	import { DISTRIBUTE_FORBIDDEN_HINT, OFFLINE_HINT } from './stock/hints';
 	import { buildLotRows } from './stock/lot-view';
@@ -44,6 +45,7 @@
 
 	const storagePoints = useStoragePoints(() => shelterCode);
 	const lotRows = $derived(buildLotRows(lots, storagePoints.points, Date.now(), itemsById));
+	const balanceByLotRef = $derived(new Map(lots.map((l) => [l.lot_ref, l])));
 
 	const ACTIONS = [
 		{ kind: 'receive', label: 'รับเข้า', icon: ArrowDownToLine },
@@ -207,6 +209,12 @@
 													? ''
 													: `ลำดับที่ ${index + 1}: `}{lot.reason}
 											</p>
+											{#if !lot.isNegative}
+												{@const balance = balanceByLotRef.get(lot.lotRef)}
+												{#if balance}
+													<LotFractionWriteOff lot={balance} {offline} />
+												{/if}
+											{/if}
 										</li>
 									{/each}
 								</ul>

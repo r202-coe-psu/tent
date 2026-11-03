@@ -22,7 +22,7 @@ describe('fractionWriteOffQty (#805)', () => {
 		expect(fractionWriteOffQty(balance, 'count')).toBeUndefined();
 	});
 
-	it.each(['mass', 'volume', 'other', undefined] as const)(
+	it.each(['mass', 'volume', 'length', 'energy', undefined] as const)(
 		'offers nothing when the dimension is %s',
 		(dimension) => {
 			expect(fractionWriteOffQty('3.5', dimension)).toBeUndefined();

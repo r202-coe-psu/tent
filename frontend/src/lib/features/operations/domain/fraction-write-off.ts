@@ -19,11 +19,13 @@ export function fractionWriteOffQty(
 	return qtyNeg(value.minus(value.floor()));
 }
 
+export type FractionWriteOffInput = AdjustInput & { qty: string };
+
 /** The adjust that writes the fraction off the lot it sits in, bound to that lot like a manual write-off. */
 export function fractionWriteOffInput(
 	lot: StockLotBalance,
 	dimension: Dimension | undefined
-): AdjustInput | undefined {
+): FractionWriteOffInput | undefined {
 	const qty = fractionWriteOffQty(lot.qty, dimension);
 	if (qty === undefined) return undefined;
 	return {
