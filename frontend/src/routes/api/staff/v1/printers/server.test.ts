@@ -110,6 +110,18 @@ describe('GET /api/staff/v1/printers', () => {
 		expect(mockList).not.toHaveBeenCalled();
 	});
 
+	it.each(['sh001', 'SH01', 'catalog', '../_users'])(
+		'answers 422 VALIDATION for a malformed shelter_code %s without checking scope',
+		async (code) => {
+			const response = await get(`?shelter_code=${encodeURIComponent(code)}`);
+
+			expect(response.status).toBe(422);
+			expect((await response.json()).error.code).toBe('VALIDATION');
+			expect(mockAuth).not.toHaveBeenCalled();
+			expect(mockList).not.toHaveBeenCalled();
+		}
+	);
+
 	it('answers 403 FORBIDDEN for a shelter outside the caller scope', async () => {
 		mockAuth.mockImplementation(async () => error(403, 'Caller is not in shelter "SH002" scope'));
 
