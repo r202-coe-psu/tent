@@ -7,6 +7,7 @@ import {
 } from './unit-of-measure';
 
 export const WHOLE_QTY_MESSAGE = 'หน่วยนับต้องเป็นจำนวนเต็ม';
+export const WHOLE_DIGITS_ONLY_MESSAGE = 'หน่วยนับกรอกได้เฉพาะตัวเลขจำนวนเต็ม';
 
 export type UnitDimensionSource = readonly Pick<UnitOfMeasure, 'code' | 'dimension'>[];
 
@@ -34,6 +35,9 @@ export function resolveUnitDimension(
 
 export const requiresWholeQty = (dimension: Dimension | undefined): boolean =>
 	dimension === 'count';
+
+/** Text a person may type or paste into a count-unit quantity box: digits only. */
+export const isWholeNumberText = (text: string): boolean => /^\d*$/.test(text);
 
 export const qtyInputStep = (dimension: Dimension | undefined): '1' | 'any' =>
 	requiresWholeQty(dimension) ? '1' : 'any';

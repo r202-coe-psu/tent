@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
 	WHOLE_QTY_MESSAGE,
+	isWholeNumberText,
 	qtyInputStep,
 	requiresWholeQty,
 	resolveUnitDimension,
@@ -91,5 +92,17 @@ describe('roundUpQty', () => {
 		expect(roundUpQty(86.1)).toBe(87);
 		expect(roundUpQty(2)).toBe(2);
 		expect(roundUpQty('0.0001')).toBe(1);
+	});
+});
+
+describe('isWholeNumberText', () => {
+	it('accepts digits and the empty string', () => {
+		expect(isWholeNumberText('')).toBe(true);
+		expect(isWholeNumberText('0')).toBe(true);
+		expect(isWholeNumberText('12345')).toBe(true);
+	});
+
+	it.each(['.', '6.6', '-1', '+1', 'e', '1e3', ' ', '1 2', '1,000', '๑'])('refuses %j', (text) => {
+		expect(isWholeNumberText(text)).toBe(false);
 	});
 });
