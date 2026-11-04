@@ -235,6 +235,7 @@ curl -s -X PUT -u <staff>:<pw> $EDGE/couch/shelter_sh001/evacuee:01OUTAGE0000000
 
 - URL ฝั่ง edge ใน job คือ `http://127.0.0.1:5984` เพราะ job รัน **ภายใน container CouchDB** เอง
 - job แต่ละตัวเก็บ `edge_init_hash` (fingerprint ของ URL + credential + selector) — รันซ้ำแล้ว config ตรงกับ `.env` = `exists` (ข้าม) · ไม่ตรง เช่นแก้ `SYNC_URL` / รหัส / `SHELTER_CODE` = `stale` แล้วลบและสร้างใหม่ให้เอง (job ที่สร้างก่อนมี fingerprint ถูกสร้างใหม่หนึ่งครั้ง)
+- **เช็ก uuid ก่อนสร้าง job:** `edge-init` เรียก `GET /` ของ central (ด้วย `CENTRAL_REPL_USER`) และของ edge เทียบ `uuid` — ถ้าตรงกัน แปลว่า `SYNC_URL` ชี้กลับมาที่ edge ตัวเอง (เช่น LAN DNS ยังชี้ domain มาที่ edge) จะขึ้น `FAILED` แล้ว exit 1 · อ่าน `GET /` ของ central ไม่ได้ก็ `FAILED` เช่นกัน · ถ้าไม่เช็ก job จะขึ้น `running` `error_count 0` ทั้งที่ replicate เข้าตัวเอง
 - รหัสผ่านใน doc ของ `_replicator` เป็น **plaintext** (admin อ่านกลับก็เห็น) ถือเป็นความลับของเครื่อง edge
 
 ### อัปเกรดเป็น CR-171 (`_users.edge_shelters` + soft delete)
@@ -352,6 +353,8 @@ edge ใช้ `couchdb-edge-example.ini` (`auth_noop`, ปิด `verify_ssl_ce
 | `crashing` หลัง WAN กลับ ทั้งที่ central ปกติ | LAN DNS ยังชี้ domain แอปมาที่ edge (ยังไม่ cutback) job ยิงเข้า edge ตัวเอง ([README T9](README.md)) | cutback คืน DNS แล้ว `edge-watchdog` เตะให้เอง |
 | staff login ที่ edge ไม่ได้ | `CENTRAL_REPL_USER` ไม่ใช่ central admin (job `users_<code>_pull` ได้ 401), staff ไม่มี role `shelter:<CODE>` ที่ central หรือ CouchDB คนละ version | ขั้น 4 · ใช้ `couchdb:3.5` ทั้งสองฝั่ง |
 | `edge-init` ขึ้น `FAILED ... (HTTP 4xx/5xx)` | ดูข้อความหลัง `FAILED` — ส่วนใหญ่ central ต่อไม่ได้ หรือ JSON เพี้ยนเพราะรหัสผ่านมี `"` / `\` | แก้ `.env` แล้วรัน `edge-init` ซ้ำ (รันซ้ำได้) |
+| `edge-init` ขึ้น `FAILED  SYNC_URL (...) ชี้กลับมาที่ edge ตัวเอง (uuid ตรงกัน ...)` | `SYNC_URL` resolve มาที่ edge เอง — LAN DNS ยังชี้ domain central มาที่ edge (cutover ยังไม่ cutback) หรือใส่ URL ผิด | แก้ `SYNC_URL` / คืน DNS ให้ชี้ central แล้วรัน `edge-init` ซ้ำ |
+| `edge-init` ขึ้น `FAILED  อ่าน GET / ของ central ... ไม่ได้` | ต่อ central ไม่ได้, `SYNC_URL` ผิด หรือ `CENTRAL_REPL_*` ผิด / ถูกล็อกเอาต์ | ขั้น 1 · `.env` ขั้น 4 · แก้แล้วรัน `edge-init` ซ้ำ |
 | list job ว่างหลัง `up` | replicator ยังไม่หยิบ job | รอ ~30 วินาที |
 | CouchDB ไม่ start / mount error | ไม่มีไฟล์ `couchdb-edge.ini` (Docker สร้างเป็นโฟลเดอร์) | ขั้น 3 แล้ว `docker compose -f docker-compose.edge.yml up -d --force-recreate` |
 | nginx edge ไม่ start: `host not found in upstream "fastapi"` | mount `nginx/` ของ central แทน `nginx-edge/` | ใช้ `docker-compose.edge.yml` ตัวจริง |
@@ -361,6 +364,11 @@ edge ใช้ `couchdb-edge-example.ini` (`auth_noop`, ปิด `verify_ssl_ce
 [`/_scheduler/*`, `/_active_tasks`](https://docs.couchdb.org/en/stable/api/server/common.html)
 
 ---
+
+> **⚠ เปลี่ยนรหัส admin ของ central — ระวัง lockout ข้าม edge:** CouchDB ล็อกเอาต์ตาม IP และทุก edge เข้า central ผ่าน nginx ตัวเดียวกัน
+> (central เห็นเป็น IP เดียว) จึงมี edge **เครื่องเดียว** ที่ใช้รหัส central admin ผิด ก็ทำให้ admin ของ **ทุก edge** ถูกล็อกได้
+> ก่อนหมุนรหัส admin ของ central ให้ **หยุด job บนทุก edge** (หรือแก้ `CENTRAL_REPL_PASSWORD` ใน `.env` ของทุก edge แล้วรัน `edge-init`) **ในช่วงเวลาเดียวกัน**
+> อย่าปล่อยให้ edge ใดใช้รหัสเก่าต่อ
 
 ## ตอน cutover / cutback (แบบ path `/sync`)
 
