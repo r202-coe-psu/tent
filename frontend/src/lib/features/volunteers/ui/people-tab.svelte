@@ -38,6 +38,7 @@
 	} from '../application/queries';
 	import { hasPendingControlledSkill, identityVerificationStatus } from '../domain/verification';
 	import { skillMatches } from '../domain/skill-catalog';
+	import { matchesVolunteerSearch, volunteerSearchFields } from '../domain/volunteer-search';
 	import { hasVolunteerAccount, volunteerAccessStatus } from '../domain/volunteer-access-status';
 	import type { PersonnelType, Volunteer, VolunteerSource } from '../domain/volunteer.schema';
 	import type { ShiftAssignment, ShiftAssignmentStatus } from '../domain/shift-assignment.schema';
@@ -96,18 +97,6 @@
 	);
 	const readyCount = $derived(volunteers.length - pendingCount);
 
-	function matchesSearch(v: Volunteer, term: string): boolean {
-		if (!term) return true;
-		const needle = term.trim().toLowerCase();
-		if (!needle) return true;
-		return (
-			v.first_name.toLowerCase().includes(needle) ||
-			v.last_name.toLowerCase().includes(needle) ||
-			(v.phone ?? '').includes(needle) ||
-			v.volunteer_code.toLowerCase().includes(needle)
-		);
-	}
-
 	const filteredVolunteers = $derived.by<Volunteer[]>(() => {
 		let list = volunteers;
 
@@ -135,7 +124,7 @@
 			list = [];
 		}
 
-		if (search) list = list.filter((v) => matchesSearch(v, search));
+		if (search) list = list.filter((v) => matchesVolunteerSearch(volunteerSearchFields(v), search));
 		if (skillFilter)
 			list = list.filter((v) =>
 				v.skills.some((value) => skillMatches(value, skillFilter, skillCatalog.options))

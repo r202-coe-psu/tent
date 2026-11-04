@@ -2,7 +2,7 @@ import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import {
 	ServiceError,
-	serviceError,
+	serviceOrHttpError,
 	requireShelterScopeOrSA,
 	requireShelterManagerOrSA
 } from '$lib/server/couch-admin';
@@ -13,6 +13,7 @@ import {
 	EMPTY_PARKING_POLICY,
 	DEFAULT_SHELTER_FEATURE_FLAGS,
 	DEFAULT_SITE_KIND,
+	resolveOperationStatus,
 	validateSiteKindChange
 } from '$lib/features/shelters/server';
 import { readMasterDoc } from '$lib/server/master-data-server';
@@ -68,7 +69,7 @@ export const GET: RequestHandler = async ({ request, params }) => {
 			updated_at: migrated.updated_at ?? ''
 		});
 	} catch (e) {
-		return serviceError(e);
+		return serviceOrHttpError(e);
 	}
 };
 
@@ -91,6 +92,13 @@ export const PATCH: RequestHandler = async ({ request, params }) => {
 		// updateMaster re-reads the doc + retries 409s internally
 		// (skill: couchdb-pouchdb-bestpractices §3) and owns `closed_at`.
 		await updateMaster(code, (current) => {
+			// CR-219 FR-22: closing must go through the close route, which checks people out first.
+			// A save that keeps an already-closed shelter closed is fine.
+			if (patch.operation_status === 'closed' && resolveOperationStatus(current) !== 'closed') {
+				error(400, {
+					message: 'ปิดศูนย์ต้องทำผ่าน POST /api/back-office/shelter/[code]/close'
+				});
+			}
 			if (input.site_kind) {
 				// FR-8: compared with the stored kind of the doc being written, so a retry sees the winner's value.
 				const siteKindError = validateSiteKindChange(
@@ -105,6 +113,7 @@ export const PATCH: RequestHandler = async ({ request, params }) => {
 
 		return json({ ok: true, code });
 	} catch (e) {
-		return serviceError(e);
+		// The guard's 403 / the close-block 400 keep their status (CR-219 FR-22).
+		return serviceOrHttpError(e);
 	}
 };

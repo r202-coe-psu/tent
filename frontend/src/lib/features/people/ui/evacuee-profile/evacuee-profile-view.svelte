@@ -32,6 +32,7 @@
 		statusChangeHandlerKind,
 		canChangeEvacueeZone,
 		formatPersonName,
+		movementReasonLabel,
 		zoneLabel
 	} from '$lib/features/people';
 	import {
@@ -868,7 +869,7 @@
 									<div class="break-words text-muted-foreground">
 										{formatDateTime(m.occurred_at)}
 										{#if m.reason}
-											· {m.reason}
+											· {movementReasonLabel(m.reason)}
 										{/if}
 									</div>
 								</div>

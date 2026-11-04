@@ -294,7 +294,7 @@ const AUDIT_PAGE_SIZE = 1000;
  * index (`type`, `target_id`, `reason`). That index cannot order by `created_at`, so the newest is
  * picked here.
  */
-async function lastGrantEndings(
+export async function lastGrantEndings(
 	shelterCode: string,
 	names: readonly string[]
 ): Promise<Map<string, GrantEnding>> {

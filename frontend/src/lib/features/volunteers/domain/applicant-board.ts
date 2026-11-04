@@ -26,6 +26,8 @@ export type HistoryFacet = 'confirmed' | 'rejected' | 'cancelled' | 'staff_assig
 
 export interface ApplicantPerson {
 	name: string | null;
+	/** From the linked volunteer profile; an application form does not ask for one. */
+	nickname: string | null;
 	phone: string | null;
 	code: string | null;
 }
@@ -103,6 +105,7 @@ export function applicationPerson(
 	const volunteer = application.volunteer_id ? volunteers.get(application.volunteer_id) : null;
 	return {
 		name: `${applicant.first_name} ${applicant.last_name}`.trim(),
+		nickname: volunteer?.nickname ?? null,
 		phone: applicant.phone,
 		code: volunteer?.volunteer_code ?? null
 	};
@@ -147,10 +150,11 @@ function staffEntry(
 		person: volunteer
 			? {
 					name: `${volunteer.first_name} ${volunteer.last_name}`.trim(),
+					nickname: volunteer.nickname ?? null,
 					phone: volunteer.phone,
 					code: volunteer.volunteer_code
 				}
-			: { name: null, phone: null, code: null },
+			: { name: null, nickname: null, phone: null, code: null },
 		shiftId: assignment.shift_id ?? null,
 		date: assignment.date
 	};
