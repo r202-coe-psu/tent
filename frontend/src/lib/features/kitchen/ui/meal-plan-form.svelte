@@ -34,11 +34,16 @@
 		useUnitsOfMeasure,
 		useUnitDimensionResolver,
 		qtyInputStep,
-		wholeQtyError
+		requiresWholeQty,
+		wholeQtyError,
+		WholeNumberGuard,
+		WholeNumberNote
 	} from '$lib/features/catalog';
 	import { langState } from '$lib/states/i18n.svelte';
 	import { useSupplyItems } from '$lib/features/supply';
 	import { useStockBalance } from '$lib/features/operations';
+
+	const wholeGuard = new WholeNumberGuard();
 
 	// Edit draft if plan present; create if absent.
 	let {
@@ -401,6 +406,7 @@
 											min="0"
 											step={qtyInputStep(rowDim)}
 											aria-invalid={!!qtyError}
+											{@attach wholeGuard.attach(() => requiresWholeQty(rowDim), String(i))}
 											class="min-h-11 w-full sm:min-h-9 sm:w-28"
 											placeholder="ต่อคน"
 											bind:value={row.qtyPerPerson}
@@ -421,6 +427,7 @@
 								{#if qtyError}
 									<p class="pl-0.5 text-xs text-destructive">{qtyError}</p>
 								{/if}
+								<WholeNumberNote guard={wholeGuard} key={String(i)} class="pl-0.5" />
 								{#if row.itemId && !currentUnresolved}
 									<p class="pl-0.5 text-xs text-muted-foreground">
 										ยอดคลังสแตนบาย ณ ศูนย์: <span class="font-medium text-foreground"
