@@ -76,7 +76,9 @@ const volunteers = new Map<string, Volunteer>(
 			first_name: `ชื่อ${n}`,
 			last_name: `สกุล${n}`,
 			phone: `081000000${n}`,
-			volunteer_code: `V-00${n}`
+			volunteer_code: `V-00${n}`,
+			// Applicant 1 (pending) and staff row 5 carry a nickname on their profile (#1122).
+			...(n === 1 ? { nickname: 'มดแดง' } : n === 5 ? { nickname: 'ปุ้ย' } : {})
 		} as Volunteer
 	])
 );
@@ -183,6 +185,18 @@ describe('filterApplicantBoard', () => {
 		expect(run({ search: 'v-001' }).pending).toEqual([app(1)]);
 		expect(run({ search: 'nobody' })).toEqual({ pending: [], history: [] });
 	});
+
+	it('finds a nickname from the linked profile, on pending and history rows (#1122)', () => {
+		expect(run({ search: 'มดแดง' })).toEqual({ pending: [app(1)], history: [] });
+		expect(run({ search: 'ปุ้ย' })).toEqual({ pending: [], history: [asg(5)] });
+	});
+
+	it.each(['081-000-0005', '081 000 0005', '0810000005'])(
+		'finds the same person when the phone is typed as %s (#1122)',
+		(search) => {
+			expect(run({ search }).history).toEqual([asg(5)]);
+		}
+	);
 
 	it.each(['v006', 'V006', 'v-006', 'V 006'])(
 		'finds V-006 when searched as %s (#1013)',
