@@ -7,11 +7,14 @@
 		formatUnit,
 		itemMasterUnit,
 		qtyInputStep,
+		requiresWholeQty,
 		systemCategoryId,
 		useItemMasters,
 		useUnitDimensionResolver,
 		wholeQtyError,
-		useUnitsOfMeasure
+		useUnitsOfMeasure,
+		WholeNumberGuard,
+		WholeNumberNote
 	} from '$lib/features/catalog';
 	import { StoragePointSelect, type StoragePointRef } from '$lib/features/operations';
 	import { getShelterCode } from '$lib/db/shelter';
@@ -67,6 +70,8 @@
 		const item = readyMeals.find((i) => i._id === itemId);
 		return item ? dimensions.resolve(itemMasterUnit(item)) : undefined;
 	}
+
+	const wholeGuard = new WholeNumberGuard();
 
 	const qtyErrors = $derived(
 		new Map(lines.map((line) => [line.key, wholeQtyError(line.qty, dimensionOf(line.item_id))]))
@@ -168,12 +173,14 @@
 						placeholder="0"
 						bind:value={line.qty}
 						aria-invalid={!!qtyErrors.get(line.key)}
+						{@attach wholeGuard.attach(() => requiresWholeQty(dimensionOf(line.item_id)), line.key)}
 						{disabled}
 						class="h-11 tabular-nums sm:h-10"
 					/>
 					{#if qtyErrors.get(line.key)}
 						<p class="text-xs font-semibold text-red-600">{qtyErrors.get(line.key)}</p>
 					{/if}
+					<WholeNumberNote guard={wholeGuard} key={line.key} />
 				</div>
 				<div class="space-y-1.5">
 					<Label class="text-sm font-semibold text-slate-700">สถานที่จัดเก็บ</Label>
