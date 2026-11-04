@@ -122,9 +122,6 @@ const BATCH_B: Batch = {
 	ticketNo: ''
 };
 
-/** Recipe: 1 kg of rice per 10 dishes; the scaled amount rounds up to whole units (#805 FR-3). */
-const riceFor = (batch: Batch) => Math.ceil(batch.target / REGULAR_HEADCOUNT);
-
 const ownedIds = new Set<string>();
 const owners = [KITCHEN.name, MANAGER.name, WAREHOUSE.name];
 const sessions: Record<string, string> = {};
@@ -376,11 +373,11 @@ async function approveBatch(warehouse: Page, batch: Batch, onHand: number): Prom
 	await expect(items.filter({ hasText: CHICKEN })).toHaveCount(0);
 	// The on-hand column shows what's left of the seeded rice lot (earlier batches already
 	// dispatched) and the allocation defaults to what the kitchen asked for (recipe: 1 kg per
-	// 10 dishes, rounded up to a whole kg), so nothing is short and approve is enabled.
+	// 10 dishes), so nothing is short and approve is enabled.
 	await expect(riceLine).toContainText(String(onHand));
 	await expect(riceLine).not.toContainText('สต็อกไม่พอ');
 	await expect(warehouse.getByLabel(`จำนวนที่คลังจัดให้ ${RICE}`)).toHaveValue(
-		String(riceFor(batch))
+		String(batch.target / REGULAR_HEADCOUNT)
 	);
 
 	const approve = warehouse.getByRole('button', { name: 'อนุมัติ', exact: true });
@@ -399,9 +396,12 @@ async function approveBatch(warehouse: Page, batch: Batch, onHand: number): Prom
 	await expect(lotRow).toContainText('พร้อมปล่อย', { timeout: 15_000 });
 	// The modal shows the same prefill; open, check, close without saving.
 	await warehouse.getByRole('button', { name: 'จัดการ lot' }).click();
-	await expect(warehouse.getByLabel('จำนวนที่ใช้จาก Lot นี้')).toHaveValue(String(riceFor(batch)), {
-		timeout: 15_000
-	});
+	await expect(warehouse.getByLabel('จำนวนที่ใช้จาก Lot นี้')).toHaveValue(
+		String(batch.target / REGULAR_HEADCOUNT),
+		{
+			timeout: 15_000
+		}
+	);
 	// Scope to the dialog — the action bar also has "ยกเลิกตั๋ว".
 	await warehouse.getByRole('dialog').getByRole('button', { name: 'ยกเลิก', exact: true }).click();
 	await expect(warehouse.getByRole('dialog')).toBeHidden();
@@ -631,7 +631,7 @@ test.describe(
 			await test.step('warehouse approves and dispatches both tickets', async () => {
 				// Seeded 50 kg of rice; batch A's dispatch takes its share before B is approved.
 				await approveBatch(warehouse, BATCH_A, RICE_STOCK);
-				await approveBatch(warehouse, BATCH_B, RICE_STOCK - riceFor(BATCH_A));
+				await approveBatch(warehouse, BATCH_B, RICE_STOCK - BATCH_A.target / REGULAR_HEADCOUNT);
 			});
 
 			await test.step('kitchen confirms receipt of both dispatches', async () => {
