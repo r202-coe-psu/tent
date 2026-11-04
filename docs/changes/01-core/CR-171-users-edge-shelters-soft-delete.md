@@ -96,6 +96,8 @@ related:
 - **FR-12** (guard) `_users/_design/tent_guard` v2 (`USERS_GUARD_DESIGN_VERSION = 2`) ห้าม non-admin เปลี่ยน
   `edge_shelters`, `deleted_at`, `deleted_by` (รวมกับ `role_grants`, `active` เดิม) — เฉพาะ server admin
   (`user-service` ผ่าน admin credential) เขียนได้; ล็อกด้วย `users-guard-design.test.ts`. (Blocker 2 ของ PO review 2026-10-31)
+  guard เดียวกันปฏิเสธการ `DELETE` doc user จาก non-admin ด้วย (บังคับ FR-3 ฝั่ง CouchDB — self-DELETE ทิ้ง tombstone
+  ที่ไม่ผ่าน selector ของ edge) · ไม่ bump version เพราะ v2 ยังไม่เคย deploy.
 
 ### Acceptance
 
@@ -154,3 +156,6 @@ user ที่ถูก `DELETE` ไปก่อน CR นี้ (tombstone) ไ
   (`created_by` ฯลฯ) — ใช้ชื่อซ้ำทำให้ประวัติคนเก่าปนกับคนใหม่, `edge_shelters` ของคนเก่าติดไปกับคนใหม่, และ doc ของคนเก่าถูกเขียนทับ.
   ราคา: ชื่อถูกจองถาวร. กู้คืนบัญชีโดย SA ให้ทำเป็นฟีเจอร์แยกถ้าจำเป็น.
 - 2026-10-18 — owner (@net-lynx) อนุมัติ CR-171 ใน PR #348 · ผ่าน acceptance รวมเทสบน edge จริง
+- 2026-11-04 — kong: FR-12 guard ปฏิเสธ non-admin `DELETE` doc user (F9 จาก pre-merge review #348). CouchDB 3.5 default
+  ให้ `_users` เป็น admin-only และ `_security` ของ `_users` แก้ไม่ได้ (ทดสอบแล้ว: non-admin เข้า `_users` ไม่ได้เลย)
+  จึงเป็น defense in depth ถ้า config เปลี่ยนในอนาคต — ไม่ใช่ช่องโหว่ใน config ปัจจุบัน.

@@ -118,11 +118,28 @@ describe('_users/_design/tent_guard validate_doc_update (FR-11, AC-7)', () => {
 		).not.toThrow();
 	});
 
-	it('does not look at deletions or at docs that are not users', () => {
+	// CR-171 FR-3: a self-DELETE leaves a tombstone without roles/edge_shelters, so the edge
+	// would keep the old doc and its roles.
+	it('refuses a user deleting their own doc', () => {
+		const del = () =>
+			vdu({ _id: 'org.couchdb.user:vol@example.com', _deleted: true }, stored(), SELF);
+		expect(del).toThrow();
+		try {
+			del();
+		} catch (e) {
+			expect(e).toMatchObject({ forbidden: expect.stringContaining('administrator') });
+		}
+	});
+
+	it('lets an admin delete a user doc', () => {
 		expect(() =>
-			vdu({ _id: 'org.couchdb.user:vol@example.com', _deleted: true }, stored(), SELF)
+			vdu({ _id: 'org.couchdb.user:vol@example.com', _deleted: true }, stored(), ADMIN)
 		).not.toThrow();
+	});
+
+	it('does not look at docs that are not users', () => {
 		expect(() => vdu({ _id: '_design/other', active: true }, null, SELF)).not.toThrow();
+		expect(() => vdu({ _id: '_design/other', _deleted: true }, null, SELF)).not.toThrow();
 	});
 });
 

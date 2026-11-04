@@ -2924,7 +2924,7 @@ CouchDB `_users` DB ไม่ใช่ operational doc ธรรมดา — �
 
 - ห้าม `DELETE` doc ใน `_users` (tombstone ไม่ผ่าน selector ของ edge → edge ไม่รู้ว่าถูกลบ)
 - ลบ = PUT doc เดิมด้วย `roles: []`, `shelter_id: null`, `active: false`, `password` สุ่มใหม่, `deleted_at`, `deleted_by` — field อื่นรวม PII และ `edge_shelters` คงเดิม
-- `edge_shelters`, `deleted_at`, `deleted_by` ถูก guard ใน `_users/_design/tent_guard` v2 — non-admin แก้ไม่ได้ (CR-171 FR-12)
+- `edge_shelters`, `deleted_at`, `deleted_by` ถูก guard ใน `_users/_design/tent_guard` v2 — non-admin แก้ไม่ได้ และ non-admin `DELETE` doc user ไม่ได้ (CR-171 FR-12)
 - doc ที่ `deleted_at` ไม่ว่างไม่ใช่ user สำหรับ management API / login ด้วยเบอร์ / OAuth login · ชื่อของบัญชีที่ถูกลบถูกจองถาวร — สร้างชื่อเดิมซ้ำได้ `CONFLICT` (ห้ามเขียนทับ doc เดิม)
 
 ---

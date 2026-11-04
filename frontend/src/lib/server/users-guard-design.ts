@@ -46,8 +46,8 @@ export interface UsersGuardDesignDoc {
 export function buildUsersGuardValidateDocUpdate(): string {
 	return `function (newDoc, oldDoc, userCtx) {
   if (userCtx.roles.indexOf('_admin') !== -1) return;
-  if (newDoc._deleted) return;
   if (typeof newDoc._id !== 'string' || newDoc._id.indexOf('org.couchdb.user:') !== 0) return;
+  if (newDoc._deleted) throw({ forbidden: 'only an administrator can delete a user' });
   function canon(v) {
     if (v === undefined || v === null) return 'null';
     if (typeof v !== 'object') return JSON.stringify(v);
