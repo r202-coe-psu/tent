@@ -534,7 +534,9 @@ export async function seedCatalog(): Promise<Map<string, string>> {
     var hasScope = userCtx.roles.indexOf('shelter:' + newDoc.shelter_code) !== -1;
     var isManager = userCtx.roles.indexOf('shelter_manager') !== -1;
     var isWS = userCtx.roles.indexOf('warehouse_staff') !== -1;
-    if (hasScope && (isManager || isWS)) {
+    // CR-227: donation_staff writes its own shelter's catalog docs (compound role only).
+    var isDonationStaff = userCtx.roles.indexOf(newDoc.shelter_code + ':donation_staff') !== -1;
+    if (hasScope && (isManager || isWS || isDonationStaff)) {
       return;
     }
   }

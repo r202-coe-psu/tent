@@ -1,6 +1,6 @@
-import { requireWarehouseAccess } from '$lib/guards/auth';
+import { requireSupplyView } from '$lib/guards/auth';
 import type { PageLoad } from './$types';
 
 export const load = (async ({ fetch }) => {
-	await requireWarehouseAccess(fetch);
+	await requireSupplyView(fetch);
 }) satisfies PageLoad;

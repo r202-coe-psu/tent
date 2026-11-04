@@ -2,7 +2,7 @@ import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { adminRaw } from '$lib/server/couch-admin';
 import {
-	authorizeWarehouse,
+	authorizeDonation,
 	resolveReceivedShelter,
 	routeErrorResponse,
 	shelterDb
@@ -226,7 +226,7 @@ function cursorFits(by: ReceivedSearchBy, state: SearchCursorState, q: string): 
 
 export const POST: RequestHandler = async ({ request }) => {
 	try {
-		const caller = await authorizeWarehouse(request.headers.get('cookie'));
+		const caller = await authorizeDonation(request.headers.get('cookie'));
 
 		const parsed = receivedSearchInputSchema.safeParse(await request.json().catch(() => null));
 		if (!parsed.success) {

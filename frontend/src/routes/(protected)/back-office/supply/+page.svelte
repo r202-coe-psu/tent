@@ -16,7 +16,7 @@
 	import { ResourceNeedsDashboard } from '$lib/features/resource-calc';
 	import { FoodSphereStockTab } from '$lib/features/sop-ratios/components';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
-	import { shelterCodeFromRoles } from '$lib/auth/roles';
+	import { canChangeStock, shelterCodeFromRoles } from '$lib/auth/roles';
 	import { useDashboardOccupancy } from '$lib/features/dashboard';
 	import { page } from '$app/state';
 	import { goto } from '$app/navigation';
@@ -32,6 +32,9 @@
 		shelterStore.selectedShelterCode ?? shelterCodeFromRoles(roles) ?? getShelterCode()
 	);
 
+	// donation_staff sees this page read-only (CR-227): no transfer tab, no pending-transfer query.
+	const canChange = $derived(canChangeStock(roles, shelterCode));
+
 	const occupancyQuery = useDashboardOccupancy(() => shelterCode);
 	// In the shelter = active + room_confirmed (draft-in-shelter-headcount).
 	const occupancy = $derived(occupancyQuery.data?.in_shelter ?? 0);
@@ -39,7 +42,7 @@
 	// The master list shows on-hand quantity; the ledger lives in `operations`, so the page joins them.
 	const balanceQuery = useStockBalance();
 
-	const pendingTransfers = usePendingTransferCount();
+	const pendingTransfers = usePendingTransferCount(() => canChange);
 	const pendingCount = $derived(pendingTransfers.data ?? 0);
 
 	const catalogBasePath = resolve('/back-office/catalog');
@@ -66,7 +69,9 @@
 	const KNOWN_TABS: readonly TabKey[] = [...PRIMARY_TABS, ...SECONDARY_TABS.map((t) => t.key)];
 
 	const activeTab = $derived<TabKey>(
-		KNOWN_TABS.find((t) => t === page.url.searchParams.get('tab')) ?? 'inventory'
+		KNOWN_TABS.find(
+			(t) => t === page.url.searchParams.get('tab') && (t !== 'transfer' || canChange)
+		) ?? 'inventory'
 	);
 
 	function setTab(tab: PrimaryTabKey) {
@@ -149,22 +154,24 @@
 			>
 				ความเคลื่อนไหว
 			</button>
-			<button
-				type="button"
-				onclick={() => setTab('transfer')}
-				aria-current={activeTab === 'transfer' ? 'page' : undefined}
-				class={tabClass(activeTab === 'transfer')}
-			>
-				โอนย้าย
-				{#if pendingCount > 0}
-					<span
-						class="inline-flex h-[22px] min-w-[22px] items-center justify-center rounded-full bg-[#0284C7] px-1.5 text-xs font-bold text-white tabular-nums"
-					>
-						{pendingCount}
-						<span class="sr-only">รายการรอดำเนินการ</span>
-					</span>
-				{/if}
-			</button>
+			{#if canChange}
+				<button
+					type="button"
+					onclick={() => setTab('transfer')}
+					aria-current={activeTab === 'transfer' ? 'page' : undefined}
+					class={tabClass(activeTab === 'transfer')}
+				>
+					โอนย้าย
+					{#if pendingCount > 0}
+						<span
+							class="inline-flex h-[22px] min-w-[22px] items-center justify-center rounded-full bg-[#0284C7] px-1.5 text-xs font-bold text-white tabular-nums"
+						>
+							{pendingCount}
+							<span class="sr-only">รายการรอดำเนินการ</span>
+						</span>
+					{/if}
+				</button>
+			{/if}
 		</nav>
 
 		<nav

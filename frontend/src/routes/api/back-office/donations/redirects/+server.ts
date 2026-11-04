@@ -1,7 +1,7 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import {
-	authorizeWarehouse,
+	authorizeDonation,
 	listShelterCodes,
 	routeErrorResponse,
 	shelterDb
@@ -19,7 +19,7 @@ import { isDonationRedirect, type DonationRedirect } from '$lib/features/donatio
  */
 export const GET: RequestHandler = async ({ request }) => {
 	try {
-		const caller = await authorizeWarehouse(request.headers.get('cookie'));
+		const caller = await authorizeDonation(request.headers.get('cookie'));
 
 		const codes = caller.isSA
 			? await listShelterCodes()
