@@ -37,6 +37,9 @@ import {
 	confineKioskStaffOnly,
 	resolvePostLoginDestination,
 	requireDistributionDesk,
+	requireDonationAccess,
+	requireSupplyView,
+	requireTicketAccess,
 	requireBannerManagement,
 	requireKioskManagement,
 	requireMedicalScreening,
@@ -254,6 +257,46 @@ describe('requireDistributionDesk (Station 4 route guard)', () => {
 			status: 302,
 			location: '/login'
 		});
+	});
+});
+
+describe('donation_staff page guards (CR-227)', () => {
+	const don = ['shelter:SH001', 'SH001:donation_staff'];
+
+	beforeEach(() => {
+		mocks.user = { roles: [] };
+		mocks.selectedShelterCode = null;
+	});
+
+	it('requireDonationAccess and requireSupplyView admit donation_staff and the warehouse side', async () => {
+		for (const guard of [requireDonationAccess, requireSupplyView]) {
+			expect(await passes(guard, don)).toBe(true);
+			expect(await passes(guard, ['system_admin'])).toBe(true);
+			for (const cap of ['shelter_manager', 'warehouse_staff', 'supply_coordinator']) {
+				expect(await passes(guard, ['shelter:SH001', `SH001:${cap}`])).toBe(true);
+			}
+		}
+	});
+
+	it('refuses donation_staff of another shelter and unrelated staff', async () => {
+		for (const guard of [requireDonationAccess, requireSupplyView]) {
+			expect(await passes(guard, don, 'SH002')).toBe(false);
+			for (const cap of ['registration_staff', 'kitchen_staff', 'distribution_staff']) {
+				expect(await passes(guard, ['shelter:SH001', `SH001:${cap}`])).toBe(false);
+			}
+		}
+	});
+
+	it('keeps the distribution, ticket and desk pages closed to donation_staff', async () => {
+		expect(await passes(requireWarehouseAccess, don)).toBe(false);
+		expect(await passes(requireTicketAccess, don)).toBe(false);
+		expect(await passes(requireDistributionDesk, don)).toBe(false);
+	});
+
+	it('redirects an unauthenticated visitor to login', async () => {
+		mocks.user = null;
+		await expect(requireDonationAccess()).rejects.toMatchObject({ status: 302 });
+		await expect(requireSupplyView()).rejects.toMatchObject({ status: 302 });
 	});
 });
 

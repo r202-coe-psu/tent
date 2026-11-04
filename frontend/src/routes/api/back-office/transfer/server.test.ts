@@ -73,6 +73,23 @@ describe('BFF Transfer List and Create Endpoints', () => {
 		});
 
 		it.each([
+			['list', () => GET(createMockEvent())],
+			['create', () => POST(createMockEvent({}, { items: [] }))]
+		])('refuses donation_staff on transfer %s (CR-227)', async (_label, call) => {
+			vi.mocked(requireShelterScopeOrSA).mockResolvedValue({
+				name: 'don_user',
+				roles: ['shelter:SH001', 'SH001:donation_staff'],
+				isSA: false,
+				shelterCode: 'SH001'
+			});
+
+			const res = await call();
+			expect(res.status).toBe(403);
+			expect(mockList).not.toHaveBeenCalled();
+			expect(mockCreate).not.toHaveBeenCalled();
+		});
+
+		it.each([
 			['flat', ['supply_coordinator', 'shelter:SH002']],
 			['shelter-scoped', ['SH002:supply_coordinator', 'shelter:SH002']]
 		])(
