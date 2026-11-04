@@ -479,7 +479,17 @@ async function receiveBatch(manager: Page, batch: Batch): Promise<void> {
 	await manager.getByRole('combobox').filter({ hasText: 'เลือกอาหารปรุงสำเร็จ' }).click();
 	await manager.getByPlaceholder('ค้นหาชื่ออาหาร...').fill(READY_MEAL);
 	await manager.getByRole('option', { name: READY_MEAL }).click();
-	await expect(manager.getByLabel(/จำนวน/)).toHaveValue(String(batch.actualYield));
+	const yieldQty = manager.getByLabel(/จำนวน/);
+	await expect(yieldQty).toHaveValue(String(batch.actualYield));
+
+	// A ready meal counts in boxes: a part of a box is flagged at once and cannot be confirmed (#805).
+	const confirm = manager.getByRole('button', { name: /ยืนยันตรวจรับเข้าสต็อก/ });
+	await yieldQty.fill(`${batch.actualYield}.5`);
+	await expect(manager.getByText('หน่วยนับต้องเป็นจำนวนเต็ม')).toBeVisible();
+	await expect(yieldQty).toHaveAttribute('aria-invalid', 'true');
+	await expect(confirm).toBeDisabled();
+	await yieldQty.fill(String(batch.actualYield));
+	await expect(manager.getByText('หน่วยนับต้องเป็นจำนวนเต็ม')).toHaveCount(0);
 
 	await manager
 		.getByRole('button', { name: `ยืนยันตรวจรับเข้าสต็อก (รวม ${batch.actualYield})` })
