@@ -5,9 +5,12 @@
 	import { Textarea } from '$lib/components/ui/textarea/index.js';
 	import {
 		formatUnit,
+		requiresWholeQty,
 		useUnitDimensionResolver,
 		useUnitsOfMeasure,
-		wholeQtyError
+		wholeQtyError,
+		WholeNumberGuard,
+		WholeNumberNote
 	} from '$lib/features/catalog';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { getShelterCode } from '$lib/db/shelter';
@@ -80,6 +83,8 @@
 	 * A count that matches the system writes nothing, so a legacy fractional balance counted
 	 * "as is" is fine; only a count that would be saved must be whole in a count unit (#805).
 	 */
+	const wholeGuard = new WholeNumberGuard();
+
 	function wholeError(entry: CycleCountEntry): string | undefined {
 		if (classifyCycleCount(entry) === 'match') return undefined;
 		return wholeQtyError(entry.counted_qty, unitDimension.resolve(entry.unit));
@@ -300,6 +305,10 @@
 								autocomplete="off"
 								bind:value={entry.counted_qty}
 								aria-invalid={classifyCycleCount(entry) === 'invalid' || !!wholeError(entry)}
+								{@attach wholeGuard.attach(
+									() => requiresWholeQty(unitDimension.resolve(entry.unit)),
+									inputId
+								)}
 								class="min-h-11 bg-white pr-12 font-mono text-base font-bold"
 							/>
 							<span
@@ -317,6 +326,7 @@
 							{wholeError(entry)}
 						</p>
 					{/if}
+					<WholeNumberNote guard={wholeGuard} key={inputId} class="mt-1" />
 				</li>
 			{/each}
 		</ul>
