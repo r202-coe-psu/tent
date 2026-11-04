@@ -16,7 +16,9 @@
 		useUnitsOfMeasure
 	} from '../application/queries';
 	import { formatUnit } from '../domain/unit-of-measure';
-	import { qtyInputStep } from '../domain/unit-quantity';
+	import { qtyInputStep, requiresWholeQty } from '../domain/unit-quantity';
+	import WholeNumberNote from './whole-number-note.svelte';
+	import { WholeNumberGuard } from './whole-number-input.svelte';
 	import { useUnitDimensionResolver } from '../application/use-unit-dimension-resolver.svelte';
 	import { recipeIngredientQtyIssues } from './recipe-ingredient-qty';
 	import { langState } from '$lib/states/i18n.svelte';
@@ -53,6 +55,8 @@
 	const unitsQuery = useUnitsOfMeasure();
 	const units = $derived(unitsQuery.data ?? []);
 	const dimensions = useUnitDimensionResolver();
+
+	const wholeGuard = new WholeNumberGuard();
 
 	const wholeQtySchema = recipeInputSchema.superRefine((data, ctx) => {
 		for (const { index, message } of recipeIngredientQtyIssues(
@@ -262,6 +266,10 @@
 										(v) => (conv.quantity = v == null ? '' : String(v))
 									}
 									aria-invalid={qtyMessages.has(index)}
+									{@attach wholeGuard.attach(
+										() => requiresWholeQty(dimensions.resolve(conv.uom)),
+										String(index)
+									)}
 									onblur={() => {
 										if (conv.quantity === '') conv.quantity = '1';
 									}}
@@ -270,6 +278,7 @@
 								{#if qtyMessages.has(index)}
 									<p class="text-xs font-semibold text-destructive">{qtyMessages.get(index)}</p>
 								{/if}
+								<WholeNumberNote guard={wholeGuard} key={String(index)} />
 							</div>
 
 							<!-- หน่วย -->
