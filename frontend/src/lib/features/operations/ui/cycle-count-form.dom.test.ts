@@ -118,4 +118,30 @@ describe('CycleCountForm whole numbers for count units (#805)', () => {
 		expect(document.body.textContent).not.toContain('หน่วยนับต้องเป็นจำนวนเต็ม');
 		expect(saveButton().disabled).toBe(false);
 	});
+
+	it('refuses a non-digit keystroke into a count box and says so', async () => {
+		await startCount([lotRow('01JIN1', '5', '2026-10-01T00:00:00.000Z')]);
+		const input = document.body.querySelector<HTMLInputElement>('input[id^="count-"]')!;
+
+		const digit = new InputEvent('beforeinput', {
+			data: '3',
+			inputType: 'insertText',
+			cancelable: true
+		});
+		input.dispatchEvent(digit);
+		expect(digit.defaultPrevented).toBe(false);
+		expect(document.body.querySelector('[role="status"]')).toBeNull();
+
+		const dot = new InputEvent('beforeinput', {
+			data: '.',
+			inputType: 'insertText',
+			cancelable: true
+		});
+		input.dispatchEvent(dot);
+		await settle();
+		expect(dot.defaultPrevented).toBe(true);
+		expect(document.body.querySelector('[role="status"]')?.textContent).toContain(
+			'กรอกได้เฉพาะตัวเลข'
+		);
+	});
 });
