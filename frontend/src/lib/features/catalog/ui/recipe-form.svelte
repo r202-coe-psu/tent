@@ -138,7 +138,16 @@
 			}
 		}
 	);
-	const { form: formData, errors, submitting } = form;
+	const { form: formData, submitting } = form;
+
+	const qtyMessages = $derived(
+		new Map(
+			recipeIngredientQtyIssues($formData.ingredients, dimensions.resolve).map((i) => [
+				i.index,
+				i.message
+			])
+		)
+	);
 
 	let populatedId = $state<string | null>(null);
 
@@ -249,15 +258,16 @@
 									step={qtyInputStep(dimensions.resolve(conv.uom))}
 									min={0}
 									value={conv.quantity}
+									aria-invalid={qtyMessages.has(index)}
 									oninput={(e) => {
 										const val = e.currentTarget.value;
 										conv.quantity = val === '' ? '1' : val;
 									}}
 									class="h-12 rounded-xl border-slate-200/80 bg-white text-center dark:border-zinc-800 dark:bg-zinc-950"
 								/>
-								{#each $errors.ingredients?.[index]?.quantity ?? [] as message (message)}
-									<p class="text-xs font-semibold text-destructive">{message}</p>
-								{/each}
+								{#if qtyMessages.has(index)}
+									<p class="text-xs font-semibold text-destructive">{qtyMessages.get(index)}</p>
+								{/if}
 							</div>
 
 							<!-- หน่วย -->
@@ -393,7 +403,7 @@
 
 				<Button
 					type="submit"
-					disabled={$submitting || isPending}
+					disabled={$submitting || isPending || qtyMessages.size > 0}
 					class="flex items-center gap-1.5 rounded-xl bg-[#002f6c] px-7 py-6 text-sm font-bold text-white shadow-md shadow-[#002f6c]/10 hover:bg-[#00204d] dark:shadow-none"
 				>
 					{#if $submitting || isPending}
