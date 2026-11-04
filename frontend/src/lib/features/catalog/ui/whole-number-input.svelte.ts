@@ -4,12 +4,11 @@ import { isWholeNumberText } from '../domain/unit-quantity';
 /**
  * Refuses non-digit typing, pasting and dropping into a quantity box while `isWhole()` is true.
  * `isWhole` is read per event, so a unit change switches the behaviour with no re-attach.
- * `onRefuse` shows the caller's note and `onBlur` clears it.
+ * `onRefuse` lets the caller show a note.
  */
 export function wholeNumberInput(
 	isWhole: () => boolean,
-	onRefuse?: () => void,
-	onBlur?: () => void
+	onRefuse?: () => void
 ): Attachment<HTMLInputElement> {
 	return (input) => {
 		const refuseUnlessDigits = (e: Event, text: string | null | undefined) => {
@@ -28,28 +27,31 @@ export function wholeNumberInput(
 		input.addEventListener('beforeinput', beforeInput);
 		input.addEventListener('paste', paste);
 		input.addEventListener('drop', drop);
-		if (onBlur) input.addEventListener('blur', onBlur);
 		return () => {
 			input.removeEventListener('beforeinput', beforeInput);
 			input.removeEventListener('paste', paste);
 			input.removeEventListener('drop', drop);
-			if (onBlur) input.removeEventListener('blur', onBlur);
 		};
 	};
 }
 
-/** Remembers which quantity box (by key) last refused a keystroke, so its note can show. */
+export const REFUSAL_NOTE_MS = 3000;
+
+/**
+ * Remembers which quantity box (by key) last refused a keystroke, so its note can show.
+ * The note times out instead of clearing on blur: a note that vanishes on mousedown
+ * shifts the layout under the pointer and swallows the click on the button below it.
+ */
 export class WholeNumberGuard {
 	#refused = $state<string | null>(null);
+	#timer: ReturnType<typeof setTimeout> | undefined;
 
 	attach(isWhole: () => boolean, key = ''): Attachment<HTMLInputElement> {
-		return wholeNumberInput(
-			isWhole,
-			() => (this.#refused = key),
-			() => {
-				if (this.#refused === key) this.#refused = null;
-			}
-		);
+		return wholeNumberInput(isWhole, () => {
+			this.#refused = key;
+			clearTimeout(this.#timer);
+			this.#timer = setTimeout(() => (this.#refused = null), REFUSAL_NOTE_MS);
+		});
 	}
 
 	isRefused(key = ''): boolean {

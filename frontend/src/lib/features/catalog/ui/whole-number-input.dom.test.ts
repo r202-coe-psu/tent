@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
-import { WholeNumberGuard, wholeNumberInput } from './whole-number-input.svelte';
+import { REFUSAL_NOTE_MS, WholeNumberGuard, wholeNumberInput } from './whole-number-input.svelte';
 
 function beforeInput(input: HTMLInputElement, data: string | null, inputType = 'insertText') {
 	const event = new InputEvent('beforeinput', { data, inputType, cancelable: true, bubbles: true });
@@ -89,7 +89,10 @@ describe('wholeNumberInput', () => {
 });
 
 describe('WholeNumberGuard', () => {
-	it('tracks the refusing box by key and clears when it loses focus', () => {
+	afterEach(() => vi.useRealTimers());
+
+	it('tracks the refusing box by key and lets the note time out', () => {
+		vi.useFakeTimers();
 		const guard = new WholeNumberGuard();
 		const a = document.createElement('input');
 		const b = document.createElement('input');
@@ -104,16 +107,32 @@ describe('WholeNumberGuard', () => {
 		expect(guard.isRefused('a')).toBe(false);
 		expect(guard.isRefused('b')).toBe(true);
 
-		b.dispatchEvent(new Event('input'));
-		expect(guard.isRefused('b')).toBe(true);
 		b.dispatchEvent(new Event('blur'));
-		expect(guard.isRefused('b')).toBe(false);
+		expect(guard.isRefused('b')).toBe(true);
 
-		beforeInput(a, '.');
-		a.dispatchEvent(new Event('blur'));
-		expect(guard.isRefused('a')).toBe(false);
+		vi.advanceTimersByTime(REFUSAL_NOTE_MS - 1);
+		expect(guard.isRefused('b')).toBe(true);
+		vi.advanceTimersByTime(1);
+		expect(guard.isRefused('b')).toBe(false);
 
 		stopA?.();
 		stopB?.();
+	});
+
+	it('restarts the timeout on every refusal', () => {
+		vi.useFakeTimers();
+		const guard = new WholeNumberGuard();
+		const input = document.createElement('input');
+		const stop = guard.attach(() => true)(input);
+
+		beforeInput(input, '.');
+		vi.advanceTimersByTime(REFUSAL_NOTE_MS - 1);
+		beforeInput(input, '-');
+		vi.advanceTimersByTime(REFUSAL_NOTE_MS - 1);
+		expect(guard.isRefused()).toBe(true);
+		vi.advanceTimersByTime(1);
+		expect(guard.isRefused()).toBe(false);
+
+		stop?.();
 	});
 });
