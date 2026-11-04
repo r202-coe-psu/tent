@@ -30,7 +30,11 @@ Pi เชื่อมต่อออกไปหา server เพียงทา
 
 ข้ามขั้นนี้ได้ถ้า deployment ที่จะใช้ตั้งค่าไว้แล้ว ตรวจได้จากหน้า back-office → **จัดการเครื่องพิมพ์** ถ้าหน้านั้นเปิดได้และไม่ขึ้น 503 แสดงว่าตั้งค่าแล้ว
 
-ค่าทั้งหมดในขั้นนี้ต้องสุ่มเอง ไม่มีใครออกให้ ใส่ใน `.env` ที่ root ของ repo บนเครื่อง server:
+Pi ไม่ได้ใช้ค่าในขั้นนี้เลย ค่าที่ Pi ใช้มีแค่ `DEVICE_ID` / `DEVICE_SECRET` จากขั้นที่ 1
+
+### 0.1 staging / production (docker compose)
+
+**ใส่เองใน `.env` ที่ root ของ repo บนเครื่อง server** ทุกค่าต้องสุ่มเอง ห้ามใช้ `change-me-in-staging` จาก `.env.example` และ staging กับ prod ควรใช้คนละชุด
 
 ```bash
 COUCHDB_PRINTING_SERVICE_USER=printing_service
@@ -38,15 +42,47 @@ COUCHDB_PRINTING_SERVICE_PASSWORD=<openssl rand -hex 24>
 PRINT_HOUSEKEEPING_TOKEN=<openssl rand -hex 32>
 ```
 
-เครื่องที่จะรันสคริปต์สร้าง user (ข้างล่าง) และเครื่องที่รัน `pnpm dev` นอก docker ต้องมีค่าเดียวกันใน `frontend/.env` ด้วย
-ถ้าไม่ตั้ง `COUCHDB_PRINTING_SERVICE_URL` สคริปต์จะข้ามการสร้าง user ไป (ขึ้นแค่ `⚠️ COUCHDB_PRINTING_SERVICE_URL unset — skipping user`)
+ถ้าไม่ใส่ `COUCHDB_PRINTING_SERVICE_PASSWORD` หรือ `PRINT_HOUSEKEEPING_TOKEN` compose จะไม่ยอมขึ้น (`... is required`)
+
+**ไม่ต้องใส่เอง** compose ประกอบให้จากค่าข้างบน:
+
+| ตัวแปร | service | ค่า |
+|---|---|---|
+| `COUCHDB_PRINTING_SERVICE_URL` | `frontend` | `http://printing_service:<รหัส>@couchdb:5984` (ใช้ `couchdb` ไม่ใช่ `localhost` และเป็น `http://` เพราะคุยกันใน docker network) |
+| `PRINT_HOUSEKEEPING_TOKEN` | `frontend`, `print-housekeeping` | ส่งต่อจาก root `.env` |
+| `PRINT_HOUSEKEEPING_URL` | `print-housekeeping` | `http://frontend:3000` |
+
+`frontend/.env` ไม่ถูกใช้ใน container ของ staging / prod
+
+**สร้าง user `printing_service` ใน CouchDB:** pipeline deploy (`Jenkinsfile.staging`, `Jenkinsfile.prod`) รัน `pnpm db:sync` ใน container `frontend` ซึ่งรวม `redeploy:access --write --confirm` อยู่แล้ว deploy ครั้งแรกหลังใส่ `.env` จึงสร้าง user ให้เอง
+ถ้าต้องรันเอง (เช่น deploy ไปก่อนใส่ `.env`):
 
 ```bash
-COUCHDB_PRINTING_SERVICE_URL=http://printing_service:<รหัสเดียวกัน>@localhost:5984
-PRINT_HOUSEKEEPING_TOKEN=<token เดียวกัน>
+# prod ใช้ docker-compose.production.no-nginx.yml
+docker compose -f docker-compose.staging.no-nginx.yml run --rm frontend pnpm redeploy:access                    # dry-run: ต้องเห็น would create _users "printing_service"
+docker compose -f docker-compose.staging.no-nginx.yml run --rm frontend pnpm redeploy:access --write --confirm  # สร้างจริง
 ```
 
-จากนั้นสร้าง user ใน CouchDB ด้วยรหัสนั้น:
+**nginx** มีใน repo แล้ว ไม่ต้องตั้งเพิ่ม: `/api/internal/printers/` ถูกปิดจากภายนอก (404) และ `/api/v1/printer/*` จำกัด 2 connection ต่อเครื่อง
+แต่ต้องมี HTTPS อยู่หน้า server เพราะ Pi ยอมต่อแค่ `https://`
+
+**ตรวจหลัง deploy:**
+
+1. container `print-housekeeping` ขึ้น `healthy`
+2. back-office → **จัดการเครื่องพิมพ์** เปิดได้และไม่ขึ้น 503
+3. ลงทะเบียนเครื่อง (ขั้นที่ 1) แล้วกด **พิมพ์ทดสอบ** ด้วย user ที่มี `system_admin` หรือ `shelter:{CODE}` + `{CODE}:shelter_manager`
+   (`admin` ของ CouchDB มีแค่ role `_admin` ซึ่งพิมพ์ไม่ได้ และจะขึ้น "คุณไม่มีสิทธิ์ในการทำรายการนี้")
+
+### 0.2 dev (`pnpm dev` นอก docker)
+
+ใส่ใน `frontend/.env` (ใช้ `localhost` เพราะรันนอก docker):
+
+```bash
+COUCHDB_PRINTING_SERVICE_URL=http://printing_service:<รหัส>@localhost:5984
+PRINT_HOUSEKEEPING_TOKEN=<openssl rand -hex 32>
+```
+
+ถ้าไม่ตั้ง `COUCHDB_PRINTING_SERVICE_URL` สคริปต์จะข้ามการสร้าง user ไป (ขึ้นแค่ `⚠️ COUCHDB_PRINTING_SERVICE_URL unset — skipping user`)
 
 ```bash
 cd frontend
@@ -54,13 +90,12 @@ pnpm redeploy:access                    # dry-run: ต้องเห็น woul
 pnpm redeploy:access --write --confirm  # สร้างจริง
 ```
 
-ห้ามใช้ `pnpm seed` บน deployment จริง เพราะจะใส่ mock data (~1k people) ลงไปด้วย
+### ข้อควรรู้
 
+- ห้ามใช้ `pnpm seed` บน deployment จริง เพราะจะใส่ mock data (~1k people) ลงไปด้วย
 - user `printing_service` ถูกสร้างแบบไม่มี role ส่วนสิทธิ์ admin ของ DB `printing_devices` และ `printing_{code}` server ใส่ให้เองตอนสร้าง DB
 - ถ้าจะเปลี่ยนรหัสทีหลัง ต้องแก้ทั้ง `.env` และรหัสของ user ใน CouchDB ให้ตรงกัน เพราะสคริปต์จะข้าม user ที่มีอยู่แล้ว ไม่ทับรหัสเดิม
 - ถ้าไม่ได้ตั้ง env นอก dev ระบบจะตอบ 503 และไม่ fallback ไปใช้ admin
-
-Pi ไม่ได้ใช้ค่าในขั้นนี้เลย ค่าที่ Pi ใช้มีแค่ `DEVICE_ID` / `DEVICE_SECRET` จากขั้นที่ 1
 
 ## 1. ลงทะเบียนเครื่องพิมพ์ใน back-office
 
@@ -110,7 +145,9 @@ sha256sum ~/printer-driver-xprinter_3.13.55_all.deb
 **สร้าง queue:** ใช้สคริปต์ของ kiosk ซึ่งจะลง CUPS กับ driver ทางการของ Xprinter และสร้าง queue `tent_xprinter` ขนาด 80×60 mm ให้
 
 ```bash
-sudo usermod -aG lpadmin "$USER"     # ให้ user ที่ใช้ตั้งค่า (คนนี้ ไม่ใช่ agent) ใช้ lpinfo ได้ ทำครั้งแรกครั้งเดียว แล้ว logout/login ใหม่
+sudo apt install -y cups             # กลุ่ม lpadmin มากับแพ็กเกจ cups ต้องลงก่อน ไม่งั้น usermod ขึ้น group 'lpadmin' does not exist
+sudo usermod -aG lpadmin "$USER"     # ให้ user ที่ใช้ตั้งค่า (คนนี้ ไม่ใช่ agent) ใช้ lpinfo ได้ ทำครั้งแรกครั้งเดียว
+# logout/login ใหม่ (หรือ reboot) แล้วตรวจว่า `id -nG` มี lpadmin ก่อนรันขั้นต่อไป
 cd ~/tent/kiosk
 ./setup_printer.sh ~/printer-driver-xprinter_*.deb --queue tent_xprinter --test
 ```
@@ -122,8 +159,8 @@ cd ~/tent/kiosk
 
 ```bash
 cd ~/tent/printer
-cp .env.example ~/agent.env && chmod 600 ~/agent.env
-nano ~/agent.env
+cp .env.example .env && chmod 600 .env     # .env ถูก gitignore ไว้แล้ว
+nano .env
 ```
 
 | ตัวแปร | ค่า |
@@ -143,9 +180,9 @@ nano ~/agent.env
 
 ```bash
 cd ~/tent/printer
-sudo ./setup_printer_server.sh --env-file ~/agent.env --host-kind standalone --dry-run   # ดูแผนก่อน ยังไม่แก้อะไร
-sudo ./setup_printer_server.sh --env-file ~/agent.env --host-kind standalone
-rm ~/agent.env      # ติดตั้งแล้ว ค่าจริงอยู่ที่ /opt/tent/printer/.env
+sudo ./setup_printer_server.sh --env-file .env --host-kind standalone --dry-run   # ดูแผนก่อน ยังไม่แก้อะไร
+sudo ./setup_printer_server.sh --env-file .env --host-kind standalone
+rm .env             # ติดตั้งแล้ว ค่าจริงอยู่ที่ /opt/tent/printer/.env ไม่ต้องเก็บสำเนา secret ไว้ใน repo
 ```
 
 | ตัวเลือก | ความหมาย |
@@ -228,7 +265,7 @@ sudo cupsenable tent_xprinter
 
 ```bash
 cd ~/tent/printer
-cp ~/agent.env .env && chmod 600 .env
+cp .env.example .env && chmod 600 .env && nano .env
 ./run.sh                         # รันในหน้าจอ Ctrl+C เพื่อหยุด · ./run.sh --setup = ติดตั้ง dependency อย่างเดียว
 ./setup_autostart.sh             # หรือให้รัน ./run.sh เองหลัง boot ด้วย user ปัจจุบัน (unit tent-printer-autostart)
 ./setup_autostart.sh --disable   # ปิด/ถอนออก
