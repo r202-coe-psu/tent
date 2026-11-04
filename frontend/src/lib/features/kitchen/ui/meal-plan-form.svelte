@@ -400,6 +400,7 @@
 											type="number"
 											min="0"
 											step={qtyInputStep(rowDim)}
+											aria-invalid={!!qtyError}
 											class="min-h-11 w-full sm:min-h-9 sm:w-28"
 											placeholder="ต่อคน"
 											bind:value={row.qtyPerPerson}

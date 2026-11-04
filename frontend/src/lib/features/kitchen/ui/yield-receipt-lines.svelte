@@ -167,6 +167,7 @@
 						inputmode={qtyInputStep(dimensionOf(line.item_id)) === '1' ? 'numeric' : 'decimal'}
 						placeholder="0"
 						bind:value={line.qty}
+						aria-invalid={!!qtyErrors.get(line.key)}
 						{disabled}
 						class="h-11 tabular-nums sm:h-10"
 					/>
