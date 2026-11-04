@@ -1178,7 +1178,11 @@ describe('user-service', () => {
 		it('deleted SA is not counted by the last-SA guard', async () => {
 			await createUser({ ...base, name: 'sa-a', roles: ['system_admin'] });
 			await createUser({ ...base, name: 'sa-b', roles: ['system_admin'] });
-			await deleteUser('sa-b', sa);
+			// Seed the deleted doc still carrying system_admin so only the deleted_at filter keeps it out.
+			fakeUsersDb[idOf('sa-b')] = {
+				...fakeUsersDb[idOf('sa-b')],
+				deleted_at: '2026-11-01T00:00:00.000Z'
+			};
 			await expect(deleteUser('sa-a', sa)).rejects.toMatchObject({ code: 'FORBIDDEN' });
 		});
 
@@ -1293,7 +1297,7 @@ describe('user-service', () => {
 			expect(fakeUsersDb[idOf('CaseUser')].deleted_at).toBeTruthy();
 		});
 
-		it('creating a name that is only a case-variant of a soft-deleted one is still reserved by exact name', async () => {
+		it('re-creating the exact name of a soft-deleted account stays reserved', async () => {
 			await createUser({ ...base, name: 'e10', roles: ['shelter:SH001'] });
 			await deleteUser('e10', sa);
 			await expect(

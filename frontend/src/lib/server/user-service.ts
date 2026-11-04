@@ -669,7 +669,8 @@ export async function grantCoordinatorRole(input: {
 		...existing,
 		roles: nextRoles,
 		shelter_id: shelterCodeFromRoles(nextRoles),
-		role_grants
+		role_grants,
+		edge_shelters: nextEdgeShelters(existing, nextRoles) // CR-171 FR-1
 	});
 	assertGrantWritten('grant volunteer role', res);
 	for (const old of replaced) {
@@ -730,7 +731,8 @@ export async function revokeCoordinatorGrant(input: {
 		...doc,
 		roles: next.roles,
 		role_grants: next.role_grants,
-		shelter_id: shelterCodeFromRoles(next.roles)
+		shelter_id: shelterCodeFromRoles(next.roles),
+		edge_shelters: nextEdgeShelters(doc, next.roles) // CR-171 FR-1
 	});
 	assertGrantWritten('revoke volunteer role', res);
 	await recordRoleGrantAudit({
@@ -760,7 +762,7 @@ export async function readVolunteerAccount(input: {
 	if (got.status === 404) return none;
 	if (got.status >= 400) throw serviceErrorFromCouch('read user', got.status, got.data);
 	const doc = got.data as CouchUserDoc;
-	if (doc.volunteer_id !== input.volunteer_id) return none;
+	if (doc.volunteer_id !== input.volunteer_id || isDeletedUserDoc(doc)) return none; // CR-171 FR-5
 	const grants = (doc.role_grants ?? []).filter((g) => g.shelter_code === input.shelter_code);
 	const granted = new Set(grants.map((g) => g.role));
 	return {
@@ -791,7 +793,8 @@ const SHELTER_ACCOUNT_FIELDS = [
 	'volunteer_id',
 	'active',
 	'roles',
-	'role_grants'
+	'role_grants',
+	'deleted_at'
 ];
 
 /**
@@ -832,7 +835,12 @@ export async function readShelterVolunteerAccounts(
 		const doc = docs.get(idOf(link.name));
 		// Only the volunteer's own volunteer account counts (CR-221 FR-6, FR-7), as in
 		// `readVolunteerAccount`: never a staff account a profile's `user_name` happens to name.
-		if (!doc || doc.personnel_type !== 'volunteer' || doc.volunteer_id !== link.volunteer_id) {
+		if (
+			!doc ||
+			isDeletedUserDoc(doc) || // CR-171 FR-5
+			doc.personnel_type !== 'volunteer' ||
+			doc.volunteer_id !== link.volunteer_id
+		) {
 			return [];
 		}
 		const grants = (doc.role_grants ?? []).filter((g) => g.shelter_code === shelterCode);
