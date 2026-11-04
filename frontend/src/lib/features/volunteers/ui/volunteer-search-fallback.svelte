@@ -16,6 +16,7 @@
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { findVolunteerByTrackingToken } from '../application/queries';
 	import type { Volunteer } from '../domain/volunteer.schema';
+	import { matchesVolunteerSearch, volunteerSearchFields } from '../domain/volunteer-search';
 
 	let { volunteers, onselect }: { volunteers: Volunteer[]; onselect: (v: Volunteer) => void } =
 		$props();
@@ -28,17 +29,9 @@
 	let tokenMatch = $state<Volunteer | null>(null);
 
 	const localResults = $derived.by(() => {
-		const q = searchQuery.trim().toLowerCase();
-		if (!q) return [];
+		if (!searchQuery.trim()) return [];
 		return volunteers
-			.filter((v) => {
-				const name = `${v.first_name} ${v.last_name} ${v.nickname ?? ''}`.toLowerCase();
-				return (
-					name.includes(q) ||
-					v.volunteer_code.toLowerCase().includes(q) ||
-					(v.phone ?? '').includes(q)
-				);
-			})
+			.filter((v) => matchesVolunteerSearch(volunteerSearchFields(v), searchQuery))
 			.slice(0, 8);
 	});
 
@@ -98,7 +91,7 @@
 			/>
 			<Input
 				type="text"
-				placeholder="พิมพ์เบอร์โทร, ชื่อ, หรือ Token..."
+				placeholder="พิมพ์เบอร์โทร, ชื่อ, ชื่อเล่น, รหัส หรือ Token..."
 				bind:value={searchQuery}
 				class="h-11 pl-9"
 			/>

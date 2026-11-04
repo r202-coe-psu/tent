@@ -1,6 +1,7 @@
 <script lang="ts">
 	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
 	import Megaphone from '@lucide/svelte/icons/megaphone';
+	import Plus from '@lucide/svelte/icons/plus';
 	import PlusCircle from '@lucide/svelte/icons/plus-circle';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
@@ -12,13 +13,17 @@
 	import { useSupplyItems } from '$lib/features/supply';
 	import {
 		canonicalizeUnitCode,
+		canWriteShelterCatalog,
 		formatUnit,
 		mergeCatalogGenerations,
+		mergedCatalogIdFor,
+		QuickCreateItemSheet,
 		useItemMasters,
 		useUnitsOfMeasure
 	} from '$lib/features/catalog';
+	import { authStore } from '$lib/stores/auth.svelte';
 	import { langState } from '$lib/states/i18n.svelte';
-	import { getShelterCode } from '$lib/db/shelter';
+	import { getShelterCode, resolveShelterCode } from '$lib/db/shelter';
 	import { persistQty, qtyGt } from '$lib/utils/qty';
 	import {
 		needPointToSave,
@@ -60,6 +65,38 @@
 	// themselves, so changing the item cannot undo their choice.
 	let categoryChoice = $state<string | null>(null);
 	let targetQty = $state('');
+
+	// Same gate and same sheet as the scan station's "เพิ่มสินค้าใหม่".
+	// `null` = no shelter resolved: hide the way in rather than write to the 'SH001' guess.
+	const createShelterCode = $derived(resolveShelterCode());
+	const canCreateItem = $derived(
+		canWriteShelterCatalog(authStore.user?.roles ?? []) && createShelterCode !== null
+	);
+	let createOpen = $state(false);
+
+	// `SearchSelect` does not expose its search text, so the sheet opens with an empty name.
+	function openCreateItem() {
+		createOpen = true;
+	}
+
+	/**
+	 * Select an item from the sheet. A master named like a legacy row is merged out of
+	 * `catalogItems`, so the row the picker shows for that name is selected instead.
+	 */
+	function selectFromSheet(item: { _id: string; name: string }): string {
+		selectedItemId = mergedCatalogIdFor(catalogItems, item);
+		return selectedItemId;
+	}
+
+	function pickCreatedItem(item: { _id: string; name: string }) {
+		if (selectFromSheet(item) !== item._id) {
+			toast.info(`มี “${item.name}” ในแคตตาล็อกอยู่แล้ว — เลือกรายการเดิมให้แทน`);
+		}
+	}
+
+	function pickExistingItem(item: { _id: string; name: string }) {
+		selectFromSheet(item);
+	}
 
 	const CATEGORY_OPTIONS = [
 		{ value: 'อาหารและเครื่องดื่ม', label: 'อาหารและเครื่องดื่ม (Food & Beverage)' },
@@ -252,14 +289,32 @@
 					bind:value={selectedItemId}
 					loading={catalogLoading}
 					placeholder="พิมพ์เพื่อค้นหารายการในแคตตาล็อก..."
-					emptyText="ไม่พบรายการนี้ในแคตตาล็อก — สร้างในหน้าจัดการข้อมูลหลักก่อน"
+					emptyText={canCreateItem
+						? 'ไม่พบรายการนี้ในแคตตาล็อก — กด “เพิ่มสินค้าใหม่” ด้านล่าง'
+						: 'ไม่พบรายการนี้ในแคตตาล็อก — สร้างในหน้าจัดการข้อมูลหลักก่อน'}
 					class="h-10 rounded-xl text-xs"
 					controlProps={{ id: 'campaign-item-title' }}
 				/>
-				<p class="mt-1.5 text-3xs text-muted-foreground">
-					ประกาศผูกกับรหัสในแคตตาล็อกโดยตรง — ไม่ได้เดาจากชื่อที่พิมพ์อีกต่อไป ถ้ายังไม่มีรายการนี้
-					ให้สร้างในหน้าจัดการข้อมูลหลักก่อน
-				</p>
+				{#if canCreateItem}
+					<p class="mt-1.5 text-3xs text-muted-foreground">
+						ประกาศผูกกับรหัสในแคตตาล็อกโดยตรง — ไม่ได้เดาจากชื่อที่พิมพ์อีกต่อไป ไม่พบรายการ? กด
+						“เพิ่มสินค้าใหม่” ได้เลย
+					</p>
+					<Button
+						type="button"
+						variant="ghost"
+						class="mt-1 min-h-11 gap-1 px-2 text-sm font-semibold text-sky-800"
+						onclick={openCreateItem}
+					>
+						<Plus class="size-4" aria-hidden="true" />
+						เพิ่มสินค้าใหม่
+					</Button>
+				{:else}
+					<p class="mt-1.5 text-3xs text-muted-foreground">
+						ประกาศผูกกับรหัสในแคตตาล็อกโดยตรง — ไม่ได้เดาจากชื่อที่พิมพ์อีกต่อไป
+						ถ้ายังไม่มีรายการนี้ ให้สร้างในหน้าจัดการข้อมูลหลักก่อน
+					</p>
+				{/if}
 			</div>
 
 			<!-- Category -->
@@ -389,3 +444,12 @@
 		</div>
 	</form>
 </div>
+
+{#if canCreateItem && createShelterCode}
+	<QuickCreateItemSheet
+		bind:open={createOpen}
+		shelterCode={createShelterCode}
+		onCreated={pickCreatedItem}
+		onUseExisting={pickExistingItem}
+	/>
+{/if}

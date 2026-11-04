@@ -11,7 +11,7 @@ describe('KioskRegisterConsent', () => {
 		});
 
 		expect(body.indexOf('ยินยอมให้อ่านข้อมูลจากบัตรประชาชน')).toBeGreaterThan(-1);
-		expect(body.indexOf('ข้อตกลงและความยินยอม')).toBeGreaterThan(
+		expect(body.indexOf('ข้อตกลงและนโยบายความเป็นส่วนตัว')).toBeGreaterThan(
 			body.indexOf('ยินยอมให้อ่านข้อมูลจากบัตรประชาชน')
 		);
 		expect(body).toContain('ยอมรับทั้งหมด');
@@ -28,7 +28,7 @@ describe('KioskRegisterConsent', () => {
 
 		expect(confirmButton).not.toBeNull();
 		expect(confirmButton?.[0]).toContain('disabled');
-		expect(body).toContain('กรุณายินยอมข้อแรกก่อนบันทึก');
+		expect(body).toContain('กรุณายอมรับข้อแรกก่อนบันทึก');
 	});
 
 	it('does not link to the term and policy pages on the kiosk', () => {
@@ -38,8 +38,7 @@ describe('KioskRegisterConsent', () => {
 
 		expect(body).not.toContain('href="/term"');
 		expect(body).not.toContain('href="/policy"');
-		expect(body).not.toContain('ข้อตกลงการใช้งาน');
-		expect(body).not.toContain('นโยบายความเป็นส่วนตัว');
+		expect(body).not.toContain('อ่านข้อตกลงการใช้งาน');
 	});
 
 	it('names ThaiD as the source for a ThaiD walk-in', () => {

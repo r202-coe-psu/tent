@@ -936,7 +936,9 @@ test.describe('Volunteer end-to-end operational flow', () => {
 				'volunteer profile from step 2, verified in step 3, must exist'
 			).toBeTruthy();
 
-			await page.getByPlaceholder('พิมพ์เบอร์โทร, ชื่อ, หรือ Token...').fill(volunteerToken);
+			await page
+				.getByPlaceholder('พิมพ์เบอร์โทร, ชื่อ, ชื่อเล่น, รหัส หรือ Token...')
+				.fill(volunteerToken);
 			await page.getByRole('button', { name: new RegExp(FULL_NAME) }).click();
 
 			await page.getByRole('button', { name: 'เช็คอิน' }).click();

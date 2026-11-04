@@ -396,7 +396,7 @@ test.describe('Volunteer access: grant dialog', { tag: TAGS }, () => {
 	}) => {
 		const page = await openAs(browser, manager);
 		await page.goto('/back-office/volunteers?tab=people');
-		await page.getByPlaceholder('ค้นหาชื่อ นามสกุล เบอร์โทร, รหัส...').fill(firstName);
+		await page.getByPlaceholder('ค้นหาชื่อ นามสกุล ชื่อเล่น เบอร์โทร, รหัส...').fill(firstName);
 
 		// Access follows the identity check (#1044): until then the button opens that check.
 		await expect(page.getByTestId('volunteer-account-status')).toContainText('ยังไม่มีบัญชีระบบ');
@@ -411,7 +411,7 @@ test.describe('Volunteer access: grant dialog', { tag: TAGS }, () => {
 			identity_verification: { status: 'verified', reviewed_by: manager.name }
 		});
 		await page.reload();
-		await page.getByPlaceholder('ค้นหาชื่อ นามสกุล เบอร์โทร, รหัส...').fill(firstName);
+		await page.getByPlaceholder('ค้นหาชื่อ นามสกุล ชื่อเล่น เบอร์โทร, รหัส...').fill(firstName);
 
 		await grantDistributionStaff(page);
 		await expect(page.getByText(`สร้างบัญชี (${email}) และออกสิทธิ์แล้ว`)).toBeVisible();
@@ -607,7 +607,9 @@ test.describe('Volunteer access: coordinator limits (#955)', { tag: TAGS }, () =
 	}) => {
 		const page = await openAs(browser, coordinator);
 		await page.goto('/back-office/volunteers?tab=people');
-		await page.getByPlaceholder('ค้นหาชื่อ นามสกุล เบอร์โทร, รหัส...').fill(`E2EV${RUN_ID}`);
+		await page
+			.getByPlaceholder('ค้นหาชื่อ นามสกุล ชื่อเล่น เบอร์โทร, รหัส...')
+			.fill(`E2EV${RUN_ID}`);
 		await page.getByRole('button', { name: 'ออกสิทธิ์ใช้งานระบบ' }).click();
 
 		// A date picker (#1044): empty until chosen, and only today through today + 7 can be picked.
@@ -693,7 +695,9 @@ test.describe('Volunteer access: coordinator limits (#955)', { tag: TAGS }, () =
 		await putDocument(SHELTER_DB, { ...profile!, _id: verifiedId, user_name: grantEmail });
 		const page = await openAs(browser, coordinator);
 		await page.goto('/back-office/volunteers?tab=people');
-		await page.getByPlaceholder('ค้นหาชื่อ นามสกุล เบอร์โทร, รหัส...').fill(`E2EV${RUN_ID}`);
+		await page
+			.getByPlaceholder('ค้นหาชื่อ นามสกุล ชื่อเล่น เบอร์โทร, รหัส...')
+			.fill(`E2EV${RUN_ID}`);
 		const status = page.getByTestId('volunteer-account-status');
 		await expect(status).toContainText('มีบัญชีแล้ว');
 		await expect(status).toContainText('เจ้าหน้าที่ครัว');
@@ -705,7 +709,9 @@ test.describe('Volunteer access: coordinator limits (#955)', { tag: TAGS }, () =
 		await page.keyboard.press('Escape');
 
 		// Not verified here: the button opens the identity check instead of the grant (#1044).
-		await page.getByPlaceholder('ค้นหาชื่อ นามสกุล เบอร์โทร, รหัส...').fill(`E2EU${RUN_ID}`);
+		await page
+			.getByPlaceholder('ค้นหาชื่อ นามสกุล ชื่อเล่น เบอร์โทร, รหัส...')
+			.fill(`E2EU${RUN_ID}`);
 		await expect(page.getByRole('button', { name: 'ออกสิทธิ์ใช้งานระบบ' })).toHaveCount(0);
 		await page.getByRole('button', { name: 'ยืนยันตัวตนก่อนออกสิทธิ์' }).click();
 		await expect(page.getByText('ต้องยืนยันตัวตนอาสาสมัครก่อนจึงจะออกสิทธิ์ได้')).toBeVisible();
