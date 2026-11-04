@@ -41,6 +41,7 @@
 		useUpdateRecipe,
 		useUnitDimensionResolver,
 		qtyInputStep,
+		requiresWholeQty,
 		wholeQtyError,
 		customRecipeInput,
 		findRecipeByLabel,
@@ -390,11 +391,17 @@
 
 		return (recipe.ingredients ?? []).map((ing) => {
 			const itemMaster = (itemMasters.data ?? []).find((m) => m._id === ing.item_master_id);
+			const unit = ing.uom || itemMaster?.base_unit || 'kg';
 			return {
 				item_id: ing.item_master_id,
 				name: itemMaster?.name || ing.item_master_id,
-				needed: scaleRecipeIngredientQty(ing.quantity, recipe.standard_portions, portions),
-				unit: ing.uom || itemMaster?.base_unit || 'kg'
+				needed: scaleRecipeIngredientQty(
+					ing.quantity,
+					recipe.standard_portions,
+					portions,
+					requiresWholeQty(dimensions.resolve(unit))
+				),
+				unit
 			};
 		});
 	}
