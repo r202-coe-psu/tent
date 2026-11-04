@@ -3,13 +3,14 @@ import {
 	ANY_DROP_OFF_POINT_LABEL,
 	canCloseByPoints,
 	defaultStoragePointId,
-	hasOtherPointLines,
 	linePointLabel,
 	namesDropOffPoints,
+	otherPointLineCount,
 	pointReceiptFields,
 	recordedAtLabel,
 	scanLineStates,
 	scanReceiveMode,
+	scanStatus,
 	type PointScanSource
 } from './point-scan';
 
@@ -60,12 +61,91 @@ describe('scanLineStates (FR-MP-19, FR-MP-21)', () => {
 		]);
 	});
 
-	it('locks every pointed line until a point is chosen (FR-MP-18a)', () => {
+	it('locks every unrecorded line, any-point ones too, until a point is chosen (owner decision #1059)', () => {
 		expect(states(split, null, true).map((s) => s.kind)).toEqual([
-			'other_point',
-			'other_point',
+			'needs_point',
+			'needs_point',
+			'needs_point'
+		]);
+	});
+
+	it('does not lock when the shelter has no point left, and keeps recorded / refused lines', () => {
+		expect(states(split, null, false, none).map((s) => s.kind)).toEqual([
+			'receivable',
+			'receivable',
 			'receivable'
 		]);
+		const mixed = {
+			items: [
+				{ drop_off_point_id: GYM },
+				{ drop_off_point_id: GYM, review_status: 'rejected' as const },
+				{ drop_off_point_id: MED }
+			],
+			point_receipts: [{ point_id: MED, line_nos: [2] }]
+		};
+		expect(states(mixed, null).map((s) => s.kind)).toEqual([
+			'needs_point',
+			'review_rejected',
+			'recorded'
+		]);
+	});
+
+	it('counts only still-locked other-point lines', () => {
+		expect(otherPointLineCount(states(split, GYM))).toBe(1);
+		expect(otherPointLineCount(states(split, GYM, true))).toBe(0);
+		expect(otherPointLineCount(states(split, null))).toBe(0);
+		const started = { ...split, point_receipts: [{ point_id: MED, line_nos: [1] }] };
+		expect(otherPointLineCount(states(started, GYM))).toBe(0);
+	});
+
+	describe('scanStatus', () => {
+		const base = {
+			wrongShelter: false,
+			needsPoint: false,
+			verified: 0,
+			decidable: 0,
+			otherPointCount: 0
+		};
+
+		it('asks for a point before anything else, never a bare 0 / 0 (#1059)', () => {
+			expect(scanStatus({ ...base, needsPoint: true, otherPointCount: 2 })).toEqual({
+				kind: 'needs_point'
+			});
+		});
+
+		it('puts another shelter ahead of the missing point', () => {
+			expect(scanStatus({ ...base, wrongShelter: true, needsPoint: true })).toEqual({
+				kind: 'wrong_shelter'
+			});
+		});
+
+		it('reports none_here only when nothing is decidable and other points have lines', () => {
+			expect(scanStatus({ ...base, otherPointCount: 3 })).toEqual({
+				kind: 'none_here',
+				otherPointCount: 3
+			});
+			expect(scanStatus({ ...base, decidable: 1, otherPointCount: 1 })).toEqual({
+				kind: 'progress',
+				verified: 0,
+				decidable: 1,
+				otherPointCount: 1
+			});
+			expect(scanStatus({ ...base })).toEqual({
+				kind: 'progress',
+				verified: 0,
+				decidable: 0,
+				otherPointCount: 0
+			});
+		});
+
+		it('reports progress with the other-point count', () => {
+			expect(scanStatus({ ...base, verified: 1, decidable: 2 })).toEqual({
+				kind: 'progress',
+				verified: 1,
+				decidable: 2,
+				otherPointCount: 0
+			});
+		});
 	});
 
 	it('unlocks another point’s unrecorded line on "รับรายการของจุดอื่น" (AC-10)', () => {
@@ -101,12 +181,6 @@ describe('scanLineStates (FR-MP-19, FR-MP-21)', () => {
 			{ kind: 'receivable', pointId: null, borrowed: false },
 			{ kind: 'receivable', pointId: null, borrowed: false }
 		]);
-	});
-
-	it('tells when another point has lines left', () => {
-		expect(hasOtherPointLines(states(split, GYM))).toBe(true);
-		expect(hasOtherPointLines(states(split, GYM, true))).toBe(true);
-		expect(hasOtherPointLines(states({ items: [{ drop_off_point_id: GYM }] }, GYM))).toBe(false);
 	});
 });
 

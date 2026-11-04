@@ -295,7 +295,7 @@
 					/>
 					<Input
 						type="search"
-						placeholder="ค้นหาชื่อ นามสกุล เบอร์โทร, รหัส V-xxx"
+						placeholder="ค้นหาชื่อ นามสกุล ชื่อเล่น เบอร์โทร, รหัส V-xxx"
 						aria-labelledby="applicant-filter-search"
 						bind:value={search}
 						class="h-10 rounded-xl bg-background pl-9 shadow-xs"

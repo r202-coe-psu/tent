@@ -1,9 +1,9 @@
 ---
 id: CR-220 # renumbered from draft-ticket-quota-release-marker
 title: ยกเลิกการสมัครจากบัตรดิจิทัล — คืนโควตาครั้งเดียวพอดีเมื่อกดซ้ำหลังคืนโควตาล้ม (marker บนใบสมัคร + ledger บน job)
-status: approved
+status: done
 date: 2026-10-29
-updated: 2026-11-01 # approved by Soravit Sukkarn (Team Lead)
+updated: 2026-11-03 # approved by Soravit Sukkarn (Team Lead); implemented in #1003; amended in place 2026-11-03 (worker shift-counter reconcile, FR-11) after review of PR #1097
 requested_by: "#1003 (ผู้เปิด @Mhapong) — follow-up ของ D4 ใน CR-212 (review PR #999 B4)"
 decided_by: Soravit Sukkarn (Team Lead)
 decision_date: 2026-11-01
@@ -13,7 +13,7 @@ affects:
   - docs/data/schema.md §2.18 `job_application` (+`quota_release_due_at`, +`quota_released_at`) · schema_v 3 → 4
   - docs/data/schema.md §2.9 `shift_assignment` (+`cancel_application_id`) · schema_v 5 → 6
   - docs/data/schema.md §2.17 `job` (+`released_application_ids`) · schema_v 3 → 4
-  - frontend/src/lib/features/volunteers/server/public-ticket.ts (`cancelTicket`, `cancelLinkedAssignments`, `markApplicationCancelled`, `readCancellableApplication`, `isTicketCancellable`)
+  - frontend/src/lib/features/volunteers/server/public-ticket.ts (`cancelTicket`, `cancelLinkedAssignments`, `markApplicationCancelled`, `markQuotaReleased`, `finishQuotaRelease`, `releaseApplicationQuota`, `isTicketCancellable`, `isQuotaReleasePending`, `canCancelTicket`)
   - frontend/src/lib/features/volunteers/server/public-schedule-action.ts (`releaseJobQuota` รับ idempotency key)
   - frontend/src/routes/api/public/v1/volunteer/ticket/[token]/+server.ts (`can_cancel`)
   - frontend/src/lib/features/volunteer-portal/ui/digital-pass.svelte (แสดงปุ่มยกเลิกตาม `can_cancel` อย่างเดียว — FR-7)
@@ -21,6 +21,7 @@ affects:
   - frontend/src/lib/features/volunteers/domain/{job-application.schema.ts,shift-assignment.schema.ts,job.schema.ts} (Zod รับ field ใหม่ + schema_v ใหม่)
   - frontend/src/lib/features/volunteers/server/public-ticket.test.ts · public-schedule-action.test.ts · routes/api/public/v1/volunteer/ticket/[token]/ticket.test.ts
   - VDU frontend/src/lib/server/shelter-access-design.ts — ไม่เปลี่ยน (ดู Impact)
+  - worker/src/worker/mongo/job.py (`apply_job_application` reconcile ตัวนับกะของ public ทุกครั้งที่ใบสมัคร upsert/delete, คืนคู่ `(job_id, shift_id)`; `apply_shift_assignment` รับ `reconcile=False` แบบเดียวกัน) · worker/src/worker/couch/bootstrap.py (reconcile ครั้งเดียวต่อกะหลังสแกน) · worker/src/worker/mongo/__init__.py (export `sync_job_shift_slot`) · worker/tests/test_mongo_job.py · worker/tests/test_bootstrap.py — เพิ่มโดย amend 2026-11-03 (ดู Impact)
   - worker projectors `job` / `job_application` / `shift_assignment` — ไม่เปลี่ยน, ไม่ bump `PROJECTION_VERSION`
 why: กดยกเลิกซ้ำหลังคืนโควตาล้ม โควตาขาด 1 ถาวร (ข้อจำกัดที่รู้ D4 ของ CR-212) เพราะไม่มีที่บันทึกว่าโควตาของใบสมัครนี้คืนแล้วหรือยัง
 migration: เพิ่ม field แบบ optional ทั้งหมด อ่าน doc เดิมโดยถือว่าไม่มี marker (ความหมายเดียวกับพฤติกรรมเดิม) ไม่ backfill — ดู §Migration
@@ -50,12 +51,12 @@ migration: เพิ่ม field แบบ optional ทั้งหมด อ่
 
 ### Schema (`docs/data/schema.md`)
 
-| doc type                | field ใหม่                 | ชนิด      | req | ความหมาย                                                                                                                          |
-| ----------------------- | -------------------------- | --------- | --- | --------------------------------------------------------------------------------------------------------------------------------- |
-| `job_application` §2.18 | `quota_release_due_at`     | ts\|null  | opt | ใบนี้ถูกยกเลิกแล้วและยังค้างคืนโควตา 1 ที่ — เขียนพร้อมกับ `status: cancelled` (ใบที่ไม่มีกะงานผูกเท่านั้น)                       |
-| `job_application` §2.18 | `quota_released_at`        | ts\|null  | opt | โควตาของใบนี้คืนให้ `job` แล้ว — มีค่าเมื่อการคืนสำเร็จเท่านั้น ใบที่ไม่เคยกินโควตา (`pending_review`) ไม่มีค่า                   |
-| `shift_assignment` §2.9 | `cancel_application_id`    | str\|null | opt | → `job_application:{ulid}` ที่ยกเลิกกะงานนี้จากบัตร — เขียนในครั้งเดียวกับ `status: cancelled` โดย ticket cancel เท่านั้น         |
-| `job` §2.17             | `released_application_ids` | [str]     | opt | `_id` ของใบสมัครที่คืนโควตาให้งานนี้แล้วผ่าน ticket cancel — ตรวจและเพิ่มในครั้งเดียวกับการลด `slots_confirmed` (idempotency key) |
+| doc type                | field ใหม่                 | ชนิด      | req | ความหมาย                                                                                                                             |
+| ----------------------- | -------------------------- | --------- | --- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `job_application` §2.18 | `quota_release_due_at`     | ts\|null  | opt | ใบนี้ถูกยกเลิกแล้วและยังค้างคืนโควตา 1 ที่ — เขียนพร้อมกับ `status: cancelled` (ใบที่ไม่มีกะงานผูกเท่านั้น)                          |
+| `job_application` §2.18 | `quota_released_at`        | ts\|null  | opt | โควตาของใบนี้คืนให้ `job` แล้ว — มีค่าเมื่อการคืนสำเร็จเท่านั้น ใบที่ไม่เคยกินโควตา (`pending_review` ไม่มีกะงานถือที่นั่ง) ไม่มีค่า |
+| `shift_assignment` §2.9 | `cancel_application_id`    | str\|null | opt | → `job_application:{ulid}` ที่ยกเลิกกะงานนี้จากบัตร — เขียนในครั้งเดียวกับ `status: cancelled` โดย ticket cancel เท่านั้น            |
+| `job` §2.17             | `released_application_ids` | [str]     | opt | `_id` ของใบสมัครที่คืนโควตาให้งานนี้แล้วผ่าน ticket cancel — ตรวจและเพิ่มในครั้งเดียวกับการลด `slots_confirmed` (idempotency key)    |
 
 - ไม่มีค่า = `null` / `[]` (ความหมายเดียวกับ doc เดิม)
 - เขียนโดย public writer (BFF ticket cancel) เท่านั้น ทางเขียนอื่นต้องคงค่าเดิมไว้ (FR-9)
@@ -102,6 +103,10 @@ migration: เพิ่ม field แบบ optional ทั้งหมด อ่
   - แก้ไขงาน / ตัวนับของเจ้าหน้าที่ (`JobRemoteRepository` `mutateQuota`, `update`): คง `released_application_ids` ไว้
     - `update(job)` สร้างเอกสารจากฟอร์ม (`...job`) แล้วเขียนทับ `latest` — ต้อง merge `released_application_ids` = union ของ `latest.released_application_ids` กับ `job.released_application_ids` (ตัดซ้ำ) แบบเดียวกับที่คง `slots_confirmed` / `slots_dispatched` จาก `latest` ไม่อย่างนั้นฟอร์มที่เปิดค้างไว้ก่อน ticket cancel จะลบ ledger แล้วกดซ้ำคืนเกิน
     - Zod `jobSchema`: `released_application_ids: z.array(z.string()).default([])` — doc ที่ไม่มี field ได้ `[]` (ความหมายเดียวกับไม่มีค่า) ไม่ต้อง null-check
+- **FR-11 `pending_review` ที่มีกะงานถือที่นั่ง:** เจ้าหน้าที่ assign อาสาตรง ๆ (`ShiftAssignmentRemoteRepository#assign`) ระหว่างที่ใบยัง `pending_review` — roster reconcile นับกะงานนั้นเป็น `slots_confirmed` 1 ที่ ทั้งที่ใบไม่เคยกินโควตา
+  - ยกเลิกจากบัตร: กะงานที่ยกเลิกในคำขอนี้ (หรือคำขอก่อน) พร้อมตราของใบนี้ และไม่ใช่ข้อเสนอที่ยังไม่ตอบ (`dispatch_status = dispatched` นับใน `slots_dispatched` ไม่ใช่ `slots_confirmed`) ถือว่าค้างคืน → เรียก FR-1 (ledger key เดียวกัน) แล้วเขียน `quota_released_at` พร้อมใบเป็น `cancelled` ตามลำดับ FR-3
+  - ไม่มีกะงานถือที่นั่ง (ไม่มีกะงานผูก หรือเป็นข้อเสนอที่ยังไม่ตอบ) → ไม่คืน ไม่แตะ `job` เหมือนเดิม (AC-8)
+  - ก่อนแก้ ที่นั่งนี้ไม่ถูกคืน ตัวนับสูงเกินจนกว่าเจ้าหน้าที่จะ reconcile
 - **FR-10 นอกขอบเขต:** ถอนตัวจาก portal ที่คืนโควตาล้มหลังยกเลิกกะงานก็ขาด 1 แบบเดียวกัน (กดซ้ำได้ `SHIFT_NOT_WITHDRAWABLE`) — แก้ใน issue follow-up แยก ไม่อยู่ใน CR นี้
 
 ### CR-212 (before → after)
@@ -125,7 +130,8 @@ migration: เพิ่ม field แบบ optional ทั้งหมด อ่
 - **AC-5 (ถอนตัวมาก่อน):** กะงานถูกถอนตัวจาก portal แล้ว (ไม่มีตรา) ยกเลิกใบจากบัตร → ใบ `cancelled` โควตาไม่คืนเพิ่ม ไม่มี `quota_released_at`
 - **AC-6 (พร้อมกัน):** ยกเลิก 2 คำขอพร้อมกัน (ทั้งสองทาง) โควตาคืนรวม 1 ครั้ง
 - **AC-7 (เจ้าหน้าที่บันทึกทับ):** เจ้าหน้าที่แก้ไขงานหลัง ticket cancel แล้ว `released_application_ids` ยังอยู่ รวมกรณีเปิดฟอร์มแก้ไขค้างไว้**ก่อน** ticket cancel แล้วบันทึกทีหลัง (`update` merge จาก `latest`) · รายการใบสมัครฝั่งเจ้าหน้าที่แสดงใบ schema_v 4 ครบ
-- **AC-8 (ใบ `pending_review`):** ยกเลิกแล้วไม่มี `quota_release_due_at` / `quota_released_at` และไม่แตะ `job`
+- **AC-8 (ใบ `pending_review` ไม่มีกะงานถือที่นั่ง):** ยกเลิกแล้วไม่มี `quota_release_due_at` / `quota_released_at` และไม่แตะ `job` (รวมกะงานที่เป็นข้อเสนอ `dispatched` ที่ยังไม่ตอบ)
+- **AC-11 (ใบ `pending_review` + กะงานที่เจ้าหน้าที่ assign ตรง — FR-11):** ยกเลิกแล้วที่นั่งคืน 1 ที่ครั้งเดียว (`released_application_ids` มี key ใบนี้) ใบ `cancelled` + `quota_released_at` · คืนล้มแล้วกดซ้ำคืนครบ 1 ที่ · กดซ้ำอีก 409 โควตาไม่เปลี่ยน
 - **AC-9 (GET):** ใบในสถานะ "ทำต่อ" ได้ `can_cancel = true` และบัตรแสดงปุ่มยกเลิกเดิม แม้ใบเป็น `cancelled` แล้ว (ใบที่ไม่มีกะงานผูก) หลังรีเฟรชหน้า (FR-7) · ใบที่คืนครบแล้วได้ `false`
 - **AC-10 (กะเริ่มแล้ว — ข้อจำกัด FR-6):** ใบมีกะงานผูกที่คืนล้ม แล้วกดซ้ำหลังกะเริ่ม → 409 `SHIFT_STARTED` ไม่เขียนอะไร
 
@@ -135,7 +141,12 @@ migration: เพิ่ม field แบบ optional ทั้งหมด อ่
 - **test:** `public-ticket.test.ts` (AC-1–AC-3, AC-5, AC-6, AC-8), `public-schedule-action.test.ts` (AC-4), `ticket.test.ts` + dom test ของ `digital-pass` (AC-9), test ของ Zod / `job.remote` `update` (AC-7)
 - **VDU (`shelter-access-design.ts`):** ไม่เปลี่ยน — VDU ของ shelter DB ตรวจ `job_application` / `job` / `shift_assignment` แค่ envelope (`schema_v`, `shelter_code` ฯลฯ) และ type whitelist ไม่ตรวจ field หรือค่า `schema_v` ราย type field ใหม่จึงผ่านทั้ง public writer และ session ของเจ้าหน้าที่ ไม่ต้อง bump design version
   - ไม่เพิ่มกฎ VDU (write-once / append-only) — เจ้าหน้าที่แก้ตัวนับโควตาเองได้อยู่แล้ว กฎเพิ่มไม่ปิดช่องจริง
-- **worker / Mongo / FastAPI:** projector ของ 3 type เลือก field แบบ whitelist field ใหม่ไม่ถูก project ไม่ bump `PROJECTION_VERSION` ไม่ต้อง regenerate OpenAPI
+- **worker / Mongo / FastAPI (amend 2026-11-03 — เดิมเขียนว่า "worker ไม่เปลี่ยน" ซึ่งไม่ตรงกับโค้ดที่ส่งจริง):**
+  - **projector** ของ 3 type ไม่เปลี่ยน — เลือก field แบบ whitelist field ใหม่ไม่ถูก project, shape ของ projection ไม่เปลี่ยน จึง **ไม่ bump `PROJECTION_VERSION`** และไม่ต้อง regenerate OpenAPI
+  - **เปลี่ยน:** ตัวนับกะของ public (`volunteer_job_shift_slot`, FastAPI อ่านไปแสดงใน public job list ที่ `backend/apiapp/modules/volunteers/use_case.py`) ถูก reconcile ที่ `worker/src/worker/mongo/job.py` `apply_job_application` ทุกครั้งที่ใบสมัคร upsert/delete (เดิม reconcile เฉพาะเมื่อ `shift_assignment` เปลี่ยน)
+  - **เหตุผล:** ตัวนับนับใบ `confirmed` ด้วย (`sync_job_shift_slot`) แต่ ticket cancel เขียนกะงานก่อนใบสมัคร (CR-212 FR-4) การ reconcile ตอนกะงานเปลี่ยนจึงเห็นใบยัง `confirmed` และตัวนับสูงเกินไป 1 ส่วนใบที่ไม่มีกะงานผูกเปลี่ยนแค่ใบสมัคร ตัวนับไม่เคยถูก reconcile เลย
+  - **bootstrap:** `couch/bootstrap.py` ไม่ reconcile ต่อเอกสาร แต่เก็บคู่ `(job_id, shift_id)` (ทั้งใบสมัครและกะงาน) แล้ว reconcile ครั้งเดียวต่อกะหลังสแกนครบ (หลังทุก `job` ถูก seed แล้วด้วย)
+  - **ตัวนับเก่าที่คลาดเคลื่อน (จาก ticket cancel ก่อน deploy):** ไม่ bump `PROJECTION_VERSION` จึงไม่มีการ re-bootstrap อัตโนมัติ ตัวนับแก้ตัวเองเมื่อมี event ถัดไปของกะนั้น (ใบสมัครหรือกะงานของกะเดียวกัน upsert/delete) เพราะ reconcile คำนวณจาก roster ที่ project อยู่ใหม่ทั้งหมด ไม่ใช่การบวก/ลบทีละหน่วย · หากต้องการแก้ทันที รัน bootstrap/resync ด้วยมือ (`worker --bootstrap`) ซึ่ง reconcile ทุกกะตามข้างบน · ฝั่ง CouchDB (`job.slots_*`) ไม่ถูกแก้ (ตามข้อจำกัด D4 เดิม)
 - **ขนาด ledger:** `released_application_ids` โตตามจำนวนใบที่ยกเลิกจากบัตรต่องาน (หลักสิบ) ไม่ต้องตัดทิ้ง
 - **CR-212:** แก้ FR-3, FR-4, AC-2, AC-3 ตามตาราง before → after เมื่อ CR นี้ approved
 - **`schema_v` ของ `shift_assignment`:** 5 → 6 — CR ของ #885 ที่เคย bump เลขเดียวกันถูกยกเลิกแล้ว (2026-10-30) จึงไม่ชน
@@ -153,9 +164,9 @@ migration: เพิ่ม field แบบ optional ทั้งหมด อ่
 ## Decision log
 
 - 2026-10-28 — CR-212 D4 (Team Lead): ยอมรับโควตาขาด 1 เป็นข้อจำกัดที่รู้ ให้แก้ใน #1003
-- 2026-10-29 — #1003: ผู้รับงานเลือกบันทึกเป็น draft CR ไฟล์
+- 2026-10-29 — #1003: ผู้รับงาน (@Mhapong) เลือกวิธี track เป็น draft CR ไฟล์ — ตามกติกา "ถามเจ้าของโปรเจกต์ก่อน" ผู้รับงานเสนอ ยังไม่ใช่การตัดสินของ owner
 - 2026-10-29 — proposed: marker บนใบสมัครอย่างเดียวคืนครั้งเดียวพอดีไม่ได้ (เขียนข้าม doc) จึงเพิ่ม ledger บน `job` และตราบน `shift_assignment` · ใบไม่มีกะงานผูกคง "ใบสมัครก่อน" ของ CR-212 แล้วเพิ่มการทำต่อ
-- 2026-10-29 — owner (@Mhapong) เคาะตามค่าเสนอทุกข้อ:
+- 2026-10-29 — ผู้รับงาน (@Mhapong) เลือกตามค่าเสนอทุกข้อ (ข้อตัดสินมีผลเมื่อ Team Lead approve 2026-11-01 — Soravit Sukkarn):
   - FR-6 — ใบมีกะงานผูกที่กะเริ่มก่อนกดซ้ำ: ยัง 409 `SHIFT_STARTED` กะขาด 1 ที่ เป็นข้อจำกัดที่รู้ เจ้าหน้าที่ปรับเอง (ตัดทิ้ง: ข้ามการตรวจเวลาเมื่อมีกะงานที่มีตรา — GET ต้องอ่านกะงานเพิ่ม)
   - FR-7 — ใบที่ยกเลิกแล้วแต่ยังค้างคืน: `can_cancel = true` ปุ่มยกเลิกเดิม ให้จิตอาสากดซ้ำ (ตัดทิ้ง: flag + ข้อความแยก)
   - FR-10 — ถอนตัวจาก portal คืนล้ม: issue follow-up แยก นอกขอบเขต (ตัดทิ้ง: ใช้ตรา + ledger กับ withdraw รอบนี้)
@@ -163,3 +174,6 @@ migration: เพิ่ม field แบบ optional ทั้งหมด อ่
   - schema_v — bump ทั้ง 3 type: `job_application` 3→4, `shift_assignment` 5→6, `job` 3→4; `job` Zod literal รับ 4 ใน PR เดียวกัน (ตัดทิ้ง: additive ไม่ bump)
 - 2026-10-31 — แก้ตาม review ของ @Jackyzaz (PR #1031): B1 `digital-pass.svelte` แสดงปุ่มตาม `can_cancel` อย่างเดียว (FR-7, AC-9) · W1 `JobRemoteRepository#update` merge `released_application_ids` แบบ union (FR-9, AC-7) · S1 ชื่อ factory `makeJob` / `makeJobApplication` / `makeShiftAssignment` · S2 `jobSchema` `.default([])` · N1 `save` → `update` · ตัดหมายเหตุชน `schema_v` กับ #885 (ยกเลิกแล้ว)
 - 2026-11-01 — approved by Soravit Sukkarn (Team Lead) · รันเลข CR-220 (renumbered from draft-ticket-quota-release-marker) ย้ายเข้า 06-A-volunteer/
+- 2026-11-01 — done: implement ตาม CR นี้ (#1003) — `releaseJobQuota` รับ key, `cancelTicket` (FR-3–FR-6), GET `can_cancel` + `digital-pass.svelte` (FR-7), Zod 3 type + `job.remote` `update` merge ledger (FR-9), อัปเดต `schema.md` §2.9/§2.17/§2.18 และ CR-212
+- 2026-11-03 — amend in place (owner @mhapong) after review of PR #1097 (ไม่เปิด CR ใหม่): บันทึกการแก้ worker (`mongo/job.py` reconcile ตัวนับกะทุกครั้งที่ใบสมัครเปลี่ยน, `couch/bootstrap.py` reconcile ครั้งเดียวต่อกะ), เหตุที่ไม่ bump `PROJECTION_VERSION`, วิธีที่ตัวนับเก่าแก้ตัวเอง (Impact), และแก้ข้อความ decision log ให้ตรงผู้ตัดสินจริง
+- 2026-11-03 — amend (owner @mhapong ยืนยัน, รอ Team Lead / @Jackyzaz approve): เพิ่ม FR-11 / AC-11 — ใบ `pending_review` ที่เจ้าหน้าที่ assign ตรง คืนที่นั่งที่กะงานถือเมื่อยกเลิกจากบัตร (เดิมไม่คืน ตัวนับสูงเกิน) ปรับ AC-8 ให้จำกัดเฉพาะใบที่ไม่มีกะงานถือที่นั่ง · ตรวจแล้วว่าเกิดได้จริงใน staff UI (`assign()` ไม่ตรวจสถานะใบสมัคร และ roster reconcile นับกะงาน `assigned` / `standby`)

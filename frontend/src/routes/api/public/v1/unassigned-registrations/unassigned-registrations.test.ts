@@ -195,12 +195,6 @@ describe('POST /api/public/v1/unassigned-registrations', () => {
 		for (const m of upstream.members) expect(m).not.toHaveProperty('booking_ref');
 	});
 
-	it('requires disclaimer acknowledgment', async () => {
-		const res = await POST(event({ ...VALID_BODY, disclaimerAcknowledged: false }));
-		expect(res.status).toBe(400);
-		expect(await res.json()).toMatchObject({ error: 'DISCLAIMER_REQUIRED' });
-	});
-
 	it('422s without the consent decision', async () => {
 		const fetchMock = vi.fn();
 		vi.stubGlobal('fetch', fetchMock);

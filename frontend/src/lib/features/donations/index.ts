@@ -152,16 +152,18 @@ export {
 	ANY_DROP_OFF_POINT_LABEL,
 	canCloseByPoints,
 	defaultStoragePointId,
-	hasOtherPointLines,
 	linePointLabel,
 	namesDropOffPoints,
+	otherPointLineCount,
 	pointReceiptFields,
 	recordedAtLabel,
 	scanLineStates,
 	scanReceiveMode,
+	scanStatus,
 	type NamedPoint,
 	type ScanLineState,
-	type ScanReceiveMode
+	type ScanReceiveMode,
+	type ScanStatus
 } from './domain/point-scan';
 // Domain — reject reasons (CR-172)
 export {

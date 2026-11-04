@@ -120,9 +120,19 @@ export class JobRemoteRepository implements JobRepository {
 			const merged: Job = {
 				...job,
 				_rev: latest._rev,
+				schema_v: latest.schema_v > job.schema_v ? latest.schema_v : job.schema_v,
 				slots_confirmed: latest.slots_confirmed,
 				slots_dispatched: latest.slots_dispatched,
-				slots_remaining: job.quota - claimed
+				slots_remaining: job.quota - claimed,
+				// CR-220: the ticket cancel ledger. A form opened before a ticket cancel carries a
+				// stale copy, so keep every id either side knows — dropping one would let a
+				// repeated cancel release the same application's quota twice.
+				released_application_ids: [
+					...new Set([
+						...(latest.released_application_ids ?? []),
+						...(job.released_application_ids ?? [])
+					])
+				]
 			};
 			// `status` is NOT re-derived here: this path carries the SM's explicit
 			// LIFECYCLE pick, and re-deriving would overwrite it in the same `put`

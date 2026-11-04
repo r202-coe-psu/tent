@@ -173,6 +173,7 @@ describe('buildApplicantBoard', () => {
 		const b = board({ assignments: [assignment({ volunteer_id: 'volunteer:2' })] });
 		expect(b.history[0].person).toEqual({
 			name: 'วิภา สุขสม',
+			nickname: null,
 			phone: '0899999999',
 			code: 'V-2'
 		});

@@ -50,14 +50,47 @@ async def apply_job(
 
 
 async def apply_job_application(
-    action: Literal["upsert", "delete", "ignore"], payload: dict[str, Any]
-) -> None:
+    action: Literal["upsert", "delete", "ignore"],
+    payload: dict[str, Any],
+    *,
+    reconcile: bool = True,
+) -> tuple[str, str] | None:
+    """Project a job application and keep its shift counter in step.
+
+    Returns the ``(job_id, shift_id)`` whose counter depends on this document, or None.
+    With ``reconcile=False`` the counter is left for the caller to reconcile once per
+    pair (bootstrap replays every document, so reconciling each would repeat the same
+    three queries per application).
+    """
+    previous = None
+    if action == "delete" and payload.get("_id"):
+        previous = await PublicJobApplication.get(payload["_id"])
     await apply_document(PublicJobApplication, action, payload)
+    # The shift counter counts confirmed applications too, so it must follow them. A ticket
+    # cancel writes the assignment before the application (CR-212 / CR-220): reconciling only
+    # on the assignment left the counter one too high, and a cancel without an assignment
+    # never reconciled it at all.
+    if action == "upsert":
+        job_id = payload.get("job_id")
+        shift_id = payload.get("shift_id")
+    else:
+        job_id = previous.job_id if previous else None
+        shift_id = previous.shift_id if previous else None
+    if not (job_id and shift_id):
+        return None
+    pair = (str(job_id), str(shift_id))
+    if reconcile:
+        await sync_job_shift_slot(job_id=pair[0], shift_id=pair[1])
+    return pair
 
 
 async def apply_shift_assignment(
-    action: Literal["upsert", "delete", "ignore"], payload: dict[str, Any]
-) -> None:
+    action: Literal["upsert", "delete", "ignore"],
+    payload: dict[str, Any],
+    *,
+    reconcile: bool = True,
+) -> tuple[str, str] | None:
+    """Project a shift assignment; see :func:`apply_job_application` for ``reconcile``."""
     previous = None
     if action == "delete" and payload.get("_id"):
         previous = await PublicShiftAssignment.get(payload["_id"])
@@ -68,11 +101,12 @@ async def apply_shift_assignment(
     else:
         job_id = previous.job_id if previous else None
         shift_id = previous.shift_id if previous else None
-    if job_id and shift_id:
-        await sync_job_shift_slot(
-            job_id=str(job_id),
-            shift_id=str(shift_id),
-        )
+    if not (job_id and shift_id):
+        return None
+    pair = (str(job_id), str(shift_id))
+    if reconcile:
+        await sync_job_shift_slot(job_id=pair[0], shift_id=pair[1])
+    return pair
 
 
 async def sync_job_shift_slot(*, job_id: str, shift_id: str) -> None:

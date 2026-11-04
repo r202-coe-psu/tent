@@ -727,24 +727,51 @@ export type ShelterVolunteerAccount = {
 	permanent_roles: string[];
 };
 
+/** The only `_users` fields `ShelterVolunteerAccount` is built from; never a hash, salt or key. */
+const SHELTER_ACCOUNT_FIELDS = [
+	'_id',
+	'name',
+	'personnel_type',
+	'volunteer_id',
+	'active',
+	'roles',
+	'role_grants'
+];
+
 /**
  * The accounts linked to a shelter's volunteer profiles, read in one request (#1044). A profile
  * whose `user_name` points at no account, or at an account linked to another volunteer, is left
  * out. Kept even when it holds nothing in the shelter any more: that is the "expired" state.
+ *
+ * `narrow` reads only `SHELTER_ACCOUNT_FIELDS` (`_find` + `fields`) instead of whole user docs:
+ * for the anonymous portal path, so a password hash or salt is never loaded for a phone-number
+ * request. The back-office keeps the whole-doc read.
  */
 export async function readShelterVolunteerAccounts(
 	links: readonly { volunteer_id: string; name: string }[],
-	shelterCode: string
+	shelterCode: string,
+	opts: { narrow?: boolean } = {}
 ): Promise<ShelterVolunteerAccount[]> {
 	if (links.length === 0) return [];
 	// `_all_docs` keys are raw doc ids; `userDocId` is URL-encoded for paths.
 	const idOf = (name: string) => `${USER_PREFIX}${name}`;
-	const res = await adminRaw('/_users/_all_docs?include_docs=true', 'POST', {
-		keys: [...new Set(links.map((link) => idOf(link.name)))]
-	});
-	if (res.status >= 400) throw serviceErrorFromCouch('read users', res.status, res.data);
-	const rows = (res.data as { rows?: { key: string; doc?: CouchUserDoc | null }[] })?.rows ?? [];
-	const docs = new Map(rows.flatMap((row) => (row.doc ? [[row.key, row.doc] as const] : [])));
+	const ids = [...new Set(links.map((link) => idOf(link.name)))];
+	let docs: Map<string, CouchUserDoc>;
+	if (opts.narrow) {
+		const res = await adminRaw('/_users/_find', 'POST', {
+			selector: { _id: { $in: ids } },
+			fields: SHELTER_ACCOUNT_FIELDS,
+			limit: ids.length
+		});
+		if (res.status >= 400) throw serviceErrorFromCouch('read users', res.status, res.data);
+		const found = (res.data as { docs?: CouchUserDoc[] } | null)?.docs ?? [];
+		docs = new Map(found.map((doc) => [doc._id, doc] as const));
+	} else {
+		const res = await adminRaw('/_users/_all_docs?include_docs=true', 'POST', { keys: ids });
+		if (res.status >= 400) throw serviceErrorFromCouch('read users', res.status, res.data);
+		const rows = (res.data as { rows?: { key: string; doc?: CouchUserDoc | null }[] })?.rows ?? [];
+		docs = new Map(rows.flatMap((row) => (row.doc ? [[row.key, row.doc] as const] : [])));
+	}
 	return links.flatMap((link) => {
 		const doc = docs.get(idOf(link.name));
 		// Only the volunteer's own volunteer account counts (CR-221 FR-6, FR-7), as in

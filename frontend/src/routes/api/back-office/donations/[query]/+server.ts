@@ -406,7 +406,7 @@ export const POST: RequestHandler = async ({ params, request }) => {
 					{
 						success: false,
 						error_code: 'POINT_REQUIRED',
-						error: 'ศูนย์นี้มีจุดรับบริจาค — เลือกจุดที่ประจำก่อนบันทึกรับของ'
+						error: 'ศูนย์นี้มีจุดรับบริจาค — เลือกจุดที่ประจำก่อนตรวจรับ'
 					},
 					{ status: 422 }
 				);

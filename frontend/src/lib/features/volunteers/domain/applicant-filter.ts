@@ -7,17 +7,16 @@
  */
 
 import { applicantAttendance, awaitingAttendanceConfirmation } from './applicant-attendance';
-import { matchesVolunteerCode } from './volunteer-code';
 import {
 	applicationPerson,
 	applicationShiftId,
 	type ApplicantBoard,
-	type ApplicantHistoryEntry,
-	type ApplicantPerson
+	type ApplicantHistoryEntry
 } from './applicant-board';
 import type { ApplicantGroup } from './applicant-queue';
 import type { ShiftAssignment } from './shift-assignment.schema';
 import type { Volunteer } from './volunteer.schema';
+import { matchesVolunteerSearch } from './volunteer-search';
 
 export type ApplicantStatusFilter = 'all' | 'pending' | 'confirmed' | 'declined' | 'staff';
 export type ApplicantAttendanceFilter =
@@ -64,20 +63,6 @@ export interface ApplicantFilterContext {
 export interface FilteredApplicantBoard {
 	pending: ApplicantGroup[];
 	history: ApplicantHistoryEntry[];
-}
-
-const digits = (value: string) => value.replace(/\D/g, '');
-
-function matchesSearch(query: string, person: ApplicantPerson): boolean {
-	if (!query) return true;
-	const q = query.toLowerCase();
-	if (person.name?.toLowerCase().includes(q)) return true;
-	if (person.code && matchesVolunteerCode(person.code, q)) return true;
-	if (!person.phone) return false;
-	if (person.phone.toLowerCase().includes(q)) return true;
-	// A phone-shaped query ("081-234") also matches a phone stored without the dashes.
-	const qDigits = digits(q);
-	return qDigits !== '' && /^[\d\s\-+()]+$/.test(q) && digits(person.phone).includes(qDigits);
 }
 
 function matchesShift(
@@ -146,7 +131,7 @@ export function filterApplicantBoard(
 						applications: group.applications.filter(
 							(a) =>
 								matchesShift(filters.shift, applicationShiftId(a), a.selected_shift.date) &&
-								matchesSearch(query, applicationPerson(a, ctx.volunteers))
+								matchesVolunteerSearch(applicationPerson(a, ctx.volunteers), query)
 						)
 					}))
 					.filter((group) => group.applications.length > 0)
@@ -156,7 +141,7 @@ export function filterApplicantBoard(
 		(entry) =>
 			statusAllows(filters.status, entry) &&
 			matchesShift(filters.shift, entry.shiftId, entry.date) &&
-			matchesSearch(query, entry.person) &&
+			matchesVolunteerSearch(entry.person, query) &&
 			(filters.attendance === 'all' || historyAttendance(entry, ctx) === filters.attendance)
 	);
 

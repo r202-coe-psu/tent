@@ -55,7 +55,7 @@
 		useJobs
 	} from '../application/queries';
 	import { ASSIGNED_STATUSES } from '../domain/hub-metrics';
-	import { matchesVolunteerCode } from '../domain/volunteer-code';
+	import { matchesVolunteerSearch, volunteerSearchFields } from '../domain/volunteer-search';
 	import type {
 		ShiftAssignment,
 		ShiftAssignmentStatus,
@@ -102,14 +102,7 @@
 	function matchesSearch(assignment: ShiftAssignment, term: string): boolean {
 		if (!term) return true;
 		const v = volunteersById.get(assignment.volunteer_id);
-		if (!v) return false;
-		const needle = term.trim().toLowerCase();
-		if (!needle) return true;
-		return (
-			`${v.first_name} ${v.last_name}`.toLowerCase().includes(needle) ||
-			matchesVolunteerCode(v.volunteer_code, needle) ||
-			(v.phone ?? '').includes(needle)
-		);
+		return !!v && matchesVolunteerSearch(volunteerSearchFields(v), term);
 	}
 
 	// Priority order roughly matching the owner-approved mockup: on-site first,

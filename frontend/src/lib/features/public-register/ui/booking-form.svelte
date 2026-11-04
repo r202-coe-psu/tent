@@ -126,19 +126,11 @@
 	const shelterPolicyQuery = useShelterPolicy(() => selected?.code ?? '');
 	const shelterPolicy = $derived(shelterPolicyQuery.data);
 
-	/** FR-22: group A of the consent block — the queue terms, or the shelter's conditions when it has any. */
+	/** FR-22: group A — shelter safety conditions only (central queue has no acknowledgement row). */
 	function consentAcknowledgement(
 		household: UnifiedRegistrationInput['household']
 	): ConsentAcknowledgement | undefined {
-		const onchange = (value: boolean) => (disclaimerAcknowledged = value);
-		if (isUnassigned) {
-			return {
-				checked: disclaimerAcknowledged,
-				onchange,
-				text: t.unassignedDisclaimerAck,
-				needMessage: t.unassignedDisclaimerRequired
-			};
-		}
+		if (isUnassigned) return undefined;
 		const groups = buildDisclaimerGroups({
 			assetDescription: household.assets?.description ?? '',
 			petCount: (household.pets ?? []).length,
@@ -148,7 +140,7 @@
 		if (groups.length === 0) return undefined;
 		return {
 			checked: disclaimerAcknowledged,
-			onchange,
+			onchange: (value: boolean) => (disclaimerAcknowledged = value),
 			text: t.shelterSafetyAck,
 			needMessage: t.shelterDisclaimerRequired,
 			conditions: { title: t.shelterSafetyTitle, groups }
@@ -228,13 +220,7 @@
 			toast.error(err);
 			throw new Error(err);
 		}
-		if (isUnassigned) {
-			if (!disclaimerAcknowledged) {
-				const err = t.unassignedDisclaimerRequired;
-				toast.error(err);
-				throw new Error(err);
-			}
-		} else {
+		if (!isUnassigned) {
 			const groups = buildDisclaimerGroups({
 				assetDescription: unifiedInput.household.assets?.description ?? '',
 				petCount: (unifiedInput.household.pets ?? []).length,
@@ -265,7 +251,6 @@
 				const res = await createUnassignedRegistration.mutateAsync({
 					...unifiedInput,
 					...consentBody,
-					disclaimerAcknowledged: true,
 					...(token ? { captchaToken: token } : {})
 				});
 

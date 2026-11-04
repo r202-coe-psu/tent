@@ -2,7 +2,7 @@ import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { adminRaw } from '$lib/server/couch-admin';
 import { fastapiBaseUrl, fastapiServiceHeaders } from '$lib/server/fastapi';
-import { isTicketCancellable, resolveTicket } from '$lib/features/volunteers/server/public-ticket';
+import { canCancelTicket, resolveTicket } from '$lib/features/volunteers/server/public-ticket';
 
 function maskPhone(phone: string | null | undefined): string {
 	if (!phone) return 'xxx-xxx-xxxx';
@@ -46,7 +46,7 @@ export const GET: RequestHandler = async ({ params, fetch }) => {
 					success: true,
 					ticket: {
 						token: tokenOut,
-						can_cancel: isTicketCancellable(app),
+						can_cancel: canCancelTicket(app),
 						application_id: app?._id,
 						status:
 							app?.status || (volunteer?.status === 'active' ? 'confirmed' : 'pending_review'),

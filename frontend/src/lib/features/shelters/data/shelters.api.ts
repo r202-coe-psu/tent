@@ -1,6 +1,7 @@
 import { serviceFetch } from '$lib/api/service';
 import { shelterStore } from '$lib/stores/shelter.svelte';
 import type { Shelter } from '../domain/schema';
+import type { ShelterClosePreview, ShelterCloseResult } from '../domain/shelter-close';
 import type { ShelterSummary } from './shelters.repository';
 
 export type { ShelterSummary };
@@ -36,6 +37,22 @@ export function updateShelter(
 	return serviceFetch(`${SHELTER_ENDPOINT}/${encodeURIComponent(code)}`, {
 		method: 'PATCH',
 		body: JSON.stringify(input)
+	});
+}
+
+/** CR-219 FR-7: people the close would change, by stay status (live read). */
+export function getShelterClosePreview(code: string): Promise<ShelterClosePreview> {
+	return serviceFetch<ShelterClosePreview>(
+		`${SHELTER_ENDPOINT}/${encodeURIComponent(code)}/close`,
+		{ cache: 'no-store' }
+	);
+}
+
+/** CR-219 FR-8: check out / cancel everyone on a stay, then close the shelter. */
+export function closeShelter(code: string, confirmText: string): Promise<ShelterCloseResult> {
+	return serviceFetch<ShelterCloseResult>(`${SHELTER_ENDPOINT}/${encodeURIComponent(code)}/close`, {
+		method: 'POST',
+		body: JSON.stringify({ confirm_text: confirmText })
 	});
 }
 

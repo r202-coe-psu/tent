@@ -36,13 +36,6 @@ export const POST: RequestHandler = async ({ request, getClientAddress, fetch })
 	}
 	const input = parsed.data;
 
-	if (input.disclaimerAcknowledged !== true) {
-		return json(
-			{ success: false, error: 'DISCLAIMER_REQUIRED' },
-			{ status: 400, headers: noStore }
-		);
-	}
-
 	const ip = getClientAddress();
 
 	const captcha = await verifyRecaptchaOrSkip({
