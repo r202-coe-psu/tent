@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 import { WholeNumberGuard, wholeNumberInput } from './whole-number-input.svelte';
 
 function beforeInput(input: HTMLInputElement, data: string | null, inputType = 'insertText') {
@@ -20,13 +20,13 @@ describe('wholeNumberInput', () => {
 	let input: HTMLInputElement;
 	let whole: boolean;
 	let cleanup: (() => void) | void;
-	let refused: ReturnType<typeof vi.fn>;
+	let refused: Mock<() => void>;
 
 	beforeEach(() => {
 		input = document.createElement('input');
 		document.body.append(input);
 		whole = true;
-		refused = vi.fn();
+		refused = vi.fn<() => void>();
 		cleanup = wholeNumberInput(() => whole, refused)(input);
 	});
 
