@@ -4,9 +4,12 @@
 	import { toLotPriorityItems, useLedger } from '$lib/features/operations';
 	import {
 		qtyInputStep,
+		requiresWholeQty,
 		useItemMasters,
 		useUnitDimensionResolver,
-		wholeQtyError
+		wholeQtyError,
+		WholeNumberGuard,
+		WholeNumberNote
 	} from '$lib/features/catalog';
 	import { getShelterCode } from '$lib/db/shelter';
 	import { Button } from '$lib/components/ui/button/index.js';
@@ -108,6 +111,8 @@
 		const value = draft[lotRef];
 		return isUsableQty(value) && qtyGt(value, remaining);
 	}
+
+	const wholeGuard = new WholeNumberGuard();
 
 	function wholeErrorFor(lotRef: string, value: string | undefined): string | undefined {
 		const lot = lots.find((l) => l.lot_ref === lotRef);
@@ -328,6 +333,7 @@
 							readonly={capped}
 							aria-disabled={capped || !canEdit}
 							aria-invalid={isOver || !!wholeError}
+							{@attach wholeGuard.attach(() => requiresWholeQty(lotDimension), lot.lot_ref)}
 							title={capped ? 'ครบจำนวนที่ต้องจ่ายแล้ว' : undefined}
 							class="h-11 w-28 [appearance:textfield] text-right text-xs tabular-nums sm:h-9 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none {capped
 								? 'cursor-not-allowed bg-slate-100 text-slate-400'
@@ -340,6 +346,7 @@
 						{:else if wholeError}
 							<p class="text-xs font-semibold text-red-700" role="alert">{wholeError}</p>
 						{/if}
+						<WholeNumberNote guard={wholeGuard} key={lot.lot_ref} />
 					</div>
 				</li>
 			{/each}
