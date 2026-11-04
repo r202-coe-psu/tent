@@ -187,6 +187,7 @@ describe('distribute form: one batch, many lines (#837)', () => {
 		expect(document.body.textContent).toContain('หน่วยนับต้องเป็นจำนวนเต็ม');
 		expect(qtyInputs()[0].step).toBe('1');
 		expect(button('บันทึกแล้วเบิกรายการถัดไป')!.disabled).toBe(true);
+		expect(qtyInputs()[0].getAttribute('aria-invalid')).toBe('true');
 
 		await type(qtyInputs()[0], '3');
 		expect(document.body.textContent).not.toContain('หน่วยนับต้องเป็นจำนวนเต็ม');

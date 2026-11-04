@@ -283,6 +283,7 @@
 							min={lineDimension === 'count' ? '1' : '0.01'}
 							step={qtyInputStep(lineDimension)}
 							value={line.qty}
+							aria-invalid={verdict.kind === 'incomplete' && verdict.missing === 'whole'}
 							oninput={(event) => (line.qty = event.currentTarget.value)}
 							onkeydown={(event) => {
 								if (event.key === 'Enter') event.preventDefault();
