@@ -257,11 +257,13 @@
 									type="number"
 									step={qtyInputStep(dimensions.resolve(conv.uom))}
 									min={0}
-									value={conv.quantity}
+									bind:value={
+										() => (conv.quantity === '' ? null : Number(conv.quantity)),
+										(v) => (conv.quantity = v == null ? '' : String(v))
+									}
 									aria-invalid={qtyMessages.has(index)}
-									oninput={(e) => {
-										const val = e.currentTarget.value;
-										conv.quantity = val === '' ? '1' : val;
+									onblur={() => {
+										if (conv.quantity === '') conv.quantity = '1';
 									}}
 									class="h-12 rounded-xl border-slate-200/80 bg-white text-center dark:border-zinc-800 dark:bg-zinc-950"
 								/>
