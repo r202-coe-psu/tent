@@ -5,12 +5,13 @@
 	let {
 		guard,
 		key = '',
+		message = WHOLE_DIGITS_ONLY_MESSAGE,
 		class: className = ''
-	}: { guard: WholeNumberGuard; key?: string; class?: string } = $props();
+	}: { guard: WholeNumberGuard; key?: string; message?: string; class?: string } = $props();
 </script>
 
 {#if guard.isRefused(key)}
 	<p role="status" class="text-xs font-semibold text-amber-700 {className}">
-		{WHOLE_DIGITS_ONLY_MESSAGE}
+		{message}
 	</p>
 {/if}

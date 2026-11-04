@@ -8,7 +8,14 @@
 	import { toast } from 'svelte-sonner';
 	import { usePublicShelterNeeds, useUpdateDonationItems } from '../application/queries';
 	import type { DonationItemEdit } from '../data/public-tracking';
-	import { qtyInputStep, resolveUnitDimension, wholeQtyError } from '$lib/features/catalog';
+	import {
+		qtyInputStep,
+		requiresWholeQty,
+		resolveUnitDimension,
+		wholeQtyError,
+		WholeNumberGuard,
+		WholeNumberNote
+	} from '$lib/features/catalog';
 	import { langState } from '$lib/states/i18n.svelte';
 	import { getTranslation } from '$lib/utils/i18n';
 	import { PUBLIC_DONATIONS_I18N } from '$lib/constants/i18n';
@@ -87,6 +94,7 @@
 	// The donor is anonymous, so the unit master (CouchDB) is out of reach: the built-in
 	// unit list decides, and an unknown free-text unit is not enforced.
 	const dimensionOf = (row: Row) => resolveUnitDimension(row.unit);
+	const wholeGuard = new WholeNumberGuard();
 	const hasWholeError = (row: Row) => !!wholeQtyError(row.qty, dimensionOf(row));
 
 	const canSave = $derived(
@@ -199,6 +207,7 @@
 								step={qtyInputStep(dimensionOf(row))}
 								bind:value={row.qty}
 								aria-invalid={hasWholeError(row) ? 'true' : undefined}
+								{@attach wholeGuard.attach(() => requiresWholeQty(dimensionOf(row)), row.key)}
 								class="h-9 rounded-xl text-xs"
 							/>
 						</div>
@@ -242,6 +251,12 @@
 							{t.editQtyWholeError}
 						</p>
 					{/if}
+					<WholeNumberNote
+						guard={wholeGuard}
+						key={row.key}
+						message={t.editQtyDigitsOnly}
+						class="text-2xs"
+					/>
 				</div>
 			{/each}
 
