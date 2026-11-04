@@ -248,9 +248,10 @@ export async function mintLoginSession(
 
 /** Decide whether a `_users` doc can mint a Google-login session (Option C). */
 export function resolveGoogleLoginUser(
-	doc: { name: string; salt?: string } | null
+	doc: { name: string; salt?: string; deleted_at?: string | null } | null
 ): GoogleLoginLookup {
-	if (!doc) return { ok: false, reason: 'google_not_linked' };
+	// CR-171 FR-8 — a soft-deleted account is treated as not linked (its salt is still mintable).
+	if (!doc || doc.deleted_at) return { ok: false, reason: 'google_not_linked' };
 	const salt = typeof doc.salt === 'string' ? doc.salt : '';
 	if (!salt) return { ok: false, reason: 'missing_salt' };
 	return { ok: true, name: doc.name, salt };

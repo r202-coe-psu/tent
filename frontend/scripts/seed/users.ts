@@ -1,3 +1,4 @@
+import { mergeEdgeShelters } from '$lib/auth/roles';
 import { hashSecurityAnswer } from '$lib/server/security-questions';
 import { isValidStaffTokenHash } from '$lib/features/users/server';
 import { ensurePublicWriter } from '$lib/server/ensure-public-writer';
@@ -140,6 +141,8 @@ export async function seedUsers(): Promise<void> {
 			phone: u.phone,
 			email: u.email,
 			shelter_id: u.shelter_id,
+			// CR-171 FR-11 — append-only history of shelters (edge `_users` replication routing)
+			edge_shelters: mergeEdgeShelters(existingDoc?.edge_shelters as string[] | undefined, u.roles),
 			active: true,
 			must_change_password: false,
 			security_question,

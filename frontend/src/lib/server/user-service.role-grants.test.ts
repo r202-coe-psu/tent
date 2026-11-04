@@ -687,6 +687,87 @@ describe('coordinator role grants on _users (#955)', () => {
 			await expect(revoke({ role: 'kiosk_staff' })).rejects.toMatchObject({ code: 'FORBIDDEN' });
 		});
 	});
+	describe('revoke name resolution skips soft-deleted docs (CR-171)', () => {
+		it('resolves a live case-variant when the exact name is soft-deleted', async () => {
+			seed('vol@x.test', { deleted_at: '2026-10-01T00:00:00.000Z', deleted_by: 'admin' });
+			seed('Vol@x.test', {
+				roles: ['shelter:SH001', 'SH001:kitchen_staff'],
+				role_grants: [grant()]
+			});
+			await revokeCoordinatorGrant({
+				name: 'vol@x.test',
+				volunteer_id: 'volunteer:V1',
+				shelter_code: 'SH001',
+				role: 'kitchen_staff',
+				actor: 'staff03'
+			});
+			expect(db[key('Vol@x.test')].roles).toEqual([]);
+			expect(db[key('vol@x.test')].deleted_at).toBeTruthy();
+		});
+	});
+	describe('edge_shelters on grant / revoke (CR-171 FR-1)', () => {
+		it('grant then revoke on an account with no SH001 keeps SH001 in edge_shelters', async () => {
+			seed(EMAIL, { roles: [], edge_shelters: [] });
+			await grantCoordinatorRole(input());
+			expect(db[key(EMAIL)].edge_shelters).toContain('SH001');
+			await revokeCoordinatorGrant({
+				name: EMAIL,
+				volunteer_id: 'volunteer:V1',
+				shelter_code: 'SH001',
+				role: 'kitchen_staff',
+				actor: 'staff03'
+			});
+			expect(db[key(EMAIL)].roles).toEqual([]);
+			expect(db[key(EMAIL)].edge_shelters).toContain('SH001');
+		});
+
+		it('revoke folds roles into edge_shelters on a pre-backfill account (no edge_shelters)', async () => {
+			seed(EMAIL, {
+				roles: ['shelter:SH001', 'SH001:kitchen_staff'],
+				role_grants: [grant()]
+			});
+			delete db[key(EMAIL)].edge_shelters;
+			await revokeCoordinatorGrant({
+				name: EMAIL,
+				volunteer_id: 'volunteer:V1',
+				shelter_code: 'SH001',
+				role: 'kitchen_staff',
+				actor: 'staff03'
+			});
+			expect(db[key(EMAIL)].roles).toEqual([]);
+			expect(db[key(EMAIL)].edge_shelters).toEqual(['SH001']);
+		});
+
+		it('grant folds existing roles into edge_shelters on a pre-backfill account', async () => {
+			seed(EMAIL, { roles: ['shelter:SH002'] });
+			delete db[key(EMAIL)].edge_shelters;
+			await grantCoordinatorRole(input());
+			expect(db[key(EMAIL)].edge_shelters).toEqual(expect.arrayContaining(['SH002', 'SH001']));
+		});
+	});
+
+	describe('soft-deleted accounts are not volunteer accounts (CR-171 FR-5)', () => {
+		const deleted = { deleted_at: '2026-11-01T00:00:00.000Z', roles: [], role_grants: [grant()] };
+
+		it('readVolunteerAccount counts a soft-deleted account as none', async () => {
+			seed(EMAIL, deleted);
+			expect(
+				await readVolunteerAccount({
+					name: EMAIL,
+					volunteer_id: 'volunteer:V1',
+					shelter_code: 'SH001'
+				})
+			).toEqual({ exists: false, grants: [], permanent_roles: [] });
+		});
+
+		it('readShelterVolunteerAccounts skips it, wide and narrow', async () => {
+			seed(EMAIL, deleted);
+			const links = [{ volunteer_id: 'volunteer:V1', name: EMAIL }];
+			expect(await readShelterVolunteerAccounts(links, 'SH001')).toEqual([]);
+			expect(await readShelterVolunteerAccounts(links, 'SH001', { narrow: true })).toEqual([]);
+		});
+	});
+
 	describe('reading a volunteer account for the dialog (FR-8, #1044)', () => {
 		const read = (over: Record<string, unknown> = {}) =>
 			readVolunteerAccount({
