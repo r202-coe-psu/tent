@@ -64,26 +64,26 @@
 	// Interim single-item form schema — the domain's `transferInputSchema` takes an `items[]`
 	// array (split-lot allocation across multiple lots/items is out of scope this round; see
 	// CR-059's "field ละเอียด" note). Mapped into a one-item TransferInput on submit.
-	const transferFormSchema = z
-		.object({
-			to_shelter: z.string().trim().min(1, 'กรุณาระบุศูนย์ปลายทาง'),
-			item_id: z.string().trim().min(1, 'กรุณาระบุสินค้า'),
-			qty: z.coerce.number().positive('จำนวนต้องมากกว่า 0'),
-			unit: z.string().trim().min(1, 'กรุณาระบุหน่วยนับ'),
-			notes: z.string().trim().optional()
-		})
-		.superRefine((d, ctx) => {
-			const message = wholeQtyError(d.qty, unitDimension.resolve(d.unit));
-			if (message) ctx.addIssue({ code: 'custom', path: ['qty'], message });
-		});
+	const transferFormSchema = z.object({
+		to_shelter: z.string().trim().min(1, 'กรุณาระบุศูนย์ปลายทาง'),
+		item_id: z.string().trim().min(1, 'กรุณาระบุสินค้า'),
+		qty: z.coerce.number().positive('จำนวนต้องมากกว่า 0'),
+		unit: z.string().trim().min(1, 'กรุณาระบุหน่วยนับ'),
+		notes: z.string().trim().optional()
+	});
 
 	const form = superForm(defaults(zod4(transferFormSchema)), {
 		SPA: true,
 		validators: zod4(transferFormSchema),
 		resetForm: true,
-		onUpdate: async ({ form: validated }) => {
+		onUpdate: async ({ form: validated, cancel }) => {
 			if (!validated.valid) {
 				toast.error('กรุณาตรวจสอบข้อมูลในฟอร์ม');
+				return;
+			}
+			if (qtyWholeError) {
+				cancel();
+				toast.error(qtyWholeError);
 				return;
 			}
 			await handleCreate(validated.data);
@@ -91,6 +91,10 @@
 	});
 
 	const { form: formData, submitting } = form;
+
+	const qtyWholeError = $derived(
+		wholeQtyError($formData.qty, unitDimension.resolve($formData.unit))
+	);
 
 	const unitOptions = $derived(selectedItem ? itemSelectableUoms(selectedItem) : []);
 	const selectedUnitLabel = $derived(
@@ -246,10 +250,14 @@
 							step={qtyInputStep(unitDimension.resolve($formData.unit))}
 							placeholder="ระบุจำนวน"
 							bind:value={$formData.qty}
+							aria-invalid={qtyWholeError ? true : props['aria-invalid']}
 							class="min-h-11 font-mono font-bold"
 						/>
 					{/snippet}
 				</Form.Control>
+				{#if qtyWholeError}
+					<p class="text-sm font-medium text-destructive">{qtyWholeError}</p>
+				{/if}
 				<Form.FieldErrors />
 			</Form.Field>
 
@@ -326,6 +334,7 @@
 			<Form.Button
 				disabled={$submitting ||
 					offline ||
+					!!qtyWholeError ||
 					!canPickDestination ||
 					!selectedItem ||
 					qtyLte(currentStock, 0)}
