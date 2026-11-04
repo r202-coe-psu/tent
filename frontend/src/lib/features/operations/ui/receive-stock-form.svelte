@@ -187,14 +187,9 @@
 		isWalkInOpen = true;
 	}
 
-	const receiveFormSchema = receiveInputSchema.superRefine((d, ctx) => {
-		const message = wholeQtyError(d.qty, unitDimension.resolve(d.unit));
-		if (message) ctx.addIssue({ code: 'custom', path: ['qty'], message });
-	});
-
 	const form = superForm(defaults({ source: 'manual' }, zod4(receiveInputSchema)), {
 		SPA: true,
-		validators: zod4(receiveFormSchema),
+		validators: zod4(receiveInputSchema),
 		resetForm: true,
 		onUpdate: async ({ form: validated, cancel }) => {
 			// In walk-in mode `ref_id` is legitimately empty: the donation does not
@@ -205,6 +200,12 @@
 			const onlyWalkInRefId = isWalkIn && fields.length === 1 && fields[0] === 'ref_id';
 			if (!validated.valid && !onlyWalkInRefId) {
 				toast.error('กรุณาตรวจสอบข้อมูลในฟอร์ม');
+				return;
+			}
+
+			if (qtyWholeError) {
+				cancel();
+				toast.error(qtyWholeError);
 				return;
 			}
 
@@ -239,6 +240,10 @@
 	});
 
 	const { form: formData, submitting, reset } = form;
+
+	const qtyWholeError = $derived(
+		wholeQtyError($formData.qty, unitDimension.resolve($formData.unit))
+	);
 
 	const selectedUnitLabel = $derived(
 		formatUnit($formData.unit, units, langState.current) || $formData.unit || 'เลือกหน่วย'
@@ -818,10 +823,14 @@
 							min={unitDimension.resolve($formData.unit) === 'count' ? '1' : '0.01'}
 							step={qtyInputStep(unitDimension.resolve($formData.unit))}
 							bind:value={$formData.qty}
+							aria-invalid={qtyWholeError ? true : props['aria-invalid']}
 							class="min-h-11 font-mono font-bold"
 						/>
 					{/snippet}
 				</Form.Control>
+				{#if qtyWholeError}
+					<p class="text-sm font-medium text-destructive">{qtyWholeError}</p>
+				{/if}
 				<Form.FieldErrors />
 			</Form.Field>
 
@@ -990,7 +999,11 @@
 			<div
 				class="sticky bottom-0 z-10 col-span-1 -mx-4 -mb-4 border-t border-slate-200 bg-slate-50 px-4 py-4 sm:col-span-2 sm:-mx-6 sm:-mb-6 sm:px-6"
 			>
-				<Form.Button size="lg" disabled={$submitting || offline} class="min-h-11 w-full font-bold">
+				<Form.Button
+					size="lg"
+					disabled={$submitting || offline || !!qtyWholeError}
+					class="min-h-11 w-full font-bold"
+				>
 					{$submitting ? 'กำลังบันทึก…' : 'บันทึกแล้วรับชิ้นถัดไป'}
 				</Form.Button>
 			</div>

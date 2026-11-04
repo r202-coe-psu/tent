@@ -13,8 +13,21 @@ vi.mock('../application/queries', () => ({
 	useStockLedgers: () => ({ data: [] }),
 	useStockBalance: () => ({ data: new Map() })
 }));
+const BOTTLE = {
+	_id: 'item:water',
+	name: 'น้ำดื่ม',
+	unit: 'ขวด',
+	base_unit: 'ขวด',
+	conversions: []
+};
+const stockItems = vi.hoisted(() => ({ current: [] as unknown[] }));
 vi.mock('../application/use-stock-form-items.svelte', () => ({
-	useStockFormItems: () => ({ items: [], isLoading: false })
+	useStockFormItems: () => ({
+		get items() {
+			return stockItems.current;
+		},
+		isLoading: false
+	})
 }));
 vi.mock('../application/use-storage-points.svelte', () => ({
 	useStoragePoints: () => ({ points: [] })
@@ -72,6 +85,7 @@ async function type(input: HTMLInputElement, value: string) {
 const errorEl = () => document.querySelector('[data-testid="walkin-phone-error"]');
 
 afterEach(async () => {
+	stockItems.current = [];
 	if (instance) unmount(instance);
 	instance = null;
 	await new Promise((resolve) => setTimeout(resolve, 50));
@@ -156,5 +170,32 @@ describe('receive-stock walk-in email', () => {
 
 		await type(emailInput(), ' somchai@example.com ');
 		expect(emailError()).toBeNull();
+	});
+});
+
+describe('receive-stock whole numbers for count units (#805)', () => {
+	const qtyInput = () => document.querySelector<HTMLInputElement>('input[type="number"]')!;
+	const saveButton = () => document.querySelector<HTMLButtonElement>('form button[type="submit"]')!;
+
+	async function openForBottles() {
+		stockItems.current = [BOTTLE];
+		instance = mount(ReceiveStockForm, {
+			target: document.body,
+			props: { preselectedItemId: BOTTLE._id }
+		});
+		await settle();
+	}
+
+	it('flags a fractional quantity at once and keeps the save button off', async () => {
+		await openForBottles();
+
+		await type(qtyInput(), '1.5');
+		expect(document.body.textContent).toContain('หน่วยนับต้องเป็นจำนวนเต็ม');
+		expect(qtyInput().getAttribute('aria-invalid')).toBe('true');
+		expect(saveButton().disabled).toBe(true);
+
+		await type(qtyInput(), '2');
+		expect(document.body.textContent).not.toContain('หน่วยนับต้องเป็นจำนวนเต็ม');
+		expect(saveButton().disabled).toBe(false);
 	});
 });
