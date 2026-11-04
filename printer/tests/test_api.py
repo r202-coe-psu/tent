@@ -123,9 +123,15 @@ def test_5xx_raises_server_error(status):
 
 @pytest.mark.parametrize(
     "error",
-    [httpx.ConnectError("refused"), httpx.ReadTimeout("slow"), httpx.RemoteProtocolError("cut")],
+    [
+        httpx.ConnectError("refused"),
+        httpx.ReadTimeout("slow"),
+        httpx.RemoteProtocolError("cut"),
+        httpx.DecodingError("bad gzip"),
+        httpx.TooManyRedirects("loop"),
+    ],
 )
-def test_transport_failures_raise_network_error(error):
+def test_request_failures_raise_network_error(error):
     def handler(request: httpx.Request) -> httpx.Response:
         raise error
 

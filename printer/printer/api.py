@@ -131,7 +131,7 @@ class BffClient:
     def _post(self, path: str, json: dict) -> httpx.Response:
         try:
             response = self._http.post(path, json=json)
-        except httpx.TransportError as exc:
+        except httpx.RequestError as exc:
             raise NetworkError(f"cannot reach server: {type(exc).__name__}") from None
         if response.status_code == 401:
             raise AuthError("device authentication failed")
