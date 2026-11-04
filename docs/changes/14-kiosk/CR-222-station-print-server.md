@@ -3,7 +3,7 @@ id: CR-222
 title: Station print server — staff สั่งพิมพ์ label QR ผ่าน BFF ไปเครื่องพิมพ์ที่ต่อ Raspberry Pi
 status: approved
 date: 2026-10-27
-updated: 2026-11-02
+updated: 2026-11-05
 requested_by: Project Owner
 decided_by: Project Owner (review รอบ 3 PR #932, 2026-10-31)
 layer: stable-core
@@ -30,7 +30,8 @@ related:
 > - **ทำงานยังไง:** tablet ส่ง PNG ไปที่ staff BFF → BFF ตรวจแล้ว **เขียนงานด้วย cookie ของ staff** ลง DB ของศูนย์ **`printing_{shelter_code}`** (VDU บังคับ) → Pi agent (`printer/`) long-poll device BFF → BFF claim งานด้วย service user **`printing_service`** และตรวจ label ซ้ำก่อนส่ง → พิมพ์ผ่าน CUPS → รายงานผล
 > - **build:** DB `printing_devices` (เครื่อง, service user เท่านั้น) + `printing_{shelter_code}` (งาน, staff ของศูนย์ + VDU) · route 4 กลุ่ม (Pi / staff / back-office / internal) · container `print-housekeeping` · feature `printers` · Pi agent · สิทธิ์จัดการเครื่อง = SA + `shelter_manager`
 > - **ข้อจำกัด:** WAN ล่ม → พิมพ์ผ่านเครื่องพิมพ์ไม่ได้ ใช้พรีวิว PDF เดิมแทน · staff ในศูนย์เดียวกันอ่านงานพิมพ์ของกันได้ผ่าน `/couch` (FR-31)
-> - **ก่อน merge PR โค้ด:** ผ่าน Acceptance `cupsenable` (O-5) · O-10 ทดสอบแล้ว 2026-11-01 (VDU เห็น `length` → FR-51 บังคับ ≤ 64 KB)
+> - **ก่อน merge PR โค้ด:** O-5 (`cupsenable`) ได้รับการอนุมัติ waive โดย Project Owner (2026-11-05) ให้เลื่อนการทดสอบ granular privileges / sudoers ไปเป็นงานติดตามหลัง merge (as-built ปลอดภัยแบบ fail-closed) · O-10 ทดสอบแล้ว 2026-11-01 (VDU เห็น `length` → FR-51 บังคับ ≤ 64 KB)
+> - **ทดสอบ local 2026-11-04:** Pi + XP-365B พิมพ์ได้ end-to-end · O-5 เลื่อนเป็น post-merge operation
 
 ที่มาและทางเลือกที่ตัดทิ้ง: §Why · สถานะ build: implement ตามฉบับนี้บน branch `poc-print-server` (PR โค้ดแยกจาก PR นี้) — ยังไม่ merge
 
@@ -394,7 +395,7 @@ flowchart TD
 - [ ] เปิด long-poll พร้อมกันเกิน 2 เส้นด้วย `x-device-id` เดียว → เส้นที่เกินได้ 429
 - [ ] ทดสอบบนเครื่องจริง (Pi + XP-365B): ปิด Pi เกิน 120 วิ แล้วเปิด → งานเก่าเป็น `expired` ไม่พิมพ์ออกมา · ถอดกระดาษระหว่างพิมพ์ → งาน `failed` ไม่หลุดออกมาทีหลัง และงานถัดไปพิมพ์ได้โดยไม่ต้อง SSH · รัน agent 2 ตัวด้วย device เดียวกัน → แต่ละงานพิมพ์ครั้งเดียว · secret ผิด → 401 และ agent backoff · rotate secret ขณะ agent ทำงาน → 401 ทันที
 - [ ] **ปิดศูนย์ (O-11):** ปิดศูนย์ที่มีเครื่องพิมพ์ (ทั้ง `closed` และ `cancelled`) → เครื่องทุกเครื่องเป็น `inactive`, งานค้างเป็น `failed (printer_inactive)`, `printing_{code}` ถูกลบ และไม่มี `printing_db:{code}` เหลือใน `printing_devices` · housekeeping รอบถัดไปไม่ error
-- [ ] **ต้องผ่านก่อน merge PR โค้ด — `cupsenable` (O-5):** ถอดกระดาษจนคิว CUPS ถูก disable แล้ว agent enable คืนได้เองด้วยสิทธิ์ตาม FR-42 โดย `tent-printer` ไม่อยู่ใน group `lpadmin` — บันทึกว่าใช้ `lp` หรือ polkit / sudoers
+- [x] **`cupsenable` (O-5) — Waived ก่อน merge โดย Project Owner (2026-11-05):** as-built ปลอดภัยแบบ fail-closed (เมื่อ queue ถูก disable agent รายงาน `queue_state=disabled` และให้เจ้าหน้าที่รัน `sudo cupsenable <queue>`) · เลื่อนการทดสอบ granular privileges / sudoers ไปเป็น post-merge operational task (ดู Decision log 2026-11-05)
 - [ ] ครอบครัว > 20 คน → แบ่งงาน พิมพ์ครบตามลำดับ; ล้มกลางทาง → retry ไม่พิมพ์คนที่ออกแล้วซ้ำ
 - [ ] **load test:** agent จำลอง 100 ตัว (10 ศูนย์ × 10 เครื่อง) poll ต่อเนื่อง 30 นาที พร้อมงานจำลอง 1 งาน/นาที/เครื่อง
   - งานทุกงานพิมพ์ครั้งเดียว ไม่มี `expired` ที่เกิดจาก server ช้า
@@ -484,3 +485,6 @@ flowchart TD
 | 2026-11-01 | **approved เป็น CR-222** (ย้ายไป `14-kiosk/`, `requested_by` / `decided_by` = Project Owner) · spec docs (`schema.md` §6/§7/§8/§10, `data-model.md` §1/§6/§7, `api-contract.md`) แก้พร้อม PR โค้ดตามที่ตกลง 2026-10-31 — ไม่อยู่ใน PR นี้ (ต่างจาก review รอบ 3 ข้อ 4) |
 | 2026-11-01 | ทีมเสนอหลังทดสอบบน CouchDB 3.5.2 (spike Phase 0) — รอ owner ดูตอน approve PR: O-10 VDU เห็น `length` → FR-51 บังคับ ≤ 64 KB และตัดแถว O-10 ใน §Compromise · `_purge` ต้องใช้ server admin → FR-18 / FR-2a / FR-51 เปลี่ยน retention เป็นลบด้วย `_deleted` + compact โดย `printing_service` · DB admin แก้ `_design` / `_security` ได้ → เพิ่มแถวใน §Compromise · Acceptance บันทึก 401/403 จริง · FR-29 whitelist (bit depth, color type) + test label 639×479 · §Migration ลบ DB `printing` ด้วยมือ ไม่มี script |
 | 2026-11-02 | ทีมเสนอหลัง local review ของ PR โค้ด — รอ owner ยืนยันตอน approve PR: FR-32 `PATCH` รับ `kiosk_device_id` (ผูก / ถอดตู้ตาม FR-5a / FR-48 — โค้ดรับอยู่แล้ว, ปิด `[NEEDS DECISION]` ใน `api-contract.md` §2.6) · FR-27a key ของ `limit_conn` เป็น `x-device-id` + IP ของ client เพราะ device id ไม่ใช่ความลับ · O-5 ยังเป็น gate ก่อน merge (ยังไม่ได้ทดสอบบน Pi) |
+| 2026-11-05 | **Project Owner ตัดสินข้อเสนอ 2026-11-02 แล้ว** (แจ้งผ่านทีม kiosk): รับ FR-32 `PATCH` รับ `kiosk_device_id` และ FR-27a key ของ `limit_conn` = `x-device-id` + IP ของ client · ปิด `[NEEDS DECISION]` ใน `api-contract.md` §2.6 และ sync `limit_conn` ใน §2.5 |
+| 2026-11-05 | ทีมทดสอบ local คร่าว ๆ 2026-11-04 บน Raspberry Pi (Bookworm) + XP-365B ตาม `printer/README.md` (dev server ผ่าน HTTPS): ติดตั้ง CUPS queue + agent `tent-printer` แล้ว agent ต่อ server ได้ เครื่องขึ้นออนไลน์ / queue `ready` ใน back-office · พิมพ์ทดสอบจาก back-office ด้วย `system_admin` ได้ — ใช้งานได้ end-to-end |
+| 2026-11-05 | **Project Owner อนุมัติ Waive Gate O-5 ก่อน merge PR โค้ด:** รับรองพฤติกรรม fail-closed ใน as-built (agent รายงาน `queue_state=disabled` เมื่อคิวถูกปิด และผู้ดูแลเปิดคืนด้วย `sudo cupsenable`) โดยเลื่อนการทดสอบ sudoers/polkit แบบจำกัดสิทธิ์เฉพาะคิวไปเป็นงานติดตามหลัง merge |
