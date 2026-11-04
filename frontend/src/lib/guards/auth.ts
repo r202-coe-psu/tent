@@ -133,6 +133,19 @@ export async function requireManager(fetchFn?: typeof fetch) {
 	}
 }
 
+/**
+ * Shelter readiness guard (`/back-office/shelters/readiness/[id]`, #478) — system admin, or
+ * shelter_manager of the shelter named in the URL. Checked against `code`, not the selected
+ * shelter, so editing the URL cannot open another shelter's assessments.
+ */
+export async function requireShelterReadiness(code: string, fetchFn?: typeof fetch) {
+	await requireAuth(fetchFn);
+	const roles = authStore.user?.roles ?? [];
+	if (!canAccessManagerPages(roles, code)) {
+		throw redirect(302, resolve(LANDING_ROUTE));
+	}
+}
+
 /** The only back-office area a kiosk_staff-only user may open (FR-SBO-29). */
 export const KIOSK_STAFF_BACKOFFICE_ROUTE = '/back-office/kiosks';
 
