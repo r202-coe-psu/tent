@@ -117,6 +117,13 @@ if $STATUS_ONLY; then
     exit 0
 fi
 
+# Two agents on one DEVICE_ID steal each other's jobs and trip nginx's 2-connection limit (429).
+for state in is-active is-enabled; do
+    if systemctl "$state" --quiet tent-printer-autostart 2>/dev/null; then
+        die "มี tent-printer-autostart ติดตั้งอยู่ ($state) — agent สองตัวจะแย่งงานกัน ถอนออกก่อน: ./setup_autostart.sh --disable"
+    fi
+done
+
 # --- Preflight (real runs only: --dry-run must work anywhere without root) --------
 if ! $DRY_RUN; then
     [ "$EUID" -eq 0 ] || die "ต้องรันด้วย root: sudo $0 ... (หรือใช้ --dry-run เพื่อดูแผน)"

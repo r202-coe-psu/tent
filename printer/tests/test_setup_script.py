@@ -32,6 +32,15 @@ def fake_bin(tmp_path) -> Path:
     fake_id = directory / "id"
     fake_id.write_text('#!/bin/sh\n[ "${FAKE_USER_EXISTS:-0}" = 1 ]\n')
     fake_id.chmod(fake_id.stat().st_mode | stat.S_IXUSR)
+    # `systemctl is-active|is-enabled tent-printer-autostart` succeeds only when
+    # FAKE_AUTOSTART is that verb; every other systemctl call fails quietly.
+    fake_systemctl = directory / "systemctl"
+    fake_systemctl.write_text(
+        '#!/bin/sh\n'
+        'for arg; do last="$arg"; done\n'
+        '[ "$last" = tent-printer-autostart ] && [ "$1" = "${FAKE_AUTOSTART:-none}" ]\n'
+    )
+    fake_systemctl.chmod(fake_systemctl.stat().st_mode | stat.S_IXUSR)
     return directory
 
 
@@ -116,6 +125,23 @@ def test_cupsenable_rights_are_not_granted_by_default(setup):
 
     assert not any("lpadmin tent-printer" in command for command in planned(result))
     assert not any(command.startswith("usermod") for command in planned(result))
+
+
+@pytest.mark.parametrize("state", ["is-active", "is-enabled"])
+def test_install_is_refused_while_the_autostart_agent_is_installed(setup, state):
+    result = setup("--host-kind", "standalone", env={"FAKE_AUTOSTART": state})
+
+    assert result.returncode != 0
+    assert "tent-printer-autostart" in result.stderr
+    assert "setup_autostart.sh --disable" in result.stderr
+    assert planned(result) == []
+
+
+def test_install_proceeds_when_the_autostart_agent_is_absent(setup):
+    result = setup("--host-kind", "standalone")
+
+    assert result.returncode == 0
+    assert "systemctl enable --now tent-printer" in planned(result)
 
 
 def test_missing_env_file_option_fails_with_a_clear_message_and_plans_nothing(setup):
