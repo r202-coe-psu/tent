@@ -207,7 +207,10 @@
 								step={qtyInputStep(dimensionOf(row))}
 								bind:value={row.qty}
 								aria-invalid={hasWholeError(row) ? 'true' : undefined}
-								{@attach wholeGuard.attach(() => requiresWholeQty(dimensionOf(row)), row.key)}
+								{@attach wholeGuard.attach(
+									() => requiresWholeQty(dimensionOf(row)),
+									String(row.key)
+								)}
 								class="h-9 rounded-xl text-xs"
 							/>
 						</div>
@@ -253,7 +256,7 @@
 					{/if}
 					<WholeNumberNote
 						guard={wholeGuard}
-						key={row.key}
+						key={String(row.key)}
 						message={t.editQtyDigitsOnly}
 						class="text-2xs"
 					/>
