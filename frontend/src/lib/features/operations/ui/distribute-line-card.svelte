@@ -10,6 +10,8 @@
 		qtyInputStep,
 		requiresWholeQty,
 		WHOLE_QTY_MESSAGE,
+		WholeNumberGuard,
+		WholeNumberNote,
 		type Dimension
 	} from '$lib/features/catalog';
 	import {
@@ -105,6 +107,7 @@
 
 	const maxBase = $derived(availableForLine(line.lot, itemLots, priorityItems, Date.now()));
 	const lineDimension = $derived(unitDimension(line.unit));
+	const wholeGuard = new WholeNumberGuard();
 	// A count unit cannot issue part of a unit, so "all" is the whole units that fit (#805).
 	const maxQtyInUnit = $derived.by(() => {
 		if (!item || !line.unit) return '0';
@@ -285,6 +288,7 @@
 							value={line.qty}
 							aria-invalid={verdict.kind === 'incomplete' && verdict.missing === 'whole'}
 							oninput={(event) => (line.qty = event.currentTarget.value)}
+							{@attach wholeGuard.attach(() => requiresWholeQty(lineDimension))}
 							onkeydown={(event) => {
 								if (event.key === 'Enter') event.preventDefault();
 							}}
@@ -339,6 +343,7 @@
 						{/if}
 					</div>
 				</div>
+				<WholeNumberNote guard={wholeGuard} />
 				{#if !landed}
 					<div class="flex flex-wrap gap-2 pt-1">
 						{#each QTY_CHIPS as chip (chip)}
