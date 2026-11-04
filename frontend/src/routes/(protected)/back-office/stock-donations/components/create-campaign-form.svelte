@@ -281,7 +281,7 @@
 					<Button
 						type="button"
 						variant="ghost"
-						class="mt-1 min-h-9 gap-1 px-2 text-sm font-semibold text-sky-800"
+						class="mt-1 min-h-11 gap-1 px-2 text-sm font-semibold text-sky-800"
 						onclick={openCreateItem}
 					>
 						<Plus class="size-4" aria-hidden="true" />
