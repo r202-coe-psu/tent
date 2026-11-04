@@ -3,7 +3,7 @@ id: CR-171
 title: "`_users.edge_shelters` + soft delete — ถอดสิทธิ์/ลบ user ที่ central ต้องตามไปถึง edge"
 status: approved
 date: 2026-10-17
-updated: 2026-10-18
+updated: 2026-11-04
 requested_by: ทีม (review PR #348 edge replication — ข้อจำกัด A ใน docs/couchdb-replication/README.md §7)
 decided_by: "@net-lynx (project owner) — อนุมัติ 2026-10-18"
 layer: stable
@@ -122,6 +122,8 @@ related:
 ไม่ bump `schema_v`. ลำดับ deploy:
 
 1. deploy frontend (central) — writer เริ่มเขียน `edge_shelters`.
+   ตามด้วย deploy `_users/_design/tent_guard` v2 (guard `edge_shelters`, `deleted_at`, `deleted_by`):
+   `cd frontend && pnpm sync:central --write --confirm` (step 8) — ไม่มี CI รันให้ จนกว่าจะรัน non-admin แก้ field เหล่านี้บน doc ตัวเองได้.
 2. `pnpm backfill:edge-shelters` (dry-run) → ตรวจ → `--write`.
 3. edge แต่ละเครื่อง: `git pull` แล้ว `docker compose -f docker-compose.edge.yml run --rm edge-init` (job `_users`
    ถูกสร้างใหม่ด้วย selector ใหม่).
