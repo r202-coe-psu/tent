@@ -15,6 +15,8 @@ affects:
   - frontend/src/lib/server/user-service.ts (create / update / delete / list / phone lookup)
   - frontend/src/lib/server/google-oauth.ts, thaid OAuth login (ปฏิเสธบัญชีที่ถูกลบ)
   - frontend/scripts/backfill-edge-shelters.ts (ใหม่ — `pnpm backfill:edge-shelters`)
+  - frontend/src/lib/server/users-guard-design.ts + users-guard-design.test.ts (`_users/_design/tent_guard` v2 — non-admin guard)
+  - frontend/scripts/sync-central-db.ts (step 8 deploys `tent_guard`)
   - frontend/scripts/seed/users.ts (dev parity)
   - scripts/edge-init.sh (selector ของ job `users_<code>_pull`)
   - docs/couchdb-replication/README.md §7, SETUP-EDGE.md
@@ -91,6 +93,9 @@ related:
 - **FR-10** `pnpm backfill:edge-shelters` — เติม `edge_shelters` ให้ทุก `_users` doc (ยกเว้น `_design/*`) =
   `mergeEdgeShelters(เดิม, roles)`; dry-run เป็น default, เขียนเมื่อ `--write`; idempotent (รอบสองไม่มีอะไรเปลี่ยน).
 - **FR-11** seed (`frontend/scripts/seed/users.ts`) เขียน `edge_shelters` ตาม FR-1 (dev parity).
+- **FR-12** (guard) `_users/_design/tent_guard` v2 (`USERS_GUARD_DESIGN_VERSION = 2`) ห้าม non-admin เปลี่ยน
+  `edge_shelters`, `deleted_at`, `deleted_by` (รวมกับ `role_grants`, `active` เดิม) — เฉพาะ server admin
+  (`user-service` ผ่าน admin credential) เขียนได้; ล็อกด้วย `users-guard-design.test.ts`. (Blocker 2 ของ PO review 2026-10-31)
 
 ### Acceptance
 
@@ -123,7 +128,10 @@ related:
 
 1. deploy frontend (central) — writer เริ่มเขียน `edge_shelters`.
    ตามด้วย deploy `_users/_design/tent_guard` v2 (guard `edge_shelters`, `deleted_at`, `deleted_by`):
-   `cd frontend && pnpm sync:central --write --confirm` (step 8) — ไม่มี CI รันให้ จนกว่าจะรัน non-admin แก้ field เหล่านี้บน doc ตัวเองได้.
+   Jenkins deploy ของ staging / prod รัน `pnpm db:sync` (→ `sync:central --write --confirm` step 1-8 ซึ่งรวม `tent_guard`)
+   ก่อน restart service อยู่แล้ว — หลัง deploy ครั้งแรกตรวจว่า `_users/_design/tent_guard` เป็น version 2.
+   central ที่ไม่ได้ deploy ผ่าน Jenkins (lab / manual) ต้องรัน `cd frontend && pnpm sync:central --write --confirm`
+   เอง (รันทุก step 1-8 ไม่ใช่แค่ step 8) — ถ้าข้าม non-admin แก้ field เหล่านี้บน doc ตัวเองได้.
 2. `pnpm backfill:edge-shelters` (dry-run) → ตรวจ → `--write`.
 3. edge แต่ละเครื่อง: `git pull` แล้ว `docker compose -f docker-compose.edge.yml run --rm edge-init` (job `_users`
    ถูกสร้างใหม่ด้วย selector ใหม่).

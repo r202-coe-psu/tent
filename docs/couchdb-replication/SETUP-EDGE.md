@@ -242,7 +242,7 @@ curl -s -X PUT -u <staff>:<pw> $EDGE/couch/shelter_sh001/evacuee:01OUTAGE0000000
 
 selector ของ `users_<code>_pull` เปลี่ยน (hash ของ job เปลี่ยน → `edge-init` สร้างใหม่เอง, checkpoint เริ่มใหม่ครั้งเดียว) ลำดับ:
 
-1. **central:** deploy frontend ก่อน — writer เริ่มเขียน `edge_shelters` · แล้วรัน `cd frontend && pnpm sync:central --write --confirm` เพื่อ deploy `_users/_design/tent_guard` v2 (guard `edge_shelters` / `deleted_at` / `deleted_by` — ไม่มี CI รันให้ ถ้าข้ามไป non-admin แก้ field เหล่านี้บน doc ตัวเองได้)
+1. **central:** deploy frontend ก่อน — writer เริ่มเขียน `edge_shelters` · deploy `_users/_design/tent_guard` v2 (guard `edge_shelters` / `deleted_at` / `deleted_by`) — Jenkins deploy ของ staging / prod รัน `pnpm db:sync` ซึ่งรวม step นี้ให้แล้ว (ตรวจว่า `_users/_design/tent_guard` เป็น version 2 หลัง deploy ครั้งแรก) · central ที่ไม่ได้ deploy ผ่าน Jenkins ให้รัน `cd frontend && pnpm sync:central --write --confirm` เอง (รัน step 1-8 ไม่ใช่แค่ step 8) ถ้าข้ามไป non-admin แก้ field เหล่านี้บน doc ตัวเองได้
 2. **central:** `cd frontend && pnpm backfill:edge-shelters` (dry-run) → ตรวจ → `pnpm backfill:edge-shelters --write` (รันซ้ำได้ รอบสองต้องไม่มี doc เปลี่ยน)
 3. **edge แต่ละเครื่อง:** `git pull` แล้ว `docker compose -f docker-compose.edge.yml run --rm edge-init` — ขึ้น `stale  _replicator/users_<code>_pull` แล้วสร้างใหม่
 
