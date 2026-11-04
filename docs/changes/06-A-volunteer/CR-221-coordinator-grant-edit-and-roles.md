@@ -3,7 +3,7 @@ id: CR-221 # renumbered from draft-coordinator-grant-edit-and-roles
 title: ผู้ประสานงานจิตอาสาจัดการบัญชีจิตอาสาได้ครบวงจร — 10 ตำแหน่ง, แก้สิทธิ์, หน้าบัญชีจิตอาสา, พากลับมา, สถานะใน portal และ 1 บัญชีใช้ได้หลายศูนย์
 status: approved
 date: 2026-10-30
-updated: 2026-11-04 # Amendment A1 proposed 2026-11-02, revised 2026-11-03 + 2026-11-04 per review PR #1123 (FR-4, FR-8, FR-9, FR-16, FR-20, FR-23, FR-28, FR-32 — SM ให้จิตอาสาหลาย role; รอ @Jackyzaz approve) · Amendment A2 proposed 2026-11-03 (รอ @Jackyzaz approve) · 2026-11-01 approved by Soravit Sukkarn (Team Lead)
+updated: 2026-11-04 # Amendment A1 approved 2026-11-04 by Soravit Sukkarn (Team Lead) — proposed 2026-11-02, revised 2026-11-03 + 2026-11-04 per review PR #1123 (FR-3, FR-4, FR-8, FR-9, FR-16, FR-20, FR-23, FR-28, FR-32 — SM ให้จิตอาสาหลาย role; A1-4 การ์ดใช้กับบัญชีที่ยังไม่มี role ในศูนย์นี้) · Amendment A2 proposed 2026-11-03 (รอ @Jackyzaz approve) · 2026-11-01 approved by Soravit Sukkarn (Team Lead)
 requested_by: "@mhapong จากการทดสอบ CR-213 บน develop (2026-10-30) — #1044, #1045"
 decided_by: Soravit Sukkarn (Team Lead)
 decision_date: 2026-11-01
@@ -21,7 +21,7 @@ affects:
   - frontend/src/lib/features/volunteers (server/volunteer-access-grant.ts, application/volunteer-access.ts, ui/volunteer-access-dialog.svelte, ui/volunteer-card.svelte, หน้าใหม่ volunteer-accounts)
   - frontend/src/lib/features/users (ui/user-form.svelte: ซ่อน / ปิดสวิตช์ `active` สำหรับ SM เมื่อบัญชีเป็นจิตอาสา — FR-23; ฟอร์มนี้เป็น checkbox หลาย role อยู่แล้ว ไม่ต้องแก้ตาม Amendment A1)
   - **Amendment A1:** frontend/src/lib/features/volunteers/ui/volunteer-card.svelte (A1-6 ปุ่มปิดโปรไฟล์ของ VC), frontend/src/lib/server/user-service.ts (`grantCoordinatorRole`: ออก grant ข้าง role ถาวรของ SM ได้; `updateUser` / `createOrMergeUser`: audit `role_grant.permanent_issued` — A1-8), frontend/src/lib/features/volunteers/ui/volunteer-access-dialog.svelte (FR-16 ใหม่, แถว FR-9 บัญชีที่มีแค่ role ถาวร), frontend/src/lib/features/volunteers/application/volunteer-access.ts (A1-4: ตัดเงื่อนไข `existing.roles.length !== 2` ของเส้นทางการ์ดของ SM), frontend/src/routes/api/v1/users/+server.ts (A1-7: `PUT` เรียก `assertVolunteerVerifiedForAccess` เมื่อเพิ่ม role), frontend/src/lib/server/user-service.role-grants.test.ts, volunteer-access-dialog.dom.test.ts, volunteer-access.test.ts
-  - **Amendment A1 (เอกสาร):** docs/data/api-contract.md §2.6 (แถว error `403 FORBIDDEN` ของ `POST /api/v1/volunteer-access`: role ซ้ำกับ role ถาวรของ SM; `PUT /api/v1/users` ตรวจการยืนยันตัวตนเมื่อเพิ่ม role — A1-7), docs/data/schema.md §2.12 `audit` (reason ใหม่ `role_grant.permanent_issued` — A1-8; ไม่ bump `schema_v`), docs/changes/06-A-volunteer/CR-213-coordinator-limited-access-grant.md (ใส่หมายเหตุ "แก้โดย CR-221 Amendment A1" ที่ FR-7, FR-10, AC-3, AC-6 และ TL;DR; FR-5 เป็นฐานของ 403 ใน A1-2 ไม่เปลี่ยนข้อความ), docs/prd/role-permission-matrix.md (แถว VC §1 และ User Management — proposed), docs/changes/_index.md (แถว CR-213, CR-221)
+  - **Amendment A1 (เอกสาร):** docs/data/api-contract.md §2.6 (แถว error `403 FORBIDDEN` ของ `POST /api/v1/volunteer-access`: role ซ้ำกับ role ถาวรของ SM; `PUT /api/v1/users` ตรวจการยืนยันตัวตนเมื่อเพิ่ม role — A1-7), docs/data/schema.md §2.12 `audit` (reason ใหม่ `role_grant.permanent_issued` — A1-8; ไม่ bump `schema_v`), docs/changes/06-A-volunteer/CR-213-coordinator-limited-access-grant.md (ใส่หมายเหตุ "แก้โดย CR-221 Amendment A1" ที่ FR-7, FR-10, AC-3, AC-6 และ TL;DR; FR-5 เป็นฐานของ 403 ใน A1-2 ไม่เปลี่ยนข้อความ), docs/prd/role-permission-matrix.md (แถว VC §1 และ User Management), docs/changes/_index.md (แถว CR-213, CR-221)
   - frontend/src/routes/api/v1/volunteer-access/** (เพิ่ม `accounts`), frontend/src/routes/api/public/v1/volunteer/access-status/ (Part C), frontend/src/lib/features/volunteer-portal (Part C)
   - frontend/src/lib/features/volunteers/ui/roster-row.svelte (FR-24, FR-25), ui/job-applicants-tab.svelte + ui/job-applicant-row.svelte (FR-25), ui/volunteer-account-badge.svelte + ui/volunteer-access-actions.svelte (ป้ายและปุ่มที่ใช้ร่วมกัน), frontend/src/routes/(protected)/back-office/volunteers/accounts/
   - frontend/src/lib/components/backoffice-navbar/static.ts (เมนูใหม่ ใช้ `canAccessVolunteerBackoffice` ตาม #1020)
@@ -46,11 +46,11 @@ affects:
 
 ---
 
-## Amendment A1 (2026-11-02, revised 2026-11-03 และ 2026-11-04, proposed — รอ @Jackyzaz approve)
+## Amendment A1 (2026-11-02, revised 2026-11-03 และ 2026-11-04) · **approved 2026-11-04 (Soravit Sukkarn (Team Lead), review PR #1123)**
 
 > **สรุป (BLUF):**
 >
-> - SM ให้บัญชีจิตอาสามี role ถาวรได้**หลาย role ต่อศูนย์** ทั้งจากหน้าผู้ใช้งานและจากการ์ดจิตอาสา; VC ออก grant แบบมีวันหมดได้ **1 role ต่อศูนย์** ข้าง role ถาวรของ SM โดยไม่แตะ role ของ SM (รวมบัญชีที่มีแค่ role ถาวร)
+> - SM ให้บัญชีจิตอาสามี role ถาวรได้**หลาย role ต่อศูนย์** จากหน้าผู้ใช้งาน (การ์ดจิตอาสาของ SM ใช้ออก 1 role ให้บัญชีที่ยังไม่มี role ในศูนย์นี้เท่านั้น — A1-4); VC ออก grant แบบมีวันหมดได้ **1 role ต่อศูนย์** ข้าง role ถาวรของ SM โดยไม่แตะ role ของ SM (รวมบัญชีที่มีแค่ role ถาวร)
 > - VC ปิดโปรไฟล์ของจิตอาสาที่มี role ถาวรจาก SM ไม่ได้ (SM / SA ปิดได้)
 > - role ถาวรที่ SM / SA เพิ่มให้บัญชีจิตอาสาต้องผ่านการยืนยันตัวตนในศูนย์นั้นทั้ง `POST` และ `PUT /api/v1/users` และเขียน audit `role_grant.permanent_issued` — **ยังไม่มีในโค้ด ต้อง implement** (A1-7, A1-8)
 > - แก้ FR-3 (ฝั่ง SM / SA), FR-4, FR-8, FR-9, FR-16, FR-20, FR-23, FR-28, FR-32 และ CR-213 FR-7, FR-10 · ไม่เปลี่ยนรูป doc / `schema_v` · เพิ่ม audit reason 1 ค่าใน schema.md §2.12
@@ -71,9 +71,10 @@ affects:
     - grant ที่ VC ออกข้าง role ถาวรสิ้นสุดแล้ว → ถอดเฉพาะ role ของ grant (ข้อ "grant สิ้นสุด" ด้านบน) บัญชีกลับเป็นบัญชีที่มีแค่ role ถาวร
     - **โค้ดปัจจุบันต้องแก้:** `volunteer-access-dialog.svelte` ตั้ง `blockedReason` = ข้อความ role ถาวรเมื่อบัญชีมี role ถาวร (`holdsManagerRole`) ทำให้บันทึกไม่ได้ทั้ง dialog และไม่บล็อกกรณียังไม่ยืนยันตัวตนเมื่อสถานะเป็น `active` → เปลี่ยนเป็นบล็อกเฉพาะเมื่อ role ที่เลือกเป็น role ถาวร และบล็อกเมื่อยังไม่ยืนยันตัวตนในศูนย์นี้และบัญชีไม่มี grant ในศูนย์นี้
 - **A1-3 (แก้ FR-23):** ตัดข้อ "ตำแหน่งหน้าที่ของศูนย์เลือกได้ 1 role (FR-4)" ในหน้าแก้ไขผู้ใช้ของ SM ออกจาก spec · `user-form.svelte` เป็น checkbox หลาย role อยู่แล้ว ไม่มีโค้ดต้องแก้ · ข้อซ่อนสวิตช์ `active` คงเดิม
-- **A1-4 (แก้ FR-32, Part A + Part B):** กติกา "1 role ต่อศูนย์" ของ SM อยู่ที่เส้นทางออกสิทธิ์จากการ์ด: `grantVolunteerAccess` ใน `frontend/src/lib/features/volunteers/application/volunteer-access.ts` รับบัญชีเดิมเฉพาะเมื่อ `existing.roles.length === 2` (scope 1 + capability 1 และต้องเป็น role ที่เลือก) เรียกจาก `volunteer-access-dialog.svelte` เมื่อผู้เรียกเป็น SM / SA → ตัดเงื่อนไขนี้:
-  - บัญชีจิตอาสาเดิมของโปรไฟล์นี้ (`volunteer_id` ตรง, `personnel_type: volunteer`, `active: true`) ที่มี role ในศูนย์นี้อยู่แล้ว: SM เลือก role อื่นจากการ์ด → เพิ่ม `SHxxx:<role>` โดยคง role เดิมทุกตัวของบัญชี (ทุกศูนย์) ไม่เปลี่ยนรหัสผ่าน · ผ่าน `/api/v1/users` จึงอยู่ใต้ A1-7 และ A1-8
-  - บัญชีมี role ที่เลือกอยู่แล้ว: ผูกโปรไฟล์ตามเดิม ไม่เปลี่ยน role
+- **A1-4 (แก้ FR-32, Part A + Part B):** SM / SA เพิ่ม role ให้บัญชีจิตอาสาที่**มี role ในศูนย์นี้อยู่แล้ว**ที่หน้าผู้ใช้งานเท่านั้น (A1-3) · การ์ด / แถวของบัญชี `active` สำหรับ SM / SA ยังเป็นปุ่ม "จัดการบัญชีผู้ใช้" → หน้าผู้ใช้งาน ตาม FR-9 ไม่เปลี่ยน
+  - เส้นทางออกสิทธิ์จากการ์ดของ SM / SA (`grantVolunteerAccess` ใน `frontend/src/lib/features/volunteers/application/volunteer-access.ts` เรียกจาก `volunteer-access-dialog.svelte`) ใช้กับบัญชีที่**ยังไม่มี role ในศูนย์นี้**เท่านั้น และออก 1 role ต่อครั้งเหมือนเดิม
+  - บัญชีจิตอาสาเดิมของโปรไฟล์นี้ (`volunteer_id` ตรง, `personnel_type: volunteer`, `active: true`) ที่มี role ในศูนย์อื่น: เพิ่ม `shelter:SHxxx` + `SHxxx:<role>` โดยคง role เดิมทุกตัวของบัญชี (ทุกศูนย์) ไม่เปลี่ยนรหัสผ่าน · ผ่าน `/api/v1/users` จึงอยู่ใต้ A1-7 และ A1-8
+  - โค้ดปัจจุบันรับบัญชีเดิมเฉพาะเมื่อ `existing.roles.length === 2` (scope 1 + capability 1 และต้องเป็น role ที่เลือก) จึงปฏิเสธบัญชีที่มี role ในศูนย์อื่น → ตัดเงื่อนไขนี้
   - เงื่อนไขอื่นของบัญชีเดิมคงเดิม (บัญชีเจ้าหน้าที่ / ผูกโปรไฟล์อื่น / ปิดใช้งาน → ข้อความเดิม "จัดการผ่านหน้าผู้ใช้งาน")
   - Part B (FR-32): ตรวจเฉพาะ role ในศูนย์ของ SM ไม่ตรวจจำนวน role
 - **A1-5 (แก้ FR-8, FR-9, FR-28 — การแสดงผล):** หน้าบัญชีจิตอาสา (FR-8) และป้ายในตาราง (FR-9) แสดงทุก role (ถาวร + grant) · portal (FR-26, FR-28) ยังคืน `role_label` ตัวเดียว ไม่เปลี่ยน response · เลือกตัวที่แสดงตามลำดับนี้ (แก้ FR-28):
@@ -90,7 +91,7 @@ affects:
 - **A1-8 (audit role ถาวรของจิตอาสา — ต้อง implement):** SM / SA เพิ่ม role ถาวรใหม่ให้บัญชี `personnel_type: volunteer` ผ่าน `POST` หรือ `PUT /api/v1/users` (รวมเส้นทางการ์ดของ A1-4) → เขียน `audit` 1 ฉบับต่อ role ลง `shelter_{code}` ของศูนย์ของ role นั้น:
   - `action: other`, `reason: role_grant.permanent_issued`, `target_type: user`, `target_id: org.couchdb.user:{name}`, `context: { role, expires_at: null, actor }` (`actor` = SM / SA ผู้บันทึก)
   - grant ของ VC ที่ SM เปลี่ยนเป็นถาวร (`permanent_roles` หรือ `pruneRoleGrants`): เขียน `role_grant.made_permanent` ตาม CR-213 FR-14 อย่างเดียว ไม่เขียน `role_grant.permanent_issued` ซ้ำ
-  - ชื่อ reason ตามแบบ `role_grant.*` เดิมใน schema.md §2.12 (`issued` = grant ของ VC ออกใหม่ → `permanent_issued` = role ถาวรออกใหม่) · ต้องเพิ่มในรายการของ §2.12 เมื่อ A1 approved (ไม่ bump `schema_v`)
+  - ชื่อ reason ตามแบบ `role_grant.*` เดิมใน schema.md §2.12 (`issued` = grant ของ VC ออกใหม่ → `permanent_issued` = role ถาวรออกใหม่) · เพิ่มในรายการของ §2.12 แล้ว (ไม่ bump `schema_v`)
   - ไม่อยู่ใน A1: audit ตอน SM ถอด role ถาวร
   - โค้ดปัจจุบัน: `auditDroppedGrants` (`user-service.ts`) บันทึกเฉพาะ grant ที่ถูกตัดทิ้งหรือเปลี่ยนเป็นถาวร ไม่มี audit เมื่อ SM เพิ่ม role ถาวร
 
@@ -105,7 +106,7 @@ affects:
 
 - #1086 (merge แล้ว) ทำให้ `grantCoordinatorRole` ปฏิเสธ (403) เมื่อบัญชีมี role ถาวรของ SM → แก้เป็น A1-2 (ปฏิเสธเฉพาะ role ที่ซ้ำกับ role ถาวร, ข้อความใหม่)
 - `volunteer-access-dialog.svelte` บล็อกการบันทึกทั้ง dialog เมื่อมี role ถาวร → แก้ตาม A1-2 (บัญชีที่มีแค่ role ถาวร)
-- `application/volunteer-access.ts` ตัดเงื่อนไข `existing.roles.length !== 2` และเพิ่ม role ให้บัญชีเดิม (A1-4)
+- `application/volunteer-access.ts` ตัดเงื่อนไข `existing.roles.length !== 2` และเพิ่ม role ของศูนย์นี้ให้บัญชีเดิมที่มี role ในศูนย์อื่น (A1-4)
 - `routes/api/v1/users/+server.ts` `PUT` ตรวจยืนยันตัวตน (A1-7) · `user-service.ts` เขียน `role_grant.permanent_issued` (A1-8)
 - `user-form.svelte` ไม่ต้องแก้ (เป็น checkbox อยู่แล้ว)
 
@@ -188,7 +189,7 @@ affects:
   | `active` ที่มีแค่ role ถาวรจาก SM ในศูนย์นี้ (ไม่มี grant) — Amendment A1-2 | "มีบัญชีแล้ว" + "<ตำแหน่ง> · ถาวร" ต่อ role + username | "แก้ไขสิทธิ์ใช้งาน" → dialog: radio role ถาวร disabled, ออก grant ของ role อื่นได้ ("บันทึกการแก้ไข"), ไม่มีปุ่มถอนสิทธิ์ |
 
   - ยังไม่ยืนยันตัวตนในศูนย์นี้ (ไม่มีบัญชี / `lapsed`): ปุ่มเป็น "ยืนยันตัวตนก่อนออกสิทธิ์" ดู FR-15
-  - SM / SA กับบัญชี `active` / `account_disabled`: ปุ่ม "จัดการบัญชีผู้ใช้" → หน้าผู้ใช้งาน
+  - SM / SA กับบัญชี `active` / `account_disabled`: ปุ่ม "จัดการบัญชีผู้ใช้" → หน้าผู้ใช้งาน *(Amendment A1-4: SM เพิ่ม role ให้บัญชี `active` ที่หน้านี้ ไม่ใช่จากการ์ด)*
   - บัญชี `lapsed` ไม่มี `shelter:SHxxx` แล้ว หน้าผู้ใช้งานของ SM จึงไม่เห็น: **SA** ได้ปุ่ม "จัดการบัญชีผู้ใช้"; **SM** ไม่มีปุ่ม แสดง "ให้ผู้ประสานงานจิตอาสาออกสิทธิ์อีกครั้ง หรือผู้ดูแลระบบจัดการบัญชี" — การพากลับมาเป็นของ VC (FR-22)
 
 ### dialog
@@ -253,7 +254,7 @@ affects:
   - บัญชีที่มี `volunteer_coordinator` หรือ `shelter_manager` ในศูนย์ใด: VC ผูกและออกสิทธิ์ให้ไม่ได้ (CR-213 FR-7) **SM ของศูนย์ที่จะให้ทำงาน (SH002) เป็นผู้ผูกและออก role ของ SH002 เอง** ไม่ต้องผ่าน SA; SM แตะได้เฉพาะ role ของศูนย์ตัวเอง
   - บัญชี `system_admin`: ไม่ผูก
 - **FR-31 แยกต่อศูนย์:** ผู้ออกสิทธิ์ใน SH002 ต้องมี `volunteer_coordinator` (หรือ SM / SA) ใน SH002 เอง ศูนย์อ่านจาก session (CR-213 FR-1) VC ของ SH001 ออกสิทธิ์ใน SH002 ไม่ได้ (403); VC / SM ของ SH002 อ่าน แก้ ถอน ได้เฉพาะ role / grant ของ SH002; ปิดโปรไฟล์ SH002 ถอนเฉพาะ SH002; หน้า "บัญชีจิตอาสา" ไม่แสดง role ของศูนย์อื่น
-- **FR-32 SM ออกสิทธิ์จากการ์ด:** เลิกเงื่อนไข "บัญชีเดิมต้องมี scope 1 ศูนย์ + 1 capability" ตรวจเฉพาะ role ในศูนย์ของ SM ~~(FR-4)~~ — หลาย role ได้ (Amendment A1-4)
+- **FR-32 SM ออกสิทธิ์จากการ์ด:** เลิกเงื่อนไข "บัญชีเดิมต้องมี scope 1 ศูนย์ + 1 capability" ตรวจเฉพาะ role ในศูนย์ของ SM ~~(FR-4)~~ *(Amendment A1-4: การ์ดใช้กับบัญชีที่ยังไม่มี role ในศูนย์นี้ · บัญชีที่มี role ในศูนย์นี้แล้วเพิ่ม role ที่หน้าผู้ใช้งาน ได้หลาย role)*
 - **FR-33 1 บัญชีต่อคน:** สร้างบัญชีจิตอาสาใหม่ถูกปฏิเสธเมื่อมีบัญชีจิตอาสาเดิมที่ตรงตาม FR-30 (ให้ผูกแทน)
 
 ### schema.md §6 `_users` — เพิ่ม field (Part B)
@@ -284,7 +285,8 @@ affects:
 - [ ] (A1-2) บัญชีเดียวกัน: `DELETE` `kitchen_staff` ได้ 403 · grant `warehouse_staff` หมดอายุ (worker) → เหลือ `shelter:SH001` + `SH001:kitchen_staff` สถานะยัง `active`
 - [ ] (A1-2) บัญชีที่มีแค่ role ถาวรแต่โปรไฟล์ยังไม่ยืนยันตัวตนใน SH001: ปุ่ม "บันทึกการแก้ไข" disabled พร้อมเหตุผลยืนยันตัวตน · ยิง `POST /api/v1/volunteer-access` ตรงได้ 422 `_users` ไม่เปลี่ยน
 - [ ] (A1-3) SM เลือก `registration_staff` + `kitchen_staff` ให้บัญชีจิตอาสาในหน้าแก้ไขผู้ใช้แล้วบันทึกผ่าน · สวิตช์ `active` ยังไม่แสดงสำหรับ SM
-- [ ] (A1-4) บัญชีจิตอาสาที่มี `SH001:registration_staff` (ออกจากการ์ด): SM เปิด dialog จากการ์ด เลือก `kitchen_staff` แล้วบันทึก → บัญชีมี `shelter:SH001` + `SH001:registration_staff` + `SH001:kitchen_staff` รหัสผ่านเดิมใช้ login ได้ ไม่ขึ้น "อีเมลนี้มีบัญชีอยู่แล้วหรือสิทธิ์ไม่ตรงกัน" · บัญชีที่มี role ของศูนย์อื่นด้วย: role ศูนย์อื่นไม่หาย
+- [ ] (A1-4) บัญชีจิตอาสาที่มี `SH001:registration_staff`: การ์ดของ SM แสดงปุ่ม "จัดการบัญชีผู้ใช้" (ไม่มี dialog ออกสิทธิ์) · SM เพิ่ม `kitchen_staff` ที่หน้าผู้ใช้งาน → บัญชีมี `shelter:SH001` + `SH001:registration_staff` + `SH001:kitchen_staff`
+- [ ] (A1-4) บัญชีจิตอาสาเดิมของโปรไฟล์ที่มีแค่ `SH002:kitchen_staff` (ยืนยันตัวตนใน SH001 แล้ว): SM ของ SH001 ออก `registration_staff` จากการ์ด → บัญชีมี `shelter:SH001` + `SH001:registration_staff` และ role ของ SH002 ไม่หาย รหัสผ่านเดิมใช้ login ได้ ไม่ขึ้น "อีเมลนี้มีบัญชีอยู่แล้วหรือสิทธิ์ไม่ตรงกัน"
 - [ ] (A1-7) SM `PUT /api/v1/users` เพิ่ม `SH001:medical_staff` ให้บัญชีจิตอาสาที่โปรไฟล์ยังไม่ยืนยันตัวตนใน SH001 → 422 `_users` ไม่เปลี่ยน · `PUT` แก้ `display_name` ของบัญชีเดียวกัน (ไม่เพิ่ม role) ผ่าน · บัญชี `personnel_type: staff` ไม่ตรวจ
 - [ ] (A1-8) SM เพิ่ม `SH001:kitchen_staff` ถาวรให้บัญชีจิตอาสา (หน้าผู้ใช้งานหรือการ์ด) → audit `role_grant.permanent_issued` 1 ฉบับใน `shelter_sh001` (`context.role` = `kitchen_staff`, `context.expires_at` = `null`, `context.actor` = SM) · SM เปลี่ยน grant ของ VC เป็นถาวร → มีเฉพาะ `role_grant.made_permanent` ไม่มี `permanent_issued`
 - [ ] ปิดโปรไฟล์: ภายในรอบ sweep บัญชีไม่มี role ในศูนย์; เปิดโปรไฟล์แล้ว VC "ออกสิทธิ์อีกครั้ง" ด้วย role ใหม่ login รหัสผ่านเดิมได้ ไม่ใช้ SM/SA
@@ -352,4 +354,4 @@ affects:
   - บัญชีที่มีแค่ role ถาวร: VC ออก grant ของ role อื่นข้าง role ถาวรได้, radio role ถาวร disabled, VC ปิดบัญชีหรือถอน role ถาวรไม่ได้ (403), grant สิ้นสุดถอนเฉพาะ role ของ grant (A1-2, แถวใหม่ใน FR-9) · โค้ด dialog ที่บล็อกการบันทึกทั้งหมดต้องแก้
   - กติกา "1 role ต่อศูนย์" ของ SM อยู่ที่เส้นทางการ์ด (`volunteer-access.ts`) ไม่ใช่ `user-form.svelte` (A1-3, A1-4) · ใส่หมายเหตุ CR-213 TL;DR, FR-7, FR-10, AC-3, AC-6 · อัปเดต role-permission-matrix และ `_index.md`
   - ตัดรหัส A1–A7 ออกจากหัวข้อย่อยของ Part A (ไม่มีโค้ดหรือเอกสารอ้างถึง) ให้ "A1-x" / "A2" หมายถึง Amendment อย่างเดียว · ไม่เปลี่ยนรหัส Amendment เพราะโค้ด (`public-access-status.ts`, `volunteer-portal/domain/volunteer.ts`), `api-contract.md` และ CR-213 อ้าง "Amendment A1-2" / "Amendment A2" อยู่แล้ว
-- _(รอ)_ — **Amendment A1 approved (ผู้อนุมัติ, วันที่, ลิงก์ PR)** — เพิ่มเมื่อ @Jackyzaz approve
+- 2026-11-04 — **Amendment A1 approved (Soravit Sukkarn (Team Lead), review PR #1123)** — อนุมัติตามที่เสนอ และตัดสิน A1-4: SM / SA เพิ่ม role ให้บัญชีจิตอาสาที่มี role ในศูนย์นี้อยู่แล้วที่หน้าผู้ใช้งานเท่านั้น (A1-3) การ์ดของบัญชี `active` คงปุ่ม "จัดการบัญชีผู้ใช้" ตาม FR-9 · เส้นทางการ์ดของ SM / SA ใช้กับบัญชีที่ยังไม่มี role ในศูนย์นี้ (1 role ต่อครั้ง) · ลบป้าย proposed ใน api-contract §2.6, role-permission-matrix, `_index.md` และหมายเหตุใน CR-213 · เพิ่ม `role_grant.permanent_issued` ใน schema.md §2.12 · ยังไม่ตัดสิน (ติดไว้ก่อน): ลำดับ 403 / 422 เมื่อเข้าทั้งสองเงื่อนไขของ A1-2 และขอบเขตศูนย์ที่ A1-7 ตรวจเมื่อ `PUT` ส่ง roles ทั้งชุด

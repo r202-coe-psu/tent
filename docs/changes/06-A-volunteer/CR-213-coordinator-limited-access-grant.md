@@ -3,7 +3,7 @@ id: CR-213
 title: ผู้ประสานงานจิตอาสาออกสิทธิ์ใช้งานระบบให้จิตอาสาได้แบบจำกัด role และมีวันหมดอายุ
 status: approved
 date: 2026-10-27
-updated: 2026-11-04 # หมายเหตุ CR-221 Amendment A1 (proposed) ที่ TL;DR, FR-7, FR-10, AC-3, AC-6 · แก้คำเรียก @Mhapong เป็นผู้รับงาน / ผู้เสนอ · 2026-11-03 FR-10 หมายเหตุ CR-221 Amendment A1 (proposed) · 2026-11-01 amend FR-2, FR-3, FR-5, FR-7, FR-8, FR-10, FR-11, FR-12 โดย CR-221 (coordinator-grant-edit-and-roles)
+updated: 2026-11-04 # CR-221 Amendment A1 approved 2026-11-04 (Soravit Sukkarn, Team Lead) — ลบป้าย proposed ในหมายเหตุ A1 · หมายเหตุ CR-221 Amendment A1 (proposed) ที่ TL;DR, FR-7, FR-10, AC-3, AC-6 · แก้คำเรียก @Mhapong เป็นผู้รับงาน / ผู้เสนอ · 2026-11-03 FR-10 หมายเหตุ CR-221 Amendment A1 (proposed) · 2026-11-01 amend FR-2, FR-3, FR-5, FR-7, FR-8, FR-10, FR-11, FR-12 โดย CR-221 (coordinator-grant-edit-and-roles)
 requested_by: "@net-lynx ใน #879 ข้อ 2 (2026-10-27) + ผู้รับงาน (@Mhapong) เสนอรายละเอียด"
 decided_by: Soravit Sukkarn (Team Lead)
 layer: stable
@@ -74,7 +74,7 @@ affects:
     - ไม่ใช่ `system_admin` และไม่มี `shelter_manager` / `volunteer_coordinator` ในศูนย์ใดก็ตาม
     - ไม่ใช่บัญชีของผู้เรียกเอง (ห้ามออกสิทธิ์ให้ตัวเอง)
   - ออกซ้ำให้บัญชีเดิม: เพิ่ม role และ grant หรือตั้ง `expires_at` ใหม่ของ grant เดิม โดยไม่เปลี่ยนรหัสผ่าน ต่ออายุซ้ำได้ไม่จำกัด ทุกครั้งเขียน audit (FR-14)
-  - ~~ถ้าบัญชีมี role นั้นจาก SM อยู่แล้ว (ไม่มี grant) ไม่เปลี่ยนอะไร~~ *(แก้โดย [CR-221](CR-221-coordinator-grant-edit-and-roles.md) A1-2, proposed: ตอบ `403 FORBIDDEN` "ตำแหน่งนี้ผู้จัดการศูนย์ให้ไว้แล้ว" ไม่เขียนอะไร · role อื่นออก grant ข้าง role ถาวรได้)*
+  - ~~ถ้าบัญชีมี role นั้นจาก SM อยู่แล้ว (ไม่มี grant) ไม่เปลี่ยนอะไร~~ *(แก้โดย [CR-221](CR-221-coordinator-grant-edit-and-roles.md) A1-2: ตอบ `403 FORBIDDEN` "ตำแหน่งนี้ผู้จัดการศูนย์ให้ไว้แล้ว" ไม่เขียนอะไร · role อื่นออก grant ข้าง role ถาวรได้)*
 - **FR-8 ถอนหรือย่นอายุ:** *(แก้โดย [CR-221](CR-221-coordinator-grant-edit-and-roles.md) — VC แก้และถอน grant ของ VC ทุกคนในศูนย์ตัวเอง ไม่จำกัดเฉพาะ grant ของตัวเอง)* coordinator ถอน (`DELETE /api/v1/volunteer-access`) หรือย่นอายุ (ออกซ้ำด้วยวันที่เร็วกว่า) ได้**เฉพาะ grant ที่ตัวเองออก** (`granted_by` = ผู้เรียก)
   - grant ของ coordinator คนอื่น: ต่ออายุได้ (FR-7) แต่ย่นหรือถอนไม่ได้ (403)
   - การต่ออายุ**คง `granted_by` และ `granted_at` ของผู้ออกเดิม** ผู้ต่ออายุจึงถอนหรือย่น grant นั้นไม่ได้ภายหลัง ส่วนผู้ต่ออายุบันทึกเป็น `actor` ใน audit `role_grant.renewed`
@@ -88,7 +88,7 @@ affects:
 ### FR — SM/SA, การหมดอายุ และการป้องกัน
 
 - **FR-9:** SM/SA ให้ได้ทุก role ไม่มีวันหมดอายุเหมือนเดิม
-- **FR-10:** *(แก้โดย [CR-221](CR-221-coordinator-grant-edit-and-roles.md) FR-23 — SM ซ่อนสวิตช์ active ของบัญชีจิตอาสา; จำนวน role: แก้โดย Amendment A1-1 / A1-3, proposed — role ถาวรจาก SM ได้หลาย role ต่อศูนย์ แทนกติกา 1 role ต่อศูนย์ของ CR-221 FR-4 เดิม)* หน้าแก้ไขผู้ใช้แสดงวันหมดอายุของ role ที่มาจาก grant
+- **FR-10:** *(แก้โดย [CR-221](CR-221-coordinator-grant-edit-and-roles.md) FR-23 — SM ซ่อนสวิตช์ active ของบัญชีจิตอาสา; จำนวน role: แก้โดย Amendment A1-1 / A1-3 — role ถาวรจาก SM ได้หลาย role ต่อศูนย์ แทนกติกา 1 role ต่อศูนย์ของ CR-221 FR-4 เดิม)* หน้าแก้ไขผู้ใช้แสดงวันหมดอายุของ role ที่มาจาก grant
   - บันทึกฟอร์มโดยคง role ไว้ grant ยังอยู่
   - ตัวเลือก "ไม่มีวันหมด" ลบ grant ของ role นั้น ทำให้ role ถาวร (ส่ง `permanent_roles` ใน `PUT /api/v1/users`; SM ลบได้เฉพาะ grant ของศูนย์ตัวเอง)
   - ถอน role ใน form ลบ grant ของ role นั้นด้วย
@@ -164,7 +164,7 @@ affects:
 - **AC-3:** *(แก้โดย [CR-221](CR-221-coordinator-grant-edit-and-roles.md) FR-3: ต้องยืนยันตัวตนในศูนย์ที่ออกสิทธิ์ ผลยืนยันของศูนย์อื่นใช้แทนไม่ได้ — 422)* จิตอาสาที่ยืนยันตัวตนที่ศูนย์อื่นออกสิทธิ์ได้เมื่อ `phone_hash` และ `national_id_hash` ตรงกัน ถ้าตรงแค่ `phone_hash` ได้ 422
 - **AC-4:** พ้น `expires_at` แล้ว sweep ถอนเฉพาะ role นั้น role ที่ SM ให้ยังอยู่ บัญชียังอยู่ มี audit `role_grant.expired` และออกสิทธิ์ใหม่ได้โดยไม่ต้องตั้งรหัส
 - **AC-5:** SM เห็นวันหมดในหน้าแก้ไขผู้ใช้ บันทึกแล้ว grant ยังอยู่ และเลือก "ไม่มีวันหมด" แล้ว grant หายพร้อม audit `role_grant.made_permanent`
-- **AC-6:** *(แก้โดย [CR-221](CR-221-coordinator-grant-edit-and-roles.md) FR-17: VC ถอน / ย่น grant ของ VC ทุกคนในศูนย์ตัวเองได้ · role ที่ SM ให้ยัง 403; Amendment A1-2, proposed: ออก grant ของ role อื่นข้าง role ถาวรได้)* coordinator ถอนและย่นอายุ grant ที่ตัวเองออกได้ ส่วน grant ของ coordinator คนอื่นและ role ที่ SM ให้ได้ 403
+- **AC-6:** *(แก้โดย [CR-221](CR-221-coordinator-grant-edit-and-roles.md) FR-17: VC ถอน / ย่น grant ของ VC ทุกคนในศูนย์ตัวเองได้ · role ที่ SM ให้ยัง 403; Amendment A1-2: ออก grant ของ role อื่นข้าง role ถาวรได้)* coordinator ถอนและย่นอายุ grant ที่ตัวเองออกได้ ส่วน grant ของ coordinator คนอื่นและ role ที่ SM ให้ได้ 403
   - coordinator B ต่ออายุ grant ของ A แล้ว `granted_by` ยังเป็น A, audit `role_grant.renewed` มี `actor` = B และ B ถอน grant นั้นได้ 403
 - **AC-7:** user ที่มี grant `PUT /couch/_users/org.couchdb.user:<self>` โดยลบหรือแก้ `role_grants` (หรือแก้ `active`, `personnel_type`, `volunteer_id`) ได้ 403 และ sweep ยังถอน role ได้ตามเวลา เปลี่ยนรหัสผ่านตัวเองยังทำได้
   - ผู้ที่ไม่ใช่ admin สร้างเอกสาร `_users` ใหม่ที่มี field เหล่านี้ได้ 403
