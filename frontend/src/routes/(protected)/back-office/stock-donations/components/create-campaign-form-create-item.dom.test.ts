@@ -46,6 +46,11 @@ vi.mock('$lib/db/shelter', () => ({
 vi.mock('$lib/features/supply', () => ({
 	useSupplyItems: () => ({ data: mocks.supply, isPending: false })
 }));
+// No drop-off points: the point field stays hidden and needs no shelter query (#1085).
+vi.mock('$lib/features/operations', async (importOriginal) => ({
+	...(await importOriginal<typeof import('$lib/features/operations')>()),
+	useDonationPoints: () => ({ points: [], isLoaded: true })
+}));
 vi.mock('$lib/features/catalog', async (importOriginal) => {
 	const stub = (await import('./__fixtures__/quick-create-item-sheet.fixture.svelte')).default;
 	return {
