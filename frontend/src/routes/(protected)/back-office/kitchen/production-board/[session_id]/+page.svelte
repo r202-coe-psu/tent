@@ -419,6 +419,7 @@
 
 	const ingredientQtyError = (ing: IngredientRow) =>
 		wholeQtyError(ing.needed, dimensions.resolve(ing.unit));
+	const hasIngredientQtyError = $derived(ingredientsList.some((ing) => !!ingredientQtyError(ing)));
 	const newQtyStep = $derived(qtyInputStep(dimensions.resolve(newUnit)));
 	const newQtyError = $derived(wholeQtyError(newQty, dimensions.resolve(newUnit)));
 
@@ -1166,6 +1167,7 @@
 													type="number"
 													step={qtyInputStep(dimensions.resolve(ing.unit))}
 													min="0"
+													aria-invalid={!!ingredientQtyError(ing)}
 													bind:value={ing.needed}
 													oninput={() => {
 														isIngredientsManuallyEdited = true;
@@ -1330,7 +1332,7 @@
 				<Button
 					class="w-full gap-2 font-semibold shadow-sm"
 					onclick={handleCreateRequisition}
-					disabled={!ticketsFresh || isOpeningRequisition}
+					disabled={!ticketsFresh || isOpeningRequisition || hasIngredientQtyError}
 				>
 					<Sparkles class="h-4 w-4" />
 					{isOpeningRequisition ? 'กำลังเปิดตั๋วเบิก...' : 'สร้างใบเบิกวัตถุดิบ'}
@@ -1342,7 +1344,8 @@
 					class="w-full gap-2 font-semibold shadow-sm"
 					onclick={handleSaveEdits}
 					disabled={updateTicketItemsMutation.isPending ||
-						updateConfirmedMealPlanMutation.isPending}
+						updateConfirmedMealPlanMutation.isPending ||
+						hasIngredientQtyError}
 				>
 					<Check class="h-4 w-4" />
 					{updateTicketItemsMutation.isPending || updateConfirmedMealPlanMutation.isPending
