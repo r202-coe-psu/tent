@@ -302,7 +302,10 @@ function findUserDocIgnoringCase(docs: CouchUserDoc[], name: string): CouchUserD
 /** The `name` an account is actually stored under (legacy accounts may be mixed case). */
 async function storedUserName(name: string): Promise<string> {
 	const got = await adminRaw(`/_users/${userDocId(name)}`, 'GET');
-	if (got.status !== 404) return name;
+	// A soft-deleted exact match (CR-171) is not "stored": fall through to a live case-variant.
+	if (got.status !== 404 && !(got.status === 200 && isDeletedUserDoc(got.data as CouchUserDoc))) {
+		return name;
+	}
 	return findUserDocIgnoringCase(await fetchAllUserDocs(), name)?.name ?? name;
 }
 
