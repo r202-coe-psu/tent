@@ -43,6 +43,8 @@
 		qtyInputStep,
 		requiresWholeQty,
 		wholeQtyError,
+		WholeNumberGuard,
+		WholeNumberNote,
 		customRecipeInput,
 		findRecipeByLabel,
 		isSameRecipeInput,
@@ -424,6 +426,7 @@
 		toast.info('คืนค่าวัตถุดิบตามสูตรและจำนวนจานเรียบร้อยแล้ว');
 	}
 
+	const wholeGuard = new WholeNumberGuard();
 	const ingredientQtyError = (ing: IngredientRow) =>
 		wholeQtyError(ing.needed, dimensions.resolve(ing.unit));
 	const hasIngredientQtyError = $derived(ingredientsList.some((ing) => !!ingredientQtyError(ing)));
@@ -1175,6 +1178,10 @@
 													step={qtyInputStep(dimensions.resolve(ing.unit))}
 													min="0"
 													aria-invalid={!!ingredientQtyError(ing)}
+													{@attach wholeGuard.attach(
+														() => requiresWholeQty(dimensions.resolve(ing.unit)),
+														ing.item_id
+													)}
 													bind:value={ing.needed}
 													oninput={() => {
 														isIngredientsManuallyEdited = true;
@@ -1190,6 +1197,11 @@
 													{ingredientQtyError(ing)}
 												</p>
 											{/if}
+											<WholeNumberNote
+												guard={wholeGuard}
+												key={ing.item_id}
+												class="mt-1 text-right"
+											/>
 										</Table.Cell>
 										<Table.Cell class="text-right text-slate-700 tabular-nums">
 											{onHand}
@@ -1252,12 +1264,17 @@
 										step={newQtyStep}
 										min={newQtyStep === '1' ? '1' : '0.01'}
 										bind:value={newQty}
+										{@attach wholeGuard.attach(
+											() => requiresWholeQty(dimensions.resolve(newUnit)),
+											'new-ingredient'
+										)}
 										placeholder="0"
 										class="mt-1 h-8 text-xs font-bold"
 									/>
 									{#if newQtyError}
 										<p class="mt-1 text-xs font-semibold text-destructive">{newQtyError}</p>
 									{/if}
+									<WholeNumberNote guard={wholeGuard} key="new-ingredient" class="mt-1" />
 								</div>
 								<div class="sm:col-span-3">
 									<Label class="text-2xs text-muted-foreground">หน่วย</Label>
