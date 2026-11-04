@@ -89,6 +89,32 @@ for DB in registry catalog; do
 	put "$DB/_design/edge_readonly" "$RO"
 done
 
+# 2.5) กัน SYNC_URL ชี้กลับมาที่ edge ตัวเอง (เช่น LAN DNS ยังชี้ domain แอปมาที่ edge) — ถ้าไม่เช็ก job จะขึ้น
+#      `running` error_count 0 ทั้งที่ replicate เข้าตัวเอง · เทียบ `uuid` จาก GET / ของ central กับ edge
+uuid_of() { # uuid_of <file> — ดึง "uuid" จาก welcome JSON ของ CouchDB
+	sed -n 's/.*"uuid":"\([^"]*\)".*/\1/p' "$1" | head -1
+}
+: >/tmp/edge-init.cen
+cen_status=$(curl -s -o /tmp/edge-init.cen -w '%{http_code}' \
+	-u "${CENTRAL_REPL_USER}:${CENTRAL_REPL_PASSWORD}" "$CEN/")
+CEN_UUID=$(uuid_of /tmp/edge-init.cen)
+if [ "$cen_status" != 200 ] || [ -z "$CEN_UUID" ]; then
+	echo "FAILED  อ่าน GET / ของ central (${CEN}/) ไม่ได้ (HTTP $cen_status) — ตรวจ SYNC_URL / credential / network ก่อนสร้าง job"
+	exit 1
+fi
+: >/tmp/edge-init.loc
+edge_status=$(curl -s -o /tmp/edge-init.loc -w '%{http_code}' "$E/")
+EDGE_UUID=$(uuid_of /tmp/edge-init.loc)
+if [ "$edge_status" != 200 ] || [ -z "$EDGE_UUID" ]; then
+	echo "FAILED  อ่าน GET / ของ edge ไม่ได้ (HTTP $edge_status)"
+	exit 1
+fi
+if [ "$CEN_UUID" = "$EDGE_UUID" ]; then
+	echo "FAILED  SYNC_URL (${CEN}) ชี้กลับมาที่ edge ตัวเอง (uuid ตรงกัน: ${EDGE_UUID}) — ตรวจ SYNC_URL ใน .env และ LAN DNS ของ domain central"
+	exit 1
+fi
+echo "ok      central uuid ${CEN_UUID} ≠ edge uuid ${EDGE_UUID}"
+
 # 3) replication jobs — edge เป็นฝ่ายเปิด connection ไปหา central เสมอ
 #    credential ฝั่ง central ชุดเดียวทุก job (central admin — decision sync 2026-10-05)
 LOC_AUTH=$(auth "$COUCHDB_USER" "$COUCHDB_PASSWORD")
