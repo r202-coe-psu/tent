@@ -8,7 +8,7 @@ from enum import StrEnum
 
 import grapheme
 
-from .masking import name_key
+from .masking import name_key, normalize_phone
 
 
 class SearchQueryKind(StrEnum):
@@ -32,13 +32,11 @@ MAX_NAME_WORDS = 4
 
 _DIGITS_ONLY = re.compile(r"^\d+$")
 _PASSPORT = re.compile(r"^[A-Za-z]{1,2}\d{6,9}$")
-_THAI_PHONE = re.compile(r"^0\d{8,9}$")
+_THAI_PHONE = re.compile(r"^0\d{9}$")  # 10-digit mobile only (CR-210)
 
 
 def _normalize_phone(value: str) -> str | None:
-    digits = re.sub(r"[\s\-()]+", "", value)
-    if digits.startswith("+66"):
-        digits = f"0{digits[3:]}"
+    digits = normalize_phone(value)
     if _THAI_PHONE.fullmatch(digits):
         return digits
     return None
@@ -51,6 +49,11 @@ def parse_search_query(raw_query: str) -> ParsedSearchQuery | None:
         return None
     # MongoDB rejects a NUL inside a $regex (the first-name prefix match) with a 500.
     if "\x00" in raw:
+        return None
+    # A lone surrogate (valid in a JSON string) cannot be encoded to BSON — the query would 500.
+    try:
+        raw.encode("utf-8")
+    except UnicodeEncodeError:
         return None
 
     compact = re.sub(r"[\s\-]+", "", raw)

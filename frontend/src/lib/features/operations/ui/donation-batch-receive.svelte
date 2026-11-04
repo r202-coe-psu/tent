@@ -90,6 +90,8 @@
 	let storagePoint = $state<StoragePointRef | null>(null);
 	let attempted = $state(false);
 	let transitionError = $state<string | null>(null);
+	/** The booking changed under the receipt: retrying cannot close it (S-R4-1). */
+	let transitionBlocked = $state(false);
 	/** `_id`s of this donation's ledger rows that belong to one of the lines above. */
 	let lockedRowIds = $state<string[]>([]);
 
@@ -112,7 +114,10 @@
 		void (async () => {
 			const matched: string[] = [];
 			for (const { line, line_no, item_id } of targets) {
-				if (!item_id) continue;
+				// A line refused at review stays at '0' even if a row was keyed for it before
+				// the refusal was honoured here — locking it would re-send that row's qty and
+				// the receipt could never close. The stray row is a stock adjustment for staff.
+				if (!item_id || line.refused !== undefined) continue;
 				const id = await deriveDonationReceiptLineId(donation._id, item_id, line_no);
 				if (run !== lockRun) return;
 				const row = rowsById.get(id);
@@ -192,9 +197,11 @@
 
 	// FR-B5 — "received less than declared" is derived, never stored.
 	const shortfalls = $derived.by(() => {
-		const declared = (donation.items ?? []).map((item, index) => {
+		// A line refused at review is "ไม่รับ", not "ขาด" (CR-172 FR-13).
+		const declared = (donation.items ?? []).flatMap((item, index) => {
+			if (item.review_status === 'rejected') return [];
 			const itemId = item.item_id || lines.find((line) => line.line_no === index)?.item_id || '';
-			return { item_id: itemId, ...toBase(item.qty, item.unit, itemId) };
+			return [{ item_id: itemId, ...toBase(item.qty, item.unit, itemId) }];
 		});
 		const counted = [
 			...lines
@@ -211,6 +218,7 @@
 
 	const submitLabel = $derived.by(() => {
 		if (receiveMutation.isPending) return 'กำลังบันทึก…';
+		if (transitionBlocked) return 'รอผู้ดูแลตรวจยอดก่อนปิดใบ';
 		if (transitionError) return 'ลองเปลี่ยนสถานะใบอีกครั้ง';
 		if (failedCount > 0) return 'ลองบันทึกเฉพาะรายการที่ไม่สำเร็จ';
 		return `บันทึกรับของ ${receivedCount} รายการ`;
@@ -274,11 +282,16 @@
 			}
 		}
 		transitionError = result.transitionError ?? null;
+		transitionBlocked = result.transitionBlocked ?? false;
 
 		if (result.received) {
 			const saved = result.lines.filter((line) => line.state === 'saved').length;
 			toast.success('รับของจากใบบริจาคแล้ว');
 			onsuccess?.(`${donation.donor.name} · รับเข้า ${saved} รายการ`);
+			return;
+		}
+		if (transitionBlocked) {
+			toast.error('บันทึกสินค้าครบแล้ว แต่ใบถูกแก้ระหว่างบันทึก — ติดต่อผู้ดูแลเพื่อตรวจยอด');
 			return;
 		}
 		if (result.rowsComplete) {
@@ -313,7 +326,11 @@
 					<p>รายการที่บันทึกแล้วถูกล็อกไว้ กดปุ่มด้านล่างเพื่อบันทึกเฉพาะรายการที่ไม่สำเร็จ</p>
 				{:else}
 					<p class="font-semibold">บันทึกสินค้าครบทุกรายการแล้ว แต่เปลี่ยนสถานะใบบริจาคไม่สำเร็จ</p>
-					<p>{transitionError} — กดลองใหม่ ระบบจะไม่บันทึกสินค้าซ้ำ</p>
+					{#if transitionBlocked}
+						<p>{transitionError}</p>
+					{:else}
+						<p>{transitionError} — กดลองใหม่ ระบบจะไม่บันทึกสินค้าซ้ำ</p>
+					{/if}
 				{/if}
 			</div>
 		</div>
@@ -377,91 +394,101 @@
 					</div>
 				</div>
 
-				{#if !line.locked && (!line.item_id || line.declared_qty === undefined || line.free_text)}
-					<div class="space-y-1.5">
-						<Label class="text-sm font-semibold text-slate-700">
-							สินค้า <span class="text-red-500">*</span>
-						</Label>
-						<ItemCombobox
-							{items}
-							allowCreate
-							value={line.item_id}
-							isLoading={stockItems.isLoading}
-							{balanceByItemId}
-							formatBalanceUnit={(item) => unitLabel(item.unit)}
-							onSelect={(item) => chooseItem(line, item)}
-						/>
+				{#if line.refused !== undefined}
+					<!-- Refused at review (CR-174): nothing to count — the review stands. -->
+					<div class="rounded-xl border border-red-200 bg-white p-4">
+						<p class="text-sm font-semibold text-red-900">ไม่รับตั้งแต่ตอนประเมิน — ไม่เข้าคลัง</p>
+						<p class="mt-1 text-base break-words text-slate-700">
+							{line.refused || 'ไม่ได้ระบุเหตุผล'}
+						</p>
 					</div>
-				{/if}
-
-				<div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
-					<div class="space-y-1.5">
-						<Label for="batch-qty-{line.line_no}" class="text-sm font-semibold text-slate-700">
-							รับจริง{#if line.unit}
-								({unitLabel(line.unit)}){/if}
-						</Label>
-						<Input
-							id="batch-qty-{line.line_no}"
-							type="number"
-							inputmode="decimal"
-							min="0"
-							step="any"
-							placeholder="0"
-							value={line.qty}
-							oninput={(event) => {
-								line.qty = event.currentTarget.value;
-								line.error = undefined;
-							}}
-							onkeydown={(event) => {
-								if (event.key === 'Enter') event.preventDefault();
-							}}
-							disabled={line.locked}
-							aria-invalid={problem === 'qty' ? 'true' : undefined}
-							class="min-h-11 font-bold tabular-nums"
-						/>
-					</div>
-
-					{#if !line.locked}
+				{:else}
+					{#if !line.locked && (!line.item_id || line.declared_qty === undefined || line.free_text)}
 						<div class="space-y-1.5">
 							<Label class="text-sm font-semibold text-slate-700">
-								วันหมดอายุ
-								{#if requires(line)}
-									<span class="text-red-500">*</span>
-								{:else}
-									<span class="font-normal text-slate-500">(ไม่บังคับ)</span>
-								{/if}
+								สินค้า <span class="text-red-500">*</span>
 							</Label>
-							<DatePicker
-								bind:value={() => line.expiry.value, (value) => setExpiry(line, value)}
-								placeholder="วว/ดด/ปปปป"
+							<ItemCombobox
+								{items}
+								allowCreate
+								value={line.item_id}
+								isLoading={stockItems.isLoading}
+								{balanceByItemId}
+								formatBalanceUnit={(item) => unitLabel(item.unit)}
+								onSelect={(item) => chooseItem(line, item)}
 							/>
 						</div>
 					{/if}
-				</div>
 
-				{#if !line.locked && line.expiry.autoFilled && line.expiry.shelfLifeDays != null}
-					<div
-						class="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-900"
-					>
-						<span>{shelfLifeExpiryLabel(line.expiry.shelfLifeDays)}</span>
-						<Button
-							type="button"
-							variant="outline"
-							class="min-h-11 rounded-lg px-3 text-xs font-bold"
-							onclick={() => (line.expiry = confirmExpiry(line.expiry))}
-						>
-							ตรวจสอบแล้ว
-						</Button>
+					<div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+						<div class="space-y-1.5">
+							<Label for="batch-qty-{line.line_no}" class="text-sm font-semibold text-slate-700">
+								รับจริง{#if line.unit}
+									({unitLabel(line.unit)}){/if}
+							</Label>
+							<Input
+								id="batch-qty-{line.line_no}"
+								type="number"
+								inputmode="decimal"
+								min="0"
+								step="any"
+								placeholder="0"
+								value={line.qty}
+								oninput={(event) => {
+									line.qty = event.currentTarget.value;
+									line.error = undefined;
+								}}
+								onkeydown={(event) => {
+									if (event.key === 'Enter') event.preventDefault();
+								}}
+								disabled={line.locked}
+								aria-invalid={problem === 'qty' ? 'true' : undefined}
+								class="min-h-11 font-bold tabular-nums"
+							/>
+						</div>
+
+						{#if !line.locked}
+							<div class="space-y-1.5">
+								<Label class="text-sm font-semibold text-slate-700">
+									วันหมดอายุ
+									{#if requires(line)}
+										<span class="text-red-500">*</span>
+									{:else}
+										<span class="font-normal text-slate-500">(ไม่บังคับ)</span>
+									{/if}
+								</Label>
+								<DatePicker
+									bind:value={() => line.expiry.value, (value) => setExpiry(line, value)}
+									placeholder="วว/ดด/ปปปป"
+								/>
+							</div>
+						{/if}
 					</div>
-				{/if}
 
-				{#if line.error}
-					<p class="flex items-start gap-2 text-sm font-semibold text-red-700" role="alert">
-						<AlertTriangle class="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
-						<span>{line.error}</span>
-					</p>
-				{:else if problem}
-					<p class="text-sm font-semibold text-red-700" role="alert">{problem}</p>
+					{#if !line.locked && line.expiry.autoFilled && line.expiry.shelfLifeDays != null}
+						<div
+							class="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-900"
+						>
+							<span>{shelfLifeExpiryLabel(line.expiry.shelfLifeDays)}</span>
+							<Button
+								type="button"
+								variant="outline"
+								class="min-h-11 rounded-lg px-3 text-xs font-bold"
+								onclick={() => (line.expiry = confirmExpiry(line.expiry))}
+							>
+								ตรวจสอบแล้ว
+							</Button>
+						</div>
+					{/if}
+
+					{#if line.error}
+						<p class="flex items-start gap-2 text-sm font-semibold text-red-700" role="alert">
+							<AlertTriangle class="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+							<span>{line.error}</span>
+						</p>
+					{:else if problem}
+						<p class="text-sm font-semibold text-red-700" role="alert">{problem}</p>
+					{/if}
 				{/if}
 			</li>
 		{/each}
@@ -475,6 +502,10 @@
 					<li class="tabular-nums">{itemName(row.item_id)} · {row.qty} {unitLabel(row.unit)}</li>
 				{/each}
 			</ul>
+			<p class="mt-2 text-xs text-slate-600">
+				ถ้าเป็นรายการในใบที่เลือกสินค้าไว้คนละตัวกับครั้งก่อน ให้เลือกสินค้าให้ตรงกับที่บันทึกไว้
+				ระบบจะไม่บันทึกซ้ำจนกว่ารายการจะตรงกัน — ถ้าไม่แน่ใจ ติดต่อผู้ดูแลเพื่อตรวจยอด
+			</p>
 		</div>
 	{/if}
 
@@ -528,7 +559,7 @@
 		<Button
 			type="button"
 			size="lg"
-			disabled={receiveMutation.isPending || offline}
+			disabled={receiveMutation.isPending || offline || transitionBlocked}
 			class="min-h-11 w-full font-bold"
 			onclick={submit}
 		>

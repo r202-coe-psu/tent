@@ -24,7 +24,7 @@ export const PUBLIC_COOKIE_I18N = {
 		],
 		closing:
 			'ทั้งนี้เจ้าของข้อมูลส่วนบุคคลสามารถเลือกที่จะปิดการทำงานหรือลบข้อมูลคุกกี้บนอุปกรณ์ของเจ้าของข้อมูลส่วนบุคคลได้เอง แต่อาจส่งผลกระทบกับการทำงานบางส่วนของแพลตฟอร์ม Smart Shelters ของมหาวิทยาลัยสงขลานครินทร์',
-		footerLink: 'นโยบายคุกกี้'
+		footerLink: 'คุกกี้'
 	},
 	en: {
 		pageTitle: 'Cookie Policy (Draft) — Smart Shelters',
@@ -51,6 +51,6 @@ export const PUBLIC_COOKIE_I18N = {
 		],
 		closing:
 			'Data subjects may choose to disable or delete cookies on their own devices. Doing so may affect some functions of the Smart Shelters platform of Prince of Songkla University.',
-		footerLink: 'Cookie Policy'
+		footerLink: 'Cookies'
 	}
 } as const;

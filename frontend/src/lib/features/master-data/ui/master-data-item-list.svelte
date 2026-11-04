@@ -9,6 +9,7 @@
 		duplicateItemCodes,
 		duplicateLabelKeys,
 		formatMasterLabel,
+		isGlobalOnlyMasterType,
 		labelCollisionKey,
 		MASTER_DATA_TYPE_META,
 		type MasterDataItem,
@@ -45,6 +46,8 @@
 	const meta = $derived(MASTER_DATA_TYPE_META[type]);
 	const isVolunteer = $derived(type === 'volunteer_skills');
 	const isShelterScope = $derived(context?.scope === 'shelter');
+	/** CR-186: global-only types have no shelter tier — back-office can only look. */
+	const isReadOnly = $derived(isShelterScope && isGlobalOnlyMasterType(type));
 
 	// Reset search/filters only when the hub switches type (not on every render).
 	let previousType: MasterDataType | undefined;
@@ -113,19 +116,21 @@
 	}
 
 	function isOwned(item: MasterDataItem): boolean {
+		// Read-only: even a leftover shelter-local item is not editable here (CR-186).
+		if (isReadOnly) return false;
 		if (!isShelterScope) return true;
 		return itemSources?.[item.code]?.scope === 'shelter';
 	}
 
 	function canPerShelterToggle(item: MasterDataItem): boolean {
-		if (!isShelterScope) return false;
+		if (!isShelterScope || isReadOnly) return false;
 		const source = itemSources?.[item.code];
 		if (source?.scope !== 'global') return false;
 		return source.shelter_disabled === true || item.status === 'active';
 	}
 
 	function canSetGlobalDefault(item: MasterDataItem): boolean {
-		if (!isShelterScope) return false;
+		if (!isShelterScope || isReadOnly) return false;
 		if (item.status !== 'active' || item.is_default) return false;
 		return itemSources?.[item.code]?.scope === 'global';
 	}
@@ -174,6 +179,15 @@
 		</ul>
 	</div>
 
+	{#if isReadOnly}
+		<div role="note" class="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm">
+			<p class="font-medium text-slate-800">ดูได้อย่างเดียว — ประเภทนี้จัดการที่ส่วนกลางเท่านั้น</p>
+			<p class="mt-1 text-slate-600">
+				เพิ่มหรือแก้รายการได้ที่ System Management · ศูนย์เพิ่มรายการเองไม่ได้
+			</p>
+		</div>
+	{/if}
+
 	{#if duplicateCount > 0}
 		<div role="alert" class="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm">
 			<p class="font-medium text-amber-900">พบชื่อซ้ำ {duplicateCount} รายการในประเภทนี้</p>
@@ -205,14 +219,16 @@
 				aria-label="ค้นหาชื่อหรือรหัส"
 			/>
 		</div>
-		<Button
-			type="button"
-			onclick={onAdd}
-			class="h-11 min-h-11 shrink-0 bg-[#0A2647] text-white hover:bg-[#051930]"
-		>
-			<Plus class="mr-1 h-4 w-4" aria-hidden="true" />
-			เพิ่มรายการ
-		</Button>
+		{#if !isReadOnly}
+			<Button
+				type="button"
+				onclick={onAdd}
+				class="h-11 min-h-11 shrink-0 bg-[#0A2647] text-white hover:bg-[#051930]"
+			>
+				<Plus class="mr-1 h-4 w-4" aria-hidden="true" />
+				เพิ่มรายการ
+			</Button>
+		{/if}
 	</div>
 
 	{#if isVolunteer}
@@ -402,6 +418,9 @@
 							ล้างค้นหา
 						</Button>
 					{/if}
+				{:else if isReadOnly}
+					<p class="text-sm font-medium text-slate-700">ยังไม่มีรายการ</p>
+					<p class="mt-1 text-sm text-slate-500">รายการของประเภทนี้เพิ่มได้ที่ส่วนกลางเท่านั้น</p>
 				{:else}
 					<p class="text-sm font-medium text-slate-700">ยังไม่มีรายการ</p>
 					<p class="mt-1 text-sm text-slate-500">เพิ่มรายการแรกเพื่อเริ่มใช้งานประเภทนี้</p>

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import re
+from collections.abc import Collection
 from datetime import UTC, datetime
 
 from fastapi import HTTPException, status
@@ -21,7 +22,14 @@ from ...utils.masking import (
 )
 from ...utils.search_query import ParsedSearchQuery, SearchQueryKind, parse_search_query
 from ...utils.ulid import new_ulid
-from .schemas import FamilyMember, SearchResponse, SearchResult
+from .schemas import (
+    ExternalSearchResponse,
+    ExternalSearchResult,
+    FamilyMember,
+    SearchResponse,
+    SearchResult,
+    ShelterStatus,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -49,6 +57,16 @@ PUBLIC_STAY_STATUSES = frozenset(
 
 def map_public_status(stay_status: str) -> str:
     return stay_status if stay_status in PUBLIC_STAY_STATUSES else "unknown"
+
+
+_SHELTER_STATUSES: frozenset[str] = frozenset({"open", "closed", "full", "standby"})
+
+
+def _shelter_status(shelter: PublicShelter | None) -> ShelterStatus | None:
+    """`public_shelters.status` for the response; unknown values are reported as null."""
+    if shelter is None or shelter.status not in _SHELTER_STATUSES:
+        return None
+    return shelter.status  # type: ignore[return-value]
 
 
 def _extract_shelter_address(shelter: PublicShelter | None) -> str | None:
@@ -110,6 +128,7 @@ def _extract_shelter_address(shelter: PublicShelter | None) -> str | None:
 
 
 def _resolve_zone_name(shelter: PublicShelter | None, care_zone: str | None) -> str | None:
+    """Partner-facing zone label (`/external/v1/occupants`, EXT-012); never on the public search."""
     if not care_zone:
         return None
     if not shelter or not shelter.raw_data:
@@ -126,6 +145,19 @@ def _resolve_zone_name(shelter: PublicShelter | None, care_zone: str | None) -> 
 
 class EvacueeUseCase:
     async def search(self, raw_query: str, *, client_ip: str = "unknown") -> SearchResponse:
+        persons = await self._find_and_audit(raw_query, client_ip=client_ip)
+        results = await self.build_results(persons)
+        return SearchResponse(results=results, count=len(results), as_of=datetime.now(UTC))
+
+    async def search_external(
+        self, raw_query: str, *, client_ip: str = "unknown"
+    ) -> ExternalSearchResponse:
+        """`/external/v1/occupants`: the public search plus `care_zone` / `zone_name`."""
+        persons = await self._find_and_audit(raw_query, client_ip=client_ip)
+        results = await self.build_external_results(persons)
+        return ExternalSearchResponse(results=results, count=len(results), as_of=datetime.now(UTC))
+
+    async def _find_and_audit(self, raw_query: str, *, client_ip: str) -> list[PublicPerson]:
         parsed = parse_search_query(raw_query)
         if parsed is None:
             raise HTTPException(
@@ -138,24 +170,46 @@ class EvacueeUseCase:
                 },
             )
 
-        persons = await self._find_persons(parsed)
-        shelters = await self._load_shelters({person.shelter_code for person in persons})
-
-        results = [
-            await self._to_result(person, shelters.get(person.shelter_code)) for person in persons
-        ]
-
+        persons = await self.find_persons(parsed)
         await self._write_search_audit(
             parsed=parsed,
             client_ip=client_ip,
-            result_count=len(results),
+            result_count=len(persons),
         )
+        return persons
 
-        return SearchResponse(
-            results=results,
-            count=len(results),
-            as_of=datetime.now(UTC),
-        )
+    async def build_results(
+        self, persons: list[PublicPerson], *, include_family: bool = True
+    ) -> list[SearchResult]:
+        """Masked `SearchResult`s for `persons`, in order.
+
+        `include_family=False` skips the household lookup entirely (EXT-012 never returns
+        `family_members`), leaving that field empty.
+        """
+        shelters = await self._load_shelters({person.shelter_code for person in persons})
+        return [
+            await self._to_result(
+                person, shelters.get(person.shelter_code), include_family=include_family
+            )
+            for person in persons
+        ]
+
+    async def build_external_results(
+        self, persons: list[PublicPerson], *, include_family: bool = True
+    ) -> list[ExternalSearchResult]:
+        """`build_results` plus the resolved zone, for partner endpoints only."""
+        shelters = await self._load_shelters({person.shelter_code for person in persons})
+        results = []
+        for person in persons:
+            shelter = shelters.get(person.shelter_code)
+            result = await self._to_result(person, shelter, include_family=include_family)
+            zone_name = _resolve_zone_name(shelter, person.care_zone)
+            results.append(
+                ExternalSearchResult(
+                    **result.model_dump(), care_zone=zone_name, zone_name=zone_name
+                )
+            )
+        return results
 
     async def _write_search_audit(
         self,
@@ -179,62 +233,35 @@ class EvacueeUseCase:
             # Search availability > audit durability; inbound/ops can alert on gaps.
             logger.exception("Failed to write search_audit for kind=%s", parsed.kind.value)
 
-    async def _find_persons(self, parsed: ParsedSearchQuery) -> list[PublicPerson]:
-        if parsed.kind == SearchQueryKind.NATIONAL_ID:
-            return (
-                await PublicPerson.find(
-                    PublicPerson.national_id_hash == national_id_hash(parsed.normalized),
-                    PublicPerson.search_excluded != True,  # noqa: E712
-                )
-                .limit(NAME_RESULT_LIMIT)
-                .to_list()
-            )
+    async def find_persons(
+        self,
+        parsed: ParsedSearchQuery,
+        *,
+        exclude_statuses: Collection[str] = (),
+    ) -> list[PublicPerson]:
+        """Find up to `NAME_RESULT_LIMIT` people matching a parsed query (shared finder).
 
-        if parsed.kind == SearchQueryKind.PASSPORT:
-            return (
-                await PublicPerson.find(
-                    PublicPerson.passport_hash == passport_hash(parsed.normalized),
-                    PublicPerson.search_excluded != True,  # noqa: E712
-                )
-                .limit(NAME_RESULT_LIMIT)
-                .to_list()
-            )
-
-        if parsed.kind == SearchQueryKind.PHONE:
-            return (
-                await PublicPerson.find(
-                    PublicPerson.phone_hash == phone_hash(parsed.normalized),
-                    PublicPerson.search_excluded != True,  # noqa: E712
-                )
-                .limit(NAME_RESULT_LIMIT)
-                .to_list()
-            )
-
-        return await self._find_by_name(parsed.normalized)
-
-    async def _find_by_name(self, name_key: str) -> list[PublicPerson]:
-        """Name search (CR-166): first-name prefix AND full surname, both anchored.
-
-        `name_key` is the normalized query (`parse_search_query`), one word per space.
-        Only the masked surname is stored in plaintext, so a surname is compared as a
-        hash of the whole normalized surname — it matches exactly or not at all, which
-        keeps a partial surname from turning the endpoint into a browse oracle.
-
-        - one word: it is a prefix of the first name, or it is the whole surname;
-        - several words: some split point puts the leading words as a first-name prefix
-          and the rest (spaces removed) as the whole surname — every split is tried
-          because a first name can have several words ("John Paul Smith").
-
-        Results are sorted (`first_name_key`, `_id`) so the 10 that survive the cap are
-        the same ones every time. The prefix is anchored: "the name starts like this" is
-        what someone half-remembering a relative's name needs, an unanchored substring
-        would not be (see CR-099).
+        Every branch applies the same exclusions in the Mongo query *before* the limit —
+        `search_excluded` opt-outs plus any `exclude_statuses` — and sorts by
+        (`first_name_key`, `_id`) so the people that survive the cap are the same ones every
+        time (CR-166 "sort every case", #736). Callers that must hide a status (EXT-012 drops
+        `cancelled`) pass it here rather than filtering the capped list afterwards.
         """
+        if parsed.kind == SearchQueryKind.NATIONAL_ID:
+            match: dict = {"national_id_hash": national_id_hash(parsed.normalized)}
+        elif parsed.kind == SearchQueryKind.PASSPORT:
+            match = {"passport_hash": passport_hash(parsed.normalized)}
+        elif parsed.kind == SearchQueryKind.PHONE:
+            match = {"phone_hash": phone_hash(parsed.normalized)}
+        else:
+            match = self._name_filter(parsed.normalized.split(" "))
+
+        conditions: list[dict] = [match, {"search_excluded": {"$ne": True}}]
+        if exclude_statuses:
+            conditions.append({"status": {"$nin": list(exclude_statuses)}})
+
         return (
-            await PublicPerson.find(
-                self._name_filter(name_key.split(" ")),
-                {"search_excluded": {"$ne": True}},
-            )
+            await PublicPerson.find(*conditions)
             .sort([("first_name_key", ASCENDING), ("_id", ASCENDING)])
             .limit(NAME_RESULT_LIMIT)
             .to_list()
@@ -242,6 +269,22 @@ class EvacueeUseCase:
 
     @staticmethod
     def _name_filter(words: list[str]) -> dict:
+        """Name-search filter (CR-166): first-name prefix AND full surname, both anchored.
+
+        `words` is the normalized query (`parse_search_query`) split on spaces. Only the
+        masked surname is stored in plaintext, so a surname is compared as a hash of the
+        whole normalized surname — it matches exactly or not at all, which keeps a partial
+        surname from turning the endpoint into a browse oracle.
+
+        - one word: it is a prefix of the first name, or it is the whole surname;
+        - several words: some split point puts the leading words as a first-name prefix
+          and the rest (spaces removed) as the whole surname — every split is tried
+          because a first name can have several words ("John Paul Smith").
+
+        The prefix is anchored: "the name starts like this" is what someone half-remembering
+        a relative's name needs, an unanchored substring would not be (see CR-099).
+        """
+
         def first_name_prefix(prefix: str) -> dict:
             return {"first_name_key": {"$regex": f"^{re.escape(prefix)}"}}
 
@@ -270,7 +313,10 @@ class EvacueeUseCase:
         return {shelter.shelter_code: shelter for shelter in shelters}
 
     async def _load_family_members(
-        self, person: PublicPerson, shelter_name: str
+        self,
+        person: PublicPerson,
+        shelter_name: str,
+        shelter_status: ShelterStatus | None,
     ) -> list[FamilyMember]:
         if not person.household_id:
             return []
@@ -286,6 +332,7 @@ class EvacueeUseCase:
                 name=f"{member.first_name} {member.last_name_masked}",
                 status=map_public_status(member.status),
                 shelter_name=shelter_name,
+                shelter_status=shelter_status,
             )
             for member in members
             if member.id != person.id
@@ -296,10 +343,12 @@ class EvacueeUseCase:
         person: PublicPerson,
         shelter: PublicShelter | None = None,
         shelter_name: str | None = None,
+        *,
+        include_family: bool = True,
     ) -> SearchResult:
         name = shelter_name or (shelter.name if shelter and shelter.name else person.shelter_code)
         shelter_address = _extract_shelter_address(shelter)
-        zone_name = _resolve_zone_name(shelter, person.care_zone)
+        shelter_status = _shelter_status(shelter)
 
         return SearchResult(
             name=f"{person.first_name} {person.last_name_masked}",
@@ -310,9 +359,12 @@ class EvacueeUseCase:
             shelter_address=shelter_address,
             origin_address=person.address_masked,
             checked_in_at=person.checked_in_at,
-            care_zone=zone_name,
-            zone_name=zone_name,
-            family_members=await self._load_family_members(person, name),
+            shelter_status=shelter_status,
+            family_members=(
+                await self._load_family_members(person, name, shelter_status)
+                if include_family
+                else []
+            ),
         )
 
 

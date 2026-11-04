@@ -136,6 +136,30 @@ export interface paths {
 		patch?: never;
 		trace?: never;
 	};
+	'/public/v1/donations/lookup-by-phone': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		get?: never;
+		put?: never;
+		/**
+		 * Lookup Donations By Phone
+		 * @description Phone number alone → every booking of it still in the buffer (CR-173).
+		 *
+		 *     Full access: each item carries its ``tracking_token``. Guarding against number
+		 *     enumeration is the BFF's captcha plus nginx's rate limit (CR-188); this logs every call
+		 *     and alerts on volume without refusing any. The BFF sends the donor's IP as ``X-Real-IP``.
+		 */
+		post: operations['lookup_donations_by_phone_public_v1_donations_lookup_by_phone_post'];
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
 	'/public/v1/donations/{tracking_token}': {
 		parameters: {
 			query?: never;
@@ -607,6 +631,23 @@ export interface paths {
 		patch?: never;
 		trace?: never;
 	};
+	'/external/persons/search': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		get?: never;
+		put?: never;
+		/** Search Persons */
+		post: operations['search_persons_external_persons_search_post'];
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
 	'/external/persons/shelter-residency': {
 		parameters: {
 			query?: never;
@@ -732,6 +773,66 @@ export interface paths {
 		 * @description Service-to-service Residence match — ids + landmark/housing_type only (no member PII).
 		 */
 		post: operations['match_unassigned_residence_public_v1_unassigned_registrations_residence_match_post'];
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
+	'/public/v1/unassigned-registrations/kiosk-lookup': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		get?: never;
+		put?: never;
+		/**
+		 * Kiosk Lookup Unassigned Registration
+		 * @description Service-to-service kiosk lookup — whole family of one registration, no contact PII.
+		 */
+		post: operations['kiosk_lookup_unassigned_registration_public_v1_unassigned_registrations_kiosk_lookup_post'];
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
+	'/public/v1/unassigned-registrations/{registration_id}/kiosk-claim/prepare': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		get?: never;
+		put?: never;
+		/**
+		 * Kiosk Prepare Unassigned Claim
+		 * @description Kiosk claim step 1 — mark members claimed and return Couch docs for the BFF to write.
+		 */
+		post: operations['kiosk_prepare_unassigned_claim_public_v1_unassigned_registrations__registration_id__kiosk_claim_prepare_post'];
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
+	'/public/v1/unassigned-registrations/{registration_id}/kiosk-claim/revert': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		get?: never;
+		put?: never;
+		/**
+		 * Kiosk Revert Unassigned Claim
+		 * @description Kiosk claim rollback — reopen members this kiosk marked when the Couch write failed.
+		 */
+		post: operations['kiosk_revert_unassigned_claim_public_v1_unassigned_registrations__registration_id__kiosk_claim_revert_post'];
 		delete?: never;
 		options?: never;
 		head?: never;
@@ -1237,6 +1338,63 @@ export interface components {
 			success: boolean;
 			key: components['schemas']['ApiKeyPublic'];
 		};
+		/** BasicEvacueeConsent */
+		BasicEvacueeConsent: {
+			/**
+			 * @description discriminator enum property added by openapi-typescript
+			 * @enum {string}
+			 */
+			mode: 'basic';
+			/**
+			 * Health
+			 * @constant
+			 */
+			health: false;
+			/** Ref */
+			ref: string;
+			/** Given At */
+			given_at: string;
+			/** Notice Version */
+			notice_version: string;
+			/**
+			 * Given By
+			 * @enum {string}
+			 */
+			given_by: 'self' | 'guardian' | 'household_member' | 'backfill';
+			/** Giver Evacuee Id */
+			giver_evacuee_id: string | null;
+			/** Recorded Verbally By */
+			recorded_verbally_by: string | null;
+			/**
+			 * Channel
+			 * @enum {string}
+			 */
+			channel: 'staff' | 'kiosk' | 'web' | 'backfill';
+		};
+		/** BasicWebConsentGrant */
+		BasicWebConsentGrant: {
+			/**
+			 * @description discriminator enum property added by openapi-typescript
+			 * @enum {string}
+			 */
+			mode: 'basic';
+			/**
+			 * Health
+			 * @constant
+			 */
+			health: false;
+			/** Ref */
+			ref: string;
+			/** Given At */
+			given_at: string;
+			/** Notice Version */
+			notice_version: string;
+			/**
+			 * Given By
+			 * @enum {string}
+			 */
+			given_by: 'self' | 'guardian' | 'household_member';
+		};
 		/** Body_upload_unassigned_photo_public_v1_unassigned_registrations_photos_post */
 		Body_upload_unassigned_photo_public_v1_unassigned_registrations_photos_post: {
 			/** Full */
@@ -1582,6 +1740,19 @@ export interface components {
 			 */
 			message: string;
 		};
+		/**
+		 * DonationCreateItem
+		 * @description One booked line as stored, so the ticket can group by point without a second read.
+		 */
+		DonationCreateItem: {
+			/** Drop Off Point Id */
+			drop_off_point_id: string | null;
+			/**
+			 * Review Status
+			 * @enum {string}
+			 */
+			review_status: 'approved' | 'pending';
+		};
 		/** DonationCreateRequest */
 		DonationCreateRequest: {
 			/** Shelter Code */
@@ -1596,6 +1767,8 @@ export interface components {
 				[key: string]: unknown;
 			} | null;
 			slot_hold?: components['schemas']['SlotHold'] | null;
+			/** Photos */
+			photos?: string[];
 			/** Captchatoken */
 			captchaToken?: string | null;
 		};
@@ -1610,6 +1783,10 @@ export interface components {
 			tracking_token: string;
 			/** Booking Ref */
 			booking_ref: string;
+			/** Status */
+			status: string;
+			/** Items */
+			items: components['schemas']['DonationCreateItem'][];
 		};
 		/** DonationItemInput */
 		DonationItemInput: {
@@ -1627,11 +1804,23 @@ export interface components {
 			condition?: string | null;
 			/** Note */
 			note?: string | null;
+			/** Line Key */
+			line_key?: string | null;
+			/** Drop Off Point Id */
+			drop_off_point_id?: string | null;
 		};
 		/** DonationItemsPatchRequest */
 		DonationItemsPatchRequest: {
 			/** Items */
 			items: components['schemas']['DonationItemInput'][];
+			/** Current Items */
+			current_items?:
+				| {
+						[key: string]: unknown;
+				  }[]
+				| null;
+			/** Current Status */
+			current_status?: string | null;
 		};
 		/** DonationItemsPatchResponse */
 		DonationItemsPatchResponse: {
@@ -1658,6 +1847,78 @@ export interface components {
 			revision?: {
 				[key: string]: unknown;
 			};
+			/** Status */
+			status: string;
+			/** Auto Approved Lines */
+			auto_approved_lines?: number[];
+		};
+		/**
+		 * DonationPhoneLookupItem
+		 * @description One booking of the number — enough to tell them apart and open the full ticket.
+		 */
+		DonationPhoneLookupItem: {
+			/** Tracking Token */
+			tracking_token: string;
+			/** Booking Ref */
+			booking_ref: string;
+			/** Status */
+			status: string;
+			/** Shelter Code */
+			shelter_code: string;
+			/** Shelter Name */
+			shelter_name?: string | null;
+			/** Delivery Method */
+			delivery_method?: string | null;
+			slot?: components['schemas']['DonationPhoneLookupSlot'] | null;
+			/** Item Count */
+			item_count: number;
+			/** Created At */
+			created_at: string;
+		};
+		/**
+		 * DonationPhoneLookupRequest
+		 * @description CR-173 FR-1 — the phone travels in the body only, never in the URL.
+		 */
+		DonationPhoneLookupRequest: {
+			/** Phone */
+			phone: string;
+		};
+		/**
+		 * DonationPhoneLookupResponse
+		 * @description Same shape whether the number has bookings or not (CR-173 FR-5).
+		 */
+		DonationPhoneLookupResponse: {
+			/**
+			 * Success
+			 * @default true
+			 */
+			success: boolean;
+			/** Items */
+			items?: components['schemas']['DonationPhoneLookupItem'][];
+		};
+		/** DonationPhoneLookupSlot */
+		DonationPhoneLookupSlot: {
+			/** Date */
+			date?: string | null;
+			/** From */
+			from?: string | null;
+			/** To */
+			to?: string | null;
+		};
+		/**
+		 * DonationPoint
+		 * @description A storage point ticked as a donation drop-off point, with a pin (CR-205).
+		 */
+		DonationPoint: {
+			/** Id */
+			id: string;
+			/** Name */
+			name: string;
+			/** Types */
+			types?: string[];
+			geo: components['schemas']['GeoPoint'];
+			/** Location Note */
+			location_note?: string | null;
 		};
 		/**
 		 * DonationTrackSearchRequest
@@ -1731,6 +1992,105 @@ export interface components {
 			/** Relation */
 			relation: string;
 		};
+		/**
+		 * ExternalNeedItemResponse
+		 * @description One row per shelter + item_id: the `/external/v1/needs` shape (CR-206 A2 FR-AP-27).
+		 */
+		ExternalNeedItemResponse: {
+			/** Item Id */
+			item_id: string;
+			/** Name */
+			name: string;
+			/** Qty Needed */
+			qty_needed: string;
+			/**
+			 * Qty Target
+			 * @default 0
+			 */
+			qty_target: string;
+			/**
+			 * On Hand
+			 * @default 0
+			 */
+			on_hand: string;
+			/**
+			 * Reserved
+			 * @default 0
+			 */
+			reserved: string;
+			/** Unit */
+			unit: string;
+			/** Status */
+			status: string;
+			/**
+			 * Urgency
+			 * @default normal
+			 */
+			urgency: string;
+			/** Category */
+			category?: string | null;
+		};
+		/** ExternalNeedsListResponse */
+		ExternalNeedsListResponse: {
+			/** Shelters */
+			shelters: components['schemas']['ExternalShelterNeedsResponse'][];
+			/**
+			 * As Of
+			 * Format: date-time
+			 */
+			as_of: string;
+		};
+		/** ExternalSearchResponse */
+		ExternalSearchResponse: {
+			/** Results */
+			results: components['schemas']['ExternalSearchResult'][];
+			/** Count */
+			count: number;
+			/**
+			 * As Of
+			 * Format: date-time
+			 */
+			as_of: string;
+		};
+		/**
+		 * ExternalSearchResult
+		 * @description `/external/v1/occupants` keeps the zone partners read (CR-183 FR-18 is public-only).
+		 */
+		ExternalSearchResult: {
+			/** Name */
+			name: string;
+			/** Status */
+			status: string;
+			/** National Id */
+			national_id?: string | null;
+			/** Gender */
+			gender?: string | null;
+			/** Shelter Name */
+			shelter_name: string;
+			/** Shelter Address */
+			shelter_address?: string | null;
+			/** Origin Address */
+			origin_address?: string | null;
+			/** Checked In At */
+			checked_in_at?: string | null;
+			/** Shelter Status */
+			shelter_status?: ('open' | 'closed' | 'full' | 'standby') | null;
+			/** Family Members */
+			family_members?: components['schemas']['FamilyMember'][];
+			/** Care Zone */
+			care_zone?: string | null;
+			/** Zone Name */
+			zone_name?: string | null;
+		};
+		/** ExternalShelterNeedsResponse */
+		ExternalShelterNeedsResponse: {
+			/** Code */
+			code: string;
+			/** Name */
+			name: string;
+			/** Needs */
+			needs: components['schemas']['ExternalNeedItemResponse'][];
+		};
 		/** FamilyMember */
 		FamilyMember: {
 			/** Name */
@@ -1739,6 +2099,8 @@ export interface components {
 			status: string;
 			/** Shelter Name */
 			shelter_name: string;
+			/** Shelter Status */
+			shelter_status?: ('open' | 'closed' | 'full' | 'standby') | null;
 		};
 		/** FaqItem */
 		FaqItem: {
@@ -1762,6 +2124,57 @@ export interface components {
 			 * @default 0
 			 */
 			order: number;
+		};
+		/** FullEvacueeConsent */
+		FullEvacueeConsent: {
+			/**
+			 * @description discriminator enum property added by openapi-typescript
+			 * @enum {string}
+			 */
+			mode: 'full';
+			/** Health */
+			health: boolean;
+			/** Ref */
+			ref: string;
+			/** Given At */
+			given_at: string;
+			/** Notice Version */
+			notice_version: string;
+			/**
+			 * Given By
+			 * @enum {string}
+			 */
+			given_by: 'self' | 'guardian' | 'household_member' | 'backfill';
+			/** Giver Evacuee Id */
+			giver_evacuee_id: string | null;
+			/** Recorded Verbally By */
+			recorded_verbally_by: string | null;
+			/**
+			 * Channel
+			 * @enum {string}
+			 */
+			channel: 'staff' | 'kiosk' | 'web' | 'backfill';
+		};
+		/** FullWebConsentGrant */
+		FullWebConsentGrant: {
+			/**
+			 * @description discriminator enum property added by openapi-typescript
+			 * @enum {string}
+			 */
+			mode: 'full';
+			/** Health */
+			health: boolean;
+			/** Ref */
+			ref: string;
+			/** Given At */
+			given_at: string;
+			/** Notice Version */
+			notice_version: string;
+			/**
+			 * Given By
+			 * @enum {string}
+			 */
+			given_by: 'self' | 'guardian' | 'household_member';
 		};
 		/** GeoJsonPoint */
 		GeoJsonPoint: {
@@ -1923,6 +2336,8 @@ export interface components {
 			contact_name: string | null;
 			/** Operating Org */
 			operating_org: string | null;
+			/** Accepts Booking */
+			accepts_booking: boolean;
 			/** Accepts Delivery */
 			accepts_delivery: boolean;
 			/** Delivery Note */
@@ -1988,6 +2403,8 @@ export interface components {
 			contact_name: string | null;
 			/** Operating Org */
 			operating_org: string | null;
+			/** Accepts Booking */
+			accepts_booking: boolean;
 			/** Accepts Delivery */
 			accepts_delivery: boolean;
 			/** Delivery Note */
@@ -2157,8 +2574,19 @@ export interface components {
 			emergency_contact?: components['schemas']['EmergencyContactInput'] | null;
 			/** Photo */
 			photo?: string | null;
+			/** Consent */
+			consent:
+				| components['schemas']['FullWebConsentGrant']
+				| components['schemas']['BasicWebConsentGrant'];
+			/** Search Excluded */
+			search_excluded: boolean;
 		};
-		/** NeedItemResponse */
+		/**
+		 * NeedItemResponse
+		 * @description One donor-board card: shelter + item + drop-off point (CR-206 A2 FR-AP-26).
+		 *
+		 *     Several cards of one shelter may share an ``item_id``.
+		 */
 		NeedItemResponse: {
 			/** Item Id */
 			item_id: string;
@@ -2192,6 +2620,10 @@ export interface components {
 			urgency: string;
 			/** Category */
 			category?: string | null;
+			/** Drop Off Point Id */
+			drop_off_point_id?: string | null;
+			/** Drop Off Point Name */
+			drop_off_point_name?: string | null;
 		};
 		/** NeedsListResponse */
 		NeedsListResponse: {
@@ -2322,6 +2754,18 @@ export interface components {
 			birth_year?: number | null;
 			/** Age */
 			age?: number | null;
+			/** Consent */
+			consent?:
+				| (
+						| components['schemas']['FullEvacueeConsent']
+						| components['schemas']['BasicEvacueeConsent']
+				  )
+				| null;
+			/**
+			 * Search Excluded
+			 * @default false
+			 */
+			search_excluded: boolean;
 		};
 		/**
 		 * OpenPetHit
@@ -2403,6 +2847,64 @@ export interface components {
 			cardType: 'national_id' | 'passport' | 'pink_card' | 'other' | 'anonymous';
 			/** Number */
 			number?: string | null;
+		};
+		/** PersonSearchEnvelope */
+		PersonSearchEnvelope: {
+			/**
+			 * Status
+			 * @default 200
+			 */
+			status: number;
+			/**
+			 * Message
+			 * @default Found Data.
+			 */
+			message: string;
+			/**
+			 * Result
+			 * @description สูงสุด 10 รายการ; ว่างเมื่อไม่พบ
+			 */
+			result: components['schemas']['PersonSearchItem'][];
+		};
+		/** PersonSearchErrorResponse */
+		PersonSearchErrorResponse: {
+			/** Status */
+			status: number;
+			/** Message */
+			message: string;
+			/** Code */
+			code?: string | null;
+			/** Detail */
+			detail?: string | null;
+		};
+		/**
+		 * PersonSearchItem
+		 * @description A masked match — same fields as public search minus `family_members` (#736 decision 4).
+		 */
+		PersonSearchItem: {
+			/** Name */
+			name: string;
+			/** Status */
+			status: string;
+			/** National Id */
+			national_id?: string | null;
+			/** Gender */
+			gender?: string | null;
+			/** Shelter Name */
+			shelter_name: string;
+			/** Shelter Address */
+			shelter_address?: string | null;
+			/** Origin Address */
+			origin_address?: string | null;
+			/**
+			 * Checked In At
+			 * @description วันเวลาเข้าพัก ISO 8601 (+07:00); null เมื่อยังไม่ check-in
+			 */
+			checked_in_at?: string | null;
+			/** Care Zone */
+			care_zone?: string | null;
+			/** Zone Name */
+			zone_name?: string | null;
 		};
 		/** PetCreated */
 		PetCreated: {
@@ -2535,6 +3037,11 @@ export interface components {
 			applicants_count: number;
 			/** Status */
 			status: string;
+			/**
+			 * Is Urgent
+			 * @default false
+			 */
+			is_urgent: boolean;
 			/**
 			 * Requires Review
 			 * @default false
@@ -2796,10 +3303,8 @@ export interface components {
 			origin_address?: string | null;
 			/** Checked In At */
 			checked_in_at?: string | null;
-			/** Care Zone */
-			care_zone?: string | null;
-			/** Zone Name */
-			zone_name?: string | null;
+			/** Shelter Status */
+			shelter_status?: ('open' | 'closed' | 'full' | 'standby') | null;
 			/** Family Members */
 			family_members?: components['schemas']['FamilyMember'][];
 		};
@@ -2832,10 +3337,10 @@ export interface components {
 			name: string;
 			/**
 			 * Site Kind
+			 * @description Master code from master_data:site_kind (e.g. evacuation_center, host_house)
 			 * @default evacuation_center
-			 * @enum {string}
 			 */
-			site_kind: 'evacuation_center' | 'host_house';
+			site_kind: string;
 			/** Status */
 			status: string;
 			/** Admin Type */
@@ -2877,6 +3382,8 @@ export interface components {
 			 * @default false
 			 */
 			accepts_pre_registration: boolean;
+			/** Donation Points */
+			donation_points?: components['schemas']['DonationPoint'][];
 		};
 		/** ShelterDetailResponse */
 		ShelterDetailResponse: {
@@ -2927,10 +3434,10 @@ export interface components {
 			name: string;
 			/**
 			 * Site Kind
+			 * @description Master code from master_data:site_kind (e.g. evacuation_center, host_house)
 			 * @default evacuation_center
-			 * @enum {string}
 			 */
-			site_kind: 'evacuation_center' | 'host_house';
+			site_kind: string;
 			/** Status */
 			status: string;
 			/**
@@ -3397,6 +3904,128 @@ export interface components {
 			flags?: {
 				[key: string]: boolean;
 			};
+		};
+		/**
+		 * UnassignedKioskImage
+		 * @description Couch image doc + base64 attachment bytes (the BFF writes them to Couch).
+		 */
+		UnassignedKioskImage: {
+			/** Doc */
+			doc: {
+				[key: string]: unknown;
+			};
+			/** Full B64 */
+			full_b64: string;
+			/** Thumb B64 */
+			thumb_b64: string;
+			/** Content Type */
+			content_type: string;
+		};
+		/**
+		 * UnassignedKioskLookupRequest
+		 * @description Kiosk lookup key — exactly one of registration, citizen or evacuee id.
+		 */
+		UnassignedKioskLookupRequest: {
+			/** Registration Id */
+			registration_id?: string | null;
+			/** Citizen Id */
+			citizen_id?: string | null;
+			/** Evacuee Id */
+			evacuee_id?: string | null;
+		};
+		/** UnassignedKioskLookupResponse */
+		UnassignedKioskLookupResponse: {
+			/** Registration Id */
+			registration_id: string;
+			/** Reserved Household Id */
+			reserved_household_id: string;
+			/** Members */
+			members: components['schemas']['UnassignedKioskMember'][];
+		};
+		/**
+		 * UnassignedKioskMember
+		 * @description Kiosk family row — unmasked name (the BFF masks); no phone / person id / photo.
+		 */
+		UnassignedKioskMember: {
+			/** Reserved Evacuee Id */
+			reserved_evacuee_id: string;
+			/** First Name */
+			first_name: string;
+			/** Last Name */
+			last_name: string;
+			/** Gender */
+			gender: ('male' | 'female' | 'other') | null;
+			/** Age */
+			age: number | null;
+			/** Status */
+			status: string;
+			/** Claimed Shelter Code */
+			claimed_shelter_code: string | null;
+			/** Matched */
+			matched: boolean;
+		};
+		/**
+		 * UnassignedKioskPrepareRequest
+		 * @description Kiosk claim prepare — mark members, return Couch docs for the BFF to write.
+		 */
+		UnassignedKioskPrepareRequest: {
+			/** Shelter Code */
+			shelter_code: string;
+			/** Device Id */
+			device_id: string;
+			/** Member Ids */
+			member_ids: string[];
+			/** Required Person Id */
+			required_person_id?: string | null;
+			/**
+			 * Claim Pets
+			 * @default false
+			 */
+			claim_pets: boolean;
+		};
+		/** UnassignedKioskPrepareResponse */
+		UnassignedKioskPrepareResponse: {
+			/** Registration Id */
+			registration_id: string;
+			/** Shelter Code */
+			shelter_code: string;
+			/** Household */
+			household: {
+				[key: string]: unknown;
+			};
+			/** Evacuees */
+			evacuees: {
+				[key: string]: unknown;
+			}[];
+			/** Images */
+			images: components['schemas']['UnassignedKioskImage'][];
+			/** Pets */
+			pets?: {
+				[key: string]: unknown;
+			}[];
+			/** Pet Ids */
+			pet_ids?: string[];
+		};
+		/**
+		 * UnassignedKioskRevertRequest
+		 * @description Kiosk claim revert — give back members and pets this kiosk marked when Couch failed.
+		 */
+		UnassignedKioskRevertRequest: {
+			/** Shelter Code */
+			shelter_code: string;
+			/** Device Id */
+			device_id: string;
+			/** Member Ids */
+			member_ids?: string[];
+			/** Pet Ids */
+			pet_ids?: string[];
+		};
+		/** UnassignedKioskRevertResponse */
+		UnassignedKioskRevertResponse: {
+			/** Reverted */
+			reverted: string[];
+			/** Reverted Pets */
+			reverted_pets?: string[];
 		};
 		/**
 		 * UnassignedPhotoUploadResponse
@@ -4267,6 +4896,39 @@ export interface operations {
 			};
 		};
 	};
+	lookup_donations_by_phone_public_v1_donations_lookup_by_phone_post: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		requestBody: {
+			content: {
+				'application/json': components['schemas']['DonationPhoneLookupRequest'];
+			};
+		};
+		responses: {
+			/** @description Successful Response */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['DonationPhoneLookupResponse'];
+				};
+			};
+			/** @description Validation Error */
+			422: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['HTTPValidationError'];
+				};
+			};
+		};
+	};
 	get_donation_public_v1_donations__tracking_token__get: {
 		parameters: {
 			query?: never;
@@ -4487,7 +5149,7 @@ export interface operations {
 					[name: string]: unknown;
 				};
 				content: {
-					'application/json': components['schemas']['NeedsListResponse'];
+					'application/json': components['schemas']['ExternalNeedsListResponse'];
 				};
 			};
 		};
@@ -4511,7 +5173,7 @@ export interface operations {
 					[name: string]: unknown;
 				};
 				content: {
-					'application/json': components['schemas']['SearchResponse'];
+					'application/json': components['schemas']['ExternalSearchResponse'];
 				};
 			};
 			/** @description Unprocessable Content */
@@ -4635,7 +5297,7 @@ export interface operations {
 				district?: string | null;
 				subdistrict?: string | null;
 				status?: string | null;
-				site_kind?: ('evacuation_center' | 'host_house') | null;
+				site_kind?: string | null;
 				/** @description User latitude */
 				lat?: number | null;
 				/** @description User longitude */
@@ -5181,6 +5843,8 @@ export interface operations {
 				updated_since?: string | null;
 				/** @description Include soft-deleted (is_active=false) locations */
 				include_inactive?: boolean;
+				/** @description Filter by the accepts_booking rule (EXT-008): true = bookable, false = not bookable. Only the lowercase strings `true` / `false` are accepted; anything else is 422. */
+				accepts_booking?: ('true' | 'false') | null;
 				/** @description Page number */
 				page?: number;
 				/** @description Items per page */
@@ -5352,6 +6016,77 @@ export interface operations {
 				};
 				content: {
 					'application/json': components['schemas']['HTTPValidationError'];
+				};
+			};
+		};
+	};
+	search_persons_external_persons_search_post: {
+		parameters: {
+			query?: {
+				/** @description วัตถุประสงค์การค้นหา (บังคับ) */
+				purpose?: string | null;
+			};
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		/** @description A missing or malformed body is answered with 422 `validation_error`. */
+		requestBody?: {
+			content: {
+				'application/json': {
+					/**
+					 * Search
+					 * @description คำค้น: ชื่อ / เลขบัตร 13 หลัก / พาสปอร์ต / เบอร์โทร (ไม่ส่งใน URL)
+					 * @default
+					 */
+					search?: string;
+				};
+			};
+		};
+		responses: {
+			/** @description Successful Response */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['PersonSearchEnvelope'];
+				};
+			};
+			/** @description Bad Request */
+			400: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['PersonSearchErrorResponse'];
+				};
+			};
+			/** @description Unauthorized */
+			401: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['PersonSearchErrorResponse'];
+				};
+			};
+			/** @description Forbidden */
+			403: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['PersonSearchErrorResponse'];
+				};
+			};
+			/** @description Unprocessable Content */
+			422: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['PersonSearchErrorResponse'];
 				};
 			};
 		};
@@ -5592,6 +6327,109 @@ export interface operations {
 				};
 				content: {
 					'application/json': components['schemas']['UnassignedResidenceMatchResponse'];
+				};
+			};
+			/** @description Validation Error */
+			422: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['HTTPValidationError'];
+				};
+			};
+		};
+	};
+	kiosk_lookup_unassigned_registration_public_v1_unassigned_registrations_kiosk_lookup_post: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		requestBody: {
+			content: {
+				'application/json': components['schemas']['UnassignedKioskLookupRequest'];
+			};
+		};
+		responses: {
+			/** @description Successful Response */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['UnassignedKioskLookupResponse'];
+				};
+			};
+			/** @description Validation Error */
+			422: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['HTTPValidationError'];
+				};
+			};
+		};
+	};
+	kiosk_prepare_unassigned_claim_public_v1_unassigned_registrations__registration_id__kiosk_claim_prepare_post: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path: {
+				registration_id: string;
+			};
+			cookie?: never;
+		};
+		requestBody: {
+			content: {
+				'application/json': components['schemas']['UnassignedKioskPrepareRequest'];
+			};
+		};
+		responses: {
+			/** @description Successful Response */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['UnassignedKioskPrepareResponse'];
+				};
+			};
+			/** @description Validation Error */
+			422: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['HTTPValidationError'];
+				};
+			};
+		};
+	};
+	kiosk_revert_unassigned_claim_public_v1_unassigned_registrations__registration_id__kiosk_claim_revert_post: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path: {
+				registration_id: string;
+			};
+			cookie?: never;
+		};
+		requestBody: {
+			content: {
+				'application/json': components['schemas']['UnassignedKioskRevertRequest'];
+			};
+		};
+		responses: {
+			/** @description Successful Response */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['UnassignedKioskRevertResponse'];
 				};
 			};
 			/** @description Validation Error */

@@ -2,25 +2,25 @@
 	import MapPin from '@lucide/svelte/icons/map-pin';
 	import type { SuperForm } from 'sveltekit-superforms';
 	import type { SuperFormData } from 'sveltekit-superforms/client';
-	import {
-		DEFAULT_SHELTER_FEATURE_FLAGS,
-		SITE_KIND_LABELS,
-		type Shelter,
-		type ProjectLevel,
-		type SiteKind
-	} from '../domain/schema';
+	import { DEFAULT_SHELTER_FEATURE_FLAGS, type Shelter, type ProjectLevel } from '../domain/schema';
 	import {
 		applyAllowAssets,
 		applyAllowPets,
 		applyAllowVehicles,
 		patchFeatureFlags
 	} from '../domain/feature-flag-policy-sync';
+	import { selectableOperationStatuses } from '../domain/shelter-close-flow';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Switch } from '$lib/components/ui/switch/index.js';
 	import * as Form from '$lib/components/ui/form/index.js';
 	import * as Select from '$lib/components/ui/select/index.js';
+	import * as AlertDialog from '$lib/components/ui/alert-dialog/index.js';
 	import SearchSelect from '$lib/components/search-select.svelte';
-	import { useMasterData, formatMasterLabel } from '$lib/features/master-data';
+	import {
+		useMasterData,
+		formatMasterLabel,
+		formatMasterLabelByCode
+	} from '$lib/features/master-data';
 	import { langState } from '$lib/states/i18n.svelte';
 	import { useProvinces, useDistricts, useSubdistricts } from '../application/queries';
 	import LocationMapPicker from './location-map-picker.svelte';
@@ -28,24 +28,45 @@
 	let {
 		form,
 		formData,
-		disabled = false
+		disabled = false,
+		canClose = true,
+		storedStatus
 	}: {
 		form: SuperForm<Shelter>;
 		formData: SuperFormData<Shelter>;
 		disabled?: boolean;
+		/** CR-219 FR-23: may this user choose "closed" (SA / manager of this shelter)? */
+		canClose?: boolean;
+		/** Operation status as stored (edit mode); undefined while creating. */
+		storedStatus?: string;
 	} = $props();
 
 	const operationStatusOptions: { value: Shelter['operation_status']; label: string }[] = [
 		{ value: 'standby', label: 'กำลังเตรียมการ (Preparing)' },
 		{ value: 'active', label: 'เปิดรับผู้อพยพ (Active)' },
 		{ value: 'full_capacity', label: 'เต็มความจุ (Full Capacity)' },
-		{ value: 'closed', label: 'ปิดศูนย์ (Closed)' }
+		{ value: 'closed', label: 'ปิดศูนย์ (Closed)' },
+		{ value: 'cancelled', label: 'ยกเลิกศูนย์ (Cancelled)' }
 	];
 
-	const siteKindOptions: { value: SiteKind; label: string }[] = [
-		{ value: 'evacuation_center', label: SITE_KIND_LABELS.evacuation_center },
-		{ value: 'host_house', label: SITE_KIND_LABELS.host_house }
-	];
+	const visibleOperationStatusOptions = $derived(
+		selectableOperationStatuses(operationStatusOptions, { canClose, currentStatus: storedStatus })
+	);
+	// FR-23: a closed shelter shows its value read-only to anyone who cannot reopen/close it.
+	const operationStatusLocked = $derived(!canClose && storedStatus === 'closed');
+
+	// draft-shelter-cancelled-status: cancelling hides the shelter from every public page and the
+	// external API, so the switch to `cancelled` is confirmed first. Other changes apply at once.
+	let confirmCancelOpen = $state(false);
+
+	function selectOperationStatus(value: string) {
+		if (value === $formData.operation_status) return;
+		if (value === 'cancelled') {
+			confirmCancelOpen = true;
+			return;
+		}
+		$formData.operation_status = value as Shelter['operation_status'];
+	}
 
 	const projectLevelOptions: { value: ProjectLevel; label: string }[] = [
 		{ value: 'community', label: 'ระดับชุมชน (จุดพักพิงย่อย/บ้านพี่เลี้ยง)' },
@@ -65,6 +86,16 @@
 			}))
 	);
 
+	// CR-198: dropdown offers active kinds only; the trigger resolves against every item so a
+	// stored code that was deactivated since still shows its label (FR-8).
+	const siteKindQuery = useMasterData(() => 'site_kind');
+	const siteKindItems = $derived(siteKindQuery.data?.items ?? []);
+	const siteKindOptions = $derived(
+		siteKindItems
+			.filter((i) => i.status === 'active')
+			.map((i) => ({ value: i.code, label: formatMasterLabel(i, langState.current) }))
+	);
+
 	// Seed configured default (master_data `is_default`) for shelter_type when untouched.
 	// A new shelter starts empty → gets the default; an existing shelter already
 	// has values (superForm initialises synchronously) so the once/only-when-empty
@@ -77,6 +108,18 @@
 		if (!$formData.shelter_type) {
 			const d = stItems.find((i) => i.is_default && i.status === 'active');
 			if (d) $formData.shelter_type = d.code;
+		}
+	});
+
+	// Same once/only-when-empty seeding for site_kind (CR-198 FR-9).
+	let siteKindSeeded = false;
+	$effect(() => {
+		const items = siteKindQuery.data?.items;
+		if (!items || siteKindSeeded) return;
+		siteKindSeeded = true;
+		if (!$formData.site_kind) {
+			const d = items.find((i) => i.is_default && i.status === 'active');
+			if (d) $formData.site_kind = d.code;
 		}
 	});
 
@@ -240,8 +283,9 @@
 					<Form.Label>ชนิดสถานที่<span class="text-destructive">*</span></Form.Label>
 					<Select.Root type="single" bind:value={$formData.site_kind} {disabled}>
 						<Select.Trigger {...props} class={selectTriggerClass}>
-							{siteKindOptions.find((o) => o.value === $formData.site_kind)?.label ??
-								'— เลือกชนิดสถานที่ —'}
+							{$formData.site_kind
+								? formatMasterLabelByCode($formData.site_kind, siteKindItems, langState.current)
+								: '— เลือกชนิดสถานที่ —'}
 						</Select.Trigger>
 						<Select.Content>
 							{#each siteKindOptions as opt (opt.value)}
@@ -258,13 +302,17 @@
 			<Form.Control>
 				{#snippet children({ props })}
 					<Form.Label>สถานะการปฏิบัติการ (Operating Status)</Form.Label>
-					<Select.Root type="single" bind:value={$formData.operation_status} {disabled}>
+					<Select.Root
+						type="single"
+						bind:value={() => $formData.operation_status, selectOperationStatus}
+						disabled={disabled || operationStatusLocked}
+					>
 						<Select.Trigger {...props} class={selectTriggerClass}>
 							{operationStatusOptions.find((o) => o.value === $formData.operation_status)?.label ??
 								'— เลือกสถานะ —'}
 						</Select.Trigger>
 						<Select.Content>
-							{#each operationStatusOptions as opt (opt.value)}
+							{#each visibleOperationStatusOptions as opt (opt.value)}
 								<Select.Item value={opt.value} label={opt.label} />
 							{/each}
 						</Select.Content>
@@ -274,10 +322,35 @@
 			<Form.FieldErrors />
 		</Form.Field>
 
+		<AlertDialog.Root bind:open={confirmCancelOpen}>
+			<AlertDialog.Content>
+				<AlertDialog.Header>
+					<AlertDialog.Title>ยืนยันยกเลิกศูนย์นี้?</AlertDialog.Title>
+					<AlertDialog.Description>
+						ศูนย์ที่ยกเลิกจะไม่แสดงในหน้าสาธารณะทุกหน้าและ API ภายนอก
+						และรับจอง/ลงทะเบียนล่วงหน้าไม่ได้ — ใช้กับศูนย์ที่สร้างผิดหรือไม่เคยเปิดใช้งาน
+						(ปิดศูนย์ตามปกติให้เลือก「ปิดศูนย์」) เปลี่ยนกลับเป็นสถานะอื่นได้ภายหลัง
+					</AlertDialog.Description>
+				</AlertDialog.Header>
+				<AlertDialog.Footer>
+					<AlertDialog.Cancel>ไม่ยกเลิก</AlertDialog.Cancel>
+					<AlertDialog.Action
+						class="bg-destructive text-white hover:bg-destructive/90"
+						onclick={() => {
+							$formData.operation_status = 'cancelled';
+							confirmCancelOpen = false;
+						}}
+					>
+						ยืนยันยกเลิกศูนย์
+					</AlertDialog.Action>
+				</AlertDialog.Footer>
+			</AlertDialog.Content>
+		</AlertDialog.Root>
+
 		<Form.Field {form} name="shelter_type">
 			<Form.Control>
 				{#snippet children({ props })}
-					<Form.Label>ประเภทสถานที่</Form.Label>
+					<Form.Label>ประเภทอาคาร</Form.Label>
 					<Select.Root
 						type="single"
 						bind:value={
@@ -454,14 +527,14 @@
 				for="enable-medical-screening"
 				class="min-w-0 flex-1 text-sm font-semibold text-slate-800"
 			>
-				เปิดคัดกรองการแพทย์ (Station 2)
+				เปิดคัดกรองผู้เข้าพัก (Station 2)
 			</label>
 			<Switch
 				id="enable-medical-screening"
 				checked={$formData.feature_flags?.enable_medical_screening ?? false}
 				onCheckedChange={(v) => setEnableMedicalScreening(v === true)}
 				{disabled}
-				aria-label="เปิดคัดกรองการแพทย์ Station 2"
+				aria-label="เปิดคัดกรองผู้เข้าพัก Station 2"
 			/>
 		</div>
 

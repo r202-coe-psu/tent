@@ -20,9 +20,10 @@ from worker.masking import (
 from worker.projectors.compute_needs import compute_needs
 from worker.projectors.donation_need_counter import plan_need_counters
 from worker.projectors.evacuee import project_evacuee
-from worker.projectors.occupancy import aggregate_occupancy
+from worker.projectors.occupancy import aggregate_occupancy, count_stay_statuses
 from worker.projectors.shelter import (
-    is_shelter_open,
+    RetentionPhase,
+    classify_registry_shelter,
     map_public_shelter_status,
     project_shelter,
     resolve_site_kind,
@@ -126,9 +127,125 @@ def test_project_shelter_preserves_host_house_site_kind():
     assert payload["site_kind"] == "host_house"
 
 
-def test_resolve_site_kind_defaults_unknown_values_to_evacuation_center():
+def _shelter_with_points(*points):
+    action, payload = project_shelter(
+        {
+            "type": "shelter",
+            "code": "SH001",
+            "name": "ศูนย์ทดสอบ",
+            "operation_status": "active",
+            "common_areas": {"sub_storage": list(points)},
+            "updated_at": "2026-01-01T00:00:00.000Z",
+        }
+    )
+    assert action == "upsert" and payload is not None
+    return payload
+
+
+def test_donation_points_only_ticked_points_with_a_pin_and_without_area():
+    payload = _shelter_with_points(
+        {
+            "id": "p1",
+            "name": "โรงยิม",
+            "types": ["food_dry", "general"],
+            "area_m2": 40,
+            "accepts_donations": True,
+            "lat": 7.0086,
+            "lng": 100.4747,
+            "location_note": "  ประตู 2  ",
+        },
+        {  # ticked but never pinned (old doc)
+            "id": "p2",
+            "name": "ห้องพยาบาล",
+            "types": ["medical_supplies"],
+            "accepts_donations": True,
+            "lat": None,
+            "lng": None,
+        },
+        {  # pinned but not ticked
+            "id": "p3",
+            "name": "โรงครัว",
+            "types": ["cooked_food"],
+            "accepts_donations": False,
+            "lat": 7.1,
+            "lng": 100.5,
+        },
+    )
+    assert payload["donation_points"] == [
+        {
+            "id": "p1",
+            "name": "โรงยิม",
+            "types": ["food_dry", "general"],
+            "geo": {"lat": 7.0086, "lng": 100.4747},
+            "location_note": "ประตู 2",
+        }
+    ]
+    assert "area_m2" not in payload["donation_points"][0]
+
+
+def test_donation_points_refuse_unset_and_invalid_pins():
+    base = {"name": "จุด", "types": ["general"], "accepts_donations": True}
+    payload = _shelter_with_points(
+        {**base, "id": "zero", "lat": 0, "lng": 0},
+        {**base, "id": "range", "lat": 91, "lng": 100},
+        {**base, "id": "str", "lat": "7", "lng": "100"},
+        {**base, "id": "bool", "lat": True, "lng": 100},
+        {**base, "id": "nan", "lat": float("nan"), "lng": 100},
+        {**base, "id": "equator", "lat": 0, "lng": 100},
+        {**base, "id": "", "lat": 7, "lng": 100},
+        {**base, "lat": 7, "lng": 100},
+    )
+    assert [p["id"] for p in payload["donation_points"]] == ["equator"]
+
+
+def test_donation_points_accept_legacy_single_type_and_blank_note():
+    payload = _shelter_with_points(
+        {
+            "id": "p1",
+            "name": "คลังเก่า",
+            "type": "food_dry",
+            "accepts_donations": True,
+            "lat": 7,
+            "lng": 100,
+            "location_note": "   ",
+        }
+    )
+    [point] = payload["donation_points"]
+    assert point["types"] == ["food_dry"]
+    assert point["location_note"] is None
+
+
+def test_donation_points_empty_without_common_areas():
+    for doc_extra in (
+        {},
+        {"common_areas": None},
+        {"common_areas": {"sub_storage": None}},
+        # Malformed: the shelter row still projects, just without points.
+        {"common_areas": ["not", "a", "dict"]},
+        {"common_areas": {"sub_storage": "not a list"}},
+    ):
+        _, payload = project_shelter(
+            {
+                "type": "shelter",
+                "code": "SH001",
+                "name": "x",
+                "updated_at": "2026-01-01",
+                **doc_extra,
+            }
+        )
+        assert payload is not None
+        assert payload["donation_points"] == []
+
+
+def test_resolve_site_kind_passes_master_codes_through():
+    assert resolve_site_kind({"site_kind": "host_house"}) == "host_house"
+    assert resolve_site_kind({"site_kind": "field_hospital"}) == "field_hospital"
+
+
+def test_resolve_site_kind_defaults_missing_or_empty_to_evacuation_center():
     assert resolve_site_kind({}) == "evacuation_center"
-    assert resolve_site_kind({"site_kind": "host"}) == "evacuation_center"
+    assert resolve_site_kind({"site_kind": ""}) == "evacuation_center"
+    assert resolve_site_kind({"site_kind": None}) == "evacuation_center"
 
 
 def test_project_shelter_closed_soft_retains():
@@ -147,6 +264,19 @@ def test_project_shelter_closed_soft_retains():
     assert payload["status"] == "closed"
     assert payload["location_status"] == "closed"
     assert payload["is_active"] is True
+
+
+def test_project_shelter_cancelled_deletes_by_code():
+    """draft-shelter-cancelled-status.md — a cancelled shelter leaves the public plane
+    entirely; the `_id` lets the caller purge its shelter-scoped projections too."""
+    doc = {
+        "_id": "shelter:01CANCEL",
+        "type": "shelter",
+        "code": "SH009",
+        "name": "ศูนย์ที่สร้างผิด",
+        "operation_status": "cancelled",
+    }
+    assert project_shelter(doc) == ("delete", {"_id": "SH009"})
 
 
 def test_project_shelter_malformed_doc_deletes():
@@ -202,11 +332,21 @@ def test_project_shelter_standby_keeps_status():
     assert payload["is_active"] is True
 
 
-def test_is_shelter_open_variants():
-    assert is_shelter_open({"operation_status": "active"}) is True
-    assert is_shelter_open({"operation_status": "standby"}) is True
-    assert is_shelter_open({"status": "open"}) is True
-    assert is_shelter_open({"operation_status": "closed"}) is False
+def test_classify_registry_shelter_variants():
+    def phase(doc):
+        return classify_registry_shelter(doc, retention_months=3, now=datetime.now(UTC))
+
+    assert phase({"operation_status": "active"}) is RetentionPhase.OPEN
+    assert phase({"operation_status": "standby"}) is RetentionPhase.OPEN
+    assert phase({"status": "open"}) is RetentionPhase.OPEN
+    assert phase({"operation_status": "cancelled"}) is RetentionPhase.HIDDEN
+    assert phase({"operation_status": "closed"}) is RetentionPhase.CLOSED_WITHOUT_DATE
+    assert (
+        phase(
+            {"operation_status": "closed", "closed_at": datetime.now(UTC).isoformat()}
+        )
+        is RetentionPhase.CLOSED_WITHIN_RETENTION
+    )
 
 
 def test_project_evacuee_maps_person_id_and_masked_fields():
@@ -382,6 +522,40 @@ def test_project_evacuee_search_excluded_deletes():
     action, payload = project_evacuee(doc, shelter_code="SH001")
     assert action == "delete"
     assert payload == {"_id": "evacuee:01OPT"}
+
+
+def test_project_evacuee_basic_consent_deletes_projection():
+    """PDPA FR-40 — a basic-mode person leaves every public read via the existing delete."""
+    doc = {
+        "_id": "evacuee:01BASIC",
+        "type": "evacuee",
+        "schema_v": 15,
+        "first_name": "พื้นฐาน",
+        "last_name": "ใจดี",
+        "person_id": {"cardType": "national_id", "number": "3900100244192"},
+        "household_id": "household:01HH",
+        "privacy": {"search_excluded": True},
+        "consent": {
+            "mode": "basic",
+            "health": False,
+            "ref": "CS-7K3QZ9MD",
+            "given_at": "2026-10-25T03:15:00.000Z",
+            "notice_version": "2026-10-25",
+            "given_by": "self",
+            "giver_evacuee_id": None,
+            "recorded_verbally_by": None,
+            "channel": "web",
+        },
+        "current_stay": {
+            "status": "active",
+            "zone": "A",
+            "since": "2026-10-25T03:15:00.000Z",
+        },
+        "updated_at": "2026-10-25T03:15:00.000Z",
+    }
+    action, payload = project_evacuee(doc, shelter_code="SH001")
+    assert action == "delete"
+    assert payload == {"_id": "evacuee:01BASIC"}
 
 
 def test_compute_needs_aggregates_campaign_minus_donations():
@@ -620,6 +794,35 @@ def test_compute_needs_without_ledgers_behaves_as_before():
     assert remaining["item:rice"] == "450.0"
 
 
+# --- PDPA D8: count_stay_statuses (pure) ---
+
+
+def test_count_stay_statuses_counts_search_excluded_evacuees():
+    """Opted-out / basic-consent evacuees have no `public_persons` row but still count."""
+    counts = count_stay_statuses(
+        [
+            {"_id": "e1", "type": "evacuee", "current_stay": {"status": "active"}},
+            {
+                "_id": "e2",
+                "type": "evacuee",
+                "privacy": {"search_excluded": True},
+                "current_stay": {"status": "active"},
+            },
+            {
+                "_id": "e3",
+                "type": "evacuee",
+                "privacy": {"search_excluded": True},
+                "current_stay": {"status": "pre_registered"},
+            },
+            {"_id": "e4", "type": "evacuee", "current_stay": {"status": "checked_out"}},
+            # No stay status and non-evacuee docs are not counted.
+            {"_id": "e5", "type": "evacuee"},
+            {"_id": "h1", "type": "household", "current_stay": {"status": "active"}},
+        ]
+    )
+    assert counts == {"active": 2, "pre_registered": 1, "checked_out": 1}
+
+
 # --- EXT-005: aggregate_occupancy (pure) ---
 
 
@@ -731,6 +934,36 @@ def test_aggregate_occupancy_age_buckets():
         ]
     )
     assert total == 3
+    assert breakdown["child_under_5"] == 1
+    assert breakdown["elderly_over_60"] == 1
+
+
+def test_aggregate_occupancy_counts_room_confirmed_as_in_shelter():
+    """decision sync 2026-11-02: in shelter = active + room_confirmed (staff in-shelter.ts)."""
+    total, breakdown = aggregate_occupancy(
+        [
+            _active_evacuee(_id="e1"),
+            _active_evacuee(_id="e2", current_stay={"status": "room_confirmed"}),
+            _active_evacuee(_id="e3", current_stay={"status": "temporary_leave"}),
+            _active_evacuee(_id="e4", current_stay={"status": "arriving"}),
+        ]
+    )
+    assert total == 2
+    assert breakdown["male"] == 2
+
+
+def test_aggregate_occupancy_age_buckets_fall_back_to_birth_year():
+    """Registration stores `birth_year` (พ.ศ.), not `age` — buckets must use it."""
+    year_be = datetime.now(UTC).year + 543
+    total, breakdown = aggregate_occupancy(
+        [
+            _active_evacuee(_id="e1", birth_year=year_be - 2),
+            _active_evacuee(_id="e2", birth_year=year_be - 70),
+            _active_evacuee(_id="e3", birth_year=year_be - 30),
+            _active_evacuee(_id="e4", birth_year=year_be + 5),  # future = unknown age
+        ]
+    )
+    assert total == 4
     assert breakdown["child_under_5"] == 1
     assert breakdown["elderly_over_60"] == 1
 
@@ -1043,16 +1276,16 @@ async def test_project_needs_for_shelter_visible_on_home_and_urgency():
     couch.iter_all_docs = mock_iter
 
     actions = await project_needs_for_shelter(couch, "SH001")
-    action_dict = {a[1]["_id"]: (a[0], a[1]) for a in actions}
+    action_dict = {a[1]["_id"]: (a[0], a[1]) for a in actions if a[0] == "upsert"}
+    (prune,) = [a[1] for a in actions if a[0] == "prune"]
 
-    # item:rice from hidden campaign must be deleted
-    assert "SH001:item:rice" in action_dict
-    assert action_dict["SH001:item:rice"][0] == "delete"
+    # item:rice from the hidden campaign has no card: the prune retracts it
+    assert "SH001:item:rice@-" not in action_dict
+    assert prune["keep_ids"] == ["SH001:item:water@-"]
 
     # item:water from visible campaign must be upserted with qty_target and urgency="critical"
-    assert "SH001:item:water" in action_dict
-    assert action_dict["SH001:item:water"][0] == "upsert"
-    payload = action_dict["SH001:item:water"][1]
+    assert "SH001:item:water@-" in action_dict
+    payload = action_dict["SH001:item:water@-"][1]
     assert payload["qty_target"] == 1000.0
     assert payload["qty_needed"] == 1000.0
     assert payload["urgency"] == "critical"

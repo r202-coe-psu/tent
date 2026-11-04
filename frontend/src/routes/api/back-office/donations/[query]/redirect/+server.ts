@@ -7,8 +7,10 @@ import {
 	isInCallerScope,
 	listShelterCodes,
 	shelterDb,
-	routeErrorResponse as toRouteError
+	routeErrorResponse as toRouteError,
+	staleDecisionResponse
 } from '$lib/server/donation-intake';
+import { hasKeyedDonationStock } from '$lib/server/donation-docs';
 import {
 	createDonationRedirect,
 	donationRedirectInputSchema,
@@ -54,6 +56,9 @@ export const POST: RequestHandler = async ({ params, request }) => {
 		}
 
 		const { donation, dbName } = found;
+		const body = await request.json().catch(() => ({}));
+		const stale = staleDecisionResponse(body, donation);
+		if (stale) return stale;
 		if (!canTransitionDonation(donation.status, 'redirected')) {
 			return json(
 				{
@@ -65,7 +70,20 @@ export const POST: RequestHandler = async ({ params, request }) => {
 			);
 		}
 
-		const body = await request.json().catch(() => ({}));
+		// Goods keyed into stock by an unfinished receipt are on this shelter's shelf: the
+		// destination would count the same delivery again. Same rule as reject.
+		if (await hasKeyedDonationStock(dbName, donation)) {
+			return json(
+				{
+					success: false,
+					error_code: 'GOODS_IN_STOCK',
+					error:
+						'ใบนี้มีของบันทึกเข้าคลังแล้ว — ส่งต่อไม่ได้ ให้รับของต่อจากหน้าตรวจรับ หรือติดต่อผู้ดูแลเพื่อตรวจยอด'
+				},
+				{ status: 409 }
+			);
+		}
+
 		const parsed = donationRedirectInputSchema.safeParse(body);
 		if (!parsed.success) {
 			return json(
@@ -140,7 +158,9 @@ export const POST: RequestHandler = async ({ params, request }) => {
 					unit: it.unit,
 					...(it.category ? { category: it.category } : {}),
 					...(it.condition ? { condition: it.condition } : {}),
-					...(it.note ? { note: it.note } : {})
+					...(it.note ? { note: it.note } : {}),
+					// The origin's drop-off points mean nothing at the destination (CR-206 FR-MP-30).
+					drop_off_point_id: null
 				})),
 				note: parsed.data.note ?? null
 			},

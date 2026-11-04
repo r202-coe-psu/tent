@@ -110,7 +110,7 @@ const summary = {
 	last_seen_at: null,
 	staff_pin_set: true,
 	staff_pin_is_default: false,
-	banner_enabled: true,
+	banner_group_id: null,
 	screen_type: 'compact'
 };
 
@@ -163,12 +163,10 @@ describe('updateScannerDevice', () => {
 		expect(JSON.parse(init.body as string)).toEqual({ status: 'inactive' });
 	});
 
-	it('patches banner_enabled and returns it from the summary (FR-KBR-36)', async () => {
-		const updated = { ...summary, banner_enabled: false };
+	it('returns the banner group id from the summary', async () => {
+		const updated = { ...summary, banner_group_id: 'kiosk_banner_group:lobby' };
 		fetchMock.mockResolvedValueOnce(respond(200, updated));
-		expect(await updateScannerDevice('kiosk-01', { banner_enabled: false })).toEqual(updated);
-		const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
-		expect(JSON.parse(init.body as string)).toEqual({ banner_enabled: false });
+		expect(await updateScannerDevice('kiosk-01', { status: 'active' })).toEqual(updated);
 	});
 
 	it('throws the server message on an error envelope', async () => {

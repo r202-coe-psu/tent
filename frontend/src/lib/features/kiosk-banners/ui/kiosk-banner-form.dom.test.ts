@@ -24,15 +24,28 @@ const stored: KioskBannerSummary = {
 	image_content_type: 'image/png'
 };
 
+const GROUP_A = 'kiosk_banner_group:aaa';
+const GROUP_B = 'kiosk_banner_group:bbb';
+const groups = [
+	{ _id: GROUP_A, name: 'โถงทางเข้า' },
+	{ _id: GROUP_B, name: 'ห้องพยาบาล' }
+];
+
 let instance: ReturnType<typeof mount> | null = null;
 let onsave: Mock<(payload: KioskBannerSavePayload) => Promise<void>>;
 const createObjectURL = vi.fn();
 const revokeObjectURL = vi.fn();
 
-function render(banner?: KioskBannerSummary, defaultScreen?: 'compact' | 'portrait') {
+function render(
+	banner?: KioskBannerSummary,
+	defaultScreen?: 'compact' | 'portrait',
+	extra: { groups?: { _id: string; name: string }[]; defaultGroupId?: string } = {
+		defaultGroupId: GROUP_A
+	}
+) {
 	instance = mount(KioskBannerForm, {
 		target: document.body,
-		props: { shelterCode: 'SH001', banner, defaultScreen, onsave }
+		props: { shelterCode: 'SH001', banner, defaultScreen, groups, ...extra, onsave }
 	});
 	flushSync();
 }
@@ -96,6 +109,8 @@ async function setDateTime(name: 'start_at' | 'end_at', date: string, time: stri
 		await press(option);
 	}
 }
+
+const grouped: KioskBannerSummary = { ...stored, group_id: GROUP_B };
 
 const png = () => new File([new Uint8Array([137, 80, 78, 71])], 'a.png', { type: 'image/png' });
 
@@ -244,6 +259,7 @@ describe('KioskBannerForm', () => {
 		expect(onsave).toHaveBeenCalledTimes(1);
 		const payload = onsave.mock.calls[0][0];
 		expect(payload.input).toMatchObject({
+			group_id: GROUP_A,
 			title: 'ป้ายใหม่',
 			caption: null,
 			duration_sec: 10,
@@ -256,11 +272,12 @@ describe('KioskBannerForm', () => {
 	});
 
 	it('keeps the stored image on edit when no new file is chosen', async () => {
-		render(stored);
+		render(grouped);
 
 		await submit();
 
 		expect(onsave).toHaveBeenCalledTimes(1);
+		expect(onsave.mock.calls[0][0].input.group_id).toBe(GROUP_B);
 		expect(onsave.mock.calls[0][0].image).toBeUndefined();
 		expect(onsave.mock.calls[0][0].rev).toBe('3-xyz');
 		expect(onsave.mock.calls[0][0].input.status).toBe('inactive');
@@ -279,6 +296,70 @@ describe('KioskBannerForm', () => {
 		expect(document.body.querySelector('[role="dialog"]')?.textContent).toContain(
 			'ตัวอย่างบน kiosk'
 		);
+	});
+
+	describe('banner group', () => {
+		const trigger = () => q<HTMLButtonElement>('#banner-group_id') as HTMLButtonElement;
+
+		async function fillAndSubmit() {
+			type(field('title'), 'ป้ายใหม่');
+			await setDateTime('start_at', '2026-10-15', '08:00');
+			await setDateTime('end_at', '2026-10-15', '18:00');
+			pick(png());
+			await submit();
+		}
+
+		it('is pre-selected from defaultGroupId on create', () => {
+			render(undefined, undefined, { defaultGroupId: GROUP_B });
+			expect(trigger().textContent).toContain('ห้องพยาบาล');
+		});
+
+		it('is pre-selected from the banner on edit', () => {
+			render(grouped);
+			expect(trigger().textContent).toContain('ห้องพยาบาล');
+		});
+
+		it('does not save without a group and asks to choose one', async () => {
+			render(undefined, undefined, {});
+
+			await fillAndSubmit();
+
+			expect(onsave).not.toHaveBeenCalled();
+			expect(document.body.textContent).toContain('เลือกกลุ่มแบนเนอร์');
+		});
+
+		it('saves the group chosen from the select', async () => {
+			render(undefined, undefined, {});
+			await press(trigger());
+			const option = [...lastOf('[role="listbox"]').querySelectorAll('[role="option"]')].find((o) =>
+				o.textContent?.includes('โถงทางเข้า')
+			) as HTMLElement;
+			await press(option);
+
+			await fillAndSubmit();
+
+			expect(onsave).toHaveBeenCalledTimes(1);
+			expect(onsave.mock.calls[0][0].input.group_id).toBe(GROUP_A);
+		});
+
+		it('hints to create a group first, linking to the new-group page, when there are none', () => {
+			render(undefined, undefined, { groups: [] });
+			expect(document.body.textContent).toContain('ยังไม่มีกลุ่มแบนเนอร์ — สร้างกลุ่มก่อน');
+			expect(
+				q<HTMLAnchorElement>('a[href$="/back-office/kiosks/banners/groups/new"]')
+			).not.toBeNull();
+		});
+
+		it('tells the editor of an ungrouped (v1) banner to choose a group before saving', async () => {
+			render(stored);
+			expect(document.body.textContent).toContain(
+				'แบนเนอร์นี้ยังไม่อยู่ในกลุ่ม เลือกกลุ่มก่อนบันทึก'
+			);
+
+			await submit();
+
+			expect(onsave).not.toHaveBeenCalled();
+		});
 	});
 
 	describe('screen type', () => {

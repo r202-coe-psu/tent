@@ -61,7 +61,7 @@
 				class="z-30 -mx-4 bg-[#F8FAFC] sm:sticky sm:top-[var(--portal-sticky-top)] sm:mx-0"
 			>
 				<div
-					class="flex snap-x snap-proximity scroll-px-4 gap-2 overflow-x-auto [mask-image:linear-gradient(to_right,#000_calc(100%-2.5rem),transparent)] py-2 pr-10 pl-4 sm:[mask-image:none] sm:px-1"
+					class="flex snap-x snap-proximity scroll-px-4 gap-2 overflow-x-auto [mask-image:linear-gradient(to_right,#000_calc(100%-2.5rem),transparent)] py-2 pr-10 pl-4 sm:snap-none sm:flex-wrap sm:overflow-x-visible sm:[mask-image:none] sm:px-1"
 				>
 					<button
 						type="button"

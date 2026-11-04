@@ -3,6 +3,7 @@ id: CR-052
 title: ปรับปรุงข้อกำหนดระบบรับบริจาค (Donation System) ตามบันทึกการแก้ไข Design V8
 status: approved
 date: 2026-07-27
+updated: 2026-10-21
 requested_by: เจ้าของโครงการ (Design V8)
 decided_by: เจ้าของโครงการ
 layer: volatile
@@ -92,6 +93,7 @@ flowchart TD
   > - **จุดเชื่อมต่อข้อมูล (Endpoint):** `POST /api/back-office/tickets`, `PATCH /api/back-office/donations/{id}`
 
 - **1.4 ระบบบังคับประเมินรายการบริจาคทุกรายการ (Task #52):** ระบบต้องนำรายการบริจาคที่เสนอเข้ามาทั้งหมดเข้าสู่ขั้นตอน "รอการประเมิน (Pending Review)" เสมอ โดยระบบต้องยกเลิกกลไกการข้ามขั้นตอนไปออกรหัสตอบรับ (QR Code) อัตโนมัติทุกกรณี
+  > **ถูกแทนด้วย [CR-174](./CR-174-donation-campaign-auto-approve.md) (2026-10-21):** ประเมินทีละรายการ — รายการที่อยู่ในแคมเปญและจองโควต้าได้อนุมัติอัตโนมัติ (`items[].review_status = approved`), รายการที่พิมพ์เอง / นอกแคมเปญยังต้องประเมิน · ใบที่ทุกรายการอยู่ในแคมเปญเริ่มที่ `verifying` และได้ QR ทันที · ไม่มีข้อยกเว้นของสด/แช่เย็น (CR-174 FR-13 — ปฏิเสธได้ที่หน้าตรวจรับ) จึงแทน flowchart B1 และข้อ 1.7 ส่วน "บังคับรายการสินค้าแช่เย็นเข้าสู่ขั้นตอนรอการประเมิน" ด้วย. ไม่ลบข้อเดิมเพื่อเก็บประวัติ
   > - **หน้าจอ (Page/Route):** `routes/public/donations/+page.svelte`
   > - **ส่วนประกอบ UI (Component):** `DonationStore` (`frontend/src/routes/public/donations/donation.svelte.ts`)
   > - **จุดเชื่อมต่อข้อมูล (Endpoint):** `POST /api/public/v1/donations`
@@ -107,6 +109,7 @@ flowchart TD
   > - **จุดเชื่อมต่อข้อมูล (Endpoint):** `POST /api/back-office/campaigns/{id}/cut-off`
 
 - **1.7 ระบบตรวจสอบเงื่อนไขสินค้าแช่เย็น (Cold-chain):** ระบบ Item Master ต้องจัดเก็บตัวบ่งชี้สินค้าแช่เย็น เพื่อให้ระบบบังคับรายการสินค้าแช่เย็นเข้าสู่ขั้นตอนรอการประเมินเสมอ
+  > **ถูกแทนด้วย [CR-174](./CR-174-donation-campaign-auto-approve.md) FR-13/FR-14 (2026-10-21):** ไม่บังคับประเมินของแช่เย็น · ข้อ "CR-052 Cold-chain" (`is_cold_chain`) ตัดออกจาก T-16 — field นี้ไม่เคยมีในโค้ดหรือ schema
   > - **หน้าจอ (Page/Route):** `routes/(protected)/back-office/master-data/+page.svelte`
   > - **ส่วนประกอบ UI (Component):** `ItemMasterForm` (`frontend/src/lib/features/catalog/domain/catalog.ts`)
   > - **จุดเชื่อมต่อข้อมูล (Endpoint):** `POST /api/public/v1/donations`, `GET /api/back-office/catalog/items`

@@ -13,6 +13,10 @@ import {
 	foodDistributionPointSchema,
 	migrateShelterV2ToCurrent,
 	isShelterBookable,
+	isShelterCancelled,
+	operationStatusSchema,
+	validateSiteKindChange,
+	DEFAULT_SITE_KIND,
 	SHELTER_MASTER_SCHEMA_V,
 	type ShelterMasterV2
 } from './schema';
@@ -30,6 +34,8 @@ const validShelterInput = {
 	risk: {},
 	zones: []
 };
+
+const NO_DROP_OFF = { accepts_donations: false, lat: null, lng: null, location_note: null };
 
 describe('shelterSchema', () => {
 	it('accepts minimal valid shelter', () => {
@@ -141,11 +147,22 @@ describe('shelterSchema', () => {
 		expect(result.success).toBe(false);
 	});
 
-	it('accepts host_house and rejects unknown site kinds', () => {
-		expect(shelterSchema.parse({ ...validShelterInput, site_kind: 'host_house' }).site_kind).toBe(
-			'host_house'
-		);
-		expect(() => shelterSchema.parse({ ...validShelterInput, site_kind: 'host' })).toThrow();
+	it('accepts any well-formed master code and rejects malformed site kinds', () => {
+		for (const site_kind of ['host_house', 'field_hospital']) {
+			expect(shelterSchema.parse({ ...validShelterInput, site_kind }).site_kind).toBe(site_kind);
+		}
+		for (const site_kind of ['', 'Host House', 'host-house', 'ศูนย์อพยพ']) {
+			expect(() => shelterSchema.parse({ ...validShelterInput, site_kind })).toThrow();
+		}
+	});
+
+	it('asks to pick a site kind, once, when it is empty', () => {
+		const result = shelterSchema.safeParse({ ...validShelterInput, site_kind: '' });
+		expect(result.success).toBe(false);
+		const messages = result.error?.issues
+			.filter((i) => i.path[0] === 'site_kind')
+			.map((i) => i.message);
+		expect(messages).toEqual(['กรุณาเลือกประเภทศูนย์']);
 	});
 
 	it('rejects empty name', () => {
@@ -275,29 +292,61 @@ describe('commonAreasSchema', () => {
 
 	it('rejects empty sub_storage name', () => {
 		expect(() =>
-			commonAreasSchema.parse({ sub_storage: [{ id: 's1', name: '', type: 'general' }] })
+			commonAreasSchema.parse({ sub_storage: [{ id: 's1', name: '', types: ['general'] }] })
 		).toThrow();
 	});
 
-	it('accepts sub_storage items', () => {
+	it('accepts sub_storage items (CR-199 types[])', () => {
+		const c = commonAreasSchema.parse({
+			sub_storage: [{ id: 's1', name: 'อาหารแห้ง', types: ['food_dry', 'drinking_water'] }]
+		});
+		expect(c.sub_storage?.[0]?.types).toEqual(['food_dry', 'drinking_water']);
+	});
+
+	it('accepts legacy single `type` and migrates it to `types` (CR-199 read-time fallback)', () => {
 		const c = commonAreasSchema.parse({
 			sub_storage: [{ id: 's1', name: 'อาหารแห้ง', type: 'food_dry' }]
 		});
-		expect(c.sub_storage?.[0]?.type).toBe('food_dry');
+		expect(c.sub_storage?.[0]?.types).toEqual(['food_dry']);
+		expect((c.sub_storage?.[0] as Record<string, unknown>).type).toBeUndefined();
 	});
 });
 
 describe('subStorageItemSchema', () => {
 	it('rejects empty name', () => {
-		expect(() => subStorageItemSchema.parse({ id: 's1', name: '', type: 'general' })).toThrow();
+		expect(() => subStorageItemSchema.parse({ id: 's1', name: '', types: ['general'] })).toThrow();
 	});
 
 	it('requires a non-empty id (schema_v 7 — ledger lots reference it)', () => {
-		expect(() => subStorageItemSchema.parse({ name: 'คลังยา', type: 'general' })).toThrow();
+		expect(() => subStorageItemSchema.parse({ name: 'คลังยา', types: ['general'] })).toThrow();
 		expect(() =>
-			subStorageItemSchema.parse({ id: '  ', name: 'คลังยา', type: 'general' })
+			subStorageItemSchema.parse({ id: '  ', name: 'คลังยา', types: ['general'] })
 		).toThrow();
-		expect(subStorageItemSchema.parse({ id: 's1', name: 'คลังยา', type: 'general' }).id).toBe('s1');
+		expect(subStorageItemSchema.parse({ id: 's1', name: 'คลังยา', types: ['general'] }).id).toBe(
+			's1'
+		);
+	});
+
+	it('requires at least one type (CR-199)', () => {
+		expect(() => subStorageItemSchema.parse({ id: 's1', name: 'คลังยา', types: [] })).toThrow();
+	});
+
+	it('accepts multiple types per storage point (CR-199)', () => {
+		const parsed = subStorageItemSchema.parse({
+			id: 's1',
+			name: 'ห้องเก็บของกลาง',
+			types: ['food_dry', 'drinking_water', 'medical_supplies']
+		});
+		expect(parsed.types).toEqual(['food_dry', 'drinking_water', 'medical_supplies']);
+	});
+
+	it('migrates a legacy single `type` to `types: [type]`', () => {
+		const parsed = subStorageItemSchema.parse({
+			id: 's1',
+			name: 'คลังยา',
+			type: 'medical_supplies'
+		});
+		expect(parsed.types).toEqual(['medical_supplies']);
 	});
 });
 
@@ -431,7 +480,7 @@ describe('createShelterSchema / updateShelterSchema', () => {
 				central_kitchen: true,
 				helipad: false,
 				parking_capacity: 30,
-				sub_storage: [{ id: 's1', name: 'อาหารแห้ง', type: 'food_dry' }]
+				sub_storage: [{ id: 's1', name: 'อาหารแห้ง', types: ['food_dry'] }]
 			},
 			zones: [{ code: 'Z1', name: 'โซน A', capacity: 100, type: 'general' }]
 		});
@@ -929,7 +978,7 @@ describe('CR-023 — migrate v3 → v4 default-fill', () => {
 		expect(m.risk?.secondary_muster_point).toBeNull();
 		expect(m.zones?.[0].area_m2).toBeNull();
 		expect(m.common_areas?.sub_storage).toEqual([
-			{ id: 'legacy-0', name: 'S', type: 'general', area_m2: null }
+			{ id: 'legacy-0', name: 'S', types: ['general'], area_m2: null, ...NO_DROP_OFF }
 		]);
 	});
 });
@@ -1054,6 +1103,28 @@ describe('isShelterBookable', () => {
 		expect(isShelterBookable(null)).toBe(false);
 		expect(isShelterBookable({})).toBe(false);
 	});
+
+	it('blocks a cancelled shelter even with the flag on (draft-shelter-cancelled-status)', () => {
+		expect(
+			isShelterBookable({
+				operation_status: 'cancelled',
+				feature_flags: { accepts_pre_registration: true }
+			})
+		).toBe(false);
+	});
+});
+
+describe('isShelterCancelled', () => {
+	it('is true only for operation_status cancelled', () => {
+		expect(isShelterCancelled({ operation_status: 'cancelled' })).toBe(true);
+		expect(isShelterCancelled({ operation_status: 'closed' })).toBe(false);
+		expect(isShelterCancelled({ operation_status: 'active' })).toBe(false);
+		expect(isShelterCancelled(null)).toBe(false);
+	});
+
+	it('is accepted by the operation_status enum (reversible like any other status)', () => {
+		expect(operationStatusSchema.parse('cancelled')).toBe('cancelled');
+	});
 });
 
 describe('draft-shelter-storage-points — migrate v6 → v7 sub_storage id back-fill', () => {
@@ -1078,9 +1149,9 @@ describe('draft-shelter-storage-points — migrate v6 → v7 sub_storage id back
 		updated_at: '2024-01-01T00:00:00Z'
 	} as unknown as ShelterMasterV2;
 
-	it('bumps a v6 doc to v7 and fills only the missing ids with legacy-<index>', () => {
+	it('bumps a v6 doc to current and fills only the missing ids with legacy-<index>', () => {
 		const m = migrateShelterV2ToCurrent(v6doc);
-		expect(m.schema_v).toBe(7);
+		expect(m.schema_v).toBe(SHELTER_MASTER_SCHEMA_V);
 		expect(m.common_areas?.sub_storage?.map((p) => p.id)).toEqual([
 			'01J0000000000000000000000A',
 			'legacy-1'
@@ -1110,5 +1181,276 @@ describe('draft-shelter-storage-points — migrate v6 → v7 sub_storage id back
 		const m = migrateShelterV2ToCurrent(bare);
 		expect(m.schema_v).toBe(SHELTER_MASTER_SCHEMA_V);
 		expect(m.common_areas).toBeUndefined();
+	});
+});
+
+describe('CR-199 — migrate v7 → v8 sub_storage type → types[]', () => {
+	const v7doc = {
+		_id: 'shelter:x',
+		type: 'shelter' as const,
+		schema_v: 7,
+		code: 'SH001',
+		name: 'X',
+		site_kind: 'evacuation_center' as const,
+		operation_status: 'standby' as const,
+		capacity: 10,
+		zones: [],
+		food_distribution_points: [],
+		common_areas: {
+			sub_storage: [
+				{ id: 's1', name: 'คลังยา', type: 'medical_supplies', area_m2: null },
+				{ id: 's2', name: 'ห้องเก็บของกลาง', type: 'food_dry' }
+			]
+		},
+		created_at: '2024-01-01T00:00:00Z',
+		updated_at: '2024-01-01T00:00:00Z'
+	} as unknown as ShelterMasterV2;
+
+	it('bumps a v7 doc to current and derives `types: [type]` deterministically', () => {
+		const m = migrateShelterV2ToCurrent(v7doc);
+		expect(m.schema_v).toBe(SHELTER_MASTER_SCHEMA_V);
+		expect(m.common_areas?.sub_storage).toEqual([
+			{ id: 's1', name: 'คลังยา', types: ['medical_supplies'], area_m2: null, ...NO_DROP_OFF },
+			{ id: 's2', name: 'ห้องเก็บของกลาง', types: ['food_dry'], ...NO_DROP_OFF }
+		]);
+	});
+
+	it('back-fills a doc already stamped current that still carries legacy `type`', () => {
+		const stamped = { ...v7doc, schema_v: SHELTER_MASTER_SCHEMA_V } as unknown as ShelterMasterV2;
+		const m = migrateShelterV2ToCurrent(stamped);
+		expect(m).not.toBe(stamped);
+		expect(m.common_areas?.sub_storage?.[0]?.types).toEqual(['medical_supplies']);
+	});
+
+	it('returns the same object once every item already carries `types` (nothing to write)', () => {
+		const first = migrateShelterV2ToCurrent(v7doc);
+		expect(migrateShelterV2ToCurrent(first)).toBe(first);
+	});
+
+	it('is a no-op key remap — the 4 pre-existing enum keys are unchanged', () => {
+		const m = migrateShelterV2ToCurrent(v7doc);
+		const keys = (m.common_areas?.sub_storage ?? []).flatMap((p) => p.types);
+		expect(keys).toEqual(['medical_supplies', 'food_dry']);
+	});
+});
+
+describe('CR-198 — validateSiteKindChange', () => {
+	const items = [
+		{ code: 'evacuation_center', status: 'active' as const },
+		{ code: 'host_house' },
+		{ code: 'field_hospital', status: 'inactive' as const }
+	];
+
+	it('accepts a new shelter whose kind is an active item (missing status counts as active)', () => {
+		expect(validateSiteKindChange('evacuation_center', items)).toBeNull();
+		expect(validateSiteKindChange('host_house', items)).toBeNull();
+	});
+
+	it('accepts an unchanged kind even when its item was deactivated since (FR-8)', () => {
+		expect(validateSiteKindChange('field_hospital', items, 'field_hospital')).toBeNull();
+	});
+
+	it('rejects a kind changed to an inactive item, naming the field', () => {
+		expect(validateSiteKindChange('field_hospital', items, 'host_house')).toContain('ประเภทศูนย์');
+	});
+
+	it('rejects a kind that is not in the master', () => {
+		expect(validateSiteKindChange('unknown_kind', items, 'host_house')).toContain('ประเภทศูนย์');
+		expect(validateSiteKindChange('unknown_kind', items)).not.toBeNull();
+	});
+
+	it('rejects every new kind when the master doc is missing', () => {
+		expect(validateSiteKindChange(DEFAULT_SITE_KIND, [])).not.toBeNull();
+	});
+
+	it('still accepts an unchanged kind when the master doc is missing', () => {
+		expect(validateSiteKindChange(DEFAULT_SITE_KIND, [], DEFAULT_SITE_KIND)).toBeNull();
+	});
+});
+
+describe('CR-205 — storage point drop-off fields', () => {
+	const base = { id: 's1', name: 'โรงยิม', types: ['general'] };
+
+	it('defaults missing keys to not accepting donations, no pin, no note (AC-1)', () => {
+		expect(subStorageItemSchema.parse(base)).toMatchObject(NO_DROP_OFF);
+	});
+
+	it('accepts a ticked point with a pin and trims the note (AC-3)', () => {
+		const p = subStorageItemSchema.parse({
+			...base,
+			accepts_donations: true,
+			lat: 7.0086,
+			lng: 100.4747,
+			location_note: '  ประตู 2  '
+		});
+		expect(p).toMatchObject({ accepts_donations: true, lat: 7.0086, lng: 100.4747 });
+		expect(p.location_note).toBe('ประตู 2');
+	});
+
+	it('turns a blank note into null (FR-DP-4)', () => {
+		expect(subStorageItemSchema.parse({ ...base, location_note: '   ' }).location_note).toBeNull();
+	});
+
+	it('rejects a note over 200 characters', () => {
+		const r = subStorageItemSchema.safeParse({ ...base, location_note: 'ก'.repeat(201) });
+		expect(r.success).toBe(false);
+	});
+
+	it('refuses a ticked point without a pin, error path .lat (AC-2)', () => {
+		for (const pin of [{}, { lat: 7, lng: null }, { lat: null, lng: 100 }]) {
+			const r = subStorageItemSchema.safeParse({ ...base, accepts_donations: true, ...pin });
+			expect(r.success).toBe(false);
+			expect(r.error?.issues.map((i) => i.path.join('.'))).toContain('lat');
+		}
+	});
+
+	it('allows an unticked point with no pin', () => {
+		expect(subStorageItemSchema.safeParse({ ...base, accepts_donations: false }).success).toBe(
+			true
+		);
+	});
+
+	it('refuses coordinates out of range (FR-DP-3)', () => {
+		expect(subStorageItemSchema.safeParse({ ...base, lat: 91, lng: 0 }).success).toBe(false);
+		expect(subStorageItemSchema.safeParse({ ...base, lat: 0, lng: 181 }).success).toBe(false);
+		expect(subStorageItemSchema.safeParse({ ...base, lat: -90, lng: -180 }).success).toBe(true);
+	});
+
+	it('refuses (0, 0) whether or not the point is ticked (AC-9)', () => {
+		for (const accepts_donations of [true, false]) {
+			const r = subStorageItemSchema.safeParse({ ...base, accepts_donations, lat: 0, lng: 0 });
+			expect(r.success).toBe(false);
+			expect(r.error?.issues.map((i) => i.path.join('.'))).toContain('lat');
+		}
+		expect(subStorageItemSchema.safeParse({ ...base, lat: 0, lng: 100 }).success).toBe(true);
+	});
+
+	it('keeps the pin and note when unticked (AC-4)', () => {
+		const p = subStorageItemSchema.parse({
+			...base,
+			accepts_donations: false,
+			lat: 7,
+			lng: 100,
+			location_note: 'ประตู 2'
+		});
+		expect(p).toMatchObject({ lat: 7, lng: 100, location_note: 'ประตู 2' });
+	});
+});
+
+describe('CR-205 — migrate to schema_v 9', () => {
+	const doc = (schema_v: number, sub_storage: unknown[]) =>
+		({
+			_id: 'shelter:x',
+			type: 'shelter',
+			schema_v,
+			code: 'SH001',
+			name: 'X',
+			site_kind: 'evacuation_center',
+			operation_status: 'standby',
+			capacity: 10,
+			zones: [],
+			food_distribution_points: [],
+			common_areas: { sub_storage },
+			created_at: '2024-01-01T00:00:00Z',
+			updated_at: '2024-01-01T00:00:00Z'
+		}) as unknown as ShelterMasterV2;
+
+	it('is schema_v 9', () => {
+		expect(SHELTER_MASTER_SCHEMA_V).toBe(9);
+	});
+
+	it('v8 → v9 fills the defaults (AC-1)', () => {
+		const m = migrateShelterV2ToCurrent(
+			doc(8, [{ id: 's1', name: 'คลังยา', types: ['medical_supplies'] }])
+		);
+		expect(m.schema_v).toBe(9);
+		expect(m.common_areas?.sub_storage?.[0]).toMatchObject(NO_DROP_OFF);
+	});
+
+	// A v8 doc used to be the current version and so went through `normalizeCurrent`;
+	// every production shelter is still v8 until its next save, so v8 → v9 must repair
+	// the same gaps a partially migrated doc can carry (#1004 review B1).
+	it('v8 without sub_storage ids gets legacy ids', () => {
+		const m = migrateShelterV2ToCurrent(
+			doc(8, [
+				{ name: 'คลังยา', types: ['medical_supplies'] },
+				{ id: 's2', name: 'ห้องเก็บของกลาง', types: ['food_dry'] }
+			])
+		);
+		expect(m.schema_v).toBe(9);
+		expect(m.common_areas?.sub_storage?.map((p) => p.id)).toEqual(['legacy-0', 's2']);
+	});
+
+	it('v8 with a single legacy `type` gets types[]', () => {
+		const m = migrateShelterV2ToCurrent(doc(8, [{ id: 's1', name: 'คลังยา', type: 'food_dry' }]));
+		expect(m.schema_v).toBe(9);
+		expect(m.common_areas?.sub_storage?.[0]).toEqual({
+			id: 's1',
+			name: 'คลังยา',
+			types: ['food_dry'],
+			...NO_DROP_OFF
+		});
+	});
+
+	it('v8 without site_kind or food_distribution_points gets the defaults', () => {
+		const bare = doc(8, []) as unknown as Record<string, unknown>;
+		delete bare.site_kind;
+		delete bare.food_distribution_points;
+		const m = migrateShelterV2ToCurrent(bare as unknown as ShelterMasterV2);
+		expect(m.schema_v).toBe(9);
+		expect(m.site_kind).toBe('evacuation_center');
+		expect(m.food_distribution_points).toEqual([]);
+	});
+
+	it('v7 with a single `type` ends at v9 with types[] and the defaults (AC-10)', () => {
+		const m = migrateShelterV2ToCurrent(doc(7, [{ id: 's1', name: 'คลังยา', type: 'food_dry' }]));
+		expect(m.schema_v).toBe(9);
+		expect(m.common_areas?.sub_storage?.[0]).toEqual({
+			id: 's1',
+			name: 'คลังยา',
+			types: ['food_dry'],
+			...NO_DROP_OFF
+		});
+	});
+
+	it('v6 without ids ends at v9 with legacy ids, types[] and the defaults', () => {
+		const m = migrateShelterV2ToCurrent(doc(6, [{ name: 'คลังยา', type: 'food_dry' }]));
+		expect(m.schema_v).toBe(9);
+		expect(m.common_areas?.sub_storage?.[0]).toEqual({
+			id: 'legacy-0',
+			name: 'คลังยา',
+			types: ['food_dry'],
+			...NO_DROP_OFF
+		});
+	});
+
+	it('does not overwrite a pin that is already there', () => {
+		const m = migrateShelterV2ToCurrent(
+			doc(8, [
+				{
+					id: 's1',
+					name: 'โรงยิม',
+					types: ['general'],
+					accepts_donations: true,
+					lat: 7,
+					lng: 100,
+					location_note: 'ประตู 2'
+				}
+			])
+		);
+		expect(m.common_areas?.sub_storage?.[0]).toMatchObject({
+			accepts_donations: true,
+			lat: 7,
+			lng: 100,
+			location_note: 'ประตู 2'
+		});
+	});
+
+	it('fills a doc stamped 9 that lacks the keys, and is then identity-stable', () => {
+		const stamped = doc(9, [{ id: 's1', name: 'โรงยิม', types: ['general'] }]);
+		const m = migrateShelterV2ToCurrent(stamped);
+		expect(m).not.toBe(stamped);
+		expect(m.common_areas?.sub_storage?.[0]).toMatchObject(NO_DROP_OFF);
+		expect(migrateShelterV2ToCurrent(m)).toBe(m);
 	});
 });

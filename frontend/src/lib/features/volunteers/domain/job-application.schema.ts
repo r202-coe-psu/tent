@@ -1,6 +1,6 @@
 /**
  * Job application domain schema — CR-094 §3.4 (schema.md §2.18, `job_application`
- * schema_v 1 → 2). Public applications may persist only `tracking_token_hash`;
+ * schema_v 1 → 2; CR-220 schema_v 3 → 4: quota release markers). Public applications may persist only `tracking_token_hash`;
  * the raw bearer token is retained only for legacy/staff-created documents.
  *
  * Pure TypeScript / Zod — no I/O, no PouchDB, no Svelte.
@@ -32,11 +32,35 @@ export const jobApplicationReviewReasonSchema = z.enum([
 export type JobApplicationReviewReason = z.infer<typeof jobApplicationReviewReasonSchema>;
 
 export const JOB_APPLICATION_REVIEW_REASON_LABEL: Record<JobApplicationReviewReason, string> = {
-	identity: 'ยืนยันตัวตน',
-	skill_certification: 'รับรองทักษะควบคุม',
-	job_fit: 'พิจารณาความเหมาะสมของงาน',
-	legacy_review: 'รายการเก่าที่ต้องตรวจ'
+	identity: 'ยังไม่ได้ยืนยันตัวตน',
+	skill_certification: 'ยังไม่ได้ตรวจใบรับรองทักษะ',
+	// The job is not set to accept applicants automatically (tier / auto_accept).
+	job_fit: 'งานนี้ต้องอนุมัติทุกใบ',
+	legacy_review: 'ใบสมัครเก่าที่ยังไม่ได้ตรวจ'
 };
+
+/**
+ * What staff still need to check on an application — display only, the stored
+ * `review_reasons` are left as they were.
+ *
+ * Identity and certificates are read from the volunteer as they are NOW, not from the
+ * reasons stamped when they applied: a person verified since then must not still be
+ * listed, and one who was never stamped (older or seeded applications) must not be
+ * reported as "ไม่มีสิ่งที่ต้องตรวจเพิ่ม" while their identity is unchecked.
+ * `job_fit` is never shown — it means the job does not auto-accept, and the job form
+ * cannot turn auto-accept on (owner decision 2026-08-27), so it sits on every
+ * application and says nothing about this applicant.
+ */
+export function outstandingReviewReasons(
+	reasons: readonly JobApplicationReviewReason[],
+	now: { identityVerified: boolean; uncertifiedSkill: boolean }
+): JobApplicationReviewReason[] {
+	const open: JobApplicationReviewReason[] = [];
+	if (!now.identityVerified) open.push('identity');
+	if (now.uncertifiedSkill) open.push('skill_certification');
+	if (reasons.includes('legacy_review')) open.push('legacy_review');
+	return open;
+}
 
 /**
  * State machine transitions for JobApplication (CR-041 D-APP=A / CR-094 §3.4 / UX-DR6).
@@ -86,7 +110,7 @@ export type SelectedShift = z.infer<typeof selectedShiftSchema>;
 
 export interface JobApplication extends BaseDoc {
 	type: 'job_application';
-	schema_v: 2 | 3;
+	schema_v: 2 | 3 | 4;
 	job_id: string;
 	/** Stable concrete shift identity; absent only on legacy v2 documents. */
 	shift_id?: string;
@@ -102,6 +126,13 @@ export interface JobApplication extends BaseDoc {
 	reviewed_at?: string | null;
 	reviewed_by?: string | null;
 	review_reasons?: JobApplicationReviewReason[];
+	/**
+	 * CR-220 — set with `status: cancelled` (no linked assignment, was `confirmed`) while the
+	 * job quota is still owed back. Written by the public ticket cancel only.
+	 */
+	quota_release_due_at?: string | null;
+	/** CR-220 — the quota of this application was given back to the `job` (ticket cancel only). */
+	quota_released_at?: string | null;
 }
 
 export const jobApplicationSchema = z
@@ -109,7 +140,7 @@ export const jobApplicationSchema = z
 		_id: z.string().startsWith('job_application:'),
 		_rev: z.string().optional(),
 		type: z.literal('job_application'),
-		schema_v: z.union([z.literal(2), z.literal(3)]),
+		schema_v: z.union([z.literal(2), z.literal(3), z.literal(4)]),
 		shelter_code: z.string().min(1),
 		created_at: z.string(),
 		updated_at: z.string(),
@@ -125,7 +156,9 @@ export const jobApplicationSchema = z
 		review_notes: z.string().nullable().optional(),
 		reviewed_at: z.string().nullable().optional(),
 		reviewed_by: z.string().nullable().optional(),
-		review_reasons: z.array(jobApplicationReviewReasonSchema).optional()
+		review_reasons: z.array(jobApplicationReviewReasonSchema).optional(),
+		quota_release_due_at: z.string().nullable().optional(),
+		quota_released_at: z.string().nullable().optional()
 	})
 	.refine((doc) => Boolean(doc.tracking_token || doc.tracking_token_hash), {
 		message: 'tracking_token or tracking_token_hash is required',
@@ -163,7 +196,7 @@ export function makeJobApplication(
 	const d = jobApplicationInputSchema.parse(input);
 	return makeDoc(
 		'job_application',
-		3,
+		4,
 		{
 			job_id: d.job_id,
 			shift_id: d.shift_id,

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import logging
 import re
 from dataclasses import dataclass
@@ -9,6 +10,7 @@ from datetime import UTC, datetime
 
 from fastapi import HTTPException, status
 from pymongo.errors import DuplicateKeyError, PyMongoError
+from tent_model.evacuee_consent import bind_web_consent
 from tent_model.unassigned_registration import (
     UNASSIGNED_SCHEMA_V,
     EmergencyContact,
@@ -54,6 +56,14 @@ from .schemas import (
     PersonIdOut,
     PetCreated,
     PetInput,
+    UnassignedKioskImage,
+    UnassignedKioskLookupRequest,
+    UnassignedKioskLookupResponse,
+    UnassignedKioskMember,
+    UnassignedKioskPrepareRequest,
+    UnassignedKioskPrepareResponse,
+    UnassignedKioskRevertRequest,
+    UnassignedKioskRevertResponse,
     UnassignedRegistrationClaimRequest,
     UnassignedRegistrationClaimResponse,
     UnassignedRegistrationCreateRequest,
@@ -74,6 +84,8 @@ from .schemas import (
 logger = logging.getLogger(__name__)
 
 # Same shape as staff Anonymous ID (CR-112): ANON- + Crockford ULID.
+# A revert that keeps losing the race to concurrent claims gives up as unavailable.
+_KIOSK_REVERT_ATTEMPTS = 3
 _ANON_ID_RE = re.compile(r"^ANON-[0-9A-HJKMNP-TV-Z]{26}$", re.IGNORECASE)
 
 
@@ -128,10 +140,34 @@ def _ensure_pet_ids(doc: UnassignedRegistration) -> bool:
         if not pet.pet_id:
             pet.pet_id = _new_pet_id()
             changed = True
-        if pet.status is None:
-            pet.status = "open"
-            changed = True
     return changed
+
+
+async def _mint_missing_pet_ids(doc: UnassignedRegistration) -> UnassignedRegistration:
+    """Fill legacy pet rows (no pet_id / no status) in Mongo with targeted `$set`s, then re-read.
+
+    Never saves the whole doc, so a member or pet claimed since `doc` was read is not reopened.
+    Reads the stored rows because `UnassignedPet` fills a missing status with "open".
+    Returns `doc` unchanged when no pet row is legacy.
+    """
+    collection = UnassignedRegistration.get_pymongo_collection()
+    raw = await collection.find_one({"_id": doc.id}, {"household.pets": 1})
+    stored = ((raw or {}).get("household") or {}).get("pets") or []
+    if all(row.get("pet_id") and row.get("status") for row in stored):
+        return doc
+    for index, row in enumerate(stored):
+        # Each `$set` matches nothing when another writer filled the field first.
+        if not row.get("pet_id"):
+            await collection.update_one(
+                {"_id": doc.id, f"household.pets.{index}.pet_id": None},
+                {"$set": {f"household.pets.{index}.pet_id": _new_pet_id()}},
+            )
+        if row.get("status") is None:
+            await collection.update_one(
+                {"_id": doc.id, f"household.pets.{index}.status": None},
+                {"$set": {f"household.pets.{index}.status": "open"}},
+            )
+    return await UnassignedRegistration.get(doc.id) or doc
 
 
 def _open_pets(doc: UnassignedRegistration) -> list[UnassignedPet]:
@@ -259,10 +295,18 @@ def _normalize_photo_ref(photo: str | None) -> str | None:
     return raw if raw.startswith("gfs:") else f"gfs:{raw}"
 
 
-def _build_member(input_member: MemberInput) -> UnassignedMember:
+def _build_members(inputs: list[MemberInput]) -> list[UnassignedMember]:
+    """One request's members; its first member is the registrant who gave consent (FR-42)."""
+    ids = [f"evacuee:{new_ulid()}" for _ in inputs]
+    return [_build_member(m, evacuee_id, ids[0]) for m, evacuee_id in zip(inputs, ids, strict=True)]
+
+
+def _build_member(
+    input_member: MemberInput, reserved_evacuee_id: str, registrant_evacuee_id: str
+) -> UnassignedMember:
     phone = normalize_phone(input_member.phone) if input_member.phone else None
     return UnassignedMember(
-        reserved_evacuee_id=f"evacuee:{new_ulid()}",
+        reserved_evacuee_id=reserved_evacuee_id,
         status="open",
         first_name=input_member.first_name,
         last_name=input_member.last_name or "",
@@ -280,6 +324,8 @@ def _build_member(input_member: MemberInput) -> UnassignedMember:
         disability_other_detail=input_member.disability_other_detail,
         emergency_contact=_normalize_emergency_contact(input_member.emergency_contact),
         photo=_normalize_photo_ref(input_member.photo),
+        consent=bind_web_consent(input_member.consent, registrant_evacuee_id),
+        search_excluded=input_member.search_excluded,
     )
 
 
@@ -397,7 +443,7 @@ class UnassignedRegistrationsUseCase:
             return await self._join_existing(payload, join_id)
 
         now = datetime.now(UTC)
-        members = [_build_member(m) for m in payload.members]
+        members = _build_members(payload.members)
         open_person_ids, open_phones = _open_identity_keys(members)
 
         household = UnassignedHousehold(
@@ -467,7 +513,7 @@ class UnassignedRegistrationsUseCase:
         _ensure_pet_ids(doc)
 
         existing_person_ids, existing_phones = _existing_identity_keys(doc.members)
-        new_members = [_build_member(m) for m in payload.members]
+        new_members = _build_members(payload.members)
         for member in new_members:
             key = (
                 member.person_id.number.strip().upper()
@@ -740,6 +786,62 @@ class UnassignedRegistrationsUseCase:
             claimed=members_claimed > 0 and doc.status in ("closed", "claimed"),
         )
 
+    async def kiosk_lookup(
+        self, payload: UnassignedKioskLookupRequest
+    ) -> UnassignedKioskLookupResponse:
+        """Whole family of one registration for the kiosk (BFF, service secret) — no contact PII."""
+        try:
+            if payload.registration_id is not None:
+                doc = await UnassignedRegistration.get(payload.registration_id)
+            elif payload.evacuee_id is not None:
+                doc = await UnassignedRegistration.find_one(
+                    {"members.reserved_evacuee_id": payload.evacuee_id}
+                )
+            else:
+                # Repeating the partial filter lets Mongo use `uniq_open_person_id_numbers`.
+                doc = await UnassignedRegistration.find_one(
+                    {
+                        "open_person_id_numbers": normalize_national_id(payload.citizen_id or ""),
+                        "open_person_id_numbers.0": {"$exists": True},
+                    }
+                )
+        except (PyMongoError, ConnectionError, TimeoutError, OSError) as exc:
+            raise _mongo_unavailable("kiosk_lookup") from exc
+        if doc is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={
+                    "error": {
+                        "code": "NOT_FOUND",
+                        "message": "Unassigned Registration not found",
+                    }
+                },
+            )
+        citizen_id = normalize_national_id(payload.citizen_id) if payload.citizen_id else None
+        return UnassignedKioskLookupResponse(
+            registration_id=doc.id,
+            reserved_household_id=doc.reserved_household_id,
+            members=[
+                UnassignedKioskMember(
+                    reserved_evacuee_id=m.reserved_evacuee_id,
+                    first_name=m.first_name,
+                    last_name=m.last_name,
+                    gender=m.gender,
+                    age=m.age,
+                    status=m.status,
+                    claimed_shelter_code=m.claimed_shelter_code,
+                    matched=m.reserved_evacuee_id == payload.evacuee_id
+                    or (
+                        citizen_id is not None
+                        and m.status == "open"
+                        and m.person_id is not None
+                        and m.person_id.number == citizen_id
+                    ),
+                )
+                for m in doc.members
+            ],
+        )
+
     async def get_review(self, registration_id: str) -> UnassignedRegistrationReviewResponse:
         """Open-only pre-claim review (CR-140 addendum) — read-only, no write."""
         try:
@@ -903,11 +1005,10 @@ class UnassignedRegistrationsUseCase:
                 },
             )
 
-        if _ensure_pet_ids(doc):
-            try:
-                await doc.save()
-            except (PyMongoError, ConnectionError, TimeoutError, OSError) as exc:
-                raise _mongo_unavailable("claim") from exc
+        try:
+            doc = await _mint_missing_pet_ids(doc)
+        except (PyMongoError, ConnectionError, TimeoutError, OSError) as exc:
+            raise _mongo_unavailable("claim") from exc
 
         by_id = {m.reserved_evacuee_id: m for m in doc.members}
         by_pet_id = {p.pet_id: p for p in (doc.household.pets or []) if p.pet_id}
@@ -1060,38 +1161,17 @@ class UnassignedRegistrationsUseCase:
         image_payloads: list[CouchImagePayload] = []
 
         async def _append_gridfs_image(photo_ref: str, *, label: str) -> str | None:
-            loaded = await load_unassigned_photo(photo_ref)
-            if loaded is None:
-                logger.warning(
-                    "Unassigned claim: GridFS photo missing for %s (%s)",
-                    label,
-                    photo_ref,
-                )
-                return None
-            image_id = f"image:{new_ulid()}"
-            image_doc = build_couch_image(
-                image_id=image_id,
+            payload = await _load_couch_image_payload(
+                photo_ref,
+                label=label,
                 shelter_code=shelter_code,
                 actor=session.name,
                 now=now,
-                filename=loaded.filename,
-                content_type=loaded.content_type,
-                width=loaded.width or 0,
-                height=loaded.height or 0,
-                original_size=loaded.original_size or len(loaded.full_bytes),
-                compressed_size=loaded.compressed_size or len(loaded.full_bytes),
-                thumbnail_size=loaded.thumbnail_size
-                or len(loaded.thumb_bytes or loaded.full_bytes),
             )
-            image_payloads.append(
-                CouchImagePayload(
-                    doc=image_doc,
-                    full_bytes=loaded.full_bytes,
-                    thumb_bytes=loaded.thumb_bytes or loaded.full_bytes,
-                    content_type=loaded.content_type,
-                )
-            )
-            return image_id
+            if payload is None:
+                return None
+            image_payloads.append(payload)
+            return payload.doc["_id"]
 
         for member in claim_targets:
             if not member.photo:
@@ -1187,6 +1267,386 @@ class UnassignedRegistrationsUseCase:
             remaining_open=[_open_member_hit(m) for m in remaining_members],
             remaining_open_pets=[_open_pet_hit(p) for p in remaining_pets],
         )
+
+    async def kiosk_prepare(
+        self,
+        registration_id: str,
+        payload: UnassignedKioskPrepareRequest,
+    ) -> UnassignedKioskPrepareResponse:
+        """Kiosk claim step 1 — mark members, return Couch docs (FastAPI never writes Couch)."""
+        shelter_code = payload.shelter_code
+        actor = f"kiosk:{payload.device_id}"
+        member_ids = list(dict.fromkeys(payload.member_ids))
+        try:
+            doc = await UnassignedRegistration.get(registration_id)
+        except (PyMongoError, ConnectionError, TimeoutError, OSError) as exc:
+            raise _mongo_unavailable("kiosk_prepare") from exc
+        if doc is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={
+                    "error": {
+                        "code": "NOT_FOUND",
+                        "message": "Unassigned Registration not found",
+                    }
+                },
+            )
+        if payload.claim_pets:
+            try:
+                doc = await _mint_missing_pet_ids(doc)
+            except (PyMongoError, ConnectionError, TimeoutError, OSError) as exc:
+                raise _mongo_unavailable("kiosk_prepare") from exc
+
+        by_id = {m.reserved_evacuee_id: m for m in doc.members}
+        if any(mid not in by_id for mid in member_ids):
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={
+                    "error": {
+                        "code": "MEMBER_NOT_FOUND",
+                        "message": "One or more member ids are not on this registration",
+                    }
+                },
+            )
+        if payload.required_person_id is not None:
+            wanted = {
+                payload.required_person_id.strip().upper(),
+                normalize_national_id(payload.required_person_id),
+            }
+            if not any(
+                m.person_id and (m.person_id.number or "").strip().upper() in wanted
+                for m in doc.members
+            ):
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail={
+                        "error": {
+                            "code": "PERSON_MISMATCH",
+                            "message": "No member of this registration has that person id",
+                        }
+                    },
+                )
+        targets = [by_id[mid] for mid in member_ids]
+        elsewhere = [
+            m.reserved_evacuee_id
+            for m in targets
+            if m.status == "claimed" and m.claimed_shelter_code != shelter_code
+        ]
+        if elsewhere:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={
+                    "error": {
+                        "code": "ALREADY_CLAIMED",
+                        "message": "One or more members were already claimed elsewhere",
+                        "member_ids": elsewhere,
+                    }
+                },
+            )
+        cancelled = [m.reserved_evacuee_id for m in targets if m.status == "cancelled"]
+        if cancelled:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={
+                    "error": {
+                        "code": "MEMBER_NOT_OPEN",
+                        "message": "Cancelled members cannot be claimed",
+                        "member_ids": cancelled,
+                    }
+                },
+            )
+        to_mark = [m for m in targets if m.status == "open"]
+        now = datetime.now(UTC)
+
+        pet_targets = _open_pets(doc) if payload.claim_pets else []
+        pet_mark_ids = [p.pet_id for p in pet_targets if p.pet_id]
+        pet_mark_id_set = set(pet_mark_ids)
+
+        mark_ids = [m.reserved_evacuee_id for m in to_mark]
+        mark_id_set = set(mark_ids)
+        remaining_members = [
+            m
+            for m in doc.members
+            if m.status == "open" and m.reserved_evacuee_id not in mark_id_set
+        ]
+        remaining_pets = [p for p in _open_pets(doc) if (p.pet_id or "") not in pet_mark_id_set]
+        next_open_ids, next_open_phones = _open_identity_keys(remaining_members)
+        if (mark_ids or pet_mark_ids) and not await _atomic_mark_claimed(
+            ClaimMarkParams(
+                registration_id=doc.id,
+                member_ids=mark_ids,
+                pet_ids=pet_mark_ids,
+                shelter_code=shelter_code,
+                actor=actor,
+                claimed_at=now,
+                open_person_id_numbers=next_open_ids,
+                open_phones=next_open_phones,
+                document_status="open" if remaining_members or remaining_pets else "closed",
+            )
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={
+                    "error": {
+                        "code": "ALREADY_CLAIMED",
+                        "message": "One or more members or pets were already claimed",
+                    }
+                },
+            )
+
+        photo_by_member: dict[str, str] = {}
+        pet_image_urls: dict[str, str] = {}
+        images: list[UnassignedKioskImage] = []
+
+        async def _append_image(photo_ref: str, *, label: str) -> str | None:
+            image = await _load_couch_image_payload(
+                photo_ref,
+                label=label,
+                shelter_code=shelter_code,
+                actor=actor,
+                now=now,
+            )
+            if image is None:
+                return None
+            images.append(
+                UnassignedKioskImage(
+                    doc=image.doc,
+                    full_b64=base64.b64encode(image.full_bytes).decode("ascii"),
+                    thumb_b64=base64.b64encode(image.thumb_bytes).decode("ascii"),
+                    content_type=image.content_type,
+                )
+            )
+            return image.doc["_id"]
+
+        for member in targets:
+            if not member.photo:
+                continue
+            image_id = await _append_image(member.photo, label=member.reserved_evacuee_id)
+            if image_id:
+                photo_by_member[member.reserved_evacuee_id] = image_id
+
+        for pet in pet_targets:
+            if not pet.image_url or not pet.pet_id:
+                continue
+            image_id = await _append_image(pet.image_url, label=pet.pet_id)
+            if image_id:
+                pet_image_urls[pet.pet_id] = image_id
+
+        return UnassignedKioskPrepareResponse(
+            registration_id=doc.id,
+            shelter_code=shelter_code,
+            household=build_couch_household(
+                doc,
+                targets[0],
+                shelter_code,
+                actor,
+                now,
+                pets=pet_targets,
+                pet_image_urls=pet_image_urls or None,
+            ),
+            evacuees=[
+                build_couch_evacuee(
+                    member,
+                    doc.reserved_household_id,
+                    shelter_code,
+                    actor,
+                    now,
+                    doc,
+                    photo=photo_by_member.get(member.reserved_evacuee_id),
+                )
+                for member in targets
+            ],
+            images=images,
+            pets=[
+                build_couch_pet(pet, image_url=pet_image_urls.get(pet.pet_id or ""))
+                for pet in pet_targets
+            ],
+            pet_ids=pet_mark_ids,
+        )
+
+    async def kiosk_revert(
+        self,
+        registration_id: str,
+        payload: UnassignedKioskRevertRequest,
+    ) -> UnassignedKioskRevertResponse:
+        """Kiosk claim rollback — reopen the members and pets *this kiosk* claimed in that shelter.
+
+        Idempotent: members/pets that are not (or no longer) this kiosk's claim are skipped.
+        """
+        member_ids = list(dict.fromkeys(payload.member_ids))
+        pet_ids = list(dict.fromkeys(payload.pet_ids))
+        actor = f"kiosk:{payload.device_id}"
+        try:
+            for _ in range(_KIOSK_REVERT_ATTEMPTS):
+                doc = await UnassignedRegistration.get(registration_id)
+                if doc is None:
+                    raise HTTPException(
+                        status_code=status.HTTP_404_NOT_FOUND,
+                        detail={
+                            "error": {
+                                "code": "NOT_FOUND",
+                                "message": "Unassigned Registration not found",
+                            }
+                        },
+                    )
+                target_ids = [
+                    m.reserved_evacuee_id
+                    for m in doc.members
+                    if m.reserved_evacuee_id in member_ids
+                    and m.status == "claimed"
+                    and m.claimed_shelter_code == payload.shelter_code
+                    and m.claimed_by == actor
+                ]
+                target_pet_ids = [
+                    p.pet_id
+                    for p in (doc.household.pets or [])
+                    if p.pet_id
+                    and p.pet_id in pet_ids
+                    and p.effective_status() == "claimed"
+                    and p.claimed_shelter_code == payload.shelter_code
+                    and p.claimed_by == actor
+                ]
+                if not target_ids and not target_pet_ids:
+                    return UnassignedKioskRevertResponse(reverted=[])
+                if await _atomic_kiosk_revert(
+                    doc, target_ids, target_pet_ids, payload.shelter_code, actor
+                ):
+                    return UnassignedKioskRevertResponse(
+                        reverted=target_ids, reverted_pets=target_pet_ids
+                    )
+                # The document changed since it was read: re-read and recompute (FR-KUC-16a).
+        except (PyMongoError, ConnectionError, TimeoutError, OSError) as exc:
+            raise _mongo_unavailable("kiosk_revert") from exc
+        raise _mongo_unavailable("kiosk_revert")
+
+
+async def _atomic_kiosk_revert(
+    doc: UnassignedRegistration,
+    target_ids: list[str],
+    target_pet_ids: list[str],
+    shelter_code: str,
+    actor: str,
+) -> bool:
+    """Reopen the members and pets in one update, only if `doc` is still as it was read.
+
+    False when anything changed since the read (another claim, a concurrent revert), so a member
+    claimed meanwhile never has its keys reopened.
+    """
+    reopened = [
+        m.model_copy(update={"status": "open"}) if m.reserved_evacuee_id in target_ids else m
+        for m in doc.members
+    ]
+    try:
+        next_open_ids, next_open_phones = _open_identity_keys(reopened)
+        owned = {
+            "status": "claimed",
+            "claimed_shelter_code": shelter_code,
+            "claimed_by": actor,
+        }
+        member_owned = {"reserved_evacuee_id": {"$in": target_ids}, **owned}
+        pet_owned = {"pet_id": {"$in": target_pet_ids}, **owned}
+        and_clauses: list[dict] = [
+            {"members": {"$elemMatch": {**member_owned, "reserved_evacuee_id": tid}}}
+            for tid in target_ids
+        ]
+        and_clauses += [
+            {"household.pets": {"$elemMatch": {**pet_owned, "pet_id": pid}}}
+            for pid in target_pet_ids
+        ]
+        set_fields: dict = {
+            "open_person_id_numbers": next_open_ids,
+            "open_phones": next_open_phones,
+            # At least one member or pet is open again, so the document is open.
+            "status": "open",
+        }
+        array_filters: list[dict] = []
+        if target_ids:
+            set_fields["members.$[m].status"] = "open"
+            set_fields["members.$[m].claimed_shelter_code"] = None
+            set_fields["members.$[m].claimed_by"] = None
+            set_fields["members.$[m].claimed_at"] = None
+            array_filters.append({f"m.{key}": value for key, value in member_owned.items()})
+        if target_pet_ids:
+            set_fields["household.pets.$[p].status"] = "open"
+            set_fields["household.pets.$[p].claimed_shelter_code"] = None
+            set_fields["household.pets.$[p].claimed_by"] = None
+            set_fields["household.pets.$[p].claimed_at"] = None
+            array_filters.append({f"p.{key}": value for key, value in pet_owned.items()})
+        result = await UnassignedRegistration.get_pymongo_collection().update_one(
+            {
+                "_id": doc.id,
+                "open_person_id_numbers": doc.open_person_id_numbers,
+                "open_phones": doc.open_phones,
+                "$and": and_clauses,
+            },
+            {"$set": set_fields},
+            array_filters=array_filters,
+        )
+    except (DuplicateKeyError, HTTPException) as exc:
+        # Someone re-registered the same identity while the claim was in flight.
+        logger.warning(
+            "Kiosk revert blocked by duplicate open identity: registration_id=%s member_ids=%s",
+            doc.id,
+            target_ids,
+        )
+        if isinstance(exc, HTTPException):
+            raise
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"error": "DUPLICATE_OPEN_IDENTITY"},
+        ) from exc
+    return result.matched_count == 1
+
+
+async def _load_couch_image_payload(
+    photo_ref: str,
+    *,
+    label: str,
+    shelter_code: str,
+    actor: str,
+    now: datetime,
+) -> CouchImagePayload | None:
+    """GridFS photo → Couch `image:{ulid}` doc + bytes; None when the GridFS row is gone.
+
+    A failed read also gives None: the caller has already marked the claim, so it goes on
+    without the photo rather than failing with the claim half done.
+    """
+    try:
+        loaded = await load_unassigned_photo(photo_ref)
+    except PyMongoError, ConnectionError, TimeoutError, OSError:
+        logger.warning(
+            "Unassigned claim: GridFS photo read failed for %s (%s)",
+            label,
+            photo_ref,
+            exc_info=True,
+        )
+        return None
+    if loaded is None:
+        logger.warning(
+            "Unassigned claim: GridFS photo missing for %s (%s)",
+            label,
+            photo_ref,
+        )
+        return None
+    image_doc = build_couch_image(
+        image_id=f"image:{new_ulid()}",
+        shelter_code=shelter_code,
+        actor=actor,
+        now=now,
+        filename=loaded.filename,
+        content_type=loaded.content_type,
+        width=loaded.width or 0,
+        height=loaded.height or 0,
+        original_size=loaded.original_size or len(loaded.full_bytes),
+        compressed_size=loaded.compressed_size or len(loaded.full_bytes),
+        thumbnail_size=loaded.thumbnail_size or len(loaded.thumb_bytes or loaded.full_bytes),
+    )
+    return CouchImagePayload(
+        doc=image_doc,
+        full_bytes=loaded.full_bytes,
+        thumb_bytes=loaded.thumb_bytes or loaded.full_bytes,
+        content_type=loaded.content_type,
+    )
 
 
 def _resolve_claim_shelter(session: StaffSession, requested: str | None) -> str:
@@ -1464,6 +1924,8 @@ def _open_member_hit(member: UnassignedMember) -> OpenMemberHit:
         photo=member.photo,
         birth_year=member.birth_year,
         age=member.age,
+        consent=member.consent,
+        search_excluded=member.search_excluded,
     )
 
 

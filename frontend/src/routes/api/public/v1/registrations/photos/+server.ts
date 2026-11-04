@@ -6,7 +6,6 @@ import {
 	savePublicBookingImage
 } from '$lib/features/public-register/save-public-booking-image.server';
 import { isShelterBookable } from '$lib/features/shelters/server';
-import { registerIpLimiter } from '$lib/server/security/rate-limiter';
 import { findMasterByCode } from '$lib/server/shelters.admin';
 
 export const prerender = false;
@@ -31,12 +30,7 @@ function formNumber(form: FormData, key: string): number {
  * Multipart fields mirror unassigned GridFS upload so the unified form can
  * reuse the compressed full/thumb payload; `shelter_code` selects the DB.
  */
-export const POST: RequestHandler = async ({ request, getClientAddress }) => {
-	const ip = getClientAddress();
-	if (!registerIpLimiter.check(ip)) {
-		return json({ success: false, error: 'RATE_LIMITED' }, { status: 429, headers: noStore });
-	}
-
+export const POST: RequestHandler = async ({ request }) => {
 	const form = await request.formData().catch(() => null);
 	if (!form) {
 		return json({ success: false, error: 'INVALID_INPUT' }, { status: 422, headers: noStore });

@@ -5,15 +5,17 @@
 		useMealServices,
 		useMealServiceReceipts,
 		useKitchenRequisitions,
-		useActiveEvacueeDietCounts,
+		useShelterMealHeadcount,
 		useCreateMealSession,
 		useDeleteMealSession,
 		computeSessionGroupProgress,
 		computeMealVariance,
 		mealServiceReceiptOutcome,
+		mealServiceRef,
 		MEAL_PERIOD_LABELS,
 		MEAL_VARIANCE_STATUS_LABELS,
 		TARGET_GROUP_LABELS,
+		TARGET_GROUP_SHORT_LABELS,
 		type MealSession,
 		type MealPlan,
 		type MealPeriod,
@@ -45,6 +47,7 @@
 	import { Label } from '$lib/components/ui/label';
 	import { Textarea } from '$lib/components/ui/textarea';
 	import { toast } from 'svelte-sonner';
+	import ArrowRight from '@lucide/svelte/icons/arrow-right';
 	import Plus from '@lucide/svelte/icons/plus';
 	import Search from '@lucide/svelte/icons/search';
 	import ChefHat from '@lucide/svelte/icons/chef-hat';
@@ -66,7 +69,7 @@
 	const services = useMealServices();
 	const serviceReceipts = useMealServiceReceipts();
 	const requisitions = useKitchenRequisitions();
-	const dietCounts = useActiveEvacueeDietCounts();
+	const mealHeadcount = useShelterMealHeadcount();
 	const tickets = useTickets();
 
 	// Per meal_plan_id: the most relevant requisition_ticket (CR-141 write path — the legacy
@@ -157,7 +160,8 @@
 	): 'A' | 'B' | 'C' {
 		if (hasService) return 'C';
 		if (!ticket) return 'A';
-		if (ticket.status === 'IN_TRANSIT' || ticket.status === 'COMPLETED') return 'C';
+		// IN_TRANSIT stays on B — the kitchen's "ยืนยันรับวัตถุดิบ" lives there.
+		if (ticket.status === 'COMPLETED') return 'C';
 		return 'B';
 	}
 
@@ -178,6 +182,13 @@
 	let countRegular = $state(0);
 	let countVolunteer = $state(0);
 
+	const shelterPeople = $derived(mealHeadcount.data?.people);
+	const shelterPeopleCards = $derived([
+		{ key: 'evacuees', label: 'ผู้อพยพ', count: shelterPeople?.evacuees },
+		{ key: 'staff', label: 'เจ้าหน้าที่', count: shelterPeople?.staff },
+		{ key: 'volunteers', label: 'อาสาสมัคร', count: shelterPeople?.volunteers }
+	]);
+
 	const formTotal = $derived(
 		Number(countHalal || 0) +
 			Number(countInfant || 0) +
@@ -187,7 +198,7 @@
 	);
 
 	function openCreateDialog() {
-		const counts = dietCounts.data;
+		const counts = mealHeadcount.data?.headcount;
 		if (counts) {
 			countHalal = counts.halal;
 			countInfant = counts.infant;
@@ -325,8 +336,6 @@
 			return s.name.toLowerCase().includes(q) || s.date.includes(q);
 		});
 	});
-
-	const groupKeys: TargetGroupTag[] = ['halal', 'infant', 'soft_food', 'regular', 'volunteer'];
 
 	let expandedSessionIds = $state<string[]>([]);
 	let initializedSessions = $state(false);
@@ -533,14 +542,17 @@
 
 									<!-- Group Completion Badge -->
 									<span
-										class="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-bold {progress.isAllCompleted
-											? 'bg-green-100 text-green-800'
-											: 'bg-amber-100 text-amber-800'}"
+										class="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-bold {progress.totalCount ===
+										0
+											? 'bg-slate-100 text-slate-600'
+											: progress.isAllCompleted
+												? 'bg-green-100 text-green-800'
+												: 'bg-amber-100 text-amber-800'}"
 									>
-										{#if !progress.isAllCompleted}
+										{#if progress.totalCount > 0 && !progress.isAllCompleted}
 											<AlertTriangle class="h-3.5 w-3.5" />
 										{/if}
-										{progress.summaryText}ครบ
+										{progress.summaryText}
 									</span>
 
 									<!-- Status Badge -->
@@ -588,20 +600,20 @@
 									<div>
 										<div class="mb-2 flex items-center justify-between">
 											<span class="text-xs font-semibold text-muted-foreground">
-												เป้าหมาย 5 กลุ่มความต้องการ (รวม {session.target_headcount.total} จาน)
+												เป้าหมายตามกลุ่มความต้องการ (รวม {progress.totalTarget} จาน)
 											</span>
 										</div>
 
 										<div class="overflow-hidden rounded-lg border">
 											<Table.Root>
 												<Table.Header>
-													<Table.Row class="bg-muted/30 text-2xs">
+													<Table.Row class="bg-muted/30 text-sm">
 														<Table.Head class="px-4 py-2 font-semibold">กลุ่มเป้าหมาย</Table.Head>
 														<Table.Head class="px-3 py-2 text-right font-semibold">
-															จำนวนเป้าหมาย (คน)
+															เป้าหมาย (จาน)
 														</Table.Head>
 														<Table.Head class="px-3 py-2 text-right font-semibold">
-															ทำแล้ว (จาน)
+															ได้รับ (จาน)
 														</Table.Head>
 														<Table.Head class="px-3 py-2 text-center font-semibold"
 															>สถานะ</Table.Head
@@ -609,33 +621,70 @@
 													</Table.Row>
 												</Table.Header>
 												<Table.Body>
-													{#each groupKeys as groupKey (groupKey)}
-														{@const item = progress.groups[groupKey]}
+													{#each progress.activeTags as tag (tag)}
+														{@const item = progress.groups[tag]}
 														<Table.Row class="text-xs">
 															<Table.Cell class="px-4 py-2 font-semibold">
-																{TARGET_GROUP_LABELS[groupKey]}
+																{TARGET_GROUP_LABELS[tag]}
 															</Table.Cell>
-															<Table.Cell class="px-3 py-2 text-right">{item.target}</Table.Cell>
-															<Table.Cell class="px-3 py-2 text-right font-semibold">
-																{item.actualYield}
+															<Table.Cell class="px-3 py-2 text-right tabular-nums"
+																>{item.target}</Table.Cell
+															>
+															<Table.Cell class="px-3 py-2 text-right font-semibold tabular-nums">
+																{item.received}
 															</Table.Cell>
 															<Table.Cell class="px-3 py-2 text-center">
 																<span
-																	class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-2xs font-bold {item.isCompleted
+																	class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-bold {item.isCompleted
 																		? 'bg-green-100 text-green-800'
 																		: 'bg-amber-100 text-amber-800'}"
 																>
 																	{#if item.isCompleted}
 																		<CheckCircle2 class="h-3 w-3" />
-																		ครบแล้ว
+																		ครบ
 																	{:else}
 																		<Clock class="h-3 w-3" />
-																		ยังไม่ครบ
+																		ขาด <span class="tabular-nums">{item.shortfall}</span>
 																	{/if}
 																</span>
 															</Table.Cell>
 														</Table.Row>
 													{/each}
+													{#if progress.noTargetTags.length > 0}
+														<Table.Row class="text-xs text-muted-foreground">
+															<Table.Cell class="px-4 py-2 font-semibold">
+																{progress.noTargetTags
+																	.map((tag) => TARGET_GROUP_SHORT_LABELS[tag])
+																	.join(' / ')}
+															</Table.Cell>
+															<Table.Cell class="px-3 py-2 text-right tabular-nums">0</Table.Cell>
+															<Table.Cell class="px-3 py-2 text-right">—</Table.Cell>
+															<Table.Cell class="px-3 py-2 text-center">
+																<span
+																	class="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-600"
+																>
+																	ไม่มีเป้าหมาย
+																</span>
+															</Table.Cell>
+														</Table.Row>
+													{/if}
+													<Table.Row class="bg-muted/20 text-xs font-bold">
+														<Table.Cell class="px-4 py-2">รวม</Table.Cell>
+														<Table.Cell class="px-3 py-2 text-right tabular-nums">
+															{progress.totalTarget}
+														</Table.Cell>
+														<Table.Cell class="px-3 py-2 text-right tabular-nums">
+															{progress.totalProduced}
+															{#if progress.surplus > 0}
+																<span class="font-semibold text-muted-foreground">
+																	· เกิน {progress.surplus}</span
+																>
+															{/if}
+														</Table.Cell>
+														<Table.Cell class="px-3 py-2 text-center">
+															{progress.summaryText}
+														</Table.Cell>
+													</Table.Row>
 												</Table.Body>
 											</Table.Root>
 										</div>
@@ -650,20 +699,26 @@
 											class="gap-0 border-b bg-muted/30"
 										>
 											<div class="flex flex-wrap items-center justify-between gap-2 px-3 py-2">
-												<Tabs.List class="h-auto gap-1.5 bg-transparent p-0">
+												<Tabs.List class="h-auto w-full gap-1.5 bg-transparent p-0 sm:w-auto">
 													<Tabs.Trigger
 														value="plans"
-														class="gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold text-muted-foreground data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm"
+														class="min-w-0 flex-1 gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold text-muted-foreground data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm sm:flex-none"
 													>
 														<Utensils class="h-3.5 w-3.5" />
-														ชุดการผลิต & แผนอาหาร ({sessionPlans.length})
+														<span class="sm:hidden">ชุดการผลิต</span><span class="hidden sm:inline"
+															>ชุดการผลิต & แผนอาหาร</span
+														>
+														({sessionPlans.length})
 													</Tabs.Trigger>
 													<Tabs.Trigger
 														value="services"
-														class="gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold text-muted-foreground data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm"
+														class="min-w-0 flex-1 gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold text-muted-foreground data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm sm:flex-none"
 													>
 														<ClipboardCheck class="h-3.5 w-3.5" />
-														สรุปบริการของมื้อนี้ ({sessionServices.length})
+														<span class="sm:hidden">สรุปบริการ</span><span class="hidden sm:inline"
+															>สรุปบริการของมื้อนี้</span
+														>
+														({sessionServices.length})
 													</Tabs.Trigger>
 												</Tabs.List>
 
@@ -701,6 +756,9 @@
 																		(r) => r.meal_service_id === planSvc._id
 																	)
 																: undefined}
+															{@const latestPlanSvc = sessionServices
+																.filter((s) => s.meal_plan_id === plan._id)
+																.at(-1)}
 															{@const planReceiptConfirmed = planReceipt
 																? mealServiceReceiptOutcome(planReceipt) === 'confirmed'
 																: false}
@@ -718,7 +776,7 @@
 																		<div class="flex flex-wrap gap-1">
 																			{#each plan.target_tags as tag (tag)}
 																				<span
-																					class="rounded bg-secondary px-1.5 py-0.5 text-2xs font-medium text-secondary-foreground"
+																					class="rounded bg-secondary px-1.5 py-0.5 text-xs font-medium text-secondary-foreground"
 																				>
 																					{TARGET_GROUP_LABELS[tag as TargetGroupTag] ?? tag}
 																				</span>
@@ -730,16 +788,39 @@
 																		(เป้า {plan.allocated_target ?? plan.headcount.total} จาน)
 																	</span>
 
-																	{#if ticket}
-																		<a
-																			href={resolve(
-																				`/back-office/tickets/${encodeURIComponent(ticket._id)}`
-																			)}
-																			class="font-mono text-2xs font-semibold text-primary hover:underline"
-																			title="เปิดตั๋วเบิกวัตถุดิบ"
+																	<!-- Linked documents: requisition out (TKT) → cooked food in (RCV) -->
+																	{#if ticket || latestPlanSvc}
+																		<span
+																			class="inline-flex basis-full flex-wrap items-center gap-1.5 text-xs sm:basis-auto"
 																		>
-																			{ticket.ticket_no}
-																		</a>
+																			{#if ticket}
+																				<span class="text-muted-foreground">เบิก</span>
+																				<a
+																					href={resolve(
+																						`/back-office/tickets/${encodeURIComponent(ticket._id)}`
+																					)}
+																					class="font-semibold text-primary tabular-nums hover:underline"
+																					title="เปิดตั๋วเบิกวัตถุดิบ"
+																				>
+																					{ticket.ticket_no}
+																				</a>
+																			{/if}
+																			{#if ticket && latestPlanSvc}
+																				<ArrowRight class="h-3.5 w-3.5 text-muted-foreground" />
+																			{/if}
+																			{#if latestPlanSvc}
+																				<span class="text-muted-foreground">รับเข้า</span>
+																				<a
+																					href={resolve(
+																						`/back-office/kitchen/receive-stock/${session._id}?plan_id=${plan._id}`
+																					)}
+																					class="font-semibold text-primary tabular-nums hover:underline"
+																					title="เปิดรายการรับอาหารปรุงเสร็จเข้าคลัง"
+																				>
+																					{mealServiceRef(latestPlanSvc)}
+																				</a>
+																			{/if}
+																		</span>
 																	{/if}
 																</div>
 
@@ -753,14 +834,14 @@
 																			planReceiptConfirmed
 																		)}
 																		<span
-																			class="inline-flex items-center gap-1 rounded px-2 py-0.5 font-mono text-2xs font-bold {status.className}"
+																			class="inline-flex items-center gap-1 rounded px-2 py-0.5 text-xs font-bold {status.className}"
 																			title="ตั๋วเบิกวัตถุดิบ"
 																		>
 																			{status.label}
 																		</span>
 																	{:else if planReq}
 																		<span
-																			class="inline-flex items-center gap-1 rounded px-2 py-0.5 font-mono text-2xs font-bold {planReq.status ===
+																			class="inline-flex items-center gap-1 rounded px-2 py-0.5 text-xs font-bold {planReq.status ===
 																			'approved'
 																				? 'bg-green-100 text-green-800'
 																				: planReq.status === 'rejected'
@@ -819,7 +900,7 @@
 														<p class="font-medium text-foreground">
 															ยังไม่มีการบันทึกผลบริการในมื้อนี้
 														</p>
-														<p class="mt-1 text-2xs">
+														<p class="mt-1 text-xs">
 															เมื่อคลังอนุมัติวัตถุดิบและปรุงอาหารเสร็จสิ้น สามารถกดปุ่ม
 															"บันทึกผลผลิต (Stage 3)" เพื่อบันทึกยอดแจกจ่ายจริงได้
 														</p>
@@ -828,7 +909,7 @@
 													<div class="overflow-x-auto rounded-md border bg-background">
 														<Table.Root>
 															<Table.Header>
-																<Table.Row class="bg-muted/30 text-2xs">
+																<Table.Row class="bg-muted/30 text-sm">
 																	<Table.Head class="px-4 py-2 font-semibold">แผนต้นทาง</Table.Head>
 																	<Table.Head class="px-3 py-2 text-right font-semibold"
 																		>วางแผน</Table.Head
@@ -860,39 +941,39 @@
 																		<Table.Cell class="px-4 py-2 font-medium">
 																			{plan?.label ?? 'เมนูอาหาร'}
 																		</Table.Cell>
-																		<Table.Cell class="px-3 py-2 text-right font-mono">
+																		<Table.Cell class="px-3 py-2 text-right tabular-nums">
 																			{v.planned !== null ? `${v.planned} จาน` : '—'}
 																		</Table.Cell>
 																		<Table.Cell
-																			class="px-3 py-2 text-right font-mono font-bold text-foreground"
+																			class="px-3 py-2 text-right font-bold text-foreground tabular-nums"
 																		>
 																			{v.actual_yield} จาน
 																		</Table.Cell>
 																		<Table.Cell
-																			class="px-3 py-2 text-right font-mono text-emerald-700"
+																			class="px-3 py-2 text-right text-emerald-700 tabular-nums"
 																		>
 																			{v.served}
 																		</Table.Cell>
 																		<Table.Cell
-																			class="px-3 py-2 text-right font-mono text-muted-foreground"
+																			class="px-3 py-2 text-right text-muted-foreground tabular-nums"
 																		>
 																			{v.external}
 																		</Table.Cell>
 																		<Table.Cell
-																			class="px-3 py-2 text-right font-mono text-amber-700"
+																			class="px-3 py-2 text-right text-amber-700 tabular-nums"
 																		>
 																			{v.waste}
 																		</Table.Cell>
 																		<Table.Cell class="px-3 py-2">
 																			<span
-																				class="inline-flex rounded-full border px-2 py-0.5 text-2xs font-semibold {STATUS_CLASS[
+																				class="inline-flex rounded-full border px-2 py-0.5 text-xs font-semibold {STATUS_CLASS[
 																					v.status
 																				]}"
 																			>
 																				{MEAL_VARIANCE_STATUS_LABELS[v.status]}
 																			</span>
 																		</Table.Cell>
-																		<Table.Cell class="px-4 py-2 text-2xs text-muted-foreground">
+																		<Table.Cell class="px-4 py-2 text-xs text-muted-foreground">
 																			<div>{svc.created_by}</div>
 																			<div>{formatThaiDateTime(svc.created_at)}</div>
 																		</Table.Cell>
@@ -917,7 +998,7 @@
 
 <!-- Create Meal Session Modal -->
 <Dialog.Root bind:open={createDialogOpen}>
-	<Dialog.Content class="sm:max-w-xl">
+	<Dialog.Content class="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-xl">
 		<Dialog.Header>
 			<Dialog.Title class="text-base font-bold text-foreground sm:text-lg"
 				>สร้างรอบมื้ออาหารใหม่</Dialog.Title
@@ -927,7 +1008,7 @@
 			</Dialog.Description>
 		</Dialog.Header>
 
-		<div class="space-y-4 py-2">
+		<div class="min-w-0 space-y-4 py-2">
 			<div>
 				<Label for="session-name" class="text-xs font-medium">ชื่อรอบมื้ออาหาร</Label>
 				<Input id="session-name" bind:value={formName} class="mt-1.5 h-9 text-sm" />
@@ -955,6 +1036,21 @@
 				</div>
 			</div>
 
+			<div class="flex gap-2.5 overflow-x-auto" data-testid="shelter-people-counts">
+				{#each shelterPeopleCards as card (card.key)}
+					<div
+						class="min-w-32 shrink-0 grow rounded-lg border bg-background p-2.5 shadow-2xs"
+						data-testid="shelter-people-{card.key}"
+					>
+						<div class="text-xs font-medium text-muted-foreground">{card.label}</div>
+						<div class="mt-0.5 text-base font-bold text-foreground tabular-nums">
+							{card.count ?? '–'}
+							<span class="text-xs font-medium text-muted-foreground">คน</span>
+						</div>
+					</div>
+				{/each}
+			</div>
+
 			<!-- 5-Group Target Headcount Inputs -->
 			<div class="rounded-xl border bg-muted/20 p-3.5 sm:p-4">
 				<div class="mb-3 flex items-center justify-between">
@@ -962,7 +1058,9 @@
 						<span class="text-xs font-semibold text-foreground"
 							>เป้าหมายจำนวนจานแยกกลุ่ม (5 กลุ่ม)</span
 						>
-						<p class="text-2xs text-muted-foreground">จัดสรรตามกลุ่มผู้อพยพและกำลังพลปฏิบัติงาน</p>
+						<p class="text-xs text-muted-foreground">
+							จัดสรรตามกลุ่มผู้เข้าพักและกำลังพลปฏิบัติงาน
+						</p>
 					</div>
 					<span class="rounded-full bg-primary/10 px-3 py-1 text-xs font-bold text-primary">
 						รวม {formTotal} จาน

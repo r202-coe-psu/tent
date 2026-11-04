@@ -10,6 +10,10 @@
 		useCreateShelter,
 		useUpdateShelter,
 		shelterSchema,
+		needsShelterCloseModal,
+		ShelterCloseDialog,
+		type Shelter,
+		type ShelterCloseResult,
 		type SiteKind,
 		BasicInfoSection,
 		ZonesFacilitiesSection,
@@ -27,6 +31,8 @@
 	} from '$lib/features/shelters';
 	import { collectErrorMessages, findInvalidSectionIds } from './shelter-form-validation';
 	import ShelterFormStickyNav from './shelter-form-sticky-nav.svelte';
+	import { authStore } from '$lib/stores/auth.svelte';
+	import { isShelterManager, isSystemAdmin } from '$lib/auth/roles';
 	import { createScrollSpy } from '$lib/utils/scroll-spy';
 	import MapPin from '@lucide/svelte/icons/map-pin';
 	import Building2 from '@lucide/svelte/icons/building-2';
@@ -76,6 +82,40 @@
 	const createMutation = useCreateShelter();
 	const updateMutation = useUpdateShelter();
 
+	// CR-219 FR-15: saving a not-yet-closed shelter as `closed` goes through the confirm modal
+	// first; the form data waits here until the close request has finished.
+	let closeDialogOpen = $state(false);
+	let pendingCloseData = $state.raw<Shelter | null>(null);
+	const storedStatus = $derived(shelterQuery.data?.operation_status);
+
+	// CR-219 FR-23: only SA / this shelter's manager may pick "closed" (create mode is unchanged).
+	const canCloseShelter = $derived.by(() => {
+		if (!isEdit) return true;
+		const roles = authStore.user?.roles ?? [];
+		return isSystemAdmin(roles) || isShelterManager(roles, id);
+	});
+
+	function revertOperationStatus() {
+		if (storedStatus) $formData.operation_status = storedStatus;
+	}
+
+	function handleCloseCancel() {
+		// FR-18: nothing was sent; put the select back to the stored value.
+		pendingCloseData = null;
+		revertOperationStatus();
+	}
+
+	function handleCloseFinish(result: ShelterCloseResult) {
+		const data = pendingCloseData;
+		pendingCloseData = null;
+		if (!result.closed || !data) {
+			revertOperationStatus();
+			return;
+		}
+		// Registry is closed now, so the normal save (other edited fields) passes the PATCH guard.
+		updateMutation.mutate({ code: id, input: data });
+	}
+
 	const sections = [
 		{ id: 'basic-info', label: 'ข้อมูลพื้นฐานและที่ตั้ง', icon: MapPin },
 		{ id: 'capacity', label: 'ความจุ โซน และสิ่งอำนวยความสะดวก', icon: Building2 },
@@ -122,6 +162,12 @@
 			showValidationSummary = false;
 			const data = validated.data;
 
+			if (isEdit && needsShelterCloseModal(storedStatus, data.operation_status)) {
+				pendingCloseData = data;
+				closeDialogOpen = true;
+				return;
+			}
+
 			if (isEdit) {
 				// Stay on the edit form; success toast comes from useUpdateShelter.
 				updateMutation.mutate({ code: id, input: data });
@@ -164,7 +210,8 @@
 	if (!$formData.feature_flags) $formData.feature_flags = { ...DEFAULT_SHELTER_FEATURE_FLAGS };
 	if (!$formData.food_distribution_points) $formData.food_distribution_points = [];
 
-	$effect(() => {
+	// `.pre` so a kind carried in from the list filter (FR-11) lands before the master default seeds.
+	$effect.pre(() => {
 		if (!isEdit && siteKind && !$formData.site_kind) $formData.site_kind = siteKind;
 	});
 
@@ -262,6 +309,12 @@
 					label: 'เต็มความจุ (Full)',
 					classes: 'border border-amber-200 bg-amber-50 text-amber-900',
 					dot: 'bg-amber-500'
+				};
+			case 'cancelled':
+				return {
+					label: 'ยกเลิกศูนย์ (Cancelled)',
+					classes: 'border border-red-200 bg-red-50 text-red-900',
+					dot: 'bg-red-500'
 				};
 			case 'closed':
 				return {
@@ -494,7 +547,12 @@
 						onkeydown={onFormKeydown}
 						{@attach scrollSpy}
 					>
-						<BasicInfoSection {form} {formData} />
+						<BasicInfoSection
+							{form}
+							{formData}
+							canClose={canCloseShelter}
+							storedStatus={isEdit ? storedStatus : undefined}
+						/>
 						<ZonesFacilitiesSection {form} {formData} shelterCode={id} />
 						<FoodDistributionSection {form} {formData} />
 						<StoragePointsSection {form} {formData} />
@@ -507,6 +565,16 @@
 				</div>
 			</div>
 		</div>
+
+		{#if isEdit && shelterQuery.data}
+			<ShelterCloseDialog
+				bind:open={closeDialogOpen}
+				code={id}
+				name={shelterQuery.data.name}
+				oncancel={handleCloseCancel}
+				onfinish={handleCloseFinish}
+			/>
+		{/if}
 
 		<ShelterFormStickyNav
 			{sections}

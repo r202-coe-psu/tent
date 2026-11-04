@@ -1,18 +1,34 @@
 import { describe, expect, it, vi } from 'vitest';
+import { mintConsentStamp, type ConsentDecision } from '$lib/features/consent/server';
 import { KioskRequestError } from '../data/kiosk-check-in.api';
-import { abandonWalkIn, registerWalkInCardRead, submitWalkInThaid } from './walk-in-registration';
+import {
+	abandonWalkIn,
+	registerWalkInCardRead,
+	restartThaidWalkIn,
+	submitWalkInThaid,
+	THAID_CONSENT_EXPIRED_MESSAGE
+} from './walk-in-registration';
 import { createWalkInSession } from './walk-in-session.svelte';
 
+const decision: ConsentDecision = {
+	mode: 'full',
+	health: false,
+	search_visible: true,
+	guardian_for: [],
+	verbal: false,
+	...mintConsentStamp()
+};
 const session = {
 	citizenId: '1234567890123',
-	consented: true,
-	consentedAt: new Date().toISOString()
+	consentDecision: decision
 };
 const card = { citizen_id: '1234567890123' } as never;
 const registration = {
 	evacuee_id: 'evacuee:01',
 	qr_payload: 'qr-payload',
-	label: { name: 'สมชาย ใจดี', phone: '0812345678' }
+	label: { name: 'สมชาย ใจดี', phone: '0812345678' },
+	consent_ref: decision.ref,
+	consent_mode: 'full' as const
 };
 
 describe('registerWalkInCardRead', () => {
@@ -23,6 +39,18 @@ describe('registerWalkInCardRead', () => {
 			registerWalkInCardRead({ citizen_id: '9999999999999' } as never, session, register)
 		).resolves.toMatchObject({ kind: 'mismatch' });
 		expect(register).not.toHaveBeenCalled();
+	});
+
+	it('hands the consent decision to the register call and registers nothing without one', async () => {
+		const register = vi.fn().mockResolvedValue(registration);
+		await registerWalkInCardRead(card, session, register);
+		expect(register).toHaveBeenCalledWith(card, decision, null);
+
+		const none = vi.fn();
+		await expect(
+			registerWalkInCardRead(card, { ...session, consentDecision: null }, none)
+		).resolves.toEqual({ kind: 'ignored' });
+		expect(none).not.toHaveBeenCalled();
 	});
 
 	it('allows retry after registration failure', async () => {
@@ -55,27 +83,100 @@ describe('registerWalkInCardRead', () => {
 	});
 });
 
+describe('stale consent', () => {
+	const stale = () =>
+		vi
+			.fn()
+			.mockRejectedValue(
+				new KioskRequestError('การยินยอมหมดเวลาแล้ว', 400, 'KIOSK_CONSENT_EXPIRED')
+			);
+
+	it('sends a card walk-in back to consent instead of a retry of the same decision', async () => {
+		await expect(registerWalkInCardRead(card, session, stale())).resolves.toEqual({
+			kind: 'consent_expired',
+			message: 'การยินยอมหมดเวลาแล้ว'
+		});
+	});
+
+	it('sends a ThaiD walk-in back to the scan: its verified session is long gone', async () => {
+		await expect(
+			submitWalkInThaid(
+				{ thaidSessionId: 'a'.repeat(32), consentDecision: decision, phone: null },
+				stale()
+			)
+		).resolves.toEqual({ kind: 'thaid_restart', message: THAID_CONSENT_EXPIRED_MESSAGE });
+	});
+
+	it('resets a ThaiD walk-in to the scan start, burning the dead session and saying why', () => {
+		const walkIn = createWalkInSession();
+		walkIn.beginThaid('b'.repeat(32));
+		walkIn.recordConsent(decision);
+		walkIn.phone = '0812345678';
+		const cancelThaid = vi.fn().mockResolvedValue(undefined);
+
+		restartThaidWalkIn(THAID_CONSENT_EXPIRED_MESSAGE, walkIn, cancelThaid);
+
+		expect(cancelThaid).toHaveBeenCalledWith('b'.repeat(32));
+		expect(walkIn.active).toBe(false);
+		expect(walkIn.source).toBeNull();
+		expect(walkIn.consentDecision).toBeNull();
+		expect(walkIn.phone).toBeNull();
+		expect(walkIn.takeThaidRestartNotice()).toBe(THAID_CONSENT_EXPIRED_MESSAGE);
+		expect(walkIn.takeThaidRestartNotice()).toBeNull();
+	});
+
+	it('leaves a card walk-in on the consent path: card and face stay held', () => {
+		const walkIn = createWalkInSession();
+		walkIn.begin('1234567890123');
+		walkIn.recordConsent(decision);
+
+		walkIn.withdrawConsent('การยินยอมหมดเวลาแล้ว');
+
+		expect(walkIn.active).toBe(true);
+		expect(walkIn.consentNotice).toBe('การยินยอมหมดเวลาแล้ว');
+		expect(walkIn.thaidRestartNotice).toBeNull();
+	});
+
+	it('keeps any other invalid registration a plain error', async () => {
+		const invalid = vi
+			.fn()
+			.mockRejectedValue(
+				new KioskRequestError('ข้อมูลไม่ถูกต้อง', 400, 'INVALID_KIOSK_REGISTRATION')
+			);
+		await expect(registerWalkInCardRead(card, session, invalid)).resolves.toEqual({
+			kind: 'error',
+			message: 'ข้อมูลไม่ถูกต้อง'
+		});
+	});
+});
+
 describe('submitWalkInThaid', () => {
 	const thaidSession = {
 		thaidSessionId: 'a'.repeat(32),
-		consented: true,
-		consentedAt: new Date().toISOString(),
+		consentDecision: decision,
 		phone: '0812345678'
 	};
 
-	it('sends the session id, consent time and phone', async () => {
+	it('sends the session id, consent decision and phone', async () => {
 		const register = vi.fn().mockResolvedValue(registration);
 		await expect(submitWalkInThaid(thaidSession, register)).resolves.toEqual({
 			kind: 'registered',
 			registration
 		});
-		expect(register).toHaveBeenCalledWith('a'.repeat(32), thaidSession.consentedAt, '0812345678');
+		expect(register).toHaveBeenCalledWith('a'.repeat(32), decision, '0812345678', null);
+	});
+
+	it('carries the scan time as the Station 1 start (CR-192)', async () => {
+		const register = vi.fn().mockResolvedValue(registration);
+		const startedAt = '2026-10-25T03:00:00.000Z';
+		await submitWalkInThaid({ ...thaidSession, startedAt }, register);
+		expect(register).toHaveBeenCalledWith('a'.repeat(32), decision, '0812345678', startedAt);
 	});
 
 	it('does nothing before consent', async () => {
 		const register = vi.fn();
 		await expect(
-			submitWalkInThaid({ ...thaidSession, consented: false }, register)
+			submitWalkInThaid({ ...thaidSession, consentDecision: null }, register)
 		).resolves.toEqual({ kind: 'ignored' });
 		expect(register).not.toHaveBeenCalled();
 	});

@@ -3,6 +3,7 @@ import type { RequestHandler } from './$types';
 import { ServiceError } from '$lib/server/couch-admin';
 import {
 	assertCanManageShelter,
+	assertGroupInShelter,
 	assertNoShelterCode,
 	bannerErrorResponse,
 	decodeImageField,
@@ -47,6 +48,7 @@ export const POST: RequestHandler = async ({ request, url }) => {
 		assertNoShelterCode(fields);
 		const input = parseBannerInput(fields);
 		const decoded = decodeImageField(image);
+		await assertGroupInShelter(input.group_id, shelterCode);
 
 		const created = await createBanner(input, decoded, { shelterCode, createdBy: caller.name });
 		return json(created, { status: 201 });

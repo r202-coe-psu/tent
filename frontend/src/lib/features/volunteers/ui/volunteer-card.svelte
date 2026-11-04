@@ -11,37 +11,42 @@
 	 *     controlled-skill evidence; it does not approve a specific job.
 	 *   - Already verified → "จัดการข้อมูล" opens `volunteer-manage-dialog.svelte`
 	 *     (see its header comment for the fields it actually persists vs. stubs).
-	 *   - "ออกสิทธิ์ใช้งานระบบ" opens `volunteer-access-dialog.svelte`, which
-	 *     creates a CouchDB login through the authorized users API and links
-	 *     its username/email back to the volunteer profile.
+	 *   - The system-access button is `volunteer-access-actions.svelte` (give / edit / give
+	 *     again, identity first), shared with a job's applicants (#1044).
 	 * (Cross-shelter transfer was cut by CR-104 AC-104-10 — a volunteer now
 	 * applies directly to any shelter's jobs via the Job Board instead.)
 	 */
 	import Pencil from '@lucide/svelte/icons/pencil';
 	import SearchCheck from '@lucide/svelte/icons/search-check';
-	import KeyRound from '@lucide/svelte/icons/key-round';
 	import Trash2 from '@lucide/svelte/icons/trash-2';
+	import RotateCcw from '@lucide/svelte/icons/rotate-ccw';
 	import Phone from '@lucide/svelte/icons/phone';
 	import Lock from '@lucide/svelte/icons/lock';
 	import { toast } from 'svelte-sonner';
 	import { useQueryClient } from '@tanstack/svelte-query';
-	import { isShelterManager, isSystemAdmin } from '$lib/auth/roles';
+	import { canAccessVolunteerBackoffice } from '$lib/auth/roles';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Badge } from '$lib/components/ui/badge/index.js';
+	import { isVolunteerMobile } from '../domain/phone';
 	import * as Table from '$lib/components/ui/table/index.js';
 	import * as AlertDialog from '$lib/components/ui/alert-dialog/index.js';
 	import VolunteerManageDialog from './volunteer-manage-dialog.svelte';
 	import VolunteerQualificationDialog from './volunteer-qualification-dialog.svelte';
-	import VolunteerAccessDialog from './volunteer-access-dialog.svelte';
-	import { useDeactivateVolunteer } from '../application/queries';
+	import VolunteerAccessActions from './volunteer-access-actions.svelte';
+	import VolunteerAccountBadge from './volunteer-account-badge.svelte';
+	import { useDeactivateVolunteer, useReactivateVolunteer } from '../application/queries';
 	import { resolveSkillOption, type SkillOption } from '../domain/skill-catalog';
 	import {
 		hasPendingControlledSkill,
 		identityVerificationStatus,
 		skillVerificationStatus
 	} from '../domain/verification';
+	import {
+		closeProfileAccessNotice,
+		type VolunteerAccessStatus
+	} from '../domain/volunteer-access-status';
 	import type { Volunteer, VolunteerSource } from '../domain/volunteer.schema';
 	import type { ShiftAssignment, ShiftKind } from '../domain/shift-assignment.schema';
 
@@ -50,13 +55,16 @@
 		shelterName,
 		shelterType,
 		skillOptions = [],
-		todayAssignment
+		todayAssignment,
+		accessStatus = { kind: 'none' }
 	}: {
 		volunteer: Volunteer;
 		shelterName: string | undefined;
 		shelterType: string | null | undefined;
 		skillOptions?: readonly SkillOption[];
 		todayAssignment: Pick<ShiftAssignment, 'shift' | 'station' | 'status'> | null | undefined;
+		/** Computed by the tab (`volunteerAccessStatus`) — this row only renders it. */
+		accessStatus?: VolunteerAccessStatus;
 	} = $props();
 
 	const SOURCE_LABELS: Record<VolunteerSource, string> = {
@@ -110,22 +118,31 @@
 	let manageDialogOpen = $state(false);
 	let qualificationDialogOpen = $state(false);
 	let qualificationFocusSkillCode = $state<string | null>(null);
-	let accessDialogOpen = $state(false);
-	// Granting system access creates a user account — SM/SA only (the BFF enforces it too); a
-	// volunteer_coordinator manages jobs/shifts but must not see a button that always 403s.
-	const canGrantAccess = $derived.by(() => {
-		const roles = authStore.user?.roles ?? [];
-		return isSystemAdmin(roles) || isShelterManager(roles, shelterStore.selectedShelterCode);
-	});
+	// Re-activating a deactivated profile (#882, CR FR-12): SA / SM / volunteer_coordinator.
+	const canReactivate = $derived(
+		canAccessVolunteerBackoffice(authStore.user?.roles ?? [], shelterStore.selectedShelterCode)
+	);
 	let deleteDialogOpen = $state(false);
 
 	const queryClient = useQueryClient();
 	const deactivateMutation = useDeactivateVolunteer(queryClient);
+	// CR-221 FR-20: closing the profile takes the coordinator grants away (worker sweep, about 5
+	// minutes; reopening before it runs keeps them) but not a role a shelter manager gave.
+	const closeNotice = $derived(closeProfileAccessNotice(accessStatus));
+	const reactivateMutation = useReactivateVolunteer(queryClient);
 
 	function openQualificationAudit(skillCode?: string) {
 		manageDialogOpen = false;
 		qualificationFocusSkillCode = skillCode ?? null;
 		qualificationDialogOpen = true;
+	}
+
+	function reactivate() {
+		reactivateMutation.mutate(volunteer._id, {
+			onSuccess: () => toast.success(`เปิดใช้งานอาสาสมัคร ${fullName} อีกครั้งแล้ว`),
+			onError: (error) =>
+				toast.error(error instanceof Error ? error.message : 'เปิดใช้งานอาสาสมัครไม่สำเร็จ')
+		});
 	}
 
 	function confirmDeactivate(event: MouseEvent) {
@@ -196,6 +213,14 @@
 						<Phone class="h-3.5 w-3.5" />
 						{volunteer.phone}
 					</p>
+					{#if !isVolunteerMobile(volunteer.phone)}
+						<Badge
+							variant="outline"
+							class="gap-1 border-amber-300 bg-amber-50 text-[11px] text-amber-800"
+						>
+							เบอร์ไม่ใช่มือถือ 10 หลัก
+						</Badge>
+					{/if}
 				{/if}
 			</div>
 		</div>
@@ -264,6 +289,8 @@
 				</Badge>
 			{/if}
 
+			<VolunteerAccountBadge status={accessStatus} />
+
 			{#if todayAssignment}
 				<p class="text-xs text-muted-foreground">{SHIFT_LABELS[todayAssignment.shift]}</p>
 			{:else if identityStatus !== 'verified'}
@@ -299,15 +326,19 @@
 				</Button>
 			{/if}
 
+			<VolunteerAccessActions {volunteer} status={accessStatus} {shelterLine} />
+
 			<div class="flex items-center gap-1.5">
-				{#if canGrantAccess}
+				{#if volunteer.status === 'inactive' && canReactivate}
 					<Button
 						size="sm"
-						class="flex-1 gap-1.5 bg-primary-dark text-white hover:bg-primary-dark/90"
-						onclick={() => (accessDialogOpen = true)}
+						variant="outline"
+						class="flex-1 gap-1.5 border-emerald-300 text-emerald-700 hover:bg-emerald-50"
+						onclick={reactivate}
+						disabled={reactivateMutation.isPending}
 					>
-						<KeyRound class="h-3.5 w-3.5" />
-						ออกสิทธิ์ใช้งานระบบ
+						<RotateCcw class="h-3.5 w-3.5" />
+						{reactivateMutation.isPending ? 'กำลังเปิดใช้งาน...' : 'เปิดใช้งานอีกครั้ง'}
 					</Button>
 				{/if}
 
@@ -339,9 +370,6 @@
 	{shelterLine}
 	focusSkillCode={qualificationFocusSkillCode}
 />
-{#if canGrantAccess}
-	<VolunteerAccessDialog bind:open={accessDialogOpen} {volunteer} {shelterLine} />
-{/if}
 
 <AlertDialog.Root bind:open={deleteDialogOpen}>
 	<AlertDialog.Content>
@@ -353,10 +381,24 @@
 				<code class="text-xs">inactive</code> และเก็บประวัติไว้ในระบบ อาสาสมัครจะไม่สามารถรับงานใหม่ได้จนกว่าจะเปิดใช้งานอีกครั้ง
 			</AlertDialog.Description>
 		</AlertDialog.Header>
+		{#if closeNotice.revokesGrants}
+			<p class="text-sm text-muted-foreground" data-testid="close-revokes-grants">
+				ถ้าไม่เปิดใช้งานคืนภายใน 5 นาที สิทธิ์ใช้งานระบบที่ผู้ประสานงานออกให้จะถูกถอนอัตโนมัติ
+			</p>
+		{/if}
+		{#if closeNotice.keepsManagerRole}
+			<p
+				role="alert"
+				class="text-sm font-medium text-destructive"
+				data-testid="close-keeps-manager-role"
+			>
+				ยังมีสิทธิ์ที่ผู้จัดการศูนย์ให้ ต้องให้ผู้จัดการศูนย์ถอน
+			</p>
+		{/if}
 		<AlertDialog.Footer>
 			<AlertDialog.Cancel disabled={deactivateMutation.isPending}>ยกเลิก</AlertDialog.Cancel>
 			<AlertDialog.Action
-				class="text-destructive-foreground bg-destructive hover:bg-destructive/90"
+				class="bg-destructive text-destructive-foreground hover:bg-destructive/90"
 				onclick={confirmDeactivate}
 				disabled={deactivateMutation.isPending}
 			>

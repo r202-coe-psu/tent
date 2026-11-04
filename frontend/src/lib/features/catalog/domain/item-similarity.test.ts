@@ -94,6 +94,13 @@ describe('missingOptionalFields', () => {
 		expect(missingOptionalFields(onlyBase)).toContain('ขนาดบรรจุ');
 	});
 
+	it('asks for allergens when the v6 array is empty (#607)', () => {
+		const empty = item({ _id: 'x', name: 'x', allergens: [] });
+		expect(missingOptionalFields(empty)).toContain('สารก่อภูมิแพ้');
+		const filled = item({ _id: 'x', name: 'x', allergens: ['egg'] });
+		expect(missingOptionalFields(filled)).not.toContain('สารก่อภูมิแพ้');
+	});
+
 	it('does not ask fuel for allergens', () => {
 		const fuel = item({ _id: 'x', name: 'x', category: 'item_category:fuel_energy' });
 		expect(missingOptionalFields(fuel)).not.toContain('สารก่อภูมิแพ้');

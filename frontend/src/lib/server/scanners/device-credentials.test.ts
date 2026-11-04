@@ -26,9 +26,15 @@ const lookupOf = (value: Record<string, unknown>) => ({
 });
 
 describe('authenticateScannerDevice principal', () => {
-	it('exposes banner_enabled, defaulting to true when the doc has none (FR-KBR-35)', async () => {
-		const principal = await authenticateScannerDevice('SCAN-01', SECRET, lookupOf(doc));
-		expect(principal.banner_enabled).toBe(true);
+	it('exposes banner_group_id, null when the doc has none or an explicit null', async () => {
+		const absent = await authenticateScannerDevice('SCAN-01', SECRET, lookupOf(doc));
+		expect(absent.banner_group_id).toBeNull();
+		const cleared = await authenticateScannerDevice(
+			'SCAN-01',
+			SECRET,
+			lookupOf({ ...doc, banner_group_id: null })
+		);
+		expect(cleared.banner_group_id).toBeNull();
 	});
 
 	it('exposes screen_type, reading a doc without one as compact', async () => {
@@ -42,12 +48,12 @@ describe('authenticateScannerDevice principal', () => {
 		expect(portrait.screen_type).toBe('portrait');
 	});
 
-	it('exposes an explicit banner_enabled=false', async () => {
+	it('exposes the banner group the device belongs to, ignoring the legacy banner_enabled', async () => {
 		const principal = await authenticateScannerDevice(
 			'SCAN-01',
 			SECRET,
-			lookupOf({ ...doc, banner_enabled: false })
+			lookupOf({ ...doc, banner_enabled: false, banner_group_id: 'kiosk_banner_group:A' })
 		);
-		expect(principal.banner_enabled).toBe(false);
+		expect(principal.banner_group_id).toBe('kiosk_banner_group:A');
 	});
 });

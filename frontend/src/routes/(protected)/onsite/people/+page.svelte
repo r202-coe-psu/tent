@@ -9,7 +9,6 @@
 	import UserPlus from '@lucide/svelte/icons/user-plus';
 
 	import { Button } from '$lib/components/ui/button';
-	import { Badge } from '$lib/components/ui/badge';
 	import * as Card from '$lib/components/ui/card';
 	import * as Dialog from '$lib/components/ui/dialog';
 
@@ -165,13 +164,10 @@
 			</a>
 			<div>
 				<div class="flex items-center gap-2">
-					<ClipboardList class="size-6 text-[#0A2647]" />
+					<ClipboardList class="size-6 text-station-1" />
 					<h1 class="text-2xl font-bold tracking-tight text-slate-900 md:text-3xl">
 						ทะเบียนผู้ประสบภัย
 					</h1>
-					<Badge variant="outline" class="border-blue-200 bg-blue-50 font-semibold text-blue-900">
-						Station 1
-					</Badge>
 				</div>
 				<p class="mt-0.5 text-xs text-slate-500">
 					Registration Desk — จุดรับรายงานตัวผู้จองล่วงหน้าและรับลงทะเบียนหน้างาน (Walk-in)

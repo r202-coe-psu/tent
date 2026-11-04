@@ -95,6 +95,13 @@ export {
 	listPendingZoneArrivalConfirmations,
 	CHECK_IN_ELIGIBLE_STATUSES,
 	CHECK_OUT_ELIGIBLE_STATUSES,
+	SHELTER_CLOSE_CHECKOUT_STATUSES,
+	SHELTER_CLOSE_CANCEL_STATUSES,
+	SHELTER_CLOSE_AFFECTED_STATUSES,
+	SHELTER_CLOSED_REASON,
+	SHELTER_CLOSED_REASON_LABEL,
+	movementReasonLabel,
+	type CheckoutDestinationType,
 	CONFIRM_ROOM_ELIGIBLE_STATUSES,
 	ZONE_CHANGE_ELIGIBLE_STATUSES,
 	ACTIVE_HOUSEHOLD_STATUSES,
@@ -145,10 +152,27 @@ export {
 	type MasterHousingItem
 } from './domain/housing-type-ui';
 
+export { startStaffStationVisit } from './application/station-log';
+
+export {
+	STATION_LOG_STALE_WINDOW_MS,
+	STATION_LOG_WRITE_WARNING,
+	STATION_NUMBERS,
+	createStationLog,
+	hasOpenStationStart,
+	stationLogInputSchema,
+	type StationLog,
+	type StationLogInput,
+	type StationLogAction,
+	type StationLogChannel,
+	type StationNumber
+} from './domain/station-log';
+
 export {
 	nextQueueLabel,
 	classifyZoningQueueTab,
 	classifyScreeningQueueTab,
+	countStationQueues,
 	nextScreeningQueueEvacuee,
 	recommendZoneKind,
 	pickRecommendedZone,
@@ -163,6 +187,7 @@ export {
 	sortByZoningQueueSince,
 	formatQueueWait,
 	type NextQueueLabel,
+	type StationQueueCounts,
 	type ZoningQueueTab,
 	type ScreeningQueueTab,
 	type ZoningRecommendKind,
@@ -183,6 +208,15 @@ export {
 	type ApplyRowClickSelectionInput,
 	type ApplyRowClickSelectionResult
 } from './domain/row-selection';
+
+export {
+	EVACUEE_SORTS,
+	EVACUEE_SORT_LABELS,
+	DEFAULT_EVACUEE_SORT,
+	isEvacueeSort,
+	sortEvacuees,
+	type EvacueeSort
+} from './domain/evacuee-sort';
 
 export {
 	REPORT_IN_CTA_LABEL,
@@ -258,7 +292,9 @@ export {
 	type FamilyRegistrationPlan,
 	type FamilyRegistrationMode,
 	type FamilyReportInPayload,
-	type MemberPhotoUploadMode
+	type MemberPhotoUploadMode,
+	type RegistrationConsent,
+	type RegistrationConsentConfig
 } from './domain/unified-registration';
 
 export {
@@ -272,12 +308,14 @@ export {
 
 export type { PeopleRepository, EvacueeFilters, HouseholdFilters } from './data/people.repository';
 export { peopleRepository, isRegistrationCompensationIncomplete } from './data/people.remote';
+export type { EvacueeNameRecord } from './data/evacuee-names.remote';
 export { getShelterCode, getShelterDb } from '$lib/db/shelter';
 
 // Application — TanStack Query hooks + changes-feed live-query wiring
 export {
 	peopleKeys,
 	useEvacuees,
+	useEvacueeNames,
 	useEvacuee,
 	usePendingScreeningEvacuees,
 	useEvacueesPaginated,
@@ -307,6 +345,8 @@ export {
 	useHouseholdsPaginated,
 	listMatchingEvacueeIds,
 	listMatchingHouseholdIds,
+	listCancellableEvacueeIds,
+	listCancellableHouseholdIds,
 	useCreateHousehold,
 	useUpdateHousehold,
 	usePatchHousehold,
@@ -320,6 +360,7 @@ export {
 	usePatchMedical,
 	useDeleteMedical,
 	usePatchEvacuee,
+	useSetSearchVisibility,
 	useMedicals,
 	useMedicalByEvacuee,
 	useMovements,
@@ -353,6 +394,7 @@ export { default as HouseholdForm } from './ui/household-form/household-form.sve
 export { default as HouseholdFormPage } from './ui/household-form/household-form-page.svelte';
 export { default as HouseholdPostArrival } from './ui/household-flows/household-post-arrival.svelte';
 export { default as EvacueeWristbandSuccess } from './ui/registration/evacuee-wristband-success.svelte';
+export { default as RegistrationConsentResult } from './ui/registration/registration-consent-result.svelte';
 export {
 	default as FamilyBatchPrint,
 	type IntakeNextStation

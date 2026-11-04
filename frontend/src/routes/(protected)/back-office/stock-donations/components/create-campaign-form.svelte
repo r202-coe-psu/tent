@@ -1,6 +1,7 @@
 <script lang="ts">
 	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
 	import Megaphone from '@lucide/svelte/icons/megaphone';
+	import Plus from '@lucide/svelte/icons/plus';
 	import PlusCircle from '@lucide/svelte/icons/plus-circle';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
@@ -12,14 +13,24 @@
 	import { useSupplyItems } from '$lib/features/supply';
 	import {
 		canonicalizeUnitCode,
+		canWriteShelterCatalog,
 		formatUnit,
 		mergeCatalogGenerations,
+		mergedCatalogIdFor,
+		QuickCreateItemSheet,
 		useItemMasters,
 		useUnitsOfMeasure
 	} from '$lib/features/catalog';
+	import { authStore } from '$lib/stores/auth.svelte';
 	import { langState } from '$lib/states/i18n.svelte';
-	import { getShelterCode } from '$lib/db/shelter';
+	import { getShelterCode, resolveShelterCode } from '$lib/db/shelter';
 	import { persistQty, qtyGt } from '$lib/utils/qty';
+	import {
+		needPointToSave,
+		resolveNeedPointField,
+		useDonationPoints
+	} from '$lib/features/operations';
+	import NeedDropOffPointField from './need-drop-off-point-field.svelte';
 
 	interface Props {
 		onclose: () => void;
@@ -33,6 +44,7 @@
 			urgency?: 'critical' | 'important' | 'normal';
 			imageUrl?: string;
 			description?: string;
+			dropOffPointId: string | null;
 		}) => void;
 	}
 
@@ -54,6 +66,38 @@
 	let categoryChoice = $state<string | null>(null);
 	let targetQty = $state('');
 
+	// Same gate and same sheet as the scan station's "เพิ่มสินค้าใหม่".
+	// `null` = no shelter resolved: hide the way in rather than write to the 'SH001' guess.
+	const createShelterCode = $derived(resolveShelterCode());
+	const canCreateItem = $derived(
+		canWriteShelterCatalog(authStore.user?.roles ?? []) && createShelterCode !== null
+	);
+	let createOpen = $state(false);
+
+	// `SearchSelect` does not expose its search text, so the sheet opens with an empty name.
+	function openCreateItem() {
+		createOpen = true;
+	}
+
+	/**
+	 * Select an item from the sheet. A master named like a legacy row is merged out of
+	 * `catalogItems`, so the row the picker shows for that name is selected instead.
+	 */
+	function selectFromSheet(item: { _id: string; name: string }): string {
+		selectedItemId = mergedCatalogIdFor(catalogItems, item);
+		return selectedItemId;
+	}
+
+	function pickCreatedItem(item: { _id: string; name: string }) {
+		if (selectFromSheet(item) !== item._id) {
+			toast.info(`มี “${item.name}” ในแคตตาล็อกอยู่แล้ว — เลือกรายการเดิมให้แทน`);
+		}
+	}
+
+	function pickExistingItem(item: { _id: string; name: string }) {
+		selectFromSheet(item);
+	}
+
 	const CATEGORY_OPTIONS = [
 		{ value: 'อาหารและเครื่องดื่ม', label: 'อาหารและเครื่องดื่ม (Food & Beverage)' },
 		{ value: 'ยารักษาโรคและเวชภัณฑ์', label: 'ยารักษาโรคและเวชภัณฑ์ (Medical Supplies)' },
@@ -71,6 +115,16 @@
 	] as const;
 
 	let urgency = $state<'critical' | 'important' | 'normal'>('critical');
+
+	// Staff, not donors, decide where this need's goods go (see need-drop-off-point.ts).
+	const donationPoints = useDonationPoints(() => getShelterCode());
+	const pointField = $derived(resolveNeedPointField(donationPoints.points));
+	let pointChoice = $state<string | null>(null);
+	const chosenPoint = $derived(pointChoice ?? pointField.value);
+	const pointToSave = $derived(needPointToSave(pointField, chosenPoint));
+	// Until the shelter doc is read the point list is empty, and saving then would
+	// store `null` for a shelter that does have points.
+	const canSave = $derived(donationPoints.isLoaded && pointToSave !== undefined);
 	let description = $state('');
 
 	// Same two sources the scan station and the hint below read, so all three agree on
@@ -174,6 +228,10 @@
 			toast.error('กรุณาระบุเหตุผลหรือรายละเอียดเพิ่มเติม');
 			return;
 		}
+		if (!canSave || pointToSave === undefined) {
+			toast.error('กรุณาเลือกจุดรับบริจาค');
+			return;
+		}
 
 		onsubmit({
 			itemId: selectedItemId,
@@ -183,7 +241,8 @@
 			category: category.trim() || 'ของใช้ทั่วไป',
 			unit: finalUnit,
 			urgency,
-			description: description.trim()
+			description: description.trim(),
+			dropOffPointId: pointToSave
 		});
 	}
 </script>
@@ -230,14 +289,32 @@
 					bind:value={selectedItemId}
 					loading={catalogLoading}
 					placeholder="พิมพ์เพื่อค้นหารายการในแคตตาล็อก..."
-					emptyText="ไม่พบรายการนี้ในแคตตาล็อก — สร้างในหน้าจัดการข้อมูลหลักก่อน"
+					emptyText={canCreateItem
+						? 'ไม่พบรายการนี้ในแคตตาล็อก — กด “เพิ่มสินค้าใหม่” ด้านล่าง'
+						: 'ไม่พบรายการนี้ในแคตตาล็อก — สร้างในหน้าจัดการข้อมูลหลักก่อน'}
 					class="h-10 rounded-xl text-xs"
 					controlProps={{ id: 'campaign-item-title' }}
 				/>
-				<p class="mt-1.5 text-3xs text-muted-foreground">
-					ประกาศผูกกับรหัสในแคตตาล็อกโดยตรง — ไม่ได้เดาจากชื่อที่พิมพ์อีกต่อไป ถ้ายังไม่มีรายการนี้
-					ให้สร้างในหน้าจัดการข้อมูลหลักก่อน
-				</p>
+				{#if canCreateItem}
+					<p class="mt-1.5 text-3xs text-muted-foreground">
+						ประกาศผูกกับรหัสในแคตตาล็อกโดยตรง — ไม่ได้เดาจากชื่อที่พิมพ์อีกต่อไป ไม่พบรายการ? กด
+						“เพิ่มสินค้าใหม่” ได้เลย
+					</p>
+					<Button
+						type="button"
+						variant="ghost"
+						class="mt-1 min-h-11 gap-1 px-2 text-sm font-semibold text-sky-800"
+						onclick={openCreateItem}
+					>
+						<Plus class="size-4" aria-hidden="true" />
+						เพิ่มสินค้าใหม่
+					</Button>
+				{:else}
+					<p class="mt-1.5 text-3xs text-muted-foreground">
+						ประกาศผูกกับรหัสในแคตตาล็อกโดยตรง — ไม่ได้เดาจากชื่อที่พิมพ์อีกต่อไป
+						ถ้ายังไม่มีรายการนี้ ให้สร้างในหน้าจัดการข้อมูลหลักก่อน
+					</p>
+				{/if}
 			</div>
 
 			<!-- Category -->
@@ -320,6 +397,14 @@
 				</Select.Root>
 			</div>
 
+			<NeedDropOffPointField
+				id="campaign-drop-off-point"
+				field={pointField}
+				points={donationPoints.points}
+				value={chosenPoint}
+				onchange={(id) => (pointChoice = id)}
+			/>
+
 			<!-- Reason / Details -->
 			<div>
 				<Label for="campaign-description" class="mb-1.5 text-xs font-bold text-foreground">
@@ -328,27 +413,30 @@
 				<Textarea
 					id="campaign-description"
 					rows={3}
-					placeholder="ระบุวัตถุประสงค์ในการประกาศขอรับ เช่น สำหรับใช้ทำอาหารแจกจ่ายประจำวัน หรือ สำหรับผู้ประสบภัยที่บ้านเรือนพังเสียหาย..."
+					placeholder="ระบุวัตถุประสงค์ในการประกาศขอรับ เช่น สำหรับใช้ทำอาหารแจกจ่ายประจำวัน หรือ สำหรับผู้เข้าพักที่บ้านเรือนพังเสียหาย..."
 					bind:value={description}
 					class="rounded-xl text-xs"
 				/>
 			</div>
 		</div>
 
-		<!-- Footer Action Buttons -->
-		<div class="flex items-center justify-end gap-3 border-t border-border/60 pt-6">
+		<!-- Footer Action Buttons — stacked full width on mobile so the long submit label fits -->
+		<div
+			class="flex flex-col-reverse gap-3 border-t border-border/60 pt-6 sm:flex-row sm:items-center sm:justify-end"
+		>
 			<Button
 				variant="ghost"
 				type="button"
 				onclick={onclose}
-				class="h-10 rounded-xl px-5 text-xs font-bold text-muted-foreground hover:bg-muted hover:text-foreground"
+				class="h-10 w-full rounded-xl px-5 text-xs font-bold text-muted-foreground hover:bg-muted hover:text-foreground sm:w-auto"
 			>
 				ยกเลิก
 			</Button>
 
 			<Button
 				type="submit"
-				class="flex h-10 items-center gap-2 rounded-xl bg-[#002D5B] px-6 text-xs font-bold text-white shadow-sm hover:bg-[#001f3f] dark:bg-blue-600 dark:hover:bg-blue-700"
+				disabled={!canSave}
+				class="flex h-auto min-h-10 w-full items-center gap-2 rounded-xl bg-[#002D5B] px-6 py-2 text-xs font-bold whitespace-normal text-white shadow-sm hover:bg-[#001f3f] sm:w-auto dark:bg-blue-600 dark:hover:bg-blue-700"
 			>
 				<Megaphone class="h-4 w-4" />
 				ประกาศขอรับบริจาคผ่านหน้าเว็บสาธารณะ
@@ -356,3 +444,12 @@
 		</div>
 	</form>
 </div>
+
+{#if canCreateItem && createShelterCode}
+	<QuickCreateItemSheet
+		bind:open={createOpen}
+		shelterCode={createShelterCode}
+		onCreated={pickCreatedItem}
+		onUseExisting={pickExistingItem}
+	/>
+{/if}

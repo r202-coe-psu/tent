@@ -37,6 +37,14 @@ export {
 	type KioskScreenType
 } from './domain/kiosk-screen';
 
+export {
+	IN_SHELTER_STATUSES,
+	countInShelter,
+	inShelterFromStatusCounts,
+	isInShelterStayStatus,
+	type InShelterStatus
+} from './domain/in-shelter';
+
 export { fetchAppConfig, updateAppConfig, type AppConfigResponse } from './data/app-config.api';
 export { fetchSystemBanner } from './data/system-banner.api';
 export { systemBannerKeys, useSystemBanner } from './application/system-banner-queries';
@@ -46,3 +54,12 @@ export { default as ThaidSettings } from './ui/thaid-settings.svelte';
 export { default as PasswordLoginSettings } from './ui/password-login-settings.svelte';
 export { default as SystemBannerSettings } from './ui/system-banner-settings.svelte';
 export { default as KioskScreenPicker } from './ui/kiosk-screen-picker.svelte';
+
+export {
+	countShelterPeople,
+	totalShelterPeople,
+	type ShelterOccupantView,
+	type ShelterPeopleCounts,
+	type StaffUserView,
+	type VolunteerPresenceView
+} from './domain/shelter-people';

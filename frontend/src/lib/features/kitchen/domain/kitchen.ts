@@ -342,6 +342,8 @@ export interface MealServiceExternal {
 
 export interface MealService extends BaseDoc {
 	type: 'meal_service';
+	// CR-177: display-only per-shelter running number (RCV-KITCHEN-0001); absent on legacy docs.
+	receipt_no?: string;
 	date: string;
 	meal: MealPeriod;
 	meal_plan_id: string | null;
@@ -370,12 +372,17 @@ export const mealServiceInputSchema = z.object({
 });
 export type MealServiceInput = z.input<typeof mealServiceInputSchema>;
 
-export function createMealService(input: MealServiceInput, ctx: AuthorContext): MealService {
+export function createMealService(
+	input: MealServiceInput,
+	receiptNo: string,
+	ctx: AuthorContext
+): MealService {
 	const d = mealServiceInputSchema.parse(input);
 	return makeDoc(
 		'meal_service',
 		2,
 		{
+			receipt_no: receiptNo,
 			date: d.date,
 			meal: d.meal,
 			meal_plan_id: d.meal_plan_id,

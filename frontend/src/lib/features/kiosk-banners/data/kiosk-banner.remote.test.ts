@@ -1,7 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { KioskBannerInput } from '../domain/kiosk-banner';
 import { KioskBannerApiError } from './kiosk-banner.repository';
-import { kioskBannerRemoteRepository as repo } from './kiosk-banner.remote';
+import {
+	kioskBannerGroupRemoteRepository as groupRepo,
+	kioskBannerRemoteRepository as repo
+} from './kiosk-banner.remote';
 
 const fetchMock = vi.fn<typeof fetch>();
 vi.stubGlobal('fetch', fetchMock);
@@ -28,6 +31,7 @@ const summary = {
 };
 
 const input: KioskBannerInput = {
+	group_id: 'kiosk_banner_group:A',
 	title: 'ประกาศ',
 	caption: null,
 	duration_sec: 10,
@@ -155,17 +159,22 @@ describe('remove', () => {
 });
 
 describe('reorder', () => {
-	it('PUTs the screen type and mapped items to the order route and parses the rows', async () => {
+	it('PUTs the slot (group and screen type) and mapped items to the order route and parses the rows', async () => {
 		fetchMock.mockResolvedValueOnce(respond(200, [summary]));
-		const rows = await repo.reorder('SH 01', 'portrait', [
-			{ id: 'kiosk_banner:01J', rev: '1-abc' },
-			{ id: 'kiosk_banner:02K', rev: '3-def' }
-		]);
+		const rows = await repo.reorder(
+			'SH 01',
+			{ groupId: 'kiosk_banner_group:A', screenType: 'portrait' },
+			[
+				{ id: 'kiosk_banner:01J', rev: '1-abc' },
+				{ id: 'kiosk_banner:02K', rev: '3-def' }
+			]
+		);
 		const { url, init } = lastCall();
 		expect(url).toBe(`${BASE}/order?shelter_code=SH%2001`);
 		expect(init.method).toBe('PUT');
 		expect(new Headers(init.headers).get('content-type')).toBe('application/json');
 		expect(JSON.parse(init.body as string)).toEqual({
+			group_id: 'kiosk_banner_group:A',
 			screen_type: 'portrait',
 			items: [
 				{ id: 'kiosk_banner:01J', _rev: '1-abc' },
@@ -180,7 +189,9 @@ describe('reorder', () => {
 		fetchMock.mockResolvedValueOnce(
 			respond(409, { error: { code: 'CONFLICT', message: 'List changed' } })
 		);
-		const error = await repo.reorder('SH-01', 'compact', []).catch((e) => e);
+		const error = await repo
+			.reorder('SH-01', { groupId: 'kiosk_banner_group:A', screenType: 'compact' }, [])
+			.catch((e) => e);
 		expect(error).toBeInstanceOf(KioskBannerApiError);
 		expect(error).toMatchObject({ status: 409, code: 'CONFLICT' });
 	});
@@ -232,5 +243,98 @@ describe('errors', () => {
 		expect(error.status).toBe(502);
 		expect(error.code).toBe('UNKNOWN');
 		expect(error.message).toBeTruthy();
+	});
+});
+
+describe('banner groups', () => {
+	const GROUP_BASE = '/api/back-office/kiosk-banner-groups';
+	const group = {
+		_id: 'kiosk_banner_group:01G',
+		_rev: '1-g',
+		type: 'kiosk_banner_group',
+		schema_v: 1,
+		shelter_code: 'SH-01',
+		name: 'ล็อบบี้',
+		description: null,
+		created_at: '2026-10-14T00:00:00.000Z',
+		updated_at: '2026-10-14T00:00:00.000Z',
+		created_by: 'Somchai',
+		device_ids: ['scanner_device:1', 'scanner_device:2']
+	};
+	const groupPutJson = { 'content-type': 'application/json' };
+
+	it('list GETs the encoded shelter code and parses the summaries with their devices', async () => {
+		fetchMock.mockResolvedValueOnce(respond(200, [group]));
+		const rows = await groupRepo.list('SH 01&x');
+		const { url, init } = lastCall();
+		expect(url).toBe(`${GROUP_BASE}?shelter_code=SH%2001%26x`);
+		expect(init.method ?? 'GET').toBe('GET');
+		expect(init.cache).toBe('no-store');
+		expect(rows[0]._rev).toBe('1-g');
+		expect(rows[0].device_ids).toEqual(['scanner_device:1', 'scanner_device:2']);
+	});
+
+	it('list rejects a row without device_ids', async () => {
+		fetchMock.mockResolvedValueOnce(respond(200, [{ ...group, device_ids: undefined }]));
+		await expect(groupRepo.list('SH-01')).rejects.toThrow();
+	});
+
+	it('get GETs the encoded id', async () => {
+		fetchMock.mockResolvedValueOnce(respond(200, group));
+		const got = await groupRepo.get('kiosk_banner_group:01G');
+		expect(lastCall().url).toBe(`${GROUP_BASE}/kiosk_banner_group%3A01G`);
+		expect(got.name).toBe('ล็อบบี้');
+	});
+
+	it('create POSTs name, description and device_ids with shelter_code in the query', async () => {
+		fetchMock.mockResolvedValueOnce(respond(201, group));
+		const created = await groupRepo.create('SH-01', { name: 'ล็อบบี้', description: 'ชั้น 1' }, [
+			'scanner_device:1'
+		]);
+		const { url, init } = lastCall();
+		expect(url).toBe(`${GROUP_BASE}?shelter_code=SH-01`);
+		expect(init.method).toBe('POST');
+		expect(init.headers).toEqual(groupPutJson);
+		expect(JSON.parse(init.body as string)).toEqual({
+			name: 'ล็อบบี้',
+			description: 'ชั้น 1',
+			device_ids: ['scanner_device:1']
+		});
+		expect(created._id).toBe('kiosk_banner_group:01G');
+	});
+
+	it('update PUTs _rev with name and description', async () => {
+		fetchMock.mockResolvedValueOnce(respond(200, group));
+		await groupRepo.update('kiosk_banner_group:01G', '1-g', { name: 'ล็อบบี้ 2' });
+		const { url, init } = lastCall();
+		expect(url).toBe(`${GROUP_BASE}/kiosk_banner_group%3A01G`);
+		expect(init.method).toBe('PUT');
+		expect(JSON.parse(init.body as string)).toEqual({ _rev: '1-g', name: 'ล็อบบี้ 2' });
+	});
+
+	it('remove DELETEs with rev in the query and accepts 204', async () => {
+		fetchMock.mockResolvedValueOnce(respond(204));
+		await expect(groupRepo.remove('kiosk_banner_group:01G', '1-g')).resolves.toBeUndefined();
+		const { url, init } = lastCall();
+		expect(url).toBe(`${GROUP_BASE}/kiosk_banner_group%3A01G?rev=1-g`);
+		expect(init.method).toBe('DELETE');
+	});
+
+	it('remove surfaces the server message when the group still has banners (409)', async () => {
+		const message = 'ลบกลุ่มไม่ได้ เพราะยังมีแบนเนอร์อยู่';
+		fetchMock.mockResolvedValueOnce(respond(409, { error: { code: 'CONFLICT', message } }));
+		const error = await groupRepo.remove('kiosk_banner_group:01G', '1-g').catch((e) => e);
+		expect(error).toBeInstanceOf(KioskBannerApiError);
+		expect(error).toMatchObject({ status: 409, code: 'CONFLICT', message });
+	});
+
+	it('setDevices PUTs device_ids to the devices sub-route and parses the summary', async () => {
+		fetchMock.mockResolvedValueOnce(respond(200, { ...group, device_ids: ['scanner_device:3'] }));
+		const updated = await groupRepo.setDevices('kiosk_banner_group:01G', ['scanner_device:3']);
+		const { url, init } = lastCall();
+		expect(url).toBe(`${GROUP_BASE}/kiosk_banner_group%3A01G/devices`);
+		expect(init.method).toBe('PUT');
+		expect(JSON.parse(init.body as string)).toEqual({ device_ids: ['scanner_device:3'] });
+		expect(updated.device_ids).toEqual(['scanner_device:3']);
 	});
 });

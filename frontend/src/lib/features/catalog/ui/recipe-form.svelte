@@ -12,8 +12,11 @@
 		useRecipe,
 		useCreateRecipe,
 		useUpdateRecipe,
-		useItemMasters
+		useItemMasters,
+		useUnitsOfMeasure
 	} from '../application/queries';
+	import { formatUnit } from '../domain/unit-of-measure';
+	import { langState } from '$lib/states/i18n.svelte';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { getShelterCode } from '$lib/db/shelter';
 	import { toast } from 'svelte-sonner';
@@ -44,6 +47,8 @@
 	const createMutation = useCreateRecipe();
 	const updateMutation = useUpdateRecipe();
 	const itemMastersQuery = useItemMasters(() => shelterCode ?? null);
+	const unitsQuery = useUnitsOfMeasure();
+	const units = $derived(unitsQuery.data ?? []);
 
 	const form = superForm(
 		defaults(zod4(recipeInputSchema), {
@@ -248,6 +253,11 @@
 									placeholder="kg"
 									class="h-12 rounded-xl border-slate-200/80 bg-white text-center font-semibold dark:border-zinc-800 dark:bg-zinc-950"
 								/>
+								{#if conv.uom && formatUnit(conv.uom, units, langState.current) !== conv.uom}
+									<span class="block text-center text-xs text-slate-500">
+										{formatUnit(conv.uom, units, langState.current)}
+									</span>
+								{/if}
 							</div>
 
 							<!-- Action Buttons -->

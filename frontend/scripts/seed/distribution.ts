@@ -283,6 +283,7 @@ export async function buildDistributionDocs(
 						qty: line.allocated_qty,
 						unit,
 						reason: 'adjust',
+						adjust_reason: 'found',
 						ref_id: null,
 						...expires
 					},
@@ -438,7 +439,8 @@ export function buildBackOfficeDocs(
 		buildTicket(f, catalog, destinations[i % destinations.length], ctx, backOfficeUlid(i + 1))
 	);
 	const stockKeys = Object.keys(OPENING_STOCK) as DistributionItemKey[];
-	// Opening stock is `adjust` with no source doc — what the back-office manual receive writes.
+	// Opening stock is `adjust` with no source doc — what the back-office manual receive writes,
+	// including its `adjust_reason: 'found'` (CR-143 §C needs one on every adjust row).
 	const ledger = stockKeys.map((key, i) => {
 		const item = catalog[key];
 		return createLegacyFlow2StockLedger(
@@ -447,6 +449,7 @@ export function buildBackOfficeDocs(
 				qty: String(OPENING_STOCK[key]),
 				unit: itemMasterUnit(item),
 				reason: 'adjust',
+				adjust_reason: 'found',
 				ref_id: null,
 				lot: {
 					lot_no: lotNo(now, i + 1),

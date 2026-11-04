@@ -14,6 +14,7 @@
  * No PII: only aggregate counts leave the server (security-rbac-bestpractices §3).
  */
 import { z } from 'zod';
+import { inShelterFromStatusCounts } from '$lib/features/shared';
 
 /**
  * Shape of one row returned by the occupancy view (?group=true).
@@ -84,7 +85,7 @@ export function rowsToOccupancyPayload(
 		arriving,
 		active,
 		room_confirmed,
-		in_shelter: active + room_confirmed,
+		in_shelter: inShelterFromStatusCounts(counts),
 		temporary_leave,
 		transferred,
 		checked_out,

@@ -78,7 +78,7 @@
 		},
 		{
 			key: 'completed',
-			label: 'เสร็จสิ้นภารกิจ/เช็คเอาต์แล้ว',
+			label: 'เสร็จสิ้นงานอาสาสมัคร/เช็คเอาต์แล้ว',
 			sub: 'Completed (เช็คเอาต์ออกงานวันนี้)',
 			value: completed,
 			icon: LogOut,

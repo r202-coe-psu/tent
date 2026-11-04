@@ -17,6 +17,20 @@ def test_parse_phone():
     assert parsed.normalized == "0812345678"
 
 
+def test_parse_phone_normalizes_formats():
+    for raw in ("081-234-5678", "081.234.5678", "+66812345678"):
+        parsed = parse_search_query(raw)
+        assert parsed is not None, raw
+        assert parsed.kind == SearchQueryKind.PHONE
+        assert parsed.normalized == "0812345678"
+
+
+def test_nine_digit_landline_is_not_a_phone():
+    for raw in ("022222222", "02-222-2222"):
+        parsed = parse_search_query(raw)
+        assert parsed is None or parsed.kind != SearchQueryKind.PHONE, raw
+
+
 def test_parse_passport():
     parsed = parse_search_query("AB1234567")
     assert parsed is not None
@@ -58,6 +72,11 @@ def test_parse_rejects_a_nul_byte():
     # MongoDB cannot take a NUL inside the $regex built from the query.
     assert parse_search_query("\x00\x00") is None
     assert parse_search_query("สม\x00หมาย") is None
+
+
+def test_lone_surrogate_is_rejected() -> None:
+    # Valid in a JSON string but not encodable to BSON: the query would 500 (#744 review).
+    assert parse_search_query("\ud800x ab") is None
 
 
 def test_parse_rejects_more_than_four_words():

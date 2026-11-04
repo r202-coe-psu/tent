@@ -3,6 +3,7 @@ import { z } from 'zod';
 import type { RequestHandler } from './$types';
 import { ServiceError } from '$lib/server/couch-admin';
 import {
+	assertGroupInShelter,
 	assertNoShelterCode,
 	bannerErrorResponse,
 	decodeImageField,
@@ -52,6 +53,7 @@ export const PUT: RequestHandler = async ({ request, params }) => {
 		const decoded = image === undefined ? null : decodeImageField(image);
 
 		const banner = await loadBannerInScope(caller, params.id);
+		await assertGroupInShelter(input.group_id, banner.shelter_code);
 		return json(await updateBanner(banner._id, rev, input, decoded));
 	} catch (error) {
 		return bannerErrorResponse(error);

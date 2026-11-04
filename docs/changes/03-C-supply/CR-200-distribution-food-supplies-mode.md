@@ -1,0 +1,124 @@
+---
+id: CR-200
+title: CR-200 — แยกโหมด "อาหาร | สิ่งของ" ที่โต๊ะแจกของ `/onsite/distribution` — แก้ CR-159 FR-DDS-01 (หน้าเดียว 5 ขั้น)
+status: approved
+date: 2026-10-25
+updated: 2026-10-28
+requested_by: feedback tester (roleplay ที่จุดแจก) — หน้า 5 ขั้นที่อาหารกับสิ่งของปนกันสับสน โดยเฉพาะบนมือถือ
+decided_by: kong (approved 2026-10-27)
+layer: volatile
+affects:
+  - docs/changes/03-C-supply/CR-159-onsite-distribution.md §A (FR-DDS-01 แก้ → หน้าเดียว 2 โหมด; FR-DDS-02/03/07 คงเดิม)
+  - docs/changes/03-C-supply/CR-121-spec-ticket.md §5 (ตาราง Screen/Role หน้าจอ 13–17 — ยังชี้ route เดียว ไม่ต้องแก้ เพราะไม่มี route ใหม่)
+  - docs/data/schema.md §2.29 `requisition_ticket.requisition_type` (อ้างอิงเท่านั้น — ไม่แก้)
+  - schema_v — ไม่เปลี่ยน (ไม่มี field/doc ใหม่; แยกโหมดด้วย `requisition_type` ที่มีอยู่)
+  - frontend/src/lib/features/distribution/ui/frontline/FrontlineStationPage.svelte (mode switch + ชุดขั้นต่อโหมด; อ่าน/เขียน `?mode=` — route ไม่เปลี่ยน)
+  - frontend/src/lib/features/distribution/ui/frontline/ShiftReconciliationCard.svelte (ปิดรอบ filter ตามโหมด)
+  - frontend/src/lib/features/distribution/ui/model/desk-mode.ts (+ test) — ชุดขั้นต่อโหมด + filter ตั๋วตาม `requisition_type`
+  - frontend/src/lib/features/distribution/ui/model/desk-mode-storage.ts (+ test) — จำโหมดต่อเครื่อง (OPEN-1)
+  - frontend/e2e/distribution/* (distribution-desk-flow, -handover, -returns-close, -access, -volunteer; pages/)
+---
+
+# CR-200 — แยกโหมด "อาหาร | สิ่งของ" ที่โต๊ะแจกของ (`/onsite/distribution`)
+
+> **สรุป (TL;DR):**
+>
+> - **เปลี่ยนอะไร:** หน้า `/onsite/distribution` เปลี่ยนจาก 5 ขั้นเรียงเดียว (อาหาร+สิ่งของปน) เป็น **สวิตช์โหมดบนสุด
+>   "อาหาร | สิ่งของ"** — โหมดอาหาร 3 ขั้น, โหมดสิ่งของ 4 ขั้น; แต่ละโหมดเห็นเฉพาะตั๋ว `requisition_type` ของตัวเอง
+> - **ทำไม:** tester (roleplay) สับสนกับหน้า 5 ขั้นที่ตั๋วอาหารกับสิ่งของปนกัน โดยเฉพาะบนมือถือ
+> - **dev ต้อง build:** mode switch + ชุดขั้นต่อโหมด + filter ตั๋ว/ปิดรอบตาม `requisition_type` ใน `FrontlineStationPage`; ปรับ e2e
+> - **กระทบ:** แก้ CR-159 FR-DDS-01 (scope หน้าจอ); role/กติกาแจก/schema ไม่เปลี่ยน; **ไม่ bump `schema_v`**
+
+---
+
+## Why
+
+- CR-159 FR-DDS-01 รับรองหน้าเดียว 5 ขั้น (as-built PR #312): 1 รับของถึงจุดแจก · 2 แจกอาหารปรุงสุก ·
+  3 จ่ายพัสดุ & ยืม-คืน · 4 รับคืนสิ่งของ · 5 ปิดรอบ & คืนของ — ขั้น 1 และ 5 รวมตั๋ว food กับ supplies ไว้ด้วยกัน
+- feedback tester (roleplay ที่จุดแจก): สลับไปมาระหว่างงานอาหารกับสิ่งของในหน้าเดียวสับสน; บนมือถือแท็บ 5 อันแน่น
+  และรายการตั๋วในขั้น 1/5 ปนสองประเภท
+- ในหน้างาน คนแจกอาหารกับคนแจกสิ่งของมักเป็นคนละโต๊ะ/คนละช่วงเวลา → แยกโหมดตรงกับงานจริง
+- ตั๋วมี `requisition_type` (`food` | `supplies`, schema.md §2.29) อยู่แล้ว → แยกได้โดยไม่แตะข้อมูล
+
+**บริบท — งาน UI ที่ทำคู่กันโดยไม่มี CR (ไม่เปลี่ยน spec, อ้างไว้เท่านั้น):**
+
+- มือถือ: auto-scroll ไปขั้นที่เลือก + แท็บแบบกะทัดรัด
+- แสดงจำนวนครั้งที่รับซ้ำ (repeat count) ของผู้รับ
+- ตัวระบุของยืมตอนรับคืนอ่านง่ายขึ้น (readable return identifiers)
+
+## Change
+
+### Before → after
+
+|                    | ก่อน (CR-159 FR-DDS-01)                     | หลัง                                                                                     |
+| ------------------ | ------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| โครงหน้า           | หน้าเดียว 5 ขั้น                            | หน้าเดียว + สวิตช์โหมด "อาหาร \| สิ่งของ" บนสุด                                         |
+| โหมดอาหาร          | —                                           | 1 รับของถึงจุดแจก (food) · 2 แจกอาหารปรุงสุก · 3 ปิดรอบ (food)                           |
+| โหมดสิ่งของ        | —                                           | 1 รับของถึงจุดแจก (supplies) · 2 จ่ายพัสดุ & ยืม-คืน · 3 รับคืนสิ่งของ · 4 ปิดรอบ & คืนของ (supplies) |
+| ตั๋วในขั้นรับของ/ปิดรอบ | food + supplies ปนกัน                  | เฉพาะ `requisition_type` ของโหมดปัจจุบัน                                                 |
+| route              | `/onsite/distribution`                      | `/onsite/distribution` เดิม (± `?mode=` ตาม OPEN-2)                                       |
+| role / กติกาแจก / schema | CR-159 FR-DDS-02/03, §B, §C            | ไม่เปลี่ยน (ตาม OPEN-4)                                                                 |
+
+### Requirements
+
+- **FR-DFS-01** — แก้ CR-159 FR-DDS-01: `/onsite/distribution` ยังเป็นหน้าเดียว (ครอบหน้าจอ 13–17 ของ CR-121 §5) แต่มี
+  **สวิตช์โหมด** "อาหาร | สิ่งของ" อยู่บนสุดของหน้า เหนือแถบขั้น; เลือกได้ครั้งละหนึ่งโหมด
+- **FR-DFS-02** — โหมด **อาหาร** แสดง 3 ขั้นตามลำดับ:
+  1. รับของถึงจุดแจก — เฉพาะตั๋ว `requisition_type = 'food'`
+  2. แจกอาหารปรุงสุก — กติกา CR-159 §B, §C เดิมทั้งหมด
+  3. ปิดรอบ — เฉพาะตั๋ว `requisition_type = 'food'`
+- **FR-DFS-03** — โหมด **สิ่งของ** แสดง 4 ขั้นตามลำดับ:
+  1. รับของถึงจุดแจก — เฉพาะตั๋ว `requisition_type = 'supplies'`
+  2. จ่ายพัสดุ & ยืม-คืน
+  3. รับคืนสิ่งของ
+  4. ปิดรอบ & คืนของ — เฉพาะตั๋ว `requisition_type = 'supplies'`; กติกายอดของยืม CR-159 FR-DDS-06 เดิม
+- **FR-DFS-04** — ขั้นใดของโหมดหนึ่งต้อง **ไม่แสดง** ตั๋ว/รายการของอีกโหมด (รวมรายการที่รอรับของ, ยอดปิดรอบ, ตัวนับ)
+- **FR-DFS-05** — สลับโหมดไม่เขียนข้อมูลใด ๆ และไม่ทิ้งงานที่บันทึกแล้ว; ถ้ามีฟอร์มที่กรอกค้าง (ยังไม่ยืนยัน) ให้ถามยืนยันก่อนสลับ
+- **FR-DFS-06** — โหมดเริ่มต้นเมื่อเข้าหน้า = โหมดล่าสุดที่จำไว้ต่อเครื่อง (`localStorage`); ครั้งแรกหรืออ่าน storage ไม่ได้ → โหมดอาหาร (OPEN-1 = A)
+- **FR-DFS-07** — โหมดอยู่ใน URL `?mode=food|supplies` (deep link / QR ติดโต๊ะ); ค่าใน URL ชนะค่าที่จำไว้; ค่าที่ไม่รู้จัก → ใช้ FR-DFS-06; ไม่มี route ใหม่ (OPEN-2 = A)
+- **FR-DFS-08** — สวิตช์โหมดแสดง badge ตัวเลขงานค้างของแต่ละโหมด = ตั๋วรอรับของถึงจุดแจก + ตั๋วรอปิดรอบ; ไม่นับผู้รับที่ยังไม่มารับ (OPEN-3 = A)
+- **FR-DFS-09** — role ต่อขั้นตาม CR-159 FR-DDS-02/03 เดิม ผูกกับขั้น ไม่ผูกกับโหมด; route guard FR-DDS-04 เดิม (OPEN-4 = A)
+- **FR-DFS-10** — FR-DDS-07 (filter ตั๋วตามจุดแจก) คงสถานะเดิม; ตัวเลือกจุดแจกและ filter จุดแจกทำงานภายในโหมดปัจจุบัน — รายการจุดแจกคิดจากตั๋วของโหมดนั้นเท่านั้น (OPEN-5 = A)
+
+### Acceptance
+
+- [x] เปิด `/onsite/distribution` เห็นสวิตช์ "อาหาร | สิ่งของ" เหนือแถบขั้น
+- [x] โหมดอาหารมี 3 ขั้น (รับของ · แจกอาหารปรุงสุก · ปิดรอบ); โหมดสิ่งของมี 4 ขั้น (รับของ · จ่ายพัสดุ & ยืม-คืน · รับคืน · ปิดรอบ & คืนของ)
+- [x] shelter มีตั๋ว food 1 ใบ + supplies 1 ใบ สถานะรอรับ → โหมดอาหาร ขั้น 1 เห็นเฉพาะใบ food; โหมดสิ่งของ ขั้น 1 เห็นเฉพาะใบ supplies
+- [x] ปิดรอบในโหมดอาหารไม่แตะ/ไม่แสดงตั๋ว supplies และกลับกัน
+- [x] สลับโหมดระหว่างกรอกจำนวนค้าง → มี dialog ยืนยัน; ยกเลิกแล้วค่าที่กรอกยังอยู่
+- [x] role ที่เปิดแต่ละขั้นได้ตรงกับ CR-159 FR-DDS-02/03
+- [x] ใช้งานได้ที่ความกว้างมือถือ (360 px) โดยสวิตช์โหมด + แถบขั้นไม่ล้นจอ
+- [x] unit test: filter ตั๋วตาม `requisition_type` ต่อโหมด/ขั้น; e2e ของ desk ผ่านหลังปรับตามโหมด
+
+## Open points — เคาะแล้ว (kong, 2026-10-27: ตามค่าเสนอทั้งหมด)
+
+| #      | เรื่อง                                   | ทางเลือก                                                                                                   | เคาะ                                                                                                              |
+| ------ | ---------------------------------------- | ---------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| OPEN-1 | โหมดเริ่มต้นเมื่อเข้าหน้า               | (A) จำโหมดล่าสุดต่อเครื่อง (`localStorage`) · (B) อาหารก่อนเสมอ · (C) โหมดที่มีงานค้าง                     | **A** แล้ว fallback **B** ครั้งแรก/อ่าน storage ไม่ได้ — โต๊ะหนึ่งมักทำโหมดเดียวทั้งกะ; C ทำให้หน้าเปลี่ยนเองจนงง |
+| OPEN-2 | โหมดอยู่ใน URL (`?mode=food\|supplies`) | (A) มี — deep link / QR ติดโต๊ะ / e2e เปิดตรงได้, URL ชนะค่าที่จำไว้ · (B) ไม่มี state ใน URL             | **A** — ไม่มี route ใหม่ (CR-121 §5 ไม่ต้องแก้); ค่าที่ไม่รู้จัก → ใช้ default ตาม OPEN-1                          |
+| OPEN-3 | บอกงานค้างของอีกโหมด                    | (A) badge ตัวเลขบนสวิตช์โหมด (ตั๋วรอรับของ + ตั๋วรอปิดรอบ ของโหมดนั้น) · (B) badge จุดไม่มีตัวเลข · (C) ไม่แสดง | **A** — นับเฉพาะงานที่ต้องลงมือ (รอรับของถึงจุดแจก, รอปิดรอบ); ไม่นับผู้รับที่ยังไม่มารับ                         |
+| OPEN-4 | role ต่อขั้น (CR-159 FR-DDS-02/03)      | (A) ไม่เปลี่ยน — gate ผูกกับขั้นเดิม · (B) gate ระดับโหมด                                                   | **A** — route guard FR-DDS-04 (union SA, SM, DST) เดิม; ไม่เปลี่ยน role/permission จึงไม่กระทบ RM                 |
+| OPEN-5 | FR-DDS-07 (filter ตั๋วตามจุดแจก)        | (A) คงสถานะ NEEDS DECISION เดิม — ถ้าเคาะ filter จุดแจก ให้ใช้ภายในแต่ละโหมด · (B) ผูกจุดแจกกับโหมด          | **A** — สองเรื่องตั้งฉากกัน: โหมด filter ตาม `requisition_type`, จุดแจก filter ตาม `destination_location`          |
+| OPEN-6 | e2e / tests                              | ปรับ page object ใน `frontend/e2e/distribution/pages/` ให้เลือกโหมดก่อนเลือกขั้น                          | ปรับ spec เดิม (flow, handover, returns-close, access, volunteer) ใน PR เดียวกับ UI; เพิ่ม unit test filter ต่อโหมด + e2e สลับโหมด 1 เคส |
+
+## Impact
+
+- **Docs:** CR-159 §A — FR-DDS-01 ถูกแก้โดย CR นี้ (มีบรรทัดชี้มาที่ CR นี้ใต้ FR-DDS-01); CR-121 §5 ไม่ต้องแก้ เพราะไม่มี route ใหม่
+- **Code:** `FrontlineStationPage.svelte` (mode switch, ชุดขั้นต่อโหมด, `?mode=`), `ShiftReconciliationCard.svelte` (ปิดรอบตามโหมด),
+  `ui/model/desk-mode.ts` (filter ตาม `requisition_type`), `ui/model/desk-mode-storage.ts` (จำโหมดต่อเครื่อง)
+- **Tests:** unit `desk-mode.test.ts`, `desk-mode-storage.test.ts`; e2e `frontend/e2e/distribution/*` และ page objects
+- **ไม่กระทบ:** schema / `schema_v`, VDU, `distribution_log`, กติกา CR-159 §B/§C/CR-191, role/permission, worker/FastAPI,
+  back-office ตั๋ว (`/back-office/...` ยังเห็นทุกประเภท)
+
+## Migration
+
+N/A — ไม่มีการเปลี่ยนรูปร่าง doc ที่ persist; **ไม่ bump `schema_v`**. ค่าที่จำโหมด (FR-DFS-06) เป็น per-device
+convenience ใน browser storage เท่านั้น อ่านไม่ได้ → ใช้ default
+
+## Decision log
+
+- 2026-10-25 — proposed. kong เคาะแล้ว: track ด้วย CR ไฟล์แยกที่แก้ CR-159 (draft รอ approve); ดีไซน์ = สวิตช์
+  "อาหาร | สิ่งของ" + โหมดอาหาร 3 ขั้น / โหมดสิ่งของ 4 ขั้น. รอเคาะ OPEN-1..6
+- 2026-10-27 — approved โดย kong เป็น CR-200; เคาะ OPEN-1..6 ตามค่าเสนอทั้งหมด (FR-DFS-06..10); FR-DFS-05
+  (ถามยืนยันก่อนสลับโหมดเมื่อมีฟอร์มกรอกค้าง) คงไว้ใน scope

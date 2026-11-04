@@ -5,7 +5,8 @@
 
 	const occupancyQuery = useDashboardOccupancy(() => code);
 
-	const active = $derived(occupancyQuery.data?.active ?? 0);
+	// In the shelter = active + room_confirmed (draft-in-shelter-headcount).
+	const active = $derived(occupancyQuery.data?.in_shelter ?? 0);
 	const ratio = $derived(capacity > 0 ? active / capacity : 0);
 	const percent = $derived(Math.min(100, Math.round(ratio * 100)));
 

@@ -198,7 +198,7 @@
 		</p>
 		{#if selectedSkills.length > 0}
 			<span class="flex items-center gap-1 text-[11px] text-muted-foreground">
-				<Sparkles class="h-3 w-3 text-emerald-600" />
+				<Sparkles class="h-3 w-3 text-domain-volunteer" />
 				แนะนำงานที่ตรงกับทักษะที่เลือกไว้ก่อน
 			</span>
 		{/if}
@@ -237,7 +237,9 @@
 							<span class="flex flex-wrap items-center gap-1.5">
 								<span class="truncate font-bold">{group.job.title}</span>
 								{#if group.skillMatch}
-									<Badge class="shrink-0 gap-1 border-none bg-emerald-500 text-[10px] text-white">
+									<Badge
+										class="shrink-0 gap-1 border-none bg-domain-volunteer-strong text-[10px] text-white"
+									>
 										<Sparkles class="h-2.5 w-2.5" />
 										แนะนำ
 									</Badge>

@@ -29,7 +29,9 @@ describe('note on non-adjust rows', () => {
 			reason: 'donation',
 			ref_id: 'donation:01J'
 		} as const;
+		// @ts-expect-error -- a blank note is dropped at runtime, but the type still refuses it
 		expect(() => createStockLedger({ ...base, note: '   ' }, ctx)).not.toThrow();
+		// @ts-expect-error -- the type forbids it too; the runtime guard covers untyped data
 		expect(() => createStockLedger({ ...base, note: 'x' }, ctx)).toThrow();
 	});
 });

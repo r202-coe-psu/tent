@@ -3,6 +3,12 @@
 	import { Input } from '$lib/components/ui/input';
 	import { Label } from '$lib/components/ui/label';
 	import HouseholdSearchSelect from '$lib/components/household-search-select.svelte';
+	import {
+		formatMasterLabel,
+		formatMasterLabelByCode,
+		useMasterData
+	} from '$lib/features/master-data';
+	import { langState } from '$lib/states/i18n.svelte';
 	import type { OverviewFilters } from '../domain/schemas';
 
 	let {
@@ -25,17 +31,21 @@
 	const sourceValue = $derived(filters.source ?? 'all');
 	const householdMode = $derived(filters.shelter_code ? 'shelter' : 'universal');
 
-	const siteKindLabel = $derived.by(() => {
-		if (siteKindValue === 'evacuation_center') return 'ศูนย์อพยพ';
-		if (siteKindValue === 'host_house') return 'บ้านพี่เลี้ยง';
-		return 'ทั้งหมด';
-	});
+	// CR-198 FR-10: options are the active kinds; the trigger resolves against every item.
+	const siteKindQuery = useMasterData(() => 'site_kind');
+	const siteKindItems = $derived(siteKindQuery.data?.items ?? []);
+	const siteKindLabel = $derived(
+		siteKindValue === 'all'
+			? 'ทั้งหมด'
+			: formatMasterLabelByCode(siteKindValue, siteKindItems, langState.current)
+	);
 
 	const operationStatusLabel = $derived.by(() => {
 		if (operationStatusValue === 'standby') return 'เตรียมการ';
 		if (operationStatusValue === 'active') return 'เปิดรับ';
 		if (operationStatusValue === 'full_capacity') return 'เต็มความจุ';
 		if (operationStatusValue === 'closed') return 'ปิดศูนย์';
+		if (operationStatusValue === 'cancelled') return 'ยกเลิกศูนย์';
 		return 'ทั้งหมด';
 	});
 
@@ -65,7 +75,7 @@
 			onValueChange={(v) => {
 				if (!v) return;
 				patch({
-					site_kind: v === 'all' ? undefined : (v as OverviewFilters['site_kind'])
+					site_kind: v === 'all' ? undefined : v
 				});
 			}}
 		>
@@ -81,8 +91,9 @@
 			</Select.Trigger>
 			<Select.Content>
 				<Select.Item value="all" label="ทั้งหมด" />
-				<Select.Item value="evacuation_center" label="ศูนย์อพยพ" />
-				<Select.Item value="host_house" label="บ้านพี่เลี้ยง" />
+				{#each siteKindItems.filter((i) => i.status === 'active') as item (item.code)}
+					<Select.Item value={item.code} label={formatMasterLabel(item, langState.current)} />
+				{/each}
 			</Select.Content>
 		</Select.Root>
 	</div>
@@ -115,6 +126,7 @@
 				<Select.Item value="active" label="เปิดรับ" />
 				<Select.Item value="full_capacity" label="เต็มความจุ" />
 				<Select.Item value="closed" label="ปิดศูนย์" />
+				<Select.Item value="cancelled" label="ยกเลิกศูนย์" />
 			</Select.Content>
 		</Select.Root>
 	</div>

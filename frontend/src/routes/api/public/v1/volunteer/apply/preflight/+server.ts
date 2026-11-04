@@ -1,13 +1,7 @@
-import { dev } from '$app/environment';
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { env } from '$env/dynamic/private';
 import { z } from 'zod';
-import { isCaptchaKeyConfigured } from '$lib/features/public-register/server';
-import {
-	volunteerApplyIpLimiter,
-	volunteerApplyPhoneLimiter
-} from '$lib/server/security/rate-limiter';
+import { volunteerMobileSchema } from '$lib/utils/volunteer-phone';
 import {
 	preflightPublicVolunteerApplication,
 	PublicApplicationError
@@ -20,43 +14,32 @@ const schema = z.object({
 	shelter_code: z.string().trim().min(1).optional(),
 	first_name: z.string().trim().min(1),
 	last_name: z.string().trim().min(1),
-	phone: z
-		.string()
-		.trim()
-		.transform((value) => value.replace(/\D/g, ''))
-		.pipe(z.string().regex(/^0\d{8,9}$/, 'เบอร์โทรศัพท์ไม่ถูกต้อง')),
+	phone: volunteerMobileSchema,
 	email: z.string().optional(),
 	skills: z.array(z.string().trim().min(1)).default([]),
 	shift_id: z.string().trim().min(1).optional(),
-	shift_date: z.string().optional(),
+	shift_date: z
+		.string()
+		.regex(/^\d{4}-\d{2}-\d{2}$/, 'รูปแบบวันที่ไม่ถูกต้อง (YYYY-MM-DD)')
+		.optional(),
 	start_time: z.string().optional(),
 	end_time: z.string().optional(),
 	station: z.string().optional()
 });
 
+/**
+ * Errors leave as a code only, like `POST /volunteer/jobs/[id]/apply`: the client turns it
+ * into copy through the same table it uses for the apply step (`volunteer-api.ts`), so the
+ * two steps can never word the same failure differently.
+ */
 const noStore = { 'Cache-Control': 'no-store' };
 
-export const POST: RequestHandler = async ({ request, getClientAddress }) => {
+export const POST: RequestHandler = async ({ request }) => {
 	const parsed = schema.safeParse(await request.json().catch(() => null));
 	if (!parsed.success) {
 		return json(
 			{ success: false, error: 'VALIDATION_ERROR', message: parsed.error.issues[0]?.message },
 			{ status: 400, headers: noStore }
-		);
-	}
-	const ip = getClientAddress();
-	// Same budget as POST /apply (CR-092 FR-VOL-02.3, 3 per 10 min per IP and per phone),
-	// and the same dev escape hatch: the loopback bypass inside RateLimiter only covers the
-	// IP key, so without this a local test run burns the phone budget twice per submit
-	// (preflight + apply) and locks itself out after the second attempt.
-	const skipDevGuards = dev && !isCaptchaKeyConfigured(env.SECRET_RECAPTCHA_KEY);
-	if (
-		!skipDevGuards &&
-		(!volunteerApplyIpLimiter.check(ip) || !volunteerApplyPhoneLimiter.check(parsed.data.phone))
-	) {
-		return json(
-			{ success: false, error: 'RATE_LIMITED', message: 'กรุณารอสักครู่แล้วลองใหม่อีกครั้ง' },
-			{ status: 429, headers: noStore }
 		);
 	}
 	try {
@@ -81,6 +64,7 @@ export const POST: RequestHandler = async ({ request, getClientAddress }) => {
 				{ status: error.httpStatus, headers: noStore }
 			);
 		}
+		console.error('[public-volunteer-apply] preflight failed', error);
 		return json({ success: false, error: 'PREFLIGHT_FAILED' }, { status: 503, headers: noStore });
 	}
 };

@@ -94,6 +94,8 @@
 	}: Props = $props();
 
 	let lookup = $state<Extract<KioskLookupResponse, { kind: 'household' }> | null>(null);
+	/** When the current `lookup` succeeded (ISO) — sent with the check-in as the Station 1 start (CR-192). */
+	let lookupAt = '';
 	let candidates = $state<KioskHouseholdCandidate[]>([]);
 	let candidateShelterCode = $state('');
 	let lookupError = $state('');
@@ -139,6 +141,12 @@
 			canRegister &&
 			(input?.source === 'smart-card' || input?.source === 'thaid') &&
 			Boolean(onregister)
+	);
+	/** No pre-registration and the kiosk may not register this card / ThaiD scan (FR-KWR-40). */
+	const walkInClosed = $derived(
+		lookupErrorCode === 'PRE_REGISTRATION_NOT_FOUND' &&
+			!canRegister &&
+			(input?.source === 'smart-card' || input?.source === 'thaid')
 	);
 	const successfulResults = $derived(
 		results.filter((result) => result.status === 'checked_in' || result.qr_payload)
@@ -230,6 +238,7 @@
 				return;
 			}
 			lookup = found;
+			lookupAt = new Date().toISOString();
 			const selectableMembers = found.members.filter((member) => member.selectable);
 			if (selectableMembers.length === 0) {
 				results = toExistingReportResults(found.members);
@@ -301,6 +310,7 @@
 		try {
 			const response = await checkInSelectedMembers(lookup.primary_evacuee_id, ids, {
 				batchLimit: 20,
+				lookupAt,
 				...(isThaidGate ? thaidOptions() : await cardPhotoOptions())
 			});
 			thaidSessionSpent = true;
@@ -602,6 +612,31 @@
 					if (input?.source === 'smart-card' || input?.source === 'thaid') onregister?.(input);
 				}}
 			/>
+		{:else if walkInClosed}
+			<KioskNoticePanel
+				tone="warning"
+				icon={CircleAlert}
+				title="ไม่พบข้อมูลลงทะเบียนล่วงหน้า"
+				role="alert"
+				data-testid="kiosk-walk-in-closed"
+			>
+				<p>ไม่สามารถลงทะเบียนเพิ่มที่ตู้นี้ได้ กรุณาติดต่อเจ้าหน้าที่</p>
+				{#snippet actions()}
+					<KioskLookupErrorActions
+						{lookupErrorCode}
+						{isPhoneGate}
+						{isThaidGate}
+						walkInClosed
+						{isLookingUp}
+						{retryAfterSeconds}
+						{homeUrl}
+						{backUrl}
+						onretry={retryLookup}
+						{onreset}
+						{onrescan}
+					/>
+				{/snippet}
+			</KioskNoticePanel>
 		{:else if lookupError}
 			<KioskNoticePanel tone="warning" icon={CircleAlert} title={lookupError} role="alert">
 				{#snippet actions()}

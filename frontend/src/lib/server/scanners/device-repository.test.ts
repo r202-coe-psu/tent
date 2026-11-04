@@ -144,10 +144,12 @@ describe('ScannerDeviceRepository', () => {
 			expect(mockRaw.mock.calls[1]?.[2]).toMatchObject({ screen_type: 'portrait' });
 		});
 
-		it('writes banner_enabled: true explicitly on a new device (FR-KBR-35)', async () => {
+		it('writes no banner fields on a new device, so it starts without a banner group', async () => {
 			await repository.createDevice(input, 'sa-user');
 
-			expect(mockRaw.mock.calls[1]?.[2]).toMatchObject({ banner_enabled: true });
+			const body = mockRaw.mock.calls[1]?.[2] as Record<string, unknown>;
+			expect(body).not.toHaveProperty('banner_enabled');
+			expect(body).not.toHaveProperty('banner_group_id');
 		});
 
 		it('writes a random default PIN to scanner_secrets first and returns it once', async () => {
@@ -498,25 +500,6 @@ describe('ScannerDeviceRepository', () => {
 			expect(updated.status).toBe('inactive');
 		});
 
-		it('writes banner_enabled and keeps it absent when not patched (FR-KBR-35)', async () => {
-			mockRaw
-				.mockResolvedValueOnce({ status: 200, data: v2Doc })
-				.mockResolvedValueOnce({ status: 201, data: { ok: true, rev: '4-def' } })
-				.mockResolvedValueOnce({ status: 200, data: v2Doc })
-				.mockResolvedValueOnce({ status: 201, data: { ok: true, rev: '4-def' } });
-
-			const updated = await repository.updateDevice(v2Doc._id, { banner_enabled: false }, 'sm-a');
-			expect(putBodyAt(1)).toEqual({
-				...v2Doc,
-				banner_enabled: false,
-				updated_at: expect.any(String)
-			});
-			expect(updated.banner_enabled).toBe(false);
-
-			await repository.updateDevice(v2Doc._id, { status: 'inactive' }, 'sm-a');
-			expect(putBodyAt(3)).not.toHaveProperty('banner_enabled');
-		});
-
 		it('writes screen_type through a patch', async () => {
 			mockRaw
 				.mockResolvedValueOnce({ status: 200, data: v2Doc })
@@ -595,6 +578,56 @@ describe('ScannerDeviceRepository', () => {
 			);
 			expect(logged).not.toContain(v2Doc.secret_hash);
 			info.mockRestore();
+		});
+	});
+
+	describe('setBannerGroup', () => {
+		const otherDoc = {
+			...v2Doc,
+			_id: 'scanner_device:kiosk-sh001-02',
+			_rev: '5-xyz',
+			device_id: 'kiosk-sh001-02'
+		};
+		const putBodyAt = (call: number) => mockRaw.mock.calls[call]?.[2] as Record<string, unknown>;
+
+		it('sets banner_group_id on each device and leaves every other field untouched', async () => {
+			mockRaw
+				.mockResolvedValueOnce({ status: 200, data: v2Doc })
+				.mockResolvedValueOnce({ status: 201, data: { ok: true, rev: '4-def' } })
+				.mockResolvedValueOnce({ status: 200, data: otherDoc })
+				.mockResolvedValueOnce({ status: 201, data: { ok: true, rev: '6-uvw' } });
+
+			const updated = await repository.setBannerGroup(
+				[v2Doc._id, otherDoc._id],
+				'kiosk_banner_group:g1',
+				'sm-a'
+			);
+
+			expect(putBodyAt(1)).toEqual({
+				...v2Doc,
+				banner_group_id: 'kiosk_banner_group:g1',
+				updated_at: expect.any(String)
+			});
+			expect(putBodyAt(3)).toEqual({
+				...otherDoc,
+				banner_group_id: 'kiosk_banner_group:g1',
+				updated_at: expect.any(String)
+			});
+			expect(updated.map((d) => [d.device_id, d.banner_group_id])).toEqual([
+				['kiosk-sh001-01', 'kiosk_banner_group:g1'],
+				['kiosk-sh001-02', 'kiosk_banner_group:g1']
+			]);
+		});
+
+		it('clears the group with null (stored as explicit null, not removed)', async () => {
+			const grouped = { ...v2Doc, banner_group_id: 'kiosk_banner_group:g1' };
+			mockRaw
+				.mockResolvedValueOnce({ status: 200, data: grouped })
+				.mockResolvedValueOnce({ status: 201, data: { ok: true, rev: '4-def' } });
+
+			await repository.setBannerGroup([v2Doc._id], null, 'sm-a');
+
+			expect(putBodyAt(1)).toMatchObject({ banner_group_id: null });
 		});
 	});
 

@@ -777,7 +777,7 @@ user ของ kiosk ต้องรัน `kiosk/start_kiosk.sh` ได้ (scr
 7. **ตรวจสถานะ:** `./setup_printer.sh --status` → ทุกข้อต้องเป็น ✅
 8. **Reboot** → Kiosk เปิดเอง → รายงานตัวผู้ทดสอบ → กด "พิมพ์ QR Code" → label ออกโดยไม่มี dialog
 
-`setup_printer.sh` ทำให้อัตโนมัติ: ติดตั้ง CUPS + driver, เลือก filter ให้ตรงสถาปัตยกรรม, **ห่อ filter ให้ลบภาพ label ออกจาก `/tmp` หลังทุกงานพิมพ์**, ลบ cron `mvimg.sh` + `/var/log/prnlog` ที่ driver ติดตั้งมา (เก็บภาพชื่อผู้อพยพ), สร้าง queue `tent_xprinter` ขนาด label เป็น default และลบ queue `XP-365B` ที่ driver สร้างเอง, ปิดการเข้าถึง CUPS จากเครื่องอื่น, ติดตั้ง Chromium policy (ไม่มี header/footer, ปิด "Save as PDF")
+`setup_printer.sh` ทำให้อัตโนมัติ: ติดตั้ง CUPS + driver, เลือก filter ให้ตรงสถาปัตยกรรม, **ห่อ filter ให้ลบภาพ label ออกจาก `/tmp` หลังทุกงานพิมพ์**, ลบ cron `mvimg.sh` + `/var/log/prnlog` ที่ driver ติดตั้งมา (เก็บภาพชื่อผู้อพยพ), ยกเลิก job ที่ค้างใน queue ของ XP-365B (label เก่าจะได้ไม่หลุดออกเครื่องใหม่), สร้าง queue `tent_xprinter` ขนาด label เป็น default (ไม่ผูก serial — XP-365B ตัวไหนก็ได้) และลบ queue `XP-365B` ที่ driver สร้างเอง, ปิดการเข้าถึง CUPS จากเครื่องอื่น, ติดตั้ง Chromium policy (ไม่มี header/footer, ปิด "Save as PDF")
 
 > ⚠️ `setup_printer.sh` รันได้เฉพาะบน Raspberry Pi (แก้ค่าเครื่องพิมพ์ทั้งระบบ) — บนเครื่อง dev ใช้ `./test_label_print.sh --configure` แทน
 
@@ -800,7 +800,7 @@ user ของ kiosk ต้องรัน `kiosk/start_kiosk.sh` ได้ (scr
 | :---------------------------- | :-------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | อัปเกรด / ติดตั้ง `.deb` ใหม่ | รัน `./setup_printer.sh <deb ใหม่>` ซ้ำ **ทุกครั้ง** — ตัวติดตั้งของ driver เขียนทับ wrapper และสร้าง cron + queue `XP-365B` กลับมา                                         |
 | เปลี่ยนขนาดม้วน label         | (1) แก้ `KIOSK_LABEL_MM` + deploy frontend (2) รัน `./setup_printer.sh --label <W>x<H> --gap <N>` บน **ทุก** Pi (3) `./test_label_print.sh` — (1) กับ (2) ต้องเสร็จพร้อมกัน |
-| เปลี่ยนเครื่องพิมพ์ตัวใหม่    | รัน `./setup_printer.sh` ซ้ำ (หา URI ใหม่ให้เอง)                                                                                                                            |
+| เปลี่ยนเครื่องพิมพ์ตัวใหม่    | XP-365B รุ่นเดียวกัน: เสียบแทนได้เลย (queue ไม่ผูก serial — CUPS ใช้ XP-365B ตัวไหนก็ได้ที่เสียบอยู่; เสียบทีละตัว) · รุ่นอื่น หรือ `--status` ขึ้น ❌ "queue ผูกกับเครื่องตัวเดียว" → รัน `./setup_printer.sh` ซ้ำ |
 | QR จาง                        | `sudo lpadmin -p tent_xprinter -o Darkness=12` (สูงสุด 15) · ช้าลงให้คมขึ้น `-o PrintSpeed=2`                                                                               |
 
 ### 4. แก้ปัญหาเครื่องพิมพ์

@@ -1,5 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { deriveHeadcountFromOccupancy, type OccupantView } from './occupancy';
+import {
+	deriveHeadcountFromOccupancy,
+	deriveSessionHeadcountFromOccupancy,
+	type OccupantView
+} from './occupancy';
 
 const occ = (o: Partial<OccupantView> & { status: string }): OccupantView => ({
 	current_stay: { status: o.status },
@@ -7,16 +11,18 @@ const occ = (o: Partial<OccupantView> & { status: string }): OccupantView => ({
 	special_needs: o.special_needs
 });
 
-describe('deriveHeadcountFromOccupancy (CR-022 mapping, CR-035 status rename)', () => {
-	it('counts only active (in-shelter) evacuees as total', () => {
+describe('deriveHeadcountFromOccupancy (CR-022 mapping, draft-in-shelter-headcount)', () => {
+	it('counts the evacuees in the shelter (active + room_confirmed) as total', () => {
 		const h = deriveHeadcountFromOccupancy([
 			occ({ status: 'active' }),
 			occ({ status: 'active' }),
+			occ({ status: 'room_confirmed' }),
+			occ({ status: 'arriving' }),
 			occ({ status: 'pre_registered' }),
 			occ({ status: 'checked_out' }),
 			occ({ status: 'transferred' })
 		]);
-		expect(h.total).toBe(2);
+		expect(h.total).toBe(3);
 	});
 
 	it('ignores the legacy checked_in status (pre-CR-035 value no longer counts)', () => {
@@ -33,13 +39,15 @@ describe('deriveHeadcountFromOccupancy (CR-022 mapping, CR-035 status rename)', 
 		expect(h.total).toBe(0);
 	});
 
-	it('counts exactly one of the seven stay statuses (active)', () => {
-		// Mirrors people/domain/people.ts stayStatusSchema verbatim — kept as a
-		// local literal list (not imported) so this domain module stays
-		// people-agnostic.
+	it('counts exactly two stay statuses (active, room_confirmed)', () => {
+		// Mirrors people/domain/people.ts stayStatusSchema — kept as a local literal list
+		// (not imported) so this domain module stays people-agnostic.
 		const ALL_STAY_STATUSES = [
 			'pre_registered',
+			'kiosk_registered',
+			'arriving',
 			'active',
+			'room_confirmed',
 			'temporary_leave',
 			'transferred',
 			'checked_out',
@@ -47,7 +55,7 @@ describe('deriveHeadcountFromOccupancy (CR-022 mapping, CR-035 status rename)', 
 			'cancelled'
 		] as const;
 		const h = deriveHeadcountFromOccupancy(ALL_STAY_STATUSES.map((status) => occ({ status })));
-		expect(h.total).toBe(1);
+		expect(h.total).toBe(2);
 	});
 
 	it('derives halal from religion=muslim among the present', () => {
@@ -90,5 +98,23 @@ describe('deriveHeadcountFromOccupancy (CR-022 mapping, CR-035 status rename)', 
 		});
 		const h = deriveHeadcountFromOccupancy([occ({ status: 'active' })]);
 		expect(h).toEqual({ total: 1, halal: 0, soft_food: 0, infant: 0 });
+	});
+});
+
+describe('deriveSessionHeadcountFromOccupancy staff and volunteers', () => {
+	it('puts staff + volunteers in the volunteer group and into total', () => {
+		const h = deriveSessionHeadcountFromOccupancy(
+			[occ({ status: 'active' }), occ({ status: 'checked_out' })],
+			5
+		);
+		expect(h.volunteer).toBe(5);
+		expect(h.regular).toBe(1);
+		expect(h.total).toBe(6);
+	});
+
+	it('defaults the volunteer group to 0', () => {
+		const h = deriveSessionHeadcountFromOccupancy([occ({ status: 'active' })]);
+		expect(h.volunteer).toBe(0);
+		expect(h.total).toBe(1);
 	});
 });

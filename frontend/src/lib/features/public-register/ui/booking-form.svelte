@@ -1,16 +1,13 @@
 <script lang="ts">
 	import AlertTriangle from '@lucide/svelte/icons/alert-triangle';
-	import ExternalLink from '@lucide/svelte/icons/external-link';
 	import Info from '@lucide/svelte/icons/info';
 	import MapPin from '@lucide/svelte/icons/map-pin';
 	import QrCode from '@lucide/svelte/icons/qr-code';
-	import ShieldAlert from '@lucide/svelte/icons/shield-alert';
 	import { onMount, tick, untrack } from 'svelte';
 	import { toast } from 'svelte-sonner';
 	import { replaceState } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { env } from '$env/dynamic/public';
-	import { Checkbox } from '$lib/components/ui/checkbox';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Label } from '$lib/components/ui/label';
 	import * as Select from '$lib/components/ui/select/index.js';
@@ -27,8 +24,14 @@
 	import { getTranslation } from '$lib/utils/i18n';
 	import { PUBLIC_BOOKING_FORM_I18N } from '$lib/constants/i18n';
 	import { buildDisclaimerGroups } from '$lib/features/people/domain/disclaimer';
+	import type { ConsentAcknowledgement } from '$lib/features/consent';
 	import { UNASSIGNED_SHELTER_CODE } from '../domain/booking';
-	import { UnifiedRegistrationForm, type UnifiedRegistrationInput } from '$lib/features/people';
+	import {
+		UnifiedRegistrationForm,
+		type RegistrationConsent,
+		type RegistrationConsentConfig,
+		type UnifiedRegistrationInput
+	} from '$lib/features/people';
 	import { fetchRecaptchaEnabled } from '$lib/api/recaptcha-status';
 	import { ensureRecaptchaLoaded } from '$lib/api/recaptcha-script';
 	import {
@@ -47,6 +50,8 @@
 	let { shelters, lockedShelterCode = '', initialShelterCode = '', onbooked }: Props = $props();
 
 	let t = $derived(getTranslation(PUBLIC_BOOKING_FORM_I18N, langState.current));
+
+	const consentConfig: RegistrationConsentConfig = { channel: 'web', staff: null };
 
 	const createBooking = useCreateBooking();
 	const createUnassignedRegistration = useCreateUnassignedRegistration();
@@ -117,11 +122,30 @@
 	);
 	const hasShelter = $derived(selected !== null && selectedIsBookable && !selectedIsFull);
 	const isShelterOrQueueChosen = $derived(hasShelter || isUnassigned);
-	/** Unassigned flow: confirm stays disabled until disclaimer consent is checked. */
-	const submitDisabled = $derived(isUnassigned && !disclaimerAcknowledged);
 
 	const shelterPolicyQuery = useShelterPolicy(() => selected?.code ?? '');
 	const shelterPolicy = $derived(shelterPolicyQuery.data);
+
+	/** FR-22: group A — shelter safety conditions only (central queue has no acknowledgement row). */
+	function consentAcknowledgement(
+		household: UnifiedRegistrationInput['household']
+	): ConsentAcknowledgement | undefined {
+		if (isUnassigned) return undefined;
+		const groups = buildDisclaimerGroups({
+			assetDescription: household.assets?.description ?? '',
+			petCount: (household.pets ?? []).length,
+			vehicleCount: (household.vehicles ?? []).length,
+			shelter: shelterPolicy as unknown as ShelterSummary
+		});
+		if (groups.length === 0) return undefined;
+		return {
+			checked: disclaimerAcknowledged,
+			onchange: (value: boolean) => (disclaimerAcknowledged = value),
+			text: t.shelterSafetyAck,
+			needMessage: t.shelterDisclaimerRequired,
+			conditions: { title: t.shelterSafetyTitle, groups }
+		};
+	}
 
 	onMount(() => {
 		void fetchRecaptchaEnabled().then((enabled) => {
@@ -181,19 +205,22 @@
 		return t.bookingErrorFallback;
 	}
 
-	async function handleUnifiedSubmit(unifiedInput: UnifiedRegistrationInput) {
+	async function handleUnifiedSubmit(
+		unifiedInput: UnifiedRegistrationInput,
+		meta?: { consent: RegistrationConsent | null }
+	) {
+		const registrationConsent = meta?.consent;
+		if (!registrationConsent) throw new Error('consent block was not confirmed');
+		const consentBody = {
+			consent: registrationConsent.decision,
+			consent_member_keys: [...registrationConsent.memberKeys]
+		};
 		if (!isUnassigned && !selectedIsBookable) {
 			const err = t.shelterNotBookable;
 			toast.error(err);
 			throw new Error(err);
 		}
-		if (isUnassigned) {
-			if (!disclaimerAcknowledged) {
-				const err = t.unassignedDisclaimerRequired;
-				toast.error(err);
-				throw new Error(err);
-			}
-		} else {
+		if (!isUnassigned) {
 			const groups = buildDisclaimerGroups({
 				assetDescription: unifiedInput.household.assets?.description ?? '',
 				petCount: (unifiedInput.household.pets ?? []).length,
@@ -223,7 +250,7 @@
 				// Single path: pass UnifiedRegistrationInput through BFF → Mongo executor (#255).
 				const res = await createUnassignedRegistration.mutateAsync({
 					...unifiedInput,
-					disclaimerAcknowledged: true,
+					...consentBody,
 					...(token ? { captchaToken: token } : {})
 				});
 
@@ -253,6 +280,7 @@
 
 			const res = await createBooking.mutateAsync({
 				...unifiedInput,
+				...consentBody,
 				shelter_code: selectedShelterCode,
 				...(token ? { captchaToken: token } : {}),
 				disclaimerAcknowledged
@@ -308,7 +336,7 @@
 	{/if}
 </svelte:head>
 
-<div class="space-y-5">
+<div class="unified-reg-bleed space-y-5">
 	<!-- Guidance banner -->
 	<div
 		class="flex items-start gap-3 rounded-xl border border-primary/20 bg-primary/5 p-4 text-sm text-foreground shadow-2xs"
@@ -325,7 +353,10 @@
 	</div>
 
 	<!-- ── 1. ศูนย์พักพิงและผู้ติดต่อหลัก ───────────────────────────────── -->
-	<section class="space-y-5 rounded-2xl border border-border/60 bg-card p-5 shadow-2xs sm:p-6">
+	<section
+		data-surface="light"
+		class="unified-reg-band space-y-5 rounded-2xl border border-sky-200 bg-sky-50/70 p-5 shadow-2xs sm:p-6"
+	>
 		<div class="flex items-center gap-2.5 border-b border-border/60 pb-3">
 			<MapPin class="size-5 text-primary" />
 			<h3 class="text-base font-bold text-foreground sm:text-lg">{t.step1Title}</h3>
@@ -446,12 +477,13 @@
 			channel="public"
 			includeVehiclesAssets={false}
 			pending={isSubmitting}
-			{submitDisabled}
 			enableUnassignedPhoto={isUnassigned}
 			shelterCode={isUnassigned ? '' : selectedShelterCode}
 			shelterName={selected?.name ?? (isUnassigned ? t.unassignedShelterName : selectedShelterCode)}
 			bookableShelterCodes={bookable.map((s) => s.code)}
 			{joinResetKey}
+			consent={consentConfig}
+			{consentAcknowledgement}
 			onsubmit={handleUnifiedSubmit}
 			onselectshelter={(code, name) => {
 				if (code && selectedShelterCode !== code) {
@@ -461,86 +493,9 @@
 			}}
 			submitLabel={t.submitRegistration}
 		>
-			{#snippet children({ household })}
-				{@const currentDisclaimerGroups = !isUnassigned
-					? buildDisclaimerGroups({
-							assetDescription: household.assets?.description ?? '',
-							petCount: (household.pets ?? []).length,
-							vehicleCount: (household.vehicles ?? []).length,
-							shelter: shelterPolicy as unknown as ShelterSummary
-						})
-					: []}
-				{#if isUnassigned}
-					<section class="mt-2 space-y-3 rounded-xl border border-amber-500/40 bg-amber-500/10 p-4">
-						<div class="flex items-center gap-2">
-							<ShieldAlert class="size-5 text-amber-600 dark:text-amber-400" />
-							<h4 class="text-sm font-bold text-foreground">{t.unassignedDisclaimerTitle}</h4>
-						</div>
-						<p class="text-xs leading-relaxed text-muted-foreground">
-							{t.unassignedDisclaimerBody}
-						</p>
-						<label
-							class="flex min-h-12 cursor-pointer items-start gap-3 rounded-xl border border-amber-500/30 bg-card p-3.5 shadow-2xs"
-						>
-							<Checkbox
-								id="unassigned-disclaimer-ack"
-								checked={disclaimerAcknowledged}
-								onCheckedChange={(v) => (disclaimerAcknowledged = v === true)}
-								class="mt-0.5 size-5 shrink-0"
-							/>
-							<span class="text-xs leading-relaxed font-semibold select-none sm:text-sm">
-								{t.unassignedDisclaimerAckPrefix}<a
-									href={resolve('/term')}
-									target="_blank"
-									rel="noopener noreferrer"
-									class="text-blue-600 underline underline-offset-2 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
-									>{t.unassignedDisclaimerAckLink}<ExternalLink
-										class="ml-0.5 inline size-3.5 align-[-0.125em]"
-										aria-hidden="true"
-									/></a
-								>{t.unassignedDisclaimerAckSuffix}
-							</span>
-						</label>
-					</section>
-				{:else if currentDisclaimerGroups.length > 0}
-					<section class="mt-2 space-y-3 rounded-xl border border-amber-500/40 bg-amber-500/10 p-4">
-						<div class="flex items-center gap-2">
-							<ShieldAlert class="size-5 text-amber-600 dark:text-amber-400" />
-							<h4 class="text-sm font-bold text-foreground">
-								{t.shelterSafetyTitle}
-							</h4>
-						</div>
-						<div class="space-y-3">
-							{#each currentDisclaimerGroups as group (group.label)}
-								<div>
-									<h5 class="mb-1 text-xs font-semibold text-foreground">{group.label}</h5>
-									<ul class="list-disc space-y-0.5 pl-5 text-xs text-muted-foreground">
-										{#each group.items as item, i (i)}
-											<li>{item}</li>
-										{/each}
-									</ul>
-								</div>
-							{/each}
-						</div>
-						<label
-							class="flex min-h-12 cursor-pointer items-start gap-3 rounded-xl border border-amber-500/30 bg-card p-3.5 shadow-2xs"
-						>
-							<Checkbox
-								id="disclaimer-ack"
-								checked={disclaimerAcknowledged}
-								onCheckedChange={(v) => (disclaimerAcknowledged = v === true)}
-								class="mt-0.5 size-5 shrink-0"
-							/>
-							<span class="text-xs leading-relaxed font-semibold select-none sm:text-sm">
-								{t.shelterSafetyAck}
-							</span>
-						</label>
-					</section>
-				{/if}
-				{#if captchaEnabled}
-					<p class="mt-4 text-center text-2xs text-muted-foreground">{t.recaptchaBranding}</p>
-				{/if}
-			{/snippet}
+			{#if captchaEnabled}
+				<p class="mt-4 text-center text-2xs text-muted-foreground">{t.recaptchaBranding}</p>
+			{/if}
 		</UnifiedRegistrationForm>
 	{:else}
 		<div class="rounded-2xl border border-dashed border-border/80 bg-card/50 p-8 text-center">

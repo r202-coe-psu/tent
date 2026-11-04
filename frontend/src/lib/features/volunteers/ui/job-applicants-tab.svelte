@@ -1,8 +1,9 @@
 <script lang="ts">
 	/**
 	 * Job detail — Tab 3 "ผู้สมัคร (Applicants & Queue)" (01-tab-job-board.md
-	 * §01.5, approved mockup 2026-08-30): four summary tiles over one card
-	 * holding the applicant list.
+	 * §01.5, approved mockup 2026-08-30): summary tiles over one card holding the
+	 * applicant list. Volunteers staff assigned directly (no application) are listed in the
+	 * history beside the decided applications (`buildApplicantBoard`).
 	 *
 	 * Approving is the moment a job slot is consumed — the whole write path
 	 * (`JobApplicationRepository#review` → `JobRepository#confirmSlot`, with the
@@ -10,63 +11,191 @@
 	 * the data layer; this screen is the queue that drives it.
 	 *
 	 * Every list is read from an UNFILTERED query and narrowed here with
-	 * `partitionApplicantQueue`. `useJobApplications(filter)` takes its filter
+	 * `buildApplicantBoard`. `useJobApplications(filter)` takes its filter
 	 * once at setup, so a `{ jobId }` filter would freeze to whichever job was
 	 * rendered first (SvelteKit reuses this component across `[id]`
 	 * navigations) — and sharing the unfiltered cache entry with the tab badge
-	 * means the badge and this list can never disagree.
+	 * means the badge and this list can never disagree. Shift assignments (for the
+	 * per-shift check-in action) are read the same unfiltered way.
 	 */
+	import Search from '@lucide/svelte/icons/search';
 	import Users from '@lucide/svelte/icons/users';
+	import { Button } from '$lib/components/ui/button/index.js';
+	import { Input } from '$lib/components/ui/input/index.js';
+	import * as Select from '$lib/components/ui/select/index.js';
 	import { Skeleton } from '$lib/components/ui/skeleton/index.js';
+	import { formatThaiShortDate } from '$lib/utils/date';
+	import { canAccessVolunteerBackoffice } from '$lib/auth/roles';
+	import { getShelterCode } from '$lib/db/shelter';
+	import { useShelter } from '$lib/features/shelters';
+	import { authStore } from '$lib/stores/auth.svelte';
+	import { shelterStore } from '$lib/stores/shelter.svelte';
 	import JobApplicantRow from './job-applicant-row.svelte';
 	import JobApplicantReviewDialog from './job-applicant-review-dialog.svelte';
-	import { partitionApplicantQueue } from '../domain/applicant-queue';
+	import StaffAssignmentRow from './staff-assignment-row.svelte';
+	import { buildApplicantBoard, historyBreakdown } from '../domain/applicant-board';
+	import { volunteerAccessStatus } from '../domain/volunteer-access-status';
+	import {
+		EMPTY_APPLICANT_FILTERS,
+		filterApplicantBoard,
+		hasActiveApplicantFilters,
+		type ApplicantAttendanceFilter,
+		type ApplicantStatusFilter
+	} from '../domain/applicant-filter';
 	import type { Job } from '../domain/job.schema';
 	import type { JobApplication } from '../domain/job-application.schema';
-	import { useJobApplications, useSkillOptions, useVolunteers } from '../application/queries';
+	import {
+		todayDateString,
+		useJobApplications,
+		useShelterVolunteerAccounts,
+		useShiftAssignments,
+		useSkillOptions,
+		useVolunteers
+	} from '../application/queries';
+	import { createMinuteClock } from './minute-clock.svelte';
 
 	let { job }: { job: Job } = $props();
 
 	const applicationsQuery = useJobApplications();
 	const volunteersQuery = useVolunteers();
+	const assignmentsQuery = useShiftAssignments();
 	const skillCatalog = useSkillOptions();
 
-	const loading = $derived(applicationsQuery.isPending);
-	const queue = $derived(partitionApplicantQueue(applicationsQuery.data ?? [], job._id));
-
-	/** `volunteer_id` → `volunteer_code`, so a linked application shows its roster code. */
-	const codeByVolunteerId = $derived(
-		new Map((volunteersQuery.data ?? []).map((v) => [v._id, v.volunteer_code]))
+	// Each applicant's system account and role here, with the same give / edit / revoke button as
+	// the people tab (#1044). SA / SM / coordinator only; the server 403s anyone else.
+	const shelterCode = $derived(shelterStore.selectedShelterCode ?? getShelterCode());
+	const shelterQuery = useShelter(() => shelterCode);
+	const shelterLine = $derived(shelterQuery.data?.name ?? shelterCode ?? '—');
+	const canReadAccounts = $derived(
+		canAccessVolunteerBackoffice(authStore.user?.roles ?? [], shelterCode)
 	);
-	const volunteerById = $derived(new Map((volunteersQuery.data ?? []).map((v) => [v._id, v])));
+	const accountsQuery = useShelterVolunteerAccounts(
+		() => shelterCode,
+		() => canReadAccounts
+	);
+	const accounts = $derived(canReadAccounts ? accountsQuery.data : undefined);
 
-	const counts = $derived({
-		total: queue.pending.length + queue.reviewed.length,
-		pending: queue.pending.length,
-		confirmed: queue.reviewed.filter((a) => a.status === 'confirmed').length,
-		declined: queue.reviewed.filter((a) => a.status === 'rejected' || a.status === 'cancelled')
-			.length
+	const loading = $derived(
+		applicationsQuery.isPending || assignmentsQuery.isPending || volunteersQuery.isPending
+	);
+	const assignments = $derived(assignmentsQuery.data ?? []);
+	// #885 — "รอยืนยันการเข้างาน" turns on as time passes, so the clock ticks every minute;
+	// `today` rides the same clock so it rolls over at Bangkok midnight with the page open.
+	const { now } = createMinuteClock();
+	const today = $derived(todayDateString(now));
+	const volunteerById = $derived(new Map((volunteersQuery.data ?? []).map((v) => [v._id, v])));
+	const board = $derived(
+		buildApplicantBoard({
+			jobId: job._id,
+			applications: applicationsQuery.data ?? [],
+			assignments,
+			volunteers: volunteerById
+		})
+	);
+	// People are counted once however many shifts they applied for or were assigned to; the
+	// other tiles count shifts (#716).
+	const counts = $derived(board.counts);
+
+	// Filters narrow the lists only; the tiles above keep counting everything (#849).
+	let statusFilter = $state<ApplicantStatusFilter>('all');
+	let shiftChoice = $state('all'); // 'all' | 'today' | a `job.shifts[].id`
+	let search = $state('');
+	let attendanceFilter = $state<ApplicantAttendanceFilter>('all');
+
+	const STATUS_OPTIONS: { value: ApplicantStatusFilter; label: string }[] = [
+		{ value: 'all', label: 'ทุกสถานะการพิจารณา' },
+		{ value: 'pending', label: 'รอพิจารณา' },
+		{ value: 'confirmed', label: 'อนุมัติแล้ว' },
+		{ value: 'declined', label: 'ปฏิเสธ/ยกเลิก' },
+		{ value: 'staff', label: 'มอบหมายโดยเจ้าหน้าที่' }
+	];
+	const ATTENDANCE_OPTIONS: { value: ApplicantAttendanceFilter; label: string }[] = [
+		{ value: 'all', label: 'ทุกสถานะการเข้างาน' },
+		{ value: 'not_checked_in', label: 'ยังไม่เช็คอิน' },
+		{ value: 'awaiting_confirmation', label: 'รอยืนยันการเข้างาน' },
+		{ value: 'working', label: 'กำลังปฏิบัติงาน' },
+		{ value: 'completed', label: 'เสร็จสิ้น' }
+	];
+	const shiftOptions = $derived([
+		{ value: 'all', label: 'ทุกกะ / ทุกวัน' },
+		{ value: 'today', label: 'วันนี้' },
+		...job.shifts.map((s, i) => ({
+			value: s.id,
+			label: `กะย่อย #${i + 1} · ${formatThaiShortDate(s.date)} ${s.start_time}-${s.end_time}`
+		}))
+	]);
+	const shiftCriterion = $derived.by(() => {
+		if (shiftChoice === 'today') return { id: null, date: today };
+		const shift = job.shifts.find((s) => s.id === shiftChoice);
+		return shift ? { id: shift.id, date: shift.date } : null;
 	});
+	const filters = $derived({
+		status: statusFilter,
+		shift: shiftCriterion,
+		search,
+		attendance: attendanceFilter
+	});
+	const filtersActive = $derived(hasActiveApplicantFilters(filters));
+	const view = $derived(
+		filterApplicantBoard(board, filters, {
+			assignments,
+			volunteers: volunteerById,
+			today,
+			now
+		})
+	);
+	const viewPendingShifts = $derived(view.pending.reduce((n, g) => n + g.applications.length, 0));
+	const viewHistory = $derived(historyBreakdown(view.history));
+
+	function clearFilters() {
+		statusFilter = EMPTY_APPLICANT_FILTERS.status;
+		shiftChoice = 'all';
+		search = EMPTY_APPLICANT_FILTERS.search;
+		attendanceFilter = EMPTY_APPLICANT_FILTERS.attendance;
+	}
+
+	const selectTriggerClass = 'h-10 w-full min-w-0 rounded-xl bg-background px-3 shadow-xs';
 
 	const tiles = $derived([
-		{ key: 'total', label: 'ผู้สมัครทั้งหมด', value: counts.total, tone: 'border-border bg-card' },
+		{
+			key: 'total',
+			status: 'all' as ApplicantStatusFilter,
+			label: 'ผู้สมัครทั้งหมด',
+			value: counts.people,
+			unit: 'คน',
+			tone: 'border-border bg-card'
+		},
 		{
 			key: 'pending',
+			status: 'pending' as ApplicantStatusFilter,
 			label: 'รอพิจารณา',
 			value: counts.pending,
+			unit: 'กะ',
 			tone: 'border-border bg-muted/50'
 		},
 		{
 			key: 'confirmed',
+			status: 'confirmed' as ApplicantStatusFilter,
 			label: 'อนุมัติใบสมัครแล้ว',
 			value: counts.confirmed,
+			unit: 'กะ',
 			tone: 'border-emerald-200 bg-emerald-50/70'
 		},
 		{
 			key: 'declined',
-			label: '✕ ปฏิเสธ/ไม่สะดวก',
+			status: 'declined' as ApplicantStatusFilter,
+			label: '✕ ปฏิเสธ/ยกเลิก',
 			value: counts.declined,
+			unit: 'กะ',
 			tone: 'border-rose-200 bg-rose-50/70'
+		},
+		{
+			key: 'staff',
+			status: 'staff' as ApplicantStatusFilter,
+			label: 'มอบหมายโดยเจ้าหน้าที่',
+			value: counts.staffAssigned,
+			unit: 'กะ',
+			tone: 'border-sky-200 bg-sky-50/70'
 		}
 	]);
 
@@ -85,24 +214,49 @@
 		return index === -1 ? null : `กะย่อย #${index + 1}`;
 	}
 
+	function volunteerFor(application: JobApplication) {
+		return application.volunteer_id ? (volunteerById.get(application.volunteer_id) ?? null) : null;
+	}
+
+	/** The job's sub-shift a staff assignment points at, or `null` for a legacy/deleted one. */
+	function staffShiftFor(shiftId: string | null) {
+		const index = shiftId ? job.shifts.findIndex((s) => s.id === shiftId) : -1;
+		if (index === -1) return null;
+		const { start_time, end_time } = job.shifts[index];
+		return { label: `กะย่อย #${index + 1}`, start_time, end_time };
+	}
+
 	let reviewOpen = $state(false);
-	let reviewTarget = $state<JobApplication | null>(null);
+	let reviewTargets = $state<JobApplication[]>([]);
 	let reviewDecision = $state<'confirmed' | 'rejected'>('confirmed');
 
-	function openReview(application: JobApplication, decision: 'confirmed' | 'rejected') {
-		reviewTarget = application;
+	function openReview(applications: JobApplication[], decision: 'confirmed' | 'rejected') {
+		reviewTargets = applications;
 		reviewDecision = decision;
 		reviewOpen = true;
 	}
+
+	const reviewVolunteerId = $derived(reviewTargets[0]?.volunteer_id ?? null);
 </script>
 
 <div class="space-y-4">
-	<div class="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4">
+	<div class="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5">
 		{#each tiles as tile (tile.key)}
-			<div class={['rounded-2xl border p-3.5', tile.tone]}>
-				<p class="text-xs font-medium text-muted-foreground">{tile.label}</p>
-				<p class="mt-1 text-2xl font-bold text-foreground tabular-nums">{tile.value} คน</p>
-			</div>
+			<button
+				type="button"
+				aria-pressed={statusFilter === tile.status}
+				onclick={() => (statusFilter = tile.status)}
+				class={[
+					'rounded-2xl border p-3.5 text-left transition-shadow focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none',
+					statusFilter === tile.status && 'ring-2 ring-primary',
+					tile.tone
+				]}
+			>
+				<span class="block text-xs font-medium text-muted-foreground">{tile.label}</span>
+				<span class="mt-1 block text-2xl font-bold text-foreground tabular-nums"
+					>{tile.value} {tile.unit}</span
+				>
+			</button>
 		{/each}
 	</div>
 
@@ -119,7 +273,7 @@
 				<Skeleton class="h-32 w-full rounded-xl" />
 				<Skeleton class="h-32 w-full rounded-xl" />
 			</div>
-		{:else if counts.total === 0}
+		{:else if counts.people === 0}
 			<div
 				class="mt-3 flex flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-border py-14 text-center text-muted-foreground"
 			>
@@ -131,51 +285,156 @@
 				</p>
 			</div>
 		{:else}
-			{#if queue.pending.length > 0}
+			<div class="mt-3 space-y-2">
+				<span id="applicant-filter-search" class="block text-xs font-medium text-muted-foreground"
+					>ค้นหาผู้สมัคร</span
+				>
+				<div class="relative">
+					<Search
+						class="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+					/>
+					<Input
+						type="search"
+						placeholder="ค้นหาชื่อ นามสกุล ชื่อเล่น เบอร์โทร, รหัส V-xxx"
+						aria-labelledby="applicant-filter-search"
+						bind:value={search}
+						class="h-10 rounded-xl bg-background pl-9 shadow-xs"
+					/>
+				</div>
+				<div class="grid grid-cols-1 gap-2 sm:grid-cols-3">
+					<div class="min-w-0 space-y-1">
+						<span
+							id="applicant-filter-status"
+							class="block text-xs font-medium text-muted-foreground"
+							>สถานะการพิจารณา (เจ้าหน้าที่)</span
+						>
+						<Select.Root type="single" bind:value={statusFilter}>
+							<Select.Trigger class={selectTriggerClass} aria-labelledby="applicant-filter-status">
+								<span class="truncate">
+									{STATUS_OPTIONS.find((o) => o.value === statusFilter)?.label}
+								</span>
+							</Select.Trigger>
+							<Select.Content>
+								{#each STATUS_OPTIONS as opt (opt.value)}
+									<Select.Item value={opt.value} label={opt.label} />
+								{/each}
+							</Select.Content>
+						</Select.Root>
+					</div>
+					<div class="min-w-0 space-y-1">
+						<span
+							id="applicant-filter-shift"
+							class="block text-xs font-medium text-muted-foreground">กะ / วันที่</span
+						>
+						<Select.Root type="single" bind:value={shiftChoice}>
+							<Select.Trigger class={selectTriggerClass} aria-labelledby="applicant-filter-shift">
+								<span class="truncate">
+									{(shiftOptions.find((o) => o.value === shiftChoice) ?? shiftOptions[0]).label}
+								</span>
+							</Select.Trigger>
+							<Select.Content>
+								{#each shiftOptions as opt (opt.value)}
+									<Select.Item value={opt.value} label={opt.label} />
+								{/each}
+							</Select.Content>
+						</Select.Root>
+					</div>
+					<div class="min-w-0 space-y-1">
+						<span
+							id="applicant-filter-attendance"
+							class="block text-xs font-medium text-muted-foreground"
+							>สถานะการเข้างาน (เช็คอิน)</span
+						>
+						<Select.Root type="single" bind:value={attendanceFilter}>
+							<Select.Trigger
+								class={selectTriggerClass}
+								aria-labelledby="applicant-filter-attendance"
+							>
+								<span class="truncate">
+									{ATTENDANCE_OPTIONS.find((o) => o.value === attendanceFilter)?.label}
+								</span>
+							</Select.Trigger>
+							<Select.Content>
+								{#each ATTENDANCE_OPTIONS as opt (opt.value)}
+									<Select.Item value={opt.value} label={opt.label} />
+								{/each}
+							</Select.Content>
+						</Select.Root>
+					</div>
+				</div>
+				{#if filtersActive}
+					<Button type="button" variant="outline" size="sm" onclick={clearFilters}>
+						ล้างตัวกรอง
+					</Button>
+				{/if}
+			</div>
+
+			{#if view.pending.length === 0 && view.history.length === 0}
+				<div
+					class="mt-4 flex flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-border py-10 text-center text-muted-foreground"
+				>
+					<Search class="h-6 w-6" />
+					<p class="text-sm font-medium">ไม่พบผู้สมัครตามตัวกรอง</p>
+				</div>
+			{/if}
+
+			{#if view.pending.length > 0}
 				<div class="mt-4 flex items-center justify-between gap-3">
-					<h4 class="text-xs font-bold text-foreground">รอพิจารณา ({queue.pending.length} คน)</h4>
+					<h4 class="text-xs font-bold text-foreground">
+						รอพิจารณา ({view.pending.length} คน · {viewPendingShifts} กะ)
+					</h4>
 					<span class="text-2xs text-muted-foreground">เรียงตามวันที่สมัคร</span>
 				</div>
 				<ul class="mt-3 space-y-3">
-					{#each queue.pending as application (application._id)}
+					{#each view.pending as group (group.key)}
+						{@const volunteer = volunteerFor(group.applications[0])}
 						<JobApplicantRow
-							{application}
-							volunteer={application.volunteer_id
-								? (volunteerById.get(application.volunteer_id) ?? null)
-								: null}
-							volunteerCode={application.volunteer_id
-								? (codeByVolunteerId.get(application.volunteer_id) ?? null)
-								: null}
-							shiftLabel={shiftLabelFor(application)}
+							applications={group.applications}
+							{volunteer}
+							volunteerCode={volunteer?.volunteer_code ?? null}
+							shiftLabelOf={shiftLabelFor}
+							requiredSkills={job.skills_required ?? []}
 							skillOptions={skillCatalog.options}
+							{assignments}
+							{today}
 							onreview={openReview}
+							accessStatus={volunteer ? volunteerAccessStatus(volunteer, accounts) : null}
+							{shelterLine}
 						/>
 					{/each}
 				</ul>
 			{/if}
 
-			{#if queue.reviewed.length > 0}
+			{#if view.history.length > 0}
 				<div class="mt-6 border-t border-border pt-4">
-					<div class="flex items-center justify-between gap-3">
-						<h4 class="text-xs font-bold text-foreground">
-							ประวัติการพิจารณา ({queue.reviewed.length} คน)
-						</h4>
-						<span class="text-2xs text-muted-foreground">รวมอนุมัติ ปฏิเสธ และไม่สะดวก</span>
+					<div class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+						<h4 class="text-xs font-bold text-foreground">ประวัติ ({view.history.length} กะ)</h4>
+						<span class="text-2xs text-muted-foreground">
+							อนุมัติ {viewHistory.confirmed} · ปฏิเสธ/ยกเลิก {viewHistory.declined} · มอบหมายโดยเจ้าหน้าที่
+							{viewHistory.staffAssigned}
+						</span>
 					</div>
 					<ul class="mt-3 space-y-3">
-						{#each queue.reviewed as application (application._id)}
-							<JobApplicantRow
-								{application}
-								volunteer={application.volunteer_id
-									? (volunteerById.get(application.volunteer_id) ?? null)
-									: null}
-								volunteerCode={application.volunteer_id
-									? (codeByVolunteerId.get(application.volunteer_id) ?? null)
-									: null}
-								shiftLabel={shiftLabelFor(application)}
-								skillOptions={skillCatalog.options}
-								onreview={openReview}
-							/>
+						{#each view.history as entry (entry.key)}
+							{#if entry.kind === 'staff'}
+								<StaffAssignmentRow {entry} shift={staffShiftFor(entry.shiftId)} {today} />
+							{:else}
+								<JobApplicantRow
+									applications={[entry.application]}
+									volunteer={entry.volunteer}
+									volunteerCode={entry.person.code}
+									shiftLabelOf={shiftLabelFor}
+									requiredSkills={job.skills_required ?? []}
+									skillOptions={skillCatalog.options}
+									{assignments}
+									{today}
+									onreview={openReview}
+									accessStatus={entry.volunteer
+										? volunteerAccessStatus(entry.volunteer, accounts)
+										: null}
+									{shelterLine}
+								/>
+							{/if}
 						{/each}
 					</ul>
 				</div>
@@ -186,10 +445,8 @@
 	<JobApplicantReviewDialog
 		bind:open={reviewOpen}
 		{job}
-		application={reviewTarget}
-		volunteer={reviewTarget?.volunteer_id
-			? (volunteerById.get(reviewTarget.volunteer_id) ?? null)
-			: null}
+		applications={reviewTargets}
+		volunteer={reviewVolunteerId ? (volunteerById.get(reviewVolunteerId) ?? null) : null}
 		decision={reviewDecision}
 	/>
 </div>

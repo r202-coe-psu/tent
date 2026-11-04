@@ -3,7 +3,7 @@ id: CR-141
 title: OAuth-first staff login — hide password form behind admin toggle, hidden /admin-login, link Google/ThaID to a new account via username/password
 status: approved
 date: 2026-09-29
-updated: 2026-09-29
+updated: 2026-10-23
 requested_by: project owner (audit เบื้องต้น)
 decided_by: project owner (approve 2026-09-29)
 layer: stable
@@ -169,3 +169,7 @@ callback: findUserBy*Subject(sub)
   - ใช้ `thaid_registration_enabled` เดิม; ไม่มี fallback อัตโนมัติ / คำเตือน
   - Track ด้วย CR file ใหม่
 - 2026-09-29 — approved (owner) → CR-141; FR-20 ระบุ limit ต่อ worker
+
+## Decision log
+
+- 2026-10-23 — **Superseded (rate limit) by [CR-188](../01-core/CR-188-rate-limit-to-nginx.md):** FR-20 (ผิด 5 ครั้งต่อ `pending_link` nonce + จำกัดต่อ IP) ถูกยกเลิก — เหลือ captcha + CouchDB `_session` + nginx zone `auth`; AC-11 ส่วน rate limit ไม่ใช้แล้ว

@@ -76,8 +76,13 @@ export const GET: RequestHandler = async ({ url, fetch, cookies }) => {
 	const earlyState = parseThaidOAuthState(cookieState);
 	const paramState = parseThaidOAuthState(url.searchParams.get('state') ?? undefined);
 
-	const detectedMode = earlyState?.mode ?? paramState?.mode;
-	const detectedReturnTo = earlyState?.returnTo ?? paramState?.returnTo;
+	// Cross-device scans may reopen this callback in another browser (no or a stale state cookie);
+	// the signed state + single-use server session bind the result, so those modes ignore the cookie.
+	const isCrossDeviceMode =
+		paramState?.mode === 'kiosk_check_in' || paramState?.mode === 'member_scan';
+	const detectedState = isCrossDeviceMode ? paramState : (earlyState ?? paramState);
+	const detectedMode = detectedState?.mode;
+	const detectedReturnTo = detectedState?.returnTo;
 	const isRegisterMode = detectedMode === 'register';
 	const isLoginMode = detectedMode === 'login';
 	const isMemberScanMode = detectedMode === 'member_scan';
@@ -110,11 +115,11 @@ export const GET: RequestHandler = async ({ url, fetch, cookies }) => {
 		const stateParam = url.searchParams.get('state');
 		clearThaidOAuthStateCookie(cookies);
 
-		if (!code || !stateParam || stateParam !== cookieState) {
+		if (!code || !stateParam || (!isCrossDeviceMode && stateParam !== cookieState)) {
 			dispatchErrorRedirect('invalid_state');
 		}
 
-		const state = parseThaidOAuthState(stateParam);
+		const state = paramState;
 		if (!state) {
 			dispatchErrorRedirect('invalid_state');
 		}

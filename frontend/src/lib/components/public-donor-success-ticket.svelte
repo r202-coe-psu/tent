@@ -6,22 +6,59 @@
 	import Package from '@lucide/svelte/icons/package';
 	import Navigation from '@lucide/svelte/icons/navigation';
 	import Copy from '@lucide/svelte/icons/copy';
+	import Printer from '@lucide/svelte/icons/printer';
 	import Search from '@lucide/svelte/icons/search';
 	import X from '@lucide/svelte/icons/x';
 	import { Input } from '$lib/components/ui/input';
 	import { Button } from '$lib/components/ui/button';
 	import { resolve } from '$app/paths';
 	import { formatUnit, useUnitsOfMeasure } from '$lib/features/catalog';
+	import {
+		dropOffDirectionsUrl,
+		DropOffGroups,
+		groupDropOffDestinations,
+		needsDropOffDestination,
+		resolveDropOffPoint
+	} from '$lib/features/donations';
+	import { usePublicShelter } from '$lib/features/public-portal';
 	import { getDonationStore } from '../../routes/(public)/donations/donation.svelte';
 	import { toast } from 'svelte-sonner';
 	import { langState } from '$lib/states/i18n.svelte';
 	import { getTranslation } from '$lib/utils/i18n';
 	import { PUBLIC_DONATIONS_I18N } from '$lib/constants/i18n';
+	import { generateQrDataUrl } from '$lib/utils/qrcode';
 
 	const donationStore = getDonationStore();
 	const unitsQuery = useUnitsOfMeasure();
 	const units = $derived(unitsQuery.data ?? []);
 	const t = $derived(getTranslation(PUBLIC_DONATIONS_I18N, langState.current));
+
+	// Same gate as the track page: `shelter_pickup` has no destination to look up. Skipping or
+	// failing the lookup falls back to the name/code the donor picked, with no map link.
+	const wantsDestination = $derived(needsDropOffDestination(donationStore.deliveryMethod));
+	const shelterQuery = usePublicShelter(() =>
+		wantsDestination ? donationStore.shelterCode : null
+	);
+	const dropOffPoint = $derived(shelterQuery.data ? resolveDropOffPoint(shelterQuery.data) : null);
+	const directionsHref = $derived(dropOffPoint ? dropOffDirectionsUrl(dropOffPoint) : null);
+	// CR-206 FR-MP-13 — a booking split across drop-off points shows one card per point, each
+	// with its own directions; `null` keeps the one shelter destination as before. The points
+	// are the ones the booking answered with (staff-assigned drop-off FR-AP-8b).
+	const pointGroups = $derived(
+		shelterQuery.data
+			? groupDropOffDestinations(donationStore.bookedItems, shelterQuery.data, {
+					anyPointName: t.anyPointGroupTitle,
+					awaitingName: t.awaitingPointGroupTitle,
+					deliveryMethod: donationStore.deliveryMethod
+				})
+			: null
+	);
+	const lineNames = $derived(
+		donationStore.items.map(
+			(item) =>
+				`${item.name || t.unspecified} — ${item.amount} ${formatUnit(item.unit, units, langState.current)}`
+		)
+	);
 
 	let courierTracking = $state('');
 	let savingCourier = $state(false);
@@ -30,30 +67,14 @@
 	let isItemsModalOpen = $state(false);
 	let isCopied = $state(false);
 
-	// CR-052 §2.6: hand the ref + phone to the track page so it can search on arrival.
-	const trackHref = $derived.by(() => {
-		const base = resolve('/donations/track');
-		const parts: string[] = [];
-		if (donationStore.bookingRef) parts.push(`ref=${encodeURIComponent(donationStore.bookingRef)}`);
-		if (donationStore.donorPhone)
-			parts.push(`phone=${encodeURIComponent(donationStore.donorPhone)}`);
-		return parts.length ? `${base}?${parts.join('&')}` : base;
-	});
-
 	/**
-	 * EVERY public booking opens in `pending_review` — CR-052 §1.4 (Task #52) removed
-	 * the path that issued a check-in QR straight away, and FastAPI stamps the status
-	 * server-side (`INITIAL_DONATION_STATUS`). So this ticket always shows the waiting
-	 * state and never a QR.
-	 *
-	 * It used to guess with a client-side rule (`shelter_pickup`, total > 500,
-	 * unsolicited, or a line with no `item_id`) — so a small booking made from a needs
-	 * card got a QR at once while its doc sat in `pending_review`, and the donor arrived
-	 * holding a pass no one had approved. That rule WAS the §1.4 violation, and it is
-	 * why the ticket and the tracking page disagreed.
-	 *
-	 * The pass itself comes from the tracking page once staff approve.
+	 * FastAPI decides the status, line by line (CR-174): a booking made only of lines the
+	 * shelter asked for in its campaign opens in `verifying` and gets its check-in QR here
+	 * at once (FR-16); one with a typed-in line opens in `pending_review` and the donor
+	 * gets the QR on the tracking page once staff approve it. The ticket never guesses —
+	 * a client-side rule once handed out passes no one had approved.
 	 */
+	const approved = $derived(donationStore.bookingStatus === 'verifying');
 
 	async function saveCourier() {
 		if (!donationStore.trackingToken) return;
@@ -110,13 +131,17 @@
 		<div
 			class="relative z-10 mx-auto mb-2 flex h-16 w-16 items-center justify-center rounded-full bg-white/20 backdrop-blur-xs"
 		>
-			<Clock class="h-8 w-8 animate-pulse text-white" />
+			{#if approved}
+				<ShieldCheck class="h-8 w-8 text-white" />
+			{:else}
+				<Clock class="h-8 w-8 animate-pulse text-white" />
+			{/if}
 		</div>
 		<h3 class="relative z-10 text-2xl font-bold">
-			{t.pendingReviewTitle}
+			{approved ? t.successTitle : t.pendingReviewTitle}
 		</h3>
 		<p class="relative z-10 text-xs leading-relaxed font-medium text-white/80">
-			{t.pendingReviewDesc}
+			{approved ? t.successDesc : t.pendingReviewDesc}
 		</p>
 
 		<!-- Decorative background circles -->
@@ -140,17 +165,33 @@
 
 		<div class="mt-4 mb-6 border-b-2 border-dashed border-slate-200 pb-6">
 			<div class="mx-auto mb-4 w-fit rounded-2xl border border-slate-200 bg-white p-4 shadow-2xs">
-				<!-- Where the QR used to be. There is no check-in pass yet: staff have to
-				     review the request first (CR-052 §1.4) — the donor gets it on the
-				     tracking page once approved. -->
-				<div
-					class="flex h-[180px] w-[180px] items-center justify-center rounded-xl border-2 border-amber-200/50 bg-amber-50"
-				>
-					<div class="flex flex-col items-center gap-2 text-center text-amber-600">
-						<Clock class="h-10 w-10 animate-pulse" />
-						<span class="text-sm font-bold">{t.pendingWarehouse}</span>
+				{#if approved && donationStore.trackingToken}
+					{#await generateQrDataUrl(donationStore.trackingToken, { margin: 1, width: 256 })}
+						<div class="h-[180px] w-[180px] animate-pulse rounded-xl bg-slate-100"></div>
+					{:then url}
+						<img
+							src={url}
+							alt="QR Code for {donationStore.bookingRef || donationStore.trackingToken}"
+							class="h-[180px] w-[180px] rounded-xl"
+							data-testid="ticket-qr"
+						/>
+					{:catch}
+						<div class="flex h-[180px] w-[180px] items-center justify-center text-sm text-red-600">
+							{t.qrError}
+						</div>
+					{/await}
+				{:else}
+					<!-- No check-in pass yet: a line still waits for staff review — the donor
+					     gets it on the tracking page once approved. -->
+					<div
+						class="flex h-[180px] w-[180px] items-center justify-center rounded-xl border-2 border-amber-200/50 bg-amber-50"
+					>
+						<div class="flex flex-col items-center gap-2 text-center text-amber-600">
+							<Clock class="h-10 w-10 animate-pulse" />
+							<span class="text-sm font-bold">{t.pendingWarehouse}</span>
+						</div>
 					</div>
-				</div>
+				{/if}
 			</div>
 
 			<div class="mb-1 text-2xs font-bold tracking-[0.2em] text-slate-400">{t.refIdLabel}</div>
@@ -170,9 +211,25 @@
 					{t.destShelter}
 				</div>
 				<div class="text-base font-bold text-slate-800">
-					{donationStore.selectedShelterName || donationStore.shelterCode || t.centralShelter}
+					{dropOffPoint?.shelterName ||
+						donationStore.selectedShelterName ||
+						donationStore.shelterCode ||
+						t.centralShelter}
 				</div>
+				{#if pointGroups}
+					<DropOffGroups groups={pointGroups} {lineNames} />
+				{:else if dropOffPoint?.address}
+					<div class="mt-0.5 text-xs font-medium text-slate-500">{dropOffPoint.address}</div>
+				{/if}
 			</div>
+
+			<!-- CR-209 FR-3a: the plate the booking sent, not whatever the form holds now. -->
+			{#if donationStore.bookedVehiclePlate}
+				<div>
+					<div class="mb-1 text-xs font-bold text-slate-500">{t.vehiclePlateTicketLabel}</div>
+					<div class="text-sm font-bold text-slate-800">{donationStore.bookedVehiclePlate}</div>
+				</div>
+			{/if}
 
 			<div class="grid grid-cols-2 gap-4">
 				<div>
@@ -193,8 +250,8 @@
 						<ShieldCheck class="h-3.5 w-3.5" />
 						{t.queueStatus}
 					</div>
-					<div class="text-sm font-bold text-amber-600">
-						{t.statusPendingReview}
+					<div class="text-sm font-bold {approved ? 'text-emerald-700' : 'text-amber-600'}">
+						{approved ? t.statusApprovedAwaitingDropoff : t.statusPendingReview}
 					</div>
 				</div>
 
@@ -290,8 +347,14 @@
 				</div>
 			</div>
 
+			<!-- Straight to this booking's ticket by its token: the phone never goes in a URL
+			     (CR-173 FR-12). Without a token there is nothing to open, so the search page. -->
 			<a
-				href={trackHref}
+				href={resolve(
+					donationStore.trackingToken
+						? `/donations/track/${encodeURIComponent(donationStore.trackingToken)}`
+						: '/donations/track'
+				)}
 				class="flex w-full cursor-pointer items-center justify-center gap-1.5 rounded-xl bg-domain-donation-strong py-3 text-xs font-bold text-white shadow-xs transition-all duration-200 hover:bg-domain-donation-text"
 			>
 				<Search class="h-3.5 w-3.5" />
@@ -330,14 +393,28 @@
 			</div>
 		{/if}
 
-		<button
-			type="button"
-			onclick={() => toast.success(t.openingMapsToast)}
-			class="mt-6 flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-slate-950 py-4 text-sm font-bold text-white shadow-md transition-colors hover:bg-slate-800"
-		>
-			<Navigation class="h-4.5 w-4.5" />
-			{t.navigateGoogleMaps}
-		</button>
+		{#if approved && donationStore.trackingToken}
+			<a
+				href={resolve(`/donations/track/${encodeURIComponent(donationStore.trackingToken)}/label`)}
+				class="mt-6 flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white py-3 text-sm font-bold text-slate-800 transition-colors hover:bg-slate-50"
+				data-testid="ticket-box-label-link"
+			>
+				<Printer class="h-4 w-4" />
+				{t.boxLabelOpenBtn}
+			</a>
+		{/if}
+
+		{#if directionsHref && !pointGroups}
+			<a
+				href={directionsHref}
+				target="_blank"
+				rel="noopener noreferrer"
+				class="mt-6 flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-slate-950 py-4 text-sm font-bold text-white shadow-md transition-colors hover:bg-slate-800"
+			>
+				<Navigation class="h-4.5 w-4.5" />
+				{t.navigateGoogleMaps}
+			</a>
+		{/if}
 
 		<button
 			type="button"

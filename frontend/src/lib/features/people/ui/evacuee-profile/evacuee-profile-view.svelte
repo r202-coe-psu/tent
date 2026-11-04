@@ -32,6 +32,7 @@
 		statusChangeHandlerKind,
 		canChangeEvacueeZone,
 		formatPersonName,
+		movementReasonLabel,
 		zoneLabel
 	} from '$lib/features/people';
 	import {
@@ -62,9 +63,11 @@
 	import EvacueeProfileHealthCard from './evacuee-profile-health-card.svelte';
 	import EvacueeProfileHouseholdCard from './evacuee-profile-household-card.svelte';
 	import EvacueeProfileAssetsCard from './evacuee-profile-assets-card.svelte';
+	import EvacueeProfilePrivacyCard from './evacuee-profile-privacy-card.svelte';
 	import EvacueeZoneModal from './evacuee-zone-modal.svelte';
 	import EvacueeStatusModal from './evacuee-status-modal.svelte';
 	import EvacueeQrModal from './evacuee-qr-modal.svelte';
+	import EvacueeHandoverSlipModal from './evacuee-handover-slip-modal.svelte';
 	import EvacueeAddressModal from './evacuee-address-modal.svelte';
 	import EvacueeAssetsModal from './evacuee-assets-modal.svelte';
 	import EvacueePersonalModal, {
@@ -345,6 +348,7 @@
 	let showZoneModal = $state(false);
 	let showStatusModal = $state(false);
 	let showQrModal = $state(false);
+	let showHandoverSlip = $state(false);
 	let showAddressModal = $state(false);
 	let showAssetModal = $state(false);
 	let showPersonalModal = $state(false);
@@ -776,6 +780,7 @@
 				onOpenZoneModal={() => (showZoneModal = true)}
 				onOpenStatusModal={() => (showStatusModal = true)}
 				onOpenQrModal={() => (showQrModal = true)}
+				onOpenHandoverSlip={() => (showHandoverSlip = true)}
 				onOpenPersonalEdit={() => (showPersonalModal = true)}
 				onOpenEmergencyEdit={() => (showEmergencyModal = true)}
 			/>
@@ -794,6 +799,7 @@
 					onOpenZoneModal={() => (showZoneModal = true)}
 					onOpenStatusModal={() => (showStatusModal = true)}
 					onOpenQrModal={() => (showQrModal = true)}
+					onOpenHandoverSlip={() => (showHandoverSlip = true)}
 					onOpenPersonalEdit={() => (showPersonalModal = true)}
 					onOpenEmergencyEdit={() => (showEmergencyModal = true)}
 				/>
@@ -810,6 +816,7 @@
 						onOpenEdit={() => (showHealthModal = true)}
 					/>
 				</div>
+				<EvacueeProfilePrivacyCard {evacuee} readonly={profileReadonly} {getAuthorContext} />
 				<div class="space-y-4">
 					<EvacueeProfileHouseholdCard
 						{evacuee}
@@ -862,7 +869,7 @@
 									<div class="break-words text-muted-foreground">
 										{formatDateTime(m.occurred_at)}
 										{#if m.reason}
-											· {m.reason}
+											· {movementReasonLabel(m.reason)}
 										{/if}
 									</div>
 								</div>
@@ -913,6 +920,7 @@
 		onOpenZoneModal={() => (showZoneModal = true)}
 		onOpenStatusModal={() => (showStatusModal = true)}
 		onOpenQrModal={() => (showQrModal = true)}
+		onOpenHandoverSlip={() => (showHandoverSlip = true)}
 	/>
 
 	<!-- Modals (edit mode only) -->
@@ -939,6 +947,15 @@
 		{/if}
 
 		<EvacueeQrModal show={showQrModal} {evacuee} onClose={() => (showQrModal = false)} />
+
+		{#if showHandoverSlip}
+			<EvacueeHandoverSlipModal
+				show={showHandoverSlip}
+				{evacuee}
+				symptoms={screening?.symptoms ?? []}
+				onClose={() => (showHandoverSlip = false)}
+			/>
+		{/if}
 
 		{#if showAddressModal && household}
 			<EvacueeAddressModal

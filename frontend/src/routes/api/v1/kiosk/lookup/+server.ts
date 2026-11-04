@@ -15,10 +15,6 @@ import {
 	isKioskWalkInRegistrationEnabled
 } from '$lib/features/kiosk/config';
 import {
-	kioskPhoneDeviceLimiter,
-	kioskPhoneNumberLimiter
-} from '$lib/server/security/rate-limiter';
-import {
 	authenticateScannerDevice,
 	DEVICE_AUTH_FAILED,
 	DEPENDENCY_UNAVAILABLE,
@@ -74,28 +70,6 @@ export const POST: RequestHandler = async ({ request }) => {
 					{ error: { code: 'INVALID_GATE_INPUT', message: 'ข้อมูลสำหรับค้นหาไม่ถูกต้อง' } },
 					{ status: 400, headers: noStoreHeaders }
 				);
-			}
-			const deviceAllowed = kioskPhoneDeviceLimiter.check(principal.registry_id);
-			if (!deviceAllowed) {
-				return json(
-					{ error: { code: 'KIOSK_RATE_LIMITED', message: 'กรุณารอสักครู่แล้วลองใหม่' } },
-					{
-						status: 429,
-						headers: { ...noStoreHeaders, 'retry-after': '60' }
-					}
-				);
-			}
-			if (!parsed.data.primary_evacuee_id) {
-				const phoneAllowed = kioskPhoneNumberLimiter.check(canonical);
-				if (!phoneAllowed) {
-					return json(
-						{ error: { code: 'KIOSK_RATE_LIMITED', message: 'กรุณารอสักครู่แล้วลองใหม่' } },
-						{
-							status: 429,
-							headers: { ...noStoreHeaders, 'retry-after': '60' }
-						}
-					);
-				}
 			}
 		}
 		let gateInput: KioskResolvedGateInput;

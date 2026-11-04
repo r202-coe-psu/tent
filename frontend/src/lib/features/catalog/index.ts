@@ -54,6 +54,8 @@ export {
 	type ItemMasterUpdateInput,
 	createItemMaster,
 	ITEM_MASTER_SCHEMA_V,
+	itemAllergens,
+	upgradeItemMasterShape,
 	isItemMaster,
 	itemMasterUnit,
 	DEFAULT_ITEM_UNIT,
@@ -67,6 +69,7 @@ export {
 	type PackagingUomOption,
 	type PackagingSource,
 	mergeCatalogGenerations,
+	mergedCatalogIdFor,
 	type CatalogEntry,
 	// Expiry requirement (CR-143 §D)
 	requiresExpiry,
@@ -122,7 +125,13 @@ export {
 	type QuickCreateErrors,
 	type ItemMasterInitialValues
 } from './domain/quick-create';
-export { canWriteShelterCatalog } from './domain/catalog-permissions';
+export { canWriteShelterRecipe, canWriteShelterCatalog } from './domain/catalog-permissions';
+export {
+	customRecipeInput,
+	findRecipeByLabel,
+	isSameRecipeInput,
+	type CustomRecipeIngredient
+} from './domain/custom-recipe';
 export {
 	isMergedItem,
 	mergedAliasesByTarget,
@@ -179,6 +188,7 @@ export { default as ItemCategoryForm } from './ui/item-category-form.svelte';
 export { default as ItemMasterForm } from './ui/item-master-form.svelte';
 export { default as QuickCreateItemDialog } from './ui/quick-create-item-dialog.svelte';
 export { default as QuickCreateItem } from './ui/quick-create-item.svelte';
+export { default as QuickCreateItemSheet } from './ui/quick-create-item-sheet.svelte';
 export { default as RecipeForm } from './ui/recipe-form.svelte';
 export { default as MasterBadge } from './ui/master/master-badge.svelte';
 export { default as MasterFilterBar } from './ui/master/master-filter-bar.svelte';

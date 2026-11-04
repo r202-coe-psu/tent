@@ -32,6 +32,16 @@ class OccupancyBreakdown(BaseModel):
     disabled: int = 0
 
 
+class DonationPoint(BaseModel):
+    """A storage point ticked as a donation drop-off point, with a pin (CR-205)."""
+
+    id: str
+    name: str
+    types: list[str] = Field(default_factory=list)
+    geo: GeoPoint
+    location_note: str | None = None
+
+
 class PublicShelterReadinessSummary(BaseModel):
     latest_assessment_id: str | None = None
     verdict: str | None = None
@@ -73,7 +83,15 @@ class PublicShelter(Document):
     closed_at: datetime | None = None
     occupancy_total: int = 0
     occupancy_breakdown: OccupancyBreakdown = Field(default_factory=OccupancyBreakdown)
+    # `current_stay.status` -> evacuee count, over every evacuee in the shelter DB — also the
+    # search-excluded ones `public_persons` drops (PDPA D8, decision sync 2026-10-26). Public
+    # Forecast / present / in_zone sum this; `occupancy_total` stays EXT-005 `active` only.
+    # `None` = row not re-projected since this field was added: readers fall back to
+    # counting `public_persons` (legacy, misses search-excluded people).
+    occupancy_by_status: dict[str, int] | None = None
     readiness: PublicShelterReadinessSummary | None = None
+    # Only ticked storage points with a pin; never read the points from `raw_data`.
+    donation_points: list[DonationPoint] = Field(default_factory=list)
     raw_data: dict[str, Any] = Field(default_factory=dict)
     updated_at: datetime
 

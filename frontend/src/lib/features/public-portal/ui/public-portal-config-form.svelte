@@ -41,7 +41,7 @@
 	const { form: formData, enhance, submitting, submit } = form;
 </script>
 
-<form method="POST" use:enhance>
+<form method="POST" action="?/save" use:enhance>
 	{#if activeType === 'social'}
 		<SocialSection {form} {formData} />
 	{:else}

@@ -1,13 +1,13 @@
 import type { AuthorContext } from '$lib/db/model';
 import { qtyGt, qtyNeg } from '$lib/utils/qty';
 import {
-	ITEM_MASTER_SCHEMA_V,
 	canMergeItem,
 	convertItemQty,
 	isMergedItem,
 	isShelterLocalItem,
 	itemMasterUnit,
 	resolveItemUnitConversion,
+	upgradeItemMasterShape,
 	type ItemMaster
 } from '$lib/features/catalog';
 import { deriveDeterministicLedgerId } from './deterministic-ledger-id';
@@ -233,12 +233,12 @@ export async function planItemMerge(input: PlanItemMergeInput): Promise<ItemMerg
 	return {
 		entries,
 		legs,
-		source: {
+		// Stamps the current schema_v, so a pre-v6 `allergens` string is upgraded too (#607).
+		source: upgradeItemMasterShape({
 			...source,
-			schema_v: ITEM_MASTER_SCHEMA_V,
 			merged_into: target._id,
 			deactivated: true
-		}
+		})
 	};
 }
 

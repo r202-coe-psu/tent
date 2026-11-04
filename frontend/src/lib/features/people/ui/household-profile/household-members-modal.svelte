@@ -109,7 +109,7 @@
 
 				<!-- Search & Add Candidates -->
 				<div class="space-y-3">
-					<h4 class="text-xs font-bold text-slate-700 uppercase">ค้นหาผู้ประสบภัยคนอื่น</h4>
+					<h4 class="text-xs font-bold text-slate-700 uppercase">ค้นหาผู้เข้าพักคนอื่น</h4>
 					<div class="relative">
 						<Search class="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
 						<Input

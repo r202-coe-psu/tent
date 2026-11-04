@@ -18,21 +18,30 @@ const device = (id: string, over: Partial<ScannerDevice> = {}): ScannerDevice =>
 	last_seen_at: null,
 	staff_pin_set: false,
 	staff_pin_is_default: false,
-	banner_enabled: true,
+	banner_group_id: null,
 	screen_type: 'compact',
 	...over
 });
 
-const html = (devices: ScannerDevice[]) => render(ScannerList, { props: { devices } }).body;
+const html = (devices: ScannerDevice[], groupNames?: ReadonlyMap<string, string>) =>
+	render(ScannerList, { props: { devices, groupNames } }).body;
 
 describe('ScannerList', () => {
-	it('shows the banner state as a labelled badge (FR-KBR-38), not a switch', () => {
-		const on = html([device('a')]);
-		expect(on).toContain('แสดงแบนเนอร์');
-		expect(on).not.toContain('ไม่แสดงแบนเนอร์');
-		expect(on).not.toContain('role="switch"');
+	it('shows the banner group name as a labelled badge, not a switch', () => {
+		const names = new Map([['kiosk_banner_group:lobby', 'ล็อบบี้']]);
+		const body = html([device('a', { banner_group_id: 'kiosk_banner_group:lobby' })], names);
+		expect(body).toContain('ล็อบบี้');
+		expect(body).not.toContain('ไม่มีกลุ่มแบนเนอร์');
+		expect(body).not.toContain('role="switch"');
+	});
 
-		expect(html([device('a', { banner_enabled: false })])).toContain('ไม่แสดงแบนเนอร์');
+	it('says ไม่มีกลุ่มแบนเนอร์ for a device without a group or whose group is gone', () => {
+		const names = new Map([['kiosk_banner_group:lobby', 'ล็อบบี้']]);
+		expect(html([device('a')], names)).toContain('ไม่มีกลุ่มแบนเนอร์');
+		expect(html([device('a', { banner_group_id: 'kiosk_banner_group:deleted' })], names)).toContain(
+			'ไม่มีกลุ่มแบนเนอร์'
+		);
+		expect(html([device('a')])).toContain('ไม่มีกลุ่มแบนเนอร์');
 	});
 
 	it('labels each device with its kiosk screen and size', () => {

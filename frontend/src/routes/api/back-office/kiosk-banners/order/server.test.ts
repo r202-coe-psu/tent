@@ -22,7 +22,9 @@ vi.mock('$lib/server/kiosk-banners/kiosk-banner.server', async () => {
 const mockSession = vi.mocked(readSessionUserCtx);
 const mockReorder = vi.mocked(reorderBanners);
 
+const GROUP = 'kiosk_banner_group:A';
 const body = {
+	group_id: GROUP,
 	screen_type: 'portrait',
 	items: [
 		{ id: 'kiosk_banner:b2', _rev: '1-b' },
@@ -68,10 +70,20 @@ describe('PUT /api/back-office/kiosk-banners/order', () => {
 		expect(mockReorder).not.toHaveBeenCalled();
 	});
 
+	it('lets pr_staff reorder their own shelter and returns 403 for another', async () => {
+		mockSession.mockResolvedValue(SESSIONS.prA);
+		expect((await put('?shelter_code=SH001', body)).status).toBe(200);
+		expect(mockReorder).toHaveBeenCalledTimes(1);
+		expect((await put('?shelter_code=SH002', body)).status).toBe(403);
+		expect(mockReorder).toHaveBeenCalledTimes(1);
+	});
+
 	it('returns 422 for a bad body without calling the service', async () => {
 		const bad = [
 			{ ...body, shelter_code: 'SH002' },
 			{ ...body, screen_type: 'landscape' },
+			{ screen_type: body.screen_type, items: body.items },
+			{ ...body, group_id: 'shelter:A' },
 			{ items: body.items },
 			{ ...body, items: [{ id: 'kiosk_banner:b1' }] },
 			{ ...body, items: [{ id: 'kiosk_banner:b1', _rev: '1-a', order: 1 }] },
@@ -89,10 +101,14 @@ describe('PUT /api/back-office/kiosk-banners/order', () => {
 			const response = await put('?shelter_code=SH001', body);
 			expect(response.status).toBe(200);
 			expect(await response.json()).toEqual([{ _id: 'kiosk_banner:b2' }]);
-			expect(mockReorder).toHaveBeenLastCalledWith('SH001', 'portrait', [
-				{ id: 'kiosk_banner:b2', rev: '1-b' },
-				{ id: 'kiosk_banner:b1', rev: '1-a' }
-			]);
+			expect(mockReorder).toHaveBeenLastCalledWith(
+				'SH001',
+				{ groupId: GROUP, screenType: 'portrait' },
+				[
+					{ id: 'kiosk_banner:b2', rev: '1-b' },
+					{ id: 'kiosk_banner:b1', rev: '1-a' }
+				]
+			);
 		}
 	});
 

@@ -36,6 +36,7 @@
 		useUpdateVolunteer,
 		useSkillOptions
 	} from '../application/queries';
+	import { optionalVolunteerMobileSchema, VOLUNTEER_PHONE_MESSAGE } from '../domain/phone';
 	import { isControlledSkill } from '../domain/skills';
 	import { toSkillCode, toSkillCodes } from '../domain/skill-catalog';
 	import {
@@ -90,7 +91,7 @@
 	let verificationNotes = $state('');
 
 	// Rehydrate from the volunteer prop each time the dialog opens on a
-	// (possibly different) row — mirrors `job-form-dialog.svelte`'s `lastOpenedKey`.
+	// (possibly different) row — the same per-row rehydrate guard dialogs in this feature use.
 	let lastOpenedId = $state<string | null>(null);
 	$effect(() => {
 		if (!open) {
@@ -147,8 +148,9 @@
 			toast.error('กรุณากรอกชื่อและนามสกุล คั่นด้วยเว้นวรรค เช่น "สมชาย ใจดี"');
 			return;
 		}
-		if (!phone.trim()) {
-			toast.error('กรุณากรอกเบอร์โทรศัพท์');
+		const parsedPhone = optionalVolunteerMobileSchema.safeParse(phone);
+		if (!parsedPhone.success) {
+			toast.error(VOLUNTEER_PHONE_MESSAGE);
 			return;
 		}
 
@@ -157,7 +159,7 @@
 				...volunteer,
 				first_name: name.slice(0, spaceIndex).trim(),
 				last_name: name.slice(spaceIndex + 1).trim(),
-				phone: phone.trim(),
+				phone: parsedPhone.data,
 				skills: selectedSkills,
 				personnel_type: personnelType
 			});
@@ -271,7 +273,7 @@
 						<Input id="vm-name" bind:value={fullName} class="h-11" />
 					</div>
 					<div class="space-y-1.5">
-						<Label for="vm-phone">เบอร์โทรศัพท์ <span class="text-destructive">*</span></Label>
+						<Label for="vm-phone">เบอร์มือถือ</Label>
 						<Input id="vm-phone" bind:value={phone} class="h-11" />
 					</div>
 				</div>

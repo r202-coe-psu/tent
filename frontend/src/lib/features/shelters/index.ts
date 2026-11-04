@@ -2,9 +2,12 @@
 export {
 	operationStatusSchema,
 	siteKindSchema,
-	SITE_KIND_LABELS,
+	DEFAULT_SITE_KIND,
+	HOST_HOUSE_SITE_KIND,
+	validateSiteKindChange,
 	resolveOperationStatus,
 	isShelterBookable,
+	isShelterCancelled,
 	zoneTypeSchema,
 	ZONE_TYPE_LABELS,
 	zoneStatusSchema,
@@ -111,7 +114,13 @@ export {
 	type PolicySyncSlice
 } from './domain/feature-flag-policy-sync';
 
-export { SUB_STORAGE_TYPE_LABELS, listStoragePoints } from './domain/storage-points';
+export {
+	SUB_STORAGE_TYPE_LABELS,
+	listDonationPoints,
+	listStoragePoints,
+	sortSubStorageTypes,
+	subStorageTypeLabels
+} from './domain/storage-points';
 
 export {
 	sumZoneCapacities,
@@ -131,6 +140,22 @@ export {
 	type AreaAlignment
 } from './domain/area-guide';
 
+export {
+	matchesShelterCloseConfirm,
+	shelterCloseConfirmPhrase,
+	type ShelterClosePreview,
+	type ShelterCloseResult
+} from './domain/shelter-close';
+
+export {
+	needsShelterCloseModal,
+	selectableOperationStatuses,
+	shelterCloseCountRows,
+	describeShelterCloseResult,
+	type ShelterCloseCountRow,
+	type ShelterCloseOutcome
+} from './domain/shelter-close-flow';
+
 // Data layer (public)
 export {
 	createShelter,
@@ -138,7 +163,9 @@ export {
 	listShelters,
 	updateShelter,
 	closeZone,
-	reopenZone
+	reopenZone,
+	getShelterClosePreview,
+	closeShelter
 } from './data/shelters.api';
 export { sheltersRepository, SHELTER_REGISTRY_DB } from './data/shelters.remote';
 export type { ShelterSummary, ShelterBasic } from './data/shelters.repository';
@@ -157,11 +184,14 @@ export {
 	useCreateShelter,
 	useUpdateShelter,
 	useCloseZone,
-	useReopenZone
+	useReopenZone,
+	useShelterClosePreview,
+	useCloseShelter
 } from './application/queries';
 
 // UI (public — single page now handles create+edit via isEdit prop)
 export { default as ShelterFormPage } from './ui/shelter-form-page.svelte';
+export { default as ShelterCloseDialog } from './ui/shelter-close-dialog.svelte';
 export { default as ShelterList } from './ui/shelter-list.svelte';
 export { default as BasicInfoSection } from './ui/basic-info-section.svelte';
 export { default as CapacitySection } from './ui/capacity-section.svelte';

@@ -5,6 +5,7 @@
 	import CircleAlert from '@lucide/svelte/icons/circle-alert';
 	import Printer from '@lucide/svelte/icons/printer';
 	import { Button } from '$lib/components/ui/button/index.js';
+	import { CONSENT_COPY } from '$lib/features/consent';
 	import {
 		buildKioskContextQuery,
 		getKioskDisplayContext,
@@ -132,6 +133,10 @@
 				{viaThaid
 					? 'รับ QR Code แล้วไปที่จุดคัดกรอง'
 					: 'กรุณานำบัตรออกจากเครื่อง รับ QR Code แล้วไปที่จุดคัดกรอง'}
+			</p>
+			<p class="text-base kiosk-portrait:text-xl">
+				{CONSENT_COPY.summary.ref}:
+				<span class="font-mono tracking-wide">{registration.consent_ref}</span>
 			</p>
 			{#if printError}
 				<KioskInlineAlert tone="warning" icon={CircleAlert} role="alert"

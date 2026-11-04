@@ -16,6 +16,6 @@
 	<meta name="robots" content="noindex, nofollow" />
 </svelte:head>
 
-<PublicPageShell>
+<PublicPageShell class="lg:px-8" maxWidth="max-w-7xl">
 	<DigitalPass {token} {hideQr} />
 </PublicPageShell>

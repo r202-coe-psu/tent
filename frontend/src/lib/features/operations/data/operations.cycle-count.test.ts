@@ -84,6 +84,7 @@ import {
 	isStockLedger,
 	stockBalance,
 	createStockLedger,
+	LotWriteOffError,
 	type StockLedger
 } from '../domain/operations';
 import { buildCycleCountLots, planCycleCount, type CycleCountEntry } from '../domain/cycle-count';
@@ -106,7 +107,7 @@ function ledgerRows(): StockLedger[] {
 
 /** The count a walker starts from the current ledger, keyed with `counted[item_id]`. */
 function keyedEntries(counted: Record<string, string>): CycleCountEntry[] {
-	return buildCycleCountLots(ledgerRows()).map((lot) => ({
+	return buildCycleCountLots(ledgerRows()).lots.map((lot) => ({
 		...lot,
 		counted_qty: counted[lot.item_id] ?? ''
 	}));
@@ -192,9 +193,48 @@ describe('applyCycleCount (#347)', () => {
 		const submission = planCycleCount(keyedEntries({ 'item:rice': '8', 'item:salt': '5' }), 'c');
 		// the shelf lost stock between the walk and the save
 		seed('item:rice', '-9');
-		await expect(repo.applyCycleCount(submission, ctx)).rejects.toThrow(/Insufficient stock/);
+		await expect(repo.applyCycleCount(submission, ctx)).rejects.toThrow(/ไม่พอตัด/);
 		expect(bulkCalls).toHaveLength(0);
 		expect(ledgerRows().filter((r) => r.reason === 'adjust')).toHaveLength(0);
+	});
+
+	it('writes each shortfall against its own lot (#569)', async () => {
+		const [riceLot] = buildCycleCountLots(ledgerRows()).lots.filter(
+			(l) => l.item_id === 'item:rice'
+		);
+		await repo.applyCycleCount(planCycleCount(keyedEntries({ 'item:rice': '8' }), 'c'), ctx);
+
+		const [row] = ledgerRows().filter((r) => r.reason === 'adjust');
+		expect(row.lot_ref).toBe(riceLot.lot_ref);
+		expect(row.qty).toBe('-2');
+	});
+
+	it('refuses a shortfall that overdraws its lot though the item total covers it (#569)', async () => {
+		seed('item:rice', '100');
+		const lots = buildCycleCountLots(ledgerRows()).lots.filter((l) => l.item_id === 'item:rice');
+		const lotA = lots.find((l) => l.system_qty === '10')!;
+		// the walker counts lot A at 5 (short 5) ...
+		const submission = planCycleCount(
+			lots.map((lot) => ({ ...lot, counted_qty: lot.lot_ref === lotA.lot_ref ? '5' : '' })),
+			'c'
+		);
+		// ... while a dispatch out of lot A takes 8 of its 10
+		const dispatch = createStockLedger(
+			{
+				item_id: 'item:rice',
+				qty: '-8',
+				unit: 'kg',
+				reason: 'adjust',
+				adjust_reason: 'damaged',
+				ref_id: null,
+				lot_ref: lotA.lot_ref
+			},
+			ctx
+		);
+		docs.set(dispatch._id, clone(dispatch) as unknown as Doc);
+
+		await expect(repo.applyCycleCount(submission, ctx)).rejects.toBeInstanceOf(LotWriteOffError);
+		expect(bulkCalls).toHaveLength(0);
 	});
 
 	it('refuses an unknown item or a unit mismatch before writing anything', async () => {
@@ -214,7 +254,7 @@ describe('applyCycleCount (#347)', () => {
 		).rejects.toThrow(/Nothing to record/);
 
 		await repo.applyCycleCount(planCycleCount(keyedEntries({ 'item:rice': '8' }), 'count-1'), ctx);
-		const [rice] = buildCycleCountLots(ledgerRows()).filter((l) => l.item_id === 'item:rice');
+		const [rice] = buildCycleCountLots(ledgerRows()).lots.filter((l) => l.item_id === 'item:rice');
 		const changed = planCycleCount([{ ...rice, system_qty: '10', counted_qty: '7' }], 'count-1');
 		await expect(repo.applyCycleCount(changed, ctx)).rejects.toThrow(/cannot be changed/);
 	});

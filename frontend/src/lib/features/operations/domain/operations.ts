@@ -1,5 +1,12 @@
 import { z } from 'zod';
-import { type AuthorContext, type BaseDoc, type Timestamp, makeDoc, now } from '$lib/db/model';
+import {
+	type AuthorContext,
+	type BaseDoc,
+	type Timestamp,
+	makeDoc,
+	now,
+	thaiMobilePhoneSchema
+} from '$lib/db/model';
 import {
 	addQty,
 	persistQty,
@@ -239,7 +246,73 @@ export interface DonationItem {
 	category?: string;
 	condition?: string;
 	note?: string;
+	/**
+	 * Per-line review (CR-174 FR-1 · schema_v 7): a line the shelter asked for in its
+	 * campaign is `approved` at booking time, a typed-in one waits as `pending`. Absent on
+	 * docs before schema_v 7 — those are reviewed as a whole, by `status`.
+	 */
+	review_status?: 'approved' | 'pending' | 'rejected';
+	review_reason_code?: string | null;
+	review_reason?: string | null;
+	/**
+	 * Which line this is (CR-196 · schema_v 8): a ULID FastAPI gives every public line at
+	 * booking, and the donor's edit form sends back to name the line it changes. Absent on
+	 * walk-in lines and on docs before schema_v 8.
+	 */
+	line_key?: string;
+	/**
+	 * What the campaign counter holds for this line's item (CR-080) — stamped by FastAPI
+	 * only when the counter really took it, so it is also how an automatic approval
+	 * (FR-2) is told from a person's (FR-8).
+	 */
+	reserved_qty?: string;
+	/**
+	 * The drop-off point (`sub_storage[].id` ticked `accepts_donations`) the donor takes this
+	 * line to (CR-206 · schema_v 11). `null` or absent = no point: the line may be received at
+	 * any point of the shelter. Only `self_dropoff` bookings carry one.
+	 */
+	drop_off_point_id?: string | null;
 }
+
+/** One line's result in a {@link DonationPointReceipt} — `received_summary.items[]` plus `line_no`. */
+export interface DonationPointReceiptItem {
+	line_no: number;
+	item_id?: string;
+	free_text?: string;
+	qty: string;
+	unit: string;
+	rejected?: boolean;
+	reject_reason?: string;
+	reject_reason_code?: string;
+}
+
+/**
+ * One receipt at a drop-off point (CR-206 FR-MP-5): the lines one point recorded, received or
+ * turned away. Appended, never rewritten; `items[]` stays what was declared.
+ */
+export interface DonationPointReceipt {
+	/** The recorder's point. `null` = recorded after the shelter had no drop-off point left (FR-MP-18b). */
+	point_id: string | null;
+	line_nos: number[];
+	received_at: Timestamp;
+	received_by: string;
+	audit_id: string;
+	ledger_ids: string[];
+	items: DonationPointReceiptItem[];
+	remarks?: string;
+}
+
+/** How a booking with point receipts was closed (CR-206 FR-MP-27a). */
+export type DonationCloseReason = 'all_points' | 'staff_close' | 'expired';
+
+/**
+ * `schema_v` every donation writer stamps — the walk-in factory here, the donor edit
+ * route, and `worker/inbound/donations.py`. 11 = CR-206 `items[].drop_off_point_id` +
+ * `point_receipts[]` (10 CR-209 `logistics.vehicle_plate`, 9 CR-175 donor `photos`, 8 CR-196
+ * `items[].line_key`, 7 CR-174 `items[].review_status`, 6 CR-172 `reject_reason`,
+ * 5 CR-087 `redirect_to_shelter_code`, 4 CR-080 `revisions[]`).
+ */
+export const DONATION_SCHEMA_V = 11;
 
 export interface Donor {
 	name: string;
@@ -253,6 +326,7 @@ export interface Donor {
 export interface DonationLogistics {
 	delivery_method: 'self_dropoff' | 'parcel' | 'shelter_pickup';
 	vehicle?: 'motorcycle' | 'car' | 'pickup' | 'truck';
+	vehicle_plate?: string;
 	slot?: {
 		date: string;
 		from: string;
@@ -281,6 +355,9 @@ export interface Donation extends BaseDoc {
 		total_items: number;
 		received_at: Timestamp;
 		remarks?: string;
+		/** Booking closed from point receipts (CR-206): staff name or `system`. Absent on a whole-booking receipt. */
+		closed_by?: string;
+		closed_reason?: DonationCloseReason;
 		shortfalls?: Array<{
 			item_id?: string;
 			item_name?: string;
@@ -293,8 +370,18 @@ export interface Donation extends BaseDoc {
 			free_text?: string;
 			qty: string;
 			unit?: string;
+			/** Staff turned this line away at the counter — no ledger row, qty `'0'` (CR-172 FR-10). */
+			rejected?: boolean;
+			reject_reason?: string;
+			reject_reason_code?: string;
 		}>;
 	} | null;
+	/**
+	 * Why the booking was turned away, as the donor reads it on the tracking page.
+	 * Written only with `status: 'rejected'` (CR-172 FR-1, FR-2 · schema_v 6).
+	 */
+	reject_reason?: string | null;
+	reject_reason_code?: string | null;
 	/**
 	 * Destination shelter this request was handed to (CR-087). Set
 	 * only alongside `status: 'redirected'`; the ticket the destination actually
@@ -302,6 +389,13 @@ export interface Donation extends BaseDoc {
 	 * scope isolation means a field here is invisible to them.
 	 */
 	redirect_to_shelter_code?: string | null;
+	/**
+	 * Donor photos of an unsolicited public booking, `image:{ulid}` ids in this shelter's
+	 * DB (CR-175 donor photos · schema_v 9). Attached at booking only; an edit keeps them.
+	 */
+	photos?: string[];
+	/** Receipts at drop-off points (CR-206 FR-MP-5 · schema_v 11). Absent or `[]` = no point recorded yet. */
+	point_receipts?: DonationPointReceipt[];
 }
 
 /**
@@ -330,6 +424,8 @@ export interface CampaignNeed {
 	qty_target: string; // qty_str
 	unit: string;
 	status?: 'open' | 'closed';
+	/** Drop-off point staff set for this need; lines booked against it inherit it. */
+	drop_off_point_id?: string | null;
 }
 
 export interface DonationCampaign extends BaseDoc {
@@ -393,6 +489,9 @@ export type OperationsDoc = StockLedger | Donation | DonationCampaign | StockTra
 type LedgerRefPrefix = string | null;
 export type LedgerRefRule = LedgerRefPrefix | readonly LedgerRefPrefix[];
 
+/** `ref_id` prefix of a bulk return pool document; allowed for `receive` ledger rows only. */
+export const BULK_RETURN_POOL_REF_PREFIX = 'bulk_return_pool:';
+
 export const REF_PREFIX_BY_REASON: Record<LedgerReason, LedgerRefRule> = {
 	donation: 'donation:',
 	// kitchen_requisition: legacy doc type, deprecated (CR-141) — still accepted so
@@ -403,8 +502,15 @@ export const REF_PREFIX_BY_REASON: Record<LedgerReason, LedgerRefRule> = {
 	transfer_out: ['stock_transfer:', 'requisition_ticket:'],
 	adjust: null, // manual correction — no source document by definition
 	distribute: 'requisition_ticket:',
-	distribution_return: 'distribution_batch:',
-	receive: ['meal_service:', 'requisition_ticket:', 'distribution_log:', 'bulk_return_pool:']
+	// distribution_batch: legacy batch flow; requisition_ticket: leftovers received back from a
+	// ticket into their source lot (CR-208), never a `direct-` issue — see isCanonicalLedgerRef.
+	distribution_return: ['distribution_batch:', 'requisition_ticket:'],
+	receive: [
+		'meal_service:',
+		'requisition_ticket:',
+		'distribution_log:',
+		BULK_RETURN_POOL_REF_PREFIX
+	]
 };
 
 function matchesLedgerRefPrefix(refId: string, prefix: string): boolean {
@@ -416,9 +522,15 @@ export function isCanonicalLedgerRef(reason: LedgerReason, refId: string | null)
 	const rule = REF_PREFIX_BY_REASON[reason];
 	const accepted = Array.isArray(rule) ? rule : [rule];
 	if (refId === null) return accepted.includes(null);
+	if (isDirectIssueReturnRef(reason, refId)) return false;
 	return accepted.some(
 		(value) => typeof value === 'string' && matchesLedgerRefPrefix(refId, value)
 	);
+}
+
+/** CR-208 FR-RTN-18 — a direct issue from the stock page has no return step to receive back. */
+function isDirectIssueReturnRef(reason: LedgerReason, refId: string): boolean {
+	return reason === 'distribution_return' && refId.startsWith('requisition_ticket:direct-');
 }
 
 /**
@@ -434,6 +546,14 @@ function checkRefIdAgainstRule(
 ): void {
 	const accepted = Array.isArray(rule) ? rule : [rule];
 	if (isCanonicalLedgerRef(reason, refId)) return;
+	if (refId !== null && isDirectIssueReturnRef(reason, refId)) {
+		ctx.addIssue({
+			code: 'custom',
+			path: ['ref_id'],
+			message: `รายการประเภท '${reason}' ต้องไม่อ้างอิงการเบิกตรงจากหน้าคลัง (requisition_ticket:direct-)`
+		});
+		return;
+	}
 	if (accepted.length === 1 && accepted[0] === null) {
 		ctx.addIssue({
 			code: 'custom',
@@ -560,7 +680,27 @@ function stockLedgerInputSchemaWith(
 }
 
 export const stockLedgerInputSchema = stockLedgerInputSchemaWith(checkRefId);
-export type StockLedgerInput = z.input<typeof stockLedgerInputSchema>;
+type StockLedgerInputBase = Omit<
+	z.input<typeof stockLedgerInputBaseSchema>,
+	'reason' | 'adjust_reason' | 'note'
+>;
+
+/**
+ * Compile-time mirror of CR-143 FR-C1/C2, discriminated on `reason`: an adjust row must
+ * carry `adjust_reason` (`note` optional), every other row must carry neither. The Zod
+ * `superRefine` above stays as the runtime guard for data that never passed through TypeScript.
+ */
+export type StockLedgerInput =
+	| (StockLedgerInputBase & {
+			reason: 'adjust';
+			adjust_reason: AdjustReason;
+			note?: string;
+	  })
+	| (StockLedgerInputBase & {
+			reason: Exclude<LedgerReason, 'adjust'>;
+			adjust_reason?: never;
+			note?: never;
+	  });
 
 const legacyFlow2StockLedgerInputSchema = stockLedgerInputSchemaWith(checkLegacyFlow2RefId);
 
@@ -734,24 +874,21 @@ export function createReceiveEntry(
 	id?: string
 ): StockLedger {
 	const d = receiveInputSchema.parse(input);
-	return createStockLedger(
-		{
-			item_id: d.item_id,
-			qty: d.qty,
-			unit: d.unit,
-			reason: REASON_BY_RECEIVE_SOURCE[d.source],
-			ref_id: d.ref_id,
-			// A hand-keyed receipt is booked as an adjust (CR-143 §C needs a reason on those):
-			// stock that turned up, so `found` (CR-156 FR-C7); the form offers no picker (FR-C8).
-			...(REASON_BY_RECEIVE_SOURCE[d.source] === 'adjust'
-				? { adjust_reason: 'found' as const }
-				: {}),
-			lot: d.lot,
-			occurred_at: d.occurred_at
-		},
-		ctx,
-		id
-	);
+	const common = {
+		item_id: d.item_id,
+		qty: d.qty,
+		unit: d.unit,
+		ref_id: d.ref_id,
+		lot: d.lot,
+		occurred_at: d.occurred_at
+	};
+	const reason = REASON_BY_RECEIVE_SOURCE[d.source];
+	// A hand-keyed receipt is booked as an adjust (CR-143 §C needs a reason on those):
+	// stock that turned up, so `found` (CR-156 FR-C7); the form offers no picker (FR-C8).
+	if (reason === 'adjust') {
+		return createStockLedger({ ...common, reason, adjust_reason: 'found' }, ctx, id);
+	}
+	return createStockLedger({ ...common, reason }, ctx, id);
 }
 
 export const distributeInputSchema = z.object({
@@ -796,7 +933,12 @@ export const distributionReturnInputSchema = z.object({
 	item_id: z.string().min(1),
 	qty: qtyStrCoercePositiveSchema,
 	unit: z.string().trim().min(1),
-	ref_id: z.string().regex(/^distribution_batch:.+/, 'ref_id must reference a distribution batch'),
+	ref_id: z
+		.string()
+		.regex(
+			/^(?:distribution_batch|requisition_ticket):.+/,
+			'ref_id must reference a distribution batch or requisition ticket'
+		),
 	lot_ref: z.string().regex(/^stock_ledger:.+/, 'lot_ref must reference an inbound stock ledger'),
 	lot: stockLotSchema.optional(),
 	occurred_at: z.string().optional()
@@ -837,9 +979,26 @@ export const adjustInputSchema = z
 		adjust_reason: manualAdjustReasonSchema,
 		note: z.string().trim().max(ADJUST_NOTE_MAX_LENGTH).optional(),
 		lot: stockLotSchema.optional(),
+		/**
+		 * The physical lot a write-off comes out of (#569). Only on a negative adjust: a
+		 * positive row always becomes a new lot of its own (see `createStockLedger`).
+		 */
+		lot_ref: z
+			.string()
+			.regex(/^stock_ledger:.+/, 'lot_ref must reference an inbound stock ledger')
+			.optional(),
 		occurred_at: z.string().optional()
 	})
-	.superRefine((d, ctx) => checkOtherNote(d.adjust_reason, d.note, ctx));
+	.superRefine((d, ctx) => {
+		checkOtherNote(d.adjust_reason, d.note, ctx);
+		if (d.lot_ref && !qtyGt('0', persistQty(d.qty))) {
+			ctx.addIssue({
+				code: 'custom',
+				path: ['lot_ref'],
+				message: 'lot_ref is only for a negative adjustment; added stock becomes a new lot'
+			});
+		}
+	});
 export type AdjustInput = z.input<typeof adjustInputSchema>;
 
 /** `id` pins the row's `_id` (see {@link createStockLedger}) — the cycle count derives it per lot. */
@@ -859,6 +1018,7 @@ export function createAdjustEntry(
 			adjust_reason: d.adjust_reason,
 			note: d.note,
 			lot: d.lot,
+			...(d.lot_ref ? { lot_ref: d.lot_ref } : {}),
 			occurred_at: d.occurred_at
 		},
 		ctx,
@@ -880,7 +1040,7 @@ export function resolveAdjustReason(
 }
 
 /** Sum signed deltas per item — the `stock_balance` read model, computed client-side. */
-export function stockBalance(ledger: StockLedger[]): Map<string, string> {
+export function stockBalance(ledger: readonly StockLedger[]): Map<string, string> {
 	const balance = new Map<string, string>();
 	for (const entry of ledger) {
 		balance.set(entry.item_id, addQty(balance.get(entry.item_id) ?? '0', entry.qty));
@@ -895,6 +1055,34 @@ export interface StockLotBalance {
 	qty: string;
 	lot?: StockLot;
 	received_at: Timestamp;
+}
+
+/** A lot whose projected balance is below zero (#855): shown with a warning, never issued from. */
+export function isNegativeLot(lot: Pick<StockLotBalance, 'qty'>): boolean {
+	return qtyGt('0', lot.qty);
+}
+
+export function negativeLots<T extends Pick<StockLotBalance, 'qty'>>(lots: readonly T[]): T[] {
+	return lots.filter(isNegativeLot);
+}
+
+/** The stock-table note for an item with an overdrawn lot (CR-216 FR-6a): the total nets the
+ * negative lot in, but only the positive lots can be issued — `A = -3, B = 10` is total 7,
+ * usable 10. Null when no lot is negative. */
+export function negativeLotSummary(
+	lots: readonly Pick<StockLotBalance, 'qty'>[]
+): { usable: string; negative: string } | null {
+	let usable = '0';
+	let negative = '0';
+	let anyNegative = false;
+	for (const lot of lots) {
+		if (qtyGt(lot.qty, 0)) usable = addQty(usable, lot.qty);
+		else if (isNegativeLot(lot)) {
+			anyNegative = true;
+			negative = addQty(negative, lot.qty);
+		}
+	}
+	return anyNegative ? { usable, negative } : null;
 }
 
 export class StockLotIntegrityError extends Error {
@@ -939,7 +1127,10 @@ export function sortStockLotsByConsumptionOrder(
  * Project exact per-lot balances from ledger history. Explicit `lot_ref` rows
  * target that physical lot. A legacy inbound row uses its own `_id` as a
  * virtual reference; a legacy outbound row consumes eligible lots FEFO, then
- * FIFO (`occurred_at`, `_id`). Impossible histories fail closed.
+ * FIFO (`occurred_at`, `_id`). A lot overdrawn by a row naming it (or by the shortfall of a legacy row,
+ * attached to the last lot it consumed) goes negative instead of throwing (#855) — see
+ * {@link isNegativeLot}. Genuinely corrupt histories (identity changes, unknown lots, a legacy
+ * outbound with no lot to consume) still fail closed.
  */
 export function projectStockLotBalances(ledger: readonly StockLedger[]): StockLotBalance[] {
 	const balances = new Map<string, StockLotBalance>();
@@ -973,17 +1164,29 @@ export function projectStockLotBalances(ledger: readonly StockLedger[]): StockLo
 		}
 
 		let remaining = qtyAbs(entry.qty);
-		const candidates = entry.lot_ref
-			? [balances.get(entry.lot_ref)].filter((lot): lot is StockLotBalance => Boolean(lot))
-			: [...balances.values()]
-					.filter(
-						(lot) => lot.item_id === entry.item_id && lot.unit === entry.unit && qtyGt(lot.qty, 0)
-					)
-					.sort(compareLotConsumptionOrder);
+		if (entry.lot_ref) {
+			// A row naming its lot is never clamped: an overdrawn lot goes negative (#855).
+			const lot = balances.get(entry.lot_ref);
+			if (lot) {
+				if (lot.item_id !== entry.item_id || lot.unit !== entry.unit) {
+					throw new StockLotIntegrityError(`Lot identity ${entry.lot_ref} changed item or unit`);
+				}
+				lot.qty = subQty(lot.qty, remaining);
+				continue;
+			}
+			throw new StockLotIntegrityError(
+				`Historical outbound ${entry._id} references unknown lot ${entry.lot_ref}`
+			);
+		}
 
+		let lastConsumed: StockLotBalance | undefined;
+		const candidates = [...balances.values()]
+			.filter(
+				(lot) => lot.item_id === entry.item_id && lot.unit === entry.unit && qtyGt(lot.qty, 0)
+			)
+			.sort(compareLotConsumptionOrder);
 		for (const lot of candidates) {
-			if (lot.item_id !== entry.item_id || lot.unit !== entry.unit) continue;
-			if (!qtyGt(lot.qty, 0)) continue;
+			lastConsumed = lot;
 			if (qtyGte(lot.qty, remaining)) {
 				lot.qty = subQty(lot.qty, remaining);
 				remaining = '0';
@@ -994,14 +1197,137 @@ export function projectStockLotBalances(ledger: readonly StockLedger[]): StockLo
 		}
 
 		if (!qtyIsZero(remaining)) {
-			const target = entry.lot_ref ? ` lot ${entry.lot_ref}` : '';
-			throw new StockLotIntegrityError(
-				`Historical outbound ${entry._id} exceeds available${target} stock by ${remaining}`
-			);
+			// Shortfall of a legacy row (no lot_ref): attach it to the last lot it consumed so the
+			// history stays representable. With no lot to consume it cannot be placed (#855).
+			if (!lastConsumed) {
+				throw new StockLotIntegrityError(
+					`Historical outbound ${entry._id} exceeds available stock by ${remaining}`
+				);
+			}
+			lastConsumed.qty = subQty(lastConsumed.qty, remaining);
 		}
 	}
 
 	return [...balances.values()].sort((a, b) => a.lot_ref.localeCompare(b.lot_ref));
+}
+
+/**
+ * Per-lot balances of every item, from the same projection the stock table uses (#569):
+ * `lot_ref` rows hit their own lot, older outbound rows are replayed in the legacy order.
+ *
+ * Projected one item at a time — lots never cross items, so the result is the same as one
+ * whole-ledger pass, but one item with an impossible history only drops that item, named in
+ * `brokenItemIds`, instead of the whole page or count.
+ */
+export function projectLotsByItem(ledger: readonly StockLedger[]): {
+	lots: StockLotBalance[];
+	brokenItemIds: string[];
+} {
+	const byItem = new Map<string, StockLedger[]>();
+	for (const entry of ledger) {
+		const rows = byItem.get(entry.item_id);
+		if (rows) rows.push(entry);
+		else byItem.set(entry.item_id, [entry]);
+	}
+	const lots: StockLotBalance[] = [];
+	const brokenItemIds: string[] = [];
+	for (const [itemId, rows] of byItem) {
+		try {
+			lots.push(...projectStockLotBalances(rows));
+		} catch (error) {
+			if (!(error instanceof StockLotIntegrityError)) throw error;
+			brokenItemIds.push(itemId);
+		}
+	}
+	return { lots, brokenItemIds };
+}
+
+/**
+ * Stock a no-lot write-off can actually draw on, per item: the sum of lots with qty > 0 (#855).
+ * A negative lot counts as 0 — it is never netted against healthy lots, so `A = -3, B = 10`
+ * offers 10, not 7. An item whose history cannot be projected falls back to its plain total.
+ */
+export function usableStockByItem(ledger: readonly StockLedger[]): Map<string, string> {
+	const { lots, brokenItemIds } = projectLotsByItem(ledger);
+	const usable = new Map<string, string>();
+	for (const lot of lots) {
+		if (!qtyGt(lot.qty, 0)) continue;
+		usable.set(lot.item_id, addQty(usable.get(lot.item_id) ?? '0', lot.qty));
+	}
+	if (brokenItemIds.length > 0) {
+		// Never offer a negative total as stock on hand (CR-216 FR-9b).
+		const totals = stockBalance(ledger);
+		for (const id of brokenItemIds) {
+			const total = totals.get(id) ?? '0';
+			usable.set(id, qtyGt(total, 0) ? total : '0');
+		}
+	}
+	return usable;
+}
+
+/**
+ * A write-off that names its lot must fit in that lot (#569): an adjust or a count shortfall
+ * carrying `lot_ref` is replayed against that one lot, so checking it against the item's total
+ * would let it overdraw the lot and leave the item's history impossible to replay — for good,
+ * the ledger being append-only. `entries` are the rows about to be written; rows without a
+ * `lot_ref`, or adding stock, are not checked here. Several rows on one lot are summed.
+ */
+export function assertLotWriteOffsFit(
+	ledger: readonly StockLedger[],
+	entries: readonly Pick<StockLedger, 'item_id' | 'unit' | 'qty' | 'lot_ref'>[]
+): void {
+	const wanted = new Map<string, { item_id: string; unit: string; qty: string }>();
+	for (const entry of entries) {
+		if (!entry.lot_ref || !qtyGt('0', entry.qty)) continue;
+		const prior = wanted.get(entry.lot_ref);
+		if (prior && (prior.item_id !== entry.item_id || prior.unit !== entry.unit)) {
+			throw new LotWriteOffError(`ล็อต ${entry.lot_ref} ถูกอ้างด้วยสินค้าหรือหน่วยต่างกัน`);
+		}
+		wanted.set(entry.lot_ref, {
+			item_id: entry.item_id,
+			unit: entry.unit,
+			qty: addQty(prior?.qty ?? '0', qtyAbs(entry.qty))
+		});
+	}
+	if (wanted.size === 0) return;
+
+	const itemIds = new Set([...wanted.values()].map((w) => w.item_id));
+	let projected: StockLotBalance[];
+	try {
+		projected = projectStockLotBalances(ledger.filter((row) => itemIds.has(row.item_id)));
+	} catch (error) {
+		if (!(error instanceof StockLotIntegrityError)) throw error;
+		throw new LotWriteOffError(
+			'ประวัติคลังของสินค้านี้คำนวณยอดรายล็อตไม่ได้ — กรุณาแจ้งผู้ดูแลระบบ'
+		);
+	}
+	const lots = new Map(projected.map((lot) => [lot.lot_ref, lot]));
+	for (const [lotRef, want] of wanted) {
+		const lot = lots.get(lotRef);
+		if (!lot || lot.item_id !== want.item_id || lot.unit !== want.unit) {
+			throw new LotWriteOffError(
+				'ไม่พบล็อตที่เลือกในคลังของสินค้านี้แล้ว — ข้อมูลอาจเปลี่ยนไป กรุณาโหลดใหม่แล้วเลือกล็อตอีกครั้ง'
+			);
+		}
+		if (isNegativeLot(lot)) {
+			throw new LotWriteOffError(
+				`ล็อตที่เลือกติดลบ (${persistQty(lot.qty)} ${lot.unit}) ตัดยอดเพิ่มไม่ได้ — ต้องแก้ยอดล็อตนี้ก่อน`
+			);
+		}
+		if (!qtyGte(lot.qty, want.qty)) {
+			throw new LotWriteOffError(
+				`ล็อตที่เลือกคงเหลือ ${persistQty(lot.qty)} ${lot.unit} ไม่พอตัด ${want.qty} ${want.unit} — ยอดอาจเปลี่ยนไปแล้ว กรุณาโหลดใหม่`
+			);
+		}
+	}
+}
+
+/** A lot-bound write-off that does not fit its lot (`assertLotWriteOffsFit`). */
+export class LotWriteOffError extends Error {
+	constructor(message: string) {
+		super(message);
+		this.name = 'LotWriteOffError';
+	}
 }
 
 // ---------------------------------------------------------------- donation
@@ -1022,12 +1348,11 @@ export const walkInDonationInputSchema = z
 	.object({
 		donor: z.object({
 			name: z.string().trim().min(1),
-			phone: z
-				.string()
-				.trim()
-				.regex(/^[0-9]+$/)
-				.nullable(),
+			phone: thaiMobilePhoneSchema,
 			phone_hash: z.string().min(1),
+			// Same rule as the back-office walk-in (`walkInIntakeInputSchema`): a blank is NOT an
+			// email — callers leave the key out, and nothing is stored (#821 FR-11).
+			email: z.string().trim().email().optional(),
 			tax_receipt: z.boolean().optional(),
 			tax_id: z.string().optional()
 		}),
@@ -1051,10 +1376,9 @@ export function createWalkInDonation(input: WalkInDonationInput, ctx: AuthorCont
 	).toISOString();
 	return makeDoc(
 		'donation',
-		// 5 since CR-087 added redirect_to_shelter_code (4 was CR-080's revisions[]). A
-		// walk-in has neither yet, but the version has to say which shape a reader should
-		// expect — and the public writer (worker/inbound/donations.py) stamps the same.
-		5,
+		// A walk-in has none of the later fields yet, but the version has to say which
+		// shape a reader should expect — and the public writer stamps the same.
+		DONATION_SCHEMA_V,
 		{
 			channel: 'walk_in' as const,
 			donor: d.donor,
@@ -1095,7 +1419,9 @@ const DONATION_TRANSITIONS: Record<DonationStatus, DonationStatus[]> = {
 	//     already writes this for every outstanding status (`quota/expiry.py`,
 	//     `EXPIRABLE_STATUSES`), so leaving it out here made the two implementations
 	//     disagree about a transition that happens nightly.
-	verifying: ['received', 'redirected', 'rejected', 'expired', 'cancelled'],
+	//   · `pending_review` — the donor edits a booking that already has its QR and adds
+	//     a line that needs review (CR-174 FR-21): the QR waits until staff decide.
+	verifying: ['received', 'pending_review', 'redirected', 'rejected', 'expired', 'cancelled'],
 	received: [],
 	redirected: [],
 	rejected: [],
@@ -1170,6 +1496,24 @@ export function keyDonationReceipt(
 	);
 }
 
+/** Why the batch receive page turns away a booking split across drop-off points (CR-206 FR-MP-24a). */
+export const POINT_SPLIT_DONATION_ERROR = 'ใบนี้แยกส่งหลายจุด — รับที่หน้าสแกน';
+
+/**
+ * A booking received point by point at the scan station (CR-206 FR-MP-24a): a line names a
+ * drop-off point, or a point already recorded a receipt. The batch page has no shelter doc to
+ * tell a current point from one unticked since, so any named point counts — closing such a
+ * booking whole would record the other points' lines as missing before they arrive.
+ */
+export function isPointSplitDonation(
+	donation: Pick<Donation, 'items' | 'point_receipts'>
+): boolean {
+	return (
+		(donation.point_receipts ?? []).length > 0 ||
+		(donation.items ?? []).some((item) => (item.drop_off_point_id ?? null) !== null)
+	);
+}
+
 /**
  * Close a donation whose rows are all in the ledger (CR-143 FR-B4b).
  *
@@ -1178,9 +1522,11 @@ export function keyDonationReceipt(
  * straight from the counter by the scan route too (`api/back-office/donations/[query]`),
  * because the count IS the verification. Terminal statuses other than `received` stay
  * refused. An already `received` donation comes back unchanged so a retry that lost
- * the response of a transition that did land is a no-op (FR-B8).
+ * the response of a transition that did land is a no-op (FR-B8). A booking split across
+ * drop-off points is closed from its point receipts instead, never here (CR-206 FR-MP-24a).
  */
 export function completeDonationReceipt(donation: Donation): Donation {
+	if (isPointSplitDonation(donation)) throw new Error(POINT_SPLIT_DONATION_ERROR);
 	if (donation.status === 'received') return donation;
 	if (!isDonationOutstanding(donation.status)) {
 		throw new Error(`Cannot receive a donation in status "${donation.status}"`);
@@ -1235,11 +1581,16 @@ export const disputeInfoSchema = z.object({
 });
 export type DisputeInfoInput = z.input<typeof disputeInfoSchema>;
 
+/** Most transfer ids one list request may name — keeps the BFF query string short (#811). */
+export const TRANSFER_IDS_PER_REQUEST = 50;
+
 export const transferFilterSchema = z.object({
 	status: transferStatusSchema.optional(),
 	limit: z.number().int().positive().max(1000).default(50),
 	skip: z.number().int().nonnegative().default(0),
-	sort: z.enum(['created_at_desc', 'created_at_asc']).default('created_at_desc')
+	sort: z.enum(['created_at_desc', 'created_at_asc']).default('created_at_desc'),
+	/** Read exactly these transfers (ledger ref labels, #811) — `limit` does not cap them. */
+	ids: z.array(z.string().min(1)).min(1).max(TRANSFER_IDS_PER_REQUEST).optional()
 });
 export type TransferFilter = z.input<typeof transferFilterSchema>;
 
@@ -1455,7 +1806,8 @@ export const campaignInputSchema = z.object({
 				item_id: z.string().min(1),
 				qty_target: qtyStrCoercePositiveSchema,
 				unit: unitCodeSchema,
-				status: z.enum(['open', 'closed']).optional().default('open')
+				status: z.enum(['open', 'closed']).optional().default('open'),
+				drop_off_point_id: z.string().min(1).nullable().optional().default(null)
 			})
 		)
 		.min(1, 'A campaign needs at least one item'),
@@ -1467,11 +1819,14 @@ export const campaignInputSchema = z.object({
 });
 export type CampaignInput = z.input<typeof campaignInputSchema>;
 
+/** CR-206 A2 FR-AP-1: `needs[].drop_off_point_id`. */
+export const DONATION_CAMPAIGN_SCHEMA_V = 4;
+
 export function createCampaign(input: CampaignInput, ctx: AuthorContext): DonationCampaign {
 	const d = campaignInputSchema.parse(input);
 	return makeDoc(
 		'donation_campaign',
-		3,
+		DONATION_CAMPAIGN_SCHEMA_V,
 		{
 			title: d.title,
 			needs: d.needs.map((n) => ({ ...n, qty_target: persistQty(n.qty_target) })),
@@ -1551,6 +1906,17 @@ export function keyableDonations(donations: Donation[], stockLedgers: StockLedge
 	);
 }
 
+/**
+ * Goods still owed to the shelter, per item: outstanding donations plus `received`
+ * ones the ledger has not recorded, minus what a batch receipt already recorded.
+ *
+ * With `campaignId`, only that campaign's donations count — a donation with no
+ * `campaign_id` belongs to none, and a line with no `item_id` (free text) to no item.
+ * Both used to be attributed anyway (every campaign; an item guessed from the text),
+ * so the back-office board showed one booking under every campaign asking for the
+ * item while the public board and the quota counter counted it nowhere (#689). Now
+ * the three copies of the T-22 rule agree — see `packages/needs-fixtures`.
+ */
 export function calculateReserved(
 	donations: Donation[],
 	stockLedgers: StockLedger[],
@@ -1561,16 +1927,14 @@ export function calculateReserved(
 
 	const reserved = new Map<string, string>();
 	for (const don of donations) {
-		if (campaignId && don.campaign_id && don.campaign_id !== campaignId) continue;
+		if (campaignId && don.campaign_id !== campaignId) continue;
 		const isUnkeyedReceived = don.status === 'received' && !keyed.has(don._id);
 		if (!isDonationOutstanding(don.status) && !isUnkeyedReceived) continue;
 
 		const declared = new Map<string, string>();
 		for (const item of don.items ?? []) {
-			const itemId =
-				item.item_id || (item.free_text ? mapNeedItemHeuristic(item.free_text) : undefined);
-			if (!itemId) continue;
-			declared.set(itemId, addQty(declared.get(itemId) ?? '0', item.qty));
+			if (!item.item_id) continue;
+			declared.set(item.item_id, addQty(declared.get(item.item_id) ?? '0', item.qty));
 		}
 
 		// FR-B9: a donation part-way through a batch receipt already has some of its
@@ -1595,6 +1959,8 @@ export interface NeedAvailability {
 	qty_reserved: string;
 	qty_remaining: string;
 	is_cut_off: boolean;
+	/** `is_cut_off` split by cause — `is_cut_off === (close_state !== 'open')`. */
+	close_state: NeedCloseState;
 	status: 'open' | 'closed';
 	unit: string;
 }
@@ -1613,7 +1979,7 @@ export function deriveNeedAvailability(
 		const covered = addQty(currentOnHand, currentReserved);
 		const rem = subQty(need.qty_target, covered);
 		const remaining = qtyGte(rem, 0) ? rem : '0';
-		const isCutOff = isNeedCutOff(
+		const closeState = needCloseState(
 			need.qty_target,
 			currentOnHand,
 			currentReserved,
@@ -1626,8 +1992,11 @@ export function deriveNeedAvailability(
 			qty_target: need.qty_target,
 			qty_on_hand: currentOnHand,
 			qty_reserved: currentReserved,
-			qty_remaining: remaining,
-			is_cut_off: isCutOff,
+			// What the board offers a donor: nothing once the need is cut off (met, or
+			// closed by hand), the same zero `computeNeeds` folds a closed need into.
+			qty_remaining: closeState !== 'open' ? '0' : remaining,
+			is_cut_off: closeState !== 'open',
+			close_state: closeState,
 			status: need.status ?? 'open',
 			unit: need.unit
 		};
@@ -1670,6 +2039,26 @@ export const isDonationCampaign = (d: unknown): d is DonationCampaign =>
 export const isStockTransfer = (d: unknown): d is StockTransfer =>
 	!!d && typeof d === 'object' && (d as { type?: unknown }).type === 'stock_transfer';
 
+/** A shelter a transfer request may be sent to (#570) — code and name only. */
+export type TransferDestination = { code: string; name: string };
+export const isTransferDestination = (d: unknown): d is TransferDestination =>
+	!!d &&
+	typeof d === 'object' &&
+	typeof (d as { code?: unknown }).code === 'string' &&
+	typeof (d as { name?: unknown }).name === 'string';
+
+/**
+ * The transfer API refused this account (HTTP 403) — the tab must say so rather than show an
+ * empty list (#571). Carries no `status` on purpose: the app's query client treats an error
+ * with `status` 401/403 as a session problem, and this is a permission answer, not an expiry.
+ */
+export class TransferForbiddenError extends Error {
+	constructor(message = 'Not allowed to read transfers') {
+		super(message);
+		this.name = 'TransferForbiddenError';
+	}
+}
+
 /**
  * Determines the donation cut-off status (T-22 Cut-off Rule).
  * Automatically closes when: On-hand inventory (onHand) + Reserved amount (reserved) >= Target (target)
@@ -1682,8 +2071,50 @@ export function isNeedCutOff(
 	needStatus?: 'open' | 'closed',
 	campaignStatus?: 'open' | 'closed'
 ): boolean {
-	if (campaignStatus === 'closed' || needStatus === 'closed') return true;
-	return qtyGte(addQty(onHandStock, reservedQty), qtyTarget);
+	return needCloseState(qtyTarget, onHandStock, reservedQty, needStatus, campaignStatus) !== 'open';
+}
+
+/** Why a need takes no more donations — or `open` when it still does (#816/#817). */
+export type NeedCloseState = 'open' | 'reached' | 'closed';
+
+/**
+ * The one answer the needs board reads a row's badge, bar, buttons and filter from.
+ *
+ * A stored `closed` (need or campaign) always wins: the docs carry no close reason, so a
+ * closed need whose stock later passes the target is still `closed`, not `reached`.
+ * Otherwise `reached` is derived live from on-hand + reserved ≥ target — the same T-22
+ * formula the public projection uses to drop the need — so it falls back to `open` as
+ * soon as stock is distributed or a reservation is released.
+ */
+export function needCloseState(
+	qtyTarget: string | number,
+	onHandStock: string | number,
+	reservedQty: string | number,
+	needStatus?: 'open' | 'closed',
+	campaignStatus?: 'open' | 'closed'
+): NeedCloseState {
+	if (campaignStatus === 'closed' || needStatus === 'closed') return 'closed';
+	return qtyGte(addQty(onHandStock, reservedQty), qtyTarget) ? 'reached' : 'open';
+}
+
+/** The needs-board status filter. */
+export type NeedStatusFilter = 'all' | 'showing' | 'hidden' | 'reached' | 'closed';
+
+/**
+ * Which rows a status filter keeps. The buckets don't overlap: "showing"/"hidden" are
+ * the campaign toggle of rows still accepting donations; a reached or closed row is
+ * neither, it sits under its own state.
+ */
+export function matchesStatusFilter(
+	state: NeedCloseState,
+	showOnHome: boolean,
+	filter: NeedStatusFilter
+): boolean {
+	if (filter === 'showing') return state === 'open' && showOnHome;
+	if (filter === 'hidden') return state === 'open' && !showOnHome;
+	if (filter === 'reached') return state === 'reached';
+	if (filter === 'closed') return state === 'closed';
+	return true;
 }
 
 /**
@@ -1763,13 +2194,14 @@ export class CampaignUnitMismatchError extends Error {
  *
  * Targets the need by `item_id`, never by position: the board renders one row per
  * need, so editing "the first need" would rewrite a different item than the row the
- * user clicked. `status` is left untouched — closing/reopening is `forceCutOffNeed` /
+ * user clicked. `drop_off_point_id` is only written when the patch carries it (`null`
+ * clears it). `status` is left untouched — closing/reopening is `forceCutOffNeed` /
  * `reopenNeed`, which carry their own audit reason.
  */
 export function editNeed(
 	campaign: DonationCampaign,
 	itemId: string,
-	patch: { qty_target: string; unit?: string }
+	patch: { qty_target: string; unit?: string; drop_off_point_id?: string | null }
 ): DonationCampaign {
 	if (!campaign.needs.some((need) => need.item_id === itemId)) {
 		throw new Error(`Campaign ${campaign._id} has no need for ${itemId}`);
@@ -1782,7 +2214,10 @@ export function editNeed(
 				? {
 						...need,
 						qty_target: qtyTarget,
-						...(patch.unit?.trim() ? { unit: patch.unit.trim() } : {})
+						...(patch.unit?.trim() ? { unit: patch.unit.trim() } : {}),
+						...(patch.drop_off_point_id !== undefined
+							? { drop_off_point_id: patch.drop_off_point_id }
+							: {})
 					}
 				: need
 		),
@@ -1925,24 +2360,4 @@ export function publicItemAggregate(
 	}
 
 	return { campaignCount, totalTarget };
-}
-
-/**
- * Maps a Thai item name heuristic to a slugged itemId.
- */
-export function mapNeedItemHeuristic(name: string): string {
-	const lowerName = name.toLowerCase();
-	if (lowerName.includes('ข้าว')) return 'item:rice';
-	if (lowerName.includes('น้ำ')) return 'item:water';
-	if (lowerName.includes('พารา') || lowerName.includes('ยา')) return 'item:paracetamol';
-	if (lowerName.includes('สบู่')) return 'item:soap';
-	if (lowerName.includes('ห่ม')) return 'item:blanket';
-	if (lowerName.includes('ไข่')) return 'item:egg';
-
-	const slug = name
-		.trim()
-		.toLowerCase()
-		.replace(/[^a-z0-9\u0e00-\u0e7f]+/g, '-')
-		.replace(/^-+|-+$/g, '');
-	return `item:${slug || 'custom'}`;
 }

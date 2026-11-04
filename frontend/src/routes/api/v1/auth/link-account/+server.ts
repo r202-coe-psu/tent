@@ -6,7 +6,6 @@ import { mintLoginSession } from '$lib/server/google-oauth';
 import { clearPendingLinkCookie, readPendingLink } from '$lib/server/pending-link';
 import { ReCaptchaProvider } from '$lib/server/security/captcha';
 import { resolveRecaptchaGate, verifyRecaptchaOrSkip } from '$lib/server/security/recaptcha-gate';
-import { linkAccountIpLimiter, linkAccountNonceLimiter } from '$lib/server/security/rate-limiter';
 import {
 	assessLinkEligibility,
 	linkGoogleMfa,
@@ -40,10 +39,6 @@ export const POST: RequestHandler = async ({ request, cookies, getClientAddress 
 		}
 
 		const ip = getClientAddress();
-		if (!linkAccountIpLimiter.check(ip) || !linkAccountNonceLimiter.check(link.nonce)) {
-			clearPendingLinkCookie(cookies);
-			return reject('RATE_LIMITED', 'ลองหลายครั้งเกินไป กรุณาเข้าสู่ระบบใหม่อีกครั้ง', 429);
-		}
 
 		const body = (await request.json().catch(() => ({}))) as {
 			login?: unknown;

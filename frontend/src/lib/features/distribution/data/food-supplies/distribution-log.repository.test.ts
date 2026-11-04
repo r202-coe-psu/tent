@@ -136,6 +136,134 @@ describe('DistributionLogRemoteRepository', () => {
 		expect(returnable[0].item_id).toBe('item:item_b');
 	});
 
+	describe('malformed docs', () => {
+		const badId = (n: number) => `distribution_log:01J0000000000000000000009${n}`;
+		const seedBad = (n: number, fields: Record<string, unknown>) =>
+			store.set(badId(n), { _id: badId(n), type: 'distribution_log', ...fields });
+		const seedGood = () =>
+			repo.create(
+				{
+					ticket_id: dummyTicketId,
+					item_id: 'item:a',
+					qty: '1',
+					recipient_type: 'evacuee',
+					recipient_id: dummyEvacueeId,
+					is_returnable: true,
+					is_override: false
+				},
+				ctx
+			);
+
+		it('list skips a malformed doc instead of throwing', async () => {
+			const good = await seedGood();
+			seedBad(1, { ticket_id: dummyTicketId, item_id: 'item:a' });
+			expect((await repo.list()).map((l) => l._id)).toEqual([good._id]);
+		});
+
+		it('listWithSkipped reports only malformed docs that match the filter on raw fields', async () => {
+			const good = await seedGood();
+			const otherTicket = 'requisition_ticket:01J00000000000000000000099';
+			seedBad(1, { ticket_id: dummyTicketId, item_id: 'item:a', is_returnable: true });
+			seedBad(2, { ticket_id: otherTicket, item_id: 'item:a', is_returnable: true });
+
+			const mine = await repo.listWithSkipped({ ticket_id: dummyTicketId });
+			expect(mine.items.map((l) => l._id)).toEqual([good._id]);
+			expect(mine.skipped.map((s) => s._id)).toEqual([badId(1)]);
+
+			const other = await repo.listWithSkipped({ ticket_id: otherTicket });
+			expect(other.items).toEqual([]);
+			expect(other.skipped.map((s) => s._id)).toEqual([badId(2)]);
+
+			const wrongItem = await repo.listWithSkipped({ item_id: 'item:zzz' });
+			expect(wrongItem.skipped).toEqual([]);
+		});
+
+		it('matches on is_returnable, status and recipient_id raw fields', async () => {
+			seedBad(1, { is_returnable: false, status: 'fulfilled', recipient_id: null });
+			const byReturnable = await repo.listWithSkipped({ is_returnable: true });
+			expect(byReturnable.skipped).toEqual([]);
+			const byStatus = await repo.listWithSkipped({ status: 'active' });
+			expect(byStatus.skipped).toEqual([]);
+			const byRecipient = await repo.listWithSkipped({ recipient_id: dummyEvacueeId });
+			expect(byRecipient.skipped).toEqual([]);
+			const matching = await repo.listWithSkipped({
+				is_returnable: false,
+				status: 'fulfilled',
+				recipient_id: null
+			});
+			expect(matching.skipped.map((s) => s._id)).toEqual([badId(1)]);
+		});
+
+		it('counts an unreadable filtered field as matching', async () => {
+			seedBad(1, { ticket_id: 42, item_id: undefined, is_returnable: 'yes', recipient_id: 7 });
+			const found = await repo.listWithSkipped({
+				ticket_id: dummyTicketId,
+				item_id: 'item:a',
+				is_returnable: true,
+				recipient_id: dummyEvacueeId
+			});
+			expect(found.skipped.map((s) => s._id)).toEqual([badId(1)]);
+		});
+
+		it('returns every malformed doc when no filter is given', async () => {
+			seedBad(1, {});
+			seedBad(2, { ticket_id: dummyTicketId });
+			expect((await repo.listWithSkipped()).skipped).toHaveLength(2);
+		});
+	});
+
+	describe('getMany', () => {
+		const makeLog = () =>
+			repo.create(
+				{
+					ticket_id: dummyTicketId,
+					item_id: 'item:a',
+					qty: '1',
+					recipient_type: 'evacuee',
+					recipient_id: dummyEvacueeId,
+					is_returnable: true,
+					is_override: false
+				},
+				ctx
+			);
+		const missingId = (n: number) => `distribution_log:01J${String(n).padStart(23, '0')}`;
+
+		it('returns found logs and omits ids with no doc', async () => {
+			const a = await makeLog();
+			const b = await makeLog();
+			const found = await repo.getMany([a._id, missingId(1), b._id]);
+			expect(found.items.map((l) => l._id).sort()).toEqual([a._id, b._id].sort());
+			expect(found.skipped).toEqual([]);
+		});
+
+		it('returns nothing for an empty id list', async () => {
+			expect(await repo.getMany([])).toEqual({ items: [], skipped: [] });
+		});
+
+		it('reports a malformed doc as skipped instead of throwing', async () => {
+			const good = await makeLog();
+			const badId = 'distribution_log:01J00000000000000000000098';
+			store.set(badId, { _id: badId, type: 'distribution_log', item_id: 'item:a' });
+			const found = await repo.getMany([good._id, badId]);
+			expect(found.items.map((l) => l._id)).toEqual([good._id]);
+			expect(found.skipped.map((s) => s._id)).toEqual([badId]);
+		});
+
+		it('chunks the ids into requests of at most 100 and de-duplicates them', async () => {
+			const good = await makeLog();
+			const ids = [good._id, good._id, ...Array.from({ length: 249 }, (_, i) => missingId(i + 10))];
+			const spy = vi.spyOn(couch.couchDbModule, 'allDocsByIds');
+			try {
+				const found = await repo.getMany(ids);
+				expect(found.items.map((l) => l._id)).toEqual([good._id]);
+				expect(spy).toHaveBeenCalledTimes(3);
+				for (const call of spy.mock.calls) expect(call[1].length).toBeLessThanOrEqual(100);
+			} finally {
+				spy.mockRestore();
+			}
+		});
+	});
+
 	it('records full return on returnable log', async () => {
 		const created = await repo.create(
 			{
@@ -466,6 +594,26 @@ describe('DistributionLogRemoteRepository', () => {
 		await expect(repo.recordVoid(created._id, ctx, 'Too late')).rejects.toThrow(
 			/partially_returned/
 		);
+	});
+
+	it('does not write when the mutator returns the current doc', async () => {
+		const created = await repo.create(
+			{
+				ticket_id: dummyTicketId,
+				item_id: 'item:blanket',
+				qty: '2',
+				recipient_type: 'evacuee',
+				recipient_id: dummyEvacueeId,
+				is_returnable: true,
+				is_override: false
+			},
+			ctx
+		);
+
+		const same = await repo.mutateLogCAS(created._id, (current) => current);
+
+		expect(same._rev).toBe(created._rev);
+		expect(store.get(created._id)?._rev).toBe(created._rev);
 	});
 
 	it('rejects mutating immutable issuance fields', async () => {

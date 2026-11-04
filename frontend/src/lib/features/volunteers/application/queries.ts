@@ -15,7 +15,12 @@
  * else here recomputes them (CR-094 FR-VOL-08.2 / AC-094-09).
  */
 
-import { createMutation, createQuery, type QueryClient } from '@tanstack/svelte-query';
+import {
+	createMutation,
+	createQuery,
+	keepPreviousData,
+	type QueryClient
+} from '@tanstack/svelte-query';
 import { getShelterCode, getShelterDb } from '$lib/db/shelter';
 import {
 	subscribeDataChanges,
@@ -25,6 +30,7 @@ import { authStore } from '$lib/stores/auth.svelte';
 import { useMasterData } from '$lib/features/master-data';
 import { bangkokDateString } from '../domain/duty-window';
 import { computeHubMetrics } from '../domain/hub-metrics';
+import { parseVolunteerScanCode } from '../domain/scan-code';
 import {
 	controlledSkillValues,
 	skillOptionsFromMaster,
@@ -39,19 +45,23 @@ import { jobRepository } from '../data/job.remote';
 import { jobApplicationRepository } from '../data/job-application.remote';
 import { shiftAssignmentRepository } from '../data/shift-assignment.remote';
 import { volunteerRepository, volunteerRepositoryFor } from '../data/volunteer.remote';
+import { getVolunteerNamesByIds, uniqueVolunteerIds } from '../data/volunteer-names.remote';
+import { fetchShelterVolunteerAccounts, fetchVolunteerGrants } from './volunteer-access';
 import type {
 	JobApplicationFilter,
 	JobFilter,
 	ShiftAssignmentFilter,
-	VolunteerFilter
+	VolunteerFilter,
+	VolunteerRepository
 } from '../data/volunteer.repository';
 
 /** Calendar date "today" is evaluated against, in **Asia/Bangkok** — the same
  * wall-clock convention `domain/duty-window.ts` uses to build `duty_window`.
  * Deriving it from UTC instead would query yesterday's roster between 00:00
  * and 07:00 local, i.e. for the whole of the `night` shift. */
-export function todayDateString(): string {
-	return bangkokDateString();
+export function todayDateString(now: Date = new Date()): string {
+	// `.getTime()` (not `new Date(now)`) so a reactive `SvelteDate` clock is tracked.
+	return bangkokDateString(new Date(now.getTime()));
 }
 
 // ---------------------------------------------------------------------------
@@ -88,8 +98,16 @@ export const volunteerKeys = {
 		[...volunteerKeys.all, 'volunteers', shelterCode] as const,
 	volunteersList: (filter?: VolunteerFilter, shelterCode?: string) =>
 		[...volunteerKeys.volunteersAll(shelterCode), 'list', filter] as const,
+	/** Nested under `volunteersAll(shelterCode)` so volunteer mutations also refresh looked-up names. */
+	volunteerNames: (ids: readonly string[], shelterCode?: string) =>
+		[...volunteerKeys.volunteersAll(shelterCode), 'names', ids] as const,
 	volunteersDetails: () => [...volunteerKeys.volunteersAll(), 'detail'] as const,
-	volunteerDetail: (id: string) => [...volunteerKeys.volunteersDetails(), id] as const
+	volunteerDetail: (id: string) => [...volunteerKeys.volunteersDetails(), id] as const,
+
+	/** Coordinator grants on the volunteer's account (#955); under `all` so a grant refetches it. */
+	grants: (shelterCode: string, volunteerId: string) =>
+		[...volunteerKeys.all, 'grants', shelterCode, volunteerId] as const,
+	accounts: (shelterCode: string) => [...volunteerKeys.all, 'accounts', shelterCode] as const
 };
 
 /** Build the `{shelterCode, createdBy}` author context the same way every mutation does. */
@@ -120,6 +138,28 @@ export const useHubMetrics = () =>
 			]);
 			return computeHubMetrics({ volunteers, assignments, applications, today });
 		}
+	}));
+
+/** The coordinator's view of a volunteer's grants (#955); off until `enabled`. */
+/** The shelter's volunteer accounts and their roles there, for SA / SM / coordinator (#1044). */
+export const useShelterVolunteerAccounts = (
+	shelterCode: () => string | null | undefined,
+	enabled: () => boolean
+) =>
+	createQuery(() => ({
+		queryKey: volunteerKeys.accounts(shelterCode() ?? ''),
+		queryFn: () => fetchShelterVolunteerAccounts(shelterCode() as string),
+		enabled: enabled() && Boolean(shelterCode())
+	}));
+
+export const useVolunteerGrants = (
+	volunteer: () => Pick<Volunteer, '_id' | 'shelter_code'>,
+	enabled: () => boolean
+) =>
+	createQuery(() => ({
+		queryKey: volunteerKeys.grants(volunteer().shelter_code, volunteer()._id),
+		queryFn: () => fetchVolunteerGrants(volunteer()),
+		enabled: enabled()
 	}));
 
 export const useJobs = (filter?: JobFilter) =>
@@ -163,6 +203,34 @@ export const useJobApplicationByToken = (
 export const findVolunteerByTrackingToken = (token: string): Promise<Volunteer | null> =>
 	volunteerRepository().getByTrackingToken(token);
 
+/**
+ * Resolve any volunteer credential a scanner can hand over — the QR on a digital pass /
+ * role card (pass URL or bare `TKT-VOL-…`), a `volunteer:…` id, or a printed `V-{NNN}` code.
+ * `null` when the scan is not a volunteer credential, matches no volunteer, or carries a
+ * `V-{NNN}` code shared by more than one volunteer. Pair with `parseVolunteerScanCode` to
+ * route a mixed scanner (e.g. the distribution desk) before calling it.
+ */
+export async function lookupVolunteerByScanCode(
+	raw: string,
+	repo: Pick<VolunteerRepository, 'get' | 'list' | 'getByTrackingToken'> = volunteerRepository()
+): Promise<Volunteer | null> {
+	const parsed = parseVolunteerScanCode(raw);
+	if (!parsed) return null;
+	switch (parsed.kind) {
+		case 'id':
+			return repo.get(parsed.id);
+		case 'code': {
+			// `volunteer_code` has no unique index (volunteer-code.ts F14), so an ambiguous code
+			// resolves to nobody rather than to whichever duplicate happens to come first.
+			const all = await repo.list();
+			const hits = all.filter((v) => v.volunteer_code.toUpperCase() === parsed.code);
+			return hits.length === 1 ? hits[0] : null;
+		}
+		case 'token':
+			return repo.getByTrackingToken(parsed.token);
+	}
+}
+
 export const useShiftAssignments = (filter?: ShiftAssignmentFilter) =>
 	createQuery(() => ({
 		queryKey: volunteerKeys.shiftAssignmentsList(filter),
@@ -190,11 +258,33 @@ export const useTodayAttendance = (date: () => string = todayDateString) =>
  * pick changes instead of showing the active shelter's roster — CR-096 §2.4. Omit it and the
  * list follows the active shelter as every other caller expects.
  */
-export const useVolunteers = (filter?: VolunteerFilter, shelterCode?: () => string | undefined) =>
+export const useVolunteers = (
+	filter?: VolunteerFilter,
+	shelterCode?: () => string | undefined,
+	enabled: () => boolean = () => true
+) =>
 	createQuery(() => ({
 		queryKey: volunteerKeys.volunteersList(filter, shelterCode?.()),
-		queryFn: () => volunteerRepositoryFor(shelterCode?.()).list(filter)
+		queryFn: () => volunteerRepositoryFor(shelterCode?.()).list(filter),
+		enabled: enabled()
 	}));
+
+/**
+ * Names (only `_id` + name fields) of the given `volunteer:` ids in one shelter, read by id —
+ * never the whole roster. The key is the sorted unique id list + shelter code; the query is
+ * disabled for an empty list, and the previous names stay visible while a changed id list loads.
+ */
+export const useVolunteerNames = (ids: () => string[], shelterCode: () => string | undefined) =>
+	createQuery(() => {
+		const wanted = uniqueVolunteerIds(ids());
+		const code = shelterCode();
+		return {
+			queryKey: volunteerKeys.volunteerNames(wanted, code),
+			queryFn: () => getVolunteerNamesByIds(wanted, code),
+			enabled: wanted.length > 0,
+			placeholderData: keepPreviousData
+		};
+	});
 
 export const useVolunteer = (id: () => string, enabled: () => boolean = () => true) =>
 	createQuery(() => ({
@@ -314,8 +404,8 @@ export const useCreateJobApplication = (queryClient: QueryClient) =>
  * SM reviews a `pending_review` application. `confirmed` consumes one job
  * slot (`job.slots_remaining -> slots_confirmed`); either decision moves the
  * application out of `pending_review`, changing the hub metrics
- * `pendingApproval` counter. Quota-changing — invalidate applications, jobs,
- * and hub metrics.
+ * `pendingApproval` counter, and approving creates the shift assignment.
+ * Quota-changing — invalidate applications, jobs, shift assignments, and hub metrics.
  */
 export const useReviewApplication = (queryClient: QueryClient) =>
 	createMutation(() => ({
@@ -331,6 +421,7 @@ export const useReviewApplication = (queryClient: QueryClient) =>
 		onSuccess: () => {
 			queryClient.invalidateQueries({ queryKey: volunteerKeys.jobApplicationsAll() });
 			queryClient.invalidateQueries({ queryKey: volunteerKeys.jobsAll() });
+			queryClient.invalidateQueries({ queryKey: volunteerKeys.shiftAssignmentsAll() });
 			queryClient.invalidateQueries({ queryKey: volunteerKeys.hubMetrics() });
 		}
 	}));
@@ -445,6 +536,16 @@ export const useUpdateVolunteer = (queryClient: QueryClient) =>
 export const useDeactivateVolunteer = (queryClient: QueryClient) =>
 	createMutation(() => ({
 		mutationFn: (id: string) => volunteerRepository().deactivate(id),
+		onSuccess: () => {
+			queryClient.invalidateQueries({ queryKey: volunteerKeys.volunteersAll() });
+			queryClient.invalidateQueries({ queryKey: volunteerKeys.hubMetrics() });
+		}
+	}));
+
+/** Re-activates a deactivated volunteer profile (#882) and refreshes roster-derived metrics. */
+export const useReactivateVolunteer = (queryClient: QueryClient) =>
+	createMutation(() => ({
+		mutationFn: (id: string) => volunteerRepository().reactivate(id),
 		onSuccess: () => {
 			queryClient.invalidateQueries({ queryKey: volunteerKeys.volunteersAll() });
 			queryClient.invalidateQueries({ queryKey: volunteerKeys.hubMetrics() });

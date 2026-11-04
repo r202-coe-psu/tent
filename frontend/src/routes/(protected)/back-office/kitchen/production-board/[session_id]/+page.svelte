@@ -15,9 +15,12 @@
 		useMealServiceReceipts,
 		mealServiceReceiptOutcome,
 		sumHeadcountByTags,
+		scaleRecipeIngredientQty,
 		getActiveTagsFromSession,
+		selectableCookingIngredients,
 		TARGET_GROUP_LABELS,
 		MEAL_PERIOD_LABELS,
+		kitchenErrorReason,
 		type TargetGroupTag
 	} from '$lib/features/kitchen';
 	import {
@@ -25,9 +28,24 @@
 		useCreateTicket,
 		useUpdateTicketItems,
 		useReceiveTicket,
-		TICKET_STATUS_LABELS
+		TICKET_STATUS_LABELS,
+		type RequisitionTicket
 	} from '$lib/features/tickets';
-	import { useRecipes, useItemMasters, getItemDisplayName } from '$lib/features/catalog';
+	import {
+		useRecipes,
+		useItemMasters,
+		getItemDisplayName,
+		formatUnit,
+		useUnitsOfMeasure,
+		useCreateRecipe,
+		useUpdateRecipe,
+		customRecipeInput,
+		findRecipeByLabel,
+		isSameRecipeInput,
+		type Recipe,
+		type RecipeInput
+	} from '$lib/features/catalog';
+	import { langState } from '$lib/states/i18n.svelte';
 	import { useSupplyItems } from '$lib/features/supply';
 	import { useStockBalance } from '$lib/features/operations';
 	import * as Card from '$lib/components/ui/card';
@@ -39,7 +57,7 @@
 	import { Label } from '$lib/components/ui/label';
 	import { Textarea } from '$lib/components/ui/textarea';
 	import { toast } from 'svelte-sonner';
-	import { qtyGt } from '$lib/utils/qty';
+	import { addQty, persistQty, qtyGt, qtyLte } from '$lib/utils/qty';
 	import { formatThaiDateTime, formatThaiShortDate } from '$lib/utils/date';
 	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
 	import ChefHat from '@lucide/svelte/icons/chef-hat';
@@ -51,6 +69,7 @@
 	import Check from '@lucide/svelte/icons/check';
 	import Sparkles from '@lucide/svelte/icons/sparkles';
 	import PackageCheck from '@lucide/svelte/icons/package-check';
+	import PackageX from '@lucide/svelte/icons/package-x';
 	import Plus from '@lucide/svelte/icons/plus';
 	import Trash2 from '@lucide/svelte/icons/trash-2';
 	import RotateCcw from '@lucide/svelte/icons/rotate-ccw';
@@ -65,17 +84,31 @@
 	const services = useMealServices();
 	const serviceReceipts = useMealServiceReceipts();
 	const tickets = useTickets();
+	// Cached tickets from another kitchen page may predate an edit made elsewhere; only data
+	// fetched after this page mounted is trusted to decide prefill and whether a plan has a ticket.
+	const mountedAt = Date.now();
+	const ticketsFresh = $derived(tickets.dataUpdatedAt >= mountedAt);
 	const recipes = useRecipes(() => getShelterCode());
 	const itemMasters = useItemMasters(() => getShelterCode());
+	const unitsQuery = useUnitsOfMeasure();
+	const units = $derived(unitsQuery.data ?? []);
+	const unitLabel = (code: string) => formatUnit(code, units, langState.current);
 	const supplyItems = useSupplyItems();
 	const stock = useStockBalance();
 
 	const getItemName = (id: string) => getItemDisplayName(id, itemMasters.data, supplyItems.data);
 
 	const createMealPlanMutation = useCreateMealPlan();
+	const createRecipeMutation = useCreateRecipe();
+	const updateRecipeMutation = useUpdateRecipe();
 	const startCookingMutation = useStartMealPlanCooking();
 	const updateConfirmedMealPlanMutation = useUpdateConfirmedMealPlan();
 	const createTicketMutation = useCreateTicket();
+	const isOpeningRequisition = $derived(
+		createRecipeMutation.isPending ||
+			createMealPlanMutation.isPending ||
+			createTicketMutation.isPending
+	);
 	const updateTicketItemsMutation = useUpdateTicketItems();
 	const receiveTicketMutation = useReceiveTicket();
 	const recordServiceMutation = useRecordMealService();
@@ -88,6 +121,8 @@
 	// Plan & ticket currently tracked in the wizard
 	let activePlanId = $state<string | null>(null);
 	let activeTicketId = $state<string | null>(null);
+	// The ticket just opened here — shown until the tickets query refetches it.
+	let createdTicket = $state.raw<RequisitionTicket | null>(null);
 
 	// Sync activePlanId from query parameter
 	$effect(() => {
@@ -113,7 +148,10 @@
 
 	const activeTicket = $derived.by(() => {
 		if (activeTicketId) {
-			return (tickets.data ?? []).find((t) => t._id === activeTicketId) ?? null;
+			return (
+				(tickets.data ?? []).find((t) => t._id === activeTicketId) ??
+				(createdTicket?._id === activeTicketId ? createdTicket : null)
+			);
 		}
 		if (activePlanId) {
 			return (
@@ -135,6 +173,27 @@
 
 	// CR-144/CR-145: warehouse must decide (confirm/reject) before this batch
 	// counts as delivered; a rejected service can be superseded by re-recording.
+	// Tab locks — C opens only once the kitchen has received the ingredients
+	// (ticket COMPLETED), a service is already recorded, or a legacy plan is
+	// already cooking without a ticket. A ?stage= link can't land on a locked
+	// tab; once tickets/services have loaded it falls back to the furthest
+	// unlocked stage.
+	const stageBLocked = $derived(!activeTicket);
+	const stageCLocked = $derived(
+		!activePlanId ||
+			!(
+				activeService ||
+				activeTicket?.status === 'COMPLETED' ||
+				(!activeTicket && activePlan?.cooking_started_at)
+			)
+	);
+	const shownStage = $derived.by((): 'A' | 'B' | 'C' => {
+		if (!tickets.isSuccess || !services.isSuccess) return currentStage;
+		if (currentStage === 'C' && stageCLocked) return stageBLocked ? 'A' : 'B';
+		if (currentStage === 'B' && stageBLocked) return 'A';
+		return currentStage;
+	});
+
 	const activeServiceReceipt = $derived.by(() => {
 		if (!activeService) return null;
 		return (
@@ -152,9 +211,11 @@
 	// --- Stage A: Form States ---
 	let selectedRecipeId = $state<string>('');
 	let recipeMode = $state<'bom' | 'custom'>('bom');
+	let isIngredientsManuallyEdited = $state(false);
 
 	function setRecipeMode(mode: 'bom' | 'custom') {
 		recipeMode = mode;
+		if (mode === 'bom') resetSaveAsRecipe();
 		if (mode === 'custom' && selectedRecipeId) {
 			selectedRecipeId = '';
 			isIngredientsManuallyEdited = false;
@@ -163,6 +224,21 @@
 	}
 	let menuLabel = $state('');
 	let allocatedTarget = $state(50);
+	// #802: save this batch's ingredient list as a catalog recipe named after the menu label, at
+	// this batch's portions. New batch only: a hand-built list, or a BOM recipe whose ingredients
+	// were edited (an unedited BOM recipe would only duplicate itself).
+	let saveAsRecipe = $state(false);
+	// The recipe this form saved. Survives a failed plan/ticket attempt so a retry updates it to the
+	// list being requested instead of saving a duplicate or linking stale quantities.
+	let savedRecipe = $state.raw<{ doc: Recipe; input: RecipeInput } | null>(null);
+	const canSaveAsRecipe = $derived(
+		!activePlan && (recipeMode === 'custom' || (!!selectedRecipeId && isIngredientsManuallyEdited))
+	);
+
+	function resetSaveAsRecipe() {
+		saveAsRecipe = false;
+		savedRecipe = null;
+	}
 	let targetTags = $state<TargetGroupTag[]>(['regular']);
 	let isEveryone = $state(false);
 
@@ -195,8 +271,10 @@
 	// Pre-fill form when activePlan changes
 	let lastLoadedPlanId = $state<string | null>(null);
 
+	// Waits for fresh tickets: prefilling from the recipe or a stale ticket first would let
+	// "บันทึกการแก้ไข" overwrite the ticket's saved requested_qty.
 	$effect(() => {
-		if (activePlan && activePlan._id !== lastLoadedPlanId) {
+		if (activePlan && ticketsFresh && activePlan._id !== lastLoadedPlanId) {
 			lastLoadedPlanId = activePlan._id;
 			menuLabel = activePlan.label ?? '';
 			allocatedTarget = activePlan.allocated_target ?? activePlan.headcount?.total ?? 50;
@@ -211,11 +289,8 @@
 			selectedRecipeId = planRecipeId && planRecipeId !== 'recipe:custom' ? planRecipeId : '';
 			recipeMode = selectedRecipeId ? 'bom' : 'custom';
 			cookingStarted = !!activePlan.cooking_started_at;
-			const ticketForPlan = (tickets.data ?? []).find(
-				(t) => t.meal_plan_id === activePlan._id && t.status !== 'CANCELLED'
-			);
-			if (ticketForPlan?.items && ticketForPlan.items.length > 0) {
-				ingredientsList = ticketForPlan.items.map((it) => {
+			if (activeTicket?.items && activeTicket.items.length > 0) {
+				ingredientsList = activeTicket.items.map((it) => {
 					const master = (itemMasters.data ?? []).find((m) => m._id === it.item_id);
 					return {
 						item_id: it.item_id,
@@ -238,6 +313,7 @@
 			allocatedTarget = count > 0 ? count : session?.target_headcount?.total || 50;
 			selectedRecipeId = '';
 			recipeMode = 'bom';
+			resetSaveAsRecipe();
 			isIngredientsManuallyEdited = false;
 			ingredientsList = calculateRecipeIngredients('', allocatedTarget);
 			showAddIngredient = false;
@@ -283,6 +359,7 @@
 		if (chosen?.label) {
 			menuLabel = chosen.label;
 		}
+		resetSaveAsRecipe();
 		isIngredientsManuallyEdited = false;
 		ingredientsList = calculateRecipeIngredients(target.value, allocatedTarget);
 	}
@@ -295,30 +372,24 @@
 	}
 
 	let ingredientsList = $state<IngredientRow[]>([]);
-	let isIngredientsManuallyEdited = $state(false);
 
 	let showAddIngredient = $state(false);
 	let newItemId = $state('');
 	let newQty = $state('1');
 	let newUnit = $state('');
 
-	function calculateRecipeIngredients(recipeId: string, portions: number): IngredientRow[] {
+	function calculateRecipeIngredients(recipeId: string, portions: number | null): IngredientRow[] {
 		const recipe = (recipes.data ?? []).find((r) => r._id === recipeId);
 		if (!recipe) {
 			return [];
 		}
 
-		// Scale ingredients
-		const baseServings = Math.max(parseFloat(recipe.standard_portions) || 1, 1);
-		const factor = portions / baseServings;
-
 		return (recipe.ingredients ?? []).map((ing) => {
 			const itemMaster = (itemMasters.data ?? []).find((m) => m._id === ing.item_master_id);
-			const scaledQty = Math.round(Number(ing.quantity || 0) * factor * 100) / 100;
 			return {
 				item_id: ing.item_master_id,
 				name: itemMaster?.name || ing.item_master_id,
-				needed: String(scaledQty),
+				needed: scaleRecipeIngredientQty(ing.quantity, recipe.standard_portions, portions),
 				unit: ing.uom || itemMaster?.base_unit || 'kg'
 			};
 		});
@@ -335,6 +406,7 @@
 	});
 
 	function resetIngredientsToRecipe() {
+		saveAsRecipe = false;
 		isIngredientsManuallyEdited = false;
 		ingredientsList = calculateRecipeIngredients(selectedRecipeId, allocatedTarget);
 		showAddIngredient = false;
@@ -347,9 +419,9 @@
 	}
 
 	const ingredientComboItems = $derived(
-		(itemMasters.data ?? []).map((item) => ({
+		selectableCookingIngredients(itemMasters.data).map((item) => ({
 			value: item._id,
-			label: `${item.name} (${item.base_unit})`,
+			label: `${item.name} (${unitLabel(item.base_unit)})`,
 			keywords: [item.name]
 		}))
 	);
@@ -363,16 +435,16 @@
 	}
 
 	function confirmAddIngredient() {
-		if (!newItemId || !newQty || Number(newQty) <= 0) {
+		if (!newItemId || newQty == null || newQty === '' || qtyLte(newQty, 0)) {
 			toast.error('กรุณาระบุวัตถุดิบและจำนวนที่ถูกต้อง');
 			return;
 		}
 		const master = (itemMasters.data ?? []).find((m) => m._id === newItemId);
 		const existingIndex = ingredientsList.findIndex((it) => it.item_id === newItemId);
 		if (existingIndex >= 0) {
-			const current = Number(ingredientsList[existingIndex].needed) || 0;
-			ingredientsList[existingIndex].needed = String(
-				Math.round((current + Number(newQty)) * 100) / 100
+			ingredientsList[existingIndex].needed = addQty(
+				ingredientsList[existingIndex].needed || '0',
+				newQty
 			);
 		} else {
 			ingredientsList = [
@@ -380,7 +452,7 @@
 				{
 					item_id: newItemId,
 					name: master?.name || newItemId,
-					needed: String(newQty),
+					needed: persistQty(newQty),
 					unit: newUnit || master?.base_unit || 'kg'
 				}
 			];
@@ -391,6 +463,54 @@
 		newUnit = '';
 		showAddIngredient = false;
 		toast.success(`เพิ่ม ${master?.name || 'วัตถุดิบ'} เรียบร้อยแล้ว`);
+	}
+
+	// Saves the custom ingredient list as a shelter recipe, or brings the recipe an earlier failed
+	// attempt saved up to date with it. Never throws: the ticket must open even when the recipe
+	// can't be saved. Returns the id of a recipe matching the list, or null.
+	async function saveCustomRecipe(
+		label: string,
+		ctx: { shelterCode: string; createdBy: string }
+	): Promise<string | null> {
+		const fail = (reason: string) => {
+			toast.error(`บันทึกสูตรไม่สำเร็จ: ${reason} (ระบบยังเปิดใบเบิกให้ตามปกติ)`);
+			return null;
+		};
+		try {
+			const result = customRecipeInput({
+				label,
+				portions: allocatedTarget,
+				ingredients: ingredientsList.map((ing) => ({
+					item_master_id: ing.item_id,
+					name: getItemName(ing.item_id),
+					quantity: ing.needed,
+					uom: ing.unit
+				})),
+				units: unitsQuery.data
+			});
+			if (!result.ok) return fail(result.reason);
+			const { input } = result;
+			const previous = savedRecipe;
+			if (previous && isSameRecipeInput(previous.input, input)) return previous.doc._id;
+
+			const existing = findRecipeByLabel(recipes.data, input.label);
+			if (existing && existing._id !== previous?.doc._id) {
+				toast.warning(`มีสูตรชื่อ "${existing.label}" อยู่แล้ว จึงไม่บันทึกซ้ำ`);
+				return null;
+			}
+			const doc = previous
+				? await updateRecipeMutation.mutateAsync({ ...previous.doc, ...input })
+				: await createRecipeMutation.mutateAsync({
+						input,
+						ctx,
+						shelterCode: ctx.shelterCode
+					});
+			savedRecipe = { doc, input };
+			toast.success(`บันทึกสูตร "${input.label}" เรียบร้อยแล้ว`);
+			return doc._id;
+		} catch (err) {
+			return fail(kitchenErrorReason(err));
+		}
 	}
 
 	// Submit Stage A ➔ Create Requisition
@@ -408,9 +528,16 @@
 			toast.error('กรุณาระบุวัตถุดิบอย่างน้อย 1 รายการ');
 			return;
 		}
-		const hasInvalidQty = ingredientsList.some((ing) => Number(ing.needed) <= 0);
+		const hasInvalidQty = ingredientsList.some(
+			(ing) => ing.needed == null || ing.needed === '' || qtyLte(ing.needed, 0)
+		);
 		if (hasInvalidQty) {
 			toast.error('กรุณาระบุจำนวนวัตถุดิบให้มากกว่า 0 ทุกรายการ');
+			return;
+		}
+		const willSaveRecipe = canSaveAsRecipe && saveAsRecipe;
+		if (willSaveRecipe && !menuLabel.trim()) {
+			toast.error('กรุณาระบุชื่อเมนูที่แสดง เพื่อใช้เป็นชื่อสูตร');
 			return;
 		}
 
@@ -421,6 +548,8 @@
 			shelterCode: getShelterCode(),
 			createdBy: authStore.user?.name ?? 'kitchen_staff'
 		};
+
+		const savedRecipeId = willSaveRecipe ? await saveCustomRecipe(finalLabel, ctx) : null;
 
 		try {
 			// Plan and ticket are separate features now (CR-121/CR-141) — created
@@ -442,9 +571,12 @@
 						soft_food: targetTags.includes('soft_food') ? allocatedTarget : 0,
 						infant: targetTags.includes('infant') ? allocatedTarget : 0
 					},
-					recipes: chosenRecipe
-						? [{ recipe_id: chosenRecipe._id, planned_qty: allocatedTarget }]
-						: [{ recipe_id: 'recipe:custom', planned_qty: allocatedTarget }]
+					recipes: [
+						{
+							recipe_id: savedRecipeId ?? chosenRecipe?._id ?? 'recipe:custom',
+							planned_qty: allocatedTarget
+						}
+					]
 				},
 				ctx
 			});
@@ -462,13 +594,13 @@
 				ctx
 			});
 
+			createdTicket = ticket;
 			activePlanId = planDoc._id;
 			activeTicketId = ticket._id;
 			currentStage = 'B';
 			toast.success(`เปิดตั๋วเบิกวัตถุดิบ ${ticket.ticket_no} แล้ว — รอคลังจัดของและอนุมัติ`);
 		} catch (err) {
-			const msg = err instanceof Error ? err.message : 'ไม่สามารถเปิดตั๋วเบิกได้';
-			toast.error(msg);
+			toast.error(`เปิดใบเบิกไม่สำเร็จ: ${kitchenErrorReason(err)}`);
 		}
 	}
 
@@ -494,7 +626,9 @@
 			toast.error('กรุณาระบุวัตถุดิบอย่างน้อย 1 รายการ');
 			return;
 		}
-		const hasInvalidQty = ingredientsList.some((ing) => Number(ing.needed) <= 0);
+		const hasInvalidQty = ingredientsList.some(
+			(ing) => ing.needed == null || ing.needed === '' || qtyLte(ing.needed, 0)
+		);
 		if (hasInvalidQty) {
 			toast.error('กรุณาระบุจำนวนวัตถุดิบให้มากกว่า 0 ทุกรายการ');
 			return;
@@ -534,8 +668,7 @@
 
 			toast.success('บันทึกการแก้ไขแล้ว');
 		} catch (err) {
-			const msg = err instanceof Error ? err.message : 'ไม่สามารถบันทึกการแก้ไขได้';
-			toast.error(msg);
+			toast.error(`บันทึกการแก้ไขไม่สำเร็จ: ${kitchenErrorReason(err)}`);
 		}
 	}
 
@@ -551,7 +684,7 @@
 			currentStage = 'C';
 			toast.success('ยืนยันรับวัตถุดิบแล้ว — เข้าสู่ขั้นตอนเริ่มปรุงอาหาร');
 		} catch (err) {
-			toast.error(err instanceof Error ? err.message : 'ยืนยันรับวัตถุดิบไม่สำเร็จ');
+			toast.error(`ยืนยันรับวัตถุดิบไม่สำเร็จ: ${kitchenErrorReason(err)}`);
 		}
 	}
 
@@ -566,7 +699,7 @@
 
 	// Init stage C defaults from activeService or allocatedTarget
 	$effect(() => {
-		if (currentStage === 'C') {
+		if (shownStage === 'C') {
 			if (activeService && !serviceRejected) {
 				yieldActualPortions = activeService.actual_yield ?? activePlan?.allocated_target ?? 50;
 				servedInShelter = activeService.served;
@@ -670,8 +803,7 @@
 			toast.success('บันทึกผลการผลิตและแจกจ่ายสำเร็จแล้ว!');
 			goto(resolve('/back-office/kitchen'));
 		} catch (err) {
-			const msg = err instanceof Error ? err.message : 'ไม่สามารถบันทึกผลการผลิตได้';
-			toast.error(msg);
+			toast.error(`บันทึกผลการผลิตไม่สำเร็จ: ${kitchenErrorReason(err)}`);
 		}
 	}
 
@@ -685,7 +817,7 @@
 			cookingStarted = true;
 			toast.success('เริ่มปรุงอาหารแล้ว');
 		} catch (err) {
-			toast.error(err instanceof Error ? err.message : 'เริ่มปรุงอาหารไม่สำเร็จ');
+			toast.error(`เริ่มปรุงอาหารไม่สำเร็จ: ${kitchenErrorReason(err)}`);
 		}
 	}
 </script>
@@ -722,7 +854,7 @@
 			</div>
 			<div class="flex shrink-0 gap-2">
 				<div class="rounded-lg border border-white/20 bg-white/10 px-3 py-1.5 text-center">
-					<p class="text-2xs font-semibold whitespace-nowrap text-white/70">ผู้อพยพรวม</p>
+					<p class="text-2xs font-semibold whitespace-nowrap text-white/70">คนรวม</p>
 					<p class="text-lg font-bold tabular-nums">{session?.target_headcount.total ?? 0} คน</p>
 				</div>
 				<div class="rounded-lg border border-white/20 bg-white/10 px-3 py-1.5 text-center">
@@ -735,54 +867,56 @@
 
 	<!-- 3-Stage Progress Stepper -->
 	<Tabs.Root
-		value={currentStage}
+		value={shownStage}
 		onValueChange={(v) => (currentStage = v as 'A' | 'B' | 'C')}
 		class="gap-0 rounded-xl border bg-white p-1.5 shadow-2xs"
 	>
 		<Tabs.List class="h-auto w-full gap-2 bg-transparent p-0">
 			<Tabs.Trigger
 				value="A"
-				class="flex-1 gap-2 rounded-lg px-3 py-2 text-xs font-semibold text-muted-foreground data-[state=active]:bg-[#0A2647] data-[state=active]:text-white data-[state=active]:shadow-sm"
+				class="group min-h-11 min-w-0 flex-1 gap-2 rounded-lg px-3 py-2 text-sm leading-tight font-semibold whitespace-normal text-muted-foreground data-[state=active]:bg-[#0A2647] data-[state=active]:text-white data-[state=active]:shadow-sm"
 			>
-				<span class="flex h-5 w-5 items-center justify-center rounded-full bg-white/20 text-2xs"
-					>A</span
+				<span
+					class="flex h-5 w-5 items-center justify-center rounded-full bg-slate-100 text-xs tabular-nums group-data-[state=active]:bg-white/20"
+					>1</span
 				>
-				1. วางแผนเมนู (BOM)
+				วางแผนเมนู (BOM)
 			</Tabs.Trigger>
 			<Tabs.Trigger
 				value="B"
 				disabled={!activeTicket}
-				class="flex-1 gap-2 rounded-lg px-3 py-2 text-xs font-semibold text-muted-foreground disabled:text-muted-foreground/50 data-[state=active]:bg-[#0A2647] data-[state=active]:text-white data-[state=active]:shadow-sm"
+				class="group min-h-11 min-w-0 flex-1 gap-2 rounded-lg px-3 py-2 text-sm leading-tight font-semibold whitespace-normal text-muted-foreground disabled:text-muted-foreground/50 data-[state=active]:bg-[#0A2647] data-[state=active]:text-white data-[state=active]:shadow-sm"
 			>
-				{#if currentStage !== 'B' && !activeTicket}
+				{#if shownStage !== 'B' && stageBLocked}
 					<Lock class="h-3.5 w-3.5" />
 				{:else}
-					<span class="flex h-5 w-5 items-center justify-center rounded-full bg-white/20 text-2xs"
-						>B</span
+					<span
+						class="flex h-5 w-5 items-center justify-center rounded-full bg-slate-100 text-xs tabular-nums group-data-[state=active]:bg-white/20"
+						>2</span
 					>
 				{/if}
-				2. รอคลังอนุมัติ
+				รอคลังอนุมัติ
 			</Tabs.Trigger>
 			<Tabs.Trigger
 				value="C"
-				disabled={!activePlanId ||
-					(!activeService && activeTicket && activeTicket.status !== 'COMPLETED')}
-				class="flex-1 gap-2 rounded-lg px-3 py-2 text-xs font-semibold text-muted-foreground disabled:text-muted-foreground/50 data-[state=active]:bg-[#0A2647] data-[state=active]:text-white data-[state=active]:shadow-sm"
+				disabled={stageCLocked}
+				class="group min-h-11 min-w-0 flex-1 gap-2 rounded-lg px-3 py-2 text-sm leading-tight font-semibold whitespace-normal text-muted-foreground disabled:text-muted-foreground/50 data-[state=active]:bg-[#0A2647] data-[state=active]:text-white data-[state=active]:shadow-sm"
 			>
-				{#if currentStage !== 'C' && (!activePlanId || (!activeService && activeTicket && activeTicket.status !== 'COMPLETED'))}
+				{#if shownStage !== 'C' && stageCLocked}
 					<Lock class="h-3.5 w-3.5" />
 				{:else}
-					<span class="flex h-5 w-5 items-center justify-center rounded-full bg-white/20 text-2xs"
-						>C</span
+					<span
+						class="flex h-5 w-5 items-center justify-center rounded-full bg-slate-100 text-xs tabular-nums group-data-[state=active]:bg-white/20"
+						>3</span
 					>
 				{/if}
-				3. รายงานผลจริง
+				รายงานผลจริง
 			</Tabs.Trigger>
 		</Tabs.List>
 	</Tabs.Root>
 
 	<!-- Stage Content -->
-	{#if currentStage === 'A'}
+	{#if shownStage === 'A'}
 		<!-- STAGE A: Plan, BOM & Requisition Creation -->
 		<div class="grid grid-cols-1 gap-4 lg:grid-cols-2">
 			<!-- Column 1: Menu & Target Groups -->
@@ -846,11 +980,29 @@
 								กำหนดวัตถุดิบเองในตารางด้านขวา ไม่อ้างอิงสูตรจากฐานข้อมูล
 							</p>
 						{/if}
+						{#if canSaveAsRecipe}
+							<label class="mt-2 flex cursor-pointer items-center gap-2">
+								<input
+									type="checkbox"
+									bind:checked={saveAsRecipe}
+									class="h-3.5 w-3.5 rounded border-gray-300 text-primary focus:ring-primary"
+								/>
+								<span class="text-xs">บันทึกเป็นสูตรใหม่</span>
+							</label>
+							{#if saveAsRecipe}
+								<p class="mt-1 text-2xs text-muted-foreground">
+									{recipeMode === 'bom'
+										? 'ตั้งชื่อเมนูที่แสดงใหม่ให้ต่างจากสูตรเดิม ระบบจะใช้เป็นชื่อสูตร และใช้จำนวนจานที่ต้องการผลิตเป็นจำนวนจานมาตรฐาน'
+										: 'ใช้ชื่อเมนูที่แสดงเป็นชื่อสูตร และจำนวนจานที่ต้องการผลิตเป็นจำนวนจานมาตรฐาน'}
+								</p>
+							{/if}
+						{/if}
 					</div>
 
 					<div>
-						<Label class="text-xs">ชื่อเมนูที่แสดง</Label>
+						<Label for="menu-label" class="text-xs">ชื่อเมนูที่แสดง</Label>
 						<Input
+							id="menu-label"
 							bind:value={menuLabel}
 							placeholder="เช่น ข้าวต้มไก่ฮาลาล, ข้าวผัดไข่..."
 							class="mt-1 text-xs"
@@ -959,19 +1111,19 @@
 						ปรับเปลี่ยนจำนวน เพิ่ม หรือลบวัตถุดิบที่ต้องการเบิกได้ตามความเหมาะสม
 					</Card.Description>
 				</Card.Header>
-				<Card.Content class="space-y-3 text-xs">
+				<Card.Content class="space-y-3 text-sm">
 					<div class="overflow-hidden rounded-lg border">
 						<Table.Root>
-							<Table.Header class="bg-muted/40 text-2xs">
+							<Table.Header class="bg-muted/40 text-sm">
 								<Table.Row>
 									<Table.Head>วัตถุดิบ</Table.Head>
 									<Table.Head class="w-28 text-right">ต้องใช้</Table.Head>
 									<Table.Head class="text-right">ในคลัง</Table.Head>
-									<Table.Head class="w-16 text-center">สถานะ</Table.Head>
+									<Table.Head class="w-24 text-center">สถานะ</Table.Head>
 									<Table.Head class="w-8"></Table.Head>
 								</Table.Row>
 							</Table.Header>
-							<Table.Body class="text-xs">
+							<Table.Body class="text-sm">
 								{#if ingredientsList.length === 0}
 									<Table.Row>
 										<Table.Cell colspan={5} class="py-4 text-center text-muted-foreground">
@@ -981,7 +1133,8 @@
 								{/if}
 								{#each ingredientsList as ing, idx (ing.item_id + '_' + idx)}
 									{@const onHand = stock.data?.get(ing.item_id) ?? '0'}
-									{@const isShort = qtyGt(ing.needed, onHand)}
+									{@const isShort =
+										ing.needed != null && ing.needed !== '' && qtyGt(ing.needed, onHand)}
 									<Table.Row>
 										<Table.Cell class="font-medium">
 											{ing.name}
@@ -996,27 +1149,27 @@
 													oninput={() => {
 														isIngredientsManuallyEdited = true;
 													}}
-													class="h-7 w-20 text-right font-mono text-xs font-bold"
+													class="h-8 w-24 [appearance:textfield] text-right text-sm font-semibold tabular-nums [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
 												/>
-												<span class="w-5 truncate text-left text-2xs text-muted-foreground"
-													>{ing.unit}</span
+												<span class="w-16 truncate text-left text-xs text-muted-foreground"
+													>{unitLabel(ing.unit)}</span
 												>
 											</div>
 										</Table.Cell>
-										<Table.Cell class="text-right font-mono text-muted-foreground">
+										<Table.Cell class="text-right text-slate-700 tabular-nums">
 											{onHand}
-											{ing.unit}
+											{unitLabel(ing.unit)}
 										</Table.Cell>
 										<Table.Cell class="text-center">
 											{#if isShort}
 												<span
-													class="inline-flex items-center rounded bg-rose-100 px-1.5 py-0.5 text-2xs font-bold text-rose-700"
+													class="inline-flex items-center rounded-full border border-red-200 bg-red-50 px-2 py-0.5 text-xs font-semibold whitespace-nowrap text-red-900"
 												>
 													ขาดสต็อก
 												</span>
 											{:else}
 												<span
-													class="inline-flex items-center rounded bg-green-100 px-1.5 py-0.5 text-2xs font-bold text-green-700"
+													class="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-xs font-semibold whitespace-nowrap text-emerald-900"
 												>
 													พร้อม
 												</span>
@@ -1071,7 +1224,7 @@
 								<div class="sm:col-span-3">
 									<Label class="text-2xs text-muted-foreground">หน่วย</Label>
 									<Input
-										value={newUnit}
+										value={unitLabel(newUnit)}
 										readonly
 										tabindex={-1}
 										placeholder="หน่วย"
@@ -1096,7 +1249,7 @@
 									size="sm"
 									class="h-7 gap-1 text-xs"
 									onclick={confirmAddIngredient}
-									disabled={!newItemId || !newQty || Number(newQty) <= 0}
+									disabled={!newItemId || newQty == null || newQty === '' || qtyLte(newQty, 0)}
 								>
 									<Plus class="h-3 w-3" />
 									เพิ่มวัตถุดิบนี้
@@ -1121,24 +1274,33 @@
 						</Button>
 					{/if}
 
-					<p class="text-2xs text-muted-foreground">
+					<p class="text-xs text-muted-foreground">
 						* หากสต็อกในคลังไม่พอ คลังสินค้าสามารถตัดจ่ายบางส่วนในขั้นตอนอนุมัติได้
 					</p>
 				</Card.Content>
 			</Card.Root>
 		</div>
 
-		{#if !activeTicket}
+		{#if tickets.isError && !ticketsFresh}
+			<!-- Without tickets we can't tell whether this meal already has one, and creating would open a second plan and ticket for it. -->
+			<div
+				class="flex items-center justify-between gap-3 rounded-xl border border-red-200 bg-red-50 p-4 text-red-900"
+			>
+				<div class="flex items-center gap-2 text-sm font-semibold">
+					<AlertCircle class="h-5 w-5 shrink-0 text-red-600" />
+					โหลดข้อมูลใบเบิกไม่สำเร็จ
+				</div>
+				<Button variant="outline" size="sm" onclick={() => tickets.refetch()}>ลองใหม่</Button>
+			</div>
+		{:else if !activeTicket}
 			<div class="rounded-xl border border-primary/20 bg-primary/5 p-4">
 				<Button
 					class="w-full gap-2 font-semibold shadow-sm"
 					onclick={handleCreateRequisition}
-					disabled={createMealPlanMutation.isPending || createTicketMutation.isPending}
+					disabled={!ticketsFresh || isOpeningRequisition}
 				>
 					<Sparkles class="h-4 w-4" />
-					{createMealPlanMutation.isPending || createTicketMutation.isPending
-						? 'กำลังเปิดตั๋วเบิก...'
-						: 'สร้างใบเบิกวัตถุดิบ'}
+					{isOpeningRequisition ? 'กำลังเปิดตั๋วเบิก...' : 'สร้างใบเบิกวัตถุดิบ'}
 				</Button>
 			</div>
 		{:else if activeTicket.status === 'PENDING_PICK'}
@@ -1156,11 +1318,11 @@
 				</Button>
 			</div>
 		{/if}
-	{:else if currentStage === 'B'}
+	{:else if shownStage === 'B'}
 		<!-- STAGE B: Ticket status (read-only — allocate/approve/dispatch happen at
 		     /back-office/tickets/[id], not here — CR-121/CR-141 role split) -->
-		<Card.Root class="border shadow-sm">
-			<Card.Header class="border-b bg-muted/20">
+		<Card.Root class="gap-0 overflow-hidden border py-0 shadow-sm">
+			<Card.Header class="border-b bg-muted/20 py-4 [.border-b]:pb-4">
 				<div class="flex flex-wrap items-center justify-between gap-3">
 					<div>
 						<Card.Title class="flex items-center gap-2 text-lg font-bold">
@@ -1203,7 +1365,7 @@
 				</div>
 			</Card.Header>
 
-			<Card.Content class="space-y-4 p-5 text-xs">
+			<Card.Content class="space-y-4 p-5 text-sm">
 				<!-- Status Notification Banner -->
 				{#if activeTicket?.status === 'PENDING_PICK'}
 					<div
@@ -1213,7 +1375,7 @@
 						<div>
 							<h4 class="font-bold">รอคลังจัดของ</h4>
 							<p class="mt-1 text-xs text-amber-700">
-								ยังแก้ไขรายการที่ Stage A ได้จนกว่าคลังจะเริ่มจัดของ
+								ยังแก้ไขรายการวัตถุดิบได้ที่แท็บ "วางแผนเมนู" จนกว่าคลังจะกดอนุมัติ
 							</p>
 						</div>
 					</div>
@@ -1223,7 +1385,7 @@
 					>
 						<PackageCheck class="h-5 w-5 shrink-0 text-blue-600" />
 						<div>
-							<h4 class="font-bold">ผู้จัดการอนุมัติแล้ว รอคลังปล่อยของ</h4>
+							<h4 class="font-bold">อนุมัติแล้ว รอคลังปล่อยของ</h4>
 							<p class="mt-1 text-xs text-blue-700">อนุมัติโดย: {activeTicket.approved_by}</p>
 						</div>
 					</div>
@@ -1257,7 +1419,7 @@
 						<AlertCircle class="h-5 w-5 shrink-0 text-rose-600" />
 						<div class="flex-1">
 							<h4 class="font-bold">ตั๋วนี้ถูกยกเลิกแล้ว</h4>
-							<p class="mt-1 text-xs text-rose-700">เปิดตั๋วใหม่ได้จากขั้นตอน A</p>
+							<p class="mt-1 text-xs text-rose-700">เปิดตั๋วใหม่ได้จากแท็บ "วางแผนเมนู"</p>
 						</div>
 					</div>
 				{/if}
@@ -1268,26 +1430,41 @@
 						รายการวัตถุดิบที่ขอเบิก
 					</div>
 					<Table.Root>
-						<Table.Header class="text-2xs">
+						<Table.Header class="text-sm">
 							<Table.Row>
 								<Table.Head>รายการ</Table.Head>
 								<Table.Head class="text-right">จำนวนที่ขอ</Table.Head>
 								<Table.Head class="text-right">จำนวนที่คลังจัด</Table.Head>
 							</Table.Row>
 						</Table.Header>
-						<Table.Body class="text-xs">
+						<Table.Body class="text-sm">
 							{#each activeTicket?.items ?? [] as it (it.item_id)}
 								<Table.Row>
 									<Table.Cell>
 										<span class="font-medium text-foreground">{it.item_name}</span>
 									</Table.Cell>
-									<Table.Cell class="text-right font-mono">{it.requested_qty} {it.unit}</Table.Cell>
-									<Table.Cell
-										class="text-right font-mono font-bold {it.allocated_qty !== '0'
-											? 'text-green-700'
-											: 'text-muted-foreground'}"
+									<Table.Cell class="text-right tabular-nums"
+										>{it.requested_qty} {unitLabel(it.unit)}</Table.Cell
 									>
-										{it.allocated_qty !== '0' ? `${it.allocated_qty} ${it.unit}` : 'รอดำเนินการ'}
+									{@const allocated = it.allocated_qty !== '0'}
+									{@const awaiting = !allocated && activeTicket?.status === 'PENDING_PICK'}
+									<Table.Cell
+										class="text-right font-semibold tabular-nums {allocated
+											? 'text-green-700'
+											: awaiting
+												? 'text-muted-foreground'
+												: 'text-amber-700'}"
+									>
+										{#if allocated}
+											{it.allocated_qty} {unitLabel(it.unit)}
+										{:else if awaiting}
+											รอดำเนินการ
+										{:else}
+											<span class="inline-flex items-center justify-end gap-1">
+												<PackageX class="h-3.5 w-3.5" />
+												คลังไม่มีให้
+											</span>
+										{/if}
 									</Table.Cell>
 								</Table.Row>
 							{/each}
@@ -1308,7 +1485,7 @@
 				</div>
 			</Card.Content>
 		</Card.Root>
-	{:else if currentStage === 'C'}
+	{:else if shownStage === 'C'}
 		<!-- STAGE C: Actual Yield & Meal Service Recording -->
 		<Card.Root class="border shadow-sm">
 			<Card.Header class="flex flex-wrap items-start justify-between gap-4 border-b bg-muted/20">
@@ -1387,7 +1564,7 @@
 									เป้าหมายตามแผน: {activePlan?.allocated_target ?? allocatedTarget} จาน
 								</p>
 							</div>
-							{#if activeTicket}
+							{#if activeTicket?.status === 'COMPLETED'}
 								<span
 									class="rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-bold text-green-800"
 								>

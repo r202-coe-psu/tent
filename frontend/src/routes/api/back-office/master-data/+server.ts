@@ -1,7 +1,11 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { requireShelterScopeOrSA, serviceError, ServiceError } from '$lib/server/couch-admin';
-import { MASTER_DATA_TYPES, masterDocId } from '$lib/features/master-data/domain';
+import {
+	isGlobalOnlyMasterType,
+	MASTER_DATA_TYPES,
+	masterDocId
+} from '$lib/features/master-data/domain';
 import { mergeMasterDataItems, readMasterDoc } from '$lib/server/master-data-server';
 
 /**
@@ -35,7 +39,11 @@ export const GET: RequestHandler = async ({ request }) => {
 		const out = await Promise.all(
 			MASTER_DATA_TYPES.map(async (type) => {
 				const global = scope.scope === 'shelter' ? null : await readMasterDoc(type);
-				const local = shelterCode ? await readMasterDoc(type, shelterCode) : null;
+				// CR-186: global-only types ignore leftover shelter-local docs.
+				const local =
+					shelterCode && !isGlobalOnlyMasterType(type)
+						? await readMasterDoc(type, shelterCode)
+						: null;
 				const effective =
 					scope.scope === 'effective' ? mergeMasterDataItems(global, local, shelterCode) : null;
 				const doc = local ?? global;

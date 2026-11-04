@@ -75,7 +75,6 @@ export {
 
 // Data
 export type { IncidentRepository } from './data/incident.repository';
-export type { StaffDirectoryEntry } from './data/staff-directory.api';
 
 // Application
 export {

@@ -5,6 +5,7 @@ import {
 	type Timestamp,
 	makeDoc,
 	now,
+	isThaiMobilePhone,
 	normalizeThaiPhone,
 	phoneSchema,
 	registeredViaSchema
@@ -12,6 +13,14 @@ import {
 import { ulid } from '$lib/db/ulid';
 import { isValidThaiNationalId } from '$lib/utils/thai-id';
 import { ConflictError } from '$lib/utils/errors';
+// Deep import on purpose: the `$lib/features/shared` barrel re-exports `.svelte` files, which
+// plain `tsx` cannot load — and `scripts/migrate-closed-shelter-checkout.ts` imports this domain.
+import { createAuditEntry, type AuditEntry } from '$lib/features/shared/domain/audit';
+import {
+	EVACUEE_SCHEMA_V,
+	type EvacueeConsent,
+	type MemberConsentWrite
+} from '$lib/features/consent/server';
 
 /**
  * People domain — the registration baseline (FR-4..13).
@@ -220,8 +229,33 @@ export const MANUAL_HOUSEHOLD_STATUS_TRANSITIONS: Readonly<
 	merged: []
 };
 
+/**
+ * `shelter_closed` (CR-219 FR-1) is written only by the shelter-close flow — a manual checkout
+ * destination picker must not offer it.
+ */
+export const checkoutDestinationTypeSchema = z.enum([
+	'returned_home',
+	'transferred_shelter',
+	'referred_facility',
+	'other',
+	'shelter_closed'
+]);
+export type CheckoutDestinationType = z.infer<typeof checkoutDestinationTypeSchema>;
+
+/** Movement `reason` / audit `reason` / `checkout_destination.type` of the shelter-close flow (CR-219 D-4). */
+export const SHELTER_CLOSED_REASON = 'shelter_closed';
+
+/** Display copy for the `shelter_closed` reason (CR-219 FR-21). */
+export const SHELTER_CLOSED_REASON_LABEL = 'ศูนย์ปิด';
+
+/** Display a movement reason: the shelter-close code maps to its Thai label, free text passes through. */
+export function movementReasonLabel(reason: string | null | undefined): string {
+	if (!reason) return '';
+	return reason === SHELTER_CLOSED_REASON ? SHELTER_CLOSED_REASON_LABEL : reason;
+}
+
 export const checkoutDestinationSchema = z.object({
-	type: z.enum(['returned_home', 'transferred_shelter', 'referred_facility', 'other']),
+	type: checkoutDestinationTypeSchema,
 	destination_name: z.string().trim().optional(),
 	notes: z.string().trim().optional()
 });
@@ -328,6 +362,7 @@ export interface Evacuee extends BaseDoc {
 	 */
 	booking_ref?: string | null;
 	privacy: { search_excluded: boolean };
+	consent?: EvacueeConsent;
 	registered_via: z.infer<typeof registeredViaSchema>;
 	anonymized?: boolean; // set by the purge job
 }
@@ -774,8 +809,8 @@ export const emergencyContactRequiredSchema = z.object(
 			.min(1, 'กรุณากรอกชื่อ-นามสกุลผู้ติดต่อฉุกเฉิน'),
 		phone: z
 			.string({ error: 'กรุณากรอกเบอร์ติดต่อฉุกเฉิน' })
-			.trim()
-			.regex(/^\d{10}$/, 'กรุณากรอกเบอร์ติดต่อฉุกเฉินให้ครบ 10 หลัก'),
+			.transform(normalizeThaiPhone)
+			.pipe(z.string().regex(/^0\d{9}$/, 'กรุณากรอกเบอร์ติดต่อฉุกเฉินให้ครบ 10 หลัก')),
 		relation: z
 			.string({ error: 'กรุณาระบุความสัมพันธ์ของผู้ติดต่อฉุกเฉิน' })
 			.trim()
@@ -948,6 +983,45 @@ export const medicalInputSchema = z.object({
 	notes: z.string().trim().optional()
 });
 export type MedicalInput = z.input<typeof medicalInputSchema>;
+
+interface RegistrationMedicalFields {
+	medical_conditions?: readonly string[];
+	medical_allergies?: readonly string[];
+	medical_medications?: readonly string[];
+	medical_note?: string | null;
+}
+
+export function hasMedicalInput(member: RegistrationMedicalFields): boolean {
+	return Boolean(
+		member.medical_conditions?.length ||
+		member.medical_allergies?.length ||
+		member.medical_medications?.length ||
+		member.medical_note?.length
+	);
+}
+
+/**
+ * The `medical` doc a registration save may create for one member, or null. FR-32: a member
+ * whose consent forbids health data gets none; `null` consent (a channel without the block)
+ * keeps the pre-consent behaviour.
+ */
+export function registrationMedicalInput(
+	member: RegistrationMedicalFields,
+	evacueeId: string,
+	consent: Pick<MemberConsentWrite, 'medicalAllowed'> | null,
+	track: CareTrack
+): MedicalInput | null {
+	if (consent && !consent.medicalAllowed) return null;
+	if (!hasMedicalInput(member)) return null;
+	return {
+		evacuee_id: evacueeId,
+		conditions: [...(member.medical_conditions ?? [])],
+		allergies: [...(member.medical_allergies ?? [])],
+		medications: [...(member.medical_medications ?? [])],
+		notes: member.medical_note || '',
+		track
+	};
+}
 
 function hasCompleteResidenceGeo(data: {
 	subdistrict?: string | null;
@@ -1175,7 +1249,7 @@ export const evacueePersonalEditFormSchema = z
 		religionOther: z.string().trim().max(RELIGION_OTHER_MAX).default('')
 	})
 	.superRefine((data, ctx) => {
-		if (!data.noPhone && digitsOnly(data.phone).length !== 10) {
+		if (!data.noPhone && !isThaiMobilePhone(data.phone)) {
 			ctx.addIssue({
 				code: 'custom',
 				path: ['phone'],
@@ -1247,7 +1321,7 @@ export const evacueeEmergencyEditFormSchema = z
 		if (!hasContact) return;
 		if (!data.name)
 			ctx.addIssue({ code: 'custom', path: ['name'], message: 'กรุณากรอกชื่อผู้ติดต่อ' });
-		if (digitsOnly(data.phone).length !== 10) {
+		if (!isThaiMobilePhone(data.phone)) {
 			ctx.addIssue({ code: 'custom', path: ['phone'], message: 'กรุณากรอกเบอร์โทร 10 หลัก' });
 		}
 		if (!data.relation)
@@ -1538,12 +1612,23 @@ export function totalPetCount(pets: readonly { count?: number | string | null }[
 	return pets.reduce((sum, p) => sum + (Number(p.count) || 0), 0);
 }
 
-export function createEvacuee(input: EvacueeInput, ctx: AuthorContext, id?: string): Evacuee {
+export type EvacueeConsentWrite = Pick<MemberConsentWrite, 'consent' | 'searchExcluded'>;
+
+/**
+ * `consent` is required so a new writer cannot forget it: pass `null` on channels without the
+ * consent block (back-office, import, paper, seed), which keep `search_excluded: false` (FR-44).
+ */
+export function createEvacuee(
+	input: EvacueeInput,
+	ctx: AuthorContext,
+	consent: EvacueeConsentWrite | null,
+	id?: string
+): Evacuee {
 	const d = evacueeInputSchema.parse(input);
 	const person_id = resolvePersonIdOnCreate(d.person_id);
 	return makeDoc(
 		'evacuee',
-		14, // schema_v 14: booking_ref (CR-169); 13: preferred_zone (CR-159); 12: gender nullable + registered_via `api` (CR-154); 11: religion_other + disability_other_detail (CR-148); 10: anonymous cardType + ANON mint (CR-112); 9: arriving (CR-106); 8: draft/card_snapshot (CR-084); 7 = registered_via `web` (CR-070); 6 = stay cancelled (CR-070); 5 = age (CR-057)
+		EVACUEE_SCHEMA_V, // 15: consent (PDPA block); 14: booking_ref (CR-169); 13: preferred_zone (CR-159); 12: gender nullable + registered_via `api` (CR-154); 11: religion_other + disability_other_detail (CR-148); 10: anonymous cardType + ANON mint (CR-112); 9: arriving (CR-106); 8: draft/card_snapshot (CR-084); 7 = registered_via `web` (CR-070); 6 = stay cancelled (CR-070); 5 = age (CR-057)
 		{
 			first_name: d.first_name,
 			last_name: d.last_name,
@@ -1566,7 +1651,8 @@ export function createEvacuee(input: EvacueeInput, ctx: AuthorContext, id?: stri
 			...(d.preferred_zone ? { preferred_zone: d.preferred_zone } : {}),
 			// Worker-owned (CR-169): only reachable via EvacueeInput; public/form schemas omit it.
 			...(d.booking_ref ? { booking_ref: d.booking_ref } : {}),
-			privacy: { search_excluded: false },
+			privacy: { search_excluded: consent?.searchExcluded ?? false },
+			...(consent ? { consent: consent.consent } : {}),
 			registered_via: d.registered_via
 		},
 		ctx,
@@ -1582,10 +1668,11 @@ export function createEvacuee(input: EvacueeInput, ctx: AuthorContext, id?: stri
 export function createKioskEvacueeFromCard(
 	cardSnapshot: CardSnapshot,
 	ctx: AuthorContext,
+	consent: EvacueeConsentWrite,
 	photoId?: string,
 	phone: string | null = null,
 	id?: string
-): Evacuee {
+): Evacuee & { consent: EvacueeConsent } {
 	const firstName = cardSnapshot.first_name_th || 'ไม่ระบุชื่อ';
 	const lastName = cardSnapshot.last_name_th || '';
 	// Card chip carries no gender → ไม่ระบุ (`null`); never fabricate legacy 'other'.
@@ -1602,7 +1689,7 @@ export function createKioskEvacueeFromCard(
 
 	return makeDoc(
 		'evacuee',
-		11,
+		EVACUEE_SCHEMA_V,
 		{
 			first_name: firstName,
 			last_name: lastName,
@@ -1621,7 +1708,8 @@ export function createKioskEvacueeFromCard(
 			card_snapshot: persistedCardSnapshot,
 			photo: photoId ?? null,
 			current_stay: { status: 'arriving', zone: null, since: now() },
-			privacy: { search_excluded: false },
+			privacy: { search_excluded: consent.searchExcluded },
+			consent: consent.consent,
 			registered_via: 'kiosk'
 		},
 		ctx,
@@ -1819,6 +1907,56 @@ export const CHECK_OUT_ELIGIBLE_STATUSES = [
 	'room_confirmed'
 ] as const satisfies readonly StayStatus[];
 
+/**
+ * Stays the shelter-close flow checks out (CR-219 FR-2). Wider than
+ * {@link CHECK_OUT_ELIGIBLE_STATUSES}: `temporary_leave` / `arriving` / `kiosk_registered`
+ * are allowed only for the system close (FR-3).
+ */
+export const SHELTER_CLOSE_CHECKOUT_STATUSES = [
+	'active',
+	'room_confirmed',
+	'temporary_leave',
+	'arriving',
+	'kiosk_registered'
+] as const satisfies readonly StayStatus[];
+
+/** Stays the shelter-close flow cancels with hold-cancel semantics (CR-219 FR-2, FR-6). */
+export const SHELTER_CLOSE_CANCEL_STATUSES = [
+	'pre_registered'
+] as const satisfies readonly StayStatus[];
+
+/** Every stay a shelter close changes; anything else is left alone (CR-219 FR-12). */
+export const SHELTER_CLOSE_AFFECTED_STATUSES = [
+	...SHELTER_CLOSE_CHECKOUT_STATUSES,
+	...SHELTER_CLOSE_CANCEL_STATUSES
+] as const satisfies readonly StayStatus[];
+
+export function isShelterCloseCheckoutStatus(status: StayStatus): boolean {
+	return (SHELTER_CLOSE_CHECKOUT_STATUSES as readonly StayStatus[]).includes(status);
+}
+
+export function isShelterCloseCancelStatus(status: StayStatus): boolean {
+	return (SHELTER_CLOSE_CANCEL_STATUSES as readonly StayStatus[]).includes(status);
+}
+
+export function isShelterCloseAffectedStatus(status: StayStatus): boolean {
+	return isShelterCloseCheckoutStatus(status) || isShelterCloseCancelStatus(status);
+}
+
+/** CR-219 FR-3: the system-close check-out guard — never used by staff check-out. */
+export function assertShelterCloseCheckoutAllowed(
+	evacuee: Pick<Evacuee, 'current_stay'>,
+	reason: string | null | undefined
+): void {
+	if (reason !== SHELTER_CLOSED_REASON) {
+		throw new Error('การเช็คเอาท์จากการปิดศูนย์ต้องใช้เหตุผล shelter_closed');
+	}
+	const status = evacuee.current_stay.status;
+	if (!isShelterCloseCheckoutStatus(status)) {
+		throw new Error(`ไม่สามารถเช็คเอาท์จากการปิดศูนย์จากสถานะ ${status} ได้`);
+	}
+}
+
 /** Stay statuses that may receive a `zone_change` (rezone while staying). */
 export const ZONE_CHANGE_ELIGIBLE_STATUSES = [
 	'active',
@@ -1923,9 +2061,17 @@ export function listPendingZoneArrivalConfirmations(evacuees: readonly Evacuee[]
 export function assertMovementAllowed(
 	evacuee: Evacuee,
 	action: MovementAction,
-	opts: { reason?: string | null; notes?: string | null } = {}
+	opts: { reason?: string | null; notes?: string | null; systemClose?: boolean } = {}
 ): void {
 	const status = evacuee.current_stay.status;
+	if (opts.systemClose) {
+		// CR-219 FR-3: only the shelter-close flow passes `systemClose`, and only for check-out.
+		if (action !== 'check_out') {
+			throw new Error('การปิดศูนย์ใช้ได้กับการเช็คเอาท์เท่านั้น');
+		}
+		assertShelterCloseCheckoutAllowed(evacuee, opts.reason);
+		return;
+	}
 	if (status === 'deceased' && action !== 'mark_deceased') {
 		throw new Error('สถานะเสียชีวิตเป็นสถานะสุดท้าย — ไม่สามารถเปลี่ยนสถานะได้อีก');
 	}
@@ -1999,10 +2145,15 @@ export function canCancelHouseholdPreRegistration(household: Household): boolean
  * authoritative history is the append-only movement stream; this just keeps the
  * UI snapshot in step (movement events win on conflict — data-model.md §5).
  */
-export function applyMovementToStay(evacuee: Evacuee, movement: Movement): Evacuee {
+export function applyMovementToStay(
+	evacuee: Evacuee,
+	movement: Movement,
+	opts: { systemClose?: boolean } = {}
+): Evacuee {
 	assertMovementAllowed(evacuee, movement.action, {
 		reason: movement.reason,
-		notes: undefined
+		notes: undefined,
+		systemClose: opts.systemClose
 	});
 	if (movement.action === 'zone_change') {
 		const nextZone = movement.zone?.trim() || null;
@@ -2124,6 +2275,86 @@ export function statusChangeHandlerKind(action: MovementAction): StatusChangeHan
 	if (action === 'check_out') return 'check_out';
 	if (action === 'confirm_room') return 'confirm_room';
 	return 'record';
+}
+
+// ---------------------------------------------------------------- shelter close (CR-219)
+
+/**
+ * CR-219 FR-3/FR-4: check one evacuee out because the shelter is closing. Returns the
+ * `check_out` movement (`reason = shelter_closed`, `zone = null`) and the evacuee with the
+ * movement applied through {@link applyMovementToStay} — never a direct status write.
+ */
+export function buildShelterCloseCheckout(
+	evacuee: Evacuee,
+	ctx: AuthorContext,
+	occurredAt: Timestamp = now()
+): { movement: Movement; evacuee: Evacuee } {
+	const movement = createMovement(
+		{
+			evacuee_id: evacuee._id,
+			action: 'check_out',
+			zone: null,
+			reason: SHELTER_CLOSED_REASON,
+			occurred_at: occurredAt
+		},
+		ctx
+	);
+	return { movement, evacuee: applyMovementToStay(evacuee, movement, { systemClose: true }) };
+}
+
+/**
+ * CR-219 FR-6: cancel a `pre_registered` stay with hold-cancel semantics
+ * (`cancelPreRegistration`) — `status = cancelled`, `since = now`, no movement.
+ */
+export function buildShelterCloseCancel(evacuee: Evacuee, since: Timestamp = now()): Evacuee {
+	if (!isShelterCloseCancelStatus(evacuee.current_stay.status)) {
+		throw new Error(`ไม่สามารถยกเลิกจากการปิดศูนย์จากสถานะ ${evacuee.current_stay.status} ได้`);
+	}
+	return {
+		...evacuee,
+		updated_at: now(),
+		current_stay: { ...evacuee.current_stay, status: 'cancelled', since }
+	};
+}
+
+/**
+ * CR-219 FR-5/FR-6b: re-derive a household after its members were closed out. A household
+ * that becomes `checked_out` with no destination gets `{ type: 'shelter_closed' }`; an
+ * existing destination is kept. Returns `null` when nothing changes.
+ */
+export function deriveShelterCloseHousehold<
+	H extends Pick<Household, 'status' | 'checkout_destination' | 'updated_at'>
+>(household: H, memberStayStatuses: readonly StayStatus[]): H | null {
+	const status = deriveHouseholdStatus(memberStayStatuses);
+	const destination =
+		status === 'checked_out' && !household.checkout_destination
+			? { type: 'shelter_closed' as const }
+			: household.checkout_destination;
+	if (status === household.status && destination === household.checkout_destination) return null;
+	return { ...household, status, checkout_destination: destination, updated_at: now() };
+}
+
+/** CR-219 FR-6a: one audit per household whose pre-registered members the close cancelled. */
+export function buildShelterCloseCancelAudit(
+	householdId: string,
+	evacueeIds: readonly string[],
+	ctx: AuthorContext,
+	context: Record<string, unknown> = {}
+): AuditEntry {
+	return createAuditEntry(
+		{
+			action: 'other',
+			target_type: 'household',
+			target_id: householdId,
+			reason: SHELTER_CLOSED_REASON,
+			context: {
+				cancelled_member_count: evacueeIds.length,
+				evacuee_ids: [...evacueeIds],
+				...context
+			}
+		},
+		ctx
+	);
 }
 
 // ---------------------------------------------------------------- display helpers
@@ -2285,6 +2516,39 @@ export interface EwarSymptomGroup {
 
 export const EWAR_SYMPTOM_GROUPS: EwarSymptomGroup[] = [
 	{
+		title: 'อาการเฝ้าระวังทั่วไปและเหตุฉุกเฉินอื่นๆ',
+		symptoms: [
+			{
+				id: 'high_fever',
+				emoji: '🔥',
+				label: 'ไข้สูงเกิน 38.5 °C'
+			},
+			{
+				id: 'trauma',
+				emoji: '💥',
+				label: 'ได้รับบาดเจ็บ',
+				sublabel: 'Trauma'
+			},
+			{
+				id: 'chemical_poisoning',
+				emoji: '☠️',
+				label: 'ได้รับสารเคมี / สารพิษ',
+				sublabel: 'Chemical poisoning'
+			}
+		]
+	},
+	{
+		title: 'กลุ่มอาการทางเดินหายใจ',
+		symptoms: [
+			{
+				id: 'acute_respiratory',
+				emoji: '😷',
+				label: 'ติดเชื้อทางเดินหายใจเฉียบพลัน (ไอ เจ็บคอ หายใจลำบาก)',
+				sublabel: 'Acute respiratory infection'
+			}
+		]
+	},
+	{
 		title: 'กลุ่มอาการทางเดินอาหาร',
 		symptoms: [
 			{
@@ -2308,30 +2572,19 @@ export const EWAR_SYMPTOM_GROUPS: EwarSymptomGroup[] = [
 		]
 	},
 	{
-		title: 'กลุ่มอาการทางเดินหายใจ',
-		symptoms: [
-			{
-				id: 'acute_respiratory',
-				emoji: '😷',
-				label: 'ติดเชื้อทางเดินหายใจเฉียบพลัน (ไอ เจ็บคอ หายใจลำบาก)',
-				sublabel: 'Acute respiratory infection'
-			}
-		]
-	},
-	{
 		title: 'กลุ่มโรคที่มีพาหะนำโรค',
 		symptoms: [
-			{
-				id: 'malaria',
-				emoji: '🤒',
-				label: 'ไข้มาลาเรีย',
-				sublabel: 'Malaria'
-			},
 			{
 				id: 'dengue',
 				emoji: '🦟',
 				label: 'ไข้เลือดออก',
 				sublabel: 'Dengue'
+			},
+			{
+				id: 'malaria',
+				emoji: '🤒',
+				label: 'ไข้มาลาเรีย',
+				sublabel: 'Malaria'
 			}
 		]
 	},
@@ -2345,6 +2598,12 @@ export const EWAR_SYMPTOM_GROUPS: EwarSymptomGroup[] = [
 				sublabel: 'Measles'
 			},
 			{
+				id: 'pertussis',
+				emoji: '😮‍💨',
+				label: 'ไอกรน (ไอเป็นชุด ๆ)',
+				sublabel: 'Pertussis'
+			},
+			{
 				id: 'meningitis',
 				emoji: '🧠',
 				label: 'เยื่อหุ้มสมองอักเสบ (ไข้ ปวดหัว คอแข็ง)',
@@ -2355,12 +2614,6 @@ export const EWAR_SYMPTOM_GROUPS: EwarSymptomGroup[] = [
 				emoji: '🗣️',
 				label: 'คอตีบ',
 				sublabel: 'Diphtheria'
-			},
-			{
-				id: 'pertussis',
-				emoji: '😮‍💨',
-				label: 'ไอกรน (ไอเป็นชุด ๆ)',
-				sublabel: 'Pertussis'
 			}
 		]
 	},
@@ -2385,10 +2638,10 @@ export const EWAR_SYMPTOM_GROUPS: EwarSymptomGroup[] = [
 		title: 'กลุ่มอาการทางระบบประสาทและอื่นๆ',
 		symptoms: [
 			{
-				id: 'acute_flaccid_paralysis',
-				emoji: '🦿',
-				label: 'แขนขาอ่อนแรงเฉียบพลัน (สงสัยโปลิโอ)',
-				sublabel: 'กล้ามเนื้ออ่อนปวกเปียกเฉียบพลัน · Acute flaccid paralysis / Polio'
+				id: 'acute_haemorrhagic_fever_syndrome',
+				emoji: '🩸',
+				label: 'ไข้ร่วมกับเลือดออกผิดปกติ',
+				sublabel: 'กลุ่มอาการไข้เลือดออกรุนแรง · Acute haemorrhagic fever syndrome'
 			},
 			{
 				id: 'tetanus',
@@ -2397,32 +2650,10 @@ export const EWAR_SYMPTOM_GROUPS: EwarSymptomGroup[] = [
 				sublabel: 'Tetanus'
 			},
 			{
-				id: 'acute_haemorrhagic_fever_syndrome',
-				emoji: '🩸',
-				label: 'ไข้ร่วมกับเลือดออกผิดปกติ',
-				sublabel: 'กลุ่มอาการไข้เลือดออกรุนแรง · Acute haemorrhagic fever syndrome'
-			}
-		]
-	},
-	{
-		title: 'อาการเฝ้าระวังทั่วไปและเหตุฉุกเฉินอื่นๆ',
-		symptoms: [
-			{
-				id: 'high_fever',
-				emoji: '🔥',
-				label: 'ไข้สูงเกิน 38.5 °C'
-			},
-			{
-				id: 'trauma',
-				emoji: '💥',
-				label: 'ได้รับบาดเจ็บ',
-				sublabel: 'Trauma'
-			},
-			{
-				id: 'chemical_poisoning',
-				emoji: '☠️',
-				label: 'ได้รับสารเคมี / สารพิษ',
-				sublabel: 'Chemical poisoning'
+				id: 'acute_flaccid_paralysis',
+				emoji: '🦿',
+				label: 'แขนขาอ่อนแรงเฉียบพลัน (สงสัยโปลิโอ)',
+				sublabel: 'กล้ามเนื้ออ่อนปวกเปียกเฉียบพลัน · Acute flaccid paralysis / Polio'
 			}
 		]
 	}

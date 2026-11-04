@@ -8,6 +8,8 @@ import {
 } from '$lib/server/couch-admin';
 import { createOrMergeUser, deleteUser, listUsers, updateUser } from '$lib/server/user-service';
 import { validateProvisionedPassword } from '$lib/server/password-policy';
+import { shelterCodesFromRoles } from '$lib/auth/roles';
+import { assertVolunteerVerifiedForAccess } from '$lib/features/volunteers/server/volunteer-access-grant';
 
 // Service plane `/api/v1/*` — dev BFF mirroring the canonical contract
 // (api-contract.md §2/§3) so it is a drop-in swap for the future FastAPI.
@@ -48,6 +50,7 @@ interface UpdateUserBody {
 	active?: unknown;
 	must_change_password?: unknown;
 	affiliation_tags?: unknown;
+	permanent_roles?: unknown;
 }
 
 /** POST — create a user (SA: any non-_admin; SM: own-shelter staff). */
@@ -103,6 +106,10 @@ export const POST: RequestHandler = async ({ request }) => {
 			throw new ServiceError('VALIDATION', 'display_name must be at least 1 character');
 
 		assertCanGrant(caller, roles);
+		// An account linked to a volunteer profile needs the profile verified in the shelter it is
+		// given roles in (CR-221 FR-3): the SA / SM grant path creates its account here.
+		if (volunteer_id)
+			await assertVolunteerVerifiedForAccess(shelterCodesFromRoles(roles), volunteer_id);
 		const result = await createOrMergeUser(
 			{
 				name,
@@ -169,6 +176,9 @@ export const PUT: RequestHandler = async ({ request }) => {
 		const affiliation_tags = Array.isArray(body.affiliation_tags)
 			? body.affiliation_tags.filter((t): t is string => typeof t === 'string')
 			: undefined;
+		const permanent_roles = Array.isArray(body.permanent_roles)
+			? body.permanent_roles.filter((r): r is string => typeof r === 'string')
+			: undefined;
 		const password =
 			typeof body.password === 'string' && body.password.length > 0 ? body.password : undefined;
 		const display_name =
@@ -192,7 +202,8 @@ export const PUT: RequestHandler = async ({ request }) => {
 				duty_window,
 				active,
 				must_change_password,
-				affiliation_tags
+				affiliation_tags,
+				permanent_roles
 			},
 			caller
 		);

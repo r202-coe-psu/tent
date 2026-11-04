@@ -4,7 +4,7 @@ title: Kiosk — เปลี่ยนจาก "เสียบบัตรเ�
 status: approved
 date: 2026-09-24
 created: 2026-09-24
-updated: 2026-10-20 # ข้อเสนอแก้ไข §17 approved โดย Team Lead Soravit Sukkarn (2026-10-20) — พิมพ์ QR จิตอาสา (#609) · 2026-10-18 ทีม kiosk เสนอ §16 (#654): แถว Zone + checklist บน QR label, `zones[].short_name`, reprint คืน `label.zone`/`stations_passed` — รอ PO เคาะ · 2026-10-17 decision sync (#604): ฐาน local ขาด kiosk index → redeploy แล้ว + redeploy/seed deploy index ครบชุด · 2026-10-15 ทีม kiosk ขอเลิกกรอง registered_via ใน §15 (FR-KPC-101/104) · 2026-10-13 ข้อเสนอแก้ไข §15 approved โดย Dev/Team Lead Soravit Sukkarn (รับ requirement จากหัวหน้าโครงการเมื่อวาน 2026-10-12) · 2026-10-04 approved และ merge โดย Soravit Sukkar (Team Lead) + รันเลข CR-151 และลงทะเบียนใน _index.md
+updated: 2026-10-23 # 2026-10-23 rate limit superseded by CR-188 · ข้อเสนอแก้ไข §17 approved โดย Team Lead Soravit Sukkarn (2026-10-20) — พิมพ์ QR จิตอาสา (#609) · 2026-10-18 ทีม kiosk เสนอ §16 (#654): แถว Zone + checklist บน QR label, `zones[].short_name`, reprint คืน `label.zone`/`stations_passed` — รอ PO เคาะ · 2026-10-17 decision sync (#604): ฐาน local ขาด kiosk index → redeploy แล้ว + redeploy/seed deploy index ครบชุด · 2026-10-15 ทีม kiosk ขอเลิกกรอง registered_via ใน §15 (FR-KPC-101/104) · 2026-10-13 ข้อเสนอแก้ไข §15 approved โดย Dev/Team Lead Soravit Sukkarn (รับ requirement จากหัวหน้าโครงการเมื่อวาน 2026-10-12) · 2026-10-04 approved และ merge โดย Soravit Sukkar (Team Lead) + รันเลข CR-151 และลงทะเบียนใน _index.md
 requested_by: ทีม kiosk (branch feat/pre-register_kiosk)
 decided_by: Soravit Sukkar (Team Lead)
 decision_date: 2026-10-04
@@ -646,3 +646,7 @@ migration: ไม่มี — ไม่มี field ใหม่ ไม่ bump
 - วิธีออก/หมุน token (CR-127) · parse QR จิตอาสาฝั่ง scan (#650) · แก้ `phone_hash` ไม่อัปเดต (#693) · กันเบอร์ซ้ำ (#694)
 
 ---
+
+## Decision log
+
+- 2026-10-23 — **Superseded (rate limit) by [CR-188](../01-core/CR-188-rate-limit-to-nginx.md):** FR-KPC-59 / FR-KPC-108 (verify ผิด 5 ครั้ง/10 นาที ต่อ primary) / FR-KPC-126 / D7 ถูกยกเลิก — kiosk ใช้ nginx zone `kiosk` ต่อ IP (body 429 `KIOSK_RATE_LIMITED` + `Retry-After: 60` คงเดิม)

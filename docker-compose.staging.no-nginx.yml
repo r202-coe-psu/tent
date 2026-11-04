@@ -122,11 +122,12 @@ services:
       ORIGIN: ${PUBLIC_ORIGIN:-http://localhost}
       # Kiosk banner uploads are JSON base64 (2 MB image ≈ 2.7 MB body); adapter-node default is 512K
       BODY_SIZE_LIMIT: ${BODY_SIZE_LIMIT:-4M}
-      # Client IP for rate limiters (getClientAddress): the reverse proxy in front
-      # (container nginx, or host nginx in the no-nginx variants) appends $remote_addr
-      # to X-Forwarded-For, so depth 1 = the address that proxy saw. Spoofed entries a
-      # client sends sit further left and are ignored. Without this every request shows
-      # the proxy's IP and all users share one rate-limit bucket.
+      # Client IP for getClientAddress (reCAPTCHA remote IP, logs, X-Real-IP sent to
+      # FastAPI for audit): the reverse proxy in front (container nginx, or host nginx in
+      # the no-nginx variants) appends $remote_addr to X-Forwarded-For, so depth 1 = the
+      # address that proxy saw. Spoofed entries a client sends sit further left and are
+      # ignored. Without this every request shows the proxy's IP. Rate limiting itself
+      # is nginx limit_req (CR-188).
       ADDRESS_HEADER: ${ADDRESS_HEADER:-X-Forwarded-For}
       XFF_DEPTH: ${XFF_DEPTH:-1}
       # node:cluster workers for BFF/SPA (clamped to CPUs); see .env.example scale map
@@ -140,11 +141,6 @@ services:
       # BFF donations/needs → FastAPI on the compose network (not localhost)
       FASTAPI_INTERNAL_URL: http://fastapi:9000
       EXTERNAL_API_SECRET: ${EXTERNAL_API_SECRET}
-      # CR-160: BFF rate-limit switch. Only `false`/`0` disables the bypassable limiters
-      # (donation + pre-register forms); auth/volunteer limiters ignore it. Default is
-      # fail-closed `true`. NEVER default this to false, and never set false in production
-      # .env — only the staging server's root .env / Jenkins tent-staging-e2e-env may.
-      RATE_LIMIT: ${RATE_LIMIT:-true}
       # Site key also at runtime for $env/dynamic/public; secret is verify-only
       PUBLIC_RECAPTCHA_SITE_KEY: ${PUBLIC_RECAPTCHA_SITE_KEY}
       RECAPTCHA_PROJECT_ID: ${RECAPTCHA_PROJECT_ID:-smart-shelter-508719}

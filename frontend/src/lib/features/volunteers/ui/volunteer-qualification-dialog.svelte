@@ -369,8 +369,7 @@
 
 				<div class="space-y-1.5">
 					<Label for="qualification-review-notes"
-						>หมายเหตุการพิจารณาเพิ่มเติม {#if decision === 'rejected'}<span class="text-destructive"
-								>*</span
+						>บันทึกเพิ่มเติม {#if decision === 'rejected'}<span class="text-destructive">*</span
 							>{/if}</Label
 					>
 					<Textarea

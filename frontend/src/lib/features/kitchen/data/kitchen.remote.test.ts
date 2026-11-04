@@ -1,5 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { LOT_NO_PATTERN, lotDateStamp } from '$lib/features/operations/server';
 import { createInMemoryRepository } from '$lib/db/in-memory-repository';
 
 vi.mock('$lib/db/shelter', () => ({
@@ -415,6 +416,22 @@ describe('KitchenRemoteRepository.recordMealService — record + read back (T-27
 		expect(await repo.listMealServices()).toHaveLength(2);
 	});
 
+	it('mints receipt_no as max+1, ignoring legacy docs without one (CR-177)', async () => {
+		const planless = { ...serviceInput, meal_plan_id: null };
+		await memoryRepo.put({
+			_id: 'meal_service:01ARZ3NDEKTSV4RRFFQ69G5FA0',
+			type: 'meal_service',
+			schema_v: 2,
+			...planless
+		} as never);
+		const first = await repo.recordMealService(planless, ctx);
+		expect(first.receipt_no).toBe('RCV-KITCHEN-0001');
+		const second = await repo.recordMealService(planless, ctx);
+		expect(second.receipt_no).toBe('RCV-KITCHEN-0002');
+		const stored = (await memoryRepo.get(second._id)) as Record<string, unknown>;
+		expect(stored.receipt_no).toBe('RCV-KITCHEN-0002');
+	});
+
 	it('persists actual_yield onto the stored doc (CR-084)', async () => {
 		const svc = await repo.recordMealService({ ...serviceInput, actual_yield: 90 }, ctx);
 		const stored = (await memoryRepo.get(svc._id)) as Record<string, unknown>;
@@ -736,12 +753,12 @@ describe('KitchenRemoteRepository.confirmMealServiceReceiptWithYield (cooked foo
 		extra: Partial<{ storage_point: { id: string; name: string }; unit: string }> = {}
 	) => ({ item_id, qty, unit: 'box', item_name: `เมนู ${item_id}`, ...extra });
 
-	async function recordService() {
+	async function recordService(mealPlanId = 'meal_plan:01ARZ3NDEKTSV4RRFFQ69G5FAV') {
 		return repo.recordMealService(
 			{
 				date: '2026-07-15',
 				meal: 'dinner' as const,
-				meal_plan_id: 'meal_plan:01ARZ3NDEKTSV4RRFFQ69G5FAV',
+				meal_plan_id: mealPlanId,
 				actual_yield: 120,
 				served: 0,
 				waste: 0,
@@ -810,6 +827,103 @@ describe('KitchenRemoteRepository.confirmMealServiceReceiptWithYield (cooked foo
 		const rows = await ledgerRows();
 		expect(rows).toHaveLength(1);
 		expect(rows[0].qty).toBe('50');
+	});
+
+	it('mints a lot number for every row it receives (#1070)', async () => {
+		const service = await recordService();
+		await repo.confirmMealServiceReceiptWithYield(
+			service,
+			[
+				resolved('item_master:A', '80', { storage_point: { id: 'p1', name: 'ตู้เย็น 1' } }),
+				resolved('item_master:B', '40')
+			],
+			ctx
+		);
+
+		const rows = await ledgerRows();
+		const lotNos = rows.map((r) => r.lot?.lot_no).sort();
+		expect(lotNos.every((lot) => LOT_NO_PATTERN.test(lot ?? ''))).toBe(true);
+		expect(new Set(lotNos).size).toBe(2);
+	});
+
+	it('continues the day sequence after lot numbers already on the ledger (#1070)', async () => {
+		// Match lotDateStamp (local calendar) — UTC `toISOString` drifts across midnight in Bangkok.
+		const stamp = lotDateStamp(new Date());
+		await memoryRepo.put({
+			_id: 'stock_ledger:earlier',
+			type: 'stock_ledger',
+			schema_v: 6,
+			item_id: 'item_master:Z',
+			qty: '1',
+			unit: 'box',
+			reason: 'donation',
+			ref_id: null,
+			occurred_at: new Date().toISOString(),
+			lot: { lot_no: `L-${stamp}-007` }
+		} as never);
+
+		const service = await recordService();
+		await repo.confirmMealServiceReceiptWithYield(service, [resolved('item_master:A', '10')], ctx);
+
+		const [row] = await ledgerRows();
+		expect(row.lot?.lot_no).toBe(`L-${stamp}-008`);
+	});
+
+	it('refuses to receive when the lot number lookup fails, rather than restarting at 001 (#1070)', async () => {
+		const stamp = lotDateStamp(new Date());
+		await memoryRepo.put({
+			_id: 'stock_ledger:earlier',
+			type: 'stock_ledger',
+			schema_v: 6,
+			item_id: 'item_master:Z',
+			qty: '1',
+			unit: 'box',
+			reason: 'donation',
+			ref_id: null,
+			occurred_at: new Date().toISOString(),
+			lot: { lot_no: `L-${stamp}-001` }
+		} as never);
+		const service = await recordService();
+		const find = vi.spyOn(memoryRepo, 'find').mockRejectedValueOnce(new Error('couch is down'));
+
+		await expect(
+			repo.confirmMealServiceReceiptWithYield(service, [resolved('item_master:A', '10')], ctx)
+		).rejects.toThrow('ออกเลขล็อตไม่สำเร็จ');
+
+		expect(await ledgerRows()).toHaveLength(0);
+		expect(await repo.listMealServiceReceipts()).toHaveLength(0);
+		find.mockRestore();
+	});
+
+	it('keeps the lot number a half-finished attempt already wrote (#1070)', async () => {
+		const service = await recordService();
+		const lines = [resolved('item_master:A', '10')];
+		const first = await repo.confirmMealServiceReceiptWithYield(service, lines, ctx);
+		const firstLotNo = first.ledger[0].lot?.lot_no;
+		await memoryRepo.remove(first.receipt);
+
+		const second = await repo.confirmMealServiceReceiptWithYield(service, lines, ctx);
+
+		expect(second.ledger[0].lot?.lot_no).toBe(firstLotNo);
+		expect(await ledgerRows()).toHaveLength(1);
+	});
+
+	it('reads back what was received for one meal service, and nothing else (#1070)', async () => {
+		const service = await recordService();
+		const other = await recordService('meal_plan:01ARZ3NDEKTSV4RRFFQ69G5FB0');
+		await repo.confirmMealServiceReceiptWithYield(
+			service,
+			[resolved('item_master:A', '80', { storage_point: { id: 'p1', name: 'ตู้เย็น 1' } })],
+			ctx
+		);
+		await repo.confirmMealServiceReceiptWithYield(other, [resolved('item_master:B', '40')], ctx);
+
+		const rows = await repo.listMealServiceLedger(service._id);
+
+		expect(rows).toHaveLength(1);
+		expect(rows[0].item_id).toBe('item_master:A');
+		expect(rows[0].lot?.storage_zone).toBe('ตู้เย็น 1');
+		expect(LOT_NO_PATTERN.test(rows[0].lot?.lot_no ?? '')).toBe(true);
 	});
 
 	it('refuses a second decision for the same meal_service', async () => {

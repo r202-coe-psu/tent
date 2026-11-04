@@ -7,6 +7,9 @@
  */
 import { z } from 'zod';
 import { isValidThaiNationalId } from '$lib/utils/thai-id';
+import { volunteerMobileSchema } from '$lib/utils/volunteer-phone';
+// Deep import: the volunteers barrel re-exports UI that imports this domain (cycle).
+import { openShifts } from '$lib/features/volunteers/domain/shift-closing';
 
 /** CR-092 §4 ticket statuses. `rejected` is deliberately absent — see the module notes. */
 export const TICKET_STATUSES = ['confirmed', 'pending_review', 'cancelled'] as const;
@@ -50,6 +53,8 @@ export type PublicJob = {
 	applicants_count?: number;
 	status: string;
 	requires_review: boolean;
+	/** Staff flagged the job as needing people urgently; absent from older projections. */
+	is_urgent?: boolean;
 };
 
 export type PublicJobShift = {
@@ -82,6 +87,8 @@ export type VolunteerTicket = {
 	 * hiding the button is the courtesy, not the control.
 	 */
 	can_cancel: boolean;
+	/** The application this pass shows; sent back on cancel so a stale pass cannot cancel another one. */
+	application_id?: string;
 	status: TicketStatus | string;
 	job_id: string;
 	shift_id?: string | null;
@@ -136,13 +143,8 @@ export type TicketSummary = {
 	end_time?: string;
 };
 
-/** Thai mobile numbers, tolerant of the separators people actually type. */
-const phoneField = z
-	.string()
-	.trim()
-	.min(1, 'กรุณากรอกเบอร์โทรศัพท์')
-	.transform((value) => value.replace(/[\s-()]/g, ''))
-	.refine((value) => /^0\d{8,9}$/.test(value), 'เบอร์โทรศัพท์ไม่ถูกต้อง');
+/** Volunteer mobile (10 digits, #951), tolerant of the separators people actually type. */
+const phoneField = z.string().trim().min(1, 'กรุณากรอกเบอร์โทรศัพท์').pipe(volunteerMobileSchema);
 
 /**
  * Optional on purpose. CR-092 lists the 13-digit ID as a main field, but a volunteer
@@ -160,6 +162,23 @@ const nationalIdField = z
 // Shared with registration (CR-148) — re-exported for existing volunteer-portal callers.
 export { isValidThaiNationalId };
 
+/** How many shifts one application request may carry — a month of daily shifts (#716). */
+export const MAX_SHIFTS_PER_APPLICATION = 31;
+
+/** One shift picked on the apply form, identified the same way a single-shift request is. */
+export const applyShiftSchema = z.object({
+	shift_id: z.string().trim().min(1).optional(),
+	shift_date: z
+		.string()
+		.trim()
+		.regex(/^\d{4}-\d{2}-\d{2}$/, 'รูปแบบวันที่ไม่ถูกต้อง (YYYY-MM-DD)')
+		.optional(),
+	start_time: z.string().trim().optional(),
+	end_time: z.string().trim().optional()
+});
+
+export type ApplyShift = z.infer<typeof applyShiftSchema>;
+
 export const volunteerApplySchema = z.object({
 	/** Used by the direct CouchDB writer to select the job's shelter database. */
 	shelter_code: z.string().trim().min(1).optional(),
@@ -171,6 +190,16 @@ export const volunteerApplySchema = z.object({
 	skills: z.array(z.string().trim().min(1)).default([]),
 	shift_id: z.string().trim().min(1, 'กรุณาเลือกกะ').optional(),
 	shift_date: z.string().trim().optional(),
+	/**
+	 * Several shifts of the same job in one request (#716). Each one becomes its own
+	 * `job_application`, exactly as if it had been sent alone; `shift_id` / `shift_date`
+	 * above stay for clients that still send a single shift.
+	 */
+	shifts: z
+		.array(applyShiftSchema)
+		.min(1, 'กรุณาเลือกกะ')
+		.max(MAX_SHIFTS_PER_APPLICATION, `เลือกได้ไม่เกิน ${MAX_SHIFTS_PER_APPLICATION} กะต่อครั้ง`)
+		.optional(),
 	station: z.string().trim().optional(),
 	/**
 	 * reCAPTCHA v3 token (FR-VOL-13.4). Optional in the schema because the BFF decides
@@ -193,9 +222,17 @@ export type PublicJobFilter = {
 	skill?: string;
 };
 
-/** A card can be applied to only while the projection still shows a free seat. */
-export function isJobApplicable(job: PublicJob): boolean {
-	return job.slots_remaining > 0 && job.status !== 'closed' && job.status !== 'cancelled';
+/**
+ * A card can be applied to only while the projection still shows a free seat and a shift
+ * that has not ended (#972).
+ */
+export function isJobApplicable(job: PublicJob, now: Date = new Date()): boolean {
+	if (job.status === 'closed' || job.status === 'cancelled') return false;
+	const shifts = job.shifts ?? [];
+	// With shift rows only the shifts that have not ended count; the job-level counter also
+	// includes ended ones. Without rows (an older projection) it is all there is (FR-6).
+	if (shifts.length === 0) return job.slots_remaining > 0;
+	return openShifts(shifts, now).some((shift) => (shift.slots_remaining ?? 0) > 0);
 }
 
 export const ticketFindSchema = z.object({ phone: phoneField });
@@ -321,6 +358,64 @@ export function buildStoredPortalSession(
 }
 
 /**
+ * `localStorage` key for an opt-in "จดจำเครื่องนี้" sign-in (#625, CR-127 note).
+ *
+ * The `TKT-VOL-` token is a permanent bearer credential, so remembering it lets anyone
+ * using this browser in the next week open that volunteer's portal. It is therefore
+ * opt-in (unticked by default), token sign-ins only, bounded by
+ * `PORTAL_REMEMBER_TTL_MS`, and dropped on sign-out or when the server no longer
+ * recognises the token.
+ */
+export const PORTAL_REMEMBER_KEY = 'volunteer-portal-remembered';
+
+/** How long a remembered device keeps signing in on its own — fixed from when it was ticked. */
+export const PORTAL_REMEMBER_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+
+/** What lands in `localStorage` for a remembered device. */
+export type RememberedPortalCredential = {
+	token: string;
+	portal_id: string;
+	remembered_until: number;
+};
+
+/**
+ * The record to remember for a sign-in, or `null` when it may not be remembered — only
+ * a ticket token is (a phone sign-in is cheap to repeat and not a secret worth keeping).
+ */
+export function buildRememberedPortalCredential(
+	credential: PortalCredential & { portal_id: string },
+	now: number = Date.now()
+): RememberedPortalCredential | null {
+	const token = credential.token ? normalizeTicketToken(credential.token) : null;
+	if (!token) return null;
+	return {
+		token,
+		portal_id: credential.portal_id,
+		remembered_until: now + PORTAL_REMEMBER_TTL_MS
+	};
+}
+
+/**
+ * Read a remembered device back out of `localStorage` (the parsed JSON). `null` when it
+ * is missing, malformed, expired, or claims to last longer than a remembered device
+ * ever may — the caller then forgets it and shows the sign-in screen.
+ */
+export function readRememberedPortalCredential(
+	raw: unknown,
+	now: number = Date.now()
+): (PortalCredential & { token: string; portal_id: string }) | null {
+	if (!raw || typeof raw !== 'object') return null;
+	const until = (raw as { remembered_until?: unknown }).remembered_until;
+	if (typeof until !== 'number' || now > until || until - now > PORTAL_REMEMBER_TTL_MS) {
+		return null;
+	}
+	const parsed = portalCredentialSchema.safeParse(raw);
+	if (!parsed.success || !('token' in parsed.data) || !parsed.data.portal_id) return null;
+	const token = normalizeTicketToken(parsed.data.token);
+	return token ? { token, portal_id: parsed.data.portal_id } : null;
+}
+
+/**
  * Whether a record just read back out of `sessionStorage` has aged past its clock.
  *
  * `raw` is the untyped, parsed JSON — not the schema-validated credential — because
@@ -340,6 +435,41 @@ const TRACKING_TOKEN_PREFIX = 'TKT-VOL-';
  * checker compares the embedded hash directly with `volunteer.tracking_token_hash`.
  */
 export const TRACKING_TOKEN_HASH_PREFIX = 'TKT-VOL-HASH-';
+
+/** Random bytes in a minted tracking token — 128 bits, so it cannot be guessed. */
+export const TRACKING_TOKEN_RANDOM_BYTES = 16;
+
+/**
+ * Turn CSPRNG output into a tracking token: the prefix plus the bytes as uppercase hex.
+ * The one place the minted format is written down — every mint site passes its own
+ * random bytes here (`randomBytes` on the server, `crypto.getRandomValues` in the
+ * browser), and {@link isMintedTicketToken} checks against the same constants, so the
+ * two can never drift apart.
+ */
+export function formatMintedTicketToken(bytes: Uint8Array): string {
+	if (bytes.length !== TRACKING_TOKEN_RANDOM_BYTES) {
+		throw new RangeError(`expected ${TRACKING_TOKEN_RANDOM_BYTES} random bytes`);
+	}
+	const hex = Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
+	return `${TRACKING_TOKEN_PREFIX}${hex.toUpperCase()}`;
+}
+
+const MINTED_TOKEN_RE = new RegExp(
+	`^${TRACKING_TOKEN_PREFIX}[0-9A-F]{${TRACKING_TOKEN_RANDOM_BYTES * 2}}$`,
+	'i'
+);
+
+/**
+ * True only for a full, freshly minted `TKT-VOL-` token — 128 random bits, so it cannot
+ * be guessed. Lookups with one may use the looser token rate limit; anything else
+ * (a phone number, a short or legacy code) keeps the strict lookup limit, because those
+ * can be enumerated (#625).
+ */
+export function isMintedTicketToken(credential: unknown): boolean {
+	if (!credential || typeof credential !== 'object') return false;
+	const token = (credential as { token?: unknown }).token;
+	return typeof token === 'string' && MINTED_TOKEN_RE.test(token.trim());
+}
 
 /**
  * Clean up a code that was typed, pasted or scanned, or `null` if it is not a tracking
@@ -459,3 +589,29 @@ export const dispatchRespondSchema = z.object({
 });
 
 export type DispatchRespondInput = z.infer<typeof dispatchRespondSchema>;
+
+/**
+ * Where a volunteer stands on staff-system access in one shelter (CR-221 FR-26): `none` = no
+ * linked account, or an account the public answer must not tell apart from it (a suspended
+ * account: phone-only callers must not learn that, Amendment A2); `lapsed` = account with
+ * nothing left in this shelter; `active`.
+ */
+export type PortalAccessStatusCode = 'none' | 'lapsed' | 'active';
+
+/**
+ * One shelter's row of the portal's "สิทธิ์ใช้งานระบบ" card. Exactly these keys and no more
+ * (CR-221 FR-28): the portal opens with a phone number, so nothing that names the account
+ * (username, email, issuer) may ever be added here.
+ */
+export type PortalAccessStatus = {
+	shelter_code: string;
+	shelter_name: string;
+	status: PortalAccessStatusCode;
+	/** Display label of the role shown; `null` unless `active`. */
+	role_label: string | null;
+	/**
+	 * `active`: ISO instant the grant ends (`null` for a permanent role). `lapsed`: when access
+	 * here ended (`null` when unknown). `null` for `none`.
+	 */
+	expires_at: string | null;
+};

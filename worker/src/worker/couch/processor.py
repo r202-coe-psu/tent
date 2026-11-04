@@ -7,7 +7,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from worker.couch.checkpoint import save_checkpoint
-from worker.masking import shelter_code_from_db_name
+from worker.masking import shelter_code_from_db_name, shelter_db_name
 from worker.mongo import (
     apply_donation,
     apply_job,
@@ -19,14 +19,19 @@ from worker.mongo import (
     apply_shelter_deactivate,
     apply_shift_assignment,
     apply_volunteer,
+    delete_closed_shelter_operations,
+    delete_jobs_for_shelter,
     delete_needs_for_shelter,
     delete_occupants_for_shelter,
     delete_persons_for_shelter,
     delete_stocks_for_shelter,
+    is_person_projected,
+    projected_shelter_status,
     refresh_occupancy,
     refresh_shelter_occupants,
     refresh_shelter_stock,
     resolve_shelter_code_for_registry_delete,
+    sync_booking_stay,
 )
 from worker.mongo.announcement import apply_announcement
 from worker.mongo.on_hand import refresh_on_hand
@@ -57,10 +62,73 @@ async def _reproject_needs(couch: Any, shelter_code: str) -> None:
         await apply_need(action, payload)
 
 
+async def _reproject_shelter_database(couch: Any, shelter_code: str) -> None:
+    """Rebuild a shelter DB's projections when its shelter (re)opens in public.
+
+    A cancelled shelter's projections were purged and its changes skipped meanwhile
+    (draft-shelter-cancelled-status.md); a closed one lost its needs, stocks and
+    occupants, and its persons too once retention expired (CR-183). Either way the DB
+    has to be rescanned — tailing from its checkpoint alone would leave the untouched
+    docs missing."""
+    database = shelter_db_name(shelter_code)
+    if not await couch.database_exists(database):
+        return
+    # Imported here: bootstrap → worker.quota → expiry imports bootstrap back.
+    from worker.couch.bootstrap import bootstrap_database
+
+    await bootstrap_database(couch, database)
+
+
+async def _process_closed_shelter_change(
+    couch: Any, database: str, shelter_code: str, change: dict[str, Any]
+) -> None:
+    """A closed shelter stays searchable, so only its persons follow CouchDB — an
+    opt-out or check-out after closing must still reach the public plane (CR-183 FR-10).
+    Everything operational was dropped on close and must not come back.
+
+    Persons are only updated or removed here, never added: a replay from an old
+    checkpoint (a closed shelter without ``closed_at`` is tailed but never bootstrapped)
+    or a change landing just after the retention deadline would otherwise re-publish
+    someone retention already deleted."""
+    doc_id = change.get("id")
+    if change.get("deleted"):
+        if doc_id:
+            await apply_person("delete", {"_id": doc_id})
+        return
+    doc = change.get("doc")
+    if not doc or doc.get("type") != "evacuee":
+        return
+    household = None
+    household_id = doc.get("household_id")
+    if household_id:
+        household = await couch.get_doc(database, str(household_id))
+    action, payload = project_evacuee(
+        doc, shelter_code=shelter_code, household=household
+    )
+    if action != "upsert" or (payload and await is_person_projected(payload["_id"])):
+        await apply_person(action, payload)
+    await sync_booking_stay(doc)
+
+
 async def process_change(couch: Any, database: str, change: dict[str, Any]) -> None:
     seq = change.get("seq")
     if seq is None:
         return
+
+    if database != REGISTRY_DB:
+        gated_code = shelter_code_from_db_name(database)
+        public_status = (
+            await projected_shelter_status(gated_code) if gated_code else None
+        )
+        if gated_code and public_status is None:
+            # Cancelled shelter (no public row): project nothing for it. Reverting the
+            # status rescans the DB via _reproject_shelter_database.
+            await save_checkpoint(database, seq)
+            return
+        if gated_code and public_status == "closed":
+            await _process_closed_shelter_change(couch, database, gated_code, change)
+            await save_checkpoint(database, seq)
+            return
 
     if change.get("deleted"):
         doc_id = change.get("id")
@@ -134,13 +202,29 @@ async def process_change(couch: Any, database: str, change: dict[str, Any]) -> N
         doc_type = doc.get("type")
         if doc_type == "shelter":
             action, payload = project_shelter(doc)
+            code = str(payload["_id"]) if payload and payload.get("_id") else None
+            previous_status = await projected_shelter_status(code) if code else None
+            closed = action == "upsert" and payload["status"] == "closed"
+            # FR-9 (#645): reopening has to rescan whether the row was purged
+            # (cancelled) or kept as closed — either way the DB was not fully projected.
+            relisted = (
+                action == "upsert"
+                and code is not None
+                and not closed
+                and previous_status in (None, "closed")
+            )
             await apply_shelter(action, payload)
-            if action == "delete" and payload and payload.get("_id"):
-                code = str(payload["_id"])
+            if action == "delete" and code:
                 await delete_persons_for_shelter(code)
                 await delete_occupants_for_shelter(code)
                 await delete_needs_for_shelter(code)
                 await delete_stocks_for_shelter(code)
+                # Cancelled shelter: its postings leave the volunteer board too.
+                await delete_jobs_for_shelter(code)
+            elif closed and code:
+                await delete_closed_shelter_operations(code, trigger="shelter_closed")
+            elif relisted and code:
+                await _reproject_shelter_database(couch, code)
         elif doc_type == "announcement":
             action, payload = project_announcement(doc)
             await apply_announcement(action, payload)
@@ -171,6 +255,7 @@ async def process_change(couch: Any, database: str, change: dict[str, Any]) -> N
                     doc, shelter_code=shelter_code, household=household
                 )
                 await apply_person(action, payload)
+                await sync_booking_stay(doc)
                 # EXT-005/007: check-in/out, zone move, or any other evacuee field change
                 # can shift the headcount/demographic breakdown and occupant list.
                 await refresh_occupancy(couch, shelter_code)
@@ -186,9 +271,15 @@ async def process_change(couch: Any, database: str, change: dict[str, Any]) -> N
                 # …and one that arrived without ever reserving — a walk-in staff keyed
                 # in — has to start holding it, or the counter hands the same goods out
                 # to a public donor as well.
-                await reserve_walk_in_quota(
+                walk_in_reconciled = await reserve_walk_in_quota(
                     couch, doc, shelter_code=shelter_code, now=now
                 )
+                # A booking that became `received` hands back what never arrived (its
+                # shortfall) now, not at the next ledger row (CR-206 FR-MP-27c) — a
+                # booking closed from its point receipts writes no ledger row of its own.
+                # A walk-in just reconciled the same shelter, so it needs no second pass.
+                if doc.get("status") == "received" and not walk_in_reconciled:
+                    await settle_shelved_quota(couch, shelter_code, now=now)
                 # New/updated declared items change remaining qty on the public board.
                 await _reproject_needs(couch, shelter_code)
             elif doc_type == "donation_campaign":

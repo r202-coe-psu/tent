@@ -25,12 +25,29 @@ import {
 	isRegistrationCompensationIncomplete
 } from './people.remote';
 import { UlidReservation } from '$lib/db/ulid-reservation';
+import { mintConsentStamp } from '$lib/features/consent/server';
 import type { EvacueeInput, Medical } from '../domain/people';
+import type { EvacueeSort } from '../domain/evacuee-sort';
+import type { EvacueeFilters } from './people.repository';
 import {
 	createKioskEvacueeFromCard,
 	createKioskWalkInHousehold,
-	type CardSnapshot
+	type CardSnapshot,
+	type EvacueeConsentWrite
 } from '../domain/people';
+
+const kioskConsent: EvacueeConsentWrite = {
+	consent: {
+		mode: 'full',
+		health: false,
+		...mintConsentStamp(new Date('2026-10-25T03:00:00.000Z')),
+		channel: 'kiosk',
+		given_by: 'self',
+		giver_evacuee_id: null,
+		recorded_verbally_by: null
+	},
+	searchExcluded: false
+};
 
 const ctx = { shelterCode: 'SH001', createdBy: 'tester' };
 
@@ -605,6 +622,83 @@ describe('PeopleRemoteRepository', () => {
 		});
 	});
 
+	describe('listEvacueesPaginated sort (#1061)', () => {
+		async function seed(names: [string, string][]) {
+			const saved = [];
+			for (const [first_name, last_name] of names) {
+				saved.push(await repo.createEvacuee(evInput({ first_name, last_name }), ctx));
+			}
+			return saved;
+		}
+
+		async function allPages(
+			pageSize: number,
+			search?: string,
+			filters?: EvacueeFilters,
+			sort?: EvacueeSort
+		) {
+			const first = await repo.listEvacueesPaginated(1, pageSize, search, filters, sort);
+			const rest = [];
+			for (let page = 2; page <= first.totalPages; page++) {
+				rest.push(await repo.listEvacueesPaginated(page, pageSize, search, filters, sort));
+			}
+			return [first, ...rest].flatMap((p) => p.items.map((e) => e.first_name));
+		}
+
+		it('defaults to newest-registered first on the unfiltered server-paged path', async () => {
+			await seed([
+				['A', 'One'],
+				['B', 'Two'],
+				['C', 'Three']
+			]);
+			const page = vi.spyOn(memoryRepo, 'pageByType');
+
+			expect(await allPages(2)).toEqual(['C', 'B', 'A']);
+			expect(page).toHaveBeenCalledWith('evacuee', expect.any(Function), 1, 2, {
+				descending: true
+			});
+		});
+
+		it('pages oldest-first server-side (ascending _all_docs)', async () => {
+			await seed([
+				['A', 'One'],
+				['B', 'Two'],
+				['C', 'Three']
+			]);
+			const page = vi.spyOn(memoryRepo, 'pageByType');
+
+			expect(await allPages(2, '', {}, 'oldest')).toEqual(['A', 'B', 'C']);
+			expect(page).toHaveBeenCalledWith('evacuee', expect.any(Function), 2, 2, {
+				descending: false
+			});
+		});
+
+		it('sorts by Thai name ก–ฮ across pages with no filter', async () => {
+			await seed([
+				['สมชาย', 'ใจดี'],
+				['เอกชัย', 'มั่นคง'],
+				['กมล', 'ศรีสุข']
+			]);
+			expect(await allPages(2, '', {}, 'name')).toEqual(['กมล', 'สมชาย', 'เอกชัย']);
+		});
+
+		it('keeps the chosen order on the client-paged path (search / filter)', async () => {
+			await seed([
+				['ข้อ', 'Match'],
+				['Other', 'Skip'],
+				['กมล', 'Match'],
+				['ฉัตร', 'Match']
+			]);
+
+			expect(await allPages(2, 'Match')).toEqual(['ฉัตร', 'กมล', 'ข้อ']);
+			expect(await allPages(2, 'Match', {}, 'oldest')).toEqual(['ข้อ', 'กมล', 'ฉัตร']);
+			expect(await allPages(2, 'Match', {}, 'name')).toEqual(['กมล', 'ข้อ', 'ฉัตร']);
+
+			const preRegistered = { status: 'pre_registered' as const };
+			expect(await allPages(10, '', preRegistered)).toEqual(['ฉัตร', 'กมล', 'Other', 'ข้อ']);
+		});
+	});
+
 	describe('listHouseholdsPaginated status filter', () => {
 		it('filters households by status and returns matching ids', async () => {
 			const a = await repo.createEvacuee(evInput({ first_name: 'A' }), ctx);
@@ -641,6 +735,63 @@ describe('PeopleRemoteRepository', () => {
 
 			const ids = await repo.listMatchingHouseholdIds('', undefined, { status: 'arriving' });
 			expect(ids).toEqual([arriving._id]);
+		});
+	});
+
+	describe('listCancellableEvacueeIds', () => {
+		it('keeps only hold-cancellable stays and ignores ids that were not selected', async () => {
+			const pre = await repo.createEvacuee(evInput({ first_name: 'Pre' }), ctx);
+			const checkedIn = await repo.createEvacuee(evInput({ first_name: 'In' }), ctx);
+			await repo.checkInEvacuee(checkedIn, ctx, 'zone-a');
+			const unselected = await repo.createEvacuee(evInput({ first_name: 'Other' }), ctx);
+
+			const ids = await repo.listCancellableEvacueeIds([pre._id, checkedIn._id]);
+
+			expect(ids).toEqual([pre._id]);
+			expect(ids).not.toContain(unselected._id);
+		});
+
+		it('returns an empty list for an empty selection', async () => {
+			await expect(repo.listCancellableEvacueeIds([])).resolves.toEqual([]);
+		});
+
+		it('ignores ids that no longer exist', async () => {
+			const pre = await repo.createEvacuee(evInput({ first_name: 'Pre' }), ctx);
+
+			const ids = await repo.listCancellableEvacueeIds([pre._id, 'evacuee:missing']);
+
+			expect(ids).toEqual([pre._id]);
+		});
+	});
+
+	describe('listCancellableHouseholdIds', () => {
+		async function makeHousehold(label: string, status: 'pre_registered' | 'arriving') {
+			const head = await repo.createEvacuee(evInput({ first_name: label }), ctx);
+			return repo.createHousehold(
+				{
+					label,
+					head_evacuee_id: head._id,
+					status,
+					municipality_zone: null,
+					community: null,
+					pets: [],
+					vehicles: []
+				},
+				ctx
+			);
+		}
+
+		it('keeps only pre_registered households', async () => {
+			const pre = await makeHousehold('Pre', 'pre_registered');
+			const arriving = await makeHousehold('Arriving', 'arriving');
+
+			const ids = await repo.listCancellableHouseholdIds([pre._id, arriving._id]);
+
+			expect(ids).toEqual([pre._id]);
+		});
+
+		it('returns an empty list for an empty selection', async () => {
+			await expect(repo.listCancellableHouseholdIds([])).resolves.toEqual([]);
 		});
 	});
 });
@@ -1557,7 +1708,8 @@ describe('check-in / check-out', () => {
 					citizen_id: '1234567890123',
 					photo_base64: 'data:image/jpeg;base64,AA=='
 				} as CardSnapshot,
-				ctx
+				ctx,
+				kioskConsent
 			);
 			const evacuee = {
 				...generated,
@@ -2519,7 +2671,7 @@ describe('kiosk walk-in household at Station 1', () => {
 			scanned_at: new Date().toISOString(),
 			device_id: 'KIOSK-01'
 		};
-		const created = createKioskEvacueeFromCard(snapshot, kioskCtx);
+		const created = createKioskEvacueeFromCard(snapshot, kioskCtx, kioskConsent);
 		const unlinked = {
 			...created,
 			current_stay: { ...created.current_stay, status: 'kiosk_registered' as const }

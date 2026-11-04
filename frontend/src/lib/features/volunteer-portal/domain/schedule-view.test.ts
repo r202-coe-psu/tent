@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { filterAndSortPortalActivities, mergePortalActivities } from './schedule-view';
+import {
+	distinctStation,
+	filterAndSortPortalActivities,
+	mergePortalActivities
+} from './schedule-view';
 import type { ScheduleShift, TicketSummary } from './volunteer';
 
 const shift = (overrides: Partial<ScheduleShift> = {}): ScheduleShift => ({
@@ -95,5 +99,23 @@ describe('portal schedule view', () => {
 				Date.parse('2026-09-09T00:00:00Z')
 			)
 		).toHaveLength(1);
+	});
+});
+
+describe('distinctStation', () => {
+	it('hides a station that only repeats the job title (the recorded default)', () => {
+		expect(distinctStation('ครัวกลาง', 'ครัวกลาง')).toBe(false);
+		expect(distinctStation(' Test Kin Koal ', 'test kin koal')).toBe(false);
+		expect(distinctStation('', 'ครัวกลาง')).toBe(false);
+		expect(distinctStation(null, 'ครัวกลาง')).toBe(false);
+	});
+
+	it('shows a real station', () => {
+		expect(distinctStation('ครัว อาคาร 2', 'ครัวกลาง')).toBe(true);
+	});
+
+	it('drops the repeated station from the portal card', () => {
+		const [activity] = mergePortalActivities([shift({ station: 'ครัวกลาง' })], []);
+		expect(activity?.description).toBe('');
 	});
 });

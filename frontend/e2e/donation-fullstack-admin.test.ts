@@ -39,8 +39,7 @@ import {
  * `E2E Donation admin …` shelter (README §4), driven through the back-office screens.
  *
  * Needs `docker compose up -d` (CouchDB, Mongo, worker, FastAPI) and a seeded catalog
- * (`pnpm seed`). Locally use the dev server — only it skips reCAPTCHA keys / the BFF's
- * per-IP rate limits (on `vite preview` also set DONATION_E2E_PACE=1):
+ * (`pnpm seed`). Locally use the dev server — only it skips reCAPTCHA keys:
  *   PLAYWRIGHT_TEST_BASE_URL=http://localhost:5173 \
  *     pnpm exec playwright test e2e/donation-fullstack-admin.test.ts
  * On a writable remote target (`E2E_BASE_URL` + `ALLOW_REMOTE_WRITES=true`, i.e. staging)
@@ -134,6 +133,12 @@ test.describe('Donation full-stack: back office', { tag: ['@critical', '@donatio
 			const row = page.getByRole('row').filter({ hasText: CAMPAIGN_ITEM });
 			await expect(row).toBeVisible();
 			await expect(row).toContainText('40 กระป๋อง');
+			// Every figure carries its unit, and what donors can still book has its own
+			// column (#689): จองแล้ว · ในคลัง · เป้าหมาย · คงเหลือรับได้.
+			const cells = row.getByRole('cell');
+			await expect(cells.nth(1)).toHaveText(/^\s*0\s*กระป๋อง\s*$/);
+			await expect(cells.nth(2)).toHaveText(/^\s*0\s*กระป๋อง\s*$/);
+			await expect(cells.nth(4)).toHaveText(/^\s*40\s*กระป๋อง\s*$/);
 
 			// The default level on the form is critical; the board reads the stored level.
 			await expect.poll(async () => (await boardLine(request))?.urgency, SYNC).toBe('critical');
@@ -176,6 +181,8 @@ test.describe('Donation full-stack: back office', { tag: ['@critical', '@donatio
 			await expect
 				.poll(async () => (await boardLine(request))?.status ?? 'gone', SYNC)
 				.not.toBe('open');
+			// A need closed by hand takes nothing more, whatever is left of its target.
+			await expect(cells.nth(4)).toHaveText(/^\s*0\s*กระป๋อง\s*$/);
 
 			// ── Reopen: no reason asked ─────────────────────────────────────────────
 			await row.getByRole('button', { name: 'เปิดรับบริจาค (Restore)' }).click();
@@ -199,7 +206,7 @@ test.describe('Donation full-stack: back office', { tag: ['@critical', '@donatio
 			await page.locator('#donor-name').fill(`E2E ดูคิว ${RUN_ID}`);
 			await page.locator('#donor-phone').fill('0889012345');
 			await page.getByRole('spinbutton', { name: 'ปริมาณ' }).fill('1');
-			await page.getByRole('button', { name: 'ถัดไป: เลือกจุดส่งมอบ' }).click();
+			await page.getByRole('button', { name: 'ถัดไป: นัดหมายการส่งของบริจาค' }).click();
 			await page.getByRole('button', { name: mode }).click();
 		}
 
@@ -523,7 +530,8 @@ test.describe('Donation full-stack: back office', { tag: ['@critical', '@donatio
 	test('Z teardown leaves nothing of this run behind', async ({ request }) => {
 		test.setTimeout(240_000);
 		const run = await teardownRun(request, ledger);
-		expect(run.shelters).toHaveLength(1);
+		// The ledger may also hold shelters from an aborted earlier run; this teardown purges those too.
+		expect(run.shelters).toContain(shelter.code);
 		await expectRunGone(request, run);
 	});
 });

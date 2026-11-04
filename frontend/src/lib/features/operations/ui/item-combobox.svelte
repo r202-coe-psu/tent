@@ -16,6 +16,7 @@
 		looksLikeBarcode,
 		type ItemMaster
 	} from '$lib/features/catalog';
+	import { partitionInStockFirst, sortInStockFirstByName } from '../domain/stock-availability-sort';
 	import {
 		filterStockFormItems,
 		toStockFormItems,
@@ -81,9 +82,20 @@
 
 	const selectedItem = $derived(items.find((item) => item._id === value) ?? null);
 
-	const filteredItems = $derived(filterStockFormItems(items, searchValue));
-
 	const query = $derived(searchValue.trim());
+
+	const filteredItems = $derived.by(() => {
+		const ranked = filterStockFormItems(items, searchValue);
+		const balances = balanceByItemId;
+		if (!balances) return ranked;
+		const getBalance = (item: StockFormItem) => balances.get(item._id);
+		if (query === '') return sortInStockFirstByName(ranked, getBalance, (item) => item.name);
+		// Keep search relevance; an exact barcode match stays pinned on top regardless of stock.
+		const scannedId = findItemByBarcode(items, query)?.item._id;
+		const pinned = scannedId ? ranked.filter((item) => item._id === scannedId) : [];
+		const rest = scannedId ? ranked.filter((item) => item._id !== scannedId) : ranked;
+		return [...pinned, ...partitionInStockFirst(rest, getBalance)];
+	});
 	const queryIsBarcode = $derived(looksLikeBarcode(query));
 	const shelterCode = $derived(getShelterCode());
 	const canCreate = $derived(
@@ -263,16 +275,16 @@
 			}}
 			onkeydown={handleInputKeydown}
 			class={cn(
-				'flex min-h-11 w-full rounded-md border border-input bg-background px-3 py-2 pr-28 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-none disabled:cursor-not-allowed disabled:bg-muted disabled:font-bold disabled:text-muted-foreground disabled:opacity-100',
+				'flex min-h-11 w-full rounded-md border border-input bg-white px-3 py-2 pr-36 text-sm shadow-xs ring-offset-background placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-none disabled:cursor-not-allowed disabled:bg-muted disabled:font-bold disabled:text-muted-foreground disabled:opacity-100',
 				className
 			)}
 		/>
-		<div class="absolute top-1/2 right-1 flex -translate-y-1/2 items-center gap-0.5">
+		<div class="absolute top-1/2 right-1 flex -translate-y-1/2 items-center">
 			{#if selectedItem && !disabled}
 				<Button
 					type="button"
 					variant="ghost"
-					class="min-h-9 min-w-9 px-2 text-sm font-semibold text-muted-foreground hover:text-foreground"
+					class="min-h-10 min-w-10 px-2 text-sm font-semibold text-muted-foreground hover:text-foreground"
 					onclick={(e) => {
 						e.preventDefault();
 						e.stopPropagation();
@@ -287,7 +299,7 @@
 				<Button
 					type="button"
 					variant="ghost"
-					class="min-h-9 min-w-9 px-2 text-muted-foreground hover:text-foreground"
+					class="min-h-10 min-w-10 px-2 text-muted-foreground hover:text-foreground"
 					onclick={(e) => {
 						e.preventDefault();
 						e.stopPropagation();
@@ -299,7 +311,7 @@
 				</Button>
 			{/if}
 			<Combobox.Trigger
-				class="inline-flex min-h-9 min-w-9 items-center justify-center rounded-md text-muted-foreground hover:bg-muted disabled:pointer-events-none"
+				class="inline-flex min-h-10 min-w-10 items-center justify-center rounded-md text-muted-foreground hover:bg-muted disabled:pointer-events-none"
 				{disabled}
 			>
 				<ChevronsUpDownIcon class="size-4 opacity-50" />
@@ -324,6 +336,7 @@
 					{#each filteredItems as item (item._id)}
 						{@const bal = balanceOf(item)}
 						{@const itemDisabled = isItemDisabled(item)}
+						{@const outOfStock = !!balanceByItemId && !qtyGt(bal, 0)}
 						<Combobox.Item
 							value={item._id}
 							label={item.name}
@@ -334,7 +347,7 @@
 								<div class="min-w-0 flex-1">
 									<div class="flex items-center gap-2">
 										<span
-											class="truncate font-semibold text-foreground {itemDisabled
+											class="truncate font-semibold text-foreground {itemDisabled || outOfStock
 												? 'opacity-50'
 												: ''}"
 										>
@@ -354,8 +367,12 @@
 											? 'border-primary/20 bg-primary/10 text-primary'
 											: 'border-destructive/20 bg-destructive/10 text-destructive'}"
 									>
-										{bal}
-										{unitLabel(item)}
+										{#if outOfStock}
+											หมด
+										{:else}
+											{bal}
+											{unitLabel(item)}
+										{/if}
 									</span>
 								{:else if formatBalanceUnit}
 									<!-- No balance to show: still say which unit the item counts in (#636). -->

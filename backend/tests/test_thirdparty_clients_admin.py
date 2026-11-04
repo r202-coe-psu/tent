@@ -242,6 +242,95 @@ async def test_create_m2_client_with_booking_and_residency_scopes(
     assert {"booking-write", "residency-read"} <= set(created.allowed_scopes)
 
 
+async def test_create_allows_occupant_search_scope(
+    client: AsyncClient, auth_headers: dict[str, str]
+) -> None:
+    """#736: EXT-012's `occupant-search` scope is grantable on create and on PATCH."""
+    response = await client.post(
+        "/v1/admin/thirdparty-clients",
+        headers=auth_headers,
+        json={"name": "Search partner", "allowed_scopes": ["location-read", "occupant-search"]},
+    )
+    assert response.status_code == 201, response.text
+
+    created = await ThirdPartyClient.get(response.json()["id"])
+    assert created is not None
+    assert "occupant-search" in created.allowed_scopes
+
+    updated = await client.patch(
+        f"/v1/admin/thirdparty-clients/{response.json()['id']}",
+        headers=auth_headers,
+        json={"allowed_scopes": ["occupant-search"]},
+    )
+    assert updated.status_code == 200, updated.text
+    assert updated.json()["allowed_scopes"] == ["occupant-search"]
+
+
+async def test_create_allows_booking_bypass_scope(
+    client: AsyncClient, auth_headers: dict[str, str]
+) -> None:
+    """#751: EOC's `booking-bypass` is grantable on create, rides on `booking-write`."""
+    response = await client.post(
+        "/v1/admin/thirdparty-clients",
+        headers=auth_headers,
+        json={
+            "name": "EOC bypass partner",
+            "module_name": "M2",
+            "allowed_scopes": ["booking-write", "booking-bypass"],
+        },
+    )
+    assert response.status_code == 201, response.text
+    assert set(response.json()["allowed_scopes"]) == {"booking-write", "booking-bypass"}
+
+    created = await ThirdPartyClient.get(response.json()["id"])
+    assert created is not None
+    assert {"booking-write", "booking-bypass"} <= set(created.allowed_scopes)
+
+
+async def test_update_scopes_grants_and_removes_booking_bypass(
+    client: AsyncClient, auth_headers: dict[str, str]
+) -> None:
+    created = await _create_client(client, auth_headers, allowed_scopes=["booking-write"])
+
+    granted = await client.patch(
+        f"/v1/admin/thirdparty-clients/{created['id']}",
+        headers=auth_headers,
+        json={"allowed_scopes": ["booking-write", "booking-bypass"]},
+    )
+    assert granted.status_code == 200, granted.text
+    assert granted.json()["allowed_scopes"] == ["booking-write", "booking-bypass"]
+
+    removed = await client.patch(
+        f"/v1/admin/thirdparty-clients/{created['id']}",
+        headers=auth_headers,
+        json={"allowed_scopes": ["booking-write"]},
+    )
+    assert removed.status_code == 200
+    assert removed.json()["allowed_scopes"] == ["booking-write"]
+    stored = await ThirdPartyClient.get(created["id"])
+    assert stored is not None
+    assert stored.allowed_scopes == ["booking-write"]
+
+
+async def test_booking_bypass_scope_reaches_the_minted_token(
+    client: AsyncClient, auth_headers: dict[str, str]
+) -> None:
+    """The scope a client holds is what its token carries (`/external/token`)."""
+    created = await _create_client(
+        client, auth_headers, module_name="M2", allowed_scopes=["booking-write", "booking-bypass"]
+    )
+    token = await client.post(
+        "/external/token",
+        json={
+            "grant_type": "client_credentials",
+            "client_id": created["client_id"],
+            "client_secret": created["client_secret"],
+        },
+    )
+    assert token.status_code == 200, token.text
+    assert set(token.json()["scopes"]) == {"booking-write", "booking-bypass"}
+
+
 async def test_create_without_module_name(
     client: AsyncClient, auth_headers: dict[str, str]
 ) -> None:

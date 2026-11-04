@@ -9,6 +9,7 @@ export const auditActionSchema = z.enum([
 	'conflict_resolved',
 	'manual_adjust',
 	'created',
+	'privacy_change',
 	'other'
 ]);
 export type AuditAction = z.infer<typeof auditActionSchema>;
@@ -36,7 +37,15 @@ export const auditEntryInputSchema = z.object({
 });
 export type AuditEntryInput = z.input<typeof auditEntryInputSchema>;
 
-export function createAuditEntry(input: AuditEntryInput, ctx: AuthorContext): AuditEntry {
+/**
+ * `id` pins the `_id` for a caller that must not record the same event twice (a retried
+ * request writes the same doc, which CouchDB then refuses as a conflict).
+ */
+export function createAuditEntry(
+	input: AuditEntryInput,
+	ctx: AuthorContext,
+	id?: string
+): AuditEntry {
 	const d = auditEntryInputSchema.parse(input);
 	return makeDoc(
 		'audit',
@@ -49,6 +58,7 @@ export function createAuditEntry(input: AuditEntryInput, ctx: AuthorContext): Au
 			...(d.context ? { context: d.context } : {}),
 			occurred_at: d.occurred_at ?? now()
 		},
-		ctx
+		ctx,
+		id
 	);
 }

@@ -28,6 +28,11 @@ export interface DonationRedirect extends BaseDoc {
 		category?: string;
 		condition?: string;
 		note?: string;
+		/**
+		 * Always `null` (CR-206 FR-MP-30): drop-off points belong to the origin shelter, so the
+		 * destination receives every line at any of its own points.
+		 */
+		drop_off_point_id?: null;
 	}>;
 	note: string | null;
 	/**
@@ -45,7 +50,8 @@ const redirectItemSchema = z.object({
 	unit: z.string().min(1),
 	category: z.string().optional(),
 	condition: z.string().optional(),
-	note: z.string().optional()
+	note: z.string().optional(),
+	drop_off_point_id: z.null().optional()
 });
 
 /** Body of `POST /api/back-office/donations/[query]/redirect`. */

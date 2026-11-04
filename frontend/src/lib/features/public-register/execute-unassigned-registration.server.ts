@@ -13,10 +13,12 @@ import {
 	toUnassignedRegistrationPayload,
 	type UnassignedRegistrationPayload
 } from './domain/unassigned-registration';
+import type { PublicConsentBody } from './domain/public-consent';
 
 export interface ExecuteUnassignedRegistrationOptions {
 	/** SvelteKit `fetch` (or test double) used for the upstream FastAPI call. */
 	fetch: typeof globalThis.fetch;
+	consent: PublicConsentBody;
 }
 
 export interface UnassignedRegistrationResult {
@@ -69,7 +71,8 @@ export async function executeUnassignedRegistration(
 	}
 
 	const upstreamBody: UnassignedRegistrationPayload = toUnassignedRegistrationPayload(input, {
-		joinRegistrationId
+		joinRegistrationId,
+		consent: options.consent
 	});
 
 	let apiRes: Response;

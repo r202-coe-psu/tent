@@ -62,6 +62,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from tent_model import ExternalBooking
+from tent_model.evacuee_consent import EVACUEE_SCHEMA_V
 
 from worker.couch.client import CouchClient
 from worker.masking import shelter_db_name
@@ -129,9 +130,6 @@ _MAX_TRACKED_FAILURES = 10_000
 _MAX_BACKOFF_EXPONENT = 16
 
 HOUSEHOLD_SCHEMA_V = 6
-# Evacuee schema_v history: 12 = CR-154 (gender nullable + registered_via "api"),
-# 13 = `preferred_zone` CR-159 (not written by this worker), 14 = `booking_ref` CR-169.
-EVACUEE_SCHEMA_V = 14
 AUDIT_SCHEMA_V = 1
 
 #: Stay statuses that hold a bed (schema.md §1.1 Forecast set) — a CID already in one
@@ -288,10 +286,11 @@ def build_evacuee_doc(
     created_by: str,
     now: str,
 ) -> dict[str, Any]:
-    """Couch ``evacuee`` (schema.md §1.1, schema_v 14) at ``pre_registered`` (FR-51).
+    """Couch ``evacuee`` (schema.md §1.1) at ``pre_registered`` (FR-51), without ``consent``.
 
     ``booking_ref`` is the partner ``booking_id`` shared by every person of one group
-    (CR-169 FR-60) — set on every new booking, single-person ones included.
+    (CR-169 FR-60) — set on every new booking, single-person ones included. Partner
+    bookings have no consent block; consent is collected at report-in (PDPA FR-44).
     """
     return {
         "_id": evacuee_id,

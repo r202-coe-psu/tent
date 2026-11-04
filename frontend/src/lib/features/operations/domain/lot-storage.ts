@@ -24,6 +24,8 @@ const LOT_NOTE_SYSTEM_VALUES: ReadonlySet<string> = new Set([
 export interface StoragePointRef {
 	id: string;
 	name: string;
+	/** Thai labels of what the point can hold, in enum order — shown in the picker. */
+	typeLabels?: readonly string[];
 }
 
 type LotLike = StockLot | null | undefined;
@@ -52,6 +54,12 @@ export function lotStorageName(
 /** {@link lotStorageName} with the "คลังหลัก" fallback, for display. */
 export function lotStorageLabel(lot: LotLike, points: readonly StoragePointRef[] = []): string {
 	return lotStorageName(lot, points) ?? DEFAULT_STORAGE_LABEL;
+}
+
+/** "ที่เก็บ · เลขล็อต" for display; just the place when the lot has no number. */
+export function lotDisplayName(lot: LotLike, points: readonly StoragePointRef[] = []): string {
+	const place = lotStorageLabel(lot, points);
+	return lot?.lot_no ? `${place} · ${lot.lot_no}` : place;
 }
 
 /**

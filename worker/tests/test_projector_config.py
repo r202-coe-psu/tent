@@ -47,13 +47,47 @@ def test_absent_fields_are_omitted_so_readers_fall_back():
     assert payload == {"_id": "config:app"}
 
 
-def test_public_portal_config_is_still_copied_whole():
+def test_public_portal_config_is_copied_except_footer_logos():
     doc = {"_id": "config:public_portal", "type": "config", "faqs": {"public": []}}
     assert project_config(doc) == ("upsert", doc)
 
 
+def test_public_portal_footer_logos_stay_in_couchdb():
+    """CR-184 Q2: the BFF serves logos from CouchDB; Mongo keeps neither entries nor stubs."""
+    doc = {
+        "_id": "config:public_portal",
+        "type": "config",
+        "faqs": {"public": []},
+        "line_oa_url": "https://line.me/x",
+        "footer_logos": [
+            {"id": "01J", "alt_th": "PSU", "order": 1, "is_published": False}
+        ],
+        "_attachments": {
+            "footer_logo_01J": {
+                "stub": True,
+                "content_type": "image/png",
+                "digest": "md5-x",
+            }
+        },
+    }
+
+    action, payload = project_config(doc)
+
+    assert action == "upsert"
+    assert payload == {
+        "_id": "config:public_portal",
+        "type": "config",
+        "faqs": {"public": []},
+        "line_oa_url": "https://line.me/x",
+    }
+    assert "footer_logos" in doc and "_attachments" in doc  # source doc is not mutated
+
+
 def test_other_config_singletons_are_ignored():
-    assert project_config({"_id": "config:something_else", "type": "config"}) == ("noop", None)
+    assert project_config({"_id": "config:something_else", "type": "config"}) == (
+        "noop",
+        None,
+    )
 
 
 def test_empty_doc_is_ignored():

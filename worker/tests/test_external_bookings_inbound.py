@@ -223,8 +223,10 @@ def test_build_evacuee_doc_shape():
     )
     assert doc["_id"] == "evacuee:E1"
     assert doc["type"] == "evacuee"
-    assert doc["schema_v"] == 14
+    assert doc["schema_v"] == 15
     assert doc["booking_ref"] == "BK-01TEST"
+    assert "consent" not in doc
+    assert doc["privacy"] == {"search_excluded": False}
     assert doc["gender"] is None
     assert doc["last_name"] == ""
     assert doc["person_id"] == {"cardType": "national_id", "number": CID}
@@ -267,7 +269,7 @@ async def test_pending_booking_written_and_pii_cleared(db):
     assert evacuee["_id"] == row["evacuee_id"]
     assert evacuee["gender"] is None
     assert evacuee["registered_via"] == "api"
-    assert evacuee["schema_v"] == 14
+    assert evacuee["schema_v"] == 15
     assert evacuee["booking_ref"] == BOOKING_ID
     assert evacuee["person_id"]["number"] == CID
     assert evacuee["created_by"] == "partner:M2"
@@ -299,7 +301,7 @@ async def test_group_of_three_written_with_shared_booking_ref(db, caplog):
     evacuees = [d for d in docs if d["type"] == "evacuee"]
     assert len(households) == len(evacuees) == 3
     assert {d["booking_ref"] for d in evacuees} == {BOOKING_ID}
-    assert {d["schema_v"] for d in evacuees} == {14}
+    assert {d["schema_v"] for d in evacuees} == {15}
     assert [d["person_id"]["number"] for d in evacuees] == [_cid(0), _cid(1), _cid(2)]
     # 1 person = 1 household (no automatic merge — CR-169 D4).
     assert len({d["household_id"] for d in evacuees}) == 3

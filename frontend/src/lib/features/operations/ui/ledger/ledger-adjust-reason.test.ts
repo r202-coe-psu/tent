@@ -78,7 +78,7 @@ describe('toLedgerRow adjust reason', () => {
 		const row = toLedgerRow(received, lookup);
 		expect(row.adjustReason).toBeNull();
 		expect(row.adjustReasonLabel).toBe('');
-		expect(row.detail).toBe('donation:DN-1');
+		expect(row.detail).toBe('ใบบริจาค · DN-1');
 	});
 
 	it('exports the reason in the CSV reason/destination column', () => {

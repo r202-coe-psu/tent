@@ -5,6 +5,7 @@
 	import MapPin from '@lucide/svelte/icons/map-pin';
 	import Pencil from '@lucide/svelte/icons/pencil';
 	import Printer from '@lucide/svelte/icons/printer';
+	import FileText from '@lucide/svelte/icons/file-text';
 	import ShieldAlert from '@lucide/svelte/icons/shield-alert';
 	import {
 		evacueeAgeYears,
@@ -40,6 +41,7 @@
 		onOpenZoneModal,
 		onOpenStatusModal,
 		onOpenQrModal,
+		onOpenHandoverSlip,
 		onOpenPersonalEdit,
 		onOpenEmergencyEdit
 	}: {
@@ -54,6 +56,7 @@
 		onOpenZoneModal: () => void;
 		onOpenStatusModal: () => void;
 		onOpenQrModal: () => void;
+		onOpenHandoverSlip: () => void;
 		onOpenPersonalEdit: () => void;
 		onOpenEmergencyEdit: () => void;
 	} = $props();
@@ -228,6 +231,16 @@
 				>
 					<Printer class="size-4 opacity-75" />
 					พิมพ์ QR
+				</button>
+				<button
+					type="button"
+					onclick={onOpenHandoverSlip}
+					class="inline-flex {isCompact
+						? 'min-h-11'
+						: 'min-h-10'} w-full cursor-pointer items-center justify-center gap-1.5 rounded-xl border border-slate-200/80 bg-white px-3 py-2 text-sm font-semibold text-slate-800 transition-colors hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none"
+				>
+					<FileText class="size-4 opacity-75" />
+					พิมพ์ใบส่งตัว
 				</button>
 			</div>
 		{:else}

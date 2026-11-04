@@ -1,15 +1,10 @@
-import { dev } from '$app/environment';
 import { json } from '@sveltejs/kit';
 import { env } from '$env/dynamic/private';
 import type { RequestHandler } from './$types';
 import { z } from 'zod';
-import { isCaptchaKeyConfigured } from '$lib/features/public-register/server';
+import { volunteerMobileSchema } from '$lib/utils/volunteer-phone';
 import { ReCaptchaProvider } from '$lib/server/security/captcha';
 import { verifyRecaptchaOrSkip } from '$lib/server/security/recaptcha-gate';
-import {
-	volunteerApplyIpLimiter,
-	volunteerApplyPhoneLimiter
-} from '$lib/server/security/rate-limiter';
 import {
 	applyPublicVolunteerApplication,
 	PublicApplicationError
@@ -24,12 +19,7 @@ const applySchema = z.object({
 	applicant: z.object({
 		first_name: z.string().trim().min(1, 'กรุณาระบุชื่อ'),
 		last_name: z.string().trim().min(1, 'กรุณาระบุนามสกุล'),
-		phone: z
-			.string()
-			.trim()
-			.min(1, 'กรุณาระบุเบอร์โทรศัพท์')
-			.transform((value) => value.replace(/\D/g, ''))
-			.pipe(z.string().regex(/^0\d{8,9}$/, 'เบอร์โทรศัพท์ไม่ถูกต้อง (เช่น 0812345678)')),
+		phone: z.string().trim().min(1, 'กรุณาระบุเบอร์โทรศัพท์').pipe(volunteerMobileSchema),
 		email: z.string().email().nullable().optional(),
 		skills: z.array(z.string().trim().min(1)).default([])
 	}),
@@ -72,18 +62,6 @@ export const POST: RequestHandler = async ({ request, getClientAddress }) => {
 
 	const { job_id, shelter_code, applicant, selected_shift, recaptcha_token } = parsed.data;
 	const ip = getClientAddress();
-	const skipDevGuards =
-		dev && !isCaptchaKeyConfigured(env.RECAPTCHA_PROJECT_ID || env.SECRET_RECAPTCHA_KEY);
-
-	if (
-		!skipDevGuards &&
-		(!volunteerApplyIpLimiter.check(ip) || !volunteerApplyPhoneLimiter.check(applicant.phone))
-	) {
-		return json(
-			{ success: false, error: 'RATE_LIMITED', message: 'กรุณารอสักครู่แล้วลองใหม่อีกครั้ง' },
-			{ status: 429, headers: noStore }
-		);
-	}
 
 	const captcha = await verifyRecaptchaOrSkip({
 		token: recaptcha_token ?? '',
@@ -119,6 +97,7 @@ export const POST: RequestHandler = async ({ request, getClientAddress }) => {
 				JOB_NOT_FOUND: 'ไม่พบงานที่ระบุในระบบ',
 				JOB_NOT_OPEN: 'งานนี้ปิดรับสมัครแล้ว',
 				JOB_FULL: 'งานนี้มีผู้สมัครเต็มจำนวนแล้ว',
+				SHIFT_CLOSED: 'กะเวลานี้สิ้นสุดแล้ว ปิดรับสมัคร',
 				SHIFT_NOT_FOUND: 'ไม่พบกะเวลาที่เลือก',
 				SHIFT_FULL: 'กะเวลานี้มีผู้สมัครเต็มจำนวนแล้ว',
 				SHIFT_ID_REQUIRED: 'กรุณาเลือกกะเวลาที่ต้องการปฏิบัติงาน',
@@ -127,6 +106,7 @@ export const POST: RequestHandler = async ({ request, getClientAddress }) => {
 				AMBIGUOUS_VOLUNTEER: 'พบข้อมูล volunteer มากกว่าหนึ่ง profile กรุณาติดต่อเจ้าหน้าที่',
 				TIME_CONFLICT: 'คุณมีกะงานอื่นที่เวลาทับซ้อนกัน',
 				JOB_NOT_READY: 'ระบบกำลังปรับปรุงข้อมูล กรุณาลองใหม่อีกครั้ง',
+				WRITER_UNAVAILABLE: 'ระบบรับสมัครขัดข้องชั่วคราว กรุณาลองใหม่ภายหลังหรือแจ้งเจ้าหน้าที่',
 				WRITE_FAILED: 'ไม่สามารถบันทึกข้อมูลได้ กรุณาลองใหม่อีกครั้ง'
 			};
 			return json(

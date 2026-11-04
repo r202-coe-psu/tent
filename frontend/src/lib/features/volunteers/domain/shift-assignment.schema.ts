@@ -1,6 +1,7 @@
 /**
  * Shift assignment domain schema — CR-107 (`shift_assignment` schema_v 3 → 4),
- * CR-108 (schema_v 4 → 5: check-out actor + manual-override reason).
+ * CR-108 (schema_v 4 → 5: check-out actor + manual-override reason),
+ * CR-220 (schema_v 5 → 6: `cancel_application_id` stamp from the ticket cancel).
  *
  * Pure TypeScript / Zod — no I/O, no PouchDB, no Svelte.
  */
@@ -73,7 +74,7 @@ export const SHIFT_WINDOWS: Readonly<
 
 export interface ShiftAssignment extends BaseDoc {
 	type: 'shift_assignment';
-	schema_v: 3 | 4 | 5;
+	schema_v: 3 | 4 | 5 | 6;
 	/** F12 — `job:{ulid}`, or the migration sentinel `'legacy'` (schema.md §2.9 v1 → v2 migration note). */
 	job_id: string;
 	/** Stable identity of the concrete row in job.shifts[]. Optional only on legacy v3 rows. */
@@ -99,6 +100,12 @@ export interface ShiftAssignment extends BaseDoc {
 	check_out_method: CheckInMethod;
 	/** CR-108 — required when `check_out_method === 'manual_override'`. */
 	check_out_reason: string | null;
+	/**
+	 * CR-220 — `job_application:{ulid}` whose ticket cancel cancelled this assignment. Written
+	 * with `status: cancelled` by the public ticket cancel only; its absence means the quota
+	 * of this assignment was handled by another path (portal withdraw, staff unassign).
+	 */
+	cancel_application_id?: string | null;
 }
 
 /** F12 — schema.md §2.9 v1 → v2 migration writes `job_id: 'legacy'` on rows that predate the `job` link; new writes must still use `job:{ulid}`. */
@@ -106,12 +113,30 @@ const jobIdSchema = z.string().refine((v) => v === 'legacy' || v.startsWith('job
 	message: 'job_id ต้องขึ้นต้นด้วย job: (หรือเป็น "legacy" สำหรับข้อมูลเก่า)'
 });
 
-export const shiftAssignmentSchema = z
+/**
+ * schema.md §2.9 "Migration (schema_v 4 → 5)": docs older than v5 (e.g. worker-written v4) lack
+ * `check_out_by/method/reason`; fill the documented defaults (null / 'qr' / null) on read.
+ * Fills missing keys only — present values (even null) are never overwritten.
+ */
+export function normalizeLegacyShiftAssignment<T>(doc: T): T {
+	if (typeof doc !== 'object' || doc === null || Array.isArray(doc)) return doc;
+	const d = doc as Record<string, unknown>;
+	const defaults: Record<string, unknown> = {
+		check_out_by: null,
+		check_out_method: 'qr',
+		check_out_reason: null
+	};
+	const missing = Object.keys(defaults).filter((k) => d[k] === undefined);
+	if (missing.length === 0) return doc;
+	return { ...d, ...Object.fromEntries(missing.map((k) => [k, defaults[k]])) } as T;
+}
+
+const shiftAssignmentDocSchema = z
 	.object({
 		_id: z.string().startsWith('shift_assignment:'),
 		_rev: z.string().optional(),
 		type: z.literal('shift_assignment'),
-		schema_v: z.union([z.literal(3), z.literal(4), z.literal(5)]),
+		schema_v: z.union([z.literal(3), z.literal(4), z.literal(5), z.literal(6)]),
 		shelter_code: z.string().min(1),
 		created_at: z.string(),
 		updated_at: z.string(),
@@ -132,7 +157,8 @@ export const shiftAssignmentSchema = z
 		check_in_method: checkInMethodSchema,
 		check_in_reason: z.string().nullable(),
 		check_out_method: checkInMethodSchema,
-		check_out_reason: z.string().nullable()
+		check_out_reason: z.string().nullable(),
+		cancel_application_id: z.string().nullable().optional()
 	})
 	.refine(
 		(d) =>
@@ -152,6 +178,12 @@ export const shiftAssignmentSchema = z
 			path: ['check_out_reason']
 		}
 	);
+
+/** Same contract as the doc schema; legacy docs are normalized (defaults filled) before parsing. */
+export const shiftAssignmentSchema = z.preprocess(
+	normalizeLegacyShiftAssignment,
+	shiftAssignmentDocSchema
+);
 
 export const isShiftAssignment = (d: unknown): d is ShiftAssignment =>
 	shiftAssignmentSchema.safeParse(d).success;
@@ -205,7 +237,7 @@ export function makeShiftAssignment(
 	const check_out_method = fields.check_out_method ?? 'qr';
 	const doc = makeDoc(
 		'shift_assignment',
-		5,
+		6,
 		{
 			job_id: d.job_id,
 			shift_id: d.shift_id,

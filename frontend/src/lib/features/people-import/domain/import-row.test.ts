@@ -98,6 +98,24 @@ describe('validateRow — cell resolution', () => {
 		expect(result.payload?.head.phone).toBe('0812345678');
 	});
 
+	it('normalises +66 and rejects a 9-digit landline (CR-210)', () => {
+		const intl = validateRow(minimalHead({ [H.phone]: '+66812345678' }), 1, emptyLookups());
+		expect(intl.payload?.head.phone).toBe('0812345678');
+
+		const landline = validateRow(minimalHead({ [H.phone]: '02-222-2222' }), 1, emptyLookups());
+		expect(landline.payload).toBeUndefined();
+		expect(landline.errors.map((e) => e.column)).toContain(H.phone);
+	});
+
+	it('rejects a 9-digit emergency phone', () => {
+		const result = validateRow(
+			minimalHead({ [H.emergency_name]: 'สมหญิง ใจดี', [H.emergency_phone]: '022222222' }),
+			1,
+			emptyLookups()
+		);
+		expect(result.errors.map((e) => e.column)).toContain(H.emergency_phone);
+	});
+
 	it('reads "ไม่มี" as no phone', () => {
 		const result = validateRow(minimalHead({ [H.phone]: 'ไม่มี' }), 1, emptyLookups());
 		expect(result.ok).toBe(true);
@@ -289,5 +307,68 @@ describe('validateWorkbook', () => {
 		};
 
 		expect(orphanMemberRows(wb).map((m) => m.line)).toEqual([3]);
+	});
+});
+
+describe('validateRow — โรคประจำตัว maps onto master chronic_disease (CR-186 FR-9)', () => {
+	const lookups = {
+		medical_conditions: [
+			{ code: 'diabetes', label_th: 'เบาหวาน', label_en: 'Diabetes' },
+			{ code: 'asthma', label_th: 'หอบหืด', label_en: 'Asthma' }
+		]
+	};
+
+	it('stores matching labels and codes as codes, deduped, and keeps the rest as text', () => {
+		const result = validateRow(
+			minimalHead({ [H.medical_conditions]: 'เบาหวาน|diabetes|โรคเกาต์' }),
+			1,
+			lookups
+		);
+
+		expect(result.ok).toBe(true);
+		expect(result.payload?.head.medical_conditions).toEqual(['diabetes', 'โรคเกาต์']);
+	});
+
+	it('warns about free-text values without blocking the row', () => {
+		const result = validateRow(
+			minimalHead({ [H.medical_conditions]: 'เบาหวาน|โรคเกาต์' }),
+			1,
+			lookups
+		);
+
+		expect(result.ok).toBe(true);
+		expect(result.errors).toEqual([]);
+		expect(result.warnings).toHaveLength(1);
+		expect(result.warnings[0]).toMatchObject({ column: H.medical_conditions });
+		expect(result.warnings[0].message).toContain('โรคเกาต์');
+		expect(result.warnings[0].message).not.toContain('เบาหวาน');
+	});
+
+	it('points a member warning at the member sheet and its row', () => {
+		const result = validateRow(minimalHead(), 1, lookups, [
+			memberRow(
+				{
+					[H.first_name]: 'สมหญิง',
+					[H.last_name]: 'ใจดี',
+					[H.gender]: 'หญิง',
+					[H.medical_conditions]: 'ASTHMA|ไมเกรน'
+				},
+				3
+			)
+		]);
+
+		expect(result.payload?.members[0].evacuee.medical_conditions).toEqual(['asthma', 'ไมเกรน']);
+		expect(result.warnings[0]).toMatchObject({ sheet: 'สมาชิก', line: 3 });
+	});
+
+	it('keeps values as typed and raises no warning when no master list is loaded', () => {
+		const result = validateRow(
+			minimalHead({ [H.medical_conditions]: 'เบาหวาน|โรคเกาต์' }),
+			1,
+			emptyLookups()
+		);
+
+		expect(result.payload?.head.medical_conditions).toEqual(['เบาหวาน', 'โรคเกาต์']);
+		expect(result.warnings).toEqual([]);
 	});
 });

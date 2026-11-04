@@ -3,7 +3,7 @@ id: CR-158
 title: Kiosk staff PIN — ข้ามการตรวจใบหน้าได้เฉพาะเมื่อเจ้าหน้าที่ใส่ PIN ของเครื่อง (PIN ต่อเครื่อง เก็บใน DB scanner_secrets)
 status: approved
 date: 2026-10-10
-updated: 2026-10-13 # ข้อเสนอแก้ไข §8 approved โดย Dev/Team Lead Soravit Sukkarn (รับ requirement จากหัวหน้าโครงการเมื่อวาน 2026-10-12)
+updated: 2026-10-24 # §9 ข้อเสนอ (ทีม kiosk, #796) PIN ข้ามเลขบัตร 4 ตัวท้ายใน reprint — รอ Team Lead · §8 approved 2026-10-13 โดย Dev/Team Lead Soravit Sukkarn (รับ requirement จากหัวหน้าโครงการ 2026-10-12)
 requested_by: ทีม kiosk
 decided_by: Soravit Sukkarn (Team Lead)
 layer: volatile
@@ -29,6 +29,8 @@ migration: additive — doc scanner_device v1 อ่านเป็น "ยั�
 # CR-158: Kiosk staff PIN — ข้ามการตรวจใบหน้าได้เฉพาะเมื่อเจ้าหน้าที่ใส่ PIN ของเครื่อง
 
 > **ข้อเสนอแก้ไข 2026-10-13 (approved โดย Team Lead):** §8 ท้ายเอกสาร — Soravit Sukkarn (Team Lead) อนุมัติแล้ว โดยรับ requirement จากหัวหน้าโครงการเมื่อ 2026-10-12: การตรวจใบหน้านับเฉพาะหน้าในกรอบวงรี · PIN ของเครื่องใช้เปิดปุ่ม test print ด้วย (CR-150 §6)
+
+> **ข้อเสนอแก้ไข 2026-10-24 (ทีม kiosk เสนอ — ยังไม่ approved):** §9 ท้ายเอกสาร — ใช้ PIN ของเครื่องข้ามการกรอกเลขบัตร 4 ตัวท้ายใน flow พิมพ์ QR ซ้ำ (`/kiosk/reprint`, #796)
 
 > **สรุป (TL;DR):**
 >
@@ -220,6 +222,7 @@ mode `off`: ไม่เปลี่ยน ไม่มี PIN (mode `shadow` �
 - 2026-10-11 — approved โดย Soravit Sukkarn (Team Lead) (รันเลข CR-158)
 - 2026-10-13 — ทีม kiosk เสนอ §8 จาก feedback หน้างาน: คนเดินผ่านด้านหลังทำให้ตรวจหน้าไม่ผ่าน (`multiple_faces`) → ตรวจเฉพาะหน้าในกรอบวงรี
 - 2026-10-13 — Soravit Sukkarn (Team Lead) approved ข้อเสนอแก้ไข §8 โดยรับ requirement จากหัวหน้าโครงการเมื่อวาน (2026-10-12)
+- 2026-10-24 — ทีม kiosk เสนอ §9 (#796): PIN ของเครื่องข้ามเลขบัตร 4 ตัวท้ายใน reprint · ตรวจ PIN ใน request reprint เอง (ไม่ใช้ผลของ `/staff-pin/verify`) · audit = server log (reprint ยังไม่เขียน DB) — รอ Team Lead
 
 ## 8. ข้อเสนอแก้ไข 2026-10-13 (approved โดย Team Lead)
 
@@ -233,3 +236,19 @@ mode `off`: ไม่เปลี่ยน ไม่มี PIN (mode `shadow` �
 
 - **AC-15** คนยืนในกรอบ + คนเดินผ่านด้านหลัง → ตรวจหน้าผ่าน · 2 คนในกรอบ →「กรุณาให้มีเพียงท่านเดียวในภาพ」
 - **Risk:** ค่ากรอบอยู่ทั้ง Svelte และ Python (ต่างภาษา) — cross-ref ด้วยคอมเมนต์ · กล้องที่แคบกว่า 4:3 วงรีจะคลาดเคลื่อน
+
+## 9. ข้อเสนอแก้ไข 2026-10-24 — PIN ข้ามเลขบัตร 4 ตัวท้ายใน reprint (ทีม kiosk เสนอ, #796 — ยังไม่ approved)
+
+> **สรุป (TL;DR):** ขั้นยืนยันเลขบัตรประชาชน 4 ตัวท้ายของ `/kiosk/reprint` มีปุ่ม「ให้เจ้าหน้าที่ยืนยันด้วย PIN」 · server ตรวจ PIN ของเครื่อง**ใน request reprint เอง** ด้วยกติกา verify เดิม (FR-8..10) · ใช้ได้แม้ primary ไม่มีเลขบัตรในระบบ · ไม่กระทบ schema · reprint ยังไม่เขียน DB
+
+| ID    | Requirement |
+| :---- | :---------- |
+| FR-33 | `POST /api/v1/kiosk/reprint` รับ `id_last4` (ตัวเลข 4 หลัก) **หรือ** `staff_pin` อย่างใดอย่างหนึ่งเท่านั้น — ส่งทั้งคู่หรือไม่ส่งเลย = `400 INVALID_REPRINT_INPUT` |
+| FR-34 | ส่ง `staff_pin`: ตรวจ phone / shelter scope ของ primary **ก่อน** (ไม่พบ = `404 KIOSK_REPRINT_NOT_FOUND` โดยไม่ตรวจ PIN) แล้วตรวจ PIN ของเครื่องที่ยืนยันตัวตนแล้วผ่าน `verifyDeviceStaffPin` + `staffPinThrottle` ตัวเดียวกับ `/staff-pin/verify` · ไม่ดูเลขบัตรของ primary (ไม่มีเลขบัตรก็พิมพ์ได้) · การกรองสมาชิก (household / shelter / สถานะ reprint ได้) เหมือนเดิม |
+| FR-35 | ผลของ PIN: ผิด (รวม format ผิด) → `401 KIOSK_REPRINT_STAFF_PIN_INVALID` หลังหน่วง ~1 วินาที · เครื่องไม่มี PIN → `409 staff_pin_not_set` · คิวเต็ม → `429 RATE_LIMITED` · `scanner_secrets` ใช้ไม่ได้ → `503 DEPENDENCY_UNAVAILABLE` |
+| FR-36 | Audit: ทุกการตรวจ PIN log `[scanner-staff-pin] verify device=… result=…` และเมื่อพิมพ์ด้วย PIN สำเร็จ log `[kiosk-reprint] staff_pin_bypass device=… shelter=… primary=… labels=N at=…` — **ห้าม log PIN / เบอร์ / ชื่อ** · ยังไม่บันทึกลง CouchDB (ตาม trust boundary §2.4) |
+| FR-37 | Kiosk: panel PIN เดิม (`KioskStaffPinEntry`) · PIN ผิด/ตรวจไม่สำเร็จให้ลองใหม่ได้ · ไม่มี PIN แสดง「ยังข้ามขั้นตอนนี้ไม่ได้ กรุณาติดต่อผู้ดูแลระบบ」 · ยกเลิก / 30 วินาทีไม่แตะ → กลับขั้นกรอกเลข 4 ตัว · PIN ไม่อยู่ใน URL / log / storage |
+
+- **AC-16** primary ไม่มีเลขบัตร → กรอกเลข 4 ตัวได้「ไม่สามารถยืนยันตัวตนได้」→ เจ้าหน้าที่กด PIN → ใส่ PIN ถูก → พิมพ์ QR ของสมาชิกที่เลือก
+- **AC-17** PIN ผิด → ไม่พิมพ์, ตอบหลัง ~1 วินาที, server log มีบรรทัด verify `result=wrong` ไม่มีค่า PIN
+- **Impact:** `frontend/src/lib/features/kiosk/{server/kiosk-reprint.server.ts,data/kiosk-check-in.api.ts,application/reprint-session.svelte.ts,ui/kiosk-reprint.svelte}` · `frontend/src/routes/api/v1/kiosk/reprint/+server.ts` · `docs/data/api-contract.md` §2.2 · `kiosk/app/manager.py` อนุญาต path นี้อยู่แล้ว (ไม่ต้องแก้)

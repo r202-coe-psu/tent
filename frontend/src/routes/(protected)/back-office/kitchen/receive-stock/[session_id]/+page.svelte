@@ -15,9 +15,11 @@
 		useMealPlans,
 		useMealServices,
 		useMealServiceReceipts,
+		useMealServiceLedger,
 		useConfirmMealServiceYield,
 		useRejectMealServiceReceipt,
 		mealServiceReceiptOutcome,
+		mealServiceRef,
 		toYieldReceiptInput,
 		yieldReceiptInputSchema,
 		yieldTotal,
@@ -71,6 +73,15 @@
 		activeServiceReceipt ? mealServiceReceiptOutcome(activeServiceReceipt) : undefined
 	);
 	const serviceReceiptConfirmed = $derived(activeServiceOutcome === 'confirmed');
+	const receivedLedger = useMealServiceLedger(
+		() => activeService?._id ?? '',
+		() => serviceReceiptConfirmed
+	);
+	const receivedLines = $derived(
+		[...(receivedLedger.data ?? [])].sort((a, b) =>
+			(a.lot?.note ?? '').localeCompare(b.lot?.note ?? '')
+		)
+	);
 	const serviceRejected = $derived(activeServiceOutcome === 'rejected');
 
 	const activeTicket = $derived.by(() => {
@@ -205,9 +216,15 @@
 	{:else}
 		<Card.Root class="border shadow-sm">
 			<Card.Header class="border-b bg-muted/20">
-				<Card.Title class="flex items-center gap-2 text-base font-bold">
+				<Card.Title class="flex flex-wrap items-center gap-2 text-base font-bold">
 					<ClipboardList class="h-4 w-4 text-sky-600" />
 					รับของเข้าคลัง: {activePlan.label}
+					<span
+						class="rounded-lg border border-slate-200 bg-white px-2 py-0.5 text-xs font-semibold text-slate-700 tabular-nums"
+						title="เลขอ้างอิงรายการรับเข้า"
+					>
+						{mealServiceRef(activeService)}
+					</span>
 				</Card.Title>
 				<Card.Description class="text-xs">
 					เป้าหมาย {activePlan.allocated_target ?? activeService.actual_yield ?? 0} จาน
@@ -300,6 +317,22 @@
 									ยืนยันเมื่อ {formatThaiDateTime(activeServiceReceipt.created_at)} โดย
 									{activeServiceReceipt.received_by}
 								</p>
+							{/if}
+							{#if receivedLedger.isPending}
+								<p class="mt-2 text-xs text-green-700">กำลังโหลดรายการที่รับเข้า...</p>
+							{:else if receivedLines.length > 0}
+								<ul class="mt-2 space-y-1.5">
+									{#each receivedLines as row (row._id)}
+										<li class="text-xs text-green-900">
+											<span class="font-semibold">{row.lot?.note ?? row.item_id}</span>
+											<span class="text-green-700"> · {row.qty} {row.unit}</span>
+											<span class="text-green-700">
+												· {row.lot?.storage_zone ?? 'ไม่ระบุจุดเก็บ'}</span
+											>
+											<span class="text-green-700"> · {row.lot?.lot_no ?? 'ไม่มีเลขล็อต'}</span>
+										</li>
+									{/each}
+								</ul>
 							{/if}
 						</div>
 					</div>

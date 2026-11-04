@@ -208,7 +208,6 @@ export class ScannerDeviceRepository {
 			shelter_code: input.shelter_code,
 			station_name: input.station_name,
 			screen_type: input.screen_type,
-			banner_enabled: true,
 			secret_hash: hashScannerSecret(plaintext_secret),
 			secret_prefix: `${plaintext_secret.slice(0, 16)}...`,
 			status: input.status,
@@ -253,7 +252,7 @@ export class ScannerDeviceRepository {
 	 */
 	async updateDevice(
 		id: string,
-		patch: ScannerDevicePatch,
+		patch: ScannerDevicePatch & { banner_group_id?: string | null },
 		updatedBy: string
 	): Promise<PersistedScannerDevice> {
 		const fields = Object.fromEntries(
@@ -286,6 +285,22 @@ export class ScannerDeviceRepository {
 			}
 			current = await this.findDeviceById(id);
 		}
+	}
+
+	/**
+	 * Put the given devices (registry doc ids) into a banner group, `null` = no group. Each device
+	 * is written through {@link updateDevice}, so a `_rev` race is retried on a fresh read.
+	 */
+	async setBannerGroup(
+		deviceIds: string[],
+		groupId: string | null,
+		updatedBy: string
+	): Promise<PersistedScannerDevice[]> {
+		const updated: PersistedScannerDevice[] = [];
+		for (const id of deviceIds) {
+			updated.push(await this.updateDevice(id, { banner_group_id: groupId }, updatedBy));
+		}
+		return updated;
 	}
 
 	/**

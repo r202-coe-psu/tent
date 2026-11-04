@@ -40,6 +40,21 @@ describe('GET /api/public/v1/config/shelter-policy', () => {
 		expect(data.feature_flags.allow_pets).toBe(false);
 	});
 
+	it('returns 404 for a cancelled shelter (draft-shelter-cancelled-status)', async () => {
+		findMasterByCodeMock.mockResolvedValue({
+			_id: 'shelter:01JCAN',
+			code: 'SH009',
+			name: 'ศูนย์ที่สร้างผิด',
+			operation_status: 'cancelled',
+			feature_flags: { allow_pets: true, allow_assets: true, allow_vehicles: true }
+		} as unknown as Awaited<ReturnType<typeof findMasterByCode>>);
+		const res = await GET(makeEvent('SH009'));
+		expect(res.status).toBe(404);
+		const data = await res.json();
+		expect(data.code).toBeUndefined();
+		expect(data.feature_flags.allow_pets).toBe(false);
+	});
+
 	it('returns feature flags and policies when shelter exists', async () => {
 		findMasterByCodeMock.mockResolvedValue({
 			_id: 'shelter:01JABC',

@@ -28,7 +28,19 @@ export {
 	isBirthYearBEValid,
 	MAX_AGE_YEARS,
 	PETS_MAX_COUNT,
-	totalPetCount
+	totalPetCount,
+	SHELTER_CLOSE_CHECKOUT_STATUSES,
+	SHELTER_CLOSE_CANCEL_STATUSES,
+	SHELTER_CLOSE_AFFECTED_STATUSES,
+	SHELTER_CLOSED_REASON,
+	isShelterCloseAffectedStatus,
+	isShelterCloseCancelStatus,
+	isShelterCloseCheckoutStatus,
+	buildShelterCloseCheckout,
+	buildShelterCloseCancel,
+	buildShelterCloseCancelAudit,
+	deriveShelterCloseHousehold,
+	stayStatusSchema
 } from './domain/people';
 
 export {
@@ -50,9 +62,32 @@ export {
 	PRIMARY_CONTACT_LABEL
 } from './domain/unified-registration';
 
+export {
+	STATION_LOG_STALE_WINDOW_MS,
+	STATION_CHANNEL_COMBOS,
+	bangkokDateOf,
+	createStationLog,
+	resolveKioskStartedAt,
+	summarizeStationTimes,
+	rankStationActors,
+	compareStationActorRank,
+	type StationActorRow,
+	type StationLog,
+	type StationLogEvent,
+	type StationNumber,
+	type StationTimeRow
+} from './domain/station-log';
+
 export { registeredViaSchema } from '$lib/db/model';
 
-export type { Evacuee, EvacueeInput, Household, HouseholdInput, StayStatus } from './domain/people';
+export type {
+	Evacuee,
+	EvacueeInput,
+	Household,
+	HouseholdInput,
+	Movement,
+	StayStatus
+} from './domain/people';
 export type {
 	FamilyRegistrationPlan,
 	FamilyRegistrationMode,

@@ -8,6 +8,7 @@
 	import { authStore } from '$lib/stores/auth.svelte';
 	import {
 		FamilyBatchPrint,
+		RegistrationConsentResult,
 		RegistrationSaveErrorAlert,
 		UnifiedRegistrationForm,
 		useCreateFamilyRegistration,
@@ -27,6 +28,8 @@
 		type Evacuee,
 		type Household,
 		type IntakeNextStation,
+		type RegistrationConsent,
+		type RegistrationConsentConfig,
 		type SaveFailureReport,
 		type UnifiedRegistrationInput
 	} from '$lib/features/people';
@@ -38,10 +41,22 @@
 
 	const t = $derived(getTranslation(EVACUEE_PAGE_I18N, languageStore.current));
 	const createFamily = useCreateFamilyRegistration();
+	// CR-192: when the walk-in form was opened — the Station 1 `start` time (plain const: not reactive).
+	const formOpenedAt = new Date().toISOString();
 	// No 'SH001' fallback here: a walk-in must never be written to a guessed shelter.
 	const shelterCode = $derived(resolveShelterCode());
 
-	let completed = $state<{ household: Household; members: Evacuee[] } | null>(null);
+	let completed = $state<{
+		household: Household;
+		members: Evacuee[];
+		consentRef: string | null;
+	} | null>(null);
+	const staff = $derived(
+		authStore.user
+			? { name: authStore.user.display_name || authStore.user.name, userId: authStore.user.name }
+			: null
+	);
+	const consentConfig = $derived<RegistrationConsentConfig>({ channel: 'staff', staff });
 	let saveError = $state<SaveFailureReport | null>(null);
 	let isDirty = $state(false);
 	let isNavigatingAfterSave = $state(false);
@@ -58,8 +73,12 @@
 	 */
 	let idReservation: { inputKey: string; ids: UlidReservation } | null = null;
 
-	function reservationFor(input: UnifiedRegistrationInput): UlidReservation {
-		const inputKey = JSON.stringify(input);
+	/** The consent ref is part of the key: a changed consent choice must not replay old ids. */
+	function reservationFor(
+		input: UnifiedRegistrationInput,
+		consent: RegistrationConsent | null
+	): UlidReservation {
+		const inputKey = JSON.stringify([input, consent?.decision.ref ?? null]);
 		if (idReservation?.inputKey !== inputKey) {
 			idReservation = { inputKey, ids: new UlidReservation() };
 		}
@@ -157,7 +176,11 @@
 		}
 	});
 
-	async function handleRegister(input: UnifiedRegistrationInput) {
+	async function handleRegister(
+		input: UnifiedRegistrationInput,
+		meta?: { consent: RegistrationConsent | null }
+	) {
+		const consent = meta?.consent ?? null;
 		const canProceed = await checkForDuplicatesAndMaybeConfirm(input);
 		if (!canProceed) {
 			// Silently abort — caller (UnifiedRegistrationForm) swallows a thrown
@@ -180,12 +203,14 @@
 				input,
 				ctx,
 				channel: 'onsite',
-				ids: reservationFor(input)
+				ids: reservationFor(input, consent),
+				consent,
+				stationStartedAt: formOpenedAt
 			});
 			saveError = null;
 			isDirty = false;
 			isNavigatingAfterSave = true;
-			completed = result;
+			completed = { ...result, consentRef: consent?.decision.ref ?? null };
 			await focusCompletionHeading();
 			toast.success(`ลงทะเบียนครอบครัว ${result.members.length} คน สำเร็จ`);
 		} catch (err) {
@@ -252,6 +277,13 @@
 
 <div class="mx-auto w-full max-w-6xl px-4 py-4 md:px-6 md:py-6 xl:max-w-7xl">
 	{#if completed}
+		{#if completed.consentRef}
+			<RegistrationConsentResult
+				members={completed.members}
+				consentRef={completed.consentRef}
+				{staff}
+			/>
+		{/if}
 		<FamilyBatchPrint
 			household={completed.household}
 			members={completed.members}
@@ -296,6 +328,7 @@
 				includeVehiclesAssets={true}
 				{shelterCode}
 				pending={createFamily.isPending || checkingDuplicate}
+				consent={consentConfig}
 				onsubmit={handleRegister}
 				onDirtyChange={(dirty) => (isDirty = dirty)}
 			/>

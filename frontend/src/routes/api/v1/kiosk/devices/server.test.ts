@@ -111,6 +111,12 @@ describe('POST /api/v1/kiosk/devices', () => {
 		expect(mockCreate).not.toHaveBeenCalled();
 	});
 
+	it('returns 403 when pr_staff creates a device, even in their own shelter', async () => {
+		mockSession.mockResolvedValue(SESSIONS.prA);
+		expect((await post(input)).status).toBe(403);
+		expect(mockCreate).not.toHaveBeenCalled();
+	});
+
 	it('lets a manager of both shelters and a system admin create in either', async () => {
 		for (const session of [SESSIONS.managerAB, SESSIONS.admin]) {
 			mockSession.mockResolvedValue(session);
@@ -150,7 +156,7 @@ describe('POST /api/v1/kiosk/devices', () => {
 			last_seen_at: null,
 			staff_pin_set: false,
 			staff_pin_is_default: false,
-			banner_enabled: true,
+			banner_group_id: null,
 			screen_type: 'compact'
 		});
 		expect(data.device).not.toHaveProperty('secret_hash');
@@ -247,7 +253,7 @@ describe('GET /api/v1/kiosk/devices', () => {
 				last_seen_at: null,
 				staff_pin_set: false,
 				staff_pin_is_default: false,
-				banner_enabled: true,
+				banner_group_id: null,
 				screen_type: 'compact'
 			}
 		]);
@@ -273,6 +279,16 @@ describe('GET /api/v1/kiosk/devices', () => {
 		expect((await get('?shelter_code=SH001')).status).toBe(200);
 		expect(mockList).toHaveBeenCalledWith(['SH001']);
 		expect((await get('?shelter_code=SH002')).status).toBe(403);
+		expect(mockList).toHaveBeenCalledTimes(1);
+	});
+
+	it('lets pr_staff list their own shelter and returns 403 for another', async () => {
+		mockSession.mockResolvedValue(SESSIONS.prA);
+		expect((await get('?shelter_code=SH001')).status).toBe(200);
+		expect(mockList).toHaveBeenCalledWith(['SH001']);
+		const other = await get('?shelter_code=SH002');
+		expect(other.status).toBe(403);
+		expect((await other.json()).error.message).toContain('pr_staff');
 		expect(mockList).toHaveBeenCalledTimes(1);
 	});
 

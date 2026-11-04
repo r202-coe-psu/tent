@@ -5,7 +5,10 @@ import {
 	DAILY_SOP_ROLE_QUESTIONS
 } from './daily-sop.questions';
 import {
+	DAILY_SOP_CAPACITY_QUESTION_ID,
+	DAILY_SOP_OCCUPANCY_QUESTION_IDS,
 	DAILY_SOP_ROLES,
+	DAILY_SOP_STOCK_QUESTION_ID,
 	assessableRoles,
 	applySystemMetricSuggestionsForEditedControls,
 	canAssessRole,
@@ -16,23 +19,35 @@ import {
 	dailySopBangkokDate,
 	dailySopReviewDates,
 	dailySopRoleAssessmentSchema,
+	daySummaryStatus,
 	hasRoleDraftInput,
+	historyNeedsMorePages,
+	isControlComplete,
 	isDailySopUtcTimestamp,
 	metricForQuestion,
 	metricParameterForQuestion,
+	notesRequired,
+	personDisplayName,
 	questionText,
 	requiredForMetric,
 	requiredUnits,
 	questionsForRole,
 	roleAssessmentProgress,
+	roleRowAccess,
+	roleUsesOccupancy,
+	roleUsesShelterCapacity,
+	roleUsesStockCheck,
 	summarizeRoleDraft,
+	visibleHistoryDates,
 	type DailySopRoleAssessment,
-	type DailySopRoleCode
+	type DailySopRoleCode,
+	type DailySopRoleStatus
 } from './daily-sop';
 import { SOP_RATIO_KEYS } from '$lib/features/sop-ratios/domain/sop-ratio';
 import { validRatios } from '$lib/features/sop-ratios/domain/sop-ratio.fixture';
 
 const timestamp = '2026-10-05T00:00:00.000Z';
+const expectedRoleCodes = ['SM', 'REG', 'TRG', 'MED', 'KS', 'SC', 'VC', 'SO', 'FAC'] as const;
 
 function validAssessment(
 	role: DailySopRoleCode,
@@ -115,10 +130,10 @@ describe('Daily SOP role question set', () => {
 		expect(DAILY_SOP_ROLE_QUESTIONS.map((question) => question.id)).not.toContain('D-REG-04');
 		expect(DAILY_SOP_ROLE_QUESTIONS.map((question) => question.role)).not.toContain('LEGACY');
 		expect(DAILY_SOP_ROLE_QUESTIONS.find((question) => question.id === 'D-SM-03')?.text).toBe(
-			'ข้อประเมินที่ไม่ผ่านของฝ่ายต่าง ๆ ที่กระทบความปลอดภัยหรือบริการจำเป็น มีผู้รับผิดชอบและแผนแก้ไขหรือไม่'
+			'ปัญหาจากการประเมินของฝ่ายต่าง ๆ ที่กระทบความปลอดภัยหรือบริการจำเป็น มีผู้รับผิดชอบและแผนแก้ไขครบทุกเรื่องหรือไม่?'
 		);
 		expect(DAILY_SOP_ROLE_QUESTIONS.find((question) => question.id === 'D-VC-01')?.text).toBe(
-			'จำนวนอาสาสมัครที่มารายงานตัวและพร้อมปฏิบัติงานตรงกับบัญชีกำลังคนหรือไม่'
+			'จำนวนอาสาสมัครที่มาทำงานจริงตรงกับจำนวนที่กำหนดไว้ในตารางกะหรือไม่?'
 		);
 	});
 
@@ -199,6 +214,77 @@ describe('Daily SOP role question set', () => {
 		expect(assessableRoles(['SH001:shelter_manager'], 'SH001')).toHaveLength(9);
 		expect(assessableRoles(['system_admin'], 'SH001')).toHaveLength(9);
 		expect(assessableRoles(['_admin'], 'SH001')).toHaveLength(9);
+	});
+
+	// CR-153 acceptance matrix (visibility): rows = only roles the account can assess, canonical order.
+	it.each([
+		{ account: 'REG owner', roles: ['SH001:registration_staff'], visible: ['REG'] },
+		{
+			account: 'REG + MED',
+			roles: ['SH001:medical_staff', 'SH001:registration_staff'],
+			visible: ['REG', 'MED']
+		},
+		{ account: 'warehouse_staff', roles: ['SH001:warehouse_staff'], visible: ['SC'] },
+		{ account: 'supply_coordinator', roles: ['SH001:supply_coordinator'], visible: ['SC'] },
+		{
+			account: 'legacy warehouse_staff, one scope',
+			roles: ['warehouse_staff', 'shelter:SH001'],
+			visible: ['SC']
+		},
+		{
+			account: 'shelter manager',
+			roles: ['SH001:shelter_manager'],
+			visible: [...expectedRoleCodes]
+		},
+		{
+			account: 'system admin',
+			roles: ['system_admin'],
+			visible: [...expectedRoleCodes]
+		},
+		{ account: 'no position', roles: ['shelter:SH001'], visible: [] },
+		{ account: 'unrelated role', roles: ['SH001:kiosk_staff'], visible: [] },
+		{
+			account: 'staff of another shelter',
+			roles: ['SH002:registration_staff', 'SH002:shelter_manager'],
+			visible: []
+		},
+		{
+			account: 'legacy role with two shelter scopes',
+			roles: ['registration_staff', 'shelter:SH001', 'shelter:SH002'],
+			visible: []
+		}
+	])('shows only assessable role rows: $account', ({ roles, visible }) => {
+		const rows = roleRowAccess(assessableRoles(roles, 'SH001'));
+		expect(rows.map(({ role }) => role.code)).toEqual(visible);
+		expect(rows.every(({ canAssess }) => canAssess)).toBe(true);
+	});
+
+	it('lists history dates only for visible roles, plus today', () => {
+		const docs = [
+			{ assessment_date: '2026-10-20', role_code: 'REG' as const },
+			{ assessment_date: '2026-10-21', role_code: 'MED' as const },
+			{ assessment_date: '2026-10-20', role_code: 'REG' as const }
+		];
+		expect(visibleHistoryDates(docs, [{ code: 'REG' }], '2026-10-25')).toEqual([
+			'2026-10-25',
+			'2026-10-20'
+		]);
+		expect(visibleHistoryDates([], [{ code: 'REG' }], '2026-10-25')).toEqual(['2026-10-25']);
+		expect(visibleHistoryDates(docs, [], '2026-10-25')).toEqual([]);
+		expect(visibleHistoryDates(docs, [{ code: 'REG' }, { code: 'MED' }], '2026-10-25')).toEqual([
+			'2026-10-25',
+			'2026-10-21',
+			'2026-10-20'
+		]);
+	});
+
+	it('keeps loading history while loaded pages hold no visible-role document', () => {
+		const otherRoles = [{ role_code: 'MED' as const }, { role_code: 'KS' as const }];
+		expect(historyNeedsMorePages(otherRoles, [{ code: 'REG' }], true)).toBe(true);
+		expect(historyNeedsMorePages(otherRoles, [{ code: 'REG' }], false)).toBe(false);
+		expect(
+			historyNeedsMorePages([...otherRoles, { role_code: 'REG' }], [{ code: 'REG' }], true)
+		).toBe(false);
 	});
 
 	it('calculates numeric context without choosing an evaluator status', () => {
@@ -342,7 +428,75 @@ describe('Daily SOP role question set', () => {
 		expect(dailySopRoleAssessmentSchema.safeParse(unexpectedField).success).toBe(false);
 	});
 
-	it('requires notes for Fail and Pending before completing a role', () => {
+	it('treats unanswered or unknown statuses as incomplete', () => {
+		expect(isControlComplete(undefined)).toBe(false);
+		expect(isControlComplete({ status: null, notes: '' })).toBe(false);
+		expect(
+			isControlComplete({ status: 'Unknown' as unknown as DailySopRoleStatus, notes: 'x' })
+		).toBe(false);
+		expect(isControlComplete({ status: 'Pass', notes: '' })).toBe(true);
+		expect(isControlComplete({ status: 'Fail', notes: '' })).toBe(true);
+		expect(isControlComplete({ status: 'Pending', notes: '' })).toBe(false);
+		expect(notesRequired('Fail')).toBe(false);
+		expect(notesRequired('Pending')).toBe(true);
+	});
+
+	it('gives every metric question a pass and fail sentence that is never persisted', () => {
+		const metricIds = [
+			'D-SM-02',
+			'D-REG-03',
+			'D-TRG-01',
+			'D-TRG-05',
+			'D-TRG-08',
+			'D-KS-06',
+			'D-KS-10',
+			'D-VC-01',
+			'D-VC-02',
+			'D-VC-03',
+			'D-VC-04',
+			'D-VC-05',
+			'D-FAC-01',
+			'D-FAC-02',
+			'D-FAC-03',
+			'D-FAC-06',
+			'D-FAC-07',
+			'D-FAC-08',
+			'D-FAC-10'
+		];
+		const ratios = {
+			people_per_volunteer: '10',
+			m2_per_person_living: '3.5',
+			people_per_toilet_female: '20',
+			people_per_toilet_male: '20',
+			people_per_bathing: '20',
+			people_per_laundry: '20',
+			people_per_tap: '20'
+		};
+		for (const id of metricIds) {
+			const metric = metricForQuestion(id, ratios);
+			expect(metric?.passText, id).toBeTruthy();
+			expect(metric?.failText, id).toBeTruthy();
+		}
+		expect(metricForQuestion('D-KS-10')).toMatchObject({
+			passText: 'ยอดอาหารคงเหลือตรงกับจำนวนที่ควรเหลือ',
+			failText: 'ยอดอาหารคงเหลือไม่ตรงกับจำนวนที่ควรเหลือ'
+		});
+		const food = metricForQuestion('D-KS-10');
+		expect(food?.evaluate({ produced: 1, distributed: 1, loss: 0, remaining: 1 })).toBe(false);
+		expect(food?.hint({ produced: 1, distributed: 1, loss: 0, remaining: 1 })).toBe(
+			'ควรเหลือ 0 ที่ (ทำเสร็จ 1 − แจก 1 − เสีย 0)'
+		);
+		expect(food?.hint({ produced: 1, distributed: null, loss: 0, remaining: 1 })).toBeNull();
+		expect(metricForQuestion('D-SM-02')?.hint({ occupants: 1, capacity: 2 })).toBeNull();
+		expect(metricForQuestion('D-KS-10')?.fields.map((item) => item.label)).toEqual([
+			'อาหารที่ทำเสร็จ',
+			'อาหารที่แจกแล้ว',
+			'อาหารเสีย หก หรือทิ้ง',
+			'อาหารที่เหลืออยู่จริง'
+		]);
+	});
+
+	it('requires notes only for Pending before completing a role', () => {
 		const draft = createEmptyRoleDraft('REG');
 		expect(roleAssessmentProgress(draft, 'REG')).toMatchObject({
 			total: 5,
@@ -352,9 +506,12 @@ describe('Daily SOP role question set', () => {
 		for (const question of questionsForRole('REG')) draft[question.id].status = 'Pass';
 		expect(canCompleteRoleDraft(draft, 'REG')).toBe(true);
 		draft['D-REG-01'].status = 'Fail';
-		expect(canCompleteRoleDraft(draft, 'REG')).toBe(false);
+		expect(canCompleteRoleDraft(draft, 'REG')).toBe(true);
 		draft['D-REG-01'].notes = 'ป้ายทางเข้าหลุดจากจุดติดตั้ง';
 		draft['D-REG-02'].status = 'Pending';
+		expect(canCompleteRoleDraft(draft, 'REG')).toBe(false);
+		draft['D-REG-02'].notes = '   ';
+		expect(canCompleteRoleDraft(draft, 'REG')).toBe(false);
 		draft['D-REG-02'].notes = 'รอยืนยันจำนวนผู้ช่วยจากผู้ประสานงาน';
 		expect(canCompleteRoleDraft(draft, 'REG')).toBe(true);
 		expect(summarizeRoleDraft(draft, 'REG')).toEqual({
@@ -458,17 +615,28 @@ describe('Daily SOP formulas and snapshot contract', () => {
 
 	it('enforces notes, version, id, role key and shape on the document', () => {
 		const base = () => validAssessment('SM');
+		// CR-153 (2026-10-25): only Pending requires notes; omitting the field is invalid.
 		const failNoNotes = base();
 		failNoNotes.controls[0].status = 'Fail';
 		failNoNotes.pass_count--;
 		failNoNotes.fail_count++;
 		for (const notes of ['', '   ']) {
 			failNoNotes.controls[0].notes = notes;
-			expect(dailySopRoleAssessmentSchema.safeParse(failNoNotes).success).toBe(false);
+			expect(dailySopRoleAssessmentSchema.safeParse(failNoNotes).success).toBe(true);
 		}
 		const noNotesKey = JSON.parse(JSON.stringify(failNoNotes));
 		delete noNotesKey.controls[0].notes;
 		expect(dailySopRoleAssessmentSchema.safeParse(noNotesKey).success).toBe(false);
+		const pendingNoNotes = base();
+		pendingNoNotes.controls[0].status = 'Pending';
+		pendingNoNotes.pass_count--;
+		pendingNoNotes.pending_count++;
+		for (const notes of ['', '   ']) {
+			pendingNoNotes.controls[0].notes = notes;
+			expect(dailySopRoleAssessmentSchema.safeParse(pendingNoNotes).success).toBe(false);
+		}
+		pendingNoNotes.controls[0].notes = 'รอผลตรวจนับ';
+		expect(dailySopRoleAssessmentSchema.safeParse(pendingNoNotes).success).toBe(true);
 
 		const nullVersion = { ...base(), question_set_version: null };
 		expect(dailySopRoleAssessmentSchema.safeParse(nullVersion).success).toBe(false);
@@ -502,5 +670,44 @@ describe('Daily SOP formulas and snapshot contract', () => {
 		expect(control.measured_values).toEqual({});
 		control.measured_values = { x: 1 };
 		expect(dailySopRoleAssessmentSchema.safeParse(assessment).success).toBe(false);
+	});
+});
+
+describe('Daily SOP page helpers', () => {
+	const codesWhere = (predicate: (code: DailySopRoleCode) => boolean) =>
+		DAILY_SOP_ROLES.map((role) => role.code).filter(predicate);
+
+	it('keeps every question id the page pre-fills in the question bank', () => {
+		const ids = new Set<string>(DAILY_SOP_ROLE_QUESTIONS.map((question) => question.id));
+		for (const id of [
+			...DAILY_SOP_OCCUPANCY_QUESTION_IDS,
+			DAILY_SOP_CAPACITY_QUESTION_ID,
+			DAILY_SOP_STOCK_QUESTION_ID
+		]) {
+			expect(ids.has(id), id).toBe(true);
+		}
+	});
+
+	it('derives which roles use live shelter data from the questions they own', () => {
+		expect(codesWhere(roleUsesOccupancy)).toEqual(['SM', 'VC', 'FAC']);
+		expect(codesWhere(roleUsesShelterCapacity)).toEqual(['SM']);
+		expect(codesWhere(roleUsesStockCheck)).toEqual(['SC']);
+	});
+
+	it('strips the trailing account name from a display name', () => {
+		expect(personDisplayName('พว. สมหญิง การุณ (Staff 02)')).toBe('พว. สมหญิง การุณ');
+		expect(personDisplayName('สมหญิง การุณ')).toBe('สมหญิง การุณ');
+		expect(personDisplayName('สมหญิง (พยาบาล) การุณ')).toBe('สมหญิง (พยาบาล) การุณ');
+		expect(personDisplayName(undefined)).toBe('');
+	});
+
+	it('summarises a day as not started, in progress or completed', () => {
+		expect(daySummaryStatus({ recordedRoles: 0, completedRoles: 0, roleCount: 9 })).toBeUndefined();
+		expect(daySummaryStatus({ recordedRoles: 3, completedRoles: 1, roleCount: 9 })).toBe(
+			'InProgress'
+		);
+		expect(daySummaryStatus({ recordedRoles: 9, completedRoles: 9, roleCount: 9 })).toBe(
+			'Completed'
+		);
 	});
 });

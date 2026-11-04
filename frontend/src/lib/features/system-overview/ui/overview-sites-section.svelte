@@ -7,7 +7,8 @@
 	import { DateRangePicker } from '$lib/components/ui/date-picker';
 	import { Label } from '$lib/components/ui/label';
 	import { Skeleton } from '$lib/components/ui/skeleton';
-	import { SITE_KIND_LABELS, type SiteKind } from '$lib/features/shelters/domain/schema';
+	import { formatMasterLabelByCode, useMasterData } from '$lib/features/master-data';
+	import { langState } from '$lib/states/i18n.svelte';
 	import { thailandDateString, type OverviewSiteRow } from '../domain/schemas';
 
 	let {
@@ -30,16 +31,17 @@
 		standby: 'เตรียมการ',
 		active: 'เปิดรับ',
 		full_capacity: 'เต็มความจุ',
-		closed: 'ปิดศูนย์'
+		closed: 'ปิดศูนย์',
+		cancelled: 'ยกเลิกศูนย์'
 	};
 
 	function formatPct(value: number | null): string {
 		return value == null ? '—' : `${value}%`;
 	}
 
-	function siteKindLabel(kind: SiteKind): string {
-		return SITE_KIND_LABELS[kind] ?? kind;
-	}
+	const siteKindQuery = useMasterData(() => 'site_kind');
+	const siteKindLabel = (code: string) =>
+		formatMasterLabelByCode(code, siteKindQuery.data?.items ?? [], langState.current);
 
 	function statusLabel(status: string): string {
 		return STATUS_LABELS[status] ?? status;

@@ -2,21 +2,31 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { PATCH } from './+server';
 import { adminRaw } from '$lib/server/couch-admin';
 import { putAsPublicWriter } from '$lib/server/couch-public-writer';
-import { donationEditLimiter } from '$lib/server/security/rate-limiter';
 import { sha256Hex } from '$lib/db/hash';
-import { fetchDocs } from '$lib/server/donation-docs';
+import {
+	CouchReadError,
+	fetchDocsStrict,
+	hasKeyedDonationStock,
+	readDonationCampaign
+} from '$lib/server/donation-docs';
+import { DONATION_SCHEMA_V } from '$lib/features/operations/server';
 
 type PatchEvent = Parameters<typeof PATCH>[0];
 
 vi.mock('$lib/server/couch-admin', () => ({ adminRaw: vi.fn() }));
-vi.mock('$lib/server/donation-docs', () => ({ fetchDocs: vi.fn(async () => []) }));
+vi.mock('$lib/server/donation-docs', async (importOriginal) => {
+	const actual = await importOriginal<typeof import('$lib/server/donation-docs')>();
+	return {
+		CouchReadError: actual.CouchReadError,
+		// Real lookup over the mocked `adminRaw`, so `couchHas` drives it.
+		findByTokenHash: actual.findByTokenHash,
+		fetchDocsStrict: vi.fn(async () => []),
+		hasKeyedDonationStock: vi.fn(async () => false),
+		readDonationCampaign: vi.fn(async () => null),
+		GOODS_IN_STOCK_ERROR: { success: false, error: 'GOODS_IN_STOCK', message: 'in stock' }
+	};
+});
 vi.mock('$lib/server/couch-public-writer', () => ({ putAsPublicWriter: vi.fn() }));
-vi.mock('$lib/server/security/rate-limiter', () => ({
-	donationIpLimiter: { check: vi.fn(() => true) },
-	donationPhoneLimiter: { check: vi.fn(() => true) },
-	donationEditLimiter: { check: vi.fn(() => true) },
-	donationReadLimiter: { check: vi.fn(() => true) }
-}));
 vi.mock('$env/dynamic/private', () => ({
 	env: { FASTAPI_INTERNAL_URL: 'http://localhost:9000', EXTERNAL_API_SECRET: 'test-secret' }
 }));
@@ -44,29 +54,59 @@ function couchDoc(status = 'declared') {
 	};
 }
 
-function fastapiOk(body: Record<string, unknown> = {}) {
+/**
+ * What FastAPI's intake buffer answers when the route reads the booking for a donation
+ * CouchDB has not seen yet. Only the PATCH is what a test asserts on, so the GET is a
+ * separate answer — a booking with no campaign unless a test says otherwise.
+ */
+let buffered: { status: number; body: Record<string, unknown> | string };
+const bufferHolds = (donation: Record<string, unknown>) => {
+	buffered = { status: 200, body: { success: true, donation } };
+};
+
+function stubFastapi(patch: { ok: boolean; status: number; body: Record<string, unknown> }) {
 	vi.stubGlobal(
 		'fetch',
-		vi.fn().mockResolvedValue({
-			ok: true,
-			status: 200,
-			json: async () => ({
-				success: true,
-				revisions: 1,
-				items: [{ item_id: 'item:rice', qty: '8', unit: 'kg', reserved_qty: '8' }],
-				revision: { at: '2026-08-21T00:00:00Z', by: 'donor', items_before: [], items_after: [] },
-				...body
-			})
+		vi.fn(async (_url: string, init?: RequestInit) => {
+			const answer =
+				init?.method === 'PATCH'
+					? patch
+					: { ok: buffered.status < 400, status: buffered.status, body: buffered.body };
+			return {
+				ok: answer.ok,
+				status: answer.status,
+				json: async () => {
+					if (typeof answer.body === 'string') throw new SyntaxError('Unexpected token');
+					return answer.body;
+				}
+			};
 		})
 	);
 }
 
-function fastapiFails(status: number, detail: Record<string, unknown>) {
-	vi.stubGlobal(
-		'fetch',
-		vi.fn().mockResolvedValue({ ok: false, status, json: async () => ({ errors: [detail] }) })
-	);
+function fastapiOk(body: Record<string, unknown> = {}) {
+	stubFastapi({
+		ok: true,
+		status: 200,
+		body: {
+			success: true,
+			revisions: 1,
+			items: [{ item_id: 'item:rice', qty: '8', unit: 'kg', reserved_qty: '8' }],
+			revision: { at: '2026-08-21T00:00:00Z', by: 'donor', items_before: [], items_after: [] },
+			...body
+		}
+	});
 }
+
+function fastapiFails(status: number, detail: Record<string, unknown>) {
+	stubFastapi({ ok: false, status, body: { errors: [detail] } });
+}
+
+/** The PATCH FastAPI got, whether or not a GET of the buffered booking came first. */
+const patchCall = () =>
+	vi
+		.mocked(fetch)
+		.mock.calls.find(([, init]) => (init as RequestInit | undefined)?.method === 'PATCH')!;
 
 const call = (items: unknown = ITEMS, token = TOKEN) =>
 	PATCH({
@@ -79,9 +119,26 @@ describe('PATCH /api/public/v1/donations/[token]/items', () => {
 	beforeEach(() => {
 		vi.resetAllMocks();
 		vi.unstubAllGlobals();
-		vi.mocked(donationEditLimiter.check).mockReturnValue(true);
 		vi.mocked(putAsPublicWriter).mockResolvedValue({ status: 201, data: {} });
-		vi.mocked(fetchDocs).mockResolvedValue([]);
+		vi.mocked(fetchDocsStrict).mockResolvedValue([]);
+		vi.mocked(hasKeyedDonationStock).mockResolvedValue(false);
+		vi.mocked(readDonationCampaign).mockResolvedValue(null);
+		bufferHolds({ campaign_id: null, logistics: null });
+	});
+
+	// Owner decision 2026-10-22 — goods already keyed for this booking: the donor can no
+	// longer move its lines, which would re-number them under the stock rows.
+	it('refuses an edit once goods of the booking are in stock, moving no quota', async () => {
+		couchHas(couchDoc('pending_review'));
+		fastapiOk();
+		vi.mocked(hasKeyedDonationStock).mockResolvedValue(true);
+
+		const response = await call();
+
+		expect(response.status).toBe(409);
+		expect((await response.json()).error).toBe('GOODS_IN_STOCK');
+		expect(fetch).not.toHaveBeenCalled();
+		expect(putAsPublicWriter).not.toHaveBeenCalled();
 	});
 
 	it('moves the quota before writing CouchDB', async () => {
@@ -125,7 +182,226 @@ describe('PATCH /api/public/v1/donations/[token]/items', () => {
 			{ item_id: 'item:rice', qty: '8', unit: 'kg', reserved_qty: '8' }
 		]);
 		expect((written as { revisions: unknown[] }).revisions).toHaveLength(1);
-		expect((written as { schema_v: number }).schema_v).toBe(4);
+		// FR-18b — the current version, not a stale constant.
+		expect((written as { schema_v: number }).schema_v).toBe(DONATION_SCHEMA_V);
+	});
+
+	// CR-196 FR-LK-4 — refused here, before the headroom reads or any quota moves.
+	// CR-175 donor photos FR-3a / AC-12 — editing the lines leaves the photos as booked.
+	it('keeps the photos of the booking through an edit', async () => {
+		const photos = ['image:01K8PHXTX00000000000000001', 'image:01K8PHXTX00000000000000002'];
+		couchHas({ ...couchDoc('pending_review'), photos });
+		fastapiOk();
+
+		const response = await call();
+
+		expect(response.status).toBe(200);
+		const [, , written] = vi.mocked(putAsPublicWriter).mock.calls[0]!;
+		expect((written as { photos: string[] }).photos).toEqual(photos);
+	});
+
+	describe('a booking something was decided on', () => {
+		it.each([
+			['its QR is out', couchDoc('verifying')],
+			['it was refused', couchDoc('rejected')],
+			[
+				'the campaign rule approved a line',
+				{
+					...couchDoc('pending_review'),
+					items: [
+						{ item_id: 'item:rice', qty: '5', unit: 'kg', review_status: 'approved' },
+						{ free_text: 'ผ้าห่ม', qty: '1', unit: 'ผืน', review_status: 'pending' }
+					]
+				}
+			],
+			[
+				'staff refused a line',
+				{
+					...couchDoc('pending_review'),
+					items: [{ free_text: 'ผ้าห่ม', qty: '1', unit: 'ผืน', review_status: 'rejected' }]
+				}
+			]
+		])('answers ALREADY_REVIEWED when %s', async (_, doc) => {
+			couchHas(doc);
+			fastapiOk();
+
+			const response = await call();
+
+			expect(response.status).toBe(400);
+			expect((await response.json()).error).toBe('ALREADY_REVIEWED');
+			expect(fetchDocsStrict).not.toHaveBeenCalled();
+			expect(fetch).not.toHaveBeenCalled();
+			expect(putAsPublicWriter).not.toHaveBeenCalled();
+		});
+	});
+
+	// CR-174 FR-18 / FR-18b / FR-26
+	describe('per-line review after an edit (CR-174)', () => {
+		it('sends FastAPI the booking as it stands in CouchDB, line keys included', async () => {
+			const held = [
+				{ free_text: 'ผ้าห่ม', qty: '1', unit: 'ผืน', review_status: 'pending', line_key: 'K1' }
+			];
+			couchHas({ ...couchDoc('pending_review'), items: [...held] });
+			fastapiOk();
+
+			await call([{ line_key: 'K1', free_text: 'ผ้าห่ม', qty: '2', unit: 'ผืน' }]);
+
+			const body = JSON.parse(String(patchCall()[1]!.body));
+			expect(body).toMatchObject({
+				items: [{ line_key: 'K1', qty: '2' }],
+				current_items: held,
+				current_status: 'pending_review'
+			});
+		});
+
+		it('AC-14: writes the status FastAPI worked out back to CouchDB', async () => {
+			couchHas(couchDoc('pending_review'));
+			fastapiOk({ status: 'verifying' });
+
+			const response = await call();
+
+			const [, , written] = vi.mocked(putAsPublicWriter).mock.calls[0]!;
+			expect(written).toMatchObject({ status: 'verifying', schema_v: DONATION_SCHEMA_V });
+			expect((await response.json()).status).toBe('verifying');
+		});
+
+		it('writes the line keys FastAPI returned onto the CouchDB doc', async () => {
+			couchHas(couchDoc('pending_review'));
+			fastapiOk({
+				status: 'pending_review',
+				items: [{ free_text: 'ผ้าห่ม', qty: '2', unit: 'ผืน', line_key: 'K-NEW' }]
+			});
+
+			await call();
+
+			const [, , written] = vi.mocked(putAsPublicWriter).mock.calls[0]!;
+			expect((written as { items: { line_key?: string }[] }).items[0]!.line_key).toBe('K-NEW');
+		});
+
+		// A doc a newer writer stamped keeps its version: stamping the current one over it would claim it
+		// lacks fields it has.
+		it('never lowers the schema_v of a doc a newer writer stamped', async () => {
+			couchHas({ ...couchDoc('pending_review'), schema_v: DONATION_SCHEMA_V + 1 });
+			fastapiOk({ status: 'pending_review' });
+
+			await call();
+
+			const [, , written] = vi.mocked(putAsPublicWriter).mock.calls[0]!;
+			expect(written).toMatchObject({ schema_v: DONATION_SCHEMA_V + 1 });
+		});
+
+		it('AC-22: audits the lines the campaign rule approved in this edit, after the write', async () => {
+			couchHas(couchDoc('pending_review'));
+			fastapiOk({ status: 'verifying', auto_approved_lines: [0] });
+
+			await call();
+
+			const auditCall = vi
+				.mocked(adminRaw)
+				.mock.calls.find((c) => String(c[0]).includes('_bulk_docs'));
+			const [audit] = (auditCall![2] as { docs: Record<string, unknown>[] }).docs;
+			expect(audit).toMatchObject({
+				type: 'audit',
+				action: 'manual_adjust',
+				target_id: 'donation:1',
+				created_by: 'system',
+				context: { approved_by: 'system', rule: 'campaign_line', lines: [0] }
+			});
+		});
+
+		// Review #783 M2 — the edit has landed by now: the donor must hear it did, or a retry
+		// moves the quota at FastAPI a second time. A lost audit is logged, not swallowed.
+		describe('when the audit cannot be written', () => {
+			function auditAnswers(answer: () => Promise<unknown>) {
+				const base = vi.mocked(adminRaw).getMockImplementation()!;
+				vi.mocked(adminRaw).mockImplementation((path, method, body) =>
+					String(path).includes('_bulk_docs')
+						? (answer() as ReturnType<typeof adminRaw>)
+						: base(path, method, body)
+				);
+			}
+
+			it('logs a row CouchDB refused inside a 201', async () => {
+				couchHas(couchDoc('pending_review'));
+				fastapiOk({ status: 'verifying', auto_approved_lines: [0] });
+				auditAnswers(async () => ({
+					status: 201,
+					data: [{ id: 'audit:x', error: 'forbidden', reason: 'not allowed' }]
+				}));
+				const logged = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+				const response = await call();
+
+				expect(response.status).toBe(200);
+				expect(logged).toHaveBeenCalledWith(
+					'donation auto-approve audit failed',
+					expect.anything()
+				);
+				logged.mockRestore();
+			});
+
+			it('still reports the edit when the audit request throws', async () => {
+				couchHas(couchDoc('pending_review'));
+				fastapiOk({ status: 'verifying', auto_approved_lines: [0] });
+				auditAnswers(() => Promise.reject(new Error('socket hang up')));
+				const logged = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+				const response = await call();
+
+				expect(response.status).toBe(200);
+				expect((await response.json()).success).toBe(true);
+				logged.mockRestore();
+			});
+		});
+
+		it('writes no audit when nothing new was approved', async () => {
+			couchHas(couchDoc('pending_review'));
+			fastapiOk({ status: 'pending_review', auto_approved_lines: [] });
+
+			await call();
+
+			expect(vi.mocked(adminRaw).mock.calls.some((c) => String(c[0]).includes('_bulk_docs'))).toBe(
+				false
+			);
+		});
+	});
+
+	// S-R5-3 — a failed read used to look like "not synced yet": the edit skipped the
+	// status and stock checks and moved quota at FastAPI while CouchDB stayed as it was.
+	it('stops before moving quota when CouchDB cannot be read', async () => {
+		vi.mocked(adminRaw).mockResolvedValue({ status: 500, data: { error: 'unknown_error' } });
+		fastapiOk();
+
+		const response = await call();
+
+		expect(response.status).toBe(503);
+		expect((await response.json()).error).toBe('DONATION_UNAVAILABLE');
+		expect(fetch).not.toHaveBeenCalled();
+		expect(putAsPublicWriter).not.toHaveBeenCalled();
+	});
+
+	it('stops the same way when the stock check cannot read CouchDB', async () => {
+		couchHas(couchDoc());
+		vi.mocked(hasKeyedDonationStock).mockRejectedValue(
+			new CouchReadError('shelter_sh001', 'stock_ledger (ref_id)', 500)
+		);
+		fastapiOk();
+
+		const response = await call();
+
+		expect(response.status).toBe(503);
+		expect((await response.json()).error).toBe('DONATION_UNAVAILABLE');
+		expect(fetch).not.toHaveBeenCalled();
+	});
+
+	it('treats a shelter with no database as a booking CouchDB has not seen', async () => {
+		vi.mocked(adminRaw).mockResolvedValue({ status: 404, data: { error: 'not_found' } });
+		fastapiOk();
+
+		const response = await call();
+
+		expect(response.status).toBe(200);
+		expect(putAsPublicWriter).not.toHaveBeenCalled();
 	});
 
 	it('leaves CouchDB alone when the donation has not synced yet', async () => {
@@ -153,14 +429,13 @@ describe('PATCH /api/public/v1/donations/[token]/items', () => {
 	it('refuses before moving quota once staff have taken the booking', async () => {
 		// The buffer follows CouchDB a few seconds behind, so checking the record first
 		// means no quota is moved and rolled back for a booking that cannot be edited.
-		// `verifying`, not `pending_review`: since CR-052 every booking opens in review
-		// and stays the donor's until the goods are at the counter (decision D-1).
-		couchHas(couchDoc('verifying'));
+		couchHas(couchDoc('received'));
 		fastapiOk();
 
 		const response = await call();
 
 		expect(response.status).toBe(400);
+		expect((await response.json()).error).toBe('Cannot edit a donation in status "received"');
 		expect(fetch).not.toHaveBeenCalled();
 		expect(putAsPublicWriter).not.toHaveBeenCalled();
 	});
@@ -190,13 +465,6 @@ describe('PATCH /api/public/v1/donations/[token]/items', () => {
 		expect(adminRaw).not.toHaveBeenCalled();
 	});
 
-	it('returns 429 when the IP is over the rate limit', async () => {
-		vi.mocked(donationEditLimiter.check).mockReturnValue(false);
-		const response = await call();
-		expect(response.status).toBe(429);
-		expect(adminRaw).not.toHaveBeenCalled();
-	});
-
 	it('says the quota already moved when the CouchDB write conflicts', async () => {
 		// Not "nothing happened": the counter is ahead of the document until recalculate.
 		couchHas(couchDoc());
@@ -217,7 +485,7 @@ describe('PATCH /api/public/v1/donations/[token]/items', () => {
 		 * since T-22; editing has to answer to the same rule.
 		 */
 		function couchWorld(onHand: string, otherDonations: number) {
-			vi.mocked(fetchDocs).mockImplementation(async (_db: string, prefix: string) => {
+			vi.mocked(fetchDocsStrict).mockImplementation(async (_db: string, prefix: string) => {
 				if (prefix === 'donation_campaign:')
 					return [
 						{
@@ -277,6 +545,22 @@ describe('PATCH /api/public/v1/donations/[token]/items', () => {
 			expect(fetch).not.toHaveBeenCalled();
 		});
 
+		// Full-branch review — an unreadable ledger is not an empty one: read as [] it
+		// looked like headroom and let the edit past the target.
+		it('stops before moving quota when the stock cannot be read', async () => {
+			couchWorld('80', 0);
+			vi.mocked(fetchDocsStrict).mockRejectedValue(
+				new CouchReadError('shelter_sh001', 'stock_ledger:', 500)
+			);
+			fastapiOk();
+
+			const response = await call(blanket('100'));
+
+			expect(response.status).toBe(503);
+			expect((await response.json()).error).toBe('DONATION_UNAVAILABLE');
+			expect(fetch).not.toHaveBeenCalled();
+		});
+
 		it('allows what is genuinely left', async () => {
 			// 100 target − 80 on hand = 20, and this booking already holds all of it.
 			couchWorld('80', 0);
@@ -313,7 +597,7 @@ describe('PATCH /api/public/v1/donations/[token]/items', () => {
 
 			await call([{ free_text: 'ผ้าห่ม', qty: '10', unit: 'piece' }]);
 
-			const [, init] = vi.mocked(fetch).mock.calls[0]! as [unknown, RequestInit];
+			const [, init] = patchCall() as [unknown, RequestInit];
 			expect(JSON.parse(init.body as string).items[0].item_id).toBe('item:blanket');
 		});
 
@@ -324,6 +608,247 @@ describe('PATCH /api/public/v1/donations/[token]/items', () => {
 			// 100 − 50 on hand − 40 someone else = 10 left.
 			expect((await call(blanket('30'))).status).toBe(409);
 			expect((await call(blanket('10'))).status).toBe(200);
+		});
+	});
+
+	describe('drop-off point per line, set by staff (FR-AP-15a, FR-AP-15b)', () => {
+		const dropOffDoc = (extra: Record<string, unknown> = {}) => ({
+			...couchDoc('pending_review'),
+			shelter_code: 'SH001',
+			campaign_id: 'c1',
+			logistics: { delivery_method: 'self_dropoff', vehicle: 'car' },
+			...extra
+		});
+		const campaign = (status: 'open' | 'closed' = 'open') =>
+			({
+				_id: 'c1',
+				type: 'donation_campaign',
+				status,
+				needs: [
+					{ item_id: 'item:rice', qty_target: '100', unit: 'kg', drop_off_point_id: 'point-gym' }
+				]
+			}) as never;
+		const RICE = { item_id: 'item:rice', free_text: 'ข้าวสาร', qty: '5', unit: 'kg' };
+		const BLANKET = { free_text: 'ผ้าห่ม', qty: '1', unit: 'piece' };
+		const sentPoints = () => {
+			const [, init] = patchCall();
+			return (
+				JSON.parse(String((init as RequestInit).body)).items as Array<Record<string, unknown>>
+			).map((item) => item.drop_off_point_id);
+		};
+
+		it("writes every line's point from the booking's campaign over what the client sent (AC-AP-14)", async () => {
+			couchHas(dropOffDoc());
+			vi.mocked(readDonationCampaign).mockResolvedValue(campaign());
+			fastapiOk();
+
+			const response = await call([
+				{ ...RICE, drop_off_point_id: null },
+				{ ...BLANKET, drop_off_point_id: 'point-med' }
+			]);
+
+			expect(response.status).toBe(200);
+			expect(readDonationCampaign).toHaveBeenCalledWith('shelter_sh001', 'c1');
+			expect(sentPoints()).toEqual(['point-gym', null]);
+		});
+
+		it('gives a point to a line the carried item_id makes a campaign line', async () => {
+			couchHas(
+				dropOffDoc({ items: [{ item_id: 'item:rice', qty: '5', unit: 'kg', line_key: 'k1' }] })
+			);
+			vi.mocked(readDonationCampaign).mockResolvedValue(campaign());
+			fastapiOk();
+
+			await call([{ line_key: 'k1', free_text: 'ข้าวสาร', qty: '6', unit: 'kg' }]);
+
+			expect(sentPoints()).toEqual(['point-gym']);
+		});
+
+		it('reads a campaign closed since the booking (AC-AP-14b)', async () => {
+			couchHas(dropOffDoc());
+			vi.mocked(readDonationCampaign).mockResolvedValue(campaign('closed'));
+			fastapiOk();
+
+			await call([RICE]);
+
+			expect(sentPoints()).toEqual(['point-gym']);
+		});
+
+		it('stops before moving quota when the campaign cannot be read (AC-AP-14b)', async () => {
+			couchHas(dropOffDoc());
+			vi.mocked(readDonationCampaign).mockRejectedValue(
+				new CouchReadError('shelter_sh001', 'c1', 500)
+			);
+			fastapiOk();
+
+			const response = await call([RICE]);
+
+			expect(response.status).toBe(503);
+			expect((await response.json()).error).toBe('DONATION_UNAVAILABLE');
+			expect(fetch).not.toHaveBeenCalled();
+			expect(putAsPublicWriter).not.toHaveBeenCalled();
+		});
+
+		it('writes null when the campaign doc is gone', async () => {
+			couchHas(dropOffDoc());
+			fastapiOk();
+
+			await call([RICE]);
+
+			expect(sentPoints()).toEqual([null]);
+		});
+
+		describe('a booking CouchDB has not seen yet', () => {
+			const inBuffer = (donation: Record<string, unknown> = {}) =>
+				bufferHolds({
+					campaign_id: 'c1',
+					logistics: { delivery_method: 'self_dropoff' },
+					...donation
+				});
+
+			it("gives a campaign line added now the need's point, read from the buffer's campaign", async () => {
+				couchHas(null);
+				inBuffer();
+				vi.mocked(readDonationCampaign).mockResolvedValue(campaign());
+				fastapiOk();
+
+				const response = await call([
+					{ ...RICE, drop_off_point_id: null },
+					{ ...BLANKET, drop_off_point_id: 'point-med' }
+				]);
+
+				expect(response.status).toBe(200);
+				expect(readDonationCampaign).toHaveBeenCalledWith('shelter_sh001', 'c1');
+				expect(sentPoints()).toEqual(['point-gym', null]);
+				expect(putAsPublicWriter).not.toHaveBeenCalled();
+			});
+
+			it('writes null for a booking that is not a self drop-off', async () => {
+				couchHas(null);
+				inBuffer({ logistics: { delivery_method: 'parcel' } });
+				vi.mocked(readDonationCampaign).mockResolvedValue(campaign());
+				fastapiOk();
+
+				await call([RICE]);
+
+				expect(sentPoints()).toEqual([null]);
+			});
+
+			it('writes null and reads no campaign for a booking made outside one', async () => {
+				couchHas(null);
+				inBuffer({ campaign_id: null });
+				fastapiOk();
+
+				await call([{ ...RICE, drop_off_point_id: 'point-gym' }]);
+
+				expect(readDonationCampaign).not.toHaveBeenCalled();
+				expect(sentPoints()).toEqual([null]);
+			});
+
+			it('stops before moving quota when the campaign cannot be read (AC-AP-14b)', async () => {
+				couchHas(null);
+				inBuffer();
+				vi.mocked(readDonationCampaign).mockRejectedValue(
+					new CouchReadError('shelter_sh001', 'c1', 500)
+				);
+				fastapiOk();
+
+				const response = await call([RICE]);
+
+				expect(response.status).toBe(503);
+				expect((await response.json()).error).toBe('DONATION_UNAVAILABLE');
+				expect(vi.mocked(fetch).mock.calls.some(([, init]) => init?.method === 'PATCH')).toBe(
+					false
+				);
+			});
+
+			it('stops before moving quota when the buffer cannot be read', async () => {
+				couchHas(null);
+				buffered = { status: 500, body: {} };
+				fastapiOk();
+
+				const response = await call([RICE]);
+
+				expect(response.status).toBe(503);
+				expect((await response.json()).error).toBe('DONATION_UNAVAILABLE');
+				expect(vi.mocked(fetch).mock.calls.some(([, init]) => init?.method === 'PATCH')).toBe(
+					false
+				);
+			});
+
+			it.each([
+				['a body without the donation', { status: 200, body: {} }],
+				['a body that is not JSON', { status: 200, body: '<html>bad gateway</html>' }]
+			])('stops before moving quota when the buffer answers with %s', async (_label, reply) => {
+				couchHas(null);
+				buffered = reply as typeof buffered;
+				fastapiOk();
+
+				const response = await call([RICE]);
+
+				expect(response.status).toBe(503);
+				expect((await response.json()).error).toBe('DONATION_UNAVAILABLE');
+				expect(vi.mocked(fetch).mock.calls.some(([, init]) => init?.method === 'PATCH')).toBe(
+					false
+				);
+				expect(readDonationCampaign).not.toHaveBeenCalled();
+			});
+
+			it('leaves the 404 to the PATCH when FastAPI has no such booking', async () => {
+				couchHas(null);
+				buffered = { status: 404, body: {} };
+				fastapiFails(404, { success: false, error: 'Donation record not found' });
+
+				const response = await call([RICE]);
+
+				expect(response.status).toBe(404);
+				expect(readDonationCampaign).not.toHaveBeenCalled();
+			});
+		});
+
+		it('writes null for every line of a booking that is not a self drop-off', async () => {
+			couchHas(dropOffDoc({ logistics: { delivery_method: 'parcel' } }));
+			vi.mocked(readDonationCampaign).mockResolvedValue(campaign());
+			fastapiOk();
+
+			await call([RICE]);
+
+			expect(sentPoints()).toEqual([null]);
+		});
+
+		it('writes the points FastAPI returned and stamps the current schema_v', async () => {
+			couchHas(dropOffDoc());
+			fastapiOk({
+				items: [{ ...RICE, drop_off_point_id: 'point-gym' }]
+			});
+
+			await call([RICE]);
+
+			const [, , written] = vi.mocked(putAsPublicWriter).mock.calls[0]!;
+			const doc = written as { items: Array<Record<string, unknown>>; schema_v: number };
+			expect(doc.items[0].drop_off_point_id).toBe('point-gym');
+			expect(doc.schema_v).toBe(DONATION_SCHEMA_V);
+		});
+
+		// FR-MP-17 / FR-MP-17a / AC-9 — the real guard: a receipt alone starts the booking.
+		it('refuses an edit once a point recorded a receipt, moving no quota (AC-9)', async () => {
+			const actual = await vi.importActual<typeof import('$lib/server/donation-docs')>(
+				'$lib/server/donation-docs'
+			);
+			vi.mocked(hasKeyedDonationStock).mockImplementation(actual.hasKeyedDonationStock);
+			couchHas(
+				dropOffDoc({
+					point_receipts: [{ point_id: 'point-gym', line_nos: [0], ledger_ids: [] }]
+				})
+			);
+			fastapiOk();
+
+			const response = await call([RICE]);
+
+			expect(response.status).toBe(409);
+			expect((await response.json()).error).toBe('GOODS_IN_STOCK');
+			expect(fetch).not.toHaveBeenCalled();
+			expect(putAsPublicWriter).not.toHaveBeenCalled();
 		});
 	});
 });

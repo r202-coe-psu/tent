@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Locator, type Page } from '@playwright/test';
 import {
 	createCouchUser,
 	deleteCouchUser,
@@ -27,7 +27,21 @@ const RUN_ID = `si_${Date.now().toString(36)}_${Math.random().toString(36).subst
 const SHELTER_DB = 'shelter_sh001';
 const CATALOG_DB = 'catalog';
 
-const DISTRIBUTE_FORBIDDEN_HINT = 'ต้องมีสิทธิ์เจ้าหน้าที่คลัง (warehouse_staff) จึงจะเบิกจ่ายได้';
+const DISTRIBUTE_FORBIDDEN_HINT =
+	'ต้องมีสิทธิ์เจ้าหน้าที่คลัง (warehouse_staff) หรือผู้จัดการศูนย์ (shelter_manager) จึงจะเบิกจ่ายได้';
+
+/**
+ * A disabled button has `pointer-events: none`, so its reason lives on the wrapper around it
+ * (#572): described for screen readers, and shown as a tooltip when the wrapper is hovered.
+ */
+async function expectDisabledReason(page: Page, button: Locator, reason: string) {
+	const wrapper = button.locator('xpath=ancestor::*[@aria-disabled="true"][1]');
+	await expect(wrapper).toHaveAccessibleDescription(reason);
+	await wrapper.hover();
+	// bits-ui tooltip content carries no `tooltip` role; shadcn marks it with data-slot.
+	await expect(page.locator('[data-slot="tooltip-content"]')).toContainText(reason);
+	await page.mouse.move(0, 0);
+}
 
 const WH_STAFF: TestUser = {
 	name: `wh_staff_${RUN_ID}`,
@@ -50,7 +64,19 @@ const REG_STAFF: TestUser = {
 	display_name: 'Registration Staff E2E'
 };
 
-const testUsernames = new Set<string>([WH_STAFF.name, COORD_STAFF.name, REG_STAFF.name]);
+const SHELTER_MGR: TestUser = {
+	name: `shelter_mgr_${RUN_ID}`,
+	password: 'Password1!',
+	roles: ['shelter:SH001', 'shelter_manager'],
+	display_name: 'Shelter Manager E2E'
+};
+
+const testUsernames = new Set<string>([
+	WH_STAFF.name,
+	COORD_STAFF.name,
+	REG_STAFF.name,
+	SHELTER_MGR.name
+]);
 const ownedShelterDocIds = new Set<string>();
 const ownedCatalogDocIds = new Set<string>();
 const sessions: Record<string, string> = {};
@@ -68,7 +94,7 @@ test.describe('Stock Inventory & Warehouse Operations (/back-office/supply)', ()
 
 	test.beforeAll(async () => {
 		// 1. Create and setup test users
-		for (const user of [WH_STAFF, COORD_STAFF, REG_STAFF]) {
+		for (const user of [WH_STAFF, COORD_STAFF, REG_STAFF, SHELTER_MGR]) {
 			await createCouchUser(user);
 			await seedSecurityQuestion(user.name);
 			sessions[user.name] = await couchLogin(user.name, user.password);
@@ -293,7 +319,7 @@ test.describe('Stock Inventory & Warehouse Operations (/back-office/supply)', ()
 		const headerDistribute = page.getByRole('button', { name: 'เบิกจ่าย', exact: true });
 		await expect(headerDistribute).toBeVisible();
 		await expect(headerDistribute).toBeDisabled();
-		await expect(headerDistribute).toHaveAttribute('title', DISTRIBUTE_FORBIDDEN_HINT);
+		await expectDisabledReason(page, headerDistribute, DISTRIBUTE_FORBIDDEN_HINT);
 
 		// 2. Filter to Item 1
 		const searchInput = page.getByPlaceholder('ค้นหาชื่อ / SKU / สแกนบาร์โค้ด');
@@ -306,7 +332,7 @@ test.describe('Stock Inventory & Warehouse Operations (/back-office/supply)', ()
 		const rowDistribute = row.getByRole('button', { name: `เบิก ${item1Name}` });
 		await expect(rowDistribute).toBeVisible();
 		await expect(rowDistribute).toBeDisabled();
-		await expect(rowDistribute).toHaveAttribute('title', DISTRIBUTE_FORBIDDEN_HINT);
+		await expectDisabledReason(page, rowDistribute, DISTRIBUTE_FORBIDDEN_HINT);
 
 		// 4. Open Item Detail Sheet and verify distribute button inside sheet is also disabled
 		await row.getByRole('button', { name: item1Name, exact: true }).click();
@@ -316,7 +342,7 @@ test.describe('Stock Inventory & Warehouse Operations (/back-office/supply)', ()
 		const sheetDistribute = sheet.getByRole('button', { name: `เบิกจ่าย ${item1Name}` });
 		await expect(sheetDistribute).toBeVisible();
 		await expect(sheetDistribute).toBeDisabled();
-		await expect(sheetDistribute).toHaveAttribute('title', DISTRIBUTE_FORBIDDEN_HINT);
+		await expectDisabledReason(page, sheetDistribute, DISTRIBUTE_FORBIDDEN_HINT);
 
 		// Close sheet
 		await page.keyboard.press('Escape');
@@ -371,6 +397,11 @@ test.describe('Stock Inventory & Warehouse Operations (/back-office/supply)', ()
 
 		const searchInput = page.getByPlaceholder('ค้นหาชื่อ / SKU / สแกนบาร์โค้ด');
 
+		// Let the list load first, so the filter below is what hides the other item.
+		await expect(page.getByRole('row').filter({ hasText: item2Name })).toBeVisible({
+			timeout: 10_000
+		});
+
 		// 1. Search for Item 1
 		await searchInput.fill(item1Name);
 		await expect(page.getByRole('row').filter({ hasText: item1Name })).toBeVisible({
@@ -401,6 +432,31 @@ test.describe('Stock Inventory & Warehouse Operations (/back-office/supply)', ()
 			});
 			await expect(page.getByRole('row').filter({ hasText: item2Name })).toBeVisible();
 		}
+	});
+
+	test('a query typed before the shelter list resolves is kept', async ({ page }) => {
+		await routeBrowserCouchThroughApp(page);
+		await injectSession(page, WH_STAFF, sessions[WH_STAFF.name]);
+		// First visit on a device: no remembered shelter, so the shelter list picks one once it loads.
+		await page.addInitScript(() => localStorage.removeItem('tent.activeShelterCode'));
+		let releaseShelters!: () => void;
+		const sheltersHeld = new Promise<void>((resolve) => (releaseShelters = resolve));
+		await page.route(/\/couch\/registry\//, async (route) => {
+			await sheltersHeld;
+			await route.fallback();
+		});
+		await page.goto('/back-office/supply');
+
+		const searchInput = page.getByPlaceholder('ค้นหาชื่อ / SKU / สแกนบาร์โค้ด');
+		await searchInput.fill(item1Name);
+		// Resolve the shelters inside the 300ms search debounce, before the query reaches the URL.
+		releaseShelters();
+
+		await expect(page.getByRole('row').filter({ hasText: item1Name })).toBeVisible({
+			timeout: 10_000
+		});
+		await expect(page.getByRole('row').filter({ hasText: item2Name })).toHaveCount(0);
+		await expect(searchInput).toHaveValue(item1Name);
 	});
 
 	test('shelf life expiry: expired badge and attention card (CR-156 §J)', async ({ page }) => {
@@ -441,5 +497,44 @@ test.describe('Stock Inventory & Warehouse Operations (/back-office/supply)', ()
 		await expect(page.getByRole('row').filter({ hasText: item1Name })).toBeVisible({
 			timeout: 10_000
 		});
+	});
+
+	test('shelter manager can distribute stock directly (#837)', async ({ page }) => {
+		await routeBrowserCouchThroughApp(page);
+		await injectSession(page, SHELTER_MGR, sessions[SHELTER_MGR.name]);
+		await page.goto('/back-office/supply');
+
+		await expect(page.getByRole('heading', { name: 'คลังของศูนย์' })).toBeVisible({
+			timeout: 10_000
+		});
+		await expect(page.getByRole('button', { name: 'เบิกจ่าย', exact: true })).toBeEnabled();
+
+		await page.getByPlaceholder('ค้นหาชื่อ / SKU / สแกนบาร์โค้ด').fill(item1Name);
+		const row = page.getByRole('row').filter({ hasText: item1Name });
+		await expect(row).toBeVisible({ timeout: 10_000 });
+		await row.getByRole('button', { name: `เบิก ${item1Name}` }).click();
+
+		const form = page.getByRole('dialog');
+		await expect(form.getByText(DISTRIBUTE_FORBIDDEN_HINT)).toHaveCount(0);
+		await form.locator('input[id^="distribute-qty-"]').fill('2');
+		await form.getByLabel('ปลายทาง / ผู้รับ').fill(`E2E SM ${RUN_ID}`);
+		await form.getByRole('button', { name: /^เบิก 2 / }).click();
+		// A rejected write keeps the sheet open with an error toast; success closes it.
+		await expect(form).toBeHidden({ timeout: 15_000 });
+
+		// The row landed through the VDU (reservation claim + ledger write) as the manager.
+		await expect
+			.poll(
+				async () =>
+					(await allDocuments(SHELTER_DB)).filter(
+						(d) =>
+							d.type === 'stock_ledger' &&
+							d.reason === 'distribute' &&
+							d.item_id === item1Id &&
+							d.created_by === SHELTER_MGR.name
+					).length,
+				{ timeout: 15_000 }
+			)
+			.toBe(1);
 	});
 });

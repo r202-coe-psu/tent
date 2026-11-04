@@ -25,6 +25,9 @@ export type PublicNeedItem = {
 	status?: string;
 	category?: string;
 	urgency?: 'critical' | 'important' | 'normal' | string;
+	/** One row per item + drop-off point (CR-206 A2): `item_id` can repeat in a shelter. */
+	drop_off_point_id?: string | null;
+	drop_off_point_name?: string | null;
 	target?: number;
 	received?: number;
 };
@@ -58,18 +61,26 @@ export const load: PageLoad = async ({ fetch, parent }) => {
 			return null;
 		})
 	]);
+	// `null` = the list could not be read (network error, non-2xx, or a body that is not JSON).
 	const [needsData, sheltersData, summaryData] = await Promise.all([
 		needsRes?.ok
-			? needsRes.json().catch(() => [] as PublicShelterNeeds[])
-			: Promise.resolve([] as PublicShelterNeeds[]),
+			? (needsRes.json().catch(() => null) as Promise<PublicShelterNeeds[] | null>)
+			: Promise.resolve(null),
 		sheltersRes?.ok
-			? sheltersRes.json().catch(() => ({}) as { shelters?: PublicShelterItem[] })
-			: Promise.resolve({} as { shelters?: PublicShelterItem[] }),
+			? (sheltersRes.json().catch(() => null) as Promise<{
+					shelters?: PublicShelterItem[];
+				} | null>)
+			: Promise.resolve(null),
 		summaryRes ? summaryRes.json().catch(() => null) : Promise.resolve(null)
 	]);
 
 	const donationNeeds: PublicShelterNeeds[] = needsData || [];
-	const sheltersList: PublicShelterItem[] = sheltersData.shelters || [];
+	const sheltersList: PublicShelterItem[] = sheltersData?.shelters || [];
+	/**
+	 * Either list failed to load (#740). The page still renders with empty lists, but says the
+	 * system is unavailable — otherwise an outage reads as "no needs / no shelters".
+	 */
+	const listsLoadFailed = needsData === null || sheltersData === null;
 
 	if (summaryRes) {
 		const parsedSummaryData = summaryData as TransparencySummaryPayload | null;
@@ -97,6 +108,7 @@ export const load: PageLoad = async ({ fetch, parent }) => {
 	return {
 		donationNeeds,
 		sheltersList,
+		listsLoadFailed,
 		...metrics
 	};
 };

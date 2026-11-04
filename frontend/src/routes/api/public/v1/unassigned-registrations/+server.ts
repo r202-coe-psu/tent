@@ -9,7 +9,6 @@ import {
 import { publicUnassignedRegistrationRequestSchema } from '$lib/features/public-register/server';
 import { ReCaptchaProvider } from '$lib/server/security/captcha';
 import { verifyRecaptchaOrSkip } from '$lib/server/security/recaptcha-gate';
-import { registerIpLimiter, registerPhoneLimiter } from '$lib/server/security/rate-limiter';
 
 export const prerender = false;
 
@@ -37,18 +36,7 @@ export const POST: RequestHandler = async ({ request, getClientAddress, fetch })
 	}
 	const input = parsed.data;
 
-	if (input.disclaimerAcknowledged !== true) {
-		return json(
-			{ success: false, error: 'DISCLAIMER_REQUIRED' },
-			{ status: 400, headers: noStore }
-		);
-	}
-
 	const ip = getClientAddress();
-	const contactPhone = input.members[0]?.phone ?? '';
-	if (!registerIpLimiter.check(ip) || (contactPhone && !registerPhoneLimiter.check(contactPhone))) {
-		return json({ success: false, error: 'RATE_LIMITED' }, { status: 429, headers: noStore });
-	}
 
 	const captcha = await verifyRecaptchaOrSkip({
 		token: input.captchaToken ?? '',
@@ -70,7 +58,10 @@ export const POST: RequestHandler = async ({ request, getClientAddress, fetch })
 				household: input.household,
 				...(input.join_match_token ? { join_match_token: input.join_match_token } : {})
 			},
-			{ fetch }
+			{
+				fetch,
+				consent: { consent: input.consent, consent_member_keys: input.consent_member_keys }
+			}
 		);
 		return json({ ...created, success: true }, { status: 201, headers: noStore });
 	} catch (err) {

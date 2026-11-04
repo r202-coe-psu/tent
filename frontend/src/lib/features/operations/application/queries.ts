@@ -1,6 +1,7 @@
 import {
 	createMutation,
 	createQuery,
+	keepPreviousData,
 	useQueryClient,
 	type QueryClient
 } from '@tanstack/svelte-query';
@@ -17,7 +18,6 @@ import type {
 	DonationSlot,
 	CampaignInput,
 	ReceiveInput,
-	DistributeInput,
 	AdjustInput,
 	TransferInput,
 	TransferFilter,
@@ -33,7 +33,12 @@ import type { MergeItemsInput } from '../domain/item-merge';
 import type { DonationBatchLine } from '../domain/donation-batch';
 import type { CycleCountSubmission } from '../domain/cycle-count';
 import { countPendingTransfers } from '../domain/transfer-pending';
-import { distributeAcrossLots, type DistributeAcrossLotsArgs } from './distribute-across-lots';
+import { buildDonationLotRows } from '../domain/donation-lots';
+import { labelledLedgerRefIds, ledgerRefLabels } from '../domain/ledger-ref';
+import { digestRefIds, resolveLedgerRefLabels, type LedgerRefLabels } from './ledger-ref-labels';
+import { retryUnlessForbidden } from './transfer-retry';
+import { distributeBatch } from './distribute-batch';
+import type { BatchLinePlan } from '../domain/distribute-batch';
 
 /**
  * Keys for data read out of ONE shelter's database carry that shelter's code, like
@@ -48,11 +53,17 @@ export const operationsKeys = {
 	stockLedgers: () => [...operationsKeys.all, 'stockLedgers', getShelterCode()] as const,
 	donations: () => [...operationsKeys.all, 'donations', getShelterCode()] as const,
 	ledger: () => [...operationsKeys.all, 'ledger'] as const,
+	donationLots: (donationId: string) =>
+		[...operationsKeys.all, 'donationLots', getShelterCode(), donationId] as const,
 	byItem: (id: string) => [...operationsKeys.ledger(), id] as const,
+	ledgerRefs: () => [...operationsKeys.all, 'ledgerRefs', getShelterCode()] as const,
+	ledgerRefsFor: (idsDigest: string) => [...operationsKeys.ledgerRefs(), idsDigest] as const,
 	balance: () => [...operationsKeys.all, 'balance', getShelterCode()] as const,
 	donationSlots: () => [...operationsKeys.all, 'donationSlots', getShelterCode()] as const,
 	transfers: () => [...operationsKeys.all, 'transfers'] as const,
-	transfer: (id: string) => [...operationsKeys.transfers(), id] as const
+	transfer: (id: string) => [...operationsKeys.transfers(), id] as const,
+	transferDestinations: () =>
+		[...operationsKeys.all, 'transferDestinations', getShelterCode()] as const
 };
 
 export const useCampaigns = () =>
@@ -156,6 +167,50 @@ export const useLedgerByItem = (itemId: () => string | undefined) =>
 		queryFn: () => operationsRepository().listLedgerByItem(itemId() ?? ''),
 		enabled: !!itemId()
 	}));
+
+/**
+ * The lots one donation brought into stock, with what is left of each (#821 FR-12). Two reads,
+ * both bounded: the donation's own ledger rows, then the history of just those items to replay
+ * their per-lot balances. `staleTime: 0` — a balance read a minute ago is a wrong balance.
+ */
+export const useDonationLots = (donationId: () => string | undefined) =>
+	createQuery(() => ({
+		queryKey: operationsKeys.donationLots(donationId() ?? ''),
+		queryFn: async () => {
+			const repo = operationsRepository();
+			const receipts = await repo.listDonationLedger(donationId() ?? '');
+			const itemIds = [...new Set(receipts.map((row) => row.item_id))];
+			return buildDonationLotRows(receipts, await repo.listLedgerByItems(itemIds));
+		},
+		enabled: !!donationId(),
+		staleTime: 0
+	}));
+
+/**
+ * Readable labels for ledger `ref_id`s (#811); ids without one fall back to `shortLedgerRef`.
+ * Keyed on a digest of the ids, and ids an earlier key already resolved come from the cache.
+ */
+export const useLedgerRefLabels = (refIds: () => readonly string[]) => {
+	const queryClient = useQueryClient();
+	return createQuery(() => {
+		const ids = labelledLedgerRefIds(refIds());
+		const shelterKey = operationsKeys.ledgerRefs();
+		return {
+			queryKey: operationsKeys.ledgerRefsFor(digestRefIds(ids)),
+			queryFn: () =>
+				resolveLedgerRefLabels(
+					ids,
+					queryClient
+						.getQueriesData<LedgerRefLabels>({ queryKey: shelterKey })
+						.map(([, labels]) => labels),
+					async (missing) =>
+						ledgerRefLabels(await operationsRepository().listLedgerRefDocs(missing))
+				),
+			enabled: ids.length > 0,
+			placeholderData: keepPreviousData
+		};
+	});
+};
 
 export const useStockBalance = () =>
 	createQuery(() => ({
@@ -295,34 +350,26 @@ export const useApplyCycleCount = () => {
 };
 
 /**
- * Mutation hook to distribute outbound stock, persist the ledger entry, and invalidate caches.
+ * Mutation hook to issue several items under one `ref_id` (#837): one `distributeAcrossLots`
+ * per line, no rollback. Resolves with per-line outcomes when a row fails — read
+ * `result.outcomes` / `.complete`. The caches are refetched before it resolves, even on a
+ * partial run (earlier rows already landed), so the retry plans from fresh balances.
  */
-export const useDistributeStock = () => {
+export const useDistributeBatch = () => {
 	const queryClient = useQueryClient();
 	return createMutation(() => ({
-		mutationFn: ({ input, ctx }: { input: DistributeInput; ctx: AuthorContext }) =>
-			operationsRepository().distributeStock(input, ctx),
-		onSuccess: () => {
-			// Eagerly invalidate — live query will also fire, but this ensures instant update
-			queryClient.invalidateQueries({ queryKey: operationsKeys.all });
-		}
-	}));
-};
-
-/**
- * Mutation hook to issue one request across several lots (CR-143 FR-A7–A9): one
- * `distributeStock` per planned lot, one shared `ref_id`, no rollback. Resolves
- * with the partial result when a row fails — read `result.complete` / `.failure`.
- * Caches are invalidated either way, since earlier rows may already have landed.
- */
-export const useDistributeAcrossLots = () => {
-	const queryClient = useQueryClient();
-	return createMutation(() => ({
-		mutationFn: ({ plan, ctx }: { plan: DistributeAcrossLotsArgs; ctx: AuthorContext }) =>
-			distributeAcrossLots(operationsRepository(), plan, ctx),
-		onSettled: () => {
-			queryClient.invalidateQueries({ queryKey: operationsKeys.all });
-		}
+		mutationFn: ({
+			lines,
+			ref_id,
+			note,
+			ctx
+		}: {
+			lines: readonly BatchLinePlan[];
+			ref_id: string;
+			note: string;
+			ctx: AuthorContext;
+		}) => distributeBatch(operationsRepository(), lines, ref_id, note, ctx),
+		onSettled: () => queryClient.invalidateQueries({ queryKey: operationsKeys.all })
 	}));
 };
 
@@ -357,12 +404,24 @@ export const useMergeItems = () => {
 };
 
 /**
+ * Shelters the active shelter may send a transfer to (#570) — every shelter but its own, for
+ * the roles the transfer API accepts. Shelters change rarely, so it is kept fresh for a while.
+ */
+export const useTransferDestinations = () =>
+	createQuery(() => ({
+		queryKey: operationsKeys.transferDestinations(),
+		queryFn: () => operationsRepository().listTransferDestinations(),
+		staleTime: 5 * 60_000
+	}));
+
+/**
  * Query hook to list transfers (source or destination) for the active shelter (CR-059 Flow 1 / T-13).
  */
 export const useTransfers = (filter?: TransferFilter) =>
 	createQuery(() => ({
 		queryKey: operationsKeys.transfers(),
-		queryFn: () => operationsRepository().listTransfers(filter)
+		queryFn: () => operationsRepository().listTransfers(filter),
+		retry: retryUnlessForbidden
 	}));
 
 /**
@@ -373,6 +432,7 @@ export const usePendingTransferCount = () =>
 	createQuery(() => ({
 		queryKey: operationsKeys.transfers(),
 		queryFn: () => operationsRepository().listTransfers(),
+		retry: retryUnlessForbidden,
 		select: (transfers: StockTransfer[]) => countPendingTransfers(transfers, getShelterCode())
 	}));
 

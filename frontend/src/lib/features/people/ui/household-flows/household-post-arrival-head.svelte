@@ -90,7 +90,7 @@
 	<div class="space-y-2">
 		<h3 class="text-lg font-bold text-foreground">1. ตรวจสอบและเลือกหัวหน้าครัวเรือน</h3>
 		<p class="text-sm text-muted-foreground">
-			สืบค้นข้อมูลผู้ประสบภัยที่ทำการเช็คอินเข้าพักในศูนย์แล้ว เพื่อกำหนดเป็นหัวหน้าครัวเรือนหลัก
+			สืบค้นข้อมูลผู้เข้าพักที่ทำการเช็คอินเข้าพักในศูนย์แล้ว เพื่อกำหนดเป็นหัวหน้าครัวเรือนหลัก
 		</p>
 	</div>
 
@@ -164,7 +164,7 @@
 				</div>
 			{:else if debouncedHeadQuery && headSearchResults.length === 0}
 				<div class="py-6 text-center text-sm text-muted-foreground">
-					ไม่พบผู้ประสบภัยที่ตรงกับการค้นหา
+					ไม่พบผู้เข้าพักที่ตรงกับการค้นหา
 				</div>
 			{:else if headSearchResults.length > 0}
 				<div class="max-h-[300px] space-y-2 overflow-y-auto">

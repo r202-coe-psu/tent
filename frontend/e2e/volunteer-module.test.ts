@@ -26,6 +26,10 @@ const TODAY = new Intl.DateTimeFormat('en-CA', {
 	month: '2-digit',
 	day: '2-digit'
 }).format(new Date());
+/** Tomorrow in Asia/Bangkok: a public-board shift that is never ended while the suite runs (#972). */
+const TOMORROW = new Date(new Date(`${TODAY}T00:00:00Z`).getTime() + 24 * 60 * 60 * 1000)
+	.toISOString()
+	.slice(0, 10);
 
 const ACCOUNTS = {
 	sa: {
@@ -189,7 +193,7 @@ const PUBLIC_JOB = {
 	shifts: [
 		{
 			id: 'morning-1',
-			date: TODAY,
+			date: TOMORROW,
 			start_time: '08:00',
 			end_time: '12:00',
 			quota: 2,
@@ -238,7 +242,13 @@ async function mockVolunteerCouch(
 
 	await page.route('**/*', async (route) => {
 		const requestUrl = new URL(route.request().url());
-		const segments = requestUrl.pathname.split('/').filter(Boolean);
+		// The app reaches CouchDB through the same-origin proxy (PUBLIC_COUCH_PROXY=/couch,
+		// the default in .env) or directly — strip the proxy prefix so both match. Without it
+		// every request fell through to the real dev CouchDB and the board showed its jobs.
+		const segments = requestUrl.pathname
+			.replace(/^\/couch(?=\/)/, '')
+			.split('/')
+			.filter(Boolean);
 		const dbName = segments[0];
 		if (dbName !== 'registry' && !dbName?.startsWith('shelter_')) {
 			await route.fallback();
@@ -375,7 +385,7 @@ test.describe('Volunteer backoffice module', () => {
 		await injectSession(page, ACCOUNTS.sm, sessions.sm);
 		await page.goto(`${BASE}/back-office/volunteers`);
 
-		await expect(page.getByText('Smart Volunteer Control Hub')).toBeVisible();
+		await expect(page.getByRole('heading', { name: 'จัดการอาสาสมัคร', level: 2 })).toBeVisible();
 		await expect(page.getByRole('heading', { name: JOB_DOC.title })).toBeVisible();
 
 		await page.getByRole('tab', { name: /ตารางกะและเช็คอิน/ }).click();

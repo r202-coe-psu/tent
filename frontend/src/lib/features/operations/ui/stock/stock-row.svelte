@@ -1,6 +1,7 @@
 <script lang="ts">
 	import * as Table from '$lib/components/ui/table/index.js';
 	import RowActions from './row-actions.svelte';
+	import { OFFLINE_HINT } from './hints';
 	import StatusBadges from './status-badges.svelte';
 	import StockBar from './stock-bar.svelte';
 	import { formatThresholdLine } from './stock-bar';
@@ -71,6 +72,9 @@
 			>
 			<span class="text-xs text-slate-500">{row.unitLabel}</span>
 		</p>
+		{#if row.usableNote}
+			<p class="mt-0.5 text-xs font-semibold text-red-800 tabular-nums">{row.usableNote}</p>
+		{/if}
 		<div class="mt-1.5">
 			<StockBar onHand={row.qtyOnHand} threshold={row.reorderThreshold} {caption} />
 		</div>
@@ -103,6 +107,7 @@
 			itemName={row.name}
 			layout="inline"
 			disabled={readonly || offline}
+			disabledReason={offline ? OFFLINE_HINT : undefined}
 			distributeDisabled={!canDistribute}
 			onreceive={() => onreceive(row)}
 			ondistribute={() => ondistribute(row)}

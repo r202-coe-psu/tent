@@ -2,6 +2,8 @@ import { describe, it, expect } from 'vitest';
 import { createEvacuee, createHousehold } from '$lib/features/people/server';
 import {
 	bookingCodeFrom,
+	bookingOptionalPhoneSchema,
+	bookingPhoneSchema,
 	evacueeIdFromBookingCode,
 	householdLabelFrom,
 	isCaptchaKeyConfigured,
@@ -227,11 +229,11 @@ describe('toEvacueeInputs → createEvacuee', () => {
 	const ctx = { shelterCode: 'SH001', createdBy: 'public' };
 
 	it('mints every member pre_registered with registered_via web', () => {
-		const evacuees = toEvacueeInputs(input, 'household:H1').map((i) => createEvacuee(i, ctx));
+		const evacuees = toEvacueeInputs(input, 'household:H1').map((i) => createEvacuee(i, ctx, null));
 
 		expect(evacuees).toHaveLength(3);
 		for (const e of evacuees) {
-			expect(e.schema_v).toBe(14);
+			expect(e.schema_v).toBe(15);
 			expect(e.registered_via).toBe('web');
 
 			expect(e.current_stay.status).toBe('pre_registered');
@@ -243,7 +245,7 @@ describe('toEvacueeInputs → createEvacuee', () => {
 	});
 
 	it('gives the phone and national id to the contact only', () => {
-		const evacuees = toEvacueeInputs(input, 'household:H1').map((i) => createEvacuee(i, ctx));
+		const evacuees = toEvacueeInputs(input, 'household:H1').map((i) => createEvacuee(i, ctx, null));
 
 		expect(evacuees[0].phone).toBe('0812345678');
 		expect(evacuees[0].person_id).toEqual({ cardType: 'national_id', number: '1234567890121' });
@@ -253,7 +255,7 @@ describe('toEvacueeInputs → createEvacuee', () => {
 	});
 
 	it('carries each member’s own vulnerability tags into special_needs', () => {
-		const evacuees = toEvacueeInputs(input, 'household:H1').map((i) => createEvacuee(i, ctx));
+		const evacuees = toEvacueeInputs(input, 'household:H1').map((i) => createEvacuee(i, ctx, null));
 
 		expect(evacuees[0].special_needs).toEqual([]);
 		expect(evacuees[1].special_needs).toEqual(['ผู้สูงอายุ']);
@@ -269,7 +271,7 @@ describe('toEvacueeInputs → createEvacuee', () => {
 			]
 		});
 		const evacuees = toEvacueeInputs(inputWithAges, 'household:H1').map((i) =>
-			createEvacuee(i, ctx)
+			createEvacuee(i, ctx, null)
 		);
 		expect(evacuees[0].birth_year).toBe(2530);
 		expect(evacuees[0].age).toBe(39);
@@ -600,5 +602,15 @@ describe('CR-112 / CR-113 alignment', () => {
 			number: 'ANON-01JABCDEFGHJKMNPQRSTVWXYZ0'
 		});
 		expect(evacuees[1].vulnerable_groups).toEqual(['child']);
+	});
+});
+
+describe('booking phone schemas (CR-210)', () => {
+	it('requires a 0-prefixed 10-digit mobile', () => {
+		expect(bookingPhoneSchema.safeParse('1234567890').success).toBe(false);
+		expect(bookingPhoneSchema.safeParse('022222222').success).toBe(false);
+		expect(bookingPhoneSchema.parse('+66812345678')).toBe('0812345678');
+		expect(bookingOptionalPhoneSchema.safeParse('1234567890').success).toBe(false);
+		expect(bookingOptionalPhoneSchema.safeParse('').success).toBe(true);
 	});
 });

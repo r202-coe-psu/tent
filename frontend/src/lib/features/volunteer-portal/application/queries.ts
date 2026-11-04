@@ -3,6 +3,7 @@ import {
 	applyToJob,
 	applyScheduleAction,
 	cancelTicket,
+	fetchAccessStatus,
 	fetchJobs,
 	fetchProfile,
 	fetchRoleCardToken,
@@ -25,6 +26,8 @@ export const volunteerPortalKeys = {
 		[...volunteerPortalKeys.all, 'schedule', credential] as const,
 	tickets: (credential: PortalCredential) =>
 		[...volunteerPortalKeys.all, 'tickets', credential] as const,
+	accessStatus: (credential: PortalCredential) =>
+		[...volunteerPortalKeys.all, 'access-status', credential] as const,
 	profile: (credential: PortalCredential) =>
 		[...volunteerPortalKeys.all, 'profile', credential] as const,
 	skills: (shelterCode?: string) =>
@@ -51,8 +54,9 @@ export function useFindTicketsMutation() {
 export function useCancelTicketMutation() {
 	const queryClient = useQueryClient();
 	return createMutation(() => ({
-		mutationFn: (token: string) => cancelTicket(token),
-		onSuccess: (_data, token: string) => {
+		mutationFn: (input: { token: string; applicationId: string }) =>
+			cancelTicket(input.token, input.applicationId),
+		onSuccess: (_data, { token }) => {
 			void queryClient.invalidateQueries({ queryKey: volunteerPortalKeys.ticket(token) });
 		}
 	}));
@@ -69,6 +73,19 @@ export function useVolunteerSchedule(credential: () => PortalCredential | null) 
 	return createQuery(() => ({
 		queryKey: volunteerPortalKeys.schedule(credential() ?? { phone: '' }),
 		queryFn: () => fetchSchedule(credential()!),
+		enabled: credential() !== null,
+		staleTime: 0
+	}));
+}
+
+/**
+ * The signed-in volunteer's staff-system access per shelter (CR-221 FR-26). `null` = signed out:
+ * the query is disabled and never fetches (its key then holds an empty phone, a placeholder only).
+ */
+export function useVolunteerAccessStatus(credential: () => PortalCredential | null) {
+	return createQuery(() => ({
+		queryKey: volunteerPortalKeys.accessStatus(credential() ?? { phone: '' }),
+		queryFn: () => fetchAccessStatus(credential()!),
 		enabled: credential() !== null,
 		staleTime: 0
 	}));
@@ -134,13 +151,21 @@ export function useScheduleActionMutation(credential: () => PortalCredential | n
  */
 export function useVolunteerJobs(
 	filter: () => PublicJobFilter = () => ({}),
-	enabled: () => boolean = () => true
+	enabled: () => boolean = () => true,
+	/**
+	 * The board refetches on every visit (`staleTime: 0`) so an applicant never books a seat
+	 * that is gone. A page that only shows totals — the public home card (#709) — can ask for
+	 * less: the BFF shares a 30-a-minute-per-IP budget, and many people behind one shelter
+	 * Wi-Fi would spend it on refocus refetches alone.
+	 */
+	options: { staleTime?: number; refetchOnWindowFocus?: boolean } = {}
 ) {
 	return createQuery(() => ({
 		queryKey: volunteerPortalKeys.jobsList(filter()),
 		queryFn: () => fetchJobs(filter()),
 		enabled: enabled(),
-		staleTime: 0
+		staleTime: options.staleTime ?? 0,
+		refetchOnWindowFocus: options.refetchOnWindowFocus ?? true
 	}));
 }
 

@@ -1,6 +1,5 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { volunteerTicketLimiter } from '$lib/server/security/rate-limiter';
 import { fastapiBaseUrl, fastapiServiceHeaders } from '$lib/server/fastapi';
 import { adminRaw } from '$lib/server/couch-admin';
 
@@ -84,11 +83,7 @@ function enrichJobsWithQuotaCounts(jobs: JobDoc[]): void {
 /**
  * กระดานงานอาสาสาธารณะ (CR-092 หน้าจอ 1) — the read half of the public board.
  */
-export const GET: RequestHandler = async ({ url, fetch, getClientAddress }) => {
-	if (!volunteerTicketLimiter.check(getClientAddress())) {
-		return json({ success: false, error: 'RATE_LIMITED' }, { status: 429 });
-	}
-
+export const GET: RequestHandler = async ({ url, fetch }) => {
 	const query = new URLSearchParams();
 	const shelterCode = url.searchParams.get('shelter_code') || url.searchParams.get('shelter');
 	const skill = url.searchParams.get('skill');

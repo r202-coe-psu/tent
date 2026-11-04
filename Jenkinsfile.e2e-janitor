@@ -104,6 +104,35 @@ pipeline {
     post {
         always {
             archiveArtifacts allowEmptyArchive: true, artifacts: 'scripts/staging-e2e-janitor.mjs', fingerprint: false
+            // Discord notification (ci/README.md): on failure, or when MODE=execute (it deleted
+            // data). Dry-run successes stay quiet. Never fails the build.
+            script {
+                try {
+                    if ((currentBuild.currentResult != 'SUCCESS' || params.MODE == 'execute') && fileExists('ci/discord-notify.sh')) {
+                        withCredentials([string(credentialsId: 'tent-discord-webhook-ci', variable: 'DISCORD_WEBHOOK_URL')]) {
+                            withEnv([
+                                'NOTIFY_KIND=janitor',
+                                'NOTIFY_USERNAME=Tent Janitor',
+                                "NOTIFY_RESULT=${currentBuild.currentResult}",
+                                "NOTIFY_JOB=${env.JOB_NAME ?: ''}",
+                                "NOTIFY_BRANCH=${env.BRANCH_NAME ?: ''}",
+                                "NOTIFY_BUILD_NUMBER=${env.BUILD_NUMBER ?: ''}",
+                                "NOTIFY_BUILD_URL=${env.BUILD_URL ?: ''}",
+                                "NOTIFY_COMMIT=${env.GIT_COMMIT ?: ''}",
+                                "NOTIFY_DURATION=${currentBuild.durationString.replace(' and counting', '')}",
+                                "NOTIFY_DETAIL=Mode: ${params.MODE}, max age: ${params.MAX_AGE_HOURS}h"
+                            ]) {
+                                def rc = sh(script: './ci/discord-notify.sh', returnStatus: true)
+                                if (rc != 0) {
+                                    echo "WARNING: Discord notification failed (exit ${rc}); ignoring."
+                                }
+                            }
+                        }
+                    }
+                } catch (err) {
+                    echo "WARNING: Discord notification skipped: ${err.message}"
+                }
+            }
             cleanWs(cleanWhenNotBuilt: false,
                     deleteDirs: true,
                     disableDeferredWipeout: true,

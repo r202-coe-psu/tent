@@ -8,7 +8,10 @@ import {
 } from './kiosk-banner-form';
 import { kioskBannerInputSchema } from './kiosk-banner';
 
+const GROUP = 'kiosk_banner_group:A';
+
 const valid = (over: Partial<KioskBannerFormValues> = {}): KioskBannerFormValues => ({
+	group_id: GROUP,
 	title: 'แจกอาหารกลางวัน',
 	caption: '',
 	duration_sec: 10,
@@ -47,6 +50,10 @@ describe('kioskBannerFormSchema', () => {
 		expect(issuePaths(valid({ duration_sec: 61 }))).toContain('duration_sec');
 	});
 
+	it('requires a banner group, reported under group_id', () => {
+		expect(issuePaths(valid({ group_id: '' }))).toEqual(['group_id']);
+	});
+
 	it('rejects an unknown screen_type', () => {
 		expect(issuePaths({ ...valid(), screen_type: 'landscape' })).toContain('screen_type');
 	});
@@ -70,6 +77,12 @@ describe('bannerFormToInput', () => {
 		expect(input.caption).toBeNull();
 	});
 
+	it('carries the chosen group into the API input', () => {
+		expect(bannerFormToInput(valid({ group_id: 'kiosk_banner_group:B' })).group_id).toBe(
+			'kiosk_banner_group:B'
+		);
+	});
+
 	it('keeps a non-empty caption', () => {
 		expect(bannerFormToInput(valid({ caption: 'ที่โรงอาหาร' })).caption).toBe('ที่โรงอาหาร');
 	});
@@ -78,6 +91,7 @@ describe('bannerFormToInput', () => {
 describe('bannerToFormValues', () => {
 	it('turns a stored banner into Bangkok-local form values and back', () => {
 		const stored = {
+			group_id: GROUP,
 			title: 'ตรวจสุขภาพ',
 			caption: null,
 			duration_sec: 15,
@@ -88,6 +102,7 @@ describe('bannerToFormValues', () => {
 		};
 		const values = bannerToFormValues(stored);
 		expect(values).toEqual({
+			group_id: GROUP,
 			title: 'ตรวจสุขภาพ',
 			caption: '',
 			duration_sec: 15,
@@ -98,11 +113,24 @@ describe('bannerToFormValues', () => {
 		});
 		expect(bannerFormToInput(values)).toEqual(stored);
 	});
+
+	it('prefills an empty group for a v1 banner that has none', () => {
+		const legacy = {
+			title: 'เดิม',
+			caption: null,
+			duration_sec: 10,
+			start_at: '2026-10-16T02:00:00.000Z',
+			end_at: '2026-10-16T05:00:00.000Z',
+			status: 'active' as const
+		};
+		expect(bannerToFormValues(legacy).group_id).toBe('');
+	});
 });
 
 describe('emptyKioskBannerForm', () => {
 	it('starts with the spec defaults and blank times', () => {
 		expect(emptyKioskBannerForm()).toEqual({
+			group_id: '',
 			title: '',
 			caption: '',
 			duration_sec: 10,

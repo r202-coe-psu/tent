@@ -1,4 +1,5 @@
 import type { AuthorContext } from '$lib/db/model';
+import type { LedgerRefDoc } from '../domain/ledger-ref';
 import type {
 	DonationCampaign,
 	CampaignInput,
@@ -10,6 +11,7 @@ import type {
 	WalkInDonationInput,
 	DonationSlot,
 	StockTransfer,
+	TransferDestination,
 	TransferInput,
 	TransferFilter,
 	DispatchInfoInput,
@@ -49,6 +51,25 @@ export interface OperationsRepository {
 	 * Retrieve stock ledger entries filtered by item ID.
 	 */
 	listLedgerByItem(itemId: string): Promise<StockLedger[]>;
+
+	/**
+	 * The `reason: 'donation'` ledger rows a donation wrote on receipt (`ref_id` = its `_id`) —
+	 * the lots it brought in (#821 FR-12). Read through the `['type','ref_id','item_id','reason']`
+	 * Mango index, not by scanning the ledger.
+	 */
+	listDonationLedger(donationId: string): Promise<StockLedger[]>;
+
+	/**
+	 * Every ledger row of the given items — the history a per-lot balance is replayed from.
+	 * Bounded by those items, paged by bookmark to the end (never the default `limit` of 25).
+	 */
+	listLedgerByItems(itemIds: readonly string[]): Promise<StockLedger[]>;
+
+	/**
+	 * The docs ledger rows point at by `ref_id`. Missing or deleted ids are left out,
+	 * so the caller falls back to the short ref.
+	 */
+	listLedgerRefDocs(refIds: readonly string[]): Promise<LedgerRefDoc[]>;
 
 	/**
 	 * Calculate current on-hand stock balance for all items (sum of signed deltas).
@@ -147,6 +168,11 @@ export interface OperationsRepository {
 	// path every method above uses. See `data/transfer.server-repository.ts` for the write path.
 
 	listTransfers(filter?: TransferFilter): Promise<StockTransfer[]>;
+	/**
+	 * Shelters this shelter may send a transfer to (#570). Not `listShelters()`, which is scoped
+	 * to the caller's own shelter for everyone but system_admin.
+	 */
+	listTransferDestinations(): Promise<TransferDestination[]>;
 	getTransfer(id: string): Promise<StockTransfer | null>;
 	createTransfer(input: TransferInput, ctx: AuthorContext): Promise<StockTransfer>;
 	/** CR-089 FR-01 — the driver and plate travel with the transition; the domain rejects a

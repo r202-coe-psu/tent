@@ -6,7 +6,8 @@ import {
 	jobApplicationInputSchema,
 	canTransitionJobApplication,
 	JOB_APPLICATION_TRANSITIONS,
-	type JobApplicationInput
+	type JobApplicationInput,
+	outstandingReviewReasons
 } from './job-application.schema';
 
 const ctx = { shelterCode: 'SH001', createdBy: 'tester' };
@@ -60,6 +61,48 @@ describe('jobApplicationSchema', () => {
 
 	it('accepts legacy v2 and rejects unsupported schema versions', () => {
 		expect(jobApplicationSchema.safeParse({ ...validDoc(), schema_v: 1 }).success).toBe(false);
+		expect(jobApplicationSchema.safeParse({ ...validDoc(), schema_v: 5 }).success).toBe(false);
+	});
+
+	describe('CR-220 — schema_v 4 and the quota release markers', () => {
+		it('accepts v3 and v4', () => {
+			expect(jobApplicationSchema.safeParse({ ...validDoc(), schema_v: 3 }).success).toBe(true);
+			expect(jobApplicationSchema.safeParse({ ...validDoc(), schema_v: 4 }).success).toBe(true);
+		});
+
+		it('keeps quota_release_due_at / quota_released_at through parse (a staff save must not strip them)', () => {
+			const parsed = jobApplicationSchema.parse({
+				...validDoc(),
+				schema_v: 4,
+				status: 'cancelled',
+				quota_release_due_at: '2026-11-01T03:00:00.000Z',
+				quota_released_at: '2026-11-01T03:00:05.000Z'
+			});
+			expect(parsed.quota_release_due_at).toBe('2026-11-01T03:00:00.000Z');
+			expect(parsed.quota_released_at).toBe('2026-11-01T03:00:05.000Z');
+		});
+
+		it('treats both markers as optional and nullable', () => {
+			expect(jobApplicationSchema.safeParse(validDoc()).success).toBe(true);
+			expect(
+				jobApplicationSchema.safeParse({
+					...validDoc(),
+					quota_release_due_at: null,
+					quota_released_at: null
+				}).success
+			).toBe(true);
+		});
+
+		it('isJobApplication does not filter a v4 doc out of the staff list', () => {
+			expect(
+				isJobApplication({
+					...validDoc(),
+					schema_v: 4,
+					status: 'cancelled',
+					quota_released_at: '2026-11-01T03:00:05.000Z'
+				})
+			).toBe(true);
+		});
 	});
 
 	it('requires job_id to start with job:', () => {
@@ -135,7 +178,7 @@ describe('makeJobApplication', () => {
 	it('mints an application with the caller-supplied initial status', () => {
 		const app = makeJobApplication(baseInput, ctx, 'pending_review');
 		expect(app._id).toMatch(/^job_application:/);
-		expect(app.schema_v).toBe(3);
+		expect(app.schema_v).toBe(4);
 		expect(app.status).toBe('pending_review');
 		expect(app.review_notes).toBeNull();
 		expect(app.reviewed_at).toBeNull();
@@ -206,5 +249,34 @@ describe('JOB_APPLICATION_TRANSITIONS and canTransitionJobApplication (Story 3.3
 			rejected: [],
 			cancelled: []
 		});
+	});
+});
+
+describe('outstandingReviewReasons', () => {
+	const unchecked = { identityVerified: false, uncertifiedSkill: true };
+	const cleared = { identityVerified: true, uncertifiedSkill: false };
+
+	it('lists what is still unchecked on the volunteer now', () => {
+		expect(outstandingReviewReasons(['identity', 'skill_certification'], unchecked)).toEqual([
+			'identity',
+			'skill_certification'
+		]);
+	});
+
+	it('drops what staff have checked since the volunteer applied', () => {
+		expect(outstandingReviewReasons(['identity', 'skill_certification'], cleared)).toEqual([]);
+	});
+
+	it('still reports an unchecked identity the application was never stamped with', () => {
+		expect(
+			outstandingReviewReasons(['job_fit'], { identityVerified: false, uncertifiedSkill: false })
+		).toEqual(['identity']);
+	});
+
+	it('keeps a legacy review, and never shows job_fit', () => {
+		expect(outstandingReviewReasons(['job_fit', 'legacy_review'], cleared)).toEqual([
+			'legacy_review'
+		]);
+		expect(outstandingReviewReasons(['job_fit'], cleared)).toEqual([]);
 	});
 });

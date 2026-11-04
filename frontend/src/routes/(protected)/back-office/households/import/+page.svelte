@@ -3,7 +3,7 @@
 </script>
 
 <svelte:head>
-	<title>นำเข้าผู้ประสบภัยจาก Excel · SmartShelter</title>
+	<title>นำเข้าผู้เข้าพักจาก Excel · SmartShelter</title>
 </svelte:head>
 
 <PeopleImportPage />

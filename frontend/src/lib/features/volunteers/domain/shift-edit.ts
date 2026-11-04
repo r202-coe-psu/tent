@@ -1,10 +1,10 @@
 /**
  * shift-edit.ts — validation rules for editing ONE existing sub-shift.
  *
- * Pure TypeScript — no I/O, no Svelte. Shared by the two places a shift can be
+ * Pure TypeScript — no I/O, no Svelte. Shared by every place a shift can be
  * edited so they can never drift: the standalone dialog on the job detail
- * "กะและตารางกะ" tab, and the inline row editor inside the job create/edit
- * form dialog.
+ * "กะและตารางกะ" tab, and the shift cards (`shift-draft.ts`, #624) of the job
+ * create/edit form and the detail page's Shifts Generator.
  *
  * Adding shifts is `shift-batch.ts`; this module only covers changing one that
  * already exists.

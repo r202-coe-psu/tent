@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from unittest.mock import AsyncMock
 
 import pytest
+from tent_model import ShelterOccupant
 
+from worker.mongo.occupant import refresh_shelter_occupants
 from worker.projectors.occupant import (
     compute_age_range,
     mask_occupant_name,
@@ -143,7 +146,24 @@ def test_project_shelter_occupant_null_gender():
     assert payload["gender"] is None
 
 
-@pytest.mark.parametrize("status", ["checked_out", "cancelled", "pre_registered"])
+def test_project_shelter_occupant_room_confirmed():
+    """decision sync 2026-11-02: room_confirmed is still in the shelter."""
+    doc = {
+        "_id": "evacuee:03",
+        "type": "evacuee",
+        "first_name": "สมหญิง",
+        "last_name": "ใจดี",
+        "current_stay": {"status": "room_confirmed", "since": "2026-08-10T18:40:00Z"},
+    }
+    payload = project_shelter_occupant(doc, "SH001")
+    assert payload is not None
+    assert payload["occupant_ref"] == "OCC-03"
+
+
+@pytest.mark.parametrize(
+    "status",
+    ["checked_out", "cancelled", "pre_registered", "arriving", "temporary_leave"],
+)
 def test_project_shelter_occupant_skips_inactive(status):
     doc = {
         "_id": "evacuee:02",
@@ -159,3 +179,47 @@ def test_project_shelter_occupant_skips_non_evacuee():
         "type": "donation",
     }
     assert project_shelter_occupant(doc, "SH001") is None
+
+
+def _active_evacuee(*, search_excluded: bool) -> dict:
+    return {
+        "_id": "evacuee:06",
+        "type": "evacuee",
+        "first_name": "สมศรี",
+        "last_name": "ซ่อนตัว",
+        "privacy": {"search_excluded": search_excluded},
+        "current_stay": {"status": "active", "since": "2026-08-10T18:40:00Z"},
+    }
+
+
+def test_project_shelter_occupant_skips_search_excluded():
+    """#791: opt-out / basic consent hides the person from EXT-007 too."""
+    assert (
+        project_shelter_occupant(_active_evacuee(search_excluded=True), "SH001") is None
+    )
+
+
+def test_project_shelter_occupant_keeps_search_included():
+    payload = project_shelter_occupant(_active_evacuee(search_excluded=False), "SH001")
+    assert payload is not None
+
+
+async def test_refresh_shelter_occupants_purges_row_when_search_excluded_flips(
+    db: None,
+) -> None:
+    docs = [_active_evacuee(search_excluded=False)]
+
+    async def _docs(database: str):
+        for doc in docs:
+            yield doc
+
+    couch = AsyncMock()
+    couch.database_exists = AsyncMock(return_value=True)
+    couch.iter_all_docs = _docs
+
+    assert await refresh_shelter_occupants(couch, "SH791") == 1
+    assert await ShelterOccupant.get("SH791:06") is not None
+
+    docs[0] = _active_evacuee(search_excluded=True)
+    assert await refresh_shelter_occupants(couch, "SH791") == 0
+    assert await ShelterOccupant.get("SH791:06") is None

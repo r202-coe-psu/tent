@@ -20,10 +20,14 @@
 	import { useUsers, useDeleteUser } from '../application/queries';
 	import {
 		adminResetPassword,
+		getStaffCard,
+		rotateStaffCard,
 		unlinkGoogleMfa,
 		unlinkThaidMfa,
+		type StaffCardForPrint,
 		type UserSummary
 	} from '../data/users.api';
+	import StaffCardView from './staff-card-view.svelte';
 	import { usersKeys } from '../application/queries';
 	import { usersListBaseFromPathname, withUsersView } from '../domain/user-edit-path';
 	import UserPlus from '@lucide/svelte/icons/user-plus';
@@ -32,15 +36,18 @@
 	import Check from '@lucide/svelte/icons/check';
 	import ShieldAlert from '@lucide/svelte/icons/shield-alert';
 	import Unlink from '@lucide/svelte/icons/unlink';
+	import RotateCw from '@lucide/svelte/icons/rotate-cw';
 	import StaffPageShell from '$lib/components/staff-page-shell.svelte';
 	import { spatial } from '$lib/tokens';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import * as Select from '$lib/components/ui/select/index.js';
 	import * as Dialog from '$lib/components/ui/dialog/index.js';
+	import * as AlertDialog from '$lib/components/ui/alert-dialog/index.js';
 	import PaginationControls from '$lib/components/pagination-controls.svelte';
 	import { useQueryClient } from '@tanstack/svelte-query';
 	import { useShelters } from '$lib/features/shelters';
+	import { ServiceRequestError } from '$lib/api/service';
 
 	let {
 		lockedShelterCode,
@@ -91,6 +98,14 @@
 	let copied = $state(false);
 	let resetting = $state(false);
 	let unlinkingMfa = $state(false);
+
+	let staffCardDialogOpen = $state(false);
+	let rotateConfirmOpen = $state(false);
+	let staffCardUser = $state<UserSummary | null>(null);
+	let staffCard = $state<StaffCardForPrint | null>(null);
+	let staffCardLoading = $state(false);
+	let staffCardMissingMessage = $state<string | null>(null);
+	let rotating = $state(false);
 
 	const shelterFilterOptions = $derived([
 		{ value: '', label: 'ทั้งหมด' },
@@ -207,6 +222,58 @@
 			unlinkingMfa = false;
 		}
 	}
+
+	async function handleOpenStaffCard(user: UserSummary) {
+		staffCardUser = user;
+		staffCard = null;
+		staffCardMissingMessage = null;
+		staffCardLoading = true;
+		staffCardDialogOpen = true;
+		try {
+			const card = await getStaffCard(user.name);
+			if (staffCardUser?.name === user.name) staffCard = card;
+		} catch (err) {
+			if (staffCardUser?.name !== user.name) return;
+			if (err instanceof ServiceRequestError && err.status === 404) {
+				staffCardMissingMessage = err.message;
+			} else {
+				staffCardDialogOpen = false;
+				toast.error(err instanceof Error ? err.message : 'ไม่สามารถเปิดบัตรเจ้าหน้าที่ได้');
+			}
+		} finally {
+			if (staffCardUser?.name === user.name) staffCardLoading = false;
+		}
+	}
+
+	function requestRotate() {
+		if (staffCard) rotateConfirmOpen = true;
+		else void handleRotate();
+	}
+
+	async function handleRotate() {
+		if (!staffCardUser) return;
+		const target = staffCardUser;
+		rotating = true;
+		try {
+			const card = await rotateStaffCard(target.name);
+			rotateConfirmOpen = false;
+			if (staffCardUser?.name === target.name) {
+				staffCard = card;
+				staffCardMissingMessage = null;
+			}
+			toast.success(`หมุน QR บัตรของ "${target.display_name ?? target.name}" แล้ว`);
+			await queryClient.invalidateQueries({ queryKey: usersKeys.all });
+		} catch (err) {
+			rotateConfirmOpen = false;
+			toast.error(err instanceof Error ? err.message : 'ไม่สามารถหมุน QR ได้');
+		} finally {
+			rotating = false;
+		}
+	}
+
+	const staffCardShelterName = $derived(
+		effectiveLock ? (sheltersQuery.data?.find((s) => s.code === effectiveLock)?.name ?? null) : null
+	);
 
 	async function handleConfirmReset() {
 		if (!selectedUser) return;
@@ -397,6 +464,7 @@
 				{editHref}
 				ondelete={confirmDelete}
 				onresetpassword={handleOpenReset}
+				onstaffcard={handleOpenStaffCard}
 				onunlinkmfa={handleOpenUnlinkMfa}
 				pending={deleteMutation.isPending || unlinkingMfa}
 			/>
@@ -489,6 +557,72 @@
 		</div>
 	</Dialog.Content>
 </Dialog.Root>
+
+<!-- Staff Card Dialog -->
+<Dialog.Root bind:open={staffCardDialogOpen}>
+	<Dialog.Content class="max-h-[90dvh] overflow-y-auto rounded-2xl p-6 sm:max-w-[460px]">
+		<Dialog.Header>
+			<Dialog.Title class="text-lg font-bold text-slate-900">บัตรเจ้าหน้าที่</Dialog.Title>
+			<Dialog.Description class="pt-1 text-sm text-slate-600">
+				บัตรนี้ใช้ได้กับทุกศูนย์ ใช้สแกนยืนยันตัวตนเจ้าหน้าที่
+			</Dialog.Description>
+		</Dialog.Header>
+
+		{#if staffCardLoading}
+			<p class="py-8 text-center text-sm text-slate-500" role="status">กำลังโหลดบัตร...</p>
+		{:else if staffCard}
+			<StaffCardView
+				payload={staffCard.payload}
+				displayName={staffCard.display_name}
+				shelterName={staffCardShelterName}
+			/>
+		{:else if staffCardMissingMessage}
+			<p class="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+				{staffCardMissingMessage}
+			</p>
+		{/if}
+
+		{#if !staffCardLoading && (staffCard || staffCardMissingMessage)}
+			<div class="flex justify-end pt-2">
+				<Button
+					variant="outline"
+					class="min-h-11 w-full gap-1.5 sm:w-auto"
+					disabled={rotating}
+					onclick={requestRotate}
+				>
+					<RotateCw class="size-4" aria-hidden="true" />
+					{#if rotating}กำลังหมุน QR...{:else}หมุน QR{/if}
+				</Button>
+			</div>
+		{/if}
+	</Dialog.Content>
+</Dialog.Root>
+
+<AlertDialog.Root bind:open={rotateConfirmOpen}>
+	<AlertDialog.Content class="rounded-2xl p-6 sm:max-w-[420px]">
+		<AlertDialog.Header>
+			<AlertDialog.Title class="text-lg font-bold text-red-700">ยืนยันการหมุน QR</AlertDialog.Title>
+			<AlertDialog.Description class="pt-2 text-sm leading-relaxed text-slate-600">
+				บัตรเดิมของ
+				<strong class="text-slate-900">{staffCardUser?.display_name ?? staffCardUser?.name}</strong>
+				จะใช้ไม่ได้ทันทีทุกศูนย์ และต้องพิมพ์บัตรใหม่แจกให้เจ้าหน้าที่
+			</AlertDialog.Description>
+		</AlertDialog.Header>
+		<AlertDialog.Footer class="mt-2 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+			<AlertDialog.Cancel class="min-h-11" disabled={rotating}>ยกเลิก</AlertDialog.Cancel>
+			<AlertDialog.Action
+				class="min-h-11 bg-red-600 text-white hover:bg-red-700"
+				disabled={rotating}
+				onclick={(e: MouseEvent) => {
+					e.preventDefault();
+					void handleRotate();
+				}}
+			>
+				{#if rotating}กำลังหมุน QR...{:else}ยืนยันหมุน QR{/if}
+			</AlertDialog.Action>
+		</AlertDialog.Footer>
+	</AlertDialog.Content>
+</AlertDialog.Root>
 
 <!-- Reset Password Confirmation Dialog -->
 <Dialog.Root bind:open={resetDialogOpen}>

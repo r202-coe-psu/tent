@@ -9,6 +9,7 @@
 	import { Label } from '$lib/components/ui/label/index.js';
 	import { DatePicker } from '$lib/components/ui/date-picker/index.js';
 	import TimePicker from '$lib/components/time-picker.svelte';
+	import * as Select from '$lib/components/ui/select/index.js';
 	import { Switch } from '$lib/components/ui/switch/index.js';
 	import { Textarea } from '$lib/components/ui/textarea/index.js';
 	import Eye from '@lucide/svelte/icons/eye';
@@ -44,6 +45,8 @@
 		shelterCode,
 		banner,
 		defaultScreen,
+		groups,
+		defaultGroupId,
 		onsave
 	}: {
 		shelterCode: string;
@@ -51,6 +54,10 @@
 		banner?: KioskBannerSummary;
 		/** Create mode only: the screen type the form starts on. */
 		defaultScreen?: KioskScreenType;
+		/** Banner groups of the active shelter the banner can belong to. */
+		groups: { _id: string; name: string }[];
+		/** Create mode only: the group the form starts on (the page's `?group=`). */
+		defaultGroupId?: string;
 		onsave: (payload: KioskBannerSavePayload) => Promise<void>;
 	} = $props();
 
@@ -62,7 +69,12 @@
 	// svelte-ignore state_referenced_locally
 	const initialValues = banner
 		? bannerToFormValues(banner)
-		: { ...emptyKioskBannerForm(), ...(defaultScreen ? { screen_type: defaultScreen } : {}) };
+		: {
+				...emptyKioskBannerForm(),
+				...(defaultScreen ? { screen_type: defaultScreen } : {}),
+				...(defaultGroupId ? { group_id: defaultGroupId } : {})
+			};
+	const isUngrouped = isEdit && initialValues.group_id === '';
 	// svelte-ignore state_referenced_locally
 	const currentImageUrl = banner
 		? kioskBannerRemoteRepository.imageUrl(banner._id, banner._rev)
@@ -147,6 +159,7 @@
 	const imageHelp = $derived(
 		`แนะนำ ${KIOSK_SCREENS[$formData.screen_type].size} px · รองรับ png / jpeg / webp ขนาดไม่เกิน 2 MB`
 	);
+	const selectedGroupName = $derived(groups.find((g) => g._id === $formData.group_id)?.name);
 	const isPortrait = $derived($formData.screen_type === 'portrait');
 	const imageShape = $derived(isPortrait ? 'aspect-[9/16] max-h-80 mx-auto' : 'aspect-video');
 
@@ -158,6 +171,7 @@
 	});
 
 	const listHref = resolve('/back-office/kiosks/banners');
+	const newGroupHref = resolve('/back-office/kiosks/banners/groups/new');
 </script>
 
 {#snippet dateTimeField(name: 'start_at' | 'end_at', label: string, errorsId?: string)}
@@ -204,6 +218,42 @@
 					>
 				</p>
 			</div>
+
+			<Form.Field {form} name="group_id" class="space-y-2">
+				<Form.Control id="banner-group_id">
+					{#snippet children({ props })}
+						<Form.Label>กลุ่มแบนเนอร์ <span class="text-destructive">*</span></Form.Label>
+						<Select.Root
+							type="single"
+							bind:value={$formData.group_id}
+							disabled={groups.length === 0}
+						>
+							<Select.Trigger {...props} class="h-11 w-full bg-white">
+								{selectedGroupName ?? '— เลือกกลุ่ม —'}
+							</Select.Trigger>
+							<Select.Content>
+								{#each groups as group (group._id)}
+									<Select.Item value={group._id} label={group.name} />
+								{/each}
+							</Select.Content>
+						</Select.Root>
+					{/snippet}
+				</Form.Control>
+				{#if groups.length === 0}
+					<p class="text-sm text-slate-700">
+						ยังไม่มีกลุ่มแบนเนอร์ — สร้างกลุ่มก่อน
+						<a href={newGroupHref} class="font-medium text-primary underline underline-offset-2">
+							สร้างกลุ่มแบนเนอร์
+						</a>
+					</p>
+				{:else if isUngrouped}
+					<p class="text-sm text-amber-700">แบนเนอร์นี้ยังไม่อยู่ในกลุ่ม เลือกกลุ่มก่อนบันทึก</p>
+				{/if}
+				<Form.Description class="text-xs text-slate-500">
+					แบนเนอร์จะแสดงเฉพาะเครื่องที่อยู่ในกลุ่มนี้ และขนาดจอตรงกัน
+				</Form.Description>
+				<Form.FieldErrors />
+			</Form.Field>
 
 			<Form.Field {form} name="screen_type" class="space-y-2">
 				<Form.Control>

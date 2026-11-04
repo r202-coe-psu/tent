@@ -35,10 +35,12 @@ const summary = (over: Partial<ScreenSummary> = {}): ScreenSummary => ({
 
 let instance: ReturnType<typeof mount> | null = null;
 
-function render(props: { screen?: 'compact' | 'portrait'; summary: ScreenSummary }) {
+const GROUP_SCREEN_HREF = '/back-office/kiosks/banners/groups/kiosk_banner_group%3AA/portrait';
+
+function render(props: { screen?: 'compact' | 'portrait'; summary: ScreenSummary; href?: string }) {
 	instance = mount(KioskBannerScreenCard, {
 		target: document.body,
-		props: { screen: 'compact', ...props }
+		props: { screen: 'compact', href: GROUP_SCREEN_HREF, ...props }
 	});
 	flushSync();
 }
@@ -106,10 +108,10 @@ describe('KioskBannerScreenCard', () => {
 		expect(document.body.textContent).toContain('ยังไม่มีแบนเนอร์ที่ยังไม่หมดอายุ');
 	});
 
-	it('is a single link to the screen page', () => {
+	it('is a single link to the href it is given (the group screen page)', () => {
 		render({ screen: 'portrait', summary: summary() });
 
 		expect(document.body.querySelectorAll('a')).toHaveLength(1);
-		expect(link().getAttribute('href')).toBe('/back-office/kiosks/banners/portrait');
+		expect(link().getAttribute('href')).toBe(GROUP_SCREEN_HREF);
 	});
 });

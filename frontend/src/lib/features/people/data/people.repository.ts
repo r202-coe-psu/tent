@@ -15,11 +15,29 @@ import type {
 	MovementAction,
 	StayStatus
 } from '../domain/people';
+import type { StationNumber } from '../domain/station-log';
+import type { EvacueeSort } from '../domain/evacuee-sort';
 import type {
 	FamilyReportInPayload,
+	RegistrationConsent,
 	UnifiedRegistrationChannel,
 	UnifiedRegistrationInput
 } from '../domain/unified-registration';
+
+/**
+ * Options for the repository methods that also append `station_log` docs (CR-192).
+ * The log write is best-effort: it never fails the station action, and the caller learns
+ * about a failure only through `onStationLogError`.
+ */
+export type StationLogWriteOptions = {
+	/** Called when the station_log write failed although the station action itself succeeded. */
+	onStationLogError?: (error: unknown) => void;
+	/**
+	 * Station 1 forms only (report-in, walk-in): when the form was opened. Its presence turns on
+	 * writing a `start` (occurred_at = this time) plus a `complete` for every saved member.
+	 */
+	startedAt?: string;
+};
 
 export type HouseholdSearchLabels = {
 	municipalityZone: Record<string, string>;
@@ -101,12 +119,16 @@ export interface PeopleRepository {
 	listEvacuees(): Promise<Evacuee[]>;
 	/** Members linked to one household, resolved through the household_id Mango index. */
 	listHouseholdMembers(householdId: string): Promise<Evacuee[]>;
-	/** Paginated list of evacuees — optional `search` filters before paging. */
+	/**
+	 * Paginated list of evacuees — optional `search` filters before paging. `sort` defaults to
+	 * newest-registered first (#1061).
+	 */
 	listEvacueesPaginated(
 		page: number,
 		pageSize: number,
 		search?: string,
-		filters?: EvacueeFilters
+		filters?: EvacueeFilters,
+		sort?: EvacueeSort
 	): Promise<PaginatedResult<Evacuee>>;
 	/** One evacuee by `_id`, or `null` when absent. */
 	getEvacuee(id: string): Promise<Evacuee | null>;
@@ -114,6 +136,17 @@ export interface PeopleRepository {
 	updateEvacuee(evacuee: Evacuee): Promise<Evacuee>;
 	/** Merge section-owned evacuee fields into the latest persisted revision. */
 	patchEvacuee(id: string, patch: EvacueePatch): Promise<Evacuee>;
+	/**
+	 * Show or hide a person in the relative search at the person's request (T-40). Writes the
+	 * evacuee and its `privacy_change` audit entry in one request and throws when either fails.
+	 * It re-reads the evacuee first, so a `_rev` conflict only happens in the short gap before
+	 * `_bulk_docs`. Resolves to `null` when the visibility already matches.
+	 */
+	setSearchVisibility(
+		evacueeId: string,
+		visible: boolean,
+		ctx: AuthorContext
+	): Promise<Evacuee | null>;
 	/** Mint a household from form input + author context and persist it. */
 	createHousehold(input: HouseholdInput, ctx: AuthorContext): Promise<Household>;
 	/** Every household in this shelter database. */
@@ -140,6 +173,13 @@ export interface PeopleRepository {
 	 * {@link listEvacueesPaginated} (no paging) — used for select-all-matching.
 	 */
 	listMatchingEvacueeIds(search?: string, filters?: EvacueeFilters): Promise<string[]>;
+	/**
+	 * The subset of `ids` whose evacuee may still be hold-cancelled (D-HOLD-CANCEL). Lets a bulk
+	 * cancel skip rows it already knows will be rejected, including rows selected on another page.
+	 */
+	listCancellableEvacueeIds(ids: readonly string[]): Promise<string[]>;
+	/** The subset of `ids` whose household may still be hold-cancelled (D-HOLD-CANCEL). */
+	listCancellableHouseholdIds(ids: readonly string[]): Promise<string[]>;
 	/** One household by `_id`, or `null` when absent. */
 	getHousehold(id: string): Promise<Household | null>;
 	/** Persist an edited household (LWW: bumps `updated_at`). */
@@ -182,7 +222,9 @@ export interface PeopleRepository {
 			/** When set, patches the evacuee alongside the screening record (Station 2 additional needs). */
 			special_needs?: string[];
 		},
-		ctx: AuthorContext
+		ctx: AuthorContext,
+		/** CR-192: also appends the Station 2 `complete` (and Station 3 when checking in). */
+		stationLog?: StationLogWriteOptions
 	): Promise<{ screening: Screening; evacuee?: Evacuee; medical?: Medical }>;
 	/**
 	 * Compensate a failed registration unit: remove medicals for the evacuee,
@@ -222,7 +264,24 @@ export interface PeopleRepository {
 	 * Writes the append-only `movement` doc first, then the updated evacuee —
 	 * this is the only path that flips occupancy to `active` (T-06).
 	 */
-	checkInEvacuee(evacuee: Evacuee, ctx: AuthorContext, zone: string): Promise<Evacuee>;
+	checkInEvacuee(
+		evacuee: Evacuee,
+		ctx: AuthorContext,
+		zone: string,
+		/** CR-192: appends the Station 3 `complete` when the evacuee was `arriving` (zoning). */
+		stationLog?: StationLogWriteOptions
+	): Promise<Evacuee>;
+	/**
+	 * CR-192 FR-STL-13: append a staff Station 2/3 `start` when the evacuee opens the screening /
+	 * zoning page. Idempotent — skipped when a `start` with no later `complete` younger than the
+	 * stale window already exists. Resolves `true` when a doc was written, `false` when skipped.
+	 * Rejects when the write (or the lookup) fails; callers treat that as best-effort.
+	 */
+	recordStationStart(
+		evacueeId: string,
+		station: StationNumber,
+		ctx: AuthorContext
+	): Promise<boolean>;
 	/**
 	 * Record a check-out movement and apply it to the evacuee's `current_stay`.
 	 * Writes the append-only `movement` doc first, then the updated evacuee —
@@ -283,7 +342,10 @@ export interface PeopleRepository {
 		ctx: AuthorContext,
 		channel?: UnifiedRegistrationChannel,
 		/** Reuse across retries of the same input so a resubmit cannot mint a second family. */
-		ids?: UlidReservation
+		ids?: UlidReservation,
+		consent?: RegistrationConsent | null,
+		/** CR-192: with `startedAt`, appends Station 1 `start` + `complete` per created member. */
+		stationLog?: StationLogWriteOptions
 	): Promise<{
 		household: Household;
 		members: Evacuee[];
@@ -293,7 +355,11 @@ export interface PeopleRepository {
 	 * Updates existing household, updates existing members, creates any new members,
 	 * and promotes members selected for report-in from `pre_registered` → `arriving`.
 	 */
-	submitFamilyReportIn(payload: FamilyReportInPayload): Promise<{
+	submitFamilyReportIn(
+		payload: FamilyReportInPayload,
+		/** CR-192: with `startedAt`, appends Station 1 `start` + `complete` per reported-in member. */
+		stationLog?: StationLogWriteOptions
+	): Promise<{
 		household: Household;
 		members: Evacuee[];
 	}>;

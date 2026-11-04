@@ -1,6 +1,6 @@
 import { createRemoteRepository, type Repository } from '$lib/db/repository';
 import { getShelterDb } from '$lib/db/shelter';
-import { touch, type AuthorContext } from '$lib/db/model';
+import { normalizeThaiPhone, touch, type AuthorContext } from '$lib/db/model';
 import { sha256Hex } from '$lib/db/hash';
 import {
 	isVolunteer,
@@ -10,24 +10,26 @@ import {
 	type VolunteerInput,
 	type VolunteerStatus
 } from '../domain/volunteer.schema';
-import { trackingTokenHashFromPayload } from '$lib/features/volunteer-portal/domain/volunteer';
+import {
+	formatMintedTicketToken,
+	trackingTokenHashFromPayload,
+	TRACKING_TOKEN_RANDOM_BYTES
+} from '$lib/features/volunteer-portal/domain/volunteer';
 import { nextVolunteerCode } from '../domain/volunteer-code';
-import { normalizePhone } from '../domain/phone';
 import type { VerificationStatus } from '../domain/verification';
 import type { VolunteerFilter, VolunteerRepository } from './volunteer.repository';
 
 /** `phone_hash` for a stored phone; null when the phone is missing or blank. */
 async function phoneHashOf(phone: string | null | undefined): Promise<string | null> {
-	const normalized = phone ? normalizePhone(phone) : '';
+	const normalized = phone ? normalizeThaiPhone(phone) : '';
 	return normalized ? sha256Hex(normalized) : null;
 }
 
 /** Mint the permanent role-card secret without ever persisting its plaintext. */
 function mintTrackingToken(): string {
-	const bytes = new Uint8Array(16);
-	crypto.getRandomValues(bytes);
-	const hex = Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
-	return `TKT-VOL-${hex.toUpperCase()}`;
+	return formatMintedTicketToken(
+		crypto.getRandomValues(new Uint8Array(TRACKING_TOKEN_RANDOM_BYTES))
+	);
 }
 
 /**
@@ -128,6 +130,12 @@ export class VolunteerRemoteRepository implements VolunteerRepository {
 		const latest = await this.repo.get<Volunteer>(id);
 		if (!latest) throw new Error(`ไม่พบข้อมูลอาสาสมัคร: ${id}`);
 		return this.save(touch({ ...latest, status: 'inactive', _rev: latest._rev }));
+	}
+
+	async reactivate(id: string): Promise<Volunteer> {
+		const latest = await this.repo.get<Volunteer>(id);
+		if (!latest) throw new Error(`ไม่พบข้อมูลอาสาสมัคร: ${id}`);
+		return this.save(touch({ ...latest, status: 'active', _rev: latest._rev }));
 	}
 
 	async reviewIdentity(

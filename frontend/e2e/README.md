@@ -7,16 +7,16 @@
 
 ## 1. Current state
 
-| Item                           | Today                                                                                                                                                                                                                               |
-| ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Playwright                     | 1.64, Chromium only                                                                                                                                                                                                                 |
-| `playwright.config.ts`         | local: `vite preview` (:4173) + `e2e/mock-api.js` (:9001); `grepInvert: /@quarantine/`                                                                                                                                              |
-| `playwright.staging.config.ts` | remote: `grep: /@critical\|@smoke/`, `grepInvert: /@quarantine/`, workers=1, `globalTimeout` 30 min                                                                                                                                 |
-| `playwright.prod.config.ts`    | remote read-only: `grep: /@prod/`, `globalTimeout` 2 min                                                                                                                                                                            |
-| `playwright.public.config.ts`  | remote read-only public suites (incl. pre-register) — **not wired to any job**                                                                                                                                                      |
-| Suites                         | J1–J6 carry `@release` where green locally; unsafe SH001 suites are `@quarantine`; donations are `@donation` (§8.3); the Partner API (`/external/*`) is `@partner-api` (§8.5)                                                       |
-| Automation                     | Staging deploy runs `tent-e2e-staging` with `wait: true, propagate: false` (manual review: no GitHub commit status; a person reads the Staging E2E Report before promoting). Prod deploy runs `@prod` after. Janitor job available. |
-| Pre-push (lefthook)            | lint / check / unit tests only — no e2e                                                                                                                                                                                             |
+| Item                           | Today                                                                                                                                                                                                                                   |
+| ------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Playwright                     | 1.64, Chromium only                                                                                                                                                                                                                     |
+| `playwright.config.ts`         | local: `vite preview` (:4173) + `e2e/mock-api.js` (:9001); `grepInvert: /@quarantine/`                                                                                                                                                  |
+| `playwright.staging.config.ts` | remote: `grep: /@critical\|@smoke/`, `grepInvert: /@quarantine/`, workers=1, `globalTimeout` 2 h                                                                                                                                        |
+| `playwright.prod.config.ts`    | remote read-only: `grep: /@prod/`, `globalTimeout` 2 min                                                                                                                                                                                |
+| `playwright.public.config.ts`  | remote read-only public suites (incl. pre-register) — **not wired to any job**                                                                                                                                                          |
+| Suites                         | J1–J6 carry `@release` where green locally; unsafe SH001 suites are `@quarantine`; donations are `@donation` (§8.3); the Partner API (`/external/*`) is `@partner-api` (§8.5)                                                           |
+| Automation                     | Staging deploy triggers `tent-e2e-staging` with `wait: false` (fire and forget; manual review: no GitHub commit status; a person reads the Staging E2E Report before promoting). Prod deploy runs `@prod` after. Janitor job available. |
+| Pre-push (lefthook)            | lint / check / unit tests only — no e2e                                                                                                                                                                                                 |
 
 Known problems:
 
@@ -33,17 +33,10 @@ Known problems:
   `npx playwright test` right after it reused the orphan and exited fine. Reinstalling
   `@playwright/test` never fixed it. The hung run's printed results are final — `Ctrl+C` is safe.
 - ~~`[15/37]` in a full local `@critical` run (pre-register **W5**) sat idle for ~1 minute.~~
-  **Fixed** — the ticket-status BFF allows 10 requests/min/IP and W5 used to sleep a fixed 61s
-  after W2 to stay under it. Half of that budget was an app bug: opening the "ใบลงทะเบียนของฉัน" tab
-  synced every stored ticket **twice** (the tab's `onclick` and `TicketHistory`'s own `onMount`),
-  which also burns a real citizen's budget. With the duplicate removed, W2–W5 spend ~8 of 10, and
-  `waitForStatusBudget(needed)` now counts real hits and only waits when the budget is short. The
-  limiters live in the preview server's memory, so re-running the pre-register suite back-to-back
-  against a **reused** server with `RATE_LIMIT=true` can still get `429 Too Many Requests` on W4/W5 —
-  wait a minute or restart the server (not an issue with the default `RATE_LIMIT=false`, see §7.1).
-  Since develop's `registrations/check-duplicate` (instant duplicate check on the public form)
-  shares that same `registerLookupIpLimiter` budget, W4 and W5 fill the form again and usually
-  wait out one window, so the pre-register `@critical` group takes ~1 min longer than before.
+  **Fixed** — W5 used to sleep a fixed 61s to stay under the ticket-status request limit. Half of
+  that load was an app bug: opening the "ใบลงทะเบียนของฉัน" tab synced every stored ticket **twice**
+  (the tab's `onclick` and `TicketHistory`'s own `onMount`). The duplicate is removed and the sleep
+  is gone; request rate limiting now lives in nginx only.
 - ~~`onsite-stations-flow` Station 1 failed at random on the Person QR.~~ **Fixed** — error was
   `No MultiFormat Readers were able to detect the code`: html5-qrcode's bundled ZXing misses ~8% of the app's Person QR
   images (random ULID payloads; measured 34/400). `decodeQrImage` (`helpers/onsite.ts`) now
@@ -82,9 +75,13 @@ Known problems:
   any non-empty value, `false` included).
 - `config:app.recaptcha_enabled` defaults to `true`; any suite that writes through a public BFF
   route gated by `recaptcha-gate.ts` needs to flip it off for the duration of its writes and restore
-  it after (see `setRecaptcha` in `helpers/staff-ui.ts`, used by both pre-register W1-W4/W6 **and**
-  W5/W6 shelter-booking blocks) — a fake `window.__captchaToken` alone does not pass real reCAPTCHA
-  Enterprise verification once the server-side keys are configured. Re-running `pnpm seed` resets
+  it after. Use `suspendRecaptcha(browser)` (`helpers/recaptcha-lease.ts`, used by the donation
+  full-stack specs **and** pre-register W1-W4/W6 and W5/W6): the switch is global and staging runs
+  two workers, so it is a ref-counted lease in `node_modules/.cache/e2e-recaptcha/` — the first
+  holder saves the original and turns it off, the last release restores it, so one suite's restore
+  never turns it back on under another (a crashed holder is pruned by pid and its saved original
+  is kept). Do not call `setRecaptcha` (`helpers/staff-ui.ts`) directly from a suite. A fake `window.__captchaToken` alone does not pass real
+  reCAPTCHA Enterprise verification once the server-side keys are configured. Re-running `pnpm seed` resets
   this flag back to its default (`true`) even if a previous run had it toggled off mid-test.
 - ~~Repo-wide `playwright test --list` failed because `public-portal-faq-crud.test.ts` imported
   `completeUserOnboarding` (removed when `helpers/couch.ts` renamed it to `seedSecurityQuestion`).~~
@@ -134,6 +131,13 @@ Select a feature and a layer: `playwright test --grep "(?=.*@pre-register)(?=.*@
 1. Everything a test creates is fictitious and marked: names start with `E2E`, the run id comes from
    `LOCAL_RUN_ID`, Thai national IDs start with `0` (never a real person) with a valid checksum.
 2. **Teardown deletes only ids recorded by this run** (ledger). Never delete by search/query results.
+   The shelter/queue ledger (`helpers/public-cleanup.ts`) is **one file per suite**
+   (`node_modules/.cache/e2e-created/<suite>.json`, `<suite>` = the spec's basename). Staging runs
+   specs on parallel workers, so `recordCreatedShelter` / `recordCreatedQueueId` /
+   `purgeCreatedData` all take the suite id and a purge only ever deletes what its own suite
+   recorded — never another suite's live shelter. `forgetCreatedShelter(code)` (also called by
+   `teardownShelter`) drops a code from whichever ledger holds it. A suite that spans several
+   workers (the `distribution/` `shelter` fixture) uses one id per worker process.
 3. Never modify seeded or real records (e.g. SH001–SH004, `config:app`). A test that needs a
    shelter creates its own `E2E …` shelter through the staff UI and removes it with `teardownShelter`.
    Shelter settings a journey needs (e.g. `enable_medical_screening`, `accepts_pre_registration`)
@@ -205,25 +209,11 @@ pnpm test:e2e:regression                      # mocked suites only
 
 Live suites also need platform init (`pnpm seed:master`, `pnpm db:sync`); see each file's header.
 
-### 7.1 Rate limits — the `RATE_LIMIT` switch (CR-160)
+### 7.1 Rate limits
 
-BFF limiters exempt loopback only under `vite dev`; Playwright runs `vite preview` (a production
-build) and every suite shares the runner's IP, so the 3/min booking limit would throttle e2e.
-CR-160 adds a **server env `RATE_LIMIT`**:
-
-- `false` / `0` (trimmed, case-insensitive) turns off **only** limiters constructed with
-  `{ bypassable: true }`: `donationIp/Phone/Edit/Read` and `registerIp/Phone/LookupIp`. No hit is
-  recorded while off. Everything else — staff login, secret reveal, link-account, volunteer — and
-  any limiter added later enforces regardless (the default is `bypassable: false`).
-- Unset or any other value enforces everything. FastAPI's own per-IP limiter is not affected.
-- `playwright.config.ts` defaults it to `false` for the local preview server (override with
-  `RATE_LIMIT=true`). On staging the server needs `RATE_LIMIT=false` in its root `.env` and the
-  runner env (Jenkins credential `tent-staging-e2e-env`) must carry the same value. The compose
-  files pass `RATE_LIMIT: ${RATE_LIMIT:-true}` to the frontend, so production stays enforced and
-  must never set `false`.
-- The e2e side reads the same variable (`RATE_LIMIT_ENFORCED` in `helpers/e2e-env.ts`):
-  `waitForStatusBudget` in the pre-register suite only waits when limits are enforced (unset counts
-  as enforced).
+The frontend BFF no longer rate limits (#627); nginx `limit_req` owns it. The local preview server
+(`vite preview`) therefore never answers `429 RATE_LIMITED`, and e2e has no pacing or switch. A
+remote target sits behind nginx, so a burst against it can still get a 429: wait a minute and rerun.
 
 ## 8. Release gate — six journeys that must pass before prod
 
@@ -307,20 +297,18 @@ How the three full-stack suites obey §4:
 - **Zero-leak Z test** (`expectRunGone`): shelter database and registry row gone, the shelter
   absent from the public needs board, staff users gone, every booking released
   (`cancelled`/`rejected`/`received`/…).
-- **Gating.** `CAN_WRITE` / `READ_ONLY_REASON`, not `PW_BASE_URL`. `suspendRecaptcha` flips
-  `config:app.recaptcha_enabled` off for the run and restores the previous value in afterAll
-  (the switch is global to the stack — do not run these suites against a stack someone else is
+- **Gating.** `CAN_WRITE` / `READ_ONLY_REASON`, not `PW_BASE_URL`. `suspendRecaptcha` leases
+  `config:app.recaptcha_enabled` off for the run (the last lease released restores the previous
+  value; the switch is global to the stack — do not run these suites against a stack someone else is
   using for reCAPTCHA-dependent testing).
 - **Residue the test side cannot remove:** the Mongo intake-buffer / `public_donations` rows of
   the run's bookings (no delete API; retention purges them on their TTL) and the closed
   `public_shelters` row (the worker's retention job drops it within minutes). A received donation
   is not reversible either — its `stock_ledger` row lives in the deleted shelter database, so it
   goes with it.
-- **Rate limits.** The BFF allows 3 bookings and 10 edit/cancel calls per minute per IP, and
-  FastAPI 30 requests per minute per IP on every donation route. The limiters exempt loopback
-  only under `vite dev`, so on a remote target (and on `vite preview` with
-  `DONATION_E2E_PACE=1`) `bookingPacer` / the cancel pacer spread the calls out; the three suites
-  take an estimated 10–15 minutes together there (paced; not yet measured on staging). Locally run them against `pnpm dev`:
+- **Rate limits.** nginx rate limits the donation routes per IP, and FastAPI allows 30 requests per
+  minute per IP on every donation route. The three suites take an estimated 10–15 minutes together
+  on a remote target (not yet measured on staging). Locally run them against `pnpm dev`:
   `PLAYWRIGHT_TEST_BASE_URL=http://localhost:5173 pnpm exec playwright test e2e/donation-fullstack.test.ts`
   (wait about a minute between two back-to-back runs: FastAPI's limiter is not loopback-exempt).
 
@@ -328,13 +316,19 @@ How the three full-stack suites obey §4:
 
 Feature tag `@distribution`, layer `@critical`; none carries `@release` yet.
 
-| Suite                                                  | What it proves                                                                                                                                                                           |
-| ------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `distribution/distribution-ticket-lifecycle.test.ts`   | Back-office ↔ desk: create → allocate → approve → dispatch → receive → hand out → close (Journey A: zero returns → COMPLETED; Journey B: warehouse credits only the verified return qty) |
-| `distribution/distribution-desk-access.test.ts`        | Who may do what: page access by role (every capability × flat/compound, SA, scope-only, cross-shelter) and VDU write permissions (no UI)                                                 |
-| `distribution/distribution-desk-handover.test.ts`      | Tab 1 receive cargo, tab 2 ready meals (duplicate / menu-mismatch overrides, lot expiry, service day, history, preflight retry), tab 3 supplies and loans                                |
-| `distribution/distribution-desk-returns-close.test.ts` | Tab 4 loan returns (physical, lost/waived, bulk pool, offline, resume) and tab 5 shift close + warehouse hand-off (incl. the "card stays on the closed ticket" regression)               |
-| `distribution/distribution-desk-flow.test.ts`          | Across tabs (point filter, badges, live updates between desks, scan-first) and a compound-role DST working every tab                                                                     |
+| Suite                                                  | What it proves                                                                                                                                                                                                                                               |
+| ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `distribution/distribution-ticket-lifecycle.test.ts`   | Back-office ↔ desk: create → allocate → approve → dispatch → receive → hand out → close (Journey A: zero returns → COMPLETED; Journey B: warehouse credits only the verified return qty)                                                                     |
+| `distribution/distribution-desk-access.test.ts`        | Who may do what: page access by role (every capability × flat/compound, SA, scope-only, cross-shelter) and VDU write permissions (no UI); v3 pool writes are in bulk-return-pool-access                                                                      |
+| `distribution/distribution-desk-handover.test.ts`      | Tab 1 receive cargo, tab 2 ready meals (duplicate / menu-mismatch overrides, lot expiry, service day, history, preflight retry), tab 3 supplies and loans                                                                                                    |
+| `distribution/distribution-desk-returns-close.test.ts` | Tab 4 loan returns (physical, lost/waived, offline, resume) and tab 5 shift close + warehouse hand-off (incl. the "card stays on the closed ticket" regression)                                                                                              |
+| `distribution/distribution-desk-flow.test.ts`          | Across tabs (point filter, badges, live updates between desks, scan-first) and a compound-role DST working every tab                                                                                                                                         |
+| `distribution/distribution-desk-volunteer.test.ts`     | Volunteer recipients (#650): pass-QR scan → meal logged as `volunteer:{ulid}`, repeat meal needs an override, deactivated pass selects nobody, volunteer loan issued and returned at the counter                                                             |
+| `distribution/distribution-desk-staff.test.ts`         | Staff QR recipients (CR-211 AC-15): staff-card scan → meal logged as `user:{name}`, repeat meal needs an override, a volunteer-linked card is caught after the volunteer meal, lowercase payload resolves                                                    |
+| `distribution/bulk-return-pool-flow.test.ts`           | Bulk return pool v3 lifecycle on both surfaces: open, add (board, detail, loan card), move, void, submit, receive, cancel; loans, entries and `stock_ledger` read back (BRP-F1 to F10, F10 = regression for the fixed stale detail sheet; fixme: loan drift) |
+| `distribution/bulk-return-pool-storage.test.ts`        | Storage points (CR-139): a pool opened at one point and received into another, receive refuses a missing point; own shelter with two points (`shelterStoragePoints`, BRP-S1/S2)                                                                              |
+| `distribution/bulk-return-pool-access.test.ts`         | Roles on the board (onsite DST, back-office WH / SC / SM) and the VDU matrix for pool, entry, move, void and receive-ledger writes (BRP-A, BRP-V1), incl. system_admin (BRP-A-SA)                                                                            |
+| `distribution/bulk-return-pool-gap-isolation.test.ts`  | Regression for the fixed gap BRP-F11: an orphan move/void doc is skipped and shown as "รอซิงก์" instead of failing the pool board for the whole shelter; own worker and shelter so it can never poison the other specs                                       |
 
 How they obey §4:
 
@@ -343,9 +337,16 @@ How they obey §4:
   it with `recordCreatedShelter`. Every test seeds at its own distribution point inside it, so
   tests never see each other's tickets. SH002 is only visited/read as "another shelter".
 - **Setup.** Ticket-level prerequisites that are not the subject of a test (a ticket already
-  dispatched, a meal already served, a counted bulk pool) are written with the admin API —
-  driving back-office for each of ~70 tests would dominate the run. The UI path itself is
-  covered end to end by Journey A/B.
+  dispatched, a meal already served, an open bulk return pool or a loan the pool tests start
+  from) are written with the admin API — driving back-office for each of ~70 tests would
+  dominate the run. The UI path itself is covered end to end by Journey A/B; every pool action
+  that is the subject of a bulk return pool test (open, add, move, void, submit, receive,
+  cancel) goes through the UI.
+- **Storage points.** `bulk-return-pool-storage.test.ts` sets the worker option
+  `shelterStoragePoints` (`test.use`); the `shelter` fixture then writes
+  `common_areas.sub_storage` onto that run's own `E2E Distribution …` registry doc (admin API,
+  refused for any other shelter) before any page loads. Playwright starts a separate worker, and
+  so a separate shelter, for that spec; every other spec keeps a shelter without points.
 - **Teardown by id.** Users and catalog items are recorded per scenario and deleted by id after
   each test; the shelter (registry master, database and its `shelter:{code}` grant on
   `registry`/`catalog`) is removed when the worker ends, then `assertRunLeftNothing` fails the
@@ -358,22 +359,23 @@ Run them (preview build, local CouchDB with `pnpm seed:master` + `pnpm db:sync`)
 
 ### 8.5 Partner API suite (`@partner-api`)
 
-`partner-api.test.ts` (+ `helpers/partner-api.ts`) drives EXT-001…011 end to end against the real
+`partner-api.test.ts` (+ `helpers/partner-api.ts`) drives EXT-001…012 end to end against the real
 `/external/*` plane — FastAPI directly (`E2E_FASTAPI_URL`, default `http://localhost:9000`; on
 staging the host nginx's `/public-api`), not through the BFF. It replaces running
 `scripts/smoke_test_partner_api.py` by hand for these checks. Tags: `@smoke` (auth gate) and
 `@critical` (everything that creates data); none carries `@release`. Both groups are in
 `playwright.staging.config.ts`'s allowlist; budget about 3 minutes, mostly worker polling.
 
-| Group       | What it proves                                                                                                                                                                                                                                                                                                                                       |
-| ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `@smoke`    | S1: every endpoint refuses a missing or garbage token with 401 `invalid_token` and `WWW-Authenticate: Bearer`. S2: `/external/token` rejects a wrong `grant_type` (400), an unknown client (401 `invalid_client`) and a form-encoded body (422). No data created; runs on any target                                                                 |
-| `@critical` | A1 creates an `E2E partner <runId>` client with all six scopes **through the UI**; A2 mints; A3 happy path of every EXT (booking create / idempotent replay / key reuse 409 / worker write / residency 404 / cancel twice); A3b cross-client isolation; **A4 scope matrix**; A5 least privilege; A6–A8 edit scopes, revoke, delete through the UI; Z |
+| Group       | What it proves                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| ----------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `@smoke`    | S1: every endpoint refuses a missing or garbage token with 401 `invalid_token` and `WWW-Authenticate: Bearer`. S2: `/external/token` rejects a wrong `grant_type` (400), an unknown client (401 `invalid_client`) and a form-encoded body (422). No data created; runs on any target                                                                                                                                                                                                                                                                                                                      |
+| `@critical` | A1 creates an `E2E partner <runId>` client with all eight scopes **through the UI**; A2 mints; A3 happy path of every EXT (booking create / idempotent replay / key reuse 409 / worker write / residency 404 / cancel twice); B1/B2 `accepts_booking` on EXT-003 / EXT-002 (+ `?accepts_booking=` filter) for a bookable and a not-bookable shelter; A3b cross-client isolation; B3/B4 EXT-008 on the not-bookable shelter (409 with `booking-write` alone, 201 → BOOKED → cancelled with `booking-bypass`); **A4 scope matrix**; A5 least privilege; A6–A8 edit scopes, revoke, delete through the UI; Z |
 
 How they obey §4:
 
-- **Own data.** The run creates its own `E2E partner <runId>` shelter (`createShelterViaUi`, pre-registration on)
-  and its own clients (`E2E partner <runId>`, `E2E partner-iso <runId>`). Bookings use `fictitiousNationalId`.
+- **Own data.** The run creates its own `E2E partner <runId>` shelter (`createShelterViaUi`, pre-registration on),
+  a second `E2E partner closed <runId>` shelter (pre-registration off: not bookable by the normal rule, #751)
+  and its own clients (`E2E partner <runId>`, `E2E partner-iso <runId>`, `E2E partner-bypass <runId>`). Bookings use `fictitiousNationalId`.
 - **Ledger.** `PartnerLedger` (`node_modules/.cache/partner-api-e2e-created.json`) records clients (BFF
   row id + `client_id`), shelters and bookings the moment they exist. `teardownPartnerRun` is idempotent
   and runs at the start of the next run, in the Z test and in afterAll: cancel still-open bookings as
@@ -396,16 +398,18 @@ How they obey §4:
   suite: provisioning the run's shelter needs `_admin` anyway (`createShelterViaUi`), so no `E2E_ADMIN_*`
   user is needed beyond `COUCHDB_ADMIN_URL`; the BFF adds `EXTERNAL_API_SECRET` toward FastAPI itself.
   The preview server therefore needs `FASTAPI_INTERNAL_URL` + `EXTERNAL_API_SECRET` (`frontend/.env`).
-- **Approved exception to §4 rule 4.** Besides the UI, setup uses the BFF for the **second client** (A3b cross-client
-  isolation) and for the **scope matrix** (A4/A5: PATCH `allowed_scopes` six times is not UI-worthy; A6 covers the
+- **Approved exception to §4 rule 4.** Besides the UI, setup uses the BFF for the **secondary clients** (A3b cross-client
+  isolation, B4 `booking-bypass`) and for the **scope matrix** (A4/A5: PATCH `allowed_scopes` eight times is not UI-worthy; A6 covers the
   edit-scopes dialog). Create / edit / revoke / delete of the main client still go through the UI.
 - **FastAPI origin guard.** `partnerApiUrl()` uses `E2E_FASTAPI_URL` only on a remote run (`E2E_BASE_URL` set); a local
   run must stay on loopback and throws if a copied `.env` points `E2E_FASTAPI_URL` elsewhere. A remote run without
   `E2E_FASTAPI_URL` throws a clear error instead of falling back to localhost.
-- **Scope matrix (A4).** For each of the six scopes: PATCH `allowed_scopes` to _all minus that scope_ (BFF),
+- **Scope matrix (A4).** For each of the eight scopes: PATCH `allowed_scopes` to _all minus that scope_ (BFF),
   mint a new token (it must not carry the scope), assert every endpoint that needs it answers 403
   `insufficient_scope` (EXT-006 without `occupancy-read` stays 200 with `occupancy_total: null`) and that every
-  endpoint on another scope still answers. EXT-007 / EXT-011 always send `purpose` (checked before the scope).
+  endpoint on another scope still answers. `booking-bypass` gates no endpoint: it is covered by a probe
+  (`SCOPE_PROBES`), EXT-008 on the not-bookable shelter answers 409 `location_not_bookable` (not 403) without it, and a scope with
+  neither an endpoint nor a probe fails the matrix. EXT-007 / EXT-011 / EXT-012 always send `purpose` (checked before the scope).
 - **Current token behaviour is asserted, not wished for (ADR 0002 §6).** `verify_thirdparty_token` trusts the JWT
   claims and never reads the DB, so a token minted before a scope removal (A6) or a revoke (A7) keeps working until
   it expires (3,600 s); only a token minted afterwards reflects the change. The edit / revoke dialogs say so too.
@@ -423,6 +427,11 @@ How they obey §4:
 - **Accepted leftovers in Mongo** (a browser cannot delete them; PII-free): `external_bookings` rows (cancelled; PII
   cleared by the worker), `third_party_access_logs`, `external_booking_idempotency` keys, and the soft-deleted
   `third_party_clients` rows. They are swept by the partner janitor (§9.C).
+- **EXT-012 (person search, #736).** E12-1…5 search by CID only (every booking in the run shares the same name and phone,
+  so name / phone / passport searches are covered by `backend/tests/test_thirdparty_person_search.py`): a
+  `pre_registered` hit is masked, has no `family_members` / `phone` / `passport` and never echoes the CID, the response is
+  `no-store`, a missing `purpose` is 400, a one-character query is 422, and once the worker projected the cancel the
+  same search returns an empty `result` (`cancelled` is dropped). The matrix probes it with a fresh CID: 200 with `result: []`.
 - EXT-011's 200 path needs someone really checked in and stays with the Python smoke script; here only 400 / 404.
 
 Local run (the preview server must see `FASTAPI_INTERNAL_URL` and `EXTERNAL_API_SECRET`; `fastapi` and `worker`
@@ -498,7 +507,7 @@ assertion green; `--list` shows every touched test with exactly one layer tag; a
 ### 9.C Pipeline (after B is merged) — **done in Step C PR**
 
 - `playwright.staging.config.ts`: `grep: /@critical|@smoke/`, `grepInvert: /@quarantine/`,
-  workers=1, `globalTimeout` 30 min. `@critical` suites only run their live writes when the
+  workers=1, `globalTimeout` 2 h (run went past 30 min in build #64). `@critical` suites only run their live writes when the
   `tent-staging-e2e-env` credential sets `ALLOW_REMOTE_WRITES=true` (exactly `true`; `CAN_WRITE`
   in `helpers/e2e-env.ts`). `public-search-flow` / `public-shelters-filter` now create and tear
   down their own per-run data on such a run too (zero-leak Z test each); only `public-home-flow`
@@ -513,6 +522,8 @@ assertion green; `--list` shows every touched test with exactly one layer tag; a
 - Root `Jenkinsfile`: removed `catchError → UNSTABLE`; ~~**wait+propagate** on `tent-e2e-staging`
   so a red E2E fails the staging deploy job.~~ _Superseded by decision 2026-10-09: now
   `wait: true, propagate: false`, so the deploy stays green when the deploy itself succeeded._
+  _Since 2026-10-21: `wait: false` — the deploy job no longer holds its executor for the
+  15–30 min run; `tent-e2e-staging` posts its own result to Discord (ci/README.md)._
 - Staging janitor: `scripts/staging-e2e-janitor.mjs` + `scripts/run-staging-e2e-janitor.sh` +
   `Jenkinsfile.e2e-janitor` — deletes only registry shelters whose **name starts with `E2E`** and
   are older than N hours; default **dry-run**; logs every id. Credential:
@@ -539,8 +550,9 @@ assertion green; `--list` shows every touched test with exactly one layer tag; a
   integer). Keep `MODE=dry-run` until the listing shows only `E2E partner …` clients.
 - Prod: `playwright.prod.config.ts` + `scripts/run-prod-e2e.sh`; root `Jenkinsfile` / `Jenkinsfile.prod`
   run `@prod` after deploy (`E2E_BASE_URL=https://shelter.psu.ac.th`, credential
-  `tent-prod-e2e-env`). Failure fails the job and prints an ALERT line (wire Slack/email in Jenkins
-  if desired).
+  `tent-prod-e2e-env`). Failure fails the job and prints an ALERT line; the root `Jenkinsfile`,
+  `Jenkinsfile.e2e-staging` and `Jenkinsfile.e2e-janitor` also post Discord notifications (setup:
+  [`ci/README.md`](../../ci/README.md)).
 - **Owner follow-ups (not in code):** ~~enable `main` branch protection requiring status
   `staging/e2e`; provision `tent-github-status-token`, `tent-staging-couch-admin-url`,
   `tent-prod-e2e-env`;~~ provision `tent-staging-couch-admin-url` and `tent-prod-e2e-env`; fill
@@ -563,7 +575,7 @@ assertion green; `--list` shows every touched test with exactly one layer tag; a
 ### Decision (2026-10-09) — manual review for now
 
 Staging E2E runs automatically after every staging deploy (`tent-e2e-staging`, triggered with
-`wait: true, propagate: false`), but it is **not** an automatic gate: no GitHub commit status is
+`wait: false` since 2026-10-21 — it reports its own result to Discord), but it is **not** an automatic gate: no GitHub commit status is
 posted and `main` branch protection does not require one. A person reads the "Staging E2E Report"
 in Jenkins and decides whether to promote `staging` → `main`. Credential `tent-github-status-token`
 is no longer needed; `tent-staging-e2e-env` still is. Re-introducing the automatic gate later means

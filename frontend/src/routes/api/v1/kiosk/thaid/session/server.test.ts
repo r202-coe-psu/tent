@@ -100,33 +100,4 @@ describe('POST /api/v1/kiosk/thaid/session', () => {
 		expect(getKioskSessionForDevice(first.session_id, 'kiosk-twice')?.status).toBe('cancelled');
 		expect(getKioskSessionForDevice(second.session_id, 'kiosk-twice')?.status).toBe('pending');
 	});
-
-	it('rate limits before the gate, so a flooding device costs no gate reads', async () => {
-		for (let i = 0; i < 10; i += 1) {
-			expect((await POST(event('kiosk-flood'))).status).toBe(200);
-		}
-		mockGate.mockClear();
-		mockGate.mockResolvedValue(false);
-
-		const response = await POST(event('kiosk-flood'));
-
-		expect(response.status).toBe(429);
-		expect(mockGate).not.toHaveBeenCalled();
-	});
-
-	it('returns 429 KIOSK_RATE_LIMITED on the 11th create within a minute for one device', async () => {
-		for (let i = 0; i < 10; i += 1) {
-			expect((await POST(event('kiosk-limited'))).status).toBe(200);
-		}
-
-		const response = await POST(event('kiosk-limited'));
-
-		expect(response.status).toBe(429);
-		expect(await response.json()).toEqual({
-			error: { code: 'KIOSK_RATE_LIMITED', message: 'กรุณารอสักครู่แล้วลองใหม่' }
-		});
-		expect(response.headers.get('retry-after')).toBe('60');
-		expect(response.headers.get('cache-control')).toBe('no-store');
-		expect((await POST(event('kiosk-other'))).status).toBe(200);
-	});
 });

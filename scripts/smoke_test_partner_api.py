@@ -30,14 +30,15 @@ Endpoints exercised (prefix + path):
   POST {prefix}/external/bookings                      (M2, EXT-008, scope booking-write)
   GET  {prefix}/external/bookings/{booking_id}         (M2, EXT-010)
   GET  {prefix}/external/persons/shelter-residency     (M2, EXT-011, scope residency-read)
+  POST {prefix}/external/persons/search                (EXT-012, scope occupant-search)
   POST {prefix}/external/bookings/{booking_id}/cancel  (M2, EXT-009)
 
 Normal mode also covers the CR-169 group rules at API level (persons[] of 2-3, cid
 duplicates in one request, several bad persons, duplicate vs existing booking, group
 cancel, EXT-010 persons[]). Repeat-cancel → 200 (CR-169 FR-40, #592) is a normal assertion.
 
-M2 checks (EXT-008..011) are scope-aware: when the token lacks `booking-write` /
-`residency-read` the script asserts the 403 insufficient_scope gate instead of
+M2 checks (EXT-008..012) are scope-aware: when the token lacks `booking-write` /
+`residency-read` / `occupant-search` the script asserts the 403 insufficient_scope gate instead of
 skipping silently. The booking checks WRITE one booking (random checksum-valid CID,
 name "Smoke Test") to the target shelter and always cancel it afterwards. Use
 --skip-booking-writes to keep a run strictly read-only.
@@ -76,8 +77,9 @@ everything runs on this host, so the no-Mongo mode is for all-local runs only.
 
 Prerequisites: local stack up (`docker compose up -d`), with fastapi + worker
 built from a branch that contains CR-169 (`docker compose up -d --build --no-deps
-fastapi worker`), a seeded shelter that is `open` and accepts pre-registration
-(local default data: SH004), CouchDB admin credentials.
+fastapi worker`), a seeded shelter that is `open` and has the pre-registration
+switch ON (#751: a shelter without the switch is not bookable; the seed data does not set
+it, so turn it on for the target shelter first, e.g. in the staff UI), CouchDB admin credentials.
 
 Run (local; admin provision mode, secrets from env / repo-root .env, never echoed):
   set -a; . ./.env; set +a          # COUCHDB_USER, COUCHDB_PASSWORD, EXTERNAL_API_SECRET
@@ -464,12 +466,15 @@ class SmokeTestRunner:
             payload = {
                 "name": f"smoke-m2-{ts}",
                 "module_name": ADMIN_CLIENT_MODULE,
+                # `booking-bypass` (#751, EOC override) is deliberately not granted: the smoke
+                # run checks the normal EXT-008 rule.
                 "allowed_scopes": [
                     "location-read",
                     "location-stock-read",
                     "occupancy-read",
                     "booking-write",
                     "residency-read",
+                    "occupant-search",
                 ],
             }
             status, data = self.http_request(
@@ -964,7 +969,10 @@ class SmokeTestRunner:
         self.log(f"{BOLD}{bar}{RESET}")
 
     def _booking_candidates(self, headers: Dict[str, str]) -> List[str]:
-        """Explicit --shelter-code only; otherwise `open` locations from EXT-002.
+        """Explicit --shelter-code only; otherwise bookable `open` locations from EXT-002.
+
+        #751: `accepts_booking=true` keeps shelters whose pre-registration switch is off (or was
+        never set) out of the list, since EXT-008 now answers 409 for them.
 
         Not `self.shelter_code`: #216 auto-fills it with the first listed location,
         which may be closed or opted out of pre-registration.
@@ -973,7 +981,7 @@ class SmokeTestRunner:
             return [self.explicit_shelter_code]
         status, data = self.http_request(
             "GET",
-            self.partner_path("/external/locations") + "?status=open&limit=20",
+            self.partner_path("/external/locations") + "?status=open&accepts_booking=true&limit=20",
             headers=headers,
         )
         result = data.get("result") if status == 200 else None
@@ -1488,6 +1496,66 @@ class SmokeTestRunner:
             "needs the worker and CouchDB; run with --e2e",
         )
 
+    def test_person_search(self) -> bool:
+        """EXT-012 — purpose + scope gates, 422 for a bad query, 200 + empty result for no match."""
+        self._banner("Testing EXT-012 Person Search")
+
+        if not self.access_token:
+            self.record_result("EXT-012", "Person search endpoint", False, "Missing access token")
+            return False
+
+        headers = {"Authorization": f"Bearer {self.access_token}"}
+        path = self.partner_path("/external/persons/search")
+
+        def search(query: str, purpose: Optional[str] = "smoke-test") -> Tuple[int, Dict[str, Any]]:
+            url = path if purpose is None else f"{path}?{urllib.parse.urlencode({'purpose': purpose})}"
+            # The query is a national ID / name: keep it out of the verbose log.
+            return self.http_request(
+                "POST", url, headers=headers, body={"search": query}, log_body=False
+            )
+
+        status, data = search(make_valid_cid(), purpose=None)
+        err_code = get_error_code(data)
+        self.record_result(
+            "EXT-012",
+            "EXT-012 missing 'purpose' rejected with 400 missing_purpose",
+            status == 400 and err_code == "missing_purpose",
+            f"HTTP {status} (code={err_code})",
+        )
+
+        if "occupant-search" not in self.token_scopes:
+            status, data = search(make_valid_cid())
+            err_code = get_error_code(data)
+            self.record_result(
+                "EXT-012",
+                "Token without occupant-search is denied (403 insufficient_scope)",
+                status == 403 and err_code == "insufficient_scope",
+                f"HTTP {status} (code={err_code})",
+            )
+            self.log(
+                f"  {YELLOW}Skipping person search (token has no occupant-search scope){RESET}"
+            )
+            return True
+
+        status, data = search("a")
+        err_code = get_error_code(data)
+        self.record_result(
+            "EXT-012",
+            "EXT-012 too-short query rejected with 422 validation_error",
+            status == 422 and err_code == "validation_error",
+            f"HTTP {status} (code={err_code})",
+        )
+
+        status, data = search(make_valid_cid())
+        result = data.get("result") if isinstance(data, dict) else None
+        self.record_result(
+            "EXT-012",
+            "EXT-012 unknown cid returns 200 with an empty result list",
+            status == 200 and data.get("status") == 200 and result == [],
+            f"HTTP {status}, result={result}",
+        )
+        return True
+
     def test_m2_residency(self) -> bool:
         """EXT-011 — purpose + scope gates, 404 for a booked-but-not-checked-in CID."""
         self._banner("Testing M2: EXT-011 Shelter Residency Lookup")
@@ -1767,6 +1835,7 @@ class SmokeTestRunner:
         self.test_issue_220_occupants_pdpa()
         self.test_m2_bookings()
         self.test_m2_residency()
+        self.test_person_search()
         self.test_m2_cancel()
         self.test_cleanup_and_revocation()
 

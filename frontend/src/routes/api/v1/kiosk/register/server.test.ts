@@ -13,8 +13,8 @@ import {
 	registerKioskThaidWalkIn,
 	registerKioskWalkIn
 } from '$lib/features/kiosk/server/kiosk-register.server';
+import { mintConsentStamp, type ConsentDecision } from '$lib/features/consent/server';
 import { isKioskThaidCheckInAllowed } from '$lib/features/kiosk/server/kiosk-thaid-gate.server';
-import { kioskRegisterDeviceLimiter } from '$lib/server/security/rate-limiter';
 import {
 	_resetSessionsForTest,
 	completeKioskSession,
@@ -66,17 +66,31 @@ function request(body: unknown, includeHeaders = true): RequestEvent {
 	} as unknown as RequestEvent;
 }
 
+function kioskDecision(overrides: object = {}): ConsentDecision {
+	return {
+		mode: 'full',
+		health: false,
+		search_visible: true,
+		guardian_for: [],
+		verbal: false,
+		...mintConsentStamp(),
+		...overrides
+	} as ConsentDecision;
+}
+
+function consentFields(decision: ConsentDecision = kioskDecision()) {
+	return { consent: decision, consented_at: decision.given_at };
+}
+
 const validBody = {
 	card: { citizen_id: '1234567890123', first_name_th: 'สมชาย', gender: 'male' },
-	consented: true,
-	consented_at: new Date().toISOString()
+	...consentFields()
 };
 
 describe('POST /api/v1/kiosk/register', () => {
 	beforeEach(() => {
 		vi.restoreAllMocks();
 		vi.clearAllMocks();
-		vi.spyOn(kioskRegisterDeviceLimiter, 'check').mockReturnValue(true);
 		mockAuthenticate.mockImplementation(async (deviceId) => {
 			if (!deviceId) throw new ScannerAuthError();
 			return {
@@ -93,7 +107,8 @@ describe('POST /api/v1/kiosk/register', () => {
 			_id: 'evacuee:01ARZ3NDEKTSV4RRFFQ69G5FAV',
 			first_name: 'สมชาย',
 			last_name: 'ใจดี',
-			phone: '0812345678'
+			phone: '0812345678',
+			consent: { ref: validBody.consent.ref, mode: 'full' }
 		} as never);
 	});
 
@@ -105,7 +120,9 @@ describe('POST /api/v1/kiosk/register', () => {
 			status: 'created',
 			evacuee_id: 'evacuee:01ARZ3NDEKTSV4RRFFQ69G5FAV',
 			qr_payload: 'evacuee:01ARZ3NDEKTSV4RRFFQ69G5FAV',
-			label: { name: 'สมชาย ใจดี', phone: '0812345678' }
+			label: { name: 'สมชาย ใจดี', phone: '0812345678' },
+			consent_ref: validBody.consent.ref,
+			consent_mode: 'full'
 		});
 		expect(mockRegister).toHaveBeenCalledWith(
 			'SH001',
@@ -113,8 +130,9 @@ describe('POST /api/v1/kiosk/register', () => {
 			'โต๊ะ 1',
 			expect.objectContaining({ citizen_id: validBody.card.citizen_id }),
 			null,
-			validBody.consented_at,
-			null
+			validBody.consent,
+			null,
+			undefined
 		);
 		expect(mockUpdateLastSeen).toHaveBeenCalledWith('registry:KIOSK-01');
 	});
@@ -128,9 +146,31 @@ describe('POST /api/v1/kiosk/register', () => {
 			'โต๊ะ 1',
 			expect.anything(),
 			null,
-			validBody.consented_at,
-			'0812345678'
+			validBody.consent,
+			'0812345678',
+			undefined
 		);
+	});
+
+	it('passes the card-read time through as the Station 1 start (CR-192)', async () => {
+		const startedAt = new Date(Date.now() - 45_000).toISOString();
+		const response = await POST(request({ ...validBody, started_at: startedAt }));
+		expect(response.status).toBe(200);
+		expect(mockRegister.mock.calls[0]?.[7]).toBe(startedAt);
+	});
+
+	it('drops a malformed card-read time instead of failing the registration', async () => {
+		const response = await POST(request({ ...validBody, started_at: { nope: true } }));
+		expect(response.status).toBe(200);
+		expect(mockRegister.mock.calls[0]?.[7]).toBeUndefined();
+	});
+
+	it('rejects a body that names the channel or device and registers nothing (CR-192 FR-STL-10)', async () => {
+		const response = await POST(
+			request({ ...validBody, channel: 'staff', device_id: 'forged-device', created_by: 'x' })
+		);
+		expect(response.status).toBe(400);
+		expect(mockRegister).not.toHaveBeenCalled();
 	});
 
 	it('rejects a phone that is not a Thai number', async () => {
@@ -148,9 +188,31 @@ describe('POST /api/v1/kiosk/register', () => {
 		expect(mockRegister).not.toHaveBeenCalled();
 	});
 
-	it('requires explicit consent and a valid timestamp', async () => {
-		const response = await POST(request({ ...validBody, consented: false }));
+	it.each([
+		['no consent at all', { consent: undefined }],
+		['a null consent', { consent: null }],
+		['only the old consented flag', { consent: undefined, consented: true }],
+		['guardian_for on the kiosk', { consent: kioskDecision({ guardian_for: ['member-1'] }) }],
+		['verbal consent on the kiosk', { consent: kioskDecision({ verbal: true }) }],
+		['a malformed consent ref', { consent: kioskDecision({ ref: 'CS-bad' }) }],
+		['a basic-mode consent', { consent: kioskDecision({ mode: 'basic' }) }],
+		[
+			'a basic-mode consent in its old shape',
+			{
+				consent: {
+					mode: 'basic',
+					guardian_for: [],
+					verbal: false,
+					...mintConsentStamp()
+				}
+			}
+		],
+		['an unknown consent field', { consent: { ...kioskDecision(), channel: 'staff' } }],
+		['a consented_at that is not the decision time', { consented_at: '2020-01-01T00:00:00.000Z' }]
+	])('returns 400 and registers nobody for %s', async (_name, override) => {
+		const response = await POST(request({ ...validBody, ...override }));
 		expect(response.status).toBe(400);
+		expect((await response.json()).error.code).toBe('INVALID_KIOSK_REGISTRATION');
 		expect(mockRegister).not.toHaveBeenCalled();
 	});
 
@@ -184,18 +246,19 @@ describe('POST /api/v1/kiosk/register', () => {
 		expect(mockRegister).not.toHaveBeenCalled();
 	});
 
-	it('returns 400 when the consent timestamp is stale', async () => {
-		const stale = new Date(Date.now() - 11 * 60 * 1000).toISOString();
-		const response = await POST(request({ ...validBody, consented_at: stale }));
+	it('returns 400 when the consent decision is older than ten minutes', async () => {
+		const stale = kioskDecision(mintConsentStamp(new Date(Date.now() - 11 * 60 * 1000)));
+		const response = await POST(request({ ...validBody, ...consentFields(stale) }));
 		expect(response.status).toBe(400);
+		expect((await response.json()).error.code).toBe('KIOSK_CONSENT_EXPIRED');
 		expect(mockRegister).not.toHaveBeenCalled();
 	});
 
-	it('returns 429 when the authenticated device exceeds its registration limit', async () => {
-		vi.mocked(kioskRegisterDeviceLimiter.check).mockReturnValue(false);
-		const response = await POST(request(validBody));
-		expect(response.status).toBe(429);
-		expect(response.headers.get('retry-after')).toBe('60');
+	it('keeps a decision dated ahead of the server a plain invalid body', async () => {
+		const ahead = kioskDecision(mintConsentStamp(new Date(Date.now() + 11 * 60 * 1000)));
+		const response = await POST(request({ ...validBody, ...consentFields(ahead) }));
+		expect(response.status).toBe(400);
+		expect((await response.json()).error.code).toBe('INVALID_KIOSK_REGISTRATION');
 		expect(mockRegister).not.toHaveBeenCalled();
 	});
 
@@ -232,7 +295,6 @@ describe('POST /api/v1/kiosk/register source thaid', () => {
 		vi.restoreAllMocks();
 		vi.clearAllMocks();
 		_resetSessionsForTest();
-		vi.spyOn(kioskRegisterDeviceLimiter, 'check').mockReturnValue(true);
 		mockAuthenticate.mockResolvedValue({
 			shelter_code: 'SH001',
 			device_id: 'KIOSK-01',
@@ -247,7 +309,8 @@ describe('POST /api/v1/kiosk/register source thaid', () => {
 			_id: 'evacuee:01ARZ3NDEKTSV4RRFFQ69G5FAV',
 			first_name: 'สมชาย',
 			last_name: 'ใจดี',
-			phone: null
+			phone: null,
+			consent: { ref: validBody.consent.ref, mode: 'full' }
 		} as never);
 	});
 
@@ -262,8 +325,7 @@ describe('POST /api/v1/kiosk/register source thaid', () => {
 			source: 'thaid',
 			session_id: sessionId,
 			phone: '0812345678',
-			consented: true,
-			consented_at: new Date().toISOString(),
+			...consentFields(),
 			...extra
 		};
 	}
@@ -278,8 +340,9 @@ describe('POST /api/v1/kiosk/register source thaid', () => {
 		expect(mockRegisterThaid).toHaveBeenCalledWith(
 			{ shelterCode: 'SH001', deviceId: 'KIOSK-01', stationName: 'โต๊ะ 1' },
 			citizen,
-			body.consented_at,
-			'0812345678'
+			body.consent,
+			'0812345678',
+			undefined
 		);
 		expect(mockRegister).not.toHaveBeenCalled();
 		expect(getKioskSessionForDevice(sessionId, DEVICE)?.status).toBe('consumed');
@@ -294,6 +357,15 @@ describe('POST /api/v1/kiosk/register source thaid', () => {
 			label: { name: 'สมชาย ใจดี', phone: null }
 		});
 		expect(mockRegisterThaid.mock.calls[0]?.[3]).toBeNull();
+	});
+
+	it('rejects a ThaiD registration without a valid consent, keeping the session', async () => {
+		const sessionId = completedSession();
+		const response = await POST(request(thaidBody(sessionId, { consent: undefined })));
+
+		expect(response.status).toBe(400);
+		expect(mockRegisterThaid).not.toHaveBeenCalled();
+		expect(getKioskSessionForDevice(sessionId, DEVICE)?.status).toBe('completed');
 	});
 
 	it('rejects a citizen id or card sent with a ThaiD registration', async () => {

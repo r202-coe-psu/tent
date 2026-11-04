@@ -328,6 +328,75 @@ describe('PUT /api/back-office/master-data/[type]', () => {
 		expect(adminRawMock).toHaveBeenCalled();
 	});
 
+	it('rejects a shelter-local write for a global-only type (CR-186)', async () => {
+		readMock.mockResolvedValue(null);
+
+		const res = await callPUT(
+			'chronic_disease',
+			{
+				shelter_code: 'SH001',
+				items: [{ code: 'gout', label_th: 'เกาต์', label_en: 'Gout', is_default: false }]
+			},
+			'?scope=shelter&shelter_code=SH001'
+		);
+
+		expect(res.status).toBe(422);
+		const body = await res.json();
+		expect(body.error.code).toBe('VALIDATION');
+		expect(body.error.message).toContain('System Management');
+		expect(adminRawMock).not.toHaveBeenCalled();
+	});
+
+	it('rejects a shelter-local allergy write (CR-187)', async () => {
+		readMock.mockResolvedValue(null);
+
+		const res = await callPUT(
+			'allergy',
+			{
+				shelter_code: 'SH001',
+				items: [{ code: 'soy', label_th: 'ถั่วเหลือง', label_en: 'Soy', is_default: false }]
+			},
+			'?scope=shelter&shelter_code=SH001'
+		);
+
+		expect(res.status).toBe(422);
+		expect((await res.json()).error.code).toBe('VALIDATION');
+		expect(adminRawMock).not.toHaveBeenCalled();
+	});
+
+	it('ignores a leftover shelter-local doc of a global-only type on read (CR-186)', async () => {
+		readMock.mockImplementation(async (_type, shelterCode) =>
+			shelterCode
+				? {
+						...existingDoc([
+							{ code: 'test', label_th: 'ทดสอบ', label_en: 'Test', is_default: false }
+						]),
+						_id: 'master_data:chronic_disease:SH001',
+						shelter_code: 'SH001'
+					}
+				: existingDoc([
+						{ code: 'diabetes', label_th: 'เบาหวาน', label_en: 'Diabetes', is_default: false }
+					])
+		);
+
+		const res = await callGET('chronic_disease', '?scope=effective&shelter_code=SH001');
+		const body = await res.json();
+
+		expect(body.items.map((i: { code: string }) => i.code)).toEqual(['diabetes']);
+		expect(readMock).not.toHaveBeenCalledWith('chronic_disease', 'SH001');
+	});
+
+	it('allows a global write for a global-only type (CR-186)', async () => {
+		readMock.mockResolvedValue(null);
+
+		const res = await callPUT('chronic_disease', {
+			items: [{ code: 'diabetes', label_th: 'เบาหวาน', label_en: 'Diabetes', is_default: false }]
+		});
+
+		expect(res.status).toBe(200);
+		expect(adminRawMock).toHaveBeenCalled();
+	});
+
 	it('rejects a GLOBAL label that collides with an existing shelter-local item (CR-078)', async () => {
 		readMock.mockResolvedValue(null);
 		readShelterDocsMock.mockResolvedValue([

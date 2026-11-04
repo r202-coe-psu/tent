@@ -1,13 +1,17 @@
 import type { StockLedger } from '$lib/features/operations';
 import {
+	isExpiryPassed,
 	isLotExpired,
 	lotPriorityReason,
+	planLotSplit,
 	projectStockLotBalances,
+	rankLotsForIssue,
 	sortStockLotsByConsumptionOrder,
 	type LotPriorityItem,
+	type LotSplitPlan,
 	type StockLotBalance
 } from '$lib/features/operations';
-import { qtyGt, qtyGte } from '$lib/utils/qty';
+import { parseQty, persistQty, qtyGt, qtyGte, subQty } from '$lib/utils/qty';
 
 export interface EligiblePhysicalLot {
 	lot_ref: string;
@@ -31,11 +35,7 @@ export function isLotDateExpired(
 	expiryDateStr: string | undefined,
 	referenceDate: Date = new Date()
 ): boolean {
-	if (!expiryDateStr) return false;
-	const expiry = new Date(expiryDateStr);
-	if (isNaN(expiry.getTime())) return false;
-	// FR-A4: a lot whose expiry is at or before now is expired.
-	return expiry.getTime() <= referenceDate.getTime();
+	return isExpiryPassed(expiryDateStr, referenceDate.getTime());
 }
 
 /** Per-lot remaining balances (> 0) of one item, projected from ledger history. */
@@ -62,6 +62,23 @@ export function getItemLotBalances(
 
 	// Filter for this item and positive remaining balance
 	return balances.filter((lot) => lot.item_id === itemId && qtyGt(lot.qty, 0));
+}
+
+/**
+ * Auto-allocation plan for one item (CR-143 §A): non-expired lots in weighted issue order,
+ * split to cover `requiredQty`. Shared by the picker's auto button and by callers that
+ * prefill a plan (CR-178).
+ */
+export function planAutoLotAllocation(
+	ledger: readonly StockLedger[] | undefined,
+	itemId: string,
+	requiredQty: string,
+	priorityMap: ReadonlyMap<string, LotPriorityItem>,
+	nowMs: number = Date.now()
+): LotSplitPlan {
+	const balances = getItemLotBalances(ledger, itemId);
+	const ranked = rankLotsForIssue(balances, priorityMap, nowMs, { excludeExpired: true });
+	return planLotSplit(ranked, requiredQty, nowMs, priorityMap);
 }
 
 /**
@@ -104,4 +121,13 @@ export function getEligiblePhysicalLots(
 			reason: lotPriorityReason(lot, item, nowMs)
 		};
 	});
+}
+
+/**
+ * Highest qty one lot's input may take: its own balance, capped by what the other lots have
+ * not already covered (`allocatedQty` minus `othersQty`). Never negative.
+ */
+export function lotInputMax(lotQty: string, allocatedQty: string, othersQty: string): string {
+	const room = qtyGt(allocatedQty, othersQty) ? subQty(allocatedQty, othersQty) : '0';
+	return persistQty(parseQty(lotQty).lt(parseQty(room)) ? lotQty : room);
 }

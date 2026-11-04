@@ -14,6 +14,23 @@ import type { Evacuee, Household } from '$lib/features/people';
 let mockUserRoles: string[] = [];
 let mockIsAuthenticated = true;
 
+vi.mock('$lib/features/master-data', async (importOriginal) => ({
+	...(await importOriginal<typeof import('$lib/features/master-data')>()),
+	useMasterData: () => ({
+		data: {
+			items: [
+				{
+					code: 'diabetes',
+					label_th: 'เบาหวาน',
+					label_en: 'Diabetes',
+					is_default: false,
+					status: 'active'
+				}
+			]
+		}
+	})
+}));
+
 vi.mock('$lib/guards/auth', () => ({
 	requireMedicalScreening: vi.fn(async () => {
 		const allowed = [

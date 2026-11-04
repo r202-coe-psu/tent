@@ -76,7 +76,7 @@
 		<div class="rounded-2xl border border-border bg-card p-4 shadow-xs">
 			<h3 class="inline-flex items-center gap-2 text-sm font-bold text-foreground">
 				<FileText class="h-4 w-4 text-primary" />
-				รายละเอียดภารกิจ และแนวทางปฏิบัติ (SOP)
+				รายละเอียดงานอาสาสมัคร และแนวทางปฏิบัติ (SOP)
 			</h3>
 			<p class="mt-3 text-sm leading-relaxed break-words whitespace-pre-line text-muted-foreground">
 				{job.description}

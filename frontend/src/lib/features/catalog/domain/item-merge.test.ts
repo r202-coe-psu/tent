@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import type { ItemMaster } from './catalog';
-import { createItemMaster, ITEM_MASTER_SCHEMA_V, mergeCatalogGenerations } from './catalog';
+import {
+	createItemMaster,
+	ITEM_MASTER_SCHEMA_V,
+	mergeCatalogGenerations,
+	mergedCatalogIdFor
+} from './catalog';
 import {
 	canMergeItem,
 	convertItemQty,
@@ -13,8 +18,8 @@ import {
 const item = (over: Partial<ItemMaster> & { _id: string; name: string }): ItemMaster =>
 	({ base_unit: 'bottle', conversions: [], ...over }) as ItemMaster;
 
-describe('item_master schema_v 5 (CR-143 §F)', () => {
-	it('stamps schema_v 5 on a newly created item', () => {
+describe('item_master schema_v (CR-143 §F v5, #607 v6)', () => {
+	it('stamps the current schema_v on a newly created item', () => {
 		const doc = createItemMaster(
 			{
 				name: 'น้ำ',
@@ -25,8 +30,8 @@ describe('item_master schema_v 5 (CR-143 §F)', () => {
 			{ shelterCode: 'SH001', createdBy: 'staff' },
 			'SH001'
 		);
-		expect(ITEM_MASTER_SCHEMA_V).toBe(5);
-		expect(doc.schema_v).toBe(5);
+		expect(ITEM_MASTER_SCHEMA_V).toBe(6);
+		expect(doc.schema_v).toBe(6);
 		expect(doc.merged_into).toBeUndefined();
 	});
 });
@@ -76,6 +81,39 @@ describe('merged_into visibility (FR-F5)', () => {
 			]
 		);
 		expect(entries.map((e) => e._id)).toEqual(['item_master:B']);
+	});
+});
+
+describe('mergedCatalogIdFor', () => {
+	const legacyBlanket = { _id: 'item:blanket', name: 'ผ้าห่ม', unit: 'piece' };
+
+	it('selects the legacy row when a new master shares its name', () => {
+		const created = { _id: 'item_master:new', name: ' ผ้าห่ม ', base_unit: 'piece' };
+		const entries = mergeCatalogGenerations([legacyBlanket], [created]);
+		expect(entries.map((e) => e._id)).toEqual(['item:blanket']);
+		expect(mergedCatalogIdFor(entries, created)).toBe('item:blanket');
+	});
+
+	it('selects the legacy twin of an existing master picked by name', () => {
+		const rice = { _id: 'item_master:rice', name: 'ข้าวสาร', base_unit: 'kg' };
+		const entries = mergeCatalogGenerations(
+			[{ _id: 'item:rice', name: 'ข้าวสาร', unit: 'kg' }],
+			[rice]
+		);
+		expect(mergedCatalogIdFor(entries, rice)).toBe('item:rice');
+	});
+
+	it('keeps the id the merged list already carries', () => {
+		const fish = { _id: 'item_master:fish', name: 'ปลากระป๋อง', base_unit: 'can' };
+		const entries = mergeCatalogGenerations([legacyBlanket], [fish]);
+		expect(mergedCatalogIdFor(entries, fish)).toBe('item_master:fish');
+	});
+
+	it('keeps a new id the list has not loaded yet', () => {
+		const entries = mergeCatalogGenerations([legacyBlanket], []);
+		expect(mergedCatalogIdFor(entries, { _id: 'item_master:soap', name: 'สบู่' })).toBe(
+			'item_master:soap'
+		);
 	});
 });
 

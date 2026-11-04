@@ -92,12 +92,20 @@ type MetricValues = Readonly<Record<string, number | null | undefined>>;
 type MetricDefinition = {
 	fields: readonly MetricField[];
 	threshold: string;
+	/** UI-only result sentences (CR-153 ภาคผนวก B.2); never persisted in `metric_spec`. */
+	passText: string;
+	failText: string;
+	/** UI-only explanation of the expected value, e.g. how much food should remain. */
+	hint?: (values: MetricValues) => string | null;
 	parameterKey?: SopRatioKey;
 	evaluate: (values: MetricValues, parameter?: Decimal) => boolean | null;
 };
 export type MetricSpec = {
 	fields: readonly MetricField[];
 	threshold: string;
+	passText: string;
+	failText: string;
+	hint: (values: MetricValues) => string | null;
 	parameter?: { key: SopRatioKey; value: string };
 	evaluate: (values: MetricValues) => boolean | null;
 };
@@ -132,59 +140,81 @@ const equalCoverage = (values: MetricValues): boolean | null =>
 const metricDefinitions: Record<string, MetricDefinition> = {
 	'D-SM-02': {
 		fields: [
-			field('occupants', 'จำนวนผู้พักพิงปัจจุบัน', 'คน'),
-			field('capacity', 'ความจุที่ได้รับอนุมัติ', 'คน')
+			field('occupants', 'ผู้พักพิงที่อยู่ในศูนย์ขณะนี้', 'คน'),
+			field('capacity', 'จำนวนผู้พักพิงสูงสุดที่ศูนย์รองรับได้', 'คน')
 		],
+		passText: 'จำนวนผู้พักพิงไม่เกินที่ศูนย์รองรับได้',
+		failText: 'จำนวนผู้พักพิงเกินที่ศูนย์รองรับได้',
 		threshold: 'occupants ≤ capacity',
 		evaluate: (values) => compare(values, 'occupants', 'capacity', 'lte')
 	},
 	'D-REG-03': {
 		fields: [
-			field('required', 'ผู้ที่ต้องได้รับความช่วยเหลือ', 'คน'),
-			field('complete', 'ผู้ที่ได้รับความช่วยเหลือ', 'คน')
+			field('required', 'ผู้ที่ต้องการความช่วยเหลือในการลงทะเบียน', 'คน'),
+			field('complete', 'ในจำนวนนี้ ได้รับความช่วยเหลือแล้ว', 'คน')
 		],
+		passText: 'ได้รับความช่วยเหลือครบทุกคนแล้ว',
+		failText: 'ยังมีผู้ที่ไม่ได้รับความช่วยเหลือ',
 		threshold: 'complete = required; ถ้า required = 0 ต้อง complete = 0',
 		evaluate: equalCoverage
 	},
 	'D-TRG-01': {
 		fields: [
-			field('required', 'ผู้พักพิงที่มาถึง', 'คน'),
-			field('complete', 'ผู้ที่คัดกรองแล้ว', 'คน')
+			field('required', 'ผู้พักพิงที่มาถึงศูนย์', 'คน'),
+			field('complete', 'ในจำนวนนี้ คัดกรองแล้ว', 'คน')
 		],
+		passText: 'คัดกรองครบทุกคนแล้ว',
+		failText: 'ยังคัดกรองไม่ครบ',
 		threshold: 'complete = required; ถ้า required = 0 ต้อง complete = 0',
 		evaluate: equalCoverage
 	},
 	'D-TRG-05': {
 		fields: [
-			field('required', 'ผู้พักพิงกลุ่มเสี่ยงที่ตรวจพบ', 'คน'),
-			field('complete', 'ผู้พักพิงที่มีข้อมูลประเภทและความต้องการครบ', 'คน')
+			field('required', 'ผู้พักพิงกลุ่มเปราะบางที่พบ', 'คน'),
+			field('complete', 'ในจำนวนนี้ บันทึกประเภทและความต้องการครบแล้ว', 'คน')
 		],
+		passText: 'บันทึกข้อมูลครบทุกคนแล้ว',
+		failText: 'ยังบันทึกข้อมูลไม่ครบ',
 		threshold: 'complete = required; ถ้า required = 0 ต้อง complete = 0',
 		evaluate: equalCoverage
 	},
 	'D-TRG-08': {
 		fields: [
-			field('required', 'รายการที่ต้องติดตาม', 'รายการ'),
-			field('complete', 'รายการที่ติดตามแล้ว', 'รายการ')
+			field('required', 'รายการติดตามที่ถึงกำหนด', 'รายการ'),
+			field('complete', 'ในจำนวนนี้ ติดตามแล้ว', 'รายการ')
 		],
+		passText: 'ติดตามครบตามกำหนดแล้ว',
+		failText: 'ยังมีรายการที่ไม่ได้ติดตาม',
 		threshold: 'complete = required; ถ้า required = 0 ต้อง complete = 0',
 		evaluate: equalCoverage
 	},
 	'D-KS-06': {
 		fields: [
-			field('required', 'อุปกรณ์ที่ต้องใช้', 'ชิ้น'),
-			field('usable', 'อุปกรณ์สะอาดและใช้งานได้', 'ชิ้น')
+			field('required', 'จำนวนอุปกรณ์ที่ต้องใช้', 'ชิ้น'),
+			field('usable', 'อุปกรณ์ที่สะอาดและใช้งานได้', 'ชิ้น')
 		],
+		passText: 'อุปกรณ์ที่พร้อมใช้มีเพียงพอ',
+		failText: 'อุปกรณ์ที่พร้อมใช้ไม่เพียงพอ',
 		threshold: 'usable ≥ required',
 		evaluate: (values) => compare(values, 'usable', 'required', 'gte')
 	},
 	'D-KS-10': {
 		fields: [
-			field('produced', 'ผลิต', 'ที่'),
-			field('distributed', 'แจก', 'ที่'),
-			field('loss', 'สูญเสีย', 'ที่'),
-			field('remaining', 'คงเหลือ', 'ที่')
+			field('produced', 'อาหารที่ทำเสร็จ', 'ที่'),
+			field('distributed', 'อาหารที่แจกแล้ว', 'ที่'),
+			field('loss', 'อาหารเสีย หก หรือทิ้ง', 'ที่'),
+			field('remaining', 'อาหารที่เหลืออยู่จริง', 'ที่')
 		],
+		passText: 'ยอดอาหารคงเหลือตรงกับจำนวนที่ควรเหลือ',
+		failText: 'ยอดอาหารคงเหลือไม่ตรงกับจำนวนที่ควรเหลือ',
+		hint: (values) => {
+			const produced = decimalValue(values, 'produced');
+			const distributed = decimalValue(values, 'distributed');
+			const loss = decimalValue(values, 'loss');
+			if (!produced || !distributed || !loss) return null;
+			const expected = produced.minus(distributed).minus(loss);
+			return `ควรเหลือ ${expected.toString()} ที่ (ทำเสร็จ ${produced.toString()} − แจก ${distributed.toString()} − เสีย ${loss.toString()})`;
+		},
 		threshold: 'produced - distributed - loss = remaining',
 		evaluate: (values) => {
 			const produced = decimalValue(values, 'produced');
@@ -198,18 +228,22 @@ const metricDefinitions: Record<string, MetricDefinition> = {
 	},
 	'D-VC-01': {
 		fields: [
-			field('rostered', 'อาสาสมัครตามบัญชี/ตารางกะ', 'คน'),
-			field('present', 'อาสาสมัครที่มาปฏิบัติงานจริง', 'คน')
+			field('rostered', 'จำนวนอาสาสมัครตามตารางกะ', 'คน'),
+			field('present', 'จำนวนอาสาสมัครที่มาทำงานจริง', 'คน')
 		],
+		passText: 'จำนวนอาสาสมัครตรงตามตารางกะ',
+		failText: 'จำนวนอาสาสมัครไม่ตรงตามตารางกะ',
 		threshold:
 			'จำนวนตรงกันเมื่อ present = rostered; ผู้ประเมินเลือก status เองและบันทึกเหตุผลใน notes เมื่อเกี่ยวข้อง',
 		evaluate: (values) => compare(values, 'present', 'rostered', 'eq')
 	},
 	'D-VC-02': {
 		fields: [
-			field('occupants', 'จำนวนผู้พักพิง', 'คน'),
-			field('volunteers', 'อาสาสมัครที่พร้อมปฏิบัติงาน', 'คน')
+			field('occupants', 'ผู้พักพิงที่อยู่ในศูนย์ขณะนี้', 'คน'),
+			field('volunteers', 'อาสาสมัครที่พร้อมทำงานขณะนี้', 'คน')
 		],
+		passText: 'จำนวนอาสาสมัครเพียงพอ',
+		failText: 'จำนวนอาสาสมัครไม่เพียงพอ',
 		threshold: 'volunteers ≥ ceil(occupants ÷ {parameter}); ถ้า occupants = 0 ต้องการ 0 คน',
 		parameterKey: 'people_per_volunteer',
 		evaluate: (values, parameter) => ratioCompare(values, 'occupants', 'volunteers', parameter)
@@ -217,32 +251,40 @@ const metricDefinitions: Record<string, MetricDefinition> = {
 	'D-VC-03': {
 		fields: [
 			field('required', 'งานที่ต้องใช้ทักษะเฉพาะ', 'งาน'),
-			field('complete', 'งานที่มอบให้ผู้มีทักษะตรง', 'งาน')
+			field('complete', 'ในจำนวนนี้ มอบหมายให้ผู้มีทักษะตรงแล้ว', 'งาน')
 		],
+		passText: 'มอบหมายงานตรงทักษะครบแล้ว',
+		failText: 'ยังมอบหมายงานตรงทักษะไม่ครบ',
 		threshold: 'complete = required; ถ้า required = 0 ต้อง complete = 0',
 		evaluate: equalCoverage
 	},
 	'D-VC-04': {
 		fields: [
 			field('required', 'อาสาสมัครที่เริ่มงาน', 'คน'),
-			field('complete', 'อาสาสมัครที่ผ่านการชี้แจง', 'คน')
+			field('complete', 'ในจำนวนนี้ ได้รับคำชี้แจงแล้ว', 'คน')
 		],
+		passText: 'ชี้แจงครบทุกคนแล้ว',
+		failText: 'ยังชี้แจงไม่ครบ',
 		threshold: 'complete = required; ถ้า required = 0 ต้อง complete = 0',
 		evaluate: equalCoverage
 	},
 	'D-VC-05': {
 		fields: [
-			field('required', 'ผู้ที่ได้รับมอบหมายงาน', 'คน'),
-			field('complete', 'ผู้ที่มีคำสั่งงานและผู้ควบคุมครบ', 'คน')
+			field('required', 'อาสาสมัครที่ได้รับมอบหมายงาน', 'คน'),
+			field('complete', 'ในจำนวนนี้ มีคำสั่งงานและผู้ควบคุมแล้ว', 'คน')
 		],
+		passText: 'มีคำสั่งงานและผู้ควบคุมครบทุกคน',
+		failText: 'ยังมีผู้ที่ไม่มีคำสั่งงานหรือผู้ควบคุม',
 		threshold: 'complete = required; ถ้า required = 0 ต้อง complete = 0',
 		evaluate: equalCoverage
 	},
 	'D-FAC-01': {
 		fields: [
-			field('usableArea', 'พื้นที่พักอาศัยสุทธิที่ใช้ได้', 'ตร.ม.', '0.01'),
-			field('occupants', 'จำนวนผู้พักพิง', 'คน')
+			field('usableArea', 'พื้นที่นอนพักที่ใช้ได้จริง', 'ตร.ม.', '0.01'),
+			field('occupants', 'ผู้พักพิงที่อยู่ในศูนย์ขณะนี้', 'คน')
 		],
+		passText: 'พื้นที่นอนพักเพียงพอตามเกณฑ์',
+		failText: 'พื้นที่นอนพักไม่เพียงพอ',
 		threshold:
 			'ถ้า occupants > 0: usableArea ÷ occupants ≥ {parameter}; ถ้า occupants = 0 ให้พื้นที่ขั้นต่ำเป็น 0 ตร.ม.',
 		parameterKey: 'm2_per_person_living',
@@ -256,8 +298,10 @@ const metricDefinitions: Record<string, MetricDefinition> = {
 	'D-FAC-02': {
 		fields: [
 			field('people', 'ผู้พักพิงหญิง', 'คน'),
-			field('units', 'ห้องน้ำหญิงที่ใช้งานได้', 'ห้อง')
+			field('units', 'ห้องน้ำหญิงที่ใช้ได้จริง', 'ห้อง')
 		],
+		passText: 'ห้องน้ำหญิงเพียงพอตามเกณฑ์',
+		failText: 'ห้องน้ำหญิงไม่เพียงพอ',
 		threshold: 'units ≥ ceil(people ÷ {parameter}); ถ้า people = 0 ต้องการ 0 ห้อง',
 		parameterKey: 'people_per_toilet_female',
 		evaluate: (values, parameter) => ratioCompare(values, 'people', 'units', parameter)
@@ -265,34 +309,53 @@ const metricDefinitions: Record<string, MetricDefinition> = {
 	'D-FAC-03': {
 		fields: [
 			field('people', 'ผู้พักพิงชาย', 'คน'),
-			field('units', 'ห้องน้ำชายที่ใช้งานได้', 'ห้อง')
+			field('units', 'ห้องน้ำชายที่ใช้ได้จริง', 'ห้อง')
 		],
+		passText: 'ห้องน้ำชายเพียงพอตามเกณฑ์',
+		failText: 'ห้องน้ำชายไม่เพียงพอ',
 		threshold: 'units ≥ ceil(people ÷ {parameter}); ถ้า people = 0 ต้องการ 0 ห้อง',
 		parameterKey: 'people_per_toilet_male',
 		evaluate: (values, parameter) => ratioCompare(values, 'people', 'units', parameter)
 	},
 	'D-FAC-06': {
-		fields: [field('people', 'ผู้พักพิง', 'คน'), field('units', 'จุดอาบน้ำที่ใช้งานได้', 'จุด')],
+		fields: [
+			field('people', 'ผู้พักพิงที่อยู่ในศูนย์ขณะนี้', 'คน'),
+			field('units', 'จุดอาบน้ำที่ใช้ได้จริง', 'จุด')
+		],
+		passText: 'จุดอาบน้ำเพียงพอตามเกณฑ์',
+		failText: 'จุดอาบน้ำไม่เพียงพอ',
 		threshold: 'units ≥ ceil(people ÷ {parameter}); ถ้า people = 0 ต้องการ 0 จุด',
 		parameterKey: 'people_per_bathing',
 		evaluate: (values, parameter) => ratioCompare(values, 'people', 'units', parameter)
 	},
 	'D-FAC-07': {
-		fields: [field('people', 'ผู้พักพิง', 'คน'), field('units', 'จุดซักล้างที่ใช้งานได้', 'จุด')],
+		fields: [
+			field('people', 'ผู้พักพิงที่อยู่ในศูนย์ขณะนี้', 'คน'),
+			field('units', 'จุดซักล้างที่ใช้ได้จริง', 'จุด')
+		],
+		passText: 'จุดซักล้างเพียงพอตามเกณฑ์',
+		failText: 'จุดซักล้างไม่เพียงพอ',
 		threshold: 'units ≥ ceil(people ÷ {parameter}); ถ้า people = 0 ต้องการ 0 จุด',
 		parameterKey: 'people_per_laundry',
 		evaluate: (values, parameter) => ratioCompare(values, 'people', 'units', parameter)
 	},
 	'D-FAC-08': {
 		fields: [
-			field('available', 'น้ำปลอดภัยพร้อมใช้', 'ลิตร', '0.1'),
-			field('plannedNeed', 'ความต้องการตามแผนทรัพยากรวันนี้', 'ลิตร', '0.1')
+			field('available', 'น้ำสะอาดที่มีพร้อมใช้', 'ลิตร', '0.1'),
+			field('plannedNeed', 'ปริมาณน้ำที่ศูนย์วางแผนว่าจะใช้วันนี้', 'ลิตร', '0.1')
 		],
+		passText: 'มีน้ำสะอาดเพียงพอตามแผน',
+		failText: 'น้ำสะอาดไม่เพียงพอตามแผน',
 		threshold: 'available ≥ plannedNeed',
 		evaluate: (values) => compare(values, 'available', 'plannedNeed', 'gte')
 	},
 	'D-FAC-10': {
-		fields: [field('people', 'ผู้พักพิง', 'คน'), field('units', 'จุดจ่ายน้ำที่ใช้งานได้', 'จุด')],
+		fields: [
+			field('people', 'ผู้พักพิงที่อยู่ในศูนย์ขณะนี้', 'คน'),
+			field('units', 'จุดจ่ายน้ำที่ใช้ได้จริง', 'จุด')
+		],
+		passText: 'จุดจ่ายน้ำเพียงพอตามเกณฑ์',
+		failText: 'จุดจ่ายน้ำไม่เพียงพอ',
 		threshold: 'units ≥ ceil(people ÷ {parameter}); ถ้า people = 0 ต้องการ 0 จุด',
 		parameterKey: 'people_per_tap',
 		evaluate: (values, parameter) => ratioCompare(values, 'people', 'units', parameter)
@@ -370,6 +433,9 @@ export const metricForQuestion = (
 	return {
 		fields: definition.fields,
 		threshold: thresholdFor(definition, validParameter),
+		passText: definition.passText,
+		failText: definition.failText,
+		hint: (values) => definition.hint?.(values) ?? null,
 		...(parameterKey && validParameter
 			? { parameter: { key: parameterKey, value: validParameter } }
 			: {}),
@@ -438,6 +504,72 @@ export const canAssessRole = (
 		) ?? false
 	);
 };
+
+/** Rows the UI may show (CR-153): only roles the user can assess, in the canonical 9-role order. */
+export const roleRowAccess = (availableRoles: readonly { code: DailySopRoleCode }[]) =>
+	DAILY_SOP_ROLES.filter((role) =>
+		availableRoles.some((availableRole) => availableRole.code === role.code)
+	).map((role) => ({ role, canAssess: true }));
+
+/**
+ * Dates the day list may show (CR-153 History contract): dates that have a document for a
+ * visible role, plus today when the user has at least one visible role.
+ */
+export const visibleHistoryDates = (
+	assessments: readonly { assessment_date: string; role_code: DailySopRoleCode }[],
+	visibleRoles: readonly { code: DailySopRoleCode }[],
+	today: string
+): string[] => {
+	if (visibleRoles.length === 0) return [];
+	const visible = new Set(visibleRoles.map((role) => role.code));
+	return dailySopReviewDates(
+		assessments.filter((item) => visible.has(item.role_code)).map((item) => item.assessment_date),
+		today
+	);
+};
+
+/** True while the loaded pages hold no visible-role document but more pages exist. */
+export const historyNeedsMorePages = (
+	assessments: readonly { role_code: DailySopRoleCode }[],
+	visibleRoles: readonly { code: DailySopRoleCode }[],
+	hasNextPage: boolean
+): boolean =>
+	hasNextPage &&
+	!assessments.some((item) => visibleRoles.some((role) => role.code === item.role_code));
+
+/** Questions whose numbers the page can pre-fill from live shelter data. */
+export const DAILY_SOP_OCCUPANCY_QUESTION_IDS: readonly string[] = [
+	'D-SM-02',
+	'D-VC-02',
+	'D-FAC-01'
+];
+export const DAILY_SOP_CAPACITY_QUESTION_ID = 'D-SM-02';
+export const DAILY_SOP_STOCK_QUESTION_ID = 'D-SC-01';
+
+const roleHasQuestion = (role: DailySopRoleCode, questionIds: readonly string[]) =>
+	questionsForRole(role).some((question) => questionIds.includes(question.id));
+
+export const roleUsesOccupancy = (role: DailySopRoleCode) =>
+	roleHasQuestion(role, DAILY_SOP_OCCUPANCY_QUESTION_IDS);
+export const roleUsesShelterCapacity = (role: DailySopRoleCode) =>
+	roleHasQuestion(role, [DAILY_SOP_CAPACITY_QUESTION_ID]);
+export const roleUsesStockCheck = (role: DailySopRoleCode) =>
+	roleHasQuestion(role, [DAILY_SOP_STOCK_QUESTION_ID]);
+
+/** Drops the trailing account name, e.g. "พว. สมหญิง (Staff 02)" → "พว. สมหญิง". */
+export const personDisplayName = (name: string | undefined): string =>
+	(name ?? '').replace(/\s*\([^)]*\)\s*$/, '');
+
+export const daySummaryStatus = (day: {
+	recordedRoles: number;
+	completedRoles: number;
+	roleCount: number;
+}): 'Completed' | 'InProgress' | undefined =>
+	day.recordedRoles === 0
+		? undefined
+		: day.completedRoles === day.roleCount
+			? 'Completed'
+			: 'InProgress';
 
 export const assessableRoles = (roles: readonly string[], shelterCode: string) =>
 	DAILY_SOP_ROLES.filter((role) => canAssessRole(role.code, roles, shelterCode));
@@ -541,11 +673,24 @@ export const summarizeRoleDraft = (draft: DailySopRoleDraft, role: DailySopRoleC
 	return counts;
 };
 
+const ANSWERED_STATUSES: ReadonlySet<unknown> = new Set(['Pass', 'Fail', 'Pending']);
+
+export const isAnsweredStatus = (status: unknown): status is DailySopRoleStatus =>
+	ANSWERED_STATUSES.has(status);
+
+/** CR-153: only Pending requires notes; Pass and Fail may leave notes empty. */
+export const notesRequired = (status: DailySopRoleStatus | null | undefined): boolean =>
+	status === 'Pending';
+
+export const isControlComplete = (
+	control: Pick<DailySopRoleControlDraft, 'status' | 'notes'> | undefined
+): boolean => {
+	if (!control || !isAnsweredStatus(control.status)) return false;
+	return !notesRequired(control.status) || control.notes.trim().length > 0;
+};
+
 export const canCompleteRoleDraft = (draft: DailySopRoleDraft, role: DailySopRoleCode) =>
-	controlsForRoleDraft(draft, role).every(
-		(control) =>
-			Boolean(control?.status) && (control.status === 'Pass' || control.notes.trim().length > 0)
-	);
+	controlsForRoleDraft(draft, role).every(isControlComplete);
 
 export const hasRoleDraftInput = (draft: DailySopRoleDraft, role: DailySopRoleCode) =>
 	controlsForRoleDraft(draft, role).some(
@@ -673,10 +818,10 @@ const roleControlSchema = z
 	})
 	.strict()
 	.superRefine((control, ctx) => {
-		if ((control.status === 'Fail' || control.status === 'Pending') && !control.notes.trim()) {
+		if (notesRequired(control.status) && !control.notes.trim()) {
 			ctx.addIssue({
 				code: 'custom',
-				message: 'Fail and Pending answers require notes',
+				message: 'Pending answers require notes',
 				path: ['notes']
 			});
 		}

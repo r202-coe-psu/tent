@@ -46,7 +46,7 @@
 		{
 			id: 'ready',
 			label: 'พร้อมเปิดใช้งาน (Ready)',
-			subtext: 'องค์ประกอบจำเป็นมีครบถ้วน สามารถรองรับผู้ประสบภัยได้อย่างปลอดภัย',
+			subtext: 'องค์ประกอบจำเป็นมีครบถ้วน สามารถรองรับผู้เข้าพักได้อย่างปลอดภัย',
 			icon: CheckCircle2,
 			borderClass: 'border-emerald-300',
 			bgActive: 'bg-emerald-50 text-emerald-900 border-emerald-500 ring-2 ring-emerald-400/40',
@@ -178,7 +178,7 @@
 				disabled={readOnly}
 				value={justificationNote}
 				oninput={(e) => onChangeNote((e.currentTarget as HTMLTextAreaElement).value)}
-				placeholder="ระบุข้อเท็จจริงหน้างาน เหตุผลที่ตัดสินผ่านหรือมีเงื่อนไข เช่น 'ได้รับการสนับสนุนเครื่องปั่นไฟสำรองจาก อปท. ข้างเคียงแล้ว กำลังเดินทางมาถึงก่อนเริ่มรับผู้อพยพ'..."
+				placeholder="ระบุข้อเท็จจริงหน้างาน เหตุผลที่ตัดสินผ่านหรือมีเงื่อนไข เช่น 'ได้รับการสนับสนุนเครื่องปั่นไฟสำรองจาก อปท. ข้างเคียงแล้ว กำลังเดินทางมาถึงก่อนเริ่มรับผู้เข้าพัก'..."
 				rows={3}
 				class="text-xs"
 			/>

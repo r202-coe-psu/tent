@@ -1,5 +1,5 @@
 /**
- * Helpers for the Partner API suite (`partner-api.test.ts`, EXT-001…011, ADR 0002).
+ * Helpers for the Partner API suite (`partner-api.test.ts`, EXT-001…012, ADR 0002).
  *
  * The suite drives the real `/external/*` plane (FastAPI, no BFF in between) with tokens it
  * mints itself, and manages its own `E2E partner …` clients through the staff BFF
@@ -28,11 +28,31 @@ import { publicShelter, teardownShelter } from './public-cleanup';
 // ─── Scopes + endpoint table ───────────────────────────────────────────────────
 
 /**
- * The six scopes a partner client can hold (`tent_model.third_party_client`, mirrored by the
+ * The eight scopes a partner client can hold (`tent_model.third_party_client`, mirrored by the
  * staff UI's `GRANTABLE_SCOPES`), imported so a new scope cannot be forgotten here.
  */
 export const PARTNER_SCOPES = GRANTABLE_SCOPES;
 export type PartnerScope = GrantableScope;
+
+/** What a scope without an endpoint of its own changes (a flag on another call, not a route). */
+export interface ScopeProbe {
+	/** The endpoint whose behaviour the scope alters. */
+	ext: 'EXT-008';
+	/** Answer a client WITHOUT the scope gets (the scope present would turn it into a 201). */
+	status: number;
+	code: string;
+}
+
+/**
+ * A4 removes each scope in turn and asserts the endpoints that need it answer 403. A scope that
+ * is not a gate on any route has nothing to assert that way, so it lists its probe here: the
+ * call that behaves differently without it. `booking-bypass` (#751) lets a `booking-write`
+ * client book a shelter that is closed to bookings; without it that call is a 409, never a 403.
+ * A scope with neither an endpoint in {@link PARTNER_ENDPOINTS} nor a probe fails A4 loudly.
+ */
+export const SCOPE_PROBES: Readonly<Record<string, ScopeProbe>> = {
+	'booking-bypass': { ext: 'EXT-008', status: 409, code: 'location_not_bookable' }
+};
 
 /**
  * FastAPI origin the `/external/*` plane is reached on. A remote run (`E2E_BASE_URL` set) uses
@@ -74,7 +94,7 @@ export interface PartnerEndpoint {
 	method: 'GET' | 'POST';
 	path: (ctx: ExtCtx) => string;
 	scope: PartnerScope;
-	/** 007 / 011 check `purpose` before the scope, so every call carries one. */
+	/** 007 / 011 / 012 check `purpose` before the scope, so every call carries one. */
 	query?: (ctx: ExtCtx) => Record<string, string>;
 	body?: (ctx: ExtCtx) => unknown;
 	/** Status a fully-scoped token gets for this request in the matrix (not the 401 sweep). */
@@ -174,6 +194,17 @@ export const PARTNER_ENDPOINTS: readonly PartnerEndpoint[] = [
 		query: (c) => ({ ...PURPOSE, cid: c.cid }),
 		// A CID nobody checked in under: 404 residency_not_found is the "scope passed" answer.
 		okStatus: 404
+	},
+	{
+		ext: 'EXT-012',
+		method: 'POST',
+		path: () => '/external/persons/search',
+		scope: 'occupant-search',
+		query: () => PURPOSE,
+		// E12-* send the run's own CID; the scope matrix overrides `cid` with a fresh, never-booked one,
+		// so 200 with an empty `result` is its "scope passed" answer.
+		body: (c) => ({ search: c.cid }),
+		okStatus: 200
 	}
 ];
 
@@ -289,6 +320,31 @@ export function expectExtError(res: ExtResponse, status: number, code: string, l
 	});
 }
 
+/** One row of EXT-002 (the fields the suite reads). */
+export interface LocationRow {
+	location_code: string;
+	accepts_booking?: boolean;
+}
+
+/** Walk every page of EXT-002 (limit 200, capped at 20 pages) with the given filters. */
+export async function listAllLocations(
+	request: APIRequestContext,
+	token: string,
+	query: Record<string, string> = {}
+): Promise<LocationRow[]> {
+	const rows: LocationRow[] = [];
+	for (let page = 1; page <= 20; page++) {
+		const res = await callExtPath(request, token, 'GET', '/external/locations', {
+			query: { ...query, limit: '200', page: String(page) }
+		});
+		expect(res.status, `EXT-002 page ${page} (code ${res.body?.code})`).toBe(200);
+		const batch = res.body.result as LocationRow[];
+		rows.push(...batch);
+		if (batch.length < 200) break;
+	}
+	return rows;
+}
+
 // ─── Admin BFF (staff session) ─────────────────────────────────────────────────
 
 /**
@@ -371,6 +427,27 @@ export class PartnerAdmin {
 		const res = await this.call('DELETE', `/${encodeURIComponent(rowId)}`);
 		expect([200, 404], 'delete partner client').toContain(res.status);
 	}
+}
+
+/**
+ * A secondary fixture client: ledger its name, create it through the BFF (ledgering the id before
+ * any assertion), remember its secret in memory and mint a token. Returns what a test needs.
+ */
+export async function createLedgeredClient(
+	admin: PartnerAdmin,
+	request: APIRequestContext,
+	ledger: PartnerLedger,
+	secrets: Map<string, string>,
+	name: string,
+	scopes: readonly string[]
+): Promise<{ clientId: string; token: string; scopes: string[] }> {
+	ledger.add('clientNames', name);
+	const created = await admin.createClient(name, scopes, (c) =>
+		ledger.add('clients', { rowId: c.id, clientId: c.client_id })
+	);
+	secrets.set(created.client_id, created.client_secret);
+	const minted = await mintToken(request, created.client_id, created.client_secret);
+	return { clientId: created.client_id, token: minted.access_token, scopes: minted.scopes };
 }
 
 // ─── Per-run ledger ────────────────────────────────────────────────────────────

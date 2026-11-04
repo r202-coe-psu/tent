@@ -158,7 +158,8 @@ export function useImportShelters() {
 						name: r.name,
 						shelter: r.shelter,
 						errors: r.errors,
-						food_distribution_points_present: r.foodDistributionPointsProvided === true
+						food_distribution_points_present: r.foodDistributionPointsProvided === true,
+						...(r.siteKindBlank ? { site_kind_blank: true } : {})
 					}))
 				})
 			});

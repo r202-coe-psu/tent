@@ -2,9 +2,6 @@
 
 from __future__ import annotations
 
-import threading
-import time
-from collections import defaultdict
 from typing import Annotated
 
 from fastapi import (
@@ -29,9 +26,14 @@ from ...core.staff_session import (
     require_system_admin,
 )
 from ...infrastructure.gridfs import load_unassigned_photo, store_unassigned_photo
-from ...utils.request_meta import client_ip
 from .couch_birth import CouchBirthPort, get_couch_birth
 from .schemas import (
+    UnassignedKioskLookupRequest,
+    UnassignedKioskLookupResponse,
+    UnassignedKioskPrepareRequest,
+    UnassignedKioskPrepareResponse,
+    UnassignedKioskRevertRequest,
+    UnassignedKioskRevertResponse,
     UnassignedPhotoUploadResponse,
     UnassignedRegistrationClaimRequest,
     UnassignedRegistrationClaimResponse,
@@ -58,26 +60,7 @@ staff_router = APIRouter(
     tags=["Unassigned Registrations (Staff)"],
 )
 
-_RATE_WINDOW_SECONDS = 60
-_RATE_MAX_REQUESTS = 30
-_rate_buckets: dict[str, list[float]] = defaultdict(list)
-_rate_lock = threading.Lock()
 _MAX_PHOTO_BYTES = 5 * 1024 * 1024
-
-
-def _enforce_rate_limit(request: Request) -> None:
-    """In-process sliding window — not shared across replicas."""
-    ip = client_ip(request)
-    now = time.monotonic()
-    with _rate_lock:
-        bucket = [ts for ts in _rate_buckets[ip] if now - ts < _RATE_WINDOW_SECONDS]
-        if len(bucket) >= _RATE_MAX_REQUESTS:
-            raise HTTPException(
-                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                detail={"error": {"code": "RATE_LIMITED", "message": "Too many requests"}},
-            )
-        bucket.append(now)
-        _rate_buckets[ip] = bucket
 
 
 def get_unassigned_registrations_use_case(
@@ -106,7 +89,6 @@ async def upload_unassigned_photo(
     thumbnail_size: int | None = Form(default=None),
 ) -> UnassignedPhotoUploadResponse:
     """Store a compressed face/pet photo in Mongo GridFS for later claim → Couch image (#255)."""
-    _enforce_rate_limit(request)
     response.headers["Cache-Control"] = "no-store"
 
     full_bytes = await full.read(_MAX_PHOTO_BYTES + 1)
@@ -169,7 +151,6 @@ async def create_unassigned_registration(
     ),
 ) -> UnassignedRegistrationCreateResponse:
     """Public pre-registration without a shelter — writes Mongo only (FR-UR-01)."""
-    _enforce_rate_limit(request)
     response.headers["Cache-Control"] = "no-store"
     return await use_case.create(payload)
 
@@ -188,9 +169,61 @@ async def match_unassigned_residence(
     ),
 ) -> UnassignedResidenceMatchResponse:
     """Service-to-service Residence match — ids + landmark/housing_type only (no member PII)."""
-    _enforce_rate_limit(request)
     response.headers["Cache-Control"] = "no-store"
     return await use_case.match_by_residence(payload)
+
+
+@router.post(
+    "/kiosk-lookup",
+    response_model=UnassignedKioskLookupResponse,
+    dependencies=[Depends(verify_external_secret)],
+)
+async def kiosk_lookup_unassigned_registration(
+    response: Response,
+    payload: UnassignedKioskLookupRequest,
+    use_case: UnassignedRegistrationsUseCase = Depends(  # noqa: B008
+        get_unassigned_registrations_use_case
+    ),
+) -> UnassignedKioskLookupResponse:
+    """Service-to-service kiosk lookup — whole family of one registration, no contact PII."""
+    response.headers["Cache-Control"] = "no-store"
+    return await use_case.kiosk_lookup(payload)
+
+
+@router.post(
+    "/{registration_id}/kiosk-claim/prepare",
+    response_model=UnassignedKioskPrepareResponse,
+    dependencies=[Depends(verify_external_secret)],
+)
+async def kiosk_prepare_unassigned_claim(
+    registration_id: str,
+    response: Response,
+    payload: UnassignedKioskPrepareRequest,
+    use_case: UnassignedRegistrationsUseCase = Depends(  # noqa: B008
+        get_unassigned_registrations_use_case
+    ),
+) -> UnassignedKioskPrepareResponse:
+    """Kiosk claim step 1 — mark members claimed and return Couch docs for the BFF to write."""
+    response.headers["Cache-Control"] = "no-store"
+    return await use_case.kiosk_prepare(registration_id, payload)
+
+
+@router.post(
+    "/{registration_id}/kiosk-claim/revert",
+    response_model=UnassignedKioskRevertResponse,
+    dependencies=[Depends(verify_external_secret)],
+)
+async def kiosk_revert_unassigned_claim(
+    registration_id: str,
+    response: Response,
+    payload: UnassignedKioskRevertRequest,
+    use_case: UnassignedRegistrationsUseCase = Depends(  # noqa: B008
+        get_unassigned_registrations_use_case
+    ),
+) -> UnassignedKioskRevertResponse:
+    """Kiosk claim rollback — reopen members this kiosk marked when the Couch write failed."""
+    response.headers["Cache-Control"] = "no-store"
+    return await use_case.kiosk_revert(registration_id, payload)
 
 
 @router.get(
@@ -207,7 +240,6 @@ async def get_unassigned_registration_status(
     ),
 ) -> UnassignedRegistrationStatusResponse:
     """Service-to-service ticket status (BFF sync) — status + counts only, no PII."""
-    _enforce_rate_limit(request)
     response.headers["Cache-Control"] = "no-store"
     return await use_case.get_status(registration_id)
 

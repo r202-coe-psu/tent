@@ -3,6 +3,8 @@ import {
 	CLIENT_DESCRIPTION_MAX_LENGTH,
 	CLIENT_NAME_MAX_LENGTH,
 	DEFAULT_SCOPES_BY_MODULE,
+	GRANTABLE_SCOPES,
+	SCOPE_LABEL,
 	SENSITIVE_SCOPES,
 	SENSITIVE_SCOPE_WARNING,
 	createThirdPartyClientSchema,
@@ -190,6 +192,58 @@ describe('CR-154 M2 scopes', () => {
 		expect(SENSITIVE_SCOPES).toContain('residency-read');
 		for (const scope of SENSITIVE_SCOPES) expect(SENSITIVE_SCOPE_WARNING[scope]).toBeTruthy();
 	});
+});
+
+describe('#736 occupant-search scope (EXT-012)', () => {
+	const SCOPE = 'occupant-search';
+
+	it('is grantable and has a label', () => {
+		expect(GRANTABLE_SCOPES as readonly string[]).toContain(SCOPE);
+		expect((SCOPE_LABEL as Record<string, string>)[SCOPE]).toBeTruthy();
+		expect(
+			createThirdPartyClientSchema.safeParse({
+				name: 'Search partner',
+				module_name: '',
+				allowed_scopes: ['location-read', SCOPE]
+			}).success
+		).toBe(true);
+	});
+
+	it('is sensitive and carries a warning', () => {
+		expect(SENSITIVE_SCOPES as readonly string[]).toContain(SCOPE);
+		expect((SENSITIVE_SCOPE_WARNING as Record<string, string>)[SCOPE]).toBeTruthy();
+	});
+
+	it('is not in any module preset — an admin ticks it case by case', () => {
+		for (const scopes of Object.values(DEFAULT_SCOPES_BY_MODULE)) {
+			expect(scopes as readonly string[]).not.toContain(SCOPE);
+		}
+	});
+});
+
+describe('#751 booking-bypass scope (EOC)', () => {
+	const SCOPE = 'booking-bypass';
+
+	it('is grantable and has a label; the grantable set is now eight scopes', () => {
+		expect(GRANTABLE_SCOPES as readonly string[]).toContain(SCOPE);
+		expect(GRANTABLE_SCOPES).toHaveLength(8);
+		expect((SCOPE_LABEL as Record<string, string>)[SCOPE]).toBeTruthy();
+		expect(
+			createThirdPartyClientSchema.safeParse({
+				name: 'EOC partner',
+				module_name: 'M2',
+				allowed_scopes: ['booking-write', SCOPE]
+			}).success
+		).toBe(true);
+	});
+
+	it('is sensitive and carries a warning', () => {
+		expect(SENSITIVE_SCOPES as readonly string[]).toContain(SCOPE);
+		expect((SENSITIVE_SCOPE_WARNING as Record<string, string>)[SCOPE]).toBeTruthy();
+	});
+
+	// Not in any preset (M7 included): covered by 'never presets a sensitive scope' above, since
+	// this scope is sensitive.
 });
 
 describe('display helpers', () => {

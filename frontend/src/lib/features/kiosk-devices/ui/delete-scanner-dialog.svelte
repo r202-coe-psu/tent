@@ -40,7 +40,7 @@
 		<AlertDialog.Footer>
 			<AlertDialog.Cancel disabled={pending}>ยกเลิก</AlertDialog.Cancel>
 			<AlertDialog.Action
-				class="text-destructive-foreground bg-destructive hover:bg-destructive/90"
+				class="bg-destructive text-destructive-foreground hover:bg-destructive/90"
 				disabled={pending || !device}
 				onclick={() => device && onconfirm(device)}
 			>

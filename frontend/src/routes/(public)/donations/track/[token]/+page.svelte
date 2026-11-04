@@ -15,6 +15,7 @@
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import Download from '@lucide/svelte/icons/download';
+	import Printer from '@lucide/svelte/icons/printer';
 	import { generateQrDataUrl } from '$lib/utils/qrcode';
 	import { toast } from 'svelte-sonner';
 	import {
@@ -27,15 +28,23 @@
 		formatTrackSchedule,
 		canEditCourierTracking,
 		canCancelDonation,
+		donationItemEditGate,
+		isTerminalDonationStatus,
+		isStartedAtPoint,
+		rejectedLineReasons,
+		needsDropOffDestination,
+		resolveDropOffPoint,
+		groupDropOffDestinations,
 		CancelDonationDialog,
+		DropOffCard,
+		DropOffGroups,
 		EditDonationItemsDialog
 	} from '$lib/features/donations';
-	import { PublicPageShell } from '$lib/features/public-portal';
+	import { PublicPageShell, usePublicShelter } from '$lib/features/public-portal';
 	import { langState } from '$lib/states/i18n.svelte';
 	import { getTranslation } from '$lib/utils/i18n';
 	import { PUBLIC_DONATIONS_I18N } from '$lib/constants/i18n';
 	import { formatUnit, useUnitsOfMeasure } from '$lib/features/catalog';
-	import { qtyGt, subQty } from '$lib/utils/qty';
 
 	let { data }: { data: { token: string } } = $props();
 	const token = $derived(data.token);
@@ -59,6 +68,35 @@
 
 	const status = $derived(donation?.status ?? '');
 
+	// Only a booking the donor or a courier brings to the shelter needs a destination;
+	// a failed lookup leaves the raw shelter code in place rather than breaking the page.
+	const wantsDestination = $derived(needsDropOffDestination(donation?.logistics?.delivery_method));
+	const shelterQuery = usePublicShelter(() =>
+		wantsDestination ? (donation?.shelter_code ?? null) : null
+	);
+	const dropOffPoint = $derived(shelterQuery.data ? resolveDropOffPoint(shelterQuery.data) : null);
+	// A finished or cancelled booking still names its shelter, but no longer sends anyone there.
+	const showDirections = $derived(!isTerminalDonationStatus(status));
+
+	// CR-206 FR-MP-13, FR-MP-16 — a booking split across drop-off points: one card per point
+	// with what each point has taken, and the lines staff have yet to give a point (staff-
+	// assigned drop-off FR-AP-22). `null` (no line has or awaits a point) keeps the shelter card.
+	const pointGroups = $derived(
+		donation && shelterQuery.data
+			? groupDropOffDestinations(donation.items, shelterQuery.data, {
+					anyPointName: t.anyPointGroupTitle,
+					awaitingName: t.awaitingPointGroupTitle,
+					deliveryMethod: donation.logistics?.delivery_method,
+					pointReceipts: donation.point_receipts
+				})
+			: null
+	);
+	const lineNames = $derived(donation ? donation.items.map((item) => item.item_name) : []);
+	// "รับแล้ว" stays true on a received booking; on one turned away or cancelled it would mislead.
+	const showReceivedGroups = $derived(!isTerminalDonationStatus(status) || status === 'received');
+	// FR-MP-17 — once a point recorded a receipt the donor can neither cancel nor edit.
+	const startedAtPoint = $derived(donation ? isStartedAtPoint(donation) : false);
+
 	/**
 	 * CR-052 §1.4 (Task #52) — "ยกเลิกกลไกการข้ามขั้นตอนไปออกรหัสตอบรับ (QR Code)
 	 * อัตโนมัติทุกกรณี": a booking gets no check-in pass until staff have reviewed it.
@@ -77,53 +115,8 @@
 	const showQr = $derived(status === 'verifying');
 	const isReceived = $derived(status === 'received');
 
-	const shortfalls = $derived.by(() => {
-		if (!isReceived || !donation?.received_summary) return [];
-		if (donation.received_summary.shortfalls && donation.received_summary.shortfalls.length > 0) {
-			return donation.received_summary.shortfalls;
-		}
-		if (donation.received_summary.items && donation.received_summary.items.length > 0) {
-			const countedMap: Record<string, string> = {};
-			for (const c of donation.received_summary.items) {
-				const key = c.item_id || c.free_text || c.item_name || '';
-				if (key) countedMap[key] = String(c.qty ?? '0');
-			}
-			const list: Array<{
-				item_id?: string;
-				item_name?: string;
-				declared: string;
-				counted: string;
-				short: string;
-			}> = [];
-			for (const it of donation.items) {
-				const key = it.item_id || it.item_name || '';
-				const counted = countedMap[key] ?? '0';
-				const declared = String(it.qty ?? '0');
-				if (qtyGt(declared, counted)) {
-					list.push({
-						item_id: it.item_id ?? undefined,
-						item_name: it.item_name,
-						declared,
-						counted,
-						short: subQty(declared, counted)
-					});
-				}
-			}
-			return list;
-		}
-		return [];
-	});
-
-	const hasShortfall = $derived(shortfalls.length > 0);
-
-	const shortfallByItem = $derived.by(() => {
-		const map: Record<string, { declared?: string; counted?: string; short?: string }> = {};
-		for (const s of shortfalls) {
-			if (s.item_id) map[s.item_id] = s;
-			if (s.item_name) map[s.item_name] = s;
-		}
-		return map;
-	});
+	/** Per declared line: the reason staff turned it away, or null (CR-172 FR-16). */
+	const lineRejections = $derived(donation ? rejectedLineReasons(donation) : []);
 
 	let qrCodeUrl = $state('');
 
@@ -157,9 +150,24 @@
 		donation ? canEditCourierTracking(donation.status, donation.logistics) : false
 	);
 	const showCancel = $derived(donation ? canCancelDonation(donation.status) : false);
-	// Same gate as cancelling: while it is only a reservation the donor still owns it
-	// (CR-080 — the owner settled on `declared` only).
+	// Shown wherever cancelling is, so the page does not jump when a review lands; usable
+	// only until anything on the booking is decided (CR-196 FR-LK-4).
 	const showEdit = $derived(showCancel);
+	const canEditItems = $derived(
+		donation
+			? donationItemEditGate(donation.status, donation.items) === 'editable' && !startedAtPoint
+			: false
+	);
+
+	function openEdit() {
+		if (canEditItems) editOpen = true;
+		else toast.error(startedAtPoint ? t.pointStartedToast : t.editBlockedToast);
+	}
+
+	function openCancel() {
+		if (startedAtPoint) toast.error(t.pointStartedToast);
+		else cancelOpen = true;
+	}
 
 	async function saveCourier() {
 		const value = courierInput.trim();
@@ -263,26 +271,21 @@
 							{t.receivedBody}
 						</p>
 					</div>
+				{/if}
 
-					{#if hasShortfall}
-						<div
-							class="flex items-start gap-3 rounded-2xl border border-amber-500/40 bg-amber-50/80 p-4 text-xs text-amber-900 dark:border-amber-500/30 dark:bg-amber-950/30 dark:text-amber-200"
-						>
-							<AlertCircle class="mt-0.5 h-5 w-5 shrink-0 text-amber-600 dark:text-amber-400" />
-							<div>
-								<h5 class="font-bold">
-									{langState.current === 'en'
-										? `Received with shortfall (${shortfalls.length} item${shortfalls.length > 1 ? 's' : ''})`
-										: `ศูนย์ตรวจรับสิ่งของไม่ครบ (${shortfalls.length} รายการ)`}
-								</h5>
-								<p class="mt-0.5 text-2xs text-amber-800/90 dark:text-amber-300/90">
-									{langState.current === 'en'
-										? 'The unreceived quantities have been deducted and will not remain as reserved quota in the system.'
-										: 'ยอดส่วนต่างที่ยังไม่ได้รับถูกยกเลิกแล้ว ไม่มียอดค้างในระบบ และไม่ผูกกับโควตาการบริจาค'}
-								</p>
-							</div>
+				{#if status === 'rejected' && donation.reject_reason}
+					<div
+						class="flex items-start gap-3 rounded-2xl border border-red-200 bg-red-50 p-4 text-xs text-red-900"
+						data-testid="donation-reject-reason"
+					>
+						<AlertCircle class="mt-0.5 h-5 w-5 shrink-0 text-red-600" />
+						<div>
+							<h5 class="font-bold">
+								{langState.current === 'en' ? 'Reason from the shelter' : 'เหตุผลจากศูนย์พักพิง'}
+							</h5>
+							<p class="mt-0.5 text-sm break-words whitespace-pre-line">{donation.reject_reason}</p>
 						</div>
-					{/if}
+					</div>
 				{/if}
 
 				{#if showQr && qrCodeUrl}
@@ -304,6 +307,18 @@
 						<p class="max-w-xs text-2xs text-muted-foreground">
 							{t.qrHint}
 						</p>
+						<div class="mt-1 flex w-full flex-col items-center gap-2 border-t border-border pt-4">
+							<Button
+								href={resolve(`/donations/track/${encodeURIComponent(token)}/label`)}
+								variant="outline"
+								size="sm"
+								data-testid="box-label-link"
+							>
+								<Printer class="h-3.5 w-3.5" />
+								{t.boxLabelOpenBtn}
+							</Button>
+							<p class="max-w-xs text-2xs text-muted-foreground">{t.boxLabelOpenHint}</p>
+						</div>
 					</div>
 				{/if}
 
@@ -422,7 +437,19 @@
 									<span class="text-2xs font-bold text-muted-foreground uppercase"
 										>{t.destinationShelterLabel}</span
 									>
-									<p class="mt-0.5 font-semibold text-foreground">{donation.shelter_code}</p>
+									{#if pointGroups}
+										<DropOffGroups
+											groups={pointGroups}
+											{lineNames}
+											directions={showDirections}
+											showPending={!isTerminalDonationStatus(status)}
+											showReceived={showReceivedGroups}
+										/>
+									{:else if dropOffPoint}
+										<DropOffCard point={dropOffPoint} directions={showDirections} />
+									{:else}
+										<p class="mt-0.5 font-semibold text-foreground">{donation.shelter_code}</p>
+									{/if}
 									<p class="mt-0.5 text-2xs text-muted-foreground">
 										{deliveryMethodLabel(donation.logistics?.delivery_method, langState.current)}
 										{#if donation.logistics?.vehicle}
@@ -494,45 +521,43 @@
 									</thead>
 									<tbody class="divide-y divide-border/60 font-semibold text-foreground">
 										{#each donation.items as item, i (item.item_name + String(i))}
-											{@const sf =
-												(item.item_id && shortfallByItem[item.item_id]) ||
-												shortfallByItem[item.item_name]}
+											{@const rejectedReason = lineRejections[i]}
 											<tr>
 												<td class="px-4 py-3">
 													<div class="flex flex-wrap items-center gap-2">
 														<span>{item.item_name}</span>
-														{#if sf}
+														{#if rejectedReason !== null}
 															<span
-																class="inline-flex items-center rounded-md bg-amber-100 px-2 py-0.5 text-2xs font-bold text-amber-800 dark:bg-amber-950/50 dark:text-amber-300"
+																class="inline-flex items-center rounded-md border border-red-200 bg-red-50 px-2 py-0.5 text-2xs font-semibold text-red-900"
 															>
-																{langState.current === 'en'
-																	? `Shortfall: -${sf.short}`
-																	: `รับไม่ครบ (ขาด ${sf.short})`}
+																{t.lineReviewRejected}
+															</span>
+														{:else if item.review_status === 'pending' && status === 'pending_review'}
+															<span
+																class="inline-flex items-center rounded-md border border-amber-200 bg-amber-50 px-2 py-0.5 text-2xs font-semibold text-amber-900"
+															>
+																{t.lineReviewPending}
+															</span>
+														{:else if item.review_status === 'approved' && (status === 'pending_review' || status === 'verifying')}
+															<span
+																class="inline-flex items-center rounded-md border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-2xs font-semibold text-emerald-900"
+															>
+																{t.lineReviewApproved}
 															</span>
 														{/if}
 													</div>
+													{#if rejectedReason}
+														<p class="mt-1 text-2xs font-medium break-words text-red-700">
+															{rejectedReason}
+														</p>
+													{/if}
 												</td>
 												<td class="px-4 py-3 text-right">
-													{#if sf}
-														<div class="flex flex-col items-end">
-															<span class="text-xs font-bold text-foreground">
-																{Number(sf.counted).toLocaleString(
-																	langState.current === 'en' ? 'en-US' : 'th-TH'
-																)}
-															</span>
-															<span class="text-2xs text-muted-foreground line-through">
-																{Number(item.qty).toLocaleString(
-																	langState.current === 'en' ? 'en-US' : 'th-TH'
-																)}
-															</span>
-														</div>
-													{:else}
-														{item.qty != null
-															? Number(item.qty).toLocaleString(
-																	langState.current === 'en' ? 'en-US' : 'th-TH'
-																)
-															: t.noData}
-													{/if}
+													{item.qty != null
+														? Number(item.qty).toLocaleString(
+																langState.current === 'en' ? 'en-US' : 'th-TH'
+															)
+														: t.noData}
 												</td>
 												<td class="px-4 py-3 text-muted-foreground"
 													>{item.unit
@@ -549,18 +574,20 @@
 
 					{#if showEdit}
 						<div class="flex flex-col gap-2 border-t border-border pt-5">
+							<!-- aria-disabled, not disabled: a disabled button swallows the click, and
+							     the donor has to hear why (CR-196 FR-LK-4). -->
 							<Button
 								variant="outline"
-								onclick={() => (editOpen = true)}
-								class="h-10 rounded-xl text-xs font-bold"
+								onclick={openEdit}
+								aria-disabled={!canEditItems}
+								data-testid="edit-donation-items-btn"
+								class="h-10 rounded-xl text-xs font-bold aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
 							>
 								<Pencil class="h-4 w-4" />
 								{t.editItemsBtn}
 							</Button>
 							<p class="text-2xs leading-relaxed text-muted-foreground">
-								{langState.current === 'en'
-									? 'Adjust quantity or add/remove items until staff begins check-in'
-									: 'ปรับจำนวนหรือเพิ่ม-ลบรายการได้จนกว่าเจ้าหน้าที่จะเริ่มตรวจรับ'}
+								{t.editItemsHint}
 								{#if donation.revisions.length}
 									· {langState.current === 'en'
 										? `Edited ${donation.revisions.length} times`
@@ -572,18 +599,25 @@
 
 					{#if showCancel}
 						<div class="flex flex-col gap-2 border-t border-border pt-5">
+							<!-- aria-disabled for the same reason as the edit button (CR-206 FR-MP-17). -->
 							<Button
 								variant="outline"
-								onclick={() => (cancelOpen = true)}
-								class="h-10 rounded-xl border-destructive/40 text-xs font-bold text-destructive hover:bg-destructive/10 hover:text-destructive"
+								onclick={openCancel}
+								aria-disabled={startedAtPoint}
+								data-testid="cancel-donation-btn"
+								class="h-10 rounded-xl border-destructive/40 text-xs font-bold text-destructive hover:bg-destructive/10 hover:text-destructive aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
 							>
 								<Ban class="h-4 w-4" />
 								{t.cancelDonationBtn}
 							</Button>
 							<p class="text-2xs leading-relaxed text-muted-foreground">
-								{langState.current === 'en'
-									? 'Once cancelled, the reserved quota will be immediately released to other donors and cannot be undone'
-									: 'ยกเลิกแล้วจำนวนที่จองไว้จะถูกคืนให้ผู้บริจาคท่านอื่นทันที และย้อนกลับไม่ได้'}
+								{#if startedAtPoint}
+									{t.pointStartedToast}
+								{:else}
+									{langState.current === 'en'
+										? 'Once cancelled, the reserved quota will be immediately released to other donors and cannot be undone'
+										: 'ยกเลิกแล้วจำนวนที่จองไว้จะถูกคืนให้ผู้บริจาคท่านอื่นทันที และย้อนกลับไม่ได้'}
+								{/if}
 							</p>
 						</div>
 					{/if}

@@ -2,7 +2,6 @@ import { json } from '@sveltejs/kit';
 import { z } from 'zod';
 import type { RequestHandler } from './$types';
 import { portalCredentialSchema } from '$lib/features/volunteer-portal/server';
-import { volunteerTicketFindLimiter } from '$lib/server/security/rate-limiter';
 import {
 	applyPublicScheduleAction,
 	PublicScheduleError
@@ -22,12 +21,10 @@ const actionBodySchema = z.union([
 ]);
 
 /** Volunteer-owned check-in, check-out and withdrawal action. */
-export const POST: RequestHandler = async ({ request, getClientAddress }) => {
-	if (!volunteerTicketFindLimiter.check(getClientAddress())) {
-		return json({ success: false, error: 'RATE_LIMITED' }, { status: 429 });
-	}
+export const POST: RequestHandler = async ({ request }) => {
+	const body: unknown = await request.json().catch(() => null);
+	const parsed = actionBodySchema.safeParse(body);
 	try {
-		const parsed = actionBodySchema.safeParse(await request.json());
 		if (!parsed.success) {
 			return json({ success: false, error: 'INVALID_INPUT' }, { status: 422 });
 		}

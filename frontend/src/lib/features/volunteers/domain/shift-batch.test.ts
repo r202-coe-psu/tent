@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
+	checkBatchRange,
+	weekdayName,
 	ALL_WEEKDAYS,
 	MAX_BATCH_SHIFTS,
 	ShiftBatchError,
@@ -210,5 +212,62 @@ describe('weekday presets', () => {
 	it('start the week on Sunday and cover all seven days exactly once', () => {
 		expect(ALL_WEEKDAYS).toEqual([0, 1, 2, 3, 4, 5, 6] as Weekday[]);
 		expect([...WEEKDAYS_MON_FRI, ...WEEKENDS].sort()).toEqual([...ALL_WEEKDAYS].sort());
+	});
+});
+
+describe('checkBatchRange', () => {
+	// 2026-10-19 is a Monday, 2026-10-20 a Tuesday.
+	it('says nothing until both dates are picked', () => {
+		expect(checkBatchRange('2026-10-19', '', [1])).toEqual({
+			rangeError: null,
+			available: null,
+			missing: [],
+			count: 0
+		});
+	});
+
+	it('lists only the weekdays a short range contains', () => {
+		const check = checkBatchRange('2026-10-19', '2026-10-20', [1, 2]);
+		expect([...(check.available ?? [])].sort()).toEqual([1, 2]);
+		expect(check.missing).toEqual([]);
+		expect(check.count).toBe(2);
+	});
+
+	it('flags selected weekdays the range does not contain', () => {
+		const check = checkBatchRange('2026-10-19', '2026-10-20', [1, 6]);
+		expect(check.missing).toEqual([6]);
+		expect(check.count).toBe(1);
+	});
+
+	it('produces nothing when no selected weekday falls in the range', () => {
+		const check = checkBatchRange('2026-10-19', '2026-10-20', [0, 6]);
+		expect(check.missing).toEqual([0, 6]);
+		expect(check.count).toBe(0);
+		expect(check.rangeError).toBeNull();
+	});
+
+	it('has every weekday available from a 7-day range on', () => {
+		expect(checkBatchRange('2026-10-19', '2026-10-25', []).available?.size).toBe(7);
+	});
+
+	it('reports a reversed range even before any weekday is chosen', () => {
+		expect(checkBatchRange('2026-10-20', '2026-10-19', []).rangeError).toMatch(/ไม่อยู่ก่อน/);
+	});
+
+	it('reports a range over a year', () => {
+		expect(checkBatchRange('2026-01-01', '2027-06-01', [1]).rangeError).toMatch(/เกิน 1 ปี/);
+	});
+
+	it('reports more shifts than one press may create', () => {
+		expect(checkBatchRange('2026-01-01', '2026-12-31', [0, 1, 2, 3, 4, 5, 6]).rangeError).toMatch(
+			/สูงสุด/
+		);
+	});
+});
+
+describe('weekdayName', () => {
+	it('drops the English suffix', () => {
+		expect(weekdayName(6)).toBe('เสาร์');
+		expect(weekdayName(4)).toBe('พฤหัสบดี');
 	});
 });

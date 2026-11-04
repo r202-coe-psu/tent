@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
+import { acceptFullConsent } from './helpers/consent';
 
 const SHELTERS = {
 	shelters: [
@@ -57,6 +58,13 @@ const LOCATIONS = {
 };
 
 async function mockReferenceData(page: Page) {
+	await page.route('**/api/public/v1/registrations/check-duplicate', (route) =>
+		route.fulfill({
+			status: 200,
+			contentType: 'application/json',
+			body: JSON.stringify({ success: true, duplicate: false, field: null })
+		})
+	);
 	await page.route('**/api/public/v1/shelters**', (route) =>
 		route.fulfill({
 			status: 200,
@@ -193,7 +201,7 @@ test.describe(
 			await page.locator('#member-0-first-name').fill('สมชาย');
 			await page.locator('#member-0-last-name').fill('ใจดี');
 			await page.locator('#member-0-gender-male').click({ force: true });
-			await page.getByLabel(/ข้าพเจ้ารับทราบข้อตกลงการใช้งาน/).check();
+			await acceptFullConsent(page);
 
 			// The sticky summary aside repeats the submit button; use the one in the form body.
 			await page.getByRole('button', { name: 'ยืนยันการลงทะเบียน' }).last().click();
@@ -233,6 +241,7 @@ test.describe(
 			// Public head must enter phone — no「ไม่มีเบอร์」checkbox.
 			await expect(page.locator('#member-0-no-phone')).toHaveCount(0);
 
+			await acceptFullConsent(page);
 			await page.getByRole('button', { name: 'ยืนยันการลงทะเบียน' }).last().click();
 
 			await expect(page.getByText('สมชาย ใจดี')).toBeVisible();
@@ -293,6 +302,7 @@ test.describe(
 			await member2.getByRole('button', { name: 'กลุ่มเปราะบาง' }).click();
 			await member2.locator('#vg-1-elderly_dependent').click();
 
+			await acceptFullConsent(page);
 			await page.getByRole('button', { name: 'ยืนยันการลงทะเบียน' }).last().click();
 			await expect(page.getByAltText('QR สำหรับยืนยันตัวตนที่ประตูศูนย์')).toBeVisible();
 
@@ -365,14 +375,15 @@ test.describe(
 			await page.getByPlaceholder(/มีโรคประจำตัว|สายพันธุ์/).fill('ชิวาว่า');
 			await page.getByText('มีกรง / สายจูง / ตะกร้า').click();
 
-			await page
-				.getByLabel(/ข้าพเจ้ารับทราบและยินยอมปฏิบัติตามเงื่อนไขและมาตรการด้านความปลอดภัย/)
-				.check();
+			await page.getByLabel(/รับทราบและจะปฏิบัติตามกฎความปลอดภัยของศูนย์/).check();
 
+			await acceptFullConsent(page);
 			await page.getByRole('button', { name: 'ยืนยันการลงทะเบียน' }).last().click();
 			await expect(page.getByAltText('QR สำหรับยืนยันตัวตนที่ประตูศูนย์')).toBeVisible();
 
-			const household = submitted?.household as { pets?: Array<Record<string, unknown>> };
+			const household = (submitted as Record<string, unknown> | null)?.household as {
+				pets?: Array<Record<string, unknown>>;
+			};
 			expect(household?.pets?.[0]).toMatchObject({
 				species: 'dog',
 				has_cage: true
@@ -399,6 +410,7 @@ test.describe(
 				lastName: 'ใจดี',
 				phone: '0812345678'
 			});
+			await acceptFullConsent(page);
 			await page.getByRole('button', { name: 'ยืนยันการลงทะเบียน' }).last().click();
 
 			// Server errors surface as toast (booking-form catch); form alert is for client validation.
@@ -512,7 +524,7 @@ test.describe(
 			});
 			await expect(page.locator('#member-0-no-phone')).toHaveCount(0);
 
-			await page.getByLabel(/ข้าพเจ้ารับทราบข้อตกลงการใช้งาน/).check();
+			await acceptFullConsent(page);
 			await page.getByRole('button', { name: 'ยืนยันการลงทะเบียน' }).last().click();
 
 			await expect(page.getByText('ลงทะเบียนล่วงหน้าสำเร็จ')).toBeVisible();
@@ -528,10 +540,10 @@ test.describe(
 			).toBeVisible();
 
 			expect(submitted).toMatchObject({
-				disclaimerAcknowledged: true,
 				members: [{ first_name: 'สมชาย', last_name: 'ใจดี', gender: 'male', phone: '0812345678' }],
 				household: { province: 'สงขลา', district: 'หาดใหญ่', subdistrict: 'คอหงส์' }
 			});
+			expect(submitted).not.toHaveProperty('disclaimerAcknowledged');
 			expect(String((submitted as { shelter_code?: string } | null)?.shelter_code ?? '')).not.toBe(
 				'SH001'
 			);
@@ -576,7 +588,7 @@ test.describe(
 					lastName: 'ใจดี',
 					phone: '0812345678'
 				});
-				await page.getByLabel(/ข้าพเจ้ารับทราบข้อตกลงการใช้งาน/).check();
+				await acceptFullConsent(page);
 				await page.getByRole('button', { name: 'ยืนยันการลงทะเบียน' }).last().click();
 				await expect(page.getByText('ลงทะเบียนล่วงหน้าสำเร็จ')).toBeVisible();
 				await expect.poll(() => storedCodes(page)).toContain(REG_ID);

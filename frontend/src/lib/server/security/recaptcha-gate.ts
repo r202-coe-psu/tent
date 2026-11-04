@@ -58,7 +58,7 @@ export type RecaptchaVerifyFailure = {
 export type RecaptchaVerifySuccess = { ok: true; skipped?: boolean };
 
 /**
- * Shared CAPTCHA gate for BFF routes. Call after rate-limit checks.
+ * Shared CAPTCHA gate for BFF routes.
  */
 export async function verifyRecaptchaOrSkip(options: {
 	token: string;

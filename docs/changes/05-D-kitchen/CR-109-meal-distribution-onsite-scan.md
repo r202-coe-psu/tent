@@ -1,9 +1,12 @@
 ---
 id: CR-109
 title: เพิ่ม meal_distribution log สำหรับแจกจ่ายอาหารหน้างาน + คุมเพดาน Distribution Limit (Soft Warning)
-status: approved
+status: superseded
+superseded_by: CR-121
+superseded_date: 2026-10-11
+note: ผนวก meal_distribution เข้า distribution_log (schema.md §2.30) ใน CR-121
 date: 2026-09-02
-updated: 2026-09-06
+updated: 2026-10-22
 requested_by: ทีมพัฒนา (พบช่องว่างระหว่างสร้าง mock UI `frontend/src/lib/features/meal-distribution/`)
 decided_by: Project Owner
 layer: volatile
@@ -74,3 +77,4 @@ affects:
 ## Decision log
 - 2026-09-02 — proposed
 - 2026-09-06 — approved by Project Owner (เคาะ Option 1A, ตัด override_reason, ปรับเพดาน actual_yield เป็น Soft warning อนุโลมให้แจกต่อได้, รันรหัส CR-109)
+- 2026-10-22 — superseded โดย CR-121 ตาม CR-159 §D (FR-CRS-01); เนื้อหาเดิมคงไว้ไม่แก้

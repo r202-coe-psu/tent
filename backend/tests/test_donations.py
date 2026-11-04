@@ -15,8 +15,8 @@ from tent_model.public_donation import PublicDonation
 from tent_model.public_shelter import PublicShelter
 
 from apiapp.core.config import Settings
-from apiapp.modules.donations import router as donation_router
 from apiapp.modules.donations import use_case as donation_use_case
+from apiapp.modules.donations.review import REVIEW_FIELDS
 from apiapp.utils.masking import sha256_hex
 from apiapp.utils.ulid import new_ulid
 
@@ -77,6 +77,9 @@ async def test_create_donation_persists_campaign_id_and_tracking_stub(
     assert response.status_code == 201
     body = response.json()
     assert body["success"] is True
+    # No counter for c1/rice here (NOT_SEEDED) — the line holds no quota, so it waits for
+    # review and so does the booking (CR-174 FR-2, FR-15).
+    assert body["status"] == "pending_review"
     token = body["tracking_token"]
     booking_ref = body["booking_ref"]
     assert token.startswith("TX-SH001-")
@@ -93,9 +96,9 @@ async def test_create_donation_persists_campaign_id_and_tracking_stub(
     stub = await PublicDonation.find_one(PublicDonation.tracking_token_hash == sha256_hex(token))
     assert stub is not None
     assert stub.booking_ref == booking_ref
-    # CR-052 §1.4 (Task #52): no submission skips the staff review step, so the public
-    # projection opens in review rather than at `declared`.
+    # CR-174: the projection opens in the status the lines add up to, not at `declared`.
     assert stub.status == "pending_review"
+    assert stub.items_declared[0].review_status == "pending"
 
     track = await client.get(f"/public/v1/donations/{token}", headers=auth_headers)
     assert track.status_code == 200
@@ -152,6 +155,116 @@ async def test_create_donation_rejects_closed_shelter(
     assert response.json()["errors"][0]["error"] == "SHELTER_CLOSED"
 
 
+async def test_create_donation_passes_logistics_vehicle_plate_through(
+    client: AsyncClient, open_shelter: PublicShelter, auth_headers: dict[str, str]
+) -> None:
+    # A valid plate is stored and read back as sent (CR-209 FR-1 checks it on the way in).
+    logistics = {
+        "delivery_method": "self_dropoff",
+        "vehicle": "car",
+        "vehicle_plate": "กข 1234 กรุงเทพมหานคร",
+    }
+    response = await client.post(
+        "/public/v1/donations",
+        headers=auth_headers,
+        json={
+            "shelter_code": "SH001",
+            "donor": {"name": "Donor", "phone": "0812345678"},
+            "items": [{"free_text": "น้ำดื่ม", "qty": 2, "unit": "pack"}],
+            "logistics": logistics,
+        },
+    )
+    assert response.status_code == 201
+    token = response.json()["tracking_token"]
+
+    buffer = await DonationBuffer.find_one(DonationBuffer.tracking_token_hash == sha256_hex(token))
+    assert buffer is not None
+    assert buffer.logistics == logistics
+
+    track = await client.get(f"/public/v1/donations/{token}", headers=auth_headers)
+    assert track.status_code == 200
+    # FastAPI hands the block to the BFF whole; stripping the plate from the donor-facing
+    # tracking response is the BFF allowlist's job.
+    assert track.json()["donation"]["logistics"] == logistics
+
+
+async def _create_with_logistics(
+    client: AsyncClient, auth_headers: dict[str, str], logistics: dict[str, object]
+):
+    return await client.post(
+        "/public/v1/donations",
+        headers=auth_headers,
+        json={
+            "shelter_code": "SH001",
+            "donor": {"name": "Donor", "phone": "0812345678"},
+            "items": [{"free_text": "น้ำดื่ม", "qty": 2, "unit": "pack"}],
+            "logistics": logistics,
+        },
+    )
+
+
+async def _buffered_logistics(token: str) -> dict[str, object] | None:
+    buffer = await DonationBuffer.find_one(DonationBuffer.tracking_token_hash == sha256_hex(token))
+    assert buffer is not None
+    return buffer.logistics
+
+
+async def test_create_donation_trims_the_vehicle_plate_and_drops_a_blank_one(
+    client: AsyncClient, open_shelter: PublicShelter, auth_headers: dict[str, str]
+) -> None:
+    # CR-209 FR-1: the same rule as the BFF zod schema, so a caller past the BFF gets it too.
+    trimmed = await _create_with_logistics(
+        client,
+        auth_headers,
+        {"delivery_method": "self_dropoff", "vehicle": "car", "vehicle_plate": "  กข 1234  "},
+    )
+    assert trimmed.status_code == 201
+    stored = await _buffered_logistics(trimmed.json()["tracking_token"])
+    assert stored is not None and stored["vehicle_plate"] == "กข 1234"
+
+    blank = await _create_with_logistics(
+        client,
+        auth_headers,
+        {"delivery_method": "self_dropoff", "vehicle": "car", "vehicle_plate": "   "},
+    )
+    assert blank.status_code == 201
+    stored = await _buffered_logistics(blank.json()["tracking_token"])
+    assert stored is not None and "vehicle_plate" not in stored
+
+
+async def test_create_donation_allows_40_plate_characters_and_refuses_41(
+    client: AsyncClient, open_shelter: PublicShelter, auth_headers: dict[str, str]
+) -> None:
+    ok = await _create_with_logistics(
+        client,
+        auth_headers,
+        {"delivery_method": "self_dropoff", "vehicle": "car", "vehicle_plate": "ก" * 40},
+    )
+    assert ok.status_code == 201
+
+    too_long = await _create_with_logistics(
+        client,
+        auth_headers,
+        {"delivery_method": "self_dropoff", "vehicle": "car", "vehicle_plate": "ก" * 41},
+    )
+    assert too_long.status_code == 422
+
+
+@pytest.mark.parametrize("method", ["parcel", "shelter_pickup"])
+async def test_create_donation_refuses_a_vehicle_plate_outside_self_dropoff(
+    client: AsyncClient,
+    open_shelter: PublicShelter,
+    auth_headers: dict[str, str],
+    method: str,
+) -> None:
+    # CR-209 FR-1a: the shelter's own vehicle collects a pickup; a parcel has no vehicle.
+    response = await _create_with_logistics(
+        client, auth_headers, {"delivery_method": method, "vehicle_plate": "กข 1234"}
+    )
+    assert response.status_code == 422
+    assert await DonationBuffer.find_one(DonationBuffer.shelter_code == "SH001") is None
+
+
 async def test_get_tracking_falls_back_to_buffer(
     client: AsyncClient, auth_headers: dict[str, str]
 ) -> None:
@@ -178,6 +291,104 @@ async def test_get_tracking_falls_back_to_buffer(
     body = track.json()
     assert body["donation"]["booking_ref"] == "DN-999001"
     assert body["donation"]["items"][0]["item_name"] == "น้ำดื่ม"
+    # CR-172: a booking still in the buffer has never been reviewed — no reason yet.
+    assert body["donation"]["reject_reason"] is None
+    assert body["donation"]["reject_reason_code"] is None
+
+
+async def test_tracking_reports_the_reject_reason(
+    client: AsyncClient, auth_headers: dict[str, str]
+) -> None:
+    """CR-172 FR-14: the donor sees why the shelter turned the donation down."""
+    token = "TX-SH001-REJECT01"
+    await PublicDonation(
+        id=f"donation:{new_ulid()}",
+        tracking_token_hash=sha256_hex(token),
+        shelter_code="SH001",
+        status="rejected",
+        booking_ref="DN-172001",
+        items_declared=[{"item_name": "นมกล่อง", "qty": "10", "unit": "กล่อง"}],
+        received_summary=None,
+        reject_reason="หมดอายุ — กล่องนมหมดอายุ 2 กล่อง",
+        reject_reason_code="expired",
+        updated_at=datetime.now(UTC),
+    ).insert()
+
+    track = await client.get(f"/public/v1/donations/{token}", headers=auth_headers)
+
+    assert track.status_code == 200
+    donation = track.json()["donation"]
+    assert donation["status"] == "rejected"
+    assert donation["reject_reason"] == "หมดอายุ — กล่องนมหมดอายุ 2 กล่อง"
+    assert donation["reject_reason_code"] == "expired"
+
+
+async def test_tracking_passes_rejected_lines_through_received_summary(
+    client: AsyncClient, auth_headers: dict[str, str]
+) -> None:
+    """CR-172 FR-3/FR-14: a partly received donation keeps each line's reason."""
+    token = "TX-SH001-REJECT02"
+    summary = {
+        "total_items": 2,
+        "received_at": "2026-10-21T03:00:00.000Z",
+        "shortfalls": [],
+        "items": [
+            {"item_id": "item:rice", "qty": "5", "unit": "ถุง"},
+            {
+                "free_text": "นมกล่อง",
+                "qty": "0",
+                "unit": "กล่อง",
+                "rejected": True,
+                "reject_reason": "ชำรุด — กล่องบุบ",
+                "reject_reason_code": "damaged",
+            },
+        ],
+    }
+    await PublicDonation(
+        id=f"donation:{new_ulid()}",
+        tracking_token_hash=sha256_hex(token),
+        shelter_code="SH001",
+        status="received",
+        booking_ref="DN-172002",
+        items_declared=[],
+        received_summary=summary,
+        updated_at=datetime.now(UTC),
+    ).insert()
+
+    track = await client.get(f"/public/v1/donations/{token}", headers=auth_headers)
+
+    assert track.status_code == 200
+    donation = track.json()["donation"]
+    assert donation["received_summary"] == summary
+    assert donation["reject_reason"] is None
+    assert donation["reject_reason_code"] is None
+
+
+async def test_tracking_a_pre_v6_projection_has_no_reject_reason(
+    client: AsyncClient, auth_headers: dict[str, str]
+) -> None:
+    """CR-172 FR-17 / AC-5: a row projected before schema_v 6 lacks both keys entirely."""
+    token = "TX-SH001-LEGACY01"
+    await PublicDonation.get_pymongo_collection().insert_one(
+        {
+            "_id": f"donation:{new_ulid()}",
+            "tracking_token_hash": sha256_hex(token),
+            "shelter_code": "SH001",
+            "status": "rejected",
+            "booking_ref": "DN-172003",
+            "items_declared": [],
+            "received_summary": None,
+            "updated_at": datetime.now(UTC),
+        }
+    )
+
+    track = await client.get(f"/public/v1/donations/{token}", headers=auth_headers)
+
+    assert track.status_code == 200
+    donation = track.json()["donation"]
+    assert donation["status"] == "rejected"
+    assert donation["reject_reason"] is None
+    assert donation["reject_reason_code"] is None
 
 
 async def test_track_search_resolves_dn_plus_phone(
@@ -664,10 +875,6 @@ async def test_concurrent_bookings_never_exceed_the_target(
     can vary without making the test flaky. The pre-counter read-then-write path would
     have accepted all twelve.
     """
-    # The router's sliding window is module state shared across tests in this process,
-    # and twelve requests at once would otherwise be judged against whatever earlier
-    # tests already spent. Rate limiting has its own test; this one is about the quota.
-    donation_router._rate_buckets.clear()
 
     now = datetime.now(UTC)
     await DonationNeedCounter(
@@ -839,11 +1046,13 @@ async def _seed_counter(target: str, item_id: str = "item:rice") -> None:
 
 
 async def _book(client: AsyncClient, headers: dict[str, str], items: list[dict]) -> str:
-    # The router's sliding window is module state shared across every test in this
-    # process. These cases each make several calls; without clearing, the later ones are
-    # judged against what the earlier ones spent and start returning 429. Rate limiting
-    # has its own test — these are about editing.
-    donation_router._rate_buckets.clear()
+    """A booking that holds quota and that the donor may still edit.
+
+    Since CR-196 FR-LK-4 a line holding quota is approved at once, which closes the edit,
+    so the only such booking left is one made before schema_v 7: lines with no review and
+    no ``line_key``, still ``pending_review``. Booked through the API so the counter really
+    holds the quota, then set back to that shape.
+    """
     response = await client.post(
         "/public/v1/donations",
         headers=headers,
@@ -855,7 +1064,16 @@ async def _book(client: AsyncClient, headers: dict[str, str], items: list[dict])
         },
     )
     assert response.status_code == 201, response.text
-    return response.json()["tracking_token"]
+    token = response.json()["tracking_token"]
+    buffer = await _buffer(token)
+    legacy = [
+        {key: value for key, value in line.items() if key not in (*REVIEW_FIELDS, "line_key")}
+        for line in buffer.items_declared
+    ]
+    await DonationBuffer.get_pymongo_collection().update_one(
+        {"_id": buffer.id}, {"$set": {"items_declared": legacy, "status": "pending_review"}}
+    )
+    return token
 
 
 async def _reserved(item_id: str = "item:rice") -> Decimal:
@@ -868,7 +1086,6 @@ async def _reserved(item_id: str = "item:rice") -> Decimal:
 
 
 async def _edit(client: AsyncClient, headers: dict[str, str], token: str, items: list[dict]):
-    donation_router._rate_buckets.clear()
     return await client.patch(
         f"/public/v1/donations/{token}/items", headers=headers, json={"items": items}
     )
@@ -1011,21 +1228,23 @@ async def test_an_edit_is_logged_as_a_snapshot_pair(
 async def test_editing_repeatedly_appends_and_is_never_capped(
     client: AsyncClient, open_shelter: PublicShelter, auth_headers: dict[str, str]
 ) -> None:
-    """CR-080 Q5 — no per-booking limit; the IP rate limit is the only brake."""
-    await _seed_counter("100")
-    token = await _book(client, auth_headers, [{"item_id": "item:rice", "qty": "1", "unit": "kg"}])
+    """CR-080 Q5 — no per-booking limit; the per-IP rate limit at nginx is the only brake.
+
+    Typed lines: they stay in review, so the booking stays editable (CR-196 FR-LK-4).
+    """
+    token = await _book(client, auth_headers, [{"free_text": "ผ้าห่ม", "qty": "1", "unit": "ผืน"}])
 
     for qty in ("2", "3", "4"):
         assert (
             await _edit(
-                client, auth_headers, token, [{"item_id": "item:rice", "qty": qty, "unit": "kg"}]
+                client, auth_headers, token, [{"free_text": "ผ้าห่ม", "qty": qty, "unit": "ผืน"}]
             )
-        ).status_code == 200
+        ).status_code == 200, qty
 
     buffer = await DonationBuffer.find_one(DonationBuffer.tracking_token_hash == sha256_hex(token))
     assert buffer is not None
     assert len(buffer.revisions) == 3
-    assert await _reserved() == Decimal("4")
+    assert buffer.items_declared[0]["qty"] == "4"
 
 
 async def test_editing_does_not_extend_the_ttl(
@@ -1047,19 +1266,14 @@ async def test_editing_does_not_extend_the_ttl(
     assert after == before
 
 
-@pytest.mark.parametrize("status_value", ["verifying", "received", "cancelled"])
+@pytest.mark.parametrize("status_value", ["received", "partially_received", "cancelled"])
 async def test_a_booking_taken_over_by_staff_may_not_be_edited(
     client: AsyncClient,
     open_shelter: PublicShelter,
     auth_headers: dict[str, str],
     status_value: str,
 ) -> None:
-    """CR-080 Q1 — once staff start assessing, the count is theirs.
-
-    ``pending_review`` is deliberately absent: CR-052 §1.4 opens every public booking
-    there, so it is the donor's own waiting room rather than staff territory. It has its
-    own test below.
-    """
+    """CR-080 Q1 — once the goods arrive, the count is staff's."""
     await _seed_counter("100")
     token = await _book(client, auth_headers, [{"item_id": "item:rice", "qty": "5", "unit": "kg"}])
     buffer = await DonationBuffer.find_one(DonationBuffer.tracking_token_hash == sha256_hex(token))
@@ -1072,30 +1286,35 @@ async def test_a_booking_taken_over_by_staff_may_not_be_edited(
     )
 
     assert response.status_code == 400
+    assert (
+        response.json()["errors"][0]["error"]
+        == f'Cannot edit a donation in status "{status_value}"'
+    )
     assert await _reserved() == Decimal("5")
 
 
 async def test_a_booking_awaiting_review_is_still_the_donors_to_edit(
     client: AsyncClient, open_shelter: PublicShelter, auth_headers: dict[str, str]
 ) -> None:
-    """CR-052 §1.4 — every booking opens at ``pending_review``.
+    """Typed lines only: nothing decided yet, so the booking is still the donor's (D-1)."""
+    response = await client.post(
+        "/public/v1/donations",
+        headers=auth_headers,
+        json={
+            "shelter_code": "SH001",
+            "donor": {"name": "Donor", "phone": "0812345678"},
+            "items": [{"free_text": "ผ้าห่ม", "qty": "2", "unit": "ผืน"}],
+        },
+    )
+    token = response.json()["tracking_token"]
+    assert response.json()["status"] == "pending_review"
 
-    Gating edits on ``declared`` alone would therefore take edit and cancel away from
-    every booking the public wizard creates, which is the opposite of what CR-080 Q1
-    protects. Mirrors ``isDonorEditable`` on the BFF.
-    """
-    await _seed_counter("100")
-    token = await _book(client, auth_headers, [{"item_id": "item:rice", "qty": "5", "unit": "kg"}])
-    buffer = await DonationBuffer.find_one(DonationBuffer.tracking_token_hash == sha256_hex(token))
-    assert buffer is not None
-    assert buffer.status == "pending_review", "a fresh booking should open in review"
-
-    response = await _edit(
-        client, auth_headers, token, [{"item_id": "item:rice", "qty": "9", "unit": "kg"}]
+    edited = await _edit(
+        client, auth_headers, token, [{"free_text": "ผ้าห่ม", "qty": "3", "unit": "ผืน"}]
     )
 
-    assert response.status_code == 200
-    assert await _reserved() == Decimal("9")
+    assert edited.status_code == 200
+    assert edited.json()["status"] == "pending_review"
 
 
 async def test_an_empty_basket_is_refused(
@@ -1273,7 +1492,6 @@ async def test_two_donors_racing_for_the_last_trip_get_one_place(
 ) -> None:
     """The race e2e's pickup case, at the service: both pass the BFF's CouchDB count,
     so only the counter stands between them and a double-booked truck."""
-    donation_router._rate_buckets.clear()
 
     responses = await asyncio.gather(
         *[
@@ -1295,7 +1513,6 @@ async def test_two_donors_racing_for_the_last_trip_get_one_place(
 async def test_many_donors_never_overfill_a_capped_window(
     client: AsyncClient, open_shelter: PublicShelter, auth_headers: dict[str, str]
 ) -> None:
-    donation_router._rate_buckets.clear()
 
     responses = await asyncio.gather(
         *[
@@ -1316,7 +1533,6 @@ async def test_places_taken_before_the_counter_existed_still_count(
 ) -> None:
     """The first booking seeds the counter from the CouchDB count the BFF sends, so a
     window already full from older bookings refuses rather than starting from 0."""
-    donation_router._rate_buckets.clear()
 
     response = await client.post(
         "/public/v1/donations",
@@ -1333,7 +1549,6 @@ async def test_slot_full_hands_the_quota_back(
     client: AsyncClient, open_shelter: PublicShelter, auth_headers: dict[str, str]
 ) -> None:
     """Quota is reserved before the place, so a refused place must release it."""
-    donation_router._rate_buckets.clear()
     await _seed_counter("10")
     payload = _slot_booking(0, capacity=1, booked=1)
     payload["campaign_id"] = "donation_campaign:c1"
@@ -1348,7 +1563,6 @@ async def test_slot_full_hands_the_quota_back(
 async def test_cancel_gives_the_place_back(
     client: AsyncClient, open_shelter: PublicShelter, auth_headers: dict[str, str]
 ) -> None:
-    donation_router._rate_buckets.clear()
     created = await client.post("/public/v1/donations", headers=auth_headers, json=_slot_booking(0))
     assert created.status_code == 201
     assert await _slot_booked() == 1
@@ -1358,7 +1572,6 @@ async def test_cancel_gives_the_place_back(
     assert cancelled.status_code == 200, cancelled.text
     assert await _slot_booked() == 0
 
-    donation_router._rate_buckets.clear()
     again = await client.post("/public/v1/donations", headers=auth_headers, json=_slot_booking(1))
     assert again.status_code == 201
 
@@ -1387,7 +1600,6 @@ async def test_concurrent_cancels_release_the_place_once(
 ) -> None:
     """Two cancels of one booking in flight together must hand back one place, not two —
     the second release would free a place that another donor's booking still holds."""
-    donation_router._rate_buckets.clear()
     tokens = []
     for i in range(2):
         created = await client.post(
@@ -1410,12 +1622,10 @@ async def test_concurrent_cancels_release_the_place_once(
     assert await _slot_booked() == 1, "the other donor's place must still be held"
 
     # With one place free and one held, exactly one more booking fits.
-    donation_router._rate_buckets.clear()
     third = await client.post(
         "/public/v1/donations", headers=auth_headers, json=_slot_booking(2, capacity=2)
     )
     assert third.status_code == 201
-    donation_router._rate_buckets.clear()
     fourth = await client.post(
         "/public/v1/donations", headers=auth_headers, json=_slot_booking(3, capacity=2)
     )
@@ -1478,7 +1688,6 @@ async def test_a_booking_without_a_hold_takes_no_place(
     client: AsyncClient, open_shelter: PublicShelter, auth_headers: dict[str, str]
 ) -> None:
     """Uncapped windows send no hold — they never get a counter."""
-    donation_router._rate_buckets.clear()
     payload = _slot_booking(0)
     del payload["slot_hold"]
 
@@ -1489,3 +1698,717 @@ async def test_a_booking_without_a_hold_takes_no_place(
         DonationBuffer.booking_ref == response.json()["booking_ref"]
     )
     assert buffer is not None and buffer.slot_counter_id is None
+
+
+# --- per-line review (CR-174) ---
+
+_RICE = {"item_id": "item:rice", "free_text": "ข้าวสาร", "qty": "5", "unit": "kg"}
+_BLANKET = {"free_text": "ผ้าห่ม", "qty": "2", "unit": "ผืน"}
+
+
+async def _buffer(token: str) -> DonationBuffer:
+    buffer = await DonationBuffer.find_one(DonationBuffer.tracking_token_hash == sha256_hex(token))
+    assert buffer is not None
+    return buffer
+
+
+async def _stub(token: str) -> PublicDonation:
+    stub = await PublicDonation.find_one(PublicDonation.tracking_token_hash == sha256_hex(token))
+    assert stub is not None
+    return stub
+
+
+async def _create(client: AsyncClient, headers: dict[str, str], items: list[dict]) -> dict:
+    response = await client.post(
+        "/public/v1/donations",
+        headers=headers,
+        json={
+            "shelter_code": "SH001",
+            "campaign_id": "donation_campaign:c1",
+            "donor": {"name": "Donor", "phone": "0812345678"},
+            "items": items,
+        },
+    )
+    assert response.status_code == 201, response.text
+    return response.json()
+
+
+async def test_ac1_a_campaign_only_booking_opens_verifying(
+    client: AsyncClient, open_shelter: PublicShelter, auth_headers: dict[str, str]
+) -> None:
+    await _seed_counter("100")
+    body = await _create(client, auth_headers, [_RICE])
+
+    assert body["status"] == "verifying"
+    buffer = await _buffer(body["tracking_token"])
+    assert buffer.status == "verifying"
+    assert buffer.items_declared[0]["review_status"] == "approved"
+    stub = await _stub(body["tracking_token"])
+    assert stub.status == "verifying"
+    assert stub.items_declared[0].review_status == "approved"
+
+    tracked = await client.get(
+        f"/public/v1/donations/{body['tracking_token']}", headers=auth_headers
+    )
+    assert tracked.json()["donation"]["items"][0]["review_status"] == "approved"
+
+
+async def test_ac2_a_mixed_booking_waits_for_the_typed_line(
+    client: AsyncClient, open_shelter: PublicShelter, auth_headers: dict[str, str]
+) -> None:
+    await _seed_counter("100")
+    body = await _create(client, auth_headers, [_RICE, _BLANKET])
+
+    assert body["status"] == "pending_review"
+    buffer = await _buffer(body["tracking_token"])
+    assert [i["review_status"] for i in buffer.items_declared] == ["approved", "pending"]
+
+
+async def test_ac4_a_typed_only_booking_opens_pending_review(
+    client: AsyncClient, open_shelter: PublicShelter, auth_headers: dict[str, str]
+) -> None:
+    body = await _create(client, auth_headers, [_BLANKET])
+
+    assert body["status"] == "pending_review"
+    buffer = await _buffer(body["tracking_token"])
+    assert buffer.items_declared[0]["review_status"] == "pending"
+
+
+async def test_a_campaign_line_without_a_counter_waits(
+    client: AsyncClient, open_shelter: PublicShelter, auth_headers: dict[str, str]
+) -> None:
+    """FR-2 — NOT_SEEDED goes through unreserved, so it is not approved."""
+    body = await _create(client, auth_headers, [_RICE])
+
+    assert body["status"] == "pending_review"
+
+
+async def _create_typed(client: AsyncClient, headers: dict[str, str], items: list[dict]) -> str:
+    """A booking nothing was decided on: typed lines, or campaign lines with no counter."""
+    body = await _create(client, headers, items)
+    assert body["status"] == "pending_review"
+    return body["tracking_token"]
+
+
+async def test_an_edited_campaign_line_is_approved_and_reported(
+    client: AsyncClient, open_shelter: PublicShelter, auth_headers: dict[str, str]
+) -> None:
+    """FR-2 / FR-26 — booked before the counter was seeded, so it waited; now it holds quota."""
+    token = await _create_typed(client, auth_headers, [_BLANKET, _RICE])
+    held = (await _buffer(token)).items_declared
+    await _seed_counter("100")
+
+    body = (
+        await _edit(
+            client,
+            auth_headers,
+            token,
+            [
+                {**_BLANKET, "line_key": held[0]["line_key"]},
+                {**_RICE, "qty": "8", "line_key": held[1]["line_key"]},
+            ],
+        )
+    ).json()
+
+    assert [i["review_status"] for i in body["items"]] == ["pending", "approved"]
+    assert body["auto_approved_lines"] == [1]
+    assert body["status"] == "pending_review"
+
+
+async def test_the_couch_status_gates_the_edit(
+    client: AsyncClient, open_shelter: PublicShelter, auth_headers: dict[str, str]
+) -> None:
+    token = await _create_typed(client, auth_headers, [_BLANKET])
+
+    response = await client.patch(
+        f"/public/v1/donations/{token}/items",
+        headers=auth_headers,
+        json={"items": [{**_BLANKET, "qty": "9"}], "current_status": "received"},
+    )
+
+    assert response.status_code == 400
+    assert response.json()["errors"][0]["error"] == 'Cannot edit a donation in status "received"'
+    assert (await _buffer(token)).items_declared[0]["qty"] == "2"
+
+
+async def test_a_receipt_settled_during_the_edit_is_not_written_back(
+    client: AsyncClient,
+    open_shelter: PublicShelter,
+    auth_headers: dict[str, str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Staff received the goods after the BFF read CouchDB but before the edit saved.
+
+    The quota settle released must stay released, and the buffer must keep ``received``,
+    or retention hands the quota back a second time when the row ages out.
+    """
+    await _seed_counter("100")
+    token = await _book(client, auth_headers, [_RICE])
+
+    async def settle_lands_first(**kwargs: object) -> object:
+        await DonationBuffer.get_pymongo_collection().update_one(
+            {"tracking_token_hash": sha256_hex(token)}, {"$set": {"status": "received"}}
+        )
+        return await reserve_quota(**kwargs)
+
+    monkeypatch.setattr(donation_use_case, "reserve_quota", settle_lands_first)
+
+    response = await client.patch(
+        f"/public/v1/donations/{token}/items",
+        headers=auth_headers,
+        json={
+            "items": [{**_RICE, "qty": "9"}],
+            "current_items": [{**_RICE, "reserved_qty": "5"}],
+            "current_status": "pending_review",
+        },
+    )
+
+    assert response.status_code == 409
+    assert response.json()["errors"][0]["error"] == "BOOKING_CHANGED"
+    assert (await _buffer(token)).status == "received"
+    assert await _reserved() == Decimal("5")
+
+
+async def test_a_buffer_settle_already_moved_on_is_not_edited(
+    client: AsyncClient, open_shelter: PublicShelter, auth_headers: dict[str, str]
+) -> None:
+    """The BFF's CouchDB read is older than the settle that already reached the buffer."""
+    await _seed_counter("100")
+    token = await _book(client, auth_headers, [_RICE])
+    await DonationBuffer.get_pymongo_collection().update_one(
+        {"tracking_token_hash": sha256_hex(token)}, {"$set": {"status": "received"}}
+    )
+
+    response = await client.patch(
+        f"/public/v1/donations/{token}/items",
+        headers=auth_headers,
+        json={
+            "items": [{**_RICE, "qty": "9"}],
+            "current_items": [{**_RICE, "reserved_qty": "5"}],
+            "current_status": "pending_review",
+        },
+    )
+
+    assert response.status_code == 400
+    assert (await _buffer(token)).status == "received"
+    assert await _reserved() == Decimal("5")
+
+
+async def _legacy_booking(token: str, status_value: str, items: list[dict]) -> None:
+    """A booking from before schema_v 7 — synced, no review fields or line keys anywhere."""
+    now = datetime.now(UTC)
+    donation_id = f"donation:{new_ulid()}"
+    await DonationBuffer(
+        id=donation_id,
+        shelter_code="SH001",
+        donor=DonorBuffer(name="Legacy", phone="0812345678"),
+        items_declared=items,
+        campaign_id="donation_campaign:c1",
+        booking_ref=f"DN-{abs(hash(token)) % 900000 + 100000}",
+        tracking_token=token,
+        tracking_token_hash=sha256_hex(token),
+        status="pending_review",
+        synced_to_couch=True,
+        created_at=now,
+        expires_at=now + timedelta(hours=72),
+    ).insert()
+    await PublicDonation(
+        id=donation_id,
+        tracking_token_hash=sha256_hex(token),
+        shelter_code="SH001",
+        status=status_value,
+        booking_ref="DN-1",
+        items_declared=[],
+        updated_at=now,
+    ).insert()
+
+
+async def test_ac20_legacy_pending_review_is_judged_like_a_new_booking(
+    client: AsyncClient, open_shelter: PublicShelter, auth_headers: dict[str, str]
+) -> None:
+    await _seed_counter("100")
+    token = "TX-SH001-LEGACYP"
+    await _legacy_booking(token, "pending_review", [_RICE, _BLANKET])
+
+    body = (await _edit(client, auth_headers, token, [_RICE, {**_BLANKET, "qty": "3"}])).json()
+
+    assert body["status"] == "pending_review"
+    assert [i["review_status"] for i in body["items"]] == ["approved", "pending"]
+    assert body["auto_approved_lines"] == [0]
+
+
+async def test_ac21_a_declared_booking_stays_declared(
+    client: AsyncClient, open_shelter: PublicShelter, auth_headers: dict[str, str]
+) -> None:
+    await _seed_counter("100")
+    token = "TX-SH001-LEGACYD"
+    await _legacy_booking(token, "declared", [_RICE])
+
+    body = (await _edit(client, auth_headers, token, [{**_RICE, "qty": "4"}])).json()
+
+    assert body["status"] == "declared"
+    assert all("review_status" not in item for item in body["items"])
+    assert body["auto_approved_lines"] == []
+
+
+async def test_ac9_a_verifying_booking_can_be_cancelled(
+    client: AsyncClient, open_shelter: PublicShelter, auth_headers: dict[str, str]
+) -> None:
+    """CR-196 FR-LK-10 — the edit is closed, the cancel is not."""
+    await _seed_counter("100")
+    token = (await _create(client, auth_headers, [_RICE]))["tracking_token"]
+    assert await _reserved() == Decimal("5")
+
+    response = await client.delete(f"/public/v1/donations/{token}", headers=auth_headers)
+
+    assert response.status_code == 200
+    assert await _reserved() == Decimal("0")
+
+
+async def test_ac11_a_verifying_booking_takes_a_courier_number(
+    client: AsyncClient, open_shelter: PublicShelter, auth_headers: dict[str, str]
+) -> None:
+    """CR-196 FR-LK-11 — the edit is closed, the courier number is not."""
+    await _seed_counter("100")
+    response = await client.post(
+        "/public/v1/donations",
+        headers=auth_headers,
+        json={
+            "shelter_code": "SH001",
+            "campaign_id": "donation_campaign:c1",
+            "donor": {"name": "Donor", "phone": "0812345678"},
+            "items": [_RICE],
+            "logistics": {"delivery_method": "parcel"},
+        },
+    )
+    assert response.json()["status"] == "verifying"
+    token = response.json()["tracking_token"]
+
+    patched = await client.patch(
+        f"/public/v1/donations/{token}",
+        headers=auth_headers,
+        json={"courier_tracking_no": "TH123"},
+    )
+
+    assert patched.status_code == 200
+    assert ((await _buffer(token)).logistics or {})["courier_tracking_no"] == "TH123"
+
+
+async def test_an_unseeded_line_stays_in_review_across_edits(
+    client: AsyncClient, open_shelter: PublicShelter, auth_headers: dict[str, str]
+) -> None:
+    """No counter = no reservation, so no "held" quantity for the next edit to lean on."""
+    token = (await _create(client, auth_headers, [_RICE]))["tracking_token"]
+
+    first = (await _edit(client, auth_headers, token, [{**_RICE, "qty": "6"}])).json()
+    second = (
+        await _edit(client, auth_headers, token, [{**_RICE, "qty": "6", "note": "แพ็คละ 1 kg"}])
+    ).json()
+
+    assert first["items"][0]["review_status"] == "pending"
+    assert "reserved_qty" not in first["items"][0]
+    assert second["items"][0]["review_status"] == "pending"
+    assert second["status"] == "pending_review"
+    assert second["auto_approved_lines"] == []
+
+
+async def test_a_synced_edit_leaves_the_projection_status_to_the_projector(
+    client: AsyncClient, open_shelter: PublicShelter, auth_headers: dict[str, str]
+) -> None:
+    await _seed_counter("100")
+    token = await _create_typed(client, auth_headers, [_BLANKET])
+    couch_items = (await _buffer(token)).items_declared
+
+    response = await client.patch(
+        f"/public/v1/donations/{token}/items",
+        headers=auth_headers,
+        json={"items": [_RICE], "current_items": couch_items, "current_status": "pending_review"},
+    )
+
+    assert response.json()["status"] == "verifying"
+    assert (await _buffer(token)).status == "verifying"
+    # The BFF writes CouchDB next; the projector carries that to public_donations.
+    assert (await _stub(token)).status == "pending_review"
+
+
+# --- CR-196: lines carry a line_key; an edit is closed once anything was decided ---
+
+#: Lines as the donate wizard writes them: category/condition/note included.
+_WIZARD_RICE = {**_RICE, "category": "อาหารแห้ง", "note": "ถุงละ 5 kg"}
+_NEW_SHIRT = {"free_text": "เสื้อ", "qty": "3", "unit": "ตัว", "condition": "ของใหม่"}
+_USED_SHIRT = {**_NEW_SHIRT, "condition": "มือสอง"}
+
+
+def _as_edit_form(line: dict) -> dict:
+    """What ``edit-donation-items-dialog.svelte`` sends for a held line (DonationItemEdit)."""
+    return {
+        key: line[key] for key in ("line_key", "item_id", "free_text", "qty", "unit") if key in line
+    }
+
+
+def _is_ulid(value: object) -> bool:
+    return isinstance(value, str) and len(value) == 26 and set(value) <= set(_CROCKFORD)
+
+
+_CROCKFORD = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
+
+
+async def test_lk_ac1_every_line_is_booked_with_its_own_key(
+    client: AsyncClient, open_shelter: PublicShelter, auth_headers: dict[str, str]
+) -> None:
+    """FR-LK-1..3 — a ULID per line, whatever the client sent, and GET hands it back."""
+    token = (
+        await _create(client, auth_headers, [{**_NEW_SHIRT, "line_key": "CLIENT-CHOSEN"}, _BLANKET])
+    )["tracking_token"]
+
+    keys = [line["line_key"] for line in (await _buffer(token)).items_declared]
+    assert all(_is_ulid(key) for key in keys)
+    assert len(set(keys)) == 2
+    tracked = await client.get(f"/public/v1/donations/{token}", headers=auth_headers)
+    assert [i["line_key"] for i in tracked.json()["donation"]["items"]] == keys
+
+
+async def test_lk_ac2_a_booking_with_its_qr_cannot_be_edited(
+    client: AsyncClient, open_shelter: PublicShelter, auth_headers: dict[str, str]
+) -> None:
+    await _seed_counter("100")
+    token = (await _create(client, auth_headers, [_RICE]))["tracking_token"]
+    held = (await _buffer(token)).items_declared
+
+    response = await _edit(client, auth_headers, token, [{**_as_edit_form(held[0]), "qty": "9"}])
+
+    assert response.status_code == 400
+    assert response.json()["errors"][0]["error"] == "ALREADY_REVIEWED"
+    assert await _reserved() == Decimal("5")
+    assert (await _buffer(token)).revisions == []
+
+
+async def test_lk_ac2_a_line_approved_by_the_campaign_rule_closes_the_edit(
+    client: AsyncClient, open_shelter: PublicShelter, auth_headers: dict[str, str]
+) -> None:
+    """Still ``pending_review`` for the typed line, but the rice was already approved."""
+    await _seed_counter("100")
+    body = await _create(client, auth_headers, [_RICE, _BLANKET])
+    assert body["status"] == "pending_review"
+
+    response = await _edit(client, auth_headers, body["tracking_token"], [_BLANKET])
+
+    assert response.status_code == 400
+    assert response.json()["errors"][0]["error"] == "ALREADY_REVIEWED"
+    assert await _reserved() == Decimal("5")
+
+
+async def test_lk_ac2_a_staff_refusal_read_from_couch_closes_the_edit(
+    client: AsyncClient, open_shelter: PublicShelter, auth_headers: dict[str, str]
+) -> None:
+    """Review #783 H1 — A "new shirt" approved, B "used shirt" refused; the donor drops A.
+
+    The edit used to pair what was left with A and approve B. Now nothing is paired: the
+    booking was reviewed, so the edit is refused and B stays refused.
+    """
+    token = await _create_typed(client, auth_headers, [_NEW_SHIRT, _USED_SHIRT])
+    held = (await _buffer(token)).items_declared
+    couch_items = [
+        {**held[0], "review_status": "approved"},
+        {
+            **held[1],
+            "review_status": "rejected",
+            "review_reason_code": "damaged",
+            "review_reason": "ชำรุดเสียหาย",
+        },
+    ]
+
+    response = await client.patch(
+        f"/public/v1/donations/{token}/items",
+        headers=auth_headers,
+        json={
+            "items": [_as_edit_form(held[1])],
+            "current_items": couch_items,
+            "current_status": "verifying",
+        },
+    )
+
+    assert response.status_code == 400
+    assert response.json()["errors"][0]["error"] == "ALREADY_REVIEWED"
+    assert [line["line_key"] for line in (await _buffer(token)).items_declared] == [
+        held[0]["line_key"],
+        held[1]["line_key"],
+    ]
+
+
+async def test_lk_ac2_a_rejected_line_closes_the_edit_even_while_in_review(
+    client: AsyncClient, open_shelter: PublicShelter, auth_headers: dict[str, str]
+) -> None:
+    """A refusal next to a pending line — left by an edit made before CR-196."""
+    token = await _create_typed(client, auth_headers, [_NEW_SHIRT, _USED_SHIRT])
+    held = (await _buffer(token)).items_declared
+
+    response = await client.patch(
+        f"/public/v1/donations/{token}/items",
+        headers=auth_headers,
+        json={
+            "items": [_as_edit_form(held[0])],
+            "current_items": [held[0], {**held[1], "review_status": "rejected"}],
+            "current_status": "pending_review",
+        },
+    )
+
+    assert response.json()["errors"][0]["error"] == "ALREADY_REVIEWED"
+
+
+async def test_lk_ac2_a_legacy_booking_staff_approved_cannot_be_edited(
+    client: AsyncClient, open_shelter: PublicShelter, auth_headers: dict[str, str]
+) -> None:
+    """FR-18c no longer applies to ``verifying``: staff approved the whole booking."""
+    token = "TX-SH001-LEGACYV"
+    await _legacy_booking(token, "verifying", [_BLANKET])
+
+    response = await _edit(client, auth_headers, token, [{**_BLANKET, "qty": "7"}])
+
+    assert response.status_code == 400
+    assert response.json()["errors"][0]["error"] == "ALREADY_REVIEWED"
+
+
+async def test_lk_ac3_an_untouched_line_keeps_its_key_and_its_details(
+    client: AsyncClient, open_shelter: PublicShelter, auth_headers: dict[str, str]
+) -> None:
+    """The form sends back only key/item_id/name/qty/unit; the rest comes off the held line."""
+    token = await _create_typed(client, auth_headers, [_WIZARD_RICE, _NEW_SHIRT])
+    held = (await _buffer(token)).items_declared
+    await _seed_counter("100")
+
+    body = (
+        await _edit(
+            client,
+            auth_headers,
+            token,
+            [{**_as_edit_form(held[0]), "qty": "8"}, _as_edit_form(held[1])],
+        )
+    ).json()
+
+    assert [i["line_key"] for i in body["items"]] == [held[0]["line_key"], held[1]["line_key"]]
+    assert body["items"][0]["category"] == "อาหารแห้ง"
+    assert body["items"][0]["note"] == "ถุงละ 5 kg"
+    assert body["items"][1]["condition"] == "ของใหม่"
+    # Only the rice item moves on the counter; the typed shirt holds nothing.
+    assert await _reserved() == Decimal("8")
+    assert "reserved_qty" not in body["items"][1]
+
+
+async def test_lk_a_detail_the_request_does_send_wins(
+    client: AsyncClient, open_shelter: PublicShelter, auth_headers: dict[str, str]
+) -> None:
+    token = await _create_typed(client, auth_headers, [_NEW_SHIRT])
+    held = (await _buffer(token)).items_declared
+
+    body = (
+        await _edit(client, auth_headers, token, [{**_as_edit_form(held[0]), "condition": "มือสอง"}])
+    ).json()
+
+    assert body["items"][0]["condition"] == "มือสอง"
+    assert body["items"][0]["line_key"] == held[0]["line_key"]
+
+
+async def test_lk_deleting_one_of_two_same_name_lines_keeps_the_other_as_it_was(
+    client: AsyncClient, open_shelter: PublicShelter, auth_headers: dict[str, str]
+) -> None:
+    """Two "เสื้อ" lines: the key says which one stayed — no guessing by name."""
+    token = await _create_typed(client, auth_headers, [_NEW_SHIRT, _USED_SHIRT])
+    held = (await _buffer(token)).items_declared
+
+    body = (await _edit(client, auth_headers, token, [_as_edit_form(held[1])])).json()
+
+    assert len(body["items"]) == 1
+    assert body["items"][0]["line_key"] == held[1]["line_key"]
+    assert body["items"][0]["condition"] == "มือสอง"
+
+
+async def test_lk_reordered_lines_keep_their_own_keys_and_details(
+    client: AsyncClient, open_shelter: PublicShelter, auth_headers: dict[str, str]
+) -> None:
+    token = await _create_typed(client, auth_headers, [_NEW_SHIRT, _USED_SHIRT])
+    held = (await _buffer(token)).items_declared
+
+    body = (
+        await _edit(client, auth_headers, token, [_as_edit_form(held[1]), _as_edit_form(held[0])])
+    ).json()
+
+    assert [i["line_key"] for i in body["items"]] == [held[1]["line_key"], held[0]["line_key"]]
+    assert [i["condition"] for i in body["items"]] == ["มือสอง", "ของใหม่"]
+
+
+async def test_lk_ac6_an_added_line_gets_a_new_key(
+    client: AsyncClient, open_shelter: PublicShelter, auth_headers: dict[str, str]
+) -> None:
+    token = await _create_typed(client, auth_headers, [_NEW_SHIRT])
+    held = (await _buffer(token)).items_declared
+
+    body = (await _edit(client, auth_headers, token, [_as_edit_form(held[0]), _BLANKET])).json()
+
+    added = body["items"][1]["line_key"]
+    assert _is_ulid(added)
+    assert added != held[0]["line_key"]
+    assert [line.line_key for line in (await _stub(token)).items_declared] == [
+        held[0]["line_key"],
+        added,
+    ]
+
+
+async def test_lk_ac4_a_key_the_booking_does_not_hold_is_refused(
+    client: AsyncClient, open_shelter: PublicShelter, auth_headers: dict[str, str]
+) -> None:
+    token = await _create_typed(client, auth_headers, [_RICE])
+    await _seed_counter("100")
+
+    response = await _edit(
+        client, auth_headers, token, [{**_RICE, "qty": "9", "line_key": new_ulid()}]
+    )
+
+    assert response.status_code == 400
+    assert response.json()["errors"][0]["error"] == "UNKNOWN_LINE_KEY"
+    assert await _reserved() == Decimal("0")
+    assert (await _buffer(token)).revisions == []
+
+
+async def test_lk_ac5_a_key_named_twice_is_refused(
+    client: AsyncClient, open_shelter: PublicShelter, auth_headers: dict[str, str]
+) -> None:
+    token = await _create_typed(client, auth_headers, [_RICE, _BLANKET])
+    held = (await _buffer(token)).items_declared
+    await _seed_counter("100")
+
+    response = await _edit(
+        client,
+        auth_headers,
+        token,
+        [_as_edit_form(held[0]), {**_as_edit_form(held[1]), "line_key": held[0]["line_key"]}],
+    )
+
+    assert response.status_code == 400
+    assert response.json()["errors"][0]["error"] == "DUPLICATE_LINE_KEY"
+    assert await _reserved() == Decimal("0")
+    assert (await _buffer(token)).items_declared == held
+
+
+async def test_lk_fr7_a_booking_from_before_line_keys_gets_them_on_its_first_edit(
+    client: AsyncClient, open_shelter: PublicShelter, auth_headers: dict[str, str]
+) -> None:
+    token = "TX-SH001-LEGACYK"
+    await _legacy_booking(token, "pending_review", [_NEW_SHIRT, _BLANKET])
+
+    body = (await _edit(client, auth_headers, token, [_NEW_SHIRT, _BLANKET])).json()
+
+    keys = [i["line_key"] for i in body["items"]]
+    assert all(_is_ulid(key) for key in keys)
+    assert len(set(keys)) == 2
+
+
+async def test_lk_fr7_a_booking_from_before_line_keys_holds_no_key_to_name(
+    client: AsyncClient, open_shelter: PublicShelter, auth_headers: dict[str, str]
+) -> None:
+    token = "TX-SH001-LEGACYU"
+    await _legacy_booking(token, "pending_review", [_BLANKET])
+
+    response = await _edit(client, auth_headers, token, [{**_BLANKET, "line_key": new_ulid()}])
+
+    assert response.json()["errors"][0]["error"] == "UNKNOWN_LINE_KEY"
+
+
+async def test_lk_sending_the_same_edit_twice_settles_on_the_same_booking(
+    client: AsyncClient, open_shelter: PublicShelter, auth_headers: dict[str, str]
+) -> None:
+    """A retried request (the first answer lost) ends where the first one did."""
+    token = await _create_typed(client, auth_headers, [_NEW_SHIRT, _USED_SHIRT])
+    held = (await _buffer(token)).items_declared
+    edit = [{**_as_edit_form(held[1]), "qty": "5"}, _BLANKET]
+
+    first = (await _edit(client, auth_headers, token, edit)).json()
+    second = await _edit(client, auth_headers, token, edit)
+
+    assert second.status_code == 200
+    assert second.json()["items"][0]["line_key"] == held[1]["line_key"]
+    # The added line has no key to send, so each attempt mints one; the rest is the same.
+    assert [{**i, "line_key": None} for i in second.json()["items"]] == [
+        {**i, "line_key": None} for i in first["items"]
+    ]
+
+
+async def test_lk_a_retry_after_the_edit_was_approved_moves_no_more_quota(
+    client: AsyncClient, open_shelter: PublicShelter, auth_headers: dict[str, str]
+) -> None:
+    """The first attempt landed and approved the water, so the retry meets a reviewed
+    booking — refused, with the quota the first attempt took left as it is."""
+    token = await _create_typed(client, auth_headers, [_BLANKET])
+    held = (await _buffer(token)).items_declared
+    await _seed_counter("100", "item:water")
+    edit = [
+        _as_edit_form(held[0]),
+        {"item_id": "item:water", "free_text": "น้ำดื่ม", "qty": "12", "unit": "ขวด"},
+    ]
+
+    assert (await _edit(client, auth_headers, token, edit)).status_code == 200
+    retry = await _edit(client, auth_headers, token, edit)
+
+    assert retry.json()["errors"][0]["error"] == "ALREADY_REVIEWED"
+    assert await _reserved("item:water") == Decimal("12")
+
+
+_PHOTO_IDS = ["image:01K8PHXTX00000000000000001", "image:01K8PHXTX00000000000000002"]
+
+
+async def _create_unsolicited(client: AsyncClient, auth_headers: dict[str, str], **extra):
+    return await client.post(
+        "/public/v1/donations",
+        headers=auth_headers,
+        json={
+            "shelter_code": "SH001",
+            "donor": {"name": "Donor", "phone": "0812345678"},
+            "items": [{"free_text": "ผ้าห่ม", "qty": 2, "unit": "ผืน"}],
+            **extra,
+        },
+    )
+
+
+async def test_create_donation_keeps_photos_and_waits_to_bind_them(
+    client: AsyncClient, open_shelter: PublicShelter, auth_headers: dict[str, str]
+) -> None:
+    # CR-175 FR-11: the ids ride the buffer to CouchDB; the worker binds them (FR-11a).
+    response = await _create_unsolicited(client, auth_headers, photos=_PHOTO_IDS)
+    assert response.status_code == 201
+
+    buffer = await DonationBuffer.find_one(
+        DonationBuffer.booking_ref == response.json()["booking_ref"]
+    )
+    assert buffer is not None
+    assert buffer.photos == _PHOTO_IDS
+    assert buffer.photos_linked is False
+
+    # FR-14 — the donor's tracking page has no photo read path.
+    tracking = await client.get(
+        f"/public/v1/donations/{response.json()['tracking_token']}", headers=auth_headers
+    )
+    assert tracking.status_code == 200
+    assert "photos" not in tracking.json()["donation"]
+
+
+async def test_create_donation_without_photos_has_nothing_to_bind(
+    client: AsyncClient, open_shelter: PublicShelter, auth_headers: dict[str, str]
+) -> None:
+    response = await _create_unsolicited(client, auth_headers)
+    assert response.status_code == 201
+
+    buffer = await DonationBuffer.find_one(
+        DonationBuffer.booking_ref == response.json()["booking_ref"]
+    )
+    assert buffer is not None
+    assert buffer.photos == []
+    assert buffer.photos_linked is True
+
+
+async def test_create_donation_refuses_more_than_30_photos(
+    client: AsyncClient, open_shelter: PublicShelter, auth_headers: dict[str, str]
+) -> None:
+    photos = [f"image:01K8PHXTX{n:017d}" for n in range(31)]
+    response = await _create_unsolicited(client, auth_headers, photos=photos)
+    assert response.status_code == 422
+    assert await DonationBuffer.find_all().count() == 0

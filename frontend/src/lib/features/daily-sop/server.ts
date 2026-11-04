@@ -1,6 +1,7 @@
 export {
 	DAILY_SOP_ROLE_METRIC_CONTRACTS,
 	DAILY_SOP_ROLES,
+	canAssessRole,
 	metricForQuestion,
 	questionText,
 	questionsForRole,

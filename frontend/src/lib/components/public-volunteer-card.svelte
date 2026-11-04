@@ -1,16 +1,17 @@
 <script lang="ts">
 	import MapPin from '@lucide/svelte/icons/map-pin';
+	import { resolve } from '$app/paths';
 	import { langState } from '$lib/states/i18n.svelte';
 
 	export type PublicVolunteerCardData = {
-		id: string;
+		/** When set, the apply button opens the job board filtered to this shelter (#709). */
+		shelterCode?: string;
 		name: string;
 		status: string;
 		location: string;
 		missions: string[];
 		volunteerPercent: number;
 		deficitText: string;
-		href?: string;
 	};
 
 	let {
@@ -21,8 +22,11 @@
 		class?: string;
 	} = $props();
 
-	const targetHref = $derived(item.href || `/volunteers?shelter=${item.id}`);
 	const isEn = $derived(langState.current === 'en');
+	/** `?shelter=` filters the job board to this card's shelter (#709). */
+	const shelterQuery = $derived(
+		item.shelterCode ? `?shelter=${encodeURIComponent(item.shelterCode)}` : ''
+	);
 	const displayStatus = $derived(
 		isEn ? (item.status === 'วิกฤติ' ? 'Critical' : item.status) : item.status
 	);
@@ -55,7 +59,7 @@
 		<!-- Missions Needed Tags -->
 		<div class="space-y-1.5 pt-0.5 sm:space-y-3 sm:pt-1">
 			<div class="text-xs font-semibold text-slate-700 sm:text-sm">
-				{isEn ? 'Urgent volunteer roles needed:' : 'ภารกิจจิตอาสาที่เปิดรับ:'}
+				{isEn ? 'Urgent volunteer roles needed:' : 'งานอาสาสมัครที่เปิดรับ:'}
 			</div>
 			<div class="flex flex-wrap gap-1.5 sm:gap-2">
 				{#each item.missions as mission, idx (idx)}
@@ -72,7 +76,7 @@
 						class="inline-flex items-center rounded-lg border border-dashed border-domain-volunteer-border bg-domain-volunteer-subtle px-2 py-0.5 text-xs font-semibold text-domain-volunteer-text sm:hidden"
 					>
 						+{item.missions.length - 3}
-						{isEn ? 'more' : 'ภารกิจ'}
+						{isEn ? 'more' : 'งานอาสาสมัคร'}
 					</span>
 				{/if}
 			</div>
@@ -99,7 +103,7 @@
 		</div>
 
 		<a
-			href={targetHref}
+			href={`${resolve('/volunteers/jobs')}${shelterQuery}`}
 			class="flex w-full cursor-pointer items-center justify-center rounded-xl bg-domain-volunteer-strong py-2.5 text-xs font-bold text-white shadow-xs transition-colors hover:bg-domain-volunteer-text sm:rounded-2xl sm:py-4 sm:text-base"
 		>
 			{isEn ? 'Volunteer' : 'สมัครจิตอาสา'}

@@ -13,6 +13,7 @@
 	} from '$lib/features/operations';
 	import { useFoodSphereStandards } from '../application/food-sphere-queries';
 	import { useRequirementGroups } from '../application/requirement-group-queries';
+	import { useShelterPeopleCounts } from '../application/shelter-people-queries';
 	import { useReplenishmentPolicies } from '../application/replenishment-queries';
 	import { headcountsFromAgeGroups } from '../domain/food-sphere-calc';
 	import { useDashboardDemographics, useDashboardOccupancy } from '$lib/features/dashboard';
@@ -24,6 +25,7 @@
 	} from '../domain/food-sphere-table';
 	import type { DocAlertStatus } from '../domain/replenishment-calc';
 	import DocStatusBadge from './doc-status-badge.svelte';
+	import PeopleTotalTooltip from './people-total-tooltip.svelte';
 	import { qtyGt } from '$lib/utils/qty';
 
 	// Icons
@@ -66,9 +68,15 @@
 	const demographicsQuery = useDashboardDemographics(() => cleanShelterCode);
 	const occupancyQuery = useDashboardOccupancy(() => cleanShelterCode);
 
-	const effectiveOccupancy = $derived(
-		occupancy > 0 ? occupancy : (occupancyQuery.data?.active ?? 0)
+	const peopleQuery = useShelterPeopleCounts(() => cleanShelterCode);
+	const evacueeCount = $derived(
+		peopleQuery.data?.evacuees ??
+			(occupancy > 0 ? occupancy : (occupancyQuery.data?.in_shelter ?? 0))
 	);
+	const staffCount = $derived(peopleQuery.data?.staff ?? 0);
+	const volunteerCount = $derived(peopleQuery.data?.volunteers ?? 0);
+	const effectiveOccupancy = $derived(evacueeCount + staffCount + volunteerCount);
+	const peopleBaseFailed = $derived(peopleQuery.isError);
 
 	const isLoading = $derived(
 		itemMastersQuery.isLoading ||
@@ -288,6 +296,16 @@
 		return '';
 	}
 </script>
+
+{#snippet peopleTotal()}
+	<PeopleTotalTooltip
+		total={effectiveOccupancy}
+		evacuees={evacueeCount}
+		staff={staffCount}
+		volunteers={volunteerCount}
+		failed={peopleBaseFailed}
+	/>
+{/snippet}
 
 <div class="space-y-4 sm:space-y-6">
 	<!-- Summary KPI Cards -->
@@ -530,9 +548,12 @@
 					แสดง {filteredGroups.reduce((acc, g) => acc + g.items.length, 0)} รายการใน {filteredGroups.length}
 					กลุ่ม
 					{#if effectiveOccupancy > 0}
-						<span class="ml-1 font-semibold text-primary"
-							>· อัตราครองเตียง {effectiveOccupancy} คน</span
-						>
+						<span class="ml-1">· {@render peopleTotal()}</span>
+					{/if}
+					{#if peopleBaseFailed}
+						<span class="ml-1 font-medium text-destructive">
+							· โหลดจำนวนเจ้าหน้าที่และจิตอาสาไม่สำเร็จ ฐานคำนวณนี้ต่ำกว่าความเป็นจริง
+						</span>
 					{/if}
 				</div>
 			</div>
@@ -682,7 +703,7 @@
 												</span>
 											{/if}
 											<span class="text-[11px] text-muted-foreground">
-												ผู้ประสบภัย: <strong class="text-foreground">{effectiveOccupancy}</strong> คน
+												ฐานคำนวณ: {@render peopleTotal()}
 											</span>
 										</div>
 
@@ -830,9 +851,7 @@
 															</span>
 														{/if}
 														<span class="text-[11px] text-muted-foreground">
-															ผู้ประสบภัย: <strong class="text-foreground"
-																>{effectiveOccupancy}</strong
-															> คน
+															ฐานคำนวณ: {@render peopleTotal()}
 														</span>
 													</div>
 												</td>

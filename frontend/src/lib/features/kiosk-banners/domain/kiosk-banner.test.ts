@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
 	createKioskBanner,
+	groupOf,
 	isActiveAt,
 	kioskBannerDocSchema,
 	kioskBannerInputSchema,
 	matchesScreen,
+	matchesSlot,
 	nextBannerOrder,
 	orderableBanners,
 	planReorder,
@@ -12,7 +14,10 @@ import {
 	splitByView
 } from './kiosk-banner';
 
+const GROUP = 'kiosk_banner_group:A';
+
 const validInput = {
+	group_id: GROUP,
 	title: 'ยินดีต้อนรับ',
 	caption: 'ศูนย์พักพิงชั่วคราว',
 	duration_sec: 10,
@@ -25,6 +30,17 @@ describe('kioskBannerInputSchema', () => {
 	it('accepts a valid input', () => {
 		const result = kioskBannerInputSchema.safeParse(validInput);
 		expect(result.success).toBe(true);
+	});
+
+	it('requires a banner group, reporting a Thai message on group_id', () => {
+		const withoutGroup: Partial<typeof validInput> = { ...validInput };
+		delete withoutGroup.group_id;
+		for (const value of [withoutGroup, { ...validInput, group_id: '' }]) {
+			const result = kioskBannerInputSchema.safeParse(value);
+			expect(result.error?.issues).toEqual([
+				expect.objectContaining({ path: ['group_id'], message: 'เลือกกลุ่มแบนเนอร์' })
+			]);
+		}
 	});
 
 	it('enforces title length 1-120 after trimming', () => {
@@ -62,6 +78,7 @@ describe('kioskBannerInputSchema', () => {
 
 	it('applies defaults for duration_sec and status', () => {
 		const result = kioskBannerInputSchema.safeParse({
+			group_id: GROUP,
 			title: 't',
 			start_at: validInput.start_at,
 			end_at: validInput.end_at
@@ -107,8 +124,12 @@ describe('kioskBannerInputSchema', () => {
 	});
 });
 
+const legacyInput: Partial<typeof validInput> = { ...validInput };
+delete legacyInput.group_id;
+
+/** A banner stored before groups existed (schema_v 1, no group_id). */
 const validDoc = {
-	...validInput,
+	...legacyInput,
 	order: 1,
 	_id: 'kiosk_banner:01J9ZZZZZZZZZZZZZZZZZZZZZZ',
 	_rev: '1-abc',
@@ -133,11 +154,25 @@ describe('kioskBannerDocSchema', () => {
 			{ shelter_code: '' },
 			{ _id: 'announcement:01J9' },
 			{ type: 'announcement' },
-			{ schema_v: 2 },
+			{ schema_v: 3 },
 			{ created_by: '' }
 		]) {
 			expect(kioskBannerDocSchema.safeParse({ ...validDoc, ...patch }).success).toBe(false);
 		}
+	});
+
+	it('accepts a v1 doc without group_id and a v2 doc with one', () => {
+		const v1 = kioskBannerDocSchema.safeParse(validDoc);
+		expect(v1.success && v1.data.group_id).toBeUndefined();
+		const v2 = kioskBannerDocSchema.safeParse({ ...validDoc, schema_v: 2, group_id: GROUP });
+		expect(v2.success && v2.data.group_id).toBe(GROUP);
+	});
+
+	it('rejects a v2 doc without group_id or with a malformed one', () => {
+		expect(kioskBannerDocSchema.safeParse({ ...validDoc, schema_v: 2 }).success).toBe(false);
+		expect(
+			kioskBannerDocSchema.safeParse({ ...validDoc, schema_v: 2, group_id: 'nope:1' }).success
+		).toBe(false);
 	});
 
 	it('accepts a legacy doc without screen_type and a portrait doc', () => {
@@ -149,9 +184,13 @@ describe('kioskBannerDocSchema', () => {
 		expect(kioskBannerDocSchema.safeParse({ ...validDoc, screen_type: 'tv' }).success).toBe(false);
 	});
 
-	it('still enforces end_at > start_at', () => {
-		const result = kioskBannerDocSchema.safeParse({ ...validDoc, end_at: validDoc.start_at });
-		expect(result.success).toBe(false);
+	it('still enforces end_at > start_at on v1 and v2', () => {
+		const sameTime = { end_at: validDoc.start_at };
+		expect(kioskBannerDocSchema.safeParse({ ...validDoc, ...sameTime }).success).toBe(false);
+		expect(
+			kioskBannerDocSchema.safeParse({ ...validDoc, schema_v: 2, group_id: GROUP, ...sameTime })
+				.success
+		).toBe(false);
 	});
 });
 
@@ -164,7 +203,8 @@ describe('createKioskBanner', () => {
 		const doc = createKioskBanner(input, ctx, now);
 		expect(doc).toMatchObject({
 			type: 'kiosk_banner',
-			schema_v: 1,
+			schema_v: 2,
+			group_id: GROUP,
 			shelter_code: 'SH-007',
 			created_by: 'user:bob',
 			created_at: '2026-10-15T08:30:00.000Z',
@@ -192,6 +232,7 @@ describe('createKioskBanner', () => {
 
 	it('mints a distinct _id per call and applies input defaults', () => {
 		const input = kioskBannerInputSchema.parse({
+			group_id: GROUP,
 			title: 't',
 			start_at: validInput.start_at,
 			end_at: validInput.end_at
@@ -210,6 +251,48 @@ describe('matchesScreen', () => {
 		expect(matchesScreen({ screen_type: 'compact' }, 'compact')).toBe(true);
 		expect(matchesScreen({}, 'compact')).toBe(true);
 		expect(matchesScreen({}, 'portrait')).toBe(false);
+	});
+});
+
+describe('matchesSlot', () => {
+	const group = 'kiosk_banner_group:A';
+
+	it('matches only the same group and screen type; an ungrouped banner never matches', () => {
+		const slot = { group_id: group, screen_type: 'portrait' } as const;
+		expect(matchesSlot({ group_id: group, screen_type: 'portrait' }, slot)).toBe(true);
+		expect(matchesSlot({ group_id: group, screen_type: 'compact' }, slot)).toBe(false);
+		expect(matchesSlot({ group_id: 'kiosk_banner_group:B', screen_type: 'portrait' }, slot)).toBe(
+			false
+		);
+		expect(matchesSlot({ screen_type: 'portrait' }, slot)).toBe(false);
+		expect(matchesSlot({ group_id: group }, { group_id: group, screen_type: 'compact' })).toBe(
+			true
+		);
+	});
+
+	it('accepts a banner doc with group_id and still parses one without', () => {
+		const doc = {
+			_id: 'kiosk_banner:b1',
+			type: 'kiosk_banner',
+			schema_v: 2,
+			shelter_code: 'SH1',
+			...legacyInput,
+			order: 1,
+			created_at: validInput.start_at,
+			updated_at: validInput.start_at,
+			created_by: 'alice'
+		};
+		expect(kioskBannerDocSchema.parse({ ...doc, group_id: group }).group_id).toBe(group);
+		expect(kioskBannerDocSchema.parse({ ...doc, schema_v: 1 }).group_id).toBeUndefined();
+		expect(kioskBannerDocSchema.safeParse({ ...doc, group_id: 'nope:1' }).success).toBe(false);
+	});
+});
+
+describe('groupOf', () => {
+	it('is the banner group id, or null for an ungrouped banner', () => {
+		expect(groupOf({ group_id: GROUP })).toBe(GROUP);
+		expect(groupOf({})).toBeNull();
+		expect(groupOf({ group_id: null })).toBeNull();
 	});
 });
 
@@ -285,72 +368,108 @@ describe('splitByView', () => {
 
 describe('next banner order', () => {
 	const now = new Date('2026-10-16T00:00:00.000Z');
+	const OTHER = 'kiosk_banner_group:B';
 	const banner = (
 		id: string,
 		order: number,
-		extra: { screen_type?: 'compact' | 'portrait'; end_at?: string } = {}
+		extra: { group_id?: string; screen_type?: 'compact' | 'portrait'; end_at?: string } = {}
 	) => ({
 		_id: `kiosk_banner:${id}`,
 		order,
 		end_at: extra.end_at ?? '2026-10-20T00:00:00.000Z',
+		group_id: 'group_id' in extra ? extra.group_id : GROUP,
 		screen_type: extra.screen_type
 	});
 
 	describe('nextBannerOrder', () => {
-		it('is max order + 1 among current banners of that screen type', () => {
+		it('is max order + 1 among current banners of that group and screen type', () => {
 			const list = [
 				banner('a', 2),
 				banner('b', 5, { screen_type: 'compact' }),
 				banner('c', 9, { screen_type: 'portrait' }),
 				banner('d', 7, { end_at: '2026-10-01T00:00:00.000Z' })
 			];
-			expect(nextBannerOrder(list, 'compact', now)).toBe(6);
-			expect(nextBannerOrder(list, 'portrait', now)).toBe(10);
+			expect(nextBannerOrder(list, { group_id: GROUP, screen_type: 'compact' }, now)).toBe(6);
+			expect(nextBannerOrder(list, { group_id: GROUP, screen_type: 'portrait' }, now)).toBe(10);
 		});
 
-		it('is the default order (1) when there is none', () => {
-			expect(nextBannerOrder([], 'compact', now)).toBe(1);
-			expect(nextBannerOrder([banner('a', 4, { screen_type: 'portrait' })], 'compact', now)).toBe(
-				1
-			);
+		it('does not count banners of another group or ungrouped ones', () => {
+			const list = [
+				banner('a', 2),
+				banner('other', 8, { group_id: OTHER }),
+				banner('legacy', 9, { group_id: undefined })
+			];
+			expect(nextBannerOrder(list, { group_id: GROUP, screen_type: 'compact' }, now)).toBe(3);
+			expect(nextBannerOrder(list, { group_id: OTHER, screen_type: 'compact' }, now)).toBe(9);
+		});
+
+		it('is the default order (1) when the slot is empty', () => {
+			const slot = { group_id: GROUP, screen_type: 'compact' } as const;
+			expect(nextBannerOrder([], slot, now)).toBe(1);
+			expect(nextBannerOrder([banner('a', 4, { screen_type: 'portrait' })], slot, now)).toBe(1);
+			expect(nextBannerOrder([banner('a', 4, { group_id: OTHER })], slot, now)).toBe(1);
 		});
 	});
 });
 
 describe('orderableBanners', () => {
 	const now = new Date('2026-10-16T00:00:00.000Z');
+	const GROUP_A = 'kiosk_banner_group:A';
+	const GROUP_B = 'kiosk_banner_group:B';
 	const banner = (
 		id: string,
 		order: number,
-		extra: { screen_type?: 'compact' | 'portrait'; start_at?: string; end_at?: string } = {}
+		extra: {
+			group_id?: string;
+			screen_type?: 'compact' | 'portrait';
+			start_at?: string;
+			end_at?: string;
+			status?: string;
+		} = {}
 	) => ({
 		_id: `kiosk_banner:${id}`,
 		order,
 		start_at: extra.start_at ?? '2026-10-15T00:00:00.000Z',
 		end_at: extra.end_at ?? '2026-10-20T00:00:00.000Z',
-		screen_type: extra.screen_type
+		screen_type: extra.screen_type,
+		group_id: 'group_id' in extra ? extra.group_id : GROUP_A,
+		status: extra.status
 	});
+	const slotA = { group_id: GROUP_A, screen_type: 'compact' as const };
 
-	it('keeps current banners of the screen type, sorted, and drops expired or other-screen ones', () => {
+	it('keeps current banners of the slot, sorted, and drops expired ones', () => {
 		const list = [
 			banner('c', 3, { screen_type: 'compact' }),
 			banner('a', 1),
-			banner('p', 1, { screen_type: 'portrait' }),
 			banner('old', 2, { end_at: '2026-10-15T23:59:59.000Z' }),
 			banner('b', 2, { screen_type: 'compact' })
 		];
-		const ids = (type: 'compact' | 'portrait') =>
-			orderableBanners(list, type, now).map((b) => b._id);
-		expect(ids('compact')).toEqual(['kiosk_banner:a', 'kiosk_banner:b', 'kiosk_banner:c']);
-		expect(ids('portrait')).toEqual(['kiosk_banner:p']);
+		expect(orderableBanners(list, slotA, now).map((b) => b._id)).toEqual([
+			'kiosk_banner:a',
+			'kiosk_banner:b',
+			'kiosk_banner:c'
+		]);
+	});
+
+	it('drops banners of another group, another screen type and ungrouped banners', () => {
+		const list = [
+			banner('mine', 1),
+			banner('other-group', 1, { group_id: GROUP_B }),
+			banner('other-screen', 1, { screen_type: 'portrait' }),
+			banner('ungrouped', 1, { group_id: undefined })
+		];
+		expect(orderableBanners(list, slotA, now).map((b) => b._id)).toEqual(['kiosk_banner:mine']);
+		expect(
+			orderableBanners(list, { group_id: GROUP_A, screen_type: 'portrait' }, now).map((b) => b._id)
+		).toEqual(['kiosk_banner:other-screen']);
 	});
 
 	it('includes inactive and not-yet-started banners', () => {
 		const list = [
-			{ ...banner('a', 1), status: 'inactive' },
+			banner('a', 1, { status: 'inactive' }),
 			banner('b', 2, { start_at: '2026-10-18T00:00:00.000Z' })
 		];
-		expect(orderableBanners(list, 'compact', now).map((b) => b._id)).toEqual([
+		expect(orderableBanners(list, slotA, now).map((b) => b._id)).toEqual([
 			'kiosk_banner:a',
 			'kiosk_banner:b'
 		]);

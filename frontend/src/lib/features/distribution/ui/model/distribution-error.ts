@@ -16,7 +16,14 @@ import {
 	CapacityExceededError,
 	StockIntegrityError,
 	InsufficientPoolQuotaError,
-	ConcurrencyCollisionError
+	ConcurrencyCollisionError,
+	BulkReturnLoanReopenError,
+	BulkReturnPoolNameTakenError,
+	BulkReturnPoolStateError,
+	BulkReturnPoolLockTimeoutError,
+	BulkReturnPoolNotEmptyError,
+	BulkReturnPoolEmptyError,
+	DistributionDataIntegrityError
 } from '../../application/food-supplies/errors';
 import { ZodError } from 'zod';
 
@@ -49,17 +56,113 @@ function isUserFacingMessage(msg: string): boolean {
 }
 
 /**
+ * `validate_doc_update` reasons are English and written for developers ("Only warehouse
+ * staff, … can approve requisition_tickets"), so staff get a Thai sentence for the kind of
+ * refusal instead of the raw reason.
+ */
+function describePolicyReason(reason: string | undefined): string {
+	const text = reason ?? '';
+	if (/^Only .+ can /i.test(text)) {
+		return 'บัญชีนี้ไม่มีสิทธิ์ทำรายการนี้ หากต้องทำรายการนี้ กรุณาติดต่อผู้จัดการศูนย์หรือผู้ดูแลระบบ';
+	}
+	if (/must match the current actor/i.test(text)) {
+		return 'ข้อมูลผู้ทำรายการไม่ตรงกับบัญชีที่เข้าสู่ระบบ กรุณาออกจากระบบแล้วเข้าใหม่ จากนั้นลองอีกครั้ง';
+	}
+	if (/Illegal .* transition|Same-status/i.test(text)) {
+		return 'สถานะของใบเบิกจ่ายเปลี่ยนไปแล้ว กรุณาโหลดข้อมูลล่าสุดแล้วลองใหม่';
+	}
+	return 'ระบบปฏิเสธการบันทึกเอกสารตามนโยบายความปลอดภัย';
+}
+
+/** Fixed Thai copy for a refused loan reopen (the workflow messages are developer-facing English). */
+function describeLoanReopenRejection(err: BulkReturnLoanReopenError): string {
+	switch (err.reason) {
+		case 'loan_not_revertable':
+			if (err.loanStatus === 'lost')
+				return 'ใบยืมนี้ถูกปิดเป็นสูญหายไปแล้ว จึงเปิดยอดยืมกลับไม่ได้';
+			if (err.loanStatus === 'waived')
+				return 'ใบยืมนี้ถูกปิดเป็นยกเว้นการคืนไปแล้ว จึงเปิดยอดยืมกลับไม่ได้';
+			return 'ใบยืมนี้เปลี่ยนไปแล้ว จึงเปิดยอดยืมกลับไม่ได้ กรุณารีเฟรชเพื่อดูสถานะล่าสุด';
+		case 'not_in_snapshot':
+			return 'รายการนี้ไม่ได้อยู่ในยอดที่ส่งของกองนี้ จึงเปิดยอดยืมกลับไม่ได้ กรุณาย้ายรายการไปกองอื่นแทน';
+		case 'no_applied_loan':
+			return 'รายการนี้ไม่มียอดยืมที่ถูกตัด (ไม่ได้ตัด หรือเปิดกลับไปแล้ว) จึงไม่มียอดยืมให้เปิดกลับ';
+		case 'reason_required':
+			return 'กรุณาระบุเหตุผลในการเปิดยอดยืมกลับ';
+		case 'entry_not_found':
+			return 'ไม่พบรายการนี้ กรุณารีเฟรชเพื่อดูสถานะล่าสุด';
+	}
+}
+
+/**
  * Formats an unknown error into a safe, human-friendly user message.
  * Strictly prevents exposure of CouchDB internals, VDU logic, stack traces, and database identifiers,
  * while preserving safe typed domain/application validation and workflow messages.
  */
 export function formatDistributionError(
 	err: unknown,
-	fallbackMessage = 'เกิดข้อผิดพลาดในการทำรายการ กรุณาลองใหม่อีกครั้ง'
+	fallbackMessage = 'เกิดข้อผิดพลาดในการทำรายการ กรุณาลองใหม่อีกครั้ง',
+	options?: { poolContext?: 'intake' | 'manage' | 'reopen' }
 ): string {
 	if (!err) return fallbackMessage;
 
 	// 1. Distribution Workflow Typed Errors
+	// Bulk return pool v3 errors first: NameTaken / LoanReopen extend WorkflowValidationError, and
+	// these workflow messages are developer-facing English, so they always map to fixed Thai copy.
+	if (err instanceof BulkReturnLoanReopenError) {
+		return describeLoanReopenRejection(err);
+	}
+	if (err instanceof BulkReturnPoolNameTakenError) {
+		return 'มีกองที่เปิดรับอยู่ใช้ชื่อนี้แล้ว กรุณาตั้งชื่ออื่น';
+	}
+	if (err instanceof BulkReturnPoolStateError) {
+		if (options?.poolContext === 'reopen') {
+			if (err.reason === 'not_submitted') {
+				return 'กองนี้ยังเปิดรับอยู่ จึงเปิดยอดยืมกลับไม่ได้ ให้ยกเลิกรายการแทน';
+			}
+			if (err.reason === 'closed') {
+				return 'กองนี้ถูกยกเลิกแล้ว จึงไม่มียอดยืมให้เปิดกลับ';
+			}
+			if (err.reason === 'not_found') {
+				return 'ไม่พบกองนี้ กรุณารีเฟรชเพื่อดูสถานะล่าสุด';
+			}
+		}
+		if (err.reason === 'closed') {
+			return (options?.poolContext ?? 'manage') === 'intake'
+				? 'กองนี้ปิดรับของแล้ว กรุณาเลือกกองอื่น'
+				: 'กองนี้ไม่ได้เปิดรับแล้ว (ส่งเข้าคลัง ตรวจรับ หรือยกเลิกไปแล้ว) จึงทำรายการนี้ไม่ได้ กรุณารีเฟรชเพื่อดูสถานะล่าสุด';
+		}
+		if (err.reason === 'source_closed') {
+			return 'ย้ายรายการนี้ไม่ได้ เพราะกองที่รายการอยู่ถูกส่งเข้าคลังแล้ว และรายการนี้นับรวมในยอดที่ส่งแล้ว กรุณารีเฟรชเพื่อดูสถานะล่าสุด';
+		}
+		if (err.reason === 'not_submitted') {
+			return 'กองนี้ยังไม่ได้ส่งเข้าคลัง จึงยังตรวจรับไม่ได้ กรุณารีเฟรชเพื่อดูสถานะล่าสุด';
+		}
+		if (err.reason === 'conflict') {
+			return 'กองนี้ถูกตรวจรับไปแล้วด้วยยอดที่ต่างจากที่ส่งมา กรุณารีเฟรชแล้วลองใหม่อีกครั้ง';
+		}
+		if (err.reason === 'locked') {
+			return 'กองนี้กำลังถูกส่งเข้าคลังหรือยกเลิกอยู่ กรุณารอสักครู่แล้วลองอีกครั้ง';
+		}
+		return 'กองนี้ไม่ได้อยู่ในสถานะเปิดรับ หรือกำลังถูกดำเนินการอยู่ จึงทำรายการนี้ไม่ได้ กรุณารีเฟรชแล้วตรวจสอบสถานะล่าสุด';
+	}
+	if (err instanceof BulkReturnPoolLockTimeoutError) {
+		if (err.blockingPoolId) {
+			return 'มีกองอื่นที่เกี่ยวข้องกำลังถูกส่งเข้าคลังอยู่ กรุณารอสักครู่แล้วลองอีกครั้ง';
+		}
+		return 'กองนี้กำลังถูกส่งเข้าคลังหรือยกเลิกอยู่ ระบบยังยืนยันรายการไม่ได้ กรุณารอสักครู่แล้วลองอีกครั้ง';
+	}
+	if (err instanceof BulkReturnPoolNotEmptyError) {
+		return 'ยกเลิกกองไม่ได้ เพราะยังมีรายการอยู่ในกอง กรุณาย้ายของออกให้หมดก่อน';
+	}
+	if (err instanceof BulkReturnPoolEmptyError) {
+		return 'กองนี้ไม่มีรายการ จึงเก็บเข้าคลังไม่ได้ กรุณายกเลิกกองแทน';
+	}
+	if (err instanceof DistributionDataIntegrityError) {
+		const ids = err.docIds.filter(Boolean).join(', ');
+		return `พบเอกสารที่ข้อมูลไม่ถูกต้อง (${ids || `${err.docIds.length} รายการ`}) — ติดต่อผู้ดูแลระบบก่อนทำรายการต่อ`;
+	}
+
 	if (err instanceof WorkflowValidationError || err instanceof ReservationSemanticMismatchError) {
 		if (err.message && isUserFacingMessage(err.message) && !isUnsafeRawMessage(err.message)) {
 			return err.message;
@@ -98,10 +201,10 @@ export function formatDistributionError(
 
 	if (err instanceof CouchDocumentPolicyError) {
 		const reason = err.reason || err.message;
-		if (reason && !isUnsafeRawMessage(reason)) {
+		if (reason && isUserFacingMessage(reason) && !isUnsafeRawMessage(reason)) {
 			return `ระบบปฏิเสธเอกสาร: ${reason}`;
 		}
-		return 'ระบบปฏิเสธการบันทึกเอกสารตามนโยบายความปลอดภัย';
+		return describePolicyReason(reason);
 	}
 
 	if (err instanceof AuthError || isPouchError(err, 401) || isPouchError(err, 403)) {

@@ -10,6 +10,7 @@
  * Pure: no I/O, no Svelte. Safe to import from `+server.ts`.
  */
 import { z } from 'zod';
+import { isThaiMobilePhone } from '$lib/db/model';
 import type { components } from '$lib/api/openapi';
 import {
 	dormFieldsFor,
@@ -21,6 +22,12 @@ import {
 	type UnifiedRegistrationParsed
 } from '$lib/features/people/server';
 import { NETWORK_ERROR_MESSAGE } from './booking';
+import {
+	planPublicConsent,
+	publicConsentShape,
+	refinePublicConsent,
+	type PublicConsentBody
+} from './public-consent';
 
 /** FastAPI create body — derived from OpenAPI (CONVENTIONS §12) + optional join. */
 export type UnassignedRegistrationPayload =
@@ -38,9 +45,11 @@ export const publicUnassignedRegistrationRequestSchema = z
 		household: unifiedRegistrationInputSchema.shape.household,
 		join_match_token: z.string().trim().min(1).nullable().optional(),
 		captchaToken: z.string().trim().optional(),
-		disclaimerAcknowledged: z.boolean().optional()
+		disclaimerAcknowledged: z.boolean().optional(),
+		...publicConsentShape
 	})
 	.superRefine((value, ctx) => {
+		refinePublicConsent(value, ctx);
 		// `.shape.members` skips the unified schema's own superRefine — re-apply member rules (CR-148)
 		value.members.forEach((member, index) => refineMemberRules(member, ctx, ['members', index]));
 		const joining = Boolean(value.join_match_token?.trim());
@@ -55,7 +64,7 @@ export const publicUnassignedRegistrationRequestSchema = z
 			}
 			return;
 		}
-		if (!/^0\d{8,9}$/.test(headPhone.replace(/[-\s]/g, ''))) {
+		if (!isThaiMobilePhone(headPhone)) {
 			ctx.addIssue({
 				code: 'custom',
 				path: ['members', 0, 'phone'],
@@ -90,15 +99,20 @@ function omitBlankEmergency(
  * Public channel: vehicles/assets are not collected (cleared by the form).
  * Medical fields are out of scope for the Mongo queue (#255).
  * Optional `join_registration_id` appends into an existing open reserved household.
+ * Each member carries its id-free consent plan; FastAPI binds the giver and channel (FR-42).
  */
 export function toUnassignedRegistrationPayload(
 	input: UnifiedRegistrationInput | UnifiedRegistrationParsed,
-	options?: { joinRegistrationId?: string | null }
+	options: { joinRegistrationId?: string | null; consent: PublicConsentBody }
 ): UnassignedRegistrationPayload {
 	const parsed =
 		'pets' in (input.household ?? {})
 			? unifiedRegistrationInputSchema.parse(input)
 			: (input as UnifiedRegistrationParsed);
+	const consentPlans = planPublicConsent(options.consent);
+	if (consentPlans.length !== parsed.members.length) {
+		throw new Error('consent does not cover every member');
+	}
 
 	const members = parsed.members.map((member, index) => {
 		const rawPhone = member.phone?.trim();
@@ -119,6 +133,14 @@ export function toUnassignedRegistrationPayload(
 		const religion =
 			member.religion && member.religion !== 'unknown' ? member.religion : member.religion || null;
 		const photo = member.photo?.trim() || null;
+		const { consent, searchExcluded } = consentPlans[index];
+		if (consent.given_by === 'backfill') throw new Error('web consent cannot be backfill');
+		const stamp = {
+			ref: consent.ref,
+			given_at: consent.given_at,
+			notice_version: consent.notice_version,
+			given_by: consent.given_by
+		};
 
 		return {
 			first_name: member.first_name,
@@ -135,12 +157,17 @@ export function toUnassignedRegistrationPayload(
 			...(religion ? { religion } : {}),
 			...memberExtrasFor(member),
 			...(emergency ? { emergency_contact: emergency } : {}),
-			...(photo ? { photo } : {})
+			...(photo ? { photo } : {}),
+			consent:
+				consent.mode === 'basic'
+					? { mode: 'basic' as const, health: false as const, ...stamp }
+					: { mode: 'full' as const, health: consent.health, ...stamp },
+			search_excluded: searchExcluded
 		};
 	});
 
 	const hh = parsed.household;
-	const joinId = options?.joinRegistrationId?.trim();
+	const joinId = options.joinRegistrationId?.trim();
 	return {
 		members,
 		household: {
@@ -183,7 +210,6 @@ export type UnassignedRegistrationErrorCode =
 	| 'SERVER_MISCONFIGURED'
 	| 'DUPLICATE_OPEN_IDENTITY'
 	| 'WRITE_FAILED'
-	| 'DISCLAIMER_REQUIRED'
 	| 'NETWORK_ERROR';
 
 export function unassignedRegistrationErrorMessage(code: string | undefined): string {
@@ -203,8 +229,6 @@ export function unassignedRegistrationErrorMessage(code: string | undefined): st
 		case 'CAPTCHA_REQUIRED':
 		case 'CAPTCHA_FAILED':
 			return 'การยืนยันตัวตนไม่สำเร็จ กรุณาลองใหม่';
-		case 'DISCLAIMER_REQUIRED':
-			return 'กรุณายืนยันการรับทราบเงื่อนไขการใช้งานระบบก่อนส่งข้อมูล';
 		case 'INVALID_INPUT':
 			return 'ข้อมูลไม่ครบหรือไม่ถูกต้อง';
 		case 'NETWORK_ERROR':

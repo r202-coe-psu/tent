@@ -34,6 +34,13 @@
 	 * opens. Picking a job still assigns the walk-in to it either way; only the
 	 * immediate check-in is gated.
 	 *
+	 * Section 1 starts with an optional "ค้นหาคนในศูนย์" box
+	 * (`walk-in-evacuee-search.svelte`, #1062) that copies a picked evacuee of the active
+	 * shelter into the form fields; see `fillFromEvacuee` for the overwrite rule. It is shown only
+	 * to users who pass `canAccessEvacueeRegistration` (SA / SM / registration staff) — the
+	 * volunteer coordinator may open this dialog but must not see evacuee data, and gets the
+	 * plain manual-entry form.
+	 *
 	 * `identity_verified` is left at the domain factory's default (`false`,
 	 * `makeVolunteer`) even though staff are presumably checking an ID card in
 	 * person at the desk — also flagged for the CR (should `source: 'walk_in'`
@@ -57,6 +64,8 @@
 	import { getShelterCode } from '$lib/db/shelter';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
 	import { useShelter } from '$lib/features/shelters';
+	import { authStore } from '$lib/stores/auth.svelte';
+	import { canAccessEvacueeRegistration } from '$lib/auth/roles';
 	import {
 		walkInVolunteerFormSchema,
 		type WalkInVolunteerFormValues
@@ -64,6 +73,8 @@
 	import { shiftKindFor } from '../domain/assign-roster';
 	import { isWithinDutyWindow } from '../domain/duty-window';
 	import { toSkillCode } from '../domain/skill-catalog';
+	import type { WalkInPrefill } from '../domain/walk-in-prefill';
+	import WalkInEvacueeSearch, { type WalkInPick } from './walk-in-evacuee-search.svelte';
 	import JobShiftPicker, { type JobShiftSelection } from './job-shift-picker.svelte';
 	import {
 		useCreateWalkInVolunteer,
@@ -78,6 +89,10 @@
 	const shelterCode = $derived(shelterStore.selectedShelterCode ?? getShelterCode());
 	const shelterQuery = useShelter(() => shelterCode);
 	const shelterLabel = $derived(shelterQuery.data?.name ?? shelterCode);
+	/** The evacuee roster is not VC data (role matrix): only registration staff / SM / SA may search it. */
+	const canSearchEvacuees = $derived(
+		canAccessEvacueeRegistration(authStore.user?.roles ?? [], shelterCode)
+	);
 
 	/**
 	 * Master Data `volunteer_skills`, effective for this shelter (CR-100).
@@ -141,7 +156,7 @@
 					first_name: data.first_name,
 					last_name: data.last_name,
 					nickname: data.nickname || undefined,
-					phone: data.phone,
+					phone: data.phone || null,
 					email: data.email || null,
 					skills: selectedSkills,
 					organization: null,
@@ -184,7 +199,30 @@
 
 	const { form: formData, errors, submitting } = form;
 
+	/** What the last pick wrote, so a second pick does not leave the first person's data behind. */
+	let lastPrefill: WalkInPrefill = {};
+
+	/**
+	 * Copy a picked shelter evacuee into the form (#1062, UI-only — no link, no schema change).
+	 * Overwrite rule: the five identity fields (first/last name, nickname, phone, national_id)
+	 * are overwritten with whatever the evacuee HAS. A field the evacuee lacks keeps what the
+	 * operator typed, but is cleared when it still holds the previous pick's value. `email`,
+	 * skills, job/shift and the check-in box are never touched.
+	 */
+	function fillFromEvacuee({ prefill: next }: WalkInPick) {
+		const stale = (Object.keys(lastPrefill) as (keyof WalkInPrefill)[]).filter(
+			(key) => !(key in next) && $formData[key] === lastPrefill[key]
+		);
+		$formData = {
+			...$formData,
+			...Object.fromEntries(stale.map((key) => [key, ''])),
+			...next
+		};
+		lastPrefill = next;
+	}
+
 	function reset() {
+		lastPrefill = {};
 		$formData = emptyValues();
 		selectedSkills = [];
 		jobShiftSelection = null;
@@ -207,7 +245,9 @@
 >
 	<Dialog.Content class="max-h-[92vh] w-full gap-0 overflow-hidden p-0 sm:max-w-2xl lg:max-w-3xl">
 		<div class="flex items-center gap-2 border-b border-border px-6 py-4 pr-12">
-			<div class="grid h-9 w-9 place-items-center rounded-xl bg-emerald-100 text-emerald-700">
+			<div
+				class="grid h-9 w-9 place-items-center rounded-xl bg-domain-volunteer-subtle text-domain-volunteer-strong"
+			>
 				<Zap class="h-4.5 w-4.5" />
 			</div>
 			<div>
@@ -221,6 +261,9 @@
 		<form method="POST" use:form.enhance class="max-h-[70vh] space-y-6 overflow-y-auto px-6 py-5">
 			<div class="space-y-3">
 				<p class="text-xs font-bold text-foreground">1. ข้อมูลบุคคล (PERSONAL INFO)</p>
+				{#if canSearchEvacuees}
+					<WalkInEvacueeSearch onpick={fillFromEvacuee} {shelterLabel} />
+				{/if}
 				<div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
 					<Form.Field {form} name="first_name">
 						<Form.Control>
@@ -255,7 +298,7 @@
 					<Form.Field {form} name="phone">
 						<Form.Control>
 							{#snippet children({ props })}
-								<Form.Label>เบอร์โทรศัพท์ <span class="text-destructive">*</span></Form.Label>
+								<Form.Label>เบอร์มือถือ (ทางเลือก / Optional)</Form.Label>
 								<Input
 									{...props}
 									bind:value={$formData.phone}
@@ -427,7 +470,7 @@
 			<Button type="button" variant="ghost" onclick={() => (open = false)}>ยกเลิก</Button>
 			<Button
 				type="submit"
-				class="gap-1.5 bg-emerald-600 text-white hover:bg-emerald-700"
+				class="gap-1.5 bg-domain-volunteer-strong text-white hover:bg-domain-volunteer-text"
 				disabled={isPending}
 				onclick={() => form.submit()}
 			>

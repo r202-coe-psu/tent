@@ -32,7 +32,8 @@ export {
 	invalidateTicketWithCollection,
 	invalidateDistributionLogs,
 	invalidateShiftReconciliation,
-	invalidateBulkPools,
+	invalidateBulkPoolsV3,
+	invalidateReturnerOutstandingLoans,
 	invalidateBulkClaims,
 	invalidateInventoryQueries
 } from './query/invalidation';
@@ -46,10 +47,43 @@ export {
 	useDispatchedLotExpiry,
 	useBulkReturnPools,
 	useBulkReturnPool,
-	useBulkReturnClaim,
+	useBulkReturnPoolOverview,
+	useBulkReturnPoolClosedLoanRefs,
+	useBulkReturnPoolMissedLoanRefs,
+	useBulkReturnPoolTimeline,
+	useBulkReturnPoolAppliedLoanRefs,
+	useReturnerOutstandingLoans,
+	useBulkReturnSkippedDocs,
 	useShiftReconciliation,
 	useReturnOperationState
 } from './query/read-queries';
+
+// Bulk return pool v3 mutations (issue #659)
+export {
+	useOpenBulkReturnPool,
+	useUpdateBulkReturnPoolHeader,
+	useAddBulkReturnEntries,
+	useMoveBulkReturnEntry,
+	useApplyMissedBulkReturnLoanRefs,
+	useVoidBulkReturnEntry,
+	useReopenBulkReturnEntryLoans,
+	useCancelBulkReturnPool,
+	useSubmitBulkReturnPool,
+	useReceiveBulkReturnPool,
+	type ApplyMissedBulkReturnLoanRefsMutationInput,
+	type OpenBulkReturnPoolMutationInput,
+	type UpdateBulkReturnPoolHeaderMutationInput,
+	type AddBulkReturnEntriesMutationInput,
+	type MoveBulkReturnEntryMutationInput,
+	type VoidBulkReturnEntryMutationInput,
+	type ReopenBulkReturnEntryLoansMutationInput,
+	type CancelBulkReturnPoolMutationInput,
+	type SubmitBulkReturnPoolMutationInput,
+	type ReceiveBulkReturnPoolMutationInput
+} from './query/bulk-pool-v3-mutations';
+
+// Imperative read: which add-entry operationUlids already wrote an entry (retry of a partial save)
+export { findWrittenBulkReturnEntries } from './food-supplies/bulk-return-pool-v3-add-entry';
 
 // Ticket lifecycle mutations (Workflows 1–7)
 export {
@@ -83,12 +117,9 @@ export {
 	useReturnLoanAtCounter,
 	useClearLoanNonPhysical,
 	useCreateBulkReturnPool,
-	useClearLoanViaBulkPool,
 	useAbortAbandonedReturnReservation,
 	type ReturnLoanMutationInput,
 	type ClearLoanMutationInput,
-	type CreateBulkPoolMutationInput,
-	type ClearLoanViaBulkPoolMutationInput,
 	type AbortAbandonedReservationMutationInput
 } from './query/return-mutations';
 

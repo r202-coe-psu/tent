@@ -240,3 +240,20 @@ async def test_granted_call_is_logged_without_cid(
     assert log.result_count == 1
     assert log.module_name is None
     assert CID not in log.model_dump_json()
+
+
+async def test_basic_consent_person_is_not_resident_once_projection_is_deleted(
+    client: AsyncClient, shelters: list[PublicShelter]
+) -> None:
+    """PDPA FR-40 — residency reads only `public_persons`, which the worker deletes for a
+    basic-mode person (worker `test_project_evacuee_basic_consent_deletes_projection`)."""
+    person = await _person(status="room_confirmed")
+    params = {"cid": CID, "purpose": "m2-check"}
+    before = await client.get(URL, params=params, headers=GRANTED)
+    assert before.json()["result"]["location_code"] == "SH001"
+
+    await person.delete()
+
+    response = await client.get(URL, params=params, headers=GRANTED)
+    assert response.status_code == 404
+    assert response.json()["code"] == "residency_not_found"

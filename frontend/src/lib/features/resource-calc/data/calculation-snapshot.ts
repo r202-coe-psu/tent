@@ -3,6 +3,7 @@
  * It resolves every live source once and returns the exact immutable values fed to the engine.
  */
 import { now } from '$lib/db/model';
+import { countInShelter } from '$lib/features/shared';
 import { peopleRepository, type Evacuee } from '$lib/features/people';
 import { operationsRepository } from '$lib/features/operations';
 import { sheltersRepository } from '$lib/features/shelters';
@@ -38,8 +39,12 @@ export interface CalculationSnapshot {
 }
 
 /** Count evacuees physically present in the shelter. */
-export function countActive(evacuees: Evacuee[]): number {
-	return evacuees.filter((evacuee) => evacuee.current_stay?.status === 'active').length;
+/**
+ * `daily_calc.occupancy_snapshot` headcount: evacuees in the shelter (`active` +
+ * `room_confirmed` — draft-in-shelter-headcount; was `active` only under CR-035).
+ */
+export function countOccupancy(evacuees: Evacuee[]): number {
+	return countInShelter(evacuees);
 }
 
 function profileSnapshot(active: SopMaster | SopOverride): CalculationProfileSnapshot {
@@ -102,7 +107,7 @@ export async function loadCalculationSnapshot(shelterCode: string): Promise<Calc
 		as_of: completedAt,
 		formula_v: FORMULA_V,
 		profile: profileSnapshot(active),
-		current_occupancy: countActive(evacuees),
+		current_occupancy: countOccupancy(evacuees),
 		current_ratios: currentRatios,
 		resource_inputs: resources.resource_inputs.map((resource) => ({ ...resource })),
 		stock_snapshot: { ...resources.stock_snapshot }

@@ -22,6 +22,11 @@ export interface BatchLineDraft {
 	expiry: ExpiryState;
 	/** Already in the ledger: shown read-only and never re-sent as a change. */
 	locked: boolean;
+	/**
+	 * Refused at review (CR-174): the reason the donor was given. The line counts as not
+	 * received ('0') and cannot be changed here — the review is not undone at the shelf.
+	 */
+	refused?: string;
 	/** Last write outcome of this line, shown beside it. */
 	error?: string;
 }
@@ -32,16 +37,20 @@ export interface BatchLineDraft {
  * entry's index, so it is stable for as long as the donation's items are.
  */
 export function initialBatchDrafts(donation: Donation): BatchLineDraft[] {
-	return (donation.items ?? []).map((item, index) => ({
-		line_no: index,
-		item_id: item.item_id ?? '',
-		...(item.free_text && !item.item_id ? { free_text: item.free_text } : {}),
-		declared_qty: item.qty,
-		unit: item.unit,
-		qty: item.qty,
-		expiry: initialExpiryState(),
-		locked: false
-	}));
+	return (donation.items ?? []).map((item, index) => {
+		const refused = item.review_status === 'rejected';
+		return {
+			line_no: index,
+			item_id: item.item_id ?? '',
+			...(item.free_text && !item.item_id ? { free_text: item.free_text } : {}),
+			declared_qty: item.qty,
+			unit: item.unit,
+			qty: refused ? '0' : item.qty,
+			expiry: initialExpiryState(),
+			locked: false,
+			...(refused ? { refused: item.review_reason?.trim() ?? '' } : {})
+		};
+	});
 }
 
 /** A line that will become a ledger row. */

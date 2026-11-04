@@ -15,7 +15,11 @@ THIRD_PARTY_SCOPES = (
 	"occupancy-pii-read",
 	# CR-154 (M2): EXT-008–010 booking writes, EXT-011 per-person residency lookup.
 	"booking-write",
+	# #751: EOC override on top of `booking-write` - EXT-008 skips the acceptance rule (sensitive).
+	"booking-bypass",
 	"residency-read",
+	# #736: EXT-012 person search by name / national ID / passport / phone (sensitive).
+	"occupant-search",
 )
 
 

@@ -10,7 +10,10 @@ import {
 	filterRequisitionTickets,
 	sortRequisitionTickets,
 	filterAndSortRequisitionTickets,
-	filterDeskTickets
+	filterDeskTickets,
+	followUpStatusesFor,
+	constrainStatusesToGroup,
+	statusesForGroup
 } from './ticket-filters';
 
 const mockTicket = (
@@ -469,6 +472,70 @@ describe('Ticket Workflow Groups & Filtering (Slice 5.1 §17, §18, §19, §43)'
 			});
 			expect(result).toEqual([]);
 		});
+	});
+});
+
+describe('ticket filter extensions', () => {
+	const tickets = [
+		mockTicket('01', 'PENDING_PICK', { created_at: '2026-09-19T10:00:00.000Z' }),
+		mockTicket('02', 'IN_TRANSIT', { created_at: '2026-09-19T18:00:00.000Z' }),
+		mockTicket('03', 'COMPLETED', { created_at: '2026-09-22T10:00:00.000Z' })
+	];
+	const ids = (list: { _id: string }[]) => list.map((t) => t._id.split(':')[1]);
+
+	it('statuses: empty means no filter, otherwise membership', () => {
+		expect(ids(filterRequisitionTickets(tickets, { groupId: 'all', statuses: [] }))).toHaveLength(
+			3
+		);
+		expect(
+			ids(
+				filterRequisitionTickets(tickets, { groupId: 'all', statuses: ['IN_TRANSIT', 'COMPLETED'] })
+			)
+		).toEqual(['02', '03']);
+	});
+
+	it('created range is inclusive and uses the Thailand calendar day', () => {
+		// 02 is 2026-09-20 01:00 in Thailand although 2026-09-19 in UTC
+		expect(
+			ids(filterRequisitionTickets(tickets, { groupId: 'all', createdFrom: '2026-09-20' }))
+		).toEqual(['02', '03']);
+		expect(
+			ids(filterRequisitionTickets(tickets, { groupId: 'all', createdTo: '2026-09-19' }))
+		).toEqual(['01']);
+		expect(
+			ids(
+				filterRequisitionTickets(tickets, {
+					groupId: 'all',
+					createdFrom: '2026-09-19',
+					createdTo: '2026-09-20'
+				})
+			)
+		).toEqual(['01', '02']);
+	});
+
+	it('followUpStatusesFor unions warehouse and frontline statuses', () => {
+		expect(followUpStatusesFor({ canWarehouse: false, canFrontline: false })).toEqual([]);
+		expect(followUpStatusesFor({ canWarehouse: false, canFrontline: true })).toEqual([
+			'IN_TRANSIT'
+		]);
+		expect(followUpStatusesFor({ canWarehouse: true, canFrontline: false })).toEqual([
+			'PENDING_PICK',
+			'READY_FOR_DISPATCH',
+			'RETURN_PENDING_RECEIPT',
+			'RETURN_COMPLETED'
+		]);
+		expect(followUpStatusesFor({ canWarehouse: true, canFrontline: true })).toHaveLength(5);
+	});
+
+	it('constrainStatusesToGroup drops statuses outside the group', () => {
+		expect(constrainStatusesToGroup(['PENDING_PICK', 'IN_TRANSIT'], 'pending_ready')).toEqual([
+			'PENDING_PICK'
+		]);
+		expect(constrainStatusesToGroup(['PENDING_PICK', 'IN_TRANSIT'], 'all')).toEqual([
+			'PENDING_PICK',
+			'IN_TRANSIT'
+		]);
+		expect(statusesForGroup('completed')).toEqual(['COMPLETED', 'CANCELLED']);
 	});
 });
 

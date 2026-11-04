@@ -33,6 +33,7 @@ export type PortalDepartmentId =
 	| 'security'
 	| 'facility'
 	| 'management'
+	| 'pr'
 	| 'central';
 
 export type PortalIconKey =
@@ -48,6 +49,7 @@ export type PortalIconKey =
 	| 'heart-pulse'
 	| 'house'
 	| 'map-pin'
+	| 'megaphone'
 	| 'monitor'
 	| 'monitor-smartphone'
 	| 'package'
@@ -75,7 +77,8 @@ export type PortalCapability =
 	| 'security_officer'
 	| 'facility_staff'
 	| 'distribution_staff'
-	| 'kiosk_staff';
+	| 'kiosk_staff'
+	| 'pr_staff';
 
 /**
  * Per-shelter feature availability. `null` = not known yet (shelter still loading): items that
@@ -112,8 +115,10 @@ export type PortalDepartment = {
 	label: string;
 	desc: string;
 	/**
-	 * Work-domain colour family for the whole department; every item inherits it (items are told
-	 * apart by icon and station number, never by their own colour).
+	 * Work-domain colour family for the whole department; every portal tile inherits it (tiles are
+	 * told apart by icon and station number, never by their own colour). Station PAGES are the one
+	 * exception — they carry `baseStation` colours so staff can tell สถานี 1/2/3 apart across a
+	 * hall; the tiles here stay on the department colour.
 	 */
 	domain: DomainId;
 	/** Which step of the family is the department accent; defaults to `base`. */
@@ -143,6 +148,7 @@ const SO = 'security_officer';
 const FAC = 'facility_staff';
 const DST = 'distribution_staff';
 const KIO = 'kiosk_staff';
+const PR = 'pr_staff';
 
 export const PORTAL_DEPARTMENTS: readonly PortalDepartment[] = [
 	{
@@ -165,7 +171,7 @@ export const PORTAL_DEPARTMENTS: readonly PortalDepartment[] = [
 			},
 			{
 				id: 'station-2',
-				label: 'คัดกรองการแพทย์',
+				label: 'คัดกรองผู้เข้าพัก',
 				desc: 'คัดกรองอาการและกลุ่มเปราะบางก่อนจัดโซน',
 				icon: 'heart-pulse',
 				href: '/onsite/medical-screening',
@@ -277,6 +283,16 @@ export const PORTAL_DEPARTMENTS: readonly PortalDepartment[] = [
 				desc: 'ใบเบิกจากฝ่ายต่างๆ',
 				icon: 'clipboard-list',
 				href: '/back-office/distribution',
+				scope: 'shelter',
+				roles: [SC]
+			},
+			{
+				// Same queue the kitchen opens tickets into — warehouse approves and dispatches here.
+				id: 'supply-kitchen-requisition',
+				label: 'เบิกวัตถุดิบครัว',
+				desc: 'ใบเบิกวัตถุดิบและเสบียงอาหาร',
+				icon: 'clipboard-check',
+				href: '/back-office/tickets/kitchen',
 				scope: 'shelter',
 				roles: [SC]
 			},
@@ -420,6 +436,25 @@ export const PORTAL_DEPARTMENTS: readonly PortalDepartment[] = [
 				href: '/back-office',
 				scope: 'shelter',
 				roles: []
+			}
+		]
+	},
+	{
+		id: 'pr',
+		label: 'ฝ่ายประชาสัมพันธ์',
+		desc: 'ข่าวสารและประชาสัมพันธ์บนตู้ Kiosk ของศูนย์',
+		// Own gold family (CR-203): the other 7 families each belong to a department.
+		domain: 'pr',
+		icon: 'megaphone',
+		items: [
+			{
+				id: 'kiosk-banners',
+				label: 'ข่าวสารบน Kiosk',
+				desc: 'จัดการแบนเนอร์ประชาสัมพันธ์บนตู้ Kiosk',
+				icon: 'megaphone',
+				href: '/back-office/kiosks/banners',
+				scope: 'shelter',
+				roles: [PR]
 			}
 		]
 	},

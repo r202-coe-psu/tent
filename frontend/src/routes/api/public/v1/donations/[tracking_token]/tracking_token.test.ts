@@ -17,13 +17,6 @@ vi.mock('$lib/server/couch-public-writer', () => ({
 	putAsPublicWriter: vi.fn()
 }));
 
-vi.mock('$lib/server/security/rate-limiter', () => ({
-	donationIpLimiter: { check: vi.fn(() => true) },
-	donationPhoneLimiter: { check: vi.fn(() => true) },
-	donationEditLimiter: { check: vi.fn(() => true) },
-	donationReadLimiter: { check: vi.fn(() => true) }
-}));
-
 vi.mock('$env/dynamic/private', () => ({
 	env: {
 		FASTAPI_INTERNAL_URL: 'http://localhost:9000',
@@ -160,6 +153,271 @@ describe('GET & PATCH & DELETE /api/public/v1/donations/[tracking_token]', () =>
 		expect(data.donation.status).toBe('received');
 		expect(data.donation.received_summary?.shortfalls).toHaveLength(1);
 		expect(data.donation.received_summary?.shortfalls[0].short).toBe('2');
+	});
+
+	it('GET does not pass the campaign_id FastAPI holds on a booking CouchDB has not seen', async () => {
+		vi.stubGlobal(
+			'fetch',
+			vi.fn().mockResolvedValue({
+				ok: true,
+				status: 200,
+				json: async () => ({
+					success: true,
+					donation: {
+						status: 'declared',
+						booking_ref: 'DN-999999',
+						shelter_code: 'SH001',
+						campaign_id: 'donation_campaign:c1',
+						donor: { name: 'S***' },
+						items: [{ free_text: 'ข้าวสาร', qty: '10', unit: 'kg' }],
+						logistics: { delivery_method: 'self_dropoff' },
+						received_summary: null,
+						updated_at: '2026-01-01T00:00:00Z'
+					}
+				})
+			})
+		);
+		vi.mocked(adminRaw).mockResolvedValue({ status: 404, data: {} });
+
+		const response = await GET({
+			params: { tracking_token: TOKEN },
+			getClientAddress: () => '127.0.0.1'
+		} as unknown as GetEvent);
+
+		const data = await response.json();
+		expect(response.status).toBe(200);
+		expect(data.donation.booking_ref).toBe('DN-999999');
+		expect(data.donation).not.toHaveProperty('campaign_id');
+	});
+
+	describe('vehicle plate never leaves through tracking (CR-209 FR-4)', () => {
+		const PLATE = 'กข 1234 กรุงเทพมหานคร';
+		const plateLogistics = {
+			delivery_method: 'self_dropoff',
+			vehicle: 'car',
+			vehicle_plate: PLATE,
+			slot: { date: '2026-11-01', from: '09:00', to: '10:00' }
+		};
+
+		function fastapiReturns(donation: Record<string, unknown>) {
+			vi.stubGlobal(
+				'fetch',
+				vi.fn().mockResolvedValue({
+					ok: true,
+					status: 200,
+					json: async () => ({ success: true, donation })
+				})
+			);
+		}
+
+		it('drops vehicle_plate from the CouchDB doc', async () => {
+			fastapiReturns({ status: 'declared', booking_ref: 'DN-999999', items: [] });
+			vi.mocked(adminRaw).mockImplementation((path: string, method: string) => {
+				if (method === 'GET' && path.includes('_all_docs')) {
+					return Promise.resolve({
+						status: 200,
+						data: { rows: [{ doc: { ...mockDonation, logistics: plateLogistics } }] }
+					});
+				}
+				return Promise.resolve({ status: 404, data: {} });
+			});
+
+			const response = await GET({
+				params: { tracking_token: TOKEN },
+				getClientAddress: () => '127.0.0.1'
+			} as unknown as GetEvent);
+
+			const body = await response.json();
+			expect(response.status).toBe(200);
+			expect(body.donation.logistics).toEqual({
+				delivery_method: 'self_dropoff',
+				vehicle: 'car',
+				slot: { date: '2026-11-01', from: '09:00', to: '10:00' }
+			});
+			expect(JSON.stringify(body)).not.toContain(PLATE);
+		});
+
+		it('drops vehicle_plate from the FastAPI fallback (not yet in CouchDB)', async () => {
+			fastapiReturns({
+				status: 'declared',
+				booking_ref: 'DN-999999',
+				items: [],
+				logistics: plateLogistics
+			});
+			vi.mocked(adminRaw).mockResolvedValue({ status: 404, data: {} });
+
+			const response = await GET({
+				params: { tracking_token: TOKEN },
+				getClientAddress: () => '127.0.0.1'
+			} as unknown as GetEvent);
+
+			const body = await response.json();
+			expect(response.status).toBe(200);
+			expect(body.donation.logistics).not.toHaveProperty('vehicle_plate');
+			expect(body.donation.logistics.vehicle).toBe('car');
+			expect(JSON.stringify(body)).not.toContain(PLATE);
+		});
+	});
+
+	describe('donor contact never leaves through tracking', () => {
+		it('sends only the name and a masked phone from the CouchDB doc', async () => {
+			vi.stubGlobal(
+				'fetch',
+				vi.fn().mockResolvedValue({
+					ok: true,
+					status: 200,
+					json: async () => ({ success: true, donation: { status: 'declared', items: [] } })
+				})
+			);
+			vi.mocked(adminRaw).mockImplementation((path: string, method: string) => {
+				if (method === 'GET' && path.includes('_all_docs')) {
+					return Promise.resolve({
+						status: 200,
+						data: {
+							rows: [
+								{
+									doc: {
+										...mockDonation,
+										donor: { ...mockDonation.donor, line_id: 'secretline' }
+									}
+								}
+							]
+						}
+					});
+				}
+				return Promise.resolve({ status: 404, data: {} });
+			});
+
+			const response = await GET({
+				params: { tracking_token: TOKEN },
+				getClientAddress: () => '127.0.0.1'
+			} as unknown as GetEvent);
+
+			const body = await response.json();
+			expect(body.donation.donor).toEqual({ name: 'Secret Donor', phone_masked: '***-***-5678' });
+			const raw = JSON.stringify(body);
+			for (const secret of ['0812345678', 'abc', 'secret@donor.com', 'secretline']) {
+				expect(raw).not.toContain(secret);
+			}
+		});
+
+		it('drops LINE and email from the FastAPI fallback too', async () => {
+			vi.stubGlobal(
+				'fetch',
+				vi.fn().mockResolvedValue({
+					ok: true,
+					status: 200,
+					json: async () => ({
+						success: true,
+						donation: {
+							status: 'declared',
+							items: [],
+							donor: {
+								name: 'Buffer Donor',
+								phone_masked: '***-***-1111',
+								line_id: 'bufferline',
+								email: 'buffer@donor.com'
+							}
+						}
+					})
+				})
+			);
+			vi.mocked(adminRaw).mockResolvedValue({ status: 404, data: {} });
+
+			const response = await GET({
+				params: { tracking_token: TOKEN },
+				getClientAddress: () => '127.0.0.1'
+			} as unknown as GetEvent);
+
+			const body = await response.json();
+			expect(body.donation.donor).toEqual({ name: 'Buffer Donor', phone_masked: '***-***-1111' });
+		});
+	});
+
+	// CR-172 FR-14 — the reason staff gave reaches the donor before the projection catches up.
+	it('GET passes the reject reason through, from CouchDB over the projection', async () => {
+		vi.stubGlobal(
+			'fetch',
+			vi.fn().mockResolvedValue({
+				ok: true,
+				status: 200,
+				json: async () => ({
+					success: true,
+					donation: {
+						status: 'pending_review',
+						shelter_code: 'SH001',
+						items: [],
+						reject_reason: null,
+						updated_at: '2026-01-01T00:00:00Z'
+					}
+				})
+			})
+		);
+		vi.mocked(adminRaw).mockImplementation((path: string, method: string) => {
+			if (method === 'GET' && path.includes('/shelter_sh001/') && path.includes('_all_docs')) {
+				return Promise.resolve({
+					status: 200,
+					data: {
+						rows: [
+							{
+								doc: {
+									...mockDonation,
+									status: 'rejected',
+									reject_reason: 'หมดอายุ',
+									reject_reason_code: 'expired'
+								}
+							}
+						]
+					}
+				});
+			}
+			return Promise.resolve({ status: 404, data: {} });
+		});
+
+		const response = await GET({
+			params: { tracking_token: TOKEN },
+			getClientAddress: () => '127.0.0.1'
+		} as unknown as GetEvent);
+
+		const data = await response.json();
+		expect(data.donation).toMatchObject({
+			status: 'rejected',
+			reject_reason: 'หมดอายุ',
+			reject_reason_code: 'expired'
+		});
+	});
+
+	it('GET never hands the donor the photo ids, even once the booking is in CouchDB (CR-175 FR-14)', async () => {
+		vi.stubGlobal(
+			'fetch',
+			vi.fn().mockResolvedValue({
+				ok: true,
+				status: 200,
+				json: async () => ({ success: true, donation: { status: 'pending_review', items: [] } })
+			})
+		);
+		vi.mocked(adminRaw).mockImplementation((path: string, method: string) =>
+			Promise.resolve(
+				method === 'GET' && path.includes('/shelter_sh001/') && path.includes('_all_docs')
+					? {
+							status: 200,
+							data: {
+								rows: [{ doc: { ...mockDonation, photos: ['image:01K8PHXTX00000000000000001'] } }]
+							}
+						}
+					: { status: 404, data: {} }
+			)
+		);
+
+		const response = await GET({
+			params: { tracking_token: TOKEN },
+			getClientAddress: () => '127.0.0.1'
+		} as unknown as GetEvent);
+
+		const data = await response.json();
+		expect(data.success).toBe(true);
+		expect(data.donation).not.toHaveProperty('photos');
+		expect(JSON.stringify(data)).not.toContain('image:');
 	});
 
 	it('PATCH updates the courier tracking number in CouchDB', async () => {
@@ -308,6 +566,10 @@ describe('GET & PATCH & DELETE /api/public/v1/donations/[tracking_token]', () =>
 					data: { rows: [{ doc: mockDonation }] }
 				});
 			}
+			// No goods of this booking in stock yet.
+			if (method === 'POST' && path.endsWith('/_find')) {
+				return Promise.resolve({ status: 200, data: { docs: [] } });
+			}
 			return Promise.resolve({ status: 404, data: {} });
 		});
 		vi.mocked(putAsPublicWriter).mockResolvedValue({ status: 201, data: { ok: true } });
@@ -324,6 +586,162 @@ describe('GET & PATCH & DELETE /api/public/v1/donations/[tracking_token]', () =>
 		expect(putAsPublicWriter).toHaveBeenCalled();
 		const [, , savedDoc] = vi.mocked(putAsPublicWriter).mock.calls[0]!;
 		expect((savedDoc as PublicDonationDoc).status).toBe('cancelled');
+	});
+
+	it('DELETE refuses once goods of the booking are in stock (owner decision 2026-10-22)', async () => {
+		vi.mocked(adminRaw).mockImplementation((path: string, method: string) => {
+			if (method === 'GET' && path.includes('/shelter_sh001/') && path.includes('_all_docs')) {
+				return Promise.resolve({ status: 200, data: { rows: [{ doc: mockDonation }] } });
+			}
+			if (method === 'POST' && path.endsWith('/_find')) {
+				return Promise.resolve({ status: 200, data: { docs: [{ _id: 'stock_ledger:1' }] } });
+			}
+			return Promise.resolve({ status: 404, data: {} });
+		});
+
+		const response = await DELETE({
+			params: { tracking_token: TOKEN },
+			getClientAddress: () => '127.0.0.1'
+		} as unknown as DeleteEvent);
+
+		expect(response.status).toBe(409);
+		expect((await response.json()).error).toBe('GOODS_IN_STOCK');
+		expect(putAsPublicWriter).not.toHaveBeenCalled();
+	});
+
+	// CR-206 FR-MP-17 / FR-MP-17a / AC-17 — a point that turned every line away keys no
+	// ledger row, yet the booking has started: the cancel is refused all the same.
+	it('DELETE refuses once a drop-off point recorded a receipt, with no stock row (AC-17)', async () => {
+		const started = {
+			...mockDonation,
+			status: 'verifying',
+			point_receipts: [
+				{
+					point_id: 'point-gym',
+					line_nos: [0],
+					received_at: '2026-10-28T02:12:00Z',
+					received_by: 'staff1',
+					audit_id: 'audit:x',
+					ledger_ids: [],
+					items: [{ line_no: 0, qty: '0', unit: 'kg', rejected: true }]
+				}
+			]
+		};
+		vi.mocked(adminRaw).mockImplementation((path: string, method: string) => {
+			if (method === 'GET' && path.includes('/shelter_sh001/') && path.includes('_all_docs')) {
+				return Promise.resolve({ status: 200, data: { rows: [{ doc: started }] } });
+			}
+			if (method === 'POST' && path.endsWith('/_find')) {
+				return Promise.resolve({ status: 200, data: { docs: [] } });
+			}
+			return Promise.resolve({ status: 404, data: {} });
+		});
+
+		const response = await DELETE({
+			params: { tracking_token: TOKEN },
+			getClientAddress: () => '127.0.0.1'
+		} as unknown as DeleteEvent);
+
+		expect(response.status).toBe(409);
+		expect((await response.json()).error).toBe('GOODS_IN_STOCK');
+		expect(putAsPublicWriter).not.toHaveBeenCalled();
+	});
+
+	// CR-206 §Change — the donor sees point, lines and time; not who recorded or which rows.
+	it('GET returns the point receipts of the CouchDB doc without staff or stock ids', async () => {
+		vi.stubGlobal(
+			'fetch',
+			vi.fn().mockResolvedValue({
+				ok: true,
+				status: 200,
+				json: async () => ({ success: true, donation: { status: 'verifying', point_receipts: [] } })
+			})
+		);
+		vi.mocked(adminRaw).mockImplementation((path: string, method: string) => {
+			if (method === 'GET' && path.includes('/shelter_sh001/') && path.includes('_all_docs')) {
+				return Promise.resolve({
+					status: 200,
+					data: {
+						rows: [
+							{
+								doc: {
+									...mockDonation,
+									status: 'verifying',
+									items: [
+										{ free_text: 'น้ำดื่ม', qty: '24', unit: 'ขวด', drop_off_point_id: 'point-gym' }
+									],
+									received_summary: {
+										total_items: 1,
+										received_at: '2026-10-28T02:12:00Z',
+										closed_by: 'สมศรี',
+										remarks: 'internal summary remark',
+										closed_reason: 'all_points',
+										items: [{ free_text: 'น้ำดื่ม', qty: '24', unit: 'ขวด' }]
+									},
+									point_receipts: [
+										{
+											point_id: 'point-gym',
+											line_nos: [0],
+											received_at: '2026-10-28T02:12:00Z',
+											received_by: 'staff1',
+											audit_id: 'audit:x',
+											ledger_ids: ['stock_ledger:1'],
+											items: [{ line_no: 0, qty: '24', unit: 'ขวด' }],
+											remarks: 'internal'
+										}
+									]
+								}
+							}
+						]
+					}
+				});
+			}
+			return Promise.resolve({ status: 404, data: {} });
+		});
+
+		const response = await GET({
+			params: { tracking_token: TOKEN },
+			getClientAddress: () => '127.0.0.1'
+		} as unknown as GetEvent);
+		const data = await response.json();
+
+		expect(data.donation.items[0].drop_off_point_id).toBe('point-gym');
+		expect(data.donation.point_receipts).toEqual([
+			{ point_id: 'point-gym', line_nos: [0], received_at: '2026-10-28T02:12:00Z' }
+		]);
+		// The closing staff member's name stays in CouchDB (decision sync 2026-10-30).
+		expect(data.donation.received_summary).toMatchObject({ closed_reason: 'all_points' });
+		expect(data.donation.received_summary).not.toHaveProperty('closed_by');
+		// The point receipts' remarks, joined into the summary at close, are staff's too.
+		expect(data.donation.received_summary).not.toHaveProperty('remarks');
+		expect(JSON.stringify(data)).not.toContain('internal');
+	});
+
+	it('GET falls back to the projection receipts before the doc reaches CouchDB', async () => {
+		vi.stubGlobal(
+			'fetch',
+			vi.fn().mockResolvedValue({
+				ok: true,
+				status: 200,
+				json: async () => ({
+					success: true,
+					donation: {
+						status: 'verifying',
+						point_receipts: [{ point_id: null, line_nos: [1], received_at: '2026-10-28T03:00:00Z' }]
+					}
+				})
+			})
+		);
+		vi.mocked(adminRaw).mockResolvedValue({ status: 200, data: { rows: [] } });
+
+		const response = await GET({
+			params: { tracking_token: TOKEN },
+			getClientAddress: () => '127.0.0.1'
+		} as unknown as GetEvent);
+
+		expect((await response.json()).donation.point_receipts).toEqual([
+			{ point_id: null, line_nos: [1], received_at: '2026-10-28T03:00:00Z' }
+		]);
 	});
 
 	it('DELETE falls back to FastAPI when donation is not yet in CouchDB', async () => {
@@ -462,5 +880,83 @@ describe('GET & PATCH & DELETE /api/public/v1/donations/[tracking_token]', () =>
 		const data = await response.json();
 		expect(response.status).toBe(400);
 		expect(data.success).toBe(false);
+	});
+
+	// A CouchDB failure used to read as "not synced yet": courier edits and cancels went to
+	// FastAPI, which answered that the booking was syncing.
+	describe('when CouchDB cannot be read', () => {
+		const couchDown = () =>
+			vi.mocked(adminRaw).mockResolvedValue({ status: 500, data: { error: 'unknown_error' } });
+
+		it('PATCH answers 503 and leaves FastAPI alone', async () => {
+			couchDown();
+			vi.stubGlobal('fetch', vi.fn());
+
+			const response = await PATCH({
+				params: { tracking_token: TOKEN },
+				request: { json: () => Promise.resolve({ courier_tracking_no: 'TH111222' }) },
+				getClientAddress: () => '127.0.0.1'
+			} as unknown as PatchEvent);
+
+			expect(response.status).toBe(503);
+			expect((await response.json()).error).toBe('DONATION_UNAVAILABLE');
+			expect(fetch).not.toHaveBeenCalled();
+			expect(putAsPublicWriter).not.toHaveBeenCalled();
+		});
+
+		it('DELETE answers 503 and leaves FastAPI alone', async () => {
+			couchDown();
+			vi.stubGlobal('fetch', vi.fn());
+
+			const response = await DELETE({
+				params: { tracking_token: TOKEN },
+				getClientAddress: () => '127.0.0.1'
+			} as unknown as DeleteEvent);
+
+			expect(response.status).toBe(503);
+			expect((await response.json()).error).toBe('DONATION_UNAVAILABLE');
+			expect(fetch).not.toHaveBeenCalled();
+			expect(putAsPublicWriter).not.toHaveBeenCalled();
+		});
+
+		it('DELETE answers 503 when only the stock check fails', async () => {
+			vi.mocked(adminRaw).mockImplementation((path: string, method: string) => {
+				if (method === 'GET' && path.includes('_all_docs')) {
+					return Promise.resolve({ status: 200, data: { rows: [{ doc: mockDonation }] } });
+				}
+				return Promise.resolve({ status: 500, data: { error: 'unknown_error' } });
+			});
+
+			const response = await DELETE({
+				params: { tracking_token: TOKEN },
+				getClientAddress: () => '127.0.0.1'
+			} as unknown as DeleteEvent);
+
+			expect(response.status).toBe(503);
+			expect(putAsPublicWriter).not.toHaveBeenCalled();
+		});
+
+		it('GET still answers from FastAPI — the CouchDB overlay is optional', async () => {
+			couchDown();
+			vi.stubGlobal(
+				'fetch',
+				vi.fn().mockResolvedValue({
+					ok: true,
+					status: 200,
+					json: async () => ({
+						success: true,
+						donation: { status: 'declared', booking_ref: 'DN-999999', items: [] }
+					})
+				})
+			);
+
+			const response = await GET({
+				params: { tracking_token: TOKEN },
+				getClientAddress: () => '127.0.0.1'
+			} as unknown as GetEvent);
+
+			expect(response.status).toBe(200);
+			expect((await response.json()).donation.status).toBe('declared');
+		});
 	});
 });

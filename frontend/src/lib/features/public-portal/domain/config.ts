@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import type { CatalogDoc } from '$lib/db/model';
+import { footerLogoSchema, type FooterLogo } from './footer-logo';
 
 export const faqItemSchema = z.object({
 	id: z.string().optional(),
@@ -26,7 +27,9 @@ export const publicConfigSchema = z
 		schema_v: z.literal(1),
 		created_at: z.string().datetime(),
 		updated_at: z.string().datetime(),
-		created_by: z.string().min(1)
+		created_by: z.string().min(1),
+		// Not in the body schema: the FAQ/social save never writes it (FR-10).
+		footer_logos: z.array(footerLogoSchema).optional()
 	})
 	.merge(publicConfigBodySchema);
 
@@ -34,4 +37,5 @@ export type FaqItem = z.infer<typeof faqItemSchema>;
 export type PublicConfigBody = z.infer<typeof publicConfigBodySchema>;
 export interface PublicConfigDoc extends CatalogDoc, PublicConfigBody {
 	type: 'config';
+	footer_logos?: FooterLogo[];
 }

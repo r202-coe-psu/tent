@@ -36,9 +36,8 @@ export function computeNeeds(
 	const campaignRemaining = new Map<string, Map<string, string>>();
 
 	// Same terms as the back-office board (deriveNeedAvailability): what the shelter
-	// already holds plus what is still owed to it. Deliberately not `calculateReserved` —
-	// that one attributes a donation with no campaign_id to every campaign and guesses an
-	// item_id from free text, both of which this side dropped on purpose.
+	// already holds plus what is still owed to it. Both sides count a donation only
+	// against its own campaign_id and skip lines without an item_id (#689).
 	const onHand = stockBalance(stockLedgers);
 	const keyed = keyedDonationIds(stockLedgers);
 	const recorded = recordedDonationQty(stockLedgers);
@@ -87,6 +86,37 @@ export function computeNeeds(
 
 /** What a donation asks for, as far as campaign selection is concerned. */
 export type RequestedItem = { item_id?: string | null; qty: string | number };
+
+/** A line of the request, with the point of the board card it came from (FR-AP-7a). */
+export type CardRequestedItem = RequestedItem & { need_drop_off_point_id?: string | null };
+
+type CampaignNeedPoints = {
+	needs: readonly { item_id: string; drop_off_point_id?: string | null }[];
+};
+
+/**
+ * Keep only the campaigns that match every card the donor pressed (staff-assigned drop-off
+ * FR-AP-7b). A line that carries `need_drop_off_point_id` names a card = item + point; the
+ * campaign must have a need with that `item_id` and that `drop_off_point_id` (no key reads
+ * as `null`, `null` matches `null`). A booking never moves to another point's campaign
+ * (D-AP-17). No line carries the key (old client, donor's own items) → every campaign stays.
+ */
+export function filterCampaignsByCards<C extends CampaignNeedPoints>(
+	campaigns: readonly C[],
+	items: readonly CardRequestedItem[]
+): C[] {
+	const cards = items.filter((it) => !!it.item_id && it.need_drop_off_point_id !== undefined);
+	if (cards.length === 0) return [...campaigns];
+	return campaigns.filter((campaign) =>
+		cards.every((card) =>
+			campaign.needs.some(
+				(need) =>
+					need.item_id === card.item_id &&
+					(need.drop_off_point_id ?? null) === (card.need_drop_off_point_id ?? null)
+			)
+		)
+	);
+}
 
 export type CampaignPick = { ok: true; campaignId: string | null } | { ok: false; itemId: string };
 

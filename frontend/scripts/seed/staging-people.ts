@@ -136,7 +136,8 @@ function buildShelterPeople(
 						registered_via: p.registered_via,
 						country: 'THAILAND'
 					},
-					ctx
+					ctx,
+					null
 				),
 				_id: `evacuee:${evId}`
 			};

@@ -15,11 +15,15 @@ vi.mock('../application/kiosk-banner.queries', () => ({
 
 vi.mock('svelte-sonner', () => ({ toast: { success: toastSuccess } }));
 
-const banner = (id: string, over: Partial<KioskBannerSummary> = {}): KioskBannerSummary => ({
+const banner = (
+	id: string,
+	over: Partial<Omit<KioskBannerSummary, 'schema_v'>> = {}
+): KioskBannerSummary => ({
 	_id: `kiosk_banner:${id}`,
 	_rev: `1-${id}`,
 	type: 'kiosk_banner',
-	schema_v: 1,
+	schema_v: 2,
+	group_id: 'kiosk_banner_group:A',
 	shelter_code: 'SH001',
 	title: `แบนเนอร์ ${id}`,
 	caption: null,

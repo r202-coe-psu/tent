@@ -3,10 +3,6 @@ import { POST } from './+server';
 
 type PostEvent = Parameters<typeof POST>[0];
 
-vi.mock('$lib/server/security/rate-limiter', () => ({
-	donationIpLimiter: { check: vi.fn(() => true) }
-}));
-
 vi.mock('$env/dynamic/private', () => ({
 	env: {
 		FASTAPI_INTERNAL_URL: 'http://localhost:9000',

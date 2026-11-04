@@ -19,4 +19,25 @@ read-side FastAPI changes). Never decrement it. Bumping costs one full bootstrap
 per deploy, so batch related projector changes into one bump per release when possible.
 """
 
-PROJECTION_VERSION: int = 5
+#: 6 — CR-185 (``public_jobs.is_urgent``, #709).
+#: 7 — CR-172 (``public_donations.reject_reason`` / ``reject_reason_code``) and CR-174
+#: (``public_donations.items_declared[].review_status`` / ``review_reason_code`` /
+#: ``review_reason``). Both shipped unreleased on one branch, so one bump covers both.
+#: 8 — #791 (``shelter_occupants`` drops ``privacy.search_excluded`` evacuees).
+#: 9 — PDPA D8 (decision sync 2026-10-26): ``public_shelters.occupancy_by_status`` (counts
+#: search-excluded evacuees too) and ``external_bookings.stay_status`` for booked evacuees.
+#: 10 — CR-183: bootstrap also scans closed shelters still in their retention window
+#: (persons only), restoring the ``public_persons`` the old retention deleted on close.
+#: 11 — CR-196 (``public_donations.items_declared[].line_key``).
+#: 12 — CR-205: ``public_shelters.donation_points`` (ticked storage points with a pin).
+#: 13 — CR-198 (``public_shelters.site_kind`` passes any ``master_data:site_kind`` code
+#: through instead of coercing values outside the two seeded ones to ``evacuation_center``).
+#: 14 — CR-206: ``public_donations.items_declared[].drop_off_point_id`` and
+#: ``public_donations.point_receipts[]`` (``point_id``, ``line_nos``, ``received_at``).
+#: 15 — CR-206 A2: ``public_needs`` is one row per shelter + ``item_id`` +
+#: ``drop_off_point_id`` (``_id`` = ``{shelter}:{item_id}@{point_id|-}``; new fields
+#: ``item_id``, ``drop_off_point_id``); legacy ``{shelter}:{item_id}`` rows are pruned.
+#: 16 — decision sync 2026-11-02: EXT-005 ``occupancy_total`` / ``occupancy_breakdown`` and
+#: EXT-007 ``shelter_occupants`` count ``active`` + ``room_confirmed``; breakdown ages fall
+#: back to ``birth_year`` (``resolve_age``).
+PROJECTION_VERSION: int = 16

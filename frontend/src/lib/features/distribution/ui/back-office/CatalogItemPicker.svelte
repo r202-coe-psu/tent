@@ -1,7 +1,7 @@
 <script lang="ts">
 	import type { ItemMaster } from '$lib/features/catalog';
 	import { useItemMasters } from '$lib/features/catalog';
-	import { useStockBalance } from '$lib/features/operations';
+	import { isOutOfStock, sortInStockFirstByName, useStockBalance } from '$lib/features/operations';
 	import type { Flow2RequisitionType } from '../../domain/food-supplies';
 	import {
 		isEligibleDistributionCatalogItem,
@@ -48,7 +48,7 @@
 	});
 
 	// Further filter by search term (name or SKU)
-	const filteredItems = $derived.by(() => {
+	const textFilteredItems = $derived.by(() => {
 		const term = searchQuery.trim().toLowerCase();
 		if (!term) return eligibleItems;
 		return eligibleItems.filter((item) => {
@@ -57,6 +57,19 @@
 			return matchName || matchSku;
 		});
 	});
+
+	// In-stock items first, then out-of-stock; each group by name. Out-of-stock stays addable.
+	// Skip sorting and out-of-stock styling until balances have loaded.
+	const balancesLoaded = $derived(stockBalanceQuery.data !== undefined);
+	const filteredItems = $derived(
+		balancesLoaded
+			? sortInStockFirstByName(
+					textFilteredItems,
+					(item) => stockBalanceQuery.data?.get(item._id),
+					(item) => item.name
+				)
+			: textFilteredItems
+	);
 
 	function getStockOnHand(itemId: string): string {
 		return stockBalanceQuery.data?.get(itemId) ?? '0';
@@ -67,6 +80,7 @@
 	}
 
 	function handleAdd(item: ItemMaster) {
+		if (balancesLoaded && isOutOfStock(getStockOnHand(item._id))) return;
 		const rawQty = itemQuantities[item._id] ?? '1';
 		const validation = validatePositiveQuantity(rawQty);
 		if (!validation.isValid || !validation.value) {
@@ -136,15 +150,23 @@
 				{#each filteredItems as item (item._id)}
 					{@const isAlreadyAdded = alreadySelectedItemIds.includes(item._id)}
 					{@const stockOnHand = getStockOnHand(item._id)}
+					{@const outOfStock = balancesLoaded && isOutOfStock(stockOnHand)}
 					<div
 						class="flex flex-col gap-3 py-3.5 sm:flex-row sm:items-center sm:justify-between {isAlreadyAdded
 							? 'bg-slate-50/50 opacity-60'
 							: ''}"
 					>
 						<!-- Item info -->
-						<div class="min-w-0 flex-1">
+						<div class="min-w-0 flex-1 {outOfStock ? 'opacity-60' : ''}">
 							<div class="flex items-center gap-2">
 								<span class="truncate text-sm font-bold text-slate-900">{item.name}</span>
+								{#if outOfStock}
+									<span
+										class="shrink-0 rounded-md border border-destructive/20 bg-destructive/10 px-2 py-0.5 text-xs font-bold text-destructive"
+									>
+										หมด
+									</span>
+								{/if}
 								<!-- Read-only Returnable Badge derived from catalog -->
 								<span
 									class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold {getReturnableBadgeClass(
@@ -195,6 +217,7 @@
 											onblur={(e) => {
 												handlePickerQtyBlur(e.currentTarget.value);
 											}}
+											disabled={outOfStock}
 											class="h-9 w-20 text-right text-sm font-semibold tabular-nums shadow-2xs"
 										/>
 										<span class="min-w-[30px] text-xs text-slate-500">{item.base_unit}</span>
@@ -204,7 +227,8 @@
 								<button
 									type="button"
 									onclick={() => handleAdd(item)}
-									class="inline-flex h-9 items-center gap-1 rounded-lg bg-[#0A2647] px-3 text-xs font-semibold text-white shadow-2xs transition-colors hover:bg-[#051930]"
+									disabled={outOfStock}
+									class="inline-flex h-9 items-center gap-1 rounded-lg bg-[#0A2647] px-3 text-xs font-semibold text-white shadow-2xs transition-colors hover:bg-[#051930] disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-[#0A2647]"
 								>
 									<Plus class="h-3.5 w-3.5" />
 									<span>เลือก</span>

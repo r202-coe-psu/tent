@@ -4,6 +4,7 @@
  */
 
 import { qtyGt } from '$lib/utils/qty';
+import { expiryInstant } from './expiry-instant';
 import type { StockLot, StockLotBalance } from './operations';
 
 const MS_MINUTE = 60_000;
@@ -49,9 +50,7 @@ export function timeSinceProducedMs(producedAt: string, now: number = Date.now()
  * Returns NaN when expiry is missing/invalid.
  */
 export function timeUntilExpiryMs(expiry: string, now: number = Date.now()): number {
-	const t = Date.parse(expiry);
-	if (Number.isNaN(t)) return NaN;
-	return t - now;
+	return expiryInstant(expiry) - now;
 }
 
 export function formatAgeInStock(receivedAt: string, now: number = Date.now()): string | null {
@@ -106,7 +105,7 @@ export function summarizeItemLotAge(
 		}
 		const expiry = lot.lot?.expiry;
 		if (expiry) {
-			if (!nearestExpiry || Date.parse(expiry) < Date.parse(nearestExpiry)) {
+			if (!nearestExpiry || expiryInstant(expiry) < expiryInstant(nearestExpiry)) {
 				nearestExpiry = expiry;
 			}
 		}

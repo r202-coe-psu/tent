@@ -13,6 +13,8 @@ import type { AuthorContext } from '$lib/db/model';
 import { kitchenRepository } from '../data/kitchen.remote';
 import { getActiveSopProfile } from '$lib/features/sop-ratios';
 import { peopleRepository } from '$lib/features/people';
+import { volunteerRepositoryFor } from '$lib/features/volunteers';
+import { listShelterStaff } from '$lib/features/users';
 import { catalogRepository, itemMasterUnit, systemCategoryId } from '$lib/features/catalog';
 import { operationsKeys } from '$lib/features/operations';
 import { supplyRepository } from '$lib/features/supply';
@@ -37,6 +39,7 @@ import {
 	type CustomIngredientInput
 } from '../domain/meal-calc';
 import {
+	countShelterPeople,
 	deriveHeadcountFromOccupancy,
 	deriveSessionHeadcountFromOccupancy
 } from '../domain/occupancy';
@@ -59,6 +62,8 @@ export const kitchenKeys = {
 	mealServices: () => [...kitchenKeys.all, 'meal_services', getShelterCode()] as const,
 	mealServiceReceipts: () =>
 		[...kitchenKeys.all, 'meal_service_receipts', getShelterCode()] as const,
+	mealServiceLedger: (id: string) =>
+		[...kitchenKeys.all, 'meal_service_ledger', getShelterCode(), id] as const,
 	occupancy: () => [...kitchenKeys.all, 'occupancy', getShelterCode()] as const,
 	dietCounts: () => [...kitchenKeys.all, 'diet_counts', getShelterCode()] as const
 };
@@ -94,11 +99,26 @@ export const useOccupancyHeadcount = () =>
 		queryFn: async () => deriveHeadcountFromOccupancy(await peopleRepository().listEvacuees())
 	}));
 
-export const useActiveEvacueeDietCounts = () =>
+/**
+ * Evacuees, staff and checked-in volunteers of this shelter, plus the 5-group session headcount
+ * derived from them (`volunteer` = staff + volunteers).
+ */
+export const useShelterMealHeadcount = () =>
 	createQuery(() => ({
 		queryKey: kitchenKeys.dietCounts(),
-		queryFn: async () =>
-			deriveSessionHeadcountFromOccupancy(await peopleRepository().listEvacuees())
+		queryFn: async () => {
+			const shelterCode = getShelterCode();
+			const [occupants, volunteers, staff] = await Promise.all([
+				peopleRepository().listEvacuees(),
+				volunteerRepositoryFor(shelterCode).list(),
+				listShelterStaff(shelterCode)
+			]);
+			const people = countShelterPeople(shelterCode, occupants, volunteers, staff);
+			return {
+				people,
+				headcount: deriveSessionHeadcountFromOccupancy(occupants, people.staff + people.volunteers)
+			};
+		}
 	}));
 
 // --- MealSession (schema.md §2.7.3) ---
@@ -390,6 +410,16 @@ export const useMealServiceReceipts = () =>
 		queryFn: () => kitchenRepository().listMealServiceReceipts()
 	}));
 
+export const useMealServiceLedger = (
+	mealServiceId: () => string,
+	enabled: () => boolean = () => true
+) =>
+	createQuery(() => ({
+		queryKey: kitchenKeys.mealServiceLedger(mealServiceId()),
+		enabled: Boolean(mealServiceId()) && enabled(),
+		queryFn: () => kitchenRepository().listMealServiceLedger(mealServiceId())
+	}));
+
 export const useConfirmMealServiceReceipt = () =>
 	kitchenMutation(({ mealServiceId, ctx }: { mealServiceId: string; ctx: AuthorContext }) =>
 		kitchenRepository().confirmMealServiceReceipt(mealServiceId, ctx)
@@ -479,6 +509,8 @@ export function startKitchenLiveQuery(queryClient: QueryClient): SubscribeDataCh
 			case 'evacuee':
 			case 'movement':
 				return [kitchenKeys.occupancy(), kitchenKeys.dietCounts()];
+			case 'volunteer':
+				return [kitchenKeys.dietCounts()];
 			default:
 				return [];
 		}

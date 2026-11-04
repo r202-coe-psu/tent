@@ -49,21 +49,31 @@ export function localizedSkillLabel(option: VolunteerSkillOption, lang: 'th' | '
 	return localized || option.label || option.code;
 }
 
-/** Human label for a stored value — the raw value when the list has dropped it. */
-export function skillLabel(value: string, options: readonly VolunteerSkillOption[]): string {
+/**
+ * Human label for a stored value — the raw value when the list has dropped it. With
+ * `lang`, the label is in the reader's language ({@link localizedSkillLabel}).
+ */
+export function skillLabel(
+	value: string,
+	options: readonly VolunteerSkillOption[],
+	lang?: 'th' | 'en'
+): string {
 	const option = findSkillOption(value, options);
-	const label = option?.label?.trim() ?? value.trim();
+	const label = (
+		option && lang ? localizedSkillLabel(option, lang) : (option?.label ?? value)
+	).trim();
 	return isTechnicalSkillValue(label) ? '' : label;
 }
 
 /** `{ value, label }` per stored skill, in the order the job lists them. */
 export function skillLabels(
 	values: readonly string[],
-	options: readonly VolunteerSkillOption[]
+	options: readonly VolunteerSkillOption[],
+	lang?: 'th' | 'en'
 ): { value: string; label: string }[] {
 	return values.flatMap((value) => {
 		if (!findSkillOption(value, options)) return [];
-		const label = skillLabel(value, options);
+		const label = skillLabel(value, options, lang);
 		return label ? [{ value, label }] : [];
 	});
 }

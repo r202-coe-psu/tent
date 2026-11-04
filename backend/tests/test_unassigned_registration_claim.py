@@ -6,7 +6,9 @@ import asyncio
 from datetime import UTC, datetime
 
 import pytest
+from consent_factory import consent_fields
 from httpx import AsyncClient
+from tent_model.evacuee_consent import EVACUEE_SCHEMA_V
 from tent_model.public_person import PublicPerson
 from tent_model.unassigned_registration import (
     PersonId,
@@ -22,7 +24,6 @@ from apiapp.core.staff_session import (
     require_shelter_scoped_staff,
 )
 from apiapp.modules.unassigned_registrations.couch_birth import (
-    EVACUEE_SCHEMA_V,
     HOUSEHOLD_SCHEMA_V,
     CouchBirthError,
     InMemoryCouchBirth,
@@ -854,6 +855,7 @@ async def test_join_after_full_claim_reopens_closed_document(
                     "country": "THAILAND",
                     "vulnerable_groups": [],
                     "special_needs": [],
+                    **consent_fields(),
                 }
             ],
             "household": {
@@ -1154,3 +1156,156 @@ async def test_review_and_claim_carry_cr148_fields(
     assert household["dorm_building"] == "B"
     assert household["dorm_floor"] == "3"
     assert household["dorm_room"] == "305"
+
+
+async def test_claim_copies_consent_verbatim_and_hides_basic_from_search(
+    authed_client: AsyncClient,
+    couch_birth: InMemoryCouchBirth,
+    auth_headers: dict[str, str],
+) -> None:
+    """FR-42 + FR-31 — the Couch doc gets the queued consent unchanged; basic ⇒ search_excluded."""
+    member = {
+        "last_name": "ใจดี",
+        "gender": "female",
+        "country": "THAILAND",
+        "vulnerable_groups": [],
+        "special_needs": [],
+    }
+    created = await authed_client.post(
+        "/public/v1/unassigned-registrations",
+        headers=auth_headers,
+        json={
+            "registered_via": "web",
+            "members": [
+                {
+                    **member,
+                    "first_name": "สมใจ",
+                    "phone": "0866666666",
+                    **consent_fields(),
+                },
+                {
+                    **member,
+                    "first_name": "สมศรี",
+                    **consent_fields(
+                        search_excluded=True,
+                        mode="basic",
+                        health=False,
+                        given_by="guardian",
+                    ),
+                },
+            ],
+            "household": {
+                "housing_type": "owned_house",
+                "address_no": "9",
+                "subdistrict": "คอหงส์",
+                "district": "หาดใหญ่",
+                "province": "สงขลา",
+                "postal_code": "90110",
+                "pets": [],
+            },
+        },
+    )
+    assert created.status_code == 201
+    registration_id = created.json()["id"]
+    head_id, basic_id = [m["reserved_evacuee_id"] for m in created.json()["members"]]
+
+    response = await authed_client.post(
+        f"/staff/v1/unassigned-registrations/{registration_id}/claim",
+        json={"member_ids": [head_id, basic_id]},
+    )
+    assert response.status_code == 200
+
+    born = couch_birth.docs_for("SH001")
+    assert born[head_id]["schema_v"] == EVACUEE_SCHEMA_V == 15
+    assert born[head_id]["consent"] == {
+        "mode": "full",
+        "health": True,
+        "ref": "CS-7K3QZ9MD",
+        "given_at": "2026-10-25T03:15:00.000Z",
+        "notice_version": "2026-10-25",
+        "given_by": "self",
+        "giver_evacuee_id": None,
+        "recorded_verbally_by": None,
+        "channel": "web",
+    }
+    assert born[head_id]["privacy"] == {"search_excluded": False}
+    assert born[basic_id]["consent"]["mode"] == "basic"
+    assert born[basic_id]["consent"]["health"] is False
+    assert born[basic_id]["consent"]["given_by"] == "guardian"
+    assert born[basic_id]["consent"]["giver_evacuee_id"] == head_id
+    assert born[basic_id]["privacy"] == {"search_excluded": True}
+
+
+async def test_claim_of_member_queued_without_consent_births_without_consent(
+    authed_client: AsyncClient,
+    couch_birth: InMemoryCouchBirth,
+) -> None:
+    """FR-44 — consent for pre-change queue rows is collected at report-in."""
+    doc = await _seed_two_member_registration()
+    ids = [m.reserved_evacuee_id for m in doc.members]
+
+    response = await authed_client.post(
+        f"/staff/v1/unassigned-registrations/{doc.id}/claim",
+        json={"member_ids": ids},
+    )
+    assert response.status_code == 200
+
+    born = couch_birth.docs_for("SH001")
+    for evacuee_id in ids:
+        assert "consent" not in born[evacuee_id]
+        assert born[evacuee_id]["privacy"] == {"search_excluded": False}
+        assert born[evacuee_id]["schema_v"] == 15
+
+
+def test_claim_photo_is_image_schema_v2_without_a_donation_purpose():
+    # CR-175 AC-11: every image writer stamps 2, and only a donation photo carries
+    # `purpose` — the orphan sweep (FR-16) keys on it, so a claim photo must not.
+    from datetime import UTC, datetime
+
+    from apiapp.modules.unassigned_registrations.couch_birth import build_couch_image
+
+    doc = build_couch_image(
+        image_id="image:01K8TESTCLAIMPHOTO00000000",
+        shelter_code="SH001",
+        actor="reg.staff",
+        now=datetime(2026, 10, 26, 3, 0, tzinfo=UTC),
+        filename="face.webp",
+        content_type="image/webp",
+        width=800,
+        height=600,
+        original_size=12000,
+        compressed_size=4000,
+        thumbnail_size=800,
+    )
+    assert doc["schema_v"] == 2
+    assert "purpose" not in doc
+    assert "donation_id" not in doc
+
+
+async def test_legacy_pet_stored_without_pet_id_or_status_is_claimable(
+    authed_client: AsyncClient,
+    couch_birth: InMemoryCouchBirth,
+) -> None:
+    from tent_model.unassigned_registration import UnassignedPet
+
+    doc = await _seed_two_member_registration()
+    doc.household.pets = [UnassignedPet(pet_id=f"pet:{new_ulid()}", species="dog", count=1)]
+    await doc.save()
+    await UnassignedRegistration.get_pymongo_collection().update_one(
+        {"_id": doc.id},
+        {"$unset": {"household.pets.0.pet_id": "", "household.pets.0.status": ""}},
+    )
+
+    people = await authed_client.post(
+        f"/staff/v1/unassigned-registrations/{doc.id}/claim",
+        json={"member_ids": [doc.members[0].reserved_evacuee_id]},
+    )
+    assert people.status_code == 200
+    minted = people.json()["remaining_open_pets"][0]["pet_id"]
+
+    pets_claim = await authed_client.post(
+        f"/staff/v1/unassigned-registrations/{doc.id}/claim",
+        json={"pet_ids": [minted]},
+    )
+    assert pets_claim.status_code == 200
+    assert couch_birth.docs_for("SH001")[doc.reserved_household_id]["pets"][0]["species"] == "dog"

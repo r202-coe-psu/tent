@@ -38,6 +38,19 @@ describe('rowsToRegistrationsPayload', () => {
 		expect(result.total).toBe(0);
 		expect(result.checkin).toEqual({});
 		expect(result.checkout).toEqual({});
+		expect(result.preregister).toEqual({});
+	});
+
+	it('fills preregister per day without adding it to the check-in total', () => {
+		const rows = [
+			{ key: ['2026-06-01', 'preregister'], value: 4 },
+			{ key: ['2026-06-01', 'checkin'], value: 2 },
+			{ key: ['2026-06-02', 'preregister'], value: 6 }
+		];
+		const result = rowsToRegistrationsPayload('SH001', rows, '2026-06-01', '2026-06-02');
+		expect(result.preregister).toEqual({ '2026-06-01': 4, '2026-06-02': 6 });
+		expect(result.checkin).toEqual({ '2026-06-01': 2 });
+		expect(result.total).toBe(2);
 	});
 });
 
@@ -92,12 +105,24 @@ describe('RegistrationsQuerySchema', () => {
 });
 
 describe('RegistrationsPayloadSchema', () => {
+	it('rejects a payload without the preregister series', () => {
+		const withoutPreregister = {
+			shelter_code: 'SH001',
+			range: { from: '2026-06-01', to: '2026-06-30' },
+			checkin: {},
+			checkout: {},
+			total: 0
+		};
+		expect(RegistrationsPayloadSchema.safeParse(withoutPreregister).success).toBe(false);
+	});
+
 	it('accepts a valid payload', () => {
 		const valid = {
 			shelter_code: 'SH001',
 			range: { from: '2026-06-01', to: '2026-06-30' },
 			checkin: { '2026-06-01': 5, '2026-06-02': 8 },
 			checkout: { '2026-06-03': 3 },
+			preregister: { '2026-06-01': 2 },
 			total: 13
 		};
 		expect(() => RegistrationsPayloadSchema.parse(valid)).not.toThrow();
@@ -109,6 +134,7 @@ describe('RegistrationsPayloadSchema', () => {
 			range: { from: '2026-06-01', to: '2026-06-30' },
 			checkin: {},
 			checkout: {},
+			preregister: {},
 			total: 0,
 			first_name: 'John',
 			national_id: '1234567890123'

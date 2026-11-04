@@ -62,6 +62,13 @@
 	let volunteersMenuOpen = $state(false);
 	let volunteersMenuEl: HTMLDivElement | undefined = $state();
 	let headerHeight = $state(64);
+	/** Mobile: slide the header away while scrolling down, bring it back on scroll up. */
+	let scrolledAway = $state(false);
+	let lastScrollY = 0;
+	const SCROLL_DELTA_PX = 8;
+	const headerHidden = $derived(
+		scrolledAway && !mobileMenuOpen && !donationsMenuOpen && !volunteersMenuOpen
+	);
 
 	const t = $derived(getTranslation(PUBLIC_NAVBAR_I18N, langState.current));
 
@@ -104,18 +111,46 @@
 		volunteersMenuOpen = false;
 	}
 
+	/** Lets pinned page chrome (e.g. the registration member/pet indicator) stack under the header. */
+	$effect(() => {
+		const root = document.documentElement;
+		root.style.setProperty('--public-navbar-offset', headerHidden ? '0px' : `${headerHeight}px`);
+		return () => root.style.removeProperty('--public-navbar-offset');
+	});
+
+	function handleWindowScroll() {
+		const y = Math.max(0, window.scrollY);
+		const delta = y - lastScrollY;
+		if (y <= headerHeight) {
+			scrolledAway = false;
+		} else if (Math.abs(delta) >= SCROLL_DELTA_PX) {
+			scrolledAway = delta > 0;
+		} else {
+			return;
+		}
+		lastScrollY = y;
+	}
+
 	afterNavigate(() => {
+		scrolledAway = false;
+		lastScrollY = window.scrollY;
 		donationsMenuOpen = false;
 		volunteersMenuOpen = false;
 		mobileMenuOpen = false;
 	});
 </script>
 
-<svelte:window onpointerdown={handleWindowPointerDown} onkeydown={handleWindowKeydown} />
+<svelte:window
+	onpointerdown={handleWindowPointerDown}
+	onkeydown={handleWindowKeydown}
+	onscroll={handleWindowScroll}
+/>
 
 <header
 	bind:clientHeight={headerHeight}
-	class="fixed top-0 right-0 left-0 z-50 w-full border-b border-border bg-card/95 px-3 py-2.5 shadow-xs backdrop-blur-md sm:px-6 sm:py-3"
+	class="fixed top-0 right-0 left-0 z-50 w-full border-b border-border bg-card/95 px-3 py-2.5 shadow-xs backdrop-blur-md transition-transform duration-200 ease-out motion-reduce:transition-none sm:translate-y-0 sm:px-6 sm:py-3 {headerHidden
+		? 'max-sm:-translate-y-full'
+		: ''}"
 >
 	<div
 		class="relative z-50 mx-auto flex max-w-7xl flex-nowrap items-center justify-between gap-2 sm:gap-3"

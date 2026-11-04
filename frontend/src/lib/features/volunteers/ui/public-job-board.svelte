@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { onMount, untrack } from 'svelte';
 	import { SvelteSet } from 'svelte/reactivity';
 	import Filter from '@lucide/svelte/icons/filter';
 	import Search from '@lucide/svelte/icons/search';
@@ -17,6 +17,7 @@
 	} from '$lib/features/volunteer-portal/domain/volunteer';
 	import type { PortalActivity } from '$lib/features/volunteer-portal/domain/schedule-view';
 	import { findBookingConflict } from '$lib/features/volunteer-portal/domain/booking-overlap';
+	import { openJobsFirst, openShifts } from '../domain/shift-closing';
 	import { shiftDutyWindow } from '$lib/features/volunteers/domain/duty-window';
 	import { languageStore } from '$lib/stores/language.svelte';
 	import { jobsI18n } from '$lib/features/volunteers/i18n/jobs.i18n';
@@ -26,11 +27,14 @@
 	let {
 		applicantProfile = null,
 		applicantCredential = null,
-		existingActivities = []
+		existingActivities = [],
+		initialShelter = null
 	}: {
 		applicantProfile?: VolunteerProfile | null;
 		applicantCredential?: PortalCredential | null;
 		existingActivities?: PortalActivity[];
+		/** Shelter code to filter by on arrival — the home page's per-shelter cards link here (#709). */
+		initialShelter?: string | null;
 	} = $props();
 
 	const t = $derived(jobsI18n[languageStore.current]);
@@ -58,6 +62,8 @@
 		shelter_code?: string;
 		description: string;
 		shifts: DisplayShift[];
+		/** Every shift has ended, so the card stays on the board but cannot be applied to (#972). */
+		closed: boolean;
 		tags: { label: string; variant: 'success' | 'warning' | 'outline' }[];
 		skills: { value: string; label: string }[];
 		skills_required?: string[];
@@ -116,7 +122,7 @@
 	let isLoading = $state(true);
 
 	function resolvedSkillLabel(value: string): string {
-		return skillLabel(value, skillOptions);
+		return skillLabel(value, skillOptions, languageStore.current);
 	}
 
 	/** Compare filter values and stored job values by Master Data code or label. */
@@ -200,10 +206,7 @@
 		if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()))
 			return 'ช่วงเวลาที่ตรวจสอบไม่ได้';
 		return (
-			start.toLocaleTimeString('th-TH', options) +
-			' - ' +
-			end.toLocaleTimeString('th-TH', options) +
-			' น.'
+			start.toLocaleTimeString('en-GB', options) + ' - ' + end.toLocaleTimeString('en-GB', options)
 		);
 	}
 
@@ -269,7 +272,8 @@
 
 	const displayedJobs = $derived.by<DisplayJobCard[]>(() => {
 		if (rawJobs && rawJobs.length > 0) {
-			return rawJobs.map((job: RawPublicJob) => {
+			const now = new Date();
+			const cards = rawJobs.map((job: RawPublicJob) => {
 				const jobId = job.job_id || job._id || '';
 				const cleanJobId = jobId.replace(/^job:/, '');
 				const shelterName =
@@ -282,8 +286,12 @@
 					(job.skills_required?.some((s: string) => isControlledSkill(s)) ?? false);
 
 				let shifts: DisplayShift[];
+				let closed = false;
 				if (job.shifts && job.shifts.length > 0) {
-					shifts = job.shifts.map((s: RawPublicJobShift, idx: number) => {
+					const stillOpen = openShifts(job.shifts, now);
+					closed = stillOpen.length === 0;
+					// A closed job keeps its ended shifts so the card still says what it was.
+					shifts = (closed ? job.shifts : stillOpen).map((s: RawPublicJobShift, idx: number) => {
 						const st = s.start_time || '08:00';
 						const et = s.end_time || '16:00';
 						const shiftConfirmed =
@@ -297,7 +305,7 @@
 						return {
 							id: s.shift_id || s.id || `s-${idx}`,
 							date: s.date || new Date().toISOString().slice(0, 10),
-							time: `${st} - ${et} น.`,
+							time: `${st} - ${et}`,
 							start_time: st,
 							end_time: et,
 							end_date: endDateFor(
@@ -325,7 +333,7 @@
 						return {
 							id: `st-${cleanJobId}-${idx}`,
 							date: asApplyDate(day, idx),
-							time: `${stTime} - ${edTime} น.`,
+							time: `${stTime} - ${edTime}`,
 							start_time: stTime,
 							end_time: edTime,
 							end_date: endDateFor(asApplyDate(day, idx), stTime, edTime, null),
@@ -341,7 +349,7 @@
 						{
 							id: `default-${cleanJobId}`,
 							date: new Date().toISOString().slice(0, 10),
-							time: '08:00 - 16:00 น.',
+							time: '08:00 - 16:00',
 							start_time: '08:00',
 							end_time: '16:00',
 							end_date: new Date().toISOString().slice(0, 10),
@@ -364,7 +372,9 @@
 
 				const tags: { label: string; variant: 'success' | 'warning' | 'outline' }[] = [];
 
-				if (job.status === 'open') {
+				if (closed) {
+					tags.push({ label: t.tagClosed, variant: 'outline' });
+				} else if (job.status === 'open') {
 					tags.push({ label: t.tagOpen, variant: 'success' });
 				} else if (job.status === 'almost_full') {
 					tags.push({ label: t.tagNearFull, variant: 'warning' });
@@ -384,6 +394,7 @@
 					shelter_code: job.shelter_code,
 					description: job.description || t.defaultJobDesc,
 					shifts,
+					closed,
 					tags,
 					skills,
 					skills_required: job.skills_required,
@@ -391,6 +402,7 @@
 					isControlled
 				};
 			});
+			return openJobsFirst(cards, (card) => !card.closed);
 		}
 
 		return [];
@@ -400,10 +412,33 @@
 	let selectedJob = $state<QuickApplyJob | null>(null);
 	let searchQuery = $state('');
 	let selectedFilter = $state<'all' | 'open' | 'near_full' | 'controlled'>('all');
-	let selectedShelter = $state('all');
+	// Start on the shelter the reader arrived for (#709), so the board never renders "all" first.
+	let selectedShelter = $state(untrack(() => initialShelter) || 'all');
+	// Follows the link the reader arrived by; they can still pick another shelter here.
+	$effect(() => {
+		if (initialShelter) {
+			selectedShelter = initialShelter;
+			currentPage = 1;
+		}
+	});
 	let selectedSkill = $state('all');
 	const PAGE_SIZE = 6;
 	let currentPage = $state(1);
+	let jobList = $state<HTMLElement>();
+
+	/**
+	 * Picking another page swaps the cards in place, leaving the reader at the bottom of a
+	 * list they have not seen. Take them to its first card — the list, not the page top:
+	 * on a phone the search and filters above it fill the whole screen. Focus goes there
+	 * too, so keyboard and screen-reader users land on the new page's jobs. Only a page
+	 * the reader picks triggers this; a filter resetting to page 1 does not.
+	 */
+	function showNewPage() {
+		if (!jobList) return;
+		const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+		jobList.focus({ preventScroll: true });
+		jobList.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'start' });
+	}
 
 	// Unique list of shelters for the filter
 	const availableShelters = $derived.by<{ code: string; name: string }[]>(() => {
@@ -429,7 +464,7 @@
 		// 1. Add skills from Master Data
 		for (const opt of baseList) {
 			const code = opt.code || opt.label;
-			const label = skillLabel(code, skillOptions);
+			const label = skillLabel(code, skillOptions, languageStore.current);
 			const normCode = code.trim().toLowerCase();
 			if (code && label && !seenCodes.has(normCode)) {
 				seenCodes.add(normCode);
@@ -470,13 +505,16 @@
 			}
 
 			if (selectedFilter === 'open') {
-				return j.shifts.some((s) => s.quota - s.confirmed > 0);
+				return !j.closed && j.shifts.some((s) => s.quota - s.confirmed > 0);
 			}
 			if (selectedFilter === 'near_full') {
-				return j.shifts.some((s) => {
-					const rem = s.quota - s.confirmed;
-					return rem > 0 && rem <= 2;
-				});
+				return (
+					!j.closed &&
+					j.shifts.some((s) => {
+						const rem = s.quota - s.confirmed;
+						return rem > 0 && rem <= 2;
+					})
+				);
 			}
 			if (selectedFilter === 'controlled') {
 				return j.isControlled;
@@ -701,9 +739,13 @@
 
 	<!-- Job Cards List -->
 	<div
-		class="grid min-h-0 items-stretch gap-4 sm:gap-5 {paginatedJobs.length > 0
-			? 'xl:grid-cols-2'
-			: ''}"
+		bind:this={jobList}
+		tabindex="-1"
+		aria-label={t.jobBoardSectionTitle}
+		class={[
+			'grid min-h-0 scroll-mt-28 items-stretch gap-4 focus:outline-none sm:gap-5',
+			paginatedJobs.length > 0 && 'xl:grid-cols-2'
+		]}
 		class:flex-1={!isLoading && paginatedJobs.length === 0}
 	>
 		{#if isLoading}
@@ -742,7 +784,12 @@
 
 			{#if totalPages > 1}
 				<div class="w-fit justify-self-center">
-					<Pagination.Root bind:page={currentPage} count={filteredJobs.length} perPage={PAGE_SIZE}>
+					<Pagination.Root
+						bind:page={currentPage}
+						count={filteredJobs.length}
+						perPage={PAGE_SIZE}
+						onPageChange={showNewPage}
+					>
 						{#snippet children({ pages })}
 							<Pagination.Content>
 								<Pagination.Previous />

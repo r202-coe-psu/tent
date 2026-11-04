@@ -152,24 +152,24 @@
 				? 'border-primary/60 bg-primary/5'
 				: 'border-border/80 bg-muted/20'}"
 		>
-			<div class="flex items-start justify-between gap-3">
-				<div class="flex items-start gap-2.5">
+			<div class="flex flex-col gap-2.5 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
+				<div class="flex min-w-0 items-start gap-2.5">
 					<div
 						class="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary"
 					>
 						<Sparkles class="size-4" />
 					</div>
-					<div>
-						<div class="flex items-center gap-2">
+					<div class="min-w-0">
+						<div class="flex flex-wrap items-center gap-x-2 gap-y-0.5">
 							<span class="text-xs font-bold text-foreground">โซนแนะนำ:</span>
-							<span class="text-xs font-bold text-primary"
+							<span class="text-sm font-bold text-primary"
 								>{recommendedZone.name || recommendedZone.code}</span
 							>
-							<span class="text-2xs text-muted-foreground"
+							<span class="text-xs text-muted-foreground"
 								>({zoneTypeName(recommendedZone.type)})</span
 							>
 						</div>
-						<p class="mt-0.5 text-2xs text-muted-foreground">
+						<p class="mt-0.5 text-xs text-muted-foreground">
 							{recommendLabel(recommendedZoneType)}
 						</p>
 					</div>
@@ -179,13 +179,13 @@
 					<button
 						type="button"
 						onclick={() => handleSelect(recommendedZone.code)}
-						class="rounded-md border border-primary/40 bg-primary px-2.5 py-1 text-2xs font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
+						class="inline-flex min-h-11 shrink-0 items-center justify-center rounded-md border border-primary/40 bg-primary px-3 py-1.5 text-xs font-semibold whitespace-nowrap text-primary-foreground transition-colors hover:bg-primary/90 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none sm:min-h-9"
 					>
 						เลือกโซนแนะนำ
 					</button>
 				{:else if isRecSelected}
 					<span
-						class="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-2xs font-semibold text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300"
+						class="inline-flex shrink-0 items-center gap-1 self-start rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-semibold whitespace-nowrap text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300"
 					>
 						<CheckCircle class="size-3" /> เลือกอยู่
 					</span>
@@ -238,7 +238,7 @@
 	<!-- List of zones for quick tap/click -->
 	{#if activeZones.length > 0}
 		<div class="space-y-1.5 pt-1">
-			<span class="text-2xs font-medium text-muted-foreground">รายการโซนทั้งหมด:</span>
+			<span class="text-xs font-medium text-muted-foreground">รายการโซนทั้งหมด:</span>
 			<div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
 				{#each activeZones as zone (zone.code)}
 					{@const isSelected = selected_zone === zone.code}
@@ -279,7 +279,7 @@
 										</span>
 									{/if}
 								</div>
-								<span class="text-2xs text-muted-foreground">
+								<span class="text-xs text-muted-foreground">
 									พักอยู่ {occupantCount(zone.code)}
 									{zone.capacity != null ? `/ ${zone.capacity}` : ''} คน
 								</span>

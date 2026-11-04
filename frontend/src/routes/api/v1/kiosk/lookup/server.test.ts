@@ -10,10 +10,6 @@ import {
 	ScannerDependencyError
 } from '$lib/server/scanners/device-credentials';
 import { lookupPreRegisteredEvacuee } from '$lib/features/kiosk/server/kiosk-check-in.server';
-import {
-	kioskPhoneDeviceLimiter,
-	kioskPhoneNumberLimiter
-} from '$lib/server/security/rate-limiter';
 import { findMasterByCode } from '$lib/server/shelters.admin';
 import { isKioskThaidCheckInAllowed } from '$lib/features/kiosk/server/kiosk-thaid-gate.server';
 import {
@@ -91,10 +87,6 @@ async function send(body: unknown, deviceId?: string): Promise<Response> {
 	return POST(request(body, deviceId));
 }
 
-function phoneFor(index: number): string {
-	return `08123456${String(index).padStart(2, '0')}`;
-}
-
 describe('POST /api/v1/kiosk/lookup', () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
@@ -117,16 +109,12 @@ describe('POST /api/v1/kiosk/lookup', () => {
 
 	it('rejects phone lookup when its authenticated shelter has disabled the method', async () => {
 		mockFindShelter.mockResolvedValueOnce({ code: 'SH001', feature_flags: {} } as never);
-		const deviceLimit = vi.spyOn(kioskPhoneDeviceLimiter, 'check');
-		const phoneLimit = vi.spyOn(kioskPhoneNumberLimiter, 'check');
 
 		const response = await send({ source: 'phone', phone });
 
 		expect(response.status).toBe(403);
 		expect((await response.json()).error.code).toBe('KIOSK_METHOD_DISABLED');
 		expect(response.headers.get('cache-control')).toBe('no-store');
-		expect(deviceLimit).not.toHaveBeenCalled();
-		expect(phoneLimit).not.toHaveBeenCalled();
 		expect(mockLookup).not.toHaveBeenCalled();
 	});
 
@@ -216,73 +204,6 @@ describe('POST /api/v1/kiosk/lookup', () => {
 				);
 		}
 	);
-
-	it('limits each device to ten phone searches per minute without consuming another phone bucket on denial', async () => {
-		const deviceId = 'kph-device-limit-test';
-		for (let index = 0; index < 10; index += 1) {
-			expect((await send({ source: 'phone', phone: phoneFor(index) }, deviceId)).status).toBe(200);
-		}
-		const blocked = await send({ source: 'phone', phone: '0899991001' }, deviceId);
-		expect(blocked.status).toBe(429);
-		expect(blocked.headers.get('retry-after')).toBe('60');
-		expect(blocked.headers.get('cache-control')).toBe('no-store');
-
-		for (let index = 0; index < 5; index += 1) {
-			expect(
-				(await send({ source: 'phone', phone: '0899991001' }, `kph-other-device-${index}`)).status
-			).toBe(200);
-		}
-		expect((await send({ source: 'phone', phone: '0899991001' }, 'kph-final-device')).status).toBe(
-			429
-		);
-	});
-
-	it('limits one normalized phone across devices', async () => {
-		const sharedPhone = '0888884001';
-		for (let index = 0; index < 5; index += 1) {
-			expect(
-				(await send({ source: 'phone', phone: sharedPhone }, `kph-shared-device-${index}`)).status
-			).toBe(200);
-		}
-		const blocked = await send({ source: 'phone', phone: sharedPhone }, 'kph-shared-device-six');
-		expect(blocked.status).toBe(429);
-		expect(blocked.headers.get('retry-after')).toBe('60');
-	});
-
-	it('skips the per-phone limit when selecting a household but keeps the per-device limit', async () => {
-		const sharedPhone = '0877773001';
-		for (let index = 0; index < 5; index += 1) {
-			expect(
-				(await send({ source: 'phone', phone: sharedPhone }, `kph-selection-search-${index}`))
-					.status
-			).toBe(200);
-		}
-
-		const selection = {
-			source: 'phone',
-			phone: sharedPhone,
-			primary_evacuee_id: household.primary_evacuee_id
-		};
-		const deviceId = 'kph-selection-device-limit';
-		for (let index = 0; index < 10; index += 1) {
-			expect((await send(selection, deviceId)).status).toBe(200);
-		}
-		const blocked = await send(selection, deviceId);
-		expect(blocked.status).toBe(429);
-		expect(blocked.headers.get('retry-after')).toBe('60');
-		expect(mockLookup).toHaveBeenCalledWith('SH001', selection);
-	});
-
-	it('does not rate limit card lookups', async () => {
-		for (let index = 0; index < 12; index += 1) {
-			const response = await send(
-				{ source: 'smart-card', citizen_id: '1234567890123' },
-				'kph-card-device'
-			);
-			expect(response.status).toBe(200);
-		}
-		expect(mockLookup).toHaveBeenCalledTimes(12);
-	});
 });
 
 describe('POST /api/v1/kiosk/lookup source thaid', () => {

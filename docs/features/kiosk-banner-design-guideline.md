@@ -2,14 +2,14 @@
 title: Kiosk Banner — Design Pattern Guideline
 status: active
 created: 2026-10-11
-updated: 2026-10-18
+updated: 2026-10-22
 author: Soravit Sukkarn (Team Lead)
 base_branch: feat/pre-register_kiosk
-note: 2026-10-18 — sync ตาม CR-162 ส่วนที่ปรับ 2026-10-15..17 (`shelter_code` เดียว, `screen_type`, `banner_enabled`, path `/back-office/kiosks/banners` + `/api/v1/kiosk/*`, role `kiosk_staff` ของ CR-165, client `kiosk/`, จัดลำดับลากวาง, overlay รูปอย่างเดียว)
+note: 2026-10-22 — banner group Team Lead อนุมัติ (CR-162 §3.7 FR-KBG) · 2026-10-21 — เพิ่มหมายเหตุ banner group: path map หน้ากลุ่ม + group API · 2026-10-18 — sync ตาม CR-162 ส่วนที่ปรับ 2026-10-15..17 (`shelter_code` เดียว, `screen_type`, `banner_enabled`, path `/back-office/kiosks/banners` + `/api/v1/kiosk/*`, role `kiosk_staff` ของ CR-165, client `kiosk/`, จัดลำดับลากวาง, overlay รูปอย่างเดียว)
 affects:
   - docs/changes/14-kiosk/CR-162-kiosk-banner.md
-  - docs/data/schema.md §3.11 (scanner_device) · §3.12 (kiosk_banner)
-  - docs/data/api-contract.md §2.2 · §2.3 Kiosk banner
+  - docs/data/schema.md §3.11 (scanner_device) · §3.12 (kiosk_banner) · §3.13 (kiosk_banner_group — 2026-10-21)
+  - docs/data/api-contract.md §2.2 · §2.3 Kiosk banner · §2.3.1 Kiosk banner group (2026-10-21)
   - docs/prd/role-permission-matrix.md §1.1 (kiosk_staff)
 ---
 
@@ -19,6 +19,7 @@ affects:
 >
 > - เอกสารนี้คือ **แนวทาง implement** kiosk banner ใน tent — requirement ที่ผูกพันอยู่ใน [CR-162](../changes/14-kiosk/CR-162-kiosk-banner.md) (FR-KBN-xx, FR-KBR-xx); ถ้าขัดกัน **CR ชนะ**
 > - Flow: doc `kiosk_banner` ใน `registry` → back-office CRUD (`kiosk_staff` / SM / SA ของ active shelter) → `POST /api/v1/kiosk/banners` (device auth, กรองตามศูนย์ + ขนาดจอของเครื่อง) → **attract overlay** บน `/kiosk`
+> - **(2026-10-21 · Team Lead อนุมัติ 2026-10-22) banner group:** เครื่องสังกัดกลุ่ม (`scanner_device.banner_group_id`) แทน `banner_enabled` · banner สังกัดกลุ่ม (`kiosk_banner.group_id`) · ข้างในกลุ่มแยกตู้เล็ก/ตู้ใหญ่ · หน้า back-office เปลี่ยนเป็น `/back-office/kiosks/banners` (กลุ่ม) → `groups/{group}` → `groups/{group}/{compact|portrait}` — ดู §2.3 ท้ายตาราง path และ CR-162 §3.7
 > - อ่านก่อนเขียนโค้ดทุกส่วนของ feature นี้: §1 หลักการ, §2 layer map + path map (§2.3), §3 state machine, §4 security, §6 checklist
 
 ---
@@ -34,7 +35,7 @@ affects:
 | P5  | **Device-authenticated feed** | `X-Device-Id` / `X-Device-Secret` ฉีดโดย `kiosk/app/manager.py` `_route_kiosk_api` (POST same-origin + allowlist) · browser ไม่ถือ secret (FR-KPC-06)                  |
 | P6  | **Image only**                | รองรับเฉพาะรูป png / jpeg / webp ≤2 MB · ไม่มี iframe / link slide (เปิดเว็บภายนอกบนตู้ + เสี่ยงรั่ว credential) · overlay แสดงรูปอย่างเดียว ไม่มี caption (FR-KBR-46) |
 | P7  | **Text-only caption**         | `caption` เก็บและแก้ได้ใน back-office เท่านั้น · ห้าม `{@html}` · `alt = title`                                                                                        |
-| P8  | **Fail soft, never break**    | ไม่มี banner / API ล้ม / รูปเสีย / `banner_enabled = false` → ไม่แสดง overlay หรือข้ามสไลด์ · หน้าเลือกวิธีทำงานปกติ · ไม่มี JS error                                  |
+| P8  | **Fail soft, never break**    | ไม่มี banner / API ล้ม / รูปเสีย / `banner_enabled = false` (2026-10-21: เครื่องไม่มี `banner_group_id`) → ไม่แสดง overlay หรือข้ามสไลด์ · หน้าเลือกวิธีทำงานปกติ · ไม่มี JS error                                  |
 | P9  | **Safe mutations**            | เปิด/ปิด = `PATCH`, ลบ = `DELETE`, จัดลำดับ = `PUT …/order` ผ่าน BFF ที่ตรวจ `_session` · ลบ = hard delete ทั้ง doc (attachment หายไปด้วย)                             |
 | P10 | **Refresh without reload**    | refetch JSON ทุก 5 นาที · ไม่ reload หน้า `/kiosk`                                                                                                                    |
 | P11 | **Timestamps at call time**   | `created_at` / `updated_at` สร้างใน factory ณ เวลาเรียก                                                                                                               |
@@ -57,6 +58,8 @@ kiosk (Chromium --kiosk, /kiosk)
        │   (kiosk/app/manager.py _route_kiosk_api ฉีด X-Device-Id/Secret)
        └─ +server.ts → authenticateScannerDevice → principal.shelter_code + screen_type + banner_enabled
             → filter active window + shelter + screen → sort → ≤20 → sign image_url (15 min)
+            (2026-10-21: principal.banner_group_id แทน banner_enabled · ไม่มีกลุ่ม → [] ไม่ query
+             · filter shelter + group_id + screen · back-office เพิ่ม /api/back-office/kiosk-banner-groups[/{id}[/devices]])
   └─ <img src=image_url>   GET /api/v1/kiosk/banners/{id}/image?exp&sig  (ไม่มี device header · cache private ตามอายุลายเซ็น)
 ```
 
@@ -108,6 +111,26 @@ kiosk (Chromium --kiosk, /kiosk)
 | `/api/v1/kiosk/banners/{id}/image?exp=&sig=`               | `GET`                                       | `<img>` บนตู้                   | signed URL (HMAC, 15 นาที)                    | **ใหม่**                     |
 | `/api/v1/kiosk/config`                                     | `POST`                                      | ตู้                             | device credential                             | มีอยู่ — template ที่ mirror |
 | `/api/public/v1/system-banner`                             | `GET`                                       | ทุกหน้า (`SystemBannerHost`)    | —                                             | มีอยู่ — overlay ห้ามบัง     |
+
+#### Banner group — path เพิ่ม/เปลี่ยน (2026-10-21 — CR-162 §3.7)
+
+> แถว `/back-office/kiosks/banners` (card ต่อขนาดจอ) และ `/back-office/kiosks/banners/{compact|portrait}` ในตารางด้านบนถูกแทนที่ด้วยตารางนี้ (Team Lead อนุมัติ 2026-10-22) · `/new` / `/{id}` ยังอยู่ (เพิ่ม select กลุ่ม required) · ตารางด้านบนไม่ถูกแก้เพื่อคงฉบับที่อนุมัติไว้
+
+| Path                                                              | Method                              | ผู้เรียก                | Auth                                                     | สถานะ                                                         |
+| :---------------------------------------------------------------- | :---------------------------------- | :---------------------- | :------------------------------------------------------- | :------------------------------------------------------------ |
+| `/back-office/kiosks/banners`                                     | page (card ต่อกลุ่ม + สร้างกลุ่ม + ยังไม่จัดกลุ่ม) | `kiosk_staff` / SM / SA | `_session` + `requireKioskManagement`                    | **แทนที่** card ต่อขนาดจอ                                      |
+| `/back-office/kiosks/banners/groups/new`                          | page (ขั้น 1 ชื่อ · ขั้น 2 เลือกเครื่อง)           | `kiosk_staff` / SM / SA | เหมือนข้างบน                                             | **ใหม่**                                                       |
+| `/back-office/kiosks/banners/groups/{group}`                      | page (header กลุ่ม + card ต่อขนาดจอ + สร้างแบนเนอร์) | `kiosk_staff` / SM / SA | เหมือนข้างบน                                             | **ใหม่**                                                       |
+| `/back-office/kiosks/banners/groups/{group}/{compact\|portrait}`  | page (2 แท็บ + ลากวางจัดลำดับต่อ slot)           | `kiosk_staff` / SM / SA | เหมือนข้างบน                                             | **ใหม่** — แทน `/back-office/kiosks/banners/{compact\|portrait}` (route เดิม redirect ไป `/back-office/kiosks/banners`) |
+| `/back-office/kiosks/banners/new?group=&screen=` · `/{id}`        | page (ฟอร์ม + select กลุ่ม required)               | `kiosk_staff` / SM / SA | เหมือนข้างบน                                             | แก้                                                            |
+| `/api/back-office/kiosk-banner-groups`                            | `GET` (list + `device_ids`) · `POST`               | back-office UI          | `_session` + scope ของ `?shelter_code=`                  | **ใหม่**                                                       |
+| `/api/back-office/kiosk-banner-groups/{id}`                       | `GET` · `PUT` · `DELETE ?rev=` (มี banner `409`)   | back-office UI          | `_session` + scope ของ `doc.shelter_code` (นอก scope `404`) | **ใหม่**                                                    |
+| `/api/back-office/kiosk-banner-groups/{id}/devices`               | `PUT` `{ device_ids }` (แทนที่สมาชิก)              | back-office UI          | `_session` + scope                                       | **ใหม่**                                                       |
+| `/api/back-office/kiosk-banners` · `/{id}` · `/order`             | เพิ่ม `group_id` (create / update) · order body `{ group_id, screen_type, items }` | back-office UI | เหมือนเดิม                                    | แก้                                                            |
+| `/api/v1/kiosk/banners`                                           | `POST` — กรองตาม `banner_group_id` ของเครื่อง · shape เดิม | ตู้                | device credential                                        | แก้ (allowlist `manager.py` ไม่เปลี่ยน)                        |
+| `/api/v1/kiosk/devices/{id}`                                      | `PATCH` ตัด `banner_enabled` · summary มี `banner_group_id` | back-office UI   | เหมือนเดิม                                               | แก้                                                            |
+
+ไฟล์เพิ่มของ group: `lib/features/kiosk-banners/domain/kiosk-banner-group.ts` · `ui/kiosk-banner-group-{card,form,device-picker}.svelte` · `lib/server/kiosk-banners/kiosk-banner-group.server.ts` · `routes/api/back-office/kiosk-banner-groups/**` · `routes/(protected)/back-office/kiosks/banners/groups/{new,[group],[group]/[screen=kioskScreen]}/+page.{ts,svelte}` · schema.md §3.13 · api-contract.md §2.3.1
 
 #### ไฟล์ใหม่ (`frontend/src/` ยกเว้นระบุ)
 

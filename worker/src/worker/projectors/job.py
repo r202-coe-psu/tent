@@ -127,6 +127,7 @@ def project_job(
         },
         "shifts": shifts,
         "auto_accept": bool(doc.get("auto_accept", False)),
+        "is_urgent": bool(doc.get("is_urgent", False)),
         "status": status,
         "updated_at": _updated_at(doc),
     }

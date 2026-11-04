@@ -105,6 +105,21 @@ describe('buildLotRows', () => {
 		expect(row.storageName).toBe('ห้องเย็น');
 	});
 
+	it("shows what the lot's storage point can hold (#647 AC3)", () => {
+		const points = [{ id: 'sp1', name: 'ห้องเย็น', typeLabels: ['อาหารแช่เย็น/แข็ง', 'ยา'] }];
+		const rows = buildLotRows(
+			[
+				lot({ lot_ref: 'a', lot: { storage_point_id: 'sp1' } }),
+				lot({ lot_ref: 'b', lot: { storage_point_id: 'gone', storage_zone: 'จุดที่ลบแล้ว' } }),
+				lot({ lot_ref: 'c' })
+			],
+			points,
+			NOW
+		);
+		const types = Object.fromEntries(rows.map((r) => [r.lotRef, r.storageTypes]));
+		expect(types).toEqual({ a: 'อาหารแช่เย็น/แข็ง, ยา', b: null, c: null });
+	});
+
 	it('puts a lot expiring in 3 days before long-stored dry stock without expiry (AC-A3)', () => {
 		const rows = buildLotRows(
 			[
@@ -139,5 +154,55 @@ describe('buildLotRows', () => {
 		const itemsById = new Map([['item_master:rice', { shelf_life_days: 5 }]]);
 		const [row] = buildLotRows([lot({ lot_ref: 'a', received_at: iso(-1) })], [], NOW, itemsById);
 		expect(row.reason).toBe('อายุเก็บรักษาเหลือ 4 วัน (เร่งด่วน)');
+	});
+
+	it('#855: lists a negative lot last, flagged, never as next', () => {
+		const rows = buildLotRows(
+			[
+				lot({ lot_ref: 'neg', qty: '-3', lot: { expiry: iso(1) } }),
+				lot({ lot_ref: 'ok', lot: { expiry: iso(30) } })
+			],
+			[],
+			NOW
+		);
+		expect(rows.map((r) => [r.lotRef, r.isNegative, r.isNext])).toEqual([
+			['ok', false, true],
+			['neg', true, false]
+		]);
+		expect(rows[1].qty).toBe('-3');
+	});
+});
+
+describe('buildLotRows lot number (#1069)', () => {
+	it('carries the lot number through so the card can show it', () => {
+		const rows = buildLotRows(
+			[lot({ lot_ref: 'a', lot: { lot_no: 'L-261020-001', expiry: iso(5) } })],
+			[],
+			NOW
+		);
+
+		expect(rows[0].lotNo).toBe('L-261020-001');
+	});
+
+	it('is null for a row written before lot numbers existed', () => {
+		const rows = buildLotRows([lot({ lot_ref: 'legacy', lot: { expiry: iso(5) } })], [], NOW);
+
+		expect(rows[0].lotNo).toBeNull();
+	});
+
+	it('is null when the row has no lot block at all', () => {
+		const rows = buildLotRows([lot({ lot_ref: 'bare' })], [], NOW);
+
+		expect(rows[0].lotNo).toBeNull();
+	});
+
+	it('keeps the number on an overdrawn lot, which is the one staff must go and fix', () => {
+		const rows = buildLotRows(
+			[lot({ lot_ref: 'neg', qty: '-2', lot: { lot_no: 'L-261020-009' } })],
+			[],
+			NOW
+		);
+
+		expect(rows[0]).toMatchObject({ isNegative: true, lotNo: 'L-261020-009' });
 	});
 });

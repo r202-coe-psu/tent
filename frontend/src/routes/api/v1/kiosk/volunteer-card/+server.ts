@@ -16,12 +16,7 @@ import {
 	ScannerAuthError,
 	ScannerDependencyError
 } from '$lib/server/scanners/device-credentials';
-import {
-	kioskVolunteerCardDeviceLimiter,
-	kioskVolunteerCardPhoneLimiter
-} from '$lib/server/security/rate-limiter';
 import { findMasterByCode } from '$lib/server/shelters.admin';
-import { sha256Hex } from '$lib/db/hash';
 
 export const prerender = false;
 
@@ -37,9 +32,6 @@ function errorResponse(
 ): Response {
 	return json({ error: { code, message } }, { status, headers: { ...noStoreHeaders, ...headers } });
 }
-
-const rateLimited = () =>
-	errorResponse(429, 'KIOSK_RATE_LIMITED', 'กรุณารอสักครู่แล้วลองใหม่', { 'retry-after': '60' });
 
 /**
  * Show a volunteer their existing role-card QR after they type their phone at the kiosk.
@@ -71,10 +63,6 @@ export const POST: RequestHandler = async ({ request }) => {
 				'ช่องทางนี้ปิดใช้งาน กรุณาติดต่อเจ้าหน้าที่'
 			);
 		}
-
-		if (!kioskVolunteerCardDeviceLimiter.check(principal.registry_id)) return rateLimited();
-		// Hashed so raw phones are not held in memory; counts every request, not only misses.
-		if (!kioskVolunteerCardPhoneLimiter.check(await sha256Hex(canonical))) return rateLimited();
 
 		const volunteer = await resolveKioskVolunteerCard(principal.shelter_code, canonical);
 		await scannerServerRepository.updateDeviceLastSeen(principal.registry_id).catch(() => {});

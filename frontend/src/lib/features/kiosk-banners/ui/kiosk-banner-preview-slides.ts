@@ -15,19 +15,24 @@ type ListBanner = Pick<
 	| 'end_at'
 	| 'status'
 	| 'screen_type'
+	| 'group_id'
 >;
 
 /**
  * Slides for the list page's「ดูตัวอย่างบน kiosk」: only banners active at `now`, in the order the
- * kiosk plays them (FR-KBN-29), grouped by the screen type each kiosk is served.
+ * kiosk plays them (FR-KBN-29), grouped by the screen type each kiosk is served. With `groupId`,
+ * only that banner group's banners are included.
  */
 export function buildListPreviewSlides(
 	banners: readonly ListBanner[],
 	now: Date,
-	imageUrl: (id: string, rev?: string) => string
+	imageUrl: (id: string, rev?: string) => string,
+	groupId?: string
 ): Record<KioskScreenType, KioskBannerSlide[]> {
 	const grouped: Record<KioskScreenType, KioskBannerSlide[]> = { compact: [], portrait: [] };
-	for (const banner of sortBanners(banners.filter((b) => isActiveAt(b, now)))) {
+	for (const banner of sortBanners(
+		banners.filter((b) => isActiveAt(b, now) && (groupId === undefined || b.group_id === groupId))
+	)) {
 		grouped[screenTypeOf(banner)].push({
 			id: banner._id,
 			title: banner.title,

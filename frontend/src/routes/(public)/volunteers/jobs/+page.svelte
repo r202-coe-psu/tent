@@ -5,7 +5,7 @@
 	import Lock from '@lucide/svelte/icons/lock';
 	import { page } from '$app/state';
 	import { resolve } from '$app/paths';
-	import { PublicHeroMetrics, PublicPageShell } from '$lib/features/public-portal';
+	import { PublicPageShell } from '$lib/features/public-portal';
 	import { languageStore } from '$lib/stores/language.svelte';
 	import { jobsI18n } from '$lib/features/volunteers/i18n/jobs.i18n';
 	import {
@@ -30,17 +30,27 @@
 	<title>{t.pageTitle}</title>
 </svelte:head>
 
-<PublicPageShell class="flex min-h-full flex-col space-y-8" maxWidth="max-w-6xl">
-	<PublicHeroMetrics
-		title={t.heroTitle}
-		description={t.heroDescription}
-		badgeText={t.heroBadge}
-		badgeIcon={UserPlus}
-		showLivePing={false}
-		bgClass="bg-domain-volunteer-strong"
-		showSearch={false}
-	/>
+<!-- Full-width hero band, laid out like the landing page's: centred copy on the domain colour. -->
+<header
+	class="bg-domain-volunteer-strong px-4 pt-10 pb-12 text-center text-white sm:px-6 sm:pt-14 sm:pb-16 lg:px-8"
+>
+	<div class="mx-auto max-w-4xl">
+		<span
+			class="inline-flex items-center gap-2 rounded-full border border-white/25 bg-white/10 px-3 py-1.5 text-xs font-semibold tracking-wider text-white/90 uppercase"
+		>
+			<UserPlus class="h-4 w-4" aria-hidden="true" />
+			{t.heroBadge}
+		</span>
+		<h1 class="mt-4 text-2xl font-extrabold tracking-tight text-white sm:text-3xl lg:text-4xl">
+			{t.heroTitle}
+		</h1>
+		<p class="mx-auto mt-3 max-w-2xl text-base text-white/85 sm:text-lg">
+			{t.heroDescription}
+		</p>
+	</div>
+</header>
 
+<PublicPageShell class="flex min-h-full flex-col space-y-8 lg:px-8" maxWidth="max-w-7xl">
 	<!-- Top Navigation Tabs -->
 	<div class="mb-2 flex flex-col justify-between gap-4 md:flex-row md:items-center">
 		<div
@@ -69,16 +79,16 @@
 		</div>
 		<a
 			href={resolve('/volunteer/portal')}
-			class="hover:bg-opacity-90 flex w-full shrink-0 items-center justify-center gap-2.5 rounded-[20px] bg-domain-volunteer-strong px-7 py-4 text-sm font-bold text-white shadow-sm transition-all active:scale-[0.98] md:w-auto"
+			class="flex w-full shrink-0 items-center justify-center gap-2.5 rounded-[20px] bg-domain-volunteer-strong px-7 py-4 text-sm font-bold text-white shadow-sm transition-all hover:bg-domain-volunteer-strong/90 active:scale-[0.98] md:w-auto"
 		>
-			<Lock class="h-4 w-4 text-warning" />
+			<Lock class="h-4 w-4 text-domain-volunteer-border" />
 			{t.portalLink}
 		</a>
 	</div>
 
 	<!-- TAB 1: Job Board -->
 	{#if activeTab === 'jobs'}
-		<JobBoard />
+		<JobBoard initialShelter={page.url.searchParams.get('shelter')} />
 	{/if}
 
 	<!-- TAB 2: Ticket Search -->

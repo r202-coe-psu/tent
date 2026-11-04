@@ -10,6 +10,7 @@
 	import { generateQrDataUrl } from '$lib/utils/qrcode';
 	import KioskBackButton from './kiosk-back-button.svelte';
 	import KioskCheckInWizard from './kiosk-check-in-wizard.svelte';
+	import KioskInlineAlert from './kiosk-inline-alert.svelte';
 	import KioskNoticePanel from './kiosk-notice-panel.svelte';
 	import KioskPreRegisteredCheckIn from './kiosk-pre-registered-check-in.svelte';
 	import { KioskIdleTimeout, KIOSK_IDLE_TIMEOUT_MS } from './kiosk-idle-timeout.svelte.js';
@@ -43,6 +44,7 @@
 	});
 	// Monotonic, like `session.deadline`: the kiosk wall clock never decides how long the QR lives.
 	let now = $state(performance.now());
+	const restartNotice = walkInSession.takeThaidRestartNotice();
 
 	const homeUrl = $derived(resolve(`/kiosk${contextQuery}`));
 	const gate = $derived(session.gate);
@@ -161,6 +163,11 @@
 		<div class="flex justify-start">
 			<KioskBackButton href={homeUrl} />
 		</div>
+		{#if restartNotice}
+			<KioskInlineAlert tone="warning" icon={CircleAlert} role="alert"
+				>{restartNotice}</KioskInlineAlert
+			>
+		{/if}
 
 		{#if session.state === 'expired'}
 			<KioskNoticePanel tone="warning" icon={Clock} title="QR หมดอายุ" role="status">

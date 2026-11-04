@@ -1,7 +1,9 @@
 import type { AuthorContext } from '$lib/db/model';
 import {
+	canDistributeInShelter,
 	DISTRIBUTION_STAFF,
 	hasCapabilityInShelter,
+	isShelterManager,
 	isSystemAdmin,
 	SHELTER_MANAGER,
 	SUPPLY_COORDINATOR,
@@ -25,12 +27,17 @@ export function canCreateTicket(ctx: AuthorContext): boolean {
 
 /**
  * Checks if the actor is authorized to approve tickets for dispatch (Step 2).
- * Allowed: shelter_manager, system_admin (AC-TKT-03.1).
+ * Allowed: warehouse_staff, supply_coordinator, shelter_manager, system_admin
+ * (CR-179 widens AC-TKT-03.1; aligned with VDU rule 12 `canApproveTicket`).
  */
 export function canApproveTicket(ctx: AuthorContext): boolean {
 	if (!ctx.roles) return false;
 	if (isSystemAdmin(ctx.roles)) return true;
-	return hasCapabilityInShelter(ctx.roles, ctx.shelterCode, SHELTER_MANAGER);
+	return (
+		hasCapabilityInShelter(ctx.roles, ctx.shelterCode, WAREHOUSE_STAFF) ||
+		hasCapabilityInShelter(ctx.roles, ctx.shelterCode, SUPPLY_COORDINATOR) ||
+		hasCapabilityInShelter(ctx.roles, ctx.shelterCode, SHELTER_MANAGER)
+	);
 }
 
 /**
@@ -54,11 +61,7 @@ export function canDispatchTicket(ctx: AuthorContext): boolean {
  */
 export function canPerformFrontlineDistribution(ctx: AuthorContext): boolean {
 	if (!ctx.roles) return false;
-	if (isSystemAdmin(ctx.roles)) return true;
-	return (
-		hasCapabilityInShelter(ctx.roles, ctx.shelterCode, DISTRIBUTION_STAFF) ||
-		hasCapabilityInShelter(ctx.roles, ctx.shelterCode, SHELTER_MANAGER)
-	);
+	return canDistributeInShelter(ctx.roles, ctx.shelterCode);
 }
 
 /**
@@ -86,6 +89,47 @@ export function canReturnLoanPhysical(ctx: AuthorContext): boolean {
 	return (
 		canReceivePhysicalStock(ctx) ||
 		hasCapabilityInShelter(ctx.roles, ctx.shelterCode, DISTRIBUTION_STAFF)
+	);
+}
+
+/**
+ * #659 / #660 — may open / edit / cancel / submit / receive a bulk return pool.
+ * Allowed: warehouse_staff, supply_coordinator, shelter_manager, system_admin (VDU
+ * `canManageBulkReturnPool`).
+ */
+export function canManageBulkReturnPool(ctx: AuthorContext): boolean {
+	if (!ctx.roles) return false;
+	if (isSystemAdmin(ctx.roles)) return true;
+	return (
+		hasCapabilityInShelter(ctx.roles, ctx.shelterCode, WAREHOUSE_STAFF) ||
+		hasCapabilityInShelter(ctx.roles, ctx.shelterCode, SUPPLY_COORDINATOR) ||
+		hasCapabilityInShelter(ctx.roles, ctx.shelterCode, SHELTER_MANAGER)
+	);
+}
+
+/**
+ * #659 — may add / move / void a bulk return entry (and update the loans it closes): the pool
+ * managers plus distribution_staff (VDU `canWriteBulkReturnEntry`).
+ */
+export function canWriteBulkReturnEntry(ctx: AuthorContext): boolean {
+	if (!ctx.roles) return false;
+	return (
+		canManageBulkReturnPool(ctx) ||
+		hasCapabilityInShelter(ctx.roles, ctx.shelterCode, DISTRIBUTION_STAFF)
+	);
+}
+
+/**
+ * CR-193 §35 FR-35.2 — may reopen the loans of a bulk return entry of a closed pool:
+ * shelter_manager or warehouse_staff of the context's shelter, or system_admin (narrower than
+ * `canManageBulkReturnPool` on purpose: no supply_coordinator / distribution_staff).
+ */
+export function canReopenBulkReturnLoan(ctx: AuthorContext): boolean {
+	if (!ctx.roles) return false;
+	if (isSystemAdmin(ctx.roles)) return true;
+	return (
+		isShelterManager(ctx.roles, ctx.shelterCode) ||
+		hasCapabilityInShelter(ctx.roles, ctx.shelterCode, WAREHOUSE_STAFF)
 	);
 }
 
@@ -132,7 +176,7 @@ export function assertCanCancelTicket(ctx: AuthorContext): void {
 export function assertCanApproveTicket(ctx: AuthorContext): void {
 	if (!canApproveTicket(ctx)) {
 		throw new WorkflowAuthorizationError(
-			'Unauthorized: ticket approval requires shelter_manager or system_admin role'
+			'Unauthorized: ticket approval requires warehouse_staff, supply_coordinator, shelter_manager, or system_admin role'
 		);
 	}
 }
@@ -165,6 +209,30 @@ export function assertCanReturnLoanPhysical(ctx: AuthorContext): void {
 	if (!canReturnLoanPhysical(ctx)) {
 		throw new WorkflowAuthorizationError(
 			'Unauthorized: physical loan return requires warehouse_staff, supply_coordinator, distribution_staff, shelter_manager, or system_admin role'
+		);
+	}
+}
+
+export function assertCanManageBulkReturnPool(ctx: AuthorContext): void {
+	if (!canManageBulkReturnPool(ctx)) {
+		throw new WorkflowAuthorizationError(
+			'Unauthorized: managing a bulk return pool requires warehouse_staff, supply_coordinator, shelter_manager, or system_admin role'
+		);
+	}
+}
+
+export function assertCanWriteBulkReturnEntry(ctx: AuthorContext): void {
+	if (!canWriteBulkReturnEntry(ctx)) {
+		throw new WorkflowAuthorizationError(
+			'Unauthorized: recording bulk return entries requires warehouse_staff, supply_coordinator, distribution_staff, shelter_manager, or system_admin role'
+		);
+	}
+}
+
+export function assertCanReopenBulkReturnLoan(ctx: AuthorContext): void {
+	if (!canReopenBulkReturnLoan(ctx)) {
+		throw new WorkflowAuthorizationError(
+			'Unauthorized: reopening a bulk return loan requires shelter_manager, warehouse_staff, or system_admin role'
 		);
 	}
 }

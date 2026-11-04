@@ -57,6 +57,7 @@ const volunteerRepo = {
 	create: vi.fn(),
 	update: vi.fn(),
 	deactivate: vi.fn(),
+	reactivate: vi.fn(),
 	setCheckedIn: vi.fn()
 };
 /** Shelter code the last `volunteerRepositoryFor()` call asked for — `undefined` = active shelter. */
@@ -122,6 +123,7 @@ import {
 	useCreateJob,
 	useUpdateJob,
 	useDeactivateVolunteer,
+	useReactivateVolunteer,
 	useDispatchVolunteers,
 	useReviewApplication,
 	useCheckIn,
@@ -129,7 +131,8 @@ import {
 	useCreateWalkInVolunteer,
 	useSetVolunteerAccountLink,
 	startVolunteersLiveQuery,
-	findVolunteerByTrackingToken
+	findVolunteerByTrackingToken,
+	lookupVolunteerByScanCode
 } from './queries';
 
 function fakeQueryClient(): QueryClient {
@@ -346,6 +349,13 @@ describe('mutation invalidation map', () => {
 			keys: () => [volunteerKeys.volunteersAll(), volunteerKeys.hubMetrics()]
 		},
 		{
+			name: 'useReactivateVolunteer invalidates volunteers + hubMetrics',
+			seed: () => volunteerRepo.reactivate.mockResolvedValue({ status: 'active' }),
+			run: (qc) => useReactivateVolunteer(qc).mutate('volunteer:1'),
+			afterRun: () => expect(volunteerRepo.reactivate).toHaveBeenCalledWith('volunteer:1'),
+			keys: () => [volunteerKeys.volunteersAll(), volunteerKeys.hubMetrics()]
+		},
+		{
 			name: 'useDispatchVolunteers invalidates jobs + shiftAssignments + hubMetrics (quota-changing)',
 			seed: () => shiftAssignmentRepo.dispatch.mockResolvedValue({}),
 			run: (qc) => useDispatchVolunteers(qc).mutate({} as never),
@@ -356,13 +366,14 @@ describe('mutation invalidation map', () => {
 			]
 		},
 		{
-			name: 'useReviewApplication invalidates applications + jobs + hubMetrics (quota-changing)',
+			name: 'useReviewApplication invalidates applications + jobs + shiftAssignments + hubMetrics (quota-changing)',
 			seed: () => jobApplicationRepo.review.mockResolvedValue({}),
 			run: (qc) =>
 				useReviewApplication(qc).mutate({ id: 'job_application:1', decision: 'confirmed' }),
 			keys: () => [
 				volunteerKeys.jobApplicationsAll(),
 				volunteerKeys.jobsAll(),
+				volunteerKeys.shiftAssignmentsAll(),
 				volunteerKeys.hubMetrics()
 			]
 		},
@@ -420,6 +431,49 @@ describe('findVolunteerByTrackingToken', () => {
 		volunteerRepo.getByTrackingToken.mockResolvedValue(null);
 
 		await expect(findVolunteerByTrackingToken('missing')).resolves.toBeNull();
+	});
+});
+
+describe('lookupVolunteerByScanCode', () => {
+	it('resolves the digital-pass QR URL through the role-card token', async () => {
+		const volunteer = { _id: 'volunteer:1' };
+		volunteerRepo.getByTrackingToken.mockResolvedValue(volunteer);
+
+		await expect(
+			lookupVolunteerByScanCode('https://shelter.example/volunteer/ticket/TKT-VOL-ABC123')
+		).resolves.toBe(volunteer);
+		expect(volunteerRepo.getByTrackingToken).toHaveBeenCalledWith('TKT-VOL-ABC123');
+	});
+
+	it('fetches a scanned volunteer id directly', async () => {
+		const volunteer = { _id: 'volunteer:01HZX' };
+		volunteerRepo.get.mockResolvedValue(volunteer);
+
+		await expect(lookupVolunteerByScanCode('volunteer:01HZX')).resolves.toBe(volunteer);
+		expect(volunteerRepo.get).toHaveBeenCalledWith('volunteer:01HZX');
+	});
+
+	it('matches a printed volunteer code case-insensitively', async () => {
+		const match = { _id: 'volunteer:2', volunteer_code: 'V-002' };
+		volunteerRepo.list.mockResolvedValue([{ _id: 'volunteer:1', volunteer_code: 'V-001' }, match]);
+
+		await expect(lookupVolunteerByScanCode('v-002')).resolves.toBe(match);
+	});
+
+	it('resolves null when a printed code is shared by two volunteers', async () => {
+		volunteerRepo.list.mockResolvedValue([
+			{ _id: 'volunteer:1', volunteer_code: 'V-003' },
+			{ _id: 'volunteer:2', volunteer_code: 'v-003' }
+		]);
+
+		await expect(lookupVolunteerByScanCode('V-003')).resolves.toBeNull();
+	});
+
+	it('resolves null without a lookup for a non-volunteer scan', async () => {
+		await expect(lookupVolunteerByScanCode('evacuee:01HZX')).resolves.toBeNull();
+		expect(volunteerRepo.get).not.toHaveBeenCalled();
+		expect(volunteerRepo.list).not.toHaveBeenCalled();
+		expect(volunteerRepo.getByTrackingToken).not.toHaveBeenCalled();
 	});
 });
 

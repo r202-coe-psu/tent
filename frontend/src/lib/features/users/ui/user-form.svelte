@@ -7,6 +7,7 @@
 	import * as AlertDialog from '$lib/components/ui/alert-dialog/index.js';
 	import * as Popover from '$lib/components/ui/popover/index.js';
 	import { defaults, setError, superForm } from 'sveltekit-superforms';
+	import { toast } from 'svelte-sonner';
 	import { zod4 } from 'sveltekit-superforms/adapters';
 	import {
 		SA_GRANTABLE_CAPABILITIES,
@@ -17,8 +18,12 @@
 		SHELTER_MANAGER,
 		roleDisplayLabel,
 		assignmentsFromRoles,
-		capabilitiesForShelter
+		capabilitiesForShelter,
+		compoundCapabilityRole,
+		STAFF_CAPABILITY_DESCRIPTIONS,
+		type StaffCapability
 	} from '$lib/auth/roles';
+	import { grantExpiryLabel, grantFor } from '$lib/auth/role-grants';
 	import {
 		createUserSchema,
 		editUserSchema,
@@ -31,6 +36,7 @@
 	import { generateTemporaryPassphrase } from '$lib/auth/passphrase-generator';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Badge } from '$lib/components/ui/badge/index.js';
+	import PasswordRuleChecklist from '$lib/components/password-rule-checklist.svelte';
 	import Save from '@lucide/svelte/icons/save';
 	import UserCheck from '@lucide/svelte/icons/user-check';
 	import Users from '@lucide/svelte/icons/users';
@@ -43,7 +49,7 @@
 	import Trash2 from '@lucide/svelte/icons/trash-2';
 	import Info from '@lucide/svelte/icons/info';
 	import RefreshCw from '@lucide/svelte/icons/refresh-cw';
-	import { SvelteMap, SvelteSet } from 'svelte/reactivity';
+	import { SvelteSet } from 'svelte/reactivity';
 	import Building2 from '@lucide/svelte/icons/building-2';
 	import CircleAlert from '@lucide/svelte/icons/circle-alert';
 	import Eye from '@lucide/svelte/icons/eye';
@@ -205,14 +211,14 @@
 					});
 					if (!editing) reset();
 				} catch (err) {
-					setError(
-						form,
+					const message =
 						err instanceof Error
 							? err.message
 							: editing
 								? 'ไม่สามารถบันทึกข้อมูลผู้ใช้งานได้'
-								: 'ไม่สามารถสร้างผู้ใช้งานได้'
-					);
+								: 'ไม่สามารถสร้างผู้ใช้งานได้';
+					setError(form, message);
+					toast.error(message);
 				}
 			}
 		}
@@ -343,74 +349,24 @@
 	const SHELTER_MANAGER_DESCRIPTION =
 		'ควบคุมการปฏิบัติงานทั้งหมดภายในศูนย์ของตนเอง มีอำนาจครอบคลุมสิทธิ์ของบทบาทเจ้าหน้าที่ทั้งหมดในศูนย์นั้น รวมถึงงานคัดกรองและการแพทย์';
 
-	/** Compact role picker — checkbox names + PRD descriptions. */
-	const ROLE_OPTIONS = [
-		{
-			id: 'registration_staff',
-			name: 'เจ้าหน้าที่รับลงทะเบียน',
-			description:
-				'บันทึกข้อมูลทะเบียนประวัติผู้อพยพ (Evacuees), ข้อมูลครัวเรือน, ยานพาหนะ, สัตว์เลี้ยง, การเช็คอิน-เช็คเอาต์ประจำวัน และออกบัตรประจำตัว'
-		},
-		{
-			id: 'triage_staff',
-			name: 'เจ้าหน้าที่คัดกรอง',
-			description:
-				'คัดกรองกลุ่มเปราะบาง (ผู้สูงอายุ, ผู้พิการ, เด็ก, สตรีมีครรภ์) และคัดแยกผู้ป่วยเบื้องต้นเพื่อส่งต่อไปยังพื้นที่พักพิงที่เหมาะสม'
-		},
-		{
-			id: 'medical_staff',
-			name: 'เจ้าหน้าที่การแพทย์และพยาบาล',
-			description:
-				'บันทึกข้อมูลสุขภาพ, ประวัติการรักษาพยาบาลเบื้องต้น, การจ่ายยา, การเฝ้าระวังโรคติดต่อ และการส่งต่อผู้ป่วยไปยังโรงพยาบาลภายนอก'
-		},
-		{
-			id: 'kitchen_staff',
-			name: 'เจ้าหน้าที่ครัวกลาง',
-			description:
-				'วางแผนรายการอาหารประจำวัน (Meal Planning), คำนวณวัตถุดิบและแก๊สหุงต้ม, เบิกจ่ายวัตถุดิบ, และบันทึกยอดการแจกจ่ายอาหาร'
-		},
-		{
-			id: 'supply_coordinator',
-			name: 'ผู้ประสานงานพัสดุและคลัง',
-			description:
-				'รับมอบสิ่งของบริจาค, จัดการคลังพัสดุ, ตัดจ่ายสิ่งของจำเป็น, เบิกถุงยังชีพ, และควบคุมระดับสต็อกขั้นต่ำ'
-		},
-		{
-			id: 'warehouse_staff',
-			name: 'เจ้าหน้าที่คลัง',
-			description: 'ดูแลคลังสินค้า รับ-จ่ายวัสดุ และบันทึกสต็อกภายในศูนย์'
-		},
-		{
-			id: 'distribution_staff',
-			name: 'เจ้าหน้าที่แจกจ่าย',
-			description:
-				'ปฏิบัติงานจุดแจกจ่ายอาหารและสิ่งของ (Station 4) ภายในศูนย์ของตนเอง: รับของจากคลัง, สแกนส่งมอบให้ผู้ประสบภัย, ปิดกะ และส่งคืนของเหลือ'
-		},
-		{
-			id: 'kiosk_staff',
-			name: 'เจ้าหน้าที่ดูแลตู้ Kiosk',
-			description:
-				'ดูแลตู้ Kiosk ของศูนย์ตัวเอง: เพิ่มเครื่อง, แก้ชื่อและจุดบริการ, เปิด/ปิด/ลบเครื่อง, ตั้งหรือดู PIN เจ้าหน้าที่ของเครื่อง, และจัดการแบนเนอร์ที่แสดงบนตู้'
-		},
-		{
-			id: 'facility_staff',
-			name: 'เจ้าหน้าที่ฝ่ายอาคารสถานที่',
-			description:
-				'จัดการโซนที่พัก (Zoning), บริหารจัดการเต็นท์และพื้นที่นอน, ดูแลระบบไฟฟ้า น้ำประปา สุขาภิบาล และการซ่อมบำรุงอาคาร'
-		},
-		{
-			id: 'volunteer_coordinator',
-			name: 'ผู้ประสานงานจิตอาสา',
-			description:
-				'สร้างประกาศภารกิจงานอาสา, ดูแลกระดานงาน, จัดสรรกะงาน, ดูแลจุดเช็คอินแท็บเล็ตหน้าศูนย์, และออกสิทธิ์ระบบให้อาสาช่วยงาน'
-		},
-		{
-			id: 'security_officer',
-			name: 'เจ้าหน้าที่รักษาความปลอดภัย',
-			description:
-				'ควบคุมความสงบเรียบร้อย, บันทึกเหตุการณ์ความไม่ปลอดภัย (Incidents), จัดการพื้นที่หวงห้าม, และเฝ้าระวังจุดเข้า-ออกศูนย์'
-		}
-	] as const;
+	/** Compact role picker — PRD descriptions per capability. */
+	/** Picker order; the descriptions live in `STAFF_CAPABILITY_DESCRIPTIONS` (shared with the volunteer access dialog). */
+	const ROLE_OPTIONS = (
+		[
+			'registration_staff',
+			'triage_staff',
+			'medical_staff',
+			'kitchen_staff',
+			'supply_coordinator',
+			'warehouse_staff',
+			'distribution_staff',
+			'kiosk_staff',
+			'pr_staff',
+			'facility_staff',
+			'volunteer_coordinator',
+			'security_officer'
+		] as const satisfies readonly StaffCapability[]
+	).map((id) => ({ id, description: STAFF_CAPABILITY_DESCRIPTIONS[id] }));
 
 	function toggleRole(roleId: string, checked: boolean) {
 		const cap = roleId as SaGrantableCapability;
@@ -439,36 +395,33 @@
 		$formData.capabilities = Array.from(current);
 	}
 
+	/** Make a coordinator-granted role permanent ("ไม่มีวันหมด"); saved as `permanent_roles`. */
+	function setPermanent(key: string, checked: boolean) {
+		const keys = new SvelteSet($formData.permanent_roles ?? []);
+		if (checked) keys.add(key);
+		else keys.delete(key);
+		$formData.permanent_roles = [...keys];
+	}
+
 	function isRoleChecked(roleId: string): boolean {
 		return (($formData.capabilities ?? []) as string[]).includes(roleId);
 	}
 
-	/** Prefer the form's long Thai labels; fall back to shared roleDisplayLabel. */
-	const roleLabelById = (() => {
-		const map = new SvelteMap<string, string>();
-		map.set(SYSTEM_ADMIN, 'ผู้ดูแลระบบส่วนกลาง (System Admin)');
-		map.set(SHELTER_MANAGER, 'ผู้จัดการศูนย์พักพิง (Shelter Manager)');
-		for (const role of ROLE_OPTIONS) {
-			map.set(role.id, role.name);
-		}
-		return map;
-	})();
-
 	const selectedRoleChips = $derived.by(() => {
 		if (isSaRoleSelected) {
-			return [{ id: SYSTEM_ADMIN, label: roleLabelById.get(SYSTEM_ADMIN) ?? SYSTEM_ADMIN }];
+			return [{ id: SYSTEM_ADMIN, label: roleDisplayLabel(SYSTEM_ADMIN) }];
 		}
 		if (multiShelter) {
 			return ($formData.assignments ?? []).flatMap((a) =>
 				a.capabilities.map((id) => ({
 					id: `${a.shelter_code}:${id}`,
-					label: `${roleLabelById.get(id) ?? roleDisplayLabel(id)} (${a.shelter_code})`
+					label: `${roleDisplayLabel(id)} (${a.shelter_code})`
 				}))
 			);
 		}
 		return ($formData.capabilities ?? []).map((id) => ({
 			id,
-			label: roleLabelById.get(id) ?? roleDisplayLabel(id)
+			label: roleDisplayLabel(id)
 		}));
 	});
 
@@ -477,6 +430,37 @@
 		return shelterItems.filter((s) => !used.has(s.value));
 	});
 </script>
+
+{#snippet grantNote(shelterCode: string | null, roleId: string)}
+	{@const grant = shelterCode ? grantFor(user?.role_grants, shelterCode, roleId) : null}
+	{#if grant}
+		{@const key = compoundCapabilityRole(grant.shelter_code, grant.role)}
+		{@const permanent = ($formData.permanent_roles ?? []).includes(key)}
+		{@const reviewer = grant.verified_by?.reviewed_by}
+		<div
+			class="col-span-full -mt-0.5 mb-1 ml-8 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs"
+		>
+			<span class={permanent ? 'text-muted-foreground line-through' : 'font-medium text-amber-700'}>
+				{grantExpiryLabel(grant)}
+			</span>
+			<span class="text-muted-foreground">ออกโดย {grant.granted_by}</span>
+			{#if reviewer}
+				<span class="text-muted-foreground">
+					ยืนยันตัวตนโดย {reviewer}{reviewer === grant.granted_by ? ' (คนเดียวกัน)' : ''}
+				</span>
+			{/if}
+			<label class="flex cursor-pointer items-center gap-1.5 text-slate-700">
+				<input
+					type="checkbox"
+					class="size-3.5 shrink-0 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+					checked={permanent}
+					onchange={(e) => setPermanent(key, e.currentTarget.checked)}
+				/>
+				ไม่มีวันหมด
+			</label>
+		</div>
+	{/if}
+{/snippet}
 
 {#snippet roleInfoButton(description: string, ariaLabel: string)}
 	<Popover.Root>
@@ -734,6 +718,9 @@
 										สร้างรหัส
 									</Button>
 								</div>
+								{#if $formData.password}
+									<PasswordRuleChecklist password={$formData.password} />
+								{/if}
 							{/snippet}
 						</Form.Control>
 						<Form.FieldErrors />
@@ -810,9 +797,7 @@
 							onchange={(e) => setSystemAdmin(e.currentTarget.checked)}
 						/>
 						<div>
-							<span class="text-sm font-bold text-slate-900"
-								>ผู้ดูแลระบบส่วนกลาง (System Admin)</span
-							>
+							<span class="text-sm font-bold text-slate-900">{roleDisplayLabel(SYSTEM_ADMIN)}</span>
 							<p class="text-xs text-slate-500">
 								มีสิทธิ์สูงสุดระดับสากล เข้าถึงและจัดการได้ทุกศูนย์พักพิงในระบบ
 							</p>
@@ -930,7 +915,7 @@
 											toggleAssignmentRole(index, SHELTER_MANAGER, e.currentTarget.checked)}
 									/>
 									<span class="text-sm font-semibold text-slate-900"
-										>ผู้จัดการศูนย์พักพิง (Shelter Manager)</span
+										>{roleDisplayLabel(SHELTER_MANAGER)}</span
 									>
 								</label>
 								{@render roleInfoButton(
@@ -953,10 +938,16 @@
 													onchange={(e) =>
 														toggleAssignmentRole(index, role.id, e.currentTarget.checked)}
 												/>
-												<span class="text-sm text-slate-800">{role.name}</span>
+												<span class="text-sm text-slate-800">{roleDisplayLabel(role.id)}</span>
 											</label>
-											{@render roleInfoButton(role.description, `รายละเอียด${role.name}`)}
+											{@render roleInfoButton(
+												role.description,
+												`รายละเอียด${roleDisplayLabel(role.id)}`
+											)}
 										</div>
+										{#if isAssignmentRoleChecked(index, role.id)}
+											{@render grantNote(assignment.shelter_code, role.id)}
+										{/if}
 									{/each}
 								</div>
 							{/if}
@@ -1044,7 +1035,7 @@
 										onchange={(e) => toggleRole(SHELTER_MANAGER, e.currentTarget.checked)}
 									/>
 									<span class="text-sm font-semibold text-slate-900"
-										>ผู้จัดการศูนย์พักพิง (Shelter Manager)</span
+										>{roleDisplayLabel(SHELTER_MANAGER)}</span
 									>
 								</label>
 								{@render roleInfoButton(
@@ -1067,10 +1058,16 @@
 												checked={isRoleChecked(role.id)}
 												onchange={(e) => toggleRole(role.id, e.currentTarget.checked)}
 											/>
-											<span class="text-sm text-slate-800">{role.name}</span>
+											<span class="text-sm text-slate-800">{roleDisplayLabel(role.id)}</span>
 										</label>
-										{@render roleInfoButton(role.description, `รายละเอียด${role.name}`)}
+										{@render roleInfoButton(
+											role.description,
+											`รายละเอียด${roleDisplayLabel(role.id)}`
+										)}
 									</div>
+									{#if isRoleChecked(role.id)}
+										{@render grantNote(boundShelterCode, role.id)}
+									{/if}
 								{/each}
 							</div>
 						{/if}

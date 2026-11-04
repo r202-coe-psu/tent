@@ -2,12 +2,24 @@
 
 from __future__ import annotations
 
+from contextlib import ExitStack
 from decimal import Decimal
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from worker.couch.processor import process_change
+
+
+@pytest.fixture(autouse=True)
+def shelter_projected():
+    """Every shelter counts as open in `public_shelters` unless a test says otherwise."""
+    with patch(
+        "worker.couch.processor.projected_shelter_status",
+        new_callable=AsyncMock,
+        return_value="open",
+    ) as projected:
+        yield projected
 
 
 @pytest.mark.asyncio
@@ -389,11 +401,16 @@ async def test_process_evacuee_change_refreshes_occupancy():
         patch(
             "worker.couch.processor.refresh_shelter_occupants", new_callable=AsyncMock
         ) as refresh_occ,
+        patch(
+            "worker.couch.processor.sync_booking_stay", new_callable=AsyncMock
+        ) as sync_stay,
     ):
         await process_change(couch, "shelter_sh001", change)
 
     refresh.assert_awaited_once_with(couch, "SH001")
     refresh_occ.assert_awaited_once_with(couch, "SH001")
+    # PDPA D8: EXT-009 reads the stay from the booking row when the person is not projected.
+    sync_stay.assert_awaited_once_with(change["doc"])
 
 
 @pytest.mark.asyncio
@@ -482,23 +499,26 @@ async def test_process_registry_shelter_tombstone_deactivates_not_deletes():
 
 
 @pytest.mark.asyncio
-async def test_process_registry_shelter_upsert_delete_drops_the_shelters_stocks():
-    """A registry doc that projects to `delete` (closed shelter) cascades like the
-    tombstone does — `shelter_stocks` rows included (#461)."""
+async def test_process_registry_cancelled_shelter_deletes_its_projections():
+    """A registry doc that projects to `delete` (cancelled shelter) drops the row and
+    every shelter-scoped projection — `shelter_stocks` rows included (#461)."""
     couch = AsyncMock()
     change = {
         "seq": 78,
-        "id": "shelter:01CLOSED",
-        "doc": {"_id": "shelter:01CLOSED", "type": "shelter"},
+        "id": "shelter:01CANCELLED",
+        "doc": {
+            "_id": "shelter:01CANCELLED",
+            "type": "shelter",
+            "code": "SH002",
+            "operation_status": "cancelled",
+        },
     }
 
     with (
         patch("worker.couch.processor.save_checkpoint", new_callable=AsyncMock),
         patch(
-            "worker.couch.processor.project_shelter",
-            return_value=("delete", {"_id": "SH002"}),
-        ),
-        patch("worker.couch.processor.apply_shelter", new_callable=AsyncMock),
+            "worker.couch.processor.apply_shelter", new_callable=AsyncMock
+        ) as apply_shelter,
         patch(
             "worker.couch.processor.delete_persons_for_shelter", new_callable=AsyncMock
         ) as del_persons,
@@ -512,10 +532,182 @@ async def test_process_registry_shelter_upsert_delete_drops_the_shelters_stocks(
         patch(
             "worker.couch.processor.delete_stocks_for_shelter", new_callable=AsyncMock
         ) as del_stocks,
+        patch(
+            "worker.couch.processor.delete_jobs_for_shelter", new_callable=AsyncMock
+        ) as del_jobs,
+        patch(
+            "worker.couch.processor._reproject_shelter_database", new_callable=AsyncMock
+        ) as reproject,
     ):
         await process_change(couch, "registry", change)
 
+    apply_shelter.assert_awaited_once_with("delete", {"_id": "SH002"})
     del_persons.assert_awaited_once_with("SH002")
     del_occupants.assert_awaited_once_with("SH002")
     del_needs.assert_awaited_once_with("SH002")
     del_stocks.assert_awaited_once_with("SH002")
+    del_jobs.assert_awaited_once_with("SH002")
+    reproject.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_process_registry_shelter_relisted_rescans_its_database(
+    shelter_projected: AsyncMock,
+):
+    """Reverting `cancelled` (no public row yet) rebuilds the shelter DB's projections —
+    its changes were skipped while it was hidden."""
+    shelter_projected.return_value = None
+    couch = AsyncMock()
+    couch.database_exists.return_value = True
+    change = {
+        "seq": 79,
+        "id": "shelter:01BACK",
+        "doc": {
+            "_id": "shelter:01BACK",
+            "type": "shelter",
+            "code": "SH003",
+            "operation_status": "standby",
+        },
+    }
+
+    with (
+        patch("worker.couch.processor.save_checkpoint", new_callable=AsyncMock),
+        patch(
+            "worker.couch.processor.apply_shelter", new_callable=AsyncMock
+        ) as apply_shelter,
+        patch(
+            "worker.couch.bootstrap.bootstrap_database", new_callable=AsyncMock
+        ) as bootstrap_db,
+    ):
+        await process_change(couch, "registry", change)
+
+    assert apply_shelter.await_args.args[0] == "upsert"
+    couch.database_exists.assert_awaited_once_with("shelter_sh003")
+    bootstrap_db.assert_awaited_once_with(couch, "shelter_sh003")
+
+
+@pytest.mark.asyncio
+async def test_process_registry_shelter_already_listed_does_not_rescan():
+    couch = AsyncMock()
+    change = {
+        "seq": 80,
+        "id": "shelter:01OPEN",
+        "doc": {
+            "_id": "shelter:01OPEN",
+            "type": "shelter",
+            "code": "SH004",
+            "operation_status": "active",
+        },
+    }
+
+    with (
+        patch("worker.couch.processor.save_checkpoint", new_callable=AsyncMock),
+        patch("worker.couch.processor.apply_shelter", new_callable=AsyncMock),
+        patch(
+            "worker.couch.bootstrap.bootstrap_database", new_callable=AsyncMock
+        ) as bootstrap_db,
+    ):
+        await process_change(couch, "registry", change)
+
+    bootstrap_db.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_process_change_skips_a_cancelled_shelters_database(
+    shelter_projected: AsyncMock,
+):
+    """No public row (cancelled) → a shelter-DB change projects nothing, but the
+    checkpoint still advances."""
+    shelter_projected.return_value = None
+    couch = AsyncMock()
+    change = {
+        "seq": 81,
+        "id": "evacuee:01X",
+        "doc": {"_id": "evacuee:01X", "type": "evacuee"},
+    }
+
+    with (
+        patch(
+            "worker.couch.processor.save_checkpoint", new_callable=AsyncMock
+        ) as save_cp,
+        patch(
+            "worker.couch.processor.apply_person", new_callable=AsyncMock
+        ) as apply_person,
+        patch(
+            "worker.couch.processor.refresh_shelter_occupants", new_callable=AsyncMock
+        ) as refresh_occupants,
+    ):
+        await process_change(couch, "shelter_sh005", change)
+
+    shelter_projected.assert_awaited_once_with("SH005")
+    apply_person.assert_not_awaited()
+    refresh_occupants.assert_not_awaited()
+    save_cp.assert_awaited_once_with("shelter_sh005", 81)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("status", "walk_in_reconciled", "settles"),
+    [
+        # CR-206 FR-MP-27c / AC-7: closed with a shortfall — hand it back now.
+        ("received", False, True),
+        # A received walk-in was just reconciled by reserve_walk_in_quota.
+        ("received", True, False),
+        ("verifying", False, False),
+        ("rejected", False, False),
+    ],
+)
+async def test_a_received_booking_settles_its_shortfall(
+    status: str, walk_in_reconciled: bool, settles: bool
+):
+    couch = AsyncMock()
+    doc = {
+        "_id": "donation:01MP",
+        "type": "donation",
+        "status": status,
+        "channel": "public",
+        "campaign_id": "donation_campaign:01",
+        "items": [{"item_id": "item:para", "qty": "10"}],
+    }
+    change = {"seq": 90, "id": "donation:01MP", "doc": doc}
+
+    with ExitStack() as stack:
+        for name in (
+            "save_checkpoint",
+            "apply_donation",
+            "apply_need",
+            "settle_donation_quota",
+        ):
+            stack.enter_context(
+                patch(f"worker.couch.processor.{name}", new_callable=AsyncMock)
+            )
+        stack.enter_context(
+            patch(
+                "worker.couch.processor.project_needs_for_shelter",
+                new_callable=AsyncMock,
+                return_value=[],
+            )
+        )
+        stack.enter_context(
+            patch(
+                "worker.couch.processor.project_donation",
+                return_value=("upsert", {"_id": "donation:01MP"}),
+            )
+        )
+        stack.enter_context(
+            patch(
+                "worker.couch.processor.reserve_walk_in_quota",
+                new_callable=AsyncMock,
+                return_value=walk_in_reconciled,
+            )
+        )
+        settle_shelved = stack.enter_context(
+            patch("worker.couch.processor.settle_shelved_quota", new_callable=AsyncMock)
+        )
+        await process_change(couch, "shelter_sh001", change)
+
+    if settles:
+        settle_shelved.assert_awaited_once()
+        assert settle_shelved.await_args.args == (couch, "SH001")
+    else:
+        settle_shelved.assert_not_awaited()

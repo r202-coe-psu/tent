@@ -78,6 +78,21 @@ export function invalidateBulkPools(
 	});
 }
 
+/** Invalidates every v3 bulk return pool overview query of the shelter. */
+export function invalidateBulkPoolsV3(queryClient: QueryClient, shelterCode: string): void {
+	queryClient.invalidateQueries({ queryKey: distributionKeys.bulkPoolsV3All(shelterCode) });
+}
+
+/** Invalidates every returner outstanding-loans query of the shelter. */
+export function invalidateReturnerOutstandingLoans(
+	queryClient: QueryClient,
+	shelterCode: string
+): void {
+	queryClient.invalidateQueries({
+		queryKey: distributionKeys.returnerOutstandingLoansAll(shelterCode)
+	});
+}
+
 /** Invalidates bulk return claims, optionally invalidating a specific claim. */
 export function invalidateBulkClaims(
 	queryClient: QueryClient,

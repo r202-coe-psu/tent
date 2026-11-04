@@ -1,5 +1,5 @@
 import { env } from '$env/dynamic/private';
-import { error, json } from '@sveltejs/kit';
+import { error, json, isHttpError, type HttpError } from '@sveltejs/kit';
 import {
 	COUCH_ADMIN,
 	SYSTEM_ADMIN,
@@ -69,6 +69,20 @@ export async function adminRaw(
 	});
 	const data = await res.json().catch(() => null);
 	return { status: res.status, data };
+}
+
+/** Admin GET of one attachment's raw bytes — avoids pulling every attachment via `?attachments=true`. */
+export async function adminAttachment(
+	path: string
+): Promise<{ status: number; bytes: ArrayBuffer | null; contentType: string | null }> {
+	const { base, authHeader } = adminConfig();
+	const res = await fetch(`${base}${path}`, { headers: { Authorization: authHeader } });
+	if (!res.ok) return { status: res.status, bytes: null, contentType: null };
+	return {
+		status: res.status,
+		bytes: await res.arrayBuffer(),
+		contentType: res.headers.get('content-type')
+	};
 }
 
 /** Admin request that parses JSON and throws CouchDB's reason on HTTP error. */
@@ -161,15 +175,19 @@ export async function requireShelterManagerOrSA(
 // session-cookie authorization. These helpers keep the BFF on that contract.
 
 export type ServiceErrorCode =
-	'UNAUTHENTICATED' | 'FORBIDDEN' | 'VALIDATION' | 'CONFLICT' | 'INTERNAL';
+	'UNAUTHENTICATED' | 'FORBIDDEN' | 'NOT_FOUND' | 'VALIDATION' | 'CONFLICT' | 'INTERNAL';
 
 const STATUS_BY_CODE: Record<ServiceErrorCode, number> = {
 	UNAUTHENTICATED: 401,
 	FORBIDDEN: 403,
+	NOT_FOUND: 404,
 	VALIDATION: 422,
 	CONFLICT: 409,
 	INTERNAL: 500
 };
+
+/** HTTP status for a {@link ServiceErrorCode} — for callers that answer with `fail()` instead of JSON. */
+export const serviceErrorStatus = (code: ServiceErrorCode): number => STATUS_BY_CODE[code];
 
 /** Contract-shaped error carrying its code; handlers turn it into the envelope. */
 export class ServiceError extends Error {
@@ -237,6 +255,27 @@ export function serviceError(e: unknown): Response {
 	return json({ error }, { status: STATUS_BY_CODE[err.code] });
 }
 
+const CODE_BY_STATUS: Record<number, ServiceErrorCode> = {
+	400: 'VALIDATION',
+	401: 'UNAUTHENTICATED',
+	403: 'FORBIDDEN',
+	404: 'NOT_FOUND',
+	409: 'CONFLICT',
+	422: 'VALIDATION'
+};
+
+/**
+ * Like {@link serviceError}, but a SvelteKit `error()` (thrown by the route guards, or a
+ * deliberate 400) keeps its status and message in the contract envelope instead of collapsing
+ * to a 500 — `serviceFetch` reads `error.message`, so the UI toasts the real reason.
+ */
+export function serviceOrHttpError(e: unknown): Response {
+	if (!isHttpError(e)) return serviceError(e);
+	const err = e as HttpError;
+	const code = CODE_BY_STATUS[err.status] ?? 'INTERNAL';
+	return json({ error: { code, message: err.body.message } }, { status: err.status });
+}
+
 /** Authenticated caller, resolved from the session cookie via central `_session`. */
 export interface Caller {
 	name: string;
@@ -271,14 +310,18 @@ export async function readSessionUserCtx(
  * so the handler can scope the operation. Throws {@link ServiceError}.
  */
 export async function authorizeUserWrite(cookie: string | null): Promise<Caller> {
-	const { name, roles } = await readSessionUserCtx(cookie);
-	if (!name) throw new ServiceError('UNAUTHENTICATED', 'Authentication required');
-
-	const isSA = isSystemAdmin(roles);
-	if (!isSA && !isShelterManager(roles)) {
+	const caller = await authorizeSession(cookie);
+	if (!caller.isSA && !isShelterManager(caller.roles)) {
 		throw new ServiceError('FORBIDDEN', 'Requires system_admin or shelter_manager');
 	}
-	return { name, roles, isSA, shelterCode: shelterCodeFromRoles(roles) };
+	return caller;
+}
+
+/** Any logged-in caller; the operation itself enforces capability. Throws {@link ServiceError}. */
+export async function authorizeSession(cookie: string | null): Promise<Caller> {
+	const { name, roles } = await readSessionUserCtx(cookie);
+	if (!name) throw new ServiceError('UNAUTHENTICATED', 'Authentication required');
+	return { name, roles, isSA: isSystemAdmin(roles), shelterCode: shelterCodeFromRoles(roles) };
 }
 
 /**
