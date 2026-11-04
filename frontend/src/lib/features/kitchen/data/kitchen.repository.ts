@@ -126,6 +126,7 @@ export interface KitchenRepository {
 		lines: readonly ResolvedYieldLine[],
 		ctx: AuthorContext
 	): Promise<{ receipt: MealServiceReceipt; ledger: StockLedger[] }>;
+	listMealServiceLedger(mealServiceId: string): Promise<StockLedger[]>;
 	rejectMealServiceReceipt(
 		mealServiceId: string,
 		reason: string,

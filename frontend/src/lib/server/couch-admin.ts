@@ -1,5 +1,5 @@
 import { env } from '$env/dynamic/private';
-import { error, json } from '@sveltejs/kit';
+import { error, json, isHttpError, type HttpError } from '@sveltejs/kit';
 import {
 	COUCH_ADMIN,
 	SYSTEM_ADMIN,
@@ -264,6 +264,27 @@ export function serviceError(e: unknown): Response {
 	};
 	if (err.description) error.description = err.description;
 	return json({ error }, { status: STATUS_BY_CODE[err.code] });
+}
+
+const CODE_BY_STATUS: Record<number, ServiceErrorCode> = {
+	400: 'VALIDATION',
+	401: 'UNAUTHENTICATED',
+	403: 'FORBIDDEN',
+	404: 'NOT_FOUND',
+	409: 'CONFLICT',
+	422: 'VALIDATION'
+};
+
+/**
+ * Like {@link serviceError}, but a SvelteKit `error()` (thrown by the route guards, or a
+ * deliberate 400) keeps its status and message in the contract envelope instead of collapsing
+ * to a 500 — `serviceFetch` reads `error.message`, so the UI toasts the real reason.
+ */
+export function serviceOrHttpError(e: unknown): Response {
+	if (!isHttpError(e)) return serviceError(e);
+	const err = e as HttpError;
+	const code = CODE_BY_STATUS[err.status] ?? 'INTERNAL';
+	return json({ error: { code, message: err.body.message } }, { status: err.status });
 }
 
 /** Authenticated caller, resolved from the session cookie via central `_session`. */

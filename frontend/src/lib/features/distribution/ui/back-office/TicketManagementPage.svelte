@@ -31,7 +31,6 @@
 		type PoolUrlState
 	} from '../model/pool-url-state';
 	import { untrack } from 'svelte';
-	import TicketGroupTabs from './TicketGroupTabs.svelte';
 	import TicketFilters from './TicketFilters.svelte';
 	import TicketTable from './TicketTable.svelte';
 	import CreateTicketDialog from './CreateTicketDialog.svelte';
@@ -299,6 +298,68 @@
 		searchQuery = '';
 		updateFilters({ ...TICKET_URL_DEFAULTS, group: 'pending_ready' });
 	}
+
+	const KPI_CARDS = [
+		{
+			id: 'all',
+			label: 'ทั้งหมด',
+			hint: 'รวมทุกสถานะ',
+			icon: ClipboardList,
+			border: 'border-slate-200/80',
+			labelClass: 'text-slate-500',
+			iconClass: 'text-slate-400',
+			hintClass: 'text-slate-400'
+		},
+		{
+			id: 'pending_ready',
+			label: 'รอจัด / พร้อมส่ง',
+			hint: 'รอจัดของ • พร้อมส่งออก',
+			icon: Clock,
+			border: 'border-amber-200',
+			labelClass: 'text-amber-800',
+			iconClass: 'text-amber-600',
+			hintClass: 'text-amber-700'
+		},
+		{
+			id: 'in_progress',
+			label: 'กำลังดำเนินการ',
+			hint: 'นำส่ง • แจกจ่าย • ปิดรอบ',
+			icon: Send,
+			border: 'border-blue-200',
+			labelClass: 'text-blue-800',
+			iconClass: 'text-blue-600',
+			hintClass: 'text-blue-700'
+		},
+		{
+			id: 'returns_closeout',
+			label: 'รับคืน / รอปิดงาน',
+			hint: 'รอตรวจรับคืน • ตรวจรับแล้ว',
+			icon: RotateCcw,
+			border: 'border-orange-200',
+			labelClass: 'text-orange-800',
+			iconClass: 'text-orange-600',
+			hintClass: 'text-orange-700'
+		},
+		{
+			id: 'completed',
+			label: 'เสร็จสมบูรณ์',
+			hint: 'สมบูรณ์ • ยกเลิก',
+			icon: CheckCircle2,
+			border: 'border-slate-200/80',
+			labelClass: 'text-slate-700',
+			iconClass: 'text-emerald-600',
+			hintClass: 'text-slate-400'
+		}
+	] as const satisfies readonly {
+		id: TicketWorkflowGroupId;
+		label: string;
+		hint: string;
+		icon: typeof ClipboardList;
+		border: string;
+		labelClass: string;
+		iconClass: string;
+		hintClass: string;
+	}[];
 </script>
 
 <svelte:head>
@@ -364,76 +425,34 @@
 			onSelectedPoolChange={(pool) => updatePoolParams({ view: 'bulk_pools', pool })}
 		/>
 	{:else}
-		<!-- Overview KPI Counters (Single source of truth with workflow groups) -->
+		<!-- KPI cards double as the workflow-group filter (same counts as the table) -->
 		<div
 			class="flex flex-wrap justify-center gap-3 *:basis-[calc(50%-0.375rem)] sm:*:basis-[calc(33.333%-0.5rem)] lg:flex-nowrap lg:*:min-w-0 lg:*:flex-1 lg:*:basis-0"
 		>
-			<!-- 1. All -->
-			<div class="rounded-xl border border-slate-200/80 bg-white p-4 shadow-2xs">
-				<div class="flex items-center justify-between">
-					<span class="text-xs font-semibold text-slate-500">ทั้งหมด</span>
-					<ClipboardList class="h-4 w-4 text-slate-400" />
-				</div>
-				<div class="mt-2 text-2xl font-bold text-slate-900 tabular-nums">
-					{groupCounts.all}
-				</div>
-				<p class="mt-0.5 text-xs text-slate-400">รวมทุกสถานะ</p>
-			</div>
-
-			<!-- 2. Pending Pick & Ready -->
-			<div class="rounded-xl border border-amber-200 bg-white p-4 shadow-2xs">
-				<div class="flex items-center justify-between">
-					<span class="text-xs font-semibold text-amber-800">รอจัด / พร้อมส่ง</span>
-					<Clock class="h-4 w-4 text-amber-600" />
-				</div>
-				<div class="mt-2 text-2xl font-bold text-slate-900 tabular-nums">
-					{groupCounts.pending_ready}
-				</div>
-				<p class="mt-0.5 text-xs text-amber-700">รอจัดของ • พร้อมส่งออก</p>
-			</div>
-
-			<!-- 3. In Progress -->
-			<div class="rounded-xl border border-blue-200 bg-white p-4 shadow-2xs">
-				<div class="flex items-center justify-between">
-					<span class="text-xs font-semibold text-blue-800">กำลังดำเนินการ</span>
-					<Send class="h-4 w-4 text-blue-600" />
-				</div>
-				<div class="mt-2 text-2xl font-bold text-slate-900 tabular-nums">
-					{groupCounts.in_progress}
-				</div>
-				<p class="mt-0.5 text-xs text-blue-700">นำส่ง • แจกจ่าย • ปิดรอบ</p>
-			</div>
-
-			<!-- 4. Returns & Closeout -->
-			<div class="rounded-xl border border-orange-200 bg-white p-4 shadow-2xs">
-				<div class="flex items-center justify-between">
-					<span class="text-xs font-semibold text-orange-800">รับคืน / รอปิดงาน</span>
-					<RotateCcw class="h-4 w-4 text-orange-600" />
-				</div>
-				<div class="mt-2 text-2xl font-bold text-slate-900 tabular-nums">
-					{groupCounts.returns_closeout}
-				</div>
-				<p class="mt-0.5 text-xs text-orange-700">รอตรวจรับคืน • ตรวจรับแล้ว</p>
-			</div>
-
-			<!-- 5. Completed -->
-			<div class="rounded-xl border border-slate-200/80 bg-white p-4 shadow-2xs">
-				<div class="flex items-center justify-between">
-					<span class="text-xs font-semibold text-slate-700">เสร็จสมบูรณ์</span>
-					<CheckCircle2 class="h-4 w-4 text-emerald-600" />
-				</div>
-				<div class="mt-2 text-2xl font-bold text-slate-900 tabular-nums">
-					{groupCounts.completed}
-				</div>
-				<p class="mt-0.5 text-xs text-slate-400">สมบูรณ์ • ยกเลิก</p>
-			</div>
+			{#each KPI_CARDS as card (card.id)}
+				{@const isActive = activeGroup === card.id}
+				<button
+					type="button"
+					aria-pressed={isActive}
+					onclick={() => handleSelectGroup(card.id)}
+					class="cursor-pointer rounded-xl border bg-white p-4 text-left shadow-2xs transition-shadow hover:shadow-md focus-visible:ring-2 focus-visible:ring-[#0A2647] focus-visible:outline-none {card.border} {isActive
+						? 'ring-2 ring-[#0A2647]'
+						: ''}"
+				>
+					<div class="flex items-center justify-between">
+						<span class="text-xs font-semibold {card.labelClass}">{card.label}</span>
+						<card.icon class="h-4 w-4 {card.iconClass}" />
+					</div>
+					<div class="mt-2 text-2xl font-bold text-slate-900 tabular-nums">
+						{groupCounts[card.id]}
+					</div>
+					<p class="mt-0.5 text-xs {card.hintClass}">{card.hint}</p>
+				</button>
+			{/each}
 		</div>
 
 		<!-- Main Ticket Management Surface -->
 		<div class="space-y-4">
-			<!-- Grouped Workflow Tabs -->
-			<TicketGroupTabs {activeGroup} counts={groupCounts} onSelectGroup={handleSelectGroup} />
-
 			<!-- Filters & Search -->
 			<TicketFilters
 				search={searchQuery}

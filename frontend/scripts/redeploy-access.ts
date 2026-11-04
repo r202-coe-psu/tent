@@ -53,6 +53,7 @@ import {
 	REFERRAL_MANGO_INDEXES,
 	KIOSK_LOOKUP_MANGO_INDEXES,
 	REQUISITION_TICKET_MANGO_INDEXES,
+	ROLE_GRANT_AUDIT_MANGO_INDEX,
 	shelterDbName,
 	STOCK_LEDGER_LOT_NO_MANGO_INDEX,
 	TRANSFER_LEDGER_MANGO_INDEXES
@@ -570,6 +571,14 @@ async function main() {
 			);
 			console.log(
 				`    ✓ donation received / phone / ledger lot mango indexes (${donationReceivedIndexResult.created} created, ${donationReceivedIndexResult.existing} existing)`
+			);
+			const roleGrantAuditIndexResult = await deployMangoIndexes(
+				db,
+				[ROLE_GRANT_AUDIT_MANGO_INDEX],
+				false
+			);
+			console.log(
+				`    ✓ role-grant audit mango index (${roleGrantAuditIndexResult.created} created, ${roleGrantAuditIndexResult.existing} existing)`
 			);
 			const donationPhotoIndexResult = await deployMangoIndexes(
 				db,

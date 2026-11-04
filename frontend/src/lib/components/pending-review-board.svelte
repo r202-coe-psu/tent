@@ -6,6 +6,7 @@
 	import { Badge } from '$lib/components/ui/badge/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
+	import { Label } from '$lib/components/ui/label/index.js';
 	import * as Pagination from '$lib/components/ui/pagination/index.js';
 	import * as Select from '$lib/components/ui/select/index.js';
 	import * as Table from '$lib/components/ui/table/index.js';
@@ -60,18 +61,22 @@
 	const unitsQuery = useUnitsOfMeasure();
 	const units = $derived(unitsQuery.data ?? []);
 
+	const uid = $props.id();
+	const sourceId = `${uid}-source`;
+	const sortId = `${uid}-sort`;
+
 	let searchQuery = $state('');
 	let sourceFilter = $state('all');
 	let sortOrder = $state<'newest' | 'oldest'>('newest');
 
 	const SOURCE_OPTIONS = [
-		{ value: 'all', label: 'ที่มา: ทั้งหมด' },
-		{ value: 'unsolicited', label: 'ที่มา: รายการไม่อยู่ในประกาศ' },
-		{ value: 'solicited', label: 'ที่มา: รายการตามประกาศ' }
+		{ value: 'all', label: 'ทั้งหมด' },
+		{ value: 'unsolicited', label: 'รายการไม่อยู่ในประกาศ' },
+		{ value: 'solicited', label: 'รายการตามประกาศ' }
 	];
 	const SORT_OPTIONS = [
-		{ value: 'newest', label: 'เรียง: ใหม่สุดก่อน' },
-		{ value: 'oldest', label: 'เรียง: เก่าสุดก่อน' }
+		{ value: 'newest', label: 'ใหม่สุดก่อน' },
+		{ value: 'oldest', label: 'เก่าสุดก่อน' }
 	] as const;
 
 	const sourceLabel = $derived(
@@ -219,7 +224,7 @@
 	{:else}
 		<!-- Filter Bar -->
 		<div class="border-b border-border/60 bg-card p-4">
-			<div class="flex flex-col gap-3 md:flex-row md:items-center">
+			<div class="flex flex-col gap-3 md:flex-row md:items-end">
 				<!-- Search input -->
 				<div class="relative flex-1">
 					<Search
@@ -234,34 +239,51 @@
 				</div>
 
 				<!-- Filter dropdowns -->
-				<div class="flex flex-wrap items-center gap-2">
-					<Select.Root type="single" bind:value={sourceFilter}>
-						<Select.Trigger
-							aria-label="กรองตามที่มา"
-							class="h-9 rounded-xl text-xs data-[size=default]:h-9"
+				<div class="flex flex-wrap items-end gap-2">
+					<div class="space-y-1">
+						<Label
+							id="{sourceId}-label"
+							for={sourceId}
+							class="text-xs font-semibold text-slate-600"
 						>
-							{sourceLabel}
-						</Select.Trigger>
-						<Select.Content>
-							{#each SOURCE_OPTIONS as option (option.value)}
-								<Select.Item value={option.value} label={option.label} />
-							{/each}
-						</Select.Content>
-					</Select.Root>
+							ที่มา
+						</Label>
+						<Select.Root type="single" bind:value={sourceFilter}>
+							<!-- Label + own text, so a screen reader also hears the selected value. -->
+							<Select.Trigger
+								id={sourceId}
+								aria-labelledby="{sourceId}-label {sourceId}"
+								class="h-9 rounded-xl text-xs data-[size=default]:h-9"
+							>
+								{sourceLabel}
+							</Select.Trigger>
+							<Select.Content>
+								{#each SOURCE_OPTIONS as option (option.value)}
+									<Select.Item value={option.value} label={option.label} />
+								{/each}
+							</Select.Content>
+						</Select.Root>
+					</div>
 
-					<Select.Root type="single" bind:value={sortOrder}>
-						<Select.Trigger
-							aria-label="เรียงลำดับ"
-							class="h-9 rounded-xl text-xs data-[size=default]:h-9"
-						>
-							{sortLabel}
-						</Select.Trigger>
-						<Select.Content>
-							{#each SORT_OPTIONS as option (option.value)}
-								<Select.Item value={option.value} label={option.label} />
-							{/each}
-						</Select.Content>
-					</Select.Root>
+					<div class="space-y-1">
+						<Label id="{sortId}-label" for={sortId} class="text-xs font-semibold text-slate-600">
+							เรียง
+						</Label>
+						<Select.Root type="single" bind:value={sortOrder}>
+							<Select.Trigger
+								id={sortId}
+								aria-labelledby="{sortId}-label {sortId}"
+								class="h-9 rounded-xl text-xs data-[size=default]:h-9"
+							>
+								{sortLabel}
+							</Select.Trigger>
+							<Select.Content>
+								{#each SORT_OPTIONS as option (option.value)}
+									<Select.Item value={option.value} label={option.label} />
+								{/each}
+							</Select.Content>
+						</Select.Root>
+					</div>
 				</div>
 			</div>
 		</div>

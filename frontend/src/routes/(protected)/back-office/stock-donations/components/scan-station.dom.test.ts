@@ -220,9 +220,164 @@ describe('scan-station point by point (CR-206)', () => {
 		await openBooking();
 
 		expect(document.querySelector('[data-testid="receiving-point"]')).not.toBeNull();
-		expect(line(0).dataset.lineState).toBe('other_point');
-		expect(line(1).dataset.lineState).toBe('other_point');
+		expect(line(0).dataset.lineState).toBe('needs_point');
+		expect(line(1).dataset.lineState).toBe('needs_point');
 		expect(submit().disabled).toBe(true);
+		expect(submit().textContent).toContain('เลือกจุดที่ประจำก่อน');
+	});
+
+	it('locks every row and hides 0 / 0 until a point is chosen (#1059)', async () => {
+		shelterDoc.current = { common_areas: { sub_storage: [dropOffPoint(GYM), dropOffPoint(MED)] } };
+		storagePointList.current = [GYM, MED];
+		stubApi(splitBooking());
+		await openBooking();
+
+		expect(document.querySelector('[data-testid="choose-point-warning"]')).not.toBeNull();
+		expect(document.querySelector('[data-testid="other-point-warning"]')).toBeNull();
+		expect(document.body.textContent).toContain('เลือกจุดที่ประจำก่อนจึงจะตรวจรับได้');
+		expect(document.body.textContent).not.toContain('0 / 0');
+		// The receive checklist too (it once read "(0/0)" here).
+		expect(document.body.textContent).not.toContain('(0/0)');
+		expect(document.body.textContent).toContain('(หลังเลือกจุดที่ประจำ)');
+		expect(
+			document.querySelector('[data-testid="scan-line-0-needs-point"]')?.textContent
+		).toContain('เลือกจุดที่ประจำก่อนจึงจะตรวจรับรายการนี้ได้');
+		expect(buttonIn(line(0), 'ผ่านการตรวจสอบแล้ว')).toBeUndefined();
+	});
+
+	it('locks a whole booking too until a point is chosen (Q4)', async () => {
+		shelterDoc.current = { common_areas: { sub_storage: [dropOffPoint(GYM), dropOffPoint(MED)] } };
+		storagePointList.current = [GYM, MED];
+		stubApi(splitBooking({ items: [{ item_id: 'item:water', qty: '24', unit: 'bottle' }] }));
+		await openBooking();
+
+		expect(line(0).dataset.lineState).toBe('needs_point');
+		expect(buttonIn(line(0), 'ผ่านการตรวจสอบแล้ว')).toBeUndefined();
+		expect(submit().disabled).toBe(true);
+	});
+
+	it('warns that a line is another points, and counts it (#1059)', async () => {
+		shelterDoc.current = { common_areas: { sub_storage: [dropOffPoint(GYM), dropOffPoint(MED)] } };
+		storagePointList.current = [GYM, MED];
+		localStorage.setItem('stock-donations:receiving-point:SH001', GYM.id);
+		stubApi(splitBooking());
+		await openBooking();
+
+		const warning = document.querySelector('[data-testid="other-point-warning"]')!;
+		expect(warning.textContent).toContain('1 รายการเป็นของจุดอื่น');
+		expect(warning.querySelector('[data-testid="unlock-other-points"]')).not.toBeNull();
+		expect(document.querySelector('[data-testid="choose-point-warning"]')).toBeNull();
+		const row = document.querySelector('[data-testid="scan-line-1-other-point"]')!;
+		expect(row.className).toContain('border-amber-200');
+		expect(row.textContent).toContain('ของจุดอื่น');
+		expect(line(1).className).toContain('border-amber-200');
+		expect(document.body.textContent).toContain('ตรวจแล้ว 0 / 1 รายการ · อีก 1 รายการอยู่จุดอื่น');
+	});
+
+	it('says so when the chosen point has no line of its own (#1059)', async () => {
+		shelterDoc.current = { common_areas: { sub_storage: [dropOffPoint(GYM), dropOffPoint(MED)] } };
+		storagePointList.current = [GYM, MED];
+		localStorage.setItem('stock-donations:receiving-point:SH001', MED.id);
+		stubApi(
+			splitBooking({
+				items: [
+					{ item_id: 'item:water', qty: '24', unit: 'bottle', drop_off_point_id: GYM.id },
+					{ item_id: 'item:rice', qty: '5', unit: 'bag', drop_off_point_id: GYM.id }
+				]
+			})
+		);
+		await openBooking();
+
+		expect(document.body.textContent).toContain('ตรวจแล้ว 0 / 0 รายการ · อีก 2 รายการอยู่จุดอื่น');
+		expect(submit().disabled).toBe(true);
+		expect(submit().textContent).toContain('ไม่มีรายการของจุดนี้ให้รับ');
+
+		document.querySelector<HTMLButtonElement>('[data-testid="unlock-other-points"]')!.click();
+		await settle();
+		expect(document.querySelector('[data-testid="other-point-warning"]')).toBeNull();
+		expect(document.body.textContent).toContain('รับรายการของจุดอื่นได้แล้ว');
+		expect(document.body.textContent).toContain('ตรวจแล้ว 0 / 2 รายการ');
+		expect(document.body.textContent).not.toContain('อีก 2 รายการอยู่จุดอื่น');
+		expect(document.querySelector('[data-testid="scan-line-0-borrowed"]')).not.toBeNull();
+	});
+
+	it('keeps the other-point count and an idle button when a mix has an unticked line here (#1059)', async () => {
+		shelterDoc.current = { common_areas: { sub_storage: [dropOffPoint(GYM), dropOffPoint(MED)] } };
+		storagePointList.current = [GYM, MED];
+		localStorage.setItem('stock-donations:receiving-point:SH001', GYM.id);
+		stubApi(splitBooking());
+		await openBooking();
+
+		expect(document.body.textContent).toContain('ตรวจแล้ว 0 / 1 รายการ · อีก 1 รายการอยู่จุดอื่น');
+		expect(submit().disabled).toBe(true);
+		expect(submit().textContent).not.toContain('ไม่มีรายการของจุดนี้ให้รับ');
+	});
+
+	it('blames the other shelter, not the missing point, for a booking of another shelter', async () => {
+		shelterDoc.current = { common_areas: { sub_storage: [dropOffPoint(GYM), dropOffPoint(MED)] } };
+		storagePointList.current = [GYM, MED];
+		stubApi(splitBooking({ shelter_code: 'SH002' }));
+		await openBooking();
+
+		expect(submit().disabled).toBe(true);
+		expect(submit().textContent).toContain('ใบนี้เป็นของศูนย์อื่น');
+		expect(submit().textContent).not.toContain('เลือกจุดที่ประจำก่อน');
+		expect(document.body.textContent).not.toContain('เลือกจุดที่ประจำก่อนจึงจะตรวจรับได้');
+		expect(document.querySelector('[data-testid="choose-point-warning"]')).toBeNull();
+		expect(
+			document.querySelector('[data-testid="scan-line-0-needs-point"]')?.textContent
+		).toContain('ใบนี้เป็นของศูนย์อื่น');
+
+		// The checklist blames the shelter too: no "pick a point" step, no point-first wording.
+		const checklist = [...document.querySelectorAll('h4')].find(
+			(h) => h.textContent === 'ก่อนรับเข้าคลัง'
+		)!.parentElement!.textContent!;
+		expect(checklist).toContain('ใบนี้เป็นของศูนย์อื่น — สลับศูนย์ก่อนตรวจรับ');
+		expect(checklist).not.toContain('เลือกจุดที่ประจำ');
+	});
+
+	it('words the whole-booking checklist as "pick a point" while locked, with no count (#1059)', async () => {
+		shelterDoc.current = { common_areas: { sub_storage: [dropOffPoint(GYM), dropOffPoint(MED)] } };
+		storagePointList.current = [GYM, MED];
+		stubApi(splitBooking({ items: [{ item_id: 'item:water', qty: '24', unit: 'bottle' }] }));
+		await openBooking();
+
+		expect(document.body.textContent).toContain(
+			'เลือกจุดที่ประจำก่อน จึงจะติ๊ก "ผ่านการตรวจสอบแล้ว" ได้'
+		);
+		expect(document.body.textContent).not.toContain('ครบ (0/1)');
+	});
+
+	it('locks other points again when the recorder picks another point', async () => {
+		shelterDoc.current = { common_areas: { sub_storage: [dropOffPoint(GYM), dropOffPoint(MED)] } };
+		storagePointList.current = [GYM, MED];
+		localStorage.setItem('stock-donations:receiving-point:SH001', GYM.id);
+		stubApi(splitBooking());
+		await openBooking();
+
+		const unlock = () =>
+			document.querySelector<HTMLButtonElement>('[data-testid="unlock-other-points"]')!;
+		unlock().click();
+		await settle();
+		expect(unlock().getAttribute('aria-pressed')).toBe('true');
+		expect(line(1).dataset.lineState).toBe('receivable');
+
+		const trigger = document.querySelector<HTMLElement>('[data-testid="receiving-point-trigger"]')!;
+		trigger.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+		await settle();
+		const option = [...document.querySelectorAll<HTMLElement>('[role="option"]')].find((o) =>
+			o.textContent?.includes(MED.name)
+		)!;
+		option.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, pointerType: 'mouse' }));
+		option.click();
+		await settle();
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		await settle();
+
+		expect(localStorage.getItem('stock-donations:receiving-point:SH001')).toBe(MED.id);
+		expect(unlock().getAttribute('aria-pressed')).toBe('false');
+		expect(line(0).dataset.lineState).toBe('other_point');
+		expect(line(1).dataset.lineState).toBe('receivable');
 	});
 
 	it('records only the gyms line and sends point_id + line_nos (AC-5)', async () => {

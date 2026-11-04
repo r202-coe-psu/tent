@@ -57,3 +57,14 @@ export {
 export { SHELTER_DASHBOARD_VIEWS } from './domain/views';
 export { SHELTER_VIEW_MANIFEST } from './domain/view-manifest';
 export type { ShelterViewManifest, CouchViewDefinition } from './domain/view-manifest';
+export {
+	matchesShelterCloseConfirm,
+	normalizeShelterCloseConfirmText,
+	shelterCloseConfirmPhrase,
+	shelterClosePreviewSchema,
+	shelterCloseRequestSchema,
+	shelterCloseResultSchema,
+	type ShelterClosePreview,
+	type ShelterCloseRequest,
+	type ShelterCloseResult
+} from './domain/shelter-close';

@@ -286,10 +286,15 @@
 							<Form.Control>
 								{#snippet children({ props })}
 									<Form.Label>คำอธิบายตำแหน่งสำหรับผู้มาส่ง</Form.Label>
+									<!-- A binding, not a delegated `oninput`: that one runs after superforms' own form
+									listener, so the change loses its "input" tag and a valid form gets the trimmed
+									parse written back on every key — a typed space vanished at once (#1054). -->
 									<Input
 										{...props}
-										value={point.location_note ?? ''}
-										oninput={(e) => patchPoint(point.id, { location_note: e.currentTarget.value })}
+										bind:value={
+											() => point.location_note ?? '',
+											(note) => patchPoint(point.id, { location_note: note })
+										}
 										placeholder="เช่น ประตู 2 ข้างโรงยิม"
 										maxlength={SUB_STORAGE_NOTE_MAX}
 										class="bg-white"

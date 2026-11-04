@@ -61,6 +61,7 @@ type Guard = () => Promise<void>;
 const GUARD_OF: Record<string, Guard> = {
 	'/back-office/evacuee-management': requireEvacueeRegistration,
 	'/back-office/volunteers': requireVolunteerBackoffice,
+	'/back-office/volunteers/accounts': requireVolunteerBackoffice,
 	'/back-office/referrals': requireManager,
 	'/back-office/supply': requireWarehouseAccess,
 	'/back-office/stock-donations': requireWarehouseAccess,

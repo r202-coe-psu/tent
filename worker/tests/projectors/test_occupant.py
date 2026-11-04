@@ -146,7 +146,24 @@ def test_project_shelter_occupant_null_gender():
     assert payload["gender"] is None
 
 
-@pytest.mark.parametrize("status", ["checked_out", "cancelled", "pre_registered"])
+def test_project_shelter_occupant_room_confirmed():
+    """decision sync 2026-11-02: room_confirmed is still in the shelter."""
+    doc = {
+        "_id": "evacuee:03",
+        "type": "evacuee",
+        "first_name": "สมหญิง",
+        "last_name": "ใจดี",
+        "current_stay": {"status": "room_confirmed", "since": "2026-08-10T18:40:00Z"},
+    }
+    payload = project_shelter_occupant(doc, "SH001")
+    assert payload is not None
+    assert payload["occupant_ref"] == "OCC-03"
+
+
+@pytest.mark.parametrize(
+    "status",
+    ["checked_out", "cancelled", "pre_registered", "arriving", "temporary_leave"],
+)
 def test_project_shelter_occupant_skips_inactive(status):
     doc = {
         "_id": "evacuee:02",

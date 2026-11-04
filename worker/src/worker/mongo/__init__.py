@@ -8,6 +8,7 @@ from worker.mongo.job import (
     apply_shift_assignment,
     apply_volunteer,
     delete_jobs_for_shelter,
+    sync_job_shift_slot,
 )
 from worker.mongo.need import apply_need, delete_needs_for_shelter
 from worker.mongo.occupant import (
@@ -65,4 +66,5 @@ __all__ = [
     "refresh_shelter_stock",
     "resolve_shelter_code_for_registry_delete",
     "sync_booking_stay",
+    "sync_job_shift_slot",
 ]

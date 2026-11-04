@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { createItemMaster, itemMasterInputSchema } from './catalog';
 import {
 	buildQuickCreateInput,
+	quickCreateNeedsFullForm,
 	quickCreateTypeClass,
 	validateQuickCreate,
 	type QuickCreateDraft
@@ -133,5 +134,29 @@ describe('buildQuickCreateInput', () => {
 		const input = buildQuickCreateInput(draft({ categoryId: undefined }), categories);
 		expect(input.category).toBeUndefined();
 		expect(itemMasterInputSchema.safeParse(input).success).toBe(true);
+	});
+});
+
+describe('fuel & energy category', () => {
+	const fuelCategories = [
+		...categories,
+		{ _id: 'item_category:fuel_energy', default_class: 'CONSUMABLE' as const }
+	];
+
+	it('quick-create input for fuel fails the schema (needs capacity and burn rate)', () => {
+		const input = buildQuickCreateInput(
+			draft({ name: 'แก๊ส LPG', categoryId: 'item_category:fuel_energy' }),
+			fuelCategories
+		);
+		const result = itemMasterInputSchema.safeParse(input);
+		expect(result.success).toBe(false);
+		const paths = result.success ? [] : result.error.issues.map((i) => i.path.join('.'));
+		expect(paths).toEqual(expect.arrayContaining(['capacity_kg', 'burn_rate_kg_per_hour']));
+	});
+
+	it('only the fuel category needs the full form', () => {
+		expect(quickCreateNeedsFullForm('item_category:fuel_energy')).toBe(true);
+		expect(quickCreateNeedsFullForm('item_category:food')).toBe(false);
+		expect(quickCreateNeedsFullForm(undefined)).toBe(false);
 	});
 });

@@ -34,6 +34,7 @@
 		useScheduleActionMutation,
 		useResolvePortalAccessMutation,
 		useRoleCardTokenMutation,
+		useVolunteerAccessStatus,
 		useVolunteerJobs,
 		useVolunteerProfile,
 		useVolunteerSchedule,
@@ -41,6 +42,7 @@
 	} from '../application/queries';
 	import { volunteerPortalKeys } from '../application/queries';
 	import JobBoard from '$lib/features/volunteers/ui/public-job-board.svelte';
+	import AccessStatusCard from './access-status-card.svelte';
 	import ProfileEditDialog from './profile-edit-dialog.svelte';
 	import {
 		buildRememberedPortalCredential,
@@ -346,6 +348,7 @@
 		(openingsQuery.data ?? []).filter((job) => isJobApplicable(job)).length
 	);
 	const profileQuery = useVolunteerProfile(() => session);
+	const accessStatusQuery = useVolunteerAccessStatus(() => session);
 	let profileDialogOpen = $state(false);
 	const respond = useRespondToDispatchMutation(() => session);
 	const scheduleAction = useScheduleActionMutation(() => session);
@@ -1420,6 +1423,13 @@
 
 				<!-- Right 1 Col: Widgets -->
 				<div class="space-y-6">
+					<!-- WIDGET 0: สิทธิ์ใช้งานระบบ (CR-221 FR-26) -->
+					<AccessStatusCard
+						rows={accessStatusQuery.data ?? []}
+						loading={accessStatusQuery.isPending}
+						error={accessStatusQuery.isError}
+					/>
+
 					<!-- WIDGET 1: กติกาการเข้ากะ -->
 					<div class="rounded-3xl border border-border bg-card p-6 shadow-sm">
 						<h4 class="flex items-center gap-2 text-sm font-bold text-foreground">

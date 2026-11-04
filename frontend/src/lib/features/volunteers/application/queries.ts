@@ -46,7 +46,7 @@ import { jobApplicationRepository } from '../data/job-application.remote';
 import { shiftAssignmentRepository } from '../data/shift-assignment.remote';
 import { volunteerRepository, volunteerRepositoryFor } from '../data/volunteer.remote';
 import { getVolunteerNamesByIds, uniqueVolunteerIds } from '../data/volunteer-names.remote';
-import { fetchVolunteerGrants } from './volunteer-access';
+import { fetchShelterVolunteerAccounts, fetchVolunteerGrants } from './volunteer-access';
 import type {
 	JobApplicationFilter,
 	JobFilter,
@@ -106,7 +106,8 @@ export const volunteerKeys = {
 
 	/** Coordinator grants on the volunteer's account (#955); under `all` so a grant refetches it. */
 	grants: (shelterCode: string, volunteerId: string) =>
-		[...volunteerKeys.all, 'grants', shelterCode, volunteerId] as const
+		[...volunteerKeys.all, 'grants', shelterCode, volunteerId] as const,
+	accounts: (shelterCode: string) => [...volunteerKeys.all, 'accounts', shelterCode] as const
 };
 
 /** Build the `{shelterCode, createdBy}` author context the same way every mutation does. */
@@ -140,6 +141,17 @@ export const useHubMetrics = () =>
 	}));
 
 /** The coordinator's view of a volunteer's grants (#955); off until `enabled`. */
+/** The shelter's volunteer accounts and their roles there, for SA / SM / coordinator (#1044). */
+export const useShelterVolunteerAccounts = (
+	shelterCode: () => string | null | undefined,
+	enabled: () => boolean
+) =>
+	createQuery(() => ({
+		queryKey: volunteerKeys.accounts(shelterCode() ?? ''),
+		queryFn: () => fetchShelterVolunteerAccounts(shelterCode() as string),
+		enabled: enabled() && Boolean(shelterCode())
+	}));
+
 export const useVolunteerGrants = (
 	volunteer: () => Pick<Volunteer, '_id' | 'shelter_code'>,
 	enabled: () => boolean

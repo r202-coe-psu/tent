@@ -89,7 +89,7 @@ describe('PATCH /api/back-office/shelter/[code]', () => {
 		mgrMock.mockImplementationOnce(() => {
 			throw error(403, 'not authorised for shelter');
 		});
-		await callPATCH('SH999', {});
+		expect((await callPATCH('SH999', {})).status).toBe(403);
 		expect(updateMock).not.toHaveBeenCalled();
 	});
 
@@ -107,9 +107,61 @@ describe('PATCH /api/back-office/shelter/[code]', () => {
 		const mutator = updateMock.mock.calls[0][1] as (c: unknown) => {
 			patch: Record<string, unknown>;
 		};
-		const { patch } = mutator({ operation_status: 'active' });
+		const { patch } = mutator({ operation_status: 'closed' });
 		expect(patch.operation_status).toBe('closed');
 		expect(patch).not.toHaveProperty('closed_at');
+	});
+});
+
+describe('PATCH /api/back-office/shelter/[code] — closing goes through the close route (CR-219 FR-22)', () => {
+	/** Run the PATCH against a stored shelter in `stored` status; returns the response status. */
+	async function patchAgainst(stored: string, body: unknown): Promise<number> {
+		updateMock.mockImplementation(async (_code, mutator) => {
+			await mutator({ operation_status: stored } as ShelterMaster);
+			return { id: 'shelter:SH001', rev: '2-new' };
+		});
+		return (await callPATCH('SH001', body)).status;
+	}
+
+	it.each(['active', 'standby', 'full_capacity', 'cancelled'])(
+		'400 when the PATCH would close a %s shelter directly',
+		async (stored) => {
+			expect(await patchAgainst(stored, { operation_status: 'closed' })).toBe(400);
+		}
+	);
+
+	it('allows saving other fields of an already-closed shelter', async () => {
+		expect(await patchAgainst('closed', { operation_status: 'closed', name: 'x' })).toBe(200);
+	});
+
+	it('allows reopening a closed shelter (FR-25)', async () => {
+		expect(await patchAgainst('closed', { operation_status: 'active' })).toBe(200);
+	});
+
+	it('answers 403 (not 500) for a manager of another shelter', async () => {
+		mgrMock.mockImplementationOnce(() => {
+			throw error(403, 'not authorised for shelter');
+		});
+		const res = await callPATCH('SH999', {});
+		expect(res.status).toBe(403);
+		expect(await res.json()).toEqual({
+			error: { code: 'FORBIDDEN', message: 'not authorised for shelter' }
+		});
+	});
+
+	it('answers the close block in the contract envelope so the UI can toast it', async () => {
+		updateMock.mockImplementation(async (_code, mutator) => {
+			await mutator({ operation_status: 'active' } as ShelterMaster);
+			return { id: 'shelter:SH001', rev: '2-new' };
+		});
+		const res = await callPATCH('SH001', { operation_status: 'closed' });
+		expect(res.status).toBe(400);
+		expect(await res.json()).toEqual({
+			error: {
+				code: 'VALIDATION',
+				message: 'ปิดศูนย์ต้องทำผ่าน POST /api/back-office/shelter/[code]/close'
+			}
+		});
 	});
 });
 

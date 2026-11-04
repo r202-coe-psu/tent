@@ -9,6 +9,7 @@ export const auditActionSchema = z.enum([
 	'conflict_resolved',
 	'manual_adjust',
 	'created',
+	'privacy_change',
 	'other'
 ]);
 export type AuditAction = z.infer<typeof auditActionSchema>;

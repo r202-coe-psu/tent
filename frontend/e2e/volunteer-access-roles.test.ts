@@ -2,18 +2,23 @@
  * Volunteer system access (#841) — the role a volunteer is granted really opens the pages the
  * users-page role picker (`ROLE_OPTIONS` in `user-form.svelte`) promises, and nothing else.
  *
- * Two groups, both on SH001 with per-run accounts and a per-run volunteer doc (nothing seeded is
+ * Three groups, all on SH001 with per-run accounts and a per-run volunteer doc (nothing seeded is
  * touched; no shelter policy is changed):
  *  1. One grant through the real "ออกสิทธิ์ใช้งานระบบ" dialog (`distribution_staff`): `_users`
  *     roles are compound, a retry relinks without touching the password, and the new account
  *     signs in and reaches `/onsite/distribution`.
  *  2. A table for every `STAFF_CAPABILITIES` role. Accounts are created directly with
  *     `rolesFromAssignments` (the roles the dialog writes). Per role: `/portal` shows only its
- *     department, allowed URLs load, forbidden URLs bounce back to `/portal`.
- *
- * A third group (#955, #879 item 2) pins the limits of a `volunteer_coordinator` granting access:
- * own shelter, four roles, verified identity, a required expiry within 7 days, and the account
- * shape (`role_grants`). Expiry revocation by the worker is covered by worker unit tests.
+ *     department, allowed URLs load, forbidden URLs bounce back to `/portal`, and the back-office
+ *     sidebar (#1037) offers exactly the back-office URLs of `allowed`, so a menu the guard
+ *     bounces (or a reachable page with no menu) fails the run. A page whose access is a
+ *     still-open spec question is listed in `sidebarPendingSpec` and left out of that comparison.
+ *     The same page and sidebar checks run for `shelter_manager` and `system_admin`, which are
+ *     not `STAFF_CAPABILITIES` (`MANAGEMENT_ACCESS`).
+ *  3. (#955, #879 item 2) The limits of a `volunteer_coordinator` granting access: own shelter,
+ *     the coordinator roles (all staff roles but volunteer_coordinator / kiosk_staff), verified
+ *     identity, a required expiry within 7 days, and the account shape (`role_grants`). Expiry
+ *     revocation by the worker is covered by worker unit tests.
  *
  * The table records the REAL guard behaviour. Permissions are not changed here (a change needs
  * a CR).
@@ -60,6 +65,12 @@ interface RoleAccess {
 	allowed: string[];
 	/** URLs of other departments (real guard behaviour). */
 	forbidden: string[];
+	/**
+	 * Back-office pages whose access for this role is an open spec question (see the row's comment).
+	 * They are neither asserted as reachable nor as bounced, and are left out of the sidebar
+	 * comparison. Remove the entry once the decision lands.
+	 */
+	sidebarPendingSpec?: string[];
 }
 
 /** Role to pages, one row per `STAFF_CAPABILITIES` entry. */
@@ -94,13 +105,27 @@ const ROLE_ACCESS: RoleAccess[] = [
 	{
 		role: 'supply_coordinator',
 		portalDepartments: ['supply'],
-		allowed: ['/back-office/supply', '/back-office/stock-donations', '/back-office/distribution'],
-		forbidden: ['/back-office/kitchen']
+		// `/back-office/distribution` is deliberately in neither list. #1037 / CR-204: SC may view
+		// stock and receive it but may not issue it, yet the menu and the guard still admit SC today
+		// ("SC sees the menu today; spec says SC cannot issue; awaiting Team Lead"). Pinning either
+		// outcome here would lock a permission the spec has not settled.
+		allowed: [
+			'/back-office/supply',
+			'/back-office/stock-donations',
+			'/back-office/tickets/kitchen'
+		],
+		forbidden: ['/back-office/kitchen'],
+		sidebarPendingSpec: ['/back-office/distribution']
 	},
 	{
 		role: 'warehouse_staff',
 		portalDepartments: ['supply'],
-		allowed: ['/back-office/supply'],
+		allowed: [
+			'/back-office/supply',
+			'/back-office/stock-donations',
+			'/back-office/distribution',
+			'/back-office/tickets/kitchen'
+		],
 		forbidden: ['/back-office/kitchen']
 	},
 	{
@@ -113,7 +138,11 @@ const ROLE_ACCESS: RoleAccess[] = [
 		role: 'kiosk_staff',
 		portalDepartments: ['management'],
 		allowed: ['/back-office/kiosks', '/back-office/kiosks/banners'],
-		forbidden: ['/back-office/volunteers', '/back-office/supply']
+		forbidden: [
+			'/back-office/volunteers',
+			'/back-office/volunteers/accounts',
+			'/back-office/supply'
+		]
 	},
 	{
 		// CR-203 (#930): confined to the banner pages.
@@ -131,7 +160,11 @@ const ROLE_ACCESS: RoleAccess[] = [
 	{
 		role: 'volunteer_coordinator',
 		portalDepartments: ['volunteer'],
-		allowed: ['/back-office/volunteers', '/onsite/volunteer-check-in'],
+		allowed: [
+			'/back-office/volunteers',
+			'/back-office/volunteers/accounts',
+			'/onsite/volunteer-check-in'
+		],
 		forbidden: ['/back-office/supply']
 	},
 	{
@@ -143,6 +176,49 @@ const ROLE_ACCESS: RoleAccess[] = [
 		forbidden: ['/back-office/supply']
 	}
 ];
+
+/**
+ * Every back-office page the sidebar can offer to a shelter manager or system admin. Mirrors
+ * `src/lib/components/backoffice-navbar/static.ts`: a menu added, removed or re-guarded there must
+ * be changed here too, or the sidebar equality check below fails.
+ */
+const MANAGEMENT_PAGES = [
+	'/back-office/evacuee-management',
+	'/back-office/volunteers',
+	'/back-office/volunteers/accounts',
+	'/back-office/referrals',
+	'/back-office/supply',
+	'/back-office/stock-donations',
+	'/back-office/distribution',
+	'/back-office/tickets/kitchen',
+	'/back-office/kitchen',
+	'/back-office/incidents',
+	'/back-office/shelters',
+	'/back-office/users',
+	'/back-office/kiosks',
+	'/back-office/kiosks/banners',
+	'/back-office/master-data'
+];
+
+/**
+ * `shelter_manager` (SH001) and `system_admin` are not `STAFF_CAPABILITIES`, so they sit outside
+ * `ROLE_ACCESS`. Both pass every guard (`canAccessManagerPages` and its supersets), so both reach
+ * all of `MANAGEMENT_PAGES`; the list is checked against the guards by loading each page.
+ */
+const MANAGEMENT_ACCESS: { role: 'shelter_manager' | 'system_admin'; roles: string[] }[] = [
+	{
+		role: 'shelter_manager',
+		roles: rolesFromAssignments([{ shelter_code: SHELTER, capabilities: ['shelter_manager'] }])
+	},
+	{ role: 'system_admin', roles: ['system_admin'] }
+];
+
+const managementUser = (role: string, roles: string[]): TestUser => ({
+	name: `e2e_vaccess_${RUN_ID}_${role}_mgmt`,
+	password: PASSWORD,
+	roles,
+	display_name: `E2E Access ${role}`
+});
 
 const roleUser = (role: StaffCapability): TestUser => ({
 	name: `e2e_vaccess_${RUN_ID}_${role}`,
@@ -182,6 +258,65 @@ async function portalDepartments(page: Page): Promise<string[]> {
 }
 
 const pathOf = (page: Page) => new URL(page.url()).pathname;
+
+/** Back-office pages with no role guard yet (#845): every role sees them, so they prove nothing. */
+const UNGUARDED_PAGES = [
+	'/back-office/shelters/readiness',
+	'/back-office/dailysop',
+	'/back-office/sop-parameters'
+];
+
+/**
+ * The back-office paths the sidebar offers a role (#1037), groups opened one by one in case they
+ * behave as an accordion. Opened on the role's first back-office page, else on an unguarded one,
+ * so roles with no back-office page of their own are checked too. `pendingSpec` pages are dropped.
+ */
+async function sidebarPaths(
+	page: Page,
+	allowed: readonly string[],
+	pendingSpec: readonly string[] = []
+): Promise<string[]> {
+	const url = allowed.find((u) => u.startsWith('/back-office/')) ?? '/back-office/dailysop';
+	await page.goto(url);
+	// A 500 or a guard redirect would otherwise surface only as "sidebar not found".
+	await expect(page.locator('main').first()).toBeVisible();
+	expect(pathOf(page), `${url} should load before its sidebar is read`).toBe(url);
+	const sidebar = page.getByTestId('backoffice-sidebar');
+	await expect(sidebar).toBeVisible();
+	// The sidebar starts as a collapsed rail, which renders no group children; open it first.
+	// Wait until the toggle has rendered in either state: a bare `isVisible()` is a snapshot.
+	const expand = sidebar.getByRole('button', { name: 'ขยายแถบเมนู' });
+	const collapse = sidebar.getByRole('button', { name: 'ย่อแถบเมนู' });
+	await expect(expand.or(collapse)).toBeVisible();
+	if (await expand.isVisible()) await expand.click();
+	await expect(collapse).toBeVisible();
+	const seen = new Set<string>();
+	const opened = new Set<string>();
+	const collect = async () => {
+		const hrefs = await sidebar
+			.locator('a[href^="/back-office/"]')
+			.evaluateAll((els) => els.map((el) => el.getAttribute('href') ?? ''));
+		for (const href of hrefs) seen.add(new URL(href, 'http://localhost').pathname);
+	};
+	await collect();
+	// Menu groups are the collapsed (`aria-expanded=false`) buttons that are not popup triggers: the
+	// account menu opens a popup (`aria-haspopup`) and the shelter switcher is a combobox, so
+	// neither is a group button. A group button's text is its label, i.e. its accessible name.
+	const closed = sidebar
+		.getByRole('button', { expanded: false })
+		.and(sidebar.locator(':not([aria-haspopup])'));
+	for (let round = 0; round < 20; round++) {
+		const names = await closed.evaluateAll((els) => els.map((el) => (el.textContent ?? '').trim()));
+		const next = names.find((name) => name !== '' && !opened.has(name));
+		if (next === undefined) break;
+		opened.add(next);
+		await sidebar.getByRole('button', { name: next, exact: true, expanded: false }).click();
+		await collect();
+	}
+	return [...seen]
+		.filter((path) => !UNGUARDED_PAGES.includes(path) && !pendingSpec.includes(path))
+		.sort();
+}
 
 async function expectLoads(page: Page, url: string): Promise<void> {
 	await page.goto(url);
@@ -249,9 +384,8 @@ test.describe('Volunteer access: grant dialog', { tag: TAGS }, () => {
 	async function grantDistributionStaff(page: Page): Promise<void> {
 		await page.getByRole('button', { name: 'ออกสิทธิ์ใช้งานระบบ' }).click();
 		const dialog = page.getByRole('dialog');
-		// The dialog opens on registration_staff; its trigger is a button named after that role.
-		await dialog.getByRole('button', { name: 'เจ้าหน้าที่ลงทะเบียน' }).click();
-		await page.getByRole('option', { name: 'เจ้าหน้าที่แจกจ่าย', exact: true }).click();
+		// No role is preselected (#1072): the grantor picks one of the radios.
+		await dialog.getByRole('radio', { name: 'เจ้าหน้าที่แจกจ่าย', exact: true }).check();
 		await dialog.getByLabel('อีเมลสำหรับเข้าสู่ระบบ').fill(email);
 		await dialog.getByLabel(/รหัสผ่านสำหรับบัญชีใหม่/).fill(PASSWORD);
 		await dialog.getByRole('button', { name: 'บันทึกและออกสิทธิ์ใหม่' }).click();
@@ -262,7 +396,22 @@ test.describe('Volunteer access: grant dialog', { tag: TAGS }, () => {
 	}) => {
 		const page = await openAs(browser, manager);
 		await page.goto('/back-office/volunteers?tab=people');
-		await page.getByPlaceholder('ค้นหาชื่อ นามสกุล เบอร์โทร, รหัส...').fill(firstName);
+		await page.getByPlaceholder('ค้นหาชื่อ นามสกุล ชื่อเล่น เบอร์โทร, รหัส...').fill(firstName);
+
+		// Access follows the identity check (#1044): until then the button opens that check.
+		await expect(page.getByTestId('volunteer-account-status')).toContainText('ยังไม่มีบัญชีระบบ');
+		await page.getByRole('button', { name: 'ยืนยันตัวตนก่อนออกสิทธิ์' }).click();
+		await expect(page.getByRole('dialog')).toBeVisible();
+		await page.keyboard.press('Escape');
+		const unverified = await getDocument(SHELTER_DB, volunteerId);
+		await putDocument(SHELTER_DB, {
+			...unverified!,
+			_id: volunteerId,
+			identity_verified: true,
+			identity_verification: { status: 'verified', reviewed_by: manager.name }
+		});
+		await page.reload();
+		await page.getByPlaceholder('ค้นหาชื่อ นามสกุล ชื่อเล่น เบอร์โทร, รหัส...').fill(firstName);
 
 		await grantDistributionStaff(page);
 		await expect(page.getByText(`สร้างบัญชี (${email}) และออกสิทธิ์แล้ว`)).toBeVisible();
@@ -277,6 +426,10 @@ test.describe('Volunteer access: grant dialog', { tag: TAGS }, () => {
 		// relinking an existing account without touching its password is unit-tested.
 		await expect(page.getByRole('link', { name: 'จัดการบัญชีผู้ใช้' })).toBeVisible();
 		await expect(page.getByRole('button', { name: 'ออกสิทธิ์ใช้งานระบบ' })).toHaveCount(0);
+		// The row says what the account may do here: a manager's role has no expiry.
+		await expect(page.getByTestId('volunteer-account-status')).toContainText(
+			/เจ้าหน้าที่แจกจ่าย\s*· ถาวร/
+		);
 		await page.context().close();
 
 		await seedSecurityQuestion(email);
@@ -318,7 +471,31 @@ test.describe('Volunteer access: every staff role', { tag: TAGS }, () => {
 				.toEqual(expected ? [] : row.portalDepartments);
 			for (const url of row.allowed) await expectLoads(page, url);
 			for (const url of row.forbidden) await expectBouncedToPortal(page, url);
+			// #1037: the sidebar offers exactly the back-office pages the guards let this role open.
+			expect(
+				await sidebarPaths(page, row.allowed, row.sidebarPendingSpec),
+				'sidebar menus'
+			).toEqual(row.allowed.filter((url) => url.startsWith('/back-office/')).sort());
 			await page.context().close();
+		});
+	}
+
+	for (const { role, roles } of MANAGEMENT_ACCESS) {
+		test(`${role} reaches every management page and the sidebar offers exactly those`, async ({
+			browser
+		}) => {
+			const user = managementUser(role, roles);
+			try {
+				await createStaffAccount(user);
+				const page = await openAs(browser, user);
+				for (const url of MANAGEMENT_PAGES) await expectLoads(page, url);
+				expect(await sidebarPaths(page, MANAGEMENT_PAGES), 'sidebar menus').toEqual(
+					[...MANAGEMENT_PAGES].sort()
+				);
+				await page.context().close();
+			} finally {
+				await deleteCouchUser(user.name);
+			}
 		});
 	}
 
@@ -430,14 +607,24 @@ test.describe('Volunteer access: coordinator limits (#955)', { tag: TAGS }, () =
 	}) => {
 		const page = await openAs(browser, coordinator);
 		await page.goto('/back-office/volunteers?tab=people');
-		await page.getByPlaceholder('ค้นหาชื่อ นามสกุล เบอร์โทร, รหัส...').fill(`E2EV${RUN_ID}`);
+		await page
+			.getByPlaceholder('ค้นหาชื่อ นามสกุล ชื่อเล่น เบอร์โทร, รหัส...')
+			.fill(`E2EV${RUN_ID}`);
 		await page.getByRole('button', { name: 'ออกสิทธิ์ใช้งานระบบ' }).click();
 
+		// A date picker (#1044): empty until chosen, and only today through today + 7 can be picked.
 		const expiry = page.getByRole('dialog').getByLabel(/วันหมดอายุของสิทธิ์/);
 		await expect(expiry).toBeVisible();
-		await expect(expiry).toHaveValue('');
-		await expect(expiry).toHaveAttribute('min', bangkokDate(0));
-		await expect(expiry).toHaveAttribute('max', bangkokDate(7));
+		await expect(expiry).toContainText('เลือกวันหมดอายุ');
+		await expiry.click();
+		// Days of the shown month only; the window's last day may sit in the next month.
+		const day = (iso: string) =>
+			page.locator(`[data-calendar-cell][data-value="${iso}"]:not([data-outside-month])`);
+		await expect(day(bangkokDate(0))).not.toHaveAttribute('data-disabled');
+		if (bangkokDate(8).slice(0, 7) === bangkokDate(0).slice(0, 7)) {
+			await expect(day(bangkokDate(8))).toHaveAttribute('data-disabled');
+		}
+		await page.keyboard.press('Escape');
 
 		await page.getByRole('dialog').getByLabel('อีเมลสำหรับเข้าสู่ระบบ').fill(grantEmail);
 		await page
@@ -445,7 +632,15 @@ test.describe('Volunteer access: coordinator limits (#955)', { tag: TAGS }, () =
 			.getByLabel(/รหัสผ่านสำหรับบัญชีใหม่/)
 			.fill(PASSWORD);
 		await page.getByRole('dialog').getByRole('button', { name: 'บันทึกและออกสิทธิ์ใหม่' }).click();
-		await expect(page.getByText('กรุณาเลือกวันหมดอายุ')).toBeVisible();
+		// No role is preselected (#1072), so the role is asked for first. Refusals also toast, so the
+		// note is looked up inside the dialog.
+		await expect(page.getByRole('dialog').getByText('กรุณาเลือกตำแหน่งหน้าที่')).toBeVisible();
+		await page
+			.getByRole('dialog')
+			.getByRole('radio', { name: 'เจ้าหน้าที่ลงทะเบียน', exact: true })
+			.check();
+		await page.getByRole('dialog').getByRole('button', { name: 'บันทึกและออกสิทธิ์ใหม่' }).click();
+		await expect(page.getByRole('dialog').getByText('กรุณาเลือกวันหมดอายุ')).toBeVisible();
 		expect(
 			await getDocument('_users', `org.couchdb.user:${grantEmail}`),
 			'nothing created'
@@ -475,29 +670,57 @@ test.describe('Volunteer access: coordinator limits (#955)', { tag: TAGS }, () =
 		expect(grants[0].granted_at).toBeTruthy();
 	});
 
-	test('a re-grant adds the role and renews without touching the password', async () => {
+	test('a re-grant with another role replaces it and renews without touching the password', async () => {
+		// One coordinator role per shelter (#1044): kitchen_staff replaces distribution_staff.
 		const res = await grantRequest({ role: 'kitchen_staff', password: 'Another-Pass9!' });
 		expect(res.status).toBe(200);
 
 		const doc = await getDocument('_users', `org.couchdb.user:${grantEmail}`);
-		expect(doc?.roles).toEqual([
-			`shelter:${SHELTER}`,
-			`${SHELTER}:distribution_staff`,
-			`${SHELTER}:kitchen_staff`
-		]);
-		expect(doc?.role_grants as unknown[]).toHaveLength(2);
+		expect(doc?.roles).toEqual([`shelter:${SHELTER}`, `${SHELTER}:kitchen_staff`]);
+		expect(doc?.role_grants as unknown[]).toHaveLength(1);
 		await expect(couchLogin(grantEmail, PASSWORD), 'password unchanged').resolves.toBeTruthy();
 
-		await expect(grantRequest({ expires_on: bangkokDate(7) })).resolves.toMatchObject({
-			status: 200
-		});
+		await expect(
+			grantRequest({ role: 'kitchen_staff', expires_on: bangkokDate(7) })
+		).resolves.toMatchObject({ status: 200 });
 		const renewed = await getDocument('_users', `org.couchdb.user:${grantEmail}`);
-		expect(renewed?.role_grants as unknown[], 'renewed, not duplicated').toHaveLength(2);
+		expect(renewed?.role_grants as unknown[], 'renewed, not duplicated').toHaveLength(1);
+	});
+
+	test('the people tab shows the granted role with its last day, and offers to edit it', async ({
+		browser
+	}) => {
+		// The API grants above skip the client step that links the profile to the account.
+		const profile = await getDocument(SHELTER_DB, verifiedId);
+		await putDocument(SHELTER_DB, { ...profile!, _id: verifiedId, user_name: grantEmail });
+		const page = await openAs(browser, coordinator);
+		await page.goto('/back-office/volunteers?tab=people');
+		await page
+			.getByPlaceholder('ค้นหาชื่อ นามสกุล ชื่อเล่น เบอร์โทร, รหัส...')
+			.fill(`E2EV${RUN_ID}`);
+		const status = page.getByTestId('volunteer-account-status');
+		await expect(status).toContainText('มีบัญชีแล้ว');
+		await expect(status).toContainText('เจ้าหน้าที่ครัว');
+		await expect(status).toContainText('· ถึง');
+		await page.getByRole('button', { name: 'แก้ไขสิทธิ์ใช้งาน' }).click();
+		await expect(
+			page.getByRole('dialog').getByRole('radio', { name: 'เจ้าหน้าที่ครัว', exact: true })
+		).toBeChecked();
+		await page.keyboard.press('Escape');
+
+		// Not verified here: the button opens the identity check instead of the grant (#1044).
+		await page
+			.getByPlaceholder('ค้นหาชื่อ นามสกุล ชื่อเล่น เบอร์โทร, รหัส...')
+			.fill(`E2EU${RUN_ID}`);
+		await expect(page.getByRole('button', { name: 'ออกสิทธิ์ใช้งานระบบ' })).toHaveCount(0);
+		await page.getByRole('button', { name: 'ยืนยันตัวตนก่อนออกสิทธิ์' }).click();
+		await expect(page.getByText('ต้องยืนยันตัวตนอาสาสมัครก่อนจึงจะออกสิทธิ์ได้')).toBeVisible();
+		await page.context().close();
 	});
 
 	for (const [label, over, status] of [
-		['a role outside the four (medical_staff)', { role: 'medical_staff' }, 403],
-		['a role above the four (shelter_manager)', { role: 'shelter_manager' }, 403],
+		['a role the coordinator may not grant (kiosk_staff)', { role: 'kiosk_staff' }, 403],
+		['a role above the coordinator (shelter_manager)', { role: 'shelter_manager' }, 403],
 		['another shelter', { shelter_code: 'SH002' }, 403],
 		['an expiry more than 7 days away', { expires_on: bangkokDate(8) }, 422],
 		['an expiry in the past', { expires_on: bangkokDate(-1) }, 422],
