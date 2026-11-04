@@ -3,9 +3,10 @@
  * local CouchDB.
  *
  * The BOM table on "แผงควบคุมและจัดสรรเครื่องครัวภัยพิบัติ" scales each recipe line to the plate
- * target. It used to round to 2 dp with floats (0.125 became 0.13, 1/3 became 0.33) and merge a
- * repeated item with the same float math. Quantities are now decimal strings at 4 dp, and an
- * emptied quantity box is rejected with a toast instead of crashing the submit.
+ * target. The scaled default rounds up to a whole number for every unit (#805 FR-3), using exact
+ * decimal math so a line that scales to exactly 3 stays 3. Quantities the user types stay exact
+ * (0.1875 is saved as 0.1875), a repeated item merges to an exact decimal sum, and an emptied
+ * quantity box is rejected with a toast instead of crashing the submit.
  *
  * Fixtures: one recipe (3 standard portions) over two item masters in the catalog and one
  * meal_session with 1 regular plate. Nothing here opens a ticket. Teardown deletes only documents
@@ -178,7 +179,8 @@ test.describe(
 			const thirdId = await seedItemMaster(THIRD);
 			const tenthId = await seedItemMaster(TENTH);
 
-			// 3 standard portions: 0.375 -> 0.125 per plate, 1 -> one third per plate, 0.3 -> 0.1 per plate.
+			// 3 standard portions: 0.375 -> 0.125 per plate, 1 -> one third per plate, 0.3 -> 0.1 per plate,
+			// each rounded up to a whole number on the board.
 			const recipe = envelope('recipe', 4, {
 				label: RECIPE,
 				ingredients: [
@@ -222,28 +224,32 @@ test.describe(
 			expect(leftovers, 'zero-leak: no documents from this run remain').toEqual([]);
 		});
 
-		test('recipe quantities scale to exact decimals, not 2 dp floats', async ({ browser }) => {
+		test('recipe quantities scale up to whole numbers, exact when already whole', async ({
+			browser
+		}) => {
 			expect(recipeId).toMatch(/^recipe:/);
 			const { target, bom } = await openBoardWithRecipe(browser);
 
-			await expect(qtyInput(bom, EIGHTH)).toHaveValue('0.125', { timeout: 15_000 });
-			await expect(qtyInput(bom, THIRD)).toHaveValue('0.3333');
-			await expect(qtyInput(bom, TENTH)).toHaveValue('0.1');
+			await expect(qtyInput(bom, EIGHTH)).toHaveValue('1', { timeout: 15_000 });
+			await expect(qtyInput(bom, THIRD)).toHaveValue('1');
+			await expect(qtyInput(bom, TENTH)).toHaveValue('1');
 
-			await target.fill('3');
-			await expect(qtyInput(bom, TENTH)).toHaveValue('0.3');
+			await target.fill('9');
+			await expect(qtyInput(bom, EIGHTH)).toHaveValue('2');
+			await expect(qtyInput(bom, THIRD)).toHaveValue('3');
+			await expect(qtyInput(bom, TENTH)).toHaveValue('1');
 
 			await target.fill('7');
-			await expect(qtyInput(bom, EIGHTH)).toHaveValue('0.875');
-			await expect(qtyInput(bom, THIRD)).toHaveValue('2.3333');
-			await expect(qtyInput(bom, TENTH)).toHaveValue('0.7');
+			await expect(qtyInput(bom, EIGHTH)).toHaveValue('1');
+			await expect(qtyInput(bom, THIRD)).toHaveValue('3');
+			await expect(qtyInput(bom, TENTH)).toHaveValue('1');
 		});
 
 		test('adding an item already in the table merges to an exact decimal sum', async ({
 			browser
 		}) => {
 			const { page, bom } = await openBoardWithRecipe(browser);
-			await expect(qtyInput(bom, EIGHTH)).toHaveValue('0.125', { timeout: 15_000 });
+			await expect(qtyInput(bom, EIGHTH)).toHaveValue('1', { timeout: 15_000 });
 
 			await bom.getByRole('button', { name: 'เพิ่มวัตถุดิบ', exact: true }).click();
 			await bom.getByRole('combobox').click();
@@ -254,8 +260,8 @@ test.describe(
 
 			await expect(toast(page, `เพิ่ม ${EIGHTH} เรียบร้อยแล้ว`)).toBeVisible();
 			await expect(bom.getByRole('row').filter({ hasText: EIGHTH })).toHaveCount(1);
-			await expect(qtyInput(bom, EIGHTH)).toHaveValue('0.1875');
-			await expect(qtyInput(bom, THIRD)).toHaveValue('0.3333');
+			await expect(qtyInput(bom, EIGHTH)).toHaveValue('1.0625');
+			await expect(qtyInput(bom, THIRD)).toHaveValue('1');
 		});
 
 		test('an emptied quantity box is rejected with a toast and opens no ticket', async ({
@@ -286,7 +292,7 @@ test.describe(
 				(await allDocuments(SHELTER_DB)).filter(isKitchenTicket).map((d) => d._id)
 			);
 			const { page, bom } = await openBoardWithRecipe(browser);
-			await expect(qtyInput(bom, EIGHTH)).toHaveValue('0.125', { timeout: 15_000 });
+			await expect(qtyInput(bom, EIGHTH)).toHaveValue('1', { timeout: 15_000 });
 			await qtyInput(bom, EIGHTH).fill('0.1875');
 			await page.getByRole('button', { name: 'สร้างใบเบิกวัตถุดิบ' }).click();
 			await expect(toast(page, /เปิดตั๋วเบิกวัตถุดิบ .+ แล้ว/)).toBeVisible();
@@ -334,7 +340,7 @@ test.describe(
 			});
 
 			await expect(qtyInput(bom, EIGHTH)).toHaveValue('0.1875', { timeout: 15_000 });
-			await expect(qtyInput(bom, THIRD)).toHaveValue('0.3333');
+			await expect(qtyInput(bom, THIRD)).toHaveValue('1');
 		});
 
 		test('a failed ticket load offers retry and never a second ticket', async ({ browser }) => {
