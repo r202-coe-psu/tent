@@ -4,6 +4,7 @@ import {
 	createOrMergeUser,
 	createUser,
 	deleteUser,
+	revokeCoordinatorGrant,
 	updateUser,
 	resetUserPasswordByAdmin,
 	getCurrentUserProfile,
@@ -24,7 +25,8 @@ import {
 	updateOwnProfile,
 	resolveLoginName,
 	findUserNameByPhone,
-	listShelterStaffDirectory
+	listShelterStaffDirectory,
+	getDisplayNames
 } from './user-service';
 import type { CouchUserDoc } from './user-service';
 import { hashSecurityAnswer } from './security-questions';
@@ -48,6 +50,14 @@ describe('user-service', () => {
 					value: { rev: doc._rev },
 					doc
 				}));
+				return { status: 200, data: { rows } };
+			}
+
+			if (method === 'POST' && cleanPath === '/_users/_all_docs') {
+				const keys = ((body ?? {}) as { keys?: string[] }).keys ?? [];
+				const rows = keys.map((key) =>
+					fakeUsersDb[key] ? { id: key, key, doc: fakeUsersDb[key] } : { key, error: 'not_found' }
+				);
 				return { status: 200, data: { rows } };
 			}
 
@@ -1210,6 +1220,85 @@ describe('user-service', () => {
 				)
 			).rejects.toMatchObject({ code: 'CONFLICT', message: DELETED_MSG });
 			expect(fakeUsersDb[idOf('e9')]).toEqual(before);
+		});
+
+		it('createUser keeps role_grants together with edge_shelters and null soft-delete fields', async () => {
+			const grant = {
+				shelter_code: 'SH001',
+				role: 'kitchen_staff',
+				expires_at: '2026-12-31T16:59:59.999Z',
+				granted_by: 'mgr-SH001',
+				granted_at: '2026-11-01T00:00:00.000Z'
+			};
+			await createUser({
+				...base,
+				name: 'g1',
+				roles: ['shelter:SH001', 'registration_staff'],
+				role_grants: [grant]
+			});
+			const saved = fakeUsersDb[idOf('g1')];
+			expect(saved.role_grants).toEqual([grant]);
+			expect(saved.edge_shelters).toEqual(['SH001']);
+			expect(saved.deleted_at ?? null).toBeNull();
+			expect(saved.deleted_by ?? null).toBeNull();
+		});
+
+		it('getDisplayNames omits soft-deleted users', async () => {
+			await createUser({
+				...base,
+				name: 'dn-live',
+				display_name: 'Live Name',
+				roles: ['shelter:SH001']
+			});
+			await createUser({
+				...base,
+				name: 'dn-gone',
+				display_name: 'Gone Name',
+				roles: ['shelter:SH001']
+			});
+			await deleteUser('dn-gone', sa);
+			const names = await getDisplayNames(['dn-live', 'dn-gone', 'dn-missing']);
+			expect([...names.entries()]).toEqual([['dn-live', 'Live Name']]);
+		});
+
+		it('revokeCoordinatorGrant name lookup (storedUserName) skips a soft-deleted case-variant', async () => {
+			const grant = {
+				shelter_code: 'SH001',
+				role: 'kitchen_staff',
+				expires_at: '2099-12-31T16:59:59.999Z',
+				granted_by: 'mgr-SH001',
+				granted_at: '2026-11-01T00:00:00.000Z'
+			};
+			// A soft-deleted account and a live legacy account whose names differ only in case.
+			await createUser({ ...base, name: 'CaseUser', roles: ['shelter:SH001'] });
+			await deleteUser('CaseUser', sa);
+			await createUser({
+				...base,
+				name: 'CASEUSER',
+				roles: ['shelter:SH001', 'SH001:kitchen_staff'],
+				volunteer_id: 'vol:1',
+				role_grants: [grant]
+			});
+
+			await revokeCoordinatorGrant({
+				name: 'caseuser',
+				volunteer_id: 'vol:1',
+				shelter_code: 'SH001',
+				role: 'kitchen_staff',
+				actor: 'coord'
+			});
+
+			// The live doc was resolved (not the deleted one) and had its grant revoked.
+			expect(fakeUsersDb[idOf('CASEUSER')].role_grants ?? []).toEqual([]);
+			expect(fakeUsersDb[idOf('CaseUser')].deleted_at).toBeTruthy();
+		});
+
+		it('creating a name that is only a case-variant of a soft-deleted one is still reserved by exact name', async () => {
+			await createUser({ ...base, name: 'e10', roles: ['shelter:SH001'] });
+			await deleteUser('e10', sa);
+			await expect(
+				createUser({ ...base, name: 'e10', roles: ['shelter:SH001'] })
+			).rejects.toMatchObject({ code: 'CONFLICT', message: DELETED_MSG });
 		});
 
 		it('findUserBy*Subject ignore deleted accounts', async () => {
