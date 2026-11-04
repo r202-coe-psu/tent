@@ -47,7 +47,10 @@
 		useItemMasters,
 		useUnitsOfMeasure,
 		useUnitDimensionResolver,
-		wholeQtyError
+		requiresWholeQty,
+		wholeQtyError,
+		WholeNumberGuard,
+		WholeNumberNote
 	} from '$lib/features/catalog';
 	import { ticketActionsFor } from '../domain/ticket-actions';
 	import { langState } from '$lib/states/i18n.svelte';
@@ -150,6 +153,8 @@
 	// Draft per line; defaults to the saved qty, or to what the kitchen requested
 	// when nothing is saved yet ('0'). Approve writes all drafts in one go.
 	let allocDraft = $state<Record<string, string>>({});
+
+	const wholeGuard = new WholeNumberGuard();
 
 	function draftFor(item: TicketItem): string {
 		return (
@@ -577,6 +582,7 @@
 											{wholeError}
 										</p>
 									{/if}
+									<WholeNumberNote guard={wholeGuard} key={item.item_id} class="mt-0.5" />
 									{#if draftZero}
 										<p class="mt-0.5 flex items-center gap-1 text-xs font-semibold text-amber-800">
 											<PackageX class="h-3.5 w-3.5 shrink-0" />
@@ -634,6 +640,10 @@
 													? 'numeric'
 													: 'decimal'}
 												aria-invalid={parsed === null || !!stockShort}
+												{@attach wholeGuard.attach(
+													() => requiresWholeQty(unitDimensions.resolve(item.unit)),
+													item.item_id
+												)}
 												value={draftFor(item)}
 												oninput={(e) => (allocDraft[item.item_id] = e.currentTarget.value)}
 											/>
