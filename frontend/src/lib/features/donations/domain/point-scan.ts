@@ -51,12 +51,16 @@ export function scanReceiveMode(
  * - `receivable` — this point may record it. `pointId` is the line's current point (`null`
  *   = any point); `borrowed` = another point's line unlocked by "รับรายการของจุดอื่น" (FR-MP-21).
  * - `other_point` — another point's line, read-only until unlocked (FR-MP-19).
+ * - `needs_point` — the shelter has drop-off points but staff have not chosen theirs yet
+ *   (FR-MP-18a, owner decision #1059): nothing can be ticked, so we do not yet know which
+ *   lines are "another point's".
  */
 export type ScanLineState =
 	| { kind: 'recorded'; receiptPointId: string | null }
 	| { kind: 'review_rejected' }
 	| { kind: 'receivable'; pointId: string | null; borrowed: boolean }
-	| { kind: 'other_point'; pointId: string };
+	| { kind: 'other_point'; pointId: string }
+	| { kind: 'needs_point' };
 
 export function scanLineStates(
 	donation: PointScanSource,
@@ -78,6 +82,9 @@ export function scanLineStates(
 			return { kind: 'recorded', receiptPointId: receiptOf.get(lineNo) ?? null };
 		}
 		if (item.review_status === 'rejected') return { kind: 'review_rejected' };
+		if (opts.currentPointIds.size > 0 && opts.chosenPointId === null) {
+			return { kind: 'needs_point' };
+		}
 		const pointId = currentLinePoint(item, opts.currentPointIds);
 		if (pointId === null || pointId === opts.chosenPointId) {
 			return { kind: 'receivable', pointId, borrowed: false };
@@ -89,11 +96,43 @@ export function scanLineStates(
 	});
 }
 
-/** Some unrecorded line belongs to another current point — the "รับรายการของจุดอื่น" case. */
-export function hasOtherPointLines(states: readonly ScanLineState[]): boolean {
-	return states.some(
-		(state) => state.kind === 'other_point' || (state.kind === 'receivable' && state.borrowed)
-	);
+/** Lines of another point still locked here — what the banner and the counter report. */
+export function otherPointLineCount(states: readonly ScanLineState[]): number {
+	return states.filter((state) => state.kind === 'other_point').length;
+}
+
+/**
+ * What the station's counter and idle save button report, as a state the UI words (#1059):
+ * - `wrong_shelter` — the booking is another shelter's; picking a point would not help.
+ * - `needs_point` — no point chosen yet, so no line can be ticked (FR-MP-18a).
+ * - `none_here` — the chosen point has no line to decide, but other points do.
+ * - `progress` — lines to decide here: `verified` of `decidable`.
+ */
+export type ScanStatus =
+	| { kind: 'wrong_shelter' }
+	| { kind: 'needs_point' }
+	| { kind: 'none_here'; otherPointCount: number }
+	| { kind: 'progress'; verified: number; decidable: number; otherPointCount: number };
+
+/** Wrong shelter comes first: its cause is not fixed by choosing a point. */
+export function scanStatus(opts: {
+	wrongShelter: boolean;
+	needsPoint: boolean;
+	verified: number;
+	decidable: number;
+	otherPointCount: number;
+}): ScanStatus {
+	if (opts.wrongShelter) return { kind: 'wrong_shelter' };
+	if (opts.needsPoint) return { kind: 'needs_point' };
+	if (opts.decidable === 0 && opts.otherPointCount > 0) {
+		return { kind: 'none_here', otherPointCount: opts.otherPointCount };
+	}
+	return {
+		kind: 'progress',
+		verified: opts.verified,
+		decidable: opts.decidable,
+		otherPointCount: opts.otherPointCount
+	};
 }
 
 /**
