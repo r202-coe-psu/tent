@@ -293,4 +293,26 @@ describe('adjust form whole numbers for count units (#805)', () => {
 		expect(document.getElementById('new-qty')?.getAttribute('aria-invalid')).toBe('true');
 		expect(document.body.textContent).toContain('หน่วยนับต้องเป็นจำนวนเต็ม');
 	});
+
+	it('keeps the save button off while the counted quantity is fractional', async () => {
+		ledger.current = [FRACTIONAL];
+		await render();
+		await chooseLot('คงเหลือ 2.5');
+		const save = () => document.querySelector<HTMLButtonElement>('form button[type="submit"]')!;
+		const type = async (value: string) => {
+			const qty = document.getElementById('new-qty') as HTMLInputElement;
+			qty.value = value;
+			qty.dispatchEvent(new Event('input', { bubbles: true }));
+			await settle();
+		};
+		[...document.body.querySelectorAll<HTMLButtonElement>('button')]
+			.find((b) => b.textContent?.trim() === 'เสียหาย / เน่าเสีย')!
+			.click();
+
+		await type('1.5');
+		expect(save().disabled).toBe(true);
+
+		await type('2');
+		expect(save().disabled).toBe(false);
+	});
 });

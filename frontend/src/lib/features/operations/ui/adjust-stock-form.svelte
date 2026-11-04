@@ -542,6 +542,7 @@
 						disabled={offline ||
 							isSubmitting ||
 							deltaQty === '0' ||
+							!!newQtyError ||
 							!adjustReason ||
 							(noteRequired && !note.trim())}
 						class="min-h-11 w-full font-bold"
