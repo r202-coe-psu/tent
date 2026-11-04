@@ -231,13 +231,16 @@
 	});
 
 	function problemText(line: BatchLineDraft): string | null {
-		const problem = attempted ? problemOf(line) : null;
-		if (problem === 'qty') return 'ระบุจำนวนที่รับจริง (ใส่ 0 ถ้าไม่ได้รับ)';
+		const problem = problemOf(line);
 		if (problem === 'whole') return WHOLE_QTY_MESSAGE;
+		if (!attempted) return null;
+		if (problem === 'qty') return 'ระบุจำนวนที่รับจริง (ใส่ 0 ถ้าไม่ได้รับ)';
 		if (problem === 'item') return 'เลือกสินค้าให้ตรงกับรายการนี้ก่อนบันทึก';
 		if (problem === 'expiry') return 'สินค้านี้ต้องระบุวันหมดอายุ';
 		return null;
 	}
+
+	const hasWholeProblem = $derived(lines.some((line) => problemOf(line) === 'whole'));
 
 	async function submit() {
 		attempted = true;
@@ -449,7 +452,9 @@
 									if (event.key === 'Enter') event.preventDefault();
 								}}
 								disabled={line.locked}
-								aria-invalid={problem === 'qty' ? 'true' : undefined}
+								aria-invalid={problem && ['qty', 'whole'].includes(problemOf(line) ?? '')
+									? 'true'
+									: undefined}
 								class="min-h-11 font-bold tabular-nums"
 							/>
 						</div>
@@ -566,7 +571,7 @@
 		<Button
 			type="button"
 			size="lg"
-			disabled={receiveMutation.isPending || offline || transitionBlocked}
+			disabled={receiveMutation.isPending || offline || transitionBlocked || hasWholeProblem}
 			class="min-h-11 w-full font-bold"
 			onclick={submit}
 		>
