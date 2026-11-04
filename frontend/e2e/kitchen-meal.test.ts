@@ -550,7 +550,7 @@ test.describe(
 				).toBeVisible();
 
 				await form.getByLabel(/ชื่อสูตรอาหาร/).fill(RECIPE);
-				await form.getByRole('button', { name: 'เพิ่ม', exact: true }).click();
+				await form.getByRole('button', { name: 'เพิ่มวัตถุดิบ', exact: true }).click();
 				const searches = form.getByPlaceholder('ค้นหาชื่อวัตถุดิบ...');
 				const quantities = form.getByRole('spinbutton');
 				for (const [index, [name, qty]] of [

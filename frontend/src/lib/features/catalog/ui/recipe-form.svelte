@@ -225,7 +225,7 @@
 				<div class="space-y-3">
 					{#each $formData.ingredients as conv, index (index)}
 						<div
-							class="flex flex-col items-stretch gap-3 rounded-2xl border border-slate-100 bg-white p-5 shadow-sm md:flex-row md:items-end dark:border-zinc-800 dark:bg-zinc-950"
+							class="flex flex-col items-stretch gap-3 rounded-2xl border border-slate-100 bg-white p-5 shadow-sm md:flex-row md:items-start dark:border-zinc-800 dark:bg-zinc-950"
 						>
 							<!-- ค้นหาวัตถุดิบจากคลัง -->
 							<div class="flex-1 space-y-1.5">
@@ -276,9 +276,11 @@
 								{/if}
 							</div>
 
-							<!-- Action Buttons -->
-							<div class="mt-4 flex items-center gap-2 md:mt-0">
-								{#if $formData.ingredients.length > 1}
+							{#if $formData.ingredients.length > 1}
+								<div class="space-y-1.5">
+									<span aria-hidden="true" class="invisible hidden text-xs font-bold md:block"
+										>ลบ</span
+									>
 									<Button
 										type="button"
 										variant="ghost"
@@ -286,21 +288,20 @@
 										onclick={() => removeIngredient(index)}
 									>
 										<Trash2 class="h-5 w-5" />
+										<span class="sr-only">ลบวัตถุดิบ</span>
 									</Button>
-								{/if}
-								{#if index === $formData.ingredients.length - 1}
-									<Button
-										type="button"
-										onclick={addIngredient}
-										class="flex h-12 shrink-0 items-center gap-1 rounded-xl bg-slate-100 px-5 font-bold text-[#002f6c] hover:bg-slate-200 dark:bg-zinc-800 dark:text-blue-400 dark:hover:bg-zinc-700"
-									>
-										<Plus class="h-4 w-4" />
-										เพิ่ม
-									</Button>
-								{/if}
-							</div>
+								</div>
+							{/if}
 						</div>
 					{/each}
+					<Button
+						type="button"
+						onclick={addIngredient}
+						class="flex h-12 items-center gap-1 rounded-xl bg-slate-100 px-5 font-bold text-[#002f6c] hover:bg-slate-200 dark:bg-zinc-800 dark:text-blue-400 dark:hover:bg-zinc-700"
+					>
+						<Plus class="h-4 w-4" />
+						เพิ่มวัตถุดิบ
+					</Button>
 				</div>
 
 				<div class="grid grid-cols-1 gap-4 pt-2 md:grid-cols-2">
