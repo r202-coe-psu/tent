@@ -31,7 +31,10 @@
 		shelfLifeExpiryLabel,
 		useUnitDimensionResolver,
 		qtyInputStep,
-		wholeQtyError
+		requiresWholeQty,
+		wholeQtyError,
+		WholeNumberGuard,
+		WholeNumberNote
 	} from '$lib/features/catalog';
 	import {
 		applyExpiryAutofill,
@@ -240,6 +243,8 @@
 	});
 
 	const { form: formData, submitting, reset } = form;
+
+	const wholeGuard = new WholeNumberGuard();
 
 	const qtyWholeError = $derived(
 		wholeQtyError($formData.qty, unitDimension.resolve($formData.unit))
@@ -824,6 +829,9 @@
 							step={qtyInputStep(unitDimension.resolve($formData.unit))}
 							bind:value={$formData.qty}
 							aria-invalid={qtyWholeError ? true : props['aria-invalid']}
+							{@attach wholeGuard.attach(() =>
+								requiresWholeQty(unitDimension.resolve($formData.unit))
+							)}
 							class="min-h-11 font-mono font-bold"
 						/>
 					{/snippet}
@@ -831,6 +839,7 @@
 				{#if qtyWholeError}
 					<p class="text-sm font-medium text-destructive">{qtyWholeError}</p>
 				{/if}
+				<WholeNumberNote guard={wholeGuard} />
 				<Form.FieldErrors />
 			</Form.Field>
 
