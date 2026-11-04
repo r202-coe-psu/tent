@@ -89,7 +89,7 @@ describe('wholeNumberInput', () => {
 });
 
 describe('WholeNumberGuard', () => {
-	it('tracks the refusing box by key and clears on the next accepted input', () => {
+	it('tracks the refusing box by key and clears when it loses focus', () => {
 		const guard = new WholeNumberGuard();
 		const a = document.createElement('input');
 		const b = document.createElement('input');
@@ -105,6 +105,8 @@ describe('WholeNumberGuard', () => {
 		expect(guard.isRefused('b')).toBe(true);
 
 		b.dispatchEvent(new Event('input'));
+		expect(guard.isRefused('b')).toBe(true);
+		b.dispatchEvent(new Event('blur'));
 		expect(guard.isRefused('b')).toBe(false);
 
 		beforeInput(a, '.');

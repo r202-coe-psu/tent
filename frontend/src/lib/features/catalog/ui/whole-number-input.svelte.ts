@@ -4,11 +4,12 @@ import { isWholeNumberText } from '../domain/unit-quantity';
 /**
  * Refuses non-digit typing, pasting and dropping into a quantity box while `isWhole()` is true.
  * `isWhole` is read per event, so a unit change switches the behaviour with no re-attach.
+ * `onRefuse` shows the caller's note and `onBlur` clears it.
  */
 export function wholeNumberInput(
 	isWhole: () => boolean,
 	onRefuse?: () => void,
-	onAccept?: () => void
+	onBlur?: () => void
 ): Attachment<HTMLInputElement> {
 	return (input) => {
 		const refuseUnlessDigits = (e: Event, text: string | null | undefined) => {
@@ -27,18 +28,12 @@ export function wholeNumberInput(
 		input.addEventListener('beforeinput', beforeInput);
 		input.addEventListener('paste', paste);
 		input.addEventListener('drop', drop);
-		if (onAccept) {
-			input.addEventListener('input', onAccept);
-			input.addEventListener('blur', onAccept);
-		}
+		if (onBlur) input.addEventListener('blur', onBlur);
 		return () => {
 			input.removeEventListener('beforeinput', beforeInput);
 			input.removeEventListener('paste', paste);
 			input.removeEventListener('drop', drop);
-			if (onAccept) {
-				input.removeEventListener('input', onAccept);
-				input.removeEventListener('blur', onAccept);
-			}
+			if (onBlur) input.removeEventListener('blur', onBlur);
 		};
 	};
 }
