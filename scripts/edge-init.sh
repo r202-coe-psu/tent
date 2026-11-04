@@ -24,7 +24,7 @@ ROLE="shelter:${SHELTER_CODE}"
 
 put() { # put <path> <json> — แสดงเฉพาะ response (payload ของ job มีรหัสผ่าน)
 	status=$(curl -s -o /tmp/edge-init.out -w '%{http_code}' -X PUT "$E/$1" \
-		-H 'Content-Type: application/json' -d "$2")
+		-H 'Content-Type: application/json' -d "$2") || true
 	case "$status" in
 	2??) echo "ok      $1" ;;
 	409 | 412) echo "exists  $1" ;;
@@ -45,7 +45,7 @@ job() {
 	body="\"source\":{\"url\":\"$2\",\"auth\":$3},\"target\":{\"url\":\"$4\",\"auth\":$5},\"continuous\":true${6:+,$6}"
 	hash=$(printf '%s' "$body" | sha256sum | cut -c1-32)
 	: >/tmp/edge-init.cur # ต่อไม่ติด (000) curl ไม่เขียนไฟล์ — กันข้อความค้างจากรอบก่อน
-	cur_status=$(curl -s -o /tmp/edge-init.cur -w '%{http_code}' "$E/_replicator/$1")
+	cur_status=$(curl -s -o /tmp/edge-init.cur -w '%{http_code}' "$E/_replicator/$1") || true
 	case "$cur_status" in
 	200 | 404) ;;
 	*)
@@ -61,7 +61,7 @@ job() {
 		;;
 	*'"_rev":"'*)
 		rev=$(printf '%s' "$cur" | sed -n 's/.*"_rev":"\([^"]*\)".*/\1/p' | head -1)
-		status=$(curl -s -o /tmp/edge-init.out -w '%{http_code}' -X DELETE "$E/_replicator/$1?rev=$rev")
+		status=$(curl -s -o /tmp/edge-init.out -w '%{http_code}' -X DELETE "$E/_replicator/$1?rev=$rev") || true
 		case "$status" in
 		2??) echo "stale   _replicator/$1 (config ไม่ตรงกับ .env) — สร้างใหม่" ;;
 		*)
@@ -96,14 +96,14 @@ uuid_of() { # uuid_of <file> — ดึง "uuid" จาก welcome JSON ขอ�
 }
 : >/tmp/edge-init.cen
 cen_status=$(curl -s -o /tmp/edge-init.cen -w '%{http_code}' \
-	-u "${CENTRAL_REPL_USER}:${CENTRAL_REPL_PASSWORD}" "$CEN/")
+	-u "${CENTRAL_REPL_USER}:${CENTRAL_REPL_PASSWORD}" "$CEN/") || true
 CEN_UUID=$(uuid_of /tmp/edge-init.cen)
 if [ "$cen_status" != 200 ] || [ -z "$CEN_UUID" ]; then
 	echo "FAILED  อ่าน GET / ของ central (${CEN}/) ไม่ได้ (HTTP $cen_status) — ตรวจ SYNC_URL / credential / network ก่อนสร้าง job"
 	exit 1
 fi
 : >/tmp/edge-init.loc
-edge_status=$(curl -s -o /tmp/edge-init.loc -w '%{http_code}' "$E/")
+edge_status=$(curl -s -o /tmp/edge-init.loc -w '%{http_code}' "$E/") || true
 EDGE_UUID=$(uuid_of /tmp/edge-init.loc)
 if [ "$edge_status" != 200 ] || [ -z "$EDGE_UUID" ]; then
 	echo "FAILED  อ่าน GET / ของ edge ไม่ได้ (HTTP $edge_status)"

@@ -51,7 +51,9 @@ pass() {
 	docs_file="$STATE_DIR/docs.json"
 	todo="$STATE_DIR/todo.txt"
 	: >"$todo"
-	if ! curl -s -m 10 "$E/_scheduler/docs/_replicator" | grep '"doc_id"' >"$docs_file"; then
+	# CouchDB returns {"docs":[{"database":..,"doc_id":..},{...}]} as ONE line — split to one doc per line first,
+	# otherwise field()/error_count (greedy sed) only ever see the last job and the 401/403 grep spans every job
+	if ! curl -s -m 10 "$E/_scheduler/docs/_replicator" | sed 's/{"database"/\n&/g' | grep '"doc_id"' >"$docs_file"; then
 		:
 	fi
 	if [ ! -s "$docs_file" ]; then
