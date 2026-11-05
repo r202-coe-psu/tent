@@ -18,13 +18,15 @@ affects:
   - frontend/scripts/seed/master-seed.ts
   - frontend/src/lib/server/shelter-access-design.ts
   - frontend/src/lib/server/shelter-access-design.test.ts
-  - docs/data/schema.md §4.9 canonical seed set — **Amendment A1** (เพิ่ม `ball`, รวม 31 หน่วย; ไม่ bump `schema_v`)
-  - frontend/src/lib/features/catalog/domain/unit-of-measure.ts, frontend/scripts/seed/master-seed.ts, tests ของทั้งสองไฟล์ — **Amendment A1**
+  - docs/data/schema.md # §4.9 canonical seed set, Amendment A1 (เพิ่ม `ball`, รวม 31 หน่วย; ไม่ bump `schema_v`)
+  - docs/master-data/README.md # Amendment A1 (จำนวนหน่วย)
+  - docs/changes/_index.md # Amendment A1 (จำนวนหน่วย)
+  - frontend/src/lib/features/catalog/domain/unit-of-measure.test.ts # Amendment A1
 ---
 
 # CR-125 — Unit of Measure Master Data and Protected UOM Invariants
 
-> **สรุป (TL;DR):** เพิ่ม `unit_of_measure` เป็น master data ระดับส่วนกลางในฐานข้อมูล `catalog` ด้วย `schema_v: 1` และ deterministic ID `unit_of_measure:{code}` · seed หน่วยมาตรฐาน 27 รายการแบบ idempotent · บังคับ `code` เป็น immutable สำหรับทุกหน่วย · ป้องกันหน่วยระบบจากการลบ การเปลี่ยน `code`/`dimension` และการปลด `is_protected` · กำหนดขอบเขตชัดเจนว่าฐานข้อมูลศูนย์พักพิง (`shelter_*`) ไม่อนุญาตให้เขียน UOM (read-only replica) · ปรับแก้ CR-120 ให้ `base_unit` ของแก๊สเป็น `"cylinder"` พร้อมตาราง Legacy Compatibility Matrix ที่รองรับภาษาไทยเดิมผ่าน `formatUnit` โดยไม่กระทบเอกสารเดิม
+> **สรุป (TL;DR):** เพิ่ม `unit_of_measure` เป็น master data ระดับส่วนกลางในฐานข้อมูล `catalog` ด้วย `schema_v: 1` และ deterministic ID `unit_of_measure:{code}` · seed หน่วยมาตรฐาน 31 รายการแบบ idempotent (A1) · บังคับ `code` เป็น immutable สำหรับทุกหน่วย · ป้องกันหน่วยระบบจากการลบ การเปลี่ยน `code`/`dimension` และการปลด `is_protected` · กำหนดขอบเขตชัดเจนว่าฐานข้อมูลศูนย์พักพิง (`shelter_*`) ไม่อนุญาตให้เขียน UOM (read-only replica) · ปรับแก้ CR-120 ให้ `base_unit` ของแก๊สเป็น `"cylinder"` พร้อมตาราง Legacy Compatibility Matrix ที่รองรับภาษาไทยเดิมผ่าน `formatUnit` โดยไม่กระทบเอกสารเดิม
 
 ## 1. Why
 
@@ -49,14 +51,15 @@ affects:
 
 ## 3. Canonical seed set
 
-Seeder ต้องจัดการหน่วยต่อไปนี้รวม 27 รายการแบบ idempotent:
+Seeder ต้องจัดการหน่วยต่อไปนี้รวม 31 รายการแบบ idempotent:
 
 | Dimension | Codes |
 | --- | --- |
-| `count` | `piece`, `unit`, `item`, `set`, `pair`, `box`, `pack`, `bag`, `sachet`, `bottle`, `can`, `tablet`, `bar`, `tube`, `roll`, `sheet`, `cloth`, `bundle`, `egg`, `fruit`, `cylinder` |
-| `mass` | `g`, `kg` |
+| `count` | `piece`, `unit`, `item`, `set`, `pair`, `box`, `pack`, `bag`, `sachet`, `bottle`, `can`, `tablet`, `bar`, `tube`, `roll`, `sheet`, `cloth`, `bundle`, `egg`, `fruit`, `ball`, `cylinder` |
+| `mass` | `g`, `kg`, `mg`, `mcg` |
 | `volume` | `gallon`, `ml`, `l` |
 | `length` | `m` |
+| `energy` | `kcal` |
 
 Seed behavior:
 
@@ -88,7 +91,7 @@ Seed behavior:
 - `frontend/src/lib/features/catalog/data/catalog.remote.ts` — Repository CRUD พร้อม client-side guard ป้องกันการปลด `is_protected`, แก้ `code`/`dimension` หรือลบหน่วย protected
 - `frontend/src/routes/(protected)/back-office/catalog/components/unit-of-measure-tab.svelte` — หน้าจัดการ master UOM รองรับการสร้าง/แก้ไข label/deactivate
 - `frontend/scripts/sync-central-db.ts` — ซิงก์ Catalog DB VDU (`_design/access.validate_doc_update`) สำหรับตรวจสอบสิทธิ์ `system_admin`/`_admin` และป้องกันการแก้ไข protected UOM
-- `frontend/scripts/seed/master-seed.ts` — Provisioning canonical seed 27 หน่วยแบบ idempotent
+- `frontend/scripts/seed/master-seed.ts` — Provisioning canonical seed 31 หน่วยแบบ idempotent
 - `frontend/src/lib/server/shelter-access-design.ts` — VDU ของฐานข้อมูลศูนย์พักพิง (`shelter_{shelter_code}`) **ไม่รวม** `unit_of_measure` ใน whitelist doc types (`allowed`), ส่งผลให้ shelter ปฏิเสธการเขียน UOM ทุกกรณี (`doc type not allowed yet: unit_of_measure`)
 - `frontend/src/lib/server/shelter-access-design.test.ts` — Regression test ยืนยันว่าการเขียน `unit_of_measure` ใน shelter DB ถูกปฏิเสธ
 
@@ -126,7 +129,7 @@ Seed behavior:
 ## 7. Acceptance Criteria
 
 - [x] **AC-01:** Catalog schema ระบุ `unit_of_measure` พร้อม fields, `schema_v: 1`, deterministic ID และ 4 dimensions
-- [x] **AC-02:** Seeder สร้าง/ซ่อมชุด canonical UOM 27 รายการแบบ idempotent และคง label ที่ผู้ดูแลแก้ไข
+- [x] **AC-02:** Seeder สร้าง/ซ่อมชุด canonical UOM 31 รายการแบบ idempotent และคง label ที่ผู้ดูแลแก้ไข
 - [x] **AC-03:** Protected UOM ถูกปฏิเสธเมื่อ delete หรือเปลี่ยน `code`/`dimension`
 - [x] **AC-04:** Protected UOM ถูกปฏิเสธเมื่อ request เปลี่ยน `is_protected` จาก `true` เป็น `false` ที่ VDU
 - [x] **AC-05:** ฟิลด์ `code` เป็น immutable สำหรับทุก UOM (ทั้งระบบและ custom)
@@ -141,11 +144,11 @@ Seed behavior:
 - **2026-09-17:** กำหนดให้ `code` เป็น immutable สำหรับทุก UOM เพื่อป้องกัน deterministic `_id` และ foreign key reference เสียหาย
 - **2026-09-17:** กำหนด Topology ชัดเจน: UOM จัดเก็บใน `catalog` DB เท่านั้น โดยฐานข้อมูลศูนย์พักพิง (`shelter_*`) เป็น read-only replica และปฏิเสธการเขียน UOM เด็ดขาด
 - **2026-09-17:** ปรับแก้ CR-120 ให้ใช้ `base_unit = "cylinder"` ทดแทนภาษาไทย `"ถัง"` พร้อมกำหนดตาราง Legacy Compatibility Matrix เพื่อความเข้ากันได้ย้อนหลัง 100%
-- **2026-11-05 (approved — เคาะ kong, 2026-11-05):** Amendment A1 — เพิ่ม `ball` (ลูก) เป็นหน่วยที่ 31 และให้ seed เขียน `sort_order` ของหน่วย protected ตามนิยามเสมอ เพื่อไม่ให้ `sort_order` ซ้ำบน DB ที่ seed แล้ว (issue #1188).
+- **2026-11-05 (approved — เคาะ kong, 2026-11-05):** Amendment A1 — เพิ่ม `ball` (ลูก) เป็นหน่วยที่ 31 และให้ seed เขียน `sort_order` ของหน่วย protected ตามนิยามเมื่อพบค่าซ้ำ เพื่อไม่ให้ `sort_order` ซ้ำบน DB ที่ seed แล้ว (issue #1188).
 
-## Amendment A1 — เพิ่มหน่วย `ball` (ลูก) และให้ seed เขียน `sort_order` ของหน่วย protected (approved 2026-11-05 · kong · issue #1188)
+## Amendment A1 — เพิ่มหน่วย `ball` (ลูก) และให้ seed แก้ `sort_order` ของหน่วย protected ที่ซ้ำ (approved 2026-11-05 · kong · issue #1188)
 
-> **สรุป (TL;DR):** เพิ่มหน่วย `ball` / "ลูก" (`count`) ใน canonical seed ต่อจาก `fruit` · `sort_order` ของ `gallon`..`kcal` เลื่อน +1 (21–30 → 22–31) · รวม 31 หน่วย · seed เขียน `sort_order` ของหน่วย protected ตามนิยามเสมอ (label ที่แก้เองคงเดิม) · ไม่เปลี่ยนรูป doc ไม่ bump `schema_v`
+> **สรุป (TL;DR):** เพิ่มหน่วย `ball` / "ลูก" (`count`) ใน canonical seed ต่อจาก `fruit` · `sort_order` ของ `gallon`..`kcal` เลื่อน +1 (21–30 → 22–31) · รวม 31 หน่วย · seed เขียน `sort_order` ของหน่วย protected ตามนิยามเมื่อพบ `sort_order` ซ้ำ (ค่าที่แอดมินจัดไว้และไม่ซ้ำคงเดิม, label ที่แก้เองคงเดิม) · ไม่เปลี่ยนรูป doc ไม่ bump `schema_v`
 
 **Why.** ของที่นับเป็นลูก (มะพร้าว แตงโม ลูกบอล) ไม่มีหน่วยที่ตรงใน dropdown. seed เดิมคง `sort_order` ของ doc ที่มีอยู่ ทำให้ DB ที่ seed ไปแล้วได้ `ball` = 21 ซ้ำกับ `gallon`.
 
@@ -153,8 +156,8 @@ Seed behavior:
 
 - **FR-A1-1** — canonical seed เพิ่มหน่วย `ball`: `label_th` = `ลูก`, `label_en` = `ball`, `dimension` = `count`, `sort_order` = `21`, `is_protected: true`.
 - **FR-A1-2** — `sort_order` ของหน่วยตั้งแต่ `gallon` ถึง `kcal` เลื่อน +1 (21–30 → 22–31). `sort_order` ของ 31 หน่วยต้องไม่ซ้ำกัน.
-- **FR-A1-3** — canonical seed set มี 31 หน่วย (`count` เพิ่ม `ball` ต่อจาก `fruit`). แทนที่จำนวน 27 ใน §3, §5, AC-02 และจำนวน 30 ใน `schema.md` §4.9.
-- **FR-A1-4** — เมื่อรัน seed กับหน่วย `is_protected: true` ที่มีอยู่แล้ว ต้องเขียน `sort_order` ตาม `FALLBACK_UNIT_DEFINITIONS` เสมอ (แทนการคง `sort_order` เดิมตาม §3 Seed behavior). `label_th`, `label_th_short`, `label_en` และ metadata อื่นที่ผู้ดูแลแก้ไขได้ คงค่าเดิม.
+- **FR-A1-3** — canonical seed set มี 31 หน่วย (`count` เพิ่ม `ball` ต่อจาก `fruit`). จำนวน 27 ใน TL;DR, §3, §5 และ AC-02 ถูกแก้เป็น 31 ในเอกสารนี้แล้ว (รวมตาราง §3 ให้ครบทั้ง 31 รหัส) และจำนวน 30 ใน `schema.md` §4.9 ถูกแก้เป็น 31. บรรทัด decision log 2026-09-17 คงเดิมเป็นประวัติ.
+- **FR-A1-4** — เมื่อรัน seed ถ้าพบ `sort_order` ซ้ำกันระหว่างเอกสาร `unit_of_measure` ใด ๆ ใน `catalog` ให้ seed เขียน `sort_order` ของ **ทุก** หน่วย `is_protected: true` ตาม `FALLBACK_UNIT_DEFINITIONS` (ค่าตามนิยามไม่ซ้ำกันเอง จึงจบในรอบเดียว). ถ้าไม่พบค่าซ้ำ ให้คง `sort_order` เดิมของเอกสารที่มีอยู่ตาม §3 Seed behavior และ §4 (แอดมินจัดลำดับเองได้). `label_th`, `label_th_short`, `label_en` และ `deactivated` คงค่าเดิมเสมอ.
 - **FR-A1-5** — seed ต้อง idempotent: รันซ้ำไม่สร้าง doc ซ้ำ และไม่เปลี่ยนค่าใด ๆ ของ doc ที่ตรงอยู่แล้ว (ยกเว้น `updated_at` และ `_rev` ที่ seed เขียนใหม่ทุกครั้ง).
 - **FR-A1-6** — DB ที่ยังไม่มี `unit_of_measure:ball` ต้องได้ doc นี้ (`is_protected: true`) เมื่อรัน `pnpm seed:master` หนึ่งครั้ง.
 
@@ -168,6 +171,7 @@ Seed behavior:
 
 - [ ] **AC-A1-1:** "ลูก" (`ball`) อยู่ใน dropdown หน่วยต่อจาก "ผล"; `formatUnit('ball')` = `ลูก`.
 - [ ] **AC-A1-2:** สินค้าที่ใช้ `base_unit: ball` สร้าง/แก้ได้และแสดงเป็น "ลูก".
-- [ ] **AC-A1-3:** `pnpm seed:master` บน DB ที่ seed แล้วได้ `unit_of_measure:ball` และ `sort_order` ไม่ซ้ำ.
+- [ ] **AC-A1-3:** `pnpm seed:master` บน DB ที่ seed แล้ว (มี `gallon` = 21) ได้ `unit_of_measure:ball` = 21, `gallon` = 22 และ `sort_order` ของ 31 หน่วยไม่ซ้ำ.
 - [ ] **AC-A1-4:** seed รันซ้ำได้ (idempotent); label ที่แก้เองคงเดิม.
+- [ ] **AC-A1-6:** บน DB ที่ไม่มี `sort_order` ซ้ำ และแอดมินจัดลำดับหน่วย protected เอง seed ไม่เปลี่ยน `sort_order` นั้น.
 - [ ] **AC-A1-5:** `schema.md` §4.9 ระบุ `ball` และจำนวน 31 หน่วย.
