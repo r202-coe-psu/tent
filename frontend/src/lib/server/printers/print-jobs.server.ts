@@ -72,6 +72,10 @@ async function writeJob(
 		await deps.storeFor(shelterCode).createJob(job);
 	} catch (error) {
 		if (!(error instanceof PrintShelterDbMissingError) || !deps.reprovisionShelterDb) throw error;
+		// The DB may be gone because the shelter was closed while this request was in flight: only
+		// bring it back when the printer is still active, never resurrect a closed shelter's DB.
+		const device = await deps.devices.getDevice(job.printer_id);
+		if (!device || device.status !== 'active') throw new PrinterNotFoundError();
 		await deps.reprovisionShelterDb(shelterCode);
 		await deps.storeFor(shelterCode).createJob(job);
 	}

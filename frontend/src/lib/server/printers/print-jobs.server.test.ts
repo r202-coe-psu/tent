@@ -145,6 +145,31 @@ describe('createPrintJob', () => {
 			expect(result.job_id).toBe('01JB0000000000000000000009');
 		});
 
+		it('does not reprovision when the printer was deactivated between the read and the write', async () => {
+			const { deps, caller, created } = setup();
+			let current: PrintDeviceDoc | null = device;
+			deps.devices = { getDevice: async () => current };
+			let reprovisions = 0;
+			deps.storeFor = () => ({
+				async createJob() {
+					// Shelter closed while the request was in flight: the printer goes inactive, DB is gone.
+					current = { ...device, status: 'inactive' };
+					throw new PrintShelterDbMissingError();
+				}
+			});
+
+			await expect(
+				createPrintJob(
+					{ ...deps, reprovisionShelterDb: async () => void (reprovisions += 1) },
+					caller,
+					label,
+					now
+				)
+			).rejects.toBeInstanceOf(PrinterNotFoundError);
+			expect(reprovisions).toBe(0);
+			expect(created).toHaveLength(0);
+		});
+
 		it('gives up after one retry when the DB is still missing', async () => {
 			const { deps, caller } = setup();
 			let reprovisions = 0;
