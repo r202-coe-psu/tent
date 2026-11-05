@@ -1294,6 +1294,76 @@ describe('buildValidateDocUpdate', () => {
 		});
 	});
 
+	describe('stock parameter role gate (#1189)', () => {
+		const TYPES = ['replenishment_policy', 'requirement_group', 'food_sphere_standard'] as const;
+		const param = (type: string, over: Doc = {}): Doc => ({
+			...envelope,
+			schema_v: 1,
+			_id: `${type}:X`,
+			type,
+			source: 'SHELTER_OVERRIDE',
+			...over
+		});
+		const SUPPLY: UserCtx = { name: 'sc', roles: ['shelter:SH001', 'SH001:supply_coordinator'] };
+		const VOLUNTEER: UserCtx = { name: 'vol', roles: ['shelter:SH001', 'SH001:volunteer'] };
+		const OTHER_WAREHOUSE: UserCtx = {
+			name: 'ws2',
+			roles: ['shelter:SH002', 'SH002:warehouse_staff']
+		};
+
+		describe.each(TYPES)('%s', (type) => {
+			it.each([
+				['warehouse staff', WAREHOUSE],
+				['a supply coordinator', SUPPLY],
+				['a shelter manager', MANAGER],
+				['a system admin', ADMIN]
+			])('lets %s create, update and deactivate', (_, user) => {
+				expect(() => compile()(param(type), null, user)).not.toThrow();
+				expect(() =>
+					compile()(param(type, { status: 'inactive' }), param(type), user)
+				).not.toThrow();
+				expect(() =>
+					compile()({ _id: `${type}:X`, _rev: '1-a', _deleted: true }, param(type), user)
+				).not.toThrow();
+			});
+
+			it.each([
+				['kitchen staff', KITCHEN],
+				['a volunteer', VOLUNTEER],
+				['registration staff', REGISTRATION],
+				['warehouse staff of another shelter', OTHER_WAREHOUSE]
+			])('rejects %s', (_, user) => {
+				expectForbidden(() => compile()(param(type), null, user), /can write replenishment_policy/);
+				expectForbidden(
+					() => compile()(param(type, { status: 'inactive' }), param(type), user),
+					/can write replenishment_policy/
+				);
+				expectForbidden(
+					() => compile()({ _id: `${type}:X`, _rev: '1-a', _deleted: true }, param(type), user),
+					/can write replenishment_policy/
+				);
+			});
+
+			it('lets the couch admin bypass the gate', () => {
+				const admin: UserCtx = { name: 'a', roles: ['_admin'] };
+				expect(() => compile()(param(type), null, admin)).not.toThrow();
+			});
+		});
+
+		it('does not rewrite a stock parameter into another type to dodge the gate', () => {
+			expectForbidden(
+				() => compile()(param('item_category'), param('requirement_group'), KITCHEN),
+				/Cannot change type/
+			);
+		});
+
+		it('keeps sop_override as it was (no role gate at CouchDB)', () => {
+			expect(() =>
+				compile()(param('sop_override', { ratios, version: 1 }), null, WAREHOUSE)
+			).not.toThrow();
+		});
+	});
+
 	it('accepts a new stock_ledger entry from warehouse staff', () => {
 		expect(() => compile()(ledger(), null, WAREHOUSE)).not.toThrow();
 	});

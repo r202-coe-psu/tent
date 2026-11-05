@@ -271,7 +271,7 @@
 								</td>
 								<td class="p-3 text-right">
 									<div class="flex items-center justify-end gap-2">
-										{#if isSA || (canEditOverride && pol.source === 'SHELTER_OVERRIDE')}
+										{#if isSA || canEditOverride}
 											<Button
 												variant="outline"
 												size="sm"
@@ -281,27 +281,29 @@
 												<Settings2 class="h-3.5 w-3.5" />
 												แก้ไข
 											</Button>
-											{#if (pol.status ?? 'active') === 'active'}
-												<Button
-													variant="destructive"
-													size="sm"
-													onclick={() => openDeleteDialog(pol)}
-													class="flex items-center gap-1"
-												>
-													<Trash2 class="h-3.5 w-3.5" />
-													ปิดใช้งาน
-												</Button>
-											{:else}
-												<Button
-													variant="outline"
-													size="sm"
-													disabled={setStatusMutation.isPending}
-													onclick={() => handleReactivate(pol)}
-													class="flex items-center gap-1 text-emerald-600 hover:text-emerald-700 dark:text-emerald-400"
-												>
-													<RotateCcw class="h-3.5 w-3.5" />
-													เปิดใช้งาน
-												</Button>
+											{#if isSA || pol.source === 'SHELTER_OVERRIDE'}
+												{#if (pol.status ?? 'active') === 'active'}
+													<Button
+														variant="destructive"
+														size="sm"
+														onclick={() => openDeleteDialog(pol)}
+														class="flex items-center gap-1"
+													>
+														<Trash2 class="h-3.5 w-3.5" />
+														ปิดใช้งาน
+													</Button>
+												{:else}
+													<Button
+														variant="outline"
+														size="sm"
+														disabled={setStatusMutation.isPending}
+														onclick={() => handleReactivate(pol)}
+														class="flex items-center gap-1 text-emerald-600 hover:text-emerald-700 dark:text-emerald-400"
+													>
+														<RotateCcw class="h-3.5 w-3.5" />
+														เปิดใช้งาน
+													</Button>
+												{/if}
 											{/if}
 										{/if}
 									</div>
