@@ -1,8 +1,7 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
-	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
-	import { Button } from '$lib/components/ui/button/index.js';
+	import BackLink from '$lib/components/back-link.svelte';
 	import { IncidentCreateForm, type ShelterIncident } from '$lib/features/incidents';
 
 	function openCreated(incident: ShelterIncident) {
@@ -26,14 +25,11 @@
 				ไม่จำเป็นต้องผูกกับผู้เข้าพัก และระบุคู่กรณีภายหลังได้หากยังไม่ทราบตัวตน
 			</p>
 		</div>
-		<Button
-			variant="outline"
+		<BackLink
 			href={resolve('/back-office/incidents')}
-			class="min-h-11 shrink-0 gap-1.5 rounded-xl"
-		>
-			<ArrowLeft class="h-4 w-4" />
-			ย้อนกลับ
-		</Button>
+			label="กลับไปบันทึกเหตุการณ์ประจำวัน"
+			class="shrink-0 rounded-xl"
+		/>
 	</header>
 
 	<IncidentCreateForm oncreated={openCreated} />
