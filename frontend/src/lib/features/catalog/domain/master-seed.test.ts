@@ -199,13 +199,15 @@ describe('master seed unit-of-measure provisioning', () => {
 	});
 
 	it('resets every protected sort_order on a DB seeded before ball existed', async () => {
-		const ballOrder = FALLBACK_UNIT_DEFINITIONS.find((unit) => unit.code === 'ball')!.sort_order;
+		const ballOrder =
+			FALLBACK_UNIT_DEFINITIONS.find((unit) => unit.code === 'ball')?.sort_order ?? 0;
 		// Orders as the previous seed wrote them: everything after fruit sits one lower.
 		const store = new Map<string, Record<string, unknown>>(
 			FALLBACK_UNIT_DEFINITIONS.filter((unit) => unit.code !== 'ball').map((unit) => [
 				`unit_of_measure:${unit.code}`,
 				unitDoc(unit, {
-					sort_order: unit.sort_order >= ballOrder ? unit.sort_order - 1 : unit.sort_order
+					sort_order:
+						(unit.sort_order ?? 0) >= ballOrder ? (unit.sort_order ?? 0) - 1 : unit.sort_order
 				})
 			])
 		);

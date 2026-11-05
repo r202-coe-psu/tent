@@ -490,7 +490,9 @@ async function hasUnitSortOrderCollision(): Promise<boolean> {
 	}
 	for (const def of FALLBACK_UNIT_DEFINITIONS) {
 		const docId = `unit_of_measure:${def.code}`;
-		if (!orders.has(docId)) orders.set(docId, def.sort_order);
+		if (!orders.has(docId) && typeof def.sort_order === 'number') {
+			orders.set(docId, def.sort_order);
+		}
 	}
 	const values = [...orders.values()];
 	return new Set(values).size !== values.length;
