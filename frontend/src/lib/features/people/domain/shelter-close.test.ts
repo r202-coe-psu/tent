@@ -75,7 +75,7 @@ describe('CR-219 FR-3 — system-close check-out guard', () => {
 		(status) => {
 			expect(() =>
 				assertMovementAllowed(evacueeIn(status), 'check_out', { reason: SHELTER_CLOSED_REASON })
-			).toThrow(/เช็คเอาท์/);
+			).toThrow(/เช็คเอาต์/);
 		}
 	);
 
@@ -100,7 +100,7 @@ describe('CR-219 FR-3 — system-close check-out guard', () => {
 		).toThrow();
 		expect(() =>
 			assertMovementAllowed(evacueeIn('active'), 'transfer_out', { systemClose: true })
-		).toThrow(/เช็คเอาท์/);
+		).toThrow(/เช็คเอาต์/);
 	});
 
 	it('applyMovementToStay needs the systemClose flag for temporary_leave', () => {

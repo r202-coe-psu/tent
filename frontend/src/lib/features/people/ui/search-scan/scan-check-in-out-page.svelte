@@ -195,7 +195,7 @@
 			if (result.source === 'unassigned') {
 				scanResult = {
 					success: false,
-					message: 'พบคิวลงทะเบียนล่วงหน้า (คิวกลาง) — รับเข้าศูนย์ก่อนเช็คอิน/เอาท์'
+					message: 'พบคิวลงทะเบียนล่วงหน้า (คิวกลาง) — รับเข้าศูนย์ก่อนเช็คอิน/เอาต์'
 				};
 				toast.success('พบคิวลงทะเบียนล่วงหน้า (คิวกลาง)');
 				claimHit = result.hit;

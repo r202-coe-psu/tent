@@ -1949,11 +1949,11 @@ export function assertShelterCloseCheckoutAllowed(
 	reason: string | null | undefined
 ): void {
 	if (reason !== SHELTER_CLOSED_REASON) {
-		throw new Error('การเช็คเอาท์จากการปิดศูนย์ต้องใช้เหตุผล shelter_closed');
+		throw new Error('การเช็คเอาต์จากการปิดศูนย์ต้องใช้เหตุผล shelter_closed');
 	}
 	const status = evacuee.current_stay.status;
 	if (!isShelterCloseCheckoutStatus(status)) {
-		throw new Error(`ไม่สามารถเช็คเอาท์จากการปิดศูนย์จากสถานะ ${status} ได้`);
+		throw new Error(`ไม่สามารถเช็คเอาต์จากการปิดศูนย์จากสถานะ ${status} ได้`);
 	}
 }
 
@@ -2067,7 +2067,7 @@ export function assertMovementAllowed(
 	if (opts.systemClose) {
 		// CR-219 FR-3: only the shelter-close flow passes `systemClose`, and only for check-out.
 		if (action !== 'check_out') {
-			throw new Error('การปิดศูนย์ใช้ได้กับการเช็คเอาท์เท่านั้น');
+			throw new Error('การปิดศูนย์ใช้ได้กับการเช็คเอาต์เท่านั้น');
 		}
 		assertShelterCloseCheckoutAllowed(evacuee, opts.reason);
 		return;
