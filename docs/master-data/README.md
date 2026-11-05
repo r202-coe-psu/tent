@@ -31,7 +31,7 @@ language: th
 
 - [master-defs.ts](../../frontend/scripts/seed/master-defs.ts) — รายการ `registry.master_data`
 - [master-seed.ts](../../frontend/scripts/seed/master-seed.ts) — ลำดับและรูปแบบการสร้าง registry/catalog/config
-- [unit-of-measure.ts](../../frontend/src/lib/features/catalog/domain/unit-of-measure.ts) — canonical UOM definitions 30 รายการ
+- [unit-of-measure.ts](../../frontend/src/lib/features/catalog/domain/unit-of-measure.ts) — canonical UOM definitions 31 รายการ
 - [master-data.ts](../../frontend/src/lib/features/master-data/domain/master-data.ts) — master type, schema และ vulnerable-group set
 - [sop-ratio.fixture.ts](../../frontend/src/lib/features/sop-ratios/domain/sop-ratio.fixture.ts) — SOP ratio baseline
 - [requirement-group.fixture.ts](../../frontend/src/lib/features/sop-ratios/domain/requirement-group.fixture.ts) — requirement groups
