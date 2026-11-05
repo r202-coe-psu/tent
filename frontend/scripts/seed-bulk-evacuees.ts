@@ -3,9 +3,14 @@
  *   pnpm seed:bulk-evacuees --shelter=SH001 --count=100000
  * Without --count it asks for the number in the terminal (default 100000).
  *
+ * --shelter is required. Local dev only: refuses a non-local CouchDB. Needs `pnpm seed:master`
+ * to have run (reads the vulnerable_group master data, never writes platform data).
+ *
  * Adds households, evacuees and movements on top of the staging volume. Ids use the
- * `seed-bulk:` prefix so they never collide with `seed-st:` docs, and the run is chunked so
- * memory stays flat. Re-running is a no-op once the first bulk evacuee exists.
+ * `seed-bulk:` prefix so they never collide with `seed-st:` docs. The run is chunked (about
+ * 2,000 people; a chunk is cut at household boundaries so it can be slightly larger) to keep
+ * memory flat. Re-running with the same count is a no-op once the LAST evacuee exists; a
+ * different count keeps existing docs (conflicts ignored), so unseed first to resize.
  */
 import { createInterface } from 'node:readline/promises';
 import type { AuthorContext } from '$lib/db/model';
@@ -20,15 +25,15 @@ import {
 	type PeopleDoc
 } from '$lib/features/people/domain/people';
 import { shelterDbName } from '$lib/server/shelter-access-design';
-import { bulkDocsBatched, couchReq, displayCouchUrl } from './seed/couch';
-import { seedMasterData } from './seed/master-seed';
+import { assertLocalCouch, bulkDocsBatched, couchReq, displayCouchUrl } from './seed/couch';
 import { generatePersonProfile, initStagingFaker, nextHouseholdSize } from './seed/people-faker';
-import { masterCodes, SH002_CODE } from './seed/types';
+import { SH001_CODE, SH002_CODE } from './seed/types';
 
 const ID_PREFIX = 'seed-bulk';
 const ZONES = ['Z1', 'Z2', 'Z3', 'Z4'];
 const FAKER_SEED = 20261103;
 const CHUNK_PERSONS = 2000;
+const MAX_COUNT = 999_999; // ids use pad(6)
 
 async function askCount(): Promise<string> {
 	if (!process.stdin.isTTY) {
@@ -45,11 +50,30 @@ async function askCount(): Promise<string> {
 
 async function parseArgs(argv: string[]): Promise<{ shelter: string; count: number }> {
 	const arg = (name: string) => argv.find((a) => a.startsWith(`--${name}=`))?.split('=')[1];
+	const shelter = arg('shelter')?.trim().toUpperCase();
+	if (!shelter) throw new Error('--shelter=<code> is required');
 	const count = Number(arg('count') ?? (await askCount()));
-	if (!Number.isInteger(count) || count <= 0) {
-		throw new Error('count must be a positive integer');
+	if (!Number.isInteger(count) || count <= 0 || count > MAX_COUNT) {
+		throw new Error(`count must be a positive integer up to ${MAX_COUNT}`);
 	}
-	return { shelter: (arg('shelter') ?? 'SH001').toUpperCase(), count };
+	return { shelter, count };
+}
+
+/** vulnerable_group code by key, read-only from `registry` (seeded by `pnpm seed:master`). */
+async function loadVulnerableGroupCodes(): Promise<Map<string, string>> {
+	const { status, data } = await couchReq('GET', '/registry/master_data:vulnerable_group');
+	if (status !== 200) {
+		throw new Error(
+			'registry master_data:vulnerable_group not found — run `pnpm seed:master` first'
+		);
+	}
+	const items = (data as { items?: Array<{ code: string }> }).items ?? [];
+	return new Map(items.map((i) => [i.code, i.code]));
+}
+
+async function assertShelterDbExists(db: string): Promise<void> {
+	const { status } = await couchReq('GET', `/${db}`);
+	if (status !== 200) throw new Error(`shelter DB ${db} not found (HTTP ${status})`);
 }
 
 function pad(n: number, width = 6): string {
@@ -66,7 +90,9 @@ function needsCheckOut(status: string): boolean {
 
 async function alreadySeeded(db: string, id: string): Promise<boolean> {
 	const { status } = await couchReq('GET', `/${db}/${encodeURIComponent(id)}`);
-	return status === 200;
+	if (status === 200) return true;
+	if (status === 404) return false;
+	throw new Error(`Cannot probe ${db}/${id} (HTTP ${status})`);
 }
 
 function buildStay(
@@ -107,7 +133,7 @@ function buildStay(
 			)
 		);
 	} else if (status === 'transferred') {
-		const destCode = shelterCode === SH002_CODE ? 'SH001' : SH002_CODE;
+		const destCode = shelterCode === SH002_CODE ? SH001_CODE : SH002_CODE;
 		record(
 			'xfer',
 			createMovement(
@@ -130,19 +156,22 @@ function buildStay(
 }
 
 async function main(): Promise<void> {
+	assertLocalCouch();
 	const { shelter, count } = await parseArgs(process.argv.slice(2));
 	const db = shelterDbName(shelter);
 	const codeSlug = shelter.toLowerCase();
 	const evIdFor = (i: number) => `${ID_PREFIX}:${codeSlug}:${pad(i)}`;
 
+	await assertShelterDbExists(db);
+
 	// Chunks are written in order, so the last evacuee existing means the whole run finished.
 	if (await alreadySeeded(db, `evacuee:${evIdFor(count - 1)}`)) {
-		console.log(`  ✓ ${db}: ${ID_PREFIX} volume already present, skipping`);
+		console.log(`  ✓ ${db}: ${ID_PREFIX} volume for count=${count} already present, skipping`);
 		return;
 	}
 
 	console.log(`\nAdding ${count} evacuees to ${db} → ${displayCouchUrl()}\n`);
-	const master = await seedMasterData();
+	const vgCodes = await loadVulnerableGroupCodes();
 	const ctx: AuthorContext = { shelterCode: shelter, createdBy: 'seed' };
 	const faker = initStagingFaker(FAKER_SEED);
 
@@ -186,7 +215,12 @@ async function main(): Promise<void> {
 			for (let j = 0; j < profiles.length; j++) {
 				const p = profiles[j];
 				const evId = evIdFor(personIndex + j);
-				const vg = p.vgKeys.length > 0 ? masterCodes(master, 'vulnerable_group', ...p.vgKeys) : [];
+				const vg = p.vgKeys.map((key) => {
+					const code = vgCodes.get(key);
+					if (!code)
+						throw new Error(`vulnerable_group "${key}" missing — run \`pnpm seed:master\``);
+					return code;
+				});
 				const zone = ZONES[(personIndex + j) % ZONES.length];
 
 				const evacuee: Evacuee = {

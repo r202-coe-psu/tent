@@ -105,6 +105,7 @@ pnpm dev          # http://localhost:5173
 ## การตรวจคุณภาพโค้ด (Quality Gate: pre-commit & pre-push)
 
 repo root ใช้ **[Lefthook](https://github.com/evilmartians/lefthook)** เป็น quality gate ก่อน commit และ push:
+
 - **pre-commit:** ตรวจ format และ lint (frontend, backend, worker)
 - **pre-push:** ตรวจ type-check และ unit tests (frontend, backend, worker)
 
@@ -131,8 +132,16 @@ pnpm exec lefthook run pre-push
 - `pnpm seed` — Staging/local full seed (alias ของ `seed:staging`: ~1,000 ผู้เข้าพัก + ops)
 - `pnpm seed:master` — Platform init เท่านั้น (`master_data` + catalog/SOP/config) — ใช้ร่วม prod/staging
 - `pnpm seed:staging` — Full staging demo (master + users + 3 ศูนย์ + volume people)
-- `pnpm seed:bulk-evacuees --shelter=SH001 --count=100000` — เพิ่มผู้อพยพจำนวนมากเข้าศูนย์ (ใส่ `--count` เองได้ ถ้าไม่ใส่จะถามในเทอร์มินัล, ค่าเริ่มต้น 100000) ใช้ id prefix `seed-bulk:` จึงไม่ชนกับ staging volume; รันซ้ำได้ ข้ามชุดที่เขียนครบแล้ว และไม่ลดจำนวนที่มีอยู่
+- `pnpm seed:bulk-evacuees --shelter=SH001 --count=100000` — เพิ่มผู้อพยพจำนวนมากเข้าศูนย์ (load/demo test)
+  - `--shelter` **จำเป็น** (ไม่มีค่าเริ่มต้น); `--count` สูงสุด 999,999 — ถ้าไม่ใส่จะถามในเทอร์มินัล (ค่าเริ่มต้น 100000) และ prompt ใช้ได้เฉพาะ TTY; ถ้าไม่ใช่ TTY ต้องส่ง `--count=<n>`
+  - **local dev เท่านั้น**: ปฏิเสธการรันถ้า `COUCHDB_ADMIN_URL` ไม่ใช่ CouchDB ในเครื่อง; ต้องรัน `pnpm seed:master` ก่อน (สคริปต์แค่อ่าน `master_data:vulnerable_group`, ไม่เขียน master data) และ shelter DB ต้องมีอยู่แล้ว
+  - ใช้ id prefix `seed-bulk:` จึงไม่ชนกับ staging volume; แบ่งเขียนเป็นชุดละประมาณ 2,000 คน (ตัดที่ขอบครัวเรือน จึงอาจเกินเล็กน้อย)
+  - รันซ้ำด้วย `--count` เดิมจะข้าม (เช็ก evacuee คนสุดท้าย); ถ้าเปลี่ยน `--count` เอกสารเดิมจะถูกเก็บไว้ (ชน id แล้วข้าม) จึงควร unseed ก่อนเปลี่ยนขนาด
+  - sync worker จะ re-project ทุก evacuee ที่เปลี่ยน (`refresh_occupancy` สแกนทั้ง shelter DB) ทำให้ seed 100k ช้ามาก: หยุด `sync-worker` ก่อน seed/unseed ชุดใหญ่ แล้วรัน `uv run --project worker sync-worker --bootstrap` หลังเสร็จ
 - `pnpm unseed:bulk-evacuees --shelter=SH001` — dry-run นับ bulk evacuee (`seed-bulk:`) ใน shelter นั้น; เพิ่ม `--confirm` เพื่อลบเฉพาะชุดนี้ (staging volume ไม่ถูกลบ)
+  - `--shelter` **จำเป็น**; local dev เท่านั้น (ปฏิเสธ CouchDB ที่ไม่ใช่ในเครื่อง); ถ้ามีเอกสารลบไม่สำเร็จจะรายงานจำนวนที่ลบจริงและออกด้วย exit code ≠ 0
+  - เอกสารที่อ้างถึง bulk evacuee (เช่น distribution, referral) จะกลายเป็น orphan หลัง unseed
+  - ชุดใหญ่ควรหยุด `sync-worker` ก่อน แล้ว bootstrap ใหม่หลังเสร็จ (เหตุผลเดียวกับ seed)
 - `pnpm unseed --confirm` — Wipe all CouchDB databases except `_users`
 - `pnpm unseed:master-data --confirm` — ลบเฉพาะเอกสาร `master_data:*` ใน `registry` (ไม่กระทบ shelter, catalog, หรือ users)
 - `pnpm unseed:master --confirm` — ลบ `master_data`, `config`, และฐานข้อมูล `catalog`
@@ -199,6 +208,7 @@ Services: CouchDB, frontend, MongoDB, sync worker, FastAPI (`127.0.0.1:9000`).
 (ค่าเดียวสำหรับ worker + FastAPI).
 
 Volume dirs:
+
 - staging: `/mnt/tent-data/couchdb/data`, `/mnt/tent-data/mongodb/data`
 - production: `../deployment/tent/data` (Couch), `../deployment/tent/mongodb/data` (Mongo)
 

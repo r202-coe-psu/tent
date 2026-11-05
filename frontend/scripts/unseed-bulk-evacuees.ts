@@ -10,9 +10,8 @@
  * Needs: CouchDB running + COUCHDB_ADMIN_URL in frontend/.env
  */
 import { shelterDbName } from '$lib/server/shelter-access-design';
-import { displayCouchUrl } from './seed/couch';
+import { assertLocalCouch, couchReq, displayCouchUrl } from './seed/couch';
 import { findDocsByPrefix } from './unseed-stock';
-import { deleteDocs } from './unseed';
 
 const ID_PREFIX = 'seed-bulk';
 const DELETE_CHUNK = 500;
@@ -41,16 +40,38 @@ export async function unseedBulkEvacuees(
 		return { db, counts };
 	}
 
+	let deleted = 0;
+	const failures: string[] = [];
 	for (let i = 0; i < docs.length; i += DELETE_CHUNK) {
-		await deleteDocs(db, docs.slice(i, i + DELETE_CHUNK));
+		const chunk = docs.slice(i, i + DELETE_CHUNK);
+		const { status, data } = await couchReq('POST', `/${db}/_bulk_docs`, {
+			docs: chunk.map((d) => ({ _id: d.id, _rev: d.rev, _deleted: true }))
+		});
+		if (status !== 201 || !Array.isArray(data)) {
+			throw new Error(`Cannot delete docs from ${db} (HTTP ${status})`);
+		}
+		for (const row of data as Array<{ id?: string; ok?: boolean; error?: string }>) {
+			if (row.ok) deleted += 1;
+			else failures.push(`${row.id}: ${row.error ?? 'unknown'}`);
+		}
 	}
-	console.log(`\n  ✓ deleted ${docs.length} docs from ${db}\n`);
+	console.log(`\n  ✓ deleted ${deleted} of ${docs.length} docs from ${db}\n`);
+	if (failures.length > 0) {
+		throw new Error(
+			`${failures.length} docs failed to delete, e.g. ${failures.slice(0, 3).join('; ')}`
+		);
+	}
 	return { db, counts };
 }
 
 async function main(): Promise<void> {
 	const argv = process.argv.slice(2);
-	const shelter = (argv.find((a) => a.startsWith('--shelter='))?.split('=')[1] ?? 'SH001').trim();
+	assertLocalCouch();
+	const shelter = argv
+		.find((a) => a.startsWith('--shelter='))
+		?.split('=')[1]
+		?.trim();
+	if (!shelter) throw new Error('--shelter=<code> is required');
 	await unseedBulkEvacuees(shelter, { confirm: argv.includes('--confirm') });
 }
 
