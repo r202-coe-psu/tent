@@ -31,9 +31,20 @@ describe('master seed unit-of-measure provisioning', () => {
 		couch.setSecurity.mockReset();
 	});
 
+	type CouchHandler = (method: string, path: string, body?: unknown) => unknown;
+
+	/** Answers the seed's UOM list read (`_all_docs`) and delegates every other call. */
+	function mockCouch(handler: CouchHandler, listed: () => Record<string, unknown>[] = () => []) {
+		couch.request.mockImplementation(async (method: string, path: string, body?: unknown) =>
+			method === 'GET' && path.includes('_all_docs')
+				? { status: 200, data: { rows: listed().map((doc) => ({ id: doc._id, doc })) } }
+				: handler(method, path, body)
+		);
+	}
+
 	it('creates all canonical units when the catalog is missing them', async () => {
 		const writes: Record<string, unknown>[] = [];
-		couch.request.mockImplementation(async (method: string, _path: string, body?: unknown) => {
+		mockCouch(async (method, _path, body) => {
 			if (method === 'GET') return { status: 404, data: { error: 'not_found' } };
 			writes.push(body as Record<string, unknown>);
 			return { status: 201, data: { ok: true } };
@@ -47,7 +58,7 @@ describe('master seed unit-of-measure provisioning', () => {
 		expect(writes.every((doc) => doc.type === 'unit_of_measure' && doc.schema_v === 1)).toBe(true);
 	});
 
-	it('preserves operator metadata while enforcing canonical protected fields', async () => {
+	it('preserves operator metadata and a non-colliding sort_order while enforcing canonical protected fields', async () => {
 		const first = FALLBACK_UNIT_DEFINITIONS[0];
 		const existing = {
 			_id: `unit_of_measure:${first.code}`,
@@ -66,17 +77,20 @@ describe('master seed unit-of-measure provisioning', () => {
 		};
 		const writes: Record<string, unknown>[] = [];
 		let firstRead = true;
-		couch.request.mockImplementation(async (method: string, _path: string, body?: unknown) => {
-			if (method === 'GET') {
-				if (firstRead) {
-					firstRead = false;
-					return { status: 200, data: existing };
+		mockCouch(
+			async (method, _path, body) => {
+				if (method === 'GET') {
+					if (firstRead) {
+						firstRead = false;
+						return { status: 200, data: existing };
+					}
+					return { status: 404, data: { error: 'not_found' } };
 				}
-				return { status: 404, data: { error: 'not_found' } };
-			}
-			writes.push(body as Record<string, unknown>);
-			return { status: 201, data: { ok: true } };
-		});
+				writes.push(body as Record<string, unknown>);
+				return { status: 201, data: { ok: true } };
+			},
+			() => [existing]
+		);
 
 		await seedCatalogUnitOfMeasures();
 
@@ -85,7 +99,8 @@ describe('master seed unit-of-measure provisioning', () => {
 			_rev: existing._rev,
 			label_th: existing.label_th,
 			label_en: existing.label_en,
-			sort_order: first.sort_order,
+			// 99 collides with nothing, so the admin-arranged order stays (CR-125 A1 FR-A1-4).
+			sort_order: 99,
 			deactivated: existing.deactivated,
 			code: first.code,
 			dimension: first.dimension,
@@ -118,19 +133,22 @@ describe('master seed unit-of-measure provisioning', () => {
 		};
 	}
 
-	it('rewrites sort_order of protected units to the canonical value and keeps custom labels', async () => {
+	it('rewrites sort_order of protected units when ball would collide and keeps custom labels', async () => {
 		const gallon = FALLBACK_UNIT_DEFINITIONS.find((unit) => unit.code === 'gallon')!;
 		const stale = unitDoc(gallon, { sort_order: 21, label_th: 'แกลลอนใหญ่' });
 		const writes: Record<string, unknown>[] = [];
-		couch.request.mockImplementation(async (method: string, path: string, body?: unknown) => {
-			if (method === 'GET') {
-				return path.endsWith(encodeURIComponent(stale._id))
-					? { status: 200, data: stale }
-					: { status: 404, data: { error: 'not_found' } };
-			}
-			writes.push(body as Record<string, unknown>);
-			return { status: 201, data: { ok: true } };
-		});
+		mockCouch(
+			async (method, path, body) => {
+				if (method === 'GET') {
+					return path.endsWith(encodeURIComponent(stale._id))
+						? { status: 200, data: stale }
+						: { status: 404, data: { error: 'not_found' } };
+				}
+				writes.push(body as Record<string, unknown>);
+				return { status: 201, data: { ok: true } };
+			},
+			() => [stale]
+		);
 
 		await seedCatalogUnitOfMeasures();
 
@@ -145,15 +163,18 @@ describe('master seed unit-of-measure provisioning', () => {
 				unitDoc(unit)
 			])
 		);
-		couch.request.mockImplementation(async (method: string, path: string, body?: unknown) => {
-			const id = decodeURIComponent(path.split('/').pop() ?? '');
-			if (method === 'GET') {
-				const doc = store.get(id);
-				return doc ? { status: 200, data: doc } : { status: 404, data: { error: 'not_found' } };
-			}
-			store.set(id, { ...(body as Record<string, unknown>), _rev: '2-test' });
-			return { status: 201, data: { ok: true } };
-		});
+		mockCouch(
+			async (method, path, body) => {
+				const id = decodeURIComponent(path.split('/').pop() ?? '');
+				if (method === 'GET') {
+					const doc = store.get(id);
+					return doc ? { status: 200, data: doc } : { status: 404, data: { error: 'not_found' } };
+				}
+				store.set(id, { ...(body as Record<string, unknown>), _rev: '2-test' });
+				return { status: 201, data: { ok: true } };
+			},
+			() => [...store.values()]
+		);
 
 		await seedCatalogUnitOfMeasures();
 		const snapshot = new Map(store);
@@ -172,6 +193,42 @@ describe('master seed unit-of-measure provisioning', () => {
 		expect(store.size).toBe(FALLBACK_UNIT_DEFINITIONS.length);
 		for (const [id, doc] of store) {
 			expect(withoutVolatile(doc)).toEqual(withoutVolatile(snapshot.get(id)!));
+		}
+		const orders = [...store.values()].map((doc) => doc.sort_order);
+		expect(new Set(orders).size).toBe(orders.length);
+	});
+
+	it('resets every protected sort_order on a DB seeded before ball existed', async () => {
+		const ballOrder = FALLBACK_UNIT_DEFINITIONS.find((unit) => unit.code === 'ball')!.sort_order;
+		// Orders as the previous seed wrote them: everything after fruit sits one lower.
+		const store = new Map<string, Record<string, unknown>>(
+			FALLBACK_UNIT_DEFINITIONS.filter((unit) => unit.code !== 'ball').map((unit) => [
+				`unit_of_measure:${unit.code}`,
+				unitDoc(unit, {
+					sort_order: unit.sort_order >= ballOrder ? unit.sort_order - 1 : unit.sort_order
+				})
+			])
+		);
+		mockCouch(
+			async (method, path, body) => {
+				const id = decodeURIComponent(path.split('/').pop() ?? '');
+				if (method === 'GET') {
+					const doc = store.get(id);
+					return doc ? { status: 200, data: doc } : { status: 404, data: { error: 'not_found' } };
+				}
+				store.set(id, { ...(body as Record<string, unknown>), _rev: '2-test' });
+				return { status: 201, data: { ok: true } };
+			},
+			() => [...store.values()]
+		);
+
+		await seedCatalogUnitOfMeasures();
+
+		for (const def of FALLBACK_UNIT_DEFINITIONS) {
+			expect(store.get(`unit_of_measure:${def.code}`)).toMatchObject({
+				sort_order: def.sort_order,
+				is_protected: true
+			});
 		}
 		const orders = [...store.values()].map((doc) => doc.sort_order);
 		expect(new Set(orders).size).toBe(orders.length);
@@ -199,7 +256,7 @@ describe('master seed unit-of-measure provisioning', () => {
 			{ status: 201, data: { ok: true } }
 		];
 		const writes: Record<string, unknown>[] = [];
-		couch.request.mockImplementation(async (method: string, _path: string, body?: unknown) => {
+		mockCouch(async (method, _path, body) => {
 			if (method === 'PUT') writes.push(body as Record<string, unknown>);
 			return (
 				queuedResponses.shift() ??
@@ -215,15 +272,15 @@ describe('master seed unit-of-measure provisioning', () => {
 	});
 
 	it('fails without writing when a UOM read returns an unexpected status', async () => {
-		couch.request.mockResolvedValue({ status: 503, data: { error: 'unavailable' } });
+		mockCouch(async () => ({ status: 503, data: { error: 'unavailable' } }));
 
 		await expect(seedCatalogUnitOfMeasures()).rejects.toThrow('HTTP 503');
-		expect(couch.request).toHaveBeenCalledTimes(1);
+		expect(couch.request).toHaveBeenCalledTimes(2);
 	});
 
 	it('rejects an existing UOM with a malformed common envelope', async () => {
 		const first = FALLBACK_UNIT_DEFINITIONS[0];
-		couch.request.mockResolvedValue({
+		mockCouch(async () => ({
 			status: 200,
 			data: {
 				_id: `unit_of_measure:${first.code}`,
@@ -233,10 +290,10 @@ describe('master seed unit-of-measure provisioning', () => {
 				dimension: first.dimension,
 				created_by: 'system_admin'
 			}
-		});
+		}));
 
 		await expect(seedCatalogUnitOfMeasures()).rejects.toThrow('invalid created_at');
-		expect(couch.request).toHaveBeenCalledTimes(1);
+		expect(couch.request).toHaveBeenCalledTimes(2);
 	});
 
 	it('validates canonical, custom, and unsupported item-master UOM values', () => {
@@ -315,6 +372,9 @@ describe('master seed unit-of-measure provisioning', () => {
 		couch.request.mockImplementation(async (method: string, path: string) => {
 			if (method === 'GET' && path === '/catalog/_all_docs?include_docs=true') {
 				return { status: 200, data: { rows: existingRows } };
+			}
+			if (method === 'GET' && path.includes('_all_docs')) {
+				return { status: 200, data: { rows: [] } };
 			}
 			if (method === 'GET') return { status: 404, data: { error: 'not_found' } };
 			return { status: 201, data: { ok: true } };
