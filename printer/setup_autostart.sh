@@ -78,9 +78,12 @@ install_autostart() {
     [ -f "$SCRIPT_DIR/.env" ] || die "ไม่พบ $SCRIPT_DIR/.env — cp .env.example .env แล้วใส่ TENT_BASE_URL / DEVICE_ID / DEVICE_SECRET / PRINTER_NAME ก่อน"
     [ "$AGENT_USER" != root ] || die "อย่ารัน agent ด้วย root — รันสคริปต์นี้ด้วย user ปกติ (สคริปต์เรียก sudo เอง)"
 
-    if ! $DRY_RUN && systemctl is-enabled --quiet tent-printer.service 2>/dev/null; then
-        warn "มี tent-printer.service (ติดตั้งจริง Phase 5) เปิดอยู่ — agent สองตัวจะแย่งงานกัน: sudo systemctl disable --now tent-printer"
-    fi
+    # Two agents on one DEVICE_ID steal each other's jobs and trip nginx's 2-connection limit (429).
+    for state in is-active is-enabled; do
+        if systemctl "$state" --quiet tent-printer.service 2>/dev/null; then
+            die "มี tent-printer.service (ติดตั้งจริง Phase 5) อยู่ ($state) — agent สองตัวจะแย่งงานกัน ปิดก่อน: sudo systemctl disable --now tent-printer"
+        fi
+    done
 
     # Build .venv now (as this user), so the first boot doesn't wait on pip.
     run "$SCRIPT_DIR/run.sh" --setup

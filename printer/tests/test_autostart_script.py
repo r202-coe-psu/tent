@@ -1,5 +1,6 @@
 """setup_autostart.sh runs under --dry-run: mutating commands are printed, not run."""
 
+import stat
 import subprocess
 from pathlib import Path
 
@@ -21,13 +22,34 @@ def agent_dir(tmp_path) -> Path:
 
 
 @pytest.fixture
-def setup(agent_dir):
-    def run(*args: str):
+def fake_bin(tmp_path) -> Path:
+    """`systemctl` stand-in: `is-active|is-enabled tent-printer[.service]` succeeds only for FAKE_PRODUCTION."""
+    directory = tmp_path / "bin"
+    directory.mkdir()
+    fake_systemctl = directory / "systemctl"
+    fake_systemctl.write_text(
+        "#!/bin/sh\n"
+        'for arg; do last="$arg"; done\n'
+        '{ [ "$last" = tent-printer ] || [ "$last" = tent-printer.service ]; } '
+        '&& [ "$1" = "${FAKE_PRODUCTION:-none}" ]\n'
+    )
+    fake_systemctl.chmod(fake_systemctl.stat().st_mode | stat.S_IXUSR)
+    return directory
+
+
+@pytest.fixture
+def setup(agent_dir, fake_bin):
+    def run(*args: str, env: dict[str, str] | None = None):
         return subprocess.run(
             ["bash", str(agent_dir / "setup_autostart.sh"), "--dry-run", *args],
             capture_output=True,
             text=True,
-            env={"PATH": "/usr/bin:/bin", "HOME": str(agent_dir), "USER": "printer"},
+            env={
+                "PATH": f"{fake_bin}:/usr/bin:/bin",
+                "HOME": str(agent_dir),
+                "USER": "printer",
+                **(env or {}),
+            },
         )
 
     return run
@@ -55,6 +77,16 @@ def test_install_prepares_the_venv_then_enables_the_unit_at_boot(setup, agent_di
         f"sudo systemctl enable --now {UNIT}"
     )
     assert "sudo systemctl daemon-reload" in steps
+
+
+@pytest.mark.parametrize("state", ["is-active", "is-enabled"])
+def test_install_is_refused_while_the_production_agent_is_installed(setup, state):
+    result = setup(env={"FAKE_PRODUCTION": state})
+
+    assert result.returncode != 0
+    assert "tent-printer.service" in result.stderr
+    assert "systemctl disable --now tent-printer" in result.stderr
+    assert planned(result) == []
 
 
 def test_install_refuses_without_env_file(setup, agent_dir):
