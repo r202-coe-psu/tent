@@ -157,7 +157,7 @@ Seed behavior:
 - **FR-A1-1** — canonical seed เพิ่มหน่วย `ball`: `label_th` = `ลูก`, `label_en` = `ball`, `dimension` = `count`, `sort_order` = `21`, `is_protected: true`.
 - **FR-A1-2** — `sort_order` ของหน่วยตั้งแต่ `gallon` ถึง `kcal` เลื่อน +1 (21–30 → 22–31). `sort_order` ของ 31 หน่วยต้องไม่ซ้ำกัน.
 - **FR-A1-3** — canonical seed set มี 31 หน่วย (`count` เพิ่ม `ball` ต่อจาก `fruit`). จำนวน 27 ใน TL;DR, §3, §5 และ AC-02 ถูกแก้เป็น 31 ในเอกสารนี้แล้ว (รวมตาราง §3 ให้ครบทั้ง 31 รหัส) และจำนวน 30 ใน `schema.md` §4.9 ถูกแก้เป็น 31. บรรทัด decision log 2026-09-17 คงเดิมเป็นประวัติ.
-- **FR-A1-4** — เมื่อรัน seed ถ้าพบ `sort_order` ซ้ำกันระหว่างเอกสาร `unit_of_measure` ใด ๆ ใน `catalog` ให้ seed เขียน `sort_order` ของ **ทุก** หน่วย `is_protected: true` ตาม `FALLBACK_UNIT_DEFINITIONS` (ค่าตามนิยามไม่ซ้ำกันเอง จึงจบในรอบเดียว). ถ้าไม่พบค่าซ้ำ ให้คง `sort_order` เดิมของเอกสารที่มีอยู่ตาม §3 Seed behavior และ §4 (แอดมินจัดลำดับเองได้). `label_th`, `label_th_short`, `label_en` และ `deactivated` คงค่าเดิมเสมอ.
+- **FR-A1-4** — เมื่อรัน seed ให้ตรวจ `sort_order` ซ้ำจากชุดเอกสาร `unit_of_measure` ใน `catalog` **หลังรวมเอกสารที่ seed กำลังจะสร้าง** (เช่น `ball` = 21 ที่ยังไม่มีใน DB) แล้วถ้าพบค่าซ้ำให้ seed เขียน `sort_order` ของ **ทุก** หน่วย `is_protected: true` ตาม `FALLBACK_UNIT_DEFINITIONS` (ค่าตามนิยามของหน่วย protected ไม่ซ้ำกันเอง จึงจบในรอบเดียว; `sort_order` ของหน่วยที่แอดมินสร้างเอง (ไม่ protected) อยู่นอกขอบเขต FR-A1-4 และ seed ไม่แตะ). ถ้าไม่พบค่าซ้ำ ให้คง `sort_order` เดิมของเอกสารที่มีอยู่ตาม §3 Seed behavior และ §4 (แอดมินจัดลำดับเองได้). `label_th`, `label_th_short`, `label_en` และ `deactivated` คงค่าเดิมเสมอ.
 - **FR-A1-5** — seed ต้อง idempotent: รันซ้ำไม่สร้าง doc ซ้ำ และไม่เปลี่ยนค่าใด ๆ ของ doc ที่ตรงอยู่แล้ว (ยกเว้น `updated_at` และ `_rev` ที่ seed เขียนใหม่ทุกครั้ง).
 - **FR-A1-6** — DB ที่ยังไม่มี `unit_of_measure:ball` ต้องได้ doc นี้ (`is_protected: true`) เมื่อรัน `pnpm seed:master` หนึ่งครั้ง.
 
@@ -174,4 +174,5 @@ Seed behavior:
 - [ ] **AC-A1-3:** `pnpm seed:master` บน DB ที่ seed แล้ว (มี `gallon` = 21) ได้ `unit_of_measure:ball` = 21, `gallon` = 22 และ `sort_order` ของ 31 หน่วยไม่ซ้ำ.
 - [ ] **AC-A1-4:** seed รันซ้ำได้ (idempotent); label ที่แก้เองคงเดิม.
 - [ ] **AC-A1-6:** บน DB ที่ไม่มี `sort_order` ซ้ำ และแอดมินจัดลำดับหน่วย protected เอง seed ไม่เปลี่ยน `sort_order` นั้น.
+- [ ] **AC-A1-7:** บน DB ที่แอดมินจัดลำดับหน่วย protected เองจนชนกับ `ball` = 21 หลัง seed สร้าง `ball` seed รีเซ็ต `sort_order` ของทุกหน่วย protected เป็นค่ามาตรฐานและไม่ซ้ำ.
 - [ ] **AC-A1-5:** `schema.md` §4.9 ระบุ `ball` และจำนวน 31 หน่วย.
