@@ -119,8 +119,8 @@ export async function grantVolunteerAccess(
 	) {
 		throw new Error('อีเมลนี้มีบัญชีอยู่แล้วหรือสิทธิ์ไม่ตรงกัน กรุณาจัดการผ่านหน้าผู้ใช้งาน');
 	}
-	const created = !existing;
-	const roleAdded = !!existing && rolesHere.length === 0;
+	let created = !existing;
+	let roleAdded = !!existing && rolesHere.length === 0;
 	if (existing && roleAdded) {
 		// A system admin's save replaces the roles, so it carries the other shelters' too; a manager
 		// sends their own shelter's only and the server keeps the rest. The password stays.
@@ -131,7 +131,7 @@ export async function grantVolunteerAccess(
 		});
 	}
 	if (created) {
-		await createUser({
+		const result = await createUser({
 			name: email,
 			password,
 			display_name: `${profile.first_name} ${profile.last_name}`.trim(),
@@ -143,6 +143,12 @@ export async function grantVolunteerAccess(
 			volunteer_id: volunteer._id,
 			must_change_password: isPhoneBootstrapPassword
 		});
+		// A manager does not list accounts outside their shelter: an existing one is found by the
+		// server, which adds this shelter's role and keeps the password (A1-4).
+		if (result.merged) {
+			created = false;
+			roleAdded = true;
+		}
 	}
 	await linkVolunteerProfile(repository, volunteer, profile, accountName, created);
 	return { created, roleAdded };

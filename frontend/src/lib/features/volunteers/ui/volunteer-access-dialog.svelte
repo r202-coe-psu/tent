@@ -122,6 +122,8 @@
 			? ([...grants].sort((a, b) => Date.parse(b.expires_at) - Date.parse(a.expires_at))[0] ?? null)
 			: null
 	);
+	/** Empty until the grantor picks one: no role is preselected (#1072). */
+	let role = $state<StaffCapability | ''>('');
 	const pickedManagerRole = $derived(limited && role !== '' && permanentRoles.includes(role));
 	// A closed profile is reopened before it can be given access (CR-221 FR-21, FR-9).
 	const profileClosed = $derived(volunteer.status === 'inactive');
@@ -161,8 +163,6 @@
 
 	let email = $state('');
 	let showPassword = $state(false);
-	/** Empty until the grantor picks one: no role is preselected (#1072). */
-	let role = $state<StaffCapability | ''>('');
 	let roleError = $state<string | null>(null);
 	let password = $state('');
 	let passwordError = $state<string | null>(null);

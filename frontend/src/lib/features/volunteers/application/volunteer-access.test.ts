@@ -298,6 +298,17 @@ describe('grantVolunteerAccess', () => {
 			mocks.authStore.user = { roles: ['shelter:SH001', 'SH001:shelter_manager'] };
 		});
 
+		it('reports the role added when the server merged into an account the manager cannot list', async () => {
+			mocks.createUser.mockResolvedValueOnce({ ok: true, merged: true });
+			await expect(grantVolunteerAccess(volunteer, input)).resolves.toEqual({
+				created: false,
+				roleAdded: true
+			});
+			expect(mocks.update).toHaveBeenCalledWith(
+				expect.objectContaining({ user_name: input.email })
+			);
+		});
+
 		it('adds beside a legacy flat role of another shelter', async () => {
 			mocks.listUsers.mockResolvedValue([{ ...account, roles: ['shelter:SH002', input.role] }]);
 			await expect(grantVolunteerAccess(volunteer, input)).resolves.toEqual({
