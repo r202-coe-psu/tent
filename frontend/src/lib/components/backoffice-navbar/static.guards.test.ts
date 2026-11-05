@@ -69,6 +69,7 @@ const GUARD_OF: Record<string, Guard> = {
 	'/back-office/tickets/kitchen': requireTicketAccess,
 	'/back-office/kitchen': requireKitchen,
 	'/back-office/shelters': requireManager,
+	'/back-office/shelters/readiness': requireManager,
 	'/back-office/users': requireManager,
 	'/back-office/master-data': requireManager,
 	'/back-office/incidents': requireIncidents,
@@ -77,11 +78,7 @@ const GUARD_OF: Record<string, Guard> = {
 };
 
 /** No page guard yet (R2, #845). */
-const EXEMPT = new Set([
-	'/back-office/shelters/readiness',
-	'/back-office/dailysop',
-	'/back-office/sop-parameters'
-]);
+const EXEMPT = new Set(['/back-office/dailysop', '/back-office/sop-parameters']);
 
 const leaves = (): BackofficeNavbarNode[] => {
 	const walk = (nodes: BackofficeNavbarNode[]): BackofficeNavbarNode[] =>
