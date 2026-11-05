@@ -825,19 +825,17 @@ Content-Type: application/json
 | Method   | Path                                        | Request                                                                                   | สำเร็จ                                              |
 | -------- | ------------------------------------------- | ----------------------------------------------------------------------------------------- | -------------------------------------------------- |
 | `GET`    | `/api/back-office/printers[?shelter_code=]` | —                                                                                         | `200 { printers: [PrinterAdminItem], server_time }` |
-| `POST`   | `/api/back-office/printers`                 | `{ device_id, name, shelter_code, host_kind, station?, kiosk_device_id? }`                | `201 { device: PrinterAdminSummary, secret }`       |
-| `PATCH`  | `/api/back-office/printers/{device_id}`     | `{ name?, station?, status?, kiosk_device_id? }` (อย่างน้อย 1 field)                       | `200 PrinterAdminSummary`                           |
+| `POST`   | `/api/back-office/printers`                 | `{ device_id, name, shelter_code, station? }`                | `201 { device: PrinterAdminSummary, secret }`       |
+| `PATCH`  | `/api/back-office/printers/{device_id}`     | `{ name?, station?, status? }` (อย่างน้อย 1 field)                       | `200 PrinterAdminSummary`                           |
 | `POST`   | `/api/back-office/printers/{device_id}/rotate-secret` | —                                                                               | `200 { device: PrinterAdminSummary, secret }`       |
 | `POST`   | `/api/back-office/printers/{device_id}/test-print`    | —                                                                               | `201 { job_id, shelter_code, expires_at }`          |
 | `DELETE` | `/api/back-office/printers/{device_id}`     | —                                                                                         | `204`                                              |
 
-- `PATCH` `kiosk_device_id`: string = ผูกตู้ kiosk (เฉพาะ `host_kind: kiosk` + scanner device ศูนย์เดียวกัน) · `null` = ถอดตู้ (CR-222 FR-32 / FR-5a / FR-48)
 
-- `PrinterAdminSummary` = `{ id, device_id, name, shelter_code, station, host_kind, kiosk_device_id, status, secret_prefix, last_seen_at, queue_state,
+- `PrinterAdminSummary` = `{ id, device_id, name, shelter_code, station, status, secret_prefix, last_seen_at, queue_state,
   agent_version, local_ips[], online }` · `PrinterAdminItem` = summary + `last_job: { status, finished_at, error_code, created_at } | null` (งานล่าสุด 1 งาน)
 - `GET`: เครื่องทุกสถานะใน scope ของผู้เรียก เรียงตาม `shelter_code` แล้วชื่อ · `?shelter_code=` นอก scope → `403`
-- `POST`: body strict · `device_id` `^[a-z0-9][a-z0-9-]{2,62}$` · `name` 1–80 · `kiosk_device_id` ได้เฉพาะ `host_kind = kiosk` และต้องเป็น scanner device
-  ของศูนย์เดียวกัน · provision `printing_{code}` ถ้ายังไม่มี (schema.md §10.5) · `secret` = `sk_print_` + 64 hex **แสดงครั้งเดียว** (เก็บแค่ hash + prefix)
+- `POST`: body strict · `device_id` `^[a-z0-9][a-z0-9-]{2,62}$` · `name` 1–80 · provision `printing_{code}` ถ้ายังไม่มี (schema.md §10.5) · `secret` = `sk_print_` + 64 hex **แสดงครั้งเดียว** (เก็บแค่ hash + prefix)
 - `PATCH`: `status: inactive` → เขียนเครื่องก่อน แล้วงาน `pending` / `printing` → `failed (printer_inactive)` · แก้แบบ read-modify-write retry ≤ 4 ครั้งเมื่อชน `_rev`
   โดยคง field heartbeat
 - `rotate-secret`: secret เดิมใช้ไม่ได้ทันที · secret ใหม่แสดงครั้งเดียว
@@ -854,9 +852,7 @@ Content-Type: application/json
 | 409    | `CONFLICT`                         | `device_id` ซ้ำ · ชน `_rev` ครบ 4 ครั้ง                                                   |
 | 409    | `PRINTER_OFFLINE`                  | test-print ตอนเครื่องไม่ online                                                         |
 | 422    | `VALIDATION`                       | body ผิด                                                                              |
-| 422    | `KIOSK_DEVICE_NOT_FOUND`           | `kiosk_device_id` ไม่มี หรืออยู่ศูนย์อื่น                                                  |
-| 422    | `KIOSK_DEVICE_REQUIRES_KIOSK_HOST` | ผูก `kiosk_device_id` กับเครื่อง `host_kind = standalone`                                  |
-| 503    | `DEPENDENCY_UNAVAILABLE`           | CouchDB / `printing_service` / scanner registry ใช้ไม่ได้                                  |
+| 503    | `DEPENDENCY_UNAVAILABLE`           | CouchDB / `printing_service` ใช้ไม่ได้                                  |
 
 #### 2.8.4 Internal — `POST /api/internal/printers/housekeeping`
 

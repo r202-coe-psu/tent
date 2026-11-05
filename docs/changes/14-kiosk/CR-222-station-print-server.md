@@ -43,7 +43,7 @@ related:
 > - **PNG (รอบ 1 ข้อ 1):** ตรวจ IHDR ให้ตรงขนาด label เป๊ะ ทั้งที่ BFF ตอนสร้างและตอน claim (FR-29, FR-12a)
 > - **สิทธิ์สั่งพิมพ์ตาม `source` (รอบ 1 ข้อ 8, O-2):** FR-29a
 > - **housekeeping (รอบ 1 ข้อ 4):** ย้ายจาก timer ใน `hooks.server.ts` ไป container `print-housekeeping` + `last_run_at` + healthcheck (FR-17, FR-17a)
-> - **Pi:** `TENT_BASE_URL` ต้องเป็น `https://` ยกเว้น loopback (รอบ 1 ข้อ 2, O-9) · nginx `limit_conn` ≤ 2 ต่อคู่ `x-device-id` + IP ของ client (ข้อ 7) · สิทธิ์ `cupsenable` ต้องทดสอบบน Pi (ข้อ 12, O-5) · `host_kind: kiosk` มี 2 credential แยก (ข้อ 14)
+> - **Pi:** `TENT_BASE_URL` ต้องเป็น `https://` ยกเว้น loopback (รอบ 1 ข้อ 2, O-9) · nginx `limit_conn` ≤ 2 ต่อคู่ `x-device-id` + IP ของ client (ข้อ 7) · สิทธิ์ `cupsenable` ต้องทดสอบบน Pi (ข้อ 12, O-5) · เครื่องพิมพ์ในตู้ kiosk มี 2 credential แยก (ข้อ 14)
 > - **เอกสาร:** §Impact รูป label ค้างได้ ~1 ชม. หลังงานจบ (ข้อ 9) · FR-31 อ่อนลง · เพิ่ม FR-49 (`_changes` เส้นเดียวต่อ process) · Acceptance load test · §Compromise
 
 ---
@@ -82,8 +82,8 @@ related:
   - ปิดศูนย์ (`closed` หรือ `cancelled`) — ทำใน checklist ปิดศูนย์เดิม (`data-model.md` §1) **ทันที** ไม่รอ DB ว่าง ตามลำดับ: (1) ตั้งเครื่องทุกเครื่องของศูนย์เป็น `inactive` (FR-15 → งานค้างเป็น `failed (printer_inactive)`) → (2) ลบ `printing_{code}` → (3) ลบ `printing_db:{code}` ออกจาก `printing_devices` (O-11) · idempotent (รันซ้ำได้) · จนกว่าจะมี flow ปิดศูนย์ในระบบ ops รัน script `close-shelter-printing` (dry-run เป็นค่าเริ่มต้น) ตาม checklist _(script: ทีมเสนอ 2026-10-31)_
   - housekeeping ไม่สร้าง DB ให้ server ที่ยังไม่มีเครื่องพิมพ์
   - staff `POST /print-jobs` เจอ `printing_{code}` หาย (404) → BFF **อ่านเครื่องใหม่** แล้ว reprovision + PUT ซ้ำเฉพาะเมื่อเครื่องยัง `active` · ไม่ active → 404 `PRINTER_NOT_FOUND` ไม่สร้าง DB ของศูนย์ที่ปิดแล้วกลับมา (O-11) _(ทีมเสนอ 2026-11-05, review PR โค้ด ข้อ 3)_
-- **FR-5** — `print_device:{device_id}` (ใน `printing_devices`): `device_id` ตรง `^[a-z0-9][a-z0-9-]{2,62}$`, `name` 1–80 ตัว, ผูก `shelter_code`, `station` (nullable), `host_kind` ∈ `standalone`/`kiosk`.
-- **FR-5a** — `host_kind: kiosk` → ตู้นั้นมี **2 credential แยกกัน** (scanner device + print device) สิทธิ์ต่างกันและ revoke แยกได้ · `print_device` มี `kiosk_device_id` (nullable, เฉพาะ `kiosk`) ชี้ scanner device ของตู้เดียวกัน · หน้า back-office แสดงว่าเครื่องไหนอยู่ตู้เดียวกัน. _(ใหม่ 2026-10-29)_
+- **FR-5** — `print_device:{device_id}` (ใน `printing_devices`): `device_id` ตรง `^[a-z0-9][a-z0-9-]{2,62}$`, `name` 1–80 ตัว, ผูก `shelter_code`, `station` (nullable). _(ถอด `host_kind` และ `kiosk_device_id` ออก 2026-11-05 — ใช้เป็นเครื่องพิมพ์ standalone)_
+- **FR-5a** — ~~เครื่องพิมพ์ในตู้ kiosk ผูกกับ scanner device ผ่าน `kiosk_device_id`~~ _(ตัดออก 2026-11-05 — ใช้เครื่องพิมพ์ standalone ไม่จับคู่กับตู้ · ถ้าวันหลังติดเครื่องพิมพ์ในตู้ ตู้นั้นยังมี credential แยก scanner / print device ตามปกติ)_
 - **FR-6** — `print_device` เก็บ **แค่** `secret_hash` (SHA-256 hex) และ `secret_prefix` (16 ตัวแรก) — ห้ามเก็บ secret ตัวจริงในที่ใดเลย.
 - **FR-7** — `print_job:{ulid}` (ใน `printing_{code}`) แนบ label เป็น `_attachments` `label-NNN.png` (`image/png`) ระหว่าง `pending`/`printing` เท่านั้น; มี `shelter_code`, `printer_id`, `source`, `label_count`, `created_by`, `created_at`, `expires_at`.
 
@@ -146,7 +146,7 @@ related:
 
 ### API — back-office (`/api/back-office/printers*`)
 
-- **FR-32** — `GET` รายการเครื่องใน scope + `online` + `local_ips` + `secret_prefix` + `kiosk_device_id` + งานล่าสุด 1 งาน · `POST` สร้างเครื่อง (provision `printing_{code}` ถ้ายังไม่มี) คืน secret (`sk_print_` + 64 hex) **ครั้งเดียว** · `PATCH /{id}` แก้ `name`/`station`/`status`/`kiosk_device_id` (string = ผูกตู้ตามกติกาเดียวกับตอนสร้าง: เฉพาะ `host_kind: kiosk` + scanner device ศูนย์เดียวกัน · `null` = ถอดตู้; FR-5a / FR-48) _(ปรับ 2026-11-02)_ · `POST /{id}/rotate-secret` คืน secret ใหม่ครั้งเดียว · `POST /{id}/test-print` (label ทดสอบในตัว 639×479 1-bit ไม่มีข้อมูลคน, `source: test`, เขียนด้วย cookie ของผู้เรียก) · `DELETE /{id}`.
+- **FR-32** — `GET` รายการเครื่องใน scope + `online` + `local_ips` + `secret_prefix` + งานล่าสุด 1 งาน · `POST` สร้างเครื่อง (provision `printing_{code}` ถ้ายังไม่มี) คืน secret (`sk_print_` + 64 hex) **ครั้งเดียว** · `PATCH /{id}` แก้ `name`/`station`/`status` _(ปรับ 2026-11-05: ถอด `kiosk_device_id`)_ · `POST /{id}/rotate-secret` คืน secret ใหม่ครั้งเดียว · `POST /{id}/test-print` (label ทดสอบในตัว 639×479 1-bit ไม่มีข้อมูลคน, `source: test`, เขียนด้วย cookie ของผู้เรียก) · `DELETE /{id}`.
 - **FR-33** — ทุก route ต้องเป็น SA หรือ `shelter_manager` ของศูนย์ของเครื่อง (`PRINTER_MANAGER_CAPABILITIES`, O-3); `kiosk_staff` จัดการไม่ได้.
 - **FR-34** — แก้ device doc แบบ read-modify-write retry ≤ 4 ครั้งเมื่อชน `_rev` (heartbeat เขียนทับบ่อย) โดยคงค่า heartbeat ล่าสุด.
 
@@ -172,7 +172,7 @@ related:
 - **FR-45** — tablet poll สถานะทุก 1 วิ จนงานจบ หรือครบ `PRINT_JOB_POLL_TIMEOUT_MS` (= TTL + lease ของงาน 20 label + sweep + 15 วิ) — ไม่ยอมให้ retry ก่อนนั้นเพราะงานอาจยังพิมพ์ออก. ดึงสถานะพลาด (เครือข่าย / 5xx) **ไม่จบการ poll** — แสดง "ยังไม่ทราบผล — ตรวจที่เครื่องพิมพ์" โดยไม่มีปุ่ม retry แล้ว poll ต่อจนงานจบหรือครบเวลา (ตัดกติกาเลิกรอหลังพลาด 3 ครั้งติด) _(ปรับ 2026-11-05, review PR โค้ด ข้อ 1)_
 - **FR-46** — งานยัง `pending` เกิน 10 วิ → แสดงข้อความให้เช็คเครื่องพิมพ์ (ไม่มีปุ่ม retry).
 - **FR-47** — retry หลังล้มเหลวเริ่มต่อจากจุดที่หยุด: ไม่ส่ง label ที่พิมพ์ไปแล้วซ้ำ (ตัดตาม `printed`); งานสุดท้ายถือว่า "ส่งแล้ว" เมื่อ Pi claim (`printing`).
-- **FR-48** — เครื่องที่เลือกจำไว้ต่อศูนย์ใน `localStorage` (station printer); หน้า back-office **Printers** แสดงรายการ + dialog สร้าง/แก้/แสดง secret ครั้งเดียว/rotate/ทดสอบ/ลบ + เครื่องที่อยู่ตู้ kiosk เดียวกัน (FR-5a).
+- **FR-48** — เครื่องที่เลือกจำไว้ต่อศูนย์ใน `localStorage` (station printer); หน้า back-office **Printers** แสดงรายการ + dialog สร้าง/แก้/แสดง secret ครั้งเดียว/rotate/ทดสอบ/ลบ.
 
 ### Scale / database
 
@@ -492,3 +492,4 @@ flowchart TD
 | 2026-11-05 | ทีมทดสอบ local คร่าว ๆ 2026-11-04 บน Raspberry Pi (Bookworm) + XP-365B ตาม `printer/README.md` (dev server ผ่าน HTTPS): ติดตั้ง CUPS queue + agent `tent-printer` แล้ว agent ต่อ server ได้ เครื่องขึ้นออนไลน์ / queue `ready` ใน back-office · พิมพ์ทดสอบจาก back-office ด้วย `system_admin` ได้ — ใช้งานได้ end-to-end |
 | 2026-11-05 | ทีมเสนอหลัง review PR โค้ด (รอ owner ยืนยันตอน approve PR): FR-45 ดึงสถานะพลาดไม่จบ poll / ไม่มี retry ก่อนครบเวลา (เดิมโค้ดเลิกรอหลังพลาด 3 ครั้ง ขัด FR-45) · FR-29 `job_id` จาก client + 409 replay / `JOB_ID_CONFLICT` + timeout POST 15 วิ · FR-4 อ่านเครื่องใหม่ก่อน reprovision · FR-2a คงถ้อยคำเดิม — ย้าย helper ที่ไม่ใช้ admin credential ออกจาก `couch-admin` แล้ว ESLint ห้าม import ทั้งโมดูลใน route ของ printer · compose ใช้ `:-` กับ `COUCHDB_PRINTING_SERVICE_PASSWORD` / `PRINT_HOUSEKEEPING_TOKEN` (fail closed 503 ตาม Acceptance) · เพิ่มแถว printer ใน `role-permission-matrix.md` |
 | 2026-11-05 | **Project Owner อนุมัติ Waive Gate O-5 ก่อน merge PR โค้ด:** รับรองพฤติกรรม fail-closed ใน as-built (agent รายงาน `queue_state=disabled` เมื่อคิวถูกปิด และผู้ดูแลเปิดคืนด้วย `sudo cupsenable`) โดยเลื่อนการทดสอบ sudoers/polkit แบบจำกัดสิทธิ์เฉพาะคิวไปเป็นงานติดตามหลัง merge |
+| 2026-11-05 | ทีมเสนอ — รอ owner ยืนยันตอน approve PR: ใช้เครื่องพิมพ์ standalone อย่างเดียว · ถอด `host_kind` (FR-5) และ `kiosk_device_id` (FR-5a, FR-32, FR-48) ออกจาก `print_device`, BFF และหน้า back-office · ตัด error `KIOSK_DEVICE_REQUIRES_KIOSK_HOST` / `KIOSK_DEVICE_NOT_FOUND` · doc เดิมที่มี field ค้างไม่มีใครอ่าน (ไม่ bump `schema_v` — CR ยังไม่ merge) · flag `--host-kind` ของ `setup_printer_server.sh` ยังอยู่ (ตั้ง CUPS บน Pi เท่านั้น) |
