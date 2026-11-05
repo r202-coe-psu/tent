@@ -19,7 +19,7 @@
 		useCreateKioskBannerGroup,
 		useKioskBannerGroups
 	} from '$lib/features/kiosk-banners';
-	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
+	import BackLink from '$lib/components/back-link.svelte';
 	import Loader2 from '@lucide/svelte/icons/loader-2';
 
 	/** Every role (SA included) works on the shelter picked in the back-office shelter switcher. */
@@ -89,13 +89,11 @@
 			<p class="text-sm text-slate-600">
 				ศูนย์: <span class="font-semibold text-slate-900">{activeShelter}</span>
 			</p>
-			<a
+			<BackLink
 				href={resolve('/back-office/kiosks/banners')}
-				class="inline-flex min-h-11 items-center gap-1 text-sm text-primary underline-offset-2 hover:underline"
-			>
-				<ArrowLeft class="h-4 w-4" />
-				กลับไปรายการกลุ่ม
-			</a>
+				label="กลับไปแบนเนอร์ Kiosk"
+				class="-ml-3"
+			/>
 		</div>
 	{/snippet}
 
