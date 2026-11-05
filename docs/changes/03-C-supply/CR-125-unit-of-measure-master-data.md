@@ -155,7 +155,7 @@ Seed behavior:
 - **FR-A1-2** — `sort_order` ของหน่วยตั้งแต่ `gallon` ถึง `kcal` เลื่อน +1 (21–30 → 22–31). `sort_order` ของ 31 หน่วยต้องไม่ซ้ำกัน.
 - **FR-A1-3** — canonical seed set มี 31 หน่วย (`count` เพิ่ม `ball` ต่อจาก `fruit`). แทนที่จำนวน 27 ใน §3, §5, AC-02 และจำนวน 30 ใน `schema.md` §4.9.
 - **FR-A1-4** — เมื่อรัน seed กับหน่วย `is_protected: true` ที่มีอยู่แล้ว ต้องเขียน `sort_order` ตาม `FALLBACK_UNIT_DEFINITIONS` เสมอ (แทนการคง `sort_order` เดิมตาม §3 Seed behavior). `label_th`, `label_th_short`, `label_en` และ metadata อื่นที่ผู้ดูแลแก้ไขได้ คงค่าเดิม.
-- **FR-A1-5** — seed ต้อง idempotent: รันซ้ำไม่สร้าง doc ซ้ำ และไม่เขียน doc ถ้าทุกค่าตรงอยู่แล้ว.
+- **FR-A1-5** — seed ต้อง idempotent: รันซ้ำไม่สร้าง doc ซ้ำ และไม่เปลี่ยนค่าใด ๆ ของ doc ที่ตรงอยู่แล้ว (ยกเว้น `updated_at` และ `_rev` ที่ seed เขียนใหม่ทุกครั้ง).
 - **FR-A1-6** — DB ที่ยังไม่มี `unit_of_measure:ball` ต้องได้ doc นี้ (`is_protected: true`) เมื่อรัน `pnpm seed:master` หนึ่งครั้ง.
 
 ### Impact / Migration
