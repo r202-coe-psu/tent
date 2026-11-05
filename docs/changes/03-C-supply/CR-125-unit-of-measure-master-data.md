@@ -3,7 +3,7 @@ id: CR-125
 title: Unit of Measure master data and protected UOM invariants
 status: done
 date: 2026-09-17
-updated: 2026-09-17
+updated: 2026-11-05 # Amendment A1 proposed 2026-11-05 (#1188) — รอ approve
 requested_by: Project Owner (PR review follow-up)
 decided_by: Project Owner
 layer: stable
@@ -18,6 +18,8 @@ affects:
   - frontend/scripts/seed/master-seed.ts
   - frontend/src/lib/server/shelter-access-design.ts
   - frontend/src/lib/server/shelter-access-design.test.ts
+  - docs/data/schema.md §4.9 canonical seed set — **Amendment A1** (เพิ่ม `ball`, รวม 31 หน่วย; ไม่ bump `schema_v`)
+  - frontend/src/lib/features/catalog/domain/unit-of-measure.ts, frontend/scripts/seed/master-seed.ts, tests ของทั้งสองไฟล์ — **Amendment A1**
 ---
 
 # CR-125 — Unit of Measure Master Data and Protected UOM Invariants
@@ -139,3 +141,33 @@ Seed behavior:
 - **2026-09-17:** กำหนดให้ `code` เป็น immutable สำหรับทุก UOM เพื่อป้องกัน deterministic `_id` และ foreign key reference เสียหาย
 - **2026-09-17:** กำหนด Topology ชัดเจน: UOM จัดเก็บใน `catalog` DB เท่านั้น โดยฐานข้อมูลศูนย์พักพิง (`shelter_*`) เป็น read-only replica และปฏิเสธการเขียน UOM เด็ดขาด
 - **2026-09-17:** ปรับแก้ CR-120 ให้ใช้ `base_unit = "cylinder"` ทดแทนภาษาไทย `"ถัง"` พร้อมกำหนดตาราง Legacy Compatibility Matrix เพื่อความเข้ากันได้ย้อนหลัง 100%
+- **2026-11-05 (proposed, รอ approve):** Amendment A1 — เพิ่ม `ball` (ลูก) เป็นหน่วยที่ 31 และให้ seed เขียน `sort_order` ของหน่วย protected ตามนิยามเสมอ เพื่อไม่ให้ `sort_order` ซ้ำบน DB ที่ seed แล้ว (issue #1188). ผู้ตัดสินใจบันทึกเป็น `kong` เมื่อ approve.
+
+## Amendment A1 — เพิ่มหน่วย `ball` (ลูก) และให้ seed เขียน `sort_order` ของหน่วย protected (proposed 2026-11-05 · รอ approve · issue #1188)
+
+> **สรุป (TL;DR):** เพิ่มหน่วย `ball` / "ลูก" (`count`) ใน canonical seed ต่อจาก `fruit` · `sort_order` ของ `gallon`..`kcal` เลื่อน +1 (21–30 → 22–31) · รวม 31 หน่วย · seed เขียน `sort_order` ของหน่วย protected ตามนิยามเสมอ (label ที่แก้เองคงเดิม) · ไม่เปลี่ยนรูป doc ไม่ bump `schema_v`
+
+**Why.** ของที่นับเป็นลูก (มะพร้าว แตงโม ลูกบอล) ไม่มีหน่วยที่ตรงใน dropdown. seed เดิมคง `sort_order` ของ doc ที่มีอยู่ ทำให้ DB ที่ seed ไปแล้วได้ `ball` = 21 ซ้ำกับ `gallon`.
+
+### Requirements
+
+- **FR-A1-1** — canonical seed เพิ่มหน่วย `ball`: `label_th` = `ลูก`, `label_en` = `ball`, `dimension` = `count`, `sort_order` = `21`, `is_protected: true`.
+- **FR-A1-2** — `sort_order` ของหน่วยตั้งแต่ `gallon` ถึง `kcal` เลื่อน +1 (21–30 → 22–31). `sort_order` ของ 31 หน่วยต้องไม่ซ้ำกัน.
+- **FR-A1-3** — canonical seed set มี 31 หน่วย (`count` เพิ่ม `ball` ต่อจาก `fruit`). แทนที่จำนวน 27 ใน §3, §5, AC-02 และจำนวน 30 ใน `schema.md` §4.9.
+- **FR-A1-4** — เมื่อรัน seed กับหน่วย `is_protected: true` ที่มีอยู่แล้ว ต้องเขียน `sort_order` ตาม `FALLBACK_UNIT_DEFINITIONS` เสมอ (แทนการคง `sort_order` เดิมตาม §3 Seed behavior). `label_th`, `label_th_short`, `label_en` และ metadata อื่นที่ผู้ดูแลแก้ไขได้ คงค่าเดิม.
+- **FR-A1-5** — seed ต้อง idempotent: รันซ้ำไม่สร้าง doc ซ้ำ และไม่เขียน doc ถ้าทุกค่าตรงอยู่แล้ว.
+- **FR-A1-6** — DB ที่ยังไม่มี `unit_of_measure:ball` ต้องได้ doc นี้ (`is_protected: true`) เมื่อรัน `pnpm seed:master` หนึ่งครั้ง.
+
+### Impact / Migration
+
+- ไม่เปลี่ยนรูป doc: `unit_of_measure` คง `schema_v: 1`. VDU, invariants §4 และ `canonicalizeUnitCode` ไม่เปลี่ยน.
+- env ที่ seed แล้ว (staging/edge) รัน `pnpm seed:master` ครั้งเดียวได้หน่วยใหม่และ `sort_order` ที่ถูกต้อง. ไม่ต้อง backfill แยก.
+- นอกขอบเขต: แปลงหน่วยของสินค้าเดิมที่ใช้ `fruit`/`piece` เป็น `ball`; legacy Thai mapping `ลูก` → `ball` ใน `canonicalizeUnitCode` (เพิ่มได้ก็ต่อเมื่อพบข้อมูลเก่าที่ใช้คำนี้เป็นหน่วย).
+
+### Acceptance Criteria
+
+- [ ] **AC-A1-1:** "ลูก" (`ball`) อยู่ใน dropdown หน่วยต่อจาก "ผล"; `formatUnit('ball')` = `ลูก`.
+- [ ] **AC-A1-2:** สินค้าที่ใช้ `base_unit: ball` สร้าง/แก้ได้และแสดงเป็น "ลูก".
+- [ ] **AC-A1-3:** `pnpm seed:master` บน DB ที่ seed แล้วได้ `unit_of_measure:ball` และ `sort_order` ไม่ซ้ำ.
+- [ ] **AC-A1-4:** seed รันซ้ำได้ (idempotent); label ที่แก้เองคงเดิม.
+- [ ] **AC-A1-5:** `schema.md` §4.9 ระบุ `ball` และจำนวน 31 หน่วย.
