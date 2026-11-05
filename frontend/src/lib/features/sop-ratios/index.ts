@@ -62,6 +62,16 @@ export {
 	type Severity
 } from './domain/resource-calc';
 
+// One-time item demand vs stock (#1190)
+export {
+	buildOneTimeDemandRows,
+	formatCoveragePercent,
+	sortOneTimeDemandRows,
+	type OneTimeDemandItem,
+	type OneTimeDemandRow,
+	type OneTimeDemandStatus
+} from './domain/one-time-demand';
+
 // Data — repositories + resolver
 export type { SopMasterRepository, SopOverrideRepository } from './data/sop-ratio.repository';
 export {

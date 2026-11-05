@@ -59,6 +59,7 @@ export const operationsKeys = {
 	ledgerRefs: () => [...operationsKeys.all, 'ledgerRefs', getShelterCode()] as const,
 	ledgerRefsFor: (idsDigest: string) => [...operationsKeys.ledgerRefs(), idsDigest] as const,
 	balance: () => [...operationsKeys.all, 'balance', getShelterCode()] as const,
+	lotReservations: () => [...operationsKeys.all, 'lotReservations', getShelterCode()] as const,
 	donationSlots: () => [...operationsKeys.all, 'donationSlots', getShelterCode()] as const,
 	transfers: () => [...operationsKeys.all, 'transfers'] as const,
 	transfer: (id: string) => [...operationsKeys.transfers(), id] as const,
@@ -211,6 +212,13 @@ export const useLedgerRefLabels = (refIds: () => readonly string[]) => {
 		};
 	});
 };
+
+/** Claims still held on lots (stock promised, ledger row not yet written). */
+export const useLotReservationClaims = () =>
+	createQuery(() => ({
+		queryKey: operationsKeys.lotReservations(),
+		queryFn: () => new OperationsRemoteRepository().listLotReservationClaims()
+	}));
 
 export const useStockBalance = () =>
 	createQuery(() => ({

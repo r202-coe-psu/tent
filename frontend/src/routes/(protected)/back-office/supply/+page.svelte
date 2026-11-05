@@ -14,7 +14,7 @@
 	import { endpointStore } from '$lib/stores/endpoint.svelte';
 	import AlertTriangle from '@lucide/svelte/icons/alert-triangle';
 	import { ResourceNeedsDashboard } from '$lib/features/resource-calc';
-	import { FoodSphereStockTab } from '$lib/features/sop-ratios/components';
+	import { FoodSphereStockTab, OneTimeDemandTab } from '$lib/features/sop-ratios/components';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
 	import { canChangeStock, shelterCodeFromRoles } from '$lib/auth/roles';
 	import { useDashboardOccupancy } from '$lib/features/dashboard';
@@ -61,7 +61,8 @@
 	const SECONDARY_TABS = [
 		{ key: 'catalog', label: 'สินค้า (Master)' },
 		{ key: 'sphere', label: 'วิเคราะห์ความต้องการ' },
-		{ key: 'food-sphere', label: 'วิเคราะห์เสบียงอาหาร' }
+		{ key: 'food-sphere', label: 'วิเคราะห์เสบียงอาหาร' },
+		{ key: 'one-time', label: 'ของแจกครั้งเดียว' }
 	] as const;
 	type SecondaryTabKey = (typeof SECONDARY_TABS)[number]['key'];
 	type TabKey = PrimaryTabKey | SecondaryTabKey;
@@ -214,6 +215,10 @@
 	{:else if activeTab === 'food-sphere'}
 		<div class="animate-in duration-300 fade-in slide-in-from-bottom-2">
 			<FoodSphereStockTab {occupancy} {shelterCode} />
+		</div>
+	{:else if activeTab === 'one-time'}
+		<div class="animate-in duration-300 fade-in slide-in-from-bottom-2">
+			<OneTimeDemandTab {shelterCode} />
 		</div>
 	{:else if activeTab === 'transfer'}
 		<div class="animate-in duration-300 fade-in slide-in-from-bottom-2">

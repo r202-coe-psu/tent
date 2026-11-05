@@ -1,0 +1,204 @@
+import { describe, expect, it } from 'vitest';
+import {
+	buildOneTimeDemandRows,
+	formatCoveragePercent,
+	sortOneTimeDemandRows,
+	type OneTimeDemandItem,
+	type OneTimeDemandLot,
+	type OneTimeDemandReservation
+} from './one-time-demand';
+
+// 2026-11-05 12:00 Asia/Bangkok
+const NOW = Date.parse('2026-11-05T05:00:00.000Z');
+
+const net: OneTimeDemandItem = {
+	_id: 'item_master:net',
+	name: 'มุ้ง',
+	base_unit: 'piece',
+	distribution_type: 'one_time',
+	qty_per_person: 1
+};
+
+function lot(
+	itemId: string,
+	qty: string,
+	opts: { ref?: string; expiry?: string } = {}
+): OneTimeDemandLot {
+	return {
+		lot_ref: opts.ref ?? `stock_ledger:${itemId}-${qty}`,
+		item_id: itemId,
+		unit: 'piece',
+		qty,
+		received_at: '2026-10-01T00:00:00.000Z',
+		...(opts.expiry ? { lot: { expiry: opts.expiry } } : {})
+	};
+}
+
+function build(
+	items: OneTimeDemandItem[],
+	people: number,
+	lots: OneTimeDemandLot[] = [],
+	reservations: OneTimeDemandReservation[] = []
+) {
+	return buildOneTimeDemandRows({ items, people, lots, reservations, now: NOW });
+}
+
+describe('buildOneTimeDemandRows', () => {
+	it('120 people x 1 with 100 on hand: demand 120, shortfall 20, 83%, short', () => {
+		const [row] = build([net], 120, [lot(net._id, '100')]);
+		expect(row).toMatchObject({
+			itemId: net._id,
+			name: 'มุ้ง',
+			unit: 'piece',
+			demand: '120',
+			available: '100',
+			shortfall: '20',
+			status: 'short',
+			qtyPerPersonMissing: false
+		});
+		expect(formatCoveragePercent(row.coverage)).toBe('83%');
+	});
+
+	it('qty_per_person 2 with 300 on hand: demand 240, no shortfall, enough', () => {
+		const [row] = build([{ ...net, qty_per_person: 2 }], 120, [lot(net._id, '300')]);
+		expect(row).toMatchObject({
+			demand: '240',
+			available: '300',
+			shortfall: '0',
+			status: 'enough'
+		});
+		expect(formatCoveragePercent(row.coverage)).toBe('125%');
+	});
+
+	it('falls back to 1 per person and flags a missing qty_per_person', () => {
+		const { qty_per_person: _drop, ...noQty } = net;
+		void _drop;
+		const [row] = build([noQty], 120, [lot(net._id, '120')]);
+		expect(row).toMatchObject({ demand: '120', qtyPerPersonMissing: true, status: 'enough' });
+	});
+
+	it('does not flag an item that has a qty_per_person', () => {
+		const [row] = build([net], 10);
+		expect(row.qtyPerPersonMissing).toBe(false);
+	});
+
+	it('ignores expired lots (a bare expiry date lasts the whole Bangkok day)', () => {
+		const rows = build([net], 120, [
+			lot(net._id, '60', { ref: 'stock_ledger:a', expiry: '2026-11-04' }),
+			lot(net._id, '30', { ref: 'stock_ledger:b', expiry: '2026-11-05' }),
+			lot(net._id, '10', { ref: 'stock_ledger:c' })
+		]);
+		expect(rows[0].available).toBe('40');
+		expect(rows[0].shortfall).toBe('80');
+	});
+
+	it('subtracts active reservations of counted lots', () => {
+		const [row] = build(
+			[net],
+			120,
+			[lot(net._id, '100', { ref: 'stock_ledger:a' })],
+			[{ item_id: net._id, lot_ref: 'stock_ledger:a', qty: '30' }]
+		);
+		expect(row.available).toBe('70');
+		expect(row.shortfall).toBe('50');
+	});
+
+	it('does not subtract a reservation held on an expired lot', () => {
+		const [row] = build(
+			[net],
+			10,
+			[
+				lot(net._id, '50', { ref: 'stock_ledger:old', expiry: '2026-11-01' }),
+				lot(net._id, '20', { ref: 'stock_ledger:new' })
+			],
+			[{ item_id: net._id, lot_ref: 'stock_ledger:old', qty: '5' }]
+		);
+		expect(row.available).toBe('20');
+	});
+
+	it('floors available at 0 when reservations exceed the balance', () => {
+		const [row] = build(
+			[net],
+			10,
+			[lot(net._id, '5', { ref: 'stock_ledger:a' })],
+			[{ item_id: net._id, lot_ref: 'stock_ledger:a', qty: '8' }]
+		);
+		expect(row.available).toBe('0');
+		expect(row.shortfall).toBe('10');
+		expect(formatCoveragePercent(row.coverage)).toBe('0%');
+	});
+
+	it('ignores negative lots instead of subtracting them', () => {
+		const [row] = build([net], 10, [
+			lot(net._id, '12', { ref: 'stock_ledger:a' }),
+			lot(net._id, '-4', { ref: 'stock_ledger:b' })
+		]);
+		expect(row.available).toBe('12');
+	});
+
+	it('0 people: demand 0, coverage is a dash, still enough', () => {
+		const [row] = build([net], 0, [lot(net._id, '5')]);
+		expect(row).toMatchObject({ demand: '0', shortfall: '0', coverage: null, status: 'enough' });
+		expect(formatCoveragePercent(row.coverage)).toBe('—');
+	});
+
+	it('keeps decimal quantities exact (no float drift)', () => {
+		const [row] = build([{ ...net, qty_per_person: 0.1 }], 3, [lot(net._id, '0.2')]);
+		expect(row.demand).toBe('0.3');
+		expect(row.shortfall).toBe('0.1');
+	});
+
+	it('only includes active one_time items', () => {
+		const rows = build(
+			[
+				net,
+				{ ...net, _id: 'item_master:rice', name: 'ข้าว', distribution_type: 'recurring' },
+				{ ...net, _id: 'item_master:equip', name: 'ไม่ระบุ', distribution_type: undefined },
+				{ ...net, _id: 'item_master:off', name: 'ปิด', deactivated: true },
+				{
+					...net,
+					_id: 'item_master:merged',
+					name: 'รวม',
+					deactivated: true,
+					merged_into: 'item_master:net'
+				}
+			],
+			10
+		);
+		expect(rows.map((r) => r.itemId)).toEqual(['item_master:net']);
+	});
+
+	it('returns no rows when there is no one_time item', () => {
+		expect(build([], 10)).toEqual([]);
+	});
+});
+
+describe('sortOneTimeDemandRows', () => {
+	const rowOf = (name: string, demand: number, available: number) =>
+		build([{ ...net, _id: `item_master:${name}`, name }], demand, [
+			lot(`item_master:${name}`, String(available))
+		])[0];
+
+	it('puts short rows first, then coverage ascending', () => {
+		const enough = rowOf('enough', 10, 20); // 200%
+		const half = rowOf('half', 10, 5); // 50%
+		const none = rowOf('none', 10, 0); // 0%
+		const most = rowOf('most', 10, 9); // 90%
+		const sorted = sortOneTimeDemandRows([enough, most, half, none]);
+		expect(sorted.map((r) => r.name)).toEqual(['none', 'half', 'most', 'enough']);
+	});
+
+	it('orders enough rows after short ones even with no demand, and does not mutate input', () => {
+		const idle = build([{ ...net, name: 'idle' }], 0)[0];
+		const short = rowOf('short', 10, 1);
+		const input = [idle, short];
+		expect(sortOneTimeDemandRows(input).map((r) => r.name)).toEqual(['short', 'idle']);
+		expect(input[0].name).toBe('idle');
+	});
+
+	it('breaks ties by name', () => {
+		const b = rowOf('b', 10, 5);
+		const a = rowOf('a', 10, 5);
+		expect(sortOneTimeDemandRows([b, a]).map((r) => r.name)).toEqual(['a', 'b']);
+	});
+});

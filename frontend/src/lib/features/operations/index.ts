@@ -209,6 +209,7 @@ export {
 	useLedger,
 	useLedgerByItem,
 	useStockBalance,
+	useLotReservationClaims,
 	useReceiveStock,
 	useDistributeBatch,
 	useAdjustStock,
