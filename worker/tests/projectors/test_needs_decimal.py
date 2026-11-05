@@ -103,6 +103,14 @@ def _legacy_double_row() -> dict:
         (5.0, "5"),
         (1e-05, "0"),
         ("12.3456789", "12.3457"),
+        (Decimal("-0"), "0"),
+        (Decimal("-0.00004"), "0"),
+        (Decimal("-0.00005"), "-0.0001"),
+        (Decimal("0.30000"), "0.3"),
+        (3, "3"),
+        (0.1 + 0.2, "0.3"),
+        ("1E+2", "100"),
+        ("0.30000", "0.3"),
         (Decimal("NaN"), "0"),
         (Decimal("Infinity"), "0"),
         (None, "0"),
@@ -243,3 +251,101 @@ async def test_non_finite_ledger_row_cannot_reach_mongo(db):
     assert stored is not None
     assert stored.qty_needed == Decimal(3)
     assert stored.on_hand == Decimal(2)
+
+
+def test_compute_needs_does_not_import_the_mongo_layer():
+    import ast
+    import inspect
+
+    from worker.projectors import compute_needs as module
+
+    tree = ast.parse(inspect.getsource(module))
+    imported = {
+        node.module or "" for node in ast.walk(tree) if isinstance(node, ast.ImportFrom)
+    } | {
+        alias.name
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Import)
+        for alias in node.names
+    }
+
+    assert not [name for name in imported if name.startswith("worker.mongo")]
+    assert not hasattr(module, "on_hand_by_item")
+    assert not hasattr(module, "_to_float")
+
+
+def _donation(qty: str) -> dict:
+    return {
+        "_id": "donation:01",
+        "type": "donation",
+        "campaign_id": "donation_campaign:01",
+        "status": "declared",
+        "items": [{"item_id": ITEM, "qty": qty}],
+    }
+
+
+@pytest.mark.parametrize(
+    ("target", "on_hand", "reserved", "kept"),
+    [
+        ("10", "2", "5", "3"),  # reserved > on_hand still just adds up
+        ("10", "2", "8", None),  # exactly covered by on_hand + reserved
+        ("10", "2", "9.5", None),  # over-covered: negative remaining, no row
+        ("1", "5", "0", None),  # on_hand alone over target
+        ("1", "0.1", "0.2", "0.7"),
+    ],
+)
+async def test_reserved_on_hand_mixes_and_negative_remaining(
+    db, target, on_hand, reserved, kept
+):
+    docs = [_campaign(target), *_ledger(on_hand), _donation(reserved)]
+
+    actions = await _project(docs)
+
+    rows = _upserts(actions)
+    if kept is None:
+        assert rows == []
+    else:
+        (row,) = rows
+        assert row["qty_needed"] == Decimal(kept)
+        assert row["reserved"] == Decimal(reserved)
+        assert row["on_hand"] == Decimal(on_hand)
+
+
+@pytest.mark.parametrize(
+    ("on_hand", "kept"),
+    [
+        ("0.99995", "0.0001"),  # remainder 0.00005 rounds HALF_UP to 0.0001 -> kept
+        ("0.99996", None),  # remainder 0.00004 rounds to 0 -> deleted
+    ],
+)
+async def test_sub_step_remainder_rounds_half_up_before_the_delete(db, on_hand, kept):
+    rows = _upserts(await _project([_campaign("1"), *_ledger(on_hand)]))
+
+    if kept is None:
+        assert rows == []
+    else:
+        (row,) = rows
+        assert row["qty_needed"] == Decimal(kept)
+        assert row["on_hand"] == Decimal(1)  # stored terms round to the step too
+
+
+async def test_legacy_numeric_ledger_rows_with_more_than_four_places(db):
+    """Old ledger rows can hold a JSON number (not a qty_str) with >4 places."""
+    kept = _upserts(await _project([_campaign("1"), *_ledger(0.99995)]))
+    gone = _upserts(await _project([_campaign("1"), *_ledger(0.99996)]))
+    summed = _upserts(await _project([_campaign("1"), *_ledger(0.1, 0.2)]))
+
+    assert [row["qty_needed"] for row in kept] == [Decimal("0.0001")]
+    assert gone == []
+    assert summed[0]["on_hand"] == Decimal("0.3")
+    assert summed[0]["qty_needed"] == Decimal("0.7")
+
+
+async def test_stored_qty_is_canonical_not_padded(db):
+    (row,) = _upserts(await _project([_campaign("1.50000"), *_ledger("0.30000")]))
+
+    for field in ("qty_needed", "qty_target", "on_hand"):
+        assert row[field] == row[field].normalize()
+    assert str(row["on_hand"]) == "0.3"
+    assert str(row["qty_target"]) == "1.5"
+    assert str(row["qty_needed"]) == "1.2"

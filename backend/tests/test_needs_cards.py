@@ -292,3 +292,56 @@ async def test_external_needs_whole_sum_has_no_trailing_zero(client: AsyncClient
     (need,) = res.json()["shelters"][0]["needs"]
     assert need["qty_needed"] == "20"
     assert need["qty_target"] == "100"
+
+
+async def test_public_needs_prints_legacy_double_drift_and_exponent_as_qty_str(
+    client: AsyncClient, auth_headers: dict[str, str]
+) -> None:
+    """Doubles projected before #934 carry float noise; the API must still print qty_str."""
+    await _shelter()
+    await PublicNeed.get_pymongo_collection().insert_one(
+        {
+            "_id": "SH001:item_master:rice@-",
+            "shelter_code": "SH001",
+            "item_id": "item_master:rice",
+            "drop_off_point_id": None,
+            "item_name": "ข้าว",
+            "category": "food",
+            "qty_needed": 0.1 + 0.2,  # 0.30000000000000004
+            "qty_target": 100.0,
+            "on_hand": 1e-05,
+            "reserved": 5e-05,  # rounds half-up to 0.0001
+            "unit": "kg",
+            "urgency": "normal",
+            "updated_at": datetime.now(UTC),
+        }
+    )
+
+    res = await client.get("/public/v1/needs", headers=auth_headers)
+
+    (need,) = res.json()["shelters"][0]["needs"]
+    assert need["qty_needed"] == "0.3"
+    assert need["qty_target"] == "100"
+    assert need["on_hand"] == "0"
+    assert need["reserved"] == "0.0001"
+    assert need["status"] == "open"
+
+
+async def test_external_needs_with_only_sub_step_cards_is_closed(
+    client: AsyncClient,
+) -> None:
+    headers = await _external_key()
+    await _shelter()
+    for point in ("gym", "clinic"):
+        await _row(
+            f"SH001:item_master:rice@{point}",
+            item_id="item_master:rice",
+            drop_off_point_id=point,
+            qty_needed=Decimal("0.00004"),
+        )
+
+    res = await client.get("/external/v1/needs", headers=headers)
+
+    (need,) = res.json()["shelters"][0]["needs"]
+    assert need["qty_needed"] == "0"
+    assert need["status"] == "closed"
