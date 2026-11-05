@@ -5,12 +5,16 @@ import { grantExpiryError } from '$lib/auth/role-grants';
 import {
 	COORDINATOR_GRANTABLE_CAPABILITIES,
 	STAFF_CAPABILITIES,
+	capabilitiesForShelter,
 	compoundCapabilityRole,
+	isSystemAdmin,
+	mergeShelterAssignment,
 	rolesFromAssignments,
 	shelterScopeRole
 } from '$lib/auth/roles';
 import { normalizeThaiPhone } from '$lib/db/model';
-import { createUser, listUsers } from '$lib/features/users';
+import { createUser, listUsers, updateUser } from '$lib/features/users';
+import { authStore } from '$lib/stores/auth.svelte';
 import { volunteerRepositoryFor } from '../data/volunteer.remote';
 import type { VolunteerRepository } from '../data/volunteer.repository';
 import { isVolunteerMobile } from '../domain/phone';
@@ -52,11 +56,15 @@ export function volunteerPasswordError(password: string, loginPhone: string | nu
 	return result.success ? null : (result.error.issues[0]?.message ?? 'รหัสผ่านไม่ถูกต้อง');
 }
 
-/** Create credentials first, then link the latest profile; an exact existing link is retryable. */
+/**
+ * Create credentials first, then link the latest profile; an exact existing link is retryable.
+ * The volunteer's own account with roles in other shelters only gets this shelter's role beside
+ * them (CR-221 A1-4); one that already holds a role here is managed on the users page.
+ */
 export async function grantVolunteerAccess(
 	volunteer: Volunteer,
 	input: z.infer<typeof volunteerAccessSchema>
-): Promise<{ created: boolean }> {
+): Promise<{ created: boolean; roleAdded: boolean }> {
 	const { email, password, role } = volunteerAccessSchema.parse(input);
 	if (hasInvalidAccessPhone(volunteer.phone)) throw new Error(VOLUNTEER_ACCESS_PHONE_MESSAGE);
 	const loginPhone = accountPhone(volunteer.phone);
@@ -92,22 +100,36 @@ export async function grantVolunteerAccess(
 	) {
 		throw new Error('โปรไฟล์อาสาสมัครผูกกับบัญชีอื่นแล้ว กรุณาจัดการผ่านหน้าผู้ใช้งาน');
 	}
+	// This shelter's roles, compound or legacy flat (issued before CR-093). Only none (add one) or
+	// exactly the picked one, held in one form (a retry whose link failed), is handled here.
+	const rolesHere = existing ? capabilitiesForShelter(existing.roles, volunteer.shelter_code) : [];
+	const pickedEntries = existing
+		? existing.roles.filter(
+				(r) => r === compoundCapabilityRole(volunteer.shelter_code, role) || r === role
+			).length
+		: 0;
 	if (
 		existing &&
 		(existing.volunteer_id !== volunteer._id ||
 			existing.personnel_type !== 'volunteer' ||
 			existing.active === false ||
-			// Scope + exactly one capability, in compound or legacy flat form (issued before CR-093).
-			// Matched literally: `hasCapabilityInShelter` also passes `system_admin`.
-			existing.roles.length !== 2 ||
-			!existing.roles.includes(scope) ||
-			!existing.roles.some(
-				(r) => r === compoundCapabilityRole(volunteer.shelter_code, role) || r === role
-			))
+			isSystemAdmin(existing.roles) ||
+			(rolesHere.length > 0 &&
+				(rolesHere.length !== 1 || rolesHere[0] !== role || pickedEntries !== 1)))
 	) {
 		throw new Error('อีเมลนี้มีบัญชีอยู่แล้วหรือสิทธิ์ไม่ตรงกัน กรุณาจัดการผ่านหน้าผู้ใช้งาน');
 	}
 	const created = !existing;
+	const roleAdded = !!existing && rolesHere.length === 0;
+	if (existing && roleAdded) {
+		// A system admin's save replaces the roles, so it carries the other shelters' too; a manager
+		// sends their own shelter's only and the server keeps the rest. The password stays.
+		await updateUser(existing.name, {
+			roles: isSystemAdmin(authStore.user?.roles ?? [])
+				? mergeShelterAssignment(existing.roles, volunteer.shelter_code, [role])
+				: rolesFromAssignments([{ shelter_code: volunteer.shelter_code, capabilities: [role] }])
+		});
+	}
 	if (created) {
 		await createUser({
 			name: email,
@@ -123,7 +145,7 @@ export async function grantVolunteerAccess(
 		});
 	}
 	await linkVolunteerProfile(repository, volunteer, profile, accountName, created);
-	return { created };
+	return { created, roleAdded };
 }
 
 /** Point the volunteer profile at the account. Retryable: the account is already provisioned. */

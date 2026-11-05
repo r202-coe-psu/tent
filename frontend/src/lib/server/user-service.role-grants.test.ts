@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as couchAdmin from './couch-admin';
 import {
+	createOrMergeUser,
 	deleteUser,
 	grantCoordinatorRole,
 	readShelterVolunteerAccounts,
@@ -201,18 +202,36 @@ describe('coordinator role grants on _users (#955)', () => {
 		expect(db[key(EMAIL)].roles).toEqual(['shelter:SH001', 'SH001:warehouse_staff']);
 	});
 
-	it('refuses (403, no write) to add a second role beside one a manager gave (FR-4, FR-16)', async () => {
+	it('replaces the grant beside a role a manager gave, which stays (CR-221 A1-2)', async () => {
 		seed(EMAIL, {
 			roles: ['shelter:SH001', 'SH001:registration_staff', 'SH001:kitchen_staff'],
 			role_grants: [grant()]
 		});
-		const before = JSON.stringify(db);
-		await expect(grantCoordinatorRole(input(grant('warehouse_staff')))).rejects.toMatchObject({
-			code: 'FORBIDDEN',
-			message: 'ผู้จัดการศูนย์เป็นผู้ให้ แก้ไขได้ที่หน้าผู้ใช้งาน'
-		});
-		expect(JSON.stringify(db)).toBe(before);
-		expect(written).toEqual([]);
+		await grantCoordinatorRole(input(grant('warehouse_staff')));
+		expect(db[key(EMAIL)].roles).toEqual([
+			'shelter:SH001',
+			'SH001:registration_staff',
+			'SH001:warehouse_staff'
+		]);
+		expect(db[key(EMAIL)].role_grants).toEqual([grant('warehouse_staff')]);
+		expect(audits()).toMatchObject([
+			{ reason: 'role_grant.revoked', context: { role: 'kitchen_staff' } },
+			{ reason: 'role_grant.issued', context: { role: 'warehouse_staff' } }
+		]);
+	});
+
+	it('grants beside the permanent roles of an account with no grant here (CR-221 A1-2)', async () => {
+		seed(EMAIL, { roles: ['shelter:SH001', 'SH001:kitchen_staff'] });
+		await grantCoordinatorRole(input(grant('warehouse_staff')));
+		expect(db[key(EMAIL)].roles).toEqual([
+			'shelter:SH001',
+			'SH001:kitchen_staff',
+			'SH001:warehouse_staff'
+		]);
+		expect(db[key(EMAIL)].role_grants).toEqual([grant('warehouse_staff')]);
+		expect(audits()).toMatchObject([
+			{ reason: 'role_grant.issued', context: { role: 'warehouse_staff' } }
+		]);
 	});
 
 	it('keeps the verification a grant was issued under when an edit carries none (FR-3)', async () => {
@@ -402,10 +421,14 @@ describe('coordinator role grants on _users (#955)', () => {
 		expect(db[key(EMAIL)].shelter_id).toBe('SH001');
 	});
 
-	it('refuses (403, no write) when a manager already gave the same role (no grant)', async () => {
-		seed(EMAIL, { roles: ['shelter:SH001', 'SH001:kitchen_staff'] });
-		await expect(grantCoordinatorRole(input())).rejects.toMatchObject({ code: 'FORBIDDEN' });
-		expect(db[key(EMAIL)].role_grants).toBeUndefined();
+	it('refuses (403, no write) when a manager already gave the same role (CR-221 A1-2)', async () => {
+		seed(EMAIL, { roles: ['shelter:SH001', 'SH001:kitchen_staff', 'SH001:registration_staff'] });
+		const before = JSON.stringify(db);
+		await expect(grantCoordinatorRole(input())).rejects.toMatchObject({
+			code: 'FORBIDDEN',
+			message: 'ตำแหน่งนี้ผู้จัดการศูนย์ให้ไว้แล้ว'
+		});
+		expect(JSON.stringify(db)).toBe(before);
 		expect(written).toEqual([]);
 	});
 
@@ -600,6 +623,125 @@ describe('coordinator role grants on _users (#955)', () => {
 		it('a system admin may make a role permanent too', async () => {
 			await updateUser(EMAIL, { permanent_roles: ['SH001:facility_staff'] }, sa);
 			expect(db[key(EMAIL)].role_grants).toEqual([grant()]);
+		});
+
+		describe('giving a volunteer a new role for good (CR-221 A1-7, A1-8)', () => {
+			const verify = vi.fn(async () => {});
+
+			beforeEach(() => verify.mockReset());
+
+			it('checks the identity in the shelter of the new role, then audits it', async () => {
+				await updateUser(EMAIL, { roles: [...granted, 'SH001:medical_staff'] }, sm, {
+					verifyVolunteerRoles: verify
+				});
+				expect(verify).toHaveBeenCalledWith(['SH001'], 'volunteer:V1');
+				expect(db[key(EMAIL)].roles).toContain('SH001:medical_staff');
+				expect(audits()).toEqual([
+					{
+						db: 'shelter_sh001',
+						reason: 'role_grant.permanent_issued',
+						target: `org.couchdb.user:${EMAIL}`,
+						context: { role: 'medical_staff', expires_at: null, actor: 'sm01' }
+					}
+				]);
+			});
+
+			it('writes nothing when the check refuses', async () => {
+				verify.mockRejectedValueOnce(
+					new couchAdmin.ServiceError('VALIDATION', 'อาสาสมัครต้องยืนยันตัวตนก่อนจึงจะออกสิทธิ์ได้')
+				);
+				const before = JSON.stringify(db);
+				await expect(
+					updateUser(EMAIL, { roles: [...granted, 'SH001:medical_staff'] }, sm, {
+						verifyVolunteerRoles: verify
+					})
+				).rejects.toMatchObject({ code: 'VALIDATION' });
+				expect(JSON.stringify(db)).toBe(before);
+				expect(written).toEqual([]);
+			});
+
+			it.each([
+				['keeps the roles', { roles: granted, display_name: 'ใหม่' }],
+				['removes a role', { roles: ['shelter:SH001', 'SH001:facility_staff'] }],
+				['edits another field', { display_name: 'ใหม่' }],
+				['makes a grant permanent', { roles: granted, permanent_roles: ['SH001:kitchen_staff'] }]
+			])('neither checks nor audits an issue when the save %s', async (_what, change) => {
+				await updateUser(EMAIL, change, sm, { verifyVolunteerRoles: verify });
+				expect(verify).not.toHaveBeenCalled();
+				expect(audits().map((a) => a.reason)).not.toContain('role_grant.permanent_issued');
+			});
+
+			it('leaves a staff account alone', async () => {
+				seed('staff@example.com', { personnel_type: 'staff', roles: granted });
+				await updateUser('staff@example.com', { roles: [...granted, 'SH001:medical_staff'] }, sm, {
+					verifyVolunteerRoles: verify
+				});
+				expect(verify).not.toHaveBeenCalled();
+				expect(written).toEqual([]);
+			});
+
+			it('checks every shelter a system admin adds a role in', async () => {
+				await updateUser(
+					EMAIL,
+					{ roles: [...granted, 'shelter:SH002', 'SH002:kitchen_staff'] },
+					sa,
+					{ verifyVolunteerRoles: verify }
+				);
+				expect(verify).toHaveBeenCalledWith(['SH002'], 'volunteer:V1');
+				expect(audits()).toMatchObject([
+					{
+						db: 'shelter_sh002',
+						reason: 'role_grant.permanent_issued',
+						context: { role: 'kitchen_staff', actor: 'sa01' }
+					}
+				]);
+			});
+
+			it('audits each role of a new volunteer account a manager creates', async () => {
+				await createOrMergeUser(
+					{
+						name: 'new@example.com',
+						password: PASSWORD,
+						display_name: 'ใหม่',
+						roles: ['shelter:SH001', 'SH001:kitchen_staff', 'SH001:registration_staff'],
+						personnel_type: 'volunteer',
+						volunteer_id: 'volunteer:V9'
+					},
+					sm
+				);
+				expect(audits()).toMatchObject([
+					{ reason: 'role_grant.permanent_issued', context: { role: 'kitchen_staff' } },
+					{ reason: 'role_grant.permanent_issued', context: { role: 'registration_staff' } }
+				]);
+			});
+
+			it('audits the role a manager merges into an existing volunteer account', async () => {
+				seed('other@example.com', { roles: ['shelter:SH002', 'SH002:kitchen_staff'] });
+				await createOrMergeUser(
+					{
+						name: 'other@example.com',
+						password: PASSWORD,
+						display_name: 'อื่น',
+						roles: ['shelter:SH001', 'SH001:registration_staff'],
+						personnel_type: 'volunteer',
+						volunteer_id: 'volunteer:V1'
+					},
+					sm
+				);
+				expect(db[key('other@example.com')].roles).toEqual([
+					'shelter:SH002',
+					'SH002:kitchen_staff',
+					'shelter:SH001',
+					'SH001:registration_staff'
+				]);
+				expect(audits()).toMatchObject([
+					{
+						db: 'shelter_sh001',
+						reason: 'role_grant.permanent_issued',
+						context: { role: 'registration_staff', actor: 'sm01' }
+					}
+				]);
+			});
 		});
 
 		it('a manager cannot touch another shelter grants', async () => {

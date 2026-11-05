@@ -5,6 +5,8 @@ import type { UserSummary } from '$lib/features/users';
 const mocks = vi.hoisted(() => ({
 	createUser: vi.fn(),
 	listUsers: vi.fn(),
+	updateUser: vi.fn(),
+	authStore: { user: { roles: ['shelter:SH001', 'SH001:shelter_manager'] } as { roles: string[] } },
 	get: vi.fn(),
 	update: vi.fn(),
 	repositoryFor: vi.fn(),
@@ -13,8 +15,10 @@ const mocks = vi.hoisted(() => ({
 vi.mock('$lib/api/service', () => ({ serviceFetch: mocks.serviceFetch }));
 vi.mock('$lib/features/users', () => ({
 	createUser: mocks.createUser,
-	listUsers: mocks.listUsers
+	listUsers: mocks.listUsers,
+	updateUser: mocks.updateUser
 }));
+vi.mock('$lib/stores/auth.svelte', () => ({ authStore: mocks.authStore }));
 vi.mock('../data/volunteer.remote', () => ({
 	volunteerRepositoryFor: mocks.repositoryFor
 }));
@@ -127,7 +131,7 @@ describe('grantVolunteerAccess', () => {
 		});
 		await expect(
 			grantVolunteerAccess(volunteer, { ...input, email: ' helper@example.com ' })
-		).resolves.toEqual({ created: true });
+		).resolves.toEqual({ created: true, roleAdded: false });
 		expect(mocks.repositoryFor).toHaveBeenCalledWith('SH001');
 		expect(mocks.createUser).toHaveBeenCalledWith(
 			expect.objectContaining({
@@ -165,7 +169,10 @@ describe('grantVolunteerAccess', () => {
 
 	it('links a legacy mixed-case account by its stored name instead of creating one', async () => {
 		mocks.listUsers.mockResolvedValue([{ ...account, name: 'Helper@Example.com' }]);
-		await expect(grantVolunteerAccess(volunteer, input)).resolves.toEqual({ created: false });
+		await expect(grantVolunteerAccess(volunteer, input)).resolves.toEqual({
+			created: false,
+			roleAdded: false
+		});
 		expect(mocks.createUser).not.toHaveBeenCalled();
 		expect(mocks.update).toHaveBeenCalledWith(
 			expect.objectContaining({ user_name: 'Helper@Example.com' })
@@ -201,7 +208,10 @@ describe('grantVolunteerAccess', () => {
 	it('grants a volunteer with no phone an account with phone null', async () => {
 		const noPhone = { ...volunteer, phone: null };
 		mocks.get.mockImplementation(async () => ({ ...noPhone }));
-		await expect(grantVolunteerAccess(noPhone, input)).resolves.toEqual({ created: true });
+		await expect(grantVolunteerAccess(noPhone, input)).resolves.toEqual({
+			created: true,
+			roleAdded: false
+		});
 		expect(mocks.createUser).toHaveBeenCalledWith(
 			expect.objectContaining({ phone: null, email: input.email, must_change_password: false })
 		);
@@ -243,8 +253,6 @@ describe('grantVolunteerAccess', () => {
 
 	it.each([
 		{ ...account, volunteer_id: 'volunteer:other' },
-		{ ...account, roles: ['shelter:SH002', `SH002:${input.role}`] },
-		{ ...account, roles: ['shelter:SH002', input.role] },
 		{ ...account, personnel_type: 'staff' as const },
 		{ ...account, active: false },
 		{ ...account, roles: ['shelter:SH001', 'SH001:warehouse_staff'] },
@@ -262,11 +270,60 @@ describe('grantVolunteerAccess', () => {
 		expect(mocks.update).not.toHaveBeenCalled();
 	});
 
+	describe('an existing account with roles in other shelters only (CR-221 A1-4)', () => {
+		const elsewhere = { ...account, roles: ['shelter:SH002', 'SH002:kitchen_staff'] };
+
+		it("adds this shelter's role for a shelter manager, who sends this shelter's roles only", async () => {
+			mocks.listUsers.mockResolvedValue([elsewhere]);
+			await expect(grantVolunteerAccess(volunteer, input)).resolves.toEqual({
+				created: false,
+				roleAdded: true
+			});
+			expect(mocks.updateUser).toHaveBeenCalledWith(input.email, {
+				roles: ['shelter:SH001', `SH001:${input.role}`]
+			});
+			expect(mocks.createUser).not.toHaveBeenCalled();
+			expect(mocks.update).toHaveBeenCalledWith(
+				expect.objectContaining({ user_name: input.email, email: input.email })
+			);
+		});
+
+		it('keeps the other shelters roles when a system admin saves the whole list', async () => {
+			mocks.authStore.user = { roles: ['system_admin'] };
+			mocks.listUsers.mockResolvedValue([elsewhere]);
+			await grantVolunteerAccess(volunteer, input);
+			expect(mocks.updateUser).toHaveBeenCalledWith(input.email, {
+				roles: ['shelter:SH002', 'SH002:kitchen_staff', 'shelter:SH001', `SH001:${input.role}`]
+			});
+			mocks.authStore.user = { roles: ['shelter:SH001', 'SH001:shelter_manager'] };
+		});
+
+		it('adds beside a legacy flat role of another shelter', async () => {
+			mocks.listUsers.mockResolvedValue([{ ...account, roles: ['shelter:SH002', input.role] }]);
+			await expect(grantVolunteerAccess(volunteer, input)).resolves.toEqual({
+				created: false,
+				roleAdded: true
+			});
+		});
+
+		it('does not link the profile when adding the role is refused', async () => {
+			mocks.listUsers.mockResolvedValue([elsewhere]);
+			mocks.updateUser.mockRejectedValueOnce(
+				new Error('อาสาสมัครต้องยืนยันตัวตนก่อนจึงจะออกสิทธิ์ได้')
+			);
+			await expect(grantVolunteerAccess(volunteer, input)).rejects.toThrow(/ยืนยันตัวตน/);
+			expect(mocks.update).not.toHaveBeenCalled();
+		});
+	});
+
 	it('recovers profile linkage after partial failure without resetting credentials', async () => {
 		mocks.update.mockRejectedValueOnce(new Error('Network error'));
 		await expect(grantVolunteerAccess(volunteer, input)).rejects.toThrow(/บัญชี/);
 		mocks.listUsers.mockResolvedValue([account]);
-		await expect(grantVolunteerAccess(volunteer, input)).resolves.toEqual({ created: false });
+		await expect(grantVolunteerAccess(volunteer, input)).resolves.toEqual({
+			created: false,
+			roleAdded: false
+		});
 		expect(mocks.createUser).toHaveBeenCalledTimes(1);
 		expect(mocks.update).toHaveBeenCalledTimes(2);
 	});
@@ -276,7 +333,10 @@ describe('grantVolunteerAccess', () => {
 		{ label: 'legacy flat', roles: ['shelter:SH001', input.role] }
 	])('relinks an existing $label account without recreating it', async ({ roles }) => {
 		mocks.listUsers.mockResolvedValue([{ ...account, roles }]);
-		await expect(grantVolunteerAccess(volunteer, input)).resolves.toEqual({ created: false });
+		await expect(grantVolunteerAccess(volunteer, input)).resolves.toEqual({
+			created: false,
+			roleAdded: false
+		});
 		expect(mocks.createUser).not.toHaveBeenCalled();
 		expect(mocks.update).toHaveBeenCalledWith(
 			expect.objectContaining({ user_name: input.email, email: input.email })
@@ -285,7 +345,10 @@ describe('grantVolunteerAccess', () => {
 
 	it('can replace the old mock-only user_name when there is no real account', async () => {
 		mocks.get.mockResolvedValue({ ...volunteer, user_name: 'old@example.com' });
-		await expect(grantVolunteerAccess(volunteer, input)).resolves.toEqual({ created: true });
+		await expect(grantVolunteerAccess(volunteer, input)).resolves.toEqual({
+			created: true,
+			roleAdded: false
+		});
 		expect(mocks.update).toHaveBeenCalledWith(expect.objectContaining({ user_name: input.email }));
 	});
 

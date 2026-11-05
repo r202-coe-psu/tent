@@ -1,7 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import {
+	COORDINATOR_CLOSE_BLOCKED_MESSAGE,
 	accessEndingParts,
 	closeProfileAccessNotice,
+	closeProfileBlockedReason,
 	hasVolunteerAccount,
 	volunteerAccessStatus,
 	type VolunteerAccount
@@ -118,6 +120,40 @@ describe('closeProfileAccessNotice (CR-221 FR-20)', () => {
 		]
 	])('has nothing to say for %s', (_what, result) => {
 		expect(result).toEqual({ revokesGrants: false, keepsManagerRole: false });
+	});
+});
+
+describe('closeProfileBlockedReason (CR-221 A1-6)', () => {
+	const status = (over: Partial<VolunteerAccount>) => volunteerAccessStatus(vol, [account(over)]);
+	const GRANT = {
+		role: 'kitchen_staff',
+		expires_at: '2026-11-03T16:59:59.999Z',
+		granted_by: 'coord01'
+	};
+
+	it('stops a coordinator closing a profile whose account has a manager-given role', () => {
+		expect(
+			closeProfileBlockedReason(
+				status({ grants: [GRANT], permanent_roles: ['registration_staff'] }),
+				false
+			)
+		).toBe(COORDINATOR_CLOSE_BLOCKED_MESSAGE);
+	});
+
+	it('lets a shelter manager or system admin close it', () => {
+		expect(closeProfileBlockedReason(status({ permanent_roles: ['kitchen_staff'] }), true)).toBe(
+			null
+		);
+	});
+
+	it('lets a coordinator close a profile that holds coordinator grants only', () => {
+		expect(closeProfileBlockedReason(status({ grants: [GRANT] }), false)).toBe(null);
+	});
+
+	it('does not block while the roles are not known yet', () => {
+		expect(
+			closeProfileBlockedReason({ kind: 'active', loginName: 'a@x.com', roles: null }, false)
+		).toBe(null);
 	});
 });
 

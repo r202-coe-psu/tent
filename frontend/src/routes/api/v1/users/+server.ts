@@ -205,7 +205,10 @@ export const PUT: RequestHandler = async ({ request }) => {
 				affiliation_tags,
 				permanent_roles
 			},
-			caller
+			caller,
+			// A role added to a volunteer account needs the profile verified there, as on POST
+			// (CR-221 A1-7); a save that adds no role is not checked.
+			{ verifyVolunteerRoles: assertVolunteerVerifiedForAccess }
 		);
 		return json({ ok: true });
 	} catch (e) {
