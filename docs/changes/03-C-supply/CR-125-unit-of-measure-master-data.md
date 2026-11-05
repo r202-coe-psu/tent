@@ -3,7 +3,7 @@ id: CR-125
 title: Unit of Measure master data and protected UOM invariants
 status: done
 date: 2026-09-17
-updated: 2026-11-05 # Amendment A1 proposed 2026-11-05 (#1188) — รอ approve
+updated: 2026-11-05 # Amendment A1 approved 2026-11-05 (#1188, kong)
 requested_by: Project Owner (PR review follow-up)
 decided_by: Project Owner
 layer: stable
@@ -141,9 +141,9 @@ Seed behavior:
 - **2026-09-17:** กำหนดให้ `code` เป็น immutable สำหรับทุก UOM เพื่อป้องกัน deterministic `_id` และ foreign key reference เสียหาย
 - **2026-09-17:** กำหนด Topology ชัดเจน: UOM จัดเก็บใน `catalog` DB เท่านั้น โดยฐานข้อมูลศูนย์พักพิง (`shelter_*`) เป็น read-only replica และปฏิเสธการเขียน UOM เด็ดขาด
 - **2026-09-17:** ปรับแก้ CR-120 ให้ใช้ `base_unit = "cylinder"` ทดแทนภาษาไทย `"ถัง"` พร้อมกำหนดตาราง Legacy Compatibility Matrix เพื่อความเข้ากันได้ย้อนหลัง 100%
-- **2026-11-05 (proposed, รอ approve):** Amendment A1 — เพิ่ม `ball` (ลูก) เป็นหน่วยที่ 31 และให้ seed เขียน `sort_order` ของหน่วย protected ตามนิยามเสมอ เพื่อไม่ให้ `sort_order` ซ้ำบน DB ที่ seed แล้ว (issue #1188). ผู้ตัดสินใจบันทึกเป็น `kong` เมื่อ approve.
+- **2026-11-05 (approved — เคาะ kong, 2026-11-05):** Amendment A1 — เพิ่ม `ball` (ลูก) เป็นหน่วยที่ 31 และให้ seed เขียน `sort_order` ของหน่วย protected ตามนิยามเสมอ เพื่อไม่ให้ `sort_order` ซ้ำบน DB ที่ seed แล้ว (issue #1188).
 
-## Amendment A1 — เพิ่มหน่วย `ball` (ลูก) และให้ seed เขียน `sort_order` ของหน่วย protected (proposed 2026-11-05 · รอ approve · issue #1188)
+## Amendment A1 — เพิ่มหน่วย `ball` (ลูก) และให้ seed เขียน `sort_order` ของหน่วย protected (approved 2026-11-05 · kong · issue #1188)
 
 > **สรุป (TL;DR):** เพิ่มหน่วย `ball` / "ลูก" (`count`) ใน canonical seed ต่อจาก `fruit` · `sort_order` ของ `gallon`..`kcal` เลื่อน +1 (21–30 → 22–31) · รวม 31 หน่วย · seed เขียน `sort_order` ของหน่วย protected ตามนิยามเสมอ (label ที่แก้เองคงเดิม) · ไม่เปลี่ยนรูป doc ไม่ bump `schema_v`
 
