@@ -3,9 +3,8 @@
 	import { spatial } from '$lib/tokens';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import Plus from '@lucide/svelte/icons/plus';
-	import { shelterStore } from '$lib/stores/shelter.svelte';
 	import { languageStore } from '$lib/stores/language.svelte';
-	import { getShelterCode } from '$lib/db/shelter';
+	import { resolveContextShelterCode } from '$lib/db/shelter';
 	import { getTranslation } from '$lib/utils/i18n';
 	import {
 		CreatePrinterDialog,
@@ -19,12 +18,16 @@
 
 	const t = $derived(getTranslation(PRINTERS_I18N, languageStore.current).admin);
 
-	/** Every role (SA included) works on the shelter picked in the back-office shelter switcher. */
-	const activeShelter = $derived(shelterStore.selectedShelterCode ?? getShelterCode());
+	/**
+	 * The shelter picked in the back-office switcher (or the one a scoped role belongs to);
+	 * `null` when a system admin has not picked one. Never guessed: a printer created in the
+	 * wrong shelter is a silent mistake, so the create dialog asks for the shelter instead.
+	 */
+	const activeShelter = $derived(resolveContextShelterCode());
 
-	const printersQuery = usePrinterAdminList(() => activeShelter);
+	const printersQuery = usePrinterAdminList(() => activeShelter ?? undefined);
 	/** Scanners of the shelter: lets kiosk printers be linked to and named after their kiosk. */
-	const kioskDevicesQuery = useScannerDevices(() => activeShelter);
+	const kioskDevicesQuery = useScannerDevices(() => activeShelter ?? undefined);
 	const kioskDevices = $derived(kioskDevicesQuery.data ?? []);
 
 	let createOpen = $state(false);
