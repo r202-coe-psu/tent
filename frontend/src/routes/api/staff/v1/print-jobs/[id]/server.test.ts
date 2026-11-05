@@ -2,14 +2,15 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { error } from '@sveltejs/kit';
 import { GET } from './+server';
 import type { RequestEvent } from './$types';
-import { requireShelterScopeOrSA } from '$lib/server/couch-admin';
+import { requireShelterScopeOrSA } from '$lib/server/session-auth';
 import { CouchUserError } from '$lib/server/couch-as-user';
 import { userJobStore } from '$lib/server/printers/print-job.user-store';
 import type { PrintJobDoc } from '$lib/server/printers/print-queue.server';
 
-vi.mock('$lib/server/couch-admin', async () => {
-	const actual =
-		await vi.importActual<typeof import('$lib/server/couch-admin')>('$lib/server/couch-admin');
+vi.mock('$lib/server/session-auth', async () => {
+	const actual = await vi.importActual<typeof import('$lib/server/session-auth')>(
+		'$lib/server/session-auth'
+	);
 	return { ...actual, requireShelterScopeOrSA: vi.fn() };
 });
 

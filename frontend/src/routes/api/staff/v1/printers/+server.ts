@@ -2,7 +2,7 @@ import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { envelope, printErrorResponse } from '../_print-http';
 import { shelterCodeSchema } from '$lib/db/model';
-import { requireShelterScopeOrSA } from '$lib/server/couch-admin';
+import { requireShelterScopeOrSA } from '$lib/server/session-auth';
 import { listShelterPrinters } from '$lib/server/printers/print-jobs.server';
 import { printDeviceRepository } from '$lib/server/printers/print-device.repo';
 

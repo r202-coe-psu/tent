@@ -1,6 +1,6 @@
 /** Error envelope + domain-error mapping shared by the staff print routes (plan §4.2). */
 import { isHttpError, json } from '@sveltejs/kit';
-import { ServiceError } from '$lib/server/couch-admin';
+import { ServiceError } from '$lib/server/session-auth';
 import {
 	DEPENDENCY_UNAVAILABLE,
 	PrintDependencyError

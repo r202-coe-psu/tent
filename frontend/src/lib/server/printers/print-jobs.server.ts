@@ -1,5 +1,5 @@
 import { ulid } from '$lib/db/ulid';
-import { ServiceError } from '$lib/server/couch-admin';
+import { ServiceError } from '$lib/server/session-auth';
 // eslint-disable-next-line no-restricted-imports -- server-safe domain rule; feature barrel will pull client UI/query code
 import { canPrintSource } from '$lib/features/printers/domain/print-permission';
 // eslint-disable-next-line no-restricted-imports -- server-safe domain schema; feature barrel will pull client UI/query code

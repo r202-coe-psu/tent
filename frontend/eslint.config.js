@@ -25,7 +25,7 @@ const featureBarrelPatterns = [
 ];
 
 const printerAdminImportMessage =
-	'Printer code must not use the CouchDB server admin: go through `printing_service` (`$lib/server/couch-printing-service`), or the caller session (`$lib/server/couch-as-user`). Only printing-provision.ts provisions databases.';
+	'Printer code must not import `$lib/server/couch-admin` (the CouchDB server admin): go through `printing_service` (`$lib/server/couch-printing-service`), the caller session (`$lib/server/couch-as-user`), or the credential-free helpers in `$lib/server/session-auth`. Only printing-provision.ts provisions databases.';
 
 export default ts.config(
 	includeIgnoreFile(gitignorePath),
@@ -64,10 +64,11 @@ export default ts.config(
 		rules: { 'no-restricted-imports': 'off' }
 	},
 	{
-		// Print-server least privilege (plan §4.5): printer code runs as `printing_service`, never the
-		// CouchDB server admin. Only `printing-provision.ts` may hold it (creating / deleting a
-		// database needs the server admin). The non-admin helpers of couch-admin (`ServiceError`,
-		// `readSessionUserCtx`, `require*`) stay importable, hence `importNames`. Same rule as the
+		// Print-server least privilege (plan §4.5, CR-222 FR-2a): printer code runs as `printing_service`,
+		// never the CouchDB server admin, so it must not import `$lib/server/couch-admin` at all. The
+		// credential-free helpers (`ServiceError`, `readSessionUserCtx`, `requireShelterScopeOrSA`) live in
+		// `$lib/server/session-auth`. Only `printing-provision.ts` may hold the admin client (creating /
+		// deleting a database needs the server admin); routes reach it through that module. Same rule as the
 		// global block, so the feature-barrel patterns are repeated here instead of being overridden.
 		files: [
 			'src/lib/server/printers/**',
@@ -82,22 +83,12 @@ export default ts.config(
 			'no-restricted-imports': [
 				'error',
 				{
-					paths: [
-						{
-							name: '$lib/server/couch-admin',
-							importNames: ['adminRaw', 'adminAttachment', 'adminFetch'],
-							message: printerAdminImportMessage
-						}
-					],
+					paths: [{ name: '$lib/server/couch-admin', message: printerAdminImportMessage }],
 					// `paths` only matches the exact `$lib/server/couch-admin` specifier; the group also
 					// catches relative spellings (`../couch-admin`, `../../server/couch-admin`).
 					patterns: [
 						...featureBarrelPatterns,
-						{
-							group: ['**/couch-admin', '**/couch-admin.*'],
-							importNames: ['adminRaw', 'adminAttachment', 'adminFetch'],
-							message: printerAdminImportMessage
-						}
+						{ group: ['**/couch-admin', '**/couch-admin.*'], message: printerAdminImportMessage }
 					]
 				}
 			]

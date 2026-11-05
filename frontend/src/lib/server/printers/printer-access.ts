@@ -1,5 +1,5 @@
 import { PRINTER_MANAGER_CAPABILITIES } from '$lib/auth/roles';
-import { ServiceError } from '$lib/server/couch-admin';
+import { ServiceError } from '$lib/server/session-auth';
 import {
 	callerCanManage,
 	requireShelterCapabilityCaller,

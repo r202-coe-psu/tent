@@ -1,5 +1,5 @@
 import type { RequestHandler } from './$types';
-import { ServiceError } from '$lib/server/couch-admin';
+import { ServiceError } from '$lib/server/session-auth';
 import {
 	createPrinter,
 	listPrinters,

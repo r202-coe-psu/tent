@@ -1,7 +1,7 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { envelope, printErrorResponse } from '../_print-http';
-import { readSessionUserCtx } from '$lib/server/couch-admin';
+import { readSessionUserCtx } from '$lib/server/session-auth';
 import { createPrintJob } from '$lib/server/printers/print-jobs.server';
 import { printDeviceRepository } from '$lib/server/printers/print-device.repo';
 import { userJobStore } from '$lib/server/printers/print-job.user-store';

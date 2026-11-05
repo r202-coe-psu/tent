@@ -1,6 +1,6 @@
 /** Error envelope + domain-error mapping shared by the back-office printer routes (plan §4.3). */
 import { json } from '@sveltejs/kit';
-import { ServiceError } from '$lib/server/couch-admin';
+import { ServiceError } from '$lib/server/session-auth';
 import { PrintDependencyError } from '$lib/server/printers/device-credentials';
 import { isDependencyUnreachable } from '$lib/server/printers/dependency-unreachable';
 import { PrinterNotFoundError, PrinterOfflineError } from '$lib/server/printers/print-jobs.server';
