@@ -191,6 +191,32 @@ export const FALLBACK_UNIT_DEFINITIONS: FallbackUnitDef[] = [
 ];
 
 /**
+ * CR-125 A1 (FR-A1-4): true when `sort_order` repeats across the stored UOM docs once the
+ * canonical units missing from `docs` are counted. A stored doc without `sort_order` takes its
+ * canonical value; custom (non-canonical) docs take part in the check.
+ */
+export function hasUnitSortOrderCollision(
+	docs: readonly { _id?: unknown; sort_order?: unknown }[],
+	defs: readonly FallbackUnitDef[] = FALLBACK_UNIT_DEFINITIONS
+): boolean {
+	const orders = new Map<string, number>();
+	for (const doc of docs) {
+		if (typeof doc._id !== 'string') continue;
+		const def = defs.find((unit) => `unit_of_measure:${unit.code}` === doc._id);
+		const order = typeof doc.sort_order === 'number' ? doc.sort_order : def?.sort_order;
+		if (typeof order === 'number') orders.set(doc._id, order);
+	}
+	for (const def of defs) {
+		const docId = `unit_of_measure:${def.code}`;
+		if (!orders.has(docId) && typeof def.sort_order === 'number') {
+			orders.set(docId, def.sort_order);
+		}
+	}
+	const values = [...orders.values()];
+	return new Set(values).size !== values.length;
+}
+
+/**
  * Resolves a persisted or legacy display unit to its canonical UOM code.
  *
  * New writes must persist codes (for example `piece`), while this recognises

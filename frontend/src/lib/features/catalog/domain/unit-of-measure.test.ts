@@ -6,6 +6,7 @@ import {
 	formatUnit,
 	canonicalizeUnitCode,
 	FALLBACK_UNIT_DEFINITIONS,
+	hasUnitSortOrderCollision,
 	unitCodeSchema,
 	type UnitOfMeasure
 } from './unit-of-measure';
@@ -199,6 +200,30 @@ describe('unit-of-measure domain', () => {
 			});
 			expect(FALLBACK_UNIT_DEFINITIONS.find((unit) => unit.code === 'gallon')?.sort_order).toBe(22);
 			expect(FALLBACK_UNIT_DEFINITIONS.find((unit) => unit.code === 'kcal')?.sort_order).toBe(31);
+		});
+	});
+
+	describe('hasUnitSortOrderCollision', () => {
+		const stored = (orderOf: (canonical: number) => number) =>
+			FALLBACK_UNIT_DEFINITIONS.filter((unit) => unit.code !== 'ball').map((unit) => ({
+				_id: `unit_of_measure:${unit.code}`,
+				sort_order: orderOf(unit.sort_order ?? 0)
+			}));
+
+		it('detects a catalog seeded before ball, where gallon holds 21', () => {
+			const before = stored((order) => (order >= 21 ? order - 1 : order));
+			expect(hasUnitSortOrderCollision(before)).toBe(true);
+		});
+
+		it('keeps a non-colliding admin order and a fully canonical catalog', () => {
+			expect(hasUnitSortOrderCollision(stored((order) => order))).toBe(false);
+			expect(hasUnitSortOrderCollision(stored((order) => order + 100))).toBe(false);
+			expect(hasUnitSortOrderCollision([])).toBe(false);
+		});
+
+		it('counts a custom unit that repeats a canonical order', () => {
+			const docs = [...stored((order) => order), { _id: 'unit_of_measure:custom', sort_order: 5 }];
+			expect(hasUnitSortOrderCollision(docs)).toBe(true);
 		});
 	});
 

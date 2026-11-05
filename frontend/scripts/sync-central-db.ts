@@ -30,7 +30,10 @@ import {
 	sopMasterSchema
 } from '$lib/features/sop-ratios/domain/sop-ratio';
 import { validRatios } from '$lib/features/sop-ratios/domain/sop-ratio.fixture';
-import { FALLBACK_UNIT_DEFINITIONS } from '$lib/features/catalog/domain/unit-of-measure';
+import {
+	FALLBACK_UNIT_DEFINITIONS,
+	hasUnitSortOrderCollision
+} from '$lib/features/catalog/domain/unit-of-measure';
 import { SYSTEM_ITEM_CATEGORIES, type ItemCategory } from '$lib/features/catalog/domain/catalog';
 import { backfillStaffPins } from '$lib/server/scanners/staff-pin-backfill';
 import { CENTRAL_MEMBER_DBS, syncCentralDbAccess } from '$lib/server/central-db-security';
@@ -352,6 +355,21 @@ async function syncUnitsOfMeasure(dryRun: boolean): Promise<{ created: number; e
 		}
 	};
 
+	// CR-125 A1 (FR-A1-4): keep admin-arranged orders unless sort_order repeats in the catalog.
+	const startkey = encodeURIComponent(JSON.stringify('unit_of_measure:'));
+	const endkey = encodeURIComponent(JSON.stringify('unit_of_measure:￰'));
+	const list = await couchReq(
+		'GET',
+		`/catalog/_all_docs?startkey=${startkey}&endkey=${endkey}&include_docs=true`
+	);
+	if (list.status !== 200) {
+		throw new Error(`Cannot list units of measure (HTTP ${list.status})`);
+	}
+	const rows = (list.data as { rows?: { doc?: Record<string, unknown> }[] } | null)?.rows ?? [];
+	const resetSortOrder = hasUnitSortOrderCollision(
+		rows.flatMap((row) => (row.doc ? [row.doc] : []))
+	);
+
 	for (const def of FALLBACK_UNIT_DEFINITIONS) {
 		const docId = `unit_of_measure:${def.code}`;
 		const { status, data } = await couchReq('GET', `/catalog/${encodeURIComponent(docId)}`);
@@ -368,6 +386,7 @@ async function syncUnitsOfMeasure(dryRun: boolean): Promise<{ created: number; e
 					code: def.code,
 					dimension: def.dimension,
 					is_protected: true,
+					...(resetSortOrder ? { sort_order: def.sort_order } : {}),
 					updated_at: new Date().toISOString()
 				});
 			}

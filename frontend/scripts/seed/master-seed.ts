@@ -26,6 +26,7 @@ import { MASTER_DATA_DEFS } from './master-defs';
 import { type MasterLookup } from './types';
 import {
 	FALLBACK_UNIT_DEFINITIONS,
+	hasUnitSortOrderCollision,
 	isCanonicalUnitCode,
 	isLegacyUnitLabel,
 	type FallbackUnitDef
@@ -466,7 +467,7 @@ function validateExistingUnitOfMeasure(
  * docs this seed is about to create are counted. Custom (non-protected) units take part in
  * the check; only protected units are ever rewritten.
  */
-async function hasUnitSortOrderCollision(): Promise<boolean> {
+async function catalogHasUnitSortOrderCollision(): Promise<boolean> {
 	const startkey = encodeURIComponent(JSON.stringify('unit_of_measure:'));
 	const endkey = encodeURIComponent(JSON.stringify('unit_of_measure:\ufff0'));
 	const { status, data } = await couchReq(
@@ -477,31 +478,16 @@ async function hasUnitSortOrderCollision(): Promise<boolean> {
 		throw new Error(`GET unit_of_measure list → catalog failed (HTTP ${status})`);
 	}
 	const rows = isRecord(data) && Array.isArray(data.rows) ? data.rows : [];
-	const orders = new Map<string, number>();
-	for (const row of rows) {
-		const doc = isRecord(row) && isRecord(row.doc) ? row.doc : undefined;
-		if (!doc || typeof doc._id !== 'string' || doc._deleted === true) continue;
-		const def = FALLBACK_UNIT_DEFINITIONS.find(
-			(unit) => `unit_of_measure:${unit.code}` === doc._id
-		);
-		// Same fallback buildUnitOfMeasureSeedDoc applies to a protected doc without sort_order.
-		const order = typeof doc.sort_order === 'number' ? doc.sort_order : def?.sort_order;
-		if (typeof order === 'number') orders.set(doc._id, order);
-	}
-	for (const def of FALLBACK_UNIT_DEFINITIONS) {
-		const docId = `unit_of_measure:${def.code}`;
-		if (!orders.has(docId) && typeof def.sort_order === 'number') {
-			orders.set(docId, def.sort_order);
-		}
-	}
-	const values = [...orders.values()];
-	return new Set(values).size !== values.length;
+	const docs = rows
+		.map((row) => (isRecord(row) && isRecord(row.doc) ? row.doc : undefined))
+		.filter((doc): doc is Record<string, unknown> => doc !== undefined && doc._deleted !== true);
+	return hasUnitSortOrderCollision(docs);
 }
 
 export async function seedCatalogUnitOfMeasures(): Promise<number> {
 	let seededCount = 0;
 	const maxAttempts = 3;
-	const resetSortOrder = await hasUnitSortOrderCollision();
+	const resetSortOrder = await catalogHasUnitSortOrderCollision();
 
 	for (const def of FALLBACK_UNIT_DEFINITIONS) {
 		const docId = `unit_of_measure:${def.code}`;
