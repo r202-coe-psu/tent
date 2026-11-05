@@ -19,6 +19,7 @@
 	import { formatThaiDateTime } from '$lib/utils/date';
 	import {
 		createStableOperationId,
+		resolveAuthenticatedAuthorContext,
 		useBulkReturnPoolAppliedLoanRefs,
 		useBulkReturnPoolClosedLoanRefs,
 		useBulkReturnPoolMissedLoanRefs,
@@ -26,11 +27,21 @@
 		useBulkReturnPoolTimeline,
 		useBulkReturnSkippedDocs,
 		useCancelBulkReturnPool,
+		useReopenBulkReturnEntryLoans,
 		useVoidBulkReturnEntry
 	} from '../../application/queries';
 	import type { BulkReturnEntry, BulkReturnPoolOverviewRow } from '../../domain/food-supplies';
+	import { canReopenBulkReturnLoan } from '../../application/food-supplies/auth';
 	import { formatDistributionError } from '../model/distribution-error';
 	import {
+		REOPEN_LOAN_DONE_NOTE,
+		REOPEN_LOAN_ERROR,
+		REOPEN_LOAN_REPLAYED_TOAST,
+		REOPEN_LOAN_SKIPPED_TOAST,
+		reopenLoanAction,
+		reopenLoanSuccessToast,
+		reopenedEntryIds,
+		reopenedReasonByEntry,
 		CLOSED_LOAN_WARNING_TESTID,
 		MISSED_LOAN_ACTION,
 		MISSED_LOAN_WARNING,
@@ -39,6 +50,8 @@
 		SNAPSHOT_CONFLICT_WARNING_TESTID,
 		VOID_SNAPSHOT_CONFLICT_TOAST,
 		groupMissedLoanRefsByEntry,
+		missedLoanApplyToast,
+		missedLoanLockedNotice,
 		snapshotConflictEntryIds,
 		LATE_BADGE_CLASS,
 		LATE_ENTRY_GUIDANCE,
@@ -62,12 +75,16 @@
 		type BulkReturnPoolRow,
 		type PoolCatalogItem
 	} from '../model/bulk-return-pool-v3';
+	import { MISSED_LOAN_LOCKED_NOTICE_TESTID } from '../model/bulk-return-copy';
+	import { formatSkippedDocIds } from '../model/bulk-return-skipped-docs';
 	import { ticketHref } from '../model/pool-url-state';
 	import { liveSummaryRows, submittedSummaryRows } from '../model/bulk-return-lifecycle';
+	import BulkReturnEntryReopenAction from './BulkReturnEntryReopenAction.svelte';
 	import BulkReturnPoolReceiveRecord from './BulkReturnPoolReceiveRecord.svelte';
 	import BulkReturnPoolTimeline from './BulkReturnPoolTimeline.svelte';
 	import EditBulkReturnPoolHeaderDialog from './EditBulkReturnPoolHeaderDialog.svelte';
 	import MoveBulkReturnEntryDialog from './MoveBulkReturnEntryDialog.svelte';
+	import ReopenBulkReturnLoanDialog from './ReopenBulkReturnLoanDialog.svelte';
 
 	interface Props {
 		/** Live overview row of the selected pool (null = nothing selected, sheet closed). */
@@ -107,6 +124,7 @@
 
 	let editOpen = $state(false);
 	let moveEntry = $state<BulkReturnEntry | null>(null);
+	let reopenEntry = $state<BulkReturnEntry | null>(null);
 	let voidTarget = $state<BulkReturnEntry | null>(null);
 	let voidError = $state<string | null>(null);
 	let cancelOpen = $state(false);
@@ -136,13 +154,21 @@
 		() => shelterCode
 	);
 	const appliedRefsByEntry = $derived(groupAppliedLoanRefsByEntry(appliedRefsQuery.data ?? []));
-	// Snapshot entries of a submitted / received pool whose loans were never cut (CR-193 §34).
+	// Entries of an OPEN, SUBMITTED or RECEIVED pool whose loans were never cut (CR-193 §34).
+	// An OPEN pool is repaired while it is unlocked; a cancelled pool has nothing to repair.
 	const missedRefsQuery = useBulkReturnPoolMissedLoanRefs(
 		() => row?.pool._id ?? null,
 		() => shelterCode,
-		() => row?.pool.status === 'SUBMITTED' || row?.pool.status === 'RECEIVED'
+		() =>
+			row?.pool.status === 'OPEN' ||
+			row?.pool.status === 'SUBMITTED' ||
+			row?.pool.status === 'RECEIVED'
 	);
 	const missedRefsByEntry = $derived(groupMissedLoanRefsByEntry(missedRefsQuery.data ?? []));
+	// An OPEN pool holding a lock returns no missed refs; say so instead of hiding the repair box.
+	const missedLockedNotice = $derived(
+		row ? missedLoanLockedNotice(row.pool, missedRefsQuery.data) : null
+	);
 	const applyMissedMutation = useApplyMissedBulkReturnLoanRefs();
 	// Entries whose void / move was written after the submit snapshot (no effect; CR-193 §33).
 	const conflictEntryIds = $derived(snapshotConflictEntryIds(row));
@@ -150,18 +176,25 @@
 	// Malformed docs the pool reads leave out: the entries below may be incomplete until they are fixed.
 	const skippedQuery = useBulkReturnSkippedDocs(undefined, () => shelterCode);
 	const skippedDocs = $derived(skippedQuery.data ?? []);
-	const skippedIds = $derived(
-		skippedDocs
-			.map((doc) => doc._id)
-			.filter(Boolean)
-			.join(', ')
-	);
+	const skippedIds = $derived(formatSkippedDocIds(skippedDocs));
 
 	// Chronological history of this pool (nested under the overview key, so writes refresh it).
 	const timelineQuery = useBulkReturnPoolTimeline(
 		() => row?.pool._id ?? null,
 		() => shelterCode
 	);
+	// Fail closed: any problem resolving the session context hides the reopen action.
+	const canReopen = $derived.by(() => {
+		try {
+			return canReopenBulkReturnLoan(resolveAuthenticatedAuthorContext(shelterCode));
+		} catch {
+			return false;
+		}
+	});
+	const reopenedIds = $derived(reopenedEntryIds(timelineQuery.data?.events));
+	// Stored reason of each existing reopen doc: resuming replays with it (no new reason asked).
+	const reopenedReasons = $derived(reopenedReasonByEntry(timelineQuery.data?.events));
+	const resumeMutation = useReopenBulkReturnEntryLoans();
 	const poolNameById = $derived(new Map(rows.map((r) => [r.pool._id, r.pool.name])));
 
 	const entries = $derived(row ? liveEntries(row) : []);
@@ -219,14 +252,28 @@
 				input: { entry_id: entryId, pool_id: row.pool._id },
 				shelterCode
 			});
-			const applied = result.loansApplied.length;
-			if (applied === 0 && result.loansSkipped.length > 0) {
-				toast.warning('ยอดยืมถูกปิดไปแล้ว ตัดเพิ่มไม่ได้');
-			} else {
-				toast.success(`ตัดยอดยืมแล้ว ${applied} รายการ`);
-			}
+			const outcome = missedLoanApplyToast(result);
+			toast[outcome.kind](outcome.message);
 		} catch (err) {
 			toast.error(formatDistributionError(err, 'ตัดยอดยืมไม่สำเร็จ กรุณาลองใหม่อีกครั้ง'));
+		}
+	}
+
+	async function resumeReopen(entryId: string, storedReason: string) {
+		try {
+			const result = await resumeMutation.mutateAsync({
+				input: { entry_id: entryId, reason: storedReason },
+				shelterCode
+			});
+			const reopened = result.loansReopened.length;
+			if (result.replayed && reopened === 0) {
+				toast.info(REOPEN_LOAN_REPLAYED_TOAST);
+			} else {
+				toast.success(reopenLoanSuccessToast(reopened));
+			}
+			if (result.loansSkipped.length > 0) toast.warning(REOPEN_LOAN_SKIPPED_TOAST);
+		} catch (err) {
+			toast.error(formatDistributionError(err, REOPEN_LOAN_ERROR, { poolContext: 'reopen' }));
 		}
 	}
 
@@ -396,9 +443,30 @@
 							ยังไม่มีรายการในกองนี้
 						</p>
 					{:else}
+						{#if missedLockedNotice}
+							<div
+								role="status"
+								data-testid={MISSED_LOAN_LOCKED_NOTICE_TESTID}
+								class="mb-3 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-2.5 text-sm text-amber-900"
+							>
+								<AlertTriangle class="mt-0.5 h-4 w-4 shrink-0 text-amber-600" aria-hidden="true" />
+								<p>{missedLockedNotice}</p>
+							</div>
+						{/if}
 						<ul class="space-y-3">
 							{#each entries as live (live.entry._id)}
 								{@const entry = live.entry}
+								{@const reopenAction = reopenLoanAction({
+									pool,
+									entryId: entry._id,
+									appliedRefs: appliedRefsByEntry.get(entry._id) ?? [],
+									canReopen,
+									reopened: reopenedIds.has(entry._id),
+									reopenedKnown: timelineQuery.isSuccess
+								})}
+								{@const resumeReason = reopenAction.showButton
+									? reopenedReasons.get(entry._id)
+									: undefined}
 								{@const item = resolveItemDisplay(entry.item_id, catalog)}
 								{@const closedRefs = closedRefsByEntry.get(entry._id) ?? []}
 								{@const missedRefs = missedRefsByEntry.get(entry._id) ?? []}
@@ -429,6 +497,9 @@
 										</p>
 										{#if entry.notes}
 											<p class="text-xs break-words text-slate-500">หมายเหตุ: {entry.notes}</p>
+										{/if}
+										{#if reopenedIds.has(entry._id)}
+											<p class="text-xs font-medium text-red-800">{REOPEN_LOAN_DONE_NOTE}</p>
 										{/if}
 									</div>
 
@@ -519,6 +590,18 @@
 										</div>
 									{/if}
 
+									<BulkReturnEntryReopenAction
+										showButton={reopenAction.showButton}
+										blockedNotice={reopenAction.blockedNotice}
+										resume={resumeReason !== undefined}
+										pending={resumeMutation.isPending &&
+											resumeMutation.variables?.input.entry_id === entry._id}
+										onReopen={() =>
+											resumeReason !== undefined
+												? void resumeReopen(entry._id, resumeReason)
+												: (reopenEntry = entry)}
+									/>
+
 									{#if canWriteEntry}
 										{@const showMove = canMoveEntry(row, entry._id)}
 										{@const showVoid = canVoidEntry(row)}
@@ -565,6 +648,8 @@
 					{poolNameById}
 					isLoading={timelineQuery.isPending && timelineQuery.fetchStatus !== 'idle'}
 					isError={timelineQuery.isError}
+					skipped={timelineQuery.data?.skipped}
+					shelterSkipped={skippedQuery.data}
 				/>
 
 				{#if canManage && pool.status === 'OPEN'}
@@ -627,6 +712,16 @@
 		targets={moveTargets}
 		{shelterCode}
 		onClose={() => (moveEntry = null)}
+	/>
+{/if}
+
+{#if row && reopenEntry}
+	<ReopenBulkReturnLoanDialog
+		entry={reopenEntry}
+		item={resolveItemDisplay(reopenEntry.item_id, catalog)}
+		returnerName={returnerDisplayName(reopenEntry, returnerNames)}
+		{shelterCode}
+		onClose={() => (reopenEntry = null)}
 	/>
 {/if}
 

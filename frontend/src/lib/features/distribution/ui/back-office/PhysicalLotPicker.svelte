@@ -152,16 +152,16 @@
 </script>
 
 <div class="space-y-2.5">
-	<div class="flex flex-wrap items-center justify-between gap-2">
-		<div class="flex items-center gap-2">
-			<Boxes class="h-4 w-4 text-[#0A2647]" />
-			<span class="text-xs font-bold text-slate-800">
-				เลือก Physical Lot สำหรับ: <strong class="text-[#0A2647]">{itemName}</strong>
-			</span>
-		</div>
-		<div class="flex items-center gap-2">
-			<span
-				class="text-xs font-semibold tabular-nums {totalState === 'ok'
+	<div class="flex items-start justify-between gap-3">
+		<div class="min-w-0 space-y-1">
+			<div class="flex items-center gap-2">
+				<Boxes class="h-4 w-4 shrink-0 text-[#0A2647]" />
+				<span class="text-xs font-bold text-slate-800">
+					เลือก Physical Lot สำหรับ: <strong class="text-[#0A2647]">{itemName}</strong>
+				</span>
+			</div>
+			<p
+				class="pl-6 text-xs font-semibold tabular-nums {totalState === 'ok'
 					? 'text-emerald-700'
 					: totalState === 'short'
 						? 'text-amber-700'
@@ -175,19 +175,19 @@
 				{:else if totalState === 'over'}
 					(เกินยอด)
 				{/if}
-			</span>
-			<Button
-				type="button"
-				variant="outline"
-				size="sm"
-				class="h-9 text-xs font-semibold"
-				disabled={disabled || isLoading || hasNoLots}
-				onclick={autoAllocate}
-			>
-				<WandSparkles class="h-3.5 w-3.5" />
-				จัดสรรอัตโนมัติ
-			</Button>
+			</p>
 		</div>
+		<Button
+			type="button"
+			variant="outline"
+			size="sm"
+			class="h-9 shrink-0 text-xs font-semibold"
+			disabled={disabled || isLoading || hasNoLots}
+			onclick={autoAllocate}
+		>
+			<WandSparkles class="h-3.5 w-3.5" />
+			จัดสรรอัตโนมัติ
+		</Button>
 	</div>
 
 	{#if isLoading}

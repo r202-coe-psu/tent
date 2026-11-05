@@ -2,7 +2,7 @@
 title: Smart Shelter — Data Model (CouchDB remote-first) v3
 status: draft for review
 created: 2026-06-11
-updated: 2026-10-25
+updated: 2026-11-03
 note: ออกแบบใหม่ทั้งหมด — ไม่สืบทอดจาก docs/data v2.0 (retired 2026-06-11); decision sync 2026-06-15 เลือก MongoDB projection สำหรับ public tier และ EOC read-model
 ---
 
@@ -49,7 +49,7 @@ device app  ⇄ WAN ⇄  central (CouchDB)
 | `registry` | ✓ master | ✓ replica | no disconnected read cache (status-only when unreachable) | app read จาก central (pull/read-through) | central → edge; app read จาก edge เฉพาะ outage |
 | `shelter_import_audit` | ✓ private | — | no browser access | server-side `adminRaw` + SA-only BFF | — |
 | `catalog` | ✓ master | ✓ replica | no disconnected read cache (status-only when unreachable) | app read จาก central (pull/read-through) | central → edge; app read จาก edge เฉพาะ outage |
-| `_users` | ✓ master | ✓ **filtered replica** (เฉพาะ user ของศูนย์ตน) | — | central `_session` | central → edge (selector by role `shelter:{id}`) เพื่อ fallback login |
+| `_users` | ✓ master | ✓ **filtered replica** (เฉพาะ user ของศูนย์ตน) | — | central `_session` | central → edge (selector `edge_shelters` มี `{id}` — CR-171; append-only จึงส่งการถอดสิทธิ์/soft delete ตามไปด้วย) เพื่อ fallback login |
 | `central_ops` | ✓ เท่านั้น | — | — | central-only service/read model & cross-tenant store | — (search_audit, export_job, `counter:shelter`, `referral`, `referral_close_job`, `referral_close_lock` — CR-168) |
 
 - 1 ศูนย์ = 1 db → ปิดศูนย์ = หยุด replication + purge ทั้ง db ที่ central, ล้าง edge server ทั้งเครื่อง
@@ -149,7 +149,10 @@ State machine บน CouchDB = เขียน doc ใหม่ทั้ง doc 
                                           // (central_ops:counter:shelter) ตอน provisioning;
                                           // เป็นชื่อ db shelter_{code} + อ้างข้ามศูนย์ทุกที่ (shelter_code)
                                           // pattern ^SH\d{3,}$: 1–999 pad 3 หลัก, ≥1000 กว้างตามจริง (SH1000)
-  name, site_kind: "evacuation_center|host_house", status: "open|closed", capacity,
+  site_kind: "evacuation_center",         // req — code ของ master_data:site_kind (global-only; CR-198)
+                                          // seed: evacuation_center (default) | host_house; SA เพิ่มได้
+                                          // ต้อง active ตอนเขียน; doc ไม่มี field → evacuation_center
+  name, status: "open|closed", capacity,
   zones: [{ code, name, capacity }],
   area_m2: 1200,                          // opt — พื้นที่ปิดรวม m² (Sphere ≥3.5 m²/คน)
   facilities: {                           // opt — นับจริง ใช้คำนวณ Sphere ratio vs occupancy
@@ -175,6 +178,7 @@ State machine บน CouchDB = เขียน doc ใหม่ทั้ง doc 
 | View (design doc `_design/app`) | ใช้ทำ |
 | --- | --- |
 | `occupancy` — map movement → reduce `_count` ตาม status | dashboard FR-14, occupancy guard FR-12 |
+| `occupancy_by_zone` — map evacuee ที่มี `current_stay.zone` → key `[zone, status]` reduce `_count` (CR-226, manifest v8) | dashboard กราฟความเต็มรายโซน (นับ Present ต่อโซน) |
 | `stock_balance` — **client** Decimal sum ของ `stock_ledger.qty` (`qty_str`) ต่อ item (CR-038; อย่าพึ่ง `_sum` ของ float) | stock dashboard, reorder alert |
 | `latest_screening` — map screening by (evacuee, ts) | ผลคัดกรองล่าสุด |
 | `meals_served` — reduce `_sum` ต่อวัน/มื้อ | kitchen dashboard |
@@ -232,7 +236,7 @@ design doc เดียวกัน deploy พร้อม db provisioning
 | `medical` | purge ทันทีที่ครบ 2 ปีหลัง `shelter.closed_at` (ลำดับแรก) |
 | `evacuee`, `household` | แทนที่ด้วย tombstone ไร้ PII (`{type, anonymized: true}`) เมื่อครบ 2 ปีหลังปิดศูนย์ |
 | `movement`, `screening`, ledger, audit | เก็บต่อได้ (อ้างถึงแค่ ULID — ไร้ PII หลัง tombstone) จนจบโครงการ |
-| donor PII ใน `donation` | ลบ name/phone ภายใน 3 เดือนหลังปิดศูนย์ (เหลือ hash + ยอด) |
+| donor PII ใน `donation` | ลบ `donor.name`/`phone`/`line_id`/`email` และ `logistics.vehicle_plate` ภายใน 3 เดือนหลังปิดศูนย์ (เหลือ `phone_hash` + ยอด) · **สถานะจริง (2026-10-29):** ยังไม่มีงานลบอัตโนมัติฝั่ง CouchDB — worker ลบเฉพาะ buffer ใน Mongo (`DonationBuffer`) และ projection สาธารณะ; PII ใน CouchDB `donation` ยังอยู่จนกว่าจะมีงานลบ |
 | local disconnected cache | ไม่ใช้ใน policy นี้ (status-only เมื่อไม่มี endpoint) |
 | edge server | wipe ทั้งเครื่อง (db + `_users` replica) เป็นขั้นตอนปิดศูนย์ — ก่อนนาฬิกา 2 ปีเริ่มนับที่ central |
 

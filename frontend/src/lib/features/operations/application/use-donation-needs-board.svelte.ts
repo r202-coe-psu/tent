@@ -194,13 +194,8 @@ export function useDonationNeedsBoard(options?: { onFormCreated?: () => void }) 
 		for (const camp of campaigns) {
 			const availabilities = deriveNeedAvailability(camp, donations, stockLedgers);
 			const needs: NeedItem['needs'] = [];
-			let allNeedsCutOff = true;
 
 			for (const avail of availabilities) {
-				if (!avail.is_cut_off) {
-					allNeedsCutOff = false;
-				}
-
 				needs.push({
 					itemId: avail.item_id,
 					name: itemDisplayName(avail.item_id),
@@ -211,13 +206,14 @@ export function useDonationNeedsBoard(options?: { onFormCreated?: () => void }) 
 					// Catalog first, stored second: `avail.unit` only answers while the
 					// catalog query is still loading or for an id it no longer carries.
 					unit: itemDisplayUnit(avail.item_id) || avail.unit,
-					isCutOff: avail.is_cut_off,
-					isManualClosed: avail.status === 'closed'
+					closeState: avail.close_state,
+					isManualClosed: avail.status === 'closed',
+					dropOffPointId:
+						camp.needs.find((n) => n.item_id === avail.item_id)?.drop_off_point_id ?? null
 				});
 			}
 
 			const isManualClosed = camp.status === 'closed';
-			const isCutOff = allNeedsCutOff || isManualClosed;
 
 			list.push({
 				id: camp._id,
@@ -225,7 +221,9 @@ export function useDonationNeedsBoard(options?: { onFormCreated?: () => void }) 
 				location: camp.notes || 'คลังช่วยเหลือภัยพิบัติ EOC',
 				needs: needs,
 				showOnHome: camp.visible_on_home !== false,
-				isCutOff: isCutOff,
+				// Not "every need cut off": a campaign whose needs all reached target is still
+				// open, and folding that in here is what let rows disagree (#817).
+				closeState: isManualClosed ? 'closed' : 'open',
 				isManualClosed: isManualClosed,
 				campaignDoc: camp
 			});
@@ -334,6 +332,7 @@ export function useDonationNeedsBoard(options?: { onFormCreated?: () => void }) 
 		urgency?: 'critical' | 'important' | 'normal';
 		imageUrl?: string;
 		description?: string;
+		dropOffPointId: string | null;
 	}) {
 		// The picker supplies the id, but the unit written onto the need comes from the
 		// CATALOG, never from the form — an item with no Item Master row has no standard
@@ -364,7 +363,8 @@ export function useDonationNeedsBoard(options?: { onFormCreated?: () => void }) 
 					item_id: item.itemId,
 					qty_target: input.target,
 					unit,
-					status: 'open' as const
+					status: 'open' as const,
+					drop_off_point_id: input.dropOffPointId
 				}
 			],
 			notes: buildCampaignNotes(input),
@@ -411,6 +411,7 @@ export function useDonationNeedsBoard(options?: { onFormCreated?: () => void }) 
 			urgency?: 'critical' | 'important' | 'normal';
 			imageUrl?: string;
 			description?: string;
+			dropOffPointId: string | null;
 		}
 	) {
 		const targetItem = derivedItems.find((i) => i.id === compoundId);
@@ -421,7 +422,8 @@ export function useDonationNeedsBoard(options?: { onFormCreated?: () => void }) 
 		try {
 			updatedCampaign = editNeed(camp, itemId, {
 				qty_target: updated.target,
-				unit: updated.unit
+				unit: updated.unit,
+				drop_off_point_id: updated.dropOffPointId
 			});
 		} catch (err) {
 			toast.error(err instanceof Error ? err.message : 'ไม่สามารถบันทึกการแก้ไขได้');

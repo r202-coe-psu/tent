@@ -1,5 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { ApplyFailedError, applyToJob, preflightApplication } from './volunteer-api';
+import {
+	ApplyFailedError,
+	apiErrorCopy,
+	applyToJob,
+	fetchAccessStatus,
+	preflightApplication
+} from './volunteer-api';
 
 const input = {
 	job_id: 'job:target',
@@ -101,5 +107,39 @@ describe('applyToJob', () => {
 
 		expect(error).not.toBeInstanceOf(ApplyFailedError);
 		expect((error as Error).message).toBe('ส่งคำขอถี่เกินไป กรุณารอสักครู่แล้วลองใหม่');
+	});
+});
+
+describe('cancel error copy', () => {
+	it.each(['CANCEL_FAILED', 'NOT_CANCELLABLE', 'SHIFT_STARTED'])('has Thai copy for %s', (code) => {
+		expect(apiErrorCopy(code)).toMatch(/[ก-๙]/);
+	});
+});
+
+describe('fetchAccessStatus', () => {
+	const row = {
+		shelter_code: 'SH001',
+		shelter_name: 'ศูนย์หลัก',
+		status: 'none',
+		role_label: null,
+		expires_at: null
+	};
+
+	it('posts the credential and returns the rows', async () => {
+		const fetchMock = respond(200, { success: true, access: [row] });
+
+		await expect(fetchAccessStatus({ phone: '0812345678' })).resolves.toEqual([row]);
+		expect(fetchMock).toHaveBeenCalledWith(
+			'/api/public/v1/volunteer/access-status',
+			expect.objectContaining({ method: 'POST', body: JSON.stringify({ phone: '0812345678' }) })
+		);
+	});
+
+	it('words a failure with the access copy', async () => {
+		respond(503, { success: false, error: 'ACCESS_STATUS_UNAVAILABLE' });
+
+		await expect(fetchAccessStatus({ phone: '0812345678' })).rejects.toThrow(
+			'ไม่สามารถตรวจสอบสิทธิ์ใช้งานระบบได้ กรุณาลองใหม่อีกครั้ง'
+		);
 	});
 });

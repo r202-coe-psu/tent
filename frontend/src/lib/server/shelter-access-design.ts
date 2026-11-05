@@ -73,6 +73,91 @@ export const DAILY_SOP_ROLE_MANGO_INDEX = {
 	type: 'json' as const
 };
 
+/**
+ * Index behind the volunteer access dialog's "how did the last grant end" lookup (CR-221, #1044):
+ * the `audit` docs of one account (`target_id`) by `reason` (`role_grant.revoked` / `.expired` /
+ * `.verification_revoked`), read by `lastGrantEndings` with `target_id: { $in: [...] }` and paged by
+ * bookmark. It does not order by `created_at` (the newest is picked in code), so the deployed
+ * definition stays as is. Audit docs grow without bound, so the query must not scan them all.
+ */
+export const ROLE_GRANT_AUDIT_MANGO_INDEX = {
+	index: { fields: ['type', 'target_id', 'reason'] },
+	ddoc: 'role-grant-audit-target',
+	name: 'role-grant-audit-by-target',
+	type: 'json' as const
+};
+
+/**
+ * Index behind the back-office "รับแล้ว" list (#821): received donations, newest first,
+ * `_id` as the tie-breaker. The route queries with `allow_fallback: false`, so a shelter
+ * DB without this index answers 503 instead of being scanned.
+ */
+export const DONATION_RECEIVED_MANGO_INDEX = {
+	index: {
+		fields: [{ type: 'desc' }, { status: 'desc' }, { received_at: 'desc' }, { _id: 'desc' }]
+	},
+	ddoc: 'donation-received-list',
+	name: 'donation-received-by-received-at',
+	type: 'json' as const
+};
+
+/**
+ * Index behind the "รับแล้ว" search by donor phone (#821 FR-8 `phone`): `donor.phone_hash`
+ * equality inside the received donations, newest first. `phone_hash` outlives the retention
+ * wipe of the raw phone, so a donation stays findable by number after `donor.phone` is gone.
+ */
+export const DONATION_RECEIVED_PHONE_MANGO_INDEX = {
+	index: { fields: ['type', 'status', 'donor.phone_hash', 'received_at'] },
+	ddoc: 'donation-received-phone',
+	name: 'donation-received-phone',
+	type: 'json' as const
+};
+
+/**
+ * Index behind the "รับแล้ว" search by booking reference (#821 FR-8 `booking_ref`): equality on
+ * `booking_ref` among the donations. A shelter DB had no `booking_ref` index before (the unique
+ * one lives in Mongo), so without it the search could only filter the received list in memory.
+ */
+export const DONATION_BOOKING_REF_MANGO_INDEX = {
+	index: { fields: ['type', 'booking_ref'] },
+	ddoc: 'donation-booking-ref',
+	name: 'donation-booking-ref',
+	type: 'json' as const
+};
+
+/**
+ * Index behind the "รับแล้ว" search by lot number (#821 FR-8 `lot`, FR-13): the `stock_ledger`
+ * rows carrying one `lot.lot_no`. `lot_no` is a label, not a key — several rows and donations
+ * may share it — so the route reads every row of the label, not the first.
+ */
+export const STOCK_LEDGER_LOT_NO_MANGO_INDEX = {
+	index: { fields: ['type', 'lot.lot_no'] },
+	ddoc: 'stock-ledger-lot-no',
+	name: 'stock-ledger-lot-no',
+	type: 'json' as const
+};
+
+/**
+ * Donor photos no booking has bound yet (CR-175 donor photos FR-16). Partial: a photo
+ * leaves the index the moment the worker writes its `donation_id`, so the sweep never
+ * re-reads bound photos. CouchDB never picks a partial index on its own, so the worker
+ * names this one in `use_index` (`worker/src/worker/retention/donation_photos.py`) and
+ * repeats the filter in its selector.
+ */
+export const DONATION_PHOTO_ORPHAN_MANGO_INDEX = {
+	index: {
+		fields: ['created_at'],
+		partial_filter_selector: {
+			type: 'image',
+			purpose: 'donation',
+			donation_id: { $exists: false }
+		}
+	},
+	ddoc: 'donation-photo-orphans',
+	name: 'image-donation-unbound-created-idx',
+	type: 'json' as const
+};
+
 const DAILY_SOP_ROLE_VDU_CONTRACT = JSON.stringify({
 	version: DAILY_SOP_ROLE_QUESTION_VERSION,
 	roles: DAILY_SOP_ROLES.map((role) => ({
@@ -281,6 +366,7 @@ export const TICKET_DISTRIBUTION_MANGO_INDEXES = [
  *  - **forward-only** `donation.status` — `received` may not fall back to `declared`
  *    (schema.md §2.3 state machine).
  *  - **role gate** on `stock_ledger` — only warehouse staff / managers may move stock.
+ *  - **role gate** on `recipe` — SM, warehouse, supply and kitchen staff of this shelter (CR-217).
  *
  * `_admin` bypasses so provisioning/seed writes are not blocked. NOTE: the
  * back-office intake route writes with admin credentials, so it does NOT pass
@@ -368,6 +454,13 @@ ${consentVduClause()}
   function canWriteBulkReturnEntry() {
     return canManageBulkReturnPool() || isRole('distribution_staff');
   }
+  // CR-217: shelter recipes are written (create, update, delete) by SM, WH, SC and KS of this
+  // shelter (+ SA via isRole), the same set as canWriteShelterRecipe on the client.
+  function canWriteRecipe() {
+    return isRole('shelter_manager') || isRole('warehouse_staff') ||
+      isRole('supply_coordinator') || isRole('kitchen_staff');
+  }
+  var RECIPE_WRITE_FORBIDDEN = 'Only shelter managers, warehouse, supply or kitchen staff of this shelter can write recipe';
   function sameObjectExcept(previousObject, nextObject, ignoredFields) {
     var keys = {};
     var previousKeys = Object.keys(previousObject || {});
@@ -416,7 +509,8 @@ ${consentVduClause()}
     'meal_service', 'meal_service_receipt',
     'distribution_issue', 'distribution_issue_idempotency',
     // #658: event log of a bulk return pool — never updated, never deleted.
-    'bulk_return_entry', 'bulk_return_entry_move', 'bulk_return_entry_void'
+    'bulk_return_entry', 'bulk_return_entry_move', 'bulk_return_entry_void',
+    'bulk_return_loan_reopen'
   ];
   var wasAppendOnly = oldDoc && appendOnly.indexOf(oldDoc.type) !== -1;
   if (newDoc._deleted) {
@@ -425,6 +519,9 @@ ${consentVduClause()}
     }
     if (oldDoc && oldDoc.type === 'item_category' && oldDoc.is_protected === true) {
       throw { forbidden: 'Cannot delete system protected category: ' + oldDoc._id };
+    }
+    if (oldDoc && oldDoc.type === 'recipe' && !canWriteRecipe()) {
+      throw { forbidden: RECIPE_WRITE_FORBIDDEN };
     }
     if (oldDoc && oldDoc.type === 'distribution_batch' && oldDoc.status === 'closed') {
       throw { forbidden: 'Closed distribution_batch cannot be modified' };
@@ -480,6 +577,9 @@ ${consentVduClause()}
   require('created_at');
   require('updated_at');
   require('created_by');
+  if (newDoc.type === 'recipe' && !canWriteRecipe()) {
+    throw { forbidden: RECIPE_WRITE_FORBIDDEN };
+  }
   if (newDoc.shelter_code !== '${code}') {
     throw { forbidden: 'shelter_code must be ${code}' };
   }
@@ -514,6 +614,7 @@ ${consentVduClause()}
 		'shelter_readiness_assessment',
     'requisition_ticket', 'distribution_log', 'bulk_return_pool', 'bulk_return_claim', 'loan_return_reservation',
     'bulk_return_entry', 'bulk_return_entry_move', 'bulk_return_entry_void',
+    'bulk_return_loan_reopen',
     'meal_service_receipt',
     'shelter_incident', 'daily_sop_role_assessment'
   ];
@@ -1210,9 +1311,6 @@ ${consentVduClause()}
         throw { forbidden: 'Loan return stock ledger requires a stock_ledger:{26-char id}' };
       }
     }
-    if (newDoc.reason === 'distribution_return' && !isWarehouseOrAdmin) {
-      throw { forbidden: 'Only warehouse staff or system admin can write distribution return stock ledger' };
-    }
     if (newDoc.reason === 'distribute') {
       if (typeof newDoc.ref_id !== 'string' || (!/^distribution_batch:.+/.test(newDoc.ref_id) && !/^requisition_ticket:.+/.test(newDoc.ref_id))) {
         throw { forbidden: 'Distribute stock ledger requires distribution_batch ref_id or requisition_ticket ref_id' };
@@ -1239,8 +1337,18 @@ ${consentVduClause()}
       }
     }
     if (newDoc.reason === 'distribution_return') {
-      if (typeof newDoc.ref_id !== 'string' || !/^distribution_batch:.+/.test(newDoc.ref_id)) {
-        throw { forbidden: 'Distribution return stock ledger requires distribution_batch ref_id' };
+      // CR-208: a ticket's leftovers go back into their source lot; a direct issue has no return step.
+      var isTicketReturn =
+        typeof newDoc.ref_id === 'string' &&
+        /^requisition_ticket:.+/.test(newDoc.ref_id) &&
+        !/^requisition_ticket:direct-/.test(newDoc.ref_id);
+      var isBatchReturn = typeof newDoc.ref_id === 'string' && /^distribution_batch:.+/.test(newDoc.ref_id);
+      if (!isTicketReturn && !isBatchReturn) {
+        throw { forbidden: 'Distribution return stock ledger requires distribution_batch or non-direct requisition_ticket ref_id' };
+      }
+      // Ticket returns follow canReceiveWarehouseReturns; the legacy batch flow keeps its narrower gate.
+      if (isBatchReturn && !isWarehouseOrAdmin) {
+        throw { forbidden: 'Only warehouse staff or system admin can write distribution return stock ledger' };
       }
       if (typeof newDoc.lot_ref !== 'string' || !/^stock_ledger:.+/.test(newDoc.lot_ref)) {
         throw { forbidden: 'Distribution return stock ledger requires physical stock_ledger lot_ref' };
@@ -2185,7 +2293,7 @@ ${consentVduClause()}
     if (typeof newDoc.is_returnable !== 'boolean') {
       throw { forbidden: 'distribution_log requires boolean is_returnable' };
     }
-    if (['evacuee', 'volunteer', 'outside'].indexOf(newDoc.recipient_type) === -1) {
+    if (['evacuee', 'volunteer', 'staff', 'outside'].indexOf(newDoc.recipient_type) === -1) {
       throw { forbidden: 'Invalid recipient_type: ' + newDoc.recipient_type };
     }
     if (newDoc.recipient_type === 'evacuee' && (typeof newDoc.recipient_id !== 'string' || newDoc.recipient_id.indexOf('evacuee:') !== 0)) {
@@ -2193,6 +2301,9 @@ ${consentVduClause()}
     }
     if (newDoc.recipient_type === 'volunteer' && (typeof newDoc.recipient_id !== 'string' || newDoc.recipient_id.indexOf('volunteer:') !== 0)) {
       throw { forbidden: 'volunteer recipient_id is required' };
+    }
+    if (newDoc.recipient_type === 'staff' && (typeof newDoc.recipient_id !== 'string' || newDoc.recipient_id.indexOf('user:') !== 0 || newDoc.recipient_id.length <= 5)) {
+      throw { forbidden: 'staff recipient_id is required' };
     }
     if (newDoc.recipient_type === 'outside' && typeof newDoc.recipient_id !== 'undefined' && newDoc.recipient_id !== null) {
       throw { forbidden: 'outside recipients must not carry recipient_id' };
@@ -2766,6 +2877,49 @@ ${consentVduClause()}
     }
     if (typeof newDoc.notes !== 'undefined' && (typeof newDoc.notes !== 'string' || !newDoc.notes.trim())) {
       throw { forbidden: 'bulk_return_entry_void notes must be a non-empty string' };
+    }
+  }
+  // 14e. CR-193 §35: bulk_return_loan_reopen (append-only; deterministic id so an entry's loans are
+  // reopened at most once — a second reopen is a CouchDB 409 conflict, not a VDU rejection). A shelter
+  // manager or warehouse staff reopens the loans of ONE bulk_return_entry whose pool is closed. Advisory (VDU cannot
+  // read other docs): the pool is closed, entry_id belongs to pool_id, and loan_ids are exactly the
+  // loans that hold the entry in applied_bulk_entry_ids — enforced by the domain checks. The loan
+  // revert itself is authorised by the existing distribution_log rule (canReturnLoanPhysical); the
+  // narrower shelter_manager / warehouse_staff role applies to this doc only.
+  if (newDoc.type === 'bulk_return_loan_reopen') {
+    if (newDoc.schema_v !== 1) {
+      throw { forbidden: 'Unsupported bulk_return_loan_reopen schema version' };
+    }
+    if (!isRole('shelter_manager') && !isRole('warehouse_staff')) {
+      throw { forbidden: 'Only shelter managers, warehouse staff or system admins can reopen bulk return loans' };
+    }
+    if (newDoc.created_by !== userCtx.name) {
+      throw { forbidden: 'bulk_return_loan_reopen.created_by must match the current actor' };
+    }
+    var reopenIdMatch = /^bulk_return_loan_reopen:([0-9A-HJKMNP-TV-Z]{26})$/.exec(newDoc._id);
+    if (!reopenIdMatch) {
+      throw { forbidden: 'bulk_return_loan_reopen id must be bulk_return_loan_reopen:{entryUlid}' };
+    }
+    if (newDoc.entry_id !== 'bulk_return_entry:' + reopenIdMatch[1]) {
+      throw { forbidden: 'bulk_return_loan_reopen entry_id must match the entry ULID in _id' };
+    }
+    if (typeof newDoc.pool_id !== 'string' || !/^bulk_return_pool:[0-9A-HJKMNP-TV-Z]{26}$/.test(newDoc.pool_id)) {
+      throw { forbidden: 'bulk_return_loan_reopen requires pool_id' };
+    }
+    if (typeof newDoc.reason !== 'string' || newDoc.reason.trim().length < 1 || newDoc.reason.trim().length > 500) {
+      throw { forbidden: 'bulk_return_loan_reopen reason must be 1-500 characters' };
+    }
+    if (!Array.isArray(newDoc.loan_ids) || newDoc.loan_ids.length === 0) {
+      throw { forbidden: 'bulk_return_loan_reopen loan_ids must be a non-empty array' };
+    }
+    for (var rl = 0; rl < newDoc.loan_ids.length; rl++) {
+      var reopenLoanId = newDoc.loan_ids[rl];
+      if (typeof reopenLoanId !== 'string' || !/^distribution_log:[0-9A-HJKMNP-TV-Z]{26}$/.test(reopenLoanId)) {
+        throw { forbidden: 'bulk_return_loan_reopen.loan_ids must contain distribution_log:{ulid} ids' };
+      }
+      if (newDoc.loan_ids.indexOf(reopenLoanId) !== rl) {
+        throw { forbidden: 'Duplicate id in bulk_return_loan_reopen.loan_ids: ' + reopenLoanId };
+      }
     }
   }
   // 15. CR-134: bulk_return_claim validation (Rule 15)

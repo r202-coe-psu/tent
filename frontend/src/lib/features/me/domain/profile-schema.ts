@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { normalizeThaiPhone, THAI_MOBILE_PHONE_MESSAGE } from '$lib/db/model';
 
 /** Self-service profile fields (matches PATCH /api/v1/auth/me). */
 export const ownProfileSchema = z.object({
@@ -6,7 +7,8 @@ export const ownProfileSchema = z.object({
 	phone: z
 		.string()
 		.trim()
-		.regex(/^$|^0[0-9]{8,9}$/, 'เบอร์โทรศัพท์ต้องเป็นตัวเลข 9–10 หลักขึ้นต้นด้วย 0'),
+		.transform(normalizeThaiPhone)
+		.pipe(z.string().regex(/^$|^0\d{9}$/, THAI_MOBILE_PHONE_MESSAGE)),
 	email: z.string().trim().email('รูปแบบอีเมลไม่ถูกต้อง').or(z.literal('')),
 	organization: z.string().trim(),
 	position: z.string().trim()

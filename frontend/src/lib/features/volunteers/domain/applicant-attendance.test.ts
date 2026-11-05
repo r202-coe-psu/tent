@@ -2,7 +2,8 @@ import { describe, it, expect } from 'vitest';
 import {
 	applicantAttendance,
 	assignmentAttendance,
-	assignmentMatchesApplication
+	assignmentMatchesApplication,
+	awaitingAttendanceConfirmation
 } from './applicant-attendance';
 import type { JobApplication } from './job-application.schema';
 import type { ShiftAssignment } from './shift-assignment.schema';
@@ -227,5 +228,65 @@ describe('assignmentAttendance', () => {
 		const a = assignment();
 		expect(assignmentAttendance(a, true, TODAY).kind).toBe('check-in');
 		expect(assignmentAttendance(a, false, TODAY).kind).toBe('verify');
+	});
+});
+
+describe('awaitingAttendanceConfirmation', () => {
+	// duty_window ends 2026-08-10T09:00Z (16:00 Bangkok); confirmation opens 30 minutes later.
+	const justBefore = new Date('2026-08-10T09:29:59.999Z');
+	const atThreshold = new Date('2026-08-10T09:30:00.000Z');
+
+	it('opens 30 minutes after an assigned shift ends', () => {
+		expect(awaitingAttendanceConfirmation(assignment(), justBefore)).toBe(false);
+		expect(awaitingAttendanceConfirmation(assignment(), atThreshold)).toBe(true);
+	});
+
+	it.each(['checked_in', 'completed', 'no_show', 'cancelled'] as const)(
+		'ignores a %s row',
+		(status) => {
+			expect(awaitingAttendanceConfirmation(assignment({ status }), atThreshold)).toBe(false);
+		}
+	);
+
+	it('counts a standby row only once the volunteer accepted it', () => {
+		const standby = (dispatch_status: ShiftAssignment['dispatch_status']) =>
+			assignment({ status: 'standby', dispatch_status });
+		expect(awaitingAttendanceConfirmation(standby('accepted'), justBefore)).toBe(false);
+		expect(awaitingAttendanceConfirmation(standby('accepted'), atThreshold)).toBe(true);
+		expect(awaitingAttendanceConfirmation(standby('dispatched'), atThreshold)).toBe(false);
+		expect(awaitingAttendanceConfirmation(standby(null), atThreshold)).toBe(false);
+	});
+
+	it('does not count an assigned row the volunteer has not answered (dispatched)', () => {
+		const dispatched = assignment({ status: 'assigned', dispatch_status: 'dispatched' });
+		expect(awaitingAttendanceConfirmation(dispatched, atThreshold)).toBe(false);
+	});
+
+	it.each(['accepted', 'declined', null, undefined] as const)(
+		'still counts an assigned row with dispatch_status %s',
+		(dispatch_status) => {
+			const row = assignment({ status: 'assigned', dispatch_status });
+			expect(awaitingAttendanceConfirmation(row, justBefore)).toBe(false);
+			expect(awaitingAttendanceConfirmation(row, atThreshold)).toBe(true);
+		}
+	);
+
+	it('counts an accepted standby row once the window has passed', () => {
+		const row = assignment({ status: 'standby', dispatch_status: 'accepted' });
+		expect(awaitingAttendanceConfirmation(row, atThreshold)).toBe(true);
+	});
+
+	it('never counts a flex standby row, accepted or not', () => {
+		const flex = assignment({ status: 'standby', dispatch_status: 'accepted', shift: 'flex' });
+		expect(awaitingAttendanceConfirmation(flex, atThreshold)).toBe(false);
+	});
+
+	it('never applies to a flex shift', () => {
+		expect(awaitingAttendanceConfirmation(assignment({ shift: 'flex' }), atThreshold)).toBe(false);
+	});
+
+	it('is false when the duty window cannot be read', () => {
+		const broken = assignment({ duty_window: { start_ts: '', end_ts: 'not-a-date' } });
+		expect(awaitingAttendanceConfirmation(broken, atThreshold)).toBe(false);
 	});
 });

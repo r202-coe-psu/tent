@@ -1,5 +1,8 @@
+import { mergeEdgeShelters } from '$lib/auth/roles';
 import { hashSecurityAnswer } from '$lib/server/security-questions';
+import { isValidStaffTokenHash } from '$lib/features/users/server';
 import { ensurePublicWriter } from '$lib/server/ensure-public-writer';
+import { mintStaffTokenHash } from '$lib/server/staff-card-token';
 import { couchReq, env } from './couch';
 import { SH001_CODE } from './types';
 
@@ -138,6 +141,8 @@ export async function seedUsers(): Promise<void> {
 			phone: u.phone,
 			email: u.email,
 			shelter_id: u.shelter_id,
+			// CR-171 FR-11 — append-only history of shelters (edge `_users` replication routing)
+			edge_shelters: mergeEdgeShelters(existingDoc?.edge_shelters as string[] | undefined, u.roles),
 			active: true,
 			must_change_password: false,
 			security_question,
@@ -146,6 +151,10 @@ export async function seedUsers(): Promise<void> {
 
 		if (!existingDoc) {
 			userDoc.password = SEED_STAFF_PASSWORD;
+		}
+
+		if (!userDoc.volunteer_id && !isValidStaffTokenHash(userDoc.staff_token_hash)) {
+			userDoc.staff_token_hash = await mintStaffTokenHash();
 		}
 
 		const { status } = await couchReq('PUT', `/_users/${docId}`, userDoc);

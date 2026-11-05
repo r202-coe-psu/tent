@@ -101,8 +101,13 @@ export function submittedSummaryRows(
 
 export interface ReceiveLine {
 	item_id: string;
-	/** From the submit snapshot. */
+	/**
+	 * The receivable qty ("ยอดที่ส่งมา"): the submit snapshot minus entries already counted in an
+	 * older pool. Received is capped at it and a mismatch is `received !== expected_qty`.
+	 */
 	expected_qty: string;
+	/** The submit snapshot qty (>= `expected_qty`). */
+	snapshot_qty: string;
 	/** Raw text of the input (prefilled with the expected qty). */
 	received_qty: string;
 	/** '' = none chosen. */
@@ -131,16 +136,39 @@ export function receiveQtyError(expected: string): string {
 	return `กรอกจำนวนเต็มตั้งแต่ 0 ถึง ${expected}`;
 }
 
+/**
+ * One line per snapshot item, prefilled with the receivable qty. An item missing from
+ * `receivableSummary` (or an empty summary) is receivable in full.
+ */
 export function initReceiveLines(
-	itemsSummary: readonly BulkReturnPoolItemSummaryRow[]
+	itemsSummary: readonly BulkReturnPoolItemSummaryRow[],
+	receivableSummary: readonly BulkReturnPoolItemSummaryRow[] = []
 ): ReceiveLine[] {
-	return itemsSummary.map(({ item_id, qty }) => ({
-		item_id,
-		expected_qty: qty,
-		received_qty: qty,
-		reason: '',
-		note: ''
-	}));
+	const receivable = new Map(receivableSummary.map((row) => [row.item_id, row.qty]));
+	return itemsSummary.map(({ item_id, qty }) => {
+		const cap = receivable.get(item_id) ?? qty;
+		return {
+			item_id,
+			expected_qty: cap,
+			snapshot_qty: qty,
+			received_qty: cap,
+			reason: '',
+			note: ''
+		};
+	});
+}
+
+/** Qty of the snapshot that is not receivable here (counted in another pool), or null when none. */
+export function uncountedGap(line: ReceiveLine): number | null {
+	const snapshot = parseWhole(line.snapshot_qty);
+	const expected = parseWhole(line.expected_qty);
+	if (snapshot === null || expected === null || snapshot <= expected) return null;
+	return snapshot - expected;
+}
+
+/** Short hint under "ยอดที่ส่งมา" when part of the snapshot was counted in another pool. */
+export function uncountedGapHint(gap: number): string {
+	return `ไม่นับ ${gap} ชิ้นที่ถูกนับในกองอื่นแล้ว`;
 }
 
 /** The typed qty as a whole number, or null when it is not a non-negative integer. */
@@ -202,8 +230,9 @@ export function validateReceiveLines(
 }
 
 /**
- * Workflow input from validated lines. Matched lines drop reason / note; the note is trimmed and a
- * blank one becomes undefined. `point` null = unspecified (main store).
+ * Workflow input from validated lines. Lines received in full of the receivable qty drop reason /
+ * note (the workflow records the "counted in another pool" miscount itself); the note is trimmed
+ * and a blank one becomes undefined. `point` null = unspecified (main store).
  */
 export function buildReceiveInput(
 	lines: readonly ReceiveLine[],

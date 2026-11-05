@@ -42,6 +42,8 @@ export interface StockDisplayRow extends StockRowBase {
 	coverDays: number | null;
 	/** Lots still holding stock. */
 	lotCount: number;
+	/** "ใช้ได้ N (ไม่นับล็อตติดลบ −M)" when a lot is overdrawn (CR-216 FR-6a); null otherwise. */
+	usableNote: string | null;
 	/** First storage point plus a "+N" count, or null when unspecified. */
 	locationLabel: string | null;
 }

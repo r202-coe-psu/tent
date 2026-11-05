@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { tick } from 'svelte';
+	import { tick, untrack } from 'svelte';
 	import { toast } from 'svelte-sonner';
 	import Truck from '@lucide/svelte/icons/truck';
 	import UtensilsCrossed from '@lucide/svelte/icons/utensils-crossed';
@@ -11,9 +11,9 @@
 	import RotateCcw from '@lucide/svelte/icons/rotate-ccw';
 	import AlertCircle from '@lucide/svelte/icons/alert-circle';
 	import RefreshCw from '@lucide/svelte/icons/refresh-cw';
-	import { replaceState } from '$app/navigation';
-	import { resolve } from '$app/paths';
+	import { beforeNavigate, goto, replaceState } from '$app/navigation';
 	import { page } from '$app/state';
+	import { resolve } from '$app/paths';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
 	import { getShelterCode } from '$lib/db/shelter';
 	import {
@@ -53,6 +53,7 @@
 	} from '../model/desk-mode';
 	import { readStoredDeskMode, storeDeskMode } from '../model/desk-mode-storage';
 	import { DeskDrafts } from '../model/desk-draft';
+	import { incomingLinkAction } from '../model/desk-link-gate';
 	import {
 		filterTicketsByServiceDay,
 		resolveServiceDay,
@@ -70,11 +71,31 @@
 	import * as AlertDialog from '$lib/components/ui/alert-dialog/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
 
+	import {
+		ONSITE_DISTRIBUTION_PATH,
+		onsiteDeskHref,
+		parseOnsiteDistributionParams
+	} from '../model/pool-url-state';
+
 	interface Props {
+		/** Mode from the URL (`?mode=`, or forced by the tab); beats the remembered mode. */
+		initialMode?: DeskMode | null;
+		/** Active tab from the URL; local clicks override it until the next link. */
 		initialTab?: StationTab;
+		/** Bulk return pool to open on the returns tab (deep link). */
+		initialPoolId?: string | null;
+		/** Bumped on each real navigation, so following the same link again re-applies it. */
+		linkKey?: number;
 	}
 
-	let { initialTab = 'receive' }: Props = $props();
+	// Mode, tab and pool are re-applied whenever the link changes (new URL params or a new
+	// navigation).
+	let {
+		initialMode = null,
+		initialTab = 'receive',
+		initialPoolId = null,
+		linkKey = 0
+	}: Props = $props();
 
 	const currentShelterCode = $derived(shelterStore.selectedShelterCode ?? getShelterCode());
 
@@ -90,23 +111,50 @@
 
 	const canFrontline = $derived(authContext ? canPerformFrontlineDistribution(authContext) : false);
 
-	// Mode and tab are intentionally set once from the URL / stored mode / initialTab prop; user
-	// navigation controls them after mount. A closure breaks the Svelte reactivity chain so Svelte
-	// does not warn that only the initial value is captured.
-	let mode = $state<DeskMode>(
-		(function () {
-			const urlMode = page.url.searchParams.get('mode');
-			const initial = resolveInitialMode(urlMode, readStoredDeskMode());
-			// FR-DFS-06: a deep link (e.g. a supplies QR) is also the mode this device last used.
-			if (isDeskMode(urlMode)) storeDeskMode(urlMode);
-			return initial;
-		})()
-	);
-	let activeTab = $state<StationTab>(
-		(function () {
-			return stepAfterModeSwitch(initialTab, mode);
-		})()
-	);
+	// The link (props) sets mode / tab / pool; user actions override them locally. The URL is then
+	// written whole from this state (`writeUrl`). The props follow the route's parse of
+	// `page.state.deskSearch` (else `page.url`), so they track the desk's own writes; a real
+	// navigation clears `page.state`, so the link's URL applies again.
+	// `?mode=` beats the remembered mode (FR-DFS-07); the stored read is not a dependency.
+	// One link object: any prop or `linkKey` change makes a fresh one, so mode, tab and pool are
+	// applied together. `linkKey` re-derives it on a real navigation even when the parsed values
+	// are unchanged. Local state and the written URL agree, since every local change writes the URL.
+	// `explicit` is true when the link itself names a mode (FR-DFS-06).
+	const link = $derived.by(() => {
+		void linkKey;
+		const m = resolveInitialMode(initialMode, untrack(readStoredDeskMode));
+		return {
+			mode: m,
+			tab: stepAfterModeSwitch(initialTab, m),
+			pool: initialPoolId,
+			explicit: isDeskMode(initialMode)
+		};
+	});
+	// Local state: derived from the link, overridden by user actions until the next link. (Writable
+	// deriveds.) No gate effect is needed for FR-DFS-05: a mode-changing navigation with a draft is
+	// stopped in `beforeNavigate` below, before the props can change, so the link only ever reaches
+	// here once it is safe to apply. The desk's own shallow `replaceState` writes keep the mode, and
+	// the initial load has no draft.
+	let mode = $derived<DeskMode>(link.mode);
+	let activeTab = $derived<StationTab>(link.tab);
+	// Open bulk return pool; the local value keeps a closed pool closed when the user returns.
+	let selectedPoolId = $derived<string | null>(link.pool);
+
+	// FR-DFS-06: a link that names a mode is also the mode this device last used. Why an effect: it
+	// writes localStorage. It reads only `link`, so it re-runs once per link (also the same link again).
+	$effect(() => {
+		if (link.explicit) storeDeskMode(link.mode);
+	});
+
+	// One URL model: `?mode=&tab=[&pool=]`, always written whole. Shallow, so a goto does not
+	// cancel the phone scroll. Never called on initial load. Skipped once the user has navigated
+	// away (a late board callback or awaited receive must not overwrite another page's URL).
+	function writeUrl() {
+		if (page.url.pathname !== resolve(ONSITE_DISTRIBUTION_PATH)) return;
+		const href = onsiteDeskHref({ mode, tab: activeTab, pool: selectedPoolId });
+		// The query is kept in `page.state`: history restores it on Back, while `page.url` stays stale.
+		replaceState(resolve(href), { deskSearch: href.slice(href.indexOf('?') + 1) });
+	}
 
 	const steps = $derived(DESK_MODES[mode].steps);
 
@@ -125,30 +173,114 @@
 
 	const drafts = new DeskDrafts();
 	// FR-DFS-05: a switch unmounts the step's form, so typed input waits on this confirm.
-	let pendingMode = $state<DeskMode | null>(null);
+	// One confirm for both paths: the in-page switcher and a navigation that changes the mode.
+	type PendingSwitch =
+		| { kind: 'mode'; mode: DeskMode }
+		| { kind: 'nav'; mode: DeskMode; url: URL; popDelta: number | null };
+	let pendingSwitch = $state.raw<PendingSwitch | null>(null);
+	const pendingMode = $derived(pendingSwitch?.mode ?? null);
 
 	function selectMode(next: DeskMode) {
 		if (next === mode) return;
 		if (drafts.hasDraft()) {
-			pendingMode = next;
+			pendingSwitch = { kind: 'mode', mode: next };
 			return;
 		}
 		switchMode(next);
 	}
 
+	// One-shot: the `href` of the navigation we re-run after a confirm, so it is not held again.
+	let bypassHref: string | null = null;
+
+	// FR-DFS-05 for navigations. A same-route navigation that changes the mode would unmount the
+	// step's form, so while a draft exists it is cancelled here and waits on the confirm. Cancelling
+	// leaves the URL and history exactly as they were: for a link nothing was pushed yet, and for
+	// popstate SvelteKit's `block` undoes the move with `history.go(-delta)`. Limit: SvelteKit can
+	// only cancel popstates it handles as navigations; a popstate within one navigation entry (the
+	// desk's own shallow writes) is not a navigation, never reaches here, and keeps the mode anyway.
+	// A popstate reads the target mode from `location`: kit sets `to.url` from the entry's original
+	// URL, but the browser is already on the entry, whose address is the desk's last write.
+	beforeNavigate((nav) => {
+		const bypass = bypassHref;
+		bypassHref = null;
+		if (nav.willUnload || nav.to === null) return;
+		if (nav.to.url.pathname !== resolve(ONSITE_DISTRIBUTION_PATH)) return;
+		if (bypass === nav.to.url.href) return;
+
+		const targetParams =
+			nav.type === 'popstate' ? new URL(location.href).searchParams : nav.to.url.searchParams;
+		const targetMode = resolveInitialMode(
+			parseOnsiteDistributionParams(targetParams).mode,
+			untrack(readStoredDeskMode)
+		);
+		const action = incomingLinkAction({
+			currentMode: mode,
+			linkMode: targetMode,
+			hasDraft: drafts.hasDraft()
+		});
+		if (action === 'apply') {
+			// Proceeds. Any open confirm is now stale (the user went elsewhere), so drop it.
+			pendingSwitch = null;
+			return;
+		}
+		nav.cancel();
+		pendingSwitch = {
+			kind: 'nav',
+			mode: targetMode,
+			url: nav.to.url,
+			popDelta: nav.type === 'popstate' && nav.delta !== undefined ? nav.delta : null
+		};
+	});
+
+	// Cancel (or closing the dialog). Nothing to undo: a held navigation was cancelled, so the
+	// URL, history position and draft are untouched. The desk URL is deliberately not rewritten.
+	function cancelPending() {
+		pendingSwitch = null;
+	}
+
+	function confirmPending() {
+		const held = pendingSwitch;
+		if (!held) return;
+		if (held.kind === 'mode') {
+			switchMode(held.mode);
+			return;
+		}
+		pendingSwitch = null;
+		// Re-run the navigation once; `bypassHref` keeps `beforeNavigate` from holding it again.
+		// A link push (`replaceState: false`) matches what the click would have done. Scroll is
+		// left at its default; the phone then brings the detail into view like any desk action.
+		bypassHref = held.url.href;
+		if (held.popDelta !== null) {
+			history.go(held.popDelta);
+			return;
+		}
+		const href = `${ONSITE_DISTRIBUTION_PATH}${held.url.search}${held.url.hash}`;
+		void goto(resolve(href as typeof ONSITE_DISTRIBUTION_PATH), { replaceState: false }).then(() =>
+			scrollToContent()
+		);
+	}
+
 	function switchMode(next: DeskMode) {
-		pendingMode = null;
+		pendingSwitch = null;
 		mode = next;
 		activeTab = stepAfterModeSwitch(activeTab, next);
+		if (activeTab !== 'returns') selectedPoolId = null;
 		storeDeskMode(next);
-		// Shallow URL update: a goto re-runs navigation and cancels the scroll below.
-		replaceState(resolve(`/onsite/distribution?mode=${next}` as '/onsite/distribution'), {});
+		writeUrl();
 		void scrollToContent();
 	}
 
 	function selectTab(tab: StationTab) {
 		activeTab = tab;
+		if (tab !== 'returns') selectedPoolId = null;
+		writeUrl();
 		void scrollToContent();
+	}
+
+	// Board callback (select / close); also fires after an awaited action, so it only writes.
+	function selectPool(poolId: string | null) {
+		selectedPoolId = poolId;
+		writeUrl();
 	}
 
 	function pickTicket(set: (id: string) => void) {
@@ -335,18 +467,18 @@
 				shelterCode: currentShelterCode
 			});
 			toast.success(`ตรวจรับสินค้าเข้าจุดแจกจ่ายเรียบร้อยแล้ว: ${ticket.ticket_no}`);
-			// Show the received ticket: clear the point filter, then switch to its tab.
-			pickedPoint = null;
-			// If received food, switch tab to food; if supplies, switch to supplies
-			if (ticket.requisition_type === 'food') {
-				activeTab = 'food';
-				pickedFoodDay = ticketServiceDay(ticket);
-				pickedFoodTicketId = ticket._id;
-				void scrollToContent();
-			} else if (ticket.requisition_type === 'supplies') {
-				activeTab = 'supplies';
-				pickedSuppliesTicketId = ticket._id;
-				void scrollToContent();
+			// Show the received ticket in its tab, but only if the desk is still in its mode: the mode
+			// buttons stay enabled during the await, and a jump would mix modes (and the URL).
+			if (ticket.requisition_type === mode) {
+				pickedPoint = null;
+				if (ticket.requisition_type === 'food') {
+					selectTab('food');
+					pickedFoodDay = ticketServiceDay(ticket);
+					pickedFoodTicketId = ticket._id;
+				} else {
+					selectTab('supplies');
+					pickedSuppliesTicketId = ticket._id;
+				}
 			}
 		} catch (err) {
 			toast.error(formatDistributionError(err, 'ไม่สามารถตรวจรับสินค้าได้ กรุณาลองใหม่อีกครั้ง'));
@@ -797,7 +929,11 @@
 			<LoanReturnCard shelterCode={currentShelterCode} />
 			<!-- Bulk return pools (#659): the desk adds / moves / voids entries; open / edit / cancel stay
 				 hidden (canManage). -->
-			<BulkReturnPoolBoard shelterCode={currentShelterCode ?? undefined} />
+			<BulkReturnPoolBoard
+				shelterCode={currentShelterCode ?? undefined}
+				initialPoolId={selectedPoolId}
+				onSelectedPoolChange={selectPool}
+			/>
 		</div>
 	{:else if activeTab === 'reconciliation'}
 		<!-- TAB 5: Shift Reconciliation & Close Surface -->
@@ -912,7 +1048,7 @@
 	<AlertDialog.Root
 		open={pendingMode !== null}
 		onOpenChange={(open) => {
-			if (!open) pendingMode = null;
+			if (!open) cancelPending();
 		}}
 	>
 		<AlertDialog.Content class="max-w-md">
@@ -926,9 +1062,7 @@
 			</AlertDialog.Header>
 			<AlertDialog.Footer>
 				<AlertDialog.Cancel>อยู่โหมดเดิม</AlertDialog.Cancel>
-				<AlertDialog.Action onclick={() => pendingMode && switchMode(pendingMode)}>
-					สลับโหมด
-				</AlertDialog.Action>
+				<AlertDialog.Action onclick={confirmPending}>สลับโหมด</AlertDialog.Action>
 			</AlertDialog.Footer>
 		</AlertDialog.Content>
 	</AlertDialog.Root>

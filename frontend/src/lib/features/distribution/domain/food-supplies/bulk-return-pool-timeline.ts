@@ -1,6 +1,7 @@
 import type { BulkReturnEntry, BulkReturnEntryReturnerType } from './bulk-return-entry';
 import type { BulkReturnEntryMove } from './bulk-return-entry-move';
 import type { BulkReturnEntryVoid } from './bulk-return-entry-void';
+import type { BulkReturnLoanReopen } from './bulk-return-loan-reopen';
 import type { BulkReturnPoolV3 } from './bulk-return-pool-v3';
 
 /**
@@ -14,6 +15,7 @@ export type PoolTimelineEventKind =
 	| 'moved_in'
 	| 'moved_out'
 	| 'voided'
+	| 'loan_reopened'
 	| 'submitted'
 	| 'received'
 	| 'cancelled';
@@ -25,9 +27,10 @@ const KIND_ORDER: Record<PoolTimelineEventKind, number> = {
 	moved_in: 2,
 	moved_out: 3,
 	voided: 4,
-	submitted: 5,
-	received: 6,
-	cancelled: 7
+	loan_reopened: 5,
+	submitted: 6,
+	received: 7,
+	cancelled: 8
 };
 
 export interface PoolTimelineEvent {
@@ -55,6 +58,7 @@ export interface PoolTimelineEventSet {
 	entries: readonly BulkReturnEntry[];
 	moves: readonly BulkReturnEntryMove[];
 	voids: readonly BulkReturnEntryVoid[];
+	loanReopens?: readonly BulkReturnLoanReopen[];
 }
 
 function compare(a: PoolTimelineEvent, b: PoolTimelineEvent): number {
@@ -146,6 +150,21 @@ export function buildPoolTimeline(
 			...returnerOf(entryVoid.entry_id),
 			...(entryVoid.notes ? { notes: entryVoid.notes } : {}),
 			...(pins?.has(entryVoid.entry_id) ? { no_effect: true as const } : {})
+		});
+	}
+
+	for (const reopen of events.loanReopens ?? []) {
+		if (reopen.pool_id !== poolId) continue;
+		const entry = entryById.get(reopen.entry_id);
+		out.push({
+			id: reopen._id,
+			kind: 'loan_reopened',
+			at: reopen.created_at,
+			by: reopen.created_by,
+			...(entry ? { item_id: entry.item_id, qty: entry.qty } : {}),
+			entry_id: reopen.entry_id,
+			...returnerOf(reopen.entry_id),
+			notes: reopen.reason
 		});
 	}
 

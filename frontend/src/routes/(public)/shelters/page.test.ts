@@ -24,8 +24,7 @@ type LoadResult = {
 	summary: {
 		shelters_total: number;
 		shelters_open: number;
-		evac_centers: number;
-		host_houses: number;
+		counts_by_site_kind: Record<string, number>;
 	};
 	filters: Record<string, string>;
 	available_types: string[];
@@ -351,5 +350,43 @@ describe('public/shelters load function', () => {
 		expect(result.shelters).toHaveLength(1);
 		expect(result.shelters[0].code).toBe('SH001');
 		expect(result.shelters[0].admin_type).toBe('โรงเรียน');
+	});
+
+	it('counts shelters per site_kind code, including codes added in master data', async () => {
+		vi.mocked(listPublicShelters).mockResolvedValue({
+			shelters: [
+				{ code: 'A', name: 'ก', status: 'open', capacity: 1, site_kind: 'evacuation_center' },
+				{ code: 'B', name: 'ข', status: 'open', capacity: 1, site_kind: 'host_house' },
+				{ code: 'C', name: 'ค', status: 'open', capacity: 1, site_kind: 'field_hospital' },
+				{ code: 'D', name: 'ง', status: 'open', capacity: 1, site_kind: 'field_hospital' },
+				{ code: 'E', name: 'จ', status: 'open', capacity: 1 }
+			],
+			count: 5,
+			as_of: '2026-08-19T10:00:00Z'
+		} as unknown as PublicShelterListResponse);
+
+		const result = await runLoad(new URL('http://localhost/shelters'));
+
+		expect(result.summary.counts_by_site_kind).toEqual({
+			evacuation_center: 2,
+			host_house: 1,
+			field_hospital: 2
+		});
+	});
+
+	it('passes any well-formed site_kind code through to the API and rejects malformed ones', async () => {
+		vi.mocked(listPublicShelters).mockResolvedValue({
+			shelters: [],
+			count: 0,
+			as_of: '2026-08-19T10:00:00Z'
+		});
+
+		const ok = await runLoad(new URL('http://localhost/shelters?site_kind=field_hospital'));
+		expect(vi.mocked(listPublicShelters).mock.calls[0][0]?.site_kind).toBe('field_hospital');
+		expect(ok.filters.site_kind).toBe('field_hospital');
+
+		const bad = await runLoad(new URL('http://localhost/shelters?site_kind=Field%20Hospital!'));
+		expect(vi.mocked(listPublicShelters).mock.calls[1][0]?.site_kind).toBeUndefined();
+		expect(bad.filters.site_kind).toBeUndefined();
 	});
 });

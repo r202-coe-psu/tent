@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { luggageRuleLabels } from '$lib/features/shelters';
+import { luggageRuleLabels, type SubStorageItem } from '$lib/features/shelters';
 import { H, isTextColumn, PET_CONDITION_COLUMNS, SHEETS } from './columns';
 import {
 	buildMasterLookup,
@@ -20,6 +20,15 @@ function lookups(): Lookups {
 		shelter_type: buildMasterLookup([
 			{ code: 'school', label: 'โรงเรียน' },
 			{ code: 'temple', label: 'วัด (ศาสนสถาน)' }
+		]),
+		site_kind: buildMasterLookup([
+			{
+				code: 'evacuation_center',
+				label: 'ศูนย์อพยพ',
+				label_en: 'Evacuation Center',
+				is_default: true
+			},
+			{ code: 'host_house', label: 'บ้านพี่เลี้ยง', label_en: 'Host House' }
 		])
 	};
 }
@@ -27,6 +36,8 @@ function lookups(): Lookups {
 function baseRow(over: Partial<RawRow> = {}): RawRow {
 	return { [H.name]: 'ศูนย์ทดสอบ', [H.capacity]: '150', ...over };
 }
+
+const NOT_A_DROP_OFF = { accepts_donations: false, lat: null, lng: null, location_note: null };
 
 describe('validateRow — happy path', () => {
 	it('maps a minimal valid row to a shelter payload', () => {
@@ -72,6 +83,75 @@ describe('validateRow — happy path', () => {
 
 		const byCode = validateRow(baseRow({ [H.shelter_type]: 'temple' }), 1, lookups());
 		expect(byCode.shelter?.shelter_type).toBe('temple');
+	});
+
+	it.each([
+		['label_th', 'บ้านพี่เลี้ยง', 'host_house'],
+		['label_en', 'Host House', 'host_house'],
+		['code', 'host_house', 'host_house'],
+		['empty cell (is_default)', '', 'evacuation_center']
+	])('resolves ชนิดสถานที่ from %s', (_name, cell, expected) => {
+		const r = validateRow(baseRow({ [H.site_kind]: cell }), 1, lookups());
+		expect(r.ok).toBe(true);
+		expect(r.shelter?.site_kind).toBe(expected);
+	});
+
+	it('falls back to evacuation_center on an empty ชนิดสถานที่ when the list has no default', () => {
+		const r = validateRow(baseRow(), 1, emptyLookups());
+		expect(r.shelter?.site_kind).toBe('evacuation_center');
+	});
+
+	it('flags a ชนิดสถานที่ that is not in the lookup', () => {
+		const unknown = validateRow(baseRow({ [H.site_kind]: 'โรงพยาบาลสนาม' }), 1, lookups());
+		expect(unknown.ok).toBe(false);
+		expect(unknown.errors.find((e) => e.column === H.site_kind)?.message).toContain('ไม่พบ');
+	});
+
+	it('resolves an inactive ชนิดสถานที่ and records it, but never defaults to it', () => {
+		const withInactive: Lookups = {
+			...lookups(),
+			site_kind: buildMasterLookup([
+				{ code: 'evacuation_center', label: 'ศูนย์อพยพ', is_default: true },
+				{ code: 'field_hospital', label: 'โรงพยาบาลสนาม', status: 'inactive', is_default: true }
+			])
+		};
+		expect(withInactive.site_kind.inactiveCodes).toEqual(new Set(['field_hospital']));
+		for (const cell of ['field_hospital', 'โรงพยาบาลสนาม']) {
+			const r = validateRow(baseRow({ [H.site_kind]: cell }), 1, withInactive);
+			expect(r.ok).toBe(true);
+			expect(r.shelter?.site_kind).toBe('field_hospital');
+		}
+		const empty = validateRow(baseRow(), 1, withInactive);
+		expect(empty.shelter?.site_kind).toBe('evacuation_center');
+	});
+
+	it('reads site kinds written by the pre-CR-198 template ("label_th (label_en)")', () => {
+		for (const [cell, code] of [
+			['ศูนย์อพยพ (Evacuation Center)', 'evacuation_center'],
+			['บ้านพี่เลี้ยง (Host House)', 'host_house']
+		]) {
+			const r = validateRow(baseRow({ [H.site_kind]: cell }), 1, lookups());
+			expect(r.ok).toBe(true);
+			expect(r.shelter?.site_kind).toBe(code);
+		}
+	});
+
+	it('resolves a label shared with an inactive item to the active one, in either order', () => {
+		const active = { code: 'field_hospital', label: 'โรงพยาบาลสนาม', label_en: 'Field Hospital' };
+		const retired = {
+			code: 'old_field_hospital',
+			label: 'โรงพยาบาลสนาม',
+			label_en: 'Field Hospital',
+			status: 'inactive' as const
+		};
+		for (const items of [
+			[active, retired],
+			[retired, active]
+		]) {
+			const lookup = buildMasterLookup(items);
+			expect(lookup.byLabel.get('โรงพยาบาลสนาม')).toBe('field_hospital');
+			expect(lookup.byLabel.get('Field Hospital')).toBe('field_hospital');
+		}
 	});
 
 	it('leaves the app-only fields unset — they are not in the workbook', () => {
@@ -289,8 +369,20 @@ describe('validateRow — sub storage list', () => {
 		);
 		expect(r.ok).toBe(true);
 		expect(r.shelter?.common_areas.sub_storage).toEqual([
-			{ id: expect.any(String), name: 'คลังหน้าอาคาร', types: ['food_dry'], area_m2: 20 },
-			{ id: expect.any(String), name: 'คลังยา', types: ['medical_supplies'], area_m2: null }
+			{
+				id: expect.any(String),
+				name: 'คลังหน้าอาคาร',
+				types: ['food_dry'],
+				area_m2: 20,
+				...NOT_A_DROP_OFF
+			},
+			{
+				id: expect.any(String),
+				name: 'คลังยา',
+				types: ['medical_supplies'],
+				area_m2: null,
+				...NOT_A_DROP_OFF
+			}
 		]);
 	});
 
@@ -612,6 +704,59 @@ describe('column contract — headers are unique across sheets', () => {
 	});
 });
 
+describe('buildUpdatePayload — storage points already in the app (#1004 review W2)', () => {
+	const fromFile = (cell: string) => {
+		const r = validateRow(baseRow({ [H.sub_storage]: cell }), 1, emptyLookups());
+		if (!r.shelter) throw new Error('fixture row should validate');
+		return r.shelter;
+	};
+	const gym: SubStorageItem = {
+		id: 'point-gym',
+		name: 'โรงยิม',
+		types: ['general'],
+		area_m2: null,
+		accepts_donations: true,
+		lat: 7.01,
+		lng: 100.41,
+		location_note: 'ประตู 2'
+	};
+
+	it('keeps the id and the drop-off settings of a point of the same name', () => {
+		const payload = buildUpdatePayload(fromFile('โรงยิม:อาหารแห้ง:40'), {
+			common_areas: { sub_storage: [gym] }
+		});
+		expect(payload.common_areas.sub_storage).toEqual([
+			{ ...gym, types: ['food_dry'], area_m2: 40 }
+		]);
+	});
+
+	it('gives a point new to the app a new id and no drop-off settings', () => {
+		const payload = buildUpdatePayload(fromFile('โรงยิม:ทั่วไป | ห้องพยาบาล:ยา'), {
+			common_areas: { sub_storage: [gym] }
+		});
+		const [kept, added] = payload.common_areas.sub_storage ?? [];
+		expect(kept.id).toBe('point-gym');
+		expect(added).toMatchObject({ name: 'ห้องพยาบาล', accepts_donations: false, lat: null });
+		expect(added.id).not.toBe('point-gym');
+	});
+
+	it('matches each stored point once, so two points of one name stay two', () => {
+		const payload = buildUpdatePayload(fromFile('โรงยิม:ทั่วไป | โรงยิม:ทั่วไป'), {
+			common_areas: { sub_storage: [gym] }
+		});
+		const ids = (payload.common_areas.sub_storage ?? []).map((p) => p.id);
+		expect(ids[0]).toBe('point-gym');
+		expect(ids[1]).not.toBe('point-gym');
+	});
+
+	it('drops a stored point the file no longer lists, as before', () => {
+		const payload = buildUpdatePayload(fromFile('ห้องพยาบาล:ยา'), {
+			common_areas: { sub_storage: [gym] }
+		});
+		expect(payload.common_areas.sub_storage?.map((p) => p.name)).toEqual(['ห้องพยาบาล']);
+	});
+});
+
 describe('buildUpdatePayload — fields the workbook cannot express', () => {
 	const rowPayload = () => {
 		const r = validateRow(baseRow(), 1, emptyLookups());
@@ -632,6 +777,18 @@ describe('buildUpdatePayload — fields the workbook cannot express', () => {
 		expect(payload.admission_policy.supported_vulnerable_groups).toEqual(['elderly', 'pregnant']);
 		// the pet half still comes from the file
 		expect(payload.admission_policy.pet_policy).toEqual({ policy: null, categories: [] });
+	});
+
+	it('keeps the stored site_kind when the cell was blank (CR-198 D-4)', () => {
+		const blank = validateRow(baseRow(), 1, lookups());
+		expect(blank.siteKindBlank).toBe(true);
+		expect(blank.shelter?.site_kind).toBe('evacuation_center');
+		const payload = buildUpdatePayload(blank.shelter!, null, { siteKindBlank: true });
+		expect('site_kind' in payload).toBe(false);
+
+		const filled = validateRow(baseRow({ [H.site_kind]: 'host_house' }), 1, lookups());
+		expect(filled.siteKindBlank).toBeUndefined();
+		expect(buildUpdatePayload(filled.shelter!, null).site_kind).toBe('host_house');
 	});
 
 	it('keeps every other field from the file', () => {

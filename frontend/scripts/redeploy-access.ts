@@ -41,12 +41,18 @@ import {
 	BULK_RETURN_ENTRY_MANGO_INDEXES,
 	buildValidateDocUpdate,
 	DAILY_SOP_ROLE_MANGO_INDEX,
+	DONATION_RECEIVED_MANGO_INDEX,
+	DONATION_RECEIVED_PHONE_MANGO_INDEX,
+	DONATION_BOOKING_REF_MANGO_INDEX,
+	DONATION_PHOTO_ORPHAN_MANGO_INDEX,
 	KIOSK_LOOKUP_WARMUP_SELECTORS,
 	PEOPLE_MANGO_INDEXES,
 	REFERRAL_MANGO_INDEXES,
 	KIOSK_LOOKUP_MANGO_INDEXES,
 	REQUISITION_TICKET_MANGO_INDEXES,
+	ROLE_GRANT_AUDIT_MANGO_INDEX,
 	shelterDbName,
+	STOCK_LEDGER_LOT_NO_MANGO_INDEX,
 	TRANSFER_LEDGER_MANGO_INDEXES
 } from '$lib/server/shelter-access-design';
 
@@ -475,7 +481,8 @@ async function main() {
 					PEOPLE_MANGO_INDEXES.length +
 					REQUISITION_TICKET_MANGO_INDEXES.length +
 					BULK_RETURN_ENTRY_MANGO_INDEXES.length +
-					1;
+					// Daily SOP role, the donor photo index, and the four donation / ledger indexes of #821.
+					6;
 				console.log(`    would ensure ${indexCount} shelter Mango indexes`);
 				if (PUBLIC_WRITER_NAME) {
 					console.log(
@@ -517,6 +524,35 @@ async function main() {
 			const dailySopIndexResult = await deployMangoIndexes(db, [DAILY_SOP_ROLE_MANGO_INDEX], false);
 			console.log(
 				`    ✓ Daily SOP role mango index (${dailySopIndexResult.created} created, ${dailySopIndexResult.existing} existing)`
+			);
+			const donationReceivedIndexResult = await deployMangoIndexes(
+				db,
+				[
+					DONATION_RECEIVED_MANGO_INDEX,
+					DONATION_RECEIVED_PHONE_MANGO_INDEX,
+					DONATION_BOOKING_REF_MANGO_INDEX,
+					STOCK_LEDGER_LOT_NO_MANGO_INDEX
+				],
+				false
+			);
+			console.log(
+				`    ✓ donation received / phone / ledger lot mango indexes (${donationReceivedIndexResult.created} created, ${donationReceivedIndexResult.existing} existing)`
+			);
+			const roleGrantAuditIndexResult = await deployMangoIndexes(
+				db,
+				[ROLE_GRANT_AUDIT_MANGO_INDEX],
+				false
+			);
+			console.log(
+				`    ✓ role-grant audit mango index (${roleGrantAuditIndexResult.created} created, ${roleGrantAuditIndexResult.existing} existing)`
+			);
+			const donationPhotoIndexResult = await deployMangoIndexes(
+				db,
+				[DONATION_PHOTO_ORPHAN_MANGO_INDEX],
+				false
+			);
+			console.log(
+				`    ✓ donor photo mango index (${donationPhotoIndexResult.created} created, ${donationPhotoIndexResult.existing} existing)`
 			);
 			const kioskIndexResult = await deployKioskLookupMangoIndexes(db, false);
 			console.log(

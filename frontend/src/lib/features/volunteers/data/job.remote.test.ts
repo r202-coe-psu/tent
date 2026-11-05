@@ -259,4 +259,65 @@ describe('JobRemoteRepository — quota mutations', () => {
 		const edited = await repo.update({ ...full!, title: 'แก้ชื่องาน', status: 'open' });
 		expect(edited.status).toBe('open');
 	});
+
+	describe('released_application_ids ledger (CR-220)', () => {
+		/** What the public ticket cancel leaves on the job: counters moved and the key appended. */
+		async function ticketCancelRelease(id: string, key: string) {
+			const stored = (await memoryRepo.get(id)) as { _id: string } & Record<string, unknown>;
+			const ledger = (stored.released_application_ids as string[] | undefined) ?? [];
+			await memoryRepo.put({ ...stored, schema_v: 4, released_application_ids: [...ledger, key] });
+		}
+
+		it('update() keeps a ledger entry written after the form was opened (AC-7)', async () => {
+			const repo = createJobRepositoryForTest('shelter_sh001');
+			const created = await repo.create(withQuota(5), ctx);
+			// The edit form holds `created`; a ticket cancel lands before staff press save.
+			await ticketCancelRelease(created._id, 'job_application:a1');
+
+			const saved = await repo.update({ ...created, title: 'ชื่อใหม่' });
+
+			expect(saved).toMatchObject({ title: 'ชื่อใหม่', schema_v: 4 });
+			expect(saved.released_application_ids).toEqual(['job_application:a1']);
+			expect(await repo.get(created._id)).toMatchObject({
+				released_application_ids: ['job_application:a1']
+			});
+		});
+
+		it('update() merges both sides as a de-duplicated union', async () => {
+			const repo = createJobRepositoryForTest('shelter_sh001');
+			const created = await repo.create(withQuota(5), ctx);
+			await ticketCancelRelease(created._id, 'job_application:a1');
+			await ticketCancelRelease(created._id, 'job_application:a2');
+
+			const saved = await repo.update({
+				...created,
+				released_application_ids: ['job_application:a1', 'job_application:a0']
+			});
+
+			expect([...(saved.released_application_ids ?? [])].sort()).toEqual([
+				'job_application:a0',
+				'job_application:a1',
+				'job_application:a2'
+			]);
+		});
+
+		it('update() on a job with no ledger writes an empty one', async () => {
+			const repo = createJobRepositoryForTest('shelter_sh001');
+			const created = await repo.create(withQuota(5), ctx);
+			const saved = await repo.update({ ...created, title: 'ชื่อใหม่' });
+			expect(saved.released_application_ids ?? []).toEqual([]);
+		});
+
+		it('quota mutations keep the ledger', async () => {
+			const repo = createJobRepositoryForTest('shelter_sh001');
+			const created = await repo.create(withQuota(5), ctx);
+			await ticketCancelRelease(created._id, 'job_application:a1');
+
+			await repo.dispatch(created._id, 1);
+			await repo.acceptDispatch(created._id, 1);
+			const after = await repo.releaseSlot(created._id, 1);
+
+			expect(after.released_application_ids).toEqual(['job_application:a1']);
+		});
+	});
 });

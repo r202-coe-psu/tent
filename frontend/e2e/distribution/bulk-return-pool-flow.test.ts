@@ -12,7 +12,7 @@
  */
 
 import type { Route } from '@playwright/test';
-import { putDocument } from '../helpers/couch';
+import { COUCH_BASE, putDocument } from '../helpers/couch';
 import { injectSession } from '../helpers/login';
 import { expect, test } from './fixtures';
 import {
@@ -924,5 +924,68 @@ test.describe('Bulk return pool v3 — lifecycle (BRP-F)', { tag: DESK_TAGS }, (
 		expect(after._rev).toBe(before._rev);
 		expect(after.status).toBe(before.status);
 		expect(after.qty_returned).toEqual(before.qty_returned);
+	});
+
+	// Guards #920 loan-batch isolation: a failed loan read must not take the pool board down.
+	test('BRP-F15 a failed loan read keeps the board up and marks affected pools', async ({
+		page,
+		scenarioAs
+	}) => {
+		const scenario = await scenarioAs('brp_f15');
+		const name = poolName(scenario, 'F15');
+		const pool = await seedOpenPool(scenario, { name });
+		const evacuee = await seedRecipient(scenario, `Brp${scenario.namespace.slice(-6)}`, 'F15');
+		const loan = await seedLoan(scenario, evacuee, 'f15', '2');
+		await seedEntry(scenario, pool, {
+			item: loan.item,
+			qty: '1',
+			returner: evacuee,
+			loanRefs: [{ logId: loan.logId, qty: '1' }]
+		});
+
+		// Fail ONLY the loan batch read (POST _all_docs keyed by the loan id); pool reads are GETs.
+		const loanReadDown = async (route: Route) => {
+			const req = route.request();
+			if (
+				req.method() === 'POST' &&
+				new URL(req.url()).pathname.endsWith('/_all_docs') &&
+				(req.postData() ?? '').includes(loan.logId)
+			) {
+				await route.abort('internetdisconnected');
+				return;
+			}
+			await route.fallback();
+		};
+		await page.route(`${COUCH_BASE}/**`, loanReadDown);
+
+		const board = new BulkReturnPoolBoard(page);
+		await board.gotoBackOffice();
+
+		// The client retries with backoff before degrading, hence the long timeout.
+		const banner = page.getByTestId('bulk-return-board-loan-read-failed');
+		await expect(banner).toBeVisible({ timeout: 15_000 });
+		await expect(board.card(name)).toBeVisible();
+		await expect(board.card(name).getByTestId('bulk-return-card-loan-unknown-hint')).toBeVisible();
+
+		// Loan-unknown pools count as "ต้องจัดการ": listed in the flagged queue and kept by the filter.
+		const flaggedQueue = page
+			.getByTestId('bulk-return-work-queues')
+			.locator('section[aria-labelledby="bulk-queue-flagged"]');
+		const flaggedItem = flaggedQueue.getByRole('listitem').filter({ hasText: name });
+		await expect(flaggedItem).toBeVisible();
+		await expect(flaggedItem).toContainText('ตรวจยอดยืมไม่ได้');
+
+		const needsAttentionSwitch = page.locator('#bulk-pool-needs-attention');
+		await needsAttentionSwitch.click();
+		await expect(needsAttentionSwitch).toHaveAttribute('aria-checked', 'true');
+		await expect(board.card(name)).toBeVisible();
+		await needsAttentionSwitch.click();
+		await expect(needsAttentionSwitch).toHaveAttribute('aria-checked', 'false');
+
+		await page.unroute(`${COUCH_BASE}/**`, loanReadDown);
+		await banner.getByRole('button', { name: 'ลองใหม่' }).click();
+		await expect(banner).toHaveCount(0);
+		await expect(board.card(name).getByTestId('bulk-return-card-loan-unknown-hint')).toHaveCount(0);
+		await expect(flaggedItem).toHaveCount(0);
 	});
 });

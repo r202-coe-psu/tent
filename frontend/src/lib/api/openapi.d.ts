@@ -1740,6 +1740,19 @@ export interface components {
 			 */
 			message: string;
 		};
+		/**
+		 * DonationCreateItem
+		 * @description One booked line as stored, so the ticket can group by point without a second read.
+		 */
+		DonationCreateItem: {
+			/** Drop Off Point Id */
+			drop_off_point_id: string | null;
+			/**
+			 * Review Status
+			 * @enum {string}
+			 */
+			review_status: 'approved' | 'pending';
+		};
 		/** DonationCreateRequest */
 		DonationCreateRequest: {
 			/** Shelter Code */
@@ -1754,6 +1767,8 @@ export interface components {
 				[key: string]: unknown;
 			} | null;
 			slot_hold?: components['schemas']['SlotHold'] | null;
+			/** Photos */
+			photos?: string[];
 			/** Captchatoken */
 			captchaToken?: string | null;
 		};
@@ -1770,6 +1785,8 @@ export interface components {
 			booking_ref: string;
 			/** Status */
 			status: string;
+			/** Items */
+			items: components['schemas']['DonationCreateItem'][];
 		};
 		/** DonationItemInput */
 		DonationItemInput: {
@@ -1787,6 +1804,10 @@ export interface components {
 			condition?: string | null;
 			/** Note */
 			note?: string | null;
+			/** Line Key */
+			line_key?: string | null;
+			/** Drop Off Point Id */
+			drop_off_point_id?: string | null;
 		};
 		/** DonationItemsPatchRequest */
 		DonationItemsPatchRequest: {
@@ -1885,6 +1906,21 @@ export interface components {
 			to?: string | null;
 		};
 		/**
+		 * DonationPoint
+		 * @description A storage point ticked as a donation drop-off point, with a pin (CR-205).
+		 */
+		DonationPoint: {
+			/** Id */
+			id: string;
+			/** Name */
+			name: string;
+			/** Types */
+			types?: string[];
+			geo: components['schemas']['GeoPoint'];
+			/** Location Note */
+			location_note?: string | null;
+		};
+		/**
 		 * DonationTrackSearchRequest
 		 * @description CR-052 §2.6 — human booking_ref + phone exact match (not token alone).
 		 */
@@ -1955,6 +1991,105 @@ export interface components {
 			phone: string;
 			/** Relation */
 			relation: string;
+		};
+		/**
+		 * ExternalNeedItemResponse
+		 * @description One row per shelter + item_id: the `/external/v1/needs` shape (CR-206 A2 FR-AP-27).
+		 */
+		ExternalNeedItemResponse: {
+			/** Item Id */
+			item_id: string;
+			/** Name */
+			name: string;
+			/** Qty Needed */
+			qty_needed: string;
+			/**
+			 * Qty Target
+			 * @default 0
+			 */
+			qty_target: string;
+			/**
+			 * On Hand
+			 * @default 0
+			 */
+			on_hand: string;
+			/**
+			 * Reserved
+			 * @default 0
+			 */
+			reserved: string;
+			/** Unit */
+			unit: string;
+			/** Status */
+			status: string;
+			/**
+			 * Urgency
+			 * @default normal
+			 */
+			urgency: string;
+			/** Category */
+			category?: string | null;
+		};
+		/** ExternalNeedsListResponse */
+		ExternalNeedsListResponse: {
+			/** Shelters */
+			shelters: components['schemas']['ExternalShelterNeedsResponse'][];
+			/**
+			 * As Of
+			 * Format: date-time
+			 */
+			as_of: string;
+		};
+		/** ExternalSearchResponse */
+		ExternalSearchResponse: {
+			/** Results */
+			results: components['schemas']['ExternalSearchResult'][];
+			/** Count */
+			count: number;
+			/**
+			 * As Of
+			 * Format: date-time
+			 */
+			as_of: string;
+		};
+		/**
+		 * ExternalSearchResult
+		 * @description `/external/v1/occupants` keeps the zone partners read (CR-183 FR-18 is public-only).
+		 */
+		ExternalSearchResult: {
+			/** Name */
+			name: string;
+			/** Status */
+			status: string;
+			/** National Id */
+			national_id?: string | null;
+			/** Gender */
+			gender?: string | null;
+			/** Shelter Name */
+			shelter_name: string;
+			/** Shelter Address */
+			shelter_address?: string | null;
+			/** Origin Address */
+			origin_address?: string | null;
+			/** Checked In At */
+			checked_in_at?: string | null;
+			/** Shelter Status */
+			shelter_status?: ('open' | 'closed' | 'full' | 'standby') | null;
+			/** Family Members */
+			family_members?: components['schemas']['FamilyMember'][];
+			/** Care Zone */
+			care_zone?: string | null;
+			/** Zone Name */
+			zone_name?: string | null;
+		};
+		/** ExternalShelterNeedsResponse */
+		ExternalShelterNeedsResponse: {
+			/** Code */
+			code: string;
+			/** Name */
+			name: string;
+			/** Needs */
+			needs: components['schemas']['ExternalNeedItemResponse'][];
 		};
 		/** FamilyMember */
 		FamilyMember: {
@@ -2446,7 +2581,12 @@ export interface components {
 			/** Search Excluded */
 			search_excluded: boolean;
 		};
-		/** NeedItemResponse */
+		/**
+		 * NeedItemResponse
+		 * @description One donor-board card: shelter + item + drop-off point (CR-206 A2 FR-AP-26).
+		 *
+		 *     Several cards of one shelter may share an ``item_id``.
+		 */
 		NeedItemResponse: {
 			/** Item Id */
 			item_id: string;
@@ -2480,6 +2620,10 @@ export interface components {
 			urgency: string;
 			/** Category */
 			category?: string | null;
+			/** Drop Off Point Id */
+			drop_off_point_id?: string | null;
+			/** Drop Off Point Name */
+			drop_off_point_name?: string | null;
 		};
 		/** NeedsListResponse */
 		NeedsListResponse: {
@@ -3193,10 +3337,10 @@ export interface components {
 			name: string;
 			/**
 			 * Site Kind
+			 * @description Master code from master_data:site_kind (e.g. evacuation_center, host_house)
 			 * @default evacuation_center
-			 * @enum {string}
 			 */
-			site_kind: 'evacuation_center' | 'host_house';
+			site_kind: string;
 			/** Status */
 			status: string;
 			/** Admin Type */
@@ -3238,6 +3382,8 @@ export interface components {
 			 * @default false
 			 */
 			accepts_pre_registration: boolean;
+			/** Donation Points */
+			donation_points?: components['schemas']['DonationPoint'][];
 		};
 		/** ShelterDetailResponse */
 		ShelterDetailResponse: {
@@ -3288,10 +3434,10 @@ export interface components {
 			name: string;
 			/**
 			 * Site Kind
+			 * @description Master code from master_data:site_kind (e.g. evacuation_center, host_house)
 			 * @default evacuation_center
-			 * @enum {string}
 			 */
-			site_kind: 'evacuation_center' | 'host_house';
+			site_kind: string;
 			/** Status */
 			status: string;
 			/**
@@ -3831,6 +3977,11 @@ export interface components {
 			member_ids: string[];
 			/** Required Person Id */
 			required_person_id?: string | null;
+			/**
+			 * Claim Pets
+			 * @default false
+			 */
+			claim_pets: boolean;
 		};
 		/** UnassignedKioskPrepareResponse */
 		UnassignedKioskPrepareResponse: {
@@ -3848,10 +3999,16 @@ export interface components {
 			}[];
 			/** Images */
 			images: components['schemas']['UnassignedKioskImage'][];
+			/** Pets */
+			pets?: {
+				[key: string]: unknown;
+			}[];
+			/** Pet Ids */
+			pet_ids?: string[];
 		};
 		/**
 		 * UnassignedKioskRevertRequest
-		 * @description Kiosk claim revert — give back members this kiosk marked when the Couch write failed.
+		 * @description Kiosk claim revert — give back members and pets this kiosk marked when Couch failed.
 		 */
 		UnassignedKioskRevertRequest: {
 			/** Shelter Code */
@@ -3859,12 +4016,16 @@ export interface components {
 			/** Device Id */
 			device_id: string;
 			/** Member Ids */
-			member_ids: string[];
+			member_ids?: string[];
+			/** Pet Ids */
+			pet_ids?: string[];
 		};
 		/** UnassignedKioskRevertResponse */
 		UnassignedKioskRevertResponse: {
 			/** Reverted */
 			reverted: string[];
+			/** Reverted Pets */
+			reverted_pets?: string[];
 		};
 		/**
 		 * UnassignedPhotoUploadResponse
@@ -4988,7 +5149,7 @@ export interface operations {
 					[name: string]: unknown;
 				};
 				content: {
-					'application/json': components['schemas']['NeedsListResponse'];
+					'application/json': components['schemas']['ExternalNeedsListResponse'];
 				};
 			};
 		};
@@ -5012,7 +5173,7 @@ export interface operations {
 					[name: string]: unknown;
 				};
 				content: {
-					'application/json': components['schemas']['SearchResponse'];
+					'application/json': components['schemas']['ExternalSearchResponse'];
 				};
 			};
 			/** @description Unprocessable Content */
@@ -5136,7 +5297,7 @@ export interface operations {
 				district?: string | null;
 				subdistrict?: string | null;
 				status?: string | null;
-				site_kind?: ('evacuation_center' | 'host_house') | null;
+				site_kind?: string | null;
 				/** @description User latitude */
 				lat?: number | null;
 				/** @description User longitude */

@@ -19,12 +19,7 @@
 	import { ulid } from '$lib/db/ulid';
 	import AlertTriangle from '@lucide/svelte/icons/triangle-alert';
 	import Plus from '@lucide/svelte/icons/plus';
-	import {
-		projectStockLotBalances,
-		StockLotIntegrityError,
-		type StockLedger,
-		type StockLotBalance
-	} from '../domain/operations';
+	import { projectLotsByItem, type StockLedger, type StockLotBalance } from '../domain/operations';
 	import { toLotPriorityItems } from '../domain/lot-priority';
 	import {
 		applyBatchRun,
@@ -108,17 +103,12 @@
 		}
 	});
 
-	const lotProjection = $derived.by((): { lots: StockLotBalance[]; error: string | null } => {
-		if (!ledgerQuery.data) return { lots: [], error: null };
-		try {
-			const lots = projectStockLotBalances(ledgerQuery.data as StockLedger[]).filter((l) =>
-				qtyGt(l.qty, 0)
-			);
-			return { lots, error: null };
-		} catch (error) {
-			if (!(error instanceof StockLotIntegrityError)) throw error;
-			return { lots: [], error: error.message };
-		}
+	// Projected one item at a time (#569): an item whose history cannot be replayed loses its
+	// lots alone, so every other item still gets its lot plan.
+	const lotProjection = $derived.by((): { lots: StockLotBalance[]; brokenItemIds: string[] } => {
+		if (!ledgerQuery.data) return { lots: [], brokenItemIds: [] };
+		const { lots, brokenItemIds } = projectLotsByItem(ledgerQuery.data as StockLedger[]);
+		return { lots: lots.filter((l) => qtyGt(l.qty, 0)), brokenItemIds };
 	});
 	const rankedLotsByItem = $derived(rankLotsByItem(lotProjection.lots, priorityItems, Date.now()));
 
@@ -164,6 +154,12 @@
 
 	const summary = $derived(summarizeBatch(lines, check));
 	const takenItemIds = $derived(new Set(lines.map((l) => l.item_id).filter((id) => id !== '')));
+	/** Only the picked items whose history is broken are named — the rest plan normally. */
+	const brokenLineItemNames = $derived(
+		lotProjection.brokenItemIds
+			.filter((id) => takenItemIds.has(id))
+			.map((id) => itemById.get(id)?.name ?? id)
+	);
 	const hasLanded = $derived(lines.some(hasLandedRows));
 	const submitting = $derived(batchMutation.isPending);
 	const lineDisabled = $derived(offline || !canDistribute || submitting);
@@ -331,12 +327,12 @@
 			</div>
 		{/if}
 
-		{#if lotProjection.error}
+		{#if brokenLineItemNames.length > 0}
 			<div
 				class="rounded-lg border border-red-200 bg-red-50 p-3 text-sm font-semibold text-red-900"
 				role="alert"
 			>
-				คำนวณยอดล็อตไม่ได้ — {lotProjection.error}
+				ประวัติคลังของ {brokenLineItemNames.join(', ')} ไม่สอดคล้องกัน จึงคำนวณยอดรายล็อตไม่ได้ — กรุณาแจ้งผู้ดูแลระบบ
 			</div>
 		{/if}
 

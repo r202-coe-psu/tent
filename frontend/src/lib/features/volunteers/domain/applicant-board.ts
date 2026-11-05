@@ -26,6 +26,8 @@ export type HistoryFacet = 'confirmed' | 'rejected' | 'cancelled' | 'staff_assig
 
 export interface ApplicantPerson {
 	name: string | null;
+	/** From the linked volunteer profile; an application form does not ask for one. */
+	nickname: string | null;
 	phone: string | null;
 	code: string | null;
 }
@@ -58,7 +60,7 @@ export interface ApplicantBoard {
 		pending: number;
 		confirmed: number;
 		declined: number;
-		/** Cancelled staff rows are listed but not counted. */
+		/** Active staff-assigned shifts; a cancelled one counts under `declined` (#849). */
 		staffAssigned: number;
 	};
 }
@@ -89,6 +91,26 @@ export function staffAssignments(
 	return jobAssignments.filter((a) => !claimed.has(a._id));
 }
 
+/** The shift an application is for: the confirmed `shift_id`, else the one the applicant chose. */
+export function applicationShiftId(application: JobApplication): string | null {
+	return application.shift_id ?? application.selected_shift.shift_id ?? null;
+}
+
+/** Who applied, as the board shows and searches them. */
+export function applicationPerson(
+	application: JobApplication,
+	volunteers: ReadonlyMap<string, Volunteer>
+): ApplicantPerson {
+	const { applicant } = application;
+	const volunteer = application.volunteer_id ? volunteers.get(application.volunteer_id) : null;
+	return {
+		name: `${applicant.first_name} ${applicant.last_name}`.trim(),
+		nickname: volunteer?.nickname ?? null,
+		phone: applicant.phone,
+		code: volunteer?.volunteer_code ?? null
+	};
+}
+
 function applicationEntry(
 	application: JobApplication,
 	volunteers: ReadonlyMap<string, Volunteer>
@@ -96,7 +118,6 @@ function applicationEntry(
 	const volunteer = application.volunteer_id
 		? (volunteers.get(application.volunteer_id) ?? null)
 		: null;
-	const { applicant } = application;
 	return {
 		kind: 'application',
 		application,
@@ -105,12 +126,8 @@ function applicationEntry(
 		facet: application.status as Exclude<HistoryFacet, 'staff_assigned'>,
 		personKey: applicantKey(application),
 		volunteer,
-		person: {
-			name: `${applicant.first_name} ${applicant.last_name}`.trim(),
-			phone: applicant.phone,
-			code: volunteer?.volunteer_code ?? null
-		},
-		shiftId: application.shift_id ?? application.selected_shift.shift_id ?? null,
+		person: applicationPerson(application, volunteers),
+		shiftId: applicationShiftId(application),
 		date: application.selected_shift.date
 	};
 }
@@ -125,16 +142,19 @@ function staffEntry(
 		assignment,
 		key: assignment._id,
 		decidedAt: assignment.created_at,
-		facet: 'staff_assigned',
+		// A cancelled direct assignment is no longer "assigned": count and filter it with the
+		// declined/cancelled rows so the tile, the status filter and the heading agree (#849).
+		facet: assignment.status === 'cancelled' ? 'cancelled' : 'staff_assigned',
 		personKey: assignment.volunteer_id,
 		volunteer,
 		person: volunteer
 			? {
 					name: `${volunteer.first_name} ${volunteer.last_name}`.trim(),
+					nickname: volunteer.nickname ?? null,
 					phone: volunteer.phone,
 					code: volunteer.volunteer_code
 				}
-			: { name: null, phone: null, code: null },
+			: { name: null, nickname: null, phone: null, code: null },
 		shiftId: assignment.shift_id ?? null,
 		date: assignment.date
 	};
@@ -170,9 +190,27 @@ export function buildApplicantBoard(input: {
 			people: people.size,
 			pending: queue.pending.length,
 			confirmed: queue.reviewed.filter((a) => a.status === 'confirmed').length,
-			declined: queue.reviewed.filter((a) => a.status === 'rejected' || a.status === 'cancelled')
-				.length,
+			declined:
+				queue.reviewed.filter((a) => a.status === 'rejected' || a.status === 'cancelled').length +
+				staff.filter((a) => a.status === 'cancelled').length,
 			staffAssigned: staff.filter((a) => a.status !== 'cancelled').length
 		}
 	};
+}
+
+/** Per-facet totals for the history heading, so its shift count reads as a sum (#849). */
+export function historyBreakdown(history: readonly Pick<ApplicantHistoryEntry, 'facet'>[]): {
+	confirmed: number;
+	declined: number;
+	staffAssigned: number;
+} {
+	let confirmed = 0;
+	let declined = 0;
+	let staffAssigned = 0;
+	for (const entry of history) {
+		if (entry.facet === 'confirmed') confirmed++;
+		else if (entry.facet === 'staff_assigned') staffAssigned++;
+		else declined++;
+	}
+	return { confirmed, declined, staffAssigned };
 }

@@ -1,6 +1,12 @@
 import { afterEach, describe, it, expect, vi } from 'vitest';
 import { SOP_RATIO_KEYS, SOP_RATIO_KIND } from '$lib/features/sop-ratios/server';
 import {
+	buildBookingRefFindBody,
+	buildLotLedgerFindBody,
+	buildPhoneFindBody,
+	buildReceivedFindBody
+} from '$lib/features/donations/server';
+import {
 	DAILY_SOP_ROLES,
 	canAssessRole,
 	metricForQuestion,
@@ -17,6 +23,12 @@ import { planPublicConsent } from '$lib/features/public-register/server';
 import {
 	buildValidateDocUpdate,
 	DAILY_SOP_ROLE_MANGO_INDEX,
+	DONATION_RECEIVED_MANGO_INDEX,
+	DONATION_RECEIVED_PHONE_MANGO_INDEX,
+	DONATION_BOOKING_REF_MANGO_INDEX,
+	ROLE_GRANT_AUDIT_MANGO_INDEX,
+	STOCK_LEDGER_LOT_NO_MANGO_INDEX,
+	DONATION_PHOTO_ORPHAN_MANGO_INDEX,
 	KIOSK_LOOKUP_MANGO_INDEXES,
 	BULK_RETURN_ENTRY_MANGO_INDEXES,
 	KIOSK_LOOKUP_WARMUP_SELECTORS,
@@ -318,7 +330,13 @@ describe('buildValidateDocUpdate', () => {
 			PEOPLE_MANGO_INDEXES,
 			REQUISITION_TICKET_MANGO_INDEXES,
 			BULK_RETURN_ENTRY_MANGO_INDEXES,
-			[DAILY_SOP_ROLE_MANGO_INDEX]
+			[DAILY_SOP_ROLE_MANGO_INDEX],
+			[DONATION_RECEIVED_MANGO_INDEX],
+			[DONATION_RECEIVED_PHONE_MANGO_INDEX],
+			[DONATION_BOOKING_REF_MANGO_INDEX],
+			[STOCK_LEDGER_LOT_NO_MANGO_INDEX],
+			[DONATION_PHOTO_ORPHAN_MANGO_INDEX],
+			[ROLE_GRANT_AUDIT_MANGO_INDEX]
 		];
 		const byName = new Map<string, string>();
 		for (const { name, index } of lists.flat()) {
@@ -326,6 +344,78 @@ describe('buildValidateDocUpdate', () => {
 			expect(byName.get(name) ?? definition, name).toBe(definition);
 			byName.set(name, definition);
 		}
+	});
+
+	it('defines the received-donations index the "รับแล้ว" list queries (#821)', () => {
+		expect(DONATION_RECEIVED_MANGO_INDEX).toEqual({
+			index: {
+				fields: [{ type: 'desc' }, { status: 'desc' }, { received_at: 'desc' }, { _id: 'desc' }]
+			},
+			ddoc: 'donation-received-list',
+			name: 'donation-received-by-received-at',
+			type: 'json'
+		});
+		// The route's use_index must name exactly what is deployed.
+		const body = buildReceivedFindBody();
+		expect(body.use_index).toEqual([
+			`_design/${DONATION_RECEIVED_MANGO_INDEX.ddoc}`,
+			DONATION_RECEIVED_MANGO_INDEX.name
+		]);
+		expect(body.sort).toEqual(DONATION_RECEIVED_MANGO_INDEX.index.fields);
+	});
+
+	it('defines the phone, booking-ref and lot-number search indexes of the "รับแล้ว" search (#821)', () => {
+		expect(DONATION_RECEIVED_PHONE_MANGO_INDEX).toEqual({
+			index: { fields: ['type', 'status', 'donor.phone_hash', 'received_at'] },
+			ddoc: 'donation-received-phone',
+			name: 'donation-received-phone',
+			type: 'json'
+		});
+		expect(STOCK_LEDGER_LOT_NO_MANGO_INDEX).toEqual({
+			index: { fields: ['type', 'lot.lot_no'] },
+			ddoc: 'stock-ledger-lot-no',
+			name: 'stock-ledger-lot-no',
+			type: 'json'
+		});
+		// The route's use_index must name exactly what is deployed.
+		expect(buildPhoneFindBody('h').use_index).toEqual([
+			`_design/${DONATION_RECEIVED_PHONE_MANGO_INDEX.ddoc}`,
+			DONATION_RECEIVED_PHONE_MANGO_INDEX.name
+		]);
+		expect(DONATION_BOOKING_REF_MANGO_INDEX).toEqual({
+			index: { fields: ['type', 'booking_ref'] },
+			ddoc: 'donation-booking-ref',
+			name: 'donation-booking-ref',
+			type: 'json'
+		});
+		expect(buildBookingRefFindBody('DN-306892').use_index).toEqual([
+			`_design/${DONATION_BOOKING_REF_MANGO_INDEX.ddoc}`,
+			DONATION_BOOKING_REF_MANGO_INDEX.name
+		]);
+		expect(buildLotLedgerFindBody('L-261029-001').use_index).toEqual([
+			`_design/${STOCK_LEDGER_LOT_NO_MANGO_INDEX.ddoc}`,
+			STOCK_LEDGER_LOT_NO_MANGO_INDEX.name
+		]);
+	});
+
+	it('indexes the audit docs of one account by reason for the last-grant-ended lookup (CR-221)', () => {
+		expect(ROLE_GRANT_AUDIT_MANGO_INDEX).toEqual({
+			index: { fields: ['type', 'target_id', 'reason'] },
+			ddoc: 'role-grant-audit-target',
+			name: 'role-grant-audit-by-target',
+			type: 'json'
+		});
+	});
+
+	it('indexes only donor photos no booking has bound, by age (CR-175 FR-16)', () => {
+		expect(DONATION_PHOTO_ORPHAN_MANGO_INDEX.index).toEqual({
+			fields: ['created_at'],
+			partial_filter_selector: {
+				type: 'image',
+				purpose: 'donation',
+				donation_id: { $exists: false }
+			}
+		});
 	});
 
 	it('declares the bulk return Mango indexes: entries by pool, moves by target pool (#658)', () => {
@@ -1162,6 +1252,48 @@ describe('buildValidateDocUpdate', () => {
 		);
 	});
 
+	describe('recipe role gate (CR-217)', () => {
+		const recipe = (over: Doc = {}): Doc => ({
+			...envelope,
+			schema_v: 4,
+			_id: 'recipe:01J',
+			type: 'recipe',
+			label: 'ข้าวผัด',
+			ingredients: [{ item_master_id: 'item_master:rice', quantity: '2', uom: 'kg' }],
+			standard_portions: '10',
+			standard_duration_hours: '1',
+			...over
+		});
+		const deletion = { _id: 'recipe:01J', _rev: '1-a', _deleted: true };
+		const SUPPLY: UserCtx = { name: 'sc', roles: ['shelter:SH001', 'SH001:supply_coordinator'] };
+		const OTHER_KITCHEN: UserCtx = { name: 'kt2', roles: ['shelter:SH002', 'SH002:kitchen_staff'] };
+
+		it.each([
+			['kitchen staff', KITCHEN],
+			['warehouse staff', WAREHOUSE],
+			['a supply coordinator', SUPPLY],
+			['a shelter manager', MANAGER],
+			['a system admin', ADMIN]
+		])('lets %s create, update and delete a recipe', (_, user) => {
+			expect(() => compile()(recipe(), null, user)).not.toThrow();
+			expect(() => compile()(recipe({ label: 'ข้าวผัดไก่' }), recipe(), user)).not.toThrow();
+			expect(() => compile()(deletion, recipe(), user)).not.toThrow();
+		});
+
+		it.each([
+			['registration staff', REGISTRATION],
+			['distribution staff', DISTRIBUTION],
+			['kitchen staff of another shelter', OTHER_KITCHEN]
+		])('rejects %s creating, updating or deleting a recipe', (_, user) => {
+			expectForbidden(() => compile()(recipe(), null, user), /can write recipe/);
+			expectForbidden(
+				() => compile()(recipe({ label: 'ข้าวผัดไก่' }), recipe(), user),
+				/can write recipe/
+			);
+			expectForbidden(() => compile()(deletion, recipe(), user), /can write recipe/);
+		});
+	});
+
 	it('accepts a new stock_ledger entry from warehouse staff', () => {
 		expect(() => compile()(ledger(), null, WAREHOUSE)).not.toThrow();
 	});
@@ -1902,6 +2034,55 @@ describe('buildValidateDocUpdate', () => {
 			expectForbidden(() => compile()(returnLedger, null, userCtx), /Only warehouse staff/);
 		});
 
+		describe('distribution_return from a requisition ticket (CR-208)', () => {
+			const ticketReturn = () =>
+				ledger({
+					qty: '2',
+					reason: 'distribution_return',
+					ref_id: 'requisition_ticket:01J',
+					lot_ref: 'stock_ledger:01J'
+				});
+
+			it.each([
+				['warehouse_staff', WAREHOUSE],
+				['supply_coordinator', { name: 'sc', roles: ['shelter:SH001', 'supply_coordinator'] }],
+				['shelter_manager', { name: 'sm', roles: ['shelter:SH001', 'shelter_manager'] }],
+				['system_admin', { name: 'admin', roles: ['system_admin'] }]
+			])('allows %s', (_role, userCtx) => {
+				expect(() => compile()(ticketReturn(), null, userCtx)).not.toThrow();
+			});
+
+			it.each([
+				['registration_staff', REGISTRATION],
+				['distribution_staff', { name: 'dst', roles: ['shelter:SH001', 'distribution_staff'] }]
+			])('rejects %s', (_role, userCtx) => {
+				expectForbidden(() => compile()(ticketReturn(), null, userCtx), /Only warehouse staff/);
+			});
+
+			it('rejects a direct issue ref', () => {
+				expectForbidden(
+					() =>
+						compile()(
+							{ ...ticketReturn(), ref_id: 'requisition_ticket:direct-01J' },
+							null,
+							WAREHOUSE
+						),
+					/non-direct requisition_ticket ref_id/
+				);
+			});
+
+			it('keeps the lot_ref and positive qty rules', () => {
+				expectForbidden(
+					() => compile()({ ...ticketReturn(), lot_ref: undefined }, null, WAREHOUSE),
+					/physical stock_ledger lot_ref/
+				);
+				expectForbidden(
+					() => compile()({ ...ticketReturn(), qty: '-2' }, null, WAREHOUSE),
+					/positive decimal string/
+				);
+			});
+		});
+
 		it('enforces distribute ref, lot, qty, and old-document append-only invariants', () => {
 			const valid = ledger({
 				qty: '-1.5',
@@ -1950,15 +2131,15 @@ describe('buildValidateDocUpdate', () => {
 			// REF invariants: missing/null or invalid prefix
 			expectForbidden(
 				() => compile()({ ...valid, ref_id: null }, null, WAREHOUSE),
-				/Distribution return stock ledger requires distribution_batch ref_id/
+				/Distribution return stock ledger requires distribution_batch or non-direct requisition_ticket ref_id/
 			);
 			expectForbidden(
 				() => compile()({ ...valid, ref_id: 'donation:01J' }, null, WAREHOUSE),
-				/Distribution return stock ledger requires distribution_batch ref_id/
+				/Distribution return stock ledger requires distribution_batch or non-direct requisition_ticket ref_id/
 			);
 			expectForbidden(
 				() => compile()({ ...valid, ref_id: undefined }, null, WAREHOUSE),
-				/Distribution return stock ledger requires distribution_batch ref_id/
+				/Distribution return stock ledger requires distribution_batch or non-direct requisition_ticket ref_id/
 			);
 
 			// LOT invariants: missing/null or invalid prefix
@@ -4104,6 +4285,23 @@ describe('buildValidateDocUpdate', () => {
 				expect(() => compile()(validReturnableLog, null, DISTRIBUTION)).not.toThrow();
 			});
 
+			it('accepts a staff recipient only with a user: recipient_id', () => {
+				const staffLog = (recipient_id?: string | null): Doc => {
+					const log: Doc = { ...validFoodLog, recipient_type: 'staff' };
+					delete log.household_id;
+					if (recipient_id === undefined) delete log.recipient_id;
+					else log.recipient_id = recipient_id;
+					return log;
+				};
+				expect(() => compile()(staffLog('user:somchai'), null, DISTRIBUTION)).not.toThrow();
+				for (const bad of [undefined, null, 'user:', 'volunteer:x', 'evacuee:x']) {
+					expectForbidden(
+						() => compile()(staffLog(bad), null, DISTRIBUTION),
+						/staff recipient_id is required/
+					);
+				}
+			});
+
 			it('rejects hard-delete of distribution_log', () => {
 				expectForbidden(
 					() => compile()({ _id: validFoodLog._id, _deleted: true }, validFoodLog, DISTRIBUTION),
@@ -6185,6 +6383,155 @@ describe('buildValidateDocUpdate', () => {
 					expectForbidden(
 						() => compile()({ _id: VOID_ID, _deleted: true }, voidDoc, user),
 						/Cannot delete append-only bulk_return_entry_void documents/
+					);
+				}
+			});
+		});
+
+		describe('bulk_return_loan_reopen VDU validation (Rule 14e)', () => {
+			const ENTRY_ULID = '01J00000000000000000000040';
+			const REOPEN_ID = `bulk_return_loan_reopen:${ENTRY_ULID}`;
+			const reopenDoc: Doc = {
+				_id: REOPEN_ID,
+				type: 'bulk_return_loan_reopen',
+				schema_v: 1,
+				shelter_code: 'SH001',
+				created_at: '2026-10-01T00:00:00.000Z',
+				updated_at: '2026-10-01T00:00:00.000Z',
+				created_by: 'mgr',
+				entry_id: `bulk_return_entry:${ENTRY_ULID}`,
+				pool_id: 'bulk_return_pool:01J00000000000000000000010',
+				reason: 'wrong pool closed',
+				loan_ids: [
+					'distribution_log:01J00000000000000000000051',
+					'distribution_log:01J00000000000000000000052'
+				]
+			};
+			const asUser = (user: UserCtx, over: Doc = {}): Doc => ({
+				...reopenDoc,
+				created_by: user.name,
+				...over
+			});
+
+			it('accepts a valid doc from shelter_manager, warehouse_staff and system_admin', () => {
+				for (const user of [MANAGER, WAREHOUSE, ADMIN]) {
+					expect(() => compile()(asUser(user), null, user)).not.toThrow();
+				}
+			});
+
+			it('rejects supply coordinator and distribution staff', () => {
+				for (const user of [SUPPLY_COORD, DISTRIBUTION]) {
+					expectForbidden(
+						() => compile()(asUser(user), null, user),
+						/Only shelter managers, warehouse staff or system admins can reopen bulk return loans/
+					);
+				}
+			});
+
+			it('rejects a warehouse_staff or shelter_manager of another shelter', () => {
+				for (const roles of [['SH002:warehouse_staff'], ['SH002:shelter_manager']]) {
+					const user: UserCtx = { name: 'other', roles };
+					expectForbidden(
+						() => compile()(asUser(user), null, user),
+						/Only shelter managers, warehouse staff or system admins can reopen bulk return loans/
+					);
+				}
+			});
+
+			it('rejects a wrong schema_v', () => {
+				expectForbidden(
+					() => compile()(asUser(MANAGER, { schema_v: 2 }), null, MANAGER),
+					/schema version/
+				);
+			});
+
+			it('requires created_by to be the current actor', () => {
+				expectForbidden(
+					() => compile()(asUser(MANAGER, { created_by: 'mallory' }), null, MANAGER),
+					/created_by must match the current actor/
+				);
+			});
+
+			it('requires a well-formed id and an entry_id matching its ULID', () => {
+				for (const _id of [
+					'bulk_return_loan_reopen:short',
+					`bulk_return_loan_reopen:${ENTRY_ULID}:0001`,
+					`bulk_return_entry:${ENTRY_ULID}`
+				]) {
+					expectForbidden(
+						() => compile()(asUser(MANAGER, { _id }), null, MANAGER),
+						/id must be bulk_return_loan_reopen:\{entryUlid\}/
+					);
+				}
+				expectForbidden(
+					() =>
+						compile()(
+							asUser(MANAGER, { entry_id: 'bulk_return_entry:01J00000000000000000000099' }),
+							null,
+							MANAGER
+						),
+					/entry_id must match the entry ULID/
+				);
+			});
+
+			it('requires a valid pool_id', () => {
+				expectForbidden(
+					() => compile()(asUser(MANAGER, { pool_id: 'bulk_return_pool:x' }), null, MANAGER),
+					/requires pool_id/
+				);
+			});
+
+			it('requires a reason of 1-500 trimmed characters', () => {
+				for (const reason of ['', '   ', 'x'.repeat(501), 5]) {
+					expectForbidden(
+						() => compile()(asUser(MANAGER, { reason }), null, MANAGER),
+						/reason must be 1-500 characters/
+					);
+				}
+				expect(() =>
+					compile()(asUser(MANAGER, { reason: 'x'.repeat(500) }), null, MANAGER)
+				).not.toThrow();
+			});
+
+			it('requires loan_ids to be a non-empty array', () => {
+				for (const loan_ids of [[], undefined, 'distribution_log:01J00000000000000000000051']) {
+					expectForbidden(
+						() => compile()(asUser(MANAGER, { loan_ids }), null, MANAGER),
+						/loan_ids must be a non-empty array/
+					);
+				}
+			});
+
+			it('rejects duplicate loan_ids', () => {
+				const dup = 'distribution_log:01J00000000000000000000051';
+				expectForbidden(
+					() => compile()(asUser(MANAGER, { loan_ids: [dup, dup] }), null, MANAGER),
+					/Duplicate id in bulk_return_loan_reopen.loan_ids/
+				);
+			});
+
+			it('rejects loan_ids that are not distribution_log ids', () => {
+				for (const bad of [
+					'bulk_return_entry:01J00000000000000000000051',
+					'distribution_log:x',
+					5
+				]) {
+					expectForbidden(
+						() => compile()(asUser(MANAGER, { loan_ids: [bad] }), null, MANAGER),
+						/loan_ids must contain distribution_log:\{ulid\} ids/
+					);
+				}
+			});
+
+			it('is append-only: no update and no delete, even for system_admin', () => {
+				for (const user of [MANAGER, ADMIN]) {
+					expectForbidden(
+						() => compile()(asUser(user, { reason: 'edit' }), asUser(user), user),
+						/Cannot update append-only bulk_return_loan_reopen documents/
+					);
+					expectForbidden(
+						() => compile()({ _id: REOPEN_ID, _deleted: true }, asUser(user), user),
+						/Cannot delete append-only bulk_return_loan_reopen documents/
 					);
 				}
 			});

@@ -4,6 +4,7 @@ import { env } from '$env/dynamic/private';
 import type { RequestHandler } from './$types';
 import { requireSystemAdmin, serviceError } from '$lib/server/couch-admin';
 import { createShelterSchema } from '$lib/features/shelters/server';
+import { readMasterDoc } from '$lib/server/master-data-server';
 import {
 	createImportJob,
 	MAX_IMPORT_ROWS,
@@ -18,6 +19,7 @@ const rowSchema = z.object({
 	name: z.string().max(500).nullable(),
 	shelter: z.unknown().optional(),
 	food_distribution_points_present: z.boolean().optional(),
+	site_kind_blank: z.boolean().optional(),
 	errors: z
 		.array(
 			z.object({
@@ -110,9 +112,22 @@ export const POST: RequestHandler = async ({ request }) => {
 			);
 		}
 		const body = parsedBody;
+		// CR-198: only a code unknown to the master is rejected here. Whether an inactive one may be
+		// written depends on the stored shelter (FR-8), which only the worker can see.
+		const knownSiteKinds = new Set(
+			((await readMasterDoc('site_kind'))?.items ?? []).map((item) => item.code)
+		);
 		const rows = body.rows.map((row) => {
 			const parsed = row.shelter === undefined ? null : createShelterSchema.safeParse(row.shelter);
 			const errors: ImportItemError[] = [];
+			if (parsed?.success) {
+				if (!knownSiteKinds.has(parsed.data.site_kind)) {
+					errors.push({
+						column: 'site_kind',
+						message: `ไม่พบประเภทศูนย์ "${parsed.data.site_kind}" ในรายการประเภทศูนย์`
+					});
+				}
+			}
 			const clientValidationFailed = (row.errors?.length ?? 0) > 0;
 			if (!parsed || !parsed.success) {
 				if (parsed && !parsed.success) {
@@ -138,6 +153,7 @@ export const POST: RequestHandler = async ({ request }) => {
 				row: row.row,
 				name: input?.name ?? (parsed?.success ? parsed.data.name : null),
 				food_distribution_points_present: row.food_distribution_points_present === true,
+				...(row.site_kind_blank === true ? { site_kind_blank: true } : {}),
 				...(input ? { input } : {}),
 				errors: errors.length ? errors : undefined,
 				valid: Boolean(input)

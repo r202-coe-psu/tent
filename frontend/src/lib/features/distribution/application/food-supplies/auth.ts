@@ -1,7 +1,9 @@
 import type { AuthorContext } from '$lib/db/model';
 import {
+	canDistributeInShelter,
 	DISTRIBUTION_STAFF,
 	hasCapabilityInShelter,
+	isShelterManager,
 	isSystemAdmin,
 	SHELTER_MANAGER,
 	SUPPLY_COORDINATOR,
@@ -59,11 +61,7 @@ export function canDispatchTicket(ctx: AuthorContext): boolean {
  */
 export function canPerformFrontlineDistribution(ctx: AuthorContext): boolean {
 	if (!ctx.roles) return false;
-	if (isSystemAdmin(ctx.roles)) return true;
-	return (
-		hasCapabilityInShelter(ctx.roles, ctx.shelterCode, DISTRIBUTION_STAFF) ||
-		hasCapabilityInShelter(ctx.roles, ctx.shelterCode, SHELTER_MANAGER)
-	);
+	return canDistributeInShelter(ctx.roles, ctx.shelterCode);
 }
 
 /**
@@ -118,6 +116,20 @@ export function canWriteBulkReturnEntry(ctx: AuthorContext): boolean {
 	return (
 		canManageBulkReturnPool(ctx) ||
 		hasCapabilityInShelter(ctx.roles, ctx.shelterCode, DISTRIBUTION_STAFF)
+	);
+}
+
+/**
+ * CR-193 §35 FR-35.2 — may reopen the loans of a bulk return entry of a closed pool:
+ * shelter_manager or warehouse_staff of the context's shelter, or system_admin (narrower than
+ * `canManageBulkReturnPool` on purpose: no supply_coordinator / distribution_staff).
+ */
+export function canReopenBulkReturnLoan(ctx: AuthorContext): boolean {
+	if (!ctx.roles) return false;
+	if (isSystemAdmin(ctx.roles)) return true;
+	return (
+		isShelterManager(ctx.roles, ctx.shelterCode) ||
+		hasCapabilityInShelter(ctx.roles, ctx.shelterCode, WAREHOUSE_STAFF)
 	);
 }
 
@@ -213,6 +225,14 @@ export function assertCanWriteBulkReturnEntry(ctx: AuthorContext): void {
 	if (!canWriteBulkReturnEntry(ctx)) {
 		throw new WorkflowAuthorizationError(
 			'Unauthorized: recording bulk return entries requires warehouse_staff, supply_coordinator, distribution_staff, shelter_manager, or system_admin role'
+		);
+	}
+}
+
+export function assertCanReopenBulkReturnLoan(ctx: AuthorContext): void {
+	if (!canReopenBulkReturnLoan(ctx)) {
+		throw new WorkflowAuthorizationError(
+			'Unauthorized: reopening a bulk return loan requires shelter_manager, warehouse_staff, or system_admin role'
 		);
 	}
 }

@@ -3,6 +3,7 @@ id: CR-203
 title: Kiosk — role pr_staff (เจ้าหน้าที่ประชาสัมพันธ์) จัดการข่าวสารบนตู้ Kiosk ของศูนย์
 status: approved
 date: 2026-10-27
+updated: 2026-10-28 # amend: สี department pr = domain family ใหม่ `pr` (ทอง) · FR-PRS-11 ใช้ DEVICE_VIEWER_CAPABILITIES · FR-PRS-22 SM/KIO เปลี่ยน PIN จากหน้ากลุ่มได้
 requested_by: ทีม kiosk (issue #930)
 decided_by: Soravit Sukkarn (Team Lead)
 layer: volatile
@@ -11,13 +12,14 @@ affects:
   - docs/data/schema.md §6 `_users.roles`
   - docs/data/api-contract.md §2.2 (สิทธิ์ `/api/v1/kiosk/devices/**`) · §2.3 / §2.3.1 (guard back-office banner + กลุ่ม)
   - no schema_v bump (เพิ่ม role string เท่านั้น)
-  - frontend/src/lib/auth/roles.ts (`PR_STAFF`, `BANNER_MANAGER_CAPABILITIES`, `canManageBanners`, `kioskConfinement`)
+  - frontend/src/lib/auth/roles.ts (`PR_STAFF`, `BANNER_MANAGER_CAPABILITIES`, `DEVICE_VIEWER_CAPABILITIES`, `canManageBanners`, `kioskConfinement`)
   - frontend/src/lib/guards/auth.ts (`requireBannerManagement`, `confineKioskStaffOnly`)
   - frontend/src/lib/server/kiosk-banners/kiosk-banner-access.ts · frontend/src/lib/server/scanners/scanner-access.ts (`requireDeviceViewer`)
   - frontend/src/routes/api/v1/kiosk/devices/+server.ts (GET) · .../[id]/staff-pin/reveal/+server.ts
   - frontend/src/routes/(protected)/back-office/kiosks/banners/** (+page.ts guard · หน้ากลุ่ม: ปุ่มดู PIN)
   - frontend/src/lib/features/portal/domain/{portal-menu,portal-preview}.ts · lib/components/backoffice-navbar/static.ts
   - frontend/src/lib/features/users/ui/user-form.svelte
+  - frontend/src/lib/tokens/colors.ts · frontend/src/app.css (domain family ใหม่ `pr`)
   - tests: roles / guards / navbar / portal unit · banner + group + devices + reveal + staff-pin server tests (session `prA`) · e2e/kiosk-pr-staff.test.ts
 ---
 
@@ -61,7 +63,7 @@ affects:
 | `POST /api/v1/kiosk/devices` · `PATCH` / `DELETE devices/[id]` · `POST .../staff-pin`                    |  ✓  | scope | scope | `403` |
 
 - **FR-PRS-10** — route banner + กลุ่ม resolve ผู้เรียกด้วย `BANNER_MANAGER_CAPABILITIES`
-- **FR-PRS-11** — `GET devices` + `staff-pin/reveal` resolve ด้วย `BANNER_MANAGER_CAPABILITIES`; reveal log `by=<user>` ทุกครั้ง ไม่ log ค่า PIN
+- **FR-PRS-11** — `GET devices` + `staff-pin/reveal` resolve ด้วย `DEVICE_VIEWER_CAPABILITIES = [shelter_manager, kiosk_staff, pr_staff]` (แยกจาก `BANNER_MANAGER_CAPABILITIES` แม้สมาชิกเท่ากัน — role ที่จัดการ banner ได้อย่างเดียวในอนาคตจะไม่ได้สิทธิ์ดู PIN ตามไปด้วย); reveal log `by=<user>` ทุกครั้ง ไม่ log ค่า PIN
 - **FR-PRS-12** — endpoint เขียนเครื่อง / ตั้ง PIN คง `SCANNER_MANAGER_CAPABILITIES` → `pr_staff` ได้ `403 FORBIDDEN`
 - **FR-PRS-13** — ศูนย์นอก scope: list / create `403` · `{id}` `404` (FR-KBR-11/12, FR-SBO-04/05 เดิม)
 
@@ -72,7 +74,7 @@ affects:
   - มี `kiosk_staff` → เข้า back-office ได้เฉพาะ `/back-office/kiosks/**`
   - `pr_staff` อย่างเดียว → เข้าได้เฉพาะ `/back-office/kiosks/banners/**`
   - path อื่นใน back-office → redirect ไป portal
-- **FR-PRS-22** — หน้ากลุ่ม banner แสดงปุ่ม "ดู PIN" ที่เครื่องในกลุ่มแต่ละเครื่อง; dialog ไม่มีปุ่มตั้ง / สุ่ม PIN
+- **FR-PRS-22** — หน้ากลุ่ม banner แสดงปุ่ม "ดู PIN" ที่เครื่องในกลุ่มแต่ละเครื่อง; สำหรับ `pr_staff` dialog ไม่มีปุ่มตั้ง / สุ่ม PIN (แสดงข้อความให้ติดต่อ SM / `kiosk_staff`) · SA / SM / `kiosk_staff` เห็นปุ่ม "เปลี่ยน PIN" ที่เปิด dialog ตั้ง PIN ในหน้าเดิม
 - **FR-PRS-23** — navbar back-office: เมนู "จัดการแบนเนอร์" เห็นได้ด้วย `BANNER_MANAGER_CAPABILITIES`; `pr_staff` อย่างเดียวเห็นเมนูนี้เมนูเดียว
 
 ### Portal
@@ -80,7 +82,17 @@ affects:
 - **FR-PRS-30** — department `pr` "ฝ่ายประชาสัมพันธ์" มี item เดียว "ข่าวสารบน Kiosk" → `/back-office/kiosks/banners` (`roles: ['pr_staff']`, scope `shelter` — SA / SM เห็นด้วยตามกฎเดิม)
 - **FR-PRS-31** — portal preview ของ SA มีตัวเลือก `pr_staff` ("ประชาสัมพันธ์")
 
-> [NEEDS DECISION: สีของ department `pr`] — domain สีใน `tokens/colors.ts` ทั้ง 7 family มี department ใช้ครบ; implementation ปัจจุบันใช้ `volunteer` ร่วมกับฝ่ายอาสาสมัคร (แยกด้วย icon `megaphone` + label). ทางเลือก: คง `volunteer` · ใช้ `admin` · เพิ่ม domain family ใหม่ (กระทบ civic-design-system tokens)
+- **FR-PRS-32** — department `pr` ใช้ domain family ใหม่ `pr` "ประชาสัมพันธ์" (ทอง) ใน `tokens/colors.ts` + `--domain-pr-*` ใน `app.css`:
+
+  | step     | hex       |
+  | -------- | --------- |
+  | `base`   | `#CA8A04` |
+  | `strong` | `#A16207` |
+  | `subtle` | `#FEFCE8` |
+  | `border` | `#FEF08A` |
+  | `text`   | `#713F12` |
+
+  ผ่าน WCAG AA ตาม test เดิมของ domain token และไม่ใช้ค่าสี status ที่จองไว้ (`#F59E0B` warning amber) · ใช้คู่กับ icon `megaphone` + label เสมอ เพราะโทนใกล้ warning
 
 ## Acceptance
 
@@ -106,5 +118,6 @@ N/A — เพิ่ม role string เท่านั้น ไม่เปล�
 
 ## Decision log
 
+- 2026-10-28 — amend (ทีม kiosk เสนอ, review PR #985 — รอ owner ยืนยัน): ปิด `[NEEDS DECISION: สีของ department pr]` → เพิ่ม domain family `pr` สีทอง (FR-PRS-32) แทนการใช้ `volunteer` ร่วมกับฝ่ายอาสา · FR-PRS-11 อ้าง `DEVICE_VIEWER_CAPABILITIES` ให้ตรงโค้ด · FR-PRS-22 ให้ SM / `kiosk_staff` เปลี่ยน PIN จากหน้ากลุ่มได้ (เดิมเห็นข้อความให้ติดต่อตัวเอง)
 - 2026-10-27 — approved โดย Soravit Sukkarn (Team Lead) · รันเลข CR-203
 - 2026-10-27 — proposed (ทีม kiosk, issue #930) · implement ล่วงหน้าบน `feat/pr-staff-role`

@@ -171,7 +171,7 @@ Role ย่อ (ดู [role-permission-matrix](prd/role-permission-matrix.md)):
 | `GET /public/v1/jobs`                              | รายการ Job Board เปิดรับสมัครของศูนย์ต่าง ๆ พร้อมยอดโควตากะย่อยรายวัน 2 สี `[ 🟢 รับแล้ว \| ⚪ ยังขาด ]`              | FR-43     | —                         |
 | `POST /public/v1/jobs/{id}/apply`                  | ยื่นใบสมัครงานอาสาสมัครด่วน 30s (No-Auth, No-SMS OTP) → ออก `tracking_token` + Digital Ticket QR                      | FR-42     | reCAPTCHA v3 + Rate Limit |
 | `GET /public/v1/volunteer/ticket/{token}`          | ตรวจสอบสถานะการสมัคร / ตารางกะงาน / Digital Ticket QR Code / ปุ่ม Self Check-in                                       | FR-42     | `tracking_token`          |
-| `POST /public/v1/volunteer/ticket/{token}/cancel`  | กดยกเลิกการสมัครล่วงหน้าด้วยตนเอง                                                                                     | FR-42     | `tracking_token`          |
+| `POST /public/v1/volunteer/ticket/{token}/cancel`  | กดยกเลิกการสมัครล่วงหน้าด้วยตนเอง (BFF เขียน CouchDB ตาม CR-212; route ของ FastAPI ไม่มีใครเรียกแล้ว)               | FR-42     | `tracking_token` / token ถาวร |
 | `POST /public/v1/volunteer/ticket/{token}/checkin` | Self Check-in สแกนป้ายคิวอาร์โค้ดประจำศูนย์เพื่อยืนยันการมาถึงศูนย์หน้างาน                                            | FR-42     | `tracking_token`          |
 | `POST /public/v1/volunteer/portal/lookup`          | ค้นหาตารางงานทั้งหมดที่เคยลงทะเบียนไว้ด้วยเบอร์โทรศัพท์ (อ่านอย่างเดียว)                                              | FR-42     | rate-limit + reCAPTCHA    |
 

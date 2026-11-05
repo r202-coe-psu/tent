@@ -141,8 +141,11 @@ function mintToken(): string {
 		.toUpperCase()}`;
 }
 
+/** Mirrors `normalizeThaiPhone` in `src/lib/db/model.ts` (strips `[\s\-.()]`, `+66`/`66` → `0`). */
 function normalizePhone(value: string): string {
-	return value.replace(/[\s\-()]/g, '');
+	const compact = value.trim().replace(/[\s\-.()]/g, '');
+	const intl = /^\+?66(\d{8,9})$/.exec(compact);
+	return intl ? `0${intl[1]}` : compact;
 }
 
 /** Mirrors `src/lib/db/hash.ts#sha256Hex` so the mock's stored hash fields are
@@ -933,7 +936,9 @@ test.describe('Volunteer end-to-end operational flow', () => {
 				'volunteer profile from step 2, verified in step 3, must exist'
 			).toBeTruthy();
 
-			await page.getByPlaceholder('พิมพ์เบอร์โทร, ชื่อ, หรือ Token...').fill(volunteerToken);
+			await page
+				.getByPlaceholder('พิมพ์เบอร์โทร, ชื่อ, ชื่อเล่น, รหัส หรือ Token...')
+				.fill(volunteerToken);
 			await page.getByRole('button', { name: new RegExp(FULL_NAME) }).click();
 
 			await page.getByRole('button', { name: 'เช็คอิน' }).click();
@@ -1041,6 +1046,153 @@ test.describe('Volunteer end-to-end operational flow', () => {
 			await expect(page.getByText(/^กะที่ \d+$/)).toHaveCount(5);
 			await expect(page.getByText(/5 กะ · รวมจำนวนรับ/)).toBeVisible();
 		});
+	});
+
+	test('the applicants filters start fresh when moving to another job in the app (#1013)', async ({
+		page
+	}) => {
+		const jobA = { ...SECOND_JOB, _id: `job:e2eflow${RUN_ID}keyA`, title: `งาน E2E A ${RUN_ID}` };
+		const jobB = { ...SECOND_JOB, _id: `job:e2eflow${RUN_ID}keyB`, title: `งาน E2E B ${RUN_ID}` };
+		// The filter bar shows once a job has applicants, so each job gets one pending application.
+		const phoneHash = await sha256Hex(APPLICANT_PHONE);
+		const applicationFor = (job: typeof jobA) => ({
+			_id: `job_application:${job._id.slice('job:'.length)}app`,
+			type: 'job_application',
+			schema_v: 3,
+			shelter_code: 'SH001',
+			created_at: '2026-09-02T00:00:00.000Z',
+			updated_at: '2026-09-02T00:00:00.000Z',
+			created_by: 'public',
+			job_id: job._id,
+			shift_id: 'reg-1',
+			volunteer_id: null,
+			applicant: {
+				first_name: 'เก่งกล้า',
+				last_name: 'อาสา',
+				phone: APPLICANT_PHONE,
+				phone_hash: phoneHash,
+				email: null,
+				skills: []
+			},
+			selected_shift: { shift_id: 'reg-1', date: TOMORROW, start_time: '09:00', end_time: '12:00' },
+			tracking_token: mintToken(),
+			status: 'pending_review',
+			review_notes: null,
+			reviewed_at: null,
+			reviewed_by: null,
+			review_reasons: ['job_fit']
+		});
+		const world = new World([jobA, jobB, applicationFor(jobA), applicationFor(jobB)]);
+		await mockCouch(page, world);
+		await mockPublicApi(page, world);
+		await injectSession(page, ADMIN, adminSession);
+
+		const jobUrl = (job: typeof jobA) =>
+			`${BASE}/back-office/volunteers/jobs/${encodeURIComponent(job._id)}`;
+		// A client-side navigation (SvelteKit handles the link click), so the page component stays
+		// mounted; page.goto would reload and hide the bug {#key job._id} fixes.
+		const followLink = async (href: string) => {
+			await page.evaluate((target) => {
+				document.getElementById('e2e-next-job')?.remove();
+				const link = document.createElement('a');
+				link.href = target;
+				link.id = 'e2e-next-job';
+				link.textContent = 'next job';
+				link.style.cssText = 'position:fixed;top:0;left:0;z-index:2147483647;background:#fff';
+				document.body.append(link);
+			}, href);
+			await page.locator('#e2e-next-job').click();
+		};
+		const search = page.getByRole('searchbox', { name: 'ค้นหาผู้สมัคร' });
+		const openApplicants = async () => {
+			// Clicking the already-selected tab is a no-op, so no state read is needed.
+			await page.getByRole('tab', { name: /ผู้สมัคร/ }).click();
+			await expect(search).toBeVisible();
+		};
+
+		// Job B is visited first so it is already cached when we come back to it: the job query
+		// then never goes pending and nothing else unmounts the applicants tab.
+		await page.goto(jobUrl(jobB));
+		await openApplicants();
+		await followLink(jobUrl(jobA));
+		await expect(page.getByRole('heading', { name: jobA.title })).toBeVisible();
+		await openApplicants();
+		await search.fill('v013');
+		await expect(search).toHaveValue('v013');
+		// A non-search filter is changed too, so the reset below covers every filter, not just search.
+		const statusFilter = page.getByRole('button', { name: 'สถานะการพิจารณา (เจ้าหน้าที่)' });
+		const statusDefault = await statusFilter.innerText();
+		await statusFilter.click();
+		await page.getByRole('option').nth(1).click();
+		await expect(statusFilter).not.toHaveText(statusDefault);
+
+		await followLink(jobUrl(jobB));
+		await expect(page.getByRole('heading', { name: jobB.title })).toBeVisible();
+		await openApplicants();
+		await expect(search).toHaveValue('');
+		await expect(statusFilter).toHaveText(statusDefault);
+	});
+
+	test('the assign roster search finds a volunteer by code with or without the dash (#1087)', async ({
+		page
+	}) => {
+		const volunteerDoc = (n: number, firstName: string, lastName: string) => ({
+			_id: `volunteer:e2eflow${RUN_ID}roster${n}`,
+			type: 'volunteer',
+			schema_v: 4,
+			shelter_code: 'SH001',
+			created_at: '2026-09-01T00:00:00.000Z',
+			updated_at: '2026-09-01T00:00:00.000Z',
+			created_by: 'volunteer-flow-e2e',
+			first_name: firstName,
+			last_name: lastName,
+			phone: `089000000${n}`,
+			email: null,
+			skills: [],
+			organization: null,
+			status: 'active',
+			user_name: null,
+			checked_in: false,
+			current_shelter_code: null,
+			volunteer_code: `V-01${n}`,
+			identity_verified: true,
+			identity_verification: {
+				status: 'verified',
+				reviewed_at: null,
+				reviewed_by: null,
+				notes: null
+			},
+			source: 'walk_in',
+			personnel_type: 'volunteer'
+		});
+		const first = volunteerDoc(3, 'สมชาย', 'ใจดีรอสเตอร์');
+		const second = volunteerDoc(4, 'สมหญิง', 'รักงานรอสเตอร์');
+		const world = new World([SECOND_JOB, first, second]);
+		await mockCouch(page, world);
+		await mockPublicApi(page, world);
+		await injectSession(page, ADMIN, adminSession);
+
+		await page.goto(
+			`${BASE}/back-office/volunteers/jobs/${encodeURIComponent(SECOND_JOB._id)}/assign`
+		);
+		await expect(page.getByRole('heading', { name: /มอบหมายอาสาเข้ากะ/ })).toBeVisible();
+		const rowOf = (doc: typeof first) => page.locator('li', { hasText: doc.last_name });
+		await expect(rowOf(first)).toBeVisible();
+		await expect(rowOf(second)).toBeVisible();
+
+		const search = page.getByRole('textbox', { name: 'ค้นหาอาสาสมัคร' });
+		await search.fill('v013');
+		await expect(rowOf(first)).toBeVisible();
+		await expect(rowOf(second)).toHaveCount(0);
+
+		await search.fill('V 014');
+		await expect(rowOf(second)).toBeVisible();
+		await expect(rowOf(first)).toHaveCount(0);
+
+		// Only dashes/spaces must not match every code.
+		await search.fill(' - ');
+		await expect(rowOf(first)).toHaveCount(0);
+		await expect(rowOf(second)).toHaveCount(0);
 	});
 
 	test('one applicant with several pending shifts is one card, approved together (#716)', async ({

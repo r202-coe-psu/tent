@@ -1,5 +1,5 @@
 import { ServiceError } from '$lib/server/couch-admin';
-import { SCANNER_MANAGER_CAPABILITIES } from '$lib/auth/roles';
+import { DEVICE_VIEWER_CAPABILITIES, SCANNER_MANAGER_CAPABILITIES } from '$lib/auth/roles';
 import {
 	callerCanManage,
 	requireShelterCapabilityCaller,
@@ -13,6 +13,16 @@ export function requireScannerManager(request: Request): Promise<ScopedCaller> {
 		request.headers.get('cookie'),
 		SCANNER_MANAGER_CAPABILITIES
 	);
+}
+
+/**
+ * Resolve the caller of a read-only device route (list, reveal staff PIN): SA, or a
+ * shelter_manager / kiosk_staff / pr_staff of at least one shelter. pr_staff needs the device list
+ * and PIN to run the kiosk banner screen but must not change devices — writes keep
+ * `requireScannerManager`.
+ */
+export function requireDeviceViewer(request: Request): Promise<ScopedCaller> {
+	return requireShelterCapabilityCaller(request.headers.get('cookie'), DEVICE_VIEWER_CAPABILITIES);
 }
 
 /** A device outside the caller's scope reads as missing (FR-SBO-04). */

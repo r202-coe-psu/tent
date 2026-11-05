@@ -15,6 +15,7 @@
 		useMealPlans,
 		useMealServices,
 		useMealServiceReceipts,
+		useMealServiceLedger,
 		useConfirmMealServiceYield,
 		useRejectMealServiceReceipt,
 		mealServiceReceiptOutcome,
@@ -72,6 +73,15 @@
 		activeServiceReceipt ? mealServiceReceiptOutcome(activeServiceReceipt) : undefined
 	);
 	const serviceReceiptConfirmed = $derived(activeServiceOutcome === 'confirmed');
+	const receivedLedger = useMealServiceLedger(
+		() => activeService?._id ?? '',
+		() => serviceReceiptConfirmed
+	);
+	const receivedLines = $derived(
+		[...(receivedLedger.data ?? [])].sort((a, b) =>
+			(a.lot?.note ?? '').localeCompare(b.lot?.note ?? '')
+		)
+	);
 	const serviceRejected = $derived(activeServiceOutcome === 'rejected');
 
 	const activeTicket = $derived.by(() => {
@@ -307,6 +317,22 @@
 									ยืนยันเมื่อ {formatThaiDateTime(activeServiceReceipt.created_at)} โดย
 									{activeServiceReceipt.received_by}
 								</p>
+							{/if}
+							{#if receivedLedger.isPending}
+								<p class="mt-2 text-xs text-green-700">กำลังโหลดรายการที่รับเข้า...</p>
+							{:else if receivedLines.length > 0}
+								<ul class="mt-2 space-y-1.5">
+									{#each receivedLines as row (row._id)}
+										<li class="text-xs text-green-900">
+											<span class="font-semibold">{row.lot?.note ?? row.item_id}</span>
+											<span class="text-green-700"> · {row.qty} {row.unit}</span>
+											<span class="text-green-700">
+												· {row.lot?.storage_zone ?? 'ไม่ระบุจุดเก็บ'}</span
+											>
+											<span class="text-green-700"> · {row.lot?.lot_no ?? 'ไม่มีเลขล็อต'}</span>
+										</li>
+									{/each}
+								</ul>
 							{/if}
 						</div>
 					</div>

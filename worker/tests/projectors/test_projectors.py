@@ -127,9 +127,125 @@ def test_project_shelter_preserves_host_house_site_kind():
     assert payload["site_kind"] == "host_house"
 
 
-def test_resolve_site_kind_defaults_unknown_values_to_evacuation_center():
+def _shelter_with_points(*points):
+    action, payload = project_shelter(
+        {
+            "type": "shelter",
+            "code": "SH001",
+            "name": "ศูนย์ทดสอบ",
+            "operation_status": "active",
+            "common_areas": {"sub_storage": list(points)},
+            "updated_at": "2026-01-01T00:00:00.000Z",
+        }
+    )
+    assert action == "upsert" and payload is not None
+    return payload
+
+
+def test_donation_points_only_ticked_points_with_a_pin_and_without_area():
+    payload = _shelter_with_points(
+        {
+            "id": "p1",
+            "name": "โรงยิม",
+            "types": ["food_dry", "general"],
+            "area_m2": 40,
+            "accepts_donations": True,
+            "lat": 7.0086,
+            "lng": 100.4747,
+            "location_note": "  ประตู 2  ",
+        },
+        {  # ticked but never pinned (old doc)
+            "id": "p2",
+            "name": "ห้องพยาบาล",
+            "types": ["medical_supplies"],
+            "accepts_donations": True,
+            "lat": None,
+            "lng": None,
+        },
+        {  # pinned but not ticked
+            "id": "p3",
+            "name": "โรงครัว",
+            "types": ["cooked_food"],
+            "accepts_donations": False,
+            "lat": 7.1,
+            "lng": 100.5,
+        },
+    )
+    assert payload["donation_points"] == [
+        {
+            "id": "p1",
+            "name": "โรงยิม",
+            "types": ["food_dry", "general"],
+            "geo": {"lat": 7.0086, "lng": 100.4747},
+            "location_note": "ประตู 2",
+        }
+    ]
+    assert "area_m2" not in payload["donation_points"][0]
+
+
+def test_donation_points_refuse_unset_and_invalid_pins():
+    base = {"name": "จุด", "types": ["general"], "accepts_donations": True}
+    payload = _shelter_with_points(
+        {**base, "id": "zero", "lat": 0, "lng": 0},
+        {**base, "id": "range", "lat": 91, "lng": 100},
+        {**base, "id": "str", "lat": "7", "lng": "100"},
+        {**base, "id": "bool", "lat": True, "lng": 100},
+        {**base, "id": "nan", "lat": float("nan"), "lng": 100},
+        {**base, "id": "equator", "lat": 0, "lng": 100},
+        {**base, "id": "", "lat": 7, "lng": 100},
+        {**base, "lat": 7, "lng": 100},
+    )
+    assert [p["id"] for p in payload["donation_points"]] == ["equator"]
+
+
+def test_donation_points_accept_legacy_single_type_and_blank_note():
+    payload = _shelter_with_points(
+        {
+            "id": "p1",
+            "name": "คลังเก่า",
+            "type": "food_dry",
+            "accepts_donations": True,
+            "lat": 7,
+            "lng": 100,
+            "location_note": "   ",
+        }
+    )
+    [point] = payload["donation_points"]
+    assert point["types"] == ["food_dry"]
+    assert point["location_note"] is None
+
+
+def test_donation_points_empty_without_common_areas():
+    for doc_extra in (
+        {},
+        {"common_areas": None},
+        {"common_areas": {"sub_storage": None}},
+        # Malformed: the shelter row still projects, just without points.
+        {"common_areas": ["not", "a", "dict"]},
+        {"common_areas": {"sub_storage": "not a list"}},
+    ):
+        _, payload = project_shelter(
+            {
+                "type": "shelter",
+                "code": "SH001",
+                "name": "x",
+                "updated_at": "2026-01-01",
+                **doc_extra,
+            }
+        )
+        assert payload is not None
+        assert payload["donation_points"] == []
+
+
+def test_resolve_site_kind_passes_master_codes_through():
+    assert resolve_site_kind({"site_kind": "host_house"}) == "host_house"
+    assert resolve_site_kind({"site_kind": "field_hospital"}) == "field_hospital"
+
+
+def test_resolve_site_kind_defaults_missing_or_empty_to_evacuation_center():
     assert resolve_site_kind({}) == "evacuation_center"
-    assert resolve_site_kind({"site_kind": "host"}) == "evacuation_center"
+    assert resolve_site_kind({"site_kind": ""}) == "evacuation_center"
+    assert resolve_site_kind({"site_kind": None}) == "evacuation_center"
 
 
 def test_project_shelter_closed_soft_retains():
@@ -822,6 +938,36 @@ def test_aggregate_occupancy_age_buckets():
     assert breakdown["elderly_over_60"] == 1
 
 
+def test_aggregate_occupancy_counts_room_confirmed_as_in_shelter():
+    """decision sync 2026-11-02: in shelter = active + room_confirmed (staff in-shelter.ts)."""
+    total, breakdown = aggregate_occupancy(
+        [
+            _active_evacuee(_id="e1"),
+            _active_evacuee(_id="e2", current_stay={"status": "room_confirmed"}),
+            _active_evacuee(_id="e3", current_stay={"status": "temporary_leave"}),
+            _active_evacuee(_id="e4", current_stay={"status": "arriving"}),
+        ]
+    )
+    assert total == 2
+    assert breakdown["male"] == 2
+
+
+def test_aggregate_occupancy_age_buckets_fall_back_to_birth_year():
+    """Registration stores `birth_year` (พ.ศ.), not `age` — buckets must use it."""
+    year_be = datetime.now(UTC).year + 543
+    total, breakdown = aggregate_occupancy(
+        [
+            _active_evacuee(_id="e1", birth_year=year_be - 2),
+            _active_evacuee(_id="e2", birth_year=year_be - 70),
+            _active_evacuee(_id="e3", birth_year=year_be - 30),
+            _active_evacuee(_id="e4", birth_year=year_be + 5),  # future = unknown age
+        ]
+    )
+    assert total == 4
+    assert breakdown["child_under_5"] == 1
+    assert breakdown["elderly_over_60"] == 1
+
+
 def test_aggregate_occupancy_special_needs_tags_are_case_insensitive():
     total, breakdown = aggregate_occupancy(
         [
@@ -1130,16 +1276,16 @@ async def test_project_needs_for_shelter_visible_on_home_and_urgency():
     couch.iter_all_docs = mock_iter
 
     actions = await project_needs_for_shelter(couch, "SH001")
-    action_dict = {a[1]["_id"]: (a[0], a[1]) for a in actions}
+    action_dict = {a[1]["_id"]: (a[0], a[1]) for a in actions if a[0] == "upsert"}
+    (prune,) = [a[1] for a in actions if a[0] == "prune"]
 
-    # item:rice from hidden campaign must be deleted
-    assert "SH001:item:rice" in action_dict
-    assert action_dict["SH001:item:rice"][0] == "delete"
+    # item:rice from the hidden campaign has no card: the prune retracts it
+    assert "SH001:item:rice@-" not in action_dict
+    assert prune["keep_ids"] == ["SH001:item:water@-"]
 
     # item:water from visible campaign must be upserted with qty_target and urgency="critical"
-    assert "SH001:item:water" in action_dict
-    assert action_dict["SH001:item:water"][0] == "upsert"
-    payload = action_dict["SH001:item:water"][1]
+    assert "SH001:item:water@-" in action_dict
+    payload = action_dict["SH001:item:water@-"][1]
     assert payload["qty_target"] == 1000.0
     assert payload["qty_needed"] == 1000.0
     assert payload["urgency"] == "critical"

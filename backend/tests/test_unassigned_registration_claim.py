@@ -1255,3 +1255,57 @@ async def test_claim_of_member_queued_without_consent_births_without_consent(
         assert "consent" not in born[evacuee_id]
         assert born[evacuee_id]["privacy"] == {"search_excluded": False}
         assert born[evacuee_id]["schema_v"] == 15
+
+
+def test_claim_photo_is_image_schema_v2_without_a_donation_purpose():
+    # CR-175 AC-11: every image writer stamps 2, and only a donation photo carries
+    # `purpose` — the orphan sweep (FR-16) keys on it, so a claim photo must not.
+    from datetime import UTC, datetime
+
+    from apiapp.modules.unassigned_registrations.couch_birth import build_couch_image
+
+    doc = build_couch_image(
+        image_id="image:01K8TESTCLAIMPHOTO00000000",
+        shelter_code="SH001",
+        actor="reg.staff",
+        now=datetime(2026, 10, 26, 3, 0, tzinfo=UTC),
+        filename="face.webp",
+        content_type="image/webp",
+        width=800,
+        height=600,
+        original_size=12000,
+        compressed_size=4000,
+        thumbnail_size=800,
+    )
+    assert doc["schema_v"] == 2
+    assert "purpose" not in doc
+    assert "donation_id" not in doc
+
+
+async def test_legacy_pet_stored_without_pet_id_or_status_is_claimable(
+    authed_client: AsyncClient,
+    couch_birth: InMemoryCouchBirth,
+) -> None:
+    from tent_model.unassigned_registration import UnassignedPet
+
+    doc = await _seed_two_member_registration()
+    doc.household.pets = [UnassignedPet(pet_id=f"pet:{new_ulid()}", species="dog", count=1)]
+    await doc.save()
+    await UnassignedRegistration.get_pymongo_collection().update_one(
+        {"_id": doc.id},
+        {"$unset": {"household.pets.0.pet_id": "", "household.pets.0.status": ""}},
+    )
+
+    people = await authed_client.post(
+        f"/staff/v1/unassigned-registrations/{doc.id}/claim",
+        json={"member_ids": [doc.members[0].reserved_evacuee_id]},
+    )
+    assert people.status_code == 200
+    minted = people.json()["remaining_open_pets"][0]["pet_id"]
+
+    pets_claim = await authed_client.post(
+        f"/staff/v1/unassigned-registrations/{doc.id}/claim",
+        json={"pet_ids": [minted]},
+    )
+    assert pets_claim.status_code == 200
+    assert couch_birth.docs_for("SH001")[doc.reserved_household_id]["pets"][0]["species"] == "dog"

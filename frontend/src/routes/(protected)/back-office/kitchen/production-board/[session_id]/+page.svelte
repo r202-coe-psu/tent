@@ -15,10 +15,12 @@
 		useMealServiceReceipts,
 		mealServiceReceiptOutcome,
 		sumHeadcountByTags,
+		scaleRecipeIngredientQty,
 		getActiveTagsFromSession,
 		selectableCookingIngredients,
 		TARGET_GROUP_LABELS,
 		MEAL_PERIOD_LABELS,
+		kitchenErrorReason,
 		type TargetGroupTag
 	} from '$lib/features/kitchen';
 	import {
@@ -34,7 +36,14 @@
 		useItemMasters,
 		getItemDisplayName,
 		formatUnit,
-		useUnitsOfMeasure
+		useUnitsOfMeasure,
+		useCreateRecipe,
+		useUpdateRecipe,
+		customRecipeInput,
+		findRecipeByLabel,
+		isSameRecipeInput,
+		type Recipe,
+		type RecipeInput
 	} from '$lib/features/catalog';
 	import { langState } from '$lib/states/i18n.svelte';
 	import { useSupplyItems } from '$lib/features/supply';
@@ -48,7 +57,7 @@
 	import { Label } from '$lib/components/ui/label';
 	import { Textarea } from '$lib/components/ui/textarea';
 	import { toast } from 'svelte-sonner';
-	import { qtyGt } from '$lib/utils/qty';
+	import { addQty, persistQty, qtyGt, qtyLte } from '$lib/utils/qty';
 	import { formatThaiDateTime, formatThaiShortDate } from '$lib/utils/date';
 	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
 	import ChefHat from '@lucide/svelte/icons/chef-hat';
@@ -75,6 +84,10 @@
 	const services = useMealServices();
 	const serviceReceipts = useMealServiceReceipts();
 	const tickets = useTickets();
+	// Cached tickets from another kitchen page may predate an edit made elsewhere; only data
+	// fetched after this page mounted is trusted to decide prefill and whether a plan has a ticket.
+	const mountedAt = Date.now();
+	const ticketsFresh = $derived(tickets.dataUpdatedAt >= mountedAt);
 	const recipes = useRecipes(() => getShelterCode());
 	const itemMasters = useItemMasters(() => getShelterCode());
 	const unitsQuery = useUnitsOfMeasure();
@@ -86,9 +99,16 @@
 	const getItemName = (id: string) => getItemDisplayName(id, itemMasters.data, supplyItems.data);
 
 	const createMealPlanMutation = useCreateMealPlan();
+	const createRecipeMutation = useCreateRecipe();
+	const updateRecipeMutation = useUpdateRecipe();
 	const startCookingMutation = useStartMealPlanCooking();
 	const updateConfirmedMealPlanMutation = useUpdateConfirmedMealPlan();
 	const createTicketMutation = useCreateTicket();
+	const isOpeningRequisition = $derived(
+		createRecipeMutation.isPending ||
+			createMealPlanMutation.isPending ||
+			createTicketMutation.isPending
+	);
 	const updateTicketItemsMutation = useUpdateTicketItems();
 	const receiveTicketMutation = useReceiveTicket();
 	const recordServiceMutation = useRecordMealService();
@@ -191,9 +211,11 @@
 	// --- Stage A: Form States ---
 	let selectedRecipeId = $state<string>('');
 	let recipeMode = $state<'bom' | 'custom'>('bom');
+	let isIngredientsManuallyEdited = $state(false);
 
 	function setRecipeMode(mode: 'bom' | 'custom') {
 		recipeMode = mode;
+		if (mode === 'bom') resetSaveAsRecipe();
 		if (mode === 'custom' && selectedRecipeId) {
 			selectedRecipeId = '';
 			isIngredientsManuallyEdited = false;
@@ -202,6 +224,21 @@
 	}
 	let menuLabel = $state('');
 	let allocatedTarget = $state(50);
+	// #802: save this batch's ingredient list as a catalog recipe named after the menu label, at
+	// this batch's portions. New batch only: a hand-built list, or a BOM recipe whose ingredients
+	// were edited (an unedited BOM recipe would only duplicate itself).
+	let saveAsRecipe = $state(false);
+	// The recipe this form saved. Survives a failed plan/ticket attempt so a retry updates it to the
+	// list being requested instead of saving a duplicate or linking stale quantities.
+	let savedRecipe = $state.raw<{ doc: Recipe; input: RecipeInput } | null>(null);
+	const canSaveAsRecipe = $derived(
+		!activePlan && (recipeMode === 'custom' || (!!selectedRecipeId && isIngredientsManuallyEdited))
+	);
+
+	function resetSaveAsRecipe() {
+		saveAsRecipe = false;
+		savedRecipe = null;
+	}
 	let targetTags = $state<TargetGroupTag[]>(['regular']);
 	let isEveryone = $state(false);
 
@@ -234,8 +271,10 @@
 	// Pre-fill form when activePlan changes
 	let lastLoadedPlanId = $state<string | null>(null);
 
+	// Waits for fresh tickets: prefilling from the recipe or a stale ticket first would let
+	// "บันทึกการแก้ไข" overwrite the ticket's saved requested_qty.
 	$effect(() => {
-		if (activePlan && activePlan._id !== lastLoadedPlanId) {
+		if (activePlan && ticketsFresh && activePlan._id !== lastLoadedPlanId) {
 			lastLoadedPlanId = activePlan._id;
 			menuLabel = activePlan.label ?? '';
 			allocatedTarget = activePlan.allocated_target ?? activePlan.headcount?.total ?? 50;
@@ -250,11 +289,8 @@
 			selectedRecipeId = planRecipeId && planRecipeId !== 'recipe:custom' ? planRecipeId : '';
 			recipeMode = selectedRecipeId ? 'bom' : 'custom';
 			cookingStarted = !!activePlan.cooking_started_at;
-			const ticketForPlan = (tickets.data ?? []).find(
-				(t) => t.meal_plan_id === activePlan._id && t.status !== 'CANCELLED'
-			);
-			if (ticketForPlan?.items && ticketForPlan.items.length > 0) {
-				ingredientsList = ticketForPlan.items.map((it) => {
+			if (activeTicket?.items && activeTicket.items.length > 0) {
+				ingredientsList = activeTicket.items.map((it) => {
 					const master = (itemMasters.data ?? []).find((m) => m._id === it.item_id);
 					return {
 						item_id: it.item_id,
@@ -277,6 +313,7 @@
 			allocatedTarget = count > 0 ? count : session?.target_headcount?.total || 50;
 			selectedRecipeId = '';
 			recipeMode = 'bom';
+			resetSaveAsRecipe();
 			isIngredientsManuallyEdited = false;
 			ingredientsList = calculateRecipeIngredients('', allocatedTarget);
 			showAddIngredient = false;
@@ -322,6 +359,7 @@
 		if (chosen?.label) {
 			menuLabel = chosen.label;
 		}
+		resetSaveAsRecipe();
 		isIngredientsManuallyEdited = false;
 		ingredientsList = calculateRecipeIngredients(target.value, allocatedTarget);
 	}
@@ -334,30 +372,24 @@
 	}
 
 	let ingredientsList = $state<IngredientRow[]>([]);
-	let isIngredientsManuallyEdited = $state(false);
 
 	let showAddIngredient = $state(false);
 	let newItemId = $state('');
 	let newQty = $state('1');
 	let newUnit = $state('');
 
-	function calculateRecipeIngredients(recipeId: string, portions: number): IngredientRow[] {
+	function calculateRecipeIngredients(recipeId: string, portions: number | null): IngredientRow[] {
 		const recipe = (recipes.data ?? []).find((r) => r._id === recipeId);
 		if (!recipe) {
 			return [];
 		}
 
-		// Scale ingredients
-		const baseServings = Math.max(parseFloat(recipe.standard_portions) || 1, 1);
-		const factor = portions / baseServings;
-
 		return (recipe.ingredients ?? []).map((ing) => {
 			const itemMaster = (itemMasters.data ?? []).find((m) => m._id === ing.item_master_id);
-			const scaledQty = Math.round(Number(ing.quantity || 0) * factor * 100) / 100;
 			return {
 				item_id: ing.item_master_id,
 				name: itemMaster?.name || ing.item_master_id,
-				needed: String(scaledQty),
+				needed: scaleRecipeIngredientQty(ing.quantity, recipe.standard_portions, portions),
 				unit: ing.uom || itemMaster?.base_unit || 'kg'
 			};
 		});
@@ -374,6 +406,7 @@
 	});
 
 	function resetIngredientsToRecipe() {
+		saveAsRecipe = false;
 		isIngredientsManuallyEdited = false;
 		ingredientsList = calculateRecipeIngredients(selectedRecipeId, allocatedTarget);
 		showAddIngredient = false;
@@ -402,16 +435,16 @@
 	}
 
 	function confirmAddIngredient() {
-		if (!newItemId || !newQty || Number(newQty) <= 0) {
+		if (!newItemId || newQty == null || newQty === '' || qtyLte(newQty, 0)) {
 			toast.error('กรุณาระบุวัตถุดิบและจำนวนที่ถูกต้อง');
 			return;
 		}
 		const master = (itemMasters.data ?? []).find((m) => m._id === newItemId);
 		const existingIndex = ingredientsList.findIndex((it) => it.item_id === newItemId);
 		if (existingIndex >= 0) {
-			const current = Number(ingredientsList[existingIndex].needed) || 0;
-			ingredientsList[existingIndex].needed = String(
-				Math.round((current + Number(newQty)) * 100) / 100
+			ingredientsList[existingIndex].needed = addQty(
+				ingredientsList[existingIndex].needed || '0',
+				newQty
 			);
 		} else {
 			ingredientsList = [
@@ -419,7 +452,7 @@
 				{
 					item_id: newItemId,
 					name: master?.name || newItemId,
-					needed: String(newQty),
+					needed: persistQty(newQty),
 					unit: newUnit || master?.base_unit || 'kg'
 				}
 			];
@@ -430,6 +463,54 @@
 		newUnit = '';
 		showAddIngredient = false;
 		toast.success(`เพิ่ม ${master?.name || 'วัตถุดิบ'} เรียบร้อยแล้ว`);
+	}
+
+	// Saves the custom ingredient list as a shelter recipe, or brings the recipe an earlier failed
+	// attempt saved up to date with it. Never throws: the ticket must open even when the recipe
+	// can't be saved. Returns the id of a recipe matching the list, or null.
+	async function saveCustomRecipe(
+		label: string,
+		ctx: { shelterCode: string; createdBy: string }
+	): Promise<string | null> {
+		const fail = (reason: string) => {
+			toast.error(`บันทึกสูตรไม่สำเร็จ: ${reason} (ระบบยังเปิดใบเบิกให้ตามปกติ)`);
+			return null;
+		};
+		try {
+			const result = customRecipeInput({
+				label,
+				portions: allocatedTarget,
+				ingredients: ingredientsList.map((ing) => ({
+					item_master_id: ing.item_id,
+					name: getItemName(ing.item_id),
+					quantity: ing.needed,
+					uom: ing.unit
+				})),
+				units: unitsQuery.data
+			});
+			if (!result.ok) return fail(result.reason);
+			const { input } = result;
+			const previous = savedRecipe;
+			if (previous && isSameRecipeInput(previous.input, input)) return previous.doc._id;
+
+			const existing = findRecipeByLabel(recipes.data, input.label);
+			if (existing && existing._id !== previous?.doc._id) {
+				toast.warning(`มีสูตรชื่อ "${existing.label}" อยู่แล้ว จึงไม่บันทึกซ้ำ`);
+				return null;
+			}
+			const doc = previous
+				? await updateRecipeMutation.mutateAsync({ ...previous.doc, ...input })
+				: await createRecipeMutation.mutateAsync({
+						input,
+						ctx,
+						shelterCode: ctx.shelterCode
+					});
+			savedRecipe = { doc, input };
+			toast.success(`บันทึกสูตร "${input.label}" เรียบร้อยแล้ว`);
+			return doc._id;
+		} catch (err) {
+			return fail(kitchenErrorReason(err));
+		}
 	}
 
 	// Submit Stage A ➔ Create Requisition
@@ -447,9 +528,16 @@
 			toast.error('กรุณาระบุวัตถุดิบอย่างน้อย 1 รายการ');
 			return;
 		}
-		const hasInvalidQty = ingredientsList.some((ing) => Number(ing.needed) <= 0);
+		const hasInvalidQty = ingredientsList.some(
+			(ing) => ing.needed == null || ing.needed === '' || qtyLte(ing.needed, 0)
+		);
 		if (hasInvalidQty) {
 			toast.error('กรุณาระบุจำนวนวัตถุดิบให้มากกว่า 0 ทุกรายการ');
+			return;
+		}
+		const willSaveRecipe = canSaveAsRecipe && saveAsRecipe;
+		if (willSaveRecipe && !menuLabel.trim()) {
+			toast.error('กรุณาระบุชื่อเมนูที่แสดง เพื่อใช้เป็นชื่อสูตร');
 			return;
 		}
 
@@ -460,6 +548,8 @@
 			shelterCode: getShelterCode(),
 			createdBy: authStore.user?.name ?? 'kitchen_staff'
 		};
+
+		const savedRecipeId = willSaveRecipe ? await saveCustomRecipe(finalLabel, ctx) : null;
 
 		try {
 			// Plan and ticket are separate features now (CR-121/CR-141) — created
@@ -481,9 +571,12 @@
 						soft_food: targetTags.includes('soft_food') ? allocatedTarget : 0,
 						infant: targetTags.includes('infant') ? allocatedTarget : 0
 					},
-					recipes: chosenRecipe
-						? [{ recipe_id: chosenRecipe._id, planned_qty: allocatedTarget }]
-						: [{ recipe_id: 'recipe:custom', planned_qty: allocatedTarget }]
+					recipes: [
+						{
+							recipe_id: savedRecipeId ?? chosenRecipe?._id ?? 'recipe:custom',
+							planned_qty: allocatedTarget
+						}
+					]
 				},
 				ctx
 			});
@@ -507,8 +600,7 @@
 			currentStage = 'B';
 			toast.success(`เปิดตั๋วเบิกวัตถุดิบ ${ticket.ticket_no} แล้ว — รอคลังจัดของและอนุมัติ`);
 		} catch (err) {
-			const msg = err instanceof Error ? err.message : 'ไม่สามารถเปิดตั๋วเบิกได้';
-			toast.error(msg);
+			toast.error(`เปิดใบเบิกไม่สำเร็จ: ${kitchenErrorReason(err)}`);
 		}
 	}
 
@@ -534,7 +626,9 @@
 			toast.error('กรุณาระบุวัตถุดิบอย่างน้อย 1 รายการ');
 			return;
 		}
-		const hasInvalidQty = ingredientsList.some((ing) => Number(ing.needed) <= 0);
+		const hasInvalidQty = ingredientsList.some(
+			(ing) => ing.needed == null || ing.needed === '' || qtyLte(ing.needed, 0)
+		);
 		if (hasInvalidQty) {
 			toast.error('กรุณาระบุจำนวนวัตถุดิบให้มากกว่า 0 ทุกรายการ');
 			return;
@@ -574,8 +668,7 @@
 
 			toast.success('บันทึกการแก้ไขแล้ว');
 		} catch (err) {
-			const msg = err instanceof Error ? err.message : 'ไม่สามารถบันทึกการแก้ไขได้';
-			toast.error(msg);
+			toast.error(`บันทึกการแก้ไขไม่สำเร็จ: ${kitchenErrorReason(err)}`);
 		}
 	}
 
@@ -591,7 +684,7 @@
 			currentStage = 'C';
 			toast.success('ยืนยันรับวัตถุดิบแล้ว — เข้าสู่ขั้นตอนเริ่มปรุงอาหาร');
 		} catch (err) {
-			toast.error(err instanceof Error ? err.message : 'ยืนยันรับวัตถุดิบไม่สำเร็จ');
+			toast.error(`ยืนยันรับวัตถุดิบไม่สำเร็จ: ${kitchenErrorReason(err)}`);
 		}
 	}
 
@@ -710,8 +803,7 @@
 			toast.success('บันทึกผลการผลิตและแจกจ่ายสำเร็จแล้ว!');
 			goto(resolve('/back-office/kitchen'));
 		} catch (err) {
-			const msg = err instanceof Error ? err.message : 'ไม่สามารถบันทึกผลการผลิตได้';
-			toast.error(msg);
+			toast.error(`บันทึกผลการผลิตไม่สำเร็จ: ${kitchenErrorReason(err)}`);
 		}
 	}
 
@@ -725,7 +817,7 @@
 			cookingStarted = true;
 			toast.success('เริ่มปรุงอาหารแล้ว');
 		} catch (err) {
-			toast.error(err instanceof Error ? err.message : 'เริ่มปรุงอาหารไม่สำเร็จ');
+			toast.error(`เริ่มปรุงอาหารไม่สำเร็จ: ${kitchenErrorReason(err)}`);
 		}
 	}
 </script>
@@ -888,11 +980,29 @@
 								กำหนดวัตถุดิบเองในตารางด้านขวา ไม่อ้างอิงสูตรจากฐานข้อมูล
 							</p>
 						{/if}
+						{#if canSaveAsRecipe}
+							<label class="mt-2 flex cursor-pointer items-center gap-2">
+								<input
+									type="checkbox"
+									bind:checked={saveAsRecipe}
+									class="h-3.5 w-3.5 rounded border-gray-300 text-primary focus:ring-primary"
+								/>
+								<span class="text-xs">บันทึกเป็นสูตรใหม่</span>
+							</label>
+							{#if saveAsRecipe}
+								<p class="mt-1 text-2xs text-muted-foreground">
+									{recipeMode === 'bom'
+										? 'ตั้งชื่อเมนูที่แสดงใหม่ให้ต่างจากสูตรเดิม ระบบจะใช้เป็นชื่อสูตร และใช้จำนวนจานที่ต้องการผลิตเป็นจำนวนจานมาตรฐาน'
+										: 'ใช้ชื่อเมนูที่แสดงเป็นชื่อสูตร และจำนวนจานที่ต้องการผลิตเป็นจำนวนจานมาตรฐาน'}
+								</p>
+							{/if}
+						{/if}
 					</div>
 
 					<div>
-						<Label class="text-xs">ชื่อเมนูที่แสดง</Label>
+						<Label for="menu-label" class="text-xs">ชื่อเมนูที่แสดง</Label>
 						<Input
+							id="menu-label"
 							bind:value={menuLabel}
 							placeholder="เช่น ข้าวต้มไก่ฮาลาล, ข้าวผัดไข่..."
 							class="mt-1 text-xs"
@@ -1023,7 +1133,8 @@
 								{/if}
 								{#each ingredientsList as ing, idx (ing.item_id + '_' + idx)}
 									{@const onHand = stock.data?.get(ing.item_id) ?? '0'}
-									{@const isShort = qtyGt(ing.needed, onHand)}
+									{@const isShort =
+										ing.needed != null && ing.needed !== '' && qtyGt(ing.needed, onHand)}
 									<Table.Row>
 										<Table.Cell class="font-medium">
 											{ing.name}
@@ -1138,7 +1249,7 @@
 									size="sm"
 									class="h-7 gap-1 text-xs"
 									onclick={confirmAddIngredient}
-									disabled={!newItemId || !newQty || Number(newQty) <= 0}
+									disabled={!newItemId || newQty == null || newQty === '' || qtyLte(newQty, 0)}
 								>
 									<Plus class="h-3 w-3" />
 									เพิ่มวัตถุดิบนี้
@@ -1170,17 +1281,26 @@
 			</Card.Root>
 		</div>
 
-		{#if !activeTicket}
+		{#if tickets.isError && !ticketsFresh}
+			<!-- Without tickets we can't tell whether this meal already has one, and creating would open a second plan and ticket for it. -->
+			<div
+				class="flex items-center justify-between gap-3 rounded-xl border border-red-200 bg-red-50 p-4 text-red-900"
+			>
+				<div class="flex items-center gap-2 text-sm font-semibold">
+					<AlertCircle class="h-5 w-5 shrink-0 text-red-600" />
+					โหลดข้อมูลใบเบิกไม่สำเร็จ
+				</div>
+				<Button variant="outline" size="sm" onclick={() => tickets.refetch()}>ลองใหม่</Button>
+			</div>
+		{:else if !activeTicket}
 			<div class="rounded-xl border border-primary/20 bg-primary/5 p-4">
 				<Button
 					class="w-full gap-2 font-semibold shadow-sm"
 					onclick={handleCreateRequisition}
-					disabled={createMealPlanMutation.isPending || createTicketMutation.isPending}
+					disabled={!ticketsFresh || isOpeningRequisition}
 				>
 					<Sparkles class="h-4 w-4" />
-					{createMealPlanMutation.isPending || createTicketMutation.isPending
-						? 'กำลังเปิดตั๋วเบิก...'
-						: 'สร้างใบเบิกวัตถุดิบ'}
+					{isOpeningRequisition ? 'กำลังเปิดตั๋วเบิก...' : 'สร้างใบเบิกวัตถุดิบ'}
 				</Button>
 			</div>
 		{:else if activeTicket.status === 'PENDING_PICK'}

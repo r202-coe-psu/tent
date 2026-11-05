@@ -116,10 +116,27 @@ export function findMissedLoanRefs(
 	return out;
 }
 
+/**
+ * True when reverting `ref` on `loan` would be accepted: the loan is `partially_returned` /
+ * `returned` and already holds at least `ref.qty` returned. Mirrors `revertBulkEntryFromLog`
+ * (which throws otherwise), so a reopen can pre-check without writing anything.
+ */
+export function isBulkReturnRefRevertable(
+	loan: Pick<DistributionLog, 'status' | 'qty_returned'>,
+	ref: { qty: string }
+): boolean {
+	if (loan.status !== 'partially_returned' && loan.status !== 'returned') return false;
+	return !qtyGt(ref.qty, loan.qty_returned ?? '0');
+}
+
 export interface AppliedBulkReturnLoanRef {
 	entry_id: string;
 	distribution_log_id: string;
 	qty: string;
+	/** Current status of the loan (derived at read time, not persisted). */
+	loan_status: DistributionLog['status'];
+	/** Whether a loan reopen could revert this ref right now (`isBulkReturnRefRevertable`). */
+	revertable: boolean;
 }
 
 /**
@@ -133,16 +150,16 @@ export function findAppliedBulkReturnLoanRefs(
 	const out: AppliedBulkReturnLoanRef[] = [];
 	for (const entry of entries) {
 		for (const ref of entry.loan_refs) {
-			const assessment = assessBulkReturnRefOnLoan(
-				loansById.get(ref.distribution_log_id),
-				ref,
-				entry._id
-			);
-			if (assessment.status !== 'already_applied') continue;
+			const loan = loansById.get(ref.distribution_log_id);
+			const assessment = assessBulkReturnRefOnLoan(loan, ref, entry._id);
+			// `already_applied` implies the loan exists.
+			if (assessment.status !== 'already_applied' || !loan) continue;
 			out.push({
 				entry_id: entry._id,
 				distribution_log_id: ref.distribution_log_id,
-				qty: ref.qty
+				qty: ref.qty,
+				loan_status: loan.status,
+				revertable: isBulkReturnRefRevertable(loan, ref)
 			});
 		}
 	}

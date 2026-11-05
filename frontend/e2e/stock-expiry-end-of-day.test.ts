@@ -133,18 +133,34 @@ async function expectOnHand(page: Page, item: string, qty: number): Promise<void
 }
 
 type LedgerRow = {
+	_id?: string;
 	qty: string;
 	reason: string;
 	adjust_reason?: string;
 	lot?: { expiry?: string };
 };
 
-async function ledgerRows(selector: Record<string, unknown>): Promise<LedgerRow[]> {
+async function findLedger(selector: Record<string, unknown>): Promise<LedgerRow[]> {
 	const res = await couchReq('POST', `/${shelterDb()}/_find`, {
 		selector: { type: 'stock_ledger', ...selector },
-		limit: 100
+		limit: 1000
 	});
 	return ((res.data as { docs?: LedgerRow[] } | null)?.docs ?? []) as LedgerRow[];
+}
+
+/**
+ * The `shelter` fixture is worker-scoped, so earlier specs on this worker leave ledger rows in the
+ * same shelter DB. `ledgerBaseline` holds the ids present before this suite writes anything;
+ * `ledgerRows` skips them so assertions only see rows this suite wrote.
+ */
+let ledgerBaseline = new Set<string>();
+
+async function snapshotLedger(): Promise<void> {
+	ledgerBaseline = new Set((await findLedger({})).map((r) => r._id ?? ''));
+}
+
+async function ledgerRows(selector: Record<string, unknown>): Promise<LedgerRow[]> {
+	return (await findLedger(selector)).filter((r) => !ledgerBaseline.has(r._id ?? ''));
 }
 
 async function countDocs(type: string): Promise<number> {
@@ -178,6 +194,7 @@ test.describe(
 		}) => {
 			test.setTimeout(180_000);
 			await warehouseStaff(scenarioAs, shelter.code);
+			await snapshotLedger();
 			await openSupply(page, RECEIVE_AT);
 
 			const sheet = await openMovement(page, 'รับเข้า', 'รับเข้า');
@@ -362,6 +379,12 @@ test.describe(
 			await qty.fill('3');
 
 			const plan = page.getByText('แผนการตัดล็อต').locator('xpath=..');
+			// The skipped-expired notice is role="status", so any alert here is a non-ok line verdict
+			// (short / unit / no lots) and names why the plan box fell back to its empty state.
+			await expect(
+				sheet.getByRole('alert'),
+				'no line verdict alert (short / unit / no lots) should block the plan'
+			).toHaveCount(0);
 			await expect(plan, 'auto plan draws from the 10-unit today lot').toContainText(
 				'จากคงเหลือ 10'
 			);
@@ -371,7 +394,7 @@ test.describe(
 			await expect(plan).toContainText('ข้าม 1 ล็อตที่หมดอายุแล้ว');
 
 			await page.getByRole('button', { name: 'เลือกล็อตเอง' }).click();
-			const lotTrigger = page.getByRole('button', { name: /^ล็อต \*/ });
+			const lotTrigger = page.getByRole('button', { name: 'ล็อต', exact: true });
 			await expect(lotTrigger, 'manual mode preselects the today lot').toContainText('คงเหลือ 10');
 
 			await page.getByRole('button', { name: 'อื่นๆ...' }).click();

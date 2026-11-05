@@ -16,6 +16,8 @@ import {
 	receiveTotals,
 	receivedStorageLabel,
 	submittedSummaryRows,
+	uncountedGap,
+	uncountedGapHint,
 	validateReceiveLines,
 	type ReceiveLine
 } from './bulk-return-lifecycle';
@@ -45,11 +47,13 @@ function makeRow(
 		pool,
 		entry_count: empty ? 0 : 1,
 		items: empty ? [] : [{ item_id: 'item_master:fan', qty: '3' }],
+		receivable_items_summary: [],
 		entries: [],
 		late_entries: [],
 		snapshot_conflicts: [],
 		unresolved_refs: [],
 		closed_loan_refs: [],
+		loan_refs_unavailable: false,
 		is_empty: empty
 	} as BulkReturnPoolOverviewRow;
 }
@@ -64,6 +68,7 @@ function line(overrides: Partial<ReceiveLine> = {}): ReceiveLine {
 	return {
 		item_id: 'item_master:fan',
 		expected_qty: '5',
+		snapshot_qty: '5',
 		received_qty: '5',
 		reason: '',
 		note: '',
@@ -151,9 +156,85 @@ describe('initReceiveLines', () => {
 				{ item_id: 'b', qty: '1' }
 			])
 		).toEqual([
-			{ item_id: 'a', expected_qty: '4', received_qty: '4', reason: '', note: '' },
-			{ item_id: 'b', expected_qty: '1', received_qty: '1', reason: '', note: '' }
+			{
+				item_id: 'a',
+				expected_qty: '4',
+				snapshot_qty: '4',
+				received_qty: '4',
+				reason: '',
+				note: ''
+			},
+			{
+				item_id: 'b',
+				expected_qty: '1',
+				snapshot_qty: '1',
+				received_qty: '1',
+				reason: '',
+				note: ''
+			}
 		]);
+	});
+
+	it('uses the receivable qty as expected and prefill, keeping the snapshot qty', () => {
+		const lines = initReceiveLines(
+			[
+				{ item_id: 'a', qty: '5' },
+				{ item_id: 'b', qty: '2' }
+			],
+			[{ item_id: 'a', qty: '3' }]
+		);
+		expect(lines).toEqual([
+			{
+				item_id: 'a',
+				expected_qty: '3',
+				snapshot_qty: '5',
+				received_qty: '3',
+				reason: '',
+				note: ''
+			},
+			{
+				item_id: 'b',
+				expected_qty: '2',
+				snapshot_qty: '2',
+				received_qty: '2',
+				reason: '',
+				note: ''
+			}
+		]);
+	});
+});
+
+describe('uncounted gap', () => {
+	it('is the snapshot qty not receivable here', () => {
+		expect(uncountedGap(line({ snapshot_qty: '5', expected_qty: '3' }))).toBe(2);
+		expect(uncountedGapHint(2)).toBe('ไม่นับ 2 ชิ้นที่ถูกนับในกองอื่นแล้ว');
+	});
+
+	it('is null when the whole snapshot is receivable', () => {
+		expect(uncountedGap(line())).toBeNull();
+	});
+});
+
+describe('receivable cap', () => {
+	const noStorage = { storagePointId: '', points: [] };
+	const capped = () => line({ snapshot_qty: '5', expected_qty: '3', received_qty: '3' });
+
+	it('is matched when received equals the receivable qty, without a reason', () => {
+		expect(isLineMismatched(capped())).toBe(false);
+		expect(validateReceiveLines([capped()], noStorage).isValid).toBe(true);
+		expect(buildReceiveInput([capped()], null).items).toEqual([
+			{ item_id: 'item_master:fan', received_qty: '3' }
+		]);
+	});
+
+	it('rejects more than the receivable qty, even when within the snapshot', () => {
+		const result = validateReceiveLines([{ ...capped(), received_qty: '4' }], noStorage);
+		expect(result.lineErrors['item_master:fan'].received_qty).toBe('กรอกจำนวนเต็มตั้งแต่ 0 ถึง 3');
+	});
+
+	it('requires a reason below the receivable qty', () => {
+		const result = validateReceiveLines([{ ...capped(), received_qty: '2' }], noStorage);
+		expect(result.lineErrors['item_master:fan']).toEqual({ reason: 'เลือกเหตุผลของส่วนต่าง' });
 	});
 });
 

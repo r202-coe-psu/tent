@@ -20,7 +20,7 @@ import {
 import { bangkokToday } from '../../src/lib/utils/date';
 import { injectSession, routeBrowserCouchThroughApp } from './login';
 import { publicShelter, teardownShelter, waitForProjection } from './public-cleanup';
-import { createShelterViaUi, pinActiveShelter, setRecaptcha } from './staff-ui';
+import { createShelterViaUi, pinActiveShelter } from './staff-ui';
 
 /**
  * Shared steps for the full-stack donation specs (`donation-fullstack*.test.ts`,
@@ -57,6 +57,9 @@ export type PublicNeed = {
 	urgency?: string;
 	on_hand?: string | number;
 	reserved?: string | number;
+	/** The card's drop-off point (CR-206 A2 FR-AP-26): one row per item + point. */
+	drop_off_point_id?: string | null;
+	drop_off_point_name?: string | null;
 };
 export type PublicShelter = { code: string; name: string; needs: PublicNeed[] };
 
@@ -117,27 +120,9 @@ export class RunLedger {
 
 // ─── reCAPTCHA ─────────────────────────────────────────────────────────────────
 
-/**
- * Turn `config:app.recaptcha_enabled` off as the CouchDB admin, the same switch
- * pre-register flips (`setRecaptcha`). It is global, so call this only once the spec
- * knows it will run, and always await the returned restore in `afterAll` — it puts
- * back whatever state the switch had before.
- */
-export async function suspendRecaptcha(browser: Browser): Promise<() => Promise<void>> {
-	const admin = await bootstrapAdminSession();
-	const context = await browser.newContext();
-	const page = await context.newPage();
-	await routeBrowserCouchThroughApp(page);
-	await injectSession(page, admin.user, admin.cookie);
-	const wasEnabled = await setRecaptcha(page, false);
-	return async () => {
-		try {
-			await setRecaptcha(page, wasEnabled);
-		} finally {
-			await context.close();
-		}
-	};
-}
+// The switch is global and suites run on parallel workers: it is leased, not toggled (see
+// recaptcha-lease.ts), so one suite's restore can never turn it back on under another.
+export { suspendRecaptcha } from './recaptcha-lease';
 
 /**
  * Type a far-future expiry into a `DatePicker` (DD/MM/YYYY) and leave the field, which
@@ -191,6 +176,8 @@ export async function provisionShelter(
 		);
 		return { code, name };
 	} finally {
+		// Drop the routes first so an in-flight `_changes` long-poll cannot reject close().
+		await Promise.all(context.pages().map((p) => p.unrouteAll({ behavior: 'ignoreErrors' })));
 		await context.close();
 	}
 }
@@ -243,14 +230,12 @@ export type Booking = { bookingRef: string; trackingToken: string };
  * landmark, and `.first()` would be the outermost wrapper — which holds EVERY card, so
  * its first button belongs to whichever shelter/need happens to be listed first.
  */
-function cardWith(page: Page, text: string, name: string) {
+function cardWith(page: Page, text: string, name: string, pointName?: string | null) {
 	const button = page.getByRole('button', { name });
-	return page
-		.locator('div')
-		.filter({ hasText: text })
-		.filter({ has: button })
-		.last()
-		.getByRole('button', { name });
+	let card = page.locator('div').filter({ hasText: text });
+	// One item can have a card per drop-off point (CR-206 A2 FR-AP-28): pick the point's.
+	if (pointName) card = card.filter({ has: page.getByText(`จุดรับบริจาค: ${pointName}`) });
+	return card.filter({ has: button }).last().getByRole('button', { name });
 }
 
 /** `item_master` id for a catalog name — ids are minted per seed (`item_master:<ulid>`). */
@@ -271,13 +256,23 @@ export async function openShelter(page: Page, shelter: Pick<PublicShelter, 'name
 	await expect(
 		page.getByRole('heading', { name: /ของที่ศูนย์พักพิง\s*ต้องการตอนนี้/ })
 	).toBeVisible();
+	// The board lists only the first few shelters (most urgent first) and other suites' E2E
+	// shelters run alongside this one — filter by name so the card is never behind "show more".
+	const search = page.getByRole('textbox', { name: 'ค้นหาศูนย์พักพิงหรือสิ่งของ' });
+	await search.fill(shelter.name);
+	await search.blur(); // closes the suggestion dropdown that would sit over the cards
 	await cardWith(page, shelter.name, 'ดูรายละเอียดและบริจาค').click();
 }
 
 /** Public needs board → `shelter`'s card → the line for `itemName` (as the board prints it). */
-export async function openNeed(page: Page, shelter: Pick<PublicShelter, 'name'>, itemName: string) {
+export async function openNeed(
+	page: Page,
+	shelter: Pick<PublicShelter, 'name'>,
+	itemName: string,
+	pointName?: string | null
+) {
 	await openShelter(page, shelter);
-	await cardWith(page, itemName, 'บริจาครายการนี้').click();
+	await cardWith(page, itemName, 'บริจาครายการนี้', pointName).click();
 }
 
 /** An item the donor types in themselves ("บริจาคสิ่งของอื่นๆ") instead of picking a need card. */
@@ -286,19 +281,26 @@ export type UnsolicitedItem = { itemName: string; unitLabel: string };
 export type BookingOptions = {
 	shelter: Pick<PublicShelter, 'code' | 'name'>;
 	/** The need card to book against — or `unsolicited` to type the item in yourself. */
-	need?: Pick<PublicNeed, 'name'>;
+	need?: Pick<PublicNeed, 'name' | 'drop_off_point_name'>;
 	unsolicited?: UnsolicitedItem;
 	donorName: string;
 	phone: string;
 	mode?: DeliveryMode;
 	/** How many units to declare — 1 unless a test needs more. */
 	qty?: number;
+	/** Image files to attach on the typed-in form (CR-175 donor photos) — `unsolicited` only. */
+	photos?: string[];
 	/** Every accepted booking is recorded here for `teardownRun`. */
 	ledger: RunLedger;
 };
 
+/** One line of a booking as the BFF answers it: the point staff set for it (FR-AP-8a). */
+export type BookedLine = { drop_off_point_id: string | null; review_status: string };
+
 export type BookingResponse = Partial<Booking> & {
 	success: boolean;
+	status?: string;
+	items?: BookedLine[];
 	error?: string | { code: string; message: string };
 };
 
@@ -319,7 +321,7 @@ export async function fillBooking(
 		await page.getByRole('button', { name: 'บริจาคสิ่งของอื่นๆ' }).click();
 	} else {
 		if (!need) throw new Error('fillBooking needs either `need` or `unsolicited`');
-		await openNeed(page, shelter, need.name);
+		await openNeed(page, shelter, need.name, need.drop_off_point_name);
 	}
 
 	// Step 2 — donor + item. A need card brings its own name/unit; a typed item does not.
@@ -334,13 +336,15 @@ export async function fillBooking(
 		await expect(page.getByRole('textbox', { name: 'ประเภทสิ่งของ' })).toHaveValue(need!.name);
 	}
 	await page.getByRole('spinbutton', { name: 'ปริมาณ' }).fill(String(opts.qty ?? 1));
-	await page.getByRole('button', { name: 'ถัดไป: เลือกจุดส่งมอบ' }).click();
+	if (opts.photos?.length) await attachDonorPhotos(page, opts.photos);
+	await page.getByRole('button', { name: 'ถัดไป: นัดหมายการส่งของบริจาค' }).click();
 
 	// Step 3 — logistics. The destination is locked to the card's shelter.
 	await expect(
 		page.getByRole('heading', { name: 'ส่วนที่ 3: ข้อมูลการจัดส่ง โลจิสติกส์' })
 	).toBeVisible();
-	await expect(page.getByText('ล็อกตามความต้องการที่เลือก')).toBeVisible();
+	// #814: step 3 shows the locked shelter read-only (no dropdown, no "locked" badge).
+	await expect(page.getByTestId('drop-off-shelter-name')).toHaveText(shelter.name);
 	const button = page.getByRole('button', { name: 'ยืนยันการจองคิวบริจาค' });
 
 	if (mode.kind === 'self') {
@@ -384,6 +388,28 @@ export async function fillBooking(
 			return body;
 		}
 	};
+}
+
+/**
+ * Pick `files` in the typed-in form's photo section and wait until every one is stored
+ * (one `POST /api/public/v1/donations/photos` each) and none is still uploading.
+ */
+export async function attachDonorPhotos(page: Page, files: string[]) {
+	const picker = page.getByTestId('donor-photo-picker');
+	await expect(picker.getByRole('heading', { name: /รูปของที่จะบริจาค/ })).toBeVisible();
+	let stored = 0;
+	const onResponse = (r: { url(): string; status(): number }) => {
+		if (r.url().endsWith('/api/public/v1/donations/photos') && r.status() === 201) stored++;
+	};
+	page.on('response', onResponse);
+	try {
+		await page.getByTestId('donor-photo-input').setInputFiles(files);
+		await expect.poll(() => stored, { timeout: 30_000 }).toBe(files.length);
+		await expect(picker.getByRole('status')).toHaveCount(0);
+		await expect(picker.getByText(`${files.length} / 30 รูป`)).toBeVisible();
+	} finally {
+		page.off('response', onResponse);
+	}
 }
 
 /**
@@ -445,6 +471,10 @@ export async function bookAsDonor(page: Page, opts: BookingOptions): Promise<Boo
 	} else {
 		await expect(page.getByRole('heading', { name: 'สำเร็จ! ตั๋วบริจาคของคุณ' })).toBeVisible();
 		await expect(page.getByTestId('ticket-qr')).toBeVisible();
+		await expect(page.getByTestId('ticket-box-label-link')).toHaveAttribute(
+			'href',
+			`/donations/track/${trackingToken}/label`
+		);
 	}
 	await expect(page.getByText(bookingRef).first()).toBeVisible();
 	return { bookingRef, trackingToken };
@@ -484,7 +514,7 @@ export async function openPendingRow(page: Page, bookingRef: string) {
 		await page.getByRole('tab', { name: /รายการของบริจาค/ }).click();
 		await page.getByRole('button', { name: /^รอประเมิน/ }).click();
 		await expect(row).toBeVisible({ timeout: 3_000 });
-	}).toPass({ timeout: 30_000 });
+	}).toPass({ timeout: 60_000 });
 	await row.getByRole('button', { name: 'จัดการ' }).click();
 	await expect(page.getByRole('heading', { name: new RegExp(`^${bookingRef} - `) })).toBeVisible();
 }
@@ -567,6 +597,12 @@ export async function findDonation(shelterCode: string, bookingRef: string) {
 	return (res.data as { docs: Record<string, unknown>[] }).docs[0];
 }
 
+/** A photo doc as CouchDB holds it — `null` once it is gone. */
+export async function findImage(shelterCode: string, imageId: string) {
+	const res = await couchReq('GET', `/${shelterDb(shelterCode)}/${encodeURIComponent(imageId)}`);
+	return res.status === 200 ? (res.data as Record<string, unknown>) : null;
+}
+
 export async function ledgerRowsFor(shelterCode: string, donationId: string) {
 	const res = await couchReq('POST', `/${shelterDb(shelterCode)}/_find`, {
 		selector: { type: 'stock_ledger', reason: 'donation', ref_id: donationId },
@@ -586,13 +622,14 @@ export function todayYmd() {
 export async function boardLineFor(
 	request: APIRequestContext,
 	shelterCode: string,
-	itemName: string
+	itemName: string,
+	pointName?: string
 ): Promise<PublicNeed | undefined> {
 	const res = await request.get('/api/public/v1/needs');
 	if (!res.ok()) return undefined;
 	return ((await res.json()) as PublicShelter[])
 		.find((s) => s.code === shelterCode)
-		?.needs.find((n) => n.name === itemName);
+		?.needs.find((n) => n.name === itemName && (!pointName || n.drop_off_point_name === pointName));
 }
 
 // Campaigns reach the public board through the worker's Mongo projection.
@@ -622,7 +659,7 @@ export async function createCampaignViaUi(
 	request: APIRequestContext,
 	staff: Staff,
 	shelterCode: string,
-	opts: { item: string; target: number; notes: string }
+	opts: { item: string; target: number; notes: string; pointName?: string }
 ): Promise<PublicNeed> {
 	await openBackOffice(page, staff);
 	await page.getByRole('tab', { name: 'จัดการความต้องการ' }).click();
@@ -634,12 +671,22 @@ export async function createCampaignViaUi(
 	await expect(page.getByText('เลือกรายการพัสดุก่อน')).toHaveCount(0);
 	await page.getByRole('textbox', { name: /จำนวนเป้าหมาย/ }).fill(String(opts.target));
 	await page.getByRole('textbox', { name: /เหตุผลหรือรายละเอียดเพิ่มเติม/ }).fill(opts.notes);
-	await page.getByRole('button', { name: 'ประกาศขอรับบริจาคผ่านหน้าเว็บสาธารณะ' }).click();
+	const save = page.getByRole('button', { name: 'ประกาศขอรับบริจาคผ่านหน้าเว็บสาธารณะ' });
+	if (opts.pointName) {
+		// A shelter with two or more drop-off points cannot post a need without one (FR-AP-3).
+		await expect(save).toBeDisabled();
+		await page.getByRole('button', { name: /^จุดรับบริจาค/ }).click();
+		await page.getByRole('option', { name: opts.pointName, exact: true }).click();
+	}
+	await save.click();
 	await expect(page.getByText(`เพิ่มประกาศความต้องการ "${opts.item}" สำเร็จ`)).toBeVisible();
 	await expect
-		.poll(async () => (await boardLineFor(request, shelterCode, opts.item))?.status, BOARD_SYNC)
+		.poll(
+			async () => (await boardLineFor(request, shelterCode, opts.item, opts.pointName))?.status,
+			BOARD_SYNC
+		)
 		.toBe('open');
-	return (await boardLineFor(request, shelterCode, opts.item))!;
+	return (await boardLineFor(request, shelterCode, opts.item, opts.pointName))!;
 }
 
 export type SlotMode = 'ผู้บริจาคมาส่งเอง' | 'รถศูนย์ไปรับ';
@@ -687,15 +734,32 @@ export type TornDown = ReturnType<RunLedger['read']>;
  * through the BFF). That hands the need's reserved quantity and the queue place back —
  * Mongo counters that no shelter delete would ever release. Terminal bookings (received,
  * rejected, already cancelled) answer 400 and are left as they are.
+ *
+ * A booking is only done once its DELETE answers 400: a 200 is asked again in the next
+ * round, because the sync worker can write its stale Mongo status back over a fresh
+ * cancel (the booking then reads `verifying` again). 409 means inbound has the row but
+ * CouchDB does not show it yet, or a concurrent write won. Anything else, or a booking
+ * still open after the last round, throws with the last status and body.
  */
 async function cancelOpenBookings(request: APIRequestContext, bookings: LedgerBooking[]) {
-	for (const b of bookings) {
-		for (let attempt = 0; attempt < 6; attempt++) {
+	let open = bookings.map((b) => ({ b, last: 'not asked' }));
+	for (let round = 0; round < 6 && open.length > 0; round++) {
+		if (round > 0) await sleep(3_000);
+		const next: typeof open = [];
+		for (const { b } of open) {
 			const res = await request.delete(`/api/public/v1/donations/${b.token}`);
-			// 409: inbound has the row but CouchDB does not show it yet.
-			if (res.status() === 409) await sleep(3_000);
-			else break;
+			const last = `${res.status()} ${await res.text()}`;
+			if (res.status() === 400) continue;
+			if (res.status() !== 200 && res.status() !== 409) {
+				throw new Error(`cancel of ${b.ref} failed: ${last}`);
+			}
+			next.push({ b, last });
 		}
+		open = next;
+	}
+	if (open.length > 0) {
+		const left = open.map(({ b, last }) => `${b.ref} (${last})`).join('; ');
+		throw new Error(`still open after 6 cancel rounds: ${left}`);
 	}
 }
 

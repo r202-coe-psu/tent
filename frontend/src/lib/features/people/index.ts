@@ -95,6 +95,13 @@ export {
 	listPendingZoneArrivalConfirmations,
 	CHECK_IN_ELIGIBLE_STATUSES,
 	CHECK_OUT_ELIGIBLE_STATUSES,
+	SHELTER_CLOSE_CHECKOUT_STATUSES,
+	SHELTER_CLOSE_CANCEL_STATUSES,
+	SHELTER_CLOSE_AFFECTED_STATUSES,
+	SHELTER_CLOSED_REASON,
+	SHELTER_CLOSED_REASON_LABEL,
+	movementReasonLabel,
+	type CheckoutDestinationType,
 	CONFIRM_ROOM_ELIGIBLE_STATUSES,
 	ZONE_CHANGE_ELIGIBLE_STATUSES,
 	ACTIVE_HOUSEHOLD_STATUSES,
@@ -203,6 +210,15 @@ export {
 } from './domain/row-selection';
 
 export {
+	EVACUEE_SORTS,
+	EVACUEE_SORT_LABELS,
+	DEFAULT_EVACUEE_SORT,
+	isEvacueeSort,
+	sortEvacuees,
+	type EvacueeSort
+} from './domain/evacuee-sort';
+
+export {
 	REPORT_IN_CTA_LABEL,
 	NEW_REGISTRATION_CTA_LABEL,
 	INTAKE_SEARCH_PLACEHOLDER,
@@ -292,12 +308,14 @@ export {
 
 export type { PeopleRepository, EvacueeFilters, HouseholdFilters } from './data/people.repository';
 export { peopleRepository, isRegistrationCompensationIncomplete } from './data/people.remote';
+export type { EvacueeNameRecord } from './data/evacuee-names.remote';
 export { getShelterCode, getShelterDb } from '$lib/db/shelter';
 
 // Application — TanStack Query hooks + changes-feed live-query wiring
 export {
 	peopleKeys,
 	useEvacuees,
+	useEvacueeNames,
 	useEvacuee,
 	usePendingScreeningEvacuees,
 	useEvacueesPaginated,
@@ -342,6 +360,7 @@ export {
 	usePatchMedical,
 	useDeleteMedical,
 	usePatchEvacuee,
+	useSetSearchVisibility,
 	useMedicals,
 	useMedicalByEvacuee,
 	useMovements,

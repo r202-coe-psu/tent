@@ -53,6 +53,7 @@ import {
 	householdPreRegisterAddressFormSchema,
 	householdPostArrivalAddressFormSchema,
 	evacueePersonalEditFormSchema,
+	evacueeEmergencyEditFormSchema,
 	evacueeHealthEditFormSchema,
 	formatPersonName,
 	stayStatusSchema,
@@ -75,7 +76,11 @@ import {
 	migratePetGroup,
 	migratePetGroups,
 	groupPetsBySpecies,
-	petSpeciesLabel
+	petSpeciesLabel,
+	checkoutDestinationTypeSchema,
+	SHELTER_CLOSED_REASON,
+	SHELTER_CLOSED_REASON_LABEL,
+	movementReasonLabel
 } from './people';
 import type { AuthorContext } from '$lib/db/model';
 import type { ScreeningInput, StayStatus } from './people';
@@ -598,6 +603,21 @@ describe('station1EvacueeInputSchema emergency contact', () => {
 				])
 			);
 		}
+	});
+
+	it('normalises a formatted emergency phone and rejects a 9-digit landline (CR-210)', () => {
+		const ok = station1EvacueeInputSchema.safeParse({
+			...base,
+			emergency_contact: { name: 'มานี', phone: '081-234-5678', relation: 'มารดา' }
+		});
+		expect(ok.success).toBe(true);
+		if (ok.success) expect(ok.data.emergency_contact?.phone).toBe('0812345678');
+
+		const landline = station1EvacueeInputSchema.safeParse({
+			...base,
+			emergency_contact: { name: 'มานี', phone: '022222222', relation: 'มารดา' }
+		});
+		expect(landline.success).toBe(false);
 	});
 
 	it('accepts a complete emergency contact on Station 1', () => {
@@ -2153,5 +2173,55 @@ describe('evacuee booking_ref (CR-169, schema_v 14)', () => {
 		expect(out).toEqual(base);
 		expect(input.booking_ref).toBe('BK-X');
 		expect(withoutBookingRef(base)).toEqual(base);
+	});
+});
+
+describe('evacuee edit forms require a 10-digit mobile (CR-210)', () => {
+	const personal = (phone: string) =>
+		evacueePersonalEditFormSchema.safeParse({
+			firstName: 'A',
+			lastName: 'B',
+			nickname: '',
+			birthYear: '',
+			age: '',
+			gender: 'other',
+			phone,
+			noPhone: false,
+			cardType: 'other',
+			cardNumber: '',
+			country: 'TH',
+			religion: 'unknown'
+		});
+
+	it('rejects a 10-digit number that is not a 0-prefixed mobile', () => {
+		expect(personal('1234567890').success).toBe(false);
+		expect(personal('0812345678').success).toBe(true);
+		expect(personal('081-234-5678').success).toBe(true);
+	});
+
+	it('rejects a non-0 emergency phone', () => {
+		const run = (phone: string) =>
+			evacueeEmergencyEditFormSchema.safeParse({ name: 'N', phone, relation: 'R' }).success;
+		expect(run('1234567890')).toBe(false);
+		expect(run('0812345678')).toBe(true);
+	});
+});
+
+describe('shelter-closed checkout display (CR-219 FR-1, FR-21)', () => {
+	it('maps the shelter_closed reason to its Thai label', () => {
+		expect(SHELTER_CLOSED_REASON).toBe('shelter_closed');
+		expect(movementReasonLabel('shelter_closed')).toBe('ศูนย์ปิด');
+		expect(movementReasonLabel(SHELTER_CLOSED_REASON)).toBe(SHELTER_CLOSED_REASON_LABEL);
+	});
+
+	it('passes free-text reasons through and blanks empty ones', () => {
+		expect(movementReasonLabel('ญาติมารับ')).toBe('ญาติมารับ');
+		expect(movementReasonLabel('')).toBe('');
+		expect(movementReasonLabel(null)).toBe('');
+		expect(movementReasonLabel(undefined)).toBe('');
+	});
+
+	it('accepts shelter_closed as a stored destination', () => {
+		expect(checkoutDestinationTypeSchema.safeParse('shelter_closed').success).toBe(true);
 	});
 });

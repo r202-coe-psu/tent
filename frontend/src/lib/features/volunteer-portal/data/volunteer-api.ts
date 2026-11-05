@@ -6,6 +6,7 @@
  * (CR-063).
  */
 import type {
+	PortalAccessStatus,
 	PortalCredential,
 	PublicJob,
 	PublicJobFilter,
@@ -22,6 +23,7 @@ const ERROR_COPY: Record<string, string> = {
 	JOB_NOT_OPEN: 'งานอาสาสมัครนี้ปิดรับสมัครแล้ว',
 	JOB_FULL: 'งานอาสาสมัครนี้เต็มแล้ว กรุณาเลือกกะหรืองานอาสาสมัครอื่น',
 	SHIFT_FULL: 'กะนี้เต็มแล้ว กรุณาเลือกกะหรืองานอาสาสมัครอื่น',
+	SHIFT_CLOSED: 'กะนี้สิ้นสุดแล้ว ปิดรับสมัคร กรุณาเลือกกะอื่น',
 	SHIFT_NOT_FOUND: 'ไม่พบกะงานนี้ หรือกะนี้ไม่ใช่ของคุณ',
 	SHIFT_ID_REQUIRED: 'กรุณาเลือกกะที่ต้องการสมัคร',
 	SHIFT_DATE_AMBIGUOUS: 'ไม่สามารถระบุกะงานที่ต้องการได้ กรุณาเลือกกะใหม่อีกครั้ง',
@@ -46,8 +48,11 @@ const ERROR_COPY: Record<string, string> = {
 	ACTION_FAILED: 'ดำเนินการกับกะงานไม่สำเร็จ กรุณาลองใหม่อีกครั้ง',
 	TICKET_NOT_FOUND: 'ไม่พบตั๋วนี้ กรุณาตรวจสอบลิงก์อีกครั้ง',
 	NOT_CANCELLABLE: 'ตั๋วนี้ยกเลิกไม่ได้แล้ว',
+	SHIFT_STARTED: 'กะนี้เริ่มไปแล้ว ยกเลิกการสมัครไม่ได้',
+	CANCEL_FAILED: 'ยกเลิกการสมัครไม่สำเร็จ กรุณาลองใหม่อีกครั้ง',
 	RATE_LIMITED: 'ส่งคำขอถี่เกินไป กรุณารอสักครู่แล้วลองใหม่',
 	VOLUNTEER_NOT_FOUND: 'ไม่พบเบอร์โทรศัพท์นี้ในระบบอาสาสมัคร กรุณาตรวจสอบเบอร์ที่ใช้สมัครอีกครั้ง',
+	ACCESS_STATUS_UNAVAILABLE: 'ไม่สามารถตรวจสอบสิทธิ์ใช้งานระบบได้ กรุณาลองใหม่อีกครั้ง',
 	ACCESS_UNAVAILABLE: 'ไม่สามารถตรวจสอบข้อมูลจิตอาสาได้ กรุณาลองใหม่อีกครั้ง',
 	ROLE_CARD_NOT_FOUND: 'ไม่พบข้อมูล role card ของอาสาสมัคร',
 	ROLE_CARD_WRITE_FAILED: 'ไม่สามารถสร้าง QR Role Card ได้ กรุณาลองใหม่อีกครั้ง'
@@ -108,10 +113,14 @@ export async function findTickets(credential: PortalCredential): Promise<TicketF
 	return { tickets: body.tickets ?? [], phoneMasked: body.phone_masked ?? '' };
 }
 
-export async function cancelTicket(token: string): Promise<void> {
+export async function cancelTicket(token: string, applicationId: string): Promise<void> {
 	const response = await fetch(
 		`/api/public/v1/volunteer/ticket/${encodeURIComponent(token)}/cancel`,
-		{ method: 'POST' }
+		{
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ application_id: applicationId })
+		}
 	);
 	if (!response.ok) {
 		throw apiError(await readJson(response), response.status, 'ยกเลิกการสมัครไม่สำเร็จ');
@@ -129,6 +138,25 @@ export async function fetchSchedule(credential: PortalCredential): Promise<Sched
 		throw apiError(data, response.status, 'ไม่สามารถโหลดตารางงานได้');
 	}
 	return (data as { shifts?: ScheduleShift[] }).shifts ?? [];
+}
+
+/**
+ * Whether the signed-in volunteer may use the staff system, per shelter they have a profile in
+ * (CR-221 FR-26). Rows carry no account name by design (FR-28).
+ */
+export async function fetchAccessStatus(
+	credential: PortalCredential
+): Promise<PortalAccessStatus[]> {
+	const response = await fetch('/api/public/v1/volunteer/access-status', {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify(credential)
+	});
+	const data = await readJson(response);
+	if (!response.ok || !data) {
+		throw apiError(data, response.status, 'ไม่สามารถตรวจสอบสิทธิ์ใช้งานระบบได้');
+	}
+	return (data as { access?: PortalAccessStatus[] }).access ?? [];
 }
 
 export async function respondToDispatch(

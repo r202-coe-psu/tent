@@ -11,6 +11,7 @@ export { default as YieldReceiptLines } from './ui/yield-receipt-lines.svelte';
 export {
 	calculateMealIngredients,
 	calculateMealIngredientsFromRecipe,
+	scaleRecipeIngredientQty,
 	calculateMealIngredientsFromCustom,
 	resolveItemMasterStock,
 	toRequisitionInput,
@@ -170,8 +171,10 @@ export {
 	useMealServices,
 	useRecordMealService,
 	useMealServiceReceipts,
+	useMealServiceLedger,
 	useConfirmMealServiceReceipt,
 	useConfirmMealServiceYield,
 	useRejectMealServiceReceipt,
 	startKitchenLiveQuery
 } from './application/queries';
+export { kitchenErrorReason } from './domain/kitchen-error';

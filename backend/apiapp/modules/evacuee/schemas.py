@@ -46,6 +46,19 @@ class SearchResponse(BaseModel):
     as_of: datetime
 
 
+class ExternalSearchResult(SearchResult):
+    """`/external/v1/occupants` keeps the zone partners read (CR-183 FR-18 is public-only)."""
+
+    care_zone: str | None = None
+    zone_name: str | None = None
+
+
+class ExternalSearchResponse(BaseModel):
+    results: list[ExternalSearchResult]
+    count: int
+    as_of: datetime
+
+
 class ApiErrorBody(BaseModel):
     code: str
     message: str

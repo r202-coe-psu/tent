@@ -31,9 +31,14 @@
 		PublicPageShell,
 		requestUserPosition,
 		canRequestGeolocation,
+		isHostHouseKind,
+		siteKindLabel,
+		siteKindTiles,
+		useSiteKinds,
 		type PublicShelterCardModel
 	} from '$lib/features/public-portal';
 	import { Button } from '$lib/components/ui/button';
+	import { Skeleton } from '$lib/components/ui/skeleton/index.js';
 	import { getTranslation } from '$lib/utils/i18n';
 	import { directionsUrl } from '$lib/utils/maps';
 	import { PUBLIC_SHELTERS_I18N, PUBLIC_SHELTER_CARD_I18N } from '$lib/constants/i18n';
@@ -57,6 +62,10 @@
 
 	const t = $derived(getTranslation(PUBLIC_SHELTERS_I18N, langState.current));
 	const cardT = $derived(getTranslation(PUBLIC_SHELTER_CARD_I18N, langState.current));
+	const siteKindsQuery = useSiteKinds();
+	const siteKindStatTiles = $derived(
+		siteKindTiles(data?.summary?.counts_by_site_kind ?? {}, siteKindsQuery.data)
+	);
 
 	onMount(() => {
 		if (typeof window !== 'undefined') {
@@ -264,7 +273,7 @@
 	<div
 		class="{mobileViewMode === 'map'
 			? 'hidden lg:grid'
-			: 'grid'} grid-cols-2 gap-3 sm:gap-4 md:grid-cols-4 lg:gap-6"
+			: 'grid'} grid-cols-2 gap-3 sm:gap-4 md:grid-cols-[repeat(auto-fit,minmax(10rem,1fr))] lg:gap-6"
 	>
 		<PublicShelterMetricCard
 			title={t.totalShelters}
@@ -282,21 +291,23 @@
 			iconClass="border-success shadow-success/15 text-success"
 		/>
 
-		<PublicShelterMetricCard
-			title={t.evacCenters}
-			value={data?.summary?.evac_centers ?? 0}
-			unit={t.locationsUnit}
-			icon={Tent}
-			iconClass="border-primary shadow-primary/15 text-primary"
-		/>
-
-		<PublicShelterMetricCard
-			title={t.hostHouses}
-			value={data?.summary?.host_houses ?? 0}
-			unit={t.locationsUnit}
-			icon={House}
-			iconClass="border-sky-300 shadow-sky-300/15 text-sky-700"
-		/>
+		<!-- Wait for the kind list so the tiles appear together instead of popping in one by one. -->
+		{#if siteKindsQuery.isPending}
+			<Skeleton class="h-24 rounded-2xl sm:h-28" />
+			<Skeleton class="h-24 rounded-2xl sm:h-28" />
+		{:else}
+			{#each siteKindStatTiles as tile (tile.code)}
+				<PublicShelterMetricCard
+					title={siteKindLabel(tile.code, siteKindsQuery.data, langState.current)}
+					value={tile.count}
+					unit={t.locationsUnit}
+					icon={isHostHouseKind(tile.code) ? House : Tent}
+					iconClass={isHostHouseKind(tile.code)
+						? 'border-sky-300 shadow-sky-300/15 text-sky-700'
+						: 'border-primary shadow-primary/15 text-primary'}
+				/>
+			{/each}
+		{/if}
 	</div>
 
 	<!-- Map Container (Always visible on Desktop; on Mobile visible when mobileViewMode === 'map') -->

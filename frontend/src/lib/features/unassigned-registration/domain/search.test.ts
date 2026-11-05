@@ -4,6 +4,7 @@ import {
 	CLAIM_FLOW_STATUS_GUIDANCE,
 	UNASSIGNED_QUEUE_BADGE_LABEL,
 	UNASSIGNED_QUEUE_BADGE_SHORT,
+	claimedPetSummaries,
 	formatClaimCreatedAt,
 	formatOpenMemberCardType,
 	formatOpenMemberDemographicsLine,
@@ -13,7 +14,10 @@ import {
 	formatOpenMemberVulnerableGroup,
 	isOnlineRequiredError,
 	openMemberHitSchema,
-	type OpenMemberHit
+	petsLeftBehind,
+	totalOpenPetCount,
+	type OpenMemberHit,
+	type OpenPetHit
 } from './search';
 
 const baseMember = {
@@ -128,5 +132,120 @@ describe('isOnlineRequiredError', () => {
 		expect(isOnlineRequiredError({ code: 'ONLINE_REQUIRED' })).toBe(true);
 		expect(isOnlineRequiredError({ error: { code: 'ONLINE_REQUIRED' } })).toBe(true);
 		expect(isOnlineRequiredError({ error: { code: 'OTHER' } })).toBe(false);
+	});
+});
+
+describe('petsLeftBehind (#798)', () => {
+	const pet = (id: string, count = 1): OpenPetHit => ({
+		pet_id: id,
+		status: 'open',
+		species: 'dog',
+		count
+	});
+
+	it('returns the open pets the claimer did not tick', () => {
+		const open = [pet('pet:a'), pet('pet:b'), pet('pet:c')];
+
+		expect(petsLeftBehind(open, ['pet:b']).map((p) => p.pet_id)).toEqual(['pet:a', 'pet:c']);
+	});
+
+	it('returns every open pet when nothing is ticked', () => {
+		const open = [pet('pet:a'), pet('pet:b')];
+
+		expect(petsLeftBehind(open, [])).toHaveLength(2);
+	});
+
+	it('returns nothing when every open pet is ticked', () => {
+		const open = [pet('pet:a'), pet('pet:b')];
+
+		expect(petsLeftBehind(open, ['pet:a', 'pet:b'])).toEqual([]);
+	});
+
+	it('ignores ticked ids that are no longer open', () => {
+		const open = [pet('pet:a')];
+
+		expect(petsLeftBehind(open, ['pet:a', 'pet:gone'])).toEqual([]);
+	});
+
+	it('handles an empty open list', () => {
+		expect(petsLeftBehind([], ['pet:a'])).toEqual([]);
+	});
+});
+
+describe('totalOpenPetCount', () => {
+	const pet = (id: string, count: number): OpenPetHit => ({
+		pet_id: id,
+		status: 'open',
+		species: 'cat',
+		count
+	});
+
+	it('sums the count of each row rather than counting rows', () => {
+		expect(totalOpenPetCount([pet('pet:a', 2), pet('pet:b', 3)])).toBe(5);
+	});
+
+	it('is zero for an empty list', () => {
+		expect(totalOpenPetCount([])).toBe(0);
+	});
+});
+
+describe('claimedPetSummaries', () => {
+	const pet = (over: Partial<OpenPetHit> = {}): OpenPetHit => ({
+		pet_id: 'pet:a',
+		status: 'open',
+		species: 'dog',
+		count: 1,
+		...over
+	});
+
+	it('keeps the species and the count so the form can show what claim will write', () => {
+		expect(claimedPetSummaries([pet({ species: 'cat', count: 3 })])).toEqual([
+			{ species: 'cat', count: 3 }
+		]);
+	});
+
+	it('carries the registrant notes through as details', () => {
+		expect(claimedPetSummaries([pet({ notes: 'ชื่อ หมาดำ' })])).toEqual([
+			{ species: 'dog', count: 1, details: 'ชื่อ หมาดำ' }
+		]);
+	});
+
+	it('mentions the cage next to the notes', () => {
+		expect(claimedPetSummaries([pet({ notes: 'ชื่อ หมาดำ', has_cage: true })])[0].details).toBe(
+			'ชื่อ หมาดำ · มีกรง'
+		);
+	});
+
+	it('mentions the cage on its own when there are no notes', () => {
+		expect(claimedPetSummaries([pet({ has_cage: true })])[0].details).toBe('มีกรง');
+	});
+
+	it('leaves details off when there is nothing to say', () => {
+		expect(claimedPetSummaries([pet({ notes: '   ' })])[0]).not.toHaveProperty('details');
+	});
+
+	it('maps every open pet, in order', () => {
+		const rows = claimedPetSummaries([
+			pet({ pet_id: 'pet:a' }),
+			pet({ pet_id: 'pet:b', species: 'other' })
+		]);
+
+		expect(rows.map((row) => row.species)).toEqual(['dog', 'other']);
+	});
+
+	it('is empty when no pet was ticked', () => {
+		expect(claimedPetSummaries([])).toEqual([]);
+	});
+
+	it('reads a household PetGroup the same way, so both sources render as one list', () => {
+		expect(
+			claimedPetSummaries([{ species: 'cat', count: 2, notes: 'ส้มโอ', has_cage: true }])
+		).toEqual([{ species: 'cat', count: 2, details: 'ส้มโอ · มีกรง' }]);
+	});
+
+	it('tolerates a household row whose notes are null', () => {
+		expect(claimedPetSummaries([{ species: 'dog', count: 1, notes: null }])[0]).not.toHaveProperty(
+			'details'
+		);
 	});
 });

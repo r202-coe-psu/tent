@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+	deriveDonationCloseAuditId,
 	deriveDonationReceiptAuditId,
 	deriveDonationReceiptLineId,
 	donationShortfall,
@@ -85,6 +86,44 @@ describe('deriveDonationReceiptAuditId (#695)', () => {
 		expect(a).toBe(await deriveDonationReceiptAuditId('donation:D1'));
 		expect(a).toMatch(/^audit:[0-9A-HJKMNP-TV-Z]{26}$/);
 		expect(await deriveDonationReceiptAuditId('donation:D2')).not.toBe(a);
+	});
+
+	// Bookings received whole keep the id their earlier attempts already wrote under.
+	it('keeps the per-booking id byte for byte when no lines are given', async () => {
+		expect(await deriveDonationReceiptAuditId('donation:D1')).toBe(
+			'audit:81XJAFCJKADCVWZCM43TNRSF9M'
+		);
+	});
+});
+
+describe('deriveDonationReceiptAuditId with lines (CR-206 FR-MP-22c)', () => {
+	it('gives one id per set of lines, whatever order they were sent in', async () => {
+		const a = await deriveDonationReceiptAuditId('donation:D1', [2, 0]);
+		expect(a).toBe(await deriveDonationReceiptAuditId('donation:D1', [0, 2]));
+		expect(a).toMatch(/^audit:[0-9A-HJKMNP-TV-Z]{26}$/);
+	});
+
+	it('differs from the per-booking id and between line sets and bookings', async () => {
+		const whole = await deriveDonationReceiptAuditId('donation:D1');
+		const first = await deriveDonationReceiptAuditId('donation:D1', [0]);
+		expect(first).not.toBe(whole);
+		expect(await deriveDonationReceiptAuditId('donation:D1', [1])).not.toBe(first);
+		expect(await deriveDonationReceiptAuditId('donation:D1', [0, 1])).not.toBe(first);
+		expect(await deriveDonationReceiptAuditId('donation:D2', [0])).not.toBe(first);
+		// "1,2" and "12" must not meet.
+		expect(await deriveDonationReceiptAuditId('donation:D1', [12])).not.toBe(
+			await deriveDonationReceiptAuditId('donation:D1', [1, 2])
+		);
+	});
+});
+
+describe('deriveDonationCloseAuditId (CR-206 FR-MP-27)', () => {
+	it('gives one id per booking, apart from every receipt id', async () => {
+		const close = await deriveDonationCloseAuditId('donation:D1');
+		expect(close).toBe(await deriveDonationCloseAuditId('donation:D1'));
+		expect(close).toMatch(/^audit:[0-9A-HJKMNP-TV-Z]{26}$/);
+		expect(close).not.toBe(await deriveDonationReceiptAuditId('donation:D1'));
+		expect(await deriveDonationCloseAuditId('donation:D2')).not.toBe(close);
 	});
 });
 

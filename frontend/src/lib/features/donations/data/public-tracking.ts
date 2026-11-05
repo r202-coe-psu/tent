@@ -4,6 +4,7 @@
  * FastAPI `/public/v1/donations/{token}` requires EXTERNAL_API_SECRET — the browser
  * must not call it with publicClient. Same pattern as POST/PATCH in the donate wizard.
  */
+import { PUBLIC_DONATIONS_I18N } from '$lib/constants/i18n';
 import {
 	toDonationTrackView,
 	type DonationLookupItem,
@@ -153,8 +154,12 @@ export async function cancelDonation(trackingToken: string): Promise<void> {
 	}
 }
 
-/** What the donor wants the booking to contain — the whole basket, not a delta. */
+/**
+ * What the donor wants the booking to contain — the whole basket, not a delta. A held
+ * line carries its `line_key`; a line the donor added has none (CR-196 FR-LK-5).
+ */
 export type DonationItemEdit = {
+	line_key?: string;
 	item_id?: string;
 	free_text?: string;
 	qty: string;
@@ -183,12 +188,12 @@ export async function updateDonationItems(
 		if ((body as { error?: string }).error === 'BOOKING_CHANGED') {
 			throw new Error('ศูนย์เพิ่งอัปเดตรายการนี้ระหว่างที่คุณแก้ไข กรุณารีเฟรชแล้วลองใหม่อีกครั้ง');
 		}
-		// Before the generic 400: the booking is still editable, this edit is not — it would
-		// keep only lines the shelter already refused. Cancelling is the way out (CR-174).
-		if ((body as { error?: string }).error === 'NO_ACCEPTED_ITEMS') {
-			throw new Error(
-				'ต้องเหลืออย่างน้อย 1 รายการที่ศูนย์ไม่ได้ปฏิเสธ — ถ้าไม่ต้องการบริจาคแล้ว ให้กด "ยกเลิกการจองนี้" แทน'
-			);
+		const error = (body as { error?: string }).error;
+		// Reviewed since the page loaded (CR-196 FR-LK-4) — same words as the disabled button.
+		if (error === 'ALREADY_REVIEWED') throw new Error(PUBLIC_DONATIONS_I18N.th.editBlockedToast);
+		// The form was built from lines the booking no longer holds — another tab saved first.
+		if (error === 'UNKNOWN_LINE_KEY' || error === 'DUPLICATE_LINE_KEY') {
+			throw new Error('รายการในใบนี้เปลี่ยนไปแล้ว กรุณารีเฟรชแล้วแก้ไขใหม่อีกครั้ง');
 		}
 		if (res.status === 400) {
 			throw new Error('รายการนี้แก้ไม่ได้แล้ว — เจ้าหน้าที่เริ่มตรวจรับหรือปิดรายการไปแล้ว');

@@ -3,7 +3,10 @@ import { H, normalizeHeader, ZONE_SHEET_NAME } from '../domain/columns';
 import { parseShelterWorkbook } from './parse';
 import { buildShelterTemplateBlob } from './template';
 
-const MASTERS = { shelter_type: [{ value: 'school', label: 'โรงเรียน' }] };
+const MASTERS = {
+	shelter_type: [{ value: 'school', label: 'โรงเรียน' }],
+	site_kind: [{ value: 'evacuation_center', label: 'ศูนย์อพยพ' }]
+};
 
 async function generateAndParse() {
 	const blob = await buildShelterTemplateBlob(MASTERS, { withSample: true });

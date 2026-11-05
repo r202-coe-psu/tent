@@ -10,6 +10,7 @@
  * Pure: no I/O, no Svelte. Safe to import from `+server.ts`.
  */
 import { z } from 'zod';
+import { isThaiMobilePhone } from '$lib/db/model';
 import type { components } from '$lib/api/openapi';
 import {
 	dormFieldsFor,
@@ -63,7 +64,7 @@ export const publicUnassignedRegistrationRequestSchema = z
 			}
 			return;
 		}
-		if (!/^0\d{8,9}$/.test(headPhone.replace(/[-\s]/g, ''))) {
+		if (!isThaiMobilePhone(headPhone)) {
 			ctx.addIssue({
 				code: 'custom',
 				path: ['members', 0, 'phone'],
@@ -209,7 +210,6 @@ export type UnassignedRegistrationErrorCode =
 	| 'SERVER_MISCONFIGURED'
 	| 'DUPLICATE_OPEN_IDENTITY'
 	| 'WRITE_FAILED'
-	| 'DISCLAIMER_REQUIRED'
 	| 'NETWORK_ERROR';
 
 export function unassignedRegistrationErrorMessage(code: string | undefined): string {
@@ -229,8 +229,6 @@ export function unassignedRegistrationErrorMessage(code: string | undefined): st
 		case 'CAPTCHA_REQUIRED':
 		case 'CAPTCHA_FAILED':
 			return 'การยืนยันตัวตนไม่สำเร็จ กรุณาลองใหม่';
-		case 'DISCLAIMER_REQUIRED':
-			return 'กรุณายืนยันการรับทราบเงื่อนไขการใช้งานระบบก่อนส่งข้อมูล';
 		case 'INVALID_INPUT':
 			return 'ข้อมูลไม่ครบหรือไม่ถูกต้อง';
 		case 'NETWORK_ERROR':

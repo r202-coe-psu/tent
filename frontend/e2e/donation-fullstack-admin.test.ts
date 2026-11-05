@@ -206,7 +206,7 @@ test.describe('Donation full-stack: back office', { tag: ['@critical', '@donatio
 			await page.locator('#donor-name').fill(`E2E ดูคิว ${RUN_ID}`);
 			await page.locator('#donor-phone').fill('0889012345');
 			await page.getByRole('spinbutton', { name: 'ปริมาณ' }).fill('1');
-			await page.getByRole('button', { name: 'ถัดไป: เลือกจุดส่งมอบ' }).click();
+			await page.getByRole('button', { name: 'ถัดไป: นัดหมายการส่งของบริจาค' }).click();
 			await page.getByRole('button', { name: mode }).click();
 		}
 
@@ -530,7 +530,8 @@ test.describe('Donation full-stack: back office', { tag: ['@critical', '@donatio
 	test('Z teardown leaves nothing of this run behind', async ({ request }) => {
 		test.setTimeout(240_000);
 		const run = await teardownRun(request, ledger);
-		expect(run.shelters).toHaveLength(1);
+		// The ledger may also hold shelters from an aborted earlier run; this teardown purges those too.
+		expect(run.shelters).toContain(shelter.code);
 		await expectRunGone(request, run);
 	});
 });

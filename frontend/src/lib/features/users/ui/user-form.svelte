@@ -18,8 +18,12 @@
 		SHELTER_MANAGER,
 		roleDisplayLabel,
 		assignmentsFromRoles,
-		capabilitiesForShelter
+		capabilitiesForShelter,
+		compoundCapabilityRole,
+		STAFF_CAPABILITY_DESCRIPTIONS,
+		type StaffCapability
 	} from '$lib/auth/roles';
+	import { grantExpiryLabel, grantFor } from '$lib/auth/role-grants';
 	import {
 		createUserSchema,
 		editUserSchema,
@@ -32,6 +36,7 @@
 	import { generateTemporaryPassphrase } from '$lib/auth/passphrase-generator';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Badge } from '$lib/components/ui/badge/index.js';
+	import PasswordRuleChecklist from '$lib/components/password-rule-checklist.svelte';
 	import Save from '@lucide/svelte/icons/save';
 	import UserCheck from '@lucide/svelte/icons/user-check';
 	import Users from '@lucide/svelte/icons/users';
@@ -345,62 +350,23 @@
 		'ควบคุมการปฏิบัติงานทั้งหมดภายในศูนย์ของตนเอง มีอำนาจครอบคลุมสิทธิ์ของบทบาทเจ้าหน้าที่ทั้งหมดในศูนย์นั้น รวมถึงงานคัดกรองและการแพทย์';
 
 	/** Compact role picker — PRD descriptions per capability. */
-	const ROLE_OPTIONS = [
-		{
-			id: 'registration_staff',
-			description:
-				'บันทึกข้อมูลทะเบียนประวัติผู้อพยพ (Evacuees), ข้อมูลครัวเรือน, ยานพาหนะ, สัตว์เลี้ยง, การเช็คอิน-เช็คเอาต์ประจำวัน และออกบัตรประจำตัว'
-		},
-		{
-			id: 'triage_staff',
-			description:
-				'คัดกรองกลุ่มเปราะบาง (ผู้สูงอายุ, ผู้พิการ, เด็ก, สตรีมีครรภ์) และคัดแยกผู้ป่วยเบื้องต้นเพื่อส่งต่อไปยังพื้นที่พักพิงที่เหมาะสม'
-		},
-		{
-			id: 'medical_staff',
-			description:
-				'บันทึกข้อมูลสุขภาพ, ประวัติการรักษาพยาบาลเบื้องต้น, การจ่ายยา, การเฝ้าระวังโรคติดต่อ และการส่งต่อผู้ป่วยไปยังโรงพยาบาลภายนอก'
-		},
-		{
-			id: 'kitchen_staff',
-			description:
-				'วางแผนรายการอาหารประจำวัน (Meal Planning), คำนวณวัตถุดิบและแก๊สหุงต้ม, เบิกจ่ายวัตถุดิบ, และบันทึกยอดการแจกจ่ายอาหาร'
-		},
-		{
-			id: 'supply_coordinator',
-			description:
-				'รับมอบสิ่งของบริจาค, จัดการคลังพัสดุ, ตัดจ่ายสิ่งของจำเป็น, เบิกถุงยังชีพ, และควบคุมระดับสต็อกขั้นต่ำ'
-		},
-		{
-			id: 'warehouse_staff',
-			description: 'ดูแลคลังสินค้า รับ-จ่ายวัสดุ และบันทึกสต็อกภายในศูนย์'
-		},
-		{
-			id: 'distribution_staff',
-			description:
-				'ปฏิบัติงานจุดแจกจ่ายอาหารและสิ่งของ (Station 4) ภายในศูนย์ของตนเอง: รับของจากคลัง, สแกนส่งมอบให้ผู้ประสบภัย, ปิดกะ และส่งคืนของเหลือ'
-		},
-		{
-			id: 'kiosk_staff',
-			description:
-				'ดูแลตู้ Kiosk ของศูนย์ตัวเอง: เพิ่มเครื่อง, แก้ชื่อและจุดบริการ, เปิด/ปิด/ลบเครื่อง, ตั้งหรือดู PIN เจ้าหน้าที่ของเครื่อง, และจัดการแบนเนอร์ที่แสดงบนตู้'
-		},
-		{
-			id: 'facility_staff',
-			description:
-				'จัดการโซนที่พัก (Zoning), บริหารจัดการเต็นท์และพื้นที่นอน, ดูแลระบบไฟฟ้า น้ำประปา สุขาภิบาล และการซ่อมบำรุงอาคาร'
-		},
-		{
-			id: 'volunteer_coordinator',
-			description:
-				'สร้างประกาศงานอาสาสมัคร, ดูแลกระดานงาน, จัดสรรกะงาน, ดูแลจุดเช็คอินแท็บเล็ตหน้าศูนย์, และออกสิทธิ์ระบบให้อาสาช่วยงาน'
-		},
-		{
-			id: 'security_officer',
-			description:
-				'ควบคุมความสงบเรียบร้อย, บันทึกเหตุการณ์ความไม่ปลอดภัย (Incidents), จัดการพื้นที่หวงห้าม, และเฝ้าระวังจุดเข้า-ออกศูนย์'
-		}
-	] as const;
+	/** Picker order; the descriptions live in `STAFF_CAPABILITY_DESCRIPTIONS` (shared with the volunteer access dialog). */
+	const ROLE_OPTIONS = (
+		[
+			'registration_staff',
+			'triage_staff',
+			'medical_staff',
+			'kitchen_staff',
+			'supply_coordinator',
+			'warehouse_staff',
+			'distribution_staff',
+			'kiosk_staff',
+			'pr_staff',
+			'facility_staff',
+			'volunteer_coordinator',
+			'security_officer'
+		] as const satisfies readonly StaffCapability[]
+	).map((id) => ({ id, description: STAFF_CAPABILITY_DESCRIPTIONS[id] }));
 
 	function toggleRole(roleId: string, checked: boolean) {
 		const cap = roleId as SaGrantableCapability;
@@ -427,6 +393,14 @@
 			current.delete(cap);
 		}
 		$formData.capabilities = Array.from(current);
+	}
+
+	/** Make a coordinator-granted role permanent ("ไม่มีวันหมด"); saved as `permanent_roles`. */
+	function setPermanent(key: string, checked: boolean) {
+		const keys = new SvelteSet($formData.permanent_roles ?? []);
+		if (checked) keys.add(key);
+		else keys.delete(key);
+		$formData.permanent_roles = [...keys];
 	}
 
 	function isRoleChecked(roleId: string): boolean {
@@ -456,6 +430,37 @@
 		return shelterItems.filter((s) => !used.has(s.value));
 	});
 </script>
+
+{#snippet grantNote(shelterCode: string | null, roleId: string)}
+	{@const grant = shelterCode ? grantFor(user?.role_grants, shelterCode, roleId) : null}
+	{#if grant}
+		{@const key = compoundCapabilityRole(grant.shelter_code, grant.role)}
+		{@const permanent = ($formData.permanent_roles ?? []).includes(key)}
+		{@const reviewer = grant.verified_by?.reviewed_by}
+		<div
+			class="col-span-full -mt-0.5 mb-1 ml-8 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs"
+		>
+			<span class={permanent ? 'text-muted-foreground line-through' : 'font-medium text-amber-700'}>
+				{grantExpiryLabel(grant)}
+			</span>
+			<span class="text-muted-foreground">ออกโดย {grant.granted_by}</span>
+			{#if reviewer}
+				<span class="text-muted-foreground">
+					ยืนยันตัวตนโดย {reviewer}{reviewer === grant.granted_by ? ' (คนเดียวกัน)' : ''}
+				</span>
+			{/if}
+			<label class="flex cursor-pointer items-center gap-1.5 text-slate-700">
+				<input
+					type="checkbox"
+					class="size-3.5 shrink-0 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+					checked={permanent}
+					onchange={(e) => setPermanent(key, e.currentTarget.checked)}
+				/>
+				ไม่มีวันหมด
+			</label>
+		</div>
+	{/if}
+{/snippet}
 
 {#snippet roleInfoButton(description: string, ariaLabel: string)}
 	<Popover.Root>
@@ -713,6 +718,9 @@
 										สร้างรหัส
 									</Button>
 								</div>
+								{#if $formData.password}
+									<PasswordRuleChecklist password={$formData.password} />
+								{/if}
 							{/snippet}
 						</Form.Control>
 						<Form.FieldErrors />
@@ -937,6 +945,9 @@
 												`รายละเอียด${roleDisplayLabel(role.id)}`
 											)}
 										</div>
+										{#if isAssignmentRoleChecked(index, role.id)}
+											{@render grantNote(assignment.shelter_code, role.id)}
+										{/if}
 									{/each}
 								</div>
 							{/if}
@@ -1054,6 +1065,9 @@
 											`รายละเอียด${roleDisplayLabel(role.id)}`
 										)}
 									</div>
+									{#if isRoleChecked(role.id)}
+										{@render grantNote(boundShelterCode, role.id)}
+									{/if}
 								{/each}
 							</div>
 						{/if}

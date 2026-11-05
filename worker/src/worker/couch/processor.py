@@ -271,9 +271,15 @@ async def process_change(couch: Any, database: str, change: dict[str, Any]) -> N
                 # …and one that arrived without ever reserving — a walk-in staff keyed
                 # in — has to start holding it, or the counter hands the same goods out
                 # to a public donor as well.
-                await reserve_walk_in_quota(
+                walk_in_reconciled = await reserve_walk_in_quota(
                     couch, doc, shelter_code=shelter_code, now=now
                 )
+                # A booking that became `received` hands back what never arrived (its
+                # shortfall) now, not at the next ledger row (CR-206 FR-MP-27c) — a
+                # booking closed from its point receipts writes no ledger row of its own.
+                # A walk-in just reconciled the same shelter, so it needs no second pass.
+                if doc.get("status") == "received" and not walk_in_reconciled:
+                    await settle_shelved_quota(couch, shelter_code, now=now)
                 # New/updated declared items change remaining qty on the public board.
                 await _reproject_needs(couch, shelter_code)
             elif doc_type == "donation_campaign":

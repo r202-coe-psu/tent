@@ -260,6 +260,7 @@ export {
 	useMoveBulkReturnEntry,
 	useApplyMissedBulkReturnLoanRefs,
 	useVoidBulkReturnEntry,
+	useReopenBulkReturnEntryLoans,
 	useCancelBulkReturnPool,
 	useSubmitBulkReturnPool,
 	useReceiveBulkReturnPool,
@@ -289,6 +290,7 @@ export {
 	type MoveBulkReturnEntryMutationInput,
 	type ApplyMissedBulkReturnLoanRefsMutationInput,
 	type VoidBulkReturnEntryMutationInput,
+	type ReopenBulkReturnEntryLoansMutationInput,
 	type CancelBulkReturnPoolMutationInput,
 	type SubmitBulkReturnPoolMutationInput,
 	type ReceiveBulkReturnPoolMutationInput
@@ -298,7 +300,6 @@ export {
 export { default as TicketStatusBadge } from './ui/common/TicketStatusBadge.svelte';
 export { default as TicketManagementPage } from './ui/back-office/TicketManagementPage.svelte';
 export { default as BulkReturnPoolBoard } from './ui/bulk-return/BulkReturnPoolBoard.svelte';
-export { default as TicketGroupTabs } from './ui/back-office/TicketGroupTabs.svelte';
 export { default as TicketTable } from './ui/back-office/TicketTable.svelte';
 export { default as TicketFilters } from './ui/back-office/TicketFilters.svelte';
 export { default as CreateTicketDialog } from './ui/back-office/CreateTicketDialog.svelte';
@@ -415,8 +416,15 @@ export {
 	type WarehouseReturnFormValidationResult
 } from './ui/model/warehouse-return';
 
-/** Deep link to one bulk return pool (back-office pools tab, detail open). */
-export { bulkReturnPoolHref } from './ui/model/pool-url-state';
+/**
+ * Bulk return pool links: back-office deep link + fallback to the desk, and the Distribution
+ * Desk (`/onsite/distribution`) `?mode=&tab=[&pool=]` URL parser.
+ */
+export {
+	bulkReturnPoolHref,
+	deskFallbackForBackOfficeParams,
+	parseOnsiteDistributionParams
+} from './ui/model/pool-url-state';
 
 export {
 	formatDistributionError,

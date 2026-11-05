@@ -126,19 +126,11 @@
 	const shelterPolicyQuery = useShelterPolicy(() => selected?.code ?? '');
 	const shelterPolicy = $derived(shelterPolicyQuery.data);
 
-	/** FR-22: group A of the consent block — the queue terms, or the shelter's conditions when it has any. */
+	/** FR-22: group A — shelter safety conditions only (central queue has no acknowledgement row). */
 	function consentAcknowledgement(
 		household: UnifiedRegistrationInput['household']
 	): ConsentAcknowledgement | undefined {
-		const onchange = (value: boolean) => (disclaimerAcknowledged = value);
-		if (isUnassigned) {
-			return {
-				checked: disclaimerAcknowledged,
-				onchange,
-				text: t.unassignedDisclaimerAck,
-				needMessage: t.unassignedDisclaimerRequired
-			};
-		}
+		if (isUnassigned) return undefined;
 		const groups = buildDisclaimerGroups({
 			assetDescription: household.assets?.description ?? '',
 			petCount: (household.pets ?? []).length,
@@ -148,7 +140,7 @@
 		if (groups.length === 0) return undefined;
 		return {
 			checked: disclaimerAcknowledged,
-			onchange,
+			onchange: (value: boolean) => (disclaimerAcknowledged = value),
 			text: t.shelterSafetyAck,
 			needMessage: t.shelterDisclaimerRequired,
 			conditions: { title: t.shelterSafetyTitle, groups }
@@ -228,13 +220,7 @@
 			toast.error(err);
 			throw new Error(err);
 		}
-		if (isUnassigned) {
-			if (!disclaimerAcknowledged) {
-				const err = t.unassignedDisclaimerRequired;
-				toast.error(err);
-				throw new Error(err);
-			}
-		} else {
+		if (!isUnassigned) {
 			const groups = buildDisclaimerGroups({
 				assetDescription: unifiedInput.household.assets?.description ?? '',
 				petCount: (unifiedInput.household.pets ?? []).length,
@@ -265,7 +251,6 @@
 				const res = await createUnassignedRegistration.mutateAsync({
 					...unifiedInput,
 					...consentBody,
-					disclaimerAcknowledged: true,
 					...(token ? { captchaToken: token } : {})
 				});
 
@@ -351,7 +336,7 @@
 	{/if}
 </svelte:head>
 
-<div class="space-y-5">
+<div class="unified-reg-bleed space-y-5">
 	<!-- Guidance banner -->
 	<div
 		class="flex items-start gap-3 rounded-xl border border-primary/20 bg-primary/5 p-4 text-sm text-foreground shadow-2xs"
@@ -368,7 +353,10 @@
 	</div>
 
 	<!-- ── 1. ศูนย์พักพิงและผู้ติดต่อหลัก ───────────────────────────────── -->
-	<section class="space-y-5 rounded-2xl border border-border/60 bg-card p-5 shadow-2xs sm:p-6">
+	<section
+		data-surface="light"
+		class="unified-reg-band space-y-5 rounded-2xl border border-sky-200 bg-sky-50/70 p-5 shadow-2xs sm:p-6"
+	>
 		<div class="flex items-center gap-2.5 border-b border-border/60 pb-3">
 			<MapPin class="size-5 text-primary" />
 			<h3 class="text-base font-bold text-foreground sm:text-lg">{t.step1Title}</h3>

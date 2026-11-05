@@ -35,6 +35,14 @@ export type QuickCreateErrors = Partial<Record<'name' | 'category' | 'baseUnit' 
 /** The default stock storage the form pre-selects (mockup: "แห้ง"). */
 export const QUICK_CREATE_DEFAULT_STORAGE: StorageType = 'DRY';
 
+/**
+ * Fuel & Energy rows must carry tank capacity and burn rate (`itemMasterInputSchema`),
+ * which the quick form does not collect — so that category opens the full form instead.
+ */
+export function quickCreateNeedsFullForm(categoryId: string | undefined): boolean {
+	return categoryId === 'item_category:fuel_energy';
+}
+
 /** `type_class` of a quick-created item: its category's default, else consumable. */
 export function quickCreateTypeClass(
 	categoryId: string | undefined,

@@ -79,6 +79,37 @@ describe('jobSchema', () => {
 		expect(jobSchema.safeParse({ ...validJobDoc(), schema_v: 1 }).success).toBe(false);
 	});
 
+	describe('CR-220 — schema_v 4 and released_application_ids', () => {
+		it('accepts v3 and v4 but nothing else', () => {
+			expect(jobSchema.safeParse({ ...validJobDoc(), schema_v: 3 }).success).toBe(true);
+			expect(jobSchema.safeParse({ ...validJobDoc(), schema_v: 4 }).success).toBe(true);
+			expect(jobSchema.safeParse({ ...validJobDoc(), schema_v: 5 }).success).toBe(false);
+		});
+
+		it('defaults a missing ledger to []', () => {
+			const parsed = jobSchema.parse(validJobDoc());
+			expect(parsed.released_application_ids).toEqual([]);
+		});
+
+		it('keeps the ledger through parse (a staff save must not strip it)', () => {
+			const parsed = jobSchema.parse({
+				...validJobDoc(),
+				schema_v: 4,
+				released_application_ids: ['job_application:01A', 'job_application:01B']
+			});
+			expect(parsed.released_application_ids).toEqual([
+				'job_application:01A',
+				'job_application:01B'
+			]);
+		});
+
+		it('isJob accepts a v4 doc', () => {
+			expect(
+				isJob({ ...validJobDoc(), schema_v: 4, released_application_ids: ['job_application:01A'] })
+			).toBe(true);
+		});
+	});
+
 	it('rejects a non-positive quota', () => {
 		expect(jobSchema.safeParse({ ...validJobDoc(), quota: 0 }).success).toBe(false);
 		expect(jobSchema.safeParse({ ...validJobDoc(), quota: -1 }).success).toBe(false);
@@ -214,7 +245,7 @@ describe('makeJob', () => {
 	it('mints an open job with the full quota unclaimed (schema.md §2.17 default)', () => {
 		const job = makeJob(baseInput, ctx);
 		expect(job._id).toMatch(/^job:/);
-		expect(job.schema_v).toBe(3);
+		expect(job.schema_v).toBe(4);
 		expect(job.status).toBe('open');
 		expect(job.slots_confirmed).toBe(0);
 		expect(job.slots_dispatched).toBe(0);

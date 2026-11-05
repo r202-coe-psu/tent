@@ -507,7 +507,9 @@
 					"200": {
 						"description": "Successful Response",
 						"content": {
-							"application/json": { "schema": { "$ref": "#/components/schemas/NeedsListResponse" } }
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/ExternalNeedsListResponse" }
+							}
 						}
 					}
 				},
@@ -529,7 +531,9 @@
 					"200": {
 						"description": "Successful Response",
 						"content": {
-							"application/json": { "schema": { "$ref": "#/components/schemas/SearchResponse" } }
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/ExternalSearchResponse" }
+							}
 						}
 					},
 					"429": {
@@ -692,13 +696,7 @@
 						"name": "site_kind",
 						"in": "query",
 						"required": false,
-						"schema": {
-							"anyOf": [
-								{ "enum": ["evacuation_center", "host_house"], "type": "string" },
-								{ "type": "null" }
-							],
-							"title": "Site Kind"
-						}
+						"schema": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Site Kind" }
 					},
 					{
 						"name": "lat",
@@ -3486,6 +3484,23 @@
 				"type": "object",
 				"title": "DonationCourierPatchResponse"
 			},
+			"DonationCreateItem": {
+				"properties": {
+					"drop_off_point_id": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Drop Off Point Id"
+					},
+					"review_status": {
+						"type": "string",
+						"enum": ["approved", "pending"],
+						"title": "Review Status"
+					}
+				},
+				"type": "object",
+				"required": ["drop_off_point_id", "review_status"],
+				"title": "DonationCreateItem",
+				"description": "One booked line as stored, so the ticket can group by point without a second read."
+			},
 			"DonationCreateRequest": {
 				"properties": {
 					"shelter_code": { "type": "string", "title": "Shelter Code" },
@@ -3506,6 +3521,12 @@
 					"slot_hold": {
 						"anyOf": [{ "$ref": "#/components/schemas/SlotHold" }, { "type": "null" }]
 					},
+					"photos": {
+						"items": { "type": "string" },
+						"type": "array",
+						"maxItems": 30,
+						"title": "Photos"
+					},
 					"captchaToken": {
 						"anyOf": [{ "type": "string" }, { "type": "null" }],
 						"title": "Captchatoken"
@@ -3520,10 +3541,15 @@
 					"success": { "type": "boolean", "title": "Success", "default": true },
 					"tracking_token": { "type": "string", "title": "Tracking Token" },
 					"booking_ref": { "type": "string", "title": "Booking Ref" },
-					"status": { "type": "string", "title": "Status" }
+					"status": { "type": "string", "title": "Status" },
+					"items": {
+						"items": { "$ref": "#/components/schemas/DonationCreateItem" },
+						"type": "array",
+						"title": "Items"
+					}
 				},
 				"type": "object",
-				"required": ["tracking_token", "booking_ref", "status"],
+				"required": ["tracking_token", "booking_ref", "status", "items"],
 				"title": "DonationCreateResponse"
 			},
 			"DonationItemInput": {
@@ -3543,7 +3569,12 @@
 						"anyOf": [{ "type": "string" }, { "type": "null" }],
 						"title": "Condition"
 					},
-					"note": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Note" }
+					"note": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Note" },
+					"line_key": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Line Key" },
+					"drop_off_point_id": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Drop Off Point Id"
+					}
 				},
 				"type": "object",
 				"required": ["qty"],
@@ -3660,6 +3691,22 @@
 				"type": "object",
 				"title": "DonationPhoneLookupSlot"
 			},
+			"DonationPoint": {
+				"properties": {
+					"id": { "type": "string", "title": "Id" },
+					"name": { "type": "string", "title": "Name" },
+					"types": { "items": { "type": "string" }, "type": "array", "title": "Types" },
+					"geo": { "$ref": "#/components/schemas/GeoPoint" },
+					"location_note": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Location Note"
+					}
+				},
+				"type": "object",
+				"required": ["id", "name", "geo"],
+				"title": "DonationPoint",
+				"description": "A storage point ticked as a donation drop-off point, with a pin (CR-205)."
+			},
 			"DonationTrackSearchRequest": {
 				"properties": {
 					"booking_ref": { "type": "string", "title": "Booking Ref" },
@@ -3718,6 +3765,110 @@
 				"type": "object",
 				"required": ["name", "phone", "relation"],
 				"title": "EmergencyContactOut"
+			},
+			"ExternalNeedItemResponse": {
+				"properties": {
+					"item_id": { "type": "string", "title": "Item Id" },
+					"name": { "type": "string", "title": "Name" },
+					"qty_needed": { "type": "string", "title": "Qty Needed" },
+					"qty_target": { "type": "string", "title": "Qty Target", "default": "0" },
+					"on_hand": { "type": "string", "title": "On Hand", "default": "0" },
+					"reserved": { "type": "string", "title": "Reserved", "default": "0" },
+					"unit": { "type": "string", "title": "Unit" },
+					"status": { "type": "string", "title": "Status" },
+					"urgency": { "type": "string", "title": "Urgency", "default": "normal" },
+					"category": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Category" }
+				},
+				"type": "object",
+				"required": ["item_id", "name", "qty_needed", "unit", "status"],
+				"title": "ExternalNeedItemResponse",
+				"description": "One row per shelter + item_id: the `/external/v1/needs` shape (CR-206 A2 FR-AP-27)."
+			},
+			"ExternalNeedsListResponse": {
+				"properties": {
+					"shelters": {
+						"items": { "$ref": "#/components/schemas/ExternalShelterNeedsResponse" },
+						"type": "array",
+						"title": "Shelters"
+					},
+					"as_of": { "type": "string", "format": "date-time", "title": "As Of" }
+				},
+				"type": "object",
+				"required": ["shelters", "as_of"],
+				"title": "ExternalNeedsListResponse"
+			},
+			"ExternalSearchResponse": {
+				"properties": {
+					"results": {
+						"items": { "$ref": "#/components/schemas/ExternalSearchResult" },
+						"type": "array",
+						"title": "Results"
+					},
+					"count": { "type": "integer", "title": "Count" },
+					"as_of": { "type": "string", "format": "date-time", "title": "As Of" }
+				},
+				"type": "object",
+				"required": ["results", "count", "as_of"],
+				"title": "ExternalSearchResponse"
+			},
+			"ExternalSearchResult": {
+				"properties": {
+					"name": { "type": "string", "title": "Name" },
+					"status": { "type": "string", "title": "Status" },
+					"national_id": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "National Id"
+					},
+					"gender": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Gender" },
+					"shelter_name": { "type": "string", "title": "Shelter Name" },
+					"shelter_address": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Shelter Address"
+					},
+					"origin_address": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Origin Address"
+					},
+					"checked_in_at": {
+						"anyOf": [{ "type": "string", "format": "date-time" }, { "type": "null" }],
+						"title": "Checked In At"
+					},
+					"shelter_status": {
+						"anyOf": [
+							{ "type": "string", "enum": ["open", "closed", "full", "standby"] },
+							{ "type": "null" }
+						],
+						"title": "Shelter Status"
+					},
+					"family_members": {
+						"items": { "$ref": "#/components/schemas/FamilyMember" },
+						"type": "array",
+						"title": "Family Members"
+					},
+					"care_zone": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Care Zone"
+					},
+					"zone_name": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Zone Name" }
+				},
+				"type": "object",
+				"required": ["name", "status", "shelter_name"],
+				"title": "ExternalSearchResult",
+				"description": "`/external/v1/occupants` keeps the zone partners read (CR-183 FR-18 is public-only)."
+			},
+			"ExternalShelterNeedsResponse": {
+				"properties": {
+					"code": { "type": "string", "title": "Code" },
+					"name": { "type": "string", "title": "Name" },
+					"needs": {
+						"items": { "$ref": "#/components/schemas/ExternalNeedItemResponse" },
+						"type": "array",
+						"title": "Needs"
+					}
+				},
+				"type": "object",
+				"required": ["code", "name", "needs"],
+				"title": "ExternalShelterNeedsResponse"
 			},
 			"FamilyMember": {
 				"properties": {
@@ -4387,11 +4538,20 @@
 					"unit": { "type": "string", "title": "Unit" },
 					"status": { "type": "string", "title": "Status" },
 					"urgency": { "type": "string", "title": "Urgency", "default": "normal" },
-					"category": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Category" }
+					"category": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Category" },
+					"drop_off_point_id": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Drop Off Point Id"
+					},
+					"drop_off_point_name": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Drop Off Point Name"
+					}
 				},
 				"type": "object",
 				"required": ["item_id", "name", "qty_needed", "unit", "status"],
-				"title": "NeedItemResponse"
+				"title": "NeedItemResponse",
+				"description": "One donor-board card: shelter + item + drop-off point (CR-206 A2 FR-AP-26).\n\nSeveral cards of one shelter may share an ``item_id``."
 			},
 			"NeedsListResponse": {
 				"properties": {
@@ -5092,8 +5252,8 @@
 					"name": { "type": "string", "title": "Name" },
 					"site_kind": {
 						"type": "string",
-						"enum": ["evacuation_center", "host_house"],
 						"title": "Site Kind",
+						"description": "Master code from master_data:site_kind (e.g. evacuation_center, host_house)",
 						"default": "evacuation_center"
 					},
 					"status": { "type": "string", "title": "Status" },
@@ -5141,6 +5301,11 @@
 						"type": "boolean",
 						"title": "Accepts Pre Registration",
 						"default": false
+					},
+					"donation_points": {
+						"items": { "$ref": "#/components/schemas/DonationPoint" },
+						"type": "array",
+						"title": "Donation Points"
 					}
 				},
 				"type": "object",
@@ -5210,8 +5375,8 @@
 					"name": { "type": "string", "title": "Name" },
 					"site_kind": {
 						"type": "string",
-						"enum": ["evacuation_center", "host_house"],
 						"title": "Site Kind",
+						"description": "Master code from master_data:site_kind (e.g. evacuation_center, host_house)",
 						"default": "evacuation_center"
 					},
 					"status": { "type": "string", "title": "Status" },
@@ -5835,7 +6000,8 @@
 					"required_person_id": {
 						"anyOf": [{ "type": "string" }, { "type": "null" }],
 						"title": "Required Person Id"
-					}
+					},
+					"claim_pets": { "type": "boolean", "title": "Claim Pets", "default": false }
 				},
 				"type": "object",
 				"required": ["shelter_code", "device_id", "member_ids"],
@@ -5856,7 +6022,13 @@
 						"items": { "$ref": "#/components/schemas/UnassignedKioskImage" },
 						"type": "array",
 						"title": "Images"
-					}
+					},
+					"pets": {
+						"items": { "additionalProperties": true, "type": "object" },
+						"type": "array",
+						"title": "Pets"
+					},
+					"pet_ids": { "items": { "type": "string" }, "type": "array", "title": "Pet Ids" }
 				},
 				"type": "object",
 				"required": ["registration_id", "shelter_code", "household", "evacuees", "images"],
@@ -5870,18 +6042,28 @@
 						"items": { "type": "string" },
 						"type": "array",
 						"maxItems": 20,
-						"minItems": 1,
 						"title": "Member Ids"
+					},
+					"pet_ids": {
+						"items": { "type": "string" },
+						"type": "array",
+						"maxItems": 20,
+						"title": "Pet Ids"
 					}
 				},
 				"type": "object",
-				"required": ["shelter_code", "device_id", "member_ids"],
+				"required": ["shelter_code", "device_id"],
 				"title": "UnassignedKioskRevertRequest",
-				"description": "Kiosk claim revert — give back members this kiosk marked when the Couch write failed."
+				"description": "Kiosk claim revert — give back members and pets this kiosk marked when Couch failed."
 			},
 			"UnassignedKioskRevertResponse": {
 				"properties": {
-					"reverted": { "items": { "type": "string" }, "type": "array", "title": "Reverted" }
+					"reverted": { "items": { "type": "string" }, "type": "array", "title": "Reverted" },
+					"reverted_pets": {
+						"items": { "type": "string" },
+						"type": "array",
+						"title": "Reverted Pets"
+					}
 				},
 				"type": "object",
 				"required": ["reverted"],

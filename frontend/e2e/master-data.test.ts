@@ -8,8 +8,8 @@
  *
  * Coverage:
  * [Guard]     non-manager is redirected away from the page
- * [Hub]       sidebar shows all 6 types; type query selects the panel
- * [Scope]     global-only chronic_disease / allergy are read-only in back-office (CR-186, CR-187)
+ * [Hub]       sidebar shows all 7 types; type query selects the panel
+ * [Scope]     global-only chronic_disease / allergy / site_kind are read-only in back-office (CR-186, CR-187)
  * [CRUD]      add → edit round-trips through the mocked BFF
  * [Redirect]  legacy URLs land on the hub with the correct `?type=`
  */
@@ -35,7 +35,8 @@ const SHORT_TITLES: Record<string, string> = {
 	shelter_type: 'ประเภทอาคาร',
 	volunteer_skills: 'ทักษะอาสา',
 	chronic_disease: 'โรคประจำตัว',
-	allergy: 'อาการแพ้'
+	allergy: 'อาการแพ้',
+	site_kind: 'ประเภทศูนย์'
 };
 
 type MockItem = {
@@ -51,6 +52,8 @@ type MockStore = Map<string, MockItem[]>;
 
 async function mockMasterData(page: Page, seed: Record<string, MockItem[]>): Promise<MockStore> {
 	const store: MockStore = new Map(Object.entries(seed));
+	// Codes written at shelter scope, so GET reports them as shelter-owned like the real BFF does.
+	const shelterOwned = new Map<string, Set<string>>();
 
 	await page.route(API_PATTERN, async (route: Route) => {
 		const req = route.request();
@@ -82,7 +85,15 @@ async function mockMasterData(page: Page, seed: Record<string, MockItem[]>): Pro
 				body: JSON.stringify({
 					_id: `master_data:${type}`,
 					master_type: type,
-					items: store.get(type) ?? []
+					items: store.get(type) ?? [],
+					item_sources: Object.fromEntries(
+						(store.get(type) ?? []).map((item) => [
+							item.code,
+							shelterOwned.get(type)?.has(item.code)
+								? { scope: 'shelter', shelter_code: url.searchParams.get('shelter_code') }
+								: { scope: 'global', shelter_code: null }
+						])
+					)
 				})
 			});
 			return;
@@ -91,6 +102,9 @@ async function mockMasterData(page: Page, seed: Record<string, MockItem[]>): Pro
 		if (segments.length === 1 && method === 'PUT') {
 			const body = req.postDataJSON() as { items: MockItem[] };
 			store.set(type, body.items);
+			if (url.searchParams.get('scope') === 'shelter') {
+				shelterOwned.set(type, new Set(body.items.map((item) => item.code)));
+			}
 			await route.fulfill({
 				status: 200,
 				contentType: 'application/json',
@@ -166,7 +180,7 @@ test.describe('Master Data hub', () => {
 		await expect(page).toHaveURL(`${BASE}/portal`, { timeout: 8000 });
 	});
 
-	test('renders the hub with all 6 type sidebar entries', async ({ page }) => {
+	test('renders the hub with all 7 type sidebar entries', async ({ page }) => {
 		await injectSession(page, SA, sessions[SA.name]);
 		await mockMasterData(page, {
 			vulnerable_group: [],
@@ -174,7 +188,8 @@ test.describe('Master Data hub', () => {
 			shelter_type: [],
 			volunteer_skills: [],
 			chronic_disease: [],
-			allergy: []
+			allergy: [],
+			site_kind: []
 		});
 		await page.goto(`${BASE}${HUB_PATH}`);
 
@@ -248,6 +263,28 @@ test.describe('Master Data hub', () => {
 		).toBeVisible();
 		await expect(page.getByRole('button', { name: 'เพิ่มรายการ' })).toHaveCount(0);
 		await expect(page.getByRole('button', { name: 'แก้ไข ไข่' })).toHaveCount(0);
+	});
+
+	test('back-office shows global-only site_kind read-only (CR-198)', async ({ page }) => {
+		await injectSession(page, SA, sessions[SA.name]);
+		await mockMasterData(page, {
+			site_kind: [
+				{
+					code: 'evacuation_center',
+					label_th: 'ศูนย์อพยพ',
+					label_en: 'Evacuation Center',
+					is_default: true
+				}
+			]
+		});
+		await page.goto(`${BASE}${HUB_PATH}?type=site_kind`);
+
+		await expect(page.getByText('ศูนย์อพยพ', { exact: true })).toBeVisible();
+		await expect(
+			page.getByText('ดูได้อย่างเดียว — ประเภทนี้จัดการที่ส่วนกลางเท่านั้น')
+		).toBeVisible();
+		await expect(page.getByRole('button', { name: 'เพิ่มรายการ' })).toHaveCount(0);
+		await expect(page.getByRole('button', { name: 'แก้ไข ศูนย์อพยพ' })).toHaveCount(0);
 	});
 
 	test('system management can add chronic_disease items (CR-186)', async ({ page }) => {

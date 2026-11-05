@@ -3,6 +3,8 @@ import {
 	bulkReturnEntryDocSchema,
 	bulkReturnEntryMoveDocSchema,
 	bulkReturnEntryVoidDocSchema,
+	bulkReturnLoanReopenDocSchema,
+	type BulkReturnLoanReopen,
 	type BulkReturnEntry,
 	type BulkReturnEntryMove,
 	type BulkReturnEntryVoid,
@@ -26,6 +28,19 @@ export interface BulkReturnEventRepository {
 	getMove(moveId: string): Promise<BulkReturnEntryMove | null>;
 	createVoid(entryVoid: BulkReturnEntryVoid): Promise<BulkReturnEntryVoid>;
 	getVoid(voidId: string): Promise<BulkReturnEntryVoid | null>;
+	/** CR-193 §35: put-if-absent (ConflictError when the entry's loans were already reopened). */
+	createLoanReopen(reopen: BulkReturnLoanReopen): Promise<BulkReturnLoanReopen>;
+	getLoanReopen(reopenId: string): Promise<BulkReturnLoanReopen | null>;
+	/**
+	 * Batched `getEntry` (`_all_docs`, 100 ids per request). Absent ids are omitted; a doc that
+	 * fails validation (or is not an entry) throws, exactly like `getEntry` (fail closed).
+	 */
+	getEntriesByIds(entryIds: readonly string[]): Promise<BulkReturnEntry[]>;
+	/**
+	 * Batched `getLoanReopen` by reopen doc id (`_all_docs`, 100 ids per request). Absent ids are
+	 * omitted; an invalid doc throws like `getLoanReopen`.
+	 */
+	getLoanReopensByIds(reopenIds: readonly string[]): Promise<BulkReturnLoanReopen[]>;
 	listAll(): Promise<BulkReturnEventSet>;
 	/**
 	 * One entry with its whole move chain and void (an unknown entry yields empty lists). Reads only
@@ -45,6 +60,8 @@ const isOfType =
 	<T>(type: string) =>
 	(d: unknown): d is T =>
 		typeof d === 'object' && d !== null && (d as { type?: string }).type === type;
+
+const isObject = (d: unknown): d is Record<string, unknown> => typeof d === 'object' && d !== null;
 
 export class BulkReturnEventRemoteRepository implements BulkReturnEventRepository {
 	private readonly dbName: string;
@@ -85,8 +102,39 @@ export class BulkReturnEventRemoteRepository implements BulkReturnEventRepositor
 		return raw ? (bulkReturnEntryVoidDocSchema.parse(raw) as BulkReturnEntryVoid) : null;
 	}
 
+	async createLoanReopen(reopen: BulkReturnLoanReopen): Promise<BulkReturnLoanReopen> {
+		const doc = bulkReturnLoanReopenDocSchema.parse(reopen) as BulkReturnLoanReopen;
+		return putDocStrict(this.dbName, doc);
+	}
+
+	async getLoanReopen(reopenId: string): Promise<BulkReturnLoanReopen | null> {
+		const raw = await getDoc<BulkReturnLoanReopen>(this.dbName, reopenId);
+		return raw ? (bulkReturnLoanReopenDocSchema.parse(raw) as BulkReturnLoanReopen) : null;
+	}
+
+	async getEntriesByIds(entryIds: readonly string[]): Promise<BulkReturnEntry[]> {
+		const out: BulkReturnEntry[] = [];
+		for (const chunk of chunked([...new Set(entryIds)], ID_CHUNK_SIZE)) {
+			// Any object passes the guard so a wrong-typed doc reaches the strict parse and throws.
+			const raws = await allDocsByIds<Record<string, unknown>>(this.dbName, chunk, isObject);
+			for (const raw of raws) out.push(bulkReturnEntryDocSchema.parse(raw) as BulkReturnEntry);
+		}
+		return out;
+	}
+
+	async getLoanReopensByIds(reopenIds: readonly string[]): Promise<BulkReturnLoanReopen[]> {
+		const out: BulkReturnLoanReopen[] = [];
+		for (const chunk of chunked([...new Set(reopenIds)], ID_CHUNK_SIZE)) {
+			const raws = await allDocsByIds<Record<string, unknown>>(this.dbName, chunk, isObject);
+			for (const raw of raws) {
+				out.push(bulkReturnLoanReopenDocSchema.parse(raw) as BulkReturnLoanReopen);
+			}
+		}
+		return out;
+	}
+
 	async listAll(): Promise<BulkReturnEventSet> {
-		const [entries, moves, voids] = await Promise.all([
+		const [entries, moves, voids, reopens] = await Promise.all([
 			allDocsByType<BulkReturnEntry>(
 				this.dbName,
 				'bulk_return_entry',
@@ -101,20 +149,31 @@ export class BulkReturnEventRemoteRepository implements BulkReturnEventRepositor
 				this.dbName,
 				'bulk_return_entry_void',
 				isOfType<BulkReturnEntryVoid>('bulk_return_entry_void')
+			),
+			allDocsByType<BulkReturnLoanReopen>(
+				this.dbName,
+				'bulk_return_loan_reopen',
+				isOfType<BulkReturnLoanReopen>('bulk_return_loan_reopen')
 			)
 		]);
-		return parseScopedSet(entries, moves, voids);
+		return parseScopedSet(entries, moves, voids, reopens);
 	}
 
 	async listForEntry(entryId: string): Promise<ScopedBulkReturnEventSet> {
 		if (!entryId.startsWith(ENTRY_ID_PREFIX)) return emptyScopedSet();
 		const ulid = entryId.slice(ENTRY_ID_PREFIX.length);
-		const [entry, moves, entryVoid] = await Promise.all([
+		const [entry, moves, entryVoid, reopen] = await Promise.all([
 			getDoc<{ _id: string }>(this.dbName, entryId),
 			this.listMovesOfEntry(ulid),
-			getDoc<{ _id: string }>(this.dbName, `${VOID_ID_PREFIX}${ulid}`)
+			getDoc<{ _id: string }>(this.dbName, `${VOID_ID_PREFIX}${ulid}`),
+			getDoc<{ _id: string }>(this.dbName, `${REOPEN_ID_PREFIX}${ulid}`)
 		]);
-		return parseScopedSet(entry ? [entry] : [], moves, entryVoid ? [entryVoid] : []);
+		return parseScopedSet(
+			entry ? [entry] : [],
+			moves,
+			entryVoid ? [entryVoid] : [],
+			reopen ? [reopen] : []
+		);
 	}
 
 	async listForPool(poolId: string): Promise<ScopedBulkReturnEventSet> {
@@ -159,7 +218,18 @@ export class BulkReturnEventRemoteRepository implements BulkReturnEventRepositor
 			);
 		}
 
-		const set = parseScopedSet(entryRaws, moveRaws, voidRaws);
+		const reopenRaws: unknown[] = [];
+		for (const chunk of chunked(ulids, ID_CHUNK_SIZE)) {
+			reopenRaws.push(
+				...(await allDocsByIds<BulkReturnLoanReopen>(
+					this.dbName,
+					chunk.map((ulid) => `${REOPEN_ID_PREFIX}${ulid}`),
+					isOfType<BulkReturnLoanReopen>('bulk_return_loan_reopen')
+				))
+			);
+		}
+
+		const set = parseScopedSet(entryRaws, moveRaws, voidRaws, reopenRaws);
 		return {
 			...set,
 			skipped: dedupeSkipped([...movedIn.skipped, ...set.skipped])
@@ -182,6 +252,7 @@ export type ScopedBulkReturnEventSet = BulkReturnEventSet & { skipped: SkippedDo
 const ENTRY_ID_PREFIX = 'bulk_return_entry:';
 const MOVE_ID_PREFIX = 'bulk_return_entry_move:';
 const VOID_ID_PREFIX = 'bulk_return_entry_void:';
+const REOPEN_ID_PREFIX = 'bulk_return_loan_reopen:';
 /** Explicit `_find` page size: CouchDB defaults to 25 rows, which would silently truncate. */
 const FIND_PAGE_SIZE = 200;
 /** Ids per `_all_docs` keys request. */
@@ -190,7 +261,7 @@ const ID_CHUNK_SIZE = 100;
 const MOVE_SCAN_CONCURRENCY = 20;
 
 function emptyScopedSet(): ScopedBulkReturnEventSet {
-	return { entries: [], moves: [], voids: [], skipped: [] };
+	return { entries: [], moves: [], voids: [], loanReopens: [], skipped: [] };
 }
 
 function chunked<T>(items: readonly T[], size: number): T[][] {
@@ -212,16 +283,19 @@ function dedupeSkipped(skipped: readonly SkippedDoc[]): SkippedDoc[] {
 function parseScopedSet(
 	entries: readonly unknown[],
 	moves: readonly unknown[],
-	voids: readonly unknown[]
+	voids: readonly unknown[],
+	reopens: readonly unknown[]
 ): ScopedBulkReturnEventSet {
 	const e = parseDocsOrSkip<BulkReturnEntry>(entries, bulkReturnEntryDocSchema);
 	const m = parseDocsOrSkip<BulkReturnEntryMove>(moves, bulkReturnEntryMoveDocSchema);
 	const v = parseDocsOrSkip<BulkReturnEntryVoid>(voids, bulkReturnEntryVoidDocSchema);
+	const r = parseDocsOrSkip<BulkReturnLoanReopen>(reopens, bulkReturnLoanReopenDocSchema);
 	return {
 		entries: e.items,
 		moves: m.items,
 		voids: v.items,
-		skipped: [...e.skipped, ...m.skipped, ...v.skipped]
+		loanReopens: r.items,
+		skipped: [...e.skipped, ...m.skipped, ...v.skipped, ...r.skipped]
 	};
 }
 

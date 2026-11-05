@@ -3,14 +3,14 @@ id: CR-175
 title: "ผู้บริจาคแนบรูปของบริจาค (ทั้งใบ) และแสดงให้เจ้าหน้าที่ดูตอนประเมิน/ตรวจรับ"
 status: approved
 date: 2026-10-18
-updated: 2026-10-23
+updated: 2026-10-29
 approved_at: 2026-10-20
 requested_by: "Kan"
 decided_by: "Soravit Sukkarn (Team Lead)"
 layer: volatile
 affects:
   - docs/data/schema.md §2.3 `donation` — field ใหม่ `photos`
-  - schema_v donation 7 → 8 (CR-172 ใช้ 6 · CR-174 ใช้ 7)
+  - schema_v donation 8 → 9 (CR-172 ใช้ 6 · CR-174 ใช้ 7 · CR-196 ใช้ 8)
   - docs/data/schema.md §1.6 `image` — field ใหม่ `purpose`, `donation_id`, writer ใหม่ (public donation), ขนาดรูปของบริจาค
   - schema_v image 1 → 2
   - docs/data/api-contract.md — BFF `POST /api/public/v1/donations/photos`, `photos` ใน `POST /public/v1/donations`, error code ของ 422
@@ -18,7 +18,7 @@ affects:
   - frontend/src/routes/api/public/v1/donations/ (BFF ใหม่ + POST booking) · lib/utils/image-compress.ts
   - frontend/src/lib/features/images/domain/image.ts (`ImageDoc`) · writer ของ `image` ทุกจุด: lib/features/images/data/image.remote.ts · lib/features/kiosk/server/kiosk-photo.server.ts · lib/features/public-register/save-public-booking-image.server.ts (+ รับ `purpose`) · backend/apiapp/modules/unassigned_registrations/couch_birth.py (`IMAGE_SCHEMA_V`)
   - frontend/src/lib/features/kiosk/domain/kiosk-photo.ts (`detectImageMime` ใช้ร่วม)
-  - frontend/src/lib/server/shelter-access-design.ts (Mango partial index ใหม่) · frontend/src/lib/server/security/rate-limiter.ts (limiter ใหม่)
+  - frontend/src/lib/server/shelter-access-design.ts (Mango partial index ใหม่) · rate limit ใช้ nginx zone `public_write` (CR-188)
   - frontend/src/lib/components/form/form-donor.svelte · lib/components/pending-review-detail.svelte · stock-donations/components/scan-station.svelte
   - backend/apiapp/modules/donations (schemas, create) · packages/tent-model (DonationBuffer: `photos`, `photos_linked`)
   - worker/src/worker/inbound/donations.py (copy `photos` + ผูกรูปกับใบ) · worker/src/worker/retention/job.py (ลบรูปที่ไม่ถูกใช้)
@@ -33,7 +33,7 @@ migration: field ใหม่ optional ทั้งสอง doc type — doc �
 - **เปลี่ยน:** ฟอร์มบริจาคแบบพิมพ์เองมีช่องแนบรูป (ทั้งใบ ไม่บังคับ สูงสุด 30 รูป) · เจ้าหน้าที่เห็นรูปในหน้าประเมินและหน้าตรวจรับ
 - **เพื่อ:** เจ้าหน้าที่ตัดสินใจรับ/ไม่รับได้จากสภาพของจริงก่อนของมาถึง
 - **dev ต้อง build:** BFF อัปโหลดรูป (ใช้ทางเดียวกับรูปลงทะเบียนล่วงหน้า → doc `image:{ulid}` ใน shelter DB) · `donation.photos` · worker ผูกรูปกับใบ (`image.donation_id`) · ช่องแนบรูปในฟอร์ม · แถบรูปฝั่งเจ้าหน้าที่ · worker ลบรูปที่ไม่ถูกใช้หลัง 24 ชม.
-- **กระทบ:** `donation` schema_v 7 → 8 · `image` schema_v 1 → 2 · ผู้บริจาคไม่เห็นรูปบนหน้าติดตาม
+- **กระทบ:** `donation` schema_v 8 → 9 · `image` schema_v 1 → 2 · ผู้บริจาคไม่เห็นรูปบนหน้าติดตาม
 
 ## Requirements
 
@@ -115,7 +115,7 @@ migration: field ใหม่ optional ทั้งสอง doc type — doc �
 
 ## Migration
 
-- **`donation` schema_v 7 → 8:** `photos` optional → doc เดิมไม่ต้อง backfill · ไม่มี field = ไม่มีรูป · เรียงต่อจาก CR-172 (6) และ CR-174 (7)
+- **`donation` schema_v 8 → 9:** `photos` optional → doc เดิมไม่ต้อง backfill · ไม่มี field = ไม่มีรูป · เรียงต่อจาก CR-172 (6), CR-174 (7) และ CR-196 (8)
 - **`image` schema_v 1 → 2:** `purpose`, `donation_id` optional → doc เดิมไม่ต้อง backfill · ไม่มี `purpose` = รูปประเภทเดิม (ไม่ถูกลบโดย FR-16) · writer ทุกจุด (frontend 3 จุด + `couch_birth.py`) เขียน schema_v 2 หลังเปลี่ยน
 
 ## Why
@@ -137,3 +137,4 @@ migration: field ใหม่ optional ทั้งสอง doc type — doc �
 - 2026-10-19 — แก้ตาม review รอบ 2 PR #679: partial index สำหรับรูปที่ยังไม่ผูกกับใบ (FR-16) · `couch_birth.py` อยู่ในรายการ writer ของ `image` · schema_v donation 7 → 8 หลัง CR-174 · limiter 60 ครั้ง/นาที/IP (FR-9) · `savePublicBookingImage` รับ `purpose` · 409 ตอนผูกรูปลองใหม่ 3 ครั้ง ไม่สำเร็จให้ loop inbound ลองซ้ำด้วย `DonationBuffer.photos_linked` (FR-11a) · คืน `photo_id`
 - 2026-10-20 — approved โดย Soravit Sukkarn (Team Lead) รันเลข CR-175 ย้ายเข้าหมวด `04-donation/`
 - 2026-10-23 — **Superseded (rate limit) by [CR-188](../01-core/CR-188-rate-limit-to-nginx.md):** FR-9 (limiter อัปโหลดรูป 60 ครั้ง/นาที/IP ใน BFF) ถูกยกเลิกก่อน implement — ใช้ nginx zone `public_write`
+- 2026-10-29 — amend: schema_v donation เลื่อนเป็น 8 → 9 เพราะ [CR-196](CR-196-donation-line-key.md) merge ก่อนและใช้ 8 · เอา `rate-limiter.ts` ออกจาก `affects` ตาม CR-188

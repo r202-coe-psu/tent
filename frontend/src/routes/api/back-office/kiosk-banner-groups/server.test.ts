@@ -70,6 +70,13 @@ describe('GET /api/back-office/kiosk-banner-groups', () => {
 		expect(mockList).toHaveBeenCalledWith('SH001');
 	});
 
+	it('lets pr_staff list their own shelter groups and 403 for another', async () => {
+		mockSession.mockResolvedValue(SESSIONS.prA);
+		expect((await get('?shelter_code=SH001')).status).toBe(200);
+		expect((await get('?shelter_code=SH002')).status).toBe(403);
+		expect(mockList).toHaveBeenCalledTimes(1);
+	});
+
 	it('returns 401 without a session and 403 for registration staff', async () => {
 		mockSession.mockResolvedValue(SESSIONS.anonymous);
 		expect((await get('?shelter_code=SH001')).status).toBe(401);
@@ -126,6 +133,17 @@ describe('POST /api/back-office/kiosk-banner-groups', () => {
 				{ shelterCode: 'SH001', createdBy: session.name }
 			);
 		}
+	});
+
+	it('lets pr_staff create a group in their own shelter and 403 for another', async () => {
+		mockSession.mockResolvedValue(SESSIONS.prA);
+		expect((await post('?shelter_code=SH001', { name: 'ตู้ PR' })).status).toBe(201);
+		expect(mockCreate).toHaveBeenLastCalledWith(expect.objectContaining({ name: 'ตู้ PR' }), [], {
+			shelterCode: 'SH001',
+			createdBy: 'pr-a'
+		});
+		expect((await post('?shelter_code=SH002', { name: 'ตู้ PR' })).status).toBe(403);
+		expect(mockCreate).toHaveBeenCalledTimes(1);
 	});
 
 	it('defaults device_ids to an empty list', async () => {

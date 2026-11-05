@@ -10,8 +10,9 @@
 	import Upload from '@lucide/svelte/icons/upload';
 	import Search from '@lucide/svelte/icons/search';
 	import X from '@lucide/svelte/icons/x';
+	import { formatMasterLabel, useMasterData } from '$lib/features/master-data';
+	import { langState } from '$lib/states/i18n.svelte';
 	import {
-		SITE_KIND_LABELS,
 		ShelterList,
 		useShelters,
 		type ShelterSummary,
@@ -22,6 +23,23 @@
 	let currentPage = $state(1);
 	let siteKindFilter = $state<SiteKind | 'all'>('all');
 	let searchQuery = $state('');
+
+	// CR-198 FR-10: "ทั้งหมด" + every active site kind, labelled from the global master.
+	const siteKindQuery = useMasterData(() => 'site_kind');
+	const siteKindOptions = $derived([
+		{ value: 'all', label: 'ทั้งหมด' },
+		...(siteKindQuery.data?.items ?? [])
+			.filter((i) => i.status === 'active')
+			.map((i) => ({ value: i.code, label: formatMasterLabel(i, langState.current) }))
+	]);
+	const emptyLabel = $derived(
+		siteKindFilter === 'all'
+			? 'ศูนย์พักพิง'
+			: formatMasterLabel(
+					siteKindQuery.data?.items.find((i) => i.code === siteKindFilter),
+					'th'
+				) || siteKindFilter
+	);
 
 	const sheltersQuery = useShelters();
 	const shelters = $derived(sheltersQuery.data ?? []);
@@ -147,7 +165,7 @@
 					role="tablist"
 					aria-label="กรองตามชนิดสถานที่"
 				>
-					{#each [{ value: 'all' as const, label: 'ทั้งหมด' }, { value: 'evacuation_center' as const, label: SITE_KIND_LABELS.evacuation_center }, { value: 'host_house' as const, label: SITE_KIND_LABELS.host_house }] as option (option.value)}
+					{#each siteKindOptions as option (option.value)}
 						<button
 							type="button"
 							onclick={() => selectSiteKind(option.value)}
@@ -181,11 +199,7 @@
 				เกิดข้อผิดพลาด: {sheltersQuery.error?.message}
 			</div>
 		{:else}
-			<ShelterList
-				shelters={pageShelters}
-				onedit={handleEdit}
-				emptyLabel={siteKindFilter === 'host_house' ? 'บ้านพี่เลี้ยง' : 'ศูนย์พักพิง'}
-			/>
+			<ShelterList shelters={pageShelters} onedit={handleEdit} {emptyLabel} />
 
 			{#if totalPages > 1}
 				<div

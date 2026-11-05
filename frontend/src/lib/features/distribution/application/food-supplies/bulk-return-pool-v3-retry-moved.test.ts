@@ -27,7 +27,6 @@ vi.mock('$lib/features/catalog', () => ({
 import { submitBulkReturnPoolV3 } from '../../domain/food-supplies';
 import { addBulkReturnEntries } from './bulk-return-pool-v3-add-entry';
 import { moveBulkReturnEntry } from './bulk-return-pool-v3-move';
-import { BulkReturnPoolLockTimeoutError } from './errors';
 import {
 	createBulkReturnPoolV3Fixture,
 	dist,
@@ -82,9 +81,9 @@ describe('bulk return pool v3 — retrying an add after the entry was moved mean
 			}),
 			fenceClock: virtualClock()
 		};
-		await expect(addBulkReturnEntries(input, dist, racing)).rejects.toBeInstanceOf(
-			BulkReturnPoolLockTimeoutError
-		);
+		const first = await addBulkReturnEntries(input, dist, racing);
+		// The first line is written, its loan is pending, and the second line is not written.
+		expect(first.results.map((r) => r.loan_pending)).toEqual([true]);
 		// The stuck submit is cleared: the pool is OPEN again.
 		await poolRepo.mutateCAS(poolId, (cur) => ({ ...cur, lock: null }));
 	}

@@ -7,6 +7,15 @@ import { directionsUrl } from '$lib/utils/maps';
 
 export type DropOffGeo = { lat: number; lng: number };
 
+/** One entry of `public_shelters.donation_points` (CR-205), as `GET /public/v1/shelters/{code}` returns it. */
+export type DonationPointSource = {
+	id: string;
+	name: string;
+	types?: readonly string[];
+	geo: DropOffGeo;
+	location_note?: string | null;
+};
+
 /** The slice of a public shelter detail a drop-off point is built from. */
 export type DropOffShelterSource = {
 	id?: string;
@@ -14,6 +23,7 @@ export type DropOffShelterSource = {
 	name: string;
 	address?: string | null;
 	geo?: DropOffGeo | null;
+	donation_points?: readonly DonationPointSource[] | null;
 };
 
 export type DropOffPoint = {
@@ -24,7 +34,7 @@ export type DropOffPoint = {
 	/** Point name, or the shelter name for the main point. */
 	name: string;
 	address: string | null;
-	/** Point-level instruction (e.g. "gate 2"). Always `null` until points exist. */
+	/** Point-level instruction (e.g. "gate 2"). `null` for the main point. */
 	note: string | null;
 	geo: DropOffGeo | null;
 };
@@ -46,7 +56,7 @@ function cleanGeo(geo: DropOffGeo | null | undefined): DropOffGeo | null {
 	return inRange && !(lat === 0 && lng === 0) ? { lat, lng } : null;
 }
 
-/** Shelters have no drop-off points yet (#812), so every booking goes to the main point. */
+/** The main point: the shelter's own location. Bookings do not pick a point yet (#813). */
 export function resolveDropOffPoint(shelter: DropOffShelterSource): DropOffPoint {
 	return {
 		shelterCode: shelter.code ?? shelter.id ?? '',
@@ -57,6 +67,23 @@ export function resolveDropOffPoint(shelter: DropOffShelterSource): DropOffPoint
 		note: null,
 		geo: cleanGeo(shelter.geo)
 	};
+}
+
+/**
+ * Every place a donor can drop off at this shelter (CR-205 FR-DP-16/17). Ticked points
+ * replace the shelter's own location; with none, the main point is the only choice.
+ */
+export function listDropOffPoints(shelter: DropOffShelterSource): DropOffPoint[] {
+	const main = resolveDropOffPoint(shelter);
+	const points = shelter.donation_points ?? [];
+	if (points.length === 0) return [main];
+	return points.map((point) => ({
+		...main,
+		pointId: point.id,
+		name: point.name,
+		note: cleanText(point.location_note),
+		geo: cleanGeo(point.geo)
+	}));
 }
 
 /** `null` when the point has no coordinates: the UI then shows the address without a button. */
