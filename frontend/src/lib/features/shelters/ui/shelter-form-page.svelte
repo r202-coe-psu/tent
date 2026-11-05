@@ -44,7 +44,7 @@
 	import Briefcase from '@lucide/svelte/icons/briefcase';
 	import Car from '@lucide/svelte/icons/car';
 	import AlertCircle from '@lucide/svelte/icons/alert-circle';
-	import ChevronLeft from '@lucide/svelte/icons/chevron-left';
+	import BackLink from '$lib/components/back-link.svelte';
 	import Loader2 from '@lucide/svelte/icons/loader-2';
 	import Save from '@lucide/svelte/icons/save';
 	import ClipboardCheck from '@lucide/svelte/icons/clipboard-check';
@@ -55,12 +55,15 @@
 		isEdit,
 		basePath,
 		editBasePath,
-		siteKind
+		siteKind,
+		backLabel = 'กลับไปหน้าหลัก'
 	}: {
 		id?: string;
 		isEdit: boolean;
 		/** Cancel/back target. */
 		basePath?: string;
+		/** Visible name of `basePath`, shown on the back link. */
+		backLabel?: string;
 		/** Prefix of the `…/edit/{code}` route opened after create; defaults to `basePath`. */
 		editBasePath?: string;
 		siteKind?: SiteKind;
@@ -350,15 +353,8 @@
 		<div class="mx-auto max-w-7xl px-4 py-3 sm:px-6 sm:py-3.5 lg:px-8">
 			<div class="flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
 				<!-- Mobile Rows 1 & 2 / Desktop Left Column -->
-				<div class="flex min-w-0 items-start gap-3">
-					<a
-						href={resolvedBasePath}
-						onclick={handleCancelOrBack}
-						class="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 shadow-2xs transition hover:bg-slate-50 hover:text-slate-900"
-						title="กลับหน้ารายการศูนย์พักพิง"
-					>
-						<ChevronLeft class="h-4 w-4" />
-					</a>
+				<div class="min-w-0">
+					<BackLink href={resolvedBasePath} label={backLabel} class="mb-1 -ml-3" />
 					<div class="min-w-0 flex-1 space-y-0.5">
 						<!-- Row 1 on mobile: Title + Badge -->
 						<div class="flex flex-wrap items-center gap-2">
@@ -441,7 +437,7 @@
 				href={resolvedBasePath}
 				class="inline-block rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-700 shadow-2xs transition hover:bg-slate-50"
 			>
-				กลับหน้ารวมศูนย์พักพิง
+				{backLabel}
 			</a>
 		</div>
 	{:else}
