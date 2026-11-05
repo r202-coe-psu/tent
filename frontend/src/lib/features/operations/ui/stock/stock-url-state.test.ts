@@ -24,7 +24,8 @@ describe('parseStockParams', () => {
 			status: 'low',
 			sort: 'name',
 			page: 3,
-			all: true
+			all: true,
+			selfPurchased: false
 		});
 	});
 
@@ -36,6 +37,12 @@ describe('parseStockParams', () => {
 		expect(s.all).toBe(false);
 		expect(parseStockParams(params('page=2.5')).page).toBe(1);
 		expect(parseStockParams(params('page=abc')).page).toBe(1);
+	});
+
+	it('reads the self-purchased filter from sp=1 only', () => {
+		expect(parseStockParams(params('sp=1')).selfPurchased).toBe(true);
+		expect(parseStockParams(params('sp=true')).selfPurchased).toBe(false);
+		expect(parseStockParams(params('')).selfPurchased).toBe(false);
 	});
 
 	it('ignores the old "normal" status, which no card maps to', () => {
@@ -56,7 +63,8 @@ describe('serializeStockParams', () => {
 			status: 'expiring',
 			sort: 'qty',
 			page: 2,
-			all: true
+			all: true,
+			selfPurchased: true
 		};
 		expect(parseStockParams(serializeStockParams(state))).toEqual(state);
 	});
@@ -65,6 +73,17 @@ describe('serializeStockParams', () => {
 		const out = serializeStockParams({ ...STOCK_URL_DEFAULTS, q: '  ข้าว ', page: 1 });
 		expect(out.get('q')).toBe('ข้าว');
 		expect(out.has('page')).toBe(false);
+	});
+});
+
+describe('self-purchased filter in the URL', () => {
+	it('serializes sp=1 only when on, and merge replaces it', () => {
+		expect(serializeStockParams({ ...STOCK_URL_DEFAULTS, selfPurchased: true }).get('sp')).toBe(
+			'1'
+		);
+		expect(serializeStockParams(STOCK_URL_DEFAULTS).has('sp')).toBe(false);
+		const out = mergeStockParams(params('tab=inventory&sp=1'), STOCK_URL_DEFAULTS);
+		expect(out.toString()).toBe('tab=inventory');
 	});
 });
 

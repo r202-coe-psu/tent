@@ -163,6 +163,14 @@
 				{type.label}
 			</button>
 		{/each}
+		<button
+			type="button"
+			aria-pressed={filter.selfPurchased}
+			onclick={() => onchange({ selfPurchased: !filter.selfPurchased })}
+			class={chipClass(filter.selfPurchased)}
+		>
+			รับเข้าที่ซื้อเอง
+		</button>
 	</div>
 
 	{#if filter.type === 'adjust'}

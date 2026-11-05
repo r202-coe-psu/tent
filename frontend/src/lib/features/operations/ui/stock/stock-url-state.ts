@@ -1,7 +1,7 @@
 import type { StockSort, StockStatusFilter } from './stock-view';
 
 /** Query keys owned by the stock table. Anything else (`tab`, `action`, …) is left alone. */
-export const STOCK_PARAM_KEYS = ['q', 'cat', 'loc', 'status', 'sort', 'page', 'all'] as const;
+export const STOCK_PARAM_KEYS = ['q', 'cat', 'loc', 'status', 'sort', 'page', 'all', 'sp'] as const;
 
 export const STOCK_PAGE_SIZE = 25;
 
@@ -13,6 +13,8 @@ export interface StockUrlState {
 	sort: StockSort;
 	page: number;
 	all: boolean;
+	/** "ซื้อเอง" filter: items with a self-purchased lot still on hand. */
+	selfPurchased: boolean;
 }
 
 export const STOCK_URL_DEFAULTS: StockUrlState = {
@@ -22,7 +24,8 @@ export const STOCK_URL_DEFAULTS: StockUrlState = {
 	status: 'all',
 	sort: 'urgency',
 	page: 1,
-	all: false
+	all: false,
+	selfPurchased: false
 };
 
 const STATUSES: readonly StockStatusFilter[] = ['expired', 'empty', 'low', 'expiring'];
@@ -42,7 +45,8 @@ export function parseStockParams(params: URLSearchParams): StockUrlState {
 			: STOCK_URL_DEFAULTS.status,
 		sort: SORTS.includes(sort as StockSort) ? (sort as StockSort) : STOCK_URL_DEFAULTS.sort,
 		page: Number.isInteger(page) && page >= 1 ? page : STOCK_URL_DEFAULTS.page,
-		all: params.get('all') === '1'
+		all: params.get('all') === '1',
+		selfPurchased: params.get('sp') === '1'
 	};
 }
 
@@ -56,6 +60,7 @@ export function serializeStockParams(state: StockUrlState): URLSearchParams {
 	if (state.sort !== STOCK_URL_DEFAULTS.sort) out.set('sort', state.sort);
 	if (state.page > 1) out.set('page', String(state.page));
 	if (state.all) out.set('all', '1');
+	if (state.selfPurchased) out.set('sp', '1');
 	return out;
 }
 

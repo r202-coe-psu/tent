@@ -214,6 +214,36 @@ describe('filterLedger', () => {
 	});
 });
 
+describe('self-purchased receipts (schema_v 7)', () => {
+	const bought = entry({
+		reason: 'adjust',
+		adjust_reason: 'found',
+		qty: '6',
+		occurred_at: at(2, 11),
+		lot: { self_purchased: true }
+	});
+	const transferIn = entry({
+		reason: 'transfer_in',
+		qty: '9',
+		ref_id: 'stock_transfer:TR-1',
+		occurred_at: at(2, 12),
+		lot: { self_purchased: true }
+	});
+	const rows = buildLedgerRows([...all, bought, transferIn], lookup);
+	const open = { from: null, to: null };
+
+	it('flags only a flagged receipt; old rows and a stray transfer_in are not', () => {
+		expect(rows.filter((r) => r.selfPurchased).map((r) => r.id)).toEqual([bought._id]);
+		expect(toLedgerRow(receive, lookup).selfPurchased).toBe(false);
+	});
+
+	it('"รับเข้าที่ซื้อเอง" keeps only those rows', () => {
+		const out = filterLedger(rows, { range: open, type: 'all', q: '', selfPurchased: true });
+		expect(out.map((r) => r.id)).toEqual([bought._id]);
+		expect(filterLedger(rows, { range: open, type: 'all', q: '' })).toHaveLength(rows.length);
+	});
+});
+
 describe('groupByDay', () => {
 	it('splits at local midnight and keeps order', () => {
 		const groups = groupByDay(buildLedgerRows(all, lookup));

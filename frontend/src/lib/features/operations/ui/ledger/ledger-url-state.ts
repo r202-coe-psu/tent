@@ -7,7 +7,16 @@ import {
 } from './ledger-view';
 
 /** Query keys owned by the movements tab — the page strips them when leaving it. */
-export const LEDGER_PARAM_KEYS = ['range', 'from', 'to', 'type', 'lreason', 'lq', 'lpage'] as const;
+export const LEDGER_PARAM_KEYS = [
+	'range',
+	'from',
+	'to',
+	'type',
+	'lreason',
+	'lq',
+	'lpage',
+	'lsp'
+] as const;
 
 export const LEDGER_PAGE_SIZE = 50;
 
@@ -23,6 +32,8 @@ export interface LedgerUrlState {
 	reason: LedgerReasonFilter;
 	q: string;
 	page: number;
+	/** "รับเข้าที่ซื้อเอง" filter (schema_v 7). */
+	selfPurchased: boolean;
 }
 
 export const LEDGER_URL_DEFAULTS: LedgerUrlState = {
@@ -32,7 +43,8 @@ export const LEDGER_URL_DEFAULTS: LedgerUrlState = {
 	type: 'all',
 	reason: 'all',
 	q: '',
-	page: 1
+	page: 1,
+	selfPurchased: false
 };
 
 export const LEDGER_RANGE_LABELS: Record<LedgerRangePreset, string> = {
@@ -80,7 +92,8 @@ export function parseLedgerParams(params: URLSearchParams): LedgerUrlState {
 				? (reason as LedgerReasonFilter)
 				: LEDGER_URL_DEFAULTS.reason,
 		q: params.get('lq') ?? LEDGER_URL_DEFAULTS.q,
-		page: Number.isInteger(page) && page >= 1 ? page : LEDGER_URL_DEFAULTS.page
+		page: Number.isInteger(page) && page >= 1 ? page : LEDGER_URL_DEFAULTS.page,
+		selfPurchased: params.get('lsp') === '1'
 	};
 }
 
@@ -96,6 +109,7 @@ export function serializeLedgerParams(state: LedgerUrlState): URLSearchParams {
 	if (state.reason !== LEDGER_URL_DEFAULTS.reason) out.set('lreason', state.reason);
 	if (state.q.trim()) out.set('lq', state.q.trim());
 	if (state.page > 1) out.set('lpage', String(state.page));
+	if (state.selfPurchased) out.set('lsp', '1');
 	return out;
 }
 

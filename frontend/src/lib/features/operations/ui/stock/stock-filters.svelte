@@ -16,6 +16,7 @@
 		loc,
 		sort,
 		all,
+		selfPurchased = false,
 		categories,
 		locations,
 		showOverall = $bindable(false),
@@ -28,6 +29,8 @@
 		sort: StockSort;
 		/** "ทั้งแคตตาล็อก": include items this shelter never received. */
 		all: boolean;
+		/** "ซื้อเอง": only items with a self-purchased lot still on hand. */
+		selfPurchased?: boolean;
 		categories: Option[];
 		locations: LocationOption[];
 		/** System admins can sum every shelter's stock. */
@@ -39,6 +42,7 @@
 			loc?: string;
 			sort?: StockSort;
 			all?: boolean;
+			selfPurchased?: boolean;
 		}) => void;
 	} = $props();
 
@@ -151,6 +155,20 @@
 		<Switch id="stock-all-catalog" checked={all} onCheckedChange={(v) => onchange({ all: v })} />
 		<Label for="stock-all-catalog" class="cursor-pointer text-sm whitespace-nowrap text-slate-700">
 			ทั้งแคตตาล็อก
+		</Label>
+	</div>
+
+	<div class="flex min-h-11 items-center gap-2.5 px-1">
+		<Switch
+			id="stock-self-purchased"
+			checked={selfPurchased}
+			onCheckedChange={(v) => onchange({ selfPurchased: v })}
+		/>
+		<Label
+			for="stock-self-purchased"
+			class="cursor-pointer text-sm whitespace-nowrap text-slate-700"
+		>
+			ซื้อเอง
 		</Label>
 	</div>
 

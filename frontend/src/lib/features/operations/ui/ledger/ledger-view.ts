@@ -2,6 +2,7 @@ import { qtyGt } from '$lib/utils/qty';
 import { DISPLAY_LOCALE, DISPLAY_TIME_ZONE } from '$lib/utils/date';
 import { lotStorageName, type StoragePointRef } from '../../domain/lot-storage';
 import { shortLedgerRef } from '../../domain/ledger-ref';
+import { isSelfPurchasedReceipt } from '../../domain/self-purchased';
 import {
 	BULK_RETURN_POOL_REF_PREFIX,
 	resolveAdjustReason,
@@ -82,6 +83,8 @@ export interface LedgerRow {
 	refId: string;
 	/** Deep link to the source document, when one exists (bulk return pool receives). */
 	refHref?: BulkReturnPoolLedgerHref;
+	/** A receipt flagged "ซื้อเอง" (schema_v 7); false for every other row and for older rows. */
+	selfPurchased: boolean;
 }
 
 /** Deep link to a bulk return pool in the distribution back-office. */
@@ -164,6 +167,7 @@ export function toLedgerRow(entry: StockLedger, lookup: LedgerLookup): LedgerRow
 		storage: lotStorageName(lot, lookup.points) ?? '',
 		createdBy: entry.created_by,
 		refId: entry.ref_id ?? '',
+		selfPurchased: isSelfPurchasedReceipt(entry),
 		...(refHref ? { refHref } : {})
 	};
 }
@@ -196,6 +200,8 @@ export interface LedgerFilter {
 	q: string;
 	/** Adjust reason (FR-C5); omitted / `all` keeps every row. */
 	reason?: LedgerReasonFilter;
+	/** "รับเข้าที่ซื้อเอง": keep only flagged receipts. */
+	selfPurchased?: boolean;
 }
 
 /** Range, type and free-text search (item, reference, destination, lot, place, author). */
@@ -204,6 +210,7 @@ export function filterLedger(rows: readonly LedgerRow[], filter: LedgerFilter): 
 	return filterByRange(rows, filter.range).filter((r) => {
 		if (filter.type !== 'all' && r.group !== filter.type) return false;
 		if (filter.reason && filter.reason !== 'all' && r.adjustReason !== filter.reason) return false;
+		if (filter.selfPurchased && !r.selfPurchased) return false;
 		if (!q) return true;
 		return [r.itemName, r.refId, r.detail, r.lotNo, r.storage, r.createdBy].some((v) =>
 			v.toLowerCase().includes(q)

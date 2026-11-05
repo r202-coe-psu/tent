@@ -129,8 +129,8 @@ describe('KitchenRemoteRepository.issueRequisition — ledger deduction pattern'
 		>[];
 
 		for (const row of rows) {
-			// Every ledger writer stamps the same version (CR-088 → 4; draft-shelter-storage-points → 5; CR-143 §C → 6).
-			expect(row.schema_v).toBe(6);
+			// Every ledger writer stamps the same version (CR-088 → 4; draft-shelter-storage-points → 5; CR-143 §C → 6; draft-self-purchased-lot-flag → 7).
+			expect(row.schema_v).toBe(7);
 			expect(row.shelter_code).toBe(ctx.shelterCode);
 			expect(row.created_by).toBe(ctx.createdBy);
 			expect(row.ref_id).toBe(result._id);

@@ -267,8 +267,8 @@ describe('stockBalance', () => {
 });
 
 describe('stock_ledger schema_v + reason enum (CR-032 / draft-lot-produced-at)', () => {
-	// Writer stamps schema_v 6 (CR-143 §C); legacy rows through schema_v 5 remain readable.
-	it('stamps schema_v 6 on new ledger rows', () => {
+	// Writer stamps schema_v 7 (draft-self-purchased-lot-flag); legacy rows through schema_v 5 remain readable.
+	it('stamps schema_v 7 on new ledger rows', () => {
 		const entry = createStockLedger(
 			{
 				item_id: 'item:rice',
@@ -279,7 +279,7 @@ describe('stock_ledger schema_v + reason enum (CR-032 / draft-lot-produced-at)',
 			},
 			ctx
 		);
-		expect(entry.schema_v).toBe(6);
+		expect(entry.schema_v).toBe(7);
 		expect(entry.lot?.produced_at).toBe(entry.occurred_at);
 	});
 
@@ -331,7 +331,7 @@ describe('stock_ledger schema_v + reason enum (CR-032 / draft-lot-produced-at)',
 			ctx
 		);
 		expect(entry.lot).toBeUndefined();
-		expect(entry.schema_v).toBe(6);
+		expect(entry.schema_v).toBe(7);
 	});
 
 	it('accepts `distribution_return` as a valid reason (CR-059)', () => {
@@ -1975,7 +1975,7 @@ describe('lot numbering (CR-088)', () => {
 			storage_zone: 'A-01',
 			produced_at: '2026-08-25T10:00:00.000Z'
 		});
-		expect(entry.schema_v).toBe(6);
+		expect(entry.schema_v).toBe(7);
 		expect(parseStockLedger(entry)).toEqual(entry);
 	});
 });

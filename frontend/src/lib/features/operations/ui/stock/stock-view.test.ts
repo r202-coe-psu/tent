@@ -107,6 +107,18 @@ describe('filterRows', () => {
 		expect(filterRows([a, b], { ...NO_FILTER, loc: 'sp:1' }).map((r) => r._id)).toEqual(['a', 'b']);
 	});
 
+	it('"ซื้อเอง" keeps only items with a self-purchased lot on hand', () => {
+		const bought = row({ _id: 'bought', hasSelfPurchased: true });
+		const donated = row({ _id: 'donated', hasSelfPurchased: false });
+		const legacy = row({ _id: 'legacy' });
+		const all = [bought, donated, legacy];
+		expect(filterRows(all, { ...NO_FILTER, selfPurchased: true }).map((r) => r._id)).toEqual([
+			'bought'
+		]);
+		expect(filterRows(all, { ...NO_FILTER, selfPurchased: false })).toHaveLength(3);
+		expect(filterRows(all, NO_FILTER)).toHaveLength(3);
+	});
+
 	it('maps the main-store token to unspecified lots', () => {
 		const a = row({ _id: 'a', storageKeys: [''] });
 		const b = row({ _id: 'b', storageKeys: ['id:1'] });

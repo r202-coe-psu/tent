@@ -206,3 +206,36 @@ describe('buildLotRows lot number (#1069)', () => {
 		expect(rows[0]).toMatchObject({ isNegative: true, lotNo: 'L-261020-009' });
 	});
 });
+
+describe('buildLotRows self-purchased badge (schema_v 7)', () => {
+	it('marks only the lots whose ref is in the self-purchased set', () => {
+		const rows = buildLotRows(
+			[lot({ lot_ref: 'bought' }), lot({ lot_ref: 'donated' })],
+			[],
+			NOW,
+			undefined,
+			new Set(['bought'])
+		);
+		expect(Object.fromEntries(rows.map((r) => [r.lotRef, r.isSelfPurchased]))).toEqual({
+			bought: true,
+			donated: false
+		});
+	});
+
+	it('reads as not self-purchased when no set is given (old callers, old rows)', () => {
+		const [row] = buildLotRows([lot({ lot_ref: 'a' })], [], NOW);
+		expect(row.isSelfPurchased).toBe(false);
+	});
+
+	it('flags an overdrawn self-purchased lot too', () => {
+		const [row] = buildLotRows(
+			[lot({ lot_ref: 'neg', qty: '-2' })],
+			[],
+			NOW,
+			undefined,
+			new Set(['neg'])
+		);
+		expect(row.isNegative).toBe(true);
+		expect(row.isSelfPurchased).toBe(true);
+	});
+});

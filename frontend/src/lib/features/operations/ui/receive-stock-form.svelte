@@ -7,6 +7,7 @@
 	import * as Field from '$lib/components/ui/field/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Label } from '$lib/components/ui/label/index.js';
+	import { Checkbox } from '$lib/components/ui/checkbox/index.js';
 	import { defaults, superForm } from 'sveltekit-superforms';
 	import { z } from 'zod';
 	import { zod4 } from 'sveltekit-superforms/adapters';
@@ -166,8 +167,15 @@
 		].join(' ');
 	}
 
+	function setSelfPurchased(checked: boolean) {
+		// Unchecked is written as absent, never `false` (schema.md §2.1 `lot.self_purchased`).
+		$formData.lot = { ...($formData.lot ?? {}), self_purchased: checked || undefined };
+	}
+
 	function setSourceMode(mode: SourceMode) {
 		sourceMode = mode;
+		// Only the manual receipt can be a purchase; a donation never is.
+		if (mode !== 'manual') setSelfPurchased(false);
 		if (mode === 'manual') {
 			$formData.source = 'manual';
 			clearDonation();
@@ -230,6 +238,9 @@
 	});
 
 	const { form: formData, submitting, reset } = form;
+
+	/** "ซื้อเอง" (schema_v 7): a hand-keyed receipt of goods the shelter bought itself. */
+	const selfPurchased = $derived($formData.lot?.self_purchased === true);
 
 	const selectedUnitLabel = $derived(
 		formatUnit($formData.unit, units, langState.current) || $formData.unit || 'เลือกหน่วย'
@@ -342,7 +353,8 @@
 				expiry: undefined,
 				produced_at: undefined,
 				storage_zone: undefined,
-				storage_point_id: undefined
+				storage_point_id: undefined,
+				self_purchased: undefined
 			};
 		}
 		setStoragePoint(null);
@@ -944,6 +956,20 @@
 				</Form.Control>
 				<Form.FieldErrors />
 			</Form.Field>
+
+			{#if sourceMode === 'manual'}
+				<div class="col-span-1 flex min-h-11 items-center gap-2.5 sm:col-span-2">
+					<Checkbox
+						id="receive-self-purchased"
+						checked={selfPurchased}
+						onCheckedChange={(v) => setSelfPurchased(v === true)}
+					/>
+					<Label for="receive-self-purchased" class="cursor-pointer text-sm font-semibold">
+						ซื้อเอง
+						<span class="font-normal text-muted-foreground">(ศูนย์ซื้อของนี้มาเอง)</span>
+					</Label>
+				</div>
+			{/if}
 
 			<div class="col-span-1 sm:col-span-2">
 				<button

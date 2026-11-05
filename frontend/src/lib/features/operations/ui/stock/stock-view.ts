@@ -31,6 +31,8 @@ export interface StockRowBase {
 	neverReceived: boolean;
 	/** Names of items merged into this one, so searching an old name finds it (CR-143 FR-F5). */
 	aliases?: string[];
+	/** True when a lot with stock left (qty > 0) was bought by this shelter (schema_v 7). */
+	hasSelfPurchased?: boolean;
 }
 
 /** A row as the table and cards render it — display strings resolved by the orchestrator. */
@@ -89,6 +91,8 @@ export interface StockFilterState {
 	status: StockStatusFilter | 'all';
 	/** Include catalog items this shelter never received. */
 	all: boolean;
+	/** Keep only items with a self-purchased lot still on hand ("ซื้อเอง"). */
+	selfPurchased?: boolean;
 }
 
 export type AttentionCounts = Record<StockStatusFilter, number>;
@@ -131,7 +135,7 @@ function matchesStatus(row: StockRowBase, status: StockStatusFilter): boolean {
 	}
 }
 
-/** Apply search, category, location, status and the catalog-only switch. */
+/** Apply search, category, location, status, self-purchased and the catalog-only switch. */
 export function filterRows<T extends StockRowBase>(
 	rows: readonly T[],
 	filter: StockFilterState
@@ -151,6 +155,7 @@ export function filterRows<T extends StockRowBase>(
 			if (!r.storageKeys.includes(key)) return false;
 		}
 		if (filter.status !== 'all' && !matchesStatus(r, filter.status)) return false;
+		if (filter.selfPurchased && !r.hasSelfPurchased) return false;
 		return true;
 	});
 }

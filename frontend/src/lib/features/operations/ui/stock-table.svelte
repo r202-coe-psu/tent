@@ -60,6 +60,7 @@
 		type StockUrlState
 	} from './stock/stock-url-state';
 	import { negativeLotSummary, negativeLots, projectLotsByItem } from '../domain/operations';
+	import { selfPurchasedLotRefs } from '../domain/self-purchased';
 	import {
 		dailyConsumption,
 		daysOfCover,
@@ -239,6 +240,16 @@
 		return { byItem: groupLotsByItem(lots), brokenItemIds };
 	});
 	const lotsByItem = $derived(projected.byItem);
+	/** Lots the shelter bought itself ("ซื้อเอง", schema_v 7). */
+	const selfPurchasedRefs = $derived(selfPurchasedLotRefs(ledger));
+	const selfPurchasedItemIds = $derived(
+		new Set(
+			[...lotsByItem.values()]
+				.flat()
+				.filter((lot) => qtyGt(lot.qty, 0) && selfPurchasedRefs.has(lot.lot_ref))
+				.map((lot) => lot.item_id)
+		)
+	);
 
 	/**
 	 * Location filter options, keyed by `lotStorageKey` so a renamed storage point stays one option
@@ -357,6 +368,7 @@
 				locationLabel: locationLabelByItem.get(item._id) ?? null,
 				coverDays: daysOfCover(qtyOnHand, dailyConsumption(occupancy, item, override)),
 				neverReceived: !everStocked.has(item._id),
+				hasSelfPurchased: selfPurchasedItemIds.has(item._id),
 				aliases: 'aliases' in item ? item.aliases : []
 			};
 		})
@@ -378,7 +390,8 @@
 		urlState.q.trim() !== '' ||
 			urlState.cat !== 'all' ||
 			urlState.loc !== 'all' ||
-			urlState.status !== 'all'
+			urlState.status !== 'all' ||
+			urlState.selfPurchased
 	);
 
 	const isLoading = $derived(
@@ -400,7 +413,7 @@
 	);
 
 	function clearFilters() {
-		updateUrl({ q: '', cat: 'all', loc: 'all', status: 'all' });
+		updateUrl({ q: '', cat: 'all', loc: 'all', status: 'all', selfPurchased: false });
 	}
 
 	const selectedManageItem = $derived(
@@ -504,6 +517,7 @@
 			loc={urlState.loc}
 			sort={urlState.sort}
 			all={urlState.all}
+			selfPurchased={urlState.selfPurchased}
 			categories={uniqueCategories}
 			locations={uniqueLocations}
 			bind:showOverall
@@ -700,6 +714,7 @@
 	row={selectedManageItem}
 	lots={selectedItemId ? (lotsByItem.get(selectedItemId) ?? []) : []}
 	itemsById={lotPriorityItems}
+	{selfPurchasedRefs}
 	shelterCode={getShelterCode()}
 	{offline}
 	{canDistribute}

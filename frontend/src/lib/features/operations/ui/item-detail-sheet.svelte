@@ -23,6 +23,7 @@
 		row,
 		lots,
 		itemsById,
+		selfPurchasedRefs,
 		shelterCode,
 		offline = false,
 		canDistribute = true,
@@ -42,11 +43,15 @@
 		canDistribute?: boolean;
 		/** False for a read-only viewer (donation_staff, CR-227): no receive / issue / adjust buttons. */
 		canChange?: boolean;
+		/** `lot_ref`s the shelter bought itself — those lots get a "ซื้อเอง" badge. */
+		selfPurchasedRefs?: ReadonlySet<string>;
 		onaction: (kind: ItemDetailAction) => void;
 	} = $props();
 
 	const storagePoints = useStoragePoints(() => shelterCode);
-	const lotRows = $derived(buildLotRows(lots, storagePoints.points, Date.now(), itemsById));
+	const lotRows = $derived(
+		buildLotRows(lots, storagePoints.points, Date.now(), itemsById, selfPurchasedRefs)
+	);
 
 	const ACTIONS = [
 		{ kind: 'receive', label: 'รับเข้า', icon: ArrowDownToLine },
@@ -180,6 +185,13 @@
 														class="rounded-full bg-red-50 px-2.5 py-1 text-xs font-semibold text-red-800 ring-1 ring-red-200"
 													>
 														หมดอายุ — ปรับยอดออก
+													</span>
+												{/if}
+												{#if lot.isSelfPurchased}
+													<span
+														class="rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-900 ring-1 ring-amber-200"
+													>
+														ซื้อเอง
 													</span>
 												{/if}
 											</div>

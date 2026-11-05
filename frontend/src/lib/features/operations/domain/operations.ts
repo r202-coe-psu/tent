@@ -166,6 +166,12 @@ export interface StockLot {
 	 * On inbound receive, writers default this to `occurred_at` when omitted.
 	 */
 	produced_at?: Timestamp;
+	/**
+	 * The shelter bought this lot itself (schema_v 7, draft-self-purchased-lot-flag). Written
+	 * `true` or absent — never `false`; absent = not self-purchased, which is also every row
+	 * from before schema_v 7. Only a manual receipt may carry it (`canCarrySelfPurchased`).
+	 */
+	self_purchased?: boolean;
 }
 
 /** `L-YYMMDD-XXX` — `YYMMDD` = receive date, `XXX` = 3-digit per-day per-shelter sequence. */
@@ -183,7 +189,8 @@ export const stockLotSchema = z
 		storage_zone: z.string().trim().max(100).optional(),
 		storage_point_id: z.string().trim().min(1).optional(),
 		/** ISO date or datetime — DatePicker may submit `YYYY-MM-DD`. */
-		produced_at: z.string().optional()
+		produced_at: z.string().optional(),
+		self_purchased: z.boolean().optional()
 	})
 	.refine((lot) => !lot.storage_point_id || !!lot.storage_zone, {
 		message: 'storage_point_id requires storage_zone (the point name at write time)',
@@ -642,6 +649,18 @@ function stockLedgerInputSchemaWith(
 ) {
 	return stockLedgerInputBaseSchema.superRefine((d, ctx) => {
 		validateRefId(d.reason, d.ref_id, ctx);
+		// schema_v 7: a self-purchased lot is a new inbound lot from a receipt, nothing else.
+		// `false` carries no information and is dropped by the factory, so only `true` is refused.
+		if (
+			d.lot?.self_purchased === true &&
+			(!canCarrySelfPurchased(d.reason, d.adjust_reason) || !qtyGt(persistQty(d.qty), 0))
+		) {
+			ctx.addIssue({
+				code: 'custom',
+				path: ['lot', 'self_purchased'],
+				message: `รายการประเภท '${d.reason}' ห้ามมี self_purchased (ใช้ได้เฉพาะรับเข้าที่เพิ่มยอด)`
+			});
+		}
 		if ((d.reason === 'distribute' || d.reason === 'distribution_return') && !d.lot_ref) {
 			ctx.addIssue({
 				code: 'custom',
@@ -702,6 +721,19 @@ export type StockLedgerInput =
 			note?: never;
 	  });
 
+/**
+ * Which rows may say "the shelter bought this lot" (schema_v 7): a `receive` row, or the
+ * `adjust` / `found` row a hand-keyed receipt from the supply receive form is booked as
+ * (CR-156 FR-C7). Every other reason refuses the flag — a donation, a transfer-in or a
+ * distribution return is by definition not a purchase.
+ */
+export function canCarrySelfPurchased(
+	reason: LedgerReason,
+	adjustReason?: AdjustReason | null
+): boolean {
+	return reason === 'receive' || (reason === 'adjust' && adjustReason === 'found');
+}
+
 const legacyFlow2StockLedgerInputSchema = stockLedgerInputSchemaWith(checkLegacyFlow2RefId);
 
 /** Full persisted stock_ledger contract used before signed-sum calculations. */
@@ -710,7 +742,14 @@ export const stockLedgerDocSchema = z
 		_id: z.string().regex(/^stock_ledger:/),
 		_rev: z.string().optional(),
 		type: z.literal('stock_ledger'),
-		schema_v: z.union([z.literal(2), z.literal(3), z.literal(4), z.literal(5), z.literal(6)]),
+		schema_v: z.union([
+			z.literal(2),
+			z.literal(3),
+			z.literal(4),
+			z.literal(5),
+			z.literal(6),
+			z.literal(7)
+		]),
 		shelter_code: z.string().min(1),
 		created_at: z.string().datetime(),
 		updated_at: z.string().datetime(),
@@ -737,8 +776,8 @@ export function parseStockLedger(input: unknown): StockLedger {
 	return stockLedgerDocSchema.parse(input) as StockLedger;
 }
 
-/** Current persisted `stock_ledger` shape (CR-143 §C). Every writer stamps this. */
-export const STOCK_LEDGER_SCHEMA_V = 6;
+/** Current persisted `stock_ledger` shape (draft-self-purchased-lot-flag). Every writer stamps this. */
+export const STOCK_LEDGER_SCHEMA_V = 7;
 
 /**
  * Canonical factory every new `stock_ledger` writer must go through (CR-055 R7) —
@@ -760,6 +799,12 @@ function createParsedStockLedger(
 	// from occurred_at when the caller omits it (draft-lot-produced-at).
 	const isNewInboundLot = qtyGt(persistQty(d.qty), 0) && d.reason !== 'distribution_return';
 	let lot = d.lot;
+	// `self_purchased: false` is the same as absent — keep the persisted row to `true` only.
+	if (lot && lot.self_purchased === false) {
+		const rest = { ...lot };
+		delete rest.self_purchased;
+		lot = Object.keys(rest).length > 0 ? rest : undefined;
+	}
 	if (isNewInboundLot) {
 		if (!lot) {
 			lot = { produced_at: occurredAt };
@@ -856,7 +901,17 @@ export const receiveInputSchema = z
 		lot: stockLotSchema.optional(),
 		occurred_at: z.string().optional()
 	})
-	.superRefine((d, ctx) => checkRefId(REASON_BY_RECEIVE_SOURCE[d.source], d.ref_id, ctx));
+	.superRefine((d, ctx) => {
+		checkRefId(REASON_BY_RECEIVE_SOURCE[d.source], d.ref_id, ctx);
+		// Mirrors the ledger rule for the form: "ซื้อเอง" belongs to a hand-keyed receipt only.
+		if (d.lot?.self_purchased === true && d.source !== 'manual') {
+			ctx.addIssue({
+				code: 'custom',
+				path: ['lot', 'self_purchased'],
+				message: 'ซื้อเอง ใช้ได้เฉพาะการรับเข้าแบบกรอกเอง'
+			});
+		}
+	});
 export type ReceiveInput = z.input<typeof receiveInputSchema>;
 
 /**
