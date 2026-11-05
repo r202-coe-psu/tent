@@ -43,6 +43,7 @@ import {
 	requireBannerManagement,
 	requireKioskManagement,
 	requireMedicalScreening,
+	requireShelterReadiness,
 	requireVolunteerBackoffice,
 	requireWarehouseAccess,
 	LANDING_ROUTE,
@@ -461,5 +462,36 @@ describe('confineKioskStaffOnly (back-office layout, FR-SBO-29)', () => {
 		expect(() => confineKioskStaffOnly('/back-office/evacuee-management')).not.toThrow();
 		mocks.selectedShelterCode = 'SH001';
 		expect(() => confineKioskStaffOnly('/back-office/evacuee-management')).toThrow();
+	});
+});
+
+describe('requireShelterReadiness (/back-office/shelters/readiness/[id], #478)', () => {
+	const guardFor = (code: string) => () => requireShelterReadiness(code);
+
+	beforeEach(() => {
+		mocks.user = { roles: [] };
+		mocks.selectedShelterCode = null;
+	});
+
+	it('admits SA for any shelter and SM for their own shelter', async () => {
+		expect(await passes(guardFor('SH005'), ['system_admin'], null)).toBe(true);
+		expect(await passes(guardFor('SH001'), ['shelter:SH001', 'SH001:shelter_manager'])).toBe(true);
+	});
+
+	it('redirects an SM opening another shelter by editing the URL', async () => {
+		expect(await passes(guardFor('SH002'), ['shelter:SH001', 'SH001:shelter_manager'])).toBe(false);
+	});
+
+	it('checks the shelter in the URL, not the selected shelter', async () => {
+		const roles = ['shelter:SH001', 'shelter:SH002', 'SH002:shelter_manager'];
+		expect(await passes(guardFor('SH001'), roles, 'SH002')).toBe(false);
+		expect(await passes(guardFor('SH002'), roles, 'SH001')).toBe(true);
+	});
+
+	it('redirects other staff roles and a bare shelter scope', async () => {
+		for (const cap of ['registration_staff', 'warehouse_staff', 'facility_staff']) {
+			expect(await passes(guardFor('SH001'), ['shelter:SH001', `SH001:${cap}`])).toBe(false);
+		}
+		expect(await passes(guardFor('SH001'), ['shelter:SH001'])).toBe(false);
 	});
 });

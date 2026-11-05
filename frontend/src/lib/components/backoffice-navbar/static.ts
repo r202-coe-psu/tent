@@ -133,7 +133,8 @@ export const backofficeNavbarGroups: BackofficeNavbarGroup[] = [
 			{
 				label: 'การประเมินความพร้อมศูนย์',
 				href: resolve('/back-office/shelters/readiness' as '/back-office/shelters'),
-				icon: ClipboardCheck
+				icon: ClipboardCheck,
+				visibleTo: ({ roles, shelterCode }) => canAccessManagerPages(roles, shelterCode)
 			},
 			{
 				label: 'การประเมินประจำวัน',

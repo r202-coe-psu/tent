@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto';
 import { adminRaw, bootstrapAdminName, isProtectedBootstrapAdmin } from '$lib/server/couch-admin';
 import { ServiceError, serviceErrorFromCouch, type Caller } from '$lib/server/couch-admin';
 import {
@@ -12,6 +13,7 @@ import {
 	isLastAppSystemAdmin,
 	isSystemAdmin,
 	managerShelterCodes,
+	mergeEdgeShelters,
 	mergeShelterAssignment,
 	rolesFromAssignments,
 	shelterCodeFromRoles
@@ -37,8 +39,9 @@ import { isValidStaffTokenHash } from '$lib/features/users/server';
 
 /**
  * User service — the ONLY module that writes CouchDB `_users` with admin creds.
- * Both `/api/v1/users` (role-gated) and `/api/register` (public, fixed role)
- * call it, so there is a single audited admin-write surface that mirrors the
+ * `/api/v1/users` (role-gated) calls it. `/api/register` used to call it for
+ * public self-signup; that endpoint now answers 404 (#474). This keeps a
+ * single audited admin-write surface that mirrors the
  * future FastAPI route boundary. Authorization happens in the handlers
  * (couch-admin.authorizeUserWrite / assertCanGrant) BEFORE these run.
  *
@@ -154,6 +157,26 @@ export interface CouchUserDoc {
 	mfa?: UserMfa | null;
 	/** CouchDB password salt — required to mint AuthSession (Phase 2). */
 	salt?: string;
+	/** CR-171 — every shelter code the user ever held `shelter:{code}` for (append-only; replication routing only). */
+	edge_shelters?: string[];
+	/** CR-171 — soft-delete timestamp; null / missing = live account. */
+	deleted_at?: string | null;
+	/** CR-171 — `_users` name of whoever soft-deleted the account. */
+	deleted_by?: string | null;
+}
+
+/** CR-171 FR-5 — a soft-deleted account is not a user for any management / login path. */
+export function isDeletedUserDoc(doc: { deleted_at?: string | null } | null | undefined): boolean {
+	return Boolean(doc?.deleted_at);
+}
+
+/**
+ * CR-171 FR-1 — `edge_shelters` after a roles change: existing ∪ shelters in the OLD roles ∪ the
+ * new roles. Folding in the old roles matters for docs written before the backfill — otherwise the
+ * shelter being removed is never recorded and its edge never receives the revocation.
+ */
+function nextEdgeShelters(doc: CouchUserDoc, nextRoles: readonly string[]): string[] {
+	return mergeEdgeShelters(mergeEdgeShelters(doc.edge_shelters, doc.roles ?? []), nextRoles);
 }
 
 function userDocId(name: string): string {
@@ -216,7 +239,10 @@ async function fetchAllUserDocs(): Promise<CouchUserDoc[]> {
 	const res = await adminRaw('/_users/_all_docs?include_docs=true', 'GET');
 	if (res.status >= 400) throw serviceErrorFromCouch('list users', res.status, res.data);
 	const rows = (res.data as { rows?: { id: string; doc: CouchUserDoc }[] })?.rows ?? [];
-	return rows.filter((r) => r.id.startsWith(USER_PREFIX) && r.doc).map((r) => r.doc);
+	// Soft-deleted accounts (CR-171) are invisible to list / SA count / phone + OAuth lookups.
+	return rows
+		.filter((r) => r.id.startsWith(USER_PREFIX) && r.doc && !isDeletedUserDoc(r.doc))
+		.map((r) => r.doc);
 }
 
 /**
@@ -235,7 +261,12 @@ export async function getDisplayNames(names: readonly string[]): Promise<Map<str
 	const rows = (res.data as { rows?: { doc?: CouchUserDoc | null }[] })?.rows ?? [];
 	for (const row of rows) {
 		const doc = row.doc;
-		if (doc?.name && typeof doc.display_name === 'string' && doc.display_name.trim()) {
+		if (
+			doc?.name &&
+			!isDeletedUserDoc(doc) &&
+			typeof doc.display_name === 'string' &&
+			doc.display_name.trim()
+		) {
 			out.set(doc.name, doc.display_name.trim());
 		}
 	}
@@ -254,20 +285,39 @@ async function assertNotLastAppSa(targetRoles: readonly string[]): Promise<void>
 	}
 }
 
-/** Exact name match wins; otherwise the one whose name differs only in case. */
+/** CR-171 FR-6 — CONFLICT for a username reserved by a soft-deleted account. */
+class DeletedNameConflictError extends ServiceError {
+	constructor() {
+		super('CONFLICT', 'ชื่อผู้ใช้นี้เคยถูกใช้และถูกลบไปแล้ว กรุณาใช้ชื่ออื่น');
+		this.name = 'DeletedNameConflictError';
+	}
+}
+
+/** Exact name match wins; otherwise the one whose name differs only in case. Skips soft-deleted docs (CR-171). */
 function findUserDocIgnoringCase(docs: CouchUserDoc[], name: string): CouchUserDoc | undefined {
 	const lower = name.toLowerCase();
-	return docs.find((d) => d.name === name) ?? docs.find((d) => d.name?.toLowerCase() === lower);
+	const live = docs.filter((d) => !isDeletedUserDoc(d));
+	return live.find((d) => d.name === name) ?? live.find((d) => d.name?.toLowerCase() === lower);
 }
 
 /** The `name` an account is actually stored under (legacy accounts may be mixed case). */
 async function storedUserName(name: string): Promise<string> {
 	const got = await adminRaw(`/_users/${userDocId(name)}`, 'GET');
-	if (got.status !== 404) return name;
+	// A soft-deleted exact match (CR-171) is not "stored": fall through to a live case-variant.
+	if (got.status !== 404 && !(got.status === 200 && isDeletedUserDoc(got.data as CouchUserDoc))) {
+		return name;
+	}
 	return findUserDocIgnoringCase(await fetchAllUserDocs(), name)?.name ?? name;
 }
 
+/** Read a LIVE user; a soft-deleted doc (CR-171) is reported as not found. */
 async function readUserDoc(name: string, action: string): Promise<CouchUserDoc> {
+	const doc = await readUserDocIncludingDeleted(name, action);
+	if (isDeletedUserDoc(doc)) throw new ServiceError('VALIDATION', `User "${name}" not found`);
+	return doc;
+}
+
+async function readUserDocIncludingDeleted(name: string, action: string): Promise<CouchUserDoc> {
 	const got = await adminRaw(`/_users/${userDocId(name)}`, 'GET');
 	if (got.status === 404) {
 		const body = got.data as { reason?: string } | null;
@@ -399,7 +449,7 @@ export async function createUser(input: {
 		mustChangePassword: must_change_password
 	});
 	const normalizedPhone = await assertPhoneAvailable(phone ?? null, name);
-	const res = await adminRaw(`/_users/${userDocId(name)}`, 'PUT', {
+	const newDoc = {
 		name,
 		password,
 		display_name,
@@ -421,9 +471,18 @@ export async function createUser(input: {
 		must_change_password,
 		security_question: security_question ?? null,
 		affiliation_tags: affiliation_tags ?? [],
+		edge_shelters: mergeEdgeShelters(null, roles),
+		deleted_at: null,
+		deleted_by: null,
 		...(role_grants?.length ? { role_grants } : {})
-	});
-	if (res.status === 409) throw new ServiceError('CONFLICT', `User "${name}" already exists`);
+	};
+	const res = await adminRaw(`/_users/${userDocId(name)}`, 'PUT', newDoc);
+	if (res.status === 409) {
+		// CR-171 FR-6 — never overwrite an existing doc. A soft-deleted name stays reserved.
+		const existing = await readUserDocIncludingDeleted(name, 'read user');
+		if (isDeletedUserDoc(existing)) throw new DeletedNameConflictError();
+		throw new ServiceError('CONFLICT', `User "${name}" already exists`);
+	}
 	if (res.status >= 400) throw serviceErrorFromCouch('create user', res.status, res.data);
 }
 
@@ -440,6 +499,7 @@ export async function createOrMergeUser(
 		return { merged: false };
 	} catch (e) {
 		if (!(e instanceof ServiceError) || e.code !== 'CONFLICT' || caller.isSA) throw e;
+		if (e instanceof DeletedNameConflictError) throw e; // reserved name: never merge into a deleted account
 		const managed = managerShelterCodes(caller.roles);
 		const code = managed[0] ?? caller.shelterCode;
 		if (!code) throw e;
@@ -613,7 +673,8 @@ export async function grantCoordinatorRole(input: {
 		...existing,
 		roles: nextRoles,
 		shelter_id: shelterCodeFromRoles(nextRoles),
-		role_grants
+		role_grants,
+		edge_shelters: nextEdgeShelters(existing, nextRoles) // CR-171 FR-1
 	});
 	assertGrantWritten('grant volunteer role', res);
 	for (const old of replaced) {
@@ -674,7 +735,8 @@ export async function revokeCoordinatorGrant(input: {
 		...doc,
 		roles: next.roles,
 		role_grants: next.role_grants,
-		shelter_id: shelterCodeFromRoles(next.roles)
+		shelter_id: shelterCodeFromRoles(next.roles),
+		edge_shelters: nextEdgeShelters(doc, next.roles) // CR-171 FR-1
 	});
 	assertGrantWritten('revoke volunteer role', res);
 	await recordRoleGrantAudit({
@@ -704,7 +766,7 @@ export async function readVolunteerAccount(input: {
 	if (got.status === 404) return none;
 	if (got.status >= 400) throw serviceErrorFromCouch('read user', got.status, got.data);
 	const doc = got.data as CouchUserDoc;
-	if (doc.volunteer_id !== input.volunteer_id) return none;
+	if (doc.volunteer_id !== input.volunteer_id || isDeletedUserDoc(doc)) return none; // CR-171 FR-5
 	const grants = (doc.role_grants ?? []).filter((g) => g.shelter_code === input.shelter_code);
 	const granted = new Set(grants.map((g) => g.role));
 	return {
@@ -735,7 +797,8 @@ const SHELTER_ACCOUNT_FIELDS = [
 	'volunteer_id',
 	'active',
 	'roles',
-	'role_grants'
+	'role_grants',
+	'deleted_at'
 ];
 
 /**
@@ -776,7 +839,12 @@ export async function readShelterVolunteerAccounts(
 		const doc = docs.get(idOf(link.name));
 		// Only the volunteer's own volunteer account counts (CR-221 FR-6, FR-7), as in
 		// `readVolunteerAccount`: never a staff account a profile's `user_name` happens to name.
-		if (!doc || doc.personnel_type !== 'volunteer' || doc.volunteer_id !== link.volunteer_id) {
+		if (
+			!doc ||
+			isDeletedUserDoc(doc) || // CR-171 FR-5
+			doc.personnel_type !== 'volunteer' ||
+			doc.volunteer_id !== link.volunteer_id
+		) {
 			return [];
 		}
 		const grants = (doc.role_grants ?? []).filter((g) => g.shelter_code === shelterCode);
@@ -882,7 +950,8 @@ export async function deleteUser(name: string, caller: Caller): Promise<void> {
 				...doc,
 				...(doc.role_grants !== undefined ? { role_grants: roleGrants } : {}),
 				roles: remaining,
-				shelter_id: shelterCodeFromRoles(remaining)
+				shelter_id: shelterCodeFromRoles(remaining),
+				edge_shelters: nextEdgeShelters(doc, remaining)
 			};
 			const res = await adminRaw(`/_users/${userDocId(name)}`, 'PUT', updatedDoc);
 			if (res.status >= 400) throw serviceErrorFromCouch('delete user', res.status, res.data);
@@ -893,7 +962,22 @@ export async function deleteUser(name: string, caller: Caller): Promise<void> {
 		await assertNotLastAppSa(doc.roles ?? []);
 	}
 
-	const res = await adminRaw(`/_users/${userDocId(name)}?rev=${doc._rev}`, 'DELETE');
+	// CR-171 FR-3 — never DELETE: a tombstone has no `roles`, so the filtered edge replica would
+	// never receive it. Soft delete keeps `edge_shelters`, so the new revision still replicates.
+	const softDeleted = {
+		...doc,
+		roles: [],
+		shelter_id: null,
+		active: false,
+		password: randomBytes(32).toString('hex'),
+		deleted_at: new Date().toISOString(),
+		deleted_by: caller.name,
+		edge_shelters: nextEdgeShelters(doc, [])
+	} as CouchUserDoc & { password?: string; password_sha?: string };
+	delete softDeleted.password_sha;
+	delete softDeleted.salt;
+
+	const res = await adminRaw(`/_users/${userDocId(name)}`, 'PUT', softDeleted);
 	if (res.status >= 400) throw serviceErrorFromCouch('delete user', res.status, res.data);
 }
 
@@ -992,7 +1076,13 @@ export async function updateUser(
 		...doc,
 		...(doc.role_grants !== undefined ? { role_grants: roleGrants } : {}),
 		...(input.display_name !== undefined ? { display_name: input.display_name } : {}),
-		...(nextRoles ? { roles: nextRoles, shelter_id: shelterCodeFromRoles(nextRoles) } : {}),
+		...(nextRoles
+			? {
+					roles: nextRoles,
+					shelter_id: shelterCodeFromRoles(nextRoles),
+					edge_shelters: nextEdgeShelters(doc, nextRoles)
+				}
+			: {}),
 		...(input.personnel_type !== undefined ? { personnel_type: input.personnel_type } : {}),
 		...(input.organization !== undefined ? { organization: input.organization } : {}),
 		...(input.position !== undefined ? { position: input.position } : {}),
@@ -1504,7 +1594,8 @@ export async function touchThaidMfaVerified(name: string): Promise<void> {
 }
 
 /** Why a `_users` doc may / may not be linked from `/login/link` (CR-141 FR-16). */
-export type LinkEligibility = 'ok' | 'bootstrap' | 'not_new' | 'has_provider' | 'missing_salt';
+export type LinkEligibility =
+	'ok' | 'bootstrap' | 'deleted' | 'not_new' | 'has_provider' | 'missing_salt';
 
 /**
  * Pure eligibility check for link-on-first-login (CR-141).
@@ -1518,6 +1609,7 @@ export function assessLinkEligibility(
 	bootstrapName: string = bootstrapAdminName()
 ): LinkEligibility {
 	if (isProtectedBootstrapAdmin(doc, bootstrapName)) return 'bootstrap';
+	if (isDeletedUserDoc(doc)) return 'deleted'; // CR-171 FR-8
 	if (doc.must_change_password !== true) return 'not_new';
 	if (doc.mfa?.providers?.length) return 'has_provider';
 	if (typeof doc.salt !== 'string' || !doc.salt) return 'missing_salt';

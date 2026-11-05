@@ -23,11 +23,14 @@ export const USERS_GUARDED_FIELDS = [
 	'role_grants',
 	'active',
 	'personnel_type',
-	'volunteer_id'
+	'volunteer_id',
+	'edge_shelters',
+	'deleted_at',
+	'deleted_by'
 ] as const;
 
 /** Bump when the validation changes so a deployer can tell a stale design doc from a current one. */
-export const USERS_GUARD_DESIGN_VERSION = 1;
+export const USERS_GUARD_DESIGN_VERSION = 2;
 
 export interface UsersGuardDesignDoc {
 	_id: string;
@@ -43,8 +46,8 @@ export interface UsersGuardDesignDoc {
 export function buildUsersGuardValidateDocUpdate(): string {
 	return `function (newDoc, oldDoc, userCtx) {
   if (userCtx.roles.indexOf('_admin') !== -1) return;
-  if (newDoc._deleted) return;
   if (typeof newDoc._id !== 'string' || newDoc._id.indexOf('org.couchdb.user:') !== 0) return;
+  if (newDoc._deleted) throw({ forbidden: 'only an administrator can delete a user' });
   function canon(v) {
     if (v === undefined || v === null) return 'null';
     if (typeof v !== 'object') return JSON.stringify(v);

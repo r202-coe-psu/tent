@@ -3,7 +3,7 @@ id: CR-064
 title: Edge disaster continuity — network-only LAN cutover + ops status UI (CR-033 follow-up)
 status: approved
 date: 2026-08-12
-updated: 2026-09-01
+updated: 2026-10-18
 requested_by: เจ้าของโครงการ
 decided_by: เจ้าของโครงการ (OD lock; CR approve รอ)
 layer: stable
@@ -107,3 +107,17 @@ N/A สำหรับ `schema_v` ในรอบนี้ (ยังไม่ b
 - 2026-08-12 — idea parked + OD-1..OD-5 locked (owner)
 - 2026-08-12 — CR-064 proposed; T-54 expanded; Notion sync initiated
 - ⬜ Owner approve → แก้ binding `api-contract` / `data-model` / offline-fallback spec
+- 2026-10-18 — **decision sync (owner @net-lynx, PR #348) — ต่อจาก OD-6 (2026-10-05):**
+  - **B — push กรอง `_design/*`:** job `<code>_push` ใส่ `selector` `{"_id":{"$not":{"$regex":"^_design/"}}}` (`scripts/edge-init.sh`) ·
+    ป้องกัน: อุบัติเหตุ / edge ที่มี design doc เก่ากว่า central · **ไม่ป้องกัน** เครื่อง edge ที่ถูกขโมย (OD-6 ยังถือ central admin) ·
+    ทบทวน OD-6 (เปลี่ยนเป็น replication user ต่อศูนย์) ก่อนติดตั้ง edge ของศูนย์ที่สอง (หลัง pilot) หรือเมื่อเครื่อง edge หายหนึ่งเครื่อง
+  - **A2 — บล็อกการเขียน `_users` ที่ edge (D5)** ด้วย flag `EDGE_MODE`: frontend ที่ edge มี `COUCHDB_ADMIN_URL` (BFF เขียน `_users` ได้)
+    แต่ job `_users` เป็น pull ทางเดียว · ทดสอบ CouchDB 3.5: แก้ user ที่ edge 2 ครั้ง + soft delete ที่ central → conflict ที่ edge
+    และ login ไม่ได้ (`User document conflicts must be resolved before the document is used for authentication purposes.`) ·
+    edge mode — PR แยก, CR-171 amendment pending
+  - **A3 — login ครั้งแรกที่ edge (`must_change_password`)** ถูกบล็อกเหมือนการเขียนอื่น: บัญชีต้อง activate ที่ central ก่อนเปิดศูนย์
+  - **A4 — ไม่สร้าง user ที่ edge** (คง A1 ของ idea doc): เตรียม spare account ที่ provision + activate ที่ central ล่วงหน้า · ผู้จัดการศูนย์ประมาณจำนวน
+  - **Gate:** ห้ามติดตั้ง edge ที่ศูนย์จริงจนกว่า PR edge mode (A2) จะ merge · PR #348 merge ได้ตามปกติ
+  - **เลื่อน/ไม่ทำ:** VDU ที่ central กัน hard delete / edge_shelters หดตัว (ทำเมื่อพบการแก้ `_users` นอก user-service แม้ครั้งเดียว) ·
+    สร้าง user ที่ edge ตอน incident (ต้องมี CR แก้ A1) · เปลี่ยน OD-6 เป็น replication user ต่อศูนย์ (ตาม trigger ข้างบน) ·
+    ไม่ทำ: ถอดสิทธิ์ช่วง WAN ล่มไม่ถึง edge (ยอมรับ) · reconcile tombstone ก่อน CR-171 (ยังไม่มี edge ใน prod)
