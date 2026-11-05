@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { PRINTERS_I18N, printerAdminErrorMessage, printJobOutcomeMessage } from './printers.i18n';
+import { printerCreateInputSchema } from './print-device.schema';
+import {
+	PRINTERS_I18N,
+	printerAdminErrorMessage,
+	printerCreateIssueMessage,
+	printJobOutcomeMessage
+} from './printers.i18n';
 
 describe('printFamily', () => {
 	it('labels the whole-family print button with the number of labels', () => {
@@ -85,5 +91,38 @@ describe('printerAdminErrorMessage', () => {
 	it('returns null for a code it has no copy for so the caller keeps the server message', () => {
 		expect(printerAdminErrorMessage('SOMETHING_ELSE', 'th')).toBeNull();
 		expect(printerAdminErrorMessage(null, 'th')).toBeNull();
+	});
+});
+
+describe('printerCreateIssueMessage', () => {
+	const base = {
+		device_id: 'printer-sh001-a',
+		name: 'Desk 1',
+		shelter_code: 'SH001',
+		host_kind: 'standalone'
+	};
+	const firstIssue = (input: Record<string, unknown>) => {
+		const parsed = printerCreateInputSchema.safeParse({ ...base, ...input });
+		if (parsed.success) throw new Error('expected the input to be rejected');
+		return parsed.error.issues[0];
+	};
+
+	it.each([
+		[{ device_id: 'AB' }, 'Device ID ต้องเป็นตัวพิมพ์เล็ก ตัวเลข และ - ยาว 3–63 ตัวอักษร'],
+		[{ name: '   ' }, 'กรุณากรอกชื่อเครื่อง'],
+		[{ name: 'x'.repeat(81) }, 'ชื่อเครื่องยาวเกิน 80 ตัวอักษร'],
+		[{ kiosk_device_id: 'kiosk-a' }, 'เลือกตู้ kiosk ได้เฉพาะเครื่องที่ติดตั้งในตู้ kiosk'],
+		[{ shelter_code: '' }, 'ข้อมูลไม่ถูกต้อง']
+	])('explains %j in Thai', (input, expected) => {
+		expect(printerCreateIssueMessage(firstIssue(input), 'th')).toBe(expected);
+	});
+
+	it('explains the issues in English', () => {
+		expect(printerCreateIssueMessage(firstIssue({ device_id: 'AB' }), 'en')).toBe(
+			'Device ID must be lowercase letters, digits and -, 3 to 63 characters'
+		);
+		expect(printerCreateIssueMessage(firstIssue({ name: '' }), 'en')).toBe(
+			'Enter the printer name'
+		);
 	});
 });

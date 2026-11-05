@@ -14,7 +14,11 @@
 		type PrintHostKind,
 		type PrinterSecretResponse
 	} from '../domain/print-device.schema';
-	import { PRINTERS_I18N, printerAdminErrorMessage } from '../domain/printers.i18n';
+	import {
+		PRINTERS_I18N,
+		printerAdminErrorMessage,
+		printerCreateIssueMessage
+	} from '../domain/printers.i18n';
 	import { useCreatePrinterDevice } from '../application/queries';
 	import KioskDeviceSelect from './kiosk-device-select.svelte';
 
@@ -74,7 +78,10 @@
 			...(hostKind === 'kiosk' && kioskDeviceId ? { kiosk_device_id: kioskDeviceId } : {})
 		});
 		if (!parsed.success) {
-			toast.error(parsed.error.issues[0]?.message ?? t.create.invalid);
+			const [issue] = parsed.error.issues;
+			toast.error(
+				issue ? printerCreateIssueMessage(issue, languageStore.current) : t.create.invalid
+			);
 			return;
 		}
 		try {

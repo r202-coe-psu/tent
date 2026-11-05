@@ -77,6 +77,29 @@ describe('CreatePrinterDialog secret handling', () => {
 	});
 });
 
+describe('CreatePrinterDialog validation copy', () => {
+	it('toasts a bad Device ID in Thai, not the schema English', async () => {
+		fill('printer-device-id', 'AB');
+
+		submit().click();
+		await settle();
+
+		expect(mutateAsync).not.toHaveBeenCalled();
+		expect(toast.error).toHaveBeenCalledWith(
+			'Device ID ต้องเป็นตัวพิมพ์เล็ก ตัวเลข และ - ยาว 3–63 ตัวอักษร'
+		);
+	});
+
+	it('toasts a blank name in Thai', async () => {
+		fill('printer-name', '   ');
+
+		submit().click();
+		await settle();
+
+		expect(toast.error).toHaveBeenCalledWith('กรุณากรอกชื่อเครื่อง');
+	});
+});
+
 describe('CreatePrinterDialog kiosk link', () => {
 	it('shows the kiosk picker only for a kiosk host, listing this shelter scanners', async () => {
 		expect(field('printer-kiosk-device')).toBeNull();

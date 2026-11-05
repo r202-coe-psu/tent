@@ -89,6 +89,12 @@ export const PRINTERS_I18N = {
 				success: 'ลงทะเบียนเครื่องพิมพ์สำเร็จ',
 				failed: 'เกิดข้อผิดพลาดในการลงทะเบียนเครื่องพิมพ์',
 				invalid: 'ข้อมูลไม่ถูกต้อง',
+				validation: {
+					deviceId: 'Device ID ต้องเป็นตัวพิมพ์เล็ก ตัวเลข และ - ยาว 3–63 ตัวอักษร',
+					nameRequired: 'กรุณากรอกชื่อเครื่อง',
+					nameTooLong: 'ชื่อเครื่องยาวเกิน 80 ตัวอักษร',
+					kioskDeviceRequiresKiosk: 'เลือกตู้ kiosk ได้เฉพาะเครื่องที่ติดตั้งในตู้ kiosk'
+				},
 				conflict: 'Device ID นี้ถูกใช้แล้ว'
 			},
 			reveal: {
@@ -264,6 +270,12 @@ export const PRINTERS_I18N = {
 				success: 'Printer registered',
 				failed: 'Could not register the printer',
 				invalid: 'Invalid data',
+				validation: {
+					deviceId: 'Device ID must be lowercase letters, digits and -, 3 to 63 characters',
+					nameRequired: 'Enter the printer name',
+					nameTooLong: 'The printer name is longer than 80 characters',
+					kioskDeviceRequiresKiosk: 'A kiosk can only be chosen for a printer installed in a kiosk'
+				},
 				conflict: 'This Device ID is already in use'
 			},
 			reveal: {
@@ -371,6 +383,35 @@ export function printerAdminErrorMessage(
 ): string | null {
 	const table: Readonly<Record<string, string>> = PRINTERS_I18N[lang].adminErrors;
 	return code !== null && Object.hasOwn(table, code) ? table[code] : null;
+}
+
+/** The part of a Zod issue the create dialog needs to pick its copy. */
+export interface PrinterCreateIssue {
+	readonly path: readonly PropertyKey[];
+	readonly code: string;
+}
+
+/**
+ * Localized copy for the first problem `printerCreateInputSchema` finds, so the dialog never
+ * toasts the schema's English messages. Unmapped issues get the generic "invalid data" copy.
+ */
+export function printerCreateIssueMessage(
+	issue: PrinterCreateIssue,
+	lang: PrintersI18nLang
+): string {
+	const create = PRINTERS_I18N[lang].admin.create;
+	switch (issue.path[0]) {
+		case 'device_id':
+			return create.validation.deviceId;
+		case 'name':
+			return issue.code === 'too_big'
+				? create.validation.nameTooLong
+				: create.validation.nameRequired;
+		case 'kiosk_device_id':
+			return create.validation.kioskDeviceRequiresKiosk;
+		default:
+			return create.invalid;
+	}
 }
 
 function failureMessage(
