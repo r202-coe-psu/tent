@@ -7,6 +7,7 @@ import { printDeviceRepository } from '$lib/server/printers/print-device.repo';
 import { userJobStore } from '$lib/server/printers/print-job.user-store';
 import { labelPngBase64 } from '$lib/testing/label-png';
 import { PrintDependencyError, type PrintDeviceDoc } from '$lib/server/printers/device-credentials';
+import { PrintJobConflictError } from '$lib/server/printers/print-jobs.server';
 
 vi.mock('$lib/server/session-auth', async () => {
 	const actual = await vi.importActual<typeof import('$lib/server/session-auth')>(
@@ -121,6 +122,73 @@ describe('POST /api/staff/v1/print-jobs', () => {
 				'label-001.png': { content_type: 'image/png', data: LABEL }
 			}
 		});
+	});
+
+	describe('with a client-minted job_id', () => {
+		const JOB_ID = '01JC0000000000000000000001';
+		const request = {
+			job_id: JOB_ID,
+			printer_id: 'print_device:printer-sh001-reg1',
+			source: 'walk_in',
+			labels: [LABEL]
+		};
+		const written = (over: Record<string, unknown> = {}) => ({
+			_id: `print_job:${JOB_ID}`,
+			shelter_code: 'SH001',
+			printer_id: 'print_device:printer-sh001-reg1',
+			source: 'walk_in',
+			label_count: 1,
+			created_by: 'staff-a',
+			expires_at: '2026-10-22T03:01:50.000Z',
+			...over
+		});
+
+		it('writes the job under that id', async () => {
+			const response = await post(request);
+
+			expect(response.status).toBe(201);
+			expect((await response.json()).job_id).toBe(JOB_ID);
+			expect(mockCreateJob.mock.calls[0][0]._id).toBe(`print_job:${JOB_ID}`);
+		});
+
+		it('answers a retry of an already written job with that job, not a duplicate', async () => {
+			const get = vi.fn().mockResolvedValue(written());
+			mockCreateJob.mockRejectedValue(new PrintJobConflictError());
+			mockUserJobStore.mockReturnValue({ createJob: mockCreateJob, get });
+
+			const response = await post(request);
+
+			expect(response.status).toBe(201);
+			expect(await response.json()).toEqual({
+				job_id: JOB_ID,
+				shelter_code: 'SH001',
+				expires_at: '2026-10-22T03:01:50.000Z'
+			});
+			expect(get).toHaveBeenCalledWith(`print_job:${JOB_ID}`);
+		});
+
+		it("answers 409 JOB_ID_CONFLICT when the id holds another staff member's job", async () => {
+			mockCreateJob.mockRejectedValue(new PrintJobConflictError());
+			mockUserJobStore.mockReturnValue({
+				createJob: mockCreateJob,
+				get: vi.fn().mockResolvedValue(written({ created_by: 'staff-b' }))
+			});
+
+			const response = await post(request);
+
+			expect(response.status).toBe(409);
+			expect((await response.json()).error.code).toBe('JOB_ID_CONFLICT');
+		});
+
+		it.each([['not-a-ulid'], ['print_job:01JC0000000000000000000001']])(
+			'answers 422 INVALID_LABELS for the malformed job_id %s',
+			async (jobId) => {
+				const response = await post({ ...request, job_id: jobId });
+
+				expect(response.status).toBe(422);
+				expect(mockCreateJob).not.toHaveBeenCalled();
+			}
+		);
 	});
 
 	it('rejects an offline printer with 409 PRINTER_OFFLINE and stores nothing', async () => {

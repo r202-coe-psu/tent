@@ -12,7 +12,7 @@ import {
 	PrintShelterDbMissingError,
 	type PrintDeviceDoc
 } from './device-credentials';
-import { createPrintJob } from './print-jobs.server';
+import { createPrintJob, PrintJobConflictError } from './print-jobs.server';
 import { userJobStore } from './print-job.user-store';
 import type { PrintJobDoc } from './print-queue.server';
 
@@ -88,8 +88,15 @@ describe('user job store: createJob', () => {
 		expect(calls[0]?.path).toBe('/printing_ab2/print_job%3A01');
 	});
 
-	it('treats an id collision (409) as a dependency failure, like the admin adapter did', async () => {
+	it('reports an id collision (409) as PrintJobConflictError so a retried create can be settled', async () => {
 		reply({ status: 409 });
+		await expect(userJobStore(COOKIE, 'SH01').createJob(job())).rejects.toBeInstanceOf(
+			PrintJobConflictError
+		);
+	});
+
+	it('still treats an unexpected status (500) as a dependency failure', async () => {
+		reply({ status: 500 });
 		await expect(userJobStore(COOKIE, 'SH01').createJob(job())).rejects.toBeInstanceOf(
 			PrintDependencyError
 		);

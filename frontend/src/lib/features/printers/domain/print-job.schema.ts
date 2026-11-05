@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { isUlid } from '$lib/db/ulid';
 import { base64DecodedBytes, isPrintableLabel, MAX_LABEL_PNG_BYTES } from './label-png';
 
 export const MAX_LABEL_BYTES = MAX_LABEL_PNG_BYTES;
@@ -17,7 +18,15 @@ export const printLabelSchema = z
 	.refine((value) => base64DecodedBytes(value) <= MAX_LABEL_BYTES, 'Label exceeds 64 KB')
 	.refine(isPrintableLabel, 'Label is not a valid label-size PNG');
 
+/**
+ * Client-minted job id (a bare ULID, no `print_job:` prefix). It is the doc `_id` suffix, so a
+ * retry of a create whose outcome the tablet never saw collides (409) instead of queueing a second
+ * job. Optional: without it the server mints one (test print, older clients).
+ */
+export const printJobIdSchema = z.string().refine(isUlid, 'Job id must be a ULID');
+
 export const printJobCreateInputSchema = z.object({
+	job_id: printJobIdSchema.optional(),
 	printer_id: z.string().min(1),
 	source: printJobSourceSchema,
 	labels: z

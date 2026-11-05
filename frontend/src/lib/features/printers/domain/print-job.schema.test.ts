@@ -17,6 +17,38 @@ describe('printJobCreateInputSchema', () => {
 	});
 });
 
+describe('printJobCreateInputSchema job_id', () => {
+	const base = {
+		printer_id: 'print_device:printer-sh001-reg1',
+		source: 'walk_in' as const,
+		labels: [PNG_LABEL]
+	};
+
+	it('accepts a client-minted ULID as the job id', () => {
+		const result = printJobCreateInputSchema.safeParse({
+			...base,
+			job_id: '01JB0000000000000000000009'
+		});
+
+		expect(result.success).toBe(true);
+		expect(result.data?.job_id).toBe('01JB0000000000000000000009');
+	});
+
+	it('still accepts a request without a job id (the server mints one)', () => {
+		expect(printJobCreateInputSchema.safeParse(base).success).toBe(true);
+	});
+
+	it.each([
+		['lowercase', '01jb0000000000000000000009'],
+		['too short', '01JB00000000000000000009'],
+		['an excluded letter (U)', '01JB000000000000000000000U'],
+		['a prefixed doc id', 'print_job:01JB0000000000000000000009'],
+		['a path-like string', '../../_users']
+	])('rejects a job id that is %s', (_name, jobId) => {
+		expect(printJobCreateInputSchema.safeParse({ ...base, job_id: jobId }).success).toBe(false);
+	});
+});
+
 /** A label PNG whose decoded size is exactly `bytes` (bytes must be a multiple of 3). */
 function labelOfBytes(bytes: number): string {
 	return labelPngBase64({ size: bytes });

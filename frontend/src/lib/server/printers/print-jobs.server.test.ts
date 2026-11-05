@@ -7,10 +7,16 @@ import {
 	listShelterPrinters,
 	PrinterNotFoundError,
 	PrinterOfflineError,
+	PrintJobConflictError,
+	PrintJobIdConflictError,
 	type PrintJobCreator,
 	type PrintDeviceReader
 } from './print-jobs.server';
-import { PrintShelterDbMissingError, type PrintDeviceDoc } from './device-credentials';
+import {
+	PrintDependencyError,
+	PrintShelterDbMissingError,
+	type PrintDeviceDoc
+} from './device-credentials';
 import type { PrintJobDoc } from './print-queue.server';
 
 // 8 PNG magic bytes + 00 00 00 0D, and the same with a different tail.
@@ -107,6 +113,96 @@ describe('createPrintJob', () => {
 				}
 			}
 		]);
+	});
+
+	describe('with a client-minted job id', () => {
+		const clientId = '01JC0000000000000000000001';
+		const input = {
+			job_id: clientId,
+			printer_id: device._id,
+			source: 'walk_in' as const,
+			labels: [LABEL_A]
+		};
+		const now = new Date('2026-10-22T03:00:00.000Z');
+
+		it('uses it as the doc id instead of minting one', async () => {
+			const { deps, caller, created } = setup();
+
+			const result = await createPrintJob(deps, caller, input, now);
+
+			expect(result.job_id).toBe(clientId);
+			expect(created[0]._id).toBe(`print_job:${clientId}`);
+		});
+
+		function existingDoc(over: Partial<PrintJobDoc> = {}): PrintJobDoc {
+			return {
+				_id: `print_job:${clientId}`,
+				type: 'print_job',
+				schema_v: 1,
+				shelter_code: 'SH001',
+				printer_id: device._id,
+				status: 'printing',
+				label_count: 1,
+				source: 'walk_in',
+				created_at: '2026-10-22T02:59:58.000Z',
+				created_by: 'staff-a',
+				expires_at: '2026-10-22T03:01:58.000Z',
+				claimed_at: null,
+				lease_until: null,
+				finished_at: null,
+				printed: 0,
+				error_code: null,
+				...over
+			};
+		}
+
+		function conflictingStore(existing: PrintJobDoc | null): PrintJobCreator {
+			return {
+				async createJob() {
+					throw new PrintJobConflictError();
+				},
+				async get() {
+					return existing;
+				}
+			};
+		}
+
+		it('answers a retry of an already written job with that job (idempotent create)', async () => {
+			const { deps, caller } = setup();
+			deps.storeFor = () => conflictingStore(existingDoc());
+
+			const result = await createPrintJob(deps, caller, input, now);
+
+			expect(result).toEqual({
+				job_id: clientId,
+				shelter_code: 'SH001',
+				expires_at: '2026-10-22T03:01:58.000Z'
+			});
+		});
+
+		it.each([
+			['another staff member', { created_by: 'staff-b' }],
+			['another printer', { printer_id: 'print_device:other' }],
+			['another shelter', { shelter_code: 'SH002' }],
+			['another source', { source: 'evacuee_qr' as const }],
+			['another label count', { label_count: 2 }]
+		])('refuses to hand back a job that belongs to %s', async (_name, over) => {
+			const { deps, caller } = setup();
+			deps.storeFor = () => conflictingStore(existingDoc(over));
+
+			await expect(createPrintJob(deps, caller, input, now)).rejects.toBeInstanceOf(
+				PrintJobIdConflictError
+			);
+		});
+
+		it('fails as a dependency error when the conflicting job cannot be read back', async () => {
+			const { deps, caller } = setup();
+			deps.storeFor = () => conflictingStore(null);
+
+			await expect(createPrintJob(deps, caller, input, now)).rejects.toBeInstanceOf(
+				PrintDependencyError
+			);
+		});
 	});
 
 	describe('when the shelter print DB is missing (dropped by another process)', () => {

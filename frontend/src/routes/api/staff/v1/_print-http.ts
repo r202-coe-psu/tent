@@ -8,6 +8,7 @@ import {
 import { isDependencyUnreachable } from '$lib/server/printers/dependency-unreachable';
 import {
 	PrintJobForbiddenError,
+	PrintJobIdConflictError,
 	PrintJobNotFoundError,
 	PrinterNotFoundError,
 	PrinterOfflineError
@@ -24,6 +25,7 @@ export function envelope(status: number, code: string, message: string): Respons
 
 export function printErrorResponse(e: unknown): Response {
 	if (e instanceof PrinterOfflineError) return envelope(409, 'PRINTER_OFFLINE', e.message);
+	if (e instanceof PrintJobIdConflictError) return envelope(409, 'JOB_ID_CONFLICT', e.message);
 	if (e instanceof PrinterNotFoundError) return envelope(404, 'PRINTER_NOT_FOUND', e.message);
 	if (e instanceof PrintJobNotFoundError) return envelope(404, 'JOB_NOT_FOUND', e.message);
 	if (e instanceof PrintJobForbiddenError) return envelope(403, 'FORBIDDEN', e.message);

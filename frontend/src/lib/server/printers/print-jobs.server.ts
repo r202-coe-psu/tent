@@ -8,12 +8,38 @@ import type { PrintJobCreateInput } from '$lib/features/printers/domain/print-jo
 import { isPrinterOnline } from '$lib/features/printers/domain/printer-status';
 // eslint-disable-next-line no-restricted-imports -- server-safe domain rule; feature barrel will pull client UI/query code
 import { JOB_TTL_SEC } from '$lib/features/printers/domain/print-job-timing';
-import { PrintShelterDbMissingError, type PrintDeviceDoc } from './device-credentials';
+import {
+	PrintDependencyError,
+	PrintShelterDbMissingError,
+	type PrintDeviceDoc
+} from './device-credentials';
 import type { PrintJobDoc } from './print-queue.server';
 
 /** Write side of the `printing` DB: one PUT, the doc already carries its `_attachments`. */
 export interface PrintJobCreator {
+	/** Throws `PrintJobConflictError` when a doc with this `_id` already exists (HTTP 409). */
 	createJob(doc: PrintJobDoc): Promise<void>;
+	/**
+	 * Full doc `_id` (`print_job:{ulid}`); null when missing. Needed only to settle a
+	 * `PrintJobConflictError` for a client-minted id (a retried create).
+	 */
+	get?(id: string): Promise<PrintJobDoc | null>;
+}
+
+/** The store refused `createJob` because the `_id` is taken (a retried create, or a clash). */
+export class PrintJobConflictError extends Error {
+	constructor() {
+		super('Print job id already exists');
+		this.name = 'PrintJobConflictError';
+	}
+}
+
+/** A client-minted job id is already used by a job of another staff member / printer / request. */
+export class PrintJobIdConflictError extends Error {
+	constructor() {
+		super('Print job id is already in use');
+		this.name = 'PrintJobIdConflictError';
+	}
 }
 
 export interface PrintDeviceReader {
@@ -81,7 +107,23 @@ async function writeJob(
 	}
 }
 
-/** Queue a print job: a `pending` doc with the label PNGs attached, expiring after 120 s. */
+/** True when `existing` is the job this very request wrote earlier (same caller and context). */
+function isSameRequest(existing: PrintJobDoc, job: PrintJobDoc): boolean {
+	return (
+		existing.created_by === job.created_by &&
+		existing.shelter_code === job.shelter_code &&
+		existing.printer_id === job.printer_id &&
+		existing.source === job.source &&
+		existing.label_count === job.label_count
+	);
+}
+
+/**
+ * Queue a print job: a `pending` doc with the label PNGs attached, expiring after 120 s.
+ * With a client-minted `job_id` the create is idempotent: when that id already holds this same
+ * caller's job for the same printer/source/label count (a retry after a lost response), the
+ * existing job is returned instead of queueing a second one.
+ */
 export async function createPrintJob(
 	deps: CreatePrintJobDeps,
 	caller: PrintJobCaller,
@@ -95,7 +137,7 @@ export async function createPrintJob(
 	}
 	if (!isPrinterOnline(device, now)) throw new PrinterOfflineError();
 
-	const jobId = (deps.newId ?? ulid)();
+	const jobId = input.job_id ?? (deps.newId ?? ulid)();
 	const expiresAt = new Date(now.getTime() + JOB_TTL_SEC * 1000).toISOString();
 	const job: PrintJobDoc = {
 		_id: `print_job:${jobId}`,
@@ -116,7 +158,15 @@ export async function createPrintJob(
 		error_code: null,
 		_attachments: toAttachments(input.labels)
 	};
-	await writeJob(deps, device.shelter_code, job);
+	try {
+		await writeJob(deps, device.shelter_code, job);
+	} catch (error) {
+		if (!(error instanceof PrintJobConflictError)) throw error;
+		const existing = await deps.storeFor(device.shelter_code).get?.(job._id);
+		if (!existing) throw new PrintDependencyError();
+		if (!isSameRequest(existing, job)) throw new PrintJobIdConflictError();
+		return { job_id: jobId, shelter_code: device.shelter_code, expires_at: existing.expires_at };
+	}
 	return { job_id: jobId, shelter_code: device.shelter_code, expires_at: expiresAt };
 }
 
