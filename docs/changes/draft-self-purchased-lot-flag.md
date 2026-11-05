@@ -21,7 +21,7 @@ migration: additive — แถว schema_v ≤ 6 ไม่มี field = ไม�
 
 > **สรุป (TL;DR):**
 >
-> - **เปลี่ยนอะไร:** เพิ่ม `stock_ledger.lot.self_purchased` (bool, optional) บนแถว `reason='receive'` ที่บันทึกจากฟอร์มรับเข้าหน้า supply เท่านั้น; bump `stock_ledger` schema_v **6 → 7**
+> - **เปลี่ยนอะไร:** เพิ่ม `stock_ledger.lot.self_purchased` (bool, optional) บนแถวรับเข้าที่ฟอร์มรับเข้าหน้า supply บันทึก (โหมด "กรอกเอง" = `reason='adjust'` + `adjust_reason='found'`, CR-156 FR-C7; domain รับ `reason='receive'` ด้วย) เท่านั้น; bump `stock_ledger` schema_v **6 → 7**
 > - **ทำไม:** แยกของที่ศูนย์ซื้อเองออกจากของบริจาค/หน่วยงาน เพื่อดูยอดซื้อเองและของซื้อเองที่คงเหลือ
 > - **Dev ต้อง build:** checkbox ในฟอร์มรับเข้า, ป้าย/ตัวกรองในหน้า supply (ตารางคลัง, ledger, detail sheet), สรุปยอดซื้อเองตามช่วงวัน
 > - **กระทบ:** schema.md §2.1 เท่านั้น. ไม่แตะ worker projector, ไม่ bump `PROJECTION_VERSION`, ไม่ต้อง redeploy `_design/*`
@@ -33,19 +33,19 @@ migration: additive — แถว schema_v ≤ 6 ไม่มี field = ไม�
 
 | ID    | Requirement                                                                                                                                                                                                                                                                        |
 | ----- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| FR-1  | `stock_ledger.lot.self_purchased`: `bool`, optional. ไม่มีค่า = ไม่ใช่ซื้อเอง                                                                                                                                                                                                       |
-| FR-2  | มีค่านี้ได้เฉพาะแถว `reason='receive'` ที่เขียนจากฟอร์มรับเข้าหน้า supply (`receive-stock-form`). ฟอร์มครัวรับของ, การรับบริจาค (`reason='donation'`) และ scan-station ไม่มี checkbox และไม่เขียน field นี้                                                                              |
-| FR-3  | Zod lot schema + `superRefine` (`operations/domain/operations.ts`) รับ `self_purchased` เฉพาะ `reason='receive'`; reason อื่นที่ส่ง field นี้มา — implement ตัดสินว่า strip หรือ reject แล้วเขียนเทสต์ล็อกพฤติกรรม (CR นี้ไม่บังคับทางใดทางหนึ่ง แต่ต้องไม่ persist ค่าลง reason อื่น)   |
+| FR-1  | `stock_ledger.lot.self_purchased`: `bool`, optional; เขียนเป็น `true` หรือไม่เขียน (ไม่เขียน `false`). ไม่มีค่า = ไม่ใช่ซื้อเอง                                                                                                                                                                                                    |
+| FR-2  | มีค่านี้ได้เฉพาะแถวรับเข้าที่เพิ่มยอด (qty > 0) ที่เป็น **`reason='receive'`** หรือ **`reason='adjust'` + `adjust_reason='found'`**. ฟอร์มรับเข้าหน้า supply โหมด "กรอกเอง" บันทึกเป็น `adjust`/`found` (CR-156 FR-C7 — ไม่มีฟอร์มใดเขียน `reason='receive'` ตรงๆ; แถว `receive` เป็นของระบบ: ผลผลิตครัว, ของเหลือคืนจากตั๋ว, ของยืมคืน, กองรวม) จึงเป็นที่เดียวที่แสดง checkbox. โหมดรับบริจาค (`reason='donation'`), ฟอร์มครัวรับของ และ scan-station ไม่มี checkbox และไม่เขียน field นี้ |
+| FR-3  | Zod (`stockLedgerInputSchema.superRefine`) **reject** `lot.self_purchased: true` เมื่อ reason/qty ไม่เข้าเงื่อนไข FR-2 (ตัดสินแล้ว: reject ไม่ strip — ตามแบบ `adjust_reason`/`note` ที่ห้ามบน reason อื่น); `self_purchased: false` ถูกตัดทิ้งโดย `createStockLedger` (ไม่ persist `false`). `receiveInputSchema` สะท้อนกติกาเดียวกันเพื่อ UX (ใช้ได้เฉพาะ `source='manual'`) |
 | FR-4  | `createStockLedger` stamp `schema_v: 7`. ผู้เขียน ledger ทุกที่ที่ผ่าน factory นี้ stamp 7 (รวมแถวที่ไม่มี `self_purchased`)                                                                                                                                                          |
-| FR-5  | **การจัดประเภท lot ว่า "ซื้อเอง"** (ตาม physical lot, `lot_ref`): (a) แถว `receive` ที่ `lot.self_purchased === true` → ซื้อเอง; (b) `distribution_return` ที่คืนเข้า `lot_ref` ของแถว (a) → ยังนับเป็นซื้อเองตาม `lot_ref`; (c) `transfer_in` ที่ศูนย์ปลายทาง → **ไม่** นับเป็นซื้อเอง (นับเฉพาะศูนย์ที่ซื้อ ไม่พก flag ข้ามศูนย์); (d) แถวที่ไม่มี field (รวมแถว schema_v ≤ 6) → ไม่ใช่ซื้อเอง |
+| FR-5  | **การจัดประเภท lot ว่า "ซื้อเอง"** (ตาม physical lot, `lot_ref`): (a) แถวรับเข้าตาม FR-2 ที่ `lot.self_purchased === true` → ซื้อเอง (นับจากแถวต้นทางของ lot เท่านั้น แถว `transfer_in` ที่มี flag หลุดมาก็ไม่นับ); (b) `distribution_return` ที่คืนเข้า `lot_ref` ของแถว (a) → ยังนับเป็นซื้อเองตาม `lot_ref`; (c) `transfer_in` ที่ศูนย์ปลายทาง → **ไม่** นับเป็นซื้อเอง (นับเฉพาะศูนย์ที่ซื้อ ไม่พก flag ข้ามศูนย์); (d) แถวที่ไม่มี field (รวมแถว schema_v ≤ 6) → ไม่ใช่ซื้อเอง |
 | FR-6  | **Append-only:** แก้ flag หลังบันทึกไม่ได้. ติ๊กผิด → ใช้ flow ปรับยอด (`adjust`) แล้วรับเข้าใหม่ เหมือนข้อผิดพลาดอื่นของ ledger                                                                                                                                                       |
 | FR-7  | UI (หน้า supply, `requireWarehouseAccess`, ศูนย์ตนเองเท่านั้น): (1) item detail sheet ป้าย "ซื้อเอง" ราย lot; (2) ตัวกรองตารางคลัง "ซื้อเอง" = สินค้าที่มี lot ซื้อเองคงเหลือ (qty > 0), เก็บใน URL state; (3) ledger: ป้าย/คอลัมน์ "ซื้อเอง" บนแถวรับเข้า + ตัวกรอง "รับเข้าที่ซื้อเอง"; (4) สรุปยอดซื้อเอง |
 | FR-8  | **สรุปยอดซื้อเอง:** เลือกช่วงวันได้ โดยอิง `occurred_at`/`received_at` ของแถวรับเข้า ตามเวลา **Asia/Bangkok** (ขอบวัน 00:00 Asia/Bangkok); ตารางต่อสินค้า: สินค้า, ยอดรับเข้าที่ซื้อเองในช่วง, คงเหลือปัจจุบันจาก lot ซื้อเอง; หน่วย `base_unit`; นับเฉพาะศูนย์ตนเอง; ตำแหน่ง UI (แท็บ/section) ให้ dev เลือก |
 
 ## 2. Acceptance
 
-- **AC-1** รับเข้าจากฟอร์ม supply โดยติ๊ก "ซื้อเอง" → แถว ledger มี `lot.self_purchased: true` และ `schema_v: 7`; ไม่ติ๊ก → ไม่มี field (ไม่เขียน `false`)
-- **AC-2** แถว `reason` อื่นที่ส่ง `self_purchased` มา ไม่ถูก persist ด้วยค่านี้ (strip หรือ reject ตามที่ implement เลือก) — unit test
+- **AC-1** รับเข้าจากฟอร์ม supply (โหมดกรอกเอง) โดยติ๊ก "ซื้อเอง" → แถว ledger (`adjust`/`found`) มี `lot.self_purchased: true` และ `schema_v: 7`; ไม่ติ๊ก → ไม่มี field (ไม่เขียน `false`)
+- **AC-2** `self_purchased: true` บน reason อื่น (donation, transfer_in, distribute, distribution_return, adjust ที่ไม่ใช่ found) ถูก reject (reject) — unit test
 - **AC-3** ฟังก์ชันจัดประเภท: receive ที่ติ๊ก → ซื้อเอง; `distribution_return` เข้า `lot_ref` ซื้อเอง → ซื้อเอง; `transfer_in` → ไม่ใช่
 - **AC-4** ฟังก์ชันสรุป: ขอบวัน Asia/Bangkok (เช่น 23:59 และ 00:00 ติดกัน) ถูกฝั่ง, `now` คงที่ใน test, ไม่นับ `transfer_in`
 - **AC-5** `filterRows` ตัวเลือก "ซื้อเอง" คืนเฉพาะสินค้าที่มี lot ซื้อเองคงเหลือ > 0
@@ -54,12 +54,12 @@ migration: additive — แถว schema_v ≤ 6 ไม่มี field = ไม�
 ## 3. ทำไมไม่ขัด A6 / CR-138
 
 - **A6** ([CR-058](05-D-kitchen/CR-058-food-warehouse-nutrition-kitchen-overhaul.md)) = ไม่มีระบบจัดซื้อ (Purchase Order) ในแอป. CR นี้ไม่มี PO, ราคา, ผู้ขาย, ใบเสร็จ หรือ workflow อนุมัติ — เป็นแค่ **ป้ายบอกที่มา** (provenance tag) บน lot ที่รับเข้าตามปกติ
-- **CR-138** ถอน doc type `purchase` + `reason='purchase'` + UI ใบจัดซื้อ. CR นี้ **ไม่เพิ่ม `reason: purchase` กลับมา**, ไม่เพิ่ม doc type, ไม่เพิ่ม route จัดซื้อ; `reason` enum ไม่เปลี่ยน — ของซื้อเองยังเป็น `reason='receive'` เหมือนรับเข้าด้วยมือทั่วไป
+- **CR-138** ถอน doc type `purchase` + `reason='purchase'` + UI ใบจัดซื้อ. CR นี้ **ไม่เพิ่ม `reason: purchase` กลับมา**, ไม่เพิ่ม doc type, ไม่เพิ่ม route จัดซื้อ; `reason` enum ไม่เปลี่ยน — ของซื้อเองยังบันทึกเป็นรับเข้าด้วยมือตามเดิม (`adjust`/`found`)
 - ผลคือ ledger ยังไม่ทราบว่าซื้อจากใคร/ราคาเท่าไร ทราบเพียงว่า "ศูนย์ซื้อเอง" หรือไม่
 
 ## 4. Spec delta — `docs/data/schema.md` §2.1 (pending CR นี้)
 
-- `lot` เพิ่ม `self_purchased`: bool, opt, เฉพาะ `reason='receive'` จากฟอร์มรับเข้า supply (schema_v 7)
+- `lot` เพิ่ม `self_purchased`: bool, opt, เฉพาะแถวรับเข้าตาม FR-2 (`receive`, หรือ `adjust`+`found` จากฟอร์มรับเข้า supply) (schema_v 7)
 - เพิ่ม note **schema_v 7** + **Migration (schema_v 6 → 7)** ใน §2.1 (ทำเครื่องหมาย "รอ CR approve")
 - `updated:` → 2026-11-05
 
