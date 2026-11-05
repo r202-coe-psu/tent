@@ -23,8 +23,9 @@ export function handleEndpointError(e: unknown, label?: string) {
  * supply_coordinator in SH002 but only registration_staff in SH001 must not act on SH001's
  * transfers. role-permission-matrix.md gives SC the Inventory & Supply row at shelter scope, and
  * its decision sync 2026-10-10 note makes `warehouse_staff` an alias of SC
- * (docs/prd/role-permission-matrix.md, "พัสดุและคลัง"). `authorizeWarehouse` (donation intake and
- * others) is unchanged; its any-shelter check is #477.
+ * (docs/prd/role-permission-matrix.md, "พัสดุและคลัง"). `donation_staff` is not on this list
+ * (CR-227). `authorizeDonation` (donation intake and others) is unchanged for the warehouse side;
+ * its any-shelter check is #477.
  */
 export async function authorizeTransfer(cookie: string | null): Promise<Caller> {
 	const caller = await requireShelterScopeOrSA(cookie);

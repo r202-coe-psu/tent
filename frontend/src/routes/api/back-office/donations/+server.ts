@@ -2,7 +2,8 @@ import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import {
 	assertCountedAgainstCatalog,
-	authorizeWarehouse,
+	assertDonationLedgerRows,
+	authorizeDonation,
 	listShelterCodes,
 	resolveReceivedShelter,
 	routeErrorResponse,
@@ -83,7 +84,7 @@ async function receivedPage(caller: Caller, url: URL): Promise<Response> {
 
 export const GET: RequestHandler = async ({ request, url }) => {
 	try {
-		const caller = await authorizeWarehouse(request.headers.get('cookie'));
+		const caller = await authorizeDonation(request.headers.get('cookie'));
 		const status = url.searchParams.get('status') ?? 'declared';
 		if (!isAllowedDonationStatus(status)) {
 			return json({ success: false, error: 'Invalid status' }, { status: 400 });
@@ -134,7 +135,7 @@ export const GET: RequestHandler = async ({ request, url }) => {
  */
 export const POST: RequestHandler = async ({ request }) => {
 	try {
-		const caller = await authorizeWarehouse(request.headers.get('cookie'));
+		const caller = await authorizeDonation(request.headers.get('cookie'));
 
 		const parsed = walkInIntakeInputSchema.safeParse(await request.json());
 		if (!parsed.success) {
@@ -223,6 +224,7 @@ export const POST: RequestHandler = async ({ request }) => {
 			lot: { ...(line.lot ?? {}), lot_no: lotNos[i] }
 		}));
 		const ledgers: StockLedger[] = keyDonationReceipt(declared, countedWithLots, ctx);
+		assertDonationLedgerRows(ledgers);
 
 		// `receiveDonation` is the only thing that moves the lifecycle, so the walk-in
 		// edge (`declared → received`) stays defined in one place (schema.md §2.3).

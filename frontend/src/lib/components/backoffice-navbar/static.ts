@@ -7,6 +7,7 @@ import {
 	isKioskStaffOnly,
 	isShelterManager,
 	isSystemAdmin,
+	canAccessDonations,
 	canAccessEvacueeRegistration,
 	canAccessIncidents,
 	canAccessKitchen,
@@ -14,6 +15,7 @@ import {
 	canAccessTickets,
 	canAccessVolunteerBackoffice,
 	canAccessWarehouse,
+	canViewSupply,
 	shelterCodeFromRoles
 } from '$lib/auth/roles';
 import Users from '@lucide/svelte/icons/users';
@@ -143,13 +145,13 @@ export const backofficeNavbarGroups: BackofficeNavbarGroup[] = [
 				label: 'คลัง',
 				href: resolve('/back-office/supply'),
 				icon: Package,
-				visibleTo: ({ roles, shelterCode }) => canAccessWarehouse(roles, shelterCode)
+				visibleTo: ({ roles, shelterCode }) => canViewSupply(roles, shelterCode)
 			},
 			{
 				label: 'บริจาค',
 				href: resolve('/back-office/stock-donations'),
 				icon: HandHeart,
-				visibleTo: ({ roles, shelterCode }) => canAccessWarehouse(roles, shelterCode)
+				visibleTo: ({ roles, shelterCode }) => canAccessDonations(roles, shelterCode)
 			},
 			{
 				label: 'จัดการคำร้องเบิกจ่าย',
@@ -242,7 +244,7 @@ export const backofficeNavbarGroups: BackofficeNavbarGroup[] = [
 						label: 'คลังสินค้า',
 						href: resolve('/back-office/supply?tab=catalog' as '/back-office/supply'),
 						icon: Warehouse,
-						visibleTo: ({ roles, shelterCode }) => canAccessWarehouse(roles, shelterCode)
+						visibleTo: ({ roles, shelterCode }) => canViewSupply(roles, shelterCode)
 					},
 					{
 						label: 'พารามิเตอร์',

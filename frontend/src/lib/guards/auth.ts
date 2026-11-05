@@ -9,7 +9,9 @@ import {
 	isShelterManager,
 	isSystemAdmin,
 	canAccessManagerPages,
+	canAccessDonations,
 	canAccessWarehouse,
+	canViewSupply,
 	canAccessKitchen,
 	canAccessTickets,
 	canAccessEvacueeRegistration,
@@ -213,6 +215,32 @@ export async function requireWarehouseAccess(
 	const shelter = activeShelterCode(roles);
 	if (!canAccessWarehouse(roles, shelter)) {
 		throw redirect(302, resolve(warehouseDeniedDestination(roles, shelter, options?.deskFallback)));
+	}
+}
+
+/**
+ * Donation intake guard (`/back-office/stock-donations`) — the warehouse side plus
+ * `donation_staff` of the active shelter (CR-227). Kept apart from {@link requireWarehouseAccess}
+ * so donation_staff does not reach distribution or tickets.
+ */
+export async function requireDonationAccess(fetchFn: typeof fetch = fetch) {
+	await requireAuth(fetchFn);
+	const roles = authStore.user?.roles ?? [];
+	if (!canAccessDonations(roles, activeShelterCode(roles))) {
+		throw redirect(302, resolve(LANDING_ROUTE));
+	}
+}
+
+/**
+ * Supply / stock pages guard (`/back-office/supply`) — the warehouse side plus `donation_staff`,
+ * who sees stock read-only (CR-227). The page hides the mutating actions; the data layer stays the
+ * real boundary.
+ */
+export async function requireSupplyView(fetchFn: typeof fetch = fetch) {
+	await requireAuth(fetchFn);
+	const roles = authStore.user?.roles ?? [];
+	if (!canViewSupply(roles, activeShelterCode(roles))) {
+		throw redirect(302, resolve(LANDING_ROUTE));
 	}
 }
 

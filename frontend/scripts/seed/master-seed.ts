@@ -534,7 +534,18 @@ export async function seedCatalog(): Promise<Map<string, string>> {
     var hasScope = userCtx.roles.indexOf('shelter:' + newDoc.shelter_code) !== -1;
     var isManager = userCtx.roles.indexOf('shelter_manager') !== -1;
     var isWS = userCtx.roles.indexOf('warehouse_staff') !== -1;
-    if (hasScope && (isManager || isWS)) {
+    // CR-227: donation_staff writes its own shelter's catalog docs (compound role only).
+    var isDonationStaff = userCtx.roles.indexOf(newDoc.shelter_code + ':donation_staff') !== -1;
+    if (hasScope && (isManager || isWS || isDonationStaff)) {
+      // CR-227 R4: donation_staff only creates/edits item_master here and never merges (merge stays SM/WS).
+      if (!isManager && !isWS) {
+        if (newDoc.type !== 'item_master' || (oldDoc && oldDoc.type !== 'item_master')) {
+          throw({ forbidden: 'donation_staff can only write item_master in catalog' });
+        }
+        if (newDoc.merged_into && !(oldDoc && oldDoc.merged_into === newDoc.merged_into)) {
+          throw({ forbidden: 'Only warehouse staff, shelter manager, or system admin can merge items' });
+        }
+      }
       return;
     }
   }

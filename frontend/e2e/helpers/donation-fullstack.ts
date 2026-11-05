@@ -204,6 +204,28 @@ export async function createWarehouseStaff(
 	return { ...user, session: await couchLogin(user.name, user.password) };
 }
 
+/**
+ * A `donation_staff` of `shelterCode` (CR-227), in the compound form `SHxxx:donation_staff` that
+ * the users page and the volunteer access dialog write. Recorded in `ledger` before the user
+ * exists, so a crash in between still deletes it.
+ */
+export async function createDonationStaff(
+	ledger: RunLedger,
+	shelterCode: string,
+	tag: string
+): Promise<Staff> {
+	const user: TestUser = {
+		name: `dn_${tag}_${RUN_ID}`,
+		password: 'Password1!',
+		roles: [`shelter:${shelterCode}`, `${shelterCode}:donation_staff`],
+		display_name: `Donation E2E ${tag}`
+	};
+	ledger.add('staff', user.name);
+	await createCouchUser(user);
+	await seedSecurityQuestion(user.name);
+	return { ...user, session: await couchLogin(user.name, user.password) };
+}
+
 /** A system admin — no shelter of their own, so `openBackOffice` needs `workingShelter`. */
 export async function createSystemAdmin(ledger: RunLedger, tag: string): Promise<Staff> {
 	const user: TestUser = {
