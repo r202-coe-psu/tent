@@ -426,8 +426,6 @@ describe('closeShelterPrinting', () => {
 			name: deviceId,
 			shelter_code: 'SH001',
 			station: null,
-			host_kind: 'standalone',
-			kiosk_device_id: null,
 			secret_hash: 'h',
 			secret_prefix: 'sk_print_aaaaaaaa',
 			status: 'active',

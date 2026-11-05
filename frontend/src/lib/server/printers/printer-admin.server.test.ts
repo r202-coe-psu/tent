@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 // eslint-disable-next-line no-restricted-imports -- server-safe domain schema; feature barrel pulls client UI/query code
 import { printLabelSchema } from '$lib/features/printers/domain/print-job.schema';
 import { PrinterOfflineError } from './print-jobs.server';
@@ -72,14 +72,6 @@ function fakeJobs(seed: PrintJobDoc[] = [], pageSize = Infinity) {
 	};
 }
 
-/** Scanner registry slice: `kiosk-a` is in SH001, `kiosk-b` in SH002. */
-const scanners = {
-	async getDeviceByDeviceId(deviceId: string) {
-		const shelters: Record<string, string> = { 'kiosk-a': 'SH001', 'kiosk-b': 'SH002' };
-		return deviceId in shelters ? { shelter_code: shelters[deviceId] } : null;
-	}
-};
-
 /** `createPrinter` deps over `store`; `events` records provisioning and the device write in order. */
 function createDeps(store: PrintDeviceAdminStore, events: string[] = []) {
 	return {
@@ -90,7 +82,6 @@ function createDeps(store: PrintDeviceAdminStore, events: string[] = []) {
 				return store.createDevice(doc);
 			}
 		},
-		scanners,
 		ensureShelterDb: async (shelterCode: string) => void events.push(`ensure:${shelterCode}`)
 	};
 }
@@ -103,7 +94,6 @@ function updateDeps(
 ) {
 	return {
 		devices: store,
-		scanners,
 		jobsFor: (shelterCode: string) => {
 			shelters.push(shelterCode);
 			return jobs;
@@ -115,8 +105,7 @@ const input: PrintDeviceInput = {
 	device_id: 'printer-sh001-reg1',
 	name: 'จุดลงทะเบียน 1',
 	shelter_code: 'SH001',
-	station: 'โต๊ะ 1',
-	host_kind: 'standalone'
+	station: 'โต๊ะ 1'
 };
 
 describe('createPrinter', () => {
@@ -132,8 +121,6 @@ describe('createPrinter', () => {
 			name: 'จุดลงทะเบียน 1',
 			shelter_code: 'SH001',
 			station: 'โต๊ะ 1',
-			host_kind: 'standalone',
-			kiosk_device_id: null,
 			status: 'active',
 			secret_prefix: secret.slice(0, 16),
 			last_seen_at: null,
@@ -188,7 +175,6 @@ function deviceDoc(overrides: Partial<PrintDeviceDoc>): PrintDeviceDoc {
 		name: 'จุดลงทะเบียน 1',
 		shelter_code: 'SH001',
 		station: null,
-		host_kind: 'standalone',
 		secret_hash: 'a'.repeat(64),
 		secret_prefix: 'sk_print_01234567',
 		status: 'active',
@@ -610,82 +596,26 @@ describe('deletePrinter', () => {
 	});
 });
 
-describe('printDeviceInputSchema kiosk link', () => {
+describe('printDeviceInputSchema', () => {
 	const parse = (override: object) => printDeviceInputSchema.safeParse({ ...input, ...override });
 
-	it('accepts a kiosk printer with the scanner device it sits in', () => {
-		const result = parse({ host_kind: 'kiosk', kiosk_device_id: 'kiosk-a' });
-
-		expect(result.success && result.data.kiosk_device_id).toBe('kiosk-a');
+	it('accepts a plain printer', () => {
+		expect(parse({}).success).toBe(true);
 	});
 
-	it('accepts a kiosk printer without a link yet, and a plain standalone printer', () => {
-		expect(parse({ host_kind: 'kiosk' }).success).toBe(true);
-		expect(parse({ host_kind: 'standalone' }).success).toBe(true);
-	});
-
-	it('rejects a kiosk_device_id on a standalone printer', () => {
-		const result = parse({ host_kind: 'standalone', kiosk_device_id: 'kiosk-a' });
-
-		expect(result.success).toBe(false);
-		expect(!result.success && result.error.issues[0]?.message).toBe(
-			'kiosk_device_id requires host_kind "kiosk"'
-		);
+	it('rejects kiosk_device_id and host_kind, which are no longer part of the input', () => {
+		expect(parse({ kiosk_device_id: 'kiosk-a' }).success).toBe(false);
+		expect(parse({ host_kind: 'kiosk' }).success).toBe(false);
 	});
 });
 
-describe('printDevicePatchSchema kiosk link', () => {
-	it('accepts linking a scanner device or clearing the link', () => {
-		expect(printDevicePatchSchema.safeParse({ kiosk_device_id: 'kiosk-a' }).success).toBe(true);
-		expect(printDevicePatchSchema.safeParse({ kiosk_device_id: null }).success).toBe(true);
+describe('printDevicePatchSchema', () => {
+	it('rejects kiosk_device_id, which is no longer part of the patch', () => {
+		expect(printDevicePatchSchema.safeParse({ kiosk_device_id: 'kiosk-a' }).success).toBe(false);
 	});
 });
 
-describe('createPrinter kiosk link and provisioning', () => {
-	const kioskInput: PrintDeviceInput = {
-		...input,
-		device_id: 'printer-sh001-kiosk-a',
-		host_kind: 'kiosk',
-		kiosk_device_id: 'kiosk-a'
-	};
-
-	it('links a kiosk printer to the scanner device of the same shelter', async () => {
-		const { store, docs } = fakeStore();
-
-		const { device } = await createPrinter(createDeps(store), kioskInput, 'sa-user', NOW);
-
-		expect(device).toMatchObject({ host_kind: 'kiosk', kiosk_device_id: 'kiosk-a' });
-		expect(docs.get('print_device:printer-sh001-kiosk-a')).toMatchObject({
-			kiosk_device_id: 'kiosk-a'
-		});
-	});
-
-	it('stores no link for a standalone printer', async () => {
-		const { store, docs } = fakeStore();
-
-		const { device } = await createPrinter(createDeps(store), input, 'sa-user', NOW);
-
-		expect(device.kiosk_device_id).toBeNull();
-		expect(docs.get('print_device:printer-sh001-reg1')).toMatchObject({ kiosk_device_id: null });
-	});
-
-	it.each([
-		['does not exist', 'kiosk-zzz'],
-		['belongs to another shelter', 'kiosk-b']
-	])('rejects a scanner device that %s, writing and provisioning nothing', async (_n, id) => {
-		const { store, docs } = fakeStore();
-		const events: string[] = [];
-
-		await expect(
-			createPrinter(createDeps(store, events), { ...kioskInput, kiosk_device_id: id }, 'sa', NOW)
-		).rejects.toMatchObject({
-			name: 'PrintDeviceValidationError',
-			code: 'KIOSK_DEVICE_NOT_FOUND'
-		});
-		expect(events).toEqual([]);
-		expect(docs.size).toBe(0);
-	});
-
+describe('createPrinter provisioning', () => {
 	it('provisions the shelter printing DB before the device is written (FR-4)', async () => {
 		const { store } = fakeStore();
 		const events: string[] = [];
@@ -704,15 +634,6 @@ describe('createPrinter kiosk link and provisioning', () => {
 
 		await expect(createPrinter(deps, input, 'sa-user', NOW)).rejects.toThrow('couch down');
 		expect(docs.size).toBe(0);
-	});
-});
-
-describe('toPrinterSummary kiosk link', () => {
-	it('carries the linked scanner device, and null for a device written before the link existed', () => {
-		expect(toPrinterSummary(deviceDoc({ kiosk_device_id: 'kiosk-a' }), NOW).kiosk_device_id).toBe(
-			'kiosk-a'
-		);
-		expect(toPrinterSummary(deviceDoc({}), NOW).kiosk_device_id).toBeNull();
 	});
 });
 
@@ -834,71 +755,5 @@ describe('updatePrinter reactivation', () => {
 		await updatePrinter(deps, original._id, { status: 'inactive' }, NOW);
 
 		expect(events).toEqual([]);
-	});
-});
-
-describe('updatePrinter kiosk link', () => {
-	const kiosk = () =>
-		deviceDoc({ host_kind: 'kiosk', kiosk_device_id: null, shelter_code: 'SH001' });
-
-	it('links a kiosk printer to a scanner device of its shelter, and clears the link', async () => {
-		const original = kiosk();
-		const { store, docs } = fakeStore([original]);
-
-		await updatePrinter(
-			updateDeps(store, fakeJobs()),
-			original._id,
-			{ kiosk_device_id: 'kiosk-a' },
-			NOW
-		);
-		expect(docs.get(original._id)).toMatchObject({ kiosk_device_id: 'kiosk-a' });
-
-		await updatePrinter(
-			updateDeps(store, fakeJobs()),
-			original._id,
-			{ kiosk_device_id: null },
-			NOW
-		);
-		expect(docs.get(original._id)).toMatchObject({ kiosk_device_id: null });
-	});
-
-	it.each([
-		['a scanner device of another shelter', kiosk(), 'kiosk-b', 'KIOSK_DEVICE_NOT_FOUND'],
-		['an unknown scanner device', kiosk(), 'kiosk-zzz', 'KIOSK_DEVICE_NOT_FOUND'],
-		[
-			'a standalone printer',
-			deviceDoc({ host_kind: 'standalone' }),
-			'kiosk-a',
-			'KIOSK_DEVICE_REQUIRES_KIOSK_HOST'
-		]
-	])('rejects linking %s and changes nothing', async (_n, original, id, code) => {
-		const { store, docs } = fakeStore([original]);
-
-		await expect(
-			updatePrinter(updateDeps(store, fakeJobs()), original._id, { kiosk_device_id: id }, NOW)
-		).rejects.toMatchObject({ code });
-		expect(docs.get(original._id)).toEqual(original);
-	});
-
-	it('reads the printer once when linking and reactivating in one patch', async () => {
-		const original = { ...kiosk(), status: 'inactive' as const };
-		const { store, docs } = fakeStore([original]);
-		const getDevice = vi.spyOn(store, 'getDevice');
-		const ensured: string[] = [];
-
-		await updatePrinter(
-			{
-				...updateDeps(store, fakeJobs()),
-				ensureShelterDb: async (code: string) => void ensured.push(code)
-			},
-			original._id,
-			{ kiosk_device_id: 'kiosk-a', status: 'active' },
-			NOW
-		);
-
-		// one pre-check read + one read inside mutateDevice
-		expect(getDevice).toHaveBeenCalledTimes(2);
-		expect(ensured).toEqual(['SH001']);
-		expect(docs.get(original._id)).toMatchObject({ kiosk_device_id: 'kiosk-a', status: 'active' });
 	});
 });

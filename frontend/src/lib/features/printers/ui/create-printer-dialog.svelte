@@ -5,46 +5,31 @@
 	import { Label } from '$lib/components/ui/label/index.js';
 	import * as Dialog from '$lib/components/ui/dialog/index.js';
 	import ShelterScopeSelect from '$lib/components/shelter-scope-select.svelte';
-	import { languageStore } from '$lib/stores/language.svelte';
-	import { getTranslation } from '$lib/utils/i18n';
 	import { PrintApiError } from '../data/printers.api';
-	import type { KioskDeviceRef } from '../domain/kiosk-link';
 	import {
 		printerCreateInputSchema,
-		type PrintHostKind,
 		type PrinterSecretResponse
 	} from '../domain/print-device.schema';
-	import {
-		PRINTERS_I18N,
-		printerAdminErrorMessage,
-		printerCreateIssueMessage
-	} from '../domain/printers.i18n';
+	import { printerCreateIssueMessage } from '../domain/printer-admin.messages';
 	import { useCreatePrinterDevice } from '../application/queries';
-	import KioskDeviceSelect from './kiosk-device-select.svelte';
 
 	let {
 		open = $bindable(false),
 		fixedShelterCode,
-		kioskDevices = [],
 		oncreated
 	}: {
 		open?: boolean;
 		/** `null` = system admin picks any shelter; a code = locked to that shelter. */
 		fixedShelterCode: string | null;
-		/** Scanner devices a kiosk printer can be linked to (filtered to the chosen shelter). */
-		kioskDevices?: readonly KioskDeviceRef[];
 		/** The one-time secret leaves through here; the page must not keep it past the reveal dialog. */
 		oncreated: (created: PrinterSecretResponse) => void;
 	} = $props();
 
-	const t = $derived(getTranslation(PRINTERS_I18N, languageStore.current).admin);
 	const createMutation = useCreatePrinterDevice();
 
 	let deviceId = $state('');
 	let name = $state('');
 	let station = $state('');
-	let hostKind = $state<PrintHostKind>('standalone');
-	let kioskDeviceId = $state<string | null>(null);
 	let pickedShelterCode = $state<string | undefined>(undefined);
 
 	const shelterCode = $derived(fixedShelterCode ?? pickedShelterCode);
@@ -53,8 +38,6 @@
 		deviceId = '';
 		name = '';
 		station = '';
-		hostKind = 'standalone';
-		kioskDeviceId = null;
 		pickedShelterCode = undefined;
 	}
 
@@ -65,28 +48,23 @@
 
 	async function handleCreate() {
 		if (!shelterCode) {
-			toast.error(t.create.chooseShelter);
+			toast.error('กรุณาเลือกศูนย์พักพิง');
 			return;
 		}
 		const parsed = printerCreateInputSchema.safeParse({
 			device_id: deviceId.trim(),
 			name,
 			shelter_code: shelterCode.toUpperCase(),
-			station: station.trim() || null,
-			host_kind: hostKind,
-			// A link only makes sense for a kiosk host; switching back drops a stale pick.
-			...(hostKind === 'kiosk' && kioskDeviceId ? { kiosk_device_id: kioskDeviceId } : {})
+			station: station.trim() || null
 		});
 		if (!parsed.success) {
 			const [issue] = parsed.error.issues;
-			toast.error(
-				issue ? printerCreateIssueMessage(issue, languageStore.current) : t.create.invalid
-			);
+			toast.error(issue ? printerCreateIssueMessage(issue) : 'ข้อมูลไม่ถูกต้อง');
 			return;
 		}
 		try {
 			const created = await createMutation.mutateAsync(parsed.data);
-			toast.success(t.create.success);
+			toast.success('ลงทะเบียนเครื่องพิมพ์สำเร็จ');
 			handleOpenChange(false);
 			oncreated(created);
 			// The secret now lives only in the reveal dialog; drop the mutation's own copy.
@@ -94,10 +72,10 @@
 		} catch (err) {
 			toast.error(
 				err instanceof PrintApiError && err.status === 409
-					? t.create.conflict
-					: ((err instanceof PrintApiError
-							? printerAdminErrorMessage(err.code, languageStore.current)
-							: null) ?? (err instanceof Error ? err.message : t.create.failed))
+					? 'Device ID นี้ถูกใช้แล้ว'
+					: err instanceof Error
+						? err.message
+						: 'เกิดข้อผิดพลาดในการลงทะเบียนเครื่องพิมพ์'
 			);
 		}
 	}
@@ -106,9 +84,9 @@
 <Dialog.Root bind:open onOpenChange={handleOpenChange}>
 	<Dialog.Content class="sm:max-w-[500px]">
 		<Dialog.Header>
-			<Dialog.Title class="text-xl font-bold">{t.create.title}</Dialog.Title>
+			<Dialog.Title class="text-xl font-bold">ลงทะเบียนเครื่องพิมพ์</Dialog.Title>
 			<Dialog.Description class="text-sm text-muted-foreground">
-				{t.create.description}
+				เพิ่มเครื่องพิมพ์ฉลากใหม่และสร้าง Device Secret สำหรับเชื่อมต่อ
 			</Dialog.Description>
 		</Dialog.Header>
 
@@ -121,25 +99,25 @@
 			<div class="grid gap-4 py-4">
 				<div class="grid gap-2">
 					<Label for="printer-device-id" class="text-sm font-semibold">
-						{t.create.deviceId} <span class="text-destructive">*</span>
+						Device ID <span class="text-destructive">*</span>
 					</Label>
 					<Input
 						id="printer-device-id"
 						bind:value={deviceId}
-						placeholder={t.create.deviceIdPlaceholder}
+						placeholder="เช่น printer-sh001-reg1"
 						autocomplete="off"
 					/>
-					<p class="text-xs text-muted-foreground">{t.create.deviceIdHint}</p>
+					<p class="text-xs text-muted-foreground">ตัวพิมพ์เล็ก ตัวเลข และ - ยาว 3–63 ตัวอักษร</p>
 				</div>
 
 				<div class="grid gap-2">
 					<Label for="printer-name" class="text-sm font-semibold">
-						{t.create.name} <span class="text-destructive">*</span>
+						ชื่อเครื่อง <span class="text-destructive">*</span>
 					</Label>
 					<Input
 						id="printer-name"
 						bind:value={name}
-						placeholder={t.create.namePlaceholder}
+						placeholder="เช่น โต๊ะลงทะเบียน 1"
 						maxlength={80}
 					/>
 				</div>
@@ -147,61 +125,28 @@
 				{#if fixedShelterCode === null}
 					<div class="grid gap-2">
 						<span class="text-sm font-semibold">
-							{t.create.shelter} <span class="text-destructive">*</span>
+							ศูนย์พักพิง <span class="text-destructive">*</span>
 						</span>
 						<ShelterScopeSelect
 							allowedCodes={null}
 							bind:value={pickedShelterCode}
-							ariaLabel={t.create.shelterAria}
+							ariaLabel="ศูนย์พักพิงประจำเครื่องพิมพ์"
 						/>
 					</div>
 				{/if}
 
 				<div class="grid gap-2">
-					<Label for="printer-station" class="text-sm font-semibold">{t.create.station}</Label>
-					<Input
-						id="printer-station"
-						bind:value={station}
-						placeholder={t.create.stationPlaceholder}
-					/>
+					<Label for="printer-station" class="text-sm font-semibold">จุดบริการ</Label>
+					<Input id="printer-station" bind:value={station} placeholder="เช่น ลงทะเบียน" />
 				</div>
-
-				<div class="grid gap-2">
-					<Label for="printer-host-kind" class="text-sm font-semibold">{t.create.hostKind}</Label>
-					<select
-						id="printer-host-kind"
-						class="h-11 rounded-md border border-input bg-background px-3 text-sm"
-						value={hostKind}
-						onchange={(event) => (hostKind = event.currentTarget.value as PrintHostKind)}
-					>
-						<option value="standalone">{t.create.hostKinds.standalone}</option>
-						<option value="kiosk">{t.create.hostKinds.kiosk}</option>
-					</select>
-				</div>
-
-				{#if hostKind === 'kiosk' && shelterCode}
-					<div class="grid gap-2">
-						<Label for="printer-kiosk-device" class="text-sm font-semibold">
-							{t.create.kioskDevice}
-						</Label>
-						<KioskDeviceSelect
-							id="printer-kiosk-device"
-							bind:value={kioskDeviceId}
-							devices={kioskDevices}
-							{shelterCode}
-							noneLabel={t.create.kioskDeviceNone}
-						/>
-						<p class="text-xs text-muted-foreground">{t.create.kioskDeviceHint}</p>
-					</div>
-				{/if}
 			</div>
 
 			<Dialog.Footer class="gap-2 sm:gap-0">
 				<Button type="button" variant="outline" onclick={() => handleOpenChange(false)}>
-					{t.create.cancel}
+					ยกเลิก
 				</Button>
 				<Button type="submit" disabled={createMutation.isPending}>
-					{createMutation.isPending ? t.create.submitting : t.create.submit}
+					{createMutation.isPending ? 'กำลังบันทึก...' : 'สร้างและรับ Secret'}
 				</Button>
 			</Dialog.Footer>
 		</form>

@@ -11,7 +11,6 @@ const device = (overrides: Partial<PrintDeviceDoc> = {}): PrintDeviceDoc => ({
 	name: 'จุดลงทะเบียน 1',
 	shelter_code: 'SH001',
 	station: null,
-	host_kind: 'standalone',
 	secret_hash: 'abc',
 	secret_prefix: 'sk_print_01234567',
 	status: 'active',

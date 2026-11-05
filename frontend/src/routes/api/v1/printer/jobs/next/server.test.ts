@@ -40,7 +40,6 @@ describe('POST /api/v1/printer/jobs/next', () => {
 		name: 'จุดลงทะเบียน 1',
 		shelter_code: 'SH001',
 		station: null,
-		host_kind: 'standalone' as const,
 		secret_hash: hashPrintSecret(secret),
 		secret_prefix: 'sk_print_01234567',
 		status: 'active' as const,

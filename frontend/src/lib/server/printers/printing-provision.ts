@@ -6,7 +6,6 @@ import { PrintDependencyError } from './device-credentials';
 import { closeShelterPrintingWith, type ShelterCloseReport } from './printing-close';
 import {
 	updatePrinter,
-	type KioskDeviceReader,
 	type PrinterJobCloser,
 	type PrintDeviceAdminStore
 } from './printer-admin.server';
@@ -193,9 +192,6 @@ export interface CloseShelterPrintingDeps {
 	now?: () => Date;
 }
 
-/** Deactivating never links a scanner, so the kiosk lookup is never reached. */
-const NO_SCANNERS: KioskDeviceReader = { getDeviceByDeviceId: async () => null };
-
 /**
  * Real adapters, imported on demand: `print-device.repo` itself imports this module for
  * `ensurePrintingDevicesDb`, so a top-level import would be a cycle.
@@ -224,12 +220,7 @@ export async function closeShelterPrinting(
 			admin: (path, method, body) => adminRaw(path, method, body),
 			printerIds: async (code) => (await devices.listDevices(code)).map((device) => device._id),
 			async deactivate(printerId) {
-				await updatePrinter(
-					{ devices, jobsFor, scanners: NO_SCANNERS },
-					printerId,
-					{ status: 'inactive' },
-					now()
-				);
+				await updatePrinter({ devices, jobsFor }, printerId, { status: 'inactive' }, now());
 			}
 		},
 		shelterCode

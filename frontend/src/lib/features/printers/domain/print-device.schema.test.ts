@@ -11,7 +11,6 @@ const summary = {
 	name: 'ตู้ kiosk A',
 	shelter_code: 'SH001',
 	station: null,
-	host_kind: 'kiosk',
 	status: 'active',
 	secret_prefix: 'sk_print_01234567',
 	last_seen_at: null,
@@ -20,49 +19,23 @@ const summary = {
 	online: false
 };
 
-describe('printerAdminSummarySchema kiosk link', () => {
-	it('keeps the scanner device a kiosk printer is linked to', () => {
+describe('printer schemas after the kiosk link was removed', () => {
+	it('drops a stray kiosk_device_id from the admin summary', () => {
 		const parsed = printerAdminSummarySchema.parse({ ...summary, kiosk_device_id: 'kiosk-a' });
 
-		expect(parsed.kiosk_device_id).toBe('kiosk-a');
+		expect(parsed).not.toHaveProperty('kiosk_device_id');
 	});
 
-	it('accepts an unlinked printer (null)', () => {
-		expect(
-			printerAdminSummarySchema.parse({ ...summary, kiosk_device_id: null }).kiosk_device_id
-		).toBe(null);
-	});
-});
-
-describe('printerCreateInputSchema kiosk link', () => {
-	const input = {
-		device_id: 'printer-sh001-kiosk-a',
-		name: 'ตู้ kiosk A',
-		shelter_code: 'SH001',
-		host_kind: 'kiosk'
-	};
-
-	it('accepts a kiosk printer with its scanner device', () => {
-		expect(
-			printerCreateInputSchema.safeParse({ ...input, kiosk_device_id: 'kiosk-a' }).success
-		).toBe(true);
-	});
-
-	it('rejects a kiosk_device_id on a standalone printer', () => {
-		const result = printerCreateInputSchema.safeParse({
-			...input,
-			host_kind: 'standalone',
+	it('drops a stray kiosk_device_id from create and patch input', () => {
+		const created = printerCreateInputSchema.parse({
+			device_id: 'printer-sh001-kiosk-a',
+			name: 'ตู้ kiosk A',
+			shelter_code: 'SH001',
 			kiosk_device_id: 'kiosk-a'
 		});
+		const patched = printerPatchSchema.parse({ name: 'x', kiosk_device_id: 'kiosk-a' });
 
-		expect(result.success).toBe(false);
-		expect(!result.success && result.error.issues[0]?.path).toEqual(['kiosk_device_id']);
-	});
-});
-
-describe('printerPatchSchema kiosk link', () => {
-	it('accepts linking a scanner device or clearing the link', () => {
-		expect(printerPatchSchema.safeParse({ kiosk_device_id: 'kiosk-a' }).success).toBe(true);
-		expect(printerPatchSchema.safeParse({ kiosk_device_id: null }).success).toBe(true);
+		expect(created).not.toHaveProperty('kiosk_device_id');
+		expect(patched).not.toHaveProperty('kiosk_device_id');
 	});
 });

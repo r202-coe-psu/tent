@@ -1,6 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { PrintDependencyError } from '$lib/server/printers/device-credentials';
-import { ScannerDependencyError } from '$lib/server/scanners/device-credentials';
 import { printerAdminError } from './_http';
 
 const UNAVAILABLE = {
@@ -17,14 +16,10 @@ describe('printerAdminError: dependency failures (FR-25, FR-27)', () => {
 		vi.restoreAllMocks();
 	});
 
-	it.each([
-		[
-			'printing service misconfigured',
+	it('answers 503 without leaking the detail (printing service misconfigured)', async () => {
+		const response = printerAdminError(
 			new PrintDependencyError('COUCHDB_PRINTING_SERVICE_URL is invalid')
-		],
-		['scanner registry down', new ScannerDependencyError()]
-	])('answers 503 without leaking the detail (%s)', async (_name, error) => {
-		const response = printerAdminError(error);
+		);
 
 		expect(response.status).toBe(503);
 		expect(await response.json()).toEqual(UNAVAILABLE);

@@ -47,7 +47,6 @@ function device(overrides: Partial<PrintDeviceDoc> = {}): PrintDeviceDoc {
 		name: 'Front desk',
 		shelter_code: 'SH01',
 		station: null,
-		host_kind: 'standalone',
 		secret_hash: 'h',
 		secret_prefix: 'sk_print_ab',
 		status: 'active',

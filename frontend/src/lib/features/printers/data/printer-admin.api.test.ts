@@ -25,7 +25,6 @@ const summary = {
 	name: 'โต๊ะลงทะเบียน 1',
 	shelter_code: 'SH001',
 	station: 'ลงทะเบียน',
-	host_kind: 'standalone',
 	status: 'active',
 	secret_prefix: 'sk_print_ab12',
 	last_seen_at: '2026-10-22T03:00:00.000Z',
@@ -68,8 +67,7 @@ describe('printer admin api', () => {
 			device_id: 'printer-sh001-reg1',
 			name: 'โต๊ะลงทะเบียน 1',
 			shelter_code: 'SH001',
-			station: 'ลงทะเบียน',
-			host_kind: 'standalone'
+			station: 'ลงทะเบียน'
 		} as const;
 
 		const created = await createPrinterDevice(input);

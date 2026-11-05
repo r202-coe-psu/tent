@@ -5,8 +5,6 @@ import { readSessionUserCtx } from '$lib/server/session-auth';
 import { printDeviceRepository } from '$lib/server/printers/print-device.repo';
 import { printJobStoreFor } from '$lib/server/printers/print-job.service-store';
 import { reprovisionShelterPrintingDb } from '$lib/server/printers/printing-provision';
-import { scannerDeviceRepository } from '$lib/server/scanners/device-repository';
-import { ScannerDependencyError } from '$lib/server/scanners/device-credentials';
 import { SESSIONS } from '$lib/server/scanners/test-sessions';
 
 vi.mock('$lib/server/session-auth', async () => {
@@ -35,23 +33,17 @@ vi.mock('$lib/server/printers/printing-provision', () => ({
 	reprovisionShelterPrintingDb: vi.fn()
 }));
 
-vi.mock('$lib/server/scanners/device-repository', () => ({
-	scannerDeviceRepository: { getDeviceByDeviceId: vi.fn() }
-}));
-
 const mockSession = vi.mocked(readSessionUserCtx);
 const mockCreate = vi.mocked(printDeviceRepository.createDevice);
 const mockList = vi.mocked(printDeviceRepository.listDevicesInScope);
 const mockLastJob = vi.mocked(jobStore.lastJobOf);
 const mockEnsureDb = vi.mocked(reprovisionShelterPrintingDb);
-const mockScanner = vi.mocked(scannerDeviceRepository.getDeviceByDeviceId);
 
 const input = {
 	device_id: 'printer-sh001-reg1',
 	name: 'จุดลงทะเบียน 1',
 	shelter_code: 'SH001',
-	station: 'โต๊ะ 1',
-	host_kind: 'standalone'
+	station: 'โต๊ะ 1'
 };
 
 describe('POST /api/back-office/printers', () => {
@@ -83,7 +75,6 @@ describe('POST /api/back-office/printers', () => {
 			id: 'print_device:printer-sh001-reg1',
 			device_id: 'printer-sh001-reg1',
 			shelter_code: 'SH001',
-			kiosk_device_id: null,
 			status: 'active',
 			secret_prefix: data.secret.slice(0, 16),
 			online: false
@@ -105,57 +96,6 @@ describe('POST /api/back-office/printers', () => {
 		await post(input);
 
 		expect(order).toEqual(['ensure:SH001', 'create']);
-	});
-
-	it('links a kiosk printer to the scanner device of its shelter', async () => {
-		mockScanner.mockResolvedValue({ shelter_code: 'SH001' } as never);
-
-		const response = await post({ ...input, host_kind: 'kiosk', kiosk_device_id: 'kiosk-a' });
-
-		expect(response.status).toBe(201);
-		expect(mockScanner).toHaveBeenCalledWith('kiosk-a');
-		expect((await response.json()).device).toMatchObject({
-			host_kind: 'kiosk',
-			kiosk_device_id: 'kiosk-a'
-		});
-		expect(mockCreate.mock.calls[0][0]).toMatchObject({ kiosk_device_id: 'kiosk-a' });
-	});
-
-	it.each([
-		['does not exist', null],
-		['is in another shelter', { shelter_code: 'SH002' }]
-	])('answers 422 KIOSK_DEVICE_NOT_FOUND when the scanner device %s', async (_n, scanner) => {
-		mockScanner.mockResolvedValue(scanner as never);
-
-		const response = await post({ ...input, host_kind: 'kiosk', kiosk_device_id: 'kiosk-a' });
-
-		expect(response.status).toBe(422);
-		expect(response.headers.get('cache-control')).toBe('no-store');
-		expect(await response.json()).toEqual({
-			error: { code: 'KIOSK_DEVICE_NOT_FOUND', message: 'Kiosk device not found in this shelter' }
-		});
-		expect(mockCreate).not.toHaveBeenCalled();
-		expect(mockEnsureDb).not.toHaveBeenCalled();
-	});
-
-	it('answers 422 VALIDATION for a standalone printer with a kiosk_device_id', async () => {
-		const response = await post({ ...input, host_kind: 'standalone', kiosk_device_id: 'kiosk-a' });
-
-		expect(response.status).toBe(422);
-		expect(await response.json()).toEqual({
-			error: { code: 'VALIDATION', message: 'kiosk_device_id requires host_kind "kiosk"' }
-		});
-		expect(mockCreate).not.toHaveBeenCalled();
-	});
-
-	it('answers 503 DEPENDENCY_UNAVAILABLE when the scanner registry is down', async () => {
-		mockScanner.mockRejectedValue(new ScannerDependencyError());
-
-		const response = await post({ ...input, host_kind: 'kiosk', kiosk_device_id: 'kiosk-a' });
-
-		expect(response.status).toBe(503);
-		expect((await response.json()).error.code).toBe('DEPENDENCY_UNAVAILABLE');
-		expect(mockCreate).not.toHaveBeenCalled();
 	});
 
 	it('returns 403 and creates nothing when the caller cannot manage the target shelter', async () => {
@@ -184,7 +124,8 @@ describe('POST /api/back-office/printers', () => {
 	it.each([
 		['a malformed device_id', { device_id: 'Bad_ID' }],
 		['an empty name', { name: '  ' }],
-		['an unknown host_kind', { host_kind: 'cloud' }],
+		['a host_kind (field removed)', { host_kind: 'kiosk' }],
+		['a kiosk_device_id (field removed)', { kiosk_device_id: 'kiosk-a' }],
 		['a client-supplied secret_hash', { secret_hash: 'a'.repeat(64) }]
 	])('answers 422 VALIDATION for %s and creates nothing', async (_name, override) => {
 		const response = await post({ ...input, ...override });
@@ -219,7 +160,6 @@ describe('GET /api/back-office/printers', () => {
 		name: 'จุดลงทะเบียน 1',
 		shelter_code: 'SH001',
 		station: null,
-		host_kind: 'standalone' as const,
 		secret_hash: 'a'.repeat(64),
 		secret_prefix: 'sk_print_01234567',
 		status: 'active' as const,
@@ -262,8 +202,6 @@ describe('GET /api/back-office/printers', () => {
 			device_id: 'printer-sh001-reg1',
 			shelter_code: 'SH001',
 			station: null,
-			host_kind: 'standalone',
-			kiosk_device_id: null,
 			status: 'active',
 			secret_prefix: 'sk_print_01234567',
 			queue_state: 'ready',

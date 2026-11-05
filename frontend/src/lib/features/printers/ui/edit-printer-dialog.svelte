@@ -15,17 +15,12 @@
 	import Printer from '@lucide/svelte/icons/printer';
 	import Trash2 from '@lucide/svelte/icons/trash-2';
 	import KeyRound from '@lucide/svelte/icons/key-round';
-	import { languageStore } from '$lib/stores/language.svelte';
-	import { getTranslation } from '$lib/utils/i18n';
 	import { PrintApiError } from '../data/printers.api';
-	import type { KioskDeviceRef } from '../domain/kiosk-link';
 	import type {
 		PrinterAdminSummary,
 		PrinterPatch,
 		PrinterSecretResponse
 	} from '../domain/print-device.schema';
-	import { PRINTERS_I18N, printerAdminErrorMessage } from '../domain/printers.i18n';
-	import KioskDeviceSelect from './kiosk-device-select.svelte';
 	import {
 		useDeletePrinterDevice,
 		useRotatePrinterSecret,
@@ -36,19 +31,14 @@
 	let {
 		open = $bindable(false),
 		printer,
-		kioskDevices = [],
 		onrotated
 	}: {
 		open?: boolean;
 		/** Mounted per printer (keyed by the list), so the form starts from this printer's values. */
 		printer: PrinterAdminSummary;
-		/** Scanner devices to link a kiosk printer to (filtered to the printer's shelter). */
-		kioskDevices?: readonly KioskDeviceRef[];
 		/** A new secret was issued: the page shows it once in the reveal dialog. */
 		onrotated?: (result: PrinterSecretResponse) => void;
 	} = $props();
-
-	const t = $derived(getTranslation(PRINTERS_I18N, languageStore.current).admin);
 
 	const updateMutation = useUpdatePrinterDevice();
 	const rotateMutation = useRotatePrinterSecret();
@@ -61,8 +51,6 @@
 	let station = $state(printer.station ?? '');
 	// svelte-ignore state_referenced_locally
 	let active = $state(printer.status === 'active');
-	// svelte-ignore state_referenced_locally
-	let kioskDeviceId = $state<string | null>(printer.kiosk_device_id ?? null);
 	let confirmDeleteOpen = $state(false);
 	let confirmRotateOpen = $state(false);
 
@@ -73,9 +61,6 @@
 		if (station.trim() !== (printer.station ?? '')) next.station = station.trim() || null;
 		const status = active ? 'active' : 'inactive';
 		if (status !== printer.status) next.status = status;
-		if (printer.host_kind === 'kiosk' && kioskDeviceId !== (printer.kiosk_device_id ?? null)) {
-			next.kiosk_device_id = kioskDeviceId;
-		}
 		return Object.keys(next).length > 0 ? next : null;
 	});
 	const busy = $derived(
@@ -85,25 +70,23 @@
 			deleteMutation.isPending
 	);
 
-	const errorText = (err: unknown) => (err instanceof Error ? err.message : t.edit.actionFailed);
-	const kioskLinkError = (err: unknown) =>
-		err instanceof PrintApiError ? printerAdminErrorMessage(err.code, languageStore.current) : null;
+	const errorText = (err: unknown) => (err instanceof Error ? err.message : 'ดำเนินการไม่สำเร็จ');
 
 	async function save() {
 		if (!patch) return;
 		try {
 			await updateMutation.mutateAsync({ deviceId: printer.device_id, patch });
-			toast.success(t.edit.saved(patch.name ?? printer.name));
+			toast.success(`บันทึกการตั้งค่าเครื่อง ${patch.name ?? printer.name} แล้ว`);
 			open = false;
 		} catch (err) {
-			toast.error(kioskLinkError(err) ?? (err instanceof Error ? err.message : t.edit.saveFailed));
+			toast.error(err instanceof Error ? err.message : 'ไม่สามารถบันทึกการตั้งค่าเครื่องได้');
 		}
 	}
 
 	async function rotate() {
 		try {
 			const result = await rotateMutation.mutateAsync(printer.device_id);
-			toast.success(t.edit.rotateDone);
+			toast.success('ออก Device Secret ใหม่แล้ว');
 			confirmRotateOpen = false;
 			open = false;
 			onrotated?.(result);
@@ -117,11 +100,11 @@
 	async function testPrint() {
 		try {
 			await testPrintMutation.mutateAsync(printer.device_id);
-			toast.success(t.edit.testPrintSent(printer.name));
+			toast.success(`ส่งงานพิมพ์ทดสอบไปที่ ${printer.name} แล้ว`);
 		} catch (err) {
 			toast.error(
 				err instanceof PrintApiError && err.code === 'PRINTER_OFFLINE'
-					? t.edit.testPrintOffline(printer.name)
+					? `เครื่อง ${printer.name} ออฟไลน์ พิมพ์ทดสอบไม่ได้`
 					: errorText(err)
 			);
 		}
@@ -130,7 +113,7 @@
 	async function remove() {
 		try {
 			await deleteMutation.mutateAsync(printer.device_id);
-			toast.success(t.edit.deleted);
+			toast.success('ลบเครื่องพิมพ์เรียบร้อยแล้ว');
 			confirmDeleteOpen = false;
 			open = false;
 		} catch (err) {
@@ -153,7 +136,7 @@
 					<Printer class="h-5 w-5" />
 				</div>
 				<div class="min-w-0 space-y-1 text-left">
-					<Dialog.Title class="text-lg font-bold text-slate-900">{t.edit.title}</Dialog.Title>
+					<Dialog.Title class="text-lg font-bold text-slate-900">จัดการเครื่องพิมพ์</Dialog.Title>
 					<Dialog.Description class="text-sm text-slate-500">
 						<span class="font-semibold text-slate-700 tabular-nums">{printer.device_id}</span>
 						· {printer.shelter_code}
@@ -171,42 +154,29 @@
 			}}
 		>
 			<section class="space-y-3">
-				<h3 class={sectionTitle}>{t.edit.infoSection}</h3>
+				<h3 class={sectionTitle}>ข้อมูลเครื่อง</h3>
 				<div class="grid gap-2">
 					<Label for="edit-printer-name" class="text-sm font-semibold text-slate-700">
-						{t.edit.name} <span class="text-destructive">*</span>
+						ชื่อเครื่อง <span class="text-destructive">*</span>
 					</Label>
 					<Input id="edit-printer-name" class="h-11" maxlength={80} bind:value={name} />
 				</div>
 				<div class="grid gap-2">
 					<Label for="edit-printer-station" class="text-sm font-semibold text-slate-700">
-						{t.edit.station}
+						จุดบริการ
 					</Label>
 					<Input id="edit-printer-station" class="h-11" bind:value={station} />
 				</div>
-				{#if printer.host_kind === 'kiosk'}
-					<div class="grid gap-2">
-						<Label for="edit-printer-kiosk" class="text-sm font-semibold text-slate-700">
-							{t.edit.kioskDevice}
-						</Label>
-						<KioskDeviceSelect
-							id="edit-printer-kiosk"
-							bind:value={kioskDeviceId}
-							devices={kioskDevices}
-							shelterCode={printer.shelter_code}
-							noneLabel={t.edit.kioskDeviceNone}
-						/>
-						<p class="text-xs text-slate-500">{t.edit.kioskDeviceHint}</p>
-					</div>
-				{/if}
 				<div
 					class="flex items-center justify-between gap-4 rounded-xl border border-slate-200/80 bg-slate-50/60 p-4"
 				>
 					<div class="space-y-0.5">
 						<Label for="edit-printer-active" class="text-sm font-semibold text-slate-700">
-							{t.edit.activeLabel}
+							เปิดใช้งานเครื่อง
 						</Label>
-						<p class="text-xs text-slate-500">{active ? t.edit.activeOn : t.edit.activeOff}</p>
+						<p class="text-xs text-slate-500">
+							{active ? 'Active — รับงานพิมพ์ได้' : 'Inactive — ไม่รับงานพิมพ์จนกว่าจะเปิดอีกครั้ง'}
+						</p>
 					</div>
 					<Switch id="edit-printer-active" bind:checked={active} />
 				</div>
@@ -214,12 +184,14 @@
 		</form>
 
 		<section class="space-y-3">
-			<h3 class={sectionTitle}>{t.edit.connectionSection}</h3>
+			<h3 class={sectionTitle}>การเชื่อมต่อและทดสอบ</h3>
 			<div class="divide-y divide-slate-200/80 rounded-xl border border-slate-200/80">
 				<div class="flex flex-wrap items-center justify-between gap-3 p-4">
 					<div class="space-y-0.5">
-						<p class="text-sm font-semibold text-slate-700">{t.edit.rotate}</p>
-						<p class="text-xs text-slate-500">{t.edit.rotateHint}</p>
+						<p class="text-sm font-semibold text-slate-700">ออก Secret ใหม่</p>
+						<p class="text-xs text-slate-500">
+							เครื่องเดิมที่ใช้ Secret เก่าจะเชื่อมต่อไม่ได้ทันที
+						</p>
 					</div>
 					<Button
 						type="button"
@@ -229,13 +201,13 @@
 						onclick={() => (confirmRotateOpen = true)}
 					>
 						<KeyRound class="h-4 w-4" />
-						{t.edit.rotate}
+						ออก Secret ใหม่
 					</Button>
 				</div>
 				<div class="flex flex-wrap items-center justify-between gap-3 p-4">
 					<div class="space-y-0.5">
-						<p class="text-sm font-semibold text-slate-700">{t.edit.testPrint}</p>
-						<p class="text-xs text-slate-500">{t.edit.testPrintHint}</p>
+						<p class="text-sm font-semibold text-slate-700">พิมพ์ทดสอบ</p>
+						<p class="text-xs text-slate-500">ส่งฉลากทดสอบ (ไม่มีข้อมูลบุคคล) ไปที่เครื่องนี้</p>
 					</div>
 					<Button
 						type="button"
@@ -245,7 +217,7 @@
 						onclick={testPrint}
 					>
 						<Printer class="h-4 w-4" />
-						{t.edit.testPrint}
+						พิมพ์ทดสอบ
 					</Button>
 				</div>
 			</div>
@@ -255,8 +227,8 @@
 			class="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-red-200 bg-white p-4"
 		>
 			<div class="space-y-0.5">
-				<p class="text-sm font-semibold text-red-900">{t.edit.deleteSection}</p>
-				<p class="text-xs text-slate-500">{t.edit.deleteHint}</p>
+				<p class="text-sm font-semibold text-red-900">ลบเครื่องนี้</p>
+				<p class="text-xs text-slate-500">งานพิมพ์ที่ค้างอยู่จะถูกยกเลิก และย้อนกลับไม่ได้</p>
 			</div>
 			<Button
 				type="button"
@@ -266,13 +238,13 @@
 				onclick={() => (confirmDeleteOpen = true)}
 			>
 				<Trash2 class="h-4 w-4" />
-				{t.edit.delete}
+				ลบเครื่อง
 			</Button>
 		</section>
 
 		<Dialog.Footer class="gap-2">
 			<Button type="button" variant="outline" class="min-h-11" onclick={() => (open = false)}>
-				{t.edit.cancel}
+				ยกเลิก
 			</Button>
 			<Button
 				type="submit"
@@ -282,9 +254,9 @@
 			>
 				{#if updateMutation.isPending}
 					<Loader2 class="h-4 w-4 animate-spin" />
-					{t.edit.saving}
+					กำลังบันทึก...
 				{:else}
-					{t.edit.save}
+					บันทึก
 				{/if}
 			</Button>
 		</Dialog.Footer>
@@ -294,20 +266,23 @@
 <AlertDialog.Root bind:open={confirmRotateOpen}>
 	<AlertDialog.Content class="max-w-md">
 		<AlertDialog.Header>
-			<AlertDialog.Title>{t.edit.rotateConfirmTitle}</AlertDialog.Title>
+			<AlertDialog.Title>ยืนยันการออก Secret ใหม่</AlertDialog.Title>
 			<AlertDialog.Description class="space-y-2 pt-2 text-sm">
-				<span class="block">{t.edit.rotateConfirmBody(printer.name)}</span>
-				<span class="block font-medium text-destructive">{t.edit.rotateConfirmWarning}</span>
+				<span class="block">ออก Device Secret ใหม่ให้เครื่อง {printer.name}</span>
+				<span class="block font-medium text-destructive"
+					>Secret เก่าจะใช้ไม่ได้ทันที เครื่อง Pi จะออฟไลน์จนกว่าจะนำ Secret ใหม่ไปติดตั้งในไฟล์
+					.env และรีสตาร์ทโปรแกรม printer</span
+				>
 			</AlertDialog.Description>
 		</AlertDialog.Header>
 		<AlertDialog.Footer>
-			<AlertDialog.Cancel disabled={rotateMutation.isPending}>{t.edit.cancel}</AlertDialog.Cancel>
+			<AlertDialog.Cancel disabled={rotateMutation.isPending}>ยกเลิก</AlertDialog.Cancel>
 			<AlertDialog.Action
 				class="bg-destructive text-destructive-foreground hover:bg-destructive/90"
 				disabled={rotateMutation.isPending}
 				onclick={rotate}
 			>
-				{rotateMutation.isPending ? t.edit.rotating : t.edit.rotate}
+				{rotateMutation.isPending ? 'กำลังออก Secret...' : 'ออก Secret ใหม่'}
 			</AlertDialog.Action>
 		</AlertDialog.Footer>
 	</AlertDialog.Content>
@@ -316,20 +291,22 @@
 <AlertDialog.Root bind:open={confirmDeleteOpen}>
 	<AlertDialog.Content class="max-w-md">
 		<AlertDialog.Header>
-			<AlertDialog.Title>{t.edit.deleteConfirmTitle}</AlertDialog.Title>
+			<AlertDialog.Title>ยืนยันการลบเครื่องพิมพ์</AlertDialog.Title>
 			<AlertDialog.Description class="space-y-2 pt-2 text-sm">
-				<span class="block">{t.edit.deleteConfirmBody(printer.name, printer.device_id)}</span>
-				<span class="block font-medium text-destructive">{t.edit.deleteConfirmWarning}</span>
+				<span class="block">ลบเครื่อง {printer.name} ({printer.device_id}) ออกจากระบบ</span>
+				<span class="block font-medium text-destructive"
+					>ลบแล้วย้อนกลับไม่ได้ เครื่อง Pi จะเชื่อมต่อไม่ได้อีก ถ้าต้องการใช้ต่อต้องลงทะเบียนใหม่</span
+				>
 			</AlertDialog.Description>
 		</AlertDialog.Header>
 		<AlertDialog.Footer>
-			<AlertDialog.Cancel disabled={deleteMutation.isPending}>{t.edit.cancel}</AlertDialog.Cancel>
+			<AlertDialog.Cancel disabled={deleteMutation.isPending}>ยกเลิก</AlertDialog.Cancel>
 			<AlertDialog.Action
 				class="bg-destructive text-destructive-foreground hover:bg-destructive/90"
 				disabled={deleteMutation.isPending}
 				onclick={remove}
 			>
-				{deleteMutation.isPending ? t.edit.deleting : t.edit.delete}
+				{deleteMutation.isPending ? 'กำลังลบ...' : 'ลบเครื่อง'}
 			</AlertDialog.Action>
 		</AlertDialog.Footer>
 	</AlertDialog.Content>

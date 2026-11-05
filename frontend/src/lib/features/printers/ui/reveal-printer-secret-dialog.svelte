@@ -8,10 +8,7 @@
 	import Check from '@lucide/svelte/icons/check';
 	import Key from '@lucide/svelte/icons/key';
 	import ShieldAlert from '@lucide/svelte/icons/shield-alert';
-	import { languageStore } from '$lib/stores/language.svelte';
-	import { getTranslation } from '$lib/utils/i18n';
 	import type { PrinterAdminSummary } from '../domain/print-device.schema';
-	import { PRINTERS_I18N } from '../domain/printers.i18n';
 
 	let {
 		open = $bindable(false),
@@ -27,8 +24,6 @@
 		/** The dialog closed: the page should drop the plaintext secret it handed in. */
 		onclose?: () => void;
 	} = $props();
-
-	const t = $derived(getTranslation(PRINTERS_I18N, languageStore.current).admin.reveal);
 
 	let copied = $state(false);
 	let copiedEnv = $state(false);
@@ -56,7 +51,7 @@
 			mark();
 			toast.success(done);
 		} catch {
-			toast.error(t.copyFailed);
+			toast.error('ไม่สามารถคัดลอกได้');
 		}
 	}
 </script>
@@ -70,9 +65,15 @@
 					: 'text-foreground'}"
 			>
 				<Key class="h-5 w-5 text-primary" />
-				<span>{reason === 'created' ? t.createdTitle : t.rotatedTitle}</span>
+				<span
+					>{reason === 'created'
+						? 'ลงทะเบียนเครื่องพิมพ์สำเร็จ'
+						: 'ออก Device Secret ใหม่แล้ว'}</span
+				>
 			</Dialog.Title>
-			<Dialog.Description class="text-sm text-muted-foreground">{t.description}</Dialog.Description>
+			<Dialog.Description class="text-sm text-muted-foreground"
+				>นำค่าด้านล่างไปใส่ในไฟล์ .env ของโปรแกรม printer บนเครื่อง Pi — Secret นี้แสดงครั้งเดียว</Dialog.Description
+			>
 		</Dialog.Header>
 
 		{#if device && secret}
@@ -81,8 +82,11 @@
 					<div class="flex items-start gap-2">
 						<ShieldAlert class="mt-0.5 h-4 w-4 shrink-0 text-sky-700" />
 						<div>
-							<p class="font-semibold">{t.warningTitle}</p>
-							<p class="mt-0.5 leading-relaxed">{t.warning}</p>
+							<p class="font-semibold">เก็บเป็นความลับ</p>
+							<p class="mt-0.5 leading-relaxed">
+								Device Secret เปรียบเสมือนรหัสผ่านของเครื่องพิมพ์ ระบบจะไม่แสดงซ้ำอีก
+								หากปิดหน้าต่างแล้วต้องออก Secret ใหม่
+							</p>
 						</div>
 					</div>
 				</div>
@@ -94,7 +98,7 @@
 
 				<div class="space-y-1.5">
 					<label for="printer-device-secret" class="text-sm font-semibold text-slate-700">
-						{t.secretLabel}
+						Device Secret
 					</label>
 					<div class="flex flex-col gap-2 sm:flex-row">
 						<Input
@@ -108,7 +112,7 @@
 							size="sm"
 							class="min-h-11 shrink-0 gap-1.5 sm:min-h-9"
 							onclick={() =>
-								copy(secret, t.copySecretDone, () => {
+								copy(secret, 'คัดลอก Device Secret แล้ว', () => {
 									copied = true;
 									setTimeout(() => (copied = false), 2000);
 								})}
@@ -118,20 +122,22 @@
 							{:else}
 								<Copy class="h-4 w-4" />
 							{/if}
-							<span>{t.copy}</span>
+							<span>คัดลอก</span>
 						</Button>
 					</div>
 				</div>
 
 				<div class="space-y-1.5">
 					<div class="flex flex-wrap items-center justify-between gap-1">
-						<span class="text-xs font-semibold text-muted-foreground">{t.envLabel}</span>
+						<span class="text-xs font-semibold text-muted-foreground"
+							>ตัวอย่างไฟล์ .env สำหรับเครื่อง Pi:</span
+						>
 						<Button
 							variant="ghost"
 							size="sm"
 							class="min-h-11 gap-1 text-xs"
 							onclick={() =>
-								copy(envSnippet, t.copyEnvDone, () => {
+								copy(envSnippet, 'คัดลอก .env config snippet แล้ว', () => {
 									copiedEnv = true;
 									setTimeout(() => (copiedEnv = false), 2000);
 								})}
@@ -141,7 +147,7 @@
 							{:else}
 								<Copy class="h-3.5 w-3.5" />
 							{/if}
-							<span>{t.copyEnv}</span>
+							<span>คัดลอก .env</span>
 						</Button>
 					</div>
 					<pre
@@ -151,7 +157,7 @@
 		{/if}
 
 		<Dialog.Footer>
-			<Button class="w-full sm:w-auto" onclick={() => handleOpenChange(false)}>{t.close}</Button>
+			<Button class="w-full sm:w-auto" onclick={() => handleOpenChange(false)}>ปิดหน้าต่าง</Button>
 		</Dialog.Footer>
 	</Dialog.Content>
 </Dialog.Root>

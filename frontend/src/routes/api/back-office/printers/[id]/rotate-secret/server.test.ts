@@ -31,7 +31,6 @@ const device: PrintDeviceDoc = {
 	name: 'จุดลงทะเบียน 1',
 	shelter_code: 'SH001',
 	station: null,
-	host_kind: 'standalone',
 	secret_hash: hashPrintSecret(OLD_SECRET),
 	secret_prefix: OLD_SECRET.slice(0, 16),
 	status: 'active',

@@ -47,8 +47,6 @@ function device(deviceId: string, shelter = 'SH001'): PrintDeviceDoc {
 		name: deviceId,
 		shelter_code: shelter,
 		station: null,
-		host_kind: 'standalone',
-		kiosk_device_id: null,
 		secret_hash: 'h',
 		secret_prefix: 'sk_print_aaaaaaaa',
 		status: 'active',

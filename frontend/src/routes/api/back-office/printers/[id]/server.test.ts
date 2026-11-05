@@ -6,7 +6,6 @@ import type { PrintDeviceDoc } from '$lib/server/printers/device-credentials';
 import { printDeviceRepository } from '$lib/server/printers/print-device.repo';
 import { printJobStoreFor } from '$lib/server/printers/print-job.service-store';
 import { reprovisionShelterPrintingDb } from '$lib/server/printers/printing-provision';
-import { scannerDeviceRepository } from '$lib/server/scanners/device-repository';
 import { SESSIONS } from '$lib/server/scanners/test-sessions';
 
 vi.mock('$lib/server/session-auth', async () => {
@@ -35,17 +34,12 @@ vi.mock('$lib/server/printers/printing-provision', () => ({
 	reprovisionShelterPrintingDb: vi.fn()
 }));
 
-vi.mock('$lib/server/scanners/device-repository', () => ({
-	scannerDeviceRepository: { getDeviceByDeviceId: vi.fn() }
-}));
-
 const mockSession = vi.mocked(readSessionUserCtx);
 const mockGet = vi.mocked(printDeviceRepository.getDevice);
 const mockUpdate = vi.mocked(printDeviceRepository.updateDevice);
 const mockDelete = vi.mocked(printDeviceRepository.deleteDevice);
 const mockFindJobs = vi.mocked(jobStore.findJobs);
 const mockPutJob = vi.mocked(jobStore.put);
-const mockScanner = vi.mocked(scannerDeviceRepository.getDeviceByDeviceId);
 
 const device: PrintDeviceDoc = {
 	_id: 'print_device:printer-sh001-reg1',
@@ -56,7 +50,6 @@ const device: PrintDeviceDoc = {
 	name: 'จุดลงทะเบียน 1',
 	shelter_code: 'SH001',
 	station: null,
-	host_kind: 'standalone',
 	secret_hash: 'a'.repeat(64),
 	secret_prefix: 'sk_print_01234567',
 	status: 'active',
@@ -149,6 +142,7 @@ describe('PATCH /api/back-office/printers/[id]', () => {
 		['an empty body', {}],
 		['a bad status', { status: 'broken' }],
 		['a shelter change', { shelter_code: 'SH002' }],
+		['a kiosk_device_id (field removed)', { kiosk_device_id: 'kiosk-a' }],
 		['an empty name', { name: ' ' }]
 	])('answers 422 VALIDATION for %s', async (_name, body) => {
 		const response = await patch('printer-sh001-reg1', body);
@@ -169,38 +163,8 @@ describe('PATCH /api/back-office/printers/[id]', () => {
 	});
 });
 
-describe('PATCH kiosk link and per-shelter job store', () => {
+describe('PATCH per-shelter job store', () => {
 	const patch = (id: string, body: unknown) => PATCH(event(id, 'PATCH', body));
-
-	it('links a kiosk printer to a scanner device of its shelter', async () => {
-		mockGet.mockResolvedValue({ ...device, host_kind: 'kiosk' });
-		mockScanner.mockResolvedValue({ shelter_code: 'SH001' } as never);
-
-		const response = await patch('printer-sh001-reg1', { kiosk_device_id: 'kiosk-a' });
-
-		expect(response.status).toBe(200);
-		expect(await response.json()).toMatchObject({ kiosk_device_id: 'kiosk-a' });
-		expect(mockUpdate.mock.calls[0][0]).toMatchObject({ kiosk_device_id: 'kiosk-a' });
-	});
-
-	it('answers 422 KIOSK_DEVICE_NOT_FOUND for a scanner device of another shelter', async () => {
-		mockGet.mockResolvedValue({ ...device, host_kind: 'kiosk' });
-		mockScanner.mockResolvedValue({ shelter_code: 'SH002' } as never);
-
-		const response = await patch('printer-sh001-reg1', { kiosk_device_id: 'kiosk-b' });
-
-		expect(response.status).toBe(422);
-		expect((await response.json()).error.code).toBe('KIOSK_DEVICE_NOT_FOUND');
-		expect(mockUpdate).not.toHaveBeenCalled();
-	});
-
-	it('answers 422 KIOSK_DEVICE_REQUIRES_KIOSK_HOST for a standalone printer', async () => {
-		const response = await patch('printer-sh001-reg1', { kiosk_device_id: 'kiosk-a' });
-
-		expect(response.status).toBe(422);
-		expect((await response.json()).error.code).toBe('KIOSK_DEVICE_REQUIRES_KIOSK_HOST');
-		expect(mockUpdate).not.toHaveBeenCalled();
-	});
 
 	it('deactivating closes jobs in the store of the printer shelter', async () => {
 		mockGet.mockResolvedValue({ ...device, shelter_code: 'SH002' });

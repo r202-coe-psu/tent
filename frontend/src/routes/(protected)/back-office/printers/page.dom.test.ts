@@ -13,9 +13,6 @@ vi.mock('$lib/stores/auth.svelte', () => ({
 		}
 	}
 }));
-vi.mock('$lib/features/kiosk-devices', () => ({
-	useScannerDevices: () => ({ data: [] })
-}));
 vi.mock('$lib/features/printers', async (importActual) => ({
 	...(await importActual<typeof import('$lib/features/printers')>()),
 	CreatePrinterDialog: (await import('./__fixtures__/create-printer-dialog-stub.svelte')).default,

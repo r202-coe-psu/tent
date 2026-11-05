@@ -18,7 +18,6 @@ const created = {
 		name: 'โต๊ะลงทะเบียน 1',
 		shelter_code: 'SH001',
 		station: 'ลงทะเบียน',
-		host_kind: 'standalone',
 		status: 'active',
 		secret_prefix: 'sk_print_0123',
 		last_seen_at: null,
@@ -80,8 +79,7 @@ describe('create printer → reveal secret', () => {
 			device_id: 'printer-sh001-reg1',
 			name: 'โต๊ะลงทะเบียน 1',
 			shelter_code: 'SH001',
-			station: 'ลงทะเบียน',
-			host_kind: 'standalone'
+			station: 'ลงทะเบียน'
 		});
 	});
 

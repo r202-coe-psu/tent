@@ -3,20 +3,14 @@
 	import { spatial } from '$lib/tokens';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import Plus from '@lucide/svelte/icons/plus';
-	import { languageStore } from '$lib/stores/language.svelte';
 	import { resolveContextShelterCode } from '$lib/db/shelter';
-	import { getTranslation } from '$lib/utils/i18n';
 	import {
 		CreatePrinterDialog,
-		PRINTERS_I18N,
 		PrinterAdminList,
 		RevealPrinterSecretDialog,
 		usePrinterAdminList,
 		type PrinterSecretResponse
 	} from '$lib/features/printers';
-	import { useScannerDevices } from '$lib/features/kiosk-devices';
-
-	const t = $derived(getTranslation(PRINTERS_I18N, languageStore.current).admin);
 
 	/**
 	 * The shelter picked in the back-office switcher (or the one a scoped role belongs to);
@@ -26,9 +20,6 @@
 	const activeShelter = $derived(resolveContextShelterCode());
 
 	const printersQuery = usePrinterAdminList(() => activeShelter ?? undefined);
-	/** Scanners of the shelter: lets kiosk printers be linked to and named after their kiosk. */
-	const kioskDevicesQuery = useScannerDevices(() => activeShelter ?? undefined);
-	const kioskDevices = $derived(kioskDevicesQuery.data ?? []);
 
 	let createOpen = $state(false);
 	let revealOpen = $state(false);
@@ -50,14 +41,17 @@
 </script>
 
 <svelte:head>
-	<title>{t.pageTitle} — SmartShelter</title>
+	<title>จัดการเครื่องพิมพ์ — SmartShelter</title>
 </svelte:head>
 
-<StaffPageShell title={t.pageTitle} description={t.pageDescription}>
+<StaffPageShell
+	title="จัดการเครื่องพิมพ์"
+	description="ลงทะเบียนเครื่องพิมพ์ฉลาก (Raspberry Pi + เครื่องพิมพ์) ประจำศูนย์ — สร้าง Device Secret เพื่อให้เครื่องเชื่อมต่อกับระบบ"
+>
 	{#snippet actions()}
 		<Button onclick={() => (createOpen = true)} class="btn-primary-brand shrink-0 gap-2">
 			<Plus class="h-4 w-4" />
-			{t.register}
+			ลงทะเบียนเครื่องพิมพ์ใหม่
 		</Button>
 	{/snippet}
 
@@ -67,18 +61,16 @@
 				<div
 					class="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent"
 				></div>
-				<p>{t.loading}</p>
+				<p>กำลังโหลดรายการเครื่องพิมพ์...</p>
 			</div>
 		{:else if printersQuery.isError}
 			<div class="px-6 py-16 text-center text-sm text-destructive">
-				{printersQuery.error instanceof Error ? printersQuery.error.message : t.loadFailed}
+				{printersQuery.error instanceof Error
+					? printersQuery.error.message
+					: 'ไม่สามารถโหลดรายการเครื่องพิมพ์ได้'}
 			</div>
 		{:else}
-			<PrinterAdminList
-				{printers}
-				{kioskDevices}
-				onrotated={(result) => handleSecret(result, 'rotated')}
-			/>
+			<PrinterAdminList {printers} onrotated={(result) => handleSecret(result, 'rotated')} />
 		{/if}
 	</div>
 </StaffPageShell>
@@ -86,7 +78,6 @@
 <CreatePrinterDialog
 	bind:open={createOpen}
 	fixedShelterCode={activeShelter}
-	{kioskDevices}
 	oncreated={(created) => handleSecret(created, 'created')}
 />
 <RevealPrinterSecretDialog

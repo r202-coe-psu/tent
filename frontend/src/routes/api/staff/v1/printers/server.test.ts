@@ -30,7 +30,6 @@ describe('GET /api/staff/v1/printers', () => {
 		name: device_id,
 		shelter_code: 'SH001',
 		station: null,
-		host_kind: 'standalone',
 		secret_hash: 'a'.repeat(64),
 		secret_prefix: 'sk_print_01234567',
 		status: 'active',

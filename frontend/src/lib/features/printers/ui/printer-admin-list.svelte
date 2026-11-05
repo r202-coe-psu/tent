@@ -6,30 +6,34 @@
 	import { Button } from '$lib/components/ui/button/index.js';
 	import Printer from '@lucide/svelte/icons/printer';
 	import Settings2 from '@lucide/svelte/icons/settings-2';
-	import { languageStore } from '$lib/stores/language.svelte';
 	import { cn } from '$lib/utils/shadcn';
-	import { getTranslation } from '$lib/utils/i18n';
 	import { formatThaiShortDate } from '$lib/utils/date';
-	import { kioskLinkName, type KioskDeviceRef } from '../domain/kiosk-link';
 	import type { PrinterAdminItem, PrinterSecretResponse } from '../domain/print-device.schema';
-	import { PRINTERS_I18N } from '../domain/printers.i18n';
 	import EditPrinterDialog from './edit-printer-dialog.svelte';
 
 	let {
 		printers = [],
-		kioskDevices = [],
 		onrotated
 	}: {
 		printers: readonly PrinterAdminItem[];
-		/** Scanner devices of the listed shelter(s): names the kiosk a printer is linked to. */
-		kioskDevices?: readonly KioskDeviceRef[];
 		/** A secret was rotated in the edit dialog: the page shows it once. */
 		onrotated?: (result: PrinterSecretResponse) => void;
 	} = $props();
 
-	const lang = $derived(languageStore.current);
-	const t = $derived(getTranslation(PRINTERS_I18N, lang));
-	const a = $derived(t.admin);
+	const QUEUE_STATE_LABEL: Record<PrinterAdminItem['queue_state'], string> = {
+		ready: 'พร้อมใช้งาน',
+		disabled: 'คิวถูกปิด',
+		missing: 'ไม่พบคิว',
+		unknown: 'ไม่ทราบสถานะ'
+	};
+
+	const JOB_STATUS_LABEL: Readonly<Record<string, string>> = {
+		pending: 'รอพิมพ์',
+		printing: 'กำลังพิมพ์',
+		printed: 'พิมพ์สำเร็จ',
+		failed: 'พิมพ์ไม่สำเร็จ',
+		expired: 'หมดอายุ'
+	};
 
 	let editOpen = $state(false);
 	let editDeviceId = $state<string | null>(null);
@@ -45,7 +49,7 @@
 	}
 
 	function lastSeenText(lastSeen: string | null): string {
-		return lastSeen ? formatThaiShortDate(lastSeen) || lastSeen : a.neverSeen;
+		return lastSeen ? formatThaiShortDate(lastSeen) || lastSeen : 'ยังไม่เคยเชื่อมต่อ';
 	}
 </script>
 
@@ -53,12 +57,12 @@
 	<table class="w-full text-left text-sm">
 		<thead class="border-b border-slate-200/80 bg-slate-50 text-xs font-semibold text-slate-500">
 			<tr>
-				<th class="px-6 py-3.5">{a.columns.printer}</th>
-				<th class="px-6 py-3.5">{a.columns.station}</th>
-				<th class="px-6 py-3.5">{a.columns.status}</th>
-				<th class="px-6 py-3.5">{a.columns.queue}</th>
-				<th class="px-6 py-3.5">{a.columns.lastJob}</th>
-				<th class="px-6 py-3.5 text-right"><span class="sr-only">{a.columns.manage}</span></th>
+				<th class="px-6 py-3.5">เครื่องพิมพ์</th>
+				<th class="px-6 py-3.5">จุดบริการ</th>
+				<th class="px-6 py-3.5">สถานะ</th>
+				<th class="px-6 py-3.5">คิวพิมพ์</th>
+				<th class="px-6 py-3.5">งานล่าสุด</th>
+				<th class="px-6 py-3.5 text-right"><span class="sr-only">จัดการ</span></th>
 			</tr>
 		</thead>
 		<tbody class="divide-y divide-slate-200/70">
@@ -66,8 +70,8 @@
 				<tr>
 					<td colspan="6" class="px-6 py-12 text-center text-slate-500">
 						<Printer class="mx-auto mb-2 h-8 w-8 text-slate-300" />
-						<p>{a.empty}</p>
-						<p class="text-xs">{a.emptyHint}</p>
+						<p>ยังไม่มีเครื่องพิมพ์ในศูนย์นี้</p>
+						<p class="text-xs">กดปุ่ม "ลงทะเบียนเครื่องพิมพ์ใหม่" ด้านบนเพื่อเพิ่มเครื่อง</p>
 					</td>
 				</tr>
 			{:else}
@@ -77,21 +81,19 @@
 							<p class="font-semibold text-slate-900">{printer.name}</p>
 							<p class="text-xs text-slate-500 tabular-nums">{printer.device_id}</p>
 							<p class="font-mono text-xs text-slate-500">
-								{printer.local_ips.length > 0 ? a.localIps(printer.local_ips) : a.noLocalIps}
+								{printer.local_ips.length > 0
+									? `IP ${printer.local_ips.join(', ')}`
+									: 'ยังไม่ทราบ IP'}
 							</p>
 							<p class="font-mono text-xs text-slate-400">
-								{a.secretPrefix(printer.secret_prefix)}
+								Secret {printer.secret_prefix}…
 							</p>
 						</td>
 						<td class="px-6 py-4">
 							<span class="font-semibold text-slate-900">{printer.shelter_code}</span>
-							<span class="block text-xs text-slate-500">{printer.station ?? a.noStation}</span>
-							{#if printer.host_kind === 'kiosk'}
-								{@const kioskName = kioskLinkName(printer.kiosk_device_id, kioskDevices)}
-								<span class="block text-xs text-slate-500">
-									{kioskName ? a.kioskLink(kioskName) : a.noKioskLink}
-								</span>
-							{/if}
+							<span class="block text-xs text-slate-500"
+								>{printer.station ?? 'ไม่ระบุจุดบริการ'}</span
+							>
 						</td>
 						<td class="px-6 py-4">
 							<div class="flex flex-wrap items-center gap-1.5">
@@ -101,23 +103,23 @@
 										printer.online ? 'text-emerald-700' : 'text-muted-foreground'
 									)}
 								>
-									{printer.online ? `● ${t.online}` : `● ${t.offline}`}
+									{printer.online ? '● ออนไลน์' : '● ออฟไลน์'}
 								</span>
 								{#if printer.status === 'inactive'}
-									<span class="badge-muted">{a.inactive}</span>
+									<span class="badge-muted">ปิดใช้งาน</span>
 								{/if}
 							</div>
 							<p class="mt-1 text-xs text-slate-500">{lastSeenText(printer.last_seen_at)}</p>
 						</td>
-						<td class="px-6 py-4 text-xs text-slate-700">{a.queueState[printer.queue_state]}</td>
+						<td class="px-6 py-4 text-xs text-slate-700"
+							>{QUEUE_STATE_LABEL[printer.queue_state]}</td
+						>
 						<td class="px-6 py-4 text-xs text-slate-700">
 							{#if printer.last_job}
-								{@const known = Object.hasOwn(a.jobStatus, printer.last_job.status)}
-								{known
-									? a.jobStatus[printer.last_job.status as keyof typeof a.jobStatus]
-									: printer.last_job.status}
+								{@const status = printer.last_job.status}
+								{Object.hasOwn(JOB_STATUS_LABEL, status) ? JOB_STATUS_LABEL[status] : status}
 							{:else}
-								{a.noJob}
+								ยังไม่มีงานพิมพ์
 							{/if}
 						</td>
 						<td class="px-6 py-4 text-right">
@@ -127,8 +129,8 @@
 								onclick={() => handleEdit(printer)}
 							>
 								<Settings2 class="h-4 w-4" />
-								{a.manage}
-								<span class="sr-only">{a.manageSr(printer.name)}</span>
+								จัดการ
+								<span class="sr-only">เครื่อง {printer.name}</span>
 							</Button>
 						</td>
 					</tr>
@@ -140,6 +142,6 @@
 
 {#if editPrinter}
 	{#key editSession}
-		<EditPrinterDialog bind:open={editOpen} printer={editPrinter} {kioskDevices} {onrotated} />
+		<EditPrinterDialog bind:open={editOpen} printer={editPrinter} {onrotated} />
 	{/key}
 {/if}

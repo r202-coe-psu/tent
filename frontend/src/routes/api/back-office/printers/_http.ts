@@ -6,10 +6,8 @@ import { isDependencyUnreachable } from '$lib/server/printers/dependency-unreach
 import { PrinterNotFoundError, PrinterOfflineError } from '$lib/server/printers/print-jobs.server';
 import {
 	PrintDeviceConflictError,
-	PrintDeviceNotFoundError,
-	PrintDeviceValidationError
+	PrintDeviceNotFoundError
 } from '$lib/server/printers/printer-admin.server';
-import { ScannerDependencyError } from '$lib/server/scanners/device-credentials';
 import { callerCanManage, type ScopedCaller } from '$lib/server/shelter-capability-access';
 
 /** Never echoes a dependency's own message: it can name env vars or hosts. */
@@ -62,13 +60,8 @@ export function printerAdminError(e: unknown): Response {
 	if (e instanceof PrinterOfflineError) return envelope(409, 'PRINTER_OFFLINE', e.message);
 	if (e instanceof PrinterNotFoundError) return envelope(404, 'NOT_FOUND', e.message);
 	if (e instanceof PrintDeviceNotFoundError) return envelope(404, 'NOT_FOUND', e.message);
-	if (e instanceof PrintDeviceValidationError) return envelope(422, e.code, e.message);
 	if (e instanceof PrintDeviceConflictError) return envelope(409, 'CONFLICT', e.message);
-	if (
-		e instanceof PrintDependencyError ||
-		e instanceof ScannerDependencyError ||
-		isDependencyUnreachable(e)
-	) {
+	if (e instanceof PrintDependencyError || isDependencyUnreachable(e)) {
 		// Details (env var names, hosts) stay in the server log, never in the staff-visible message.
 		console.error('[printing] dependency unavailable:', e instanceof Error ? e.message : e);
 		return envelope(503, 'DEPENDENCY_UNAVAILABLE', DEPENDENCY_MESSAGE);
