@@ -85,12 +85,96 @@ describe('master seed unit-of-measure provisioning', () => {
 			_rev: existing._rev,
 			label_th: existing.label_th,
 			label_en: existing.label_en,
-			sort_order: existing.sort_order,
+			sort_order: first.sort_order,
 			deactivated: existing.deactivated,
 			code: first.code,
 			dimension: first.dimension,
 			is_protected: true
 		});
+	});
+
+	const withoutVolatile = (doc: Record<string, unknown>) =>
+		Object.fromEntries(
+			Object.entries(doc).filter(([key]) => key !== 'updated_at' && key !== '_rev')
+		);
+
+	function unitDoc(def: (typeof FALLBACK_UNIT_DEFINITIONS)[number], overrides = {}) {
+		return {
+			_id: `unit_of_measure:${def.code}`,
+			_rev: '1-test',
+			type: 'unit_of_measure',
+			schema_v: 1,
+			code: def.code,
+			created_at: '2026-09-22T00:00:00.000Z',
+			updated_at: '2026-09-22T00:00:00.000Z',
+			created_by: 'system_admin',
+			label_th: def.label_th,
+			label_en: def.label_en,
+			dimension: def.dimension,
+			is_protected: true,
+			sort_order: def.sort_order,
+			deactivated: false,
+			...overrides
+		};
+	}
+
+	it('rewrites sort_order of protected units to the canonical value and keeps custom labels', async () => {
+		const gallon = FALLBACK_UNIT_DEFINITIONS.find((unit) => unit.code === 'gallon')!;
+		const stale = unitDoc(gallon, { sort_order: 21, label_th: 'แกลลอนใหญ่' });
+		const writes: Record<string, unknown>[] = [];
+		couch.request.mockImplementation(async (method: string, path: string, body?: unknown) => {
+			if (method === 'GET') {
+				return path.endsWith(encodeURIComponent(stale._id))
+					? { status: 200, data: stale }
+					: { status: 404, data: { error: 'not_found' } };
+			}
+			writes.push(body as Record<string, unknown>);
+			return { status: 201, data: { ok: true } };
+		});
+
+		await seedCatalogUnitOfMeasures();
+
+		const written = writes.find((doc) => doc._id === stale._id);
+		expect(written).toMatchObject({ sort_order: 22, label_th: 'แกลลอนใหญ่', is_protected: true });
+	});
+
+	it('creates a missing ball doc as protected and leaves up-to-date docs unchanged', async () => {
+		const store = new Map<string, Record<string, unknown>>(
+			FALLBACK_UNIT_DEFINITIONS.filter((unit) => unit.code !== 'ball').map((unit) => [
+				`unit_of_measure:${unit.code}`,
+				unitDoc(unit)
+			])
+		);
+		couch.request.mockImplementation(async (method: string, path: string, body?: unknown) => {
+			const id = decodeURIComponent(path.split('/').pop() ?? '');
+			if (method === 'GET') {
+				const doc = store.get(id);
+				return doc ? { status: 200, data: doc } : { status: 404, data: { error: 'not_found' } };
+			}
+			store.set(id, { ...(body as Record<string, unknown>), _rev: '2-test' });
+			return { status: 201, data: { ok: true } };
+		});
+
+		await seedCatalogUnitOfMeasures();
+		const snapshot = new Map(store);
+
+		expect(store.get('unit_of_measure:ball')).toMatchObject({
+			code: 'ball',
+			label_th: 'ลูก',
+			dimension: 'count',
+			sort_order: 21,
+			is_protected: true
+		});
+		expect(store.size).toBe(FALLBACK_UNIT_DEFINITIONS.length);
+
+		await seedCatalogUnitOfMeasures();
+
+		expect(store.size).toBe(FALLBACK_UNIT_DEFINITIONS.length);
+		for (const [id, doc] of store) {
+			expect(withoutVolatile(doc)).toEqual(withoutVolatile(snapshot.get(id)!));
+		}
+		const orders = [...store.values()].map((doc) => doc.sort_order);
+		expect(new Set(orders).size).toBe(orders.length);
 	});
 
 	it('retries a conflicting write with the latest revision', async () => {

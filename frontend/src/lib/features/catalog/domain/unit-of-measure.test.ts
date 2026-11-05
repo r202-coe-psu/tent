@@ -111,7 +111,7 @@ describe('unit-of-measure domain', () => {
 	});
 
 	describe('canonical seed definitions', () => {
-		it('contains the 30 canonical units with deterministic IDs and valid dimensions', () => {
+		it('contains the 31 canonical units with deterministic IDs and valid dimensions', () => {
 			const expectedCodes = [
 				'piece',
 				'unit',
@@ -133,6 +133,7 @@ describe('unit-of-measure domain', () => {
 				'bundle',
 				'egg',
 				'fruit',
+				'ball',
 				'gallon',
 				'cylinder',
 				'g',
@@ -145,7 +146,7 @@ describe('unit-of-measure domain', () => {
 				'kcal'
 			];
 			const expectedDimensions = [
-				...Array.from({ length: 20 }, () => 'count'),
+				...Array.from({ length: 21 }, () => 'count'),
 				'volume',
 				'count',
 				'mass',
@@ -158,8 +159,8 @@ describe('unit-of-measure domain', () => {
 				'energy'
 			];
 
-			expect(FALLBACK_UNIT_DEFINITIONS).toHaveLength(30);
-			expect(new Set(FALLBACK_UNIT_DEFINITIONS.map((unit) => unit.code)).size).toBe(30);
+			expect(FALLBACK_UNIT_DEFINITIONS).toHaveLength(31);
+			expect(new Set(FALLBACK_UNIT_DEFINITIONS.map((unit) => unit.code)).size).toBe(31);
 			expect(FALLBACK_UNIT_DEFINITIONS.map((unit) => unit.code)).toEqual(expectedCodes);
 			expect(
 				FALLBACK_UNIT_DEFINITIONS.every((unit) => unitCodeSchema.safeParse(unit.code).success)
@@ -169,7 +170,7 @@ describe('unit-of-measure domain', () => {
 			);
 			expect(FALLBACK_UNIT_DEFINITIONS.map((unit) => unit.dimension)).toEqual(expectedDimensions);
 			expect(FALLBACK_UNIT_DEFINITIONS.filter((unit) => unit.dimension === 'count')).toHaveLength(
-				21
+				22
 			);
 			expect(FALLBACK_UNIT_DEFINITIONS.filter((unit) => unit.dimension === 'mass')).toHaveLength(4);
 			expect(FALLBACK_UNIT_DEFINITIONS.filter((unit) => unit.dimension === 'volume')).toHaveLength(
@@ -182,8 +183,22 @@ describe('unit-of-measure domain', () => {
 				1
 			);
 			expect(FALLBACK_UNIT_DEFINITIONS.map((unit) => unit.sort_order)).toEqual(
-				Array.from({ length: 30 }, (_, index) => index + 1)
+				Array.from({ length: 31 }, (_, index) => index + 1)
 			);
+			expect(new Set(FALLBACK_UNIT_DEFINITIONS.map((unit) => unit.sort_order)).size).toBe(31);
+		});
+
+		it('places ball (ลูก) right after fruit with the count dimension', () => {
+			const codes = FALLBACK_UNIT_DEFINITIONS.map((unit) => unit.code);
+			expect(codes[codes.indexOf('fruit') + 1]).toBe('ball');
+			expect(FALLBACK_UNIT_DEFINITIONS.find((unit) => unit.code === 'ball')).toMatchObject({
+				label_th: 'ลูก',
+				label_en: 'ball',
+				dimension: 'count',
+				sort_order: 21
+			});
+			expect(FALLBACK_UNIT_DEFINITIONS.find((unit) => unit.code === 'gallon')?.sort_order).toBe(22);
+			expect(FALLBACK_UNIT_DEFINITIONS.find((unit) => unit.code === 'kcal')?.sort_order).toBe(31);
 		});
 	});
 
@@ -223,6 +238,9 @@ describe('unit-of-measure domain', () => {
 
 			expect(formatUnit('cylinder', [], 'th')).toBe('ถัง');
 			expect(formatUnit('cylinder', [], 'en')).toBe('cylinder');
+
+			expect(formatUnit('ball', [], 'th')).toBe('ลูก');
+			expect(formatUnit('ball', [], 'en')).toBe('ball');
 		});
 
 		it('handles legacy Thai unit inputs gracefully', () => {

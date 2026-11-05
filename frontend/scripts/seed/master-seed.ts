@@ -399,7 +399,8 @@ function buildUnitOfMeasureSeedDoc(
 				: {}),
 		dimension: def.dimension,
 		is_protected: true,
-		sort_order: typeof existing.sort_order === 'number' ? existing.sort_order : def.sort_order,
+		// Protected system units always follow the canonical order so new units never collide.
+		sort_order: def.sort_order,
 		deactivated: typeof existing.deactivated === 'boolean' ? existing.deactivated : false,
 		updated_at: now()
 	};
