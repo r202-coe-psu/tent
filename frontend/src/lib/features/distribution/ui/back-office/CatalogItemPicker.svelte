@@ -247,7 +247,7 @@
 				onclick={onClose}
 				class="inline-flex h-9 items-center rounded-lg border border-slate-200 bg-white px-4 text-xs font-semibold text-slate-700 shadow-2xs transition-colors hover:bg-slate-50"
 			>
-				ปิดหน้าต่าง
+				ปิด
 			</button>
 		</div>
 	</Dialog.Content>
