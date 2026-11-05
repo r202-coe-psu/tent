@@ -24,6 +24,12 @@ export function leaseSecFor(labelCount: number): number {
  */
 export const PRINT_JOB_PICKUP_HINT_MS = 10_000;
 
+/**
+ * Longest the tablet waits for the create POST to answer. Past it the request is aborted and the
+ * user may retry: the retry reuses the same job id, so a job the BFF did write is not queued twice.
+ */
+export const PRINT_JOB_CREATE_TIMEOUT_MS = 15_000;
+
 /** Slack for the 1 s status poll and clock jitter. */
 const POLL_MARGIN_SEC = 15;
 

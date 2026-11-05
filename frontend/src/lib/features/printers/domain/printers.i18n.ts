@@ -7,6 +7,7 @@ export const PRINTERS_I18N = {
 		partiallyPrinted: (count: number) => `(พิมพ์ไปแล้ว ${count} ใบ)`,
 		notResponding: (printer: string) => `เครื่อง ${printer} ไม่ตอบ`,
 		notPickedUp: (printer: string) => `เครื่อง ${printer} ยังไม่รับงาน — ตรวจสอบว่าเครื่องเปิดอยู่`,
+		statusUnknown: (printer: string) => `ยังไม่ทราบผล — ตรวจที่เครื่องพิมพ์ ${printer}`,
 		choosePrinter: 'เลือกเครื่องพิมพ์',
 		changePrinter: 'เปลี่ยนเครื่อง',
 		printerOffline: (printer: string) => `เครื่อง ${printer} ออฟไลน์`,
@@ -187,6 +188,8 @@ export const PRINTERS_I18N = {
 		notResponding: (printer: string) => `${printer} is not responding`,
 		notPickedUp: (printer: string) =>
 			`${printer} has not picked up the job yet. Check that it is switched on.`,
+		statusUnknown: (printer: string) =>
+			`Result unknown. Check the printer ${printer} to see if the labels came out.`,
 		choosePrinter: 'Choose a printer',
 		changePrinter: 'Change printer',
 		printerOffline: (printer: string) => `${printer} is offline`,

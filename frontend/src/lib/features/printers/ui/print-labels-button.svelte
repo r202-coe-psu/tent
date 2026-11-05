@@ -1,6 +1,7 @@
 <script lang="ts">
 	import LoaderCircle from '@lucide/svelte/icons/loader-circle';
 	import { Button } from '$lib/components/ui/button/index.js';
+	import { ulid } from '$lib/db/ulid';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { endpointStore } from '$lib/stores/endpoint.svelte';
 	import { languageStore } from '$lib/stores/language.svelte';
@@ -11,12 +12,11 @@
 	import { stationPrinter } from '../application/station-printer.svelte';
 	import { chunkLabels } from '../domain/chunk-labels';
 	import { canPrintSource } from '../domain/print-permission';
+	import { isTerminalJobStatus, PRINT_JOB_POLL_TIMEOUT_MS } from '../domain/print-job-status';
 	import {
-		isTerminalJobStatus,
-		PRINT_JOB_POLL_TIMEOUT_MS,
-		trackStatusErrors
-	} from '../domain/print-job-status';
-	import { PRINT_JOB_PICKUP_HINT_MS } from '../domain/print-job-timing';
+		PRINT_JOB_CREATE_TIMEOUT_MS,
+		PRINT_JOB_PICKUP_HINT_MS
+	} from '../domain/print-job-timing';
 	import {
 		PRINTERS_I18N,
 		printJobOutcomeMessage,
@@ -63,8 +63,13 @@
 
 	// Set while the job waits longer than a healthy Pi takes to claim it; cleared when it settles.
 	let pickupLate = $state(false);
+	// Set while the latest status fetch failed: the result is unknown, so no retry is offered (the
+	// job may still print) until the poll timeout settles it (FR-45).
+	let statusUnreachable = $state(false);
 	let sendingTo = $state('');
-	const notPickedUp = $derived(running && pickupLate && statusQuery.data?.status !== 'printing');
+	const notPickedUp = $derived(
+		running && pickupLate && !statusUnreachable && statusQuery.data?.status !== 'printing'
+	);
 
 	// The send loop awaits one job at a time; this effect hands it every status update and the
 	// wait started by `waitForJob` decides which one settles the job. Settling writes state
@@ -89,8 +94,8 @@
 
 	/**
 	 * Resolves on the job's final status, or on `printing` (Pi claimed it) when `untilClaimed`.
-	 * Resolves `timeout` early when the status route fails several times in a row (403/404, network
-	 * down), so a dead status poll does not spin until the poll timeout.
+	 * Failed status fetches never end the wait: polling goes on until the job settles or the poll
+	 * timeout passes, because the job may still print and a retry before then would duplicate labels.
 	 * Resolves `null` as soon as `signal` aborts (cancel button / unmount), dropping every timer.
 	 */
 	function waitForJob(untilClaimed: boolean, signal: AbortSignal): Promise<PrintJobOutcome | null> {
@@ -101,6 +106,7 @@
 				signal.removeEventListener('abort', onAbort);
 				onStatus = null;
 				pickupLate = false;
+				statusUnreachable = false;
 				resolve(outcome);
 			};
 			const onAbort = () => settle(null);
@@ -110,7 +116,6 @@
 				PRINT_JOB_POLL_TIMEOUT_MS
 			);
 			const hintTimer = setTimeout(() => (pickupLate = true), PRINT_JOB_PICKUP_HINT_MS);
-			let consecutiveErrors = 0;
 			let seenDataAt = 0;
 			let seenErrorAt = 0;
 			onStatus = ({ data, dataUpdatedAt, errorUpdatedAt }) => {
@@ -124,13 +129,11 @@
 				// Each fetch result counts once, however often the effect re-runs.
 				if (dataUpdatedAt !== seenDataAt) {
 					seenDataAt = dataUpdatedAt;
-					consecutiveErrors = trackStatusErrors(consecutiveErrors, false).consecutive;
+					statusUnreachable = false;
 				}
 				if (errorUpdatedAt !== seenErrorAt) {
 					seenErrorAt = errorUpdatedAt;
-					const tracked = trackStatusErrors(consecutiveErrors, true);
-					consecutiveErrors = tracked.consecutive;
-					if (tracked.giveUp) settle({ status: 'timeout', printed: 0, error_code: null });
+					statusUnreachable = true;
 				}
 			};
 			if (signal.aborted) settle(null);
@@ -147,9 +150,15 @@
 		runAbort?.abort('cancel');
 	}
 
-	// Chunks still to send. Non-null only after a failure, so the retry resumes where it stopped
-	// without rendering the labels again.
-	let unsent = $state.raw<string[][] | null>(null);
+	// Chunks still to send, each with the job id it is created under. Non-null only after a failure,
+	// so the retry resumes where it stopped without rendering the labels again. The id stays with
+	// the chunk across retries of a create whose outcome the tablet never saw (cancel, timeout,
+	// network), so the BFF can answer with the job it already wrote instead of queueing a second.
+	interface Chunk {
+		labels: string[];
+		jobId: string;
+	}
+	let unsent = $state.raw<Chunk[] | null>(null);
 	let printedTotal = $state(0);
 	const progressDone = $derived(printedTotal + (statusQuery.data?.printed ?? 0));
 
@@ -179,7 +188,7 @@
 				const labels = await renderLabels();
 				if (abort.signal.aborted) return finishAborted(abort.signal);
 				progressTotal = labels.length;
-				unsent = chunkLabels(labels);
+				unsent = chunkLabels(labels).map((chunk) => ({ labels: chunk, jobId: ulid() }));
 			} catch {
 				if (abort.signal.aborted) return finishAborted(abort.signal);
 				running = false;
@@ -206,6 +215,29 @@
 		return t.sendFailed(printerName);
 	}
 
+	/**
+	 * One create POST, aborted by the run's `signal` (cancel / unmount) or after
+	 * `PRINT_JOB_CREATE_TIMEOUT_MS`, so the button never hangs at "printing 0/N" on a stalled request.
+	 */
+	async function postChunk(printerId: string, chunk: Chunk, signal: AbortSignal) {
+		const attempt = new AbortController();
+		const forward = () => attempt.abort(signal.reason);
+		signal.addEventListener('abort', forward, { once: true });
+		const timer = setTimeout(
+			() => attempt.abort(new Error('create timed out')),
+			PRINT_JOB_CREATE_TIMEOUT_MS
+		);
+		try {
+			return await createJob.mutateAsync({
+				input: { job_id: chunk.jobId, printer_id: printerId, source, labels: chunk.labels },
+				signal: attempt.signal
+			});
+		} finally {
+			clearTimeout(timer);
+			signal.removeEventListener('abort', forward);
+		}
+	}
+
 	async function sendUnsent(printer: { id: string; name: string }, signal: AbortSignal) {
 		sendingTo = printer.name;
 		const pending = [...(unsent ?? [])];
@@ -216,12 +248,12 @@
 			}
 			let created;
 			try {
-				created = await createJob.mutateAsync({
-					printer_id: printer.id,
-					source,
-					labels: pending[0]
-				});
+				created = await postChunk(printer.id, pending[0], signal);
 			} catch (error) {
+				// Same chunk, same id on retry, unless the server says that id is another job's.
+				if (error instanceof PrintApiError && error.code === 'JOB_ID_CONFLICT') {
+					pending[0] = { ...pending[0], jobId: ulid() };
+				}
 				unsent = pending;
 				if (signal.aborted) return finishAborted(signal);
 				running = false;
@@ -249,8 +281,12 @@
 			const sent = outcome.status === 'printed' || (last && outcome.status === 'printing');
 			if (!sent) {
 				// The labels a failed job already printed are not sent again on retry.
-				const rest = pending[0].slice(outcome.printed);
-				const remaining = rest.length > 0 ? [rest, ...pending.slice(1)] : pending.slice(1);
+				// That job is over, so the rest goes out as a new job under a new id.
+				const rest = pending[0].labels.slice(outcome.printed);
+				const remaining =
+					rest.length > 0
+						? [{ labels: rest, jobId: ulid() }, ...pending.slice(1)]
+						: pending.slice(1);
 				unsent = remaining.length > 0 ? remaining : null;
 				running = false;
 				toast.error(
@@ -286,7 +322,9 @@
 				{t.cancel}
 			</Button>
 		{/if}
-		{#if notPickedUp}
+		{#if running && statusUnreachable}
+			<p class="text-sm text-muted-foreground" role="status">{t.statusUnknown(sendingTo)}</p>
+		{:else if notPickedUp}
 			<p class="text-sm text-muted-foreground" role="status">{t.notPickedUp(sendingTo)}</p>
 		{/if}
 		{#if disconnected}

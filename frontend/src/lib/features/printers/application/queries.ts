@@ -35,10 +35,15 @@ export const useShelterPrinters = (shelterCode: () => string | undefined) =>
 		};
 	});
 
-/** One mutation = one job (≤ 20 labels). Labels are large; do not keep them in the cache. */
+/**
+ * One mutation = one job (≤ 20 labels). Labels are large; do not keep them in the cache.
+ * `input.job_id` should be the caller's own ULID, kept across retries so a re-sent create is
+ * idempotent; `signal` aborts the in-flight POST.
+ */
 export const useCreatePrintJob = () =>
 	createMutation(() => ({
-		mutationFn: (input: PrintJobCreateInput) => createPrintJob(input),
+		mutationFn: ({ input, signal }: { input: PrintJobCreateInput; signal?: AbortSignal }) =>
+			createPrintJob(input, signal),
 		gcTime: 0
 	}));
 

@@ -5,7 +5,7 @@ import { QueryClient } from '@tanstack/svelte-query';
 import { endpointStore } from '$lib/stores/endpoint.svelte';
 import { stationPrinter } from '../application/station-printer.svelte';
 import { PRINT_JOB_POLL_TIMEOUT_MS } from '../domain/print-job-status';
-import { PRINT_JOB_PICKUP_HINT_MS } from '../domain/print-job-timing';
+import { PRINT_JOB_CREATE_TIMEOUT_MS, PRINT_JOB_PICKUP_HINT_MS } from '../domain/print-job-timing';
 import { PrintApiError } from '../data/printers.api';
 import type { PrinterSummary } from '../domain/print-device.schema';
 import Harness from './__fixtures__/print-labels-button-harness.svelte';
@@ -72,7 +72,19 @@ async function settle() {
 	}
 }
 
+const ULID = /^[0-9A-HJKMNP-TV-Z]{26}$/;
 const labels = (count: number) => Array.from({ length: count }, (_, i) => `label-${i}`);
+/** Labels of every create call so far, in order. */
+const sentLabels = () => api.createPrintJob.mock.calls.map(([input]) => input.labels);
+/** Job id of every create call so far, in order. */
+const sentJobIds = () => api.createPrintJob.mock.calls.map(([input]) => input.job_id as string);
+/** A create call that never answers until its signal aborts, as a stalled fetch would. */
+function hangUntilAborted() {
+	return (_input: unknown, signal: AbortSignal) =>
+		new Promise((_resolve, reject) => {
+			signal.addEventListener('abort', () => reject(signal.reason));
+		});
+}
 const mainButton = () => buttons()[0];
 const options = () => [...document.body.querySelectorAll<HTMLElement>('[role="radio"]')];
 const buttons = () => [...document.body.querySelectorAll<HTMLButtonElement>('button')];
@@ -228,11 +240,15 @@ describe('PrintLabelsButton', () => {
 
 		expect(renderLabels).toHaveBeenCalledTimes(1);
 		expect(api.createPrintJob).toHaveBeenCalledTimes(1);
-		expect(api.createPrintJob).toHaveBeenCalledWith({
-			printer_id: 'p1',
-			source: 'walk_in',
-			labels: labels(20)
-		});
+		expect(api.createPrintJob).toHaveBeenCalledWith(
+			{
+				job_id: expect.stringMatching(ULID),
+				printer_id: 'p1',
+				source: 'walk_in',
+				labels: labels(20)
+			},
+			expect.any(AbortSignal)
+		);
 		expect(mainButton().disabled).toBe(true);
 		expect(mainButton().textContent).toContain('กำลังพิมพ์ 0/45…');
 	});
@@ -283,7 +299,7 @@ describe('PrintLabelsButton', () => {
 		await vi.waitFor(() => expect(toast.success).toHaveBeenCalledTimes(1));
 
 		expect(toast.success).toHaveBeenCalledWith('สั่งพิมพ์ 45 ใบไปที่ เครื่อง-p1 แล้ว');
-		expect(api.createPrintJob.mock.calls.map(([input]) => input.labels)).toEqual([
+		expect(sentLabels()).toEqual([
 			labels(45).slice(0, 20),
 			labels(45).slice(20, 40),
 			labels(45).slice(40)
@@ -370,10 +386,9 @@ describe('PrintLabelsButton', () => {
 		const cancel = buttons().find((b) => b.textContent?.trim() === 'ยกเลิก');
 		expect(cancel).toBeDefined();
 		cancel?.click();
-		await settle();
+		await vi.waitFor(() => expect(toast.info).toHaveBeenCalledTimes(1));
 
 		expect(api.createPrintJob).toHaveBeenCalledTimes(1);
-		expect(toast.info).toHaveBeenCalledTimes(1);
 		expect(toast.success).not.toHaveBeenCalled();
 		expect(mainButton().disabled).toBe(false);
 		expect(mainButton().textContent).toContain('พิมพ์อีกครั้ง');
@@ -466,7 +481,7 @@ describe('PrintLabelsButton', () => {
 		mainButton().click();
 		await vi.waitFor(() => expect(toast.success).toHaveBeenCalledTimes(1));
 
-		expect(api.createPrintJob.mock.calls.map(([input]) => input.labels)).toEqual([
+		expect(sentLabels()).toEqual([
 			labels(25).slice(0, 20),
 			labels(25).slice(7, 20),
 			labels(25).slice(20)
@@ -525,7 +540,7 @@ describe('PrintLabelsButton', () => {
 		expect(mainButton().textContent).toContain('พิมพ์อีกครั้ง');
 	});
 
-	it('stops waiting and offers a retry when the status route keeps failing', async () => {
+	it('keeps polling and shows "unknown result" without a retry while the status route keeps failing', async () => {
 		vi.useFakeTimers();
 		stationPrinter.set('SH001', 'p1');
 		api.createPrintJob.mockResolvedValue({
@@ -537,11 +552,62 @@ describe('PrintLabelsButton', () => {
 		await render({ printers: [printer('p1')] });
 
 		mainButton().click();
-		await vi.advanceTimersByTimeAsync(10_000);
+		await vi.advanceTimersByTimeAsync(PRINT_JOB_POLL_TIMEOUT_MS / 2);
+
+		expect(toast.error).not.toHaveBeenCalled();
+		expect(document.body.textContent).toContain('ยังไม่ทราบผล — ตรวจที่เครื่องพิมพ์ เครื่อง-p1');
+		expect(mainButton().disabled).toBe(true);
+		expect(mainButton().textContent).not.toContain('พิมพ์อีกครั้ง');
+		expect(api.getPrintJobStatus.mock.calls.length).toBeGreaterThan(10);
+	});
+
+	it('offers a retry only after the full poll timeout when the status route never recovers', async () => {
+		vi.useFakeTimers();
+		stationPrinter.set('SH001', 'p1');
+		api.createPrintJob.mockResolvedValue({
+			job_id: 'job-1',
+			shelter_code: 'SH001',
+			expires_at: '2026-10-22T04:00:00Z'
+		});
+		api.getPrintJobStatus.mockRejectedValue(new Error('network'));
+		await render({ printers: [printer('p1')] });
+
+		mainButton().click();
+		await vi.advanceTimersByTimeAsync(PRINT_JOB_POLL_TIMEOUT_MS - 1_000);
+		expect(toast.error).not.toHaveBeenCalled();
+		expect(mainButton().textContent).not.toContain('พิมพ์อีกครั้ง');
+		await vi.advanceTimersByTimeAsync(2_000);
 
 		expect(toast.error).toHaveBeenCalledWith('เครื่อง เครื่อง-p1 ไม่ตอบ');
 		expect(mainButton().textContent).toContain('พิมพ์อีกครั้ง');
 		expect(mainButton().disabled).toBe(false);
+	});
+
+	it('drops the "unknown result" note and finishes once the status route recovers', async () => {
+		vi.useFakeTimers();
+		stationPrinter.set('SH001', 'p1');
+		api.createPrintJob.mockResolvedValue({
+			job_id: 'job-1',
+			shelter_code: 'SH001',
+			expires_at: '2026-10-22T04:00:00Z'
+		});
+		api.getPrintJobStatus
+			.mockRejectedValueOnce(new Error('network'))
+			.mockRejectedValueOnce(new Error('network'))
+			.mockRejectedValueOnce(new Error('network'))
+			.mockRejectedValueOnce(new Error('network'))
+			.mockResolvedValueOnce({ status: 'pending', printed: 0, label_count: 1, error_code: null })
+			.mockResolvedValue({ status: 'printed', printed: 1, label_count: 1, error_code: null });
+		await render({ printers: [printer('p1')] });
+
+		mainButton().click();
+		await vi.advanceTimersByTimeAsync(3_000);
+		expect(document.body.textContent).toContain('ยังไม่ทราบผล');
+		await vi.advanceTimersByTimeAsync(5_000);
+
+		expect(document.body.textContent).not.toContain('ยังไม่ทราบผล');
+		expect(toast.success).toHaveBeenCalledTimes(1);
+		expect(toast.error).not.toHaveBeenCalled();
 	});
 
 	it('keeps waiting through a one-off status failure', async () => {
@@ -566,6 +632,179 @@ describe('PrintLabelsButton', () => {
 
 		expect(toast.error).not.toHaveBeenCalled();
 		expect(toast.success).toHaveBeenCalledTimes(1);
+	});
+
+	it('mints one distinct job id per chunk', async () => {
+		stationPrinter.set('SH001', 'p1');
+		api.createPrintJob.mockImplementation(async (input: { job_id: string }) => ({
+			job_id: input.job_id,
+			shelter_code: 'SH001',
+			expires_at: '2026-10-22T04:00:00Z'
+		}));
+		api.getPrintJobStatus.mockImplementation(async () => ({
+			status: 'printed',
+			printed: 20,
+			label_count: 20,
+			error_code: null
+		}));
+		await render({
+			printers: [printer('p1')],
+			labelCount: 45,
+			renderLabels: async () => labels(45)
+		});
+
+		mainButton().click();
+		await vi.waitFor(() => expect(toast.success).toHaveBeenCalledTimes(1));
+
+		const ids = sentJobIds();
+		expect(ids).toHaveLength(3);
+		expect(ids.every((id) => ULID.test(id))).toBe(true);
+		expect(new Set(ids).size).toBe(3);
+	});
+
+	it('retries a create whose outcome was unknown under the same job id', async () => {
+		stationPrinter.set('SH001', 'p1');
+		api.createPrintJob
+			.mockRejectedValueOnce(new TypeError('network'))
+			.mockImplementation(async (input: { job_id: string }) => ({
+				job_id: input.job_id,
+				shelter_code: 'SH001',
+				expires_at: '2026-10-22T04:00:00Z'
+			}));
+		api.getPrintJobStatus.mockResolvedValue({
+			status: 'printed',
+			printed: 1,
+			label_count: 1,
+			error_code: null
+		});
+		await render({ printers: [printer('p1')] });
+
+		mainButton().click();
+		await vi.waitFor(() => expect(toast.error).toHaveBeenCalledTimes(1));
+		await settle();
+		expect(mainButton().textContent).toContain('พิมพ์อีกครั้ง');
+		mainButton().click();
+		await vi.waitFor(() => expect(toast.success).toHaveBeenCalledTimes(1));
+
+		const [first, second] = sentJobIds();
+		expect(first).toMatch(ULID);
+		expect(second).toBe(first);
+	});
+
+	it('cancel aborts the create that is in flight and a retry reuses its job id', async () => {
+		stationPrinter.set('SH001', 'p1');
+		api.createPrintJob.mockImplementationOnce(hangUntilAborted());
+		await render({ printers: [printer('p1')] });
+
+		mainButton().click();
+		await settle();
+		const signal = api.createPrintJob.mock.calls[0][1] as AbortSignal;
+		expect(signal.aborted).toBe(false);
+		buttons()
+			.find((b) => b.textContent?.trim() === 'ยกเลิก')
+			?.click();
+		await vi.waitFor(() => expect(toast.info).toHaveBeenCalledTimes(1));
+
+		expect(signal.aborted).toBe(true);
+		expect(mainButton().textContent).toContain('พิมพ์อีกครั้ง');
+
+		api.createPrintJob.mockResolvedValue({
+			job_id: 'x',
+			shelter_code: 'SH001',
+			expires_at: '2026-10-22T04:00:00Z'
+		});
+		api.getPrintJobStatus.mockResolvedValue({
+			status: 'printed',
+			printed: 1,
+			label_count: 1,
+			error_code: null
+		});
+		mainButton().click();
+		await vi.waitFor(() => expect(toast.success).toHaveBeenCalledTimes(1));
+
+		const [first, second] = sentJobIds();
+		expect(second).toBe(first);
+	});
+
+	it('gives up on a create that hangs after the send timeout and retries under the same job id', async () => {
+		vi.useFakeTimers();
+		stationPrinter.set('SH001', 'p1');
+		api.createPrintJob.mockImplementationOnce(hangUntilAborted());
+		await render({ printers: [printer('p1')] });
+
+		mainButton().click();
+		await vi.advanceTimersByTimeAsync(PRINT_JOB_CREATE_TIMEOUT_MS - 1_000);
+		expect(toast.error).not.toHaveBeenCalled();
+		expect(mainButton().textContent).toContain('กำลังพิมพ์ 0/1');
+		await vi.advanceTimersByTimeAsync(2_000);
+
+		expect(toast.error).toHaveBeenCalledWith('ส่งงานพิมพ์ไปที่ เครื่อง-p1 ไม่สำเร็จ');
+		expect(mainButton().textContent).toContain('พิมพ์อีกครั้ง');
+		expect(mainButton().disabled).toBe(false);
+
+		api.createPrintJob.mockResolvedValue({
+			job_id: 'x',
+			shelter_code: 'SH001',
+			expires_at: '2026-10-22T04:00:00Z'
+		});
+		api.getPrintJobStatus.mockResolvedValue({
+			status: 'printed',
+			printed: 1,
+			label_count: 1,
+			error_code: null
+		});
+		mainButton().click();
+		await vi.advanceTimersByTimeAsync(3_000);
+
+		const [first, second] = sentJobIds();
+		expect(second).toBe(first);
+		expect(toast.success).toHaveBeenCalledTimes(1);
+	});
+
+	it('uses a fresh job id for the rest of a chunk whose job failed', async () => {
+		stationPrinter.set('SH001', 'p1');
+		api.createPrintJob.mockImplementation(async (input: { job_id: string }) => ({
+			job_id: input.job_id,
+			shelter_code: 'SH001',
+			expires_at: '2026-10-22T04:00:00Z'
+		}));
+		api.getPrintJobStatus.mockImplementation(async (jobId: string) =>
+			jobId === sentJobIds()[0]
+				? { status: 'failed', printed: 7, label_count: 20, error_code: 'printer_timeout' }
+				: { status: 'printed', printed: 13, label_count: 13, error_code: null }
+		);
+		await render({
+			printers: [printer('p1')],
+			labelCount: 20,
+			renderLabels: async () => labels(20)
+		});
+
+		mainButton().click();
+		await vi.waitFor(() => expect(toast.error).toHaveBeenCalledTimes(1));
+		await settle();
+		mainButton().click();
+		await vi.waitFor(() => expect(toast.success).toHaveBeenCalledTimes(1));
+
+		const [first, second] = sentJobIds();
+		expect(second).toMatch(ULID);
+		expect(second).not.toBe(first);
+	});
+
+	it('mints a new job id when the server says the old one belongs to another job', async () => {
+		stationPrinter.set('SH001', 'p1');
+		api.createPrintJob.mockRejectedValueOnce(new PrintApiError('taken', 409, 'JOB_ID_CONFLICT'));
+		await render({ printers: [printer('p1')] });
+
+		mainButton().click();
+		await vi.waitFor(() => expect(toast.error).toHaveBeenCalledTimes(1));
+		await settle();
+		api.createPrintJob.mockRejectedValueOnce(new Error('stop'));
+		mainButton().click();
+		await vi.waitFor(() => expect(toast.error).toHaveBeenCalledTimes(2));
+
+		const [first, second] = sentJobIds();
+		expect(second).toMatch(ULID);
+		expect(second).not.toBe(first);
 	});
 
 	it('treats an expired job as the printer not responding', async () => {
