@@ -16,7 +16,12 @@ import {
 	closeZone,
 	reopenZone,
 	getShelterClosePreview,
-	closeShelter
+	closeShelter,
+	getStoragePoints,
+	addStoragePoint,
+	editStoragePoint,
+	deleteStoragePoint,
+	type StoragePointInput
 } from '../data/shelters.api';
 import { listProvinces, listDistricts, listSubdistricts } from '../data/thailand-location.api';
 import type { Shelter } from '../domain/schema';
@@ -26,6 +31,7 @@ export const sheltersKeys = {
 	list: () => [...sheltersKeys.all, 'list'] as const,
 	search: () => [...sheltersKeys.all, 'search'] as const,
 	detail: (code: string) => [...sheltersKeys.all, 'detail', code] as const,
+	storagePoints: (code: string) => [...sheltersKeys.all, 'storage-points', code] as const,
 	closePreview: (code: string) => [...sheltersKeys.all, 'close-preview', code] as const
 };
 
@@ -212,3 +218,60 @@ export function startSheltersLiveQuery(queryClient: QueryClient): SubscribeDataC
 		return [];
 	});
 }
+
+// ===== Storage points ("จัดการคลัง", #1186) =====
+
+/** The shelter's points and the `_rev` writes must quote; always re-read, never served stale. */
+export const useStoragePointsAdmin = (code: () => string) =>
+	createQuery(() => ({
+		queryKey: sheltersKeys.storagePoints(code()),
+		queryFn: () => getStoragePoints(code()),
+		enabled: !!code(),
+		staleTime: 0
+	}));
+
+/**
+ * Add (no `pointId`) or edit one storage point. `rev` is the `_rev` of the snapshot the user saw;
+ * a 409 (someone saved the shelter meanwhile) re-reads the snapshot so the next try quotes a fresh one.
+ */
+export const useSaveStoragePoint = () => {
+	const queryClient = useQueryClient();
+	return createMutation(() => ({
+		mutationFn: ({
+			code,
+			rev,
+			pointId,
+			point
+		}: {
+			code: string;
+			rev: string;
+			pointId?: string;
+			point: StoragePointInput;
+		}) =>
+			pointId ? editStoragePoint(code, pointId, rev, point) : addStoragePoint(code, rev, point),
+		onSuccess: (_, variables) => {
+			queryClient.invalidateQueries({ queryKey: sheltersKeys.all });
+			toast.success(variables.pointId ? 'บันทึกจุดเก็บของสำเร็จ' : 'เพิ่มจุดเก็บของสำเร็จ');
+		},
+		onError: (err: Error, variables) => {
+			queryClient.invalidateQueries({ queryKey: sheltersKeys.storagePoints(variables.code) });
+			toast.error(err.message || 'บันทึกจุดเก็บของไม่สำเร็จ');
+		}
+	}));
+};
+
+export const useDeleteStoragePoint = () => {
+	const queryClient = useQueryClient();
+	return createMutation(() => ({
+		mutationFn: ({ code, rev, pointId }: { code: string; rev: string; pointId: string }) =>
+			deleteStoragePoint(code, pointId, rev),
+		onSuccess: () => {
+			queryClient.invalidateQueries({ queryKey: sheltersKeys.all });
+			toast.success('ลบจุดเก็บของสำเร็จ');
+		},
+		onError: (err: Error, variables) => {
+			queryClient.invalidateQueries({ queryKey: sheltersKeys.storagePoints(variables.code) });
+			toast.error(err.message || 'ลบจุดเก็บของไม่สำเร็จ');
+		}
+	}));
+};

@@ -12,6 +12,7 @@ import {
 	canAccessDonations,
 	canViewSupply,
 	canChangeStock,
+	canManageStoragePoints,
 	canAccessKitchen,
 	canAccessTickets,
 	canAccessEvacueeRegistration,
@@ -753,5 +754,22 @@ describe('page-guard predicates shared by guards and sidebar (#842)', () => {
 		for (const cap of everyCap) expect(fn(sh(cap), 'A')).toBe(allowed.includes(cap));
 		for (const cap of everyCap) expect(fn(sh(cap), 'B')).toBe(false);
 		expect(fn([], 'A')).toBe(false);
+	});
+});
+
+describe('canManageStoragePoints (#1186)', () => {
+	it('lets SA and the warehouse side + SM manage storage points in their own shelter only', () => {
+		expect(canManageStoragePoints(['system_admin'], 'SH001')).toBe(true);
+		for (const cap of ['warehouse_staff', 'supply_coordinator', 'shelter_manager']) {
+			const roles = ['shelter:SH001', `SH001:${cap}`];
+			expect(canManageStoragePoints(roles, 'SH001')).toBe(true);
+			expect(canManageStoragePoints(roles, 'SH002')).toBe(false);
+		}
+	});
+
+	it('refuses other staff roles, including donation_staff', () => {
+		for (const cap of ['kitchen_staff', 'registration_staff', 'donation_staff']) {
+			expect(canManageStoragePoints(['shelter:SH001', `SH001:${cap}`], 'SH001')).toBe(false);
+		}
 	});
 });
