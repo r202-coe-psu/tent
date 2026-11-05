@@ -64,6 +64,10 @@ WorkingDirectory=$SCRIPT_DIR
 ExecStart=$SCRIPT_DIR/run.sh
 Restart=always
 RestartSec=5
+# SIGTERM only sets a flag: wait out the longest job (20 labels: 190 s lease) before SIGKILL.
+TimeoutStopSec=240
+# Exit 2 = invalid configuration; restarting every 5 s cannot fix it.
+RestartPreventExitStatus=2
 
 [Install]
 WantedBy=multi-user.target
