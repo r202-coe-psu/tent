@@ -25,7 +25,13 @@ export const STOCK_URL_DEFAULTS: StockUrlState = {
 	all: false
 };
 
-const STATUSES: readonly StockStatusFilter[] = ['expired', 'empty', 'low', 'expiring'];
+const STATUSES: readonly StockStatusFilter[] = [
+	'expired',
+	'empty',
+	'low',
+	'expiring',
+	'has_expiry'
+];
 const SORTS: readonly StockSort[] = ['urgency', 'name', 'qty'];
 
 /** Read the stock table state; unknown or malformed values fall back to the defaults. */

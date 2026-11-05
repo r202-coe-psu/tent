@@ -41,8 +41,7 @@
 	const EXPIRY_CLASS = {
 		critical: 'text-red-700',
 		warning: 'text-amber-700',
-		muted: 'text-slate-500',
-		default: 'text-slate-500'
+		muted: 'text-slate-500'
 	};
 </script>
 
