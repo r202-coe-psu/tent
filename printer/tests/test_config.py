@@ -212,3 +212,12 @@ def test_printer_name_rejects_names_cups_would_not_accept(bad):
 @pytest.mark.parametrize("good", ["tent_xprinter", "XP-365B", "q1", "a" * 127])
 def test_printer_name_accepts_cups_queue_name_charset(good):
     assert load_config({**VALID_ENV, "PRINTER_NAME": good}).printer_name == good
+
+
+def test_repr_of_config_never_contains_the_device_secret():
+    secret = "sk_print_TOPSECRET123"
+
+    config = load_config({**VALID_ENV, "DEVICE_SECRET": secret})
+
+    assert secret not in repr(config)
+    assert secret not in str(config)

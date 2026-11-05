@@ -2,7 +2,7 @@ import ipaddress
 import os
 import re
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -15,7 +15,7 @@ class ConfigError(ValueError):
 class Config:
     base_url: str
     device_id: str
-    device_secret: str
+    device_secret: str = field(repr=False)
     printer_name: str
     ppi: int = 203
     job_timeout_sec: int = 30
