@@ -2,9 +2,9 @@
 title: "Task Breakdown — Household & Zoning"
 status: active
 created: 2026-06-05
-updated: 2026-08-20
+updated: 2026-10-28
 module: people
-note: decision-synced 2026-06-15 — task details and DoD maintained directly in Markdown; updated 2026-06-18 per CR-001 (permission cross-ref, lifecycle, screening inline, pre-registration, bulk ops, UI split); updated 2026-06-24 per CR-009 (T-04 — Household management ย้ายไป Stage 3, 2-box search/create flow); 2026-08-13 — CR-066 T-71..T-74; Wave 3 + T-72 **approved**; T-73/T-74 = Wave 4 รอบ CR ถัดไป; 2026-08-14 — CR-076 บังคับ household ใน onsite registration และเก็บ pet/asset/vehicle ที่ household
+note: decision-synced 2026-06-15 — task details and DoD maintained directly in Markdown; updated 2026-06-18 per CR-001 (permission cross-ref, lifecycle, screening inline, pre-registration, bulk ops, UI split); updated 2026-06-24 per CR-009 (T-04 — Household management ย้ายไป Stage 3, 2-box search/create flow); 2026-08-13 — CR-066 T-71..T-74; Wave 3 + T-72 **approved**; T-73/T-74 = Wave 4 รอบ CR ถัดไป; 2026-08-14 — CR-076 บังคับ household ใน onsite registration และเก็บ pet/asset/vehicle ที่ household; decision sync 2026-10-28 (decided_by: kong, #990) — copy only: สะกด "เช็คเอาต์" ทั้งแอป (เลิก "เช็คเอาท์"); ไม่แตะ enum `checked_out`, label อังกฤษ, `schema_v`, `PROJECTION_VERSION`
 ---
 
 # Household & Zoning
