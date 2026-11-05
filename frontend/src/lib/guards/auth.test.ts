@@ -489,7 +489,13 @@ describe('requireShelterReadiness (/back-office/shelters/readiness/[id], #478)',
 	});
 
 	it('redirects other staff roles and a bare shelter scope', async () => {
-		for (const cap of ['registration_staff', 'warehouse_staff', 'facility_staff']) {
+		for (const cap of [
+			'registration_staff',
+			'supply_coordinator',
+			'warehouse_staff',
+			'donation_staff',
+			'facility_staff'
+		]) {
 			expect(await passes(guardFor('SH001'), ['shelter:SH001', `SH001:${cap}`])).toBe(false);
 		}
 		expect(await passes(guardFor('SH001'), ['shelter:SH001'])).toBe(false);
