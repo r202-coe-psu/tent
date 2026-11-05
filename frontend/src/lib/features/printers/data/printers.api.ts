@@ -44,9 +44,14 @@ export async function listShelterPrinters(shelterCode: string): Promise<PrinterL
 	return printerListResponseSchema.parse(payload);
 }
 
-export async function createPrintJob(input: PrintJobCreateInput): Promise<PrintJobCreateResponse> {
+/** `signal` aborts the in-flight POST (cancel button, send timeout); the BFF may still have queued the job. */
+export async function createPrintJob(
+	input: PrintJobCreateInput,
+	signal?: AbortSignal
+): Promise<PrintJobCreateResponse> {
 	const payload = await request('/api/staff/v1/print-jobs', {
 		method: 'POST',
+		signal,
 		headers: { 'content-type': 'application/json' },
 		body: JSON.stringify(input)
 	});

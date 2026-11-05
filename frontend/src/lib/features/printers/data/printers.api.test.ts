@@ -100,6 +100,38 @@ describe('createPrintJob', () => {
 		expect(JSON.parse(init.body as string)).toEqual(input);
 	});
 
+	it('sends the job id the caller minted so a retry reuses it', async () => {
+		fetchMock.mockResolvedValueOnce(
+			respond(201, {
+				job_id: '01JC0000000000000000000001',
+				shelter_code: 'SH001',
+				expires_at: '2026-10-22T03:02:00.000Z'
+			})
+		);
+
+		await createPrintJob({ ...input, job_id: '01JC0000000000000000000001' });
+
+		const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+		expect(JSON.parse(init.body as string).job_id).toBe('01JC0000000000000000000001');
+	});
+
+	it('hands the abort signal to fetch and rejects when the caller aborts the request', async () => {
+		fetchMock.mockImplementationOnce(
+			(_url, init) =>
+				new Promise((_resolve, reject) => {
+					init?.signal?.addEventListener('abort', () => reject(init.signal?.reason));
+				})
+		);
+		const controller = new AbortController();
+
+		const pending = createPrintJob(input, controller.signal);
+		controller.abort(new Error('cancelled'));
+
+		await expect(pending).rejects.toThrow('cancelled');
+		const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+		expect(init.signal).toBe(controller.signal);
+	});
+
 	it('exposes PRINTER_OFFLINE so the UI can say which printer is down', async () => {
 		fetchMock.mockResolvedValueOnce(
 			respond(409, { error: { code: 'PRINTER_OFFLINE', message: 'offline' } })
