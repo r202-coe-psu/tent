@@ -792,7 +792,7 @@ Content-Type: application/json
 | Method | Path                                          | Request                                                         | สำเร็จ                                                                                                         |
 | ------ | --------------------------------------------- | --------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
 | `GET`  | `/api/staff/v1/printers?shelter_code=`        | —                                                               | `200 { printers: [{ id, name, station, online, queue_state, last_seen_at }], server_time }` — เฉพาะ `active` ของศูนย์ เรียงตามชื่อ |
-| `POST` | `/api/staff/v1/print-jobs`                    | `{ printer_id, source: "walk_in" \| "evacuee_qr", labels: [base64 PNG] }` | `201 { job_id, shelter_code, expires_at }`                                                              |
+| `POST` | `/api/staff/v1/print-jobs`                    | `{ printer_id, source: "walk_in" \| "evacuee_qr", labels: [base64 PNG], job_id?: ULID }` | `201 { job_id, shelter_code, expires_at }`                                                              |
 | `GET`  | `/api/staff/v1/print-jobs/{id}?shelter_code=` | —                                                               | `200 { status, printed, label_count, error_code }`                                                             |
 
 - `GET /printers`: ผู้เรียกต้องมี scope ศูนย์นั้นหรือเป็น SA · `id` = `print_device:{device_id}` · ไม่มี secret / hash / `local_ips`
@@ -804,6 +804,7 @@ Content-Type: application/json
   - BFF เขียน `print_job` (`pending`, `expires_at = now + 120 วิ`, รูปเป็น `_attachments` `label-NNN.png`) ลง `printing_{code}` ด้วย cookie ของผู้เรียก ·
     VDU reject → `403`
   - `shelter_code` ใน response ใช้กับ `?shelter_code=` ตอน poll สถานะ
+  - `job_id` (optional, ULID 26 ตัว ไม่มี prefix) → `_id` = `print_job:{job_id}` · ส่งซ้ำด้วยงานเดียวกัน (`created_by` / `shelter_code` / `printer_id` / `source` / `label_count` ตรง) → `201` ของงานเดิม ไม่เข้าคิวซ้ำ · ไม่ตรง → `409 JOB_ID_CONFLICT` _(CR-222 ทีมเสนอ 2026-11-05)_
 - `GET /print-jobs/{id}`: อ่านด้วย cookie ของผู้เรียก · ตอบเฉพาะผู้สร้างงาน (`created_by`) หรือ SA · tablet poll ทุก 1 วิจนงานจบหรือครบ
   `PRINT_JOB_POLL_TIMEOUT_MS` (TTL 120 + lease ของงาน 20 label 190 + sweep 30 + 15 วิ = 355 วิ)
 
@@ -814,7 +815,8 @@ Content-Type: application/json
 | 404    | `PRINTER_NOT_FOUND`      | `POST /print-jobs`: ไม่มีเครื่อง หรือเครื่อง `inactive`                                       |
 | 404    | `JOB_NOT_FOUND`          | `GET /print-jobs/{id}`: ไม่มีงานใน `printing_{code}`                                         |
 | 409    | `PRINTER_OFFLINE`        | `POST /print-jobs`: เครื่องไม่ online (`active` + `queue_state = ready` + heartbeat ≤ 90 วิ) — ไม่เข้าคิว |
-| 422    | `INVALID_LABELS`         | `POST /print-jobs`: body ไม่ผ่าน schema (labels ผิดเกณฑ์ข้างบน)                               |
+| 409    | `JOB_ID_CONFLICT`        | `POST /print-jobs`: `job_id` ถูกใช้แล้วกับงานอื่น (คนละผู้สร้าง / เครื่อง / `source` / จำนวน label) |
+| 422    | `INVALID_LABELS`         | `POST /print-jobs`: body ไม่ผ่าน schema (labels ผิดเกณฑ์ข้างบน หรือ `job_id` ไม่ใช่ ULID)                               |
 | 422    | `VALIDATION`             | `GET`: ไม่ส่ง `shelter_code` (หรือรูปแบบผิด)                                                   |
 | 503    | `DEPENDENCY_UNAVAILABLE` | CouchDB ใช้ไม่ได้                                                                           |
 
