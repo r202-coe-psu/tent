@@ -10,8 +10,9 @@
  * Needs: CouchDB running + COUCHDB_ADMIN_URL in frontend/.env
  */
 import { shelterDbName } from '$lib/server/shelter-access-design';
+import { isLargeVolume, LARGE_VOLUME_WARNING } from './seed/bulk-volume';
 import { assertLocalCouch, couchReq, displayCouchUrl } from './seed/couch';
-import { findDocsByPrefix } from './unseed-stock';
+import { findDocsByPrefix, type CouchReq } from './unseed-stock';
 
 const ID_PREFIX = 'seed-bulk';
 const DELETE_CHUNK = 500;
@@ -19,21 +20,24 @@ const DOC_KINDS = ['evacuee', 'household', 'movement'] as const;
 
 export async function unseedBulkEvacuees(
 	shelter: string,
-	options: { confirm?: boolean } = {}
+	options: { confirm?: boolean; req?: CouchReq } = {}
 ): Promise<{ db: string; counts: Record<string, number> }> {
+	const req = options.req ?? couchReq;
 	const db = shelterDbName(shelter);
 	const codeSlug = shelter.toLowerCase();
 	const counts: Record<string, number> = {};
 	const docs: Array<{ id: string; rev: string }> = [];
 
 	for (const kind of DOC_KINDS) {
-		const found = await findDocsByPrefix(db, `${kind}:${ID_PREFIX}:${codeSlug}:`);
+		const found = await findDocsByPrefix(db, `${kind}:${ID_PREFIX}:${codeSlug}:`, req);
 		counts[kind] = found.length;
 		docs.push(...found);
 	}
 
 	console.log(`\nBulk evacuee volume in ${db} → ${displayCouchUrl()}`);
 	for (const kind of DOC_KINDS) console.log(`  ${kind}: ${counts[kind]}`);
+
+	if (isLargeVolume(docs.length)) console.log(`\n${LARGE_VOLUME_WARNING}`);
 
 	if (!options.confirm) {
 		console.log(`\nDry-run only. Add --confirm to delete ${docs.length} docs.\n`);
@@ -44,7 +48,7 @@ export async function unseedBulkEvacuees(
 	const failures: string[] = [];
 	for (let i = 0; i < docs.length; i += DELETE_CHUNK) {
 		const chunk = docs.slice(i, i + DELETE_CHUNK);
-		const { status, data } = await couchReq('POST', `/${db}/_bulk_docs`, {
+		const { status, data } = await req('POST', `/${db}/_bulk_docs`, {
 			docs: chunk.map((d) => ({ _id: d.id, _rev: d.rev, _deleted: true }))
 		});
 		if (status !== 201 || !Array.isArray(data)) {

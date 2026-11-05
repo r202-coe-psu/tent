@@ -13,32 +13,21 @@
  * different count keeps existing docs (conflicts ignored), so unseed first to resize.
  */
 import { createInterface } from 'node:readline/promises';
-import type { AuthorContext } from '$lib/db/model';
-import {
-	applyMovementToStay,
-	createEvacuee,
-	createHousehold,
-	createMovement,
-	type Evacuee,
-	type Household,
-	type Movement,
-	type PeopleDoc
-} from '$lib/features/people/domain/people';
 import { shelterDbName } from '$lib/server/shelter-access-design';
+import { isLargeVolume, LARGE_VOLUME_WARNING } from './seed/bulk-volume';
 import { assertLocalCouch, bulkDocsBatched, couchReq, displayCouchUrl } from './seed/couch';
-import { generatePersonProfile, initStagingFaker, nextHouseholdSize } from './seed/people-faker';
+import { buildPeople, pad } from './seed/people-builder';
+import { initStagingFaker } from './seed/people-faker';
 import { SH001_CODE, SH002_CODE } from './seed/types';
 
 const ID_PREFIX = 'seed-bulk';
 const ZONES = ['Z1', 'Z2', 'Z3', 'Z4'];
 const FAKER_SEED = 20261103;
 const CHUNK_PERSONS = 2000;
+const PAD_WIDTH = 6;
 const MAX_COUNT = 999_999; // ids use pad(6)
 
 async function askCount(): Promise<string> {
-	if (!process.stdin.isTTY) {
-		throw new Error('pass --count=<n> when not running in a terminal');
-	}
 	const rl = createInterface({ input: process.stdin, output: process.stdout });
 	try {
 		const answer = await rl.question('จำนวนผู้อพยพที่ต้องการ gen (ค่าเริ่มต้น 100000): ');
@@ -48,19 +37,32 @@ async function askCount(): Promise<string> {
 	}
 }
 
-async function parseArgs(argv: string[]): Promise<{ shelter: string; count: number }> {
-	const arg = (name: string) => argv.find((a) => a.startsWith(`--${name}=`))?.split('=')[1];
-	const shelter = arg('shelter')?.trim().toUpperCase();
-	if (!shelter) throw new Error('--shelter=<code> is required');
-	const count = Number(arg('count') ?? (await askCount()));
+export function validateCount(raw: string): number {
+	const count = Number(raw);
 	if (!Number.isInteger(count) || count <= 0 || count > MAX_COUNT) {
 		throw new Error(`count must be a positive integer up to ${MAX_COUNT}`);
 	}
-	return { shelter, count };
+	return count;
+}
+
+/** `count` is null when the caller must ask for it (interactive terminal only). */
+export function parseBulkArgs(
+	argv: string[],
+	isTTY: boolean
+): { shelter: string; count: number | null } {
+	const arg = (name: string) => argv.find((a) => a.startsWith(`--${name}=`))?.split('=')[1];
+	const shelter = arg('shelter')?.trim().toUpperCase();
+	if (!shelter) throw new Error('--shelter=<code> is required');
+	const rawCount = arg('count');
+	if (rawCount === undefined) {
+		if (!isTTY) throw new Error('pass --count=<n> when not running in a terminal');
+		return { shelter, count: null };
+	}
+	return { shelter, count: validateCount(rawCount) };
 }
 
 /** vulnerable_group code by key, read-only from `registry` (seeded by `pnpm seed:master`). */
-async function loadVulnerableGroupCodes(): Promise<Map<string, string>> {
+async function loadVulnerableGroupCodes(): Promise<Set<string>> {
 	const { status, data } = await couchReq('GET', '/registry/master_data:vulnerable_group');
 	if (status !== 200) {
 		throw new Error(
@@ -68,24 +70,13 @@ async function loadVulnerableGroupCodes(): Promise<Map<string, string>> {
 		);
 	}
 	const items = (data as { items?: Array<{ code: string }> }).items ?? [];
-	return new Map(items.map((i) => [i.code, i.code]));
+	// Seed keys are persisted as the code, so a key is valid exactly when that code exists.
+	return new Set(items.map((i) => i.code));
 }
 
 async function assertShelterDbExists(db: string): Promise<void> {
 	const { status } = await couchReq('GET', `/${db}`);
 	if (status !== 200) throw new Error(`shelter DB ${db} not found (HTTP ${status})`);
-}
-
-function pad(n: number, width = 6): string {
-	return String(n).padStart(width, '0');
-}
-
-function needsCheckIn(status: string): boolean {
-	return status === 'active' || status === 'room_confirmed' || status === 'temporary_leave';
-}
-
-function needsCheckOut(status: string): boolean {
-	return status === 'checked_out' || status === 'transferred' || status === 'deceased';
 }
 
 async function alreadySeeded(db: string, id: string): Promise<boolean> {
@@ -95,72 +86,14 @@ async function alreadySeeded(db: string, id: string): Promise<boolean> {
 	throw new Error(`Cannot probe ${db}/${id} (HTTP ${status})`);
 }
 
-function buildStay(
-	evacuee: Evacuee,
-	status: string,
-	zone: string,
-	shelterCode: string,
-	ctx: AuthorContext,
-	evId: string
-): { evacuee: Evacuee; movements: Movement[] } {
-	const movements: Movement[] = [];
-	if (!needsCheckIn(status) && !needsCheckOut(status)) return { evacuee, movements };
-
-	const record = (suffix: string, movement: Movement) => {
-		movements.push({ ...movement, _id: `movement:${evId}-${suffix}` });
-		evacuee = applyMovementToStay(evacuee, movements[movements.length - 1]);
-	};
-
-	record('in', createMovement({ evacuee_id: evacuee._id, action: 'check_in', zone }, ctx));
-
-	if (status === 'temporary_leave') {
-		record(
-			'leave',
-			createMovement({ evacuee_id: evacuee._id, action: 'leave_temporary', zone }, ctx)
-		);
-	} else if (status === 'checked_out') {
-		record(
-			'out',
-			createMovement(
-				{
-					evacuee_id: evacuee._id,
-					action: 'check_out',
-					zone: null,
-					destination: { kind: 'home' },
-					reason: 'กลับบ้าน / ย้ายที่พักชั่วคราว'
-				},
-				ctx
-			)
-		);
-	} else if (status === 'transferred') {
-		const destCode = shelterCode === SH002_CODE ? SH001_CODE : SH002_CODE;
-		record(
-			'xfer',
-			createMovement(
-				{
-					evacuee_id: evacuee._id,
-					action: 'transfer_out',
-					zone: null,
-					destination: { kind: 'shelter', shelter_code: destCode }
-				},
-				ctx
-			)
-		);
-	} else if (status === 'deceased') {
-		record('dec', createMovement({ evacuee_id: evacuee._id, action: 'mark_deceased', zone }, ctx));
-	} else if (status === 'room_confirmed') {
-		record('room', createMovement({ evacuee_id: evacuee._id, action: 'confirm_room', zone }, ctx));
-	}
-
-	return { evacuee, movements };
-}
-
 async function main(): Promise<void> {
 	assertLocalCouch();
-	const { shelter, count } = await parseArgs(process.argv.slice(2));
+	const args = parseBulkArgs(process.argv.slice(2), Boolean(process.stdin.isTTY));
+	const { shelter } = args;
+	const count = args.count ?? validateCount(await askCount());
 	const db = shelterDbName(shelter);
 	const codeSlug = shelter.toLowerCase();
-	const evIdFor = (i: number) => `${ID_PREFIX}:${codeSlug}:${pad(i)}`;
+	const evIdFor = (i: number) => `${ID_PREFIX}:${codeSlug}:${pad(i, PAD_WIDTH)}`;
 
 	await assertShelterDbExists(db);
 
@@ -171,105 +104,45 @@ async function main(): Promise<void> {
 	}
 
 	console.log(`\nAdding ${count} evacuees to ${db} → ${displayCouchUrl()}\n`);
+	if (isLargeVolume(count)) console.log(`${LARGE_VOLUME_WARNING}\n`);
 	const vgCodes = await loadVulnerableGroupCodes();
-	const ctx: AuthorContext = { shelterCode: shelter, createdBy: 'seed' };
-	const faker = initStagingFaker(FAKER_SEED);
+	const config = {
+		shelterCode: shelter,
+		idPrefix: ID_PREFIX,
+		padWidth: PAD_WIDTH,
+		zones: ZONES,
+		faker: initStagingFaker(FAKER_SEED),
+		vulnerableGroupCode: (key: string) => {
+			if (!vgCodes.has(key))
+				throw new Error(`vulnerable_group "${key}" missing — run \`pnpm seed:master\``);
+			return key;
+		},
+		transferDestCode: shelter === SH002_CODE ? SH001_CODE : SH002_CODE,
+		allowPets: true
+	};
 
-	let personIndex = 0;
-	let hhIndex = 0;
-	while (personIndex < count) {
-		const chunkEnd = Math.min(count, personIndex + CHUNK_PERSONS);
-		const docs: PeopleDoc[] = [];
-
-		while (personIndex < chunkEnd) {
-			const size = Math.min(nextHouseholdSize(faker), count - personIndex);
-			const profiles = Array.from({ length: size }, (_, j) =>
-				generatePersonProfile(faker, personIndex + j)
-			);
-			const head = profiles[0];
-			const householdId = `household:${ID_PREFIX}:${codeSlug}:hh-${pad(hhIndex)}`;
-			const household: Household = {
-				...createHousehold(
-					{
-						label: `ครัวเรือน${head.last_name}`,
-						municipality_zone: head.zoneLabel,
-						community: head.communityLabel,
-						housing_type: head.housingTypeKey,
-						head_evacuee_id: `evacuee:${evIdFor(personIndex)}`,
-						pets: faker.datatype.boolean({ probability: 0.12 })
-							? [{ species: faker.helpers.arrayElement(['dog', 'cat'] as const), count: 1 }]
-							: [],
-						address_no: `${faker.number.int({ min: 1, max: 200 })}/${faker.number.int({ min: 1, max: 40 })}`,
-						village_no: String(faker.number.int({ min: 1, max: 12 })),
-						subdistrict: 'หาดใหญ่',
-						district: 'หาดใหญ่',
-						province: 'สงขลา',
-						postal_code: '90110'
-					},
-					ctx
-				),
-				_id: householdId
-			};
-			docs.push(household);
-
-			for (let j = 0; j < profiles.length; j++) {
-				const p = profiles[j];
-				const evId = evIdFor(personIndex + j);
-				const vg = p.vgKeys.map((key) => {
-					const code = vgCodes.get(key);
-					if (!code)
-						throw new Error(`vulnerable_group "${key}" missing — run \`pnpm seed:master\``);
-					return code;
-				});
-				const zone = ZONES[(personIndex + j) % ZONES.length];
-
-				const evacuee: Evacuee = {
-					...createEvacuee(
-						{
-							first_name: p.first_name,
-							last_name: p.last_name,
-							gender: p.gender,
-							phone: p.phone,
-							birth_year: p.birth_year,
-							religion: p.religion,
-							vulnerable_groups: vg,
-							special_needs: p.special_needs,
-							household_id: householdId,
-							status:
-								p.status === 'pre_registered' || p.status === 'arriving'
-									? p.status
-									: 'pre_registered',
-							registered_via: p.registered_via,
-							country: 'THAILAND'
-						},
-						ctx,
-						null
-					),
-					_id: `evacuee:${evId}`
-				};
-
-				const stay = buildStay(evacuee, p.status, zone, shelter, ctx, evId);
-				docs.push(...stay.movements, stay.evacuee);
-			}
-
-			personIndex += size;
-			hhIndex += 1;
-		}
+	let cursor = { personIndex: 0, householdIndex: 0 };
+	while (cursor.personIndex < count) {
+		const chunkEnd = Math.min(count, cursor.personIndex + CHUNK_PERSONS);
+		const { docs, ...next } = buildPeople(config, cursor, chunkEnd, count);
+		cursor = next;
 
 		// Resume after a failed run: a chunk whose last evacuee exists was already written.
-		if (await alreadySeeded(db, `evacuee:${evIdFor(personIndex - 1)}`)) {
-			console.log(`  ✓ ${personIndex}/${count} already written, skipping chunk`);
+		if (await alreadySeeded(db, `evacuee:${evIdFor(cursor.personIndex - 1)}`)) {
+			console.log(`  ✓ ${cursor.personIndex}/${count} already written, skipping chunk`);
 			continue;
 		}
 
 		await bulkDocsBatched(db, docs, 150, { allowConflicts: true });
-		console.log(`  ✓ ${personIndex}/${count} evacuees written`);
+		console.log(`  ✓ ${cursor.personIndex}/${count} evacuees written`);
 	}
 
-	console.log(`\n  ✓ ${db}: ${count} bulk evacuees, ${hhIndex} households\n`);
+	console.log(`\n  ✓ ${db}: ${count} bulk evacuees, ${cursor.householdIndex} households\n`);
 }
 
-main().catch((err) => {
-	console.error(err);
-	process.exit(1);
-});
+if (process.argv[1]?.endsWith('seed-bulk-evacuees.ts')) {
+	main().catch((err) => {
+		console.error(err);
+		process.exit(1);
+	});
+}
