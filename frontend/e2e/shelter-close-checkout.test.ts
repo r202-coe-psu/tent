@@ -251,9 +251,10 @@ test.describe('Shelter close checks everyone out (CR-219)', { tag: ['@shelter-cl
 			(await api('otherManager', 'POST', close, { confirm_text: confirmPhrase() })).status
 		).toBe(403);
 
-		const patch = await api('manager', 'PATCH', `/api/back-office/shelter/${shelterCode}`, {
-			operation_status: 'closed'
-		});
+		// PATCH needs the `_rev` it read (CR-230 A1), so this reaches the close block, not the `_rev` gate.
+		const shelterPath = `/api/back-office/shelter/${shelterCode}`;
+		const { _rev } = (await api('manager', 'GET', shelterPath)).data as { _rev: string };
+		const patch = await api('manager', 'PATCH', shelterPath, { _rev, operation_status: 'closed' });
 		expect(patch.status).toBe(400);
 
 		const wrong = await api('manager', 'POST', close, { confirm_text: `${shelterCode} ผิด` });
