@@ -19,23 +19,13 @@ into the ledger is *excluded* from reserved: its quantity is on the shelf now, a
 counting it in both places would close the need at half the goods. An outstanding
 donation part-way through a batch receipt owes only its unrecorded part (CR-143).
 The ledger reading is shared with the quota counter (``worker.donation_ledger``).
-
-Quantities are ``Decimal`` end to end (#934): ``0.1 + 0.2`` must be ``0.3`` and a need
-whose target is met exactly (``on_hand 0.9 + 0.1`` against ``1``) must read 0, not
-``1.1e-16``. Rounding to the four stored places is the caller's job (``projectors.needs``).
 """
 
 from __future__ import annotations
 
-from decimal import Decimal, InvalidOperation
 from typing import Any
 
-from worker.donation_ledger import (
-    keyed_donation_ids,
-    on_hand_decimals,
-    recorded_donation_qty,
-    still_owed,
-)
+from worker.donation_ledger import keyed_donation_ids, recorded_donation_qty, still_owed
 
 #: A donation stops owing the shelter anything once it is expired or cancelled. The
 #: wider set is kept deliberately — narrowing it here would change what the public board
@@ -46,23 +36,31 @@ from worker.donation_ledger import (
 _SETTLED_STATUSES = frozenset({"expired", "cancelled", "redirected", "rejected"})
 
 
-def _qty(value: Any) -> Decimal:
-    """A need's ``qty_target`` as a finite Decimal; anything unusable counts as 0."""
+def _to_float(value: Any) -> float:
     try:
-        number = Decimal(str(value))
-    except InvalidOperation, ValueError:
-        return Decimal(0)
-    return number if number.is_finite() else Decimal(0)
+        return float(value)
+    except TypeError, ValueError:
+        return 0.0
+
+
+def on_hand_by_item(stock_ledgers: list[dict[str, Any]]) -> dict[str, float]:
+    balance: dict[str, float] = {}
+    for entry in stock_ledgers:
+        item_id = entry.get("item_id")
+        if not item_id:
+            continue
+        balance[item_id] = balance.get(item_id, 0.0) + _to_float(entry.get("qty"))
+    return balance
 
 
 def _reserved_by_item(
     donations: list[dict[str, Any]],
     stock_ledgers: list[dict[str, Any]],
     campaign_id: str,
-) -> dict[str, Decimal]:
+) -> dict[str, float]:
     keyed = keyed_donation_ids(stock_ledgers)
     recorded = recorded_donation_qty(stock_ledgers)
-    reserved: dict[str, Decimal] = {}
+    reserved: dict[str, float] = {}
     for donation in donations:
         if donation.get("campaign_id") != campaign_id:
             continue
@@ -74,7 +72,7 @@ def _reserved_by_item(
         for item_id, qty in still_owed(donation, keyed, recorded):
             if not item_id:
                 continue
-            reserved[item_id] = reserved.get(item_id, Decimal(0)) + qty
+            reserved[item_id] = reserved.get(item_id, 0.0) + float(qty)
     return reserved
 
 
@@ -82,7 +80,7 @@ def compute_needs(
     campaigns: list[dict[str, Any]],
     donations: list[dict[str, Any]],
     stock_ledgers: list[dict[str, Any]] | None = None,
-) -> tuple[dict[str, Decimal], dict[str, str]]:
+) -> tuple[dict[str, str], dict[str, str]]:
     """Remaining need per item, summed over campaigns, and the item → campaign map.
 
     ``stock_ledgers`` defaults to empty so existing callers keep working, but the
@@ -90,9 +88,9 @@ def compute_needs(
     exactly the direction that over-collects.
     """
     ledgers = stock_ledgers or []
-    on_hand = on_hand_decimals(ledgers)
+    on_hand = on_hand_by_item(ledgers)
 
-    remaining: dict[str, Decimal] = {}
+    remaining: dict[str, float] = {}
     item_campaign: dict[str, str] = {}
 
     for campaign in campaigns:
@@ -107,23 +105,24 @@ def compute_needs(
             # CR-052). Contributes a zero rather than being skipped: a missing key reads
             # as "not tracked" downstream and lets the booking through.
             is_closed = need.get("status") == "closed"
-            covered = on_hand.get(item_id, Decimal(0)) + reserved.get(
-                item_id, Decimal(0)
-            )
-            rem = Decimal(0) if is_closed else _qty(need.get("qty_target")) - covered
-            remaining[item_id] = remaining.get(item_id, Decimal(0)) + rem
+            covered = on_hand.get(item_id, 0.0) + reserved.get(item_id, 0.0)
+            rem = 0.0 if is_closed else _to_float(need.get("qty_target")) - covered
+            remaining[item_id] = remaining.get(item_id, 0.0) + rem
             # Bind the item to a campaign still accepting it.
             if not is_closed and item_id not in item_campaign:
                 item_campaign[item_id] = campaign_id
 
-    return remaining, item_campaign
+    return (
+        {item_id: str(qty) for item_id, qty in remaining.items()},
+        item_campaign,
+    )
 
 
 def need_breakdown(
     campaigns: list[dict[str, Any]],
     donations: list[dict[str, Any]],
     stock_ledgers: list[dict[str, Any]] | None = None,
-) -> dict[str, dict[str, Decimal]]:
+) -> dict[str, dict[str, float]]:
     """The three terms behind ``remaining``, per item, for the public board to show.
 
     ``compute_needs`` publishes one number — the shortage — which is all the booking
@@ -143,18 +142,14 @@ def need_breakdown(
     makes when it credits the full balance to each campaign.
     """
     ledgers = stock_ledgers or []
-    on_hand = on_hand_decimals(ledgers)
+    on_hand = on_hand_by_item(ledgers)
 
-    breakdown: dict[str, dict[str, Decimal]] = {}
+    breakdown: dict[str, dict[str, float]] = {}
 
-    def bucket(item_id: str) -> dict[str, Decimal]:
+    def bucket(item_id: str) -> dict[str, float]:
         return breakdown.setdefault(
             item_id,
-            {
-                "qty_target": Decimal(0),
-                "on_hand": on_hand.get(item_id, Decimal(0)),
-                "reserved": Decimal(0),
-            },
+            {"qty_target": 0.0, "on_hand": on_hand.get(item_id, 0.0), "reserved": 0.0},
         )
 
     for campaign in campaigns:
@@ -168,7 +163,7 @@ def need_breakdown(
             if not item_id or need.get("status") == "closed":
                 continue
             entry = bucket(str(item_id))
-            entry["qty_target"] += _qty(need.get("qty_target"))
-            entry["reserved"] += reserved.get(item_id, Decimal(0))
+            entry["qty_target"] += _to_float(need.get("qty_target"))
+            entry["reserved"] += reserved.get(item_id, 0.0)
 
     return breakdown

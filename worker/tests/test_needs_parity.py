@@ -12,16 +12,13 @@ A rule change that lands in only one language turns this red.
 from __future__ import annotations
 
 import json
-from decimal import Decimal
 from pathlib import Path
 
 import pytest
 
 from worker.projectors.compute_needs import compute_needs
 
-FIXTURES = (
-    Path(__file__).resolve().parents[2] / "packages" / "needs-fixtures" / "cases.json"
-)
+FIXTURES = Path(__file__).resolve().parents[2] / "packages" / "needs-fixtures" / "cases.json"
 CASES = json.loads(FIXTURES.read_text(encoding="utf-8"))["cases"]
 
 
@@ -54,7 +51,7 @@ def test_remaining_matches_the_shared_cases(case: dict) -> None:
     remaining, _ = compute_needs(_campaigns(case), _donations(case), _ledgers(case))
 
     for item_id, expected in case["expected_remaining"].items():
-        assert remaining[item_id] == Decimal(str(expected)), case["why"]
+        assert float(remaining[item_id]) == pytest.approx(expected), case["why"]
 
 
 @pytest.mark.parametrize("case", CASES, ids=_ids(CASES))

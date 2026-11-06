@@ -3,11 +3,9 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from decimal import Decimal
 
 from tent_model.public_need import PublicNeed
 from tent_model.public_shelter import PublicShelter
-from tent_model.qty import format_qty, quantize_qty
 
 from .schemas import (
     ExternalNeedItemResponse,
@@ -56,15 +54,14 @@ class NeedsUseCase:
                     drop_off_point_id=point_id,
                     drop_off_point_name=point_names.get(point_id) if point_id else None,
                     name=need.item_name,
-                    qty_needed=format_qty(need.qty_needed),
-                    qty_target=format_qty(need.qty_target),
-                    on_hand=format_qty(need.on_hand),
-                    reserved=format_qty(need.reserved),
+                    qty_needed=str(need.qty_needed),
+                    qty_target=str(need.qty_target),
+                    on_hand=str(need.on_hand),
+                    reserved=str(need.reserved),
                     unit=need.unit,
                     category=need.category,
                     urgency=need.urgency,
-                    # Same rounding as the printed qty_needed, so status and number agree.
-                    status="open" if quantize_qty(need.qty_needed) > 0 else "closed",
+                    status="open" if need.qty_needed > 0 else "closed",
                 )
             )
 
@@ -90,7 +87,7 @@ class NeedsUseCase:
         shelters = await self._open_shelters()
 
         merged: dict[str, dict[str, ExternalNeedItemResponse]] = {}
-        sums: dict[tuple[str, str], list[Decimal]] = {}
+        sums: dict[tuple[str, str], list[float]] = {}
         for need in needs:
             if need.shelter_code not in shelters:
                 continue
@@ -102,18 +99,18 @@ class NeedsUseCase:
                     item_id=item_id,
                     name=need.item_name,
                     qty_needed="0",
-                    on_hand=format_qty(need.on_hand),
+                    on_hand=str(need.on_hand),
                     unit=need.unit,
                     status="closed",
                     urgency=need.urgency,
                     category=need.category,
                 )
-                sums[key] = [Decimal(0), Decimal(0), Decimal(0)]
+                sums[key] = [0.0, 0.0, 0.0]
             row = by_item[item_id]
             totals = sums[key]
-            totals[0] += quantize_qty(need.qty_needed)
-            totals[1] += quantize_qty(need.qty_target)
-            totals[2] += quantize_qty(need.reserved)
+            totals[0] += need.qty_needed
+            totals[1] += need.qty_target
+            totals[2] += need.reserved
             if _URGENCY_RANK.get(need.urgency, 1) > _URGENCY_RANK.get(row.urgency, 1):
                 row.urgency = need.urgency
 
@@ -122,9 +119,9 @@ class NeedsUseCase:
             items: list[ExternalNeedItemResponse] = []
             for item_id, row in sorted(by_item.items()):
                 needed, target, reserved = sums[(code, item_id)]
-                row.qty_needed = format_qty(needed)
-                row.qty_target = format_qty(target)
-                row.reserved = format_qty(reserved)
+                row.qty_needed = str(needed)
+                row.qty_target = str(target)
+                row.reserved = str(reserved)
                 row.status = "open" if needed > 0 else "closed"
                 items.append(row)
             result.append(

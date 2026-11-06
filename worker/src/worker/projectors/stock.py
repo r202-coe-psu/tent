@@ -57,7 +57,7 @@ def _to_decimal(value: Any) -> Decimal | None:
 
 
 def _stock_balances(stock_ledgers: list[dict[str, Any]]) -> dict[str, Decimal]:
-    """Shelter balance per item — same sum as `worker.donation_ledger.on_hand_decimals`,
+    """Shelter balance per item — same sum as `worker.mongo.on_hand.on_hand_decimals`,
     duplicated locally (not imported) to keep this module free of the `worker.mongo`
     package and avoid a projectors ↔ mongo import cycle."""
     balance: dict[str, Decimal] = {}

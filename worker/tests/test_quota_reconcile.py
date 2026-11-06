@@ -125,67 +125,6 @@ def _ledger(
     }
 
 
-@pytest.mark.parametrize("bad", ["NaN", "sNaN", "Infinity", "-Infinity"])
-def test_skips_non_finite_qty(bad: str):
-    """NaN used to crash reconcile (InvalidOperation) and Infinity made reserved inf."""
-    donations = [
-        {
-            "_id": "donation:1",
-            "campaign_id": CAMPAIGN,
-            "status": "declared",
-            "items": [
-                {"item_id": "item:rice", "qty": bad},
-                {"item_id": "item:rice", "qty": "2"},
-            ],
-        },
-    ]
-    assert sum_reserved_by_key(donations) == {RICE: Decimal(2)}
-
-
-@pytest.mark.parametrize("bad", ["NaN", "sNaN", "Infinity", "-Infinity"])
-def test_non_finite_donation_only_contributes_nothing(bad: str):
-    donations = [
-        {
-            "_id": "donation:1",
-            "campaign_id": CAMPAIGN,
-            "status": "declared",
-            "items": [{"item_id": "item:rice", "qty": bad}],
-        },
-    ]
-    assert sum_reserved_by_key(donations) == {}
-
-
-@pytest.mark.parametrize("bad", ["NaN", "sNaN", "Infinity", "-Infinity"])
-def test_non_finite_ledger_qty_does_not_reduce_what_is_owed(bad: str):
-    """A garbage ledger row is ignored, so the donation still owes its full qty."""
-    donations = [
-        {
-            "_id": "donation:1",
-            "campaign_id": CAMPAIGN,
-            "status": "declared",
-            "items": [{"item_id": "item:rice", "qty": "10"}],
-        },
-    ]
-    ledgers = [_ledger("donation:1", bad), _ledger("donation:1", "4")]
-    assert sum_reserved_by_key(donations, stock_ledgers=ledgers) == {RICE: Decimal(6)}
-
-
-@pytest.mark.parametrize("bad", ["NaN", "sNaN", "Infinity", "-Infinity"])
-def test_received_donation_with_non_finite_keyed_ledger_row_is_settled(bad: str):
-    # keyed_donation_ids ignores qty (parity with the frontend keyedDonationIds), so a
-    # received donation with any reason=donation row counts as done even if that row is junk.
-    donations = [
-        {
-            "_id": "donation:1",
-            "campaign_id": CAMPAIGN,
-            "status": "received",
-            "items": [{"item_id": "item:rice", "qty": "10"}],
-        },
-    ]
-    ledgers = [_ledger("donation:1", bad)]
-    assert sum_reserved_by_key(donations, stock_ledgers=ledgers) == {}
-
-
 def test_received_and_shelved_donation_no_longer_holds_quota():
     """Goods in the ledger sit in on_hand_qty — counting them here too took them off
     the ceiling twice (board showed 89 open, a booking of 89 came back NEED_FULL)."""

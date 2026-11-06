@@ -40,7 +40,4 @@ per deploy, so batch related projector changes into one bump per release when po
 #: 16 — decision sync 2026-11-02: EXT-005 ``occupancy_total`` / ``occupancy_breakdown`` and
 #: EXT-007 ``shelter_occupants`` count ``active`` + ``room_confirmed``; breakdown ages fall
 #: back to ``birth_year`` (``resolve_age``).
-#: 17 — draft-public-needs-decimal (#934): ``public_needs.qty_needed`` / ``qty_target`` /
-#: ``on_hand`` / ``reserved`` are ``Decimal128`` (were ``double``), computed in ``Decimal``
-#: and rounded to four places half-up before the ``<= 0`` delete.
-PROJECTION_VERSION: int = 17
+PROJECTION_VERSION: int = 16

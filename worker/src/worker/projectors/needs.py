@@ -3,10 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from decimal import Decimal
 from typing import Any, Literal
-
-from tent_model.qty import canonical_qty
 
 from worker.couch.client import CouchClient
 from worker.masking import shelter_db_name
@@ -163,9 +160,10 @@ async def project_needs_for_shelter(
         ]
         remaining, _ = compute_needs(card_campaigns, donations, stock_ledgers)
         breakdown = need_breakdown(card_campaigns, donations, stock_ledgers)
-        # Round to the four stored places BEFORE deciding: the `<= 0` delete and the API's
-        # open/closed status then read the same number the board prints (#934).
-        qty_needed = canonical_qty(remaining.get(item_id, Decimal(0)))
+        try:
+            qty_needed = float(remaining.get(item_id, 0))
+        except TypeError, ValueError:
+            qty_needed = 0.0
         if qty_needed <= 0:
             continue  # not kept -> the prune below removes any row it had
         doc_id = f"{shelter_code}:{item_id}@{point_id or '-'}"
@@ -183,9 +181,9 @@ async def project_needs_for_shelter(
                     "item_name": details.get("name", item_id),
                     "category": details.get("category", "other"),
                     "qty_needed": qty_needed,
-                    "qty_target": canonical_qty(terms.get("qty_target", Decimal(0))),
-                    "on_hand": canonical_qty(terms.get("on_hand", Decimal(0))),
-                    "reserved": canonical_qty(terms.get("reserved", Decimal(0))),
+                    "qty_target": terms.get("qty_target", 0.0),
+                    "on_hand": terms.get("on_hand", 0.0),
+                    "reserved": terms.get("reserved", 0.0),
                     "urgency": urgency_by_card.get((item_id, point_id), "normal"),
                     "unit": details.get("unit", "unit"),
                     "updated_at": now,

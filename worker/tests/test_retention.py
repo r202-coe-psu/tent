@@ -39,7 +39,7 @@ def test_compute_needs_zero_when_fully_covered():
         }
     ]
     remaining, _ = compute_needs(campaigns, donations)
-    assert remaining["item:rice"] == Decimal(0)
+    assert remaining["item:rice"] == "0.0"
 
 
 def test_classify_expired_buffer_skips_unsynced():

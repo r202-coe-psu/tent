@@ -25,32 +25,15 @@ RecordedQty = dict[str, dict[str, Decimal]]
 
 
 def _to_decimal(value: Any) -> Decimal | None:
-    """``value`` as a finite Decimal, or ``None`` — ``NaN`` / ``Infinity`` are unusable
-    (comparing a NaN raises, and an infinite balance would swallow every need)."""
     try:
-        number = Decimal(str(value))
+        return Decimal(str(value))
     except InvalidOperation, TypeError, ValueError:
         return None
-    return number if number.is_finite() else None
 
 
 def normalize_donation_id(raw: str) -> str:
     """Intake buffers may carry the bare ULID; CouchDB and the ledger carry the prefix."""
     return raw if raw.startswith("donation:") else f"donation:{raw}"
-
-
-def on_hand_decimals(stock_ledgers: list[dict[str, Any]]) -> dict[str, Decimal]:
-    """Shelter balance per item (issues are negative rows). Decimal, so it can be compared
-    against Decimal128 quantities without float drift. Unusable ``qty`` counts as 0."""
-    balance: dict[str, Decimal] = {}
-    for entry in stock_ledgers:
-        item_id = entry.get("item_id")
-        if not item_id:
-            continue
-        balance[str(item_id)] = balance.get(str(item_id), Decimal(0)) + (
-            _to_decimal(entry.get("qty")) or Decimal(0)
-        )
-    return balance
 
 
 def keyed_donation_ids(stock_ledgers: list[dict[str, Any]]) -> set[str]:

@@ -1,9 +1,8 @@
 from __future__ import annotations
 
 from datetime import datetime
-from decimal import Decimal
 
-from beanie import DecimalAnnotation, Document
+from beanie import Document
 from pydantic import BaseModel, ConfigDict, Field
 from pymongo import IndexModel
 
@@ -19,15 +18,13 @@ class PublicNeed(Document):
 	drop_off_point_id: str | None = None
 	item_name: str
 	category: str
-	#: Quantities are ``Decimal128`` in Mongo (#934, same as ``donation_need_counter``);
-	#: rows projected before that hold a ``double`` and still load (pydantic accepts it).
-	qty_needed: DecimalAnnotation
+	qty_needed: float
 	#: The terms the shortage is made of, so the donor board can show a real progress
 	#: bar (it used to invent `target = qty × 2`). Optional with a 0 default: rows
 	#: projected before this existed have none and must still load.
-	qty_target: DecimalAnnotation = Decimal("0")
-	on_hand: DecimalAnnotation = Decimal("0")
-	reserved: DecimalAnnotation = Decimal("0")
+	qty_target: float = 0.0
+	on_hand: float = 0.0
+	reserved: float = 0.0
 	unit: str
 	#: Highest urgency across the open campaigns asking for this item.
 	urgency: str = "normal"
