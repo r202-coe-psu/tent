@@ -84,3 +84,11 @@ describe('mergeStockParams', () => {
 		expect(out.toString()).toBe('tab=inventory');
 	});
 });
+
+describe('has_expiry status', () => {
+	it('round-trips through the URL', () => {
+		const state = parseStockParams(params('status=has_expiry'));
+		expect(state.status).toBe('has_expiry');
+		expect(serializeStockParams(state).get('status')).toBe('has_expiry');
+	});
+});

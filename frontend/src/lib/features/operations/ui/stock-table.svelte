@@ -350,6 +350,7 @@
 				expiryState: summary?.expiryState ?? 'none',
 				earliestExpiry: summary?.earliestExpiry ?? null,
 				storageKeys: summary?.storageKeys ?? [],
+				hasLotExpiry: summary?.hasLotExpiry ?? false,
 				lotCount: summary?.lotCount ?? 0,
 				usableNote: negative
 					? `ใช้ได้ ${negative.usable} (ไม่นับล็อตติดลบ ${negative.negative})`
@@ -504,6 +505,7 @@
 			loc={urlState.loc}
 			sort={urlState.sort}
 			all={urlState.all}
+			status={urlState.status}
 			categories={uniqueCategories}
 			locations={uniqueLocations}
 			bind:showOverall

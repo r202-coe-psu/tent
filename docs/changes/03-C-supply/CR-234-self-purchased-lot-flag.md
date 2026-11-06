@@ -1,10 +1,10 @@
 ---
-id: draft
+id: CR-234
 title: ติ๊ก "ซื้อเอง" ตอนรับเข้า — stock_ledger.lot.self_purchased (schema_v 6 → 7)
-status: proposed
+status: approved
 date: 2026-11-05
 requested_by: GitHub #1187
-decided_by:
+decided_by: kong
 layer: volatile
 affects:
   - docs/data/schema.md §2.1 `stock_ledger.lot` (เพิ่ม `self_purchased`, schema_v 7 note, migration note)
@@ -17,7 +17,7 @@ why: เจ้าหน้าที่คลังแยกไม่ออกว
 migration: additive — แถว schema_v ≤ 6 ไม่มี field = ไม่ใช่ซื้อเอง; ไม่ backfill; ไม่ต้อง redeploy `_design/*`
 ---
 
-# draft-self-purchased-lot-flag — ติ๊ก "ซื้อเอง" ตอนรับเข้าคลัง
+# CR-234 — ติ๊ก "ซื้อเอง" ตอนรับเข้าคลัง
 
 > **สรุป (TL;DR):**
 >
@@ -53,7 +53,7 @@ migration: additive — แถว schema_v ≤ 6 ไม่มี field = ไม�
 
 ## 3. ทำไมไม่ขัด A6 / CR-138
 
-- **A6** ([CR-058](05-D-kitchen/CR-058-food-warehouse-nutrition-kitchen-overhaul.md)) = ไม่มีระบบจัดซื้อ (Purchase Order) ในแอป. CR นี้ไม่มี PO, ราคา, ผู้ขาย, ใบเสร็จ หรือ workflow อนุมัติ — เป็นแค่ **ป้ายบอกที่มา** (provenance tag) บน lot ที่รับเข้าตามปกติ
+- **A6** ([CR-058](../05-D-kitchen/CR-058-food-warehouse-nutrition-kitchen-overhaul.md)) = ไม่มีระบบจัดซื้อ (Purchase Order) ในแอป. CR นี้ไม่มี PO, ราคา, ผู้ขาย, ใบเสร็จ หรือ workflow อนุมัติ — เป็นแค่ **ป้ายบอกที่มา** (provenance tag) บน lot ที่รับเข้าตามปกติ
 - **CR-138** ถอน doc type `purchase` + `reason='purchase'` + UI ใบจัดซื้อ. CR นี้ **ไม่เพิ่ม `reason: purchase` กลับมา**, ไม่เพิ่ม doc type, ไม่เพิ่ม route จัดซื้อ; `reason` enum ไม่เปลี่ยน — ของซื้อเองยังบันทึกเป็นรับเข้าด้วยมือตามเดิม (`adjust`/`found`)
 - ผลคือ ledger ยังไม่ทราบว่าซื้อจากใคร/ราคาเท่าไร ทราบเพียงว่า "ศูนย์ซื้อเอง" หรือไม่
 
@@ -91,4 +91,5 @@ migration: additive — แถว schema_v ≤ 6 ไม่มี field = ไม�
 
 ## Decision log
 
-- 2026-11-05 — proposed (GitHub #1187) — รอเจ้าของโครงการเลือกวิธี track และ approve
+- 2026-11-05 — proposed (GitHub #1187)
+- 2026-11-06 — approved โดย kong (เลข CR-234: CR-233 ถูกจองโดย PR #1221)
