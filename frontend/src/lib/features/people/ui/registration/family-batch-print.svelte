@@ -156,6 +156,7 @@
 				evacuee={member}
 				embedded={true}
 				dismissible={false}
+				printable={false}
 				onClose={onDone}
 			/>
 		</section>
@@ -165,7 +166,8 @@
 		class="sticky bottom-0 z-10 -mx-1 border-t border-border bg-background/95 p-3 backdrop-blur-sm"
 	>
 		<div class="flex flex-col gap-2 sm:flex-row sm:justify-end">
-			<!-- Only here (not in the shared nextActions): one instance = one print state, no double print. -->
+			<!-- The only printer button on this page (member cards hide theirs, nextActions has none):
+			     one instance = one print state, no double print. -->
 			{#if total > 0}
 				<!-- Keyed by the family: the button keeps unsent chunks for Retry, which must not outlive a
 				     change of members (it would print the old labels). -->
