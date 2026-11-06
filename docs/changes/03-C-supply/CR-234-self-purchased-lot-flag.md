@@ -21,7 +21,7 @@ migration: additive — แถว schema_v ≤ 6 ไม่มี field = ไม�
 
 > **สรุป (TL;DR):**
 >
-> - **เปลี่ยนอะไร:** เพิ่ม `stock_ledger.lot.self_purchased` (bool, optional) บนแถวรับเข้าที่ฟอร์มรับเข้าหน้า supply บันทึก (โหมด "กรอกเอง" = `reason='adjust'` + `adjust_reason='found'`, CR-156 FR-C7; domain รับ `reason='receive'` ด้วย) เท่านั้น; bump `stock_ledger` schema_v **6 → 7**
+> - **เปลี่ยนอะไร:** เพิ่ม `stock_ledger.lot.self_purchased` (bool, optional) บนแถวรับเข้าที่ฟอร์มรับเข้าหน้า supply บันทึก (โหมด "กรอกเอง" = `reason='adjust'` + `adjust_reason='found'`, CR-156 FR-C7) เท่านั้น; bump `stock_ledger` schema_v **6 → 7**
 > - **ทำไม:** แยกของที่ศูนย์ซื้อเองออกจากของบริจาค/หน่วยงาน เพื่อดูยอดซื้อเองและของซื้อเองที่คงเหลือ
 > - **Dev ต้อง build:** checkbox ในฟอร์มรับเข้า, ป้าย/ตัวกรองในหน้า supply (ตารางคลัง, ledger, detail sheet), สรุปยอดซื้อเองตามช่วงวัน
 > - **กระทบ:** schema.md §2.1 เท่านั้น. ไม่แตะ worker projector, ไม่ bump `PROJECTION_VERSION`, ไม่ต้อง redeploy `_design/*`
@@ -34,7 +34,7 @@ migration: additive — แถว schema_v ≤ 6 ไม่มี field = ไม�
 | ID    | Requirement                                                                                                                                                                                                                                                                        |
 | ----- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | FR-1  | `stock_ledger.lot.self_purchased`: `bool`, optional; เขียนเป็น `true` หรือไม่เขียน (ไม่เขียน `false`). ไม่มีค่า = ไม่ใช่ซื้อเอง                                                                                                                                                                                                    |
-| FR-2  | มีค่านี้ได้เฉพาะแถวรับเข้าที่เพิ่มยอด (qty > 0) ที่เป็น **`reason='receive'`** หรือ **`reason='adjust'` + `adjust_reason='found'`**. ฟอร์มรับเข้าหน้า supply โหมด "กรอกเอง" บันทึกเป็น `adjust`/`found` (CR-156 FR-C7 — ไม่มีฟอร์มใดเขียน `reason='receive'` ตรงๆ; แถว `receive` เป็นของระบบ: ผลผลิตครัว, ของเหลือคืนจากตั๋ว, ของยืมคืน, กองรวม) จึงเป็นที่เดียวที่แสดง checkbox. โหมดรับบริจาค (`reason='donation'`), ฟอร์มครัวรับของ และ scan-station ไม่มี checkbox และไม่เขียน field นี้ |
+| FR-2  | มีค่านี้ได้เฉพาะแถว **`reason='adjust'` + `adjust_reason='found'`** ที่เพิ่มยอด (qty > 0) ซึ่งเป็นสิ่งที่ฟอร์มรับเข้าหน้า supply โหมด "กรอกเอง" บันทึก (CR-156 FR-C7). **ฟอร์มรับเข้านี้เป็นที่เดียวที่แสดง checkbox และส่ง flag** — dialog ปรับยอด (แม้เลือก `found` ตอนนับสต็อก) ไม่มี checkbox และไม่เขียน field นี้. แถว `reason='receive'` ทุกแบบ (ผลผลิตครัว, ของเหลือคืนจากตั๋ว CR-208, ของยืมคืน CR-161, กองรวม) **ห้าม**มี field นี้ — ของคืนนับซื้อเองผ่าน `lot_ref` ตาม FR-5 แทน. โหมดรับบริจาค (`reason='donation'`), ฟอร์มครัวรับของ และ scan-station ไม่มี checkbox และไม่เขียน field นี้ |
 | FR-3  | Zod (`stockLedgerInputSchema.superRefine`) **reject** `lot.self_purchased: true` เมื่อ reason/qty ไม่เข้าเงื่อนไข FR-2 (ตัดสินแล้ว: reject ไม่ strip — ตามแบบ `adjust_reason`/`note` ที่ห้ามบน reason อื่น); `self_purchased: false` ถูกตัดทิ้งโดย `createStockLedger` (ไม่ persist `false`). `receiveInputSchema` สะท้อนกติกาเดียวกันเพื่อ UX (ใช้ได้เฉพาะ `source='manual'`) |
 | FR-4  | `createStockLedger` stamp `schema_v: 7`. ผู้เขียน ledger ทุกที่ที่ผ่าน factory นี้ stamp 7 (รวมแถวที่ไม่มี `self_purchased`)                                                                                                                                                          |
 | FR-5  | **การจัดประเภท lot ว่า "ซื้อเอง"** (ตาม physical lot, `lot_ref`): (a) แถวรับเข้าตาม FR-2 ที่ `lot.self_purchased === true` → ซื้อเอง (นับจากแถวต้นทางของ lot เท่านั้น แถว `transfer_in` ที่มี flag หลุดมาก็ไม่นับ); (b) `distribution_return` ที่คืนเข้า `lot_ref` ของแถว (a) → ยังนับเป็นซื้อเองตาม `lot_ref`; (c) `transfer_in` ที่ศูนย์ปลายทาง → **ไม่** นับเป็นซื้อเอง (นับเฉพาะศูนย์ที่ซื้อ ไม่พก flag ข้ามศูนย์); (d) แถวที่ไม่มี field (รวมแถว schema_v ≤ 6) → ไม่ใช่ซื้อเอง |
@@ -45,8 +45,8 @@ migration: additive — แถว schema_v ≤ 6 ไม่มี field = ไม�
 ## 2. Acceptance
 
 - **AC-1** รับเข้าจากฟอร์ม supply (โหมดกรอกเอง) โดยติ๊ก "ซื้อเอง" → แถว ledger (`adjust`/`found`) มี `lot.self_purchased: true` และ `schema_v: 7`; ไม่ติ๊ก → ไม่มี field (ไม่เขียน `false`)
-- **AC-2** `self_purchased: true` บน reason อื่น (donation, transfer_in, distribute, distribution_return, adjust ที่ไม่ใช่ found) ถูก reject (reject) — unit test
-- **AC-3** ฟังก์ชันจัดประเภท: receive ที่ติ๊ก → ซื้อเอง; `distribution_return` เข้า `lot_ref` ซื้อเอง → ซื้อเอง; `transfer_in` → ไม่ใช่
+- **AC-2** `self_purchased: true` บน reason อื่น (receive, donation, transfer_in, distribute, distribution_return, adjust ที่ไม่ใช่ found) ถูก reject (reject) — unit test
+- **AC-3** ฟังก์ชันจัดประเภท: แถวรับเข้า `adjust`/`found` ที่ติ๊ก → ซื้อเอง; `distribution_return` เข้า `lot_ref` ซื้อเอง → ซื้อเอง; `transfer_in` → ไม่ใช่
 - **AC-4** ฟังก์ชันสรุป: ขอบวัน Asia/Bangkok (เช่น 23:59 และ 00:00 ติดกัน) ถูกฝั่ง, `now` คงที่ใน test, ไม่นับ `transfer_in`
 - **AC-5** `filterRows` ตัวเลือก "ซื้อเอง" คืนเฉพาะสินค้าที่มี lot ซื้อเองคงเหลือ > 0
 - **AC-6** แถวเก่าไม่มี field อ่านได้ ไม่ throw และนับเป็นไม่ใช่ซื้อเอง
@@ -59,15 +59,15 @@ migration: additive — แถว schema_v ≤ 6 ไม่มี field = ไม�
 
 ## 4. Spec delta — `docs/data/schema.md` §2.1 (pending CR นี้)
 
-- `lot` เพิ่ม `self_purchased`: bool, opt, เฉพาะแถวรับเข้าตาม FR-2 (`receive`, หรือ `adjust`+`found` จากฟอร์มรับเข้า supply) (schema_v 7)
-- เพิ่ม note **schema_v 7** + **Migration (schema_v 6 → 7)** ใน §2.1 (ทำเครื่องหมาย "รอ CR approve")
+- `lot` เพิ่ม `self_purchased`: bool, opt, เฉพาะแถว `adjust`+`found` (qty > 0) จากฟอร์มรับเข้า supply ตาม FR-2 (schema_v 7)
+- เพิ่ม note **schema_v 7** + **Migration (schema_v 6 → 7)** ใน §2.1
 - `updated:` → 2026-11-05
 
 ## 5. Impact
 
 - **Docs:** `docs/data/schema.md` §2.1
 - **Code:** `operations` domain (Zod schema/refine, `createStockLedger`, classify + summary), data/application (receive mutation ส่ง flag), UI (form checkbox, tables, sheet, summary)
-- **Tests:** unit (schema receive vs reason อื่น; classify; summary + ขอบวัน Asia/Bangkok; `filterRows`), API (`POST` receive ที่ติ๊ก → `lot.self_purchased: true`, `schema_v: 7`)
+- **Tests:** unit (schema แถว `adjust`/`found` จากฟอร์มรับเข้า vs reason อื่น รวม `receive`; classify; summary + ขอบวัน Asia/Bangkok; `filterRows`), API (`POST` receive ที่ติ๊ก → `lot.self_purchased: true`, `schema_v: 7`)
 - **Worker / projection:** ตรวจ `worker/src/worker/projectors/*`, `donation_ledger.py`, `quota/reconcile.py`, `packages/tent-model` — ผู้อ่าน `stock_ledger` ใช้เฉพาะ `item_id`, `qty`, `reason`, `ref_id` (`compute_needs.py`, `needs.py`, `donation_ledger.py`); **ไม่มีที่ใดอ่าน `lot`** ⇒ output projection ไม่เปลี่ยน ⇒ **ไม่ต้อง bump `PROJECTION_VERSION`**
 - **CouchDB `_design/access`:** `validate_doc_update` ของ `stock_ledger` ตรวจ `schema_v` แบบ `>= 6` เฉพาะเงื่อนไข adjust_reason และจำกัด key ของ `lot` เฉพาะแถวคืนของยืม (`counter_loan_return`) ⇒ แถว schema_v 7 ที่มี `lot.self_purchased` ผ่านเดิม ไม่ต้องแก้/redeploy
 - **Ops:** ไม่ต้อง redeploy `_design/*`; deploy client ใหม่ได้ทันที (client เก่าที่ stamp 6 ยังอ่านได้)
@@ -93,3 +93,4 @@ migration: additive — แถว schema_v ≤ 6 ไม่มี field = ไม�
 
 - 2026-11-05 — proposed (GitHub #1187)
 - 2026-11-06 — approved โดย kong (เลข CR-234: CR-233 ถูกจองโดย PR #1221)
+- 2026-11-06 — kong ตัดสิน (review PR #1194): flag มีเฉพาะจากฟอร์มรับเข้าหน้า supply → FR-2 ตัด `reason='receive'` ออก (ตรงกับ VDU ที่จำกัด key `lot` ของแถวคืนของยืม) และ dialog ปรับยอดไม่มี checkbox
