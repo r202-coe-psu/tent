@@ -485,7 +485,7 @@
 			{/if}
 		</div>
 
-		<!-- Own row: three options never fit a third of the row (English "Unspecified" overflowed) -->
+		<!-- Own row; options size to their label and wrap onto a new line instead of overflowing (English "Unspecified") -->
 		<div class="flex flex-col gap-1.5 sm:col-span-2">
 			<div class="flex min-h-7 items-center">
 				<Label class="text-xs font-semibold text-foreground" id={fid('gender-label')}>
@@ -505,10 +505,10 @@
 				aria-labelledby={fid('gender-label')}
 				aria-invalid={!!errors?.gender}
 				aria-describedby={errors?.gender ? fid('gender-error') : undefined}
-				class="grid grid-cols-3 gap-2"
+				class="flex flex-wrap gap-2"
 			>
 				<label
-					class="flex min-h-11 w-full cursor-pointer items-center gap-2.5 rounded-md border border-border px-2 py-2 text-sm sm:px-3 {genderRadioValue ===
+					class="flex min-h-11 flex-auto cursor-pointer items-center gap-2 rounded-md border border-border px-2.5 py-2 text-sm sm:px-3 {genderRadioValue ===
 					'male'
 						? 'border-primary bg-primary/5 font-semibold'
 						: ''} {disabled ? 'pointer-events-none opacity-60' : ''}"
@@ -518,7 +518,7 @@
 					{t.genderMale}
 				</label>
 				<label
-					class="flex min-h-11 w-full cursor-pointer items-center gap-2.5 rounded-md border border-border px-2 py-2 text-sm sm:px-3 {genderRadioValue ===
+					class="flex min-h-11 flex-auto cursor-pointer items-center gap-2 rounded-md border border-border px-2.5 py-2 text-sm sm:px-3 {genderRadioValue ===
 					'female'
 						? 'border-primary bg-primary/5 font-semibold'
 						: ''} {disabled ? 'pointer-events-none opacity-60' : ''}"
@@ -528,7 +528,7 @@
 					{t.genderFemale}
 				</label>
 				<label
-					class="flex min-h-11 w-full cursor-pointer items-center gap-2.5 rounded-md border border-border px-2 py-2 text-sm sm:px-3 {genderRadioValue ===
+					class="flex min-h-11 flex-auto cursor-pointer items-center gap-2 rounded-md border border-border px-2.5 py-2 text-sm sm:px-3 {genderRadioValue ===
 					GENDER_UNSPECIFIED
 						? 'border-primary bg-primary/5 font-semibold'
 						: ''} {disabled ? 'pointer-events-none opacity-60' : ''}"

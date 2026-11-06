@@ -87,7 +87,7 @@
 						id="{idPrefix}-care-track-{opt.value}"
 						class="mt-0.5"
 					/>
-					<div class="space-y-0.5">
+					<div class="min-w-0 space-y-0.5 break-words">
 						<span class="block text-xs font-semibold text-foreground">{opt.label}</span>
 						<span class="block text-xs text-muted-foreground">{opt.desc}</span>
 					</div>
