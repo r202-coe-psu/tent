@@ -167,9 +167,10 @@ export interface StockLot {
 	 */
 	produced_at?: Timestamp;
 	/**
-	 * The shelter bought this lot itself (schema_v 7, draft-self-purchased-lot-flag). Written
+	 * The shelter bought this lot itself (schema_v 7, CR-234). Written
 	 * `true` or absent — never `false`; absent = not self-purchased, which is also every row
-	 * from before schema_v 7. Only a manual receipt may carry it (`canCarrySelfPurchased`).
+	 * from before schema_v 7. Only the supply form's manual receipt (`adjust` / `found`, qty > 0)
+	 * may carry it (`canCarrySelfPurchased`).
 	 */
 	self_purchased?: boolean;
 }
@@ -649,7 +650,7 @@ function stockLedgerInputSchemaWith(
 ) {
 	return stockLedgerInputBaseSchema.superRefine((d, ctx) => {
 		validateRefId(d.reason, d.ref_id, ctx);
-		// schema_v 7: a self-purchased lot is a new inbound lot from a receipt, nothing else.
+		// schema_v 7: a self-purchased lot is a manual receipt (adjust/found, qty > 0), nothing else.
 		// `false` carries no information and is dropped by the factory, so only `true` is refused.
 		if (
 			d.lot?.self_purchased === true &&
@@ -658,7 +659,7 @@ function stockLedgerInputSchemaWith(
 			ctx.addIssue({
 				code: 'custom',
 				path: ['lot', 'self_purchased'],
-				message: `รายการประเภท '${d.reason}' ห้ามมี self_purchased (ใช้ได้เฉพาะรับเข้าที่เพิ่มยอด)`
+				message: `รายการประเภท '${d.reason}' ห้ามมี self_purchased (ใช้ได้เฉพาะรับเข้าแบบกรอกเอง adjust/found ที่เพิ่มยอด)`
 			});
 		}
 		if ((d.reason === 'distribute' || d.reason === 'distribution_return') && !d.lot_ref) {
@@ -722,16 +723,17 @@ export type StockLedgerInput =
 	  });
 
 /**
- * Which rows may say "the shelter bought this lot" (schema_v 7): a `receive` row, or the
- * `adjust` / `found` row a hand-keyed receipt from the supply receive form is booked as
- * (CR-156 FR-C7). Every other reason refuses the flag — a donation, a transfer-in or a
- * distribution return is by definition not a purchase.
+ * Which rows may say "the shelter bought this lot" (CR-234 FR-2): only the `adjust` / `found`
+ * row a hand-keyed receipt from the supply receive form is booked as (CR-156 FR-C7).
+ * Every `receive` row (kitchen output, leftover return, loan return, pooled), donation,
+ * transfer-in and distribution return refuses the flag; a returned lot counts as self-purchased
+ * through its `lot_ref` instead (CR-234 FR-5).
  */
 export function canCarrySelfPurchased(
 	reason: LedgerReason,
 	adjustReason?: AdjustReason | null
 ): boolean {
-	return reason === 'receive' || (reason === 'adjust' && adjustReason === 'found');
+	return reason === 'adjust' && adjustReason === 'found';
 }
 
 const legacyFlow2StockLedgerInputSchema = stockLedgerInputSchemaWith(checkLegacyFlow2RefId);
@@ -776,7 +778,7 @@ export function parseStockLedger(input: unknown): StockLedger {
 	return stockLedgerDocSchema.parse(input) as StockLedger;
 }
 
-/** Current persisted `stock_ledger` shape (draft-self-purchased-lot-flag). Every writer stamps this. */
+/** Current persisted `stock_ledger` shape (CR-234). Every writer stamps this. */
 export const STOCK_LEDGER_SCHEMA_V = 7;
 
 /**

@@ -47,17 +47,36 @@ const receive = (qty: string, selfPurchased?: boolean, over: Partial<StockLedger
 describe('self_purchased on the ledger write path (schema_v 7)', () => {
 	const base = { item_id: 'item:rice', qty: '5', unit: 'kg' };
 
-	it('a receive row with lot.self_purchased: true passes and is stamped schema_v 7', () => {
+	it.each([
+		['receive (pooled)', { ref_id: 'bulk_return_pool:01J' }],
+		['receive (kitchen output)', { ref_id: 'meal_service:01J' }],
+		['receive (leftover return)', { ref_id: 'requisition_ticket:01J' }]
+	])('rejects self_purchased: true on %s (CR-234 FR-2)', (_name, over) => {
+		const input = {
+			...base,
+			reason: 'receive',
+			lot: { self_purchased: true },
+			...over
+		} as StockLedgerInput;
+		const parsed = stockLedgerInputSchema.safeParse(input);
+		expect(parsed.success).toBe(false);
+		if (!parsed.success) {
+			expect(parsed.error.issues.map((i) => i.path.join('.'))).toEqual(['lot.self_purchased']);
+		}
+		expect(() => createStockLedger(input, ctx)).toThrow();
+	});
+
+	it('self_purchased: false on a receive row is stripped, not rejected', () => {
 		const entry = createStockLedger(
 			{
 				...base,
 				reason: 'receive',
-				ref_id: 'distribution_log:01J',
-				lot: { self_purchased: true }
+				ref_id: 'bulk_return_pool:01J',
+				lot: { self_purchased: false }
 			},
 			ctx
 		);
-		expect(entry.lot?.self_purchased).toBe(true);
+		expect(entry.lot).not.toHaveProperty('self_purchased');
 		expect(entry.schema_v).toBe(7);
 	});
 
@@ -67,6 +86,7 @@ describe('self_purchased on the ledger write path (schema_v 7)', () => {
 			ctx
 		);
 		expect(entry.lot?.self_purchased).toBe(true);
+		expect(entry.schema_v).toBe(7);
 	});
 
 	it.each([
@@ -160,6 +180,16 @@ describe('selfPurchasedLotRefs / isSelfPurchasedLot', () => {
 		expect(lots).toHaveLength(1);
 		expect(lots[0].qty).toBe('12');
 		expect(isSelfPurchasedLot(lots[0].lot_ref, refs)).toBe(true);
+	});
+
+	it('a stray flag on a receive row does not make a lot self-purchased', () => {
+		const stray = row({
+			qty: '5',
+			reason: 'receive',
+			ref_id: 'distribution_log:01J',
+			lot: { self_purchased: true }
+		});
+		expect(selfPurchasedLotRefs([stray]).size).toBe(0);
 	});
 
 	it('a transfer_in is never self-purchased, even if a stray row carries the flag', () => {

@@ -1042,7 +1042,7 @@ describe('OperationsRemoteRepository', () => {
 			expect(up.qty).toBe('2');
 		});
 
-		// draft-self-purchased-lot-flag (#1187): the supply receive form's "ซื้อเอง" checkbox.
+		// CR-234 (#1187): the supply receive form's "ซื้อเอง" checkbox.
 		it('stores lot.self_purchased: true and schema_v 7 on a manual receipt', async () => {
 			mockGetItem.mockResolvedValue({ unit: 'kg' } as SupplyItem);
 

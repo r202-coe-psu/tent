@@ -311,7 +311,7 @@ describe('Back-office GET & POST /api/back-office/donations/[query]', () => {
 				unit: 'kg',
 				reason: 'donation',
 				ref_id: 'donation:123',
-				schema_v: 7, // 4 = CR-088 (lot_no / storage_zone); 5 = draft-shelter-storage-points (storage_point_id); 6 = CR-143 §C (adjust_reason); 7 = draft-self-purchased-lot-flag (lot.self_purchased)
+				schema_v: 7, // 4 = CR-088 (lot_no / storage_zone); 5 = draft-shelter-storage-points (storage_point_id); 6 = CR-143 §C (adjust_reason); 7 = CR-234 (lot.self_purchased)
 				shelter_code: 'SH001',
 				created_by: 'admin'
 			});

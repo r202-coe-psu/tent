@@ -8,7 +8,7 @@ import {
 } from './operations';
 
 /**
- * Self-purchased lots (schema_v 7, draft-self-purchased-lot-flag).
+ * Self-purchased lots (schema_v 7, CR-234).
  *
  * A lot is "ซื้อเอง" when the row that created it says so. The identity is the physical lot
  * (`lot_ref`, or the row's own `_id` for a lot's first row), so a `distribution_return` into that
@@ -16,7 +16,7 @@ import {
  * shelters. Rows from before schema_v 7 have no flag and are not self-purchased.
  */
 
-/** A flagged receipt that adds stock — the only kind of row that makes a lot self-purchased. */
+/** A flagged manual receipt (adjust/found, qty > 0) — the only kind of row that makes a lot self-purchased. */
 export function isSelfPurchasedReceipt(
 	entry: Pick<StockLedger, 'reason' | 'adjust_reason' | 'qty' | 'lot'>
 ): boolean {

@@ -267,7 +267,7 @@ describe('stockBalance', () => {
 });
 
 describe('stock_ledger schema_v + reason enum (CR-032 / draft-lot-produced-at)', () => {
-	// Writer stamps schema_v 7 (draft-self-purchased-lot-flag); legacy rows through schema_v 5 remain readable.
+	// Writer stamps schema_v 7 (CR-234); legacy rows through schema_v 5 remain readable.
 	it('stamps schema_v 7 on new ledger rows', () => {
 		const entry = createStockLedger(
 			{
