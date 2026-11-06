@@ -77,6 +77,25 @@ describe('buildOneTimeDemandRows', () => {
 		expect(row).toMatchObject({ demand: '120', qtyPerPersonMissing: true, status: 'enough' });
 	});
 
+	it('treats qty_per_person 0 as not set', () => {
+		const [row] = build([{ ...net, qty_per_person: 0 }], 120, [lot(net._id, '120')]);
+		expect(row).toMatchObject({ demand: '120', qtyPerPersonMissing: true, status: 'enough' });
+	});
+
+	it('applies shelf_life_days to lots without an expiry (received 2026-10-01, 30 days)', () => {
+		const shelfItem = { ...net, shelf_life_days: 30 };
+		const rows = build([shelfItem], 10, [
+			// received 2026-10-01 + 30d = 2026-10-31 < now -> expired
+			lot(net._id, '40', { ref: 'stock_ledger:old' }),
+			{
+				...lot(net._id, '7', { ref: 'stock_ledger:fresh' }),
+				received_at: '2026-10-20T00:00:00.000Z'
+			}
+		]);
+		expect(rows[0].available).toBe('7');
+		expect(rows[0].shortfall).toBe('3');
+	});
+
 	it('does not flag an item that has a qty_per_person', () => {
 		const [row] = build([net], 10);
 		expect(row.qtyPerPersonMissing).toBe(false);
@@ -126,6 +145,15 @@ describe('buildOneTimeDemandRows', () => {
 		expect(row.available).toBe('0');
 		expect(row.shortfall).toBe('10');
 		expect(formatCoveragePercent(row.coverage)).toBe('0%');
+	});
+
+	it('AC-5a: lot A 50 and lot B -10 gives 50', () => {
+		const [row] = build([net], 100, [
+			lot(net._id, '50', { ref: 'stock_ledger:a' }),
+			lot(net._id, '-10', { ref: 'stock_ledger:b' })
+		]);
+		expect(row.available).toBe('50');
+		expect(row.shortfall).toBe('50');
 	});
 
 	it('ignores negative lots instead of subtracting them', () => {

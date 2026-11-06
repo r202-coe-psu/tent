@@ -3,8 +3,7 @@ import { isLotExpired, type StockLotBalance } from '$lib/features/operations';
 import { addQty, parseQty, persistQty, qtyGt, qtyGte, subQty } from '$lib/utils/qty';
 
 /**
- * Demand vs stock for one-time items (`distribution_type = one_time`), per the draft CR
- * `draft-one-time-item-demand` (#1190). Pure: the people base (`countShelterPeople`, CR-223),
+ * Demand vs stock for one-time items (`distribution_type = one_time`), per CR-236 (#1190). Pure: the people base (`countShelterPeople`, CR-223),
  * lot balances and reservation claims arrive as inputs. Quantities are qty_str / Decimal only.
  */
 
@@ -84,8 +83,12 @@ export function buildOneTimeDemandRows(input: BuildOneTimeDemandInput): OneTimeD
 	}
 
 	return input.items.filter(isActiveOneTime).map((item) => {
-		const qtyPerPersonMissing = item.qty_per_person == null;
-		const demand = persistQty(parseQty(people).times(item.qty_per_person ?? 1));
+		// FR-2: unset or 0 means "not configured" -> 1. FR-8: number -> Decimal via its string form.
+		const qtyPerPersonMissing = !item.qty_per_person;
+		const perPerson = qtyPerPersonMissing
+			? new Decimal(1)
+			: new Decimal(String(item.qty_per_person));
+		const demand = persistQty(new Decimal(String(people)).times(perPerson));
 
 		// Only live, positive lots count; a claim held on an excluded lot is not double-counted.
 		let onHand = ZERO;
