@@ -3,7 +3,10 @@
 	import { Textarea } from '$lib/components/ui/textarea/index.js';
 	import * as RadioGroup from '$lib/components/ui/radio-group/index.js';
 	import { MasterTagInput, resolveMasterCodes, useMasterData } from '$lib/features/master-data';
+	import { langState } from '$lib/states/i18n.svelte';
+	import { getTranslation } from '$lib/utils/i18n';
 	import type { CareTrack } from '../../domain/people.js';
+	import { HEALTH_MEDICAL_FIELDS_I18N } from '../_constants/health-medical-fields.i18n';
 
 	let {
 		care_track = $bindable<CareTrack>('normal'),
@@ -24,6 +27,8 @@
 		idPrefix?: string;
 		showGeneralSymptoms?: boolean;
 	} = $props();
+
+	const t = $derived(getTranslation(HEALTH_MEDICAL_FIELDS_I18N, langState.current));
 
 	// CR-186 / #648 — โรคประจำตัว and ประวัติการแพ้ pick from masters `chronic_disease` /
 	// `allergy`; both stay comma-separated strings of codes / free text so parents
@@ -50,23 +55,15 @@
 		allergies = tokens.join(', ');
 	}
 
-	const careTrackOptions: { value: CareTrack; label: string; desc: string }[] = [
-		{
-			value: 'normal',
-			label: 'ดูแลตามปกติ (Normal)',
-			desc: 'ไม่มีภาวะเร่งด่วน จัดกลุ่มการดูแลตามปกติ'
-		},
-		{
-			value: 'fast_track',
-			label: 'Fast track',
-			desc: 'มีภาวะเร่งด่วนหรือต้องการการติดตามอย่างใกล้ชิด'
-		}
-	];
+	const careTrackOptions: { value: CareTrack; label: string; desc: string }[] = $derived([
+		{ value: 'normal', label: t.careTrackNormalLabel, desc: t.careTrackNormalDesc },
+		{ value: 'fast_track', label: t.careTrackFastLabel, desc: t.careTrackFastDesc }
+	]);
 </script>
 
 <div class="space-y-5">
 	<div class="space-y-1.5">
-		<Label class="text-xs font-semibold text-foreground">แนวทางดูแล (Care Track)</Label>
+		<Label class="text-xs font-semibold text-foreground">{t.careTrackLabel}</Label>
 		<RadioGroup.Root
 			value={care_track}
 			onValueChange={(v) => {
@@ -102,29 +99,29 @@
 	<!-- โรคประจำตัว gets a full-width row so its tags flow on one line (CR-186). -->
 	<div class="space-y-1.5">
 		<Label for="{idPrefix}-conditions" class="text-xs font-medium text-foreground">
-			โรคประจำตัว
+			{t.conditionsLabel}
 		</Label>
 		<MasterTagInput
 			id="{idPrefix}-conditions"
 			bind:value={getConditionTokens, setConditionTokens}
 			items={chronicDiseaseItems}
 			{disabled}
-			placeholder="เลือกหรือพิมพ์ เช่น เบาหวาน, โรคหัวใจ"
-			searchPlaceholder="ค้นหาโรคประจำตัว..."
-			listLabel="โรคประจำตัวที่เลือก"
+			placeholder={t.conditionsPlaceholder}
+			searchPlaceholder={t.conditionsSearch}
+			listLabel={t.conditionsListLabel}
 		/>
 	</div>
 
 	<div class="space-y-1.5">
 		<Label for="{idPrefix}-medications" class="text-xs font-medium text-foreground">
-			ยาที่ใช้ประจำ
+			{t.medicationsLabel}
 		</Label>
 		<Textarea
 			id="{idPrefix}-medications"
 			bind:value={medications}
 			{disabled}
 			rows={3}
-			placeholder="เช่น ยาลดความดัน, อินซูลิน"
+			placeholder={t.medicationsPlaceholder}
 			class="text-xs"
 		/>
 	</div>
@@ -132,29 +129,29 @@
 	<!-- ประวัติการแพ้ gets its own full-width row like โรคประจำตัว (#648). -->
 	<div class="space-y-1.5">
 		<Label for="{idPrefix}-allergies" class="text-xs font-medium text-foreground">
-			ประวัติการแพ้
+			{t.allergiesLabel}
 		</Label>
 		<MasterTagInput
 			id="{idPrefix}-allergies"
 			bind:value={getAllergyTokens, setAllergyTokens}
 			items={allergyItems}
 			{disabled}
-			placeholder="เลือกหรือพิมพ์ เช่น อาหารทะเล, เพนิซิลลิน"
-			searchPlaceholder="ค้นหาสิ่งที่แพ้..."
+			placeholder={t.allergiesPlaceholder}
+			searchPlaceholder={t.allergiesSearch}
 		/>
 	</div>
 
 	{#if showGeneralSymptoms}
 		<div class="space-y-1.5">
 			<Label for="{idPrefix}-general-symptoms" class="text-xs font-medium text-foreground">
-				อาการและข้อสังเกต
+				{t.generalSymptomsLabel}
 			</Label>
 			<Textarea
 				id="{idPrefix}-general-symptoms"
 				bind:value={general_symptoms}
 				{disabled}
 				rows={3}
-				placeholder="กรอกอาการทั่วไป เช่น ปวดศีรษะ เวียนศีรษะ ปวดเมื่อยตัว อ่อนเพลีย บาดแผล ฯลฯ (เว้นว่างได้ถ้าไม่มีอาการ)"
+				placeholder={t.generalSymptomsPlaceholder}
 				class="text-xs"
 			/>
 		</div>

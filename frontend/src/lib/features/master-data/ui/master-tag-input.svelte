@@ -6,6 +6,9 @@
 	import * as Popover from '$lib/components/ui/popover/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { cn } from '$lib/utils/shadcn.js';
+	import { langState } from '$lib/states/i18n.svelte';
+	import { getTranslation } from '$lib/utils/i18n';
+	import { MASTER_TAG_INPUT_I18N } from './_constants/master-tag-input.i18n';
 	import { formatMasterLabelByCode, resolveMasterCode, type MasterDataItem } from '../domain.js';
 
 	/**
@@ -17,10 +20,10 @@
 		value = $bindable<string[]>([]),
 		items = [],
 		disabled = false,
-		placeholder = 'เลือกหรือพิมพ์เพิ่ม',
-		searchPlaceholder = 'ค้นหา...',
-		emptyText = 'ไม่พบรายการ',
-		listLabel = 'รายการที่เลือก'
+		placeholder,
+		searchPlaceholder,
+		emptyText,
+		listLabel
 	}: {
 		id?: string;
 		value?: string[];
@@ -33,9 +36,12 @@
 		listLabel?: string;
 	} = $props();
 
+	const t = $derived(getTranslation(MASTER_TAG_INPUT_I18N, langState.current));
+
 	let open = $state(false);
 	let search = $state('');
 
+	const lang = $derived(langState.current);
 	const activeItems = $derived(items.filter((i) => i.status !== 'inactive'));
 	const selected = $derived(new Set(value));
 	/** Free text to offer as a new tag — commas would split it on save. */
@@ -61,9 +67,9 @@
 
 <div class="space-y-2">
 	{#if value.length > 0}
-		<ul class="flex flex-wrap gap-1.5" aria-label={listLabel}>
+		<ul class="flex flex-wrap gap-1.5" aria-label={listLabel ?? t.listLabel}>
 			{#each value as token (token)}
-				{@const label = formatMasterLabelByCode(token, items) || token}
+				{@const label = formatMasterLabelByCode(token, items, lang) || token}
 				<li
 					class="inline-flex min-h-11 items-center gap-1 rounded-full border border-slate-200 bg-slate-50 py-0.5 pr-0.5 pl-3 text-sm font-semibold text-slate-800"
 				>
@@ -75,7 +81,7 @@
 						class="inline-flex size-10 items-center justify-center rounded-full text-slate-500 hover:bg-slate-200 hover:text-slate-900 focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:outline-none disabled:pointer-events-none disabled:opacity-50"
 					>
 						<X class="size-4" />
-						<span class="sr-only">ลบ {label}</span>
+						<span class="sr-only">{t.removePrefix} {label}</span>
 					</button>
 				</li>
 			{/each}
@@ -96,26 +102,26 @@
 					class="min-h-12 w-full justify-start gap-2 text-sm font-normal text-muted-foreground"
 				>
 					<Plus class="size-4 shrink-0" />
-					<span class="truncate">{placeholder}</span>
+					<span class="truncate">{placeholder ?? t.placeholder}</span>
 				</Button>
 			{/snippet}
 		</Popover.Trigger>
 		<Popover.Content align="start" class="w-(--bits-floating-anchor-width) min-w-64 p-0">
 			<Command.Root>
 				<Command.Input
-					placeholder={searchPlaceholder}
+					placeholder={searchPlaceholder ?? t.searchPlaceholder}
 					value={search}
 					oninput={(e) => (search = e.currentTarget.value)}
 				/>
 				<Command.List>
-					<Command.Empty>{emptyText}</Command.Empty>
+					<Command.Empty>{emptyText ?? t.emptyText}</Command.Empty>
 					{#if canAddFreeText}
 						<!-- forceMount: the search may hold a comma the add option strips, so
 						     bits-ui's filter would otherwise hide it. -->
 						<Command.Group forceMount>
 							<Command.Item value="__add__{freeText}" forceMount onSelect={addFreeText}>
 								<Plus class="size-4" />
-								<span>เพิ่ม “{freeText}”</span>
+								<span>{t.addPrefix} “{freeText}”</span>
 							</Command.Item>
 						</Command.Group>
 					{/if}
@@ -127,7 +133,7 @@
 								onSelect={() => toggle(item.code)}
 							>
 								<CheckIcon class={cn('size-4', !selected.has(item.code) && 'text-transparent')} />
-								<span>{formatMasterLabelByCode(item.code, items)}</span>
+								<span>{formatMasterLabelByCode(item.code, items, lang)}</span>
 							</Command.Item>
 						{/each}
 					</Command.Group>

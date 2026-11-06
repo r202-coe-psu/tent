@@ -23,6 +23,9 @@
 	import { resolveMasterCodes, useMasterData } from '$lib/features/master-data';
 	import { getShelterCode } from '$lib/db/shelter';
 	import { authStore } from '$lib/stores/auth.svelte';
+	import { langState } from '$lib/states/i18n.svelte';
+	import { getTranslation } from '$lib/utils/i18n';
+	import { STAFF_MEDICAL_SCREENING_I18N } from '$lib/constants/i18n/staff-medical-screening';
 
 	type PriorScreeningContext = {
 		screeningCount: number;
@@ -43,6 +46,8 @@
 		/** Called after a successful save; parent shows Station 3 / queue CTAs. */
 		onSuccess?: (evacueeId: string) => void;
 	} = $props();
+
+	const t = $derived(getTranslation(STAFF_MEDICAL_SCREENING_I18N, langState.current));
 
 	function safeQuery<T>(fn: () => T, fallback: T): T {
 		try {
@@ -178,10 +183,10 @@
 			});
 
 			baselineSnapshot = currentSnapshot();
-			toast.success('บันทึกผลการคัดกรองแล้ว');
+			toast.success(t.toastSaved);
 			onSuccess?.(evacuee._id);
 		} catch (err: unknown) {
-			toast.error(err instanceof Error ? err.message : 'เกิดข้อผิดพลาดในการบันทึกข้อมูล');
+			toast.error(err instanceof Error ? err.message : t.toastSaveErrorFallback);
 		} finally {
 			isSubmitting = false;
 		}
@@ -196,10 +201,10 @@
 				<HeartPulse class="size-4 text-primary" />
 				<div>
 					<h3 class="text-sm font-bold text-foreground">
-						1. ประวัติสุขภาพและแนวทางดูแล (Health History &amp; Care Track)
+						{t.section1Title}
 					</h3>
 					<p class="text-xs text-muted-foreground">
-						ซักประวัติโรคประจำตัว ยาที่ใช้ประจำ ประวัติการแพ้ และจัดกลุ่มแนวทางดูแล
+						{t.section1Desc}
 					</p>
 				</div>
 			</div>
@@ -221,9 +226,9 @@
 			<div class="flex items-center gap-2 border-b border-border/60 pb-2.5">
 				<ShieldAlert class="size-4 text-primary" />
 				<div>
-					<h3 class="text-sm font-bold text-foreground">2. กลุ่มเปราะบาง (Vulnerable Groups)</h3>
+					<h3 class="text-sm font-bold text-foreground">{t.section2Title}</h3>
 					<p class="text-xs text-muted-foreground">
-						ติ๊กทุกข้อที่ตรงกับผู้ประสบภัย — เลือกได้หลายข้อ · ไม่ตรงข้อไหนเลยให้เว้นว่าง
+						{t.section2Desc}
 					</p>
 				</div>
 			</div>
@@ -242,10 +247,9 @@
 			<div class="flex items-center gap-2 border-b border-border/60 pb-2.5">
 				<HeartHandshake class="size-4 text-primary" />
 				<div>
-					<h3 class="text-sm font-bold text-foreground">3. ความต้องการพิเศษ (Special needs)</h3>
+					<h3 class="text-sm font-bold text-foreground">{t.section3Title}</h3>
 					<p class="text-xs text-muted-foreground">
-						ข้อมูลเดียวกับที่กรอกที่จุดลงทะเบียน (สถานี 1) — แก้ไขหรือเพิ่มได้ · เลือกได้หลายข้อ ·
-						ไม่มีให้เว้นว่าง
+						{t.section3Desc}
 					</p>
 				</div>
 			</div>
@@ -259,12 +263,12 @@
 				<AlertCircle class="size-4 text-primary" />
 				<div>
 					<h3 class="text-sm font-bold text-foreground">
-						4. อาการเฝ้าระวังทางระบาดวิทยา (EWAR Surveillance Symptoms)
+						{t.section4Title}
 					</h3>
 					<p class="text-xs text-muted-foreground">
-						ติ๊กเฉพาะอาการที่พบตอนนี้ — เลือกได้หลายข้อ · <strong class="font-semibold"
-							>ไม่มีอาการ ไม่ต้องเลือก</strong
-						> (ถ้าติ๊กอาการใด ระบบจะแนะนำโซนกักตัวที่สถานี 3)
+						{t.section4DescBefore}
+						<strong class="font-semibold">{t.section4DescStrong}</strong>
+						{t.section4DescAfter}
 					</p>
 				</div>
 			</div>
@@ -284,10 +288,10 @@
 		>
 			{#if isSubmitting}
 				<Loader2 class="size-4 animate-spin" />
-				<span>กำลังบันทึกข้อมูล...</span>
+				<span>{t.savingData}</span>
 			{:else}
 				<Save class="size-4" />
-				<span>บันทึกผลคัดกรอง</span>
+				<span>{t.saveScreening}</span>
 			{/if}
 		</Button>
 	</div>

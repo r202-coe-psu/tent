@@ -13,13 +13,13 @@
 		useEvacuees,
 		useScreenings,
 		maskNationalId,
-		genderLabelTh,
+		genderLabel,
 		evacueeAgeYears,
 		nextScreeningQueueEvacuee,
 		classifyScreeningQueueTab,
 		startStaffStationVisit,
 		recommendZoneKind,
-		ZONE_KIND_LABELS,
+		zoneKindLabelsByLanguage,
 		formatPersonName,
 		StationCompletionSummary,
 		type Screening
@@ -28,10 +28,15 @@
 	import { shelterStore } from '$lib/stores/shelter.svelte';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { getShelterCode } from '$lib/db/shelter';
+	import { langState } from '$lib/states/i18n.svelte';
+	import { getTranslation } from '$lib/utils/i18n';
+	import { STAFF_MEDICAL_SCREENING_I18N } from '$lib/constants/i18n/staff-medical-screening';
 	import ClinicalScreeningForm from '../clinical-screening-form.svelte';
 	import { shouldConfirmLeave } from '../medical-screening.utils';
 
 	let { data } = $props();
+
+	const t = $derived(getTranslation(STAFF_MEDICAL_SCREENING_I18N, langState.current));
 
 	const shelterQuery = useShelter(() => shelterStore.selectedShelterCode ?? getShelterCode());
 	const enableMedical = $derived(
@@ -79,23 +84,23 @@
 		const symptoms = latestScreening?.symptoms ?? [];
 		return [
 			{
-				label: 'แนวทางดูแล',
-				value: latestScreening?.track === 'fast_track' ? 'Fast track' : 'ดูแลตามปกติ'
+				label: t.factCareTrack,
+				value: latestScreening?.track === 'fast_track' ? t.factFastTrack : t.factNormalCare
 			},
 			{
-				label: 'อาการเฝ้าระวัง (EWAR)',
-				value: symptoms.length > 0 ? `${symptoms.length} อาการ` : 'ไม่มี'
+				label: t.factEwar,
+				value: symptoms.length > 0 ? t.factSymptomCount(symptoms.length) : t.factNone
 			},
 			{
-				label: 'กลุ่มเปราะบาง',
+				label: t.factVulnerable,
 				value:
 					(evacuee.vulnerable_groups?.length ?? 0) > 0
-						? `${evacuee.vulnerable_groups.length} กลุ่ม`
-						: 'ไม่มี'
+						? t.factGroupCount(evacuee.vulnerable_groups.length)
+						: t.factNone
 			},
 			{
-				label: 'โซนที่ระบบแนะนำ (สถานี 3)',
-				value: ZONE_KIND_LABELS[recommendZoneKind(evacuee, symptoms)]
+				label: t.factZone,
+				value: zoneKindLabelsByLanguage[langState.current][recommendZoneKind(evacuee, symptoms)]
 			}
 		];
 	});
@@ -124,10 +129,7 @@
 
 	beforeNavigate((nav) => {
 		if (isNavigatingAfterSave || justSaved) return;
-		if (
-			shouldConfirmLeave({ isDirty }) &&
-			!confirm('มีการแก้ไขที่ยังไม่ได้บันทึก ต้องการออกจากหน้านี้หรือไม่?')
-		) {
+		if (shouldConfirmLeave({ isDirty }) && !confirm(t.confirmLeave)) {
 			nav.cancel();
 		}
 	});
@@ -161,7 +163,7 @@
 
 <svelte:head>
 	<title>
-		{evacuee ? `คัดกรอง · ${evacuee.first_name} ${evacuee.last_name}` : 'คัดกรองผู้เข้าพัก'} | SmartShelter
+		{evacuee ? t.detailTitle(`${evacuee.first_name} ${evacuee.last_name}`) : t.detailTitleDefault} | SmartShelter
 	</title>
 </svelte:head>
 
@@ -171,7 +173,7 @@
 			type="button"
 			onclick={goToQueue}
 			class="inline-flex h-9 w-9 items-center justify-center rounded-full border border-border bg-card text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-			title="กลับไปคิวคัดกรอง"
+			title={t.backToQueueTitle}
 		>
 			<ArrowLeft class="size-4" />
 		</button>
@@ -187,15 +189,18 @@
 						{evacuee.first_name}
 						{evacuee.last_name}
 					{:else}
-						ฟอร์มคัดกรองผู้เข้าพัก
+						{t.formHeading}
 					{/if}
 				</h1>
 			</div>
 			{#if evacuee}
 				<p class="mt-0.5 text-xs text-muted-foreground">
-					เพศ {genderLabelTh(evacuee.gender)} · อายุ
-					{evacueeAgeYears(evacuee) ?? '—'} ปี · บัตร
-					{maskNationalId(evacuee.person_id?.number)} · โทร {evacuee.phone || '—'}
+					{t.headerMeta(
+						genderLabel(evacuee.gender, langState.current),
+						String(evacueeAgeYears(evacuee) ?? '—'),
+						maskNationalId(evacuee.person_id?.number),
+						evacuee.phone || '—'
+					)}
 				</p>
 			{/if}
 		</div>
@@ -206,7 +211,7 @@
 			<div
 				class="size-6 animate-spin rounded-full border-2 border-primary border-t-transparent"
 			></div>
-			<p class="text-xs">กำลังโหลดข้อมูลผู้ประสบภัย...</p>
+			<p class="text-xs">{t.loadingEvacuee}</p>
 		</div>
 	{:else if !enableMedical}
 		<div class="flex flex-1 items-center justify-center p-6">
@@ -216,13 +221,13 @@
 				>
 					<Stethoscope class="size-6" />
 				</div>
-				<h2 class="text-base font-bold text-foreground">จุดคัดกรองผู้เข้าพักถูกปิดใช้งาน</h2>
+				<h2 class="text-base font-bold text-foreground">{t.disabledTitle}</h2>
 				<p class="mt-1.5 text-xs leading-relaxed text-muted-foreground">
-					ศูนย์พักพิงนี้ไม่ได้เปิดใช้งานจุดคัดกรองผู้เข้าพัก (Station 2) ตามการตั้งค่าศูนย์พักพิง
+					{t.disabledDesc}
 				</p>
 				<div class="mt-5 flex flex-col gap-2">
 					<Button variant="default" class="w-full" onclick={() => goto(resolve('/portal'))}>
-						กลับหน้าเลือกเมนูหลัก
+						{t.backToPortal}
 					</Button>
 					<Button
 						variant="outline"
@@ -230,7 +235,7 @@
 						onclick={() =>
 							goto(resolve(`/onsite/zoning/${evacueeId}` as `/onsite/zoning/${string}`))}
 					>
-						ไปจุดจัดสรรที่พัก (Station 3)
+						{t.goToStation3}
 					</Button>
 				</div>
 			</Card.Root>
@@ -243,32 +248,35 @@
 				>
 					<AlertTriangle class="size-6" />
 				</div>
-				<h2 class="text-base font-bold text-foreground">ไม่พบผู้ประสบภัย</h2>
+				<h2 class="text-base font-bold text-foreground">{t.notFoundTitle}</h2>
 				<p class="mt-1.5 text-xs leading-relaxed text-muted-foreground">
-					รหัส <span class="font-semibold text-foreground">{evacueeId}</span> ไม่มีในศูนย์นี้ หรือคุณไม่มีสิทธิ์เข้าถึง
-					— กลับไปที่คิวคัดกรองแล้วลองค้นหาอีกครั้ง
+					{t.notFoundPrefix}
+					<span class="font-semibold text-foreground">{evacueeId}</span>
+					{t.notFoundSuffix}
 				</p>
-				<Button variant="default" class="mt-4 w-full" onclick={goToQueue}>กลับไปคิวคัดกรอง</Button>
+				<Button variant="default" class="mt-4 w-full" onclick={goToQueue}>{t.backToQueueBtn}</Button
+				>
 			</Card.Root>
 		</div>
 	{:else if justSaved}
 		<div class="p-4 md:p-6">
 			<StationCompletionSummary
-				title="บันทึกผลคัดกรองแล้ว"
-				subtitle={`${formatPersonName(evacuee)} — ส่งต่อโต๊ะจัดสรรที่พัก (สถานี 3) ได้เลย`}
+				title={t.savedTitle}
+				subtitle={t.savedSubtitle(formatPersonName(evacuee))}
 				facts={savedFacts}
 			>
 				{#snippet actions()}
-					<Button class="min-h-11" onclick={() => goToZoning(evacuee._id)}>ไปจัดโซนเลย</Button>
+					<Button class="min-h-11" onclick={() => goToZoning(evacuee._id)}>{t.goToZoning}</Button>
 					<Button
 						variant="outline"
 						class="min-h-11"
 						disabled={!nextInQueue}
 						onclick={goToNextInQueue}
 					>
-						{nextInQueue ? `คนถัดไปในคิว: ${formatPersonName(nextInQueue)}` : 'ไม่มีคนรอตรวจในคิว'}
+						{nextInQueue ? t.nextInQueue(formatPersonName(nextInQueue)) : t.noNextInQueue}
 					</Button>
-					<Button variant="ghost" class="min-h-11" onclick={goToQueue}>กลับคิวแพทย์</Button>
+					<Button variant="ghost" class="min-h-11" onclick={goToQueue}>{t.backToDoctorQueue}</Button
+					>
 				{/snippet}
 			</StationCompletionSummary>
 		</div>
