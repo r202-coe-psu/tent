@@ -75,6 +75,27 @@ export function volunteerAccessStatus(
 		: { kind: 'lapsed', loginName: account.name, lastEnded: account.last_ended ?? null };
 }
 
+/** Accounts keyed by the profile they link, so a long roster finds each row's account at once. */
+export function accountsByVolunteer(
+	accounts: readonly VolunteerAccount[] | undefined
+): Map<string, VolunteerAccount> | undefined {
+	return accounts && new Map(accounts.map((account) => [account.volunteer_id, account]));
+}
+
+/**
+ * The account strip of one shift-roster row (CR-221 FR-25): nothing for staff who cannot manage
+ * access, and nothing until the accounts have loaded — never a guess from `user_name`.
+ */
+export function rosterAccessStatus(
+	volunteer: { _id: string; user_name?: string | null },
+	allowed: boolean,
+	accounts: Map<string, VolunteerAccount> | undefined
+): VolunteerAccessStatus | null {
+	if (!allowed || !accounts) return null;
+	const account = accounts.get(volunteer._id);
+	return volunteerAccessStatus(volunteer, account ? [account] : []);
+}
+
 export function hasVolunteerAccount(status: VolunteerAccessStatus): boolean {
 	return status.kind !== 'none';
 }

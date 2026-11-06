@@ -34,10 +34,9 @@
 	import Lock from '@lucide/svelte/icons/lock';
 	import Phone from '@lucide/svelte/icons/phone';
 	import SearchCheck from '@lucide/svelte/icons/search-check';
-	import { canAccessVolunteerBackoffice } from '$lib/auth/roles';
-	import { authStore } from '$lib/stores/auth.svelte';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Badge } from '$lib/components/ui/badge/index.js';
+	import { Skeleton } from '$lib/components/ui/skeleton/index.js';
 	import * as Tooltip from '$lib/components/ui/tooltip/index.js';
 	import ApplicantCheckInDialog from './applicant-check-in-dialog.svelte';
 	import VolunteerAccessActions from './volunteer-access-actions.svelte';
@@ -61,6 +60,8 @@
 		jobTitle,
 		today,
 		accessStatus = null,
+		accountsPending = false,
+		canVerify = false,
 		shelterLine = '—',
 		onhistory
 	}: {
@@ -72,6 +73,10 @@
 		today: string;
 		/** The volunteer's system account here; `null` hides the account strip (not SA / SM / VC). */
 		accessStatus?: VolunteerAccessStatus | null;
+		/** The accounts are still loading: the strip shows a placeholder instead of a guess. */
+		accountsPending?: boolean;
+		/** SA / SM / coordinator of the tab's shelter may check identity here (FR-24). */
+		canVerify?: boolean;
 		/** Shelter name for the verify and access dialogs. */
 		shelterLine?: string;
 		onhistory: (volunteerId: string) => void;
@@ -100,11 +105,9 @@
 	// a shift on another date is `status` only, so it can't be checked into by accident.
 	const attendance = $derived(assignmentAttendance(assignment, volunteer.identity_verified, today));
 	const blockedByIdentity = $derived(attendance.kind === 'verify');
-	// The identity check is the people tab's: SA / SM / coordinator of this shelter (FR-24).
-	const canVerify = $derived(
-		canAccessVolunteerBackoffice(authStore.user?.roles ?? [], volunteer.shelter_code)
-	);
 	let verifyOpen = $state(false);
+	// The row's own button opens the identity check, so the access strip leaves out its copy.
+	const offersVerify = $derived(blockedByIdentity && canVerify);
 
 	const fullName = $derived(`${volunteer.first_name} ${volunteer.last_name}`.trim());
 	const phoneLast4 = $derived(volunteer.phone ? volunteer.phone.slice(-4) : null);
@@ -280,10 +283,10 @@
 				</Tooltip.Root>
 			</Tooltip.Provider>
 
-			{#if blockedByIdentity && canVerify}
+			{#if offersVerify}
 				<Button
 					size="sm"
-					class="flex-1 gap-1.5 bg-amber-600 text-white hover:bg-amber-700"
+					class="flex-1 gap-1.5 bg-amber-700 text-white hover:bg-amber-800"
 					onclick={() => (verifyOpen = true)}
 				>
 					<SearchCheck class="h-3.5 w-3.5" />
@@ -320,23 +323,35 @@
 		</div>
 	</div>
 
-	{#if accessStatus}
+	{#if accountsPending}
+		<Skeleton class="h-10 w-full rounded-lg lg:col-span-4" data-testid="roster-account-pending" />
+	{:else if accessStatus}
 		<div
 			class="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border bg-background px-3 py-2 lg:col-span-4"
 		>
 			<div class="flex min-w-0 flex-wrap items-center gap-1.5 text-xs">
 				<span class="font-semibold text-muted-foreground">บัญชีระบบ:</span>
-				<VolunteerAccountBadge status={accessStatus} showLogin={false} />
+				<VolunteerAccountBadge
+					status={accessStatus}
+					showLogin={false}
+					testId="roster-account-status"
+				/>
 				{#if accessStatus.kind !== 'none'}
 					<span class="break-all text-muted-foreground">{accessStatus.loginName}</span>
 				{/if}
 			</div>
-			<VolunteerAccessActions {volunteer} status={accessStatus} {shelterLine} />
+			<VolunteerAccessActions
+				{volunteer}
+				status={accessStatus}
+				{shelterLine}
+				hideVerify={offersVerify}
+			/>
 		</div>
 	{/if}
 </div>
 
-{#if canVerify}
+<!-- Mounted only while open: a long roster would otherwise carry one dialog per row. -->
+{#if canVerify && verifyOpen}
 	<VolunteerQualificationDialog bind:open={verifyOpen} {volunteer} {shelterLine} />
 {/if}
 

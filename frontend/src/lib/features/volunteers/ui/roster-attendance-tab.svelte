@@ -61,7 +61,8 @@
 		useShelterVolunteerAccounts
 	} from '../application/queries';
 	import { ASSIGNED_STATUSES } from '../domain/hub-metrics';
-	import { volunteerAccessStatus } from '../domain/volunteer-access-status';
+	import { accountsByVolunteer, rosterAccessStatus } from '../domain/volunteer-access-status';
+	import { toast } from 'svelte-sonner';
 	import { matchesVolunteerSearch, volunteerSearchFields } from '../domain/volunteer-search';
 	import type {
 		ShiftAssignment,
@@ -100,7 +101,7 @@
 	// (CR-221 FR-24, FR-25). SA / SM / coordinator only; the server 403s anyone else.
 	const shelterCode = $derived(shelterStore.selectedShelterCode ?? getShelterCode());
 	const shelterQuery = useShelter(() => shelterCode);
-	const shelterLine = $derived(shelterQuery.data?.name ?? shelterCode ?? '—');
+	const shelterLine = $derived(shelterQuery.data?.name ?? shelterCode);
 	const canManageAccess = $derived(
 		canAccessVolunteerBackoffice(authStore.user?.roles ?? [], shelterCode)
 	);
@@ -108,7 +109,18 @@
 		() => shelterCode,
 		() => canManageAccess
 	);
-	const accounts = $derived(canManageAccess ? accountsQuery.data : undefined);
+	// Indexed once per load, so each row finds its account without scanning the list.
+	const accounts = $derived(accountsByVolunteer(accountsQuery.data));
+	// The strip waits for the real accounts (a skeleton), never guessing from `user_name`.
+	const accountsPending = $derived(canManageAccess && accountsQuery.isPending);
+	// Not state: it only remembers which failure was already toasted.
+	let toastedAccountsError: unknown = null;
+	$effect(() => {
+		const error = canManageAccess ? accountsQuery.error : null;
+		if (!error || error === toastedAccountsError) return;
+		toastedAccountsError = error;
+		toast.error('โหลดข้อมูลบัญชีระบบของอาสาสมัครไม่สำเร็จ กรุณาลองใหม่');
+	});
 	const jobTitleById = $derived.by(() => {
 		const map = new Map(jobsQuery.data?.map((j) => [j._id, j.title]) ?? []);
 		return map;
@@ -270,7 +282,9 @@
 						{volunteer}
 						jobTitle={jobTitleById.get(assignment.job_id)}
 						today={todayDateString(now)}
-						accessStatus={canManageAccess ? volunteerAccessStatus(volunteer, accounts) : null}
+						accessStatus={rosterAccessStatus(volunteer, canManageAccess, accounts)}
+						{accountsPending}
+						canVerify={canManageAccess}
 						{shelterLine}
 						onhistory={(volunteerId) => openAudit(volunteerId)}
 					/>
