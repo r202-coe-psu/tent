@@ -16,7 +16,7 @@
 		useKioskBanners,
 		type KioskBannerSummary
 	} from '$lib/features/kiosk-banners';
-	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
+	import BackLink from '$lib/components/back-link.svelte';
 	import Eye from '@lucide/svelte/icons/eye';
 	import Plus from '@lucide/svelte/icons/plus';
 	import TriangleAlert from '@lucide/svelte/icons/triangle-alert';
@@ -101,13 +101,11 @@
 			<p class="text-sm text-slate-600">
 				ศูนย์: <span class="font-semibold text-slate-900">{activeShelter}</span>
 			</p>
-			<a
+			<BackLink
 				href={resolve(`/back-office/kiosks/banners/groups/${encodeURIComponent(groupId)}`)}
-				class="inline-flex min-h-11 items-center gap-1 text-sm text-primary underline-offset-2 hover:underline"
-			>
-				<ArrowLeft class="h-4 w-4" />
-				กลับไปกลุ่ม {groupName}
-			</a>
+				label="กลับไปกลุ่ม {groupName}"
+				class="-ml-3"
+			/>
 		</div>
 	{/snippet}
 	{#snippet actions()}

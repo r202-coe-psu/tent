@@ -36,7 +36,7 @@
 		useSetKioskBannerGroupDevices,
 		useUpdateKioskBannerGroup
 	} from '$lib/features/kiosk-banners';
-	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
+	import BackLink from '$lib/components/back-link.svelte';
 	import Cpu from '@lucide/svelte/icons/cpu';
 	import KeyRound from '@lucide/svelte/icons/key-round';
 	import Loader2 from '@lucide/svelte/icons/loader-2';
@@ -205,13 +205,7 @@
 </svelte:head>
 
 {#snippet backLink()}
-	<a
-		href={listHref}
-		class="inline-flex min-h-11 items-center gap-1 text-sm text-primary underline-offset-2 hover:underline"
-	>
-		<ArrowLeft class="h-4 w-4" />
-		กลับไปรายการกลุ่ม
-	</a>
+	<BackLink href={listHref} label="กลับไปแบนเนอร์ Kiosk" class="-ml-3" />
 {/snippet}
 
 {#if loading}

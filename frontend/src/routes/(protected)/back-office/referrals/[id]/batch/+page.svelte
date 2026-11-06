@@ -8,11 +8,12 @@
 	import TriangleAlert from '@lucide/svelte/icons/triangle-alert';
 
 	import {
-		ReferralBackLink,
 		ReferralBatchCards,
 		referralDetailPath,
-		useReferralBatch
+		useReferralBatch,
+		REFERRALS_PATH
 	} from '$lib/features/referrals';
+	import BackLink from '$lib/components/back-link.svelte';
 
 	const id = $derived(page.params.id ?? '');
 	const batchQuery = useReferralBatch(() => id);
@@ -22,7 +23,7 @@
 </script>
 
 <div class="flex flex-wrap items-center gap-3">
-	<ReferralBackLink />
+	<BackLink href={REFERRALS_PATH} label="กลับไปรายการส่งต่อ" />
 </div>
 
 {#if batchQuery.isError}
