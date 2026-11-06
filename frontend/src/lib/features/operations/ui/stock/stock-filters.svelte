@@ -5,7 +5,7 @@
 	import { Switch } from '$lib/components/ui/switch/index.js';
 	import { Checkbox } from '$lib/components/ui/checkbox/index.js';
 	import { Label } from '$lib/components/ui/label/index.js';
-	import type { StockSort } from './stock-view';
+	import type { StockSort, StockStatusFilter } from './stock-view';
 
 	type Option = { value: string; label: string };
 	type LocationOption = Option & { hint?: string };
@@ -16,6 +16,7 @@
 		loc,
 		sort,
 		all,
+		status,
 		categories,
 		locations,
 		showOverall = $bindable(false),
@@ -28,6 +29,8 @@
 		sort: StockSort;
 		/** "ทั้งแคตตาล็อก": include items this shelter never received. */
 		all: boolean;
+		/** Current status filter; the "มีวันหมดอายุ" switch is on while it is `has_expiry`. */
+		status: StockStatusFilter | 'all';
 		categories: Option[];
 		locations: LocationOption[];
 		/** System admins can sum every shelter's stock. */
@@ -39,6 +42,7 @@
 			loc?: string;
 			sort?: StockSort;
 			all?: boolean;
+			status?: StockStatusFilter | 'all';
 		}) => void;
 	} = $props();
 
@@ -151,6 +155,17 @@
 		<Switch id="stock-all-catalog" checked={all} onCheckedChange={(v) => onchange({ all: v })} />
 		<Label for="stock-all-catalog" class="cursor-pointer text-sm whitespace-nowrap text-slate-700">
 			ทั้งแคตตาล็อก
+		</Label>
+	</div>
+
+	<div class="flex min-h-11 items-center gap-2.5 px-1">
+		<Switch
+			id="stock-has-expiry"
+			checked={status === 'has_expiry'}
+			onCheckedChange={(v) => onchange({ status: v ? 'has_expiry' : 'all' })}
+		/>
+		<Label for="stock-has-expiry" class="cursor-pointer text-sm whitespace-nowrap text-slate-700">
+			มีวันหมดอายุ
 		</Label>
 	</div>
 

@@ -4,7 +4,7 @@ title: shelter — ตั้งค่าจุดเก็บของ (common_a
 status: approved
 date: 2026-09-26
 requested_by: ทีม C — review หน้าจัดการสต็อก
-decided_by: Kong 
+decided_by: Kong
 layer: volatile
 affects:
   - docs/data/schema.md §3.1 (schema_v shelter 6 → 7)
@@ -94,39 +94,39 @@ migration: >
 
 ### `shelter` (§3.1) — schema_v 6 → 7
 
-| Field | Before (v6) | After (v7) |
-| --- | --- | --- |
-| `common_areas.sub_storage[].id` | `str?` | `str` **req on write** — ULID (ใหม่) หรือ `legacy-<index>` (back-fill) |
-| อื่น ๆ ใน `sub_storage[]` | `name`, `type`, `area_m2?` | ไม่เปลี่ยน |
+| Field                           | Before (v6)                | After (v7)                                                             |
+| ------------------------------- | -------------------------- | ---------------------------------------------------------------------- |
+| `common_areas.sub_storage[].id` | `str?`                     | `str` **req on write** — ULID (ใหม่) หรือ `legacy-<index>` (back-fill) |
+| อื่น ๆ ใน `sub_storage[]`       | `name`, `type`, `area_m2?` | ไม่เปลี่ยน                                                             |
 
 ### `stock_ledger.lot` (§2.1) — schema_v 4 → 5
 
-| Field | Before (v4) | After (v5) |
-| --- | --- | --- |
-| `lot.storage_point_id` | ❌ | `str?` → `shelter.common_areas.sub_storage[].id` ของ `shelter_code` เดียวกัน |
-| `lot.storage_zone` | free text ≤100, ไม่มี master | ชื่อจุดเก็บ ณ เวลาบันทึก (snapshot) ≤100; **บังคับมีค่าเมื่อมี `storage_point_id`** |
-| `lot.note` | ชื่อเมนู / ค่า system / (โดยพฤตินัย) สถานที่ | ชื่อเมนู / ค่า system เท่านั้น — writer ใหม่ไม่เขียนสถานที่ |
+| Field                  | Before (v4)                                  | After (v5)                                                                          |
+| ---------------------- | -------------------------------------------- | ----------------------------------------------------------------------------------- |
+| `lot.storage_point_id` | ❌                                           | `str?` → `shelter.common_areas.sub_storage[].id` ของ `shelter_code` เดียวกัน        |
+| `lot.storage_zone`     | free text ≤100, ไม่มี master                 | ชื่อจุดเก็บ ณ เวลาบันทึก (snapshot) ≤100; **บังคับมีค่าเมื่อมี `storage_point_id`** |
+| `lot.note`             | ชื่อเมนู / ค่า system / (โดยพฤตินัย) สถานที่ | ชื่อเมนู / ค่า system เท่านั้น — writer ใหม่ไม่เขียนสถานที่                         |
 
 ### UI
 
-| หน้า | Before | After |
-| --- | --- | --- |
-| แก้ไขศูนย์ | "คลังย่อยและสถานที่จัดเก็บ" ซ่อนใน "โซนและสิ่งอำนวยความสะดวก" | section "จุดเก็บของ" แยก (FR-1/2) |
-| รับเข้า / ปรับปรุงสต๊อก | Zone A/B/C hardcode → `lot.note` | จุดเก็บของของศูนย์ → `storage_point_id` + `storage_zone` |
-| ตารางสต็อก / ประวัติ / เบิกจ่าย / Food Sphere | แสดง `lot.note` | แสดงตาม FR-8 |
+| หน้า                                          | Before                                                        | After                                                    |
+| --------------------------------------------- | ------------------------------------------------------------- | -------------------------------------------------------- |
+| แก้ไขศูนย์                                    | "คลังย่อยและสถานที่จัดเก็บ" ซ่อนใน "โซนและสิ่งอำนวยความสะดวก" | section "จุดเก็บของ" แยก (FR-1/2)                        |
+| รับเข้า / ปรับปรุงสต๊อก                       | Zone A/B/C hardcode → `lot.note`                              | จุดเก็บของของศูนย์ → `storage_point_id` + `storage_zone` |
+| ตารางสต็อก / ประวัติ / เบิกจ่าย / Food Sphere | แสดง `lot.note`                                               | แสดงตาม FR-8                                             |
 
 ## Impact
 
-| Area | Path |
-| --- | --- |
-| Shelter domain | `features/shelters/domain/schema.ts` — `subStorageItemSchema.id`, `SHELTER_MASTER_SCHEMA_V = 7`, `migrateV6ToV7`, `normalizeCurrent`, helper `listStoragePoints` |
-| Shelter UI | `features/shelters/ui/storage-points-section.svelte` (ใหม่), `zones-facilities-section.svelte`, `shelter-form-page.svelte`, `shelter-form-validation.ts` |
-| Shelter import | `features/shelter-import/domain/import-row.ts` |
+| Area              | Path                                                                                                                                                                         |
+| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Shelter domain    | `features/shelters/domain/schema.ts` — `subStorageItemSchema.id`, `SHELTER_MASTER_SCHEMA_V = 7`, `migrateV6ToV7`, `normalizeCurrent`, helper `listStoragePoints`             |
+| Shelter UI        | `features/shelters/ui/storage-points-section.svelte` (ใหม่), `zones-facilities-section.svelte`, `shelter-form-page.svelte`, `shelter-form-validation.ts`                     |
+| Shelter import    | `features/shelter-import/domain/import-row.ts`                                                                                                                               |
 | Operations domain | `features/operations/domain/operations.ts` — `StockLot`, `stockLotSchema`, `makeDoc('stock_ledger', 5)`, `stockLedgerDocSchema`, helpers `lotStorageKey` / `lotStorageLabel` |
-| Operations UI | `receive-stock-form`, `adjust-stock-form`, `distribute-stock-form`, `stock-table`, `ledger-table`, `storage-point-select` (ใหม่) |
-| อื่น ๆ | `sop-ratios` Food Sphere (แสดงผล), lot input schema ใน `donations/domain/{back-office,public-donation}.ts`, `distribution/domain/distribution.ts` |
-| ไม่กระทบ | worker (ไม่อ่าน `lot`), FastAPI / OpenAPI, `validate_doc_update` (ไม่ตรวจ field ใน `lot`) |
-| ทีมอื่น | `team-A-donation` — FR-11; `team-Leader-Implement-Kitchen-Ticket` แก้ `adjust-stock-form` / `stock-table` ด้วย → conflict ระดับข้อความ |
+| Operations UI     | `receive-stock-form`, `adjust-stock-form`, `distribute-stock-form`, `stock-table`, `ledger-table`, `storage-point-select` (ใหม่)                                             |
+| อื่น ๆ            | `sop-ratios` Food Sphere (แสดงผล), lot input schema ใน `donations/domain/{back-office,public-donation}.ts`, `distribution/domain/distribution.ts`                            |
+| ไม่กระทบ          | worker (ไม่อ่าน `lot`), FastAPI / OpenAPI, `validate_doc_update` (ไม่ตรวจ field ใน `lot`)                                                                                    |
+| ทีมอื่น           | `team-A-donation` — FR-11; `team-Leader-Implement-Kitchen-Ticket` แก้ `adjust-stock-form` / `stock-table` ด้วย → conflict ระดับข้อความ                                       |
 
 ## Migration
 
@@ -147,12 +147,12 @@ export ไว้ใน barrel `$lib/features/operations` แล้ว (มีผ
 
 **API ที่ใช้ได้**
 
-| Export | ใช้ทำอะไร |
-| --- | --- |
-| `useStoragePoints(() => shelterCode)` | คืน `{ points: StoragePointRef[]; isLoading }` — จุดเก็บของของศูนย์ (`{ id, name }`) |
-| `StoragePointSelect` | dropdown สถานที่จัดเก็บ — props: `points`, `bind:value` (point id, `''` = ไม่ระบุ/คลังหลัก), `onchange(point \| null)`, `id?`, `disabled?`, `triggerProps?` |
-| `storageLotFields(point \| null)` | คืน `{ storage_point_id, storage_zone }` ที่ต้องใส่ใน `lot` (หรือ `{}` เมื่อไม่ระบุ) |
-| `lotStorageLabel(lot, points)` | ข้อความสถานที่สำหรับแสดงผล (fallback "คลังหลัก") |
+| Export                                | ใช้ทำอะไร                                                                                                                                                   |
+| ------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `useStoragePoints(() => shelterCode)` | คืน `{ points: StoragePointRef[]; isLoading }` — จุดเก็บของของศูนย์ (`{ id, name }`)                                                                        |
+| `StoragePointSelect`                  | dropdown สถานที่จัดเก็บ — props: `points`, `bind:value` (point id, `''` = ไม่ระบุ/คลังหลัก), `onchange(point \| null)`, `id?`, `disabled?`, `triggerProps?` |
+| `storageLotFields(point \| null)`     | คืน `{ storage_point_id, storage_zone }` ที่ต้องใส่ใน `lot` (หรือ `{}` เมื่อไม่ระบุ)                                                                        |
+| `lotStorageLabel(lot, points)`        | ข้อความสถานที่สำหรับแสดงผล (fallback "คลังหลัก")                                                                                                            |
 
 **สิ่งที่ต้องแก้**
 
@@ -179,6 +179,7 @@ export ไว้ใน barrel `$lib/features/operations` แล้ว (มีผ
 > [DECIDED N1] หน้าตรวจรับบริจาค: บังคับเลือกจุดเก็บเมื่อศูนย์มีจุดเก็บ ≥1 และไม่บังคับเมื่อไม่มีเลย (เลือกคลังหลัก)
 >
 > [DECIDED N2] ลบจุดเก็บที่ยังมีของคงเหลือ: อนุญาต (ล็อตเดิมยังคงแสดงชื่อ snapshot ใน `storage_zone`)
+> **[AMENDED by [CR-230](../03-C-supply/CR-230-warehouse-storage-point-management.md) FR-6, 2026-11-06]** ไม่อนุญาตอีกต่อไป — ลบจุดที่ยังมี lot คงเหลือ (qty > 0) ไม่ได้ ทั้งจากหน้า supply และฟอร์มศูนย์
 >
 > [DECIDED N3] ชื่อ section: ใช้ชื่อ **"จุดเก็บของ"**
 
