@@ -3,6 +3,9 @@
 	import X from '@lucide/svelte/icons/x';
 	import type { Evacuee, Screening } from '$lib/features/people';
 	import ZoneSelectionFields from '../forms/zone-selection-fields.svelte';
+	import { getTranslation } from '$lib/utils/i18n';
+	import { langState } from '$lib/states/i18n.svelte';
+	import { EVACUEE_PROFILE_MODALS_I18N } from '../_constants/evacuee-profile-modals.i18n';
 	import ModalEscapeListener from '../shared/modal-escape-listener.svelte';
 
 	interface Zone {
@@ -26,6 +29,8 @@
 		onClose: () => void;
 		onUpdateZone: (zoneCode: string) => Promise<void>;
 	} = $props();
+
+	const t = $derived(getTranslation(EVACUEE_PROFILE_MODALS_I18N, langState.current).zone);
 
 	let selectedZone = $state(untrack(() => evacuee.current_stay.zone ?? ''));
 	let saving = $state(false);
@@ -67,7 +72,7 @@
 		>
 			<div class="flex items-center justify-between border-b border-border pb-2.5">
 				<h3 class="text-lg font-bold text-slate-900 dark:text-slate-50">
-					ย้ายโซนที่พัก (Change stay zone)
+					{t.title}
 				</h3>
 				<button
 					type="button"
@@ -97,7 +102,7 @@
 					disabled={saving}
 					class="cursor-pointer rounded-xl border border-border bg-background px-4 py-2 text-xs font-semibold text-slate-800 transition-colors hover:bg-muted disabled:pointer-events-none disabled:opacity-50 dark:text-slate-200"
 				>
-					ยกเลิก
+					{t.cancel}
 				</button>
 				<button
 					type="button"
@@ -105,7 +110,7 @@
 					disabled={confirmDisabled}
 					class="cursor-pointer rounded-xl bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground transition-colors hover:bg-primary/90 disabled:pointer-events-none disabled:opacity-50"
 				>
-					{saving ? 'กำลังบันทึก...' : 'ยืนยันย้ายโซน'}
+					{saving ? t.saving : t.confirm}
 				</button>
 			</div>
 		</div>

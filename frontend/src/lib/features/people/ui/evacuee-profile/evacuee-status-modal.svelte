@@ -4,6 +4,9 @@
 	import X from '@lucide/svelte/icons/x';
 	import CheckCircle from '@lucide/svelte/icons/check-circle';
 	import { resolveStatusChangeAction, type Evacuee, type StayStatus } from '$lib/features/people';
+	import { getTranslation } from '$lib/utils/i18n';
+	import { langState } from '$lib/states/i18n.svelte';
+	import { EVACUEE_PROFILE_MODALS_I18N } from '../_constants/evacuee-profile-modals.i18n';
 	import ModalEscapeListener from '../shared/modal-escape-listener.svelte';
 
 	interface StatusConfig {
@@ -33,6 +36,8 @@
 		onClose: () => void;
 		onUpdateStatus: (status: StayStatus, reason?: string) => Promise<void>;
 	} = $props();
+
+	const t = $derived(getTranslation(EVACUEE_PROFILE_MODALS_I18N, langState.current).status);
 
 	// Pending choice + reason reset when this instance mounts (parent remounts on
 	// open / evacuee id change via `{#key}`).
@@ -69,9 +74,7 @@
 		if (confirmDisabled) return;
 		if (needsReason && !reason.trim()) {
 			toast.error(
-				pendingStatus === 'checked_out'
-					? 'การเช็คเอาท์ต้องระบุเหตุผลหรือหมายเหตุ'
-					: 'การออกชั่วคราวต้องระบุเหตุผล'
+				pendingStatus === 'checked_out' ? t.checkedOutReasonRequired : t.leaveReasonRequired
 			);
 			return;
 		}
@@ -94,7 +97,7 @@
 		>
 			<div class="flex items-center justify-between border-b border-border pb-2.5">
 				<h3 class="text-lg font-bold text-slate-900 dark:text-slate-50">
-					แก้ไขสถานะการพักพิง (Stay status)
+					{t.title}
 				</h3>
 				<button
 					type="button"
@@ -106,7 +109,7 @@
 				</button>
 			</div>
 
-			<div class="space-y-2" role="radiogroup" aria-label="สถานะการพักพิง">
+			<div class="space-y-2" role="radiogroup" aria-label={t.groupAria}>
 				{#each selectableOptions as [statusKey, cfg] (statusKey)}
 					<button
 						type="button"
@@ -133,14 +136,14 @@
 			{#if needsReason}
 				<div class="space-y-1.5">
 					<label for="evacuee-status-reason" class="text-xs font-semibold text-foreground">
-						เหตุผล <span class="text-destructive">*</span>
+						{t.reason} <span class="text-destructive">*</span>
 					</label>
 					<textarea
 						id="evacuee-status-reason"
 						bind:value={reason}
 						disabled={saving}
 						rows={3}
-						placeholder="ระบุเหตุผล เช่น กลับบ้านชั่วคราว / ย้ายออก"
+						placeholder={t.reasonPlaceholder}
 						class="w-full resize-y rounded-xl border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/20 focus-visible:outline-none disabled:opacity-60"
 					></textarea>
 				</div>
@@ -153,7 +156,7 @@
 					disabled={saving}
 					class="cursor-pointer rounded-xl border border-border bg-background px-4 py-2 text-xs font-semibold text-slate-800 transition-colors hover:bg-muted disabled:pointer-events-none disabled:opacity-50 dark:text-slate-200"
 				>
-					ยกเลิก
+					{t.cancel}
 				</button>
 				<button
 					type="button"
@@ -161,7 +164,7 @@
 					disabled={confirmDisabled}
 					class="cursor-pointer rounded-xl bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground transition-colors hover:bg-primary/90 disabled:pointer-events-none disabled:opacity-50"
 				>
-					{saving ? 'กำลังบันทึก...' : 'ยืนยัน'}
+					{saving ? t.saving : t.confirm}
 				</button>
 			</div>
 		</div>
