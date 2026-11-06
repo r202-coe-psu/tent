@@ -1,7 +1,16 @@
 import type { StockSort, StockStatusFilter } from './stock-view';
 
 /** Query keys owned by the stock table. Anything else (`tab`, `action`, …) is left alone. */
-export const STOCK_PARAM_KEYS = ['q', 'cat', 'loc', 'status', 'sort', 'page', 'all'] as const;
+export const STOCK_PARAM_KEYS = [
+	'q',
+	'cat',
+	'loc',
+	'status',
+	'sort',
+	'page',
+	'all',
+	'incoming'
+] as const;
 
 export const STOCK_PAGE_SIZE = 25;
 
@@ -13,6 +22,8 @@ export interface StockUrlState {
 	sort: StockSort;
 	page: number;
 	all: boolean;
+	/** "รวมของที่กำลังมา" switch (#1153); off by default. */
+	incoming: boolean;
 }
 
 export const STOCK_URL_DEFAULTS: StockUrlState = {
@@ -22,7 +33,8 @@ export const STOCK_URL_DEFAULTS: StockUrlState = {
 	status: 'all',
 	sort: 'urgency',
 	page: 1,
-	all: false
+	all: false,
+	incoming: false
 };
 
 const STATUSES: readonly StockStatusFilter[] = [
@@ -48,7 +60,8 @@ export function parseStockParams(params: URLSearchParams): StockUrlState {
 			: STOCK_URL_DEFAULTS.status,
 		sort: SORTS.includes(sort as StockSort) ? (sort as StockSort) : STOCK_URL_DEFAULTS.sort,
 		page: Number.isInteger(page) && page >= 1 ? page : STOCK_URL_DEFAULTS.page,
-		all: params.get('all') === '1'
+		all: params.get('all') === '1',
+		incoming: params.get('incoming') === '1'
 	};
 }
 
@@ -62,6 +75,7 @@ export function serializeStockParams(state: StockUrlState): URLSearchParams {
 	if (state.sort !== STOCK_URL_DEFAULTS.sort) out.set('sort', state.sort);
 	if (state.page > 1) out.set('page', String(state.page));
 	if (state.all) out.set('all', '1');
+	if (state.incoming) out.set('incoming', '1');
 	return out;
 }
 

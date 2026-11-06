@@ -16,7 +16,9 @@ describe('parseStockParams', () => {
 
 	it('reads every key', () => {
 		expect(
-			parseStockParams(params('q=นม&cat=food&loc=sp:1&status=low&sort=name&page=3&all=1'))
+			parseStockParams(
+				params('q=นม&cat=food&loc=sp:1&status=low&sort=name&page=3&all=1&incoming=1')
+			)
 		).toEqual({
 			q: 'นม',
 			cat: 'food',
@@ -24,16 +26,18 @@ describe('parseStockParams', () => {
 			status: 'low',
 			sort: 'name',
 			page: 3,
-			all: true
+			all: true,
+			incoming: true
 		});
 	});
 
 	it('falls back to defaults for invalid values', () => {
-		const s = parseStockParams(params('status=bogus&sort=zzz&page=-4&all=yes'));
+		const s = parseStockParams(params('status=bogus&sort=zzz&page=-4&all=yes&incoming=true'));
 		expect(s.status).toBe('all');
 		expect(s.sort).toBe('urgency');
 		expect(s.page).toBe(1);
 		expect(s.all).toBe(false);
+		expect(s.incoming).toBe(false);
 		expect(parseStockParams(params('page=2.5')).page).toBe(1);
 		expect(parseStockParams(params('page=abc')).page).toBe(1);
 	});
@@ -56,7 +60,8 @@ describe('serializeStockParams', () => {
 			status: 'expiring',
 			sort: 'qty',
 			page: 2,
-			all: true
+			all: true,
+			incoming: true
 		};
 		expect(parseStockParams(serializeStockParams(state))).toEqual(state);
 	});
@@ -90,5 +95,25 @@ describe('has_expiry status', () => {
 		const state = parseStockParams(params('status=has_expiry'));
 		expect(state.status).toBe('has_expiry');
 		expect(serializeStockParams(state).get('status')).toBe('has_expiry');
+	});
+});
+
+describe('incoming switch (#1153)', () => {
+	it('is off by default and not written to the URL', () => {
+		expect(parseStockParams(params('')).incoming).toBe(false);
+		expect(serializeStockParams(STOCK_URL_DEFAULTS).has('incoming')).toBe(false);
+	});
+
+	it('persists as incoming=1 and survives a merge that keeps other keys', () => {
+		const state = parseStockParams(params('incoming=1'));
+		expect(state.incoming).toBe(true);
+		const out = mergeStockParams(params('tab=inventory'), state);
+		expect(out.get('incoming')).toBe('1');
+		expect(out.get('tab')).toBe('inventory');
+	});
+
+	it('clears incoming when the switch goes back off', () => {
+		const out = mergeStockParams(params('tab=inventory&incoming=1'), STOCK_URL_DEFAULTS);
+		expect(out.toString()).toBe('tab=inventory');
 	});
 });

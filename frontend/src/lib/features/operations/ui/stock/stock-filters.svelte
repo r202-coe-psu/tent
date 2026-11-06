@@ -5,6 +5,8 @@
 	import { Switch } from '$lib/components/ui/switch/index.js';
 	import { Checkbox } from '$lib/components/ui/checkbox/index.js';
 	import { Label } from '$lib/components/ui/label/index.js';
+	import DisabledReason from './disabled-reason.svelte';
+	import { INCOMING_NO_STORAGE_HINT } from './hints';
 	import type { StockSort, StockStatusFilter } from './stock-view';
 
 	type Option = { value: string; label: string };
@@ -16,6 +18,8 @@
 		loc,
 		sort,
 		all,
+		incoming = false,
+		incomingDisabled = false,
 		status,
 		categories,
 		locations,
@@ -29,6 +33,10 @@
 		sort: StockSort;
 		/** "ทั้งแคตตาล็อก": include items this shelter never received. */
 		all: boolean;
+		/** "รวมของที่กำลังมา" (#1153): add approved donations + shipped transfers to the remaining qty. */
+		incoming?: boolean;
+		/** A storage point is filtered: incoming goods have no place yet, so the switch is off. */
+		incomingDisabled?: boolean;
 		/** Current status filter; the "มีวันหมดอายุ" switch is on while it is `has_expiry`. */
 		status: StockStatusFilter | 'all';
 		categories: Option[];
@@ -42,6 +50,7 @@
 			loc?: string;
 			sort?: StockSort;
 			all?: boolean;
+			incoming?: boolean;
 			status?: StockStatusFilter | 'all';
 		}) => void;
 	} = $props();
@@ -157,6 +166,25 @@
 			ทั้งแคตตาล็อก
 		</Label>
 	</div>
+
+	<DisabledReason reason={incomingDisabled ? INCOMING_NO_STORAGE_HINT : undefined}>
+		<div class="flex min-h-11 items-center gap-2.5 px-1">
+			<Switch
+				id="stock-incoming"
+				checked={incoming && !incomingDisabled}
+				disabled={incomingDisabled}
+				onCheckedChange={(v) => onchange({ incoming: v })}
+			/>
+			<Label
+				for="stock-incoming"
+				class="text-sm whitespace-nowrap {incomingDisabled
+					? 'cursor-not-allowed text-slate-400'
+					: 'cursor-pointer text-slate-700'}"
+			>
+				รวมของที่กำลังมา
+			</Label>
+		</div>
+	</DisabledReason>
 
 	<div class="flex min-h-11 items-center gap-2.5 px-1">
 		<Switch

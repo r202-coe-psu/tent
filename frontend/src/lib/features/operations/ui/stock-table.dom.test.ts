@@ -34,7 +34,8 @@ vi.mock('../application/queries', () => ({
 			}
 		]),
 	useCrossShelterStockBalances: () => q([]),
-	useCrossShelterLedger: () => q([])
+	useCrossShelterLedger: () => q([]),
+	useIncomingStock: () => q(undefined)
 }));
 vi.mock('$lib/features/supply', () => ({
 	useSupplyItems: () => q([]),
