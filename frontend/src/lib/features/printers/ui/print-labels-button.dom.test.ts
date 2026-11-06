@@ -5,7 +5,11 @@ import { QueryClient } from '@tanstack/svelte-query';
 import { endpointStore } from '$lib/stores/endpoint.svelte';
 import { stationPrinter } from '../application/station-printer.svelte';
 import { PRINT_JOB_POLL_TIMEOUT_MS } from '../domain/print-job-status';
-import { PRINT_JOB_CREATE_TIMEOUT_MS, PRINT_JOB_PICKUP_HINT_MS } from '../domain/print-job-timing';
+import {
+	PRINT_JOB_CREATE_TIMEOUT_MS,
+	PRINT_JOB_FINAL_CHECK_MS,
+	PRINT_JOB_PICKUP_HINT_MS
+} from '../domain/print-job-timing';
 import { PrintApiError } from '../data/printers.api';
 import type { PrinterSummary } from '../domain/print-device.schema';
 import Harness from './__fixtures__/print-labels-button-harness.svelte';
@@ -581,6 +585,82 @@ describe('PrintLabelsButton', () => {
 		expect(toast.error).toHaveBeenCalledWith('เครื่อง เครื่อง-p1 ไม่ตอบ');
 		expect(mainButton().textContent).toContain('พิมพ์อีกครั้ง');
 		expect(mainButton().disabled).toBe(false);
+	});
+
+	it('keeps the printed count seen before a status outage', async () => {
+		vi.useFakeTimers();
+		stationPrinter.set('SH001', 'p1');
+		api.createPrintJob.mockResolvedValue({
+			job_id: 'job-1',
+			shelter_code: 'SH001',
+			expires_at: '2026-10-22T04:00:00Z'
+		});
+		api.getPrintJobStatus
+			.mockResolvedValueOnce({ status: 'printing', printed: 5, label_count: 20, error_code: null })
+			.mockRejectedValue(new Error('network'));
+		await render({
+			printers: [printer('p1')],
+			labelCount: 25,
+			renderLabels: async () => labels(25)
+		});
+
+		mainButton().click();
+		await vi.advanceTimersByTimeAsync(PRINT_JOB_POLL_TIMEOUT_MS + 1_000);
+		expect(toast.error).toHaveBeenCalledWith('เครื่อง เครื่อง-p1 ไม่ตอบ');
+		mainButton().click();
+		await vi.advanceTimersByTimeAsync(0);
+
+		expect(sentLabels()[1]).toEqual(labels(25).slice(5, 20));
+	});
+
+	it('checks the status once more at the poll timeout and goes on when the job did print', async () => {
+		vi.useFakeTimers();
+		stationPrinter.set('SH001', 'p1');
+		api.createPrintJob.mockResolvedValue({
+			job_id: 'job-1',
+			shelter_code: 'SH001',
+			expires_at: '2026-10-22T04:00:00Z'
+		});
+		const outageEndsAt = Date.now() + PRINT_JOB_POLL_TIMEOUT_MS;
+		api.getPrintJobStatus.mockImplementation(async () => {
+			if (Date.now() < outageEndsAt) throw new Error('network');
+			return { status: 'printed', printed: 20, label_count: 20, error_code: null };
+		});
+		await render({
+			printers: [printer('p1')],
+			labelCount: 25,
+			renderLabels: async () => labels(25)
+		});
+
+		mainButton().click();
+		await vi.advanceTimersByTimeAsync(PRINT_JOB_POLL_TIMEOUT_MS + 1_000);
+
+		expect(toast.error).not.toHaveBeenCalled();
+		expect(sentLabels()).toEqual([labels(25).slice(0, 20), labels(25).slice(20)]);
+	});
+
+	it('gives up on a final status check that hangs', async () => {
+		vi.useFakeTimers();
+		stationPrinter.set('SH001', 'p1');
+		api.createPrintJob.mockResolvedValue({
+			job_id: 'job-1',
+			shelter_code: 'SH001',
+			expires_at: '2026-10-22T04:00:00Z'
+		});
+		const outageEndsAt = Date.now() + PRINT_JOB_POLL_TIMEOUT_MS;
+		api.getPrintJobStatus.mockImplementation(async () => {
+			if (Date.now() < outageEndsAt) throw new Error('network');
+			return new Promise(() => {});
+		});
+		await render({ printers: [printer('p1')] });
+
+		mainButton().click();
+		await vi.advanceTimersByTimeAsync(PRINT_JOB_POLL_TIMEOUT_MS + 1_000);
+		expect(toast.error).not.toHaveBeenCalled();
+		await vi.advanceTimersByTimeAsync(PRINT_JOB_FINAL_CHECK_MS);
+
+		expect(toast.error).toHaveBeenCalledWith('เครื่อง เครื่อง-p1 ไม่ตอบ');
+		expect(mainButton().textContent).toContain('พิมพ์อีกครั้ง');
 	});
 
 	it('drops the "unknown result" note and finishes once the status route recovers', async () => {

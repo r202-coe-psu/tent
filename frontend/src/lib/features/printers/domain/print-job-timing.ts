@@ -41,6 +41,12 @@ const POLL_MARGIN_SEC = 15;
 export const PRINT_JOB_POLL_TIMEOUT_MS =
 	(JOB_TTL_SEC + leaseSecFor(MAX_LABELS_PER_JOB) + SWEEP_INTERVAL_SEC + POLL_MARGIN_SEC) * 1000;
 
+/**
+ * At the poll timeout the server has settled the job, so the tablet asks for its status once more
+ * before giving up; a check still unanswered after this long counts as failed.
+ */
+export const PRINT_JOB_FINAL_CHECK_MS = 10_000;
+
 const toMs = (now: Date | number): number => (typeof now === 'number' ? now : now.getTime());
 
 /**

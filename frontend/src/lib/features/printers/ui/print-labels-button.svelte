@@ -15,6 +15,7 @@
 	import { isTerminalJobStatus, PRINT_JOB_POLL_TIMEOUT_MS } from '../domain/print-job-status';
 	import {
 		PRINT_JOB_CREATE_TIMEOUT_MS,
+		PRINT_JOB_FINAL_CHECK_MS,
 		PRINT_JOB_PICKUP_HINT_MS
 	} from '../domain/print-job-timing';
 	import {
@@ -100,9 +101,13 @@
 	 */
 	function waitForJob(untilClaimed: boolean, signal: AbortSignal): Promise<PrintJobOutcome | null> {
 		return new Promise((resolve) => {
+			let done = false;
 			const settle = (outcome: PrintJobOutcome | null) => {
+				if (done) return;
+				done = true;
 				clearTimeout(timer);
 				clearTimeout(hintTimer);
+				clearTimeout(finalCheckTimer);
 				signal.removeEventListener('abort', onAbort);
 				onStatus = null;
 				pickupLate = false;
@@ -110,22 +115,36 @@
 				resolve(outcome);
 			};
 			const onAbort = () => settle(null);
-			// The status query stops polling after the same window; a job still pending then is lost.
-			const timer = setTimeout(
-				() => settle({ status: 'timeout', printed: 0, error_code: null }),
-				PRINT_JOB_POLL_TIMEOUT_MS
-			);
+			// Labels the tablet has seen printed. A retry after a timeout resumes after them (FR-47).
+			let lastPrinted = 0;
+			/** Settles on a final status (or the claim, for the last chunk); false otherwise. */
+			const settleOnStatus = (data: typeof statusQuery.data): boolean => {
+				if (!data) return false;
+				lastPrinted = Math.max(lastPrinted, data.printed);
+				if (!isTerminalJobStatus(data.status) && !(untilClaimed && data.status === 'printing')) {
+					return false;
+				}
+				settle({ status: data.status, printed: data.printed, error_code: data.error_code });
+				return true;
+			};
+			// The status query stops polling after the same window. By then the server has settled the
+			// job, so one more status fetch tells the real outcome if the network is back; only when
+			// that fails too does the job count as timed out.
+			let finalCheckTimer: ReturnType<typeof setTimeout> | undefined;
+			const finalCheck = async () => {
+				const giveUp = new Promise<undefined>((r) => {
+					finalCheckTimer = setTimeout(() => r(undefined), PRINT_JOB_FINAL_CHECK_MS);
+				});
+				const latest = await Promise.race([statusQuery.refetch().then((r) => r.data), giveUp]);
+				if (done || settleOnStatus(latest)) return;
+				settle({ status: 'timeout', printed: lastPrinted, error_code: null });
+			};
+			const timer = setTimeout(() => void finalCheck(), PRINT_JOB_POLL_TIMEOUT_MS);
 			const hintTimer = setTimeout(() => (pickupLate = true), PRINT_JOB_PICKUP_HINT_MS);
 			let seenDataAt = 0;
 			let seenErrorAt = 0;
 			onStatus = ({ data, dataUpdatedAt, errorUpdatedAt }) => {
-				if (
-					data &&
-					(isTerminalJobStatus(data.status) || (untilClaimed && data.status === 'printing'))
-				) {
-					settle({ status: data.status, printed: data.printed, error_code: data.error_code });
-					return;
-				}
+				if (settleOnStatus(data)) return;
 				// Each fetch result counts once, however often the effect re-runs.
 				if (dataUpdatedAt !== seenDataAt) {
 					seenDataAt = dataUpdatedAt;
