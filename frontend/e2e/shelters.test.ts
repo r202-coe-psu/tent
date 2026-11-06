@@ -575,6 +575,7 @@ test.describe('Shelter Form — Donation drop-off points (CR-205)', () => {
 		const body = getPatchBody() as { _rev?: string; common_areas?: Record<string, unknown> };
 		expect(body.common_areas).not.toHaveProperty('sub_storage');
 		expect(body._rev).toBe(E2E_REV);
+		expect(body).not.toHaveProperty('_loaded_sub_storage');
 	});
 
 	test('a save refused as stale reloads the form, so the next save cannot drop a point added elsewhere (CR-230 A1)', async ({

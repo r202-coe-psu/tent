@@ -11,7 +11,6 @@
 		sheltersKeys,
 		useCreateShelter,
 		useUpdateShelter,
-		shelterSchema,
 		needsShelterCloseModal,
 		ShelterCloseDialog,
 		type Shelter,
@@ -32,7 +31,14 @@
 		DEFAULT_SHELTER_FEATURE_FLAGS
 	} from '$lib/features/shelters';
 	import type { SubStorageItem } from '../domain/schema';
-	import { omitUnchangedSubStorage, sameSubStorage } from '../domain/storage-points';
+	import { sameSubStorage } from '../domain/storage-points';
+	import {
+		editsSubStorage,
+		shelterFormSchema,
+		shelterPatchInput,
+		withoutFormMeta,
+		type ShelterForm
+	} from '../domain/shelter-form';
 	import { ServiceRequestError } from '$lib/api/service';
 	import { collectErrorMessages, findInvalidSectionIds } from './shelter-form-validation';
 	import ShelterFormStickyNav from './shelter-form-sticky-nav.svelte';
@@ -97,7 +103,7 @@
 	// CR-219 FR-15: saving a not-yet-closed shelter as `closed` goes through the confirm modal
 	// first; the form data waits here until the close request has finished.
 	let closeDialogOpen = $state(false);
-	let pendingCloseData = $state.raw<Shelter | null>(null);
+	let pendingCloseData = $state.raw<ShelterForm | null>(null);
 	const storedStatus = $derived(shelterQuery.data?.operation_status);
 
 	// CR-219 FR-23: only SA / this shelter's manager may pick "closed" (create mode is unchanged).
@@ -117,17 +123,14 @@
 		revertOperationStatus();
 	}
 
-	// `_rev` and `sub_storage` of the doc the form fields were last seeded from. They must travel
-	// with the fields: the `_rev` sent with a save has to describe the doc the submitted values were
-	// based on, or a stale form could overwrite a newer doc (CR-230 A1). Only `seedForm` and the
-	// submit/close paths below move them, always together with the fields.
-	let seededRev: string | undefined;
-	let seededSubStorage: SubStorageItem[] | undefined;
-
 	type ShelterDoc = NonNullable<typeof shelterQuery.data>;
 
-	/** The form fields for a stored shelter doc. */
-	function formValuesFromDoc(d: ShelterDoc): Shelter {
+	/**
+	 * The form data for a stored shelter doc, including the `_rev` and points it was loaded from
+	 * (CR-230 A1). Keeping them in the form data means they are always replaced together with the
+	 * fields, whoever writes the fields.
+	 */
+	function formValuesFromDoc(d: ShelterDoc): ShelterForm {
 		return {
 			name: d.name,
 			site_kind: d.site_kind,
@@ -161,25 +164,36 @@
 			feature_flags: {
 				...DEFAULT_SHELTER_FEATURE_FLAGS,
 				...(d.feature_flags ?? {})
-			}
-		} as Shelter;
-	}
-
-	function seedFrom(d: ShelterDoc) {
-		seededRev = d._rev;
-		seededSubStorage = d.common_areas?.sub_storage;
+			},
+			_rev: d._rev,
+			// A copy: an in-place edit of the form's points must not also change the snapshot.
+			_loaded_sub_storage: $state.snapshot(d.common_areas?.sub_storage ?? [])
+		} as ShelterForm;
 	}
 
 	const SHELTER_CONFLICT_MESSAGE =
 		'ข้อมูลศูนย์ถูกแก้ไขโดยผู้อื่น โหลดข้อมูลล่าสุดให้แล้ว กรุณาแก้ไขซ้ำอีกครั้ง';
 
-	/** Edit-save payload: leave `sub_storage` out when the form did not change it (CR-230). */
-	function withSubStorageGuard(data: Shelter, baseline = seededSubStorage): Shelter {
-		if (!data.common_areas) return data;
-		return {
-			...data,
-			common_areas: omitUnchangedSubStorage(data.common_areas, baseline) as Shelter['common_areas']
-		};
+	/** Replace the form with the latest doc in the cache (the 409 path; the hook refetched it first). */
+	function reloadFromLatest() {
+		const latest = queryClient.getQueryData<ShelterDoc>(sheltersKeys.detail(id));
+		if (latest) $formData = formValuesFromDoc(latest);
+	}
+
+	/**
+	 * Edit save. `rev` defaults to the one the form data was loaded with. The hook's `onError` has
+	 * awaited the refetch before this call's `onError` runs, and superforms' own write-back of the
+	 * submitted data happened when `onUpdate` returned, so a 409 reload is the last write.
+	 */
+	function saveEdit(data: ShelterForm, rev = data._rev) {
+		updateMutation.mutate(
+			{ code: id, input: shelterPatchInput(data), rev },
+			{
+				onError: (err) => {
+					if (err instanceof ServiceRequestError && err.status === 409) reloadFromLatest();
+				}
+			}
+		);
 	}
 
 	async function handleCloseFinish(result: ShelterCloseResult) {
@@ -190,27 +204,23 @@
 			return;
 		}
 		// Registry is closed now, so the normal save (other edited fields) passes the PATCH guard.
-		// The close route rewrote the doc, so the loaded `_rev` is stale: refetch for the fresh one.
-		// The baseline is read first: the refetch re-seeds the fields from the newer doc.
-		const baseline = seededSubStorage;
+		// The close route rewrote the doc, so this save needs the fresh `_rev`. Points edited in this
+		// form must not land over points someone else changed meanwhile: `data` carries the points
+		// it was loaded with, so compare those with the fresh doc.
 		const fresh = await shelterQuery.refetch();
-		const input = withSubStorageGuard(data, baseline);
-		// The points were edited in this form while someone else changed them: the fresh `_rev`
-		// would let this save overwrite their points, so refuse and let the form show the latest.
 		if (
-			input.common_areas &&
-			'sub_storage' in input.common_areas &&
+			editsSubStorage(data) &&
 			fresh.data &&
-			!sameSubStorage(fresh.data.common_areas?.sub_storage, baseline)
+			!sameSubStorage(
+				fresh.data.common_areas?.sub_storage,
+				data._loaded_sub_storage as SubStorageItem[] | undefined
+			)
 		) {
 			toast.error(SHELTER_CONFLICT_MESSAGE);
+			reloadFromLatest();
 			return;
 		}
-		updateMutation.mutate({
-			code: id,
-			input,
-			rev: fresh.data?._rev ?? seededRev
-		});
+		saveEdit(data, fresh.data?._rev ?? data._rev);
 	}
 
 	const sections = [
@@ -244,13 +254,13 @@
 		document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 	}
 
-	const form = superForm(defaults(zod4(shelterSchema)), {
+	const form = superForm(defaults(zod4(shelterFormSchema)), {
 		SPA: true,
 		dataType: 'json',
-		validators: zod4(shelterSchema),
+		validators: zod4(shelterFormSchema),
 		resetForm: false,
 		// SPA form with no server load to refresh; `invalidateAll` would only delay superforms'
-		// final write of `validated.data`, widening the window in which typing is overwritten.
+		// write-back of the submitted data, which could then land after a 409 reload.
 		invalidateAll: false,
 		onUpdate: async ({ form: validated }) => {
 			if (!validated.valid) {
@@ -269,46 +279,10 @@
 			}
 
 			if (isEdit) {
-				// Stay on the edit form; toasts come from useUpdateShelter. The save is awaited because
-				// superforms writes `validated.data` over the fields once this handler returns, which would
-				// undo the reseed from the query effect and leave fields older than the seeded `_rev`.
-				const rev0 = seededRev;
-				const subStorage0 = seededSubStorage;
-				const input = withSubStorageGuard(data);
-				// The points the doc holds once this save lands: what was sent, else what was loaded.
-				const savedSubStorage =
-					input.common_areas && 'sub_storage' in input.common_areas
-						? input.common_areas.sub_storage
-						: subStorage0;
-				let saved = false;
-				let conflict = false;
-				try {
-					await updateMutation.mutateAsync({ code: id, input, rev: rev0 });
-					saved = true;
-				} catch (err) {
-					conflict = err instanceof ServiceRequestError && err.status === 409;
-					if (!conflict) {
-						// Any other failure keeps the user's edits, and the seeds they are based on (the query
-						// effect may have moved them meanwhile).
-						seededRev = rev0;
-						seededSubStorage = subStorage0;
-					}
-				}
-				// The mutation hook already awaited the refetch, so the cache holds the latest doc.
-				const latest = queryClient.getQueryData<ShelterDoc>(sheltersKeys.detail(id));
-				if (latest && (conflict || saved)) {
-					if (saved && sameSubStorage(latest.common_areas?.sub_storage, savedSubStorage)) {
-						// Our own save is the newest write: the fields are still what they are based on.
-						seedFrom(latest);
-					} else {
-						// Stale `_rev`, or the doc moved on right after the save: fields and seeds move to the
-						// latest doc together so the next save cannot carry a `_rev` newer than its content.
-						validated.data = formValuesFromDoc(latest);
-						seedFrom(latest);
-					}
-				}
+				// Stay on the edit form; toasts come from useUpdateShelter.
+				saveEdit(data);
 			} else {
-				createMutation.mutate(data, {
+				createMutation.mutate(withoutFormMeta(data), {
 					onSuccess: (result) => {
 						// Deep-link to edit so further saves are updates and users unlock.
 						// Success toast comes from useCreateShelter.
@@ -354,7 +328,6 @@
 	// Populate form data when edit query loads.
 	$effect(() => {
 		if (shelterQuery.data) {
-			seedFrom(shelterQuery.data);
 			$formData = formValuesFromDoc(shelterQuery.data);
 		}
 	});
