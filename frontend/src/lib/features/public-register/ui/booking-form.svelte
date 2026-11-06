@@ -28,6 +28,7 @@
 	import { UNASSIGNED_SHELTER_CODE } from '../domain/booking';
 	import {
 		UnifiedRegistrationForm,
+		localizeRegistrationMessage,
 		type RegistrationConsent,
 		type RegistrationConsentConfig,
 		type UnifiedRegistrationInput
@@ -202,7 +203,9 @@
 	 */
 	function submitErrorMessage(err: unknown): string {
 		if (isNetworkError(err)) return t.networkError;
-		if (err instanceof PublicApiError && err.message) return err.message;
+		if (err instanceof PublicApiError && err.message) {
+			return localizeRegistrationMessage(err.message, langState.current);
+		}
 		return t.bookingErrorFallback;
 	}
 

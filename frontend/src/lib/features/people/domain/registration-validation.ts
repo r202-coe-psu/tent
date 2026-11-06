@@ -7,6 +7,9 @@
  * been told about by a submit first.
  */
 
+import type { LanguageCode } from '$lib/stores/language.svelte';
+import { localizeRegistrationMessage } from './registration-messages.i18n';
+
 /** A validation issue: Zod-shaped path + message (also used for the UI-only rules). */
 export type RegistrationIssue = { path: readonly PropertyKey[]; message: string };
 
@@ -45,9 +48,14 @@ export function registrationIssueKey(issue: RegistrationIssue): string {
 	return `form:${issue.message}`;
 }
 
-/** Every distinct issue as an entry (the summary lists them all; a field shows its first one). */
+/**
+ * Every distinct issue as an entry (the summary lists them all; a field shows its first one).
+ * With `lang`, each message is translated for display; the key and de-duplication still use the
+ * canonical message, so a language switch never changes which field an entry belongs to.
+ */
 export function toRegistrationEntries(
-	issues: readonly RegistrationIssue[]
+	issues: readonly RegistrationIssue[],
+	lang: LanguageCode = 'th'
 ): RegistrationErrorEntry[] {
 	const seen = new Set<string>();
 	const entries: RegistrationErrorEntry[] = [];
@@ -57,7 +65,11 @@ export function toRegistrationEntries(
 		const identity = `${key}|${issue.message}`;
 		if (seen.has(identity)) continue;
 		seen.add(identity);
-		entries.push({ key, path: issue.path, message: issue.message });
+		entries.push({
+			key,
+			path: issue.path,
+			message: localizeRegistrationMessage(issue.message, lang)
+		});
 	}
 	return entries;
 }

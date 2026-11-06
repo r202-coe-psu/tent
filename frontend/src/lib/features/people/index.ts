@@ -284,6 +284,7 @@ export {
 	type PhoneHouseholdMatchCandidate,
 	type JoinCandidateEvacuee
 } from './domain/registration-shell';
+export { localizeRegistrationMessage } from './domain/registration-messages.i18n';
 
 export {
 	PRIMARY_CONTACT_LABEL,
