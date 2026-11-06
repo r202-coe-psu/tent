@@ -3,7 +3,7 @@ id: CR-222
 title: Station print server — staff สั่งพิมพ์ label QR ผ่าน BFF ไปเครื่องพิมพ์ที่ต่อ Raspberry Pi
 status: approved
 date: 2026-10-27
-updated: 2026-11-05
+updated: 2026-11-06
 requested_by: Project Owner
 decided_by: Project Owner (review รอบ 3 PR #932, 2026-10-31)
 layer: stable-core
@@ -43,7 +43,7 @@ related:
 > - **PNG (รอบ 1 ข้อ 1):** ตรวจ IHDR ให้ตรงขนาด label เป๊ะ ทั้งที่ BFF ตอนสร้างและตอน claim (FR-29, FR-12a)
 > - **สิทธิ์สั่งพิมพ์ตาม `source` (รอบ 1 ข้อ 8, O-2):** FR-29a
 > - **housekeeping (รอบ 1 ข้อ 4):** ย้ายจาก timer ใน `hooks.server.ts` ไป container `print-housekeeping` + `last_run_at` + healthcheck (FR-17, FR-17a)
-> - **Pi:** `TENT_BASE_URL` ต้องเป็น `https://` ยกเว้น loopback (รอบ 1 ข้อ 2, O-9) · nginx `limit_conn` ≤ 2 ต่อคู่ `x-device-id` + IP ของ client (ข้อ 7) · สิทธิ์ `cupsenable` ต้องทดสอบบน Pi (ข้อ 12, O-5) · เครื่องพิมพ์ในตู้ kiosk มี 2 credential แยก (ข้อ 14)
+> - **Pi:** `TENT_BASE_URL` เป็น `https://` ยกเว้น loopback หรือเปิด `TENT_ALLOW_HTTP=1` สำหรับ edge ที่ไม่มี HTTPS (รอบ 1 ข้อ 2, O-9 · ปรับ 2026-11-06) · nginx `limit_conn` ≤ 2 ต่อคู่ `x-device-id` + IP ของ client (ข้อ 7) · สิทธิ์ `cupsenable` ต้องทดสอบบน Pi (ข้อ 12, O-5) · เครื่องพิมพ์ในตู้ kiosk มี 2 credential แยก (ข้อ 14)
 > - **เอกสาร:** §Impact รูป label ค้างได้ ~1 ชม. หลังงานจบ (ข้อ 9) · FR-31 อ่อนลง · เพิ่ม FR-49 (`_changes` เส้นเดียวต่อ process) · Acceptance load test · §Compromise
 
 ---
@@ -157,7 +157,7 @@ related:
 ### Pi agent (`printer/`)
 
 - **FR-35** — `printed` นับเมื่อ CUPS รายงาน job `completed` (อ่าน `job-state` ผ่าน IPP ไม่ใช่แค่ `lp` exit 0); ส่งภาพทาง stdin, job title `tent-print-job`, `-o ppi=<PRINT_PPI>`; log ไม่มี secret หรือ byte ของ label.
-- **FR-36** — config จาก env: `TENT_BASE_URL` (บังคับ `https://`, ยอม `http://` **เฉพาะ loopback** สำหรับ dev — ไม่ยอม private / link-local แล้ว), `DEVICE_ID`, `DEVICE_SECRET`, `PRINTER_NAME` (default `tent_xprinter`), `PRINT_PPI` (203), `PRINT_JOB_TIMEOUT_SEC` (30), `IDLE_BACKOFF_SEC` (5), `ERROR_BACKOFF_MAX_SEC` (60), `BOOT_SLIP` (true). _(ปรับ 2026-10-29)_
+- **FR-36** — config จาก env: `TENT_BASE_URL` (บังคับ `https://` เป็นค่าเริ่มต้น, ยอม `http://` ไป loopback สำหรับ dev · ไป host อื่น (IP ใน LAN / domain ที่ไม่มี HTTPS) ได้เมื่อตั้ง `TENT_ALLOW_HTTP=1` และ agent log เตือนตอน start ว่า secret วิ่งแบบไม่เข้ารหัส), `TENT_ALLOW_HTTP` (0), `DEVICE_ID`, `DEVICE_SECRET`, `PRINTER_NAME` (default `tent_xprinter`), `PRINT_PPI` (203), `PRINT_JOB_TIMEOUT_SEC` (30), `IDLE_BACKOFF_SEC` (5), `ERROR_BACKOFF_MAX_SEC` (60), `BOOT_SLIP` (true). _(ปรับ 2026-10-29, 2026-11-06)_
 - **FR-37** — เริ่มทำงาน: `hello` (retry + backoff จนสำเร็จ) → พิมพ์ boot slip (ชื่อเครื่อง, ศูนย์, IP, version) ถ้า `BOOT_SLIP` เปิด.
 - **FR-38** — ทุกรอบ poll เรียก `cupsenable` ถ้าคิวถูก disable แล้วรายงาน `queue_state`; log เมื่อสถานะคิวเปลี่ยน.
 - **FR-39** — ใช้ `lease_sec` ของงาน (ไม่มี → ใช้ของ `hello`); หยุดส่ง label ถัดไปที่ `claimed_at + lease − min(15 วิ, lease/2)` แล้วรายงาน `printer_timeout`; label ที่ CUPS ค้างถูก cancel.
@@ -229,7 +229,7 @@ flowchart TD
     P -- ยัง --> P1[server admin สร้าง DB<br/>+ _security + VDU + index<br/>+ registry printing_db] --> D
     P -- มี --> D[BFF สุ่ม secret<br/>เก็บแค่ SHA-256 + prefix<br/>ลง printing_devices]
     D --> E[แสดง DEVICE_ID + DEVICE_SECRET<br/>ครั้งเดียว]
-    E --> F[ทำไฟล์ .env ส่งให้คนติดตั้ง<br/>TENT_BASE_URL ต้องเป็น https]
+    E --> F[ทำไฟล์ .env ส่งให้คนติดตั้ง<br/>TENT_BASE_URL เป็น https<br/>หรือ http + TENT_ALLOW_HTTP=1]
     F --> G[บน Pi: setup_printer_server.sh --env-file<br/>CUPS queue + .env 600 + systemd]
     G --> H[agent เรียก hello]
     H --> I{401?}
@@ -394,7 +394,7 @@ flowchart TD
 - [ ] housekeeping รันครั้งเดียวต่อรอบแม้ frontend มีหลาย process / replica · หยุด container `print-housekeeping` เกิน 2 นาที → healthcheck เป็น unhealthy · `hooks.server.ts` ไม่ตั้ง timer ของ printer
 - [ ] heartbeat ไม่ทำให้ `update_seq` ของ `printing_{code}` ขยับตอนไม่มีงาน
 - [ ] สั่งพิมพ์ไปเครื่อง offline → ปฏิเสธทันที ไม่เกิดงาน
-- [ ] agent ตั้ง `TENT_BASE_URL=http://192.168.x.x` → ไม่ start (config error) · `http://127.0.0.1` ได้
+- [ ] agent ตั้ง `TENT_BASE_URL=http://192.168.x.x` → ไม่ start (config error) · `http://127.0.0.1` ได้ · `http://192.168.x.x` + `TENT_ALLOW_HTTP=1` → start และ log เตือน
 - [ ] เปิด long-poll พร้อมกันเกิน 2 เส้นด้วย `x-device-id` เดียว → เส้นที่เกินได้ 429
 - [ ] ทดสอบบนเครื่องจริง (Pi + XP-365B): ปิด Pi เกิน 120 วิ แล้วเปิด → งานเก่าเป็น `expired` ไม่พิมพ์ออกมา · ถอดกระดาษระหว่างพิมพ์ → งาน `failed` ไม่หลุดออกมาทีหลัง และงานถัดไปพิมพ์ได้โดยไม่ต้อง SSH · รัน agent 2 ตัวด้วย device เดียวกัน → แต่ละงานพิมพ์ครั้งเดียว · secret ผิด → 401 และ agent backoff · rotate secret ขณะ agent ทำงาน → 401 ทันที
 - [ ] **ปิดศูนย์ (O-11):** ปิดศูนย์ที่มีเครื่องพิมพ์ (ทั้ง `closed` และ `cancelled`) → เครื่องทุกเครื่องเป็น `inactive`, งานค้างเป็น `failed (printer_inactive)`, `printing_{code}` ถูกลบ และไม่มี `printing_db:{code}` เหลือใน `printing_devices` · housekeeping รอบถัดไปไม่ error
@@ -444,7 +444,7 @@ flowchart TD
 | O-6  | TTL / lease                   | TTL 120 วิ · lease 90 + 5×label · online ภายใน 90 วิ                                                                                                            |
 | O-7  | ขนาดงาน                       | ≤ 20 label/งาน, ≤ 64 KB/รูป, ≤ 1 MB/งาน, IHDR ตรงขนาด label — มากกว่านั้นแบ่งงานที่ tablet                                                                      |
 | O-8  | ข้อมูลบน label                | ชื่อ-นามสกุล, โซน, checklist, QR (`_id`) — เหมือน label kiosk                                                                                                   |
-| O-9  | ส่ง secret ไปที่ Pi           | admin copy ใส่ `.env` เอง (ยังไม่มี pairing code) · **ปรับ 2026-10-29:** `https://` เท่านั้น — `http://` เฉพาะ loopback (dev)                                   |
+| O-9  | ส่ง secret ไปที่ Pi           | admin copy ใส่ `.env` เอง (ยังไม่มี pairing code) · **ปรับ 2026-10-29:** `https://` เท่านั้น — `http://` เฉพาะ loopback (dev) · **ปรับ 2026-11-06 (ทีมเสนอ):** opt-in `TENT_ALLOW_HTTP=1` สำหรับ edge ไม่มี HTTPS                                   |
 | O-10 | VDU เห็นขนาด attachment ไหม   | **ข้อตัดสิน:** ทดสอบกับ CouchDB ที่ใช้จริง**ก่อนเริ่ม PR โค้ด** · เห็น `length` → บังคับ ≤ 64 KB ใน FR-51 · ไม่เห็น → ตัดเงื่อนไขขนาดออกจาก FR-51 + ใช้แถว O-10 ใน §Compromise · **ไม่**ตั้ง `max_attachment_size` ระดับ server · **ผลทดสอบ 2026-11-01 (CouchDB 3.5.2):** VDU เห็น `length` → FR-51 บังคับ ≤ 64 KB, ไม่มีแถว O-10 ใน §Compromise |
 | O-11 | ลบ `printing_{code}` ตอนไหน   | **ข้อตัดสิน:** ใน checklist ปิดศูนย์เดิม (`data-model.md` §1) ทั้ง `closed` และ `cancelled`: เครื่องทุกเครื่องเป็น `inactive` (FR-15) → ลบ `printing_{code}` → ลบ `printing_db:{code}` · ทำทันที ไม่รอ DB ว่าง (FR-4) |
 | O-12 | `requested_by` ของ CR         | **ข้อตัดสิน:** `Project Owner` (แก้ frontmatter แล้ว) |
@@ -493,3 +493,4 @@ flowchart TD
 | 2026-11-05 | ทีมเสนอหลัง review PR โค้ด (รอ owner ยืนยันตอน approve PR): FR-45 ดึงสถานะพลาดไม่จบ poll / ไม่มี retry ก่อนครบเวลา (เดิมโค้ดเลิกรอหลังพลาด 3 ครั้ง ขัด FR-45) · FR-29 `job_id` จาก client + 409 replay / `JOB_ID_CONFLICT` + timeout POST 15 วิ · FR-4 อ่านเครื่องใหม่ก่อน reprovision · FR-2a คงถ้อยคำเดิม — ย้าย helper ที่ไม่ใช้ admin credential ออกจาก `couch-admin` แล้ว ESLint ห้าม import ทั้งโมดูลใน route ของ printer · compose ใช้ `:-` กับ `COUCHDB_PRINTING_SERVICE_PASSWORD` / `PRINT_HOUSEKEEPING_TOKEN` (fail closed 503 ตาม Acceptance) · เพิ่มแถว printer ใน `role-permission-matrix.md` |
 | 2026-11-05 | **Project Owner อนุมัติ Waive Gate O-5 ก่อน merge PR โค้ด:** รับรองพฤติกรรม fail-closed ใน as-built (agent รายงาน `queue_state=disabled` เมื่อคิวถูกปิด และผู้ดูแลเปิดคืนด้วย `sudo cupsenable`) โดยเลื่อนการทดสอบ sudoers/polkit แบบจำกัดสิทธิ์เฉพาะคิวไปเป็นงานติดตามหลัง merge |
 | 2026-11-05 | ทีมเสนอ — รอ owner ยืนยันตอน approve PR: ใช้เครื่องพิมพ์ standalone อย่างเดียว · ถอด `host_kind` (FR-5) และ `kiosk_device_id` (FR-5a, FR-32, FR-48) ออกจาก `print_device`, BFF และหน้า back-office · ตัด error `KIOSK_DEVICE_REQUIRES_KIOSK_HOST` / `KIOSK_DEVICE_NOT_FOUND` · doc เดิมที่มี field ค้างไม่มีใครอ่าน (ไม่ bump `schema_v` — CR ยังไม่ merge) · flag `--host-kind` ของ `setup_printer_server.sh` ยังอยู่ (ตั้ง CUPS บน Pi เท่านั้น) |
+| 2026-11-06 | ทีมเสนอ — รอ owner ยืนยันตอน approve PR: FR-36 / O-9 เพิ่ม env `TENT_ALLOW_HTTP` (ค่าเริ่มต้น 0) ให้ agent ต่อ `http://` ไป IP ใน LAN หรือ domain ที่ไม่มี HTTPS ได้ เผื่อ edge ไม่มี HTTPS · ค่าเริ่มต้นยังบังคับ `https://` · ข้อแลก: `DEVICE_SECRET` และรูป label วิ่งในเครือข่ายแบบไม่เข้ารหัส — agent log เตือนทุกครั้งที่ start |
