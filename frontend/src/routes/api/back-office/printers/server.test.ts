@@ -4,7 +4,10 @@ import type { RequestEvent } from './$types';
 import { readSessionUserCtx } from '$lib/server/session-auth';
 import { printDeviceRepository } from '$lib/server/printers/print-device.repo';
 import { printJobStoreFor } from '$lib/server/printers/print-job.service-store';
-import { reprovisionShelterPrintingDb } from '$lib/server/printers/printing-provision';
+import {
+	isShelterOpenForPrinting,
+	reprovisionShelterPrintingDb
+} from '$lib/server/printers/printing-provision';
 import { SESSIONS } from '$lib/server/scanners/test-sessions';
 
 vi.mock('$lib/server/session-auth', async () => {
@@ -30,6 +33,7 @@ vi.mock('$lib/server/printers/print-job.service-store', () => ({
 }));
 
 vi.mock('$lib/server/printers/printing-provision', () => ({
+	isShelterOpenForPrinting: vi.fn(async () => true),
 	reprovisionShelterPrintingDb: vi.fn()
 }));
 
@@ -96,6 +100,17 @@ describe('POST /api/back-office/printers', () => {
 		await post(input);
 
 		expect(order).toEqual(['ensure:SH001', 'create']);
+	});
+
+	it('answers 409 SHELTER_CLOSED and provisions nothing for a closed shelter (O-11)', async () => {
+		vi.mocked(isShelterOpenForPrinting).mockResolvedValueOnce(false);
+
+		const response = await post(input);
+
+		expect(response.status).toBe(409);
+		expect((await response.json()).error.code).toBe('SHELTER_CLOSED');
+		expect(mockEnsureDb).not.toHaveBeenCalled();
+		expect(mockCreate).not.toHaveBeenCalled();
 	});
 
 	it('returns 403 and creates nothing when the caller cannot manage the target shelter', async () => {

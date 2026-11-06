@@ -1,4 +1,7 @@
 import { adminRaw } from '$lib/server/couch-admin';
+import { findMasterByCode } from '$lib/server/shelters.admin';
+// eslint-disable-next-line no-restricted-imports -- server-safe domain rule; feature barrel pulls client UI/query code
+import { resolveOperationStatus } from '$lib/features/shelters/domain/schema';
 import { requirePrintingServiceName } from '$lib/server/couch-printing-service';
 // eslint-disable-next-line no-restricted-imports -- server-safe domain rule; feature barrel pulls client UI/query code
 import { PRINTING_DEVICES_DB, printingDbName } from '$lib/features/printers/domain/printing-db';
@@ -176,6 +179,17 @@ export function reprovisionShelterPrintingDb(shelterCode: string): Promise<void>
 	printingDbName(shelterCode); // throws for an invalid code before touching the memo
 	shelterDbs.delete(shelterCode.toUpperCase());
 	return ensureShelterPrintingDb(shelterCode);
+}
+
+/**
+ * Is the shelter still open for printing? A closed or cancelled shelter, or a code missing from the
+ * registry, gets no printer and no `printing_{code}` back (O-11). Reads the registry as server admin.
+ */
+export async function isShelterOpenForPrinting(shelterCode: string): Promise<boolean> {
+	const master = await findMasterByCode(shelterCode.toUpperCase());
+	if (!master) return false;
+	const status = resolveOperationStatus(master);
+	return status !== 'closed' && status !== 'cancelled';
 }
 
 /** Test-only: forget which databases this process has provisioned. */

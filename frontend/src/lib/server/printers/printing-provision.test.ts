@@ -4,6 +4,8 @@ const adminRaw = vi.hoisted(() => vi.fn());
 vi.mock('$lib/server/couch-admin', () => ({ adminRaw }));
 const requirePrintingServiceName = vi.hoisted(() => vi.fn<() => string>());
 vi.mock('$lib/server/couch-printing-service', () => ({ requirePrintingServiceName }));
+const findMasterByCode = vi.hoisted(() => vi.fn());
+vi.mock('$lib/server/shelters.admin', () => ({ findMasterByCode }));
 
 import { PrintDependencyError } from './device-credentials';
 import type { PrintDeviceDoc } from './device-credentials';
@@ -12,6 +14,7 @@ import {
 	closeShelterPrinting,
 	ensurePrintingDevicesDb,
 	ensureShelterPrintingDb,
+	isShelterOpenForPrinting,
 	reprovisionShelterPrintingDb,
 	resetPrintingProvisionForTests,
 	type CloseShelterPrintingDeps
@@ -595,5 +598,21 @@ describe('closeShelterPrinting', () => {
 		await ensureShelterPrintingDb('SH001');
 
 		expect(requests()[0]).toBe('PUT /printing_sh001');
+	});
+});
+
+describe('isShelterOpenForPrinting', () => {
+	it.each([
+		[{ code: 'SH001', operation_status: 'open' }, true],
+		[{ code: 'SH001', operation_status: 'preparing' }, true],
+		[{ code: 'SH001', operation_status: 'closed' }, false],
+		[{ code: 'SH001', operation_status: 'cancelled' }, false],
+		[{ code: 'SH001', status: 'closed' }, false],
+		[null, false]
+	])('registry doc %j → %s', async (master, open) => {
+		findMasterByCode.mockResolvedValue(master);
+
+		expect(await isShelterOpenForPrinting('sh001')).toBe(open);
+		expect(findMasterByCode).toHaveBeenCalledWith('SH001');
 	});
 });

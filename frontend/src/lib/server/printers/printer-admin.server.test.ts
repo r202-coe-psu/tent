@@ -15,6 +15,7 @@ import {
 	toPrinterSummary,
 	updatePrinter,
 	PrintDeviceConflictError,
+	PrintShelterClosedError,
 	printDeviceInputSchema,
 	printDevicePatchSchema,
 	type PrintDeviceAdminStore,
@@ -81,6 +82,10 @@ function createDeps(store: PrintDeviceAdminStore, events: string[] = []) {
 				events.push('create');
 				return store.createDevice(doc);
 			}
+		},
+		isShelterOpen: async (shelterCode: string) => {
+			events.push(`check:${shelterCode}`);
+			return true;
 		},
 		ensureShelterDb: async (shelterCode: string) => void events.push(`ensure:${shelterCode}`)
 	};
@@ -622,7 +627,19 @@ describe('createPrinter provisioning', () => {
 
 		await createPrinter(createDeps(store, events), input, 'sa-user', NOW);
 
-		expect(events).toEqual(['ensure:SH001', 'create']);
+		expect(events).toEqual(['check:SH001', 'ensure:SH001', 'create']);
+	});
+
+	it('refuses a closed or cancelled shelter without recreating its print DB (O-11)', async () => {
+		const { store, docs } = fakeStore();
+		const events: string[] = [];
+		const deps = { ...createDeps(store, events), isShelterOpen: async () => false };
+
+		await expect(createPrinter(deps, input, 'sa-user', NOW)).rejects.toBeInstanceOf(
+			PrintShelterClosedError
+		);
+		expect(events).toEqual([]);
+		expect(docs.size).toBe(0);
 	});
 
 	it('writes no device when provisioning the shelter DB fails', async () => {
@@ -707,6 +724,7 @@ describe('updatePrinter reactivation', () => {
 		await updatePrinter(
 			{
 				...updateDeps(store, fakeJobs()),
+				isShelterOpen: async () => true,
 				ensureShelterDb: async (code: string) => {
 					events.push(`ensure:${code}`);
 					statusAtEnsure.push(docs.get(original._id)?.status ?? '?');
@@ -730,6 +748,7 @@ describe('updatePrinter reactivation', () => {
 			updatePrinter(
 				{
 					...updateDeps(store, fakeJobs()),
+					isShelterOpen: async () => true,
 					ensureShelterDb: async () => {
 						throw new Error('couch down');
 					}
@@ -748,6 +767,7 @@ describe('updatePrinter reactivation', () => {
 		const events: string[] = [];
 		const deps = {
 			...updateDeps(store, fakeJobs()),
+			isShelterOpen: async () => true,
 			ensureShelterDb: async (code: string) => void events.push(code)
 		};
 
@@ -755,5 +775,31 @@ describe('updatePrinter reactivation', () => {
 		await updatePrinter(deps, original._id, { status: 'inactive' }, NOW);
 
 		expect(events).toEqual([]);
+	});
+
+	it('keeps a printer of a closed or cancelled shelter inactive without recreating its print DB (O-11)', async () => {
+		const original = deviceDoc({ status: 'inactive' });
+		const { store, docs } = fakeStore([original]);
+		const checked: string[] = [];
+		const ensured: string[] = [];
+
+		await expect(
+			updatePrinter(
+				{
+					...updateDeps(store, fakeJobs()),
+					isShelterOpen: async (code: string) => {
+						checked.push(code);
+						return false;
+					},
+					ensureShelterDb: async (code: string) => void ensured.push(code)
+				},
+				original._id,
+				{ status: 'active' },
+				NOW
+			)
+		).rejects.toBeInstanceOf(PrintShelterClosedError);
+		expect(checked).toEqual(['SH001']);
+		expect(ensured).toEqual([]);
+		expect(docs.get(original._id)).toMatchObject({ status: 'inactive' });
 	});
 });

@@ -7,7 +7,10 @@ import {
 } from '$lib/server/printers/printer-admin.server';
 import { printDeviceRepository } from '$lib/server/printers/print-device.repo';
 import { printJobStoreFor } from '$lib/server/printers/print-job.service-store';
-import { reprovisionShelterPrintingDb } from '$lib/server/printers/printing-provision';
+import {
+	isShelterOpenForPrinting,
+	reprovisionShelterPrintingDb
+} from '$lib/server/printers/printing-provision';
 import { requirePrinterManager } from '$lib/server/printers/printer-access';
 import {
 	assertPrinterInScope,
@@ -57,6 +60,7 @@ export const PATCH: RequestHandler = async ({ request, params }) => {
 				{
 					devices: printDeviceRepository,
 					jobsFor: printJobStoreFor,
+					isShelterOpen: isShelterOpenForPrinting,
 					ensureShelterDb: reprovisionShelterPrintingDb
 				},
 				printerId,

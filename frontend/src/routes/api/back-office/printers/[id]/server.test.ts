@@ -5,7 +5,10 @@ import { readSessionUserCtx } from '$lib/server/session-auth';
 import type { PrintDeviceDoc } from '$lib/server/printers/device-credentials';
 import { printDeviceRepository } from '$lib/server/printers/print-device.repo';
 import { printJobStoreFor } from '$lib/server/printers/print-job.service-store';
-import { reprovisionShelterPrintingDb } from '$lib/server/printers/printing-provision';
+import {
+	isShelterOpenForPrinting,
+	reprovisionShelterPrintingDb
+} from '$lib/server/printers/printing-provision';
 import { SESSIONS } from '$lib/server/scanners/test-sessions';
 
 vi.mock('$lib/server/session-auth', async () => {
@@ -31,6 +34,7 @@ vi.mock('$lib/server/printers/print-job.service-store', () => ({
 }));
 
 vi.mock('$lib/server/printers/printing-provision', () => ({
+	isShelterOpenForPrinting: vi.fn(async () => true),
 	reprovisionShelterPrintingDb: vi.fn()
 }));
 
@@ -113,6 +117,18 @@ describe('PATCH /api/back-office/printers/[id]', () => {
 		const response = await patch('printer-sh001-reg1', { status: 'active' });
 		expect(response.status).toBe(200);
 		expect(reprovisionShelterPrintingDb).toHaveBeenCalledWith('SH001');
+	});
+
+	it('answers 409 SHELTER_CLOSED and keeps the printer inactive when its shelter is closed (O-11)', async () => {
+		mockGet.mockResolvedValue({ ...device, status: 'inactive' });
+		vi.mocked(isShelterOpenForPrinting).mockResolvedValueOnce(false);
+
+		const response = await patch('printer-sh001-reg1', { status: 'active' });
+
+		expect(response.status).toBe(409);
+		expect((await response.json()).error.code).toBe('SHELTER_CLOSED');
+		expect(reprovisionShelterPrintingDb).not.toHaveBeenCalled();
+		expect(mockUpdate).not.toHaveBeenCalled();
 	});
 
 	it('answers 404 NOT_FOUND for an unknown printer or a malformed id, writing nothing', async () => {

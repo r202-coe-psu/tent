@@ -7,7 +7,10 @@ import {
 } from '$lib/server/printers/printer-admin.server';
 import { printDeviceRepository } from '$lib/server/printers/print-device.repo';
 import { printJobStoreFor } from '$lib/server/printers/print-job.service-store';
-import { reprovisionShelterPrintingDb } from '$lib/server/printers/printing-provision';
+import {
+	isShelterOpenForPrinting,
+	reprovisionShelterPrintingDb
+} from '$lib/server/printers/printing-provision';
 import {
 	assertCanCreatePrinterFor,
 	requirePrinterManager
@@ -50,6 +53,7 @@ export const POST: RequestHandler = async ({ request }) => {
 		const created = await createPrinter(
 			{
 				store: printDeviceRepository,
+				isShelterOpen: isShelterOpenForPrinting,
 				ensureShelterDb: reprovisionShelterPrintingDb
 			},
 			parsed.data,

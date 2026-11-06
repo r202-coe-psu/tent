@@ -72,6 +72,17 @@ export class PrintDeviceNotFoundError extends Error {
 	}
 }
 
+/** O-11: a closed or cancelled shelter gets no printer and no print DB back. */
+export class PrintShelterClosedError extends Error {
+	constructor() {
+		super('Shelter is closed, cancelled or not registered');
+		this.name = 'PrintShelterClosedError';
+	}
+}
+
+/** Registry check before `printing_{code}` is provisioned: false for a closed/cancelled/unknown shelter. */
+export type IsShelterOpen = (shelterCode: string) => Promise<boolean>;
+
 export const printDevicePatchSchema = z
 	.object({
 		name: z.string().trim().min(1, 'Name is required').max(80, 'Name is too long').optional(),
@@ -103,6 +114,7 @@ const SECRET_PREFIX_LENGTH = 16;
 
 export interface CreatePrinterDeps {
 	store: PrintDeviceAdminStore;
+	isShelterOpen: IsShelterOpen;
 	/** Provision `printing_{code}` (idempotent) so the shelter DB exists before its first printer (FR-4). */
 	ensureShelterDb: (shelterCode: string) => Promise<void>;
 }
@@ -114,6 +126,7 @@ export async function createPrinter(
 	actor: string,
 	now: Date
 ): Promise<{ device: PrinterSummary; secret: string }> {
+	if (!(await deps.isShelterOpen(input.shelter_code))) throw new PrintShelterClosedError();
 	await deps.ensureShelterDb(input.shelter_code);
 
 	const secret = generatePrintSecret();
@@ -252,13 +265,16 @@ export interface DeletePrinterDeps {
 	jobsFor: (shelterCode: string) => PrinterJobCloser;
 }
 
-export interface UpdatePrinterDeps extends DeletePrinterDeps {
-	/**
-	 * Provision `printing_{code}` (fresh, not memoized) before a printer is reactivated: the shelter
-	 * DB may have been dropped while the printer was inactive (O-11), and job creation would 503.
-	 */
-	ensureShelterDb?: (shelterCode: string) => Promise<void>;
-}
+/**
+ * Reactivation deps come as a pair: `printing_{code}` is provisioned (fresh, not memoized) before a
+ * printer goes active, because the shelter DB may have been dropped while it was inactive and job
+ * creation would 503, but only while the shelter is still open (O-11).
+ */
+export type UpdatePrinterDeps = DeletePrinterDeps &
+	(
+		| { isShelterOpen?: undefined; ensureShelterDb?: undefined }
+		| { isShelterOpen: IsShelterOpen; ensureShelterDb: (shelterCode: string) => Promise<void> }
+	);
 
 /**
  * Deactivating also fails the printer's open jobs (`printer_inactive`). The device is written
@@ -271,11 +287,11 @@ export async function updatePrinter(
 	patch: PrintDevicePatch,
 	now: Date
 ): Promise<PrinterSummary> {
-	const ensureShelterDb = patch.status === 'active' ? deps.ensureShelterDb : undefined;
-	if (ensureShelterDb) {
+	if (patch.status === 'active' && deps.ensureShelterDb) {
 		const current = await deps.devices.getDevice(printerId);
 		if (!current) throw new PrintDeviceNotFoundError();
-		await ensureShelterDb(current.shelter_code);
+		if (!(await deps.isShelterOpen(current.shelter_code))) throw new PrintShelterClosedError();
+		await deps.ensureShelterDb(current.shelter_code);
 	}
 	const doc = await mutateDevice(deps.devices, printerId, now, (current) => ({
 		...current,

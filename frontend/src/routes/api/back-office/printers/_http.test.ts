@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { PrintDependencyError } from '$lib/server/printers/device-credentials';
+import { PrintShelterClosedError } from '$lib/server/printers/printer-admin.server';
 import { printerAdminError } from './_http';
 
 const UNAVAILABLE = {
@@ -47,5 +48,14 @@ describe('printerAdminError: dependency failures (FR-25, FR-27)', () => {
 		printerAdminError(new Error('bug'));
 
 		expect(logged).toHaveBeenCalledWith('[printing] admin request failed:', 'bug');
+	});
+});
+
+describe('printerAdminError: closed shelter (O-11)', () => {
+	it('answers 409 SHELTER_CLOSED', async () => {
+		const response = printerAdminError(new PrintShelterClosedError());
+
+		expect(response.status).toBe(409);
+		expect((await response.json()).error.code).toBe('SHELTER_CLOSED');
 	});
 });
