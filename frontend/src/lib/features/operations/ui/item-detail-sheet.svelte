@@ -232,7 +232,7 @@
 													? ''
 													: `ลำดับที่ ${index + 1}: `}{lot.reason}
 											</p>
-											{#if !lot.isNegative}
+											{#if canChange && !lot.isNegative}
 												{@const balance = balanceByLotRef.get(lot.lotRef)}
 												{#if balance}
 													<LotFractionWriteOff lot={balance} {offline} />
