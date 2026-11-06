@@ -22,7 +22,7 @@ export const PRINTERS_I18N = {
 			`งานก่อนหน้ายังไม่ทราบผล — พิมพ์อีกครั้งจะส่งไปที่ ${printer} เพื่อไม่ให้พิมพ์ซ้ำ`,
 		cancel: 'ยกเลิก',
 		cancelled:
-			'หยุดส่งงานพิมพ์แล้ว — งานที่ส่งไปแล้วอาจยังพิมพ์ต่อ กดพิมพ์อีกครั้งเพื่อส่งส่วนที่เหลือ',
+			'หยุดส่งงานพิมพ์แล้ว — งานที่ส่งไปแล้วอาจยังพิมพ์ต่อ กดพิมพ์อีกครั้งเพื่อตามผลงานเดิมและส่งส่วนที่เหลือ ระบบจะไม่ส่งฉลากซ้ำ',
 		renderFailed: 'สร้างภาพฉลากไม่สำเร็จ',
 		sendFailed: (printer: string) => `ส่งงานพิมพ์ไปที่ ${printer} ไม่สำเร็จ`,
 		forbidden: 'คุณไม่มีสิทธิ์พิมพ์ฉลากในศูนย์นี้',
@@ -36,13 +36,13 @@ export const PRINTERS_I18N = {
 				`คิวพิมพ์ของเครื่อง ${printer} ถูกปิดอยู่ กรุณาแจ้งผู้ดูแลระบบ`,
 			lp_failed: (printer: string) => `สั่งพิมพ์ที่เครื่อง ${printer} ไม่สำเร็จ`,
 			agent_restart: (printer: string) =>
-				`เครื่อง ${printer} เพิ่งรีสตาร์ท งานพิมพ์ถูกยกเลิก กรุณาพิมพ์อีกครั้ง`,
+				`เครื่อง ${printer} เพิ่งรีสตาร์ท ระบบไม่ทราบว่าพิมพ์ออกไปกี่ใบ ตรวจฉลากที่เครื่องก่อนพิมพ์อีกครั้ง เพราะอาจได้ฉลากซ้ำ`,
 			lease_expired: (printer: string) =>
-				`เครื่อง ${printer} ไม่ส่งผลการพิมพ์กลับมา ตรวจสอบเครื่องแล้วพิมพ์อีกครั้ง`,
+				`เครื่อง ${printer} ไม่ส่งผลการพิมพ์กลับมา ตรวจฉลากที่เครื่องก่อนพิมพ์อีกครั้ง เพราะอาจได้ฉลากซ้ำ`,
 			printer_inactive: (printer: string) =>
-				`เครื่อง ${printer} ถูกปิดใช้งาน งานพิมพ์ถูกยกเลิก กรุณาเลือกเครื่องอื่น`,
+				`เครื่อง ${printer} ถูกปิดใช้งาน ตรวจฉลากที่เครื่องก่อนพิมพ์ที่เครื่องอื่น เพราะอาจได้ฉลากซ้ำ`,
 			printer_deleted: (printer: string) =>
-				`เครื่อง ${printer} ถูกลบออกจากระบบ งานพิมพ์ถูกยกเลิก กรุณาเลือกเครื่องอื่น`,
+				`เครื่อง ${printer} ถูกลบออกจากระบบ ตรวจฉลากที่เครื่องก่อนพิมพ์ที่เครื่องอื่น เพราะอาจได้ฉลากซ้ำ`,
 			invalid_label: () => 'รูป label ไม่ถูกต้อง — ลองพิมพ์ใหม่จากหน้านี้',
 			unknown: (printer: string) => `พิมพ์ที่เครื่อง ${printer} ไม่สำเร็จ`
 		}
@@ -74,7 +74,7 @@ export const PRINTERS_I18N = {
 			`The last job's result is unknown, so printing again goes to ${printer} to avoid duplicates.`,
 		cancel: 'Cancel',
 		cancelled:
-			'Stopped sending. A job already sent may still print. Press print again to send the rest.',
+			'Stopped sending. A job already sent may still print. Print again to follow it up and send the rest; no labels are sent twice.',
 		renderFailed: 'Could not render the labels.',
 		sendFailed: (printer: string) => `Could not send the print job to ${printer}.`,
 		forbidden: 'You are not allowed to print labels in this shelter.',
@@ -88,13 +88,13 @@ export const PRINTERS_I18N = {
 				`The print queue on ${printer} is disabled. Contact an administrator.`,
 			lp_failed: (printer: string) => `Could not send the job to ${printer}.`,
 			agent_restart: (printer: string) =>
-				`${printer} just restarted and the job was cancelled. Print again.`,
+				`${printer} just restarted, so how many labels came out is unknown. Check the printer before printing again, or labels may be duplicated.`,
 			lease_expired: (printer: string) =>
-				`${printer} never reported back. Check the printer, then print again.`,
+				`${printer} never reported back. Check the printer before printing again, or labels may be duplicated.`,
 			printer_inactive: (printer: string) =>
-				`${printer} was deactivated and the job was cancelled. Pick another printer.`,
+				`${printer} was deactivated. Check its labels before printing on another printer, or labels may be duplicated.`,
 			printer_deleted: (printer: string) =>
-				`${printer} was removed and the job was cancelled. Pick another printer.`,
+				`${printer} was removed. Check its labels before printing on another printer, or labels may be duplicated.`,
 			invalid_label: () => 'The label image is invalid. Try printing again from this page.',
 			unknown: (printer: string) => `Printing at ${printer} failed.`
 		}
