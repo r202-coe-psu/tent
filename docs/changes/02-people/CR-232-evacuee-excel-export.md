@@ -1,11 +1,11 @@
 ---
-id: draft # draft (ตอน proposed) -> เปลี่ยนเป็น CR-NNN เมื่อเจ้าของโครงการ approve
+id: CR-232
 title: Export Excel ในแท็บ dashboard ผู้อพยพ — รายชื่อชาวต่างชาติสำหรับกงสุล (PII) + ตัวเลข dashboard
-status: proposed
+status: approved
 date: 2026-11-06
 updated: 2026-11-06
 requested_by: Dev Team B (epic #1050 · issue #1206, #1207)
-decided_by: รอเจ้าของโครงการ approve · DPO ยืนยัน O-1
+decided_by: Soravit Sukkarn (Team Lead)
 layer: volatile
 affects:
   - docs/data/schema.md §2.12 `audit` (เพิ่มเฉพาะหมายเหตุ note ค่า `reason = consulate_export` — `reason` เป็น `str` อิสระ ไม่ใช่ enum; enum `action` เดิม ไม่เพิ่มค่า)
@@ -16,7 +16,7 @@ affects:
   - ไม่ bump schema_v (ไม่มี field ใหม่ ไม่มี view/index ใหม่ ไม่มี endpoint ใหม่)
 ---
 
-# Export Excel ในแท็บ dashboard ผู้อพยพ (epic #1050)
+# CR-232 — Export Excel ในแท็บ dashboard ผู้อพยพ (epic #1050)
 
 > **สรุป (TL;DR):**
 >
@@ -131,4 +131,4 @@ N/A — ไม่เปลี่ยนรูป doc ที่ persist; `audit` d
 - 2026-11-06 — owner: FR-2 จำกัดเฉพาะ SA + shelter_manager (`canAccessManagerPages`, ไม่รวม `registration_staff`)
 - 2026-11-06 — owner: O-1 เลือก Option A (รวมคน `search_excluded` / consent `basic`) ไปก่อน รอ DPO
 - 2026-11-06 — owner: FR-30 ใช้มาตรฐานเดียวกับ Excel Import Template (`people-import/domain/columns.ts`)
-- 2026-11-06 — owner: จะ approve + รันเลข `CR-NNN` หลังแก้ Blocker/Warning ครบ (ย้ายเข้าหมวดตอน approve — พิจารณา `02-people` หรือ `08-E-reports` แทน `10-eoc`)
+- 2026-11-06 — approved by Soravit Sukkarn (Team Lead) (epic #1050, issue #1206, #1207, PR #1215) — รันหมายเลข CR-232 (หมวด 02-people)
