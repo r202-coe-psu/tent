@@ -3,6 +3,7 @@ import {
 	listDonationPoints,
 	listStoragePoints,
 	omitUnchangedSubStorage,
+	sameSubStorage,
 	sortSubStorageTypes,
 	SUB_STORAGE_TYPE_LABELS,
 	subStorageTypeLabels
@@ -133,5 +134,19 @@ describe('omitUnchangedSubStorage', () => {
 		expect(omitUnchangedSubStorage({ sub_storage: [point, point] }, [point])).toHaveProperty(
 			'sub_storage'
 		);
+	});
+});
+
+describe('sameSubStorage', () => {
+	const point = { id: 'a', name: 'คลัง', types: ['general'] } as unknown as SubStorageItem;
+
+	it('is true for deep-equal lists and treats missing as empty', () => {
+		expect(sameSubStorage([{ ...point }], [{ ...point }])).toBe(true);
+		expect(sameSubStorage(undefined, [])).toBe(true);
+	});
+
+	it('is false when a point was added or changed', () => {
+		expect(sameSubStorage([point, { ...point, id: 'b' }], [point])).toBe(false);
+		expect(sameSubStorage([{ ...point, name: 'อื่น' }], [point])).toBe(false);
 	});
 });

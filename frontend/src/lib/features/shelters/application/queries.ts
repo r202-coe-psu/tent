@@ -5,6 +5,7 @@ import {
 	type QueryClient
 } from '@tanstack/svelte-query';
 import { toast } from 'svelte-sonner';
+import { ServiceRequestError } from '$lib/api/service';
 import {
 	subscribeDataChanges,
 	type SubscribeDataChangesHandle
@@ -109,14 +110,20 @@ export const useUpdateShelter = () => {
 	return createMutation(() => ({
 		mutationFn: ({ code, input, rev }: { code: string; input: Partial<Shelter>; rev?: string }) =>
 			updateShelter(code, input, rev),
-		onSuccess: (_, variables) => {
+		// The detail refetch is awaited before toasting so the edit form (which waits on this
+		// mutation) sees the doc it must reload from the moment the save is reported.
+		onSuccess: async (_, variables) => {
 			queryClient.invalidateQueries({ queryKey: sheltersKeys.all });
-			queryClient.invalidateQueries({ queryKey: sheltersKeys.detail(variables.code) });
+			await queryClient.invalidateQueries({ queryKey: sheltersKeys.detail(variables.code) });
 			toast.success(`อัปเดตข้อมูลศูนย์พักพิง ${variables.code} สำเร็จ`);
 		},
-		onError: (err: Error, variables) => {
+		onError: async (err: Error, variables) => {
 			// Stale `_rev` (409): refetch so the form reloads the latest doc; unsaved edits are replaced.
-			queryClient.invalidateQueries({ queryKey: sheltersKeys.detail(variables.code) });
+			await queryClient.invalidateQueries({ queryKey: sheltersKeys.detail(variables.code) });
+			if (err instanceof ServiceRequestError && err.status === 409) {
+				toast.error('ข้อมูลศูนย์ถูกแก้ไขโดยผู้อื่น โหลดข้อมูลล่าสุดให้แล้ว กรุณาแก้ไขซ้ำอีกครั้ง');
+				return;
+			}
 			toast.error(err.message || 'เกิดข้อผิดพลาดในการอัปเดตข้อมูล');
 		}
 	}));

@@ -2,11 +2,13 @@
 	import { tick } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
+	import { useQueryClient } from '@tanstack/svelte-query';
 	import { toast } from 'svelte-sonner';
 	import { superForm, defaults } from 'sveltekit-superforms';
 	import { zod4 } from 'sveltekit-superforms/adapters';
 	import {
 		useShelter,
+		sheltersKeys,
 		useCreateShelter,
 		useUpdateShelter,
 		shelterSchema,
@@ -29,7 +31,9 @@
 		EMPTY_PARKING_POLICY,
 		DEFAULT_SHELTER_FEATURE_FLAGS
 	} from '$lib/features/shelters';
-	import { omitUnchangedSubStorage } from '../domain/storage-points';
+	import type { SubStorageItem } from '../domain/schema';
+	import { omitUnchangedSubStorage, sameSubStorage } from '../domain/storage-points';
+	import { ServiceRequestError } from '$lib/api/service';
 	import { collectErrorMessages, findInvalidSectionIds } from './shelter-form-validation';
 	import ShelterFormStickyNav from './shelter-form-sticky-nav.svelte';
 	import { authStore } from '$lib/stores/auth.svelte';
@@ -88,6 +92,7 @@
 	const shelterQuery = useShelter(() => id);
 	const createMutation = useCreateShelter();
 	const updateMutation = useUpdateShelter();
+	const queryClient = useQueryClient();
 
 	// CR-219 FR-15: saving a not-yet-closed shelter as `closed` goes through the confirm modal
 	// first; the form data waits here until the close request has finished.
@@ -112,15 +117,68 @@
 		revertOperationStatus();
 	}
 
+	// `_rev` and `sub_storage` of the doc the form fields were last seeded from. They must travel
+	// with the fields: the `_rev` sent with a save has to describe the doc the submitted values were
+	// based on, or a stale form could overwrite a newer doc (CR-230 A1). Only `seedForm` and the
+	// submit/close paths below move them, always together with the fields.
+	let seededRev: string | undefined;
+	let seededSubStorage: SubStorageItem[] | undefined;
+
+	type ShelterDoc = NonNullable<typeof shelterQuery.data>;
+
+	/** The form fields for a stored shelter doc. */
+	function formValuesFromDoc(d: ShelterDoc): Shelter {
+		return {
+			name: d.name,
+			site_kind: d.site_kind,
+			operation_status: d.operation_status,
+			shelter_type: d.shelter_type ?? null,
+			floor_count: d.floor_count ?? null,
+			project_level: d.project_level ?? null,
+			location: d.location ?? {},
+			contact: d.contact ?? {},
+			municipality_zone: d.municipality_zone ?? null,
+			community: d.community ?? null,
+			address_no: d.address_no ?? null,
+			village_no: d.village_no ?? null,
+			subdistrict: d.subdistrict ?? null,
+			district: d.district ?? null,
+			province: d.province ?? null,
+			postal_code: d.postal_code ?? null,
+			key_personnel: d.key_personnel ?? { eoc_liaison: {}, medical_lead: {}, kitchen_lead: {} },
+			capacity: d.capacity,
+			area_m2: d.area_m2 ?? null,
+			area_type: (d.area_type ?? null) as Shelter['area_type'],
+			facilities: d.facilities ?? {},
+			common_areas: d.common_areas ?? { sub_storage: [] },
+			utilities: d.utilities ?? { communications: [] },
+			risk: d.risk ?? {},
+			zones: d.zones ?? [],
+			food_distribution_points: d.food_distribution_points ?? [],
+			admission_policy: d.admission_policy ?? { ...EMPTY_ADMISSION_POLICY },
+			luggage_policy: d.luggage_policy ?? { ...EMPTY_LUGGAGE_POLICY },
+			parking_policy: d.parking_policy ?? { ...EMPTY_PARKING_POLICY },
+			feature_flags: {
+				...DEFAULT_SHELTER_FEATURE_FLAGS,
+				...(d.feature_flags ?? {})
+			}
+		} as Shelter;
+	}
+
+	function seedFrom(d: ShelterDoc) {
+		seededRev = d._rev;
+		seededSubStorage = d.common_areas?.sub_storage;
+	}
+
+	const SHELTER_CONFLICT_MESSAGE =
+		'ข้อมูลศูนย์ถูกแก้ไขโดยผู้อื่น โหลดข้อมูลล่าสุดให้แล้ว กรุณาแก้ไขซ้ำอีกครั้ง';
+
 	/** Edit-save payload: leave `sub_storage` out when the form did not change it (CR-230). */
-	function withSubStorageGuard(data: Shelter): Shelter {
+	function withSubStorageGuard(data: Shelter, baseline = seededSubStorage): Shelter {
 		if (!data.common_areas) return data;
 		return {
 			...data,
-			common_areas: omitUnchangedSubStorage(
-				data.common_areas,
-				shelterQuery.data?.common_areas?.sub_storage
-			) as Shelter['common_areas']
+			common_areas: omitUnchangedSubStorage(data.common_areas, baseline) as Shelter['common_areas']
 		};
 	}
 
@@ -133,11 +191,25 @@
 		}
 		// Registry is closed now, so the normal save (other edited fields) passes the PATCH guard.
 		// The close route rewrote the doc, so the loaded `_rev` is stale: refetch for the fresh one.
+		// The baseline is read first: the refetch re-seeds the fields from the newer doc.
+		const baseline = seededSubStorage;
 		const fresh = await shelterQuery.refetch();
+		const input = withSubStorageGuard(data, baseline);
+		// The points were edited in this form while someone else changed them: the fresh `_rev`
+		// would let this save overwrite their points, so refuse and let the form show the latest.
+		if (
+			input.common_areas &&
+			'sub_storage' in input.common_areas &&
+			fresh.data &&
+			!sameSubStorage(fresh.data.common_areas?.sub_storage, baseline)
+		) {
+			toast.error(SHELTER_CONFLICT_MESSAGE);
+			return;
+		}
 		updateMutation.mutate({
 			code: id,
-			input: withSubStorageGuard(data),
-			rev: fresh.data?._rev ?? shelterQuery.data?._rev
+			input,
+			rev: fresh.data?._rev ?? seededRev
 		});
 	}
 
@@ -177,6 +249,9 @@
 		dataType: 'json',
 		validators: zod4(shelterSchema),
 		resetForm: false,
+		// SPA form with no server load to refresh; `invalidateAll` would only delay superforms'
+		// final write of `validated.data`, widening the window in which typing is overwritten.
+		invalidateAll: false,
 		onUpdate: async ({ form: validated }) => {
 			if (!validated.valid) {
 				showValidationSummary = true;
@@ -194,12 +269,44 @@
 			}
 
 			if (isEdit) {
-				// Stay on the edit form; success toast comes from useUpdateShelter.
-				updateMutation.mutate({
-					code: id,
-					input: withSubStorageGuard(data),
-					rev: shelterQuery.data?._rev
-				});
+				// Stay on the edit form; toasts come from useUpdateShelter. The save is awaited because
+				// superforms writes `validated.data` over the fields once this handler returns, which would
+				// undo the reseed from the query effect and leave fields older than the seeded `_rev`.
+				const rev0 = seededRev;
+				const subStorage0 = seededSubStorage;
+				const input = withSubStorageGuard(data);
+				// The points the doc holds once this save lands: what was sent, else what was loaded.
+				const savedSubStorage =
+					input.common_areas && 'sub_storage' in input.common_areas
+						? input.common_areas.sub_storage
+						: subStorage0;
+				let saved = false;
+				let conflict = false;
+				try {
+					await updateMutation.mutateAsync({ code: id, input, rev: rev0 });
+					saved = true;
+				} catch (err) {
+					conflict = err instanceof ServiceRequestError && err.status === 409;
+					if (!conflict) {
+						// Any other failure keeps the user's edits, and the seeds they are based on (the query
+						// effect may have moved them meanwhile).
+						seededRev = rev0;
+						seededSubStorage = subStorage0;
+					}
+				}
+				// The mutation hook already awaited the refetch, so the cache holds the latest doc.
+				const latest = queryClient.getQueryData<ShelterDoc>(sheltersKeys.detail(id));
+				if (latest && (conflict || saved)) {
+					if (saved && sameSubStorage(latest.common_areas?.sub_storage, savedSubStorage)) {
+						// Our own save is the newest write: the fields are still what they are based on.
+						seedFrom(latest);
+					} else {
+						// Stale `_rev`, or the doc moved on right after the save: fields and seeds move to the
+						// latest doc together so the next save cannot carry a `_rev` newer than its content.
+						validated.data = formValuesFromDoc(latest);
+						seedFrom(latest);
+					}
+				}
 			} else {
 				createMutation.mutate(data, {
 					onSuccess: (result) => {
@@ -247,42 +354,8 @@
 	// Populate form data when edit query loads.
 	$effect(() => {
 		if (shelterQuery.data) {
-			const d = shelterQuery.data;
-			$formData = {
-				name: d.name,
-				site_kind: d.site_kind,
-				operation_status: d.operation_status,
-				shelter_type: d.shelter_type ?? null,
-				floor_count: d.floor_count ?? null,
-				project_level: d.project_level ?? null,
-				location: d.location ?? {},
-				contact: d.contact ?? {},
-				municipality_zone: d.municipality_zone ?? null,
-				community: d.community ?? null,
-				address_no: d.address_no ?? null,
-				village_no: d.village_no ?? null,
-				subdistrict: d.subdistrict ?? null,
-				district: d.district ?? null,
-				province: d.province ?? null,
-				postal_code: d.postal_code ?? null,
-				key_personnel: d.key_personnel ?? { eoc_liaison: {}, medical_lead: {}, kitchen_lead: {} },
-				capacity: d.capacity,
-				area_m2: d.area_m2 ?? null,
-				area_type: (d.area_type ?? null) as (typeof $formData)['area_type'],
-				facilities: d.facilities ?? {},
-				common_areas: d.common_areas ?? { sub_storage: [] },
-				utilities: d.utilities ?? { communications: [] },
-				risk: d.risk ?? {},
-				zones: d.zones ?? [],
-				food_distribution_points: d.food_distribution_points ?? [],
-				admission_policy: d.admission_policy ?? { ...EMPTY_ADMISSION_POLICY },
-				luggage_policy: d.luggage_policy ?? { ...EMPTY_LUGGAGE_POLICY },
-				parking_policy: d.parking_policy ?? { ...EMPTY_PARKING_POLICY },
-				feature_flags: {
-					...DEFAULT_SHELTER_FEATURE_FLAGS,
-					...(d.feature_flags ?? {})
-				}
-			};
+			seedFrom(shelterQuery.data);
+			$formData = formValuesFromDoc(shelterQuery.data);
 		}
 	});
 

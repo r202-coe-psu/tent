@@ -105,18 +105,24 @@ async function mockCreate(
  * the registry level (mirrors `mockShelters()` in users/ui-crud.test.ts) while
  * PATCH (the actual save) is mocked at the BFF route.
  */
+/** `_rev` the mocked registry serves; the form must send it back on PATCH (CR-230 A1). */
+const E2E_REV = '4-e2e';
+
 async function mockShelterDetail(
 	page: Page,
 	code: string,
 	shelter: Record<string, unknown>
 ): Promise<{ getPatchBody: () => unknown }> {
+	let stored: Record<string, unknown> = {
+		_id: `shelter:${code}`,
+		_rev: E2E_REV,
+		type: 'shelter',
+		schema_v: 6,
+		code,
+		...shelter
+	};
 	await page.route('**/registry/_all_docs*', async (route) => {
-		const rows = [
-			{
-				id: `shelter:${code}`,
-				doc: { _id: `shelter:${code}`, type: 'shelter', schema_v: 6, code, ...shelter }
-			}
-		];
+		const rows = [{ id: `shelter:${code}`, doc: stored }];
 		await route.fulfill({
 			status: 200,
 			contentType: 'application/json',
@@ -128,6 +134,16 @@ async function mockShelterDetail(
 	await page.route(`**/api/back-office/shelter/${code}`, async (route) => {
 		if (route.request().method() === 'PATCH') {
 			patchBody = route.request().postDataJSON();
+			// Persist like the server: a later save then reloads the doc this one wrote.
+			const { _rev, common_areas, ...patch } = patchBody as Record<string, unknown> & {
+				common_areas?: Record<string, unknown>;
+			};
+			stored = {
+				...stored,
+				...patch,
+				common_areas: { ...(stored.common_areas as object), ...common_areas },
+				_rev: `${Number.parseInt(String(_rev ?? E2E_REV), 10) + 1}-e2e`
+			};
 			await route.fulfill({
 				status: 200,
 				contentType: 'application/json',
@@ -556,8 +572,68 @@ test.describe('Shelter Form — Donation drop-off points (CR-205)', () => {
 		await openStorage(page, CODE);
 
 		await save(page, CODE);
-		const body = getPatchBody() as { common_areas?: Record<string, unknown> };
+		const body = getPatchBody() as { _rev?: string; common_areas?: Record<string, unknown> };
 		expect(body.common_areas).not.toHaveProperty('sub_storage');
+		expect(body._rev).toBe(E2E_REV);
+	});
+
+	test('a save refused as stale reloads the form, so the next save cannot drop a point added elsewhere (CR-230 A1)', async ({
+		page
+	}) => {
+		const CODE = 'SH915';
+		const added = { id: 'sp-2', name: 'โกดังคลัง', types: ['general'], area_m2: null };
+		// What the registry serves now; the warehouse adds a point after the form has loaded.
+		let served = { rev: E2E_REV, points: [gym] };
+		await page.route('**/registry/_all_docs*', async (route) => {
+			const doc = {
+				_id: `shelter:${CODE}`,
+				_rev: served.rev,
+				type: 'shelter',
+				schema_v: 8,
+				code: CODE,
+				...storageShelter(served.points, 8)
+			};
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({ rows: [{ id: doc._id, doc }] })
+			});
+		});
+		const patches: { status: number; body: Record<string, unknown> }[] = [];
+		await page.route(`**/api/back-office/shelter/${CODE}`, async (route) => {
+			if (route.request().method() !== 'PATCH') return route.continue();
+			const body = route.request().postDataJSON();
+			const stale = body._rev !== served.rev;
+			patches.push({ status: stale ? 409 : 200, body });
+			await route.fulfill({
+				status: stale ? 409 : 200,
+				contentType: 'application/json',
+				body: JSON.stringify(
+					stale
+						? { error: { code: 'CONFLICT', message: 'ข้อมูลศูนย์ถูกแก้ไขโดยผู้อื่น' } }
+						: { ok: true, code: CODE }
+				)
+			});
+		});
+		await openStorage(page, CODE);
+		const pointNames = page.locator('input[name^="common_areas.sub_storage["][name$=".name"]');
+		await expect(pointNames).toHaveCount(1);
+
+		served = { rev: '5-e2e', points: [gym, added] };
+		await page.getByLabel('ชื่อจุดเก็บของ').fill('โรงยิม (แก้ไข)');
+		await save(page, CODE);
+		expect(patches[0]).toMatchObject({ status: 409, body: { _rev: E2E_REV } });
+
+		// The form reloads the latest doc (fields and `_rev` together) instead of staying stale.
+		await expect(pointNames).toHaveCount(2);
+		await expect(pointNames.nth(1)).toHaveValue('โกดังคลัง');
+
+		await save(page, CODE);
+		expect(patches).toHaveLength(2);
+		expect(patches[1].status).toBe(200);
+		expect(patches[1].body._rev).toBe('5-e2e');
+		const sent = (patches[1].body.common_areas as { sub_storage?: { name: string }[] }).sub_storage;
+		if (sent) expect(sent.map((p) => p.name)).toContain('โกดังคลัง');
 	});
 
 	test('a schema_v 8 point with no new keys saves as not accepting donations', async ({ page }) => {

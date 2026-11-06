@@ -81,3 +81,11 @@ export function omitUnchangedSubStorage<T extends { sub_storage?: SubStorageItem
 	delete rest.sub_storage;
 	return rest as Omit<T, 'sub_storage'>;
 }
+
+/** True when two point lists are the same (missing and empty count as equal). */
+export function sameSubStorage(
+	a: readonly SubStorageItem[] | undefined,
+	b: readonly SubStorageItem[] | undefined
+): boolean {
+	return deepEqual(a ?? [], b ?? []);
+}
