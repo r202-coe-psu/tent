@@ -179,6 +179,12 @@ describe('real backofficeNavbarGroups — visible leaves per role (regression gu
 		expect(visibleLeafLabels(ctx(sh('distribution_staff')))).toEqual(labelsFor());
 	});
 
+	it('donation_staff sees the stock and donation menus only, not distribution or kitchen requisitions (CR-227)', () => {
+		expect(visibleLeafLabels(ctx(sh('donation_staff')))).toEqual(
+			labelsFor('คลัง', 'บริจาค', 'คลังสินค้า')
+		);
+	});
+
 	it('kitchen_staff sees kitchen and kitchen requisitions, not the warehouse menus (#842)', () => {
 		expect(visibleLeafLabels(ctx(sh('kitchen_staff')))).toEqual(labelsFor(kitchenTickets, kitchen));
 	});

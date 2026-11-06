@@ -236,6 +236,16 @@ describe('filterPortalMenu — single-department roles', () => {
 		expect(itemIds(views[0])).toEqual(['frontline-distribution']);
 	});
 
+	it('donation_staff sees stock and donations only, not distribution, requisitions or the desk (CR-227)', () => {
+		const views = menu(staff('donation_staff'));
+		expect(deptIds(views)).toEqual(['supply']);
+		expect(itemIds(views[0])).toEqual(['warehouse', 'stock-donations']);
+	});
+
+	it('donation_staff of another shelter sees nothing', () => {
+		expect(menu(staff('donation_staff', 'SH002'))).toEqual([]);
+	});
+
 	it('distribution_staff of another shelter does not see the desk', () => {
 		expect(menu(staff('distribution_staff', 'SH002'))).toEqual([]);
 	});

@@ -7558,3 +7558,277 @@ describe('buildValidateDocUpdate', () => {
 		});
 	});
 });
+
+// CR-227: donation_staff records donation receipts and nothing else that moves stock.
+describe('buildValidateDocUpdate — donation_staff (CR-227)', () => {
+	const DONATION: UserCtx = {
+		name: 'don',
+		roles: ['shelter:SH001', 'SH001:donation_staff']
+	};
+	const OTHER_SHELTER: UserCtx = {
+		name: 'don',
+		roles: ['shelter:SH002', 'SH002:donation_staff']
+	};
+	const GATE = /Only warehouse staff or managers can write stock ledger/;
+	const don = (over: Doc = {}): Doc => ledger({ created_by: 'don', ...over });
+
+	describe('allowed: positive donation receipt in its own shelter', () => {
+		it.each([
+			['compound role', DONATION],
+			[
+				'flat role with a single shelter scope',
+				{ name: 'don', roles: ['shelter:SH001', 'donation_staff'] }
+			]
+		])('lets a %s write a donation stock_ledger row', (_label, userCtx) => {
+			expect(() => compile()(don(), null, userCtx)).not.toThrow();
+		});
+
+		it('accepts a decimal quantity and a donation ref_id, lot included', () => {
+			expect(() =>
+				compile()(
+					don({
+						qty: '2.5',
+						ref_id: 'donation:01J',
+						lot: { lot_no: 'L-0001', expiry: '2026-12-31' }
+					}),
+					null,
+					DONATION
+				)
+			).not.toThrow();
+		});
+	});
+
+	describe('refused: anything else on stock_ledger', () => {
+		it.each([
+			['a donation row in another shelter', () => don(), OTHER_SHELTER],
+			['a zero donation quantity', () => don({ qty: '0' }), DONATION],
+			['a negative donation quantity', () => don({ qty: '-5' }), DONATION],
+			['a non-string donation quantity', () => don({ qty: 5 }), DONATION],
+			[
+				'an adjust row',
+				() => don({ schema_v: 6, qty: '-3', reason: 'adjust', adjust_reason: 'count_mismatch' }),
+				DONATION
+			],
+			[
+				'a positive adjust row (found)',
+				() => don({ schema_v: 6, qty: '3', reason: 'adjust', adjust_reason: 'found' }),
+				DONATION
+			],
+			[
+				'an item merge row',
+				() =>
+					don({
+						schema_v: 6,
+						qty: '-6',
+						reason: 'adjust',
+						ref_id: null,
+						adjust_reason: 'merge',
+						note: 'item_master:B'
+					}),
+				DONATION
+			],
+			[
+				'a direct distribute row',
+				() =>
+					don({
+						qty: '-10',
+						reason: 'distribute',
+						ref_id: 'requisition_ticket:direct-01J',
+						lot_ref: 'stock_ledger:01J'
+					}),
+				DONATION
+			],
+			[
+				'a batch distribute row',
+				() =>
+					don({
+						qty: '-10',
+						reason: 'distribute',
+						ref_id: 'distribution_batch:01J',
+						lot_ref: 'stock_ledger:01J'
+					}),
+				DONATION
+			],
+			[
+				'a requisition row',
+				() =>
+					don({
+						qty: '-10',
+						reason: 'requisition',
+						ref_id: 'requisition_ticket:01J',
+						lot_ref: 'stock_ledger:01J'
+					}),
+				DONATION
+			],
+			['a manual receive row', () => don({ reason: 'receive', ref_id: null }), DONATION],
+			[
+				'a loan-return receive row',
+				() =>
+					don({
+						reason: 'receive',
+						ref_id: 'distribution_log:01J',
+						lot: { note: 'counter_loan_return' }
+					}),
+				DONATION
+			]
+		] as [string, () => Doc, UserCtx][])('rejects %s', (_label, make, userCtx) => {
+			expectForbidden(() => compile()(make(), null, userCtx), GATE);
+		});
+
+		it('does not let a donation row carry adjust-only fields', () => {
+			expectForbidden(
+				() => compile()(don({ schema_v: 6, adjust_reason: 'found' }), null, DONATION),
+				/adjust_reason is only allowed when reason is adjust/
+			);
+			expectForbidden(
+				() => compile()(don({ note: 'x' }), null, DONATION),
+				/note is only allowed when reason is adjust/
+			);
+		});
+
+		it('keeps stock_ledger append-only for it', () => {
+			expectForbidden(
+				() => compile()(don({ qty: '99' }), don(), DONATION),
+				/Cannot update append-only stock_ledger/
+			);
+		});
+	});
+
+	describe('refused: other stock-side documents', () => {
+		it('refuses distribution_batch', () => {
+			expectForbidden(
+				() =>
+					compile()(
+						{
+							_id: 'distribution_batch:01J',
+							type: 'distribution_batch',
+							request_id: 'distribution_request:01J',
+							status: 'activating',
+							items: [{ item_id: 'item:soap', allocated_qty: '10', unit: 'bar' }],
+							allocations: [{ item_id: 'item:soap', lot_ref: 'stock_ledger:01J', qty: '10' }],
+							...envelope,
+							schema_v: 1
+						},
+						null,
+						DONATION
+					),
+				/Only warehouse staff or system admin can manage distribution batches/
+			);
+		});
+
+		it('refuses stock_lot_reservation', () => {
+			expectForbidden(
+				() =>
+					compile()(
+						{
+							_id: 'stock_lot_reservation:hash123',
+							type: 'stock_lot_reservation',
+							lot_ref: 'stock_ledger:01J',
+							pending_claims: [],
+							...envelope,
+							schema_v: 1
+						},
+						null,
+						DONATION
+					),
+				/Only warehouse staff, shelter manager, or system admin can manage stock lot reservations/
+			);
+		});
+
+		it('refuses opening, allocating and dispatching a requisition_ticket', () => {
+			const ticket = (over: Doc = {}): Doc => ({
+				_id: 'requisition_ticket:01J',
+				type: 'requisition_ticket',
+				...envelope,
+				schema_v: 1,
+				created_by: 'don',
+				ticket_no: 'TKT-KITCHEN-0001',
+				requisition_type: 'kitchen',
+				status: 'PENDING_PICK',
+				meal_plan_id: 'meal_plan:01J',
+				source_location: 'warehouse:main',
+				destination_location: 'kitchen',
+				requested_by: 'don',
+				items: [
+					{
+						item_id: 'item_master:rice',
+						item_name: 'ข้าวสาร',
+						unit: 'kg',
+						requested_qty: '30',
+						allocated_qty: '0'
+					}
+				],
+				...over
+			});
+			expectForbidden(
+				() => compile()(ticket(), null, DONATION),
+				/Only kitchen staff or system admin can open/
+			);
+			const open = ticket();
+			const allocated = ticket({
+				items: [{ ...(open.items as Doc[])[0], allocated_qty: '30' }]
+			});
+			expectForbidden(
+				() => compile()(allocated, open, DONATION),
+				/Only warehouse staff, supply coordinator, kitchen staff, or system admin can update requisition_ticket items/
+			);
+			expectForbidden(
+				() => compile()({ ...allocated, status: 'READY_FOR_DISPATCH' }, allocated, DONATION),
+				/can approve a requisition_ticket/
+			);
+		});
+
+		it('refuses retiring an item_master into another (merge)', () => {
+			const item = (over: Doc = {}): Doc => ({
+				_id: 'item_master:A',
+				type: 'item_master',
+				...envelope,
+				schema_v: 5,
+				name: 'ข้าวสาร',
+				base_unit: 'kg',
+				...over
+			});
+			const merged = item({ merged_into: 'item_master:B', deactivated: true });
+			expectForbidden(() => compile()(merged, item(), DONATION), /can merge items/);
+		});
+	});
+
+	describe('warehouse_staff keeps every right (not a regression)', () => {
+		it('still writes donation, adjust and distribute rows', () => {
+			expect(() => compile()(ledger(), null, WAREHOUSE)).not.toThrow();
+			expect(() =>
+				compile()(
+					ledger({ schema_v: 6, qty: '-3', reason: 'adjust', adjust_reason: 'count_mismatch' }),
+					null,
+					WAREHOUSE
+				)
+			).not.toThrow();
+			expect(() =>
+				compile()(
+					ledger({
+						qty: '-10',
+						reason: 'distribute',
+						ref_id: 'distribution_batch:01J',
+						lot_ref: 'stock_ledger:01J'
+					}),
+					null,
+					WAREHOUSE
+				)
+			).not.toThrow();
+		});
+
+		it('a user holding both roles keeps the warehouse rights', () => {
+			const both: UserCtx = {
+				name: 'both',
+				roles: ['shelter:SH001', 'SH001:donation_staff', 'SH001:warehouse_staff']
+			};
+			expect(() =>
+				compile()(
+					ledger({ schema_v: 6, qty: '-3', reason: 'adjust', adjust_reason: 'count_mismatch' }),
+					null,
+					both
+				)
+			).not.toThrow();
+		});
+	});
+});

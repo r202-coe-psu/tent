@@ -121,15 +121,16 @@ export const FALLBACK_UNIT_DEFINITIONS: FallbackUnitDef[] = [
 	{ code: 'bundle', label_th: 'ห่อ', label_en: 'bundle', dimension: 'count', sort_order: 18 },
 	{ code: 'egg', label_th: 'ฟอง', label_en: 'egg', dimension: 'count', sort_order: 19 },
 	{ code: 'fruit', label_th: 'ผล', label_en: 'fruit', dimension: 'count', sort_order: 20 },
-	{ code: 'gallon', label_th: 'แกลลอน', label_en: 'gallon', dimension: 'volume', sort_order: 21 },
-	{ code: 'cylinder', label_th: 'ถัง', label_en: 'cylinder', dimension: 'count', sort_order: 22 },
+	{ code: 'ball', label_th: 'ลูก', label_en: 'ball', dimension: 'count', sort_order: 21 },
+	{ code: 'gallon', label_th: 'แกลลอน', label_en: 'gallon', dimension: 'volume', sort_order: 22 },
+	{ code: 'cylinder', label_th: 'ถัง', label_en: 'cylinder', dimension: 'count', sort_order: 23 },
 	{
 		code: 'g',
 		label_th: 'กรัม',
 		label_th_short: 'ก.',
 		label_en: 'g',
 		dimension: 'mass',
-		sort_order: 23
+		sort_order: 24
 	},
 	{
 		code: 'kg',
@@ -137,7 +138,7 @@ export const FALLBACK_UNIT_DEFINITIONS: FallbackUnitDef[] = [
 		label_th_short: 'กก.',
 		label_en: 'kg',
 		dimension: 'mass',
-		sort_order: 24
+		sort_order: 25
 	},
 	{
 		code: 'ml',
@@ -145,7 +146,7 @@ export const FALLBACK_UNIT_DEFINITIONS: FallbackUnitDef[] = [
 		label_th_short: 'มล.',
 		label_en: 'ml',
 		dimension: 'volume',
-		sort_order: 25
+		sort_order: 26
 	},
 	{
 		code: 'l',
@@ -153,7 +154,7 @@ export const FALLBACK_UNIT_DEFINITIONS: FallbackUnitDef[] = [
 		label_th_short: 'ล.',
 		label_en: 'L',
 		dimension: 'volume',
-		sort_order: 26
+		sort_order: 27
 	},
 	{
 		code: 'm',
@@ -161,7 +162,7 @@ export const FALLBACK_UNIT_DEFINITIONS: FallbackUnitDef[] = [
 		label_th_short: 'ม.',
 		label_en: 'm',
 		dimension: 'length',
-		sort_order: 27
+		sort_order: 28
 	},
 	{
 		code: 'mg',
@@ -169,7 +170,7 @@ export const FALLBACK_UNIT_DEFINITIONS: FallbackUnitDef[] = [
 		label_th_short: 'มก.',
 		label_en: 'mg',
 		dimension: 'mass',
-		sort_order: 28
+		sort_order: 29
 	},
 	{
 		code: 'mcg',
@@ -177,7 +178,7 @@ export const FALLBACK_UNIT_DEFINITIONS: FallbackUnitDef[] = [
 		label_th_short: 'มคก.',
 		label_en: 'mcg',
 		dimension: 'mass',
-		sort_order: 29
+		sort_order: 30
 	},
 	{
 		code: 'kcal',
@@ -185,7 +186,7 @@ export const FALLBACK_UNIT_DEFINITIONS: FallbackUnitDef[] = [
 		label_th_short: 'กิโลแคลอรี',
 		label_en: 'kcal',
 		dimension: 'energy',
-		sort_order: 30
+		sort_order: 31
 	}
 ];
 

@@ -428,8 +428,9 @@ export const useTransfers = (filter?: TransferFilter) =>
  * Number of transfers waiting on THIS shelter (tab badge). Shares `useTransfers`'
  * cache entry (same key, unfiltered), so it adds no request beside `TransferList`.
  */
-export const usePendingTransferCount = () =>
+export const usePendingTransferCount = (enabled: () => boolean = () => true) =>
 	createQuery(() => ({
+		enabled: enabled(),
 		queryKey: operationsKeys.transfers(),
 		queryFn: () => operationsRepository().listTransfers(),
 		retry: retryUnlessForbidden,
