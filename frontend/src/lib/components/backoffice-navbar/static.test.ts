@@ -132,7 +132,6 @@ describe('real backofficeNavbarGroups — visible leaves per role (regression gu
 
 	/** R2 (#842): no guard on the page, or no page yet — shown to every role as before. */
 	const ungated = [
-		'การประเมินความพร้อมศูนย์',
 		'การประเมินประจำวัน',
 		'รายงานความโปร่งใส',
 		'รายงานสรุปหลังเหตุการณ์',
@@ -145,7 +144,12 @@ describe('real backofficeNavbarGroups — visible leaves per role (regression gu
 	const warehouse = ['คลัง', 'บริจาค', 'จัดการเบิกจ่ายพัสดุและอาหาร', 'คลังสินค้า'];
 	const kitchenTickets = 'เบิกวัตถุดิบครัว';
 	const kitchen = 'ครัวกลางและอาหาร';
-	const managerOnly = ['จัดการศูนย์พักพิง', 'จัดการผู้ใช้งานและสิทธิ์', 'ข้อมูลหลัก'];
+	const managerOnly = [
+		'การประเมินความพร้อมศูนย์',
+		'จัดการศูนย์พักพิง',
+		'จัดการผู้ใช้งานและสิทธิ์',
+		'ข้อมูลหลัก'
+	];
 	const incidentLog = 'บันทึกเหตุการณ์ประจำวัน';
 	/** Tree-ordered ungated leaves plus the gated ones the role may open. */
 	const labelsFor = (...gated: (string | string[])[]): string[] => {
@@ -173,6 +177,12 @@ describe('real backofficeNavbarGroups — visible leaves per role (regression gu
 
 	it('distribution_staff sees none of warehouse / kitchen / users / referrals / shelters (#842)', () => {
 		expect(visibleLeafLabels(ctx(sh('distribution_staff')))).toEqual(labelsFor());
+	});
+
+	it('donation_staff sees the stock and donation menus only, not distribution or kitchen requisitions (CR-227)', () => {
+		expect(visibleLeafLabels(ctx(sh('donation_staff')))).toEqual(
+			labelsFor('คลัง', 'บริจาค', 'คลังสินค้า')
+		);
 	});
 
 	it('kitchen_staff sees kitchen and kitchen requisitions, not the warehouse menus (#842)', () => {

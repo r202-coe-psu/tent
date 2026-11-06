@@ -9,6 +9,9 @@ import {
 	canAccessIncidents,
 	canAccessManagerPages,
 	canAccessWarehouse,
+	canAccessDonations,
+	canViewSupply,
+	canChangeStock,
 	canAccessKitchen,
 	canAccessTickets,
 	canAccessEvacueeRegistration,
@@ -36,6 +39,8 @@ import {
 	rolesFromAssignments,
 	assignmentsFromRoles,
 	DISTRIBUTION_STAFF,
+	DONATION_STAFF,
+	COORDINATOR_GRANTABLE_CAPABILITIES,
 	isKioskStaffOnly,
 	kioskConfinement,
 	KIOSK_STAFF,
@@ -45,6 +50,7 @@ import {
 	STAFF_CAPABILITIES,
 	shelterCodeFromRoles,
 	shelterCodesFromRoles,
+	mergeEdgeShelters,
 	shelterCodesWithCapability,
 	shelterScopeRole
 } from './roles';
@@ -377,6 +383,62 @@ describe('distribution_staff capability', () => {
 	});
 });
 
+describe('donation_staff capability (CR-227)', () => {
+	const don = ['shelter:SH001', 'SH001:donation_staff'];
+
+	it('is grantable by SA, SM and a volunteer coordinator', () => {
+		expect(STAFF_CAPABILITIES).toContain(DONATION_STAFF);
+		expect(SHELTER_CAPABILITIES).toContain(DONATION_STAFF);
+		expect(SA_GRANTABLE_CAPABILITIES).toContain(DONATION_STAFF);
+		expect(COORDINATOR_GRANTABLE_CAPABILITIES).toContain(DONATION_STAFF);
+		expect(isStaffOnly(don)).toBe(true);
+	});
+
+	it('round-trips through compound shelter assignments', () => {
+		const roles = rolesFromAssignments([{ shelter_code: 'SH001', capabilities: [DONATION_STAFF] }]);
+		expect(roles).toEqual(don);
+		expect(assignmentsFromRoles(roles)).toEqual([
+			{ shelter_code: 'SH001', capabilities: [DONATION_STAFF] }
+		]);
+	});
+
+	it('is scoped to its own shelter', () => {
+		const roles = ['shelter:SH001', 'shelter:SH002', 'SH001:donation_staff'];
+		expect(hasCapabilityInShelter(roles, 'SH001', DONATION_STAFF)).toBe(true);
+		expect(hasCapabilityInShelter(roles, 'SH002', DONATION_STAFF)).toBe(false);
+	});
+
+	it('opens the donation and the read-only supply pages, only in its shelter', () => {
+		expect(canAccessDonations(don, 'SH001')).toBe(true);
+		expect(canViewSupply(don, 'SH001')).toBe(true);
+		expect(canAccessDonations(don, 'SH002')).toBe(false);
+		expect(canViewSupply(don, 'SH002')).toBe(false);
+	});
+
+	it('does not open warehouse, ticket, kitchen or distribution pages, nor stock changes', () => {
+		expect(canAccessWarehouse(don, 'SH001')).toBe(false);
+		expect(canAccessTickets(don, 'SH001')).toBe(false);
+		expect(canAccessKitchen(don, 'SH001')).toBe(false);
+		expect(canAccessDistributionDesk(don, 'SH001')).toBe(false);
+		expect(canChangeStock(don, 'SH001')).toBe(false);
+		expect(canDistributeStock(don, 'SH001')).toBe(false);
+	});
+
+	it('keeps the warehouse side able to change stock, and adds nothing to it', () => {
+		for (const cap of ['warehouse_staff', 'supply_coordinator', 'shelter_manager']) {
+			expect(canChangeStock(['shelter:SH001', `SH001:${cap}`], 'SH001')).toBe(true);
+			expect(canAccessDonations(['shelter:SH001', `SH001:${cap}`], 'SH001')).toBe(true);
+		}
+		// DON next to WS keeps the warehouse rights.
+		expect(canChangeStock([...don, 'SH001:warehouse_staff'], 'SH001')).toBe(true);
+	});
+
+	it('has a Thai display label', () => {
+		expect(roleDisplayLabel(DONATION_STAFF)).toBe('เจ้าหน้าที่รับบริจาค');
+		expect(roleDisplayLabel('SH001:donation_staff')).toBe('เจ้าหน้าที่รับบริจาค (SH001)');
+	});
+});
+
 describe('shelterCodesWithCapability', () => {
 	it('returns null (every shelter) for a system admin', () => {
 		expect(shelterCodesWithCapability(['system_admin'], ['shelter_manager'])).toBeNull();
@@ -612,6 +674,36 @@ describe('isKioskStaffOnly', () => {
 	});
 });
 
+describe('mergeEdgeShelters (CR-171)', () => {
+	it('seeds from roles when there is no existing value', () => {
+		expect(mergeEdgeShelters(undefined, ['shelter:SH001', 'SH001:shelter_manager'])).toEqual([
+			'SH001'
+		]);
+		expect(mergeEdgeShelters(null, ['shelter:SH001', 'shelter:SH002'])).toEqual(['SH001', 'SH002']);
+	});
+
+	it('is append-only: removing a shelter from roles keeps it', () => {
+		expect(mergeEdgeShelters(['SH001', 'SH002'], ['shelter:SH002'])).toEqual(['SH001', 'SH002']);
+		expect(mergeEdgeShelters(['SH001'], [])).toEqual(['SH001']);
+	});
+
+	it('keeps order, appends new codes, dedupes, ignores non-strings', () => {
+		expect(
+			mergeEdgeShelters(
+				['SH002', 'SH002', 7 as unknown as string],
+				['shelter:SH001', 'shelter:SH002']
+			)
+		).toEqual(['SH002', 'SH001']);
+	});
+
+	it('returns [] for system_admin without shelters and does not mutate input', () => {
+		const existing = ['SH001'];
+		expect(mergeEdgeShelters([], ['system_admin'])).toEqual([]);
+		mergeEdgeShelters(existing, ['shelter:SH009']);
+		expect(existing).toEqual(['SH001']);
+	});
+});
+
 describe('page-guard predicates shared by guards and sidebar (#842)', () => {
 	const sh = (cap: string) => ['shelter:A', `A:${cap}`];
 	const SA = ['system_admin'];
@@ -632,7 +724,18 @@ describe('page-guard predicates shared by guards and sidebar (#842)', () => {
 			'canAccessEvacueeRegistration',
 			canAccessEvacueeRegistration,
 			['shelter_manager', 'registration_staff']
-		]
+		],
+		[
+			'canAccessDonations',
+			canAccessDonations,
+			['shelter_manager', 'warehouse_staff', 'supply_coordinator', 'donation_staff']
+		],
+		[
+			'canViewSupply',
+			canViewSupply,
+			['shelter_manager', 'warehouse_staff', 'supply_coordinator', 'donation_staff']
+		],
+		['canChangeStock', canChangeStock, ['shelter_manager', 'warehouse_staff', 'supply_coordinator']]
 	];
 	const everyCap = [
 		'shelter_manager',
@@ -641,6 +744,7 @@ describe('page-guard predicates shared by guards and sidebar (#842)', () => {
 		'kitchen_staff',
 		'registration_staff',
 		'distribution_staff',
+		'donation_staff',
 		'volunteer_coordinator'
 	];
 

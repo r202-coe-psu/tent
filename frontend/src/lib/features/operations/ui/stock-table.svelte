@@ -24,7 +24,7 @@
 	} from '$lib/features/catalog';
 	import { langState } from '$lib/states/i18n.svelte';
 	import { authStore } from '$lib/stores/auth.svelte';
-	import { isSystemAdmin, canDistributeStock } from '$lib/auth/roles';
+	import { isSystemAdmin, canChangeStock, canDistributeStock } from '$lib/auth/roles';
 	import { useShelters } from '$lib/features/shelters';
 	import { getShelterCode } from '$lib/db/shelter';
 	import * as Table from '$lib/components/ui/table/index.js';
@@ -101,6 +101,8 @@
 	const isSA = $derived(isSystemAdmin(roles));
 	const currentShelter = $derived(getShelterCode());
 	const canDistribute = $derived(canDistributeStock(roles, currentShelter));
+	// donation_staff sees stock read-only (CR-227): no receive / issue / adjust / count buttons.
+	const canChange = $derived(canChangeStock(roles, currentShelter));
 	let showOverall = $state(false);
 
 	const sheltersQuery = useShelters();
@@ -147,6 +149,7 @@
 	}
 
 	function openQuickAction(kind: QuickActionKind, itemId?: string) {
+		if (!canChange) return;
 		quickActionKind = kind;
 		quickActionItemId = itemId;
 		quickActionOpen = true;
@@ -347,6 +350,7 @@
 				expiryState: summary?.expiryState ?? 'none',
 				earliestExpiry: summary?.earliestExpiry ?? null,
 				storageKeys: summary?.storageKeys ?? [],
+				hasLotExpiry: summary?.hasLotExpiry ?? false,
 				lotCount: summary?.lotCount ?? 0,
 				usableNote: negative
 					? `ใช้ได้ ${negative.usable} (ไม่นับล็อตติดลบ ${negative.negative})`
@@ -410,52 +414,54 @@
 	<div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
 		<h2 class="text-lg font-bold text-slate-900 sm:text-xl">รายการพัสดุในคลัง</h2>
 		<div class="flex flex-wrap gap-2 md:justify-end">
-			<div class="hidden gap-2 md:flex">
-				<Button
-					type="button"
-					class="min-h-11 gap-2 rounded-lg bg-[#0A2647] px-4 text-sm font-semibold text-white hover:bg-[#051930]"
-					disabled={offline}
-					title={offline ? OFFLINE_HINT : undefined}
-					onclick={() => openQuickAction('receive')}
-				>
-					<ArrowDownToLine class="h-4 w-4" aria-hidden="true" />
-					รับเข้า
-				</Button>
-				<DisabledReason reason={distributeDisabledReason}>
+			{#if canChange}
+				<div class="hidden gap-2 md:flex">
+					<Button
+						type="button"
+						class="min-h-11 gap-2 rounded-lg bg-[#0A2647] px-4 text-sm font-semibold text-white hover:bg-[#051930]"
+						disabled={offline}
+						title={offline ? OFFLINE_HINT : undefined}
+						onclick={() => openQuickAction('receive')}
+					>
+						<ArrowDownToLine class="h-4 w-4" aria-hidden="true" />
+						รับเข้า
+					</Button>
+					<DisabledReason reason={distributeDisabledReason}>
+						<Button
+							type="button"
+							variant="outline"
+							class="min-h-11 gap-2 rounded-lg border-slate-300 px-4 text-sm font-semibold text-slate-800 shadow-2xs"
+							disabled={offline || !canDistribute}
+							onclick={() => openQuickAction('distribute')}
+						>
+							<ArrowUpFromLine class="h-4 w-4" aria-hidden="true" />
+							เบิกจ่าย
+						</Button>
+					</DisabledReason>
 					<Button
 						type="button"
 						variant="outline"
 						class="min-h-11 gap-2 rounded-lg border-slate-300 px-4 text-sm font-semibold text-slate-800 shadow-2xs"
-						disabled={offline || !canDistribute}
-						onclick={() => openQuickAction('distribute')}
+						disabled={offline}
+						title={offline ? OFFLINE_HINT : undefined}
+						onclick={() => openQuickAction('adjust')}
 					>
-						<ArrowUpFromLine class="h-4 w-4" aria-hidden="true" />
-						เบิกจ่าย
+						<SlidersHorizontal class="h-4 w-4" aria-hidden="true" />
+						ปรับยอด
 					</Button>
-				</DisabledReason>
-				<Button
-					type="button"
-					variant="outline"
-					class="min-h-11 gap-2 rounded-lg border-slate-300 px-4 text-sm font-semibold text-slate-800 shadow-2xs"
-					disabled={offline}
-					title={offline ? OFFLINE_HINT : undefined}
-					onclick={() => openQuickAction('adjust')}
-				>
-					<SlidersHorizontal class="h-4 w-4" aria-hidden="true" />
-					ปรับยอด
-				</Button>
-				<Button
-					type="button"
-					variant="outline"
-					class="min-h-11 gap-2 rounded-lg border-slate-300 px-4 text-sm font-semibold text-slate-800 shadow-2xs"
-					disabled={offline}
-					title={offline ? OFFLINE_HINT : undefined}
-					onclick={() => openQuickAction('count')}
-				>
-					<ClipboardList class="h-4 w-4" aria-hidden="true" />
-					ตรวจนับ
-				</Button>
-			</div>
+					<Button
+						type="button"
+						variant="outline"
+						class="min-h-11 gap-2 rounded-lg border-slate-300 px-4 text-sm font-semibold text-slate-800 shadow-2xs"
+						disabled={offline}
+						title={offline ? OFFLINE_HINT : undefined}
+						onclick={() => openQuickAction('count')}
+					>
+						<ClipboardList class="h-4 w-4" aria-hidden="true" />
+						ตรวจนับ
+					</Button>
+				</div>
+			{/if}
 			<a
 				href={resolve('/back-office/supply?tab=catalog&action=create' as '/back-office/supply')}
 				class="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg border border-teal-200 bg-teal-50 px-4 text-sm font-semibold text-teal-900 shadow-2xs transition-colors hover:bg-teal-100 focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none md:w-auto"
@@ -499,6 +505,7 @@
 			loc={urlState.loc}
 			sort={urlState.sort}
 			all={urlState.all}
+			status={urlState.status}
 			categories={uniqueCategories}
 			locations={uniqueLocations}
 			bind:showOverall
@@ -580,6 +587,7 @@
 								{readonly}
 								{offline}
 								{canDistribute}
+								{canChange}
 								onopen={(r) => openDetail(r._id)}
 								onreceive={(r) => openQuickAction('receive', r._id)}
 								ondistribute={(r) => openQuickAction('distribute', r._id)}
@@ -614,6 +622,7 @@
 									{readonly}
 									{offline}
 									{canDistribute}
+									{canChange}
 									onopen={(r) => openDetail(r._id)}
 									onreceive={(r) => openQuickAction('receive', r._id)}
 									ondistribute={(r) => openQuickAction('distribute', r._id)}
@@ -641,50 +650,52 @@
 </div>
 
 <!-- Movement buttons: bottom bar below md (md+ keeps them in the header) -->
-<div
-	class="fixed inset-x-0 bottom-0 z-30 grid grid-cols-4 gap-2 border-t border-slate-200 bg-white p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] md:hidden"
->
-	<Button
-		type="button"
-		class="min-h-12 rounded-lg bg-[#0A2647] text-sm font-semibold text-white hover:bg-[#051930]"
-		disabled={offline}
-		title={offline ? OFFLINE_HINT : undefined}
-		onclick={() => openQuickAction('receive')}
+{#if canChange}
+	<div
+		class="fixed inset-x-0 bottom-0 z-30 grid grid-cols-4 gap-2 border-t border-slate-200 bg-white p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] md:hidden"
 	>
-		รับเข้า
-	</Button>
-	<DisabledReason reason={distributeDisabledReason}>
+		<Button
+			type="button"
+			class="min-h-12 rounded-lg bg-[#0A2647] text-sm font-semibold text-white hover:bg-[#051930]"
+			disabled={offline}
+			title={offline ? OFFLINE_HINT : undefined}
+			onclick={() => openQuickAction('receive')}
+		>
+			รับเข้า
+		</Button>
+		<DisabledReason reason={distributeDisabledReason}>
+			<Button
+				type="button"
+				variant="outline"
+				class="min-h-12 rounded-lg border-slate-300 text-sm font-semibold text-slate-800"
+				disabled={offline || !canDistribute}
+				onclick={() => openQuickAction('distribute')}
+			>
+				เบิกจ่าย
+			</Button>
+		</DisabledReason>
 		<Button
 			type="button"
 			variant="outline"
 			class="min-h-12 rounded-lg border-slate-300 text-sm font-semibold text-slate-800"
-			disabled={offline || !canDistribute}
-			onclick={() => openQuickAction('distribute')}
+			disabled={offline}
+			title={offline ? OFFLINE_HINT : undefined}
+			onclick={() => openQuickAction('adjust')}
 		>
-			เบิกจ่าย
+			ปรับยอด
 		</Button>
-	</DisabledReason>
-	<Button
-		type="button"
-		variant="outline"
-		class="min-h-12 rounded-lg border-slate-300 text-sm font-semibold text-slate-800"
-		disabled={offline}
-		title={offline ? OFFLINE_HINT : undefined}
-		onclick={() => openQuickAction('adjust')}
-	>
-		ปรับยอด
-	</Button>
-	<Button
-		type="button"
-		variant="outline"
-		class="min-h-12 rounded-lg border-slate-300 text-sm font-semibold text-slate-800"
-		disabled={offline}
-		title={offline ? OFFLINE_HINT : undefined}
-		onclick={() => openQuickAction('count')}
-	>
-		ตรวจนับ
-	</Button>
-</div>
+		<Button
+			type="button"
+			variant="outline"
+			class="min-h-12 rounded-lg border-slate-300 text-sm font-semibold text-slate-800"
+			disabled={offline}
+			title={offline ? OFFLINE_HINT : undefined}
+			onclick={() => openQuickAction('count')}
+		>
+			ตรวจนับ
+		</Button>
+	</div>
+{/if}
 
 <ItemDetailSheet
 	bind:open={detailOpen}
@@ -694,6 +705,7 @@
 	shelterCode={getShelterCode()}
 	{offline}
 	{canDistribute}
+	{canChange}
 	onaction={(kind) => openQuickAction(kind, selectedItemId ?? undefined)}
 />
 

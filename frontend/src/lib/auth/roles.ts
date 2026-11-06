@@ -22,6 +22,8 @@ export const VOLUNTEER_COORDINATOR = 'volunteer_coordinator';
 export const SECURITY_OFFICER = 'security_officer';
 export const FACILITY_STAFF = 'facility_staff';
 export const DISTRIBUTION_STAFF = 'distribution_staff';
+/** Runs the donation intake of one shelter; sees stock read-only, cannot adjust or issue it (CR-227). */
+export const DONATION_STAFF = 'donation_staff';
 /** Looks after the kiosk devices of one shelter (draft CR scanner back-office FR-SBO-28). */
 export const KIOSK_STAFF = 'kiosk_staff';
 /** Manages the kiosk banners of one shelter, but not its kiosk devices (issue #930). */
@@ -42,6 +44,7 @@ export const STAFF_CAPABILITIES = [
 	SECURITY_OFFICER,
 	FACILITY_STAFF,
 	DISTRIBUTION_STAFF,
+	DONATION_STAFF,
 	KIOSK_STAFF,
 	PR_STAFF
 ] as const;
@@ -60,6 +63,7 @@ export const COORDINATOR_GRANTABLE_CAPABILITIES = [
 	SUPPLY_COORDINATOR,
 	WAREHOUSE_STAFF,
 	DISTRIBUTION_STAFF,
+	DONATION_STAFF,
 	PR_STAFF,
 	FACILITY_STAFF,
 	SECURITY_OFFICER
@@ -108,6 +112,27 @@ export function parseCompoundCapability(role: string): { code: string; capabilit
 /** Extract all shelter codes from a role list (`["shelter:SH001", "shelter:SH002"]` → `["SH001", "SH002"]`). */
 export function shelterCodesFromRoles(roles: readonly string[]): string[] {
 	return roles.filter((r) => r.startsWith('shelter:')).map((r) => r.slice('shelter:'.length));
+}
+
+/**
+ * `_users.edge_shelters` (CR-171): every shelter code the user has ever held `shelter:{code}` for.
+ * Append-only — existing values (deduped, order kept, non-strings ignored) first, then any code
+ * from `roles` not yet present. Drives edge `_users` replication only; grants no access.
+ */
+export function mergeEdgeShelters(
+	existing: readonly string[] | null | undefined,
+	roles: readonly string[]
+): string[] {
+	const out: string[] = [];
+	const seen = new Set<string>();
+	const push = (code: unknown) => {
+		if (typeof code !== 'string' || seen.has(code)) return;
+		seen.add(code);
+		out.push(code);
+	};
+	for (const code of Array.isArray(existing) ? existing : []) push(code);
+	for (const code of shelterCodesFromRoles(roles)) push(code);
+	return out;
 }
 
 /** Extract the first shelter code from a role list, or null. Prefer {@link shelterCodesFromRoles} for multi. */
@@ -504,6 +529,36 @@ export function canAccessWarehouse(roles: readonly string[], shelterCode?: strin
 	return canAccessManagerPages(roles, shelterCode) || isWarehouseStaff(roles, shelterCode);
 }
 
+/** True when the role list includes `donation_staff` (any or scoped shelter; CR-227). */
+export function isDonationStaff(roles: readonly string[], shelterCode?: string | null): boolean {
+	return hasStaffCapability(roles, DONATION_STAFF, shelterCode);
+}
+
+/**
+ * Donation intake (`/back-office/stock-donations`, menu "บริจาค"): everyone who reaches the
+ * warehouse pages, plus `donation_staff` (CR-227). Deliberately separate from
+ * {@link canAccessWarehouse} so DON does not open distribution, tickets or transfer.
+ */
+export function canAccessDonations(roles: readonly string[], shelterCode?: string | null): boolean {
+	return canAccessWarehouse(roles, shelterCode) || isDonationStaff(roles, shelterCode);
+}
+
+/**
+ * Read-only stock / supply pages (`/back-office/supply`, menu "คลัง"): the warehouse side plus
+ * `donation_staff`, who sees stock but cannot change it (CR-227).
+ */
+export function canViewSupply(roles: readonly string[], shelterCode?: string | null): boolean {
+	return canAccessWarehouse(roles, shelterCode) || isDonationStaff(roles, shelterCode);
+}
+
+/**
+ * True when the user may change stock by hand (receive, adjust, count, transfer) in the shelter:
+ * the warehouse side only. `donation_staff` receives through the donation flow, not these.
+ */
+export function canChangeStock(roles: readonly string[], shelterCode?: string | null): boolean {
+	return canAccessWarehouse(roles, shelterCode);
+}
+
 /** `requireKitchen`: SA, SM, or kitchen_staff of the shelter. */
 export function canAccessKitchen(roles: readonly string[], shelterCode?: string | null): boolean {
 	return (
@@ -575,6 +630,8 @@ export const STAFF_CAPABILITY_DESCRIPTIONS: Record<StaffCapability, string> = {
 	warehouse_staff: 'ดูแลคลังสินค้า รับ-จ่ายวัสดุ และบันทึกสต็อกภายในศูนย์',
 	distribution_staff:
 		'ปฏิบัติงานจุดแจกจ่ายอาหารและสิ่งของ (Station 4) ภายในศูนย์ของตนเอง: รับของจากคลัง, สแกนส่งมอบให้ผู้ประสบภัย, ปิดกะ และส่งคืนของเหลือ',
+	donation_staff:
+		'ดูแลงานบริจาคของศูนย์ตัวเอง: รับของบริจาค (หน้าศูนย์/walk-in), อนุมัติ ปฏิเสธ ส่งต่อ ปิดรายการ, ติดต่อผู้บริจาค, สร้างแคมเปญบริจาคและสินค้าในแคตตาล็อก — ดูคลังได้อย่างเดียว ปรับยอด เบิกจ่าย โอนย้ายไม่ได้',
 	kiosk_staff:
 		'ดูแลตู้ Kiosk ของศูนย์ตัวเอง: เพิ่มเครื่อง, แก้ชื่อและจุดบริการ, เปิด/ปิด/ลบเครื่อง, ตั้งหรือดู PIN เจ้าหน้าที่ของเครื่อง, และจัดการแบนเนอร์ที่แสดงบนตู้',
 	pr_staff:
@@ -604,6 +661,7 @@ const STAFF_CAPABILITY_LABELS: Record<StaffCapability, string> = {
 	security_officer: 'เจ้าหน้าที่รักษาความปลอดภัย',
 	facility_staff: 'เจ้าหน้าที่ฝ่ายอาคารสถานที่',
 	distribution_staff: 'เจ้าหน้าที่แจกจ่าย',
+	donation_staff: 'เจ้าหน้าที่รับบริจาค',
 	kiosk_staff: 'เจ้าหน้าที่ดูแลตู้ Kiosk',
 	pr_staff: 'เจ้าหน้าที่ประชาสัมพันธ์'
 };

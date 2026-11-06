@@ -22,6 +22,7 @@ export type PortalPreviewRole =
 	| 'security_officer'
 	| 'facility_staff'
 	| 'distribution_staff'
+	| 'donation_staff'
 	| 'kiosk_staff'
 	| 'pr_staff';
 
@@ -39,6 +40,7 @@ export const PORTAL_PREVIEW_ROLES: readonly { value: PortalPreviewRole; label: s
 	{ value: 'security_officer', label: 'รักษาความปลอดภัย' },
 	{ value: 'facility_staff', label: 'อาคารสถานที่' },
 	{ value: 'distribution_staff', label: 'จุดแจกจ่าย' },
+	{ value: 'donation_staff', label: 'รับบริจาค' },
 	{ value: 'kiosk_staff', label: 'ดูแลตู้ Kiosk' },
 	{ value: 'pr_staff', label: 'ประชาสัมพันธ์' }
 ];
