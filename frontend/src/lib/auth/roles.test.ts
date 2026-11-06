@@ -24,6 +24,8 @@ import {
 	DEVICE_VIEWER_CAPABILITIES,
 	SCANNER_MANAGER_CAPABILITIES,
 	canDistributeStock,
+	canEditSopOverride,
+	canEditStockParameters,
 	capabilitiesForShelter,
 	compoundCapabilityRole,
 	hasCapabilityInShelter,
@@ -753,5 +755,47 @@ describe('page-guard predicates shared by guards and sidebar (#842)', () => {
 		for (const cap of everyCap) expect(fn(sh(cap), 'A')).toBe(allowed.includes(cap));
 		for (const cap of everyCap) expect(fn(sh(cap), 'B')).toBe(false);
 		expect(fn([], 'A')).toBe(false);
+	});
+});
+
+describe('stock parameter / SOP override edit permissions (CR-235)', () => {
+	const sh1 = (cap: string) => ['shelter:SH001', `SH001:${cap}`];
+
+	it('lets WH and SM of the shelter edit stock parameters, and SA anywhere', () => {
+		for (const cap of ['warehouse_staff', 'shelter_manager']) {
+			expect(canEditStockParameters(sh1(cap), 'SH001')).toBe(true);
+		}
+		expect(canEditStockParameters(['system_admin'], 'SH001')).toBe(true);
+	});
+
+	it('does not let another shelter or other roles edit stock parameters', () => {
+		for (const cap of ['warehouse_staff', 'shelter_manager']) {
+			expect(canEditStockParameters(sh1(cap), 'SH002')).toBe(false);
+		}
+		for (const cap of [
+			'supply_coordinator',
+			'kitchen_staff',
+			'donation_staff',
+			'distribution_staff',
+			'volunteer_coordinator'
+		]) {
+			expect(canEditStockParameters(sh1(cap), 'SH001')).toBe(false);
+		}
+		expect(canEditStockParameters([], 'SH001')).toBe(false);
+	});
+
+	it('does not treat a missing shelter as "any shelter"', () => {
+		expect(canEditStockParameters(sh1('warehouse_staff'), '')).toBe(false);
+		expect(canEditStockParameters(sh1('shelter_manager'), null)).toBe(false);
+		expect(canEditStockParameters(['system_admin'], '')).toBe(true);
+	});
+
+	it('keeps sop_override to SA and the shelter manager (WH/SC cannot edit it)', () => {
+		expect(canEditSopOverride(sh1('shelter_manager'), 'SH001')).toBe(true);
+		expect(canEditSopOverride(['system_admin'], 'SH001')).toBe(true);
+		expect(canEditSopOverride(sh1('warehouse_staff'), 'SH001')).toBe(false);
+		expect(canEditSopOverride(sh1('supply_coordinator'), 'SH001')).toBe(false);
+		expect(canEditSopOverride(sh1('shelter_manager'), 'SH002')).toBe(false);
+		expect(canEditSopOverride(sh1('shelter_manager'), '')).toBe(false);
 	});
 });

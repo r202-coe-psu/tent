@@ -18,6 +18,8 @@
 	import { headcountsFromAgeGroups } from '../domain/food-sphere-calc';
 	import { useDashboardDemographics, useDashboardOccupancy } from '$lib/features/dashboard';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
+	import { authStore } from '$lib/stores/auth.svelte';
+	import { canEditStockParameters, isSystemAdmin } from '$lib/auth/roles';
 	import {
 		buildFoodSphereTable,
 		type FoodSphereTableGroup,
@@ -26,6 +28,8 @@
 	import type { DocAlertStatus } from '../domain/replenishment-calc';
 	import DocStatusBadge from './doc-status-badge.svelte';
 	import PeopleTotalTooltip from './people-total-tooltip.svelte';
+	import StockParametersSheet from './stock-parameters-sheet.svelte';
+	import RequirementGroupEditSheet from './requirement-group-edit-sheet.svelte';
 	import { qtyGt } from '$lib/utils/qty';
 
 	// Icons
@@ -43,6 +47,7 @@
 	import Boxes from '@lucide/svelte/icons/boxes';
 	import RefreshCw from '@lucide/svelte/icons/refresh-cw';
 	import ShieldAlert from '@lucide/svelte/icons/shield-alert';
+	import Settings2 from '@lucide/svelte/icons/settings-2';
 
 	let {
 		occupancy = 0,
@@ -53,6 +58,20 @@
 	} = $props();
 
 	const cleanShelterCode = $derived(shelterCode || shelterStore.selectedShelterCode || '');
+
+	// Stock parameter overrides: SA / SM / WH of this shelter (CR-235). Buttons are hidden
+	// otherwise; CouchDB enforces the same rule.
+	const roles = $derived(authStore.user?.roles ?? []);
+	const isSA = $derived(isSystemAdmin(roles));
+	const canEditParams = $derived(canEditStockParameters(roles, cleanShelterCode));
+	let paramsSheetOpen = $state(false);
+	let groupSheetOpen = $state(false);
+	let editingGroupId = $state('');
+
+	function openGroupEditor(groupId: string) {
+		editingGroupId = groupId;
+		groupSheetOpen = true;
+	}
 
 	// ─── Queries ──────────────────────────────────────────────────────────────
 	const itemMastersQuery = useItemMasters();
@@ -475,6 +494,17 @@
 
 				<!-- Action Controls & Expand/Collapse -->
 				<div class="flex items-center gap-2">
+					{#if canEditParams}
+						<Button
+							variant="default"
+							size="sm"
+							onclick={() => (paramsSheetOpen = true)}
+							class="flex flex-1 items-center gap-1.5 rounded-xl text-xs font-medium sm:flex-initial"
+						>
+							<Settings2 class="h-3.5 w-3.5" />
+							ตั้งค่าพารามิเตอร์
+						</Button>
+					{/if}
 					<Button
 						variant="outline"
 						size="sm"
@@ -593,47 +623,61 @@
 					<div
 						class="overflow-hidden rounded-xl border border-border/70 bg-card shadow-sm transition-all duration-200 sm:rounded-2xl"
 					>
-						<!-- Group Accordion Header -->
-						<button
-							type="button"
-							onclick={() => toggleGroup(group.id)}
-							class="flex w-full items-center justify-between gap-2.5 bg-muted/40 px-3.5 py-3 text-left transition-colors hover:bg-muted/60 sm:px-5 sm:py-3.5"
-						>
-							<div class="flex min-w-0 items-center gap-2.5 sm:gap-3">
-								<div
-									class="shrink-0 rounded-lg border border-border/60 bg-background/80 p-1 text-muted-foreground shadow-sm"
-								>
-									{#if isExpanded}
-										<ChevronDown class="h-4 w-4 text-primary" />
-									{:else}
-										<ChevronRight class="h-4 w-4" />
-									{/if}
-								</div>
-
-								<div class="flex min-w-0 flex-wrap items-center gap-1.5 sm:gap-2">
-									<span class="text-sm font-bold break-words text-foreground sm:text-base">
-										{group.name}
-									</span>
-									<span
-										class="shrink-0 rounded-full border border-primary/20 bg-primary/10 px-2 py-0.5 text-[11px] font-semibold text-primary sm:text-xs"
+						<!-- Group Accordion Header (edit button is a sibling: no button inside a button) -->
+						<div class="flex items-center bg-muted/40 transition-colors hover:bg-muted/60">
+							<button
+								type="button"
+								onclick={() => toggleGroup(group.id)}
+								class="flex min-w-0 flex-1 items-center justify-between gap-2.5 px-3.5 py-3 text-left sm:px-5 sm:py-3.5"
+							>
+								<div class="flex min-w-0 items-center gap-2.5 sm:gap-3">
+									<div
+										class="shrink-0 rounded-lg border border-border/60 bg-background/80 p-1 text-muted-foreground shadow-sm"
 									>
-										{group.items.length} รายการ
-									</span>
-									{#if group.totalGroupDemand > 0}
-										<span
-											class="shrink-0 rounded-full border border-border/60 bg-background/80 px-2 py-0.5 font-mono text-[11px] font-medium text-muted-foreground sm:text-xs"
-										>
-											เป้าหมาย: {group.totalGroupDemand.toLocaleString()}
-											{formatUnit(group.standardUom, units, langState.current)}/วัน
-										</span>
-									{/if}
-								</div>
-							</div>
+										{#if isExpanded}
+											<ChevronDown class="h-4 w-4 text-primary" />
+										{:else}
+											<ChevronRight class="h-4 w-4" />
+										{/if}
+									</div>
 
-							<div class="hidden shrink-0 text-xs font-semibold text-muted-foreground sm:block">
-								{isExpanded ? 'คลิกเพื่อยุบ' : 'คลิกเพื่อเปิดดู'}
-							</div>
-						</button>
+									<div class="flex min-w-0 flex-wrap items-center gap-1.5 sm:gap-2">
+										<span class="text-sm font-bold break-words text-foreground sm:text-base">
+											{group.name}
+										</span>
+										<span
+											class="shrink-0 rounded-full border border-primary/20 bg-primary/10 px-2 py-0.5 text-[11px] font-semibold text-primary sm:text-xs"
+										>
+											{group.items.length} รายการ
+										</span>
+										{#if group.totalGroupDemand > 0}
+											<span
+												class="shrink-0 rounded-full border border-border/60 bg-background/80 px-2 py-0.5 font-mono text-[11px] font-medium text-muted-foreground sm:text-xs"
+											>
+												เป้าหมาย: {group.totalGroupDemand.toLocaleString()}
+												{formatUnit(group.standardUom, units, langState.current)}/วัน
+											</span>
+										{/if}
+									</div>
+								</div>
+
+								<div class="hidden shrink-0 text-xs font-semibold text-muted-foreground sm:block">
+									{isExpanded ? 'คลิกเพื่อยุบ' : 'คลิกเพื่อเปิดดู'}
+								</div>
+							</button>
+							{#if canEditParams && group.id !== 'GENERAL'}
+								<Button
+									variant="outline"
+									size="sm"
+									onclick={() => openGroupEditor(group.id)}
+									aria-label={`แก้ไขกลุ่ม ${group.name}`}
+									class="mr-3 shrink-0 gap-1 rounded-lg text-xs sm:mr-5"
+								>
+									<Settings2 class="h-3.5 w-3.5" />
+									<span class="hidden sm:inline">แก้ไข</span>
+								</Button>
+							{/if}
+						</div>
 
 						<!-- Rows inside Accordion -->
 						{#if isExpanded}
@@ -923,3 +967,12 @@
 		{/if}
 	</div>
 </div>
+
+{#if canEditParams && cleanShelterCode}
+	<StockParametersSheet bind:open={paramsSheetOpen} shelterCode={cleanShelterCode} {isSA} canEdit />
+	<RequirementGroupEditSheet
+		bind:open={groupSheetOpen}
+		shelterCode={cleanShelterCode}
+		groupId={editingGroupId}
+	/>
+{/if}
