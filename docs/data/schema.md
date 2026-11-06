@@ -2639,14 +2639,14 @@ VDU ไม่ตรวจ field ของ doc นี้ (เงื่อนไ�
 
 | Dimension | Codes                                                                                                                                                                            |
 | --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `count`   | `piece`, `unit`, `item`, `set`, `pair`, `box`, `pack`, `bag`, `sachet`, `bottle`, `can`, `tablet`, `bar`, `tube`, `roll`, `sheet`, `cloth`, `bundle`, `egg`, `fruit`, `cylinder` |
+| `count`   | `piece`, `unit`, `item`, `set`, `pair`, `box`, `pack`, `bag`, `sachet`, `bottle`, `can`, `tablet`, `bar`, `tube`, `roll`, `sheet`, `cloth`, `bundle`, `egg`, `fruit`, `ball`, `cylinder` |
 | `mass`    | `g`, `kg`, `mg`, `mcg`                                                                                                                                                           |
 | `volume`  | `gallon`, `ml`, `l`                                                                                                                                                              |
 | `length`  | `m`                                                                                                                                                                              |
 | `energy`  | `kcal`                                                                                                                                                                           |
 
-รวม 30 หน่วย (`mg`, `mcg`, `kcal` เพิ่ม 2026-09-24 เพื่อรองรับหน่วยของ `requirement_group.standard_uom`). Seeder ต้องทำงานแบบ idempotent: สร้างเอกสารที่หายไป และบังคับ `code`, `dimension`,
-`schema_v: 1` และ `is_protected: true` สำหรับเอกสารระบบ โดยคง label ที่ผู้ดูแลแก้ไขไว้.
+รวม 31 หน่วย (`mg`, `mcg`, `kcal` เพิ่ม 2026-09-24 เพื่อรองรับหน่วยของ `requirement_group.standard_uom`; `ball` เพิ่มต่อจาก `fruit` ด้วย CR-125 Amendment A1 — `sort_order` 21, `gallon`..`kcal` เลื่อนเป็น 22–31). Seeder ต้องทำงานแบบ idempotent: สร้างเอกสารที่หายไป และบังคับ `code`, `dimension`,
+`schema_v: 1` และ `is_protected: true` สำหรับเอกสารระบบ โดยคง label ที่ผู้ดูแลแก้ไขไว้ และคง `sort_order` เดิมเว้นแต่พบค่าซ้ำ (ถ้าซ้ำ เขียน `sort_order` ของทุกหน่วย protected ตามนิยาม — CR-125 FR-A1-4).
 
 **Migration/compatibility (CR-125):** เพิ่ม doc type ใหม่แบบ additive ที่ `schema_v: 1`; ไม่ต้อง bump
 `schema_v` ของ `item_master` หรือย้ายข้อมูลเดิม. ค่า `item_master.base_unit` เดิมที่เป็นภาษาไทยยังคงอ่านได้ตลอดอายุระบบ
