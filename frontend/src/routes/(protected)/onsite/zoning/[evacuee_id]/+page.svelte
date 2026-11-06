@@ -376,18 +376,18 @@
 		<Card.Root class="border-border p-5 shadow-sm">
 			<div class="mb-2 space-y-2">
 				<div class="flex flex-wrap items-center gap-2">
-					<p class="text-lg font-bold">{formatPersonName(evacuee)}</p>
+					<p class="min-w-0 text-lg font-bold break-words">{formatPersonName(evacuee)}</p>
 					{#if isAwaitingConfirm}
 						<Badge
 							variant="outline"
-							class="border-amber-500/40 bg-amber-500/15 text-amber-800 dark:text-amber-200"
+							class="h-auto max-w-full min-w-0 border-amber-500/40 bg-amber-500/15 py-0.5 text-left leading-tight break-words whitespace-normal text-amber-800 dark:text-amber-200"
 						>
 							{t.badgeAwaiting(zoneLabel(currentZone, shelterZones))}
 						</Badge>
 					{:else if evacuee.current_stay.status === 'room_confirmed'}
 						<Badge
 							variant="outline"
-							class="border-emerald-500/40 bg-emerald-500/15 text-emerald-800 dark:text-emerald-200"
+							class="h-auto max-w-full min-w-0 border-emerald-500/40 bg-emerald-500/15 py-0.5 text-left leading-tight break-words whitespace-normal text-emerald-800 dark:text-emerald-200"
 						>
 							{t.badgeConfirmed(zoneLabel(currentZone, shelterZones))}
 						</Badge>
@@ -417,7 +417,7 @@
 						{#if latestScreening?.symptoms && latestScreening.symptoms.length > 0}
 							<Badge
 								variant="outline"
-								class="border-red-500/40 bg-red-500/15 text-red-800 dark:text-red-200"
+								class="h-auto max-w-full min-w-0 border-red-500/40 bg-red-500/15 py-0.5 text-left leading-tight break-words whitespace-normal text-red-800 dark:text-red-200"
 							>
 								{t.ewarBadge(latestScreening.symptoms.length)}
 							</Badge>
@@ -425,7 +425,7 @@
 						{#if latestScreening?.track === 'fast_track'}
 							<Badge
 								variant="outline"
-								class="border-blue-500/40 bg-blue-500/15 text-blue-800 dark:text-blue-200"
+								class="h-auto max-w-full min-w-0 border-blue-500/40 bg-blue-500/15 py-0.5 text-left leading-tight break-words whitespace-normal text-blue-800 dark:text-blue-200"
 							>
 								{t.fastTrack}
 							</Badge>
@@ -439,7 +439,10 @@
 					<div class="flex flex-wrap items-center gap-1.5 pt-1">
 						<span class="text-xs font-medium text-muted-foreground">{t.vulnerableLabel}</span>
 						{#each evacuee.vulnerable_groups as group (group)}
-							<Badge variant="outline" class="border-primary/30 bg-primary/10 text-primary">
+							<Badge
+								variant="outline"
+								class="h-auto max-w-full min-w-0 border-primary/30 bg-primary/10 py-0.5 text-left leading-tight break-words whitespace-normal text-primary"
+							>
 								{getSpecialNeedLabel(group)}
 							</Badge>
 						{/each}
@@ -449,7 +452,10 @@
 					<div class="flex flex-wrap items-center gap-1.5 pt-1">
 						<span class="text-xs font-medium text-muted-foreground">{t.chronicLabel}</span>
 						{#each chronicDiseaseLabels as label (label)}
-							<Badge variant="outline" class="border-slate-300 bg-slate-50 text-slate-800">
+							<Badge
+								variant="outline"
+								class="h-auto max-w-full min-w-0 border-slate-300 bg-slate-50 py-0.5 text-left leading-tight break-words whitespace-normal text-slate-800"
+							>
 								{label}
 							</Badge>
 						{/each}
@@ -461,7 +467,7 @@
 						{#each evacuee.special_needs as need (need)}
 							<Badge
 								variant="outline"
-								class="border-amber-500/30 bg-amber-500/10 text-amber-800 dark:text-amber-200"
+								class="h-auto max-w-full min-w-0 border-amber-500/30 bg-amber-500/10 py-0.5 text-left leading-tight break-words whitespace-normal text-amber-800 dark:text-amber-200"
 							>
 								{getSpecialNeedLabel(need)}
 							</Badge>
@@ -497,7 +503,7 @@
 											<li>
 												<Badge
 													variant="outline"
-													class="border-red-500/40 bg-red-500/15 text-red-800 dark:text-red-200"
+													class="h-auto max-w-full min-w-0 border-red-500/40 bg-red-500/15 py-0.5 text-left leading-tight break-words whitespace-normal text-red-800 dark:text-red-200"
 												>
 													{ewarSymptomLabel(symptom, langState.current)}
 												</Badge>
@@ -517,7 +523,9 @@
 						</div>
 						<div>
 							<dt class="text-xs text-muted-foreground">{t.notesLabel}</dt>
-							<dd class="mt-1 whitespace-pre-line">{latestScreening.notes?.trim() || '—'}</dd>
+							<dd class="mt-1 break-words whitespace-pre-line">
+								{latestScreening.notes?.trim() || '—'}
+							</dd>
 						</div>
 					</dl>
 				</section>
@@ -533,7 +541,7 @@
 						{t.notReportedBody}
 					</p>
 					<Button
-						class="mt-2"
+						class="mt-2 h-auto max-w-full py-1.5 text-left leading-tight whitespace-normal"
 						size="sm"
 						variant="outline"
 						href={resolve(`/onsite/people/${evacuee._id}/report-in`)}
@@ -551,7 +559,7 @@
 						{t.notScreenedBody}
 					</p>
 					<Button
-						class="mt-2"
+						class="mt-2 h-auto max-w-full py-1.5 text-left leading-tight whitespace-normal"
 						size="sm"
 						variant="outline"
 						href={resolve(`/onsite/medical-screening/${evacuee._id}`)}
@@ -610,7 +618,11 @@
 					class="mt-6 flex flex-col gap-2 border-t border-slate-200/80 pt-4 sm:flex-row sm:flex-wrap sm:items-center"
 				>
 					{#if canConfirmArrival}
-						<Button class="w-full sm:w-auto" onclick={handleConfirmArrival} disabled={submitting}>
+						<Button
+							class="h-auto min-h-9 w-full py-2 leading-tight whitespace-normal sm:w-auto"
+							onclick={handleConfirmArrival}
+							disabled={submitting}
+						>
 							{#if submitting}
 								<Loader2 class="mr-2 size-4 animate-spin" />
 							{/if}
@@ -619,7 +631,7 @@
 						{#if evacuee.household_id}
 							<Button
 								variant="secondary"
-								class="w-full sm:w-auto"
+								class="h-auto min-h-9 w-full py-2 leading-tight whitespace-normal sm:w-auto"
 								onclick={handleConfirmHouseholdArrival}
 								disabled={submitting}
 							>
@@ -630,7 +642,7 @@
 					{#if showZoneEditor}
 						<Button
 							variant={isAwaitingConfirm ? 'outline' : 'default'}
-							class="w-full sm:w-auto"
+							class="h-auto min-h-9 w-full py-2 leading-tight whitespace-normal sm:w-auto"
 							onclick={handleSubmit}
 							disabled={submitting || !canSubmitZone}
 						>
@@ -642,7 +654,7 @@
 					{:else}
 						<Button
 							variant="outline"
-							class="w-full sm:w-auto"
+							class="h-auto min-h-9 w-full py-2 leading-tight whitespace-normal sm:w-auto"
 							onclick={() => (rezoneOpenFor = evacueeId)}
 							disabled={submitting}
 						>

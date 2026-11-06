@@ -216,10 +216,18 @@
 				{t.disabledDesc}
 			</p>
 			<div class="mt-5 flex flex-col gap-2">
-				<Button variant="default" class="w-full" onclick={() => goto(resolve('/portal'))}>
+				<Button
+					variant="default"
+					class="h-auto min-h-9 w-full py-2 leading-tight whitespace-normal"
+					onclick={() => goto(resolve('/portal'))}
+				>
 					{t.backToPortal}
 				</Button>
-				<Button variant="outline" class="w-full" onclick={() => goto(resolve('/onsite/zoning'))}>
+				<Button
+					variant="outline"
+					class="h-auto min-h-9 w-full py-2 leading-tight whitespace-normal"
+					onclick={() => goto(resolve('/onsite/zoning'))}
+				>
 					{t.goToStation3}
 				</Button>
 			</div>
@@ -228,15 +236,15 @@
 {:else}
 	<div class="mx-auto flex w-full max-w-7xl flex-col gap-6 px-4 py-6 md:px-6">
 		<div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-			<div class="flex items-center gap-3">
+			<div class="flex min-w-0 items-center gap-3">
 				<a
 					href={resolve('/portal')}
-					class="inline-flex h-9 w-9 items-center justify-center rounded-full border border-border bg-card text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+					class="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-border bg-card text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
 					title={t.backToPortal}
 				>
 					<ArrowLeft class="size-4" />
 				</a>
-				<div>
+				<div class="min-w-0">
 					<div class="flex items-center gap-2.5">
 						<div
 							class="flex size-8 items-center justify-center rounded-lg bg-station-2-subtle text-station-2"
@@ -295,8 +303,8 @@
 					{/if}
 				</div>
 
-				<div class="flex items-center gap-2">
-					<div class="relative min-w-[220px]">
+				<div class="flex flex-wrap items-center gap-2">
+					<div class="relative w-full min-w-0 sm:w-auto sm:min-w-[220px]">
 						<Scan
 							class="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
 						/>
@@ -318,7 +326,7 @@
 						size="default"
 						onclick={() => handleCodeInput(barcodeInput)}
 						disabled={!barcodeInput.trim()}
-						class="h-10"
+						class="h-10 shrink-0"
 					>
 						{t.confirm}
 					</Button>
@@ -338,10 +346,10 @@
 		{#snippet queueTable()}
 			<Card.Root class="overflow-hidden border-border bg-card shadow-sm">
 				<Card.Header class="border-b bg-muted/20 px-5 py-3.5">
-					<div class="flex items-center justify-between">
-						<div class="flex items-center gap-2">
+					<div class="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+						<div class="flex min-w-0 flex-wrap items-center gap-2">
 							<Users class="size-4 text-emerald-600 dark:text-emerald-400" />
-							<Card.Title class="text-base font-semibold">
+							<Card.Title class="min-w-0 text-base font-semibold break-words">
 								{activeTab === 'pending' ? t.queueTitlePending : t.queueTitleScreened}
 							</Card.Title>
 							<Badge variant="secondary" class="text-xs">
@@ -482,12 +490,18 @@
 		{/snippet}
 
 		<Tabs.Root bind:value={activeTab} class="gap-4">
-			<Tabs.List class="grid w-full max-w-md grid-cols-2">
-				<Tabs.Trigger value="pending" class="gap-1.5">
+			<Tabs.List class="grid h-auto w-full max-w-md grid-cols-2">
+				<Tabs.Trigger
+					value="pending"
+					class="min-w-0 flex-wrap gap-1.5 leading-tight whitespace-normal"
+				>
 					{t.tabPending}
 					<Badge variant="secondary" class="text-[10px]">{pendingEvacuees.length}</Badge>
 				</Tabs.Trigger>
-				<Tabs.Trigger value="screened" class="gap-1.5">
+				<Tabs.Trigger
+					value="screened"
+					class="min-w-0 flex-wrap gap-1.5 leading-tight whitespace-normal"
+				>
 					{t.tabScreened}
 					<Badge variant="secondary" class="text-[10px]">{screenedEvacuees.length}</Badge>
 				</Tabs.Trigger>

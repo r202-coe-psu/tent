@@ -99,7 +99,7 @@
 </script>
 
 <span
-	class="inline-flex items-center gap-1.5 rounded-full border font-semibold transition-colors {style.badgeClass} {size ===
+	class="inline-flex max-w-full items-center gap-1.5 rounded-full border font-semibold transition-colors {style.badgeClass} {size ===
 	'sm'
 		? 'px-2.5 py-0.5 text-xs'
 		: 'px-3 py-1 text-sm'} {className}"
@@ -107,5 +107,5 @@
 	{#if showIcon}
 		<Icon class="{size === 'sm' ? 'size-3.5' : 'size-4'} {style.iconClass} shrink-0" />
 	{/if}
-	<span>{displayLabel}</span>
+	<span class="min-w-0 break-words">{displayLabel}</span>
 </span>

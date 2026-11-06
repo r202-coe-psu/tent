@@ -198,8 +198,8 @@
 		<!-- Section 1: Health history, care track & general symptoms -->
 		<div class="space-y-4 rounded-2xl border border-border/80 bg-card p-4 shadow-xs">
 			<div class="flex items-center gap-2 border-b border-border/60 pb-2.5">
-				<HeartPulse class="size-4 text-primary" />
-				<div>
+				<HeartPulse class="size-4 shrink-0 text-primary" />
+				<div class="min-w-0">
 					<h3 class="text-sm font-bold text-foreground">
 						{t.section1Title}
 					</h3>
@@ -224,8 +224,8 @@
 		<!-- Section 2: Vulnerable Groups (editable checkboxes) -->
 		<div class="space-y-3 rounded-2xl border border-border/80 bg-card p-4 shadow-xs">
 			<div class="flex items-center gap-2 border-b border-border/60 pb-2.5">
-				<ShieldAlert class="size-4 text-primary" />
-				<div>
+				<ShieldAlert class="size-4 shrink-0 text-primary" />
+				<div class="min-w-0">
 					<h3 class="text-sm font-bold text-foreground">{t.section2Title}</h3>
 					<p class="text-xs text-muted-foreground">
 						{t.section2Desc}
@@ -245,8 +245,8 @@
 		<!-- Section 3: Special needs (same `special_needs` field as Station 1) -->
 		<div class="space-y-3 rounded-2xl border border-border/80 bg-card p-4 shadow-xs">
 			<div class="flex items-center gap-2 border-b border-border/60 pb-2.5">
-				<HeartHandshake class="size-4 text-primary" />
-				<div>
+				<HeartHandshake class="size-4 shrink-0 text-primary" />
+				<div class="min-w-0">
 					<h3 class="text-sm font-bold text-foreground">{t.section3Title}</h3>
 					<p class="text-xs text-muted-foreground">
 						{t.section3Desc}
@@ -260,8 +260,8 @@
 		<!-- Section 4: EWAR surveillance symptoms (checkboxes) -->
 		<div class="space-y-3 rounded-2xl border border-border/80 bg-card p-4 shadow-xs">
 			<div class="flex items-center gap-2 border-b border-border/60 pb-2.5">
-				<AlertCircle class="size-4 text-primary" />
-				<div>
+				<AlertCircle class="size-4 shrink-0 text-primary" />
+				<div class="min-w-0">
 					<h3 class="text-sm font-bold text-foreground">
 						{t.section4Title}
 					</h3>

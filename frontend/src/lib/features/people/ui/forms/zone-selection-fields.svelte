@@ -169,7 +169,7 @@
 					<div class="min-w-0">
 						<div class="flex flex-wrap items-center gap-x-2 gap-y-0.5">
 							<span class="text-xs font-bold text-foreground">{t.recommendedZone}</span>
-							<span class="text-sm font-bold text-primary"
+							<span class="text-sm font-bold break-words text-primary"
 								>{recommendedZone.name || recommendedZone.code}</span
 							>
 							<span class="text-xs text-muted-foreground"
@@ -255,21 +255,24 @@
 						type="button"
 						{disabled}
 						onclick={() => handleSelect(zone.code)}
-						class="flex items-center justify-between rounded-lg border p-2.5 text-left text-xs transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none disabled:pointer-events-none disabled:opacity-50 {isSelected
+						class="flex min-h-11 min-w-0 items-center justify-between gap-2 rounded-lg border p-2.5 text-left text-xs transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none disabled:pointer-events-none disabled:opacity-50 {isSelected
 							? 'border-primary bg-primary/5 font-semibold text-primary'
 							: isQuarantine(zone)
 								? 'border-red-500/50 bg-red-500/5 text-foreground hover:bg-red-500/10'
 								: 'border-border bg-card text-foreground hover:bg-muted/40'}"
 					>
-						<div class="flex items-center gap-2">
+						<div class="flex min-w-0 items-center gap-2">
 							{#if isQuarantine(zone)}
-								<ShieldAlert class="size-3.5 text-red-600 dark:text-red-400" aria-hidden="true" />
+								<ShieldAlert
+									class="size-3.5 shrink-0 text-red-600 dark:text-red-400"
+									aria-hidden="true"
+								/>
 							{:else}
-								<MapPin class="size-3.5 text-muted-foreground" />
+								<MapPin class="size-3.5 shrink-0 text-muted-foreground" />
 							{/if}
-							<div>
+							<div class="min-w-0">
 								<div class="flex flex-wrap items-center gap-1.5">
-									<span>{zone.name?.trim() || zone.code}</span>
+									<span class="min-w-0 break-words">{zone.name?.trim() || zone.code}</span>
 									<span
 										class="inline-flex items-center rounded-md px-1.5 py-px text-xs leading-5 font-semibold {isQuarantine(
 											zone
@@ -295,7 +298,7 @@
 							</div>
 						</div>
 						{#if isSelected}
-							<CheckCircle class="size-4 text-primary" />
+							<CheckCircle class="size-4 shrink-0 text-primary" />
 						{/if}
 					</button>
 				{/each}

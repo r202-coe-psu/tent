@@ -172,7 +172,7 @@
 		<button
 			type="button"
 			onclick={goToQueue}
-			class="inline-flex h-9 w-9 items-center justify-center rounded-full border border-border bg-card text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+			class="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-border bg-card text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
 			title={t.backToQueueTitle}
 		>
 			<ArrowLeft class="size-4" />
@@ -226,12 +226,16 @@
 					{t.disabledDesc}
 				</p>
 				<div class="mt-5 flex flex-col gap-2">
-					<Button variant="default" class="w-full" onclick={() => goto(resolve('/portal'))}>
+					<Button
+						variant="default"
+						class="h-auto min-h-9 w-full py-2 leading-tight whitespace-normal"
+						onclick={() => goto(resolve('/portal'))}
+					>
 						{t.backToPortal}
 					</Button>
 					<Button
 						variant="outline"
-						class="w-full"
+						class="h-auto min-h-9 w-full py-2 leading-tight whitespace-normal"
 						onclick={() =>
 							goto(resolve(`/onsite/zoning/${evacueeId}` as `/onsite/zoning/${string}`))}
 					>
@@ -266,16 +270,22 @@
 				facts={savedFacts}
 			>
 				{#snippet actions()}
-					<Button class="min-h-11" onclick={() => goToZoning(evacuee._id)}>{t.goToZoning}</Button>
+					<Button
+						class="h-auto min-h-11 py-2 leading-tight whitespace-normal"
+						onclick={() => goToZoning(evacuee._id)}>{t.goToZoning}</Button
+					>
 					<Button
 						variant="outline"
-						class="min-h-11"
+						class="h-auto min-h-11 py-2 leading-tight whitespace-normal"
 						disabled={!nextInQueue}
 						onclick={goToNextInQueue}
 					>
 						{nextInQueue ? t.nextInQueue(formatPersonName(nextInQueue)) : t.noNextInQueue}
 					</Button>
-					<Button variant="ghost" class="min-h-11" onclick={goToQueue}>{t.backToDoctorQueue}</Button
+					<Button
+						variant="ghost"
+						class="h-auto min-h-11 py-2 leading-tight whitespace-normal"
+						onclick={goToQueue}>{t.backToDoctorQueue}</Button
 					>
 				{/snippet}
 			</StationCompletionSummary>

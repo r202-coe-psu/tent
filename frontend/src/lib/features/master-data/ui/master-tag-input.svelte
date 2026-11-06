@@ -71,14 +71,14 @@
 			{#each value as token (token)}
 				{@const label = formatMasterLabelByCode(token, items, lang) || token}
 				<li
-					class="inline-flex min-h-11 items-center gap-1 rounded-full border border-slate-200 bg-slate-50 py-0.5 pr-0.5 pl-3 text-sm font-semibold text-slate-800"
+					class="inline-flex min-h-11 max-w-full items-center gap-1 rounded-full border border-slate-200 bg-slate-50 py-0.5 pr-0.5 pl-3 text-sm font-semibold text-slate-800"
 				>
-					<span>{label}</span>
+					<span class="min-w-0 break-words">{label}</span>
 					<button
 						type="button"
 						{disabled}
 						onclick={() => remove(token)}
-						class="inline-flex size-10 items-center justify-center rounded-full text-slate-500 hover:bg-slate-200 hover:text-slate-900 focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:outline-none disabled:pointer-events-none disabled:opacity-50"
+						class="inline-flex size-10 shrink-0 items-center justify-center rounded-full text-slate-500 hover:bg-slate-200 hover:text-slate-900 focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:outline-none disabled:pointer-events-none disabled:opacity-50"
 					>
 						<X class="size-4" />
 						<span class="sr-only">{t.removePrefix} {label}</span>
@@ -99,10 +99,10 @@
 					role="combobox"
 					aria-expanded={open}
 					{disabled}
-					class="min-h-12 w-full justify-start gap-2 text-sm font-normal text-muted-foreground"
+					class="h-auto min-h-12 w-full justify-start gap-2 py-2 text-left text-sm font-normal text-muted-foreground"
 				>
 					<Plus class="size-4 shrink-0" />
-					<span class="truncate">{placeholder ?? t.placeholder}</span>
+					<span class="min-w-0 break-words whitespace-normal">{placeholder ?? t.placeholder}</span>
 				</Button>
 			{/snippet}
 		</Popover.Trigger>

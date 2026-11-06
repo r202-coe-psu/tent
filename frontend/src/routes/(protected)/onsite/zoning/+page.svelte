@@ -725,20 +725,22 @@
 				? 'border-amber-300 bg-amber-50/50 shadow-2xs ring-2 ring-amber-500/20'
 				: 'border-slate-200/80 bg-white shadow-2xs'}"
 		>
-			<div class="flex min-w-0 items-center gap-2 sm:justify-between">
-				<span class="truncate text-xs font-semibold text-amber-900">{t.tabPending}</span>
+			<div class="flex min-w-0 flex-1 items-center gap-2 sm:justify-between">
+				<span class="min-w-0 text-xs leading-tight font-semibold break-words text-amber-900"
+					>{t.tabPending}</span
+				>
 				<div
 					class="flex size-7 shrink-0 items-center justify-center rounded-lg bg-amber-100 text-amber-700 transition-colors group-hover:bg-amber-200"
 				>
 					<Clock class="size-4" />
 				</div>
 			</div>
-			<div class="shrink-0 text-right sm:mt-2 sm:text-left">
+			<div class="max-w-[55%] min-w-0 text-right sm:mt-2 sm:max-w-none sm:text-left">
 				<p class="text-2xl font-bold tracking-tight text-slate-900 tabular-nums">
 					{pendingEvacuees.length}
 					<span class="text-xs font-normal text-slate-500">{t.unitPerson}</span>
 				</p>
-				<p class="mt-0.5 text-xs text-slate-500">{t.pendingSub}</p>
+				<p class="mt-0.5 text-xs leading-tight break-words text-slate-500">{t.pendingSub}</p>
 			</div>
 		</button>
 
@@ -750,20 +752,22 @@
 				? 'border-emerald-300 bg-emerald-50/50 shadow-2xs ring-2 ring-emerald-500/20'
 				: 'border-slate-200/80 bg-white shadow-2xs'}"
 		>
-			<div class="flex min-w-0 items-center gap-2 sm:justify-between">
-				<span class="truncate text-xs font-semibold text-emerald-900">{t.tabAwaiting}</span>
+			<div class="flex min-w-0 flex-1 items-center gap-2 sm:justify-between">
+				<span class="min-w-0 text-xs leading-tight font-semibold break-words text-emerald-900"
+					>{t.tabAwaiting}</span
+				>
 				<div
 					class="flex size-7 shrink-0 items-center justify-center rounded-lg bg-emerald-100 text-emerald-700 transition-colors group-hover:bg-emerald-200"
 				>
 					<Clock class="size-4" />
 				</div>
 			</div>
-			<div class="shrink-0 text-right sm:mt-2 sm:text-left">
+			<div class="max-w-[55%] min-w-0 text-right sm:mt-2 sm:max-w-none sm:text-left">
 				<p class="text-2xl font-bold tracking-tight text-slate-900 tabular-nums">
 					{awaitingConfirmEvacuees.length}
 					<span class="text-xs font-normal text-slate-500">{t.unitPerson}</span>
 				</p>
-				<p class="mt-0.5 text-xs text-slate-500">{t.awaitingSub}</p>
+				<p class="mt-0.5 text-xs leading-tight break-words text-slate-500">{t.awaitingSub}</p>
 			</div>
 		</button>
 
@@ -775,20 +779,22 @@
 				? 'border-sky-300 bg-sky-50/50 shadow-2xs ring-2 ring-sky-500/20'
 				: 'border-slate-200/80 bg-white shadow-2xs'}"
 		>
-			<div class="flex min-w-0 items-center gap-2 sm:justify-between">
-				<span class="truncate text-xs font-semibold text-sky-900">{t.tabAssigned}</span>
+			<div class="flex min-w-0 flex-1 items-center gap-2 sm:justify-between">
+				<span class="min-w-0 text-xs leading-tight font-semibold break-words text-sky-900"
+					>{t.tabAssigned}</span
+				>
 				<div
 					class="flex size-7 shrink-0 items-center justify-center rounded-lg bg-sky-100 text-sky-700 transition-colors group-hover:bg-sky-200"
 				>
 					<Check class="size-4" />
 				</div>
 			</div>
-			<div class="shrink-0 text-right sm:mt-2 sm:text-left">
+			<div class="max-w-[55%] min-w-0 text-right sm:mt-2 sm:max-w-none sm:text-left">
 				<p class="text-2xl font-bold tracking-tight text-slate-900 tabular-nums">
 					{assignedEvacuees.length}
 					<span class="text-xs font-normal text-slate-500">{t.unitPerson}</span>
 				</p>
-				<p class="mt-0.5 text-xs text-slate-500">{t.assignedSub}</p>
+				<p class="mt-0.5 text-xs leading-tight break-words text-slate-500">{t.assignedSub}</p>
 			</div>
 		</button>
 	</section>
@@ -849,7 +855,7 @@
 				class="flex flex-wrap items-center gap-2 border-b border-slate-200/80 bg-white px-5 py-3.5"
 			>
 				<Users class="size-4 text-station-3" />
-				<span class="text-base font-semibold text-slate-900">
+				<span class="min-w-0 text-base font-semibold break-words text-slate-900">
 					{#if activeTab === 'pending'}
 						{t.headerPending}
 					{:else if activeTab === 'awaiting_confirm'}
@@ -883,7 +889,7 @@
 							size="sm"
 							onclick={() => void bulkConfirmSelected()}
 							disabled={bulkBusy || selectedIds.length === 0}
-							class="rounded-lg font-semibold"
+							class="h-auto min-h-7 max-w-full rounded-lg py-1 text-left leading-tight font-semibold whitespace-normal"
 						>
 							{t.bulkConfirm(selectedIds.length)}
 						</Button>
@@ -892,7 +898,7 @@
 							size="sm"
 							onclick={openBulkZoneDialog}
 							disabled={bulkBusy || selectedIds.length === 0}
-							class="rounded-lg font-semibold"
+							class="h-auto min-h-7 max-w-full rounded-lg py-1 text-left leading-tight font-semibold whitespace-normal"
 						>
 							{t.bulkAssignSame}
 						</Button>
@@ -901,7 +907,7 @@
 							size="sm"
 							onclick={openBulkZoneDialog}
 							disabled={bulkBusy || selectedIds.length === 0}
-							class="rounded-lg font-semibold"
+							class="h-auto min-h-7 max-w-full rounded-lg py-1 text-left leading-tight font-semibold whitespace-normal"
 						>
 							{t.bulkMoveSame}
 						</Button>
@@ -1058,7 +1064,7 @@
 									<Table.Cell
 										class="sticky right-0 z-10 bg-white py-3 pr-5 text-right shadow-[-8px_0_8px_-8px_rgba(15,23,42,0.12)]"
 									>
-										<div class="flex justify-end gap-1.5">
+										<div class="flex flex-col items-end gap-1.5 sm:flex-row sm:justify-end">
 											{#if activeTab === 'awaiting_confirm'}
 												<Button
 													size="sm"
@@ -1067,7 +1073,7 @@
 														void confirmOne(row._id);
 													}}
 													disabled={confirmRoomMutation.isPending || bulkBusy}
-													class="rounded-lg font-semibold"
+													class="h-auto min-h-7 max-w-36 rounded-lg py-1 leading-tight font-semibold whitespace-normal sm:max-w-none sm:whitespace-nowrap"
 												>
 													{t.confirmZoneArrival}
 												</Button>
@@ -1080,7 +1086,7 @@
 															void confirmHousehold(row.household_id!);
 														}}
 														disabled={confirmRoomHouseholdMutation.isPending || bulkBusy}
-														class="rounded-lg border-slate-200 px-3 font-semibold text-slate-700"
+														class="h-auto min-h-7 max-w-36 rounded-lg border-slate-200 px-3 py-1 leading-tight font-semibold whitespace-normal text-slate-700 sm:max-w-none sm:whitespace-nowrap"
 													>
 														{t.actionWholeHousehold}
 													</Button>
@@ -1093,7 +1099,7 @@
 														e.stopPropagation();
 														openDetail(row._id);
 													}}
-													class="rounded-lg border-slate-200 px-3 font-semibold text-slate-700"
+													class="h-auto min-h-7 max-w-36 rounded-lg border-slate-200 px-3 py-1 leading-tight font-semibold whitespace-normal text-slate-700 sm:max-w-none sm:whitespace-nowrap"
 												>
 													{activeTab === 'pending' ? t.actionAssign : t.actionMove}
 												</Button>
@@ -1165,11 +1171,15 @@
 				disabled={bulkBusy}
 			/>
 		</div>
-		<div class="flex justify-end gap-2">
+		<div class="flex flex-wrap justify-end gap-2">
 			<Button variant="outline" onclick={() => (bulkZoneOpen = false)} disabled={bulkBusy}>
 				{t.cancel}
 			</Button>
-			<Button onclick={() => void bulkApplyZone()} disabled={bulkBusy || !bulkZone.trim()}>
+			<Button
+				onclick={() => void bulkApplyZone()}
+				disabled={bulkBusy || !bulkZone.trim()}
+				class="h-auto min-h-9 py-2 leading-tight whitespace-normal"
+			>
 				{activeTab === 'assigned' ? t.bulkConfirmMove : t.bulkConfirmAssign}
 			</Button>
 		</div>

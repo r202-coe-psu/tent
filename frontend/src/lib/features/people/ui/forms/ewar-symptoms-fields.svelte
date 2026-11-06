@@ -85,12 +85,12 @@
 	{/if}
 
 	<div class="space-y-2">
-		<div class="flex items-center justify-between border-b border-border pb-2">
-			<h4 class="text-xs font-semibold text-foreground">
+		<div class="flex items-center justify-between gap-2 border-b border-border pb-2">
+			<h4 class="min-w-0 text-xs font-semibold text-foreground">
 				{t.checklistTitle}
 			</h4>
 			{#if symptoms.length > 0}
-				<span class="text-2xs font-semibold text-red-600 dark:text-red-400">
+				<span class="shrink-0 text-2xs font-semibold text-red-600 dark:text-red-400">
 					{t.selectedCount(symptoms.length)}
 				</span>
 			{/if}
@@ -100,10 +100,11 @@
 			{#each symptomGroups as group (group.title)}
 				<div class="overflow-hidden rounded-lg border border-border bg-card">
 					<div
-						class="flex items-center justify-between border-b border-border bg-muted/30 px-3 py-1.5"
+						class="flex items-center justify-between gap-2 border-b border-border bg-muted/30 px-3 py-1.5"
 					>
-						<span class="text-2xs font-bold text-foreground">{group.title}</span>
-						<span class="text-2xs text-muted-foreground">
+						<span class="min-w-0 text-2xs font-bold break-words text-foreground">{group.title}</span
+						>
+						<span class="shrink-0 text-2xs text-muted-foreground">
 							{group.symptoms.filter((symptom) => symptoms.includes(symptom.id)).length}/{group
 								.symptoms.length}
 						</span>
@@ -129,7 +130,7 @@
 								>
 									{#if checked}<Check class="size-2.5" aria-hidden="true" />{/if}
 								</span>
-								<span class="flex min-w-0 flex-col leading-snug">
+								<span class="flex min-w-0 flex-col leading-snug break-words">
 									<span>{symptom.label}</span>
 									{#if symptom.sublabel}
 										<span class="text-xs font-normal text-muted-foreground">{symptom.sublabel}</span
