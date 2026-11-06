@@ -66,6 +66,17 @@ run() {
     fi
 }
 
+# Thai vowel/tone marks on the boot slip need Pillow built with libraqm; warn (never abort) if not.
+check_raqm() {
+    local py="$1"
+    local probe="import sys; from PIL import features; sys.exit(0 if features.check('raqm') else 1)"
+    if $DRY_RUN; then
+        echo "[dry-run] $py -c \"$probe\"  # raqm check"
+    elif ! "$py" -c "$probe" 2>/dev/null; then
+        warn "Pillow ไม่มี libraqm — สระ/วรรณยุกต์ไทยบนบูตสลิปจะเพี้ยน แก้: sudo apt-get install -y libraqm0 libfribidi0 (หรือ libraqm-dev) แล้วรีสตาร์ท agent"
+    fi
+}
+
 # Value of KEY= in a dotenv-style file (last wins, edge whitespace and one pair of quotes stripped).
 # Prints only that one value - never the rest of the file.
 env_value() {
@@ -133,7 +144,11 @@ if fc-list :lang=th file 2>/dev/null | grep -q .; then
     ok "มีฟอนต์ไทยแล้ว"
 else
     info "ติดตั้งฟอนต์ไทย (fonts-thai-tlwg) สำหรับบูตสลิป"
-    run apt-get install -y fonts-thai-tlwg
+    # A fresh image's package index is often stale or empty, so refresh it first. A failure here
+    # is only a warning: the slip falls back to plain text, the agent itself works without it.
+    run apt-get update || warn "apt-get update ไม่สำเร็จ — ลองติดตั้งฟอนต์ต่อ"
+    run apt-get install -y fonts-thai-tlwg \
+        || warn "ติดตั้ง fonts-thai-tlwg ไม่สำเร็จ — บูตสลิปจะพิมพ์ภาษาไทยเป็นกล่อง/ตัวอักษรธรรมดา ติดตั้งเองภายหลัง: apt-get install -y fonts-thai-tlwg"
 fi
 
 # 1) Service user (no login, no home; group lp so it can talk to the printer queue)
@@ -153,6 +168,7 @@ run install -D -m 0644 "$SCRIPT_DIR/pyproject.toml" "$PREFIX/pyproject.toml"
 run install -D -m 0644 "$SCRIPT_DIR/uv.lock" "$PREFIX/uv.lock"
 # only-system: a downloaded interpreter would live under root's home, unreadable by the service user.
 run uv sync --frozen --no-dev --python-preference only-system --project "$PREFIX"
+check_raqm "$PREFIX/.venv/bin/python"
 
 # 3) Secret file: owner = service user, mode 600. Contents are never echoed.
 info "[3/6] วาง .env (600, owner $SERVICE_USER)"

@@ -323,3 +323,28 @@ def test_skips_the_thai_font_when_one_is_installed(setup):
 
     assert result.returncode == 0, result.stderr
     assert INSTALL_THAI_FONT not in planned(result)
+
+
+def test_package_index_is_refreshed_once_before_the_thai_font_install(setup):
+    plan = planned(setup(env={"FAKE_THAI_FONT": "0"}))
+
+    assert plan.count("apt-get update") == 1
+    assert plan.index("apt-get update") < plan.index(INSTALL_THAI_FONT)
+
+
+def test_package_index_is_not_refreshed_when_the_thai_font_is_already_there(setup):
+    plan = planned(setup(env={"FAKE_THAI_FONT": "1"}))
+
+    assert "apt-get update" not in plan
+
+
+def test_pillow_raqm_support_is_checked_in_the_installed_venv_after_deps_are_synced(setup):
+    plan = planned(setup("--prefix", "/srv/tent/printer"))
+
+    sync = next(i for i, command in enumerate(plan) if command.startswith("uv sync"))
+    check = next(
+        i
+        for i, command in enumerate(plan)
+        if command.startswith("/srv/tent/printer/.venv/bin/python -c") and "raqm" in command
+    )
+    assert sync < check

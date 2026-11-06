@@ -48,6 +48,17 @@ run() {
     fi
 }
 
+# Thai vowel/tone marks on the boot slip need Pillow built with libraqm; warn (never abort) if not.
+check_raqm() {
+    local py="$1"
+    local probe="import sys; from PIL import features; sys.exit(0 if features.check('raqm') else 1)"
+    if $DRY_RUN; then
+        echo "[dry-run] $py -c \"$probe\"  # raqm check"
+    elif ! "$py" -c "$probe" 2>/dev/null; then
+        warn "Pillow ไม่มี libraqm — สระ/วรรณยุกต์ไทยบนบูตสลิปจะเพี้ยน แก้: sudo apt-get install -y libraqm0 libfribidi0 (หรือ libraqm-dev) แล้วรีสตาร์ท agent"
+    fi
+}
+
 # Under sudo, run the agent as the person who called sudo, never as root.
 AGENT_USER="${SUDO_USER:-${USER:-$(id -un)}}"
 
@@ -86,12 +97,17 @@ install_autostart() {
     done
 
     # Thai font for the boot slip; without one it prints as plain text and Thai shows as boxes.
+    # A fresh image's package index is often stale or empty, so refresh it first. A failure here
+    # is only a warning: the slip falls back to plain text, the agent itself works without it.
     if ! fc-list :lang=th file 2>/dev/null | grep -q .; then
-        run sudo apt-get install -y fonts-thai-tlwg
+        run sudo apt-get update || warn "apt-get update ไม่สำเร็จ — ลองติดตั้งฟอนต์ต่อ"
+        run sudo apt-get install -y fonts-thai-tlwg \
+            || warn "ติดตั้ง fonts-thai-tlwg ไม่สำเร็จ — บูตสลิปจะพิมพ์ภาษาไทยเป็นกล่อง/ตัวอักษรธรรมดา ติดตั้งเองภายหลัง: sudo apt-get install -y fonts-thai-tlwg"
     fi
 
     # Build .venv now (as this user), so the first boot doesn't wait on pip.
     run "$SCRIPT_DIR/run.sh" --setup
+    check_raqm "$SCRIPT_DIR/.venv/bin/python"
 
     if $DRY_RUN; then
         echo "[dry-run] sudo tee $UNIT_PATH <<"
