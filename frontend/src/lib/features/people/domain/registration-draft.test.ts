@@ -30,7 +30,7 @@ describe('registration draft (#358)', () => {
 		expect(draft).toMatchObject({ v: 1, saved_at: NOW });
 		expect(draft.members[0]).toMatchObject({ first_name: 'สมชาย', phone: '0812345678' });
 		expect(draft.members[0].photo).toBeNull();
-		expect(draft.household.pets[0]).toMatchObject({ species: 'dog', image_url: null });
+		expect(draft.household.pets?.[0]).toMatchObject({ species: 'dog', image_url: null });
 		expect(draft.household.address_no).toBe('12');
 	});
 
