@@ -122,6 +122,7 @@ N/A — ไม่เปลี่ยนรูป doc ที่ persist, ไม่
 - **Tests:** integration PATCH/GET ใน `[code]/server.test.ts`; unit ของ helper เทียบ `sub_storage`
 - **Migration:** N/A — ไม่เปลี่ยนรูป doc, ไม่ bump `schema_v`
 - **Compatibility:** `_rev` ใน `PATCH` เป็น optional (ไม่ส่ง = ไม่เช็ค) เพราะ `e2e/shelter-close-checkout.test.ts` เรียก PATCH ตรงโดยไม่ส่ง `_rev`; มีเฉพาะฟอร์มศูนย์ที่ส่ง `_rev` จึงได้รับการป้องกัน
+- **ลำดับของ flow ปิดศูนย์ (known limitation):** route ปิดศูนย์ (CR-219) ทำงานและบันทึก `closed` ก่อน แล้วฟอร์มจึงตรวจว่าจุดเก็บของที่โหลดมาเปลี่ยนไปหรือไม่ — ถ้าเปลี่ยน ฟอร์มปฏิเสธเฉพาะ "การบันทึกต่อ" (toast conflict + โหลดใหม่) ศูนย์ปิดไปแล้ว ค่าที่ผู้ใช้แก้ค้างในฟอร์มไม่ถูกบันทึก แต่จุดของคนอื่นไม่หาย ยอมรับตามลำดับเดิมของ CR-219 และไม่เปลี่ยนใน CR นี้
 
 ### Why
 
