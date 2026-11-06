@@ -43,6 +43,8 @@ export {
 	useRequisitionTickets,
 	useRequisitionTicket,
 	useDistributionLogs,
+	useRecipientsDistributionLogs,
+	useEvacueeAllergies,
 	useDistributionLog,
 	useDispatchedLotExpiry,
 	useBulkReturnPools,
@@ -105,6 +107,7 @@ export {
 // Frontline distribution & handover mutations (Workflows 8–10)
 export {
 	useRecordFoodDistribution,
+	useRecordHouseholdMealPickup,
 	useRecordSuppliesDistribution,
 	useVoidDistributionLog,
 	type FoodDistributionMutationInput,

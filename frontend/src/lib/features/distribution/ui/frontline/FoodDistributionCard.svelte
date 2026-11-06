@@ -47,6 +47,7 @@
 	import QtyStepper from '../common/QtyStepper.svelte';
 	import MealEntitlementWarning from './MealEntitlementWarning.svelte';
 	import InFlightTopUpDialog from './InFlightTopUpDialog.svelte';
+	import HouseholdMealPickupPanel from './HouseholdMealPickupPanel.svelte';
 
 	interface Props {
 		ticket: RequisitionTicket;
@@ -350,6 +351,18 @@
 		}
 	}
 
+	// #1154: an evacuee with a household collects for its in-shelter members, one log each.
+	const householdCollector = $derived(
+		recipientSelection?.recipientType === 'evacuee' && recipientSelection.householdId
+			? { collectorId: recipientSelection.recipientId, householdId: recipientSelection.householdId }
+			: undefined
+	);
+	const householdMeal = $derived(householdCollector && selectedItem ? ticket.meal : undefined);
+
+	function handleHouseholdDone() {
+		picker?.next();
+	}
+
 	function handleOverrideConfirm(reason: string) {
 		warningModalOpen = false;
 		executeHandover(true, reason);
@@ -474,7 +487,22 @@
 		{shelterCode}
 	/>
 
-	{#if recipientSelection}
+	{#if householdCollector && householdMeal && selectedItem}
+		<HouseholdMealPickupPanel
+			ticketId={ticket._id}
+			meal={householdMeal}
+			item={selectedItem}
+			menu={selectedMenu}
+			inHandQty={capacitySummary.inHandQty}
+			collectorId={householdCollector.collectorId}
+			householdId={householdCollector.householdId}
+			bind:notes={notesInput}
+			{shelterCode}
+			{canDistribute}
+			{now}
+			ondone={handleHouseholdDone}
+		/>
+	{:else if recipientSelection}
 		<!-- Recipient allergies (#607 FR-MRM-09) -->
 		{#if recipientAllergyLabel}
 			<div class="flex flex-wrap items-center gap-2 text-sm">
@@ -596,7 +624,7 @@
 			<QtyStepper
 				id="food-qty-input"
 				label="จำนวนกล่อง"
-				hint="แจกหลายกล่องให้คนเดียวได้ เช่น รับแทนครอบครัว"
+				hint="แจกหลายกล่องให้คนเดียวได้"
 				unit="ชุด"
 				bind:value={qtyInput}
 				max={capacitySummary.inHandQty}

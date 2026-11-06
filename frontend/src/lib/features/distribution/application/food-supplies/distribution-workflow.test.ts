@@ -23,6 +23,7 @@ import {
 	recordSuppliesDistribution,
 	voidDistributionLog
 } from './distribution-workflow';
+import { recordHouseholdMealPickup } from './household-meal-pickup-workflow';
 
 class InMemoryTicketRepository implements RequisitionTicketRepository {
 	tickets = new Map<string, RequisitionTicket>();
@@ -1285,5 +1286,188 @@ describe('distribution-workflow', () => {
 		await expect(voidDistributionLog(waived._id, 'Too late', POS_CTX, logRepo)).rejects.toThrow(
 			/after return or clear activity|resolution state/
 		);
+	});
+});
+
+describe('recordHouseholdMealPickup (#1154)', () => {
+	const CTX: AuthorContext = {
+		shelterCode: 'SH001',
+		createdBy: 'pos_user',
+		roles: ['shelter:SH001', 'SH001:distribution_staff']
+	};
+	const HOUSEHOLD = 'household:01JHOUSEHOLD000000000000001';
+	const [P1, P2, P3, P4] = [1, 2, 3, 4].map((n) => `evacuee:01JHHMEMBER00000000000000${n}`);
+	const OUT = 'evacuee:01JHHMEMBER000000000000009';
+	const members = [P1, P2, P3, P4]
+		.map((_id) => ({ _id, current_stay: { status: 'active' } }))
+		.concat({ _id: OUT, current_stay: { status: 'checked_out' } });
+
+	let ticketRepo: InMemoryTicketRepository;
+	let logRepo: InMemoryLogRepository;
+	let ticketId: string;
+	const deps = () => ({
+		ticketRepo,
+		logRepo,
+		listHouseholdMembers: async (id: string) => (id === HOUSEHOLD ? members : [])
+	});
+	const pickup = (
+		collector_id: string,
+		selections: { evacuee_id: string; override_reason?: string }[]
+	) =>
+		recordHouseholdMealPickup(
+			ticketId,
+			{ item_id: 'item:curry', household_id: HOUSEHOLD, collector_id, selections },
+			CTX,
+			deps()
+		);
+
+	beforeEach(async () => {
+		ticketRepo = new InMemoryTicketRepository();
+		logRepo = new InMemoryLogRepository();
+		const ticket = await ticketRepo.create(
+			{
+				ticket_no: 'TKT-FOOD-HH01',
+				requisition_type: 'food',
+				meal: 'lunch',
+				source_location: 'warehouse:main',
+				destination_location: 'point:a',
+				items: [
+					{
+						item_id: 'item:curry',
+						item_name: 'Curry',
+						type_class: 'CONSUMABLE',
+						returnable: false,
+						requested_qty: '10',
+						allocated_qty: '10'
+					}
+				]
+			},
+			CTX
+		);
+		ticketId = ticket._id;
+	});
+
+	it('writes one log per member and marks who collected for the others', async () => {
+		const results = await pickup(
+			P2,
+			[P1, P2, P3, P4].map((evacuee_id) => ({ evacuee_id }))
+		);
+
+		expect(results.every((r) => r.ok)).toBe(true);
+		const logs = [...logRepo.logs.values()];
+		expect(logs.map((l) => l.recipient_id).sort()).toEqual([P1, P2, P3, P4]);
+		expect(logs.every((l) => l.qty === '1' && l.household_id === HOUSEHOLD)).toBe(true);
+		const byRecipient = new Map(logs.map((l) => [l.recipient_id, l]));
+		expect(byRecipient.get(P2)?.collected_by_recipient_id).toBeUndefined();
+		for (const id of [P1, P3, P4]) {
+			expect(byRecipient.get(id)?.collected_by_recipient_id).toBe(P2);
+		}
+	});
+
+	it('makes a member who was collected for hit the repeat-meal check when they scan themselves', async () => {
+		await pickup(P1, [{ evacuee_id: P1 }, { evacuee_id: P3 }]);
+
+		await expect(
+			recordFoodDistribution(
+				ticketId,
+				{ item_id: 'item:curry', qty: '1', recipient_type: 'evacuee', recipient_id: P3 },
+				CTX,
+				deps()
+			)
+		).rejects.toThrow(/already received a meal/);
+	});
+
+	it('fails only the already-served member without a reason, and records them with one', async () => {
+		await pickup(P1, [{ evacuee_id: P1 }]);
+
+		const results = await pickup(P2, [{ evacuee_id: P1 }, { evacuee_id: P2 }]);
+		expect(results.map((r) => [r.evacuee_id, r.ok])).toEqual([
+			[P1, false],
+			[P2, true]
+		]);
+
+		const [overridden] = await pickup(P2, [{ evacuee_id: P1, override_reason: 'ทำหกหมด' }]);
+		expect(overridden.ok && overridden.log.is_override).toBe(true);
+	});
+
+	it('rejects a selection outside the in-shelter household before writing anything', async () => {
+		await expect(pickup(P1, [{ evacuee_id: P2 }, { evacuee_id: OUT }])).rejects.toThrow(
+			/not an in-shelter member/
+		);
+		await expect(
+			pickup(P1, [{ evacuee_id: P2 }, { evacuee_id: 'evacuee:01JSTRANGER000000000000001' }])
+		).rejects.toThrow(/not an in-shelter member/);
+		await expect(
+			pickup('evacuee:01JSTRANGER000000000000001', [{ evacuee_id: P2 }])
+		).rejects.toThrow(/collector/);
+		await expect(pickup(P1, [{ evacuee_id: P2 }, { evacuee_id: P2 }])).rejects.toThrow(
+			/more than once/
+		);
+		expect(logRepo.logs.size).toBe(0);
+	});
+
+	it('reports a failed write per member, and a retry of the failed ones adds no duplicates', async () => {
+		const create = logRepo.create.bind(logRepo);
+		let failP3 = true;
+		logRepo.create = async (input, ctx) => {
+			if (failP3 && 'recipient_id' in input && input.recipient_id === P3) {
+				failP3 = false;
+				throw new Error('network down');
+			}
+			return create(input, ctx);
+		};
+
+		const first = await pickup(
+			P1,
+			[P1, P2, P3].map((evacuee_id) => ({ evacuee_id }))
+		);
+		const failed = first.filter((r) => !r.ok).map((r) => r.evacuee_id);
+		expect(failed).toEqual([P3]);
+
+		const retry = await pickup(
+			P1,
+			failed.map((evacuee_id) => ({ evacuee_id }))
+		);
+		expect(retry.every((r) => r.ok)).toBe(true);
+		expect([...logRepo.logs.values()].map((l) => l.recipient_id).sort()).toEqual([P1, P2, P3]);
+	});
+
+	it('checks allergens per member', async () => {
+		const results = await recordHouseholdMealPickup(
+			ticketId,
+			{
+				item_id: 'item:curry',
+				household_id: HOUSEHOLD,
+				collector_id: P1,
+				selections: [
+					{ evacuee_id: P1 },
+					{
+						evacuee_id: P2,
+						allergen_check: { recipient_allergy_codes: ['egg'], menu_allergen_codes: ['egg'] }
+					}
+				]
+			},
+			CTX,
+			deps()
+		);
+		expect(results.map((r) => [r.evacuee_id, r.ok])).toEqual([
+			[P1, true],
+			[P2, false]
+		]);
+	});
+
+	it('lowers the in-hand quantity by the members recorded', async () => {
+		await pickup(
+			P1,
+			[P1, P2, P3].map((evacuee_id) => ({ evacuee_id }))
+		);
+		await expect(
+			recordFoodDistribution(
+				ticketId,
+				{ item_id: 'item:curry', qty: '8', recipient_type: 'outside', recipient_id: null },
+				CTX,
+				deps()
+			)
+		).rejects.toThrow(/In-hand: 7/);
 	});
 });
