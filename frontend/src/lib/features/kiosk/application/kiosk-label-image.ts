@@ -33,6 +33,16 @@ const FONT_FAMILY = "'IBM Plex Sans Thai Looped', 'IBM Plex Sans Thai', sans-ser
 /** The web font is split by unicode-range; `load()` fetches only the files covering this text. */
 const FONT_SAMPLE = 'กขค Aa0';
 
+/**
+ * Load `font` for canvas drawing. Rejects when the load fails or no face matched (`load()`
+ * resolves `[]`): `fillText` would then silently draw with the fallback face, so a label whose
+ * Thai glyphs are tofu boxes would reach the printer. Nothing is cached, so a retry loads again.
+ */
+async function loadLabelFont(font: string): Promise<void> {
+	const faces = await document.fonts.load(font, FONT_SAMPLE);
+	if (faces.length === 0) throw new Error(`Label font is unavailable: ${font}`);
+}
+
 function loadImage(src: string): Promise<HTMLImageElement> {
 	const image = new Image();
 	image.src = src;
@@ -91,9 +101,7 @@ export async function renderKioskLabelPng(label: KioskLabelContent): Promise<str
 	const [qr] = await Promise.all([
 		loadImage(label.qrSrc),
 		document.fonts.ready,
-		...Object.values(fonts).map((font) =>
-			document.fonts.load(font, FONT_SAMPLE).catch(() => undefined)
-		)
+		...Object.values(fonts).map(loadLabelFont)
 	]);
 	const layout = kioskLabelLayout(qr.width);
 	const words = segmenter('word');
