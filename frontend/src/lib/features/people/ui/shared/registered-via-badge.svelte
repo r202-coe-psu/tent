@@ -61,6 +61,10 @@
 </script>
 
 <script lang="ts">
+	import { langState } from '$lib/states/i18n.svelte';
+	import { getTranslation } from '$lib/utils/i18n';
+	import { SHARED_BADGES_I18N } from '../_constants/shared-badges.i18n';
+
 	let {
 		via,
 		hasCardSnapshot = false,
@@ -79,16 +83,18 @@
 
 	const effectiveVia = $derived(via || (hasCardSnapshot ? 'kiosk' : 'staff'));
 
+	const t = $derived(getTranslation(SHARED_BADGES_I18N, langState.current));
+
 	const style = $derived(
 		REGISTERED_VIA_BADGE_STYLES[effectiveVia] ?? {
-			label: effectiveVia || 'ไม่ระบุ',
+			label: effectiveVia || t.unspecified,
 			badgeClass: 'border-slate-200 bg-slate-50 text-slate-700',
 			iconClass: 'text-slate-600',
 			icon: UserPlus
 		}
 	);
 
-	const displayLabel = $derived(customLabel ?? style.label);
+	const displayLabel = $derived(customLabel ?? t.via[effectiveVia] ?? style.label);
 	const Icon = $derived(style.icon);
 </script>
 

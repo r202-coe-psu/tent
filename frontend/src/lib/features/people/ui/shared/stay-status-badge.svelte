@@ -71,6 +71,11 @@
 </script>
 
 <script lang="ts">
+	import { langState } from '$lib/states/i18n.svelte';
+	import { getTranslation } from '$lib/utils/i18n';
+	import { peopleLabels } from '../../domain/people';
+	import { SHARED_BADGES_I18N } from '../_constants/shared-badges.i18n';
+
 	let {
 		status,
 		size = 'sm',
@@ -85,15 +90,19 @@
 		class?: string;
 	} = $props();
 
+	const t = $derived(getTranslation(SHARED_BADGES_I18N, langState.current));
+
 	const style = $derived(
 		STAY_STATUS_BADGE_STYLES[status as StayStatus] ?? {
-			label: status || 'ไม่ระบุ',
+			label: status || t.unspecified,
 			badgeClass: 'border-slate-200 bg-slate-50 text-slate-600',
 			dotClass: 'bg-slate-400'
 		}
 	);
 
-	const displayLabel = $derived(customLabel ?? style.label);
+	const displayLabel = $derived(
+		customLabel ?? peopleLabels(langState.current).stayStatus[status as StayStatus] ?? style.label
+	);
 </script>
 
 <span

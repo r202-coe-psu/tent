@@ -69,6 +69,11 @@
 	import { getShelterCode } from '$lib/db/shelter';
 	import { DISPLAY_LOCALE, DISPLAY_TIME_ZONE, formatThaiTime } from '$lib/utils/date';
 	import { authStore } from '$lib/stores/auth.svelte';
+	import { langState } from '$lib/states/i18n.svelte';
+	import { getTranslation } from '$lib/utils/i18n';
+	import { STAFF_ZONING_I18N } from '$lib/constants/i18n/staff-zoning';
+
+	const t = $derived(getTranslation(STAFF_ZONING_I18N, langState.current));
 
 	const PAGE_SIZE = 10;
 	/** Chips shown per table cell before collapsing the rest into a 「+N」 popover. */
@@ -132,24 +137,10 @@
 		return () => clearInterval(timer);
 	});
 
-	const SPECIAL_NEED_LABELS: Record<string, string> = {
-		wheelchair: 'ใช้วีลแชร์',
-		bedridden: 'ผู้ป่วยติดเตียง',
-		oxygen: 'ใช้ออกซิเจน',
-		pregnant: 'หญิงตั้งครรภ์',
-		infant: 'ทารก/เด็กเล็ก',
-		visual_impaired: 'ผู้พิการทางการมองเห็น',
-		hearing_impaired: 'ผู้พิการทางการได้ยิน',
-		high_dependency: 'มีภาวะพึ่งพิงสูง',
-		elderly: 'ผู้สูงอายุ',
-		chronic_illness: 'โรคเรื้อรัง',
-		disabled: 'ผู้พิการ'
-	};
-
 	function getSpecialNeedLabel(need: string): string {
 		const masterItem = vulnerableGroupQuery.data?.items.find((i) => i.code === need);
-		if (masterItem) return formatMasterLabel(masterItem, 'th');
-		return SPECIAL_NEED_LABELS[need] ?? need;
+		if (masterItem) return formatMasterLabel(masterItem, langState.current);
+		return t.specialNeeds[need] ?? need;
 	}
 
 	let searchQuery = $state('');
@@ -367,14 +358,14 @@
 
 	function toastSettled(ok: number, failed: number, okLabel: string) {
 		if (failed === 0) {
-			toast.success(`${okLabel}สำเร็จ ${ok} คน`);
+			toast.success(t.settledAll(okLabel, ok));
 			return;
 		}
 		if (ok > 0) {
-			toast.warning(`${okLabel}สำเร็จ ${ok} คน, ล้มเหลว ${failed} คน`);
+			toast.warning(t.settledPartial(okLabel, ok, failed));
 			return;
 		}
-		toast.error(`${okLabel}ไม่สำเร็จ ${failed} คน`);
+		toast.error(t.settledNone(okLabel, failed));
 	}
 
 	async function confirmOne(evacueeId: string) {
@@ -382,7 +373,7 @@
 		if (!target) return;
 		try {
 			await confirmRoomMutation.mutateAsync({ evacuee: target, ctx: authorCtx() });
-			toast.success(`ยืนยันถึงโซน: ${formatPersonName(target)}`);
+			toast.success(t.toastConfirmedOne(formatPersonName(target)));
 		} catch (err: unknown) {
 			toast.error(movementConflictMessage(err));
 		}
@@ -395,9 +386,9 @@
 				evacuees: allEvacuees,
 				ctx: authorCtx()
 			});
-			toast.success(`ยืนยันถึงโซนทั้งครัวเรือน ${confirmed.length} คน`);
+			toast.success(t.toastConfirmedHousehold(confirmed.length));
 		} catch (err: unknown) {
-			toast.error(err instanceof Error ? err.message : 'ยืนยันถึงโซนไม่สำเร็จ');
+			toast.error(err instanceof Error ? err.message : t.toastConfirmFailed);
 		}
 	}
 
@@ -436,7 +427,7 @@
 			(e) => canConfirmRoom(e) && isPendingZoneArrivalConfirmation(e)
 		);
 		if (targets.length === 0) {
-			toast.error('ไม่มีรายการที่รอยืนยันถึงโซนในชุดที่เลือก');
+			toast.error(t.toastNoneToConfirm);
 			return;
 		}
 		bulkBusy = true;
@@ -451,7 +442,7 @@
 				.filter((_, i) => results[i]?.status === 'fulfilled')
 				.map((e) => e._id);
 			removeSucceededFromSelection(succeededIds);
-			toastSettled(ok, failed, 'ยืนยันถึงโซน');
+			toastSettled(ok, failed, t.opConfirmArrival);
 		} finally {
 			bulkBusy = false;
 		}
@@ -466,7 +457,7 @@
 	async function bulkApplyZone() {
 		const zone = bulkZone.trim();
 		if (!zone) {
-			toast.error('กรุณาเลือกโซนที่พัก');
+			toast.error(t.pickZoneToast);
 			return;
 		}
 		if (bulkBusy || selectedIds.length === 0) return;
@@ -477,11 +468,7 @@
 			isPendingTab ? canCheckInEvacuee(e) : canChangeEvacueeZone(e)
 		);
 		if (targets.length === 0) {
-			toast.error(
-				isPendingTab
-					? 'ไม่มีรายการที่พร้อมจัดโซนในชุดที่เลือก'
-					: 'ไม่มีรายการที่ย้ายโซนได้ในชุดที่เลือก'
-			);
+			toast.error(isPendingTab ? t.toastNoneToAssign : t.toastNoneToMove);
 			return;
 		}
 
@@ -498,7 +485,7 @@
 				.filter((_, i) => results[i]?.status === 'fulfilled')
 				.map((e) => e._id);
 			removeSucceededFromSelection(succeededIds);
-			toastSettled(ok, failed, isPendingTab ? 'จัดโซน' : 'ย้ายโซน');
+			toastSettled(ok, failed, isPendingTab ? t.opAssign : t.opMove);
 			if (ok > 0) bulkZoneOpen = false;
 		} finally {
 			bulkBusy = false;
@@ -511,21 +498,21 @@
 		try {
 			const result = await lookupFederatedByScanCode(queryClient, raw);
 			if (!result) {
-				toast.error('ไม่พบข้อมูลผู้ประสบภัยที่ตรงกับรหัสนี้');
+				toast.error(t.toastCodeNotFound);
 				return;
 			}
 			barcodeInput = '';
 			showCameraModal = false;
 			if (result.source === 'couch') {
-				toast.success(`พบผู้ประสบภัย: ${formatPersonName(result.evacuee)}`);
+				toast.success(t.toastFoundEvacuee(formatPersonName(result.evacuee)));
 				openDetail(result.evacuee._id, { focusZone: true });
 				return;
 			}
-			toast.success('พบคิวลงทะเบียนล่วงหน้า (คิวกลาง) — รับเข้าศูนย์ก่อนจัดโซน');
+			toast.success(t.toastFoundCentralQueue);
 			claimHit = result.hit;
 			claimOpen = true;
 		} catch (err) {
-			toast.error(err instanceof Error ? err.message : 'ค้นหาจากรหัสที่สแกนไม่สำเร็จ');
+			toast.error(err instanceof Error ? err.message : t.toastScanFailed);
 		} finally {
 			lookupInFlight = false;
 		}
@@ -557,7 +544,7 @@
 				() => {}
 			)
 			.catch(() => {
-				cameraError = 'ไม่สามารถเข้าถึงกล้องได้ โปรดตรวจสอบการอนุญาตใช้งานกล้อง';
+				cameraError = t.cameraDenied;
 			});
 
 		return () => {
@@ -576,14 +563,10 @@
 			day: 'numeric',
 			month: 'short'
 		});
-		return `${time} น. (${day})`;
+		return t.timeWithDay(time, day);
 	}
 
-	const emptyPendingMessage = $derived(
-		enableMedical
-			? 'ยังไม่มีผู้พร้อมจัดโซน — ผู้ที่ลงทะเบียนแล้วต้องผ่านคัดกรองผู้เข้าพักก่อน'
-			: 'ยังไม่มีผู้พร้อมจัดโซน — เมื่อลงทะเบียนเสร็จจะปรากฏที่นี่'
-	);
+	const emptyPendingMessage = $derived(enableMedical ? t.emptyPendingMedical : t.emptyPendingPlain);
 </script>
 
 {#snippet chip(label: string, tone: string)}
@@ -618,10 +601,10 @@
 									(props.onclick as ((e: MouseEvent) => void) | undefined)?.(e);
 								}}
 								onmousedown={(e) => e.stopPropagation()}
-								aria-label={`ดู${heading}ทั้งหมด ${labels.length} รายการ`}
+								aria-label={t.chipViewAllAria(heading, labels.length)}
 								class="rounded-md border border-slate-200 bg-white px-2 py-0.5 text-xs font-semibold text-slate-600 tabular-nums hover:bg-slate-50 hover:text-slate-900 focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none"
 							>
-								+{hidden} รายการ
+								{t.chipMore(hidden)}
 							</button>
 						{/snippet}
 					</Popover.Trigger>
@@ -642,7 +625,7 @@
 {/snippet}
 
 <svelte:head>
-	<title>จัดสรรที่พัก (Station 3) | SmartShelter</title>
+	<title>{t.listPageTitle}</title>
 </svelte:head>
 
 <div class="mx-auto flex w-full max-w-7xl flex-col gap-6 px-4 py-6 md:px-6">
@@ -651,18 +634,19 @@
 			<a
 				href={resolve('/portal')}
 				class="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-slate-200/80 bg-white text-slate-600 shadow-2xs transition-colors hover:bg-slate-50"
-				aria-label="กลับหน้าเลือกเมนูหลัก"
+				aria-label={t.backToMenuAria}
 			>
 				<ArrowLeft class="size-4" />
 			</a>
 			<div class="min-w-0">
 				<div class="flex flex-wrap items-center gap-x-2 gap-y-1">
 					<MapPin class="size-6 shrink-0 text-station-3" />
-					<h1 class="text-2xl font-bold tracking-tight text-slate-900 md:text-3xl">จัดสรรที่พัก</h1>
+					<h1 class="text-2xl font-bold tracking-tight text-slate-900 md:text-3xl">
+						{t.listTitle}
+					</h1>
 				</div>
 				<p class="mt-0.5 text-xs text-slate-500">
-					เลือกคนจากคิว「พร้อมจัดโซน」(เรียงตามเวลารอ — รอนานสุดก่อน) หรือสแกน Handover / Person QR
-					เป็นทางลัด
+					{t.listSubtitle}
 				</p>
 			</div>
 		</div>
@@ -676,7 +660,7 @@
 				/>
 				<Input
 					type="text"
-					placeholder="ค้นหาชื่อ, นามสกุล, เบอร์โทร, เลขบัตร..."
+					placeholder={t.searchPlaceholder}
 					bind:value={searchQuery}
 					class="h-12 w-full rounded-xl bg-slate-50 pr-8 pl-11"
 				/>
@@ -685,7 +669,7 @@
 						type="button"
 						onclick={() => (searchQuery = '')}
 						class="absolute top-1/2 right-2.5 -translate-y-1/2 p-0.5 text-slate-400 hover:text-slate-700"
-						title="ล้างคำค้นหา"
+						title={t.clearSearch}
 					>
 						<X class="size-3.5" />
 					</button>
@@ -699,7 +683,7 @@
 					/>
 					<Input
 						type="text"
-						placeholder="สแกนรหัส / หมายเลขบัตร"
+						placeholder={t.scanPlaceholder}
 						bind:value={barcodeInput}
 						onkeydown={(e) => {
 							if (e.key === 'Enter') {
@@ -717,7 +701,7 @@
 					disabled={!barcodeInput.trim()}
 					class="h-12 shrink-0 rounded-xl"
 				>
-					ยืนยัน
+					{t.confirm}
 				</Button>
 				<Button
 					variant="default"
@@ -726,13 +710,13 @@
 					class="h-12 shrink-0 gap-1.5 rounded-xl bg-station-3-strong font-semibold text-white hover:bg-station-3-text"
 				>
 					<Camera class="size-4" />
-					<span>สแกนกล้อง</span>
+					<span>{t.scanCamera}</span>
 				</Button>
 			</div>
 		</div>
 	</Card.Root>
 
-	<section aria-label="สรุปยอดคิวจัดสรรที่พัก" class="grid grid-cols-1 gap-4 sm:grid-cols-3">
+	<section aria-label={t.summaryAria} class="grid grid-cols-1 gap-4 sm:grid-cols-3">
 		<button
 			type="button"
 			onclick={() => setActiveTab('pending')}
@@ -742,7 +726,7 @@
 				: 'border-slate-200/80 bg-white shadow-2xs'}"
 		>
 			<div class="flex min-w-0 items-center gap-2 sm:justify-between">
-				<span class="truncate text-xs font-semibold text-amber-900">พร้อมจัดโซน</span>
+				<span class="truncate text-xs font-semibold text-amber-900">{t.tabPending}</span>
 				<div
 					class="flex size-7 shrink-0 items-center justify-center rounded-lg bg-amber-100 text-amber-700 transition-colors group-hover:bg-amber-200"
 				>
@@ -752,9 +736,9 @@
 			<div class="shrink-0 text-right sm:mt-2 sm:text-left">
 				<p class="text-2xl font-bold tracking-tight text-slate-900 tabular-nums">
 					{pendingEvacuees.length}
-					<span class="text-xs font-normal text-slate-500">คน</span>
+					<span class="text-xs font-normal text-slate-500">{t.unitPerson}</span>
 				</p>
-				<p class="mt-0.5 text-xs text-slate-500">คิวรอจัดสรรที่พัก</p>
+				<p class="mt-0.5 text-xs text-slate-500">{t.pendingSub}</p>
 			</div>
 		</button>
 
@@ -767,7 +751,7 @@
 				: 'border-slate-200/80 bg-white shadow-2xs'}"
 		>
 			<div class="flex min-w-0 items-center gap-2 sm:justify-between">
-				<span class="truncate text-xs font-semibold text-emerald-900">รอยืนยันถึงโซน</span>
+				<span class="truncate text-xs font-semibold text-emerald-900">{t.tabAwaiting}</span>
 				<div
 					class="flex size-7 shrink-0 items-center justify-center rounded-lg bg-emerald-100 text-emerald-700 transition-colors group-hover:bg-emerald-200"
 				>
@@ -777,9 +761,9 @@
 			<div class="shrink-0 text-right sm:mt-2 sm:text-left">
 				<p class="text-2xl font-bold tracking-tight text-slate-900 tabular-nums">
 					{awaitingConfirmEvacuees.length}
-					<span class="text-xs font-normal text-slate-500">คน</span>
+					<span class="text-xs font-normal text-slate-500">{t.unitPerson}</span>
 				</p>
-				<p class="mt-0.5 text-xs text-slate-500">รอ Zone Arrival Confirmation</p>
+				<p class="mt-0.5 text-xs text-slate-500">{t.awaitingSub}</p>
 			</div>
 		</button>
 
@@ -792,7 +776,7 @@
 				: 'border-slate-200/80 bg-white shadow-2xs'}"
 		>
 			<div class="flex min-w-0 items-center gap-2 sm:justify-between">
-				<span class="truncate text-xs font-semibold text-sky-900">ยืนยันแล้ว</span>
+				<span class="truncate text-xs font-semibold text-sky-900">{t.tabAssigned}</span>
 				<div
 					class="flex size-7 shrink-0 items-center justify-center rounded-lg bg-sky-100 text-sky-700 transition-colors group-hover:bg-sky-200"
 				>
@@ -802,9 +786,9 @@
 			<div class="shrink-0 text-right sm:mt-2 sm:text-left">
 				<p class="text-2xl font-bold tracking-tight text-slate-900 tabular-nums">
 					{assignedEvacuees.length}
-					<span class="text-xs font-normal text-slate-500">คน</span>
+					<span class="text-xs font-normal text-slate-500">{t.unitPerson}</span>
 				</p>
-				<p class="mt-0.5 text-xs text-slate-500">ย้ายโซนได้</p>
+				<p class="mt-0.5 text-xs text-slate-500">{t.assignedSub}</p>
 			</div>
 		</button>
 	</section>
@@ -813,7 +797,7 @@
 		<div class="border-b border-border">
 			<nav
 				class="flex [scrollbar-width:none] gap-1 overflow-x-auto [&::-webkit-scrollbar]:hidden"
-				aria-label="แท็บคิวจัดสรรที่พัก"
+				aria-label={t.tabsAria}
 			>
 				<button
 					type="button"
@@ -824,7 +808,7 @@
 						: 'border-transparent text-muted-foreground hover:border-border hover:text-foreground'}"
 				>
 					<Clock class="size-4" />
-					<span>พร้อมจัดโซน</span>
+					<span>{t.tabPending}</span>
 					<span class="rounded-full bg-muted px-2 py-0.5 text-xs font-medium tabular-nums">
 						{pendingEvacuees.length}
 					</span>
@@ -838,7 +822,7 @@
 						: 'border-transparent text-muted-foreground hover:border-border hover:text-foreground'}"
 				>
 					<Clock class="size-4" />
-					<span>รอยืนยันถึงโซน</span>
+					<span>{t.tabAwaiting}</span>
 					<span class="rounded-full bg-muted px-2 py-0.5 text-xs font-medium tabular-nums">
 						{awaitingConfirmEvacuees.length}
 					</span>
@@ -852,7 +836,7 @@
 						: 'border-transparent text-muted-foreground hover:border-border hover:text-foreground'}"
 				>
 					<Check class="size-4" />
-					<span>ยืนยันแล้ว</span>
+					<span>{t.tabAssigned}</span>
 					<span class="rounded-full bg-muted px-2 py-0.5 text-xs font-medium tabular-nums">
 						{assignedEvacuees.length}
 					</span>
@@ -867,14 +851,14 @@
 				<Users class="size-4 text-station-3" />
 				<span class="text-base font-semibold text-slate-900">
 					{#if activeTab === 'pending'}
-						Cleared for Zoning — คิวพร้อมจัดสรรที่พัก
+						{t.headerPending}
 					{:else if activeTab === 'awaiting_confirm'}
-						รอยืนยันถึงโซน (Zone Arrival Confirmation) — ไม่หมดอายุอัตโนมัติ
+						{t.headerAwaiting}
 					{:else}
-						รายการที่ยืนยันถึงโซนแล้ว (ย้ายโซนได้)
+						{t.headerAssigned}
 					{/if}
 				</span>
-				<Badge variant="secondary" class="text-xs">{filteredQueue.length} ราย</Badge>
+				<Badge variant="secondary" class="text-xs">{t.queueCount(filteredQueue.length)}</Badge>
 			</div>
 
 			{#if selectedIds.length > 0}
@@ -882,7 +866,8 @@
 					class="flex flex-wrap items-center gap-3 border-b border-sky-200/80 bg-[var(--shelter-accent-blue-bg)] px-5 py-3"
 				>
 					<span class="text-sm font-semibold text-[var(--shelter-accent-blue-text)]">
-						เลือกแล้ว <span class="tabular-nums">{selectedIds.length}</span> คน
+						{t.selectedPrefix} <span class="tabular-nums">{selectedIds.length}</span>
+						{t.unitPerson}
 					</span>
 					<Button
 						variant="outline"
@@ -891,7 +876,7 @@
 						disabled={bulkBusy}
 						class="rounded-lg border-slate-200"
 					>
-						ล้างการเลือก
+						{t.clearSelection}
 					</Button>
 					{#if activeTab === 'awaiting_confirm'}
 						<Button
@@ -900,7 +885,7 @@
 							disabled={bulkBusy || selectedIds.length === 0}
 							class="rounded-lg font-semibold"
 						>
-							ยืนยันถึงโซน ({selectedIds.length} คน)
+							{t.bulkConfirm(selectedIds.length)}
 						</Button>
 					{:else if activeTab === 'pending'}
 						<Button
@@ -909,7 +894,7 @@
 							disabled={bulkBusy || selectedIds.length === 0}
 							class="rounded-lg font-semibold"
 						>
-							จัดโซนเดียวกัน…
+							{t.bulkAssignSame}
 						</Button>
 					{:else}
 						<Button
@@ -918,7 +903,7 @@
 							disabled={bulkBusy || selectedIds.length === 0}
 							class="rounded-lg font-semibold"
 						>
-							ย้ายโซนเดียวกัน…
+							{t.bulkMoveSame}
 						</Button>
 					{/if}
 				</div>
@@ -929,7 +914,7 @@
 					<div
 						class="size-6 animate-spin rounded-full border-2 border-primary border-t-transparent"
 					></div>
-					<p class="text-xs">กำลังโหลดคิว...</p>
+					<p class="text-xs">{t.loadingQueue}</p>
 				</div>
 			{:else if filteredQueue.length === 0}
 				<div class="flex h-48 flex-col items-center justify-center gap-2 px-6 text-center">
@@ -938,9 +923,9 @@
 						{#if activeTab === 'pending'}
 							{emptyPendingMessage}
 						{:else if activeTab === 'awaiting_confirm'}
-							ไม่มีรายการรอยืนยันถึงโซน
+							{t.emptyAwaiting}
 						{:else}
-							ยังไม่มีรายการที่ยืนยันถึงโซนแล้ว
+							{t.emptyAssigned}
 						{/if}
 					</p>
 				</div>
@@ -954,31 +939,33 @@
 										checked={allPageSelected}
 										indeterminate={somePageSelected}
 										onCheckedChange={toggleSelectAll}
-										aria-label="เลือกทั้งหมดในหน้านี้"
+										aria-label={t.selectAllAria}
 									/>
 								</Table.Head>
 								<Table.Head class="h-11 text-xs font-semibold text-slate-600"
-									>ชื่อ-นามสกุล</Table.Head
-								>
-								<Table.Head class="h-11 px-3 text-xs font-semibold text-slate-600">บัตร</Table.Head>
-								<Table.Head class="h-11 px-3 text-xs font-semibold text-slate-600"
-									>เฝ้าระวัง (EWAR)</Table.Head
+									>{t.colName}</Table.Head
 								>
 								<Table.Head class="h-11 px-3 text-xs font-semibold text-slate-600"
-									>กลุ่มเปราะบาง</Table.Head
+									>{t.colCard}</Table.Head
 								>
 								<Table.Head class="h-11 px-3 text-xs font-semibold text-slate-600"
-									>ความต้องการพิเศษ</Table.Head
+									>{t.colEwar}</Table.Head
 								>
 								<Table.Head class="h-11 px-3 text-xs font-semibold text-slate-600"
-									>ครอบครัว</Table.Head
+									>{t.colVulnerable}</Table.Head
+								>
+								<Table.Head class="h-11 px-3 text-xs font-semibold text-slate-600"
+									>{t.colSpecialNeeds}</Table.Head
+								>
+								<Table.Head class="h-11 px-3 text-xs font-semibold text-slate-600"
+									>{t.colFamily}</Table.Head
 								>
 								<Table.Head class="h-11 px-3 text-xs font-semibold text-slate-600">
-									{activeTab === 'pending' ? 'รอมาแล้ว' : 'โซน'}
+									{activeTab === 'pending' ? t.colWaited : t.colZone}
 								</Table.Head>
 								<Table.Head
 									class="sticky right-0 z-20 h-11 bg-slate-50 pr-5 text-right text-xs font-semibold text-slate-600 shadow-[-8px_0_8px_-8px_rgba(15,23,42,0.12)]"
-									>ดำเนินการ</Table.Head
+									>{t.colActions}</Table.Head
 								>
 							</Table.Row>
 						</Table.Header>
@@ -1005,7 +992,7 @@
 											<Checkbox
 												checked={selected}
 												onCheckedChange={(checked) => onCheckboxChange(row._id, index, checked)}
-												aria-label={`เลือก ${formatPersonName(row)}`}
+												aria-label={t.selectRowAria(formatPersonName(row))}
 											/>
 										</div>
 									</Table.Cell>
@@ -1017,23 +1004,23 @@
 									</Table.Cell>
 									<Table.Cell class="px-3 py-3">
 										{@render chipList(
-											(ewarSymptoms ?? []).map((id) => ewarSymptomLabel(id)),
+											(ewarSymptoms ?? []).map((id) => ewarSymptomLabel(id, langState.current)),
 											CHIP_TONES.ewar,
-											'เฝ้าระวัง (EWAR)'
+											t.colEwar
 										)}
 									</Table.Cell>
 									<Table.Cell class="px-3 py-3">
 										{@render chipList(
 											(row.vulnerable_groups ?? []).map(getSpecialNeedLabel),
 											CHIP_TONES.vulnerable,
-											'กลุ่มเปราะบาง'
+											t.colVulnerable
 										)}
 									</Table.Cell>
 									<Table.Cell class="px-3 py-3">
 										{@render chipList(
 											(row.special_needs ?? []).map(getSpecialNeedLabel),
 											CHIP_TONES.need,
-											'ความต้องการพิเศษ'
+											t.colSpecialNeeds
 										)}
 									</Table.Cell>
 									<Table.Cell class="px-3 py-3 text-sm text-slate-600">
@@ -1043,7 +1030,7 @@
 										{#if activeTab === 'pending'}
 											{@const since = zoningQueueSince(row, latestScreeningAt[row._id])}
 											<span title={formatTimeOrDate(since)} class="tabular-nums">
-												{formatQueueWait(since, now)}
+												{formatQueueWait(since, now, langState.current)}
 											</span>
 										{:else}
 											<span class="inline-flex flex-wrap items-center gap-1.5">
@@ -1051,18 +1038,18 @@
 												{#if quarantineZoneCodes.has(row.current_stay.zone ?? '')}
 													<span
 														class="rounded-full bg-red-600 px-1.5 py-0.5 text-xs font-semibold text-white dark:bg-red-500"
-														>กักโรค</span
+														>{t.quarantineBadge}</span
 													>
 												{/if}
 												{#if row.current_stay.status === 'room_confirmed'}
 													<span
 														class="rounded-full border border-emerald-500/40 bg-emerald-500/10 px-1.5 py-0.5 text-xs font-medium text-emerald-800 dark:text-emerald-200"
-														>ยืนยันแล้ว</span
+														>{t.confirmedBadge}</span
 													>
 												{:else if isPendingZoneArrivalConfirmation(row)}
 													<span
 														class="rounded-full border border-amber-500/40 bg-amber-500/10 px-1.5 py-0.5 text-xs font-medium text-amber-800 dark:text-amber-200"
-														>รอยืนยัน</span
+														>{t.awaitingBadge}</span
 													>
 												{/if}
 											</span>
@@ -1082,7 +1069,7 @@
 													disabled={confirmRoomMutation.isPending || bulkBusy}
 													class="rounded-lg font-semibold"
 												>
-													ยืนยันถึงโซน
+													{t.confirmZoneArrival}
 												</Button>
 												{#if row.household_id}
 													<Button
@@ -1095,7 +1082,7 @@
 														disabled={confirmRoomHouseholdMutation.isPending || bulkBusy}
 														class="rounded-lg border-slate-200 px-3 font-semibold text-slate-700"
 													>
-														ทั้งครัวเรือน
+														{t.actionWholeHousehold}
 													</Button>
 												{/if}
 											{:else}
@@ -1108,7 +1095,7 @@
 													}}
 													class="rounded-lg border-slate-200 px-3 font-semibold text-slate-700"
 												>
-													{activeTab === 'pending' ? 'จัดโซน' : 'ย้ายโซน'}
+													{activeTab === 'pending' ? t.actionAssign : t.actionMove}
 												</Button>
 											{/if}
 										</div>
@@ -1135,8 +1122,8 @@
 <Dialog.Root bind:open={showCameraModal}>
 	<Dialog.Content class="max-w-md">
 		<Dialog.Header>
-			<Dialog.Title>สแกน QR จัดสรรที่พัก</Dialog.Title>
-			<Dialog.Description>สแกน Person QR, Handover หรือรหัสผู้ประสบภัย</Dialog.Description>
+			<Dialog.Title>{t.cameraTitle}</Dialog.Title>
+			<Dialog.Description>{t.cameraDesc}</Dialog.Description>
 		</Dialog.Header>
 		{#if cameraError}
 			<p class="text-sm text-destructive">{cameraError}</p>
@@ -1154,10 +1141,10 @@
 	<Dialog.Content class="max-w-lg">
 		<Dialog.Header>
 			<Dialog.Title>
-				{activeTab === 'assigned' ? 'ย้ายโซนเดียวกัน' : 'จัดโซนเดียวกัน'}
+				{activeTab === 'assigned' ? t.bulkTitleMove : t.bulkTitleAssign}
 			</Dialog.Title>
 			<Dialog.Description>
-				เลือกโซนสำหรับ {selectedEvacuees.length} คนที่เลือก — ไม่ใช้ recommend รายคน
+				{t.bulkDesc(selectedEvacuees.length)}
 			</Dialog.Description>
 		</Dialog.Header>
 		{#if selectedEvacuees.length > 0}
@@ -1166,7 +1153,7 @@
 					.slice(0, 5)
 					.map((e) => formatPersonName(e))
 					.join(', ')}{#if selectedEvacuees.length > 5}
-					&nbsp;และอีก {selectedEvacuees.length - 5} คน{/if}
+					&nbsp;{t.andMore(selectedEvacuees.length - 5)}{/if}
 			</p>
 		{/if}
 		<div class="py-2">
@@ -1180,10 +1167,10 @@
 		</div>
 		<div class="flex justify-end gap-2">
 			<Button variant="outline" onclick={() => (bulkZoneOpen = false)} disabled={bulkBusy}>
-				ยกเลิก
+				{t.cancel}
 			</Button>
 			<Button onclick={() => void bulkApplyZone()} disabled={bulkBusy || !bulkZone.trim()}>
-				{activeTab === 'assigned' ? 'ยืนยันย้ายโซน' : 'ยืนยันจัดโซน'}
+				{activeTab === 'assigned' ? t.bulkConfirmMove : t.bulkConfirmAssign}
 			</Button>
 		</div>
 	</Dialog.Content>

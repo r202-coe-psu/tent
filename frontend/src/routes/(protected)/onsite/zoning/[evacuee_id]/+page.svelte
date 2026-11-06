@@ -49,6 +49,11 @@
 	import { shelterStore } from '$lib/stores/shelter.svelte';
 	import { getShelterCode } from '$lib/db/shelter';
 	import { authStore } from '$lib/stores/auth.svelte';
+	import { langState } from '$lib/states/i18n.svelte';
+	import { getTranslation } from '$lib/utils/i18n';
+	import { STAFF_ZONING_I18N } from '$lib/constants/i18n/staff-zoning';
+
+	const t = $derived(getTranslation(STAFF_ZONING_I18N, langState.current));
 
 	let { data }: { data: { evacueeId: string; focusZone?: boolean } } = $props();
 
@@ -89,28 +94,18 @@
 		const items = chronicDiseaseQuery.data?.items ?? [];
 		// Dedupe after mapping: legacy data may hold both `diabetes` and "เบาหวาน".
 		return [
-			...new Set((medical?.conditions ?? []).map((c) => formatMasterLabelByCode(c, items) || c))
+			...new Set(
+				(medical?.conditions ?? []).map(
+					(c) => formatMasterLabelByCode(c, items, langState.current) || c
+				)
+			)
 		];
 	});
 
-	const SPECIAL_NEED_LABELS: Record<string, string> = {
-		wheelchair: 'ใช้วีลแชร์',
-		bedridden: 'ผู้ป่วยติดเตียง',
-		oxygen: 'ใช้ออกซิเจน',
-		pregnant: 'หญิงตั้งครรภ์',
-		infant: 'ทารก/เด็กเล็ก',
-		visual_impaired: 'ผู้พิการทางการมองเห็น',
-		hearing_impaired: 'ผู้พิการทางการได้ยิน',
-		high_dependency: 'มีภาวะพึ่งพิงสูง',
-		elderly: 'ผู้สูงอายุ',
-		chronic_illness: 'โรคเรื้อรัง',
-		disabled: 'ผู้พิการ'
-	};
-
 	function getSpecialNeedLabel(need: string): string {
 		const masterItem = vulnerableGroupQuery.data?.items.find((i) => i.code === need);
-		if (masterItem) return formatMasterLabel(masterItem, 'th');
-		return SPECIAL_NEED_LABELS[need] ?? need;
+		if (masterItem) return formatMasterLabel(masterItem, langState.current);
+		return t.specialNeeds[need] ?? need;
 	}
 
 	// CR-192: Station 3 `start` when staff open someone who is still waiting to be zoned. The
@@ -182,10 +177,10 @@
 		const zoned = isRezone;
 		const steps: StageStep[] = [];
 		if (enableMedical) {
-			steps.push({ key: 'screened', label: 'คัดกรองแล้ว', done: !!latestScreening || zoned });
+			steps.push({ key: 'screened', label: t.stepScreened, done: !!latestScreening || zoned });
 		}
-		steps.push({ key: 'zoned', label: 'จัดเข้าโซน', done: zoned });
-		steps.push({ key: 'confirmed', label: 'ยืนยันถึงโซน', done: status === 'room_confirmed' });
+		steps.push({ key: 'zoned', label: t.stepZoned, done: zoned });
+		steps.push({ key: 'confirmed', label: t.stepConfirmed, done: status === 'room_confirmed' });
 		return steps;
 	});
 
@@ -276,7 +271,7 @@
 		submitting = true;
 		try {
 			await confirmRoomMutation.mutateAsync({ evacuee, ctx: authorCtx() });
-			toast.success('ยืนยันถึงโซนแล้ว');
+			toast.success(t.toastArrivalConfirmed);
 			await goto(resolve('/onsite/zoning'));
 		} catch (err: unknown) {
 			toast.error(movementConflictMessage(err));
@@ -294,7 +289,7 @@
 				evacuees: allEvacuees,
 				ctx: authorCtx()
 			});
-			toast.success(`ยืนยันถึงโซนทั้งครัวเรือน ${confirmed.length} คน`);
+			toast.success(t.toastConfirmedHousehold(confirmed.length));
 			await goto(resolve('/onsite/zoning'));
 		} catch (err: unknown) {
 			toast.error(movementConflictMessage(err));
@@ -305,15 +300,15 @@
 
 	async function handleSubmit() {
 		if (!evacuee || !selectedZone.trim()) {
-			toast.error('กรุณาเลือกโซนที่พัก');
+			toast.error(t.pickZoneToast);
 			return;
 		}
 		if (intakeBlock) {
-			toast.error('ยังจัดโซนไม่ได้ — ต้องผ่านขั้นตอนก่อนหน้าให้ครบก่อน');
+			toast.error(t.toastIntakeBlocked);
 			return;
 		}
 		if (!canSubmitZone) {
-			toast.error('โซนที่เลือกเป็นโซนเดิม — เลือกโซนใหม่ก่อนบันทึกการย้าย');
+			toast.error(t.toastSameZone);
 			return;
 		}
 		submitting = true;
@@ -325,8 +320,8 @@
 			}
 			toast.success(
 				isRezone
-					? `ย้ายโซนเป็น ${zoneLabel(selectedZone, shelterZones)} แล้ว`
-					: `จัดเข้าโซน ${zoneLabel(selectedZone, shelterZones)} แล้ว — รอยืนยันถึงโซน`
+					? t.toastMoved(zoneLabel(selectedZone, shelterZones))
+					: t.toastAssigned(zoneLabel(selectedZone, shelterZones))
 			);
 			await goto(resolve('/onsite/zoning'));
 		} catch (err: unknown) {
@@ -338,7 +333,7 @@
 </script>
 
 <svelte:head>
-	<title>จัดสรรที่พัก | SmartShelter</title>
+	<title>{t.detailPageTitle}</title>
 </svelte:head>
 
 <div class="mx-auto flex w-full max-w-3xl flex-col gap-6 px-4 py-6 md:px-6">
@@ -347,14 +342,18 @@
 		class="inline-flex w-fit items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
 	>
 		<ArrowLeft class="size-4" />
-		กลับไปรายการจัดโซน
+		{t.backToList}
 	</a>
 	<div class="-mt-3 flex items-center gap-3">
 		<div>
 			<div class="flex items-center gap-2">
 				<MapPin class="size-5 text-amber-600" />
 				<h1 class="text-xl font-bold">
-					{isAwaitingConfirm ? 'ยืนยันถึงโซน' : isRezone ? 'ย้ายโซนที่พัก' : 'จัดสรรที่พัก'}
+					{isAwaitingConfirm
+						? t.detailTitleConfirm
+						: isRezone
+							? t.detailTitleMove
+							: t.detailTitleAssign}
 				</h1>
 			</div>
 		</div>
@@ -362,14 +361,15 @@
 
 	{#if evacueeQuery.isPending}
 		<p class="flex items-center gap-2 text-sm text-muted-foreground">
-			<Loader2 class="size-4 animate-spin" /> กำลังโหลด...
+			<Loader2 class="size-4 animate-spin" />
+			{t.loading}
 		</p>
 	{:else if !evacuee}
 		<Card.Root class="p-6">
-			<p class="text-sm text-muted-foreground">ไม่พบผู้ประสบภัยรหัสนี้</p>
+			<p class="text-sm text-muted-foreground">{t.notFound}</p>
 			<Button class="mt-4" variant="outline" href={resolve('/onsite/zoning')}>
 				<ArrowLeft class="mr-1.5 size-4" />
-				กลับไปรายการจัดโซน
+				{t.backToList}
 			</Button>
 		</Card.Root>
 	{:else}
@@ -382,26 +382,23 @@
 							variant="outline"
 							class="border-amber-500/40 bg-amber-500/15 text-amber-800 dark:text-amber-200"
 						>
-							รอยืนยันถึงโซน · {zoneLabel(currentZone, shelterZones)}
+							{t.badgeAwaiting(zoneLabel(currentZone, shelterZones))}
 						</Badge>
 					{:else if evacuee.current_stay.status === 'room_confirmed'}
 						<Badge
 							variant="outline"
 							class="border-emerald-500/40 bg-emerald-500/15 text-emerald-800 dark:text-emerald-200"
 						>
-							ยืนยันแล้ว · {zoneLabel(currentZone, shelterZones)}
+							{t.badgeConfirmed(zoneLabel(currentZone, shelterZones))}
 						</Badge>
 					{:else}
 						<StayStatusBadge status={evacuee.current_stay.status} />
 					{/if}
 				</div>
 				<p class="text-xs text-muted-foreground">
-					บัตร {maskNationalId(evacuee.person_id?.number)} · ครอบครัว {householdLabel}
+					{t.cardAndFamily(maskNationalId(evacuee.person_id?.number), householdLabel)}
 				</p>
-				<ol
-					class="flex flex-wrap items-center gap-1.5 pt-1 text-xs"
-					aria-label="ขั้นตอนจัดสรรที่พัก"
-				>
+				<ol class="flex flex-wrap items-center gap-1.5 pt-1 text-xs" aria-label={t.stepsAria}>
 					{#each stageSteps as step, i (step.key)}
 						{#if i > 0}
 							<li aria-hidden="true" class="text-muted-foreground">→</li>
@@ -422,7 +419,7 @@
 								variant="outline"
 								class="border-red-500/40 bg-red-500/15 text-red-800 dark:text-red-200"
 							>
-								เฝ้าระวัง EWAR ({latestScreening.symptoms.length} อาการ)
+								{t.ewarBadge(latestScreening.symptoms.length)}
 							</Badge>
 						{/if}
 						{#if latestScreening?.track === 'fast_track'}
@@ -430,19 +427,17 @@
 								variant="outline"
 								class="border-blue-500/40 bg-blue-500/15 text-blue-800 dark:text-blue-200"
 							>
-								Fast Track
+								{t.fastTrack}
 							</Badge>
 						{/if}
 						{#if isolationDefault}
-							<span class="text-xs text-amber-700 dark:text-amber-300"
-								>— แนะนำกักตัว (ไม่รวมครัวเรือนโดยปริยาย)</span
-							>
+							<span class="text-xs text-amber-700 dark:text-amber-300">{t.isolationHint}</span>
 						{/if}
 					</div>
 				{/if}
 				{#if evacuee.vulnerable_groups && evacuee.vulnerable_groups.length > 0}
 					<div class="flex flex-wrap items-center gap-1.5 pt-1">
-						<span class="text-xs font-medium text-muted-foreground">กลุ่มเปราะบาง:</span>
+						<span class="text-xs font-medium text-muted-foreground">{t.vulnerableLabel}</span>
 						{#each evacuee.vulnerable_groups as group (group)}
 							<Badge variant="outline" class="border-primary/30 bg-primary/10 text-primary">
 								{getSpecialNeedLabel(group)}
@@ -452,7 +447,7 @@
 				{/if}
 				{#if chronicDiseaseLabels.length > 0}
 					<div class="flex flex-wrap items-center gap-1.5 pt-1">
-						<span class="text-xs font-medium text-muted-foreground">โรคประจำตัว:</span>
+						<span class="text-xs font-medium text-muted-foreground">{t.chronicLabel}</span>
 						{#each chronicDiseaseLabels as label (label)}
 							<Badge variant="outline" class="border-slate-300 bg-slate-50 text-slate-800">
 								{label}
@@ -462,7 +457,7 @@
 				{/if}
 				{#if evacuee.special_needs && evacuee.special_needs.length > 0}
 					<div class="flex flex-wrap items-center gap-1.5 pt-1">
-						<span class="text-xs font-medium text-muted-foreground">ความต้องการพิเศษ:</span>
+						<span class="text-xs font-medium text-muted-foreground">{t.specialNeedsLabel}</span>
 						{#each evacuee.special_needs as need (need)}
 							<Badge
 								variant="outline"
@@ -485,16 +480,16 @@
 						: 'border-border bg-card'}"
 				>
 					<h2 id="screening-findings-title" class="text-sm font-semibold text-foreground">
-						ผลจากจุดคัดกรอง (สถานี 2)
+						{t.findingsTitle}
 					</h2>
 					{#if ewarSymptoms.length > 0}
 						<p class="mt-1 text-sm font-medium text-red-800 dark:text-red-200">
-							มีอาการเฝ้าระวัง — ควรแยกไปโซนกักตัว ไม่ให้อยู่รวมกับผู้อื่น
+							{t.findingsWarning}
 						</p>
 					{/if}
 					<dl class="mt-3 grid gap-3 text-sm sm:grid-cols-2">
 						<div class="sm:col-span-2">
-							<dt class="text-xs text-muted-foreground">อาการเฝ้าระวัง (EWAR)</dt>
+							<dt class="text-xs text-muted-foreground">{t.ewarSymptomsLabel}</dt>
 							<dd class="mt-1">
 								{#if ewarSymptoms.length > 0}
 									<ul class="flex flex-wrap gap-1.5">
@@ -504,24 +499,24 @@
 													variant="outline"
 													class="border-red-500/40 bg-red-500/15 text-red-800 dark:text-red-200"
 												>
-													{ewarSymptomLabel(symptom)}
+													{ewarSymptomLabel(symptom, langState.current)}
 												</Badge>
 											</li>
 										{/each}
 									</ul>
 								{:else}
-									<span class="text-muted-foreground">ไม่มี</span>
+									<span class="text-muted-foreground">{t.none}</span>
 								{/if}
 							</dd>
 						</div>
 						<div>
-							<dt class="text-xs text-muted-foreground">แนวทางดูแล</dt>
+							<dt class="text-xs text-muted-foreground">{t.careLabel}</dt>
 							<dd class="mt-1">
-								{latestScreening.track === 'fast_track' ? 'Fast Track (ดูแลก่อน)' : 'ดูแลตามปกติ'}
+								{latestScreening.track === 'fast_track' ? t.careFastTrack : t.careNormal}
 							</dd>
 						</div>
 						<div>
-							<dt class="text-xs text-muted-foreground">อาการทั่วไป / บันทึก</dt>
+							<dt class="text-xs text-muted-foreground">{t.notesLabel}</dt>
 							<dd class="mt-1 whitespace-pre-line">{latestScreening.notes?.trim() || '—'}</dd>
 						</div>
 					</dl>
@@ -533,9 +528,9 @@
 					role="alert"
 					class="mb-4 rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-sm text-amber-900 dark:text-amber-100"
 				>
-					<p class="font-semibold">ยังไม่รายงานตัว — จัดโซนไม่ได้</p>
+					<p class="font-semibold">{t.notReportedTitle}</p>
 					<p class="mt-0.5 text-xs">
-						คนนี้ลงทะเบียนล่วงหน้าไว้แต่ยังไม่ได้รายงานตัวที่สถานี 1 ให้รายงานตัวก่อน แล้วจึงจัดโซน
+						{t.notReportedBody}
 					</p>
 					<Button
 						class="mt-2"
@@ -543,7 +538,7 @@
 						variant="outline"
 						href={resolve(`/onsite/people/${evacuee._id}/report-in`)}
 					>
-						ไปรายงานตัว (สถานี 1)
+						{t.goReportIn}
 					</Button>
 				</div>
 			{:else if intakeBlock === 'not_screened'}
@@ -551,9 +546,9 @@
 					role="alert"
 					class="mb-4 rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-sm text-amber-900 dark:text-amber-100"
 				>
-					<p class="font-semibold">ยังไม่ผ่านคัดกรองผู้เข้าพัก — จัดโซนไม่ได้</p>
+					<p class="font-semibold">{t.notScreenedTitle}</p>
 					<p class="mt-0.5 text-xs">
-						ศูนย์นี้เปิดคัดกรองผู้เข้าพัก ให้ส่งไปสถานี 2 ก่อน แล้วจึงจัดโซน
+						{t.notScreenedBody}
 					</p>
 					<Button
 						class="mt-2"
@@ -561,7 +556,7 @@
 						variant="outline"
 						href={resolve(`/onsite/medical-screening/${evacuee._id}`)}
 					>
-						ไปคัดกรองผู้เข้าพัก (สถานี 2)
+						{t.goScreening}
 					</Button>
 				</div>
 			{/if}
@@ -585,12 +580,10 @@
 					{#if companionCandidates.length > 0}
 						<div class="mt-6 space-y-3 border-t border-border pt-4">
 							<p class="text-sm font-semibold">
-								{isRezone
-									? 'ย้ายสมาชิกครัวเรือนที่พักอยู่ด้วย'
-									: 'จัดโซนสมาชิกครัวเรือนที่รอจัดด้วย'}
+								{isRezone ? t.companionTitleMove : t.companionTitleAssign}
 							</p>
 							<p class="text-xs text-muted-foreground">
-								เลือกเฉพาะคน — คนละโซนได้เมื่อจำเป็น (เช่น กักตัว)
+								{t.companionHint}
 							</p>
 							{#each companionCandidates as member (member._id)}
 								{@const checked = selectedCompanionIds.includes(member._id)}
@@ -621,7 +614,7 @@
 							{#if submitting}
 								<Loader2 class="mr-2 size-4 animate-spin" />
 							{/if}
-							ยืนยันถึงโซน
+							{t.confirmZoneArrival}
 						</Button>
 						{#if evacuee.household_id}
 							<Button
@@ -630,7 +623,7 @@
 								onclick={handleConfirmHouseholdArrival}
 								disabled={submitting}
 							>
-								ยืนยันทั้งครัวเรือน
+								{t.confirmWholeHousehold}
 							</Button>
 						{/if}
 					{/if}
@@ -644,7 +637,7 @@
 							{#if submitting}
 								<Loader2 class="mr-2 size-4 animate-spin" />
 							{/if}
-							{isRezone ? 'บันทึกการย้ายโซน' : 'จัดเข้าโซน (รอยืนยันถึงโซน)'}
+							{isRezone ? t.saveMove : t.saveAssign}
 						</Button>
 					{:else}
 						<Button
@@ -653,7 +646,7 @@
 							onclick={() => (rezoneOpenFor = evacueeId)}
 							disabled={submitting}
 						>
-							ย้ายโซน…
+							{t.openRezone}
 						</Button>
 					{/if}
 				</div>
