@@ -487,15 +487,7 @@ async function receiveBatch(manager: Page, batch: Batch): Promise<void> {
 	await yieldQty.focus();
 	await yieldQty.press('End');
 	await yieldQty.pressSequentially('.5');
-	await expect(yieldQty).toHaveValue(`${batch.actualYield}5`);
-	const digitsOnly = manager.getByRole('status').filter({ hasText: 'กรอกได้เฉพาะตัวเลข' });
-	await expect(digitsOnly).toBeVisible();
-	await expect(digitsOnly).toBeHidden({ timeout: 6_000 });
-	// `fill` types through beforeinput and is refused too, so set the value the way a stale draft would.
-	await yieldQty.evaluate((input: HTMLInputElement, value) => {
-		input.value = value;
-		input.dispatchEvent(new Event('input', { bubbles: true }));
-	}, `${batch.actualYield}.5`);
+	await expect(yieldQty).toHaveValue(`${batch.actualYield}.5`);
 	await expect(manager.getByText('หน่วยนับต้องเป็นจำนวนเต็ม')).toBeVisible();
 	await expect(yieldQty).toHaveAttribute('aria-invalid', 'true');
 	await expect(confirm).toBeDisabled();

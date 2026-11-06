@@ -15,9 +15,7 @@
 		toLedgerQtyUnit,
 		useUnitDimensionResolver,
 		useUnitsOfMeasure,
-		WHOLE_QTY_MESSAGE,
-		WholeNumberGuard,
-		WholeNumberNote
+		WHOLE_QTY_MESSAGE
 	} from '$lib/features/catalog';
 	import { langState } from '$lib/states/i18n.svelte';
 	import { authStore } from '$lib/stores/auth.svelte';
@@ -92,7 +90,6 @@
 
 	// The ticket is fixed for the lifetime of this component (the parent keys it by `_id`),
 	// so its lines are read once; refetches of the donation must not overwrite the count.
-	const wholeGuard = new WholeNumberGuard();
 
 	let lines = $state<BatchLineDraft[]>(untrack(() => initialBatchDrafts(donation)));
 	// New lines continue after the ticket's own, so no line ever reuses a number.
@@ -446,7 +443,9 @@
 							<Input
 								id="batch-qty-{line.line_no}"
 								type="number"
-								inputmode={unitDimension.resolve(line.unit) === 'count' ? 'numeric' : 'decimal'}
+								inputmode={requiresWholeQty(unitDimension.resolve(line.unit))
+									? 'numeric'
+									: 'decimal'}
 								min="0"
 								step={qtyInputStep(unitDimension.resolve(line.unit))}
 								placeholder="0"
@@ -459,16 +458,11 @@
 									if (event.key === 'Enter') event.preventDefault();
 								}}
 								disabled={line.locked}
-								{@attach wholeGuard.attach(
-									() => requiresWholeQty(unitDimension.resolve(line.unit)),
-									String(line.line_no)
-								)}
 								aria-invalid={problem && ['qty', 'whole'].includes(problemOf(line) ?? '')
 									? 'true'
 									: undefined}
 								class="min-h-11 font-bold tabular-nums"
 							/>
-							<WholeNumberNote guard={wholeGuard} key={String(line.line_no)} />
 						</div>
 
 						{#if !line.locked}

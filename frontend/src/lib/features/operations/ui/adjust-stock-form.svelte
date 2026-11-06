@@ -8,12 +8,9 @@
 	import {
 		formatUnit,
 		qtyInputStep,
-		requiresWholeQty,
 		useUnitDimensionResolver,
 		useUnitsOfMeasure,
-		wholeQtyError,
-		WholeNumberGuard,
-		WholeNumberNote
+		wholeQtyError
 	} from '$lib/features/catalog';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { getShelterCode } from '$lib/db/shelter';
@@ -143,7 +140,6 @@
 	// computed and may stay fractional: counting 0 against 0.5 bottle is how that remainder is written off.
 	const itemDimension = $derived(unitDimension.resolve(selectedItem?.unit));
 	const newQtyError = $derived(wholeQtyError(newQtyInput, itemDimension));
-	const wholeGuard = new WholeNumberGuard();
 
 	// Delta Calculation
 	const deltaQty = $derived.by(() => {
@@ -441,7 +437,6 @@
 								step={qtyInputStep(itemDimension)}
 								bind:value={newQtyInput}
 								aria-invalid={newQtyError ? 'true' : undefined}
-								{@attach wholeGuard.attach(() => requiresWholeQty(itemDimension))}
 								class="min-h-11 border-sky-200 bg-white pr-14 font-mono text-lg font-bold"
 							/>
 							<span
@@ -455,7 +450,6 @@
 								{newQtyError}
 							</p>
 						{/if}
-						<WholeNumberNote guard={wholeGuard} class="mt-1.5" />
 					</div>
 
 					<div

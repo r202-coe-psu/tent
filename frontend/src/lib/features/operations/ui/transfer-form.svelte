@@ -25,9 +25,7 @@
 		qtyInputStep,
 		useUnitDimensionResolver,
 		requiresWholeQty,
-		wholeQtyError,
-		WholeNumberGuard,
-		WholeNumberNote
+		wholeQtyError
 	} from '$lib/features/catalog';
 	import { langState } from '$lib/states/i18n.svelte';
 	import { toast } from 'svelte-sonner';
@@ -94,8 +92,6 @@
 	});
 
 	const { form: formData, submitting } = form;
-
-	const wholeGuard = new WholeNumberGuard();
 
 	const qtyWholeError = $derived(
 		wholeQtyError($formData.qty, unitDimension.resolve($formData.unit))
@@ -251,14 +247,11 @@
 						<Input
 							{...props}
 							type="number"
-							min={unitDimension.resolve($formData.unit) === 'count' ? '1' : '0.01'}
+							min={requiresWholeQty(unitDimension.resolve($formData.unit)) ? '1' : '0.01'}
 							step={qtyInputStep(unitDimension.resolve($formData.unit))}
 							placeholder="ระบุจำนวน"
 							bind:value={$formData.qty}
 							aria-invalid={qtyWholeError ? true : props['aria-invalid']}
-							{@attach wholeGuard.attach(() =>
-								requiresWholeQty(unitDimension.resolve($formData.unit))
-							)}
 							class="min-h-11 font-mono font-bold"
 						/>
 					{/snippet}
@@ -266,7 +259,6 @@
 				{#if qtyWholeError}
 					<p class="text-sm font-medium text-destructive">{qtyWholeError}</p>
 				{/if}
-				<WholeNumberNote guard={wholeGuard} />
 				<Form.FieldErrors />
 			</Form.Field>
 

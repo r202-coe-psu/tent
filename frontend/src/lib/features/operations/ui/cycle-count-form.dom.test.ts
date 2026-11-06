@@ -91,11 +91,12 @@ describe('CycleCountForm whole numbers for count units (#805)', () => {
 	}
 	const saveButton = () => document.body.querySelector<HTMLButtonElement>('button[type="submit"]')!;
 
-	it('refuses a fractional count and says why, then accepts a whole one', async () => {
+	it('keeps a fractional count, flags it, blocks save, then accepts a whole one', async () => {
 		await startCount([lotRow('01JIN1', '5', '2026-10-01T00:00:00.000Z')]);
 
 		const input = await key('3.5');
 		expect(document.body.textContent).toContain('หน่วยนับต้องเป็นจำนวนเต็ม');
+		expect(input.value).toBe('3.5');
 		expect(input.getAttribute('aria-invalid')).toBe('true');
 		expect(saveButton().disabled).toBe(true);
 
@@ -117,31 +118,5 @@ describe('CycleCountForm whole numbers for count units (#805)', () => {
 		await key('2');
 		expect(document.body.textContent).not.toContain('หน่วยนับต้องเป็นจำนวนเต็ม');
 		expect(saveButton().disabled).toBe(false);
-	});
-
-	it('refuses a non-digit keystroke into a count box and says so', async () => {
-		await startCount([lotRow('01JIN1', '5', '2026-10-01T00:00:00.000Z')]);
-		const input = document.body.querySelector<HTMLInputElement>('input[id^="count-"]')!;
-
-		const digit = new InputEvent('beforeinput', {
-			data: '3',
-			inputType: 'insertText',
-			cancelable: true
-		});
-		input.dispatchEvent(digit);
-		expect(digit.defaultPrevented).toBe(false);
-		expect(document.body.querySelector('[role="status"]')).toBeNull();
-
-		const dot = new InputEvent('beforeinput', {
-			data: '.',
-			inputType: 'insertText',
-			cancelable: true
-		});
-		input.dispatchEvent(dot);
-		await settle();
-		expect(dot.defaultPrevented).toBe(true);
-		expect(document.body.querySelector('[role="status"]')?.textContent).toContain(
-			'กรอกได้เฉพาะตัวเลข'
-		);
 	});
 });

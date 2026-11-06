@@ -33,31 +33,43 @@ async function openWith(unit: string) {
 	return document.body.querySelector<HTMLInputElement>('#qty-0')!;
 }
 
-function type(input: HTMLInputElement, data: string) {
-	const event = new InputEvent('beforeinput', { data, inputType: 'insertText', cancelable: true });
-	input.dispatchEvent(event);
-	return event;
+async function type(input: HTMLInputElement, value: string) {
+	input.value = value;
+	input.dispatchEvent(new Event('input', { bubbles: true }));
+	flushSync();
+	await tick();
 }
 
+const WHOLE_ERROR = 'หน่วยนับต้องเป็นจำนวนเต็ม';
+const saveButton = () =>
+	[...document.body.querySelectorAll<HTMLButtonElement>('button')].find((b) =>
+		b.textContent?.includes('บันทึกการแก้ไข')
+	)!;
+
 describe('EditDonationItemsDialog quantity box', () => {
-	it('refuses a decimal point for a count unit and says why', async () => {
+	it('keeps a decimal typed into a count unit, flags it, and blocks save', async () => {
 		const qty = await openWith('bottle');
+		expect(saveButton().disabled).toBe(false);
 
-		expect(type(qty, '5').defaultPrevented).toBe(false);
-		const dot = type(qty, '.');
-		flushSync();
-		await tick();
+		await type(qty, '1.5');
 
-		expect(dot.defaultPrevented).toBe(true);
-		expect(document.body.querySelector('[role="status"]')?.textContent).toContain(
-			'กรอกได้เฉพาะตัวเลข'
-		);
+		expect(qty.value).toBe('1.5');
+		expect(document.body.textContent).toContain(WHOLE_ERROR);
+		expect(qty.getAttribute('aria-invalid')).toBe('true');
+		expect(saveButton().disabled).toBe(true);
+
+		await type(qty, '2');
+		expect(document.body.textContent).not.toContain(WHOLE_ERROR);
+		expect(saveButton().disabled).toBe(false);
 	});
 
-	it('still accepts a decimal point for a mass unit', async () => {
+	it('accepts a decimal for a mass unit', async () => {
 		const qty = await openWith('kg');
 
-		expect(type(qty, '.').defaultPrevented).toBe(false);
-		expect(document.body.querySelector('[role="status"]')).toBeNull();
+		await type(qty, '1.5');
+
+		expect(qty.value).toBe('1.5');
+		expect(document.body.textContent).not.toContain(WHOLE_ERROR);
+		expect(saveButton().disabled).toBe(false);
 	});
 });
