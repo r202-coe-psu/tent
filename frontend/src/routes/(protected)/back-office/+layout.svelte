@@ -1,4 +1,5 @@
 <script lang="ts">
+	import LanguageSwitcher from '$lib/components/language-switcher.svelte';
 	import BackofficeNavbar from '$lib/components/backoffice-navbar.svelte';
 	import type { LayoutProps } from './$types';
 	import {
@@ -112,7 +113,8 @@
 		>
 			<div class="flex h-16 min-h-16 items-center gap-2 px-4 sm:px-6">
 				<PageIcon class="size-4 shrink-0 text-primary" />
-				<h1 class="truncate text-sm font-bold text-foreground">{pageTitle}</h1>
+				<h1 class="min-w-0 flex-1 truncate text-sm font-bold text-foreground">{pageTitle}</h1>
+				<LanguageSwitcher class="shrink-0" />
 			</div>
 
 			{#if showStatusBanner}

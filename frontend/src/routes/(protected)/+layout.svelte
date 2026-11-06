@@ -4,6 +4,7 @@
 	import { goto } from '$app/navigation';
 	import ConnectionBanner from '$lib/components/ConnectionBanner.svelte';
 	import StaffAccountMenu from '$lib/components/staff-account-menu.svelte';
+	import LanguageSwitcher from '$lib/components/language-switcher.svelte';
 	import { invalidateQueriesAfterReauth, startStaffCouchSync } from '$lib/db/staff-couch-sync';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { endpointStore } from '$lib/stores/endpoint.svelte';
@@ -96,6 +97,7 @@
 				</a>
 			</div>
 			<div class="flex shrink-0 items-center gap-2">
+				<LanguageSwitcher class="hidden sm:inline-flex" />
 				<StaffAccountMenu />
 			</div>
 		</header>
