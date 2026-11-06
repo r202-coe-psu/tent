@@ -6,6 +6,11 @@
 	import { shelterStore, persistSelectedShelter } from '$lib/stores/shelter.svelte';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { shelterCodesFromRoles, isSystemAdmin } from '$lib/auth/roles';
+	import { STAFF_CHROME_I18N } from '$lib/constants/i18n/staff-chrome';
+	import { langState } from '$lib/states/i18n.svelte';
+	import { getTranslation } from '$lib/utils/i18n';
+
+	const t = $derived(getTranslation(STAFF_CHROME_I18N, langState.current).navbar);
 
 	const sheltersQuery = useShelters();
 
@@ -19,7 +24,7 @@
 	);
 
 	const selectedShelterName = $derived(
-		allowedShelters.find((s) => s.code === selectedCode)?.name ?? 'เลือกศูนย์พักพิง'
+		allowedShelters.find((s) => s.code === selectedCode)?.name ?? t.selectShelter
 	);
 
 	$effect(() => {
@@ -57,9 +62,9 @@
 
 	<div class="flex min-w-0 items-center gap-2">
 		{#if sheltersQuery.isPending}
-			<span class="pr-2 text-sm font-medium text-white/80">กำลังโหลด...</span>
+			<span class="pr-2 text-sm font-medium text-white/80">{t.loading}</span>
 		{:else if sheltersQuery.isError}
-			<span class="pr-2 text-sm font-medium text-red-400">เกิดข้อผิดพลาดในการโหลดข้อมูล</span>
+			<span class="pr-2 text-sm font-medium text-red-400">{t.loadError}</span>
 		{:else if sheltersQuery.data}
 			<Select.Root type="single" value={selectedCode ?? ''} onValueChange={onShelterChange}>
 				<Select.Trigger
