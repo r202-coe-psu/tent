@@ -23,6 +23,8 @@
 		ok: 'bg-emerald-600',
 		neutral: 'bg-slate-400'
 	};
+	const STRIPES =
+		'repeating-linear-gradient(135deg, rgb(255 255 255 / 0.55) 0 2px, transparent 2px 5px)';
 </script>
 
 <div class="min-w-0">
@@ -42,8 +44,7 @@
 				class="absolute inset-y-0 bg-sky-500 {fill.pct > 0 ? 'rounded-r-full' : 'rounded-full'}"
 				style:left="{fill.pct}%"
 				style:width="{fill.incomingPct}%"
-				style:background-image="repeating-linear-gradient(135deg, rgb(255 255 255 / 0.55) 0 2px,
-				transparent 2px 5px)"
+				style:background-image={STRIPES}
 			></div>
 		{/if}
 		{#if fill.tickPct !== null}
