@@ -20,6 +20,10 @@ def main() -> None:
         raise SystemExit(2) from None
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
     logging.getLogger("httpx").setLevel(logging.WARNING)  # one line per long-poll is noise
+    if config.base_url.startswith("http://"):
+        logging.getLogger("printer").warning(
+            "TENT_BASE_URL is plain http:// - DEVICE_SECRET and labels travel unencrypted"
+        )
     stopping = False
 
     def request_stop(signum: int, _frame: FrameType | None) -> None:

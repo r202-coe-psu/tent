@@ -64,7 +64,7 @@ docker compose -f docker-compose.staging.no-nginx.yml run --rm frontend pnpm red
 ```
 
 **nginx** มีใน repo แล้ว ไม่ต้องตั้งเพิ่ม: `/api/internal/printers/` ถูกปิดจากภายนอก (404) และ `/api/v1/printer/*` จำกัด 2 connection ต่อเครื่อง
-แต่ต้องมี HTTPS อยู่หน้า server เพราะ Pi ยอมต่อแค่ `https://`
+ควรมี HTTPS อยู่หน้า server เพราะ Pi ต่อแค่ `https://` เป็นค่าเริ่มต้น (ถ้าไม่มี ดู `TENT_ALLOW_HTTP` ในขั้นที่ตั้ง `.env`)
 
 **ตรวจหลัง deploy:**
 
@@ -123,9 +123,10 @@ git clone https://github.com/r202-coe-psu/tent.git ~/tent    # repo เป็น
 cd ~/tent && git checkout poc-print-server
 ```
 
-**เครือข่าย:** Pi ต้องเข้า URL ของระบบได้ด้วย `https://` เช่น `https://tent.example.org` ตรวจจาก Pi ด้วย `curl -I <URL>`
-agent ไม่รับ `http://` ไปยัง IP ในวง LAN (`192.168.x`, `10.x`, `172.16–31.x`, `169.254.x`) `http://` ใช้ได้เฉพาะ loopback ตอนรัน agent บนเครื่องเดียวกับ dev server
-ถ้าจะทดสอบกับ dev server ที่อยู่คนละเครื่อง ให้ตั้ง HTTPS reverse proxy ไว้หน้า dev server แล้วใช้ URL `https://` นั้นแทน
+**เครือข่าย:** Pi ต้องเข้า URL ของระบบได้ เช่น `https://tent.example.org` ตรวจจาก Pi ด้วย `curl -I <URL>`
+ค่าเริ่มต้น agent รับเฉพาะ `https://` (และ `http://` ไปยัง loopback)
+ถ้า server ไม่มี HTTPS เช่น edge ในวง LAN (`http://192.168.1.10:3000`) หรือ domain ที่ไม่มี cert ให้ตั้ง `TENT_ALLOW_HTTP=1` ใน `.env`
+เมื่อใช้ `http://` ตัว `DEVICE_SECRET` กับข้อมูลบน label จะวิ่งในเครือข่ายแบบไม่เข้ารหัส จึงควรใช้เฉพาะใน LAN ที่ควบคุมได้ และ agent จะ log เตือนทุกครั้งที่เริ่มทำงาน
 
 **ตั้งเวลาให้ถูก:** การยืนยันตัวตนและ lease ของงานพิมพ์อิงเวลา ตรวจว่า `timedatectl` ขึ้น `System clock synchronized: yes`
 
@@ -165,7 +166,8 @@ nano .env
 
 | ตัวแปร | ค่า |
 |---|---|
-| `TENT_BASE_URL` | URL ของระบบ ต้องเป็น `https://` (`http://` ใช้ได้เฉพาะ `localhost`, `127.0.0.0/8`, `::1`) |
+| `TENT_BASE_URL` | URL ของระบบ เป็น `https://` (`http://` ใช้ได้กับ `localhost`, `127.0.0.0/8`, `::1` หรือกับ host ไหนก็ได้เมื่อตั้ง `TENT_ALLOW_HTTP=1`) |
+| `TENT_ALLOW_HTTP` | `1` = ยอม `http://` ไป IP/domain ไหนก็ได้ (edge ที่ไม่มี HTTPS) · ค่าเริ่มต้น `0` |
 | `DEVICE_ID` / `DEVICE_SECRET` | จากขั้นที่ 1 |
 | `PRINTER_NAME` | ชื่อ CUPS queue จากขั้นที่ 3 (`tent_xprinter`) ใช้ได้เฉพาะ `A-Z a-z 0-9 _ -` ยาวไม่เกิน 127 ตัว และห้ามขึ้นต้นด้วย `-` ถ้าผิดรูปแบบ agent จะไม่ยอมเริ่มทำงาน |
 | `BOOT_SLIP` | `1` = พิมพ์สลิป (ชื่อเครื่อง, device, shelter, IP) ทุกครั้งที่ agent เริ่ม · `0` = ไม่พิมพ์ |

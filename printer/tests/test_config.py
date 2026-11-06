@@ -88,6 +88,39 @@ def test_base_url_rejects_plaintext_http_to_public_hosts(base_url):
         load_config({**VALID_ENV, "TENT_BASE_URL": base_url})
 
 
+@pytest.mark.parametrize(
+    "base_url",
+    ["http://192.168.1.10:3000", "http://10.0.0.5", "http://edge.local", "http://tent.example.org"],
+)
+def test_allow_http_opt_in_accepts_plaintext_to_any_host(base_url):
+    environ = {**VALID_ENV, "TENT_BASE_URL": base_url, "TENT_ALLOW_HTTP": "1"}
+
+    assert load_config(environ).base_url == base_url
+
+
+@pytest.mark.parametrize("flag", ["", "0", "false", "no"])
+def test_allow_http_off_still_rejects_plaintext_lan(flag):
+    environ = {**VALID_ENV, "TENT_BASE_URL": "http://192.168.1.10", "TENT_ALLOW_HTTP": flag}
+
+    with pytest.raises(ConfigError, match="TENT_ALLOW_HTTP"):
+        load_config(environ)
+
+
+@pytest.mark.parametrize("base_url", ["ftp://192.168.1.10", "tent.example.org", "http://"])
+def test_allow_http_still_requires_an_http_url_with_a_host(base_url):
+    environ = {**VALID_ENV, "TENT_BASE_URL": base_url, "TENT_ALLOW_HTTP": "1"}
+
+    with pytest.raises(ConfigError, match="TENT_BASE_URL"):
+        load_config(environ)
+
+
+def test_allow_http_rejects_unknown_word():
+    environ = {**VALID_ENV, "TENT_ALLOW_HTTP": "maybe"}
+
+    with pytest.raises(ConfigError, match="TENT_ALLOW_HTTP"):
+        load_config(environ)
+
+
 def test_optional_ints_are_parsed():
     config = load_config(
         {

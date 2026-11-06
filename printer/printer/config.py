@@ -32,7 +32,7 @@ def _required(environ: Mapping[str, str], name: str) -> str:
 
 
 def _is_trusted_plaintext_host(hostname: str) -> bool:
-    """Plain HTTP is only allowed to loopback (dev); every other host must use HTTPS."""
+    """Plain HTTP is allowed to loopback (dev) without opting in."""
     if hostname == "localhost":
         return True
     try:
@@ -43,16 +43,18 @@ def _is_trusted_plaintext_host(hostname: str) -> bool:
 
 
 def _base_url(environ: Mapping[str, str]) -> str:
+    """HTTPS by default; `TENT_ALLOW_HTTP=1` admits plain HTTP to any host (e.g. an edge on LAN)."""
     value = _required(environ, "TENT_BASE_URL")
+    allow_http = _boolean(environ, "TENT_ALLOW_HTTP", False)
     parts = urlsplit(value)
     hostname = (parts.hostname or "").lower()
     if parts.scheme == "https" and hostname:
         return value.rstrip("/")
-    if parts.scheme == "http" and _is_trusted_plaintext_host(hostname):
+    if parts.scheme == "http" and hostname and (allow_http or _is_trusted_plaintext_host(hostname)):
         return value.rstrip("/")
     raise ConfigError(
-        "TENT_BASE_URL must be https:// (http:// is allowed only for loopback: "
-        "localhost, 127.0.0.0/8, ::1) - use https:// for any other host"
+        "TENT_BASE_URL must be https:// (http:// is allowed for loopback, or for any host "
+        "with TENT_ALLOW_HTTP=1) - use https:// or set TENT_ALLOW_HTTP=1"
     )
 
 
