@@ -81,7 +81,7 @@
 	const storagePoints = useStoragePoints(() => getShelterCode());
 	const unitsQuery = useUnitsOfMeasure();
 	const units = $derived(unitsQuery.data ?? []);
-	// CR-227 decision sync 2026-11-06: stock-page receives may mint a lot number; on by default.
+	// decision sync 2026-11-06 (schema.md §2.1 lot.lot_no): stock-page receives may mint a lot number; on by default.
 	let issueLotNo = $state(true);
 	const receiveMutation = useReceiveStock();
 	const donationsQuery = useDonations();
