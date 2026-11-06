@@ -13,6 +13,7 @@ import {
 	type StockFilterState,
 	type StockRowBase
 } from './stock-view';
+import { formatTimeUntilExpiry } from '../../domain/lot-age';
 
 const DAY = 86_400_000;
 const NOW = Date.parse('2026-10-02T00:00:00.000Z');
@@ -27,6 +28,7 @@ function row(over: Partial<StockRowBase> & { _id: string }): StockRowBase {
 		expiryState: 'none',
 		earliestExpiry: null,
 		storageKeys: [],
+		hasLotExpiry: false,
 		neverReceived: false,
 		...over
 	};
@@ -221,6 +223,16 @@ describe('statusBadges', () => {
 	});
 });
 
+describe('filterRows has_expiry', () => {
+	it('keeps only items with a remaining lot that carries lot.expiry', () => {
+		const withExpiry = row({ _id: 'a', hasLotExpiry: true });
+		const without = row({ _id: 'b', hasLotExpiry: false });
+		expect(
+			filterRows([withExpiry, without], { ...NO_FILTER, status: 'has_expiry' }).map((r) => r._id)
+		).toEqual(['a']);
+	});
+});
+
 describe('expiryLabel', () => {
 	it('shows a dash when no lot has an expiry', () => {
 		expect(expiryLabel(null, 'none', NOW)).toEqual({ text: '—', relative: null, tone: 'muted' });
@@ -238,9 +250,10 @@ describe('expiryLabel', () => {
 		expect(label.relative).toBe('อีก 2 วัน');
 	});
 
-	it('shows only the date for a lot that is not near expiry', () => {
+	it('shows the time left in grey for a lot that is not near expiry', () => {
 		const label = expiryLabel(iso(200), 'ok', NOW);
-		expect(label.tone).toBe('default');
-		expect(label.relative).toBeNull();
+		expect(label.tone).toBe('muted');
+		expect(label.relative).toMatch(/^อีก .+/);
+		expect(label.relative).toBe(`อีก ${formatTimeUntilExpiry(iso(200), NOW)}`);
 	});
 });
