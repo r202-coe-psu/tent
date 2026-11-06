@@ -29,6 +29,7 @@
 		onClose,
 		embedded = false,
 		dismissible = true,
+		printable = true,
 		closeLabel
 	}: {
 		show: boolean;
@@ -36,12 +37,17 @@
 		onClose: () => void;
 		embedded?: boolean;
 		dismissible?: boolean;
+		/** Shows the station-printer button. Off where the host prints these labels itself. */
+		printable?: boolean;
 		closeLabel?: string;
 	} = $props();
 
 	const effectiveCloseLabel = $derived(closeLabel ?? t.closeWindow);
 
 	let isExportingPdf = $state(false);
+	// Closing mid-print would drop the run's state while its job stays queued, so printing again
+	// after reopening would print the labels twice: the modal stays open until the run ends.
+	let printing = $state(false);
 
 	const shelterCode = $derived(shelterStore.selectedShelterCode ?? getShelterCode());
 
@@ -105,7 +111,7 @@
 
 {#if show}
 	{#if dismissible}
-		<ModalEscapeListener open={show} onEscape={onClose} />
+		<ModalEscapeListener open={show} disabled={printing} onEscape={onClose} />
 	{/if}
 	<div
 		class={embedded
@@ -133,6 +139,7 @@
 						variant="ghost"
 						size="icon"
 						class="size-11 shrink-0 text-slate-500 hover:text-slate-900"
+						disabled={printing}
 						onclick={onClose}
 					>
 						<X class="size-5" />
@@ -171,8 +178,9 @@
 			</figure>
 
 			<div class="mt-5 flex flex-col gap-2">
-				{#if labelPng}
+				{#if printable && labelPng}
 					<PrintLabelsButton
+						bind:printing
 						{shelterCode}
 						labelCount={1}
 						source="evacuee_qr"
@@ -189,7 +197,12 @@
 					{isExportingPdf ? t.generatingPdf : t.printIdCard}
 				</Button>
 				{#if dismissible}
-					<Button variant="ghost" class="h-11 w-full text-slate-600" onclick={onClose}>
+					<Button
+						variant="ghost"
+						class="h-11 w-full text-slate-600"
+						disabled={printing}
+						onclick={onClose}
+					>
 						{effectiveCloseLabel}
 					</Button>
 				{/if}
