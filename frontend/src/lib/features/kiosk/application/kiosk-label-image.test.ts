@@ -122,7 +122,8 @@ describe('renderKioskLabelPng', () => {
 
 		expect(harness.fontsUsedInDrawing.length).toBeGreaterThan(0);
 		for (const font of harness.fontsUsedInDrawing) {
-			expect(font).toMatch(/'IBM Plex Sans Thai'/);
+			// Same face as the web page around the preview, so the label matches the app.
+			expect(font).toMatch(/px 'IBM Plex Sans Thai Looped', 'IBM Plex Sans Thai'/);
 		}
 		const texts = harness.fakeContext.fillText.mock.calls.map(([text]) => text);
 		expect(texts).toEqual([

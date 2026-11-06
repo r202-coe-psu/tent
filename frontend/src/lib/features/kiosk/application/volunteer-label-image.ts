@@ -15,7 +15,7 @@ export type VolunteerLabelContent = {
 const INK_THRESHOLD = 160;
 /** Matches the app's typography stack (`$lib/tokens/typography.ts`) so Thai glyphs render
  * instead of the generic sans-serif fallback's tofu boxes on a kiosk without a system Thai font. */
-const FONT_FAMILY = "'IBM Plex Sans Thai', sans-serif";
+const FONT_FAMILY = "'IBM Plex Sans Thai Looped', 'IBM Plex Sans Thai', sans-serif";
 /** The web font is split by unicode-range; `load()` fetches only the files covering this text. */
 const FONT_SAMPLE = 'กขค Aa0';
 
