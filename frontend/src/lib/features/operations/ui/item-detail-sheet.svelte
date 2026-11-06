@@ -49,6 +49,12 @@
 	} = $props();
 
 	const storagePoints = useStoragePoints(() => shelterCode);
+	const LOT_EXPIRY_CLASS = {
+		expired: 'text-red-700',
+		expiring: 'text-amber-700',
+		ok: 'text-slate-500'
+	};
+
 	const lotRows = $derived(
 		buildLotRows(lots, storagePoints.points, Date.now(), itemsById, selfPurchasedRefs)
 	);
@@ -180,11 +186,18 @@
 													>
 														เบิกถัดไป
 													</span>
-												{:else if lot.isExpired}
+												{:else if lot.isExpired || lot.expiryState === 'expired'}
 													<span
 														class="rounded-full bg-red-50 px-2.5 py-1 text-xs font-semibold text-red-800 ring-1 ring-red-200"
 													>
 														หมดอายุ — ปรับยอดออก
+													</span>
+												{/if}
+												{#if lot.expiryState === 'expiring' && !lot.isNegative}
+													<span
+														class="rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-800 ring-1 ring-amber-200"
+													>
+														ใกล้หมดอายุ
 													</span>
 												{/if}
 												{#if lot.isSelfPurchased}
@@ -201,7 +214,12 @@
 													>{:else}<span class="text-slate-500">ไม่มีเลขล็อต</span>{/if}
 												<span class="text-slate-400" aria-hidden="true">·</span>
 												{#if lot.expiry}หมดอายุ <span class="tabular-nums">{lot.expiry}</span
-													>{:else}
+													>{#if lot.expiryRelative}
+														<span
+															class="text-xs font-medium {LOT_EXPIRY_CLASS[
+																lot.expiryState ?? 'ok'
+															]}">({lot.expiryRelative})</span
+														>{/if}{:else}
 													<span class="text-slate-500">ไม่ระบุวันหมดอายุ</span>
 												{/if}
 												{#if lot.storageName}

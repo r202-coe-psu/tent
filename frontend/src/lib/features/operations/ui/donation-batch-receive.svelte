@@ -2,6 +2,7 @@
 	import { untrack } from 'svelte';
 	import { toast } from 'svelte-sonner';
 	import { Button } from '$lib/components/ui/button/index.js';
+	import { Checkbox } from '$lib/components/ui/checkbox/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Label } from '$lib/components/ui/label/index.js';
 	import { DatePicker } from '$lib/components/ui/date-picker/index.js';
@@ -72,6 +73,7 @@
 	const unitsQuery = useUnitsOfMeasure();
 	const ledgersQuery = useStockLedgers();
 	const balanceQuery = useStockBalance();
+	let issueLotNo = $state(true);
 	const receiveMutation = useReceiveDonationBatch();
 
 	const units = $derived(unitsQuery.data ?? []);
@@ -265,7 +267,7 @@
 		const ctx = { shelterCode: getShelterCode(), createdBy: authStore.user?.name ?? 'unknown' };
 		let result;
 		try {
-			result = await receiveMutation.mutateAsync({ donation, lines: batch, ctx });
+			result = await receiveMutation.mutateAsync({ donation, lines: batch, ctx, issueLotNo });
 		} catch (err) {
 			toast.error(err instanceof Error ? err.message : 'เกิดข้อผิดพลาดในการบันทึกข้อมูล');
 			return;
@@ -524,6 +526,14 @@
 			onchange={(point) => (storagePoint = point)}
 		/>
 	</div>
+
+	<label
+		class="inline-flex min-h-11 cursor-pointer items-center gap-2 text-sm font-medium text-slate-700"
+	>
+		<Checkbox bind:checked={issueLotNo} />
+		ออกเลขล็อต
+		<span class="font-normal text-muted-foreground">(สร้างเลขล็อตให้อัตโนมัติ)</span>
+	</label>
 
 	<div
 		class="sticky bottom-0 z-10 -mx-4 -mb-4 flex flex-col gap-3 border-t border-slate-200 bg-slate-50 px-4 py-4 sm:-mx-6 sm:-mb-6 sm:px-6"

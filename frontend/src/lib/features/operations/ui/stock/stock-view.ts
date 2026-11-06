@@ -10,7 +10,7 @@ import {
 } from '../../domain/stock-summary';
 
 /** A card / filter value: which kind of "needs attention" row to show. */
-export type StockStatusFilter = 'expired' | 'empty' | 'low' | 'expiring';
+export type StockStatusFilter = 'expired' | 'empty' | 'low' | 'expiring' | 'has_expiry';
 
 export type StockSort = 'urgency' | 'name' | 'qty';
 
@@ -25,6 +25,8 @@ export interface StockRowBase {
 	status: StockQtyStatus;
 	expiryState: StockExpiryState;
 	earliestExpiry: string | null;
+	/** A lot still holding stock carries its own `lot.expiry` (the "มีวันหมดอายุ" filter). */
+	hasLotExpiry: boolean;
 	/** Distinct storage keys of lots still holding stock ('' = unspecified). */
 	storageKeys: string[];
 	/** True when this shelter has no ledger row for the item — catalog-only. */
@@ -95,7 +97,8 @@ export interface StockFilterState {
 	selfPurchased?: boolean;
 }
 
-export type AttentionCounts = Record<StockStatusFilter, number>;
+/** The four "needs attention" cards; `has_expiry` is a plain filter with no card. */
+export type AttentionCounts = Record<Exclude<StockStatusFilter, 'has_expiry'>, number>;
 
 /** Rows the page shows by default: catalog-only items are hidden unless `all`. */
 export function visibleRows<T extends StockRowBase>(rows: readonly T[], all: boolean): T[] {
@@ -132,6 +135,8 @@ function matchesStatus(row: StockRowBase, status: StockStatusFilter): boolean {
 			return row.status === 'empty';
 		case 'low':
 			return row.status === 'low';
+		case 'has_expiry':
+			return row.hasLotExpiry;
 	}
 }
 
@@ -228,10 +233,10 @@ export interface ExpiryLabel {
 	text: string;
 	/** Relative clock, e.g. "หมดแล้ว 1 วัน" or "2 วัน". */
 	relative: string | null;
-	tone: 'critical' | 'warning' | 'muted' | 'default';
+	tone: 'critical' | 'warning' | 'muted';
 }
 
-/** Earliest-expiry cell: Buddhist-era short date plus a countdown when it matters. */
+/** Earliest-expiry cell: Buddhist-era short date plus the time left (red / orange / grey). */
 export function expiryLabel(
 	earliestExpiry: string | null,
 	expiryState: StockExpiryState,
@@ -246,5 +251,6 @@ export function expiryLabel(
 		const left = formatTimeUntilExpiry(earliestExpiry, now);
 		return { text, relative: left ? `อีก ${left}` : null, tone: 'warning' };
 	}
-	return { text, relative: null, tone: 'default' };
+	const left = formatTimeUntilExpiry(earliestExpiry, now);
+	return { text, relative: left ? `อีก ${left}` : null, tone: 'muted' };
 }
