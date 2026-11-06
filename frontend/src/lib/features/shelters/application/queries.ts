@@ -107,14 +107,16 @@ export const useCreateShelter = () => {
 export const useUpdateShelter = () => {
 	const queryClient = useQueryClient();
 	return createMutation(() => ({
-		mutationFn: ({ code, input }: { code: string; input: Partial<Shelter> }) =>
-			updateShelter(code, input),
+		mutationFn: ({ code, input, rev }: { code: string; input: Partial<Shelter>; rev?: string }) =>
+			updateShelter(code, input, rev),
 		onSuccess: (_, variables) => {
 			queryClient.invalidateQueries({ queryKey: sheltersKeys.all });
 			queryClient.invalidateQueries({ queryKey: sheltersKeys.detail(variables.code) });
 			toast.success(`อัปเดตข้อมูลศูนย์พักพิง ${variables.code} สำเร็จ`);
 		},
-		onError: (err: Error) => {
+		onError: (err: Error, variables) => {
+			// Stale `_rev` (409): refetch so the form reloads the latest doc; unsaved edits are replaced.
+			queryClient.invalidateQueries({ queryKey: sheltersKeys.detail(variables.code) });
 			toast.error(err.message || 'เกิดข้อผิดพลาดในการอัปเดตข้อมูล');
 		}
 	}));

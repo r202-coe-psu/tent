@@ -36,7 +36,8 @@
 		form,
 		formData,
 		disabled = false,
-		stockedLotCount = () => 0
+		stockedLotCount = () => 0,
+		stockReady = true
 	}: {
 		form: SuperForm<Shelter>;
 		formData: SuperFormData<Shelter>;
@@ -47,6 +48,8 @@
 		 * saved has no lots, so it counts 0 and stays deletable.
 		 */
 		stockedLotCount?: (pointId: string) => number;
+		/** False until the ledger behind `stockedLotCount` has loaded; delete stays off meanwhile. */
+		stockReady?: boolean;
 	} = $props();
 
 	// CR-199: display order = enum declaration order (matches the
@@ -219,7 +222,7 @@
 							size="icon"
 							class="text-destructive hover:bg-destructive/10 hover:text-destructive"
 							onclick={() => removePoint(point.id)}
-							disabled={disabled || stocked > 0}
+							disabled={disabled || !stockReady || stocked > 0}
 							title={stocked > 0 ? `ยังมีของ ${stocked} ล็อต` : 'ลบจุดเก็บของ'}
 						>
 							<Trash2 class="h-4 w-4" />

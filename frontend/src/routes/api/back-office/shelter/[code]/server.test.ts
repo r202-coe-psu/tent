@@ -34,9 +34,9 @@ vi.mock('$lib/server/shelters.admin', () => ({
 	nowIso: () => '2026-01-01T00:00:00.000Z'
 }));
 
-import { PATCH } from './+server';
+import { GET, PATCH } from './+server';
 import { requireShelterManagerOrSA } from '$lib/server/couch-admin';
-import { updateMaster } from '$lib/server/shelters.admin';
+import { updateMaster, findMasterByCode, migrate } from '$lib/server/shelters.admin';
 import { readMasterDoc } from '$lib/server/master-data-server';
 import type { MasterData } from '$lib/features/master-data/domain';
 import type { ShelterMaster } from '$lib/features/shelters/server';
@@ -195,4 +195,80 @@ describe('PATCH /api/back-office/shelter/[code] — site_kind (CR-198 FR-7/FR-8)
 			expect((await res.json()).error.message).toContain('ประเภทศูนย์');
 		}
 	);
+});
+
+describe('PATCH /api/back-office/shelter/[code] — optimistic concurrency + storage points (CR-230)', () => {
+	const point = { id: 'p1', name: 'คลัง', types: ['general'] };
+
+	/** Run the mutator against a stored doc at `_rev`; returns the status and what it patched. */
+	async function patchAgainst(stored: Record<string, unknown>, body: unknown) {
+		let patch: Record<string, unknown> | undefined;
+		updateMock.mockImplementation(async (_code, mutator) => {
+			patch = (await mutator(stored as unknown as ShelterMaster)).patch as Record<string, unknown>;
+			return { id: 'shelter:SH001', rev: '3-new' };
+		});
+		const res = await callPATCH('SH001', body);
+		return { res, patch };
+	}
+
+	it('409 with the reload message and no patch when _rev is stale', async () => {
+		const { res, patch } = await patchAgainst({ _rev: '2-b' }, { name: 'x', _rev: '1-a' });
+		expect(res.status).toBe(409);
+		expect((await res.json()).error.message).toContain('กรุณาโหลดใหม่');
+		expect(patch).toBeUndefined();
+	});
+
+	it('200 when _rev matches, and never writes _rev into the patch', async () => {
+		const { res, patch } = await patchAgainst({ _rev: '2-b' }, { name: 'x', _rev: '2-b' });
+		expect(res.status).toBe(200);
+		expect(patch).toEqual({ name: 'x', updated_at: '2026-01-01T00:00:00.000Z' });
+	});
+
+	it('stays optional: a body without _rev is accepted (e2e/direct callers)', async () => {
+		const { res } = await patchAgainst({ _rev: '2-b' }, { name: 'x' });
+		expect(res.status).toBe(200);
+	});
+
+	it('keeps the stored sub_storage when common_areas is sent without it', async () => {
+		const { res, patch } = await patchAgainst(
+			{ _rev: '2-b', common_areas: { helipad: false, sub_storage: [point] } },
+			{ common_areas: { helipad: true } }
+		);
+		expect(res.status).toBe(200);
+		expect(patch?.common_areas).toEqual({ helipad: true, sub_storage: [point] });
+	});
+
+	it('replaces sub_storage when the form sends it', async () => {
+		const sent = { id: 'p2', name: 'ใหม่', types: ['general'] };
+		const { patch } = await patchAgainst(
+			{ _rev: '2-b', common_areas: { sub_storage: [point] } },
+			{ common_areas: { sub_storage: [sent] } }
+		);
+		expect((patch?.common_areas as { sub_storage: unknown[] }).sub_storage).toHaveLength(1);
+		expect((patch?.common_areas as { sub_storage: { id: string }[] }).sub_storage[0].id).toBe('p2');
+	});
+
+	it('falls back to [] when nothing is stored and sub_storage was not sent', async () => {
+		const { patch } = await patchAgainst({ _rev: '2-b' }, { common_areas: { helipad: true } });
+		expect(patch?.common_areas).toEqual({ helipad: true, sub_storage: [] });
+	});
+});
+
+describe('GET /api/back-office/shelter/[code]', () => {
+	it('returns the master _rev', async () => {
+		vi.mocked(findMasterByCode).mockResolvedValue({ code: 'SH001' } as ShelterMaster);
+		vi.mocked(migrate).mockReturnValue({
+			code: 'SH001',
+			name: 'ศูนย์',
+			_rev: '4-abc'
+		} as ShelterMaster);
+		const request = new Request('http://localhost/api/back-office/shelter/SH001', {
+			headers: { cookie: 'AuthSession=abc' }
+		});
+		const res = await GET({ request, params: { code: 'SH001' } } as unknown as Parameters<
+			typeof GET
+		>[0]);
+		expect(res.status).toBe(200);
+		expect((await res.json())._rev).toBe('4-abc');
+	});
 });

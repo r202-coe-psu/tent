@@ -245,6 +245,7 @@
 		<div class="animate-in duration-300 fade-in slide-in-from-bottom-2">
 			<StoragePointsManager
 				{shelterCode}
+				stockReady={!!storageLedgerQuery.data}
 				stockedLotCount={(pointId) => countLotsHoldingStock(pointId, storageLots)}
 			/>
 		</div>

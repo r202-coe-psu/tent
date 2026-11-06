@@ -29,6 +29,7 @@
 		EMPTY_PARKING_POLICY,
 		DEFAULT_SHELTER_FEATURE_FLAGS
 	} from '$lib/features/shelters';
+	import { omitUnchangedSubStorage } from '../domain/storage-points';
 	import { collectErrorMessages, findInvalidSectionIds } from './shelter-form-validation';
 	import ShelterFormStickyNav from './shelter-form-sticky-nav.svelte';
 	import { authStore } from '$lib/stores/auth.svelte';
@@ -56,7 +57,8 @@
 		basePath,
 		editBasePath,
 		siteKind,
-		stockedLotCount
+		stockedLotCount,
+		stockReady
 	}: {
 		id?: string;
 		isEdit: boolean;
@@ -67,6 +69,8 @@
 		siteKind?: SiteKind;
 		/** Lots still holding stock at a storage point; blocks its delete button (CR-230 FR-11). */
 		stockedLotCount?: (pointId: string) => number;
+		/** False while the ledger behind `stockedLotCount` is still loading. */
+		stockReady?: boolean;
 	} = $props();
 
 	const resolvedBasePath = $derived(basePath ?? resolve('/portal'));
@@ -108,7 +112,19 @@
 		revertOperationStatus();
 	}
 
-	function handleCloseFinish(result: ShelterCloseResult) {
+	/** Edit-save payload: leave `sub_storage` out when the form did not change it (CR-230). */
+	function withSubStorageGuard(data: Shelter): Shelter {
+		if (!data.common_areas) return data;
+		return {
+			...data,
+			common_areas: omitUnchangedSubStorage(
+				data.common_areas,
+				shelterQuery.data?.common_areas?.sub_storage
+			) as Shelter['common_areas']
+		};
+	}
+
+	async function handleCloseFinish(result: ShelterCloseResult) {
 		const data = pendingCloseData;
 		pendingCloseData = null;
 		if (!result.closed || !data) {
@@ -116,7 +132,13 @@
 			return;
 		}
 		// Registry is closed now, so the normal save (other edited fields) passes the PATCH guard.
-		updateMutation.mutate({ code: id, input: data });
+		// The close route rewrote the doc, so the loaded `_rev` is stale: refetch for the fresh one.
+		const fresh = await shelterQuery.refetch();
+		updateMutation.mutate({
+			code: id,
+			input: withSubStorageGuard(data),
+			rev: fresh.data?._rev ?? shelterQuery.data?._rev
+		});
 	}
 
 	const sections = [
@@ -173,7 +195,11 @@
 
 			if (isEdit) {
 				// Stay on the edit form; success toast comes from useUpdateShelter.
-				updateMutation.mutate({ code: id, input: data });
+				updateMutation.mutate({
+					code: id,
+					input: withSubStorageGuard(data),
+					rev: shelterQuery.data?._rev
+				});
 			} else {
 				createMutation.mutate(data, {
 					onSuccess: (result) => {
@@ -558,7 +584,7 @@
 						/>
 						<ZonesFacilitiesSection {form} {formData} shelterCode={id} />
 						<FoodDistributionSection {form} {formData} />
-						<StoragePointsSection {form} {formData} {stockedLotCount} />
+						<StoragePointsSection {form} {formData} {stockedLotCount} {stockReady} />
 						<UtilitiesSection {form} {formData} />
 						<RiskSection {form} {formData} />
 						<AdmissionPolicySection {formData} />

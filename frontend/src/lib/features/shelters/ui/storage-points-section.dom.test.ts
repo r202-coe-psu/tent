@@ -30,12 +30,17 @@ async function render(
 	over: Partial<SubStorageItem> = {},
 	{
 		validated = false,
-		stockedLotCount
-	}: { validated?: boolean; stockedLotCount?: (pointId: string) => number } = {}
+		stockedLotCount,
+		stockReady
+	}: {
+		validated?: boolean;
+		stockedLotCount?: (pointId: string) => number;
+		stockReady?: boolean;
+	} = {}
 ) {
 	instance = mount(Harness, {
 		target: document.body,
-		props: { points: [{ ...POINT, types, ...over }], validated, stockedLotCount }
+		props: { points: [{ ...POINT, types, ...over }], validated, stockedLotCount, stockReady }
 	});
 	flushSync();
 	await tick();
@@ -211,6 +216,11 @@ describe('StoragePointsSection — delete guard (CR-230 FR-11, AC-8)', () => {
 		expect(deleteButton().disabled).toBe(true);
 		expect(deleteButton().title).toBe('ยังมีของ 2 ล็อต');
 		expect(document.body.textContent).toContain('ยังมีของ 2 ล็อต');
+	});
+
+	it('keeps delete off until the ledger has loaded', async () => {
+		await render(['general'], {}, { stockedLotCount: () => 0, stockReady: false });
+		expect(deleteButton().disabled).toBe(true);
 	});
 
 	it('keeps an empty point deletable', async () => {

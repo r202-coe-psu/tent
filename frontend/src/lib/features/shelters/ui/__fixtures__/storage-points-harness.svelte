@@ -13,11 +13,13 @@
 	let {
 		points,
 		validated = false,
-		stockedLotCount
+		stockedLotCount,
+		stockReady
 	}: {
 		points: SubStorageItem[];
 		validated?: boolean;
 		stockedLotCount?: (pointId: string) => number;
+		stockReady?: boolean;
 	} = $props();
 
 	const initial = defaults(zod4(shelterSchema));
@@ -43,7 +45,7 @@
 </script>
 
 <form method="POST" {@attach fromAction(enhance)}>
-	<StoragePointsSection {form} {formData} {stockedLotCount} />
+	<StoragePointsSection {form} {formData} {stockedLotCount} {stockReady} />
 </form>
 <output data-testid="types">
 	{JSON.stringify(($formData.common_areas.sub_storage ?? []).map((p) => p.types))}

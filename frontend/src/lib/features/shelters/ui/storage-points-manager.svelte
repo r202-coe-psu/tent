@@ -33,11 +33,14 @@
 
 	let {
 		shelterCode,
-		stockedLotCount
+		stockedLotCount,
+		stockReady
 	}: {
 		shelterCode: string;
 		/** Lots at a point that still hold stock (qty > 0) — a point with any cannot be deleted. */
 		stockedLotCount: (pointId: string) => number;
+		/** False until the ledger behind `stockedLotCount` has loaded; delete stays off meanwhile. */
+		stockReady: boolean;
 	} = $props();
 
 	const typeOptions = Object.entries(SUB_STORAGE_TYPE_LABELS) as [SubStorageType, string][];
@@ -217,7 +220,7 @@
 						size="sm"
 						class="min-h-11 text-destructive"
 						onclick={() => (deleteTarget = point)}
-						disabled={busy || stocked > 0}
+						disabled={busy || !stockReady || stocked > 0}
 						aria-label={`ลบจุดเก็บของ ${point.name}`}
 					>
 						<Trash2 class="mr-1 h-4 w-4" /> ลบ

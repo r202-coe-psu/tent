@@ -465,6 +465,8 @@ test.describe('Shelter Form — Storage point types (#647)', () => {
 		);
 		await expect(group.locator('[aria-pressed="true"]')).toHaveCount(1);
 
+		// An untouched `sub_storage` is left out of the PATCH (CR-230 A1), so edit the point to send it.
+		await page.getByLabel('ชื่อจุดเก็บของ').fill('ห้องยาเดิม (แก้ไข)');
 		const patched = page.waitForResponse(
 			(res) =>
 				res.request().method() === 'PATCH' && res.url().endsWith(`/api/back-office/shelter/${CODE}`)
@@ -546,12 +548,26 @@ test.describe('Shelter Form — Donation drop-off points (CR-205)', () => {
 			.then(() => patched);
 	};
 
+	test('saving without touching the storage points leaves sub_storage out of the PATCH (CR-230 A1)', async ({
+		page
+	}) => {
+		const CODE = 'SH914';
+		const { getPatchBody } = await mockShelterDetail(page, CODE, storageShelter([gym]));
+		await openStorage(page, CODE);
+
+		await save(page, CODE);
+		const body = getPatchBody() as { common_areas?: Record<string, unknown> };
+		expect(body.common_areas).not.toHaveProperty('sub_storage');
+	});
+
 	test('a schema_v 8 point with no new keys saves as not accepting donations', async ({ page }) => {
 		const CODE = 'SH910';
 		const { getPatchBody } = await mockShelterDetail(page, CODE, storageShelter([gym]));
 		await openStorage(page, CODE);
 		await expect(page.getByRole('checkbox', { name: 'ใช้เป็นจุดรับบริจาค' })).not.toBeChecked();
 
+		// An untouched `sub_storage` is left out of the PATCH (CR-230 A1), so edit the point to send it.
+		await page.getByLabel('ชื่อจุดเก็บของ').fill('โรงยิม (แก้ไข)');
 		await save(page, CODE);
 		const body = getPatchBody() as DropOffPatch;
 		expect(body.common_areas.sub_storage[0]).toMatchObject({

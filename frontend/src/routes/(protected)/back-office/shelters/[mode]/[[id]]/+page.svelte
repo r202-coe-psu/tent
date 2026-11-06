@@ -14,6 +14,8 @@
 	// shelter's database, which the effect below keeps on the shelter being edited.
 	const ledgerQuery = useLedger(() => data.mode === 'edit');
 	const stockedLots = $derived(ledgerQuery.data ? projectLotsByItem(ledgerQuery.data).lots : []);
+	// Create mode reads no ledger: a new shelter has no stock.
+	const stockReady = $derived(data.mode !== 'edit' || !!ledgerQuery.data);
 
 	// Deep-link / menu open: keep the header selector on the shelter being edited.
 	$effect(() => {
@@ -42,4 +44,5 @@
 	editBasePath={resolve('/back-office/shelters')}
 	siteKind={data.siteKind}
 	stockedLotCount={(pointId) => countLotsHoldingStock(pointId, stockedLots)}
+	{stockReady}
 />

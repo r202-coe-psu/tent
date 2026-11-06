@@ -32,11 +32,13 @@ export function createShelter(input: Shelter): Promise<{ ok: true; code: string 
 
 export function updateShelter(
 	code: string,
-	input: Partial<Shelter>
+	input: Partial<Shelter>,
+	rev?: string
 ): Promise<{ ok: true; code: string }> {
 	return serviceFetch(`${SHELTER_ENDPOINT}/${encodeURIComponent(code)}`, {
 		method: 'PATCH',
-		body: JSON.stringify(input)
+		// `_rev` makes the server 409 when the doc changed since the form loaded.
+		body: JSON.stringify(rev ? { ...input, _rev: rev } : input)
 	});
 }
 
