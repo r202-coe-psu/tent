@@ -2,12 +2,13 @@
 # ==============================================================================
 # Tent print agent - installer for a Raspberry Pi / kiosk machine
 # ------------------------------------------------------------------------------
-# Usage: sudo ./setup_printer_server.sh --env-file FILE --host-kind standalone|kiosk [options]
-#   --env-file FILE     .env ของ agent (DEVICE_ID / DEVICE_SECRET จากหน้า back-office Printers) — บังคับ; จะถูกวางเป็น <prefix>/.env (600)
-#   --host-kind KIND    standalone = Pi แยก | kiosk = ใช้ queue ร่วมกับเครื่อง kiosk — บังคับ
+# Usage: sudo ./setup_printer_server.sh [--env-file FILE] [options]
+#   ติดตั้งครั้งแรก:  sudo ./setup_printer_server.sh --env-file .env
+#   อัปเดต/ติดตั้งซ้ำ: sudo ./setup_printer_server.sh   (ใช้ <prefix>/.env เดิม)
+#   --env-file FILE     .env ของ agent (DEVICE_ID / DEVICE_SECRET จากหน้า back-office Printers);
+#                       จะถูกวางเป็น <prefix>/.env (600) · ไม่ใส่ = ใช้ <prefix>/.env ที่ติดตั้งไว้แล้ว
 #   --queue NAME        ชื่อ CUPS queue (default: PRINTER_NAME ใน --env-file หรือ tent_xprinter)
 #   --prefix DIR        ที่ติดตั้ง (default: /opt/tent/printer)
-#   --kiosk-env FILE    .env ของ kiosk ที่จะตรวจ PRINTER_BACKEND (default: /home/*/tent/kiosk/.env)
 #   --unit-dir DIR      ที่วาง systemd unit (default: /etc/systemd/system)
 #   --dry-run           พิมพ์คำสั่งที่จะรัน แทนการรันจริง (ไม่ต้องเป็น root, ไม่เขียนอะไร)
 #   --status            แสดงสถานะ unit / queue / log 5 บรรทัดล่าสุด แล้วออก (ไม่แก้อะไร)
@@ -36,11 +37,9 @@ die() {
 
 DRY_RUN=false
 STATUS_ONLY=false
-HOST_KIND=""
 ENV_FILE=""
 QUEUE=""
 QUEUE_GIVEN=false
-KIOSK_ENV=""
 PREFIX="$DEFAULT_PREFIX"
 UNIT_DIR=/etc/systemd/system
 
@@ -48,14 +47,12 @@ while [ $# -gt 0 ]; do
     case "$1" in
     --dry-run) DRY_RUN=true; shift ;;
     --status) STATUS_ONLY=true; shift ;;
-    --host-kind) HOST_KIND="${2-}"; shift $(($# > 1 ? 2 : 1)) ;;
     --env-file) ENV_FILE="${2-}"; shift $(($# > 1 ? 2 : 1)) ;;
     --queue) QUEUE="${2-}"; QUEUE_GIVEN=true; shift $(($# > 1 ? 2 : 1)) ;;
     --prefix) PREFIX="${2-}"; shift $(($# > 1 ? 2 : 1)) ;;
-    --kiosk-env) KIOSK_ENV="${2-}"; shift $(($# > 1 ? 2 : 1)) ;;
     --unit-dir) UNIT_DIR="${2-}"; shift $(($# > 1 ? 2 : 1)) ;;
     --allow-cupsenable) die "--allow-cupsenable ถูกถอดออกแล้ว: ห้ามให้ agent อยู่ใน group lpadmin — เปิด queue เองด้วย sudo cupsenable (ดู README)" ;;
-    -h | --help) sed -n '2,14p' "$0"; exit 0 ;;
+    -h | --help) sed -n '2,15p' "$0"; exit 0 ;;
     *) die "ไม่รู้จัก option: $1 (ดู --help)" ;;
     esac
 done
@@ -76,16 +73,12 @@ env_value() {
 }
 
 # --- Validate arguments (before anything is planned or touched) ------------------
-if ! $STATUS_ONLY; then
-    case "$HOST_KIND" in
-    standalone | kiosk) ;;
-    *) die "--host-kind ต้องเป็น standalone หรือ kiosk" ;;
-    esac
-fi
 [[ "$PREFIX" =~ ^/[A-Za-z0-9_./-]+$ ]] || die "--prefix ต้องเป็น path เต็มที่ใช้ได้เฉพาะ A-Z a-z 0-9 _ . / -"
 
 if ! $STATUS_ONLY; then
-    [ -n "$ENV_FILE" ] || die "--env-file จำเป็น: ระบุไฟล์ .env ของ agent (DEVICE_ID / DEVICE_SECRET จากหน้า back-office Printers)"
+    # Re-run without --env-file keeps the installed one.
+    if [ -z "$ENV_FILE" ] && [ -f "$PREFIX/.env" ]; then ENV_FILE="$PREFIX/.env"; fi
+    [ -n "$ENV_FILE" ] || die "--env-file จำเป็นตอนติดตั้งครั้งแรก: ระบุไฟล์ .env ของ agent (DEVICE_ID / DEVICE_SECRET จากหน้า back-office Printers)"
     [ -f "$ENV_FILE" ] || die "ไม่พบไฟล์ --env-file: $ENV_FILE"
 fi
 
@@ -133,7 +126,7 @@ if ! $DRY_RUN; then
     lpstat -p "$QUEUE" >/dev/null 2>&1 || die "ไม่พบ CUPS queue $QUEUE — รัน kiosk/setup_printer.sh --queue $QUEUE ก่อน"
 fi
 
-echo -e "${BLUE}=== Tent print agent setup: prefix $PREFIX, queue $QUEUE, host $HOST_KIND ===${NC}"
+echo -e "${BLUE}=== Tent print agent setup: prefix $PREFIX, queue $QUEUE ===${NC}"
 
 # 0) Thai font for the boot slip; without one it prints as plain text and Thai shows as boxes.
 if fc-list :lang=th file 2>/dev/null | grep -q .; then
@@ -170,23 +163,9 @@ else
     run install -m 600 -o "$SERVICE_USER" -g lp "$ENV_FILE" "$PREFIX/.env"
 fi
 
-# 4) Error policy + kiosk coexistence (plan §5.6)
+# 4) Error policy: a failed job is dropped, not left blocking the queue
 info "[4/6] error policy"
-if [ "$HOST_KIND" = standalone ]; then
-    run lpadmin -p "$QUEUE" -o printer-error-policy=abort-job
-else
-    warn "ข้ามการตั้ง printer-error-policy=abort-job: queue $QUEUE ใช้ร่วมกับ kiosk บนเครื่องเดียวกัน"
-    echo "   (kiosk พึ่ง cupsenable ใน start_kiosk.sh — ตกลงกับฝั่ง kiosk ก่อนค่อยตั้งเอง)"
-    # If the kiosk drives the printer itself, it and this agent would both claim /dev/usb/lpN.
-    kiosk_envs=("$KIOSK_ENV")
-    [ -n "$KIOSK_ENV" ] || kiosk_envs=(/home/*/tent/kiosk/.env)
-    for kiosk_env in "${kiosk_envs[@]}"; do
-        [ -f "$kiosk_env" ] || continue
-        if grep -Eq "^PRINTER_BACKEND=[\"']?escpos([\"']|[[:space:]]|$)" "$kiosk_env"; then
-            warn "$kiosk_env ตั้ง PRINTER_BACKEND=escpos — kiosk จะแย่ง /dev/usb/lpN กับ CUPS; ต้องเป็น cups"
-        fi
-    done
-fi
+run lpadmin -p "$QUEUE" -o printer-error-policy=abort-job
 
 # 5) cupsenable rights: never lpadmin. Queue re-enable stays manual until a hardware test
 #    shows a narrower right (group lp / cupsd.conf policy) is enough.

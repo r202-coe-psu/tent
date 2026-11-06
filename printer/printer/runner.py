@@ -93,11 +93,19 @@ def _print_boot_slip(
     """
     try:
         rows = _boot_slip_rows(hello, agent_version, local_ips())
-        png = render_slip_png(rows, cups.ppi, find_thai_font())
+        font = find_thai_font()
+        png = render_slip_png(rows, cups.ppi, font)
         if png is not None:
             request = cups.submit(png, title="tent-boot-slip")
         else:
-            log.warning("boot slip as plain text: no Thai font (apt install fonts-thai-tlwg)")
+            if font is None:
+                log.warning("boot slip as plain text: no Thai font (apt install fonts-thai-tlwg)")
+            else:
+                log.warning(
+                    "boot slip as plain text: cannot draw the image with %s "
+                    "(Pillow missing? run ./run.sh --setup)",
+                    font,
+                )
             request = cups.submit_text(_boot_slip_text(rows), "tent-boot-slip")
         if request is None:
             log.warning("boot slip not printed: lp failed")

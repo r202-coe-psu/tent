@@ -7,7 +7,7 @@
 # รัน ./run.sh จากโฟลเดอร์นี้ด้วย user ปัจจุบัน (ไม่ต้องย้ายโค้ดไป /opt แบบ setup_printer_server.sh)
 #
 # Usage: ./setup_autostart.sh [--status | --disable] [--dry-run]
-#   (ไม่ใส่)    ติดตั้ง + เปิดใช้งานทันที
+#   (ไม่ใส่)    ติดตั้ง/อัปเดต (ฟอนต์ไทย, dependency, unit) แล้ว restart agent — รันซ้ำได้หลัง git pull
 #   --status    ดูสถานะ service และ log ล่าสุด
 #   --disable   หยุดและเอา service ออก (กลับไปรัน ./run.sh เองได้)
 #   --dry-run   พิมพ์คำสั่งที่จะรัน แทนการรันจริง
@@ -100,7 +100,9 @@ install_autostart() {
         unit_text | sudo tee "$UNIT_PATH" >/dev/null
     fi
     run sudo systemctl daemon-reload
-    run sudo systemctl enable --now "$UNIT"
+    run sudo systemctl enable "$UNIT"
+    # restart, not enable --now: a running agent must pick up new code/deps; a stopped one starts.
+    run sudo systemctl restart "$UNIT"
 
     ok "ตั้งค่า autostart แล้ว: agent รันด้วย user $AGENT_USER และขึ้นเองทุกครั้งที่ boot"
     echo "   ดู log:  journalctl -u $UNIT -f"

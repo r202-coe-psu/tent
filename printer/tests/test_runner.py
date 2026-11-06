@@ -464,6 +464,22 @@ def test_boot_slip_is_drawn_as_an_image_with_thai_safe_rows(agent, fake_cups, mo
     assert ("IP", "192.168.1.50") in rows
 
 
+@pytest.mark.parametrize(
+    ("font", "expected"),
+    [(None, "no Thai font"), ("/fonts/Loma.ttf", "cannot draw the image")],
+)
+def test_plain_text_boot_slip_logs_why_it_was_not_drawn(
+    agent, fake_cups, monkeypatch, caplog, font, expected
+):
+    monkeypatch.setattr("printer.runner.find_thai_font", lambda: font)
+    monkeypatch.setattr("printer.runner.render_slip_png", lambda *_a, **_k: None)
+    agent.config = SLIP_CONFIG
+
+    agent.run(max_iterations=1, local_ips=lambda: ["192.168.1.50"])
+
+    assert any(expected in r.getMessage() for r in caplog.records)
+
+
 def test_boot_slip_is_not_printed_when_boot_slip_is_disabled(agent, fake_cups):
     agent.run(max_iterations=2, local_ips=lambda: ["192.168.1.50"])
 

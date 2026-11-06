@@ -182,15 +182,14 @@ nano .env
 
 ```bash
 cd ~/tent/printer
-sudo ./setup_printer_server.sh --env-file .env --host-kind standalone --dry-run   # ดูแผนก่อน ยังไม่แก้อะไร
-sudo ./setup_printer_server.sh --env-file .env --host-kind standalone
+sudo ./setup_printer_server.sh --env-file .env --dry-run   # ดูแผนก่อน ยังไม่แก้อะไร
+sudo ./setup_printer_server.sh --env-file .env
 rm .env             # ติดตั้งแล้ว ค่าจริงอยู่ที่ /opt/tent/printer/.env ไม่ต้องเก็บสำเนา secret ไว้ใน repo
 ```
 
 | ตัวเลือก | ความหมาย |
 |---|---|
-| `--env-file FILE` | `.env` ของ agent (บังคับ) ถูกคัดลอกไปเป็น `<prefix>/.env` |
-| `--host-kind standalone\|kiosk` | (บังคับ) `standalone` = Pi แยกเครื่อง สคริปต์จะตั้ง `printer-error-policy=abort-job` ให้ queue · `kiosk` = ใช้ queue ร่วมกับเครื่อง kiosk จะไม่แตะ error policy และเตือนถ้า kiosk ตั้ง `PRINTER_BACKEND=escpos` |
+| `--env-file FILE` | `.env` ของ agent ถูกคัดลอกไปเป็น `<prefix>/.env` · บังคับตอนติดตั้งครั้งแรก ครั้งต่อไปไม่ใส่ก็ได้ จะใช้ `<prefix>/.env` เดิม |
 | `--queue NAME` | ชื่อ CUPS queue (default: `PRINTER_NAME` ใน `--env-file`) |
 | `--prefix DIR` | ที่ติดตั้ง (default `/opt/tent/printer`) |
 | `--dry-run` | พิมพ์คำสั่งที่จะรัน ไม่เขียนอะไร และไม่ต้องเป็น root |
@@ -212,10 +211,10 @@ rm .env             # ติดตั้งแล้ว ค่าจริงอ
 
 ```bash
 cd ~/tent && git pull
-cd printer && sudo ./setup_printer_server.sh --env-file /opt/tent/printer/.env --host-kind standalone
+cd printer && sudo ./setup_printer_server.sh
 ```
 
-สคริปต์รันซ้ำได้และจะ restart service ให้เอง ใช้ `--env-file /opt/tent/printer/.env` เพื่อคงค่าเดิมไว้
+สคริปต์รันซ้ำได้ ใช้ `.env` เดิมที่ `/opt/tent/printer/.env` แล้วลงฟอนต์ไทย / dependency ใหม่และ restart service ให้เอง
 ถ้าเพิ่ง rotate secret ใน back-office ให้แก้ `DEVICE_SECRET` ด้วย `sudo nano /opt/tent/printer/.env` แล้ว `sudo systemctl restart tent-printer`
 
 ถ้ารัน `kiosk/setup_printer.sh` ใหม่ (เช่นเปลี่ยนม้วน) ให้ `sudo systemctl restart tent-printer` ด้วย
@@ -271,5 +270,6 @@ cd ~/tent/printer
 cp .env.example .env && chmod 600 .env && nano .env
 ./run.sh                         # รันในหน้าจอ Ctrl+C เพื่อหยุด · ./run.sh --setup = ติดตั้ง dependency อย่างเดียว
 ./setup_autostart.sh             # หรือให้รัน ./run.sh เองหลัง boot ด้วย user ปัจจุบัน (unit tent-printer-autostart)
+                                 # รันซ้ำหลัง git pull ได้เลย: ลงฟอนต์ไทย / dependency ใหม่แล้ว restart agent ให้
 ./setup_autostart.sh --disable   # ปิด/ถอนออก
 ```

@@ -70,56 +70,15 @@ def planned(result: subprocess.CompletedProcess) -> list[str]:
     return [line[len(DRY) :] for line in result.stdout.splitlines() if line.startswith(DRY)]
 
 
-def test_standalone_host_sets_abort_job_error_policy_on_the_queue(setup):
-    result = setup("--host-kind", "standalone")
+def test_sets_abort_job_error_policy_on_the_queue(setup):
+    result = setup()
 
     assert result.returncode == 0, result.stderr
     assert "lpadmin -p tent_xprinter -o printer-error-policy=abort-job" in planned(result)
 
 
-def test_kiosk_host_skips_error_policy_and_warns_it_is_shared_with_the_kiosk(setup):
-    result = setup("--host-kind", "kiosk")
-
-    assert result.returncode == 0, result.stderr
-    assert not any("printer-error-policy" in command for command in planned(result))
-    assert "ใช้ร่วมกับ kiosk" in result.stdout
-    assert "abort-job" in result.stdout
-
-
-@pytest.mark.parametrize("value", ["escpos", '"escpos"', "escpos  "])
-def test_kiosk_host_warns_when_the_kiosk_env_uses_the_escpos_backend(setup, tmp_path, value):
-    kiosk_env = tmp_path / "kiosk.env"
-    kiosk_env.write_text(f"PRINTER_NAME=tent_xprinter\nPRINTER_BACKEND={value}\n")
-
-    result = setup("--host-kind", "kiosk", "--kiosk-env", str(kiosk_env))
-
-    assert result.returncode == 0, result.stderr
-    assert "PRINTER_BACKEND=escpos" in result.stdout
-    assert str(kiosk_env) in result.stdout
-
-
-@pytest.mark.parametrize("line", ["PRINTER_BACKEND=cups", "# PRINTER_BACKEND=escpos", ""])
-def test_kiosk_host_does_not_warn_about_backend_when_it_is_not_escpos(setup, tmp_path, line):
-    kiosk_env = tmp_path / "kiosk.env"
-    kiosk_env.write_text(f"{line}\n")
-
-    result = setup("--host-kind", "kiosk", "--kiosk-env", str(kiosk_env))
-
-    assert result.returncode == 0, result.stderr
-    assert "escpos" not in result.stdout
-
-
-def test_standalone_host_ignores_the_kiosk_env(setup, tmp_path):
-    kiosk_env = tmp_path / "kiosk.env"
-    kiosk_env.write_text("PRINTER_BACKEND=escpos\n")
-
-    result = setup("--host-kind", "standalone", "--kiosk-env", str(kiosk_env))
-
-    assert "escpos" not in result.stdout
-
-
 def test_allow_cupsenable_is_rejected_and_plans_nothing(setup):
-    result = setup("--host-kind", "standalone", "--allow-cupsenable")
+    result = setup("--allow-cupsenable")
 
     assert result.returncode != 0
     assert "lpadmin" in result.stderr
@@ -127,7 +86,7 @@ def test_allow_cupsenable_is_rejected_and_plans_nothing(setup):
 
 
 def test_cupsenable_rights_are_not_granted_by_default(setup):
-    result = setup("--host-kind", "standalone")
+    result = setup()
 
     assert not any("lpadmin tent-printer" in command for command in planned(result))
     assert not any(command.startswith("usermod") for command in planned(result))
@@ -135,7 +94,7 @@ def test_cupsenable_rights_are_not_granted_by_default(setup):
 
 @pytest.mark.parametrize("state", ["is-active", "is-enabled"])
 def test_install_is_refused_while_the_autostart_agent_is_installed(setup, state):
-    result = setup("--host-kind", "standalone", env={"FAKE_AUTOSTART": state})
+    result = setup(env={"FAKE_AUTOSTART": state})
 
     assert result.returncode != 0
     assert "tent-printer-autostart" in result.stderr
@@ -144,14 +103,14 @@ def test_install_is_refused_while_the_autostart_agent_is_installed(setup, state)
 
 
 def test_install_proceeds_when_the_autostart_agent_is_absent(setup):
-    result = setup("--host-kind", "standalone")
+    result = setup()
 
     assert result.returncode == 0
     assert "systemctl enable --now tent-printer" in planned(result)
 
 
-def test_missing_env_file_option_fails_with_a_clear_message_and_plans_nothing(setup):
-    result = setup("--host-kind", "standalone", with_env_file=False)
+def test_missing_env_file_option_fails_with_a_clear_message_and_plans_nothing(setup, tmp_path):
+    result = setup("--prefix", str(tmp_path / "empty"), with_env_file=False)
 
     assert result.returncode != 0
     assert "--env-file" in result.stderr
@@ -159,31 +118,20 @@ def test_missing_env_file_option_fails_with_a_clear_message_and_plans_nothing(se
 
 
 def test_env_file_that_does_not_exist_is_refused(setup, tmp_path):
-    result = setup("--host-kind", "standalone", with_env_file=False, env=None)
+    result = setup("--prefix", str(tmp_path / "empty"), with_env_file=False, env=None)
     assert result.returncode != 0
 
     missing = tmp_path / "nope.env"
-    result = setup("--host-kind", "standalone", "--env-file", str(missing), with_env_file=False)
+    result = setup("--env-file", str(missing), with_env_file=False)
 
     assert result.returncode != 0
     assert str(missing) in result.stderr
     assert planned(result) == []
 
 
-@pytest.mark.parametrize("kind", [None, "laptop"])
-def test_host_kind_is_required_and_must_be_standalone_or_kiosk(setup, kind):
-    args = ["--host-kind", kind] if kind else []
-
-    result = setup(*args)
-
-    assert result.returncode != 0
-    assert "--host-kind" in result.stderr
-    assert planned(result) == []
-
-
 @pytest.mark.parametrize("queue", ["bad name", "q;rm -rf /", "a/b", "$(id)", "", "my.queue", "-q"])
 def test_invalid_queue_name_is_rejected_before_anything_is_planned(setup, queue):
-    result = setup("--host-kind", "standalone", "--queue", queue)
+    result = setup("--queue", queue)
 
     assert result.returncode != 0
     assert "queue" in result.stderr
@@ -192,35 +140,34 @@ def test_invalid_queue_name_is_rejected_before_anything_is_planned(setup, queue)
 
 def test_queue_name_comes_from_printer_name_in_the_env_file_and_is_validated(setup, env_file):
     env_file.write_text(ENV_TEXT.replace("PRINTER_NAME=tent_xprinter", 'PRINTER_NAME="my_queue-2"'))
-    result = setup("--host-kind", "standalone")
+    result = setup()
     assert "lpadmin -p my_queue-2 -o printer-error-policy=abort-job" in planned(result)
 
     env_file.write_text(ENV_TEXT.replace("PRINTER_NAME=tent_xprinter", "PRINTER_NAME=bad name"))
-    result = setup("--host-kind", "standalone")
+    result = setup()
     assert result.returncode != 0
     assert "queue" in result.stderr
 
 
 def test_queue_option_overrides_the_env_file_and_defaults_to_tent_xprinter(setup, env_file):
-    result = setup("--host-kind", "standalone", "--queue", "label_q")
+    result = setup("--queue", "label_q")
     assert "lpadmin -p label_q -o printer-error-policy=abort-job" in planned(result)
 
     env_file.write_text(ENV_TEXT.replace("PRINTER_NAME=tent_xprinter\n", ""))
-    result = setup("--host-kind", "standalone")
+    result = setup()
     assert "lpadmin -p tent_xprinter -o printer-error-policy=abort-job" in planned(result)
 
 
 def test_env_file_contents_are_never_printed(setup):
-    for args in (["--host-kind", "standalone"], ["--host-kind", "kiosk"]):
-        result = setup(*args)
+    result = setup()
 
-        assert result.returncode == 0, result.stderr
-        assert FAKE_SECRET not in result.stdout
-        assert FAKE_SECRET not in result.stderr
+    assert result.returncode == 0, result.stderr
+    assert FAKE_SECRET not in result.stdout
+    assert FAKE_SECRET not in result.stderr
 
 
 def test_missing_service_user_is_created_as_a_system_user_in_group_lp(setup):
-    result = setup("--host-kind", "standalone")
+    result = setup()
 
     assert (
         "useradd --system --gid lp --no-create-home --shell /usr/sbin/nologin tent-printer"
@@ -229,13 +176,13 @@ def test_missing_service_user_is_created_as_a_system_user_in_group_lp(setup):
 
 
 def test_existing_service_user_is_not_created_again(setup):
-    result = setup("--host-kind", "standalone", env={"FAKE_USER_EXISTS": "1"})
+    result = setup(env={"FAKE_USER_EXISTS": "1"})
 
     assert not any(command.startswith("useradd") for command in planned(result))
 
 
 def test_project_is_synced_to_the_prefix_without_dev_scripts_and_deps_are_frozen(setup):
-    result = setup("--host-kind", "standalone", "--prefix", "/srv/tent/printer")
+    result = setup("--prefix", "/srv/tent/printer")
     plan = planned(result)
 
     sync = next(command for command in plan if command.startswith("rsync"))
@@ -250,7 +197,7 @@ def test_project_is_synced_to_the_prefix_without_dev_scripts_and_deps_are_frozen
 
 
 def test_env_file_is_installed_owned_by_the_service_user_with_mode_600(setup, env_file):
-    result = setup("--host-kind", "standalone")
+    result = setup()
 
     assert f"install -m 600 -o tent-printer -g lp {env_file} /opt/tent/printer/.env" in planned(
         result
@@ -261,7 +208,7 @@ def test_unit_is_installed_with_the_prefix_then_enabled_and_started(setup, tmp_p
     unit_dir = tmp_path / "units"
 
     result = setup(
-        "--host-kind", "standalone", "--prefix", "/srv/tent/printer", "--unit-dir", str(unit_dir)
+        "--prefix", "/srv/tent/printer", "--unit-dir", str(unit_dir)
     )
     plan = planned(result)
 
@@ -274,7 +221,7 @@ def test_unit_is_installed_with_the_prefix_then_enabled_and_started(setup, tmp_p
 
 
 def test_steps_run_in_install_order(setup):
-    result = setup("--host-kind", "standalone")
+    result = setup()
     plan = planned(result)
 
     def at(prefix: str) -> int:
@@ -333,8 +280,6 @@ def test_rerun_with_the_installed_env_file_fixes_owner_and_mode_instead_of_copyi
     installed.write_text(ENV_TEXT)
 
     result = setup(
-        "--host-kind",
-        "standalone",
         "--prefix",
         str(prefix),
         "--env-file",
@@ -349,18 +294,32 @@ def test_rerun_with_the_installed_env_file_fixes_owner_and_mode_instead_of_copyi
     assert not any(command.startswith("install -m 600") for command in plan)
 
 
+def test_rerun_without_env_file_reuses_the_installed_one(setup, tmp_path):
+    prefix = tmp_path / "opt" / "printer"
+    prefix.mkdir(parents=True)
+    installed = prefix / ".env"
+    installed.write_text(ENV_TEXT)
+
+    result = setup("--prefix", str(prefix), with_env_file=False)
+    plan = planned(result)
+
+    assert result.returncode == 0, result.stderr
+    assert f"chown tent-printer:lp {installed}" in plan
+    assert "systemctl enable --now tent-printer" in plan
+
+
 INSTALL_THAI_FONT = "apt-get install -y fonts-thai-tlwg"
 
 
 def test_installs_a_thai_font_for_the_boot_slip_when_none_is_present(setup):
-    result = setup("--host-kind", "standalone", env={"FAKE_THAI_FONT": "0"})
+    result = setup(env={"FAKE_THAI_FONT": "0"})
 
     assert result.returncode == 0, result.stderr
     assert INSTALL_THAI_FONT in planned(result)
 
 
 def test_skips_the_thai_font_when_one_is_installed(setup):
-    result = setup("--host-kind", "standalone", env={"FAKE_THAI_FONT": "1"})
+    result = setup(env={"FAKE_THAI_FONT": "1"})
 
     assert result.returncode == 0, result.stderr
     assert INSTALL_THAI_FONT not in planned(result)

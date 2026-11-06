@@ -79,10 +79,18 @@ def test_install_writes_a_unit_that_runs_run_sh_as_the_current_user(setup, agent
 def test_install_prepares_the_venv_then_enables_the_unit_at_boot(setup, agent_dir):
     steps = planned(setup())
 
-    assert steps.index(f"{agent_dir}/run.sh --setup") < steps.index(
-        f"sudo systemctl enable --now {UNIT}"
-    )
+    assert steps.index(f"{agent_dir}/run.sh --setup") < steps.index(f"sudo systemctl enable {UNIT}")
     assert "sudo systemctl daemon-reload" in steps
+
+
+def test_install_restarts_the_agent_so_a_rerun_picks_up_new_code(setup):
+    steps = planned(setup())
+
+    # restart also starts a stopped unit, so one command covers first install and updates.
+    assert steps.index(f"sudo systemctl enable {UNIT}") < steps.index(
+        f"sudo systemctl restart {UNIT}"
+    )
+    assert f"sudo systemctl enable --now {UNIT}" not in steps
 
 
 @pytest.mark.parametrize("state", ["is-active", "is-enabled"])
