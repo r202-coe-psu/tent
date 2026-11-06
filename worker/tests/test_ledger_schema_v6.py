@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from decimal import Decimal
 
-from worker.mongo.on_hand import on_hand_decimals
+from worker.donation_ledger import on_hand_decimals
 from worker.projectors.compute_needs import need_breakdown
 from worker.projectors.stock import compute_shelter_stocks
 

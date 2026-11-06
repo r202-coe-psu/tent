@@ -17,7 +17,7 @@ from worker.couch.client import CouchClient
 from worker.donation_ledger import on_hand_decimals
 from worker.masking import shelter_db_name
 
-__all__ = ["on_hand_decimals", "refresh_on_hand"]  # on_hand_decimals re-exported
+__all__ = ["refresh_on_hand"]
 
 logger = logging.getLogger(__name__)
 
