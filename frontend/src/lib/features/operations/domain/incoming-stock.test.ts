@@ -84,6 +84,7 @@ describe('deriveDonationIncoming', () => {
 	it('counts only approved lines (pending, rejected and unreviewed are skipped)', () => {
 		const r = deriveDonationIncoming(
 			donation({
+				status: 'pending_review',
 				items: [
 					{ item_id: 'item_master:rice', qty: '1', unit: 'kg', review_status: 'pending' },
 					{ item_id: 'item_master:rice', qty: '2', unit: 'kg', review_status: 'rejected' },
@@ -97,6 +98,23 @@ describe('deriveDonationIncoming', () => {
 		);
 		expect(r.rows.map((x) => x.qty)).toEqual(['8']);
 	});
+
+	it.each([
+		['verifying', ['3']],
+		['pending_review', []],
+		['declared', []]
+	] as const)(
+		'counts a line without review_status (before schema_v 7) only when the booking is verifying (%s)',
+		(status, qtys) => {
+			const r = deriveDonationIncoming(
+				donation({ status, items: [{ item_id: 'item_master:rice', qty: '3', unit: 'kg' }] }),
+				'SH001',
+				catalog,
+				NOW
+			);
+			expect(r.rows.map((x) => x.qty)).toEqual(qtys);
+		}
+	);
 
 	it('skips money donations', () => {
 		expect(deriveDonationIncoming(donation({ kind: 'money' }), 'SH001', catalog, NOW).rows).toEqual(

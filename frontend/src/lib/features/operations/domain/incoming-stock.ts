@@ -112,7 +112,8 @@ export function donationIncomingDate(donation: Pick<Donation, 'logistics'>): str
  * Incoming rows of one donation (FR-1, FR-4, FR-5, FR-6).
  *
  * Only `review_status: 'approved'` lines of a booking not in {@link DONATION_NOT_INCOMING_STATUSES}
- * count. A line a drop-off point already recorded (`point_receipts[].line_nos`, CR-206) is in the
+ * count. A line without `review_status` (before schema_v 7) counts when the booking is `verifying`
+ * (CR-174 AC-8). A line a drop-off point already recorded (`point_receipts[].line_nos`, CR-206) is in the
  * ledger, so it is left out — otherwise a part-received booking would be counted twice.
  */
 export function deriveDonationIncoming(
@@ -131,7 +132,10 @@ export function deriveDonationIncoming(
 	const recorded = new Set((donation.point_receipts ?? []).flatMap((r) => r.line_nos));
 
 	(donation.items ?? []).forEach((line, index) => {
-		if (line.review_status !== 'approved' || recorded.has(index)) return;
+		const approved = line.review_status
+			? line.review_status === 'approved'
+			: donation.status === 'verifying';
+		if (!approved || recorded.has(index)) return;
 		const base = { ref, doc_id: donation._id, date, overdue, shelter_code: shelterCode };
 		const unmatched = (reason: UnmatchedReason) =>
 			out.unmatched.push({
