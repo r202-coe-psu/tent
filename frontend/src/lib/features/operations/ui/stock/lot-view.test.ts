@@ -206,3 +206,31 @@ describe('buildLotRows lot number (#1069)', () => {
 		expect(rows[0]).toMatchObject({ isNegative: true, lotNo: 'L-261020-009' });
 	});
 });
+
+describe('buildLotRows expiry info', () => {
+	it('gives a fresh lot the time left with an ok state', () => {
+		const [r] = buildLotRows([lot({ lot_ref: 'a', lot: { expiry: iso(30) } })], [], NOW);
+		expect(r.expiryState).toBe('ok');
+		expect(r.expiryRelative).toMatch(/^อีก .+/);
+	});
+
+	it('flags a lot inside the expiring-soon window', () => {
+		const [r] = buildLotRows([lot({ lot_ref: 'a', lot: { expiry: iso(3) } })], [], NOW);
+		expect(r.expiryState).toBe('expiring');
+		expect(r.expiryRelative).toMatch(/^อีก .+/);
+	});
+
+	it('keeps an expired lot with stock, flagged expired with how long ago', () => {
+		const [r] = buildLotRows([lot({ lot_ref: 'a', lot: { expiry: iso(-2) } })], [], NOW);
+		expect(r.expiryState).toBe('expired');
+		expect(r.expiryRelative).toMatch(/^หมดแล้ว /);
+	});
+
+	it('returns null for a lot without lot.expiry, even with a shelf life configured', () => {
+		const items = new Map([['item_master:rice', { storage_type: 'DRY', shelf_life_days: 30 }]]);
+		const [r] = buildLotRows([lot({ lot_ref: 'a', received_at: iso(-60) })], [], NOW, items);
+		expect(r.expiry).toBeNull();
+		expect(r.expiryRelative).toBeNull();
+		expect(r.expiryState).toBeNull();
+	});
+});
