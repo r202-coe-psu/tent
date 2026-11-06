@@ -35,11 +35,18 @@
 	let {
 		form,
 		formData,
-		disabled = false
+		disabled = false,
+		stockedLotCount = () => 0
 	}: {
 		form: SuperForm<Shelter>;
 		formData: SuperFormData<Shelter>;
 		disabled?: boolean;
+		/**
+		 * Lots at a point that still hold stock (qty > 0) — a point with any cannot be deleted
+		 * (CR-230 FR-6/FR-11). Supplied by the route, which owns the ledger read; a point not yet
+		 * saved has no lots, so it counts 0 and stays deletable.
+		 */
+		stockedLotCount?: (pointId: string) => number;
 	} = $props();
 
 	// CR-199: display order = enum declaration order (matches the
@@ -164,6 +171,7 @@
 
 	<div class="space-y-2">
 		{#each $formData.common_areas.sub_storage ?? [] as point, i (point.id)}
+			{@const stocked = stockedLotCount(point.id)}
 			<div class="flex flex-col gap-3 rounded-lg border border-shelter-border p-3">
 				<div class="flex flex-col gap-3 sm:flex-row sm:items-start">
 					<Form.Field {form} name={`common_areas.sub_storage[${i}].name`} class="min-w-0 flex-1">
@@ -204,19 +212,24 @@
 						<Form.FieldErrors />
 					</Form.Field>
 
-					<div class="flex shrink-0 justify-end sm:pt-6">
+					<div class="flex shrink-0 flex-col items-end gap-1 sm:pt-6">
 						<Button
 							type="button"
 							variant="ghost"
 							size="icon"
 							class="text-destructive hover:bg-destructive/10 hover:text-destructive"
 							onclick={() => removePoint(point.id)}
-							{disabled}
-							title="ลบจุดเก็บของ"
+							disabled={disabled || stocked > 0}
+							title={stocked > 0 ? `ยังมีของ ${stocked} ล็อต` : 'ลบจุดเก็บของ'}
 						>
 							<Trash2 class="h-4 w-4" />
-							<span class="sr-only">ลบจุดเก็บของ</span>
+							<span class="sr-only">{withPointName('ลบจุดเก็บของ', point)}</span>
 						</Button>
+						{#if stocked > 0}
+							<p class="text-xs font-semibold text-amber-800">
+								ยังมีของ {stocked} ล็อต — ต้องย้ายของออกก่อนจึงจะลบได้
+							</p>
+						{/if}
 					</div>
 				</div>
 

@@ -117,15 +117,10 @@ describe('POST /storage-points (add)', () => {
 		expect(body.rev).toBe('2-new');
 	});
 
-	it.each([['supply_coordinator'], ['shelter_manager']])(
-		'allows %s of the shelter',
-		async (cap) => {
-			state.roles = ['shelter:SH001', `SH001:${cap}`];
-			expect((await POST(ctx('POST', 'SH001', { _rev: '1-a', point: point('x') }))).status).toBe(
-				201
-			);
-		}
-	);
+	it.each([['warehouse_staff'], ['shelter_manager']])('allows %s of the shelter', async (cap) => {
+		state.roles = ['shelter:SH001', `SH001:${cap}`];
+		expect((await POST(ctx('POST', 'SH001', { _rev: '1-a', point: point('x') }))).status).toBe(201);
+	});
 
 	it('refuses warehouse_staff of another shelter with 403 and writes nothing', async () => {
 		state.roles = ['shelter:SH002', 'SH002:warehouse_staff'];
@@ -134,7 +129,7 @@ describe('POST /storage-points (add)', () => {
 		expect(subStorage()).toHaveLength(1);
 	});
 
-	it.each([['kitchen_staff'], ['donation_staff'], ['registration_staff']])(
+	it.each([['supply_coordinator'], ['kitchen_staff'], ['donation_staff'], ['registration_staff']])(
 		'refuses %s of the shelter with 403',
 		async (cap) => {
 			state.roles = ['shelter:SH001', `SH001:${cap}`];

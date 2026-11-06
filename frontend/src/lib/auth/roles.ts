@@ -561,14 +561,17 @@ export function canChangeStock(roles: readonly string[], shelterCode?: string | 
 
 /**
  * True when the user may add / edit / delete the shelter's storage points (`sub_storage`, #1186):
- * SA, or its shelter_manager / warehouse_staff / supply_coordinator. The shelter form still edits
- * every other field for SM / SA only; `donation_staff` and other roles cannot change them.
+ * SA, or its shelter_manager / warehouse_staff (CR-230 FR-1). `supply_coordinator` is excluded, as
+ * for stock distribution. The shelter form still edits every other field for SM / SA only.
  */
 export function canManageStoragePoints(
 	roles: readonly string[],
 	shelterCode?: string | null
 ): boolean {
-	return canAccessWarehouse(roles, shelterCode);
+	return (
+		canAccessManagerPages(roles, shelterCode) ||
+		hasStaffCapability(roles, WAREHOUSE_STAFF, shelterCode)
+	);
 }
 
 /** `requireKitchen`: SA, SM, or kitchen_staff of the shelter. */

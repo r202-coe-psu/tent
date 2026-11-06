@@ -2,12 +2,18 @@
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { ShelterFormPage } from '$lib/features/shelters';
+	import { countLotsHoldingStock, projectLotsByItem, useLedger } from '$lib/features/operations';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
 
 	let { data } = $props();
 
 	/** Last edit id we aligned the header selector to (URL → store). */
 	let syncedEditId = $state<string | null>(null);
+
+	// CR-230 FR-11: a point still holding stock can't be deleted. The ledger reads the active
+	// shelter's database, which the effect below keeps on the shelter being edited.
+	const ledgerQuery = useLedger(() => data.mode === 'edit');
+	const stockedLots = $derived(ledgerQuery.data ? projectLotsByItem(ledgerQuery.data).lots : []);
 
 	// Deep-link / menu open: keep the header selector on the shelter being edited.
 	$effect(() => {
@@ -35,4 +41,5 @@
 	basePath={resolve('/portal')}
 	editBasePath={resolve('/back-office/shelters')}
 	siteKind={data.siteKind}
+	stockedLotCount={(pointId) => countLotsHoldingStock(pointId, stockedLots)}
 />

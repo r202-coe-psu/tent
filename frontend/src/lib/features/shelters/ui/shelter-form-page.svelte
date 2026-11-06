@@ -55,7 +55,8 @@
 		isEdit,
 		basePath,
 		editBasePath,
-		siteKind
+		siteKind,
+		stockedLotCount
 	}: {
 		id?: string;
 		isEdit: boolean;
@@ -64,6 +65,8 @@
 		/** Prefix of the `…/edit/{code}` route opened after create; defaults to `basePath`. */
 		editBasePath?: string;
 		siteKind?: SiteKind;
+		/** Lots still holding stock at a storage point; blocks its delete button (CR-230 FR-11). */
+		stockedLotCount?: (pointId: string) => number;
 	} = $props();
 
 	const resolvedBasePath = $derived(basePath ?? resolve('/portal'));
@@ -555,7 +558,7 @@
 						/>
 						<ZonesFacilitiesSection {form} {formData} shelterCode={id} />
 						<FoodDistributionSection {form} {formData} />
-						<StoragePointsSection {form} {formData} />
+						<StoragePointsSection {form} {formData} {stockedLotCount} />
 						<UtilitiesSection {form} {formData} />
 						<RiskSection {form} {formData} />
 						<AdmissionPolicySection {formData} />

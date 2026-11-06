@@ -28,11 +28,14 @@ const POINT = {
 async function render(
 	types: SubStorageType[],
 	over: Partial<SubStorageItem> = {},
-	{ validated = false } = {}
+	{
+		validated = false,
+		stockedLotCount
+	}: { validated?: boolean; stockedLotCount?: (pointId: string) => number } = {}
 ) {
 	instance = mount(Harness, {
 		target: document.body,
-		props: { points: [{ ...POINT, types, ...over }], validated }
+		props: { points: [{ ...POINT, types, ...over }], validated, stockedLotCount }
 	});
 	flushSync();
 	await tick();
@@ -194,5 +197,33 @@ describe('StoragePointsSection — typing the drop-off note (#1054)', () => {
 		await type('   ');
 		await leaveField();
 		expect(storedPoint().location_note).toBeNull();
+	});
+});
+
+describe('StoragePointsSection — delete guard (CR-230 FR-11, AC-8)', () => {
+	const deleteButton = () =>
+		document.body.querySelector<HTMLButtonElement>(
+			'button[title^="ลบจุดเก็บของ"], button[title^="ยังมีของ"]'
+		)!;
+
+	it('disables delete and shows the lot count while stock remains', async () => {
+		await render(['general'], {}, { stockedLotCount: (id) => (id === 'p1' ? 2 : 0) });
+		expect(deleteButton().disabled).toBe(true);
+		expect(deleteButton().title).toBe('ยังมีของ 2 ล็อต');
+		expect(document.body.textContent).toContain('ยังมีของ 2 ล็อต');
+	});
+
+	it('keeps an empty point deletable', async () => {
+		await render(['general'], {}, { stockedLotCount: () => 0 });
+		expect(deleteButton().disabled).toBe(false);
+		expect(document.body.textContent).not.toContain('ยังมีของ');
+		deleteButton().click();
+		await settle();
+		expect(document.body.querySelector('[data-testid="points"]')!.textContent).toBe('[]');
+	});
+
+	it('defaults to deletable when no counter is supplied', async () => {
+		await render(['general']);
+		expect(deleteButton().disabled).toBe(false);
 	});
 });

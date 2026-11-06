@@ -31,7 +31,7 @@ export function validationError(e: unknown): unknown {
 }
 
 /**
- * Gate for the storage-point endpoints (#1186): SA, or SM / warehouse_staff / supply_coordinator of
+ * Gate for the storage-point endpoints (#1186): SA, or SM / warehouse_staff of
  * the shelter in the URL. The shelter code comes from the path and is checked against the session's
  * roles, never taken from the body.
  */

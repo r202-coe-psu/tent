@@ -758,17 +758,22 @@ describe('page-guard predicates shared by guards and sidebar (#842)', () => {
 });
 
 describe('canManageStoragePoints (#1186)', () => {
-	it('lets SA and the warehouse side + SM manage storage points in their own shelter only', () => {
+	it('lets SA, warehouse_staff and SM manage storage points in their own shelter only', () => {
 		expect(canManageStoragePoints(['system_admin'], 'SH001')).toBe(true);
-		for (const cap of ['warehouse_staff', 'supply_coordinator', 'shelter_manager']) {
+		for (const cap of ['warehouse_staff', 'shelter_manager']) {
 			const roles = ['shelter:SH001', `SH001:${cap}`];
 			expect(canManageStoragePoints(roles, 'SH001')).toBe(true);
 			expect(canManageStoragePoints(roles, 'SH002')).toBe(false);
 		}
 	});
 
-	it('refuses other staff roles, including donation_staff', () => {
-		for (const cap of ['kitchen_staff', 'registration_staff', 'donation_staff']) {
+	it('refuses other staff roles, including supply_coordinator and donation_staff', () => {
+		for (const cap of [
+			'supply_coordinator',
+			'kitchen_staff',
+			'registration_staff',
+			'donation_staff'
+		]) {
 			expect(canManageStoragePoints(['shelter:SH001', `SH001:${cap}`], 'SH001')).toBe(false);
 		}
 	});
