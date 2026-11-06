@@ -319,7 +319,18 @@
 	<!-- จัดการ (ACTIONS) -->
 	<Table.Cell class="w-[18%] p-4 align-top whitespace-normal">
 		<div class="flex flex-wrap items-center gap-1.5 lg:flex-col lg:items-stretch">
-			{#if identityStatus !== 'verified' || needsSkillReview}
+			{#if identityStatus === 'rejected'}
+				<!-- Checked before and turned down: reopening the check reads as an edit of that result. -->
+				<Button
+					size="sm"
+					variant="outline"
+					class="gap-1.5 border-rose-300 text-rose-700 hover:bg-rose-50"
+					onclick={() => openQualificationAudit()}
+				>
+					<Pencil class="h-3.5 w-3.5" />
+					แก้ไขผลการตรวจ (เคยไม่ผ่าน)
+				</Button>
+			{:else if identityStatus !== 'verified' || needsSkillReview}
 				<Button
 					size="sm"
 					class="gap-1.5 bg-amber-600 text-white hover:bg-amber-700"

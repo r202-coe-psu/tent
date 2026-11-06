@@ -162,6 +162,9 @@ describe('VolunteerCard identity status', () => {
 		expect(text()).toContain('ไม่ผ่านการยืนยันตัวตน');
 		expect(text()).toContain('ทักษะควบคุมไม่ผ่านการรับรอง');
 		expect(text()).not.toContain('รอยืนยันตัวตน');
+		// The review button says it edits an earlier result.
+		expect(text()).toContain('แก้ไขผลการตรวจ (เคยไม่ผ่าน)');
+		expect(text()).not.toContain('ตรวจสอบ & อนุมัติ');
 	});
 
 	it('still shows a pending identity as waiting', async () => {
@@ -171,5 +174,7 @@ describe('VolunteerCard identity status', () => {
 		} as Partial<Volunteer>);
 		expect(text()).toContain('รอยืนยันตัวตน');
 		expect(text()).not.toContain('ไม่ผ่านการยืนยันตัวตน');
+		expect(text()).toContain('ตรวจสอบ & อนุมัติ');
+		expect(text()).not.toContain('แก้ไขผลการตรวจ');
 	});
 });
