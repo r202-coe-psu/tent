@@ -194,6 +194,54 @@ describe('createPrintJob', () => {
 			);
 		});
 
+		describe('when the printer has gone offline since', () => {
+			const offline = { ...device, last_seen_at: '2026-10-22T02:58:00.000Z' };
+
+			function storeHolding(existing: PrintJobDoc | null, created: PrintJobDoc[]) {
+				return (): PrintJobCreator => ({
+					async createJob(doc) {
+						created.push(doc);
+					},
+					async get() {
+						return existing;
+					}
+				});
+			}
+
+			it('answers a follow-up with the job already written (its outcome, not a refusal)', async () => {
+				const { deps, caller, created } = setup(offline);
+				deps.storeFor = storeHolding(existingDoc({ status: 'failed' }), created);
+
+				const result = await createPrintJob(deps, caller, input, now);
+
+				expect(result).toEqual({
+					job_id: clientId,
+					shelter_code: 'SH001',
+					expires_at: '2026-10-22T03:01:58.000Z'
+				});
+				expect(created).toEqual([]);
+			});
+
+			it('refuses as offline when the id holds no job, and stores none', async () => {
+				const { deps, caller, created } = setup(offline);
+				deps.storeFor = storeHolding(null, created);
+
+				await expect(createPrintJob(deps, caller, input, now)).rejects.toBeInstanceOf(
+					PrinterOfflineError
+				);
+				expect(created).toEqual([]);
+			});
+
+			it('refuses when the id belongs to another job', async () => {
+				const { deps, caller, created } = setup(offline);
+				deps.storeFor = storeHolding(existingDoc({ created_by: 'staff-b' }), created);
+
+				await expect(createPrintJob(deps, caller, input, now)).rejects.toBeInstanceOf(
+					PrintJobIdConflictError
+				);
+			});
+		});
+
 		it('fails as a dependency error when the conflicting job cannot be read back', async () => {
 			const { deps, caller } = setup();
 			deps.storeFor = () => conflictingStore(null);

@@ -107,8 +107,13 @@ async function writeJob(
 	}
 }
 
+type RequestKey = Pick<
+	PrintJobDoc,
+	'created_by' | 'shelter_code' | 'printer_id' | 'source' | 'label_count'
+>;
+
 /** True when `existing` is the job this very request wrote earlier (same caller and context). */
-function isSameRequest(existing: PrintJobDoc, job: PrintJobDoc): boolean {
+function isSameRequest(existing: PrintJobDoc, job: RequestKey): boolean {
 	return (
 		existing.created_by === job.created_by &&
 		existing.shelter_code === job.shelter_code &&
@@ -119,10 +124,26 @@ function isSameRequest(existing: PrintJobDoc, job: PrintJobDoc): boolean {
 }
 
 /**
+ * The job this request already wrote under `jobId`, or null when that id holds no job.
+ * Throws `PrintJobIdConflictError` when the id belongs to another job.
+ */
+async function findOwnJob(
+	deps: CreatePrintJobDeps,
+	jobId: string,
+	request: RequestKey
+): Promise<{ job_id: string; shelter_code: string; expires_at: string } | null> {
+	const existing = await deps.storeFor(request.shelter_code).get?.(`print_job:${jobId}`);
+	if (!existing) return null;
+	if (!isSameRequest(existing, request)) throw new PrintJobIdConflictError();
+	return { job_id: jobId, shelter_code: request.shelter_code, expires_at: existing.expires_at };
+}
+
+/**
  * Queue a print job: a `pending` doc with the label PNGs attached, expiring after 120 s.
  * With a client-minted `job_id` the create is idempotent: when that id already holds this same
  * caller's job for the same printer/source/label count (a retry after a lost response), the
- * existing job is returned instead of queueing a second one.
+ * existing job is returned instead of queueing a second one, even when the printer has gone
+ * offline since (a follow-up must learn the job's outcome, not a refusal).
  */
 export async function createPrintJob(
 	deps: CreatePrintJobDeps,
@@ -135,7 +156,21 @@ export async function createPrintJob(
 	if (!canPrintSource(caller.roles, device.shelter_code, input.source)) {
 		throw new ServiceError('FORBIDDEN', 'Not allowed to print on this shelter');
 	}
-	if (!isPrinterOnline(device, now)) throw new PrinterOfflineError();
+	if (!isPrinterOnline(device, now)) {
+		// A follow-up of a job already written still gets that job, so the tablet learns its outcome
+		// instead of a refusal that hides whether the labels printed (FR-47).
+		const existing = input.job_id
+			? await findOwnJob(deps, input.job_id, {
+					created_by: caller.name,
+					shelter_code: device.shelter_code,
+					printer_id: device._id,
+					source: input.source,
+					label_count: input.labels.length
+				})
+			: null;
+		if (existing) return existing;
+		throw new PrinterOfflineError();
+	}
 
 	const jobId = input.job_id ?? (deps.newId ?? ulid)();
 	const expiresAt = new Date(now.getTime() + JOB_TTL_SEC * 1000).toISOString();
@@ -162,10 +197,9 @@ export async function createPrintJob(
 		await writeJob(deps, device.shelter_code, job);
 	} catch (error) {
 		if (!(error instanceof PrintJobConflictError)) throw error;
-		const existing = await deps.storeFor(device.shelter_code).get?.(job._id);
+		const existing = await findOwnJob(deps, jobId, job);
 		if (!existing) throw new PrintDependencyError();
-		if (!isSameRequest(existing, job)) throw new PrintJobIdConflictError();
-		return { job_id: jobId, shelter_code: device.shelter_code, expires_at: existing.expires_at };
+		return existing;
 	}
 	return { job_id: jobId, shelter_code: device.shelter_code, expires_at: expiresAt };
 }
