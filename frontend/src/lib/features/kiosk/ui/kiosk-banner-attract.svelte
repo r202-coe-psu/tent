@@ -11,7 +11,7 @@
 		mode: 'live' | 'preview';
 		/** `preview` only: the slides to play, in order. */
 		banners?: KioskBannerSlide[];
-		/** `preview` only: called when the overlay is tapped away. */
+		/** Called when the overlay is tapped away (`live`: only while it was actually showing). */
 		onDismiss?: () => void;
 	};
 
@@ -65,7 +65,9 @@
 		cancelSwallow?.();
 		cancelSwallow = swallowClick ? swallowNextClick() : null;
 		if (controller) {
+			const wasShowing = controller.phase === 'showing';
 			controller.dismiss();
+			if (wasShowing) onDismiss?.();
 		} else if (!previewDismissed) {
 			previewDismissed = true;
 			onDismiss?.();

@@ -7,7 +7,8 @@
 		readKioskDisplayQuery,
 		IdentityMethodSelector,
 		KioskBannerAttract,
-		KioskDeviceInfo
+		KioskDeviceInfo,
+		returnToKioskLanguagePicker
 	} from '$lib/features/kiosk';
 	let { data }: PageProps = $props();
 
@@ -28,4 +29,4 @@
 	thaidCheckInEnabled={data.thaidCheckInEnabled}
 />
 <KioskDeviceInfo />
-<KioskBannerAttract mode="live" />
+<KioskBannerAttract mode="live" onDismiss={() => returnToKioskLanguagePicker(contextQuery)} />

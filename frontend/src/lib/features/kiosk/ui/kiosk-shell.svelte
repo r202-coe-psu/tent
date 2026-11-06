@@ -2,11 +2,16 @@
 	import { onMount, type Snippet } from 'svelte';
 	import { page } from '$app/state';
 	import Clock3 from '@lucide/svelte/icons/clock-3';
+	import { resolve } from '$app/paths';
+	import { languageStore } from '$lib/stores/language.svelte';
 	import { installReaderKeyGuard } from '../application/reader-key-guard';
 	import { loadKioskHardware } from '../application/kiosk-qr-input';
 	import { KIOSK_QR_PATH } from '../domain/identity-method';
 	import { qrInputPlan } from '../domain/kiosk-hardware';
+	import { buildKioskContextQuery } from '../domain/display-context';
 	import { KIOSK_COMPACT_MEDIA } from '../domain/kiosk-layout';
+	import { KIOSK_LANGUAGE_I18N } from './_constants/kiosk-language.i18n';
+	import KioskFlag from './kiosk-flag.svelte';
 	import { DISPLAY_LOCALE, DISPLAY_TIME_ZONE } from '$lib/utils/date';
 
 	interface Props {
@@ -63,6 +68,12 @@
 		return () => clearInterval(timer);
 	});
 
+	const KIOSK_LANGUAGE_PATH = '/kiosk/language';
+	const showLanguageButton = $derived(!page.url.pathname.startsWith(KIOSK_LANGUAGE_PATH));
+	const languageQuery = $derived(
+		buildKioskContextQuery({ shelterName, shelterCode, stationName, deviceName })
+	);
+
 	const timeString = $derived(
 		now.toLocaleTimeString(DISPLAY_LOCALE, {
 			timeZone: DISPLAY_TIME_ZONE,
@@ -79,6 +90,24 @@
 		})
 	);
 </script>
+
+{#snippet languageButton(buttonClass: string, flagClass: string)}
+	{#if showLanguageButton}
+		<a
+			href={resolve(`${KIOSK_LANGUAGE_PATH}${languageQuery}`)}
+			aria-label={KIOSK_LANGUAGE_I18N.shellButton.ariaLabel}
+			data-testid="kiosk-language-button"
+			class={`inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white font-semibold whitespace-nowrap text-[#0A2647] no-underline focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:outline-none active:bg-slate-100 ${buttonClass}`}
+		>
+			<KioskFlag
+				code={languageStore.current}
+				decorative
+				class={`shrink-0 rounded-xs ${flagClass}`}
+			/>
+			<span>{KIOSK_LANGUAGE_I18N.shellButton.label}</span>
+		</a>
+	{/if}
+{/snippet}
 
 <div
 	data-kiosk-shell
@@ -111,6 +140,10 @@
 				</div>
 
 				<div class="flex shrink-0 items-center gap-2">
+					{@render languageButton(
+						'min-h-10 px-2.5 text-sm kiosk-portrait:min-h-12 kiosk-portrait:px-3 kiosk-portrait:text-base',
+						'h-[19px] w-[28px] kiosk-portrait:h-[24px] kiosk-portrait:w-[36px]'
+					)}
 					{#if showClock}
 						<div
 							class="inline-flex min-h-10 items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-2.5 text-sm text-slate-700 kiosk-portrait:min-h-12 kiosk-portrait:px-3 kiosk-portrait:text-base"
@@ -130,12 +163,16 @@
 
 	{#if compactHeader}
 		<div
-			class="flex min-h-7 shrink-0 items-center justify-center border-b border-slate-200 bg-white px-3 text-xs font-medium text-slate-600"
+			class="relative flex min-h-7 shrink-0 items-center justify-center border-b border-slate-200 bg-white px-3 text-xs font-medium text-slate-600"
 		>
 			<span class="truncate"
 				>ศูนย์พักพิง {shelterName}{#if shelterCode}
 					· {shelterCode}{/if}</span
 			>
+			<!-- Overlaid at the strip's right edge so the strip keeps its one-line height. -->
+			<div class="absolute top-0 right-2 z-10">
+				{@render languageButton('h-9 px-2 text-xs', 'h-[14px] w-[21px]')}
+			</div>
 		</div>
 	{/if}
 

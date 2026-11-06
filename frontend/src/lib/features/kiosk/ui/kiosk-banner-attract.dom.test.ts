@@ -26,9 +26,12 @@ let instance: ReturnType<typeof mount> | null = null;
 let card: HTMLButtonElement;
 let onCardClick: () => void;
 
-async function mountLive(banners: KioskBannerSlide[]) {
+async function mountLive(banners: KioskBannerSlide[], onDismiss?: () => void) {
 	vi.mocked(fetchKioskBanners).mockResolvedValue(banners);
-	instance = mount(KioskBannerAttract, { target: document.body, props: { mode: 'live' } });
+	instance = mount(KioskBannerAttract, {
+		target: document.body,
+		props: { mode: 'live', onDismiss }
+	});
 	await vi.advanceTimersByTimeAsync(0);
 	flushSync();
 }
@@ -108,6 +111,38 @@ describe('KioskBannerAttract live (DOM)', () => {
 		card.click();
 
 		expect(onCardClick).toHaveBeenCalledTimes(1);
+	});
+
+	it('tells the page when the overlay is tapped away, so it can return to the language picker', async () => {
+		const onDismiss = vi.fn();
+		await mountLive([slide('a')], onDismiss);
+		await vi.advanceTimersByTimeAsync(KIOSK_BANNER_IDLE_MS);
+		flushSync();
+
+		tap(overlay()!);
+
+		expect(onDismiss).toHaveBeenCalledOnce();
+	});
+
+	it('tells the page when a key press dismisses the overlay', async () => {
+		const onDismiss = vi.fn();
+		await mountLive([slide('a')], onDismiss);
+		await vi.advanceTimersByTimeAsync(KIOSK_BANNER_IDLE_MS);
+		flushSync();
+
+		window.dispatchEvent(new KeyboardEvent('keydown', { key: 'a', cancelable: true }));
+
+		expect(onDismiss).toHaveBeenCalledOnce();
+	});
+
+	it('does not call onDismiss for activity while the overlay is hidden', async () => {
+		const onDismiss = vi.fn();
+		await mountLive([slide('a')], onDismiss);
+
+		window.dispatchEvent(new KeyboardEvent('keydown', { key: 'a', cancelable: true }));
+		tap(card);
+
+		expect(onDismiss).not.toHaveBeenCalled();
 	});
 
 	it('drops a slide whose image fails to load and hides when none are left', async () => {

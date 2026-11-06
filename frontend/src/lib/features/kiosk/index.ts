@@ -24,9 +24,11 @@ export { default as KioskReprint } from './ui/kiosk-reprint.svelte';
 export { default as KioskVolunteerCard } from './ui/kiosk-volunteer-card.svelte';
 export { default as KioskPrintQrChooser } from './ui/kiosk-print-qr-chooser.svelte';
 export { default as KioskThaidIdentityScan } from './ui/thaid-identity-scan.svelte';
+export { default as KioskLanguagePicker } from './ui/kiosk-language-picker.svelte';
+export { kioskLanguageSession } from './application/kiosk-language-session.svelte';
 export { default as KioskBannerAttract } from './ui/kiosk-banner-attract.svelte';
 export { KioskIdleTimeout, KIOSK_IDLE_TIMEOUT_MS } from './ui/kiosk-idle-timeout.svelte.js';
-export { navigateToKioskHome } from './application/kiosk-navigation';
+export { navigateToKioskHome, returnToKioskLanguagePicker } from './application/kiosk-navigation';
 export {
 	registerKioskWalkIn,
 	reprintKioskLabels,
