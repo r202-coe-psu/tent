@@ -2670,6 +2670,16 @@ VDU ไม่ตรวจ field ของ doc นี้ (เงื่อนไ�
 | `ip_hash`      | str                                           | req | —                                                                         |
 | `result_count` | int≥0                                         | req | —                                                                         |
 | `occurred_at`  | ts                                            | req | —                                                                         |
+| `searcher` | {`first_name`:str(1–100), `last_name`:str(0–100), `phone`:str} | opt | **PII** ค่าจริงของผู้ค้นหา (CR-231); `last_name` ว่างได้ (`''`); `phone` = มือถือ 10 หลัก normalize แล้ว; **เก็บที่ Mongo `search_audits` เท่านั้น — ไม่ sync เข้า CouchDB** |
+| `client_ip` | str | opt | **PII** IP จริงจาก `X-Real-IP` (CR-231); เก็บที่ Mongo เท่านั้น ไม่ sync เข้า CouchDB (`ip_hash` ยังคงไว้) |
+| `purpose` | enum(`find_family`,`find_acquaintance`,`coordinate_aid`,`other`) | opt | จุดประสงค์การค้นหา (CR-231); เก็บทั้ง Mongo และ CouchDB |
+| `purpose_note` | str(1–200) | opt | เหตุผลเมื่อ `purpose=other` (CR-231); free text อาจมี PII; เก็บที่ Mongo เท่านั้น ไม่ sync เข้า CouchDB; `purpose` อื่น = ไม่มี/`None` |
+| `consent_version` | str | opt | เวอร์ชันข้อความยินยอมที่ผู้ค้นหากดยอมรับ (CR-231); ค่าคงที่ `"search-v1"`; เก็บทั้ง Mongo และ CouchDB |
+
+> **schema_v 2** (CR-231, 2026-11-06) — เพิ่ม `searcher`, `client_ip`, `purpose`, `purpose_note`, `consent_version`
+> (ทั้งหมด opt ตอนอ่าน; additive). แถว/doc v1 อ่านได้ตามปกติ **ไม่ backfill**. `query_hash` / `ip_hash` คงเดิม.
+> doc ใน CouchDB `central_ops` มีเฉพาะ `purpose` + `consent_version` เพิ่ม — `searcher`, `client_ip`, `purpose_note` ถูกตัดออกที่ inbound worker (ดู couchdb-mongodb-sync §4.0).
+> ยังไม่มี retention สำหรับ PII ใน Mongo (ติดตามที่ #1213)
 
 ### 5.2 `export_job` — `export_job:{ulid}`
 

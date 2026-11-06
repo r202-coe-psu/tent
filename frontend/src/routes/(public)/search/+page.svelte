@@ -9,14 +9,18 @@
 	import { onMount } from 'svelte';
 	import {
 		familySearch,
+		getConfirmedSearchConsent,
 		normalizeFamilySearchQuery,
 		PublicApiError,
+		SearchConsentDialog,
+		storeConfirmedSearchConsent,
 		searchResultKey,
 		validateFamilySearchQuery,
 		PublicPageShell,
 		ShelterClosedBadge,
 		StayStatusChip,
-		type FamilySearchResult
+		type FamilySearchResult,
+		type SearchConsent
 	} from '$lib/features/public-portal';
 
 	import { getTranslation } from '$lib/utils/i18n';
@@ -45,11 +49,14 @@
 		const q = page.url.searchParams.get('q');
 		if (q) {
 			query = q;
-			performSearch();
+			requestSearch();
 		}
 	});
 
-	async function performSearch() {
+	let consentOpen = $state(false);
+
+	/** CR-231 FR-2: validate first, then ask for consent only when the session has none. */
+	function requestSearch() {
 		const issue = validateFamilySearchQuery(query);
 		if (issue) {
 			error =
@@ -63,13 +70,25 @@
 			isHint = true;
 			return;
 		}
+		const consent = getConfirmedSearchConsent();
+		if (consent) void runSearch(consent);
+		else consentOpen = true;
+	}
+
+	function confirmConsent(consent: SearchConsent) {
+		storeConfirmedSearchConsent(consent);
+		consentOpen = false;
+		void runSearch(consent);
+	}
+
+	async function runSearch(consent: SearchConsent) {
 		isLoading = true;
 		error = '';
 		isHint = false;
 		results = null;
 
 		try {
-			const data = await familySearch(normalizeFamilySearchQuery(query));
+			const data = await familySearch(normalizeFamilySearchQuery(query), consent);
 			results = data.results;
 			currentPage = 1;
 		} catch (e) {
@@ -91,7 +110,7 @@
 	}
 
 	function handleKeydown(e: KeyboardEvent) {
-		if (e.key === 'Enter') performSearch();
+		if (e.key === 'Enter') requestSearch();
 	}
 
 	function formatDateTime(isoString: string) {
@@ -143,7 +162,7 @@
 				/>
 			</div>
 			<Button
-				onclick={performSearch}
+				onclick={requestSearch}
 				disabled={isLoading}
 				class="h-12 min-w-30 rounded-xl bg-primary text-white hover:bg-primary-dark"
 			>
@@ -346,3 +365,5 @@
 		</div>
 	{/if}
 </PublicPageShell>
+
+<SearchConsentDialog bind:open={consentOpen} onconfirm={confirmConsent} />

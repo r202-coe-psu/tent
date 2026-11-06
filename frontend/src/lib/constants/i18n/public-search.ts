@@ -49,7 +49,30 @@ export const PUBLIC_SEARCH_I18N = {
 		prevBtn: 'ก่อนหน้า',
 		nextBtn: 'ถัดไป',
 		page: 'หน้า',
-		of: 'จาก'
+		of: 'จาก',
+		consentTitle: 'ยืนยันตัวตนก่อนค้นหา',
+		consentDesc:
+			'เพื่อคุ้มครองข้อมูลผู้พักพิง กรุณาระบุข้อมูลของท่านและจุดประสงค์ในการค้นหา ระบบจะบันทึกข้อมูลนี้ไว้ตรวจสอบย้อนหลัง',
+		consentFirstName: 'ชื่อ',
+		consentLastName: 'นามสกุล (ถ้ามี)',
+		consentPhone: 'เบอร์โทรศัพท์มือถือ',
+		consentPhoneHint: 'เบอร์มือถือ 10 หลัก เช่น 0812345678',
+		consentPurposeLegend: 'จุดประสงค์ในการค้นหา',
+		consentPurposeFindFamily: 'ตามหาญาติ/ครอบครัว',
+		consentPurposeFindAcquaintance: 'ตามหาเพื่อน/คนรู้จัก',
+		consentPurposeCoordinateAid: 'ประสานความช่วยเหลือ',
+		consentPurposeOther: 'อื่นๆ',
+		consentPurposeNote: 'โปรดระบุเหตุผล',
+		consentAccept: 'ข้าพเจ้ายินยอมให้เก็บและใช้ข้อมูลข้างต้นเพื่อการตรวจสอบการค้นหา ตาม',
+		consentPolicyLink: 'นโยบายความเป็นส่วนตัว',
+		consentConfirm: 'ยืนยันและค้นหา',
+		consentCancel: 'ยกเลิก',
+		consentErrorFirstName: 'กรุณากรอกชื่อ (ไม่เกิน 100 ตัวอักษร)',
+		consentErrorLastName: 'นามสกุลยาวเกินไป (ไม่เกิน 100 ตัวอักษร)',
+		consentErrorPhone: 'กรุณากรอกเบอร์มือถือ 10 หลักที่ขึ้นต้นด้วย 0',
+		consentErrorPurpose: 'กรุณาเลือกจุดประสงค์',
+		consentErrorPurposeNote: 'กรุณาระบุเหตุผล (ไม่เกิน 200 ตัวอักษร)',
+		consentErrorAccept: 'กรุณาติกยินยอมก่อนดำเนินการต่อ'
 	},
 	en: {
 		pageTitle: 'Family & Relatives Search - Smart Shelter',
@@ -102,7 +125,31 @@ export const PUBLIC_SEARCH_I18N = {
 		prevBtn: 'Previous',
 		nextBtn: 'Next',
 		page: 'Page',
-		of: 'of'
+		of: 'of',
+		consentTitle: 'Confirm before searching',
+		consentDesc:
+			'To protect shelter residents, please tell us who you are and why you are searching. This is recorded for audit.',
+		consentFirstName: 'First name',
+		consentLastName: 'Last name (optional)',
+		consentPhone: 'Mobile phone',
+		consentPhoneHint: '10-digit mobile number, e.g. 0812345678',
+		consentPurposeLegend: 'Purpose of the search',
+		consentPurposeFindFamily: 'Find relatives / family',
+		consentPurposeFindAcquaintance: 'Find a friend / acquaintance',
+		consentPurposeCoordinateAid: 'Coordinate assistance',
+		consentPurposeOther: 'Other',
+		consentPurposeNote: 'Please state the reason',
+		consentAccept:
+			'I consent to the collection and use of the information above for search auditing, under the',
+		consentPolicyLink: 'privacy policy',
+		consentConfirm: 'Confirm and search',
+		consentCancel: 'Cancel',
+		consentErrorFirstName: 'Please enter your first name (max 100 characters)',
+		consentErrorLastName: 'Last name is too long (max 100 characters)',
+		consentErrorPhone: 'Please enter a 10-digit mobile number starting with 0',
+		consentErrorPurpose: 'Please choose a purpose',
+		consentErrorPurposeNote: 'Please state the reason (max 200 characters)',
+		consentErrorAccept: 'Please tick the consent box to continue'
 	}
 } as const;
 

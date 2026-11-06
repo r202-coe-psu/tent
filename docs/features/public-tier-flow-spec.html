@@ -48,7 +48,7 @@
             <li><code>****</code> เป็นความยาวคงที่เสมอ — ไม่เปิดเผยความยาวจริงของนามสกุล</li>
           </ul></li>
         <li><strong>Consent model = opt-out:</strong> ค้นเจอเป็น default; ถ้า <code>privacy.search_excluded = true</code> ให้ <strong>hide ทั้ง record</strong> จากผลค้นหา (ไม่ปรากฏแม้ query ตรงตัว)</li>
-        <li>Max 10 ผลต่อ query; ทุก query เขียน <code>search_audit</code> ที่ central (query text, IP hash, ผลลัพธ์กี่รายการ)</li>
+        <li>Max 10 ผลต่อ query; ทุก query เขียน <code>search_audit</code> ที่ central (query hash, IP hash, ผลลัพธ์กี่รายการ + ข้อมูลผู้ค้นหา/IP จริง/จุดประสงค์/consent_version ที่ Mongo — CR-231)</li>
         <li>Anti-enumeration: rate-limit แรงต่อ IP, ตอบ generic เมื่อไม่พบ (ไม่บอกว่า "มีแต่ถูกซ่อน"), PoW challenge เมื่อ pattern ผิดปกติ</li>
       </ul></div></section>
 

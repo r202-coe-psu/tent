@@ -327,6 +327,9 @@
             <li>
               ทุก query (ยกเว้น "จำลอง") เขียน <code>search_audit</code> ที่
               central: query type, hash ของ query, IP hash, จำนวนผลลัพธ์
+              และ (CR-231) ชื่อ/นามสกุล/เบอร์ผู้ค้นหา, IP จริง, จุดประสงค์,
+              consent_version — PII เก็บที่ Mongo เท่านั้น ไม่ sync เข้า CouchDB;
+              ต้องกรอก dialog ยินยอมก่อนค้น และเขียน audit ไม่สำเร็จ = ไม่คืนผล (503)
             </li>
           </ul>
         </div>

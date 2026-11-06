@@ -9,11 +9,17 @@
 	import { PUBLIC_FAMILY_SEARCH_I18N } from '$lib/constants/i18n';
 	import { langState } from '$lib/states/i18n.svelte';
 	import { formatDate, getTranslation } from '$lib/utils/i18n';
+	import {
+		getConfirmedSearchConsent,
+		storeConfirmedSearchConsent
+	} from '../application/search-consent-session';
 	import { familySearch, PublicApiError } from '../data/public-api';
 	import { searchResultKey } from '../domain/mappers';
 	import { normalizeFamilySearchQuery, validateFamilySearchQuery } from '../domain/search-input';
+	import SearchConsentDialog from './search-consent-dialog.svelte';
 	import ShelterClosedBadge from './shelter-closed-badge.svelte';
 	import StayStatusChip from './stay-status-chip.svelte';
+	import type { SearchConsent } from '../domain/search-consent';
 	import type { FamilySearchResult } from '../domain/types';
 
 	interface Props {
@@ -42,7 +48,10 @@
 	let isHint = $state(false);
 	const messageText = $derived(message === null ? '' : t[message]);
 
-	async function performSearch() {
+	let consentOpen = $state(false);
+
+	/** CR-231 FR-2: validate first, then ask for consent only when the session has none. */
+	function requestSearch() {
 		const issue = validateFamilySearchQuery(query);
 		if (issue) {
 			message = issue;
@@ -50,12 +59,24 @@
 			results = null;
 			return;
 		}
+		const consent = getConfirmedSearchConsent();
+		if (consent) void runSearch(consent);
+		else consentOpen = true;
+	}
+
+	function confirmConsent(consent: SearchConsent) {
+		storeConfirmedSearchConsent(consent);
+		consentOpen = false;
+		void runSearch(consent);
+	}
+
+	async function runSearch(consent: SearchConsent) {
 		isLoading = true;
 		message = null;
 		results = null;
 
 		try {
-			const data = await familySearch(normalizeFamilySearchQuery(query));
+			const data = await familySearch(normalizeFamilySearchQuery(query), consent);
 			results = data.results;
 		} catch (e) {
 			if (e instanceof PublicApiError) {
@@ -73,7 +94,7 @@
 	function onKeydown(e: KeyboardEvent) {
 		if (e.key === 'Enter') {
 			e.preventDefault();
-			void performSearch();
+			requestSearch();
 		}
 	}
 
@@ -112,7 +133,7 @@
 				placeholder={t.placeholder}
 				aria-label={t.queryAria}
 			/>
-			<Button type="button" onclick={performSearch} disabled={isLoading}>
+			<Button type="button" onclick={requestSearch} disabled={isLoading}>
 				{isLoading ? t.searching : t.search}
 			</Button>
 		</div>
@@ -172,3 +193,5 @@
 		{/if}
 	</Dialog.Content>
 </Dialog.Root>
+
+<SearchConsentDialog bind:open={consentOpen} onconfirm={confirmConsent} />

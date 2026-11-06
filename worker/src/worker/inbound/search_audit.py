@@ -20,9 +20,11 @@ async def _persist_search_audit(couch: CouchClient, audit: SearchAudit) -> bool:
 
     occurred = audit.occurred_at.isoformat().replace("+00:00", "Z")
     couch_doc = {
-        "_id": audit.id if audit.id.startswith("search_audit:") else f"search_audit:{audit.id}",
+        "_id": audit.id
+        if audit.id.startswith("search_audit:")
+        else f"search_audit:{audit.id}",
         "type": "search_audit",
-        "schema_v": 1,
+        "schema_v": 2,
         "query_kind": audit.query_kind,
         "query_hash": audit.query_hash,
         "ip_hash": audit.ip_hash,
@@ -30,6 +32,12 @@ async def _persist_search_audit(couch: CouchClient, audit: SearchAudit) -> bool:
         "occurred_at": occurred,
         "created_at": occurred,
     }
+    # CR-231 FR-17: searcher / client_ip / purpose_note are PII and never reach CouchDB
+    # (append-only doc); only the non-PII purpose + consent_version are carried over.
+    if getattr(audit, "purpose", None):
+        couch_doc["purpose"] = audit.purpose
+    if getattr(audit, "consent_version", None):
+        couch_doc["consent_version"] = audit.consent_version
 
     try:
         result = await couch.put_doc(CENTRAL_OPS_DB, couch_doc)
@@ -51,11 +59,13 @@ async def _persist_search_audit(couch: CouchClient, audit: SearchAudit) -> bool:
     return True
 
 
-async def run_search_audit_inbound_loop(couch: CouchClient, *, stop_event: asyncio.Event) -> None:
+async def run_search_audit_inbound_loop(
+    couch: CouchClient, *, stop_event: asyncio.Event
+) -> None:
     while not stop_event.is_set():
         try:
             pending = await SearchAudit.find(
-                SearchAudit.synced_to_couch == False  # noqa: E712
+                SearchAudit.synced_to_couch == False
             ).to_list()
             for audit in pending:
                 if stop_event.is_set():

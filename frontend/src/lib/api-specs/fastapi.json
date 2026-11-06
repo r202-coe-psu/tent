@@ -437,7 +437,7 @@
 				"operationId": "search_evacuees_public_v1_occupants_post",
 				"requestBody": {
 					"content": {
-						"application/json": { "schema": { "$ref": "#/components/schemas/SearchRequest" } }
+						"application/json": { "schema": { "$ref": "#/components/schemas/PublicSearchRequest" } }
 					},
 					"required": true
 				},
@@ -456,6 +456,12 @@
 					},
 					"422": {
 						"description": "Unprocessable Content",
+						"content": {
+							"application/json": { "schema": { "$ref": "#/components/schemas/ApiErrorResponse" } }
+						}
+					},
+					"503": {
+						"description": "Service Unavailable",
 						"content": {
 							"application/json": { "schema": { "$ref": "#/components/schemas/ApiErrorResponse" } }
 						}
@@ -5000,6 +5006,26 @@
 				"title": "PublicJobShift",
 				"description": "Concrete shift identity plus renderable snapshot fields."
 			},
+			"PublicSearchRequest": {
+				"properties": {
+					"search": { "type": "string", "maxLength": 200, "minLength": 1, "title": "Search" },
+					"searcher": { "$ref": "#/components/schemas/Searcher" },
+					"purpose": {
+						"type": "string",
+						"enum": ["find_family", "find_acquaintance", "coordinate_aid", "other"],
+						"title": "Purpose"
+					},
+					"purpose_note": {
+						"anyOf": [{ "type": "string", "maxLength": 200 }, { "type": "null" }],
+						"title": "Purpose Note"
+					},
+					"consent_accepted": { "type": "boolean", "const": true, "title": "Consent Accepted" }
+				},
+				"type": "object",
+				"required": ["search", "searcher", "purpose", "consent_accepted"],
+				"title": "PublicSearchRequest",
+				"description": "`POST /public/v1/occupants` body: the search plus consent + purpose (CR-231).\n\n`/external/v1/occupants` keeps plain `SearchRequest` (ND-1: no consent fields)."
+			},
 			"ResidencyEnvelope": {
 				"properties": {
 					"status": { "type": "integer", "title": "Status", "default": 200 },
@@ -5214,6 +5240,17 @@
 				"type": "object",
 				"required": ["name", "status", "shelter_name"],
 				"title": "SearchResult"
+			},
+			"Searcher": {
+				"properties": {
+					"first_name": { "type": "string", "maxLength": 100, "title": "First Name" },
+					"last_name": { "type": "string", "maxLength": 100, "title": "Last Name", "default": "" },
+					"phone": { "type": "string", "title": "Phone" }
+				},
+				"type": "object",
+				"required": ["first_name", "phone"],
+				"title": "Searcher",
+				"description": "Who is searching (CR-231 FR-3/FR-8)."
 			},
 			"ShelterAdmissionPolicyDetail": {
 				"properties": {

@@ -3110,6 +3110,29 @@ export interface components {
 			 */
 			applicants_count: number;
 		};
+		/**
+		 * PublicSearchRequest
+		 * @description `POST /public/v1/occupants` body: the search plus consent + purpose (CR-231).
+		 *
+		 *     `/external/v1/occupants` keeps plain `SearchRequest` (ND-1: no consent fields).
+		 */
+		PublicSearchRequest: {
+			/** Search */
+			search: string;
+			searcher: components['schemas']['Searcher'];
+			/**
+			 * Purpose
+			 * @enum {string}
+			 */
+			purpose: 'find_family' | 'find_acquaintance' | 'coordinate_aid' | 'other';
+			/** Purpose Note */
+			purpose_note?: string | null;
+			/**
+			 * Consent Accepted
+			 * @constant
+			 */
+			consent_accepted: true;
+		};
 		/** ResidencyEnvelope */
 		ResidencyEnvelope: {
 			/**
@@ -3307,6 +3330,21 @@ export interface components {
 			shelter_status?: ('open' | 'closed' | 'full' | 'standby') | null;
 			/** Family Members */
 			family_members?: components['schemas']['FamilyMember'][];
+		};
+		/**
+		 * Searcher
+		 * @description Who is searching (CR-231 FR-3/FR-8).
+		 */
+		Searcher: {
+			/** First Name */
+			first_name: string;
+			/**
+			 * Last Name
+			 * @default
+			 */
+			last_name: string;
+			/** Phone */
+			phone: string;
 		};
 		/** ShelterAdmissionPolicyDetail */
 		ShelterAdmissionPolicyDetail: {
@@ -5070,7 +5108,7 @@ export interface operations {
 		};
 		requestBody: {
 			content: {
-				'application/json': components['schemas']['SearchRequest'];
+				'application/json': components['schemas']['PublicSearchRequest'];
 			};
 		};
 		responses: {
@@ -5094,6 +5132,15 @@ export interface operations {
 			};
 			/** @description Too Many Requests */
 			429: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['ApiErrorResponse'];
+				};
+			};
+			/** @description Service Unavailable */
+			503: {
 				headers: {
 					[name: string]: unknown;
 				};

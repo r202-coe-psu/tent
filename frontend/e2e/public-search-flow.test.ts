@@ -23,7 +23,7 @@
  * :9000) plus platform init (`pnpm seed:master`, `pnpm db:sync`).
  * Locators are generated with Playwright codegen (`pnpm exec playwright codegen`).
  */
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
 import { bootstrapAdminSession, couchReq } from './helpers/couch';
 import {
 	assertFixtureProvisioned,
@@ -61,6 +61,23 @@ const NATIONAL_ID_DASHED = [
 ].join('-');
 
 const SEARCH_BOX = 'พิมพ์ชื่อ สกุล เบอร์โทรศัพท์ หรือ รหัสบัตรประชาชน';
+
+/**
+ * CR-231: a search needs the consent dialog first. Live-result tests seed the confirmed value the
+ * dialog would store (key/shape of `search-consent-session.ts`) so they exercise search, not the gate.
+ */
+async function seedSearchConsent(page: Page) {
+	await page.addInitScript(() => {
+		sessionStorage.setItem(
+			'public-search-consent:v1',
+			JSON.stringify({
+				searcher: { first_name: 'E2E', last_name: 'Tester', phone: '0812345678' },
+				purpose: 'find_family',
+				consent_accepted: true
+			})
+		);
+	});
+}
 
 let shelterCode: string | undefined;
 
@@ -133,6 +150,19 @@ test.describe('Public family search: server errors', { tag: ['@public', '@smoke'
 		await page.goto('/search');
 		await page.getByRole('textbox', { name: SEARCH_BOX }).fill('นายทดสอบระบบ');
 		await page.getByRole('button', { name: 'ค้นหา' }).click();
+		// CR-231: the first search asks for consent + purpose; cancelling keeps the query.
+		const dialog = page.getByRole('dialog', { name: 'ยืนยันตัวตนก่อนค้นหา' });
+		await expect(dialog).toBeVisible();
+		await dialog.getByRole('button', { name: 'ยกเลิก' }).click();
+		await expect(dialog).toBeHidden();
+		await expect(page.getByRole('textbox', { name: SEARCH_BOX })).toHaveValue('นายทดสอบระบบ');
+
+		await page.getByRole('button', { name: 'ค้นหา' }).click();
+		await dialog.getByLabel('ชื่อ', { exact: true }).fill('ทดสอบ');
+		await dialog.getByLabel('เบอร์โทรศัพท์มือถือ').fill('0812345678');
+		await dialog.getByLabel('ตามหาญาติ/ครอบครัว').check();
+		await dialog.getByLabel(/ข้าพเจ้ายินยอม/).check();
+		await dialog.getByRole('button', { name: 'ยืนยันและค้นหา' }).click();
 		await expect(page.getByText('เกิดข้อผิดพลาดในการค้นหา')).toBeVisible();
 		await expect(page.getByRole('textbox', { name: SEARCH_BOX })).toHaveValue('นายทดสอบระบบ');
 		await expect(page.getByRole('heading', { name: 'ไม่พบรายชื่อ' })).toHaveCount(0);
@@ -148,6 +178,7 @@ test.describe('Public family search: live results', { tag: ['@public', '@critica
 	// the target's live system banner must not be able to say the same words (it reads
 	// "ทดสอบระบบ" on a dev stack that left its banner on).
 	test.beforeEach(async ({ page }) => {
+		await seedSearchConsent(page);
 		await mockSystemBanner(page, false);
 	});
 

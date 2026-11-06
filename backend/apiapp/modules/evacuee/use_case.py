@@ -11,7 +11,7 @@ from fastapi import HTTPException, status
 from pymongo import ASCENDING
 from tent_model.public_person import PublicPerson
 from tent_model.public_shelter import PublicShelter
-from tent_model.search_audit import SearchAudit
+from tent_model.search_audit import SearchAudit, SearchAuditSearcher
 
 from ...utils.masking import (
     last_name_hash,
@@ -26,6 +26,7 @@ from .schemas import (
     ExternalSearchResponse,
     ExternalSearchResult,
     FamilyMember,
+    PublicSearchRequest,
     SearchResponse,
     SearchResult,
     ShelterStatus,
@@ -34,6 +35,9 @@ from .schemas import (
 logger = logging.getLogger(__name__)
 
 NAME_RESULT_LIMIT = 10
+
+#: Consent text version recorded with every public search (CR-231 FR-16).
+SEARCH_CONSENT_VERSION = "search-v1"
 
 #: Staff `current_stay.status` values reported to public search verbatim
 #: (CR-080 + CR-112). Includes `arriving` and `room_confirmed` so Zone Arrival
@@ -144,8 +148,15 @@ def _resolve_zone_name(shelter: PublicShelter | None, care_zone: str | None) -> 
 
 
 class EvacueeUseCase:
-    async def search(self, raw_query: str, *, client_ip: str = "unknown") -> SearchResponse:
-        persons = await self._find_and_audit(raw_query, client_ip=client_ip)
+    async def search(
+        self,
+        raw_query: str,
+        *,
+        client_ip: str = "unknown",
+        consent: PublicSearchRequest | None = None,
+    ) -> SearchResponse:
+        """Public search. With `consent` (the public route) the audit is fail-closed (CR-231)."""
+        persons = await self._find_and_audit(raw_query, client_ip=client_ip, consent=consent)
         results = await self.build_results(persons)
         return SearchResponse(results=results, count=len(results), as_of=datetime.now(UTC))
 
@@ -157,7 +168,13 @@ class EvacueeUseCase:
         results = await self.build_external_results(persons)
         return ExternalSearchResponse(results=results, count=len(results), as_of=datetime.now(UTC))
 
-    async def _find_and_audit(self, raw_query: str, *, client_ip: str) -> list[PublicPerson]:
+    async def _find_and_audit(
+        self,
+        raw_query: str,
+        *,
+        client_ip: str,
+        consent: PublicSearchRequest | None = None,
+    ) -> list[PublicPerson]:
         parsed = parse_search_query(raw_query)
         if parsed is None:
             raise HTTPException(
@@ -175,6 +192,7 @@ class EvacueeUseCase:
             parsed=parsed,
             client_ip=client_ip,
             result_count=len(persons),
+            consent=consent,
         )
         return persons
 
@@ -217,8 +235,24 @@ class EvacueeUseCase:
         parsed: ParsedSearchQuery,
         client_ip: str,
         result_count: int,
+        consent: PublicSearchRequest | None = None,
     ) -> None:
-        """Append-only audit buffer — never store raw query or IP (hashes only)."""
+        """Append-only audit buffer; the query is always hash-only.
+
+        Public (`consent` given, CR-231): also stores the searcher, the real client IP, the
+        purpose and `consent_version` (PII stays in Mongo, the worker strips it before CouchDB),
+        and a failed write is fail-closed (503 `SEARCH_UNAVAILABLE`, no results).
+        External (`consent` None, ND-1): hashes only and fail-open, as before.
+        """
+        extra: dict = {}
+        if consent is not None:
+            extra = {
+                "searcher": SearchAuditSearcher(**consent.searcher.model_dump()),
+                "client_ip": client_ip,
+                "purpose": consent.purpose,
+                "purpose_note": consent.purpose_note,
+                "consent_version": SEARCH_CONSENT_VERSION,
+            }
         try:
             await SearchAudit(
                 id=f"search_audit:{new_ulid()}",
@@ -228,10 +262,21 @@ class EvacueeUseCase:
                 result_count=result_count,
                 occurred_at=datetime.now(UTC),
                 synced_to_couch=False,
+                **extra,
             ).insert()
         except Exception:
-            # Search availability > audit durability; inbound/ops can alert on gaps.
             logger.exception("Failed to write search_audit for kind=%s", parsed.kind.value)
+            if consent is not None:
+                raise HTTPException(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail={
+                        "error": {
+                            "code": "SEARCH_UNAVAILABLE",
+                            "message": "Search is temporarily unavailable",
+                        }
+                    },
+                ) from None
+            # External: search availability > audit durability.
 
     async def find_persons(
         self,

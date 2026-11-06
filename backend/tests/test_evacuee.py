@@ -21,6 +21,22 @@ from apiapp.utils.masking import (
 from apiapp.utils.ulid import new_ulid
 
 
+def public_search_payload(q: str, **overrides) -> dict:
+    """Valid `POST /public/v1/occupants` body (CR-231); external keeps `{"q": ...}`."""
+    return {
+        "q": q,
+        "searcher": {"first_name": "สมศรี", "last_name": "ใจดี", "phone": "0899999999"},
+        "purpose": "find_family",
+        "consent_accepted": True,
+        **overrides,
+    }
+
+
+def search_body(url: str, q: str) -> dict:
+    """Body for a fixture-parametrized endpoint: public needs consent, external stays plain."""
+    return public_search_payload(q) if url.startswith("/public/") else {"q": q}
+
+
 def test_map_public_status_includes_arriving_and_room_confirmed():
     """CR-112 — public search allow-list includes Report-in and Zone Arrival."""
     assert map_public_status("arriving") == "arriving"
@@ -101,7 +117,7 @@ async def test_evacuee_search_by_phone_returns_masked_result(
 
     response = await client.post(
         "/public/v1/occupants",
-        json={"q": phone},
+        json=public_search_payload(phone),
         headers=auth_headers,
     )
     assert response.status_code == 200
@@ -156,7 +172,7 @@ async def test_evacuee_search_by_national_id_exact_match(
 
     response = await client.post(
         "/public/v1/occupants",
-        json={"q": "3900-1002-4419-2"},
+        json=public_search_payload("3900-1002-4419-2"),
         headers=auth_headers,
     )
     assert response.status_code == 200
@@ -207,7 +223,7 @@ async def test_evacuee_search_includes_family_members(
 
     response = await client.post(
         "/public/v1/occupants",
-        json={"q": phone},
+        json=public_search_payload(phone),
         headers=auth_headers,
     )
     assert response.status_code == 200
@@ -260,7 +276,7 @@ async def test_evacuee_search_reports_pre_registered_as_itself(
 
     response = await client.post(
         "/public/v1/occupants",
-        json={"q": phone},
+        json=public_search_payload(phone),
         headers=auth_headers,
     )
     assert response.status_code == 200
@@ -294,7 +310,7 @@ async def test_evacuee_search_reports_unmapped_status_as_unknown(
 
     response = await client.post(
         "/public/v1/occupants",
-        json={"q": phone},
+        json=public_search_payload(phone),
         headers=auth_headers,
     )
     assert response.status_code == 200
@@ -338,7 +354,7 @@ async def test_evacuee_search_matches_a_thai_name_prefix(
 
     partial = await client.post(
         "/public/v1/occupants",
-        json={"q": "สักก์"},
+        json=public_search_payload("สักก์"),
         headers=auth_headers,
     )
     assert partial.status_code == 200
@@ -348,14 +364,14 @@ async def test_evacuee_search_matches_a_thai_name_prefix(
     # anchored, so a fragment from the middle of the name matches nothing.
     exact = await client.post(
         "/public/v1/occupants",
-        json={"q": "สักก์ธนัชญ์"},
+        json=public_search_payload("สักก์ธนัชญ์"),
         headers=auth_headers,
     )
     assert exact.json()["count"] == 1
 
     middle = await client.post(
         "/public/v1/occupants",
-        json={"q": "ธนัชญ์"},
+        json=public_search_payload("ธนัชญ์"),
         headers=auth_headers,
     )
     assert middle.json()["count"] == 0
@@ -386,7 +402,7 @@ async def test_evacuee_search_hides_opted_out_records(
 
     response = await client.post(
         "/public/v1/occupants",
-        json={"q": phone},
+        json=public_search_payload(phone),
         headers=auth_headers,
     )
     assert response.status_code == 200
@@ -398,7 +414,7 @@ async def test_evacuee_search_rejects_invalid_query(
 ):
     response = await client.post(
         "/public/v1/occupants",
-        json={"q": "a"},
+        json=public_search_payload("a"),
         headers=auth_headers,
     )
     assert response.status_code == 422
@@ -411,7 +427,7 @@ async def test_evacuee_search_rejects_a_query_with_a_one_character_word(
     for query in ("ก ข", "สมหมาย ก", "ก สมหมาย"):
         response = await client.post(
             "/public/v1/occupants",
-            json={"q": query},
+            json=public_search_payload(query),
             headers=auth_headers,
         )
         assert response.status_code == 422, query
@@ -422,7 +438,7 @@ async def test_evacuee_search_rejects_more_than_four_words(
 ):
     response = await client.post(
         "/public/v1/occupants",
-        json={"q": "สม หมาย มี โชค ดี"},
+        json=public_search_payload("สม หมาย มี โชค ดี"),
         headers=auth_headers,
     )
     assert response.status_code == 422
@@ -469,7 +485,7 @@ async def test_evacuee_search_writes_search_audit(
 
     response = await client.post(
         "/public/v1/occupants",
-        json={"q": phone},
+        json=public_search_payload(phone, purpose="other", purpose_note="  หาญาติ  "),
         headers={**auth_headers, "X-Real-IP": "203.0.113.10"},
     )
     assert response.status_code == 200
@@ -482,6 +498,16 @@ async def test_evacuee_search_writes_search_audit(
     assert audit.ip_hash == sha256_hex("203.0.113.10")
     assert audit.result_count == 1
     assert audit.synced_to_couch is False
+    assert audit.searcher is not None
+    assert audit.searcher.model_dump() == {
+        "first_name": "สมศรี",
+        "last_name": "ใจดี",
+        "phone": "0899999999",
+    }
+    assert audit.client_ip == "203.0.113.10"
+    assert audit.purpose == "other"
+    assert audit.purpose_note == "หาญาติ"
+    assert audit.consent_version == "search-v1"
 
 
 async def test_evacuee_search_returns_shelter_address_and_no_zone_keys(
@@ -531,7 +557,7 @@ async def test_evacuee_search_returns_shelter_address_and_no_zone_keys(
 
     response = await client.post(
         "/public/v1/occupants",
-        json={"q": phone},
+        json=public_search_payload(phone),
         headers=auth_headers,
     )
     assert response.status_code == 200
@@ -591,7 +617,7 @@ async def test_evacuee_search_returns_physical_address_from_location(
 
     response = await client.post(
         "/public/v1/occupants",
-        json={"q": phone},
+        json=public_search_payload(phone),
         headers=auth_headers,
     )
     assert response.status_code == 200
@@ -604,7 +630,7 @@ async def test_evacuee_search_returns_physical_address_from_location(
 async def _search_names(client: AsyncClient, auth_headers: dict[str, str], query: str) -> list[str]:
     response = await client.post(
         "/public/v1/occupants",
-        json={"q": query},
+        json=public_search_payload(query),
         headers=auth_headers,
     )
     assert response.status_code == 200, query
@@ -649,7 +675,7 @@ async def test_evacuee_name_search_needs_first_name_and_full_surname(
     assert await _search_names(client, auth_headers, "สมหมาย บุญ") == []
     # "มี" is one grapheme (consonant + vowel mark), so a bare "มี" word is rejected.
     response = await client.post(
-        "/public/v1/occupants", json={"q": "สมหมาย มี"}, headers=auth_headers
+        "/public/v1/occupants", json=public_search_payload("สมหมาย มี"), headers=auth_headers
     )
     assert response.status_code == 422
     # A first-name prefix plus the whole surname works.
@@ -822,7 +848,7 @@ async def _names(
     client: AsyncClient, endpoint: tuple[str, dict[str, str]], query: str
 ) -> list[str]:
     url, headers = endpoint
-    response = await client.post(url, json={"q": query}, headers=headers)
+    response = await client.post(url, json=search_body(url, query), headers=headers)
     assert response.status_code == 200, (url, response.text)
     return [result["name"] for result in response.json()["results"]]
 
@@ -903,7 +929,7 @@ async def test_public_search_still_returns_cancelled_people_and_family_members(
         )
 
     path, headers = search_endpoint
-    response = await client.post(path, json={"q": phone}, headers=headers)
+    response = await client.post(path, json=search_body(path, phone), headers=headers)
     assert response.status_code == 200
     body = response.json()
     assert body["count"] == 1
@@ -938,13 +964,17 @@ async def test_basic_consent_person_leaves_occupant_search(
                 "updated_at": now,
             },
         )
-    before = await client.post("/public/v1/occupants", json={"q": phone}, headers=auth_headers)
+    before = await client.post(
+        "/public/v1/occupants", json=public_search_payload(phone), headers=auth_headers
+    )
     assert before.json()["count"] == 2
 
     db_name = settings.DATABASE_URI.rsplit("/", 1)[-1]
     await db_client[db_name]["public_persons"].delete_one({"_id": "evacuee:basic"})
 
-    after = await client.post("/public/v1/occupants", json={"q": phone}, headers=auth_headers)
+    after = await client.post(
+        "/public/v1/occupants", json=public_search_payload(phone), headers=auth_headers
+    )
     assert after.status_code == 200
     assert after.json()["count"] == 1
     assert [r["name"].split()[0] for r in after.json()["results"]] == ["เห็น"]
@@ -1005,7 +1035,7 @@ async def test_search_reports_shelter_status_on_hit_and_family_member(
     await _seed_household(db_client, settings, shelter={"status": shelter_status}, phone=phone)
 
     url, headers = search_endpoint
-    response = await client.post(url, json={"q": phone}, headers=headers)
+    response = await client.post(url, json=search_body(url, phone), headers=headers)
 
     assert response.status_code == 200, response.text
     result = response.json()["results"][0]
@@ -1023,7 +1053,7 @@ async def test_search_shelter_status_is_null_without_shelter_row(
     await _seed_household(db_client, settings, shelter=None, phone=phone)
 
     url, headers = search_endpoint
-    response = await client.post(url, json={"q": phone}, headers=headers)
+    response = await client.post(url, json=search_body(url, phone), headers=headers)
 
     assert response.status_code == 200, response.text
     result = response.json()["results"][0]
@@ -1053,7 +1083,7 @@ async def test_search_reports_zone_to_partners_only(
     )
 
     url, headers = search_endpoint
-    response = await client.post(url, json={"q": phone}, headers=headers)
+    response = await client.post(url, json=search_body(url, phone), headers=headers)
 
     assert response.status_code == 200, response.text
     result = response.json()["results"][0]
@@ -1064,3 +1094,211 @@ async def test_search_reports_zone_to_partners_only(
         assert result["care_zone"] == "อาคาร 1"
         assert result["zone_name"] == "อาคาร 1"
         assert result["shelter_status"] == shelter_status
+
+
+# --- CR-231 S1: consent + purpose on the public route -------------------------------------
+
+
+def _without(payload: dict, *keys: str) -> dict:
+    return {k: v for k, v in payload.items() if k not in keys}
+
+
+@pytest.mark.parametrize(
+    ("label", "payload", "loc"),
+    [
+        ("missing searcher", _without(public_search_payload("0812345678"), "searcher"), "searcher"),
+        ("missing purpose", _without(public_search_payload("0812345678"), "purpose"), "purpose"),
+        (
+            "missing consent",
+            _without(public_search_payload("0812345678"), "consent_accepted"),
+            "consent_accepted",
+        ),
+        (
+            "consent false",
+            public_search_payload("0812345678", consent_accepted=False),
+            "consent_accepted",
+        ),
+        (
+            "unknown purpose",
+            public_search_payload("0812345678", purpose="spy"),
+            "purpose",
+        ),
+        (
+            "bad phone",
+            public_search_payload(
+                "0812345678", searcher={"first_name": "ก", "last_name": "", "phone": "12345"}
+            ),
+            "phone",
+        ),
+        (
+            "intl phone not allowed",
+            public_search_payload(
+                "0812345678", searcher={"first_name": "ก", "last_name": "", "phone": "+66812345678"}
+            ),
+            "phone",
+        ),
+        (
+            "blank first name",
+            public_search_payload(
+                "0812345678", searcher={"first_name": "  ", "last_name": "", "phone": "0812345678"}
+            ),
+            "first_name",
+        ),
+        (
+            "other without note",
+            public_search_payload("0812345678", purpose="other"),
+            "purpose_note",
+        ),
+        (
+            "other with blank note",
+            public_search_payload("0812345678", purpose="other", purpose_note="   "),
+            "purpose_note",
+        ),
+        (
+            "other with note too long",
+            public_search_payload("0812345678", purpose="other", purpose_note="ก" * 201),
+            "purpose_note",
+        ),
+        (
+            "first name too long",
+            public_search_payload(
+                "0812345678",
+                searcher={"first_name": "ก" * 101, "last_name": "", "phone": "0812345678"},
+            ),
+            "first_name",
+        ),
+        (
+            "note with non-other purpose",
+            public_search_payload("0812345678", purpose="find_family", purpose_note="hi"),
+            "purpose_note",
+        ),
+    ],
+)
+async def test_public_search_rejects_bad_consent_payload(
+    client: AsyncClient,
+    auth_headers: dict[str, str],
+    label: str,
+    payload: dict,
+    loc: str,
+):
+    from tent_model.search_audit import SearchAudit
+
+    response = await client.post("/public/v1/occupants", json=payload, headers=auth_headers)
+    assert response.status_code == 422, label
+    assert loc in response.text, label
+    assert await SearchAudit.find_all().to_list() == []
+
+
+@pytest.mark.parametrize("note", [None, "", "   "])
+@pytest.mark.parametrize("omit", [False, True])
+async def test_public_search_normalizes_empty_purpose_note_to_none(
+    client: AsyncClient, auth_headers: dict[str, str], note: str | None, omit: bool
+):
+    from tent_model.search_audit import SearchAudit
+
+    payload = public_search_payload("0812345678", purpose_note=note)
+    if omit:
+        payload.pop("purpose_note")
+    response = await client.post("/public/v1/occupants", json=payload, headers=auth_headers)
+    assert response.status_code == 200, response.text
+    audits = await SearchAudit.find_all().to_list()
+    assert len(audits) == 1
+    assert audits[0].purpose == "find_family"
+    assert audits[0].purpose_note is None
+
+
+async def test_public_search_accepts_single_name_searcher(
+    client: AsyncClient, auth_headers: dict[str, str]
+):
+    from tent_model.search_audit import SearchAudit
+
+    payload = public_search_payload(
+        "0812345678", searcher={"first_name": "สมชาย", "phone": "0812345678"}
+    )
+    response = await client.post("/public/v1/occupants", json=payload, headers=auth_headers)
+    assert response.status_code == 200, response.text
+    audit = (await SearchAudit.find_all().to_list())[0]
+    assert audit.searcher is not None
+    assert audit.searcher.last_name == ""
+
+
+async def test_public_search_fails_closed_when_audit_cannot_be_written(
+    client: AsyncClient,
+    db_client: AsyncMongoClient,
+    settings: Settings,
+    auth_headers: dict[str, str],
+    monkeypatch: pytest.MonkeyPatch,
+):
+    from tent_model.search_audit import SearchAudit
+
+    async def boom(self, *args, **kwargs):
+        raise RuntimeError("mongo down")
+
+    monkeypatch.setattr(SearchAudit, "insert", boom)
+    response = await client.post(
+        "/public/v1/occupants", json=public_search_payload("0812345678"), headers=auth_headers
+    )
+    assert response.status_code == 503
+    body = response.json()
+    assert body["errors"][0]["error"]["code"] == "SEARCH_UNAVAILABLE"
+    assert "results" not in body
+
+
+async def test_external_search_stays_fail_open_and_hash_only(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+):
+    """ND-1: `/external/v1/occupants` keeps plain `{"q"}`, no consent fields, fail-open audit."""
+    from tent_model.search_audit import SearchAudit
+
+    await ApiKey(
+        id=new_ulid(),
+        name="External consent test",
+        owner="test",
+        key_prefix=_EXTERNAL_API_KEY[:8],
+        key_hash=sha256_hex(_EXTERNAL_API_KEY),
+        expires_at=datetime.now(UTC) + timedelta(days=30),
+        created_by="admin",
+        created_at=datetime.now(UTC),
+    ).insert()
+    headers = {"X-API-Key": _EXTERNAL_API_KEY, "X-Real-IP": "198.51.100.7"}
+
+    ok = await client.post("/external/v1/occupants", json={"q": "0812345678"}, headers=headers)
+    assert ok.status_code == 200, ok.text
+    audit = (await SearchAudit.find_all().to_list())[0]
+    assert audit.searcher is None
+    assert audit.client_ip is None
+    assert audit.consent_version is None
+
+    async def boom(self, *args, **kwargs):
+        raise RuntimeError("mongo down")
+
+    monkeypatch.setattr(SearchAudit, "insert", boom)
+    still_ok = await client.post(
+        "/external/v1/occupants", json={"q": "0812345678"}, headers=headers
+    )
+    assert still_ok.status_code == 200
+
+
+async def test_public_search_limits_apply_after_trim(
+    client: AsyncClient, auth_headers: dict[str, str]
+):
+    """CR-231: 100/200-char limits count the trimmed text (same as the frontend Zod rule)."""
+    from tent_model.search_audit import SearchAudit
+
+    payload = public_search_payload(
+        "0812345678",
+        purpose="other",
+        purpose_note=f"  {'ก' * 200}  ",
+        searcher={
+            "first_name": f" {'ข' * 100} ",
+            "last_name": f" {'ค' * 100} ",
+            "phone": "0812345678",
+        },
+    )
+    response = await client.post("/public/v1/occupants", json=payload, headers=auth_headers)
+    assert response.status_code == 200, response.text
+    audit = (await SearchAudit.find_all().to_list())[0]
+    assert audit.purpose_note == "ก" * 200
+    assert audit.searcher is not None
+    assert audit.searcher.first_name == "ข" * 100
+    assert audit.searcher.last_name == "ค" * 100

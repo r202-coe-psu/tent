@@ -132,7 +132,14 @@ export async function publicSearchHits(query: string): Promise<PublicSearchHit[]
 	const res = await fetch(`${bffBase()}/occupants`, {
 		method: 'POST',
 		headers: { 'Content-Type': 'application/json' },
-		body: JSON.stringify({ search: query })
+		body: JSON.stringify({
+			search: query,
+			// CR-231: every public search carries the searcher, purpose and consent.
+			searcher: { first_name: 'E2E', last_name: 'Cleanup', phone: '0812345678' },
+			purpose: 'other',
+			purpose_note: 'e2e helper',
+			consent_accepted: true
+		})
 	});
 	if (!res.ok) throw new Error(`search HTTP ${res.status}`);
 	return ((await res.json()) as { results: PublicSearchHit[] }).results;
