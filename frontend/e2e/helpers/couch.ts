@@ -269,6 +269,23 @@ export async function documentsChangedSince(db: string, since: string): Promise<
 	return results.flatMap((row) => (row.doc && !row.deleted ? [row.doc] : []));
 }
 
+/** The documents one test run wrote, read from each database's changes feed since `start`. */
+export class RunChanges {
+	#since = new Map<string, string>();
+
+	async start(dbs: readonly string[]): Promise<void> {
+		for (const db of dbs) this.#since.set(db, await updateSeq(db));
+	}
+
+	documents(db: string): Promise<CouchDocument[]> {
+		const since = this.#since.get(db);
+		if (since === undefined) {
+			throw new Error(`No start sequence for ${db}: cannot find this run's documents`);
+		}
+		return documentsChangedSince(db, since);
+	}
+}
+
 export async function deleteDocument(db: string, doc: CouchDocument): Promise<void> {
 	const rev = doc._rev;
 	if (typeof rev !== 'string') return;

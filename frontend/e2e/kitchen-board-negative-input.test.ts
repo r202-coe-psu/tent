@@ -22,12 +22,11 @@ import {
 	createCouchUser,
 	deleteCouchUser,
 	deleteDocument,
-	documentsChangedSince,
+	RunChanges,
 	getDocument,
 	putDocument,
 	routeBrowserCouchThroughApp,
 	seedSecurityQuestion,
-	updateSeq,
 	type CouchDocument,
 	type TestUser
 } from './helpers/couch';
@@ -47,8 +46,8 @@ const KITCHEN: TestUser = {
 };
 
 const RECIPE_LABEL = `E2E ข้าวต้ม ${RUN}`;
-const TARGET_ERROR = 'จำนวนจานต้องมากกว่า 0';
-const SERVICE_ERROR = 'ต้องเป็นตัวเลขตั้งแต่ 0 ขึ้นไป';
+const TARGET_ERROR = 'จำนวนจานต้องเป็นจำนวนเต็มตั้งแต่ 1 ขึ้นไป';
+const SERVICE_ERROR = 'ต้องเป็นจำนวนเต็มตั้งแต่ 0 ขึ้นไป';
 const NEGATIVE_NOTE = 'ไม่รับค่าติดลบ';
 const NON_NUMERIC_NOTE = 'กรอกได้เฉพาะตัวเลข';
 const QTY_ERROR = 'จำนวนต้องมากกว่า 0';
@@ -77,15 +76,7 @@ type NegativeMode = 'key' | 'paste' | 'fill';
 const NEGATIVE_MODES: NegativeMode[] = ['key', 'paste', 'fill'];
 
 const ownedIds = new Set<string>();
-const startSeq = new Map<string, string>();
-
-function runDocuments(db: string): Promise<CouchDocument[]> {
-	const since = startSeq.get(db);
-	if (since === undefined) {
-		throw new Error(`No start sequence for ${db}: cannot find this run's documents`);
-	}
-	return documentsChangedSince(db, since);
-}
+const run = new RunChanges();
 let authSession = '';
 let sessionId = '';
 let planId = '';
@@ -169,7 +160,7 @@ async function cleanupOwnedDocuments(): Promise<void> {
 	const errors: unknown[] = [];
 	for (const db of [SHELTER_DB, CATALOG_DB]) {
 		for (let pass = 0; pass < 3; pass += 1) {
-			const owned = (await runDocuments(db)).filter(isOwned);
+			const owned = (await run.documents(db)).filter(isOwned);
 			if (owned.length === 0) break;
 			const results = await Promise.allSettled(owned.map((doc) => deleteDocument(db, doc)));
 			for (const result of results) {
@@ -248,7 +239,7 @@ test.describe(
 		test.setTimeout(90_000);
 
 		test.beforeAll(async () => {
-			for (const db of [SHELTER_DB, CATALOG_DB]) startSeq.set(db, await updateSeq(db));
+			await run.start([SHELTER_DB, CATALOG_DB]);
 			await createCouchUser(KITCHEN);
 			await seedSecurityQuestion(KITCHEN.name);
 			authSession = await couchLogin(KITCHEN.name, KITCHEN.password);
@@ -261,8 +252,8 @@ test.describe(
 
 		test.afterAll(async () => {
 			await cleanupOwnedDocuments();
-			const leftovers = (await runDocuments(SHELTER_DB))
-				.concat(await runDocuments(CATALOG_DB))
+			const leftovers = (await run.documents(SHELTER_DB))
+				.concat(await run.documents(CATALOG_DB))
 				.filter(isOwned)
 				.map((d) => d._id);
 			expect(leftovers, 'zero-leak: no documents from this run remain').toEqual([]);
@@ -319,14 +310,16 @@ test.describe(
 			await expect(create).toBeEnabled();
 		});
 
-		test('stage A target below 1 stays an error and blocks the requisition', async ({ page }) => {
+		test('stage A target below 1 or a decimal stays an error and blocks the requisition', async ({
+			page
+		}) => {
 			await openBoard(page);
 			const target = page.locator('input[type="number"][min="1"]').first();
 			const create = page.getByRole('button', { name: CREATE_REQUISITION });
 			const error = page.getByRole('alert').filter({ hasText: TARGET_ERROR });
 
 			await expect(target).toHaveValue('20', { timeout: 20_000 });
-			for (const bad of ['0', '']) {
+			for (const bad of ['0', '', '2.5']) {
 				await target.fill(bad);
 				await expect(error).toHaveCount(1);
 				await expect(create).toBeDisabled();
@@ -627,6 +620,62 @@ test.describe(
 					await expect(create).toBeEnabled();
 				});
 			}
+		});
+
+		test('new-meal dialog flags a decimal headcount and blocks creating', async ({ page }) => {
+			await routeBrowserCouchThroughApp(page);
+			await injectSession(page, KITCHEN, authSession);
+			await page.goto('/back-office/kitchen');
+			await page.getByRole('button', { name: 'สร้างมื้อใหม่' }).first().click();
+
+			const create = page.getByRole('button', { name: CREATE_SESSION });
+			const errors = page.getByRole('alert').filter({ hasText: SERVICE_ERROR });
+			await expect(numberUnderLabel(page, SESSION_FIELDS[0])).toBeVisible({
+				timeout: 20_000
+			});
+
+			for (const label of SESSION_FIELDS) {
+				await test.step(label, async () => {
+					const input = numberUnderLabel(page, label);
+					await input.fill('4.5');
+					await expect(errors).toHaveCount(1);
+					await expect(create).toBeDisabled();
+
+					await input.fill('4');
+					await expect(errors).toHaveCount(0);
+					await expect(create).toBeEnabled();
+				});
+			}
+		});
+
+		test('new-meal dialog refuses an invalid count even when the button is forced', async ({
+			page
+		}) => {
+			await routeBrowserCouchThroughApp(page);
+			await injectSession(page, KITCHEN, authSession);
+			await page.goto('/back-office/kitchen');
+			await page.getByRole('button', { name: 'สร้างมื้อใหม่' }).first().click();
+
+			const create = page.getByRole('button', { name: CREATE_SESSION });
+			const input = numberUnderLabel(page, SESSION_FIELDS[0]);
+			await expect(input).toBeVisible({ timeout: 20_000 });
+			const sessionsBefore = (await run.documents(SHELTER_DB)).filter(
+				(d) => d.type === 'meal_session'
+			).length;
+
+			await input.fill('4.5');
+			await expect(create).toBeDisabled();
+			await create.evaluate((button) => button.removeAttribute('disabled'));
+			await create.click();
+
+			await expect(
+				page.locator('[data-sonner-toast]').filter({ hasText: SERVICE_ERROR })
+			).toBeVisible();
+			await expect(create).toBeVisible();
+			const sessionsAfter = (await run.documents(SHELTER_DB)).filter(
+				(d) => d.type === 'meal_session'
+			).length;
+			expect(sessionsAfter, 'no meal session is written').toBe(sessionsBefore);
 		});
 	}
 );
