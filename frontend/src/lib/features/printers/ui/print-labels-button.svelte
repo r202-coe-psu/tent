@@ -176,12 +176,22 @@
 	interface Chunk {
 		labels: string[];
 		jobId: string;
+		/**
+		 * Set while the create may already be written on this printer (no answer, cancel, 5xx). The
+		 * retry goes there under the same id even if the user picked another printer meanwhile:
+		 * a new id on another printer would print the labels twice (FR-29).
+		 */
+		printerId?: string;
 	}
 	let unsent = $state.raw<Chunk[] | null>(null);
+	// A locked printer that left the list (deactivated / deleted) has had its open jobs failed, so
+	// the chunk is free to go to the chosen printer.
+	const lockedPrinter = $derived(printers.find((p) => p.id === unsent?.[0]?.printerId));
+	const target = $derived(lockedPrinter ?? chosen);
 	let printedTotal = $state(0);
 	const progressDone = $derived(printedTotal + (statusQuery.data?.printed ?? 0));
 
-	const blocked = $derived(running || disconnected || (chosen !== undefined && !chosen.online));
+	const blocked = $derived(running || disconnected || (target !== undefined && !target.online));
 	const buttonLabel = $derived(
 		running
 			? t.printingProgress(progressDone, progressTotal)
@@ -192,11 +202,11 @@
 
 	async function handleClick() {
 		if (running) return;
-		if (!chosen) {
+		if (!target) {
 			pickerOpen = true;
 			return;
 		}
-		const printer = chosen;
+		const printer = target;
 		const abort = new AbortController();
 		runAbort = abort;
 		running = true;
@@ -271,7 +281,10 @@
 			} catch (error) {
 				// Same chunk, same id on retry, unless the server says that id is another job's.
 				if (error instanceof PrintApiError && error.code === 'JOB_ID_CONFLICT') {
-					pending[0] = { ...pending[0], jobId: ulid() };
+					pending[0] = { labels: pending[0].labels, jobId: ulid() };
+				} else if (!(error instanceof PrintApiError && error.status < 500)) {
+					// No definite refusal: the job may be queued on this printer, so the retry stays here.
+					pending[0] = { ...pending[0], printerId: printer.id };
 				}
 				unsent = pending;
 				if (signal.aborted) return finishAborted(signal);
@@ -345,6 +358,10 @@
 			<p class="text-sm text-muted-foreground" role="status">{t.statusUnknown(sendingTo)}</p>
 		{:else if notPickedUp}
 			<p class="text-sm text-muted-foreground" role="status">{t.notPickedUp(sendingTo)}</p>
+		{:else if !running && lockedPrinter && lockedPrinter.id !== chosen?.id}
+			<p class="text-sm text-muted-foreground" role="status">
+				{t.retryLockedTo(lockedPrinter.name)}
+			</p>
 		{/if}
 		{#if disconnected}
 			<p class="text-sm text-muted-foreground">{t.disconnectedHint}</p>

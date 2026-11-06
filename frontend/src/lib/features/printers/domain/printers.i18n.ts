@@ -16,6 +16,8 @@ export const PRINTERS_I18N = {
 		printingProgress: (done: number, total: number) => `กำลังพิมพ์ ${done}/${total}…`,
 		printFamily: (count: number) => `พิมพ์ทั้งครอบครัว (${count} ใบ)`,
 		retry: 'พิมพ์อีกครั้ง',
+		retryLockedTo: (printer: string) =>
+			`งานก่อนหน้ายังไม่ทราบผล — พิมพ์อีกครั้งจะส่งไปที่ ${printer} เพื่อไม่ให้พิมพ์ซ้ำ`,
 		cancel: 'ยกเลิก',
 		cancelled:
 			'หยุดส่งงานพิมพ์แล้ว — งานที่ส่งไปแล้วอาจยังพิมพ์ต่อ กดพิมพ์อีกครั้งเพื่อส่งส่วนที่เหลือ',
@@ -64,6 +66,8 @@ export const PRINTERS_I18N = {
 		printFamily: (count: number) =>
 			`Print whole family (${count} ${count === 1 ? 'label' : 'labels'})`,
 		retry: 'Print again',
+		retryLockedTo: (printer: string) =>
+			`The last job's result is unknown, so printing again goes to ${printer} to avoid duplicates.`,
 		cancel: 'Cancel',
 		cancelled:
 			'Stopped sending. A job already sent may still print. Press print again to send the rest.',

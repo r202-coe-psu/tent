@@ -742,6 +742,65 @@ describe('PrintLabelsButton', () => {
 		expect(new Set(ids).size).toBe(3);
 	});
 
+	it('keeps a chunk whose create outcome is unknown on its printer after the user switches printers', async () => {
+		stationPrinter.set('SH001', 'p1');
+		api.createPrintJob
+			.mockRejectedValueOnce(new TypeError('network'))
+			.mockImplementation(async (input: { job_id: string }) => ({
+				job_id: input.job_id,
+				shelter_code: 'SH001',
+				expires_at: '2026-10-22T04:00:00Z'
+			}));
+		api.getPrintJobStatus.mockResolvedValue({
+			status: 'printed',
+			printed: 1,
+			label_count: 1,
+			error_code: null
+		});
+		await render({ printers: [printer('p1'), printer('p2')] });
+
+		mainButton().click();
+		await vi.waitFor(() => expect(toast.error).toHaveBeenCalledTimes(1));
+		stationPrinter.set('SH001', 'p2');
+		await settle();
+		expect(document.body.textContent).toContain(
+			'งานก่อนหน้ายังไม่ทราบผล — พิมพ์อีกครั้งจะส่งไปที่ เครื่อง-p1 เพื่อไม่ให้พิมพ์ซ้ำ'
+		);
+		mainButton().click();
+		await vi.waitFor(() => expect(toast.success).toHaveBeenCalledTimes(1));
+
+		const calls = api.createPrintJob.mock.calls.map(([input]) => input);
+		expect(calls.map((c) => c.printer_id)).toEqual(['p1', 'p1']);
+		expect(calls[1].job_id).toBe(calls[0].job_id);
+	});
+
+	it('sends to the newly chosen printer when the old one refused the job outright', async () => {
+		stationPrinter.set('SH001', 'p1');
+		api.createPrintJob
+			.mockRejectedValueOnce(new PrintApiError('offline', 409, 'PRINTER_OFFLINE'))
+			.mockImplementation(async (input: { job_id: string }) => ({
+				job_id: input.job_id,
+				shelter_code: 'SH001',
+				expires_at: '2026-10-22T04:00:00Z'
+			}));
+		api.getPrintJobStatus.mockResolvedValue({
+			status: 'printed',
+			printed: 1,
+			label_count: 1,
+			error_code: null
+		});
+		await render({ printers: [printer('p1'), printer('p2')] });
+
+		mainButton().click();
+		await vi.waitFor(() => expect(toast.error).toHaveBeenCalledTimes(1));
+		stationPrinter.set('SH001', 'p2');
+		await settle();
+		mainButton().click();
+		await vi.waitFor(() => expect(toast.success).toHaveBeenCalledTimes(1));
+
+		expect(api.createPrintJob.mock.calls.map(([input]) => input.printer_id)).toEqual(['p1', 'p2']);
+	});
+
 	it('retries a create whose outcome was unknown under the same job id', async () => {
 		stationPrinter.set('SH001', 'p1');
 		api.createPrintJob
