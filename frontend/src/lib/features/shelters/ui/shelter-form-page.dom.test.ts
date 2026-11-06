@@ -6,6 +6,8 @@ import type { ShelterSummary } from '../data/shelters.repository';
 import { sheltersKeys } from '../application/queries';
 import Harness from './__fixtures__/shelter-form-page-harness.svelte';
 
+// The real map fetches its stylesheet and needs WebGL, neither of which exists here.
+vi.mock('./location-map-picker.svelte', () => import('./__fixtures__/empty-component.svelte'));
 vi.mock('svelte-sonner', () => ({ toast: { success: vi.fn(), info: vi.fn(), error: vi.fn() } }));
 vi.mock('$app/forms', async (importOriginal) => ({
 	...(await importOriginal<typeof import('$app/forms')>()),
