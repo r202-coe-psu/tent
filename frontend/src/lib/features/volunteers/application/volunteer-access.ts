@@ -14,7 +14,6 @@ import {
 } from '$lib/auth/roles';
 import { normalizeThaiPhone } from '$lib/db/model';
 import { createUser, listUsers, updateUser } from '$lib/features/users';
-import { authStore } from '$lib/stores/auth.svelte';
 import { volunteerRepositoryFor } from '../data/volunteer.remote';
 import type { VolunteerRepository } from '../data/volunteer.repository';
 import { isVolunteerMobile } from '../domain/phone';
@@ -63,9 +62,14 @@ export function volunteerPasswordError(password: string, loginPhone: string | nu
  */
 export async function grantVolunteerAccess(
 	volunteer: Volunteer,
-	input: z.infer<typeof volunteerAccessSchema>
+	input: z.infer<typeof volunteerAccessSchema>,
+	/** The caller's session roles: a system admin's save replaces roles, a manager's merges them. */
+	callerRoles: readonly string[]
 ): Promise<{ created: boolean; roleAdded: boolean }> {
 	const { email, password, role } = volunteerAccessSchema.parse(input);
+	// Unknown caller = unknown save shape, and the wrong one would drop other shelters' roles.
+	if (callerRoles.length === 0)
+		throw new Error('ไม่พบสิทธิ์ของผู้ใช้ กรุณาโหลดหน้าใหม่แล้วลองอีกครั้ง');
 	if (hasInvalidAccessPhone(volunteer.phone)) throw new Error(VOLUNTEER_ACCESS_PHONE_MESSAGE);
 	const loginPhone = accountPhone(volunteer.phone);
 	const isPhoneBootstrapPassword = loginPhone !== null && password === loginPhone;
@@ -125,7 +129,7 @@ export async function grantVolunteerAccess(
 		// A system admin's save replaces the roles, so it carries the other shelters' too; a manager
 		// sends their own shelter's only and the server keeps the rest. The password stays.
 		await updateUser(existing.name, {
-			roles: isSystemAdmin(authStore.user?.roles ?? [])
+			roles: isSystemAdmin(callerRoles)
 				? mergeShelterAssignment(existing.roles, volunteer.shelter_code, [role])
 				: rolesFromAssignments([{ shelter_code: volunteer.shelter_code, capabilities: [role] }])
 		});

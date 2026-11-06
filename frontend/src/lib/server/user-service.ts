@@ -493,7 +493,8 @@ export async function createUser(input: {
  */
 export async function createOrMergeUser(
 	input: Parameters<typeof createUser>[0],
-	caller: Caller
+	caller: Caller,
+	options: VolunteerRoleOptions
 ): Promise<{ merged: boolean }> {
 	try {
 		await createUser(input);
@@ -509,12 +510,31 @@ export async function createOrMergeUser(
 		if (!code) throw e;
 		const caps = capabilitiesForShelter(input.roles, code);
 		if (caps.length === 0) throw e;
+		// The account named must be the one the request means: a volunteer profile only merges
+		// into its own active volunteer account (CR-221 A1-4), never another person's.
+		if (input.volunteer_id || input.personnel_type === 'volunteer') {
+			const existing = await readUserDoc(input.name, 'read user');
+			if (
+				existing.volunteer_id !== (input.volunteer_id ?? null) ||
+				existing.personnel_type !== 'volunteer' ||
+				existing.active === false
+			) {
+				throw new ServiceError(
+					'FORBIDDEN',
+					'อีเมลนี้มีบัญชีอยู่แล้วหรือสิทธิ์ไม่ตรงกัน กรุณาจัดการผ่านหน้าผู้ใช้งาน'
+				);
+			}
+		}
+		// A manager's merge gives the role for good: a coordinator grant of the same role becomes
+		// permanent instead of lapsing or being replaced later (owner, review PR #1199).
 		await updateUser(
 			input.name,
 			{
-				roles: input.roles
+				roles: input.roles,
+				permanent_roles: caps.map((cap) => compoundCapabilityRole(code, cap))
 			},
-			caller
+			caller,
+			options
 		);
 		return { merged: true };
 	}
@@ -982,6 +1002,15 @@ export async function deleteUser(name: string, caller: Caller): Promise<void> {
 	if (res.status >= 400) throw serviceErrorFromCouch('delete user', res.status, res.data);
 }
 
+/** How a save checks roles it newly gives a volunteer account (CR-221 A1-7). Required: no default. */
+export type VolunteerRoleOptions = {
+	/**
+	 * Checks the linked profile is verified in these shelters, before anything is written; throws to
+	 * refuse. Lives with the volunteers feature, so callers pass it in.
+	 */
+	verifyVolunteerRoles: (shelterCodes: string[], volunteerId: string) => Promise<void>;
+};
+
 /** Update an existing user. Managers merge roles for their shelter only. */
 export async function updateUser(
 	name: string,
@@ -1007,13 +1036,7 @@ export async function updateUser(
 		permanent_roles?: string[];
 	},
 	caller: Caller,
-	options: {
-		/**
-		 * Checks a volunteer account may be given new roles in these shelters (CR-221 A1-7), before
-		 * anything is written; throws to refuse. Lives with the volunteers feature, so it is passed in.
-		 */
-		verifyVolunteerRoles?: (shelterCodes: string[], volunteerId: string) => Promise<void>;
-	} = {}
+	options: VolunteerRoleOptions
 ): Promise<void> {
 	const doc = await readUserDoc(name, 'read user');
 
@@ -1040,7 +1063,10 @@ export async function updateUser(
 			// Add-from-outside: a target not yet in this shelter may only be pulled in via `roles`.
 			// Allow-list (not deny-list) so any other/new field is rejected by default; a mixed
 			// request (roles + any other field) is rejected whole, never partially applied.
-			const extra = Object.entries(input).filter(([k, v]) => k !== 'roles' && v !== undefined);
+			// `permanent_roles` rides with a merge's roles and is limited to the manager's shelter below.
+			const extra = Object.entries(input).filter(
+				([k, v]) => k !== 'roles' && k !== 'permanent_roles' && v !== undefined
+			);
 			if (!input.roles || extra.length > 0) {
 				throw new ServiceError(
 					'FORBIDDEN',
@@ -1081,17 +1107,23 @@ export async function updateUser(
 	);
 	// A role newly given to a volunteer account is permanent, so it needs the identity check a
 	// coordinator grant needs, and leaves an audit (CR-221 A1-7, A1-8). Keeping, removing or making
-	// a role permanent adds nothing.
+	// a role permanent adds nothing. Switching the account to or from volunteer in the same save
+	// does not slip past it: becoming a volunteer issues every role it keeps (owner, PR #1199).
+	const volunteerBefore = doc.personnel_type === 'volunteer';
+	const volunteerAfter = (input.personnel_type ?? doc.personnel_type) === 'volunteer';
 	const issued =
-		(input.personnel_type ?? doc.personnel_type) === 'volunteer'
-			? addedShelterRoles(doc.roles ?? [], nextRoles ?? doc.roles ?? [])
+		volunteerBefore || volunteerAfter
+			? addedShelterRoles(volunteerBefore ? (doc.roles ?? []) : [], nextRoles ?? doc.roles ?? [])
 			: [];
-	const volunteerId = input.volunteer_id !== undefined ? input.volunteer_id : doc.volunteer_id;
-	if (issued.length > 0 && volunteerId && options.verifyVolunteerRoles) {
-		await options.verifyVolunteerRoles(
-			[...new Set(issued.map((r) => r.shelter_code))],
-			volunteerId
-		);
+	// The profile the account is linked to before the save counts too, so clearing or swapping
+	// `volunteer_id` in the same save cannot skip the check (fail-closed).
+	const profileIds = [doc.volunteer_id, input.volunteer_id].filter(
+		(id, i, all): id is string =>
+			typeof id === 'string' && id.trim() !== '' && all.indexOf(id) === i
+	);
+	if (issued.length > 0) {
+		const shelters = [...new Set(issued.map((r) => r.shelter_code))];
+		for (const volunteerId of profileIds) await options.verifyVolunteerRoles(shelters, volunteerId);
 	}
 
 	const updatedDoc = {
@@ -1128,7 +1160,7 @@ export async function updateUser(
 	}
 
 	const res = await adminRaw(`/_users/${userDocId(name)}`, 'PUT', updatedDoc);
-	if (res.status >= 400) throw serviceErrorFromCouch('update user', res.status, res.data);
+	assertGrantWritten('update user', res);
 
 	await auditDroppedGrants(
 		name,

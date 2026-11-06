@@ -64,7 +64,9 @@ describe('POST /api/v1/users — CR-141 FR-23', () => {
 			expect(res.status).toBe(200);
 			expect(mockCreateOrMergeUser).toHaveBeenCalledWith(
 				expect.objectContaining({ must_change_password: true }),
-				expect.anything()
+				expect.anything(),
+				// A merge checks the merged account's own profile (CR-221 A1-7).
+				{ verifyVolunteerRoles: mockAssertVerified }
 			);
 		}
 	);

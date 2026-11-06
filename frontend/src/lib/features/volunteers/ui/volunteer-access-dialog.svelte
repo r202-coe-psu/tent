@@ -223,7 +223,11 @@
 		}
 		pending = true;
 		try {
-			const result = await grantVolunteerAccess(volunteer, parsed.data);
+			const result = await grantVolunteerAccess(
+				volunteer,
+				parsed.data,
+				authStore.user?.roles ?? []
+			);
 			toast.success(
 				result.created
 					? `สร้างบัญชี (${parsed.data.email}) และออกสิทธิ์แล้ว`

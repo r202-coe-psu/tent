@@ -734,7 +734,8 @@ describe('VolunteerAccessDialog username and old expiry (CR-221 FR-10, FR-13)', 
 		await settle();
 		expect(mocks.grantFull).toHaveBeenCalledWith(
 			expect.objectContaining({ _id: volunteer._id }),
-			expect.objectContaining({ email: 'vol@example.com', role: 'warehouse_staff' })
+			expect.objectContaining({ email: 'vol@example.com', role: 'warehouse_staff' }),
+			MANAGER
 		);
 	});
 

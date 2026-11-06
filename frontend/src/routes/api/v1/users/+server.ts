@@ -127,7 +127,9 @@ export const POST: RequestHandler = async ({ request }) => {
 				must_change_password,
 				affiliation_tags
 			},
-			caller
+			caller,
+			// A merge into an existing volunteer account checks that account's own profile (A1-7).
+			{ verifyVolunteerRoles: assertVolunteerVerifiedForAccess }
 		);
 		return json({ ok: true, merged: result.merged });
 	} catch (e) {

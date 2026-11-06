@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
+	CLOSE_WAITS_FOR_ROLES_MESSAGE,
 	COORDINATOR_CLOSE_BLOCKED_MESSAGE,
 	accessEndingParts,
 	closeProfileAccessNotice,
@@ -150,10 +151,14 @@ describe('closeProfileBlockedReason (CR-221 A1-6)', () => {
 		expect(closeProfileBlockedReason(status({ grants: [GRANT] }), false)).toBe(null);
 	});
 
-	it('does not block while the roles are not known yet', () => {
+	it('makes a coordinator wait while the roles are not known yet (fail-closed)', () => {
 		expect(
 			closeProfileBlockedReason({ kind: 'active', loginName: 'a@x.com', roles: null }, false)
+		).toBe(CLOSE_WAITS_FOR_ROLES_MESSAGE);
+		expect(
+			closeProfileBlockedReason({ kind: 'active', loginName: 'a@x.com', roles: null }, true)
 		).toBe(null);
+		expect(closeProfileBlockedReason({ kind: 'none' }, false)).toBe(null);
 	});
 });
 
