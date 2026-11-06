@@ -475,6 +475,7 @@
 		<!-- Issue #254: Mount Shared Unified Registration Form -->
 		<UnifiedRegistrationForm
 			channel="public"
+			draftKey="public-pre-register"
 			includeVehiclesAssets={false}
 			pending={isSubmitting}
 			enableUnassignedPhoto={isUnassigned}
