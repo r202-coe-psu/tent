@@ -86,7 +86,8 @@ PO ตัดสินใจ (2026-10-27, #794): **"Mongo projection คำนว
 - Spec: `docs/data/couchdb-mongodb-sync.md` §3.2 (`public_needs` ชนิด field)
 - Code: `tent-model` (`public_need.py`, `qty.py` ใหม่), worker projector + `projection_version.py`,
   backend `needs/use_case.py`, `worker/src/worker/donation_ledger.py` +
-  `worker/src/worker/quota/reconcile.py` (ผู้ใช้ `_to_decimal`; พฤติกรรมเปลี่ยน: donation / ledger qty
+  `worker/src/worker/quota/reconcile.py` (ไม่เรียก `_to_decimal` ตรง — ไปถึงผ่าน `still_owed` /
+  `recorded_donation_qty` ใน `donation_ledger.py`; พฤติกรรมเปลี่ยน: donation / ledger qty
   `NaN` / `Infinity` ถูกข้าม แทนที่จะ crash / ทำให้ reserved เป็น inf)
 - Test: worker `tests/projectors/test_projectors.py`, `tests/test_retention.py`, `tests/test_ledger_schema_v6.py`,
   `tests/test_quota_on_hand.py` (import `on_hand_decimals` จาก `worker.donation_ledger`),
@@ -152,9 +153,14 @@ SHA ก่อน #934 คือ `db7f88366` (parent ของ `6709e1fd1`) — *
 
 0. หยุด worker v17 (compose service `worker`, container `tent-worker-production`:
    `docker compose -f docker-compose.production.no-nginx.yml stop worker`) — worker tail `_changes` และ
-   `_reproject_needs` (`worker/src/worker/couch/processor.py` ~173 / ~190 / ~284) จะ upsert แถว `Decimal128` กลับมา
-   หลังการลบทุกครั้ง. หยุด (หรือแทนที่) backend ใหม่ด้วย
-1. ใน `mongosh`: `db.public_needs.deleteMany({})` (แถวเป็นข้อมูล derived — กระดานผู้บริจาคว่างจนกว่า bootstrap จะเสร็จ)
+   `_reproject_needs` (`worker/src/worker/couch/processor.py`) จะ upsert แถว `Decimal128` กลับมา — ทั้งหลัง delete
+   donation / stock_ledger (~173 / ~190) และเมื่อ donation / donation_campaign / stock_ledger / supply_item
+   เปลี่ยน (~284 / ~295 / ~312 / ~338). หยุด (หรือแทนที่) backend ใหม่ด้วย
+1. ลบแถวใน mongosh ของ container `tent-mongodb-production` (DB `tentdb` ตาม default ของ `DATABASE_URI` ใน
+   `docker-compose.production.no-nginx.yml` — ถ้า production ตั้ง `DATABASE_URI` เอง ให้ใช้ชื่อ DB ตามนั้น):
+   `docker exec -it tent-mongodb-production mongosh tentdb --eval 'db.public_needs.deleteMany({})'`
+   (compose ไม่เปิด auth ของ Mongo — ไม่มี `MONGO_INITDB_*` และ healthcheck ping โดยไม่ใช้ credential; ตรวจ auth ตาม env
+   ของ production ถ้า `DATABASE_URI` ใส่ user/password). แถวเป็นข้อมูล derived — กระดานผู้บริจาคว่างจนกว่า bootstrap จะเสร็จ
 2. รัน worker **เก่า** ด้วย `--bootstrap-only` แล้วรอให้จบเอง (`worker/src/worker/main.py` ~126-130; `main.py` :58
    บังคับ bootstrap เมื่อมี flag นี้) เพื่อเขียนแถวเป็น `double` ใหม่และรีเซ็ตเลขเวอร์ชันที่เก็บ.
    `worker/Dockerfile` มีแค่ `CMD ["uv", "run", "--project", "worker", "sync-worker"]` (ไม่มี ENTRYPOINT) จึงต้องระบุคำสั่งเต็ม:
