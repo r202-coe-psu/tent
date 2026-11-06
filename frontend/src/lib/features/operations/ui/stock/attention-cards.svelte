@@ -7,6 +7,8 @@
 	import { EXPIRING_SOON_DAYS } from '../../domain/stock-summary';
 	import type { AttentionCounts, StockStatusFilter } from './stock-view';
 
+	type CardKey = keyof AttentionCounts;
+
 	let {
 		counts,
 		selected,
@@ -19,7 +21,7 @@
 	} = $props();
 
 	type CardDef = {
-		key: StockStatusFilter;
+		key: CardKey;
 		label: string;
 		hint: string;
 		tone: 'critical' | 'warning';

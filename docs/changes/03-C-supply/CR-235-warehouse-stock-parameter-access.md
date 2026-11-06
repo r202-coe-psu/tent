@@ -1,10 +1,11 @@
 ---
-id: draft
-title: เจ้าหน้าที่คลังแก้พารามิเตอร์สต็อกของศูนย์ (SHELTER_OVERRIDE) — เพิ่มสิทธิ์ warehouse_staff / supply_coordinator + บังคับที่ CouchDB
-status: proposed
+id: CR-235
+title: เจ้าหน้าที่คลังแก้พารามิเตอร์สต็อกของศูนย์ (SHELTER_OVERRIDE) — เพิ่มสิทธิ์ warehouse_staff + บังคับที่ CouchDB
+status: approved
 date: 2026-11-05
+updated: 2026-11-06
 requested_by: GitHub #1189
-decided_by:
+decided_by: kong
 layer: stable
 affects:
   - docs/prd/role-permission-matrix.md §3 (เพิ่มแถว SOP Parameters — Stock Parameter Overrides)
@@ -15,11 +16,11 @@ affects:
   - frontend/src/lib/features/sop-ratios (ui: `food-sphere-stock-tab.svelte` + sheet ตั้งค่าพารามิเตอร์)
 ---
 
-# draft-warehouse-stock-parameter-access — เจ้าหน้าที่คลังแก้พารามิเตอร์สต็อกของศูนย์ตน
+# CR-235 — เจ้าหน้าที่คลังแก้พารามิเตอร์สต็อกของศูนย์ตน
 
 > **สรุป (TL;DR):**
 >
-> - **เปลี่ยนอะไร:** `warehouse_staff` และ `supply_coordinator` ของศูนย์ (นอกเหนือจาก `shelter_manager` / SA เดิม)
+> - **เปลี่ยนอะไร:** `warehouse_staff` ของศูนย์ (นอกเหนือจาก `shelter_manager` / SA เดิม; `supply_coordinator` **ไม่ได้**)
 >   สร้าง แก้ และปิด (deactivate) doc `SHELTER_OVERRIDE` 3 type ของศูนย์ตน:
 >   `replenishment_policy`, `requirement_group`, `food_sphere_standard`
 > - **ทำไม:** ปัจจุบันแก้ได้เฉพาะ SA / SM (UI: `canEditOverride`) เจ้าหน้าที่คลังที่ดูแลสต็อกจริงแก้ไม่ได้
@@ -27,7 +28,7 @@ affects:
 > - **Dev ต้อง build:** role gate ใน `validate_doc_update`, ฟังก์ชันสิทธิ์ pure ใน `roles.ts`, สิทธิ์รายแท็บใน sop-parameters,
 >   ปุ่ม "ตั้งค่าพารามิเตอร์" + ปุ่มแก้รายกลุ่มในแท็บ "วิเคราะห์เสบียงอาหาร" (`/back-office/supply?tab=food-sphere`)
 > - **กระทบ:** role matrix §3, `_design/access` ของ **ทุก** shelter DB ต้อง redeploy. ไม่เปลี่ยนรูป doc, ไม่ bump `schema_v`
-> - **ชั้น: STABLE CORE** — เพิ่ม role check ใน `validate_doc_update` (auth) ต้องผ่าน stable-core review **ก่อน approve**
+> - **ชั้น: STABLE CORE** — เพิ่ม role check ใน `validate_doc_update` (auth) · approved โดย kong 2026-11-06
 
 ---
 
@@ -35,11 +36,11 @@ affects:
 
 | ID   | Requirement                                                                                                                                                                                                                                                                                                |
 | ---- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| FR-1 | `{code}:warehouse_staff`, `{code}:supply_coordinator`, `{code}:shelter_manager` ของศูนย์ `{code}` และ SA สร้าง แก้ และปิด doc `SHELTER_OVERRIDE` ของ type `replenishment_policy`, `requirement_group`, `food_sphere_standard` ใน shelter DB ของศูนย์นั้นได้                                                |
-| FR-2 | Role อื่น (เช่น `kitchen_staff`, `donation_staff`, `distribution_staff`, `registration_staff`, อาสาสมัคร) และผู้ใช้ศูนย์อื่น เขียน doc 3 type นี้ใน shelter DB ไม่ได้ — `validate_doc_update` ตอบ `forbidden`                                                                                              |
-| FR-3 | `sop_override` (แท็บ Sphere standard / SOP ratio) **สิทธิ์เหมือนเดิม** คือ SA และ SM ของศูนย์เท่านั้นที่ UI — WH/SC แก้ไม่ได้ที่ UI. ปัจจุบัน `validate_doc_update` ไม่มี role gate ของ `sop_override` และ CR นี้ **ไม่เพิ่ม** (ช่องว่างเดิม ระบุใน §6)                                                    |
+| FR-1 | `{code}:warehouse_staff`, `{code}:shelter_manager` ของศูนย์ `{code}` และ SA สร้าง แก้ และปิด doc `SHELTER_OVERRIDE` ของ type `replenishment_policy`, `requirement_group`, `food_sphere_standard` ใน shelter DB ของศูนย์นั้นได้                                                                             |
+| FR-2 | Role อื่น (เช่น `supply_coordinator`, `kitchen_staff`, `donation_staff`, `distribution_staff`, `registration_staff`, อาสาสมัคร) และผู้ใช้ศูนย์อื่น เขียน doc 3 type นี้ใน shelter DB ไม่ได้ — `validate_doc_update` ตอบ `forbidden`                                                                        |
+| FR-3 | `sop_override` (แท็บ Sphere standard / SOP ratio) **สิทธิ์เหมือนเดิม** คือ SA และ SM ของศูนย์เท่านั้นที่ UI — WH แก้ไม่ได้ที่ UI. ปัจจุบัน `validate_doc_update` ไม่มี role gate ของ `sop_override` และ CR นี้ **ไม่เพิ่ม** (ช่องว่างเดิม ระบุใน §6)                                                       |
 | FR-4 | ค่ามาตรฐานกลาง (master, DB `catalog`, `source: SPHERE_BASELINE`) แก้ได้เฉพาะ SA เหมือนเดิม — CR นี้ไม่แตะ                                                                                                                                                                                                  |
-| FR-5 | UI แยกสิทธิ์รายแท็บ: แท็บ `sop_override` ใช้สิทธิ์เดิม (SA/SM); แท็บ 3 type ข้างต้นใช้สิทธิ์ใหม่ (SA/SM/WH/SC ของศูนย์). ตรรกะสิทธิ์เป็นฟังก์ชัน pure ใน `$lib/auth/roles.ts` ไม่คำนวณใน component                                                                                                         |
+| FR-5 | UI แยกสิทธิ์รายแท็บ: แท็บ `sop_override` ใช้สิทธิ์เดิม (SA/SM); แท็บ 3 type ข้างต้นใช้สิทธิ์ใหม่ (SA/SM/WH ของศูนย์). ตรรกะสิทธิ์เป็นฟังก์ชัน pure ใน `$lib/auth/roles.ts` ไม่คำนวณใน component                                                                                                            |
 | FR-6 | แท็บ "วิเคราะห์เสบียงอาหาร" ใน `/back-office/supply?tab=food-sphere` มีปุ่ม "ตั้งค่าพารามิเตอร์" (เปิด sheet 3 แท็บย่อย reuse component แท็บเดิม) และปุ่มแก้รายกลุ่ม (เปิดฟอร์ม requirement group + replenishment policy ของกลุ่มนั้น) — ผู้ไม่มีสิทธิ์ไม่เห็นปุ่ม (UX เท่านั้น การบังคับจริงอยู่ที่ FR-2) |
 | FR-7 | ศูนย์ที่ยังไม่มีค่าปรับแต่ง: สร้าง override จากค่ามาตรฐานกลางด้วย flow "สร้างค่าปรับแต่ง" เดิม (เขียน doc ใน shelter DB ผ่าน session ของผู้ใช้ — ผ่าน gate ตาม FR-1)                                                                                                                                       |
 | FR-8 | หลังบันทึก invalidate query (`useRequirementGroups`, `useReplenishmentPolicies`, `useFoodSphereStandards`) ให้ตารางวิเคราะห์คำนวณใหม่ทันที และแจ้งผลด้วย toast                                                                                                                                             |
@@ -47,11 +48,11 @@ affects:
 
 ## 2. Acceptance
 
-- **AC-1** `warehouse_staff` / `supply_coordinator` / `shelter_manager` ของ SH001 เขียน (สร้าง/แก้/ตั้ง `status` inactive) doc 3 type ใน `shelter_sh001` ได้; SA ได้
-- **AC-2** `kitchen_staff`, `donation_staff`, `registration_staff` ของ SH001 เขียน doc 3 type ตรงผ่าน `/couch` → `forbidden`; `warehouse_staff` ของ SH002 เขียนลง `shelter_sh001` → ไม่ผ่าน (ไม่มี scope ของศูนย์นั้น)
+- **AC-1** `warehouse_staff` / `shelter_manager` ของ SH001 เขียน (สร้าง/แก้/ตั้ง `status` inactive) doc 3 type ใน `shelter_sh001` ได้; SA ได้
+- **AC-2** `supply_coordinator`, `kitchen_staff`, `donation_staff`, `registration_staff` ของ SH001 เขียน doc 3 type ตรงผ่าน `/couch` → `forbidden`; `warehouse_staff` ของ SH002 เขียนลง `shelter_sh001` → ไม่ผ่าน (ไม่มี scope ของศูนย์นั้น)
 - **AC-3** UI: `warehouse_staff` ไม่เห็นปุ่มแก้/สร้าง/ปิดของแท็บ `sop_override` เหมือนเดิม; master (`catalog`) ยังแก้ได้เฉพาะ SA. ฝั่ง CouchDB ไม่เปลี่ยนพฤติกรรมของ `sop_override`
-- **AC-4** domain/unit: ฟังก์ชันสิทธิ์ pure ใน `roles.ts` — own shelter WH/SC/SM ได้, ศูนย์อื่น/`kitchen_staff` ไม่ได้, SA ได้, WH แก้ `sop_override` ไม่ได้
-- **AC-5** unit test ของ `buildValidateDocUpdate` (เช่น `shelter-access-design.test.ts`) ครอบ 3 type: WH/SC/SM/SA ผ่าน, `kitchen_staff`/volunteer ถูก forbidden
+- **AC-4** domain/unit: ฟังก์ชันสิทธิ์ pure ใน `roles.ts` — own shelter WH/SM ได้, ศูนย์อื่น/`supply_coordinator`/`kitchen_staff` ไม่ได้, SA ได้, WH แก้ `sop_override` ไม่ได้
+- **AC-5** unit test ของ `buildValidateDocUpdate` (เช่น `shelter-access-design.test.ts`) ครอบ 3 type: WH/SM/SA ผ่าน, `supply_coordinator`/`kitchen_staff`/volunteer ถูก forbidden
 - **AC-6** flow สร้าง override ครั้งแรกและ seed เดิมยังทำงาน (ดู §4)
 - **AC-7** หลังบันทึกจากแท็บ "วิเคราะห์เสบียงอาหาร" ตารางอัปเดตทันทีโดยไม่ต้องรีเฟรช
 
@@ -59,11 +60,11 @@ affects:
 
 เพิ่มแถว (ผู้เขียน SHELTER_OVERRIDE ของพารามิเตอร์สต็อก):
 
-| หมวดงาน / เอกสาร                              | การกระทำ (Action)                                                                                                                                                                                       | SA  |  SM   | REG | TRG | MED | KS  |  SC   | DON | VC  | SO  | FAC |
-| :-------------------------------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | :-: | :---: | :-: | :-: | :-: | :-: | :---: | :-: | :-: | :-: | :-: |
-| **Stock Parameter Overrides** (CR นี้, draft) | สร้าง/แก้/ปิด `SHELTER_OVERRIDE` ของ `replenishment_policy`, `requirement_group`, `food_sphere_standard` ของศูนย์ตน (บังคับที่ `validate_doc_update` ของ shelter DB) · `sop_override` และ master คงเดิม |  ✓  | scope |  —  |  —  |  —  |  —  | scope |  —  |  —  |  —  |  —  |
+| หมวดงาน / เอกสาร                       | การกระทำ (Action)                                                                                                                                                                                       | SA  |  SM   | REG | TRG | MED | KS  | SC  | DON | VC  | SO  | FAC |
+| :------------------------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | :-: | :---: | :-: | :-: | :-: | :-: | :-: | :-: | :-: | :-: | :-: |
+| **Stock Parameter Overrides** (CR-235) | สร้าง/แก้/ปิด `SHELTER_OVERRIDE` ของ `replenishment_policy`, `requirement_group`, `food_sphere_standard` ของศูนย์ตน (บังคับที่ `validate_doc_update` ของ shelter DB) · `sop_override` และ master คงเดิม |  ✓  | scope |  —  |  —  |  —  |  —  | WS  |  —  |  —  |  —  |  —  |
 
-- `SC` = `{code}:supply_coordinator` และ `{code}:warehouse_staff` (alias เดียวกันใน §1.1)
+- `WS` ในคอลัมน์ SC = เฉพาะ `{code}:warehouse_staff`; `supply_coordinator` ไม่มีสิทธิ์ (เหมือน CR-204 / CR-230)
 - `sop_override` (แท็บ Sphere standard): SA / SM ของศูนย์เท่านั้น — คงเดิม; master: SA เท่านั้น — คงเดิม
 
 ## 4. Impact
@@ -80,7 +81,7 @@ affects:
 | Worker (`worker/`)                                                                                                                                                  | อ่านผ่าน projection เท่านั้น   | —                                              | —                                                    | ไม่กระทบ                                                |
 
 ข้อสรุป: ไม่พบ flow ที่เขียน 3 type นี้ลง shelter DB ด้วย session ของ role นอกเหนือชุดใหม่ และ flow ที่ใช้ admin ข้าม `validate_doc_update` อยู่แล้ว
-(ผู้ใช้ที่สร้าง override ครั้งแรกคือ SA/SM/WH/SC ซึ่งผ่าน gate ใหม่). Dev ต้องยืนยันซ้ำด้วย test ว่า flow สร้าง override เดิมและ seed ยังผ่าน (AC-6)
+(ผู้ใช้ที่สร้าง override ครั้งแรกคือ SA/SM/WH ซึ่งผ่าน gate ใหม่). Dev ต้องยืนยันซ้ำด้วย test ว่า flow สร้าง override เดิมและ seed ยังผ่าน (AC-6)
 
 ### 4.2 Docs / Code / Ops
 
@@ -90,7 +91,7 @@ affects:
 - **Ops (บังคับ):** `validate_doc_update` เปลี่ยน → ต้อง redeploy `_design/access` ไปทุก shelter DB ตามขั้นตอนเดิม
   (`redeployShelterAccessDesign` / `pnpm redeploy:access`; admin endpoint เปรียบเทียบ string แล้ว PUT เมื่อต่าง — ไม่มี version marker ให้ bump).
   ถ้าไม่ redeploy ศูนย์เดิมจะยังไม่มี gate ฝั่ง CouchDB (UI อย่างเดียว)
-- **Stable-core review:** gate อยู่ใน `validate_doc_update` (auth) → ต้อง review ก่อน approve ตาม `docs/change-management.md` §1
+- **Stable-core review:** gate อยู่ใน `validate_doc_update` (auth) — kong review และ approve 2026-11-06
 
 ## 5. Migration
 
@@ -101,7 +102,8 @@ N/A — ไม่เปลี่ยนรูป doc ที่ persist, ไม่
 - แท็บ `sop_override` (SOP ratio) และ master — สิทธิ์คงเดิม. หมายเหตุ: `sop_override` ยังไม่มี role gate ที่ `validate_doc_update` (บังคับที่ UI เท่านั้น) — ถ้าต้องการปิดช่องนี้ให้เปิด CR แยก
 - เปลี่ยน field/enum/รูป doc ของ 3 type
 - เพิ่ม role gate ให้ DB `catalog`
-- ให้ WH/SC แก้ค่ามาตรฐานกลาง
+- ให้ WH แก้ค่ามาตรฐานกลาง
+- ให้ `supply_coordinator` แก้พารามิเตอร์สต็อก
 
 ## Why
 
@@ -110,4 +112,5 @@ N/A — ไม่เปลี่ยนรูป doc ที่ persist, ไม่
 
 ## Decision log
 
-- 2026-11-05 — proposed (GitHub #1189) — รอเจ้าของโครงการเลือกวิธี track, stable-core review และ approve
+- 2026-11-05 — proposed (GitHub #1189)
+- 2026-11-06 — เคาะ (kong, 2026-11-06) — approved; สิทธิ์เฉพาะ `warehouse_staff` (+ SM/SA), ตัด `supply_coordinator` ออก; track ด้วย CR ไฟล์
