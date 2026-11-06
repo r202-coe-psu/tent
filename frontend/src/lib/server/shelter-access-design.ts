@@ -368,8 +368,8 @@ export const TICKET_DISTRIBUTION_MANGO_INDEXES = [
  *  - **role gate** on `stock_ledger` — only warehouse staff / managers may move stock; the one
  *    exception for `donation_staff` is a positive `reason: 'donation'` receipt (CR-227).
  *  - **role gate** on `recipe` — SM, warehouse, supply and kitchen staff of this shelter (CR-217).
- *  - **role gate** on `replenishment_policy` / `requirement_group` / `food_sphere_standard` — SM, warehouse
- *    and supply staff of this shelter (#1189, draft-warehouse-stock-parameter-access).
+ *  - **role gate** on `replenishment_policy` / `requirement_group` / `food_sphere_standard` — SM and
+ *    warehouse staff of this shelter (CR-235); on `sop_override` — SM only (CR-235). Both cover `_deleted`.
  *
  * `_admin` bypasses so provisioning/seed writes are not blocked. NOTE: the
  * back-office intake route writes with admin credentials, so it does NOT pass
@@ -464,17 +464,25 @@ ${consentVduClause()}
       isRole('supply_coordinator') || isRole('kitchen_staff');
   }
   var RECIPE_WRITE_FORBIDDEN = 'Only shelter managers, warehouse, supply or kitchen staff of this shelter can write recipe';
-  // #1189: the shelter's stock parameter overrides (replenishment policy, requirement group, food
-  // sphere standard) are written by SM, WH and SC of this shelter (+ SA via isRole), the same set as
-  // canEditStockParameters on the client. sop_override keeps its UI-only gate.
+  // CR-235 (#1189): the shelter's stock parameter overrides (replenishment policy, requirement group,
+  // food sphere standard) are written (create, update, deactivate, delete) by SM and WH of this
+  // shelter (+ SA via isRole), the same set as canEditStockParameters on the client. supply_coordinator
+  // is NOT included. sop_override stays SA / SM only (canEditSopOverride) but is now enforced here too.
   function isStockParameterDoc(doc) {
     return !!doc && (doc.type === 'replenishment_policy' || doc.type === 'requirement_group' ||
       doc.type === 'food_sphere_standard');
   }
   function canWriteStockParameter() {
-    return isRole('shelter_manager') || isRole('warehouse_staff') || isRole('supply_coordinator');
+    return isRole('shelter_manager') || isRole('warehouse_staff');
   }
-  var STOCK_PARAMETER_WRITE_FORBIDDEN = 'Only shelter managers, warehouse or supply staff of this shelter can write replenishment_policy, requirement_group and food_sphere_standard';
+  var STOCK_PARAMETER_WRITE_FORBIDDEN = 'Only shelter managers or warehouse staff of this shelter can write replenishment_policy, requirement_group and food_sphere_standard';
+  function isSopOverrideDoc(doc) {
+    return !!doc && doc.type === 'sop_override';
+  }
+  function canWriteSopOverride() {
+    return isRole('shelter_manager');
+  }
+  var SOP_OVERRIDE_WRITE_FORBIDDEN = 'Only shelter managers of this shelter can write sop_override';
   function sameObjectExcept(previousObject, nextObject, ignoredFields) {
     var keys = {};
     var previousKeys = Object.keys(previousObject || {});
@@ -540,6 +548,9 @@ ${consentVduClause()}
     if (isStockParameterDoc(oldDoc) && !canWriteStockParameter()) {
       throw { forbidden: STOCK_PARAMETER_WRITE_FORBIDDEN };
     }
+    if (isSopOverrideDoc(oldDoc) && !canWriteSopOverride()) {
+      throw { forbidden: SOP_OVERRIDE_WRITE_FORBIDDEN };
+    }
     if (oldDoc && oldDoc.type === 'distribution_batch' && oldDoc.status === 'closed') {
       throw { forbidden: 'Closed distribution_batch cannot be modified' };
     }
@@ -599,6 +610,9 @@ ${consentVduClause()}
   }
   if ((isStockParameterDoc(newDoc) || isStockParameterDoc(oldDoc)) && !canWriteStockParameter()) {
     throw { forbidden: STOCK_PARAMETER_WRITE_FORBIDDEN };
+  }
+  if ((isSopOverrideDoc(newDoc) || isSopOverrideDoc(oldDoc)) && !canWriteSopOverride()) {
+    throw { forbidden: SOP_OVERRIDE_WRITE_FORBIDDEN };
   }
   if (newDoc.shelter_code !== '${code}') {
     throw { forbidden: 'shelter_code must be ${code}' };

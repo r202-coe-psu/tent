@@ -1294,7 +1294,7 @@ describe('buildValidateDocUpdate', () => {
 		});
 	});
 
-	describe('stock parameter role gate (#1189)', () => {
+	describe('stock parameter role gate (CR-235)', () => {
 		const TYPES = ['replenishment_policy', 'requirement_group', 'food_sphere_standard'] as const;
 		const param = (type: string, over: Doc = {}): Doc => ({
 			...envelope,
@@ -1304,49 +1304,51 @@ describe('buildValidateDocUpdate', () => {
 			source: 'SHELTER_OVERRIDE',
 			...over
 		});
+		const tombstone = (type: string): Doc => ({ _id: `${type}:X`, _rev: '1-a', _deleted: true });
 		const SUPPLY: UserCtx = { name: 'sc', roles: ['shelter:SH001', 'SH001:supply_coordinator'] };
 		const VOLUNTEER: UserCtx = { name: 'vol', roles: ['shelter:SH001', 'SH001:volunteer'] };
+		const DONATION: UserCtx = { name: 'don', roles: ['shelter:SH001', 'SH001:donation_staff'] };
 		const OTHER_WAREHOUSE: UserCtx = {
 			name: 'ws2',
 			roles: ['shelter:SH002', 'SH002:warehouse_staff']
 		};
+		const COUCH_ADMIN: UserCtx = { name: 'a', roles: ['_admin'] };
 
 		describe.each(TYPES)('%s', (type) => {
 			it.each([
 				['warehouse staff', WAREHOUSE],
-				['a supply coordinator', SUPPLY],
 				['a shelter manager', MANAGER],
 				['a system admin', ADMIN]
-			])('lets %s create, update and deactivate', (_, user) => {
+			])('lets %s create, update, deactivate and delete', (_, user) => {
 				expect(() => compile()(param(type), null, user)).not.toThrow();
 				expect(() =>
 					compile()(param(type, { status: 'inactive' }), param(type), user)
 				).not.toThrow();
-				expect(() =>
-					compile()({ _id: `${type}:X`, _rev: '1-a', _deleted: true }, param(type), user)
-				).not.toThrow();
+				expect(() => compile()(tombstone(type), param(type), user)).not.toThrow();
 			});
 
 			it.each([
+				['a supply coordinator', SUPPLY],
 				['kitchen staff', KITCHEN],
 				['a volunteer', VOLUNTEER],
 				['registration staff', REGISTRATION],
+				['donation staff', DONATION],
 				['warehouse staff of another shelter', OTHER_WAREHOUSE]
-			])('rejects %s', (_, user) => {
+			])('rejects %s on write and on delete', (_, user) => {
 				expectForbidden(() => compile()(param(type), null, user), /can write replenishment_policy/);
 				expectForbidden(
 					() => compile()(param(type, { status: 'inactive' }), param(type), user),
 					/can write replenishment_policy/
 				);
 				expectForbidden(
-					() => compile()({ _id: `${type}:X`, _rev: '1-a', _deleted: true }, param(type), user),
+					() => compile()(tombstone(type), param(type), user),
 					/can write replenishment_policy/
 				);
 			});
 
-			it('lets the couch admin bypass the gate', () => {
-				const admin: UserCtx = { name: 'a', roles: ['_admin'] };
-				expect(() => compile()(param(type), null, admin)).not.toThrow();
+			it('lets the couch admin bypass the gate (write and delete)', () => {
+				expect(() => compile()(param(type), null, COUCH_ADMIN)).not.toThrow();
+				expect(() => compile()(tombstone(type), param(type), COUCH_ADMIN)).not.toThrow();
 			});
 		});
 
@@ -1357,10 +1359,39 @@ describe('buildValidateDocUpdate', () => {
 			);
 		});
 
-		it('keeps sop_override as it was (no role gate at CouchDB)', () => {
-			expect(() =>
-				compile()(param('sop_override', { ratios, version: 1 }), null, WAREHOUSE)
-			).not.toThrow();
+		describe('sop_override', () => {
+			const sop = (over: Doc = {}): Doc => param('sop_override', { ratios, version: 1, ...over });
+
+			it.each([
+				['a shelter manager', MANAGER],
+				['a system admin', ADMIN]
+			])('lets %s create, update and delete', (_, user) => {
+				expect(() => compile()(sop(), null, user)).not.toThrow();
+				expect(() => compile()(sop({ version: 2 }), sop(), user)).not.toThrow();
+				expect(() => compile()(tombstone('sop_override'), sop(), user)).not.toThrow();
+			});
+
+			it.each([
+				['warehouse staff', WAREHOUSE],
+				['a supply coordinator', SUPPLY],
+				['kitchen staff', KITCHEN],
+				['warehouse staff of another shelter', OTHER_WAREHOUSE]
+			])('rejects %s on write and on delete', (_, user) => {
+				expectForbidden(() => compile()(sop(), null, user), /can write sop_override/);
+				expectForbidden(
+					() => compile()(sop({ version: 2 }), sop(), user),
+					/can write sop_override/
+				);
+				expectForbidden(
+					() => compile()(tombstone('sop_override'), sop(), user),
+					/can write sop_override/
+				);
+			});
+
+			it('lets the couch admin bypass the gate (seed / provisioning, AC-6)', () => {
+				expect(() => compile()(sop(), null, COUCH_ADMIN)).not.toThrow();
+				expect(() => compile()(tombstone('sop_override'), sop(), COUCH_ADMIN)).not.toThrow();
+			});
 		});
 	});
 

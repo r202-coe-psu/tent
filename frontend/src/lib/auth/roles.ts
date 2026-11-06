@@ -237,16 +237,12 @@ export function canDistributeStock(roles: readonly string[], shelterCode: string
 }
 
 /** Capabilities that may write a shelter's stock parameter overrides (#1189). */
-export const STOCK_PARAMETER_EDITOR_CAPABILITIES = [
-	SHELTER_MANAGER,
-	WAREHOUSE_STAFF,
-	SUPPLY_COORDINATOR
-] as const;
+export const STOCK_PARAMETER_EDITOR_CAPABILITIES = [SHELTER_MANAGER, WAREHOUSE_STAFF] as const;
 
 /**
  * True when the user may create, edit and deactivate the SHELTER_OVERRIDE docs of
  * `replenishment_policy`, `requirement_group` and `food_sphere_standard` in `shelterCode`
- * (SA, or its shelter_manager / warehouse_staff / supply_coordinator). Mirrors the shelter DB
+ * (SA, or its shelter_manager / warehouse_staff; supply_coordinator may not, CR-235). Mirrors the shelter DB
  * `validate_doc_update`. A missing shelter code is never "any shelter" (SA only).
  */
 export function canEditStockParameters(
@@ -260,7 +256,7 @@ export function canEditStockParameters(
 
 /**
  * True when the user may edit the shelter's `sop_override` (SOP ratio tab): SA or the shelter's
- * shelter_manager. Warehouse / supply staff may not (#1189).
+ * shelter_manager. Warehouse / supply staff may not (CR-235).
  */
 export function canEditSopOverride(
 	roles: readonly string[],

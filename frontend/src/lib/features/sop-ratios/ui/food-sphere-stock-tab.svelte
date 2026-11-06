@@ -59,7 +59,7 @@
 
 	const cleanShelterCode = $derived(shelterCode || shelterStore.selectedShelterCode || '');
 
-	// Stock parameter overrides: SA / SM / WH / SC of this shelter (#1189). Buttons are hidden
+	// Stock parameter overrides: SA / SM / WH of this shelter (CR-235). Buttons are hidden
 	// otherwise; CouchDB enforces the same rule.
 	const roles = $derived(authStore.user?.roles ?? []);
 	const isSA = $derived(isSystemAdmin(roles));

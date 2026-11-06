@@ -92,7 +92,7 @@
 
 	const roles = $derived(authStore.user?.roles ?? []);
 	const isSA = $derived(isSystemAdmin(roles));
-	// Per tab: sop_override stays SA / SM; the three stock parameter tabs also allow WH / SC (#1189).
+	// Per tab: sop_override stays SA / SM; the three stock parameter tabs also allow WH (CR-235).
 	const canEditSopOverrideTab = $derived(canEditSopOverride(roles, shelterCode));
 	const canEditStockParams = $derived(canEditStockParameters(roles, shelterCode));
 

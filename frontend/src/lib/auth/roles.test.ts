@@ -758,21 +758,22 @@ describe('page-guard predicates shared by guards and sidebar (#842)', () => {
 	});
 });
 
-describe('stock parameter / SOP override edit permissions (#1189)', () => {
+describe('stock parameter / SOP override edit permissions (CR-235)', () => {
 	const sh1 = (cap: string) => ['shelter:SH001', `SH001:${cap}`];
 
-	it('lets WH, SC and SM of the shelter edit stock parameters, and SA anywhere', () => {
-		for (const cap of ['warehouse_staff', 'supply_coordinator', 'shelter_manager']) {
+	it('lets WH and SM of the shelter edit stock parameters, and SA anywhere', () => {
+		for (const cap of ['warehouse_staff', 'shelter_manager']) {
 			expect(canEditStockParameters(sh1(cap), 'SH001')).toBe(true);
 		}
 		expect(canEditStockParameters(['system_admin'], 'SH001')).toBe(true);
 	});
 
 	it('does not let another shelter or other roles edit stock parameters', () => {
-		for (const cap of ['warehouse_staff', 'supply_coordinator', 'shelter_manager']) {
+		for (const cap of ['warehouse_staff', 'shelter_manager']) {
 			expect(canEditStockParameters(sh1(cap), 'SH002')).toBe(false);
 		}
 		for (const cap of [
+			'supply_coordinator',
 			'kitchen_staff',
 			'donation_staff',
 			'distribution_staff',
