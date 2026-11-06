@@ -5,7 +5,8 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 // runs the route's mutator against it like the real one (patch over the doc, bumped `_rev`).
 
 type Doc = Record<string, unknown> & { _rev: string; common_areas: { sub_storage: unknown[] } };
-type Selector = { item_id: { $in?: string[] }; 'lot.storage_point_id'?: string };
+type Selector = { item_id: string | { $gt: null }; 'lot.storage_point_id'?: string };
+type FindBody = { selector: Selector; limit: number; bookmark?: string };
 type Row = Record<string, unknown> & { item_id: string };
 
 const state = vi.hoisted(() => ({
@@ -24,26 +25,23 @@ vi.mock('$lib/server/couch-admin', async (importOriginal) => {
 			isSA: state.roles.includes('system_admin'),
 			shelterCode: null
 		})),
-		adminRaw: vi.fn(async (_path: string, _method: string, body: { selector: Selector }) => {
+		// Like `_find`: filter, then a page of `limit` rows from the `bookmark` (an offset here).
+		adminRaw: vi.fn(async (_path: string, _method: string, body: FindBody) => {
 			const sel = body.selector;
-			const rows = state.ledger as Row[];
-			if ('lot.storage_point_id' in sel) {
-				return {
-					status: 200,
-					data: {
-						docs: rows
-							.filter(
-								(r) =>
-									(r.lot as { storage_point_id?: string } | undefined)?.storage_point_id ===
-									sel['lot.storage_point_id']
-							)
-							.map((r) => ({ item_id: r.item_id }))
-					}
-				};
-			}
+			const all = (state.ledger as Row[]).filter((r) =>
+				'lot.storage_point_id' in sel
+					? (r.lot as { storage_point_id?: string } | undefined)?.storage_point_id ===
+						sel['lot.storage_point_id']
+					: r.item_id === sel.item_id
+			);
+			const from = Number(body.bookmark ?? 0);
+			const docs = all.slice(from, from + body.limit);
 			return {
 				status: 200,
-				data: { docs: rows.filter((r) => (sel.item_id.$in ?? []).includes(r.item_id)) }
+				data: {
+					docs: 'lot.storage_point_id' in sel ? docs.map((r) => ({ item_id: r.item_id })) : docs,
+					bookmark: String(from + docs.length)
+				}
 			};
 		})
 	};
@@ -240,6 +238,19 @@ describe('DELETE /storage-points/[pointId]', () => {
 
 	it('answers 409 and keeps the point while a lot with qty > 0 sits there', async () => {
 		state.ledger = [inbound('L1', '5')];
+		const res = await DELETE(ctx('DELETE', 'SH001', { _rev: '1-a' }, 'P1'));
+		expect(res.status).toBe(409);
+		expect((await res.json()).error.message).toContain('1 ล็อต');
+		expect(subStorage()).toHaveLength(1);
+	});
+
+	it('reads the whole history of an item, past one page, before it deletes', async () => {
+		const elsewhere = Array.from({ length: 2400 }, (_, i) => ({
+			...inbound(`F${i}`, '1'),
+			lot: { storage_point_id: 'P2' }
+		}));
+		// The lot at P1 is the last row, on the third page of the item's history.
+		state.ledger = [...elsewhere, inbound('L1', '5')];
 		const res = await DELETE(ctx('DELETE', 'SH001', { _rev: '1-a' }, 'P1'));
 		expect(res.status).toBe(409);
 		expect((await res.json()).error.message).toContain('1 ล็อต');

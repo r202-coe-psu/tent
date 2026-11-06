@@ -12,8 +12,8 @@ import { adminRaw, authorizeSession, ServiceError, type Caller } from './couch-a
 import { shelterDbName } from './shelter-access-design';
 import { findMasterByCode, migrate, nowIso, updateMaster } from './shelters.admin';
 
-/** Ledger rows read to project the lots of the items stocked at a point; a bigger ledger fails closed. */
-const LEDGER_ROW_LIMIT = 50_000;
+/** Rows per `_find` page when the ledger is read in full; the same page size the ledger screens use. */
+const LEDGER_PAGE_LIMIT = 1000;
 
 /** `_rev` the client read, plus the point's fields. Anything else in the body is ignored. */
 export const storagePointBodySchema = z.object({
@@ -56,43 +56,55 @@ export async function readStoragePoints(
 	return { rev: master._rev ?? '', points: migrated.common_areas?.sub_storage ?? [] };
 }
 
+/** Every doc matching `selector`, read page by page with CouchDB's bookmark — no overall cap. */
+async function findAll<T>(db: string, selector: object, fields?: string[]): Promise<T[]> {
+	const docs: T[] = [];
+	let bookmark: string | undefined;
+	for (;;) {
+		const res = await adminRaw(`/${db}/_find`, 'POST', {
+			selector,
+			...(fields ? { fields } : {}),
+			limit: LEDGER_PAGE_LIMIT,
+			...(bookmark ? { bookmark } : {})
+		});
+		if (res.status >= 400) {
+			throw new ServiceError('INTERNAL', 'Could not check stock at the storage point');
+		}
+		const page = res.data as { docs?: T[]; bookmark?: string } | null;
+		const pageDocs = page?.docs ?? [];
+		docs.push(...pageDocs);
+		// A short page is the end; a bookmark that does not move would loop forever.
+		if (pageDocs.length < LEDGER_PAGE_LIMIT || !page?.bookmark || page.bookmark === bookmark) {
+			return docs;
+		}
+		bookmark = page.bookmark;
+	}
+}
+
 /**
  * Lots at storage point `pointId` that still hold stock. Reads the ledger rows that name the point,
- * then every row of those items (a lot's outbound rows do not carry its location) and projects the
- * lot balances. A ledger that cannot be projected or read in full fails closed — the point is not
- * deletable until the history is sorted out.
+ * then every row of each of those items (a lot's outbound rows do not carry its location) and
+ * projects the lot balances. Both reads page through the whole ledger, so a big history is only
+ * slower, never cut short. A ledger that cannot be projected or read fails closed — the point is
+ * not deletable until the history is sorted out.
  */
 export async function countStockedLots(code: string, pointId: string): Promise<number> {
 	const db = shelterDbName(code);
-	const atPoint = await adminRaw(`/${db}/_find`, 'POST', {
-		// `item_id` is in the selector only so CouchDB picks `ledger-type-itemid-idx`.
-		selector: {
-			type: 'stock_ledger',
-			item_id: { $gt: null },
-			'lot.storage_point_id': pointId
-		},
-		fields: ['item_id'],
-		limit: LEDGER_ROW_LIMIT
-	});
-	if (atPoint.status >= 400) {
-		throw new ServiceError('INTERNAL', 'Could not check stock at the storage point');
-	}
-	const itemIds = [
-		...new Set(
-			((atPoint.data as { docs?: { item_id: string }[] }).docs ?? []).map((d) => d.item_id)
-		)
-	];
+	// `item_id` is in the selector only so CouchDB picks `ledger-type-itemid-idx`.
+	const atPoint = await findAll<{ item_id: string }>(
+		db,
+		{ type: 'stock_ledger', item_id: { $gt: null }, 'lot.storage_point_id': pointId },
+		['item_id']
+	);
+	const itemIds = [...new Set(atPoint.map((d) => d.item_id))];
 	if (itemIds.length === 0) return 0;
 
-	const rows = await adminRaw(`/${db}/_find`, 'POST', {
-		selector: { type: 'stock_ledger', item_id: { $in: itemIds } },
-		limit: LEDGER_ROW_LIMIT
-	});
-	const docs = (rows.data as { docs?: StockLedger[] } | null)?.docs ?? [];
-	if (rows.status >= 400 || docs.length >= LEDGER_ROW_LIMIT) {
-		throw new ServiceError('INTERNAL', 'Could not check stock at the storage point');
-	}
-	const { lots, brokenItemIds } = projectLotsByItem(docs);
+	// One equality read per item: an `$in` cannot range-scan `ledger-type-itemid-idx` and would
+	// read every `stock_ledger` row instead.
+	const perItem = await Promise.all(
+		itemIds.map((itemId) => findAll<StockLedger>(db, { type: 'stock_ledger', item_id: itemId }))
+	);
+	const { lots, brokenItemIds } = projectLotsByItem(perItem.flat());
 	if (brokenItemIds.length > 0) {
 		throw new ServiceError(
 			'CONFLICT',
