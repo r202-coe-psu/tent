@@ -1,10 +1,10 @@
 ---
-id: draft
+id: CR-231
 title: Public family search — บังคับ dialog ยินยอม + จุดประสงค์ และเก็บข้อมูลผู้ค้นหาใน search_audit
-status: proposed
+status: approved
 date: 2026-11-06
 requested_by: Dev Team B
-decided_by:
+decided_by: Soravit Sukkarn (Team Lead)
 layer: volatile
 issue: "#1159"
 affects:
@@ -20,7 +20,7 @@ affects:
   - frontend/src/lib/api-specs/fastapi.json + frontend/src/lib/api/openapi.d.ts (regenerate)
 ---
 
-# draft-public-search-consent-purpose — dialog ยินยอมและระบุจุดประสงค์ก่อนค้นหาผู้อพยพสาธารณะ
+# CR-231 — Public family search — dialog ยินยอมและระบุจุดประสงค์ก่อนค้นหาผู้อพยพสาธารณะ
 
 > **สรุป (TL;DR):**
 >
@@ -180,4 +180,5 @@ BFF route ไม่ทดสอบแยก (ส่ง body ต่อตรง�
 
 ## Decision log
 
-- 2026-11-06 — proposed (Dev Team B, issue #1159); วิธี track = CR ไฟล์ (ตามที่เจ้าของโครงการสั่งให้ทำ draft CR); ยังไม่ commit
+- 2026-11-06 — proposed (Dev Team B, issue #1159); วิธี track = CR ไฟล์ (ตามที่เจ้าของโครงการสั่งให้ทำ draft CR)
+- 2026-11-06 — approved by Soravit Sukkarn (Team Lead) (issue #1159, PR #1214) — รันหมายเลข CR-231
