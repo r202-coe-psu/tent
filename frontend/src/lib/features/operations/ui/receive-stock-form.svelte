@@ -6,6 +6,7 @@
 	import * as Form from '$lib/components/ui/form/index.js';
 	import * as Field from '$lib/components/ui/field/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
+	import { Checkbox } from '$lib/components/ui/checkbox/index.js';
 	import { Label } from '$lib/components/ui/label/index.js';
 	import { defaults, superForm } from 'sveltekit-superforms';
 	import { z } from 'zod';
@@ -80,6 +81,8 @@
 	const storagePoints = useStoragePoints(() => getShelterCode());
 	const unitsQuery = useUnitsOfMeasure();
 	const units = $derived(unitsQuery.data ?? []);
+	// CR-227 decision sync 2026-11-06: stock-page receives may mint a lot number; on by default.
+	let issueLotNo = $state(true);
 	const receiveMutation = useReceiveStock();
 	const donationsQuery = useDonations();
 	const ledgersQuery = useStockLedgers();
@@ -396,7 +399,7 @@
 		const ledger = toLedgerQtyUnit(data.qty, data.unit, packaging);
 		const payload: ReceiveInput = { ...data, qty: ledger.qty, unit: ledger.unit };
 
-		toast.promise(receiveMutation.mutateAsync({ input: payload, ctx }), {
+		toast.promise(receiveMutation.mutateAsync({ input: payload, ctx, issueLotNo }), {
 			loading: 'กำลังบันทึก...',
 			success: () => {
 				const name = selectedItem?.name ?? data.item_id;
@@ -424,7 +427,7 @@
 		const payload: ReceiveInput = { ...data, qty: ledger.qty, unit: ledger.unit };
 		const donation = await buildWalkInInput(payload);
 
-		toast.promise(walkInMutation.mutateAsync({ donation, receive: payload, ctx }), {
+		toast.promise(walkInMutation.mutateAsync({ donation, receive: payload, ctx, issueLotNo }), {
 			loading: 'กำลังบันทึก...',
 			success: () => {
 				const unitLabel = formatUnit(displayUnit, units, langState.current) || displayUnit;
@@ -976,6 +979,16 @@
 						</Form.Field>
 					</div>
 				{/if}
+			</div>
+
+			<div class="col-span-1 sm:col-span-2">
+				<label
+					class="inline-flex min-h-11 cursor-pointer items-center gap-2 text-sm font-medium text-slate-700"
+				>
+					<Checkbox bind:checked={issueLotNo} />
+					ออกเลขล็อต
+					<span class="font-normal text-muted-foreground">(สร้างเลขล็อตให้อัตโนมัติ)</span>
+				</label>
 			</div>
 
 			<div
