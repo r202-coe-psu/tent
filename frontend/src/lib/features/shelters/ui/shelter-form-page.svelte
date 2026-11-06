@@ -34,6 +34,7 @@
 	import { sameSubStorage } from '../domain/storage-points';
 	import {
 		editsSubStorage,
+		formMetaAfterSave,
 		shelterFormSchema,
 		shelterPatchInput,
 		withoutFormMeta,
@@ -57,9 +58,11 @@
 	import AlertCircle from '@lucide/svelte/icons/alert-circle';
 	import ChevronLeft from '@lucide/svelte/icons/chevron-left';
 	import Loader2 from '@lucide/svelte/icons/loader-2';
+	import RefreshCw from '@lucide/svelte/icons/refresh-cw';
 	import Save from '@lucide/svelte/icons/save';
 	import ClipboardCheck from '@lucide/svelte/icons/clipboard-check';
 	import { Button } from '$lib/components/ui/button/index.js';
+	import * as Alert from '$lib/components/ui/alert/index.js';
 
 	let {
 		id = '',
@@ -174,21 +177,38 @@
 	const SHELTER_CONFLICT_MESSAGE =
 		'ข้อมูลศูนย์ถูกแก้ไขโดยผู้อื่น โหลดข้อมูลล่าสุดให้แล้ว กรุณาแก้ไขซ้ำอีกครั้ง';
 
+	/**
+	 * Replace the form with `doc`. `untaint-all` makes the doc the clean baseline, so `isTainted`
+	 * only ever means "the user edited something".
+	 */
+	function seedForm(doc: ShelterDoc) {
+		formData.set(formValuesFromDoc(doc), { taint: 'untaint-all' });
+	}
+
 	/** Replace the form with the latest doc in the cache (the 409 path; the hook refetched it first). */
 	function reloadFromLatest() {
 		const latest = queryClient.getQueryData<ShelterDoc>(sheltersKeys.detail(id));
-		if (latest) $formData = formValuesFromDoc(latest);
+		if (latest) seedForm(latest);
 	}
 
 	/**
 	 * Edit save. `rev` defaults to the one the form data was loaded with. The hook's `onError` has
 	 * awaited the refetch before this call's `onError` runs, and superforms' own write-back of the
 	 * submitted data happened when `onUpdate` returned, so a 409 reload is the last write.
+	 * On success only `_rev` and the loaded points move on (to what this save wrote), so the next
+	 * save does not 409 against our own write; typed-since fields stay. Skipped when the form was
+	 * reseeded meanwhile: its `_rev` is then not the one this data was loaded with.
 	 */
 	function saveEdit(data: ShelterForm, rev = data._rev) {
 		updateMutation.mutate(
 			{ code: id, input: shelterPatchInput(data), rev },
 			{
+				onSuccess: (result) => {
+					if ($formData._rev !== data._rev) return;
+					formData.update((d) => ({ ...d, ...formMetaAfterSave(data, result.rev) }), {
+						taint: false
+					});
+				},
 				onError: (err) => {
 					if (err instanceof ServiceRequestError && err.status === 409) reloadFromLatest();
 				}
@@ -295,7 +315,7 @@
 		}
 	});
 
-	const { form: formData, submitting, enhance, errors } = form;
+	const { form: formData, submitting, enhance, errors, tainted, isTainted } = form;
 
 	const invalidSectionIds = $derived.by(() =>
 		showValidationSummary ? findInvalidSectionIds($errors) : []
@@ -325,11 +345,16 @@
 		if (!isEdit && siteKind && !$formData.site_kind) $formData.site_kind = siteKind;
 	});
 
-	// Populate form data when edit query loads.
+	// The stored doc moved past the one the form was loaded from (first load, or someone saved).
+	const docIsNewer = $derived(!!shelterQuery.data && shelterQuery.data._rev !== $formData._rev);
+	// Before the first load the form only holds init defaults (which taint it), so there is
+	// nothing of the user's to protect yet.
+	const hasUnsavedEdits = $derived($formData._rev !== undefined && isTainted($tainted));
+	// Unsaved edits are never replaced: they get a notice instead.
+	const showNewerDocNotice = $derived(docIsNewer && hasUnsavedEdits);
+
 	$effect(() => {
-		if (shelterQuery.data) {
-			$formData = formValuesFromDoc(shelterQuery.data);
-		}
+		if (shelterQuery.data && docIsNewer && !hasUnsavedEdits) seedForm(shelterQuery.data);
 	});
 
 	const isPending = $derived(isEdit ? updateMutation.isPending : createMutation.isPending);
@@ -521,6 +546,21 @@
 		</div>
 	{:else}
 		<div class="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+			{#if showNewerDocNotice}
+				<Alert.Root class="mb-4 border-sky-200 bg-sky-50 text-sky-900" role="status">
+					<RefreshCw />
+					<Alert.Title>มีข้อมูลใหม่</Alert.Title>
+					<Alert.Description class="text-sky-900/80">
+						ข้อมูลศูนย์นี้ถูกแก้ไขโดยผู้อื่น ข้อมูลที่คุณแก้ยังไม่ถูกแทนที่
+						โหลดข้อมูลล่าสุดจะทำให้การแก้ไขที่ยังไม่ได้บันทึกหายไป
+					</Alert.Description>
+					<Alert.Action>
+						<Button type="button" size="sm" variant="outline" onclick={reloadFromLatest}>
+							โหลดข้อมูลล่าสุด
+						</Button>
+					</Alert.Action>
+				</Alert.Root>
+			{/if}
 			<div class="flex flex-col gap-6 pb-28 md:flex-row">
 				<!-- Desktop sticky section nav -->
 				<nav

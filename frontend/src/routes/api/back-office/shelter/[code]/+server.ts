@@ -107,7 +107,7 @@ export const PATCH: RequestHandler = async ({ request, params }) => {
 
 		// updateMaster re-reads the doc + retries 409s internally
 		// (skill: couchdb-pouchdb-bestpractices §3) and owns `closed_at`.
-		await updateMaster(code, (current) => {
+		const { rev: newRev } = await updateMaster(code, (current) => {
 			// Optimistic concurrency: re-checked against the fresh doc on every updateMaster retry.
 			if (rev !== undefined && current._rev !== rev) {
 				throw new ServiceError(
@@ -142,7 +142,7 @@ export const PATCH: RequestHandler = async ({ request, params }) => {
 			return { patch: next as Partial<ShelterMaster> };
 		});
 
-		return json({ ok: true, code });
+		return json({ ok: true, code, rev: newRev });
 	} catch (e) {
 		// The guard's 403 / the close-block 400 keep their status (CR-219 FR-22).
 		return serviceOrHttpError(e);

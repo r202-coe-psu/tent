@@ -34,7 +34,7 @@ export function updateShelter(
 	code: string,
 	input: Partial<Shelter>,
 	rev?: string
-): Promise<{ ok: true; code: string }> {
+): Promise<{ ok: true; code: string; rev: string }> {
 	return serviceFetch(`${SHELTER_ENDPOINT}/${encodeURIComponent(code)}`, {
 		method: 'PATCH',
 		// `_rev` makes the server 409 when the doc changed since the form loaded.

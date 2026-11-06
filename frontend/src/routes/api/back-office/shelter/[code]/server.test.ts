@@ -82,7 +82,7 @@ describe('PATCH /api/back-office/shelter/[code]', () => {
 		expect(mgrMock).toHaveBeenCalledWith('AuthSession=abc', 'SH001');
 		expect(updateMock).toHaveBeenCalledTimes(1);
 		expect(res.status).toBe(200);
-		expect(await res.json()).toEqual({ ok: true, code: 'SH001' });
+		expect(await res.json()).toEqual({ ok: true, code: 'SH001', rev: '2-new' });
 	});
 
 	it('does not update when the scope guard rejects a cross-shelter edit', async () => {

@@ -147,7 +147,7 @@ async function mockShelterDetail(
 			await route.fulfill({
 				status: 200,
 				contentType: 'application/json',
-				body: JSON.stringify({ ok: true, code })
+				body: JSON.stringify({ ok: true, code, rev: stored._rev })
 			});
 		} else {
 			await route.continue();
@@ -612,7 +612,7 @@ test.describe('Shelter Form — Donation drop-off points (CR-205)', () => {
 				body: JSON.stringify(
 					stale
 						? { error: { code: 'CONFLICT', message: 'ข้อมูลศูนย์ถูกแก้ไขโดยผู้อื่น' } }
-						: { ok: true, code: CODE }
+						: { ok: true, code: CODE, rev: '6-e2e' }
 				)
 			});
 		});
@@ -635,6 +635,161 @@ test.describe('Shelter Form — Donation drop-off points (CR-205)', () => {
 		expect(patches[1].body._rev).toBe('5-e2e');
 		const sent = (patches[1].body.common_areas as { sub_storage?: { name: string }[] }).sub_storage;
 		if (sent) expect(sent.map((p) => p.name)).toContain('โกดังคลัง');
+	});
+
+	type Served = { rev: string; name: string; points: unknown[]; status?: string };
+
+	/** Serves `get()` as the registry shelter doc and lets the test fire the registry `_changes` feed. */
+	async function serveWithFeed(page: Page, code: string, get: () => Served) {
+		await page.route('**/registry/_all_docs*', async (route) => {
+			const served = get();
+			const doc = {
+				_id: `shelter:${code}`,
+				_rev: served.rev,
+				type: 'shelter',
+				schema_v: 8,
+				code,
+				...storageShelter(served.points, 8),
+				// Set, so the master-data default seeding does not edit the form on load.
+				shelter_type: 'school',
+				name: served.name,
+				operation_status: served.status ?? 'standby'
+			};
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({ rows: [{ id: doc._id, doc }] })
+			});
+		});
+		let feedDue = false;
+		await page.route('**/registry/_changes*', async (route) => {
+			for (let waited = 0; !feedDue && waited < 2000; waited += 50) {
+				await new Promise((resolve) => setTimeout(resolve, 50));
+			}
+			const results = feedDue ? [{ id: `shelter:${code}`, doc: { type: 'shelter' } }] : [];
+			feedDue = false;
+			await route
+				.fulfill({
+					status: 200,
+					contentType: 'application/json',
+					body: JSON.stringify({ results, last_seq: String(Date.now()) })
+				})
+				.catch(() => {});
+		});
+		// The feed reports the shelter doc as changed, which refetches the detail query.
+		return async () => {
+			feedDue = true;
+			await expect.poll(() => feedDue, { timeout: 8000 }).toBe(false);
+		};
+	}
+
+	test('an unsaved edit survives a registry refresh and a notice offers the latest (#1224)', async ({
+		page
+	}) => {
+		const CODE = 'SH916';
+		let served: Served = { rev: E2E_REV, name: 'ศูนย์พักพิงจุดเก็บของ', points: [gym] };
+		const refresh = await serveWithFeed(page, CODE, () => served);
+		await openStorage(page, CODE);
+		const pointName = page.getByLabel('ชื่อจุดเก็บของ');
+		await expect(pointName).toHaveValue('โรงยิม');
+		// Untouched form: the new doc is taken silently.
+		served = { rev: '5-e2e', name: 'ชื่อจากคนอื่น', points: [gym] };
+		await refresh();
+		await expect(page.getByLabel('ชื่อศูนย์พักพิง')).toHaveValue('ชื่อจากคนอื่น');
+		await expect(page.getByText('มีข้อมูลใหม่')).toHaveCount(0);
+
+		// Edited form: the typed value stays and the notice appears.
+		await pointName.fill('โรงยิม (แก้ไข)');
+		served = { rev: '6-e2e', name: 'ชื่อจากคนอื่นอีกครั้ง', points: [gym] };
+		await refresh();
+		await expect(page.getByText('มีข้อมูลใหม่')).toBeVisible();
+		await expect(pointName).toHaveValue('โรงยิม (แก้ไข)');
+		await expect(page.getByLabel('ชื่อศูนย์พักพิง')).toHaveValue('ชื่อจากคนอื่น');
+
+		await page.getByRole('button', { name: 'โหลดข้อมูลล่าสุด' }).click();
+		await expect(page.getByLabel('ชื่อศูนย์พักพิง')).toHaveValue('ชื่อจากคนอื่นอีกครั้ง');
+		await expect(pointName).toHaveValue('โรงยิม');
+		await expect(page.getByText('มีข้อมูลใหม่')).toHaveCount(0);
+	});
+
+	test('two saves in a row without a reload: the second sends the rev the first returned (#1224)', async ({
+		page
+	}) => {
+		const CODE = 'SH917';
+		const { getPatchBody } = await mockShelterDetail(page, CODE, storageShelter([gym]));
+		await openStorage(page, CODE);
+
+		await page.getByLabel('ชื่อจุดเก็บของ').fill('โรงยิม 1');
+		const first = await save(page, CODE);
+		expect(first.status()).toBe(200);
+		expect((getPatchBody() as { _rev?: string })._rev).toBe(E2E_REV);
+
+		await page.getByLabel('ชื่อจุดเก็บของ').fill('โรงยิม 2');
+		const second = await save(page, CODE);
+		expect(second.status()).toBe(200);
+		const body = getPatchBody() as {
+			_rev?: string;
+			common_areas: { sub_storage: { name: string }[] };
+		};
+		expect(body._rev).toBe('5-e2e');
+		expect(body.common_areas.sub_storage[0].name).toBe('โรงยิม 2');
+	});
+
+	test('closing is refused when points edited here changed in the doc since load (#1224)', async ({
+		page
+	}) => {
+		const CODE = 'SH918';
+		const NAME = 'ศูนย์พักพิงจุดเก็บของ';
+		const added = { id: 'sp-2', name: 'โกดังคลัง', types: ['general'], area_m2: null };
+		let served: Served = { rev: E2E_REV, name: NAME, points: [gym] };
+		const refresh = await serveWithFeed(page, CODE, () => served);
+		const patches: unknown[] = [];
+		await page.route(`**/api/back-office/shelter/${CODE}`, async (route) => {
+			if (route.request().method() === 'PATCH') patches.push(route.request().postDataJSON());
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({ ok: true, code: CODE, rev: '9-e2e' })
+			});
+		});
+		await page.route(`**/api/back-office/shelter/${CODE}/close`, async (route) => {
+			const closed = route.request().method() === 'POST';
+			// The close route rewrites the doc (new `_rev`, closed) but not the points.
+			if (closed) served = { ...served, rev: '7-e2e', status: 'closed' };
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify(
+					closed
+						? { closed: true, checked_out: 0, cancelled: 0, failed: [] }
+						: { total: 0, by_status: {} }
+				)
+			});
+		});
+		await openStorage(page, CODE);
+		const pointNames = page.locator('input[name^="common_areas.sub_storage["][name$=".name"]');
+		await page.getByLabel('ชื่อจุดเก็บของ').fill('โรงยิม (แก้ไข)');
+
+		// The warehouse adds a point; the feed refetches the doc, the typed rename stays.
+		served = { rev: '5-e2e', name: NAME, points: [gym, added] };
+		await refresh();
+		await expect(page.getByText('มีข้อมูลใหม่')).toBeVisible();
+		await expect(pointNames).toHaveCount(1);
+
+		await sectionNav(page, BASIC_INFO_HEADING).click();
+		await page.getByRole('button', { name: 'สถานะการปฏิบัติการ (Operating Status)' }).click();
+		await page.getByRole('option', { name: 'ปิดศูนย์ (Closed)' }).click();
+		await page.getByRole('button', { name: 'บันทึกข้อมูล' }).click();
+		await page.getByLabel('พิมพ์ข้อความต่อไปนี้เพื่อยืนยัน').fill(`${CODE} ${NAME}`);
+		await page.getByRole('button', { name: 'เช็คเอาต์ทั้งหมดและปิดศูนย์' }).click();
+
+		await expect(
+			page.getByText('ข้อมูลศูนย์ถูกแก้ไขโดยผู้อื่น โหลดข้อมูลล่าสุดให้แล้ว กรุณาแก้ไขซ้ำอีกครั้ง')
+		).toBeVisible();
+		// Nothing was written over the new point, and the form now shows the latest doc.
+		expect(patches).toHaveLength(0);
+		await expect(pointNames).toHaveCount(2);
+		await expect(pointNames.nth(0)).toHaveValue('โรงยิม');
 	});
 
 	test('a schema_v 8 point with no new keys saves as not accepting donations', async ({ page }) => {

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
 	editsSubStorage,
+	formMetaAfterSave,
 	shelterFormSchema,
 	shelterPatchInput,
 	withoutFormMeta,
@@ -70,5 +71,27 @@ describe('shelterPatchInput', () => {
 			formData({ common_areas: { sub_storage: [changed] } as ShelterForm['common_areas'] })
 		);
 		expect(input.common_areas.sub_storage).toEqual([changed]);
+	});
+});
+
+describe('formMetaAfterSave', () => {
+	it('moves _rev on and keeps the loaded points when the points were not edited', () => {
+		const saved = formData();
+		expect(formMetaAfterSave(saved, '8-def')).toEqual({
+			_rev: '8-def',
+			_loaded_sub_storage: [point]
+		});
+	});
+
+	it('records the points it sent as the new loaded points, as a copy', () => {
+		const renamed = { ...point, name: 'คลังใหม่' } as SubStorageItem;
+		const saved = formData({
+			common_areas: { sub_storage: [renamed] } as ShelterForm['common_areas']
+		});
+		const meta = formMetaAfterSave(saved, '8-def');
+		expect(meta._loaded_sub_storage).toEqual([renamed]);
+		expect(meta._loaded_sub_storage).not.toBe(saved.common_areas.sub_storage);
+		// Same points as stored now, so the next save does not resend them.
+		expect(editsSubStorage({ ...saved, ...meta })).toBe(false);
 	});
 });
