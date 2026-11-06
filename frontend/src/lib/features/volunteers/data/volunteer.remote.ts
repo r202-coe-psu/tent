@@ -6,6 +6,7 @@ import {
 	isVolunteer,
 	volunteerSchema,
 	makeVolunteer,
+	VOLUNTEER_SCHEMA_V,
 	type Volunteer,
 	type VolunteerInput,
 	type VolunteerStatus
@@ -16,7 +17,7 @@ import {
 	TRACKING_TOKEN_RANDOM_BYTES
 } from '$lib/features/volunteer-portal/domain/volunteer';
 import { nextVolunteerCode } from '../domain/volunteer-code';
-import type { VerificationStatus } from '../domain/verification';
+import type { AcceptedFrom, VerificationStatus } from '../domain/verification';
 import type { VolunteerFilter, VolunteerRepository } from './volunteer.repository';
 
 /** `phone_hash` for a stored phone; null when the phone is missing or blank. */
@@ -142,19 +143,22 @@ export class VolunteerRemoteRepository implements VolunteerRepository {
 		id: string,
 		status: VerificationStatus,
 		actor: string,
-		notes?: string | null
+		notes?: string | null,
+		acceptedFrom?: AcceptedFrom
 	): Promise<Volunteer> {
 		const latest = await this.repo.get<Volunteer>(id);
 		if (!latest) throw new Error(`ไม่พบข้อมูลอาสาสมัคร: ${id}`);
 		return this.save(
 			touch({
 				...latest,
+				schema_v: VOLUNTEER_SCHEMA_V,
 				identity_verified: status === 'verified',
 				identity_verification: {
 					status,
 					reviewed_at: new Date().toISOString(),
 					reviewed_by: actor,
-					notes: notes ?? null
+					notes: notes ?? null,
+					...(acceptedFrom ? { accepted_from: acceptedFrom } : {})
 				}
 			})
 		);
@@ -166,13 +170,15 @@ export class VolunteerRemoteRepository implements VolunteerRepository {
 		status: VerificationStatus,
 		actor: string,
 		notes?: string | null,
-		credentialReference?: string | null
+		credentialReference?: string | null,
+		acceptedFrom?: AcceptedFrom
 	): Promise<Volunteer> {
 		const latest = await this.repo.get<Volunteer>(id);
 		if (!latest) throw new Error(`ไม่พบข้อมูลอาสาสมัคร: ${id}`);
 		return this.save(
 			touch({
 				...latest,
+				schema_v: VOLUNTEER_SCHEMA_V,
 				skill_verifications: {
 					...(latest.skill_verifications ?? {}),
 					[skillCode]: {
@@ -180,7 +186,8 @@ export class VolunteerRemoteRepository implements VolunteerRepository {
 						reviewed_at: new Date().toISOString(),
 						reviewed_by: actor,
 						notes: notes ?? null,
-						credential_reference: credentialReference ?? null
+						credential_reference: credentialReference ?? null,
+						...(acceptedFrom ? { accepted_from: acceptedFrom } : {})
 					}
 				}
 			})

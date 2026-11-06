@@ -3,6 +3,7 @@ import { sha256Hex } from '$lib/db/hash';
 import { ulid } from '$lib/db/ulid';
 import { normalizeThaiPhone } from '$lib/db/model';
 import { nextVolunteerCode } from '../domain/volunteer-code';
+import { VOLUNTEER_SCHEMA_V } from '../domain/volunteer.schema';
 import { DEFAULT_CONTROLLED_SKILLS } from '../domain/skills';
 import { resolveSkillLabel, skillOptionsFromMaster } from '../domain/skill-catalog';
 import {
@@ -692,7 +693,7 @@ export async function applyPublicVolunteerApplication(
 		: {
 				_id: volunteerId,
 				type: 'volunteer',
-				schema_v: 4,
+				schema_v: VOLUNTEER_SCHEMA_V,
 				shelter_code: shelterCode,
 				created_at: now,
 				updated_at: now,
