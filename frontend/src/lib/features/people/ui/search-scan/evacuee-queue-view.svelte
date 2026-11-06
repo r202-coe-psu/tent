@@ -24,6 +24,8 @@
 	import { useShelter } from '$lib/features/shelters';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
 	import { formatThaiDateTime } from '$lib/utils/date';
+	import { langState } from '$lib/states/i18n.svelte';
+	import { getTranslation } from '$lib/utils/i18n';
 
 	import { useEvacuees, useHouseholds, useScreenings } from '../../application/queries';
 	import {
@@ -32,10 +34,19 @@
 		matchesEvacueeSearch,
 		zoneLabel
 	} from '../../domain/people';
-	import { isInShelterStatus, nextQueueLabel } from '../../domain/intake-pipeline';
+	import {
+		isInShelterStatus,
+		nextQueueLabel,
+		nextQueueLabelText
+	} from '../../domain/intake-pipeline';
+	import { peopleLabels } from '../../domain/people';
+	import { EVACUEE_QUEUE_I18N } from '../_constants/evacuee-queue.i18n';
 	import type { Evacuee } from '../../domain/people';
 	import RegisteredViaBadge from '../shared/registered-via-badge.svelte';
 	import StayStatusBadge from '../shared/stay-status-badge.svelte';
+
+	const t = $derived(getTranslation(EVACUEE_QUEUE_I18N, langState.current));
+	const stayStatusLabels = $derived(peopleLabels(langState.current).stayStatus);
 
 	const PAGE_SIZE = 10;
 	/** Status filter value for the 「พักในศูนย์แล้ว」 KPI card (active + room_confirmed). */
@@ -83,12 +94,6 @@
 	const screenings = $derived(screeningsQuery.data ?? []);
 	const screenedIds = $derived(new Set(screenings.map((s) => s.evacuee_id)));
 	const screeningByEvacuee = $derived(new Map(screenings.map((s) => [s.evacuee_id, s])));
-
-	const TRIAGE_LABELS: Record<string, string> = {
-		green: 'เขียว',
-		yellow: 'เหลือง',
-		red: 'แดง'
-	};
 
 	let activeTab = $state<WorkflowTab>(untrack(() => initialTab));
 	let arrivingSubTab = $state<ArrivingSubTab>('all');
@@ -206,7 +211,7 @@
 			.slice(0, 2)
 			.map((n) => {
 				const item = vulnerableGroupQuery.data?.items.find((i) => i.code === n);
-				return item ? formatMasterLabel(item, 'th') : n;
+				return item ? formatMasterLabel(item, langState.current) : n;
 			})
 			.join(', ');
 	}
@@ -228,7 +233,7 @@
 </script>
 
 <!-- Queue Stat Summary Cards -->
-<section aria-label="สรุปยอดคิวผู้ประสบภัย" class="grid grid-cols-2 gap-3 sm:grid-cols-4 sm:gap-4">
+<section aria-label={t.summaryAria} class="grid grid-cols-2 gap-3 sm:grid-cols-4 sm:gap-4">
 	<!-- Card 1: Pre-registered -->
 	<button
 		type="button"
@@ -239,7 +244,7 @@
 			: 'border-slate-200/80 bg-white shadow-2xs'}"
 	>
 		<div class="flex items-center justify-between">
-			<span class="text-xs font-semibold text-blue-900">รอรายงานตัว</span>
+			<span class="text-xs font-semibold text-blue-900">{t.preRegTitle}</span>
 			<div
 				class="flex size-7 items-center justify-center rounded-lg bg-blue-100 text-blue-700 transition-colors group-hover:bg-blue-200"
 			>
@@ -249,9 +254,9 @@
 		<div class="mt-2">
 			<p class="text-2xl font-bold tracking-tight text-slate-900 tabular-nums">
 				{preRegisteredEvacuees.length}
-				<span class="text-xs font-normal text-slate-500">คน</span>
+				<span class="text-xs font-normal text-slate-500">{t.unitPeople}</span>
 			</p>
-			<p class="mt-0.5 text-2xs text-slate-500">ลงทะเบียนล่วงหน้า / ออนไลน์</p>
+			<p class="mt-0.5 text-2xs text-slate-500">{t.preRegSub}</p>
 		</div>
 	</button>
 
@@ -265,7 +270,7 @@
 			: 'border-slate-200/80 bg-white shadow-2xs'}"
 	>
 		<div class="flex items-center justify-between">
-			<span class="text-xs font-semibold text-amber-900">รอส่งต่อเข้าพัก</span>
+			<span class="text-xs font-semibold text-amber-900">{t.arrivingTitle}</span>
 			<div
 				class="flex size-7 items-center justify-center rounded-lg bg-amber-100 text-amber-700 transition-colors group-hover:bg-amber-200"
 			>
@@ -275,12 +280,13 @@
 		<div class="mt-2">
 			<p class="text-2xl font-bold tracking-tight text-slate-900 tabular-nums">
 				{arrivingEvacuees.length}
-				<span class="text-xs font-normal text-slate-500">คน</span>
+				<span class="text-xs font-normal text-slate-500">{t.unitPeople}</span>
 			</p>
 			<p class="mt-0.5 text-2xs text-slate-500">
 				{#if enableMedical}
-					รอตรวจแพทย์ {waitingMedicalCount} ·
-				{/if}รอจัดโซน {waitingZoningCount}
+					{t.awaitingDoctor} {waitingMedicalCount} ·
+				{/if}{t.awaitingZone}
+				{waitingZoningCount}
 			</p>
 		</div>
 	</button>
@@ -298,7 +304,7 @@
 			: 'border-slate-200/80 bg-white shadow-2xs'}"
 	>
 		<div class="flex items-center justify-between">
-			<span class="text-xs font-semibold text-green-900">พักในศูนย์แล้ว</span>
+			<span class="text-xs font-semibold text-green-900">{t.inShelterTitle}</span>
 			<div
 				class="flex size-7 items-center justify-center rounded-lg bg-green-100 text-green-700 transition-colors group-hover:bg-green-200"
 			>
@@ -308,9 +314,9 @@
 		<div class="mt-2">
 			<p class="text-2xl font-bold tracking-tight text-slate-900 tabular-nums">
 				{inShelterEvacuees.length}
-				<span class="text-xs font-normal text-slate-500">คน</span>
+				<span class="text-xs font-normal text-slate-500">{t.unitPeople}</span>
 			</p>
-			<p class="mt-0.5 text-2xs text-slate-500">ยืนยันถึงโซนแล้ว {roomConfirmedCount} คน</p>
+			<p class="mt-0.5 text-2xs text-slate-500">{t.zoneConfirmedCount(roomConfirmedCount)}</p>
 		</div>
 	</button>
 
@@ -319,14 +325,14 @@
 		class="flex flex-col justify-between rounded-xl border border-slate-200/80 bg-white p-4 shadow-2xs"
 	>
 		<div class="flex items-center justify-between">
-			<span class="text-xs font-semibold text-slate-700">คิวกลาง (Central Pool)</span>
+			<span class="text-xs font-semibold text-slate-700">{t.centralPoolTitle}</span>
 			<div class="flex size-7 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
 				<Globe class="size-4" />
 			</div>
 		</div>
 		<div class="mt-2">
-			<p class="text-base font-bold text-slate-800">พร้อมดึงเข้าศูนย์</p>
-			<p class="mt-0.5 text-2xs text-slate-500">ค้นหาเพื่อ Claim เข้าศูนย์นี้ได้ทันที</p>
+			<p class="text-base font-bold text-slate-800">{t.centralPoolReady}</p>
+			<p class="mt-0.5 text-2xs text-slate-500">{t.centralPoolHint}</p>
 		</div>
 	</div>
 </section>
@@ -335,7 +341,7 @@
 <section class="flex flex-col gap-4">
 	<!-- Tab Switcher Navigation -->
 	<div class="border-b border-border">
-		<nav class="flex gap-1 overflow-x-auto" aria-label="แท็บกระบวนการลงทะเบียน">
+		<nav class="flex gap-1 overflow-x-auto" aria-label={t.tabsAria}>
 			<button
 				type="button"
 				onclick={() => {
@@ -348,7 +354,7 @@
 					: 'border-transparent text-muted-foreground hover:border-border hover:text-foreground'}"
 			>
 				<Users class="size-4" />
-				<span>ผู้ประสบภัยทั้งหมด (All Evacuees)</span>
+				<span>{t.tabAll}</span>
 				<span class="rounded-full bg-muted px-2 py-0.5 text-xs font-medium tabular-nums">
 					{allEvacuees.length}
 				</span>
@@ -363,7 +369,7 @@
 					: 'border-transparent text-muted-foreground hover:border-border hover:text-foreground'}"
 			>
 				<CalendarClock class="size-4" />
-				<span>รอรายงานตัว (Pre-registered)</span>
+				<span>{t.tabPreRegistered}</span>
 				<span
 					class="rounded-full bg-blue-100 px-2 py-0.5 text-xs font-bold text-blue-800 tabular-nums dark:bg-blue-950 dark:text-blue-300"
 				>
@@ -380,7 +386,7 @@
 					: 'border-transparent text-muted-foreground hover:border-border hover:text-foreground'}"
 			>
 				<Clock class="size-4" />
-				<span>รอส่งต่อเข้าพัก (Arriving)</span>
+				<span>{t.tabArriving}</span>
 				<span
 					class="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-bold text-amber-800 tabular-nums dark:bg-amber-950 dark:text-amber-300"
 				>
@@ -398,43 +404,43 @@
 			>
 				<div class="flex flex-wrap items-center gap-3">
 					<div class="flex items-center gap-1.5 text-xs text-slate-600">
-						<span class="font-medium">สถานะ:</span>
+						<span class="font-medium">{t.statusFilter}</span>
 						<select
 							bind:value={allStatusFilter}
 							class="h-8 rounded-lg border border-slate-200 bg-white px-2.5 text-xs text-slate-800 focus:ring-1 focus:ring-primary focus:outline-hidden"
 						>
-							<option value="all">ทุกสถานะ</option>
-							<option value={IN_SHELTER_FILTER}>พักในศูนย์แล้ว (เข้าพัก + ยืนยันถึงโซน)</option>
-							<option value="pre_registered">ลงทะเบียนล่วงหน้า</option>
-							<option value="kiosk_registered">ลงทะเบียนที่ตู้ (รอยืนยัน)</option>
-							<option value="arriving">รอเข้าพัก</option>
-							<option value="active">เข้าพักแล้ว</option>
-							<option value="room_confirmed">ยืนยันถึงโซนแล้ว</option>
-							<option value="temporary_leave">ออกชั่วคราว</option>
-							<option value="transferred">ย้ายศูนย์</option>
-							<option value="checked_out">เช็คเอาต์</option>
-							<option value="deceased">เสียชีวิต</option>
-							<option value="cancelled">ยกเลิก</option>
+							<option value="all">{t.allStatuses}</option>
+							<option value={IN_SHELTER_FILTER}>{t.inShelterOption}</option>
+							<option value="pre_registered">{stayStatusLabels.pre_registered}</option>
+							<option value="kiosk_registered">{stayStatusLabels.kiosk_registered}</option>
+							<option value="arriving">{stayStatusLabels.arriving}</option>
+							<option value="active">{stayStatusLabels.active}</option>
+							<option value="room_confirmed">{stayStatusLabels.room_confirmed}</option>
+							<option value="temporary_leave">{stayStatusLabels.temporary_leave}</option>
+							<option value="transferred">{stayStatusLabels.transferred}</option>
+							<option value="checked_out">{stayStatusLabels.checked_out}</option>
+							<option value="deceased">{stayStatusLabels.deceased}</option>
+							<option value="cancelled">{stayStatusLabels.cancelled}</option>
 						</select>
 					</div>
 
 					{#if availableZones.length > 0}
 						<div class="flex items-center gap-1.5 text-xs text-slate-600">
-							<span class="font-medium">โซน:</span>
+							<span class="font-medium">{t.zoneFilter}</span>
 							<select
 								bind:value={allZoneFilter}
 								class="h-8 rounded-lg border border-slate-200 bg-white px-2.5 text-xs text-slate-800 focus:ring-1 focus:ring-primary focus:outline-hidden"
 							>
-								<option value="all">ทุกโซน</option>
+								<option value="all">{t.allZones}</option>
 								{#each availableZones as z (z)}
-									<option value={z}>โซน {zoneLabel(z, shelterZones)}</option>
+									<option value={z}>{t.zoneName(zoneLabel(z, shelterZones))}</option>
 								{/each}
 							</select>
 						</div>
 					{/if}
 				</div>
 				<span class="text-xs text-slate-500">
-					แสดง {allFiltered.length} จาก {allEvacuees.length} รายการ
+					{t.showing(allFiltered.length, allEvacuees.length)}
 				</span>
 			</div>
 
@@ -442,7 +448,7 @@
 				<div
 					class="flex h-44 flex-col items-center justify-center gap-2 text-center text-sm text-slate-500"
 				>
-					<p class="font-medium text-slate-700">ไม่พบข้อมูลที่ตรงกับเงื่อนไข</p>
+					<p class="font-medium text-slate-700">{t.noMatch}</p>
 				</div>
 			{:else}
 				<div class="overflow-x-auto">
@@ -450,26 +456,29 @@
 						<Table.Header class="border-b border-slate-200/90 bg-slate-50">
 							<Table.Row class="border-b-0 hover:bg-transparent">
 								<Table.Head class="h-11 pl-5 text-xs font-semibold text-slate-600"
-									>ชื่อ-นามสกุล</Table.Head
-								>
-								<Table.Head class="h-11 px-3 text-xs font-semibold text-slate-600">สถานะ</Table.Head
-								>
-								<Table.Head class="h-11 px-3 text-xs font-semibold text-slate-600">โซน</Table.Head>
+									>{t.colName}</Table.Head
 								>
 								<Table.Head class="h-11 px-3 text-xs font-semibold text-slate-600"
-									>ครอบครัว</Table.Head
+									>{t.colStatus}</Table.Head
 								>
 								<Table.Head class="h-11 px-3 text-xs font-semibold text-slate-600"
-									>ความต้องการพิเศษ</Table.Head
+									>{t.colZone}</Table.Head
+								>
 								>
 								<Table.Head class="h-11 px-3 text-xs font-semibold text-slate-600"
-									>อัปเดตล่าสุด</Table.Head
+									>{t.colFamily}</Table.Head
+								>
+								<Table.Head class="h-11 px-3 text-xs font-semibold text-slate-600"
+									>{t.colSpecialNeeds}</Table.Head
+								>
+								<Table.Head class="h-11 px-3 text-xs font-semibold text-slate-600"
+									>{t.colUpdated}</Table.Head
 								>
 								<Table.Head class="h-11 pr-5 text-xs font-semibold text-slate-600"
-									>คิวถัดไป</Table.Head
+									>{t.colNextQueue}</Table.Head
 								>
 								<Table.Head class="h-11 pr-5 text-right text-xs font-semibold text-slate-600"
-									>การจัดการ</Table.Head
+									>{t.colActions}</Table.Head
 								>
 							</Table.Row>
 						</Table.Header>
@@ -492,7 +501,7 @@
 									</Table.Cell>
 									<Table.Cell class="px-3 py-3 text-xs font-medium">
 										{row.current_stay?.zone
-											? `โซน ${zoneLabel(row.current_stay.zone, shelterZones)}`
+											? t.zoneName(zoneLabel(row.current_stay.zone, shelterZones))
 											: '—'}
 									</Table.Cell>
 									<Table.Cell class="px-3 py-3 text-xs text-slate-600">
@@ -505,7 +514,9 @@
 										{formatUpdated(row.updated_at)}
 									</Table.Cell>
 									<Table.Cell class="px-3 py-3">
-										<Badge variant="secondary" class="text-xs">{next}</Badge>
+										<Badge variant="secondary" class="text-xs"
+											>{nextQueueLabelText(next, langState.current)}</Badge
+										>
 									</Table.Cell>
 									<Table.Cell class="py-3 pr-5 text-right">
 										<Button
@@ -518,7 +529,7 @@
 											}}
 										>
 											<Eye class="size-3.5" />
-											<span>ดูโปรไฟล์</span>
+											<span>{t.viewProfile}</span>
 										</Button>
 									</Table.Cell>
 								</Table.Row>
@@ -545,7 +556,7 @@
 				class="flex flex-col gap-3 border-b border-slate-200/80 bg-white px-5 py-3.5 sm:flex-row sm:items-center sm:justify-between"
 			>
 				<div class="flex flex-wrap items-center gap-2">
-					<span class="text-xs font-semibold text-slate-700">กรองช่องทาง:</span>
+					<span class="text-xs font-semibold text-slate-700">{t.channelFilter}</span>
 					<button
 						type="button"
 						onclick={() => (preRegChannelFilter = 'all')}
@@ -554,7 +565,7 @@
 							? 'border-primary bg-primary/10 font-bold text-primary'
 							: 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'}"
 					>
-						ทั้งหมด ({preRegisteredEvacuees.length})
+						{t.all} ({preRegisteredEvacuees.length})
 					</button>
 					<button
 						type="button"
@@ -565,7 +576,7 @@
 							: 'border-amber-200 bg-amber-50/60 text-amber-900 hover:bg-amber-100/60'}"
 					>
 						<CreditCard class="size-3.5 text-amber-700" />
-						<span>ตู้ Kiosk ({kioskPreRegCount})</span>
+						<span>{t.channelKiosk} ({kioskPreRegCount})</span>
 					</button>
 					<button
 						type="button"
@@ -576,7 +587,7 @@
 							: 'border-sky-200 bg-sky-50/60 text-sky-900 hover:bg-sky-100/60'}"
 					>
 						<Globe class="size-3.5 text-sky-700" />
-						<span>ออนไลน์ Web ({webPreRegCount})</span>
+						<span>{t.channelWeb} ({webPreRegCount})</span>
 					</button>
 					{#if otherPreRegCount > 0}
 						<button
@@ -587,28 +598,26 @@
 								? 'border-primary bg-primary/10 font-bold text-primary'
 								: 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'}"
 						>
-							ช่องทางอื่น ({otherPreRegCount})
+							{t.channelOther} ({otherPreRegCount})
 						</button>
 					{/if}
 				</div>
 				<span class="text-xs text-slate-500">
-					แสดง {preRegisteredFiltered.length} จาก {preRegisteredEvacuees.length} รายการ
+					{t.showing(preRegisteredFiltered.length, preRegisteredEvacuees.length)}
 				</span>
 			</div>
 
 			{#if allEvacueesQuery.isPending}
 				<div class="flex h-40 items-center justify-center text-sm text-slate-500">
-					กำลังโหลดข้อมูล...
+					{t.loading}
 				</div>
 			{:else if preRegisteredFiltered.length === 0}
 				<div
 					class="flex h-48 flex-col items-center justify-center gap-3 text-center text-sm text-slate-500"
 				>
-					<p class="font-medium text-slate-700">ไม่มีรายการผู้ลงทะเบียนล่วงหน้าค้างรายงานตัว</p>
+					<p class="font-medium text-slate-700">{t.emptyPreRegistered}</p>
 					<p class="text-xs text-slate-500">
-						{preRegChannelFilter !== 'all'
-							? 'ไม่พบข้อมูลที่ตรงกับเงื่อนไขตัวกรอง'
-							: 'หากมีผู้ประสบภัย Walk-in สามารถกดลงทะเบียนใหม่ได้ทันที'}
+						{preRegChannelFilter !== 'all' ? t.emptyFiltered : t.emptyWalkInHint}
 					</p>
 					<Button
 						variant="outline"
@@ -616,7 +625,7 @@
 						class="gap-1.5 rounded-xl border-slate-200"
 					>
 						<UserPlus class="size-4" />
-						<span>+ ลงทะเบียน Walk-in</span>
+						<span>{t.walkInCta}</span>
 					</Button>
 				</div>
 			{:else}
@@ -625,27 +634,28 @@
 						<Table.Header class="border-b border-slate-200/90 bg-slate-50">
 							<Table.Row class="border-b-0 hover:bg-transparent">
 								<Table.Head class="h-11 pl-5 text-xs font-semibold text-slate-600"
-									>ชื่อ-นามสกุล</Table.Head
+									>{t.colName}</Table.Head
 								>
 								<Table.Head class="h-11 px-3 text-xs font-semibold text-slate-600"
-									>เลขที่เอกสาร</Table.Head
+									>{t.colDocNo}</Table.Head
 								>
 								<Table.Head class="h-11 px-3 text-xs font-semibold text-slate-600"
-									>ช่องทาง</Table.Head
+									>{t.colChannel}</Table.Head
 								>
 								<Table.Head class="h-11 px-3 text-xs font-semibold text-slate-600"
-									>เบอร์โทร</Table.Head
+									>{t.colPhone}</Table.Head
 								>
 								<Table.Head class="h-11 px-3 text-xs font-semibold text-slate-600"
-									>ครอบครัว</Table.Head
+									>{t.colFamily}</Table.Head
 								>
 								<Table.Head class="h-11 px-3 text-xs font-semibold text-slate-600"
-									>ความต้องการพิเศษ</Table.Head
+									>{t.colSpecialNeeds}</Table.Head
 								>
-								<Table.Head class="h-11 px-3 text-xs font-semibold text-slate-600">สถานะ</Table.Head
+								<Table.Head class="h-11 px-3 text-xs font-semibold text-slate-600"
+									>{t.colStatus}</Table.Head
 								>
 								<Table.Head class="h-11 pr-5 text-right text-xs font-semibold text-slate-600"
-									>การจัดการ</Table.Head
+									>{t.colActions}</Table.Head
 								>
 							</Table.Row>
 						</Table.Header>
@@ -696,7 +706,7 @@
 												}}
 											>
 												<Eye class="size-3.5" />
-												<span>ดูโปรไฟล์</span>
+												<span>{t.viewProfile}</span>
 											</Button>
 											<Button
 												size="sm"
@@ -707,7 +717,7 @@
 												}}
 											>
 												<Zap class="size-3.5" />
-												<span>รับรายงานตัว</span>
+												<span>{t.reportIn}</span>
 											</Button>
 										</div>
 									</Table.Cell>
@@ -735,7 +745,7 @@
 				class="flex flex-col gap-3 border-b border-slate-200/80 bg-white px-5 py-3.5 sm:flex-row sm:items-center sm:justify-between"
 			>
 				<div class="flex flex-wrap items-center gap-2">
-					<span class="text-xs font-semibold text-slate-700">กรองขั้นตอน:</span>
+					<span class="text-xs font-semibold text-slate-700">{t.stepFilter}</span>
 					<button
 						type="button"
 						onclick={() => (arrivingSubTab = 'all')}
@@ -744,7 +754,7 @@
 							? 'border-amber-400 bg-amber-50 font-bold text-amber-900'
 							: 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'}"
 					>
-						ทั้งหมด ({arrivingEvacuees.length})
+						{t.all} ({arrivingEvacuees.length})
 					</button>
 					{#if enableMedical}
 						<button
@@ -755,7 +765,7 @@
 								? 'border-destructive bg-destructive/10 font-bold text-destructive'
 								: 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'}"
 						>
-							รอตรวจแพทย์ ({waitingMedicalCount})
+							{t.awaitingDoctor} ({waitingMedicalCount})
 						</button>
 					{/if}
 					<button
@@ -766,11 +776,11 @@
 							? 'border-primary bg-primary/10 font-bold text-primary'
 							: 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'}"
 					>
-						รอจัดโซนที่พัก ({waitingZoningCount})
+						{t.awaitingZoneTab} ({waitingZoningCount})
 					</button>
 				</div>
 				<span class="text-xs text-slate-500">
-					แสดง {arrivingFiltered.length} จาก {arrivingEvacuees.length} รายการ
+					{t.showing(arrivingFiltered.length, arrivingEvacuees.length)}
 				</span>
 			</div>
 
@@ -778,8 +788,8 @@
 				<div
 					class="flex h-44 flex-col items-center justify-center gap-2 text-center text-sm text-slate-500"
 				>
-					<p class="font-medium text-slate-700">ไม่มีรายการในหมวดนี้</p>
-					<p class="text-xs text-slate-500">ผู้ประสบภัยได้รับการตรวจและจัดสรรที่พักเรียบร้อยแล้ว</p>
+					<p class="font-medium text-slate-700">{t.emptyCategory}</p>
+					<p class="text-xs text-slate-500">{t.allSettled}</p>
 				</div>
 			{:else}
 				<div class="overflow-x-auto">
@@ -787,24 +797,24 @@
 						<Table.Header class="border-b border-slate-200/90 bg-slate-50">
 							<Table.Row class="border-b-0 hover:bg-transparent">
 								<Table.Head class="h-11 pl-5 text-xs font-semibold text-slate-600"
-									>ชื่อ-นามสกุล</Table.Head
+									>{t.colName}</Table.Head
 								>
 								<Table.Head class="h-11 px-3 text-xs font-semibold text-slate-600"
-									>เลขที่เอกสาร</Table.Head
+									>{t.colDocNo}</Table.Head
 								>
 								<Table.Head class="h-11 px-3 text-xs font-semibold text-slate-600"
-									>ครอบครัว</Table.Head
+									>{t.colFamily}</Table.Head
 								>
 								{#if enableMedical}
 									<Table.Head class="h-11 px-3 text-xs font-semibold text-slate-600"
-										>การแพทย์</Table.Head
+										>{t.colMedical}</Table.Head
 									>
 								{/if}
 								<Table.Head class="h-11 px-3 text-xs font-semibold text-slate-600"
-									>คิวถัดไป</Table.Head
+									>{t.colNextQueue}</Table.Head
 								>
 								<Table.Head class="h-11 pr-5 text-right text-xs font-semibold text-slate-600"
-									>ส่งต่อ</Table.Head
+									>{t.colHandoff}</Table.Head
 								>
 							</Table.Row>
 						</Table.Header>
@@ -834,17 +844,17 @@
 											{#if screening}
 												<span class="inline-flex items-center gap-1 font-medium text-emerald-700">
 													<CheckCircle2 class="size-3.5 text-emerald-600" />
-													ตรวจแล้ว{#if screening.triage_level}
-														({TRIAGE_LABELS[screening.triage_level] ?? screening.triage_level}){/if}
+													{t.screened}{#if screening.triage_level}
+														({t.triage[screening.triage_level] ?? screening.triage_level}){/if}
 												</span>
 											{:else}
-												<span class="font-medium text-amber-700">รอตรวจคัดกรอง</span>
+												<span class="font-medium text-amber-700">{t.awaitingScreening}</span>
 											{/if}
 										</Table.Cell>
 									{/if}
 									<Table.Cell class="px-3 py-3">
 										<Badge variant={nextQueueBadgeVariant(next)} class="font-semibold">
-											{next}
+											{nextQueueLabelText(next, langState.current)}
 										</Badge>
 									</Table.Cell>
 									<Table.Cell class="py-3 pr-5 text-right">
@@ -860,7 +870,7 @@
 													}}
 												>
 													<Stethoscope class="size-3.5" />
-													<span>คัดกรอง (S2)</span>
+													<span>{t.screeningButton}</span>
 												</Button>
 											{/if}
 											{#if canZoning && (next === 'รอโซน' || !enableMedical || screenedIds.has(row._id)) && onGoZoning}
@@ -873,7 +883,7 @@
 													}}
 												>
 													<MapPin class="size-3.5" />
-													<span>จัดโซน (S3)</span>
+													<span>{t.zoningButton}</span>
 												</Button>
 											{/if}
 											<Button
@@ -886,7 +896,7 @@
 												}}
 											>
 												<Eye class="size-3.5" />
-												<span>ดูโปรไฟล์</span>
+												<span>{t.viewProfile}</span>
 											</Button>
 										</div>
 									</Table.Cell>

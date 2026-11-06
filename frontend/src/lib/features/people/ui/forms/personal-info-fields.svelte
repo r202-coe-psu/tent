@@ -32,6 +32,7 @@
 	import { langState } from '$lib/states/i18n.svelte';
 	import { getTranslation } from '$lib/utils/i18n';
 	import { PUBLIC_BOOKING_FORM_I18N } from '$lib/constants/i18n';
+	import { STAFF_FORM_FIELDS_I18N } from '../_constants/staff-form-fields.i18n';
 
 	let {
 		first_name = $bindable(''),
@@ -90,6 +91,7 @@
 	} = $props();
 
 	const t = $derived(getTranslation(PUBLIC_BOOKING_FORM_I18N, langState.current));
+	const tf = $derived(getTranslation(STAFF_FORM_FIELDS_I18N, langState.current));
 	const countryOptions = $derived(countriesForLanguage(langState.current));
 
 	const errClass =
@@ -358,7 +360,7 @@
 						aria-live="polite"
 					>
 						<Loader2 class="size-3 animate-spin" />
-						<span>กำลังตรวจสอบ...</span>
+						<span>{tf.checking}</span>
 					</span>
 				{/if}
 			</div>
@@ -623,7 +625,7 @@
 				<Label for={fid('phone')} class="text-xs font-semibold text-foreground">
 					{t.phoneFieldLabel}
 					{#if phoneOptional}
-						<span class="text-2xs font-normal text-muted-foreground">(ทางเลือก)</span>
+						<span class="text-2xs font-normal text-muted-foreground">{tf.optional}</span>
 					{:else if !no_phone || hideNoPhone}
 						<span class="text-destructive">*</span>
 					{/if}
@@ -635,7 +637,7 @@
 						aria-live="polite"
 					>
 						<Loader2 class="size-3 animate-spin" />
-						<span>กำลังตรวจสอบ...</span>
+						<span>{tf.checking}</span>
 					</span>
 				{/if}
 			</div>
