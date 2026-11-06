@@ -128,7 +128,7 @@
 			it is the ULID / registration id the QR already carries — unreadable to a
 			human, and staff find the person by QR, name or phone, never by typing it.
 			The `booking-ticket-print` id is picked up by the @media print isolation
-			below (same visibility-hidden-then-override idiom as evacuee-qr-modal.svelte),
+			below (visibility-hidden-then-override),
 			so it stays visible while the rest of the page (header banner, dl, page
 			chrome outside this component) is hidden for print.
 		-->
@@ -200,9 +200,9 @@
 
 <style>
 	/*
-		Print QR-only: deliberately thinner than the onsite wristband/ID-card print
-		in evacuee-qr-modal.svelte. Shelter booking needs the gate scanner to read
-		`evacuee:{ulid}`; unassigned tickets encode the Mongo registration id only
+		Print QR-only: deliberately thinner than a wristband/ID-card print. Shelter
+		booking needs the gate scanner to read `evacuee:{ulid}`; unassigned tickets
+		encode the Mongo registration id only
 		(queue reference — not Station-1 Person QR until claim). Plus the holder's
 		name as a human-readable fallback.
 
@@ -225,13 +225,13 @@
 		isolation gap; the `!important` below is only belt-and-braces.
 	*/
 	@media print {
-		:global(*),
-		:global(*::before),
-		:global(*::after) {
+		:global(body:where(:has(#booking-ticket-print)) *),
+		:global(body:where(:has(#booking-ticket-print)) *::before),
+		:global(body:where(:has(#booking-ticket-print)) *::after) {
 			transition: none !important;
 			animation: none !important;
 		}
-		:global(body:has(#booking-ticket-print) *) {
+		:global(body:where(:has(#booking-ticket-print)) *) {
 			visibility: hidden !important;
 		}
 		#booking-ticket-print,
@@ -246,7 +246,7 @@
 			height entirely; the dialog's own chrome is `position: fixed`, so what is
 			left contributes nothing to the flow and the QR fits one page.
 		*/
-		:global(body:has(#booking-ticket-print) > *:not(:has(#booking-ticket-print))) {
+		:global(body:where(:has(#booking-ticket-print)) > *:not(:has(#booking-ticket-print))) {
 			display: none !important;
 		}
 		#booking-ticket-print {

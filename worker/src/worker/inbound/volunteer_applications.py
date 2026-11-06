@@ -223,7 +223,8 @@ def _shift_assignment_doc(
     return {
         "_id": f"shift_assignment:{clean_id}",
         "type": "shift_assignment",
-        "schema_v": 4,
+        # v5 (CR-108 / schema.md §2.9): the check-out actor, method and reason are written below.
+        "schema_v": 5,
         "shelter_code": application.shelter_code,
         "job_id": application.job_id,
         "shift_id": application.shift_id or shift.shift_id,
@@ -238,10 +239,13 @@ def _shift_assignment_doc(
         "check_in_at": None,
         "check_out_at": None,
         "check_in_by": None,
+        "check_out_by": None,
         "status": "assigned",
         "dispatch_status": None,
         "check_in_method": "qr",
         "check_in_reason": None,
+        "check_out_method": "qr",
+        "check_out_reason": None,
         "created_at": _iso(application.created_at),
         "updated_at": now,
         "created_by": "public_apply",

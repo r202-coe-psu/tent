@@ -20,7 +20,9 @@ vi.mock('../data/volunteer.remote', () => ({
 }));
 
 import {
+	accessState,
 	accountPhone,
+	currentGrantRole,
 	grantVolunteerAccess,
 	grantVolunteerAccessAsCoordinator,
 	hasInvalidAccessPhone,
@@ -335,6 +337,33 @@ describe('grantVolunteerAccessAsCoordinator (#955)', () => {
 		);
 	});
 
+	it('needs no password for an account that already exists (CR-221 FR-10)', async () => {
+		mocks.serviceFetch.mockResolvedValue({ ok: true, created: false, unchanged: false });
+		await expect(
+			grantVolunteerAccessAsCoordinator(volunteer, {
+				...coordinatorInput,
+				password: '',
+				account_exists: true
+			})
+		).resolves.toEqual({ created: false, unchanged: false });
+		const [, init] = mocks.serviceFetch.mock.calls[0];
+		expect(JSON.parse(init.body)).toEqual({
+			shelter_code: 'SH001',
+			volunteer_id: volunteer._id,
+			email: input.email,
+			password: '',
+			role: input.role,
+			expires_on: max
+		});
+	});
+
+	it('still asks for a password when the account is new', async () => {
+		await expect(
+			grantVolunteerAccessAsCoordinator(volunteer, { ...coordinatorInput, password: '' })
+		).rejects.toThrow();
+		expect(mocks.serviceFetch).not.toHaveBeenCalled();
+	});
+
 	it('re-checks the stored profile phone: a landline saved meanwhile stops the grant (CR-210)', async () => {
 		mocks.get.mockResolvedValueOnce({ ...volunteer, phone: '022222222' });
 		await expect(grantVolunteerAccessAsCoordinator(volunteer, coordinatorInput)).rejects.toThrow();
@@ -350,7 +379,7 @@ describe('grantVolunteerAccessAsCoordinator (#955)', () => {
 		['no expiry', { expires_on: '' }],
 		['an expiry past the 7-day ceiling', { expires_on: '2999-01-01' }],
 		['an expiry in the past', { expires_on: '2000-01-01' }],
-		['a role outside the four', { role: 'medical_staff' }],
+		['a role the coordinator may not grant', { role: 'kiosk_staff' }],
 		['a bad email', { email: 'bad' }],
 		['a weak password', { password: '0000000000' }]
 	])('rejects %s before calling the BFF', async (_label, over) => {
@@ -384,5 +413,70 @@ describe('grantVolunteerAccessAsCoordinator (#955)', () => {
 		mocks.get.mockResolvedValue(null);
 		await expect(grantVolunteerAccessAsCoordinator(volunteer, coordinatorInput)).rejects.toThrow();
 		expect(mocks.serviceFetch).not.toHaveBeenCalled();
+	});
+});
+
+describe('currentGrantRole (#1044)', () => {
+	const choices = ['kitchen_staff', 'warehouse_staff', 'registration_staff'] as const;
+
+	it('is empty without grants, so nothing is preselected (#1072)', () => {
+		expect(currentGrantRole([], choices)).toBe('');
+	});
+
+	it('picks the grant that runs longest', () => {
+		expect(
+			currentGrantRole(
+				[
+					{ role: 'kitchen_staff', expires_at: '2026-11-01T16:59:59.999Z' },
+					{ role: 'warehouse_staff', expires_at: '2026-11-03T16:59:59.999Z' }
+				],
+				choices
+			)
+		).toBe('warehouse_staff');
+	});
+
+	it('skips a role the caller may not give', () => {
+		expect(
+			currentGrantRole([{ role: 'kiosk_staff', expires_at: '2026-11-03T16:59:59.999Z' }], choices)
+		).toBe('');
+	});
+});
+
+describe('accessState (#1044)', () => {
+	const view = (over = {}) => ({
+		has_account: true,
+		grants: [],
+		permanent_roles: [],
+		last_ended: null,
+		...over
+	});
+
+	it('is none without a loaded view or an account', () => {
+		expect(accessState(null)).toEqual({ kind: 'none' });
+		expect(accessState(view({ has_account: false }))).toEqual({ kind: 'none' });
+	});
+
+	it('is active while the account holds a grant or a manager role here', () => {
+		expect(
+			accessState(
+				view({
+					grants: [{ role: 'kitchen_staff', expires_at: '2026-11-03T16:59:59.999Z', mine: true }]
+				})
+			)
+		).toEqual({ kind: 'active', permanentRoles: [] });
+		expect(accessState(view({ permanent_roles: ['registration_staff'] }))).toEqual({
+			kind: 'active',
+			permanentRoles: ['registration_staff']
+		});
+	});
+
+	it('is lapsed with how the last grant ended when it holds nothing here', () => {
+		const ended = {
+			role: 'kitchen_staff',
+			reason: 'revoked' as const,
+			at: '2026-10-31T17:00:00.000Z',
+			by: 'coord01'
+		};
+		expect(accessState(view({ last_ended: ended }))).toEqual({ kind: 'lapsed', lastEnded: ended });
 	});
 });

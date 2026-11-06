@@ -95,6 +95,13 @@ export {
 	listPendingZoneArrivalConfirmations,
 	CHECK_IN_ELIGIBLE_STATUSES,
 	CHECK_OUT_ELIGIBLE_STATUSES,
+	SHELTER_CLOSE_CHECKOUT_STATUSES,
+	SHELTER_CLOSE_CANCEL_STATUSES,
+	SHELTER_CLOSE_AFFECTED_STATUSES,
+	SHELTER_CLOSED_REASON,
+	SHELTER_CLOSED_REASON_LABEL,
+	movementReasonLabel,
+	type CheckoutDestinationType,
 	CONFIRM_ROOM_ELIGIBLE_STATUSES,
 	ZONE_CHANGE_ELIGIBLE_STATUSES,
 	ACTIVE_HOUSEHOLD_STATUSES,
@@ -201,6 +208,15 @@ export {
 	type ApplyRowClickSelectionInput,
 	type ApplyRowClickSelectionResult
 } from './domain/row-selection';
+
+export {
+	EVACUEE_SORTS,
+	EVACUEE_SORT_LABELS,
+	DEFAULT_EVACUEE_SORT,
+	isEvacueeSort,
+	sortEvacuees,
+	type EvacueeSort
+} from './domain/evacuee-sort';
 
 export {
 	REPORT_IN_CTA_LABEL,
@@ -344,6 +360,7 @@ export {
 	usePatchMedical,
 	useDeleteMedical,
 	usePatchEvacuee,
+	useSetSearchVisibility,
 	useMedicals,
 	useMedicalByEvacuee,
 	useMovements,

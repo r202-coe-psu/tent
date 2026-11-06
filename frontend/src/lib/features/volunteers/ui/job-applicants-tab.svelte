@@ -25,10 +25,16 @@
 	import * as Select from '$lib/components/ui/select/index.js';
 	import { Skeleton } from '$lib/components/ui/skeleton/index.js';
 	import { formatThaiShortDate } from '$lib/utils/date';
+	import { canAccessVolunteerBackoffice } from '$lib/auth/roles';
+	import { getShelterCode } from '$lib/db/shelter';
+	import { useShelter } from '$lib/features/shelters';
+	import { authStore } from '$lib/stores/auth.svelte';
+	import { shelterStore } from '$lib/stores/shelter.svelte';
 	import JobApplicantRow from './job-applicant-row.svelte';
 	import JobApplicantReviewDialog from './job-applicant-review-dialog.svelte';
 	import StaffAssignmentRow from './staff-assignment-row.svelte';
 	import { buildApplicantBoard, historyBreakdown } from '../domain/applicant-board';
+	import { volunteerAccessStatus } from '../domain/volunteer-access-status';
 	import {
 		EMPTY_APPLICANT_FILTERS,
 		filterApplicantBoard,
@@ -41,6 +47,7 @@
 	import {
 		todayDateString,
 		useJobApplications,
+		useShelterVolunteerAccounts,
 		useShiftAssignments,
 		useSkillOptions,
 		useVolunteers
@@ -53,6 +60,20 @@
 	const volunteersQuery = useVolunteers();
 	const assignmentsQuery = useShiftAssignments();
 	const skillCatalog = useSkillOptions();
+
+	// Each applicant's system account and role here, with the same give / edit / revoke button as
+	// the people tab (#1044). SA / SM / coordinator only; the server 403s anyone else.
+	const shelterCode = $derived(shelterStore.selectedShelterCode ?? getShelterCode());
+	const shelterQuery = useShelter(() => shelterCode);
+	const shelterLine = $derived(shelterQuery.data?.name ?? shelterCode ?? '—');
+	const canReadAccounts = $derived(
+		canAccessVolunteerBackoffice(authStore.user?.roles ?? [], shelterCode)
+	);
+	const accountsQuery = useShelterVolunteerAccounts(
+		() => shelterCode,
+		() => canReadAccounts
+	);
+	const accounts = $derived(canReadAccounts ? accountsQuery.data : undefined);
 
 	const loading = $derived(
 		applicationsQuery.isPending || assignmentsQuery.isPending || volunteersQuery.isPending
@@ -274,7 +295,7 @@
 					/>
 					<Input
 						type="search"
-						placeholder="ค้นหาชื่อ นามสกุล เบอร์โทร, รหัส V-xxx"
+						placeholder="ค้นหาชื่อ นามสกุล ชื่อเล่น เบอร์โทร, รหัส V-xxx"
 						aria-labelledby="applicant-filter-search"
 						bind:value={search}
 						class="h-10 rounded-xl bg-background pl-9 shadow-xs"
@@ -377,6 +398,8 @@
 							{assignments}
 							{today}
 							onreview={openReview}
+							accessStatus={volunteer ? volunteerAccessStatus(volunteer, accounts) : null}
+							{shelterLine}
 						/>
 					{/each}
 				</ul>
@@ -406,6 +429,10 @@
 									{assignments}
 									{today}
 									onreview={openReview}
+									accessStatus={entry.volunteer
+										? volunteerAccessStatus(entry.volunteer, accounts)
+										: null}
+									{shelterLine}
 								/>
 							{/if}
 						{/each}

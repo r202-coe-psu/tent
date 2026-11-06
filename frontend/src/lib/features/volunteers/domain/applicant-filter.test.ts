@@ -76,7 +76,9 @@ const volunteers = new Map<string, Volunteer>(
 			first_name: `ชื่อ${n}`,
 			last_name: `สกุล${n}`,
 			phone: `081000000${n}`,
-			volunteer_code: `V-00${n}`
+			volunteer_code: `V-00${n}`,
+			// Applicant 1 (pending) and staff row 5 carry a nickname on their profile (#1122).
+			...(n === 1 ? { nickname: 'มดแดง' } : n === 5 ? { nickname: 'ปุ้ย' } : {})
 		} as Volunteer
 	])
 );
@@ -184,12 +186,33 @@ describe('filterApplicantBoard', () => {
 		expect(run({ search: 'nobody' })).toEqual({ pending: [], history: [] });
 	});
 
-	it('finds a volunteer code typed without the dash or in another case (#1013)', () => {
-		for (const search of ['v006', 'V006', 'v-006', 'V 006']) {
+	it('finds a nickname from the linked profile, on pending and history rows (#1122)', () => {
+		expect(run({ search: 'มดแดง' })).toEqual({ pending: [app(1)], history: [] });
+		expect(run({ search: 'ปุ้ย' })).toEqual({ pending: [], history: [asg(5)] });
+	});
+
+	it.each(['081-000-0005', '081 000 0005', '0810000005'])(
+		'finds the same person when the phone is typed as %s (#1122)',
+		(search) => {
+			expect(run({ search }).history).toEqual([asg(5)]);
+		}
+	);
+
+	it.each(['v006', 'V006', 'v-006', 'V 006'])(
+		'finds V-006 when searched as %s (#1013)',
+		(search) => {
 			expect(run({ search }).history).toEqual([asg(6)]);
 		}
+	);
+
+	it('finds a pending application by a code typed without the dash (#1013)', () => {
 		expect(run({ search: 'v001' }).pending).toEqual([app(1)]);
-		// A lone dash compacts to nothing; it must not match every code.
+	});
+
+	it('does not match every code on a lone dash (#1013)', () => {
+		// A lone dash compacts to nothing, so the code path never matches; names and phones in
+		// this fixture have no dash either, so nothing matches. A name or phone that contains a
+		// dash would still match on its own path.
 		expect(run({ search: '-' })).toEqual({ pending: [], history: [] });
 	});
 
@@ -216,6 +239,57 @@ describe('filterApplicantBoard', () => {
 		expect(at('2026-08-10T09:29:59.000Z', 'not_checked_in')).toEqual([asg(5)]);
 		expect(at('2026-08-10T09:30:00.000Z', 'awaiting_confirmation')).toEqual([asg(5)]);
 		expect(at('2026-08-10T09:30:00.000Z', 'not_checked_in')).toEqual([]);
+	});
+
+	it('files an accepted standby shift under awaiting confirmation, not a dispatched one (#849)', () => {
+		const dutyWindow = { start_ts: '2026-08-10T01:00:00.000Z', end_ts: '2026-08-10T09:00:00.000Z' };
+		const runFor = (
+			status: 'assigned' | 'standby',
+			dispatch_status: 'accepted' | 'dispatched',
+			attendance: ApplicantFilters['attendance'] = 'awaiting_confirmation'
+		) => {
+			const withRow = [
+				assignments[0],
+				assignment(5, { status, dispatch_status, duty_window: dutyWindow }),
+				assignments[2]
+			];
+			const b = buildApplicantBoard({
+				jobId: JOB,
+				applications,
+				assignments: withRow,
+				volunteers
+			});
+			return filterApplicantBoard(
+				b,
+				{ ...EMPTY_APPLICANT_FILTERS, attendance },
+				{ ...ctx, assignments: withRow, now: new Date('2026-08-10T09:30:00.000Z') }
+			).history.map((e) => e.key);
+		};
+		expect(runFor('standby', 'accepted')).toEqual([asg(5)]);
+		expect(runFor('standby', 'dispatched')).toEqual([]);
+	});
+
+	it('keeps an unanswered invite past the window out of awaiting confirmation (#849)', () => {
+		const dutyWindow = { start_ts: '2026-08-10T01:00:00.000Z', end_ts: '2026-08-10T09:00:00.000Z' };
+		const withInvite = [
+			assignments[0],
+			assignment(5, { status: 'assigned', dispatch_status: 'dispatched', duty_window: dutyWindow }),
+			assignments[2]
+		];
+		const b = buildApplicantBoard({
+			jobId: JOB,
+			applications,
+			assignments: withInvite,
+			volunteers
+		});
+		const keys = (attendance: ApplicantFilters['attendance']) =>
+			filterApplicantBoard(
+				b,
+				{ ...EMPTY_APPLICANT_FILTERS, attendance },
+				{ ...ctx, assignments: withInvite, now: new Date('2026-08-10T09:30:00.000Z') }
+			).history.map((e) => e.key);
+		expect(keys('awaiting_confirmation')).toEqual([]);
+		expect(keys('not_checked_in')).toEqual([asg(5)]);
 	});
 
 	it('files a cancelled direct assignment under declined, not staff (#849)', () => {

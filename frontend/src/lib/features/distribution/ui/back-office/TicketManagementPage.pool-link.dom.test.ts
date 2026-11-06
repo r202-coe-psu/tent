@@ -20,7 +20,6 @@ const sonner = vi.hoisted(() => ({ warning: vi.fn(), error: vi.fn(), success: vi
 vi.mock('svelte-sonner', () => ({ toast: sonner }));
 
 // Page-level children that are irrelevant to the pool link.
-vi.mock('./TicketGroupTabs.svelte', () => ({ default: () => {} }));
 vi.mock('./TicketFilters.svelte', () => ({ default: () => {} }));
 vi.mock('./TicketTable.svelte', () => ({ default: () => {} }));
 vi.mock('./CreateTicketDialog.svelte', () => ({ default: () => {} }));

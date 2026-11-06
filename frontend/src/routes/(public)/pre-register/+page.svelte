@@ -164,7 +164,7 @@
 		<h1 class="text-2xl font-black tracking-tight text-foreground md:text-3xl">
 			{t.heading}
 		</h1>
-		{#if activeTab !== 'history'}
+		{#if activeTab !== 'history' && t.subheading}
 			<p class="mt-2 text-sm text-muted-foreground">
 				{t.subheading}
 			</p>

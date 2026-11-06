@@ -23,17 +23,22 @@
 	import { getShelterCode } from '$lib/db/shelter';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
 	import { useShelter } from '$lib/features/shelters';
-	import { useUsers } from '$lib/features/users';
-	import { isShelterManager, isSystemAdmin } from '$lib/auth/roles';
+	import { canAccessVolunteerBackoffice } from '$lib/auth/roles';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import VolunteerStatPills, { type PeopleStatFilter } from './volunteer-stat-pills.svelte';
 	import VolunteerFilterBar, { type AccountFilter } from './volunteer-filter-bar.svelte';
 	import VolunteerApprovalChips, { type ApprovalChip } from './volunteer-approval-chips.svelte';
 	import VolunteerCard from './volunteer-card.svelte';
 	import WalkInRegistrationDialog from './walk-in-registration-dialog.svelte';
-	import { useVolunteers, useTodayAttendance, useSkillOptions } from '../application/queries';
+	import {
+		useShelterVolunteerAccounts,
+		useVolunteers,
+		useTodayAttendance,
+		useSkillOptions
+	} from '../application/queries';
 	import { hasPendingControlledSkill, identityVerificationStatus } from '../domain/verification';
 	import { skillMatches } from '../domain/skill-catalog';
+	import { matchesVolunteerSearch, volunteerSearchFields } from '../domain/volunteer-search';
 	import { hasVolunteerAccount, volunteerAccessStatus } from '../domain/volunteer-access-status';
 	import type { PersonnelType, Volunteer, VolunteerSource } from '../domain/volunteer.schema';
 	import type { ShiftAssignment, ShiftAssignmentStatus } from '../domain/shift-assignment.schema';
@@ -41,13 +46,16 @@
 	const shelterCode = $derived(shelterStore.selectedShelterCode ?? getShelterCode());
 	const shelterQuery = useShelter(() => shelterCode);
 
-	// Account list is SA/SM only (server 403s otherwise) — same gate as the grant button.
-	const canGrantAccess = $derived.by(() => {
-		const roles = authStore.user?.roles ?? [];
-		return isSystemAdmin(roles) || isShelterManager(roles, shelterStore.selectedShelterCode);
-	});
-	const usersQuery = useUsers(() => canGrantAccess);
-	const accounts = $derived(canGrantAccess ? usersQuery.data : undefined);
+	// The shelter's volunteer accounts with their roles here (#1044): SA / SM / coordinator, the
+	// same people who see the grant button (the server 403s anyone else).
+	const canReadAccounts = $derived(
+		canAccessVolunteerBackoffice(authStore.user?.roles ?? [], shelterCode)
+	);
+	const accountsQuery = useShelterVolunteerAccounts(
+		() => shelterCode,
+		() => canReadAccounts
+	);
+	const accounts = $derived(canReadAccounts ? accountsQuery.data : undefined);
 
 	const volunteersQuery = useVolunteers();
 	const attendanceQuery = useTodayAttendance();
@@ -89,18 +97,6 @@
 	);
 	const readyCount = $derived(volunteers.length - pendingCount);
 
-	function matchesSearch(v: Volunteer, term: string): boolean {
-		if (!term) return true;
-		const needle = term.trim().toLowerCase();
-		if (!needle) return true;
-		return (
-			v.first_name.toLowerCase().includes(needle) ||
-			v.last_name.toLowerCase().includes(needle) ||
-			(v.phone ?? '').includes(needle) ||
-			v.volunteer_code.toLowerCase().includes(needle)
-		);
-	}
-
 	const filteredVolunteers = $derived.by<Volunteer[]>(() => {
 		let list = volunteers;
 
@@ -128,7 +124,7 @@
 			list = [];
 		}
 
-		if (search) list = list.filter((v) => matchesSearch(v, search));
+		if (search) list = list.filter((v) => matchesVolunteerSearch(volunteerSearchFields(v), search));
 		if (skillFilter)
 			list = list.filter((v) =>
 				v.skills.some((value) => skillMatches(value, skillFilter, skillCatalog.options))
@@ -137,9 +133,7 @@
 		if (personnelTypeFilter) list = list.filter((v) => v.personnel_type === personnelTypeFilter);
 		if (accountFilter) {
 			const want = accountFilter === 'has_account';
-			list = list.filter(
-				(v) => hasVolunteerAccount(volunteerAccessStatus(v, accounts, shelterCode)) === want
-			);
+			list = list.filter((v) => hasVolunteerAccount(volunteerAccessStatus(v, accounts)) === want);
 		}
 		if (shiftStatusFilter) {
 			list = list.filter((v) => attendanceByVolunteer.get(v._id)?.status === shiftStatusFilter);
@@ -251,7 +245,7 @@
 							shelterName={shelterQuery.data?.name}
 							shelterType={shelterQuery.data?.shelter_type}
 							todayAssignment={attendanceByVolunteer.get(volunteer._id)}
-							accessStatus={volunteerAccessStatus(volunteer, accounts, shelterCode)}
+							accessStatus={volunteerAccessStatus(volunteer, accounts)}
 						/>
 					{/each}
 				</Table.Body>

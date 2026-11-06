@@ -14,6 +14,7 @@ import { getShelterDb, getShelterCode } from '$lib/db/shelter';
 import type { AuthorContext } from '$lib/db/model';
 import type { PaginatedResult } from '$lib/db/repository';
 import { peopleRepository } from '../data/people.remote';
+import { DEFAULT_EVACUEE_SORT, type EvacueeSort } from '../domain/evacuee-sort';
 import { getEvacueeNamesByIds, uniqueEvacueeIds } from '../data/evacuee-names.remote';
 import type {
 	EvacueeFilters,
@@ -51,12 +52,18 @@ export const peopleKeys = {
 	all: ['people'] as const,
 	evacuees: () => [...peopleKeys.all, 'evacuees', getShelterCode()] as const,
 	evacuee: (id: string) => [...peopleKeys.all, 'evacuee', getShelterCode(), id] as const,
-	evacueesPaginated: (page: number, pageSize: number, search = '', filtersKey = '') =>
+	evacueesPaginated: (
+		page: number,
+		pageSize: number,
+		search = '',
+		filtersKey = '',
+		sort: EvacueeSort = DEFAULT_EVACUEE_SORT
+	) =>
 		[
 			...peopleKeys.all,
 			'evacuees',
 			getShelterCode(),
-			{ page, pageSize, search, filtersKey }
+			{ page, pageSize, search, filtersKey, sort }
 		] as const,
 	evacueesSearch: (query: string) =>
 		[...peopleKeys.all, 'evacuees', getShelterCode(), 'search', query] as const,
@@ -133,21 +140,24 @@ export const useEvacueesPaginated = (
 	page: () => number,
 	pageSize: () => number,
 	search?: () => string,
-	filters?: () => EvacueeFilters
+	filters?: () => EvacueeFilters,
+	sort?: () => EvacueeSort
 ) =>
 	createQuery(() => ({
 		queryKey: peopleKeys.evacueesPaginated(
 			page(),
 			pageSize(),
 			search?.() ?? '',
-			filters ? JSON.stringify(filters()) : ''
+			filters ? JSON.stringify(filters()) : '',
+			sort?.() ?? DEFAULT_EVACUEE_SORT
 		),
 		queryFn: () =>
 			peopleRepository().listEvacueesPaginated(
 				page(),
 				pageSize(),
 				search?.(),
-				filters?.()
+				filters?.(),
+				sort?.() ?? DEFAULT_EVACUEE_SORT
 			) as Promise<PaginatedResult<Evacuee>>
 	}));
 
@@ -231,6 +241,25 @@ export const usePatchEvacuee = () => {
 			queryClient.invalidateQueries({ queryKey: peopleKeys.evacuees() });
 			queryClient.invalidateQueries({ queryKey: peopleKeys.evacuee(evacuee._id) });
 			queryClient.invalidateQueries({ queryKey: peopleKeys.households() });
+		}
+	}));
+};
+
+export const useSetSearchVisibility = () => {
+	const queryClient = useQueryClient();
+	return createMutation(() => ({
+		mutationFn: ({
+			evacueeId,
+			visible,
+			ctx
+		}: {
+			evacueeId: string;
+			visible: boolean;
+			ctx: AuthorContext;
+		}) => peopleRepository().setSearchVisibility(evacueeId, visible, ctx),
+		onSettled: (_saved, _err, { evacueeId }) => {
+			queryClient.invalidateQueries({ queryKey: peopleKeys.evacuees() });
+			queryClient.invalidateQueries({ queryKey: peopleKeys.evacuee(evacueeId) });
 		}
 	}));
 };

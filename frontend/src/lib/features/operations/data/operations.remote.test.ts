@@ -1606,6 +1606,24 @@ describe('OperationsRemoteRepository.updateCampaign', () => {
 		});
 	});
 
+	it('re-stamps a v3 campaign as schema_v 4 on any update (FR-AP-4b)', async () => {
+		const created = await repo.createCampaign(
+			{
+				title: 'น้ำดื่ม',
+				needs: [{ item_id: 'item:water', qty_target: 100, unit: 'bottle' }]
+			},
+			ctx
+		);
+		const v3 = { ...created, schema_v: 3 };
+		await memoryRepo.put(v3);
+		const stale = (await repo.getCampaign(created._id))!;
+
+		const result = await repo.updateCampaign({ ...stale, visible_on_home: false });
+
+		expect(result.schema_v).toBe(4);
+		expect((await repo.getCampaign(created._id))?.schema_v).toBe(4);
+	});
+
 	it('refuses to update a campaign this shelter database does not hold', async () => {
 		// A list cached under another shelter used to be written back here as a new
 		// doc — a stray copy in the wrong shelter that the public board then read.

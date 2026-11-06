@@ -22,6 +22,7 @@ import {
 import {
 	CampaignUnitMismatchError,
 	createCampaign as buildCampaign,
+	DONATION_CAMPAIGN_SCHEMA_V,
 	isDonationCampaign,
 	isStockLedger,
 	isDonation,
@@ -314,12 +315,13 @@ export class OperationsRemoteRepository implements OperationsRepository {
 		// NOT atomic, and the gap is asymmetric. `_bulk_docs` runs
 		// `validate_doc_update` per document, and the two docs answer to different
 		// rules: `donation` has no role gate, while `stock_ledger` requires
-		// warehouse_staff / shelter_manager / system_admin
-		// (`server/shelter-access-design.ts`). A writer who has lost the warehouse
+		// warehouse_staff / shelter_manager / system_admin, or donation_staff for a
+		// positive `donation` row — which is all this writes (CR-227;
+		// `server/shelter-access-design.ts`). A writer who has lost the warehouse
 		// role therefore gets the donation accepted and the ledger row rejected —
 		// this call throws, but the donation is already persisted and starts
 		// inflating reserved stock. The only realistic trigger is a role revoked
-		// while the form sits open: the route guard (`requireWarehouseAccess`) and
+		// while the form sits open: the route guard (`requireDonationAccess`) and
 		// the design doc read the same roles, so there is no systematic mismatch,
 		// and every other rule in the design doc applies equally to both docs or
 		// only fires on update. Closing it for real means either gating `donation`
@@ -1175,8 +1177,10 @@ export class OperationsRemoteRepository implements OperationsRepository {
 			);
 		}
 		await this.validateCampaignUnits(campaign, existing);
+		// Any save re-stamps the doc, so a v3 campaign that staff touch becomes v4 (FR-AP-4b).
 		const merged = {
 			...campaign,
+			schema_v: DONATION_CAMPAIGN_SCHEMA_V,
 			_rev: existing._rev
 		};
 

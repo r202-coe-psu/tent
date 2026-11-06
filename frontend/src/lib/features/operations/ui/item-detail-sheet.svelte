@@ -26,6 +26,7 @@
 		shelterCode,
 		offline = false,
 		canDistribute = true,
+		canChange = true,
 		onaction
 	}: {
 		open?: boolean;
@@ -39,6 +40,8 @@
 		offline?: boolean;
 		/** False when user lacks warehouse_staff capability in the active shelter. */
 		canDistribute?: boolean;
+		/** False for a read-only viewer (donation_staff, CR-227): no receive / issue / adjust buttons. */
+		canChange?: boolean;
 		onaction: (kind: ItemDetailAction) => void;
 	} = $props();
 
@@ -103,32 +106,34 @@
 					</div>
 				</dl>
 
-				<div class="grid grid-cols-3 gap-2">
-					{#each ACTIONS as action (action.kind)}
-						{@const isDis = offline || (action.kind === 'distribute' && !canDistribute)}
-						{@const btnTitle = offline
-							? OFFLINE_HINT
-							: action.kind === 'distribute' && !canDistribute
-								? DISTRIBUTE_FORBIDDEN_HINT
-								: undefined}
-						<DisabledReason reason={isDis ? btnTitle : undefined}>
-							<Button
-								type="button"
-								variant={action.kind === 'receive' ? 'default' : 'outline'}
-								aria-label="{action.label} {row.name}"
-								class="min-h-11 gap-1.5 rounded-lg px-2 text-sm font-semibold {action.kind ===
-								'receive'
-									? 'bg-[#0A2647] text-white hover:bg-[#051930]'
-									: 'border-slate-300 bg-white text-slate-800 shadow-2xs'}"
-								disabled={isDis}
-								onclick={() => onaction(action.kind)}
-							>
-								<action.icon class="h-4 w-4" aria-hidden="true" />
-								{action.label}
-							</Button>
-						</DisabledReason>
-					{/each}
-				</div>
+				{#if canChange}
+					<div class="grid grid-cols-3 gap-2">
+						{#each ACTIONS as action (action.kind)}
+							{@const isDis = offline || (action.kind === 'distribute' && !canDistribute)}
+							{@const btnTitle = offline
+								? OFFLINE_HINT
+								: action.kind === 'distribute' && !canDistribute
+									? DISTRIBUTE_FORBIDDEN_HINT
+									: undefined}
+							<DisabledReason reason={isDis ? btnTitle : undefined}>
+								<Button
+									type="button"
+									variant={action.kind === 'receive' ? 'default' : 'outline'}
+									aria-label="{action.label} {row.name}"
+									class="min-h-11 gap-1.5 rounded-lg px-2 text-sm font-semibold {action.kind ===
+									'receive'
+										? 'bg-[#0A2647] text-white hover:bg-[#051930]'
+										: 'border-slate-300 bg-white text-slate-800 shadow-2xs'}"
+									disabled={isDis}
+									onclick={() => onaction(action.kind)}
+								>
+									<action.icon class="h-4 w-4" aria-hidden="true" />
+									{action.label}
+								</Button>
+							</DisabledReason>
+						{/each}
+					</div>
+				{/if}
 			</Sheet.Header>
 
 			{#key row._id}
@@ -179,6 +184,10 @@
 												{/if}
 											</div>
 											<p class="mt-1.5 text-sm text-slate-700">
+												{#if lot.lotNo}<span class="font-semibold text-slate-900 tabular-nums"
+														>{lot.lotNo}</span
+													>{:else}<span class="text-slate-500">ไม่มีเลขล็อต</span>{/if}
+												<span class="text-slate-400" aria-hidden="true">·</span>
 												{#if lot.expiry}หมดอายุ <span class="tabular-nums">{lot.expiry}</span
 													>{:else}
 													<span class="text-slate-500">ไม่ระบุวันหมดอายุ</span>

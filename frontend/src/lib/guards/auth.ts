@@ -9,7 +9,9 @@ import {
 	isShelterManager,
 	isSystemAdmin,
 	canAccessManagerPages,
+	canAccessDonations,
 	canAccessWarehouse,
+	canViewSupply,
 	canAccessKitchen,
 	canAccessTickets,
 	canAccessEvacueeRegistration,
@@ -133,6 +135,19 @@ export async function requireManager(fetchFn?: typeof fetch) {
 	}
 }
 
+/**
+ * Shelter readiness guard (`/back-office/shelters/readiness/[id]`, #478) — system admin, or
+ * shelter_manager of the shelter named in the URL. Checked against `code`, not the selected
+ * shelter, so editing the URL cannot open another shelter's assessments.
+ */
+export async function requireShelterReadiness(code: string, fetchFn?: typeof fetch) {
+	await requireAuth(fetchFn);
+	const roles = authStore.user?.roles ?? [];
+	if (!canAccessManagerPages(roles, code)) {
+		throw redirect(302, resolve(LANDING_ROUTE));
+	}
+}
+
 /** The only back-office area a kiosk_staff-only user may open (FR-SBO-29). */
 export const KIOSK_STAFF_BACKOFFICE_ROUTE = '/back-office/kiosks';
 
@@ -200,6 +215,32 @@ export async function requireWarehouseAccess(
 	const shelter = activeShelterCode(roles);
 	if (!canAccessWarehouse(roles, shelter)) {
 		throw redirect(302, resolve(warehouseDeniedDestination(roles, shelter, options?.deskFallback)));
+	}
+}
+
+/**
+ * Donation intake guard (`/back-office/stock-donations`) — the warehouse side plus
+ * `donation_staff` of the active shelter (CR-227). Kept apart from {@link requireWarehouseAccess}
+ * so donation_staff does not reach distribution or tickets.
+ */
+export async function requireDonationAccess(fetchFn: typeof fetch = fetch) {
+	await requireAuth(fetchFn);
+	const roles = authStore.user?.roles ?? [];
+	if (!canAccessDonations(roles, activeShelterCode(roles))) {
+		throw redirect(302, resolve(LANDING_ROUTE));
+	}
+}
+
+/**
+ * Supply / stock pages guard (`/back-office/supply`) — the warehouse side plus `donation_staff`,
+ * who sees stock read-only (CR-227). The page hides the mutating actions; the data layer stays the
+ * real boundary.
+ */
+export async function requireSupplyView(fetchFn: typeof fetch = fetch) {
+	await requireAuth(fetchFn);
+	const roles = authStore.user?.roles ?? [];
+	if (!canViewSupply(roles, activeShelterCode(roles))) {
+		throw redirect(302, resolve(LANDING_ROUTE));
 	}
 }
 

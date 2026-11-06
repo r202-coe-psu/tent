@@ -1740,6 +1740,19 @@ export interface components {
 			 */
 			message: string;
 		};
+		/**
+		 * DonationCreateItem
+		 * @description One booked line as stored, so the ticket can group by point without a second read.
+		 */
+		DonationCreateItem: {
+			/** Drop Off Point Id */
+			drop_off_point_id: string | null;
+			/**
+			 * Review Status
+			 * @enum {string}
+			 */
+			review_status: 'approved' | 'pending';
+		};
 		/** DonationCreateRequest */
 		DonationCreateRequest: {
 			/** Shelter Code */
@@ -1772,6 +1785,8 @@ export interface components {
 			booking_ref: string;
 			/** Status */
 			status: string;
+			/** Items */
+			items: components['schemas']['DonationCreateItem'][];
 		};
 		/** DonationItemInput */
 		DonationItemInput: {
@@ -1977,6 +1992,54 @@ export interface components {
 			/** Relation */
 			relation: string;
 		};
+		/**
+		 * ExternalNeedItemResponse
+		 * @description One row per shelter + item_id: the `/external/v1/needs` shape (CR-206 A2 FR-AP-27).
+		 */
+		ExternalNeedItemResponse: {
+			/** Item Id */
+			item_id: string;
+			/** Name */
+			name: string;
+			/** Qty Needed */
+			qty_needed: string;
+			/**
+			 * Qty Target
+			 * @default 0
+			 */
+			qty_target: string;
+			/**
+			 * On Hand
+			 * @default 0
+			 */
+			on_hand: string;
+			/**
+			 * Reserved
+			 * @default 0
+			 */
+			reserved: string;
+			/** Unit */
+			unit: string;
+			/** Status */
+			status: string;
+			/**
+			 * Urgency
+			 * @default normal
+			 */
+			urgency: string;
+			/** Category */
+			category?: string | null;
+		};
+		/** ExternalNeedsListResponse */
+		ExternalNeedsListResponse: {
+			/** Shelters */
+			shelters: components['schemas']['ExternalShelterNeedsResponse'][];
+			/**
+			 * As Of
+			 * Format: date-time
+			 */
+			as_of: string;
+		};
 		/** ExternalSearchResponse */
 		ExternalSearchResponse: {
 			/** Results */
@@ -2018,6 +2081,15 @@ export interface components {
 			care_zone?: string | null;
 			/** Zone Name */
 			zone_name?: string | null;
+		};
+		/** ExternalShelterNeedsResponse */
+		ExternalShelterNeedsResponse: {
+			/** Code */
+			code: string;
+			/** Name */
+			name: string;
+			/** Needs */
+			needs: components['schemas']['ExternalNeedItemResponse'][];
 		};
 		/** FamilyMember */
 		FamilyMember: {
@@ -2509,7 +2581,12 @@ export interface components {
 			/** Search Excluded */
 			search_excluded: boolean;
 		};
-		/** NeedItemResponse */
+		/**
+		 * NeedItemResponse
+		 * @description One donor-board card: shelter + item + drop-off point (CR-206 A2 FR-AP-26).
+		 *
+		 *     Several cards of one shelter may share an ``item_id``.
+		 */
 		NeedItemResponse: {
 			/** Item Id */
 			item_id: string;
@@ -2543,6 +2620,10 @@ export interface components {
 			urgency: string;
 			/** Category */
 			category?: string | null;
+			/** Drop Off Point Id */
+			drop_off_point_id?: string | null;
+			/** Drop Off Point Name */
+			drop_off_point_name?: string | null;
 		};
 		/** NeedsListResponse */
 		NeedsListResponse: {
@@ -3896,6 +3977,11 @@ export interface components {
 			member_ids: string[];
 			/** Required Person Id */
 			required_person_id?: string | null;
+			/**
+			 * Claim Pets
+			 * @default false
+			 */
+			claim_pets: boolean;
 		};
 		/** UnassignedKioskPrepareResponse */
 		UnassignedKioskPrepareResponse: {
@@ -3913,10 +3999,16 @@ export interface components {
 			}[];
 			/** Images */
 			images: components['schemas']['UnassignedKioskImage'][];
+			/** Pets */
+			pets?: {
+				[key: string]: unknown;
+			}[];
+			/** Pet Ids */
+			pet_ids?: string[];
 		};
 		/**
 		 * UnassignedKioskRevertRequest
-		 * @description Kiosk claim revert — give back members this kiosk marked when the Couch write failed.
+		 * @description Kiosk claim revert — give back members and pets this kiosk marked when Couch failed.
 		 */
 		UnassignedKioskRevertRequest: {
 			/** Shelter Code */
@@ -3924,12 +4016,16 @@ export interface components {
 			/** Device Id */
 			device_id: string;
 			/** Member Ids */
-			member_ids: string[];
+			member_ids?: string[];
+			/** Pet Ids */
+			pet_ids?: string[];
 		};
 		/** UnassignedKioskRevertResponse */
 		UnassignedKioskRevertResponse: {
 			/** Reverted */
 			reverted: string[];
+			/** Reverted Pets */
+			reverted_pets?: string[];
 		};
 		/**
 		 * UnassignedPhotoUploadResponse
@@ -5053,7 +5149,7 @@ export interface operations {
 					[name: string]: unknown;
 				};
 				content: {
-					'application/json': components['schemas']['NeedsListResponse'];
+					'application/json': components['schemas']['ExternalNeedsListResponse'];
 				};
 			};
 		};

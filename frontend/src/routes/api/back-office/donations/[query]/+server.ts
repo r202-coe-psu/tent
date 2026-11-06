@@ -3,7 +3,8 @@ import type { RequestHandler } from './$types';
 import { adminRaw } from '$lib/server/couch-admin';
 import {
 	assertCountedAgainstCatalog,
-	authorizeWarehouse,
+	assertDonationLedgerRows,
+	authorizeDonation,
 	findDonationByQuery,
 	isInCallerScope,
 	routeErrorResponse as toRouteError,
@@ -227,7 +228,7 @@ function lineAlreadyReceived(
 
 export const GET: RequestHandler = async ({ params, request }) => {
 	try {
-		const caller = await authorizeWarehouse(request.headers.get('cookie'));
+		const caller = await authorizeDonation(request.headers.get('cookie'));
 		const { query } = params;
 		if (!query) {
 			return json({ success: false, error: 'Query parameter is required' }, { status: 400 });
@@ -254,7 +255,7 @@ export const GET: RequestHandler = async ({ params, request }) => {
 
 export const POST: RequestHandler = async ({ params, request }) => {
 	try {
-		const caller = await authorizeWarehouse(request.headers.get('cookie'));
+		const caller = await authorizeDonation(request.headers.get('cookie'));
 		const { query } = params;
 		if (!query) {
 			return json({ success: false, error: 'Query parameter is required' }, { status: 400 });
@@ -406,7 +407,7 @@ export const POST: RequestHandler = async ({ params, request }) => {
 					{
 						success: false,
 						error_code: 'POINT_REQUIRED',
-						error: 'ศูนย์นี้มีจุดรับบริจาค — เลือกจุดที่ประจำก่อนบันทึกรับของ'
+						error: 'ศูนย์นี้มีจุดรับบริจาค — เลือกจุดที่ประจำก่อนตรวจรับ'
 					},
 					{ status: 422 }
 				);
@@ -649,6 +650,7 @@ export const POST: RequestHandler = async ({ params, request }) => {
 			ctx,
 			pending.map((index) => ids[index])
 		);
+		assertDonationLedgerRows(keyed);
 		const keyedById = new Map(keyed.map((row) => [row._id, row]));
 		const ledgerAt = (id: string): StockLedger =>
 			(recorded.get(id) ?? keyedById.get(id)) as StockLedger;

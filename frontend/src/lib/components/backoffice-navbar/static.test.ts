@@ -132,7 +132,6 @@ describe('real backofficeNavbarGroups — visible leaves per role (regression gu
 
 	/** R2 (#842): no guard on the page, or no page yet — shown to every role as before. */
 	const ungated = [
-		'การประเมินความพร้อมศูนย์',
 		'การประเมินประจำวัน',
 		'รายงานความโปร่งใส',
 		'รายงานสรุปหลังเหตุการณ์',
@@ -140,12 +139,17 @@ describe('real backofficeNavbarGroups — visible leaves per role (regression gu
 		'โลจิสติกส์ & GIS'
 	];
 	const registry = 'จัดการผู้เข้าพัก';
-	const volunteers = 'จัดการอาสาสมัคร';
+	const volunteers = ['งานและรายชื่ออาสาสมัคร', 'บัญชีจิตอาสา'];
 	const referrals = 'การส่งต่อผู้เข้าพัก';
 	const warehouse = ['คลัง', 'บริจาค', 'จัดการเบิกจ่ายพัสดุและอาหาร', 'คลังสินค้า'];
 	const kitchenTickets = 'เบิกวัตถุดิบครัว';
 	const kitchen = 'ครัวกลางและอาหาร';
-	const managerOnly = ['จัดการศูนย์พักพิง', 'จัดการผู้ใช้งานและสิทธิ์', 'ข้อมูลหลัก'];
+	const managerOnly = [
+		'การประเมินความพร้อมศูนย์',
+		'จัดการศูนย์พักพิง',
+		'จัดการผู้ใช้งานและสิทธิ์',
+		'ข้อมูลหลัก'
+	];
 	const incidentLog = 'บันทึกเหตุการณ์ประจำวัน';
 	/** Tree-ordered ungated leaves plus the gated ones the role may open. */
 	const labelsFor = (...gated: (string | string[])[]): string[] => {
@@ -154,7 +158,7 @@ describe('real backofficeNavbarGroups — visible leaves per role (regression gu
 	};
 	const managerLabels = [
 		registry,
-		volunteers,
+		...volunteers,
 		referrals,
 		...warehouse,
 		kitchenTickets,
@@ -175,6 +179,12 @@ describe('real backofficeNavbarGroups — visible leaves per role (regression gu
 		expect(visibleLeafLabels(ctx(sh('distribution_staff')))).toEqual(labelsFor());
 	});
 
+	it('donation_staff sees the stock and donation menus only, not distribution or kitchen requisitions (CR-227)', () => {
+		expect(visibleLeafLabels(ctx(sh('donation_staff')))).toEqual(
+			labelsFor('คลัง', 'บริจาค', 'คลังสินค้า')
+		);
+	});
+
 	it('kitchen_staff sees kitchen and kitchen requisitions, not the warehouse menus (#842)', () => {
 		expect(visibleLeafLabels(ctx(sh('kitchen_staff')))).toEqual(labelsFor(kitchenTickets, kitchen));
 	});
@@ -185,6 +195,18 @@ describe('real backofficeNavbarGroups — visible leaves per role (regression gu
 			expect(visibleLeafLabels(ctx(sh(cap)))).toEqual(labelsFor(warehouse, kitchenTickets));
 		}
 	);
+
+	it('puts the volunteer accounts page under the volunteer menu (CR-221 FR-5)', () => {
+		const group = backofficeNavbarGroups
+			.flatMap((g) => g.items)
+			.find((n) => n.label === 'จัดการอาสาสมัคร');
+		expect(group && isGroup(group)).toBe(true);
+		const children = group && isGroup(group) ? group.children : [];
+		expect(children.map((c) => [c.label, String(c.href)])).toEqual([
+			['งานและรายชื่ออาสาสมัคร', '/back-office/volunteers'],
+			['บัญชีจิตอาสา', '/back-office/volunteers/accounts']
+		]);
+	});
 
 	it('volunteer_coordinator sees volunteers only (#842)', () => {
 		expect(visibleLeafLabels(ctx(sh('volunteer_coordinator')))).toEqual(labelsFor(volunteers));

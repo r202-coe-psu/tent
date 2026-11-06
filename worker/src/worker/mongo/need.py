@@ -10,6 +10,13 @@ from worker.mongo.upsert import apply_document
 
 
 async def apply_need(action: str, payload: dict[str, Any] | None) -> None:
+    if action == "prune":
+        if payload and payload.get("shelter_code"):
+            await PublicNeed.find(
+                PublicNeed.shelter_code == payload["shelter_code"],
+                {"_id": {"$nin": list(payload.get("keep_ids") or [])}},
+            ).delete()
+        return
     await apply_document(PublicNeed, action, payload)
 
 

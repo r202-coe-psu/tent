@@ -1,15 +1,19 @@
 """Aggregate `evacuee` docs → occupancy total + demographic breakdown (EXT-005, ADR 0002 §2).
 
-Headcount source is `current_stay.status == 'active'` — the same physically-present
-definition CR-035 uses for `daily_calc.occupancy_snapshot` (arriving/pre_registered
-evacuees are not yet checked in, so they are not counted here either).
+Headcount source is `IN_SHELTER_STATUSES` (`active` + `room_confirmed`) — the same
+in-shelter definition the staff app uses (`frontend/.../shared/domain/in-shelter.ts`,
+#593), so partner numbers match the staff dashboard (decision sync 2026-11-02).
+`arriving` / `pre_registered` are not yet checked in and `temporary_leave` is away, so
+none of them count here.
 """
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from typing import Any, TypedDict
 
-ACTIVE_STATUS = "active"
+#: Physically in the shelter — mirrors the staff app's `IN_SHELTER_STATUSES`.
+IN_SHELTER_STATUSES = frozenset({"active", "room_confirmed"})
 CHILD_UNDER_5_MAX_AGE = 4
 ELDERLY_MIN_AGE = 60
 
@@ -19,6 +23,37 @@ ELDERLY_MIN_AGE = 60
 _PREGNANT_TAGS = {"pregnant"}
 _BEDRIDDEN_TAGS = {"bedridden"}
 _DISABLED_TAGS = {"disabled"}
+
+
+BIRTH_YEAR_ERA_OFFSET = 543  # ค.ศ. → พ.ศ.
+MIN_VALID_AGE = 0
+MAX_VALID_AGE = 130
+
+
+def resolve_age(doc: dict[str, Any]) -> float | None:
+    """Registration only ever stores `age` when staff type it in directly (CR-057) —
+    every evacuee otherwise carries `birth_year` (พ.ศ.), so that's the field to fall
+    back to rather than reporting every occupant as "unknown".
+
+    A staff typo (negative `age`, or a `birth_year` in the future / implausibly far
+    in the past) must not silently project as a valid bracket — reject out-of-range
+    values here instead of letting `compute_age_range` bucket them."""
+    age = doc.get("age")
+    if (
+        isinstance(age, (int, float))
+        and not isinstance(age, bool)
+        and MIN_VALID_AGE <= age <= MAX_VALID_AGE
+    ):
+        return age
+
+    birth_year = doc.get("birth_year")
+    if isinstance(birth_year, (int, float)) and not isinstance(birth_year, bool):
+        current_year_be = datetime.now(UTC).year + BIRTH_YEAR_ERA_OFFSET
+        calculated_age = current_year_be - birth_year
+        if MIN_VALID_AGE <= calculated_age <= MAX_VALID_AGE:
+            return calculated_age
+
+    return None
 
 
 class OccupancyBreakdownDict(TypedDict):
@@ -48,7 +83,7 @@ def _empty_breakdown() -> OccupancyBreakdownDict:
 def aggregate_occupancy(
     evacuee_docs: list[dict[str, Any]],
 ) -> tuple[int, OccupancyBreakdownDict]:
-    """Returns ``(occupancy_total, breakdown)`` for one shelter's active evacuees."""
+    """Returns ``(occupancy_total, breakdown)`` for one shelter's in-shelter evacuees."""
     breakdown = _empty_breakdown()
     total = 0
 
@@ -56,7 +91,7 @@ def aggregate_occupancy(
         if doc.get("type") != "evacuee":
             continue
         current_stay = doc.get("current_stay") or {}
-        if current_stay.get("status") != ACTIVE_STATUS:
+        if current_stay.get("status") not in IN_SHELTER_STATUSES:
             continue
 
         total += 1
@@ -71,8 +106,8 @@ def aggregate_occupancy(
             # Keeps male + female + gender_unspecified == occupancy_total.
             breakdown["gender_unspecified"] += 1
 
-        age = doc.get("age")
-        if isinstance(age, (int, float)):
+        age = resolve_age(doc)
+        if age is not None:
             if age <= CHILD_UNDER_5_MAX_AGE:
                 breakdown["child_under_5"] += 1
             if age >= ELDERLY_MIN_AGE:

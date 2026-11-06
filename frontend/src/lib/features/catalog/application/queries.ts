@@ -16,6 +16,7 @@ import { authStore } from '$lib/stores/auth.svelte';
 import {
 	isSystemAdmin,
 	isShelterManager,
+	isDonationStaff,
 	isWarehouseStaff,
 	shelterCodeFromRoles
 } from '$lib/auth/roles';
@@ -28,6 +29,7 @@ import type {
 	RecipeInput
 } from '../domain/catalog';
 import type { UnitOfMeasure, UnitOfMeasureInput } from '../domain/unit-of-measure';
+import { canWriteShelterRecipe } from '../domain/catalog-permissions';
 
 export const catalogKeys = {
 	all: ['catalog'] as const,
@@ -89,6 +91,14 @@ export const useItemCategory = (
 		enabled: !!id()
 	}));
 
+const UNAUTHORIZED_WRITE = 'Unauthorized: You do not have permission to write to this catalog.';
+
+function enforceRecipeWriteAccess(shelterCode?: string | null) {
+	if (!canWriteShelterRecipe(authStore.user?.roles ?? [], shelterCode)) {
+		throw new Error(UNAUTHORIZED_WRITE);
+	}
+}
+
 function enforceWriteAccess(shelterCode?: string | null) {
 	const roles = authStore.user?.roles ?? [];
 	if (isSystemAdmin(roles)) return;
@@ -96,13 +106,14 @@ function enforceWriteAccess(shelterCode?: string | null) {
 	if (shelterCode) {
 		const isManager = isShelterManager(roles);
 		const isWS = isWarehouseStaff(roles);
+		const isDON = isDonationStaff(roles);
 		const userShelterCode = shelterCodeFromRoles(roles);
-		if ((isManager || isWS) && userShelterCode === shelterCode) {
+		if ((isManager || isWS || isDON) && userShelterCode === shelterCode) {
 			return;
 		}
 	}
 
-	throw new Error('Unauthorized: You do not have permission to write to this catalog.');
+	throw new Error(UNAUTHORIZED_WRITE);
 }
 
 export const useCreateItemCategory = () => {
@@ -248,7 +259,7 @@ export const useCreateRecipe = () => {
 			ctx: AuthorContext;
 			shelterCode?: string;
 		}) => {
-			enforceWriteAccess(shelterCode);
+			enforceRecipeWriteAccess(shelterCode);
 			return catalogRepository().createRecipe(input, ctx, shelterCode);
 		},
 		onSuccess: () => {
@@ -261,7 +272,7 @@ export const useUpdateRecipe = () => {
 	const queryClient = useQueryClient();
 	return createMutation(() => ({
 		mutationFn: (recipe: Recipe) => {
-			enforceWriteAccess(recipe.shelter_code);
+			enforceRecipeWriteAccess(recipe.shelter_code);
 			return catalogRepository().updateRecipe(recipe);
 		},
 		onSuccess: () => {
@@ -314,7 +325,7 @@ export const useDeleteRecipe = () => {
 		mutationFn: async ({ id, shelterCode }: { id: string; shelterCode?: string | null }) => {
 			const recipe = await catalogRepository().getRecipe(id, shelterCode);
 			if (!recipe) throw new Error('Recipe not found');
-			enforceWriteAccess(recipe.shelter_code);
+			enforceRecipeWriteAccess(recipe.shelter_code);
 			return catalogRepository().deleteRecipe(id, shelterCode);
 		},
 		onSuccess: () => {

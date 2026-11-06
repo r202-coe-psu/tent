@@ -77,7 +77,7 @@ updated: 2026-10-25
 - **FR-17** — `in_shelter` = `active` + `room_confirmed`; การ์ด "อยู่ในศูนย์อพยพ" แสดง `in_shelter`
   (แคบกว่า CR-112 "Present" ที่รวม `temporary_leave` — สถานะนั้นมีการ์ด "ออกชั่วคราว" แยก)
 - **FR-18** — เพิ่มการ์ด "รายงานตัวแล้ว (รอคัดกรอง/จัดที่พัก)" แสดง `arriving`
-- **FR-19** — field `active` คงความหมายเดิม (`active` อย่างเดียว) — consumer อื่นที่ใช้ `active` ไม่เปลี่ยนใน CR นี้
+- **FR-19** — field `active` คงความหมายเดิม (`active` อย่างเดียว) — consumer อื่นที่ใช้ `active` ไม่เปลี่ยนใน CR นี้ (consumer เหล่านั้นย้ายไปใช้ยอดคนในศูนย์ตาม [CR-224](CR-224-in-shelter-headcount.md))
 
 ### ช่วงอายุ / ประเทศ — CouchDB views
 

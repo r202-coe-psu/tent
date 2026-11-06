@@ -7,6 +7,7 @@ import {
 	isKioskStaffOnly,
 	isShelterManager,
 	isSystemAdmin,
+	canAccessDonations,
 	canAccessEvacueeRegistration,
 	canAccessIncidents,
 	canAccessKitchen,
@@ -14,9 +15,11 @@ import {
 	canAccessTickets,
 	canAccessVolunteerBackoffice,
 	canAccessWarehouse,
+	canViewSupply,
 	shelterCodeFromRoles
 } from '$lib/auth/roles';
 import Users from '@lucide/svelte/icons/users';
+import KeyRound from '@lucide/svelte/icons/key-round';
 import HeartHandshake from '@lucide/svelte/icons/heart-handshake';
 import ClipboardList from '@lucide/svelte/icons/clipboard-list';
 import Package from '@lucide/svelte/icons/package';
@@ -98,9 +101,23 @@ export const backofficeNavbarGroups: BackofficeNavbarGroup[] = [
 			},
 			{
 				label: 'จัดการอาสาสมัคร',
-				href: resolve('/back-office/volunteers'),
+				href: null,
 				icon: HeartHandshake,
-				visibleTo: ({ roles, shelterCode }) => canAccessVolunteerBackoffice(roles, shelterCode)
+				children: [
+					{
+						label: 'งานและรายชื่ออาสาสมัคร',
+						href: resolve('/back-office/volunteers'),
+						icon: HeartHandshake,
+						visibleTo: ({ roles, shelterCode }) => canAccessVolunteerBackoffice(roles, shelterCode)
+					},
+					{
+						// CR-221 FR-5: same guard as the hub, so SA / SM / VC of the selected shelter.
+						label: 'บัญชีจิตอาสา',
+						href: resolve('/back-office/volunteers/accounts'),
+						icon: KeyRound,
+						visibleTo: ({ roles, shelterCode }) => canAccessVolunteerBackoffice(roles, shelterCode)
+					}
+				]
 			},
 			{
 				label: 'การส่งต่อผู้เข้าพัก',
@@ -116,7 +133,8 @@ export const backofficeNavbarGroups: BackofficeNavbarGroup[] = [
 			{
 				label: 'การประเมินความพร้อมศูนย์',
 				href: resolve('/back-office/shelters/readiness' as '/back-office/shelters'),
-				icon: ClipboardCheck
+				icon: ClipboardCheck,
+				visibleTo: ({ roles, shelterCode }) => canAccessManagerPages(roles, shelterCode)
 			},
 			{
 				label: 'การประเมินประจำวัน',
@@ -127,13 +145,13 @@ export const backofficeNavbarGroups: BackofficeNavbarGroup[] = [
 				label: 'คลัง',
 				href: resolve('/back-office/supply'),
 				icon: Package,
-				visibleTo: ({ roles, shelterCode }) => canAccessWarehouse(roles, shelterCode)
+				visibleTo: ({ roles, shelterCode }) => canViewSupply(roles, shelterCode)
 			},
 			{
 				label: 'บริจาค',
 				href: resolve('/back-office/stock-donations'),
 				icon: HandHeart,
-				visibleTo: ({ roles, shelterCode }) => canAccessWarehouse(roles, shelterCode)
+				visibleTo: ({ roles, shelterCode }) => canAccessDonations(roles, shelterCode)
 			},
 			{
 				label: 'จัดการคำร้องเบิกจ่าย',
@@ -226,7 +244,7 @@ export const backofficeNavbarGroups: BackofficeNavbarGroup[] = [
 						label: 'คลังสินค้า',
 						href: resolve('/back-office/supply?tab=catalog' as '/back-office/supply'),
 						icon: Warehouse,
-						visibleTo: ({ roles, shelterCode }) => canAccessWarehouse(roles, shelterCode)
+						visibleTo: ({ roles, shelterCode }) => canViewSupply(roles, shelterCode)
 					},
 					{
 						label: 'พารามิเตอร์',

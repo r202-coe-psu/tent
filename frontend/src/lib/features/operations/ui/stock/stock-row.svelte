@@ -12,6 +12,7 @@
 		readonly = false,
 		offline = false,
 		canDistribute = true,
+		canChange = true,
 		onopen,
 		onreceive,
 		ondistribute
@@ -23,6 +24,8 @@
 		offline?: boolean;
 		/** False when user lacks warehouse_staff capability in the active shelter. */
 		canDistribute?: boolean;
+		/** False for a read-only viewer (donation_staff, CR-227): the row has no movement buttons. */
+		canChange?: boolean;
 		onopen: (row: StockDisplayRow) => void;
 		onreceive: (row: StockDisplayRow) => void;
 		ondistribute: (row: StockDisplayRow) => void;
@@ -109,6 +112,7 @@
 			disabled={readonly || offline}
 			disabledReason={offline ? OFFLINE_HINT : undefined}
 			distributeDisabled={!canDistribute}
+			{canChange}
 			onreceive={() => onreceive(row)}
 			ondistribute={() => ondistribute(row)}
 		/>

@@ -13,6 +13,9 @@ import {
 import { ulid } from '$lib/db/ulid';
 import { isValidThaiNationalId } from '$lib/utils/thai-id';
 import { ConflictError } from '$lib/utils/errors';
+// Deep import on purpose: the `$lib/features/shared` barrel re-exports `.svelte` files, which
+// plain `tsx` cannot load — and `scripts/migrate-closed-shelter-checkout.ts` imports this domain.
+import { createAuditEntry, type AuditEntry } from '$lib/features/shared/domain/audit';
 import {
 	EVACUEE_SCHEMA_V,
 	type EvacueeConsent,
@@ -226,8 +229,33 @@ export const MANUAL_HOUSEHOLD_STATUS_TRANSITIONS: Readonly<
 	merged: []
 };
 
+/**
+ * `shelter_closed` (CR-219 FR-1) is written only by the shelter-close flow — a manual checkout
+ * destination picker must not offer it.
+ */
+export const checkoutDestinationTypeSchema = z.enum([
+	'returned_home',
+	'transferred_shelter',
+	'referred_facility',
+	'other',
+	'shelter_closed'
+]);
+export type CheckoutDestinationType = z.infer<typeof checkoutDestinationTypeSchema>;
+
+/** Movement `reason` / audit `reason` / `checkout_destination.type` of the shelter-close flow (CR-219 D-4). */
+export const SHELTER_CLOSED_REASON = 'shelter_closed';
+
+/** Display copy for the `shelter_closed` reason (CR-219 FR-21). */
+export const SHELTER_CLOSED_REASON_LABEL = 'ศูนย์ปิด';
+
+/** Display a movement reason: the shelter-close code maps to its Thai label, free text passes through. */
+export function movementReasonLabel(reason: string | null | undefined): string {
+	if (!reason) return '';
+	return reason === SHELTER_CLOSED_REASON ? SHELTER_CLOSED_REASON_LABEL : reason;
+}
+
 export const checkoutDestinationSchema = z.object({
-	type: z.enum(['returned_home', 'transferred_shelter', 'referred_facility', 'other']),
+	type: checkoutDestinationTypeSchema,
 	destination_name: z.string().trim().optional(),
 	notes: z.string().trim().optional()
 });
@@ -543,7 +571,7 @@ export function assertEvacueeHouseholdAssignment(
 		const targetHousehold = households.find((household) => household._id === targetHouseholdId);
 		if (!targetHousehold) throw new Error('ไม่พบครัวเรือนปลายทาง');
 		if (!isActiveHouseholdStatus(targetHousehold.status)) {
-			throw new Error('ไม่สามารถเพิ่มสมาชิกเข้าครัวเรือนที่ยกเลิกหรือเช็คเอาท์แล้ว');
+			throw new Error('ไม่สามารถเพิ่มสมาชิกเข้าครัวเรือนที่ยกเลิกหรือเช็คเอาต์แล้ว');
 		}
 	}
 
@@ -601,7 +629,7 @@ export function assertCheckoutDestination(
 	destination: CheckoutDestination | null | undefined
 ): void {
 	if (!destination) {
-		throw new Error('ต้องระบุปลายทางเมื่อเช็คเอาท์ครัวเรือน');
+		throw new Error('ต้องระบุปลายทางเมื่อเช็คเอาต์ครัวเรือน');
 	}
 	if (
 		(destination.type === 'transferred_shelter' || destination.type === 'referred_facility') &&
@@ -1879,6 +1907,56 @@ export const CHECK_OUT_ELIGIBLE_STATUSES = [
 	'room_confirmed'
 ] as const satisfies readonly StayStatus[];
 
+/**
+ * Stays the shelter-close flow checks out (CR-219 FR-2). Wider than
+ * {@link CHECK_OUT_ELIGIBLE_STATUSES}: `temporary_leave` / `arriving` / `kiosk_registered`
+ * are allowed only for the system close (FR-3).
+ */
+export const SHELTER_CLOSE_CHECKOUT_STATUSES = [
+	'active',
+	'room_confirmed',
+	'temporary_leave',
+	'arriving',
+	'kiosk_registered'
+] as const satisfies readonly StayStatus[];
+
+/** Stays the shelter-close flow cancels with hold-cancel semantics (CR-219 FR-2, FR-6). */
+export const SHELTER_CLOSE_CANCEL_STATUSES = [
+	'pre_registered'
+] as const satisfies readonly StayStatus[];
+
+/** Every stay a shelter close changes; anything else is left alone (CR-219 FR-12). */
+export const SHELTER_CLOSE_AFFECTED_STATUSES = [
+	...SHELTER_CLOSE_CHECKOUT_STATUSES,
+	...SHELTER_CLOSE_CANCEL_STATUSES
+] as const satisfies readonly StayStatus[];
+
+export function isShelterCloseCheckoutStatus(status: StayStatus): boolean {
+	return (SHELTER_CLOSE_CHECKOUT_STATUSES as readonly StayStatus[]).includes(status);
+}
+
+export function isShelterCloseCancelStatus(status: StayStatus): boolean {
+	return (SHELTER_CLOSE_CANCEL_STATUSES as readonly StayStatus[]).includes(status);
+}
+
+export function isShelterCloseAffectedStatus(status: StayStatus): boolean {
+	return isShelterCloseCheckoutStatus(status) || isShelterCloseCancelStatus(status);
+}
+
+/** CR-219 FR-3: the system-close check-out guard — never used by staff check-out. */
+export function assertShelterCloseCheckoutAllowed(
+	evacuee: Pick<Evacuee, 'current_stay'>,
+	reason: string | null | undefined
+): void {
+	if (reason !== SHELTER_CLOSED_REASON) {
+		throw new Error('การเช็คเอาต์จากการปิดศูนย์ต้องใช้เหตุผล shelter_closed');
+	}
+	const status = evacuee.current_stay.status;
+	if (!isShelterCloseCheckoutStatus(status)) {
+		throw new Error(`ไม่สามารถเช็คเอาต์จากการปิดศูนย์จากสถานะ ${status} ได้`);
+	}
+}
+
 /** Stay statuses that may receive a `zone_change` (rezone while staying). */
 export const ZONE_CHANGE_ELIGIBLE_STATUSES = [
 	'active',
@@ -1983,9 +2061,17 @@ export function listPendingZoneArrivalConfirmations(evacuees: readonly Evacuee[]
 export function assertMovementAllowed(
 	evacuee: Evacuee,
 	action: MovementAction,
-	opts: { reason?: string | null; notes?: string | null } = {}
+	opts: { reason?: string | null; notes?: string | null; systemClose?: boolean } = {}
 ): void {
 	const status = evacuee.current_stay.status;
+	if (opts.systemClose) {
+		// CR-219 FR-3: only the shelter-close flow passes `systemClose`, and only for check-out.
+		if (action !== 'check_out') {
+			throw new Error('การปิดศูนย์ใช้ได้กับการเช็คเอาต์เท่านั้น');
+		}
+		assertShelterCloseCheckoutAllowed(evacuee, opts.reason);
+		return;
+	}
 	if (status === 'deceased' && action !== 'mark_deceased') {
 		throw new Error('สถานะเสียชีวิตเป็นสถานะสุดท้าย — ไม่สามารถเปลี่ยนสถานะได้อีก');
 	}
@@ -2005,12 +2091,12 @@ export function assertMovementAllowed(
 		throw new Error('การกลับจากลาชั่วคราวต้องเช็คอินใหม่ (ระบุโซน) — ไม่ใช้การกลับจากลาแบบเดิม');
 	}
 	if (action === 'check_out' && !canCheckOutEvacuee(evacuee)) {
-		throw new Error(`ไม่สามารถเช็คเอาท์จากสถานะ ${status} ได้`);
+		throw new Error(`ไม่สามารถเช็คเอาต์จากสถานะ ${status} ได้`);
 	}
 	if (action === 'check_out') {
 		const remark = (opts.reason ?? opts.notes ?? '').trim();
 		if (!remark) {
-			throw new Error('การเช็คเอาท์ต้องระบุเหตุผลหรือหมายเหตุ');
+			throw new Error('การเช็คเอาต์ต้องระบุเหตุผลหรือหมายเหตุ');
 		}
 	}
 	if (action === 'zone_change' && !canChangeEvacueeZone(evacuee)) {
@@ -2059,10 +2145,15 @@ export function canCancelHouseholdPreRegistration(household: Household): boolean
  * authoritative history is the append-only movement stream; this just keeps the
  * UI snapshot in step (movement events win on conflict — data-model.md §5).
  */
-export function applyMovementToStay(evacuee: Evacuee, movement: Movement): Evacuee {
+export function applyMovementToStay(
+	evacuee: Evacuee,
+	movement: Movement,
+	opts: { systemClose?: boolean } = {}
+): Evacuee {
 	assertMovementAllowed(evacuee, movement.action, {
 		reason: movement.reason,
-		notes: undefined
+		notes: undefined,
+		systemClose: opts.systemClose
 	});
 	if (movement.action === 'zone_change') {
 		const nextZone = movement.zone?.trim() || null;
@@ -2168,7 +2259,7 @@ export function resolveStatusChangeAction(
 export function normalizeCheckoutRemark(reason: string | null | undefined): string {
 	const remark = (reason ?? '').trim();
 	if (!remark) {
-		throw new Error('การเช็คเอาท์ต้องระบุเหตุผลหรือหมายเหตุ');
+		throw new Error('การเช็คเอาต์ต้องระบุเหตุผลหรือหมายเหตุ');
 	}
 	return remark;
 }
@@ -2184,6 +2275,86 @@ export function statusChangeHandlerKind(action: MovementAction): StatusChangeHan
 	if (action === 'check_out') return 'check_out';
 	if (action === 'confirm_room') return 'confirm_room';
 	return 'record';
+}
+
+// ---------------------------------------------------------------- shelter close (CR-219)
+
+/**
+ * CR-219 FR-3/FR-4: check one evacuee out because the shelter is closing. Returns the
+ * `check_out` movement (`reason = shelter_closed`, `zone = null`) and the evacuee with the
+ * movement applied through {@link applyMovementToStay} — never a direct status write.
+ */
+export function buildShelterCloseCheckout(
+	evacuee: Evacuee,
+	ctx: AuthorContext,
+	occurredAt: Timestamp = now()
+): { movement: Movement; evacuee: Evacuee } {
+	const movement = createMovement(
+		{
+			evacuee_id: evacuee._id,
+			action: 'check_out',
+			zone: null,
+			reason: SHELTER_CLOSED_REASON,
+			occurred_at: occurredAt
+		},
+		ctx
+	);
+	return { movement, evacuee: applyMovementToStay(evacuee, movement, { systemClose: true }) };
+}
+
+/**
+ * CR-219 FR-6: cancel a `pre_registered` stay with hold-cancel semantics
+ * (`cancelPreRegistration`) — `status = cancelled`, `since = now`, no movement.
+ */
+export function buildShelterCloseCancel(evacuee: Evacuee, since: Timestamp = now()): Evacuee {
+	if (!isShelterCloseCancelStatus(evacuee.current_stay.status)) {
+		throw new Error(`ไม่สามารถยกเลิกจากการปิดศูนย์จากสถานะ ${evacuee.current_stay.status} ได้`);
+	}
+	return {
+		...evacuee,
+		updated_at: now(),
+		current_stay: { ...evacuee.current_stay, status: 'cancelled', since }
+	};
+}
+
+/**
+ * CR-219 FR-5/FR-6b: re-derive a household after its members were closed out. A household
+ * that becomes `checked_out` with no destination gets `{ type: 'shelter_closed' }`; an
+ * existing destination is kept. Returns `null` when nothing changes.
+ */
+export function deriveShelterCloseHousehold<
+	H extends Pick<Household, 'status' | 'checkout_destination' | 'updated_at'>
+>(household: H, memberStayStatuses: readonly StayStatus[]): H | null {
+	const status = deriveHouseholdStatus(memberStayStatuses);
+	const destination =
+		status === 'checked_out' && !household.checkout_destination
+			? { type: 'shelter_closed' as const }
+			: household.checkout_destination;
+	if (status === household.status && destination === household.checkout_destination) return null;
+	return { ...household, status, checkout_destination: destination, updated_at: now() };
+}
+
+/** CR-219 FR-6a: one audit per household whose pre-registered members the close cancelled. */
+export function buildShelterCloseCancelAudit(
+	householdId: string,
+	evacueeIds: readonly string[],
+	ctx: AuthorContext,
+	context: Record<string, unknown> = {}
+): AuditEntry {
+	return createAuditEntry(
+		{
+			action: 'other',
+			target_type: 'household',
+			target_id: householdId,
+			reason: SHELTER_CLOSED_REASON,
+			context: {
+				cancelled_member_count: evacueeIds.length,
+				evacuee_ids: [...evacueeIds],
+				...context
+			}
+		},
+		ctx
+	);
 }
 
 // ---------------------------------------------------------------- display helpers
