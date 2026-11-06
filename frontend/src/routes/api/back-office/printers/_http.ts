@@ -62,7 +62,7 @@ export function printerAdminError(e: unknown): Response {
 	if (e instanceof PrinterNotFoundError) return envelope(404, 'NOT_FOUND', e.message);
 	if (e instanceof PrintDeviceNotFoundError) return envelope(404, 'NOT_FOUND', e.message);
 	if (e instanceof PrintDeviceConflictError) return envelope(409, 'CONFLICT', e.message);
-	if (e instanceof PrintShelterClosedError) return envelope(409, 'SHELTER_CLOSED', e.message);
+	if (e instanceof PrintShelterClosedError) return envelope(422, 'SHELTER_CLOSED', e.message);
 	if (e instanceof PrintDependencyError || isDependencyUnreachable(e)) {
 		// Details (env var names, hosts) stay in the server log, never in the staff-visible message.
 		console.error('[printing] dependency unavailable:', e instanceof Error ? e.message : e);

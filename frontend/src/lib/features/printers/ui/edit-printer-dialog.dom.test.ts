@@ -65,7 +65,7 @@ afterEach(async () => {
 
 describe('EditPrinterDialog', () => {
 	it('tells the shelter is closed when reactivating is refused', async () => {
-		updateMutateAsync.mockRejectedValue(new PrintApiError('closed', 409, 'SHELTER_CLOSED'));
+		updateMutateAsync.mockRejectedValue(new PrintApiError('closed', 422, 'SHELTER_CLOSED'));
 		await open(printer({ status: 'inactive' }));
 
 		document.body.querySelector<HTMLElement>('[role="switch"]')?.click();
@@ -79,7 +79,7 @@ describe('EditPrinterDialog', () => {
 			expect.objectContaining({ patch: { status: 'active' } })
 		);
 		expect(toast.error).toHaveBeenCalledWith(
-			'ศูนย์นี้ปิดหรือถูกยกเลิกแล้ว จึงลงทะเบียนหรือเปิดใช้เครื่องพิมพ์ไม่ได้'
+			'ไม่พบศูนย์นี้ หรือศูนย์ปิด/ถูกยกเลิกแล้ว จึงลงทะเบียนหรือเปิดใช้เครื่องพิมพ์ไม่ได้'
 		);
 	});
 

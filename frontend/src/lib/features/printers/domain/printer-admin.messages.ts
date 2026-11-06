@@ -19,6 +19,9 @@ export function printerCreateIssueMessage(issue: PrinterCreateIssue): string {
 	}
 }
 
-/** BFF `SHELTER_CLOSED` (O-11): a closed or cancelled shelter gets no new or reactivated printer. */
+/**
+ * BFF `SHELTER_CLOSED` (O-11, HTTP 422): a closed, cancelled or unregistered shelter gets no new or
+ * reactivated printer. The registry check cannot tell "missing" from "closed", so the copy covers both.
+ */
 export const SHELTER_CLOSED_MESSAGE =
-	'ศูนย์นี้ปิดหรือถูกยกเลิกแล้ว จึงลงทะเบียนหรือเปิดใช้เครื่องพิมพ์ไม่ได้';
+	'ไม่พบศูนย์นี้ หรือศูนย์ปิด/ถูกยกเลิกแล้ว จึงลงทะเบียนหรือเปิดใช้เครื่องพิมพ์ไม่ได้';

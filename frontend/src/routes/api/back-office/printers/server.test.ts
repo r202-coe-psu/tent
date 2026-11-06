@@ -102,12 +102,12 @@ describe('POST /api/back-office/printers', () => {
 		expect(order).toEqual(['ensure:SH001', 'create']);
 	});
 
-	it('answers 409 SHELTER_CLOSED and provisions nothing for a closed shelter (O-11)', async () => {
+	it('answers 422 SHELTER_CLOSED and provisions nothing for a closed shelter (O-11)', async () => {
 		vi.mocked(isShelterOpenForPrinting).mockResolvedValueOnce(false);
 
 		const response = await post(input);
 
-		expect(response.status).toBe(409);
+		expect(response.status).toBe(422);
 		expect((await response.json()).error.code).toBe('SHELTER_CLOSED');
 		expect(mockEnsureDb).not.toHaveBeenCalled();
 		expect(mockCreate).not.toHaveBeenCalled();

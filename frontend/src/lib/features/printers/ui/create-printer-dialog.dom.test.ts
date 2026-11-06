@@ -74,13 +74,13 @@ describe('CreatePrinterDialog secret handling', () => {
 
 describe('CreatePrinterDialog validation copy', () => {
 	it('tells the shelter is closed instead of calling it a taken Device ID', async () => {
-		mutateAsync.mockRejectedValue(new PrintApiError('closed', 409, 'SHELTER_CLOSED'));
+		mutateAsync.mockRejectedValue(new PrintApiError('closed', 422, 'SHELTER_CLOSED'));
 
 		submit().click();
 		await settle();
 
 		expect(toast.error).toHaveBeenCalledWith(
-			'ศูนย์นี้ปิดหรือถูกยกเลิกแล้ว จึงลงทะเบียนหรือเปิดใช้เครื่องพิมพ์ไม่ได้'
+			'ไม่พบศูนย์นี้ หรือศูนย์ปิด/ถูกยกเลิกแล้ว จึงลงทะเบียนหรือเปิดใช้เครื่องพิมพ์ไม่ได้'
 		);
 	});
 

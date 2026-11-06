@@ -119,13 +119,13 @@ describe('PATCH /api/back-office/printers/[id]', () => {
 		expect(reprovisionShelterPrintingDb).toHaveBeenCalledWith('SH001');
 	});
 
-	it('answers 409 SHELTER_CLOSED and keeps the printer inactive when its shelter is closed (O-11)', async () => {
+	it('answers 422 SHELTER_CLOSED and keeps the printer inactive when its shelter is closed (O-11)', async () => {
 		mockGet.mockResolvedValue({ ...device, status: 'inactive' });
 		vi.mocked(isShelterOpenForPrinting).mockResolvedValueOnce(false);
 
 		const response = await patch('printer-sh001-reg1', { status: 'active' });
 
-		expect(response.status).toBe(409);
+		expect(response.status).toBe(422);
 		expect((await response.json()).error.code).toBe('SHELTER_CLOSED');
 		expect(reprovisionShelterPrintingDb).not.toHaveBeenCalled();
 		expect(mockUpdate).not.toHaveBeenCalled();

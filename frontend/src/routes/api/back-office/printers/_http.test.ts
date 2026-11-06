@@ -52,10 +52,10 @@ describe('printerAdminError: dependency failures (FR-25, FR-27)', () => {
 });
 
 describe('printerAdminError: closed shelter (O-11)', () => {
-	it('answers 409 SHELTER_CLOSED', async () => {
+	it('answers 422 SHELTER_CLOSED', async () => {
 		const response = printerAdminError(new PrintShelterClosedError());
 
-		expect(response.status).toBe(409);
+		expect(response.status).toBe(422);
 		expect((await response.json()).error.code).toBe('SHELTER_CLOSED');
 	});
 });
