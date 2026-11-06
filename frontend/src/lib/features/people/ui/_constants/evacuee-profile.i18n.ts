@@ -128,6 +128,152 @@ const th = {
 		relation: 'ความสัมพันธ์:',
 		noContactName: 'ไม่ระบุบุคคล',
 		noPhone: 'ไม่ระบุ'
+	},
+	zoneCard: {
+		title: 'พิกัดโซนและศูนย์พักพิง',
+		editAria: 'แก้ไขโซนพักอาศัย',
+		shelter: 'ศูนย์อพยพ:',
+		livingZone: 'โซนพักอาศัย:',
+		zone: (zone: string) => `โซน ${zone}`,
+		bedSpot: 'หมายเลขเตียง/จุดพัก:'
+	},
+	mobileDock: {
+		ariaLabel: 'การดำเนินการด่วน',
+		changeZone: 'ย้ายโซน',
+		actions: 'การดำเนินการ'
+	},
+	identityRail: {
+		editPersonalAria: 'แก้ไขข้อมูลส่วนบุคคล',
+		zone: (zone: string) => `โซน ${zone}`,
+		healthWatch: 'เฝ้าระวังสุขภาพ',
+		ageYears: (years: number) => `อายุ ${years} ปี`,
+		noNationality: 'ไม่ระบุสัญชาติ',
+		phone: (value: string) => `โทร: ${value}`,
+		noPhone: 'ไม่มีเบอร์',
+		emergency: 'ฉุกเฉิน:',
+		unspecified: 'ไม่ระบุ',
+		editEmergencyAria: 'แก้ไขข้อมูลติดต่อฉุกเฉิน',
+		changeZone: 'ย้ายโซน',
+		changeStatus: 'เปลี่ยนสถานะ',
+		printQr: 'พิมพ์ QR',
+		printSlip: 'พิมพ์ใบส่งตัว',
+		viewFull: 'ดูข้อมูลเต็ม'
+	},
+	actionsSheet: {
+		title: 'การดำเนินการ',
+		description: (name: string) => `เมนูด่วนสำหรับโปรไฟล์ผู้พักพิง ${name}`,
+		zone: (zone: string) => `โซน ${zone}`,
+		healthWatch: 'เฝ้าระวังสุขภาพ',
+		operations: 'ปฏิบัติการ',
+		changeZone: 'ย้ายโซน',
+		changeStatus: 'เปลี่ยนสถานะ',
+		printQr: 'พิมพ์ QR',
+		printSlip: 'พิมพ์ใบส่งตัว',
+		viewFull: 'ดูข้อมูลเต็ม'
+	},
+	headerCard: {
+		illness: 'มีอาการป่วย/เฝ้าระวัง',
+		vulnerable: 'กลุ่มเปราะบาง',
+		personalInfo: 'ข้อมูลส่วนบุคคล',
+		changeZone: 'ย้ายโซน (Change Zone)',
+		printQr: 'พิมพ์ QR',
+		viewFullEdit: 'ดูข้อมูลเต็ม / แก้ไข'
+	},
+	privacyCard: {
+		title: 'ความเป็นส่วนตัว',
+		searchLabel: 'แสดงในระบบค้นหาญาติ',
+		visibleHint: 'ญาติค้นหาชื่อและศูนย์ที่พักได้',
+		hiddenHint: 'ซ่อนจากระบบค้นหาญาติ',
+		noCurrentUser: 'ไม่พบผู้ใช้งานปัจจุบัน',
+		shownToast: 'เปิดการแสดงในระบบค้นหาญาติแล้ว',
+		hiddenToast: 'ซ่อนจากระบบค้นหาญาติแล้ว',
+		saveFailed: 'บันทึกไม่สำเร็จ',
+		showTitle: 'แสดงในระบบค้นหาญาติ?',
+		hideTitle: 'ซ่อนจากระบบค้นหาญาติ?',
+		confirmDescription: 'ยืนยันว่าเจ้าตัวเป็นผู้ขอเปลี่ยนการตั้งค่านี้ด้วยตนเอง',
+		consentChange: (mode: string) =>
+			`เมื่อยืนยัน การลงทะเบียนของผู้นี้จะเปลี่ยนเป็น「${mode}」 โดยยังไม่เก็บข้อมูลสุขภาพ`,
+		cancel: 'ยกเลิก',
+		saving: 'กำลังบันทึก…',
+		acknowledgeAndConfirm: 'เจ้าตัวรับทราบและยืนยัน',
+		confirm: 'ยืนยัน'
+	},
+	view: {
+		loading: 'กำลังโหลดข้อมูลผู้พักพิง...',
+		notFound: 'ไม่พบข้อมูลผู้พักพิงในระบบ',
+		backHome: 'กลับหน้าหลัก',
+		unspecified: 'ไม่ระบุ',
+		defaultShelterName: 'ศูนย์พักพิงชั่วคราว',
+		status: {
+			active: { label: 'เช็คอิน / พักพิงในศูนย์ (Check-in)', shortLabel: 'เช็คอิน' },
+			room_confirmed: {
+				label: 'ยืนยันถึงโซน (Zone Arrival Confirmed)',
+				shortLabel: 'ยืนยันถึงโซน'
+			},
+			pre_registered: {
+				label: 'ลงทะเบียนล่วงหน้า (Pre-registered)',
+				shortLabel: 'ลงทะเบียนล่วงหน้า'
+			},
+			kiosk_registered: {
+				label: 'ลงทะเบียนที่ตู้ (รอยืนยัน)',
+				shortLabel: 'ที่ตู้ (รอยืนยัน)'
+			},
+			arriving: {
+				label: 'อยู่ระหว่างรอเข้าพัก (Arriving / Waiting)',
+				shortLabel: 'รอเข้าพัก'
+			},
+			temporary_leave: { label: 'ออกชั่วคราว (Temporary Leave)', shortLabel: 'ออกชั่วคราว' },
+			transferred: { label: 'ส่งต่อ / ย้ายศูนย์ (Transferred)', shortLabel: 'ย้ายศูนย์' },
+			checked_out: { label: 'เช็คเอาต์ (Checked-out)', shortLabel: 'เช็คเอาต์' },
+			deceased: { label: 'เสียชีวิต (Deceased)', shortLabel: 'เสียชีวิต' },
+			cancelled: { label: 'ยกเลิกการลงทะเบียนล่วงหน้า', shortLabel: 'ยกเลิก' }
+		} as Record<string, { label: string; shortLabel: string }>,
+		movement: {
+			check_in: 'เช็คอิน (Check-in)',
+			check_out: 'ย้ายออก/กลับภูมิลำเนา (Checked-out)',
+			confirm_room: 'ยืนยันถึงโซน (Zone Arrival Confirmation)',
+			transfer_in: 'ย้ายเข้า (Transfer in)',
+			transfer_out: 'ย้ายออก (Transfer out)',
+			leave_temporary: 'ออกชั่วคราว (Temporary leave)',
+			return_from_leave: 'กลับจากออกชั่วคราว (Return from leave)',
+			mark_deceased: 'เสียชีวิต (Deceased)',
+			zone_change: 'ย้ายโซน (Zone change)'
+		} as Record<string, string>,
+		auditLog: 'บันทึกการตรวจสอบ (Audit Log)',
+		updated: 'แก้ไขข้อมูลล่าสุด (Updated)',
+		registered: 'ลงทะเบียนข้อมูล (Registered)',
+		registeredBy: (by: string) => `โดย ${by}`,
+		movementZone: (zone: string) => `โซน ${zone}`,
+		loadMore: (remaining: number) => `โหลดเพิ่มเติม (${remaining} รายการ)`,
+		noCurrentUser: 'ไม่พบผู้ใช้งานปัจจุบัน กรุณารอการยืนยันตัวตนแล้วลองใหม่',
+		zoneMoved: (zone: string) => `ย้ายโซนเป็น ${zone} เรียบร้อย`,
+		zoneMoveFailed: (detail: string) => `ไม่สามารถย้ายโซนได้: ${detail}`,
+		checkInNeedsZone: 'การเช็คอินต้องระบุโซน',
+		leaveNeedsReason: 'การออกชั่วคราวต้องระบุเหตุผล',
+		statusUpdated: 'อัปเดตสถานะการพักพิงเรียบร้อย',
+		statusUpdateFailed: (detail: string) => `ไม่สามารถอัปเดตสถานะได้: ${detail}`,
+		noHouseholdForAddress: 'ไม่พบข้อมูลครัวเรือนสำหรับบันทึกที่อยู่',
+		addressSaved: 'แก้ไขที่อยู่ครัวเรือนสำเร็จ',
+		addressSaveFailed: (detail: string) => `ไม่สามารถบันทึกที่อยู่ได้: ${detail}`,
+		noHouseholdForAssets: 'ไม่พบข้อมูลครัวเรือนสำหรับบันทึกทรัพย์สิน',
+		assetsSaved: 'แก้ไขข้อมูลทรัพย์สินและสัตว์เลี้ยงสำเร็จ',
+		assetsSaveFailed: (detail: string) => `ไม่สามารถบันทึกข้อมูลได้: ${detail}`,
+		personalSaved: 'บันทึกข้อมูลส่วนบุคคลเรียบร้อย',
+		personalSaveFailed: (detail: string) => `ไม่สามารถบันทึกข้อมูลส่วนบุคคลได้: ${detail}`,
+		emergencySaved: 'บันทึกข้อมูลติดต่อฉุกเฉินเรียบร้อย',
+		emergencySaveFailed: (detail: string) => `ไม่สามารถบันทึกข้อมูลติดต่อฉุกเฉินได้: ${detail}`,
+		healthSaved: 'บันทึกข้อมูลสุขภาพเรียบร้อย',
+		healthPartiallySaved: (detail: string) =>
+			`บันทึกข้อมูลสุขภาพได้บางส่วน กรุณารีเฟรชและตรวจสอบอีกครั้ง: ${detail}`,
+		healthRolledBack: (detail: string) =>
+			`ไม่สามารถบันทึกข้อมูลสุขภาพได้ ระบบคืนค่าการเปลี่ยนแปลงแล้ว: ${detail}`,
+		householdSaved: 'บันทึกสังกัดครัวเรือนเรียบร้อย',
+		householdSaveFailed: (detail: string) => `ไม่สามารถบันทึกสังกัดครัวเรือนได้: ${detail}`
+	},
+	page: {
+		documentTitle: 'ข้อมูลผู้พักพิง · SmartShelter',
+		back: 'ย้อนกลับ',
+		heading: 'ข้อมูลผู้พักพิง'
 	}
 };
 
@@ -261,6 +407,149 @@ const en: typeof th = {
 		relation: 'Relationship:',
 		noContactName: 'No contact person specified',
 		noPhone: 'Not specified'
+	},
+	zoneCard: {
+		title: 'Zone and shelter location',
+		editAria: 'Edit living zone',
+		shelter: 'Shelter:',
+		livingZone: 'Living zone:',
+		zone: (zone: string) => `Zone ${zone}`,
+		bedSpot: 'Bed / spot number:'
+	},
+	mobileDock: {
+		ariaLabel: 'Quick actions',
+		changeZone: 'Change zone',
+		actions: 'Actions'
+	},
+	identityRail: {
+		editPersonalAria: 'Edit personal information',
+		zone: (zone: string) => `Zone ${zone}`,
+		healthWatch: 'Health watch',
+		ageYears: (years: number) => `Age ${years} yrs`,
+		noNationality: 'Nationality not specified',
+		phone: (value: string) => `Phone: ${value}`,
+		noPhone: 'No phone',
+		emergency: 'Emergency:',
+		unspecified: 'Not specified',
+		editEmergencyAria: 'Edit emergency contact',
+		changeZone: 'Change zone',
+		changeStatus: 'Change status',
+		printQr: 'Print QR',
+		printSlip: 'Print referral slip',
+		viewFull: 'View full record'
+	},
+	actionsSheet: {
+		title: 'Actions',
+		description: (name: string) => `Quick menu for evacuee profile ${name}`,
+		zone: (zone: string) => `Zone ${zone}`,
+		healthWatch: 'Health watch',
+		operations: 'Operations',
+		changeZone: 'Change zone',
+		changeStatus: 'Change status',
+		printQr: 'Print QR',
+		printSlip: 'Print referral slip',
+		viewFull: 'View full record'
+	},
+	headerCard: {
+		illness: 'Illness / health watch',
+		vulnerable: 'Vulnerable group',
+		personalInfo: 'Personal information',
+		changeZone: 'Change zone',
+		printQr: 'Print QR',
+		viewFullEdit: 'View full record / edit'
+	},
+	privacyCard: {
+		title: 'Privacy',
+		searchLabel: 'Show in relative search',
+		visibleHint: 'Relatives can search by name and shelter',
+		hiddenHint: 'Hidden from relative search',
+		noCurrentUser: 'Current user not found',
+		shownToast: 'Now shown in relative search',
+		hiddenToast: 'Now hidden from relative search',
+		saveFailed: 'Could not save',
+		showTitle: 'Show in relative search?',
+		hideTitle: 'Hide from relative search?',
+		confirmDescription: 'Confirm that the person asked to change this setting themselves',
+		consentChange: (mode: string) =>
+			`On confirmation, this person's registration will change to "${mode}" without collecting health data`,
+		cancel: 'Cancel',
+		saving: 'Saving…',
+		acknowledgeAndConfirm: 'The person acknowledges and confirms',
+		confirm: 'Confirm'
+	},
+	view: {
+		loading: 'Loading evacuee information...',
+		notFound: 'Evacuee not found in the system',
+		backHome: 'Back to home',
+		unspecified: 'Not specified',
+		defaultShelterName: 'Temporary shelter',
+		status: {
+			active: { label: 'Checked in / staying at the shelter', shortLabel: 'Checked in' },
+			room_confirmed: { label: 'Zone arrival confirmed', shortLabel: 'Zone confirmed' },
+			pre_registered: { label: 'Pre-registered', shortLabel: 'Pre-registered' },
+			kiosk_registered: {
+				label: 'Registered at kiosk (awaiting confirmation)',
+				shortLabel: 'Kiosk (awaiting confirmation)'
+			},
+			arriving: {
+				label: 'Awaiting admission (arriving / waiting)',
+				shortLabel: 'Awaiting admission'
+			},
+			temporary_leave: { label: 'Temporary leave', shortLabel: 'Temporary leave' },
+			transferred: {
+				label: 'Referred / transferred to another shelter',
+				shortLabel: 'Transferred'
+			},
+			checked_out: { label: 'Checked out', shortLabel: 'Checked out' },
+			deceased: { label: 'Deceased', shortLabel: 'Deceased' },
+			cancelled: { label: 'Pre-registration cancelled', shortLabel: 'Cancelled' }
+		},
+		movement: {
+			check_in: 'Check-in',
+			check_out: 'Moved out / returned home',
+			confirm_room: 'Zone arrival confirmed',
+			transfer_in: 'Transfer in',
+			transfer_out: 'Transfer out',
+			leave_temporary: 'Temporary leave',
+			return_from_leave: 'Returned from leave',
+			mark_deceased: 'Deceased',
+			zone_change: 'Zone change'
+		},
+		auditLog: 'Audit log',
+		updated: 'Last updated',
+		registered: 'Registered',
+		registeredBy: (by: string) => `by ${by}`,
+		movementZone: (zone: string) => `Zone ${zone}`,
+		loadMore: (remaining: number) => `Load more (${remaining} items)`,
+		noCurrentUser: 'Current user not found. Wait for sign-in to finish and try again',
+		zoneMoved: (zone: string) => `Moved to zone ${zone}`,
+		zoneMoveFailed: (detail: string) => `Could not change zone: ${detail}`,
+		checkInNeedsZone: 'A zone is required to check in',
+		leaveNeedsReason: 'A reason is required for temporary leave',
+		statusUpdated: 'Stay status updated',
+		statusUpdateFailed: (detail: string) => `Could not update status: ${detail}`,
+		noHouseholdForAddress: 'No household found to save the address to',
+		addressSaved: 'Household address updated',
+		addressSaveFailed: (detail: string) => `Could not save the address: ${detail}`,
+		noHouseholdForAssets: 'No household found to save belongings to',
+		assetsSaved: 'Belongings and pets updated',
+		assetsSaveFailed: (detail: string) => `Could not save: ${detail}`,
+		personalSaved: 'Personal information saved',
+		personalSaveFailed: (detail: string) => `Could not save personal information: ${detail}`,
+		emergencySaved: 'Emergency contact saved',
+		emergencySaveFailed: (detail: string) => `Could not save the emergency contact: ${detail}`,
+		healthSaved: 'Health information saved',
+		healthPartiallySaved: (detail: string) =>
+			`Health information was only partly saved. Refresh and check again: ${detail}`,
+		healthRolledBack: (detail: string) =>
+			`Could not save health information. The changes were rolled back: ${detail}`,
+		householdSaved: 'Household affiliation saved',
+		householdSaveFailed: (detail: string) => `Could not save the household affiliation: ${detail}`
+	},
+	page: {
+		documentTitle: 'Evacuee information · SmartShelter',
+		back: 'Back',
+		heading: 'Evacuee information'
 	}
 };
 
