@@ -1,10 +1,11 @@
 ---
-id: draft
+id: CR-236
 title: ความต้องการของแจกครั้งเดียว (distribution_type = one_time) เทียบกับของพร้อมแจก
-status: proposed
+status: approved
 date: 2026-11-05
+updated: 2026-11-06
 requested_by: GitHub #1190
-decided_by:
+decided_by: kong
 layer: volatile
 affects:
   - frontend/src/lib/features/sop-ratios/domain (ฟังก์ชันคำนวณ + ตัวเรียงแถว — ไฟล์ใหม่)
@@ -15,14 +16,14 @@ why: ของแจกครั้งเดียว (มุ้ง เต็น
 migration: ไม่มี — ค่าคำนวณตอนอ่านทุกครั้ง ไม่ persist, ไม่มี schema_v เปลี่ยน
 ---
 
-# draft-one-time-item-demand — ความต้องการของแจกครั้งเดียวเทียบกับของพร้อมแจก
+# CR-236 — ความต้องการของแจกครั้งเดียวเทียบกับของพร้อมแจก
 
 > **สรุป (TL;DR):**
 >
 > - **เปลี่ยนอะไร:** เพิ่มกติกาคำนวณ "ต้องการ / มีพร้อมแจก / ขาด / coverage / สถานะ" ต่อสินค้า `item_master.distribution_type = one_time` ที่ active ในศูนย์
 > - **เพื่อใคร:** ผู้เข้าหน้า supply (`requireWarehouseAccess`) ของศูนย์ตนเอง — ใช้ดูว่าของแจกครั้งเดียวในคลังพอสำหรับคนในศูนย์หรือไม่
 > - **Dev ต้อง build:** ฟังก์ชัน domain แบบ pure + แท็บ "ของแจกครั้งเดียว" ใน `/back-office/supply`
-> - **กระทบ:** ไม่มี field ใหม่ ไม่ bump `schema_v` ไม่แตะ worker; ใช้ฐานคนตาม [CR-223](03-C-supply/CR-223-shelter-people-base-for-stock.md)
+> - **กระทบ:** ไม่มี field ใหม่ ไม่ bump `schema_v` ไม่แตะ worker; ใช้ฐานคนตาม [CR-223](CR-223-shelter-people-base-for-stock.md)
 
 ---
 
@@ -98,4 +99,5 @@ UI (หน้า `/back-office/supply`, ศูนย์ตนเองเท่�
 
 ## Decision log
 
-- 2026-11-05 — proposed (GitHub #1190) — รอเจ้าของโครงการเลือกวิธี track และ approve
+- 2026-11-05 — proposed (GitHub #1190)
+- 2026-11-06 — เคาะ (kong, 2026-11-06) — approved ตาม draft; track ด้วย CR ไฟล์ (PR #1201)
