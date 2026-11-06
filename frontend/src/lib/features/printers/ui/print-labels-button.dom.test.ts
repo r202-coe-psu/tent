@@ -582,7 +582,9 @@ describe('PrintLabelsButton', () => {
 		expect(mainButton().textContent).not.toContain('พิมพ์อีกครั้ง');
 		await vi.advanceTimersByTimeAsync(2_000);
 
-		expect(toast.error).toHaveBeenCalledWith('เครื่อง เครื่อง-p1 ไม่ตอบ');
+		expect(toast.error).toHaveBeenCalledWith(
+			'ไม่ทราบผลการพิมพ์ที่ เครื่อง-p1 — ตรวจที่เครื่องว่าออกไปแล้วกี่ใบก่อนกดพิมพ์อีกครั้ง'
+		);
 		expect(mainButton().textContent).toContain('พิมพ์อีกครั้ง');
 		expect(mainButton().disabled).toBe(false);
 	});
@@ -606,7 +608,9 @@ describe('PrintLabelsButton', () => {
 
 		mainButton().click();
 		await vi.advanceTimersByTimeAsync(PRINT_JOB_POLL_TIMEOUT_MS + 1_000);
-		expect(toast.error).toHaveBeenCalledWith('เครื่อง เครื่อง-p1 ไม่ตอบ');
+		expect(toast.error).toHaveBeenCalledWith(
+			'ไม่ทราบผลการพิมพ์ที่ เครื่อง-p1 — ตรวจที่เครื่องว่าออกไปแล้วกี่ใบก่อนกดพิมพ์อีกครั้ง'
+		);
 		mainButton().click();
 		await vi.advanceTimersByTimeAsync(0);
 
@@ -659,7 +663,9 @@ describe('PrintLabelsButton', () => {
 		expect(toast.error).not.toHaveBeenCalled();
 		await vi.advanceTimersByTimeAsync(PRINT_JOB_FINAL_CHECK_MS);
 
-		expect(toast.error).toHaveBeenCalledWith('เครื่อง เครื่อง-p1 ไม่ตอบ');
+		expect(toast.error).toHaveBeenCalledWith(
+			'ไม่ทราบผลการพิมพ์ที่ เครื่อง-p1 — ตรวจที่เครื่องว่าออกไปแล้วกี่ใบก่อนกดพิมพ์อีกครั้ง'
+		);
 		expect(mainButton().textContent).toContain('พิมพ์อีกครั้ง');
 	});
 

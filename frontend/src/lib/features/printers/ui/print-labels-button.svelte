@@ -128,16 +128,21 @@
 				return true;
 			};
 			// The status query stops polling after the same window. By then the server has settled the
-			// job, so one more status fetch tells the real outcome if the network is back; only when
-			// that fails too does the job count as timed out.
+			// job, so one more status fetch tells the real outcome if the network is back. A job still
+			// open then timed out; a fetch that fails or hangs leaves the result unknown, and the retry
+			// resumes after the last count seen (team proposal, CR-222 FR-47).
 			let finalCheckTimer: ReturnType<typeof setTimeout> | undefined;
 			const finalCheck = async () => {
 				const giveUp = new Promise<undefined>((r) => {
 					finalCheckTimer = setTimeout(() => r(undefined), PRINT_JOB_FINAL_CHECK_MS);
 				});
-				const latest = await Promise.race([statusQuery.refetch().then((r) => r.data), giveUp]);
+				const latest = await Promise.race([
+					statusQuery.refetch().then((r) => (r.isSuccess ? r.data : undefined)),
+					giveUp
+				]);
 				if (done || settleOnStatus(latest)) return;
-				settle({ status: 'timeout', printed: lastPrinted, error_code: null });
+				const status = latest ? 'timeout' : 'unknown';
+				settle({ status, printed: lastPrinted, error_code: null });
 			};
 			const timer = setTimeout(() => void finalCheck(), PRINT_JOB_POLL_TIMEOUT_MS);
 			const hintTimer = setTimeout(() => (pickupLate = true), PRINT_JOB_PICKUP_HINT_MS);

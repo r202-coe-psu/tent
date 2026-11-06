@@ -63,4 +63,14 @@ describe('printJobOutcomeMessage', () => {
 		expect(printJobOutcomeMessage(result, 'โต๊ะ 1', 'th')).toBe('เครื่อง โต๊ะ 1 ไม่ตอบ');
 		expect(printJobOutcomeMessage(result, 'Desk 1', 'en')).toBe('Desk 1 is not responding');
 	});
+
+	it('asks staff to check the printer before retrying when the result is unknown', () => {
+		const result = { status: 'unknown' as const, printed: 3, error_code: null };
+		expect(printJobOutcomeMessage(result, 'โต๊ะ 1', 'th')).toBe(
+			'ไม่ทราบผลการพิมพ์ที่ โต๊ะ 1 — ตรวจที่เครื่องว่าออกไปแล้วกี่ใบก่อนกดพิมพ์อีกครั้ง'
+		);
+		expect(printJobOutcomeMessage(result, 'Desk 1', 'en')).toBe(
+			'Result unknown at Desk 1. Check how many labels came out before printing again.'
+		);
+	});
 });

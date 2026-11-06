@@ -6,6 +6,8 @@ export const PRINTERS_I18N = {
 		sent: (count: number, printer: string) => `สั่งพิมพ์ ${count} ใบไปที่ ${printer} แล้ว`,
 		partiallyPrinted: (count: number) => `(พิมพ์ไปแล้ว ${count} ใบ)`,
 		notResponding: (printer: string) => `เครื่อง ${printer} ไม่ตอบ`,
+		resultUnknown: (printer: string) =>
+			`ไม่ทราบผลการพิมพ์ที่ ${printer} — ตรวจที่เครื่องว่าออกไปแล้วกี่ใบก่อนกดพิมพ์อีกครั้ง`,
 		notPickedUp: (printer: string) => `เครื่อง ${printer} ยังไม่รับงาน — ตรวจสอบว่าเครื่องเปิดอยู่`,
 		statusUnknown: (printer: string) => `ยังไม่ทราบผล — ตรวจที่เครื่องพิมพ์ ${printer}`,
 		choosePrinter: 'เลือกเครื่องพิมพ์',
@@ -53,6 +55,8 @@ export const PRINTERS_I18N = {
 		partiallyPrinted: (count: number) =>
 			`(${count} ${count === 1 ? 'label' : 'labels'} already printed)`,
 		notResponding: (printer: string) => `${printer} is not responding`,
+		resultUnknown: (printer: string) =>
+			`Result unknown at ${printer}. Check how many labels came out before printing again.`,
 		notPickedUp: (printer: string) =>
 			`${printer} has not picked up the job yet. Check that it is switched on.`,
 		statusUnknown: (printer: string) =>
@@ -101,10 +105,11 @@ export type PrintersI18nLang = keyof typeof PRINTERS_I18N;
 
 export interface PrintJobOutcome {
 	/**
-	 * `timeout` = the client gave up polling before a final status: the poll window
-	 * (`PRINT_JOB_POLL_TIMEOUT_MS`) ran out, or the status route kept failing.
+	 * `timeout` = the poll window (`PRINT_JOB_POLL_TIMEOUT_MS`) ran out and the job was still open.
+	 * `unknown` = the status could not be read at the end of that window, so the tablet does not
+	 * know how many labels came out.
 	 */
-	status: PrintJobStatus | 'timeout';
+	status: PrintJobStatus | 'timeout' | 'unknown';
 	printed: number;
 	error_code: string | null;
 }
@@ -134,6 +139,8 @@ export function printJobOutcomeMessage(
 			const message = failureMessage(t.failed, result.error_code, printerName);
 			return result.printed > 0 ? `${message} ${t.partiallyPrinted(result.printed)}` : message;
 		}
+		case 'unknown':
+			return t.resultUnknown(printerName);
 		default:
 			return t.notResponding(printerName);
 	}
