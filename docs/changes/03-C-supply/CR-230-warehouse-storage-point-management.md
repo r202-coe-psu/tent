@@ -26,8 +26,8 @@ affects:
 > - **เปลี่ยนอะไร:** `warehouse_staff` ของศูนย์ (นอกเหนือจาก `shelter_manager` / SA เดิม)
 >   เพิ่ม แก้ ลบ `shelter.common_areas.sub_storage[]` ของศูนย์ตนได้ ผ่าน endpoint เฉพาะที่แตะ `sub_storage` อย่างเดียว
 > - **ทำไม:** ปัจจุบันแก้ได้ทางเดียวคือฟอร์มศูนย์ (SM/SA เท่านั้น) เจ้าหน้าที่คลังที่ใช้ supply ทุกวันเพิ่มคลังเองไม่ได้
-> - **Dev ต้อง build:** endpoint `storage-points`, หน้า "จัดการคลัง" ใน `/back-office/supply`, ฟังก์ชันนับ lot ที่ยังอ้างจุดก่อนลบ
-> - **กระทบ:** role matrix §3 เท่านั้น. ไม่เปลี่ยนรูป doc, ไม่ bump `schema_v`
+> - **Dev ต้อง build:** endpoint `storage-points`, หน้า "จัดการคลัง" ใน `/back-office/supply`, ฟังก์ชันนับ lot ที่ยังอ้างจุดก่อนลบ, ปุ่มลบจุดในฟอร์มศูนย์ที่ใช้ฟังก์ชันเดียวกัน (disabled เมื่อยังมีของ)
+> - **กระทบ:** role matrix §3 และ **amend CR-139 N2** (เดิมลบจุดที่ยังมีของได้ → ลบไม่ได้ ทั้ง endpoint ใหม่และฟอร์มศูนย์). ไม่เปลี่ยนรูป doc, ไม่ bump `schema_v`
 
 ---
 
