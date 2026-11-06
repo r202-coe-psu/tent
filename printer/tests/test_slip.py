@@ -1,9 +1,11 @@
 import io
+import logging
 import subprocess
 
 import pytest
-from PIL import Image
+from PIL import Image, ImageDraw, ImageFont, features
 
+from printer import slip
 from printer.slip import find_thai_font, render_slip_png
 
 ROWS = [
@@ -100,3 +102,85 @@ def test_find_thai_font_is_none_when_nothing_covers_thai(monkeypatch):
     )
 
     assert find_thai_font() is None
+
+
+@pytest.fixture
+def ttf_engines(monkeypatch):
+    """Stands in for a real Thai font: records the layout engine asked for on every truetype call."""
+    engines = []
+    real_truetype = ImageFont.truetype
+    bundled = ImageFont.load_default(12).path.getvalue()  # Pillow's own bundled font bytes
+
+    def fake_truetype(_path, size, *, layout_engine=None, **_kw):
+        engines.append(layout_engine)
+        return real_truetype(io.BytesIO(bundled), size)
+
+    monkeypatch.setattr(ImageFont, "truetype", fake_truetype)
+    return engines
+
+
+def test_uses_the_raqm_layout_engine_when_pillow_has_it(monkeypatch, ttf_engines, caplog):
+    monkeypatch.setattr(features, "check", lambda name, *a, **k: name == "raqm")
+    monkeypatch.setattr(slip, "_warned_no_raqm", False)
+
+    with caplog.at_level(logging.WARNING):
+        assert render_slip_png(ROWS, ppi=203, font_path="any.ttf") is not None
+
+    assert ttf_engines and set(ttf_engines) == {ImageFont.Layout.RAQM}
+    assert "raqm" not in caplog.text.lower()
+
+
+def test_without_raqm_falls_back_to_basic_layout_and_warns_once(monkeypatch, ttf_engines, caplog):
+    monkeypatch.setattr(features, "check", lambda *a, **k: False)
+    monkeypatch.setattr(slip, "_warned_no_raqm", False)
+
+    with caplog.at_level(logging.WARNING):
+        assert render_slip_png(ROWS, ppi=203, font_path="any.ttf") is not None
+        assert render_slip_png(ROWS, ppi=203, font_path="any.ttf") is not None
+
+    assert ttf_engines and set(ttf_engines) == {ImageFont.Layout.BASIC}
+    warnings = [r for r in caplog.records if "raqm" in r.getMessage().lower()]
+    assert len(warnings) == 1
+    assert "libraqm" in warnings[0].getMessage()
+
+
+@pytest.fixture
+def drawn_text(monkeypatch, ttf_engines):
+    """Every string the slip draws, in order."""
+    texts = []
+    original = ImageDraw.ImageDraw.text
+
+    def recording_text(self, xy, text, *args, **kwargs):
+        texts.append(text)
+        return original(self, xy, text, *args, **kwargs)
+
+    monkeypatch.setattr(ImageDraw.ImageDraw, "text", recording_text)
+    return texts
+
+
+def test_long_value_wraps_onto_extra_lines_instead_of_being_cut(drawn_text):
+    value = "ABCDEFGHIJ" * 20  # too wide for one line even at the 12px floor
+
+    assert render_slip_png([("Name", value)], ppi=203, font_path="any.ttf") is not None
+
+    assert drawn_text[0] == "Name"
+    assert len(drawn_text) > 2  # label + more than one value line
+    assert "".join(drawn_text[1:]) == value
+
+
+def test_text_that_cannot_fit_even_wrapped_ends_with_an_ellipsis(drawn_text):
+    value = "ABCDEFGHIJ" * 500
+
+    assert render_slip_png([("Name", value)], ppi=203, font_path="any.ttf") is not None
+
+    assert drawn_text[-1].endswith("\u2026")
+    assert len("".join(drawn_text[1:])) < len(value)
+
+
+def test_wrapping_never_splits_a_thai_mark_from_its_consonant(drawn_text):
+    value = "กิ" * 300  # consonant + vowel mark pairs
+
+    assert render_slip_png([("Name", value)], ppi=203, font_path="any.ttf") is not None
+
+    assert len(drawn_text) > 2
+    assert all(not line.startswith("\u0e34") for line in drawn_text[1:])
