@@ -29,6 +29,31 @@ const th = {
 			christian: 'คริสต์',
 			other: 'อื่นๆ'
 		} as Record<string, string>
+	},
+	assetsCard: {
+		title: 'สิ่งที่นำมาด้วย',
+		editAria: 'แก้ไขทรัพย์สิน ยานพาหนะ และสัตว์เลี้ยง',
+		noHousehold: 'ยังไม่มีข้อมูลครัวเรือนสำหรับแสดงทรัพย์สิน',
+		noItems: 'ไม่มีรายการ',
+		vehicles: 'ยานพาหนะ',
+		licensePlate: (plate: string) => `ทะเบียน: ${plate}`,
+		pets: 'สัตว์เลี้ยง',
+		hasCage: 'มีกรง',
+		valuables: 'สัมภาระ / สิ่งของมีค่า',
+		vehicleTypes: {
+			car: 'รถยนต์',
+			motorcycle: 'จักรยานยนต์',
+			other: 'อื่นๆ'
+		} as Record<string, string>
+	},
+	emergencyCard: {
+		title: 'ข้อมูลติดต่อฉุกเฉิน',
+		editAria: 'แก้ไขข้อมูลติดต่อฉุกเฉิน',
+		contactName: 'ญาติ / ผู้ติดต่อ:',
+		contactPhone: 'เบอร์โทรศัพท์ฉุกเฉิน:',
+		relation: 'ความสัมพันธ์:',
+		noContactName: 'ไม่ระบุบุคคล',
+		noPhone: 'ไม่ระบุ'
 	}
 };
 
@@ -63,6 +88,31 @@ const en: typeof th = {
 			christian: 'Christian',
 			other: 'Other'
 		}
+	},
+	assetsCard: {
+		title: 'Belongings brought',
+		editAria: 'Edit belongings, vehicles and pets',
+		noHousehold: 'No household data to show belongings for yet',
+		noItems: 'No items',
+		vehicles: 'Vehicles',
+		licensePlate: (plate: string) => `Plate: ${plate}`,
+		pets: 'Pets',
+		hasCage: 'Has a cage',
+		valuables: 'Luggage / valuables',
+		vehicleTypes: {
+			car: 'Car',
+			motorcycle: 'Motorcycle',
+			other: 'Other'
+		}
+	},
+	emergencyCard: {
+		title: 'Emergency contact',
+		editAria: 'Edit emergency contact',
+		contactName: 'Relative / contact person:',
+		contactPhone: 'Emergency phone number:',
+		relation: 'Relationship:',
+		noContactName: 'No contact person specified',
+		noPhone: 'Not specified'
 	}
 };
 
