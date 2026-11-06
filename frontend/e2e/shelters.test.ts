@@ -780,7 +780,11 @@ test.describe('Shelter Form — Donation drop-off points (CR-205)', () => {
 		await page.getByRole('button', { name: 'สถานะการปฏิบัติการ (Operating Status)' }).click();
 		await page.getByRole('option', { name: 'ปิดศูนย์ (Closed)' }).click();
 		await page.getByRole('button', { name: 'บันทึกข้อมูล' }).click();
-		await page.getByLabel('พิมพ์ข้อความต่อไปนี้เพื่อยืนยัน').fill(`${CODE} ${NAME}`);
+		const confirmInput = page.getByLabel('พิมพ์ข้อความต่อไปนี้เพื่อยืนยัน');
+		await expect(confirmInput).toBeVisible();
+		// The form must not have been reseeded from the newer doc on the way to the modal.
+		await expect(pointNames.nth(0)).toHaveValue('โรงยิม (แก้ไข)');
+		await confirmInput.fill(`${CODE} ${NAME}`);
 		await page.getByRole('button', { name: 'เช็คเอาต์ทั้งหมดและปิดศูนย์' }).click();
 
 		await expect(
@@ -790,6 +794,35 @@ test.describe('Shelter Form — Donation drop-off points (CR-205)', () => {
 		expect(patches).toHaveLength(0);
 		await expect(pointNames).toHaveCount(2);
 		await expect(pointNames.nth(0)).toHaveValue('โรงยิม');
+	});
+
+	test('cancelling the close dialog keeps the typed edit and the newer-doc notice (#1224)', async ({
+		page
+	}) => {
+		const CODE = 'SH919';
+		const NAME = 'ศูนย์พักพิงจุดเก็บของ';
+		let served: Served = { rev: E2E_REV, name: NAME, points: [gym] };
+		const refresh = await serveWithFeed(page, CODE, () => served);
+		await openStorage(page, CODE);
+		const pointName = page.getByLabel('ชื่อจุดเก็บของ');
+		await pointName.fill('โรงยิม (แก้ไข)');
+
+		served = { rev: '5-e2e', name: NAME, points: [gym] };
+		await refresh();
+		await expect(page.getByText('มีข้อมูลใหม่')).toBeVisible();
+
+		await sectionNav(page, BASIC_INFO_HEADING).click();
+		await page.getByRole('button', { name: 'สถานะการปฏิบัติการ (Operating Status)' }).click();
+		await page.getByRole('option', { name: 'ปิดศูนย์ (Closed)' }).click();
+		await page.getByRole('button', { name: 'บันทึกข้อมูล' }).click();
+		const confirmInput = page.getByLabel('พิมพ์ข้อความต่อไปนี้เพื่อยืนยัน');
+		await expect(confirmInput).toBeVisible();
+		await expect(pointName).toHaveValue('โรงยิม (แก้ไข)');
+
+		await page.getByRole('button', { name: 'ยกเลิก', exact: true }).click();
+		await expect(confirmInput).toHaveCount(0);
+		await expect(pointName).toHaveValue('โรงยิม (แก้ไข)');
+		await expect(page.getByText('มีข้อมูลใหม่')).toBeVisible();
 	});
 
 	test('a schema_v 8 point with no new keys saves as not accepting donations', async ({ page }) => {

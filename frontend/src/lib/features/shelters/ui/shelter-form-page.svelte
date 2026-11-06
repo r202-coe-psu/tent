@@ -282,7 +282,7 @@
 		// SPA form with no server load to refresh; `invalidateAll` would only delay superforms'
 		// write-back of the submitted data, which could then land after a 409 reload.
 		invalidateAll: false,
-		onUpdate: async ({ form: validated }) => {
+		onUpdate: async ({ form: validated, cancel }) => {
 			if (!validated.valid) {
 				showValidationSummary = true;
 				await revealValidationIssues(validated.errors);
@@ -295,6 +295,10 @@
 			if (isEdit && needsShelterCloseModal(storedStatus, data.operation_status)) {
 				pendingCloseData = data;
 				closeDialogOpen = true;
+				// Nothing is saved yet: a result superforms applies would untaint the form, and the
+				// seed effect would then replace the user's edits with a newer doc before the modal
+				// even opens. Cancelled, the form keeps its data and its taint for the whole flow.
+				cancel();
 				return;
 			}
 
