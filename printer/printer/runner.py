@@ -15,6 +15,7 @@ from printer.api import (
 from printer.config import Config
 from printer.cups import Cups
 from printer.netinfo import local_ips as default_local_ips
+from printer.slip import find_thai_font, render_slip_png
 
 log = logging.getLogger("printer")
 
@@ -67,25 +68,38 @@ def _hello(
     return None
 
 
-def _boot_slip_text(hello: Hello, agent_version: str, ips: list[str]) -> str:
-    lines = [
-        "TENT PRINT AGENT",
-        f"Name:    {hello.name}",
-        f"Device:  {hello.device_id}",
-        f"Shelter: {hello.shelter_code}",
-        f"Version: {agent_version}",
-        *(f"IP:      {ip}" for ip in ips or ["(none)"]),
+def _boot_slip_rows(hello: Hello, agent_version: str, ips: list[str]) -> list[tuple[str, str]]:
+    return [
+        ("", "TENT PRINT AGENT"),
+        ("Name", hello.name),
+        ("Device", hello.device_id),
+        ("Shelter", hello.shelter_code),
+        ("Version", agent_version),
+        *(("IP", ip) for ip in ips or ["(none)"]),
     ]
+
+
+def _boot_slip_text(rows: list[tuple[str, str]]) -> str:
+    lines = (f"{label + ':' if label else '':<9}{value}".strip() for label, value in rows)
     return "\n".join(lines) + "\n"
 
 
 def _print_boot_slip(
     cups: Cups, hello: Hello, agent_version: str, local_ips: Callable[[], list[str]]
 ) -> None:
-    """Best effort: a slip that fails to print must never stop the agent."""
+    """Best effort: a slip that fails to print must never stop the agent.
+
+    Drawn as an image so a Thai device name prints; plain text only when no Thai font is installed.
+    """
     try:
-        text = _boot_slip_text(hello, agent_version, local_ips())
-        if cups.submit_text(text, "tent-boot-slip") is None:
+        rows = _boot_slip_rows(hello, agent_version, local_ips())
+        png = render_slip_png(rows, cups.ppi, find_thai_font())
+        if png is not None:
+            request = cups.submit(png, title="tent-boot-slip")
+        else:
+            log.warning("boot slip as plain text: no Thai font (apt install fonts-thai-tlwg)")
+            request = cups.submit_text(_boot_slip_text(rows), "tent-boot-slip")
+        if request is None:
             log.warning("boot slip not printed: lp failed")
     except Exception as exc:  # noqa: BLE001 - the slip is optional
         log.warning("boot slip not printed: %s", exc)

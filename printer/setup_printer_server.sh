@@ -131,6 +131,8 @@ if ! $DRY_RUN; then
     command -v rsync >/dev/null || die "ไม่พบ rsync — sudo apt-get install -y rsync"
     command -v lpstat >/dev/null || die "ไม่พบ CUPS — รัน kiosk/setup_printer.sh --queue $QUEUE ก่อน"
     lpstat -p "$QUEUE" >/dev/null 2>&1 || die "ไม่พบ CUPS queue $QUEUE — รัน kiosk/setup_printer.sh --queue $QUEUE ก่อน"
+    # Not fatal: without a Thai font the boot slip falls back to plain text (Thai shows as boxes).
+    fc-list :lang=th file 2>/dev/null | grep -q . || warn "ไม่พบฟอนต์ไทย — บูตสลิปจะพิมพ์ชื่อไทยไม่ได้: sudo apt-get install -y fonts-thai-tlwg"
 fi
 
 echo -e "${BLUE}=== Tent print agent setup: prefix $PREFIX, queue $QUEUE, host $HOST_KIND ===${NC}"

@@ -411,7 +411,10 @@ def lp_calls_with_title(fake_cups, title: str) -> list[dict]:
     return [c for c in fake_cups.calls("lp") if c["argv"][2:4] == ["-t", title]]
 
 
-def test_boot_slip_is_printed_once_after_hello_with_identity_version_and_ips(agent, fake_cups):
+def test_boot_slip_falls_back_to_plain_text_when_it_cannot_be_drawn(
+    agent, fake_cups, monkeypatch
+):
+    monkeypatch.setattr("printer.runner.render_slip_png", lambda *_a, **_k: None)
     agent.config = SLIP_CONFIG
 
     agent.run(
@@ -432,6 +435,33 @@ def test_boot_slip_is_printed_once_after_hello_with_identity_version_and_ips(age
     assert "192.168.1.50" in text
     assert "10.0.0.7" in text
     assert agent.server.paths()[0] == HELLO
+
+
+def test_boot_slip_is_drawn_as_an_image_with_thai_safe_rows(agent, fake_cups, monkeypatch):
+    drawn: list[tuple[list[tuple[str, str]], int]] = []
+
+    def fake_render(rows, ppi, font_path):
+        drawn.append((rows, ppi))
+        return b"\x89PNG-fake-slip"
+
+    monkeypatch.setattr("printer.runner.render_slip_png", fake_render)
+    monkeypatch.setattr("printer.runner.find_thai_font", lambda: "/fonts/Loma.ttf")
+    agent.config = SLIP_CONFIG
+
+    agent.run(max_iterations=2, agent_version="9.9.9", local_ips=lambda: ["192.168.1.50"])
+
+    slips = lp_calls_with_title(fake_cups, "tent-boot-slip")
+    assert [call["argv"] for call in slips] == [
+        ["-d", "tent_xprinter", "-t", "tent-boot-slip", "-o", "ppi=203", "-"]
+    ]
+    assert fake_cups.lp_stdin() == b"\x89PNG-fake-slip"
+    [(rows, ppi)] = drawn
+    assert ppi == 203
+    assert ("Name", "Registration desk 1") in rows
+    assert ("Device", "printer-sh001-reg1") in rows
+    assert ("Shelter", "SH001") in rows
+    assert ("Version", "9.9.9") in rows
+    assert ("IP", "192.168.1.50") in rows
 
 
 def test_boot_slip_is_not_printed_when_boot_slip_is_disabled(agent, fake_cups):

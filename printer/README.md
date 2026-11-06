@@ -114,7 +114,7 @@ Bullseye มากับ Python 3.9 และ agent รันบนนั้น�
 
 ```bash
 sudo apt update
-sudo apt install -y git rsync curl python3-venv
+sudo apt install -y git rsync curl python3-venv fonts-thai-tlwg   # fonts-thai-tlwg ใช้วาดชื่อเครื่องภาษาไทยบนบูตสลิป
 # ติดตั้ง uv ไว้ที่ /usr/local/bin เพื่อให้ sudo มองเห็น (ถ้าลงไว้ที่ ~/.local/bin สคริปต์ติดตั้งที่รันด้วย sudo จะหาไม่เจอ)
 curl -LsSf https://astral.sh/uv/install.sh | sudo env UV_INSTALL_DIR=/usr/local/bin sh
 uv --version
@@ -170,7 +170,7 @@ nano .env
 | `TENT_ALLOW_HTTP` | `1` = ยอม `http://` ไป IP/domain ไหนก็ได้ (edge ที่ไม่มี HTTPS) · ค่าเริ่มต้น `0` |
 | `DEVICE_ID` / `DEVICE_SECRET` | จากขั้นที่ 1 |
 | `PRINTER_NAME` | ชื่อ CUPS queue จากขั้นที่ 3 (`tent_xprinter`) ใช้ได้เฉพาะ `A-Z a-z 0-9 _ -` ยาวไม่เกิน 127 ตัว และห้ามขึ้นต้นด้วย `-` ถ้าผิดรูปแบบ agent จะไม่ยอมเริ่มทำงาน |
-| `BOOT_SLIP` | `1` = พิมพ์สลิป (ชื่อเครื่อง, device, shelter, IP) ทุกครั้งที่ agent เริ่ม · `0` = ไม่พิมพ์ |
+| `BOOT_SLIP` | `1` = พิมพ์สลิป (ชื่อเครื่อง, device, shelter, IP) ทุกครั้งที่ agent เริ่ม เป็นรูปขนาด 1 label 80×60 mm · `0` = ไม่พิมพ์ |
 
 ตัวเลือกอื่น (`PRINT_PPI`, `PRINT_JOB_TIMEOUT_SEC`, backoff) ดูใน [`.env.example`](.env.example)
 คอมเมนต์ต้องอยู่บรรทัดของตัวเอง ห้ามเขียนต่อท้ายค่า เพราะ `EnvironmentFile` ของ systemd จะถือว่าเป็นส่วนหนึ่งของค่า
@@ -241,6 +241,7 @@ log มี job id / จำนวน label / error code แต่ไม่มี 
 | 429 ซ้ำ ๆ | มี agent มากกว่าหนึ่งตัวใช้ `DEVICE_ID` เดียวกัน (nginx ให้ไม่เกิน 2 connection ต่อเครื่อง) ดูข้อ "agent สองตัว" ด้านล่าง |
 | `printer queue … is missing` | `PRINTER_NAME` ไม่ตรงกับ `lpstat -p` หรือยังไม่ได้ทำขั้นที่ 3 |
 | `printer queue … is disabled` | CUPS ปิด queue (มักเกิดหลังกระดาษหมดหรือปิดเครื่อง) ตรวจกระดาษ/ไฟ แล้วดู [สิทธิ์เปิด queue](#สิทธิ์เปิด-queue-queue-enable-rights) |
+| ชื่อภาษาไทยบนบูตสลิปเป็นสี่เหลี่ยม / log `boot slip as plain text: no Thai font` | Pi ไม่มีฟอนต์ไทย agent เลยพิมพ์เป็นข้อความธรรมดาแทน ติดตั้ง `sudo apt install -y fonts-thai-tlwg` แล้ว restart agent ตรวจด้วย `fc-list :lang=th` ต้องมีรายการ |
 | `boot slip not printed: lp failed` | ส่งงานเข้า CUPS ไม่ได้ ลอง `echo test \| lp -d tent_xprinter -` เพื่อดู error จริง |
 | `hello failed: …` / `poll failed: …` | `TENT_BASE_URL` ผิด หรือ Pi ออกเน็ตไม่ได้ ลอง `curl -I <TENT_BASE_URL>` จาก Pi |
 | งานขึ้น `printer_timeout` | เครื่องพิมพ์ไม่ตอบภายใน `PRINT_JOB_TIMEOUT_SEC` อาจปิดอยู่หรือกระดาษหมด ดู `lpstat -p` |

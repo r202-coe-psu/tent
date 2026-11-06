@@ -40,9 +40,9 @@ class Cups:
             return None
         return result.returncode, result.stdout.decode(errors="replace")
 
-    def submit(self, png: bytes) -> str | None:
+    def submit(self, png: bytes, title: str = "tent-print-job") -> str | None:
         result = self._run(
-            ["lp", "-d", self.printer_name, "-t", "tent-print-job", "-o", f"ppi={self.ppi}", "-"],
+            ["lp", "-d", self.printer_name, "-t", title, "-o", f"ppi={self.ppi}", "-"],
             input=png,
         )
         if result is None or result[0] != 0:

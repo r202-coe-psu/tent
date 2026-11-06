@@ -32,7 +32,7 @@ if [ "${1:-}" = "--setup" ]; then
 	exit 0
 fi
 
-if [ ! -x .venv/bin/python ] || ! .venv/bin/python -c 'import httpx' >/dev/null 2>&1; then
+if [ ! -x .venv/bin/python ] || ! .venv/bin/python -c 'import httpx, PIL' >/dev/null 2>&1; then
 	install_deps
 fi
 
