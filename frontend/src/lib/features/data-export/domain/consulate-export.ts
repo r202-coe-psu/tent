@@ -105,7 +105,7 @@ export const CONSULATE_HEADERS = [
 	H.emergency_relation,
 	H.religion,
 	'กลุ่มเปราะบาง',
-	'special needs'
+	'ความต้องการพิเศษ'
 ] as const;
 
 /** Zero-based indexes of columns that must stay text in Excel (ids, phones). */

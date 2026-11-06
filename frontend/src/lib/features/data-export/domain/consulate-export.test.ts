@@ -73,7 +73,7 @@ describe('buildConsulateRows (S1)', () => {
 			'ผู้ติดต่อฉุกเฉิน: ความสัมพันธ์',
 			'ศาสนา',
 			'กลุ่มเปราะบาง',
-			'special needs'
+			'ความต้องการพิเศษ'
 		]);
 		expect(table.headers).toBe(CONSULATE_HEADERS);
 	});
