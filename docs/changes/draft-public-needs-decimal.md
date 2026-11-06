@@ -60,7 +60,7 @@ PO ตัดสินใจ (2026-10-27, #794): **"Mongo projection คำนว
     ถูกเมิน จึงไม่ลดยอดที่ donation ยังค้างรับ
 - ตัว format `qty_str` ใช้ร่วมกัน worker + backend ที่ `tent_model.qty` (`quantize_qty`, `format_qty`,
   `canonical_qty`) ให้ semantics ตรง `persistQty` (`frontend/src/lib/utils/qty.ts`) และ
-  `_persist_qty` ของ `worker/donation_close.py`
+  `_persist_qty` ของ `worker/src/worker/donation_close.py`
 - ไม่เปลี่ยนชนิดใน OpenAPI (field เป็น `string` อยู่แล้ว) → ไม่ต้อง `pnpm openapi:update`
 
 ### คงเดิม / นอกขอบเขต
@@ -80,7 +80,7 @@ PO ตัดสินใจ (2026-10-27, #794): **"Mongo projection คำนว
   `test_quota_reconcile.py` (เพิ่มเคส non-finite), `projectors/test_needs_decimal.py` (ใหม่);
   backend `test_needs_cards.py`
 - Frontend: ค่าเป็น string อยู่แล้ว — `features/donations/data/public-needs.ts` รวมด้วย `addQty` (decimal.js);
-  `components/public-donor-needs.svelte` ใช้ `Number()` (float, นอกขอบเขต PR นี้) — `"5"` แทน `"5.0"` แสดงผลเหมือนกัน
+  `frontend/src/lib/components/public-donor-needs.svelte` ใช้ `Number()` (float, นอกขอบเขต PR นี้) — `"5"` แทน `"5.0"` แสดงผลเหมือนกัน
 - **Deploy worker + backend พร้อมกัน**: backend เก่า (field `float`) อ่าน `Decimal128` ไม่ได้
 - ทับซ้อนกับ [draft-public-needs-inventory-terms](draft-public-needs-inventory-terms.md)
   (ซึ่งเปิด `qty_target` / `on_hand` / `reserved` ออกสู่ public) — ฉบับนั้นกำหนด field ที่ส่งออก
@@ -114,7 +114,7 @@ merge ก่อน ให้ bump ต่อจากเลขนั้น.
 - compose recreate fastapi กับ worker ใน `up` เดียวกัน ช่วงทับซ้อนระดับวินาที ขณะที่ bootstrap ใช้เวลาระดับนาที
   จึงยอมรับได้ภายใต้ pipeline ปัจจุบัน
 - **ห้าม deploy worker เดี่ยว ๆ หรือ deploy backend หลัง worker** ถ้าต้องแยกขั้น — ต้อง deploy backend ใหม่
-  (อ่านได้ทั้ง `double` และ `Decimal128`: `tent_model/public_need.py` ~20-21) ก่อน หรือพร้อมกับ worker เสมอ
+  (อ่านได้ทั้ง `double` และ `Decimal128`: `packages/tent-model/src/tent_model/public_need.py` ~22-24) ก่อน หรือพร้อมกับ worker เสมอ
 
 **Rollback ไป v16** (ไม่อัตโนมัติ)
 
