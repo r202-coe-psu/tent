@@ -1,8 +1,9 @@
 ---
-id: draft
+id: CR-237
 title: หน้าคลังแสดงของที่กำลังมา (บริจาคที่อนุมัติแล้ว + ใบโอน shipped) พร้อมวันที่คาดว่าจะถึง
-status: proposed
+status: approved
 date: 2026-11-06
+updated: 2026-11-07
 requested_by: GitHub #1153 (feedback อบรมระบบ 2026-11-03)
 decided_by: kong
 layer: volatile
@@ -16,7 +17,7 @@ why: เจ้าหน้าที่คลังต้องเห็นทั
 migration: ไม่มี — คำนวณตอนอ่าน ไม่ persist
 ---
 
-# หน้าคลังแสดงของที่กำลังมา
+# CR-237 — หน้าคลังแสดงของที่กำลังมา
 
 > **สรุป (TL;DR):**
 >
@@ -112,3 +113,4 @@ migration: ไม่มี — คำนวณตอนอ่าน ไม่ pe
 ## Decision log
 
 - 2026-11-06 — proposed (GitHub #1153); track ด้วย CR ไฟล์ตามที่ระบุใน AC ของ issue (`decided_by: kong`)
+- 2026-11-07 — approved (เคาะ kong, 2026-11-07); เลขรัน CR-237, เพิ่มแถวใน `_index.md`
