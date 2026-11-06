@@ -77,6 +77,7 @@ export type PortalCapability =
 	| 'security_officer'
 	| 'facility_staff'
 	| 'distribution_staff'
+	| 'donation_staff'
 	| 'kiosk_staff'
 	| 'pr_staff';
 
@@ -147,6 +148,7 @@ const VC = 'volunteer_coordinator';
 const SO = 'security_officer';
 const FAC = 'facility_staff';
 const DST = 'distribution_staff';
+const DON = 'donation_staff';
 const KIO = 'kiosk_staff';
 const PR = 'pr_staff';
 
@@ -266,7 +268,8 @@ export const PORTAL_DEPARTMENTS: readonly PortalDepartment[] = [
 				icon: 'package',
 				href: '/back-office/supply',
 				scope: 'shelter',
-				roles: [SC]
+				// CR-227: donation_staff opens the same page read-only.
+				roles: [SC, DON]
 			},
 			{
 				id: 'stock-donations',
@@ -275,7 +278,7 @@ export const PORTAL_DEPARTMENTS: readonly PortalDepartment[] = [
 				icon: 'hand-heart',
 				href: '/back-office/stock-donations',
 				scope: 'shelter',
-				roles: [SC]
+				roles: [SC, DON]
 			},
 			{
 				id: 'supply-distribution',

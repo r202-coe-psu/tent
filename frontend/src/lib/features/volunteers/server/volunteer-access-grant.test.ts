@@ -219,6 +219,7 @@ describe('grantVolunteerAccessAsCoordinator', () => {
 			'supply_coordinator',
 			'warehouse_staff',
 			'distribution_staff',
+			'donation_staff',
 			'pr_staff',
 			'facility_staff',
 			'security_officer'

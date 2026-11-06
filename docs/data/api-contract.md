@@ -704,7 +704,7 @@ user ที่มี `volunteer_id` ใช้ QR จิตอาสา (`TKT-VOL
 
 **`POST /api/v1/volunteer-access`** — ออกสิทธิ์ครั้งแรก ต่ออายุ ย่นอายุ หรือเปลี่ยน role ในคำขอเดียว (CR-221 FR-17, FR-18):
 
-- `role` ต้องอยู่ใน 10 role ที่ VC ออกได้ (`registration_staff`, `triage_staff`, `medical_staff`, `kitchen_staff`, `supply_coordinator`, `warehouse_staff`, `distribution_staff`, `pr_staff`, `facility_staff`, `security_officer`) · role อื่น `403`
+- `role` ต้องอยู่ใน 11 role ที่ VC ออกได้ (`registration_staff`, `triage_staff`, `medical_staff`, `kitchen_staff`, `supply_coordinator`, `warehouse_staff`, `distribution_staff`, `donation_staff` (CR-227), `pr_staff`, `facility_staff`, `security_officer`) · role อื่น `403`
 - `expires_on` (`YYYY-MM-DD`, Asia/Bangkok) บังคับ ตั้งแต่วันนี้ถึง +7 วัน
 - role เดิมของบัญชีในศูนย์นี้ → ต่ออายุ (`role_grant.renewed`) หรือย่นอายุ (`role_grant.shortened`) กับ grant ใดก็ได้ในศูนย์ ไม่ต้องเป็นผู้ออก · grant คง `granted_by` / `granted_at` ของผู้ออกเดิม
 - role ใหม่ → **แทนที่** ทุก grant ของศูนย์นี้ใน `PUT` `_users` ครั้งเดียว: ถอด `SHxxx:<role เดิม>` + grant เดิม เพิ่ม `SHxxx:<role ใหม่>` + grant ใหม่ (`granted_by` = ผู้เรียก) · `shelter:SHxxx` คงอยู่ · audit `role_grant.revoked` (grant เดิม แต่ละตัว) + `role_grant.issued`

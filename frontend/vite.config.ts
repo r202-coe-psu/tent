@@ -34,7 +34,8 @@ function couchInit(user: string, password: string, couchUrl: string) {
 // rule-based: pure-by-convention directories, minus any file that mocks modules / stubs env or
 // globals / switches environment (those go to `isolated` automatically). Every other test file
 // stays in `isolated`, so each file runs in exactly one project.
-const TEST_INCLUDE = ['src/**/*.{test,spec}.{ts,js}'];
+// `scripts/**` holds the seed/unseed CLI logic; its tests run in the isolated project.
+const TEST_INCLUDE = ['src/**/*.{test,spec}.{ts,js}', 'scripts/**/*.{test,spec}.{ts,js}'];
 // Component tests that `mount()` into happy-dom (need the browser build of Svelte).
 const DOM_TEST_INCLUDE = ['src/**/*.dom.test.ts'];
 const PURE_GLOBS = [
