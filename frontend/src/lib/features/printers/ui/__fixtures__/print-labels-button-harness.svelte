@@ -5,8 +5,10 @@
 
 	let { client, ...props }: { client: QueryClient } & ComponentProps<typeof PrintLabelsButton> =
 		$props();
+	let retryHeld = $state(false);
 </script>
 
 <QueryClientProvider {client}>
-	<PrintLabelsButton {...props} />
+	<PrintLabelsButton {...props} bind:retryHeld />
+	<output data-testid="retry-held">{retryHeld}</output>
 </QueryClientProvider>

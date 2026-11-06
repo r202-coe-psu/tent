@@ -42,6 +42,13 @@ function render(props: Record<string, unknown> = {}) {
 
 const stationPrint = () =>
 	document.querySelector<HTMLButtonElement>('[data-testid="station-print"]');
+const stationRetryHeld = () =>
+	document.querySelector<HTMLButtonElement>('[data-testid="station-retry-held"]');
+/** The modal's own close buttons (X and the bottom one), by their accessible name. */
+const closeButtons = () =>
+	[...document.querySelectorAll<HTMLButtonElement>('button')].filter(
+		(b) => b.textContent?.trim() === 'ปิดหน้าต่าง'
+	);
 const pressEscape = () => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
 
 afterEach(() => {
@@ -56,12 +63,25 @@ describe('EvacueeQrModal', () => {
 		stationPrint()!.click();
 		flushSync();
 
-		const closers = [...document.querySelectorAll<HTMLButtonElement>('button')].filter(
-			(b) => b !== stationPrint() && b.disabled
-		);
-		expect(closers).toHaveLength(2);
+		expect(closeButtons()).toHaveLength(2);
+		expect(closeButtons().every((b) => b.disabled)).toBe(true);
 		pressEscape();
 		expect(onClose).not.toHaveBeenCalled();
+	});
+
+	it('cannot be closed while a job already sent may still print', () => {
+		const onClose = render();
+		stationRetryHeld()!.click();
+		flushSync();
+
+		expect(closeButtons().every((b) => b.disabled)).toBe(true);
+		pressEscape();
+		expect(onClose).not.toHaveBeenCalled();
+
+		stationRetryHeld()!.click();
+		flushSync();
+		pressEscape();
+		expect(onClose).toHaveBeenCalledTimes(1);
 	});
 
 	it('closes again once the print run ends', () => {

@@ -32,7 +32,8 @@
 		renderLabels,
 		label,
 		buttonClass,
-		printing: running = $bindable(false)
+		printing: running = $bindable(false),
+		retryHeld = $bindable(false)
 	}: {
 		shelterCode: string;
 		labelCount: number;
@@ -46,6 +47,12 @@
 		 * stops polling but not the queued job, so printing again after reopening duplicates labels.
 		 */
 		printing?: boolean;
+		/**
+		 * True between runs while a job already sent may still print (result unknown, or cancelled
+		 * while waiting). Printing again follows that job up under its own id; unmounting forgets it,
+		 * so a new run would print the labels twice. Bind it to keep the host open as with `printing`.
+		 */
+		retryHeld?: boolean;
 	} = $props();
 
 	const t = $derived(getTranslation(PRINTERS_I18N, languageStore.current));
@@ -176,21 +183,30 @@
 		runAbort?.abort('cancel');
 	}
 
-	// Chunks still to send, each with the job id it is created under. Non-null only after a failure,
-	// so the retry resumes where it stopped without rendering the labels again. The id stays with
-	// the chunk across retries of a create whose outcome the tablet never saw (cancel, timeout,
-	// network), so the BFF can answer with the job it already wrote instead of queueing a second.
+	// Chunks still to send, each with the job id it is created under. Non-null only after a failure
+	// or a cancel, so the retry resumes where it stopped without rendering the labels again. The id
+	// stays with the chunk across retries while the tablet does not know the job's outcome (create
+	// not answered, cancelled, result unknown), so the BFF answers with the job it already wrote
+	// instead of queueing a second.
 	interface Chunk {
 		labels: string[];
 		jobId: string;
 		/**
-		 * Set while the create may already be written on this printer (no answer, cancel, 5xx). The
-		 * retry goes there under the same id even if the user picked another printer meanwhile:
-		 * a new id on another printer would print the labels twice (FR-29).
+		 * Set while a job under this id may exist on this printer and its outcome is unknown: the
+		 * create got no answer or a 5xx, the run was cancelled after sending it, or its result was
+		 * unknown at the poll timeout. The retry goes there under the same id even if the user picked
+		 * another printer meanwhile: a new id on another printer would print the labels twice
+		 * (FR-29, FR-47).
 		 */
 		printerId?: string;
 	}
 	let unsent = $state.raw<Chunk[] | null>(null);
+	function setUnsent(next: Chunk[] | null) {
+		unsent = next && next.length > 0 ? next : null;
+		const held = unsent?.[0]?.printerId !== undefined;
+		// Only on change: every write reaches the host through the binding.
+		if (held !== retryHeld) retryHeld = held;
+	}
 	// A locked printer that left the list (deactivated / deleted) has had its open jobs failed, so
 	// the chunk is free to go to the chosen printer.
 	const lockedPrinter = $derived(printers.find((p) => p.id === unsent?.[0]?.printerId));
@@ -198,7 +214,11 @@
 	let printedTotal = $state(0);
 	const progressDone = $derived(printedTotal + (statusQuery.data?.printed ?? 0));
 
-	const blocked = $derived(running || disconnected || (target !== undefined && !target.online));
+	// A locked printer that looks offline is still tried: the BFF answers a follow-up with the job it
+	// already holds, or refuses with PRINTER_OFFLINE when it has none, which releases the lock.
+	const blocked = $derived(
+		running || disconnected || (target !== undefined && !target.online && !lockedPrinter)
+	);
 	const buttonLabel = $derived(
 		running
 			? t.printingProgress(progressDone, progressTotal)
@@ -224,7 +244,7 @@
 				const labels = await renderLabels();
 				if (abort.signal.aborted) return finishAborted(abort.signal);
 				progressTotal = labels.length;
-				unsent = chunkLabels(labels).map((chunk) => ({ labels: chunk, jobId: ulid() }));
+				setUnsent(chunkLabels(labels).map((chunk) => ({ labels: chunk, jobId: ulid() })));
 			} catch {
 				if (abort.signal.aborted) return finishAborted(abort.signal);
 				running = false;
@@ -279,7 +299,7 @@
 		const pending = [...(unsent ?? [])];
 		while (pending.length > 0) {
 			if (signal.aborted) {
-				unsent = pending;
+				setUnsent(pending);
 				return finishAborted(signal);
 			}
 			let created;
@@ -289,19 +309,22 @@
 				// Same chunk, same id on retry, unless the server says that id is another job's.
 				if (error instanceof PrintApiError && error.code === 'JOB_ID_CONFLICT') {
 					pending[0] = { labels: pending[0].labels, jobId: ulid() };
-				} else if (!(error instanceof PrintApiError && error.status < 500)) {
+				} else if (error instanceof PrintApiError && error.status < 500) {
+					// A definite refusal: no job holds this id here, so the chunk may go to any printer.
+					pending[0] = { labels: pending[0].labels, jobId: pending[0].jobId };
+				} else {
 					// No definite refusal: the job may be queued on this printer, so the retry stays here.
 					pending[0] = { ...pending[0], printerId: printer.id };
 				}
-				unsent = pending;
+				setUnsent(pending);
 				if (signal.aborted) return finishAborted(signal);
 				running = false;
 				toast.error(sendErrorMessage(error, printer.name));
 				return;
 			}
 			if (signal.aborted) {
-				// The job just created may still print, so it is not queued again on retry.
-				unsent = pending.length > 1 ? pending.slice(1) : null;
+				// The job just created may still print: the retry follows it under its own id (FR-47).
+				setUnsent([{ ...pending[0], printerId: printer.id }, ...pending.slice(1)]);
 				return finishAborted(signal);
 			}
 			job = { jobId: created.job_id, shelterCode: created.shelter_code };
@@ -312,8 +335,8 @@
 			const outcome = await waitForJob(last, signal);
 			job = undefined;
 			if (!outcome) {
-				// Aborted while waiting: the job in flight may still print, so only later chunks stay.
-				unsent = pending.length > 1 ? pending.slice(1) : null;
+				// Aborted while waiting: the job may still print, so the retry follows it (FR-47).
+				setUnsent([{ ...pending[0], printerId: printer.id }, ...pending.slice(1)]);
 				return finishAborted(signal);
 			}
 			const unsure = outcome.status === 'unknown' || outcome.status === 'timeout';
@@ -335,7 +358,7 @@
 							? [{ labels: rest, jobId: ulid() }, ...pending.slice(1)]
 							: pending.slice(1);
 				}
-				unsent = remaining.length > 0 ? remaining : null;
+				setUnsent(remaining);
 				running = false;
 				toast.error(
 					printJobOutcomeMessage(
@@ -348,7 +371,7 @@
 			}
 			pending.shift();
 		}
-		unsent = null;
+		setUnsent(null);
 		running = false;
 		toast.success(t.sent(progressTotal, printer.name));
 	}

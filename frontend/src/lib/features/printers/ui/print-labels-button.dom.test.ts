@@ -92,6 +92,9 @@ function hangUntilAborted() {
 const mainButton = () => buttons()[0];
 const options = () => [...document.body.querySelectorAll<HTMLElement>('[role="radio"]')];
 const buttons = () => [...document.body.querySelectorAll<HTMLButtonElement>('button')];
+/** The harness echoes the bound `retryHeld` prop. */
+const retryHeld = () =>
+	document.body.querySelector('[data-testid="retry-held"]')?.textContent?.trim();
 
 beforeEach(() => {
 	vi.clearAllMocks();
@@ -397,6 +400,200 @@ describe('PrintLabelsButton', () => {
 		expect(mainButton().disabled).toBe(false);
 		expect(mainButton().textContent).toContain('พิมพ์อีกครั้ง');
 		expect(buttons().some((b) => b.textContent?.trim() === 'ยกเลิก')).toBe(false);
+	});
+
+	it('follows a single job cancelled while waiting under its id on the same printer', async () => {
+		stationPrinter.set('SH001', 'p1');
+		api.createPrintJob.mockImplementation(async (input: { job_id: string }) => ({
+			job_id: input.job_id,
+			shelter_code: 'SH001',
+			expires_at: '2026-10-22T04:00:00Z'
+		}));
+		api.getPrintJobStatus.mockResolvedValue({
+			status: 'pending',
+			printed: 0,
+			label_count: 1,
+			error_code: null
+		});
+		await render({ printers: [printer('p1'), printer('p2')] });
+
+		mainButton().click();
+		await vi.waitFor(() => expect(api.getPrintJobStatus).toHaveBeenCalled());
+		buttons()
+			.find((b) => b.textContent?.trim() === 'ยกเลิก')
+			?.click();
+		await vi.waitFor(() => expect(toast.info).toHaveBeenCalledTimes(1));
+		expect(retryHeld()).toBe('true');
+
+		api.getPrintJobStatus.mockResolvedValue({
+			status: 'printed',
+			printed: 1,
+			label_count: 1,
+			error_code: null
+		});
+		stationPrinter.set('SH001', 'p2');
+		await settle();
+		mainButton().click();
+		await vi.waitFor(() => expect(toast.success).toHaveBeenCalledTimes(1));
+
+		const calls = api.createPrintJob.mock.calls.map(([input]) => input);
+		expect(calls.map((c) => c.printer_id)).toEqual(['p1', 'p1']);
+		expect(calls[1].job_id).toBe(calls[0].job_id);
+		expect(retryHeld()).toBe('false');
+	});
+
+	it('follows a job whose create answered just after the cancel under its id', async () => {
+		stationPrinter.set('SH001', 'p1');
+		let answer: (value: unknown) => void = () => {};
+		api.createPrintJob
+			.mockImplementationOnce(
+				(input: { job_id: string }) =>
+					new Promise((resolve) => {
+						answer = () =>
+							resolve({
+								job_id: input.job_id,
+								shelter_code: 'SH001',
+								expires_at: '2026-10-22T04:00:00Z'
+							});
+					})
+			)
+			.mockImplementation(async (input: { job_id: string }) => ({
+				job_id: input.job_id,
+				shelter_code: 'SH001',
+				expires_at: '2026-10-22T04:00:00Z'
+			}));
+		api.getPrintJobStatus.mockResolvedValue({
+			status: 'printed',
+			printed: 1,
+			label_count: 1,
+			error_code: null
+		});
+		await render({ printers: [printer('p1')] });
+
+		mainButton().click();
+		await vi.waitFor(() => expect(api.createPrintJob).toHaveBeenCalledTimes(1));
+		buttons()
+			.find((b) => b.textContent?.trim() === 'ยกเลิก')
+			?.click();
+		answer(undefined);
+		await vi.waitFor(() => expect(toast.info).toHaveBeenCalledTimes(1));
+		expect(retryHeld()).toBe('true');
+		mainButton().click();
+		await vi.waitFor(() => expect(toast.success).toHaveBeenCalledTimes(1));
+
+		const [first, second] = sentJobIds();
+		expect(second).toBe(first);
+	});
+
+	it('holds the retry after an unknown result, but not after a definite failure', async () => {
+		vi.useFakeTimers();
+		stationPrinter.set('SH001', 'p1');
+		api.createPrintJob.mockImplementation(async (input: { job_id: string }) => ({
+			job_id: input.job_id,
+			shelter_code: 'SH001',
+			expires_at: '2026-10-22T04:00:00Z'
+		}));
+		api.getPrintJobStatus.mockResolvedValue({
+			status: 'pending',
+			printed: 0,
+			label_count: 1,
+			error_code: null
+		});
+		await render({ printers: [printer('p1')] });
+
+		mainButton().click();
+		await vi.advanceTimersByTimeAsync(PRINT_JOB_POLL_TIMEOUT_MS + 1_000);
+		expect(retryHeld()).toBe('true');
+
+		api.getPrintJobStatus.mockResolvedValue({
+			status: 'failed',
+			printed: 0,
+			label_count: 1,
+			error_code: 'printer_timeout'
+		});
+		mainButton().click();
+		await vi.advanceTimersByTimeAsync(5_000);
+		expect(toast.error).toHaveBeenCalledTimes(2);
+		expect(retryHeld()).toBe('false');
+	});
+
+	it('follows up a job on its locked printer while that printer looks offline', async () => {
+		stationPrinter.set('SH001', 'p1');
+		const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+		api.createPrintJob
+			.mockRejectedValueOnce(new PrintApiError('unavailable', 503, 'DEPENDENCY_UNAVAILABLE'))
+			.mockImplementation(async (input: { job_id: string }) => ({
+				job_id: input.job_id,
+				shelter_code: 'SH001',
+				expires_at: '2026-10-22T04:00:00Z'
+			}));
+		api.getPrintJobStatus.mockResolvedValue({
+			status: 'printed',
+			printed: 1,
+			label_count: 1,
+			error_code: null
+		});
+		await render({ client, printers: [printer('p1'), printer('p2')] });
+
+		mainButton().click();
+		await vi.waitFor(() => expect(toast.error).toHaveBeenCalledTimes(1));
+		api.listShelterPrinters.mockResolvedValue({
+			printers: [printer('p1', { online: false }), printer('p2')],
+			server_time: '2026-10-22T03:00:10.000Z'
+		});
+		await client.invalidateQueries();
+		await settle();
+		expect(mainButton().disabled).toBe(false);
+		mainButton().click();
+		await vi.waitFor(() => expect(toast.success).toHaveBeenCalledTimes(1));
+
+		const calls = api.createPrintJob.mock.calls.map(([input]) => input);
+		expect(calls.map((c) => c.printer_id)).toEqual(['p1', 'p1']);
+		expect(calls[1].job_id).toBe(calls[0].job_id);
+	});
+
+	it('releases the lock when the offline locked printer holds no job under that id', async () => {
+		stationPrinter.set('SH001', 'p1');
+		const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+		api.createPrintJob
+			.mockRejectedValueOnce(new PrintApiError('unavailable', 503, 'DEPENDENCY_UNAVAILABLE'))
+			.mockRejectedValueOnce(new PrintApiError('offline', 409, 'PRINTER_OFFLINE'))
+			.mockImplementation(async (input: { job_id: string }) => ({
+				job_id: input.job_id,
+				shelter_code: 'SH001',
+				expires_at: '2026-10-22T04:00:00Z'
+			}));
+		api.getPrintJobStatus.mockResolvedValue({
+			status: 'printed',
+			printed: 1,
+			label_count: 1,
+			error_code: null
+		});
+		await render({ client, printers: [printer('p1'), printer('p2')] });
+
+		mainButton().click();
+		await vi.waitFor(() => expect(toast.error).toHaveBeenCalledTimes(1));
+		expect(retryHeld()).toBe('true');
+		api.listShelterPrinters.mockResolvedValue({
+			printers: [printer('p1', { online: false }), printer('p2')],
+			server_time: '2026-10-22T03:00:10.000Z'
+		});
+		await client.invalidateQueries();
+		await settle();
+		mainButton().click();
+		await vi.waitFor(() => expect(toast.error).toHaveBeenCalledTimes(2));
+		expect(toast.error).toHaveBeenLastCalledWith('เครื่อง เครื่อง-p1 ออฟไลน์');
+		expect(retryHeld()).toBe('false');
+
+		stationPrinter.set('SH001', 'p2');
+		await settle();
+		mainButton().click();
+		await vi.waitFor(() => expect(toast.success).toHaveBeenCalledTimes(1));
+		expect(api.createPrintJob.mock.calls.map(([input]) => input.printer_id)).toEqual([
+			'p1',
+			'p1',
+			'p2'
+		]);
 	});
 
 	it('does not poll or announce anything when unmounted while a job is being created', async () => {

@@ -45,9 +45,12 @@
 	const effectiveCloseLabel = $derived(closeLabel ?? t.closeWindow);
 
 	let isExportingPdf = $state(false);
-	// Closing mid-print would drop the run's state while its job stays queued, so printing again
-	// after reopening would print the labels twice: the modal stays open until the run ends.
+	// Closing mid-print, or while a job already sent may still print, would drop the button's
+	// follow-up state while the job stays queued, so printing again after reopening would print the
+	// labels twice: the modal stays open until the run ends and the follow-up is resolved.
 	let printing = $state(false);
+	let retryHeld = $state(false);
+	const locked = $derived(printing || retryHeld);
 
 	const shelterCode = $derived(shelterStore.selectedShelterCode ?? getShelterCode());
 
@@ -111,7 +114,7 @@
 
 {#if show}
 	{#if dismissible}
-		<ModalEscapeListener open={show} disabled={printing} onEscape={onClose} />
+		<ModalEscapeListener open={show} disabled={locked} onEscape={onClose} />
 	{/if}
 	<div
 		class={embedded
@@ -139,7 +142,7 @@
 						variant="ghost"
 						size="icon"
 						class="size-11 shrink-0 text-slate-500 hover:text-slate-900"
-						disabled={printing}
+						disabled={locked}
 						onclick={onClose}
 					>
 						<X class="size-5" />
@@ -181,6 +184,7 @@
 				{#if printable && labelPng}
 					<PrintLabelsButton
 						bind:printing
+						bind:retryHeld
 						{shelterCode}
 						labelCount={1}
 						source="evacuee_qr"
@@ -200,7 +204,7 @@
 					<Button
 						variant="ghost"
 						class="h-11 w-full text-slate-600"
-						disabled={printing}
+						disabled={locked}
 						onclick={onClose}
 					>
 						{effectiveCloseLabel}

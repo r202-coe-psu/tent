@@ -105,6 +105,12 @@
 		}
 	]);
 
+	// Leaving the page while printing, or while a job already sent may still print, drops the
+	// button's follow-up state: printing the family again would duplicate labels.
+	let printing = $state(false);
+	let retryHeld = $state(false);
+	const leaveLocked = $derived(printing || retryHeld);
+
 	function isHead(member: Evacuee, index: number): boolean {
 		if (household.head_evacuee_id) {
 			return member._id === household.head_evacuee_id;
@@ -115,18 +121,31 @@
 
 {#snippet nextActions()}
 	{#if onNextStation}
-		<Button type="button" class="min-h-11" onclick={() => onNextStation?.(nextStation)}>
+		<Button
+			type="button"
+			class="min-h-11"
+			disabled={leaveLocked}
+			onclick={() => onNextStation?.(nextStation)}
+		>
 			{nextStationLabel}
 			<ArrowRight class="ml-1.5 size-4" />
 		</Button>
 	{/if}
 	{#if onRegisterAnother}
-		<Button type="button" variant="outline" class="min-h-11" onclick={onRegisterAnother}>
+		<Button
+			type="button"
+			variant="outline"
+			class="min-h-11"
+			disabled={leaveLocked}
+			onclick={onRegisterAnother}
+		>
 			<UserPlus class="mr-1.5 size-4" />
 			ลงทะเบียนครอบครัวถัดไป
 		</Button>
 	{/if}
-	<Button type="button" variant="ghost" class="min-h-11" onclick={onDone}>กลับคิวทะเบียน</Button>
+	<Button type="button" variant="ghost" class="min-h-11" disabled={leaveLocked} onclick={onDone}>
+		กลับคิวทะเบียน
+	</Button>
 {/snippet}
 
 <div class="space-y-4 pb-20">
@@ -173,6 +192,8 @@
 				     change of members (it would print the old labels). -->
 				{#key `${household._id}:${members.map((m) => m._id).join(',')}`}
 					<PrintLabelsButton
+						bind:printing
+						bind:retryHeld
 						{shelterCode}
 						labelCount={total}
 						source="walk_in"
