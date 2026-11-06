@@ -28,6 +28,9 @@ vi.mock('$lib/stores/auth.svelte', () => ({
 		}
 	}
 }));
+vi.mock('$lib/features/shelters', () => ({
+	useShelters: () => ({ data: [{ code: 'SH001', name: 'ศูนย์กีฬา' }] })
+}));
 vi.mock('../application/queries', () => ({
 	useReviewVolunteerIdentity: () => ({ mutateAsync: mocks.reviewIdentity, isPending: false }),
 	useReviewVolunteerSkill: () => ({ mutateAsync: mocks.reviewSkill, isPending: false }),
@@ -209,5 +212,31 @@ describe('VolunteerQualificationDialog — results from other shelters (CR-228)'
 		expect(mocks.reviewSkill).toHaveBeenCalledWith(
 			expect.not.objectContaining({ acceptedFrom: expect.anything() })
 		);
+	});
+
+	it('shows an accepted skill as using the other shelter license instead of the license field', async () => {
+		await render({
+			skill_verifications: {
+				[MEDICAL]: {
+					status: 'verified',
+					reviewed_at: '2026-11-06T03:00:00.000Z',
+					reviewed_by: 'sm02',
+					notes: null,
+					credential_reference: 'ว.T12',
+					accepted_from: { shelter_code: 'SH001', verified_at: '2026-10-20T03:20:00.000Z' }
+				}
+			}
+		} as Partial<Volunteer>);
+		expect(text()).toContain('ใช้ผลตรวจใบอนุญาตจาก ศูนย์กีฬา (SH001) เมื่อ');
+		expect(text()).toContain('เลขใบอนุญาตที่บันทึกในศูนย์นี้: ว.T12');
+		expect(document.getElementById(`credential-reference-${MEDICAL}`)).toBeNull();
+	});
+
+	it('keeps the license field for a skill checked at this shelter', async () => {
+		await render({
+			skill_verifications: { [MEDICAL]: { status: 'verified', credential_reference: 'ว.1' } }
+		} as Partial<Volunteer>);
+		expect(document.getElementById(`credential-reference-${MEDICAL}`)).not.toBeNull();
+		expect(text()).not.toContain('ใช้ผลตรวจใบอนุญาตจาก');
 	});
 });
