@@ -10,7 +10,10 @@
 		printerCreateInputSchema,
 		type PrinterSecretResponse
 	} from '../domain/print-device.schema';
-	import { printerCreateIssueMessage } from '../domain/printer-admin.messages';
+	import {
+		printerCreateIssueMessage,
+		SHELTER_CLOSED_MESSAGE
+	} from '../domain/printer-admin.messages';
 	import { useCreatePrinterDevice } from '../application/queries';
 
 	let {
@@ -71,11 +74,13 @@
 			createMutation.reset();
 		} catch (err) {
 			toast.error(
-				err instanceof PrintApiError && err.status === 409
-					? 'Device ID นี้ถูกใช้แล้ว'
-					: err instanceof Error
-						? err.message
-						: 'เกิดข้อผิดพลาดในการลงทะเบียนเครื่องพิมพ์'
+				err instanceof PrintApiError && err.code === 'SHELTER_CLOSED'
+					? SHELTER_CLOSED_MESSAGE
+					: err instanceof PrintApiError && err.status === 409
+						? 'Device ID นี้ถูกใช้แล้ว'
+						: err instanceof Error
+							? err.message
+							: 'เกิดข้อผิดพลาดในการลงทะเบียนเครื่องพิมพ์'
 			);
 		}
 	}

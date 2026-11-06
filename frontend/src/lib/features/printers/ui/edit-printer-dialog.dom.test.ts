@@ -2,6 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushSync, mount, tick, unmount } from 'svelte';
 import type { PrinterAdminSummary } from '../domain/print-device.schema';
+import { PrintApiError } from '../data/printers.api';
 import EditPrinterDialog from './edit-printer-dialog.svelte';
 
 const updateMutateAsync = vi.fn();
@@ -63,6 +64,25 @@ afterEach(async () => {
 });
 
 describe('EditPrinterDialog', () => {
+	it('tells the shelter is closed when reactivating is refused', async () => {
+		updateMutateAsync.mockRejectedValue(new PrintApiError('closed', 409, 'SHELTER_CLOSED'));
+		await open(printer({ status: 'inactive' }));
+
+		document.body.querySelector<HTMLElement>('[role="switch"]')?.click();
+		flushSync();
+		[...document.body.querySelectorAll('button')]
+			.find((b) => b.textContent?.trim() === 'บันทึก')
+			?.click();
+		await settle();
+
+		expect(updateMutateAsync).toHaveBeenCalledWith(
+			expect.objectContaining({ patch: { status: 'active' } })
+		);
+		expect(toast.error).toHaveBeenCalledWith(
+			'ศูนย์นี้ปิดหรือถูกยกเลิกแล้ว จึงลงทะเบียนหรือเปิดใช้เครื่องพิมพ์ไม่ได้'
+		);
+	});
+
 	it('has no kiosk picker', async () => {
 		await open(printer());
 

@@ -16,6 +16,7 @@
 	import Trash2 from '@lucide/svelte/icons/trash-2';
 	import KeyRound from '@lucide/svelte/icons/key-round';
 	import { PrintApiError } from '../data/printers.api';
+	import { SHELTER_CLOSED_MESSAGE } from '../domain/printer-admin.messages';
 	import type {
 		PrinterAdminSummary,
 		PrinterPatch,
@@ -70,7 +71,12 @@
 			deleteMutation.isPending
 	);
 
-	const errorText = (err: unknown) => (err instanceof Error ? err.message : 'ดำเนินการไม่สำเร็จ');
+	const errorText = (err: unknown, fallback = 'ดำเนินการไม่สำเร็จ') =>
+		err instanceof PrintApiError && err.code === 'SHELTER_CLOSED'
+			? SHELTER_CLOSED_MESSAGE
+			: err instanceof Error
+				? err.message
+				: fallback;
 
 	async function save() {
 		if (!patch) return;
@@ -79,7 +85,7 @@
 			toast.success(`บันทึกการตั้งค่าเครื่อง ${patch.name ?? printer.name} แล้ว`);
 			open = false;
 		} catch (err) {
-			toast.error(err instanceof Error ? err.message : 'ไม่สามารถบันทึกการตั้งค่าเครื่องได้');
+			toast.error(errorText(err, 'ไม่สามารถบันทึกการตั้งค่าเครื่องได้'));
 		}
 	}
 

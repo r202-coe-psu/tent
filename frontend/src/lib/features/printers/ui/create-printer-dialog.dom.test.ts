@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushSync, mount, tick, unmount } from 'svelte';
+import { PrintApiError } from '../data/printers.api';
 import CreatePrinterDialog from './create-printer-dialog.svelte';
 
 const mutateAsync = vi.fn();
@@ -72,6 +73,17 @@ describe('CreatePrinterDialog secret handling', () => {
 });
 
 describe('CreatePrinterDialog validation copy', () => {
+	it('tells the shelter is closed instead of calling it a taken Device ID', async () => {
+		mutateAsync.mockRejectedValue(new PrintApiError('closed', 409, 'SHELTER_CLOSED'));
+
+		submit().click();
+		await settle();
+
+		expect(toast.error).toHaveBeenCalledWith(
+			'ศูนย์นี้ปิดหรือถูกยกเลิกแล้ว จึงลงทะเบียนหรือเปิดใช้เครื่องพิมพ์ไม่ได้'
+		);
+	});
+
 	it('toasts a bad Device ID in Thai, not the schema English', async () => {
 		fill('printer-device-id', 'AB');
 

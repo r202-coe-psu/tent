@@ -18,3 +18,7 @@ export function printerCreateIssueMessage(issue: PrinterCreateIssue): string {
 			return 'ข้อมูลไม่ถูกต้อง';
 	}
 }
+
+/** BFF `SHELTER_CLOSED` (O-11): a closed or cancelled shelter gets no new or reactivated printer. */
+export const SHELTER_CLOSED_MESSAGE =
+	'ศูนย์นี้ปิดหรือถูกยกเลิกแล้ว จึงลงทะเบียนหรือเปิดใช้เครื่องพิมพ์ไม่ได้';
