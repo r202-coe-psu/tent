@@ -21,6 +21,8 @@ export interface ItemStockSummary {
 	/** Earliest `lot.expiry` across every lot that still holds stock — expired ones included. */
 	earliestExpiry: string | null;
 	expiryState: StockExpiryState;
+	/** True when a lot with qty > 0 carries its own `lot.expiry` (shelf-life fallback excluded). */
+	hasLotExpiry: boolean;
 	/** Lots with qty > 0. */
 	lotCount: number;
 	/** Distinct {@link lotStorageKey} values of lots with qty > 0 ('' = unspecified). */
@@ -47,10 +49,12 @@ export function summarizeItemStock(
 	let oldestReceivedAt: string | null = null;
 	let expiredQty = '0';
 	let hasExpiredLot = false;
+	let hasLotExpiry = false;
 	const storageKeys = new Set<string>();
 
 	for (const lot of remaining) {
 		storageKeys.add(lotStorageKey(lot.lot));
+		if (lot.lot?.expiry) hasLotExpiry = true;
 		if (!oldestReceivedAt || lot.received_at < oldestReceivedAt) {
 			oldestReceivedAt = lot.received_at;
 		}
@@ -102,6 +106,7 @@ export function summarizeItemStock(
 	return {
 		earliestExpiry,
 		expiryState,
+		hasLotExpiry,
 		lotCount: remaining.length,
 		storageKeys: [...storageKeys],
 		expiredQty,
