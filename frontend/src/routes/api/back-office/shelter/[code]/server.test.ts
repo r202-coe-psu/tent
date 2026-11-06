@@ -56,20 +56,16 @@ const siteKindDoc = {
 /** Run the mutator updateMaster is given against a stored shelter of `storedKind`. */
 function useStoredKind(storedKind: string) {
 	updateMock.mockImplementation(async (_code, mutator) => {
-		await mutator({ _rev: STORED_REV, site_kind: storedKind } as ShelterMaster);
+		await mutator({ site_kind: storedKind } as ShelterMaster);
 		return { id: 'shelter:SH001', rev: '2-new' };
 	});
 }
 
-/** PATCH requires the `_rev` the client read; tests that do not care about it send `STORED_REV`. */
-const STORED_REV = '1-stored';
-
-function callPATCH(code: string, body: Record<string, unknown> = {}, withRev = true) {
-	const payload = withRev ? { _rev: STORED_REV, ...body } : body;
+function callPATCH(code: string, body: unknown = {}) {
 	const request = new Request(`http://localhost/api/back-office/shelter/${code}`, {
 		method: 'PATCH',
 		headers: { cookie: 'AuthSession=abc', 'content-type': 'application/json' },
-		body: JSON.stringify(payload)
+		body: JSON.stringify(body)
 	});
 	return PATCH({ request, params: { code } } as unknown as Parameters<typeof PATCH>[0]);
 }
@@ -102,7 +98,7 @@ describe('PATCH /api/back-office/shelter/[code]', () => {
 		const mutator = updateMock.mock.calls[0][1] as (c: unknown) => {
 			patch: Record<string, unknown>;
 		};
-		const { patch } = mutator({ _rev: STORED_REV, operation_status: 'closed' });
+		const { patch } = mutator({ operation_status: 'closed' });
 		expect(patch).toEqual({ name: 'ศูนย์ใหม่', updated_at: '2026-01-01T00:00:00.000Z' });
 	});
 
@@ -111,7 +107,7 @@ describe('PATCH /api/back-office/shelter/[code]', () => {
 		const mutator = updateMock.mock.calls[0][1] as (c: unknown) => {
 			patch: Record<string, unknown>;
 		};
-		const { patch } = mutator({ _rev: STORED_REV, operation_status: 'closed' });
+		const { patch } = mutator({ operation_status: 'closed' });
 		expect(patch.operation_status).toBe('closed');
 		expect(patch).not.toHaveProperty('closed_at');
 	});
@@ -121,7 +117,7 @@ describe('PATCH /api/back-office/shelter/[code] — closing goes through the clo
 	/** Run the PATCH against a stored shelter in `stored` status; returns the response status. */
 	async function patchAgainst(stored: string, body: unknown): Promise<number> {
 		updateMock.mockImplementation(async (_code, mutator) => {
-			await mutator({ _rev: STORED_REV, operation_status: stored } as ShelterMaster);
+			await mutator({ operation_status: stored } as ShelterMaster);
 			return { id: 'shelter:SH001', rev: '2-new' };
 		});
 		return (await callPATCH('SH001', body)).status;
@@ -155,7 +151,7 @@ describe('PATCH /api/back-office/shelter/[code] — closing goes through the clo
 
 	it('answers the close block in the contract envelope so the UI can toast it', async () => {
 		updateMock.mockImplementation(async (_code, mutator) => {
-			await mutator({ _rev: STORED_REV, operation_status: 'active' } as ShelterMaster);
+			await mutator({ operation_status: 'active' } as ShelterMaster);
 			return { id: 'shelter:SH001', rev: '2-new' };
 		});
 		const res = await callPATCH('SH001', { operation_status: 'closed' });
@@ -228,15 +224,14 @@ describe('PATCH /api/back-office/shelter/[code] — optimistic concurrency + sto
 		expect(patch).toEqual({ name: 'x', updated_at: '2026-01-01T00:00:00.000Z' });
 	});
 
-	it('422 and no write when the body has no _rev', async () => {
-		const res = await callPATCH('SH001', { name: 'x' }, false);
-		expect(res.status).toBe(422);
-		expect(updateMock).not.toHaveBeenCalled();
+	it('stays optional: a body without _rev is accepted (e2e/direct callers)', async () => {
+		const { res } = await patchAgainst({ _rev: '2-b' }, { name: 'x' });
+		expect(res.status).toBe(200);
 	});
 
 	it('keeps the stored sub_storage when common_areas is sent without it', async () => {
 		const { res, patch } = await patchAgainst(
-			{ _rev: STORED_REV, common_areas: { helipad: false, sub_storage: [point] } },
+			{ _rev: '2-b', common_areas: { helipad: false, sub_storage: [point] } },
 			{ common_areas: { helipad: true } }
 		);
 		expect(res.status).toBe(200);
@@ -246,7 +241,7 @@ describe('PATCH /api/back-office/shelter/[code] — optimistic concurrency + sto
 	it('replaces sub_storage when the form sends it', async () => {
 		const sent = { id: 'p2', name: 'ใหม่', types: ['general'] };
 		const { patch } = await patchAgainst(
-			{ _rev: STORED_REV, common_areas: { sub_storage: [point] } },
+			{ _rev: '2-b', common_areas: { sub_storage: [point] } },
 			{ common_areas: { sub_storage: [sent] } }
 		);
 		expect((patch?.common_areas as { sub_storage: unknown[] }).sub_storage).toHaveLength(1);
@@ -254,7 +249,7 @@ describe('PATCH /api/back-office/shelter/[code] — optimistic concurrency + sto
 	});
 
 	it('falls back to [] when nothing is stored and sub_storage was not sent', async () => {
-		const { patch } = await patchAgainst({ _rev: STORED_REV }, { common_areas: { helipad: true } });
+		const { patch } = await patchAgainst({ _rev: '2-b' }, { common_areas: { helipad: true } });
 		expect(patch?.common_areas).toEqual({ helipad: true, sub_storage: [] });
 	});
 });

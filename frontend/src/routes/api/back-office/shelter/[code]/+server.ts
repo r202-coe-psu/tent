@@ -92,8 +92,8 @@ export const PATCH: RequestHandler = async ({ request, params }) => {
 		);
 		// `updateShelterSchema` strips `_rev`; read it raw. It is a precondition, never part of the patch.
 		const rev = (sent as { _rev?: unknown })._rev;
-		if (typeof rev !== 'string' || rev === '') {
-			throw new ServiceError('VALIDATION', 'ต้องระบุ _rev ของข้อมูลศูนย์ที่อ่านมา');
+		if (rev !== undefined && typeof rev !== 'string') {
+			throw new ServiceError('VALIDATION', '_rev ต้องเป็นข้อความ');
 		}
 		// `commonAreasSchema.sub_storage` defaults to [] and PATCH replaces `common_areas` wholesale,
 		// so decide from the raw body whether the form sent the storage points at all.
@@ -109,7 +109,7 @@ export const PATCH: RequestHandler = async ({ request, params }) => {
 		// (skill: couchdb-pouchdb-bestpractices §3) and owns `closed_at`.
 		await updateMaster(code, (current) => {
 			// Optimistic concurrency: re-checked against the fresh doc on every updateMaster retry.
-			if (current._rev !== rev) {
+			if (rev !== undefined && current._rev !== rev) {
 				throw new ServiceError(
 					'CONFLICT',
 					'ข้อมูลศูนย์ถูกแก้ไขโดยผู้อื่น กรุณาโหลดใหม่แล้วลองอีกครั้ง'
