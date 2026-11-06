@@ -5,9 +5,12 @@ import { qtyGt } from '$lib/utils/qty';
  * typed or pasted negatives despite `min`, so the browser cannot be trusted to reject them.
  */
 
-/** True for a finite number at or above `min`; `null`, `undefined`, `NaN` and strings are not counts. */
+/**
+ * True for a whole number at or above `min`, as every kitchen count schema requires
+ * (`z.number().int()`); `null`, `undefined`, `NaN`, decimals and strings are not counts.
+ */
 export function isCount(n: number | null | undefined, min: number): boolean {
-	return typeof n === 'number' && Number.isFinite(n) && n >= min;
+	return Number.isInteger(n) && (n as number) >= min;
 }
 
 /**
@@ -20,8 +23,8 @@ export function isPositiveQty(v: unknown): boolean {
 	return Number.isFinite(n) && qtyGt(n, 0);
 }
 
-/** Inline error under a count box that is empty, negative or below zero. */
-export const COUNT_ERROR = 'ต้องเป็นตัวเลขตั้งแต่ 0 ขึ้นไป';
+/** Inline error under a count box that is empty, negative or not a whole number. */
+export const COUNT_ERROR = 'ต้องเป็นจำนวนเต็มตั้งแต่ 0 ขึ้นไป';
 
 /** Why an edit to a count box is refused. */
 export type EditRejection = 'negative' | 'non-numeric';

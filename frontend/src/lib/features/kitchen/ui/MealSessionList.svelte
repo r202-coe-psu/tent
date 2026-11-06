@@ -201,7 +201,7 @@
 	);
 
 	const guard = new CountInputGuard();
-	// An empty box counts as 0 (see formTotal); a negative or non-numeric value is an error.
+	// An empty box counts as 0 (see formTotal); a negative, decimal or non-numeric value is an error.
 	const errorFor = (id: string, n: number | null) =>
 		!guard.unparsed[id] && isCount(n ?? 0, 0) ? null : COUNT_ERROR;
 	const countErrors = $derived({
@@ -249,6 +249,10 @@
 	}
 
 	async function handleCreateSession() {
+		if (!countsValid) {
+			toast.error(COUNT_ERROR);
+			return;
+		}
 		if (!formName.trim()) {
 			toast.error('กรุณาระบุชื่อรอบมื้ออาหาร');
 			return;

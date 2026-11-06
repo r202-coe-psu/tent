@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { isCount, isPositiveQty, keyRejection, textRejection } from './count-input';
 
 describe('isCount', () => {
-	it('accepts finite numbers at or above the minimum', () => {
+	it('accepts whole numbers at or above the minimum', () => {
 		expect(isCount(0, 0)).toBe(true);
 		expect(isCount(7, 1)).toBe(true);
 	});
@@ -14,6 +14,12 @@ describe('isCount', () => {
 		expect(isCount(undefined, 0)).toBe(false);
 		expect(isCount(Number.NaN, 0)).toBe(false);
 		expect(isCount(Number.POSITIVE_INFINITY, 0)).toBe(false);
+	});
+
+	it('rejects decimals, which the count schemas refuse as non-integers', () => {
+		expect(isCount(4.5, 0)).toBe(false);
+		expect(isCount(2.5, 1)).toBe(false);
+		expect(isCount(0.5, 0)).toBe(false);
 	});
 });
 

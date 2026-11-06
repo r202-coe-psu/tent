@@ -62,7 +62,7 @@
 	import { Label } from '$lib/components/ui/label';
 	import { Textarea } from '$lib/components/ui/textarea';
 	import { toast } from 'svelte-sonner';
-	import { addQty, persistQty, qtyGt, qtyLte } from '$lib/utils/qty';
+	import { addQty, persistQty, qtyGt } from '$lib/utils/qty';
 	import { formatThaiDateTime, formatThaiShortDate } from '$lib/utils/date';
 	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
 	import ChefHat from '@lucide/svelte/icons/chef-hat';
@@ -231,7 +231,7 @@
 	let allocatedTarget = $state(50);
 	const guard = new CountInputGuard();
 	const targetValid = $derived(isCount(allocatedTarget, 1));
-	const TARGET_ERROR = 'จำนวนจานต้องมากกว่า 0';
+	const TARGET_ERROR = 'จำนวนจานต้องเป็นจำนวนเต็มตั้งแต่ 1 ขึ้นไป';
 	const QTY_ERROR = 'จำนวนต้องมากกว่า 0';
 	const scalingTarget = $derived(targetValid ? allocatedTarget : 0);
 	// #802: save this batch's ingredient list as a catalog recipe named after the menu label, at
@@ -447,7 +447,7 @@
 	}
 
 	function confirmAddIngredient() {
-		if (!newItemId || newQty == null || newQty === '' || qtyLte(newQty, 0)) {
+		if (!newItemId || !isPositiveQty(newQty)) {
 			toast.error('กรุณาระบุวัตถุดิบและจำนวนที่ถูกต้อง');
 			return;
 		}
@@ -540,10 +540,7 @@
 			toast.error('กรุณาระบุวัตถุดิบอย่างน้อย 1 รายการ');
 			return;
 		}
-		const hasInvalidQty = ingredientsList.some(
-			(ing) => ing.needed == null || ing.needed === '' || qtyLte(ing.needed, 0)
-		);
-		if (hasInvalidQty) {
+		if (!ingredientsValid) {
 			toast.error('กรุณาระบุจำนวนวัตถุดิบให้มากกว่า 0 ทุกรายการ');
 			return;
 		}
@@ -638,10 +635,7 @@
 			toast.error('กรุณาระบุวัตถุดิบอย่างน้อย 1 รายการ');
 			return;
 		}
-		const hasInvalidQty = ingredientsList.some(
-			(ing) => ing.needed == null || ing.needed === '' || qtyLte(ing.needed, 0)
-		);
-		if (hasInvalidQty) {
+		if (!ingredientsValid) {
 			toast.error('กรุณาระบุจำนวนวัตถุดิบให้มากกว่า 0 ทุกรายการ');
 			return;
 		}

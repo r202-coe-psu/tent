@@ -203,9 +203,10 @@
 		infant: isCount(infant, 0) ? null : COUNT_ERROR
 	});
 	// An empty per-person box counts as 0 and the row is skipped; a negative or unparsable value is
-	// an error.
+	// an error. Unlike the headcounts, a per-person amount may be a decimal.
+	const QTY_ERROR = 'ต้องเป็นตัวเลขตั้งแต่ 0 ขึ้นไป';
 	const isQtyValid = (qty: number | null, i: number) =>
-		!guard.unparsed[`mp-qty-${i}`] && isCount(qty ?? 0, 0);
+		!guard.unparsed[`mp-qty-${i}`] && Number.isFinite(qty ?? 0) && (qty ?? 0) >= 0;
 	const numbersValid = $derived(
 		totalError === null &&
 			Object.values(subCountErrors).every((e) => e === null) &&
@@ -430,7 +431,7 @@
 								<CountFieldError
 									{guard}
 									id={`mp-qty-${i}`}
-									message={isQtyValid(row.qtyPerPerson, i) ? null : COUNT_ERROR}
+									message={isQtyValid(row.qtyPerPerson, i) ? null : QTY_ERROR}
 								/>
 								{#if row.itemId && !currentUnresolved}
 									<p class="pl-0.5 text-xs text-muted-foreground">
@@ -649,7 +650,6 @@
 					class="min-h-11 w-full sm:w-auto"
 					disabled={createCalc.isPending ||
 						updateCalc.isPending ||
-						total <= 0 ||
 						!numbersValid ||
 						!sopProfile.data ||
 						!subCountsValid ||

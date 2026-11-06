@@ -114,7 +114,7 @@ describe('meal plan form numeric inputs (#803)', () => {
 		});
 		await enter('mp-qty-0', '');
 
-		expect(alerts()).toEqual([NON_NUMERIC, COUNT_ERROR]);
+		expect(alerts()).toEqual([NON_NUMERIC, 'ต้องเป็นตัวเลขตั้งแต่ 0 ขึ้นไป']);
 		expect(submit().disabled).toBe(true);
 
 		delete (box('mp-qty-0') as { validity?: ValidityState }).validity;
@@ -197,8 +197,15 @@ describe('meal plan form numeric inputs (#803)', () => {
 		expect((await paste('mp-halal', '1e3')).defaultPrevented).toBe(true);
 		expect(alerts()).toEqual([NON_NUMERIC]);
 
-		expect((await paste('mp-halal', '2.5')).defaultPrevented).toBe(false);
-		await enter('mp-halal', '2.5');
+		expect((await paste('mp-halal', '25')).defaultPrevented).toBe(false);
+		await enter('mp-halal', '25');
 		expect(alerts()).toEqual([]);
+	});
+
+	it('flags a decimal headcount, which the plan schema stores as a whole number', async () => {
+		await renderValid();
+
+		await enter('mp-halal', '2.5');
+		expect(alerts()).toEqual([COUNT_ERROR]);
 	});
 });
