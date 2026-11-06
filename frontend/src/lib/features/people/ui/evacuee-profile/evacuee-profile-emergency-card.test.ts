@@ -12,6 +12,7 @@ const evacuee: Evacuee = {
 	first_name: 'Anna',
 	last_name: 'Schmidt',
 	gender: 'female',
+	phone: null,
 	country: 'GERMANY',
 	vulnerable_groups: [],
 	special_needs: [],

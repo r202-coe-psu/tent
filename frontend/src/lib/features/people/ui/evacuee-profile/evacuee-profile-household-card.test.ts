@@ -57,6 +57,7 @@ const household: Household = {
 	label: 'Schmidt family',
 	head_evacuee_id: 'evacuee:head',
 	status: 'checked_in',
+	shelter_code: 'SH001',
 	checkout_destination: null,
 	municipality_zone: '5',
 	community: 'Green Park',

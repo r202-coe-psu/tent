@@ -20,9 +20,11 @@ async function render(props: Record<string, unknown>) {
 
 const stub = () => document.body.querySelector<HTMLElement>('[data-testid="qc-stub"]');
 
-afterEach(() => {
+afterEach(async () => {
 	if (instance) unmount(instance);
 	instance = null;
+	// bits-ui body-scroll-lock cleans up on a 24ms timer; let it run before the env tears down
+	await new Promise((resolve) => setTimeout(resolve, 50));
 	document.body.innerHTML = '';
 });
 
