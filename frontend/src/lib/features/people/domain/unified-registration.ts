@@ -11,6 +11,7 @@ import {
 	type ResidenceFields
 } from './registration-shell';
 import type { AuthorContext } from '$lib/db/model';
+import type { LanguageCode } from '$lib/stores/language.svelte';
 import { ulid } from '$lib/db/ulid';
 import {
 	planRegistrationConsent,
@@ -211,7 +212,11 @@ export function parseUnifiedRegistration(
 	return unifiedRegistrationInputSchema.parse(input);
 }
 
-export function memberCardLabel(index: number): string {
+/** English mirror of `PRIMARY_CONTACT_LABEL`. */
+export const PRIMARY_CONTACT_LABEL_EN = 'Primary contact';
+
+export function memberCardLabel(index: number, language: LanguageCode = 'th'): string {
+	if (language === 'en') return index === 0 ? PRIMARY_CONTACT_LABEL_EN : `Member ${index + 1}`;
 	return index === 0 ? PRIMARY_CONTACT_LABEL : `สมาชิก ${index + 1}`;
 }
 

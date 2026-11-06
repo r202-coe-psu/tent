@@ -4,7 +4,8 @@
  */
 
 import type { StayStatus } from './people';
-import { STATUS_LABELS, isAnonymousId } from './people';
+import { isAnonymousId, peopleLabelsByLanguage } from './people';
+import type { LanguageCode } from '$lib/stores/language.svelte';
 
 /** CTA when a local shelter hit is `pre_registered`. */
 export const REPORT_IN_CTA_LABEL = 'รับรายงานตัว (Report-in)';
@@ -42,6 +43,61 @@ export const NEW_REG_OVERRIDE_TRIGGER_LABEL = 'ไม่ใช่คนนี้
 /** Non-claim roles see pool rows without a claim button. */
 export const POOL_CLAIM_FORBIDDEN_HINT = 'ต้องมีสิทธิ์รับเข้าศูนย์เพื่อ claim';
 
+/** Every Station 1 search-first copy string, keyed for a language toggle. */
+export type IntakeSearchCopy = {
+	reportInCta: string;
+	newRegistrationCta: string;
+	searchPlaceholder: string;
+	overrideTitle: string;
+	overrideBody: string;
+	overridePoolErrorBody: string;
+	overrideConfirm: string;
+	overrideCancel: string;
+	poolVerifyError: string;
+	newRegLockedHint: string;
+	newRegPoolErrorLockedHint: string;
+	newRegOverrideTrigger: string;
+	poolClaimForbiddenHint: string;
+};
+
+/** English mirror of the Thai constants above — those stay the source of truth. */
+export const intakeSearchCopyByLanguage: Record<LanguageCode, IntakeSearchCopy> = {
+	th: {
+		reportInCta: REPORT_IN_CTA_LABEL,
+		newRegistrationCta: NEW_REGISTRATION_CTA_LABEL,
+		searchPlaceholder: INTAKE_SEARCH_PLACEHOLDER,
+		overrideTitle: OVERRIDE_NEW_REG_TITLE,
+		overrideBody: OVERRIDE_NEW_REG_BODY,
+		overridePoolErrorBody: OVERRIDE_NEW_REG_POOL_ERROR_BODY,
+		overrideConfirm: OVERRIDE_NEW_REG_CONFIRM,
+		overrideCancel: OVERRIDE_NEW_REG_CANCEL,
+		poolVerifyError: POOL_VERIFY_ERROR_COPY,
+		newRegLockedHint: NEW_REG_LOCKED_HINT,
+		newRegPoolErrorLockedHint: NEW_REG_POOL_ERROR_LOCKED_HINT,
+		newRegOverrideTrigger: NEW_REG_OVERRIDE_TRIGGER_LABEL,
+		poolClaimForbiddenHint: POOL_CLAIM_FORBIDDEN_HINT
+	},
+	en: {
+		reportInCta: 'Report in',
+		newRegistrationCta: '+ New registration',
+		searchPlaceholder: 'National ID / passport / name / phone',
+		overrideTitle: 'Confirm new registration?',
+		overrideBody:
+			'A record matching this search was found. If this is a different person, confirm to register them as new.',
+		overridePoolErrorBody:
+			'The central queue could not be fully checked. If you are sure this is a different person, confirm to register them as new.',
+		overrideConfirm: 'Confirm new registration',
+		overrideCancel: 'Cancel',
+		poolVerifyError: 'Could not check the central queue — try again',
+		newRegLockedHint:
+			'A matching record was found — use the one above, or confirm this is a different person',
+		newRegPoolErrorLockedHint:
+			'The central queue check is incomplete — try again, or confirm to register as new',
+		newRegOverrideTrigger: 'Not this person — register new',
+		poolClaimForbiddenHint: 'Intake permission is required to claim'
+	}
+};
+
 export type ShelterHitAction = 'report_in' | 'show_status';
 
 /** Station 1 new-registration CTA after federated search (#251 grill). */
@@ -55,9 +111,9 @@ export function resolveShelterHitAction(status: StayStatus): ShelterHitAction {
 	return status === 'pre_registered' || status === 'kiosk_registered' ? 'report_in' : 'show_status';
 }
 
-/** Thai label for the stay status shown on already-registered hits. */
-export function shelterHitStatusLabel(status: StayStatus): string {
-	return STATUS_LABELS[status] ?? status;
+/** Label (Thai by default) for the stay status shown on already-registered hits. */
+export function shelterHitStatusLabel(status: StayStatus, language: LanguageCode = 'th'): string {
+	return peopleLabelsByLanguage[language].stayStatus[status] ?? status;
 }
 
 /** Minimal shape needed to derive a duplicate-check search string from a member card. */

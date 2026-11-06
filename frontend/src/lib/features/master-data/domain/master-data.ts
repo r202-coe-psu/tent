@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { LanguageCode } from '$lib/stores/language.svelte';
 
 /**
  * Master Data Engine — central-managed parameter lists for personal data forms
@@ -90,6 +91,22 @@ export const MASTER_DATA_TYPE_LABELS: Record<MasterDataType, string> = {
 	site_kind: 'ประเภทศูนย์ (Site Kind)'
 };
 
+const masterDataTypeLabelsEn: Record<MasterDataType, string> = {
+	vulnerable_group: 'Vulnerable group',
+	housing_type: 'Housing type',
+	shelter_type: 'Building type',
+	volunteer_skills: 'Volunteer skills',
+	chronic_disease: 'Chronic disease',
+	allergy: 'Allergy',
+	site_kind: 'Site kind'
+};
+
+/** English mirror of `MASTER_DATA_TYPE_LABELS` (which stays Thai + English as before). */
+export const masterDataTypeLabelsByLanguage: Record<
+	LanguageCode,
+	Record<MasterDataType, string>
+> = { th: MASTER_DATA_TYPE_LABELS, en: masterDataTypeLabelsEn };
+
 /** Hub copy: sidebar short title, panel title/lead, and forms that consume each type. */
 export interface MasterDataTypeMeta {
 	shortTitle: string;
@@ -158,6 +175,81 @@ export const MASTER_DATA_TYPE_META: Record<MasterDataType, MasterDataTypeMeta> =
 		]
 	}
 };
+
+const masterDataTypeMetaEn: Record<MasterDataType, MasterDataTypeMeta> = {
+	vulnerable_group: {
+		shortTitle: 'Vulnerable groups',
+		title: 'Vulnerable groups',
+		description: 'Vulnerable group options staff can pick during registration and screening',
+		affectedForms: [
+			'Person registration / EWAR screening',
+			'Shelter admission policy',
+			'Zoning queue'
+		]
+	},
+	housing_type: {
+		shortTitle: 'Housing type',
+		title: 'Housing type',
+		description: 'Type of home or lodging before evacuation, used in household addresses',
+		affectedForms: [
+			'Household address form (pre-registration / after arrival)',
+			'Edit household',
+			'Public shelter booking'
+		]
+	},
+	shelter_type: {
+		shortTitle: 'Building type',
+		title: 'Building type',
+		description: 'Type of building or venue of a shelter, used in shelter setup and display',
+		affectedForms: ['Shelter details form', 'Shelter import', 'Shelter list / profile']
+	},
+	volunteer_skills: {
+		shortTitle: 'Volunteer skills',
+		title: 'Standard volunteer skills',
+		description: 'Skills that define volunteer tasks and that applicants can choose from',
+		affectedForms: [
+			'Volunteer task setup',
+			'Volunteer application (public)',
+			'Volunteer profile / assignment'
+		]
+	},
+	chronic_disease: {
+		shortTitle: 'Chronic disease',
+		title: 'Chronic disease',
+		description:
+			'Standard chronic disease list (central only) that staff can pick during health screening. Other conditions can be typed in.',
+		affectedForms: [
+			'Station 2 health screening',
+			'Edit health information in the evacuee profile',
+			'Evacuee file import'
+		]
+	},
+	allergy: {
+		shortTitle: 'Allergy',
+		title: 'Allergy',
+		description:
+			'Standard allergen list (central only) that staff can pick during health screening. Others, such as drug allergies, can be typed in.',
+		affectedForms: ['Station 2 health screening', 'Edit health information in the evacuee profile']
+	},
+	site_kind: {
+		shortTitle: 'Site kind',
+		title: 'Site kind',
+		description:
+			'Kind of site (central only), e.g. evacuation centre or host home, used in setup, filtering and display',
+		affectedForms: [
+			'Shelter details form',
+			'Shelter import',
+			'Shelter list / overview',
+			'Public shelter search'
+		]
+	}
+};
+
+/** English mirror of `MASTER_DATA_TYPE_META`; the Thai meta stays the source of truth. */
+export const masterDataTypeMetaByLanguage: Record<
+	LanguageCode,
+	Record<MasterDataType, MasterDataTypeMeta>
+> = { th: MASTER_DATA_TYPE_META, en: masterDataTypeMetaEn };
 
 /**
  * CR-112 Vulnerable Group active seed set (stable codes = keys).

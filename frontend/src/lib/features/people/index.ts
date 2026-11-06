@@ -52,6 +52,9 @@ export {
 	groupPetsBySpecies,
 	genderSchema,
 	genderLabelTh,
+	genderLabel,
+	peopleLabels,
+	peopleLabelsByLanguage,
 	religionSchema,
 	stayStatusSchema,
 	STATUS_LABELS,
@@ -100,6 +103,7 @@ export {
 	SHELTER_CLOSE_AFFECTED_STATUSES,
 	SHELTER_CLOSED_REASON,
 	SHELTER_CLOSED_REASON_LABEL,
+	SHELTER_CLOSED_REASON_LABEL_EN,
 	movementReasonLabel,
 	type CheckoutDestinationType,
 	CONFIRM_ROOM_ELIGIBLE_STATUSES,
@@ -120,6 +124,7 @@ export {
 	maskNationalId,
 	collectMemberRuleIssues,
 	type MemberRuleIssue,
+	type PeopleLabelSet,
 	formatPersonName,
 	matchesEvacueePhoneSearch,
 	matchesEvacueeSearch,
@@ -129,6 +134,8 @@ export {
 	type ZoneLabelSource,
 	evacueeAgeYears,
 	EWAR_SYMPTOM_GROUPS,
+	EWAR_SYMPTOM_GROUPS_EN,
+	ewarSymptomGroupsByLanguage,
 	ewarSymptomLabel,
 	isEvacuee,
 	isMedical,
@@ -148,6 +155,8 @@ export {
 	buildHousingTypeSelectItems,
 	setHousingTypeFromSelect,
 	housingTypeLabelForCode,
+	DEFAULT_HOUSING_TYPE_ITEMS_EN,
+	defaultHousingTypeItems,
 	type HousingTypeSelectItem,
 	type MasterHousingItem
 } from './domain/housing-type-ui';
@@ -178,6 +187,9 @@ export {
 	pickRecommendedZone,
 	resolvePreferredZone,
 	ZONE_KIND_LABELS,
+	zoneKindLabelsByLanguage,
+	nextQueueLabelText,
+	nextQueueLabelsEn,
 	countPresentOccupantsByZone,
 	parseZoningQrCode,
 	buildZoningPath,
@@ -232,6 +244,7 @@ export {
 	NEW_REG_POOL_ERROR_LOCKED_HINT,
 	NEW_REG_OVERRIDE_TRIGGER_LABEL,
 	POOL_CLAIM_FORBIDDEN_HINT,
+	intakeSearchCopyByLanguage,
 	resolveShelterHitAction,
 	shelterHitStatusLabel,
 	hasFederatedIntakeHits,
@@ -242,6 +255,7 @@ export {
 	duplicateCheckKey,
 	type DuplicateCheckQuery,
 	type ShelterHitAction,
+	type IntakeSearchCopy,
 	type NewRegistrationCtaKind,
 	type DuplicateCheckMember
 } from './domain/intake-search';
@@ -273,6 +287,7 @@ export {
 
 export {
 	PRIMARY_CONTACT_LABEL,
+	PRIMARY_CONTACT_LABEL_EN,
 	blankUnifiedMember,
 	applyAnonymousIdToMember,
 	memberCardLabel,

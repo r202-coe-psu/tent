@@ -1017,7 +1017,7 @@
 									</Table.Cell>
 									<Table.Cell class="px-3 py-3">
 										{@render chipList(
-											(ewarSymptoms ?? []).map(ewarSymptomLabel),
+											(ewarSymptoms ?? []).map((id) => ewarSymptomLabel(id)),
 											CHIP_TONES.ewar,
 											'เฝ้าระวัง (EWAR)'
 										)}
