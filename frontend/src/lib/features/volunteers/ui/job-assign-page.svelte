@@ -49,6 +49,7 @@
 	import AssignVolunteerDetailDialog from './assign-volunteer-detail-dialog.svelte';
 	import { shiftDutyWindow } from '../domain/duty-window';
 	import { assignmentCountForShift } from '../domain/shift-roster';
+	import { describePair, describeSkip, planBulkAssign } from '../domain/bulk-assign';
 	import type { JobShift } from '../domain/job.schema';
 	import {
 		buildAssignRoster,
@@ -235,11 +236,78 @@
 
 	const activeAssignedCount = $derived(shift ? (assignedByShiftId.get(shift.id) ?? 0) : 0);
 	const remaining = $derived(Math.max((shift?.quota ?? 0) - activeAssignedCount, 0));
-	const overCapacity = $derived(selectedCount > remaining);
+	// — several shifts at once (#1164) ——————————————————————————————————————————
+	/** Other shifts of this job to place the same people in; the picked shift is always included. */
+	let extraShiftIds = $state<string[]>([]);
+	/** What the last multi-shift run could not do, kept on screen until dismissed. */
+	let bulkReport = $state<{ saved: number; lines: string[] } | null>(null);
+	const otherShifts = $derived(orderedShifts.filter((s) => s.id !== activeShiftId));
+	const targetShifts = $derived(
+		shift ? [shift, ...otherShifts.filter((s) => extraShiftIds.includes(s.id))] : []
+	);
+	const multiShift = $derived(targetShifts.length > 1);
+
+	function toggleExtraShift(id: string, next: boolean) {
+		extraShiftIds = next ? [...extraShiftIds, id] : extraShiftIds.filter((x) => x !== id);
+	}
+
+	// With several shifts a full one is skipped and reported, so only a single shift is gated here.
+	const overCapacity = $derived(!multiShift && selectedCount > remaining);
 	const sending = $derived(assignMutation.isPending);
+
+	/**
+	 * Place the chosen people in every target shift. A pair that cannot go through (already there,
+	 * clashes, shift full, or the save fails) is skipped and listed; the rest are saved.
+	 */
+	async function assignAcrossShifts(chosen: AssignCandidate[]) {
+		if (!job || sending || chosen.length === 0 || targetShifts.length === 0) return;
+		const plan = planBulkAssign({
+			job,
+			shifts: targetShifts,
+			volunteers: chosen.map((c) => c.volunteer),
+			assignments: assignmentsQuery.data ?? [],
+			jobsById,
+			skillOptions: skillCatalog.options,
+			controlledSkills: skillCatalog.controlledValues
+		});
+		const lines = plan.skipped.map(describeSkip);
+		const unfinished = plan.skipped.map((s) => s.volunteer._id);
+		let saved = 0;
+		for (const item of plan.assign) {
+			try {
+				await assignMutation.mutateAsync({
+					job_id: job._id,
+					shift_id: item.shift.id,
+					volunteer_id: item.volunteer._id,
+					date: item.shift.date,
+					shift: item.shiftKind,
+					// The job is the posting, so its title is the station (as for a single shift).
+					station: job.title,
+					duty_window: item.dutyWindow
+				});
+				saved += 1;
+			} catch (err) {
+				lines.push(describePair(item.shift, item.volunteer, errorMessage(err)));
+				unfinished.push(item.volunteer._id);
+			}
+		}
+		// People with nothing left to do leave the selection; the rest stay to retry.
+		selectedIds = selectedIds.filter((id) => unfinished.includes(id));
+		bulkReport = lines.length > 0 ? { saved, lines } : null;
+		if (saved > 0) {
+			toast.success(
+				`มอบหมายสำเร็จ ${saved} รายการ (${chosen.length} คน × ${targetShifts.length} กะ)`
+			);
+		}
+		if (lines.length > 0) {
+			toast.warning(`ข้ามหรือบันทึกไม่ได้ ${lines.length} รายการ ดูรายละเอียดด้านล่าง`);
+		}
+	}
 
 	function pickShift(id: string) {
 		pickedShiftId = id;
+		extraShiftIds = extraShiftIds.filter((x) => x !== id);
+		bulkReport = null;
 		// Row states are shift-specific — a carried-over selection could dispatch
 		// someone who is not free in the newly picked shift.
 		selectedIds = [];
@@ -332,7 +400,8 @@
 
 	async function assignSelected() {
 		const chosen = visible.filter((c) => c.assignable && selectedIds.includes(c.volunteer._id));
-		await assignCandidates(chosen);
+		if (multiShift) await assignAcrossShifts(chosen);
+		else await assignCandidates(chosen);
 	}
 
 	async function assignOne(candidate: AssignCandidate) {
@@ -636,6 +705,57 @@
 			{/if}
 		</div>
 
+		{#if otherShifts.length > 0}
+			<div
+				class="space-y-2 rounded-2xl border border-border bg-card p-3.5"
+				data-testid="multi-shift"
+			>
+				<p class="text-xs font-semibold text-foreground">
+					มอบหมายเข้ากะอื่นของงานนี้พร้อมกัน (ไม่บังคับ)
+				</p>
+				<p class="text-2xs text-muted-foreground">
+					ติ๊กกะที่ต้องการเพิ่มจากกะที่เลือกไว้ด้านบน คนที่เลือกจะถูกมอบหมายทุกกะที่ติ๊ก
+					กะที่คนนั้นอยู่แล้ว เวลาซ้อนกัน หรือเต็ม จะถูกข้ามและแจ้งผลให้
+				</p>
+				<div class="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+					{#each otherShifts as s (s.id)}
+						<label
+							class="flex min-h-11 cursor-pointer items-center gap-2.5 rounded-xl border border-border bg-background px-3 py-2 text-sm"
+						>
+							<Checkbox
+								checked={extraShiftIds.includes(s.id)}
+								onCheckedChange={(next) => toggleExtraShift(s.id, next === true)}
+								aria-label={`มอบหมายเข้ากะ ${shiftLabel(s)} ด้วย`}
+							/>
+							<span class="min-w-0">{shiftLabel(s)}</span>
+						</label>
+					{/each}
+				</div>
+			</div>
+		{/if}
+
+		{#if bulkReport}
+			<div
+				role="alert"
+				class="space-y-1.5 rounded-2xl border border-amber-300 bg-amber-50 p-3.5 text-sm text-amber-900"
+				data-testid="bulk-report"
+			>
+				<div class="flex items-start justify-between gap-2">
+					<p class="font-semibold">
+						บันทึกแล้ว {bulkReport.saved} รายการ · ข้ามหรือบันทึกไม่ได้ {bulkReport.lines.length} รายการ
+					</p>
+					<Button type="button" variant="ghost" size="sm" onclick={() => (bulkReport = null)}>
+						ปิด
+					</Button>
+				</div>
+				<ul class="list-disc space-y-0.5 pl-5 text-xs">
+					{#each bulkReport.lines as line (line)}
+						<li>{line}</li>
+					{/each}
+				</ul>
+			</div>
+		{/if}
+
 		<!-- Sticky action bar: the roster can be long, the action must stay reachable. -->
 		<div
 			class="sticky bottom-0 flex flex-col gap-2 rounded-2xl border border-border bg-card/95 px-4 py-3 shadow-lg backdrop-blur sm:flex-row sm:items-center sm:justify-between sm:gap-3"
@@ -654,7 +774,11 @@
 				<Button
 					type="button"
 					class="h-auto min-h-11 w-full gap-1.5 py-2 whitespace-normal sm:w-auto sm:min-w-[220px]"
-					aria-label={sending ? undefined : `มอบหมายอาสา ${selectedCount} คนเข้ากะนี้`}
+					aria-label={sending
+						? undefined
+						: multiShift
+							? `มอบหมายอาสา ${selectedCount} คนเข้า ${targetShifts.length} กะ`
+							: `มอบหมายอาสา ${selectedCount} คนเข้ากะนี้`}
 					disabled={selectedCount === 0 || overCapacity || sending}
 					onclick={assignSelected}
 				>
@@ -664,7 +788,11 @@
 						<Send class="size-4 shrink-0" />
 						<!-- A short label on the narrowest phones, where the full one breaks mid-word. -->
 						<span class="min-[400px]:hidden">มอบหมาย {selectedCount} คน</span>
-						<span class="hidden min-[400px]:inline">มอบหมายอาสา {selectedCount} คนเข้ากะนี้</span>
+						<span class="hidden min-[400px]:inline">
+							{multiShift
+								? `มอบหมายอาสา ${selectedCount} คนเข้า ${targetShifts.length} กะ`
+								: `มอบหมายอาสา ${selectedCount} คนเข้ากะนี้`}
+						</span>
 					{/if}
 				</Button>
 			</div>
