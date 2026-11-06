@@ -81,7 +81,7 @@ install_autostart() {
     # Two agents on one DEVICE_ID steal each other's jobs and trip nginx's 2-connection limit (429).
     for state in is-active is-enabled; do
         if systemctl "$state" --quiet tent-printer.service 2>/dev/null; then
-            die "มี tent-printer.service (ติดตั้งจริง Phase 5) อยู่ ($state) — agent สองตัวจะแย่งงานกัน ปิดก่อน: sudo systemctl disable --now tent-printer"
+            die "มี tent-printer.service (ติดตั้งจริง) อยู่ ($state) — agent สองตัวจะแย่งงานกัน ปิดก่อน: sudo systemctl disable --now tent-printer"
         fi
     done
 

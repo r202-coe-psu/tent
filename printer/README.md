@@ -196,7 +196,7 @@ rm .env             # ติดตั้งแล้ว ค่าจริงอ
 | `--dry-run` | พิมพ์คำสั่งที่จะรัน ไม่เขียนอะไร และไม่ต้องเป็น root |
 | `--status` | ดูสถานะ unit / queue / log 5 บรรทัดล่าสุด แล้วออก ไม่แก้อะไร |
 
-สคริปต์ไม่ให้สิทธิ์ `lpadmin` กับ `tent-printer` (CR-222 FR-42) ถ้า queue ถูก disable ต้องเปิดคืนเอง ดู [สิทธิ์เปิด queue](#สิทธิ์เปิด-queue-queue-enable-rights)
+สคริปต์ไม่ให้สิทธิ์ `lpadmin` กับ `tent-printer` ถ้า queue ถูก disable ต้องเปิดคืนเอง ดู [สิทธิ์เปิด queue](#สิทธิ์เปิด-queue-queue-enable-rights)
 
 ## 6. ตรวจว่าใช้งานได้
 
@@ -251,14 +251,14 @@ log มี job id / จำนวน label / error code แต่ไม่มี 
 
 ## สิทธิ์เปิด queue (Queue-enable rights)
 
-agent **ไม่ได้รับสิทธิ์ `lpadmin`** (CR-222 FR-42: `lpadmin` แก้หรือลบ queue ได้ทั้งหมด ไม่ใช่แค่ enable) และสคริปต์ติดตั้งก็ไม่มีตัวเลือกให้สิทธิ์นี้แล้ว
+agent **ไม่ได้รับสิทธิ์ `lpadmin`** (`lpadmin` แก้หรือลบ queue ได้ทั้งหมด ไม่ใช่แค่ enable) และสคริปต์ติดตั้งก็ไม่มีตัวเลือกให้สิทธิ์นี้แล้ว
 เมื่อ CUPS ปิด queue agent จะรายงานสถานะ `disabled` ไปที่ back-office แล้วรอ ผู้ดูแลต้องตรวจกระดาษ/ไฟ แล้วเปิด queue เองด้วยบัญชีที่มีสิทธิ์:
 
 ```bash
 sudo cupsenable tent_xprinter
 ```
 
-การให้ agent เปิด queue เองรอผลทดสอบ S0-7 บนเครื่องจริง (gate O-5 ใน CR-222): ถอดกระดาษให้ queue ถูก disable
+การให้ agent เปิด queue เองรอผลทดสอบบนเครื่องจริง: ถอดกระดาษให้ queue ถูก disable
 แล้วดูว่าสิทธิ์ที่แคบกว่า `lpadmin` เช่น group `lp` หรือ policy ใน `cupsd.conf` พอให้ agent เปิดคืนได้หรือไม่ (sudoers ใช้ไม่ได้ เพราะ unit ตั้ง `NoNewPrivileges`)
 
 ## ทางเลือกสำหรับ dev / ลองเครื่อง

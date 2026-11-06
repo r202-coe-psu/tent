@@ -116,7 +116,7 @@ def test_allow_cupsenable_is_rejected_and_plans_nothing(setup):
     result = setup("--host-kind", "standalone", "--allow-cupsenable")
 
     assert result.returncode != 0
-    assert "FR-42" in result.stderr
+    assert "lpadmin" in result.stderr
     assert planned(result) == []
 
 

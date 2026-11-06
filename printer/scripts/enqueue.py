@@ -39,7 +39,7 @@ import httpx
 DEVICES_DB = "printing_devices"
 TERMINAL = {"printed", "failed", "expired"}
 CROCKFORD = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
-# Must equal frontend `kioskLabelDots()`: the staff API rejects any other label size (FR-12a).
+# Must equal frontend `kioskLabelDots()`: the staff API rejects any other label size.
 WIDTH, HEIGHT = 639, 479
 
 # 5x7 block digits, one string per row, '#' = black.

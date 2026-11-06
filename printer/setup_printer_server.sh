@@ -54,7 +54,7 @@ while [ $# -gt 0 ]; do
     --prefix) PREFIX="${2-}"; shift $(($# > 1 ? 2 : 1)) ;;
     --kiosk-env) KIOSK_ENV="${2-}"; shift $(($# > 1 ? 2 : 1)) ;;
     --unit-dir) UNIT_DIR="${2-}"; shift $(($# > 1 ? 2 : 1)) ;;
-    --allow-cupsenable) die "--allow-cupsenable ถูกถอดออกแล้ว: CR-222 FR-42 ห้ามให้ agent อยู่ใน group lpadmin — เปิด queue เองด้วย sudo cupsenable (ดู README)" ;;
+    --allow-cupsenable) die "--allow-cupsenable ถูกถอดออกแล้ว: ห้ามให้ agent อยู่ใน group lpadmin — เปิด queue เองด้วย sudo cupsenable (ดู README)" ;;
     -h | --help) sed -n '2,14p' "$0"; exit 0 ;;
     *) die "ไม่รู้จัก option: $1 (ดู --help)" ;;
     esac
@@ -180,10 +180,10 @@ else
     done
 fi
 
-# 5) cupsenable rights: never lpadmin (CR-222 FR-42). Queue re-enable stays manual until the
-#    S0-7 hardware test shows a narrower right (group lp / cupsd.conf policy) is enough.
+# 5) cupsenable rights: never lpadmin. Queue re-enable stays manual until a hardware test
+#    shows a narrower right (group lp / cupsd.conf policy) is enough.
 info "[5/6] สิทธิ์ cupsenable"
-echo "   ไม่ให้สิทธิ์ cupsenable (FR-42 ห้าม lpadmin) — queue ถูก disable เมื่อไร agent รายงาน queue_state=disabled; เปิดคืนด้วย sudo cupsenable $QUEUE"
+echo "   ไม่ให้สิทธิ์ cupsenable (ห้าม lpadmin) — queue ถูก disable เมื่อไร agent รายงาน queue_state=disabled; เปิดคืนด้วย sudo cupsenable $QUEUE"
 
 # 6) systemd unit (the shipped unit hardcodes /opt/tent/printer; rewrite it for --prefix)
 info "[6/6] systemd unit"
