@@ -114,7 +114,7 @@ Bullseye มากับ Python 3.9 และ agent รันบนนั้น�
 
 ```bash
 sudo apt update
-sudo apt install -y git rsync curl python3-venv fonts-thai-tlwg   # fonts-thai-tlwg ใช้วาดชื่อเครื่องภาษาไทยบนบูตสลิป
+sudo apt install -y git rsync curl python3-venv fonts-thai-tlwg   # fonts-thai-tlwg ใช้วาดชื่อไทยบนบูตสลิป (สคริปต์ติดตั้งจะลงให้เองถ้ายังไม่มี)
 # ติดตั้ง uv ไว้ที่ /usr/local/bin เพื่อให้ sudo มองเห็น (ถ้าลงไว้ที่ ~/.local/bin สคริปต์ติดตั้งที่รันด้วย sudo จะหาไม่เจอ)
 curl -LsSf https://astral.sh/uv/install.sh | sudo env UV_INSTALL_DIR=/usr/local/bin sh
 uv --version

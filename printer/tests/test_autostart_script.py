@@ -34,6 +34,12 @@ def fake_bin(tmp_path) -> Path:
         '&& [ "$1" = "${FAKE_PRODUCTION:-none}" ]\n'
     )
     fake_systemctl.chmod(fake_systemctl.stat().st_mode | stat.S_IXUSR)
+    # `fc-list :lang=th` lists a Thai font only when FAKE_THAI_FONT=1.
+    fake_fc_list = directory / "fc-list"
+    fake_fc_list.write_text(
+        '#!/bin/sh\n[ "${FAKE_THAI_FONT:-0}" = 1 ] && echo /usr/share/fonts/tlwg/Loma.ttf\nexit 0\n'
+    )
+    fake_fc_list.chmod(fake_fc_list.stat().st_mode | stat.S_IXUSR)
     return directory
 
 
@@ -117,3 +123,20 @@ def test_unknown_option_fails(setup):
 
     assert result.returncode != 0
     assert planned(result) == []
+
+
+INSTALL_THAI_FONT = "sudo apt-get install -y fonts-thai-tlwg"
+
+
+def test_installs_a_thai_font_for_the_boot_slip_when_none_is_present(setup):
+    result = setup(env={"FAKE_THAI_FONT": "0"})
+
+    assert result.returncode == 0, result.stderr
+    assert INSTALL_THAI_FONT in planned(result)
+
+
+def test_skips_the_thai_font_when_one_is_installed(setup):
+    result = setup(env={"FAKE_THAI_FONT": "1"})
+
+    assert result.returncode == 0, result.stderr
+    assert INSTALL_THAI_FONT not in planned(result)

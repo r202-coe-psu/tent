@@ -85,6 +85,11 @@ install_autostart() {
         fi
     done
 
+    # Thai font for the boot slip; without one it prints as plain text and Thai shows as boxes.
+    if ! fc-list :lang=th file 2>/dev/null | grep -q .; then
+        run sudo apt-get install -y fonts-thai-tlwg
+    fi
+
     # Build .venv now (as this user), so the first boot doesn't wait on pip.
     run "$SCRIPT_DIR/run.sh" --setup
 
