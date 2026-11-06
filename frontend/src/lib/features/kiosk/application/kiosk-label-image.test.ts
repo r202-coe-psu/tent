@@ -104,6 +104,19 @@ describe('renderKioskLabelPng', () => {
 		expect(harness.isOrderViolated()).toBe(false);
 	});
 
+	it('asks the font loader for the Thai subset too, not only the Latin one', async () => {
+		await renderKioskLabelPng(label);
+
+		// Web fonts split by unicode-range: `load(font)` alone checks a space and fetches only the
+		// Latin file, so Thai would draw in the fallback face until the UI happened to use it.
+		const calls = vi.mocked(document.fonts.load).mock.calls;
+		expect(calls.length).toBeGreaterThan(0);
+		for (const [, text] of calls) {
+			expect(text).toMatch(/[\u0E00-\u0E7F]/);
+			expect(text).toMatch(/[A-Za-z0-9]/);
+		}
+	});
+
 	it('draws every row with the Thai-capable family, and no phone number', async () => {
 		await renderKioskLabelPng(label);
 

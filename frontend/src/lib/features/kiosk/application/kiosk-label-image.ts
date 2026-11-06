@@ -30,6 +30,8 @@ const INK_THRESHOLD = 160;
 /** Matches the app's typography stack (`$lib/tokens/typography.ts`) so Thai glyphs render
  * instead of the generic sans-serif fallback's tofu boxes on a kiosk without a system Thai font. */
 const FONT_FAMILY = "'IBM Plex Sans Thai', sans-serif";
+/** The web font is split by unicode-range; `load()` fetches only the files covering this text. */
+const FONT_SAMPLE = 'กขค Aa0';
 
 function loadImage(src: string): Promise<HTMLImageElement> {
 	const image = new Image();
@@ -89,7 +91,9 @@ export async function renderKioskLabelPng(label: KioskLabelContent): Promise<str
 	const [qr] = await Promise.all([
 		loadImage(label.qrSrc),
 		document.fonts.ready,
-		...Object.values(fonts).map((font) => document.fonts.load(font).catch(() => undefined))
+		...Object.values(fonts).map((font) =>
+			document.fonts.load(font, FONT_SAMPLE).catch(() => undefined)
+		)
 	]);
 	const layout = kioskLabelLayout(qr.width);
 	const words = segmenter('word');
