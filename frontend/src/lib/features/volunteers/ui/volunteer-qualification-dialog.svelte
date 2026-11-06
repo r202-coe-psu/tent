@@ -29,6 +29,7 @@
 		useReviewVolunteerSkill,
 		useSkillOptions
 	} from '../application/queries';
+	import { useShelters } from '$lib/features/shelters';
 	import { crossShelterLabel, type CrossShelterMatch } from '../domain/cross-shelter-verification';
 	import { isControlledSkill } from '../domain/skills';
 	import { resolveSkillOption } from '../domain/skill-catalog';
@@ -37,6 +38,7 @@
 		skillVerificationRecord,
 		skillVerificationStatus,
 		VERIFICATION_STATUS_LABEL,
+		type AcceptedFrom,
 		type VerificationStatus
 	} from '../domain/verification';
 	import type { Volunteer } from '../domain/volunteer.schema';
@@ -47,6 +49,9 @@
 		label: string;
 		description: string;
 		status: VerificationStatus;
+		/** Verified by accepting another shelter's result (CR-228): no license field to fill. */
+		acceptedFrom: AcceptedFrom | null;
+		credentialReference: string | null;
 	};
 
 	let {
@@ -84,11 +89,19 @@
 				code,
 				label: option?.label ?? value,
 				description: option?.description ?? 'ทักษะควบคุมที่ต้องตรวจสอบก่อนรับรอง',
-				status: skillVerificationStatus(volunteer, code)
+				status: skillVerificationStatus(volunteer, code),
+				...acceptedSkill(code)
 			});
 		}
 		return Array.from(rows.values());
 	});
+	function acceptedSkill(code: string) {
+		const record = skillVerificationRecord(volunteer, code);
+		return {
+			acceptedFrom: record?.status === 'verified' ? (record.accepted_from ?? null) : null,
+			credentialReference: record?.credential_reference ?? null
+		};
+	}
 	const controlledSkills = $derived(
 		focusSkillCode && allControlledSkills.some((skill) => skill.code === focusSkillCode)
 			? allControlledSkills.filter((skill) => skill.code === focusSkillCode)
@@ -127,6 +140,13 @@
 				.filter((ref) => ref.code === skill.code)
 				.map((ref) => ({ match, reviewedAt: ref.reviewed_at }))
 		);
+	}
+
+	// Names for the shelter an accepted result came from; the code stands in until it loads.
+	const sheltersQuery = useShelters();
+	function shelterLabel(code: string): string {
+		const shelter = sheltersQuery.data?.find((s) => s.code === code);
+		return crossShelterLabel({ shelter_code: code, shelter_name: shelter?.name ?? code });
 	}
 
 	const whenChecked = (reviewedAt: string | null) =>
@@ -368,23 +388,38 @@
 										{VERIFICATION_STATUS_LABEL[skill.status]}
 									</Badge>
 								</div>
-								<div class="mt-2 text-xs text-violet-900/70">
-									<label
-										for={`credential-reference-${skill.code}`}
-										class="mb-1.5 block font-semibold"
+								{#if skill.acceptedFrom}
+									<div
+										class="mt-2 rounded-lg border border-sky-200 bg-sky-50/60 px-3 py-2 text-xs text-sky-900"
+										data-testid="accepted-skill"
 									>
-										เลขใบอนุญาต / เลข ว. / เอกสารอ้างอิง
-									</label>
-									<Input
-										id={`credential-reference-${skill.code}`}
-										value={credentialReferenceValue(skill.code)}
-										oninput={(event) => {
-											credentialReferences[skill.code] = event.currentTarget.value;
-										}}
-										placeholder="ระบุเลขที่ใบอนุญาตประกอบวิชาชีพ / เลข ว. / หมายเหตุวิชาชีพ..."
-										class="border-violet-200 bg-background"
-									/>
-								</div>
+										<p class="font-semibold">
+											ใช้ผลตรวจใบอนุญาตจาก {shelterLabel(skill.acceptedFrom.shelter_code)}
+											{whenChecked(skill.acceptedFrom.verified_at)}
+										</p>
+										<p class="mt-0.5">
+											เลขใบอนุญาตที่บันทึกในศูนย์นี้: {skill.credentialReference ?? 'ไม่ได้ระบุ'}
+										</p>
+									</div>
+								{:else}
+									<div class="mt-2 text-xs text-violet-900/70">
+										<label
+											for={`credential-reference-${skill.code}`}
+											class="mb-1.5 block font-semibold"
+										>
+											เลขใบอนุญาต / เลข ว. / เอกสารอ้างอิง
+										</label>
+										<Input
+											id={`credential-reference-${skill.code}`}
+											value={credentialReferenceValue(skill.code)}
+											oninput={(event) => {
+												credentialReferences[skill.code] = event.currentTarget.value;
+											}}
+											placeholder="ระบุเลขที่ใบอนุญาตประกอบวิชาชีพ / เลข ว. / หมายเหตุวิชาชีพ..."
+											class="border-violet-200 bg-background"
+										/>
+									</div>
+								{/if}
 								{#each skillReferences(skill) as ref (ref.match.shelter_code)}
 									<div
 										class="mt-2 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-sky-200 bg-sky-50/60 px-3 py-2"
