@@ -31,7 +31,8 @@
 		source,
 		renderLabels,
 		label,
-		buttonClass
+		buttonClass,
+		printing: running = $bindable(false)
 	}: {
 		shelterCode: string;
 		labelCount: number;
@@ -40,6 +41,11 @@
 		label?: string;
 		/** Extra classes for the main button (e.g. full width in a modal). */
 		buttonClass?: string;
+		/**
+		 * True while a print run is in progress. Bind it to keep the host open meanwhile: unmounting
+		 * stops polling but not the queued job, so printing again after reopening duplicates labels.
+		 */
+		printing?: boolean;
 	} = $props();
 
 	const t = $derived(getTranslation(PRINTERS_I18N, languageStore.current));
@@ -56,7 +62,6 @@
 	const createJob = useCreatePrintJob();
 
 	let pickerOpen = $state(false);
-	let running = $state(false);
 	let progressTotal = $state(0);
 	let job = $state<{ jobId: string; shelterCode: string }>();
 
@@ -115,12 +120,9 @@
 				resolve(outcome);
 			};
 			const onAbort = () => settle(null);
-			// Labels the tablet has seen printed. A retry after a timeout resumes after them (FR-47).
-			let lastPrinted = 0;
 			/** Settles on a final status (or the claim, for the last chunk); false otherwise. */
 			const settleOnStatus = (data: typeof statusQuery.data): boolean => {
 				if (!data) return false;
-				lastPrinted = Math.max(lastPrinted, data.printed);
 				if (!isTerminalJobStatus(data.status) && !(untilClaimed && data.status === 'printing')) {
 					return false;
 				}
@@ -129,8 +131,8 @@
 			};
 			// The status query stops polling after the same window. By then the server has settled the
 			// job, so one more status fetch tells the real outcome if the network is back. A job still
-			// open then timed out; a fetch that fails or hangs leaves the result unknown, and the retry
-			// resumes after the last count seen (team proposal, CR-222 FR-47).
+			// open then timed out; a fetch that fails or hangs leaves the result unknown. Either way the
+			// retry follows up the same job instead of sending a new one (CR-222 FR-47).
 			let finalCheckTimer: ReturnType<typeof setTimeout> | undefined;
 			const finalCheck = async () => {
 				const giveUp = new Promise<undefined>((r) => {
@@ -142,7 +144,7 @@
 				]);
 				if (done || settleOnStatus(latest)) return;
 				const status = latest ? 'timeout' : 'unknown';
-				settle({ status, printed: lastPrinted, error_code: null });
+				settle({ status, printed: 0, error_code: null });
 			};
 			const timer = setTimeout(() => void finalCheck(), PRINT_JOB_POLL_TIMEOUT_MS);
 			const hintTimer = setTimeout(() => (pickupLate = true), PRINT_JOB_PICKUP_HINT_MS);
@@ -314,16 +316,25 @@
 				unsent = pending.length > 1 ? pending.slice(1) : null;
 				return finishAborted(signal);
 			}
-			printedTotal += outcome.printed;
+			const unsure = outcome.status === 'unknown' || outcome.status === 'timeout';
+			if (!unsure) printedTotal += outcome.printed;
 			const sent = outcome.status === 'printed' || (last && outcome.status === 'printing');
 			if (!sent) {
-				// The labels a failed job already printed are not sent again on retry.
-				// That job is over, so the rest goes out as a new job under a new id.
-				const rest = pending[0].labels.slice(outcome.printed);
-				const remaining =
-					rest.length > 0
-						? [{ labels: rest, jobId: ulid() }, ...pending.slice(1)]
-						: pending.slice(1);
+				let remaining: Chunk[];
+				if (unsure) {
+					// The job may still be queued or printing, and its printed count is only known once it
+					// ends. The retry re-sends the same id to the same printer: the BFF answers with that
+					// job, and polling it gives the real outcome without printing anything twice.
+					remaining = [{ ...pending[0], printerId: printer.id }, ...pending.slice(1)];
+				} else {
+					// The job is over: the labels it printed are not sent again, and the rest goes out
+					// as a new job under a new id.
+					const rest = pending[0].labels.slice(outcome.printed);
+					remaining =
+						rest.length > 0
+							? [{ labels: rest, jobId: ulid() }, ...pending.slice(1)]
+							: pending.slice(1);
+				}
 				unsent = remaining.length > 0 ? remaining : null;
 				running = false;
 				toast.error(
@@ -370,8 +381,8 @@
 		{/if}
 		{#if disconnected}
 			<p class="text-sm text-muted-foreground">{t.disconnectedHint}</p>
-		{:else if chosen && !chosen.online}
-			<p class="text-sm text-muted-foreground">{t.printerOffline(chosen.name)}</p>
+		{:else if target && !target.online}
+			<p class="text-sm text-muted-foreground">{t.printerOffline(target.name)}</p>
 		{/if}
 		{#if chosen && !pickerOpen}
 			<Button

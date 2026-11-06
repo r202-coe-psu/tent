@@ -7,7 +7,7 @@ export const PRINTERS_I18N = {
 		partiallyPrinted: (count: number) => `(พิมพ์ไปแล้ว ${count} ใบ)`,
 		notResponding: (printer: string) => `เครื่อง ${printer} ไม่ตอบ`,
 		resultUnknown: (printer: string) =>
-			`ไม่ทราบผลการพิมพ์ที่ ${printer} — ตรวจที่เครื่องว่าออกไปแล้วกี่ใบก่อนกดพิมพ์อีกครั้ง`,
+			`ไม่ทราบผลการพิมพ์ที่ ${printer} — กดพิมพ์อีกครั้งเพื่อตามผลงานเดิม ระบบจะไม่ส่งฉลากซ้ำ`,
 		notPickedUp: (printer: string) => `เครื่อง ${printer} ยังไม่รับงาน — ตรวจสอบว่าเครื่องเปิดอยู่`,
 		statusUnknown: (printer: string) => `ยังไม่ทราบผล — ตรวจที่เครื่องพิมพ์ ${printer}`,
 		choosePrinter: 'เลือกเครื่องพิมพ์',
@@ -56,7 +56,7 @@ export const PRINTERS_I18N = {
 			`(${count} ${count === 1 ? 'label' : 'labels'} already printed)`,
 		notResponding: (printer: string) => `${printer} is not responding`,
 		resultUnknown: (printer: string) =>
-			`Result unknown at ${printer}. Check how many labels came out before printing again.`,
+			`Result unknown at ${printer}. Print again to follow up the same job; no labels are sent twice.`,
 		notPickedUp: (printer: string) =>
 			`${printer} has not picked up the job yet. Check that it is switched on.`,
 		statusUnknown: (printer: string) =>
