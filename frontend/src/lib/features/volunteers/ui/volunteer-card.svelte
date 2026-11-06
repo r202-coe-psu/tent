@@ -109,6 +109,12 @@
 				.flatMap((option) => [option.code, option.label])
 		)
 	);
+	// A controlled skill this shelter checked and turned down: shown, not left looking pending.
+	const rejectedSkill = $derived(
+		skills.some(
+			(skill) => skill.controlled && skillVerificationStatus(volunteer, skill.code) === 'rejected'
+		)
+	);
 	const pendingSkillCode = $derived(
 		skills.find(
 			(skill) => skill.controlled && skillVerificationStatus(volunteer, skill.code) !== 'verified'
@@ -258,6 +264,11 @@
 					<span class="h-1.5 w-1.5 rounded-full bg-emerald-500"></span>
 					ยืนยันตัวตนแล้ว
 				</Badge>
+			{:else if identityStatus === 'rejected'}
+				<Badge class="gap-1 border-rose-300 bg-rose-50 text-rose-700" variant="outline">
+					<span class="h-1.5 w-1.5 rounded-full bg-rose-500"></span>
+					ไม่ผ่านการยืนยันตัวตน
+				</Badge>
 			{:else}
 				<Badge class="gap-1 border-amber-300 bg-amber-50 text-amber-700" variant="outline">
 					<span class="h-1.5 w-1.5 rounded-full bg-amber-500"></span>
@@ -269,6 +280,12 @@
 				<Badge class="gap-1 border-amber-300 bg-amber-50 text-amber-800" variant="outline">
 					<Lock class="h-3 w-3" />
 					รอรับรองทักษะควบคุม
+				</Badge>
+			{/if}
+			{#if rejectedSkill}
+				<Badge class="gap-1 border-rose-300 bg-rose-50 text-rose-700" variant="outline">
+					<Lock class="h-3 w-3" />
+					ทักษะควบคุมไม่ผ่านการรับรอง
 				</Badge>
 			{/if}
 

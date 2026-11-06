@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushSync, mount, tick, unmount } from 'svelte';
 import type { Volunteer } from '../domain/volunteer.schema';
 import type { VolunteerAccessStatus } from '../domain/volunteer-access-status';
+import type { SkillOption } from '../domain/skill-catalog';
 import VolunteerCard from './volunteer-card.svelte';
 
 vi.mock('@tanstack/svelte-query', () => ({ useQueryClient: () => ({}) }));
@@ -45,7 +46,11 @@ async function settle() {
 	flushSync();
 }
 
-async function render(accessStatus: VolunteerAccessStatus) {
+async function render(
+	accessStatus: VolunteerAccessStatus,
+	profile: Partial<Volunteer> = {},
+	skillOptions: SkillOption[] = []
+) {
 	// The row is a <tr>: give it a table to live in.
 	const table = document.createElement('table');
 	const body = document.createElement('tbody');
@@ -54,7 +59,8 @@ async function render(accessStatus: VolunteerAccessStatus) {
 	instance = mount(VolunteerCard, {
 		target: body,
 		props: {
-			volunteer,
+			volunteer: { ...volunteer, ...profile },
+			skillOptions,
 			shelterName: 'ศูนย์ 1',
 			shelterType: null,
 			todayAssignment: null,
@@ -129,5 +135,41 @@ describe('VolunteerCard account badge when the role here ended', () => {
 		expect(badge).toContain('เคยเป็น เจ้าหน้าที่คลัง');
 		expect(badge).toContain('ถูกถอนเพราะปิดโปรไฟล์');
 		expect(badge).toContain('· เมื่อ');
+	});
+});
+
+describe('VolunteerCard identity status', () => {
+	const medical: SkillOption = {
+		code: 'medical',
+		label: 'การแพทย์ / ปฐมพยาบาล',
+		description: '',
+		icon: '🩺',
+		controlled: true
+	};
+	const text = () => (document.body.textContent ?? '').replace(/\s+/g, ' ');
+
+	it('shows a rejected identity and skill as not passed, not as waiting', async () => {
+		await render(
+			{ kind: 'none' },
+			{
+				skills: ['medical'],
+				identity_verified: false,
+				identity_verification: { status: 'rejected' },
+				skill_verifications: { medical: { status: 'rejected' } }
+			} as Partial<Volunteer>,
+			[medical]
+		);
+		expect(text()).toContain('ไม่ผ่านการยืนยันตัวตน');
+		expect(text()).toContain('ทักษะควบคุมไม่ผ่านการรับรอง');
+		expect(text()).not.toContain('รอยืนยันตัวตน');
+	});
+
+	it('still shows a pending identity as waiting', async () => {
+		await render({ kind: 'none' }, {
+			identity_verified: false,
+			identity_verification: { status: 'pending' }
+		} as Partial<Volunteer>);
+		expect(text()).toContain('รอยืนยันตัวตน');
+		expect(text()).not.toContain('ไม่ผ่านการยืนยันตัวตน');
 	});
 });
