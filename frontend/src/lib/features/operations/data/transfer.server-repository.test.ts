@@ -4,6 +4,7 @@ import {
 	TransferServerRepositoryError
 } from './transfer.server-repository';
 import type { StockTransfer } from '../domain/operations';
+import { toTransferLine } from '../domain/transfer-line';
 
 const adminRaw = vi.fn();
 
@@ -92,6 +93,85 @@ describe('TransferServerRepository', () => {
 
 		expect(doc.status).toBe('requested');
 		expect(doc._rev).toBe('1-new');
+	});
+
+	describe('packaging units (#1223)', () => {
+		const rice = {
+			_id: 'item:rice',
+			type: 'item_master',
+			base_unit: 'kg',
+			conversions: [{ uom_name: 'bag', multiplier: '5' }]
+		};
+
+		function mockCatalogAndPut(putBodies: unknown[]) {
+			adminRaw.mockImplementation(async (path: string, method: string, body?: unknown) => {
+				const decoded = decodeURIComponent(path);
+				if (method === 'GET' && decoded.startsWith('/catalog/_all_docs')) {
+					return {
+						status: 200,
+						data: {
+							rows: [
+								{
+									doc: {
+										_id: 'unit_of_measure:kg',
+										type: 'unit_of_measure',
+										code: 'kg',
+										deactivated: false
+									}
+								},
+								{
+									doc: {
+										_id: 'unit_of_measure:bag',
+										type: 'unit_of_measure',
+										code: 'bag',
+										deactivated: false
+									}
+								},
+								{ doc: rice }
+							]
+						}
+					};
+				}
+				if (method === 'PUT' && decoded.startsWith('/central_ops/stock_transfer:')) {
+					putBodies.push(body);
+					return { status: 201, data: { ok: true, id: 'x', rev: '1-new' } };
+				}
+				return { status: 200, data: {} };
+			});
+		}
+
+		it('accepts the base-unit line a "2 bag" selection converts to and stores it in kg', async () => {
+			const putBodies: unknown[] = [];
+			mockCatalogAndPut(putBodies);
+
+			const repo = new TransferServerRepository('central_ops', 'SH001');
+			const line = toTransferLine(rice, { item_id: 'item:rice', qty: '2', unit: 'bag' });
+			const doc = await repo.create(
+				{ from_shelter: 'SH001', to_shelter: 'SH002', items: [line] },
+				{ shelterCode: 'SH001', createdBy: 'Staff A' }
+			);
+
+			expect(doc.items).toEqual([{ item_id: 'item:rice', qty: '10', unit: 'kg' }]);
+			expect(putBodies).toHaveLength(1);
+		});
+
+		it('rejects a packaging-unit line sent unconverted, with no transfer written', async () => {
+			const putBodies: unknown[] = [];
+			mockCatalogAndPut(putBodies);
+
+			const repo = new TransferServerRepository('central_ops', 'SH001');
+			await expect(
+				repo.create(
+					{
+						from_shelter: 'SH001',
+						to_shelter: 'SH002',
+						items: [{ item_id: 'item:rice', qty: '2', unit: 'bag' }]
+					},
+					{ shelterCode: 'SH001', createdBy: 'Staff A' }
+				)
+			).rejects.toThrow(/Unit mismatch for item item:rice: expected kg, got bag/);
+			expect(putBodies).toHaveLength(0);
+		});
 	});
 
 	it('lists transfers scoped to the context shelter via $or', async () => {

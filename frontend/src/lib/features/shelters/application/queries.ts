@@ -5,6 +5,7 @@ import {
 	type QueryClient
 } from '@tanstack/svelte-query';
 import { toast } from 'svelte-sonner';
+import { ServiceRequestError } from '$lib/api/service';
 import {
 	subscribeDataChanges,
 	type SubscribeDataChangesHandle
@@ -16,7 +17,12 @@ import {
 	closeZone,
 	reopenZone,
 	getShelterClosePreview,
-	closeShelter
+	closeShelter,
+	getStoragePoints,
+	addStoragePoint,
+	editStoragePoint,
+	deleteStoragePoint,
+	type StoragePointInput
 } from '../data/shelters.api';
 import { listProvinces, listDistricts, listSubdistricts } from '../data/thailand-location.api';
 import type { Shelter } from '../domain/schema';
@@ -26,6 +32,7 @@ export const sheltersKeys = {
 	list: () => [...sheltersKeys.all, 'list'] as const,
 	search: () => [...sheltersKeys.all, 'search'] as const,
 	detail: (code: string) => [...sheltersKeys.all, 'detail', code] as const,
+	storagePoints: (code: string) => [...sheltersKeys.all, 'storage-points', code] as const,
 	closePreview: (code: string) => [...sheltersKeys.all, 'close-preview', code] as const
 };
 
@@ -101,14 +108,22 @@ export const useCreateShelter = () => {
 export const useUpdateShelter = () => {
 	const queryClient = useQueryClient();
 	return createMutation(() => ({
-		mutationFn: ({ code, input }: { code: string; input: Partial<Shelter> }) =>
-			updateShelter(code, input),
-		onSuccess: (_, variables) => {
+		mutationFn: ({ code, input, rev }: { code: string; input: Partial<Shelter>; rev?: string }) =>
+			updateShelter(code, input, rev),
+		// The detail refetch is awaited before toasting so the edit form (which waits on this
+		// mutation) sees the doc it must reload from the moment the save is reported.
+		onSuccess: async (_, variables) => {
 			queryClient.invalidateQueries({ queryKey: sheltersKeys.all });
-			queryClient.invalidateQueries({ queryKey: sheltersKeys.detail(variables.code) });
+			await queryClient.invalidateQueries({ queryKey: sheltersKeys.detail(variables.code) });
 			toast.success(`อัปเดตข้อมูลศูนย์พักพิง ${variables.code} สำเร็จ`);
 		},
-		onError: (err: Error) => {
+		onError: async (err: Error, variables) => {
+			// Stale `_rev` (409): refetch so the form reloads the latest doc; unsaved edits are replaced.
+			await queryClient.invalidateQueries({ queryKey: sheltersKeys.detail(variables.code) });
+			if (err instanceof ServiceRequestError && err.status === 409) {
+				toast.error('ข้อมูลศูนย์ถูกแก้ไขโดยผู้อื่น โหลดข้อมูลล่าสุดให้แล้ว กรุณาแก้ไขซ้ำอีกครั้ง');
+				return;
+			}
 			toast.error(err.message || 'เกิดข้อผิดพลาดในการอัปเดตข้อมูล');
 		}
 	}));
@@ -212,3 +227,60 @@ export function startSheltersLiveQuery(queryClient: QueryClient): SubscribeDataC
 		return [];
 	});
 }
+
+// ===== Storage points ("จัดการคลัง", #1186) =====
+
+/** The shelter's points and the `_rev` writes must quote; always re-read, never served stale. */
+export const useStoragePointsAdmin = (code: () => string) =>
+	createQuery(() => ({
+		queryKey: sheltersKeys.storagePoints(code()),
+		queryFn: () => getStoragePoints(code()),
+		enabled: !!code(),
+		staleTime: 0
+	}));
+
+/**
+ * Add (no `pointId`) or edit one storage point. `rev` is the `_rev` of the snapshot the user saw;
+ * a 409 (someone saved the shelter meanwhile) re-reads the snapshot so the next try quotes a fresh one.
+ */
+export const useSaveStoragePoint = () => {
+	const queryClient = useQueryClient();
+	return createMutation(() => ({
+		mutationFn: ({
+			code,
+			rev,
+			pointId,
+			point
+		}: {
+			code: string;
+			rev: string;
+			pointId?: string;
+			point: StoragePointInput;
+		}) =>
+			pointId ? editStoragePoint(code, pointId, rev, point) : addStoragePoint(code, rev, point),
+		onSuccess: (_, variables) => {
+			queryClient.invalidateQueries({ queryKey: sheltersKeys.all });
+			toast.success(variables.pointId ? 'บันทึกจุดเก็บของสำเร็จ' : 'เพิ่มจุดเก็บของสำเร็จ');
+		},
+		onError: (err: Error, variables) => {
+			queryClient.invalidateQueries({ queryKey: sheltersKeys.storagePoints(variables.code) });
+			toast.error(err.message || 'บันทึกจุดเก็บของไม่สำเร็จ');
+		}
+	}));
+};
+
+export const useDeleteStoragePoint = () => {
+	const queryClient = useQueryClient();
+	return createMutation(() => ({
+		mutationFn: ({ code, rev, pointId }: { code: string; rev: string; pointId: string }) =>
+			deleteStoragePoint(code, pointId, rev),
+		onSuccess: () => {
+			queryClient.invalidateQueries({ queryKey: sheltersKeys.all });
+			toast.success('ลบจุดเก็บของสำเร็จ');
+		},
+		onError: (err: Error, variables) => {
+			queryClient.invalidateQueries({ queryKey: sheltersKeys.storagePoints(variables.code) });
+			toast.error(err.message || 'ลบจุดเก็บของไม่สำเร็จ');
+		}
+	}));
+};

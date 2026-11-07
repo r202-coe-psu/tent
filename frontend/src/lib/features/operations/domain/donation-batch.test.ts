@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest';
+import { qtyToBaseUnit } from '$lib/features/catalog';
 import {
 	deriveDonationCloseAuditId,
 	deriveDonationReceiptAuditId,
 	deriveDonationReceiptLineId,
 	donationShortfall,
-	isReceivedLine
+	isReceivedLine,
+	type ShortfallLine
 } from './donation-batch';
 
 describe('donationShortfall (CR-143 FR-B5)', () => {
@@ -61,6 +63,78 @@ describe('donationShortfall (CR-143 FR-B5)', () => {
 
 	it('ignores declared lines that have no item yet (free_text not matched)', () => {
 		expect(donationShortfall([{ item_id: undefined, qty: '10' }], [])).toEqual([]);
+	});
+
+	describe('with a base-unit converter (#1223)', () => {
+		const rice = {
+			base_unit: 'kg',
+			conversions: [{ uom_name: 'sack', multiplier: '50' }]
+		};
+		// what the receive form passes: lines with a unit are converted, others are already base
+		const toBaseQty = (line: ShortfallLine): string | null => {
+			if (!line.unit) return line.qty;
+			try {
+				return qtyToBaseUnit(line.qty, line.unit, rice);
+			} catch {
+				return null;
+			}
+		};
+
+		it('does not warn when the declared packaging unit equals the counted base qty', () => {
+			expect(
+				donationShortfall(
+					[{ item_id: 'item:rice', qty: '2', unit: 'sack' }],
+					[{ item_id: 'item:rice', qty: '100', unit: 'kg' }],
+					toBaseQty
+				)
+			).toEqual([]);
+		});
+
+		it('reports the shortfall in base units when the packaging count is short', () => {
+			expect(
+				donationShortfall(
+					[{ item_id: 'item:rice', qty: '2', unit: 'sack' }],
+					[{ item_id: 'item:rice', qty: '80', unit: 'kg' }],
+					toBaseQty
+				)
+			).toEqual([{ item_id: 'item:rice', declared: '100', counted: '80', short: '20' }]);
+		});
+
+		it('skips an item declared in a unit it cannot convert instead of warning', () => {
+			expect(
+				donationShortfall(
+					[{ item_id: 'item:rice', qty: '3', unit: 'crate' }],
+					[{ item_id: 'item:rice', qty: '10', unit: 'kg' }],
+					toBaseQty
+				)
+			).toEqual([]);
+			expect(
+				donationShortfall([{ item_id: 'item:rice', qty: '3', unit: 'crate' }], [], toBaseQty)
+			).toEqual([]);
+		});
+
+		it('keeps comparing the other items when one is skipped', () => {
+			expect(
+				donationShortfall(
+					[
+						{ item_id: 'item:rice', qty: '3', unit: 'crate' },
+						{ item_id: 'item:rice2', qty: '10' }
+					],
+					[{ item_id: 'item:rice2', qty: '8' }],
+					toBaseQty
+				)
+			).toEqual([{ item_id: 'item:rice2', declared: '10', counted: '8', short: '2' }]);
+		});
+
+		it('still reports 10 declared vs 8 counted in the same unit', () => {
+			expect(
+				donationShortfall(
+					[{ item_id: 'item:rice', qty: '10', unit: 'kg' }],
+					[{ item_id: 'item:rice', qty: '8', unit: 'kg' }],
+					toBaseQty
+				)
+			).toEqual([{ item_id: 'item:rice', declared: '10', counted: '8', short: '2' }]);
+		});
 	});
 });
 
