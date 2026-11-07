@@ -125,7 +125,7 @@ describe('JobAssignPage — several shifts at once (#1164)', () => {
 
 	it('places the chosen people in every ticked shift', async () => {
 		await render();
-		await click(byLabel('มอบหมายเข้ากะ 2026-11-10 | 13:00 - 17:00 น. (0/5 คน) ด้วย'));
+		await click(byLabel('เลือกกะ 2026-11-10 | 13:00 - 17:00 น. (0/5 คน)'));
 		await click(byLabel('เลือก สมชาย ทดสอบ'));
 		await click(byLabel('เลือก สมหญิง ทดสอบ'));
 		expect(sendButton().getAttribute('aria-label')).toBe('มอบหมายอาสา 2 คนเข้า 2 กะ');
@@ -155,8 +155,8 @@ describe('JobAssignPage — several shifts at once (#1164)', () => {
 			} as ShiftAssignment
 		];
 		await render();
-		await click(byLabel('มอบหมายเข้ากะ 2026-11-10 | 13:00 - 17:00 น. (1/5 คน) ด้วย'));
-		await click(byLabel('มอบหมายเข้ากะ 2026-11-10 | 18:00 - 22:00 น. (0/1 คน) ด้วย'));
+		await click(byLabel('เลือกกะ 2026-11-10 | 13:00 - 17:00 น. (1/5 คน)'));
+		await click(byLabel('เลือกกะ 2026-11-10 | 18:00 - 22:00 น. (0/1 คน)'));
 		await click(byLabel('เลือก สมชาย ทดสอบ'));
 		await click(byLabel('เลือก สมหญิง ทดสอบ'));
 		await click(sendButton());
@@ -190,7 +190,7 @@ describe('JobAssignPage — several shifts at once (#1164)', () => {
 			return {};
 		});
 		await render();
-		await click(byLabel('มอบหมายเข้ากะ 2026-11-10 | 13:00 - 17:00 น. (0/5 คน) ด้วย'));
+		await click(byLabel('เลือกกะ 2026-11-10 | 13:00 - 17:00 น. (0/5 คน)'));
 		await click(byLabel('เลือก สมชาย ทดสอบ'));
 		await click(byLabel('เลือก สมหญิง ทดสอบ'));
 		await click(sendButton());
@@ -198,5 +198,26 @@ describe('JobAssignPage — several shifts at once (#1164)', () => {
 		expect(text()).toContain('กะ 2026-11-10 13:00-17:00 น. บันทึกไม่สำเร็จ (เครือข่ายขัดข้อง)');
 		// Only the person whose save failed stays selected, to try again.
 		expect(sendButton().getAttribute('aria-label')).toBe('มอบหมายอาสา 1 คนเข้า 2 กะ');
+	});
+
+	it('disables a shift when its quota is full and cannot be selected', async () => {
+		// Evening has 1 seat and is full
+		mocks.assignments = [
+			{
+				volunteer_id: A._id,
+				job_id: job._id,
+				shift_id: EVENING.id,
+				duty_window: shiftDutyWindow(EVENING),
+				date: EVENING.date,
+				status: 'assigned'
+			} as ShiftAssignment
+		];
+		await render();
+		const eveningBtn = byLabel('เลือกกะ 2026-11-10 | 18:00 - 22:00 น. (1/1 คน)');
+		expect(eveningBtn).not.toBeNull();
+		expect(eveningBtn.hasAttribute('disabled')).toBe(true);
+		await click(eveningBtn);
+		// Still only morning is selected
+		expect(sendButton().getAttribute('aria-label')).toBe('มอบหมายอาสา 0 คนเข้ากะนี้');
 	});
 });

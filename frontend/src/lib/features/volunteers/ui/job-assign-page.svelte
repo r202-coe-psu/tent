@@ -34,6 +34,7 @@
 	import Timer from '@lucide/svelte/icons/timer';
 	import ShieldCheck from '@lucide/svelte/icons/shield-check';
 	import CircleCheck from '@lucide/svelte/icons/circle-check';
+	import Check from '@lucide/svelte/icons/check';
 	import UserRoundPlus from '@lucide/svelte/icons/user-round-plus';
 	import Send from '@lucide/svelte/icons/send';
 	import * as Dialog from '$lib/components/ui/dialog/index.js';
@@ -137,10 +138,38 @@
 		);
 	});
 
-	/** Empty until the SM picks one — the `?shift=` deep link, else the first shift, wins. */
-	let pickedShiftId = $state('');
+	/**
+	 * Explicit user selection of shifts. Null while untouched — in that state,
+	 * `defaultShiftId` derives the first available non-full shift.
+	 */
+	let pickedShiftIds = $state<string[] | null>(null);
+	let focusedShiftId = $state<string>('');
+
+	const defaultShiftId = $derived.by(() => {
+		if (orderedShifts.length === 0) return '';
+		const candidate = shiftId ? orderedShifts.find((s) => s.id === shiftId) : undefined;
+		const candidateAssigned = candidate ? (assignedByShiftId.get(candidate.id) ?? 0) : 0;
+		const candidateFull =
+			candidate && candidate.quota > 0 ? candidateAssigned >= candidate.quota : true;
+		if (candidate && !candidateFull) return candidate.id;
+
+		const available = orderedShifts.find((s) => {
+			const assigned = assignedByShiftId.get(s.id) ?? 0;
+			return s.quota - assigned > 0;
+		});
+		return available?.id ?? '';
+	});
+
+	const selectedShiftIds = $derived(
+		pickedShiftIds !== null ? pickedShiftIds : defaultShiftId ? [defaultShiftId] : []
+	);
+
+	const targetShifts = $derived(orderedShifts.filter((s) => selectedShiftIds.includes(s.id)));
+	const multiShift = $derived(targetShifts.length > 1);
 	const activeShiftId = $derived(
-		pickedShiftId || shiftId || (orderedShifts.length > 0 ? orderedShifts[0].id : '')
+		focusedShiftId && selectedShiftIds.includes(focusedShiftId)
+			? focusedShiftId
+			: (targetShifts[0]?.id ?? '')
 	);
 	const activeIndex = $derived(orderedShifts.findIndex((s) => s.id === activeShiftId));
 	const shift = $derived(activeIndex >= 0 ? orderedShifts[activeIndex] : null);
@@ -242,19 +271,30 @@
 	const activeAssignedCount = $derived(shift ? (assignedByShiftId.get(shift.id) ?? 0) : 0);
 	const remaining = $derived(Math.max((shift?.quota ?? 0) - activeAssignedCount, 0));
 	// — several shifts at once (#1164) ——————————————————————————————————————————
-	/** Other shifts of this job to place the same people in; the picked shift is always included. */
-	let extraShiftIds = $state<string[]>([]);
 	/** The result of the last multi-shift run that left someone out: a dialog, never off-screen. */
 	let bulkResult = $state<BulkRunSummary | null>(null);
 	let bulkResultOpen = $state(false);
-	const otherShifts = $derived(orderedShifts.filter((s) => s.id !== activeShiftId));
-	const targetShifts = $derived(
-		shift ? [shift, ...otherShifts.filter((s) => extraShiftIds.includes(s.id))] : []
-	);
-	const multiShift = $derived(targetShifts.length > 1);
 
-	function toggleExtraShift(id: string, next: boolean) {
-		extraShiftIds = next ? [...extraShiftIds, id] : extraShiftIds.filter((x) => x !== id);
+	function toggleShift(s: JobShift) {
+		const assigned = assignedByShiftId.get(s.id) ?? 0;
+		const isFull = s.quota > 0 && assigned >= s.quota;
+		if (isFull) return;
+
+		const current = [...selectedShiftIds];
+		const next = current.includes(s.id) ? current.filter((id) => id !== s.id) : [...current, s.id];
+
+		pickedShiftIds = next;
+		if (next.includes(s.id)) {
+			focusedShiftId = s.id;
+		} else if (focusedShiftId === s.id) {
+			focusedShiftId = next[0] ?? '';
+		}
+
+		selectedIds = [];
+		detailCandidate = null;
+		detailOpen = false;
+		bulkResult = null;
+		bulkResultOpen = false;
 	}
 
 	// With several shifts a full one is skipped and reported, so only a single shift is gated here.
@@ -321,18 +361,6 @@
 				`มอบหมายสำเร็จ ${summary.placedCount} รายการ (${chosen.length} คน × ${targetShifts.length} กะ)`
 			);
 		}
-	}
-
-	function pickShift(id: string) {
-		pickedShiftId = id;
-		extraShiftIds = extraShiftIds.filter((x) => x !== id);
-		bulkResult = null;
-		bulkResultOpen = false;
-		// Row states are shift-specific — a carried-over selection could dispatch
-		// someone who is not free in the newly picked shift.
-		selectedIds = [];
-		detailCandidate = null;
-		detailOpen = false;
 	}
 
 	function openDetails(candidate: AssignCandidate) {
@@ -498,7 +526,7 @@
 
 		<!-- 2 Columns Layout: Left = กะงาน, Right = จิตอาสา -->
 		<div class="grid grid-cols-1 items-start gap-4 lg:grid-cols-12">
-			<!-- Col ซ้าย: เลือกเวลากะงาน (ไม่มี select ตัวใหญ่) -->
+			<!-- Col ซ้าย: เลือกเวลากะงาน (Multi-select โดยคลิกที่การ์ด กะเต็ม disabled) -->
 			<aside class="space-y-3 lg:sticky lg:top-4 lg:col-span-5 xl:col-span-4">
 				<div class="space-y-3 rounded-2xl border border-border bg-card p-3.5">
 					<div class="flex items-center justify-between gap-2 border-b border-border pb-2.5">
@@ -506,7 +534,7 @@
 							<CalendarDays class="h-4 w-4 text-primary" />
 							เวลากะงาน ({orderedShifts.length} กะ)
 						</h3>
-						{#if multiShift}
+						{#if targetShifts.length > 0}
 							<span
 								class="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary"
 							>
@@ -515,7 +543,7 @@
 						{/if}
 					</div>
 					<p class="text-xs text-muted-foreground">
-						คลิกที่กะเพื่อเลือกเป็นกะหลัก หรือติ๊ก “เลือกด้วย” เพื่อมอบหมายพร้อมกัน
+						คลิกที่กะเพื่อเลือกหลายกะพร้อมกัน (กะที่เต็มแล้วจะเลือกไม่ได้)
 					</p>
 
 					{#if orderedShifts.length === 0}
@@ -523,84 +551,93 @@
 					{:else}
 						<div class="space-y-2" data-testid="multi-shift">
 							{#each orderedShifts as s (s.id)}
-								{@const isActive = s.id === activeShiftId}
-								{@const isExtra = extraShiftIds.includes(s.id)}
+								{@const isSelected = selectedShiftIds.includes(s.id)}
 								{@const assigned = assignedByShiftId.get(s.id) ?? 0}
 								{@const shiftRem = Math.max(s.quota - assigned, 0)}
+								{@const isFull = s.quota > 0 && shiftRem === 0}
 								{@const total = s.quota > 0 ? s.quota : 1}
-								<div
-									class="rounded-xl border p-3 transition-colors {isActive
-										? 'border-primary bg-primary/5 ring-1 ring-primary'
-										: isExtra
-											? 'border-primary/40 bg-primary/5'
-											: 'border-border bg-background hover:border-border/80'}"
+								<button
+									type="button"
+									disabled={isFull}
+									onclick={() => toggleShift(s)}
+									aria-label={`เลือกกะ ${shiftLabel(s)}`}
+									aria-pressed={isSelected}
+									class="w-full rounded-xl border p-3 text-left transition-all focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none {isFull
+										? 'cursor-not-allowed border-dashed border-border bg-muted/40 opacity-60'
+										: isSelected
+											? 'cursor-pointer border-primary bg-primary/5 shadow-2xs ring-1 ring-primary'
+											: 'cursor-pointer border-border bg-background hover:border-border/80 hover:bg-muted/20'}"
 								>
 									<div class="flex items-start justify-between gap-2">
-										<button
-											type="button"
-											class="flex-1 cursor-pointer rounded-lg text-left focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
-											onclick={() => pickShift(s.id)}
-											aria-label={`เลือกกะ ${shiftLabel(s)} เป็นกะหลัก`}
-										>
-											<div class="flex flex-wrap items-center gap-1.5">
-												<span class="text-sm font-bold text-foreground">
-													{s.date}
-												</span>
-												{#if s.end_date !== s.date}
-													<span class="text-xs text-muted-foreground">(ถึง {s.end_date})</span>
+										<div class="flex items-start gap-2.5">
+											<div
+												class="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-colors {isFull
+													? 'border-muted-foreground/30 bg-muted'
+													: isSelected
+														? 'border-primary bg-primary text-primary-foreground'
+														: 'border-muted-foreground/40 bg-background'}"
+											>
+												{#if isSelected}
+													<Check class="h-3 w-3 stroke-[3]" />
 												{/if}
-												{#if isActive}
-													<span
-														class="rounded-full bg-primary px-2 py-0.5 text-[11px] font-semibold text-primary-foreground"
-													>
-														กะหลัก
+											</div>
+											<div>
+												<div class="flex flex-wrap items-center gap-1.5">
+													<span class="text-sm font-bold text-foreground">
+														{s.date}
 													</span>
-												{/if}
+													{#if s.end_date !== s.date}
+														<span class="text-xs text-muted-foreground">(ถึง {s.end_date})</span>
+													{/if}
+												</div>
+												<p class="mt-0.5 text-xs font-medium text-muted-foreground">
+													{s.start_time} - {s.end_time} น.
+												</p>
 											</div>
-											<p class="mt-0.5 text-xs font-medium text-muted-foreground">
-												{s.start_time} - {s.end_time} น.
-											</p>
-										</button>
+										</div>
 
-										{#if !isActive}
-											<div class="flex shrink-0 items-center gap-1.5 pt-0.5">
-												<Checkbox
-													id={`extra-shift-${s.id}`}
-													checked={isExtra}
-													onCheckedChange={(next) => toggleExtraShift(s.id, next === true)}
-													aria-label={`มอบหมายเข้ากะ ${shiftLabel(s)} ด้วย`}
-												/>
-												<Label
-													for={`extra-shift-${s.id}`}
-													class="cursor-pointer text-xs font-medium text-muted-foreground select-none"
+										<div class="shrink-0">
+											{#if isFull}
+												<span
+													class="rounded-full bg-destructive/15 px-2 py-0.5 text-2xs font-semibold text-destructive"
 												>
-													เลือกด้วย
-												</Label>
-											</div>
-										{/if}
+													กะเต็มแล้ว
+												</span>
+											{:else if isSelected && s.id === activeShiftId && targetShifts.length > 1}
+												<span
+													class="rounded-full bg-primary/10 px-2 py-0.5 text-2xs font-semibold text-primary"
+												>
+													กะหลัก
+												</span>
+											{:else if isSelected}
+												<span
+													class="rounded-full bg-emerald-100 px-2 py-0.5 text-2xs font-semibold text-emerald-800"
+												>
+													เลือกแล้ว
+												</span>
+											{/if}
+										</div>
 									</div>
 
 									<div class="mt-2.5 space-y-1 border-t border-border/60 pt-2 text-xs">
 										<div class="flex items-center justify-between text-muted-foreground">
 											<span>โควตา {assigned}/{s.quota} คน</span>
 											<span
-												class={shiftRem === 0
+												class={isFull
 													? 'font-semibold text-destructive'
 													: 'font-semibold text-emerald-700'}
 											>
-												{shiftRem === 0 ? 'กะเต็มแล้ว' : `ยังขาด ${shiftRem} คน`}
+												{isFull ? 'กะเต็มแล้ว (ปิดรับ)' : `ยังขาด ${shiftRem} คน`}
 											</span>
 										</div>
 										<div class="flex h-1.5 w-full overflow-hidden rounded-full bg-muted">
 											<div
-												class="h-full {shiftRem === 0
-													? 'bg-destructive'
-													: 'bg-emerald-500'} transition-all"
+												class="h-full {isFull ? 'bg-destructive' : 'bg-emerald-500'} transition-all"
 												style:width="{(Math.min(assigned, s.quota) / total) * 100}%"
 											></div>
 										</div>
 									</div>
-								</div>
+								</button>
 							{/each}
 						</div>
 					{/if}
@@ -832,7 +869,7 @@
 						: multiShift
 							? `มอบหมายอาสา ${selectedCount} คนเข้า ${targetShifts.length} กะ`
 							: `มอบหมายอาสา ${selectedCount} คนเข้ากะนี้`}
-					disabled={selectedCount === 0 || overCapacity || sending}
+					disabled={selectedCount === 0 || targetShifts.length === 0 || overCapacity || sending}
 					onclick={assignSelected}
 				>
 					{#if sending}
