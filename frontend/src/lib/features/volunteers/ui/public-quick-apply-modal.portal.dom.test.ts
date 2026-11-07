@@ -59,9 +59,11 @@ function open(language: 'th' | 'en', signedIn = true) {
 	};
 }
 
-afterEach(() => {
+afterEach(async () => {
 	if (instance) unmount(instance);
 	instance = null;
+	// bits-ui body-scroll-lock cleans up on a 24ms timer; let it run before the env tears down
+	await new Promise((resolve) => setTimeout(resolve, 50));
 	document.body.innerHTML = '';
 	langState.current = 'th';
 });
