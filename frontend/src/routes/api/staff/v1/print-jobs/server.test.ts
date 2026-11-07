@@ -179,6 +179,55 @@ describe('POST /api/staff/v1/print-jobs', () => {
 			expect((await response.json()).error.code).toBe('JOB_ID_CONFLICT');
 		});
 
+		describe('while the printer is offline', () => {
+			beforeEach(() => {
+				mockGetDevice.mockResolvedValue({ ...device, last_seen_at: '2026-10-22T02:58:00.000Z' });
+			});
+
+			it('answers a follow-up of a job already written with that job, so the tablet can poll it', async () => {
+				const get = vi.fn().mockResolvedValue(written());
+				mockUserJobStore.mockReturnValue({ createJob: mockCreateJob, get });
+
+				const response = await post(request);
+
+				expect(response.status).toBe(201);
+				expect(await response.json()).toEqual({
+					job_id: JOB_ID,
+					shelter_code: 'SH001',
+					expires_at: '2026-10-22T03:01:50.000Z'
+				});
+				expect(mockCreateJob).not.toHaveBeenCalled();
+			});
+
+			it('answers 409 PRINTER_OFFLINE when no job holds that id, storing nothing', async () => {
+				mockUserJobStore.mockReturnValue({
+					createJob: mockCreateJob,
+					get: vi.fn().mockResolvedValue(null)
+				});
+
+				const response = await post(request);
+
+				expect(response.status).toBe(409);
+				expect((await response.json()).error.code).toBe('PRINTER_OFFLINE');
+				expect(mockCreateJob).not.toHaveBeenCalled();
+			});
+
+			it("answers 409 JOB_ID_CONFLICT, without the job, when the id holds another staff member's job", async () => {
+				mockUserJobStore.mockReturnValue({
+					createJob: mockCreateJob,
+					get: vi.fn().mockResolvedValue(written({ created_by: 'staff-b' }))
+				});
+
+				const response = await post(request);
+
+				expect(response.status).toBe(409);
+				const body = await response.json();
+				expect(body.error.code).toBe('JOB_ID_CONFLICT');
+				expect(body).not.toHaveProperty('job_id');
+				expect(mockCreateJob).not.toHaveBeenCalled();
+			});
+		});
+
 		it.each([['not-a-ulid'], ['print_job:01JC0000000000000000000001']])(
 			'answers 422 INVALID_LABELS for the malformed job_id %s',
 			async (jobId) => {
