@@ -3,7 +3,7 @@ id: CR-211 # renumbered from draft-staff-qr-card
 title: Staff QR card — permanent staff_token_hash in _users + recipient_type staff at distribution
 status: approved
 date: 2026-10-28
-updated: 2026-10-31 # A2 approved (kong, 2026-10-31) — บัตรแสดง "เจ้าหน้าที่" แทนรายการ role, PNG = ป้าย 80×60 เดียวกับพิมพ์ · approved (kong); ส่วนที่ปรับ A1 approved (kong, 2026-10-30) — payload case, affects, role ของ resolve (ไม่มี rate limit ในแอป ตาม CR-188), createUser ตัวไหน, e2e AC
+updated: 2026-11-07 # คำในปุ่ม "หมุน QR" → "ออก QR ใหม่" (copy only, suthinan) · A2 approved (kong, 2026-10-31) — บัตรแสดง "เจ้าหน้าที่" แทนรายการ role, PNG = ป้าย 80×60 เดียวกับพิมพ์ · approved (kong); ส่วนที่ปรับ A1 approved (kong, 2026-10-30) — payload case, affects, role ของ resolve (ไม่มี rate limit ในแอป ตาม CR-188), createUser ตัวไหน, e2e AC
 requested_by: ทีม (issue #893)
 decided_by: kong
 decision_date: 2026-10-29
@@ -132,8 +132,8 @@ migration: one-off backfill `staff_token_hash` ให้ `_users` เดิม�
 - **FR-SQR-26** — บัตร staff แสดง `display_name`, คำว่า "เจ้าหน้าที่" (A2 — ทุกคนเหมือนกัน รวม `system_admin` และ user ที่มีหลาย role · ไม่แสดงรายการ role และไม่แสดง `position`) และ QR · ชื่อศูนย์แสดงบนจอใต้ตัวอย่างบัตร ไม่พิมพ์ลงบัตร (A2) — QR ใบเดียวกันทุกศูนย์
 - **FR-SQR-27** — บัตรจิตอาสาแสดงชื่อ คำว่า "จิตอาสา" (ตำแหน่งเดียวกับ "เจ้าหน้าที่" — A2) `volunteer_code` และ QR จิตอาสา
 - **FR-SQR-28** — `kind: 'none'` แสดงข้อความตามเหตุผล (ไม่มี QR → "ยังไม่มี QR กรุณาติดต่อผู้ดูแล" / บัญชีถูกปิด / ลิงก์จิตอาสาไม่ถูกต้อง) และแนะนำให้ติดต่อผู้ดูแล
-- **FR-SQR-29** — ดาวน์โหลด (PNG) และพิมพ์บัตรจาก dialog ได้ · ทั้งสองแบบเป็นป้าย 80×60 mm หน้าตาเดียวกัน (A2 — FR-SQR-45) · dialog ไม่มีปุ่มหมุน QR
-- **FR-SQR-30** — หน้าจัดการ user (`lib/features/users/`) มีปุ่ม "พิมพ์บัตร" และ "หมุน QR" (มี confirm เตือนว่า QR เก่าใช้ไม่ได้ทุกศูนย์) · ซ่อนสำหรับ user ที่มี `volunteer_id`
+- **FR-SQR-29** — ดาวน์โหลด (PNG) และพิมพ์บัตรจาก dialog ได้ · ทั้งสองแบบเป็นป้าย 80×60 mm หน้าตาเดียวกัน (A2 — FR-SQR-45) · dialog ไม่มีปุ่มออก QR ใหม่
+- **FR-SQR-30** — หน้าจัดการ user (`lib/features/users/`) มีปุ่ม "พิมพ์บัตร" และ "ออก QR ใหม่" (ชื่อเดิม "หมุน QR" — เปลี่ยน 2026-11-07) (มี confirm เตือนว่า QR เก่าใช้ไม่ได้ทุกศูนย์) · ซ่อนสำหรับ user ที่มี `volunteer_id`
 
 ### 3.4 หน้าแจก `/onsite/distribution`
 
@@ -234,3 +234,4 @@ migration: one-off backfill `staff_token_hash` ให้ `_users` เดิม�
 - 2026-10-30 — **A1 approved (kong)** — รับข้อเสนอ A1 ทุกข้อตามที่เขียน (FR-SQR-40..43, AC-15/16, แก้ §2.1 และ FR-SQR-02/03/13/21, `affects`) รวมการตอบ 404 เดียวกันใน FR-SQR-21 และไม่มี rate limit ในแอปตาม CR-188
 - 2026-10-31 — ข้อเสนอทีม (A2, proposed): บัตรแสดง "เจ้าหน้าที่" ตัวใหญ่แทนรายการ role (รวม admin) เพราะ user หลาย role ทำให้ป้ายรก · ไม่แสดง `position` บนบัตร · PNG เป็นป้าย 80×60 เดียวกับพิมพ์ · `resolve`/หน้าแจกยังแสดง role ตามเดิม (R1) · รอ approve
 - 2026-10-31 — **A2 approved (kong)** — รับข้อเสนอ A2 ทุกข้อตามที่เขียน (แก้ FR-SQR-26/27/29 และ AC-04, เพิ่ม FR-SQR-44/45 และ AC-17): บัตรแสดง "เจ้าหน้าที่" / "จิตอาสา" แทนรายการ role และไม่แสดง `position` · PNG เป็นป้าย 80×60 เดียวกับที่พิมพ์ · `resolve` และหน้าแจกยังแสดง role ตามเดิม (R1) — ไม่แตะ token, endpoint หรือ schema
+- 2026-11-07 — เปลี่ยนคำในปุ่ม (suthinan, decision sync): "หมุน QR" → **"ออก QR ใหม่"** ในหน้าจัดการ user, dialog ยืนยัน, toast และข้อความ error จาก server (FR-SQR-29/30) เพราะ "หมุน" อ่านเหมือนหมุนรูป ไม่สื่อว่าออกบัตรใหม่และบัตรเดิมใช้ไม่ได้ · เปลี่ยนเฉพาะข้อความที่ผู้ใช้เห็น — endpoint `/api/v1/users/staff-card/rotate`, ชื่อในโค้ด, สิทธิ์ และ schema คงเดิม · `role-permission-matrix.md` และ `api-contract.md` ยังใช้คำว่า "หมุน" ในความหมายทางเทคนิค ไม่ได้แก้ในรอบนี้

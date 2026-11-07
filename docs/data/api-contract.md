@@ -809,6 +809,142 @@ BFF ของ SvelteKit (ไม่ผ่าน FastAPI) · anonymous · ใช�
 | 422 | `VALIDATION` | body ผิดรูป · `source` นอก enum · `evacuee_ids` ว่าง/เกิน 30/ไม่ใช่ `evacuee:{ULID}` |
 | 503 | `DEPENDENCY_UNAVAILABLE` | CouchDB ของศูนย์อ่าน/เขียนไม่ได้ทั้งคำขอ |
 
+### 2.9 Station print server — Pi / staff / back-office / internal ([CR-222](../changes/14-kiosk/CR-222-station-print-server.md))
+
+> **สถานะ:** approved 2026-10-31 (review รอบ 3 PR #932) · BFF SvelteKit ที่ central เท่านั้น (WAN ล่ม → พิมพ์ผ่านเครื่องพิมพ์ไม่ได้ ใช้พรีวิว PDF) ·
+> ข้อมูล: schema.md §10 · ทุก response ของ route ในหัวข้อนี้ตอบ `cache-control: no-store` · error shape ตามสัญญาข้างต้น ·
+> response ไม่มี secret (นอกจากตอนสร้าง / rotate), `secret_hash` หรือรายละเอียด upstream
+
+| กลุ่ม       | Path                                  | Auth                                                     | credential ที่ BFF ใช้กับ CouchDB                                       |
+| ----------- | ------------------------------------- | -------------------------------------------------------- | ---------------------------------------------------------------------- |
+| Pi          | `/api/v1/printer/*`                   | header `x-device-id` + `x-device-secret`                 | `printing_service`                                                     |
+| tablet      | `/api/staff/v1/printers`              | central `_session` cookie                                | `printing_service` (เครื่องอยู่ `printing_devices` ที่ staff อ่านไม่ได้)   |
+| tablet      | `/api/staff/v1/print-jobs*`           | central `_session` cookie                                | `AuthSession` ของผู้เรียก (`_security` + VDU ตัดสิน)                     |
+| back-office | `/api/back-office/printers*`          | `_session` — `system_admin` หรือ `shelter_manager` ของศูนย์ของเครื่อง (`PRINTER_MANAGER_CAPABILITIES`; ไม่รวม `kiosk_staff`) | `printing_service` · test-print ใช้ `AuthSession` ของผู้เรียก |
+| internal    | `/api/internal/printers/housekeeping` | `Authorization: Bearer <PRINT_HOUSEKEEPING_TOKEN>`       | `printing_service`                                                     |
+
+#### 2.9.1 Pi agent — `/api/v1/printer/*` (device credential)
+
+```http
+POST /api/v1/printer/hello
+x-device-id: printer-sh001-desk1
+x-device-secret: sk_print_…
+Content-Type: application/json
+
+{ "agent_version": "0.3.0", "queue_state": "ready", "local_ips": ["192.168.1.40"] }
+```
+
+| Method | Path                         | Request body                              | สำเร็จ                                                                                                                                                     |
+| ------ | ---------------------------- | ----------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `POST` | `/api/v1/printer/hello`      | `{ agent_version?, queue_state, local_ips? }` | `200 { device: { device_id, name, shelter_code }, server_time, config: { wait_sec: 25, lease_sec } }` — `lease_sec` = lease ของงาน 1 label (95) ใช้เป็น fallback |
+| `POST` | `/api/v1/printer/jobs/next`  | `{ queue_state }`                         | `200 { job: { id, label_count, lease_sec, lease_until }, labels: [base64 PNG] }` หรือ `204` (ไม่มีงานใน 25 วิ / `queue_state ≠ ready`)                     |
+| `POST` | `/api/v1/printer/jobs/{id}/result` | `{ printed: int ≥ 0, error_code? }`  | `200 { status: "printed" \| "failed" }` — ไม่มี `error_code` → `printed`                                                                                    |
+
+- `hello`: งาน `printing` ทั้งหมดของเครื่อง → `failed (agent_restart)` แล้วบันทึก heartbeat (เขียนเสมอ) · `agent_version` เกิน 64 ตัว → `422`
+- `jobs/next`: บันทึก heartbeat (throttle 20 วิ) + sweep งานของศูนย์ถ้าถึงรอบ (≤ 1 ครั้ง / 30 วิ / process / ศูนย์; sweep ล้มไม่ทำให้ request ล้ม) ·
+  `queue_state ≠ ready` → `204` ทันที · ไม่งั้น long-poll ≤ 25 วิ ผ่าน `_changes` ของ `printing_{code}` แล้ว claim งาน `pending` เก่าสุดของเครื่อง
+  (ตรวจซ้ำเวลา + label ตอน claim — งานที่ไม่ผ่านเป็น `expired` / `failed (invalid_label)` และไม่ถูกส่ง) · `id` ใน response = ULID ไม่มี prefix `print_job:`
+- `result`: `error_code` ∈ `printer_timeout` · `queue_disabled` · `lp_failed` (ค่าฝั่ง server ส่งมาไม่ได้) · งานต้องเป็น `printing` ของเครื่องนี้
+- `queue_state` ∈ `ready` · `disabled` · `missing` · `unknown` (ค่าอื่น = `unknown`) · `local_ips` เก็บเฉพาะ IPv4 / IPv6 ที่ถูกต้อง ≤ 8 ค่า (ไม่ reject)
+- nginx จำกัด connection พร้อมกัน ≤ 2 ต่อคู่ `x-device-id` + IP ของ client (`$binary_remote_addr`) ที่ `/api/v1/printer/` (`limit_conn`, CR-222 FR-27a) เกิน → `429` · agent ถือ `401` / `429` / network / `5xx`
+  เป็น error แล้ว exponential backoff
+
+| Status | Code                     | เมื่อ                                                                                              |
+| ------ | ------------------------ | -------------------------------------------------------------------------------------------------- |
+| 401    | `DEVICE_AUTH_FAILED`     | ไม่มีเครื่อง / secret ผิด / เครื่อง `inactive` — response เดียวกันทุกกรณี                              |
+| 409    | `JOB_CONFLICT`           | `result` ของงานที่ไม่ใช่ `printing` ของเครื่องนี้ (หรือชน `_rev`) — agent เลิก retry                    |
+| 422    | `VALIDATION`             | `result` body ผิด · `hello` `agent_version` เกิน 64 ตัว                                              |
+| 429    | —                        | nginx `limit_conn`                                                                                 |
+| 503    | `DEPENDENCY_UNAVAILABLE` | CouchDB / `printing_service` ใช้ไม่ได้ (รวมไม่ได้ตั้ง `COUCHDB_PRINTING_SERVICE_URL` นอก dev)             |
+
+#### 2.9.2 Tablet — `/api/staff/v1/printers`, `/api/staff/v1/print-jobs*` (`_session`)
+
+| Method | Path                                          | Request                                                         | สำเร็จ                                                                                                         |
+| ------ | --------------------------------------------- | --------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| `GET`  | `/api/staff/v1/printers?shelter_code=`        | —                                                               | `200 { printers: [{ id, name, station, online, queue_state, last_seen_at }], server_time }` — เฉพาะ `active` ของศูนย์ เรียงตามชื่อ |
+| `POST` | `/api/staff/v1/print-jobs`                    | `{ printer_id, source: "walk_in" \| "evacuee_qr", labels: [base64 PNG], job_id?: ULID }` | `201 { job_id, shelter_code, expires_at }`                                                              |
+| `GET`  | `/api/staff/v1/print-jobs/{id}?shelter_code=` | —                                                               | `200 { status, printed, label_count, error_code }`                                                             |
+
+- `GET /printers`: ผู้เรียกต้องมี scope ศูนย์นั้นหรือเป็น SA · `id` = `print_device:{device_id}` · ไม่มี secret / hash / `local_ips`
+- `POST /print-jobs`:
+  - `labels` 1–20 รูป · แต่ละรูป base64 ถูกต้อง + PNG magic bytes + ≤ 64 KB + IHDR 639 × 479 + (bit depth, color type) ∈ {(8,6), (8,2), (8,0), (1,0)} ·
+    รวม ≤ 1 MB · มากกว่า 20 รูป tablet แบ่งเป็นหลายงาน (ส่งงานถัดไปหลังงานก่อนจบ)
+  - สิทธิ์ตาม `source` สำหรับศูนย์**ของเครื่องพิมพ์**: `{CODE}:registration_staff` · `{CODE}:shelter_manager` (พร้อม `shelter:{CODE}`) หรือ `system_admin` ·
+    role flat ไม่มี prefix ศูนย์ไม่นับ
+  - BFF เขียน `print_job` (`pending`, `expires_at = now + 120 วิ`, รูปเป็น `_attachments` `label-NNN.png`) ลง `printing_{code}` ด้วย cookie ของผู้เรียก ·
+    VDU reject → `403`
+  - `shelter_code` ใน response ใช้กับ `?shelter_code=` ตอน poll สถานะ
+  - `job_id` (optional, ULID 26 ตัว ไม่มี prefix) → `_id` = `print_job:{job_id}` · ส่งซ้ำด้วยงานเดียวกัน (`created_by` / `shelter_code` / `printer_id` / `source` / `label_count` ตรง) → `201` ของงานเดิม ไม่เข้าคิวซ้ำ · ไม่ตรง → `409 JOB_ID_CONFLICT` _(CR-222 ทีมเสนอ 2026-11-05)_
+- `GET /print-jobs/{id}`: อ่านด้วย cookie ของผู้เรียก · ตอบเฉพาะผู้สร้างงาน (`created_by`) หรือ SA · tablet poll ทุก 1 วิจนงานจบหรือครบ
+  `PRINT_JOB_POLL_TIMEOUT_MS` (TTL 120 + lease ของงาน 20 label 190 + sweep 30 + 15 วิ = 355 วิ)
+
+| Status | Code                     | เมื่อ                                                                                     |
+| ------ | ------------------------ | ----------------------------------------------------------------------------------------- |
+| 401    | `UNAUTHENTICATED`        | ไม่มี / หมดอายุ session                                                                    |
+| 403    | `FORBIDDEN`              | ไม่มี scope ศูนย์ · role ไม่พอสำหรับ `source` · VDU reject · ดูงานของคนอื่น                  |
+| 404    | `PRINTER_NOT_FOUND`      | `POST /print-jobs`: ไม่มีเครื่อง หรือเครื่อง `inactive`                                       |
+| 404    | `JOB_NOT_FOUND`          | `GET /print-jobs/{id}`: ไม่มีงานใน `printing_{code}`                                         |
+| 409    | `PRINTER_OFFLINE`        | `POST /print-jobs`: เครื่องไม่ online (`active` + `queue_state = ready` + heartbeat ≤ 90 วิ) — ไม่เข้าคิว |
+| 409    | `JOB_ID_CONFLICT`        | `POST /print-jobs`: `job_id` ถูกใช้แล้วกับงานอื่น (คนละผู้สร้าง / เครื่อง / `source` / จำนวน label) |
+| 422    | `INVALID_LABELS`         | `POST /print-jobs`: body ไม่ผ่าน schema (labels ผิดเกณฑ์ข้างบน หรือ `job_id` ไม่ใช่ ULID)                               |
+| 422    | `VALIDATION`             | `GET`: ไม่ส่ง `shelter_code` (หรือรูปแบบผิด)                                                   |
+| 503    | `DEPENDENCY_UNAVAILABLE` | CouchDB ใช้ไม่ได้                                                                           |
+
+#### 2.9.3 Back-office — `/api/back-office/printers*` (`_session`, SA / `shelter_manager`)
+
+| Method   | Path                                        | Request                                                                                   | สำเร็จ                                              |
+| -------- | ------------------------------------------- | ----------------------------------------------------------------------------------------- | -------------------------------------------------- |
+| `GET`    | `/api/back-office/printers[?shelter_code=]` | —                                                                                         | `200 { printers: [PrinterAdminItem], server_time }` |
+| `POST`   | `/api/back-office/printers`                 | `{ device_id, name, shelter_code, station? }`                | `201 { device: PrinterAdminSummary, secret }`       |
+| `PATCH`  | `/api/back-office/printers/{device_id}`     | `{ name?, station?, status? }` (อย่างน้อย 1 field)                       | `200 PrinterAdminSummary`                           |
+| `POST`   | `/api/back-office/printers/{device_id}/rotate-secret` | —                                                                               | `200 { device: PrinterAdminSummary, secret }`       |
+| `POST`   | `/api/back-office/printers/{device_id}/test-print`    | —                                                                               | `201 { job_id, shelter_code, expires_at }`          |
+| `DELETE` | `/api/back-office/printers/{device_id}`     | —                                                                                         | `204`                                              |
+
+
+- `PrinterAdminSummary` = `{ id, device_id, name, shelter_code, station, status, secret_prefix, last_seen_at, queue_state,
+  agent_version, local_ips[], online }` · `PrinterAdminItem` = summary + `last_job: { status, finished_at, error_code, created_at } | null` (งานล่าสุด 1 งาน)
+- `GET`: เครื่องทุกสถานะใน scope ของผู้เรียก เรียงตาม `shelter_code` แล้วชื่อ · `?shelter_code=` นอก scope → `403`
+- `POST`: body strict · `device_id` `^[a-z0-9][a-z0-9-]{2,62}$` · `name` 1–80 · provision `printing_{code}` ถ้ายังไม่มี (schema.md §10.5) · `secret` = `sk_print_` + 64 hex **แสดงครั้งเดียว** (เก็บแค่ hash + prefix)
+- `PATCH`: `status: inactive` → เขียนเครื่องก่อน แล้วงาน `pending` / `printing` → `failed (printer_inactive)` · แก้แบบ read-modify-write retry ≤ 4 ครั้งเมื่อชน `_rev`
+  โดยคง field heartbeat
+- `rotate-secret`: secret เดิมใช้ไม่ได้ทันที · secret ใหม่แสดงครั้งเดียว
+- `test-print`: label ทดสอบในตัว 639 × 479 1-bit ไม่มีข้อมูลบุคคล · `source: test` · เขียนด้วย cookie ของผู้เรียก (VDU บังคับ `{CODE}:shelter_manager`
+  หรือ SA) · เครื่องต้อง online
+- `DELETE`: งาน `pending` / `printing` → `failed (printer_deleted)` ก่อน แล้วจึงลบ doc
+- เครื่องนอก scope หรือ `{device_id}` รูปแบบผิด → `404` (ไม่บอกว่ามีเครื่องอยู่)
+
+| Status | Code                               | เมื่อ                                                                                 |
+| ------ | ---------------------------------- | ------------------------------------------------------------------------------------- |
+| 401    | `UNAUTHENTICATED`                  | ไม่มี / หมดอายุ session                                                                |
+| 403    | `FORBIDDEN`                        | ไม่ใช่ SA / `shelter_manager` · สร้างเครื่องให้ศูนย์นอก scope · test-print ถูก VDU reject     |
+| 404    | `NOT_FOUND`                        | ไม่มีเครื่อง / เครื่องนอก scope                                                          |
+| 409    | `CONFLICT`                         | `device_id` ซ้ำ · ชน `_rev` ครบ 4 ครั้ง                                                   |
+| 409    | `PRINTER_OFFLINE`                  | test-print ตอนเครื่องไม่ online                                                         |
+| 422    | `VALIDATION`                       | body ผิด                                                                              |
+| 422    | `SHELTER_CLOSED`                   | `POST` สร้างเครื่อง / `PATCH status: active` ให้ศูนย์ที่ไม่มีในทะเบียน หรือ `closed` / `cancelled` (ไม่ provision `printing_{code}` กลับมา — CR-222 FR-32, proposed 2026-11-06) |
+| 503    | `DEPENDENCY_UNAVAILABLE`           | CouchDB / `printing_service` ใช้ไม่ได้                                  |
+
+#### 2.9.4 Internal — `POST /api/internal/printers/housekeeping`
+
+**Internal (compose network เท่านั้น — nginx ตอบ `404` ที่ `/api/internal/printers/`):** container `print-housekeeping` (image เดียวกับ frontend)
+เรียกทุก 30 วิ (`PRINT_HOUSEKEEPING_INTERVAL_MS`) · BFF ไม่ตั้ง timer เอง.
+
+| Method | Path                                  | Auth                                                         | สำเร็จ                                         |
+| ------ | ------------------------------------- | ------------------------------------------------------------ | --------------------------------------------- |
+| `POST` | `/api/internal/printers/housekeeping` | `Authorization: Bearer <PRINT_HOUSEKEEPING_TOKEN>` (constant-time compare) | `200 { swept, purged, compacted, errors }` |
+
+- ทุกครั้ง: sweep ทุก `printing_{code}` ตาม registry `printing_db:*` — `printing` ที่เลย `lease_until` → `failed (lease_expired)` · `pending` ที่หมดอายุ → `expired`
+- ทุกชั่วโมง (ตาม `print_housekeeping.last_retention_at`): ลบงาน terminal ที่ `finished_at` เก่ากว่า 7 วัน แล้ว `_compact` ทุก `printing_{code}` และ `printing_devices`
+- ศูนย์หนึ่งล้มไม่หยุดศูนย์อื่น · ไม่ throw — ผลอยู่ใน counts + `print_housekeeping` (`last_run_at`, `last_retention_at`, `last_error`)
+- `purged` = จำนวนงานที่ลบ (`_deleted`, ไม่ใช่ `_purge`) · `compacted` = จำนวน DB ที่สั่ง `_compact` · `errors` = จำนวนขั้นที่ล้มในรอบนี้
+- container healthcheck unhealthy เมื่อเรียกสำเร็จ (2xx) ครั้งล่าสุดเกิน 2 นาที
+
+| Status | Code                     | เมื่อ                                                   |
+| ------ | ------------------------ | ------------------------------------------------------- |
+| 401    | `UNAUTHORIZED`           | ไม่มี / ผิด Bearer token                                 |
+| 503    | `DEPENDENCY_UNAVAILABLE` | server ไม่ได้ตั้ง `PRINT_HOUSEKEEPING_TOKEN` (fail closed) |
+
 ## 3. Provisioning (system_admin เท่านั้น)
 
 ```

@@ -171,7 +171,13 @@ describe('real backofficeNavbarGroups — visible leaves per role (regression gu
 	};
 	const scannerDevices = 'จัดการอุปกรณ์';
 	const bannerManagement = 'จัดการแบนเนอร์';
-	const withScanners = labelsFor(managerLabels, scannerDevices, bannerManagement);
+	const printerManagement = 'จัดการเครื่องพิมพ์';
+	const withScanners = labelsFor(
+		managerLabels,
+		scannerDevices,
+		bannerManagement,
+		printerManagement
+	);
 	const withScannersAndIncidents = withIncidents(withScanners);
 	const sh = (cap: string) => ['shelter:SH001', `SH001:${cap}`];
 
@@ -304,6 +310,15 @@ describe('real backofficeNavbarGroups — visible leaves per role (regression gu
 			labelsFor(registry, scannerDevices, bannerManagement)
 		);
 	});
+
+	it('printer management is for system_admin and shelter_manager only, not kiosk_staff (O-3)', () => {
+		const sees = (roles: string[]) =>
+			visibleLeafLabels(ctx(roles, 'SH001')).includes(printerManagement);
+		expect(sees(['system_admin'])).toBe(true);
+		expect(sees(['shelter:SH001', 'SH001:shelter_manager'])).toBe(true);
+		expect(sees(['shelter:SH001', 'SH001:kiosk_staff'])).toBe(false);
+		expect(sees(['shelter:SH001', 'SH001:registration_staff'])).toBe(false);
+	});
 });
 
 describe('activeNavHref — longest path-segment match (FR-KBR-24, draft CR kiosk-banner-design-revision)', () => {
@@ -359,6 +374,17 @@ describe('kiosk banner management nav child (FR-KBR-22)', () => {
 		const children = kioskChildren();
 		expect(children.map((c) => c.label)).toEqual(['จัดการอุปกรณ์', 'จัดการแบนเนอร์']);
 		expect(children[1].href).toBe('/back-office/kiosks/banners');
+	});
+});
+
+describe('printer management nav item', () => {
+	it('is its own settings item right after the kiosk group, not a kiosk child', () => {
+		const settings = backofficeNavbarGroups.find((g) => g.title === '4. ตั้งค่าระบบ');
+		const labels = settings?.items.map((n) => n.label) ?? [];
+		const printer = settings?.items.find((n) => n.label === 'จัดการเครื่องพิมพ์');
+
+		expect(labels.indexOf('จัดการเครื่องพิมพ์')).toBe(labels.indexOf('จัดการ Kiosk') + 1);
+		expect(printer && !isGroup(printer) && printer.href).toBe('/back-office/printers');
 	});
 });
 

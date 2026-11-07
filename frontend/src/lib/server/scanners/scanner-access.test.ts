@@ -1,11 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { readSessionUserCtx, ServiceError } from '$lib/server/couch-admin';
+import { readSessionUserCtx, ServiceError } from '$lib/server/session-auth';
 import { ScannerDeviceNotFoundError } from './device-credentials';
 import { assertCanCreateFor, assertDeviceInScope, requireScannerManager } from './scanner-access';
 
-vi.mock('$lib/server/couch-admin', async () => {
-	const actual =
-		await vi.importActual<typeof import('$lib/server/couch-admin')>('$lib/server/couch-admin');
+vi.mock('$lib/server/session-auth', async () => {
+	const actual = await vi.importActual<typeof import('$lib/server/session-auth')>(
+		'$lib/server/session-auth'
+	);
 	return { ...actual, readSessionUserCtx: vi.fn() };
 });
 
