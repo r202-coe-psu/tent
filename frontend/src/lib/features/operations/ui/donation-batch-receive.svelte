@@ -7,6 +7,7 @@
 	import { Label } from '$lib/components/ui/label/index.js';
 	import { DatePicker } from '$lib/components/ui/date-picker/index.js';
 	import {
+		canonicalizeUnitCode,
 		defaultInventoryUom,
 		formatUnit,
 		shelfLifeExpiryLabel,
@@ -24,7 +25,8 @@
 	import {
 		deriveDonationReceiptLineId,
 		donationShortfall,
-		type DonationBatchLine
+		type DonationBatchLine,
+		type ShortfallLine
 	} from '../domain/donation-batch';
 	import {
 		draftProblem,
@@ -197,21 +199,43 @@
 		}
 	}
 
+	/**
+	 * A shortfall line in the item's base unit, `null` when its unit is not one the item
+	 * knows (donor wording like "กระป๋อง") — then the quantities do not compare and the
+	 * item gets no shortage warning (#623).
+	 */
+	function shortfallBaseQty(line: ShortfallLine): string | null {
+		if (!line.unit) return line.qty;
+		const item = line.item_id ? itemById.get(line.item_id) : undefined;
+		if (!item) return null;
+		// the item's own UOM codes first, then a legacy label ("ชิ้น") resolved to its code
+		for (const unit of [line.unit, canonicalizeUnitCode(line.unit, units)]) {
+			if (!unit) continue;
+			try {
+				return toLedgerQtyUnit(line.qty, unit, item).qty;
+			} catch {
+				// try the next spelling
+			}
+		}
+		return null;
+	}
+
 	// FR-B5 — "received less than declared" is derived, never stored.
 	const shortfalls = $derived.by(() => {
 		// A line refused at review is "ไม่รับ", not "ขาด" (CR-172 FR-13).
 		const declared = (donation.items ?? []).flatMap((item, index) => {
 			if (item.review_status === 'rejected') return [];
 			const itemId = item.item_id || lines.find((line) => line.line_no === index)?.item_id || '';
-			return [{ item_id: itemId, ...toBase(item.qty, item.unit, itemId) }];
+			return [{ item_id: itemId, qty: item.qty, unit: item.unit }];
 		});
 		const counted = [
 			...lines
 				.filter((line) => line.item_id && isReceivedDraft(line))
-				.map((line) => ({ item_id: line.item_id, ...toBase(line.qty, line.unit, line.item_id) })),
+				.map((line) => ({ item_id: line.item_id, qty: line.qty, unit: line.unit })),
+			// already base units: no `unit`, nothing to convert
 			...otherRecorded.map((row) => ({ item_id: row.item_id, qty: row.qty }))
 		];
-		return donationShortfall(declared, counted);
+		return donationShortfall(declared, counted, shortfallBaseQty);
 	});
 
 	const failedCount = $derived(lines.filter((line) => !!line.error).length);

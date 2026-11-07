@@ -21,9 +21,10 @@ async function render(props: Record<string, unknown>) {
 const stub = () => document.body.querySelector<HTMLElement>('[data-testid="qc-stub"]');
 
 afterEach(async () => {
-	if (instance) unmount(instance);
+	if (instance) await unmount(instance);
 	instance = null;
-	// bits-ui releases the body scroll lock on a 24 ms timer; let it run before happy-dom tears down.
+	// bits-ui body-scroll-lock cleans up on a 24ms timer; let it run before the env tears down
+	// ("document is not defined").
 	await new Promise((resolve) => setTimeout(resolve, 50));
 	document.body.innerHTML = '';
 });
