@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
 	buildOneTimeDemandRows,
+	unitsAtCounter,
 	coverageBarWidth,
 	countCurrentRecipients,
 	presentRecipientKeys,
@@ -396,5 +397,72 @@ describe('demand status tiers', () => {
 
 	it('counts an item nobody still needs as enough', () => {
 		expect(statusOf(0, '0')).toBe('enough');
+	});
+});
+
+describe('unitsAtCounter', () => {
+	const ticket = 'requisition_ticket:t1';
+	const out = (qty: string, ref_id: string | null = ticket) => ({
+		item_id: net._id,
+		reason: 'distribute',
+		qty,
+		ref_id
+	});
+	const given = (qty: string, qty_returned = '0') => ({ item_id: net._id, qty, qty_returned });
+
+	it('100 dispatched to a counter and 1 given: 99 are at the counter', () => {
+		expect(unitsAtCounter([out('-100')], [given('1')]).get(net._id)).toBe('99');
+	});
+
+	it('ignores a direct batch issue (not sent to a counter) and unrelated reasons', () => {
+		const rows = [
+			out('-50', 'distribution_batch:b1'),
+			{ item_id: net._id, reason: 'adjust', qty: '-9', ref_id: null }
+		];
+		expect(unitsAtCounter(rows, []).has(net._id)).toBe(false);
+	});
+
+	it('takes back what returned to the warehouse and what a person brought back', () => {
+		const rows = [
+			out('-100'),
+			{ item_id: net._id, reason: 'distribution_return', qty: '10', ref_id: ticket }
+		];
+		// 100 out, 10 back to stock, 20 given of which 5 came back: 100 - 10 - (20 - 5) = 75
+		expect(unitsAtCounter(rows, [given('20', '5')]).get(net._id)).toBe('75');
+	});
+
+	it('is absent when everything dispatched was handed out, and never negative', () => {
+		expect(unitsAtCounter([out('-5')], [given('5')]).has(net._id)).toBe(false);
+		expect(unitsAtCounter([out('-5')], [given('9')]).has(net._id)).toBe(false);
+	});
+});
+
+describe('units at the counter count towards the need', () => {
+	const rowWith = (people: number, onHand: string, atCounter: string) =>
+		buildOneTimeDemandRows({
+			items: [net],
+			people,
+			lots: [lot(net._id, onHand)],
+			reservations: [],
+			atCounterByItem: new Map([[net._id, atCounter]]),
+			now: NOW
+		})[0];
+
+	it('316 people, 100 in the warehouse and 99 at the counter: short 117, not 216', () => {
+		expect(rowWith(316, '100', '99')).toMatchObject({
+			available: '100',
+			atCounter: '99',
+			shortfall: '117',
+			status: 'partial'
+		});
+	});
+
+	it('reaches enough once warehouse plus counter cover the need', () => {
+		expect(rowWith(100, '60', '40')).toMatchObject({ shortfall: '0', status: 'enough' });
+	});
+
+	it('has none at the counter by default', () => {
+		const [row] = build([net], 10, [lot(net._id, '4')]);
+		expect(row.atCounter).toBe('0');
 	});
 });

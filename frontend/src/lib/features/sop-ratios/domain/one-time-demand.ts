@@ -43,7 +43,24 @@ const NO_RECEIVED: ReceivedBreakdown = { evacuees: 0, staff: 0, volunteers: 0 };
 /** A person who already received an item (a `distribution_log` that is not voided). */
 export interface OneTimeRecipient {
 	item_id: string;
-	recipient_id: string;
+	/** Null for a recipient from outside the shelter. */
+	recipient_id: string | null;
+}
+
+/** The ledger columns the at-counter figure reads. */
+export interface CounterLedgerRow {
+	item_id: string;
+	reason: string;
+	/** Signed qty_str: negative = out of the warehouse. */
+	qty: string;
+	ref_id: string | null;
+}
+
+/** The distribution-log columns the at-counter figure reads. */
+export interface CounterLogRow {
+	item_id: string;
+	qty: string;
+	qty_returned: string;
 }
 
 /**
@@ -63,6 +80,8 @@ export interface OneTimeDemandRow {
 	received: number;
 	/** `received` split by kind of person. */
 	receivedBreakdown: ReceivedBreakdown;
+	/** Units dispatched to a distribution point and not yet handed out (qty_str). */
+	atCounter: string;
 	/** (people − received) × qty_per_person (qty_str): what is still to hand out. */
 	demand: string;
 	/** Non-expired lot balance − active reservations, floored at 0 (qty_str). */
@@ -84,6 +103,8 @@ export interface BuildOneTimeDemandInput {
 	reservations: readonly OneTimeDemandReservation[];
 	/** People already served, per item id (see {@link countCurrentRecipients}). Default: none. */
 	receivedByItem?: ReadonlyMap<string, ReceivedBreakdown>;
+	/** Units out at a distribution point per item id (see {@link unitsAtCounter}). Default: none. */
+	atCounterByItem?: ReadonlyMap<string, string>;
 	/** Epoch ms; lot expiry is judged against it. */
 	now: number;
 }
@@ -133,7 +154,7 @@ export function countCurrentRecipients(
 	const seen = new Set<string>();
 	const counts = new Map<string, ReceivedBreakdown>();
 	for (const { item_id, recipient_id } of recipients) {
-		const person = presentKeys.get(recipient_id);
+		const person = recipient_id === null ? undefined : presentKeys.get(recipient_id);
 		if (!person) continue;
 		const key = `${item_id}\n${person}`;
 		if (seen.has(key)) continue;
@@ -146,6 +167,35 @@ export function countCurrentRecipients(
 		counts.set(item_id, breakdown);
 	}
 	return counts;
+}
+
+/**
+ * Per item, the units sent to a distribution point (`distribute` rows of a requisition ticket) that
+ * were neither given to someone nor sent back. = dispatched − returned − (handed out − returned by
+ * the person). Floored at 0 per item, and only items that have some are in the map.
+ */
+export function unitsAtCounter(
+	ledger: readonly CounterLedgerRow[],
+	logs: readonly CounterLogRow[]
+): Map<string, string> {
+	const net = new Map<string, Decimal>();
+	const add = (itemId: string, delta: Decimal) =>
+		net.set(itemId, (net.get(itemId) ?? new Decimal(0)).plus(delta));
+	for (const row of ledger) {
+		if (row.reason === 'distribute' && row.ref_id?.startsWith('requisition_ticket:')) {
+			add(row.item_id, parseQty(row.qty).neg());
+		} else if (row.reason === 'distribution_return') {
+			add(row.item_id, parseQty(row.qty).neg());
+		}
+	}
+	for (const log of logs) {
+		add(log.item_id, parseQty(log.qty).neg().plus(parseQty(log.qty_returned)));
+	}
+	const out = new Map<string, string>();
+	for (const [itemId, value] of net) {
+		if (value.gt(0)) out.set(itemId, persistQty(value));
+	}
+	return out;
 }
 
 /** Ids of the active one-time items: the only ledger rows this view needs to read. */
@@ -193,7 +243,10 @@ export function buildOneTimeDemandRows(input: BuildOneTimeDemandInput): OneTimeD
 		}
 		const net = subQty(onHand, reserved);
 		const available = qtyGt(net, 0) ? net : ZERO;
-		const gap = subQty(demand, available);
+		// Units already dispatched to a distribution point are committed: they count towards the need.
+		const atCounter = input.atCounterByItem?.get(item._id) ?? ZERO;
+		const covered = addQty(available, atCounter);
+		const gap = subQty(demand, covered);
 
 		return {
 			itemId: item._id,
@@ -203,15 +256,12 @@ export function buildOneTimeDemandRows(input: BuildOneTimeDemandInput): OneTimeD
 			receivedBreakdown,
 			demand,
 			available,
+			atCounter,
 			shortfall: qtyGt(gap, 0) ? gap : ZERO,
 			coverage: qtyGt(demand, 0)
-				? parseQty(available)
-						.div(demand)
-						.times(100)
-						.toDecimalPlaces(2, Decimal.ROUND_DOWN)
-						.toString()
+				? parseQty(covered).div(demand).times(100).toDecimalPlaces(2, Decimal.ROUND_DOWN).toString()
 				: null,
-			status: demandStatus(available, demand),
+			status: demandStatus(covered, demand),
 			qtyPerPersonMissing
 		};
 	});

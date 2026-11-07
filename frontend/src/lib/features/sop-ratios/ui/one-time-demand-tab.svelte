@@ -17,7 +17,7 @@
 		useLotReservationClaims,
 		projectStockLotBalances
 	} from '$lib/features/operations';
-	import { useItemRecipients } from '$lib/features/distribution';
+	import { useItemDistributions } from '$lib/features/distribution';
 	import { langState } from '$lib/states/i18n.svelte';
 	import { formatQty } from '$lib/utils/qty';
 	import ReceivedByTypeTooltip from './received-by-type-tooltip.svelte';
@@ -25,6 +25,7 @@
 	import {
 		buildOneTimeDemandRows,
 		countCurrentRecipients,
+		unitsAtCounter,
 		coverageBarWidth,
 		formatCoveragePercent,
 		oneTimeItemIds,
@@ -56,7 +57,7 @@
 		() => itemMastersQuery.isSuccess
 	);
 	const reservationsQuery = useLotReservationClaims();
-	const recipientsQuery = useItemRecipients(
+	const recipientsQuery = useItemDistributions(
 		() => itemIds,
 		() => itemMastersQuery.isSuccess,
 		() => shelterCode ?? undefined
@@ -89,6 +90,7 @@
 				people,
 				lots: projectStockLotBalances(ledgerQuery.data ?? []),
 				reservations: reservationsQuery.data ?? [],
+				atCounterByItem: unitsAtCounter(ledgerQuery.data ?? [], recipientsQuery.data ?? []),
 				receivedByItem: countCurrentRecipients(
 					recipientsQuery.data ?? [],
 					new Map(peopleQuery.data?.recipientKeys ?? [])
@@ -188,6 +190,15 @@
 			></div>
 		</div>
 	</div>
+{/snippet}
+
+{#snippet atCounterNote(row: OneTimeDemandRow)}
+	{#if row.atCounter !== '0'}
+		<span class="block text-xs font-normal text-slate-500">
+			+{formatQty(row.atCounter)}
+			{unitLabel(row)} อยู่ที่จุดแจก
+		</span>
+	{/if}
 {/snippet}
 
 {#snippet missingQtyBadge()}
@@ -389,6 +400,7 @@
 								<dd class="font-semibold text-slate-900 tabular-nums">
 									{formatQty(row.available)}
 									{unitLabel(row)}
+									{@render atCounterNote(row)}
 								</dd>
 							</div>
 							<div>
@@ -457,6 +469,7 @@
 								>
 									{formatQty(row.available)}
 									<span class="text-sm font-normal text-slate-500">{unitLabel(row)}</span>
+									{@render atCounterNote(row)}
 								</Table.Cell>
 								<Table.Cell
 									class="px-4 py-3 text-right text-base font-semibold tabular-nums {row.status !==

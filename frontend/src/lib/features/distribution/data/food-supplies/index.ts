@@ -46,4 +46,4 @@ export { parseDocsOrSkip, type SkippedDoc } from './parse-or-skip';
 
 export { resolveShelterDbName, retryCas, isCouchConflictError, MAX_CAS_RETRIES } from './shared';
 
-export { listRecipientsByItems, type ItemRecipient } from './item-recipients';
+export { listItemDistributions, type ItemDistribution } from './item-distributions';

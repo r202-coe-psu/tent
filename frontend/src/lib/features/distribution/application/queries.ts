@@ -43,7 +43,7 @@ export {
 	useRequisitionTickets,
 	useRequisitionTicket,
 	useDistributionLogs,
-	useItemRecipients,
+	useItemDistributions,
 	useDistributionLog,
 	useDispatchedLotExpiry,
 	useBulkReturnPools,

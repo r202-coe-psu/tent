@@ -14,22 +14,22 @@ vi.mock('./shared', async (importOriginal) => ({
 	...(await importOriginal<typeof import('./shared')>()),
 	resolveShelterCode: (override?: string) => override ?? 'SH001'
 }));
-vi.mock('../../data/food-supplies/item-recipients', () => ({
-	listRecipientsByItems: vi.fn()
+vi.mock('../../data/food-supplies/item-distributions', () => ({
+	listItemDistributions: vi.fn()
 }));
 
 import { distributionKeys } from './keys';
-import { useItemRecipients } from './read-queries';
+import { useItemDistributions } from './read-queries';
 
-describe('useItemRecipients query key', () => {
+describe('useItemDistributions query key', () => {
 	it('is not under the logs prefix, so a distribution does not refetch every log', () => {
-		useItemRecipients(['item_master:b', 'item_master:a'], true, 'SH001');
+		useItemDistributions(['item_master:b', 'item_master:a'], true, 'SH001');
 		const { queryKey } = captured.options!();
 		const logsPrefix = [...distributionKeys.shelter('SH001'), 'logs'];
 		expect(queryKey.slice(0, logsPrefix.length)).not.toEqual(logsPrefix);
 		expect(queryKey.slice(0, -1)).toEqual([
 			...distributionKeys.shelter('SH001'),
-			'item-recipients'
+			'item-distributions'
 		]);
 		expect(queryKey.at(-1)).toBe('item_master:a,item_master:b');
 	});
