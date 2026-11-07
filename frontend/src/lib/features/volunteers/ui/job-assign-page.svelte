@@ -498,11 +498,9 @@
 	// `flex-1` at every breakpoint (not just mobile) so each segmented row
 	// stretches to fill its grid column instead of shrinking to content width
 	// and leaving dead space beside it (owner feedback 2026-08-31).
-	// Segments sized to their label and never broken mid-word (Thai breaks anywhere, so
-	// equal-width segments split "พร้อมปฏิบัติงาน" over three lines on a phone). When a
-	// row runs out of room the last segment wraps and stretches to fill its own row.
+	// Segments wrap safely on small screens without blowing out containers or overflowing.
 	const SEGMENT_BASE =
-		'min-h-11 flex-auto rounded-lg px-3 text-xs font-medium whitespace-nowrap transition-colors sm:min-h-9';
+		'h-auto min-h-11 flex-auto shrink min-w-0 rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors sm:min-h-9 break-words text-center leading-snug whitespace-normal';
 </script>
 
 <div class="space-y-4">
@@ -583,7 +581,7 @@
 		<!-- 2 Columns Layout: Left = กะงาน, Right = จิตอาสา -->
 		<div class="grid grid-cols-1 items-start gap-4 lg:grid-cols-12">
 			<!-- Col ซ้าย: เลือกเวลากะงาน (Multi-select โดยคลิกที่การ์ด กะเต็ม disabled) -->
-			<aside class="space-y-3 lg:sticky lg:top-4 lg:col-span-5 xl:col-span-4">
+			<aside class="min-w-0 space-y-3 lg:sticky lg:top-4 lg:col-span-5 xl:col-span-4">
 				<div class="space-y-3 rounded-2xl border border-border bg-card p-3.5">
 					<div class="flex items-center justify-between gap-2 border-b border-border pb-2.5">
 						<h3 class="inline-flex items-center gap-1.5 text-sm font-bold text-foreground">
@@ -701,7 +699,7 @@
 			</aside>
 
 			<!-- Col ขวา: จิตอาสา -->
-			<main class="space-y-4 lg:col-span-7 xl:col-span-8">
+			<main class="min-w-0 space-y-4 lg:col-span-7 xl:col-span-8">
 				<!-- Search + the three filter groups -->
 				<div class="space-y-3 rounded-2xl border border-border bg-card p-3.5">
 					<div class="relative">
@@ -716,13 +714,13 @@
 						/>
 					</div>
 
-					<div class="grid grid-cols-1 gap-3 lg:grid-cols-3">
-						<div class="space-y-1.5">
+					<div class="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+						<div class="min-w-0 space-y-1.5 md:col-span-2 xl:col-span-1">
 							<p class="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
-								<Target class="h-3.5 w-3.5" />
+								<Target class="h-3.5 w-3.5 shrink-0" />
 								ตัวกรองความตรงของทักษะ:
 							</p>
-							<div class="flex flex-wrap gap-1 rounded-xl bg-muted p-1">
+							<div class="flex w-full min-w-0 flex-wrap gap-1 rounded-xl bg-muted p-1">
 								<Button
 									variant={skillFilter === 'all' ? 'default' : 'ghost'}
 									class={SEGMENT_BASE}
@@ -732,25 +730,27 @@
 								</Button>
 								<Button
 									variant={skillFilter === 'match' ? 'default' : 'ghost'}
-									class={SEGMENT_BASE}
+									class="{SEGMENT_BASE} inline-flex items-center justify-center gap-1.5"
 									onclick={() => (skillFilter = 'match')}
 								>
 									<Target class="h-3.5 w-3.5 shrink-0" />
-									{#if hasJobSkills}
-										ตรงกับงานอาสาสมัครนี้ ({matchedCandidateCount})
-									{:else}
-										ตรงกับงานอาสาสมัครนี้ (ไม่จำกัดทักษะ: {roster.rows.length})
-									{/if}
+									<span class="break-words">
+										{#if hasJobSkills}
+											ตรงกับงานอาสาสมัครนี้ ({matchedCandidateCount})
+										{:else}
+											ตรงกับงานอาสาสมัครนี้ (ไม่จำกัดทักษะ: {roster.rows.length})
+										{/if}
+									</span>
 								</Button>
 							</div>
 						</div>
 
-						<div class="space-y-1.5">
+						<div class="min-w-0 space-y-1.5">
 							<p class="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
-								<Timer class="h-3.5 w-3.5" />
+								<Timer class="h-3.5 w-3.5 shrink-0" />
 								ตัวกรองความพร้อมในกะ:
 							</p>
-							<div class="flex flex-wrap gap-1 rounded-xl bg-muted p-1">
+							<div class="flex w-full min-w-0 flex-wrap gap-1 rounded-xl bg-muted p-1">
 								<Button
 									variant={availabilityFilter === 'all' ? 'default' : 'ghost'}
 									class={SEGMENT_BASE}
@@ -760,29 +760,29 @@
 								</Button>
 								<Button
 									variant={availabilityFilter === 'ready' ? 'default' : 'ghost'}
-									class={SEGMENT_BASE}
+									class="{SEGMENT_BASE} inline-flex items-center justify-center gap-1.5"
 									onclick={() => (availabilityFilter = 'ready')}
 								>
 									<CircleCheck class="h-3.5 w-3.5 shrink-0" />
-									พร้อมปฏิบัติงาน
+									<span class="break-words">พร้อมปฏิบัติงาน</span>
 								</Button>
 								<Button
 									variant={availabilityFilter === 'no_collision' ? 'default' : 'ghost'}
-									class={SEGMENT_BASE}
+									class="{SEGMENT_BASE} inline-flex items-center justify-center gap-1.5"
 									onclick={() => (availabilityFilter = 'no_collision')}
 								>
 									<Timer class="h-3.5 w-3.5 shrink-0" />
-									เวลาไม่ชนกะ
+									<span class="break-words">เวลาไม่ชนกะ</span>
 								</Button>
 							</div>
 						</div>
 
-						<div class="space-y-1.5">
+						<div class="min-w-0 space-y-1.5">
 							<p class="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
-								<ShieldCheck class="h-3.5 w-3.5" />
+								<ShieldCheck class="h-3.5 w-3.5 shrink-0" />
 								ตัวกรองสิทธิ์/การยืนยันตัวตน:
 							</p>
-							<div class="flex flex-wrap gap-1 rounded-xl bg-muted p-1">
+							<div class="flex w-full min-w-0 flex-wrap gap-1 rounded-xl bg-muted p-1">
 								<Button
 									variant={eligibilityFilter === 'all' ? 'default' : 'ghost'}
 									class={SEGMENT_BASE}
@@ -795,14 +795,14 @@
 									class={SEGMENT_BASE}
 									onclick={() => (eligibilityFilter = 'verified')}
 								>
-									ยืนยันตัวตนแล้ว
+									<span class="break-words">ยืนยันตัวตนแล้ว</span>
 								</Button>
 								<Button
 									variant={eligibilityFilter === 'professional' ? 'default' : 'ghost'}
 									class={SEGMENT_BASE}
 									onclick={() => (eligibilityFilter = 'professional')}
 								>
-									ทักษะวิชาชีพ/เจ้าหน้าที่
+									<span class="break-words">ทักษะวิชาชีพ/เจ้าหน้าที่</span>
 								</Button>
 							</div>
 						</div>
@@ -814,14 +814,17 @@
 					<div
 						class="flex flex-wrap items-center justify-between gap-2 border-b border-border pb-3"
 					>
-						<div class="flex items-center gap-2.5">
+						<div class="flex min-w-0 items-center gap-2.5">
 							<Checkbox
 								id="assign-select-all"
 								checked={allSelected}
 								disabled={assignableCount === 0}
 								onCheckedChange={(next) => toggleAll(next === true)}
 							/>
-							<Label for="assign-select-all" class="cursor-pointer text-sm font-bold">
+							<Label
+								for="assign-select-all"
+								class="min-w-0 cursor-pointer text-sm font-bold break-words"
+							>
 								เลือกทั้งหมดที่ผ่านตัวกรอง ({assignableCount} คนที่สามารถมอบหมายได้)
 							</Label>
 						</div>
