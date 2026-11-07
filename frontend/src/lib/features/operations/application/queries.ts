@@ -59,6 +59,7 @@ export const operationsKeys = {
 	ledgerRefs: () => [...operationsKeys.all, 'ledgerRefs', getShelterCode()] as const,
 	ledgerRefsFor: (idsDigest: string) => [...operationsKeys.ledgerRefs(), idsDigest] as const,
 	balance: () => [...operationsKeys.all, 'balance', getShelterCode()] as const,
+	lotReservations: () => [...operationsKeys.all, 'lotReservations', getShelterCode()] as const,
 	donationSlots: () => [...operationsKeys.all, 'donationSlots', getShelterCode()] as const,
 	transfers: () => [...operationsKeys.all, 'transfers'] as const,
 	transfer: (id: string) => [...operationsKeys.transfers(), id] as const,
@@ -161,6 +162,20 @@ export const useLedger = (enabled: () => boolean = () => true) =>
 		enabled: enabled()
 	}));
 
+/** Ledger rows of just these items, read by the `type + item_id` index (not the whole ledger). */
+export const useLedgerByItems = (
+	itemIds: () => readonly string[],
+	enabled: () => boolean = () => true
+) =>
+	createQuery(() => {
+		const ids = itemIds();
+		return {
+			queryKey: [...operationsKeys.ledger(), 'items', [...ids].sort().join(',')] as const,
+			queryFn: () => operationsRepository().listLedgerByItems(ids),
+			enabled: enabled()
+		};
+	});
+
 export const useLedgerByItem = (itemId: () => string | undefined) =>
 	createQuery(() => ({
 		queryKey: operationsKeys.byItem(itemId() ?? ''),
@@ -211,6 +226,13 @@ export const useLedgerRefLabels = (refIds: () => readonly string[]) => {
 		};
 	});
 };
+
+/** Claims still held on lots (stock promised, ledger row not yet written). */
+export const useLotReservationClaims = () =>
+	createQuery(() => ({
+		queryKey: operationsKeys.lotReservations(),
+		queryFn: () => new OperationsRemoteRepository().listLotReservationClaims()
+	}));
 
 export const useStockBalance = () =>
 	createQuery(() => ({
@@ -560,6 +582,9 @@ export function startOperationsLiveQuery(queryClient: QueryClient): SubscribeDat
 		}
 		if (type === 'stock_ledger') {
 			return [operationsKeys.stockLedgers(), operationsKeys.ledger(), operationsKeys.balance()];
+		}
+		if (type === 'stock_lot_reservation') {
+			return [operationsKeys.lotReservations()];
 		}
 		if (type === 'donation') {
 			return [operationsKeys.donations()];
