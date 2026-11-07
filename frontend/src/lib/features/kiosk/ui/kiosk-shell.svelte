@@ -10,6 +10,8 @@
 	import { qrInputPlan } from '../domain/kiosk-hardware';
 	import { buildKioskContextQuery } from '../domain/display-context';
 	import { KIOSK_COMPACT_MEDIA } from '../domain/kiosk-layout';
+	import { getTranslation } from '$lib/utils/i18n';
+	import { KIOSK_COMMON_I18N } from './_constants/kiosk-common.i18n';
 	import { KIOSK_LANGUAGE_I18N } from './_constants/kiosk-language.i18n';
 	import KioskFlag from './kiosk-flag.svelte';
 	import { DISPLAY_LOCALE, DISPLAY_TIME_ZONE } from '$lib/utils/date';
@@ -31,6 +33,8 @@
 		showClock = true,
 		children
 	}: Props = $props();
+
+	const t = $derived(getTranslation(KIOSK_COMMON_I18N, languageStore.current).shell);
 
 	let now = $state(new Date());
 	let compactHeader = $state(false);
@@ -132,7 +136,7 @@
 						</p>
 						<p
 							class="truncate text-sm leading-tight font-medium text-slate-600 kiosk-portrait:text-lg"
-							aria-label={`ศูนย์พักพิง ${shelterName} ${shelterCode} จุดบริการ ${stationName} เครื่อง ${deviceName}`}
+							aria-label={t.shelterAria(shelterName, shelterCode, stationName, deviceName)}
 						>
 							{shelterName}{#if shelterCode}<span aria-hidden="true"> · {shelterCode}</span>{/if}
 						</p>
@@ -147,7 +151,7 @@
 					{#if showClock}
 						<div
 							class="inline-flex min-h-10 items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-2.5 text-sm text-slate-700 kiosk-portrait:min-h-12 kiosk-portrait:px-3 kiosk-portrait:text-base"
-							aria-label={`เวลาปัจจุบัน ${dateString} ${timeString}`}
+							aria-label={t.clockAria(dateString, timeString)}
 						>
 							<Clock3
 								class="h-4 w-4 text-[#0A2647] kiosk-portrait:h-5 kiosk-portrait:w-5"
@@ -166,7 +170,7 @@
 			class="relative flex min-h-7 shrink-0 items-center justify-center border-b border-slate-200 bg-white px-3 text-xs font-medium text-slate-600"
 		>
 			<span class="truncate"
-				>ศูนย์พักพิง {shelterName}{#if shelterCode}
+				>{t.shelterPrefix(shelterName)}{#if shelterCode}
 					· {shelterCode}{/if}</span
 			>
 			<!-- Overlaid at the strip's right edge so the strip keeps its one-line height. -->
