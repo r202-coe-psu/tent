@@ -7,7 +7,7 @@ export const PRINTERS_I18N = {
 		partiallyPrinted: (count: number) => `(พิมพ์ไปแล้ว ${count} ใบ)`,
 		notResponding: (printer: string) => `เครื่อง ${printer} ไม่ตอบ`,
 		resultUnknown: (printer: string) =>
-			`ไม่ทราบผลการพิมพ์ที่ ${printer} — กดพิมพ์อีกครั้งเพื่อตามผลงานเดิม ระบบจะไม่ส่งฉลากซ้ำ`,
+			`ไม่ทราบผลการพิมพ์ที่ ${printer} — กดพิมพ์อีกครั้งเพื่อตามผลงานเดิม`,
 		notPickedUp: (printer: string) => `เครื่อง ${printer} ยังไม่รับงาน — ตรวจสอบว่าเครื่องเปิดอยู่`,
 		statusUnknown: (printer: string) => `ยังไม่ทราบผล — ตรวจที่เครื่องพิมพ์ ${printer}`,
 		choosePrinter: 'เลือกเครื่องพิมพ์',
@@ -20,12 +20,16 @@ export const PRINTERS_I18N = {
 		retry: 'พิมพ์อีกครั้ง',
 		retryLockedTo: (printer: string) =>
 			`งานก่อนหน้ายังไม่ทราบผล — พิมพ์อีกครั้งจะส่งไปที่ ${printer} เพื่อไม่ให้พิมพ์ซ้ำ`,
+		lockedPrinterGone:
+			'เครื่องที่รับงานก่อนหน้าถูกปิดใช้งานหรือลบแล้ว — ถ้าเครื่องนั้นเริ่มพิมพ์ไปแล้ว ให้ตรวจฉลากที่เครื่องก่อนพิมพ์ที่เครื่องอื่น เพราะอาจได้ฉลากซ้ำ',
 		cancel: 'ยกเลิก',
 		cancelled:
-			'หยุดส่งงานพิมพ์แล้ว — งานที่ส่งไปแล้วอาจยังพิมพ์ต่อ กดพิมพ์อีกครั้งเพื่อตามผลงานเดิมและส่งส่วนที่เหลือ ระบบจะไม่ส่งฉลากซ้ำ',
+			'หยุดส่งงานพิมพ์แล้ว — งานที่ส่งไปแล้วอาจยังพิมพ์ต่อ กดพิมพ์อีกครั้งเพื่อตามผลงานเดิมและส่งส่วนที่เหลือ',
+		cancelledBeforeSend: 'ยกเลิกแล้ว — ยังไม่ได้ส่งงานพิมพ์',
 		renderFailed: 'สร้างภาพฉลากไม่สำเร็จ',
 		sendFailed: (printer: string) => `ส่งงานพิมพ์ไปที่ ${printer} ไม่สำเร็จ`,
 		forbidden: 'คุณไม่มีสิทธิ์พิมพ์ฉลากในศูนย์นี้',
+		sessionExpired: 'เซสชันหมดอายุ — กรุณาเข้าสู่ระบบใหม่',
 		online: 'ออนไลน์',
 		offline: 'ออฟไลน์',
 		disconnectedHint: 'พิมพ์ผ่านเครื่องพิมพ์ไม่ได้ขณะออฟไลน์ — ใช้พรีวิว PDF',
@@ -40,9 +44,9 @@ export const PRINTERS_I18N = {
 			lease_expired: (printer: string) =>
 				`เครื่อง ${printer} ไม่ส่งผลการพิมพ์กลับมา ตรวจฉลากที่เครื่องก่อนพิมพ์อีกครั้ง เพราะอาจได้ฉลากซ้ำ`,
 			printer_inactive: (printer: string) =>
-				`เครื่อง ${printer} ถูกปิดใช้งาน ตรวจฉลากที่เครื่องก่อนพิมพ์ที่เครื่องอื่น เพราะอาจได้ฉลากซ้ำ`,
+				`เครื่อง ${printer} ถูกปิดใช้งาน — ถ้าเครื่องเริ่มพิมพ์งานนี้แล้ว ให้ตรวจฉลากที่เครื่องก่อนพิมพ์ที่เครื่องอื่น เพราะอาจได้ฉลากซ้ำ`,
 			printer_deleted: (printer: string) =>
-				`เครื่อง ${printer} ถูกลบออกจากระบบ ตรวจฉลากที่เครื่องก่อนพิมพ์ที่เครื่องอื่น เพราะอาจได้ฉลากซ้ำ`,
+				`เครื่อง ${printer} ถูกลบออกจากระบบ — ถ้าเครื่องเริ่มพิมพ์งานนี้แล้ว ให้ตรวจฉลากที่เครื่องก่อนพิมพ์ที่เครื่องอื่น เพราะอาจได้ฉลากซ้ำ`,
 			invalid_label: () => 'รูป label ไม่ถูกต้อง — ลองพิมพ์ใหม่จากหน้านี้',
 			unknown: (printer: string) => `พิมพ์ที่เครื่อง ${printer} ไม่สำเร็จ`
 		}
@@ -56,7 +60,7 @@ export const PRINTERS_I18N = {
 			`(${count} ${count === 1 ? 'label' : 'labels'} already printed)`,
 		notResponding: (printer: string) => `${printer} is not responding`,
 		resultUnknown: (printer: string) =>
-			`Result unknown at ${printer}. Print again to follow up the same job; no labels are sent twice.`,
+			`Result unknown at ${printer}. Print again to follow up the same job.`,
 		notPickedUp: (printer: string) =>
 			`${printer} has not picked up the job yet. Check that it is switched on.`,
 		statusUnknown: (printer: string) =>
@@ -72,12 +76,16 @@ export const PRINTERS_I18N = {
 		retry: 'Print again',
 		retryLockedTo: (printer: string) =>
 			`The last job's result is unknown, so printing again goes to ${printer} to avoid duplicates.`,
+		lockedPrinterGone:
+			'The printer that took the last job was deactivated or removed. If it had started printing, check its labels before printing on another printer, or labels may be duplicated.',
 		cancel: 'Cancel',
 		cancelled:
-			'Stopped sending. A job already sent may still print. Print again to follow it up and send the rest; no labels are sent twice.',
+			'Stopped sending. A job already sent may still print. Print again to follow it up and send the rest.',
+		cancelledBeforeSend: 'Cancelled. Nothing was sent to the printer.',
 		renderFailed: 'Could not render the labels.',
 		sendFailed: (printer: string) => `Could not send the print job to ${printer}.`,
 		forbidden: 'You are not allowed to print labels in this shelter.',
+		sessionExpired: 'Your session has expired. Please log in again.',
 		online: 'Online',
 		offline: 'Offline',
 		disconnectedHint: 'Cannot print through a label printer while offline. Use the PDF preview.',
@@ -92,9 +100,9 @@ export const PRINTERS_I18N = {
 			lease_expired: (printer: string) =>
 				`${printer} never reported back. Check the printer before printing again, or labels may be duplicated.`,
 			printer_inactive: (printer: string) =>
-				`${printer} was deactivated. Check its labels before printing on another printer, or labels may be duplicated.`,
+				`${printer} was deactivated. If it had started this job, check its labels before printing on another printer, or labels may be duplicated.`,
 			printer_deleted: (printer: string) =>
-				`${printer} was removed. Check its labels before printing on another printer, or labels may be duplicated.`,
+				`${printer} was removed. If it had started this job, check its labels before printing on another printer, or labels may be duplicated.`,
 			invalid_label: () => 'The label image is invalid. Try printing again from this page.',
 			unknown: (printer: string) => `Printing at ${printer} failed.`
 		}

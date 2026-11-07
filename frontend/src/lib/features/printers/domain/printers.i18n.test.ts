@@ -33,11 +33,11 @@ describe('printJobOutcomeMessage', () => {
 		],
 		[
 			'printer_inactive',
-			'เครื่อง โต๊ะ 1 ถูกปิดใช้งาน ตรวจฉลากที่เครื่องก่อนพิมพ์ที่เครื่องอื่น เพราะอาจได้ฉลากซ้ำ'
+			'เครื่อง โต๊ะ 1 ถูกปิดใช้งาน — ถ้าเครื่องเริ่มพิมพ์งานนี้แล้ว ให้ตรวจฉลากที่เครื่องก่อนพิมพ์ที่เครื่องอื่น เพราะอาจได้ฉลากซ้ำ'
 		],
 		[
 			'printer_deleted',
-			'เครื่อง โต๊ะ 1 ถูกลบออกจากระบบ ตรวจฉลากที่เครื่องก่อนพิมพ์ที่เครื่องอื่น เพราะอาจได้ฉลากซ้ำ'
+			'เครื่อง โต๊ะ 1 ถูกลบออกจากระบบ — ถ้าเครื่องเริ่มพิมพ์งานนี้แล้ว ให้ตรวจฉลากที่เครื่องก่อนพิมพ์ที่เครื่องอื่น เพราะอาจได้ฉลากซ้ำ'
 		],
 		['invalid_label', 'รูป label ไม่ถูกต้อง — ลองพิมพ์ใหม่จากหน้านี้'],
 		[null, 'พิมพ์ที่เครื่อง โต๊ะ 1 ไม่สำเร็จ'],
@@ -79,10 +79,10 @@ describe('printJobOutcomeMessage', () => {
 	it('asks staff to check the printer before retrying when the result is unknown', () => {
 		const result = { status: 'unknown' as const, printed: 3, error_code: null };
 		expect(printJobOutcomeMessage(result, 'โต๊ะ 1', 'th')).toBe(
-			'ไม่ทราบผลการพิมพ์ที่ โต๊ะ 1 — กดพิมพ์อีกครั้งเพื่อตามผลงานเดิม ระบบจะไม่ส่งฉลากซ้ำ'
+			'ไม่ทราบผลการพิมพ์ที่ โต๊ะ 1 — กดพิมพ์อีกครั้งเพื่อตามผลงานเดิม'
 		);
 		expect(printJobOutcomeMessage(result, 'Desk 1', 'en')).toBe(
-			'Result unknown at Desk 1. Print again to follow up the same job; no labels are sent twice.'
+			'Result unknown at Desk 1. Print again to follow up the same job.'
 		);
 	});
 });

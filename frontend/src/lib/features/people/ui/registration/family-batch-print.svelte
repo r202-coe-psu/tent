@@ -189,7 +189,10 @@
 			     one instance = one print state, no double print. -->
 			{#if total > 0}
 				<!-- Keyed by the family: the button keeps unsent chunks for Retry, which must not outlive a
-				     change of members (it would print the old labels). -->
+				     change of members (it would print the old labels). Invariant: `members` is a snapshot
+				     taken when the family registered, so the key never changes while `printing` or
+				     `retryHeld` is true. If it did, the new instance would report both as false and the
+				     follow-up of a job already sent would be lost. -->
 				{#key `${household._id}:${members.map((m) => m._id).join(',')}`}
 					<PrintLabelsButton
 						bind:printing

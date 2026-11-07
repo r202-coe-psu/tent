@@ -51,6 +51,8 @@
 		 * True between runs while a job already sent may still print (result unknown, or cancelled
 		 * while waiting). Printing again follows that job up under its own id; unmounting forgets it,
 		 * so a new run would print the labels twice. Bind it to keep the host open as with `printing`.
+		 * It clears by itself when that job's printer leaves the active list (its open jobs were
+		 * failed), so a host never stays locked with no button left to press.
 		 */
 		retryHeld?: boolean;
 	} = $props();
@@ -203,13 +205,21 @@
 	let unsent = $state.raw<Chunk[] | null>(null);
 	function setUnsent(next: Chunk[] | null) {
 		unsent = next && next.length > 0 ? next : null;
-		const held = unsent?.[0]?.printerId !== undefined;
-		// Only on change: every write reaches the host through the binding.
-		if (held !== retryHeld) retryHeld = held;
 	}
-	// A locked printer that left the list (deactivated / deleted) has had its open jobs failed, so
-	// the chunk is free to go to the chosen printer.
-	const lockedPrinter = $derived(printers.find((p) => p.id === unsent?.[0]?.printerId));
+	const lockedPrinterId = $derived(unsent?.[0]?.printerId);
+	const lockedPrinter = $derived(printers.find((p) => p.id === lockedPrinterId));
+	// A locked printer that left a list read successfully was deactivated or deleted, which fails its
+	// open jobs, so the chunk is free to go to the chosen printer under a new id (FR-47). Without
+	// the print UI (role lost) nothing can be printed here again, so nothing holds the host either.
+	const lockGone = $derived(
+		lockedPrinterId !== undefined && printersQuery.isSuccess && lockedPrinter === undefined
+	);
+	const held = $derived(lockedPrinterId !== undefined && canPrint && !lockGone);
+	// Pushes the lock out through the binding; the printer list can end it with no click, and the
+	// button that would clear it may be gone by then (no active printer left).
+	$effect(() => {
+		if (retryHeld !== held) retryHeld = held;
+	});
 	const target = $derived(lockedPrinter ?? chosen);
 	let printedTotal = $state(0);
 	const progressDone = $derived(printedTotal + (statusQuery.data?.printed ?? 0));
@@ -234,6 +244,10 @@
 			return;
 		}
 		const printer = target;
+		if (lockGone && unsent) {
+			// The old job was failed with its printer: a new id, so the server does not answer 409.
+			setUnsent([{ labels: unsent[0].labels, jobId: ulid() }, ...unsent.slice(1)]);
+		}
 		const abort = new AbortController();
 		runAbort = abort;
 		running = true;
@@ -241,12 +255,13 @@
 			progressTotal = labelCount;
 			printedTotal = 0;
 			try {
-				const labels = await renderLabels();
-				if (abort.signal.aborted) return finishAborted(abort.signal);
+				// Cancel wins over a slow render (or the screenings fetch behind it): nothing was sent yet.
+				const labels = await Promise.race([renderLabels(), whenAborted(abort.signal)]);
+				if (abort.signal.aborted || !labels) return finishAborted(abort.signal, false);
 				progressTotal = labels.length;
 				setUnsent(chunkLabels(labels).map((chunk) => ({ labels: chunk, jobId: ulid() })));
 			} catch {
-				if (abort.signal.aborted) return finishAborted(abort.signal);
+				if (abort.signal.aborted) return finishAborted(abort.signal, false);
 				running = false;
 				toast.error(t.renderFailed);
 				return;
@@ -255,18 +270,29 @@
 		await sendUnsent(printer, abort.signal);
 	}
 
-	/** Cancel/unmount: free the button; only a cancel the user asked for is announced. */
-	function finishAborted(signal: AbortSignal) {
+	function whenAborted(signal: AbortSignal): Promise<null> {
+		return new Promise((resolve) => {
+			if (signal.aborted) resolve(null);
+			else signal.addEventListener('abort', () => resolve(null), { once: true });
+		});
+	}
+
+	/**
+	 * Cancel/unmount: free the button; only a cancel the user asked for is announced. `mayPrint`
+	 * says whether a job of this run (or the one it follows up) may still print.
+	 */
+	function finishAborted(signal: AbortSignal, mayPrint: boolean) {
 		if (signal.reason === 'unmount') return;
 		job = undefined;
 		running = false;
-		toast.info(t.cancelled);
+		toast.info(mayPrint ? t.cancelled : t.cancelledBeforeSend);
 	}
 
 	function sendErrorMessage(error: unknown, printerName: string): string {
 		if (error instanceof PrintApiError) {
 			if (error.code === 'PRINTER_OFFLINE') return t.printerOffline(printerName);
 			if (error.code === 'FORBIDDEN') return t.forbidden;
+			if (error.code === 'UNAUTHENTICATED') return t.sessionExpired;
 		}
 		return t.sendFailed(printerName);
 	}
@@ -294,13 +320,31 @@
 		}
 	}
 
+	// Refusals that free a locked chunk: the printer is offline (a job it held would be answered
+	// instead), gone (its open jobs were failed), or the request is invalid (the same body was
+	// refused before, so it never queued). FORBIDDEN may follow a job queued before the role was
+	// lost, but every printer of this shelter refuses the same caller, so no second job can follow;
+	// keeping the lock would only leave the host stuck. Other 4xx (a lapsed session, a proxy's 429)
+	// say nothing about the earlier attempt, so the lock stays. A chunk never locked had no job yet.
+	const NO_JOB_CODES = new Set([
+		'PRINTER_OFFLINE',
+		'PRINTER_NOT_FOUND',
+		'INVALID_LABELS',
+		'FORBIDDEN'
+	]);
+	function isNoJobRefusal(error: unknown, chunk: Chunk): boolean {
+		if (!(error instanceof PrintApiError) || error.status >= 500) return false;
+		return chunk.printerId === undefined || NO_JOB_CODES.has(error.code ?? '');
+	}
+
 	async function sendUnsent(printer: { id: string; name: string }, signal: AbortSignal) {
 		sendingTo = printer.name;
 		const pending = [...(unsent ?? [])];
+		let createdAny = false;
 		while (pending.length > 0) {
 			if (signal.aborted) {
 				setUnsent(pending);
-				return finishAborted(signal);
+				return finishAborted(signal, createdAny || pending[0].printerId !== undefined);
 			}
 			let created;
 			try {
@@ -309,7 +353,7 @@
 				// Same chunk, same id on retry, unless the server says that id is another job's.
 				if (error instanceof PrintApiError && error.code === 'JOB_ID_CONFLICT') {
 					pending[0] = { labels: pending[0].labels, jobId: ulid() };
-				} else if (error instanceof PrintApiError && error.status < 500) {
+				} else if (isNoJobRefusal(error, pending[0])) {
 					// A definite refusal: no job holds this id here, so the chunk may go to any printer.
 					pending[0] = { labels: pending[0].labels, jobId: pending[0].jobId };
 				} else {
@@ -317,15 +361,16 @@
 					pending[0] = { ...pending[0], printerId: printer.id };
 				}
 				setUnsent(pending);
-				if (signal.aborted) return finishAborted(signal);
+				if (signal.aborted) return finishAborted(signal, true);
 				running = false;
 				toast.error(sendErrorMessage(error, printer.name));
 				return;
 			}
+			createdAny = true;
 			if (signal.aborted) {
 				// The job just created may still print: the retry follows it under its own id (FR-47).
 				setUnsent([{ ...pending[0], printerId: printer.id }, ...pending.slice(1)]);
-				return finishAborted(signal);
+				return finishAborted(signal, true);
 			}
 			job = { jobId: created.job_id, shelterCode: created.shelter_code };
 			// Earlier chunks must finish first (the next one is only queued then, so it cannot expire
@@ -337,7 +382,7 @@
 			if (!outcome) {
 				// Aborted while waiting: the job may still print, so the retry follows it (FR-47).
 				setUnsent([{ ...pending[0], printerId: printer.id }, ...pending.slice(1)]);
-				return finishAborted(signal);
+				return finishAborted(signal, true);
 			}
 			const unsure = outcome.status === 'unknown' || outcome.status === 'timeout';
 			if (!unsure) printedTotal += outcome.printed;
@@ -401,6 +446,8 @@
 			<p class="text-sm text-muted-foreground" role="status">
 				{t.retryLockedTo(lockedPrinter.name)}
 			</p>
+		{:else if !running && lockGone}
+			<p class="text-sm text-muted-foreground" role="status">{t.lockedPrinterGone}</p>
 		{/if}
 		{#if disconnected}
 			<p class="text-sm text-muted-foreground">{t.disconnectedHint}</p>
