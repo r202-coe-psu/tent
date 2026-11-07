@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { toast } from 'svelte-sonner';
 	import { Input } from '$lib/components/ui/input/index.js';
+	import { Label } from '$lib/components/ui/label/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import AlertCircle from '@lucide/svelte/icons/alert-circle';
 	import CheckCircle2 from '@lucide/svelte/icons/check-circle-2';
@@ -24,6 +25,7 @@
 	import {
 		buildCloseShiftOptions,
 		computeShiftClosePreview,
+		formatTotalWithUnit,
 		initializeReturnedQuantities,
 		validateReturnedQuantity,
 		validateShiftCloseForm
@@ -35,18 +37,24 @@
 	import { qtyGt } from '$lib/utils/qty';
 	import TicketLoanSummary from '../common/TicketLoanSummary.svelte';
 	import ShiftCloseStepGuide from '../common/ShiftCloseStepGuide.svelte';
+	import TicketStatusBadge from '../common/TicketStatusBadge.svelte';
+	import TicketSummaryBadges from '../common/TicketSummaryBadges.svelte';
 	import Undo2 from '@lucide/svelte/icons/undo-2';
+	import MapPin from '@lucide/svelte/icons/map-pin';
+	import { ticketCardSummary } from '../model/distribution-point';
 
 	interface Props {
 		ticket: RequisitionTicket | null;
 		shelterCode: string;
+		/** Unit label of an item's base unit; '' while the catalog is loading. */
+		unitOf: (itemId: string) => string;
 		onShiftClosed?: (ticket: RequisitionTicket) => void;
 		onReturnsSubmitted?: (ticket: RequisitionTicket) => void;
 		/** FR-DFS-05 — the page asks before a mode switch drops edited returned quantities. */
 		drafts?: DeskDrafts;
 	}
 
-	let { ticket, shelterCode, onShiftClosed, onReturnsSubmitted, drafts }: Props = $props();
+	let { ticket, shelterCode, unitOf, onShiftClosed, onReturnsSubmitted, drafts }: Props = $props();
 
 	// Session authority
 	const authContext = $derived.by(() => {
@@ -104,6 +112,10 @@
 			() => ticket?.status === 'DISTRIBUTING' && isReturnedQtyDraft(initialReturned, returnedInputs)
 		)
 	);
+
+	const summary = $derived(ticket ? ticketCardSummary(ticket) : null);
+	const itemIds = $derived(ticket?.items.map((i) => i.item_id) ?? []);
+	const total = (qty: string) => formatTotalWithUnit(qty, itemIds, unitOf);
 
 	const validation = $derived(validateShiftCloseForm(summaries, returnedInputs));
 	const preview = $derived(computeShiftClosePreview(summaries, returnedInputs));
@@ -238,60 +250,56 @@
 		</div>
 	{:else}
 		<!-- Authoritative Ticket Reconciliation Surface -->
-		<div class="space-y-5 rounded-2xl border border-slate-200/80 bg-white p-4 shadow-xs sm:p-6">
-			<!-- Header -->
+		<section
+			class="space-y-5 rounded-2xl border border-slate-200/80 bg-white p-4 shadow-2xs sm:p-6"
+			aria-label={`ปิดรอบ เลขตั๋ว ${ticket.ticket_no}`}
+		>
+			<!-- Header: what the ticket is, in the same words as the receive tab (#1183) -->
 			<div
-				class="flex flex-col gap-3 border-b border-slate-100 pb-4 sm:flex-row sm:items-center sm:justify-between"
+				class="flex flex-col gap-3 border-b border-slate-100 pb-4 md:flex-row md:items-start md:justify-between"
 			>
-				<div class="flex items-center gap-3">
-					<div
-						class="flex h-11 w-11 items-center justify-center rounded-xl border border-teal-200 bg-teal-50 text-teal-700 shadow-2xs"
-					>
-						<Lock class="h-6 w-6" />
-					</div>
-					<div>
-						<div class="flex items-center gap-2">
-							<span class="text-2xs font-bold tracking-wide text-teal-700 uppercase">
-								ปิดรอบและส่งคืน
-							</span>
+				<div class="min-w-0 space-y-3">
+					<div class="flex flex-wrap items-center gap-2">
+						<span
+							class="inline-flex items-center gap-1.5 rounded-full border border-teal-200 bg-teal-50 px-2.5 py-0.5 text-xs font-semibold text-teal-900"
+						>
+							<Lock class="size-3.5" aria-hidden="true" />
+							ปิดรอบและส่งคืน
+						</span>
+						<TicketStatusBadge status={ticket.status} />
+						{#if hasOutstandingLoans && loanSummary}
 							<span
-								class="rounded-full px-2 py-0.5 font-mono text-2xs font-bold {ticket.status ===
-								'DISTRIBUTING'
-									? 'bg-emerald-100 text-emerald-800'
-									: ticket.status === 'SHIFT_CLOSED'
-										? 'bg-purple-100 text-purple-800'
-										: ticket.status === 'RETURN_PENDING_RECEIPT'
-											? 'bg-orange-100 text-orange-800'
-											: 'bg-slate-100 text-slate-800'}"
+								class="inline-flex items-center gap-1.5 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-0.5 text-xs font-semibold text-amber-900"
 							>
-								{getTicketStatusLabel(ticket.status)}
+								<Undo2 class="size-3.5" aria-hidden="true" />
+								ของยืมค้างคืน {loanSummary.outstandingQty}
 							</span>
-							{#if hasOutstandingLoans && loanSummary}
-								<span
-									class="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-2xs font-bold text-amber-900"
-								>
-									<Undo2 class="h-3 w-3" aria-hidden="true" />
-									ของยืมค้างคืน {loanSummary.outstandingQty}
-								</span>
-							{/if}
-						</div>
-						<h2 class="text-lg font-bold text-slate-900">
-							ใบเบิก {ticket.ticket_no} ({ticket.requisition_type === 'food'
-								? 'อาหารปรุงสำเร็จ'
-								: 'พัสดุสิ่งของ'})
-						</h2>
-						<p class="text-xs text-slate-500">
-							ปลายทาง: {ticket.destination_location} • ผู้เบิก: {ticket.requested_by}
-						</p>
+						{/if}
 					</div>
+
+					{#if summary}
+						<div class="flex flex-wrap items-center gap-2">
+							<TicketSummaryBadges {ticket} />
+						</div>
+						<div>
+							<p class="text-xs font-semibold text-slate-500">จุดแจก</p>
+							<h2 class="flex items-start gap-1.5 text-lg font-bold break-words text-slate-900">
+								<MapPin class="mt-1 size-4 shrink-0 text-slate-500" aria-hidden="true" />
+								{summary.destination}
+							</h2>
+							<p class="mt-0.5 text-sm text-slate-500">
+								เลขตั๋ว <span class="tabular-nums">{ticket.ticket_no}</span>
+							</p>
+						</div>
+					{/if}
 				</div>
 
 				<!-- Read-only role warning if user cannot close shift -->
 				{#if !canFrontline}
 					<div
-						class="inline-flex items-center gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-800"
+						class="inline-flex items-center gap-1.5 self-start rounded-lg border border-amber-200 bg-amber-50 px-3 py-1.5 text-sm font-semibold text-amber-900"
 					>
-						<ShieldAlert class="h-4 w-4 text-amber-600" />
+						<ShieldAlert class="size-4 text-amber-600" aria-hidden="true" />
 						<span>โหมดอ่านอย่างเดียว (ไม่มีสิทธิ์ปิดรอบ/ส่งคืน)</span>
 					</div>
 				{/if}
@@ -299,13 +307,16 @@
 
 			<!-- Error banner if mutation failed -->
 			{#if submitError}
-				<div class="rounded-xl border border-red-200 bg-red-50/80 p-3.5 text-xs text-red-900">
+				<div
+					class="rounded-xl border border-red-200 bg-red-50/80 p-3.5 text-sm text-red-900"
+					role="alert"
+				>
 					<div class="flex items-start gap-2">
-						<AlertCircle class="mt-0.5 h-4 w-4 shrink-0 text-red-600" />
+						<AlertCircle class="mt-0.5 size-4 shrink-0 text-red-600" aria-hidden="true" />
 						<div>
 							<p class="font-bold">เกิดข้อผิดพลาด</p>
 							<p class="mt-0.5 text-red-800">{submitError}</p>
-							<p class="mt-1 text-2xs text-red-600">
+							<p class="mt-1 text-xs text-red-700">
 								ข้อมูลที่กรอกไว้ถูกเก็บรักษา สามารถตรวจสอบแล้วกดลองใหม่ได้ทันที
 							</p>
 						</div>
@@ -319,8 +330,41 @@
 			{#if ticket.status === 'DISTRIBUTING'}
 				<!-- 1. ACTIVE EDITABLE SHIFT CLOSE FORM -->
 				<div class="space-y-4">
-					<div class="overflow-x-auto rounded-xl border border-slate-200/80">
-						<table class="w-full min-w-[700px] text-left text-sm text-slate-700">
+					<!-- Phone: one card per item -->
+					<ul class="space-y-3 md:hidden">
+						{#each preview.itemPreviews as item (item.itemId)}
+							{@const unit = unitOf(item.itemId)}
+							<li class="space-y-3 rounded-xl border border-slate-200/80 bg-white p-4">
+								<p class="text-base font-bold break-words text-slate-900">{item.itemName}</p>
+								<dl class="grid grid-cols-3 gap-2 text-center">
+									<div class="rounded-lg bg-slate-50 p-2">
+										<dt class="text-xs text-slate-500">เบิกมา</dt>
+										<dd class="text-base font-semibold text-slate-900 tabular-nums">
+											{item.allocated}
+										</dd>
+									</div>
+									<div class="rounded-lg bg-slate-50 p-2">
+										<dt class="text-xs text-slate-500">แจกแล้ว</dt>
+										<dd class="text-base font-semibold text-emerald-800 tabular-nums">
+											{item.distributed}
+										</dd>
+									</div>
+									<div class="rounded-lg bg-slate-50 p-2">
+										<dt class="text-xs text-slate-500">เหลือในมือ</dt>
+										<dd class="text-base font-bold text-slate-900 tabular-nums">
+											{item.remainingInHand}
+										</dd>
+									</div>
+								</dl>
+								{@render returnedInput(item, `returned-m-${item.itemId}`, 'h-12 w-full text-lg')}
+								{@render discrepancyBadge(item, unit)}
+							</li>
+						{/each}
+					</ul>
+
+					<!-- Tablet and up: table -->
+					<div class="hidden overflow-x-auto rounded-xl border border-slate-200/80 md:block">
+						<table class="w-full text-left text-sm text-slate-700">
 							<thead
 								class="border-b border-slate-200 bg-slate-50/75 text-xs font-semibold text-slate-600"
 							>
@@ -329,92 +373,58 @@
 									<th scope="col" class="px-3 py-3.5 text-right">ยอดเบิกมา</th>
 									<th scope="col" class="px-3 py-3.5 text-right">แจกจริงแล้ว</th>
 									<th scope="col" class="px-3 py-3.5 text-right">ของเหลือในมือ</th>
-									<th scope="col" class="w-48 px-3 py-3.5 text-right">ส่งคืนคลัง (ชิ้น)</th>
+									<th scope="col" class="w-44 px-3 py-3.5 text-right">ส่งคืนคลัง</th>
 									<th scope="col" class="py-3.5 pr-4 pl-3 text-right">ส่วนต่าง / ของหาย</th>
 								</tr>
 							</thead>
 							<tbody class="divide-y divide-slate-100">
 								{#each preview.itemPreviews as item (item.itemId)}
+									{@const unit = unitOf(item.itemId)}
 									<tr class="transition-colors hover:bg-slate-50/60">
-										<td class="py-3.5 pr-3 pl-4">
-											<div class="font-bold text-slate-900">{item.itemName}</div>
-											{#if !item.itemName}
-												<div class="font-mono text-2xs text-slate-400">{item.itemId}</div>
-											{/if}
+										<td class="py-3.5 pr-3 pl-4 font-bold text-slate-900">{item.itemName}</td>
+										<td class="px-3 py-3.5 text-right tabular-nums">
+											{item.allocated} <span class="text-xs text-slate-500">{unit}</span>
 										</td>
-										<td class="px-3 py-3.5 text-right font-mono tabular-nums">{item.allocated}</td>
-										<td class="px-3 py-3.5 text-right font-mono text-emerald-700 tabular-nums">
-											{item.distributed}
+										<td class="px-3 py-3.5 text-right text-emerald-800 tabular-nums">
+											{item.distributed} <span class="text-xs text-slate-500">{unit}</span>
 										</td>
-										<td
-											class="px-3 py-3.5 text-right font-mono font-bold text-slate-900 tabular-nums"
-										>
+										<td class="px-3 py-3.5 text-right font-bold text-slate-900 tabular-nums">
 											{item.remainingInHand}
+											<span class="text-xs font-normal text-slate-500">{unit}</span>
 										</td>
 										<td class="px-3 py-3.5 text-right">
-											<div class="flex flex-col items-end">
-												<Input
-													type="text"
-													inputmode="numeric"
-													step="1"
-													min="0"
-													disabled={!canFrontline || closeShiftMutation.isPending}
-													value={returnedInputs[item.itemId] ?? ''}
-													onblur={() => handleReturnedQtyBlur(item.itemId)}
-													oninput={(e) => {
-														returnedInputs[item.itemId] = (e.target as HTMLInputElement).value;
-													}}
-													aria-label={`จำนวนส่งคืน ${item.itemName}`}
-													aria-invalid={!!validation.errors[item.itemId]}
-													class="h-8 w-28 text-right text-xs font-bold tabular-nums {validation
-														.errors[item.itemId]
-														? 'border-red-300 bg-red-50 text-red-900 focus-visible:ring-red-500'
-														: 'border-slate-200 bg-white text-slate-900 focus-visible:ring-teal-600'}"
-												/>
-												{#if validation.errors[item.itemId]}
-													<span class="mt-1 text-right text-2xs text-red-600">
-														{validation.errors[item.itemId]}
-													</span>
-												{/if}
-											</div>
+											{@render returnedInput(
+												item,
+												`returned-t-${item.itemId}`,
+												'h-11 w-28 text-base'
+											)}
 										</td>
-										<td class="py-3.5 pr-4 pl-3 text-right font-mono tabular-nums">
-											{#if item.hasDiscrepancy}
-												<span
-													class="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-2xs font-bold text-amber-900"
-												>
-													<AlertCircle class="h-3 w-3 text-amber-600" />
-													ขาด {item.discrepancy}
-												</span>
-											{:else}
-												<span class="text-xs text-slate-400">ครบพอดี (0)</span>
-											{/if}
+										<td class="py-3.5 pr-4 pl-3 text-right">
+											{@render discrepancyBadge(item, unit)}
 										</td>
 									</tr>
 								{/each}
 							</tbody>
 							<tfoot
-								class="border-t border-slate-200 bg-slate-50/50 text-xs font-bold text-slate-800"
+								class="border-t border-slate-200 bg-slate-50/50 text-sm font-bold text-slate-800"
 							>
 								<tr>
 									<td class="py-3 pr-3 pl-4">รวมทั้งหมด</td>
-									<td class="px-3 py-3 text-right font-mono tabular-nums">
-										{preview.totalAllocated}
+									<td class="px-3 py-3 text-right tabular-nums">{total(preview.totalAllocated)}</td>
+									<td class="px-3 py-3 text-right text-emerald-800 tabular-nums">
+										{total(preview.totalDistributed)}
 									</td>
-									<td class="px-3 py-3 text-right font-mono text-emerald-700 tabular-nums">
-										{preview.totalDistributed}
+									<td class="px-3 py-3 text-right tabular-nums">
+										{total(preview.totalRemainingInHand)}
 									</td>
-									<td class="px-3 py-3 text-right font-mono tabular-nums">
-										{preview.totalRemainingInHand}
+									<td class="px-3 py-3 text-right text-teal-800 tabular-nums">
+										{total(preview.totalReturned)}
 									</td>
-									<td class="px-3 py-3 text-right font-mono text-teal-800 tabular-nums">
-										{preview.totalReturned}
-									</td>
-									<td class="py-3 pr-4 pl-3 text-right font-mono tabular-nums">
+									<td class="py-3 pr-4 pl-3 text-right tabular-nums">
 										{#if preview.hasDiscrepancy}
-											<span class="text-amber-800">ขาด {preview.totalDiscrepancy}</span>
+											<span class="text-red-800">ขาด {total(preview.totalDiscrepancy)}</span>
 										{:else}
-											<span class="text-emerald-700">0</span>
+											<span class="text-emerald-800">ครบ</span>
 										{/if}
 									</td>
 								</tr>
@@ -424,21 +434,20 @@
 
 					<!-- Lifecycle Preview Banners -->
 					{#if preview.isZeroReturnFastPath}
-						<!-- Zero-Return Fast Path Notice -->
 						<div
-							class="rounded-xl border border-emerald-200 bg-emerald-50/60 p-4 text-xs text-emerald-950"
+							class="rounded-xl border border-emerald-200 bg-emerald-50/60 p-4 text-sm text-emerald-950"
 						>
 							<div class="flex items-start gap-2.5">
-								<CheckCircle2 class="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />
+								<CheckCircle2 class="mt-0.5 size-4 shrink-0 text-emerald-600" aria-hidden="true" />
 								<div>
 									<p class="font-bold">ไม่มีของเหลือจากรอบแจกที่ต้องส่งคืนคลัง</p>
 									{#if hasOutstandingLoans}
-										<p class="mt-0.5 text-slate-600">
+										<p class="mt-0.5 text-slate-700">
 											สามารถปิดรอบแจกจ่ายได้ทันที แต่ยังมีของยืมที่ผู้ประสบภัยยังไม่ได้คืน
 											ระบบจะติดตามต่อในรายการของยืม-คืนด้านล่าง
 										</p>
 									{:else}
-										<p class="mt-0.5 text-slate-600">
+										<p class="mt-0.5 text-slate-700">
 											ระบบจะปิดรอบและเปลี่ยนสถานะตั๋วเป็น <strong class="text-emerald-800"
 												>เสร็จสมบูรณ์</strong
 											> ทันที โดยไม่ต้องส่งรถกลับคลังกลาง
@@ -448,37 +457,27 @@
 							</div>
 						</div>
 					{:else}
-						<!-- Physical Returns Required Notice -->
-						<div class="rounded-xl border border-blue-200 bg-blue-50/60 p-4 text-xs text-blue-950">
+						<div class="rounded-xl border border-sky-200 bg-sky-50/60 p-4 text-sm text-sky-950">
 							<div class="flex items-start gap-2.5">
-								<Truck class="mt-0.5 h-4 w-4 shrink-0 text-blue-600" />
+								<Truck class="mt-0.5 size-4 shrink-0 text-sky-600" aria-hidden="true" />
 								<div>
-									<p class="font-bold">
-										มีพัสดุส่งคืนคลัง ({preview.totalReturned} ชิ้น)
-									</p>
-									<p class="mt-0.5 text-slate-600">
-										การปิดรอบจะเปลี่ยนสถานะตั๋วเป็น <strong class="text-purple-800"
-											>ปิดรอบแล้ว</strong
-										>
-										จากนั้นเจ้าหน้าที่จะสามารถกดยืนยันส่งคืนพัสดุกลับคลังกลางในขั้นตอนถัดไป (ยอดสต็อกคลังยังไม่ถูกเพิ่มจนกว่าคลังจะตรวจรับจริง)
+									<p class="font-bold">มีของส่งคืนคลัง {total(preview.totalReturned)}</p>
+									<p class="mt-0.5 text-slate-700">
+										ปิดรอบแล้วตั๋วจะเป็น <strong class="text-purple-800">ปิดรอบแล้ว</strong>
+										จากนั้นกดยืนยันส่งคืนของกลับคลังกลางในขั้นถัดไป (สต็อกคลังจะเพิ่มเมื่อคลังตรวจรับจริง)
 									</p>
 								</div>
 							</div>
 						</div>
 					{/if}
 
-					<!-- Discrepancy Warning Notice if applicable -->
 					{#if preview.hasDiscrepancy}
-						<div
-							class="rounded-xl border border-amber-200 bg-amber-50/80 p-4 text-xs text-amber-950"
-						>
+						<div class="rounded-xl border border-red-200 bg-red-50/70 p-4 text-sm text-red-950">
 							<div class="flex items-start gap-2.5">
-								<AlertCircle class="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+								<AlertCircle class="mt-0.5 size-4 shrink-0 text-red-600" aria-hidden="true" />
 								<div>
-									<p class="font-bold">
-										พบส่วนต่าง / ของหาย ({preview.totalDiscrepancy} ชิ้น)
-									</p>
-									<p class="mt-0.5 text-amber-800">
+									<p class="font-bold">ของขาด {total(preview.totalDiscrepancy)}</p>
+									<p class="mt-0.5 text-red-900">
 										ยอดเบิกมา ({preview.totalAllocated}) มากกว่ายอดแจกจริงรวมกับยอดส่งคืน ({preview.totalDistributed}
 										+ {preview.totalReturned}) ส่วนต่างนี้จะถูกบันทึกในเอกสารตั๋ว
 									</p>
@@ -487,229 +486,111 @@
 						</div>
 					{/if}
 
-					<!-- Close Shift Action Button -->
-					<div class="flex items-center justify-end pt-2">
+					<div class="flex justify-end pt-2">
 						<Button
 							type="button"
 							variant="default"
 							onclick={handleCloseShift}
 							disabled={!canFrontline || !validation.isValid || closeShiftMutation.isPending}
-							class="h-auto rounded-xl bg-teal-700 px-5 py-2.5 text-xs font-bold hover:bg-teal-800"
+							class="h-12 w-full rounded-lg bg-teal-700 px-5 text-base font-bold text-white hover:bg-teal-800 focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 sm:w-auto"
 						>
 							{#if closeShiftMutation.isPending}
-								<Loader2 class="h-4 w-4 animate-spin" />
+								<Loader2 class="size-4 animate-spin" aria-hidden="true" />
 								<span>กำลังบันทึกปิดรอบแจกจ่าย...</span>
 							{:else}
-								<Lock class="h-4 w-4" />
+								<Lock class="size-4" aria-hidden="true" />
 								<span>ยืนยันปิดรอบแจกจ่าย</span>
 							{/if}
 						</Button>
 					</div>
 				</div>
 			{:else if ticket.status === 'SHIFT_CLOSED'}
-				<!-- 2. SHIFT CLOSED STATE — ACTION: SUBMIT RETURNS TO WAREHOUSE -->
 				<div class="space-y-4">
 					<div
-						class="rounded-xl border border-purple-200 bg-purple-50/60 p-4 text-xs text-purple-950"
+						class="rounded-xl border border-purple-200 bg-purple-50/60 p-4 text-sm text-purple-950"
 					>
 						<div class="flex items-start gap-2.5">
-							<Info class="mt-0.5 h-4 w-4 shrink-0 text-purple-600" />
+							<Info class="mt-0.5 size-4 shrink-0 text-purple-600" aria-hidden="true" />
 							<div>
 								<p class="font-bold">ปิดรอบแจกจ่ายเรียบร้อยแล้ว</p>
-								<p class="mt-0.5 text-slate-600">
-									รอบการแจกจ่ายนี้ปิดยอดแล้ว กรุณากดยืนยันส่งคืนพัสดุที่เหลือกลับคลังกลาง
-									เพื่อให้คลังสามารถดำเนินการตรวจรับของจริงเข้าสู่ระบบ
+								<p class="mt-0.5 text-slate-700">
+									กดยืนยันส่งคืนของที่เหลือกลับคลังกลาง เพื่อให้คลังตรวจรับของจริงเข้าระบบ
 								</p>
 							</div>
 						</div>
 					</div>
 
-					<!-- Summary Table of Closed Shift -->
-					<div class="overflow-x-auto rounded-xl border border-slate-200/80">
-						<table class="w-full min-w-[640px] text-left text-sm text-slate-700">
-							<thead
-								class="border-b border-slate-200 bg-slate-50 text-xs font-semibold text-slate-600"
-							>
-								<tr>
-									<th scope="col" class="py-3 pr-3 pl-4">สินค้า</th>
-									<th scope="col" class="px-3 py-3 text-right">ยอดเบิก</th>
-									<th scope="col" class="px-3 py-3 text-right">แจกแล้ว</th>
-									<th scope="col" class="px-3 py-3 text-right text-purple-800">ยอดรอส่งคืน</th>
-									<th scope="col" class="py-3 pr-4 pl-3 text-right">ส่วนต่าง</th>
-								</tr>
-							</thead>
-							<tbody class="divide-y divide-slate-100">
-								{#each ticket.items as item (item.item_id)}
-									<tr>
-										<td class="py-3 pr-3 pl-4 font-semibold text-slate-900">{item.item_name}</td>
-										<td class="px-3 py-3 text-right font-mono tabular-nums">{item.allocated_qty}</td
-										>
-										<td class="px-3 py-3 text-right font-mono tabular-nums"
-											>{item.distributed_qty ?? '0'}</td
-										>
-										<td
-											class="px-3 py-3 text-right font-mono font-bold text-purple-800 tabular-nums"
-										>
-											{item.returned_qty ?? '0'}
-										</td>
-										<td class="py-3 pr-4 pl-3 text-right font-mono tabular-nums">
-											{item.discrepancy_qty ?? '0'}
-										</td>
-									</tr>
-								{/each}
-							</tbody>
-						</table>
-					</div>
+					{@render closedSummary('ยอดรอส่งคืน')}
 
-					<!-- Submit Action -->
-					<div class="flex items-center justify-end pt-2">
+					<div class="flex justify-end pt-2">
 						<Button
 							type="button"
 							variant="default"
 							onclick={handleSubmitReturns}
 							disabled={!canFrontline || submitReturnsMutation.isPending}
-							class="h-auto rounded-xl bg-purple-700 px-5 py-2.5 text-xs font-bold hover:bg-purple-800"
+							class="h-12 w-full rounded-lg bg-purple-700 px-5 text-base font-bold text-white hover:bg-purple-800 focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 sm:w-auto"
 						>
 							{#if submitReturnsMutation.isPending}
-								<Loader2 class="h-4 w-4 animate-spin" />
+								<Loader2 class="size-4 animate-spin" aria-hidden="true" />
 								<span>กำลังส่งข้อมูลคืนคลัง...</span>
 							{:else}
-								<Send class="h-4 w-4" />
+								<Send class="size-4" aria-hidden="true" />
 								<span>ส่งคืนพัสดุกลับคลังกลาง</span>
 							{/if}
 						</Button>
 					</div>
 				</div>
 			{:else if ticket.status === 'RETURN_PENDING_RECEIPT'}
-				<!-- 3. WAITING FOR WAREHOUSE RECEIPT -->
 				<div class="space-y-4">
-					<div
-						class="rounded-xl border border-orange-200 bg-orange-50/70 p-4 text-xs text-orange-950"
-					>
+					<div class="rounded-xl border border-amber-200 bg-amber-50/70 p-4 text-sm text-amber-950">
 						<div class="flex items-start gap-2.5">
-							<Truck class="mt-0.5 h-4 w-4 shrink-0 text-orange-600" />
+							<Truck class="mt-0.5 size-4 shrink-0 text-amber-600" aria-hidden="true" />
 							<div>
-								<p class="font-bold">ส่งคืนของแล้ว • รอคลังสินค้าตรวจรับ</p>
-								<p class="mt-0.5 text-slate-600">
-									ของเหลือถูกส่งกลับไปยังคลังแล้ว
-									อยู่ระหว่างรอเจ้าหน้าที่คลังตรวจสอบของจริงและยืนยันรับเข้าสต็อก
+								<p class="font-bold">ส่งคืนของแล้ว รอคลังตรวจรับ</p>
+								<p class="mt-0.5 text-slate-700">
+									ของเหลือถูกส่งกลับคลังแล้ว รอเจ้าหน้าที่คลังตรวจของจริงและยืนยันรับเข้าสต็อก
 								</p>
 							</div>
 						</div>
 					</div>
-
-					<div class="overflow-x-auto rounded-xl border border-slate-200/80">
-						<table class="w-full min-w-[640px] text-left text-sm text-slate-700">
-							<thead
-								class="border-b border-slate-200 bg-slate-50 text-xs font-semibold text-slate-600"
-							>
-								<tr>
-									<th scope="col" class="py-3 pr-3 pl-4">สินค้า</th>
-									<th scope="col" class="px-3 py-3 text-right">ยอดเบิก</th>
-									<th scope="col" class="px-3 py-3 text-right">แจกจริง</th>
-									<th scope="col" class="px-3 py-3 text-right font-bold text-orange-800">
-										ยอดส่งคืนคลัง
-									</th>
-									<th scope="col" class="py-3 pr-4 pl-3 text-right">ส่วนต่าง</th>
-								</tr>
-							</thead>
-							<tbody class="divide-y divide-slate-100">
-								{#each ticket.items as item (item.item_id)}
-									<tr>
-										<td class="py-3 pr-3 pl-4 font-semibold text-slate-900">{item.item_name}</td>
-										<td class="px-3 py-3 text-right font-mono tabular-nums">{item.allocated_qty}</td
-										>
-										<td class="px-3 py-3 text-right font-mono tabular-nums"
-											>{item.distributed_qty ?? '0'}</td
-										>
-										<td
-											class="px-3 py-3 text-right font-mono font-bold text-orange-800 tabular-nums"
-										>
-											{item.returned_qty ?? '0'}
-										</td>
-										<td class="py-3 pr-4 pl-3 text-right font-mono tabular-nums">
-											{item.discrepancy_qty ?? '0'}
-										</td>
-									</tr>
-								{/each}
-							</tbody>
-						</table>
-					</div>
+					{@render closedSummary('ยอดส่งคืนคลัง')}
 				</div>
 			{:else if ticket.status === 'RETURN_COMPLETED'}
-				<!-- 4. RETURN COMPLETED -->
-				<div class="space-y-4">
-					<div class="rounded-xl border border-teal-200 bg-teal-50/70 p-4 text-xs text-teal-950">
-						<div class="flex items-start gap-2.5">
-							<CheckCircle2 class="mt-0.5 h-4 w-4 shrink-0 text-teal-600" />
-							<div>
-								<p class="font-bold">คลังสินค้าตรวจรับของคืนเรียบร้อยแล้ว</p>
-								<p class="mt-0.5 text-slate-600">
-									คลังได้รับของและเพิ่มสต็อกเข้าคลังแล้ว รอปิดตั๋วโดยผู้จัดการคลัง
-								</p>
-							</div>
+				<div class="rounded-xl border border-teal-200 bg-teal-50/70 p-4 text-sm text-teal-950">
+					<div class="flex items-start gap-2.5">
+						<CheckCircle2 class="mt-0.5 size-4 shrink-0 text-teal-600" aria-hidden="true" />
+						<div>
+							<p class="font-bold">คลังสินค้าตรวจรับของคืนเรียบร้อยแล้ว</p>
+							<p class="mt-0.5 text-slate-700">
+								คลังได้รับของและเพิ่มสต็อกแล้ว รอปิดตั๋วโดยผู้จัดการคลัง
+							</p>
 						</div>
 					</div>
 				</div>
 			{:else if ticket.status === 'COMPLETED'}
-				<!-- 5. TICKET COMPLETED (Terminal) -->
 				<div class="space-y-4">
 					<div
-						class="rounded-xl border border-emerald-200 bg-emerald-50/70 p-4 text-xs text-emerald-950"
+						class="rounded-xl border border-emerald-200 bg-emerald-50/70 p-4 text-sm text-emerald-950"
 					>
 						<div class="flex items-start gap-2.5">
-							<CheckCircle2 class="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />
+							<CheckCircle2 class="mt-0.5 size-4 shrink-0 text-emerald-600" aria-hidden="true" />
 							<div>
 								<p class="font-bold">ใบเบิกจ่ายนี้เสร็จสิ้นสมบูรณ์แล้ว</p>
-								<p class="mt-0.5 text-slate-600">
+								<p class="mt-0.5 text-slate-700">
 									การแจกจ่าย การกระทบยอด และการคืนของเสร็จสิ้นสมบูรณ์
 								</p>
 							</div>
 						</div>
 					</div>
-
-					<div class="overflow-x-auto rounded-xl border border-slate-200/80">
-						<table class="w-full min-w-[640px] text-left text-sm text-slate-700">
-							<thead
-								class="border-b border-slate-200 bg-slate-50 text-xs font-semibold text-slate-600"
-							>
-								<tr>
-									<th scope="col" class="py-3 pr-3 pl-4">สินค้า</th>
-									<th scope="col" class="px-3 py-3 text-right">ยอดเบิก</th>
-									<th scope="col" class="px-3 py-3 text-right">แจกจริง</th>
-									<th scope="col" class="px-3 py-3 text-right">คืนคลัง</th>
-									<th scope="col" class="py-3 pr-4 pl-3 text-right">ส่วนต่าง</th>
-								</tr>
-							</thead>
-							<tbody class="divide-y divide-slate-100">
-								{#each ticket.items as item (item.item_id)}
-									<tr>
-										<td class="py-3 pr-3 pl-4 font-semibold text-slate-900">{item.item_name}</td>
-										<td class="px-3 py-3 text-right font-mono tabular-nums">{item.allocated_qty}</td
-										>
-										<td class="px-3 py-3 text-right font-mono tabular-nums"
-											>{item.distributed_qty ?? '0'}</td
-										>
-										<td class="px-3 py-3 text-right font-mono tabular-nums"
-											>{item.returned_qty ?? '0'}</td
-										>
-										<td class="py-3 pr-4 pl-3 text-right font-mono tabular-nums">
-											{item.discrepancy_qty ?? '0'}
-										</td>
-									</tr>
-								{/each}
-							</tbody>
-						</table>
-					</div>
+					{@render closedSummary('คืนคลัง')}
 				</div>
 			{:else}
-				<!-- Unsupported Status for Frontline Reconciliation -->
-				<div class="rounded-xl border border-slate-200 bg-slate-50 p-6 text-center text-xs">
-					<Info class="mx-auto mb-2 h-6 w-6 text-slate-400" />
+				<div class="rounded-xl border border-slate-200 bg-slate-50 p-6 text-center text-sm">
+					<Info class="mx-auto mb-2 size-6 text-slate-400" aria-hidden="true" />
 					<p class="font-bold text-slate-800">
 						ตั๋วอยู่ในสถานะ {getTicketStatusLabel(ticket.status)}
 					</p>
-					<p class="mt-1 text-slate-500">
+					<p class="mt-1 text-slate-600">
 						การปิดรอบและกระทบยอดสามารถดำเนินการได้เมื่อตั๋วอยู่ในสถานะกำลังแจกจ่ายเท่านั้น
 					</p>
 				</div>
@@ -717,6 +598,119 @@
 
 			<!-- Durable Loan Status (tracked independently of ticket lifecycle) -->
 			<TicketLoanSummary ticketId={ticket._id} items={ticket.items} {shelterCode} />
-		</div>
+		</section>
 	{/if}
 </div>
+
+{#snippet returnedInput(
+	item: (typeof preview.itemPreviews)[number],
+	inputId: string,
+	sizeClass: string
+)}
+	{@const error = validation.errors[item.itemId]}
+	<div class="flex flex-col items-stretch gap-1 md:items-end">
+		<Label for={inputId} class="text-sm font-semibold text-slate-700 md:sr-only">
+			จำนวนส่งคืน<span class="sr-only"> {item.itemName}</span>
+			{#if unitOf(item.itemId)}({unitOf(item.itemId)}){/if}
+		</Label>
+		<Input
+			id={inputId}
+			type="text"
+			inputmode="numeric"
+			disabled={!canFrontline || closeShiftMutation.isPending}
+			value={returnedInputs[item.itemId] ?? ''}
+			onblur={() => handleReturnedQtyBlur(item.itemId)}
+			oninput={(e) => {
+				returnedInputs[item.itemId] = (e.target as HTMLInputElement).value;
+			}}
+			aria-invalid={!!error}
+			class="{sizeClass} text-right font-bold tabular-nums {error
+				? 'border-red-300 bg-red-50 text-red-900 focus-visible:ring-red-500'
+				: 'border-slate-200 bg-white text-slate-900 focus-visible:ring-teal-600'}"
+		/>
+		{#if error}
+			<span class="text-sm text-red-700">{error}</span>
+		{/if}
+	</div>
+{/snippet}
+
+{#snippet discrepancyBadge(item: (typeof preview.itemPreviews)[number], unit: string)}
+	{#if item.hasDiscrepancy}
+		<span
+			class="inline-flex items-center gap-1.5 rounded-full border border-red-200 bg-red-50 px-2.5 py-0.5 text-xs font-semibold text-red-900 tabular-nums"
+		>
+			<AlertCircle class="size-3.5 text-red-600" aria-hidden="true" />
+			ขาด {item.discrepancy}
+			{unit}
+		</span>
+	{:else}
+		<span
+			class="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-xs font-semibold text-emerald-900"
+		>
+			<CheckCircle2 class="size-3.5 text-emerald-600" aria-hidden="true" />
+			ครบ
+		</span>
+	{/if}
+{/snippet}
+
+{#snippet closedSummary(returnedLabel: string)}
+	{#if ticket}
+		<!-- Phone: one card per item -->
+		<ul class="space-y-3 md:hidden">
+			{#each ticket.items as item (item.item_id)}
+				{@const unit = unitOf(item.item_id)}
+				<li class="rounded-xl border border-slate-200/80 bg-white p-4">
+					<p class="mb-2 text-base font-bold break-words text-slate-900">{item.item_name}</p>
+					<dl class="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
+						<dt class="text-slate-500">ยอดเบิก</dt>
+						<dd class="text-right tabular-nums">{item.allocated_qty} {unit}</dd>
+						<dt class="text-slate-500">แจกแล้ว</dt>
+						<dd class="text-right tabular-nums">{item.distributed_qty ?? '0'} {unit}</dd>
+						<dt class="text-slate-500">{returnedLabel}</dt>
+						<dd class="text-right font-bold text-slate-900 tabular-nums">
+							{item.returned_qty ?? '0'}
+							{unit}
+						</dd>
+						<dt class="text-slate-500">ส่วนต่าง</dt>
+						<dd class="text-right tabular-nums">{item.discrepancy_qty ?? '0'} {unit}</dd>
+					</dl>
+				</li>
+			{/each}
+		</ul>
+		<!-- Tablet and up: table -->
+		<div class="hidden overflow-x-auto rounded-xl border border-slate-200/80 md:block">
+			<table class="w-full text-left text-sm text-slate-700">
+				<thead class="border-b border-slate-200 bg-slate-50 text-xs font-semibold text-slate-600">
+					<tr>
+						<th scope="col" class="py-3 pr-3 pl-4">สินค้า</th>
+						<th scope="col" class="px-3 py-3 text-right">ยอดเบิก</th>
+						<th scope="col" class="px-3 py-3 text-right">แจกแล้ว</th>
+						<th scope="col" class="px-3 py-3 text-right">{returnedLabel}</th>
+						<th scope="col" class="py-3 pr-4 pl-3 text-right">ส่วนต่าง</th>
+					</tr>
+				</thead>
+				<tbody class="divide-y divide-slate-100">
+					{#each ticket.items as item (item.item_id)}
+						{@const unit = unitOf(item.item_id)}
+						<tr>
+							<td class="py-3 pr-3 pl-4 font-semibold text-slate-900">{item.item_name}</td>
+							<td class="px-3 py-3 text-right tabular-nums">
+								{item.allocated_qty} <span class="text-xs text-slate-500">{unit}</span>
+							</td>
+							<td class="px-3 py-3 text-right tabular-nums">
+								{item.distributed_qty ?? '0'} <span class="text-xs text-slate-500">{unit}</span>
+							</td>
+							<td class="px-3 py-3 text-right font-bold text-slate-900 tabular-nums">
+								{item.returned_qty ?? '0'}
+								<span class="text-xs font-normal text-slate-500">{unit}</span>
+							</td>
+							<td class="py-3 pr-4 pl-3 text-right tabular-nums">
+								{item.discrepancy_qty ?? '0'} <span class="text-xs text-slate-500">{unit}</span>
+							</td>
+						</tr>
+					{/each}
+				</tbody>
+			</table>
+		</div>
+	{/if}
+{/snippet}
