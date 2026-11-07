@@ -4,8 +4,9 @@
 	import CheckCircle2 from '@lucide/svelte/icons/check-circle-2';
 	import Loader from '@lucide/svelte/icons/loader';
 	import Users from '@lucide/svelte/icons/users';
+	import Info from '@lucide/svelte/icons/info';
+	import { Checkbox } from '$lib/components/ui/checkbox/index.js';
 	import { qtyGte } from '$lib/utils/qty';
-	import { formatThaiTime } from '$lib/utils/date';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Label } from '$lib/components/ui/label/index.js';
@@ -18,7 +19,12 @@
 		useRecordHouseholdMealPickup
 	} from '../../application/queries';
 	import type { MealPeriod, TicketItem } from '../../domain/food-supplies';
-	import { buildHouseholdPickupRows, isPreselected } from '../model/household-pickup';
+	import {
+		buildHouseholdPickupRows,
+		isSelectedByDefault,
+		notPreselectedReasons,
+		picksAfterPartialFailure
+	} from '../model/household-pickup';
 	import { formatDistributionError } from '../model/distribution-error';
 
 	interface Props {
@@ -72,7 +78,14 @@
 	);
 
 	const queries = $derived([membersQuery, logsQuery, allergiesQuery, allergyQuery]);
-	const loading = $derived(queries.some((q) => q.isPending));
+	// Never build rows before the logs and allergies arrive (paused offline or disabled included),
+	// or members would be pre-ticked without the repeat-meal and allergy checks. The member-scoped
+	// queries only run once there are members, so an empty household does not wait on them.
+	const loading = $derived(
+		membersQuery.isPending ||
+			allergyQuery.isPending ||
+			(memberIds.length > 0 && (logsQuery.isPending || allergiesQuery.isPending))
+	);
 	const loadError = $derived(queries.some((q) => q.isError));
 
 	const allergyItems = $derived(allergyQuery.data?.items ?? []);
@@ -92,7 +105,7 @@
 
 	// Explicit picks keyed by collector + member, so a new scan starts from the defaults.
 	let picks = $state<Record<string, boolean>>({});
-	let reasons = $state<Record<string, string>>({});
+	let overrideReasons = $state<Record<string, string>>({});
 	// Failures belong to the scan that produced them; a new collector starts clean.
 	let failureState = $state<{
 		collectorId: string;
@@ -101,11 +114,19 @@
 	const failures = $derived(failureState.collectorId === collectorId ? failureState.items : []);
 	const key = (evacueeId: string) => `${collectorId}|${evacueeId}`;
 
+	// Members whose last save failed; they stay ticked for the retry unless their write landed.
+	let retryState = $state<{ collectorId: string; ids: Set<string> }>({
+		collectorId: '',
+		ids: new Set()
+	});
+	const retryIds = $derived(
+		retryState.collectorId === collectorId ? retryState.ids : new Set<string>()
+	);
 	const isSelected = (row: (typeof rows)[number]) =>
-		picks[key(row.evacueeId)] ?? isPreselected(row);
+		picks[key(row.evacueeId)] ?? isSelectedByDefault(row, retryIds);
 	const selectedRows = $derived(rows.filter(isSelected));
 	const missingReason = $derived(
-		selectedRows.some((r) => r.needsOverride && !reasons[key(r.evacueeId)]?.trim())
+		selectedRows.some((r) => r.needsOverride && !overrideReasons[key(r.evacueeId)]?.trim())
 	);
 	const withinInHand = $derived(qtyGte(inHandQty, String(selectedRows.length)));
 	const canSubmit = $derived(
@@ -141,7 +162,7 @@
 					notes: notes.trim() || undefined,
 					selections: selectedRows.map((r) => ({
 						evacuee_id: r.evacueeId,
-						override_reason: r.needsOverride ? reasons[key(r.evacueeId)].trim() : undefined,
+						override_reason: r.needsOverride ? overrideReasons[key(r.evacueeId)].trim() : undefined,
 						menu_check: menu ? { recipient_tags: r.menuTags, menu } : undefined,
 						allergen_check: {
 							recipient_allergy_codes: r.allergen.recipientCodes,
@@ -156,7 +177,8 @@
 			if (failed.length === 0) {
 				toast.success(`บันทึกแจก ${item.item_name} ให้ ${recorded} คนสำเร็จ`);
 				picks = {};
-				reasons = {};
+				overrideReasons = {};
+				retryState = { collectorId: '', ids: new Set() };
 				notes = '';
 				ondone();
 				return;
@@ -172,31 +194,32 @@
 			};
 			// Retry only the failed members (#1154 R8).
 			const failedIds = new Set(failed.map((r) => r.evacuee_id));
-			picks = Object.fromEntries(rows.map((r) => [key(r.evacueeId), failedIds.has(r.evacueeId)]));
+			retryState = { collectorId, ids: failedIds };
+			picks = picksAfterPartialFailure(rows, failedIds, key);
 		} catch (err) {
 			toast.error(formatDistributionError(err, 'ไม่สามารถบันทึกแจกอาหารได้ กรุณาลองใหม่อีกครั้ง'));
 		}
 	}
 </script>
 
-<div class="space-y-1.5">
-	<Label for="food-notes-input" class="text-sm font-semibold text-slate-700">
-		หมายเหตุ (ไม่บังคับ)
-	</Label>
-	<Input
-		id="food-notes-input"
-		type="text"
-		bind:value={notes}
-		class="h-12 text-sm"
-		disabled={mutation.isPending}
-	/>
-</div>
-
 <fieldset class="space-y-3">
-	<legend class="flex items-center gap-2 text-sm font-semibold text-slate-700">
-		<Users class="size-4" aria-hidden="true" />
-		รับแทนสมาชิกครัวเรือน (เฉพาะคนที่อยู่ในศูนย์)
+	<legend class="w-full">
+		<span class="flex flex-wrap items-center justify-between gap-2">
+			<span class="flex items-center gap-2 text-base font-semibold text-slate-800">
+				<Users class="size-5 text-slate-500" aria-hidden="true" />
+				รับแทนสมาชิกครัวเรือน
+			</span>
+		</span>
+		<span class="mt-0.5 block text-sm text-slate-500">แสดงเฉพาะสมาชิกที่อยู่ในศูนย์</span>
 	</legend>
+	{#if !loading && !loadError && rows.length > 0}
+		<p
+			aria-live="polite"
+			class="inline-block rounded-full border border-sky-200 bg-sky-50 px-2.5 py-0.5 text-xs font-semibold text-sky-900 tabular-nums"
+		>
+			เลือก {selectedRows.length} จาก {rows.length} คน
+		</p>
+	{/if}
 
 	{#if loading}
 		<p class="flex items-center gap-2 text-sm text-slate-600">
@@ -213,68 +236,94 @@
 			<Button type="button" variant="outline" size="sm" onclick={retryLoad}>ลองใหม่</Button>
 		</div>
 	{:else}
-		<ul class="space-y-2">
+		<ul class="grid grid-cols-1 gap-3 md:grid-cols-2">
 			{#each rows as row (row.evacueeId)}
 				{@const checked = isSelected(row)}
+				{@const whyUnticked = notPreselectedReasons(row)}
+				{@const inputId = `household-member-${row.evacueeId}`}
 				<li
-					class="rounded-xl border p-3 {checked
-						? 'border-amber-400 bg-amber-50/40'
-						: 'border-slate-200 bg-white'}"
+					class="flex flex-col gap-3 rounded-xl border bg-white p-4 shadow-2xs transition-colors {checked
+						? 'border-sky-300 bg-sky-50/40'
+						: 'border-slate-200/80'}"
 				>
-					<label class="flex min-h-11 cursor-pointer items-start gap-3">
-						<input
-							type="checkbox"
-							class="mt-1 size-5 accent-amber-600"
-							{checked}
+					<div class="flex items-start gap-3">
+						<Checkbox
+							id={inputId}
+							bind:checked={() => checked, (next) => toggle(row.evacueeId, next === true)}
 							disabled={mutation.isPending}
-							onchange={(e) => toggle(row.evacueeId, e.currentTarget.checked)}
+							class="mt-0.5 size-6 rounded-md"
 						/>
-						<span class="min-w-0 flex-1">
-							<span class="block font-semibold break-words text-slate-900">
+						<div class="min-w-0 flex-1 space-y-1">
+							<Label
+								for={inputId}
+								class="flex min-h-6 cursor-pointer flex-wrap items-center gap-2 text-base font-semibold break-words text-slate-900"
+							>
 								{row.label}
 								{#if row.isCollector}
-									<span class="ml-1 text-xs font-medium text-slate-500">(ผู้มารับ)</span>
+									<span
+										class="rounded-full border border-slate-200 bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-700"
+									>
+										ผู้มารับ
+									</span>
 								{/if}
-							</span>
-							{#if row.lastDistributedAt}
-								<span class="block text-xs font-semibold text-amber-800">
-									รับมื้อนี้แล้ว เวลา {formatThaiTime(row.lastDistributedAt)}
-								</span>
-							{/if}
+							</Label>
 							{#if row.allergyLabel}
-								<span class="block text-xs font-semibold text-red-800">แพ้: {row.allergyLabel}</span
-								>
+								<p class="text-sm text-slate-700">
+									<span class="font-semibold text-red-800">แพ้:</span>
+									{row.allergyLabel}
+								</p>
 							{/if}
-							{#if row.allergenConflictLabel}
-								<span class="block text-xs text-red-800">
-									เมนูนี้มี {row.allergenConflictLabel} — ผู้รับแพ้
-								</span>
+						</div>
+					</div>
+
+					{#if whyUnticked.length > 0}
+						<div
+							class="rounded-lg border p-3 text-sm {row.allergenConflictLabel
+								? 'border-red-200 bg-red-50 text-red-900'
+								: 'border-amber-200 bg-amber-50 text-amber-900'}"
+						>
+							<p class="flex items-center gap-1.5 font-semibold">
+								<Info class="size-4 shrink-0" aria-hidden="true" />
+								{checked ? 'ต้องใส่เหตุผล เพราะ' : 'ไม่ได้เลือกไว้ให้ เพราะ'}
+							</p>
+							<ul class="mt-1 list-disc space-y-0.5 pl-6">
+								{#each whyUnticked as reason (reason)}
+									<li>{reason}</li>
+								{/each}
+							</ul>
+							{#if !checked}
+								<p class="mt-1.5 text-xs">ถ้าจะแจกให้คนนี้ ติ๊กเลือกแล้วใส่เหตุผล</p>
 							{/if}
-							{#if row.allergen.recipientFreeText.length > 0}
-								<span class="block text-xs text-amber-800">
-									แพ้ (ไม่อยู่ในรายการ): {row.allergen.recipientFreeText.join(', ')}
-								</span>
-							{/if}
-							{#if row.menuMismatchLabel}
-								<span class="block text-xs text-amber-800">
-									เมนูจัดไว้สำหรับกลุ่ม {row.menuMismatchLabel}
-								</span>
-							{/if}
-						</span>
-					</label>
+						</div>
+					{/if}
+
+					{#if !row.allergenConflictLabel && row.allergen.menuUnspecified}
+						<p class="text-sm text-slate-600">เมนูนี้ไม่ระบุสารก่อแพ้ — ตรวจสอบกับครัวก่อนแจก</p>
+					{/if}
+					{#if (row.allergyLabel || row.allergen.recipientFreeText.length > 0) && row.allergen.menuFreeText.length > 0}
+						<p class="text-sm text-slate-600">
+							เมนูระบุ: {row.allergen.menuFreeText.join(', ')} — ระบบไม่ได้เทียบให้
+						</p>
+					{/if}
+
 					{#if checked && row.needsOverride}
-						<Input
-							type="text"
-							class="mt-2 h-11 text-sm"
-							placeholder="เหตุผลกรณีพิเศษ (บังคับ)"
-							aria-label={`เหตุผลกรณีพิเศษของ ${row.label}`}
-							bind:value={reasons[key(row.evacueeId)]}
-							disabled={mutation.isPending}
-						/>
+						<div class="space-y-1.5">
+							<Label for={`${inputId}-reason`} class="text-sm font-semibold text-slate-700">
+								เหตุผลที่แจกให้ <span class="text-red-600">*</span>
+							</Label>
+							<Input
+								id={`${inputId}-reason`}
+								type="text"
+								class="h-12 text-base"
+								placeholder="เช่น หัวหน้าครอบครัวยืนยันแล้ว"
+								bind:value={overrideReasons[key(row.evacueeId)]}
+								disabled={mutation.isPending}
+							/>
+						</div>
 					{/if}
 				</li>
 			{:else}
-				<li class="text-sm text-slate-600">ไม่มีสมาชิกที่อยู่ในศูนย์</li>
+				<li class="text-sm text-slate-600 md:col-span-2">ไม่มีสมาชิกที่อยู่ในศูนย์</li>
 			{/each}
 		</ul>
 	{/if}
@@ -289,6 +338,19 @@
 			</ul>
 		</div>
 	{/if}
+
+	<div class="space-y-1.5">
+		<Label for="food-notes-input" class="text-sm font-semibold text-slate-700">
+			หมายเหตุ (ไม่บังคับ)
+		</Label>
+		<Input
+			id="food-notes-input"
+			type="text"
+			bind:value={notes}
+			class="h-12 text-base"
+			disabled={mutation.isPending}
+		/>
+	</div>
 
 	{#if !withinInHand}
 		<p class="text-sm text-red-700" role="alert">จำนวนที่เลือกเกินยอดคงเหลือในมือ ({inHandQty})</p>
@@ -308,4 +370,9 @@
 			<span>ยืนยันแจก {item.item_name} ให้ {selectedRows.length} คน</span>
 		{/if}
 	</Button>
+	{#if !canDistribute}
+		<p class="text-center text-sm text-slate-500">
+			บัญชีนี้ไม่มีสิทธิ์บันทึกการแจกอาหาร (ต้องเป็นเจ้าหน้าที่แจกจ่ายหรือผู้จัดการศูนย์)
+		</p>
+	{/if}
 </fieldset>

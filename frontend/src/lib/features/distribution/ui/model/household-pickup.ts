@@ -1,4 +1,5 @@
 import type { MasterDataItem } from '$lib/features/master-data';
+import { formatThaiTime } from '$lib/utils/date';
 import {
 	deriveRecipientMenuTags,
 	evaluateHouseholdMealPickup,
@@ -99,5 +100,52 @@ export function buildHouseholdPickupRows(input: {
 
 /** Pre-selected: a member who can collect without an override (#1154 R4/R5). */
 export function isPreselected(row: HouseholdPickupRow): boolean {
+	return !row.needsOverride;
+}
+
+/**
+ * Why a member is not ticked by default, one plain sentence per cause; empty when the member is
+ * pre-selected. Ticking such a member needs an override reason.
+ */
+export function notPreselectedReasons(row: HouseholdPickupRow): string[] {
+	const reasons: string[] = [];
+	if (row.lastDistributedAt) {
+		reasons.push(`รับมื้อนี้ไปแล้วเมื่อ ${formatThaiTime(row.lastDistributedAt)} น.`);
+	}
+	if (row.allergenConflictLabel)
+		reasons.push(`เมนูนี้มี ${row.allergenConflictLabel} ซึ่งผู้รับแพ้`);
+	if (row.allergen.recipientFreeText.length > 0) {
+		reasons.push(
+			`มีประวัติแพ้ที่ระบบเทียบกับเมนูให้ไม่ได้: ${row.allergen.recipientFreeText.join(', ')}`
+		);
+	}
+	if (row.menuMismatchLabel) reasons.push(`เมนูนี้จัดไว้สำหรับกลุ่ม ${row.menuMismatchLabel}`);
+	return reasons;
+}
+
+/**
+ * Picks after a partial save (#1154 R8): members that saved are unticked; failed ones go back to
+ * their default, which {@link isSelectedByDefault} works out from the refetched logs.
+ */
+export function picksAfterPartialFailure(
+	rows: readonly Pick<HouseholdPickupRow, 'evacueeId'>[],
+	failedIds: ReadonlySet<string>,
+	key: (evacueeId: string) => string
+): Record<string, boolean> {
+	return Object.fromEntries(
+		rows.filter((r) => !failedIds.has(r.evacueeId)).map((r) => [key(r.evacueeId), false])
+	);
+}
+
+/**
+ * Whether a member is ticked when the user has not touched it. A member whose save failed stays
+ * ticked for the retry, even one that needs an override reason, unless the refetched logs show
+ * the write landed after all (it is then "already received" and a retry would duplicate it).
+ */
+export function isSelectedByDefault(
+	row: Pick<HouseholdPickupRow, 'evacueeId' | 'needsOverride' | 'lastDistributedAt'>,
+	retryIds: ReadonlySet<string>
+): boolean {
+	if (retryIds.has(row.evacueeId)) return row.lastDistributedAt === undefined;
 	return !row.needsOverride;
 }
