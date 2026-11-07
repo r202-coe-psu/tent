@@ -52,7 +52,9 @@ describe('BookingTicketView (#415 Verification)', () => {
 			last_name: 'Schmidt',
 			member_count: 2,
 			type: 'unassigned_queue',
-			status: 'pre_registered'
+			status: 'pre_registered',
+			// Empty on purpose: ticket dates stay th-TH (CONVENTIONS §10), which would put Thai in the EN render.
+			booked_at: ''
 		};
 
 		function renderUnassigned(language: 'th' | 'en') {
