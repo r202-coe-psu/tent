@@ -1,6 +1,10 @@
 <script lang="ts">
 	import type { ItemMaster } from '$lib/features/catalog';
-	import type { Flow2RequisitionType, MealPeriod } from '../../domain/food-supplies';
+	import {
+		thailandCalendarDay,
+		type Flow2RequisitionType,
+		type MealPeriod
+	} from '../../domain/food-supplies';
 	import { useCreateRequisitionTicket } from '../../application/queries';
 	import { useShelter } from '$lib/features/shelters';
 	import { MEAL_PERIOD_LABELS } from '../model/ticket-status';
@@ -11,6 +15,7 @@
 	} from '../model/catalog-eligibility';
 	import { validatePositiveQuantity, buildCreateTicketItem } from '../model/ticket-quantity';
 	import { formatDistributionError } from '../model/distribution-error';
+	import { formatServiceDay } from '../model/service-day';
 	import {
 		buildDestinationOptionGroups,
 		resolveDestinationSelection,
@@ -55,6 +60,13 @@
 	let destinationSelection = $state('');
 	let customDestinationText = $state('');
 	let meal = $state<MealPeriod | undefined>('breakfast');
+	// Re-read the Thailand day each time the dialog opens: the page may stay open past midnight.
+	const today = $derived.by(() => {
+		void open;
+		return thailandCalendarDay();
+	});
+	// Reset to today with the rest of the form, so a later ticket never inherits the last day.
+	let serviceDate = $state(thailandCalendarDay());
 	let notes = $state('');
 	let selectedItems = $state<SelectedTicketItem[]>([]);
 	let pickerOpen = $state(false);
@@ -109,6 +121,7 @@
 		destinationSelection = '';
 		customDestinationText = '';
 		meal = 'breakfast';
+		serviceDate = thailandCalendarDay();
 		notes = '';
 		selectedItems = [];
 		pickerOpen = false;
@@ -125,6 +138,12 @@
 		// 2. Validation: Meal
 		if (requisitionType === 'food' && !meal) {
 			toast.error('ตั๋วเบิกจ่ายอาหารต้องระบุมื้ออาหาร (เช้า, กลางวัน, เย็น, อาหารว่าง)');
+			return;
+		}
+
+		// 2b. Validation: Service day (today or later — draft-food-ticket-service-date)
+		if (requisitionType === 'food' && (!serviceDate || serviceDate < thailandCalendarDay())) {
+			toast.error('วันที่แจกต้องเป็นวันนี้หรือวันถัดไป');
 			return;
 		}
 
@@ -164,7 +183,7 @@
 		const input = {
 			ticket_no: ticketNo,
 			requisition_type: requisitionType,
-			...(requisitionType === 'food' && meal ? { meal } : {}),
+			...(requisitionType === 'food' && meal ? { meal, service_date: serviceDate } : {}),
 			source_location: sourceLocation,
 			destination_location: destination,
 			items: selectedItems.map(buildCreateTicketItem),
@@ -357,6 +376,24 @@
 					<p class="mt-1 text-xs text-amber-800/80">
 						ระบบใช้มื้ออาหารในการตรวจสอบสิทธิ์รับอาหารซ้ำของผู้พักพิงในรอบวัน
 					</p>
+
+					<div class="space-y-1 pt-3">
+						<label for="service-date" class="text-sm font-semibold text-slate-800">
+							วันที่แจก <span class="text-red-500">*</span>
+						</label>
+						<Input
+							id="service-date"
+							type="date"
+							min={today}
+							bind:value={serviceDate}
+							class="w-full sm:w-56"
+						/>
+						{#if serviceDate}
+							<p class="text-xs text-amber-800/80">
+								ตั๋วนี้จะอยู่ในรอบแจก {formatServiceDay(serviceDate, today)} ของจุดแจก
+							</p>
+						{/if}
+					</div>
 				</fieldset>
 			{/if}
 
