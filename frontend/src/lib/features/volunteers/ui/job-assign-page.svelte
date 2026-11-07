@@ -26,6 +26,7 @@
 	import { resolve } from '$app/paths';
 	import { toast } from 'svelte-sonner';
 	import { useQueryClient } from '@tanstack/svelte-query';
+	import { SvelteMap } from 'svelte/reactivity';
 	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
 	import UserPlus from '@lucide/svelte/icons/user-plus';
 	import Search from '@lucide/svelte/icons/search';
@@ -43,10 +44,12 @@
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Checkbox } from '$lib/components/ui/checkbox/index.js';
 	import { Skeleton } from '$lib/components/ui/skeleton/index.js';
+	import PaginationControls from '$lib/components/pagination-controls.svelte';
 	import { useShelter } from '$lib/features/shelters';
 	import { errorMessage } from '$lib/utils/errors';
 	import AssignRosterRow from './assign-roster-row.svelte';
 	import AssignVolunteerDetailDialog from './assign-volunteer-detail-dialog.svelte';
+	import { resolveSkillOption, type SkillOption } from '../domain/skill-catalog';
 	import { shiftDutyWindow } from '../domain/duty-window';
 	import { assignmentCountForShift } from '../domain/shift-roster';
 	import {
@@ -246,6 +249,30 @@
 		}
 	);
 
+	const requiredSkills = $derived(job?.skills_required ?? []);
+	const hasJobSkills = $derived(requiredSkills.length > 0);
+	const jobSkills = $derived.by<SkillOption[]>(() => {
+		if (requiredSkills.length === 0) return [];
+		const map = new SvelteMap<string, SkillOption>();
+		for (const code of requiredSkills) {
+			const option = resolveSkillOption(code, skillCatalog.options);
+			if (option && !map.has(option.code)) {
+				map.set(option.code, option);
+			} else if (!option && !map.has(code)) {
+				map.set(code, {
+					code,
+					label: code,
+					description: '',
+					icon: '✨',
+					controlled: false
+				});
+			}
+		}
+		return Array.from(map.values());
+	});
+
+	const matchedCandidateCount = $derived(roster.rows.filter((r) => r.skillMatch).length);
+
 	const visible = $derived(
 		filterAssignRoster(roster.rows, {
 			search,
@@ -267,6 +294,16 @@
 		visible.filter((c) => c.assignable && selectedIds.includes(c.volunteer._id)).length
 	);
 	const allSelected = $derived(assignableCount > 0 && selectedCount === assignableCount);
+
+	const PAGE_SIZE = 10;
+	let currentPage = $state(1);
+
+	const unassignedTotal = $derived(unassigned.length);
+	const totalPages = $derived(Math.max(1, Math.ceil(unassignedTotal / PAGE_SIZE)));
+	const safePage = $derived(Math.max(1, Math.min(currentPage, totalPages)));
+	const paginatedUnassigned = $derived(
+		unassigned.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE)
+	);
 
 	const activeAssignedCount = $derived(shift ? (assignedByShiftId.get(shift.id) ?? 0) : 0);
 	const remaining = $derived(Math.max((shift?.quota ?? 0) - activeAssignedCount, 0));
@@ -502,6 +539,25 @@
 					</p>
 					<h2 class="text-lg font-bold text-foreground sm:text-xl">{job.title}</h2>
 					<p class="mt-0.5 text-xs text-muted-foreground">ศูนย์: {shelterLabel}</p>
+					<div class="mt-2 flex flex-wrap items-center gap-1.5">
+						<span class="text-xs font-medium text-muted-foreground">ทักษะที่ต้องการ:</span>
+						{#if jobSkills.length > 0}
+							{#each jobSkills as s (s.code)}
+								<span
+									class="inline-flex items-center gap-1 rounded-md bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary ring-1 ring-primary/20"
+								>
+									<Target class="size-3" />
+									{s.label}
+								</span>
+							{/each}
+						{:else}
+							<span
+								class="inline-flex items-center gap-1 rounded-md bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground"
+							>
+								ไม่จำกัดทักษะ (รับทุกทักษะ)
+							</span>
+						{/if}
+					</div>
 				</div>
 				{#if shift}
 					<div class="flex flex-wrap items-center gap-2">
@@ -672,7 +728,7 @@
 									class={SEGMENT_BASE}
 									onclick={() => (skillFilter = 'all')}
 								>
-									ทั้งหมด
+									ทั้งหมด ({roster.rows.length})
 								</Button>
 								<Button
 									variant={skillFilter === 'match' ? 'default' : 'ghost'}
@@ -680,7 +736,11 @@
 									onclick={() => (skillFilter = 'match')}
 								>
 									<Target class="h-3.5 w-3.5 shrink-0" />
-									ตรงกับงานอาสาสมัครนี้
+									{#if hasJobSkills}
+										ตรงกับงานอาสาสมัครนี้ ({matchedCandidateCount})
+									{:else}
+										ตรงกับงานอาสาสมัครนี้ (ไม่จำกัดทักษะ: {roster.rows.length})
+									{/if}
 								</Button>
 							</div>
 						</div>
@@ -777,6 +837,8 @@
 									{candidate}
 									selected={selectedIds.includes(candidate.volunteer._id)}
 									skillOptions={skillCatalog.options}
+									{requiredSkills}
+									{hasJobSkills}
 									capacityAvailable={remaining > 0}
 									onToggle={toggleOne}
 									onDetails={openDetails}
@@ -837,7 +899,22 @@
 										อาสาที่ผ่านตัวกรองทั้งหมดอยู่ในกะนี้แล้ว
 									</p>
 								{:else}
-									{@render rosterRows(unassigned)}
+									{@render rosterRows(paginatedUnassigned)}
+									{#if totalPages > 1}
+										<div
+											class="mt-4 flex flex-col items-center justify-between gap-3 border-t border-border pt-3 sm:flex-row"
+										>
+											<p class="text-xs text-muted-foreground">
+												แสดงหน้าที่ {safePage} จาก {totalPages} ({paginatedUnassigned.length} จาก {unassignedTotal}
+												คน)
+											</p>
+											<PaginationControls
+												bind:page={currentPage}
+												count={unassignedTotal}
+												perPage={PAGE_SIZE}
+											/>
+										</div>
+									{/if}
 								{/if}
 							</section>
 						</div>

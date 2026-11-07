@@ -11,6 +11,7 @@
 	import { SvelteMap } from 'svelte/reactivity';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Skeleton } from '$lib/components/ui/skeleton/index.js';
+	import PaginationControls from '$lib/components/pagination-controls.svelte';
 	import JobCapacitySummary from './job-capacity-summary.svelte';
 	import JobFilterChips, { type JobBoardStatusFilter } from './job-filter-chips.svelte';
 	import JobCard from './job-card.svelte';
@@ -68,6 +69,16 @@
 		}
 		return list;
 	});
+
+	const PAGE_SIZE = 9;
+	let currentPage = $state(1);
+
+	const totalFiltered = $derived(filteredJobs.length);
+	const totalPages = $derived(Math.max(1, Math.ceil(totalFiltered / PAGE_SIZE)));
+	const safePage = $derived(Math.max(1, Math.min(currentPage, totalPages)));
+	const paginatedJobs = $derived(
+		filteredJobs.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE)
+	);
 
 	function openCreate() {
 		void goto(resolve('/back-office/volunteers/jobs/new'));
@@ -135,7 +146,7 @@
 		</div>
 	{:else}
 		<div class="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
-			{#each filteredJobs as job (job._id)}
+			{#each paginatedJobs as job (job._id)}
 				<JobCard
 					{job}
 					applicantCount={applicantCounts.get(job._id) ?? 0}
@@ -145,5 +156,17 @@
 				/>
 			{/each}
 		</div>
+
+		{#if totalPages > 1}
+			<div class="flex flex-col items-center justify-between gap-3 pt-2 sm:flex-row">
+				<p class="text-xs text-muted-foreground">
+					แสดงงานที่ {(safePage - 1) * PAGE_SIZE + 1} - {Math.min(
+						safePage * PAGE_SIZE,
+						totalFiltered
+					)} จากทั้งหมด {totalFiltered} งาน
+				</p>
+				<PaginationControls page={safePage} {totalPages} onPageChange={(p) => (currentPage = p)} />
+			</div>
+		{/if}
 	{/if}
 </div>

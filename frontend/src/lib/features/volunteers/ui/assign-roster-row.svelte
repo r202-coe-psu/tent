@@ -11,6 +11,7 @@
 	import UserRound from '@lucide/svelte/icons/user-round';
 	import UserPlus from '@lucide/svelte/icons/user-plus';
 	import Tag from '@lucide/svelte/icons/tag';
+	import Target from '@lucide/svelte/icons/target';
 	import BadgeCheck from '@lucide/svelte/icons/badge-check';
 	import Clock from '@lucide/svelte/icons/clock';
 	import CircleCheck from '@lucide/svelte/icons/circle-check';
@@ -19,12 +20,14 @@
 	import { Button } from '$lib/components/ui/button/index.js';
 
 	import type { AssignCandidate } from '../domain/assign-roster';
-	import { resolveSkillOption, type SkillOption } from '../domain/skill-catalog';
+	import { resolveSkillOption, skillMatches, type SkillOption } from '../domain/skill-catalog';
 	import { identityVerificationStatus } from '../domain/verification';
 
 	let {
 		candidate,
 		skillOptions = [],
+		requiredSkills = [],
+		hasJobSkills = false,
 		selected,
 		capacityAvailable,
 		onToggle,
@@ -34,6 +37,8 @@
 		candidate: AssignCandidate;
 		/** Effective Master Data skills for rendering labels instead of stored ids. */
 		skillOptions?: readonly SkillOption[];
+		requiredSkills?: readonly string[];
+		hasJobSkills?: boolean;
 		selected: boolean;
 		capacityAvailable: boolean;
 		onToggle: (volunteerId: string, next: boolean) => void;
@@ -51,10 +56,18 @@
 		// This map is a local deduplication buffer and is not exposed to the template.
 		// eslint-disable-next-line svelte/prefer-svelte-reactivity
 		const map = new Map<string, SkillOption>();
-		for (const value of v.skills) {
+		for (const value of v.skills ?? []) {
 			const option = resolveSkillOption(value, skillOptions);
 			if (option && !map.has(option.code)) {
 				map.set(option.code, option);
+			} else if (!option && !map.has(value)) {
+				map.set(value, {
+					code: value,
+					label: value,
+					description: '',
+					icon: '✨',
+					controlled: false
+				});
 			}
 		}
 		return Array.from(map.values());
@@ -126,20 +139,35 @@
 						<UserRound class="size-3.5 shrink-0" />
 						{v.personnel_type === 'staff' ? 'เจ้าหน้าที่' : 'อาสาสมัคร'}
 					</span>
+					{#if hasJobSkills && candidate.skillMatch}
+						<span
+							class="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-semibold whitespace-nowrap text-emerald-700 ring-1 ring-emerald-200"
+						>
+							<Target class="size-3.5 shrink-0" />
+							ทักษะตรงกับงาน
+						</span>
+					{/if}
 				</div>
 
 				{#if skills.length > 0}
 					<div class="flex min-w-0 flex-wrap items-center gap-1.5">
 						<Tag class="size-3.5 shrink-0 text-primary" aria-hidden="true" />
 						<span class="sr-only">ทักษะ:</span>
-						{#each skills.slice(0, 2) as skill (skill.code)}
-							<span class="rounded-md bg-muted px-2 py-0.5 text-xs font-medium text-foreground">
+						{#each skills.slice(0, 3) as skill (skill.code)}
+							{@const isMatch =
+								hasJobSkills &&
+								requiredSkills.some((req) => skillMatches(skill.code, req, skillOptions))}
+							<span
+								class="rounded-md px-2 py-0.5 text-xs font-medium transition-colors {isMatch
+									? 'bg-emerald-100 font-semibold text-emerald-800 ring-1 ring-emerald-300'
+									: 'bg-muted text-foreground'}"
+							>
 								{skill.label}
 							</span>
 						{/each}
-						{#if skills.length > 2}
+						{#if skills.length > 3}
 							<span class="text-xs font-medium text-muted-foreground">
-								+{skills.length - 2}
+								+{skills.length - 3}
 							</span>
 						{/if}
 					</div>
