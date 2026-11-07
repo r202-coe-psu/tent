@@ -9,6 +9,7 @@ import {
 	seedSecurityQuestion,
 	type TestUser
 } from './helpers/couch';
+import { CAN_WRITE, READ_ONLY_REASON } from './helpers/e2e-env';
 import { injectSession, routeBrowserCouchThroughApp } from './helpers/login';
 import { ulid } from '../src/lib/db/ulid';
 
@@ -27,6 +28,8 @@ import { ulid } from '../src/lib/db/ulid';
  * Data (README §4): one `ssp_*` CouchDB user, one `item_master` and two `stock_ledger` rows on
  * the seeded SH001, all removed in afterAll (users, rows, and a zero-leak assertion).
  */
+
+const TAGS = { tag: ['@critical', '@supply'] };
 
 const RUN_ID = `ssp_${Date.now().toString(36)}_${Math.random().toString(36).substring(2, 6)}`;
 const SHELTER_DB = 'shelter_sh001';
@@ -50,10 +53,11 @@ const day = (offset: number) => new Date(Date.now() + offset * 86_400_000).toISO
 
 let session = '';
 
-test.describe('Self-purchased lots (/back-office/supply)', () => {
+test.describe('Self-purchased lots (/back-office/supply)', TAGS, () => {
 	test.describe.configure({ mode: 'serial' });
 
 	test.beforeAll(async () => {
+		test.skip(!CAN_WRITE, READ_ONLY_REASON);
 		await createCouchUser(USER);
 		await seedSecurityQuestion(USER.name);
 		session = await couchLogin(USER.name, USER.password);
@@ -115,6 +119,7 @@ test.describe('Self-purchased lots (/back-office/supply)', () => {
 	});
 
 	test.afterAll(async () => {
+		if (!CAN_WRITE) return;
 		const errors: Error[] = [];
 		const owned = new Set([itemId, lotA, lotB]);
 		for (const db of [SHELTER_DB, CATALOG_DB]) {
