@@ -162,6 +162,20 @@ export const useLedger = (enabled: () => boolean = () => true) =>
 		enabled: enabled()
 	}));
 
+/** Ledger rows of just these items, read by the `type + item_id` index (not the whole ledger). */
+export const useLedgerByItems = (
+	itemIds: () => readonly string[],
+	enabled: () => boolean = () => true
+) =>
+	createQuery(() => {
+		const ids = itemIds();
+		return {
+			queryKey: [...operationsKeys.ledger(), 'items', [...ids].sort().join(',')] as const,
+			queryFn: () => operationsRepository().listLedgerByItems(ids),
+			enabled: enabled()
+		};
+	});
+
 export const useLedgerByItem = (itemId: () => string | undefined) =>
 	createQuery(() => ({
 		queryKey: operationsKeys.byItem(itemId() ?? ''),

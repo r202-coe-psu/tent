@@ -1,8 +1,10 @@
 <script lang="ts">
 	import * as Table from '$lib/components/ui/table/index.js';
+	import { Input } from '$lib/components/ui/input';
+	import { Button } from '$lib/components/ui/button';
 	import { useItemMasters, formatUnit, useUnitsOfMeasure } from '$lib/features/catalog';
 	import {
-		useLedger,
+		useLedgerByItems,
 		useLotReservationClaims,
 		projectStockLotBalances
 	} from '$lib/features/operations';
@@ -12,6 +14,7 @@
 	import {
 		buildOneTimeDemandRows,
 		formatCoveragePercent,
+		oneTimeItemIds,
 		sortOneTimeDemandRows,
 		type OneTimeDemandRow
 	} from '../domain/one-time-demand';
@@ -25,7 +28,12 @@
 
 	const itemMastersQuery = useItemMasters();
 	const unitsQuery = useUnitsOfMeasure();
-	const ledgerQuery = useLedger();
+	// Read the ledger of the one-time items only, after the item list says which they are.
+	const itemIds = $derived(oneTimeItemIds(itemMastersQuery.data ?? []));
+	const ledgerQuery = useLedgerByItems(
+		() => itemIds,
+		() => itemMastersQuery.isSuccess
+	);
 	const reservationsQuery = useLotReservationClaims();
 	const peopleQuery = useShelterPeopleCounts(() => shelterCode ?? '');
 
@@ -34,7 +42,7 @@
 
 	const isLoading = $derived(
 		itemMastersQuery.isLoading ||
-			ledgerQuery.isLoading ||
+			ledgerQuery.isPending ||
 			reservationsQuery.isLoading ||
 			peopleQuery.isLoading
 	);
@@ -57,6 +65,17 @@
 			})
 		);
 	});
+
+	const PAGE_SIZE = 25;
+	let search = $state('');
+	let visible = $state(PAGE_SIZE);
+
+	const filtered = $derived.by(() => {
+		const q = search.trim().toLowerCase();
+		return q ? rows.filter((r) => r.name.toLowerCase().includes(q)) : rows;
+	});
+	const shown = $derived(filtered.slice(0, visible));
+	const shortCount = $derived(rows.filter((r) => r.status === 'short').length);
 
 	function unitLabel(row: OneTimeDemandRow) {
 		return formatUnit(row.unit, units, langState.current);
@@ -99,6 +118,12 @@
 			คำนวณจากคนในศูนย์
 			<span class="font-bold text-slate-900 tabular-nums">{formatQty(people)}</span>
 			คน
+			{#if peopleQuery.data}
+				<span class="text-slate-500">
+					(ผู้พักพิง {formatQty(peopleQuery.data.evacuees)} · เจ้าหน้าที่
+					{formatQty(peopleQuery.data.staff)} · จิตอาสา {formatQty(peopleQuery.data.volunteers)})
+				</span>
+			{/if}
 		</p>
 	</div>
 
@@ -125,10 +150,29 @@
 			<p class="text-base font-semibold text-slate-700">ยังไม่มีสินค้าประเภทแจกครั้งเดียว</p>
 		</div>
 	{:else}
+		<div class="flex flex-wrap items-center justify-between gap-3">
+			<p class="text-base text-slate-700">
+				{#if shortCount > 0}
+					<span class="font-bold text-red-700 tabular-nums">{shortCount}</span>
+					จาก {rows.length} รายการยังแจกไม่พอ
+				{:else}
+					ทั้ง {rows.length} รายการแจกได้พอทุกคน
+				{/if}
+			</p>
+			<Input
+				type="search"
+				class="w-full sm:w-64"
+				placeholder="ค้นหาสินค้า"
+				aria-label="ค้นหาสินค้า"
+				bind:value={search}
+				oninput={() => (visible = PAGE_SIZE)}
+			/>
+		</div>
+
 		<div class="overflow-hidden rounded-xl border border-slate-200/80 bg-white shadow-2xs">
 			<!-- Mobile: one card per item -->
 			<ul class="space-y-2.5 p-3 md:hidden">
-				{#each rows as row (row.itemId)}
+				{#each shown as row (row.itemId)}
 					<li
 						class="rounded-xl border bg-white p-3.5 {row.status === 'short'
 							? 'border-red-200'
@@ -157,7 +201,7 @@
 								</dd>
 							</div>
 							<div>
-								<dt class="text-slate-500">ขาด</dt>
+								<dt class="text-slate-500">ต้องหาเพิ่ม</dt>
 								<dd
 									class="font-semibold tabular-nums {row.status === 'short'
 										? 'text-red-700'
@@ -168,7 +212,7 @@
 								</dd>
 							</div>
 							<div>
-								<dt class="text-slate-500">Coverage</dt>
+								<dt class="text-slate-500">ครอบคลุม</dt>
 								<dd class="font-semibold text-slate-900 tabular-nums">
 									{formatCoveragePercent(row.coverage)}
 								</dd>
@@ -186,13 +230,13 @@
 							<Table.Head class="px-4 py-3">สินค้า</Table.Head>
 							<Table.Head class="px-4 py-3 text-right">ต้องการ</Table.Head>
 							<Table.Head class="px-4 py-3 text-right">มีพร้อมแจก</Table.Head>
-							<Table.Head class="px-4 py-3 text-right">ขาด</Table.Head>
-							<Table.Head class="px-4 py-3 text-right">Coverage</Table.Head>
+							<Table.Head class="px-4 py-3 text-right">ต้องหาเพิ่ม</Table.Head>
+							<Table.Head class="px-4 py-3 text-right">ครอบคลุม</Table.Head>
 							<Table.Head class="px-4 py-3">สถานะ</Table.Head>
 						</Table.Row>
 					</Table.Header>
 					<Table.Body>
-						{#each rows as row (row.itemId)}
+						{#each shown as row (row.itemId)}
 							<Table.Row>
 								<Table.Cell class="px-4 py-3">
 									<span class="text-base font-semibold text-slate-900">{row.name}</span>
@@ -227,5 +271,15 @@
 				</Table.Root>
 			</div>
 		</div>
+
+		{#if filtered.length === 0}
+			<p class="text-center text-base text-slate-600">ไม่พบสินค้าที่ค้นหา</p>
+		{:else if filtered.length > shown.length}
+			<div class="flex justify-center">
+				<Button variant="outline" onclick={() => (visible += PAGE_SIZE)}>
+					ดูเพิ่ม (แสดง {shown.length} จาก {filtered.length} รายการ)
+				</Button>
+			</div>
+		{/if}
 	{/if}
 </div>

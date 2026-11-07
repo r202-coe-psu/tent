@@ -66,6 +66,11 @@ function isActiveOneTime(item: OneTimeDemandItem): boolean {
 	return item.distribution_type === 'one_time' && !item.deactivated && !item.merged_into;
 }
 
+/** Ids of the active one-time items: the only ledger rows this view needs to read. */
+export function oneTimeItemIds(items: readonly OneTimeDemandItem[]): string[] {
+	return items.filter(isActiveOneTime).map((item) => item._id);
+}
+
 export function buildOneTimeDemandRows(input: BuildOneTimeDemandInput): OneTimeDemandRow[] {
 	const { people, now } = input;
 	const lotsByItem = new Map<string, OneTimeDemandLot[]>();

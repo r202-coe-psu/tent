@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
 	buildOneTimeDemandRows,
 	formatCoveragePercent,
+	oneTimeItemIds,
 	sortOneTimeDemandRows,
 	type OneTimeDemandItem,
 	type OneTimeDemandLot,
@@ -237,5 +238,18 @@ describe('sortOneTimeDemandRows', () => {
 		const b = rowOf('b', 10, 5);
 		const a = rowOf('a', 10, 5);
 		expect(sortOneTimeDemandRows([b, a]).map((r) => r.name)).toEqual(['a', 'b']);
+	});
+});
+
+describe('oneTimeItemIds', () => {
+	it('lists only active one_time items', () => {
+		expect(
+			oneTimeItemIds([
+				net,
+				{ ...net, _id: 'item_master:rice', distribution_type: 'recurring' },
+				{ ...net, _id: 'item_master:off', deactivated: true },
+				{ ...net, _id: 'item_master:merged', merged_into: 'item_master:net' }
+			])
+		).toEqual(['item_master:net']);
 	});
 });

@@ -66,6 +66,7 @@ export {
 export {
 	buildOneTimeDemandRows,
 	formatCoveragePercent,
+	oneTimeItemIds,
 	sortOneTimeDemandRows,
 	type OneTimeDemandItem,
 	type OneTimeDemandRow,
