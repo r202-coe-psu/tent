@@ -120,8 +120,6 @@
 		partial: rows.filter((r) => r.status === 'partial'),
 		shortage: rows.filter((r) => r.status === 'shortage')
 	});
-	/** Names listed on a card before "and N more". */
-	const CARD_NAMES = 2;
 
 	const categoryOfItem = $derived.by(() => {
 		const names = new Map((categoriesQuery.data ?? []).map((c) => [c._id, c.name]));
@@ -223,11 +221,6 @@
 		warning: 'text-amber-700',
 		ok: 'text-emerald-700'
 	}[card.tone]}
-	{@const toneChip = {
-		critical: 'border-red-200 bg-red-50 text-red-900',
-		warning: 'border-amber-200 bg-amber-50 text-amber-900',
-		ok: 'border-slate-200 bg-slate-50 text-slate-700'
-	}[card.tone]}
 	<button
 		type="button"
 		aria-pressed={isSelected}
@@ -245,25 +238,6 @@
 			<span class="text-sm text-slate-500">รายการ</span>
 		</span>
 		<span class="text-xs text-slate-500">{card.criteria}</span>
-		{#if list.length > 0}
-			<span class="mt-1 hidden w-full flex-wrap gap-1 xl:flex">
-				{#each list.slice(0, CARD_NAMES) as row (row.itemId)}
-					<span
-						class="inline-flex max-w-full items-center gap-1.5 rounded-md border px-2 py-0.5 text-xs {toneChip}"
-					>
-						<span class="truncate">{row.name}</span>
-						{#if card.status !== 'enough'}
-							<span class="font-semibold tabular-nums">{formatCoveragePercent(row.coverage)}</span>
-						{/if}
-					</span>
-				{/each}
-				{#if list.length > CARD_NAMES}
-					<span class="inline-flex items-center rounded-md px-1 py-0.5 text-xs text-slate-500">
-						+{list.length - CARD_NAMES} รายการ
-					</span>
-				{/if}
-			</span>
-		{/if}
 	</button>
 {/snippet}
 
