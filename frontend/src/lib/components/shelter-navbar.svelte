@@ -89,6 +89,7 @@
 		/>
 
 		<StaffAccountMenu
+			languageSwitcher
 			class="text-white hover:bg-white/5 focus-visible:ring-offset-[#0A2647] [&_svg]:text-white/80 [&>span:first-child]:bg-white/15 [&>span:first-child]:text-white"
 		/>
 	</div>
