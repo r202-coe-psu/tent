@@ -72,9 +72,12 @@
 						<Table.Head scope="col" class="{HEAD_CLASS} text-right"
 							>รับเข้าที่ซื้อเองในช่วงนี้</Table.Head
 						>
-						<Table.Head scope="col" class="{HEAD_CLASS} text-right"
-							>คงเหลือจากล็อตซื้อเอง</Table.Head
-						>
+						<Table.Head scope="col" class="{HEAD_CLASS} text-right">
+							คงเหลือจากล็อตซื้อเอง
+							<span class="block text-xs font-normal text-slate-500"
+								>นับทั้งหมด ไม่ตามช่วงวันที่</span
+							>
+						</Table.Head>
 					</Table.Row>
 				</Table.Header>
 				<Table.Body>

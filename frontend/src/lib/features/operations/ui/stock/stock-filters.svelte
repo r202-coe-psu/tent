@@ -162,29 +162,31 @@
 		</Label>
 	</div>
 
-	<div class="flex min-h-11 items-center gap-2.5 px-1">
-		<Switch
-			id="stock-self-purchased"
-			checked={selfPurchased}
-			onCheckedChange={(v) => onchange({ selfPurchased: v })}
-		/>
-		<Label
-			for="stock-self-purchased"
-			class="cursor-pointer text-sm whitespace-nowrap text-slate-700"
-		>
-			ซื้อเอง
-		</Label>
-	</div>
+	<div class="col-span-2 flex flex-wrap items-center gap-x-6 gap-y-1 md:col-span-4 lg:col-span-5">
+		<div class="flex min-h-11 items-center gap-2.5 px-1">
+			<Switch
+				id="stock-self-purchased"
+				checked={selfPurchased}
+				onCheckedChange={(v) => onchange({ selfPurchased: v })}
+			/>
+			<Label
+				for="stock-self-purchased"
+				class="cursor-pointer text-sm whitespace-nowrap text-slate-700"
+			>
+				ซื้อเอง
+			</Label>
+		</div>
 
-	<div class="flex min-h-11 items-center gap-2.5 px-1">
-		<Switch
-			id="stock-has-expiry"
-			checked={status === 'has_expiry'}
-			onCheckedChange={(v) => onchange({ status: v ? 'has_expiry' : 'all' })}
-		/>
-		<Label for="stock-has-expiry" class="cursor-pointer text-sm whitespace-nowrap text-slate-700">
-			มีวันหมดอายุ
-		</Label>
+		<div class="flex min-h-11 items-center gap-2.5 px-1">
+			<Switch
+				id="stock-has-expiry"
+				checked={status === 'has_expiry'}
+				onCheckedChange={(v) => onchange({ status: v ? 'has_expiry' : 'all' })}
+			/>
+			<Label for="stock-has-expiry" class="cursor-pointer text-sm whitespace-nowrap text-slate-700">
+				มีวันหมดอายุ
+			</Label>
+		</div>
 	</div>
 
 	{#if canShowOverall}

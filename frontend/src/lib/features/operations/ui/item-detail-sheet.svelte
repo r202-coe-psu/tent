@@ -2,6 +2,8 @@
 	import * as Sheet from '$lib/components/ui/sheet';
 	import * as Tabs from '$lib/components/ui/tabs';
 	import { Button } from '$lib/components/ui/button/index.js';
+	import { Switch } from '$lib/components/ui/switch/index.js';
+	import { Label } from '$lib/components/ui/label/index.js';
 	import { ItemPolicyPanel } from '$lib/features/sop-ratios/item-policy';
 	import ArrowDownToLine from '@lucide/svelte/icons/arrow-down-to-line';
 	import ArrowUpFromLine from '@lucide/svelte/icons/arrow-up-from-line';
@@ -57,6 +59,16 @@
 
 	const lotRows = $derived(
 		buildLotRows(lots, storagePoints.points, Date.now(), itemsById, selfPurchasedRefs)
+	);
+
+	// "ซื้อเอง" switch of the lots tab, remembered per item so opening another item starts off.
+	let selfOnlyItemId = $state<string | null>(null);
+	const selfOnly = $derived(row !== undefined && selfOnlyItemId === row._id);
+	// Keep each lot's place in the consumption order when the list is narrowed.
+	const shownLots = $derived(
+		lotRows
+			.map((lot, index) => ({ lot, order: index + 1 }))
+			.filter(({ lot }) => !selfOnly || lot.isSelfPurchased)
 	);
 
 	const ACTIONS = [
@@ -157,11 +169,23 @@
 
 					<div class="min-h-0 flex-1 overflow-y-auto p-4">
 						<Tabs.Content value="lots">
-							{#if lotRows.length === 0}
-								<p class="py-10 text-center text-sm font-medium text-slate-500">ไม่มีล็อตคงเหลือ</p>
+							<div class="mb-3 flex min-h-11 items-center gap-2.5 px-1">
+								<Switch
+									id="lots-self-purchased"
+									checked={selfOnly}
+									onCheckedChange={(v) => (selfOnlyItemId = v ? row._id : null)}
+								/>
+								<Label for="lots-self-purchased" class="cursor-pointer text-sm text-slate-700">
+									เฉพาะล็อตที่ซื้อเอง
+								</Label>
+							</div>
+							{#if shownLots.length === 0}
+								<p class="py-10 text-center text-sm font-medium text-slate-500">
+									{selfOnly ? 'ไม่มีล็อตที่ซื้อเอง' : 'ไม่มีล็อตคงเหลือ'}
+								</p>
 							{:else}
 								<ul class="space-y-2.5">
-									{#each lotRows as lot, index (lot.lotRef)}
+									{#each shownLots as { lot, order } (lot.lotRef)}
 										<li
 											class="rounded-xl border p-3 {lot.isExpired || lot.isNegative
 												? 'border-red-200 bg-red-50/40'
@@ -238,9 +262,7 @@
 													? 'text-red-800'
 													: 'text-teal-900'}"
 											>
-												{lot.isExpired || lot.isNegative
-													? ''
-													: `ลำดับที่ ${index + 1}: `}{lot.reason}
+												{lot.isExpired || lot.isNegative ? '' : `ลำดับที่ ${order}: `}{lot.reason}
 											</p>
 										</li>
 									{/each}

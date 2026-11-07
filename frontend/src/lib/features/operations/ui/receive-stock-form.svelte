@@ -874,6 +874,25 @@
 				<Form.FieldErrors />
 			</Form.Field>
 
+			{#if sourceMode === 'manual'}
+				<div class="col-span-1 sm:col-span-2">
+					<label
+						for="receive-self-purchased"
+						class="flex min-h-11 cursor-pointer items-center gap-2.5 rounded-lg border border-slate-200 bg-white px-3 py-2"
+					>
+						<Checkbox
+							id="receive-self-purchased"
+							checked={selfPurchased}
+							onCheckedChange={(v) => setSelfPurchased(v === true)}
+						/>
+						<span class="text-sm font-semibold text-slate-900">
+							ซื้อเอง
+							<span class="font-normal text-muted-foreground">(ศูนย์ซื้อของนี้มาเอง)</span>
+						</span>
+					</label>
+				</div>
+			{/if}
+
 			<!-- Storage Location (lot.storage_point_id + lot.storage_zone) -->
 			<Form.Field {form} name="lot.storage_zone" class="col-span-1 sm:col-span-2">
 				<Form.Control>
@@ -958,20 +977,6 @@
 				</Form.Control>
 				<Form.FieldErrors />
 			</Form.Field>
-
-			{#if sourceMode === 'manual'}
-				<div class="col-span-1 flex min-h-11 items-center gap-2.5 sm:col-span-2">
-					<Checkbox
-						id="receive-self-purchased"
-						checked={selfPurchased}
-						onCheckedChange={(v) => setSelfPurchased(v === true)}
-					/>
-					<Label for="receive-self-purchased" class="cursor-pointer text-sm font-semibold">
-						ซื้อเอง
-						<span class="font-normal text-muted-foreground">(ศูนย์ซื้อของนี้มาเอง)</span>
-					</Label>
-				</div>
-			{/if}
 
 			<div class="col-span-1 sm:col-span-2">
 				<button

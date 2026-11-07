@@ -59,7 +59,12 @@
 		STOCK_PAGE_SIZE,
 		type StockUrlState
 	} from './stock/stock-url-state';
-	import { negativeLotSummary, negativeLots, projectLotsByItem } from '../domain/operations';
+	import {
+		negativeLotSummary,
+		negativeLots,
+		projectLotsByItem,
+		type StockLotBalance
+	} from '../domain/operations';
 	import { selfPurchasedLotRefs } from '../domain/self-purchased';
 	import {
 		dailyConsumption,
@@ -242,6 +247,21 @@
 	const lotsByItem = $derived(projected.byItem);
 	/** Lots the shelter bought itself ("ซื้อเอง", schema_v 7). */
 	const selfPurchasedRefs = $derived(selfPurchasedLotRefs(ledger));
+	/**
+	 * Lots the table and the detail sheet work from. With the "ซื้อเอง" filter on, only the
+	 * self-purchased lots count, so quantity, expiry and place describe what the shelter bought.
+	 */
+	const viewLotsByItem = $derived.by(() => {
+		if (!urlState.selfPurchased) return lotsByItem;
+		const result = new SvelteMap<string, StockLotBalance[]>();
+		for (const [itemId, lots] of lotsByItem) {
+			result.set(
+				itemId,
+				lots.filter((lot) => selfPurchasedRefs.has(lot.lot_ref))
+			);
+		}
+		return result;
+	});
 	const selfPurchasedItemIds = $derived(
 		new Set(
 			[...lotsByItem.values()]
@@ -275,7 +295,7 @@
 
 	const stockSummaryByItem = $derived.by(() => {
 		const result = new SvelteMap<string, ItemStockSummary>();
-		for (const [itemId, lots] of lotsByItem) {
+		for (const [itemId, lots] of viewLotsByItem) {
 			result.set(
 				itemId,
 				summarizeItemStock(lots, undefined, undefined, lotPriorityItems.get(itemId))
@@ -287,7 +307,7 @@
 	/** Location label: the single storage point, or the first one plus a count. */
 	const locationLabelByItem = $derived.by(() => {
 		const result = new SvelteMap<string, string>();
-		for (const [itemId, lots] of lotsByItem) {
+		for (const [itemId, lots] of viewLotsByItem) {
 			const names = [
 				...new Set(
 					lots
@@ -348,14 +368,18 @@
 			const override = overrideByItem.get(item._id);
 			const reorderThreshold = resolveReorderThreshold(occupancy, item, override);
 			const summary = stockSummaryByItem.get(item._id);
-			const negative = negativeLotSummary(lotsByItem.get(item._id) ?? []);
+			const negative = negativeLotSummary(viewLotsByItem.get(item._id) ?? []);
+			// "ซื้อเอง" filter: show only what was bought, but keep status and cover on the full stock.
+			const shownQty = urlState.selfPurchased
+				? (viewLotsByItem.get(item._id) ?? []).reduce((sum, lot) => addQty(sum, lot.qty), '0')
+				: qtyOnHand;
 			return {
 				_id: item._id,
 				name: item.name,
 				category: item.category,
 				categoryLabel: getCategoryLabel(item.category),
 				unitLabel: formatUnit(item.unit, units, langState.current),
-				qtyOnHand,
+				qtyOnHand: shownQty,
 				reorderThreshold,
 				status: deriveStockQtyStatus(qtyOnHand, reorderThreshold),
 				expiryState: summary?.expiryState ?? 'none',
@@ -714,7 +738,7 @@
 <ItemDetailSheet
 	bind:open={detailOpen}
 	row={selectedManageItem}
-	lots={selectedItemId ? (lotsByItem.get(selectedItemId) ?? []) : []}
+	lots={selectedItemId ? (viewLotsByItem.get(selectedItemId) ?? []) : []}
 	itemsById={lotPriorityItems}
 	{selfPurchasedRefs}
 	shelterCode={getShelterCode()}
