@@ -30,14 +30,12 @@
 	import UserPlus from '@lucide/svelte/icons/user-plus';
 	import Search from '@lucide/svelte/icons/search';
 	import CalendarDays from '@lucide/svelte/icons/calendar-days';
-	import Users from '@lucide/svelte/icons/users';
 	import Target from '@lucide/svelte/icons/target';
 	import Timer from '@lucide/svelte/icons/timer';
 	import ShieldCheck from '@lucide/svelte/icons/shield-check';
 	import CircleCheck from '@lucide/svelte/icons/circle-check';
 	import UserRoundPlus from '@lucide/svelte/icons/user-round-plus';
 	import Send from '@lucide/svelte/icons/send';
-	import * as Select from '$lib/components/ui/select/index.js';
 	import * as Dialog from '$lib/components/ui/dialog/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Label } from '$lib/components/ui/label/index.js';
@@ -467,294 +465,349 @@
 			ไม่พบงานอาสาสมัครนี้ (อาจถูกลบไปแล้ว)
 		</p>
 	{:else}
-		<!-- Shift picker + multi-state quota breakdown -->
-		<div class="rounded-2xl bg-primary-dark px-4 py-4 text-white sm:px-5">
-			<p class="text-sm font-bold break-words">{job.title}</p>
-			<p class="mt-0.5 text-xs text-white/60">ศูนย์: {shelterLabel}</p>
-
-			<div class="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
-				<div class="space-y-2">
-					<Label for="assign-shift" class="inline-flex items-center gap-1.5 text-xs text-white/70">
-						<CalendarDays class="h-3.5 w-3.5" />
-						เลือกกะที่ต้องการจ่ายงาน/มอบหมาย:
-					</Label>
-					<Select.Root type="single" value={activeShiftId} onValueChange={pickShift}>
-						<Select.Trigger
-							id="assign-shift"
-							class="!h-11 w-full min-w-0 overflow-hidden border-white/20 bg-white/10 text-left text-sm font-bold text-white"
-						>
-							{#if shift && activeIndex >= 0}
-								<span class="block min-w-0 truncate">{shiftLabel(shift)}</span>
-							{:else}
-								<span class="block min-w-0 truncate">ยังไม่มีกะย่อยในงานนี้</span>
-							{/if}
-						</Select.Trigger>
-						<Select.Content>
-							{#each orderedShifts as s (s.id)}
-								<Select.Item value={s.id} label={shiftLabel(s)} />
-							{/each}
-						</Select.Content>
-					</Select.Root>
-				</div>
-
-				<div class="space-y-2">
-					<p class="inline-flex items-center gap-1.5 text-xs font-medium text-white/70">
-						<Users class="h-3.5 w-3.5" />
-						สถานะกำลังพลในกะนี้:
+		<!-- Job summary card -->
+		<div class="rounded-2xl border border-border bg-card p-4 sm:p-5">
+			<div class="flex flex-wrap items-center justify-between gap-3">
+				<div>
+					<p class="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+						งานอาสาสมัคร
 					</p>
-					<div class="grid grid-cols-1 gap-2 sm:grid-cols-3">
-						<div class="rounded-xl bg-white/8 px-3 py-2 ring-1 ring-white/10">
-							<p class="text-[11px] text-white/60">เป้าหมายทั้งหมด</p>
-							<p class="text-lg font-bold tabular-nums">{shift?.quota ?? 0} คน</p>
+					<h2 class="text-lg font-bold text-foreground sm:text-xl">{job.title}</h2>
+					<p class="mt-0.5 text-xs text-muted-foreground">ศูนย์: {shelterLabel}</p>
+				</div>
+				{#if shift}
+					<div class="flex flex-wrap items-center gap-2">
+						<div class="rounded-xl bg-muted px-3 py-2 text-center">
+							<p class="text-[11px] text-muted-foreground">เป้าหมายกะหลัก</p>
+							<p class="text-base font-bold text-foreground tabular-nums">{shift.quota} คน</p>
 						</div>
-						<div class="rounded-xl bg-emerald-500/15 px-3 py-2 ring-1 ring-emerald-400/30">
-							<p class="inline-flex items-center gap-1.5 text-[11px] text-emerald-200">
-								<CircleCheck class="h-3.5 w-3.5 shrink-0" />
-								อยู่ในกะแล้ว
-							</p>
-							<p class="text-lg font-bold text-emerald-300 tabular-nums">
+						<div class="rounded-xl bg-emerald-50 px-3 py-2 text-center ring-1 ring-emerald-200">
+							<p class="text-[11px] text-emerald-800">อยู่ในกะแล้ว</p>
+							<p class="text-base font-bold text-emerald-700 tabular-nums">
 								{activeAssignedCount} คน
 							</p>
 						</div>
-						<div class="rounded-xl bg-white/8 px-3 py-2 ring-1 ring-white/10">
-							<p class="text-[11px] text-white/60">ยังขาดอีก</p>
-							<p class="text-lg font-bold tabular-nums">{remaining} คน</p>
+						<div class="rounded-xl bg-muted px-3 py-2 text-center">
+							<p class="text-[11px] text-muted-foreground">ยังขาดอีก</p>
+							<p class="text-base font-bold text-foreground tabular-nums">{remaining} คน</p>
 						</div>
 					</div>
-					{#if shift}
-						{@const total = shift.quota > 0 ? shift.quota : 1}
-						<div class="flex h-2 w-full overflow-hidden rounded-full bg-white/15">
-							<div
-								class="h-full bg-emerald-500"
-								style:width="{(Math.min(activeAssignedCount, shift.quota) / total) * 100}%"
-							></div>
-						</div>
-					{/if}
-				</div>
+				{/if}
 			</div>
 		</div>
 
-		<!-- Search + the three filter groups -->
-		<div class="space-y-3 rounded-2xl border border-border bg-card p-3.5">
-			<div class="relative">
-				<Search
-					class="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground"
-				/>
-				<Input
-					bind:value={search}
-					class="!h-11 pl-9"
-					placeholder="ค้นหาชื่อ-นามสกุล, ชื่อเล่น, เบอร์โทรศัพท์, รหัสประจำตัวจิตอาสา..."
-					aria-label="ค้นหาอาสาสมัคร"
-				/>
-			</div>
-
-			<div class="grid grid-cols-1 gap-3 lg:grid-cols-3">
-				<div class="space-y-1.5">
-					<p class="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
-						<Target class="h-3.5 w-3.5" />
-						ตัวกรองความตรงของทักษะ:
-					</p>
-					<div class="flex flex-wrap gap-1 rounded-xl bg-muted p-1">
-						<Button
-							variant={skillFilter === 'all' ? 'default' : 'ghost'}
-							class={SEGMENT_BASE}
-							onclick={() => (skillFilter = 'all')}
-						>
-							ทั้งหมด
-						</Button>
-						<Button
-							variant={skillFilter === 'match' ? 'default' : 'ghost'}
-							class={SEGMENT_BASE}
-							onclick={() => (skillFilter = 'match')}
-						>
-							<Target class="h-3.5 w-3.5 shrink-0" />
-							ตรงกับงานอาสาสมัครนี้
-						</Button>
-					</div>
-				</div>
-
-				<div class="space-y-1.5">
-					<p class="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
-						<Timer class="h-3.5 w-3.5" />
-						ตัวกรองความพร้อมในกะ:
-					</p>
-					<div class="flex flex-wrap gap-1 rounded-xl bg-muted p-1">
-						<Button
-							variant={availabilityFilter === 'all' ? 'default' : 'ghost'}
-							class={SEGMENT_BASE}
-							onclick={() => (availabilityFilter = 'all')}
-						>
-							ทั้งหมด
-						</Button>
-						<Button
-							variant={availabilityFilter === 'ready' ? 'default' : 'ghost'}
-							class={SEGMENT_BASE}
-							onclick={() => (availabilityFilter = 'ready')}
-						>
-							<CircleCheck class="h-3.5 w-3.5 shrink-0" />
-							พร้อมปฏิบัติงาน
-						</Button>
-						<Button
-							variant={availabilityFilter === 'no_collision' ? 'default' : 'ghost'}
-							class={SEGMENT_BASE}
-							onclick={() => (availabilityFilter = 'no_collision')}
-						>
-							<Timer class="h-3.5 w-3.5 shrink-0" />
-							เวลาไม่ชนกะ
-						</Button>
-					</div>
-				</div>
-
-				<div class="space-y-1.5">
-					<p class="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
-						<ShieldCheck class="h-3.5 w-3.5" />
-						ตัวกรองสิทธิ์/การยืนยันตัวตน:
-					</p>
-					<div class="flex flex-wrap gap-1 rounded-xl bg-muted p-1">
-						<Button
-							variant={eligibilityFilter === 'all' ? 'default' : 'ghost'}
-							class={SEGMENT_BASE}
-							onclick={() => (eligibilityFilter = 'all')}
-						>
-							ทั้งหมด
-						</Button>
-						<Button
-							variant={eligibilityFilter === 'verified' ? 'default' : 'ghost'}
-							class={SEGMENT_BASE}
-							onclick={() => (eligibilityFilter = 'verified')}
-						>
-							ยืนยันตัวตนแล้ว
-						</Button>
-						<Button
-							variant={eligibilityFilter === 'professional' ? 'default' : 'ghost'}
-							class={SEGMENT_BASE}
-							onclick={() => (eligibilityFilter = 'professional')}
-						>
-							ทักษะวิชาชีพ/เจ้าหน้าที่
-						</Button>
-					</div>
-				</div>
-			</div>
-		</div>
-
-		<!-- Roster -->
-		<div class="rounded-2xl border border-border bg-card p-3.5">
-			<div class="flex flex-wrap items-center justify-between gap-2 border-b border-border pb-3">
-				<div class="flex items-center gap-2.5">
-					<Checkbox
-						id="assign-select-all"
-						checked={allSelected}
-						disabled={assignableCount === 0}
-						onCheckedChange={(next) => toggleAll(next === true)}
-					/>
-					<Label for="assign-select-all" class="cursor-pointer text-sm font-bold">
-						เลือกทั้งหมดที่ผ่านตัวกรอง ({assignableCount} คนที่สามารถมอบหมายได้)
-					</Label>
-				</div>
-				<p class="text-xs text-muted-foreground">
-					แสดงผล {visible.length} จากทั้งหมด {roster.rows.length} คน
-				</p>
-			</div>
-
-			{#snippet rosterRows(rows: typeof visible)}
-				<ul class="space-y-2">
-					{#each rows as candidate (candidate.volunteer._id)}
-						<AssignRosterRow
-							{candidate}
-							selected={selectedIds.includes(candidate.volunteer._id)}
-							skillOptions={skillCatalog.options}
-							capacityAvailable={remaining > 0}
-							onToggle={toggleOne}
-							onDetails={openDetails}
-							onAssign={assignOne}
-						/>
-					{/each}
-				</ul>
-			{/snippet}
-
-			{#if roster.error}
-				<p class="py-8 text-center text-sm text-destructive">{roster.error}</p>
-			{:else if visible.length === 0}
-				<p class="py-8 text-center text-sm text-muted-foreground">ไม่พบอาสาสมัครที่ตรงกับตัวกรอง</p>
-			{:else}
-				<div class="space-y-5 pt-3">
-					{#if onShift.length > 0}
-						<section>
-							<div
-								class="mb-2 flex flex-wrap items-center justify-between gap-2 rounded-xl bg-emerald-50 px-3 py-2 ring-1 ring-emerald-200"
+		<!-- 2 Columns Layout: Left = กะงาน, Right = จิตอาสา -->
+		<div class="grid grid-cols-1 items-start gap-4 lg:grid-cols-12">
+			<!-- Col ซ้าย: เลือกเวลากะงาน (ไม่มี select ตัวใหญ่) -->
+			<aside class="space-y-3 lg:sticky lg:top-4 lg:col-span-5 xl:col-span-4">
+				<div class="space-y-3 rounded-2xl border border-border bg-card p-3.5">
+					<div class="flex items-center justify-between gap-2 border-b border-border pb-2.5">
+						<h3 class="inline-flex items-center gap-1.5 text-sm font-bold text-foreground">
+							<CalendarDays class="h-4 w-4 text-primary" />
+							เวลากะงาน ({orderedShifts.length} กะ)
+						</h3>
+						{#if multiShift}
+							<span
+								class="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary"
 							>
-								<h4 class="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-800">
-									<CircleCheck class="h-4 w-4 shrink-0" />
-									อยู่ในกะนี้แล้ว
-									<span
-										class="rounded-full bg-white px-2 py-0.5 tabular-nums ring-1 ring-emerald-200"
-									>
-										{onShift.length} คน
-									</span>
-								</h4>
-								<p class="text-[11px] text-emerald-800/80">
-									มอบหมายซ้ำไม่ได้ — ถอดออกได้ที่แท็บ “กะและตารางกะ”
-								</p>
-							</div>
-							{@render rosterRows(onShift)}
-						</section>
-					{/if}
-
-					<section>
-						<div
-							class="mb-2 flex flex-wrap items-center justify-between gap-2 rounded-xl bg-muted px-3 py-2"
-						>
-							<h4 class="inline-flex items-center gap-1.5 text-xs font-bold text-foreground">
-								<UserRoundPlus class="h-4 w-4 shrink-0 text-primary" />
-								ยังไม่ได้มอบหมายในกะนี้
-								<span class="rounded-full bg-card px-2 py-0.5 tabular-nums ring-1 ring-border">
-									{unassigned.length} คน
-								</span>
-							</h4>
-							<p class="text-[11px] text-muted-foreground">
-								มอบหมายได้ {assignableCount} คน · เวลาชนกะอื่น {unassigned.length - assignableCount} คน
-							</p>
-						</div>
-						{#if unassigned.length === 0}
-							<p class="py-6 text-center text-sm text-muted-foreground">
-								อาสาที่ผ่านตัวกรองทั้งหมดอยู่ในกะนี้แล้ว
-							</p>
-						{:else}
-							{@render rosterRows(unassigned)}
+								เลือก {targetShifts.length} กะ
+							</span>
 						{/if}
-					</section>
-				</div>
-			{/if}
-		</div>
+					</div>
+					<p class="text-xs text-muted-foreground">
+						คลิกที่กะเพื่อเลือกเป็นกะหลัก หรือติ๊ก “เลือกด้วย” เพื่อมอบหมายพร้อมกัน
+					</p>
 
-		{#if otherShifts.length > 0}
-			<div
-				class="space-y-2 rounded-2xl border border-border bg-card p-3.5"
-				data-testid="multi-shift"
-			>
-				<p class="text-xs font-semibold text-foreground">
-					มอบหมายเข้ากะอื่นของงานนี้พร้อมกัน (ไม่บังคับ)
-				</p>
-				<p class="text-2xs text-muted-foreground">
-					ติ๊กกะที่ต้องการเพิ่มจากกะที่เลือกไว้ด้านบน คนที่เลือกจะถูกมอบหมายทุกกะที่ติ๊ก
-					กะที่คนนั้นอยู่แล้ว เวลาซ้อนกัน หรือเต็ม จะถูกข้ามและแจ้งผลให้
-				</p>
-				<div class="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
-					{#each otherShifts as s (s.id)}
-						<label
-							class="flex min-h-11 cursor-pointer items-center gap-2.5 rounded-xl border border-border bg-background px-3 py-2 text-sm"
-						>
-							<Checkbox
-								checked={extraShiftIds.includes(s.id)}
-								onCheckedChange={(next) => toggleExtraShift(s.id, next === true)}
-								aria-label={`มอบหมายเข้ากะ ${shiftLabel(s)} ด้วย`}
-							/>
-							<span class="min-w-0">{shiftLabel(s)}</span>
-						</label>
-					{/each}
+					{#if orderedShifts.length === 0}
+						<p class="py-6 text-center text-xs text-muted-foreground">งานนี้ยังไม่มีกะย่อย</p>
+					{:else}
+						<div class="space-y-2" data-testid="multi-shift">
+							{#each orderedShifts as s (s.id)}
+								{@const isActive = s.id === activeShiftId}
+								{@const isExtra = extraShiftIds.includes(s.id)}
+								{@const assigned = assignedByShiftId.get(s.id) ?? 0}
+								{@const shiftRem = Math.max(s.quota - assigned, 0)}
+								{@const total = s.quota > 0 ? s.quota : 1}
+								<div
+									class="rounded-xl border p-3 transition-colors {isActive
+										? 'border-primary bg-primary/5 ring-1 ring-primary'
+										: isExtra
+											? 'border-primary/40 bg-primary/5'
+											: 'border-border bg-background hover:border-border/80'}"
+								>
+									<div class="flex items-start justify-between gap-2">
+										<button
+											type="button"
+											class="flex-1 cursor-pointer rounded-lg text-left focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
+											onclick={() => pickShift(s.id)}
+											aria-label={`เลือกกะ ${shiftLabel(s)} เป็นกะหลัก`}
+										>
+											<div class="flex flex-wrap items-center gap-1.5">
+												<span class="text-sm font-bold text-foreground">
+													{s.date}
+												</span>
+												{#if s.end_date !== s.date}
+													<span class="text-xs text-muted-foreground">(ถึง {s.end_date})</span>
+												{/if}
+												{#if isActive}
+													<span
+														class="rounded-full bg-primary px-2 py-0.5 text-[11px] font-semibold text-primary-foreground"
+													>
+														กะหลัก
+													</span>
+												{/if}
+											</div>
+											<p class="mt-0.5 text-xs font-medium text-muted-foreground">
+												{s.start_time} - {s.end_time} น.
+											</p>
+										</button>
+
+										{#if !isActive}
+											<div class="flex shrink-0 items-center gap-1.5 pt-0.5">
+												<Checkbox
+													id={`extra-shift-${s.id}`}
+													checked={isExtra}
+													onCheckedChange={(next) => toggleExtraShift(s.id, next === true)}
+													aria-label={`มอบหมายเข้ากะ ${shiftLabel(s)} ด้วย`}
+												/>
+												<Label
+													for={`extra-shift-${s.id}`}
+													class="cursor-pointer text-xs font-medium text-muted-foreground select-none"
+												>
+													เลือกด้วย
+												</Label>
+											</div>
+										{/if}
+									</div>
+
+									<div class="mt-2.5 space-y-1 border-t border-border/60 pt-2 text-xs">
+										<div class="flex items-center justify-between text-muted-foreground">
+											<span>โควตา {assigned}/{s.quota} คน</span>
+											<span
+												class={shiftRem === 0
+													? 'font-semibold text-destructive'
+													: 'font-semibold text-emerald-700'}
+											>
+												{shiftRem === 0 ? 'กะเต็มแล้ว' : `ยังขาด ${shiftRem} คน`}
+											</span>
+										</div>
+										<div class="flex h-1.5 w-full overflow-hidden rounded-full bg-muted">
+											<div
+												class="h-full {shiftRem === 0
+													? 'bg-destructive'
+													: 'bg-emerald-500'} transition-all"
+												style:width="{(Math.min(assigned, s.quota) / total) * 100}%"
+											></div>
+										</div>
+									</div>
+								</div>
+							{/each}
+						</div>
+					{/if}
 				</div>
-			</div>
-		{/if}
+			</aside>
+
+			<!-- Col ขวา: จิตอาสา -->
+			<main class="space-y-4 lg:col-span-7 xl:col-span-8">
+				<!-- Search + the three filter groups -->
+				<div class="space-y-3 rounded-2xl border border-border bg-card p-3.5">
+					<div class="relative">
+						<Search
+							class="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+						/>
+						<Input
+							bind:value={search}
+							class="!h-11 pl-9"
+							placeholder="ค้นหาชื่อ-นามสกุล, ชื่อเล่น, เบอร์โทรศัพท์, รหัสประจำตัวจิตอาสา..."
+							aria-label="ค้นหาอาสาสมัคร"
+						/>
+					</div>
+
+					<div class="grid grid-cols-1 gap-3 lg:grid-cols-3">
+						<div class="space-y-1.5">
+							<p class="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+								<Target class="h-3.5 w-3.5" />
+								ตัวกรองความตรงของทักษะ:
+							</p>
+							<div class="flex flex-wrap gap-1 rounded-xl bg-muted p-1">
+								<Button
+									variant={skillFilter === 'all' ? 'default' : 'ghost'}
+									class={SEGMENT_BASE}
+									onclick={() => (skillFilter = 'all')}
+								>
+									ทั้งหมด
+								</Button>
+								<Button
+									variant={skillFilter === 'match' ? 'default' : 'ghost'}
+									class={SEGMENT_BASE}
+									onclick={() => (skillFilter = 'match')}
+								>
+									<Target class="h-3.5 w-3.5 shrink-0" />
+									ตรงกับงานอาสาสมัครนี้
+								</Button>
+							</div>
+						</div>
+
+						<div class="space-y-1.5">
+							<p class="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+								<Timer class="h-3.5 w-3.5" />
+								ตัวกรองความพร้อมในกะ:
+							</p>
+							<div class="flex flex-wrap gap-1 rounded-xl bg-muted p-1">
+								<Button
+									variant={availabilityFilter === 'all' ? 'default' : 'ghost'}
+									class={SEGMENT_BASE}
+									onclick={() => (availabilityFilter = 'all')}
+								>
+									ทั้งหมด
+								</Button>
+								<Button
+									variant={availabilityFilter === 'ready' ? 'default' : 'ghost'}
+									class={SEGMENT_BASE}
+									onclick={() => (availabilityFilter = 'ready')}
+								>
+									<CircleCheck class="h-3.5 w-3.5 shrink-0" />
+									พร้อมปฏิบัติงาน
+								</Button>
+								<Button
+									variant={availabilityFilter === 'no_collision' ? 'default' : 'ghost'}
+									class={SEGMENT_BASE}
+									onclick={() => (availabilityFilter = 'no_collision')}
+								>
+									<Timer class="h-3.5 w-3.5 shrink-0" />
+									เวลาไม่ชนกะ
+								</Button>
+							</div>
+						</div>
+
+						<div class="space-y-1.5">
+							<p class="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+								<ShieldCheck class="h-3.5 w-3.5" />
+								ตัวกรองสิทธิ์/การยืนยันตัวตน:
+							</p>
+							<div class="flex flex-wrap gap-1 rounded-xl bg-muted p-1">
+								<Button
+									variant={eligibilityFilter === 'all' ? 'default' : 'ghost'}
+									class={SEGMENT_BASE}
+									onclick={() => (eligibilityFilter = 'all')}
+								>
+									ทั้งหมด
+								</Button>
+								<Button
+									variant={eligibilityFilter === 'verified' ? 'default' : 'ghost'}
+									class={SEGMENT_BASE}
+									onclick={() => (eligibilityFilter = 'verified')}
+								>
+									ยืนยันตัวตนแล้ว
+								</Button>
+								<Button
+									variant={eligibilityFilter === 'professional' ? 'default' : 'ghost'}
+									class={SEGMENT_BASE}
+									onclick={() => (eligibilityFilter = 'professional')}
+								>
+									ทักษะวิชาชีพ/เจ้าหน้าที่
+								</Button>
+							</div>
+						</div>
+					</div>
+				</div>
+
+				<!-- Roster -->
+				<div class="rounded-2xl border border-border bg-card p-3.5">
+					<div
+						class="flex flex-wrap items-center justify-between gap-2 border-b border-border pb-3"
+					>
+						<div class="flex items-center gap-2.5">
+							<Checkbox
+								id="assign-select-all"
+								checked={allSelected}
+								disabled={assignableCount === 0}
+								onCheckedChange={(next) => toggleAll(next === true)}
+							/>
+							<Label for="assign-select-all" class="cursor-pointer text-sm font-bold">
+								เลือกทั้งหมดที่ผ่านตัวกรอง ({assignableCount} คนที่สามารถมอบหมายได้)
+							</Label>
+						</div>
+						<p class="text-xs text-muted-foreground">
+							แสดงผล {visible.length} จากทั้งหมด {roster.rows.length} คน
+						</p>
+					</div>
+
+					{#snippet rosterRows(rows: typeof visible)}
+						<ul class="space-y-2">
+							{#each rows as candidate (candidate.volunteer._id)}
+								<AssignRosterRow
+									{candidate}
+									selected={selectedIds.includes(candidate.volunteer._id)}
+									skillOptions={skillCatalog.options}
+									capacityAvailable={remaining > 0}
+									onToggle={toggleOne}
+									onDetails={openDetails}
+									onAssign={assignOne}
+								/>
+							{/each}
+						</ul>
+					{/snippet}
+
+					{#if roster.error}
+						<p class="py-8 text-center text-sm text-destructive">{roster.error}</p>
+					{:else if visible.length === 0}
+						<p class="py-8 text-center text-sm text-muted-foreground">
+							ไม่พบอาสาสมัครที่ตรงกับตัวกรอง
+						</p>
+					{:else}
+						<div class="space-y-5 pt-3">
+							{#if onShift.length > 0}
+								<section>
+									<div
+										class="mb-2 flex flex-wrap items-center justify-between gap-2 rounded-xl bg-emerald-50 px-3 py-2 ring-1 ring-emerald-200"
+									>
+										<h4 class="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-800">
+											<CircleCheck class="h-4 w-4 shrink-0" />
+											อยู่ในกะนี้แล้ว
+											<span
+												class="rounded-full bg-white px-2 py-0.5 tabular-nums ring-1 ring-emerald-200"
+											>
+												{onShift.length} คน
+											</span>
+										</h4>
+										<p class="text-[11px] text-emerald-800/80">
+											มอบหมายซ้ำไม่ได้ — ถอดออกได้ที่แท็บ “กะและตารางกะ”
+										</p>
+									</div>
+									{@render rosterRows(onShift)}
+								</section>
+							{/if}
+
+							<section>
+								<div
+									class="mb-2 flex flex-wrap items-center justify-between gap-2 rounded-xl bg-muted px-3 py-2"
+								>
+									<h4 class="inline-flex items-center gap-1.5 text-xs font-bold text-foreground">
+										<UserRoundPlus class="h-4 w-4 shrink-0 text-primary" />
+										ยังไม่ได้มอบหมายในกะนี้
+										<span class="rounded-full bg-card px-2 py-0.5 tabular-nums ring-1 ring-border">
+											{unassigned.length} คน
+										</span>
+									</h4>
+									<p class="text-[11px] text-muted-foreground">
+										มอบหมายได้ {assignableCount} คน · เวลาชนกะอื่น {unassigned.length -
+											assignableCount} คน
+									</p>
+								</div>
+								{#if unassigned.length === 0}
+									<p class="py-6 text-center text-sm text-muted-foreground">
+										อาสาที่ผ่านตัวกรองทั้งหมดอยู่ในกะนี้แล้ว
+									</p>
+								{:else}
+									{@render rosterRows(unassigned)}
+								{/if}
+							</section>
+						</div>
+					{/if}
+				</div>
+			</main>
+		</div>
 
 		<!-- Sticky action bar: the roster can be long, the action must stay reachable. -->
 		<div
