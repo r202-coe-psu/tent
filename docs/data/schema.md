@@ -2909,7 +2909,7 @@ closed   → (terminal)
 ## 6. DB `_users` (CouchDB system DB — central-managed)
 
 CouchDB `_users` DB ไม่ใช่ operational doc ธรรมดา — ไม่มี common envelope; managed ผ่าน `/api/v1/users`
-(ห่อ CouchDB admin API, central เท่านั้น) เอกสารนี้ระบุเฉพาะ field ที่โครงการ extend เพิ่มเข้า `_users` doc ตาม **CR-093 / CR-104 / CR-105 (Compound Scoped Roles, Profile Metadata, Security Questions, and Passphrase Reset)**, **CR-124 (Staff Google step-up MFA)** **CR-202 (Account Contact Phone Accepts Landline)** และ **[CR-211](../changes/03-C-supply/CR-211-staff-qr-card.md) (Staff QR card)**
+(ห่อ CouchDB admin API, central เท่านั้น) เอกสารนี้ระบุเฉพาะ field ที่โครงการ extend เพิ่มเข้า `_users` doc ตาม **CR-093 / CR-104 / CR-105 (Compound Scoped Roles, Profile Metadata, Security Questions, and Passphrase Reset)**, **CR-124 (Staff Google step-up MFA)** **CR-202 (Account Contact Phone Accepts Landline)**, **[CR-211](../changes/03-C-supply/CR-211-staff-qr-card.md) (Staff QR card)** และ **Issue #1246 (Staff & Volunteer PDPA & NDA Consent Gate)**
 
 | Field                  | ชนิด                      | req | หมายเหตุ                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 | ---------------------- | ------------------------- | --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -2934,6 +2934,7 @@ CouchDB `_users` DB ไม่ใช่ operational doc ธรรมดา — �
 | `edge_shelters` | [str] | opt | CR-171 — รหัสศูนย์ (`SH001`) ทุกศูนย์ที่ user **เคย** มี `shelter:{code}` · **append-only** (ห้ามลบค่าออก แม้ถอด role หรือลบ user) · ใช้เป็น selector ของ filtered `_users` replica ไป edge เท่านั้น — **ไม่ให้สิทธิ์ใด ๆ** (สิทธิ์ดูจาก `roles`) · doc ที่เขียนผ่าน `user-service` ต้องมีเสมอ |
 | `deleted_at` | ts\|null | opt | CR-171 — เวลาที่ soft delete · `null`/ไม่มี = บัญชีปกติ |
 | `deleted_by` | str\|null | opt | CR-171 — `_users` name ของผู้ลบ |
+| `consent` | object\|null | opt | ข้อมูลการยินยอม PDPA และสัญญาไม่เปิดเผยข้อมูลผู้ประสบภัย (`{ agreed: bool, agreed_at: ISO, version: str }`) บังคับสำหรับบัญชี `staff` และ `volunteer` ก่อนเข้าสู่ระบบ (#1246) |
 
 **`mfa` (CR-124 Google MFA & CR-ThaID Staff ThaID Digital ID BORA):**
 

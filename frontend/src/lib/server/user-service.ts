@@ -36,6 +36,8 @@ import {
 import { generateTemporaryPassphrase } from '$lib/server/passphrase-generator';
 import { mintStaffTokenHash } from '$lib/server/staff-card-token';
 import { isValidStaffTokenHash } from '$lib/features/users/server';
+import { CURRENT_CONSENT_VERSION, type UserConsentStatus } from '$lib/features/users';
+import { createAuditEntry } from '$lib/features/shared';
 
 /**
  * User service — the ONLY module that writes CouchDB `_users` with admin creds.
@@ -163,6 +165,8 @@ export interface CouchUserDoc {
 	deleted_at?: string | null;
 	/** CR-171 — `_users` name of whoever soft-deleted the account. */
 	deleted_by?: string | null;
+	/** PDPA & Non-disclosure agreement consent status (issue #1246). */
+	consent?: UserConsentStatus | null;
 }
 
 /** CR-171 FR-5 — a soft-deleted account is not a user for any management / login path. */
@@ -1624,4 +1628,52 @@ export async function readUserDocForLink(name: string): Promise<CouchUserDoc | n
 		if (e instanceof ServiceError && e.code === 'VALIDATION') return null;
 		throw e;
 	}
+}
+
+/** Record user PDPA and NDA consent acceptance with audit trail (issue #1246). */
+export async function recordUserConsent(
+	username: string
+): Promise<{ ok: true; consent: UserConsentStatus }> {
+	const userRes = await adminRaw(`/_users/org.couchdb.user:${encodeURIComponent(username)}`, 'GET');
+	if (userRes.status !== 200 || !userRes.data) {
+		throw new ServiceError('NOT_FOUND', 'User profile doc not found');
+	}
+	const doc = userRes.data as CouchUserDoc;
+	const nowIso = new Date().toISOString();
+	const consent: UserConsentStatus = {
+		agreed: true,
+		agreed_at: nowIso,
+		version: CURRENT_CONSENT_VERSION
+	};
+	doc.consent = consent;
+
+	const saveRes = await adminRaw(
+		`/_users/org.couchdb.user:${encodeURIComponent(username)}`,
+		'PUT',
+		doc
+	);
+	if (saveRes.status !== 200 && saveRes.status !== 201) {
+		throw new ServiceError('PERSISTENCE_FAILED', 'Failed to update user consent');
+	}
+
+	// Record audit entry in central_ops
+	const auditDoc = createAuditEntry(
+		{
+			action: 'privacy_change',
+			target_type: 'user',
+			target_id: `org.couchdb.user:${username}`,
+			reason: 'PDPA and Non-disclosure Agreement accepted',
+			context: {
+				version: CURRENT_CONSENT_VERSION,
+				personnel_type: doc.personnel_type ?? null,
+				roles: doc.roles ?? []
+			},
+			occurred_at: nowIso
+		},
+		{ author: username }
+	);
+
+	await adminRaw(`/central_ops/${auditDoc._id}`, 'PUT', auditDoc);
+
+	return { ok: true, consent };
 }
