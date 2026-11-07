@@ -1,4 +1,4 @@
-import { requireAdmin, requireManager } from '$lib/guards/auth';
+import { requireAdmin, requireManager, requireManagerOfShelter } from '$lib/guards/auth';
 import type { PageLoad } from './$types';
 import { siteKindSchema } from '$lib/features/shelters';
 import { error } from '@sveltejs/kit';
@@ -6,6 +6,10 @@ import { error } from '@sveltejs/kit';
 export const load = (async ({ params, fetch, url }) => {
 	if (params.mode === 'create') {
 		await requireAdmin(fetch);
+	} else if (params.mode === 'edit' && params.id) {
+		// Check the shelter the URL names, not the selected one (#473): editing the URL must
+		// not open another shelter's form (or switch the header selector to it).
+		await requireManagerOfShelter(params.id, fetch);
 	} else {
 		await requireManager(fetch);
 	}

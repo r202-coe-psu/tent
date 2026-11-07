@@ -136,16 +136,22 @@ export async function requireManager(fetchFn?: typeof fetch) {
 }
 
 /**
- * Shelter readiness guard (`/back-office/shelters/readiness/[id]`, #478) — system admin, or
- * shelter_manager of the shelter named in the URL. Checked against `code`, not the selected
- * shelter, so editing the URL cannot open another shelter's assessments.
+ * Manager guard for a page that names its shelter in the URL — system admin, or
+ * shelter_manager of `code`. Checked against `code`, not the selected shelter, so editing the
+ * URL cannot open another shelter's page (#478, #473). Use this instead of
+ * {@link requireManager} whenever the route has a shelter code param.
  */
-export async function requireShelterReadiness(code: string, fetchFn?: typeof fetch) {
+export async function requireManagerOfShelter(code: string, fetchFn?: typeof fetch) {
 	await requireAuth(fetchFn);
 	const roles = authStore.user?.roles ?? [];
 	if (!canAccessManagerPages(roles, code)) {
 		throw redirect(302, resolve(LANDING_ROUTE));
 	}
+}
+
+/** Shelter readiness guard (`/back-office/shelters/readiness/[id]`, #478). */
+export async function requireShelterReadiness(code: string, fetchFn?: typeof fetch) {
+	await requireManagerOfShelter(code, fetchFn);
 }
 
 /** The only back-office area a kiosk_staff-only user may open (FR-SBO-29). */
