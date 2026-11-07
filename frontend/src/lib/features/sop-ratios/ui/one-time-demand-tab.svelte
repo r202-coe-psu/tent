@@ -35,6 +35,8 @@
 	import CheckCircle2 from '@lucide/svelte/icons/check-circle-2';
 	import Eye from '@lucide/svelte/icons/eye';
 	import Info from '@lucide/svelte/icons/info';
+	import Package from '@lucide/svelte/icons/package';
+	import PackageX from '@lucide/svelte/icons/package-x';
 	import PackageOpen from '@lucide/svelte/icons/package-open';
 	import Search from '@lucide/svelte/icons/search';
 	import Users from '@lucide/svelte/icons/users';
@@ -97,16 +99,37 @@
 	let search = $state('');
 	let visible = $state(PAGE_SIZE);
 
+	// Same pattern as the stock page's attention cards: a card filters the table, a second click clears it.
+	type CardFilter = 'all' | 'short' | 'partial' | 'empty';
+	let cardFilter = $state<CardFilter>('all');
+	function toggleCard(next: Exclude<CardFilter, 'all'>) {
+		cardFilter = cardFilter === next ? 'all' : next;
+		visible = PAGE_SIZE;
+	}
+
 	const filtered = $derived.by(() => {
 		const q = search.trim().toLowerCase();
-		return q ? rows.filter((r) => r.name.toLowerCase().includes(q)) : rows;
+		const byCard = rows.filter((r) =>
+			cardFilter === 'short'
+				? r.status === 'short'
+				: cardFilter === 'partial'
+					? partialRows.some((p) => p.itemId === r.itemId)
+					: cardFilter === 'empty'
+						? emptyRows.some((e) => e.itemId === r.itemId)
+						: true
+		);
+		return q ? byCard.filter((r) => r.name.toLowerCase().includes(q)) : byCard;
 	});
 	const shown = $derived(filtered.slice(0, visible));
+	const ready = $derived(!isLoading && !isError && rows.length > 0);
 	const shortRows = $derived(rows.filter((r) => r.status === 'short'));
 	const shortCount = $derived(shortRows.length);
 	// Short rows with some stock in hand vs none at all, for the summary sentence.
 	const partialRows = $derived(shortRows.filter((r) => coverageBarWidth(r.coverage) > 0));
-	const emptyCount = $derived(shortCount - partialRows.length);
+	const emptyRows = $derived(shortRows.filter((r) => r.available === '0'));
+	const shortPercent = $derived(rows.length ? Math.round((shortCount / rows.length) * 100) : 0);
+	/** Names listed on a card before "and N more". */
+	const CARD_NAMES = 3;
 
 	const categoryOfItem = $derived.by(() => {
 		const names = new Map((categoriesQuery.data ?? []).map((c) => [c._id, c.name]));
@@ -192,83 +215,135 @@
 	</Button>
 {/snippet}
 
-<div class="space-y-4">
-	<div class="grid gap-4 lg:grid-cols-2">
-		<Card.Root>
-			<Card.Header>
-				<Card.Title class="flex items-center gap-2 text-base">
-					<Users class="h-5 w-5 text-slate-500" aria-hidden="true" />
-					ประชากรที่ใช้คำนวณความต้องการ
-				</Card.Title>
-			</Card.Header>
-			<Card.Content class="flex flex-wrap items-end gap-x-3 gap-y-2">
-				<p class="text-4xl leading-none font-bold text-slate-900 tabular-nums">
-					{formatQty(people)}
-					<span class="text-base font-medium text-slate-500">คนในศูนย์</span>
-				</p>
-				{#if peopleQuery.data}
-					<div class="flex flex-wrap gap-1.5">
-						<Badge variant="outline" class="h-6 border-blue-200 bg-blue-50 text-blue-800">
-							ผู้พักพิง {formatQty(peopleQuery.data.evacuees)} คน
-						</Badge>
-						<Badge variant="outline" class="h-6 border-emerald-200 bg-emerald-50 text-emerald-800">
-							เจ้าหน้าที่ {formatQty(peopleQuery.data.staff)} คน
-						</Badge>
-						<Badge variant="outline" class="h-6 border-amber-200 bg-amber-50 text-amber-800">
-							จิตอาสา {formatQty(peopleQuery.data.volunteers)} คน
-						</Badge>
-					</div>
+{#snippet attentionCard(card: {
+	filter: Exclude<CardFilter, 'all'>;
+	label: string;
+	tone: 'critical' | 'warning' | 'neutral' | 'ok';
+	icon: typeof AlertCircle;
+})}
+	{@const isSelected = cardFilter === card.filter}
+	{@const list =
+		card.filter === 'partial' ? partialRows : card.filter === 'empty' ? emptyRows : shortRows}
+	{@const toneNumber = {
+		critical: 'text-red-700',
+		warning: 'text-amber-700',
+		neutral: 'text-slate-900',
+		ok: 'text-emerald-700'
+	}[card.tone]}
+	{@const toneBorder = {
+		critical: 'border-red-200 bg-red-50/40',
+		warning: 'border-amber-200',
+		neutral: 'border-slate-200/80',
+		ok: 'border-emerald-200 bg-emerald-50/40'
+	}[card.tone]}
+	<button
+		type="button"
+		aria-pressed={isSelected}
+		onclick={() => toggleCard(card.filter)}
+		class="flex min-h-28 flex-col items-start gap-1 rounded-xl px-4 py-3.5 text-left transition-colors focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none {isSelected
+			? 'border-2 border-[#0284C7] bg-sky-50'
+			: `border bg-white shadow-2xs hover:border-slate-300 ${toneBorder}`}"
+	>
+		<span class="flex w-full items-center justify-between gap-2">
+			<span class="text-sm font-semibold text-slate-700">{card.label}</span>
+			<card.icon class="h-4 w-4 shrink-0 {toneNumber}" aria-hidden="true" />
+		</span>
+		<span class="flex flex-wrap items-baseline gap-x-2">
+			<span class="text-3xl font-bold tabular-nums {toneNumber}">{list.length}</span>
+			<span class="text-sm text-slate-500">
+				{card.filter === 'short' ? `/ ${rows.length}` : 'รายการ'}
+			</span>
+			{#if card.filter === 'short' && shortCount > 0}
+				<Badge variant="destructive" class="h-5">ขาดแคลน {shortPercent}%</Badge>
+			{/if}
+		</span>
+		{#if card.filter === 'short'}
+			<span class="text-sm text-slate-600">
+				{shortCount === 0
+					? 'พอแจกทุกรายการ'
+					: shortCount === rows.length
+						? 'ทุกรายการยังไม่พอ'
+						: `${rows.length - shortCount} รายการพอแล้ว`}
+			</span>
+		{:else if list.length > 0}
+			<span class="flex w-full flex-col gap-1">
+				{#each list.slice(0, CARD_NAMES) as row (row.itemId)}
+					<span
+						class="flex items-center justify-between gap-2 rounded-md px-2 py-1 text-sm {card.filter ===
+						'partial'
+							? 'border border-amber-200 bg-amber-50 text-amber-900'
+							: 'bg-slate-100 text-slate-700'}"
+					>
+						<span class="truncate">{row.name}</span>
+						{#if card.filter === 'partial'}
+							<span class="font-semibold tabular-nums">{formatCoveragePercent(row.coverage)}</span>
+						{/if}
+					</span>
+				{/each}
+				{#if list.length > CARD_NAMES}
+					<span class="text-xs text-slate-500">และอีก {list.length - CARD_NAMES} รายการ</span>
 				{/if}
-			</Card.Content>
+			</span>
+		{/if}
+	</button>
+{/snippet}
+
+<div class="space-y-4">
+	<section
+		aria-label="สรุปความพร้อมแจกจ่าย"
+		class="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4"
+	>
+		<Card.Root class="gap-1 px-4 py-3.5">
+			<div class="flex items-center justify-between gap-2">
+				<span class="text-sm font-semibold text-slate-700">ประชากรในศูนย์</span>
+				<Users class="h-4 w-4 shrink-0 text-sky-600" aria-hidden="true" />
+			</div>
+			<p class="text-3xl font-bold text-slate-900 tabular-nums">
+				{formatQty(people)}
+				<span class="text-sm font-medium text-slate-500">คนทั้งหมด</span>
+			</p>
+			{#if peopleQuery.data}
+				<p class="flex flex-wrap gap-x-2 text-sm text-slate-600">
+					<span class="whitespace-nowrap">
+						ผู้พักพิง <span class="font-semibold tabular-nums"
+							>{formatQty(peopleQuery.data.evacuees)}</span
+						>
+					</span>
+					<span class="whitespace-nowrap">
+						เจ้าหน้าที่ <span class="font-semibold tabular-nums"
+							>{formatQty(peopleQuery.data.staff)}</span
+						>
+					</span>
+					<span class="whitespace-nowrap">
+						จิตอาสา <span class="font-semibold tabular-nums"
+							>{formatQty(peopleQuery.data.volunteers)}</span
+						>
+					</span>
+				</p>
+			{/if}
 		</Card.Root>
 
-		{#if !isLoading && !isError && rows.length > 0}
-			{#if shortCount > 0}
-				<Alert.Root variant="destructive" class="border-red-200 bg-red-50 px-4 py-3">
-					<AlertTriangle aria-hidden="true" />
-					<Alert.Title class="flex items-center justify-between gap-2 text-base">
-						สถานะความพร้อมแจกจ่าย
-						<Badge variant="destructive" class="h-6">
-							{shortCount === rows.length ? 'ไม่พอทุกรายการ' : 'บางรายการไม่พอ'}
-						</Badge>
-					</Alert.Title>
-					<Alert.Description class="space-y-1 text-sm">
-						<p class="text-base">
-							<span class="text-2xl font-bold tabular-nums">{shortCount}</span>
-							จากทั้งหมด {rows.length} รายการ ยังมีไม่พอแจก
-						</p>
-						{#if partialRows.length > 0}
-							<p>
-								แจกได้บางส่วน:
-								{partialRows
-									.slice(0, 3)
-									.map((r) => `${r.name} (${formatCoveragePercent(r.coverage)})`)
-									.join(', ')}{partialRows.length > 3
-									? ` และอีก ${partialRows.length - 3} รายการ`
-									: ''}
-							</p>
-						{/if}
-						{#if emptyCount > 0}
-							<p>ยังไม่มีของพร้อมแจก {emptyCount} รายการ</p>
-						{/if}
-					</Alert.Description>
-				</Alert.Root>
-			{:else}
-				<Alert.Root class="border-emerald-200 bg-emerald-50 px-4 py-3 text-emerald-900">
-					<CheckCircle2 aria-hidden="true" />
-					<Alert.Title class="flex items-center justify-between gap-2 text-base">
-						สถานะความพร้อมแจกจ่าย
-						<Badge variant="outline" class="h-6 border-emerald-200 bg-white text-emerald-800">
-							พอแจก
-						</Badge>
-					</Alert.Title>
-					<Alert.Description class="text-base text-emerald-900">
-						ทั้ง {rows.length} รายการ พอแจกให้ทุกคนที่ยังไม่ได้รับ
-					</Alert.Description>
-				</Alert.Root>
-			{/if}
+		{#if ready}
+			{@render attentionCard({
+				filter: 'short',
+				label: 'รายการที่ยังไม่พอ',
+				tone: shortCount > 0 ? 'critical' : 'ok',
+				icon: AlertCircle
+			})}
+			{@render attentionCard({
+				filter: 'partial',
+				label: 'พร้อมแจกจ่ายบางส่วน',
+				tone: 'warning',
+				icon: Package
+			})}
+			{@render attentionCard({
+				filter: 'empty',
+				label: 'สต็อกเป็นศูนย์',
+				tone: 'neutral',
+				icon: PackageX
+			})}
 		{/if}
-	</div>
+	</section>
 
 	{#if isLoading}
 		<Card.Root>
