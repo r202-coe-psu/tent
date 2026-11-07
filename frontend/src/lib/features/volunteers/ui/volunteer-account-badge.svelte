@@ -11,11 +11,14 @@
 
 	let {
 		status,
-		showLogin = true
+		showLogin = true,
+		testId = 'volunteer-account-status'
 	}: {
 		status: VolunteerAccessStatus;
 		/** Print the login username under the badges. */
 		showLogin?: boolean;
+		/** One page may show several lists of these (people tab, shift roster): each keeps its own. */
+		testId?: string;
 	} = $props();
 
 	const ended = $derived(status.kind === 'lapsed' ? accessEndingParts(status.lastEnded) : null);
@@ -24,7 +27,7 @@
 	const wrap = 'h-auto max-w-full justify-start gap-1 text-left whitespace-normal';
 </script>
 
-<div class="flex flex-wrap items-center gap-1.5" data-testid="volunteer-account-status">
+<div class="flex flex-wrap items-center gap-1.5" data-testid={testId}>
 	{#if status.kind === 'none'}
 		<Badge variant="outline" class="{wrap} text-muted-foreground">
 			<KeyRound class="h-3 w-3 shrink-0" />

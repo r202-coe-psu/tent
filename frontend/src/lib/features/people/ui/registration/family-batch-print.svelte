@@ -4,17 +4,25 @@
 </script>
 
 <script lang="ts">
+	import { useQueryClient } from '@tanstack/svelte-query';
 	import ArrowRight from '@lucide/svelte/icons/arrow-right';
 	import UserPlus from '@lucide/svelte/icons/user-plus';
 	import { Button } from '$lib/components/ui/button/index.js';
+	import { PRINTERS_I18N, PrintLabelsButton } from '$lib/features/printers';
+	import { renderKioskQrLabelPng } from '$lib/features/kiosk';
 	import StationCompletionSummary from '../shared/station-completion-summary.svelte';
+	import { peopleKeys } from '../../application/queries';
+	import { peopleRepository } from '../../data/people.remote';
+	import { buildEvacueeQrLabel } from '../../domain/evacuee-qr-label';
+	import { headFirst } from '../../domain/household-label-order';
 	import { formatPersonName, type Evacuee, type Household } from '../../domain/people';
+	import { getTranslation } from '$lib/utils/i18n';
+	import { EVACUEE_QR_MODAL_I18N } from '../_constants/evacuee-qr-modal.i18n';
 	import EvacueeQrModal from '../evacuee-profile/evacuee-qr-modal.svelte';
 	import { useShelter } from '$lib/features/shelters/index.js';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
 	import { getShelterCode } from '$lib/db/shelter';
 	import { langState } from '$lib/states/i18n.svelte';
-	import { getTranslation } from '$lib/utils/i18n';
 	import {
 		PRIMARY_CONTACT_LABEL,
 		PRIMARY_CONTACT_LABEL_EN
@@ -50,6 +58,39 @@
 		{ data: undefined } as unknown as ReturnType<typeof useShelter>
 	);
 
+	const queryClient = safeQuery(() => useQueryClient(), null);
+	const qrT = $derived(getTranslation(EVACUEE_QR_MODAL_I18N, langState.current));
+	const printersT = $derived(getTranslation(PRINTERS_I18N, langState.current));
+	const shelterCode = $derived(shelterStore.selectedShelterCode ?? getShelterCode());
+
+	/**
+	 * Station-printer labels for the whole family, head first. Built when the button is clicked, so
+	 * the tick on คัดกรอง reflects the screenings that exist right now: each member's screenings are
+	 * fetched through the query client under the same key `useScreeningsByEvacuee` uses (the
+	 * member cards below already populate it; staleTime 0 here forces a fresh read at click time).
+	 */
+	async function renderFamilyLabels(): Promise<string[]> {
+		const client = queryClient;
+		if (!client) throw new Error('Query client is not available');
+		const zones = shelterQuery.data?.zones;
+		const checklist = [qrT.checklistCheckIn, qrT.checklistScreening, qrT.checklistLodging];
+		return Promise.all(
+			headFirst(members, household.head_evacuee_id).map(async (member) => {
+				const screenings = await client.fetchQuery({
+					queryKey: peopleKeys.screeningsByEvacuee(member._id),
+					queryFn: () => peopleRepository().listScreeningsByEvacuee(member._id),
+					staleTime: 0
+				});
+				const { qrPayload, label } = buildEvacueeQrLabel(member, {
+					zones,
+					hasScreening: screenings.length > 0,
+					checklist
+				});
+				return renderKioskQrLabelPng(qrPayload, label);
+			})
+		);
+	}
+
 	const medicalScreeningEnabled = $derived(
 		shelterQuery.data?.feature_flags?.enable_medical_screening ?? false
 	);
@@ -72,6 +113,12 @@
 		}
 	]);
 
+	// Leaving the page while printing, or while a job already sent may still print, drops the
+	// button's follow-up state: printing the family again would duplicate labels.
+	let printing = $state(false);
+	let retryHeld = $state(false);
+	const leaveLocked = $derived(printing || retryHeld);
+
 	function isHead(member: Evacuee, index: number): boolean {
 		if (household.head_evacuee_id) {
 			return member._id === household.head_evacuee_id;
@@ -82,18 +129,31 @@
 
 {#snippet nextActions()}
 	{#if onNextStation}
-		<Button type="button" class="min-h-11" onclick={() => onNextStation?.(nextStation)}>
+		<Button
+			type="button"
+			class="min-h-11"
+			disabled={leaveLocked}
+			onclick={() => onNextStation?.(nextStation)}
+		>
 			{nextStationLabel}
 			<ArrowRight class="ml-1.5 size-4" />
 		</Button>
 	{/if}
 	{#if onRegisterAnother}
-		<Button type="button" variant="outline" class="min-h-11" onclick={onRegisterAnother}>
+		<Button
+			type="button"
+			variant="outline"
+			class="min-h-11"
+			disabled={leaveLocked}
+			onclick={onRegisterAnother}
+		>
 			<UserPlus class="mr-1.5 size-4" />
 			{t.registerAnother}
 		</Button>
 	{/if}
-	<Button type="button" variant="ghost" class="min-h-11" onclick={onDone}>{t.backToQueue}</Button>
+	<Button type="button" variant="ghost" class="min-h-11" disabled={leaveLocked} onclick={onDone}>
+		{t.backToQueue}
+	</Button>
 {/snippet}
 
 <div class="space-y-4 pb-20">
@@ -123,6 +183,7 @@
 				evacuee={member}
 				embedded={true}
 				dismissible={false}
+				printable={false}
 				onClose={onDone}
 			/>
 		</section>
@@ -132,6 +193,27 @@
 		class="sticky bottom-0 z-10 -mx-1 border-t border-border bg-background/95 p-3 backdrop-blur-sm"
 	>
 		<div class="flex flex-col gap-2 sm:flex-row sm:justify-end">
+			<!-- The only printer button on this page (member cards hide theirs, nextActions has none):
+			     one instance = one print state, no double print. -->
+			{#if total > 0}
+				<!-- Keyed by the family: the button keeps unsent chunks for Retry, which must not outlive a
+				     change of members (it would print the old labels). Invariant: `members` is a snapshot
+				     taken when the family registered, so the key never changes while `printing` or
+				     `retryHeld` is true. If it did, the new instance would report both as false and the
+				     follow-up of a job already sent would be lost. -->
+				{#key `${household._id}:${members.map((m) => m._id).join(',')}`}
+					<PrintLabelsButton
+						bind:printing
+						bind:retryHeld
+						{shelterCode}
+						labelCount={total}
+						source="walk_in"
+						renderLabels={renderFamilyLabels}
+						label={printersT.printFamily(total)}
+						buttonClass="min-h-11"
+					/>
+				{/key}
+			{/if}
 			{@render nextActions()}
 		</div>
 	</div>

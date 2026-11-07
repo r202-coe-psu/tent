@@ -3,7 +3,7 @@ import { z } from 'zod';
 import type { RequestHandler } from './$types';
 import { adminRaw } from '$lib/server/couch-admin';
 import {
-	authorizeWarehouse,
+	authorizeDonation,
 	findDonationByQuery,
 	isInCallerScope,
 	routeErrorResponse as toRouteError
@@ -36,14 +36,14 @@ type BulkDocsOutcome = { id?: string; ok?: boolean; error?: string };
  * received but not every one: the goods that never came are a shortfall, and the booking
  * stops holding their quota (the worker settles it once the booking is `received`).
  *
- * Who may close is who may receive (D-8): `authorizeWarehouse` plus the shelter scope. The
+ * Who may close is who may receive (D-8): `authorizeDonation` plus the shelter scope. The
  * audit entry goes in once the close has landed, under a fixed id — one per booking — so a
  * close another write beat leaves no record; a lost audit is only logged, since the closed
  * booking carries `closed_by` itself.
  */
 export const POST: RequestHandler = async ({ params, request }) => {
 	try {
-		const caller = await authorizeWarehouse(request.headers.get('cookie'));
+		const caller = await authorizeDonation(request.headers.get('cookie'));
 		const { query } = params;
 		if (!query) {
 			return json({ success: false, error: 'Query parameter is required' }, { status: 400 });

@@ -9,6 +9,11 @@ describe('canWriteShelterCatalog', () => {
 		}
 	);
 
+	it('allows donation_staff (CR-227), flat or shelter-scoped', () => {
+		expect(canWriteShelterCatalog(['donation_staff'])).toBe(true);
+		expect(canWriteShelterCatalog(['shelter:SH001', 'SH001:donation_staff'])).toBe(true);
+	});
+
 	it('allows a shelter-scoped warehouse capability', () => {
 		expect(canWriteShelterCatalog(['SH001:warehouse_staff'])).toBe(true);
 	});
@@ -54,6 +59,12 @@ describe('canWriteShelterRecipe', () => {
 			expect(canWriteShelterRecipe(['shelter:SH001', role], 'SH002')).toBe(false);
 		}
 	);
+});
+
+describe('canWriteShelterRecipe for donation_staff (CR-227)', () => {
+	it('stays denied: donation_staff writes items, not recipes', () => {
+		expect(canWriteShelterRecipe(['shelter:SH001', 'SH001:donation_staff'], 'SH001')).toBe(false);
+	});
 });
 
 describe('canWriteShelterRecipe without a shelter (central catalog)', () => {

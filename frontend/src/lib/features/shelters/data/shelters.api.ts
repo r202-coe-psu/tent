@@ -1,6 +1,6 @@
 import { serviceFetch } from '$lib/api/service';
 import { shelterStore } from '$lib/stores/shelter.svelte';
-import type { Shelter } from '../domain/schema';
+import type { Shelter, SubStorageItem } from '../domain/schema';
 import type { ShelterClosePreview, ShelterCloseResult } from '../domain/shelter-close';
 import type { ShelterSummary } from './shelters.repository';
 
@@ -32,11 +32,13 @@ export function createShelter(input: Shelter): Promise<{ ok: true; code: string 
 
 export function updateShelter(
 	code: string,
-	input: Partial<Shelter>
-): Promise<{ ok: true; code: string }> {
+	input: Partial<Shelter>,
+	rev?: string
+): Promise<{ ok: true; code: string; rev: string }> {
 	return serviceFetch(`${SHELTER_ENDPOINT}/${encodeURIComponent(code)}`, {
 		method: 'PATCH',
-		body: JSON.stringify(input)
+		// `_rev` makes the server 409 when the doc changed since the form loaded.
+		body: JSON.stringify(rev ? { ...input, _rev: rev } : input)
 	});
 }
 
@@ -83,4 +85,54 @@ export function reopenZone(
 			body: JSON.stringify({ reopened_by: reopenedBy })
 		}
 	);
+}
+
+/** Fields of a storage point a client may send — the server issues `id` and ignores any other key. */
+export type StoragePointInput = Omit<SubStorageItem, 'id'>;
+
+/** The shelter's storage points plus the `_rev` a following write must quote (#1186). */
+export interface StoragePointsSnapshot {
+	rev: string;
+	points: SubStorageItem[];
+}
+
+const storagePointsEndpoint = (code: string) =>
+	`${SHELTER_ENDPOINT}/${encodeURIComponent(code)}/storage-points`;
+
+export function getStoragePoints(code: string): Promise<StoragePointsSnapshot> {
+	return serviceFetch<StoragePointsSnapshot>(storagePointsEndpoint(code), { cache: 'no-store' });
+}
+
+export function addStoragePoint(
+	code: string,
+	rev: string,
+	point: StoragePointInput
+): Promise<{ ok: true; rev: string; point: SubStorageItem }> {
+	return serviceFetch(storagePointsEndpoint(code), {
+		method: 'POST',
+		body: JSON.stringify({ _rev: rev, point })
+	});
+}
+
+export function editStoragePoint(
+	code: string,
+	pointId: string,
+	rev: string,
+	point: StoragePointInput
+): Promise<{ ok: true; rev: string; point: SubStorageItem }> {
+	return serviceFetch(`${storagePointsEndpoint(code)}/${encodeURIComponent(pointId)}`, {
+		method: 'PATCH',
+		body: JSON.stringify({ _rev: rev, point })
+	});
+}
+
+export function deleteStoragePoint(
+	code: string,
+	pointId: string,
+	rev: string
+): Promise<{ ok: true; rev: string }> {
+	return serviceFetch(`${storagePointsEndpoint(code)}/${encodeURIComponent(pointId)}`, {
+		method: 'DELETE',
+		body: JSON.stringify({ _rev: rev })
+	});
 }

@@ -5,7 +5,7 @@
 	import { Switch } from '$lib/components/ui/switch/index.js';
 	import { Checkbox } from '$lib/components/ui/checkbox/index.js';
 	import { Label } from '$lib/components/ui/label/index.js';
-	import type { StockSort } from './stock-view';
+	import type { StockSort, StockStatusFilter } from './stock-view';
 
 	type Option = { value: string; label: string };
 	type LocationOption = Option & { hint?: string };
@@ -16,6 +16,8 @@
 		loc,
 		sort,
 		all,
+		selfPurchased = false,
+		status,
 		categories,
 		locations,
 		showOverall = $bindable(false),
@@ -28,6 +30,10 @@
 		sort: StockSort;
 		/** "ทั้งแคตตาล็อก": include items this shelter never received. */
 		all: boolean;
+		/** "ซื้อเอง": only items with a self-purchased lot still on hand. */
+		selfPurchased?: boolean;
+		/** Current status filter; the "มีวันหมดอายุ" switch is on while it is `has_expiry`. */
+		status: StockStatusFilter | 'all';
 		categories: Option[];
 		locations: LocationOption[];
 		/** System admins can sum every shelter's stock. */
@@ -39,6 +45,8 @@
 			loc?: string;
 			sort?: StockSort;
 			all?: boolean;
+			selfPurchased?: boolean;
+			status?: StockStatusFilter | 'all';
 		}) => void;
 	} = $props();
 
@@ -152,6 +160,33 @@
 		<Label for="stock-all-catalog" class="cursor-pointer text-sm whitespace-nowrap text-slate-700">
 			ทั้งแคตตาล็อก
 		</Label>
+	</div>
+
+	<div class="col-span-2 flex flex-wrap items-center gap-x-6 gap-y-1 md:col-span-4 lg:col-span-5">
+		<div class="flex min-h-11 items-center gap-2.5 px-1">
+			<Switch
+				id="stock-self-purchased"
+				checked={selfPurchased}
+				onCheckedChange={(v) => onchange({ selfPurchased: v })}
+			/>
+			<Label
+				for="stock-self-purchased"
+				class="cursor-pointer text-sm whitespace-nowrap text-slate-700"
+			>
+				ซื้อเอง
+			</Label>
+		</div>
+
+		<div class="flex min-h-11 items-center gap-2.5 px-1">
+			<Switch
+				id="stock-has-expiry"
+				checked={status === 'has_expiry'}
+				onCheckedChange={(v) => onchange({ status: v ? 'has_expiry' : 'all' })}
+			/>
+			<Label for="stock-has-expiry" class="cursor-pointer text-sm whitespace-nowrap text-slate-700">
+				มีวันหมดอายุ
+			</Label>
+		</div>
 	</div>
 
 	{#if canShowOverall}

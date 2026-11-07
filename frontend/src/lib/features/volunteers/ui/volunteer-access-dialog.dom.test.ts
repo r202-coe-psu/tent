@@ -243,11 +243,12 @@ describe('VolunteerAccessDialog for a volunteer_coordinator (#955)', () => {
 });
 
 describe('VolunteerAccessDialog role radios (#1044, #1072)', () => {
-	it('offers the ten coordinator roles as radios, none picked', async () => {
+	it('offers the eleven coordinator roles as radios, none picked', async () => {
 		await render(COORDINATOR);
 		const radios = roleRadios();
-		expect(radios).toHaveLength(10);
+		expect(radios).toHaveLength(11);
 		expect(radios.some((r) => r.getAttribute('aria-checked') === 'true')).toBe(false);
+		expect(radios.map((r) => r.id)).toContain('volunteer-access-role-volunteer:001-donation_staff');
 		expect(radios.map((r) => r.id)).not.toContain(
 			'volunteer-access-role-volunteer:001-kiosk_staff'
 		);
@@ -273,13 +274,13 @@ describe('VolunteerAccessDialog role radios (#1044, #1072)', () => {
 		const infos = [...document.body.querySelectorAll('button')].filter((b) =>
 			b.getAttribute('aria-label')?.startsWith('รายละเอียด')
 		);
-		expect(infos).toHaveLength(10);
+		expect(infos).toHaveLength(11);
 		expect(infos.map((b) => b.getAttribute('aria-label'))).toContain('รายละเอียดเจ้าหน้าที่คลัง');
 	});
 
 	it('offers a manager every staff role', async () => {
 		await render(MANAGER);
-		expect(roleRadios()).toHaveLength(12);
+		expect(roleRadios()).toHaveLength(13);
 	});
 
 	it('refuses to save without a role with a toast and a note under the radios that clears once one is picked', async () => {
