@@ -39,6 +39,7 @@
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Badge } from '$lib/components/ui/badge/index.js';
 	import { Skeleton } from '$lib/components/ui/skeleton/index.js';
+	import PaginationControls from '$lib/components/pagination-controls.svelte';
 	import RosterLiveAttendanceBar, {
 		type AttendanceTileFilter
 	} from './roster-live-attendance-bar.svelte';
@@ -127,6 +128,14 @@
 		if (search) list = list.filter((a) => matchesSearch(a, search));
 		return [...list].sort((a, b) => STATUS_PRIORITY[a.status] - STATUS_PRIORITY[b.status]);
 	});
+
+	const PAGE_SIZE = 10;
+	let currentPage = $state(1);
+
+	const totalFiltered = $derived(rows.length);
+	const totalPages = $derived(Math.max(1, Math.ceil(totalFiltered / PAGE_SIZE)));
+	const safePage = $derived(Math.max(1, Math.min(currentPage, totalPages)));
+	const paginatedRows = $derived(rows.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE));
 
 	const isLoading = $derived(attendanceQuery.isPending || volunteersQuery.isPending);
 
@@ -242,7 +251,7 @@
 		</div>
 	{:else}
 		<div class="space-y-3">
-			{#each rows as assignment (assignment._id)}
+			{#each paginatedRows as assignment (assignment._id)}
 				{@const volunteer = volunteersById.get(assignment.volunteer_id)}
 				{#if volunteer}
 					<RosterRow
@@ -255,6 +264,18 @@
 				{/if}
 			{/each}
 		</div>
+
+		{#if totalPages > 1}
+			<div class="flex flex-col items-center justify-between gap-3 pt-2 sm:flex-row">
+				<p class="text-xs text-muted-foreground">
+					แสดงรายการที่ {(safePage - 1) * PAGE_SIZE + 1} - {Math.min(
+						safePage * PAGE_SIZE,
+						totalFiltered
+					)} จากทั้งหมด {totalFiltered} รายการ
+				</p>
+				<PaginationControls page={safePage} {totalPages} onPageChange={(p) => (currentPage = p)} />
+			</div>
+		{/if}
 	{/if}
 </div>
 

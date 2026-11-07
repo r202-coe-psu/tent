@@ -81,6 +81,10 @@ describe('resolveSkillOption', () => {
 	it('returns undefined for a value master data no longer carries', () => {
 		expect(resolveSkillOption('ทักษะที่เลิกใช้', OPTIONS)).toBeUndefined();
 	});
+
+	it('resolves legacy item codes to master data options', () => {
+		expect(resolveSkillOption('item_01m34tzhgqexqk105e4xxq0bq5', OPTIONS)?.code).toBe('medical');
+	});
 });
 
 describe('resolveSkillLabel / toSkillCode', () => {
@@ -125,16 +129,26 @@ describe('skillMatches', () => {
 		expect(skillMatches('ทักษะลับ', ' ทักษะลับ ', OPTIONS)).toBe(true);
 		expect(skillMatches('ทักษะลับ', 'อื่น', OPTIONS)).toBe(false);
 	});
+
+	it('matches when one side is an option label and the other is raw code', () => {
+		expect(skillMatches('medical', 'การแพทย์ / ปฐมพยาบาล', OPTIONS)).toBe(true);
+		expect(skillMatches('item_01m34tzhgqexqk105e4xxq0bq5', 'medical', OPTIONS)).toBe(true);
+	});
 });
 
 describe('hasAnyRequiredSkill', () => {
 	it('reads an empty requirement as satisfied', () => {
 		expect(hasAnyRequiredSkill([], [], OPTIONS)).toBe(true);
+		expect(hasAnyRequiredSkill(undefined, [], OPTIONS)).toBe(true);
+		expect(hasAnyRequiredSkill(['kitchen'], undefined, OPTIONS)).toBe(true);
 	});
 
 	it('matches across the code/label boundary', () => {
 		expect(hasAnyRequiredSkill(['การแพทย์ / ปฐมพยาบาล'], ['medical'], OPTIONS)).toBe(true);
 		expect(hasAnyRequiredSkill(['kitchen'], ['medical'], OPTIONS)).toBe(false);
+		expect(hasAnyRequiredSkill(['item_01m34tzhgqexqk105e4xxq0bq5'], ['medical'], OPTIONS)).toBe(
+			true
+		);
 	});
 });
 

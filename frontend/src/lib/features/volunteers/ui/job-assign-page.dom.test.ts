@@ -50,7 +50,18 @@ const job = {
 
 const mocks = vi.hoisted(() => ({
 	assign: vi.fn(),
-	assignments: [] as ShiftAssignment[]
+	assignments: [] as ShiftAssignment[],
+	jobSkillsRequired: [] as string[],
+	volunteers: null as Volunteer[] | null,
+	skillOptions: [
+		{
+			code: 'cooking',
+			label: 'ประกอบอาหาร / ครัวสนาม',
+			description: '',
+			icon: '✨',
+			controlled: false
+		}
+	]
 }));
 
 vi.mock('$app/navigation', () => ({ goto: vi.fn() }));
@@ -61,16 +72,31 @@ vi.mock('svelte-sonner', () => ({
 vi.mock('$lib/features/shelters', () => ({ useShelter: () => ({ data: { name: 'ศูนย์ 1' } }) }));
 vi.mock('../application/queries', () => ({
 	useAssignVolunteers: () => ({ mutateAsync: mocks.assign, isPending: false }),
-	useJob: () => ({ data: job, isLoading: false }),
-	useJobs: () => ({ data: [job], isLoading: false }),
+	useJob: () => ({
+		get data() {
+			return { ...job, skills_required: mocks.jobSkillsRequired };
+		},
+		isLoading: false
+	}),
+	useJobs: () => ({
+		get data() {
+			return [{ ...job, skills_required: mocks.jobSkillsRequired }];
+		},
+		isLoading: false
+	}),
 	useShiftAssignments: () => ({
 		get data() {
 			return mocks.assignments;
 		},
 		isLoading: false
 	}),
-	useSkillOptions: () => ({ options: [], controlledValues: [] }),
-	useVolunteers: () => ({ data: [A, B], isLoading: false })
+	useSkillOptions: () => ({ options: mocks.skillOptions, controlledValues: [] }),
+	useVolunteers: () => ({
+		get data() {
+			return mocks.volunteers ?? [A, B];
+		},
+		isLoading: false
+	})
 }));
 
 let instance: ReturnType<typeof mount> | null = null;
@@ -100,6 +126,8 @@ beforeEach(() => {
 	vi.clearAllMocks();
 	mocks.assign.mockResolvedValue({});
 	mocks.assignments = [];
+	mocks.jobSkillsRequired = [];
+	mocks.volunteers = null;
 });
 
 afterEach(async () => {
@@ -219,5 +247,57 @@ describe('JobAssignPage — several shifts at once (#1164)', () => {
 		await click(eveningBtn);
 		// Still only morning is selected
 		expect(sendButton().getAttribute('aria-label')).toBe('มอบหมายอาสา 0 คนเข้ากะนี้');
+	});
+
+	it('shows skill requirements and filters candidates by matching skill', async () => {
+		const skilledA = { ...A, skills: ['cooking'] } as Volunteer;
+		const unskilledB = { ...B, skills: [] } as Volunteer;
+		mocks.volunteers = [skilledA, unskilledB];
+		mocks.jobSkillsRequired = ['cooking'];
+
+		await render();
+		expect(text()).toContain('ทักษะที่ต้องการ: ประกอบอาหาร / ครัวสนาม');
+		expect(text()).toContain('ทักษะตรงกับงาน');
+		expect(text()).toContain('ตรงกับงานอาสาสมัครนี้ (1)');
+
+		// Filter by match: only skilledA is visible
+		const matchBtn = [...document.body.querySelectorAll<HTMLButtonElement>('button')].find((b) =>
+			b.textContent?.includes('ตรงกับงานอาสาสมัครนี้')
+		)!;
+		await click(matchBtn);
+		expect(document.body.querySelector('[aria-label="เลือก สมชาย ทดสอบ"]')).not.toBeNull();
+		expect(document.body.querySelector('[aria-label="เลือก สมหญิง ทดสอบ"]')).toBeNull();
+	});
+
+	it('indicates that all candidates match when the job requires no skill', async () => {
+		mocks.jobSkillsRequired = [];
+		await render();
+		expect(text()).toContain('ทักษะที่ต้องการ: ไม่จำกัดทักษะ (รับทุกทักษะ)');
+		expect(text()).toContain('ตรงกับงานอาสาสมัครนี้ (ไม่จำกัดทักษะ: 2)');
+	});
+
+	it('paginates unassigned candidates at 10 items per page', async () => {
+		const twelveVolunteers = Array.from({ length: 12 }, (_, i) =>
+			volunteer(i + 1, `อาสาคนที่_${i + 1}`)
+		);
+		mocks.volunteers = twelveVolunteers;
+		await render();
+
+		// Page 1: shows candidates 1 to 10
+		expect(text()).toContain('อาสาคนที่_1 ทดสอบ');
+		expect(text()).toContain('อาสาคนที่_10 ทดสอบ');
+		expect(text()).not.toContain('อาสาคนที่_11 ทดสอบ');
+		expect(text()).toContain('แสดงหน้าที่ 1 จาก 2');
+
+		// Click page 2 button
+		const page2Btn = [...document.body.querySelectorAll<HTMLButtonElement>('button')].find(
+			(b) => b.textContent?.trim() === '2'
+		);
+		expect(page2Btn).not.toBeNull();
+		await click(page2Btn!);
+		expect(text()).toContain('อาสาคนที่_11 ทดสอบ');
+		expect(text()).toContain('อาสาคนที่_12 ทดสอบ');
+		expect(text()).not.toContain('อาสาคนที่_1 ทดสอบ');
+		expect(text()).toContain('แสดงหน้าที่ 2 จาก 2');
 	});
 });

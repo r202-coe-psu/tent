@@ -88,10 +88,18 @@
 		// This map is a local deduplication buffer and is not exposed to the template.
 		// eslint-disable-next-line svelte/prefer-svelte-reactivity
 		const map = new Map<string, SkillOption>();
-		for (const value of volunteer.skills) {
+		for (const value of volunteer.skills ?? []) {
 			const option = resolveSkillOption(value, skillOptions);
 			if (option && !map.has(option.code)) {
 				map.set(option.code, option);
+			} else if (!option && !map.has(value)) {
+				map.set(value, {
+					code: value,
+					label: value,
+					description: '',
+					icon: '✨',
+					controlled: false
+				});
 			}
 		}
 		return Array.from(map.values());

@@ -20,6 +20,7 @@
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Skeleton } from '$lib/components/ui/skeleton/index.js';
 	import * as Table from '$lib/components/ui/table/index.js';
+	import PaginationControls from '$lib/components/pagination-controls.svelte';
 	import { getShelterCode } from '$lib/db/shelter';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
 	import { useShelter } from '$lib/features/shelters';
@@ -142,6 +143,16 @@
 		return list;
 	});
 
+	const PAGE_SIZE = 10;
+	let currentPage = $state(1);
+
+	const totalFiltered = $derived(filteredVolunteers.length);
+	const totalPages = $derived(Math.max(1, Math.ceil(totalFiltered / PAGE_SIZE)));
+	const safePage = $derived(Math.max(1, Math.min(currentPage, totalPages)));
+	const paginatedVolunteers = $derived(
+		filteredVolunteers.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE)
+	);
+
 	let walkInDialogOpen = $state(false);
 
 	const cardSkeletonKeys = [0, 1, 2, 3];
@@ -238,7 +249,7 @@
 					</Table.Row>
 				</Table.Header>
 				<Table.Body>
-					{#each filteredVolunteers as volunteer (volunteer._id)}
+					{#each paginatedVolunteers as volunteer (volunteer._id)}
 						<VolunteerCard
 							{volunteer}
 							skillOptions={skillCatalog.options}
@@ -250,6 +261,20 @@
 					{/each}
 				</Table.Body>
 			</Table.Root>
+
+			{#if totalPages > 1}
+				<div
+					class="flex flex-col items-center justify-between gap-3 border-t border-border p-4 sm:flex-row"
+				>
+					<p class="text-xs text-muted-foreground">
+						แสดงคนที่ {(safePage - 1) * PAGE_SIZE + 1} - {Math.min(
+							safePage * PAGE_SIZE,
+							totalFiltered
+						)} จากทั้งหมด {totalFiltered} คน
+					</p>
+					<PaginationControls bind:page={currentPage} count={totalFiltered} perPage={PAGE_SIZE} />
+				</div>
+			{/if}
 		</div>
 	{/if}
 </div>
