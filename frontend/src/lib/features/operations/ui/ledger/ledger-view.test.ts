@@ -13,6 +13,7 @@ import {
 	ledgerRefHref,
 	ledgerToCsv,
 	LEDGER_CSV_HEADER,
+	ledgerEntryLabel,
 	summarizeRows,
 	toLedgerRow,
 	type LedgerLookup
@@ -237,6 +238,11 @@ describe('self-purchased receipts (schema_v 7)', () => {
 		expect(toLedgerRow(bought, lookup).reasonLabel).toBe('ซื้อเอง');
 		expect(toLedgerRow(receive, lookup).group).toBe('in');
 		expect(toLedgerRow(transferIn, lookup).group).toBe('transfer');
+	});
+
+	it('ledgerEntryLabel gives the same label the per-item history prints', () => {
+		expect(ledgerEntryLabel(bought)).toBe('ซื้อเอง');
+		expect(ledgerEntryLabel(receive)).toBe(toLedgerRow(receive, lookup).reasonLabel);
 	});
 
 	it('an adjust/found row without the flag stays an adjust', () => {

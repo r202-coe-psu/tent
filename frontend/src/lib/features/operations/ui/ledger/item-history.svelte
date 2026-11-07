@@ -10,7 +10,7 @@
 	import { qtyGt } from '$lib/utils/qty';
 	import { formatThaiDateTime, formatThaiShortDate } from '$lib/utils/date';
 	import { resolve } from '$app/paths';
-	import { ADJUST_REASON_LABELS, REASON_LABELS, ledgerRefHref } from './ledger-view';
+	import { ADJUST_REASON_LABELS, ledgerEntryLabel, ledgerRefHref } from './ledger-view';
 	import { resolveAdjustReason } from '../../domain/operations';
 	import { lotStorageName } from '../../domain/lot-storage';
 	import { useStoragePoints } from '../../application/use-storage-points.svelte';
@@ -122,7 +122,7 @@
 											? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
 											: 'border-rose-500/20 bg-rose-500/10 text-rose-600 dark:text-rose-400'}"
 									>
-										{REASON_LABELS[entry.reason] ?? entry.reason}
+										{ledgerEntryLabel(entry)}
 									</span>
 									<!-- CR-143 FR-C4/C5: rows from before schema_v 6 read as "other". -->
 									{@const adjustReason = resolveAdjustReason(entry)}

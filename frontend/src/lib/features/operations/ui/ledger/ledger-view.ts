@@ -52,6 +52,16 @@ export const REASON_LABELS: Record<LedgerReason, string> = {
 	transfer_in: 'โอนย้ายเข้า'
 };
 
+/**
+ * The type label a ledger entry shows (CR-234 FR-9): "ซื้อเอง" for a flagged manual receipt,
+ * otherwise the label of its reason. Shared by the movements tab and the per-item history.
+ */
+export function ledgerEntryLabel(entry: StockLedger): string {
+	return isSelfPurchasedReceipt(entry)
+		? LEDGER_GROUP_LABELS.self_purchased
+		: (REASON_LABELS[entry.reason] ?? entry.reason);
+}
+
 /** CR-143 §C — why a stock correction was made. Thai labels shared by the adjust form and the ledger. */
 export const ADJUST_REASON_LABELS: Record<AdjustReason, string> = {
 	expired: 'หมดอายุ',
@@ -165,9 +175,7 @@ export function toLedgerRow(entry: StockLedger, lookup: LedgerLookup): LedgerRow
 		time: valid ? toTime(date) : '',
 		group,
 		reason: entry.reason,
-		reasonLabel: selfPurchased
-			? LEDGER_GROUP_LABELS.self_purchased
-			: (REASON_LABELS[entry.reason] ?? entry.reason),
+		reasonLabel: ledgerEntryLabel(entry),
 		adjustReason,
 		adjustReasonLabel,
 		itemName: lookup.itemName(entry.item_id),
