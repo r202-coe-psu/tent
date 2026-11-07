@@ -11,6 +11,8 @@
 		 * line staff fill in by hand. Omit for no zone row.
 		 */
 		zone?: { label: string; value: string | null };
+		/** Row under the zone, e.g. the emergency contact phone; omit for none (no blank row). */
+		emergency?: { label: string; value: string | null } | null;
 		/** Small line at the bottom of the text column, e.g. the site address. */
 		footer?: string;
 		/** Large bold badge at the bottom of the text column, above the footer (e.g. เจ้าหน้าที่); omit for none. */
@@ -31,6 +33,7 @@
 		alt,
 		name,
 		zone,
+		emergency,
 		badge,
 		footer,
 		lines = [],
@@ -61,6 +64,12 @@
 				{:else}
 					<span class="min-w-0 flex-1 border-b-[0.375mm] border-dotted border-black"></span>
 				{/if}
+			</p>
+		{/if}
+		{#if emergency?.value}
+			<p class="flex items-baseline gap-[1.5mm] text-[9pt] leading-[1.3] font-medium">
+				<span class="shrink-0">{emergency.label}</span>
+				<span class="min-w-0 truncate">{emergency.value}</span>
 			</p>
 		{/if}
 		{#if checklist.length > 0}

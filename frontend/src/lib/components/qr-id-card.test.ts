@@ -51,6 +51,21 @@ describe('QrIdCard', () => {
 		expect(render(QrIdCard, { props: base }).body).not.toContain('label-qr-caption');
 	});
 
+	it('prints the emergency row after the zone row when given', () => {
+		const body = render(QrIdCard, {
+			props: {
+				...base,
+				zone: { label: 'Zone:', value: 'A3' },
+				emergency: { label: 'ติดต่อฉุกเฉิน:', value: '0891234567' }
+			}
+		}).body;
+
+		expect(body).toMatch(/>ติดต่อฉุกเฉิน:<\/span>.*>0891234567<\/span>/);
+		expect(body.indexOf('0891234567')).toBeGreaterThan(body.indexOf('A3'));
+		expect(body.indexOf('0891234567')).toBeLessThan(body.indexOf('เช็คอิน'));
+		expect(render(QrIdCard, { props: base }).body).not.toContain('ติดต่อฉุกเฉิน');
+	});
+
 	it('prints the assigned zone after its label', () => {
 		const result = render(QrIdCard, {
 			props: { ...base, zone: { label: 'Zone:', value: 'A3' } }

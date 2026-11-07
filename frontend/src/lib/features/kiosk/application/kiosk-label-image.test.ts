@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
 	KIOSK_LABEL_CHECKBOX,
 	KIOSK_LABEL_CHECKLIST,
+	KIOSK_LABEL_EMERGENCY_PREFIX,
 	KIOSK_LABEL_LINK,
 	KIOSK_LABEL_QR_CAPTION,
 	KIOSK_LABEL_QR_CAPTION_GAP_MM,
@@ -124,6 +125,30 @@ describe('renderKioskLabelPng', () => {
 			KIOSK_LABEL_LINK,
 			...KIOSK_LABEL_QR_CAPTION
 		]);
+	});
+
+	it('prints the emergency contact phone on its own row under the zone', async () => {
+		await renderKioskLabelPng({ ...label, emergencyPhone: '0891234567' });
+
+		const texts = harness.fakeContext.fillText.mock.calls.map(([text]) => text);
+		const zoneAt = texts.indexOf(KIOSK_LABEL_ZONE_PREFIX);
+		expect(texts.slice(zoneAt + 1, zoneAt + 3)).toEqual([
+			KIOSK_LABEL_EMERGENCY_PREFIX,
+			'0891234567'
+		]);
+		const ys = harness.fakeContext.fillText.mock.calls.map(
+			(call) => (call as unknown as [string, number, number])[2]
+		);
+		const firstCheckRow = texts.indexOf(KIOSK_LABEL_CHECKLIST[0]);
+		expect(ys[zoneAt + 1]).toBeGreaterThan(ys[zoneAt]!);
+		expect(ys[zoneAt + 1]).toBeLessThan(ys[firstCheckRow]!);
+	});
+
+	it('leaves no emergency row when there is no emergency phone', async () => {
+		await renderKioskLabelPng({ ...label, emergencyPhone: null });
+
+		const texts = harness.fakeContext.fillText.mock.calls.map(([text]) => text);
+		expect(texts).not.toContain(KIOSK_LABEL_EMERGENCY_PREFIX);
 	});
 
 	it('prints the "shelter use only" caption centred under the QR, clear of its quiet zone', async () => {

@@ -92,6 +92,8 @@ export function kioskLabelPageCss(): string {
 export const KIOSK_LABEL_TEXT = {
 	name: { pt: 16, lineHeight: 1.3, weight: 700, maxLines: 3 },
 	zone: { pt: 12, lineHeight: 1.3, weight: 700 },
+	/** Emergency contact row under the zone; same face as the checklist, so no extra font load. */
+	emergency: { pt: 9, lineHeight: 1.3, weight: 500 },
 	checklist: { pt: 9, lineHeight: 1.3, weight: 500 },
 	link: { pt: 7, lineHeight: 1.3, weight: 500 }
 } as const;
@@ -119,6 +121,17 @@ export const KIOSK_LABEL_ZONE = {
 } as const;
 
 export type LabelZoneLine = { label: string; value: string | null };
+
+/**
+ * Row under the zone: the evacuee's emergency contact phone. ~37 mm with a 10-digit number at
+ * 9 pt, inside the ~38.7 mm text column; a longer number is squeezed to fit. No phone → no row.
+ */
+export const KIOSK_LABEL_EMERGENCY_PREFIX = 'ติดต่อฉุกเฉิน:';
+
+/** The emergency row of a label, or null when there is no phone to print. */
+export function labelEmergencyLine(phone: string | null | undefined): LabelZoneLine | null {
+	return phone ? { label: KIOSK_LABEL_EMERGENCY_PREFIX, value: phone } : null;
+}
 
 /**
  * The zone row of a QR label: the assigned zone's name, or a null value for a blank dotted rule

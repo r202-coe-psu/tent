@@ -122,8 +122,8 @@ describe('kiosk label canvas', () => {
 		expect(ptToDots(KIOSK_LABEL_TEXT.name.pt)).toBeCloseTo(45.11, 2);
 	});
 
-	it('fits a 3-line name, the zone, one checklist row per item and the link in the label', () => {
-		const { name, zone, checklist, link } = KIOSK_LABEL_TEXT;
+	it('fits a 3-line name, the zone, the emergency row, one checklist row per item and the link', () => {
+		const { name, zone, emergency, checklist, link } = KIOSK_LABEL_TEXT;
 		const checkRow = Math.max(
 			mmToDots(KIOSK_LABEL_CHECKBOX.sizeMm),
 			ptToDots(checklist.pt) * checklist.lineHeight
@@ -134,6 +134,8 @@ describe('kiosk label canvas', () => {
 			ptToDots(name.pt) * name.lineHeight * name.maxLines +
 			mmToDots(KIOSK_LABEL_ZONE.rowGapMm) +
 			ptToDots(zone.pt) * zone.lineHeight +
+			mmToDots(KIOSK_LABEL_ZONE.rowGapMm) +
+			ptToDots(emergency.pt) * emergency.lineHeight +
 			checkRow * rows +
 			mmToDots(KIOSK_LABEL_CHECKBOX.rowGapMm) * (rows - 1) +
 			mmToDots(KIOSK_LABEL_LINK_GAP_MM) +

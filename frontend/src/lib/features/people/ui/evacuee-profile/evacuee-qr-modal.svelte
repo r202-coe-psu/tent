@@ -64,6 +64,8 @@
 			? renderKioskQrLabelPng(evacuee._id, {
 					name,
 					zone: labelZoneName(evacuee.current_stay?.zone, shelterQuery.data?.zones),
+					// Same digits-only form the kiosk server prints (`toLabelIdentity`).
+					emergencyPhone: evacuee.emergency_contact?.phone?.replace(/[\s-]/g, '') || null,
 					checkedCount: intakeStationsPassed(
 						evacuee.current_stay,
 						(screeningsQuery.data?.length ?? 0) > 0

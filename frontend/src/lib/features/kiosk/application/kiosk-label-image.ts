@@ -9,6 +9,7 @@ import {
 	KIOSK_LABEL_ZONE,
 	kioskLabelDots,
 	kioskLabelLayout,
+	labelEmergencyLine,
 	labelZoneLine,
 	mmToDots,
 	type LabelZoneLine,
@@ -22,6 +23,8 @@ export type KioskLabelContent = {
 	name: string;
 	/** Current zone name; missing or null leaves a dotted rule to write the zone on. */
 	zone?: string | null;
+	/** Emergency contact phone, printed on its own row under the zone; none leaves no row. */
+	emergencyPhone?: string | null;
 	checklist?: readonly string[];
 	/** Intake stations passed: this many checklist boxes are ticked, top first. */
 	checkedCount?: number;
@@ -131,6 +134,11 @@ export async function renderKioskLabelPng(label: KioskLabelContent): Promise<str
 
 	y += mmToDots(KIOSK_LABEL_ZONE.rowGapMm);
 	drawZone(context, labelZoneLine(label.zone), fonts.zone, layout.text, y, { words, graphemes });
+	const emergency = labelEmergencyLine(label.emergencyPhone);
+	if (emergency) {
+		y += ptToDots(zoneStyle.pt) * zoneStyle.lineHeight + mmToDots(KIOSK_LABEL_ZONE.rowGapMm);
+		drawEmergency(context, emergency, fonts.checklist, layout.text, y);
+	}
 
 	// The checklist sits right above the site address, printed small at the very bottom.
 	const linkRow = ptToDots(linkStyle.pt) * linkStyle.lineHeight;
@@ -166,6 +174,22 @@ function drawQrCaption(
 		context.fillText(line, centre - context.measureText(line).width / 2, middle);
 		middle += row;
 	}
+}
+
+/** `ติดต่อฉุกเฉิน:` then the phone, squeezed into the column rather than cut. */
+function drawEmergency(
+	context: CanvasRenderingContext2D,
+	line: { label: string; value: string | null },
+	font: string,
+	column: { x: number; width: number },
+	top: number
+): void {
+	const { pt, lineHeight } = KIOSK_LABEL_TEXT.emergency;
+	const middle = top + (ptToDots(pt) * lineHeight) / 2;
+	context.font = font;
+	context.fillText(line.label, column.x, middle, column.width);
+	const x = column.x + context.measureText(line.label).width + mmToDots(KIOSK_LABEL_ZONE.textGapMm);
+	if (line.value) context.fillText(line.value, x, middle, Math.max(1, column.x + column.width - x));
 }
 
 /** `Zone:` then the zone name cut to one line, or a dotted rule to write the zone on by hand. */

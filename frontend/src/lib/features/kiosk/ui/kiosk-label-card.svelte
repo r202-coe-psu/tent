@@ -8,6 +8,7 @@
 		KIOSK_LABEL_MM,
 		KIOSK_LABEL_PADDING_MM,
 		KIOSK_LABEL_QR_CAPTION,
+		labelEmergencyLine,
 		kioskQrBoxMm,
 		labelZoneLine
 	} from '../domain/print-label';
@@ -38,6 +39,7 @@
 		badge={label.badge}
 		lines={label.lines}
 		zone={isStaffCard ? undefined : labelZoneLine(label.zone)}
+		emergency={isStaffCard ? undefined : labelEmergencyLine(label.emergencyPhone)}
 		checkedCount={label.checkedCount}
 		footer={KIOSK_LABEL_LINK}
 		checklist={isStaffCard ? undefined : KIOSK_LABEL_CHECKLIST}
