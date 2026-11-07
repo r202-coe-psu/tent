@@ -14,7 +14,16 @@ import type { Volunteer } from './volunteer.schema';
 
 export type BulkAssignSkipReason =
 	| { kind: 'already_on_shift' }
-	| { kind: 'clash'; jobTitle: string; startTime: string; endTime: string }
+	| {
+			kind: 'clash';
+			/** The clashing shift is of the job being filled (an earlier shift of this run, or one held). */
+			sameJob: boolean;
+			jobTitle: string;
+			startTime: string;
+			endTime: string;
+			/** The part of the day both shifts cover (`HH:mm`), when it can be told from the times. */
+			overlap: { start: string; end: string } | null;
+	  }
 	| { kind: 'shift_full' }
 	| { kind: 'bad_shift_time'; message: string };
 
@@ -75,9 +84,11 @@ export function planBulkAssign(input: PlanInput): BulkAssignPlan {
 					volunteer,
 					reason: {
 						kind: 'clash',
+						sameJob: state.jobId === job._id,
 						jobTitle: state.jobTitle,
 						startTime: state.startTime,
-						endTime: state.endTime
+						endTime: state.endTime,
+						overlap: overlapOf(shift, state)
 					}
 				});
 			} else if (seats <= 0) {
@@ -98,13 +109,44 @@ export function planBulkAssign(input: PlanInput): BulkAssignPlan {
 	return plan;
 }
 
+const minutes = (hhmm: string): number | null => {
+	const m = /^(\d{2}):(\d{2})$/.exec(hhmm);
+	return m ? Number(m[1]) * 60 + Number(m[2]) : null;
+};
+const hhmm = (total: number) =>
+	`${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`;
+
+/**
+ * The part of the day two shifts both cover, from their wall-clock times. A shift past midnight
+ * is left out: its times alone do not say where the overlap is.
+ */
+function overlapOf(
+	shift: Pick<JobShift, 'start_time' | 'end_time'>,
+	other: { startTime: string; endTime: string }
+): { start: string; end: string } | null {
+	const [a1, a2, b1, b2] = [shift.start_time, shift.end_time, other.startTime, other.endTime].map(
+		minutes
+	);
+	if (a1 === null || a2 === null || b1 === null || b2 === null || a2 <= a1 || b2 <= b1) return null;
+	const start = Math.max(a1, b1);
+	const end = Math.min(a2, b2);
+	return start < end ? { start: hhmm(start), end: hhmm(end) } : null;
+}
+
 /** Plain Thai for why a pair was not placed: what is wrong, not a code. */
 export function skipReasonText(reason: BulkAssignSkipReason): string {
 	switch (reason.kind) {
 		case 'already_on_shift':
 			return 'อยู่ในกะนี้อยู่แล้ว';
-		case 'clash':
-			return `เวลาซ้อนกับ "${reason.jobTitle}" ${reason.startTime}-${reason.endTime} น.`;
+		case 'clash': {
+			const who = reason.sameJob
+				? 'ของงานนี้ที่เขาอยู่แล้ว'
+				: `ของงาน "${reason.jobTitle}" ที่เขาอยู่แล้ว`;
+			const where = reason.overlap
+				? ` ซ้อนกันช่วง ${reason.overlap.start}-${reason.overlap.end} น.`
+				: '';
+			return `ชนกับกะ ${reason.startTime}-${reason.endTime} น. ${who}${where}`;
+		}
 		case 'shift_full':
 			return 'กะนี้เต็มแล้ว';
 		case 'bad_shift_time':

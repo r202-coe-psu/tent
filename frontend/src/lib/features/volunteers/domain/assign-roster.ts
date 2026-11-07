@@ -47,6 +47,8 @@ export type AssignRowState =
 	| { kind: 'accepted' }
 	| {
 			kind: 'collision';
+			/** The job the clashing shift belongs to. */
+			jobId: string;
 			/** Title of the job whose shift clashes, for the badge text. */
 			jobTitle: string;
 			/** Bangkok wall-clock `HH:mm` of the clashing window. */
@@ -153,6 +155,7 @@ export function buildAssignRoster(input: AssignRosterInput): AssignCandidate[] {
 				});
 				state = {
 					kind: 'collision',
+					jobId: clash.job_id,
 					jobTitle: clashJob?.title ?? 'งานอาสาสมัครอื่น',
 					...windowLabel(clashShift)
 				};
