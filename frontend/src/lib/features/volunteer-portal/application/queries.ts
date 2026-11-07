@@ -11,6 +11,7 @@ import {
 	fetchSchedule,
 	findTickets,
 	getTicket,
+	fetchTokenApplications,
 	respondToDispatch,
 	resolvePortalAccess,
 	updateProfileSkills
@@ -19,7 +20,9 @@ import type { PortalCredential, PublicJobFilter, VolunteerApplyInput } from '../
 
 export const volunteerPortalKeys = {
 	all: ['volunteer-portal'] as const,
-	ticket: (token: string) => [...volunteerPortalKeys.all, 'ticket', token] as const,
+	ticket: (token: string, applicationId?: string) =>
+		[...volunteerPortalKeys.all, 'ticket', token, applicationId ?? ''] as const,
+	applications: (token: string) => [...volunteerPortalKeys.all, 'applications', token] as const,
 	/** Keyed by the whole credential: signing in by phone and by token are two sessions
 	 * of the same person, and must not share a cache entry that outlives a sign-out. */
 	schedule: (credential: PortalCredential) =>
@@ -36,10 +39,10 @@ export const volunteerPortalKeys = {
 	jobsList: (filter: PublicJobFilter) => [...volunteerPortalKeys.jobs(), 'list', filter] as const
 };
 
-export function useVolunteerTicket(token: () => string) {
+export function useVolunteerTicket(token: () => string, applicationId?: () => string | undefined) {
 	return createQuery(() => ({
-		queryKey: volunteerPortalKeys.ticket(token()),
-		queryFn: () => getTicket(token()),
+		queryKey: volunteerPortalKeys.ticket(token(), applicationId?.()),
+		queryFn: () => getTicket(token(), applicationId?.()),
 		enabled: Boolean(token()),
 		retry: false
 	}));
@@ -57,8 +60,28 @@ export function useCancelTicketMutation() {
 		mutationFn: (input: { token: string; applicationId: string }) =>
 			cancelTicket(input.token, input.applicationId),
 		onSuccess: (_data, { token }) => {
-			void queryClient.invalidateQueries({ queryKey: volunteerPortalKeys.ticket(token) });
+			// Prefix match: every ticket view of this token, the portal's per-shift list,
+			// and the schedule/tickets queries that show the cancelled shift.
+			void queryClient.invalidateQueries({
+				queryKey: [...volunteerPortalKeys.all, 'ticket', token]
+			});
+			void queryClient.invalidateQueries({ queryKey: volunteerPortalKeys.applications(token) });
+			void queryClient.invalidateQueries({ queryKey: [...volunteerPortalKeys.all, 'schedule'] });
+			void queryClient.invalidateQueries({ queryKey: [...volunteerPortalKeys.all, 'tickets'] });
 		}
+	}));
+}
+
+/**
+ * The token session's own applications, for the per-shift "เปิดตั๋ว"/"ยกเลิก" buttons (#973).
+ * Disabled for a phone session: the number is guessable, so it never gets these buttons.
+ */
+export function useVolunteerApplications(credential: () => PortalCredential | null) {
+	return createQuery(() => ({
+		queryKey: volunteerPortalKeys.applications(credential()?.token ?? ''),
+		queryFn: () => fetchTokenApplications(credential()!.token!),
+		enabled: Boolean(credential()?.token),
+		staleTime: 0
 	}));
 }
 

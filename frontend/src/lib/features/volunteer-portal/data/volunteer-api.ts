@@ -5,6 +5,7 @@
  * EXTERNAL_API_SECRET, which the BFF injects; the SPA must never reach it directly
  * (CR-063).
  */
+import type { PortalApplication } from '../domain/schedule-view';
 import type {
 	PortalAccessStatus,
 	PortalCredential,
@@ -78,11 +79,14 @@ async function readJson(response: Response): Promise<unknown> {
 	return response.json().catch(() => null);
 }
 
-export async function getTicket(token: string): Promise<VolunteerTicket> {
+export async function getTicket(token: string, applicationId?: string): Promise<VolunteerTicket> {
 	// Called as plain `fetch`, like every other call here. It used to take an injectable
 	// `fetchFn` for a SvelteKit `load`, but this app has none (`ssr = false`, no server
 	// load), and calling the global through that binding detached it from `window`.
-	const response = await fetch(`/api/public/v1/volunteer/ticket/${encodeURIComponent(token)}`);
+	const query = applicationId ? `?application=${encodeURIComponent(applicationId)}` : '';
+	const response = await fetch(
+		`/api/public/v1/volunteer/ticket/${encodeURIComponent(token)}${query}`
+	);
 	const data = await readJson(response);
 	if (!response.ok || !data) {
 		throw apiError(data, response.status, 'ไม่สามารถเปิดตั๋วนี้ได้');
@@ -111,6 +115,18 @@ export async function findTickets(credential: PortalCredential): Promise<TicketF
 	}
 	const body = data as { tickets?: TicketSummary[]; phone_masked?: string };
 	return { tickets: body.tickets ?? [], phoneMasked: body.phone_masked ?? '' };
+}
+
+/** The applications behind a token session (#973): what the per-shift ticket buttons hang on. */
+export async function fetchTokenApplications(token: string): Promise<PortalApplication[]> {
+	const response = await fetch(
+		`/api/public/v1/volunteer/ticket/${encodeURIComponent(token)}/applications`
+	);
+	const data = await readJson(response);
+	if (!response.ok || !data) {
+		throw apiError(data, response.status, 'โหลดรายการใบสมัครไม่สำเร็จ');
+	}
+	return (data as { applications?: PortalApplication[] }).applications ?? [];
 }
 
 export async function cancelTicket(token: string, applicationId: string): Promise<void> {

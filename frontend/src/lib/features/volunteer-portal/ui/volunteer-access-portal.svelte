@@ -11,6 +11,7 @@
 	import MapPin from '@lucide/svelte/icons/map-pin';
 	import Maximize2 from '@lucide/svelte/icons/maximize-2';
 	import Phone from '@lucide/svelte/icons/phone';
+	import Ticket from '@lucide/svelte/icons/ticket';
 	import QrCode from '@lucide/svelte/icons/qr-code';
 	import Rocket from '@lucide/svelte/icons/rocket';
 	import X from '@lucide/svelte/icons/x';
@@ -35,12 +36,13 @@
 		useResolvePortalAccessMutation,
 		useRoleCardTokenMutation,
 		useVolunteerAccessStatus,
+		useVolunteerApplications,
 		useVolunteerJobs,
 		useVolunteerProfile,
 		useVolunteerSchedule,
 		useVolunteerTickets
 	} from '../application/queries';
-	import { volunteerPortalKeys } from '../application/queries';
+	import { useCancelTicketMutation, volunteerPortalKeys } from '../application/queries';
 	import JobBoard from '$lib/features/volunteers/ui/public-job-board.svelte';
 	import AccessStatusCard from './access-status-card.svelte';
 	import ProfileEditDialog from './profile-edit-dialog.svelte';
@@ -65,6 +67,7 @@
 		filterAndSortPortalActivities,
 		mergePortalActivities,
 		parsePortalTimestamp,
+		portalTicketActions,
 		type PortalActivity
 	} from '../domain/schedule-view';
 
@@ -335,6 +338,27 @@
 
 	const scheduleQuery = useVolunteerSchedule(() => session);
 	const ticketsQuery = useVolunteerTickets(() => session);
+	// Per-shift ticket buttons (#973): token sessions only, a phone session never loads these.
+	const applicationsQuery = useVolunteerApplications(() => session);
+	const cancelTicket = useCancelTicketMutation();
+	let pendingCancel = $state<{ activity: PortalActivity; applicationId: string } | null>(null);
+
+	function ticketActionsFor(activity: PortalActivity) {
+		return portalTicketActions(activity, applicationsQuery.data ?? []);
+	}
+
+	async function confirmCancelApplication() {
+		const target = pendingCancel;
+		const token = session?.token;
+		if (!target || !token) return;
+		try {
+			await cancelTicket.mutateAsync({ token, applicationId: target.applicationId });
+			toast.success('ยกเลิกกะนี้แล้ว');
+			pendingCancel = null;
+		} catch (err) {
+			toast.error(err instanceof Error ? err.message : 'ยกเลิกไม่สำเร็จ');
+		}
+	}
 	/**
 	 * Only for the count on the "งานอาสาสมัครที่เปิดรับ" tab button. The board itself fetches
 	 * with the same key, so this costs no extra request — and the badge counts jobs that
@@ -1381,6 +1405,31 @@
 											</div>
 										{/if}
 									</div>
+									{#if ticketActionsFor(activity)}
+										{@const actions = ticketActionsFor(activity)!}
+										<div class="flex w-full flex-col gap-2 md:w-56">
+											<a
+												href={resolve(
+													`/volunteer/ticket/${encodeURIComponent(session?.token ?? '')}?application=${encodeURIComponent(actions.applicationId)}`
+												)}
+												data-testid="open-ticket"
+												class="flex items-center justify-center gap-2 rounded-xl border border-primary/30 px-4 py-2.5 text-xs font-bold text-primary hover:bg-primary/5"
+											>
+												<Ticket class="size-4" /> เปิดตั๋ว
+											</a>
+											{#if actions.canCancel}
+												<button
+													type="button"
+													data-testid="cancel-application"
+													onclick={() =>
+														(pendingCancel = { activity, applicationId: actions.applicationId })}
+													class="rounded-xl border border-destructive/30 px-4 py-2.5 text-xs font-bold text-destructive hover:bg-destructive/5"
+												>
+													ยกเลิก
+												</button>
+											{/if}
+										</div>
+									{/if}
 									{#if canCheckIn(activity) || canCheckOut(activity) || canWithdraw(activity)}
 										<div class="flex w-full flex-col gap-2 md:w-56">
 											{#if canCheckIn(activity)}
@@ -1460,6 +1509,49 @@
 							</li>
 						</ul>
 					</div>
+
+					<Dialog.Root
+						open={pendingCancel !== null}
+						onOpenChange={(open) => !open && !cancelTicket.isPending && (pendingCancel = null)}
+					>
+						<Dialog.Content class="sm:max-w-md">
+							<Dialog.Header>
+								<Dialog.Title class="flex items-center gap-2">
+									<CircleAlert class="size-5 text-destructive" />
+									ยืนยันการยกเลิกกะ
+								</Dialog.Title>
+								<Dialog.Description>
+									ใบสมัครของกะนี้จะถูกยกเลิก และที่นั่งที่จองไว้จะคืนให้คนอื่น
+									กะอื่นของคุณไม่เปลี่ยน
+								</Dialog.Description>
+							</Dialog.Header>
+							{#if pendingCancel}
+								<div class="rounded-2xl border border-border bg-muted/30 p-4">
+									<p class="text-sm font-bold text-foreground">{pendingCancel.activity.title}</p>
+									<p class="mt-1 text-xs text-muted-foreground">
+										{timeRange(pendingCancel.activity)}
+									</p>
+								</div>
+							{/if}
+							<Dialog.Footer class="gap-2">
+								<Button
+									variant="outline"
+									onclick={() => (pendingCancel = null)}
+									disabled={cancelTicket.isPending}
+								>
+									กลับไป
+								</Button>
+								<Button
+									variant="destructive"
+									data-testid="confirm-cancel-application"
+									onclick={confirmCancelApplication}
+									disabled={cancelTicket.isPending}
+								>
+									ยืนยันยกเลิก
+								</Button>
+							</Dialog.Footer>
+						</Dialog.Content>
+					</Dialog.Root>
 
 					<Dialog.Root
 						open={withdrawModalOpen}

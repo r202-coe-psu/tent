@@ -2,7 +2,10 @@ import { describe, expect, it } from 'vitest';
 import {
 	distinctStation,
 	filterAndSortPortalActivities,
-	mergePortalActivities
+	mergePortalActivities,
+	portalTicketActions,
+	type PortalActivity,
+	type PortalApplication
 } from './schedule-view';
 import type { ScheduleShift, TicketSummary } from './volunteer';
 
@@ -117,5 +120,79 @@ describe('distinctStation', () => {
 	it('drops the repeated station from the portal card', () => {
 		const [activity] = mergePortalActivities([shift({ station: 'ครัวกลาง' })], []);
 		expect(activity?.description).toBe('');
+	});
+});
+
+describe('portalTicketActions (#973)', () => {
+	const activity = (over: Partial<PortalActivity> = {}): PortalActivity => ({
+		id: 'a1',
+		jobId: 'job:1',
+		shiftId: 'shift:2',
+		assignmentId: null,
+		title: 't',
+		description: '',
+		location: '',
+		shelterCode: 'SH001',
+		date: '2026-12-01',
+		shiftPeriod: '',
+		startTs: '2026-12-01T03:00:00Z',
+		endTs: '2026-12-01T07:00:00Z',
+		checkinAt: null,
+		checkoutAt: null,
+		status: 'booking',
+		dispatchStatus: null,
+		...over
+	});
+	const app = (over: Partial<PortalApplication> = {}): PortalApplication => ({
+		application_id: 'job_application:9',
+		status: 'confirmed',
+		job_id: 'job:1',
+		shift_id: 'shift:2',
+		date: '2026-12-01',
+		can_cancel: true,
+		...over
+	});
+	const before = Date.parse('2026-11-30T00:00:00Z');
+
+	it('gives no buttons without applications (phone session)', () => {
+		expect(portalTicketActions(activity(), [], before)).toBeNull();
+	});
+
+	it('offers open and cancel for a matching live application', () => {
+		expect(portalTicketActions(activity(), [app()], before)).toEqual({
+			applicationId: 'job_application:9',
+			canOpen: true,
+			canCancel: true
+		});
+	});
+
+	it('matches the right shift when a job has several', () => {
+		const apps = [
+			app({ application_id: 'x1', shift_id: 'shift:1' }),
+			app({ application_id: 'x2', shift_id: 'shift:2' })
+		];
+		expect(portalTicketActions(activity(), apps, before)?.applicationId).toBe('x2');
+	});
+
+	it('hides cancel once the shift started, keeps open', () => {
+		const after = Date.parse('2026-12-01T03:30:00Z');
+		expect(portalTicketActions(activity(), [app()], after)).toMatchObject({
+			canOpen: true,
+			canCancel: false
+		});
+	});
+
+	it('hides cancel when checked in or when the server says no', () => {
+		expect(
+			portalTicketActions(activity({ status: 'checked_in' }), [app()], before)?.canCancel
+		).toBe(false);
+		expect(portalTicketActions(activity(), [app({ can_cancel: false })], before)?.canCancel).toBe(
+			false
+		);
+	});
+
+	it('gives nothing for a cancelled application or activity', () => {
+		expect(portalTicketActions(activity(), [app({ status: 'cancelled' })], before)).toBeNull();
+		expect(portalTicketActions(activity({ status: 'cancelled' }), [app()], before)).toBeNull();
 	});
 });
