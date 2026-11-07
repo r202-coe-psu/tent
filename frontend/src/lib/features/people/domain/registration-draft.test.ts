@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
 	REGISTRATION_DRAFT_MAX_AGE_MS,
 	fromRegistrationDraft,
+	hasRegistrationDraftContent,
 	toRegistrationDraft
 } from './registration-draft';
 import { blankUnifiedMember, type UnifiedRegistrationInput } from './unified-registration';
@@ -60,5 +61,29 @@ describe('registration draft (#358)', () => {
 		expect(fromRegistrationDraft(null, NOW)).toBeNull();
 		expect(fromRegistrationDraft('text', NOW)).toBeNull();
 		expect(fromRegistrationDraft([], NOW)).toBeNull();
+	});
+
+	it('detects whether a draft or form state has meaningful user-entered content', () => {
+		expect(hasRegistrationDraftContent({ household: {}, members: [] })).toBe(false);
+		expect(
+			hasRegistrationDraftContent({
+				household: {},
+				members: [blankUnifiedMember()]
+			})
+		).toBe(false);
+
+		expect(
+			hasRegistrationDraftContent({
+				household: {},
+				members: [{ ...blankUnifiedMember(), first_name: 'มีนา' }]
+			})
+		).toBe(true);
+
+		expect(
+			hasRegistrationDraftContent({
+				household: { address_no: '12/34' },
+				members: [blankUnifiedMember()]
+			})
+		).toBe(true);
 	});
 });

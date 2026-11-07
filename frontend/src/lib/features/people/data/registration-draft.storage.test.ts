@@ -3,7 +3,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
 	clearRegistrationDraft,
 	loadRegistrationDraft,
-	saveRegistrationDraft
+	saveRegistrationDraft,
+	sweepExpiredDrafts
 } from './registration-draft.storage';
 import { blankUnifiedMember, type UnifiedRegistrationInput } from '../domain/unified-registration';
 
@@ -50,5 +51,21 @@ describe('registration draft storage (#358)', () => {
 		expect(() => saveRegistrationDraft(KEY, household, members, NOW)).not.toThrow();
 		expect(loadRegistrationDraft(KEY, NOW)).toBeNull();
 		expect(() => clearRegistrationDraft(KEY)).not.toThrow();
+	});
+
+	it('sweeps expired drafts on save or sweep', () => {
+		const expiredTime = NOW - 3 * 60 * 60 * 1000;
+		sessionStorage.setItem(
+			'tent.registrationDraft:old-draft',
+			JSON.stringify({ v: 1, saved_at: expiredTime, household: {}, members: [] })
+		);
+		sessionStorage.setItem(
+			'tent.registrationDraft:valid-draft',
+			JSON.stringify({ v: 1, saved_at: NOW - 60_000, household: {}, members: [] })
+		);
+
+		sweepExpiredDrafts(NOW);
+		expect(sessionStorage.getItem('tent.registrationDraft:old-draft')).toBeNull();
+		expect(sessionStorage.getItem('tent.registrationDraft:valid-draft')).not.toBeNull();
 	});
 });

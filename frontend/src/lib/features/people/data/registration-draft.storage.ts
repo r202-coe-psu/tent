@@ -7,15 +7,50 @@
 import {
 	fromRegistrationDraft,
 	toRegistrationDraft,
-	type RegistrationDraft
+	REGISTRATION_DRAFT_MAX_AGE_MS,
+	type RegistrationDraft,
+	type RestoredRegistrationDraft
 } from '../domain/registration-draft';
 
 const PREFIX = 'tent.registrationDraft:';
 
+/**
+ * Remove drafts that have expired or are malformed from sessionStorage (#358 review W1).
+ */
+export function sweepExpiredDrafts(now = Date.now()): void {
+	try {
+		for (let i = sessionStorage.length - 1; i >= 0; i--) {
+			const k = sessionStorage.key(i);
+			if (!k || !k.startsWith(PREFIX)) continue;
+			const raw = sessionStorage.getItem(k);
+			if (!raw) {
+				sessionStorage.removeItem(k);
+				continue;
+			}
+			try {
+				const parsed = JSON.parse(raw);
+				if (
+					!parsed ||
+					typeof parsed.saved_at !== 'number' ||
+					now - parsed.saved_at > REGISTRATION_DRAFT_MAX_AGE_MS ||
+					parsed.saved_at > now
+				) {
+					sessionStorage.removeItem(k);
+				}
+			} catch {
+				sessionStorage.removeItem(k);
+			}
+		}
+	} catch {
+		// Storage access blocked or unavailable
+	}
+}
+
 export function loadRegistrationDraft(
 	key: string,
 	now = Date.now()
-): ReturnType<typeof fromRegistrationDraft> {
+): RestoredRegistrationDraft | null {
+	sweepExpiredDrafts(now);
 	try {
 		const raw = sessionStorage.getItem(PREFIX + key);
 		if (!raw) return null;
@@ -33,6 +68,7 @@ export function saveRegistrationDraft(
 	members: RegistrationDraft['members'],
 	now = Date.now()
 ): void {
+	sweepExpiredDrafts(now);
 	try {
 		sessionStorage.setItem(
 			PREFIX + key,

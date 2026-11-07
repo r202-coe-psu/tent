@@ -10,7 +10,8 @@
 	import ChevronUp from '@lucide/svelte/icons/chevron-up';
 	import { onMount, tick, untrack } from 'svelte';
 	import { toast } from 'svelte-sonner';
-	import { replaceState } from '$app/navigation';
+	import { beforeNavigate, replaceState } from '$app/navigation';
+	import { page } from '$app/state';
 	import { resolve } from '$app/paths';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { useShelter } from '$lib/features/shelters';
@@ -110,6 +111,7 @@
 		loadRegistrationDraft,
 		saveRegistrationDraft
 	} from '../../data/registration-draft.storage';
+	import { hasRegistrationDraftContent } from '../../domain/registration-draft';
 
 	type FormSectionId = 'address' | 'pets' | 'vehicles' | 'members';
 	type ActiveRegistrationItem = { kind: 'member' | 'pet'; index: number; total: number };
@@ -317,14 +319,25 @@
 	);
 	// Not state: once the form is sent, the effect below must not write the draft back.
 	let draftSent = false;
+
+	// Drop the draft when navigating away to another route to avoid leaving PII in sessionStorage (#358 review W1).
+	beforeNavigate(({ to }) => {
+		if (draftKey && to && to.url.pathname !== page.url.pathname) {
+			clearRegistrationDraft(draftKey);
+		}
+	});
+
 	$effect(() => {
 		if (!draftKey || readOnly) return;
 		const current = $state.snapshot({ household, members });
 		if (draftSent) return;
+		if (!touched && !hasRegistrationDraftContent(current)) return;
 		saveRegistrationDraft(draftKey, current.household, current.members);
 	});
 	onMount(() => {
-		if (restoredDraft) toast.info(t.draftRestored);
+		if (restoredDraft && hasRegistrationDraftContent(restoredDraft)) {
+			toast.info(t.draftRestored);
+		}
 	});
 	let assetDescription = $state(untrack(() => initialHousehold?.assets?.description ?? ''));
 	/** What `children` and the acknowledgement see: vehicles/assets only where the form shows them. */

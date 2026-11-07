@@ -14,6 +14,11 @@ import {
 
 type DraftHousehold = UnifiedRegistrationInput['household'];
 
+export type RestoredRegistrationDraft = {
+	household: DraftHousehold;
+	members: UnifiedMemberWithMeta[];
+};
+
 export type RegistrationDraft = {
 	v: 1;
 	saved_at: number;
@@ -48,10 +53,7 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
  * old, or has no member. Each member is laid over a blank one, so a field added to the form later
  * still starts defined.
  */
-export function fromRegistrationDraft(
-	raw: unknown,
-	now: number
-): { household: DraftHousehold; members: UnifiedMemberWithMeta[] } | null {
+export function fromRegistrationDraft(raw: unknown, now: number): RestoredRegistrationDraft | null {
 	if (!isRecord(raw) || raw.v !== 1 || typeof raw.saved_at !== 'number') return null;
 	if (now - raw.saved_at > REGISTRATION_DRAFT_MAX_AGE_MS || raw.saved_at > now) return null;
 	if (!isRecord(raw.household) || !Array.isArray(raw.members) || raw.members.length === 0) {
@@ -66,4 +68,36 @@ export function fromRegistrationDraft(
 			photo: null
 		}))
 	};
+}
+
+/**
+ * Returns true only when a form has actual user-entered data rather than blank defaults.
+ * Used to avoid saving empty drafts and avoid showing restore toasts on blank forms (#358 review W2).
+ */
+export function hasRegistrationDraftContent(draft: {
+	household?: Partial<DraftHousehold> | null;
+	members?: readonly Partial<UnifiedMemberWithMeta>[] | null;
+}): boolean {
+	if (!draft) return false;
+	const h = draft.household;
+	const hasHousehold =
+		(h?.pets?.length ?? 0) > 0 ||
+		Boolean(h?.vehicles?.length) ||
+		Boolean(h?.address_no?.trim()) ||
+		Boolean(h?.subdistrict?.trim()) ||
+		Boolean(h?.district?.trim()) ||
+		Boolean(h?.province?.trim()) ||
+		Boolean(h?.residence_landmark?.trim()) ||
+		Boolean(h?.dorm_name?.trim()) ||
+		Boolean(h?.assets?.description?.trim());
+
+	const hasMember = (draft.members ?? []).some(
+		(m) =>
+			Boolean(m.first_name?.trim()) ||
+			Boolean(m.last_name?.trim()) ||
+			Boolean(m.phone?.trim()) ||
+			Boolean(m.person_id?.number?.trim())
+	);
+
+	return hasHousehold || hasMember;
 }
