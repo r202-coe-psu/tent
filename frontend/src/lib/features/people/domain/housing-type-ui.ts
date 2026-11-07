@@ -29,7 +29,7 @@ export const DEFAULT_HOUSING_TYPE_ITEMS_TH: HousingTypeSelectItem[] = [
 	{ value: 'rented_house', label: 'บ้านเช่า' },
 	{ value: 'condo', label: 'คอนโดมิเนียม' },
 	{ value: 'apartment_dorm', label: 'อะพาร์ตเมนต์/หอพัก' },
-	{ value: 'homeless', label: 'ไร้ที่อยู่อาศัยเป็นหลักแหล่ง' }
+	{ value: 'homeless', label: 'ไร้ที่อยู่อาศัยเป็นหลักแหล่ง (ไม่มีบ้านเลขที่หรือที่อยู่ที่แน่ชัด)' }
 ];
 
 /**
