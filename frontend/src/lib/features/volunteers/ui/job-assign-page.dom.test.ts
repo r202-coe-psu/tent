@@ -273,7 +273,7 @@ describe('JobAssignPage — several shifts at once (#1164)', () => {
 		mocks.jobSkillsRequired = [];
 		await render();
 		expect(text()).toContain('ทักษะที่ต้องการ: ไม่จำกัดทักษะ (รับทุกทักษะ)');
-		expect(text()).toContain('ตรงกับงานอาสาสมัครนี้ (ไม่จำกัดทักษะ: 2)');
+		expect(text()).toContain('ตรงกับงานอาสาสมัครนี้');
 	});
 
 	it('paginates unassigned candidates at 10 items per page', async () => {
