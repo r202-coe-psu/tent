@@ -172,7 +172,7 @@ describe('note (FR-C1)', () => {
 	});
 });
 
-describe('FR-C2 — every writer stamps schema_v 6', () => {
+describe('FR-C2 — every writer stamps the current schema_v (7)', () => {
 	it('createStockLedger, createAdjustEntry and the legacy Flow 2 writer', () => {
 		const adjusted = createAdjustEntry({ ...adjust, adjust_reason: 'lost' }, ctx);
 		const received = createStockLedger(
@@ -189,7 +189,7 @@ describe('FR-C2 — every writer stamps schema_v 6', () => {
 			{ item_id: 'item:rice', qty: '5', unit: 'kg', reason: 'receive', ref_id: null },
 			ctx
 		);
-		expect([adjusted.schema_v, received.schema_v, legacy.schema_v]).toEqual([6, 6, 6]);
+		expect([adjusted.schema_v, received.schema_v, legacy.schema_v]).toEqual([7, 7, 7]);
 	});
 
 	it('a manual receive (source=manual) is an adjust with reason found (FR-C7 / AC-C5)', () => {
@@ -273,10 +273,10 @@ describe('FR-C4 / AC-C3 — readers accept schema_v <= 5 rows', () => {
 		expect(resolveAdjustReason(received)).toBeNull();
 	});
 
-	it('parses schema_v 5 and 6 rows without throwing', () => {
+	it('parses schema_v 5, 6 and 7 rows without throwing', () => {
 		expect(parseStockLedger(legacyAdjust()).schema_v).toBe(5);
 		const modern = createAdjustEntry({ ...adjust, adjust_reason: 'lost' }, ctx);
-		expect(parseStockLedger(modern).schema_v).toBe(6);
+		expect(parseStockLedger(modern).schema_v).toBe(7);
 		expect(parseStockLedger(modern).adjust_reason).toBe('lost');
 	});
 
