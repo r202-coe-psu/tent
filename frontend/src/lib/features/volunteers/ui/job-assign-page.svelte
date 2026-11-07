@@ -835,7 +835,10 @@
 								<p class="font-semibold text-amber-700">ไม่ได้เข้ากะ</p>
 								<ul class="list-disc pl-5 text-foreground">
 									{#each person.notPlaced as item (item.shift)}
-										<li>{item.shift} — {item.why}</li>
+										<li>
+											<span class="font-medium">กะ {item.shift}</span>
+											<span class="block text-muted-foreground">{item.why}</span>
+										</li>
 									{/each}
 								</ul>
 							</div>

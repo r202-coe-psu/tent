@@ -98,7 +98,12 @@ describe('planBulkAssign (#1164)', () => {
 			])
 		});
 		expect(assign.map((i) => i.shift.id)).toEqual(['js-afternoon']);
-		expect(skipped[0].reason).toMatchObject({ kind: 'clash', jobTitle: 'งานอื่น' });
+		expect(skipped[0].reason).toMatchObject({
+			kind: 'clash',
+			sameJob: false,
+			jobTitle: 'งานอื่น',
+			overlap: { start: '08:30', end: '09:30' }
+		});
 	});
 
 	it('does not put one person in two shifts of this job that overlap each other', () => {
@@ -109,7 +114,15 @@ describe('planBulkAssign (#1164)', () => {
 		});
 		expect(assign.map((i) => i.shift.id)).toEqual(['js-morning']);
 		expect(skipped).toMatchObject([
-			{ shift: { id: 'js-overlap' }, reason: { kind: 'clash', jobTitle: 'ทีมครัว' } }
+			{
+				shift: { id: 'js-overlap' },
+				reason: {
+					kind: 'clash',
+					sameJob: true,
+					jobTitle: 'ทีมครัว',
+					overlap: { start: '10:00', end: '12:00' }
+				}
+			}
 		]);
 	});
 
@@ -141,12 +154,46 @@ describe('planBulkAssign (#1164)', () => {
 		expect(skipped[0].reason.kind).toBe('bad_shift_time');
 	});
 
+	it('says where two shifts overlap, and leaves it out for a shift past midnight', () => {
+		const a = volunteer('ก');
+		const overnight = shift({
+			id: 'js-night',
+			start_time: '22:00',
+			end_time: '06:00',
+			end_date: '2026-11-11'
+		});
+		const [clash] = plan({ shifts: [MORNING, OVERLAPS_MORNING], volunteers: [a] }).skipped;
+		expect(clash.reason).toMatchObject({
+			kind: 'clash',
+			overlap: { start: '10:00', end: '12:00' }
+		});
+		const [night] = plan({
+			shifts: [overnight],
+			volunteers: [a],
+			assignments: [held(a, MORNING, { job_id: 'job:other' })],
+			jobsById: new Map([['job:other', { title: 'งานอื่น', shifts: [MORNING] }]])
+		}).skipped;
+		expect(night?.reason ?? { kind: 'none' }).not.toMatchObject({
+			kind: 'clash',
+			overlap: expect.anything()
+		});
+	});
+
 	it('words each reason in plain Thai', () => {
 		expect(skipReasonText({ kind: 'already_on_shift' })).toBe('อยู่ในกะนี้อยู่แล้ว');
 		expect(skipReasonText({ kind: 'shift_full' })).toBe('กะนี้เต็มแล้ว');
+		const clash = {
+			kind: 'clash' as const,
+			jobTitle: 'ทีมครัว',
+			startTime: '08:00',
+			endTime: '12:00'
+		};
 		expect(
-			skipReasonText({ kind: 'clash', jobTitle: 'ทีมครัว', startTime: '08:00', endTime: '12:00' })
-		).toBe('เวลาซ้อนกับ "ทีมครัว" 08:00-12:00 น.');
+			skipReasonText({ ...clash, sameJob: true, overlap: { start: '10:00', end: '12:00' } })
+		).toBe('ชนกับกะ 08:00-12:00 น. ของงานนี้ที่เขาอยู่แล้ว ซ้อนกันช่วง 10:00-12:00 น.');
+		expect(skipReasonText({ ...clash, sameJob: false, overlap: null })).toBe(
+			'ชนกับกะ 08:00-12:00 น. ของงาน "ทีมครัว" ที่เขาอยู่แล้ว'
+		);
 	});
 });
 

@@ -177,9 +177,9 @@ describe('JobAssignPage — several shifts at once (#1164)', () => {
 		expect(report).toContain('ไม่ได้มอบหมาย 2 รายการ');
 		// สมชาย: placed in the morning, not in the afternoon (already there) nor the evening (one seat).
 		expect(report).toContain('สมชาย ทดสอบ เข้ากะแล้ว 2026-11-10 08:00-12:00 น.');
-		expect(report).toContain('2026-11-10 13:00-17:00 น. — อยู่ในกะนี้อยู่แล้ว');
+		expect(report).toContain('กะ 2026-11-10 13:00-17:00 น. อยู่ในกะนี้อยู่แล้ว');
 		expect(report).toContain('สมหญิง ทดสอบ เข้ากะแล้ว');
-		expect(report).toContain('2026-11-10 18:00-22:00 น. — กะนี้เต็มแล้ว');
+		expect(report).toContain('กะ 2026-11-10 18:00-22:00 น. กะนี้เต็มแล้ว');
 		expect(toast.warning).not.toHaveBeenCalled();
 	});
 
@@ -195,7 +195,7 @@ describe('JobAssignPage — several shifts at once (#1164)', () => {
 		await click(byLabel('เลือก สมหญิง ทดสอบ'));
 		await click(sendButton());
 		await new Promise((resolve) => setTimeout(resolve, 20));
-		expect(text()).toContain('2026-11-10 13:00-17:00 น. — บันทึกไม่สำเร็จ (เครือข่ายขัดข้อง)');
+		expect(text()).toContain('กะ 2026-11-10 13:00-17:00 น. บันทึกไม่สำเร็จ (เครือข่ายขัดข้อง)');
 		// Only the person whose save failed stays selected, to try again.
 		expect(sendButton().getAttribute('aria-label')).toBe('มอบหมายอาสา 1 คนเข้า 2 กะ');
 	});
