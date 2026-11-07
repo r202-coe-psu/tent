@@ -13,6 +13,7 @@ import { getShelterDb, getShelterCode } from '$lib/db/shelter';
 import type { AuthorContext } from '$lib/db/model';
 import type { AuditAction } from '$lib/features/shared';
 import { operationsRepository, OperationsRemoteRepository } from '../data/operations.remote';
+import { fetchIncomingStock } from '../data/incoming-stock.remote';
 import type {
 	DonationCampaign,
 	DonationSlot,
@@ -61,6 +62,9 @@ export const operationsKeys = {
 	balance: () => [...operationsKeys.all, 'balance', getShelterCode()] as const,
 	lotReservations: () => [...operationsKeys.all, 'lotReservations', getShelterCode()] as const,
 	donationSlots: () => [...operationsKeys.all, 'donationSlots', getShelterCode()] as const,
+	/** `scope` = a shelter code, or `'all'` for the system_admin all-shelters view. */
+	incomingStock: (scope: string = getShelterCode()) =>
+		[...operationsKeys.all, 'incomingStock', scope] as const,
 	transfers: () => [...operationsKeys.all, 'transfers'] as const,
 	transfer: (id: string) => [...operationsKeys.transfers(), id] as const,
 	transferDestinations: () =>
@@ -77,6 +81,25 @@ export const useStockLedgers = () =>
 	createQuery(() => ({
 		queryKey: operationsKeys.stockLedgers(),
 		queryFn: () => operationsRepository().listLedger()
+	}));
+
+/**
+ * Incoming stock (#1153): approved donation lines of open bookings + shipped transfers heading
+ * here. Fires only while `enabled()` (the stock page's "include incoming" switch) and refetches
+ * when the tab regains focus — no live `_changes`. `allShelters()` is the system_admin
+ * all-shelters view. Invalidated by the donation / transfer receive mutations (they hit
+ * `operationsKeys.all`).
+ */
+export const useIncomingStock = (
+	enabled: () => boolean,
+	allShelters: () => boolean = () => false
+) =>
+	createQuery(() => ({
+		queryKey: operationsKeys.incomingStock(allShelters() ? 'all' : getShelterCode()),
+		queryFn: () => fetchIncomingStock(allShelters() ? null : getShelterCode()),
+		enabled: enabled(),
+		refetchOnWindowFocus: true,
+		retry: retryUnlessForbidden
 	}));
 
 export const useDonations = () =>
@@ -507,6 +530,8 @@ export const useDispatchTransfer = () => {
 		onSuccess: () => {
 			queryClient.invalidateQueries({ queryKey: operationsKeys.transfers() });
 			queryClient.invalidateQueries({ queryKey: operationsKeys.all });
+			// Also covers the all-shelters scope; spelled out so the dependency stays visible.
+			queryClient.invalidateQueries({ queryKey: [...operationsKeys.all, 'incomingStock'] });
 		}
 	}));
 };
