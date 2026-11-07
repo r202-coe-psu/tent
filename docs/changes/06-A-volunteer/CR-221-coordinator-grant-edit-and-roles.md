@@ -3,7 +3,7 @@ id: CR-221 # renumbered from draft-coordinator-grant-edit-and-roles
 title: ผู้ประสานงานจิตอาสาจัดการบัญชีจิตอาสาได้ครบวงจร — 10 ตำแหน่ง, แก้สิทธิ์, หน้าบัญชีจิตอาสา, พากลับมา, สถานะใน portal และ 1 บัญชีใช้ได้หลายศูนย์
 status: approved
 date: 2026-10-30
-updated: 2026-11-04 # Amendment A1 approved 2026-11-04 by Soravit Sukkarn (Team Lead) — proposed 2026-11-02, revised 2026-11-03 + 2026-11-04 per review PR #1123 (FR-3, FR-4, FR-8, FR-9, FR-16, FR-20, FR-23, FR-28, FR-32 — SM ให้จิตอาสาหลาย role; A1-4 การ์ดใช้กับบัญชีที่ยังไม่มี role ในศูนย์นี้) · Amendment A2 proposed 2026-11-03 (รอ @Jackyzaz approve) · 2026-11-01 approved by Soravit Sukkarn (Team Lead)
+updated: 2026-11-06 # 2026-11-06 A1-7 / A1-8 implemented (PR #1199) with owner clarifications on volunteer ↔ staff switches and POST merge · Amendment A1 approved 2026-11-04 by Soravit Sukkarn (Team Lead) — proposed 2026-11-02, revised 2026-11-03 + 2026-11-04 per review PR #1123 (FR-3, FR-4, FR-8, FR-9, FR-16, FR-20, FR-23, FR-28, FR-32 — SM ให้จิตอาสาหลาย role; A1-4 การ์ดใช้กับบัญชีที่ยังไม่มี role ในศูนย์นี้) · Amendment A2 proposed 2026-11-03 (รอ @Jackyzaz approve) · 2026-11-01 approved by Soravit Sukkarn (Team Lead)
 requested_by: "@mhapong จากการทดสอบ CR-213 บน develop (2026-10-30) — #1044, #1045"
 decided_by: Soravit Sukkarn (Team Lead)
 decision_date: 2026-11-01
@@ -52,7 +52,7 @@ affects:
 >
 > - SM ให้บัญชีจิตอาสามี role ถาวรได้**หลาย role ต่อศูนย์** จากหน้าผู้ใช้งาน (การ์ดจิตอาสาของ SM ใช้ออก 1 role ให้บัญชีที่ยังไม่มี role ในศูนย์นี้เท่านั้น — A1-4); VC ออก grant แบบมีวันหมดได้ **1 role ต่อศูนย์** ข้าง role ถาวรของ SM โดยไม่แตะ role ของ SM (รวมบัญชีที่มีแค่ role ถาวร)
 > - VC ปิดโปรไฟล์ของจิตอาสาที่มี role ถาวรจาก SM ไม่ได้ (SM / SA ปิดได้)
-> - role ถาวรที่ SM / SA เพิ่มให้บัญชีจิตอาสาต้องผ่านการยืนยันตัวตนในศูนย์นั้นทั้ง `POST` และ `PUT /api/v1/users` และเขียน audit `role_grant.permanent_issued` — **ยังไม่มีในโค้ด ต้อง implement** (A1-7, A1-8)
+> - role ถาวรที่ SM / SA เพิ่มให้บัญชีจิตอาสาต้องผ่านการยืนยันตัวตนในศูนย์นั้นทั้ง `POST` และ `PUT /api/v1/users` และเขียน audit `role_grant.permanent_issued` (A1-7, A1-8 — implement ใน PR #1199)
 > - แก้ FR-3 (ฝั่ง SM / SA), FR-4, FR-8, FR-9, FR-16, FR-20, FR-23, FR-28, FR-32 และ CR-213 FR-7, FR-10 · ไม่เปลี่ยนรูป doc / `schema_v` · เพิ่ม audit reason 1 ค่าใน schema.md §2.12
 
 - **A1-1 (แก้ FR-4):** บัญชี `personnel_type: volunteer` ในศูนย์หนึ่งมี role ถาวรจาก SM ได้ 0..n role และ grant จาก VC ได้ 0..1 grant · การแทนที่ grant ของ VC (FR-18) ยังเป็นแบบเดิม (เปลี่ยน role = แทนที่ grant เดิมของศูนย์นี้) และไม่แตะ role ถาวร
@@ -83,17 +83,23 @@ affects:
   - มี role ถาวรและ grant พร้อมกัน: แสดงเฉพาะ role ถาวร ไม่แสดง grant
 - **A1-6 (แก้ FR-20):** โปรไฟล์ที่บัญชีมี role ถาวรจาก SM ในศูนย์นี้ **VC ปิดโปรไฟล์ไม่ได้** — ปุ่มปิดใช้งานของ VC ถูก disabled พร้อมเหตุผล "จิตอาสามีสิทธิ์ถาวรจากผู้จัดการศูนย์ ให้ผู้จัดการศูนย์ปิดหรือถอนสิทธิ์ก่อน" · SM / SA ปิดได้ตามเดิม (dialog ยังเตือนเรื่อง role ถาวร) · โปรไฟล์ที่มีเฉพาะ grant ของ VC: VC ปิดได้ตามเดิม (worker ถอน grant)
   - กติกานี้ตรวจที่ UI เท่านั้น: การปิดโปรไฟล์เขียน `shelter_{code}` ตรงด้วย session ของผู้ใช้ และ VDU ของ shelter DB อ่าน `_users` ไม่ได้ จึงตรวจที่ server ไม่ได้ — เป็นข้อจำกัดเชิงสถาปัตยกรรมที่ยอมรับ (design trade-off) ผู้ที่ไม่ใช้ UI ปิดโปรไฟล์ได้ แต่ผลคือสถานะที่ SM / SA แก้ได้ (ดู Why A1)
-- **A1-7 (แก้ FR-3 ฝั่ง SM / SA — ต้อง implement):** `PUT /api/v1/users` ที่เพิ่ม `SHxxx:<role>` ใหม่ (ไม่มีใน `roles` เดิมของบัญชี) ให้บัญชี `personnel_type: volunteer` ที่มี `volunteer_id` → server ตรวจด้วย `assertVolunteerVerifiedForAccess(<ศูนย์ของ role ใหม่>, volunteer_id)` แบบเดียวกับ `POST` (`frontend/src/routes/api/v1/users/+server.ts`) · ไม่ผ่าน → `422 VALIDATION` "อาสาสมัครต้องยืนยันตัวตนก่อนจึงจะออกสิทธิ์ได้" ไม่เขียนอะไร
+- **A1-7 (แก้ FR-3 ฝั่ง SM / SA — implement ใน PR #1199):** `PUT /api/v1/users` ที่เพิ่ม `SHxxx:<role>` ใหม่ (ไม่มีใน `roles` เดิมของบัญชี) ให้บัญชี `personnel_type: volunteer` ที่มี `volunteer_id` → server ตรวจด้วย `assertVolunteerVerifiedForAccess(<ศูนย์ของ role ใหม่>, volunteer_id)` แบบเดียวกับ `POST` (`frontend/src/routes/api/v1/users/+server.ts`) · ไม่ผ่าน → `422 VALIDATION` "อาสาสมัครต้องยืนยันตัวตนก่อนจึงจะออกสิทธิ์ได้" ไม่เขียนอะไร
   - ไม่ตรวจเมื่อ `PUT` ไม่ได้เพิ่ม role: คง role เดิม, ถอน role, แก้ field อื่น, เปลี่ยน grant เป็นถาวร (`permanent_roles` — role นั้นมีอยู่แล้ว)
   - บัญชี `personnel_type: staff` ไม่ตรวจ (เหมือนเดิม)
   - Part B: โปรไฟล์ที่ตรวจคือโปรไฟล์ของศูนย์นั้นใน `volunteer_profiles` (ไม่มี: ใช้ `volunteer_id`)
-  - โค้ดปัจจุบัน: `PUT` ไม่เรียก `assertVolunteerVerifiedForAccess` (เรียกเฉพาะ `POST`) — SM เพิ่ม role ให้บัญชีจิตอาสาที่ยังไม่ยืนยันตัวตนจากหน้าผู้ใช้งานได้
-- **A1-8 (audit role ถาวรของจิตอาสา — ต้อง implement):** SM / SA เพิ่ม role ถาวรใหม่ให้บัญชี `personnel_type: volunteer` ผ่าน `POST` หรือ `PUT /api/v1/users` (รวมเส้นทางการ์ดของ A1-4) → เขียน `audit` 1 ฉบับต่อ role ลง `shelter_{code}` ของศูนย์ของ role นั้น:
+  - ก่อน PR #1199: `PUT` ไม่เรียก `assertVolunteerVerifiedForAccess` (เรียกเฉพาะ `POST`) — SM เพิ่ม role ให้บัญชีจิตอาสาที่ยังไม่ยืนยันตัวตนจากหน้าผู้ใช้งานได้
+  - **การตีความตอน implement (owner เคาะ 2026-11-06 ตาม review PR #1199):**
+    - ตรวจกับโปรไฟล์ที่บัญชีผูกอยู่ก่อนบันทึกด้วย การล้างหรือเปลี่ยน `volunteer_id` ในการบันทึกเดียวกันจึงข้ามการตรวจไม่ได้
+    - SM เปลี่ยน `personnel_type` ระหว่าง volunteer ↔ staff ได้ แต่ role ที่เพิ่มในการบันทึกเดียวกันต้องผ่านการตรวจและมี audit · บัญชีที่เปลี่ยนเป็น volunteer นับ role ที่คงไว้ทุกตัวเป็น role ที่ออกใหม่
+    - `POST /api/v1/users` ที่ชื่อบัญชีซ้ำ (merge) ตรวจกับโปรไฟล์ของบัญชีที่ถูก merge · ถ้าคำขอระบุ `volunteer_id` หรือ `personnel_type: volunteer` บัญชีนั้นต้องเป็นบัญชีจิตอาสา `active` ของโปรไฟล์เดียวกัน ไม่เช่นนั้น `403`
+    - POST merge ถือเป็นการให้ role ถาวร: grant ของ VC ที่ role เดียวกันในศูนย์นั้นเปลี่ยนเป็นถาวร (audit `role_grant.made_permanent`)
+- **A1-8 (audit role ถาวรของจิตอาสา — implement ใน PR #1199):** SM / SA เพิ่ม role ถาวรใหม่ให้บัญชี `personnel_type: volunteer` ผ่าน `POST` หรือ `PUT /api/v1/users` (รวมเส้นทางการ์ดของ A1-4) → เขียน `audit` 1 ฉบับต่อ role ลง `shelter_{code}` ของศูนย์ของ role นั้น:
   - `action: other`, `reason: role_grant.permanent_issued`, `target_type: user`, `target_id: org.couchdb.user:{name}`, `context: { role, expires_at: null, actor }` (`actor` = SM / SA ผู้บันทึก)
   - grant ของ VC ที่ SM เปลี่ยนเป็นถาวร (`permanent_roles` หรือ `pruneRoleGrants`): เขียน `role_grant.made_permanent` ตาม CR-213 FR-14 อย่างเดียว ไม่เขียน `role_grant.permanent_issued` ซ้ำ
   - ชื่อ reason ตามแบบ `role_grant.*` เดิมใน schema.md §2.12 (`issued` = grant ของ VC ออกใหม่ → `permanent_issued` = role ถาวรออกใหม่) · เพิ่มในรายการของ §2.12 แล้ว (ไม่ bump `schema_v`)
   - ไม่อยู่ใน A1: audit ตอน SM ถอด role ถาวร
-  - โค้ดปัจจุบัน: `auditDroppedGrants` (`user-service.ts`) บันทึกเฉพาะ grant ที่ถูกตัดทิ้งหรือเปลี่ยนเป็นถาวร ไม่มี audit เมื่อ SM เพิ่ม role ถาวร
+  - ก่อน PR #1199: `auditDroppedGrants` (`user-service.ts`) บันทึกเฉพาะ grant ที่ถูกตัดทิ้งหรือเปลี่ยนเป็นถาวร ไม่มี audit เมื่อ SM เพิ่ม role ถาวร
+  - `context` คงตามข้อนี้ ไม่เพิ่ม `verified_by` (owner เคาะ 2026-11-06)
 
 **Why (A1):**
 
@@ -316,7 +322,7 @@ affects:
 - **ข้อมูลข้ามศูนย์ (FR-30):** VC SH002 เห็น username ของบัญชีเดิม (เป็นอีเมลของจิตอาสาเอง) ไม่เห็น role หรือข้อมูลของ SH001
 - **Amendment A1:** จิตอาสาที่ SM ให้หลาย role ได้สิทธิ์กว้างเท่าเจ้าหน้าที่ประจำในศูนย์นั้น (SM ตัดสินใจเองเหมือนบัญชีเจ้าหน้าที่) · grant ชั่วคราวของ VC ยังจำกัด 1 role
   - role ถาวรที่ SM ให้จิตอาสา (รวม role ที่เห็นข้อมูลอ่อนไหว `medical_staff`, `triage_staff`) ไม่มีวันหมด ผู้จัดการศูนย์ต้องทบทวนและถอนเอง
-  - **ช่องว่างที่ต้อง implement (A1-7, A1-8):** ปัจจุบันตรวจยืนยันตัวตนเฉพาะตอนสร้างบัญชี (`POST /api/v1/users`) — `PUT` เพิ่ม role ให้บัญชีจิตอาสาที่ยังไม่ยืนยันตัวตนได้ และไม่มี audit เมื่อ SM เพิ่ม role ถาวร · หลัง A1-7 / A1-8 role ถาวรทุกตัวที่ SM / SA เพิ่มให้จิตอาสาผ่านการยืนยันตัวตนในศูนย์นั้นและมี audit `role_grant.permanent_issued`
+  - **ช่องว่างที่ปิดแล้วใน PR #1199 (A1-7, A1-8):** ปัจจุบันตรวจยืนยันตัวตนเฉพาะตอนสร้างบัญชี (`POST /api/v1/users`) — `PUT` เพิ่ม role ให้บัญชีจิตอาสาที่ยังไม่ยืนยันตัวตนได้ และไม่มี audit เมื่อ SM เพิ่ม role ถาวร · หลัง A1-7 / A1-8 role ถาวรทุกตัวที่ SM / SA เพิ่มให้จิตอาสาผ่านการยืนยันตัวตนในศูนย์นั้นและมี audit `role_grant.permanent_issued`
 - **deploy:** Part A: restart worker · Part C: ไม่มี · Part B: `pnpm sync:central` → restart worker → backfill
 - **ลำดับ:** merge #984 และ #1020 ก่อน Part A
 
