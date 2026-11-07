@@ -112,29 +112,49 @@ export interface DonationShortfall {
 	short: string;
 }
 
+/** A line of {@link donationShortfall}; `unit` is only read by the optional converter. */
+export interface ShortfallLine {
+	item_id?: string | null;
+	qty: string;
+	unit?: string | null;
+}
+
 /**
  * "Received less than declared", derived per item (FR-B5) — there is no status for
  * it. Lines are summed per `item_id` on both sides. Declared lines without an
  * `item_id` are ignored: resolve a `free_text` line to an item first (FR-B2).
  * Items counted beyond the declaration are not shortfalls.
+ *
+ * Without `toBaseQty` the quantities are summed as given (callers whose lines are
+ * already in base units). With it, every line is first converted to its item's base
+ * quantity; a line it returns `null` for ("3 crates" against an item with no crate
+ * UOM) cannot be compared, so that item is skipped — no false warning (#623).
  */
 export function donationShortfall(
-	declared: readonly { item_id?: string | null; qty: string }[],
-	counted: readonly { item_id?: string | null; qty: string }[]
+	declared: readonly ShortfallLine[],
+	counted: readonly ShortfallLine[],
+	toBaseQty?: (line: ShortfallLine) => string | null
 ): DonationShortfall[] {
-	const declaredByItem = new Map<string, string>();
-	for (const line of declared) {
-		if (!line.item_id) continue;
-		declaredByItem.set(line.item_id, addQty(declaredByItem.get(line.item_id) ?? '0', line.qty));
-	}
-	const countedByItem = new Map<string, string>();
-	for (const line of counted) {
-		if (!line.item_id) continue;
-		countedByItem.set(line.item_id, addQty(countedByItem.get(line.item_id) ?? '0', line.qty));
-	}
+	const skipped = new Set<string>();
+	const sumByItem = (lines: readonly ShortfallLine[]): Map<string, string> => {
+		const byItem = new Map<string, string>();
+		for (const line of lines) {
+			if (!line.item_id) continue;
+			const qty = toBaseQty ? toBaseQty(line) : line.qty;
+			if (qty === null) {
+				skipped.add(line.item_id);
+				continue;
+			}
+			byItem.set(line.item_id, addQty(byItem.get(line.item_id) ?? '0', qty));
+		}
+		return byItem;
+	};
+	const declaredByItem = sumByItem(declared);
+	const countedByItem = sumByItem(counted);
 
 	const shortfalls: DonationShortfall[] = [];
 	for (const [item_id, declaredQty] of declaredByItem) {
+		if (skipped.has(item_id)) continue;
 		const countedQty = countedByItem.get(item_id) ?? '0';
 		const short = subQty(declaredQty, countedQty);
 		if (qtyGt(short, 0))
