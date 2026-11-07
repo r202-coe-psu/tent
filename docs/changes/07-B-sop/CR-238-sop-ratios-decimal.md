@@ -1,10 +1,12 @@
 ---
-id: draft
+id: CR-238 # renumbered from draft-sop-ratios-decimal
 title: sop-ratios — ค่าตั้งต้น Food Sphere เป็น qty_str และคำนวณ/เทียบสถานะด้วย Decimal
-status: proposed
+status: approved
 date: 2026-11-07
+updated: 2026-11-07 # approved (Soravit Sukkarn, Team Lead)
 requested_by: "PO decision 2026-10-27 (#794) ข้อ 3 — daily_demand / conversion_factor / share_percent เป็น qty_str; issue #936"
-decided_by: <เจ้าของโครงการ>
+decided_by: "Soravit Sukkarn (Team Lead)"
+decision_date: 2026-11-07
 layer: volatile
 affects:
   - docs/data/schema.md §4.6 food_sphere_standard, §4.7 requirement_group
@@ -16,9 +18,15 @@ why: daily_demand / conversion_factor / share_percent persist เป็น JSON 
 migration: ไม่มีสคริปต์ migrate — อ่านรับทั้ง number เดิมและ string (coerce), เขียนเป็น qty_str + schema_v ใหม่เสมอ; doc เก่าเปลี่ยนเป็น qty_str เมื่อถูกแก้ครั้งถัดไป
 ---
 
-# sop-ratios — ค่าตั้งต้น Food Sphere เป็น qty_str และคำนวณ/เทียบสถานะด้วย Decimal
+# CR-238 — sop-ratios: ค่าตั้งต้น Food Sphere เป็น qty_str และคำนวณ/เทียบสถานะด้วย Decimal
 
-อ้างอิง: [CR-038](01-core/CR-038-decimal-qty-strings.md) (qty_str), CR-042, CR-095 (สูตร), issue #936, parent #794
+> **สรุป (TL;DR):**
+>
+> - **เปลี่ยนอะไร:** ปรับชนิดข้อมูล `daily_demand`, `conversion_factor`, `share_percent` จาก JSON `number` เป็น `qty_str` ตาม CR-038 และคำนวณ DoC ตลอดสายด้วย Decimal (`qtyLte` / `qtyGt`) เพื่อแก้ปัญหา floating-point หลุดเกณฑ์ CRITICAL
+> - **Schema & Scope:** bump `schema_v` ของ `food_sphere_standard` (2 → 3) และ `requirement_group` (1 → 2); `replenishment_policy` คงเดิม
+> - **Dev ต้อง build:** อัปเดต domain/data/ui ใน `frontend/src/lib/features/sop-ratios/`, fixture seed และ tests ที่เกี่ยวข้อง โดยไม่ต้องรัน batch migration (อ่านได้ทั้ง number เดิมและ string ผ่าน coerce)
+
+อ้างอิง: [CR-038](../01-core/CR-038-decimal-qty-strings.md) (qty_str), [CR-042](CR-042-daily-sop-calc-follow-up.md), [CR-095](../05-D-kitchen/CR-095-food-sphere-replenishment-schema.md) (สูตร), issue #936, parent #794
 
 ## Why
 
@@ -51,7 +59,7 @@ PO decision 2026-10-27 (#794) ข้อ 3: `daily_demand` / `conversion_factor` 
 | rawStock อ่านไม่ได้                                                                        | นับเป็น 0                                   | throw error ที่ระบุ `item_id` (ไม่นับเป็น 0)                                    |
 | ผลรวม `share_percent`                                                                      | บวก float                                   | `addQty`                                                                        |
 | provenance ratio                                                                           | `Math.round(x*100)/100`                     | Decimal `toDecimalPlaces(2)`                                                    |
-| `sop-edit-form` dirty check                                                                | `Number(a) !== Number(b)`                   | Decimal `.eq`                                                                   |
+| `sop-edit-form` dirty check                                                                | `Number(a) !== Number(b)`                   | Decimal `.eq` (form จัดการ `sop_profile`/`sop_override`)                        |
 | แสดงผล `daily_demand`                                                                      | `toLocaleString()`                          | `formatQty()` (ผลบนจอเหมือนเดิม เช่น `2,100`)                                   |
 
 ### กติกา
@@ -93,8 +101,7 @@ PO decision 2026-10-27 (#794) ข้อ 3: `daily_demand` / `conversion_factor` 
 - อ่าน: data adapter normalize ด้วย `qtyStrCoercePositiveSchema` / `qtyStrCoerceNonNegativeSchema`
   (รับ number เดิมและ string) — doc `schema_v` 2 (food_sphere_standard) / 1 (requirement_group) ยังอ่านและคำนวณได้
 - เขียน: `persistQty` + `schema_v` ใหม่เสมอ → doc เก่าเปลี่ยนเป็น `qty_str` เมื่อถูกแก้ครั้งถัดไป
-- ช่วง client เก่า/ใหม่ปนกัน: client เก่าอ่าน string ได้ (`"2100" > 0`, `new Decimal("2100")`, `Number("6.3")`);
-  client ใหม่อ่าน number ที่ client เก่าเขียนได้ผ่าน coerce
+- ช่วง client เก่า/ใหม่ปนกัน: client ใหม่อ่าน number เดิมที่ client เก่าเขียนได้ผ่าน coerce; ทั้งนี้ client เก่าจะกรอง doc ใหม่ออกเนื่องจาก predicate `isFoodSphereStandard` เดิมตรวจ `typeof daily_demand === 'number'` จึงต้องให้ client รีโหลดแอปเป็นเวอร์ชันใหม่เพื่อรองรับ doc ที่เขียนเป็น string
 - Seed fixture เปลี่ยนเป็น string
 
 ## Acceptance criteria
@@ -106,10 +113,11 @@ PO decision 2026-10-27 (#794) ข้อ 3: `daily_demand` / `conversion_factor` 
 - [ ] rawStock `"abc"`, `"12abc"`, `""` → error ระบุ `item_id` ไม่ใช่ 0
 - [ ] doc เก่าที่ `daily_demand` / `conversion_factor` / `share_percent` เป็น number อ่านและคำนวณได้ผลเท่ากับ string
 - [ ] เขียนใหม่ได้ `qty_str` + `schema_v` food_sphere_standard 3 / requirement_group 2
-- [ ] unit test เดิมผ่านโดยไม่แก้ค่า expected (ยกเว้นชนิด number → string ใน fixture/seed)
+- [ ] unit test เดิมผ่านโดยไม่แก้ค่า expected (ยกเว้นชนิด number → string ใน fixture/seed, และปรับ assertion ของฟังก์ชันที่เปลี่ยน signature เป็น Decimal)
 - [ ] ทุก `.svelte` ที่แตะผ่าน `svelte-autofixer`
 
 ## Decision log
 
 - 2026-10-27 — PO decision (#794 ข้อ 3): daily_demand / conversion_factor / share_percent เป็น qty_str + bump schema_v
-- 2026-11-07 — proposed (draft; ไม่ลงเลข CR และไม่ลง `_index.md`)
+- 2026-11-07 — proposed (draft; PR #1270)
+- 2026-11-07 — approved โดย Soravit Sukkarn (Team Lead) — มอบหมายเลข CR-238
