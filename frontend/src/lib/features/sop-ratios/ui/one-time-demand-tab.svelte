@@ -1,5 +1,6 @@
 <script lang="ts">
 	import * as Table from '$lib/components/ui/table/index.js';
+	import { resolve } from '$app/paths';
 	import { Input } from '$lib/components/ui/input';
 	import { Button } from '$lib/components/ui/button';
 	import { useItemMasters, formatUnit, useUnitsOfMeasure } from '$lib/features/catalog';
@@ -89,6 +90,12 @@
 	});
 	const shown = $derived(filtered.slice(0, visible));
 	const shortCount = $derived(rows.filter((r) => r.status === 'short').length);
+
+	/** The stock list on the inventory tab, searched by name; `all` keeps never-received items in view. */
+	function stockHref(row: OneTimeDemandRow) {
+		const params = new URLSearchParams({ q: row.name, all: '1' });
+		return resolve(`/back-office/supply?${params}` as '/back-office/supply');
+	}
 
 	function unitLabel(row: OneTimeDemandRow) {
 		return formatUnit(row.unit, units, langState.current);
@@ -237,6 +244,15 @@
 								</dd>
 							</div>
 						</dl>
+						<Button
+							variant="outline"
+							size="sm"
+							class="mt-3 w-full"
+							href={stockHref(row)}
+							aria-label="ดูสินค้า {row.name} ในหน้าสต็อก"
+						>
+							ดูในสต็อก
+						</Button>
 					</li>
 				{/each}
 			</ul>
@@ -253,6 +269,9 @@
 							<Table.Head class="px-4 py-3 text-right">ต้องหาเพิ่ม</Table.Head>
 							<Table.Head class="px-4 py-3 text-right">ครอบคลุม</Table.Head>
 							<Table.Head class="px-4 py-3">สถานะ</Table.Head>
+							<Table.Head class="px-4 py-3 text-right"
+								><span class="sr-only">ดำเนินการ</span></Table.Head
+							>
 						</Table.Row>
 					</Table.Header>
 					<Table.Body>
@@ -289,6 +308,16 @@
 									{formatCoveragePercent(row.coverage)}
 								</Table.Cell>
 								<Table.Cell class="px-4 py-3">{@render statusBadge(row)}</Table.Cell>
+								<Table.Cell class="px-4 py-3 text-right">
+									<Button
+										variant="outline"
+										size="sm"
+										href={stockHref(row)}
+										aria-label="ดูสินค้า {row.name} ในหน้าสต็อก"
+									>
+										ดูในสต็อก
+									</Button>
+								</Table.Cell>
 							</Table.Row>
 						{/each}
 					</Table.Body>
