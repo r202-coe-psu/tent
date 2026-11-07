@@ -6,6 +6,7 @@
 	import { languageStore, type LanguageCode } from '$lib/stores/language.svelte';
 	import { kioskLanguageSession } from '../application/kiosk-language-session.svelte';
 	import type { KioskContextQuery } from '../domain/display-context';
+	import { KIOSK_HOME_PATH } from '../domain/identity-method';
 	import { KIOSK_LANGUAGE_I18N as T } from './_constants/kiosk-language.i18n';
 	import KioskFlag from './kiosk-flag.svelte';
 
@@ -23,7 +24,7 @@
 	function choose(code: LanguageCode) {
 		languageStore.setLanguage(code);
 		kioskLanguageSession.markChosen();
-		void goto(resolve(`/kiosk${contextQuery}`));
+		void goto(resolve(`${KIOSK_HOME_PATH}${contextQuery}`));
 	}
 </script>
 

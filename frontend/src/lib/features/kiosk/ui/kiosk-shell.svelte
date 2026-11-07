@@ -6,7 +6,7 @@
 	import { languageStore } from '$lib/stores/language.svelte';
 	import { installReaderKeyGuard } from '../application/reader-key-guard';
 	import { loadKioskHardware } from '../application/kiosk-qr-input';
-	import { KIOSK_QR_PATH } from '../domain/identity-method';
+	import { isKioskHomePath, KIOSK_LANGUAGE_PATH, KIOSK_QR_PATH } from '../domain/identity-method';
 	import { qrInputPlan } from '../domain/kiosk-hardware';
 	import { buildKioskContextQuery } from '../domain/display-context';
 	import { KIOSK_COMPACT_MEDIA } from '../domain/kiosk-layout';
@@ -72,8 +72,8 @@
 		return () => clearInterval(timer);
 	});
 
-	const KIOSK_LANGUAGE_PATH = '/kiosk/language';
-	const showLanguageButton = $derived(!page.url.pathname.startsWith(KIOSK_LANGUAGE_PATH));
+	// Home only: the picker always lands on the method page, so mid-visit it would drop the visit.
+	const showLanguageButton = $derived(isKioskHomePath(page.url.pathname));
 	const languageQuery = $derived(
 		buildKioskContextQuery({ shelterName, shelterCode, stationName, deviceName })
 	);

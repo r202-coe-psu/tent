@@ -1,4 +1,8 @@
-import { REPRINT_NOBODY_REASON, REPRINT_PRE_REGISTERED_REASON } from '../domain/check-in-status';
+import {
+	localizeReprintReason,
+	REPRINT_NOBODY_REASON,
+	REPRINT_PRE_REGISTERED_REASON
+} from '../domain/check-in-status';
 
 /** What the reprint flow tells the visitor when a step fails or is blocked. */
 const th = {
@@ -23,8 +27,8 @@ const en: typeof th = {
 	printRenderFailed: 'Could not create the QR Code to print',
 	tooManyMatches: 'Several records matched. Please contact staff.',
 	methodDisabled: 'This option is switched off. Please contact staff.',
-	blockedPreRegistered: 'Not registered yet — use your ID card or ThaiD',
-	blockedNobody: 'No one can print a QR yet. Please contact staff.'
+	blockedPreRegistered: localizeReprintReason(REPRINT_PRE_REGISTERED_REASON, 'en'),
+	blockedNobody: localizeReprintReason(REPRINT_NOBODY_REASON, 'en')
 };
 
 export type ReprintSessionMessages = typeof th;

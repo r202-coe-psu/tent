@@ -67,7 +67,7 @@
 		() =>
 			new VolunteerCardSession({
 				lookup: (phone) => requestKioskVolunteerCard(phone),
-				print: (volunteer) => printVolunteerLabel(volunteer, browserPrint),
+				print: (volunteer) => printVolunteerLabel(volunteer, browserPrint, languageStore.current),
 				...deps
 			})
 	);

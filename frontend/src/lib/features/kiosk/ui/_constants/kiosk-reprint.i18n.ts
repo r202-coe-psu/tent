@@ -1,4 +1,5 @@
 import {
+	localizeReprintReason,
 	REPRINT_PRE_REGISTERED_REASON,
 	REPRINT_TEMPORARY_LEAVE_REASON
 } from '../../domain/check-in-status';
@@ -106,8 +107,8 @@ const en: typeof th = {
 		arriving: 'Checked in · awaiting screening',
 		room_confirmed: 'Room confirmed',
 		active: 'Staying at the shelter',
-		preRegisteredReason: 'Not registered yet — use your ID card or ThaiD',
-		temporaryLeaveReason: 'Temporarily away — cannot print a QR'
+		preRegisteredReason: localizeReprintReason(REPRINT_PRE_REGISTERED_REASON, 'en'),
+		temporaryLeaveReason: localizeReprintReason(REPRINT_TEMPORARY_LEAVE_REASON, 'en')
 	}
 };
 

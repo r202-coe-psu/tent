@@ -29,6 +29,7 @@ export { kioskLanguageSession } from './application/kiosk-language-session.svelt
 export { default as KioskBannerAttract } from './ui/kiosk-banner-attract.svelte';
 export { KioskIdleTimeout, KIOSK_IDLE_TIMEOUT_MS } from './ui/kiosk-idle-timeout.svelte.js';
 export { navigateToKioskHome, returnToKioskLanguagePicker } from './application/kiosk-navigation';
+export { isKioskHomePath, KIOSK_LANGUAGE_PATH } from './domain/identity-method';
 export {
 	registerKioskWalkIn,
 	reprintKioskLabels,

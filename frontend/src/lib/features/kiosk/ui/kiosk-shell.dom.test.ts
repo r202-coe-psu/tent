@@ -3,7 +3,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushSync, mount, unmount } from 'svelte';
 import KioskShell from './kiosk-shell.svelte';
 
-vi.mock('$app/state', () => ({ page: { url: new URL('http://kiosk.test/kiosk') } }));
+const pageState = vi.hoisted(() => ({ url: new URL('http://kiosk.test/kiosk') }));
+vi.mock('$app/state', () => ({ page: pageState }));
 vi.mock('../application/kiosk-qr-input', () => ({
 	loadKioskHardware: vi.fn().mockResolvedValue(null)
 }));
@@ -24,7 +25,10 @@ function mountShell(compact: boolean) {
 	flushSync();
 }
 
-beforeEach(() => vi.clearAllMocks());
+beforeEach(() => {
+	vi.clearAllMocks();
+	pageState.url = new URL('http://kiosk.test/kiosk');
+});
 afterEach(() => {
 	if (instance) unmount(instance);
 	instance = null;
@@ -46,4 +50,14 @@ describe('KioskShell language button (DOM)', () => {
 
 		expect(document.querySelector('header [data-testid="kiosk-language-button"]')).not.toBeNull();
 	});
+
+	it.each(['/kiosk/scanner/reading', '/kiosk/register/phone', '/kiosk/qr', '/kiosk/language'])(
+		'is hidden on %s, so a visit in progress is never thrown away',
+		(path) => {
+			pageState.url = new URL(`http://kiosk.test${path}`);
+			mountShell(false);
+
+			expect(document.querySelector('[data-testid="kiosk-language-button"]')).toBeNull();
+		}
+	);
 });

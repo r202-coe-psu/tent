@@ -74,6 +74,21 @@ const MESSAGES: Record<
 	}
 };
 
+/**
+ * English for the errors the register endpoint marks with a code. In Thai the server's own text is
+ * shown, so the two cannot drift apart for the language the server writes in.
+ */
+const CODED_MESSAGES_EN: Record<string, string> = {
+	KIOSK_PHONE_DUPLICATE:
+		'This phone number is already registered. Enter another number or tap "No phone"',
+	KIOSK_CONSENT_EXPIRED: 'Your consent timed out. Please give consent again',
+	KIOSK_THAID_SESSION_INVALID: 'ThaiD verification expired or is not valid. Please scan again'
+};
+
+function codedMessage(cause: KioskRequestError, language: LanguageCode): string {
+	return language === 'en' ? (CODED_MESSAGES_EN[cause.code ?? ''] ?? cause.message) : cause.message;
+}
+
 /** The card read is not the one the walk-in started with: the message to show, else null. */
 export function walkInCardMismatch(
 	card: SmartCardData,
@@ -102,8 +117,12 @@ export async function registerWalkInCardRead(
 			registration: await register(card, session.consentDecision, session.startedAt ?? null)
 		};
 	} catch (cause) {
-		if (isPhoneDuplicate(cause)) return { kind: 'phone_duplicate', message: cause.message };
-		if (isConsentExpired(cause)) return { kind: 'consent_expired', message: cause.message };
+		if (isPhoneDuplicate(cause)) {
+			return { kind: 'phone_duplicate', message: codedMessage(cause, language) };
+		}
+		if (isConsentExpired(cause)) {
+			return { kind: 'consent_expired', message: codedMessage(cause, language) };
+		}
 		return {
 			kind: 'error',
 			message: cause instanceof Error ? cause.message : MESSAGES[language].readFailed
@@ -151,13 +170,15 @@ export async function submitWalkInThaid(
 		);
 		return { kind: 'registered', registration };
 	} catch (cause) {
-		if (isPhoneDuplicate(cause)) return { kind: 'phone_duplicate', message: cause.message };
+		if (isPhoneDuplicate(cause)) {
+			return { kind: 'phone_duplicate', message: codedMessage(cause, language) };
+		}
 		if (isConsentExpired(cause))
 			return { kind: 'thaid_restart', message: MESSAGES[language].thaidExpired };
-		const message = cause instanceof Error ? cause.message : MESSAGES[language].registerFailed;
 		if (cause instanceof KioskRequestError && cause.code === 'KIOSK_THAID_SESSION_INVALID') {
-			return { kind: 'expired', message };
+			return { kind: 'expired', message: codedMessage(cause, language) };
 		}
+		const message = cause instanceof Error ? cause.message : MESSAGES[language].registerFailed;
 		return { kind: 'error', message };
 	}
 }
