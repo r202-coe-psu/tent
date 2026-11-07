@@ -275,8 +275,15 @@ export const useCrossShelterLedger = (
 export const useReceiveStock = () => {
 	const queryClient = useQueryClient();
 	return createMutation(() => ({
-		mutationFn: ({ input, ctx }: { input: ReceiveInput; ctx: AuthorContext }) =>
-			operationsRepository().receiveStock(input, ctx),
+		mutationFn: ({
+			input,
+			ctx,
+			issueLotNo
+		}: {
+			input: ReceiveInput;
+			ctx: AuthorContext;
+			issueLotNo?: boolean;
+		}) => operationsRepository().receiveStock(input, ctx, { issueLotNo }),
 		onSuccess: () => {
 			queryClient.invalidateQueries({ queryKey: operationsKeys.all });
 		}
@@ -296,12 +303,14 @@ export const useReceiveWalkInDonation = () => {
 		mutationFn: ({
 			donation,
 			receive,
-			ctx
+			ctx,
+			issueLotNo
 		}: {
 			donation: WalkInDonationInput;
 			receive: ReceiveInput;
 			ctx: AuthorContext;
-		}) => operationsRepository().receiveWalkInDonation(donation, receive, ctx),
+			issueLotNo?: boolean;
+		}) => operationsRepository().receiveWalkInDonation(donation, receive, ctx, { issueLotNo }),
 		onSuccess: () => {
 			queryClient.invalidateQueries({ queryKey: operationsKeys.all });
 		}
@@ -321,12 +330,14 @@ export const useReceiveDonationBatch = () => {
 		mutationFn: ({
 			donation,
 			lines,
-			ctx
+			ctx,
+			issueLotNo
 		}: {
 			donation: Donation;
 			lines: readonly DonationBatchLine[];
 			ctx: AuthorContext;
-		}) => operationsRepository().receiveDonationBatch(donation, lines, ctx),
+			issueLotNo?: boolean;
+		}) => operationsRepository().receiveDonationBatch(donation, lines, ctx, { issueLotNo }),
 		onSettled: () => {
 			queryClient.invalidateQueries({ queryKey: operationsKeys.all });
 		}
@@ -428,8 +439,9 @@ export const useTransfers = (filter?: TransferFilter) =>
  * Number of transfers waiting on THIS shelter (tab badge). Shares `useTransfers`'
  * cache entry (same key, unfiltered), so it adds no request beside `TransferList`.
  */
-export const usePendingTransferCount = () =>
+export const usePendingTransferCount = (enabled: () => boolean = () => true) =>
 	createQuery(() => ({
+		enabled: enabled(),
 		queryKey: operationsKeys.transfers(),
 		queryFn: () => operationsRepository().listTransfers(),
 		retry: retryUnlessForbidden,

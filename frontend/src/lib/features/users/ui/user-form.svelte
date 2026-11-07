@@ -360,6 +360,7 @@
 			'supply_coordinator',
 			'warehouse_staff',
 			'distribution_staff',
+			'donation_staff',
 			'kiosk_staff',
 			'pr_staff',
 			'facility_staff',

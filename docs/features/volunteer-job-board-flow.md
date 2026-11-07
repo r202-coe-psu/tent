@@ -522,7 +522,7 @@ sequenceDiagram
   end
   V->>Kit: ทำงานหน้างาน (หั่นผัก / เตรียม)
   Note over V,Kit: ไม่เปิด meal plan / requisition / stock
-  opt เช็คเอาท์กะ / หัวหน้าบันทึก
+  opt เช็คเอาต์กะ / หัวหน้าบันทึก
     V->>App: จบกะ หรือ Lead บันทึก done
     App-->>SM: assignment = done
   end
@@ -531,7 +531,7 @@ sequenceDiagram
 | ขั้น | ใช้ระบบ? | หมายเหตุ |
 | --- | --- | --- |
 | ดูกะล่วงหน้า / วันงาน | ใช่ (เบา) | ตาราง + จุดงาน + ช่วงเวลา |
-| เช็คอิน/เช็คเอาท์กะ | optional | ไม่ใช่ registration/kitchen write |
+| เช็คอิน/เช็คเอาต์กะ | optional | ไม่ใช่ registration/kitchen write |
 | หั่นผัก / เตรียมของ | **ไม่** | อยู่นอกขอบเขตแอป |
 | เบิกวัตถุดิบ / แผนมื้อ | **ไม่** | เป็นของ `kitchen_staff` / SM |
 
@@ -650,7 +650,7 @@ flowchart TB
 | C-12 | Public portal หน้า `/volunteer*` | CR-005 defer | เปิดหรือยัง | ☐ |
 | C-13 | แยก job operational vs staff-capable (+ ประกาศ required RoleKey) | — | **ใหม่ (D-TIER)** | ☐ |
 | C-14 | ออกสิทธิ์ให้อาสาใช้ registration/flow อื่น | role matrix | **ใหม่ (D-DUTY-ACCESS)** | ☐ |
-| C-15 | เช็คอิน/เช็คเอาท์กะ (เบา) สำหรับ operational | — | optional | ☐ |
+| C-15 | เช็คอิน/เช็คเอาต์กะ (เบา) สำหรับ operational | — | optional | ☐ |
 | C-16 | Track + แสดงป้ายอาสา vs staff ประจำบน user / กะ | CR-002 `affiliation_tags` | **ต้องมี (D-AFFIL)** | ☐ |
 | C-17 | ฟอร์มสร้าง user บังคับเลือกชนิดคน + ตั้ง tag ให้ถูก | FR-34 / user admin | **ต้องมี (D-AFFIL)** | ☐ |
 | C-18 | Filter รายชื่อตามชนิดคน | — | **ต้องมี (D-AFFIL)** | ☐ |

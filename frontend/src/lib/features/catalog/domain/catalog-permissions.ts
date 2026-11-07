@@ -1,17 +1,24 @@
 import {
 	hasStaffCapability,
+	isDonationStaff,
 	isSystemAdmin,
 	isShelterManager,
 	isWarehouseStaff
 } from '$lib/auth/roles';
 
 /**
- * Who may create or edit shelter-scoped catalog docs (items, categories).
- * The write path re-checks this per shelter (`enforceWriteAccess`), so this is
- * only the gate for showing the UI affordance.
+ * Who may create or edit shelter-scoped catalog docs (items, categories): SA, SM, warehouse side,
+ * and donation_staff (CR-227). The write path re-checks this per shelter (`enforceWriteAccess`),
+ * so this is only the gate for showing the UI affordance. Merging items stays SM / warehouse
+ * only (`canMergeItem`).
  */
 export function canWriteShelterCatalog(roles: readonly string[]): boolean {
-	return isSystemAdmin(roles) || isShelterManager(roles) || isWarehouseStaff(roles);
+	return (
+		isSystemAdmin(roles) ||
+		isShelterManager(roles) ||
+		isWarehouseStaff(roles) ||
+		isDonationStaff(roles)
+	);
 }
 
 /**

@@ -571,7 +571,7 @@ export function assertEvacueeHouseholdAssignment(
 		const targetHousehold = households.find((household) => household._id === targetHouseholdId);
 		if (!targetHousehold) throw new Error('ไม่พบครัวเรือนปลายทาง');
 		if (!isActiveHouseholdStatus(targetHousehold.status)) {
-			throw new Error('ไม่สามารถเพิ่มสมาชิกเข้าครัวเรือนที่ยกเลิกหรือเช็คเอาท์แล้ว');
+			throw new Error('ไม่สามารถเพิ่มสมาชิกเข้าครัวเรือนที่ยกเลิกหรือเช็คเอาต์แล้ว');
 		}
 	}
 
@@ -629,7 +629,7 @@ export function assertCheckoutDestination(
 	destination: CheckoutDestination | null | undefined
 ): void {
 	if (!destination) {
-		throw new Error('ต้องระบุปลายทางเมื่อเช็คเอาท์ครัวเรือน');
+		throw new Error('ต้องระบุปลายทางเมื่อเช็คเอาต์ครัวเรือน');
 	}
 	if (
 		(destination.type === 'transferred_shelter' || destination.type === 'referred_facility') &&
@@ -1949,11 +1949,11 @@ export function assertShelterCloseCheckoutAllowed(
 	reason: string | null | undefined
 ): void {
 	if (reason !== SHELTER_CLOSED_REASON) {
-		throw new Error('การเช็คเอาท์จากการปิดศูนย์ต้องใช้เหตุผล shelter_closed');
+		throw new Error('การเช็คเอาต์จากการปิดศูนย์ต้องใช้เหตุผล shelter_closed');
 	}
 	const status = evacuee.current_stay.status;
 	if (!isShelterCloseCheckoutStatus(status)) {
-		throw new Error(`ไม่สามารถเช็คเอาท์จากการปิดศูนย์จากสถานะ ${status} ได้`);
+		throw new Error(`ไม่สามารถเช็คเอาต์จากการปิดศูนย์จากสถานะ ${status} ได้`);
 	}
 }
 
@@ -2067,7 +2067,7 @@ export function assertMovementAllowed(
 	if (opts.systemClose) {
 		// CR-219 FR-3: only the shelter-close flow passes `systemClose`, and only for check-out.
 		if (action !== 'check_out') {
-			throw new Error('การปิดศูนย์ใช้ได้กับการเช็คเอาท์เท่านั้น');
+			throw new Error('การปิดศูนย์ใช้ได้กับการเช็คเอาต์เท่านั้น');
 		}
 		assertShelterCloseCheckoutAllowed(evacuee, opts.reason);
 		return;
@@ -2091,12 +2091,12 @@ export function assertMovementAllowed(
 		throw new Error('การกลับจากลาชั่วคราวต้องเช็คอินใหม่ (ระบุโซน) — ไม่ใช้การกลับจากลาแบบเดิม');
 	}
 	if (action === 'check_out' && !canCheckOutEvacuee(evacuee)) {
-		throw new Error(`ไม่สามารถเช็คเอาท์จากสถานะ ${status} ได้`);
+		throw new Error(`ไม่สามารถเช็คเอาต์จากสถานะ ${status} ได้`);
 	}
 	if (action === 'check_out') {
 		const remark = (opts.reason ?? opts.notes ?? '').trim();
 		if (!remark) {
-			throw new Error('การเช็คเอาท์ต้องระบุเหตุผลหรือหมายเหตุ');
+			throw new Error('การเช็คเอาต์ต้องระบุเหตุผลหรือหมายเหตุ');
 		}
 	}
 	if (action === 'zone_change' && !canChangeEvacueeZone(evacuee)) {
@@ -2259,7 +2259,7 @@ export function resolveStatusChangeAction(
 export function normalizeCheckoutRemark(reason: string | null | undefined): string {
 	const remark = (reason ?? '').trim();
 	if (!remark) {
-		throw new Error('การเช็คเอาท์ต้องระบุเหตุผลหรือหมายเหตุ');
+		throw new Error('การเช็คเอาต์ต้องระบุเหตุผลหรือหมายเหตุ');
 	}
 	return remark;
 }

@@ -10,7 +10,17 @@
 	 * `validated` wires it like `shelter-form-page.svelte` — client validators, a valid shelter and
 	 * `<form>` with its `enhance` — since superforms writes the parsed data back only on a valid form (#1054).
 	 */
-	let { points, validated = false }: { points: SubStorageItem[]; validated?: boolean } = $props();
+	let {
+		points,
+		validated = false,
+		stockedLotCount,
+		stockReady
+	}: {
+		points: SubStorageItem[];
+		validated?: boolean;
+		stockedLotCount?: (pointId: string) => number;
+		stockReady?: boolean;
+	} = $props();
 
 	const initial = defaults(zod4(shelterSchema));
 	// svelte-ignore state_referenced_locally
@@ -35,7 +45,7 @@
 </script>
 
 <form method="POST" {@attach fromAction(enhance)}>
-	<StoragePointsSection {form} {formData} />
+	<StoragePointsSection {form} {formData} {stockedLotCount} {stockReady} />
 </form>
 <output data-testid="types">
 	{JSON.stringify(($formData.common_areas.sub_storage ?? []).map((p) => p.types))}
