@@ -337,7 +337,7 @@
 <div class="space-y-4">
 	<!-- Housing type + landmark -->
 	<div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
-		<div class="space-y-1.5">
+		<div class="min-w-0 space-y-1.5">
 			<Label for="housing-type" class="text-xs font-semibold text-foreground">
 				{t.housingTypeLabel}
 			</Label>
@@ -355,7 +355,7 @@
 					aria-invalid={!!errors?.housing_type}
 					aria-describedby={errors?.housing_type ? 'housing-type-error' : undefined}
 				>
-					{housingTypeTriggerLabel}
+					<span class="min-w-0 truncate leading-normal">{housingTypeTriggerLabel}</span>
 				</Select.Trigger>
 				<Select.Content>
 					{#each housingTypeItems as opt (opt.value)}
