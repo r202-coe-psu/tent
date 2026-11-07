@@ -144,7 +144,10 @@
 								</Table.Cell>
 
 								<!-- Storage place -->
-								<Table.Cell class="px-1.5 text-xs whitespace-nowrap text-foreground">
+								<Table.Cell
+									class="max-w-24 truncate px-1.5 text-xs text-foreground"
+									title={place ?? undefined}
+								>
 									{place ?? '—'}
 								</Table.Cell>
 
