@@ -13,6 +13,7 @@
 		DEFAULT_REGISTRATION_RANGE_PRESET,
 		type RegistrationRangePreset
 	} from '$lib/features/dashboard';
+	import { DashboardExportButton } from '$lib/features/data-export';
 	import { bangkokToday } from '$lib/utils/date';
 
 	import DashboardKpiCards from './dashboard-kpi-cards.svelte';
@@ -42,6 +43,10 @@
 </script>
 
 <div class="space-y-4 p-4 sm:p-6">
+	<div class="flex justify-end">
+		<DashboardExportButton {shelterCode} params={rangeParams} />
+	</div>
+
 	{#if isError}
 		<Alert variant="destructive">
 			<AlertCircle class="h-4 w-4" />
