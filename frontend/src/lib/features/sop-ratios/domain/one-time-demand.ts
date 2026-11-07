@@ -54,6 +54,7 @@ export interface CounterLedgerRow {
 	/** Signed qty_str: negative = out of the warehouse. */
 	qty: string;
 	ref_id: string | null;
+	lot?: { note?: string } | null;
 }
 
 /** The distribution-log columns the at-counter figure reads. */
@@ -169,6 +170,29 @@ export function countCurrentRecipients(
 	return counts;
 }
 
+/** `lot.note` of a `receive` row that puts a distributed unit back into the warehouse. */
+const COUNTER_LOAN_RETURN_NOTES: ReadonlySet<string> = new Set([
+	'counter_loan_return',
+	'bulk_return_pool'
+]);
+
+/**
+ * Stock coming back from a distribution point to the warehouse. Three shapes exist:
+ * - leftover of a ticket: `distribution_return`, or a `receive` noted `distribution_return` when the
+ *   lot is unknown, both citing the ticket; a batch's leftover return (`distribution_batch:*`) has no
+ *   matching dispatch and is not one;
+ * - a person bringing a loaned unit back at the counter, or through a bulk return pool: a `receive`
+ *   noted `counter_loan_return` / `bulk_return_pool` (its log is then marked returned).
+ */
+function isReturnToWarehouse(row: CounterLedgerRow): boolean {
+	if (row.reason === 'receive' && COUNTER_LOAN_RETURN_NOTES.has(row.lot?.note ?? '')) return true;
+	if (!row.ref_id?.startsWith('requisition_ticket:')) return false;
+	return (
+		row.reason === 'distribution_return' ||
+		(row.reason === 'receive' && row.lot?.note === 'distribution_return')
+	);
+}
+
 /**
  * Per item, the units sent to a distribution point (`distribute` rows of a requisition ticket) that
  * were neither given to someone nor sent back. = dispatched − returned − (handed out − returned by
@@ -184,7 +208,7 @@ export function unitsAtCounter(
 	for (const row of ledger) {
 		if (row.reason === 'distribute' && row.ref_id?.startsWith('requisition_ticket:')) {
 			add(row.item_id, parseQty(row.qty).neg());
-		} else if (row.reason === 'distribution_return') {
+		} else if (isReturnToWarehouse(row)) {
 			add(row.item_id, parseQty(row.qty).neg());
 		}
 	}

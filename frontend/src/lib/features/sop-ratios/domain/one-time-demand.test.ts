@@ -431,6 +431,52 @@ describe('unitsAtCounter', () => {
 		expect(unitsAtCounter(rows, [given('20', '5')]).get(net._id)).toBe('75');
 	});
 
+	it('takes back a return whose lot is unknown (a `receive` tagged distribution_return)', () => {
+		const rows = [
+			out('-100'),
+			{
+				item_id: net._id,
+				reason: 'receive',
+				qty: '30',
+				ref_id: ticket,
+				lot: { note: 'distribution_return' }
+			},
+			// An ordinary receive that happens to cite a ticket is not a return.
+			{ item_id: net._id, reason: 'receive', qty: '7', ref_id: ticket, lot: { note: 'gift' } }
+		];
+		expect(unitsAtCounter(rows, [given('1')]).get(net._id)).toBe('69');
+	});
+
+	it('does not count a unit twice when a person returned it at the counter', () => {
+		// 110 dispatched, 3 handed out, 1 of those brought back and received into the warehouse.
+		const rows = [
+			out('-100'),
+			out('-10', 'requisition_ticket:t2'),
+			{
+				item_id: net._id,
+				reason: 'receive',
+				qty: '1',
+				ref_id: 'distribution_log:l1',
+				lot: { note: 'counter_loan_return' }
+			}
+		];
+		const logs = [given('1', '1'), given('1'), given('1')];
+		expect(unitsAtCounter(rows, logs).get(net._id)).toBe('107');
+	});
+
+	it("does not take a batch's leftover return off what is at a counter", () => {
+		const rows = [
+			out('-100'),
+			{
+				item_id: net._id,
+				reason: 'distribution_return',
+				qty: '10',
+				ref_id: 'distribution_batch:b1'
+			}
+		];
+		expect(unitsAtCounter(rows, [given('1')]).get(net._id)).toBe('99');
+	});
+
 	it('is absent when everything dispatched was handed out, and never negative', () => {
 		expect(unitsAtCounter([out('-5')], [given('5')]).has(net._id)).toBe(false);
 		expect(unitsAtCounter([out('-5')], [given('9')]).has(net._id)).toBe(false);
