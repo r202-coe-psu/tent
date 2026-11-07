@@ -3,6 +3,8 @@ import {
 	KIOSK_LABEL_CHECKLIST,
 	KIOSK_LABEL_LINK,
 	KIOSK_LABEL_LINK_GAP_MM,
+	KIOSK_LABEL_QR_CAPTION,
+	KIOSK_LABEL_QR_CAPTION_GAP_MM,
 	KIOSK_LABEL_TEXT,
 	KIOSK_LABEL_ZONE,
 	kioskLabelDots,
@@ -141,9 +143,29 @@ export async function renderKioskLabelPng(label: KioskLabelContent): Promise<str
 	);
 	context.font = fonts.link;
 	context.fillText(KIOSK_LABEL_LINK, layout.link.x, layout.link.y, layout.text.width);
+	drawQrCaption(context, layout.qr, qr.width, linkStyle);
 
 	binarize(context, width, height);
 	return canvas.toDataURL('image/png').slice('data:image/png;base64,'.length);
+}
+
+/**
+ * The "for use inside the shelter" lines centred under the QR. Left-aligned at a measured x, so
+ * every row on the label keeps the same `textAlign`. Uses the font already set for the link.
+ */
+function drawQrCaption(
+	context: CanvasRenderingContext2D,
+	qr: { x: number; y: number },
+	qrSize: number,
+	style: { pt: number; lineHeight: number }
+): void {
+	const row = ptToDots(style.pt) * style.lineHeight;
+	const centre = qr.x + qrSize / 2;
+	let middle = qr.y + qrSize + mmToDots(KIOSK_LABEL_QR_CAPTION_GAP_MM) + row / 2;
+	for (const line of KIOSK_LABEL_QR_CAPTION) {
+		context.fillText(line, centre - context.measureText(line).width / 2, middle);
+		middle += row;
+	}
 }
 
 /** `Zone:` then the zone name cut to one line, or a dotted rule to write the zone on by hand. */

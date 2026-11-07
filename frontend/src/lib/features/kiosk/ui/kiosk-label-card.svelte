@@ -7,6 +7,7 @@
 		KIOSK_LABEL_LINK,
 		KIOSK_LABEL_MM,
 		KIOSK_LABEL_PADDING_MM,
+		KIOSK_LABEL_QR_CAPTION,
 		kioskQrBoxMm,
 		labelZoneLine
 	} from '../domain/print-label';
@@ -40,6 +41,7 @@
 		checkedCount={label.checkedCount}
 		footer={KIOSK_LABEL_LINK}
 		checklist={isStaffCard ? undefined : KIOSK_LABEL_CHECKLIST}
+		qrCaption={isStaffCard ? undefined : KIOSK_LABEL_QR_CAPTION}
 	/>
 </div>
 

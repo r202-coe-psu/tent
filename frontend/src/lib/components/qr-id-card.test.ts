@@ -43,6 +43,14 @@ describe('QrIdCard', () => {
 		expect(body.indexOf('shelter.psu.ac.th')).toBeLessThan(body.indexOf('<img'));
 	});
 
+	it('prints the QR caption lines under the QR when given', () => {
+		const caption = ['สำหรับใช้ภายในศูนย์', '(For shelter use only)'];
+		const body = render(QrIdCard, { props: { ...base, qrCaption: caption } }).body;
+
+		for (const line of caption) expect(body.indexOf(line)).toBeGreaterThan(body.indexOf('<img'));
+		expect(render(QrIdCard, { props: base }).body).not.toContain('label-qr-caption');
+	});
+
 	it('prints the assigned zone after its label', () => {
 		const result = render(QrIdCard, {
 			props: { ...base, zone: { label: 'Zone:', value: 'A3' } }

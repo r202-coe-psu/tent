@@ -21,6 +21,8 @@
 		checklist?: readonly string[];
 		/** Stations already passed: this many boxes are ticked, top first. */
 		checkedCount?: number;
+		/** Small centred lines under the QR (e.g. "for use inside the shelter"); omit for none. */
+		qrCaption?: readonly string[];
 		class?: string;
 	};
 
@@ -34,6 +36,7 @@
 		lines = [],
 		checklist = [],
 		checkedCount = 0,
+		qrCaption = [],
 		class: className
 	}: Props = $props();
 
@@ -100,10 +103,24 @@
 	<div
 		class="ml-(--label-gap) flex shrink-0 items-center border-l-[0.25mm] border-black pl-(--label-gap)"
 	>
-		{#if src}
-			<img {src} {alt} class="block size-(--qr-size) [image-rendering:pixelated]" />
-		{:else}
-			<div class="grid size-(--qr-size) place-items-center border border-black text-[8pt]">QR</div>
-		{/if}
+		<div class="relative">
+			{#if src}
+				<img {src} {alt} class="block size-(--qr-size) [image-rendering:pixelated]" />
+			{:else}
+				<div class="grid size-(--qr-size) place-items-center border border-black text-[8pt]">
+					QR
+				</div>
+			{/if}
+			{#if qrCaption.length > 0}
+				<!-- Under the QR without moving it off centre; 2 mm keeps the QR's quiet zone. -->
+				<div
+					class="label-qr-caption absolute top-full left-1/2 mt-[2mm] -translate-x-1/2 text-center text-[7pt] leading-[1.3] font-medium whitespace-nowrap"
+				>
+					{#each qrCaption as line (line)}
+						<p>{line}</p>
+					{/each}
+				</div>
+			{/if}
+		</div>
 	</div>
 </div>

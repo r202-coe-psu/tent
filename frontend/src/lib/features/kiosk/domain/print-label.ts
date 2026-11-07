@@ -97,6 +97,13 @@ export const KIOSK_LABEL_TEXT = {
 } as const;
 /** Site address printed small at the bottom of the text column. */
 export const KIOSK_LABEL_LINK = 'shelter.psu.ac.th';
+/**
+ * Two lines centred under the QR on evacuee labels (Thai, then English: one bilingual line is
+ * ~39 mm at 7 pt, wider than the QR). Printed in the link's style.
+ */
+export const KIOSK_LABEL_QR_CAPTION = ['สำหรับใช้ภายในศูนย์', '(For shelter use only)'] as const;
+/** QR image → caption. With the image's 2 margin modules this keeps the 4-module quiet zone. */
+export const KIOSK_LABEL_QR_CAPTION_GAP_MM = 2;
 /** Space between the checklist and the link under it. */
 export const KIOSK_LABEL_LINK_GAP_MM = 1;
 /** Zone row under the name, as on the field form. */

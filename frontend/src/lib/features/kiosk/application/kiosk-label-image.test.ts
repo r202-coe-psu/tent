@@ -4,6 +4,8 @@ import {
 	KIOSK_LABEL_CHECKBOX,
 	KIOSK_LABEL_CHECKLIST,
 	KIOSK_LABEL_LINK,
+	KIOSK_LABEL_QR_CAPTION,
+	KIOSK_LABEL_QR_CAPTION_GAP_MM,
 	KIOSK_LABEL_ZONE,
 	KIOSK_LABEL_ZONE_PREFIX,
 	kioskLabelLayout,
@@ -119,8 +121,27 @@ describe('renderKioskLabelPng', () => {
 			'เช็คอิน (Check-in)',
 			'คัดกรอง (Screening)',
 			'ที่พัก (Lodging)',
-			KIOSK_LABEL_LINK
+			KIOSK_LABEL_LINK,
+			...KIOSK_LABEL_QR_CAPTION
 		]);
+	});
+
+	it('prints the "shelter use only" caption centred under the QR, clear of its quiet zone', async () => {
+		await renderKioskLabelPng(label);
+
+		const { qr } = kioskLabelLayout(264);
+		const rows = harness.fakeContext.fillText.mock.calls.filter(([text]) =>
+			(KIOSK_LABEL_QR_CAPTION as readonly string[]).includes(text)
+		) as unknown as [string, number, number][];
+		expect(rows.map(([text]) => text)).toEqual([...KIOSK_LABEL_QR_CAPTION]);
+		for (const [text, x] of rows) {
+			// The fake measureText is 6 dots per character.
+			expect(x + (text.length * 6) / 2).toBeCloseTo(qr.x + 264 / 2, 5);
+		}
+		const [first, second] = rows.map(([, , y]) => y);
+		expect(first).toBeGreaterThan(qr.y + 264 + mmToDots(KIOSK_LABEL_QR_CAPTION_GAP_MM));
+		expect(second).toBeGreaterThan(first!);
+		expect(second).toBeLessThan(479 - mmToDots(2));
 	});
 
 	it('draws the link left-aligned at the bottom of the text column', async () => {
