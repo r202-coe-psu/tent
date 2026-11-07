@@ -738,7 +738,7 @@
 										{#if hasJobSkills}
 											ตรงกับงานอาสาสมัครนี้ ({matchedCandidateCount})
 										{:else}
-											ตรงกับงานอาสาสมัครนี้ (ไม่จำกัดทักษะ: {roster.rows.length})
+											ตรงกับงานอาสาสมัครนี้
 										{/if}
 									</span>
 								</Button>
