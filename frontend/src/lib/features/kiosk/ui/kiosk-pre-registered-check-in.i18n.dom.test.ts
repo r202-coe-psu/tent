@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushSync, mount, unmount } from 'svelte';
+import type { ComponentProps } from 'svelte';
 import { languageStore } from '$lib/stores/language.svelte';
 import KioskPreRegisteredCheckIn from './kiosk-pre-registered-check-in.svelte';
 import {
@@ -53,9 +54,7 @@ const household = (shelterCode = 'SH001'): KioskLookupResponse => ({
 
 let instance: ReturnType<typeof mount> | null = null;
 
-function mountCheckIn(
-	props: Partial<Parameters<typeof mount<typeof KioskPreRegisteredCheckIn>>[1]>
-) {
+function mountCheckIn(props: Partial<ComponentProps<typeof KioskPreRegisteredCheckIn>>) {
 	instance = mount(KioskPreRegisteredCheckIn, {
 		target: document.body,
 		props: {

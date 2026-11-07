@@ -8,7 +8,7 @@ const th = {
 	takeQrThaid: 'รับ QR Code แล้วไปที่จุดคัดกรอง',
 	takeQrCard: 'กรุณานำบัตรออกจากเครื่อง รับ QR Code แล้วไปที่จุดคัดกรอง',
 	// The consent block's own wording, so the reference reads the same as on the consent screen.
-	consentRef: CONSENT_COPY.summary.ref,
+	consentRef: CONSENT_COPY.summary.ref as string,
 	printFailedHint: (error: string) => `${error} กดพิมพ์อีกครั้ง หรือติดต่อเจ้าหน้าที่`,
 	printRenderFailed: 'สร้าง QR Code สำหรับพิมพ์ไม่สำเร็จ',
 	removeCard: 'กรุณานำบัตรออกจากเครื่อง',

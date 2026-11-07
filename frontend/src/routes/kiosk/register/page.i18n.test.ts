@@ -116,7 +116,7 @@ describe.each([
 	it('has the same keys in both languages and no Thai in English', () => {
 		const english = Object.entries(dictionary.en).map(([key, value]) => [
 			key,
-			typeof value === 'function' ? value('x') : value
+			typeof value === 'function' ? (value as (arg: string) => string)('x') : value
 		]);
 
 		expect(Object.keys(dictionary.en).sort()).toEqual(Object.keys(dictionary.th).sort());
