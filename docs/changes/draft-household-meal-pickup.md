@@ -3,6 +3,7 @@ id: draft
 title: รับอาหารแทนสมาชิกครัวเรือน — distribution_log รายสมาชิก + collected_by_recipient_id
 status: proposed
 date: 2026-11-05
+updated: 2026-11-07
 requested_by: feedback อบรมระบบ 2026-11-03 (#1154)
 decided_by: project owner
 layer: volatile
@@ -51,7 +52,7 @@ migration: >
 | R1 | ผู้รับไม่มี `household_id` → แจกรายคนแบบเดิม (`qty: "1"`) |
 | R2 | ผู้รับมี `household_id` → แสดงรายการสมาชิกครัวเรือนที่ "อยู่ในศูนย์" (`IN_SHELTER_STATUSES`: `active`, `room_confirmed`). สมาชิก `checked_out` / `temporary_leave` / `arriving` ไม่อยู่ในรายการ |
 | R3 | ผู้มารับ = สมาชิกคนใดก็ได้ในครัวเรือน (ไม่จำกัดหัวหน้า) |
-| R4 | สมาชิกที่ยังไม่รับมื้อนี้ (วันเดียวกันตามเวลาไทย, ไม่นับ log `voided`) ถูกเลือกไว้ล่วงหน้า |
+| R4 | สมาชิกที่ยังไม่รับมื้อนี้ (วันเดียวกันตามเวลาไทย, ไม่นับ log `voided`) ถูกเลือกไว้ล่วงหน้า — ยกเว้นสมาชิกที่ต้อง override อยู่แล้ว (รับแล้วตาม R5, แพ้ตาม R7, เมนูไม่ตรงกลุ่ม) ที่ไม่ถูกเลือกไว้ และแสดงเหตุผลรายคน |
 | R5 | สมาชิกที่รับมื้อนี้แล้ว ไม่ถูกเลือกไว้ + แสดงเวลาที่รับ; เลือกได้โดย override พร้อมเหตุผลรายคน (ไม่บล็อก — FR-MQW-05) |
 | R6 | ยืนยัน → `distribution_log` 1 ใบต่อสมาชิกที่เลือก, `qty: "1"`, `recipient_id` = สมาชิก, `collected_by_recipient_id` = ผู้มารับ (เฉพาะเมื่อสมาชิก ≠ ผู้มารับ) |
 | R7 | เตือนแพ้อาหาร (CR-191) ประเมินรายสมาชิก |
@@ -70,7 +71,7 @@ AC-DST-02.1 / AC-DST-02.2 คงเดิม.
 ## 4. Impact
 
 - Zod `distribution_log` + input schema ของ workflow แจกอาหาร: เพิ่ม `collected_by_recipient_id` + invariant ข้อ 1.
-- VDU shelter DB: ถ้าตรวจ field ใหม่ → `pnpm redeploy:access` ก่อน client รุ่นใหม่เขียน.
+- VDU shelter DB: ตรวจ field ใหม่ → `pnpm redeploy:access`. ลำดับ deploy ไม่สำคัญ: VDU ใหม่เพิ่มแค่ข้อห้าม (client เดิมไม่เขียน field นี้, client ใหม่เขียนบน VDU เดิมได้).
 - Workflow ใหม่ `recordHouseholdMealPickup` เรียก `recordFoodDistribution` ทีละสมาชิก.
 - UI `FoodDistributionCard`: stepper → รายการเลือกสมาชิก (`useHouseholdMembers`).
 - Worker/projection: ไม่กระทบ (`distribution_log` ไม่ project ไป public plane).
