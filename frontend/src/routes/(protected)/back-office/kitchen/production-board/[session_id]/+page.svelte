@@ -17,6 +17,11 @@
 		sumHeadcountByTags,
 		scaleRecipeIngredientQty,
 		getActiveTagsFromSession,
+		CountInputGuard,
+		CountFieldError,
+		COUNT_ERROR,
+		isCount,
+		isPositiveQty,
 		selectableCookingIngredients,
 		TARGET_GROUP_LABELS,
 		MEAL_PERIOD_LABELS,
@@ -57,7 +62,7 @@
 	import { Label } from '$lib/components/ui/label';
 	import { Textarea } from '$lib/components/ui/textarea';
 	import { toast } from 'svelte-sonner';
-	import { addQty, persistQty, qtyGt, qtyLte } from '$lib/utils/qty';
+	import { addQty, persistQty, qtyGt } from '$lib/utils/qty';
 	import { formatThaiDateTime, formatThaiShortDate } from '$lib/utils/date';
 	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
 	import ChefHat from '@lucide/svelte/icons/chef-hat';
@@ -219,11 +224,16 @@
 		if (mode === 'custom' && selectedRecipeId) {
 			selectedRecipeId = '';
 			isIngredientsManuallyEdited = false;
-			ingredientsList = calculateRecipeIngredients('', allocatedTarget);
+			ingredientsList = calculateRecipeIngredients('', scalingTarget);
 		}
 	}
 	let menuLabel = $state('');
 	let allocatedTarget = $state(50);
+	const guard = new CountInputGuard();
+	const targetValid = $derived(isCount(allocatedTarget, 1));
+	const TARGET_ERROR = 'จำนวนจานต้องเป็นจำนวนเต็มตั้งแต่ 1 ขึ้นไป';
+	const QTY_ERROR = 'จำนวนต้องมากกว่า 0';
+	const scalingTarget = $derived(targetValid ? allocatedTarget : 0);
 	// #802: save this batch's ingredient list as a catalog recipe named after the menu label, at
 	// this batch's portions. New batch only: a hand-built list, or a BOM recipe whose ingredients
 	// were edited (an unedited BOM recipe would only duplicate itself).
@@ -302,7 +312,7 @@
 				isIngredientsManuallyEdited = true;
 			} else {
 				isIngredientsManuallyEdited = false;
-				ingredientsList = calculateRecipeIngredients(selectedRecipeId, allocatedTarget);
+				ingredientsList = calculateRecipeIngredients(selectedRecipeId, scalingTarget);
 			}
 		} else if (!activePlanId && lastLoadedPlanId !== null) {
 			lastLoadedPlanId = null;
@@ -315,7 +325,7 @@
 			recipeMode = 'bom';
 			resetSaveAsRecipe();
 			isIngredientsManuallyEdited = false;
-			ingredientsList = calculateRecipeIngredients('', allocatedTarget);
+			ingredientsList = calculateRecipeIngredients('', scalingTarget);
 			showAddIngredient = false;
 		}
 	});
@@ -361,7 +371,7 @@
 		}
 		resetSaveAsRecipe();
 		isIngredientsManuallyEdited = false;
-		ingredientsList = calculateRecipeIngredients(target.value, allocatedTarget);
+		ingredientsList = calculateRecipeIngredients(target.value, scalingTarget);
 	}
 
 	interface IngredientRow {
@@ -377,6 +387,8 @@
 	let newItemId = $state('');
 	let newQty = $state('1');
 	let newUnit = $state('');
+	const newQtyValid = $derived(isPositiveQty(newQty));
+	const ingredientsValid = $derived(ingredientsList.every((ing) => isPositiveQty(ing.needed)));
 
 	function calculateRecipeIngredients(recipeId: string, portions: number | null): IngredientRow[] {
 		const recipe = (recipes.data ?? []).find((r) => r._id === recipeId);
@@ -398,7 +410,7 @@
 	// Synchronize ingredients with recipe & portions when not manually customized
 	$effect(() => {
 		const recId = selectedRecipeId;
-		const target = allocatedTarget;
+		const target = scalingTarget;
 		void recipes.data;
 		if (!isIngredientsManuallyEdited && target > 0) {
 			ingredientsList = calculateRecipeIngredients(recId, target);
@@ -408,7 +420,7 @@
 	function resetIngredientsToRecipe() {
 		saveAsRecipe = false;
 		isIngredientsManuallyEdited = false;
-		ingredientsList = calculateRecipeIngredients(selectedRecipeId, allocatedTarget);
+		ingredientsList = calculateRecipeIngredients(selectedRecipeId, scalingTarget);
 		showAddIngredient = false;
 		toast.info('คืนค่าวัตถุดิบตามสูตรและจำนวนจานเรียบร้อยแล้ว');
 	}
@@ -435,7 +447,7 @@
 	}
 
 	function confirmAddIngredient() {
-		if (!newItemId || newQty == null || newQty === '' || qtyLte(newQty, 0)) {
+		if (!newItemId || !isPositiveQty(newQty)) {
 			toast.error('กรุณาระบุวัตถุดิบและจำนวนที่ถูกต้อง');
 			return;
 		}
@@ -516,8 +528,8 @@
 	// Submit Stage A ➔ Create Requisition
 	async function handleCreateRequisition() {
 		if (!session) return;
-		if (allocatedTarget <= 0) {
-			toast.error('กรุณาระบุจำนวนจานเป้าหมาย');
+		if (!targetValid) {
+			toast.error('กรุณาระบุจำนวนจานเป้าหมายให้มากกว่า 0');
 			return;
 		}
 		if (targetTags.length === 0) {
@@ -528,10 +540,7 @@
 			toast.error('กรุณาระบุวัตถุดิบอย่างน้อย 1 รายการ');
 			return;
 		}
-		const hasInvalidQty = ingredientsList.some(
-			(ing) => ing.needed == null || ing.needed === '' || qtyLte(ing.needed, 0)
-		);
-		if (hasInvalidQty) {
+		if (!ingredientsValid) {
 			toast.error('กรุณาระบุจำนวนวัตถุดิบให้มากกว่า 0 ทุกรายการ');
 			return;
 		}
@@ -614,8 +623,8 @@
 			toast.error('แก้ไขไม่ได้ — คลังเริ่มดำเนินการกับตั๋วนี้แล้ว');
 			return;
 		}
-		if (allocatedTarget <= 0) {
-			toast.error('กรุณาระบุจำนวนจานเป้าหมาย');
+		if (!targetValid) {
+			toast.error('กรุณาระบุจำนวนจานเป้าหมายให้มากกว่า 0');
 			return;
 		}
 		if (targetTags.length === 0) {
@@ -626,10 +635,7 @@
 			toast.error('กรุณาระบุวัตถุดิบอย่างน้อย 1 รายการ');
 			return;
 		}
-		const hasInvalidQty = ingredientsList.some(
-			(ing) => ing.needed == null || ing.needed === '' || qtyLte(ing.needed, 0)
-		);
-		if (hasInvalidQty) {
+		if (!ingredientsValid) {
 			toast.error('กรุณาระบุจำนวนวัตถุดิบให้มากกว่า 0 ทุกรายการ');
 			return;
 		}
@@ -697,9 +703,28 @@
 	let serviceNotes = $state('');
 	let cookingStarted = $state(false);
 
-	// Init stage C defaults from activeService or allocatedTarget
+	// Outside-volunteer and outside-evacuee counts treat an empty box as 0.
+	const serviceFieldErrors = $derived({
+		yieldActual: isCount(yieldActualPortions, 0) ? null : COUNT_ERROR,
+		served: isCount(servedInShelter, 0) ? null : COUNT_ERROR,
+		waste: isCount(wastePortions, 0) ? null : COUNT_ERROR,
+		extVolunteers:
+			!guard.unparsed['service-ext-volunteers'] && isCount(extVolunteers ?? 0, 0)
+				? null
+				: COUNT_ERROR,
+		extOutside:
+			!guard.unparsed['service-ext-outside'] && isCount(extOutside ?? 0, 0) ? null : COUNT_ERROR
+	});
+	const serviceFormValid = $derived(Object.values(serviceFieldErrors).every((e) => e === null));
+
+	// Init stage C defaults from activeService or allocatedTarget, once per plan/service/outcome.
+	// A refetch of the same plan (an edit on another device) must not wipe what the kitchen typed.
+	let stageCDefaultsFor: string | null = null;
 	$effect(() => {
 		if (shownStage === 'C') {
+			const key = `${activePlan?._id}|${activeService?._id}|${serviceRejected}`;
+			if (key === stageCDefaultsFor) return;
+			stageCDefaultsFor = key;
 			if (activeService && !serviceRejected) {
 				yieldActualPortions = activeService.actual_yield ?? activePlan?.allocated_target ?? 50;
 				servedInShelter = activeService.served;
@@ -770,8 +795,8 @@
 
 	async function handleRecordService() {
 		if (!session || !activePlanId) return;
-		if (yieldActualPortions < 0) {
-			toast.error('กรุณาระบุจำนวนจานที่ปรุงได้จริง');
+		if (!serviceFormValid) {
+			toast.error('กรุณาระบุจำนวนผลผลิตและการแจกจ่ายเป็นตัวเลขตั้งแต่ 0 ขึ้นไป');
 			return;
 		}
 
@@ -1030,7 +1055,15 @@
 							type="number"
 							min="1"
 							bind:value={allocatedTarget}
+							aria-invalid={!targetValid}
+							aria-describedby={targetValid ? undefined : 'allocated-target-error'}
+							{@attach guard.attach('allocated-target')}
 							class="mt-1 text-xs font-bold"
+						/>
+						<CountFieldError
+							{guard}
+							id="allocated-target"
+							message={targetValid ? null : TARGET_ERROR}
 						/>
 					</div>
 
@@ -1133,8 +1166,7 @@
 								{/if}
 								{#each ingredientsList as ing, idx (ing.item_id + '_' + idx)}
 									{@const onHand = stock.data?.get(ing.item_id) ?? '0'}
-									{@const isShort =
-										ing.needed != null && ing.needed !== '' && qtyGt(ing.needed, onHand)}
+									{@const isShort = isPositiveQty(ing.needed) && qtyGt(ing.needed, onHand)}
 									<Table.Row>
 										<Table.Cell class="font-medium">
 											{ing.name}
@@ -1149,12 +1181,23 @@
 													oninput={() => {
 														isIngredientsManuallyEdited = true;
 													}}
+													aria-label="จำนวน {ing.name}"
+													aria-invalid={!isPositiveQty(ing.needed)}
+													aria-describedby={isPositiveQty(ing.needed)
+														? undefined
+														: `ing-qty-${ing.item_id}-error`}
+													{@attach guard.attach(`ing-qty-${ing.item_id}`)}
 													class="h-8 w-24 [appearance:textfield] text-right text-sm font-semibold tabular-nums [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
 												/>
 												<span class="w-16 truncate text-left text-xs text-muted-foreground"
 													>{unitLabel(ing.unit)}</span
 												>
 											</div>
+											<CountFieldError
+												{guard}
+												id={`ing-qty-${ing.item_id}`}
+												message={isPositiveQty(ing.needed) ? null : QTY_ERROR}
+											/>
 										</Table.Cell>
 										<Table.Cell class="text-right text-slate-700 tabular-nums">
 											{onHand}
@@ -1211,14 +1254,25 @@
 									/>
 								</div>
 								<div class="sm:col-span-3">
-									<Label class="text-2xs text-muted-foreground">จำนวน</Label>
+									<Label for="new-ingredient-qty" class="text-2xs text-muted-foreground"
+										>จำนวน</Label
+									>
 									<Input
+										id="new-ingredient-qty"
 										type="number"
 										step="any"
-										min="0.01"
+										min="0"
 										bind:value={newQty}
 										placeholder="0"
+										aria-invalid={!newQtyValid}
+										aria-describedby={newQtyValid ? undefined : 'new-ingredient-qty-error'}
+										{@attach guard.attach('new-ingredient-qty')}
 										class="mt-1 h-8 text-xs font-bold"
+									/>
+									<CountFieldError
+										{guard}
+										id="new-ingredient-qty"
+										message={newQtyValid ? null : QTY_ERROR}
 									/>
 								</div>
 								<div class="sm:col-span-3">
@@ -1249,7 +1303,7 @@
 									size="sm"
 									class="h-7 gap-1 text-xs"
 									onclick={confirmAddIngredient}
-									disabled={!newItemId || newQty == null || newQty === '' || qtyLte(newQty, 0)}
+									disabled={!newItemId || !newQtyValid}
 								>
 									<Plus class="h-3 w-3" />
 									เพิ่มวัตถุดิบนี้
@@ -1297,7 +1351,7 @@
 				<Button
 					class="w-full gap-2 font-semibold shadow-sm"
 					onclick={handleCreateRequisition}
-					disabled={!ticketsFresh || isOpeningRequisition}
+					disabled={!ticketsFresh || isOpeningRequisition || !targetValid || !ingredientsValid}
 				>
 					<Sparkles class="h-4 w-4" />
 					{isOpeningRequisition ? 'กำลังเปิดตั๋วเบิก...' : 'สร้างใบเบิกวัตถุดิบ'}
@@ -1309,7 +1363,9 @@
 					class="w-full gap-2 font-semibold shadow-sm"
 					onclick={handleSaveEdits}
 					disabled={updateTicketItemsMutation.isPending ||
-						updateConfirmedMealPlanMutation.isPending}
+						updateConfirmedMealPlanMutation.isPending ||
+						!targetValid ||
+						!ingredientsValid}
 				>
 					<Check class="h-4 w-4" />
 					{updateTicketItemsMutation.isPending || updateConfirmedMealPlanMutation.isPending
@@ -1575,32 +1631,95 @@
 
 						<div class="grid grid-cols-2 gap-3 sm:grid-cols-3">
 							<div>
-								<Label class="text-xs font-semibold">จำนวนจานปรุงได้จริง</Label>
+								<Label for="service-yield" class="text-xs font-semibold">จำนวนจานปรุงได้จริง</Label>
 								<Input
+									id="service-yield"
 									type="number"
 									min="0"
 									bind:value={yieldActualPortions}
+									aria-invalid={!!serviceFieldErrors.yieldActual}
+									aria-describedby={serviceFieldErrors.yieldActual
+										? 'service-yield-error'
+										: undefined}
+									{@attach guard.attach('service-yield')}
 									class="mt-1 text-xs font-bold"
+								/>
+								<CountFieldError
+									{guard}
+									id="service-yield"
+									message={serviceFieldErrors.yieldActual}
 								/>
 							</div>
 							<div>
-								<Label class="text-xs">แจกจ่ายในศูนย์</Label>
-								<Input type="number" min="0" bind:value={servedInShelter} class="mt-1 text-xs" />
+								<Label for="service-served" class="text-xs">แจกจ่ายในศูนย์</Label>
+								<Input
+									id="service-served"
+									type="number"
+									min="0"
+									bind:value={servedInShelter}
+									aria-invalid={!!serviceFieldErrors.served}
+									aria-describedby={serviceFieldErrors.served ? 'service-served-error' : undefined}
+									{@attach guard.attach('service-served')}
+									class="mt-1 text-xs"
+								/>
+								<CountFieldError {guard} id="service-served" message={serviceFieldErrors.served} />
 							</div>
 							<div>
-								<Label class="text-xs">อาหารเหลือทิ้ง</Label>
-								<Input type="number" min="0" bind:value={wastePortions} class="mt-1 text-xs" />
+								<Label for="service-waste" class="text-xs">อาหารเหลือทิ้ง</Label>
+								<Input
+									id="service-waste"
+									type="number"
+									min="0"
+									bind:value={wastePortions}
+									aria-invalid={!!serviceFieldErrors.waste}
+									aria-describedby={serviceFieldErrors.waste ? 'service-waste-error' : undefined}
+									{@attach guard.attach('service-waste')}
+									class="mt-1 text-xs"
+								/>
+								<CountFieldError {guard} id="service-waste" message={serviceFieldErrors.waste} />
 							</div>
 						</div>
 
 						<div class="grid grid-cols-2 gap-3">
 							<div>
-								<Label class="text-xs">แจกอาสาสมัคร/เจ้าหน้าที่</Label>
-								<Input type="number" min="0" bind:value={extVolunteers} class="mt-1 text-xs" />
+								<Label for="service-ext-volunteers" class="text-xs">แจกอาสาสมัคร/เจ้าหน้าที่</Label>
+								<Input
+									id="service-ext-volunteers"
+									type="number"
+									min="0"
+									bind:value={extVolunteers}
+									aria-invalid={!!serviceFieldErrors.extVolunteers}
+									aria-describedby={serviceFieldErrors.extVolunteers
+										? 'service-ext-volunteers-error'
+										: undefined}
+									{@attach guard.attach('service-ext-volunteers')}
+									class="mt-1 text-xs"
+								/>
+								<CountFieldError
+									{guard}
+									id="service-ext-volunteers"
+									message={serviceFieldErrors.extVolunteers}
+								/>
 							</div>
 							<div>
-								<Label class="text-xs">แจกผู้พักพิงภายนอก</Label>
-								<Input type="number" min="0" bind:value={extOutside} class="mt-1 text-xs" />
+								<Label for="service-ext-outside" class="text-xs">แจกผู้พักพิงภายนอก</Label>
+								<Input
+									id="service-ext-outside"
+									type="number"
+									min="0"
+									bind:value={extOutside}
+									aria-invalid={!!serviceFieldErrors.extOutside}
+									aria-describedby={serviceFieldErrors.extOutside
+										? 'service-ext-outside-error'
+										: undefined}
+									{@attach guard.attach('service-ext-outside')}
+									class="mt-1 text-xs"
+								/>
+								<CountFieldError
+									{guard}
+									id="service-ext-outside"
+									message={serviceFieldErrors.extOutside}
+								/>
 							</div>
 						</div>
 
@@ -1634,7 +1753,7 @@
 								<Button
 									class="gap-1.5 bg-primary shadow-sm"
 									onclick={handleRecordService}
-									disabled={recordServiceMutation.isPending || !cookingStarted}
+									disabled={recordServiceMutation.isPending || !cookingStarted || !serviceFormValid}
 									title={!cookingStarted ? 'กดเริ่มปรุงอาหารก่อน' : undefined}
 								>
 									<Check class="h-4 w-4" />
