@@ -10,6 +10,7 @@
 		type FoodSphereStandard,
 		type TargetSegment
 	} from '../domain/food-sphere';
+	import { isPositiveQty } from '../domain/qty-input';
 	import { resolveSource, type Source } from '$lib/utils/source';
 	import { useRequirementGroups } from '../application/requirement-group-queries';
 	import { useSaveFoodSphereStandard } from '../application/food-sphere-queries';
@@ -93,8 +94,7 @@
 		if (!cleanGroupId) {
 			formErrors.reqGroupId = 'กรุณาระบุหมวดความต้องการ';
 		}
-		const demand = Number(formDailyDemand);
-		if (isNaN(demand) || demand <= 0) {
+		if (!isPositiveQty(formDailyDemand)) {
 			formErrors.dailyDemand = 'ปริมาณความต้องการต้องมากกว่า 0';
 		}
 		if (!formEffectiveDate) {
@@ -113,7 +113,7 @@
 				input: {
 					target_segment: formSegment,
 					req_group_id: cleanGroupId,
-					daily_demand: demand,
+					daily_demand: String(formDailyDemand),
 					standard_uom: autoUom !== '—' ? autoUom : undefined,
 					effective_date: formEffectiveDate,
 					status: formStatus,
