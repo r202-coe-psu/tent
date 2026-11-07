@@ -185,12 +185,16 @@ describe('kioskLabelLayout', () => {
 });
 
 describe('KIOSK_LABEL_CHECKLIST', () => {
-	it('ships the staff ID card checklist', () => {
-		expect(KIOSK_LABEL_CHECKLIST).toEqual(['เช็คอิน', 'คัดกรอง', 'ที่พัก']);
+	it('ships the ID card checklist in Thai with English in brackets', () => {
+		expect(KIOSK_LABEL_CHECKLIST).toEqual([
+			'เช็คอิน (Check-in)',
+			'คัดกรอง (Screening)',
+			'ที่พัก (Lodging)'
+		]);
 	});
 
-	it('ticks only เช็คอิน on a label printed at kiosk check-in', () => {
-		expect(KIOSK_LABEL_CHECKLIST.slice(0, KIOSK_CHECK_IN_TICKS)).toEqual(['เช็คอิน']);
+	it('ticks only check-in on a label printed at kiosk check-in', () => {
+		expect(KIOSK_LABEL_CHECKLIST.slice(0, KIOSK_CHECK_IN_TICKS)).toEqual(['เช็คอิน (Check-in)']);
 	});
 });
 

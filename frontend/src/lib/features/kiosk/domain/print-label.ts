@@ -92,7 +92,7 @@ export function kioskLabelPageCss(): string {
 export const KIOSK_LABEL_TEXT = {
 	name: { pt: 16, lineHeight: 1.3, weight: 700, maxLines: 3 },
 	zone: { pt: 12, lineHeight: 1.3, weight: 700 },
-	checklist: { pt: 10, lineHeight: 1.3, weight: 500 },
+	checklist: { pt: 9, lineHeight: 1.3, weight: 500 },
 	link: { pt: 7, lineHeight: 1.3, weight: 500 }
 } as const;
 /** Site address printed small at the bottom of the text column. */
@@ -121,19 +121,27 @@ export function labelZoneLine(zone: string | null | undefined): LabelZoneLine {
 	return { label: KIOSK_LABEL_ZONE_PREFIX, value: zone?.trim() || null };
 }
 
-/** Staff ID card checklist, one box per intake station. */
-export const KIOSK_LABEL_CHECKLIST = ['เช็คอิน', 'คัดกรอง', 'ที่พัก'] as const;
-/** A label printed right after a kiosk check-in or walk-in: only เช็คอิน is done. */
+/**
+ * ID card checklist, one box per intake station. Paper cannot follow the UI language, so every
+ * label prints Thai with the English in brackets, whoever printed it. Widest row at 9 pt
+ * IBM Plex Sans Thai is ~29 mm; the text beside the box has ~34.5 mm next to a 33 mm QR.
+ */
+export const KIOSK_LABEL_CHECKLIST = [
+	'เช็คอิน (Check-in)',
+	'คัดกรอง (Screening)',
+	'ที่พัก (Lodging)'
+] as const;
+/** A label printed right after a kiosk check-in or walk-in: only check-in is done. */
 export const KIOSK_CHECK_IN_TICKS = 1;
 export const KIOSK_LABEL_CHECKBOX = {
-	sizeMm: 3.5,
+	sizeMm: 3,
 	borderMm: 0.3,
 	/** Stroke of the tick in a box whose station is done. */
 	tickMm: 0.4,
 	/** Box → its text. */
-	textGapMm: 1.5,
+	textGapMm: 1.2,
 	/** Between checklist rows (one item per row). */
-	rowGapMm: 1.5
+	rowGapMm: 1.2
 } as const;
 
 const PT_PER_INCH = 72;

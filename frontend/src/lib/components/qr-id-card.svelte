@@ -62,11 +62,11 @@
 		{/if}
 		{#if checklist.length > 0}
 			<div
-				class="label-checklist mt-auto flex flex-col items-start gap-[1.5mm] text-[10pt] leading-[1.3] font-medium"
+				class="label-checklist mt-auto flex flex-col items-start gap-[1.2mm] text-[9pt] leading-[1.3] font-medium"
 			>
 				{#each checklist as item, index (item)}
-					<span class="inline-flex items-center gap-[1.5mm]">
-						<span class="size-[3.5mm] shrink-0 border-[0.3mm] border-black" aria-hidden="true">
+					<span class="inline-flex items-center gap-[1.2mm]">
+						<span class="size-[3mm] shrink-0 border-[0.3mm] border-black" aria-hidden="true">
 							{#if index < checkedCount}
 								<svg viewBox="0 0 10 10" class="block size-full">
 									<polyline

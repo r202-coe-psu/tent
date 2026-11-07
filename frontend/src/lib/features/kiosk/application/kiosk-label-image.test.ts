@@ -2,6 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
 	KIOSK_LABEL_CHECKBOX,
+	KIOSK_LABEL_CHECKLIST,
 	KIOSK_LABEL_LINK,
 	KIOSK_LABEL_ZONE,
 	KIOSK_LABEL_ZONE_PREFIX,
@@ -115,9 +116,9 @@ describe('renderKioskLabelPng', () => {
 		expect(texts).toEqual([
 			'สมชาย ใจดี',
 			KIOSK_LABEL_ZONE_PREFIX,
-			'เช็คอิน',
-			'คัดกรอง',
-			'ที่พัก',
+			'เช็คอิน (Check-in)',
+			'คัดกรอง (Screening)',
+			'ที่พัก (Lodging)',
 			KIOSK_LABEL_LINK
 		]);
 	});
@@ -150,9 +151,13 @@ describe('renderKioskLabelPng', () => {
 		await renderKioskLabelPng(label);
 
 		const rows = harness.fakeContext.fillText.mock.calls.filter(([text]) =>
-			['เช็คอิน', 'คัดกรอง', 'ที่พัก'].includes(text)
+			['เช็คอิน (Check-in)', 'คัดกรอง (Screening)', 'ที่พัก (Lodging)'].includes(text)
 		) as unknown as [string, number, number][];
-		expect(rows.map(([text]) => text)).toEqual(['เช็คอิน', 'คัดกรอง', 'ที่พัก']);
+		expect(rows.map(([text]) => text)).toEqual([
+			'เช็คอิน (Check-in)',
+			'คัดกรอง (Screening)',
+			'ที่พัก (Lodging)'
+		]);
 		expect(new Set(rows.map(([, x]) => x)).size).toBe(1);
 		const ys = rows.map(([, , y]) => y);
 		expect(ys[0]).toBeLessThan(ys[1]!);
@@ -174,7 +179,7 @@ describe('renderKioskLabelPng', () => {
 			// Each tick starts inside its own box, top row first.
 			const starts = harness.fakeContext.moveTo.mock.calls.map(([, y]) => y as number);
 			const rows = harness.fakeContext.fillText.mock.calls
-				.filter(([text]) => ['เช็คอิน', 'คัดกรอง'].includes(text))
+				.filter(([text]) => ['เช็คอิน (Check-in)', 'คัดกรอง (Screening)'].includes(text))
 				.map((call) => (call as unknown as [string, number, number])[2]);
 			const boxSize = Math.round(mmToDots(KIOSK_LABEL_CHECKBOX.sizeMm));
 			starts.forEach((y, index) => expect(Math.abs(y - rows[index]!)).toBeLessThan(boxSize / 2));
@@ -209,10 +214,9 @@ describe('renderKioskLabelPng', () => {
 			await renderKioskLabelPng({ ...label, zone: 'A3' });
 
 			const drawn = texts();
-			expect(drawn.slice(drawn.indexOf(KIOSK_LABEL_ZONE_PREFIX), -4)).toEqual([
-				KIOSK_LABEL_ZONE_PREFIX,
-				'A3'
-			]);
+			expect(
+				drawn.slice(drawn.indexOf(KIOSK_LABEL_ZONE_PREFIX), drawn.indexOf(KIOSK_LABEL_CHECKLIST[0]))
+			).toEqual([KIOSK_LABEL_ZONE_PREFIX, 'A3']);
 			expect(ruleDots()).toEqual([]);
 		});
 

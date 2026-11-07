@@ -64,7 +64,6 @@
 			? renderKioskQrLabelPng(evacuee._id, {
 					name,
 					zone: labelZoneName(evacuee.current_stay?.zone, shelterQuery.data?.zones),
-					checklist: [t.checklistCheckIn, t.checklistScreening, t.checklistLodging],
 					checkedCount: intakeStationsPassed(
 						evacuee.current_stay,
 						(screeningsQuery.data?.length ?? 0) > 0
