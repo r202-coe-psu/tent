@@ -1011,7 +1011,9 @@
 				{/if}
 			</div>
 
-			<div class="col-span-1 sm:col-span-2">
+			<div
+				class="sticky bottom-0 z-10 col-span-1 -mx-4 -mb-4 space-y-3 border-t border-slate-200 bg-slate-50 px-4 py-4 sm:col-span-2 sm:-mx-6 sm:-mb-6 sm:px-6"
+			>
 				<label
 					class="flex min-h-11 cursor-pointer items-center gap-2.5 rounded-lg border border-slate-200 bg-white px-3 py-2"
 				>
@@ -1021,11 +1023,6 @@
 						<span class="font-normal text-muted-foreground">(สร้างเลขล็อตให้อัตโนมัติ)</span>
 					</span>
 				</label>
-			</div>
-
-			<div
-				class="sticky bottom-0 z-10 col-span-1 -mx-4 -mb-4 border-t border-slate-200 bg-slate-50 px-4 py-4 sm:col-span-2 sm:-mx-6 sm:-mb-6 sm:px-6"
-			>
 				<Form.Button size="lg" disabled={$submitting || offline} class="min-h-11 w-full font-bold">
 					{$submitting ? 'กำลังบันทึก…' : 'บันทึกแล้วรับชิ้นถัดไป'}
 				</Form.Button>
