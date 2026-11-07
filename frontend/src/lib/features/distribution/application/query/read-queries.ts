@@ -383,8 +383,9 @@ export const useReturnOperationState = (
 	});
 
 /**
- * Evacuees who already received each of `itemIds`. Keyed under the shelter's `logs` prefix, so a
- * `distribution_log` change refreshes it.
+ * Evacuees who already received each of `itemIds`. Reads every `distribution_log` of the shelter, so
+ * it is deliberately NOT under the `logs` prefix: the live query would refetch it on each
+ * distribution. It reloads when the tab opens or the stale time passes; a reload refreshes it sooner.
  */
 export function useItemEvacueeRecipients(
 	itemIds: MaybeGetter<readonly string[]>,
@@ -397,7 +398,6 @@ export function useItemEvacueeRecipients(
 		return {
 			queryKey: [
 				...distributionKeys.shelter(code),
-				'logs',
 				'item-recipients',
 				[...ids].sort().join(',')
 			] as const,
