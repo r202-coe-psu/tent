@@ -10,8 +10,6 @@ export type ItemDistribution = {
 	recipient_id: string | null;
 	/** Units handed out (qty_str). */
 	qty: string;
-	/** Units that came back (qty_str), `'0'` when none. */
-	qty_returned: string;
 };
 
 type DistributionLogRow = {
@@ -20,7 +18,6 @@ type DistributionLogRow = {
 	recipient_id?: unknown;
 	status?: unknown;
 	qty?: unknown;
-	qty_returned?: unknown;
 };
 
 const isDistributionLogRow = (d: unknown): d is DistributionLogRow =>
@@ -53,8 +50,7 @@ export async function listItemDistributions(
 			item_id,
 			recipient_type: typeof recipient_type === 'string' ? recipient_type : '',
 			recipient_id: typeof recipient_id === 'string' && recipient_id ? recipient_id : null,
-			qty: qtyStr(log.qty),
-			qty_returned: qtyStr(log.qty_returned)
+			qty: qtyStr(log.qty)
 		});
 	}
 	return out;

@@ -61,7 +61,6 @@ export interface CounterLedgerRow {
 export interface CounterLogRow {
 	item_id: string;
 	qty: string;
-	qty_returned: string;
 }
 
 /**
@@ -170,22 +169,14 @@ export function countCurrentRecipients(
 	return counts;
 }
 
-/** `lot.note` of a `receive` row that puts a distributed unit back into the warehouse. */
-const COUNTER_LOAN_RETURN_NOTES: ReadonlySet<string> = new Set([
-	'counter_loan_return',
-	'bulk_return_pool'
-]);
-
 /**
- * Stock coming back from a distribution point to the warehouse. Three shapes exist:
- * - leftover of a ticket: `distribution_return`, or a `receive` noted `distribution_return` when the
- *   lot is unknown, both citing the ticket; a batch's leftover return (`distribution_batch:*`) has no
- *   matching dispatch and is not one;
- * - a person bringing a loaned unit back at the counter, or through a bulk return pool: a `receive`
- *   noted `counter_loan_return` / `bulk_return_pool` (its log is then marked returned).
+ * Stock a distribution point sent back to the warehouse for a ticket: a `distribution_return`, or a
+ * `receive` noted `distribution_return` when the lot is unknown, both citing the ticket. Units a
+ * person brings back (at the counter or through a bulk return pool) go straight into the warehouse
+ * and never passed through the counter, and a batch's leftover (`distribution_batch:*`) has no
+ * matching dispatch, so neither is one.
  */
-function isReturnToWarehouse(row: CounterLedgerRow): boolean {
-	if (row.reason === 'receive' && COUNTER_LOAN_RETURN_NOTES.has(row.lot?.note ?? '')) return true;
+function isCounterLeftoverReturn(row: CounterLedgerRow): boolean {
 	if (!row.ref_id?.startsWith('requisition_ticket:')) return false;
 	return (
 		row.reason === 'distribution_return' ||
@@ -195,8 +186,9 @@ function isReturnToWarehouse(row: CounterLedgerRow): boolean {
 
 /**
  * Per item, the units sent to a distribution point (`distribute` rows of a requisition ticket) that
- * were neither given to someone nor sent back. = dispatched − returned − (handed out − returned by
- * the person). Floored at 0 per item, and only items that have some are in the map.
+ * were neither handed out nor sent back: dispatched − leftover returned − handed out. A unit a
+ * person later returns is already in the warehouse stock, so it is not added back here. Floored at 0
+ * per item, and only items that have some are in the map.
  */
 export function unitsAtCounter(
 	ledger: readonly CounterLedgerRow[],
@@ -208,13 +200,11 @@ export function unitsAtCounter(
 	for (const row of ledger) {
 		if (row.reason === 'distribute' && row.ref_id?.startsWith('requisition_ticket:')) {
 			add(row.item_id, parseQty(row.qty).neg());
-		} else if (isReturnToWarehouse(row)) {
+		} else if (isCounterLeftoverReturn(row)) {
 			add(row.item_id, parseQty(row.qty).neg());
 		}
 	}
-	for (const log of logs) {
-		add(log.item_id, parseQty(log.qty).neg().plus(parseQty(log.qty_returned)));
-	}
+	for (const log of logs) add(log.item_id, parseQty(log.qty).neg());
 	const out = new Map<string, string>();
 	for (const [itemId, value] of net) {
 		if (value.gt(0)) out.set(itemId, persistQty(value));

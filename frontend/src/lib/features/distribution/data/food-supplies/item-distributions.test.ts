@@ -22,7 +22,7 @@ describe('listItemDistributions', () => {
 	it('lists one row per non-voided log of the wanted items, with their quantities', async () => {
 		allDocsByType.mockResolvedValueOnce([
 			log({}),
-			log({ recipient_id: 'evacuee:b', status: 'active', qty: '2', qty_returned: '1' }),
+			log({ recipient_id: 'evacuee:b', status: 'active', qty: '2' }),
 			log({ recipient_id: 'evacuee:c', status: 'returned' }),
 			log({ recipient_id: 'evacuee:d', status: 'voided' }),
 			log({ recipient_type: 'staff', recipient_id: 'user:s' }),
@@ -37,8 +37,7 @@ describe('listItemDistributions', () => {
 			'user:s',
 			null
 		]);
-		expect(rows[1]).toMatchObject({ qty: '2', qty_returned: '1' });
-		expect(rows[0].qty_returned).toBe('0');
+		expect(rows[1]).toMatchObject({ qty: '2' });
 		expect(rows[4]).toMatchObject({ recipient_type: 'outside', qty: '5' });
 		expect(allDocsByType.mock.calls[0][0]).toBe('shelter_sh001');
 	});

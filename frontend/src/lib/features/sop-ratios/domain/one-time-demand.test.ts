@@ -408,7 +408,7 @@ describe('unitsAtCounter', () => {
 		qty,
 		ref_id
 	});
-	const given = (qty: string, qty_returned = '0') => ({ item_id: net._id, qty, qty_returned });
+	const given = (qty: string) => ({ item_id: net._id, qty });
 
 	it('100 dispatched to a counter and 1 given: 99 are at the counter', () => {
 		expect(unitsAtCounter([out('-100')], [given('1')]).get(net._id)).toBe('99');
@@ -422,13 +422,13 @@ describe('unitsAtCounter', () => {
 		expect(unitsAtCounter(rows, []).has(net._id)).toBe(false);
 	});
 
-	it('takes back what returned to the warehouse and what a person brought back', () => {
+	it('takes back what the counter sent back to the warehouse', () => {
 		const rows = [
 			out('-100'),
 			{ item_id: net._id, reason: 'distribution_return', qty: '10', ref_id: ticket }
 		];
-		// 100 out, 10 back to stock, 20 given of which 5 came back: 100 - 10 - (20 - 5) = 75
-		expect(unitsAtCounter(rows, [given('20', '5')]).get(net._id)).toBe('75');
+		// 100 out, 10 sent back, 20 handed out: 100 - 10 - 20 = 70
+		expect(unitsAtCounter(rows, [given('20')]).get(net._id)).toBe('70');
 	});
 
 	it('takes back a return whose lot is unknown (a `receive` tagged distribution_return)', () => {
@@ -447,8 +447,8 @@ describe('unitsAtCounter', () => {
 		expect(unitsAtCounter(rows, [given('1')]).get(net._id)).toBe('69');
 	});
 
-	it('does not count a unit twice when a person returned it at the counter', () => {
-		// 110 dispatched, 3 handed out, 1 of those brought back and received into the warehouse.
+	it('does not add back a unit a person returned, which went straight into the warehouse', () => {
+		// 110 dispatched, 3 handed out (one of them later returned and received into the warehouse).
 		const rows = [
 			out('-100'),
 			out('-10', 'requisition_ticket:t2'),
@@ -458,10 +458,16 @@ describe('unitsAtCounter', () => {
 				qty: '1',
 				ref_id: 'distribution_log:l1',
 				lot: { note: 'counter_loan_return' }
+			},
+			{
+				item_id: net._id,
+				reason: 'receive',
+				qty: '4',
+				ref_id: 'bulk_return_pool:p1',
+				lot: { note: 'bulk_return_pool' }
 			}
 		];
-		const logs = [given('1', '1'), given('1'), given('1')];
-		expect(unitsAtCounter(rows, logs).get(net._id)).toBe('107');
+		expect(unitsAtCounter(rows, [given('1'), given('1'), given('1')]).get(net._id)).toBe('107');
 	});
 
 	it("does not take a batch's leftover return off what is at a counter", () => {
