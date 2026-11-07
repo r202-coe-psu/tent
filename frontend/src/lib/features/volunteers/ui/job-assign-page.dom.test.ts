@@ -120,7 +120,7 @@ describe('JobAssignPage — several shifts at once (#1164)', () => {
 		expect(mocks.assign).toHaveBeenCalledWith(
 			expect.objectContaining({ shift_id: 'js-morning', volunteer_id: A._id })
 		);
-		expect(document.body.querySelector('[data-testid="bulk-report"]')).toBeNull();
+		expect(document.body.querySelector('[data-testid="bulk-result"]')).toBeNull();
 	});
 
 	it('places the chosen people in every ticked shift', async () => {
@@ -139,7 +139,7 @@ describe('JobAssignPage — several shifts at once (#1164)', () => {
 			['js-afternoon', B._id]
 		]);
 		expect(toast.success).toHaveBeenCalledWith('มอบหมายสำเร็จ 4 รายการ (2 คน × 2 กะ)');
-		expect(document.body.querySelector('[data-testid="bulk-report"]')).toBeNull();
+		expect(document.body.querySelector('[data-testid="bulk-result"]')).toBeNull();
 	});
 
 	it('saves what it can and lists what it skipped', async () => {
@@ -169,11 +169,18 @@ describe('JobAssignPage — several shifts at once (#1164)', () => {
 			['js-afternoon', B._id],
 			['js-evening', A._id]
 		]);
-		const report = text();
-		expect(report).toContain('บันทึกแล้ว 4 รายการ · ข้ามหรือบันทึกไม่ได้ 2 รายการ');
-		expect(report).toContain('สมชาย ทดสอบ — กะ 2026-11-10 13:00-17:00: อยู่ในกะนี้แล้ว');
-		expect(report).toContain('สมหญิง ทดสอบ — กะ 2026-11-10 18:00-22:00: กะเต็มแล้ว');
-		expect(toast.warning).toHaveBeenCalled();
+		// The result is a dialog in the middle of the screen, never a line at the bottom of the page.
+		const dialog = document.body.querySelector('[data-testid="bulk-result"]')!;
+		expect(dialog).not.toBeNull();
+		const report = (dialog.textContent ?? '').replace(/\s+/g, ' ');
+		expect(report).toContain('มอบหมายสำเร็จ 4 รายการ');
+		expect(report).toContain('ไม่ได้มอบหมาย 2 รายการ');
+		// สมชาย: placed in the morning, not in the afternoon (already there) nor the evening (one seat).
+		expect(report).toContain('สมชาย ทดสอบ เข้ากะแล้ว 2026-11-10 08:00-12:00 น.');
+		expect(report).toContain('2026-11-10 13:00-17:00 น. — อยู่ในกะนี้อยู่แล้ว');
+		expect(report).toContain('สมหญิง ทดสอบ เข้ากะแล้ว');
+		expect(report).toContain('2026-11-10 18:00-22:00 น. — กะนี้เต็มแล้ว');
+		expect(toast.warning).not.toHaveBeenCalled();
 	});
 
 	it('lists a save that fails and keeps that person selected to retry', async () => {
@@ -188,8 +195,8 @@ describe('JobAssignPage — several shifts at once (#1164)', () => {
 		await click(byLabel('เลือก สมหญิง ทดสอบ'));
 		await click(sendButton());
 		await new Promise((resolve) => setTimeout(resolve, 20));
-		expect(text()).toContain('สมหญิง ทดสอบ — กะ 2026-11-10 13:00-17:00: เครือข่ายขัดข้อง');
-		// Only the person with something left stays selected.
+		expect(text()).toContain('2026-11-10 13:00-17:00 น. — บันทึกไม่สำเร็จ (เครือข่ายขัดข้อง)');
+		// Only the person whose save failed stays selected, to try again.
 		expect(sendButton().getAttribute('aria-label')).toBe('มอบหมายอาสา 1 คนเข้า 2 กะ');
 	});
 });

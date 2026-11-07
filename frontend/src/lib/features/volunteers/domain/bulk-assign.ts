@@ -98,21 +98,74 @@ export function planBulkAssign(input: PlanInput): BulkAssignPlan {
 	return plan;
 }
 
-/** One line for a pair that did not go through, e.g. `สมชาย ใจดี — กะ 2026-11-10 08:00-12:00: กะเต็มแล้ว`. */
-export function describePair(shift: JobShift, volunteer: Volunteer, why: string): string {
-	const who = `${volunteer.first_name} ${volunteer.last_name}`.trim() || volunteer._id;
-	return `${who} — กะ ${shift.date} ${shift.start_time}-${shift.end_time}: ${why}`;
+/** Plain Thai for why a pair was not placed: what is wrong, not a code. */
+export function skipReasonText(reason: BulkAssignSkipReason): string {
+	switch (reason.kind) {
+		case 'already_on_shift':
+			return 'อยู่ในกะนี้อยู่แล้ว';
+		case 'clash':
+			return `เวลาซ้อนกับ "${reason.jobTitle}" ${reason.startTime}-${reason.endTime} น.`;
+		case 'shift_full':
+			return 'กะนี้เต็มแล้ว';
+		case 'bad_shift_time':
+			return reason.message;
+	}
 }
 
-export function describeSkip(skip: BulkAssignSkip): string {
-	const r = skip.reason;
-	const why =
-		r.kind === 'already_on_shift'
-			? 'อยู่ในกะนี้แล้ว'
-			: r.kind === 'clash'
-				? `เวลาซ้อนกับ ${r.jobTitle} (${r.startTime}-${r.endTime})`
-				: r.kind === 'shift_full'
-					? 'กะเต็มแล้ว'
-					: r.message;
-	return describePair(skip.shift, skip.volunteer, why);
+/** What happened to one (volunteer, shift) pair of a run: placed, or not and why (plain Thai). */
+export type BulkOutcome =
+	| { shift: JobShift; volunteer: Volunteer; ok: true }
+	| { shift: JobShift; volunteer: Volunteer; ok: false; why: string };
+
+export type BulkPersonResult = {
+	volunteerId: string;
+	name: string;
+	/** Shifts the person was placed in. */
+	placed: string[];
+	/** Shifts the person was not placed in, each with the reason. */
+	notPlaced: { shift: string; why: string }[];
+};
+
+export type BulkRunSummary = {
+	placedCount: number;
+	notPlacedCount: number;
+	/** One entry per person, in the order they were chosen. */
+	people: BulkPersonResult[];
+};
+
+const shiftText = (shift: JobShift) => `${shift.date} ${shift.start_time}-${shift.end_time} น.`;
+
+/**
+ * The result of a run, per person, so a user sees who got into which shifts and who did not and why
+ * — instead of one flat list of problems. `order` is the chosen people, so the order is stable.
+ */
+export function summarizeBulk(
+	order: readonly Volunteer[],
+	outcomes: readonly BulkOutcome[]
+): BulkRunSummary {
+	const people = new Map<string, BulkPersonResult>(
+		order.map((v) => [
+			v._id,
+			{
+				volunteerId: v._id,
+				name: `${v.first_name} ${v.last_name}`.trim() || v._id,
+				placed: [],
+				notPlaced: []
+			}
+		])
+	);
+	let placedCount = 0;
+	let notPlacedCount = 0;
+	for (const outcome of outcomes) {
+		const person = people.get(outcome.volunteer._id);
+		if (!person) continue;
+		if (outcome.ok) {
+			person.placed.push(shiftText(outcome.shift));
+			placedCount += 1;
+		} else {
+			person.notPlaced.push({ shift: shiftText(outcome.shift), why: outcome.why });
+			notPlacedCount += 1;
+		}
+	}
+	return { placedCount, notPlacedCount, people: [...people.values()] };
 }
