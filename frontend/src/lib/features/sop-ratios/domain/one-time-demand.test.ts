@@ -56,7 +56,7 @@ describe('buildOneTimeDemandRows', () => {
 			status: 'short',
 			qtyPerPersonMissing: false
 		});
-		expect(formatCoveragePercent(row.coverage)).toBe('83%');
+		expect(formatCoveragePercent(row.coverage)).toBe('83.33%');
 	});
 
 	it('qty_per_person 2 with 300 on hand: demand 240, no shortfall, enough', () => {
@@ -162,6 +162,15 @@ describe('buildOneTimeDemandRows', () => {
 			lot(net._id, '-4', { ref: 'stock_ledger:b' })
 		]);
 		expect(row.available).toBe('12');
+	});
+
+	it('a short row never rounds up to 100%', () => {
+		const [row] = build([net], 1000, [lot(net._id, '997')]);
+		expect(row.status).toBe('short');
+		expect(formatCoveragePercent(row.coverage)).toBe('99.7%');
+		const [tiny] = build([net], 100000, [lot(net._id, '99999')]);
+		expect(tiny.status).toBe('short');
+		expect(formatCoveragePercent(tiny.coverage)).toBe('99.99%');
 	});
 
 	it('0 people: demand 0, coverage is a dash, still enough', () => {

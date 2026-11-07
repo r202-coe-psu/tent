@@ -43,7 +43,7 @@ export interface OneTimeDemandRow {
 	available: string;
 	/** max(0, demand − available) (qty_str). */
 	shortfall: string;
-	/** available ÷ demand × 100, two decimals; null when demand is 0. */
+	/** available ÷ demand × 100, two decimals, rounded down; null when demand is 0. */
 	coverage: string | null;
 	status: OneTimeDemandStatus;
 	/** `qty_per_person` was not set, so 1 was used. */
@@ -110,7 +110,11 @@ export function buildOneTimeDemandRows(input: BuildOneTimeDemandInput): OneTimeD
 			available,
 			shortfall: qtyGt(gap, 0) ? gap : ZERO,
 			coverage: qtyGt(demand, 0)
-				? parseQty(available).div(demand).times(100).toDecimalPlaces(2).toString()
+				? parseQty(available)
+						.div(demand)
+						.times(100)
+						.toDecimalPlaces(2, Decimal.ROUND_DOWN)
+						.toString()
 				: null,
 			status: qtyGte(available, demand) ? 'enough' : 'short',
 			qtyPerPersonMissing
@@ -118,10 +122,10 @@ export function buildOneTimeDemandRows(input: BuildOneTimeDemandInput): OneTimeD
 	});
 }
 
-/** "83%" — rounded to a whole percent; "—" when there is no demand to cover. */
+/** "83.33%" — the stored value as is, so a short row never reads "100%"; "—" when there is no demand to cover. */
 export function formatCoveragePercent(coverage: string | null): string {
 	if (coverage === null) return '—';
-	return `${new Decimal(coverage).toDecimalPlaces(0, Decimal.ROUND_HALF_UP).toString()}%`;
+	return `${coverage}%`;
 }
 
 /** Short rows first, then coverage ascending (no demand sorts last), then name. */
