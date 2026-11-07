@@ -44,9 +44,10 @@
 
 	let { shelterCode = '' }: { shelterCode?: string | null } = $props();
 
-	const itemMastersQuery = useItemMasters();
+	// Shelter-own items (`shelter_code`) are listed only when the shelter is passed.
+	const itemMastersQuery = useItemMasters(() => shelterCode || null);
 	const unitsQuery = useUnitsOfMeasure();
-	const categoriesQuery = useItemCategories();
+	const categoriesQuery = useItemCategories(() => shelterCode || null);
 	// Read the ledger of the one-time items only, after the item list says which they are.
 	const itemIds = $derived(oneTimeItemIds(itemMastersQuery.data ?? []));
 	const ledgerQuery = useLedgerByItems(
