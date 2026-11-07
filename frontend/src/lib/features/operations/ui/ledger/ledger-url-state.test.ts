@@ -28,8 +28,7 @@ describe('parseLedgerParams', () => {
 			type: 'adjust',
 			reason: 'lost',
 			q: 'น้ำ',
-			page: 3,
-			selfPurchased: false
+			page: 3
 		});
 	});
 
@@ -38,24 +37,20 @@ describe('parseLedgerParams', () => {
 		expect(out).toEqual(LEDGER_URL_DEFAULTS);
 	});
 
-	it('reads the self-purchased filter from lsp=1 only', () => {
-		expect(parseLedgerParams(params('lsp=1')).selfPurchased).toBe(true);
-		expect(parseLedgerParams(params('lsp=yes')).selfPurchased).toBe(false);
-	});
-
 	it('treats a bare from/to as a custom range', () => {
 		expect(parseLedgerParams(params('from=2026-09-01')).range).toBe('custom');
 	});
 });
 
-describe('self-purchased filter round trip', () => {
-	it('is written as lsp=1, survives a round trip and is cleared by merge defaults', () => {
-		const state = { ...LEDGER_URL_DEFAULTS, selfPurchased: true };
-		expect(serializeLedgerParams(state).get('lsp')).toBe('1');
+describe('self-purchased type filter', () => {
+	it('is written as type=self_purchased and survives a round trip', () => {
+		const state = { ...LEDGER_URL_DEFAULTS, type: 'self_purchased' as const };
+		expect(serializeLedgerParams(state).get('type')).toBe('self_purchased');
 		expect(parseLedgerParams(serializeLedgerParams(state))).toEqual(state);
-		expect(mergeLedgerParams(params('tab=movements&lsp=1'), LEDGER_URL_DEFAULTS).toString()).toBe(
-			'tab=movements'
-		);
+	});
+
+	it('no longer reads the retired lsp=1 key', () => {
+		expect(parseLedgerParams(params('lsp=1'))).toEqual(LEDGER_URL_DEFAULTS);
 	});
 });
 
@@ -82,8 +77,7 @@ describe('serializeLedgerParams', () => {
 			type: 'adjust' as const,
 			reason: 'damaged' as const,
 			q: 'นม',
-			page: 2,
-			selfPurchased: false
+			page: 2
 		};
 		expect(parseLedgerParams(serializeLedgerParams(state))).toEqual(state);
 	});

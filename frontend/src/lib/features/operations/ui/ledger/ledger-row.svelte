@@ -1,7 +1,6 @@
 <script lang="ts">
 	import * as Table from '$lib/components/ui/table/index.js';
 	import GroupTag from './group-tag.svelte';
-	import { Badge } from '$lib/components/ui/badge/index.js';
 	import { qtyGt } from '$lib/utils/qty';
 	import { resolve } from '$app/paths';
 	import type { LedgerRow } from './ledger-view';
@@ -15,11 +14,6 @@
 	<Table.Cell class="px-4 py-3 text-slate-600 tabular-nums">{row.time}</Table.Cell>
 	<Table.Cell class="px-4 py-3">
 		<GroupTag group={row.group} label={row.reasonLabel} />
-		{#if row.selfPurchased}
-			<Badge variant="outline" class="mt-1 border-amber-300 bg-amber-50 text-amber-900">
-				ซื้อเอง
-			</Badge>
-		{/if}
 	</Table.Cell>
 	<Table.Cell class="px-4 py-3 font-semibold text-slate-900">{row.itemName}</Table.Cell>
 	<Table.Cell

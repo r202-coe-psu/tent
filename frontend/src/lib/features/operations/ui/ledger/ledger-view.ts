@@ -11,18 +11,26 @@ import {
 	type StockLedger
 } from '../../domain/operations';
 
-/** The four movement kinds the movements tab groups ledger reasons into. */
-export type LedgerGroup = 'in' | 'out' | 'adjust' | 'transfer';
+/**
+ * The movement kinds the movements tab groups ledger rows into. `self_purchased` is not a
+ * reason: it is a manual receipt flagged "ซื้อเอง" (CR-234 FR-9), which would otherwise count
+ * as an `adjust`.
+ */
+export type LedgerGroup = 'in' | 'out' | 'adjust' | 'transfer' | 'self_purchased';
 export type LedgerTypeFilter = LedgerGroup | 'all';
 
 export const LEDGER_GROUP_LABELS: Record<LedgerGroup, string> = {
 	in: 'รับเข้า',
 	out: 'เบิกจ่าย',
 	adjust: 'ปรับยอด',
-	transfer: 'โอน'
+	transfer: 'โอน',
+	self_purchased: 'ซื้อเอง'
 };
 
-export const LEDGER_GROUP_BY_REASON: Record<LedgerReason, LedgerGroup> = {
+export const LEDGER_GROUP_BY_REASON: Record<
+	LedgerReason,
+	Exclude<LedgerGroup, 'self_purchased'>
+> = {
 	receive: 'in',
 	donation: 'in',
 	distribute: 'out',
@@ -83,8 +91,6 @@ export interface LedgerRow {
 	refId: string;
 	/** Deep link to the source document, when one exists (bulk return pool receives). */
 	refHref?: BulkReturnPoolLedgerHref;
-	/** A receipt flagged "ซื้อเอง" (schema_v 7); false for every other row and for older rows. */
-	selfPurchased: boolean;
 }
 
 /** Deep link to a bulk return pool in the distribution back-office. */
@@ -130,7 +136,10 @@ export function toTime(date: Date): string {
 }
 
 export function toLedgerRow(entry: StockLedger, lookup: LedgerLookup): LedgerRow {
-	const group = LEDGER_GROUP_BY_REASON[entry.reason];
+	const selfPurchased = isSelfPurchasedReceipt(entry);
+	const group: LedgerGroup = selfPurchased
+		? 'self_purchased'
+		: LEDGER_GROUP_BY_REASON[entry.reason];
 	const date = new Date(entry.occurred_at);
 	const valid = !Number.isNaN(date.getTime());
 	// A distribute/requisition row keeps its destination in `lot.note`, which
@@ -156,7 +165,9 @@ export function toLedgerRow(entry: StockLedger, lookup: LedgerLookup): LedgerRow
 		time: valid ? toTime(date) : '',
 		group,
 		reason: entry.reason,
-		reasonLabel: REASON_LABELS[entry.reason] ?? entry.reason,
+		reasonLabel: selfPurchased
+			? LEDGER_GROUP_LABELS.self_purchased
+			: (REASON_LABELS[entry.reason] ?? entry.reason),
 		adjustReason,
 		adjustReasonLabel,
 		itemName: lookup.itemName(entry.item_id),
@@ -167,7 +178,6 @@ export function toLedgerRow(entry: StockLedger, lookup: LedgerLookup): LedgerRow
 		storage: lotStorageName(lot, lookup.points) ?? '',
 		createdBy: entry.created_by,
 		refId: entry.ref_id ?? '',
-		selfPurchased: isSelfPurchasedReceipt(entry),
 		...(refHref ? { refHref } : {})
 	};
 }
@@ -200,8 +210,6 @@ export interface LedgerFilter {
 	q: string;
 	/** Adjust reason (FR-C5); omitted / `all` keeps every row. */
 	reason?: LedgerReasonFilter;
-	/** "รับเข้าที่ซื้อเอง": keep only flagged receipts. */
-	selfPurchased?: boolean;
 }
 
 /** Range, type and free-text search (item, reference, destination, lot, place, author). */
@@ -210,7 +218,6 @@ export function filterLedger(rows: readonly LedgerRow[], filter: LedgerFilter): 
 	return filterByRange(rows, filter.range).filter((r) => {
 		if (filter.type !== 'all' && r.group !== filter.type) return false;
 		if (filter.reason && filter.reason !== 'all' && r.adjustReason !== filter.reason) return false;
-		if (filter.selfPurchased && !r.selfPurchased) return false;
 		if (!q) return true;
 		return [r.itemName, r.refId, r.detail, r.lotNo, r.storage, r.createdBy].some((v) =>
 			v.toLowerCase().includes(q)
@@ -248,6 +255,7 @@ export function summarizeRows(rows: readonly LedgerRow[]): DaySummaryCard[] {
 	const outRows = of('out');
 	const adjustRows = of('adjust');
 	const transferRows = of('transfer');
+	const selfPurchasedRows = of('self_purchased');
 
 	const sources = new Set(
 		inRows.filter((r) => r.reason === 'donation' && r.refId).map((r) => r.refId)
@@ -281,6 +289,12 @@ export function summarizeRows(rows: readonly LedgerRow[]): DaySummaryCard[] {
 			label: 'โอนย้าย',
 			count: transferRows.length,
 			hint: `ส่งออก ${sent} · รับเข้า ${received}`
+		},
+		{
+			group: 'self_purchased',
+			label: LEDGER_GROUP_LABELS.self_purchased,
+			count: selfPurchasedRows.length,
+			hint: 'รายการ · ศูนย์ซื้อเอง'
 		}
 	];
 }

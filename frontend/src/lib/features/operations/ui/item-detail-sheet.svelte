@@ -115,7 +115,7 @@
 							</dd>
 						{/if}
 						{#if row.selfPurchasedQty && qtyGt(row.selfPurchasedQty, 0)}
-							<dd class="mt-0.5 text-xs font-medium text-amber-900 tabular-nums">
+							<dd class="mt-0.5 text-xs font-medium text-sky-900 tabular-nums">
 								ซื้อเอง {row.selfPurchasedQty}
 								{row.unitLabel}
 							</dd>
@@ -242,7 +242,7 @@
 													{/if}
 													{#if lot.isSelfPurchased}
 														<span
-															class="rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-900 ring-1 ring-amber-200"
+															class="rounded-full bg-sky-50 px-2.5 py-1 text-xs font-semibold text-sky-900 ring-1 ring-sky-200"
 														>
 															ซื้อเอง
 														</span>

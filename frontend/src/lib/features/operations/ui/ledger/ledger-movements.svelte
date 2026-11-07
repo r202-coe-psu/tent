@@ -88,7 +88,6 @@
 			range,
 			type: urlState.type,
 			reason: urlState.reason,
-			selfPurchased: urlState.selfPurchased,
 			q: urlState.q
 		})
 	);
