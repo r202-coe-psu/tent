@@ -6,6 +6,8 @@
 	import Search from '@lucide/svelte/icons/search';
 	import { resolve } from '$app/paths';
 	import { Button } from '$lib/components/ui/button/index.js';
+	import { languageStore } from '$lib/stores/language.svelte';
+	import { getTranslation } from '$lib/utils/i18n';
 	import { navigateToKioskHome } from '../application/kiosk-navigation';
 	import { REPRINT_PHONE_MAX_LENGTH } from '../application/reprint-session.svelte';
 	import {
@@ -20,6 +22,7 @@
 	import type { KioskContextQuery } from '../domain/display-context';
 	import { formatPhoneForDisplay, phoneEntryHint } from '../domain/phone';
 	import { volunteerLabelIdentity } from '../domain/volunteer-label';
+	import { KIOSK_VOLUNTEER_I18N } from './_constants/kiosk-volunteer.i18n';
 	import KioskBackButton from './kiosk-back-button.svelte';
 	import KioskInlineAlert from './kiosk-inline-alert.svelte';
 	import { KioskIdleTimeout, KIOSK_IDLE_TIMEOUT_MS } from './kiosk-idle-timeout.svelte.js';
@@ -39,6 +42,8 @@
 	}
 
 	let { contextQuery, deps }: Props = $props();
+
+	const t = $derived(getTranslation(KIOSK_VOLUNTEER_I18N, languageStore.current));
 
 	const PRIMARY_BUTTON =
 		'min-h-12 w-full gap-2 bg-[#0A2647] text-base font-bold text-white hover:bg-[#051930] focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 kiosk-portrait:min-h-16 kiosk-portrait:text-xl';
@@ -71,7 +76,7 @@
 	const printQrUrl = $derived(resolve(`/kiosk/print-qr${contextQuery}`));
 	const volunteerUrl = $derived(resolve(`/kiosk/volunteer${contextQuery}`));
 	const displayPhone = $derived(formatPhoneForDisplay(session.phone));
-	const entryHint = $derived(phoneEntryHint(session.phone));
+	const entryHint = $derived(phoneEntryHint(session.phone, languageStore.current));
 	const identity = $derived(session.volunteer ? volunteerLabelIdentity(session.volunteer) : null);
 	const inFlow = $derived(session.step !== 'phone');
 	// Not sent home while the label comes out; resuming restarts the idle countdown.
@@ -100,7 +105,7 @@
 </script>
 
 <svelte:head>
-	<title>พิมพ์ QR จิตอาสา — SmartShelter Kiosk</title>
+	<title>{t.pageTitle}</title>
 </svelte:head>
 
 <svelte:window onpointerdown={recordActivity} onkeydown={recordActivity} />
@@ -121,14 +126,14 @@
 		<KioskNoticePanel
 			tone="success"
 			icon={CheckCircle2}
-			title="พิมพ์ QR เรียบร้อย"
+			title={t.done.title}
 			headingTag="h1"
 			role="status"
 		>
-			<p>รับ QR Code 1 ดวงที่ช่องพิมพ์ แล้วนำไปให้เจ้าหน้าที่สแกนก่อนเริ่มปฏิบัติงาน</p>
+			<p>{t.done.body}</p>
 			{#snippet actions()}
 				<Button type="button" onclick={returnHome} class={KIOSK_NOTICE_PRIMARY_ACTION}
-					>กลับหน้าแรก</Button
+					>{t.done.home}</Button
 				>
 			{/snippet}
 		</KioskNoticePanel>
@@ -138,23 +143,24 @@
 		<KioskNoticePanel
 			tone="warning"
 			icon={CircleAlert}
-			title="พิมพ์ไม่สำเร็จ"
+			title={t.printFailed.title}
 			headingTag="h1"
 			role="alert"
 		>
-			<p>{session.error} กดพิมพ์อีกครั้ง หรือติดต่อเจ้าหน้าที่</p>
+			<p>{t.printFailed.body(session.error)}</p>
 			{#snippet actions()}
 				<Button
 					type="button"
 					onclick={() => void session.retryPrint()}
 					disabled={session.busy}
-					class={KIOSK_NOTICE_PRIMARY_ACTION}><Printer aria-hidden="true" />ลองพิมพ์อีกครั้ง</Button
+					class={KIOSK_NOTICE_PRIMARY_ACTION}
+					><Printer aria-hidden="true" />{t.printFailed.retry}</Button
 				>
 				<Button
 					type="button"
 					variant="outline"
 					onclick={returnHome}
-					class={KIOSK_NOTICE_SECONDARY_ACTION}>กลับหน้าแรก</Button
+					class={KIOSK_NOTICE_SECONDARY_ACTION}>{t.printFailed.home}</Button
 				>
 			{/snippet}
 		</KioskNoticePanel>
@@ -168,12 +174,12 @@
 			{#if inFlow}
 				<KioskBackButton
 					href={volunteerUrl}
-					label="ย้อนกลับ"
+					label={t.back}
 					disabled={printing || session.busy}
 					onclick={() => session.back()}
 				/>
 			{:else}
-				<KioskBackButton href={printQrUrl} label="กลับไปเลือกวิธีพิมพ์ QR" />
+				<KioskBackButton href={printQrUrl} label={t.backToChooser} />
 			{/if}
 		</div>
 
@@ -193,10 +199,10 @@
 								id="volunteer-phone-title"
 								class="text-2xl font-extrabold tracking-tight text-[#0A2647] kiosk-portrait:text-4xl kiosk-compact:text-xl"
 							>
-								พิมพ์ QR จิตอาสา
+								{t.heading}
 							</h1>
 							<p class="mt-1 text-base text-slate-700 kiosk-portrait:text-xl">
-								กรอกเบอร์โทรที่ลงทะเบียนเป็นจิตอาสา
+								{t.phonePrompt}
 							</p>
 						</header>
 					{/snippet}
@@ -209,10 +215,10 @@
 									? 'kiosk-portrait:text-4xl'
 									: 'kiosk-portrait:text-2xl kiosk-portrait:font-semibold kiosk-portrait:text-slate-400'
 							]}
-							aria-label="เบอร์โทรศัพท์ที่กรอก"
+							aria-label={t.phoneLabel}
 							aria-live="polite"
 						>
-							{displayPhone || 'เบอร์โทรศัพท์'}
+							{displayPhone || t.phonePlaceholder}
 						</output>
 					{/snippet}
 
@@ -227,9 +233,9 @@
 								<span
 									class="inline-block size-5 animate-spin rounded-full border-2 border-white/40 border-t-white motion-reduce:animate-none"
 									aria-hidden="true"
-								></span>กำลังค้นหา…
+								></span>{t.searching}
 							{:else}
-								<Search class="h-5 w-5" aria-hidden="true" />ค้นหา
+								<Search class="h-5 w-5" aria-hidden="true" />{t.search}
 							{/if}
 						</Button>
 					{/snippet}
@@ -258,7 +264,7 @@
 					id="volunteer-confirm-title"
 					class="text-xl font-bold text-slate-700 kiosk-portrait:text-3xl kiosk-compact:text-lg"
 				>
-					ใช่คุณหรือไม่
+					{t.confirmHeading}
 				</h1>
 				<p
 					class="text-3xl font-extrabold tracking-tight text-[#0A2647] kiosk-portrait:text-5xl kiosk-compact:text-2xl"
@@ -268,7 +274,7 @@
 				<p
 					class="text-xl font-semibold text-slate-800 kiosk-portrait:text-3xl kiosk-compact:text-lg"
 				>
-					{identity.badge}
+					{t.badge(session.volunteer?.volunteer_code ?? '')}
 				</p>
 				<div class="flex flex-col gap-3 kiosk-compact:gap-2">
 					<Button
@@ -277,7 +283,7 @@
 						onclick={() => void session.confirmPrint()}
 						class={PRIMARY_BUTTON}
 					>
-						<Printer class="h-5 w-5" aria-hidden="true" />พิมพ์ QR
+						<Printer class="h-5 w-5" aria-hidden="true" />{t.print}
 					</Button>
 					<Button
 						type="button"
@@ -285,7 +291,7 @@
 						disabled={session.busy}
 						onclick={() => session.back()}
 						class="min-h-12 w-full border-[#CBD5E1] text-base font-semibold text-[#0A2647] kiosk-portrait:min-h-16 kiosk-portrait:text-xl"
-						>ไม่ใช่ฉัน</Button
+						>{t.notMe}</Button
 					>
 				</div>
 			</section>
