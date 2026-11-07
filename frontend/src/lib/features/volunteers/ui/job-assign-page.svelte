@@ -38,6 +38,7 @@
 	import UserRoundPlus from '@lucide/svelte/icons/user-round-plus';
 	import Send from '@lucide/svelte/icons/send';
 	import * as Select from '$lib/components/ui/select/index.js';
+	import * as Dialog from '$lib/components/ui/dialog/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Label } from '$lib/components/ui/label/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
@@ -49,7 +50,13 @@
 	import AssignVolunteerDetailDialog from './assign-volunteer-detail-dialog.svelte';
 	import { shiftDutyWindow } from '../domain/duty-window';
 	import { assignmentCountForShift } from '../domain/shift-roster';
-	import { describePair, describeSkip, planBulkAssign } from '../domain/bulk-assign';
+	import {
+		planBulkAssign,
+		skipReasonText,
+		summarizeBulk,
+		type BulkOutcome,
+		type BulkRunSummary
+	} from '../domain/bulk-assign';
 	import type { JobShift } from '../domain/job.schema';
 	import {
 		buildAssignRoster,
@@ -239,8 +246,9 @@
 	// — several shifts at once (#1164) ——————————————————————————————————————————
 	/** Other shifts of this job to place the same people in; the picked shift is always included. */
 	let extraShiftIds = $state<string[]>([]);
-	/** What the last multi-shift run could not do, kept on screen until dismissed. */
-	let bulkReport = $state<{ saved: number; lines: string[] } | null>(null);
+	/** The result of the last multi-shift run that left someone out: a dialog, never off-screen. */
+	let bulkResult = $state<BulkRunSummary | null>(null);
+	let bulkResultOpen = $state(false);
 	const otherShifts = $derived(orderedShifts.filter((s) => s.id !== activeShiftId));
 	const targetShifts = $derived(
 		shift ? [shift, ...otherShifts.filter((s) => extraShiftIds.includes(s.id))] : []
@@ -270,9 +278,14 @@
 			skillOptions: skillCatalog.options,
 			controlledSkills: skillCatalog.controlledValues
 		});
-		const lines = plan.skipped.map(describeSkip);
-		const unfinished = plan.skipped.map((s) => s.volunteer._id);
-		let saved = 0;
+		const outcomes: BulkOutcome[] = plan.skipped.map((skip) => ({
+			shift: skip.shift,
+			volunteer: skip.volunteer,
+			ok: false,
+			why: skipReasonText(skip.reason)
+		}));
+		// Only a failed save is worth retrying; a rule that said no will say no again.
+		const failedSave: string[] = [];
 		for (const item of plan.assign) {
 			try {
 				await assignMutation.mutateAsync({
@@ -285,29 +298,38 @@
 					station: job.title,
 					duty_window: item.dutyWindow
 				});
-				saved += 1;
+				outcomes.push({ shift: item.shift, volunteer: item.volunteer, ok: true });
 			} catch (err) {
-				lines.push(describePair(item.shift, item.volunteer, errorMessage(err)));
-				unfinished.push(item.volunteer._id);
+				outcomes.push({
+					shift: item.shift,
+					volunteer: item.volunteer,
+					ok: false,
+					why: `บันทึกไม่สำเร็จ (${errorMessage(err)})`
+				});
+				failedSave.push(item.volunteer._id);
 			}
 		}
-		// People with nothing left to do leave the selection; the rest stay to retry.
-		selectedIds = selectedIds.filter((id) => unfinished.includes(id));
-		bulkReport = lines.length > 0 ? { saved, lines } : null;
-		if (saved > 0) {
+		selectedIds = selectedIds.filter((id) => failedSave.includes(id));
+		const summary = summarizeBulk(
+			chosen.map((c) => c.volunteer),
+			outcomes
+		);
+		if (summary.notPlacedCount > 0) {
+			bulkResult = summary;
+			bulkResultOpen = true;
+		} else {
+			bulkResult = null;
 			toast.success(
-				`มอบหมายสำเร็จ ${saved} รายการ (${chosen.length} คน × ${targetShifts.length} กะ)`
+				`มอบหมายสำเร็จ ${summary.placedCount} รายการ (${chosen.length} คน × ${targetShifts.length} กะ)`
 			);
-		}
-		if (lines.length > 0) {
-			toast.warning(`ข้ามหรือบันทึกไม่ได้ ${lines.length} รายการ ดูรายละเอียดด้านล่าง`);
 		}
 	}
 
 	function pickShift(id: string) {
 		pickedShiftId = id;
 		extraShiftIds = extraShiftIds.filter((x) => x !== id);
-		bulkReport = null;
+		bulkResult = null;
+		bulkResultOpen = false;
 		// Row states are shift-specific — a carried-over selection could dispatch
 		// someone who is not free in the newly picked shift.
 		selectedIds = [];
@@ -734,28 +756,6 @@
 			</div>
 		{/if}
 
-		{#if bulkReport}
-			<div
-				role="alert"
-				class="space-y-1.5 rounded-2xl border border-amber-300 bg-amber-50 p-3.5 text-sm text-amber-900"
-				data-testid="bulk-report"
-			>
-				<div class="flex items-start justify-between gap-2">
-					<p class="font-semibold">
-						บันทึกแล้ว {bulkReport.saved} รายการ · ข้ามหรือบันทึกไม่ได้ {bulkReport.lines.length} รายการ
-					</p>
-					<Button type="button" variant="ghost" size="sm" onclick={() => (bulkReport = null)}>
-						ปิด
-					</Button>
-				</div>
-				<ul class="list-disc space-y-0.5 pl-5 text-xs">
-					{#each bulkReport.lines as line (line)}
-						<li>{line}</li>
-					{/each}
-				</ul>
-			</div>
-		{/if}
-
 		<!-- Sticky action bar: the roster can be long, the action must stay reachable. -->
 		<div
 			class="sticky bottom-0 flex flex-col gap-2 rounded-2xl border border-border bg-card/95 px-4 py-3 shadow-lg backdrop-blur sm:flex-row sm:items-center sm:justify-between sm:gap-3"
@@ -799,6 +799,56 @@
 		</div>
 	{/if}
 </div>
+
+<Dialog.Root bind:open={bulkResultOpen}>
+	<Dialog.Content
+		class="max-h-[88vh] gap-0 overflow-hidden p-0 sm:max-w-xl"
+		data-testid="bulk-result"
+	>
+		<div class="space-y-1 border-b border-border px-5 py-4 pr-12">
+			<Dialog.Title class="text-base font-bold">ผลการมอบหมาย</Dialog.Title>
+			<Dialog.Description class="text-sm">
+				{#if bulkResult}
+					มอบหมายสำเร็จ <span class="font-bold text-emerald-700">{bulkResult.placedCount}</span>
+					รายการ ·
+					<span class="font-bold text-amber-700">ไม่ได้มอบหมาย {bulkResult.notPlacedCount}</span> รายการ
+				{/if}
+			</Dialog.Description>
+		</div>
+		<div class="max-h-[60vh] space-y-3 overflow-y-auto px-5 py-4">
+			{#if bulkResult}
+				{#each bulkResult.people as person (person.volunteerId)}
+					<section class="space-y-1.5 rounded-xl border border-border p-3">
+						<p class="font-bold text-foreground">{person.name}</p>
+						{#if person.placed.length > 0}
+							<div class="text-sm">
+								<p class="font-semibold text-emerald-700">เข้ากะแล้ว</p>
+								<ul class="list-disc pl-5 text-foreground">
+									{#each person.placed as when (when)}
+										<li>{when}</li>
+									{/each}
+								</ul>
+							</div>
+						{/if}
+						{#if person.notPlaced.length > 0}
+							<div class="text-sm">
+								<p class="font-semibold text-amber-700">ไม่ได้เข้ากะ</p>
+								<ul class="list-disc pl-5 text-foreground">
+									{#each person.notPlaced as item (item.shift)}
+										<li>{item.shift} — {item.why}</li>
+									{/each}
+								</ul>
+							</div>
+						{/if}
+					</section>
+				{/each}
+			{/if}
+		</div>
+		<div class="flex justify-end border-t border-border px-5 py-3">
+			<Button type="button" onclick={() => (bulkResultOpen = false)}>รับทราบ</Button>
+		</div>
+	</Dialog.Content>
+</Dialog.Root>
 
 <AssignVolunteerDetailDialog
 	bind:open={detailOpen}

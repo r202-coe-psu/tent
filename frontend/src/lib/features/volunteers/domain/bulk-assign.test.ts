@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { describeSkip, planBulkAssign } from './bulk-assign';
+import { planBulkAssign, skipReasonText, summarizeBulk } from './bulk-assign';
 import { shiftDutyWindow } from './duty-window';
 import type { JobShift } from './job.schema';
 import type { ShiftAssignment } from './shift-assignment.schema';
@@ -141,9 +141,47 @@ describe('planBulkAssign (#1164)', () => {
 		expect(skipped[0].reason.kind).toBe('bad_shift_time');
 	});
 
-	it('describes a skip with who, which shift and why', () => {
-		const a = volunteer('สมชาย');
-		const [skip] = plan({ shifts: [shift({ id: 'js-tight', quota: 0 })], volunteers: [a] }).skipped;
-		expect(describeSkip(skip)).toBe('สมชาย ทดสอบ — กะ 2026-11-10 08:00-12:00: กะเต็มแล้ว');
+	it('words each reason in plain Thai', () => {
+		expect(skipReasonText({ kind: 'already_on_shift' })).toBe('อยู่ในกะนี้อยู่แล้ว');
+		expect(skipReasonText({ kind: 'shift_full' })).toBe('กะนี้เต็มแล้ว');
+		expect(
+			skipReasonText({ kind: 'clash', jobTitle: 'ทีมครัว', startTime: '08:00', endTime: '12:00' })
+		).toBe('เวลาซ้อนกับ "ทีมครัว" 08:00-12:00 น.');
+	});
+});
+
+describe('summarizeBulk (#1164)', () => {
+	it('lists, per person in the order chosen, the shifts placed and those not, with reasons', () => {
+		const [a, b] = [volunteer('ก'), volunteer('ข')];
+		const summary = summarizeBulk(
+			[a, b],
+			[
+				{ shift: MORNING, volunteer: b, ok: true },
+				{ shift: MORNING, volunteer: a, ok: true },
+				{ shift: AFTERNOON, volunteer: a, ok: false, why: 'กะนี้เต็มแล้ว' }
+			]
+		);
+		expect(summary.placedCount).toBe(2);
+		expect(summary.notPlacedCount).toBe(1);
+		expect(summary.people.map((p) => p.name)).toEqual(['ก ทดสอบ', 'ข ทดสอบ']);
+		expect(summary.people[0]).toMatchObject({
+			placed: ['2026-11-10 08:00-12:00 น.'],
+			notPlaced: [{ shift: '2026-11-10 13:00-17:00 น.', why: 'กะนี้เต็มแล้ว' }]
+		});
+		expect(summary.people[1]).toMatchObject({
+			placed: ['2026-11-10 08:00-12:00 น.'],
+			notPlaced: []
+		});
+	});
+
+	it('keeps a person with nothing placed, so they are not silently missing', () => {
+		const a = volunteer('ก');
+		const summary = summarizeBulk(
+			[a],
+			[{ shift: MORNING, volunteer: a, ok: false, why: 'อยู่ในกะนี้อยู่แล้ว' }]
+		);
+		expect(summary.people).toHaveLength(1);
+		expect(summary.people[0].placed).toEqual([]);
+		expect(summary.placedCount).toBe(0);
 	});
 });
