@@ -41,6 +41,7 @@ import {
 	requireKioskManagement,
 	requireKitchen,
 	requireManager,
+	requirePrinterManagement,
 	requireSupplyView,
 	requireTicketAccess,
 	requireVolunteerBackoffice,
@@ -76,7 +77,8 @@ const GUARD_OF: Record<string, Guard> = {
 	'/back-office/master-data': requireManager,
 	'/back-office/incidents': requireIncidents,
 	'/back-office/kiosks': requireKioskManagement,
-	'/back-office/kiosks/banners': requireBannerManagement
+	'/back-office/kiosks/banners': requireBannerManagement,
+	'/back-office/printers': requirePrinterManagement
 };
 
 /** No page guard yet (R2, #845). */

@@ -9,6 +9,24 @@ import svelteConfig from './svelte.config.js';
 
 const gitignorePath = fileURLToPath(new URL('./.gitignore', import.meta.url));
 
+// Enforce feature encapsulation: import a feature only via its barrel
+// ($lib/features/<x>), never reach into its internal layers.
+const featureBarrelPatterns = [
+	{
+		group: [
+			'$lib/features/*/domain/*',
+			'$lib/features/*/data/*',
+			'$lib/features/*/application/*',
+			'$lib/features/*/ui/*'
+		],
+		message:
+			'Import from the feature barrel ($lib/features/<feature>) instead of reaching into its internal layers.'
+	}
+];
+
+const printerAdminImportMessage =
+	'Printer code must not import `$lib/server/couch-admin` (the CouchDB server admin): go through `printing_service` (`$lib/server/couch-printing-service`), the caller session (`$lib/server/couch-as-user`), or the credential-free helpers in `$lib/server/session-auth`. Only printing-provision.ts provisions databases.';
+
 export default ts.config(
 	includeIgnoreFile(gitignorePath),
 	// Vendored shadcn-svelte primitives — generated, not hand-maintained.
@@ -36,25 +54,7 @@ export default ts.config(
 						'Use typography tokens (text-3xs, text-2xs, text-xs, text-sm, text-base, text-lg, text-xl) instead of text-[Npx].'
 				}
 			],
-			// Enforce feature encapsulation: import a feature only via its barrel
-			// ($lib/features/<x>), never reach into its internal layers.
-			'no-restricted-imports': [
-				'error',
-				{
-					patterns: [
-						{
-							group: [
-								'$lib/features/*/domain/*',
-								'$lib/features/*/data/*',
-								'$lib/features/*/application/*',
-								'$lib/features/*/ui/*'
-							],
-							message:
-								'Import from the feature barrel ($lib/features/<feature>) instead of reaching into its internal layers.'
-						}
-					]
-				}
-			]
+			'no-restricted-imports': ['error', { patterns: featureBarrelPatterns }]
 		}
 	},
 	{
@@ -62,6 +62,37 @@ export default ts.config(
 		// guards cross-feature/route access.
 		files: ['src/lib/features/**', 'scripts/**'],
 		rules: { 'no-restricted-imports': 'off' }
+	},
+	{
+		// Print-server least privilege (plan §4.5, CR-222 FR-2a): printer code runs as `printing_service`,
+		// never the CouchDB server admin, so it must not import `$lib/server/couch-admin` at all. The
+		// credential-free helpers (`ServiceError`, `readSessionUserCtx`, `requireShelterScopeOrSA`) live in
+		// `$lib/server/session-auth`. Only `printing-provision.ts` may hold the admin client (creating /
+		// deleting a database needs the server admin); routes reach it through that module. Same rule as the
+		// global block, so the feature-barrel patterns are repeated here instead of being overridden.
+		files: [
+			'src/lib/server/printers/**',
+			'src/routes/api/v1/printer/**',
+			'src/routes/api/staff/v1/printers/**',
+			'src/routes/api/staff/v1/print-jobs/**',
+			'src/routes/api/back-office/printers/**',
+			'src/routes/api/internal/printers/**'
+		],
+		ignores: ['src/lib/server/printers/printing-provision.ts'],
+		rules: {
+			'no-restricted-imports': [
+				'error',
+				{
+					paths: [{ name: '$lib/server/couch-admin', message: printerAdminImportMessage }],
+					// `paths` only matches the exact `$lib/server/couch-admin` specifier; the group also
+					// catches relative spellings (`../couch-admin`, `../../server/couch-admin`).
+					patterns: [
+						...featureBarrelPatterns,
+						{ group: ['**/couch-admin', '**/couch-admin.*'], message: printerAdminImportMessage }
+					]
+				}
+			]
+		}
 	},
 	{
 		// Whole-package lucide imports pull every icon module into the graph (slow

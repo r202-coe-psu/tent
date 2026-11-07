@@ -42,6 +42,18 @@ describe('parseLedgerParams', () => {
 	});
 });
 
+describe('self-purchased type filter', () => {
+	it('is written as type=self_purchased and survives a round trip', () => {
+		const state = { ...LEDGER_URL_DEFAULTS, type: 'self_purchased' as const };
+		expect(serializeLedgerParams(state).get('type')).toBe('self_purchased');
+		expect(parseLedgerParams(serializeLedgerParams(state))).toEqual(state);
+	});
+
+	it('no longer reads the retired lsp=1 key', () => {
+		expect(parseLedgerParams(params('lsp=1'))).toEqual(LEDGER_URL_DEFAULTS);
+	});
+});
+
 describe('serializeLedgerParams', () => {
 	it('emits nothing for the defaults', () => {
 		expect(serializeLedgerParams(LEDGER_URL_DEFAULTS).toString()).toBe('');

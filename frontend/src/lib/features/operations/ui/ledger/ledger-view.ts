@@ -2,6 +2,7 @@ import { qtyGt } from '$lib/utils/qty';
 import { DISPLAY_LOCALE, DISPLAY_TIME_ZONE } from '$lib/utils/date';
 import { lotStorageName, type StoragePointRef } from '../../domain/lot-storage';
 import { shortLedgerRef } from '../../domain/ledger-ref';
+import { isSelfPurchasedReceipt } from '../../domain/self-purchased';
 import {
 	BULK_RETURN_POOL_REF_PREFIX,
 	resolveAdjustReason,
@@ -10,18 +11,26 @@ import {
 	type StockLedger
 } from '../../domain/operations';
 
-/** The four movement kinds the movements tab groups ledger reasons into. */
-export type LedgerGroup = 'in' | 'out' | 'adjust' | 'transfer';
+/**
+ * The movement kinds the movements tab groups ledger rows into. `self_purchased` is not a
+ * reason: it is a manual receipt flagged "ซื้อเอง" (CR-234 FR-9), which would otherwise count
+ * as an `adjust`.
+ */
+export type LedgerGroup = 'in' | 'out' | 'adjust' | 'transfer' | 'self_purchased';
 export type LedgerTypeFilter = LedgerGroup | 'all';
 
 export const LEDGER_GROUP_LABELS: Record<LedgerGroup, string> = {
 	in: 'รับเข้า',
 	out: 'เบิกจ่าย',
 	adjust: 'ปรับยอด',
-	transfer: 'โอน'
+	transfer: 'โอน',
+	self_purchased: 'ซื้อเอง'
 };
 
-export const LEDGER_GROUP_BY_REASON: Record<LedgerReason, LedgerGroup> = {
+export const LEDGER_GROUP_BY_REASON: Record<
+	LedgerReason,
+	Exclude<LedgerGroup, 'self_purchased'>
+> = {
 	receive: 'in',
 	donation: 'in',
 	distribute: 'out',
@@ -42,6 +51,16 @@ export const REASON_LABELS: Record<LedgerReason, string> = {
 	transfer_out: 'โอนย้ายออก',
 	transfer_in: 'โอนย้ายเข้า'
 };
+
+/**
+ * The type label a ledger entry shows (CR-234 FR-9): "ซื้อเอง" for a flagged manual receipt,
+ * otherwise the label of its reason. Shared by the movements tab and the per-item history.
+ */
+export function ledgerEntryLabel(entry: StockLedger): string {
+	return isSelfPurchasedReceipt(entry)
+		? LEDGER_GROUP_LABELS.self_purchased
+		: (REASON_LABELS[entry.reason] ?? entry.reason);
+}
 
 /** CR-143 §C — why a stock correction was made. Thai labels shared by the adjust form and the ledger. */
 export const ADJUST_REASON_LABELS: Record<AdjustReason, string> = {
@@ -127,7 +146,10 @@ export function toTime(date: Date): string {
 }
 
 export function toLedgerRow(entry: StockLedger, lookup: LedgerLookup): LedgerRow {
-	const group = LEDGER_GROUP_BY_REASON[entry.reason];
+	const selfPurchased = isSelfPurchasedReceipt(entry);
+	const group: LedgerGroup = selfPurchased
+		? 'self_purchased'
+		: LEDGER_GROUP_BY_REASON[entry.reason];
 	const date = new Date(entry.occurred_at);
 	const valid = !Number.isNaN(date.getTime());
 	// A distribute/requisition row keeps its destination in `lot.note`, which
@@ -153,7 +175,7 @@ export function toLedgerRow(entry: StockLedger, lookup: LedgerLookup): LedgerRow
 		time: valid ? toTime(date) : '',
 		group,
 		reason: entry.reason,
-		reasonLabel: REASON_LABELS[entry.reason] ?? entry.reason,
+		reasonLabel: ledgerEntryLabel(entry),
 		adjustReason,
 		adjustReasonLabel,
 		itemName: lookup.itemName(entry.item_id),
@@ -241,6 +263,7 @@ export function summarizeRows(rows: readonly LedgerRow[]): DaySummaryCard[] {
 	const outRows = of('out');
 	const adjustRows = of('adjust');
 	const transferRows = of('transfer');
+	const selfPurchasedRows = of('self_purchased');
 
 	const sources = new Set(
 		inRows.filter((r) => r.reason === 'donation' && r.refId).map((r) => r.refId)
@@ -274,6 +297,12 @@ export function summarizeRows(rows: readonly LedgerRow[]): DaySummaryCard[] {
 			label: 'โอนย้าย',
 			count: transferRows.length,
 			hint: `ส่งออก ${sent} · รับเข้า ${received}`
+		},
+		{
+			group: 'self_purchased',
+			label: LEDGER_GROUP_LABELS.self_purchased,
+			count: selfPurchasedRows.length,
+			hint: 'รายการ · ศูนย์ซื้อเอง'
 		}
 	];
 }

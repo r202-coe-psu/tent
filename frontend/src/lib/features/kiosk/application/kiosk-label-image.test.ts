@@ -72,7 +72,8 @@ function installFakeCanvas() {
 			ready: Promise.resolve(),
 			load: vi.fn((font: string) => {
 				fontsLoaded.push(font);
-				return Promise.resolve([]);
+				// A matched face, as the browser returns once the web font is available.
+				return Promise.resolve([{ family: 'IBM Plex Sans Thai Looped' }]);
 			})
 		}
 	});
@@ -104,12 +105,26 @@ describe('renderKioskLabelPng', () => {
 		expect(harness.isOrderViolated()).toBe(false);
 	});
 
+	it('asks the font loader for the Thai subset too, not only the Latin one', async () => {
+		await renderKioskLabelPng(label);
+
+		// Web fonts split by unicode-range: `load(font)` alone checks a space and fetches only the
+		// Latin file, so Thai would draw in the fallback face until the UI happened to use it.
+		const calls = vi.mocked(document.fonts.load).mock.calls;
+		expect(calls.length).toBeGreaterThan(0);
+		for (const [, text] of calls) {
+			expect(text).toMatch(/[\u0E00-\u0E7F]/);
+			expect(text).toMatch(/[A-Za-z0-9]/);
+		}
+	});
+
 	it('draws every row with the Thai-capable family, and no phone number', async () => {
 		await renderKioskLabelPng(label);
 
 		expect(harness.fontsUsedInDrawing.length).toBeGreaterThan(0);
 		for (const font of harness.fontsUsedInDrawing) {
-			expect(font).toMatch(/'IBM Plex Sans Thai'/);
+			// Same face as the web page around the preview, so the label matches the app.
+			expect(font).toMatch(/px 'IBM Plex Sans Thai Looped', 'IBM Plex Sans Thai'/);
 		}
 		const texts = harness.fakeContext.fillText.mock.calls.map(([text]) => text);
 		expect(texts).toEqual([
@@ -227,5 +242,31 @@ describe('renderKioskLabelPng', () => {
 
 	it('returns the rendered label as base64 PNG', async () => {
 		expect(await renderKioskLabelPng(label)).toBe('ZmFrZS1wbmc=');
+	});
+
+	describe('when the Thai label font cannot be loaded', () => {
+		it('rejects instead of drawing with a fallback font when the load fails', async () => {
+			vi.mocked(document.fonts.load).mockRejectedValue(new Error('network down'));
+
+			await expect(renderKioskLabelPng(label)).rejects.toThrow('network down');
+			expect(harness.fakeContext.fillText).not.toHaveBeenCalled();
+		});
+
+		it('rejects when no font face matches (load resolves an empty list)', async () => {
+			vi.mocked(document.fonts.load).mockResolvedValue([]);
+
+			await expect(renderKioskLabelPng(label)).rejects.toThrow(/font/i);
+			expect(harness.fakeContext.fillText).not.toHaveBeenCalled();
+		});
+
+		it('tries the font again on the next render instead of caching the failure', async () => {
+			vi.mocked(document.fonts.load).mockResolvedValueOnce([]);
+			await expect(renderKioskLabelPng(label)).rejects.toThrow(/font/i);
+
+			vi.mocked(document.fonts.load).mockResolvedValue([
+				{ family: 'IBM Plex Sans Thai Looped' } as unknown as FontFace
+			]);
+			expect(await renderKioskLabelPng(label)).toBe('ZmFrZS1wbmc=');
+		});
 	});
 });
