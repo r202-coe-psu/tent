@@ -105,6 +105,11 @@
 		residenceSuggestTick
 	} from './residence-suggest-reactivity.svelte';
 	import { createQuery } from '@tanstack/svelte-query';
+	import {
+		clearRegistrationDraft,
+		loadRegistrationDraft,
+		saveRegistrationDraft
+	} from '../../data/registration-draft.storage';
 
 	type FormSectionId = 'address' | 'pets' | 'vehicles' | 'members';
 	type ActiveRegistrationItem = { kind: 'member' | 'pet'; index: number; total: number };
@@ -141,6 +146,7 @@
 		onDirtyChange,
 		/** Increment from parent to clear a stale public join selection (bad token / missing target). */
 		joinResetKey = 0,
+		draftKey = '',
 		/** Shelter codes that accept public pre-registration (fallback when chip lacks the flag). */
 		bookableShelterCodes = [],
 		consent,
@@ -178,6 +184,11 @@
 		onselectshelter?: (shelterCode: string, shelterName?: string) => void;
 		onDirtyChange?: (dirty: boolean) => void;
 		joinResetKey?: number;
+		/**
+		 * Public pre-register (#358): keep the form in `sessionStorage` under this key, so a phone
+		 * camera that drops the tab does not empty it. Cleared once the form is sent.
+		 */
+		draftKey?: string;
 		bookableShelterCodes?: string[];
 		/** Shows the PDPA consent block at the end of the form; its confirm is this form's submit. */
 		consent?: RegistrationConsentConfig;
@@ -276,7 +287,15 @@
 		return [blankUnifiedMember()];
 	}
 
-	let members = $state<UnifiedMemberWithMeta[]>(untrack(() => buildInitialMembers()));
+	// A draft only stands in for a blank form, never for the household a page passes in.
+	const restoredDraft = untrack(() =>
+		draftKey && !initialHousehold && !initialMembers?.length
+			? loadRegistrationDraft(draftKey)
+			: null
+	);
+	let members = $state<UnifiedMemberWithMeta[]>(
+		untrack(() => restoredDraft?.members ?? buildInitialMembers())
+	);
 
 	const consentBlock = untrack(() =>
 		consent
@@ -294,8 +313,19 @@
 	);
 	const consentHasMedicalInput = $derived(members.some(hasMedicalInput));
 	let household = $state<UnifiedRegistrationInput['household']>(
-		untrack(() => buildInitialHousehold())
+		untrack(() => restoredDraft?.household ?? buildInitialHousehold())
 	);
+	// Not state: once the form is sent, the effect below must not write the draft back.
+	let draftSent = false;
+	$effect(() => {
+		if (!draftKey || readOnly) return;
+		const current = $state.snapshot({ household, members });
+		if (draftSent) return;
+		saveRegistrationDraft(draftKey, current.household, current.members);
+	});
+	onMount(() => {
+		if (restoredDraft) toast.info(t.draftRestored);
+	});
 	let assetDescription = $state(untrack(() => initialHousehold?.assets?.description ?? ''));
 	/** What `children` and the acknowledgement see: vehicles/assets only where the form shows them. */
 	const visibleHousehold = $derived({
@@ -1535,6 +1565,8 @@
 				consent: registrationConsent
 			});
 			clearDirty();
+			draftSent = true;
+			if (draftKey) clearRegistrationDraft(draftKey);
 		} catch {
 			// Caller surfaces save errors.
 		}
