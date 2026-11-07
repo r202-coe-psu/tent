@@ -10,6 +10,7 @@
 	import SlidersHorizontal from '@lucide/svelte/icons/sliders-horizontal';
 	import Boxes from '@lucide/svelte/icons/boxes';
 	import type { LotPriorityItem } from '../domain/lot-priority';
+	import { qtyGt } from '$lib/utils/qty';
 	import type { StockLotBalance } from '../domain/operations';
 	import { useStoragePoints } from '../application/use-storage-points.svelte';
 	import LedgerTable from './ledger-table.svelte';
@@ -26,6 +27,7 @@
 		lots,
 		itemsById,
 		selfPurchasedRefs,
+		selfPurchasedFilter = false,
 		shelterCode,
 		offline = false,
 		canDistribute = true,
@@ -47,6 +49,8 @@
 		canChange?: boolean;
 		/** `lot_ref`s the shelter bought itself — those lots get a "ซื้อเอง" badge. */
 		selfPurchasedRefs?: ReadonlySet<string>;
+		/** The table's "ซื้อเอง" filter is on: the lots tab starts with its own switch on. */
+		selfPurchasedFilter?: boolean;
 		onaction: (kind: ItemDetailAction) => void;
 	} = $props();
 
@@ -61,9 +65,14 @@
 		buildLotRows(lots, storagePoints.points, Date.now(), itemsById, selfPurchasedRefs)
 	);
 
-	// "ซื้อเอง" switch of the lots tab, remembered per item so opening another item starts off.
-	let selfOnlyItemId = $state<string | null>(null);
-	const selfOnly = $derived(row !== undefined && selfOnlyItemId === row._id);
+	// "ซื้อเอง" switch of the lots tab. A choice is remembered for that item only; otherwise the
+	// switch follows the table's filter.
+	let selfOnlyChoice = $state<{ itemId: string; value: boolean } | null>(null);
+	const selfOnly = $derived(
+		row !== undefined && selfOnlyChoice?.itemId === row._id
+			? selfOnlyChoice.value
+			: selfPurchasedFilter
+	);
 	// Keep each lot's place in the consumption order when the list is narrowed.
 	const shownLots = $derived(
 		lotRows
@@ -103,6 +112,12 @@
 						{#if row.usableNote}
 							<dd class="mt-0.5 text-xs font-semibold text-red-800 tabular-nums">
 								{row.usableNote}
+							</dd>
+						{/if}
+						{#if row.selfPurchasedQty && qtyGt(row.selfPurchasedQty, 0)}
+							<dd class="mt-0.5 text-xs font-medium text-amber-900 tabular-nums">
+								ซื้อเอง {row.selfPurchasedQty}
+								{row.unitLabel}
 							</dd>
 						{/if}
 					</div>
@@ -173,7 +188,7 @@
 								<Switch
 									id="lots-self-purchased"
 									checked={selfOnly}
-									onCheckedChange={(v) => (selfOnlyItemId = v ? row._id : null)}
+									onCheckedChange={(v) => (selfOnlyChoice = { itemId: row._id, value: v })}
 								/>
 								<Label for="lots-self-purchased" class="cursor-pointer text-sm text-slate-700">
 									เฉพาะล็อตที่ซื้อเอง

@@ -357,18 +357,22 @@
 			const override = overrideByItem.get(item._id);
 			const reorderThreshold = resolveReorderThreshold(occupancy, item, override);
 			const summary = stockSummaryByItem.get(item._id);
-			const negative = negativeLotSummary(viewLotsByItem.get(item._id) ?? []);
-			// "ซื้อเอง" filter: show only what was bought, but keep status and cover on the full stock.
-			const shownQty = urlState.selfPurchased
-				? sumLotQty(viewLotsByItem.get(item._id) ?? [])
-				: qtyOnHand;
+			const negative = negativeLotSummary(lotsByItem.get(item._id) ?? []);
+			const selfPurchasedQty = sumLotQty(
+				(lotsByItem.get(item._id) ?? []).filter(
+					(lot) => selfPurchasedRefs.has(lot.lot_ref) && qtyGt(lot.qty, 0)
+				)
+			);
 			return {
 				_id: item._id,
 				name: item.name,
 				category: item.category,
 				categoryLabel: getCategoryLabel(item.category),
 				unitLabel: formatUnit(item.unit, units, langState.current),
-				qtyOnHand: shownQty,
+				qtyOnHand,
+				selfPurchasedQty,
+				// "ซื้อเอง" filter: the row prints what was bought; status and cover stay on the full stock.
+				shownQty: urlState.selfPurchased ? selfPurchasedQty : undefined,
 				reorderThreshold,
 				status: deriveStockQtyStatus(qtyOnHand, reorderThreshold),
 				expiryState: summary?.expiryState ?? 'none',
@@ -727,7 +731,8 @@
 <ItemDetailSheet
 	bind:open={detailOpen}
 	row={selectedManageItem}
-	lots={selectedItemId ? (viewLotsByItem.get(selectedItemId) ?? []) : []}
+	lots={selectedItemId ? (lotsByItem.get(selectedItemId) ?? []) : []}
+	selfPurchasedFilter={urlState.selfPurchased}
 	itemsById={lotPriorityItems}
 	{selfPurchasedRefs}
 	shelterCode={getShelterCode()}

@@ -36,6 +36,10 @@ export interface StockRowBase {
 	aliases?: string[];
 	/** True when a lot with stock left (qty > 0) was bought by this shelter (schema_v 7). */
 	hasSelfPurchased?: boolean;
+	/** Qty still on hand in self-purchased lots; shown beside the total in the detail sheet. */
+	selfPurchasedQty?: string;
+	/** Qty a table row / card prints when it differs from `qtyOnHand` (the "ซื้อเอง" filter). */
+	shownQty?: string;
 }
 
 /** A row as the table and cards render it — display strings resolved by the orchestrator. */
