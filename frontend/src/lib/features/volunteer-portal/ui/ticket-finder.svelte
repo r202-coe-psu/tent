@@ -10,6 +10,7 @@
 	import { useFindTicketsMutation } from '../application/queries';
 	import { resolvePortalAccess } from '../data/volunteer-api';
 	import { ticketFindSchema, ticketStatusLabel, PORTAL_SESSION_KEY } from '../domain/volunteer';
+	import { localizeVolunteerMessage } from '../domain/volunteer-messages.i18n';
 	import { ticketI18n } from '../i18n/ticket.i18n';
 	import { languageStore } from '$lib/stores/language.svelte';
 
@@ -35,7 +36,10 @@
 			await find.mutateAsync(parsed.data.phone);
 			searched = true;
 		} catch (err) {
-			error = err instanceof Error ? err.message : t.finderSearchFailed;
+			error =
+				err instanceof Error
+					? localizeVolunteerMessage(err.message, languageStore.current)
+					: t.finderSearchFailed;
 		}
 	}
 
@@ -59,7 +63,10 @@
 			}
 			await goto(resolve('/volunteers/portal'));
 		} catch (err) {
-			error = err instanceof Error ? err.message : t.finderSignInFailed;
+			error =
+				err instanceof Error
+					? localizeVolunteerMessage(err.message, languageStore.current)
+					: t.finderSignInFailed;
 		} finally {
 			isEnteringPortal = false;
 		}

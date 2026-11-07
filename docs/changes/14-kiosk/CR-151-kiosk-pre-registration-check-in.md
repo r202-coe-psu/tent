@@ -4,7 +4,7 @@ title: Kiosk — เปลี่ยนจาก "เสียบบัตรเ�
 status: approved
 date: 2026-09-24
 created: 2026-09-24
-updated: 2026-11-06 # 2026-11-06 CR-233 supersedes FR-KPC-107 (reprint เขียน log `evacuee_qr`) และ payload ใน FR-KPC-81 · 2026-10-23 rate limit superseded by CR-188 · ข้อเสนอแก้ไข §17 approved โดย Team Lead Soravit Sukkarn (2026-10-20) — พิมพ์ QR จิตอาสา (#609) · 2026-10-18 ทีม kiosk เสนอ §16 (#654): แถว Zone + checklist บน QR label, `zones[].short_name`, reprint คืน `label.zone`/`stations_passed` — รอ PO เคาะ · 2026-10-17 decision sync (#604): ฐาน local ขาด kiosk index → redeploy แล้ว + redeploy/seed deploy index ครบชุด · 2026-10-15 ทีม kiosk ขอเลิกกรอง registered_via ใน §15 (FR-KPC-101/104) · 2026-10-13 ข้อเสนอแก้ไข §15 approved โดย Dev/Team Lead Soravit Sukkarn (รับ requirement จากหัวหน้าโครงการเมื่อวาน 2026-10-12) · 2026-10-04 approved และ merge โดย Soravit Sukkar (Team Lead) + รันเลข CR-151 และลงทะเบียนใน _index.md
+updated: 2026-11-07 # 2026-11-07 ทีมเสนอแก้ §16 (branch cleanup-i18n): checklist สองภาษา, ข้อความ「สำหรับใช้ภายในศูนย์」ใต้ QR, แถว「ติดต่อฉุกเฉิน」ใต้ Zone — รอ PO เคาะ · 2026-11-06 CR-233 supersedes FR-KPC-107 (reprint เขียน log `evacuee_qr`) และ payload ใน FR-KPC-81 · 2026-10-23 rate limit superseded by CR-188 · ข้อเสนอแก้ไข §17 approved โดย Team Lead Soravit Sukkarn (2026-10-20) — พิมพ์ QR จิตอาสา (#609) · 2026-10-18 ทีม kiosk เสนอ §16 (#654): แถว Zone + checklist บน QR label, `zones[].short_name`, reprint คืน `label.zone`/`stations_passed` — รอ PO เคาะ · 2026-10-17 decision sync (#604): ฐาน local ขาด kiosk index → redeploy แล้ว + redeploy/seed deploy index ครบชุด · 2026-10-15 ทีม kiosk ขอเลิกกรอง registered_via ใน §15 (FR-KPC-101/104) · 2026-10-13 ข้อเสนอแก้ไข §15 approved โดย Dev/Team Lead Soravit Sukkarn (รับ requirement จากหัวหน้าโครงการเมื่อวาน 2026-10-12) · 2026-10-04 approved และ merge โดย Soravit Sukkar (Team Lead) + รันเลข CR-151 และลงทะเบียนใน _index.md
 requested_by: ทีม kiosk (branch feat/pre-register_kiosk)
 decided_by: Soravit Sukkar (Team Lead)
 decision_date: 2026-10-04
@@ -520,10 +520,12 @@ migration: ไม่มี — ไม่มี field ใหม่ ไม่ bump
 ## 16. ข้อเสนอแก้ไข 2026-10-18 — โซนและ checklist บน QR label (#654, รอ PO เคาะ)
 
 > **สถานะ:** proposed โดยทีม kiosk — Project Owner (รอเคาะ) · implement แล้วบน branch `feat/654-label-zone` · ที่มา: เอกสารหน้างาน หมวด 2 (issue #654) · รวม draft `draft-zone-short-name` เข้ามาในหัวข้อนี้แทนการเปิด draft CR ใหม่
+>
+> **แก้ไข 2026-11-07 (proposed, รอ PO เคาะ):** ทีมเสนอเพิ่มบน branch `cleanup-i18n` — checklist พิมพ์ไทยพร้อมอังกฤษในวงเล็บ (FR-KPC-122) · ข้อความ「สำหรับใช้ภายในศูนย์」ใต้ QR (FR-KPC-121) · แถว「ติดต่อฉุกเฉิน」ใต้ Zone (FR-KPC-120, แก้ข้อ「ไม่พิมพ์เบอร์โทร」ของ FR-KPC-110 เฉพาะเบอร์ผู้ติดต่อฉุกเฉิน)
 
 > **สรุป (TL;DR)**
 >
-> - **เปลี่ยนอะไร:** (1) QR label 80×60 มีแถว `Zone:` ใต้ชื่อ (2) checklist「เช็คอิน · คัดกรอง · ที่พัก」ติ๊กตามจำนวน station ที่ผ่าน (3) ตัดเบอร์โทรออกจาก label (4) shelter `zones[].short_name` (optional) ใช้พิมพ์บน label แทนชื่อเต็ม (5) `POST /api/v1/kiosk/reprint` คืน `label.zone` + `label.stations_passed`
+> - **เปลี่ยนอะไร:** (1) QR label 80×60 มีแถว `Zone:` ใต้ชื่อ (2) checklist「เช็คอิน (Checked-in) · คัดกรอง (Screened) · ที่พัก (Stayed)」ติ๊กตามจำนวน station ที่ผ่าน (3) ตัดเบอร์โทรของผู้พักพิงออกจาก label — พิมพ์เฉพาะเบอร์ผู้ติดต่อฉุกเฉินในแถว「ติดต่อฉุกเฉิน」ใต้ Zone (4) shelter `zones[].short_name` (optional) ใช้พิมพ์บน label แทนชื่อเต็ม (5) `POST /api/v1/kiosk/reprint` คืน `label.zone` + `label.stations_passed` (+ `label.emergency_phone` เมื่อมี) (6) ข้อความ「สำหรับใช้ภายในศูนย์ / (For shelter use only)」ใต้ QR
 > - **เพื่อใคร/ทำไม:** เจ้าหน้าที่หน้างานเห็นโซนและ station ที่ผ่านแล้วจาก label · พิมพ์ครั้งแรกยังไม่มีโซน จึงเว้นช่องให้เขียนมือ · ชื่อโซนเต็มยาวเกินพื้นที่ label
 > - **Dev ต้อง build:** implement แล้ว — ต้องทดสอบพิมพ์จริงบน XP-365B (AC-KPC-114)
 > - **กระทบ schema:** `shelter.zones[].short_name` str\|null opt (`docs/data/schema.md` shelter master) — additive ไม่ backfill ไม่ bump `schema_v` (แนวเดียวกับ CR-163)
@@ -534,17 +536,20 @@ migration: ไม่มี — ไม่มี field ใหม่ ไม่ bump
 
 | ID         | Requirement |
 | :--------- | :---------- |
-| FR-KPC-110 | label ทุกทางพิมพ์ (kiosk check-in · walk-in `/kiosk/register/done` · `/kiosk/reprint` · staff หน้า profile「QR」) ใช้ layout 80×60 เดียวกัน: ซ้าย = ชื่อ (≤3 บรรทัด) → แถว Zone → checklist → `shelter.psu.ac.th` มุมซ้ายล่าง · ขวา = QR · **ไม่พิมพ์เบอร์โทร** · staff พิมพ์จาก PNG เดียวกับ kiosk (preview = สิ่งที่พิมพ์) |
+| FR-KPC-110 | label ทุกทางพิมพ์ (kiosk check-in · walk-in `/kiosk/register/done` · `/kiosk/reprint` · staff หน้า profile「QR」) ใช้ layout 80×60 เดียวกัน: ซ้าย = ชื่อ (≤3 บรรทัด) → แถว Zone → แถวติดต่อฉุกเฉิน (FR-KPC-120) → checklist → `shelter.psu.ac.th` มุมซ้ายล่าง · ขวา = QR + ข้อความใต้ QR (FR-KPC-121) · **ไม่พิมพ์เบอร์โทรของผู้พักพิง** (พิมพ์เฉพาะเบอร์ผู้ติดต่อฉุกเฉิน) · staff พิมพ์จาก PNG เดียวกับ kiosk (preview = สิ่งที่พิมพ์) |
 | FR-KPC-111 | แถว Zone: มีโซน → `Zone: <ข้อความโซน>` (ยาวเกินแถว → ตัดด้วย `…`) · ไม่มีโซน → `Zone:` ตามด้วยเส้นจุดว่างให้เจ้าหน้าที่เขียนมือ |
 | FR-KPC-112 | ข้อความโซน = `zones[].short_name` ของโซนที่ `code` ตรงกับ `current_stay.zone` (ไม่สนตัวพิมพ์) → ไม่มีใช้ `name` → ไม่มีใช้ code ดิบ · `current_stay.zone` ว่าง → ไม่มีโซน |
 | FR-KPC-113 | checklist 3 ช่อง แถวละช่อง ติ๊กตาม `stations_passed`: **0** = ไม่มี stay หรือ `pre_registered`/`kiosk_registered`/`cancelled` · **3** = สถานะไม่ใช่ `arriving` และ (มีโซน หรือ `room_confirmed`/`temporary_leave`) — นับ 3 แม้ศูนย์ปิด medical screening · **2** = มี doc `type:'screening'` ของคนนั้น · **1** = อื่น ๆ (`arriving` ชนะโซนค้าง) |
 | FR-KPC-114 | พิมพ์ครั้งแรกที่ kiosk (check-in / walk-in) → ติ๊ก 1 ช่อง (เช็คอิน) และแถว Zone ว่าง |
+| FR-KPC-120 | (2026-11-07, proposed) แถวใต้ Zone: `ติดต่อฉุกเฉิน: <เบอร์>` จาก `evacuee.emergency_contact.phone` (ตัดช่องว่างและ `-` ออก) · ไม่มีเบอร์ → **ไม่มีแถวนี้** เว้นพื้นที่ว่าง · ไม่พิมพ์ชื่อหรือความสัมพันธ์ของผู้ติดต่อ · 9 pt (เบอร์ 10 หลักกว้าง ~37 มม. ในคอลัมน์ ~38.7 มม.; เบอร์ยาวกว่าถูกบีบให้พอดี) · ทุกทางพิมพ์ตาม FR-KPC-110 |
+| FR-KPC-121 | (2026-11-07, proposed) ใต้ QR กึ่งกลาง 2 บรรทัด「สำหรับใช้ภายในศูนย์」/「(For shelter use only)」7 pt · ห่างจากภาพ QR 2 มม. เพื่อคง quiet zone 4 module · เฉพาะ label ผู้พักพิง (ไม่ใส่บนบัตรเจ้าหน้าที่/จิตอาสา §17) |
+| FR-KPC-122 | (2026-11-07, proposed) ข้อความ checklist พิมพ์ไทยตามด้วยอังกฤษในวงเล็บเสมอ ไม่ขึ้นกับภาษาที่เลือกบนหน้าจอ: `เช็คอิน (Checked-in)` · `คัดกรอง (Screened)` · `ที่พัก (Stayed)` · 9 pt, ช่อง tick 3 มม., ระยะระหว่างแถว 1.2 มม. |
 
 ### 16.2 Reprint API
 
 | ID         | Requirement |
 | :--------- | :---------- |
-| FR-KPC-115 | (แก้ FR-KPC-107) `label` = `{ name, phone, zone, stations_passed }` · `zone` ตาม FR-KPC-112 (`null` ก่อน Station 3) · `stations_passed` 0–3 ตาม FR-KPC-113 · ยังไม่เขียน doc ใด ๆ |
+| FR-KPC-115 | (แก้ FR-KPC-107) `label` = `{ name, phone, zone, stations_passed, emergency_phone? }` (`emergency_phone` มีเฉพาะเมื่อผู้พักพิงมีเบอร์ผู้ติดต่อฉุกเฉิน — 2026-11-07 proposed; `label` ของ check-in และ walk-in register ได้ field เดียวกัน) · `zone` ตาม FR-KPC-112 (`null` ก่อน Station 3) · `stations_passed` 0–3 ตาม FR-KPC-113 · ยังไม่เขียน doc ใด ๆ |
 | FR-KPC-116 | อ่าน shelter registry เฉพาะเมื่อมีสมาชิกที่มีโซน · อ่านไม่ได้ → ใช้ code ดิบ (reprint ไม่ fail) · ค้น screening เฉพาะสมาชิกที่ยังไม่ถึง 3 ช่อง · ค้นไม่ได้ → ถือว่ายังไม่คัดกรอง (ติ๊กน้อยลง ไม่ fail) |
 
 ### 16.3 ชื่อย่อโซน (`zones[].short_name`)
@@ -560,9 +565,11 @@ migration: ไม่มี — ไม่มี field ใหม่ ไม่ bump
 - **AC-KPC-110** kiosk check-in / walk-in → label มี `Zone:` + เส้นจุด และติ๊กเช็คอิน 1 ช่อง
 - **AC-KPC-111** พิมพ์ซ้ำหลัง Station 3 จัดโซน → `Zone: <short_name หรือชื่อโซน>` และติ๊กครบ 3 ช่อง
 - **AC-KPC-112** คัดกรองแล้วยังไม่มีโซน → ติ๊ก 2 ช่อง, Zone ว่าง
-- **AC-KPC-113** ไม่มี label ใดพิมพ์เบอร์โทร
+- **AC-KPC-113** ไม่มี label ใดพิมพ์เบอร์โทรของผู้พักพิง (เบอร์ผู้ติดต่อฉุกเฉินพิมพ์ได้ตาม FR-KPC-120)
 - **AC-KPC-114** พิมพ์จริงบน XP-365B: ชื่อ 3 บรรทัด + แถว Zone + checklist ไม่ล้น/ไม่ถูกตัด (ยังต้องทดสอบ)
 - **AC-KPC-115** shelter form: ชื่อย่อเกิน 10 ตัวอักษรบันทึกไม่ได้ · เว้นว่างบันทึกได้
+- **AC-KPC-116** (proposed) ผู้พักพิงที่มี `emergency_contact.phone` → label มีแถว `ติดต่อฉุกเฉิน: <เบอร์>` ใต้ Zone · ไม่มีเบอร์ → ไม่มีแถว
+- **AC-KPC-117** (proposed) label ผู้พักพิงทุกใบมี「สำหรับใช้ภายในศูนย์ / (For shelter use only)」ใต้ QR และ checklist สองภาษา · สแกน QR ได้ปกติ · พิมพ์จริงบน XP-365B ไม่ล้น (ยังต้องทดสอบ)
 
 ### 16.5 Open questions (เสนอให้ PO เคาะ)
 
@@ -570,13 +577,15 @@ migration: ไม่มี — ไม่มี field ใหม่ ไม่ bump
 2. จำกัดอักขระ (เช่น A–Z/0–9) หรืออนุญาตภาษาไทย — ทีมเสนอ: อนุญาตทุกอักขระ
 3. ความยาวสูงสุด 10 เหมาะกับ label 80×60 หรือไม่
 4. ส่งออก `short_name` ใน shelter import / public projection หรือไม่ — ทีมเสนอ: ยังไม่ (staff-only)
-5. label ไม่มีเบอร์โทรแล้ว — ยืนยันว่าหน้างานไม่ต้องใช้เบอร์บน label
+5. label ไม่มีเบอร์โทรของผู้พักพิงแล้ว — ยืนยันว่าหน้างานไม่ต้องใช้เบอร์บน label
+6. (2026-11-07) พิมพ์เบอร์ผู้ติดต่อฉุกเฉินบน label ได้หรือไม่ — เป็นข้อมูลส่วนบุคคลของบุคคลที่สามบนบัตรที่ผู้พักพิงพกติดตัว · ทีมเสนอ: พิมพ์เฉพาะเบอร์ ไม่พิมพ์ชื่อ/ความสัมพันธ์ เพื่อให้เจ้าหน้าที่ติดต่อญาติได้ทันทีเมื่อเกิดเหตุ
 
 ### 16.6 Impact / Risks
 
 - ติ๊ก checklist คำนวณจากข้อมูล ณ ตอนพิมพ์ — label ที่พิมพ์ไปแล้วไม่อัปเดตเอง ต้องพิมพ์ซ้ำ
 - ช่อง「ชื่อย่อ」ที่กรอกแต่เว้นวรรคล้วน อาจถูกเก็บเป็น `""` แทน `null` (Zod trim หลัง form แปลงค่าว่างเป็น `null`) — label ถือว่าไม่มีชื่อย่อ จึงไม่กระทบการพิมพ์
 - reprint อ่าน registry + `_find` screening เพิ่ม (ทั้งคู่ fail-soft)
+- (2026-11-07) เบอร์ผู้ติดต่อฉุกเฉินบน label มองเห็นได้โดยทุกคนที่เห็นบัตร — ความเสี่ยง PII ตาม open question 6 · label ที่ชื่อยาว 3 บรรทัด + แถวฉุกเฉิน เหลือระยะถึง checklist ~1.2 มม. (คำนวณจาก layout; ยังไม่ได้พิมพ์จริง)
 
 ---
 

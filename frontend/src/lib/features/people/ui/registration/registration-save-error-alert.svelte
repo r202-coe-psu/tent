@@ -6,6 +6,9 @@
 	import CircleAlert from '@lucide/svelte/icons/circle-alert';
 	import Copy from '@lucide/svelte/icons/copy';
 	import X from '@lucide/svelte/icons/x';
+	import { langState } from '$lib/states/i18n.svelte';
+	import { getTranslation } from '$lib/utils/i18n';
+	import { STATION1_REGISTRATION_I18N } from '../_constants/station1-registration.i18n';
 
 	let {
 		report,
@@ -15,14 +18,15 @@
 		ondismiss?: () => void;
 	} = $props();
 
+	const t = $derived(getTranslation(STATION1_REGISTRATION_I18N, langState.current).saveError);
 	const detailText = $derived(formatSaveFailureReport(report));
 
 	async function copyReport() {
 		try {
 			await navigator.clipboard.writeText(detailText);
-			toast.success('คัดลอกรายละเอียดข้อผิดพลาดแล้ว');
+			toast.success(t.copied);
 		} catch {
-			toast.error('ไม่สามารถคัดลอกได้');
+			toast.error(t.copyFailed);
 		}
 	}
 </script>
@@ -38,7 +42,7 @@
 				size="icon"
 				class="size-7 shrink-0 text-destructive hover:bg-destructive/10"
 				onclick={ondismiss}
-				aria-label="ปิดการแจ้งเตือน"
+				aria-label={t.dismissAria}
 			>
 				<X class="size-4" />
 			</Button>
@@ -46,14 +50,13 @@
 	</Alert.Title>
 	<Alert.Description class="space-y-3 text-destructive/90">
 		<p class="text-sm">
-			ข้อมูลที่บันทึกค้างระหว่างทางถูกลบหรือยกเลิกแล้ว (ถ้าทำได้)
-			กรุณาคัดลอกรายละเอียดด้านล่างส่งให้นักพัฒนา
+			{t.note}
 		</p>
 		<pre
 			class="max-h-48 overflow-auto rounded-md border border-destructive/20 bg-background/80 p-3 font-mono text-xs break-all whitespace-pre-wrap text-foreground">{detailText}</pre>
 		<Button type="button" variant="outline" size="sm" class="gap-1.5" onclick={copyReport}>
 			<Copy class="size-3.5" />
-			คัดลอก
+			{t.copy}
 		</Button>
 	</Alert.Description>
 </Alert.Root>

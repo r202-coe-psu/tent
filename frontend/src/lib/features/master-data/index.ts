@@ -13,6 +13,8 @@ export {
 	VOLUNTEER_MASTER_TYPES,
 	MASTER_DATA_TYPE_LABELS,
 	MASTER_DATA_TYPE_META,
+	masterDataTypeLabelsByLanguage,
+	masterDataTypeMetaByLanguage,
 	CR112_VULNERABLE_GROUP_ACTIVE,
 	masterDataScopeSchema,
 	masterTypeSchema,

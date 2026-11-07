@@ -17,6 +17,9 @@
 		type Evacuee
 	} from '$lib/features/people';
 	import { formatThaiTime } from '$lib/utils/date';
+	import { langState } from '$lib/states/i18n.svelte';
+	import { getTranslation } from '$lib/utils/i18n';
+	import { STATION1_REGISTRATION_I18N } from '../_constants/station1-registration.i18n';
 	import EvacueePhoto from '../shared/evacuee-photo.svelte';
 	import RegisteredViaBadge from '../shared/registered-via-badge.svelte';
 
@@ -29,6 +32,8 @@
 		excludeIds?: string[];
 		onselect: (evacuee: Evacuee) => void;
 	} = $props();
+
+	const t = $derived(getTranslation(STATION1_REGISTRATION_I18N, langState.current).pull);
 
 	let searchQuery = $state('');
 	let channelFilter = $state<'all' | 'kiosk' | 'web'>('all');
@@ -98,11 +103,10 @@
 				</div>
 				<div>
 					<Dialog.Title class="text-lg font-bold text-slate-900">
-						ดึงข้อมูลจากคิวลงทะเบียนล่วงหน้า
+						{t.title}
 					</Dialog.Title>
 					<Dialog.Description class="text-xs text-slate-500">
-						เลือกผู้ประสบภัยที่สแกนบัตร Kiosk หรือลงทะเบียนออนไลน์ล่วงหน้าไว้
-						เพื่อดึงเข้าครอบครัวนี้
+						{t.description}
 					</Dialog.Description>
 				</div>
 			</div>
@@ -116,7 +120,7 @@
 				/>
 				<Input
 					type="text"
-					placeholder="ค้นหาด้วยชื่อ, นามสกุล, เลขบัตรประชาชน 13 หลัก, หรือเบอร์โทร..."
+					placeholder={t.searchPlaceholder}
 					bind:value={searchQuery}
 					class="h-10 rounded-xl border-slate-200 bg-white pr-9 pl-9 text-sm shadow-2xs"
 				/>
@@ -125,7 +129,7 @@
 						type="button"
 						onclick={() => (searchQuery = '')}
 						class="absolute top-1/2 right-2.5 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-						aria-label="ล้างคำค้นหา"
+						aria-label={t.clearSearchAria}
 					>
 						<X class="size-4" />
 					</button>
@@ -142,7 +146,7 @@
 						? 'border-blue-600 bg-blue-50 text-blue-700'
 						: 'border-slate-200 bg-white text-slate-600 hover:bg-slate-100'}"
 				>
-					ทั้งหมด ({preRegisteredList.length})
+					{t.all} ({preRegisteredList.length})
 				</button>
 				<button
 					type="button"
@@ -153,7 +157,7 @@
 						: 'border-amber-200 bg-white text-amber-800 hover:bg-amber-50'}"
 				>
 					<CreditCard class="size-3 text-amber-600" />
-					<span>ตู้ Kiosk ({kioskCount})</span>
+					<span>{t.channelKiosk} ({kioskCount})</span>
 				</button>
 				<button
 					type="button"
@@ -164,7 +168,7 @@
 						: 'border-sky-200 bg-white text-sky-800 hover:bg-sky-50'}"
 				>
 					<Globe class="size-3 text-sky-600" />
-					<span>ออนไลน์ Web ({webCount})</span>
+					<span>{t.channelWeb} ({webCount})</span>
 				</button>
 			</div>
 		</div>
@@ -174,7 +178,7 @@
 			{#if evacueesQuery.isPending}
 				<div class="flex flex-col items-center justify-center gap-2 py-12 text-slate-500">
 					<Loader2 class="size-6 animate-spin text-blue-600" />
-					<p class="text-xs font-medium">กำลังโหลดคิวลงทะเบียนล่วงหน้า...</p>
+					<p class="text-xs font-medium">{t.loading}</p>
 				</div>
 			{:else if filteredList.length === 0}
 				<div
@@ -185,11 +189,9 @@
 					>
 						<UserSearch class="size-6" />
 					</div>
-					<p class="text-sm font-semibold text-slate-700">ไม่พบรายชื่อในคิวลงทะเบียนล่วงหน้า</p>
+					<p class="text-sm font-semibold text-slate-700">{t.emptyTitle}</p>
 					<p class="max-w-xs text-xs text-slate-400">
-						{searchQuery || channelFilter !== 'all'
-							? 'ไม่พบข้อมูลที่ตรงกับคำค้นหาหรือตัวกรองที่เลือก'
-							: 'ไม่มีผู้ที่สแกนบัตรหรือจองออนไลน์ค้างอยู่ในระบบ'}
+						{searchQuery || channelFilter !== 'all' ? t.emptyFiltered : t.emptyNone}
 					</p>
 				</div>
 			{:else}
@@ -220,13 +222,13 @@
 									</div>
 									<div class="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-xs text-slate-500">
 										{#if evacuee.person_id?.number}
-											<span>เลขบัตร: {maskNationalId(evacuee.person_id.number)}</span>
+											<span>{t.idCardLabel} {maskNationalId(evacuee.person_id.number)}</span>
 										{/if}
 										{#if evacuee.phone}
-											<span>โทร: {evacuee.phone}</span>
+											<span>{t.phoneLabel} {evacuee.phone}</span>
 										{/if}
 										{#if timeStr}
-											<span class="text-slate-400">เวลา {timeStr} น.</span>
+											<span class="text-slate-400">{t.timeLabel(timeStr)}</span>
 										{/if}
 									</div>
 								</div>
@@ -238,7 +240,7 @@
 								onclick={() => handleSelect(evacuee)}
 							>
 								<UserCheck class="size-4" />
-								<span>เลือกคนนี้</span>
+								<span>{t.selectPerson}</span>
 							</Button>
 						</li>
 					{/each}
@@ -255,7 +257,7 @@
 				class="rounded-xl border-slate-200"
 				onclick={() => (open = false)}
 			>
-				ยกเลิก
+				{t.cancel}
 			</Button>
 		</div>
 	</Dialog.Content>

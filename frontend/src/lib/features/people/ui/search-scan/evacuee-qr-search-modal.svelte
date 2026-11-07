@@ -17,6 +17,11 @@
 	} from '$lib/features/unassigned-registration';
 	import { getShelterCode } from '$lib/db/shelter';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
+	import { langState } from '$lib/states/i18n.svelte';
+	import { getTranslation } from '$lib/utils/i18n';
+	import { SEARCH_SCAN_I18N } from '../_constants/search-scan.i18n';
+
+	const t = $derived(getTranslation(SEARCH_SCAN_I18N, langState.current).qrSearchModal);
 
 	let {
 		show,
@@ -87,7 +92,7 @@
 				}
 			)
 			.catch(() => {
-				cameraError = 'ไม่สามารถเข้าถึงกล้องได้ โปรดตรวจสอบการอนุญาตใช้งานกล้อง';
+				cameraError = t.cameraError;
 			});
 
 		return () => {
@@ -107,23 +112,21 @@
 		try {
 			const result = await lookupFederatedByScanCode(queryClient, cleanCode);
 			if (!result) {
-				toast.error(`ไม่พบข้อมูลผู้พักพิงจากรหัส "${cleanCode}" ในศูนย์ ${getShelterCode()}`);
+				toast.error(t.toast.notFound(cleanCode, getShelterCode()));
 				return;
 			}
 			manualCode = '';
 			if (result.source === 'unassigned') {
-				toast.success('พบคิวลงทะเบียนล่วงหน้า (คิวกลาง)');
+				toast.success(t.toast.unassigned);
 				claimHit = result.hit;
 				claimOpen = true;
 				onClose();
 				return;
 			}
-			toast.success(
-				`สแกนสำเร็จ: พบข้อมูล ${result.evacuee.first_name} ${result.evacuee.last_name}`
-			);
+			toast.success(t.toast.scanned(`${result.evacuee.first_name} ${result.evacuee.last_name}`));
 			onFound(result.evacuee._id);
 		} catch (err) {
-			toast.error(err instanceof Error ? err.message : 'เกิดข้อผิดพลาดในการค้นหา');
+			toast.error(err instanceof Error ? err.message : t.toast.searchFailed);
 		} finally {
 			isLooking = false;
 		}
@@ -140,7 +143,7 @@
 		<Dialog.Header class="pr-6 text-left">
 			<Dialog.Title class="flex items-center gap-2 text-base font-black">
 				<Camera class="size-5 text-primary" />
-				สแกน QR Code ตั๋วผู้พักพิง (Digital Pass Scanner)
+				{t.title}
 			</Dialog.Title>
 		</Dialog.Header>
 
@@ -190,13 +193,13 @@
 				class="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground"
 			>
 				<Keyboard class="size-3.5" />
-				หรือระบุรหัสด้วยเครื่องสแกนบาร์โค้ด / พิมพ์ด้วยมือ:
+				{t.manualLabel}
 			</label>
 			<div class="flex gap-2">
 				<Input
 					id="qr-manual-code"
 					type="text"
-					placeholder="สแกนหรือพิมพ์เลขประจำตัว / รหัสตั๋ว..."
+					placeholder={t.placeholder}
 					bind:value={manualCode}
 					disabled={isLooking}
 					class="h-11 flex-1"
@@ -209,7 +212,7 @@
 					{#if isLooking}
 						<Loader class="size-4 animate-spin" />
 					{/if}
-					ตกลง
+					{t.submit}
 				</Button>
 			</div>
 		</form>
@@ -224,7 +227,7 @@
 				class="cursor-pointer font-semibold text-muted-foreground transition-colors hover:text-foreground"
 				onclick={onClose}
 			>
-				ยกเลิก
+				{t.cancel}
 			</button>
 		</div>
 	</Dialog.Content>

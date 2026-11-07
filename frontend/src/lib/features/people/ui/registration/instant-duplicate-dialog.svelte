@@ -8,7 +8,10 @@
 	import * as AlertDialog from '$lib/components/ui/alert-dialog/index.js';
 	import { Badge } from '$lib/components/ui/badge/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
-	import { maskNationalId } from '../../domain/people';
+	import { langState } from '$lib/states/i18n.svelte';
+	import { getTranslation } from '$lib/utils/i18n';
+	import { maskNationalId, peopleLabels } from '../../domain/people';
+	import { STATION1_REGISTRATION_I18N } from '../_constants/station1-registration.i18n';
 	import type { InstantDuplicateMatch } from '../../domain/instant-duplicate';
 
 	let {
@@ -28,6 +31,15 @@
 		isPublic?: boolean;
 		ondismiss: () => void;
 	} = $props();
+
+	const t = $derived(getTranslation(STATION1_REGISTRATION_I18N, langState.current).duplicate);
+	const stayStatusLabels = $derived(peopleLabels(langState.current).stayStatus);
+
+	function matchStatusLabel(match: InstantDuplicateMatch): string {
+		return match.source === 'local'
+			? `${t.shelterStatusPrefix} — ${stayStatusLabels[match.status as keyof typeof stayStatusLabels] ?? match.status}`
+			: t.poolStatus;
+	}
 
 	const effectiveValue = $derived(queryValue || thaiId || '');
 	const primaryMatch = $derived(matches[0] ?? null);
@@ -57,11 +69,9 @@
 				<AlertTriangle class="size-5 shrink-0" />
 				<AlertDialog.Title class="text-lg font-bold text-slate-900 dark:text-slate-100">
 					{#if isPublic}
-						{fieldType === 'phone'
-							? 'เบอร์โทรศัพท์นี้มีข้อมูลในระบบแล้ว'
-							: 'เลขประจำตัวประชาชนนี้มีข้อมูลในระบบแล้ว'}
+						{fieldType === 'phone' ? t.publicPhoneTitle : t.publicIdTitle}
 					{:else}
-						{fieldType === 'phone' ? 'พบข้อมูลเบอร์โทรศัพท์ซ้ำในระบบ' : 'พบข้อมูลซ้ำในระบบ'}
+						{fieldType === 'phone' ? t.staffPhoneTitle : t.staffIdTitle}
 					{/if}
 				</AlertDialog.Title>
 			</div>
@@ -69,22 +79,22 @@
 			<AlertDialog.Description class="text-sm text-slate-600 dark:text-slate-400">
 				{#if isPublic}
 					{#if fieldType === 'phone'}
-						ตรวจพบเบอร์โทรศัพท์นี้มีการลงทะเบียนในระบบแล้ว หากท่านเคยลงทะเบียนไว้แล้ว
-						สามารถใช้เบอร์โทรศัพท์ตรวจสอบสถานะได้ที่หน้าประวัติ
+						{t.publicPhoneDesc}
 					{:else}
-						ตรวจพบเลขประจำตัวประชาชนนี้มีการลงทะเบียนในระบบแล้ว หากท่านเคยลงทะเบียนไว้แล้ว
-						สามารถตรวจสอบสถานะได้ที่หน้าประวัติ
+						{t.publicIdDesc}
 					{/if}
 				{:else if fieldType === 'phone'}
-					ตรวจพบเบอร์โทรศัพท์ <strong
-						class="font-semibold text-slate-900 tabular-nums dark:text-slate-100"
+					{t.staffPhonePrefix}
+					<strong class="font-semibold text-slate-900 tabular-nums dark:text-slate-100"
 						>{effectiveValue}</strong
-					> มีข้อมูลผู้ประสบภัยอยู่ในระบบแล้ว กรุณาตรวจสอบก่อนกรอกข้อมูลซ้ำ
+					>
+					{t.staffSuffix}
 				{:else}
-					ตรวจพบเลขบัตรประชาชน <strong
-						class="font-semibold text-slate-900 tabular-nums dark:text-slate-100"
+					{t.staffIdPrefix}
+					<strong class="font-semibold text-slate-900 tabular-nums dark:text-slate-100"
 						>{maskNationalId(effectiveValue || primaryMatch?.nationalId)}</strong
-					> มีข้อมูลผู้ประสบภัยอยู่ในระบบแล้ว กรุณาตรวจสอบก่อนกรอกข้อมูลซ้ำ
+					>
+					{t.staffSuffix}
 				{/if}
 			</AlertDialog.Description>
 		</AlertDialog.Header>
@@ -108,7 +118,7 @@
 										class="gap-1 border-blue-300 bg-blue-50 text-2xs text-blue-800 dark:border-blue-800 dark:bg-blue-950 dark:text-blue-300"
 									>
 										<Building2 class="size-3" />
-										<span>ศูนย์นี้</span>
+										<span>{t.thisShelter}</span>
 									</Badge>
 								{:else}
 									<Badge
@@ -116,11 +126,11 @@
 										class="gap-1 border-purple-300 bg-purple-50 text-2xs text-purple-800 dark:border-purple-800 dark:bg-purple-950 dark:text-purple-300"
 									>
 										<Cloud class="size-3" />
-										<span>คิวกลาง</span>
+										<span>{t.centralQueue}</span>
 									</Badge>
 								{/if}
 								<Badge variant="secondary" class="text-2xs font-medium">
-									{match.statusLabel}
+									{matchStatusLabel(match)}
 								</Badge>
 							</div>
 						</div>
@@ -128,13 +138,14 @@
 						<div class="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
 							{#if match.nationalId}
 								<span
-									>เลขบัตรประชาชน: <span class="font-mono tabular-nums"
-										>{maskNationalId(match.nationalId)}</span
+									>{t.idCardLabel}
+									<span class="font-mono tabular-nums">{maskNationalId(match.nationalId)}</span
 									></span
 								>
 							{/if}
 							{#if match.phone}
-								<span>เบอร์โทร: <span class="font-mono tabular-nums">{match.phone}</span></span>
+								<span>{t.phoneLabel} <span class="font-mono tabular-nums">{match.phone}</span></span
+								>
 							{/if}
 						</div>
 
@@ -147,7 +158,7 @@
 									class="h-8 gap-1 text-xs"
 									onclick={() => handleNavigateToExisting(match.actionUrl)}
 								>
-									<span>{match.actionLabel}</span>
+									<span>{t.goToExisting}</span>
 									<ArrowRight class="size-3.5" />
 								</Button>
 							</div>
@@ -165,7 +176,7 @@
 					class="h-10 w-full rounded-xl bg-amber-600 text-white hover:bg-amber-700 sm:w-auto"
 					onclick={handleProceedNotThisPerson}
 				>
-					รับทราบ / ปิด
+					{t.acknowledge}
 				</Button>
 			{:else}
 				<Button
@@ -174,7 +185,7 @@
 					class="h-10 rounded-xl"
 					onclick={handleProceedNotThisPerson}
 				>
-					ไม่ใช่คนนี้ / กรอกต่อ
+					{t.notThisPerson}
 				</Button>
 				{#if primaryMatch}
 					<Button
@@ -183,7 +194,7 @@
 						class="h-10 gap-1.5 rounded-xl bg-amber-600 text-white hover:bg-amber-700 dark:bg-amber-600 dark:hover:bg-amber-700"
 						onclick={() => handleNavigateToExisting(primaryMatch.actionUrl)}
 					>
-						<span>ไปที่ข้อมูลเดิม / เช็คอิน</span>
+						<span>{t.goToExisting}</span>
 						<ArrowRight class="size-4" />
 					</Button>
 				{/if}
