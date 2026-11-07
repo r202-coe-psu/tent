@@ -282,7 +282,7 @@
 								}
 							>
 								<Select.Trigger {...props} class={selectTriggerClass}>
-									{housingTypeTriggerLabel}
+									<span class="min-w-0 truncate leading-normal">{housingTypeTriggerLabel}</span>
 								</Select.Trigger>
 								<Select.Content>
 									{#each housingTypeItems as opt (opt.value)}
