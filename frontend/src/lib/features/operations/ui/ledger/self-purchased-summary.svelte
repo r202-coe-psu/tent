@@ -48,7 +48,7 @@
 			<span class="flex flex-col gap-0.5 text-left">
 				<span class="text-base font-bold text-slate-900">สรุปยอดซื้อเอง</span>
 				<span class="text-xs font-normal text-slate-500">
-					ยอดที่ศูนย์ซื้อเองในช่วงวันที่เลือก (เวลาประเทศไทย) และที่ยังเหลือจากล็อตซื้อเอง
+					ยอดที่ศูนย์ซื้อเองในช่วงวันที่เลือก
 				</span>
 			</span>
 		</Accordion.Trigger>
@@ -81,10 +81,10 @@
 							<Table.Row class="hover:bg-transparent">
 								<Table.Head scope="col" class={HEAD_CLASS}>สินค้า</Table.Head>
 								<Table.Head scope="col" class="{HEAD_CLASS} text-right"
-									>รับเข้าที่ซื้อเองในช่วงนี้</Table.Head
+									>จำนวนรับเข้าที่ซื้อเอง</Table.Head
 								>
 								<Table.Head scope="col" class="{HEAD_CLASS} text-right">
-									คงเหลือจากล็อตซื้อเอง
+									จำนวนคงเหลือจากยอดที่ซื้อเอง
 									<span class="block text-xs font-normal text-slate-500"
 										>นับทั้งหมด ไม่ตามช่วงวันที่</span
 									>
