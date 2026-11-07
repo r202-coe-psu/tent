@@ -139,7 +139,7 @@ async function closeSetup(
 	await desk.openTab('reconciliation', 'supplies');
 	await desk.selectPoint(scenarioPoint(scenario));
 	await desk.selectTicket('reconciliation', ticket);
-	await expect(desk.reconciliationHeading(ticket)).toBeVisible();
+	await expect(desk.reconciliationCard(ticket)).toBeVisible();
 	return { desk, kit, blanket, ticket };
 }
 
@@ -487,18 +487,18 @@ test.describe('Tab 5 — shift close and returns (plan §4.7)', { tag: DESK_TAGS
 		await desk.selectPoint(scenarioPoint(scenario));
 		await desk.openTab('reconciliation');
 
-		const heading = page.getByRole('heading', { name: /^ใบเบิก TKT-/ });
-		const shownNo = ((await heading.textContent()) ?? '').match(/TKT-SUPPLIES-\d+/)?.[0];
+		const card = page.getByRole('region', { name: /เลขตั๋ว TKT-/ });
+		const shownNo = ((await card.getAttribute('aria-label')) ?? '').match(/TKT-SUPPLIES-\d+/)?.[0];
 		const shown = tickets.find((t) => t.ticketNo === shownNo);
 		if (!shown) throw new Error(`Reconciliation card shows an unexpected ticket: ${shownNo}`);
 
 		await desk.closeShift({ [item.name]: '2' });
 		await expectTicketStatus(shown, 'SHIFT_CLOSED', 'Close checkpoint');
-		await expect(desk.reconciliationHeading(shown)).toBeVisible();
+		await expect(desk.reconciliationCard(shown)).toBeVisible();
 
 		await page.getByRole('button', { name: /ส่งคืนพัสดุกลับคลังกลาง/ }).click();
 		await expectTicketStatus(shown, 'RETURN_PENDING_RECEIPT', 'Submit checkpoint');
-		await expect(desk.reconciliationHeading(shown)).toBeVisible();
+		await expect(desk.reconciliationCard(shown)).toBeVisible();
 		await expect(
 			desk.reconciliationCard(shown).getByText('รอคลังตรวจรับคืน', { exact: true })
 		).toBeVisible();

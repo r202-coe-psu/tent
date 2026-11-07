@@ -516,17 +516,16 @@ test.describe('Tab 2 — ready-meal handover (plan §4.4)', { tag: DESK_TAGS }, 
 		await desk.goto();
 		await desk.openTab('food');
 		await desk.selectPoint(scenarioPoint(scenario));
-		const daySelect = page.getByLabel('เลือกวันที่ให้บริการ');
-		await expect(daySelect).toBeVisible();
+		await expect(page.getByRole('group', { name: 'วันที่แจก' })).toBeVisible();
 
 		// Today is the default day: both of today's tickets are offered, the older one is not.
-		const ticketSelect = page.getByLabel('เลือกตั๋วอาหารที่ใช้งาน');
-		await ticketSelect.click();
-		await expect(page.getByRole('option', { name: new RegExp(today.ticketNo) })).toBeVisible();
+		await page.locator('#food-ticket').click();
+		const options = desk.ticketPickerPopover();
+		await expect(options.getByRole('button', { name: new RegExp(today.ticketNo) })).toBeVisible();
 		await expect(
-			page.getByRole('option', { name: new RegExp(todayDinner.ticketNo) })
+			options.getByRole('button', { name: new RegExp(todayDinner.ticketNo) })
 		).toBeVisible();
-		await expect(page.getByRole('option', { name: new RegExp(older.ticketNo) })).toHaveCount(0);
+		await expect(options.getByRole('button', { name: new RegExp(older.ticketNo) })).toHaveCount(0);
 		await page.keyboard.press('Escape');
 
 		await desk.selectTicket('food', todayDinner);

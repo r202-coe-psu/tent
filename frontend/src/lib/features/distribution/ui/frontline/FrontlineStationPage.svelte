@@ -7,7 +7,6 @@
 	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
 	import Layers from '@lucide/svelte/icons/layers';
 	import Loader from '@lucide/svelte/icons/loader';
-	import CheckCircle2 from '@lucide/svelte/icons/check-circle-2';
 	import RotateCcw from '@lucide/svelte/icons/rotate-ccw';
 	import AlertCircle from '@lucide/svelte/icons/alert-circle';
 	import RefreshCw from '@lucide/svelte/icons/refresh-cw';
@@ -22,19 +21,14 @@
 		useReceiveTicketAtDistributionPoint
 	} from '../../application/queries';
 	import { canPerformFrontlineDistribution } from '../../application/food-supplies/auth';
-	import {
-		getTicketStatusLabel,
-		getMealPeriodLabel,
-		compareByReconciliationProgress
-	} from '../model/ticket-status';
+	import { compareByReconciliationProgress } from '../model/ticket-status';
 	import Lock from '@lucide/svelte/icons/lock';
 	import { ticketServiceDay, type RequisitionTicket } from '../../domain/food-supplies';
 	import {
 		ALL_POINTS,
 		distributionPointOptions,
 		filterTicketsByPoint,
-		resolveDistributionPoint,
-		ticketOptionLabel
+		resolveDistributionPoint
 	} from '../model/distribution-point';
 	import { filterDeskTickets } from '../model/ticket-filters';
 	import {
@@ -60,6 +54,21 @@
 		serviceDayOptions
 	} from '../model/service-day';
 	import FoodDistributionCard from './FoodDistributionCard.svelte';
+	import InTransitTicketCard from './InTransitTicketCard.svelte';
+	import TicketPicker from './TicketPicker.svelte';
+	import {
+		CLOSE_OUT_GROUPS,
+		closeOutGroup,
+		resolveCloseOutGroup,
+		type CloseOutGroup
+	} from '../model/ticket-picker';
+	import {
+		formatUnit,
+		itemMasterUnit,
+		useItemMasters,
+		useUnitsOfMeasure
+	} from '$lib/features/catalog';
+	import { langState } from '$lib/states/i18n.svelte';
 	import DistributionHistory from '../common/DistributionHistory.svelte';
 	import SuppliesDistributionCard from './SuppliesDistributionCard.svelte';
 	import LoanReturnCard from './LoanReturnCard.svelte';
@@ -70,6 +79,7 @@
 	import * as Select from '$lib/components/ui/select/index.js';
 	import * as AlertDialog from '$lib/components/ui/alert-dialog/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
+	import { Label } from '$lib/components/ui/label/index.js';
 
 	import {
 		ONSITE_DISTRIBUTION_PATH,
@@ -110,6 +120,20 @@
 	});
 
 	const canFrontline = $derived(authContext ? canPerformFrontlineDistribution(authContext) : false);
+
+	// Receive-tab cards show allocated_qty in each item's base unit (#1183).
+	const itemMastersQuery = useItemMasters(() => currentShelterCode);
+	const unitsQuery = useUnitsOfMeasure();
+	const unitByItemId = $derived.by(() => {
+		const units = unitsQuery.data ?? [];
+		return new Map(
+			(itemMastersQuery.data ?? []).map((item) => {
+				const code = itemMasterUnit(item);
+				return [item._id, formatUnit(code, units, langState.current) || code];
+			})
+		);
+	});
+	const unitOf = (itemId: string) => unitByItemId.get(itemId) ?? '';
 
 	// The link (props) sets mode / tab / pool; user actions override them locally. The URL is then
 	// written whole from this state (`writeUrl`). The props follow the route's parse of
@@ -372,6 +396,7 @@
 	const reconciliationEligibleTickets = $derived(
 		filterTicketsByPoint(allReconciliationTickets, point)
 	);
+	const showPointFilter = $derived(pointOptions.length > 1 || point !== ALL_POINTS);
 
 	// Tickets that specifically need a direct frontline action right now: shift closed but
 	// returns not yet submitted, or warehouse already verified the return but the ticket still
@@ -383,6 +408,24 @@
 	);
 
 	let pickedReconciliationTicketId = $state<string>('');
+
+	// Close-out tickets are grouped (ต้องทำ / รอคลัง / เสร็จแล้ว); a ticket just closed or submitted
+	// pins the view to its new group.
+	let pickedCloseOutGroup = $state<CloseOutGroup | null>(null);
+	const closeOutGroupShown = $derived(
+		resolveCloseOutGroup(
+			pickedCloseOutGroup,
+			reconciliationEligibleTickets,
+			pickedReconciliationTicketId
+		)
+	);
+	const closeOutGroupTickets = $derived(
+		reconciliationEligibleTickets.filter((t) => closeOutGroup(t.status) === closeOutGroupShown)
+	);
+	function pinCloseOutTicket(ticket: RequisitionTicket) {
+		pickedCloseOutGroup = null;
+		pickedReconciliationTicketId = ticket._id;
+	}
 
 	const TAB_STYLE: Record<
 		StationTab,
@@ -440,14 +483,14 @@
 	// Falls back to the ticket open on the food tab, then the supplies tab, then the first one.
 	const selectedReconciliationTicketId = $derived(
 		[pickedReconciliationTicketId, activeFoodTicket?._id, activeSuppliesTicket?._id].find(
-			(id) => !!id && reconciliationEligibleTickets.some((t) => t._id === id)
+			(id) => !!id && closeOutGroupTickets.some((t) => t._id === id)
 		) ??
-			reconciliationEligibleTickets[0]?._id ??
+			closeOutGroupTickets[0]?._id ??
 			''
 	);
 
 	const activeReconciliationTicket = $derived(
-		reconciliationEligibleTickets.find((t) => t._id === selectedReconciliationTicketId) ?? null
+		closeOutGroupTickets.find((t) => t._id === selectedReconciliationTicketId) ?? null
 	);
 
 	// Mutation for receiving cargo (IN_TRANSIT -> DISTRIBUTING)
@@ -614,32 +657,6 @@
 		{/each}
 	</div>
 
-	<!-- Distribution point filter (food / supplies / close-out tabs) -->
-	{#if pointOptions.length > 0 && (activeTab === 'food' || activeTab === 'supplies' || activeTab === 'reconciliation')}
-		<div
-			class="flex flex-col gap-2 rounded-xl border border-slate-200/80 bg-white p-3 shadow-2xs sm:flex-row sm:items-center"
-		>
-			<label for="point-select" class="shrink-0 text-sm font-semibold text-slate-700">
-				จุดแจก:
-			</label>
-			<Select.Root type="single" bind:value={() => point, (v) => (pickedPoint = v)}>
-				<Select.Trigger
-					id="point-select"
-					aria-label="เลือกจุดแจก"
-					class="h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-slate-900 shadow-2xs sm:w-72"
-				>
-					<span class="truncate">{point === ALL_POINTS ? 'ทุกจุด' : point}</span>
-				</Select.Trigger>
-				<Select.Content>
-					<Select.Item value={ALL_POINTS} label="ทุกจุด" />
-					{#each pointOptions as option (option)}
-						<Select.Item value={option} label={option} />
-					{/each}
-				</Select.Content>
-			</Select.Root>
-		</div>
-	{/if}
-
 	<!-- Main Station Content Surface -->
 	{#if ticketsQuery.isPending && allTickets.length === 0}
 		<div
@@ -689,65 +706,15 @@
 					</p>
 				</div>
 			{:else}
-				<div class="space-y-3">
+				<div class="grid grid-cols-1 gap-4">
 					{#each inTransitTickets as ticket (ticket._id)}
-						{@const isReceiving = receivingTicketId === ticket._id}
-						<div
-							class="flex flex-col gap-3 rounded-xl border border-blue-200 bg-blue-50/40 p-4 shadow-2xs sm:flex-row sm:items-center sm:justify-between"
-						>
-							<div class="space-y-1">
-								<div class="flex items-center gap-2">
-									<span class="font-mono text-xs font-bold text-slate-800">{ticket.ticket_no}</span>
-									<span
-										class="rounded-full px-2 py-0.5 text-2xs font-bold {ticket.requisition_type ===
-										'food'
-											? 'border border-amber-200 bg-amber-50 text-amber-900'
-											: 'border border-indigo-200 bg-indigo-50 text-indigo-900'}"
-									>
-										{ticket.requisition_type === 'food' ? 'อาหารปรุงสำเร็จ' : 'พัสดุบรรเทาทุกข์'}
-									</span>
-									<span
-										class="rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-2xs font-bold text-blue-900"
-									>
-										กำลังนำส่ง
-									</span>
-								</div>
-
-								<div class="flex flex-wrap items-center gap-3 text-2xs text-slate-600">
-									<span>จุดปลายทาง: <strong>{ticket.destination_location}</strong></span>
-									{#if ticket.driver_name}
-										<span>คนขับ: {ticket.driver_name}</span>
-									{/if}
-									{#if ticket.license_plate}
-										<span>ทะเบียน: {ticket.license_plate}</span>
-									{/if}
-								</div>
-
-								<div class="text-2xs text-slate-500">
-									รายการ: {ticket.items
-										.map((i) => `${i.item_name} (${i.allocated_qty})`)
-										.join(', ')}
-								</div>
-							</div>
-
-							<div class="flex shrink-0 items-center gap-2">
-								<Button
-									type="button"
-									variant="default"
-									onclick={() => handleReceiveCargo(ticket)}
-									disabled={isReceiving || !canFrontline}
-									class="h-auto rounded-xl bg-emerald-600 px-4 py-2 text-xs font-bold hover:bg-emerald-700"
-								>
-									{#if isReceiving}
-										<Loader class="h-3.5 w-3.5 animate-spin" />
-										<span>กำลังตรวจรับ...</span>
-									{:else}
-										<CheckCircle2 class="h-3.5 w-3.5" />
-										<span>ตรวจรับเข้าจุดแจก</span>
-									{/if}
-								</Button>
-							</div>
-						</div>
+						<InTransitTicketCard
+							{ticket}
+							{unitOf}
+							receiving={receivingTicketId === ticket._id}
+							canReceive={canFrontline}
+							onReceive={handleReceiveCargo}
+						/>
 					{/each}
 				</div>
 			{/if}
@@ -755,6 +722,46 @@
 	{:else if activeTab === 'food'}
 		<!-- TAB 2: Food Handover Surface-->
 		<div class="space-y-4">
+			{#if showPointFilter || foodDayOptions.length > 2 || visibleFoodTickets.length > 1}
+				<div class="space-y-4 rounded-xl border border-slate-200/80 bg-white p-4 shadow-2xs">
+					{#if showPointFilter || foodDayOptions.length > 2}
+						<div class="grid grid-cols-1 gap-4 md:grid-cols-2">
+							{#if showPointFilter}
+								{@render pointSelect()}
+							{/if}
+							{#if foodDayOptions.length > 2}
+								<div class="space-y-2">
+									<p id="food-day-label" class="text-sm font-semibold text-slate-700">วันที่แจก</p>
+									<div class="flex flex-wrap gap-2" role="group" aria-labelledby="food-day-label">
+										{#each foodDayOptions as option (option.value)}
+											{@const isOn = option.value === foodDay}
+											<button
+												type="button"
+												aria-pressed={isOn}
+												onclick={() => (pickedFoodDay = option.value)}
+												class="h-12 rounded-lg border px-4 text-sm font-semibold transition-colors focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none {isOn
+													? 'border-sky-500 bg-sky-50 text-sky-900'
+													: 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'}"
+											>
+												{option.label}
+											</button>
+										{/each}
+									</div>
+								</div>
+							{/if}
+						</div>
+					{/if}
+					{#if visibleFoodTickets.length > 1}
+						<TicketPicker
+							id="food-ticket"
+							label="ตั๋วอาหาร"
+							tickets={visibleFoodTickets}
+							selectedId={selectedFoodTicketId}
+							onPick={pickTicket((v) => (pickedFoodTicketId = v))}
+						/>
+					{/if}
+				</div>
+			{/if}
 			{#if distributingFoodTickets.length === 0}
 				<div
 					class="flex flex-col items-center justify-center rounded-2xl border border-slate-200/80 bg-white p-12 text-center shadow-xs"
@@ -776,83 +783,30 @@
 						</Button>
 					{/if}
 				</div>
-			{:else}
-				<!-- Food Service Day + Ticket Selector Bar -->
-				{#if foodDayOptions.length > 2 || visibleFoodTickets.length > 1}
-					<div
-						class="flex flex-col gap-2 rounded-xl border border-slate-200/80 bg-white p-3 shadow-2xs sm:flex-row sm:items-center"
-					>
-						{#if foodDayOptions.length > 2}
-							<div class="flex flex-col gap-2 sm:shrink-0 sm:flex-row sm:items-center">
-								<label for="food-day-select" class="shrink-0 text-xs font-bold text-slate-700">
-									วันที่ให้บริการ:
-								</label>
-								<Select.Root type="single" bind:value={() => foodDay, (v) => (pickedFoodDay = v)}>
-									<Select.Trigger
-										id="food-day-select"
-										aria-label="เลือกวันที่ให้บริการ"
-										class="h-11 w-full rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-900 shadow-2xs focus-visible:ring-2 focus-visible:ring-amber-500 sm:h-9 sm:w-40"
-									>
-										<span class="truncate">
-											{foodDayOptions.find((o) => o.value === foodDay)?.label ?? 'ทุกวัน'}
-										</span>
-									</Select.Trigger>
-									<Select.Content>
-										{#each foodDayOptions as option (option.value)}
-											<Select.Item value={option.value} label={option.label} />
-										{/each}
-									</Select.Content>
-								</Select.Root>
-							</div>
-						{/if}
-						{#if visibleFoodTickets.length > 1}
-							<label for="food-ticket-select" class="shrink-0 text-xs font-bold text-slate-700">
-								เลือกตั๋วอาหารที่ใช้งาน:
-							</label>
-							<div class="min-w-0 flex-1">
-								<Select.Root
-									type="single"
-									bind:value={
-										() => selectedFoodTicketId, pickTicket((v) => (pickedFoodTicketId = v))
-									}
-								>
-									<Select.Trigger
-										id="food-ticket-select"
-										aria-label="เลือกตั๋วอาหารที่ใช้งาน"
-										class="h-11 w-full min-w-0 rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-900 shadow-2xs focus-visible:ring-2 focus-visible:ring-amber-500 sm:h-9"
-									>
-										<span class="truncate">
-											{#if activeFoodTicket}
-												{ticketOptionLabel(activeFoodTicket)}
-											{:else}
-												เลือกตั๋วอาหาร
-											{/if}
-										</span>
-									</Select.Trigger>
-									<Select.Content>
-										{#each visibleFoodTickets as t (t._id)}
-											<Select.Item value={t._id} label={ticketOptionLabel(t)} />
-										{/each}
-									</Select.Content>
-								</Select.Root>
-							</div>
-						{/if}
-					</div>
-				{/if}
-
-				{#if activeFoodTicket}
-					<FoodDistributionCard
-						ticket={activeFoodTicket}
-						shelterCode={currentShelterCode}
-						{drafts}
-					/>
-					<DistributionHistory ticket={activeFoodTicket} shelterCode={currentShelterCode} />
-				{/if}
+			{:else if activeFoodTicket}
+				<FoodDistributionCard ticket={activeFoodTicket} shelterCode={currentShelterCode} {drafts} />
+				<DistributionHistory ticket={activeFoodTicket} shelterCode={currentShelterCode} />
 			{/if}
 		</div>
 	{:else if activeTab === 'supplies'}
 		<!-- TAB 3: Supplies & Loans Surface -->
 		<div class="space-y-4">
+			{#if showPointFilter || distributingSuppliesTickets.length > 1}
+				<div class="space-y-4 rounded-xl border border-slate-200/80 bg-white p-4 shadow-2xs">
+					{#if showPointFilter}
+						<div class="md:max-w-sm">{@render pointSelect()}</div>
+					{/if}
+					{#if distributingSuppliesTickets.length > 1}
+						<TicketPicker
+							id="supplies-ticket"
+							label="ตั๋วพัสดุ"
+							tickets={distributingSuppliesTickets}
+							selectedId={selectedSuppliesTicketId}
+							onPick={pickTicket((v) => (pickedSuppliesTicketId = v))}
+						/>
+					{/if}
+				</div>
+			{/if}
 			{#if distributingSuppliesTickets.length === 0}
 				<div
 					class="flex flex-col items-center justify-center rounded-2xl border border-slate-200/80 bg-white p-12 text-center shadow-xs"
@@ -874,53 +828,13 @@
 						</Button>
 					{/if}
 				</div>
-			{:else}
-				<!-- Supplies Ticket Selector Bar -->
-				{#if distributingSuppliesTickets.length > 1}
-					<div
-						class="flex flex-col gap-2 rounded-xl border border-slate-200/80 bg-white p-3 shadow-2xs sm:flex-row sm:items-center"
-					>
-						<label for="supplies-ticket-select" class="shrink-0 text-xs font-bold text-slate-700">
-							เลือกตั๋วพัสดุที่ใช้งาน:
-						</label>
-						<div class="min-w-0 flex-1">
-							<Select.Root
-								type="single"
-								bind:value={
-									() => selectedSuppliesTicketId, pickTicket((v) => (pickedSuppliesTicketId = v))
-								}
-							>
-								<Select.Trigger
-									id="supplies-ticket-select"
-									aria-label="เลือกตั๋วพัสดุที่ใช้งาน"
-									class="h-11 w-full min-w-0 rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-900 shadow-2xs focus-visible:ring-2 focus-visible:ring-indigo-500 sm:h-9"
-								>
-									<span class="truncate">
-										{#if activeSuppliesTicket}
-											{ticketOptionLabel(activeSuppliesTicket)}
-										{:else}
-											เลือกตั๋วพัสดุ
-										{/if}
-									</span>
-								</Select.Trigger>
-								<Select.Content>
-									{#each distributingSuppliesTickets as t (t._id)}
-										<Select.Item value={t._id} label={ticketOptionLabel(t)} />
-									{/each}
-								</Select.Content>
-							</Select.Root>
-						</div>
-					</div>
-				{/if}
-
-				{#if activeSuppliesTicket}
-					<SuppliesDistributionCard
-						ticket={activeSuppliesTicket}
-						shelterCode={currentShelterCode}
-						{drafts}
-					/>
-					<DistributionHistory ticket={activeSuppliesTicket} shelterCode={currentShelterCode} />
-				{/if}
+			{:else if activeSuppliesTicket}
+				<SuppliesDistributionCard
+					ticket={activeSuppliesTicket}
+					shelterCode={currentShelterCode}
+					{drafts}
+				/>
+				<DistributionHistory ticket={activeSuppliesTicket} shelterCode={currentShelterCode} />
 			{/if}
 		</div>
 	{:else if activeTab === 'returns'}
@@ -938,6 +852,60 @@
 	{:else if activeTab === 'reconciliation'}
 		<!-- TAB 5: Shift Reconciliation & Close Surface -->
 		<div class="space-y-4">
+			{#if showPointFilter || reconciliationEligibleTickets.length > 1}
+				<div class="space-y-4 rounded-xl border border-slate-200/80 bg-white p-4 shadow-2xs">
+					{#if showPointFilter}
+						<div class="md:max-w-sm">{@render pointSelect()}</div>
+					{/if}
+					{#if reconciliationEligibleTickets.length > 1}
+						<div class="space-y-2">
+							<p id="close-out-group-label" class="text-sm font-semibold text-slate-700">
+								สถานะตั๋ว
+							</p>
+							<div
+								class="grid grid-cols-3 gap-2"
+								role="group"
+								aria-labelledby="close-out-group-label"
+							>
+								{#each CLOSE_OUT_GROUPS as group (group.id)}
+									{@const count = reconciliationEligibleTickets.filter(
+										(t) => closeOutGroup(t.status) === group.id
+									).length}
+									{@const isOn = group.id === closeOutGroupShown}
+									<button
+										type="button"
+										aria-pressed={isOn}
+										disabled={count === 0}
+										onclick={() => {
+											pickedCloseOutGroup = group.id;
+											pickedReconciliationTicketId = '';
+										}}
+										class="flex min-h-12 flex-col items-center justify-center rounded-lg border px-2 py-1.5 text-sm font-semibold transition-colors focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50 sm:flex-row sm:gap-1.5 {isOn
+											? 'border-sky-500 bg-sky-50 text-sky-900'
+											: 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'}"
+									>
+										<span>{group.label}</span>
+										<span class="tabular-nums">({count})</span>
+									</button>
+								{/each}
+							</div>
+						</div>
+						{#if closeOutGroupTickets.length > 1}
+							<TicketPicker
+								id="reconciliation-ticket"
+								label="ตั๋ว"
+								tickets={closeOutGroupTickets}
+								selectedId={selectedReconciliationTicketId}
+								onPick={pickTicket((v) => (pickedReconciliationTicketId = v))}
+							>
+								{#snippet badges(t)}
+									<TicketStatusBadge status={t.status} class="shrink-0" />
+								{/snippet}
+							</TicketPicker>
+						{/if}
+					{/if}
+				</div>
+			{/if}
 			{#if reconciliationEligibleTickets.length === 0}
 				<div
 					class="flex flex-col items-center justify-center rounded-2xl border border-slate-200/80 bg-white p-12 text-center shadow-xs"
@@ -951,94 +919,14 @@
 					</p>
 				</div>
 			{:else}
-				<!-- Reconciliation Ticket Selector Bar -->
-				{#if reconciliationEligibleTickets.length > 1}
-					<div
-						class="flex flex-col items-stretch gap-2 rounded-xl border border-slate-200/80 bg-white p-3 shadow-2xs sm:flex-row sm:items-center"
-					>
-						<label
-							for="reconciliation-ticket-select"
-							class="shrink-0 text-xs font-bold text-slate-700"
-						>
-							เลือกตั๋วที่ต้องการปิดรอบ / กระทบยอด:
-						</label>
-						<div class="min-w-0 flex-1">
-							<Select.Root
-								type="single"
-								bind:value={
-									() => selectedReconciliationTicketId,
-									pickTicket((v) => (pickedReconciliationTicketId = v))
-								}
-							>
-								<Select.Trigger
-									id="reconciliation-ticket-select"
-									aria-label="เลือกตั๋วที่ต้องการปิดรอบหรือกระทบยอด"
-									class="h-9 w-full min-w-0 rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-900 shadow-2xs focus-visible:ring-2 focus-visible:ring-teal-500"
-								>
-									{#if activeReconciliationTicket}
-										<span class="flex min-w-0 flex-1 items-center gap-2">
-											<TicketStatusBadge
-												status={activeReconciliationTicket.status}
-												class="shrink-0"
-											/>
-											<span class="truncate">
-												{ticketOptionLabel(activeReconciliationTicket)}
-											</span>
-										</span>
-									{:else}
-										<span class="truncate">เลือกตั๋วเพื่อกระทบยอด</span>
-									{/if}
-								</Select.Trigger>
-								<!--
-									Viewport height is pinned to exactly 4 ticket rows so the dropdown never grows
-									unbounded with many tickets: each row is forced to min-h-14 (56px, via the
-									Select.Item class below) since both text lines are truncated to a single line,
-									so 4 rows is deterministic: 4 × 56px row height + 12px viewport p-1.5 padding
-									(6px top + 6px bottom) = 236px.
-								-->
-								<Select.Content viewportClass="max-h-[236px]">
-									{#each reconciliationEligibleTickets as t (t._id)}
-										<Select.Item
-											value={t._id}
-											label={`[${getTicketStatusLabel(t.status)}] ${ticketOptionLabel(t)}`}
-											class="min-h-14"
-										>
-											<div class="flex w-full min-w-0 flex-col gap-0.5 text-left">
-												<span class="flex items-center justify-between gap-2">
-													<span class="flex min-w-0 items-center gap-1.5">
-														<span class="truncate font-mono text-xs font-bold text-slate-900"
-															>{t.ticket_no}</span
-														>
-														<span
-															class="shrink-0 rounded-full border border-slate-200 bg-slate-50 px-1.5 text-2xs font-bold text-slate-600"
-														>
-															{t.requisition_type === 'food' ? 'อาหาร' : 'สิ่งของ'}
-														</span>
-													</span>
-													<TicketStatusBadge status={t.status} class="shrink-0" />
-												</span>
-												<span class="truncate text-xs text-slate-500">
-													{t.meal
-														? `มื้อ${getMealPeriodLabel(t.meal)} · `
-														: ''}{t.destination_location} ·
-													{t.items.map((i) => i.item_name).join(', ')}
-												</span>
-											</div>
-										</Select.Item>
-									{/each}
-								</Select.Content>
-							</Select.Root>
-						</div>
-					</div>
-				{/if}
-
 				<!-- Pin the acted-on ticket: the fallback selection follows the food/supplies tabs and
 					 would swap the card to another ticket once this one leaves DISTRIBUTING. -->
 				<ShiftReconciliationCard
 					ticket={activeReconciliationTicket}
 					shelterCode={currentShelterCode}
-					onShiftClosed={(t) => (pickedReconciliationTicketId = t._id)}
-					onReturnsSubmitted={(t) => (pickedReconciliationTicketId = t._id)}
+					{unitOf}
+					onShiftClosed={pinCloseOutTicket}
+					onReturnsSubmitted={pinCloseOutTicket}
 					{drafts}
 				/>
 			{/if}
@@ -1067,3 +955,23 @@
 		</AlertDialog.Content>
 	</AlertDialog.Root>
 </div>
+
+{#snippet pointSelect()}
+	<div class="space-y-2">
+		<Label for="point-select" class="text-sm font-semibold text-slate-700">จุดแจก</Label>
+		<Select.Root type="single" bind:value={() => point, (v) => (pickedPoint = v)}>
+			<Select.Trigger
+				id="point-select"
+				class="h-12 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-slate-900 shadow-2xs"
+			>
+				<span class="truncate">{point === ALL_POINTS ? 'ทุกจุด' : point}</span>
+			</Select.Trigger>
+			<Select.Content>
+				<Select.Item value={ALL_POINTS} label="ทุกจุด" />
+				{#each pointOptions as option (option)}
+					<Select.Item value={option} label={option} />
+				{/each}
+			</Select.Content>
+		</Select.Root>
+	</div>
+{/snippet}
