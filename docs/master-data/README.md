@@ -2,7 +2,7 @@
 title: Smart Shelter — Master Data Seed SSoT
 status: draft
 created: 2026-09-17
-updated: 2026-10-27
+updated: 2026-11-08
 language: th
 ---
 
@@ -105,13 +105,13 @@ Global seed ใช้ `enforceOneDefault()` เพื่อให้แต่ล
 
 #### `housing_type` — ประเภทที่อยู่อาศัย
 
-| code             | label_th                          | label_en | default |
-| ---------------- | --------------------------------- | -------- | ------- |
-| `owned_house`    | บ้านตนเอง                         | Owned house | **ใช่** |
-| `rented_house`   | บ้านเช่า                          | Rented house | —       |
-| `condo`          | คอนโดมิเนียม                      | Condominium | —       |
-| `apartment_dorm` | อะพาร์ตเมนต์/หอพัก                | Apartment / dormitory | —       |
-| `homeless`       | ไร้ที่อยู่อาศัย / ไม่มีบ้านเลขที่ | Homeless / no house number | —       |
+| code             | label_th                                                           | label_en                                              | default |
+| ---------------- | ------------------------------------------------------------------ | ----------------------------------------------------- | ------- |
+| `owned_house`    | บ้านตนเอง                                                          | Owned house                                           | **ใช่** |
+| `rented_house`   | บ้านเช่า                                                           | Rented house                                          | —       |
+| `condo`          | คอนโดมิเนียม                                                       | Condominium                                           | —       |
+| `apartment_dorm` | อะพาร์ตเมนต์/หอพัก                                                 | Apartment / dormitory                                 | —       |
+| `homeless`       | ไร้ที่อยู่อาศัยเป็นหลักแหล่ง (ไม่มีบ้านเลขที่หรือที่อยู่ที่แน่ชัด) | No fixed residence (no house number or fixed address) | —       |
 
 #### `shelter_type` — ประเภทอาคาร
 
