@@ -16,6 +16,7 @@ import { authStore } from '$lib/stores/auth.svelte';
 import {
 	isSystemAdmin,
 	isShelterManager,
+	isDonationStaff,
 	isWarehouseStaff,
 	shelterCodeFromRoles
 } from '$lib/auth/roles';
@@ -105,8 +106,9 @@ function enforceWriteAccess(shelterCode?: string | null) {
 	if (shelterCode) {
 		const isManager = isShelterManager(roles);
 		const isWS = isWarehouseStaff(roles);
+		const isDON = isDonationStaff(roles);
 		const userShelterCode = shelterCodeFromRoles(roles);
-		if ((isManager || isWS) && userShelterCode === shelterCode) {
+		if ((isManager || isWS || isDON) && userShelterCode === shelterCode) {
 			return;
 		}
 	}

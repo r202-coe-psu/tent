@@ -37,9 +37,13 @@ import {
 	confineKioskStaffOnly,
 	resolvePostLoginDestination,
 	requireDistributionDesk,
+	requireDonationAccess,
+	requireSupplyView,
+	requireTicketAccess,
 	requireBannerManagement,
 	requireKioskManagement,
 	requireMedicalScreening,
+	requirePrinterManagement,
 	requireShelterReadiness,
 	requireVolunteerBackoffice,
 	requireWarehouseAccess,
@@ -258,6 +262,46 @@ describe('requireDistributionDesk (Station 4 route guard)', () => {
 	});
 });
 
+describe('donation_staff page guards (CR-227)', () => {
+	const don = ['shelter:SH001', 'SH001:donation_staff'];
+
+	beforeEach(() => {
+		mocks.user = { roles: [] };
+		mocks.selectedShelterCode = null;
+	});
+
+	it('requireDonationAccess and requireSupplyView admit donation_staff and the warehouse side', async () => {
+		for (const guard of [requireDonationAccess, requireSupplyView]) {
+			expect(await passes(guard, don)).toBe(true);
+			expect(await passes(guard, ['system_admin'])).toBe(true);
+			for (const cap of ['shelter_manager', 'warehouse_staff', 'supply_coordinator']) {
+				expect(await passes(guard, ['shelter:SH001', `SH001:${cap}`])).toBe(true);
+			}
+		}
+	});
+
+	it('refuses donation_staff of another shelter and unrelated staff', async () => {
+		for (const guard of [requireDonationAccess, requireSupplyView]) {
+			expect(await passes(guard, don, 'SH002')).toBe(false);
+			for (const cap of ['registration_staff', 'kitchen_staff', 'distribution_staff']) {
+				expect(await passes(guard, ['shelter:SH001', `SH001:${cap}`])).toBe(false);
+			}
+		}
+	});
+
+	it('keeps the distribution, ticket and desk pages closed to donation_staff', async () => {
+		expect(await passes(requireWarehouseAccess, don)).toBe(false);
+		expect(await passes(requireTicketAccess, don)).toBe(false);
+		expect(await passes(requireDistributionDesk, don)).toBe(false);
+	});
+
+	it('redirects an unauthenticated visitor to login', async () => {
+		mocks.user = null;
+		await expect(requireDonationAccess()).rejects.toMatchObject({ status: 302 });
+		await expect(requireSupplyView()).rejects.toMatchObject({ status: 302 });
+	});
+});
+
 describe('requireWarehouseAccess desk fallback (bulk pool links)', () => {
 	const deskFallback: DeskFallbackHref = '/onsite/distribution?mode=supplies&tab=returns&pool=p1';
 
@@ -422,6 +466,26 @@ describe('confineKioskStaffOnly (back-office layout, FR-SBO-29)', () => {
 	});
 });
 
+describe('requirePrinterManagement (/back-office/printers, O-3)', () => {
+	beforeEach(() => {
+		mocks.user = { roles: [] };
+		mocks.selectedShelterCode = null;
+	});
+
+	it('admits SA and the shelter_manager of the selected shelter', async () => {
+		expect(await passes(requirePrinterManagement, ['system_admin'], null)).toBe(true);
+		expect(await passes(requirePrinterManagement, ['shelter:SH001', 'SH001:shelter_manager'])).toBe(
+			true
+		);
+	});
+
+	it('redirects kiosk_staff and other staff roles', async () => {
+		for (const cap of ['kiosk_staff', 'registration_staff']) {
+			expect(await passes(requirePrinterManagement, ['shelter:SH001', `SH001:${cap}`])).toBe(false);
+		}
+	});
+});
+
 describe('requireShelterReadiness (/back-office/shelters/readiness/[id], #478)', () => {
 	const guardFor = (code: string) => () => requireShelterReadiness(code);
 
@@ -446,7 +510,13 @@ describe('requireShelterReadiness (/back-office/shelters/readiness/[id], #478)',
 	});
 
 	it('redirects other staff roles and a bare shelter scope', async () => {
-		for (const cap of ['registration_staff', 'warehouse_staff', 'facility_staff']) {
+		for (const cap of [
+			'registration_staff',
+			'supply_coordinator',
+			'warehouse_staff',
+			'donation_staff',
+			'facility_staff'
+		]) {
 			expect(await passes(guardFor('SH001'), ['shelter:SH001', `SH001:${cap}`])).toBe(false);
 		}
 		expect(await passes(guardFor('SH001'), ['shelter:SH001'])).toBe(false);

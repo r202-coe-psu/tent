@@ -129,6 +129,14 @@ const ROLE_ACCESS: RoleAccess[] = [
 		forbidden: ['/back-office/kitchen']
 	},
 	{
+		// CR-227 (#1121): runs the donation intake and sees stock read-only. Distribution, tickets
+		// and transfer stay closed to it (the warehouse side keeps them).
+		role: 'donation_staff',
+		portalDepartments: ['supply'],
+		allowed: ['/back-office/supply', '/back-office/stock-donations'],
+		forbidden: ['/back-office/distribution', '/back-office/tickets/kitchen', '/back-office/kitchen']
+	},
+	{
 		role: 'distribution_staff',
 		portalDepartments: ['supply'],
 		allowed: ['/onsite/distribution'],

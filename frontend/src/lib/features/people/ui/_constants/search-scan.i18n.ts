@@ -13,12 +13,12 @@ const th = {
 		codePlaceholder: 'กรอกรหัส หรือ สแกน QR...',
 		submit: 'ตกลง',
 		noStatus: 'ไม่มีข้อมูลสถานะ',
-		familyTitle: 'จัดการเช็คอิน/เช็คเอาท์พร้อมกับครอบครัว',
+		familyTitle: 'จัดการเช็คอิน/เช็คเอาต์พร้อมกับครอบครัว',
 		selectAll: 'เลือกทั้งหมด',
 		scannedMember: 'คนที่สแกน',
 		memberNeedsIntake: 'ยังไม่ผ่านจุดคัดกรอง/จัดโซน — ส่งไปสถานี 2–3',
 		profile: 'โปรไฟล์',
-		checkOut: 'เช็คเอาท์',
+		checkOut: 'เช็คเอาต์',
 		checkIn: 'เช็คอิน',
 		needsIntake: 'ยังไม่ผ่านจุดคัดกรอง/จัดโซน — ส่งไปสถานี 1–3 ก่อนเช็คอิน',
 		cannotChange: 'ไม่สามารถเปลี่ยนสถานะนี้ได้',
@@ -31,16 +31,16 @@ const th = {
 		zoneCodePlaceholder: 'เช่น Z1',
 		cancel: 'ยกเลิก',
 		confirmCheckIn: 'ยืนยันเช็คอิน',
-		checkoutDialogTitle: 'เหตุผลการเช็คเอาท์',
+		checkoutDialogTitle: 'เหตุผลการเช็คเอาต์',
 		checkoutDialogDescription: 'ระบุเหตุผลหรือหมายเหตุ (บังคับ) เช่น ออกไปธุระนอกพื้นที่',
-		checkoutReasonLabel: 'เหตุผลการเช็คเอาท์',
-		confirmCheckOut: 'ยืนยันเช็คเอาท์',
+		checkoutReasonLabel: 'เหตุผลการเช็คเอาต์',
+		confirmCheckOut: 'ยืนยันเช็คเอาต์',
 		toast: {
 			notFoundMessage: (code: string, shelter: string) =>
 				`ไม่พบข้อมูลผู้ประสบภัยจากรหัส/ชื่อ "${code}" ในศูนย์ ${shelter}`,
 			notFound: (shelter: string) =>
 				`ไม่พบรหัสนี้ในศูนย์ ${shelter} — โปรดตรวจสอบศูนย์ที่เลือกด้านบน`,
-			unassignedMessage: 'พบคิวลงทะเบียนล่วงหน้า (คิวกลาง) — รับเข้าศูนย์ก่อนเช็คอิน/เอาท์',
+			unassignedMessage: 'พบคิวลงทะเบียนล่วงหน้า (คิวกลาง) — รับเข้าศูนย์ก่อนเช็คอิน/เอาต์',
 			unassigned: 'พบคิวลงทะเบียนล่วงหน้า (คิวกลาง)',
 			foundMessage: 'พบข้อมูลผู้ประสบภัย',
 			found: (name: string) => `พบข้อมูล ${name}`,
@@ -51,15 +51,15 @@ const th = {
 			checkInPartial: (ok: number, failed: number) =>
 				`เช็คอินสำเร็จ ${ok} คน, ล้มเหลว ${failed} คน`,
 			checkInFailed: 'เช็คอินไม่สำเร็จ',
-			checkOutSuccess: (n: number) => `เช็คเอาท์สำเร็จ ${n} คน`,
+			checkOutSuccess: (n: number) => `เช็คเอาต์สำเร็จ ${n} คน`,
 			checkOutPartial: (ok: number, failed: number) =>
-				`เช็คเอาท์สำเร็จ ${ok} คน, ล้มเหลว ${failed} คน`,
-			checkOutFailed: 'เช็คเอาท์ไม่สำเร็จ',
-			checkoutReasonRequired: 'การเช็คเอาท์ต้องระบุเหตุผลหรือหมายเหตุ'
+				`เช็คเอาต์สำเร็จ ${ok} คน, ล้มเหลว ${failed} คน`,
+			checkOutFailed: 'เช็คเอาต์ไม่สำเร็จ',
+			checkoutReasonRequired: 'การเช็คเอาต์ต้องระบุเหตุผลหรือหมายเหตุ'
 		}
 	},
 	scanSearchModal: {
-		title: 'ค้นหาผู้พักพิงเพื่อเช็คอิน / เช็คเอาท์',
+		title: 'ค้นหาผู้พักพิงเพื่อเช็คอิน / เช็คเอาต์',
 		placeholder: 'พิมพ์ชื่อ นามสกุล หรือหมายเลขโทรศัพท์...',
 		searching: 'กำลังสืบค้น...',
 		noMatch: 'ไม่พบรายชื่อที่ตรงกับคำค้นหา',
@@ -75,7 +75,7 @@ const th = {
 			room_confirmed: 'ยืนยันถึงโซน',
 			temporary_leave: 'ออกชั่วคราว',
 			transferred: 'ย้ายศูนย์',
-			checked_out: 'เช็คเอาท์',
+			checked_out: 'เช็คเอาต์',
 			deceased: 'เสียชีวิต',
 			cancelled: 'ยกเลิก'
 		}

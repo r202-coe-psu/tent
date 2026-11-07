@@ -28,6 +28,7 @@ describe('coordinator grantable roles', () => {
 	it('allows every staff role except volunteer_coordinator and kiosk_staff (#1044)', () => {
 		expect([...COORDINATOR_GRANTABLE_CAPABILITIES].sort()).toEqual([
 			'distribution_staff',
+			'donation_staff',
 			'facility_staff',
 			'kitchen_staff',
 			'medical_staff',

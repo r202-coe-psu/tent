@@ -99,7 +99,7 @@ describe('ScanSearchModal', () => {
 	it('keeps the Thai labels when the staff language is TH', async () => {
 		await openModal('th', [anna]);
 		const initial = document.body.textContent ?? '';
-		expect(initial).toContain('ค้นหาผู้พักพิงเพื่อเช็คอิน / เช็คเอาท์');
+		expect(initial).toContain('ค้นหาผู้พักพิงเพื่อเช็คอิน / เช็คเอาต์');
 		expect(document.body.querySelector('input')?.placeholder).toBe(
 			'พิมพ์ชื่อ นามสกุล หรือหมายเลขโทรศัพท์...'
 		);

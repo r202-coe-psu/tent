@@ -356,7 +356,8 @@ async function deployCatalogMangoIndexes(db: string): Promise<void> {
 
 function buildUnitOfMeasureSeedDoc(
 	def: FallbackUnitDef,
-	existing?: Record<string, unknown>
+	existing?: Record<string, unknown>,
+	resetSortOrder = false
 ): Record<string, unknown> {
 	const docId = `unit_of_measure:${def.code}`;
 
@@ -399,7 +400,11 @@ function buildUnitOfMeasureSeedDoc(
 				: {}),
 		dimension: def.dimension,
 		is_protected: true,
-		sort_order: typeof existing.sort_order === 'number' ? existing.sort_order : def.sort_order,
+		// CR-125 A1 (FR-A1-4): keep an admin-arranged order unless the catalog has a collision.
+		sort_order:
+			!resetSortOrder && typeof existing.sort_order === 'number'
+				? existing.sort_order
+				: def.sort_order,
 		deactivated: typeof existing.deactivated === 'boolean' ? existing.deactivated : false,
 		updated_at: now()
 	};
@@ -456,9 +461,47 @@ function validateExistingUnitOfMeasure(
 	return data;
 }
 
+/**
+ * CR-125 A1 (FR-A1-4): true when `sort_order` repeats across the catalog's UOM docs once the
+ * docs this seed is about to create are counted. Custom (non-protected) units take part in
+ * the check; only protected units are ever rewritten.
+ */
+async function hasUnitSortOrderCollision(): Promise<boolean> {
+	const startkey = encodeURIComponent(JSON.stringify('unit_of_measure:'));
+	const endkey = encodeURIComponent(JSON.stringify('unit_of_measure:\ufff0'));
+	const { status, data } = await couchReq(
+		'GET',
+		`/catalog/_all_docs?startkey=${startkey}&endkey=${endkey}&include_docs=true`
+	);
+	if (status !== 200) {
+		throw new Error(`GET unit_of_measure list → catalog failed (HTTP ${status})`);
+	}
+	const rows = isRecord(data) && Array.isArray(data.rows) ? data.rows : [];
+	const orders = new Map<string, number>();
+	for (const row of rows) {
+		const doc = isRecord(row) && isRecord(row.doc) ? row.doc : undefined;
+		if (!doc || typeof doc._id !== 'string' || doc._deleted === true) continue;
+		const def = FALLBACK_UNIT_DEFINITIONS.find(
+			(unit) => `unit_of_measure:${unit.code}` === doc._id
+		);
+		// Same fallback buildUnitOfMeasureSeedDoc applies to a protected doc without sort_order.
+		const order = typeof doc.sort_order === 'number' ? doc.sort_order : def?.sort_order;
+		if (typeof order === 'number') orders.set(doc._id, order);
+	}
+	for (const def of FALLBACK_UNIT_DEFINITIONS) {
+		const docId = `unit_of_measure:${def.code}`;
+		if (!orders.has(docId) && typeof def.sort_order === 'number') {
+			orders.set(docId, def.sort_order);
+		}
+	}
+	const values = [...orders.values()];
+	return new Set(values).size !== values.length;
+}
+
 export async function seedCatalogUnitOfMeasures(): Promise<number> {
 	let seededCount = 0;
 	const maxAttempts = 3;
+	const resetSortOrder = await hasUnitSortOrderCollision();
 
 	for (const def of FALLBACK_UNIT_DEFINITIONS) {
 		const docId = `unit_of_measure:${def.code}`;
@@ -472,7 +515,7 @@ export async function seedCatalogUnitOfMeasures(): Promise<number> {
 			}
 
 			const existing = status === 200 ? validateExistingUnitOfMeasure(def, docId, data) : undefined;
-			const next = buildUnitOfMeasureSeedDoc(def, existing);
+			const next = buildUnitOfMeasureSeedDoc(def, existing, resetSortOrder);
 			const put = await couchReq('PUT', `/catalog/${encodeURIComponent(docId)}`, next);
 
 			if (put.status >= 200 && put.status < 300) {
@@ -534,7 +577,18 @@ export async function seedCatalog(): Promise<Map<string, string>> {
     var hasScope = userCtx.roles.indexOf('shelter:' + newDoc.shelter_code) !== -1;
     var isManager = userCtx.roles.indexOf('shelter_manager') !== -1;
     var isWS = userCtx.roles.indexOf('warehouse_staff') !== -1;
-    if (hasScope && (isManager || isWS)) {
+    // CR-227: donation_staff writes its own shelter's catalog docs (compound role only).
+    var isDonationStaff = userCtx.roles.indexOf(newDoc.shelter_code + ':donation_staff') !== -1;
+    if (hasScope && (isManager || isWS || isDonationStaff)) {
+      // CR-227 R4: donation_staff only creates/edits item_master here and never merges (merge stays SM/WS).
+      if (!isManager && !isWS) {
+        if (newDoc.type !== 'item_master' || (oldDoc && oldDoc.type !== 'item_master')) {
+          throw({ forbidden: 'donation_staff can only write item_master in catalog' });
+        }
+        if (newDoc.merged_into && !(oldDoc && oldDoc.merged_into === newDoc.merged_into)) {
+          throw({ forbidden: 'Only warehouse staff, shelter manager, or system admin can merge items' });
+        }
+      }
       return;
     }
   }

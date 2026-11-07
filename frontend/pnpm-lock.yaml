@@ -197,6 +197,12 @@ importers:
 
   .:
     dependencies:
+      '@fontsource/ibm-plex-sans-thai':
+        specifier: ^5.3.0
+        version: 5.3.0
+      '@fontsource/ibm-plex-sans-thai-looped':
+        specifier: ^5.3.0
+        version: 5.3.0
       '@google-cloud/recaptcha-enterprise':
         specifier: ^7.2.0
         version: 7.2.0(supports-color@10.2.2)
@@ -671,6 +677,12 @@ packages:
 
   '@floating-ui/utils@0.2.11':
     resolution: {integrity: sha512-RiB/yIh78pcIxl6lLMG0CgBXAZ2Y0eVHqMPYugu+9U0AeT6YBeiJpf7lbdJNIugFP5SIjwNRgo4DhR1Qxi26Gg==}
+
+  '@fontsource/ibm-plex-sans-thai-looped@5.3.0':
+    resolution: {integrity: sha512-5NNySQuBNRMk44sUwQypp971+2Fn1LJ9HAEZg9J76+7803j/aCS9HHH7FNvpq6mJDqzTrTrv+VSNsODgCAhxQQ==}
+
+  '@fontsource/ibm-plex-sans-thai@5.3.0':
+    resolution: {integrity: sha512-olXzgcA/CTk0PibqGMJrheml3/z8N9VzNLcHkzv9tCoBqnaMoxYYwZp4PZrDkPuOCUe1gW942e9f5fGOOlr3zg==}
 
   '@google-cloud/recaptcha-enterprise@7.2.0':
     resolution: {integrity: sha512-hovCLtW7DJYq2WkTVXumY8o9paFH1scHGYpsI0UIkVh+O9qdl570Gm294rMfaZHv/gOQPZS+anUunFSXkhYH2g==}
@@ -4085,6 +4097,10 @@ snapshots:
       '@floating-ui/utils': 0.2.11
 
   '@floating-ui/utils@0.2.11': {}
+
+  '@fontsource/ibm-plex-sans-thai-looped@5.3.0': {}
+
+  '@fontsource/ibm-plex-sans-thai@5.3.0': {}
 
   '@google-cloud/recaptcha-enterprise@7.2.0(supports-color@10.2.2)':
     dependencies:

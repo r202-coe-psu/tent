@@ -7,7 +7,7 @@ const th = {
 		cancel: 'ยกเลิก',
 		confirm: 'ยืนยัน',
 		saving: 'กำลังบันทึก...',
-		checkedOutReasonRequired: 'การเช็คเอาท์ต้องระบุเหตุผลหรือหมายเหตุ',
+		checkedOutReasonRequired: 'การเช็คเอาต์ต้องระบุเหตุผลหรือหมายเหตุ',
 		leaveReasonRequired: 'การออกชั่วคราวต้องระบุเหตุผล'
 	},
 	zone: {

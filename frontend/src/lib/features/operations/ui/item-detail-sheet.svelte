@@ -26,6 +26,7 @@
 		shelterCode,
 		offline = false,
 		canDistribute = true,
+		canChange = true,
 		onaction
 	}: {
 		open?: boolean;
@@ -39,10 +40,18 @@
 		offline?: boolean;
 		/** False when user lacks warehouse_staff capability in the active shelter. */
 		canDistribute?: boolean;
+		/** False for a read-only viewer (donation_staff, CR-227): no receive / issue / adjust buttons. */
+		canChange?: boolean;
 		onaction: (kind: ItemDetailAction) => void;
 	} = $props();
 
 	const storagePoints = useStoragePoints(() => shelterCode);
+	const LOT_EXPIRY_CLASS = {
+		expired: 'text-red-700',
+		expiring: 'text-amber-700',
+		ok: 'text-slate-500'
+	};
+
 	const lotRows = $derived(buildLotRows(lots, storagePoints.points, Date.now(), itemsById));
 
 	const ACTIONS = [
@@ -103,32 +112,34 @@
 					</div>
 				</dl>
 
-				<div class="grid grid-cols-3 gap-2">
-					{#each ACTIONS as action (action.kind)}
-						{@const isDis = offline || (action.kind === 'distribute' && !canDistribute)}
-						{@const btnTitle = offline
-							? OFFLINE_HINT
-							: action.kind === 'distribute' && !canDistribute
-								? DISTRIBUTE_FORBIDDEN_HINT
-								: undefined}
-						<DisabledReason reason={isDis ? btnTitle : undefined}>
-							<Button
-								type="button"
-								variant={action.kind === 'receive' ? 'default' : 'outline'}
-								aria-label="{action.label} {row.name}"
-								class="min-h-11 gap-1.5 rounded-lg px-2 text-sm font-semibold {action.kind ===
-								'receive'
-									? 'bg-[#0A2647] text-white hover:bg-[#051930]'
-									: 'border-slate-300 bg-white text-slate-800 shadow-2xs'}"
-								disabled={isDis}
-								onclick={() => onaction(action.kind)}
-							>
-								<action.icon class="h-4 w-4" aria-hidden="true" />
-								{action.label}
-							</Button>
-						</DisabledReason>
-					{/each}
-				</div>
+				{#if canChange}
+					<div class="grid grid-cols-3 gap-2">
+						{#each ACTIONS as action (action.kind)}
+							{@const isDis = offline || (action.kind === 'distribute' && !canDistribute)}
+							{@const btnTitle = offline
+								? OFFLINE_HINT
+								: action.kind === 'distribute' && !canDistribute
+									? DISTRIBUTE_FORBIDDEN_HINT
+									: undefined}
+							<DisabledReason reason={isDis ? btnTitle : undefined}>
+								<Button
+									type="button"
+									variant={action.kind === 'receive' ? 'default' : 'outline'}
+									aria-label="{action.label} {row.name}"
+									class="min-h-11 gap-1.5 rounded-lg px-2 text-sm font-semibold {action.kind ===
+									'receive'
+										? 'bg-[#0A2647] text-white hover:bg-[#051930]'
+										: 'border-slate-300 bg-white text-slate-800 shadow-2xs'}"
+									disabled={isDis}
+									onclick={() => onaction(action.kind)}
+								>
+									<action.icon class="h-4 w-4" aria-hidden="true" />
+									{action.label}
+								</Button>
+							</DisabledReason>
+						{/each}
+					</div>
+				{/if}
 			</Sheet.Header>
 
 			{#key row._id}
@@ -170,11 +181,18 @@
 													>
 														เบิกถัดไป
 													</span>
-												{:else if lot.isExpired}
+												{:else if lot.isExpired || lot.expiryState === 'expired'}
 													<span
 														class="rounded-full bg-red-50 px-2.5 py-1 text-xs font-semibold text-red-800 ring-1 ring-red-200"
 													>
 														หมดอายุ — ปรับยอดออก
+													</span>
+												{/if}
+												{#if lot.expiryState === 'expiring' && !lot.isNegative}
+													<span
+														class="rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-800 ring-1 ring-amber-200"
+													>
+														ใกล้หมดอายุ
 													</span>
 												{/if}
 											</div>
@@ -184,7 +202,12 @@
 													>{:else}<span class="text-slate-500">ไม่มีเลขล็อต</span>{/if}
 												<span class="text-slate-400" aria-hidden="true">·</span>
 												{#if lot.expiry}หมดอายุ <span class="tabular-nums">{lot.expiry}</span
-													>{:else}
+													>{#if lot.expiryRelative}
+														<span
+															class="text-xs font-medium {LOT_EXPIRY_CLASS[
+																lot.expiryState ?? 'ok'
+															]}">({lot.expiryRelative})</span
+														>{/if}{:else}
 													<span class="text-slate-500">ไม่ระบุวันหมดอายุ</span>
 												{/if}
 												{#if lot.storageName}

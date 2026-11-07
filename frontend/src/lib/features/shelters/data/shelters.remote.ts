@@ -34,6 +34,7 @@ function masterToBasic(master: ShelterMaster): ShelterBasic {
 function masterToSummary(master: ShelterMaster): ShelterSummary {
 	return {
 		code: master.code,
+		_rev: master._rev,
 		name: master.name,
 		site_kind: master.site_kind ?? DEFAULT_SITE_KIND,
 		db: shelterDbName(master.code),
