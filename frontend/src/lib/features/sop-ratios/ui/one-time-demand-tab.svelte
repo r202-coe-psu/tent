@@ -260,19 +260,24 @@
 						: `${rows.length - shortCount} รายการพอแล้ว`}
 			</span>
 		{:else if list.length > 0}
-			<span class="hidden w-full flex-col text-xs text-slate-500 xl:flex">
+			<span class="mt-1 hidden w-full flex-wrap gap-1 xl:flex">
 				{#each list.slice(0, CARD_NAMES) as row (row.itemId)}
-					<span class="flex items-center justify-between gap-2">
+					<span
+						class="inline-flex max-w-full items-center gap-1.5 rounded-md border px-2 py-0.5 text-xs {card.filter ===
+						'partial'
+							? 'border-amber-200 bg-amber-50 text-amber-900'
+							: 'border-slate-200 bg-slate-50 text-slate-700'}"
+					>
 						<span class="truncate">{row.name}</span>
 						{#if card.filter === 'partial'}
-							<span class="font-semibold text-amber-700 tabular-nums">
-								{formatCoveragePercent(row.coverage)}
-							</span>
+							<span class="font-semibold tabular-nums">{formatCoveragePercent(row.coverage)}</span>
 						{/if}
 					</span>
 				{/each}
 				{#if list.length > CARD_NAMES}
-					<span>และอีก {list.length - CARD_NAMES} รายการ</span>
+					<span class="inline-flex items-center rounded-md px-1 py-0.5 text-xs text-slate-500">
+						+{list.length - CARD_NAMES} รายการ
+					</span>
 				{/if}
 			</span>
 		{/if}
@@ -332,7 +337,7 @@
 			{@render attentionCard({
 				filter: 'empty',
 				label: 'สต็อกเป็นศูนย์',
-				tone: 'neutral',
+				tone: 'critical',
 				icon: PackageX
 			})}
 		{/if}
