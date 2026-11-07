@@ -1013,11 +1013,13 @@
 
 			<div class="col-span-1 sm:col-span-2">
 				<label
-					class="inline-flex min-h-11 cursor-pointer items-center gap-2 text-sm font-medium text-slate-700"
+					class="flex min-h-11 cursor-pointer items-center gap-2.5 rounded-lg border border-slate-200 bg-white px-3 py-2"
 				>
 					<Checkbox bind:checked={issueLotNo} />
-					ออกเลขล็อต
-					<span class="font-normal text-muted-foreground">(สร้างเลขล็อตให้อัตโนมัติ)</span>
+					<span class="text-sm font-semibold text-slate-900">
+						ออกเลขล็อต
+						<span class="font-normal text-muted-foreground">(สร้างเลขล็อตให้อัตโนมัติ)</span>
+					</span>
 				</label>
 			</div>
 

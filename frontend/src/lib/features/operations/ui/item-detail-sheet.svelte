@@ -198,39 +198,41 @@
 													>
 													<span class="text-sm text-slate-500">{lot.unit}</span>
 												</p>
-												{#if lot.isNegative}
-													<span
-														class="rounded-full bg-red-100 px-2.5 py-1 text-xs font-semibold text-red-800 ring-1 ring-red-300"
-													>
-														ล็อตนี้ยอดติดลบ — ต้องแก้ยอด
-													</span>
-												{:else if lot.isNext}
-													<span
-														class="rounded-full bg-teal-50 px-2.5 py-1 text-xs font-semibold text-teal-900 ring-1 ring-teal-200"
-													>
-														เบิกถัดไป
-													</span>
-												{:else if lot.isExpired || lot.expiryState === 'expired'}
-													<span
-														class="rounded-full bg-red-50 px-2.5 py-1 text-xs font-semibold text-red-800 ring-1 ring-red-200"
-													>
-														หมดอายุ — ปรับยอดออก
-													</span>
-												{/if}
-												{#if lot.expiryState === 'expiring' && !lot.isNegative}
-													<span
-														class="rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-800 ring-1 ring-amber-200"
-													>
-														ใกล้หมดอายุ
-													</span>
-												{/if}
-												{#if lot.isSelfPurchased}
-													<span
-														class="rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-900 ring-1 ring-amber-200"
-													>
-														ซื้อเอง
-													</span>
-												{/if}
+												<div class="flex flex-wrap items-center justify-end gap-1.5">
+													{#if lot.isNegative}
+														<span
+															class="rounded-full bg-red-100 px-2.5 py-1 text-xs font-semibold text-red-800 ring-1 ring-red-300"
+														>
+															ล็อตนี้ยอดติดลบ — ต้องแก้ยอด
+														</span>
+													{:else if lot.isNext}
+														<span
+															class="rounded-full bg-teal-50 px-2.5 py-1 text-xs font-semibold text-teal-900 ring-1 ring-teal-200"
+														>
+															เบิกถัดไป
+														</span>
+													{:else if lot.isExpired || lot.expiryState === 'expired'}
+														<span
+															class="rounded-full bg-red-50 px-2.5 py-1 text-xs font-semibold text-red-800 ring-1 ring-red-200"
+														>
+															หมดอายุ — ปรับยอดออก
+														</span>
+													{/if}
+													{#if lot.expiryState === 'expiring' && !lot.isNegative}
+														<span
+															class="rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-800 ring-1 ring-amber-200"
+														>
+															ใกล้หมดอายุ
+														</span>
+													{/if}
+													{#if lot.isSelfPurchased}
+														<span
+															class="rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-900 ring-1 ring-amber-200"
+														>
+															ซื้อเอง
+														</span>
+													{/if}
+												</div>
 											</div>
 											<p class="mt-1.5 text-sm text-slate-700">
 												{#if lot.lotNo}<span class="font-semibold text-slate-900 tabular-nums"
