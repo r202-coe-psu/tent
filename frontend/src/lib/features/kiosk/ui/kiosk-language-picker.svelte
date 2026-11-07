@@ -29,7 +29,7 @@
 </script>
 
 <section
-	class="mx-auto flex w-full max-w-5xl flex-col items-center gap-6 pt-6 kiosk-portrait:gap-12 kiosk-portrait:pt-40 kiosk-compact:gap-3 kiosk-compact:pt-1"
+	class="mx-auto flex w-full max-w-5xl flex-col items-center gap-6 pt-6 kiosk-portrait:gap-12 kiosk-portrait:pt-40 kiosk-compact:flex-1 kiosk-compact:justify-center kiosk-compact:gap-3 kiosk-compact:pt-0"
 	aria-labelledby="language-title"
 >
 	<div class="flex flex-col items-center gap-4 kiosk-portrait:gap-8 kiosk-compact:gap-2">

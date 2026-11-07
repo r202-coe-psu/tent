@@ -167,16 +167,18 @@
 
 	{#if compactHeader}
 		<div
-			class="relative flex min-h-7 shrink-0 items-center justify-center border-b border-slate-200 bg-white px-3 text-xs font-medium text-slate-600"
+			class="relative flex min-h-12 shrink-0 items-center justify-center border-b border-slate-200 bg-white px-3 text-sm font-medium text-slate-600"
 		>
 			<span class="truncate"
 				>{t.shelterPrefix(shelterName)}{#if shelterCode}
 					· {shelterCode}{/if}</span
 			>
-			<!-- Overlaid at the strip's right edge so the strip keeps its one-line height. -->
-			<div class="absolute top-0 right-2 z-10">
-				{@render languageButton('h-9 px-2 text-xs', 'h-[14px] w-[21px]')}
-			</div>
+			{#if showLanguageButton}
+				<!-- Overlaid at the strip's right edge so the shelter name stays centred. -->
+				<div class="absolute top-1/2 right-2 z-10 -translate-y-1/2">
+					{@render languageButton('h-10 px-2.5 text-sm', 'h-[16px] w-[24px]')}
+				</div>
+			{/if}
 		</div>
 	{/if}
 
