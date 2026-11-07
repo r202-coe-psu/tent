@@ -20,6 +20,7 @@
 
 	import type { AssignCandidate } from '../domain/assign-roster';
 	import { resolveSkillOption, type SkillOption } from '../domain/skill-catalog';
+	import { identityVerificationStatus } from '../domain/verification';
 
 	let {
 		candidate,
@@ -43,6 +44,9 @@
 	const v = $derived(candidate.volunteer);
 	const fullName = $derived(`${v.first_name} ${v.last_name}`);
 	const rowId = $derived(`assign-row-${v._id}`);
+	// Someone whose identity is not verified here can still be given a shift, but the button must
+	// not read like the usual one: it says why, and a turned-down check looks different again.
+	const identity = $derived(identityVerificationStatus(v));
 	const skills = $derived.by<SkillOption[]>(() => {
 		// This map is a local deduplication buffer and is not exposed to the template.
 		// eslint-disable-next-line svelte/prefer-svelte-reactivity
@@ -94,12 +98,19 @@
 				</label>
 
 				<div class="flex flex-wrap items-center gap-1.5">
-					{#if v.identity_verified}
+					{#if identity === 'verified'}
 						<span
 							class="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium whitespace-nowrap text-emerald-700 ring-1 ring-emerald-200"
 						>
 							<BadgeCheck class="size-3.5 shrink-0" />
 							ยืนยันตัวตนแล้ว
+						</span>
+					{:else if identity === 'rejected'}
+						<span
+							class="inline-flex items-center gap-1 rounded-full bg-rose-50 px-2 py-0.5 text-xs font-medium whitespace-nowrap text-rose-700 ring-1 ring-rose-200"
+						>
+							<TriangleAlert class="size-3.5 shrink-0" />
+							ไม่ผ่านการยืนยันตัวตน
 						</span>
 					{:else}
 						<span
@@ -176,12 +187,25 @@
 					</Button>
 					{#if candidate.assignable}
 						<Button
-							class="min-h-11 flex-auto gap-1.5 text-sm sm:min-h-9 @md:flex-none"
+							variant={identity === 'verified' ? 'default' : 'outline'}
+							class={[
+								'min-h-11 flex-auto gap-1.5 text-sm sm:min-h-9 @md:flex-none',
+								identity === 'pending' && 'border-amber-300 text-amber-800 hover:bg-amber-50',
+								identity === 'rejected' && 'border-rose-300 text-rose-700 hover:bg-rose-50'
+							]}
 							disabled={!capacityAvailable}
 							onclick={() => onAssign(candidate)}
 						>
 							<UserPlus class="size-4" />
-							{capacityAvailable ? 'มอบหมาย' : 'กะเต็มแล้ว'}
+							{#if !capacityAvailable}
+								กะเต็มแล้ว
+							{:else if identity === 'pending'}
+								มอบหมาย (ยังไม่ยืนยันตัวตน)
+							{:else if identity === 'rejected'}
+								มอบหมาย (ตัวตนไม่ผ่าน)
+							{:else}
+								มอบหมาย
+							{/if}
 						</Button>
 					{/if}
 				</div>
