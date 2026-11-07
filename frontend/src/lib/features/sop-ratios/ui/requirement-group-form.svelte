@@ -9,8 +9,12 @@
 	import {
 		STANDARD_UOM_OPTIONS,
 		type RequirementGroup,
-		type ItemMap
+		type ItemMap,
+		sumSharePercent,
+		isShareSumOff
 	} from '../domain/requirement-group';
+	import { qtyGt, qtyGte } from '$lib/utils/qty';
+	import { isPositiveQty } from '../domain/qty-input';
 	import { resolveSource, type Source } from '$lib/utils/source';
 	import { useSaveRequirementGroup } from '../application/requirement-group-queries';
 	import { toast } from 'svelte-sonner';
@@ -87,12 +91,8 @@
 		}
 	}
 
-	const sharePercentSum = $derived(
-		formItemMaps.reduce((sum, item) => sum + (Number(item.share_percent) || 0), 0)
-	);
-	const showShareWarning = $derived(
-		formItemMaps.length > 0 && Math.abs(sharePercentSum - 100) > 0.01
-	);
+	const sharePercentSum = $derived(sumSharePercent(formItemMaps));
+	const showShareWarning = $derived(formItemMaps.length > 0 && isShareSumOff(formItemMaps));
 
 	$effect(() => {
 		if (group) {
@@ -128,7 +128,7 @@
 	function addItemMap() {
 		formItemMaps = [
 			...formItemMaps,
-			{ item_id: '', base_uom: '', conversion_factor: 1, share_percent: 0 }
+			{ item_id: '', base_uom: '', conversion_factor: '1', share_percent: '0' }
 		];
 	}
 
@@ -160,12 +160,12 @@
 			if (!item.base_uom.trim()) {
 				formErrors[`item_${i}_uom`] = 'กรุณาระบุหน่วยนับ';
 			}
-			if (Number(item.conversion_factor) <= 0) {
+			if (!isPositiveQty(item.conversion_factor)) {
 				formErrors[`item_${i}_cf`] = 'ตัวคูณแปลงค่าต้อง > 0';
 			}
 			if (
 				item.share_percent !== undefined &&
-				(Number(item.share_percent) < 0 || Number(item.share_percent) > 100)
+				(!qtyGte(item.share_percent, 0) || qtyGt(item.share_percent, 100))
 			) {
 				formErrors[`item_${i}_share`] = 'สัดส่วนต้องอยู่ระหว่าง 0-100%';
 			}
@@ -188,8 +188,8 @@
 					item_maps: formItemMaps.map((im) => ({
 						item_id: im.item_id.trim(),
 						base_uom: im.base_uom.trim(),
-						conversion_factor: Number(im.conversion_factor),
-						share_percent: im.share_percent !== undefined ? Number(im.share_percent) : undefined
+						conversion_factor: im.conversion_factor,
+						share_percent: im.share_percent
 					})),
 					shelter_code: computedSource === 'SHELTER_OVERRIDE' ? shelterCode : undefined
 				},
