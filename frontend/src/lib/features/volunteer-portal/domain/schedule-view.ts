@@ -241,3 +241,59 @@ export function filterAndSortPortalActivities(
 		return leftTime - rightTime;
 	});
 }
+
+/**
+ * One application of the signed-in volunteer, as the permanent-token session sees it. Comes
+ * from `/ticket/[token]/applications`; `can_cancel` is the server's verdict (status + shift
+ * not started + quota release still owed), the portal only adds what it can see on screen.
+ */
+export type PortalApplication = {
+	application_id: string;
+	status: string;
+	job_id: string;
+	shift_id: string | null;
+	date: string;
+	can_cancel: boolean;
+};
+
+export type PortalTicketActions = {
+	applicationId: string;
+	/** "เปิดตั๋ว": shown for every shift that has an application behind it. */
+	canOpen: boolean;
+	/** "ยกเลิก": only a live application whose shift has not started. */
+	canCancel: boolean;
+};
+
+function applicationMatches(activity: PortalActivity, app: PortalApplication): boolean {
+	if (activity.jobId !== app.job_id) return false;
+	if (activity.shiftId && app.shift_id) return activity.shiftId === app.shift_id;
+	return !app.date || app.date === activity.date;
+}
+
+/**
+ * Which ticket buttons a shift row gets (#973). Only a token session passes applications:
+ * a phone session has none, so it gets no buttons at all (the number is guessable).
+ * A shift the volunteer already started or finished, or one that is cancelled, never offers
+ * cancel; the server refuses it too, this just keeps the button from lying.
+ */
+export function portalTicketActions(
+	activity: PortalActivity,
+	applications: PortalApplication[],
+	now = Date.now()
+): PortalTicketActions | null {
+	const live = applications.filter(
+		(app) => app.status !== 'cancelled' && applicationMatches(activity, app)
+	);
+	const app = live[0];
+	if (!app || activity.status === 'cancelled') return null;
+	const started =
+		activity.status === 'checked_in' ||
+		activity.status === 'completed' ||
+		Boolean(activity.checkinAt) ||
+		(activity.startTs !== null && parsePortalTimestamp(activity.startTs).getTime() <= now);
+	return {
+		applicationId: app.application_id,
+		canOpen: true,
+		canCancel: app.can_cancel && !started
+	};
+}
