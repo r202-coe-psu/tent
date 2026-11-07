@@ -8,7 +8,7 @@
 #
 # Usage: ./test_label_print.sh [options]
 #   --queue NAME     CUPS queue (default: system default printer)
-#   --label WxH      ขนาด label เป็น mm (default: KIOSK_LABEL_MM ใน print-label.ts)
+#   --label WxH      ขนาด label เป็น mm (default: KIOSK_LABEL_MM ใน label-size.ts)
 #   --gap N          ระยะ gap ระหว่าง label (mm, default: 2)
 #   --count N        จำนวน label ทดสอบ (default: 2)
 #   --configure      ตั้งค่า queue ให้ตรง label ก่อนพิมพ์ (ใช้ sudo lpadmin)
@@ -21,7 +21,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
 REPO_DIR="$(dirname "$SCRIPT_DIR")"
 FRONTEND_DIR="$REPO_DIR/frontend"
-LABEL_TS="$FRONTEND_DIR/src/lib/features/kiosk/domain/print-label.ts"
+LABEL_TS="$FRONTEND_DIR/src/lib/utils/label-size.ts"
 DPI=203
 
 GREEN='\033[0;32m'
@@ -66,7 +66,7 @@ done
 if [ -z "$LABEL" ]; then
     [ -f "$LABEL_TS" ] || die "ไม่พบ $LABEL_TS — ระบุ --label WxH เอง"
     LABEL="$(sed -nE 's/.*KIOSK_LABEL_MM = \{ width: ([0-9.]+), height: ([0-9.]+) \}.*/\1x\2/p' "$LABEL_TS")"
-    [ -n "$LABEL" ] || die "อ่าน KIOSK_LABEL_MM จาก print-label.ts ไม่ได้ — ระบุ --label WxH เอง"
+    [ -n "$LABEL" ] || die "อ่าน KIOSK_LABEL_MM จาก label-size.ts ไม่ได้ — ระบุ --label WxH เอง"
 fi
 [[ "$LABEL" =~ ^([0-9.]+)x([0-9.]+)$ ]] || die "--label ต้องเป็นรูปแบบ WxH (mm) เช่น 80x60"
 LABEL_W="${BASH_REMATCH[1]}"

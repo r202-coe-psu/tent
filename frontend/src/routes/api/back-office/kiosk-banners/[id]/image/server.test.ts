@@ -1,14 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { GET } from './+server';
 import type { RequestEvent } from './$types';
-import { readSessionUserCtx } from '$lib/server/couch-admin';
+import { readSessionUserCtx } from '$lib/server/session-auth';
 import { getBanner, getBannerImage } from '$lib/server/kiosk-banners/kiosk-banner.server';
 import type { KioskBannerRecord } from '$lib/server/kiosk-banners/kiosk-banner.server';
 import { SESSIONS } from '$lib/server/scanners/test-sessions';
 
-vi.mock('$lib/server/couch-admin', async () => {
-	const actual =
-		await vi.importActual<typeof import('$lib/server/couch-admin')>('$lib/server/couch-admin');
+vi.mock('$lib/server/session-auth', async () => {
+	const actual = await vi.importActual<typeof import('$lib/server/session-auth')>(
+		'$lib/server/session-auth'
+	);
 	return { ...actual, readSessionUserCtx: vi.fn() };
 });
 

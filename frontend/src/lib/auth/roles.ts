@@ -229,6 +229,17 @@ export function canManageScanners(roles: readonly string[], shelterCode: string)
 export const STOCK_DISTRIBUTOR_CAPABILITIES = [WAREHOUSE_STAFF, SHELTER_MANAGER] as const;
 
 /**
+ * Capabilities that manage label printers (O-3, plan §4.3): shelter_manager only — unlike
+ * scanners, kiosk_staff may not register printers or rotate their secrets.
+ */
+export const PRINTER_MANAGER_CAPABILITIES = [SHELTER_MANAGER] as const;
+
+/** True when the user may manage printers in `shelterCode` (SA, or its shelter_manager). */
+export function canManagePrinters(roles: readonly string[], shelterCode: string): boolean {
+	return canManageInShelters(roles, [shelterCode], PRINTER_MANAGER_CAPABILITIES);
+}
+
+/**
  * True when the user may directly distribute stock in `shelterCode` (SA, or its warehouse_staff /
  * shelter_manager). `supply_coordinator` views stock but does not issue it.
  */
