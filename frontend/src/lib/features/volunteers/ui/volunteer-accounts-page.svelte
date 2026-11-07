@@ -289,11 +289,7 @@
 							totalFiltered
 						)} จากทั้งหมด {totalFiltered} บัญชี
 					</p>
-					<PaginationControls
-						page={safePage}
-						{totalPages}
-						onPageChange={(p) => (currentPage = p)}
-					/>
+					<PaginationControls bind:page={currentPage} count={totalFiltered} perPage={PAGE_SIZE} />
 				</div>
 			{/if}
 		{/if}
