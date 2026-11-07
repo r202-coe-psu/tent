@@ -69,7 +69,7 @@
 		{ key: 'catalog', label: 'สินค้า (Master)' },
 		{ key: 'sphere', label: 'วิเคราะห์ความต้องการ' },
 		{ key: 'food-sphere', label: 'วิเคราะห์เสบียงอาหาร' },
-		{ key: 'one-time', label: 'วิเคราะห์ความเสบียงสิ่งของ' }
+		{ key: 'one-time', label: 'วิเคราะห์เสบียงสิ่งของ' }
 	] as const;
 	type SecondaryTabKey = (typeof SECONDARY_TABS)[number]['key'];
 	type TabKey = PrimaryTabKey | SecondaryTabKey;
