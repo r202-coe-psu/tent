@@ -119,9 +119,9 @@ describe('renderKioskLabelPng', () => {
 		expect(texts).toEqual([
 			'สมชาย ใจดี',
 			KIOSK_LABEL_ZONE_PREFIX,
-			'เช็คอิน (Check-in)',
-			'คัดกรอง (Screening)',
-			'ที่พัก (Lodging)',
+			'เช็คอิน (Checked-in)',
+			'คัดกรอง (Screened)',
+			'ที่พัก (Stayed)',
 			KIOSK_LABEL_LINK,
 			...KIOSK_LABEL_QR_CAPTION
 		]);
@@ -197,12 +197,12 @@ describe('renderKioskLabelPng', () => {
 		await renderKioskLabelPng(label);
 
 		const rows = harness.fakeContext.fillText.mock.calls.filter(([text]) =>
-			['เช็คอิน (Check-in)', 'คัดกรอง (Screening)', 'ที่พัก (Lodging)'].includes(text)
+			['เช็คอิน (Checked-in)', 'คัดกรอง (Screened)', 'ที่พัก (Stayed)'].includes(text)
 		) as unknown as [string, number, number][];
 		expect(rows.map(([text]) => text)).toEqual([
-			'เช็คอิน (Check-in)',
-			'คัดกรอง (Screening)',
-			'ที่พัก (Lodging)'
+			'เช็คอิน (Checked-in)',
+			'คัดกรอง (Screened)',
+			'ที่พัก (Stayed)'
 		]);
 		expect(new Set(rows.map(([, x]) => x)).size).toBe(1);
 		const ys = rows.map(([, , y]) => y);
@@ -225,7 +225,7 @@ describe('renderKioskLabelPng', () => {
 			// Each tick starts inside its own box, top row first.
 			const starts = harness.fakeContext.moveTo.mock.calls.map(([, y]) => y as number);
 			const rows = harness.fakeContext.fillText.mock.calls
-				.filter(([text]) => ['เช็คอิน (Check-in)', 'คัดกรอง (Screening)'].includes(text))
+				.filter(([text]) => ['เช็คอิน (Checked-in)', 'คัดกรอง (Screened)'].includes(text))
 				.map((call) => (call as unknown as [string, number, number])[2]);
 			const boxSize = Math.round(mmToDots(KIOSK_LABEL_CHECKBOX.sizeMm));
 			starts.forEach((y, index) => expect(Math.abs(y - rows[index]!)).toBeLessThan(boxSize / 2));

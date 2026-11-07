@@ -147,9 +147,9 @@ export function labelZoneLine(zone: string | null | undefined): LabelZoneLine {
  * IBM Plex Sans Thai is ~29 mm; the text beside the box has ~34.5 mm next to a 33 mm QR.
  */
 export const KIOSK_LABEL_CHECKLIST = [
-	'เช็คอิน (Check-in)',
-	'คัดกรอง (Screening)',
-	'ที่พัก (Lodging)'
+	'เช็คอิน (Checked-in)',
+	'คัดกรอง (Screened)',
+	'ที่พัก (Stayed)'
 ] as const;
 /** A label printed right after a kiosk check-in or walk-in: only check-in is done. */
 export const KIOSK_CHECK_IN_TICKS = 1;
