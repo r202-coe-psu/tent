@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import type { CatalogDoc } from '$lib/db/model';
+import { qtyGt, qtyStrCoerceSchema, toQtyStrLossless } from '$lib/utils/qty';
 
 export const targetSegmentSchema = z.enum([
 	'ALL',
@@ -31,14 +32,14 @@ export { SOURCE_LABELS, SOURCE_OPTIONS };
 export const FOOD_SPHERE_SOURCE_LABELS = SOURCE_LABELS;
 export const FOOD_SPHERE_SOURCE_OPTIONS = SOURCE_OPTIONS;
 
-export const FOOD_SPHERE_STANDARD_SCHEMA_VERSION = 2;
+export const FOOD_SPHERE_STANDARD_SCHEMA_VERSION = 3;
 
 export interface FoodSphereStandard extends CatalogDoc {
 	type: 'food_sphere_standard';
-	schema_v: 1 | 2;
+	schema_v: 1 | 2 | 3;
 	target_segment: TargetSegment;
 	req_group_id: string; // e.g. "FOOD_ENERGY"
-	daily_demand: number; // > 0
+	daily_demand: string; // qty_str, > 0 (legacy docs stored a number)
 	standard_uom?: string;
 	effective_date: string; // "YYYY-MM-DD"
 	status?: 'active' | 'inactive';
@@ -49,7 +50,9 @@ export interface FoodSphereStandard extends CatalogDoc {
 export const foodSphereStandardInputSchema = z.object({
 	target_segment: targetSegmentSchema,
 	req_group_id: z.string().trim().min(1, 'กรุณาระบุกลุ่มความต้องการ'),
-	daily_demand: z.coerce.number().positive('ปริมาณความต้องการต้องมากกว่า 0'),
+	daily_demand: qtyStrCoerceSchema.refine((s) => qtyGt(s, 0), {
+		message: 'ปริมาณความต้องการต้องมากกว่า 0'
+	}),
 	standard_uom: z.string().trim().optional(),
 	effective_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'รูปแบบวันที่ต้องเป็น YYYY-MM-DD'),
 	status: z.enum(['active', 'inactive']).optional().default('active'),
@@ -65,6 +68,15 @@ export function isFoodSphereStandard(doc: unknown): doc is FoodSphereStandard {
 		d.type === 'food_sphere_standard' &&
 		typeof d.target_segment === 'string' &&
 		typeof d.req_group_id === 'string' &&
-		typeof d.daily_demand === 'number'
+		(typeof d.daily_demand === 'number' || typeof d.daily_demand === 'string')
 	);
+}
+
+/** Read-side normalizer: legacy number daily_demand -> qty_str (lossless); status defaults to active. */
+export function normalizeFoodSphereStandard(doc: FoodSphereStandard): FoodSphereStandard {
+	return {
+		...doc,
+		daily_demand: toQtyStrLossless(doc.daily_demand) as string,
+		status: doc.status ?? 'active'
+	};
 }

@@ -7,6 +7,7 @@
 		TARGET_SEGMENT_LABELS,
 		type FoodSphereStandard
 	} from '../domain/food-sphere';
+	import { formatQty } from '$lib/utils/qty';
 	import { SOURCE_LABELS } from '$lib/utils/source';
 	import {
 		useFoodSphereStandards,
@@ -251,7 +252,7 @@
 								</td>
 								<td class="p-3 font-mono font-medium">{std.req_group_id}</td>
 								<td class="p-3 text-right font-mono font-semibold text-foreground">
-									{std.daily_demand.toLocaleString()}
+									{formatQty(std.daily_demand)}
 								</td>
 								<td class="p-3 font-mono text-xs">{uom}</td>
 								<td class="p-3 text-xs text-muted-foreground">{std.effective_date}</td>

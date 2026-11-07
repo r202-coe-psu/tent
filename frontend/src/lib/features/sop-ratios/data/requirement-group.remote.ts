@@ -1,7 +1,10 @@
 import { createRemoteRepository, type Repository } from '$lib/db/repository';
+import { persistQty } from '$lib/utils/qty';
 import { now } from '$lib/db/model';
 import {
 	isRequirementGroup,
+	normalizeRequirementGroup,
+	REQUIREMENT_GROUP_SCHEMA_VERSION,
 	type RequirementGroup,
 	type RequirementGroupInput
 } from '../domain/requirement-group';
@@ -24,7 +27,7 @@ export class RequirementGroupRemoteRepository {
 		);
 
 		if (!shelterCode) {
-			return baselineDocs.map((doc) => ({ ...doc, status: doc.status ?? 'active' }));
+			return baselineDocs.map(normalizeRequirementGroup);
 		}
 
 		try {
@@ -41,12 +44,9 @@ export class RequirementGroupRemoteRepository {
 			for (const o of overrideDocs) {
 				effectiveMap.set(o._id, o);
 			}
-			return Array.from(effectiveMap.values()).map((doc) => ({
-				...doc,
-				status: doc.status ?? 'active'
-			}));
+			return Array.from(effectiveMap.values()).map(normalizeRequirementGroup);
 		} catch {
-			return baselineDocs.map((doc) => ({ ...doc, status: doc.status ?? 'active' }));
+			return baselineDocs.map(normalizeRequirementGroup);
 		}
 	}
 
@@ -56,7 +56,7 @@ export class RequirementGroupRemoteRepository {
 				const shelterRepo = this.getShelterRepo(shelterCode);
 				const override = await shelterRepo.get<RequirementGroup>(id);
 				if (override && isRequirementGroup(override)) {
-					return { ...override, status: override.status ?? 'active' };
+					return normalizeRequirementGroup(override);
 				}
 			} catch {
 				// fallback to catalog
@@ -64,7 +64,7 @@ export class RequirementGroupRemoteRepository {
 		}
 		const baseline = await this.catalogRepo.get<RequirementGroup>(id);
 		if (baseline && isRequirementGroup(baseline)) {
-			return { ...baseline, status: baseline.status ?? 'active' };
+			return normalizeRequirementGroup(baseline);
 		}
 		return null;
 	}
@@ -84,11 +84,15 @@ export class RequirementGroupRemoteRepository {
 			_id: id,
 			...(existing?._rev ? { _rev: existing._rev } : {}),
 			type: 'requirement_group',
-			schema_v: 1,
+			schema_v: REQUIREMENT_GROUP_SCHEMA_VERSION,
 			name: input.name,
 			standard_uom: input.standard_uom,
 			status: input.status ?? existing?.status ?? 'active',
-			item_maps: input.item_maps ?? [],
+			item_maps: (input.item_maps ?? []).map((m) => ({
+				...m,
+				conversion_factor: persistQty(m.conversion_factor),
+				...(m.share_percent === undefined ? {} : { share_percent: persistQty(m.share_percent) })
+			})),
 			source: isOverride ? 'SHELTER_OVERRIDE' : 'SPHERE_BASELINE',
 			...(isOverride ? { shelter_code: ctx.shelterCode } : {}),
 			created_at: existing?.created_at ?? ts,

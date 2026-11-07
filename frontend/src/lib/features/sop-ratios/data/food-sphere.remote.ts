@@ -1,7 +1,9 @@
 import { createRemoteRepository, type Repository } from '$lib/db/repository';
+import { persistQty } from '$lib/utils/qty';
 import { now } from '$lib/db/model';
 import {
 	isFoodSphereStandard,
+	normalizeFoodSphereStandard,
 	FOOD_SPHERE_STANDARD_SCHEMA_VERSION,
 	type FoodSphereStandard,
 	type FoodSphereStandardInput
@@ -25,7 +27,7 @@ export class FoodSphereRemoteRepository {
 		);
 
 		if (!shelterCode) {
-			return baselineDocs.map((doc) => ({ ...doc, status: doc.status ?? 'active' }));
+			return baselineDocs.map(normalizeFoodSphereStandard);
 		}
 
 		try {
@@ -42,12 +44,9 @@ export class FoodSphereRemoteRepository {
 			for (const o of overrideDocs) {
 				effectiveMap.set(o._id, o);
 			}
-			return Array.from(effectiveMap.values()).map((doc) => ({
-				...doc,
-				status: doc.status ?? 'active'
-			}));
+			return Array.from(effectiveMap.values()).map(normalizeFoodSphereStandard);
 		} catch {
-			return baselineDocs.map((doc) => ({ ...doc, status: doc.status ?? 'active' }));
+			return baselineDocs.map(normalizeFoodSphereStandard);
 		}
 	}
 
@@ -57,7 +56,7 @@ export class FoodSphereRemoteRepository {
 				const shelterRepo = this.getShelterRepo(shelterCode);
 				const override = await shelterRepo.get<FoodSphereStandard>(id);
 				if (override && isFoodSphereStandard(override)) {
-					return { ...override, status: override.status ?? 'active' };
+					return normalizeFoodSphereStandard(override);
 				}
 			} catch {
 				// fallback to catalog
@@ -65,7 +64,7 @@ export class FoodSphereRemoteRepository {
 		}
 		const baseline = await this.catalogRepo.get<FoodSphereStandard>(id);
 		if (baseline && isFoodSphereStandard(baseline)) {
-			return { ...baseline, status: baseline.status ?? 'active' };
+			return normalizeFoodSphereStandard(baseline);
 		}
 		return null;
 	}
@@ -88,7 +87,7 @@ export class FoodSphereRemoteRepository {
 			schema_v: FOOD_SPHERE_STANDARD_SCHEMA_VERSION,
 			target_segment: input.target_segment,
 			req_group_id: input.req_group_id,
-			daily_demand: Number(input.daily_demand),
+			daily_demand: persistQty(input.daily_demand),
 			standard_uom: input.standard_uom,
 			effective_date: input.effective_date,
 			status: input.status ?? existing?.status ?? 'active',

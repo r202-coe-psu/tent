@@ -23,6 +23,8 @@
 		type FoodSphereTableGroup,
 		type FoodSphereTableItem
 	} from '../domain/food-sphere-table';
+	import { InvalidStockQtyError } from '../domain/food-sphere-table';
+	import { toast } from 'svelte-sonner';
 	import type { DocAlertStatus } from '../domain/replenishment-calc';
 	import DocStatusBadge from './doc-status-badge.svelte';
 	import PeopleTotalTooltip from './people-total-tooltip.svelte';
@@ -166,15 +168,44 @@
 
 		const headcounts = headcountsFromAgeGroups(effectiveOccupancy, demographics?.age_groups);
 
-		return buildFoodSphereTable({
-			itemMasters: allItems,
-			balance,
-			requirementGroups: reqGroups,
-			standards,
-			policies,
-			headcounts,
-			latestLotInfo
-		});
+		try {
+			return {
+				error: null as string | null,
+				...buildFoodSphereTable({
+					itemMasters: allItems,
+					balance,
+					requirementGroups: reqGroups,
+					standards,
+					policies,
+					headcounts,
+					latestLotInfo
+				})
+			};
+		} catch (e) {
+			if (!(e instanceof InvalidStockQtyError)) throw e;
+			return {
+				error: `ข้อมูลสต็อกของ ${allItems.find((i) => i._id === e.itemId)?.name ?? e.itemId} อ่านค่าไม่ได้`,
+				groups: [] as FoodSphereTableGroup[],
+				summary: {
+					totalItems: 0,
+					criticalCount: 0,
+					warningCount: 0,
+					adequateCount: 0,
+					overstockCount: 0,
+					unconfiguredCount: 0
+				}
+			};
+		}
+	});
+
+	// Toast once per distinct error message, not on every recompute.
+	let lastErrorShown: string | null = null;
+	$effect(() => {
+		const message = tableData.error;
+		if (message !== lastErrorShown) {
+			lastErrorShown = message;
+			if (message) toast.error(message);
+		}
 	});
 
 	// Auto-expand all groups upon first load
@@ -568,6 +599,12 @@
 				<span class="text-xs font-medium text-muted-foreground"
 					>กำลังโหลดข้อมูลการวิเคราะห์เสบียงอาหาร...</span
 				>
+			</div>
+		{:else if tableData.error}
+			<div
+				class="flex min-h-[260px] flex-col items-center justify-center rounded-2xl border border-dashed border-border/80 p-6 text-center text-sm font-medium text-destructive sm:p-8"
+			>
+				{tableData.error}
 			</div>
 		{:else if filteredGroups.length === 0}
 			<div
