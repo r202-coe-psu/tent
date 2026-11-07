@@ -268,10 +268,10 @@
 							<Table.Head class="px-4 py-3 text-right">มีพร้อมแจก</Table.Head>
 							<Table.Head class="px-4 py-3 text-right">ต้องหาเพิ่ม</Table.Head>
 							<Table.Head class="px-4 py-3 text-right">ครอบคลุม</Table.Head>
-							<Table.Head class="px-4 py-3">สถานะ</Table.Head>
 							<Table.Head class="px-4 py-3 text-right"
 								><span class="sr-only">ดำเนินการ</span></Table.Head
 							>
+							<Table.Head class="px-4 py-3 text-right">สถานะ</Table.Head>
 						</Table.Row>
 					</Table.Header>
 					<Table.Body>
@@ -307,7 +307,6 @@
 								<Table.Cell class="px-4 py-3 text-right text-base tabular-nums">
 									{formatCoveragePercent(row.coverage)}
 								</Table.Cell>
-								<Table.Cell class="px-4 py-3">{@render statusBadge(row)}</Table.Cell>
 								<Table.Cell class="px-4 py-3 text-right">
 									<Button
 										variant="outline"
@@ -318,6 +317,7 @@
 										ดูในสต็อก
 									</Button>
 								</Table.Cell>
+								<Table.Cell class="px-4 py-3 text-right">{@render statusBadge(row)}</Table.Cell>
 							</Table.Row>
 						{/each}
 					</Table.Body>
