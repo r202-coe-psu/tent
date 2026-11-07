@@ -1,9 +1,17 @@
 <script lang="ts">
 	import * as Table from '$lib/components/ui/table/index.js';
 	import { resolve } from '$app/paths';
+	import * as Card from '$lib/components/ui/card';
+	import * as Alert from '$lib/components/ui/alert';
+	import { Badge } from '$lib/components/ui/badge';
 	import { Input } from '$lib/components/ui/input';
 	import { Button } from '$lib/components/ui/button';
-	import { useItemMasters, formatUnit, useUnitsOfMeasure } from '$lib/features/catalog';
+	import {
+		useItemMasters,
+		useItemCategories,
+		formatUnit,
+		useUnitsOfMeasure
+	} from '$lib/features/catalog';
 	import {
 		useLedgerByItems,
 		useLotReservationClaims,
@@ -16,6 +24,7 @@
 	import {
 		buildOneTimeDemandRows,
 		countCurrentRecipients,
+		coverageBarWidth,
 		formatCoveragePercent,
 		oneTimeItemIds,
 		sortOneTimeDemandRows,
@@ -24,13 +33,17 @@
 	import AlertCircle from '@lucide/svelte/icons/alert-circle';
 	import AlertTriangle from '@lucide/svelte/icons/alert-triangle';
 	import CheckCircle2 from '@lucide/svelte/icons/check-circle-2';
+	import Eye from '@lucide/svelte/icons/eye';
+	import Info from '@lucide/svelte/icons/info';
 	import PackageOpen from '@lucide/svelte/icons/package-open';
+	import Search from '@lucide/svelte/icons/search';
 	import Users from '@lucide/svelte/icons/users';
 
 	let { shelterCode = '' }: { shelterCode?: string | null } = $props();
 
 	const itemMastersQuery = useItemMasters();
 	const unitsQuery = useUnitsOfMeasure();
+	const categoriesQuery = useItemCategories();
 	// Read the ledger of the one-time items only, after the item list says which they are.
 	const itemIds = $derived(oneTimeItemIds(itemMastersQuery.data ?? []));
 	const ledgerQuery = useLedgerByItems(
@@ -89,7 +102,22 @@
 		return q ? rows.filter((r) => r.name.toLowerCase().includes(q)) : rows;
 	});
 	const shown = $derived(filtered.slice(0, visible));
-	const shortCount = $derived(rows.filter((r) => r.status === 'short').length);
+	const shortRows = $derived(rows.filter((r) => r.status === 'short'));
+	const shortCount = $derived(shortRows.length);
+	// Short rows with some stock in hand vs none at all, for the summary sentence.
+	const partialRows = $derived(shortRows.filter((r) => coverageBarWidth(r.coverage) > 0));
+	const emptyCount = $derived(shortCount - partialRows.length);
+
+	const categoryOfItem = $derived.by(() => {
+		const names = new Map((categoriesQuery.data ?? []).map((c) => [c._id, c.name]));
+		return new Map(
+			(itemMastersQuery.data ?? []).map((item) => [
+				item._id,
+				// Names read "ไทย (English)"; the Thai part is enough under a product name.
+				(item.category ? (names.get(item.category) ?? '') : '').replace(/\s*\(.*\)\s*$/, '')
+			])
+		);
+	});
 
 	/** The stock list on the inventory tab, searched by name; `all` keeps never-received items in view. */
 	function stockHref(row: OneTimeDemandRow) {
@@ -104,94 +132,188 @@
 
 {#snippet statusBadge(row: OneTimeDemandRow)}
 	{#if row.status === 'enough'}
-		<span
-			class="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-900"
-		>
-			<CheckCircle2 class="h-3.5 w-3.5" aria-hidden="true" />
+		<Badge variant="outline" class="h-6 gap-1 border-emerald-200 bg-emerald-50 text-emerald-900">
+			<CheckCircle2 aria-hidden="true" />
 			พอ
-		</span>
+		</Badge>
 	{:else}
-		<span
-			class="inline-flex items-center gap-1 rounded-full border border-red-200 bg-red-50 px-2.5 py-1 text-xs font-semibold text-red-900"
-		>
-			<AlertCircle class="h-3.5 w-3.5" aria-hidden="true" />
+		<Badge variant="outline" class="h-6 gap-1 border-red-200 bg-red-50 text-red-900">
+			<AlertCircle aria-hidden="true" />
 			ไม่พอ
-		</span>
+		</Badge>
 	{/if}
 {/snippet}
 
+{#snippet coverageMeter(row: OneTimeDemandRow)}
+	<div class="min-w-32 space-y-1.5">
+		<p class="text-sm font-semibold text-slate-600 tabular-nums">
+			{formatCoveragePercent(row.coverage)}
+		</p>
+		<div
+			class="h-2 overflow-hidden rounded-full {row.status === 'enough'
+				? 'bg-emerald-100'
+				: coverageBarWidth(row.coverage) >= 50
+					? 'bg-amber-100'
+					: 'bg-slate-200'}"
+			role="progressbar"
+			aria-label="ครอบคลุม {row.name}"
+			aria-valuemin={0}
+			aria-valuemax={100}
+			aria-valuenow={Math.round(coverageBarWidth(row.coverage))}
+		>
+			<div
+				class="h-full rounded-full {row.status === 'enough'
+					? 'bg-emerald-500'
+					: coverageBarWidth(row.coverage) >= 50
+						? 'bg-amber-500'
+						: 'bg-red-500'}"
+				style:width="{coverageBarWidth(row.coverage)}%"
+			></div>
+		</div>
+	</div>
+{/snippet}
+
 {#snippet missingQtyBadge()}
-	<span
-		class="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-900"
-	>
-		<AlertTriangle class="h-3.5 w-3.5" aria-hidden="true" />
+	<Badge variant="outline" class="h-6 gap-1 border-amber-200 bg-amber-50 text-amber-900">
+		<AlertTriangle aria-hidden="true" />
 		ยังไม่ตั้งจำนวนต่อคน
-	</span>
+	</Badge>
+{/snippet}
+
+{#snippet viewInStock(row: OneTimeDemandRow)}
+	<Button
+		variant="outline"
+		size="sm"
+		href={stockHref(row)}
+		aria-label="ดูสินค้า {row.name} ในหน้าสต็อก"
+	>
+		<Eye aria-hidden="true" />
+		ดูในสต็อก
+	</Button>
 {/snippet}
 
 <div class="space-y-4">
-	<div
-		class="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl border border-slate-200/80 bg-white px-4 py-3 shadow-2xs"
-	>
-		<Users class="h-5 w-5 text-slate-500" aria-hidden="true" />
-		<p class="text-base text-slate-700">
-			คำนวณจากคนในศูนย์
-			<span class="font-bold text-slate-900 tabular-nums">{formatQty(people)}</span>
-			คน
-			{#if peopleQuery.data}
-				<span class="text-slate-500">
-					(ผู้พักพิง {formatQty(peopleQuery.data.evacuees)} · เจ้าหน้าที่
-					{formatQty(peopleQuery.data.staff)} · จิตอาสา {formatQty(peopleQuery.data.volunteers)})
-				</span>
+	<div class="grid gap-4 lg:grid-cols-2">
+		<Card.Root>
+			<Card.Header>
+				<Card.Title class="flex items-center gap-2 text-base">
+					<Users class="h-5 w-5 text-slate-500" aria-hidden="true" />
+					ประชากรที่ใช้คำนวณความต้องการ
+				</Card.Title>
+			</Card.Header>
+			<Card.Content class="flex flex-wrap items-end gap-x-3 gap-y-2">
+				<p class="text-4xl leading-none font-bold text-slate-900 tabular-nums">
+					{formatQty(people)}
+					<span class="text-base font-medium text-slate-500">คนในศูนย์</span>
+				</p>
+				{#if peopleQuery.data}
+					<div class="flex flex-wrap gap-1.5">
+						<Badge variant="outline" class="h-6 border-blue-200 bg-blue-50 text-blue-800">
+							ผู้พักพิง {formatQty(peopleQuery.data.evacuees)} คน
+						</Badge>
+						<Badge variant="outline" class="h-6 border-emerald-200 bg-emerald-50 text-emerald-800">
+							เจ้าหน้าที่ {formatQty(peopleQuery.data.staff)} คน
+						</Badge>
+						<Badge variant="outline" class="h-6 border-amber-200 bg-amber-50 text-amber-800">
+							จิตอาสา {formatQty(peopleQuery.data.volunteers)} คน
+						</Badge>
+					</div>
+				{/if}
+			</Card.Content>
+		</Card.Root>
+
+		{#if !isLoading && !isError && rows.length > 0}
+			{#if shortCount > 0}
+				<Alert.Root variant="destructive" class="border-red-200 bg-red-50 px-4 py-3">
+					<AlertTriangle aria-hidden="true" />
+					<Alert.Title class="flex items-center justify-between gap-2 text-base">
+						สถานะความพร้อมแจกจ่าย
+						<Badge variant="destructive" class="h-6">
+							{shortCount === rows.length ? 'ไม่พอทุกรายการ' : 'บางรายการไม่พอ'}
+						</Badge>
+					</Alert.Title>
+					<Alert.Description class="space-y-1 text-sm">
+						<p class="text-base">
+							<span class="text-2xl font-bold tabular-nums">{shortCount}</span>
+							จากทั้งหมด {rows.length} รายการ ยังมีไม่พอแจก
+						</p>
+						{#if partialRows.length > 0}
+							<p>
+								แจกได้บางส่วน:
+								{partialRows
+									.slice(0, 3)
+									.map((r) => `${r.name} (${formatCoveragePercent(r.coverage)})`)
+									.join(', ')}{partialRows.length > 3
+									? ` และอีก ${partialRows.length - 3} รายการ`
+									: ''}
+							</p>
+						{/if}
+						{#if emptyCount > 0}
+							<p>ยังไม่มีของพร้อมแจก {emptyCount} รายการ</p>
+						{/if}
+					</Alert.Description>
+				</Alert.Root>
+			{:else}
+				<Alert.Root class="border-emerald-200 bg-emerald-50 px-4 py-3 text-emerald-900">
+					<CheckCircle2 aria-hidden="true" />
+					<Alert.Title class="flex items-center justify-between gap-2 text-base">
+						สถานะความพร้อมแจกจ่าย
+						<Badge variant="outline" class="h-6 border-emerald-200 bg-white text-emerald-800">
+							พอแจก
+						</Badge>
+					</Alert.Title>
+					<Alert.Description class="text-base text-emerald-900">
+						ทั้ง {rows.length} รายการ พอแจกให้ทุกคนที่ยังไม่ได้รับ
+					</Alert.Description>
+				</Alert.Root>
 			{/if}
-		</p>
+		{/if}
 	</div>
 
 	{#if isLoading}
-		<div
-			class="rounded-xl border border-slate-200/80 bg-white p-8 text-center text-base text-slate-600 shadow-2xs"
-			role="status"
-		>
-			กำลังโหลดข้อมูล…
-		</div>
+		<Card.Root>
+			<Card.Content class="py-6 text-center text-base text-slate-600" role="status">
+				กำลังโหลดข้อมูล…
+			</Card.Content>
+		</Card.Root>
 	{:else if isError}
-		<div
-			class="flex items-center gap-3 rounded-xl border border-red-200 bg-white px-4 py-3.5 text-base text-red-900 shadow-2xs"
-			role="alert"
-		>
-			<AlertCircle class="h-5 w-5 shrink-0" aria-hidden="true" />
-			โหลดข้อมูลของแจกครั้งเดียวไม่สำเร็จ กรุณาลองใหม่อีกครั้ง
-		</div>
+		<Alert.Root variant="destructive" class="border-red-200 px-4 py-3" role="alert">
+			<AlertCircle aria-hidden="true" />
+			<Alert.Description class="text-base">
+				โหลดข้อมูลของแจกครั้งเดียวไม่สำเร็จ กรุณาลองใหม่อีกครั้ง
+			</Alert.Description>
+		</Alert.Root>
 	{:else if rows.length === 0}
-		<div
-			class="flex flex-col items-center rounded-xl border border-slate-200/80 bg-white p-10 text-center shadow-2xs"
-		>
-			<PackageOpen class="mb-4 h-12 w-12 text-slate-300" aria-hidden="true" />
-			<p class="text-base font-semibold text-slate-700">ยังไม่มีสินค้าประเภทแจกครั้งเดียว</p>
-		</div>
+		<Card.Root>
+			<Card.Content class="flex flex-col items-center py-8 text-center">
+				<PackageOpen class="mb-4 h-12 w-12 text-slate-300" aria-hidden="true" />
+				<p class="text-base font-semibold text-slate-700">ยังไม่มีสินค้าประเภทแจกครั้งเดียว</p>
+			</Card.Content>
+		</Card.Root>
 	{:else}
-		<div class="flex flex-wrap items-center justify-between gap-3">
-			<p class="text-base text-slate-700">
-				{#if shortCount > 0}
-					<span class="font-bold text-red-700 tabular-nums">{shortCount}</span>
-					จาก {rows.length} รายการยังแจกไม่พอ
-				{:else}
-					ทั้ง {rows.length} รายการแจกได้พอทุกคน
-				{/if}
-			</p>
-			<Input
-				type="search"
-				class="w-full sm:w-64"
-				placeholder="ค้นหาสินค้า"
-				aria-label="ค้นหาสินค้า"
-				bind:value={search}
-				oninput={() => (visible = PAGE_SIZE)}
-			/>
-		</div>
+		<Card.Root class="gap-0 py-0">
+			<div class="flex flex-wrap items-center justify-between gap-3 p-4">
+				<div class="relative w-full sm:w-80">
+					<Search
+						class="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-slate-400"
+						aria-hidden="true"
+					/>
+					<Input
+						type="search"
+						class="pl-9"
+						placeholder="ค้นหาชื่อสินค้า (เช่น เต็นท์, มุ้ง)..."
+						aria-label="ค้นหาสินค้า"
+						bind:value={search}
+						oninput={() => (visible = PAGE_SIZE)}
+					/>
+				</div>
+				<p class="text-sm text-slate-500">
+					แสดง {shown.length} จาก {filtered.length} รายการ
+				</p>
+			</div>
 
-		<div class="overflow-hidden rounded-xl border border-slate-200/80 bg-white shadow-2xs">
 			<!-- Mobile: one card per item -->
-			<ul class="space-y-2.5 p-3 md:hidden">
+			<ul class="space-y-2.5 border-t border-slate-200/80 p-3 md:hidden">
 				{#each shown as row (row.itemId)}
 					<li
 						class="rounded-xl border bg-white p-3.5 {row.status === 'short'
@@ -199,13 +321,18 @@
 							: 'border-slate-200/80'}"
 					>
 						<div class="flex items-start justify-between gap-2">
-							<span class="text-base font-semibold text-slate-900">{row.name}</span>
+							<div>
+								<span class="text-base font-semibold text-slate-900">{row.name}</span>
+								{#if categoryOfItem.get(row.itemId)}
+									<p class="text-sm text-slate-500">{categoryOfItem.get(row.itemId)}</p>
+								{/if}
+							</div>
 							{@render statusBadge(row)}
 						</div>
 						{#if row.qtyPerPersonMissing}
 							<div class="mt-1.5">{@render missingQtyBadge()}</div>
 						{/if}
-						<dl class="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+						<dl class="mt-3 grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
 							<div>
 								<dt class="text-slate-500">รับแล้ว</dt>
 								<dd class="font-semibold text-slate-900 tabular-nums">
@@ -237,41 +364,29 @@
 									{unitLabel(row)}
 								</dd>
 							</div>
-							<div>
-								<dt class="text-slate-500">ครอบคลุม</dt>
-								<dd class="font-semibold text-slate-900 tabular-nums">
-									{formatCoveragePercent(row.coverage)}
-								</dd>
+							<div class="col-span-2">
+								<dt class="sr-only">ครอบคลุม</dt>
+								<dd>{@render coverageMeter(row)}</dd>
 							</div>
 						</dl>
-						<Button
-							variant="outline"
-							size="sm"
-							class="mt-3 w-full"
-							href={stockHref(row)}
-							aria-label="ดูสินค้า {row.name} ในหน้าสต็อก"
-						>
-							ดูในสต็อก
-						</Button>
+						<div class="mt-3 flex justify-end">{@render viewInStock(row)}</div>
 					</li>
 				{/each}
 			</ul>
 
 			<!-- Tablet / desktop table -->
-			<div class="hidden overflow-x-auto md:block">
+			<div class="hidden overflow-x-auto border-t border-slate-200/80 md:block">
 				<Table.Root>
 					<Table.Header>
 						<Table.Row class="bg-slate-50">
-							<Table.Head class="px-4 py-3">สินค้า</Table.Head>
+							<Table.Head class="px-4 py-3">รายการสินค้า</Table.Head>
 							<Table.Head class="px-4 py-3 text-right">รับแล้ว</Table.Head>
 							<Table.Head class="px-4 py-3 text-right">ต้องแจกอีก</Table.Head>
 							<Table.Head class="px-4 py-3 text-right">มีพร้อมแจก</Table.Head>
-							<Table.Head class="px-4 py-3 text-right">ต้องหาเพิ่ม</Table.Head>
-							<Table.Head class="px-4 py-3 text-right">ครอบคลุม</Table.Head>
-							<Table.Head class="px-4 py-3 text-right"
-								><span class="sr-only">ดำเนินการ</span></Table.Head
-							>
-							<Table.Head class="px-4 py-3 text-right">สถานะ</Table.Head>
+							<Table.Head class="px-4 py-3 text-right text-red-700">ต้องหาเพิ่ม</Table.Head>
+							<Table.Head class="px-4 py-3">ความครอบคลุม</Table.Head>
+							<Table.Head class="px-4 py-3 text-center">สถานะ</Table.Head>
+							<Table.Head class="px-4 py-3 text-center">จัดการ</Table.Head>
 						</Table.Row>
 					</Table.Header>
 					<Table.Body>
@@ -279,6 +394,9 @@
 							<Table.Row>
 								<Table.Cell class="px-4 py-3">
 									<span class="text-base font-semibold text-slate-900">{row.name}</span>
+									{#if categoryOfItem.get(row.itemId)}
+										<p class="text-sm text-slate-500">{categoryOfItem.get(row.itemId)}</p>
+									{/if}
 									{#if row.qtyPerPersonMissing}
 										<div class="mt-1">{@render missingQtyBadge()}</div>
 									{/if}
@@ -287,13 +405,18 @@
 									{formatQty(row.received)}
 									<span class="text-sm text-slate-500">คน</span>
 								</Table.Cell>
-								<Table.Cell class="px-4 py-3 text-right text-base tabular-nums">
+								<Table.Cell class="px-4 py-3 text-right text-base font-semibold tabular-nums">
 									{formatQty(row.demand)}
-									<span class="text-sm text-slate-500">{unitLabel(row)}</span>
+									<span class="text-sm font-normal text-slate-500">{unitLabel(row)}</span>
 								</Table.Cell>
-								<Table.Cell class="px-4 py-3 text-right text-base tabular-nums">
+								<Table.Cell
+									class="px-4 py-3 text-right text-base font-semibold tabular-nums {row.available ===
+									'0'
+										? 'text-slate-900'
+										: 'text-sky-700'}"
+								>
 									{formatQty(row.available)}
-									<span class="text-sm text-slate-500">{unitLabel(row)}</span>
+									<span class="text-sm font-normal text-slate-500">{unitLabel(row)}</span>
 								</Table.Cell>
 								<Table.Cell
 									class="px-4 py-3 text-right text-base font-semibold tabular-nums {row.status ===
@@ -304,35 +427,30 @@
 									{formatQty(row.shortfall)}
 									<span class="text-sm font-normal text-slate-500">{unitLabel(row)}</span>
 								</Table.Cell>
-								<Table.Cell class="px-4 py-3 text-right text-base tabular-nums">
-									{formatCoveragePercent(row.coverage)}
-								</Table.Cell>
-								<Table.Cell class="px-4 py-3 text-right">
-									<Button
-										variant="outline"
-										size="sm"
-										href={stockHref(row)}
-										aria-label="ดูสินค้า {row.name} ในหน้าสต็อก"
-									>
-										ดูในสต็อก
-									</Button>
-								</Table.Cell>
-								<Table.Cell class="px-4 py-3 text-right">{@render statusBadge(row)}</Table.Cell>
+								<Table.Cell class="px-4 py-3">{@render coverageMeter(row)}</Table.Cell>
+								<Table.Cell class="px-4 py-3 text-center">{@render statusBadge(row)}</Table.Cell>
+								<Table.Cell class="px-4 py-3 text-center">{@render viewInStock(row)}</Table.Cell>
 							</Table.Row>
 						{/each}
 					</Table.Body>
 				</Table.Root>
 			</div>
-		</div>
 
-		{#if filtered.length === 0}
-			<p class="text-center text-base text-slate-600">ไม่พบสินค้าที่ค้นหา</p>
-		{:else if filtered.length > shown.length}
-			<div class="flex justify-center">
-				<Button variant="outline" onclick={() => (visible += PAGE_SIZE)}>
-					ดูเพิ่ม (แสดง {shown.length} จาก {filtered.length} รายการ)
-				</Button>
+			<div
+				class="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200/80 bg-slate-50 px-4 py-3 text-sm text-slate-500"
+			>
+				<p class="flex items-center gap-1.5">
+					<Info class="h-4 w-4 shrink-0" aria-hidden="true" />
+					"ต้องหาเพิ่ม" คำนวณจาก: ยอดที่ต้องแจกอีก ลบด้วย ยอดที่มีพร้อมแจกในคลัง
+				</p>
+				{#if filtered.length === 0}
+					<p>ไม่พบสินค้าที่ค้นหา</p>
+				{:else if filtered.length > shown.length}
+					<Button variant="outline" size="sm" onclick={() => (visible += PAGE_SIZE)}>
+						ดูเพิ่ม
+					</Button>
+				{/if}
 			</div>
-		{/if}
+		</Card.Root>
 	{/if}
 </div>

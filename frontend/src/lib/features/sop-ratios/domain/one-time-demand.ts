@@ -161,10 +161,19 @@ export function buildOneTimeDemandRows(input: BuildOneTimeDemandInput): OneTimeD
 	});
 }
 
-/** "83.33%" — the stored value as is, so a short row never reads "100%"; "—" when there is no demand to cover. */
+/** "63.3%" — always one decimal; a row still short never reads "100%"; "—" when there is no demand. */
 export function formatCoveragePercent(coverage: string | null): string {
 	if (coverage === null) return '—';
-	return `${coverage}%`;
+	const value = new Decimal(coverage);
+	const rounded = value.toDecimalPlaces(1, Decimal.ROUND_HALF_UP);
+	const capped = value.lt(100) && rounded.gte(100) ? new Decimal('99.9') : rounded;
+	return `${capped.toFixed(1)}%`;
+}
+
+/** Width (0–100) of the coverage bar: coverage clamped, 0 when there is no demand. */
+export function coverageBarWidth(coverage: string | null): number {
+	if (coverage === null) return 0;
+	return Math.min(100, Math.max(0, Number(coverage)));
 }
 
 /** Short rows first, then coverage ascending (no demand sorts last), then name. */

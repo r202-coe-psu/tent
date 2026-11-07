@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
 	buildOneTimeDemandRows,
+	coverageBarWidth,
 	countCurrentRecipients,
 	formatCoveragePercent,
 	oneTimeItemIds,
@@ -58,7 +59,7 @@ describe('buildOneTimeDemandRows', () => {
 			status: 'short',
 			qtyPerPersonMissing: false
 		});
-		expect(formatCoveragePercent(row.coverage)).toBe('83.33%');
+		expect(formatCoveragePercent(row.coverage)).toBe('83.3%');
 	});
 
 	it('qty_per_person 2 with 300 on hand: demand 240, no shortfall, enough', () => {
@@ -69,7 +70,7 @@ describe('buildOneTimeDemandRows', () => {
 			shortfall: '0',
 			status: 'enough'
 		});
-		expect(formatCoveragePercent(row.coverage)).toBe('125%');
+		expect(formatCoveragePercent(row.coverage)).toBe('125.0%');
 	});
 
 	it('falls back to 1 per person and flags a missing qty_per_person', () => {
@@ -146,7 +147,7 @@ describe('buildOneTimeDemandRows', () => {
 		);
 		expect(row.available).toBe('0');
 		expect(row.shortfall).toBe('10');
-		expect(formatCoveragePercent(row.coverage)).toBe('0%');
+		expect(formatCoveragePercent(row.coverage)).toBe('0.0%');
 	});
 
 	it('AC-5a: lot A 50 and lot B -10 gives 50', () => {
@@ -172,7 +173,7 @@ describe('buildOneTimeDemandRows', () => {
 		expect(formatCoveragePercent(row.coverage)).toBe('99.7%');
 		const [tiny] = build([net], 100000, [lot(net._id, '99999')]);
 		expect(tiny.status).toBe('short');
-		expect(formatCoveragePercent(tiny.coverage)).toBe('99.99%');
+		expect(formatCoveragePercent(tiny.coverage)).toBe('99.9%');
 	});
 
 	it('0 people: demand 0, coverage is a dash, still enough', () => {
@@ -315,5 +316,23 @@ describe('countCurrentRecipients', () => {
 		);
 		expect(counts.get('item_master:net')).toBe(2);
 		expect(counts.get('item_master:tent')).toBe(1);
+	});
+});
+
+describe('formatCoveragePercent', () => {
+	it('rounds to one decimal and never shows a short row as 100%', () => {
+		expect(formatCoveragePercent('63.29')).toBe('63.3%');
+		expect(formatCoveragePercent('99.97')).toBe('99.9%');
+		expect(formatCoveragePercent('100')).toBe('100.0%');
+		expect(formatCoveragePercent('125')).toBe('125.0%');
+		expect(formatCoveragePercent(null)).toBe('—');
+	});
+});
+
+describe('coverageBarWidth', () => {
+	it('clamps to 0-100 and is empty without demand', () => {
+		expect(coverageBarWidth('63.29')).toBe(63.29);
+		expect(coverageBarWidth('15658')).toBe(100);
+		expect(coverageBarWidth(null)).toBe(0);
 	});
 });
