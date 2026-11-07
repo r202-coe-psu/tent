@@ -52,6 +52,8 @@ const distributionLogFields = {
 	recipient_type: distributionRecipientTypeSchema,
 	recipient_id: z.string().min(1).nullable().optional(),
 	household_id: z.string().min(1).optional(),
+	/** #1154 — the household member who collected on the recipient's behalf. */
+	collected_by_recipient_id: z.string().min(1).optional(),
 	meal: mealPeriodSchema.optional(),
 	is_returnable: z.boolean(),
 	status: distributionLogStatusSchema,
@@ -124,6 +126,19 @@ function validateDistributionLog(
 			code: 'custom',
 			path: ['recipient_id'],
 			message: 'staff recipient_id is required'
+		});
+	}
+	const collectorId = log.collected_by_recipient_id;
+	if (
+		collectorId !== undefined &&
+		(log.recipient_type !== 'evacuee' ||
+			!collectorId.startsWith('evacuee:') ||
+			collectorId === recipientId)
+	) {
+		ctx.addIssue({
+			code: 'custom',
+			path: ['collected_by_recipient_id'],
+			message: 'collected_by_recipient_id must be another evacuee collecting for an evacuee'
 		});
 	}
 	if (log.recipient_type === 'outside' && recipientId != null) {
@@ -278,6 +293,7 @@ export const distributionLogInputSchema = z
 		recipient_type: distributionRecipientTypeSchema,
 		recipient_id: z.string().min(1).nullable().optional(),
 		household_id: z.string().min(1).optional(),
+		collected_by_recipient_id: z.string().min(1).optional(),
 		meal: mealPeriodSchema.optional(),
 		is_returnable: z.boolean(),
 		is_override: z.boolean(),
@@ -331,6 +347,7 @@ const IMMUTABLE_LOG_ISSUANCE_FIELDS = [
 	'recipient_type',
 	'recipient_id',
 	'household_id',
+	'collected_by_recipient_id',
 	'is_returnable',
 	'distributed_at',
 	'distributed_by',

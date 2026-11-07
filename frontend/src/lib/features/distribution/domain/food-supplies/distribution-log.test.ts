@@ -79,6 +79,29 @@ describe('Food & Supplies DistributionLog contract', () => {
 		).toBe(false);
 	});
 
+	it('accepts collected_by_recipient_id only as another evacuee collecting for an evacuee (#1154)', () => {
+		const collector = 'evacuee:01J0000000000000000000000C';
+		const ok = createDistributionLog(
+			{ ...foodLogInput, collected_by_recipient_id: collector },
+			ctx
+		);
+		expect(ok.collected_by_recipient_id).toBe(collector);
+
+		const reject = (patch: Record<string, unknown>) =>
+			distributionLogInputSchema.safeParse({ ...foodLogInput, ...patch }).success;
+		expect(reject({ collected_by_recipient_id: foodLogInput.recipient_id })).toBe(false);
+		expect(reject({ collected_by_recipient_id: 'volunteer:01J0000000000000000000000C' })).toBe(
+			false
+		);
+		expect(
+			reject({
+				recipient_type: 'volunteer',
+				recipient_id: `volunteer:${ULID}`,
+				collected_by_recipient_id: collector
+			})
+		).toBe(false);
+	});
+
 	it('rejects numeric quantities in persisted DistributionLog documents', () => {
 		const log = createDistributionLog(foodLogInput, ctx, ULID);
 		expect(distributionLogDocSchema.safeParse({ ...log, qty: 1 }).success).toBe(false);
