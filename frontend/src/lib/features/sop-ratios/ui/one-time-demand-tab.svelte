@@ -28,7 +28,9 @@
 		formatCoveragePercent,
 		oneTimeItemIds,
 		sortOneTimeDemandRows,
-		type OneTimeDemandRow
+		PARTIAL_COVERAGE_PERCENT,
+		type OneTimeDemandRow,
+		type OneTimeDemandStatus
 	} from '../domain/one-time-demand';
 	import AlertCircle from '@lucide/svelte/icons/alert-circle';
 	import AlertTriangle from '@lucide/svelte/icons/alert-triangle';
@@ -36,7 +38,6 @@
 	import Eye from '@lucide/svelte/icons/eye';
 	import Info from '@lucide/svelte/icons/info';
 	import Package from '@lucide/svelte/icons/package';
-	import PackageX from '@lucide/svelte/icons/package-x';
 	import PackageOpen from '@lucide/svelte/icons/package-open';
 	import Search from '@lucide/svelte/icons/search';
 	import Users from '@lucide/svelte/icons/users';
@@ -100,34 +101,25 @@
 	let visible = $state(PAGE_SIZE);
 
 	// Same pattern as the stock page's attention cards: a card filters the table, a second click clears it.
-	type CardFilter = 'all' | 'short' | 'partial' | 'empty';
+	type CardFilter = 'all' | OneTimeDemandStatus;
 	let cardFilter = $state<CardFilter>('all');
-	function toggleCard(next: Exclude<CardFilter, 'all'>) {
+	function toggleCard(next: OneTimeDemandStatus) {
 		cardFilter = cardFilter === next ? 'all' : next;
 		visible = PAGE_SIZE;
 	}
 
 	const filtered = $derived.by(() => {
 		const q = search.trim().toLowerCase();
-		const byCard = rows.filter((r) =>
-			cardFilter === 'short'
-				? r.status === 'short'
-				: cardFilter === 'partial'
-					? partialRows.some((p) => p.itemId === r.itemId)
-					: cardFilter === 'empty'
-						? emptyRows.some((e) => e.itemId === r.itemId)
-						: true
-		);
+		const byCard = cardFilter === 'all' ? rows : rows.filter((r) => r.status === cardFilter);
 		return q ? byCard.filter((r) => r.name.toLowerCase().includes(q)) : byCard;
 	});
 	const shown = $derived(filtered.slice(0, visible));
 	const ready = $derived(!isLoading && !isError && rows.length > 0);
-	const shortRows = $derived(rows.filter((r) => r.status === 'short'));
-	const shortCount = $derived(shortRows.length);
-	// Short rows with some stock in hand vs none at all, for the summary sentence.
-	const partialRows = $derived(shortRows.filter((r) => coverageBarWidth(r.coverage) > 0));
-	const emptyRows = $derived(shortRows.filter((r) => r.available === '0'));
-	const shortPercent = $derived(rows.length ? Math.round((shortCount / rows.length) * 100) : 0);
+	const rowsByStatus = $derived({
+		enough: rows.filter((r) => r.status === 'enough'),
+		partial: rows.filter((r) => r.status === 'partial'),
+		shortage: rows.filter((r) => r.status === 'shortage')
+	});
 	/** Names listed on a card before "and N more". */
 	const CARD_NAMES = 2;
 
@@ -157,27 +149,33 @@
 	{#if row.status === 'enough'}
 		<Badge variant="outline" class="h-6 gap-1 border-emerald-200 bg-emerald-50 text-emerald-900">
 			<CheckCircle2 aria-hidden="true" />
-			พอ
+			พอแจก
+		</Badge>
+	{:else if row.status === 'partial'}
+		<Badge variant="outline" class="h-6 gap-1 border-amber-200 bg-amber-50 text-amber-900">
+			<Package aria-hidden="true" />
+			แจกได้บางส่วน
 		</Badge>
 	{:else}
 		<Badge variant="outline" class="h-6 gap-1 border-red-200 bg-red-50 text-red-900">
 			<AlertCircle aria-hidden="true" />
-			ไม่พอ
+			ขาดแคลน
 		</Badge>
 	{/if}
 {/snippet}
 
 {#snippet coverageMeter(row: OneTimeDemandRow)}
+	{@const tone = {
+		enough: ['bg-emerald-100', 'bg-emerald-500'],
+		partial: ['bg-amber-100', 'bg-amber-500'],
+		shortage: ['bg-slate-200', 'bg-red-500']
+	}[row.status]}
 	<div class="min-w-32 space-y-1.5">
 		<p class="text-sm font-semibold text-slate-600 tabular-nums">
 			{formatCoveragePercent(row.coverage)}
 		</p>
 		<div
-			class="h-2 overflow-hidden rounded-full {row.status === 'enough'
-				? 'bg-emerald-100'
-				: coverageBarWidth(row.coverage) >= 50
-					? 'bg-amber-100'
-					: 'bg-slate-200'}"
+			class="h-2 overflow-hidden rounded-full {tone[0]}"
 			role="progressbar"
 			aria-label="ครอบคลุม {row.name}"
 			aria-valuemin={0}
@@ -185,11 +183,7 @@
 			aria-valuenow={Math.round(coverageBarWidth(row.coverage))}
 		>
 			<div
-				class="h-full rounded-full {row.status === 'enough'
-					? 'bg-emerald-500'
-					: coverageBarWidth(row.coverage) >= 50
-						? 'bg-amber-500'
-						: 'bg-red-500'}"
+				class="h-full rounded-full {tone[1]}"
 				style:width="{coverageBarWidth(row.coverage)}%"
 			></div>
 		</div>
@@ -216,24 +210,28 @@
 {/snippet}
 
 {#snippet attentionCard(card: {
-	filter: Exclude<CardFilter, 'all'>;
+	status: OneTimeDemandStatus;
 	label: string;
-	tone: 'critical' | 'warning' | 'neutral' | 'ok';
+	criteria: string;
+	tone: 'critical' | 'warning' | 'ok';
 	icon: typeof AlertCircle;
 })}
-	{@const isSelected = cardFilter === card.filter}
-	{@const list =
-		card.filter === 'partial' ? partialRows : card.filter === 'empty' ? emptyRows : shortRows}
+	{@const isSelected = cardFilter === card.status}
+	{@const list = rowsByStatus[card.status]}
 	{@const toneNumber = {
 		critical: 'text-red-700',
 		warning: 'text-amber-700',
-		neutral: 'text-slate-900',
 		ok: 'text-emerald-700'
+	}[card.tone]}
+	{@const toneChip = {
+		critical: 'border-red-200 bg-red-50 text-red-900',
+		warning: 'border-amber-200 bg-amber-50 text-amber-900',
+		ok: 'border-slate-200 bg-slate-50 text-slate-700'
 	}[card.tone]}
 	<button
 		type="button"
 		aria-pressed={isSelected}
-		onclick={() => toggleCard(card.filter)}
+		onclick={() => toggleCard(card.status)}
 		class="flex min-h-[72px] flex-col items-start justify-center gap-0.5 rounded-xl px-3.5 py-2.5 text-left transition-colors focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none xl:min-h-28 xl:gap-1 xl:px-4 xl:py-3.5 {isSelected
 			? 'border-2 border-[#0284C7] bg-sky-50'
 			: 'border border-slate-200/80 bg-white shadow-2xs hover:border-slate-300'}"
@@ -244,32 +242,17 @@
 		</span>
 		<span class="flex flex-wrap items-baseline gap-x-2">
 			<span class="text-2xl font-bold tabular-nums xl:text-3xl {toneNumber}">{list.length}</span>
-			<span class="text-sm text-slate-500">
-				{card.filter === 'short' ? `/ ${rows.length}` : 'รายการ'}
-			</span>
-			{#if card.filter === 'short' && shortCount > 0}
-				<Badge variant="destructive" class="h-5">ขาดแคลน {shortPercent}%</Badge>
-			{/if}
+			<span class="text-sm text-slate-500">รายการ</span>
 		</span>
-		{#if card.filter === 'short'}
-			<span class="hidden text-xs text-slate-500 xl:block">
-				{shortCount === 0
-					? 'พอแจกทุกรายการ'
-					: shortCount === rows.length
-						? 'ทุกรายการยังไม่พอ'
-						: `${rows.length - shortCount} รายการพอแล้ว`}
-			</span>
-		{:else if list.length > 0}
+		<span class="text-xs text-slate-500">{card.criteria}</span>
+		{#if list.length > 0}
 			<span class="mt-1 hidden w-full flex-wrap gap-1 xl:flex">
 				{#each list.slice(0, CARD_NAMES) as row (row.itemId)}
 					<span
-						class="inline-flex max-w-full items-center gap-1.5 rounded-md border px-2 py-0.5 text-xs {card.filter ===
-						'partial'
-							? 'border-amber-200 bg-amber-50 text-amber-900'
-							: 'border-slate-200 bg-slate-50 text-slate-700'}"
+						class="inline-flex max-w-full items-center gap-1.5 rounded-md border px-2 py-0.5 text-xs {toneChip}"
 					>
 						<span class="truncate">{row.name}</span>
-						{#if card.filter === 'partial'}
+						{#if card.status !== 'enough'}
 							<span class="font-semibold tabular-nums">{formatCoveragePercent(row.coverage)}</span>
 						{/if}
 					</span>
@@ -323,22 +306,25 @@
 
 		{#if ready}
 			{@render attentionCard({
-				filter: 'short',
-				label: 'รายการที่ยังไม่พอ',
-				tone: shortCount > 0 ? 'critical' : 'ok',
-				icon: AlertCircle
+				status: 'enough',
+				label: 'พอแจก',
+				criteria: `ครอบคลุม ≥ 100% ของที่ต้องแจก`,
+				tone: 'ok',
+				icon: CheckCircle2
 			})}
 			{@render attentionCard({
-				filter: 'partial',
-				label: 'พร้อมแจกจ่ายบางส่วน',
+				status: 'partial',
+				label: 'แจกได้บางส่วน',
+				criteria: `ครอบคลุม ${PARTIAL_COVERAGE_PERCENT}% ถึงต่ำกว่า 100%`,
 				tone: 'warning',
 				icon: Package
 			})}
 			{@render attentionCard({
-				filter: 'empty',
-				label: 'สต็อกเป็นศูนย์',
+				status: 'shortage',
+				label: 'ขาดแคลน',
+				criteria: `ครอบคลุมต่ำกว่า ${PARTIAL_COVERAGE_PERCENT}%`,
 				tone: 'critical',
-				icon: PackageX
+				icon: AlertCircle
 			})}
 		{/if}
 	</section>
@@ -389,7 +375,7 @@
 			<ul class="space-y-2.5 border-t border-slate-200/80 p-3 md:hidden">
 				{#each shown as row (row.itemId)}
 					<li
-						class="rounded-xl border bg-white p-3.5 {row.status === 'short'
+						class="rounded-xl border bg-white p-3.5 {row.status !== 'enough'
 							? 'border-red-200'
 							: 'border-slate-200/80'}"
 					>
@@ -429,7 +415,7 @@
 							<div>
 								<dt class="text-slate-500">ต้องหาเพิ่ม</dt>
 								<dd
-									class="font-semibold tabular-nums {row.status === 'short'
+									class="font-semibold tabular-nums {row.status !== 'enough'
 										? 'text-red-700'
 										: 'text-slate-900'}"
 								>
@@ -492,8 +478,8 @@
 									<span class="text-sm font-normal text-slate-500">{unitLabel(row)}</span>
 								</Table.Cell>
 								<Table.Cell
-									class="px-4 py-3 text-right text-base font-semibold tabular-nums {row.status ===
-									'short'
+									class="px-4 py-3 text-right text-base font-semibold tabular-nums {row.status !==
+									'enough'
 										? 'text-red-700'
 										: 'text-slate-900'}"
 								>

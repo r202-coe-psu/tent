@@ -56,7 +56,7 @@ describe('buildOneTimeDemandRows', () => {
 			demand: '120',
 			available: '100',
 			shortfall: '20',
-			status: 'short',
+			status: 'partial',
 			qtyPerPersonMissing: false
 		});
 		expect(formatCoveragePercent(row.coverage)).toBe('83.3%');
@@ -169,10 +169,10 @@ describe('buildOneTimeDemandRows', () => {
 
 	it('a short row never rounds up to 100%', () => {
 		const [row] = build([net], 1000, [lot(net._id, '997')]);
-		expect(row.status).toBe('short');
+		expect(row.status).toBe('partial');
 		expect(formatCoveragePercent(row.coverage)).toBe('99.7%');
 		const [tiny] = build([net], 100000, [lot(net._id, '99999')]);
-		expect(tiny.status).toBe('short');
+		expect(tiny.status).toBe('partial');
 		expect(formatCoveragePercent(tiny.coverage)).toBe('99.9%');
 	});
 
@@ -273,7 +273,7 @@ describe('already received', () => {
 			demand: '90',
 			available: '50',
 			shortfall: '40',
-			status: 'short'
+			status: 'partial'
 		});
 	});
 
@@ -334,5 +334,28 @@ describe('coverageBarWidth', () => {
 		expect(coverageBarWidth('63.29')).toBe(63.29);
 		expect(coverageBarWidth('15658')).toBe(100);
 		expect(coverageBarWidth(null)).toBe(0);
+	});
+});
+
+describe('demand status tiers', () => {
+	const statusOf = (people: number, onHand: string) =>
+		buildOneTimeDemandRows({
+			items: [net],
+			people,
+			lots: [lot(net._id, onHand)],
+			reservations: [],
+			now: NOW
+		})[0].status;
+
+	it('is enough at 100% or more, partial from 50%, shortage below', () => {
+		expect(statusOf(100, '100')).toBe('enough');
+		expect(statusOf(100, '99')).toBe('partial');
+		expect(statusOf(100, '50')).toBe('partial');
+		expect(statusOf(100, '49')).toBe('shortage');
+		expect(statusOf(100, '0')).toBe('shortage');
+	});
+
+	it('counts an item nobody still needs as enough', () => {
+		expect(statusOf(0, '0')).toBe('enough');
 	});
 });

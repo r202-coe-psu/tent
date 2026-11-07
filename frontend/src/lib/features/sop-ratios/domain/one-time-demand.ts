@@ -37,7 +37,14 @@ export interface OneTimeRecipient {
 	recipient_id: string;
 }
 
-export type OneTimeDemandStatus = 'enough' | 'short';
+/**
+ * `enough`: available covers the need. `partial`: at least half of it. `shortage`: under half.
+ * The 50% line is the same one the coverage bar uses.
+ */
+export type OneTimeDemandStatus = 'enough' | 'partial' | 'shortage';
+
+/** Share of the need (as a percent) at and above which a short item still counts as partial. */
+export const PARTIAL_COVERAGE_PERCENT = 50;
 
 export interface OneTimeDemandRow {
 	itemId: string;
@@ -71,6 +78,13 @@ export interface BuildOneTimeDemandInput {
 }
 
 const ZERO = '0';
+
+function demandStatus(available: string, demand: string): OneTimeDemandStatus {
+	if (qtyGte(available, demand)) return 'enough';
+	// available / demand >= 50%, compared without dividing.
+	const half = new Decimal(PARTIAL_COVERAGE_PERCENT).div(100);
+	return parseQty(available).gte(parseQty(demand).times(half)) ? 'partial' : 'shortage';
+}
 
 function isActiveOneTime(item: OneTimeDemandItem): boolean {
 	return item.distribution_type === 'one_time' && !item.deactivated && !item.merged_into;
@@ -155,7 +169,7 @@ export function buildOneTimeDemandRows(input: BuildOneTimeDemandInput): OneTimeD
 						.toDecimalPlaces(2, Decimal.ROUND_DOWN)
 						.toString()
 				: null,
-			status: qtyGte(available, demand) ? 'enough' : 'short',
+			status: demandStatus(available, demand),
 			qtyPerPersonMissing
 		};
 	});
@@ -178,7 +192,7 @@ export function coverageBarWidth(coverage: string | null): number {
 
 /** Short rows first, then coverage ascending (no demand sorts last), then name. */
 export function sortOneTimeDemandRows(rows: readonly OneTimeDemandRow[]): OneTimeDemandRow[] {
-	const rank = (row: OneTimeDemandRow) => (row.status === 'short' ? 0 : 1);
+	const rank = (row: OneTimeDemandRow) => (row.status === 'enough' ? 1 : 0);
 	return [...rows].sort((a, b) => {
 		if (rank(a) !== rank(b)) return rank(a) - rank(b);
 		if (a.coverage !== b.coverage) {
