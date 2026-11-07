@@ -18,12 +18,16 @@
 		walkInSession,
 		type FaceCheckOutcome
 	} from '$lib/features/kiosk';
+	import { languageStore } from '$lib/stores/language.svelte';
+	import { getTranslation } from '$lib/utils/i18n';
+	import { KIOSK_REGISTER_FACE_I18N } from './face-page.i18n';
 
 	const displayContext = $derived(
 		getKioskDisplayContext(readKioskDisplayQuery(page.url.searchParams))
 	);
 	const contextQuery = $derived(buildKioskContextQuery(displayContext));
 	const homeUrl = $derived(`/kiosk${contextQuery}`);
+	const t = $derived(getTranslation(KIOSK_REGISTER_FACE_I18N, languageStore.current));
 	const faceCheck = walkInSession.faceCheckToRun;
 	const idleTimeout = new KioskIdleTimeout(KIOSK_IDLE_TIMEOUT_MS, returnHome);
 	/** Going on to the phone step; any other way off this page abandons the walk-in. */
@@ -67,12 +71,12 @@
 	}
 </script>
 
-<svelte:head><title>ตรวจสอบใบหน้า — SmartShelter Kiosk</title></svelte:head>
+<svelte:head><title>{t.pageTitle}</title></svelte:head>
 <svelte:window onpointerdown={activity} onkeydown={activity} />
 <div
 	class="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-4 py-3 kiosk-compact:gap-1.5 kiosk-compact:py-0"
 >
-	<KioskCheckInWizard currentStep={3} step2Label="อ่านบัตร" />
+	<KioskCheckInWizard currentStep={3} step2Label={t.wizardStep} />
 	<!-- Leaving mid-check is a cancel: unmounting ends the check and nothing is registered. -->
 	<div class="flex justify-start">
 		<KioskBackButton href={homeUrl} onclick={() => abandonWalkIn()} />

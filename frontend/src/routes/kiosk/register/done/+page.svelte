@@ -5,7 +5,8 @@
 	import CircleAlert from '@lucide/svelte/icons/circle-alert';
 	import Printer from '@lucide/svelte/icons/printer';
 	import { Button } from '$lib/components/ui/button/index.js';
-	import { CONSENT_COPY } from '$lib/features/consent';
+	import { languageStore } from '$lib/stores/language.svelte';
+	import { getTranslation } from '$lib/utils/i18n';
 	import {
 		buildKioskContextQuery,
 		getKioskDisplayContext,
@@ -26,6 +27,9 @@
 		walkInSession,
 		type KioskQrImage
 	} from '$lib/features/kiosk';
+	import { KIOSK_REGISTER_DONE_I18N } from './done-page.i18n';
+
+	const t = $derived(getTranslation(KIOSK_REGISTER_DONE_I18N, languageStore.current));
 
 	/** How long «printed» stays on screen before the status card goes away. */
 	const PRINT_DONE_VISIBLE_MS = 2500;
@@ -97,7 +101,8 @@
 				async () => {
 					await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
 					window.print();
-				}
+				},
+				languageStore.current
 			);
 			if (result.kind === 'printed') {
 				printPhase = 'done';
@@ -110,42 +115,40 @@
 			if (result.kind === 'error') printError = result.message;
 		} catch {
 			printPhase = 'idle';
-			printError = 'สร้าง QR Code สำหรับพิมพ์ไม่สำเร็จ';
+			printError = t.printRenderFailed;
 		} finally {
 			idleTimeout.setPaused(false);
 		}
 	}
 </script>
 
-<svelte:head><title>ลงทะเบียนสำเร็จ — SmartShelter Kiosk</title></svelte:head>
+<svelte:head><title>{t.pageTitle}</title></svelte:head>
 <svelte:window onpointerdown={activity} onkeydown={activity} />
 <div class="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-4 py-3">
-	<KioskCheckInWizard currentStep={5} step2Label="ลงทะเบียน" />
+	<KioskCheckInWizard currentStep={5} step2Label={t.wizardStep} />
 	<KioskNoticePanel
 		tone="success"
 		icon={CheckCircle2}
-		title="ลงทะเบียนสำเร็จ"
+		title={t.title}
 		headingTag="h1"
 		role="status"
 	>
 		{#if registration}
 			<p>
-				{viaThaid
-					? 'รับ QR Code แล้วไปที่จุดคัดกรอง'
-					: 'กรุณานำบัตรออกจากเครื่อง รับ QR Code แล้วไปที่จุดคัดกรอง'}
+				{viaThaid ? t.takeQrThaid : t.takeQrCard}
 			</p>
 			<p class="text-base kiosk-portrait:text-xl">
-				{CONSENT_COPY.summary.ref}:
+				{t.consentRef}:
 				<span class="font-mono tracking-wide">{registration.consent_ref}</span>
 			</p>
 			{#if printError}
 				<KioskInlineAlert tone="warning" icon={CircleAlert} role="alert"
-					>{printError} กดพิมพ์อีกครั้ง หรือติดต่อเจ้าหน้าที่</KioskInlineAlert
+					>{t.printFailedHint(printError)}</KioskInlineAlert
 				>
 			{/if}
 		{:else}
-			{#if !viaThaid}<p>กรุณานำบัตรออกจากเครื่อง</p>{/if}
-			<p>กรุณาติดต่อเจ้าหน้าที่เพื่อพิมพ์ QR Code</p>
+			{#if !viaThaid}<p>{t.removeCard}</p>{/if}
+			<p>{t.contactStaff}</p>
 		{/if}
 		{#snippet actions()}
 			{#if registration}
@@ -154,11 +157,11 @@
 					variant="outline"
 					onclick={printLabel}
 					disabled={printPhase === 'printing'}
-					class={KIOSK_NOTICE_SECONDARY_ACTION}><Printer aria-hidden="true" />พิมพ์อีกครั้ง</Button
+					class={KIOSK_NOTICE_SECONDARY_ACTION}><Printer aria-hidden="true" />{t.printAgain}</Button
 				>
 			{/if}
 			<Button type="button" onclick={returnHome} class={KIOSK_NOTICE_PRIMARY_ACTION}
-				>กลับหน้าแรก</Button
+				>{t.home}</Button
 			>
 		{/snippet}
 	</KioskNoticePanel>
