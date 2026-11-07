@@ -48,6 +48,9 @@ export {
 	LOT_NO_PATTERN
 } from './domain/operations';
 
+export { projectLotsByItem, StockLotIntegrityError } from './domain/operations';
+export { countLotsHoldingStock } from './domain/lot-storage';
+
 export type {
 	DonationPointReceipt,
 	DonationPointReceiptItem,

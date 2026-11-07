@@ -1,3 +1,4 @@
+import { qtyGt } from '$lib/utils/qty';
 import type { StockLot } from './operations';
 
 /**
@@ -112,4 +113,15 @@ export function lotLocationFields(
 	if (zone) return { storage_zone: zone };
 	const legacy = lotStorageName(lot);
 	return legacy ? { note: legacy } : {};
+}
+
+/**
+ * How many lots at storage point `pointId` still hold stock (qty > 0) — a point can be deleted
+ * only when this is 0 (#1186). An overdrawn (negative) lot holds no stock.
+ */
+export function countLotsHoldingStock(
+	pointId: string,
+	lots: readonly { qty: string; lot?: Pick<StockLot, 'storage_point_id'> }[]
+): number {
+	return lots.filter((l) => l.lot?.storage_point_id === pointId && qtyGt(l.qty, 0)).length;
 }

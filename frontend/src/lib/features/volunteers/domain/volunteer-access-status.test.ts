@@ -1,7 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import {
 	accessEndingParts,
+	accountsByVolunteer,
 	closeProfileAccessNotice,
+	rosterAccessStatus,
 	hasVolunteerAccount,
 	volunteerAccessStatus,
 	type VolunteerAccount
@@ -160,5 +162,34 @@ describe('accessEndingParts (#1044)', () => {
 			}
 		]);
 		expect(s).toEqual({ kind: 'lapsed', loginName: 'a@x.com', lastEnded: ending() });
+	});
+});
+
+describe('rosterAccessStatus (CR-221 FR-25)', () => {
+	const linked = { _id: 'V-011', user_name: 'a@x.com' };
+	const byVolunteer = accountsByVolunteer([
+		account({ permanent_roles: ['kitchen_staff'] }),
+		account({ volunteer_id: 'V-012', name: 'b@x.com', active: false })
+	]);
+
+	it('shows nothing to staff who cannot manage access', () => {
+		expect(rosterAccessStatus(linked, false, byVolunteer)).toBeNull();
+	});
+
+	it('shows nothing while the accounts are not loaded, rather than a guess from user_name', () => {
+		expect(rosterAccessStatus(linked, true, undefined)).toBeNull();
+	});
+
+	it("reads each row's account from the index", () => {
+		expect(rosterAccessStatus(linked, true, byVolunteer)).toMatchObject({
+			kind: 'active',
+			loginName: 'a@x.com'
+		});
+		expect(rosterAccessStatus({ _id: 'V-012' }, true, byVolunteer)).toMatchObject({
+			kind: 'deactivated'
+		});
+		expect(rosterAccessStatus({ _id: 'V-999', user_name: 'z@x.com' }, true, byVolunteer)).toEqual({
+			kind: 'none'
+		});
 	});
 });

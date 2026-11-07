@@ -20,6 +20,7 @@
 		all,
 		incoming = false,
 		incomingDisabled = false,
+		selfPurchased = false,
 		status,
 		categories,
 		locations,
@@ -37,6 +38,8 @@
 		incoming?: boolean;
 		/** A storage point is filtered: incoming goods have no place yet, so the switch is off. */
 		incomingDisabled?: boolean;
+		/** "ซื้อเอง": only items with a self-purchased lot still on hand. */
+		selfPurchased?: boolean;
 		/** Current status filter; the "มีวันหมดอายุ" switch is on while it is `has_expiry`. */
 		status: StockStatusFilter | 'all';
 		categories: Option[];
@@ -51,6 +54,7 @@
 			sort?: StockSort;
 			all?: boolean;
 			incoming?: boolean;
+			selfPurchased?: boolean;
 			status?: StockStatusFilter | 'all';
 		}) => void;
 	} = $props();
@@ -167,34 +171,50 @@
 		</Label>
 	</div>
 
-	<DisabledReason reason={incomingDisabled ? INCOMING_NO_STORAGE_HINT : undefined}>
+	<div class="col-span-2 flex flex-wrap items-center gap-x-6 gap-y-1 md:col-span-4 lg:col-span-5">
 		<div class="flex min-h-11 items-center gap-2.5 px-1">
 			<Switch
-				id="stock-incoming"
-				checked={incoming && !incomingDisabled}
-				disabled={incomingDisabled}
-				onCheckedChange={(v) => onchange({ incoming: v })}
+				id="stock-self-purchased"
+				checked={selfPurchased}
+				onCheckedChange={(v) => onchange({ selfPurchased: v })}
 			/>
 			<Label
-				for="stock-incoming"
-				class="text-sm whitespace-nowrap {incomingDisabled
-					? 'cursor-not-allowed text-slate-400'
-					: 'cursor-pointer text-slate-700'}"
+				for="stock-self-purchased"
+				class="cursor-pointer text-sm whitespace-nowrap text-slate-700"
 			>
-				รวมของที่กำลังมา
+				ซื้อเอง
 			</Label>
 		</div>
-	</DisabledReason>
 
-	<div class="flex min-h-11 items-center gap-2.5 px-1">
-		<Switch
-			id="stock-has-expiry"
-			checked={status === 'has_expiry'}
-			onCheckedChange={(v) => onchange({ status: v ? 'has_expiry' : 'all' })}
-		/>
-		<Label for="stock-has-expiry" class="cursor-pointer text-sm whitespace-nowrap text-slate-700">
-			มีวันหมดอายุ
-		</Label>
+		<DisabledReason reason={incomingDisabled ? INCOMING_NO_STORAGE_HINT : undefined}>
+			<div class="flex min-h-11 items-center gap-2.5 px-1">
+				<Switch
+					id="stock-incoming"
+					checked={incoming && !incomingDisabled}
+					disabled={incomingDisabled}
+					onCheckedChange={(v) => onchange({ incoming: v })}
+				/>
+				<Label
+					for="stock-incoming"
+					class="text-sm whitespace-nowrap {incomingDisabled
+						? 'cursor-not-allowed text-slate-400'
+						: 'cursor-pointer text-slate-700'}"
+				>
+					รวมของที่กำลังมา
+				</Label>
+			</div>
+		</DisabledReason>
+
+		<div class="flex min-h-11 items-center gap-2.5 px-1">
+			<Switch
+				id="stock-has-expiry"
+				checked={status === 'has_expiry'}
+				onCheckedChange={(v) => onchange({ status: v ? 'has_expiry' : 'all' })}
+			/>
+			<Label for="stock-has-expiry" class="cursor-pointer text-sm whitespace-nowrap text-slate-700">
+				มีวันหมดอายุ
+			</Label>
+		</div>
 	</div>
 
 	{#if canShowOverall}

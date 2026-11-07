@@ -180,6 +180,7 @@ export {
 	lotLocationFields,
 	storageLotFields,
 	isStoragePointChosen,
+	countLotsHoldingStock,
 	type StoragePointRef
 } from './domain/lot-storage';
 
@@ -208,7 +209,9 @@ export {
 	operationsKeys,
 	useLedger,
 	useLedgerByItem,
+	useLedgerByItems,
 	useStockBalance,
+	useLotReservationClaims,
 	useReceiveStock,
 	useDistributeBatch,
 	useAdjustStock,
