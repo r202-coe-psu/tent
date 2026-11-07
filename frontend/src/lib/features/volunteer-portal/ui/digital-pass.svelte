@@ -18,6 +18,7 @@
 	import * as Card from '$lib/components/ui/card/index.js';
 	import { Skeleton } from '$lib/components/ui/skeleton';
 	import { languageStore } from '$lib/stores/language.svelte';
+	import { localizeVolunteerMessage } from '../domain/volunteer-messages.i18n';
 	import { skillLabels } from '../domain/skill-label';
 	import {
 		useCancelTicketMutation,
@@ -132,7 +133,11 @@
 			cancelDialogOpen = false;
 			toast.success(t.toastCancelSuccess);
 		} catch (err) {
-			toast.error(err instanceof Error ? err.message : t.toastCancelError);
+			toast.error(
+				err instanceof Error
+					? localizeVolunteerMessage(err.message, languageStore.current)
+					: t.toastCancelError
+			);
 		}
 	}
 </script>
@@ -169,7 +174,9 @@
 			<Card.Content class="flex flex-col items-center gap-3 py-12 text-center">
 				<CircleAlert class="size-8 text-muted-foreground" aria-hidden="true" />
 				<p class="text-sm">
-					{query.error instanceof Error ? query.error.message : t.notFoundError}
+					{query.error instanceof Error
+						? localizeVolunteerMessage(query.error.message, languageStore.current)
+						: t.notFoundError}
 				</p>
 			</Card.Content>
 		</Card.Root>
