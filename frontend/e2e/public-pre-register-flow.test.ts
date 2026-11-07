@@ -600,7 +600,7 @@ test.describe('Pre-register: render contract (R)', { tag: ['@pre-register', '@sm
 			'บ้านเช่า',
 			'คอนโด',
 			'อะพาร์ตเมนต์ / หอพัก',
-			'ไร้ที่อยู่อาศัยเป็นหลักแหล่ง'
+			/^ไร้ที่อยู่อาศัย/
 		]);
 		await page.keyboard.press('Escape');
 
@@ -1027,7 +1027,7 @@ const ERROR_ROWS: ErrorRow[] = [
 		prepare: async (page) => {
 			await fillBase(page, { address: false });
 			await page.locator('#housing-type').click();
-			await page.getByRole('option', { name: 'ไร้ที่อยู่อาศัยเป็นหลักแหล่ง' }).click();
+			await page.getByRole('option', { name: /^ไร้ที่อยู่อาศัย/ }).click();
 		},
 		field: (page) => page.locator('#residence-landmark')
 	},
