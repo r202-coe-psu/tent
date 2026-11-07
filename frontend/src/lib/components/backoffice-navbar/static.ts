@@ -15,6 +15,7 @@ import {
 	canAccessTickets,
 	canAccessVolunteerBackoffice,
 	canAccessWarehouse,
+	canManagePrinters,
 	canViewSupply,
 	shelterCodeFromRoles
 } from '$lib/auth/roles';
@@ -38,6 +39,7 @@ import NotebookPen from '@lucide/svelte/icons/notebook-pen';
 import Cpu from '@lucide/svelte/icons/cpu';
 import MonitorSmartphone from '@lucide/svelte/icons/monitor-smartphone';
 import Images from '@lucide/svelte/icons/images';
+import Printer from '@lucide/svelte/icons/printer';
 
 type Leaf = {
 	label: string;
@@ -228,6 +230,13 @@ export const backofficeNavbarGroups: BackofficeNavbarGroup[] = [
 							isSystemAdmin(roles) || (!!shelterCode && canManageBanners(roles, shelterCode))
 					}
 				]
+			},
+			{
+				label: 'จัดการเครื่องพิมพ์',
+				href: resolve('/back-office/printers'),
+				icon: Printer,
+				visibleTo: ({ roles, shelterCode }) =>
+					isSystemAdmin(roles) || (!!shelterCode && canManagePrinters(roles, shelterCode))
 			},
 			{
 				label: 'จัดการข้อมูลหลัก',

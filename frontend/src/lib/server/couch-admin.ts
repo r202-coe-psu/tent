@@ -3,7 +3,6 @@ import { error, json, isHttpError, type HttpError } from '@sveltejs/kit';
 import {
 	COUCH_ADMIN,
 	SYSTEM_ADMIN,
-	hasShelterScope,
 	isShelterManager,
 	isStaffOnly,
 	isSystemAdmin,
@@ -11,6 +10,27 @@ import {
 	shelterCodeFromRoles,
 	shelterCodesFromRoles
 } from '$lib/auth/roles';
+import {
+	ServiceError,
+	centralCouchBase,
+	readSessionUserCtx,
+	requireShelterScopeOrSA,
+	serviceErrorStatus,
+	type Caller,
+	type ServiceErrorCode
+} from './session-auth';
+
+// The credential-free session helpers live in `session-auth.ts` (printer code must not import
+// this module, CR-222 FR-2a); re-exported so every existing caller keeps working unchanged.
+export {
+	ServiceError,
+	centralCouchBase,
+	readSessionUserCtx,
+	requireShelterScopeOrSA,
+	serviceErrorStatus,
+	type Caller,
+	type ServiceErrorCode
+};
 
 /**
  * Server-only CouchDB admin client.
@@ -55,11 +75,13 @@ export function isProtectedBootstrapAdmin(
 export async function adminRaw(
 	path: string,
 	method: string,
-	body?: unknown
+	body?: unknown,
+	signal?: AbortSignal
 ): Promise<{ status: number; data: unknown }> {
 	const { base, authHeader } = adminConfig();
 	const res = await fetch(`${base}${path}`, {
 		method,
+		...(signal ? { signal } : {}),
 		headers: {
 			Authorization: authHeader,
 			'Content-Type': 'application/json',
@@ -174,34 +196,6 @@ export async function requireShelterManagerOrSA(
 // future FastAPI inherits: a `{ error: { code, message } }` envelope and
 // session-cookie authorization. These helpers keep the BFF on that contract.
 
-export type ServiceErrorCode =
-	'UNAUTHENTICATED' | 'FORBIDDEN' | 'NOT_FOUND' | 'VALIDATION' | 'CONFLICT' | 'INTERNAL';
-
-const STATUS_BY_CODE: Record<ServiceErrorCode, number> = {
-	UNAUTHENTICATED: 401,
-	FORBIDDEN: 403,
-	NOT_FOUND: 404,
-	VALIDATION: 422,
-	CONFLICT: 409,
-	INTERNAL: 500
-};
-
-/** HTTP status for a {@link ServiceErrorCode} — for callers that answer with `fail()` instead of JSON. */
-export const serviceErrorStatus = (code: ServiceErrorCode): number => STATUS_BY_CODE[code];
-
-/** Contract-shaped error carrying its code; handlers turn it into the envelope. */
-export class ServiceError extends Error {
-	constructor(
-		readonly code: ServiceErrorCode,
-		message: string,
-		/** Optional operator-facing detail (CouchDB reason, remediation). Never put secrets here. */
-		readonly description?: string
-	) {
-		super(message);
-		this.name = 'ServiceError';
-	}
-}
-
 /**
  * Map a failed CouchDB admin response to {@link ServiceError} with a safe
  * `description` (status + error/reason, no admin URL / credentials).
@@ -252,7 +246,7 @@ export function serviceError(e: unknown): Response {
 		message: err.message
 	};
 	if (err.description) error.description = err.description;
-	return json({ error }, { status: STATUS_BY_CODE[err.code] });
+	return json({ error }, { status: serviceErrorStatus(err.code) });
 }
 
 const CODE_BY_STATUS: Record<number, ServiceErrorCode> = {
@@ -276,34 +270,6 @@ export function serviceOrHttpError(e: unknown): Response {
 	return json({ error: { code, message: err.body.message } }, { status: err.status });
 }
 
-/** Authenticated caller, resolved from the session cookie via central `_session`. */
-export interface Caller {
-	name: string;
-	roles: string[];
-	/** SA or CouchDB server admin (global authority over users). */
-	isSA: boolean;
-	/** The caller's single shelter code (`shelter:{code}` → `{code}`), or null. */
-	shelterCode: string | null;
-}
-
-/**
- * Resolve the caller's identity by forwarding their cookie to central `/_session` (whoami).
- * `name` is null for an anonymous session; `roles` is `[]` when CouchDB returns no userCtx.
- * Never throws on an unauthenticated session — callers decide the error to raise.
- */
-export async function readSessionUserCtx(
-	cookie: string | null
-): Promise<{ name: string | null; roles: string[] }> {
-	const { base } = adminConfig();
-	const res = await fetch(`${base}/_session`, {
-		headers: { Accept: 'application/json', ...(cookie ? { Cookie: cookie } : {}) }
-	});
-	const data = (await res.json().catch(() => null)) as {
-		userCtx?: { name: string | null; roles: string[] };
-	} | null;
-	return { name: data?.userCtx?.name ?? null, roles: data?.userCtx?.roles ?? [] };
-}
-
 /**
  * Authorize a user-management write. Forwards the caller's cookie to central
  * `/_session` (whoami), then requires SA or shelter_manager. Returns the caller
@@ -322,48 +288,6 @@ export async function authorizeSession(cookie: string | null): Promise<Caller> {
 	const { name, roles } = await readSessionUserCtx(cookie);
 	if (!name) throw new ServiceError('UNAUTHENTICATED', 'Authentication required');
 	return { name, roles, isSA: isSystemAdmin(roles), shelterCode: shelterCodeFromRoles(roles) };
-}
-
-/**
- * Read-only gate: SA or any user whose roles include the shelter scope
- * (`shelter:{code}`). Use this for GET endpoints — staff roles
- * (registration_staff / kitchen_staff / warehouse_staff) all need to see their
- * shelter's detail to do their work; writes still require
- * `requireShelterManagerOrSA`.
- *
- * Omit `code` to only resolve the caller's session (returns the {@link Caller}
- * so the handler can scope the response — e.g. SA → all rows, shelter-scoped
- * user → only their own). With `code`, the caller's `shelterCode` must equal
- * that value unless the caller is a system admin.
- *
- * @param cookie  The request's `Cookie` header (may be null for anonymous).
- * @param code    Optional shelter code from the URL params.
- */
-export async function requireShelterScopeOrSA(
-	cookie: string | null,
-	code?: string
-): Promise<Caller> {
-	const { base } = adminConfig();
-	const res = await fetch(`${base}/_session`, {
-		headers: { Accept: 'application/json', ...(cookie ? { Cookie: cookie } : {}) }
-	});
-	const data = (await res.json().catch(() => null)) as {
-		userCtx?: { name: string | null; roles: string[] };
-	} | null;
-	const name = data?.userCtx?.name;
-	const roles = data?.userCtx?.roles ?? [];
-	if (!name) throw error(401, 'Authentication required');
-
-	const caller: Caller = {
-		name,
-		roles,
-		isSA: isSystemAdmin(roles),
-		shelterCode: shelterCodeFromRoles(roles)
-	};
-	if (code === undefined) return caller;
-	if (caller.isSA) return caller;
-	if (hasShelterScope(caller.roles, code)) return caller;
-	throw error(403, `Caller is not in shelter "${code}" scope`);
 }
 
 /**
