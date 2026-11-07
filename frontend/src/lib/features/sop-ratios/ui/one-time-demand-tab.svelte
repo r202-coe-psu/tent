@@ -129,7 +129,7 @@
 	const emptyRows = $derived(shortRows.filter((r) => r.available === '0'));
 	const shortPercent = $derived(rows.length ? Math.round((shortCount / rows.length) * 100) : 0);
 	/** Names listed on a card before "and N more". */
-	const CARD_NAMES = 3;
+	const CARD_NAMES = 2;
 
 	const categoryOfItem = $derived.by(() => {
 		const names = new Map((categoriesQuery.data ?? []).map((c) => [c._id, c.name]));
@@ -230,26 +230,20 @@
 		neutral: 'text-slate-900',
 		ok: 'text-emerald-700'
 	}[card.tone]}
-	{@const toneBorder = {
-		critical: 'border-red-200 bg-red-50/40',
-		warning: 'border-amber-200',
-		neutral: 'border-slate-200/80',
-		ok: 'border-emerald-200 bg-emerald-50/40'
-	}[card.tone]}
 	<button
 		type="button"
 		aria-pressed={isSelected}
 		onclick={() => toggleCard(card.filter)}
-		class="flex min-h-28 flex-col items-start gap-1 rounded-xl px-4 py-3.5 text-left transition-colors focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none {isSelected
+		class="flex min-h-[72px] flex-col items-start justify-center gap-0.5 rounded-xl px-3.5 py-2.5 text-left transition-colors focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none xl:min-h-28 xl:gap-1 xl:px-4 xl:py-3.5 {isSelected
 			? 'border-2 border-[#0284C7] bg-sky-50'
-			: `border bg-white shadow-2xs hover:border-slate-300 ${toneBorder}`}"
+			: 'border border-slate-200/80 bg-white shadow-2xs hover:border-slate-300'}"
 	>
 		<span class="flex w-full items-center justify-between gap-2">
 			<span class="text-sm font-semibold text-slate-700">{card.label}</span>
 			<card.icon class="h-4 w-4 shrink-0 {toneNumber}" aria-hidden="true" />
 		</span>
 		<span class="flex flex-wrap items-baseline gap-x-2">
-			<span class="text-3xl font-bold tabular-nums {toneNumber}">{list.length}</span>
+			<span class="text-2xl font-bold tabular-nums xl:text-3xl {toneNumber}">{list.length}</span>
 			<span class="text-sm text-slate-500">
 				{card.filter === 'short' ? `/ ${rows.length}` : 'รายการ'}
 			</span>
@@ -258,7 +252,7 @@
 			{/if}
 		</span>
 		{#if card.filter === 'short'}
-			<span class="text-sm text-slate-600">
+			<span class="hidden text-xs text-slate-500 xl:block">
 				{shortCount === 0
 					? 'พอแจกทุกรายการ'
 					: shortCount === rows.length
@@ -266,22 +260,19 @@
 						: `${rows.length - shortCount} รายการพอแล้ว`}
 			</span>
 		{:else if list.length > 0}
-			<span class="flex w-full flex-col gap-1">
+			<span class="hidden w-full flex-col text-xs text-slate-500 xl:flex">
 				{#each list.slice(0, CARD_NAMES) as row (row.itemId)}
-					<span
-						class="flex items-center justify-between gap-2 rounded-md px-2 py-1 text-sm {card.filter ===
-						'partial'
-							? 'border border-amber-200 bg-amber-50 text-amber-900'
-							: 'bg-slate-100 text-slate-700'}"
-					>
+					<span class="flex items-center justify-between gap-2">
 						<span class="truncate">{row.name}</span>
 						{#if card.filter === 'partial'}
-							<span class="font-semibold tabular-nums">{formatCoveragePercent(row.coverage)}</span>
+							<span class="font-semibold text-amber-700 tabular-nums">
+								{formatCoveragePercent(row.coverage)}
+							</span>
 						{/if}
 					</span>
 				{/each}
 				{#if list.length > CARD_NAMES}
-					<span class="text-xs text-slate-500">และอีก {list.length - CARD_NAMES} รายการ</span>
+					<span>และอีก {list.length - CARD_NAMES} รายการ</span>
 				{/if}
 			</span>
 		{/if}
@@ -291,19 +282,21 @@
 <div class="space-y-4">
 	<section
 		aria-label="สรุปความพร้อมแจกจ่าย"
-		class="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4"
+		class="grid grid-cols-2 gap-2.5 md:grid-cols-4 xl:gap-3"
 	>
-		<Card.Root class="gap-1 px-4 py-3.5">
-			<div class="flex items-center justify-between gap-2">
+		<div
+			class="flex min-h-[72px] flex-col items-start justify-center gap-0.5 rounded-xl border border-slate-200/80 bg-white px-3.5 py-2.5 shadow-2xs xl:min-h-28 xl:gap-1 xl:px-4 xl:py-3.5"
+		>
+			<div class="flex w-full items-center justify-between gap-2">
 				<span class="text-sm font-semibold text-slate-700">ประชากรในศูนย์</span>
 				<Users class="h-4 w-4 shrink-0 text-sky-600" aria-hidden="true" />
 			</div>
-			<p class="text-3xl font-bold text-slate-900 tabular-nums">
+			<p class="text-2xl font-bold text-slate-900 tabular-nums xl:text-3xl">
 				{formatQty(people)}
 				<span class="text-sm font-medium text-slate-500">คนทั้งหมด</span>
 			</p>
 			{#if peopleQuery.data}
-				<p class="flex flex-wrap gap-x-2 text-sm text-slate-600">
+				<p class="flex flex-wrap gap-x-2 text-xs text-slate-500">
 					<span class="whitespace-nowrap">
 						ผู้พักพิง <span class="font-semibold tabular-nums"
 							>{formatQty(peopleQuery.data.evacuees)}</span
@@ -321,7 +314,7 @@
 					</span>
 				</p>
 			{/if}
-		</Card.Root>
+		</div>
 
 		{#if ready}
 			{@render attentionCard({
