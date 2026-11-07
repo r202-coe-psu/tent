@@ -120,6 +120,17 @@ describe('summarizeItemStock', () => {
 		});
 	});
 
+	it('flags hasLotExpiry only for remaining lots that carry lot.expiry', () => {
+		const expiry = '2026-12-01T00:00:00.000Z';
+		expect(summarizeItemStock([lot({ lot_ref: 'a', lot: { expiry } })], NOW).hasLotExpiry).toBe(
+			true
+		);
+		expect(summarizeItemStock([lot({ lot_ref: 'a' })], NOW).hasLotExpiry).toBe(false);
+		expect(
+			summarizeItemStock([lot({ lot_ref: 'a', qty: '0', lot: { expiry } })], NOW).hasLotExpiry
+		).toBe(false);
+	});
+
 	it('collects distinct storage keys', () => {
 		const lots = [
 			lot({ lot_ref: 'a', lot: { storage_point_id: 'p1', storage_zone: 'คลัง A' } }),

@@ -48,8 +48,10 @@
 		filterRows,
 		hiddenCatalogCount,
 		locationOptions,
+		narrowToSelfPurchased,
 		pageSlice,
 		sortRows,
+		sumLotQty,
 		visibleRows,
 		type StockDisplayRow
 	} from './stock/stock-view';
@@ -60,6 +62,7 @@
 		type StockUrlState
 	} from './stock/stock-url-state';
 	import { negativeLotSummary, negativeLots, projectLotsByItem } from '../domain/operations';
+	import { selfPurchasedLotRefs } from '../domain/self-purchased';
 	import {
 		dailyConsumption,
 		daysOfCover,
@@ -239,6 +242,23 @@
 		return { byItem: groupLotsByItem(lots), brokenItemIds };
 	});
 	const lotsByItem = $derived(projected.byItem);
+	/** Lots the shelter bought itself ("ซื้อเอง", schema_v 7). */
+	const selfPurchasedRefs = $derived(selfPurchasedLotRefs(ledger));
+	/**
+	 * Lots the table and the detail sheet work from. With the "ซื้อเอง" filter on, only the
+	 * self-purchased lots count, so quantity, expiry and place describe what the shelter bought.
+	 */
+	const viewLotsByItem = $derived(
+		urlState.selfPurchased ? narrowToSelfPurchased(lotsByItem, selfPurchasedRefs) : lotsByItem
+	);
+	const selfPurchasedItemIds = $derived(
+		new Set(
+			[...lotsByItem.values()]
+				.flat()
+				.filter((lot) => qtyGt(lot.qty, 0) && selfPurchasedRefs.has(lot.lot_ref))
+				.map((lot) => lot.item_id)
+		)
+	);
 
 	/**
 	 * Location filter options, keyed by `lotStorageKey` so a renamed storage point stays one option
@@ -264,7 +284,7 @@
 
 	const stockSummaryByItem = $derived.by(() => {
 		const result = new SvelteMap<string, ItemStockSummary>();
-		for (const [itemId, lots] of lotsByItem) {
+		for (const [itemId, lots] of viewLotsByItem) {
 			result.set(
 				itemId,
 				summarizeItemStock(lots, undefined, undefined, lotPriorityItems.get(itemId))
@@ -276,7 +296,7 @@
 	/** Location label: the single storage point, or the first one plus a count. */
 	const locationLabelByItem = $derived.by(() => {
 		const result = new SvelteMap<string, string>();
-		for (const [itemId, lots] of lotsByItem) {
+		for (const [itemId, lots] of viewLotsByItem) {
 			const names = [
 				...new Set(
 					lots
@@ -338,6 +358,11 @@
 			const reorderThreshold = resolveReorderThreshold(occupancy, item, override);
 			const summary = stockSummaryByItem.get(item._id);
 			const negative = negativeLotSummary(lotsByItem.get(item._id) ?? []);
+			const selfPurchasedQty = sumLotQty(
+				(lotsByItem.get(item._id) ?? []).filter(
+					(lot) => selfPurchasedRefs.has(lot.lot_ref) && qtyGt(lot.qty, 0)
+				)
+			);
 			return {
 				_id: item._id,
 				name: item.name,
@@ -345,11 +370,15 @@
 				categoryLabel: getCategoryLabel(item.category),
 				unitLabel: formatUnit(item.unit, units, langState.current),
 				qtyOnHand,
+				selfPurchasedQty,
+				// "ซื้อเอง" filter: the row prints what was bought; status and cover stay on the full stock.
+				shownQty: urlState.selfPurchased ? selfPurchasedQty : undefined,
 				reorderThreshold,
 				status: deriveStockQtyStatus(qtyOnHand, reorderThreshold),
 				expiryState: summary?.expiryState ?? 'none',
 				earliestExpiry: summary?.earliestExpiry ?? null,
 				storageKeys: summary?.storageKeys ?? [],
+				hasLotExpiry: summary?.hasLotExpiry ?? false,
 				lotCount: summary?.lotCount ?? 0,
 				usableNote: negative
 					? `ใช้ได้ ${negative.usable} (ไม่นับล็อตติดลบ ${negative.negative})`
@@ -357,6 +386,7 @@
 				locationLabel: locationLabelByItem.get(item._id) ?? null,
 				coverDays: daysOfCover(qtyOnHand, dailyConsumption(occupancy, item, override)),
 				neverReceived: !everStocked.has(item._id),
+				hasSelfPurchased: selfPurchasedItemIds.has(item._id),
 				aliases: 'aliases' in item ? item.aliases : []
 			};
 		})
@@ -378,7 +408,8 @@
 		urlState.q.trim() !== '' ||
 			urlState.cat !== 'all' ||
 			urlState.loc !== 'all' ||
-			urlState.status !== 'all'
+			urlState.status !== 'all' ||
+			urlState.selfPurchased
 	);
 
 	const isLoading = $derived(
@@ -400,7 +431,7 @@
 	);
 
 	function clearFilters() {
-		updateUrl({ q: '', cat: 'all', loc: 'all', status: 'all' });
+		updateUrl({ q: '', cat: 'all', loc: 'all', status: 'all', selfPurchased: false });
 	}
 
 	const selectedManageItem = $derived(
@@ -504,6 +535,8 @@
 			loc={urlState.loc}
 			sort={urlState.sort}
 			all={urlState.all}
+			selfPurchased={urlState.selfPurchased}
+			status={urlState.status}
 			categories={uniqueCategories}
 			locations={uniqueLocations}
 			bind:showOverall
@@ -699,7 +732,9 @@
 	bind:open={detailOpen}
 	row={selectedManageItem}
 	lots={selectedItemId ? (lotsByItem.get(selectedItemId) ?? []) : []}
+	selfPurchasedFilter={urlState.selfPurchased}
 	itemsById={lotPriorityItems}
+	{selfPurchasedRefs}
 	shelterCode={getShelterCode()}
 	{offline}
 	{canDistribute}

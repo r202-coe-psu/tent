@@ -7,12 +7,16 @@ import {
 	hiddenCatalogCount,
 	locationOptions,
 	MAIN_STORE_LOCATION,
+	narrowToSelfPurchased,
 	pageSlice,
 	sortRows,
 	statusBadges,
+	sumLotQty,
 	type StockFilterState,
 	type StockRowBase
 } from './stock-view';
+import type { StockLotBalance } from '../../domain/operations';
+import { formatTimeUntilExpiry } from '../../domain/lot-age';
 
 const DAY = 86_400_000;
 const NOW = Date.parse('2026-10-02T00:00:00.000Z');
@@ -27,6 +31,7 @@ function row(over: Partial<StockRowBase> & { _id: string }): StockRowBase {
 		expiryState: 'none',
 		earliestExpiry: null,
 		storageKeys: [],
+		hasLotExpiry: false,
 		neverReceived: false,
 		...over
 	};
@@ -105,6 +110,18 @@ describe('filterRows', () => {
 		const b = row({ _id: 'b', category: 'food', storageKeys: ['sp:2', 'sp:1'] });
 		expect(filterRows([a, b], { ...NO_FILTER, cat: 'water' }).map((r) => r._id)).toEqual(['a']);
 		expect(filterRows([a, b], { ...NO_FILTER, loc: 'sp:1' }).map((r) => r._id)).toEqual(['a', 'b']);
+	});
+
+	it('"ซื้อเอง" keeps only items with a self-purchased lot on hand', () => {
+		const bought = row({ _id: 'bought', hasSelfPurchased: true });
+		const donated = row({ _id: 'donated', hasSelfPurchased: false });
+		const legacy = row({ _id: 'legacy' });
+		const all = [bought, donated, legacy];
+		expect(filterRows(all, { ...NO_FILTER, selfPurchased: true }).map((r) => r._id)).toEqual([
+			'bought'
+		]);
+		expect(filterRows(all, { ...NO_FILTER, selfPurchased: false })).toHaveLength(3);
+		expect(filterRows(all, NO_FILTER)).toHaveLength(3);
 	});
 
 	it('maps the main-store token to unspecified lots', () => {
@@ -221,6 +238,16 @@ describe('statusBadges', () => {
 	});
 });
 
+describe('filterRows has_expiry', () => {
+	it('keeps only items with a remaining lot that carries lot.expiry', () => {
+		const withExpiry = row({ _id: 'a', hasLotExpiry: true });
+		const without = row({ _id: 'b', hasLotExpiry: false });
+		expect(
+			filterRows([withExpiry, without], { ...NO_FILTER, status: 'has_expiry' }).map((r) => r._id)
+		).toEqual(['a']);
+	});
+});
+
 describe('expiryLabel', () => {
 	it('shows a dash when no lot has an expiry', () => {
 		expect(expiryLabel(null, 'none', NOW)).toEqual({ text: '—', relative: null, tone: 'muted' });
@@ -238,9 +265,45 @@ describe('expiryLabel', () => {
 		expect(label.relative).toBe('อีก 2 วัน');
 	});
 
-	it('shows only the date for a lot that is not near expiry', () => {
+	it('shows the time left in grey for a lot that is not near expiry', () => {
 		const label = expiryLabel(iso(200), 'ok', NOW);
-		expect(label.tone).toBe('default');
-		expect(label.relative).toBeNull();
+		expect(label.tone).toBe('muted');
+		expect(label.relative).toMatch(/^อีก .+/);
+		expect(label.relative).toBe(`อีก ${formatTimeUntilExpiry(iso(200), NOW)}`);
+	});
+});
+
+describe('narrowToSelfPurchased / sumLotQty', () => {
+	const lot = (lot_ref: string, item_id: string, qty: string): StockLotBalance => ({
+		lot_ref,
+		item_id,
+		unit: 'kg',
+		qty,
+		received_at: iso(-1)
+	});
+	const byItem = new Map([
+		['veg', [lot('L1', 'veg', '200'), lot('L2', 'veg', '10'), lot('L3', 'veg', '5')]],
+		['rice', [lot('L4', 'rice', '50')]]
+	]);
+
+	it('keeps only the lots whose ref is self-purchased', () => {
+		const narrowed = narrowToSelfPurchased(byItem, new Set(['L2', 'L3']));
+		expect(narrowed.get('veg')?.map((l) => l.lot_ref)).toEqual(['L2', 'L3']);
+		expect(sumLotQty(narrowed.get('veg') ?? [])).toBe('15');
+	});
+
+	it('gives an item with no self-purchased lot an empty list, not the full stock', () => {
+		const narrowed = narrowToSelfPurchased(byItem, new Set(['L2']));
+		expect(narrowed.get('rice')).toEqual([]);
+		expect(sumLotQty(narrowed.get('rice') ?? [])).toBe('0');
+	});
+
+	it('does not touch the input map', () => {
+		narrowToSelfPurchased(byItem, new Set());
+		expect(byItem.get('veg')).toHaveLength(3);
+	});
+
+	it('subtracts an overdrawn lot', () => {
+		expect(sumLotQty([lot('A', 'x', '10'), lot('B', 'x', '-3')])).toBe('7');
 	});
 });
