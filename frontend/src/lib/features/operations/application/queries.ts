@@ -569,6 +569,9 @@ export function startOperationsLiveQuery(queryClient: QueryClient): SubscribeDat
 		if (type === 'stock_ledger') {
 			return [operationsKeys.stockLedgers(), operationsKeys.ledger(), operationsKeys.balance()];
 		}
+		if (type === 'stock_lot_reservation') {
+			return [operationsKeys.lotReservations()];
+		}
 		if (type === 'donation') {
 			return [operationsKeys.donations()];
 		}
