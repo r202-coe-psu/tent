@@ -80,14 +80,28 @@ export function skillOptionsFromMaster(
 		}));
 }
 
+/**
+ * Compatibility map for legacy item codes (schema_v 3 ULID codes) seeded before CR-100.
+ */
+const LEGACY_ITEM_CODE_MAP: Record<string, string> = {
+	item_01m34tzhgqexqk105e4xxq0bq2: 'cooking',
+	item_01m34tzhgqexqk105e4xxq0bq3: 'logistics',
+	item_01m34tzhgqexqk105e4xxq0bq4: 'screening',
+	item_01m34tzhgqexqk105e4xxq0bq5: 'medical',
+	item_01m34tzhgqexqk105e4xxq0bq6: 'reception',
+	item_01m34tzhgqexqk105e4xxq0bqa: 'childcare'
+};
+
 /** The option a stored value refers to: by `code`, else by legacy label. */
 export function resolveSkillOption(
 	value: string,
 	options: readonly SkillOption[]
 ): SkillOption | undefined {
-	const byCode = options.find((option) => option.code === value);
+	if (!value) return undefined;
+	const mappedCode = LEGACY_ITEM_CODE_MAP[value.trim().toLowerCase()] ?? value;
+	const byCode = options.find((option) => option.code === mappedCode || option.code === value);
 	if (byCode) return byCode;
-	const needle = normalizeSkillText(value);
+	const needle = normalizeSkillText(mappedCode);
 	return options.find(
 		(option) =>
 			normalizeSkillText(option.code) === needle || normalizeSkillText(option.label) === needle
@@ -136,18 +150,36 @@ export function controlledSkillValues(options: readonly SkillOption[]): string[]
  * code first lets current code values and legacy label values meet.
  */
 export function skillMatches(a: string, b: string, options: readonly SkillOption[]): boolean {
+	if (!a || !b) return false;
+	const normA = normalizeSkillText(a);
+	const normB = normalizeSkillText(b);
+	if (normA === normB) return true;
+
 	const left = resolveSkillOption(a, options);
 	const right = resolveSkillOption(b, options);
-	if (left && right) return left.code === right.code;
-	return normalizeSkillText(a) === normalizeSkillText(b);
+	if (left && right && left.code === right.code) return true;
+
+	if (left) {
+		if (normalizeSkillText(left.code) === normB || normalizeSkillText(left.label) === normB) {
+			return true;
+		}
+	}
+	if (right) {
+		if (normalizeSkillText(right.code) === normA || normalizeSkillText(right.label) === normA) {
+			return true;
+		}
+	}
+	return false;
 }
 
 /** Does `have` cover at least one of `required`? Empty `required` reads as "yes". */
 export function hasAnyRequiredSkill(
-	have: readonly string[],
-	required: readonly string[],
+	have: readonly string[] | undefined,
+	required: readonly string[] | undefined,
 	options: readonly SkillOption[]
 ): boolean {
-	if (required.length === 0) return true;
-	return required.some((needed) => have.some((held) => skillMatches(held, needed, options)));
+	const req = required ?? [];
+	if (req.length === 0) return true;
+	const held = have ?? [];
+	return req.some((needed) => held.some((item) => skillMatches(item, needed, options)));
 }

@@ -88,10 +88,18 @@
 		// This map is a local deduplication buffer and is not exposed to the template.
 		// eslint-disable-next-line svelte/prefer-svelte-reactivity
 		const map = new Map<string, SkillOption>();
-		for (const value of volunteer.skills) {
+		for (const value of volunteer.skills ?? []) {
 			const option = resolveSkillOption(value, skillOptions);
 			if (option && !map.has(option.code)) {
 				map.set(option.code, option);
+			} else if (!option && !map.has(value)) {
+				map.set(value, {
+					code: value,
+					label: value,
+					description: '',
+					icon: '✨',
+					controlled: false
+				});
 			}
 		}
 		return Array.from(map.values());
@@ -107,6 +115,12 @@
 			skillOptions
 				.filter((option) => option.controlled)
 				.flatMap((option) => [option.code, option.label])
+		)
+	);
+	// A controlled skill this shelter checked and turned down: shown, not left looking pending.
+	const rejectedSkill = $derived(
+		skills.some(
+			(skill) => skill.controlled && skillVerificationStatus(volunteer, skill.code) === 'rejected'
 		)
 	);
 	const pendingSkillCode = $derived(
@@ -258,6 +272,11 @@
 					<span class="h-1.5 w-1.5 rounded-full bg-emerald-500"></span>
 					ยืนยันตัวตนแล้ว
 				</Badge>
+			{:else if identityStatus === 'rejected'}
+				<Badge class="gap-1 border-rose-300 bg-rose-50 text-rose-700" variant="outline">
+					<span class="h-1.5 w-1.5 rounded-full bg-rose-500"></span>
+					ไม่ผ่านการยืนยันตัวตน
+				</Badge>
 			{:else}
 				<Badge class="gap-1 border-amber-300 bg-amber-50 text-amber-700" variant="outline">
 					<span class="h-1.5 w-1.5 rounded-full bg-amber-500"></span>
@@ -269,6 +288,12 @@
 				<Badge class="gap-1 border-amber-300 bg-amber-50 text-amber-800" variant="outline">
 					<Lock class="h-3 w-3" />
 					รอรับรองทักษะควบคุม
+				</Badge>
+			{/if}
+			{#if rejectedSkill}
+				<Badge class="gap-1 border-rose-300 bg-rose-50 text-rose-700" variant="outline">
+					<Lock class="h-3 w-3" />
+					ทักษะควบคุมไม่ผ่านการรับรอง
 				</Badge>
 			{/if}
 
@@ -302,7 +327,18 @@
 	<!-- จัดการ (ACTIONS) -->
 	<Table.Cell class="w-[18%] p-4 align-top whitespace-normal">
 		<div class="flex flex-wrap items-center gap-1.5 lg:flex-col lg:items-stretch">
-			{#if identityStatus !== 'verified' || needsSkillReview}
+			{#if identityStatus === 'rejected'}
+				<!-- Checked before and turned down: reopening the check reads as an edit of that result. -->
+				<Button
+					size="sm"
+					variant="outline"
+					class="gap-1.5 border-rose-300 text-rose-700 hover:bg-rose-50"
+					onclick={() => openQualificationAudit()}
+				>
+					<Pencil class="h-3.5 w-3.5" />
+					แก้ไขผลการตรวจ (เคยไม่ผ่าน)
+				</Button>
+			{:else if identityStatus !== 'verified' || needsSkillReview}
 				<Button
 					size="sm"
 					class="gap-1.5 bg-amber-600 text-white hover:bg-amber-700"

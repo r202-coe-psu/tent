@@ -22,6 +22,7 @@
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Skeleton } from '$lib/components/ui/skeleton/index.js';
 	import * as Table from '$lib/components/ui/table/index.js';
+	import PaginationControls from '$lib/components/pagination-controls.svelte';
 	import { getShelterCode } from '$lib/db/shelter';
 	import { useShelter } from '$lib/features/shelters';
 	import { authStore } from '$lib/stores/auth.svelte';
@@ -86,6 +87,16 @@
 	const rows = $derived(buildAccountRows(accountsQuery.data ?? [], volunteersQuery.data ?? []));
 	const counts = $derived(countAccountRows(rows, now.getTime()));
 	const visibleRows = $derived(filterAccountRows(rows, { search, filter, now: now.getTime() }));
+
+	const PAGE_SIZE = 10;
+	let currentPage = $state(1);
+
+	const totalFiltered = $derived(visibleRows.length);
+	const totalPages = $derived(Math.max(1, Math.ceil(totalFiltered / PAGE_SIZE)));
+	const safePage = $derived(Math.max(1, Math.min(currentPage, totalPages)));
+	const paginatedRows = $derived(
+		visibleRows.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE)
+	);
 
 	const isPending = $derived(accountsQuery.isPending || volunteersQuery.isPending);
 	const loadError = $derived(accountsQuery.error ?? volunteersQuery.error);
@@ -189,7 +200,7 @@
 						</Table.Row>
 					</Table.Header>
 					<Table.Body>
-						{#each visibleRows as row (row.volunteer._id)}
+						{#each paginatedRows as row (row.volunteer._id)}
 							<Table.Row data-testid="account-row">
 								<Table.Cell class="{cellClass} text-sm font-medium text-foreground">
 									<p>{row.displayName}</p>
@@ -269,6 +280,18 @@
 					</Table.Body>
 				</Table.Root>
 			</div>
+
+			{#if totalPages > 1}
+				<div class="flex flex-col items-center justify-between gap-3 pt-2 sm:flex-row">
+					<p class="text-xs text-muted-foreground">
+						แสดงบัญชีที่ {(safePage - 1) * PAGE_SIZE + 1} - {Math.min(
+							safePage * PAGE_SIZE,
+							totalFiltered
+						)} จากทั้งหมด {totalFiltered} บัญชี
+					</p>
+					<PaginationControls bind:page={currentPage} count={totalFiltered} perPage={PAGE_SIZE} />
+				</div>
+			{/if}
 		{/if}
 	</div>
 </StaffPageShell>

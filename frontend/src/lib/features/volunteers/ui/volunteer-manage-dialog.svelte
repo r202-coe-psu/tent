@@ -24,6 +24,7 @@
 	import ShieldAlert from '@lucide/svelte/icons/shield-alert';
 	import Lock from '@lucide/svelte/icons/lock';
 	import Check from '@lucide/svelte/icons/check';
+	import RotateCcw from '@lucide/svelte/icons/rotate-ccw';
 	import * as Dialog from '$lib/components/ui/dialog/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Badge } from '$lib/components/ui/badge/index.js';
@@ -121,8 +122,10 @@
 	const identityActionStatus = $derived<VerificationStatus>(
 		identityStatus === 'verified' ? 'pending' : 'verified'
 	);
+	// Once verified, the same button takes the verification back: it must not look like a confirm.
+	const undoesVerification = $derived(identityStatus === 'verified');
 	const identityActionLabel = $derived(
-		identityStatus === 'verified' ? 'ส่งกลับรอตรวจ' : 'ยืนยันตัวตน'
+		undoesVerification ? 'ยกเลิกการยืนยัน (กลับไปรอตรวจ)' : 'ยืนยันตัวตน'
 	);
 
 	async function reviewIdentity(status: VerificationStatus) {
@@ -134,7 +137,7 @@
 			});
 			verificationNotes = '';
 			toast.success(
-				status === 'verified' ? 'ยืนยันตัวตนอาสาสมัครแล้ว' : 'ส่งกลับไปรอตรวจตัวตนแล้ว'
+				status === 'verified' ? 'ยืนยันตัวตนอาสาสมัครแล้ว' : 'ยกเลิกการยืนยันตัวตนแล้ว กลับไปรอตรวจ'
 			);
 		} catch (err) {
 			toast.error(err instanceof Error ? err.message : 'บันทึกผลตรวจตัวตนไม่สำเร็จ');
@@ -231,11 +234,18 @@
 					<Button
 						type="button"
 						size="sm"
-						class="h-9 gap-1.5 bg-emerald-600 text-white hover:bg-emerald-700"
+						variant={undoesVerification ? 'outline' : 'default'}
+						class="h-9 gap-1.5 {undoesVerification
+							? 'border-amber-300 text-amber-800 hover:bg-amber-50'
+							: 'bg-emerald-600 text-white hover:bg-emerald-700'}"
 						disabled={identityReviewMutation.isPending}
 						onclick={() => reviewIdentity(identityActionStatus)}
 					>
-						<Check class="h-3.5 w-3.5" />
+						{#if undoesVerification}
+							<RotateCcw class="h-3.5 w-3.5" />
+						{:else}
+							<Check class="h-3.5 w-3.5" />
+						{/if}
 						{identityActionLabel}
 					</Button>
 					{#if identityStatus !== 'rejected'}
