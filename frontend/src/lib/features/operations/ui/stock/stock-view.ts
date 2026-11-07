@@ -1,6 +1,7 @@
-import { qtyGt } from '$lib/utils/qty';
+import { addQty, qtyGt } from '$lib/utils/qty';
 import { formatThaiShortDate } from '$lib/utils/date';
 import { expiryInstant } from '../../domain/expiry-instant';
+import type { StockLotBalance } from '../../domain/operations';
 import { formatTimeUntilExpiry } from '../../domain/lot-age';
 import { DEFAULT_STORAGE_LABEL, type StoragePointRef } from '../../domain/lot-storage';
 import {
@@ -253,4 +254,24 @@ export function expiryLabel(
 	}
 	const left = formatTimeUntilExpiry(earliestExpiry, now);
 	return { text, relative: left ? `อีก ${left}` : null, tone: 'muted' };
+}
+
+/** Keep only the lots whose `lot_ref` is in `refs`, per item (the "ซื้อเอง" filter). */
+export function narrowToSelfPurchased(
+	lotsByItem: ReadonlyMap<string, readonly StockLotBalance[]>,
+	refs: ReadonlySet<string>
+): Map<string, StockLotBalance[]> {
+	const result = new Map<string, StockLotBalance[]>();
+	for (const [itemId, lots] of lotsByItem) {
+		result.set(
+			itemId,
+			lots.filter((lot) => refs.has(lot.lot_ref))
+		);
+	}
+	return result;
+}
+
+/** Sum of the lots' quantities (overdrawn lots subtract), as a decimal string. */
+export function sumLotQty(lots: readonly Pick<StockLotBalance, 'qty'>[]): string {
+	return lots.reduce((sum, lot) => addQty(sum, lot.qty), '0');
 }

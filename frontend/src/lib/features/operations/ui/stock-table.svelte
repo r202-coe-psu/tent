@@ -48,8 +48,10 @@
 		filterRows,
 		hiddenCatalogCount,
 		locationOptions,
+		narrowToSelfPurchased,
 		pageSlice,
 		sortRows,
+		sumLotQty,
 		visibleRows,
 		type StockDisplayRow
 	} from './stock/stock-view';
@@ -59,12 +61,7 @@
 		STOCK_PAGE_SIZE,
 		type StockUrlState
 	} from './stock/stock-url-state';
-	import {
-		negativeLotSummary,
-		negativeLots,
-		projectLotsByItem,
-		type StockLotBalance
-	} from '../domain/operations';
+	import { negativeLotSummary, negativeLots, projectLotsByItem } from '../domain/operations';
 	import { selfPurchasedLotRefs } from '../domain/self-purchased';
 	import {
 		dailyConsumption,
@@ -251,17 +248,9 @@
 	 * Lots the table and the detail sheet work from. With the "ซื้อเอง" filter on, only the
 	 * self-purchased lots count, so quantity, expiry and place describe what the shelter bought.
 	 */
-	const viewLotsByItem = $derived.by(() => {
-		if (!urlState.selfPurchased) return lotsByItem;
-		const result = new SvelteMap<string, StockLotBalance[]>();
-		for (const [itemId, lots] of lotsByItem) {
-			result.set(
-				itemId,
-				lots.filter((lot) => selfPurchasedRefs.has(lot.lot_ref))
-			);
-		}
-		return result;
-	});
+	const viewLotsByItem = $derived(
+		urlState.selfPurchased ? narrowToSelfPurchased(lotsByItem, selfPurchasedRefs) : lotsByItem
+	);
 	const selfPurchasedItemIds = $derived(
 		new Set(
 			[...lotsByItem.values()]
@@ -371,7 +360,7 @@
 			const negative = negativeLotSummary(viewLotsByItem.get(item._id) ?? []);
 			// "ซื้อเอง" filter: show only what was bought, but keep status and cover on the full stock.
 			const shownQty = urlState.selfPurchased
-				? (viewLotsByItem.get(item._id) ?? []).reduce((sum, lot) => addQty(sum, lot.qty), '0')
+				? sumLotQty(viewLotsByItem.get(item._id) ?? [])
 				: qtyOnHand;
 			return {
 				_id: item._id,

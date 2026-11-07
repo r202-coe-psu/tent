@@ -7,12 +7,15 @@ import {
 	hiddenCatalogCount,
 	locationOptions,
 	MAIN_STORE_LOCATION,
+	narrowToSelfPurchased,
 	pageSlice,
 	sortRows,
 	statusBadges,
+	sumLotQty,
 	type StockFilterState,
 	type StockRowBase
 } from './stock-view';
+import type { StockLotBalance } from '../../domain/operations';
 import { formatTimeUntilExpiry } from '../../domain/lot-age';
 
 const DAY = 86_400_000;
@@ -267,5 +270,40 @@ describe('expiryLabel', () => {
 		expect(label.tone).toBe('muted');
 		expect(label.relative).toMatch(/^อีก .+/);
 		expect(label.relative).toBe(`อีก ${formatTimeUntilExpiry(iso(200), NOW)}`);
+	});
+});
+
+describe('narrowToSelfPurchased / sumLotQty', () => {
+	const lot = (lot_ref: string, item_id: string, qty: string): StockLotBalance => ({
+		lot_ref,
+		item_id,
+		unit: 'kg',
+		qty,
+		received_at: iso(-1)
+	});
+	const byItem = new Map([
+		['veg', [lot('L1', 'veg', '200'), lot('L2', 'veg', '10'), lot('L3', 'veg', '5')]],
+		['rice', [lot('L4', 'rice', '50')]]
+	]);
+
+	it('keeps only the lots whose ref is self-purchased', () => {
+		const narrowed = narrowToSelfPurchased(byItem, new Set(['L2', 'L3']));
+		expect(narrowed.get('veg')?.map((l) => l.lot_ref)).toEqual(['L2', 'L3']);
+		expect(sumLotQty(narrowed.get('veg') ?? [])).toBe('15');
+	});
+
+	it('gives an item with no self-purchased lot an empty list, not the full stock', () => {
+		const narrowed = narrowToSelfPurchased(byItem, new Set(['L2']));
+		expect(narrowed.get('rice')).toEqual([]);
+		expect(sumLotQty(narrowed.get('rice') ?? [])).toBe('0');
+	});
+
+	it('does not touch the input map', () => {
+		narrowToSelfPurchased(byItem, new Set());
+		expect(byItem.get('veg')).toHaveLength(3);
+	});
+
+	it('subtracts an overdrawn lot', () => {
+		expect(sumLotQty([lot('A', 'x', '10'), lot('B', 'x', '-3')])).toBe('7');
 	});
 });
