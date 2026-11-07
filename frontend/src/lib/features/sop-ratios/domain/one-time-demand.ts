@@ -31,13 +31,21 @@ export interface OneTimeDemandReservation {
 	qty: string;
 }
 
+/** An evacuee who already received an item (a `distribution_log` that is not voided). */
+export interface OneTimeRecipient {
+	item_id: string;
+	recipient_id: string;
+}
+
 export type OneTimeDemandStatus = 'enough' | 'short';
 
 export interface OneTimeDemandRow {
 	itemId: string;
 	name: string;
 	unit: string;
-	/** people × qty_per_person (qty_str). */
+	/** People still in the shelter who already received this item. */
+	received: number;
+	/** (people − received) × qty_per_person (qty_str): what is still to hand out. */
 	demand: string;
 	/** Non-expired lot balance − active reservations, floored at 0 (qty_str). */
 	available: string;
@@ -56,6 +64,8 @@ export interface BuildOneTimeDemandInput {
 	people: number;
 	lots: readonly OneTimeDemandLot[];
 	reservations: readonly OneTimeDemandReservation[];
+	/** People already served, per item id (see {@link countCurrentRecipients}). Default: none. */
+	receivedByItem?: ReadonlyMap<string, number>;
 	/** Epoch ms; lot expiry is judged against it. */
 	now: number;
 }
@@ -64,6 +74,27 @@ const ZERO = '0';
 
 function isActiveOneTime(item: OneTimeDemandItem): boolean {
 	return item.distribution_type === 'one_time' && !item.deactivated && !item.merged_into;
+}
+
+/**
+ * Per item, how many distinct recipients are still in the shelter. A recipient who has since left
+ * is not counted, so they do not lower the need of the people who are here.
+ */
+export function countCurrentRecipients(
+	recipients: readonly OneTimeRecipient[],
+	currentEvacueeIds: readonly string[]
+): Map<string, number> {
+	const here = new Set(currentEvacueeIds);
+	const seen = new Set<string>();
+	const counts = new Map<string, number>();
+	for (const { item_id, recipient_id } of recipients) {
+		if (!here.has(recipient_id)) continue;
+		const key = `${item_id}\n${recipient_id}`;
+		if (seen.has(key)) continue;
+		seen.add(key);
+		counts.set(item_id, (counts.get(item_id) ?? 0) + 1);
+	}
+	return counts;
 }
 
 /** Ids of the active one-time items: the only ledger rows this view needs to read. */
@@ -93,7 +124,9 @@ export function buildOneTimeDemandRows(input: BuildOneTimeDemandInput): OneTimeD
 		const perPerson = qtyPerPersonMissing
 			? new Decimal(1)
 			: new Decimal(String(item.qty_per_person));
-		const demand = persistQty(new Decimal(String(people)).times(perPerson));
+		// Someone who already got a one-time item does not need it again.
+		const received = Math.min(input.receivedByItem?.get(item._id) ?? 0, people);
+		const demand = persistQty(new Decimal(String(people - received)).times(perPerson));
 
 		// Only live, positive lots count; a claim held on an excluded lot is not double-counted.
 		let onHand = ZERO;
@@ -111,6 +144,7 @@ export function buildOneTimeDemandRows(input: BuildOneTimeDemandInput): OneTimeD
 			itemId: item._id,
 			name: item.name,
 			unit: item.base_unit || item.unit || '',
+			received,
 			demand,
 			available,
 			shortfall: qtyGt(gap, 0) ? gap : ZERO,

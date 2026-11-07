@@ -8,11 +8,13 @@
 		useLotReservationClaims,
 		projectStockLotBalances
 	} from '$lib/features/operations';
+	import { useItemEvacueeRecipients } from '$lib/features/distribution';
 	import { langState } from '$lib/states/i18n.svelte';
 	import { formatQty } from '$lib/utils/qty';
 	import { useShelterPeopleCounts } from '../application/shelter-people-queries';
 	import {
 		buildOneTimeDemandRows,
+		countCurrentRecipients,
 		formatCoveragePercent,
 		oneTimeItemIds,
 		sortOneTimeDemandRows,
@@ -35,6 +37,11 @@
 		() => itemMastersQuery.isSuccess
 	);
 	const reservationsQuery = useLotReservationClaims();
+	const recipientsQuery = useItemEvacueeRecipients(
+		() => itemIds,
+		() => itemMastersQuery.isSuccess,
+		() => shelterCode ?? undefined
+	);
 	const peopleQuery = useShelterPeopleCounts(() => shelterCode ?? '');
 
 	const units = $derived(unitsQuery.data ?? []);
@@ -44,12 +51,14 @@
 		itemMastersQuery.isLoading ||
 			ledgerQuery.isPending ||
 			reservationsQuery.isLoading ||
+			recipientsQuery.isPending ||
 			peopleQuery.isLoading
 	);
 	const isError = $derived(
 		itemMastersQuery.isError ||
 			ledgerQuery.isError ||
 			reservationsQuery.isError ||
+			recipientsQuery.isError ||
 			peopleQuery.isError
 	);
 
@@ -61,6 +70,10 @@
 				people,
 				lots: projectStockLotBalances(ledgerQuery.data ?? []),
 				reservations: reservationsQuery.data ?? [],
+				receivedByItem: countCurrentRecipients(
+					recipientsQuery.data ?? [],
+					peopleQuery.data?.evacueeIds ?? []
+				),
 				now: Date.now()
 			})
 		);
@@ -187,7 +200,13 @@
 						{/if}
 						<dl class="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
 							<div>
-								<dt class="text-slate-500">ต้องการ</dt>
+								<dt class="text-slate-500">รับแล้ว</dt>
+								<dd class="font-semibold text-slate-900 tabular-nums">
+									{formatQty(row.received)} คน
+								</dd>
+							</div>
+							<div>
+								<dt class="text-slate-500">ต้องแจกอีก</dt>
 								<dd class="font-semibold text-slate-900 tabular-nums">
 									{formatQty(row.demand)}
 									{unitLabel(row)}
@@ -228,7 +247,8 @@
 					<Table.Header>
 						<Table.Row class="bg-slate-50">
 							<Table.Head class="px-4 py-3">สินค้า</Table.Head>
-							<Table.Head class="px-4 py-3 text-right">ต้องการ</Table.Head>
+							<Table.Head class="px-4 py-3 text-right">รับแล้ว</Table.Head>
+							<Table.Head class="px-4 py-3 text-right">ต้องแจกอีก</Table.Head>
 							<Table.Head class="px-4 py-3 text-right">มีพร้อมแจก</Table.Head>
 							<Table.Head class="px-4 py-3 text-right">ต้องหาเพิ่ม</Table.Head>
 							<Table.Head class="px-4 py-3 text-right">ครอบคลุม</Table.Head>
@@ -243,6 +263,10 @@
 									{#if row.qtyPerPersonMissing}
 										<div class="mt-1">{@render missingQtyBadge()}</div>
 									{/if}
+								</Table.Cell>
+								<Table.Cell class="px-4 py-3 text-right text-base tabular-nums">
+									{formatQty(row.received)}
+									<span class="text-sm text-slate-500">คน</span>
 								</Table.Cell>
 								<Table.Cell class="px-4 py-3 text-right text-base tabular-nums">
 									{formatQty(row.demand)}

@@ -65,6 +65,7 @@ export {
 // One-time item demand vs stock (#1190)
 export {
 	buildOneTimeDemandRows,
+	countCurrentRecipients,
 	formatCoveragePercent,
 	oneTimeItemIds,
 	sortOneTimeDemandRows,

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
 	buildOneTimeDemandRows,
+	countCurrentRecipients,
 	formatCoveragePercent,
 	oneTimeItemIds,
 	sortOneTimeDemandRows,
@@ -251,5 +252,68 @@ describe('oneTimeItemIds', () => {
 				{ ...net, _id: 'item_master:merged', merged_into: 'item_master:net' }
 			])
 		).toEqual(['item_master:net']);
+	});
+});
+
+describe('already received', () => {
+	const withReceived = (people: number, onHand: string, received: number) =>
+		buildOneTimeDemandRows({
+			items: [net],
+			people,
+			lots: [lot(net._id, onHand)],
+			reservations: [],
+			receivedByItem: new Map([[net._id, received]]),
+			now: NOW
+		})[0];
+
+	it('120 people, 30 already served, 50 on hand: still need 90, short 40', () => {
+		expect(withReceived(120, '50', 30)).toMatchObject({
+			received: 30,
+			demand: '90',
+			available: '50',
+			shortfall: '40',
+			status: 'short'
+		});
+	});
+
+	it('everyone served: nothing left to hand out, enough', () => {
+		expect(withReceived(10, '0', 10)).toMatchObject({
+			demand: '0',
+			shortfall: '0',
+			status: 'enough'
+		});
+	});
+
+	it('never goes below zero when more recipients than people are reported', () => {
+		expect(withReceived(10, '0', 25)).toMatchObject({ received: 10, demand: '0' });
+	});
+
+	it('scales the rest by qty_per_person', () => {
+		const [row] = buildOneTimeDemandRows({
+			items: [{ ...net, qty_per_person: 2 }],
+			people: 10,
+			lots: [lot(net._id, '5')],
+			reservations: [],
+			receivedByItem: new Map([[net._id, 4]]),
+			now: NOW
+		});
+		expect(row).toMatchObject({ demand: '12', shortfall: '7' });
+	});
+});
+
+describe('countCurrentRecipients', () => {
+	it('counts each evacuee once per item and only those still in the shelter', () => {
+		const counts = countCurrentRecipients(
+			[
+				{ item_id: 'item_master:net', recipient_id: 'evacuee:a' },
+				{ item_id: 'item_master:net', recipient_id: 'evacuee:a' },
+				{ item_id: 'item_master:net', recipient_id: 'evacuee:b' },
+				{ item_id: 'item_master:net', recipient_id: 'evacuee:gone' },
+				{ item_id: 'item_master:tent', recipient_id: 'evacuee:a' }
+			],
+			['evacuee:a', 'evacuee:b']
+		);
+		expect(counts.get('item_master:net')).toBe(2);
+		expect(counts.get('item_master:tent')).toBe(1);
 	});
 });

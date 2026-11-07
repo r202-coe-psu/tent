@@ -31,6 +31,7 @@ import {
 	type BulkReturnPoolOverviewQuery
 } from '../food-supplies/bulk-return-pool-v3-read';
 import { listBulkReturnPoolMissedLoanRefs } from '../food-supplies/bulk-return-pool-v3-missed-loans';
+import { listEvacueeRecipientsByItems } from '../../data/food-supplies/item-recipients';
 import type {
 	RequisitionTicketListFilter,
 	DistributionLogListFilter,
@@ -380,3 +381,28 @@ export const useReturnOperationState = (
 			refetchInterval: 3000
 		};
 	});
+
+/**
+ * Evacuees who already received each of `itemIds`. Keyed under the shelter's `logs` prefix, so a
+ * `distribution_log` change refreshes it.
+ */
+export function useItemEvacueeRecipients(
+	itemIds: MaybeGetter<readonly string[]>,
+	enabled: MaybeGetter<boolean> = true,
+	shelterCode?: MaybeGetter<string | undefined>
+) {
+	return createQuery(() => {
+		const ids = toValue(itemIds);
+		const code = resolveShelterCode(toValue(shelterCode ?? undefined));
+		return {
+			queryKey: [
+				...distributionKeys.shelter(code),
+				'logs',
+				'item-recipients',
+				[...ids].sort().join(',')
+			] as const,
+			queryFn: () => listEvacueeRecipientsByItems(code, ids),
+			enabled: toValue(enabled)
+		};
+	});
+}

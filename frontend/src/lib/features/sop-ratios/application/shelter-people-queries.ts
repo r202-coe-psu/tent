@@ -1,5 +1,9 @@
 import { createQuery } from '@tanstack/svelte-query';
-import { countShelterPeople, totalShelterPeople } from '$lib/features/shared';
+import {
+	countShelterPeople,
+	isInShelterStayStatus,
+	totalShelterPeople
+} from '$lib/features/shared';
 import { peopleRepository } from '$lib/features/people';
 import { volunteerRepositoryFor } from '$lib/features/volunteers';
 import { listShelterStaff } from '$lib/features/users';
@@ -22,7 +26,11 @@ export const useShelterPeopleCounts = (shelterCode: () => string) =>
 					listShelterStaff(code)
 				]);
 				const counts = countShelterPeople(code, occupants, volunteers, staff);
-				return { ...counts, total: totalShelterPeople(counts) };
+				// Ids of the evacuees counted above, to tell who of the recipients is still here.
+				const evacueeIds = occupants
+					.filter((o) => isInShelterStayStatus(o.current_stay?.status))
+					.map((o) => o._id);
+				return { ...counts, total: totalShelterPeople(counts), evacueeIds };
 			}
 		};
 	});

@@ -244,6 +244,7 @@ export {
 	useRequisitionTickets,
 	useRequisitionTicket,
 	useDistributionLogs,
+	useItemEvacueeRecipients,
 	useDistributionLog,
 	useBulkReturnPools,
 	useBulkReturnPool,
