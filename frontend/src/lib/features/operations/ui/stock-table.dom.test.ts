@@ -23,7 +23,8 @@ const mocks = vi.hoisted(() => ({
 	roles: [] as string[],
 	search: '',
 	ledger: null as unknown[] | null,
-	balance: null as Map<string, string> | null
+	balance: null as Map<string, string> | null,
+	incoming: undefined as unknown
 }));
 
 const q = <T>(data: T) => ({ data, isLoading: false });
