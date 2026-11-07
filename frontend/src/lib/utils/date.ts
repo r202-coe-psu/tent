@@ -100,10 +100,21 @@ export function formatThaiShortDate(iso: string): string {
 
 /** แปลง ISO timestamp string → ข้อความวันเวลาภาษาไทย (เช่น "4 ก.ค. 2569, 21:30") */
 export function formatThaiDateTime(iso?: string | null): string {
+	return formatDisplayDateTime(iso, 'th');
+}
+
+/** Locale per UI language; `en-GB` keeps day-month order and a 24-hour clock. */
+const DISPLAY_LOCALE_BY_LANGUAGE = { th: DISPLAY_LOCALE, en: 'en-GB' } as const;
+
+/** Like `formatThaiDateTime`, in the given UI language (EN: "4 Jul 2026, 21:30"). */
+export function formatDisplayDateTime(
+	iso: string | null | undefined,
+	language: 'th' | 'en'
+): string {
 	if (!iso) return '';
 	const date = new Date(iso);
 	if (Number.isNaN(date.getTime())) return iso;
-	return date.toLocaleString(DISPLAY_LOCALE, {
+	return date.toLocaleString(DISPLAY_LOCALE_BY_LANGUAGE[language], {
 		timeZone: DISPLAY_TIME_ZONE,
 		year: 'numeric',
 		month: 'short',

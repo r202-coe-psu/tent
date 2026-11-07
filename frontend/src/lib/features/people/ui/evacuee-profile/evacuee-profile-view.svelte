@@ -44,7 +44,7 @@
 	import { getShelterCode } from '$lib/db/shelter';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
-	import { formatThaiDateTime } from '$lib/utils/date';
+	import { formatDisplayDateTime } from '$lib/utils/date';
 	import type {
 		Evacuee,
 		StayStatus,
@@ -710,7 +710,7 @@
 
 	function formatDateTime(ts: string | number | undefined): string {
 		if (!ts) return t.unspecified;
-		const formatted = formatThaiDateTime(String(ts));
+		const formatted = formatDisplayDateTime(String(ts), langState.current);
 		return formatted || String(ts);
 	}
 </script>
