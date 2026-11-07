@@ -115,6 +115,15 @@ describe('volunteer portal API failure messages follow the selected language', (
 		expect(localizeVolunteerMessage('ข้อมูลไม่ถูกต้อง', 'en')).toBe('Invalid data');
 	});
 
+	it('en: the quick-apply preflight "ambiguous match" message reads in English', () => {
+		expect(
+			localizeVolunteerMessage(
+				'พบข้อมูลที่อาจตรงกับมากกว่าหนึ่ง profile กรุณาติดต่อเจ้าหน้าที่',
+				'en'
+			)
+		).toBe('More than one volunteer profile may match these details. Please contact the staff');
+	});
+
 	it('th: the Thai copy is unchanged and a server message we do not know passes through', async () => {
 		expect(apiErrorCopy('JOB_NOT_OPEN')).toBe('งานอาสาสมัครนี้ปิดรับสมัครแล้ว');
 		failWith(400, { error: 'BAD_INPUT', message: 'Phone is malformed' });

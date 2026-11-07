@@ -53,6 +53,9 @@ const EN_BY_THAI_MESSAGE: Readonly<Record<string, string>> = {
 	คุณได้สมัครงานอาสาสมัครนี้ไว้แล้ว: 'You have already applied for this volunteer job',
 	'พบข้อมูล volunteer มากกว่าหนึ่ง profile กรุณาติดต่อเจ้าหน้าที่':
 		'More than one volunteer profile was found. Please contact the staff',
+	// Quick-apply preflight (`volunteers/server/public-application.ts`, `ambiguous_match`)
+	'พบข้อมูลที่อาจตรงกับมากกว่าหนึ่ง profile กรุณาติดต่อเจ้าหน้าที่':
+		'More than one volunteer profile may match these details. Please contact the staff',
 	คุณมีกะงานอื่นที่เวลาทับซ้อนกัน: 'You have another shift that overlaps in time',
 	'ไม่สามารถบันทึกข้อมูลได้ กรุณาลองใหม่อีกครั้ง': 'Could not save the data. Please try again',
 	'ไม่สามารถบันทึกใบสมัครได้ กรุณาลองใหม่อีกครั้ง':
