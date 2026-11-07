@@ -11,12 +11,14 @@ import { fetchOccupancy } from '../data/occupancy.api';
 import { fetchDemographics } from '../data/demographics.api';
 import { fetchRegistrations } from '../data/registration.api';
 import { fetchStationTimes } from '../data/station-times.api';
+import { fetchZoneOccupancy } from '../data/zone-occupancy.api';
 
 const DASHBOARD_STALE_TIME = 60 * 1000; // 1 นาที
 
 export const dashboardKeys = {
 	all: ['dashboard'] as const,
 	occupancy: (shelterCode: string) => [...dashboardKeys.all, 'occupancy', shelterCode] as const,
+	zones: (shelterCode: string) => [...dashboardKeys.all, 'zones', shelterCode] as const,
 	demographics: (shelterCode: string) =>
 		[...dashboardKeys.all, 'demographics', shelterCode] as const,
 	registrations: (shelterCode: string, from?: string, to?: string) =>
@@ -67,4 +69,12 @@ export const useDashboardStationTimes = (
 		staleTime: DASHBOARD_STALE_TIME,
 		// Keep the current numbers on screen while a new range loads (CR-170 FR-6).
 		placeholderData: keepPreviousData
+	}));
+
+export const useDashboardZoneOccupancy = (code: () => string) =>
+	createQuery(() => ({
+		queryKey: dashboardKeys.zones(code()),
+		queryFn: () => fetchZoneOccupancy(code()),
+		enabled: !!code(),
+		staleTime: DASHBOARD_STALE_TIME
 	}));
