@@ -1,6 +1,7 @@
-import { qtyGt } from '$lib/utils/qty';
+import { addQty, qtyGt } from '$lib/utils/qty';
 import { formatThaiShortDate } from '$lib/utils/date';
 import { expiryInstant } from '../../domain/expiry-instant';
+import type { StockLotBalance } from '../../domain/operations';
 import { formatTimeUntilExpiry } from '../../domain/lot-age';
 import { DEFAULT_STORAGE_LABEL, type StoragePointRef } from '../../domain/lot-storage';
 import {
@@ -33,6 +34,12 @@ export interface StockRowBase {
 	neverReceived: boolean;
 	/** Names of items merged into this one, so searching an old name finds it (CR-143 FR-F5). */
 	aliases?: string[];
+	/** True when a lot with stock left (qty > 0) was bought by this shelter (schema_v 7). */
+	hasSelfPurchased?: boolean;
+	/** Qty still on hand in self-purchased lots; shown beside the total in the detail sheet. */
+	selfPurchasedQty?: string;
+	/** Qty a table row / card prints when it differs from `qtyOnHand` (the "ซื้อเอง" filter). */
+	shownQty?: string;
 }
 
 /** A row as the table and cards render it — display strings resolved by the orchestrator. */
@@ -91,6 +98,8 @@ export interface StockFilterState {
 	status: StockStatusFilter | 'all';
 	/** Include catalog items this shelter never received. */
 	all: boolean;
+	/** Keep only items with a self-purchased lot still on hand ("ซื้อเอง"). */
+	selfPurchased?: boolean;
 }
 
 /** The four "needs attention" cards; `has_expiry` is a plain filter with no card. */
@@ -136,7 +145,7 @@ function matchesStatus(row: StockRowBase, status: StockStatusFilter): boolean {
 	}
 }
 
-/** Apply search, category, location, status and the catalog-only switch. */
+/** Apply search, category, location, status, self-purchased and the catalog-only switch. */
 export function filterRows<T extends StockRowBase>(
 	rows: readonly T[],
 	filter: StockFilterState
@@ -156,6 +165,7 @@ export function filterRows<T extends StockRowBase>(
 			if (!r.storageKeys.includes(key)) return false;
 		}
 		if (filter.status !== 'all' && !matchesStatus(r, filter.status)) return false;
+		if (filter.selfPurchased && !r.hasSelfPurchased) return false;
 		return true;
 	});
 }
@@ -248,4 +258,24 @@ export function expiryLabel(
 	}
 	const left = formatTimeUntilExpiry(earliestExpiry, now);
 	return { text, relative: left ? `อีก ${left}` : null, tone: 'muted' };
+}
+
+/** Keep only the lots whose `lot_ref` is in `refs`, per item (the "ซื้อเอง" filter). */
+export function narrowToSelfPurchased(
+	lotsByItem: ReadonlyMap<string, readonly StockLotBalance[]>,
+	refs: ReadonlySet<string>
+): Map<string, StockLotBalance[]> {
+	const result = new Map<string, StockLotBalance[]>();
+	for (const [itemId, lots] of lotsByItem) {
+		result.set(
+			itemId,
+			lots.filter((lot) => refs.has(lot.lot_ref))
+		);
+	}
+	return result;
+}
+
+/** Sum of the lots' quantities (overdrawn lots subtract), as a decimal string. */
+export function sumLotQty(lots: readonly Pick<StockLotBalance, 'qty'>[]): string {
+	return lots.reduce((sum, lot) => addQty(sum, lot.qty), '0');
 }

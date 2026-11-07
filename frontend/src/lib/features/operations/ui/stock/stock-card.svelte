@@ -60,7 +60,9 @@
 		<span class="block text-base font-semibold text-slate-900">{row.name}</span>
 		<span class="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1">
 			<span class="flex items-baseline gap-1.5">
-				<span class="text-xl font-bold text-slate-900 tabular-nums">{row.qtyOnHand}</span>
+				<span class="text-xl font-bold text-slate-900 tabular-nums"
+					>{row.shownQty ?? row.qtyOnHand}</span
+				>
 				<span class="text-sm text-slate-500">{row.unitLabel}</span>
 			</span>
 			<StatusBadges {badges} />

@@ -44,7 +44,14 @@ export const LEDGER_RANGE_LABELS: Record<LedgerRangePreset, string> = {
 };
 
 const RANGES = Object.keys(LEDGER_RANGE_LABELS) as LedgerRangePreset[];
-const TYPES: readonly LedgerTypeFilter[] = ['all', 'in', 'out', 'adjust', 'transfer'];
+const TYPES: readonly LedgerTypeFilter[] = [
+	'all',
+	'in',
+	'out',
+	'adjust',
+	'transfer',
+	'self_purchased'
+];
 const REASONS: readonly LedgerReasonFilter[] = ['all', ...adjustReasonSchema.options];
 const DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
 
