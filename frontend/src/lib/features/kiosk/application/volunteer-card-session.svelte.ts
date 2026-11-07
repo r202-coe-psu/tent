@@ -1,3 +1,4 @@
+import { languageStore, type LanguageCode } from '$lib/stores/language.svelte';
 import { KioskRequestError } from '../data/kiosk-check-in.api';
 import { isKioskPhoneSubmittable } from '../domain/phone';
 import type { KioskVolunteerCardResult } from '../data/kiosk-volunteer-card.api';
@@ -10,23 +11,38 @@ export interface VolunteerCardSessionDeps {
 	print(volunteer: KioskVolunteerCardResult['volunteer']): Promise<KioskPrintFlowResult>;
 }
 
-const NOT_FOUND_MESSAGE = 'ไม่พบข้อมูลจิตอาสาที่ใช้เบอร์นี้ในศูนย์นี้ กรุณาติดต่อเจ้าหน้าที่';
-const RATE_LIMITED_MESSAGE = 'ลองผิดหลายครั้ง กรุณารอสักครู่หรือติดต่อเจ้าหน้าที่';
-const METHOD_DISABLED_MESSAGE = 'ช่องทางนี้ปิดใช้งาน กรุณาติดต่อเจ้าหน้าที่';
-const PRINT_RENDER_FAILED_MESSAGE = 'สร้าง QR Code สำหรับพิมพ์ไม่สำเร็จ';
-const GENERIC_MESSAGE = 'ระบบไม่สามารถทำรายการได้ กรุณาลองอีกครั้ง';
+const MESSAGES: Record<
+	LanguageCode,
+	Record<'notFound' | 'rateLimited' | 'methodDisabled' | 'printRenderFailed' | 'generic', string>
+> = {
+	th: {
+		notFound: 'ไม่พบข้อมูลจิตอาสาที่ใช้เบอร์นี้ในศูนย์นี้ กรุณาติดต่อเจ้าหน้าที่',
+		rateLimited: 'ลองผิดหลายครั้ง กรุณารอสักครู่หรือติดต่อเจ้าหน้าที่',
+		methodDisabled: 'ช่องทางนี้ปิดใช้งาน กรุณาติดต่อเจ้าหน้าที่',
+		printRenderFailed: 'สร้าง QR Code สำหรับพิมพ์ไม่สำเร็จ',
+		generic: 'ระบบไม่สามารถทำรายการได้ กรุณาลองอีกครั้ง'
+	},
+	en: {
+		notFound: 'No volunteer with this number at this shelter. Please see staff',
+		rateLimited: 'Too many wrong tries. Please wait a moment or see staff',
+		methodDisabled: 'This option is turned off. Please see staff',
+		printRenderFailed: 'Could not create the QR code to print',
+		generic: 'Something went wrong. Please try again'
+	}
+};
 
-function messageFor(error: unknown): string {
-	if (!(error instanceof KioskRequestError)) return GENERIC_MESSAGE;
+function messageFor(error: unknown, language: LanguageCode): string {
+	const messages = MESSAGES[language];
+	if (!(error instanceof KioskRequestError)) return messages.generic;
 	switch (error.code) {
 		case 'KIOSK_VOLUNTEER_CARD_NOT_FOUND':
-			return NOT_FOUND_MESSAGE;
+			return messages.notFound;
 		case 'KIOSK_RATE_LIMITED':
-			return RATE_LIMITED_MESSAGE;
+			return messages.rateLimited;
 		case 'KIOSK_METHOD_DISABLED':
-			return METHOD_DISABLED_MESSAGE;
+			return messages.methodDisabled;
 		default:
-			return error.message || GENERIC_MESSAGE;
+			return error.message || messages.generic;
 	}
 }
 
@@ -42,7 +58,11 @@ export class VolunteerCardSession {
 	/** Bumped by `reset()` so an answer for an abandoned visit is dropped. */
 	private generation = 0;
 
-	constructor(private readonly deps: VolunteerCardSessionDeps) {}
+	/** `language` is read when a message is made; it defaults to the kiosk's current language. */
+	constructor(
+		private readonly deps: VolunteerCardSessionDeps,
+		private readonly language: () => LanguageCode = () => languageStore.current
+	) {}
 
 	get phone(): string {
 		return this.phoneValue;
@@ -69,7 +89,7 @@ export class VolunteerCardSession {
 			this.step = 'confirm';
 		} catch (error) {
 			if (generation !== this.generation) return;
-			this.error = messageFor(error);
+			this.error = messageFor(error, this.language());
 		} finally {
 			if (generation === this.generation) this.busy = false;
 		}
@@ -114,7 +134,7 @@ export class VolunteerCardSession {
 			try {
 				outcome = await this.deps.print(this.volunteer);
 			} catch {
-				outcome = { kind: 'error', message: PRINT_RENDER_FAILED_MESSAGE };
+				outcome = { kind: 'error', message: MESSAGES[this.language()].printRenderFailed };
 			}
 			if (generation !== this.generation) return;
 			if (outcome.kind === 'error') {
