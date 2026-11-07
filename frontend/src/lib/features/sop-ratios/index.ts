@@ -73,6 +73,7 @@ export {
 	sortOneTimeDemandRows,
 	type OneTimeDemandItem,
 	type OneTimeDemandRow,
+	type ReceivedBreakdown,
 	PARTIAL_COVERAGE_PERCENT,
 	type OneTimeDemandStatus
 } from './domain/one-time-demand';

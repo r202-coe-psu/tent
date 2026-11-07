@@ -264,7 +264,7 @@ describe('already received', () => {
 			people,
 			lots: [lot(net._id, onHand)],
 			reservations: [],
-			receivedByItem: new Map([[net._id, received]]),
+			receivedByItem: new Map([[net._id, { evacuees: received, staff: 0, volunteers: 0 }]]),
 			now: NOW
 		})[0];
 
@@ -275,6 +275,14 @@ describe('already received', () => {
 			available: '50',
 			shortfall: '40',
 			status: 'partial'
+		});
+	});
+
+	it('keeps the split by kind of person on the row', () => {
+		expect(withReceived(120, '50', 30).receivedBreakdown).toEqual({
+			evacuees: 30,
+			staff: 0,
+			volunteers: 0
 		});
 	});
 
@@ -296,7 +304,7 @@ describe('already received', () => {
 			people: 10,
 			lots: [lot(net._id, '5')],
 			reservations: [],
-			receivedByItem: new Map([[net._id, 4]]),
+			receivedByItem: new Map([[net._id, { evacuees: 3, staff: 1, volunteers: 0 }]]),
 			now: NOW
 		});
 		expect(row).toMatchObject({ demand: '12', shortfall: '7' });
@@ -321,8 +329,8 @@ describe('countCurrentRecipients', () => {
 			],
 			present
 		);
-		expect(counts.get('item_master:net')).toBe(2);
-		expect(counts.get('item_master:tent')).toBe(1);
+		expect(counts.get('item_master:net')).toEqual({ evacuees: 2, staff: 0, volunteers: 0 });
+		expect(counts.get('item_master:tent')).toEqual({ evacuees: 1, staff: 0, volunteers: 0 });
 	});
 
 	it('counts staff and volunteers who received the item', () => {
@@ -335,7 +343,7 @@ describe('countCurrentRecipients', () => {
 			],
 			present
 		);
-		expect(counts.get('item_master:net')).toBe(2);
+		expect(counts.get('item_master:net')).toEqual({ evacuees: 0, staff: 1, volunteers: 1 });
 	});
 
 	it('counts a volunteer who is also a staff account once, whichever id was recorded', () => {
@@ -346,7 +354,7 @@ describe('countCurrentRecipients', () => {
 			],
 			present
 		);
-		expect(counts.get('item_master:net')).toBe(1);
+		expect(counts.get('item_master:net')).toEqual({ evacuees: 0, staff: 0, volunteers: 1 });
 	});
 });
 

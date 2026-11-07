@@ -31,6 +31,15 @@ export interface OneTimeDemandReservation {
 	qty: string;
 }
 
+/** Who received an item, by kind of person (the same three groups as the shelter head count). */
+export interface ReceivedBreakdown {
+	evacuees: number;
+	staff: number;
+	volunteers: number;
+}
+
+const NO_RECEIVED: ReceivedBreakdown = { evacuees: 0, staff: 0, volunteers: 0 };
+
 /** A person who already received an item (a `distribution_log` that is not voided). */
 export interface OneTimeRecipient {
 	item_id: string;
@@ -52,6 +61,8 @@ export interface OneTimeDemandRow {
 	unit: string;
 	/** People still in the shelter who already received this item. */
 	received: number;
+	/** `received` split by kind of person. */
+	receivedBreakdown: ReceivedBreakdown;
 	/** (people − received) × qty_per_person (qty_str): what is still to hand out. */
 	demand: string;
 	/** Non-expired lot balance − active reservations, floored at 0 (qty_str). */
@@ -72,7 +83,7 @@ export interface BuildOneTimeDemandInput {
 	lots: readonly OneTimeDemandLot[];
 	reservations: readonly OneTimeDemandReservation[];
 	/** People already served, per item id (see {@link countCurrentRecipients}). Default: none. */
-	receivedByItem?: ReadonlyMap<string, number>;
+	receivedByItem?: ReadonlyMap<string, ReceivedBreakdown>;
 	/** Epoch ms; lot expiry is judged against it. */
 	now: number;
 }
@@ -118,16 +129,21 @@ export function presentRecipientKeys(input: {
 export function countCurrentRecipients(
 	recipients: readonly OneTimeRecipient[],
 	presentKeys: ReadonlyMap<string, string>
-): Map<string, number> {
+): Map<string, ReceivedBreakdown> {
 	const seen = new Set<string>();
-	const counts = new Map<string, number>();
+	const counts = new Map<string, ReceivedBreakdown>();
 	for (const { item_id, recipient_id } of recipients) {
 		const person = presentKeys.get(recipient_id);
 		if (!person) continue;
 		const key = `${item_id}\n${person}`;
 		if (seen.has(key)) continue;
 		seen.add(key);
-		counts.set(item_id, (counts.get(item_id) ?? 0) + 1);
+		const breakdown = counts.get(item_id) ?? { evacuees: 0, staff: 0, volunteers: 0 };
+		// The person key keeps the group: `evacuee:*`, `volunteer:*` or `user:*` (staff).
+		if (person.startsWith('evacuee:')) breakdown.evacuees += 1;
+		else if (person.startsWith('volunteer:')) breakdown.volunteers += 1;
+		else breakdown.staff += 1;
+		counts.set(item_id, breakdown);
 	}
 	return counts;
 }
@@ -160,7 +176,11 @@ export function buildOneTimeDemandRows(input: BuildOneTimeDemandInput): OneTimeD
 			? new Decimal(1)
 			: new Decimal(String(item.qty_per_person));
 		// Someone who already got a one-time item does not need it again.
-		const received = Math.min(input.receivedByItem?.get(item._id) ?? 0, people);
+		const receivedBreakdown = input.receivedByItem?.get(item._id) ?? NO_RECEIVED;
+		const received = Math.min(
+			receivedBreakdown.evacuees + receivedBreakdown.staff + receivedBreakdown.volunteers,
+			people
+		);
 		const demand = persistQty(new Decimal(String(people - received)).times(perPerson));
 
 		// Only live, positive lots count; a claim held on an excluded lot is not double-counted.
@@ -180,6 +200,7 @@ export function buildOneTimeDemandRows(input: BuildOneTimeDemandInput): OneTimeD
 			name: item.name,
 			unit: item.base_unit || item.unit || '',
 			received,
+			receivedBreakdown,
 			demand,
 			available,
 			shortfall: qtyGt(gap, 0) ? gap : ZERO,

@@ -20,6 +20,7 @@
 	import { useItemRecipients } from '$lib/features/distribution';
 	import { langState } from '$lib/states/i18n.svelte';
 	import { formatQty } from '$lib/utils/qty';
+	import ReceivedByTypeTooltip from './received-by-type-tooltip.svelte';
 	import { useShelterPeopleCounts } from '../application/shelter-people-queries';
 	import {
 		buildOneTimeDemandRows,
@@ -370,7 +371,10 @@
 							<div>
 								<dt class="text-slate-500">รับแล้ว</dt>
 								<dd class="font-semibold text-slate-900 tabular-nums">
-									{formatQty(row.received)} คน
+									<ReceivedByTypeTooltip
+										received={row.received}
+										breakdown={row.receivedBreakdown}
+									/>
 								</dd>
 							</div>
 							<div>
@@ -436,8 +440,10 @@
 									{/if}
 								</Table.Cell>
 								<Table.Cell class="px-4 py-3 text-right text-base tabular-nums">
-									{formatQty(row.received)}
-									<span class="text-sm text-slate-500">คน</span>
+									<ReceivedByTypeTooltip
+										received={row.received}
+										breakdown={row.receivedBreakdown}
+									/>
 								</Table.Cell>
 								<Table.Cell class="px-4 py-3 text-right text-base font-semibold tabular-nums">
 									{formatQty(row.demand)}
