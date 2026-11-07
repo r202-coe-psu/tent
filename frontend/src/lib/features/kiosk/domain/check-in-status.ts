@@ -22,10 +22,32 @@ export const REPRINT_PRE_REGISTERED_REASON = 'ยังไม่ได้ลง�
 export const REPRINT_TEMPORARY_LEAVE_REASON = 'ออกนอกศูนย์ชั่วคราว — พิมพ์ QR ไม่ได้';
 export const REPRINT_NOBODY_REASON = 'ไม่มีผู้ที่พิมพ์ QR ได้ กรุณาติดต่อเจ้าหน้าที่';
 
+/** English wording of the three reasons above, keyed by their Thai text. */
+const REPRINT_REASONS_EN: Record<string, string> = {
+	[REPRINT_PRE_REGISTERED_REASON]: 'Not registered yet — use your ID card or ThaiD',
+	[REPRINT_TEMPORARY_LEAVE_REASON]: 'Temporarily away from the shelter — cannot print QR',
+	[REPRINT_NOBODY_REASON]: 'No one can print a QR. Please contact staff'
+};
+
+/**
+ * Shows a reprint reason in `language`. The reasons travel as Thai text (the constants above), so
+ * a screen passes what it holds through here; text that is not a known reason comes back as is.
+ */
+export function localizeReprintReason(reason: string, language: 'th' | 'en' = 'th'): string {
+	return language === 'en' ? (REPRINT_REASONS_EN[reason] ?? reason) : reason;
+}
+
 /** Why a listed member cannot be reprinted; null when no dedicated reason applies. */
-export function reprintUnavailableReason(status: string | null | undefined): string | null {
-	if (status === 'pre_registered') return REPRINT_PRE_REGISTERED_REASON;
-	if (status === 'temporary_leave') return REPRINT_TEMPORARY_LEAVE_REASON;
+export function reprintUnavailableReason(
+	status: string | null | undefined,
+	language: 'th' | 'en' = 'th'
+): string | null {
+	if (status === 'pre_registered') {
+		return localizeReprintReason(REPRINT_PRE_REGISTERED_REASON, language);
+	}
+	if (status === 'temporary_leave') {
+		return localizeReprintReason(REPRINT_TEMPORARY_LEAVE_REASON, language);
+	}
 	return null;
 }
 

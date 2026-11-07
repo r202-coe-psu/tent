@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { languageStore } from '$lib/stores/language.svelte';
 import { mintConsentStamp, type ConsentDecision } from '$lib/features/consent/server';
 import {
 	checkInSelectedMembers,
@@ -7,7 +8,8 @@ import {
 	lookupPreRegisteredEvacuee,
 	registerKioskThaidWalkIn,
 	reprintKioskLabels,
-	registerKioskWalkIn
+	registerKioskWalkIn,
+	requestError
 } from './kiosk-check-in.api';
 
 describe('checkInSelectedMembers batching', () => {
@@ -526,5 +528,41 @@ describe('checkInSelectedMembers lookup time (CR-192)', () => {
 		await checkInSelectedMembers(primaryId, [primaryId]);
 
 		expect(bodies[0]).not.toHaveProperty('lookup_at');
+	});
+});
+
+describe('kiosk request messages language', () => {
+	afterEach(() => languageStore.setLanguage('th'));
+
+	it('builds the partial check-in message in English', () => {
+		languageStore.setLanguage('en');
+
+		const error = new KioskPartialCheckInError({
+			shelter_code: 'SH001',
+			members: [],
+			retryable_evacuee_ids: []
+		});
+
+		expect(error.message).toBe(
+			'Only part of the check-in went through. Please review the results and retry the rest'
+		);
+	});
+
+	it('keeps the Thai partial check-in message in Thai', () => {
+		const error = new KioskPartialCheckInError({
+			shelter_code: 'SH001',
+			members: [],
+			retryable_evacuee_ids: []
+		});
+
+		expect(error.message).toBe('รายงานตัวได้บางส่วน กรุณาตรวจผลและลองรายการที่เหลืออีกครั้ง');
+	});
+
+	it('uses an English generic message when the server sent none', async () => {
+		languageStore.setLanguage('en');
+
+		const error = await requestError(new Response('{}', { status: 500 }));
+
+		expect(error.message).toBe('The system could not complete this request');
 	});
 });

@@ -1,5 +1,8 @@
 import type { ConsentDecision, ConsentMode } from '$lib/features/consent';
+import { languageStore } from '$lib/stores/language.svelte';
+import { getTranslation } from '$lib/utils/i18n';
 import type { KioskPhotoPayload } from '../domain/kiosk-photo';
+import { KIOSK_CHECK_IN_MESSAGES_I18N } from './kiosk-check-in-messages.i18n';
 
 export type GateInput =
 	| { source: 'smart-card'; citizen_id: string }
@@ -178,6 +181,11 @@ export function reprintKioskLabels(
 	);
 }
 
+/** The messages in the language on screen when the error is raised (a visit never switches mid-request). */
+function requestMessages() {
+	return getTranslation(KIOSK_CHECK_IN_MESSAGES_I18N, languageStore.current);
+}
+
 export class KioskRequestError extends Error {
 	constructor(
 		message: string,
@@ -192,7 +200,7 @@ export class KioskRequestError extends Error {
 
 export class KioskPartialCheckInError extends Error {
 	constructor(readonly result: KioskCheckInBatchResult) {
-		super('รายงานตัวได้บางส่วน กรุณาตรวจผลและลองรายการที่เหลืออีกครั้ง');
+		super(requestMessages().partialCheckIn);
 		this.name = 'KioskPartialCheckInError';
 	}
 }
@@ -213,7 +221,7 @@ export async function requestError(response: Response): Promise<KioskRequestErro
 		typeof body?.error === 'object' && body.error !== null && 'code' in body.error
 			? body.error.code
 			: null;
-	const message = typeof nestedMessage === 'string' ? nestedMessage : 'ระบบไม่สามารถทำรายการได้';
+	const message = typeof nestedMessage === 'string' ? nestedMessage : requestMessages().generic;
 	return new KioskRequestError(
 		message,
 		response.status,
@@ -252,7 +260,7 @@ export async function requestWithTimeout<T>(
 		return await consume(response);
 	} catch (error) {
 		if (error instanceof Error && error.name === 'AbortError') {
-			throw new KioskRequestError('เชื่อมต่อช้า กรุณาลองอีกครั้ง', 0, 'TIMEOUT');
+			throw new KioskRequestError(requestMessages().timeout, 0, 'TIMEOUT');
 		}
 		throw error;
 	} finally {

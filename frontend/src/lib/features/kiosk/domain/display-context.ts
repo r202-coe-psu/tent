@@ -21,23 +21,36 @@ export interface KioskDisplayContext {
 	deviceName: string;
 }
 
-const FALLBACK_DISPLAY_CONTEXT: KioskDisplayContext = {
-	shelterName: 'ศูนย์พักพิง',
-	shelterCode: '',
-	stationName: 'จุดคัดกรองทั่วไป',
-	deviceName: 'Kiosk'
+const FALLBACK_DISPLAY_CONTEXT: Record<'th' | 'en', KioskDisplayContext> = {
+	th: {
+		shelterName: 'ศูนย์พักพิง',
+		shelterCode: '',
+		stationName: 'จุดคัดกรองทั่วไป',
+		deviceName: 'Kiosk'
+	},
+	en: {
+		shelterName: 'Shelter',
+		shelterCode: '',
+		stationName: 'General screening point',
+		deviceName: 'Kiosk'
+	}
 };
 
 function clean(value: string | null | undefined): string {
 	return value?.trim() ?? '';
 }
 
-export function getKioskDisplayContext(query: KioskDisplayQuery): KioskDisplayContext {
+/** `language` only picks the wording of the fallbacks; names that came in the query stay as given. */
+export function getKioskDisplayContext(
+	query: KioskDisplayQuery,
+	language: 'th' | 'en' = 'th'
+): KioskDisplayContext {
+	const fallback = FALLBACK_DISPLAY_CONTEXT[language];
 	return {
-		shelterName: clean(query.shelter_name) || FALLBACK_DISPLAY_CONTEXT.shelterName,
+		shelterName: clean(query.shelter_name) || fallback.shelterName,
 		shelterCode: clean(query.shelter_code),
-		stationName: clean(query.station_name) || FALLBACK_DISPLAY_CONTEXT.stationName,
-		deviceName: clean(query.device_name) || FALLBACK_DISPLAY_CONTEXT.deviceName
+		stationName: clean(query.station_name) || fallback.stationName,
+		deviceName: clean(query.device_name) || fallback.deviceName
 	};
 }
 

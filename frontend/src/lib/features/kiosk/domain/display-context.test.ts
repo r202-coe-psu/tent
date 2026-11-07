@@ -65,3 +65,23 @@ describe('kiosk display context', () => {
 		expect(query).not.toHaveProperty('error_msg');
 	});
 });
+
+describe('kiosk display context language', () => {
+	it('falls back to English names when the language is English', () => {
+		expect(getKioskDisplayContext({}, 'en')).toEqual({
+			shelterName: 'Shelter',
+			shelterCode: '',
+			stationName: 'General screening point',
+			deviceName: 'Kiosk'
+		});
+	});
+
+	it('keeps real names untouched whatever the language', () => {
+		expect(
+			getKioskDisplayContext({ shelter_name: 'ศูนย์ A', station_name: 'S1' }, 'en')
+		).toMatchObject({
+			shelterName: 'ศูนย์ A',
+			stationName: 'S1'
+		});
+	});
+});
