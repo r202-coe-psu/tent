@@ -43,7 +43,7 @@ export function filterTicketsByPoint<T extends PointTicket>(
 
 type OptionTicket = Pick<
 	RequisitionTicket,
-	'ticket_no' | 'requisition_type' | 'meal' | 'created_at' | 'destination_location'
+	'ticket_no' | 'requisition_type' | 'meal' | 'created_at' | 'service_date' | 'destination_location'
 > & { items: readonly { item_name: string }[] };
 
 /** A ticket in the desk's ticket selector: a short title plus labelled details, no separators. */
@@ -89,7 +89,7 @@ export interface TicketCardSummary {
 export function ticketCardSummary(
 	ticket: Pick<
 		RequisitionTicket,
-		'requisition_type' | 'meal' | 'created_at' | 'destination_location'
+		'requisition_type' | 'meal' | 'created_at' | 'service_date' | 'destination_location'
 	>,
 	today: string = thailandCalendarDay()
 ): TicketCardSummary {

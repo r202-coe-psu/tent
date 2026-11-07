@@ -65,3 +65,26 @@ describe('filterTicketsByServiceDay', () => {
 		expect(filterTicketsByServiceDay(tickets, ALL_SERVICE_DAYS)).toHaveLength(3);
 	});
 });
+
+describe('service_date (draft-food-ticket-service-date)', () => {
+	// Opened at 20:00 tonight for tomorrow's breakfast.
+	const forTomorrow = {
+		id: 'd',
+		created_at: '2026-10-07T13:00:00.000Z',
+		service_date: '2026-10-08'
+	};
+
+	it('files a ticket opened ahead under its service day, not its creation day', () => {
+		expect(ticketServiceDay(forTomorrow)).toBe('2026-10-08');
+		expect(serviceDayOptions([forTomorrow, laterToday], TODAY)[0]).toMatchObject({
+			value: '2026-10-08',
+			label: expect.stringMatching(/^พรุ่งนี้/)
+		});
+		expect(filterTicketsByServiceDay([forTomorrow, laterToday], TODAY).map((t) => t.id)).toEqual([
+			'c'
+		]);
+		expect(
+			filterTicketsByServiceDay([forTomorrow, laterToday], '2026-10-08').map((t) => t.id)
+		).toEqual(['d']);
+	});
+});

@@ -1,4 +1,10 @@
-import { thailandCalendarDay, ticketServiceDay } from '../../domain/food-supplies';
+import {
+	thailandCalendarDay,
+	ticketServiceDay,
+	type RequisitionTicket
+} from '../../domain/food-supplies';
+
+type ServiceDayTicket = Pick<RequisitionTicket, 'created_at' | 'service_date'>;
 
 /** Day-filter sentinel meaning "every service day". */
 export const ALL_SERVICE_DAYS = 'all';
@@ -29,7 +35,7 @@ export function formatServiceDay(day: string, today: string): string {
 
 /** Distinct service days of the tickets, newest first, plus the "all days" option at the end. */
 export function serviceDayOptions(
-	tickets: readonly { created_at: string }[],
+	tickets: readonly ServiceDayTicket[],
 	today: string = thailandCalendarDay()
 ): ServiceDayOption[] {
 	const days = [...new Set(tickets.map(ticketServiceDay))].sort().reverse();
@@ -45,7 +51,7 @@ export function serviceDayOptions(
  */
 export function resolveServiceDay(
 	picked: string | null,
-	tickets: readonly { created_at: string }[],
+	tickets: readonly ServiceDayTicket[],
 	today: string = thailandCalendarDay()
 ): string {
 	const days = new Set(tickets.map(ticketServiceDay));
@@ -53,7 +59,7 @@ export function resolveServiceDay(
 	return days.has(today) ? today : ALL_SERVICE_DAYS;
 }
 
-export function filterTicketsByServiceDay<T extends { created_at: string }>(
+export function filterTicketsByServiceDay<T extends ServiceDayTicket>(
 	tickets: readonly T[],
 	day: string
 ): T[] {
