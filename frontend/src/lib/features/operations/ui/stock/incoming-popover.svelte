@@ -39,7 +39,7 @@
 		</Popover.Trigger>
 		<Popover.Content align="start" class="w-80 max-w-[calc(100vw-2rem)] gap-2 p-3">
 			<h4 class="text-sm font-semibold text-slate-900">ของที่กำลังมา · {row.name}</h4>
-			<ul class="divide-y divide-slate-100">
+			<ul class="max-h-[min(24rem,60vh)] divide-y divide-slate-100 overflow-y-auto">
 				{#each lines as line, i (`${line.source}:${line.doc_id}:${i}`)}
 					{@const href = incomingRowHref(line, roles)}
 					<li class="flex items-start justify-between gap-3 py-2 text-sm">
