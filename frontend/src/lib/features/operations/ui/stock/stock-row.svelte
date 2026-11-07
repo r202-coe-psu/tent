@@ -38,8 +38,7 @@
 	const EXPIRY_CLASS = {
 		critical: 'text-red-700',
 		warning: 'text-amber-700',
-		muted: 'text-slate-400',
-		default: 'text-slate-900'
+		muted: 'text-slate-500'
 	};
 </script>
 
@@ -71,7 +70,8 @@
 	<!-- คงเหลือ / เกณฑ์ -->
 	<Table.Cell class="w-48 px-3 py-3.5 lg:px-4 xl:w-64">
 		<p class="flex items-baseline gap-1.5">
-			<span class="text-base font-bold text-slate-900 tabular-nums xl:text-lg">{row.qtyOnHand}</span
+			<span class="text-base font-bold text-slate-900 tabular-nums xl:text-lg"
+				>{row.shownQty ?? row.qtyOnHand}</span
 			>
 			<span class="text-xs text-slate-500">{row.unitLabel}</span>
 		</p>
@@ -85,7 +85,13 @@
 
 	<!-- หมดอายุเร็วสุด -->
 	<Table.Cell class="w-32 px-3 py-3.5 lg:px-4 xl:w-40">
-		<p class="text-sm font-semibold tabular-nums {EXPIRY_CLASS[expiry.tone]}">{expiry.text}</p>
+		<p
+			class="text-sm font-semibold tabular-nums {expiry.relative && expiry.tone === 'muted'
+				? 'text-slate-900'
+				: EXPIRY_CLASS[expiry.tone]}"
+		>
+			{expiry.text}
+		</p>
 		{#if expiry.relative}
 			<p class="text-xs {EXPIRY_CLASS[expiry.tone]}">{expiry.relative}</p>
 		{/if}

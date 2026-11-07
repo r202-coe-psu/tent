@@ -2,6 +2,9 @@
 	import {
 		LEDGER_PARAM_KEYS,
 		LedgerTable,
+		countLotsHoldingStock,
+		projectLotsByItem,
+		useLedger,
 		MergeItemDialog,
 		STOCK_PARAM_KEYS,
 		StockTable,
@@ -9,6 +12,7 @@
 		usePendingTransferCount,
 		useStockBalance
 	} from '$lib/features/operations';
+	import { StoragePointsManager } from '$lib/features/shelters';
 	import { ProductsPanel, type ItemMaster } from '$lib/features/catalog';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { endpointStore } from '$lib/stores/endpoint.svelte';
@@ -16,7 +20,7 @@
 	import { ResourceNeedsDashboard } from '$lib/features/resource-calc';
 	import { FoodSphereStockTab, OneTimeDemandTab } from '$lib/features/sop-ratios/components';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
-	import { canChangeStock, shelterCodeFromRoles } from '$lib/auth/roles';
+	import { canChangeStock, canManageStoragePoints, shelterCodeFromRoles } from '$lib/auth/roles';
 	import { useDashboardOccupancy } from '$lib/features/dashboard';
 	import { page } from '$app/state';
 	import { goto } from '$app/navigation';
@@ -42,6 +46,9 @@
 	// The master list shows on-hand quantity; the ledger lives in `operations`, so the page joins them.
 	const balanceQuery = useStockBalance();
 
+	// "จัดการคลัง" (#1186): warehouse side + SM; the server re-checks on every write.
+	const canManageStorage = $derived(canManageStoragePoints(roles, shelterCode));
+
 	const pendingTransfers = usePendingTransferCount(() => canChange);
 	const pendingCount = $derived(pendingTransfers.data ?? 0);
 
@@ -55,7 +62,7 @@
 		mergeOpen = true;
 	}
 
-	const PRIMARY_TABS = ['inventory', 'movements', 'transfer'] as const;
+	const PRIMARY_TABS = ['inventory', 'movements', 'transfer', 'storage'] as const;
 	type PrimaryTabKey = (typeof PRIMARY_TABS)[number];
 	// Reached by link, not by tab: their `?tab=` URLs keep working.
 	const SECONDARY_TABS = [
@@ -71,8 +78,17 @@
 
 	const activeTab = $derived<TabKey>(
 		KNOWN_TABS.find(
-			(t) => t === page.url.searchParams.get('tab') && (t !== 'transfer' || canChange)
+			(t) =>
+				t === page.url.searchParams.get('tab') &&
+				(t !== 'transfer' || canChange) &&
+				(t !== 'storage' || canManageStorage)
 		) ?? 'inventory'
+	);
+
+	// Stock lots per storage point, read only while the "จัดการคลัง" tab is open.
+	const storageLedgerQuery = useLedger(() => activeTab === 'storage');
+	const storageLots = $derived(
+		storageLedgerQuery.data ? projectLotsByItem(storageLedgerQuery.data).lots : []
 	);
 
 	function setTab(tab: PrimaryTabKey) {
@@ -173,6 +189,16 @@
 					{/if}
 				</button>
 			{/if}
+			{#if canManageStorage}
+				<button
+					type="button"
+					onclick={() => setTab('storage')}
+					aria-current={activeTab === 'storage' ? 'page' : undefined}
+					class={tabClass(activeTab === 'storage')}
+				>
+					จัดการคลัง
+				</button>
+			{/if}
 		</nav>
 
 		<nav
@@ -219,6 +245,14 @@
 	{:else if activeTab === 'one-time'}
 		<div class="animate-in duration-300 fade-in slide-in-from-bottom-2">
 			<OneTimeDemandTab {shelterCode} />
+		</div>
+	{:else if activeTab === 'storage'}
+		<div class="animate-in duration-300 fade-in slide-in-from-bottom-2">
+			<StoragePointsManager
+				{shelterCode}
+				stockReady={!!storageLedgerQuery.data}
+				stockedLotCount={(pointId) => countLotsHoldingStock(pointId, storageLots)}
+			/>
 		</div>
 	{:else if activeTab === 'transfer'}
 		<div class="animate-in duration-300 fade-in slide-in-from-bottom-2">

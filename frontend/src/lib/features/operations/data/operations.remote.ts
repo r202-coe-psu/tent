@@ -61,7 +61,9 @@ import {
 	type TransferStatus,
 	type DispatchInfoInput,
 	type CancelInfoInput,
-	type DisputeInfoInput
+	type DisputeInfoInput,
+	lotDateStamp,
+	nextLotNos
 } from '../domain/operations';
 import { assertDonationSlotDeletable, countSlotBookings, slotMode } from '../domain/donation-slot';
 import { ItemMergeError, planItemMerge } from '../domain/item-merge';
@@ -82,7 +84,7 @@ import {
 	type CycleCountResult,
 	type CycleCountSubmission
 } from '../domain/cycle-count';
-import type { OperationsRepository } from './operations.repository';
+import type { OperationsRepository, ReceiveOptions } from './operations.repository';
 import { isLedgerRefDoc, type LedgerRefDoc } from '../domain/ledger-ref';
 import { supplyRepository, type SupplyItem } from '$lib/features/supply';
 import {
@@ -145,6 +147,9 @@ const DONATION_LEDGER_LIMIT = 1000;
 
 /** Rows per `_find` round when a set of items' ledger history is read to the end. */
 const LEDGER_PAGE_LIMIT = 1000;
+
+/** Cap on the day's `lot_no` lookup when minting lot numbers (same bound as kitchen). */
+const LOT_NO_LOOKUP_LIMIT = 10_000;
 
 /** Tries at closing a batch receipt while other writes keep moving its `_rev` (S-R14-1). */
 const MAX_CLOSE_ATTEMPTS = 3;
@@ -299,8 +304,38 @@ export class OperationsRemoteRepository implements OperationsRepository {
 		return stockBalance(ledger);
 	}
 
-	async receiveStock(input: ReceiveInput, ctx: AuthorContext): Promise<StockLedger> {
+	/** Mint `count` lot numbers `L-YYMMDD-XXX` after whatever the day's ledger already holds. */
+	private async allocateLotNos(count: number, when: Date = new Date()): Promise<string[]> {
+		const prefix = `L-${lotDateStamp(when)}-`;
+		let rows: { lot?: { lot_no?: string } }[];
+		try {
+			rows = await this.repo.find<{ lot?: { lot_no?: string } }>({
+				selector: {
+					type: 'stock_ledger',
+					'lot.lot_no': { $gte: prefix, $lt: `${prefix}\ufff0` }
+				},
+				fields: ['lot.lot_no'],
+				limit: LOT_NO_LOOKUP_LIMIT
+			});
+		} catch (cause) {
+			throw new Error('ออกเลขล็อตไม่สำเร็จ กรุณาลองบันทึกรับเข้าใหม่อีกครั้ง', { cause });
+		}
+		const existing = rows
+			.map((row) => row.lot?.lot_no)
+			.filter((lot): lot is string => typeof lot === 'string');
+		return nextLotNos(existing, when, count);
+	}
+
+	async receiveStock(
+		input: ReceiveInput,
+		ctx: AuthorContext,
+		options: ReceiveOptions = {}
+	): Promise<StockLedger> {
 		const entry = createReceiveEntry(input, ctx);
+		if (options.issueLotNo) {
+			const [lot_no] = await this.allocateLotNos(1);
+			entry.lot = { ...(entry.lot ?? {}), lot_no };
+		}
 		const item = await this.loadCatalogItem(entry.item_id);
 		assertReceiveAgainstCatalog(entry, item);
 		return this.addLedgerEntry(entry);
@@ -309,7 +344,8 @@ export class OperationsRemoteRepository implements OperationsRepository {
 	async receiveWalkInDonation(
 		donationInput: WalkInDonationInput,
 		receiveInput: ReceiveInput,
-		ctx: AuthorContext
+		ctx: AuthorContext,
+		options: ReceiveOptions = {}
 	): Promise<{ donation: Donation; entry: StockLedger }> {
 		const donation = createWalkInDonation(donationInput, ctx);
 		// a walk-in is a donation by definition — do not let a caller say otherwise
@@ -318,6 +354,10 @@ export class OperationsRemoteRepository implements OperationsRepository {
 			{ ...receiveInput, source: 'donation', ref_id: donation._id },
 			ctx
 		);
+		if (options.issueLotNo) {
+			const [lot_no] = await this.allocateLotNos(1);
+			entry.lot = { ...(entry.lot ?? {}), lot_no };
+		}
 
 		const item = await this.loadCatalogItem(entry.item_id);
 		assertReceiveAgainstCatalog(entry, item);
@@ -383,7 +423,8 @@ export class OperationsRemoteRepository implements OperationsRepository {
 	async receiveDonationBatch(
 		donation: Donation,
 		counted: readonly DonationBatchLine[],
-		ctx: AuthorContext
+		ctx: AuthorContext,
+		options: ReceiveOptions = {}
 	): Promise<DonationBatchResult> {
 		if (donation.kind !== 'items') {
 			throw new Error('Only a goods donation can be received into stock');
@@ -528,6 +569,14 @@ export class OperationsRemoteRepository implements OperationsRepository {
 				ctx,
 				toWrite.map(({ id }) => id)
 			);
+			// Only rows that are really about to be written take a number, so a retry whose
+			// rows already landed does not burn any.
+			if (options.issueLotNo) {
+				const lotNos = await this.allocateLotNos(entries.length);
+				entries.forEach((entry, index) => {
+					entry.lot = { ...(entry.lot ?? {}), lot_no: lotNos[index] };
+				});
+			}
 			// Validate every row against the catalog (unit, FR-D2 expiry) BEFORE writing any:
 			// a bad line must not leave its neighbours half recorded.
 			const catalog = new Map<string, CatalogItem | null>();

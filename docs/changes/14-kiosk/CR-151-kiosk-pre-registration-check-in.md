@@ -4,7 +4,7 @@ title: Kiosk — เปลี่ยนจาก "เสียบบัตรเ�
 status: approved
 date: 2026-09-24
 created: 2026-09-24
-updated: 2026-10-23 # 2026-10-23 rate limit superseded by CR-188 · ข้อเสนอแก้ไข §17 approved โดย Team Lead Soravit Sukkarn (2026-10-20) — พิมพ์ QR จิตอาสา (#609) · 2026-10-18 ทีม kiosk เสนอ §16 (#654): แถว Zone + checklist บน QR label, `zones[].short_name`, reprint คืน `label.zone`/`stations_passed` — รอ PO เคาะ · 2026-10-17 decision sync (#604): ฐาน local ขาด kiosk index → redeploy แล้ว + redeploy/seed deploy index ครบชุด · 2026-10-15 ทีม kiosk ขอเลิกกรอง registered_via ใน §15 (FR-KPC-101/104) · 2026-10-13 ข้อเสนอแก้ไข §15 approved โดย Dev/Team Lead Soravit Sukkarn (รับ requirement จากหัวหน้าโครงการเมื่อวาน 2026-10-12) · 2026-10-04 approved และ merge โดย Soravit Sukkar (Team Lead) + รันเลข CR-151 และลงทะเบียนใน _index.md
+updated: 2026-11-06 # 2026-11-06 CR-233 supersedes FR-KPC-107 (reprint เขียน log `evacuee_qr`) และ payload ใน FR-KPC-81 · 2026-10-23 rate limit superseded by CR-188 · ข้อเสนอแก้ไข §17 approved โดย Team Lead Soravit Sukkarn (2026-10-20) — พิมพ์ QR จิตอาสา (#609) · 2026-10-18 ทีม kiosk เสนอ §16 (#654): แถว Zone + checklist บน QR label, `zones[].short_name`, reprint คืน `label.zone`/`stations_passed` — รอ PO เคาะ · 2026-10-17 decision sync (#604): ฐาน local ขาด kiosk index → redeploy แล้ว + redeploy/seed deploy index ครบชุด · 2026-10-15 ทีม kiosk ขอเลิกกรอง registered_via ใน §15 (FR-KPC-101/104) · 2026-10-13 ข้อเสนอแก้ไข §15 approved โดย Dev/Team Lead Soravit Sukkarn (รับ requirement จากหัวหน้าโครงการเมื่อวาน 2026-10-12) · 2026-10-04 approved และ merge โดย Soravit Sukkar (Team Lead) + รันเลข CR-151 และลงทะเบียนใน _index.md
 requested_by: ทีม kiosk (branch feat/pre-register_kiosk)
 decided_by: Soravit Sukkar (Team Lead)
 decision_date: 2026-10-04
@@ -263,6 +263,8 @@ migration: ไม่มี — ไม่มี field ใหม่ ไม่ bump
 | FR-KPC-82 | กด「เสร็จสิ้น」→ กลับหน้าเริ่มของช่องทางนั้น (บัตร →`/kiosk`) และล้าง state ทั้งหมด                                                                                                                                                                                                                                                                                                                                                                                              | ✅                                      |
 | FR-KPC-83 | ทุกช่องทางใช้กฎเดียวกันหลังค้นเจอ: มีสมาชิกเลือกได้อย่างน้อย 1 คน → หน้าเลือกสมาชิก (QR / บัตร เลือกไว้ก่อนเฉพาะคนที่ถูกสแกนถ้าเลือกได้ · เบอร์เลือกทุกคนที่เลือกได้) · ไม่มีใครเลือกได้ → หน้าผลแสดงทุกคนที่รายงานตัวแล้ว และพิมพ์ QR ซ้ำได้ทุกคนที่ยัง`arriving` · แทน FR-KPC-80 และรวม FR-KPC-60 | 🔄 รอ manual test                     |
 
+> **Superseded by [CR-233](../02-people/CR-233-evacuee-qr-rotate-on-print.md)** (2026-11-06): FR-KPC-81 — QR บนสายรัดไม่ใช่ `evacuee:<ULID>` คงที่อีก แต่เป็น `evacuee:<ULID>@<hash6>` ที่ server ออกใหม่ทุกครั้งที่พิมพ์ (ใบเก่าหมดอายุ); ส่วนอื่นของข้อนี้ยังใช้
+
 ### 6.9 ของเดิมที่ปิดไป
 
 | ID        | Requirement                                                                                                                                                 | สถานะ |
@@ -496,6 +498,8 @@ migration: ไม่มี — ไม่มี field ใหม่ ไม่ bump
 | FR-KPC-107 | reprint คืน `[{ evacuee_id, qr_payload, label }]` เฉพาะสมาชิก household เดียวกันที่พิมพ์ได้และไม่ `search_excluded` · **ไม่เขียน doc ใด ๆ** · `cache-control: no-store`                                                                                                                                                                                            |
 | FR-KPC-108 | rate limit ต่อเครื่อง และ verify ผิด 5 ครั้ง/10 นาทีต่อ primary → 429 `KIOSK_RATE_LIMITED` · `scanner_client` allowlist เพิ่ม `/api/v1/kiosk/reprint`                                                                                                                                                                                                              |
 | FR-KPC-109 | ข้อความเมื่อเลือกไม่ได้: `pre_registered`「ยังไม่ได้ลงทะเบียน — ใช้บัตรประชาชนหรือ ThaiD」· `temporary_leave`「ออกนอกศูนย์ชั่วคราว — พิมพ์ QR ไม่ได้」· ไม่มีใครพิมพ์ได้「ไม่มีผู้ที่พิมพ์ QR ได้ กรุณาติดต่อเจ้าหน้าที่」                                                                                                                                         |
+
+> **Superseded by [CR-233](../02-people/CR-233-evacuee-qr-rotate-on-print.md)** (2026-11-06): FR-KPC-107 — reprint **เขียน doc** แล้ว: เพิ่ม entry `source: kiosk_reprint` ใน `evacuee_qr:<ULID>` ต่อสมาชิกก่อนคืน `qr_payload` และ `qr_payload` เป็น `evacuee:<ULID>@<hash6>` ใหม่; ข้อกำหนดอื่นของข้อนี้ (สมาชิกที่พิมพ์ได้, ไม่ `search_excluded`, `no-store`) ยังใช้
 
 ### 15.3 Acceptance
 

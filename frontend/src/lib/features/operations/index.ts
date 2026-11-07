@@ -180,6 +180,7 @@ export {
 	lotLocationFields,
 	storageLotFields,
 	isStoragePointChosen,
+	countLotsHoldingStock,
 	type StoragePointRef
 } from './domain/lot-storage';
 

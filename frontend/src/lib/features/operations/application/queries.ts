@@ -283,8 +283,15 @@ export const useCrossShelterLedger = (
 export const useReceiveStock = () => {
 	const queryClient = useQueryClient();
 	return createMutation(() => ({
-		mutationFn: ({ input, ctx }: { input: ReceiveInput; ctx: AuthorContext }) =>
-			operationsRepository().receiveStock(input, ctx),
+		mutationFn: ({
+			input,
+			ctx,
+			issueLotNo
+		}: {
+			input: ReceiveInput;
+			ctx: AuthorContext;
+			issueLotNo?: boolean;
+		}) => operationsRepository().receiveStock(input, ctx, { issueLotNo }),
 		onSuccess: () => {
 			queryClient.invalidateQueries({ queryKey: operationsKeys.all });
 		}
@@ -304,12 +311,14 @@ export const useReceiveWalkInDonation = () => {
 		mutationFn: ({
 			donation,
 			receive,
-			ctx
+			ctx,
+			issueLotNo
 		}: {
 			donation: WalkInDonationInput;
 			receive: ReceiveInput;
 			ctx: AuthorContext;
-		}) => operationsRepository().receiveWalkInDonation(donation, receive, ctx),
+			issueLotNo?: boolean;
+		}) => operationsRepository().receiveWalkInDonation(donation, receive, ctx, { issueLotNo }),
 		onSuccess: () => {
 			queryClient.invalidateQueries({ queryKey: operationsKeys.all });
 		}
@@ -329,12 +338,14 @@ export const useReceiveDonationBatch = () => {
 		mutationFn: ({
 			donation,
 			lines,
-			ctx
+			ctx,
+			issueLotNo
 		}: {
 			donation: Donation;
 			lines: readonly DonationBatchLine[];
 			ctx: AuthorContext;
-		}) => operationsRepository().receiveDonationBatch(donation, lines, ctx),
+			issueLotNo?: boolean;
+		}) => operationsRepository().receiveDonationBatch(donation, lines, ctx, { issueLotNo }),
 		onSettled: () => {
 			queryClient.invalidateQueries({ queryKey: operationsKeys.all });
 		}
