@@ -836,6 +836,82 @@ describe('coordinator role grants on _users (#955)', () => {
 					]);
 				});
 
+				it('refuses to issue permanent roles to a volunteer account without a linked profile (Blocker 1 review 2)', async () => {
+					seed('unlinked@example.com', {
+						personnel_type: 'volunteer',
+						volunteer_id: undefined,
+						roles: []
+					});
+					const before = JSON.stringify(db);
+					await expect(
+						updateUser(
+							'unlinked@example.com',
+							{ roles: ['shelter:SH001', 'SH001:medical_staff'] },
+							sm,
+							{
+								verifyVolunteerRoles: verify
+							}
+						)
+					).rejects.toMatchObject({ code: 'VALIDATION' });
+					expect(JSON.stringify(db)).toBe(before);
+					expect(verify).not.toHaveBeenCalled();
+					expect(audits()).toEqual([]);
+				});
+
+				it('refuses when volunteer_id was unlinked in a previous save (Blocker 1 review 2)', async () => {
+					await updateUser(EMAIL, { volunteer_id: '' }, sm, noCheck);
+					expect(db[key(EMAIL)].volunteer_id).toBe('');
+					const before = JSON.stringify(db);
+					await expect(
+						updateUser(EMAIL, { roles: medical }, sm, { verifyVolunteerRoles: verify })
+					).rejects.toMatchObject({ code: 'VALIDATION' });
+					expect(JSON.stringify(db)).toBe(before);
+					expect(verify).not.toHaveBeenCalled();
+					expect(audits()).toEqual([]);
+				});
+
+				it('refuses when unlinked staff switches to volunteer while holding or adding roles (Blocker 1 review 2)', async () => {
+					seed('unlinked-staff@example.com', {
+						personnel_type: 'staff',
+						volunteer_id: undefined,
+						roles: ['shelter:SH001', 'SH001:kitchen_staff']
+					});
+					const before = JSON.stringify(db);
+					await expect(
+						updateUser('unlinked-staff@example.com', { personnel_type: 'volunteer' }, sm, {
+							verifyVolunteerRoles: verify
+						})
+					).rejects.toMatchObject({ code: 'VALIDATION' });
+					expect(JSON.stringify(db)).toBe(before);
+					expect(verify).not.toHaveBeenCalled();
+				});
+
+				it('refuses to create volunteer with roles without volunteer_id (Blocker 1 review 2)', async () => {
+					await expect(
+						createOrMergeUser(
+							{
+								name: 'new-vol@example.com',
+								password: PASSWORD,
+								display_name: 'New Vol',
+								roles: ['shelter:SH001', 'SH001:kitchen_staff'],
+								personnel_type: 'volunteer'
+							},
+							sm,
+							{ verifyVolunteerRoles: verify }
+						)
+					).rejects.toMatchObject({ code: 'VALIDATION' });
+					expect(db[key('new-vol@example.com')]).toBeUndefined();
+					expect(verify).not.toHaveBeenCalled();
+				});
+
+				it('refuses bare shelter scope without capabilities for volunteer account (Warning 1)', async () => {
+					await expect(
+						updateUser(EMAIL, { roles: ['shelter:SH002'] }, sa, {
+							verifyVolunteerRoles: verify
+						})
+					).rejects.toMatchObject({ code: 'VALIDATION' });
+				});
+
 				it("makes a coordinator grant permanent when a manager's merge gives the same role (Warning 3)", async () => {
 					await createOrMergeUser(
 						{

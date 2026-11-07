@@ -496,6 +496,24 @@ export async function createOrMergeUser(
 	caller: Caller,
 	options: VolunteerRoleOptions
 ): Promise<{ merged: boolean }> {
+	if (input.personnel_type === 'volunteer') {
+		for (const code of shelterCodesFromRoles(input.roles)) {
+			if (capabilitiesForShelter(input.roles, code).length === 0) {
+				throw new ServiceError(
+					'VALIDATION',
+					`บัญชีจิตอาสาไม่สามารถถือสิทธิ์ประจำศูนย์ ${code} โดยไม่มีบทบาทหน้าที่ได้`
+				);
+			}
+		}
+		const issued = addedShelterRoles([], input.roles);
+		if (issued.length > 0) {
+			if (!input.volunteer_id) {
+				throw new ServiceError('VALIDATION', 'อาสาสมัครต้องยืนยันตัวตนก่อนจึงจะออกสิทธิ์ได้');
+			}
+			const shelters = [...new Set(issued.map((r) => r.shelter_code))];
+			await options.verifyVolunteerRoles(shelters, input.volunteer_id);
+		}
+	}
 	try {
 		await createUser(input);
 		if (input.personnel_type === 'volunteer') {
@@ -526,7 +544,7 @@ export async function createOrMergeUser(
 			}
 		}
 		// A manager's merge gives the role for good: a coordinator grant of the same role becomes
-		// permanent instead of lapsing or being replaced later (owner, review PR #1199).
+		// permanent instead of lapsing or being replaced later (CR-221 A1).
 		await updateUser(
 			input.name,
 			{
@@ -1108,9 +1126,20 @@ export async function updateUser(
 	// A role newly given to a volunteer account is permanent, so it needs the identity check a
 	// coordinator grant needs, and leaves an audit (CR-221 A1-7, A1-8). Keeping, removing or making
 	// a role permanent adds nothing. Switching the account to or from volunteer in the same save
-	// does not slip past it: becoming a volunteer issues every role it keeps (owner, PR #1199).
+	// does not slip past it: becoming a volunteer issues every role it keeps (CR-221 A1).
 	const volunteerBefore = doc.personnel_type === 'volunteer';
 	const volunteerAfter = (input.personnel_type ?? doc.personnel_type) === 'volunteer';
+	if (volunteerAfter) {
+		const rawRoles = nextRoles ?? doc.roles ?? [];
+		for (const code of shelterCodesFromRoles(rawRoles)) {
+			if (capabilitiesForShelter(rawRoles, code).length === 0) {
+				throw new ServiceError(
+					'VALIDATION',
+					`บัญชีจิตอาสาไม่สามารถถือสิทธิ์ประจำศูนย์ ${code} โดยไม่มีบทบาทหน้าที่ได้`
+				);
+			}
+		}
+	}
 	const issued =
 		volunteerBefore || volunteerAfter
 			? addedShelterRoles(volunteerBefore ? (doc.roles ?? []) : [], nextRoles ?? doc.roles ?? [])
@@ -1122,6 +1151,9 @@ export async function updateUser(
 			typeof id === 'string' && id.trim() !== '' && all.indexOf(id) === i
 	);
 	if (issued.length > 0) {
+		if (profileIds.length === 0) {
+			throw new ServiceError('VALIDATION', 'อาสาสมัครต้องยืนยันตัวตนก่อนจึงจะออกสิทธิ์ได้');
+		}
 		const shelters = [...new Set(issued.map((r) => r.shelter_code))];
 		for (const volunteerId of profileIds) await options.verifyVolunteerRoles(shelters, volunteerId);
 	}
