@@ -49,7 +49,7 @@
 </script>
 
 <nav
-	class="flex h-[52px] w-full items-center justify-between gap-3 bg-[#0A2647] px-6 text-white shadow-sm"
+	class="flex h-[52px] w-full items-center justify-between gap-2 bg-[#0A2647] px-3 text-white shadow-sm sm:gap-3 sm:px-6"
 >
 	<div class="flex min-w-0 shrink items-center gap-2.5">
 		<img
@@ -84,12 +84,9 @@
 			</Select.Root>
 		{/if}
 
-		<LanguageSwitcher
-			class="hidden shrink-0 border-white/20 bg-white/10 sm:inline-flex [&_button[aria-pressed=false]]:text-white/80 [&_button[aria-pressed=false]]:hover:text-white"
-		/>
+		<LanguageSwitcher class="shrink-0" />
 
 		<StaffAccountMenu
-			languageSwitcher
 			class="text-white hover:bg-white/5 focus-visible:ring-offset-[#0A2647] [&_svg]:text-white/80 [&>span:first-child]:bg-white/15 [&>span:first-child]:text-white"
 		/>
 	</div>

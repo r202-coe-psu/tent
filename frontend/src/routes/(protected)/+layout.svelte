@@ -101,9 +101,9 @@
 			</div>
 			<div class="flex shrink-0 items-center gap-2">
 				{#if onPortal}
-					<LanguageSwitcher class="hidden sm:inline-flex" />
+					<LanguageSwitcher class="shrink-0" />
 				{/if}
-				<StaffAccountMenu languageSwitcher={onPortal} />
+				<StaffAccountMenu />
 			</div>
 		</header>
 	{/if}

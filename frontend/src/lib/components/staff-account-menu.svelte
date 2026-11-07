@@ -6,7 +6,6 @@
 	import { resolve } from '$app/paths';
 	import { toast } from 'svelte-sonner';
 	import { formatRoleList } from '$lib/auth/roles';
-	import LanguageSwitcher from '$lib/components/language-switcher.svelte';
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
 	import { LOGOUT_ROUTE } from '$lib/guards/auth';
 	import { authStore } from '$lib/stores/auth.svelte';
@@ -20,15 +19,12 @@
 		compact = false,
 		align = 'end',
 		side = 'bottom',
-		languageSwitcher = false,
 		onNavigate
 	}: {
 		class?: string;
 		compact?: boolean;
 		align?: 'start' | 'center' | 'end';
 		side?: 'top' | 'right' | 'bottom' | 'left';
-		/** Phone-width TH/EN toggle in the dropdown; only for screens that are translated (onsite, portal). */
-		languageSwitcher?: boolean;
 		onNavigate?: () => void;
 	} = $props();
 
@@ -87,17 +83,6 @@
 			<UserCircle class="size-4" />
 			{t.myAccount}
 		</DropdownMenu.Item>
-
-		{#if languageSwitcher}
-			<DropdownMenu.Item
-				class="cursor-default p-0 focus:bg-transparent data-highlighted:bg-transparent sm:hidden"
-				onSelect={(e) => e.preventDefault()}
-			>
-				<div class="w-full px-2 py-2">
-					<LanguageSwitcher class="w-full justify-center" />
-				</div>
-			</DropdownMenu.Item>
-		{/if}
 
 		<DropdownMenu.Separator />
 

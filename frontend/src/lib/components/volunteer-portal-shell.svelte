@@ -51,9 +51,7 @@
 			</a>
 
 			<div class="flex shrink-0 items-center gap-2 sm:gap-3">
-				<LanguageSwitcher
-					class="shrink-0 border-white/20 bg-white/10 [&_button]:min-h-9 [&_button]:px-2 sm:[&_button]:px-2.5 max-sm:[&_button>span:first-child]:hidden [&_button[aria-pressed=false]]:text-white/80 [&_button[aria-pressed=false]]:hover:text-white"
-				/>
+				<LanguageSwitcher class="min-h-9 shrink-0" />
 				<a
 					href={resolve('/')}
 					onclick={leavePortal}

@@ -21,6 +21,7 @@
 	import { getTranslation } from '$lib/utils/i18n';
 	import { PUBLIC_NAVBAR_I18N } from '$lib/constants/i18n';
 	import { langState } from '$lib/states/i18n.svelte';
+	import LanguageSwitcher from '$lib/components/language-switcher.svelte';
 	import type { Announcement } from '$lib/features/announcements';
 
 	interface Props {
@@ -89,10 +90,6 @@
 
 	function closeDonationsMenu() {
 		donationsMenuOpen = false;
-	}
-
-	function toggleLanguage() {
-		langState.current = langState.current === 'th' ? 'en' : 'th';
 	}
 
 	function handleWindowPointerDown(event: PointerEvent) {
@@ -188,6 +185,8 @@
 					<span class="hidden min-[400px]:inline">{t.registerShort}</span>
 				{/if}
 			</a>
+
+			<LanguageSwitcher class="shrink-0" />
 
 			<button
 				type="button"
@@ -376,14 +375,7 @@
 			<div
 				class="ml-1.5 flex shrink-0 items-center border-l border-slate-200 pl-2 2xl:ml-2 2xl:pl-3"
 			>
-				<button
-					type="button"
-					onclick={toggleLanguage}
-					class="inline-flex cursor-pointer items-center justify-center rounded-full border border-slate-300 bg-white px-3 py-1 text-xs font-bold text-[#0A2647] shadow-2xs transition-all hover:border-slate-400 hover:bg-slate-50 active:scale-95 2xl:px-3.5"
-					aria-label={t.switchLanguageAria}
-				>
-					{langState.current === 'th' ? 'TH' : 'EN'}
-				</button>
+				<LanguageSwitcher />
 			</div>
 		</nav>
 	</div>
@@ -531,26 +523,6 @@
 					<Building2 class="h-5 w-5 shrink-0" />
 					{t.backoffice}
 				</a>
-
-				<div class="mt-1 border-t border-border/60 pt-2">
-					<button
-						type="button"
-						onclick={() => {
-							toggleLanguage();
-							mobileMenuOpen = false;
-						}}
-						class="flex w-full cursor-pointer items-center justify-between rounded-xl px-4 py-2.5 text-left text-sm font-medium text-muted-foreground transition-colors hover:bg-muted/50"
-					>
-						<span class="text-sm font-medium text-slate-700">
-							{t.switchLanguage}
-						</span>
-						<span
-							class="inline-flex items-center justify-center rounded-full border border-slate-300 bg-white px-3 py-1 text-xs font-bold text-[#0A2647] shadow-2xs"
-						>
-							{langState.current === 'th' ? 'TH' : 'EN'}
-						</span>
-					</button>
-				</div>
 			</nav>
 		</Sheet.Content>
 	</Sheet.Root>

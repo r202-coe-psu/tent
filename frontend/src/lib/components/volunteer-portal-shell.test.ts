@@ -16,17 +16,15 @@ function renderShell(language: 'th' | 'en') {
 	}
 }
 
-// The switcher names each language in its own script ("ภาษาไทย (Thai)"), so that
-// title is the one Thai string an English header legitimately keeps.
+// Titles are tooltips, not visible copy; keep them out of the "no Thai text" check.
 const withoutSwitcherTitles = (html: string) => html.replace(/title="[^"]*"/g, '');
 
 describe('VolunteerPortalShell', () => {
 	it('shows a TH/EN switcher in the header', () => {
 		const body = renderShell('th');
 		const header = body.slice(body.indexOf('<header'), body.indexOf('</header>'));
-		expect(header).toContain('aria-label="Language selection"');
+		expect(header).toContain('aria-label="Switch to English"');
 		expect(header).toContain('>TH<');
-		expect(header).toContain('>EN<');
 	});
 
 	it('shows English header and footer labels and no Thai text when the language is EN', () => {
