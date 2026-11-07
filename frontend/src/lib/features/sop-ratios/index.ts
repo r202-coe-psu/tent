@@ -66,6 +66,7 @@ export {
 export {
 	buildOneTimeDemandRows,
 	countCurrentRecipients,
+	presentRecipientKeys,
 	coverageBarWidth,
 	formatCoveragePercent,
 	oneTimeItemIds,

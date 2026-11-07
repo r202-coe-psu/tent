@@ -31,7 +31,7 @@ export interface OneTimeDemandReservation {
 	qty: string;
 }
 
-/** An evacuee who already received an item (a `distribution_log` that is not voided). */
+/** A person who already received an item (a `distribution_log` that is not voided). */
 export interface OneTimeRecipient {
 	item_id: string;
 	recipient_id: string;
@@ -91,19 +91,40 @@ function isActiveOneTime(item: OneTimeDemandItem): boolean {
 }
 
 /**
- * Per item, how many distinct recipients are still in the shelter. A recipient who has since left
- * is not counted, so they do not lower the need of the people who are here.
+ * Maps every `distribution_log.recipient_id` that names a person counted in the shelter base to one
+ * key for that person: an evacuee still staying (`evacuee:*`), a volunteer checked in here
+ * (`volunteer:*`) and staff (`user:*`). A volunteer who is also a staff account answers to both ids
+ * but stays one person, as in `countShelterPeople`.
+ */
+export function presentRecipientKeys(input: {
+	evacueeIds: readonly string[];
+	volunteers: readonly { id: string; userName?: string | null }[];
+	staffNames: readonly string[];
+}): Map<string, string> {
+	const keys = new Map<string, string>();
+	for (const id of input.evacueeIds) keys.set(id, id);
+	for (const { id, userName } of input.volunteers) {
+		keys.set(id, id);
+		if (userName) keys.set(`user:${userName}`, id);
+	}
+	for (const name of input.staffNames) keys.set(`user:${name}`, `user:${name}`);
+	return keys;
+}
+
+/**
+ * Per item, how many distinct people still counted in the shelter received it. A recipient who has
+ * since left is not counted, so they do not lower the need of the people who are here.
  */
 export function countCurrentRecipients(
 	recipients: readonly OneTimeRecipient[],
-	currentEvacueeIds: readonly string[]
+	presentKeys: ReadonlyMap<string, string>
 ): Map<string, number> {
-	const here = new Set(currentEvacueeIds);
 	const seen = new Set<string>();
 	const counts = new Map<string, number>();
 	for (const { item_id, recipient_id } of recipients) {
-		if (!here.has(recipient_id)) continue;
-		const key = `${item_id}\n${recipient_id}`;
+		const person = presentKeys.get(recipient_id);
+		if (!person) continue;
+		const key = `${item_id}\n${person}`;
 		if (seen.has(key)) continue;
 		seen.add(key);
 		counts.set(item_id, (counts.get(item_id) ?? 0) + 1);

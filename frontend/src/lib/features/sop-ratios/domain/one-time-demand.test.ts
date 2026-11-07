@@ -3,6 +3,7 @@ import {
 	buildOneTimeDemandRows,
 	coverageBarWidth,
 	countCurrentRecipients,
+	presentRecipientKeys,
 	formatCoveragePercent,
 	oneTimeItemIds,
 	sortOneTimeDemandRows,
@@ -303,7 +304,13 @@ describe('already received', () => {
 });
 
 describe('countCurrentRecipients', () => {
-	it('counts each evacuee once per item and only those still in the shelter', () => {
+	const present = presentRecipientKeys({
+		evacueeIds: ['evacuee:a', 'evacuee:b'],
+		volunteers: [{ id: 'volunteer:v1' }, { id: 'volunteer:v2', userName: 'alice' }],
+		staffNames: ['bob']
+	});
+
+	it('counts each person once per item and only those still counted in the shelter', () => {
 		const counts = countCurrentRecipients(
 			[
 				{ item_id: 'item_master:net', recipient_id: 'evacuee:a' },
@@ -312,10 +319,34 @@ describe('countCurrentRecipients', () => {
 				{ item_id: 'item_master:net', recipient_id: 'evacuee:gone' },
 				{ item_id: 'item_master:tent', recipient_id: 'evacuee:a' }
 			],
-			['evacuee:a', 'evacuee:b']
+			present
 		);
 		expect(counts.get('item_master:net')).toBe(2);
 		expect(counts.get('item_master:tent')).toBe(1);
+	});
+
+	it('counts staff and volunteers who received the item', () => {
+		const counts = countCurrentRecipients(
+			[
+				{ item_id: 'item_master:net', recipient_id: 'user:bob' },
+				{ item_id: 'item_master:net', recipient_id: 'volunteer:v1' },
+				{ item_id: 'item_master:net', recipient_id: 'user:left' },
+				{ item_id: 'item_master:net', recipient_id: 'volunteer:v-checked-out' }
+			],
+			present
+		);
+		expect(counts.get('item_master:net')).toBe(2);
+	});
+
+	it('counts a volunteer who is also a staff account once, whichever id was recorded', () => {
+		const counts = countCurrentRecipients(
+			[
+				{ item_id: 'item_master:net', recipient_id: 'volunteer:v2' },
+				{ item_id: 'item_master:net', recipient_id: 'user:alice' }
+			],
+			present
+		);
+		expect(counts.get('item_master:net')).toBe(1);
 	});
 });
 

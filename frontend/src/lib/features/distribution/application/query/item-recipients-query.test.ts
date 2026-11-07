@@ -15,15 +15,15 @@ vi.mock('./shared', async (importOriginal) => ({
 	resolveShelterCode: (override?: string) => override ?? 'SH001'
 }));
 vi.mock('../../data/food-supplies/item-recipients', () => ({
-	listEvacueeRecipientsByItems: vi.fn()
+	listRecipientsByItems: vi.fn()
 }));
 
 import { distributionKeys } from './keys';
-import { useItemEvacueeRecipients } from './read-queries';
+import { useItemRecipients } from './read-queries';
 
-describe('useItemEvacueeRecipients query key', () => {
+describe('useItemRecipients query key', () => {
 	it('is not under the logs prefix, so a distribution does not refetch every log', () => {
-		useItemEvacueeRecipients(['item_master:b', 'item_master:a'], true, 'SH001');
+		useItemRecipients(['item_master:b', 'item_master:a'], true, 'SH001');
 		const { queryKey } = captured.options!();
 		const logsPrefix = [...distributionKeys.shelter('SH001'), 'logs'];
 		expect(queryKey.slice(0, logsPrefix.length)).not.toEqual(logsPrefix);

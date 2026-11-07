@@ -31,7 +31,7 @@ import {
 	type BulkReturnPoolOverviewQuery
 } from '../food-supplies/bulk-return-pool-v3-read';
 import { listBulkReturnPoolMissedLoanRefs } from '../food-supplies/bulk-return-pool-v3-missed-loans';
-import { listEvacueeRecipientsByItems } from '../../data/food-supplies/item-recipients';
+import { listRecipientsByItems } from '../../data/food-supplies/item-recipients';
 import type {
 	RequisitionTicketListFilter,
 	DistributionLogListFilter,
@@ -387,7 +387,7 @@ export const useReturnOperationState = (
  * it is deliberately NOT under the `logs` prefix: the live query would refetch it on each
  * distribution. It reloads when the tab opens or the stale time passes; a reload refreshes it sooner.
  */
-export function useItemEvacueeRecipients(
+export function useItemRecipients(
 	itemIds: MaybeGetter<readonly string[]>,
 	enabled: MaybeGetter<boolean> = true,
 	shelterCode?: MaybeGetter<string | undefined>
@@ -401,7 +401,7 @@ export function useItemEvacueeRecipients(
 				'item-recipients',
 				[...ids].sort().join(',')
 			] as const,
-			queryFn: () => listEvacueeRecipientsByItems(code, ids),
+			queryFn: () => listRecipientsByItems(code, ids),
 			enabled: toValue(enabled)
 		};
 	});

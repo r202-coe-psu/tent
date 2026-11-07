@@ -37,7 +37,7 @@ vi.mock('$lib/features/operations', () => ({
 	useLotReservationClaims: () => ok([]),
 	projectStockLotBalances: () => []
 }));
-vi.mock('$lib/features/distribution', () => ({ useItemEvacueeRecipients: () => ok([]) }));
+vi.mock('$lib/features/distribution', () => ({ useItemRecipients: () => ok([]) }));
 vi.mock('../application/shelter-people-queries', () => ({
 	useShelterPeopleCounts: () =>
 		ok({ evacuees: 10, staff: 1, volunteers: 1, total: 12, evacueeIds: [] })

@@ -17,7 +17,7 @@
 		useLotReservationClaims,
 		projectStockLotBalances
 	} from '$lib/features/operations';
-	import { useItemEvacueeRecipients } from '$lib/features/distribution';
+	import { useItemRecipients } from '$lib/features/distribution';
 	import { langState } from '$lib/states/i18n.svelte';
 	import { formatQty } from '$lib/utils/qty';
 	import { useShelterPeopleCounts } from '../application/shelter-people-queries';
@@ -55,7 +55,7 @@
 		() => itemMastersQuery.isSuccess
 	);
 	const reservationsQuery = useLotReservationClaims();
-	const recipientsQuery = useItemEvacueeRecipients(
+	const recipientsQuery = useItemRecipients(
 		() => itemIds,
 		() => itemMastersQuery.isSuccess,
 		() => shelterCode ?? undefined
@@ -90,7 +90,7 @@
 				reservations: reservationsQuery.data ?? [],
 				receivedByItem: countCurrentRecipients(
 					recipientsQuery.data ?? [],
-					peopleQuery.data?.evacueeIds ?? []
+					new Map(peopleQuery.data?.recipientKeys ?? [])
 				),
 				now: Date.now()
 			})

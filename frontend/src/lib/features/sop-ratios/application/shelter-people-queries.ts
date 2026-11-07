@@ -7,6 +7,7 @@ import {
 import { peopleRepository } from '$lib/features/people';
 import { volunteerRepositoryFor } from '$lib/features/volunteers';
 import { listShelterStaff } from '$lib/features/users';
+import { presentRecipientKeys } from '../domain/one-time-demand';
 
 export const shelterPeopleKeys = {
 	all: ['sop_ratios', 'shelter_people'] as const,
@@ -26,11 +27,20 @@ export const useShelterPeopleCounts = (shelterCode: () => string) =>
 					listShelterStaff(code)
 				]);
 				const counts = countShelterPeople(code, occupants, volunteers, staff);
-				// Ids of the evacuees counted above, to tell who of the recipients is still here.
-				const evacueeIds = occupants
-					.filter((o) => isInShelterStayStatus(o.current_stay?.status))
-					.map((o) => o._id);
-				return { ...counts, total: totalShelterPeople(counts), evacueeIds };
+				// Which `distribution_log` recipient ids are people counted above, to tell who is still here.
+				const linkedUserNames = new Set(volunteers.map((v) => v.user_name).filter(Boolean));
+				const recipientKeys = [
+					...presentRecipientKeys({
+						evacueeIds: occupants
+							.filter((o) => isInShelterStayStatus(o.current_stay?.status))
+							.map((o) => o._id),
+						volunteers: volunteers
+							.filter((v) => v.checked_in && v.current_shelter_code === code)
+							.map((v) => ({ id: v._id, userName: v.user_name })),
+						staffNames: staff.map((u) => u.name).filter((name) => !linkedUserNames.has(name))
+					})
+				];
+				return { ...counts, total: totalShelterPeople(counts), recipientKeys };
 			}
 		};
 	});
