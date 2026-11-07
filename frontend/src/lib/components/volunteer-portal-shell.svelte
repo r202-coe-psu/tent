@@ -2,9 +2,15 @@
 	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
 	import { resolve } from '$app/paths';
 	import type { Snippet } from 'svelte';
+	import LanguageSwitcher from '$lib/components/language-switcher.svelte';
+	import { VOLUNTEER_PORTAL_SHELL_I18N } from '$lib/constants/i18n/volunteer-portal-shell';
 	import { PORTAL_SESSION_KEY, PORTAL_TOKEN_HANDOFF_KEY } from '$lib/features/volunteer-portal';
+	import { langState } from '$lib/states/i18n.svelte';
+	import { getTranslation } from '$lib/utils/i18n';
 
 	let { children }: { children: Snippet } = $props();
+
+	const t = $derived(getTranslation(VOLUNTEER_PORTAL_SHELL_I18N, langState.current));
 
 	function leavePortal() {
 		try {
@@ -27,7 +33,7 @@
 				href={resolve('/')}
 				onclick={leavePortal}
 				class="flex min-w-0 items-center gap-3"
-				aria-label="กลับหน้าหลัก"
+				aria-label={t.backHomeAria}
 			>
 				<img
 					src="/logo.png"
@@ -39,20 +45,23 @@
 						PSU Smart Shelter
 					</p>
 					<p class="line-clamp-2 text-xs leading-snug font-medium whitespace-normal text-white/90">
-						เช็คงาน ติดตามสถานะ และรายงานตัวปฏิบัติหน้าที่
+						{t.tagline}
 					</p>
 				</div>
 			</a>
 
 			<div class="flex shrink-0 items-center gap-2 sm:gap-3">
+				<LanguageSwitcher
+					class="shrink-0 border-white/20 bg-white/10 [&_button]:min-h-9 [&_button]:px-2 sm:[&_button]:px-2.5 max-sm:[&_button>span:first-child]:hidden [&_button[aria-pressed=false]]:text-white/80 [&_button[aria-pressed=false]]:hover:text-white"
+				/>
 				<a
 					href={resolve('/')}
 					onclick={leavePortal}
 					class="flex min-h-11 items-center gap-1.5 rounded-full bg-white/10 px-3 py-2 text-xs font-bold text-white transition-colors hover:bg-white/20 focus-visible:ring-2 focus-visible:ring-white focus-visible:outline-none sm:px-4"
 				>
 					<ArrowLeft class="size-4 sm:size-3.5" aria-hidden="true" />
-					<span class="sm:hidden">กลับ</span>
-					<span class="hidden sm:inline">กลับหน้าหลัก</span>
+					<span class="sm:hidden">{t.backShort}</span>
+					<span class="hidden sm:inline">{t.backHome}</span>
 				</a>
 			</div>
 		</div>
@@ -65,6 +74,6 @@
 	</main>
 
 	<footer class="border-t border-slate-200 bg-white px-6 py-5 text-center text-xs text-slate-500">
-		ระบบบริการจิตอาสา · Smart Shelter Project
+		{t.footer}
 	</footer>
 </div>
