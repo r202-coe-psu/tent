@@ -47,7 +47,12 @@
 	import StockRow from './stock/stock-row.svelte';
 	import StockCard from './stock/stock-card.svelte';
 	import DisabledReason from './stock/disabled-reason.svelte';
-	import { DISTRIBUTE_FORBIDDEN_HINT, OFFLINE_HINT } from './stock/hints';
+	import {
+		DISTRIBUTE_FORBIDDEN_HINT,
+		INCOMING_FORBIDDEN_HINT,
+		INCOMING_LOAD_FAILED_HINT,
+		OFFLINE_HINT
+	} from './stock/hints';
 	import {
 		attachIncoming,
 		attentionCounts,
@@ -70,7 +75,12 @@
 		type StockUrlState
 	} from './stock/stock-url-state';
 	import { aggregateIncoming } from '../domain/incoming-stock';
-	import { negativeLotSummary, negativeLots, projectLotsByItem } from '../domain/operations';
+	import {
+		negativeLotSummary,
+		negativeLots,
+		projectLotsByItem,
+		TransferForbiddenError
+	} from '../domain/operations';
 	import { selfPurchasedLotRefs } from '../domain/self-purchased';
 	import {
 		dailyConsumption,
@@ -136,7 +146,7 @@
 	const urlState = $derived(parseStockParams(page.url.searchParams));
 
 	// "รวมของที่กำลังมา" (#1153): off by default, and off while a storage point is filtered.
-	const incomingDisabled = $derived(!incomingAvailable(urlState.loc));
+	const incomingDisabled = $derived(!incomingAvailable(urlState.loc, urlState.selfPurchased));
 	const includeIncoming = $derived(urlState.incoming && !incomingDisabled);
 	const incomingQuery = useIncomingStock(
 		() => includeIncoming,
@@ -147,6 +157,14 @@
 	);
 	const unmatchedCount = $derived(
 		includeIncoming ? (incomingQuery.data?.unmatched.length ?? 0) : 0
+	);
+	// A failed read must not look like "nothing is coming".
+	const incomingError = $derived(
+		includeIncoming && incomingQuery.isError
+			? incomingQuery.error instanceof TransferForbiddenError
+				? INCOMING_FORBIDDEN_HINT
+				: INCOMING_LOAD_FAILED_HINT
+			: ''
 	);
 	const canOpenDonations = $derived(canAccessDonations(roles, currentShelter));
 
@@ -575,6 +593,15 @@
 			canShowOverall={isSA}
 			onchange={updateUrl}
 		/>
+
+		{#if incomingError}
+			<p
+				role="alert"
+				class="border-b border-red-200 bg-red-50 px-4 py-2.5 text-sm font-semibold text-red-900"
+			>
+				{incomingError}
+			</p>
+		{/if}
 
 		{#if unmatchedCount > 0}
 			<p

@@ -380,6 +380,11 @@ describe('incoming stock (#1153)', () => {
 		expect(incomingAvailable(MAIN_STORE_LOCATION)).toBe(false);
 	});
 
+	it('is unavailable in the "ซื้อเอง" view, whose qty has no incoming part', () => {
+		expect(incomingAvailable('all', true)).toBe(false);
+		expect(incomingAvailable('all', false)).toBe(true);
+	});
+
 	it('links a row only when the user may open its page (FR-16)', () => {
 		const donation = incRow();
 		const transfer = incRow({ source: 'transfer', ref: 'T1', doc_id: 'stock_transfer:T1' });

@@ -132,9 +132,12 @@ export function hiddenCatalogCount(rows: readonly StockRowBase[]): number {
 	return rows.filter((r) => r.neverReceived && r.incoming === undefined).length;
 }
 
-/** The incoming switch cannot apply to one storage point: goods on the way have no place yet. */
-export function incomingAvailable(loc: string): boolean {
-	return loc === 'all';
+/**
+ * The incoming switch cannot apply to one storage point (goods on the way have no place yet),
+ * nor to the "ซื้อเอง" view (incoming goods are not self-purchased lots).
+ */
+export function incomingAvailable(loc: string, selfPurchased = false): boolean {
+	return loc === 'all' && !selfPurchased;
 }
 
 /**

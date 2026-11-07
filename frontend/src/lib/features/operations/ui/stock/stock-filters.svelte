@@ -6,7 +6,7 @@
 	import { Checkbox } from '$lib/components/ui/checkbox/index.js';
 	import { Label } from '$lib/components/ui/label/index.js';
 	import DisabledReason from './disabled-reason.svelte';
-	import { INCOMING_NO_STORAGE_HINT } from './hints';
+	import { INCOMING_NO_STORAGE_HINT, INCOMING_SELF_PURCHASED_HINT } from './hints';
 	import type { StockSort, StockStatusFilter } from './stock-view';
 
 	type Option = { value: string; label: string };
@@ -186,7 +186,13 @@
 			</Label>
 		</div>
 
-		<DisabledReason reason={incomingDisabled ? INCOMING_NO_STORAGE_HINT : undefined}>
+		<DisabledReason
+			reason={incomingDisabled
+				? selfPurchased
+					? INCOMING_SELF_PURCHASED_HINT
+					: INCOMING_NO_STORAGE_HINT
+				: undefined}
+		>
 			<div class="flex min-h-11 items-center gap-2.5 px-1">
 				<Switch
 					id="stock-incoming"
