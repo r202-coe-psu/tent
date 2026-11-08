@@ -90,7 +90,9 @@
 
 <main class="flex min-h-screen items-center justify-center bg-slate-50 p-3 sm:p-4 md:p-6">
 	<div class="w-full max-w-xl">
-		<Card.Root class="overflow-hidden rounded-xl border border-slate-200/90 bg-white shadow-xs">
+		<Card.Root
+			class="gap-0 overflow-hidden rounded-xl border border-slate-200/90 bg-white py-0 shadow-xs"
+		>
 			<!-- Header -->
 			<Card.Header class="border-b border-slate-100 bg-white p-4 pb-3 sm:p-5 sm:pb-4">
 				<div class="flex items-start gap-3 sm:gap-3.5">
@@ -246,7 +248,7 @@
 
 			<!-- Footer Actions -->
 			<Card.Footer
-				class="flex flex-col-reverse items-center justify-between gap-2.5 border-t border-slate-100 bg-slate-50/60 p-3.5 sm:flex-row sm:px-5 sm:py-3.5"
+				class="flex flex-col-reverse items-center justify-between gap-2.5 border-t border-slate-100 bg-slate-50/60 p-3.5 !pt-3.5 sm:flex-row sm:px-5 sm:!py-3.5"
 			>
 				<Button
 					id="btn-decline-consent"
