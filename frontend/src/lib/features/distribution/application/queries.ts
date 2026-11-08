@@ -45,6 +45,7 @@ export {
 	useDistributionLogs,
 	useRecipientsDistributionLogs,
 	useEvacueeAllergies,
+	useItemDistributions,
 	useDistributionLog,
 	useDispatchedLotExpiry,
 	useBulkReturnPools,

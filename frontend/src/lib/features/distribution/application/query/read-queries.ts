@@ -32,6 +32,7 @@ import {
 	type BulkReturnPoolOverviewQuery
 } from '../food-supplies/bulk-return-pool-v3-read';
 import { listBulkReturnPoolMissedLoanRefs } from '../food-supplies/bulk-return-pool-v3-missed-loans';
+import { listItemDistributions } from '../../data/food-supplies/item-distributions';
 import type {
 	RequisitionTicketListFilter,
 	DistributionLogListFilter,
@@ -429,3 +430,28 @@ export const useReturnOperationState = (
 			refetchInterval: 3000
 		};
 	});
+
+/**
+ * The non-voided `distribution_log` rows of `itemIds`. Reads every `distribution_log` of the shelter, so
+ * it is deliberately NOT under the `logs` prefix: the live query would refetch it on each
+ * distribution. It reloads when the tab opens or the stale time passes; a reload refreshes it sooner.
+ */
+export function useItemDistributions(
+	itemIds: MaybeGetter<readonly string[]>,
+	enabled: MaybeGetter<boolean> = true,
+	shelterCode?: MaybeGetter<string | undefined>
+) {
+	return createQuery(() => {
+		const ids = toValue(itemIds);
+		const code = resolveShelterCode(toValue(shelterCode ?? undefined));
+		return {
+			queryKey: [
+				...distributionKeys.shelter(code),
+				'item-distributions',
+				[...ids].sort().join(',')
+			] as const,
+			queryFn: () => listItemDistributions(code, ids),
+			enabled: toValue(enabled)
+		};
+	});
+}
