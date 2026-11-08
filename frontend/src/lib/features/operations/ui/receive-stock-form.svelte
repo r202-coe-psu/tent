@@ -169,8 +169,15 @@
 		].join(' ');
 	}
 
+	function setSelfPurchased(checked: boolean) {
+		// Unchecked is written as absent, never `false` (schema.md §2.1 `lot.self_purchased`).
+		$formData.lot = { ...($formData.lot ?? {}), self_purchased: checked || undefined };
+	}
+
 	function setSourceMode(mode: SourceMode) {
 		sourceMode = mode;
+		// Only the manual receipt can be a purchase; a donation never is.
+		if (mode !== 'manual') setSelfPurchased(false);
 		if (mode === 'manual') {
 			$formData.source = 'manual';
 			clearDonation();
@@ -233,6 +240,9 @@
 	});
 
 	const { form: formData, submitting, reset } = form;
+
+	/** "ซื้อเอง" (schema_v 7): a hand-keyed receipt of goods the shelter bought itself. */
+	const selfPurchased = $derived($formData.lot?.self_purchased === true);
 
 	const selectedUnitLabel = $derived(
 		formatUnit($formData.unit, units, langState.current) || $formData.unit || 'เลือกหน่วย'
@@ -345,7 +355,8 @@
 				expiry: undefined,
 				produced_at: undefined,
 				storage_zone: undefined,
-				storage_point_id: undefined
+				storage_point_id: undefined,
+				self_purchased: undefined
 			};
 		}
 		setStoragePoint(null);
@@ -863,6 +874,25 @@
 				<Form.FieldErrors />
 			</Form.Field>
 
+			{#if sourceMode === 'manual'}
+				<div class="col-span-1 sm:col-span-2">
+					<label
+						for="receive-self-purchased"
+						class="flex min-h-11 cursor-pointer items-center gap-2.5 rounded-lg border border-slate-200 bg-white px-3 py-2"
+					>
+						<Checkbox
+							id="receive-self-purchased"
+							checked={selfPurchased}
+							onCheckedChange={(v) => setSelfPurchased(v === true)}
+						/>
+						<span class="text-sm font-semibold text-slate-900">
+							ซื้อเอง
+							<span class="font-normal text-muted-foreground">(ศูนย์ซื้อของนี้มาเอง)</span>
+						</span>
+					</label>
+				</div>
+			{/if}
+
 			<!-- Storage Location (lot.storage_point_id + lot.storage_zone) -->
 			<Form.Field {form} name="lot.storage_zone" class="col-span-1 sm:col-span-2">
 				<Form.Control>
@@ -983,16 +1013,18 @@
 
 			<div class="col-span-1 sm:col-span-2">
 				<label
-					class="inline-flex min-h-11 cursor-pointer items-center gap-2 text-sm font-medium text-slate-700"
+					class="flex min-h-11 cursor-pointer items-center gap-2.5 rounded-lg border border-slate-200 bg-white px-3 py-2"
 				>
 					<Checkbox bind:checked={issueLotNo} />
-					ออกเลขล็อต
-					<span class="font-normal text-muted-foreground">(สร้างเลขล็อตให้อัตโนมัติ)</span>
+					<span class="text-sm font-semibold text-slate-900">
+						ออกเลขล็อต
+						<span class="font-normal text-muted-foreground">(สร้างเลขล็อตให้อัตโนมัติ)</span>
+					</span>
 				</label>
 			</div>
 
 			<div
-				class="sticky bottom-0 z-10 col-span-1 -mx-4 -mb-4 border-t border-slate-200 bg-slate-50 px-4 py-4 sm:col-span-2 sm:-mx-6 sm:-mb-6 sm:px-6"
+				class="sticky -bottom-4 z-10 col-span-1 -mx-4 -mb-4 border-t border-slate-200 bg-slate-50 px-4 py-4 sm:-bottom-6 sm:col-span-2 sm:-mx-6 sm:-mb-6 sm:px-6"
 			>
 				<Form.Button size="lg" disabled={$submitting || offline} class="min-h-11 w-full font-bold">
 					{$submitting ? 'กำลังบันทึก…' : 'บันทึกแล้วรับชิ้นถัดไป'}

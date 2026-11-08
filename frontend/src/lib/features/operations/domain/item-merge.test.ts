@@ -109,7 +109,7 @@ describe('AC-F1 — merge A (2 lots, 24 + 6) into B', () => {
 			expect(row.reason).toBe('adjust');
 			expect(row.adjust_reason).toBe('merge');
 			expect(row.ref_id).toBeNull();
-			expect(row.schema_v).toBe(6);
+			expect(row.schema_v).toBe(7);
 			// each row passes the same Zod gate the factory uses
 			expect(
 				stockLedgerInputSchema.safeParse({

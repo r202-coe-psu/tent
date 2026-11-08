@@ -1,6 +1,9 @@
-import { qtyGt } from '$lib/utils/qty';
+import { addQty, qtyGt } from '$lib/utils/qty';
+import { canAccessDonations, canChangeStock } from '$lib/auth/roles';
 import { formatThaiShortDate } from '$lib/utils/date';
 import { expiryInstant } from '../../domain/expiry-instant';
+import type { IncomingItemTotal, IncomingRow } from '../../domain/incoming-stock';
+import type { StockLotBalance } from '../../domain/operations';
 import { formatTimeUntilExpiry } from '../../domain/lot-age';
 import { DEFAULT_STORAGE_LABEL, type StoragePointRef } from '../../domain/lot-storage';
 import {
@@ -15,6 +18,15 @@ export type StockStatusFilter = 'expired' | 'empty' | 'low' | 'expiring' | 'has_
 export type StockSort = 'urgency' | 'name' | 'qty';
 
 export type StockBadgeTone = 'critical' | 'warning' | 'ok';
+
+/** Incoming goods (#1153) of one item, attached to a row only while the switch is on. */
+export interface RowIncoming {
+	/** Sum of base-unit qty of `rows`. */
+	qty: string;
+	/** Earliest dated row (Bangkok `YYYY-MM-DD`); null when none is dated. */
+	earliestDate: string | null;
+	rows: IncomingRow[];
+}
 
 /** What the view logic needs to know about one stock row. */
 export interface StockRowBase {
@@ -33,6 +45,17 @@ export interface StockRowBase {
 	neverReceived: boolean;
 	/** Names of items merged into this one, so searching an old name finds it (CR-143 FR-F5). */
 	aliases?: string[];
+	/**
+	 * Goods on their way (#1153). Present only while "รวมของที่กำลังมา" is on and the item has some.
+	 * `qtyOnHand` and everything derived from it (status, sort, attention) stay in-stock only.
+	 */
+	incoming?: RowIncoming;
+	/** True when a lot with stock left (qty > 0) was bought by this shelter (schema_v 7). */
+	hasSelfPurchased?: boolean;
+	/** Qty still on hand in self-purchased lots; shown beside the total in the detail sheet. */
+	selfPurchasedQty?: string;
+	/** Qty a table row / card prints when it differs from `qtyOnHand` (the "ซื้อเอง" filter). */
+	shownQty?: string;
 }
 
 /** A row as the table and cards render it — display strings resolved by the orchestrator. */
@@ -91,6 +114,8 @@ export interface StockFilterState {
 	status: StockStatusFilter | 'all';
 	/** Include catalog items this shelter never received. */
 	all: boolean;
+	/** Keep only items with a self-purchased lot still on hand ("ซื้อเอง"). */
+	selfPurchased?: boolean;
 }
 
 /** The four "needs attention" cards; `has_expiry` is a plain filter with no card. */
@@ -98,12 +123,76 @@ export type AttentionCounts = Record<Exclude<StockStatusFilter, 'has_expiry'>, n
 
 /** Rows the page shows by default: catalog-only items are hidden unless `all`. */
 export function visibleRows<T extends StockRowBase>(rows: readonly T[], all: boolean): T[] {
-	return all ? [...rows] : rows.filter((r) => !r.neverReceived);
+	// A never-received item with goods on the way still gets a row (#1153 FR-17).
+	return all ? [...rows] : rows.filter((r) => !r.neverReceived || r.incoming !== undefined);
 }
 
 /** How many catalog-only items the default view hides. */
 export function hiddenCatalogCount(rows: readonly StockRowBase[]): number {
-	return rows.filter((r) => r.neverReceived).length;
+	return rows.filter((r) => r.neverReceived && r.incoming === undefined).length;
+}
+
+/**
+ * The incoming switch cannot apply to one storage point (goods on the way have no place yet),
+ * nor to the "ซื้อเอง" view (incoming goods are not self-purchased lots).
+ */
+export function incomingAvailable(loc: string, selfPurchased = false): boolean {
+	return loc === 'all' && !selfPurchased;
+}
+
+/**
+ * Attach per-item incoming totals to rows (#1153). Rows with nothing incoming are returned as is,
+ * so with no totals the result equals the input. Never touches `qtyOnHand` / `status`, which keeps
+ * urgency, badges, sorting and attention counts in-stock only (FR-20).
+ */
+export function attachIncoming<T extends StockRowBase>(
+	rows: readonly T[],
+	totals: readonly IncomingItemTotal[]
+): T[] {
+	const byItem = new Map(totals.filter((t) => qtyGt(t.qty, 0)).map((t) => [t.item_id, t]));
+	if (byItem.size === 0) return [...rows];
+	return rows.map((r) => {
+		const t = byItem.get(r._id);
+		return t ? { ...r, incoming: { qty: t.qty, earliestDate: t.earliest_date, rows: t.rows } } : r;
+	});
+}
+
+/** The "คงเหลือ" number: the "ซื้อเอง" qty when filtered, else in-stock plus any incoming. */
+export function displayQty(row: Pick<StockRowBase, 'qtyOnHand' | 'incoming' | 'shownQty'>): string {
+	if (row.shownQty !== undefined) return row.shownQty;
+	return row.incoming ? addQty(row.qtyOnHand, row.incoming.qty) : row.qtyOnHand;
+}
+
+/** `YYYY-MM-DD` → "12 พ.ย." (Thai short month, no year). */
+export function formatIncomingDay(date: string): string {
+	const d = new Date(`${date}T00:00:00Z`);
+	if (Number.isNaN(d.getTime())) return date;
+	return d.toLocaleDateString('th-TH', { day: 'numeric', month: 'short', timeZone: 'UTC' });
+}
+
+/** "ในคลัง X · กำลังมา Y (เร็วสุด d MMM)" — the line under the bar (#1153 FR-16). */
+export function incomingCaption(row: Pick<StockRowBase, 'qtyOnHand' | 'incoming'>): string | null {
+	if (!row.incoming) return null;
+	const earliest = row.incoming.earliestDate
+		? ` (เร็วสุด ${formatIncomingDay(row.incoming.earliestDate)})`
+		: '';
+	return `ในคลัง ${row.qtyOnHand} · กำลังมา ${row.incoming.qty}${earliest}`;
+}
+
+export const INCOMING_SOURCE_LABEL: Record<IncomingRow['source'], string> = {
+	donation: 'บริจาค',
+	transfer: 'โอน'
+};
+
+/**
+ * Page an incoming row links to — only when the user may open it, else null:
+ * donations need donation intake access, transfers need the warehouse (stock-changing) side.
+ */
+export function incomingRowHref(row: IncomingRow, roles: readonly string[]): string | null {
+	if (row.source === 'donation') {
+		return canAccessDonations(roles, row.shelter_code) ? '/back-office/stock-donations' : null;
+	}
+	return canChangeStock(roles, row.shelter_code) ? '/back-office/supply?tab=transfer' : null;
 }
 
 /**
@@ -136,7 +225,7 @@ function matchesStatus(row: StockRowBase, status: StockStatusFilter): boolean {
 	}
 }
 
-/** Apply search, category, location, status and the catalog-only switch. */
+/** Apply search, category, location, status, self-purchased and the catalog-only switch. */
 export function filterRows<T extends StockRowBase>(
 	rows: readonly T[],
 	filter: StockFilterState
@@ -156,6 +245,7 @@ export function filterRows<T extends StockRowBase>(
 			if (!r.storageKeys.includes(key)) return false;
 		}
 		if (filter.status !== 'all' && !matchesStatus(r, filter.status)) return false;
+		if (filter.selfPurchased && !r.hasSelfPurchased) return false;
 		return true;
 	});
 }
@@ -248,4 +338,24 @@ export function expiryLabel(
 	}
 	const left = formatTimeUntilExpiry(earliestExpiry, now);
 	return { text, relative: left ? `อีก ${left}` : null, tone: 'muted' };
+}
+
+/** Keep only the lots whose `lot_ref` is in `refs`, per item (the "ซื้อเอง" filter). */
+export function narrowToSelfPurchased(
+	lotsByItem: ReadonlyMap<string, readonly StockLotBalance[]>,
+	refs: ReadonlySet<string>
+): Map<string, StockLotBalance[]> {
+	const result = new Map<string, StockLotBalance[]>();
+	for (const [itemId, lots] of lotsByItem) {
+		result.set(
+			itemId,
+			lots.filter((lot) => refs.has(lot.lot_ref))
+		);
+	}
+	return result;
+}
+
+/** Sum of the lots' quantities (overdrawn lots subtract), as a decimal string. */
+export function sumLotQty(lots: readonly Pick<StockLotBalance, 'qty'>[]): string {
+	return lots.reduce((sum, lot) => addQty(sum, lot.qty), '0');
 }
