@@ -12,6 +12,7 @@ import {
 	canAccessDonations,
 	canViewSupply,
 	canChangeStock,
+	canManageStoragePoints,
 	canAccessKitchen,
 	canAccessTickets,
 	canAccessEvacueeRegistration,
@@ -797,5 +798,27 @@ describe('stock parameter / SOP override edit permissions (CR-235)', () => {
 		expect(canEditSopOverride(sh1('supply_coordinator'), 'SH001')).toBe(false);
 		expect(canEditSopOverride(sh1('shelter_manager'), 'SH002')).toBe(false);
 		expect(canEditSopOverride(sh1('shelter_manager'), '')).toBe(false);
+	});
+});
+
+describe('canManageStoragePoints (#1186)', () => {
+	it('lets SA, warehouse_staff and SM manage storage points in their own shelter only', () => {
+		expect(canManageStoragePoints(['system_admin'], 'SH001')).toBe(true);
+		for (const cap of ['warehouse_staff', 'shelter_manager']) {
+			const roles = ['shelter:SH001', `SH001:${cap}`];
+			expect(canManageStoragePoints(roles, 'SH001')).toBe(true);
+			expect(canManageStoragePoints(roles, 'SH002')).toBe(false);
+		}
+	});
+
+	it('refuses other staff roles, including supply_coordinator and donation_staff', () => {
+		for (const cap of [
+			'supply_coordinator',
+			'kitchen_staff',
+			'registration_staff',
+			'donation_staff'
+		]) {
+			expect(canManageStoragePoints(['shelter:SH001', `SH001:${cap}`], 'SH001')).toBe(false);
+		}
 	});
 });

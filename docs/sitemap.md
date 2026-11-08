@@ -2,7 +2,7 @@
 title: Smart Shelter — Sitemap & Endpoint Map
 status: draft for review
 created: 2026-06-11
-updated: 2026-10-25 # retention 2 นาฬิกา (CR-194); 2026-10-20 CR-155 amend — incident route เฉพาะ SO/SM/SA + portal tile; เดิม 2026-10-08 shelter_incident replaces shelter_report
+updated: 2026-11-06 # CR-233 — `/people/[id]/card` QR payload `evacuee:{ULID}@{hash6}` ออกใหม่ทุกครั้งที่ปริ้น; 2026-10-25 retention 2 นาฬิกา (CR-194); 2026-10-20 CR-155 amend — incident route เฉพาะ SO/SM/SA + portal tile; เดิม 2026-10-08 shelter_incident replaces shelter_report
 note: แตกจาก api-contract.md v1 + role-permission-matrix — map หน้าจอ (SPA route) ↔ endpoint/doc action แบ่งตามระบบ Intake / Backoffice / Public; CR-155 route `/back-office/incidents` (แทน `/reports` ของ CR-040)
 ---
 
@@ -54,7 +54,7 @@ Role ย่อ (ดู [role-permission-matrix](prd/role-permission-matrix.md)):
 | `/people/register`                    | ลงทะเบียนบุคคล — required ขั้นต่ำ `first_name+last_name+gender`; duplicate hint จากชื่อ/เบอร์ก่อน save, override ได้ | FR-4..5     | `put evacuee:{ulid}` · override → `put audit:{ulid}`                                   |
 | `/people/[id]`                        | โปรไฟล์ + แก้ไขข้อมูล + ประวัติเข้า-ออก                                                                              | FR-5, FR-13 | `put evacuee` (แก้) · Mango `movement(evacuee_id, occurred_at)`                        |
 | `/people/[id]/screening`              | คัดกรอง: vulnerability flags, medical notes, fast-track                                                              | FR-6..8     | `put screening:{ulid}` (append-only) + `put medical:{ulid}`                            |
-| `/people/[id]/card`                   | บัตร/QR ประจำตัว — QR ฝังแค่ `official_code` ไม่มี PII/health                                                        | FR-9        | อ่าน local; code ออกโดย `POST /api/v1/mint` (app เรียกอัตโนมัติเมื่อ WAN ถึง central)  |
+| `/people/[id]/card`                   | บัตร/QR ประจำตัว — QR = `evacuee:{ULID}@{hash6}` ไม่มี PII/health; ปริ้นทุกครั้งออกใหม่ ใบเก่าสแกนไม่ผ่าน (CR-233) | FR-9        | อ่าน local; code ออกโดย `POST /api/v1/mint` (app เรียกอัตโนมัติเมื่อ WAN ถึง central) · QR ออกโดย `POST /api/v1/evacuee-qr/issue` |
 | `/checkin`                            | สแกน QR / ค้นชื่อ → check-in / check-out / ย้าย; occupancy guard เตือนเกิน capacity (warning-only)                   | FR-11..13   | `put movement:{ulid}` (append-only) + update `evacuee.current_stay` · view `occupancy` |
 | `/households`                         | รายการครัวเรือน + ค้นหา + check-in/out รายครัวเรือน                                                                  | FR-23       | local Mango query                                                                      |
 | `/households/new`, `/households/[id]` | สร้างครัวเรือน + ผูกสมาชิก + ออก Household ID/QR + บันทึก pet/asset/vehicle                                          | FR-21..24   | `put household:{ulid}`                                                                 |

@@ -3,8 +3,9 @@
 	import { OFFLINE_HINT } from './hints';
 	import StatusBadges from './status-badges.svelte';
 	import StockBar from './stock-bar.svelte';
+	import IncomingPopover from './incoming-popover.svelte';
 	import { formatThresholdLine } from './stock-bar';
-	import { expiryLabel, statusBadges, type StockDisplayRow } from './stock-view';
+	import { displayQty, expiryLabel, statusBadges, type StockDisplayRow } from './stock-view';
 
 	let {
 		row,
@@ -12,6 +13,7 @@
 		offline = false,
 		canDistribute = true,
 		canChange = true,
+		roles = [],
 		onopen,
 		onreceive,
 		ondistribute
@@ -24,6 +26,8 @@
 		canDistribute?: boolean;
 		/** False for a read-only viewer (donation_staff, CR-227): the row has no movement buttons. */
 		canChange?: boolean;
+		/** Roles of the viewer: decide whether an incoming row links to its page. */
+		roles?: readonly string[];
 		onopen: (row: StockDisplayRow) => void;
 		onreceive: (row: StockDisplayRow) => void;
 		ondistribute: (row: StockDisplayRow) => void;
@@ -41,53 +45,60 @@
 	const EXPIRY_CLASS = {
 		critical: 'text-red-700',
 		warning: 'text-amber-700',
-		muted: 'text-slate-500',
-		default: 'text-slate-500'
+		muted: 'text-slate-500'
 	};
 </script>
 
 <div
-	class="flex items-center gap-2.5 rounded-xl border bg-white p-3 pl-3.5 shadow-2xs {row.expiryState ===
-	'expired'
+	class="rounded-xl border bg-white p-3 pl-3.5 shadow-2xs {row.expiryState === 'expired'
 		? 'border-red-200'
 		: 'border-slate-200/80'}"
 >
-	<button
-		type="button"
-		disabled={readonly}
-		onclick={() => onopen(row)}
-		class="min-w-0 flex-1 rounded text-left focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none disabled:cursor-default"
-	>
-		<span class="block text-base font-semibold text-slate-900">{row.name}</span>
-		<span class="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1">
-			<span class="flex items-baseline gap-1.5">
-				<span class="text-xl font-bold text-slate-900 tabular-nums">{row.qtyOnHand}</span>
-				<span class="text-sm text-slate-500">{row.unitLabel}</span>
+	<div class="flex items-center gap-2.5">
+		<button
+			type="button"
+			disabled={readonly}
+			onclick={() => onopen(row)}
+			class="min-w-0 flex-1 rounded text-left focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none disabled:cursor-default"
+		>
+			<span class="block text-base font-semibold text-slate-900">{row.name}</span>
+			<span class="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1">
+				<span class="flex items-baseline gap-1.5">
+					<span class="text-xl font-bold text-slate-900 tabular-nums">{displayQty(row)}</span>
+					<span class="text-sm text-slate-500">{row.unitLabel}</span>
+				</span>
+				<StatusBadges {badges} />
 			</span>
-			<StatusBadges {badges} />
-		</span>
-		{#if row.usableNote}
-			<span class="mt-1 block text-xs font-semibold text-red-800 tabular-nums"
-				>{row.usableNote}</span
-			>
-		{/if}
-		<span class="mt-2 block">
-			<StockBar onHand={row.qtyOnHand} threshold={row.reorderThreshold} {caption} />
-		</span>
-		{#if expiryLine}
-			<span class="mt-1 block text-xs font-medium tabular-nums {EXPIRY_CLASS[expiry.tone]}">
-				{expiryLine}
+			{#if row.usableNote}
+				<span class="mt-1 block text-xs font-semibold text-red-800 tabular-nums"
+					>{row.usableNote}</span
+				>
+			{/if}
+			<span class="mt-2 block">
+				<StockBar
+					onHand={row.qtyOnHand}
+					threshold={row.reorderThreshold}
+					{caption}
+					incoming={row.incoming?.qty}
+				/>
 			</span>
-		{/if}
-	</button>
-	<RowActions
-		itemName={row.name}
-		layout="stack"
-		disabled={readonly || offline}
-		disabledReason={offline ? OFFLINE_HINT : undefined}
-		distributeDisabled={!canDistribute}
-		{canChange}
-		onreceive={() => onreceive(row)}
-		ondistribute={() => ondistribute(row)}
-	/>
+			{#if expiryLine}
+				<span class="mt-1 block text-xs font-medium tabular-nums {EXPIRY_CLASS[expiry.tone]}">
+					{expiryLine}
+				</span>
+			{/if}
+		</button>
+		<RowActions
+			itemName={row.name}
+			layout="stack"
+			disabled={readonly || offline}
+			disabledReason={offline ? OFFLINE_HINT : undefined}
+			distributeDisabled={!canDistribute}
+			{canChange}
+			onreceive={() => onreceive(row)}
+			ondistribute={() => ondistribute(row)}
+		/>
+	</div>
+	<!-- Outside the row button: a popover trigger must not nest inside another button. -->
+	<IncomingPopover {row} unitLabel={row.unitLabel} {roles} />
 </div>

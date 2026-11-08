@@ -48,6 +48,9 @@ export {
 	LOT_NO_PATTERN
 } from './domain/operations';
 
+export { projectLotsByItem, StockLotIntegrityError } from './domain/operations';
+export { countLotsHoldingStock } from './domain/lot-storage';
+
 export type {
 	DonationPointReceipt,
 	DonationPointReceiptItem,
@@ -90,3 +93,12 @@ export {
 	type DonationShortfall,
 	type DonationBatchLine
 } from './domain/donation-batch';
+
+export {
+	aggregateIncoming,
+	deriveDonationIncoming,
+	deriveTransferIncoming,
+	donationIncomingDate,
+	DONATION_NOT_INCOMING_STATUSES
+} from './domain/incoming-stock';
+export type { IncomingRow, IncomingStockResult, UnmatchedIncoming } from './domain/incoming-stock';

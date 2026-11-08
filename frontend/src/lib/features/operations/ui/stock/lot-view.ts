@@ -1,6 +1,7 @@
 import { formatThaiShortDate } from '$lib/utils/date';
 import { qtyGt } from '$lib/utils/qty';
-import { formatLotClockLine } from '../../domain/lot-age';
+import { EXPIRING_SOON_DAYS } from '../../domain/stock-summary';
+import { formatLotClockLine, formatTimeUntilExpiry, timeUntilExpiryMs } from '../../domain/lot-age';
 import { lotStorageName, type StoragePointRef } from '../../domain/lot-storage';
 import { isLotExpired, lotPriorityReason, type LotPriorityItem } from '../../domain/lot-priority';
 import {
@@ -8,6 +9,27 @@ import {
 	sortStockLotsByConsumptionOrder,
 	type StockLotBalance
 } from '../../domain/operations';
+
+export type LotExpiryState = 'expired' | 'expiring' | 'ok';
+
+/** Countdown and state from `lot.expiry` alone; both null when the lot has none. */
+function lotExpiryInfo(
+	expiry: string | null,
+	forceExpired: boolean,
+	now: number
+): Pick<LotRow, 'expiryRelative' | 'expiryState'> {
+	if (!expiry) return { expiryRelative: null, expiryState: null };
+	const left = timeUntilExpiryMs(expiry, now);
+	if (Number.isNaN(left)) return { expiryRelative: null, expiryState: null };
+	const relative = formatTimeUntilExpiry(expiry, now);
+	if (forceExpired || left <= 0) {
+		return { expiryRelative: relative, expiryState: 'expired' };
+	}
+	return {
+		expiryRelative: relative ? `อีก ${relative}` : null,
+		expiryState: left <= EXPIRING_SOON_DAYS * 86_400_000 ? 'expiring' : 'ok'
+	};
+}
 
 /** One remaining lot as the item detail panel renders it. */
 export interface LotRow {
@@ -20,6 +42,10 @@ export interface LotRow {
 	storageTypes: string | null;
 	/** Buddhist-era short date, or null when the lot has no expiry. */
 	expiry: string | null;
+	/** Time left ("อีก 12 วัน") or time past ("หมดแล้ว 2 วัน"); null without `lot.expiry`. */
+	expiryRelative: string | null;
+	/** Expiry badge state; null without `lot.expiry` (never inferred from shelf life). */
+	expiryState: LotExpiryState | null;
 	isExpired: boolean;
 	/** "ในคลัง 3 วัน · หมดอายุใน 5 วัน" */
 	clockLine: string;
@@ -29,6 +55,8 @@ export interface LotRow {
 	isNext: boolean;
 	/** Overdrawn lot (#855): listed last with a warning, never issued from. */
 	isNegative: boolean;
+	/** The shelter bought this lot itself ("ซื้อเอง", schema_v 7). */
+	isSelfPurchased: boolean;
 }
 
 /** Type labels of the configured point a lot sits in; null for a deleted point or no point. */
@@ -50,7 +78,8 @@ export function buildLotRows(
 	lots: readonly StockLotBalance[],
 	points: readonly StoragePointRef[] = [],
 	now: number = Date.now(),
-	itemsById?: ReadonlyMap<string, LotPriorityItem>
+	itemsById?: ReadonlyMap<string, LotPriorityItem>,
+	selfPurchasedRefs?: ReadonlySet<string>
 ): LotRow[] {
 	const ordered = sortStockLotsByConsumptionOrder(
 		lots.filter((l) => qtyGt(l.qty, 0)),
@@ -66,11 +95,13 @@ export function buildLotRows(
 		storageName: lotStorageName(lot.lot, points),
 		storageTypes: storagePointTypes(lot.lot?.storage_point_id, points),
 		expiry: lot.lot?.expiry ? formatThaiShortDate(lot.lot.expiry) : null,
+		...lotExpiryInfo(lot.lot?.expiry ?? null, false, now),
 		isExpired: false,
 		clockLine: formatLotClockLine(lot, now),
 		reason: 'ล็อตนี้ยอดติดลบ — ต้องแก้ยอด (ห้ามเบิกจากล็อตนี้)',
 		isNext: false,
-		isNegative: true
+		isNegative: true,
+		isSelfPurchased: selfPurchasedRefs?.has(lot.lot_ref) ?? false
 	}));
 	const usable = ordered.map((lot) => {
 		const expiry = lot.lot?.expiry ?? null;
@@ -85,11 +116,13 @@ export function buildLotRows(
 			storageName: lotStorageName(lot.lot, points),
 			storageTypes: storagePointTypes(lot.lot?.storage_point_id, points),
 			expiry: expiry ? formatThaiShortDate(expiry) : null,
+			...lotExpiryInfo(expiry, isExpired, now),
 			isExpired,
 			clockLine: formatLotClockLine(lot, now),
 			reason: lotPriorityReason(lot, itemsById?.get(lot.item_id), now),
 			isNext,
-			isNegative: false
+			isNegative: false,
+			isSelfPurchased: selfPurchasedRefs?.has(lot.lot_ref) ?? false
 		};
 	});
 	return [...usable, ...negatives];

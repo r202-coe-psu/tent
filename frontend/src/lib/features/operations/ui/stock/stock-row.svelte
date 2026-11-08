@@ -4,8 +4,9 @@
 	import { OFFLINE_HINT } from './hints';
 	import StatusBadges from './status-badges.svelte';
 	import StockBar from './stock-bar.svelte';
+	import IncomingPopover from './incoming-popover.svelte';
 	import { formatThresholdLine } from './stock-bar';
-	import { expiryLabel, statusBadges, type StockDisplayRow } from './stock-view';
+	import { displayQty, expiryLabel, statusBadges, type StockDisplayRow } from './stock-view';
 
 	let {
 		row,
@@ -13,6 +14,7 @@
 		offline = false,
 		canDistribute = true,
 		canChange = true,
+		roles = [],
 		onopen,
 		onreceive,
 		ondistribute
@@ -26,6 +28,8 @@
 		canDistribute?: boolean;
 		/** False for a read-only viewer (donation_staff, CR-227): the row has no movement buttons. */
 		canChange?: boolean;
+		/** Roles of the viewer: decide whether an incoming row links to its page. */
+		roles?: readonly string[];
 		onopen: (row: StockDisplayRow) => void;
 		onreceive: (row: StockDisplayRow) => void;
 		ondistribute: (row: StockDisplayRow) => void;
@@ -38,8 +42,7 @@
 	const EXPIRY_CLASS = {
 		critical: 'text-red-700',
 		warning: 'text-amber-700',
-		muted: 'text-slate-400',
-		default: 'text-slate-900'
+		muted: 'text-slate-500'
 	};
 </script>
 
@@ -71,7 +74,8 @@
 	<!-- คงเหลือ / เกณฑ์ -->
 	<Table.Cell class="w-48 px-3 py-3.5 lg:px-4 xl:w-64">
 		<p class="flex items-baseline gap-1.5">
-			<span class="text-base font-bold text-slate-900 tabular-nums xl:text-lg">{row.qtyOnHand}</span
+			<span class="text-base font-bold text-slate-900 tabular-nums xl:text-lg"
+				>{displayQty(row)}</span
 			>
 			<span class="text-xs text-slate-500">{row.unitLabel}</span>
 		</p>
@@ -79,13 +83,25 @@
 			<p class="mt-0.5 text-xs font-semibold text-red-800 tabular-nums">{row.usableNote}</p>
 		{/if}
 		<div class="mt-1.5">
-			<StockBar onHand={row.qtyOnHand} threshold={row.reorderThreshold} {caption} />
+			<StockBar
+				onHand={row.qtyOnHand}
+				threshold={row.reorderThreshold}
+				{caption}
+				incoming={row.incoming?.qty}
+			/>
+			<IncomingPopover {row} unitLabel={row.unitLabel} {roles} />
 		</div>
 	</Table.Cell>
 
 	<!-- หมดอายุเร็วสุด -->
 	<Table.Cell class="w-32 px-3 py-3.5 lg:px-4 xl:w-40">
-		<p class="text-sm font-semibold tabular-nums {EXPIRY_CLASS[expiry.tone]}">{expiry.text}</p>
+		<p
+			class="text-sm font-semibold tabular-nums {expiry.relative && expiry.tone === 'muted'
+				? 'text-slate-900'
+				: EXPIRY_CLASS[expiry.tone]}"
+		>
+			{expiry.text}
+		</p>
 		{#if expiry.relative}
 			<p class="text-xs {EXPIRY_CLASS[expiry.tone]}">{expiry.relative}</p>
 		{/if}

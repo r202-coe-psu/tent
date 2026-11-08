@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatThresholdLine, stockBarFill } from './stock-bar';
+import { formatThresholdLine, stockBarFill, stockBarSegments } from './stock-bar';
 
 describe('stockBarFill', () => {
 	it('fills half the track at the threshold, in the warning tone', () => {
@@ -44,5 +44,60 @@ describe('formatThresholdLine', () => {
 	it('omits cover when unknown or zero', () => {
 		expect(formatThresholdLine('40', 'ถุง', null)).toBe('เกณฑ์ 40 ถุง');
 		expect(formatThresholdLine('40', 'ถุง', 0)).toBe('เกณฑ์ 40 ถุง');
+	});
+});
+
+describe('stockBarSegments (#1153)', () => {
+	it('keeps the in-stock segment, tick and tone of stockBarFill and adds incoming after it', () => {
+		// threshold 40 → track max 80. in-stock 20 → 25%; incoming 30 → 37.5%.
+		expect(stockBarSegments('20', '30', '40')).toEqual({
+			pct: 25,
+			tickPct: 50,
+			tone: 'warning',
+			incomingPct: 37.5
+		});
+	});
+
+	it('stays red with no stock even when a lot is coming (AC-2)', () => {
+		// incoming 100 of track max 80 → clipped to the full track.
+		expect(stockBarSegments('0', '100', '40')).toEqual({
+			pct: 0,
+			tickPct: 50,
+			tone: 'critical',
+			incomingPct: 100
+		});
+	});
+
+	it('clips incoming to the room left on the track', () => {
+		// in-stock 60 → 75%; incoming 40 → 50% but only 25% is left.
+		expect(stockBarSegments('60', '40', '40')).toEqual({
+			pct: 75,
+			tickPct: 50,
+			tone: 'ok',
+			incomingPct: 25
+		});
+	});
+
+	it('has no incoming segment when nothing is incoming', () => {
+		expect(stockBarSegments('20', '0', '40')).toEqual({
+			...stockBarFill('20', '40'),
+			incomingPct: 0
+		});
+	});
+
+	it('splits the track in proportion when there is no threshold', () => {
+		// 30 in stock + 10 coming → 75% / 25%.
+		expect(stockBarSegments('30', '10', null)).toEqual({
+			pct: 75,
+			tickPct: null,
+			tone: 'neutral',
+			incomingPct: 25
+		});
+		// nothing in stock → all incoming
+		expect(stockBarSegments('0', '10', null)).toMatchObject({
+			pct: 0,
+			incomingPct: 100,
+			tone: 'critical'
+		});
 	});
 });

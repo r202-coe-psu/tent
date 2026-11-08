@@ -244,13 +244,13 @@ export async function rotateStaffCard(caller: Caller, name: string): Promise<Sta
 		const coversEveryShelter =
 			targetCodes.length > 0 && targetCodes.every((code) => managed.includes(code));
 		if (!coversEveryShelter || isPrivilegedTarget(doc)) {
-			throw new ServiceError('FORBIDDEN', 'ไม่มีสิทธิ์หมุน QR ของผู้ใช้นี้');
+			throw new ServiceError('FORBIDDEN', 'ไม่มีสิทธิ์ออก QR ใหม่ให้ผู้ใช้นี้');
 		}
 	}
 	const newHash = await mintStaffTokenHash();
 	const put = await adminRaw(userPath(name), 'PUT', { ...doc, staff_token_hash: newHash });
 	if (put.status === 409) {
-		throw new ServiceError('CONFLICT', 'ข้อมูลผู้ใช้เพิ่งถูกแก้ไข กรุณาลองหมุน QR อีกครั้ง');
+		throw new ServiceError('CONFLICT', 'ข้อมูลผู้ใช้เพิ่งถูกแก้ไข กรุณาลองออก QR ใหม่อีกครั้ง');
 	}
 	if (put.status >= 400) throw serviceErrorFromCouch('rotate staff card', put.status, put.data);
 	return printable(doc, newHash);
@@ -271,7 +271,7 @@ export async function getStaffCardForAdmin(
 		}
 	}
 	if (!isValidStaffTokenHash(doc.staff_token_hash)) {
-		throw new ServiceError('NOT_FOUND', 'ยังไม่มี QR กรุณาหมุน QR เพื่อออกบัตร');
+		throw new ServiceError('NOT_FOUND', 'ยังไม่มี QR กรุณากด "ออก QR ใหม่" เพื่อออกบัตร');
 	}
 	return printable(doc, doc.staff_token_hash);
 }
