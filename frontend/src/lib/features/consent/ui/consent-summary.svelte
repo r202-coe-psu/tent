@@ -3,6 +3,7 @@
 	import CircleX from '@lucide/svelte/icons/circle-x';
 	import { summarizeConsent, type EvacueeConsent } from '../domain/consent';
 	import type { ConsentStaff } from '../application/consent-block.svelte';
+	import { langState } from '$lib/states/i18n.svelte';
 
 	let {
 		consent,
@@ -19,7 +20,9 @@
 	} = $props();
 
 	const uid = $props.id();
-	const summary = $derived(summarizeConsent(consent, searchExcluded, { staff }));
+	const summary = $derived(
+		summarizeConsent(consent, searchExcluded, { staff, language: langState.current })
+	);
 </script>
 
 <section

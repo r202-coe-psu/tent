@@ -145,7 +145,7 @@
 				alt={isUnassigned ? t.qrAltUnassigned : t.qrAlt}
 				caption={t.bookerNameLabel}
 				name={fullName}
-				detail={isUnassigned ? `รหัส: ${ticket.code}` : undefined}
+				detail={isUnassigned ? `${t.registrationCodeLabel}: ${ticket.code}` : undefined}
 				fallback={isUnassigned ? t.qrErrorFallbackUnassigned : t.qrErrorFallback}
 			/>
 			<p class="text-center text-sm font-semibold text-foreground">{t.showQrInstruction}</p>

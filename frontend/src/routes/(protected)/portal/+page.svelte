@@ -28,6 +28,11 @@
 	import { Badge } from '$lib/components/ui/badge';
 	import { Button } from '$lib/components/ui/button';
 	import * as Select from '$lib/components/ui/select';
+	import { STAFF_CHROME_I18N } from '$lib/constants/i18n/staff-chrome';
+	import { langState } from '$lib/states/i18n.svelte';
+	import { getTranslation } from '$lib/utils/i18n';
+
+	const t = $derived(getTranslation(STAFF_CHROME_I18N, langState.current).portalPage);
 
 	const roles = $derived(authStore.user?.roles ?? []);
 	const isSA = $derived(isSystemAdmin(roles));
@@ -76,9 +81,7 @@
 	}
 
 	// User details
-	const displayName = $derived(
-		authStore.user?.display_name || authStore.user?.name || 'ผู้ปฏิบัติงาน'
-	);
+	const displayName = $derived(authStore.user?.display_name || authStore.user?.name || t.operator);
 	const username = $derived(authStore.user?.name ?? '');
 
 	// System-admin role preview (UI-only, not persisted, dev server only): what the menu shows for
@@ -97,7 +100,7 @@
 
 	// Role display labels (Thai)
 	const userRoleLabels = $derived.by(() => {
-		if (isSA) return ['ผู้ดูแลระบบส่วนกลาง'];
+		if (isSA) return [t.systemAdminRole];
 		const labels: string[] = [];
 		for (const r of roles) {
 			if (r.startsWith('shelter:')) continue;
@@ -110,7 +113,7 @@
 				if (!labels.includes(label)) labels.push(label);
 			}
 		}
-		return labels.length > 0 ? labels : ['ผู้ใช้งานทั่วไป'];
+		return labels.length > 0 ? labels : [t.generalUserRole];
 	});
 </script>
 
@@ -122,7 +125,7 @@
 	<div class="mx-auto w-full max-w-7xl min-w-0 px-4 sm:px-0">
 		<!-- Welcome & Operational Context Banner -->
 		<section
-			aria-label="บริบทการปฏิบัติงาน"
+			aria-label={t.contextAria}
 			class="mb-4 rounded-xl border border-border/80 bg-card px-3 py-2.5 shadow-xs sm:mb-6"
 		>
 			<div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
@@ -136,7 +139,7 @@
 					<div class="min-w-0 flex-1">
 						<div class="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
 							<span class="text-sm font-semibold text-foreground">
-								สวัสดี, {displayName}
+								{t.greeting(displayName)}
 							</span>
 							{#if username && username !== displayName}
 								<span class="text-2xs text-muted-foreground">(@{username})</span>
@@ -157,7 +160,8 @@
 						class="ml-1 min-h-11 shrink-0 gap-1.5 sm:min-h-8"
 						onclick={() => (myCardOpen = true)}
 					>
-						<IdCard class="size-4" aria-hidden="true" /> ดูบัตรของฉัน
+						<IdCard class="size-4" aria-hidden="true" />
+						{t.myCard}
 					</Button>
 				</div>
 
@@ -169,12 +173,12 @@
 							<Select.Root type="single" value={selectedCode ?? ''} onValueChange={onShelterChange}>
 								<Select.Trigger
 									class="h-11 w-full border-border bg-background text-xs font-medium sm:h-8"
-									aria-label="ศูนย์พักพิงที่ปฏิบัติงาน"
+									aria-label={t.activeShelterAria}
 								>
 									<div class="flex items-center gap-1.5 truncate">
 										<Building2 class="size-3.5 shrink-0 text-primary" />
 										<span class="truncate">
-											{currentShelter?.name ?? 'เลือกศูนย์พักพิง'}
+											{currentShelter?.name ?? t.selectShelter}
 										</span>
 									</div>
 								</Select.Trigger>
@@ -197,7 +201,7 @@
 					{:else if currentShelter}
 						<div
 							class="inline-flex h-8 max-w-full items-center gap-1.5 rounded-md border border-border/80 bg-muted/40 px-2.5 text-xs font-medium text-foreground"
-							aria-label="ศูนย์พักพิงที่ปฏิบัติงาน"
+							aria-label={t.activeShelterAria}
 						>
 							<Building2 class="size-3.5 shrink-0 text-primary" />
 							<span class="truncate">{currentShelter.name}</span>
@@ -206,21 +210,21 @@
 					{:else if sheltersQuery.isPending}
 						<div class="inline-flex h-8 items-center gap-1.5 text-2xs text-muted-foreground">
 							<RefreshCw class="size-3 animate-spin text-muted-foreground" />
-							<span>กำลังโหลดศูนย์...</span>
+							<span>{t.loadingShelters}</span>
 						</div>
 					{:else}
 						<div
 							class="inline-flex h-8 items-center gap-1.5 rounded-md border border-dashed border-border px-2.5 text-2xs text-muted-foreground"
 						>
 							<Building2 class="size-3.5 text-muted-foreground" />
-							<span>ไม่มีสังกัดศูนย์</span>
+							<span>{t.noShelter}</span>
 						</div>
 					{/if}
 
 					<div class="hidden h-6 w-px bg-border/60 sm:block" aria-hidden="true"></div>
 
 					<!-- Sync status indicator -->
-					<div class="flex h-8 items-center gap-1.5" aria-label="สถานะระบบ">
+					<div class="flex h-8 items-center gap-1.5" aria-label={t.systemStatusAria}>
 						{#if endpointStore.status === 'connected'}
 							<span class="relative flex size-2">
 								<span
@@ -228,18 +232,18 @@
 								></span>
 								<span class="relative inline-flex size-2 rounded-full bg-emerald-500"></span>
 							</span>
-							<span class="text-2xs font-medium text-foreground">เชื่อมต่อแล้ว</span>
+							<span class="text-2xs font-medium text-foreground">{t.connected}</span>
 						{:else if endpointStore.status === 'connecting'}
 							<span class="relative flex size-2">
 								<span class="relative inline-flex size-2 animate-pulse rounded-full bg-amber-500"
 								></span>
 							</span>
-							<span class="text-2xs font-medium text-muted-foreground">กำลังเชื่อมต่อ...</span>
+							<span class="text-2xs font-medium text-muted-foreground">{t.connecting}</span>
 						{:else}
 							<span class="relative flex size-2">
 								<span class="relative inline-flex size-2 rounded-full bg-rose-500"></span>
 							</span>
-							<span class="text-2xs font-medium text-destructive">ออฟไลน์</span>
+							<span class="text-2xs font-medium text-destructive">{t.offline}</span>
 						{/if}
 					</div>
 				</div>

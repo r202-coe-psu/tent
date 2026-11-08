@@ -108,6 +108,31 @@ export interface JobsTranslations {
 	/** Multi-shift picker (#716). */
 	applyPickShiftsHint: string;
 	applyShiftConflict: string;
+	conflictNote: string;
+	conflictButton: string;
+	conflictTimeUnknown: string;
+	defaultShelterName: string;
+	errShiftConflict: string;
+	errShiftConflictPickOther: string;
+	errPortalPhone: string;
+	errPreflightFallback: string;
+	existingTitle: string;
+	existingBody: string;
+	existingProfile: string;
+	existingVolunteerCode: string;
+	existingSkills: string;
+	existingSkillsNone: string;
+	existingNewSkills: string;
+	existingControlledNote: string;
+	existingCancel: string;
+	existingSaving: string;
+	existingConfirm: string;
+	portalNoteTitle: string;
+	portalNoteBody: string;
+	portalPhoneLabel: string;
+	firstNamePlaceholder: string;
+	lastNamePlaceholder: string;
+	nicknamePlaceholder: string;
 	applyShiftsPicked: string;
 	errNoShiftPicked: string;
 	applyOutcomePartialTitle: string;
@@ -256,6 +281,35 @@ export const jobsI18n: Record<LanguageCode, JobsTranslations> = {
 		applyShiftsAvailable: 'กะให้เลือก',
 		applyPickShiftsHint: 'เลือกได้หลายกะ กดกะที่เลือกแล้วอีกครั้งเพื่อเอาออก',
 		applyShiftConflict: 'เวลาชน',
+		conflictNote: 'เวลาชนกับกะที่จองไว้',
+		conflictButton: 'เวลาชนกับกะนี้',
+		conflictTimeUnknown: 'ช่วงเวลาที่ตรวจสอบไม่ได้',
+		defaultShelterName: 'ศูนย์พักพิงหลัก',
+		errShiftConflict: 'เวลาของกะนี้ชนกับกะที่คุณจองไว้แล้ว',
+		errShiftConflictPickOther:
+			'เวลาของกะนี้ชนกับกะที่คุณจองไว้แล้ว กรุณาเลือกกะอื่นที่ไม่ทับซ้อนกัน',
+		errPortalPhone: 'กรุณากรอกเบอร์โทรศัพท์ที่ใช้สมัครเดิมเพื่อสมัครงานอาสาสมัครจาก portal',
+		errPreflightFallback: 'ตรวจสอบข้อมูลก่อนสมัครไม่สำเร็จ',
+		existingTitle: 'เบอร์โทรนี้เคยสมัครไว้แล้ว',
+		existingBody:
+			'ระบบจะอัปเดต Volunteer profile เดิม และสร้างใบสมัครงานใหม่ให้คุณ ข้อมูลการสมัครงานเดิมจะไม่ถูกลบ',
+		existingProfile: 'โปรไฟล์',
+		existingVolunteerCode: 'Volunteer code',
+		existingSkills: 'ทักษะเดิม',
+		existingSkillsNone: 'ยังไม่มี',
+		existingNewSkills: 'ทักษะใหม่ที่จะเพิ่ม',
+		existingControlledNote:
+			'ทักษะควบคุมใหม่จะรอตรวจสอบก่อนใช้งาน เจ้าหน้าที่ต้องรับรองก่อนจึงจะใช้ทักษะนี้กับงานได้',
+		existingCancel: 'ยกเลิก',
+		existingSaving: 'กำลังบันทึก...',
+		existingConfirm: 'ยืนยันอัปเดตโปรไฟล์และสมัครงาน',
+		portalNoteTitle: 'คุณเข้าสู่ระบบด้วย QR Code ตั๋วอาสาสมัคร',
+		portalNoteBody:
+			'เพื่อสมัครงานอาสาสมัครใหม่ กรุณากรอกเบอร์โทรศัพท์ที่ใช้สมัครเดิม ระบบจะใช้เบอร์นี้เชื่อมใบสมัครกับโปรไฟล์ Volunteer ของคุณ',
+		portalPhoneLabel: 'เบอร์โทรศัพท์ที่ใช้สมัครเดิม',
+		firstNamePlaceholder: 'เช่น เก่งกล้า',
+		lastNamePlaceholder: 'เช่น งานอาสา',
+		nicknamePlaceholder: 'เช่น กล้า, พิมพ์',
 		applyShiftsPicked: 'กะที่เลือก',
 		errNoShiftPicked: 'กรุณาเลือกอย่างน้อย 1 กะ',
 		applyOutcomePartialTitle: 'บางกะสมัครไม่สำเร็จ',
@@ -404,6 +458,36 @@ export const jobsI18n: Record<LanguageCode, JobsTranslations> = {
 		applyShiftsAvailable: 'shifts available',
 		applyPickShiftsHint: 'You can pick several shifts. Tap a picked shift again to remove it.',
 		applyShiftConflict: 'Clashes',
+		conflictNote: 'Clashes with a shift you already booked',
+		conflictButton: 'Clashes with this shift',
+		conflictTimeUnknown: 'Time could not be read',
+		defaultShelterName: 'Main shelter',
+		errShiftConflict: 'This shift overlaps one you already booked',
+		errShiftConflictPickOther:
+			'This shift overlaps one you already booked. Please pick another shift that does not overlap',
+		errPortalPhone:
+			'Please enter the phone number you originally applied with to apply for volunteer jobs from the portal',
+		errPreflightFallback: 'Could not check your details before applying',
+		existingTitle: 'This phone number has applied before',
+		existingBody:
+			'We will update your existing volunteer profile and create a new application for you. Your earlier applications will not be deleted',
+		existingProfile: 'Profile',
+		existingVolunteerCode: 'Volunteer code',
+		existingSkills: 'Existing skills',
+		existingSkillsNone: 'None yet',
+		existingNewSkills: 'New skills to add',
+		existingControlledNote:
+			'New controlled skills wait for review before they can be used. Staff must certify them before you can use them for jobs',
+		existingCancel: 'Cancel',
+		existingSaving: 'Saving...',
+		existingConfirm: 'Confirm profile update and apply',
+		portalNoteTitle: 'You signed in with a volunteer ticket QR code',
+		portalNoteBody:
+			'To apply for a new volunteer job, please enter the phone number you originally applied with. We use it to link the application to your volunteer profile',
+		portalPhoneLabel: 'Phone number you originally applied with',
+		firstNamePlaceholder: 'e.g. Somchai',
+		lastNamePlaceholder: 'e.g. Jaidee',
+		nicknamePlaceholder: 'e.g. Chai, Pim',
 		applyShiftsPicked: 'shifts picked',
 		errNoShiftPicked: 'Pick at least one shift',
 		applyOutcomePartialTitle: 'Some shifts were not saved',

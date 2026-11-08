@@ -1,4 +1,5 @@
-import type { PortalActivity } from './schedule-view';
+import type { LanguageCode } from '$lib/utils/language';
+import { defaultJobTitle, type PortalActivity } from './schedule-view';
 
 export type BookingWindow = {
 	start_ts: string;
@@ -28,7 +29,8 @@ export function windowsOverlap(left: BookingWindow, right: BookingWindow): boole
 // Applications in booking state deliberately block the same as roster rows.
 export function findBookingConflict(
 	candidate: BookingWindow,
-	activities: readonly PortalActivity[]
+	activities: readonly PortalActivity[],
+	language: LanguageCode = 'th'
 ): BookingConflict | undefined {
 	return activities
 		.filter((activity) => !RELEASED_STATUSES.has(activity.status))
@@ -40,7 +42,7 @@ export function findBookingConflict(
 			};
 			return windowsOverlap(candidate, existing)
 				? {
-						title: activity.title || 'งานอาสาสมัคร',
+						title: activity.title || defaultJobTitle(language),
 						date: activity.date,
 						start_ts: activity.startTs,
 						end_ts: activity.endTs,
