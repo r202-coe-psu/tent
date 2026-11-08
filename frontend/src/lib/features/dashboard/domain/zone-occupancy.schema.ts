@@ -48,6 +48,11 @@ export type ZoneOccupancy = {
 	closed: boolean;
 };
 
+function occupancyLevel(count: number, capacity: number): ZoneOccupancyLevel {
+	if (capacity <= 0 || count >= capacity) return 'full';
+	return count >= capacity * 0.8 ? 'warning' : 'normal';
+}
+
 export function toZoneOccupancies(
 	rows: readonly ZoneStatusCount[],
 	zones: readonly ZoneCapacityInput[]
@@ -61,8 +66,7 @@ export function toZoneOccupancies(
 		const count = counts.get(zone.code) ?? 0;
 		const { capacity } = zone;
 		const percent = capacity > 0 ? Math.round((count / capacity) * 100) : 0;
-		const level: ZoneOccupancyLevel =
-			capacity <= 0 || count >= capacity ? 'full' : count >= capacity * 0.8 ? 'warning' : 'normal';
+		const level = occupancyLevel(count, capacity);
 		return {
 			code: zone.code,
 			name: zone.name,
@@ -73,4 +77,37 @@ export function toZoneOccupancies(
 			closed: zone.status === 'closed'
 		};
 	});
+}
+
+export type ZoneOccupancySummary = {
+	/** Open zones only, so present, capacity and available share one base. */
+	present: number;
+	capacity: number;
+	available: number;
+	percent: number;
+	level: ZoneOccupancyLevel;
+	zones: Record<ZoneOccupancyLevel | 'closed', number>;
+};
+
+export function summarizeZoneOccupancy(zones: readonly ZoneOccupancy[]): ZoneOccupancySummary {
+	const tally = { normal: 0, warning: 0, full: 0, closed: 0 };
+	let present = 0;
+	let capacity = 0;
+	for (const zone of zones) {
+		if (zone.closed) {
+			tally.closed += 1;
+			continue;
+		}
+		present += zone.count;
+		capacity += zone.capacity;
+		tally[zone.level] += 1;
+	}
+	return {
+		present,
+		capacity,
+		available: Math.max(0, capacity - present),
+		percent: capacity > 0 ? Math.round((present / capacity) * 100) : 0,
+		level: occupancyLevel(present, capacity),
+		zones: tally
+	};
 }

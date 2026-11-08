@@ -1,5 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { toZoneOccupancies, ZoneOccupancyPayloadSchema } from './zone-occupancy.schema';
+import {
+	summarizeZoneOccupancy,
+	toZoneOccupancies,
+	ZoneOccupancyPayloadSchema
+} from './zone-occupancy.schema';
 
 const zone = (
 	code: string,
@@ -81,5 +85,46 @@ describe('ZoneOccupancyPayloadSchema', () => {
 			rows: [{ zone: 'A', status: 'active', count: 2, _id: 'evacuee:x' }]
 		});
 		expect(parsed.rows[0]).toEqual({ zone: 'A', status: 'active', count: 2 });
+	});
+});
+
+describe('summarizeZoneOccupancy', () => {
+	const occ = (
+		code: string,
+		count: number,
+		capacity: number,
+		level: 'normal' | 'warning' | 'full',
+		closed = false
+	) => ({ code, name: code, count, capacity, percent: 0, level, closed });
+
+	it('totals open zones only and tallies zones by level', () => {
+		const summary = summarizeZoneOccupancy([
+			occ('A', 40, 100, 'normal'),
+			occ('B', 50, 50, 'full'),
+			occ('C', 85, 100, 'warning'),
+			occ('D', 5, 30, 'normal', true)
+		]);
+		expect(summary).toEqual({
+			present: 175,
+			capacity: 250,
+			available: 75,
+			percent: 70,
+			level: 'normal',
+			zones: { normal: 1, warning: 1, full: 1, closed: 1 }
+		});
+	});
+
+	it('never reports negative availability when over capacity', () => {
+		const summary = summarizeZoneOccupancy([occ('A', 120, 100, 'full')]);
+		expect(summary).toMatchObject({ available: 0, percent: 120, level: 'full' });
+	});
+
+	it('uses the same 80% threshold as a single zone', () => {
+		expect(summarizeZoneOccupancy([occ('A', 80, 100, 'warning')]).level).toBe('warning');
+	});
+
+	it('treats zero open capacity as full', () => {
+		const summary = summarizeZoneOccupancy([occ('A', 0, 30, 'normal', true)]);
+		expect(summary).toMatchObject({ capacity: 0, percent: 0, level: 'full' });
 	});
 });
