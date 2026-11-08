@@ -16,14 +16,16 @@ function renderShell(language: 'th' | 'en') {
 	}
 }
 
-// Titles are tooltips, not visible copy; keep them out of the "no Thai text" check.
-const withoutSwitcherTitles = (html: string) => html.replace(/title="[^"]*"/g, '');
+// Titles are tooltips, not visible copy, and the switcher names its target language (Thai) in
+// Thai on purpose; keep both out of the "no Thai text" check.
+const withoutSwitcherTitles = (html: string) =>
+	html.replace(/title="[^"]*"/g, '').replace(/aria-label="EN — [^"]*"/g, '');
 
 describe('VolunteerPortalShell', () => {
 	it('shows a TH/EN switcher in the header', () => {
 		const body = renderShell('th');
 		const header = body.slice(body.indexOf('<header'), body.indexOf('</header>'));
-		expect(header).toContain('aria-label="Switch to English"');
+		expect(header).toContain('aria-label="TH — Switch to English"');
 		expect(header).toContain('>TH<');
 	});
 

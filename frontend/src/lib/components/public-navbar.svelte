@@ -186,7 +186,8 @@
 				{/if}
 			</a>
 
-			<LanguageSwitcher class="shrink-0" />
+			<!-- Narrower pill below sm so the brand still fits at 360px. -->
+			<LanguageSwitcher class="min-w-0 shrink-0 px-1.5 sm:min-w-11 sm:px-3" />
 
 			<button
 				type="button"

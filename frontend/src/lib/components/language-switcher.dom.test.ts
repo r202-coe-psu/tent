@@ -27,7 +27,7 @@ describe('LanguageSwitcher', () => {
 		const button = render();
 		expect(document.body.querySelectorAll('button')).toHaveLength(1);
 		expect(button.textContent?.trim()).toBe('TH');
-		expect(button.getAttribute('aria-label')).toBe('Switch to English');
+		expect(button.getAttribute('aria-label')).toBe('TH — Switch to English');
 	});
 
 	it('flips TH ⇄ EN on each click', () => {
@@ -38,7 +38,7 @@ describe('LanguageSwitcher', () => {
 		flushSync();
 		expect(languageStore.current).toBe('en');
 		expect(button.textContent?.trim()).toBe('EN');
-		expect(button.getAttribute('aria-label')).toBe('Switch to Thai');
+		expect(button.getAttribute('aria-label')).toBe('EN — เปลี่ยนเป็นภาษาไทย');
 
 		button.click();
 		flushSync();
