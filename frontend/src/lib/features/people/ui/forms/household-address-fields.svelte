@@ -352,6 +352,7 @@
 				<Select.Trigger
 					id="housing-type"
 					class={selectTriggerClass}
+					title={housingTypeTriggerLabel}
 					aria-invalid={!!errors?.housing_type}
 					aria-describedby={errors?.housing_type ? 'housing-type-error' : undefined}
 				>

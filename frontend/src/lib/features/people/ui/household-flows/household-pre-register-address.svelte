@@ -281,7 +281,11 @@
 									(v) => setHousingTypeFromSelect(v, (next) => ($formData.housingType = next))
 								}
 							>
-								<Select.Trigger {...props} class={selectTriggerClass}>
+								<Select.Trigger
+									{...props}
+									class={selectTriggerClass}
+									title={housingTypeTriggerLabel}
+								>
 									<span class="min-w-0 truncate leading-normal">{housingTypeTriggerLabel}</span>
 								</Select.Trigger>
 								<Select.Content>
