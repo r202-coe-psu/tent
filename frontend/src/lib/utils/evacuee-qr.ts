@@ -19,6 +19,8 @@ export type EvacueeQrPrintRef = { printed_at: string; hash: string };
 
 // Crockford base32 ULID: first char 0-7, no I L O U.
 const ULID = '[0-7][0-9A-HJKMNP-TV-Z]{25}';
+/** Strict `evacuee:{ULID}` doc id (case-sensitive, no `@hash`). */
+export const EVACUEE_ID = new RegExp(`^evacuee:${ULID}$`);
 const PERSON_QR = new RegExp(`^evacuee:(${ULID})(?:@([0-9a-f]{6}))?$`, 'i');
 const HAS_AT = /^evacuee:[^@]*@/i;
 

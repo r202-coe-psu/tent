@@ -6,7 +6,7 @@
 import { createHash } from 'node:crypto';
 import { adminRaw, ServiceError, serviceErrorFromCouch } from '$lib/server/couch-admin';
 import { shelterDbName } from '$lib/server/shelter-access-design';
-import type { EvacueeQrPrintRef, EvacueeQrSource } from '$lib/utils/evacuee-qr';
+import { EVACUEE_ID, type EvacueeQrPrintRef, type EvacueeQrSource } from '$lib/utils/evacuee-qr';
 
 export const EVACUEE_QR_MAX_ATTEMPTS = 5;
 
@@ -35,8 +35,6 @@ export type IssueEvacueeQrInput = {
 
 export type IssuedEvacueeQr = { evacuee_id: string; qr_payload: string; printed_at: string };
 
-const EVACUEE_ID = /^evacuee:[0-7][0-9A-HJKMNP-TV-Z]{25}$/;
-
 /** FR-EQR-3: first 6 hex chars of SHA-1 over the UTF-8 `printed_at` string. */
 export function hash6Of(printedAt: string): string {
 	return createHash('sha1').update(printedAt, 'utf8').digest('hex').slice(0, 6);
@@ -46,11 +44,22 @@ export function evacueeQrDocId(evacueeId: string): string {
 	return `evacuee_qr:${evacueeId.slice('evacuee:'.length)}`;
 }
 
+/** api-contract §2.8: a CouchDB 5xx is `DEPENDENCY_UNAVAILABLE`; other failures keep the shared mapping. */
+function couchFailure(action: string, status: number, data: unknown): ServiceError {
+	return status >= 500
+		? new ServiceError(
+				'DEPENDENCY_UNAVAILABLE',
+				`Could not ${action}`,
+				`CouchDB responded ${status}`
+			)
+		: serviceErrorFromCouch(action, status, data);
+}
+
 /** Admin read of the log doc; a missing doc is `null`. */
 async function readDoc(db: string, docId: string): Promise<EvacueeQrDoc | null> {
 	const res = await adminRaw(`/${db}/${encodeURIComponent(docId)}`, 'GET');
 	if (res.status === 404) return null;
-	if (res.status >= 400) throw serviceErrorFromCouch('read evacuee_qr', res.status, res.data);
+	if (res.status >= 400) throw couchFailure('read evacuee_qr', res.status, res.data);
 	return res.data as EvacueeQrDoc;
 }
 
@@ -90,11 +99,15 @@ export async function issueEvacueeQr(input: IssueEvacueeQrInput): Promise<Issued
 	// FR-EQR-16: the evacuee must exist before anything is written.
 	const ev = await adminRaw(`/${db}/${encodeURIComponent(evacuee_id)}`, 'GET');
 	if (ev.status === 404) throw new ServiceError('NOT_FOUND', 'Evacuee not found');
-	if (ev.status >= 400) throw serviceErrorFromCouch('read evacuee', ev.status, ev.data);
+	if (ev.status >= 400) throw couchFailure('read evacuee', ev.status, ev.data);
 
 	const docId = evacueeQrDocId(evacuee_id);
 	for (let attempt = 0; attempt < EVACUEE_QR_MAX_ATTEMPTS; attempt++) {
 		const existing = await readDoc(db, docId);
+		// A foreign doc squatting this _id (wrong type / no prints) must fail loudly, not spread undefined.
+		if (existing && (existing.type !== 'evacuee_qr' || !Array.isArray(existing.prints))) {
+			throw new ServiceError('CONFLICT', 'evacuee_qr id is occupied by another document');
+		}
 		const stamp = nextStamp(existing?.prints ?? [], Date.now());
 		const entry: EvacueeQrPrint = {
 			printed_at: stamp.printed_at,
@@ -117,7 +130,7 @@ export async function issueEvacueeQr(input: IssueEvacueeQrInput): Promise<Issued
 				};
 		const res = await adminRaw(`/${db}/${encodeURIComponent(docId)}`, 'PUT', doc);
 		if (res.status === 409) continue; // FR-EQR-19: re-read, re-stamp, retry
-		if (res.status >= 400) throw serviceErrorFromCouch('issue evacuee QR', res.status, res.data);
+		if (res.status >= 400) throw couchFailure('issue evacuee QR', res.status, res.data);
 		return { evacuee_id, qr_payload: `${evacuee_id}@${stamp.hash}`, printed_at: stamp.printed_at };
 	}
 	throw new ServiceError('CONFLICT', 'Could not issue QR: too many concurrent writes, retry');

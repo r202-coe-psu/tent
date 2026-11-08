@@ -83,11 +83,10 @@ describe('FamilyBatchPrint', () => {
 		expect(issue).not.toHaveBeenCalled();
 	});
 
-	it('shows a station-printer button per member plus one for the whole family', () => {
+	it('shows exactly one station-printer button: the family one (member cards hide theirs)', () => {
 		render();
 
-		// Two members in the fixture: one button each, then the family button.
-		expect(byTestId('station-print')).toHaveLength(3);
+		expect(byTestId('station-print')).toHaveLength(1);
 	});
 
 	it.each([

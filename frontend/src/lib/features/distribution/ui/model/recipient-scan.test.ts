@@ -42,6 +42,41 @@ function deps(overrides: Partial<RecipientScanDeps> = {}): RecipientScanDeps {
 	};
 }
 
+describe('resolveScannedRecipient handover-slip path (CR-233 W1)', () => {
+	const SLIP = `/onsite/medical-screening/${evacuee._id}`;
+	const prints = [{ printed_at: '2026-11-08T01:00:00.000Z', hash: 'abcdef' }];
+
+	it('rejects a slip once a Person QR was printed, without resolving the recipient', async () => {
+		const d = deps({ listQrPrints: vi.fn().mockResolvedValue(prints) });
+		const result = await resolveScannedRecipient(SLIP, { allowVolunteer: false }, d);
+
+		expect(result).toMatchObject({ kind: 'error', expiredQr: true });
+		expect(d.lookupEvacuee).not.toHaveBeenCalled();
+	});
+
+	it('records the override when staff accept the expired slip', async () => {
+		const d = deps({ listQrPrints: vi.fn().mockResolvedValue(prints) });
+		const result = await resolveScannedRecipient(
+			SLIP,
+			{ allowVolunteer: false, acceptExpiredQr: true },
+			d
+		);
+
+		expect(result).toMatchObject({
+			kind: 'evacuee',
+			qrOverride: { issued_at: null, current_printed_at: prints[0].printed_at }
+		});
+		expect(d.lookupEvacuee).toHaveBeenCalledWith(evacuee._id);
+	});
+
+	it('still resolves a slip when no Person QR was ever printed', async () => {
+		const d = deps();
+		const result = await resolveScannedRecipient(SLIP, { allowVolunteer: false }, d);
+
+		expect(result).toMatchObject({ kind: 'evacuee' });
+	});
+});
+
 describe('resolveScannedRecipient', () => {
 	it('routes a volunteer pass QR to the volunteer lookup only', async () => {
 		const d = deps();

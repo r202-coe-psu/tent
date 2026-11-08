@@ -39,9 +39,12 @@ async function typeAndSubmit(code: string) {
 const dialogOpen = () => document.querySelector('[role="dialog"]') !== null;
 const alertText = () => document.querySelector('[role="alert"]')?.textContent?.trim();
 
-afterEach(() => {
-	if (instance) unmount(instance);
+afterEach(async () => {
+	if (instance) await unmount(instance);
 	instance = null;
+	// bits-ui releases its body scroll lock on a timer after unmount; let it fire while `document`
+	// still exists, or it throws `document is not defined` after happy-dom is torn down.
+	await new Promise((resolve) => setTimeout(resolve, 50));
 	document.body.innerHTML = '';
 });
 

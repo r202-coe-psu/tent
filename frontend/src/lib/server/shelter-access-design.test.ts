@@ -1305,6 +1305,20 @@ describe('buildValidateDocUpdate', () => {
 			);
 		});
 
+		it('reserves the evacuee_qr: _id prefix for evacuee_qr documents', () => {
+			const squatter = {
+				...envelope,
+				_id: 'evacuee_qr:01JC8ZQ4V6M2N5R7T9XBDEFGH0',
+				type: 'evacuee'
+			};
+			expectForbidden(() => compile()(squatter, null, REGISTRATION), /prefix is reserved/);
+			expectForbidden(() => compile()(squatter, null, COUCH_ADMIN), /prefix is reserved/);
+			// Deleting a squatter stays possible for an admin.
+			expect(() =>
+				compile()({ _id: squatter._id, _deleted: true }, squatter, COUCH_ADMIN)
+			).not.toThrow();
+		});
+
 		it('requires _id prefix, matching evacuee_id and this shelter', () => {
 			expectForbidden(
 				() => compile()({ ...one, _id: 'evacuee:01JC8ZQ4V6M2N5R7T9XBDEFGH0' }, null, COUCH_ADMIN),
@@ -4534,6 +4548,18 @@ describe('buildValidateDocUpdate', () => {
 								DISTRIBUTION
 							),
 						/recipient_qr_override must be/
+					);
+				});
+
+				it('rejects an overridden_by that is not the creating actor (FR-EQR-48)', () => {
+					expectForbidden(
+						() =>
+							compile()(
+								overridden({ recipient_qr_override: { ...audit, overridden_by: 'someone-else' } }),
+								null,
+								DISTRIBUTION
+							),
+						/overridden_by must match the current actor/
 					);
 				});
 

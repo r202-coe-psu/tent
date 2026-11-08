@@ -1,10 +1,10 @@
 import {
 	checkPersonQr,
+	extractScanPersonQr,
 	staffPersonQrRejectionMessage,
 	type Evacuee,
 	type EvacueeQrPrintsReader
 } from '$lib/features/people';
-import { parsePersonQr } from '$lib/utils/evacuee-qr';
 import {
 	isStaffCardScanCode,
 	parseStaffCardPayload,
@@ -131,9 +131,9 @@ export async function resolveScannedRecipient(
 	}
 
 	// Person QR `evacuee:{ULID}[@hash6]` (CR-233 FR-EQR-27/34): expired / invalid never resolves a
-	// recipient. Bare ULIDs are registration tickets and skip the rule (FR-EQR-31). The id passed
+	// recipient. A handover-slip path (`/onsite/medical-screening/evacuee:…`) is a hash-less Person QR. Bare ULIDs are registration tickets and skip the rule (FR-EQR-31). The id passed
 	// onward has no `@` (FR-EQR-6).
-	const personQr = parsePersonQr(code);
+	const personQr = extractScanPersonQr(code);
 	let qrOverride: QrOverrideDates | undefined;
 	if (personQr) {
 		const verdict = await checkPersonQr(personQr, deps.listQrPrints);

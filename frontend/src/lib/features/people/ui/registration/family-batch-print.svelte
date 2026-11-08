@@ -145,10 +145,9 @@
 	// button's follow-up state: printing the family again would duplicate labels.
 	let printing = $state(false);
 	let retryHeld = $state(false);
-	// Latest QR issued per member (by the family button or a card), shown in each card's preview.
+	// Latest QR issued per member by the family button, shown in each card's preview.
 	let issuedByMember = $state<Record<string, string | undefined>>({});
-	let memberLocks = $state<Record<string, boolean>>({});
-	const leaveLocked = $derived(printing || retryHeld || Object.values(memberLocks).some(Boolean));
+	const leaveLocked = $derived(printing || retryHeld);
 
 	function isHead(member: Evacuee, index: number): boolean {
 		if (household.head_evacuee_id) {
@@ -214,11 +213,8 @@
 				evacuee={member}
 				embedded={true}
 				dismissible={false}
+				printable={false}
 				bind:issuedPayload={issuedByMember[member._id]}
-				stationOnly={true}
-				printSource="walk_in"
-				qrSource="family_batch"
-				onLockedChange={(v) => (memberLocks[member._id] = v)}
 				onClose={onDone}
 			/>
 		</section>

@@ -85,7 +85,7 @@ afterEach(() => {
 });
 
 const clickRender = async () => {
-	// Member cards come first in the DOM; the family button is the last one.
+	// The family button is the only printer button on the page.
 	const buttons = document.querySelectorAll<HTMLButtonElement>('[data-testid="render-labels"]');
 	buttons[buttons.length - 1].click();
 	await flush();
@@ -159,23 +159,5 @@ describe('FamilyBatchPrint card previews', () => {
 
 		expect(captions()).toHaveLength(2);
 		for (const text of captions()) expect(text).toContain('QR ล่าสุดที่ออกให้');
-	});
-
-	it('prints one member through the card button, issuing only that member', async () => {
-		issueAll();
-		const buttons = document.querySelectorAll<HTMLButtonElement>('[data-testid="render-labels"]');
-
-		buttons[1].click();
-		await flush();
-
-		expect(issue).toHaveBeenCalledTimes(1);
-		expect(issue).toHaveBeenCalledWith({
-			shelter_code: expect.any(String),
-			source: 'family_batch',
-			evacuee_ids: [B]
-		});
-		const [first, second] = captions();
-		expect(first).toContain('QR จริงจะออกใหม่เมื่อกดพิมพ์');
-		expect(second).toContain('QR ล่าสุดที่ออกให้');
 	});
 });

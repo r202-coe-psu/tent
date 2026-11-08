@@ -395,6 +395,12 @@ ${consentVduClause()}
   // CR-233 FR-EQR-38/39: evacuee_qr is the Person QR print log. Written only by the server with the
   // admin credential (issueEvacueeQr); these rules run BEFORE the _admin bypass so even the server
   // can only append (prefix kept, printed_at strictly increasing, unique hash6) and never delete.
+  // The evacuee_qr: _id prefix is reserved: another type squatting an evacuee_qr:{ULID} id would make
+  // issueEvacueeQr fail permanently for that person (no prints array to append to).
+  if (typeof newDoc._id === 'string' && newDoc._id.indexOf('evacuee_qr:') === 0 &&
+      newDoc._deleted !== true && newDoc.type !== 'evacuee_qr') {
+    throw { forbidden: 'The evacuee_qr: _id prefix is reserved for evacuee_qr documents' };
+  }
   if (newDoc.type === 'evacuee_qr' || (oldDoc && oldDoc.type === 'evacuee_qr')) {
     if (!isCouchAdmin) {
       throw { forbidden: 'evacuee_qr is written by the server only' };
@@ -2381,6 +2387,10 @@ ${consentVduClause()}
           typeof qrOverride.overridden_by !== 'string' || !qrOverride.overridden_by ||
           typeof qrOverride.overridden_at !== 'string') {
         throw { forbidden: 'distribution_log.recipient_qr_override must be {issued_at, current_printed_at, overridden_by, overridden_at}' };
+      }
+      // FR-EQR-48: the risk taker is the actor creating the log, never a client-supplied name.
+      if (!oldDoc && qrOverride.overridden_by !== userCtx.name) {
+        throw { forbidden: 'distribution_log.recipient_qr_override.overridden_by must match the current actor' };
       }
     }
     if (oldDoc && oldDoc.type === 'distribution_log' &&

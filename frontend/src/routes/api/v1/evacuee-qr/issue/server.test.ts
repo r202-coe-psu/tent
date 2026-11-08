@@ -78,6 +78,8 @@ describe('POST /api/v1/evacuee-qr/issue', () => {
 		['empty ids', { ...good, evacuee_ids: [] }],
 		['31 ids', { ...good, evacuee_ids: Array.from({ length: 31 }, (_, i) => `evacuee:${i}`) }],
 		['duplicate ids', { ...good, evacuee_ids: [ID_A, ID_A] }],
+		['malformed id', { ...good, evacuee_ids: ['evacuee:not-a-ulid'] }],
+		['bad shelter code', { ...good, shelter_code: 'SH001/../x' }],
 		['no shelter', { ...good, shelter_code: '' }]
 	])('422 for %s', async (_n, body) => {
 		expect((await call(body)).status).toBe(422);
@@ -101,6 +103,20 @@ describe('POST /api/v1/evacuee-qr/issue', () => {
 			source: 'family_batch',
 			printed_by: 'staff01'
 		});
+	});
+
+	it('503 DEPENDENCY_UNAVAILABLE when CouchDB is down for the whole request', async () => {
+		vi.mocked(service.issueEvacueeQr).mockRejectedValue(
+			new ServiceError('DEPENDENCY_UNAVAILABLE', 'Could not read evacuee')
+		);
+		const res = await call({ ...good, evacuee_ids: [ID_A, ID_B] });
+		expect(res.status).toBe(503);
+		expect((await res.json()).error.code).toBe('DEPENDENCY_UNAVAILABLE');
+	});
+
+	it('503 when the CouchDB request itself fails (network)', async () => {
+		vi.mocked(service.issueEvacueeQr).mockRejectedValue(new TypeError('fetch failed'));
+		expect((await call(good)).status).toBe(503);
 	});
 
 	it('marks an item failed when issuing throws CONFLICT', async () => {

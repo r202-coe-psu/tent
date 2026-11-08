@@ -78,6 +78,16 @@ describe('extractScanPersonQr', () => {
 			hash6: null
 		});
 		expect(extractScanPersonQr(ULID)).toBeNull();
+		// Handover-slip / path forms carrying an evacuee id are hash-less (legacy) Person QRs.
+		for (const raw of [
+			`/onsite/medical-screening/evacuee:${ULID}`,
+			`https://x.test/onsite/zoning/evacuee:${ULID}`,
+			`/onsite/people?evacuee_id=evacuee:${ULID}`
+		]) {
+			expect(extractScanPersonQr(raw)).toEqual({ evacuee_id: `evacuee:${ULID}`, hash6: null });
+		}
+		// A path with a bare ULID (registration ticket) stays exempt, as do non-ULID ids.
+		expect(extractScanPersonQr(`/onsite/zoning/${ULID}`)).toBeNull();
 		expect(extractScanPersonQr('/onsite/zoning/evacuee:ABC')).toBeNull();
 	});
 });
