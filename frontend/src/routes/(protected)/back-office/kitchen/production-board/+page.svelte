@@ -1,8 +1,7 @@
 <script lang="ts">
-	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
 	import Hammer from '@lucide/svelte/icons/hammer';
 	import { resolve } from '$app/paths';
-	import { Button } from '$lib/components/ui/button';
+	import BackLink from '$lib/components/back-link.svelte';
 
 	// Production board (BOM / recipe editor) is not wired to real meal_plan docs yet.
 	// Gated behind a "coming soon" state until it reads/writes persisted data — the
@@ -14,22 +13,18 @@
 	<title>กระดานการผลิต (เร็วๆ นี้) · SmartShelter</title>
 </svelte:head>
 
-<div class="flex min-h-full flex-col items-center justify-center gap-4 p-10 text-center">
-	<div class="rounded-full bg-muted p-4">
-		<Hammer class="h-8 w-8 text-muted-foreground" />
+<div class="flex min-h-full flex-col p-10">
+	<BackLink href={resolve('/back-office/kitchen')} label="กลับไปครัวกลางและอาหาร" class="-ml-3" />
+	<div class="flex flex-1 flex-col items-center justify-center gap-4 text-center">
+		<div class="rounded-full bg-muted p-4">
+			<Hammer class="h-8 w-8 text-muted-foreground" />
+		</div>
+		<div>
+			<h1 class="text-lg font-bold">กระดานการผลิต</h1>
+			<p class="mt-1 max-w-md text-sm text-muted-foreground">
+				ฟีเจอร์จัดการสูตรมาตรฐาน (BOM) และการผลิตต่อมื้อกำลังพัฒนา —
+				จะเปิดใช้งานเมื่อเชื่อมต่อกับข้อมูลแผนอาหารจริงแล้ว
+			</p>
+		</div>
 	</div>
-	<div>
-		<h1 class="text-lg font-bold">กระดานการผลิต</h1>
-		<p class="mt-1 max-w-md text-sm text-muted-foreground">
-			ฟีเจอร์จัดการสูตรมาตรฐาน (BOM) และการผลิตต่อมื้อกำลังพัฒนา —
-			จะเปิดใช้งานเมื่อเชื่อมต่อกับข้อมูลแผนอาหารจริงแล้ว
-		</p>
-	</div>
-	<Button variant="outline" onclick={() => history.back()}>
-		<ArrowLeft class="mr-1.5 h-3.5 w-3.5" />
-		กลับ
-	</Button>
-	<a href={resolve('/back-office/kitchen')} class="text-xs text-muted-foreground underline">
-		ไปที่หน้าครัวกลาง
-	</a>
 </div>

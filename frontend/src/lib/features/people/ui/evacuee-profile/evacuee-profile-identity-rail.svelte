@@ -10,7 +10,7 @@
 	import {
 		evacueeAgeYears,
 		formatPersonName,
-		genderLabelTh,
+		genderLabel,
 		maskNationalId,
 		zoneLabel,
 		type Evacuee,
@@ -20,7 +20,10 @@
 	import { useShelter } from '$lib/features/shelters';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
 	import { getShelterCode } from '$lib/db/shelter';
-	import { COUNTRIES } from '$lib/utils/country';
+	import { getCountryName } from '$lib/utils/country';
+	import { getTranslation } from '$lib/utils/i18n';
+	import { langState } from '$lib/states/i18n.svelte';
+	import { EVACUEE_PROFILE_I18N } from '../_constants/evacuee-profile.i18n';
 	import EvacueePhoto from '../shared/evacuee-photo.svelte';
 
 	interface StatusInfo {
@@ -68,10 +71,11 @@
 
 	const ageYears = $derived(evacueeAgeYears(evacuee));
 	const displayName = $derived(formatPersonName(evacuee));
+	const t = $derived(getTranslation(EVACUEE_PROFILE_I18N, langState.current).identityRail);
 	const countryName = $derived(
-		COUNTRIES.find((c) => c.value === evacuee.country)?.label ?? evacuee.country
+		evacuee.country ? getCountryName(evacuee.country, langState.current) : ''
 	);
-	const genderLabel = $derived(genderLabelTh(evacuee.gender));
+	const genderText = $derived(genderLabel(evacuee.gender, langState.current));
 	const hasIllnessAlert = $derived(
 		(medical !== null && (medical.conditions.length > 0 || !!medical.notes)) ||
 			(screening !== null && screening.symptoms.length > 0) ||
@@ -80,11 +84,11 @@
 	const specialNeeds = $derived(evacuee.special_needs ?? []);
 	const emergencyLine = $derived.by(() => {
 		const contact = evacuee.emergency_contact;
-		if (!contact) return 'ไม่ระบุ';
+		if (!contact) return t.unspecified;
 		const parts = [contact.name, contact.phone, contact.relation]
 			.map((p) => (p ?? '').trim())
 			.filter(Boolean);
-		return parts.length > 0 ? parts.join(' · ') : 'ไม่ระบุ';
+		return parts.length > 0 ? parts.join(' · ') : t.unspecified;
 	});
 </script>
 
@@ -108,8 +112,8 @@
 				{#if !readonly}
 					<button
 						type="button"
-						aria-label="แก้ไขข้อมูลส่วนบุคคล"
-						title="แก้ไขข้อมูลส่วนบุคคล"
+						aria-label={t.editPersonalAria}
+						title={t.editPersonalAria}
 						onclick={onOpenPersonalEdit}
 						class="inline-flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-lg text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900 focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none"
 					>
@@ -135,7 +139,7 @@
 					class="inline-flex items-center gap-1 rounded-md border border-slate-200/80 bg-slate-50 px-2 py-0.5 text-xs font-semibold text-slate-700"
 				>
 					<MapPin class="size-3 shrink-0 text-[#0A2647]" />
-					โซน {zoneLabel(evacuee.current_stay.zone, shelterZones)}
+					{t.zone(zoneLabel(evacuee.current_stay.zone, shelterZones))}
 				</span>
 			</div>
 
@@ -146,7 +150,7 @@
 						<span
 							class="inline-flex items-center gap-1 rounded-full border border-red-200 bg-red-50 px-2 py-0.5 text-xs font-semibold text-red-700"
 						>
-							เฝ้าระวังสุขภาพ
+							{t.healthWatch}
 						</span>
 					{/if}
 					{#each specialNeeds as need (need)}
@@ -164,27 +168,27 @@
 	<!-- Compact personal snapshot -->
 	<div class="space-y-1 border-t border-slate-200/80 pt-3 text-sm text-slate-700">
 		<p class="break-words">
-			<span class="font-semibold text-slate-900">{genderLabel}</span>
+			<span class="font-semibold text-slate-900">{genderText}</span>
 			{#if ageYears !== null}
 				<span aria-hidden="true"> · </span>
-				<span class="tabular-nums">อายุ {ageYears} ปี</span>
+				<span class="tabular-nums">{t.ageYears(ageYears)}</span>
 			{/if}
 			<span aria-hidden="true"> · </span>
-			<span class="break-words">{countryName || 'ไม่ระบุสัญชาติ'}</span>
+			<span class="break-words">{countryName || t.noNationality}</span>
 		</p>
-		<p class="break-words">โทร: {evacuee.phone || 'ไม่มีเบอร์'}</p>
+		<p class="break-words">{t.phone(evacuee.phone || t.noPhone)}</p>
 		<p class="truncate text-slate-600" title={shelterName}>{shelterName}</p>
 		<div class="flex items-start gap-1.5 pt-0.5">
 			<ShieldAlert class="mt-0.5 size-3.5 shrink-0 text-amber-700" />
 			<p class="min-w-0 break-words text-slate-700">
-				<span class="font-semibold text-amber-900">ฉุกเฉิน:</span>
+				<span class="font-semibold text-amber-900">{t.emergency}</span>
 				{emergencyLine}
 			</p>
 			{#if !readonly}
 				<button
 					type="button"
-					aria-label="แก้ไขข้อมูลติดต่อฉุกเฉิน"
-					title="แก้ไขข้อมูลติดต่อฉุกเฉิน"
+					aria-label={t.editEmergencyAria}
+					title={t.editEmergencyAria}
 					onclick={onOpenEmergencyEdit}
 					class="inline-flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-lg text-slate-500 transition-colors hover:bg-amber-50 hover:text-slate-900 focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none"
 				>
@@ -205,7 +209,7 @@
 						? 'min-h-11'
 						: 'min-h-10'} w-full cursor-pointer items-center justify-center rounded-xl border border-amber-400 bg-transparent px-3 py-2 text-sm font-semibold text-amber-800 transition-colors hover:bg-amber-50 focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none"
 				>
-					ย้ายโซน
+					{t.changeZone}
 				</button>
 				<button
 					type="button"
@@ -217,7 +221,7 @@
 					{#if statusInfo}
 						<span class="size-1.5 shrink-0 rounded-full {statusInfo.dotClass}"></span>
 					{/if}
-					เปลี่ยนสถานะ
+					{t.changeStatus}
 					{#if statusInfo}
 						<span class="text-xs opacity-80">({statusInfo.shortLabel})</span>
 					{/if}
@@ -230,7 +234,7 @@
 						: 'min-h-10'} w-full cursor-pointer items-center justify-center gap-1.5 rounded-xl border border-slate-200/80 bg-white px-3 py-2 text-sm font-semibold text-slate-800 transition-colors hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none"
 				>
 					<Printer class="size-4 opacity-75" />
-					พิมพ์ QR
+					{t.printQr}
 				</button>
 				<button
 					type="button"
@@ -240,7 +244,7 @@
 						: 'min-h-10'} w-full cursor-pointer items-center justify-center gap-1.5 rounded-xl border border-slate-200/80 bg-white px-3 py-2 text-sm font-semibold text-slate-800 transition-colors hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none"
 				>
 					<FileText class="size-4 opacity-75" />
-					พิมพ์ใบส่งตัว
+					{t.printSlip}
 				</button>
 			</div>
 		{:else}
@@ -252,7 +256,7 @@
 					: 'min-h-10'} w-full cursor-pointer items-center justify-center gap-1.5 rounded-xl border border-slate-200/80 bg-white px-3 py-2 text-sm font-semibold text-slate-800 transition-colors hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none"
 			>
 				<ExternalLink class="size-4 opacity-75" />
-				ดูข้อมูลเต็ม
+				{t.viewFull}
 			</button>
 		{/if}
 	</div>

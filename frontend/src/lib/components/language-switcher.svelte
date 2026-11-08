@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { languageStore, type LanguageCode } from '$lib/stores/language.svelte';
+	import { languageStore } from '$lib/stores/language.svelte';
 	import { cn } from '$lib/utils/shadcn';
 
 	let {
@@ -8,40 +8,27 @@
 		class?: string;
 	} = $props();
 
-	const languages: { code: LanguageCode; label: string; flag: string; title: string }[] = [
-		{ code: 'th', label: 'TH', flag: '🇹🇭', title: 'ภาษาไทย (Thai)' },
-		{ code: 'en', label: 'EN', flag: '🇬🇧', title: 'English (อังกฤษ)' }
-	];
+	const isThai = $derived(languageStore.current === 'th');
 
-	function selectLanguage(code: LanguageCode) {
-		languageStore.setLanguage(code);
+	// Accessible name starts with the visible text (WCAG 2.5.3) and names the target language in
+	// that language, so a reader who only knows it can still find the way back.
+	const label = $derived(isThai ? 'TH — Switch to English' : 'EN — เปลี่ยนเป็นภาษาไทย');
+
+	function toggleLanguage() {
+		languageStore.setLanguage(isThai ? 'en' : 'th');
 	}
 </script>
 
-<div
-	role="group"
-	aria-label="Language selection"
+<!-- One pill that shows the current language and flips TH ⇄ EN (the public navbar's look). -->
+<button
+	type="button"
+	onclick={toggleLanguage}
+	aria-label={label}
+	title={label}
 	class={cn(
-		'inline-flex items-center rounded-lg border border-border/80 bg-muted/50 p-0.5 text-xs font-medium shadow-2xs select-none',
+		'inline-flex min-h-8 min-w-11 cursor-pointer items-center justify-center rounded-full border border-slate-300 bg-white px-3 py-1 text-xs font-bold text-[#0A2647] shadow-2xs transition-all select-none hover:border-slate-400 hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none active:scale-95',
 		className
 	)}
 >
-	{#each languages as lang (lang.code)}
-		{@const isActive = languageStore.current === lang.code}
-		<button
-			type="button"
-			onclick={() => selectLanguage(lang.code)}
-			title={lang.title}
-			aria-pressed={isActive}
-			class={cn(
-				'inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition-all focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none active:scale-95',
-				isActive
-					? 'bg-background font-bold text-foreground shadow-xs'
-					: 'text-muted-foreground hover:bg-background/40 hover:text-foreground'
-			)}
-		>
-			<span class="text-sm leading-none">{lang.flag}</span>
-			<span class="tracking-wide uppercase">{lang.label}</span>
-		</button>
-	{/each}
-</div>
+	{isThai ? 'TH' : 'EN'}
+</button>

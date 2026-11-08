@@ -6,5 +6,9 @@
  * carry Svelte components.
  */
 export * from './domain/consent';
-export { CONSENT_COPY, CONSENT_NOTICE_VERSION } from './domain/consent-notice.i18n';
+export {
+	CONSENT_BLOCK_I18N,
+	CONSENT_COPY,
+	CONSENT_NOTICE_VERSION
+} from './domain/consent-notice.i18n';
 export * from './domain/consent-backfill';

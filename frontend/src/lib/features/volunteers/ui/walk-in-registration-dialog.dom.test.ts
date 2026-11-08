@@ -58,7 +58,8 @@ vi.mock('$lib/stores/auth.svelte', () => ({
 }));
 vi.mock('$lib/db/shelter', () => ({ getShelterCode: () => 'SH001' }));
 vi.mock('$lib/stores/shelter.svelte', () => ({ shelterStore: { selectedShelterCode: 'SH001' } }));
-vi.mock('$lib/features/shelters', () => ({
+vi.mock('$lib/features/shelters', async (importOriginal) => ({
+	...(await importOriginal<typeof import('$lib/features/shelters')>()),
 	useShelter: () => ({ data: { name: 'ศูนย์ทดสอบ' } })
 }));
 vi.mock('$lib/features/people', async (importOriginal) => ({

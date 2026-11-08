@@ -17,6 +17,9 @@
 	import { zod4 } from 'sveltekit-superforms/adapters';
 	import { imageRepository } from '$lib/features/images';
 	import PersonalInfoFields from '../forms/personal-info-fields.svelte';
+	import { getTranslation } from '$lib/utils/i18n';
+	import { langState } from '$lib/states/i18n.svelte';
+	import { EVACUEE_PROFILE_MODALS_I18N } from '../_constants/evacuee-profile-modals.i18n';
 	import ModalEscapeListener from '../shared/modal-escape-listener.svelte';
 
 	export type EvacueePersonalEditData = {
@@ -47,6 +50,8 @@
 		onClose: () => void;
 		onSave: (data: EvacueePersonalEditData) => Promise<void>;
 	} = $props();
+
+	const t = $derived(getTranslation(EVACUEE_PROFILE_MODALS_I18N, langState.current).personal);
 
 	const currentYearBE = new Date().getFullYear() + 543;
 	const initial = untrack(() => ({
@@ -213,16 +218,16 @@
 		};
 		const validation = await validateForm({ update: true, focusOnError: true });
 		if (!validation.valid) {
-			toast.error('กรุณากรอกข้อมูลให้ถูกต้องและครบถ้วน');
+			toast.error(t.invalidForm);
 			return;
 		}
 
 		if (!noPhone && !isThaiMobilePhone(phone)) {
-			toast.error('กรุณากรอกเบอร์โทรศัพท์ 10 หลัก หรือเลือกไม่มีเบอร์โทร');
+			toast.error(t.invalidPhone);
 			return;
 		}
 		if (cardType === 'national_id' && cardNumber && digits(cardNumber).length !== 13) {
-			toast.error('เลขประจำตัวประชาชนต้องมี 13 หลัก');
+			toast.error(t.invalidNationalId);
 			return;
 		}
 
@@ -234,7 +239,7 @@
 			parsedAge !== undefined &&
 			(!Number.isFinite(parsedAge) || parsedAge < 0 || parsedAge > 150)
 		) {
-			toast.error('อายุต้องอยู่ระหว่าง 0 ถึง 150 ปี');
+			toast.error(t.invalidAge);
 			return;
 		}
 		// Birth-year range and age ↔ birth-year (±1) are enforced by evacueePersonalEditFormSchema (CR-148)
@@ -280,14 +285,14 @@
 			<header class="flex items-start justify-between border-b border-border px-5 py-4">
 				<div>
 					<h3 id="personal-modal-title" class="text-base font-bold text-foreground">
-						แก้ไขข้อมูลส่วนบุคคล
+						{t.title}
 					</h3>
-					<p class="mt-1 text-xs text-muted-foreground">ข้อมูลระบุตัวตนและช่องทางติดต่อหลัก</p>
+					<p class="mt-1 text-xs text-muted-foreground">{t.subtitle}</p>
 				</div>
 				<button
 					type="button"
-					aria-label="ปิด"
-					title="ปิด"
+					aria-label={t.close}
+					title={t.close}
 					onclick={onClose}
 					class="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
 				>
@@ -298,7 +303,7 @@
 			<div class="min-h-0 space-y-5 overflow-y-auto p-5">
 				<div class="grid gap-5 md:grid-cols-[132px_1fr]">
 					<div class="space-y-2">
-						<span class="text-xs font-medium text-foreground">รูปถ่าย</span>
+						<span class="text-xs font-medium text-foreground">{t.photo}</span>
 						<input
 							id="evacuee-photo"
 							type="file"
@@ -313,13 +318,13 @@
 							{#if selectedPhotoUrl || (storedPhotoUrl && !removePhoto)}
 								<img
 									src={selectedPhotoUrl ?? storedPhotoUrl ?? ''}
-									alt="ตัวอย่างรูปผู้พักพิง"
+									alt={t.photoAlt}
 									class="size-full object-cover transition-transform duration-300 group-hover:scale-105"
 								/>
 							{:else}
 								<div class="flex flex-col items-center gap-2 text-muted-foreground">
 									<Camera class="size-6" />
-									<span class="text-xs">เลือกรูป</span>
+									<span class="text-xs">{t.choosePhoto}</span>
 								</div>
 							{/if}
 						</label>
@@ -329,7 +334,8 @@
 								onclick={clearPhoto}
 								class="inline-flex w-full items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-semibold text-destructive transition-colors hover:bg-destructive/10"
 							>
-								<Trash2 class="size-3.5" /> ลบรูป
+								<Trash2 class="size-3.5" />
+								{t.removePhoto}
 							</button>
 						{/if}
 					</div>
@@ -366,9 +372,9 @@
 			</div>
 
 			<footer class="flex justify-end gap-2 border-t border-border px-5 py-4">
-				<Button type="button" variant="outline" onclick={onClose}>ยกเลิก</Button>
+				<Button type="button" variant="outline" onclick={onClose}>{t.cancel}</Button>
 				<Button type="button" disabled={saving} onclick={save}>
-					{saving ? 'กำลังบันทึก...' : 'บันทึกข้อมูลส่วนบุคคล'}
+					{saving ? t.saving : t.save}
 				</Button>
 			</footer>
 		</div>

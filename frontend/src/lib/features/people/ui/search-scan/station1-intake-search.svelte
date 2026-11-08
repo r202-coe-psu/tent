@@ -13,6 +13,8 @@
 	import { Input } from '$lib/components/ui/input';
 	import { getShelterCode } from '$lib/db/shelter';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
+	import { langState } from '$lib/states/i18n.svelte';
+	import { getTranslation } from '$lib/utils/i18n';
 	import {
 		ClaimDialog,
 		UnassignedQueueBadge,
@@ -27,25 +29,14 @@
 
 	import { useSearchEvacuees } from '../../application/queries';
 	import {
-		INTAKE_SEARCH_PLACEHOLDER,
-		NEW_REGISTRATION_CTA_LABEL,
-		NEW_REG_LOCKED_HINT,
-		NEW_REG_OVERRIDE_TRIGGER_LABEL,
-		NEW_REG_POOL_ERROR_LOCKED_HINT,
-		OVERRIDE_NEW_REG_BODY,
-		OVERRIDE_NEW_REG_CANCEL,
-		OVERRIDE_NEW_REG_CONFIRM,
-		OVERRIDE_NEW_REG_POOL_ERROR_BODY,
-		OVERRIDE_NEW_REG_TITLE,
-		POOL_CLAIM_FORBIDDEN_HINT,
-		POOL_VERIFY_ERROR_COPY,
-		REPORT_IN_CTA_LABEL,
+		intakeSearchCopyByLanguage,
 		hasFederatedIntakeHits,
 		isIntakeNewRegistrationLocked,
 		resolveNewRegistrationCta,
 		resolveShelterHitAction
 	} from '../../domain/intake-search';
 	import { formatPersonName, maskNationalId, zoneLabel } from '../../domain/people';
+	import { STATION1_INTAKE_I18N } from '../_constants/station1-intake.i18n';
 	import { useShelter } from '$lib/features/shelters';
 	import RegisteredViaBadge from '../shared/registered-via-badge.svelte';
 	import StayStatusBadge from '../shared/stay-status-badge.svelte';
@@ -68,6 +59,10 @@
 		/** Triggered when Enter is pressed on raw barcode scan. */
 		onCodeEnter?: (code: string) => void;
 	} = $props();
+
+	const lang = $derived(langState.current);
+	const t = $derived(getTranslation(STATION1_INTAKE_I18N, lang));
+	const copy = $derived(intakeSearchCopyByLanguage[lang]);
 
 	let debouncedQuery = $state('');
 	let claimOpen = $state(false);
@@ -124,10 +119,8 @@
 		})
 	);
 	const shelterCode = $derived(shelterStore.selectedShelterCode ?? getShelterCode());
-	const overrideDialogBody = $derived(
-		poolError ? OVERRIDE_NEW_REG_POOL_ERROR_BODY : OVERRIDE_NEW_REG_BODY
-	);
-	const lockedHint = $derived(poolError ? NEW_REG_POOL_ERROR_LOCKED_HINT : NEW_REG_LOCKED_HINT);
+	const overrideDialogBody = $derived(poolError ? copy.overridePoolErrorBody : copy.overrideBody);
+	const lockedHint = $derived(poolError ? copy.newRegPoolErrorLockedHint : copy.newRegLockedHint);
 
 	$effect(() => {
 		onNewRegistrationLockedChange?.(hardLocked);
@@ -181,7 +174,7 @@
 			{/if}
 			<Input
 				type="text"
-				placeholder={INTAKE_SEARCH_PLACEHOLDER}
+				placeholder={copy.searchPlaceholder}
 				bind:value={query}
 				onkeydown={(e) => {
 					if (e.key === 'Enter') {
@@ -193,14 +186,14 @@
 					}
 				}}
 				class="h-12 rounded-xl border-slate-200/80 bg-white pr-10 pl-11 text-base shadow-xs"
-				aria-label={INTAKE_SEARCH_PLACEHOLDER}
+				aria-label={copy.searchPlaceholder}
 			/>
 			{#if query}
 				<button
 					type="button"
 					class="absolute top-1/2 right-3 -translate-y-1/2 text-muted-foreground hover:text-slate-700"
 					onclick={clearSearch}
-					aria-label="ล้างคำค้น"
+					aria-label={t.clearSearchAria}
 				>
 					<X class="size-4" />
 				</button>
@@ -214,7 +207,7 @@
 				onclick={onScanClick}
 			>
 				<Camera class="size-5 text-primary" />
-				<span class="hidden sm:inline">สแกน QR</span>
+				<span class="hidden sm:inline">{t.scanQr}</span>
 			</Button>
 		{/if}
 	</div>
@@ -222,13 +215,13 @@
 	{#if isSearching}
 		<div class="flex items-center justify-center gap-2 py-10 text-sm text-slate-500">
 			<Loader2 class="size-4 animate-spin" />
-			กำลังค้นหา...
+			{t.searching}
 		</div>
 	{:else if hasSearched}
 		<div class="flex flex-col gap-5">
 			{#if localHits.length > 0}
 				<section class="space-y-3">
-					<h2 class="text-base font-semibold text-slate-900">ในศูนย์นี้</h2>
+					<h2 class="text-base font-semibold text-slate-900">{t.thisShelter}</h2>
 					<ul class="space-y-2.5">
 						{#each localHits as evacuee (evacuee._id)}
 							{@const action = resolveShelterHitAction(evacuee.current_stay.status)}
@@ -240,23 +233,22 @@
 										{formatPersonName(evacuee)}
 									</p>
 									<div class="flex flex-wrap items-center gap-2 text-sm text-slate-500">
-										<span class="text-xs">สถานะ:</span>
+										<span class="text-xs">{t.statusLabel}</span>
 										<StayStatusBadge status={evacuee.current_stay.status} size="sm" />
 										{#if evacuee.current_stay.zone}
 											<span class="text-xs text-muted-foreground"
-												>· โซน {zoneLabel(evacuee.current_stay.zone, shelterZones)}</span
+												>· {t.zoneName(zoneLabel(evacuee.current_stay.zone, shelterZones))}</span
 											>
 										{/if}
 										{#if evacuee.person_id?.number}
 											<span class="text-xs text-muted-foreground">
-												· เลขบัตร: <span class="tabular-nums"
-													>{maskNationalId(evacuee.person_id.number)}</span
-												>
+												· {t.idCardLabel}
+												<span class="tabular-nums">{maskNationalId(evacuee.person_id.number)}</span>
 											</span>
 										{/if}
 										{#if evacuee.phone}
 											<span class="text-xs text-muted-foreground">
-												· โทร: <span class="tabular-nums">{evacuee.phone}</span>
+												· {t.phoneLabel} <span class="tabular-nums">{evacuee.phone}</span>
 											</span>
 										{/if}
 									</div>
@@ -268,7 +260,7 @@
 										onclick={() => goReportIn(evacuee._id)}
 									>
 										<Zap class="size-4" />
-										{REPORT_IN_CTA_LABEL}
+										{copy.reportInCta}
 									</Button>
 								{:else}
 									<Button
@@ -278,7 +270,7 @@
 										class="h-11 w-full shrink-0 sm:h-9 sm:w-auto"
 										onclick={() => goProfile(evacuee._id)}
 									>
-										ดูสถานะ
+										{t.viewStatus}
 									</Button>
 								{/if}
 							</li>
@@ -289,7 +281,7 @@
 
 			<section class="space-y-3">
 				<div class="flex flex-wrap items-center gap-2">
-					<h2 class="text-base font-semibold text-slate-900">คิวกลาง</h2>
+					<h2 class="text-base font-semibold text-slate-900">{t.centralQueue}</h2>
 					<UnassignedQueueBadge compact />
 				</div>
 
@@ -297,9 +289,9 @@
 					<div
 						class="flex flex-col items-center justify-center gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-8 text-center text-sm text-amber-950 shadow-xs"
 					>
-						<p>{POOL_VERIFY_ERROR_COPY}</p>
+						<p>{copy.poolVerifyError}</p>
 						<Button type="button" variant="outline" size="sm" onclick={() => poolSearch.refetch()}>
-							ลองอีกครั้ง
+							{t.retry}
 						</Button>
 					</div>
 				{:else if poolHits.length > 0}
@@ -313,7 +305,7 @@
 											<RegisteredViaBadge via={hit.registered_via} />
 										</div>
 										<p class="text-xs text-muted-foreground">
-											ลงทะเบียนเมื่อ {formatClaimCreatedAt(hit.created_at)}
+											{t.registeredAt(formatClaimCreatedAt(hit.created_at))}
 										</p>
 									</div>
 									{#if canClaimPool}
@@ -324,11 +316,11 @@
 											class="h-11 w-full shrink-0 sm:h-9 sm:w-auto"
 											onclick={() => openClaimModal(hit)}
 										>
-											รับเข้าศูนย์
+											{t.claimIntoShelter}
 										</Button>
 									{:else}
 										<p class="text-xs text-muted-foreground sm:max-w-[12rem] sm:text-right">
-											{POOL_CLAIM_FORBIDDEN_HINT}
+											{copy.poolClaimForbiddenHint}
 										</p>
 									{/if}
 								</div>
@@ -337,10 +329,10 @@
 										<li class="text-sm">
 											<p class="font-medium text-slate-900">{formatOpenMemberName(member)}</p>
 											<p class="text-xs text-muted-foreground tabular-nums">
-												{formatOpenMemberIdentityLine(member)}
+												{formatOpenMemberIdentityLine(member, lang)}
 											</p>
 											<p class="text-xs text-muted-foreground">
-												{formatOpenMemberDemographicsLine(member)}
+												{formatOpenMemberDemographicsLine(member, lang)}
 											</p>
 											{#if member.vulnerable_groups.length > 0 || member.special_needs.length > 0}
 												<div class="mt-1 flex flex-wrap gap-1.5">
@@ -348,7 +340,7 @@
 														<span
 															class="rounded-md border border-rose-200 bg-rose-50 px-1.5 py-0.5 text-xs text-rose-900"
 														>
-															{formatOpenMemberVulnerableGroup(code)}
+															{formatOpenMemberVulnerableGroup(code, lang)}
 														</span>
 													{/each}
 													{#each member.special_needs as need (need)}
@@ -367,7 +359,7 @@
 						{/each}
 					</ul>
 				{:else if localHits.length > 0}
-					<p class="text-sm text-slate-500">ไม่พบในคิวกลาง</p>
+					<p class="text-sm text-slate-500">{t.notFoundInPool}</p>
 				{/if}
 			</section>
 
@@ -376,15 +368,15 @@
 					class="flex flex-col items-stretch gap-3 rounded-xl border border-slate-200/80 bg-white p-5 shadow-xs sm:items-center sm:text-center"
 				>
 					<div class="space-y-1">
-						<h3 class="text-lg font-bold text-slate-900">ไม่พบรายการ</h3>
-						<p class="text-sm text-slate-500">ลงทะเบียนใหม่ได้ทันที</p>
+						<h3 class="text-lg font-bold text-slate-900">{t.notFoundTitle}</h3>
+						<p class="text-sm text-slate-500">{t.registerNowHint}</p>
 					</div>
 					<Button
 						href={resolve('/onsite/people/new')}
 						class="h-12 w-full gap-2 text-base font-semibold sm:max-w-sm"
 					>
 						<UserPlus class="size-5" />
-						{NEW_REGISTRATION_CTA_LABEL}
+						{copy.newRegistrationCta}
 					</Button>
 				</div>
 			{:else if newRegCta === 'outlined_override'}
@@ -395,7 +387,7 @@
 					class="h-10 w-full gap-2 border-amber-300 bg-amber-50 text-amber-950 hover:bg-amber-100 sm:w-auto"
 				>
 					<UserPlus class="size-4" />
-					{NEW_REGISTRATION_CTA_LABEL}
+					{copy.newRegistrationCta}
 				</Button>
 			{:else if hardLocked}
 				<div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -407,7 +399,7 @@
 						class="h-10 shrink-0 text-slate-700"
 						onclick={() => (overrideDialogOpen = true)}
 					>
-						{NEW_REG_OVERRIDE_TRIGGER_LABEL}
+						{copy.newRegOverrideTrigger}
 					</Button>
 				</div>
 			{/if}
@@ -420,12 +412,12 @@
 <AlertDialog.Root bind:open={overrideDialogOpen}>
 	<AlertDialog.Content>
 		<AlertDialog.Header>
-			<AlertDialog.Title>{OVERRIDE_NEW_REG_TITLE}</AlertDialog.Title>
+			<AlertDialog.Title>{copy.overrideTitle}</AlertDialog.Title>
 			<AlertDialog.Description>{overrideDialogBody}</AlertDialog.Description>
 		</AlertDialog.Header>
 		<AlertDialog.Footer>
-			<AlertDialog.Cancel>{OVERRIDE_NEW_REG_CANCEL}</AlertDialog.Cancel>
-			<AlertDialog.Action onclick={confirmOverride}>{OVERRIDE_NEW_REG_CONFIRM}</AlertDialog.Action>
+			<AlertDialog.Cancel>{copy.overrideCancel}</AlertDialog.Cancel>
+			<AlertDialog.Action onclick={confirmOverride}>{copy.overrideConfirm}</AlertDialog.Action>
 		</AlertDialog.Footer>
 	</AlertDialog.Content>
 </AlertDialog.Root>

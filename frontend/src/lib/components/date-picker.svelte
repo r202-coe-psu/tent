@@ -13,10 +13,11 @@
 	import * as Popover from '$lib/components/ui/popover/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { cn } from '$lib/utils/shadcn.js';
+	import { langState } from '$lib/states/i18n.svelte';
 
 	let {
 		value = $bindable(''),
-		placeholder = 'เลือกวันที่',
+		placeholder,
 		disabled = false,
 		id,
 		min,
@@ -42,6 +43,8 @@
 	} = $props();
 
 	let open = $state(false);
+
+	const defaultPlaceholder = $derived(langState.current === 'en' ? 'Select date' : 'เลือกวันที่');
 
 	/** `''` / malformed input must not throw — the field starts empty. */
 	function toDateValue(iso: string): DateValue | undefined {
@@ -76,7 +79,7 @@
 				)}
 			>
 				<CalendarIcon class="mr-2 size-4 opacity-60" />
-				{selected ? format(value) : placeholder}
+				{selected ? format(value) : (placeholder ?? defaultPlaceholder)}
 			</Button>
 		{/snippet}
 	</Popover.Trigger>
