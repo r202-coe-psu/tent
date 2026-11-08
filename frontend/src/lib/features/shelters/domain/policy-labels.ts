@@ -67,3 +67,67 @@ export const petCategoryConditions: Record<PetCategory, PetCondition[]> = {
 };
 
 export const petCategoryOrder: PetCategory[] = ['small_general', 'large_dog', 'livestock'];
+
+export type PolicyLabelSet = {
+	luggage: Record<LuggageRule, string>;
+	parking: Record<ParkingRule, string>;
+	petCategory: Record<PetCategory, string>;
+	petCondition: Record<PetCondition, string>;
+};
+
+/**
+ * English mirror of the label maps above, for read-side surfaces with a language toggle
+ * (public pre-register disclaimer). The Thai maps stay the source of truth — shelter-import
+ * matches on them, so never reword Thai here to fit a translation.
+ */
+const policyLabelsEn: PolicyLabelSet = {
+	luggage: {
+		valuables_self_responsibility:
+			'Valuables (e.g. cash, gold, jewellery, smartphones) must be kept on you and are 100% your own responsibility. The shelter is not liable for any loss.',
+		no_hazardous_items:
+			'Flammable materials, hazardous chemicals, illegal drugs and weapons of any kind are strictly prohibited (police will be notified if found).',
+		no_large_appliances:
+			'Large electrical appliances (e.g. refrigerators, TVs, washing machines) are not allowed in the living area.',
+		has_temp_storage_service:
+			'A temporary large-item storage point is available (with check-in / check-out registration).'
+	},
+	parking: {
+		no_liability: 'The shelter is not liable for loss of or damage to vehicles in any case.',
+		first_come_first_served: 'Parking is first come, first served until spaces are full.',
+		key_deposit_required:
+			'Vehicle owners must leave their keys at the command centre (so vehicles can be moved quickly in an emergency).',
+		no_blocking_emergency_lane: 'Never park blocking emergency vehicle or ambulance routes.',
+		ev_emergency_charging:
+			'EVs only: emergency charging is available at the shelter (time-limited).'
+	},
+	petCategory: {
+		small_general: '🐾 General / small pets (small dogs, cats, birds, fish)',
+		large_dog: '🐕 Large dogs / animals needing special control',
+		livestock: '🐄 Livestock / farm animals (cattle, buffalo, goats, pigs)'
+	},
+	petCondition: {
+		bring_own_cage: 'Bring your own cage / carrier / tank (the shelter has no equipment for pets).',
+		caged_or_leashed: 'Animals must be caged or leashed at all times.',
+		vaccine_book: 'Show a vaccination record (e.g. rabies vaccine).',
+		owner_hygiene: 'Owners must strictly take care of cleanliness and animal waste.',
+		closed_system_only: 'Enclosed only (animals may not roam freely).',
+		muzzle_and_leash: 'Must wear a muzzle and be leashed at all times.',
+		designated_zone_only: 'Owners must tie up / control animals in the designated zone only.',
+		vaccine_book_mandatory: 'A vaccination record must be shown (mandatory).',
+		aggressive_behavior_expel_right:
+			'If an animal behaves aggressively, the shelter reserves the right to ask it to leave.',
+		owner_provides_feed:
+			'Owners must bring their own feed / hay (the shelter has no animal supplies).',
+		tethered_designated_area_only: 'Must be tethered in the designated area only.'
+	}
+};
+
+export const policyLabelsByLanguage: { th: PolicyLabelSet; en: PolicyLabelSet } = {
+	th: {
+		luggage: luggageRuleLabels,
+		parking: parkingRuleLabels,
+		petCategory: petCategoryLabels,
+		petCondition: petConditionLabels
+	},
+	en: policyLabelsEn
+};

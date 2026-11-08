@@ -8,22 +8,13 @@
 		useSearchEvacuees,
 		maskNationalId,
 		canCheckInEvacuee,
-		canCheckOutEvacuee,
-		type StayStatus
+		canCheckOutEvacuee
 	} from '$lib/features/people';
+	import { langState } from '$lib/states/i18n.svelte';
+	import { getTranslation } from '$lib/utils/i18n';
+	import { SEARCH_SCAN_I18N } from '../_constants/search-scan.i18n';
 
-	const STATUS_SHORT: Record<StayStatus, string> = {
-		pre_registered: 'รอเช็คอิน',
-		kiosk_registered: 'ที่ตู้',
-		arriving: 'รอจัดโซน',
-		active: 'เช็คอิน',
-		room_confirmed: 'ยืนยันถึงโซน',
-		temporary_leave: 'ออกชั่วคราว',
-		transferred: 'ย้ายศูนย์',
-		checked_out: 'เช็คเอาต์',
-		deceased: 'เสียชีวิต',
-		cancelled: 'ยกเลิก'
-	};
+	const t = $derived(getTranslation(SEARCH_SCAN_I18N, langState.current).scanSearchModal);
 
 	let {
 		show,
@@ -78,7 +69,7 @@
 		<Dialog.Header class="border-b pb-4">
 			<Dialog.Title class="flex items-center gap-2 text-base font-black">
 				<Search class="size-5 text-emerald-500" />
-				ค้นหาผู้พักพิงเพื่อเช็คอิน / เช็คเอาต์
+				{t.title}
 			</Dialog.Title>
 		</Dialog.Header>
 
@@ -87,7 +78,7 @@
 				<Search class="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-slate-400" />
 				<Input
 					type="text"
-					placeholder="พิมพ์ชื่อ นามสกุล หรือหมายเลขโทรศัพท์..."
+					placeholder={t.placeholder}
 					bind:value={searchQueryText}
 					class="h-11 bg-slate-50 pl-9 text-sm dark:bg-slate-950"
 				/>
@@ -98,15 +89,15 @@
 			{#if isSearching}
 				<div class="flex flex-col items-center justify-center gap-2 py-10">
 					<Loader class="size-6 animate-spin text-emerald-500" />
-					<span class="text-xs font-semibold text-slate-500">กำลังสืบค้น...</span>
+					<span class="text-xs font-semibold text-slate-500">{t.searching}</span>
 				</div>
 			{:else if searchQueryText && searchResults.length === 0}
 				<p class="py-10 text-center text-xs font-semibold text-slate-500">
-					ไม่พบรายชื่อที่ตรงกับคำค้นหา
+					{t.noMatch}
 				</p>
 			{:else if !searchQueryText}
 				<p class="py-10 text-center text-xs font-semibold text-slate-400">
-					พิมพ์ข้อมูลเพื่อสืบค้นประวัติ
+					{t.prompt}
 				</p>
 			{:else}
 				{#each searchResults as evacuee (evacuee._id)}
@@ -119,8 +110,10 @@
 								{evacuee.last_name}
 							</h4>
 							<p class="mt-0.5 text-2xs font-semibold text-slate-400">
-								เลขบัตร: {maskNationalId(evacuee.person_id?.number) || 'ไม่ระบุ'} • โทร: {evacuee.phone ||
-									'ไม่ระบุ'}
+								{t.idAndPhone(
+									maskNationalId(evacuee.person_id?.number) || t.notSpecified,
+									evacuee.phone || t.notSpecified
+								)}
 							</p>
 						</div>
 						<div class="flex items-center gap-3">
@@ -132,14 +125,14 @@
 										? 'bg-amber-100 text-amber-800'
 										: 'bg-slate-100 text-slate-800'}"
 							>
-								{STATUS_SHORT[evacuee.current_stay.status]}
+								{t.statusShort[evacuee.current_stay.status]}
 							</span>
 							<Button
 								size="sm"
 								class="h-8 bg-emerald-500 px-3 text-xs font-bold text-white hover:bg-emerald-600"
 								onclick={() => onSelect(evacuee._id)}
 							>
-								เลือก
+								{t.select}
 							</Button>
 						</div>
 					</div>

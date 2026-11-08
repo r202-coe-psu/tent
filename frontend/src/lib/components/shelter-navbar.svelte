@@ -1,10 +1,16 @@
 <script lang="ts">
 	import * as Select from '$lib/components/ui/select';
 	import StaffAccountMenu from '$lib/components/staff-account-menu.svelte';
+	import LanguageSwitcher from '$lib/components/language-switcher.svelte';
 	import { useShelters } from '$lib/features/shelters';
 	import { shelterStore, persistSelectedShelter } from '$lib/stores/shelter.svelte';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { shelterCodesFromRoles, isSystemAdmin } from '$lib/auth/roles';
+	import { STAFF_CHROME_I18N } from '$lib/constants/i18n/staff-chrome';
+	import { langState } from '$lib/states/i18n.svelte';
+	import { getTranslation } from '$lib/utils/i18n';
+
+	const t = $derived(getTranslation(STAFF_CHROME_I18N, langState.current).navbar);
 
 	const sheltersQuery = useShelters();
 
@@ -18,7 +24,7 @@
 	);
 
 	const selectedShelterName = $derived(
-		allowedShelters.find((s) => s.code === selectedCode)?.name ?? 'เลือกศูนย์พักพิง'
+		allowedShelters.find((s) => s.code === selectedCode)?.name ?? t.selectShelter
 	);
 
 	$effect(() => {
@@ -43,7 +49,7 @@
 </script>
 
 <nav
-	class="flex h-[52px] w-full items-center justify-between gap-3 bg-[#0A2647] px-6 text-white shadow-sm"
+	class="flex h-[52px] w-full items-center justify-between gap-2 bg-[#0A2647] px-3 text-white shadow-sm sm:gap-3 sm:px-6"
 >
 	<div class="flex min-w-0 shrink items-center gap-2.5">
 		<img
@@ -56,9 +62,9 @@
 
 	<div class="flex min-w-0 items-center gap-2">
 		{#if sheltersQuery.isPending}
-			<span class="pr-2 text-sm font-medium text-white/80">กำลังโหลด...</span>
+			<span class="pr-2 text-sm font-medium text-white/80">{t.loading}</span>
 		{:else if sheltersQuery.isError}
-			<span class="pr-2 text-sm font-medium text-red-400">เกิดข้อผิดพลาดในการโหลดข้อมูล</span>
+			<span class="pr-2 text-sm font-medium text-red-400">{t.loadError}</span>
 		{:else if sheltersQuery.data}
 			<Select.Root type="single" value={selectedCode ?? ''} onValueChange={onShelterChange}>
 				<Select.Trigger
@@ -77,6 +83,8 @@
 				</Select.Content>
 			</Select.Root>
 		{/if}
+
+		<LanguageSwitcher class="shrink-0" />
 
 		<StaffAccountMenu
 			class="text-white hover:bg-white/5 focus-visible:ring-offset-[#0A2647] [&_svg]:text-white/80 [&>span:first-child]:bg-white/15 [&>span:first-child]:text-white"

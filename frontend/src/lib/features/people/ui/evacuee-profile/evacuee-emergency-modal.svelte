@@ -8,6 +8,9 @@
 	import { defaults, superForm } from 'sveltekit-superforms';
 	import { zod4 } from 'sveltekit-superforms/adapters';
 	import EmergencyContactFields from '../forms/emergency-contact-fields.svelte';
+	import { getTranslation } from '$lib/utils/i18n';
+	import { langState } from '$lib/states/i18n.svelte';
+	import { EVACUEE_PROFILE_MODALS_I18N } from '../_constants/evacuee-profile-modals.i18n';
 	import ModalEscapeListener from '../shared/modal-escape-listener.svelte';
 
 	export type EvacueeEmergencyEditData = {
@@ -31,6 +34,8 @@
 		onClose: () => void;
 		onSave: (data: EvacueeEmergencyEditData) => Promise<void>;
 	} = $props();
+
+	const t = $derived(getTranslation(EVACUEE_PROFILE_MODALS_I18N, langState.current).emergency);
 
 	const initial = untrack(() => ({
 		name: evacuee.emergency_contact?.name ?? '',
@@ -69,14 +74,14 @@
 		$formData = { name, phone, relation };
 		const validation = await validateForm({ update: true, focusOnError: true });
 		if (!validation.valid) {
-			toast.error('กรุณากรอกข้อมูลผู้ติดต่อให้ถูกต้องและครบถ้วน');
+			toast.error(t.invalidForm);
 			return;
 		}
 		const contactProvided = Boolean(
 			validation.data.name || validation.data.phone || validation.data.relation
 		);
 		if (contactProvided && (!name.trim() || !isThaiMobilePhone(phone) || !relation.trim())) {
-			toast.error('กรุณากรอกชื่อ เบอร์โทร 10 หลัก และความสัมพันธ์ให้ครบ');
+			toast.error(t.incompleteContact);
 			return;
 		}
 
@@ -110,12 +115,12 @@
 		>
 			<header class="flex items-start justify-between border-b border-border px-5 py-4">
 				<h3 id="emergency-modal-title" class="text-base font-bold text-foreground">
-					แก้ไขผู้ติดต่อฉุกเฉิน
+					{t.title}
 				</h3>
 				<button
 					type="button"
-					aria-label="ปิด"
-					title="ปิด"
+					aria-label={t.close}
+					title={t.close}
 					onclick={onClose}
 					class="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
 				>
@@ -138,9 +143,9 @@
 			</div>
 
 			<footer class="flex justify-end gap-2 border-t border-border px-5 py-4">
-				<Button type="button" variant="outline" onclick={onClose}>ยกเลิก</Button>
+				<Button type="button" variant="outline" onclick={onClose}>{t.cancel}</Button>
 				<Button type="button" disabled={saving} onclick={save}>
-					{saving ? 'กำลังบันทึก...' : 'บันทึกผู้ติดต่อ'}
+					{saving ? t.saving : t.save}
 				</Button>
 			</footer>
 		</div>

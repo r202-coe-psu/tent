@@ -34,7 +34,6 @@ function ev(partial: {
 	} as Evacuee;
 }
 
-const CHECKLIST = ['เช็คอิน', 'คัดกรอง', 'ที่พัก'] as const;
 const ZONES = [{ code: 'A', name: 'โซนเอ อาคารเรียน', short_name: 'เอ' }];
 
 describe('buildEvacueeQrLabel', () => {
@@ -42,15 +41,14 @@ describe('buildEvacueeQrLabel', () => {
 		expect(
 			buildEvacueeQrLabel(ev({ status: 'active', zone: 'A' }), {
 				zones: ZONES,
-				hasScreening: true,
-				checklist: CHECKLIST
+				hasScreening: true
 			})
 		).toEqual({
 			qrPayload: 'evacuee:abc123',
 			label: {
 				name: 'สมชาย ใจดี',
 				zone: 'เอ',
-				checklist: ['เช็คอิน', 'คัดกรอง', 'ที่พัก'],
+				emergencyPhone: null,
 				checkedCount: 3
 			}
 		});
@@ -59,8 +57,7 @@ describe('buildEvacueeQrLabel', () => {
 	it('leaves the zone null when none is assigned', () => {
 		const { label } = buildEvacueeQrLabel(ev({ status: 'arriving' }), {
 			zones: ZONES,
-			hasScreening: true,
-			checklist: CHECKLIST
+			hasScreening: true
 		});
 		expect(label.zone).toBeNull();
 	});
@@ -68,9 +65,17 @@ describe('buildEvacueeQrLabel', () => {
 	it('ticks fewer boxes when the evacuee has no screening', () => {
 		const { label } = buildEvacueeQrLabel(ev({ status: 'arriving' }), {
 			zones: ZONES,
-			hasScreening: false,
-			checklist: CHECKLIST
+			hasScreening: false
 		});
 		expect(label.checkedCount).toBe(1);
+	});
+
+	it('prints the emergency contact phone as digits only', () => {
+		const evacuee = {
+			...ev({ status: 'active', zone: 'A' }),
+			emergency_contact: { name: 'แม่', phone: '081-234 5678' }
+		} as Evacuee;
+		const { label } = buildEvacueeQrLabel(evacuee, { zones: ZONES, hasScreening: true });
+		expect(label.emergencyPhone).toBe('0812345678');
 	});
 });
