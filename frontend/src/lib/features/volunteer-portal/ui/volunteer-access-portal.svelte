@@ -537,7 +537,8 @@
 			Boolean(session?.token) &&
 			Boolean(activity.assignmentId) &&
 			activity.dispatchStatus !== 'dispatched' &&
-			['assigned', 'standby'].includes(activity.status)
+			['assigned', 'standby'].includes(activity.status) &&
+			!ticketActionsFor(activity)
 		);
 	}
 
@@ -1405,33 +1406,31 @@
 											</div>
 										{/if}
 									</div>
-									{#if ticketActionsFor(activity)}
-										{@const actions = ticketActionsFor(activity)!}
+									{#if ticketActionsFor(activity) || canCheckIn(activity) || canCheckOut(activity) || canWithdraw(activity)}
+										{@const actions = ticketActionsFor(activity)}
 										<div class="flex w-full flex-col gap-2 md:w-56">
-											<a
-												href={resolve(
-													`/volunteer/ticket/${encodeURIComponent(session?.token ?? '')}?application=${encodeURIComponent(actions.applicationId)}`
-												)}
-												data-testid="open-ticket"
-												class="flex items-center justify-center gap-2 rounded-xl border border-primary/30 px-4 py-2.5 text-xs font-bold text-primary hover:bg-primary/5"
-											>
-												<Ticket class="size-4" /> เปิดตั๋ว
-											</a>
-											{#if actions.canCancel}
-												<button
-													type="button"
-													data-testid="cancel-application"
-													onclick={() =>
-														(pendingCancel = { activity, applicationId: actions.applicationId })}
-													class="rounded-xl border border-destructive/30 px-4 py-2.5 text-xs font-bold text-destructive hover:bg-destructive/5"
+											{#if actions}
+												<a
+													href={resolve(
+														`/volunteer/ticket/${encodeURIComponent(session?.token ?? '')}?application=${encodeURIComponent(actions.applicationId)}`
+													)}
+													data-testid="open-ticket"
+													class="flex items-center justify-center gap-2 rounded-xl border border-primary/30 px-4 py-2.5 text-xs font-bold text-primary hover:bg-primary/5"
 												>
-													ยกเลิก
-												</button>
+													<Ticket class="size-4" /> เปิดตั๋ว
+												</a>
+												{#if actions.canCancel}
+													<button
+														type="button"
+														data-testid="cancel-application"
+														onclick={() =>
+															(pendingCancel = { activity, applicationId: actions.applicationId })}
+														class="rounded-xl border border-destructive/30 px-4 py-2.5 text-xs font-bold text-destructive hover:bg-destructive/5"
+													>
+														ยกเลิก
+													</button>
+												{/if}
 											{/if}
-										</div>
-									{/if}
-									{#if canCheckIn(activity) || canCheckOut(activity) || canWithdraw(activity)}
-										<div class="flex w-full flex-col gap-2 md:w-56">
 											{#if canCheckIn(activity)}
 												<button
 													type="button"
