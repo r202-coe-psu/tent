@@ -5,5 +5,12 @@
  * without pulling in browser-specific dependencies.
  */
 
-export { isItemMaster, itemMasterUnit, requiresExpiry, DEFAULT_ITEM_UNIT } from './domain/catalog';
-export type { ItemMaster } from './domain/catalog';
+export {
+	isItemMaster,
+	itemMasterUnit,
+	requiresExpiry,
+	qtyToBaseUnit,
+	packagingMultiplier,
+	DEFAULT_ITEM_UNIT
+} from './domain/catalog';
+export type { ItemMaster, PackagingSource } from './domain/catalog';
