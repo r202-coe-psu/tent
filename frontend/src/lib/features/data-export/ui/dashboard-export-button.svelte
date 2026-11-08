@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { toast } from 'svelte-sonner';
-	import Download from '@lucide/svelte/icons/download';
+	import Share from '@lucide/svelte/icons/share';
 	import Loader2 from '@lucide/svelte/icons/loader-circle';
 	import { Button } from '$lib/components/ui/button';
 	import { canAccessManagerPages } from '$lib/auth/roles';
@@ -60,11 +60,13 @@
 
 	async function onExport() {
 		if (!ready || exporting) return;
+		// Narrow once, locally — `ready` already guarantees all four are loaded.
+		if (!occupancy.data || !demographics.data || !registrations.data || !stationTimes.data) return;
 		const data = {
-			occupancy: occupancy.data!,
-			demographics: demographics.data!,
-			registrations: registrations.data!,
-			stationTimes: stationTimes.data!
+			occupancy: occupancy.data,
+			demographics: demographics.data,
+			registrations: registrations.data,
+			stationTimes: stationTimes.data
 		};
 		exporting = true;
 		try {
@@ -82,11 +84,11 @@
 </script>
 
 {#if allowed}
-	<Button variant="outline" disabled={!ready || exporting} onclick={onExport}>
+	<Button variant="outline" disabled={!ready || exporting} aria-busy={exporting} onclick={onExport}>
 		{#if exporting}
 			<Loader2 class="h-4 w-4 animate-spin" />
 		{:else}
-			<Download class="h-4 w-4" />
+			<Share class="h-4 w-4" />
 		{/if}
 		Export Excel
 	</Button>
