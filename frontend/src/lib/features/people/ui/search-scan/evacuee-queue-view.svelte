@@ -285,8 +285,7 @@
 			<p class="mt-0.5 text-2xs text-slate-500">
 				{#if enableMedical}
 					{t.awaitingDoctor} {waitingMedicalCount} ·
-				{/if}{t.awaitingZone}
-				{waitingZoningCount}
+				{/if}{`${t.awaitingZone} ${waitingZoningCount}`}
 			</p>
 		</div>
 	</button>
