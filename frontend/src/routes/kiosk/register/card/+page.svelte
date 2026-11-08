@@ -10,7 +10,6 @@
 		abandonWalkIn,
 		buildKioskContextQuery,
 		cancelKioskFaceCheck,
-		getKioskDisplayContext,
 		KioskIdleTimeout,
 		KIOSK_IDLE_TIMEOUT_MS,
 		KIOSK_NOTICE_SECONDARY_ACTION,
@@ -31,10 +30,9 @@
 	import { languageStore } from '$lib/stores/language.svelte';
 	import { getTranslation } from '$lib/utils/i18n';
 	import { KIOSK_REGISTER_CARD_I18N } from './card-page.i18n';
-	const displayContext = $derived(
-		getKioskDisplayContext(readKioskDisplayQuery(page.url.searchParams))
+	const contextQuery = $derived(
+		buildKioskContextQuery(readKioskDisplayQuery(page.url.searchParams))
 	);
-	const contextQuery = $derived(buildKioskContextQuery(displayContext));
 	const t = $derived(getTranslation(KIOSK_REGISTER_CARD_I18N, languageStore.current));
 	const homeUrl = $derived(`/kiosk${contextQuery}`);
 	let ready = $state(false);

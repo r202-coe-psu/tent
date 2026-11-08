@@ -9,7 +9,6 @@
 	import { getTranslation } from '$lib/utils/i18n';
 	import {
 		buildKioskContextQuery,
-		getKioskDisplayContext,
 		KioskIdleTimeout,
 		KIOSK_IDLE_TIMEOUT_MS,
 		KIOSK_NOTICE_PRIMARY_ACTION,
@@ -34,10 +33,9 @@
 	/** How long «printed» stays on screen before the status card goes away. */
 	const PRINT_DONE_VISIBLE_MS = 2500;
 
-	const displayContext = $derived(
-		getKioskDisplayContext(readKioskDisplayQuery(page.url.searchParams))
+	const contextQuery = $derived(
+		buildKioskContextQuery(readKioskDisplayQuery(page.url.searchParams))
 	);
-	const contextQuery = $derived(buildKioskContextQuery(displayContext));
 	// Read before onMount forgets the walk-in: a ThaiD walk-in has no card in the reader, and the
 	// registration (QR + label text) only lives here. Empty on a reload: nothing left to print.
 	const viaThaid = walkInSession.source === 'thaid';

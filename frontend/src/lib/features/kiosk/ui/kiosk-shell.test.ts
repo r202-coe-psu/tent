@@ -27,11 +27,11 @@ function shellAt(path: string): string {
 describe('KioskShell language button', () => {
 	beforeEach(() => languageStore.setLanguage('th'));
 
-	it('links to the language picker, keeping the shelter context', () => {
-		const body = shellAt('/kiosk');
+	it('links to the language picker, keeping only the context that came in the URL', () => {
+		const body = shellAt('/kiosk?shelter_code=SH001&station_name=Station%201&secret=x');
 
 		expect(body).toContain('aria-label="เปลี่ยนภาษา / Change language"');
-		expect(body).toContain('href="/kiosk/language?shelter_name=');
+		expect(body).toContain('href="/kiosk/language?shelter_code=SH001&amp;station_name=Station+1"');
 		expect(body).toContain('ภาษา / Language');
 	});
 

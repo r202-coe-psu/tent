@@ -2,13 +2,12 @@
 	import { page } from '$app/state';
 	import {
 		buildKioskContextQuery,
-		getKioskDisplayContext,
 		KioskLanguagePicker,
 		readKioskDisplayQuery
 	} from '$lib/features/kiosk';
 
 	const contextQuery = $derived(
-		buildKioskContextQuery(getKioskDisplayContext(readKioskDisplayQuery(page.url.searchParams)))
+		buildKioskContextQuery(readKioskDisplayQuery(page.url.searchParams))
 	);
 </script>
 

@@ -6,7 +6,6 @@
 	import type { PageProps } from './$types';
 	import {
 		buildKioskContextQuery,
-		getKioskDisplayContext,
 		readKioskDisplayQuery,
 		IdentityMethodSelector,
 		KioskBannerAttract,
@@ -16,10 +15,9 @@
 	let { data }: PageProps = $props();
 
 	const t = $derived(getTranslation(KIOSK_HOME_PAGE_I18N, languageStore.current));
-	const displayContext = $derived(
-		getKioskDisplayContext(readKioskDisplayQuery(page.url.searchParams), languageStore.current)
+	const contextQuery = $derived(
+		buildKioskContextQuery(readKioskDisplayQuery(page.url.searchParams))
 	);
-	const contextQuery = $derived(buildKioskContextQuery(displayContext));
 </script>
 
 <svelte:head>

@@ -7,7 +7,6 @@
 		abandonWalkIn,
 		buildKioskContextQuery,
 		cancelKioskFaceCheck,
-		getKioskDisplayContext,
 		KioskBackButton,
 		KioskCheckInWizard,
 		KioskFaceCheck,
@@ -22,10 +21,9 @@
 	import { getTranslation } from '$lib/utils/i18n';
 	import { KIOSK_REGISTER_FACE_I18N } from './face-page.i18n';
 
-	const displayContext = $derived(
-		getKioskDisplayContext(readKioskDisplayQuery(page.url.searchParams))
+	const contextQuery = $derived(
+		buildKioskContextQuery(readKioskDisplayQuery(page.url.searchParams))
 	);
-	const contextQuery = $derived(buildKioskContextQuery(displayContext));
 	const homeUrl = $derived(`/kiosk${contextQuery}`);
 	const t = $derived(getTranslation(KIOSK_REGISTER_FACE_I18N, languageStore.current));
 	const faceCheck = walkInSession.faceCheckToRun;

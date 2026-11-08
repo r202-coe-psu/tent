@@ -35,10 +35,10 @@ describe('kiosk display context', () => {
 	it('serializes only the allowlisted context keys', () => {
 		const query = new URLSearchParams(
 			buildKioskContextQuery({
-				shelterName: 'ศูนย์/หนึ่ง',
-				shelterCode: 'SH001',
-				stationName: 'จุด 1',
-				deviceName: 'Kiosk 1'
+				shelter_name: 'ศูนย์/หนึ่ง',
+				shelter_code: 'SH001',
+				station_name: 'จุด 1',
+				device_name: 'Kiosk 1'
 			})
 		);
 
@@ -46,6 +46,21 @@ describe('kiosk display context', () => {
 		expect(query.get('shelter_name')).toBe('ศูนย์/หนึ่ง');
 		expect(query.get('shelter_code')).toBe('SH001');
 		expect(query.get('phone_check_in')).toBeNull();
+	});
+
+	it('keeps fallback names out of the URL so the next screen can word them per language', () => {
+		const contextQuery = buildKioskContextQuery(
+			readKioskDisplayQuery(new URLSearchParams('shelter_code=SH001&station_name=%20%20'))
+		);
+
+		expect(contextQuery).toBe('?shelter_code=SH001');
+		const next = readKioskDisplayQuery(new URLSearchParams(contextQuery));
+		expect(getKioskDisplayContext(next, 'en').shelterName).toBe('Shelter');
+		expect(getKioskDisplayContext(next, 'en').stationName).toBe('General screening point');
+	});
+
+	it('gives an empty query when there is no context', () => {
+		expect(buildKioskContextQuery({})).toBe('');
 	});
 
 	it('reads only the allowlisted keys and ignores unknown parameters', () => {

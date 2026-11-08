@@ -27,7 +27,9 @@
 	const displayContext = $derived(
 		getKioskDisplayContext(readKioskDisplayQuery(page.url.searchParams), languageStore.current)
 	);
-	const contextQuery = $derived(buildKioskContextQuery(displayContext));
+	const contextQuery = $derived(
+		buildKioskContextQuery(readKioskDisplayQuery(page.url.searchParams))
+	);
 	let gate = $state<GateInput | null>(null);
 	let ready = $state(false);
 	// Null until the scanner client has answered; the member list waits for it (see holdMembers).

@@ -27,7 +27,7 @@ function mountShell(compact: boolean) {
 
 beforeEach(() => {
 	vi.clearAllMocks();
-	pageState.url = new URL('http://kiosk.test/kiosk');
+	pageState.url = new URL('http://kiosk.test/kiosk?shelter_code=SH001');
 });
 afterEach(() => {
 	if (instance) unmount(instance);
@@ -41,7 +41,7 @@ describe('KioskShell language button (DOM)', () => {
 
 		expect(document.querySelector('header')).toBeNull();
 		const button = document.querySelector('[data-testid="kiosk-language-button"]')!;
-		expect(button.getAttribute('href')).toMatch(/^\/kiosk\/language\?/);
+		expect(button.getAttribute('href')).toBe('/kiosk/language?shelter_code=SH001');
 		expect(button.closest('div.border-b')?.textContent).toContain('ศูนย์พักพิง ศูนย์ A');
 	});
 

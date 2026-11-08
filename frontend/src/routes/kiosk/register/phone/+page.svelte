@@ -11,7 +11,6 @@
 	import {
 		abandonWalkIn,
 		buildKioskContextQuery,
-		getKioskDisplayContext,
 		KIOSK_NOTICE_PRIMARY_ACTION,
 		KIOSK_NOTICE_SECONDARY_ACTION,
 		KioskBackButton,
@@ -31,10 +30,9 @@
 
 	const t = $derived(getTranslation(KIOSK_REGISTER_PHONE_PAGE_I18N, languageStore.current));
 
-	const displayContext = $derived(
-		getKioskDisplayContext(readKioskDisplayQuery(page.url.searchParams))
+	const contextQuery = $derived(
+		buildKioskContextQuery(readKioskDisplayQuery(page.url.searchParams))
 	);
-	const contextQuery = $derived(buildKioskContextQuery(displayContext));
 	const homeUrl = $derived(`/kiosk${contextQuery}`);
 	const viaThaid = walkInSession.source === 'thaid';
 	let registering = $state(false);

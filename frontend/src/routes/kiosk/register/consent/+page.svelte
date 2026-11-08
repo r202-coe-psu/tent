@@ -10,7 +10,6 @@
 	import {
 		abandonWalkIn,
 		buildKioskContextQuery,
-		getKioskDisplayContext,
 		KioskIdleTimeout,
 		KIOSK_IDLE_TIMEOUT_MS,
 		KioskBackButton,
@@ -24,10 +23,9 @@
 	import { KIOSK_REGISTER_CONSENT_I18N } from './consent-page.i18n';
 
 	const t = $derived(getTranslation(KIOSK_REGISTER_CONSENT_I18N, languageStore.current));
-	const displayContext = $derived(
-		getKioskDisplayContext(readKioskDisplayQuery(page.url.searchParams))
+	const contextQuery = $derived(
+		buildKioskContextQuery(readKioskDisplayQuery(page.url.searchParams))
 	);
-	const contextQuery = $derived(buildKioskContextQuery(displayContext));
 	const homeUrl = $derived(`/kiosk${contextQuery}`);
 	const idleTimeout = new KioskIdleTimeout(KIOSK_IDLE_TIMEOUT_MS, returnHome);
 	/** Going on to the next walk-in step; any other way off this page abandons the walk-in. */

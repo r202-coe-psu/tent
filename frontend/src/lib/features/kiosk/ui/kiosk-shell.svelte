@@ -8,7 +8,7 @@
 	import { loadKioskHardware } from '../application/kiosk-qr-input';
 	import { isKioskHomePath, KIOSK_LANGUAGE_PATH, KIOSK_QR_PATH } from '../domain/identity-method';
 	import { qrInputPlan } from '../domain/kiosk-hardware';
-	import { buildKioskContextQuery } from '../domain/display-context';
+	import { buildKioskContextQuery, readKioskDisplayQuery } from '../domain/display-context';
 	import { KIOSK_COMPACT_MEDIA } from '../domain/kiosk-layout';
 	import { getTranslation } from '$lib/utils/i18n';
 	import { KIOSK_COMMON_I18N } from './_constants/kiosk-common.i18n';
@@ -75,7 +75,7 @@
 	// Home only: the picker always lands on the method page, so mid-visit it would drop the visit.
 	const showLanguageButton = $derived(isKioskHomePath(page.url.pathname));
 	const languageQuery = $derived(
-		buildKioskContextQuery({ shelterName, shelterCode, stationName, deviceName })
+		buildKioskContextQuery(readKioskDisplayQuery(page.url.searchParams))
 	);
 
 	const timeString = $derived(
