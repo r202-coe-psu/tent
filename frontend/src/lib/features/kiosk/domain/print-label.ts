@@ -166,8 +166,8 @@ export function ptToDots(pt: number): number {
 
 /**
  * Greedy line wrap for label text. Thai has no spaces, so `segments` should come from a word
- * segmenter; a segment wider than the line is split into graphemes. Overflow past `maxLines`
- * ends the last line with an ellipsis (matching CSS `line-clamp`).
+ * segmenter; a segment wider than the line is split into graphemes. A `\n` segment forces a
+ * break. Overflow past `maxLines` ends the last line with an ellipsis (matching CSS `line-clamp`).
  */
 export function wrapLabelText(
 	segments: readonly string[],
@@ -182,6 +182,11 @@ export function wrapLabelText(
 	const lines: string[] = [];
 	let current = '';
 	for (const piece of pieces) {
+		if (piece === '\n') {
+			if (current) lines.push(current.trimEnd());
+			current = '';
+			continue;
+		}
 		if (current === '' || measure(current + piece) <= maxWidth) {
 			current = (current + piece).trimStart();
 			continue;

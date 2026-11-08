@@ -127,10 +127,10 @@ export async function renderKioskLabelPng(label: KioskLabelContent): Promise<str
 	const nameSize = ptToDots(nameStyle.pt);
 	context.font = fonts.name;
 	const measure = (text: string) => context.measureText(text).width;
-	// Break between first and last name when each fits a line; the Thai word segmenter splits
-	// proper names mid-name, so it only cuts a part too wide for the column.
+	// Break between first and last name when each fits a line (always at a `\n`); the Thai word
+	// segmenter splits proper names mid-name, so it only cuts a part too wide for the column.
 	const nameSegments = label.name
-		.split(/(\s+)/)
+		.split(/(\n|[^\S\n]+)/)
 		.flatMap((part) => (measure(part.trim()) > layout.text.width ? words(part) : [part]));
 	const nameLines = wrapLabelText(
 		nameSegments,

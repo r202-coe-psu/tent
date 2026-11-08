@@ -246,4 +246,8 @@ describe('wrapLabelText', () => {
 	it('returns no lines for empty text', () => {
 		expect(wrapLabelText([], 5, measure, 2)).toEqual([]);
 	});
+
+	it('breaks at a newline segment even when the next piece fits', () => {
+		expect(wrapLabelText(['สมชาย', '\n', 'ใจดี'], 20, measure, 3)).toEqual(['สมชาย', 'ใจดี']);
+	});
 });

@@ -46,7 +46,7 @@ describe('buildEvacueeQrLabel', () => {
 		).toEqual({
 			qrPayload: 'evacuee:abc123',
 			label: {
-				name: 'สมชาย ใจดี',
+				name: 'สมชาย\nใจดี',
 				zone: 'เอ',
 				emergencyPhone: null,
 				checkedCount: 3
@@ -77,5 +77,13 @@ describe('buildEvacueeQrLabel', () => {
 		} as Evacuee;
 		const { label } = buildEvacueeQrLabel(evacuee, { zones: ZONES, hasScreening: true });
 		expect(label.emergencyPhone).toBe('0812345678');
+	});
+
+	it('prints the first name alone when there is no last name', () => {
+		const { label } = buildEvacueeQrLabel(ev({ status: 'arriving', last_name: '' }), {
+			zones: ZONES,
+			hasScreening: false
+		});
+		expect(label.name).toBe('สมชาย');
 	});
 });

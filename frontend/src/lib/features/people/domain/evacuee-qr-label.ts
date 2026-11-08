@@ -1,5 +1,5 @@
 import { intakeStationsPassed } from './intake-pipeline';
-import { formatPersonName, labelZoneName, type Evacuee, type ZoneLabelSource } from './people';
+import { labelZoneName, type Evacuee, type ZoneLabelSource } from './people';
 
 export type EvacueeQrLabelInput = {
 	/** The shelter's living zones, used to resolve the zone text; absent until loaded. */
@@ -12,6 +12,7 @@ export type EvacueeQrLabel = {
 	/** What the QR encodes: the evacuee document id. */
 	qrPayload: string;
 	label: {
+		/** First name, then the last name on its own line (`\n`-separated). */
 		name: string;
 		zone: string | null;
 		/** Emergency contact phone, digits only (the kiosk server's `toLabelIdentity` form); null if none. */
@@ -29,7 +30,10 @@ export function buildEvacueeQrLabel(evacuee: Evacuee, input: EvacueeQrLabelInput
 	return {
 		qrPayload: evacuee._id,
 		label: {
-			name: formatPersonName(evacuee),
+			name: [evacuee.first_name, evacuee.last_name ?? '']
+				.map((part) => part.trim())
+				.filter(Boolean)
+				.join('\n'),
 			zone: labelZoneName(evacuee.current_stay?.zone, input.zones),
 			emergencyPhone: evacuee.emergency_contact?.phone?.replace(/[\s-]/g, '') || null,
 			checkedCount: intakeStationsPassed(evacuee.current_stay, input.hasScreening)
