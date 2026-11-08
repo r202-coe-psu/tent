@@ -43,8 +43,12 @@ const identityStatusOf = (doc: ProfileDoc) =>
 		identity_verification: doc.identity_verification
 	});
 
-const unavailable = (what: string, detail?: string) =>
-	new ServiceError('DEPENDENCY_UNAVAILABLE', `อ่าน${what}ไม่สำเร็จ กรุณาลองใหม่`, detail);
+const unavailable = (what: string, detail?: string) => {
+	if (detail) console.error(`[cross-shelter] ${what} unavailable:`, detail);
+	return new ServiceError('DEPENDENCY_UNAVAILABLE', `อ่าน${what}ไม่สำเร็จ กรุณาลองใหม่`);
+};
+
+const SHELTER_CODE_RE = /^[A-Z0-9_-]{2,32}$/;
 
 /** Every shelter in the registry, closed and cancelled included (FR-2). No SH001 fallback: 503. */
 async function registryShelters(): Promise<ShelterRef[]> {
@@ -223,6 +227,9 @@ export async function findCrossShelterVerifications(
 	const volunteerId = asString(input.volunteer_id);
 	if (!shelterCode || !volunteerId) {
 		throw new ServiceError('VALIDATION', 'shelter_code and volunteer_id are required');
+	}
+	if (!SHELTER_CODE_RE.test(shelterCode)) {
+		throw new ServiceError('VALIDATION', 'Invalid shelter_code format');
 	}
 	if (!canAccessVolunteerBackoffice(caller.roles, shelterCode)) {
 		throw new ServiceError('FORBIDDEN', 'Requires volunteer back-office access in this shelter');

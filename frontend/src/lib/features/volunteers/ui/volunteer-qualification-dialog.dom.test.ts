@@ -214,6 +214,40 @@ describe('VolunteerQualificationDialog — results from other shelters (CR-228)'
 		);
 	});
 
+	it('preserves an existing accepted_from when the combined submit confirms verified (W2)', async () => {
+		await render({
+			identity_verification: {
+				status: 'verified',
+				reviewed_at: '2026-11-06T03:00:00.000Z',
+				reviewed_by: 'sm02',
+				notes: null,
+				accepted_from: { shelter_code: 'SH001', verified_at: '2026-10-20T03:20:00.000Z' }
+			},
+			skill_verifications: {
+				[MEDICAL]: {
+					status: 'verified',
+					reviewed_at: '2026-11-06T03:00:00.000Z',
+					reviewed_by: 'sm02',
+					notes: null,
+					credential_reference: 'ว.T12',
+					accepted_from: { shelter_code: 'SH001', verified_at: '2026-10-20T03:20:00.000Z' }
+				}
+			}
+		} as Partial<Volunteer>);
+		button('รับรองคุณสมบัติและทักษะควบคุม')!.click();
+		await settle();
+		expect(mocks.reviewIdentity).toHaveBeenCalledWith(
+			expect.objectContaining({
+				acceptedFrom: { shelter_code: 'SH001', verified_at: '2026-10-20T03:20:00.000Z' }
+			})
+		);
+		expect(mocks.reviewSkill).toHaveBeenCalledWith(
+			expect.objectContaining({
+				acceptedFrom: { shelter_code: 'SH001', verified_at: '2026-10-20T03:20:00.000Z' }
+			})
+		);
+	});
+
 	it('shows an accepted skill as using the other shelter license instead of the license field', async () => {
 		await render({
 			skill_verifications: {

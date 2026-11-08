@@ -242,22 +242,36 @@
 		if (isPending || needsReason) return;
 		const reviewNotes = notes.trim() || null;
 		const skillStatus: VerificationStatus = decision === 'controlled' ? 'verified' : 'rejected';
+		const identityStatusNext: VerificationStatus =
+			decision === 'rejected' ? 'rejected' : 'verified';
+
+		// Keep any previously accepted source unless the decision turns it down (W2 / anti-chaining).
+		const preservedIdentityAcceptedFrom =
+			identityStatusNext === 'rejected'
+				? undefined
+				: (volunteer.identity_verification?.accepted_from ?? undefined);
 
 		try {
 			// These writes must be sequential. Each repository call reads the latest
 			// CouchDB revision, so parallel writes could race on the same volunteer.
 			await identityReviewMutation.mutateAsync({
 				id: volunteer._id,
-				status: decision === 'rejected' ? 'rejected' : 'verified',
-				notes: reviewNotes
+				status: identityStatusNext,
+				notes: reviewNotes,
+				...(preservedIdentityAcceptedFrom ? { acceptedFrom: preservedIdentityAcceptedFrom } : {})
 			});
 			for (const skill of controlledSkills) {
+				const existingRecord = skillVerificationRecord(volunteer, skill.code);
+				const preservedSkillAcceptedFrom =
+					skillStatus === 'rejected' ? undefined : (existingRecord?.accepted_from ?? undefined);
+
 				await skillReviewMutation.mutateAsync({
 					id: volunteer._id,
 					skillCode: skill.code,
 					status: skillStatus,
 					notes: reviewNotes,
-					credentialReference: credentialReferenceValue(skill.code).trim() || null
+					credentialReference: credentialReferenceValue(skill.code).trim() || null,
+					...(preservedSkillAcceptedFrom ? { acceptedFrom: preservedSkillAcceptedFrom } : {})
 				});
 			}
 			toast.success(`${decisionLabel}แล้ว`);

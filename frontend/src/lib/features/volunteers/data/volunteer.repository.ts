@@ -151,10 +151,10 @@ export interface VolunteerRepository {
 	deactivate(id: string): Promise<Volunteer>;
 	/** Undo `deactivate` (#882): marks the profile active again using the latest `_rev`. */
 	reactivate(id: string): Promise<Volunteer>;
-	/** Record the reusable identity decision without changing job applications. */
 	/**
-	 * Record an identity decision. `acceptedFrom` marks a result accepted from another shelter
-	 * (CR-228 FR-8); without it the record is a check made at this shelter, replacing any mark.
+	 * Record the reusable identity decision without changing job applications.
+	 * `acceptedFrom` marks a result accepted from another shelter (CR-228 FR-8);
+	 * without it the record is a check made at this shelter, replacing any mark.
 	 */
 	reviewIdentity(
 		id: string,
