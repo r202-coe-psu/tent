@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Evacuee } from './people';
-import { buildEvacueeQrLabel } from './evacuee-qr-label';
+import { buildEvacueeQrLabel, EVACUEE_QR_PLACEHOLDER_PAYLOAD } from './evacuee-qr-label';
 
 function ev(partial: {
 	status: Evacuee['current_stay']['status'];
@@ -46,7 +46,7 @@ describe('buildEvacueeQrLabel', () => {
 				checklist: CHECKLIST
 			})
 		).toEqual({
-			qrPayload: 'evacuee:abc123',
+			qrPayload: EVACUEE_QR_PLACEHOLDER_PAYLOAD,
 			label: {
 				name: 'สมชาย ใจดี',
 				zone: 'เอ',
@@ -72,5 +72,15 @@ describe('buildEvacueeQrLabel', () => {
 			checklist: CHECKLIST
 		});
 		expect(label.checkedCount).toBe(1);
+	});
+
+	it('uses the issued payload when given, and a non-person placeholder otherwise (CR-233)', () => {
+		const e = ev({ status: 'arriving' });
+		const issued = 'evacuee:01JC8ZQ4V6M2N5R7T9XBDEFGH0@683508';
+		const input = { hasScreening: false, checklist: CHECKLIST };
+		expect(buildEvacueeQrLabel(e, { ...input, qrPayload: issued }).qrPayload).toBe(issued);
+		const placeholder = buildEvacueeQrLabel(e, input).qrPayload;
+		expect(placeholder).toBe(EVACUEE_QR_PLACEHOLDER_PAYLOAD);
+		expect(placeholder.startsWith('evacuee:')).toBe(false);
 	});
 });

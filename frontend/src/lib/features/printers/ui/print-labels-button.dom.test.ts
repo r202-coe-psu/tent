@@ -11,6 +11,7 @@ import {
 	PRINT_JOB_PICKUP_HINT_MS
 } from '../domain/print-job-timing';
 import { PrintApiError } from '../data/printers.api';
+import { ReportedRenderError } from '../domain/reported-error';
 import type { PrinterSummary } from '../domain/print-device.schema';
 import Harness from './__fixtures__/print-labels-button-harness.svelte';
 
@@ -737,6 +738,37 @@ describe('PrintLabelsButton', () => {
 			expect(retryHeld()).toBe('false');
 		}
 	);
+
+	it('adds no generic toast when renderLabels already reported its own failure', async () => {
+		stationPrinter.set('SH001', 'p1');
+		await render({
+			printers: [printer('p1')],
+			renderLabels: async () => {
+				throw new ReportedRenderError();
+			}
+		});
+
+		mainButton().click();
+		await settle();
+
+		expect(toast.error).not.toHaveBeenCalled();
+		expect(api.createPrintJob).not.toHaveBeenCalled();
+		expect(mainButton().disabled).toBe(false);
+	});
+
+	it('shows the generic toast when renderLabels throws an unreported error', async () => {
+		stationPrinter.set('SH001', 'p1');
+		await render({
+			printers: [printer('p1')],
+			renderLabels: async () => {
+				throw new Error('boom');
+			}
+		});
+
+		mainButton().click();
+		await vi.waitFor(() => expect(toast.error).toHaveBeenCalledTimes(1));
+		expect(api.createPrintJob).not.toHaveBeenCalled();
+	});
 
 	it('cancels while the labels are still rendering without sending anything', async () => {
 		stationPrinter.set('SH001', 'p1');

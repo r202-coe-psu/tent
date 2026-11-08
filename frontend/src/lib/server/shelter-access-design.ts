@@ -390,6 +390,71 @@ export function buildValidateDocUpdate(code: string): string {
     throw { forbidden: 'Daily SOP role assessment type cannot change' };
   }
 ${consentVduClause()}
+  // CR-233 FR-EQR-38/39: evacuee_qr is the Person QR print log. Written only by the server with the
+  // admin credential (issueEvacueeQr); these rules run BEFORE the _admin bypass so even the server
+  // can only append (prefix kept, printed_at strictly increasing, unique hash6) and never delete.
+  if (newDoc.type === 'evacuee_qr' || (oldDoc && oldDoc.type === 'evacuee_qr')) {
+    if (!isCouchAdmin) {
+      throw { forbidden: 'evacuee_qr is written by the server only' };
+    }
+    if (newDoc._deleted === true) {
+      throw { forbidden: 'Cannot delete evacuee_qr documents' };
+    }
+    if (oldDoc && newDoc.type !== 'evacuee_qr') {
+      throw { forbidden: 'Cannot change type of evacuee_qr document' };
+    }
+    if (typeof newDoc._id !== 'string' || newDoc._id.indexOf('evacuee_qr:') !== 0) {
+      throw { forbidden: 'evacuee_qr _id must start with evacuee_qr:' };
+    }
+    if (newDoc.schema_v !== 1) {
+      throw { forbidden: 'Unsupported evacuee_qr schema version' };
+    }
+    if (newDoc.shelter_code !== '${code}') {
+      throw { forbidden: 'shelter_code must be ${code}' };
+    }
+    if (newDoc.evacuee_id !== 'evacuee:' + newDoc._id.slice('evacuee_qr:'.length)) {
+      throw { forbidden: 'evacuee_qr evacuee_id must match _id' };
+    }
+    if (!Array.isArray(newDoc.prints) || newDoc.prints.length === 0) {
+      throw { forbidden: 'evacuee_qr prints must be a non-empty array' };
+    }
+    var qrSources = ['kiosk_checkin', 'kiosk_reprint', 'profile', 'family_batch'];
+    var qrSeenHashes = {};
+    for (var qi = 0; qi < newDoc.prints.length; qi++) {
+      var qp = newDoc.prints[qi];
+      if (!qp || typeof qp.printed_at !== 'string' ||
+          !/^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$/.test(qp.printed_at)) {
+        throw { forbidden: 'evacuee_qr printed_at must be ISO 8601 UTC with milliseconds' };
+      }
+      if (typeof qp.hash !== 'string' || !/^[0-9a-f]{6}$/.test(qp.hash)) {
+        throw { forbidden: 'evacuee_qr hash must match ^[0-9a-f]{6}$' };
+      }
+      if (qrSeenHashes[qp.hash]) {
+        throw { forbidden: 'evacuee_qr hash must be unique within prints' };
+      }
+      qrSeenHashes[qp.hash] = true;
+      if (qrSources.indexOf(qp.source) === -1) {
+        throw { forbidden: 'evacuee_qr source is not allowed' };
+      }
+      if (typeof qp.printed_by !== 'string' || qp.printed_by.length === 0) {
+        throw { forbidden: 'evacuee_qr printed_by is required' };
+      }
+      if (qi > 0 && !(qp.printed_at > newDoc.prints[qi - 1].printed_at)) {
+        throw { forbidden: 'evacuee_qr printed_at must be strictly increasing' };
+      }
+      if (oldDoc && qi < oldDoc.prints.length) {
+        var qo = oldDoc.prints[qi];
+        if (qo.printed_at !== qp.printed_at || qo.hash !== qp.hash ||
+            qo.printed_by !== qp.printed_by || qo.source !== qp.source) {
+          throw { forbidden: 'evacuee_qr prints is append-only' };
+        }
+      }
+    }
+    if (oldDoc && newDoc.prints.length < oldDoc.prints.length) {
+      throw { forbidden: 'evacuee_qr prints is append-only' };
+    }
+    return;
+  }
   if (isCouchAdmin && !isRoleAssessmentWrite) return;
   if (newDoc.type === 'unit_of_measure' || (oldDoc && oldDoc.type === 'unit_of_measure')) {
     throw { forbidden: 'unit_of_measure is central-only' };
@@ -602,7 +667,7 @@ ${consentVduClause()}
   // directly to any shelter's jobs via the Job Board instead.
   var allowed = [
     'evacuee', 'household', 'medical', 'screening', 'movement', 'image',
-    'people_import_log', 'station_log',
+    'people_import_log', 'station_log', 'evacuee_qr',
     'donation', 'donation_campaign', 'stock_ledger', 'donation_slot', 'donation_redirect',
     'audit', 'daily_calc', 'simulation', 'referral',
     'meal_session', 'kitchen_counter',

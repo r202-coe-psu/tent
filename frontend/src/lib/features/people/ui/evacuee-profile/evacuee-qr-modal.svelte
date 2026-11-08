@@ -9,10 +9,11 @@
 	import {
 		buildEvacueeQrLabel,
 		formatPersonName,
+		issueQrPayloads,
 		useScreeningsByEvacuee
 	} from '$lib/features/people';
 	import { KIOSK_LABEL_MM, renderKioskQrLabelPng } from '$lib/features/kiosk';
-	import { PrintLabelsButton } from '$lib/features/printers';
+	import { PrintLabelsButton, ReportedRenderError } from '$lib/features/printers';
 	import { useShelter } from '$lib/features/shelters';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
 	import { getShelterCode } from '$lib/db/shelter';
@@ -30,7 +31,8 @@
 		embedded = false,
 		dismissible = true,
 		printable = true,
-		closeLabel
+		closeLabel,
+		qrSource = 'profile'
 	}: {
 		show: boolean;
 		evacuee: Evacuee;
@@ -40,6 +42,8 @@
 		/** Shows the station-printer button. Off where the host prints these labels itself. */
 		printable?: boolean;
 		closeLabel?: string;
+		/** Log source of the entry written when printing (CR-233): batch page uses `family_batch`. */
+		qrSource?: 'profile' | 'family_batch';
 	} = $props();
 
 	const effectiveCloseLabel = $derived(closeLabel ?? t.closeWindow);
@@ -66,23 +70,52 @@
 		() => show
 	);
 
+	function labelContent(qrPayload?: string) {
+		return buildEvacueeQrLabel(evacuee, {
+			zones: shelterQuery.data?.zones,
+			hasScreening: (screeningsQuery.data?.length ?? 0) > 0,
+			checklist: [t.checklistCheckIn, t.checklistScreening, t.checklistLodging],
+			qrPayload
+		});
+	}
+
 	/**
-	 * The kiosk's own 80×60 mm label (base64 PNG): the preview shows exactly what prints, and a
-	 * station label printer gets the same page as the kiosk.
+	 * The kiosk's own 80×60 mm label (base64 PNG) with a QR PLACEHOLDER: opening the modal must not
+	 * issue a QR (CR-233 FR-EQR-21a), so the preview shows the layout but no usable payload.
 	 */
 	const labelPng = $derived.by(() => {
 		if (!show) return null;
-		const { qrPayload, label } = buildEvacueeQrLabel(evacuee, {
-			zones: shelterQuery.data?.zones,
-			hasScreening: (screeningsQuery.data?.length ?? 0) > 0,
-			checklist: [t.checklistCheckIn, t.checklistScreening, t.checklistLodging]
-		});
+		const { qrPayload, label } = labelContent();
 		return renderKioskQrLabelPng(qrPayload, label);
 	});
 
+	/**
+	 * Print click only (FR-EQR-21b): issue a fresh QR (writes the log entry), then render the label
+	 * with the real payload. Nothing is cached, so every print click rotates the QR. Throws, after a
+	 * toast, when the item was not issued so nothing is printed.
+	 */
+	async function renderIssuedLabelPng(): Promise<string> {
+		let payload: string | undefined;
+		try {
+			const issued = await issueQrPayloads({
+				shelterCode,
+				source: qrSource,
+				evacueeIds: [evacuee._id]
+			});
+			payload = issued.payloads.get(evacuee._id);
+		} catch {
+			payload = undefined;
+		}
+		if (!payload) {
+			toast.error(t.issueFailedToast);
+			throw new ReportedRenderError('QR was not issued');
+		}
+		const { qrPayload, label } = labelContent(payload);
+		return renderKioskQrLabelPng(qrPayload, label);
+	}
+
 	async function renderStationLabels(): Promise<string[]> {
-		if (!labelPng) throw new Error('Label is not available');
-		return [await labelPng];
+		return [await renderIssuedLabelPng()];
 	}
 
 	async function handlePrintPreview() {
@@ -97,15 +130,18 @@
 
 		isExportingPdf = true;
 		try {
-			const png = await labelPng;
+			const png = await renderIssuedLabelPng();
 			previewImageAsPdf(`data:image/png;base64,${png}`, `evacuee-id-${fullId}`, {
 				widthMm: KIOSK_LABEL_MM.width,
 				heightMm: KIOSK_LABEL_MM.height,
 				previewWindow
 			});
-		} catch {
+		} catch (err) {
 			previewWindow.close();
-			toast.error(t.pdfFailedToast);
+			// An issue failure already toasted its own message.
+			if (!(err instanceof ReportedRenderError)) {
+				toast.error(t.pdfFailedToast);
+			}
 		} finally {
 			isExportingPdf = false;
 		}
@@ -177,6 +213,7 @@
 				<figcaption class="mt-3 text-center text-sm text-slate-500">
 					<span class="font-semibold text-slate-700">{t.labelSize}</span>
 					· {t.printHint}
+					<span class="mt-1 block text-slate-600">{t.previewNote}</span>
 				</figcaption>
 			</figure>
 

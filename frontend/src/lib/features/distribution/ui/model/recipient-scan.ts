@@ -1,4 +1,10 @@
-import type { Evacuee } from '$lib/features/people';
+import {
+	checkPersonQr,
+	staffPersonQrRejectionMessage,
+	type Evacuee,
+	type EvacueeQrPrintsReader
+} from '$lib/features/people';
+import { parsePersonQr } from '$lib/utils/evacuee-qr';
 import {
 	isStaffCardScanCode,
 	parseStaffCardPayload,
@@ -25,6 +31,11 @@ export type ScannedRecipient =
 export interface RecipientScanDeps {
 	lookupEvacuee: (code: string) => Promise<Evacuee | null>;
 	lookupVolunteer: (code: string) => Promise<Volunteer | null>;
+	/**
+	 * Reads `evacuee_qr:{ULID}` prints (missing doc = []) for the Person QR scan rule (CR-233).
+	 * Rejections (offline, auth) propagate to the caller's existing error handling, never "valid".
+	 */
+	listQrPrints: EvacueeQrPrintsReader;
 	resolveStaffCard?: (payload: string) => Promise<ResolvedCardRecipient>;
 }
 
@@ -108,7 +119,18 @@ export async function resolveScannedRecipient(
 		return { kind: 'volunteer', volunteer };
 	}
 
-	const evacuee = await deps.lookupEvacuee(code);
+	// Person QR `evacuee:{ULID}[@hash6]` (CR-233 FR-EQR-27/34): expired / invalid never resolves a
+	// recipient. Bare ULIDs are registration tickets and skip the rule (FR-EQR-31). The id passed
+	// onward has no `@` (FR-EQR-6).
+	const personQr = parsePersonQr(code);
+	if (personQr) {
+		const verdict = await checkPersonQr(personQr, deps.listQrPrints);
+		if (verdict.status !== 'valid') {
+			return { kind: 'error', message: staffPersonQrRejectionMessage(verdict) };
+		}
+	}
+
+	const evacuee = await deps.lookupEvacuee(personQr?.evacuee_id ?? code);
 	if (!evacuee) {
 		return {
 			kind: 'error',

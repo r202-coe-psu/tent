@@ -30,6 +30,7 @@ function deps(overrides: Partial<RecipientScanDeps> = {}): RecipientScanDeps {
 	return {
 		lookupEvacuee: vi.fn().mockResolvedValue(evacuee),
 		lookupVolunteer: vi.fn().mockResolvedValue(volunteer()),
+		listQrPrints: vi.fn().mockResolvedValue([]),
 		resolveStaffCard: vi.fn().mockResolvedValue({
 			kind: 'staff',
 			recipient_id: 'user:somchai',
@@ -279,5 +280,59 @@ describe('searchVolunteers', () => {
 	it('returns nothing for a blank term and honours the limit', () => {
 		expect(searchVolunteers(list, '  ')).toEqual([]);
 		expect(searchVolunteers(list, 'อาสา', 1)).toHaveLength(1);
+	});
+});
+
+describe('resolveScannedRecipient — Person QR rule (CR-233)', () => {
+	const NEW = { printed_at: '2026-11-05T09:41:12.512Z', hash: '2d23a3' };
+	const OLD = { printed_at: '2026-11-03T02:10:00.000Z', hash: '289170' };
+	const opts = { allowVolunteer: false };
+
+	it('resolves the latest QR and looks the evacuee up by the id without @', async () => {
+		const d = deps({ listQrPrints: vi.fn().mockResolvedValue([OLD, NEW]) });
+		const result = await resolveScannedRecipient(`${evacuee._id}@2d23a3`, opts, d);
+
+		expect(result).toEqual({ kind: 'evacuee', evacuee });
+		expect(d.lookupEvacuee).toHaveBeenCalledWith(evacuee._id);
+	});
+
+	it('rejects an expired QR with a dated message and resolves nobody', async () => {
+		const d = deps({ listQrPrints: vi.fn().mockResolvedValue([OLD, NEW]) });
+		const result = await resolveScannedRecipient(`${evacuee._id}@289170`, opts, d);
+
+		expect(result).toMatchObject({ kind: 'error' });
+		expect(result.kind === 'error' && result.message).toContain('มีใบใหม่วันที่');
+		expect(d.lookupEvacuee).not.toHaveBeenCalled();
+	});
+
+	it('rejects an invalid hash', async () => {
+		const d = deps({ listQrPrints: vi.fn().mockResolvedValue([NEW]) });
+		const result = await resolveScannedRecipient(`${evacuee._id}@ffffff`, opts, d);
+
+		expect(result.kind === 'error' && result.message).toContain('QR ไม่ถูกต้อง');
+		expect(d.lookupEvacuee).not.toHaveBeenCalled();
+	});
+
+	it('accepts a legacy QR without @ when there is no log, rejects it once a log exists', async () => {
+		const empty = deps();
+		expect((await resolveScannedRecipient(evacuee._id, opts, empty)).kind).toBe('evacuee');
+
+		const logged = deps({ listQrPrints: vi.fn().mockResolvedValue([NEW]) });
+		expect((await resolveScannedRecipient(evacuee._id, opts, logged)).kind).toBe('error');
+		expect(logged.lookupEvacuee).not.toHaveBeenCalled();
+	});
+
+	it('propagates a log read failure instead of resolving the recipient', async () => {
+		const d = deps({ listQrPrints: vi.fn().mockRejectedValue(new Error('offline')) });
+		await expect(resolveScannedRecipient(`${evacuee._id}@2d23a3`, opts, d)).rejects.toThrow(
+			'offline'
+		);
+		expect(d.lookupEvacuee).not.toHaveBeenCalled();
+	});
+
+	it('skips the rule for a bare ULID registration ticket (FR-EQR-31)', async () => {
+		const d = deps();
+		await resolveScannedRecipient('01J00000000000000000000001', opts, d);
+		expect(d.listQrPrints).not.toHaveBeenCalled();
 	});
 });

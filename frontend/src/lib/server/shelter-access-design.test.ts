@@ -1220,6 +1220,109 @@ describe('buildValidateDocUpdate', () => {
 		).not.toThrow();
 	});
 
+	describe('evacuee_qr (CR-233 FR-EQR-38/39)', () => {
+		const COUCH_ADMIN: UserCtx = { name: 'server', roles: ['_admin'] };
+		const entry = (printed_at: string, hash: string, over: Doc = {}): Doc => ({
+			printed_at,
+			hash,
+			printed_by: 'staff01',
+			source: 'profile',
+			...over
+		});
+		const qrDoc = (prints: Doc[]): Doc => ({
+			...envelope,
+			schema_v: 1,
+			_id: 'evacuee_qr:01JC8ZQ4V6M2N5R7T9XBDEFGH0',
+			type: 'evacuee_qr',
+			evacuee_id: 'evacuee:01JC8ZQ4V6M2N5R7T9XBDEFGH0',
+			prints
+		});
+		const e1 = entry('2026-11-06T08:00:00.000Z', '289170');
+		const e2 = entry('2026-11-06T09:00:00.000Z', '2d23a3', { source: 'family_batch' });
+		const one = qrDoc([e1]);
+		const two = qrDoc([e1, e2]);
+
+		it('is in the allowed whitelist (generated source)', () => {
+			expect(buildValidateDocUpdate('SH001')).toContain("'station_log', 'evacuee_qr'");
+		});
+
+		it('accepts a create and an append from the server admin credential', () => {
+			expect(() => compile()(one, null, COUCH_ADMIN)).not.toThrow();
+			expect(() => compile()(two, one, COUCH_ADMIN)).not.toThrow();
+		});
+
+		it.each([
+			['registration staff', REGISTRATION],
+			['system_admin (app role, not CouchDB _admin)', ADMIN]
+		])('rejects writes from a user session: %s', (_n, ctx) => {
+			expectForbidden(() => compile()(one, null, ctx), /server only/);
+			expectForbidden(() => compile()(two, one, ctx), /server only/);
+		});
+
+		it('rejects DELETE even from the server credential', () => {
+			expectForbidden(
+				() => compile()({ _id: one._id, _rev: '1-a', _deleted: true }, one, COUCH_ADMIN),
+				/Cannot delete evacuee_qr/
+			);
+		});
+
+		it('rejects editing, dropping or reordering existing entries', () => {
+			const run = (next: Doc) => () => compile()(next, two, COUCH_ADMIN);
+			expectForbidden(run(qrDoc([{ ...e1, printed_by: 'x' }, e2])), /append-only/);
+			expectForbidden(run(qrDoc([e1])), /append-only/);
+			expectForbidden(run(qrDoc([e2, e1])), /strictly increasing|append-only/);
+		});
+
+		it('requires strictly increasing printed_at', () => {
+			expectForbidden(
+				() => compile()(qrDoc([e1, entry(e1.printed_at as string, 'aaaaaa')]), one, COUCH_ADMIN),
+				/strictly increasing/
+			);
+		});
+
+		it('requires hash ^[0-9a-f]{6}$ and unique within prints', () => {
+			for (const bad of ['ABCDEF', 'abc', 'abcdeg', 'abcdef0']) {
+				expectForbidden(
+					() => compile()(qrDoc([entry('2026-11-06T08:00:00.000Z', bad)]), null, COUCH_ADMIN),
+					/hash must match/
+				);
+			}
+			expectForbidden(
+				() => compile()(qrDoc([e1, entry('2026-11-06T09:00:00.000Z', '289170')]), one, COUCH_ADMIN),
+				/unique/
+			);
+		});
+
+		it('requires a source from the enum', () => {
+			expectForbidden(
+				() =>
+					compile()(
+						qrDoc([entry('2026-11-06T08:00:00.000Z', '289170', { source: 'qr' })]),
+						null,
+						COUCH_ADMIN
+					),
+				/source is not allowed/
+			);
+		});
+
+		it('requires _id prefix, matching evacuee_id and this shelter', () => {
+			expectForbidden(
+				() => compile()({ ...one, _id: 'evacuee:01JC8ZQ4V6M2N5R7T9XBDEFGH0' }, null, COUCH_ADMIN),
+				/_id must start with evacuee_qr:/
+			);
+			expectForbidden(
+				() =>
+					compile()(
+						{ ...one, evacuee_id: 'evacuee:01JC8ZQ4V6M2N5R7T9XBDEFGH1' },
+						null,
+						COUCH_ADMIN
+					),
+				/must match _id/
+			);
+			expectForbidden(() => compile('SH002')(one, null, COUCH_ADMIN), /shelter_code must be SH002/);
+		});
+	});
+
 	it('accepts household create from registration staff', () => {
 		expect(() =>
 			compile()(

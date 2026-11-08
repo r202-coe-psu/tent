@@ -8,10 +8,18 @@ export type EvacueeQrLabelInput = {
 	hasScreening: boolean;
 	/** Localised checklist row copy, in station order: check-in, screening, lodging. */
 	checklist: readonly string[];
+	/**
+	 * The server-issued payload (CR-233). Omit for the on-open preview: the label then carries a
+	 * QR placeholder that is not a usable Person QR (FR-EQR-21a).
+	 */
+	qrPayload?: string;
 };
 
+/** Encoded in the preview QR: not an `evacuee:` payload, so no scanner treats it as a person. */
+export const EVACUEE_QR_PLACEHOLDER_PAYLOAD = 'PREVIEW-QR-NOT-ISSUED';
+
 export type EvacueeQrLabel = {
-	/** What the QR encodes: the evacuee document id. */
+	/** What the QR encodes: the issued payload, or the placeholder for a preview. */
 	qrPayload: string;
 	label: {
 		name: string;
@@ -22,10 +30,10 @@ export type EvacueeQrLabel = {
 	};
 };
 
-/** The kiosk-style QR label content for an evacuee: id payload, name, zone and intake checklist. */
+/** The kiosk-style QR label content for an evacuee: payload, name, zone and intake checklist. */
 export function buildEvacueeQrLabel(evacuee: Evacuee, input: EvacueeQrLabelInput): EvacueeQrLabel {
 	return {
-		qrPayload: evacuee._id,
+		qrPayload: input.qrPayload ?? EVACUEE_QR_PLACEHOLDER_PAYLOAD,
 		label: {
 			name: formatPersonName(evacuee),
 			zone: labelZoneName(evacuee.current_stay?.zone, input.zones),

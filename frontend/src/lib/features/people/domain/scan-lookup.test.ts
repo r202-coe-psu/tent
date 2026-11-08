@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
 	extractScanLookupToken,
+	extractScanPersonQr,
 	mongoUnassignedSearchQueries,
 	pickUnassignedSearchHit,
 	toCouchEvacueeId
@@ -12,6 +13,22 @@ describe('extractScanLookupToken', () => {
 		expect(extractScanLookupToken('/onsite/medical-screening/evacuee:XYZ')).toBe('evacuee:XYZ');
 		expect(extractScanLookupToken('evacuee:BARE')).toBe('evacuee:BARE');
 		expect(extractScanLookupToken('01JABCDEFGHJKMNPQRSTVWXYZ0')).toBe('01JABCDEFGHJKMNPQRSTVWXYZ0');
+	});
+
+	const ULID = '01JC8ZQ4V6M2N5R7T9XBDEFGH0';
+
+	it('strips @hash6 from a Person QR so the id never carries `@` (FR-EQR-6)', () => {
+		expect(extractScanLookupToken(`evacuee:${ULID}@683508`)).toBe(`evacuee:${ULID}`);
+		expect(extractScanLookupToken(`EVACUEE:${ULID.toLowerCase()}@68350A`)).toBe(`evacuee:${ULID}`);
+	});
+
+	it('treats a malformed @ suffix as not a Person QR (FR-EQR-5)', () => {
+		expect(extractScanLookupToken(`evacuee:${ULID}@68350`)).toBeNull();
+		expect(extractScanLookupToken(`evacuee:${ULID}@zzzzzz`)).toBeNull();
+	});
+
+	it('leaves bare ULID registration tickets unchanged (FR-EQR-31)', () => {
+		expect(extractScanLookupToken(ULID)).toBe(ULID);
 	});
 
 	it('rejects bare station roots', () => {
@@ -45,5 +62,22 @@ describe('pickUnassignedSearchHit', () => {
 		expect(pickUnassignedSearchHit(results, 'b')?.id).toBe('b');
 		expect(pickUnassignedSearchHit(results, 'z')?.id).toBe('a');
 		expect(pickUnassignedSearchHit([], 'a')).toBeNull();
+	});
+});
+
+describe('extractScanPersonQr', () => {
+	const ULID = '01JC8ZQ4V6M2N5R7T9XBDEFGH0';
+
+	it('returns id + hash for Person QR, and null for tickets / other text', () => {
+		expect(extractScanPersonQr(`evacuee:${ULID}@683508`)).toEqual({
+			evacuee_id: `evacuee:${ULID}`,
+			hash6: '683508'
+		});
+		expect(extractScanPersonQr(`evacuee:${ULID}`)).toEqual({
+			evacuee_id: `evacuee:${ULID}`,
+			hash6: null
+		});
+		expect(extractScanPersonQr(ULID)).toBeNull();
+		expect(extractScanPersonQr('/onsite/zoning/evacuee:ABC')).toBeNull();
 	});
 });

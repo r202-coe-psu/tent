@@ -110,6 +110,11 @@
 				toast.error(`ไม่พบข้อมูลผู้พักพิงจากรหัส "${cleanCode}" ในศูนย์ ${getShelterCode()}`);
 				return;
 			}
+			if (result.source === 'qr_rejected') {
+				// Expired / invalid Person QR (CR-233): message only, no profile, no navigation.
+				toast.error(result.message);
+				return;
+			}
 			manualCode = '';
 			if (result.source === 'unassigned') {
 				toast.success('พบคิวลงทะเบียนล่วงหน้า (คิวกลาง)');

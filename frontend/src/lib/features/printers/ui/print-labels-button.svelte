@@ -11,6 +11,7 @@
 	import { PrintApiError } from '../data/printers.api';
 	import { stationPrinter } from '../application/station-printer.svelte';
 	import { chunkLabels } from '../domain/chunk-labels';
+	import { ReportedRenderError } from '../domain/reported-error';
 	import { canPrintSource } from '../domain/print-permission';
 	import { isTerminalJobStatus, PRINT_JOB_POLL_TIMEOUT_MS } from '../domain/print-job-status';
 	import {
@@ -260,9 +261,11 @@
 				if (abort.signal.aborted || !labels) return finishAborted(abort.signal, false);
 				progressTotal = labels.length;
 				setUnsent(chunkLabels(labels).map((chunk) => ({ labels: chunk, jobId: ulid() })));
-			} catch {
+			} catch (error) {
 				if (abort.signal.aborted) return finishAborted(abort.signal, false);
 				running = false;
+				// The callback already toasted its own specific message.
+				if (error instanceof ReportedRenderError) return;
 				toast.error(t.renderFailed);
 				return;
 			}

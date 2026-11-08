@@ -100,6 +100,11 @@
 				toast.info(`ค้นหา: ${raw}`);
 				return;
 			}
+			if (result.source === 'qr_rejected') {
+				// Expired / invalid Person QR (CR-233): message only, nothing opened or recorded.
+				toast.error(result.message);
+				return;
+			}
 			showCameraModal = false;
 			if (result.source === 'couch') {
 				toast.success(`พบ: ${formatPersonName(result.evacuee)}`);

@@ -12,6 +12,8 @@ vi.mock('$lib/features/printers', async (importOriginal) => ({
 		await import('../evacuee-profile/__fixtures__/print-labels-button-stub.svelte')
 	).default
 }));
+const issue = vi.hoisted(() => vi.fn());
+vi.mock('$lib/features/people/data/evacuee-qr.api', () => ({ issueEvacueeQrs: issue }));
 vi.mock('$lib/features/kiosk', () => ({
 	KIOSK_LABEL_MM: { width: 80, height: 60 },
 	renderKioskQrLabelPng: async () => 'AAAA'
@@ -72,6 +74,12 @@ afterEach(() => {
 });
 
 describe('FamilyBatchPrint', () => {
+	it('never issues a QR just by being shown (FR-EQR-21a)', () => {
+		render();
+
+		expect(issue).not.toHaveBeenCalled();
+	});
+
 	it('shows one station-printer button for the whole family', () => {
 		render();
 

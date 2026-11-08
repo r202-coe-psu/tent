@@ -9,7 +9,12 @@
 	import AlertCircle from '@lucide/svelte/icons/alert-circle';
 	import Building2 from '@lucide/svelte/icons/building-2';
 	import HandHeart from '@lucide/svelte/icons/hand-heart';
-	import { useSearchEvacuees, lookupEvacueeByScanCode, type Evacuee } from '$lib/features/people';
+	import {
+		useSearchEvacuees,
+		lookupEvacueeByScanCode,
+		readEvacueeQrPrints,
+		type Evacuee
+	} from '$lib/features/people';
 	import {
 		lookupVolunteerByScanCode,
 		useVolunteers,
@@ -136,6 +141,7 @@
 				{
 					lookupEvacuee: (c) => lookupEvacueeByScanCode(queryClient, c),
 					lookupVolunteer: (c) => lookupVolunteerByScanCode(c),
+					listQrPrints: (id) => readEvacueeQrPrints(id),
 					resolveStaffCard: shelterCode ? (p) => resolveStaffCard(p, shelterCode) : undefined
 				}
 			);

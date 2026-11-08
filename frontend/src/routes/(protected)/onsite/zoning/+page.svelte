@@ -514,6 +514,11 @@
 				toast.error('ไม่พบข้อมูลผู้ประสบภัยที่ตรงกับรหัสนี้');
 				return;
 			}
+			if (result.source === 'qr_rejected') {
+				// Expired / invalid Person QR (CR-233): message only, nothing opened or recorded.
+				toast.error(result.message);
+				return;
+			}
 			barcodeInput = '';
 			showCameraModal = false;
 			if (result.source === 'couch') {
