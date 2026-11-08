@@ -1763,16 +1763,11 @@ test.describe('Pre-register: layout and language (U)', { tag: ['@pre-register', 
 		await expect(page.getByRole('heading', { name: 'ลงทะเบียนล่วงหน้า', level: 1 })).toBeVisible();
 	});
 
-	test('U3 on a phone the language toggle lives in the hamburger menu', async ({ page }) => {
+	test('U3 on a phone the language toggle stays in the header', async ({ page }) => {
 		await page.setViewportSize({ width: 390, height: 844 });
 		await openPreRegister(page);
-		// the header toggle is hidden below sm
-		await expect(
-			page.locator('header').getByRole('button', { name: 'Switch to English' })
-		).toBeHidden();
-		await page.getByRole('button', { name: /เปิดเมนู/ }).click();
-		await page.getByRole('button', { name: /เปลี่ยนภาษา/ }).click();
-		await page.keyboard.press('Escape');
+		// one switcher everywhere: no detour through the hamburger menu
+		await page.locator('header').getByRole('button', { name: 'Switch to English' }).click();
 		await expect(page.getByRole('heading', { name: 'Pre-registration', level: 1 })).toBeVisible();
 	});
 });

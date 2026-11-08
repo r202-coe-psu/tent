@@ -3,7 +3,7 @@ id: CR-121
 title: ระบบตั๋วเบิกจ่ายพัสดุและอาหาร 4-in-1 (RequisitionTicket) พร้อมระบบแจกจ่ายหน้างานและติดตามของยืม (DistributionLog)
 status: approved
 date: 2026-09-12
-updated: 2026-10-29 # หมายเหตุ CR-208 ใต้ AC-DST-06.1 (ของเหลือคืนเข้า lot ต้นทาง)
+updated: 2026-11-08 # CR-240 FR-DST-02 stepper → เลือกสมาชิก, AC-DST-02.1 ต่อสมาชิก · 2026-10-29 หมายเหตุ CR-208 ใต้ AC-DST-06.1 (ของเหลือคืนเข้า lot ต้นทาง)
 requested_by: "Team Leader (ฝ่ายปฏิบัติการหน้างาน โรงครัว และคลังสินค้า)"
 decided_by: Project Owner
 layer: stable
@@ -643,9 +643,9 @@ export interface MealService extends BaseDoc {
 #### FR-DST-02: การสแกนแจกจ่ายและการตรวจสิทธิ์รายบุคคล (Live QR Scan & Quota)
 - **คำสั่ง:** หน้าจอแจกจ่ายจริง (`/onsite/distribution/scan`) ต้องรองรับการสแกน QR ผู้พักพิงหรือหัวหน้าครอบครัว ตรวจสอบโควตา 1 คน ต่อ 1 มื้อ และบันทึก `distribution_log`:
   - Default จำนวนจ่าย = `"1"` (qty_str)
-  - มีปุ่ม Stepper `[-] 1 [+]` ให้เจ้าหน้าที่ปรับจำนวนตามสมาชิกครอบครัว
+  - ~~มีปุ่ม Stepper `[-] 1 [+]` ให้เจ้าหน้าที่ปรับจำนวนตามสมาชิกครอบครัว~~ → [CR-240](CR-240-household-meal-pickup.md): ผู้รับที่มี `household_id` แสดงรายการเลือกสมาชิกที่อยู่ในศูนย์ บันทึก `distribution_log` 1 ใบต่อสมาชิก (`qty: "1"`) + `collected_by_recipient_id` ผู้มารับแทน (R1–R9); ผู้รับไม่มี `household_id` แจกรายคนเดิม. Stepper ของ `/onsite/loans` (FR-LON-02) ยังคงอยู่
   - หากพบประวัติการรับไปแล้วในมื้อเดียวกัน ให้แสดงกล่องเตือนสีแดง และมีปุ่ม `[ กรณีพิเศษ Override ]` พร้อมบันทึกสาเหตุ
-- **AC-DST-02.1:** ทุกการกดยืนยันจ่ายของสำเร็จ ระบบต้องสร้างเอกสาร `distribution_log` (`type: 'distribution_log'`, `_id: distribution_log:{ulid}`, `is_returnable: false`, `status: 'fulfilled'`) ทันที
+- **AC-DST-02.1:** ทุกการกดยืนยันจ่ายของสำเร็จ ระบบต้องสร้างเอกสาร `distribution_log` หนึ่งใบต่อสมาชิกที่เลือก ([CR-240](CR-240-household-meal-pickup.md)) (`type: 'distribution_log'`, `_id: distribution_log:{ulid}`, `is_returnable: false`, `status: 'fulfilled'`) ทันที
 - **AC-DST-02.2:** ตัวเลขคงเหลือในมือ (In-Hand) บนหน้าจอแจกจ่ายต้องคำนวณแบบ In-Memory Dynamic Store (`allocated_qty - sum(distribution_log.qty)`) โดยการสแกนหน้างานจะ **ไม่เขียนทับเอกสาร `requisition_ticket`** ในระหว่างกะ เพื่อป้องกันปัญหา CouchDB Concurrency Conflict (409) อย่างสมบูรณ์ ยอดสะสม `distributed_qty` จะถูกบันทึกสรุปลงในตั๋วเพียงครั้งเดียวเมื่อกดปิดรอบ (`SHIFT_CLOSED` / `/onsite/distribution/reconcile`)
 
 #### FR-DST-03: การควบคุมความปลอดภัยอาหาร 4 ชม. ด้วย Soft Warning (Food Safety Countdown)
@@ -751,7 +751,7 @@ export interface MealService extends BaseDoc {
 |                 | **Kitchen**       |  11   | วางแผนมื้อ & เปิดคำขอเบิก         | `/back-office/kitchen`                  | `kitchen_staff`                                                           | วางแผนมื้ออาหารและเปิดตั๋ว `TKT-KITCHEN` อัตโนมัติ                 |
 |                 |                   |  12   | บันทึกผลผลิตอาหารปรุงสุก          | `/back-office/kitchen/production-board` | `kitchen_staff`                                                           | บันทึกยอดปรุงเสร็จจริง (Batch Yield) เข้าคลัง (อายุ 4 ชม.)         |
 | **Frontline**   | **Distribution**  |  13   | ตรวจรับเข้าจุด & เริ่มรอบแจก      | `/onsite/distribution`                  | `registration_staff`, `supply_coordinator`, `shelter_manager` *(หรือ Volunteer Shift Pass)* | ตรวจรับตั๋วขาเข้า (Step 4), เลือกมื้อและชุดของที่จะแจก               |
-|                 |                   |  14   | สแกน QR แจกจริง & ตรวจสิทธิ์     | `/onsite/distribution/scan`             | `registration_staff`, `supply_coordinator`, `shelter_manager` *(หรือ Volunteer Shift Pass)* | สแกน QR โควตา 1 คน/มื้อ, Soft Warning 4 ชม., ปรับจำนวน Stepper |
+|                 |                   |  14   | สแกน QR แจกจริง & ตรวจสิทธิ์     | `/onsite/distribution/scan`             | `registration_staff`, `supply_coordinator`, `shelter_manager` *(หรือ Volunteer Shift Pass)* | สแกน QR โควตา 1 คน/มื้อ, Soft Warning 4 ชม., เลือกสมาชิกครัวเรือน (CR-240) |
 |                 |                   |  15   | ปิดรอบขาด & สรุปส่งคืนคลัง        | `/onsite/distribution/reconcile`        | `registration_staff`, `supply_coordinator`, `shelter_manager`             | ปิดรอบขาด (Step 5), สรุปยอดคืนคลัง 100% (Step 6)               |
 |                 | **Loans & Gate**  |  16   | สแกนยืมพัสดุคงทน (Stepper)      | `/onsite/loans`                         | `registration_staff`, `supply_coordinator`, `shelter_manager` *(หรือ Volunteer Shift Pass)* | สแกน QR ยืมของคงทน ปรับจำนวนด้วย Stepper (ไม่ใช้บาร์โค้ด)          |
 |                 |                   |  17   | จุดรับคืน & กองรวมพัสดุ           | `/onsite/returns`                       | `warehouse_staff`, `supply_coordinator`, `registration_staff`             | รับคืนรายบุคคลพร้อมตรวจสภาพ และตรวจนับของคืนจากกองรวม            |

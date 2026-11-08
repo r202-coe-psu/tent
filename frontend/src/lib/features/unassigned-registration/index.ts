@@ -11,7 +11,8 @@ export type {
 	OpenPetHit,
 	PersonIdHit,
 	UnassignedRegistrationSearchHit,
-	UnassignedRegistrationSearchResponse
+	UnassignedRegistrationSearchResponse,
+	UnassignedSearchCopy
 } from './domain/search';
 
 export type {
@@ -38,6 +39,7 @@ export {
 	CLAIM_FLOW_STATUS_GUIDANCE,
 	UNASSIGNED_QUEUE_BADGE_LABEL,
 	UNASSIGNED_QUEUE_BADGE_SHORT,
+	unassignedSearchCopyByLanguage,
 	claimedPetSummaries,
 	formatClaimCreatedAt,
 	formatOpenMemberCardType,

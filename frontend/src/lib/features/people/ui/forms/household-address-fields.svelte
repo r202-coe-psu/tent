@@ -20,6 +20,7 @@
 	import { langState } from '$lib/states/i18n.svelte';
 	import { getTranslation } from '$lib/utils/i18n';
 	import { PUBLIC_BOOKING_FORM_I18N } from '$lib/constants/i18n';
+	import { STAFF_FORM_FIELDS_I18N } from '../_constants/staff-form-fields.i18n';
 
 	let {
 		housing_type = $bindable('owned_house'),
@@ -79,6 +80,7 @@
 	} = $props();
 
 	const t = $derived(getTranslation(PUBLIC_BOOKING_FORM_I18N, langState.current));
+	const tf = $derived(getTranslation(STAFF_FORM_FIELDS_I18N, langState.current));
 
 	function safeQuery<T>(fn: () => T, fallback: T): T {
 		try {
@@ -310,9 +312,9 @@
 			}
 
 			const parts = [
-				loc.subdistrict ? `ต.${loc.subdistrict}` : '',
-				loc.district ? `อ.${loc.district}` : '',
-				loc.province ? `จ.${loc.province}` : ''
+				loc.subdistrict ? `${tf.subdistrictPrefix}${loc.subdistrict}` : '',
+				loc.district ? `${tf.districtPrefix}${loc.district}` : '',
+				loc.province ? `${tf.provincePrefix}${loc.province}` : ''
 			]
 				.filter(Boolean)
 				.join(' ');

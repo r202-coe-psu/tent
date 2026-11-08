@@ -4,7 +4,10 @@
 	import PawPrint from '@lucide/svelte/icons/paw-print';
 	import Package from '@lucide/svelte/icons/package';
 	import Check from '@lucide/svelte/icons/check';
-	import type { Household } from '$lib/features/people';
+	import { petSpeciesLabel, type Household, type PetGroup } from '$lib/features/people';
+	import { getTranslation } from '$lib/utils/i18n';
+	import { langState } from '$lib/states/i18n.svelte';
+	import { EVACUEE_PROFILE_I18N } from '../_constants/evacuee-profile.i18n';
 	import EvacueePhoto from '../shared/evacuee-photo.svelte';
 
 	let {
@@ -17,16 +20,17 @@
 		onOpenAssetModal: () => void;
 	} = $props();
 
+	const t = $derived(getTranslation(EVACUEE_PROFILE_I18N, langState.current).assetsCard);
+
 	const vehicles = $derived(household?.vehicles ?? []);
 	const pets = $derived(household?.pets ?? []);
 	const valuables = $derived(household?.assets?.description?.trim() || null);
 	const hasAny = $derived(vehicles.length > 0 || pets.length > 0 || Boolean(valuables));
 
-	const vehicleLabel = (type: 'car' | 'motorcycle' | 'other') =>
-		type === 'car' ? 'รถยนต์' : type === 'motorcycle' ? 'จักรยานยนต์' : 'อื่นๆ';
+	const vehicleLabel = (type: 'car' | 'motorcycle' | 'other') => t.vehicleTypes[type];
 
-	const speciesLabel = (species: string) =>
-		species === 'dog' ? 'สุนัข' : species === 'cat' ? 'แมว' : 'อื่นๆ';
+	const speciesLabel = (species: PetGroup['species']) =>
+		petSpeciesLabel(species, langState.current);
 
 	/** Absolute/preview URLs only — CouchDB image IDs are handled via EvacueePhoto. */
 	function petPreviewSrc(imageUrl: string | null | undefined): string | null {
@@ -43,13 +47,13 @@
 	<div class="flex items-center justify-between border-b border-slate-200/80 pb-2">
 		<div class="flex items-center gap-2.5">
 			<Car class="size-4.5 text-[#0A2647]" />
-			<h3 class="text-base font-bold text-slate-900">สิ่งที่นำมาด้วย</h3>
+			<h3 class="text-base font-bold text-slate-900">{t.title}</h3>
 		</div>
 		{#if household && !readonly}
 			<button
 				type="button"
-				aria-label="แก้ไขทรัพย์สิน ยานพาหนะ และสัตว์เลี้ยง"
-				title="แก้ไขทรัพย์สิน ยานพาหนะ และสัตว์เลี้ยง"
+				aria-label={t.editAria}
+				title={t.editAria}
 				onclick={onOpenAssetModal}
 				class="inline-flex size-11 min-h-11 min-w-11 cursor-pointer items-center justify-center rounded-lg text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900 focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none"
 			>
@@ -60,10 +64,10 @@
 
 	{#if !household}
 		<p class="py-4 text-center text-sm text-slate-500 italic">
-			ยังไม่มีข้อมูลครัวเรือนสำหรับแสดงทรัพย์สิน
+			{t.noHousehold}
 		</p>
 	{:else if !hasAny}
-		<p class="py-4 text-center text-sm text-slate-500 italic">ไม่มีรายการ</p>
+		<p class="py-4 text-center text-sm text-slate-500 italic">{t.noItems}</p>
 	{:else}
 		<div class="space-y-5">
 			<!-- Vehicles -->
@@ -71,7 +75,7 @@
 				<div class="space-y-2">
 					<div class="flex items-center gap-2">
 						<Car class="size-4 text-slate-500" />
-						<span class="text-sm font-bold text-slate-900">ยานพาหนะ</span>
+						<span class="text-sm font-bold text-slate-900">{t.vehicles}</span>
 						<span
 							class="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-xs font-semibold text-slate-700 tabular-nums"
 						>
@@ -88,7 +92,7 @@
 								</span>
 								{#if vehicle.license_plate}
 									<span class="text-sm font-medium text-slate-700 tabular-nums">
-										ทะเบียน: {vehicle.license_plate}
+										{t.licensePlate(vehicle.license_plate)}
 									</span>
 								{/if}
 							</div>
@@ -102,7 +106,7 @@
 				<div class="space-y-2">
 					<div class="flex items-center gap-2">
 						<PawPrint class="size-4 text-slate-500" />
-						<span class="text-sm font-bold text-slate-900">สัตว์เลี้ยง</span>
+						<span class="text-sm font-bold text-slate-900">{t.pets}</span>
 					</div>
 
 					<div class="space-y-2">
@@ -138,7 +142,8 @@
 										<span
 											class="inline-flex items-center gap-1 text-sm font-semibold text-emerald-800"
 										>
-											<Check class="size-3.5" /> มีกรง
+											<Check class="size-3.5" />
+											{t.hasCage}
 										</span>
 									{/if}
 									{#if pet.notes}
@@ -156,7 +161,7 @@
 				<div class="space-y-2">
 					<div class="flex items-center gap-2">
 						<Package class="size-4 text-slate-500" />
-						<span class="text-sm font-bold text-slate-900">สัมภาระ / สิ่งของมีค่า</span>
+						<span class="text-sm font-bold text-slate-900">{t.valuables}</span>
 					</div>
 					<div
 						class="rounded-xl border border-slate-200/80 bg-slate-50 p-3 text-sm font-medium break-words text-slate-800"
