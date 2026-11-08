@@ -583,31 +583,31 @@ const DOC_STATUS_CASES: Array<{
 		label: 'UNCONFIGURED',
 		currentStock: 0,
 		itemDailyDemand: 0,
-		expectedBadgeText: 'ยังไม่ได้ตั้งค่านโยบาย'
+		expectedBadgeText: 'ยังไม่ตั้งนโยบาย'
 	},
 	{
 		label: 'CRITICAL',
 		currentStock: 5,
 		itemDailyDemand: 5,
-		expectedBadgeText: 'สต็อกวิกฤต'
+		expectedBadgeText: 'เสี่ยงขาดของ'
 	},
 	{
 		label: 'WARNING',
 		currentStock: 20,
 		itemDailyDemand: 5,
-		expectedBadgeText: 'ถึงจุดสั่งเติม'
+		expectedBadgeText: 'ควรจัดหาเพิ่ม'
 	},
 	{
 		label: 'ADEQUATE',
 		currentStock: 60,
 		itemDailyDemand: 5,
-		expectedBadgeText: 'สต็อกปลอดภัย'
+		expectedBadgeText: 'เพียงพอ'
 	},
 	{
 		label: 'OVERSTOCK',
 		currentStock: 200,
 		itemDailyDemand: 5,
-		expectedBadgeText: 'สต็อกเกินเกณฑ์'
+		expectedBadgeText: 'ของเกินจำเป็น'
 	}
 ];
 

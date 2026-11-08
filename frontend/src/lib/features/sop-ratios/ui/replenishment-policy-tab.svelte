@@ -118,202 +118,227 @@
 	}
 </script>
 
+{#snippet days(n: number | null | undefined)}
+	{#if n === null || n === undefined}
+		<span class="text-slate-400" aria-label="ไม่ได้ระบุ">-</span>
+	{:else}
+		{n} <span class="text-xs font-normal text-slate-500">วัน</span>
+	{/if}
+{/snippet}
+
 {#if viewMode === 'list'}
 	<section class="min-w-0">
-		<header class="mb-6 flex flex-col gap-4">
-			<div class="flex w-full flex-col gap-4 2xl:flex-row 2xl:items-center 2xl:justify-between">
+		<div class="space-y-4">
+			<div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
 				<div>
-					<h2 class="text-lg font-bold">นโยบายการเติมสต็อก</h2>
-					<p class="text-sm text-muted-foreground">
-						กำหนดระยะเวลารอคอยสินค้า, รอบการสั่งซื้อ และจุดวิกฤต
-					</p>
+					<h2 class="text-lg font-bold text-slate-900 sm:text-xl">นโยบายการเติมสต็อก</h2>
+					<p class="text-sm text-slate-600">กำหนดระยะเวลารอคอยสินค้า, รอบการสั่งซื้อ และจุดวิกฤต</p>
 				</div>
+				{#if isSA || canEditOverride}
+					<Button
+						type="button"
+						onclick={showCreateForm}
+						class="min-h-11 gap-2 rounded-lg bg-[#0A2647] px-4 text-sm font-semibold text-white hover:bg-[#051930]"
+					>
+						<Plus class="h-4 w-4" aria-hidden="true" />
+						เพิ่มนโยบาย
+					</Button>
+				{/if}
+			</div>
 
-				<div class="flex flex-wrap items-center gap-2">
-					<div class="relative w-full sm:w-56">
-						<Search class="absolute top-2.5 left-2.5 h-4 w-4 text-muted-foreground" />
+			<div
+				class="flex min-h-[40vh] flex-col rounded-2xl border border-slate-200/80 bg-white shadow-2xs"
+			>
+				<div
+					class="grid grid-cols-2 gap-2.5 border-b border-slate-200/80 p-3 md:grid-cols-[minmax(0,2.2fr)_repeat(2,minmax(0,1fr))] md:p-4"
+				>
+					<div class="relative col-span-2 md:col-span-1">
+						<Search
+							class="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-slate-500"
+							aria-hidden="true"
+						/>
 						<Input
 							bind:value={search}
 							type="search"
-							placeholder="ค้นหานโยบาย..."
-							class="pl-9"
+							placeholder="ค้นหานโยบาย"
+							class="min-h-11 w-full rounded-lg border-slate-300 bg-white pl-9 text-base shadow-2xs md:text-sm"
 							aria-label="ค้นหานโยบาย"
 						/>
 					</div>
-
-					{#if isSA || canEditOverride}
-						<Button onclick={showCreateForm} class="ml-auto flex shrink-0 items-center gap-1.5">
-							<Plus class="h-4 w-4" />
-							เพิ่มนโยบาย
-						</Button>
-					{/if}
-				</div>
-			</div>
-
-			<!-- Filter bar -->
-			<div class="flex flex-wrap items-center gap-3 border-t pt-3 text-xs">
-				<div class="flex items-center gap-1.5">
-					<label for="filter-group" class="font-medium text-muted-foreground">กลุ่มสารอาหาร:</label>
 					<select
 						id="filter-group"
 						bind:value={filterGroup}
-						class="rounded-md border bg-background px-2.5 py-1 text-xs"
+						aria-label="กรองกลุ่มสารอาหาร"
+						class="min-h-11 w-full min-w-0 rounded-lg border border-slate-300 bg-white px-3 text-sm shadow-2xs focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:outline-none"
 					>
-						<option value="ALL_GROUPS">ทั้งหมด (ทุกกลุ่ม)</option>
+						<option value="ALL_GROUPS">กลุ่ม: ทั้งหมด</option>
 						{#each reqGroups as g (g._id)}
 							{@const cleanId = g._id.replace(/^requirement_group:/, '')}
-							<option value={cleanId}>{g.name} ({cleanId})</option>
+							<option value={cleanId}>กลุ่ม: {g.name} ({cleanId})</option>
 						{/each}
 					</select>
-				</div>
-
-				<div class="flex items-center gap-1.5">
-					<label for="filter-status" class="font-medium text-muted-foreground">สถานะ:</label>
 					<select
 						id="filter-status"
 						bind:value={filterStatus}
-						class="rounded-md border bg-background px-2.5 py-1 text-xs"
+						aria-label="กรองสถานะ"
+						class="min-h-11 w-full min-w-0 rounded-lg border border-slate-300 bg-white px-3 text-sm shadow-2xs focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:outline-none"
 					>
-						<option value="ALL">ทุกสถานะ</option>
-						<option value="active">ใช้งานอยู่</option>
-						<option value="inactive">ปิดใช้งาน</option>
+						<option value="ALL">สถานะ: ทั้งหมด</option>
+						<option value="active">สถานะ: ใช้งานอยู่</option>
+						<option value="inactive">สถานะ: ปิดใช้งาน</option>
 					</select>
 				</div>
 
-				<div class="ml-auto text-xs text-muted-foreground">
-					แสดง {filteredPolicies.length} จาก {policies.length} รายการ
-				</div>
-			</div>
-		</header>
+				<p class="border-b border-slate-100 px-4 py-2.5 text-sm text-slate-600">
+					กำลังแสดง <strong class="font-semibold text-slate-900 tabular-nums">
+						{filteredPolicies.length}
+					</strong>
+					จาก {policies.length} รายการ
+				</p>
 
-		{#if policiesQuery.isLoading}
-			<div class="flex min-h-[300px] items-center justify-center">
-				<div
-					class="h-8 w-8 animate-spin rounded-full border-2 border-slate-200 border-t-primary"
-				></div>
-			</div>
-		{:else if filteredPolicies.length === 0}
-			<div class="rounded-lg border border-dashed p-8 text-center text-muted-foreground">
-				<p class="font-medium">ไม่พบรายการนโยบายการเติมสต็อก</p>
-				{#if isSA || canEditOverride}
-					<p class="mt-1 text-sm">คลิกปุ่ม "เพิ่มนโยบาย" เพื่อเริ่มต้นกำหนดค่า</p>
-				{/if}
-			</div>
-		{:else}
-			<div class="overflow-x-auto rounded-lg border">
-				<table class="w-full text-left text-sm">
-					<thead class="bg-muted/50 text-xs font-semibold text-muted-foreground uppercase">
-						<tr>
-							<th class="p-3">กลุ่มสำหรับการคำนวณ</th>
-							<th class="p-3 text-center">ระยะเวลารอคอย</th>
-							<th class="p-3 text-center">รอบสั่งซื้อ</th>
-							<th class="p-3 text-center">วันสำรอง</th>
-							<th class="p-3 text-center">วันสั่งเติมมาตรฐาน</th>
-							<th class="p-3 text-center">Min DoC</th>
-							<th class="p-3 text-center">Max DoC</th>
-							<th class="p-3">สถานะ</th>
-							<th class="p-3">แหล่งที่มา</th>
-							<th class="p-3 text-right">การจัดการ</th>
-						</tr>
-					</thead>
-					<tbody class="divide-y">
-						{#each filteredPolicies as pol (pol._id)}
-							{@const reorderDays = calculateStandardReorderDays(pol)}
-							{@const groupName = groupMap.get(pol.target_id)}
-							<tr class="hover:bg-muted/30">
-								<td class="p-3 font-medium">
-									{#if groupName}
-										<div class="font-medium text-foreground">{groupName}</div>
-										<div class="font-mono text-xs text-muted-foreground">{pol.target_id}</div>
-									{:else}
-										<div class="font-mono font-medium">{pol.target_id}</div>
-									{/if}
-								</td>
-								<td class="p-3 text-center font-mono text-xs">{pol.lead_time_days} วัน</td>
-								<td class="p-3 text-center font-mono text-xs">{pol.review_period_days} วัน</td>
-								<td class="p-3 text-center font-mono text-xs">{pol.safety_days} วัน</td>
-								<td class="p-3 text-center font-mono font-bold text-primary">{reorderDays} วัน</td>
-								<td class="p-3 text-center font-mono text-xs text-amber-600 dark:text-amber-400"
-									>{pol.min_doc_days} วัน</td
-								>
-								<td class="p-3 text-center font-mono text-xs text-blue-600 dark:text-blue-400"
-									>{pol.max_doc_days} วัน</td
-								>
-								<td class="p-3">
-									{#if (pol.status ?? 'active') === 'active'}
-										<span
-											class="inline-flex items-center rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-semibold text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300"
+				{#if policiesQuery.isLoading}
+					<div class="flex-1 space-y-3 p-4" role="status" aria-label="กำลังโหลดนโยบาย">
+						{#each [0, 1, 2, 3] as i (i)}
+							<div
+								class="h-16 animate-pulse rounded-xl border border-slate-200/80 bg-slate-50"
+							></div>
+						{/each}
+					</div>
+				{:else if filteredPolicies.length === 0}
+					<div class="flex flex-1 flex-col items-center justify-center gap-1 p-12 text-center">
+						<p class="text-sm font-medium text-slate-500">ไม่พบรายการนโยบายการเติมสต็อก</p>
+						{#if isSA || canEditOverride}
+							<p class="text-sm text-slate-500">กดปุ่ม "เพิ่มนโยบาย" เพื่อเริ่มต้นกำหนดค่า</p>
+						{/if}
+					</div>
+				{:else}
+					<div class="flex-1 overflow-x-auto">
+						<table class="w-full min-w-[960px] text-left text-sm">
+							<thead
+								class="border-b border-slate-200/80 bg-slate-50 text-xs font-semibold text-slate-600"
+							>
+								<tr>
+									<th class="min-w-[200px] p-3.5 pl-4">กลุ่มสำหรับการคำนวณ</th>
+									<th class="p-3.5 text-right whitespace-nowrap">ระยะเวลารอคอย</th>
+									<th class="p-3.5 text-right whitespace-nowrap">รอบสั่งซื้อ</th>
+									<th class="p-3.5 text-right whitespace-nowrap">วันสำรอง</th>
+									<th class="p-3.5 text-right whitespace-nowrap text-slate-900">จุดจัดหาเพิ่ม</th>
+									<th class="p-3.5 text-right whitespace-nowrap">วันคงคลังขั้นต่ำ</th>
+									<th class="p-3.5 text-right whitespace-nowrap">วันคงคลังสูงสุด</th>
+									<th class="p-3.5 whitespace-nowrap">สถานะ</th>
+									<th class="p-3.5 whitespace-nowrap">แหล่งที่มา</th>
+									<th class="p-3.5 pr-4 text-right whitespace-nowrap">
+										<span class="sr-only">การจัดการ</span>
+									</th>
+								</tr>
+							</thead>
+							<tbody class="divide-y divide-slate-100">
+								{#each filteredPolicies as pol (pol._id)}
+									{@const reorderDays = calculateStandardReorderDays(pol)}
+									{@const groupName = groupMap.get(pol.target_id)}
+									<tr class="transition-colors hover:bg-slate-50">
+										<td class="p-3.5 pl-4">
+											{#if groupName}
+												<div class="font-bold text-slate-900">{groupName}</div>
+												<div class="font-mono text-xs text-slate-500">{pol.target_id}</div>
+											{:else}
+												<div class="font-mono font-bold text-slate-900">{pol.target_id}</div>
+											{/if}
+										</td>
+										<td class="p-3.5 text-right font-mono whitespace-nowrap text-slate-900">
+											{@render days(pol.lead_time_days)}
+										</td>
+										<td class="p-3.5 text-right font-mono whitespace-nowrap text-slate-900">
+											{@render days(pol.review_period_days)}
+										</td>
+										<td class="p-3.5 text-right font-mono whitespace-nowrap text-slate-900">
+											{@render days(pol.safety_days)}
+										</td>
+										<td
+											class="p-3.5 text-right font-mono font-bold whitespace-nowrap text-slate-900"
 										>
-											ใช้งาน
-										</span>
-									{:else}
-										<span
-											class="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-600 dark:bg-zinc-800 dark:text-zinc-400"
-										>
-											ปิดใช้งาน
-										</span>
-									{/if}
-								</td>
-								<td class="p-3">
-									{#if pol.source === 'SHELTER_OVERRIDE'}
-										<span
-											class="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800 dark:bg-amber-950/60 dark:text-amber-300"
-										>
-											{SOURCE_LABELS.SHELTER_OVERRIDE}
-										</span>
-									{:else}
-										<span
-											class="rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-800 dark:bg-blue-950/60 dark:text-blue-300"
-										>
-											{SOURCE_LABELS.SPHERE_BASELINE}
-										</span>
-									{/if}
-								</td>
-								<td class="p-3 text-right">
-									<div class="flex items-center justify-end gap-2">
-										{#if isSA || canEditOverride}
-											<Button
-												variant="outline"
-												size="sm"
-												onclick={() => showEditForm(pol)}
-												class="flex items-center gap-1"
-											>
-												<Settings2 class="h-3.5 w-3.5" />
-												แก้ไข
-											</Button>
-											{#if isSA || pol.source === 'SHELTER_OVERRIDE'}
-												{#if (pol.status ?? 'active') === 'active'}
-													<Button
-														variant="destructive"
-														size="sm"
-														onclick={() => openDeleteDialog(pol)}
-														class="flex items-center gap-1"
-													>
-														<Trash2 class="h-3.5 w-3.5" />
-														ปิดใช้งาน
-													</Button>
-												{:else}
+											{@render days(reorderDays)}
+										</td>
+										<td class="p-3.5 text-right font-mono whitespace-nowrap text-amber-700">
+											{@render days(pol.min_doc_days)}
+										</td>
+										<td class="p-3.5 text-right font-mono whitespace-nowrap text-sky-700">
+											{@render days(pol.max_doc_days)}
+										</td>
+										<td class="p-3.5">
+											{#if (pol.status ?? 'active') === 'active'}
+												<span
+													class="inline-flex items-center rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-semibold whitespace-nowrap text-emerald-800"
+												>
+													ใช้งาน
+												</span>
+											{:else}
+												<span
+													class="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-semibold whitespace-nowrap text-slate-600"
+												>
+													ปิดใช้งาน
+												</span>
+											{/if}
+										</td>
+										<td class="p-3.5">
+											{#if pol.source === 'SHELTER_OVERRIDE'}
+												<span
+													class="inline-flex items-center rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-semibold whitespace-nowrap text-amber-800"
+												>
+													{SOURCE_LABELS.SHELTER_OVERRIDE}
+												</span>
+											{:else}
+												<span
+													class="inline-flex items-center rounded-full bg-sky-100 px-2.5 py-0.5 text-xs font-semibold whitespace-nowrap text-sky-800"
+												>
+													{SOURCE_LABELS.SPHERE_BASELINE}
+												</span>
+											{/if}
+										</td>
+										<td class="p-3.5 pr-4 text-right">
+											<div class="flex items-center justify-end gap-2">
+												{#if isSA || canEditOverride}
 													<Button
 														variant="outline"
-														size="sm"
-														disabled={setStatusMutation.isPending}
-														onclick={() => handleReactivate(pol)}
-														class="flex items-center gap-1 text-emerald-600 hover:text-emerald-700 dark:text-emerald-400"
+														onclick={() => showEditForm(pol)}
+														class="min-h-11 gap-1.5 rounded-lg border-slate-300 text-sm font-semibold whitespace-nowrap"
 													>
-														<RotateCcw class="h-3.5 w-3.5" />
-														เปิดใช้งาน
+														<Settings2 class="h-3.5 w-3.5" aria-hidden="true" />
+														แก้ไข
 													</Button>
+													{#if isSA || pol.source === 'SHELTER_OVERRIDE'}
+														{#if (pol.status ?? 'active') === 'active'}
+															<Button
+																variant="destructive"
+																onclick={() => openDeleteDialog(pol)}
+																class="min-h-11 gap-1.5 rounded-lg text-sm font-semibold whitespace-nowrap"
+															>
+																<Trash2 class="h-3.5 w-3.5" aria-hidden="true" />
+																ปิดใช้งาน
+															</Button>
+														{:else}
+															<Button
+																variant="outline"
+																disabled={setStatusMutation.isPending}
+																onclick={() => handleReactivate(pol)}
+																class="min-h-11 gap-1.5 rounded-lg border-slate-300 text-sm font-semibold whitespace-nowrap text-emerald-700 hover:text-emerald-800"
+															>
+																<RotateCcw class="h-3.5 w-3.5" aria-hidden="true" />
+																เปิดใช้งาน
+															</Button>
+														{/if}
+													{/if}
 												{/if}
-											{/if}
-										{/if}
-									</div>
-								</td>
-							</tr>
-						{/each}
-					</tbody>
-				</table>
+											</div>
+										</td>
+									</tr>
+								{/each}
+							</tbody>
+						</table>
+					</div>
+				{/if}
 			</div>
-		{/if}
+		</div>
 	</section>
 {:else}
 	<div
