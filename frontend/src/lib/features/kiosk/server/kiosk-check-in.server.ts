@@ -201,8 +201,9 @@ export type KioskCheckInMemberResult = {
 	stay_status?: string;
 	qr_payload?: string;
 	/**
-	 * Unmasked name + phone for the printed ID-card label: only with a `qr_payload` (just checked
-	 * in, or already arriving), never in a lookup — the lookup screen keeps the masked `last_name`.
+	 * Unmasked name, phone and emergency contact phone (digits only, never the contact's name) for
+	 * the printed ID-card label: only with a `qr_payload` (just checked in, or already arriving),
+	 * never in a lookup — the lookup screen keeps the masked `last_name`.
 	 */
 	label?: KioskLabelIdentity;
 };
