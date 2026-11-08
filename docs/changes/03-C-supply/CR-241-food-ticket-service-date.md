@@ -1,8 +1,9 @@
 ---
-id: draft
+id: CR-241
 title: วันที่แจก (service_date) ของตั๋วอาหาร แทนการอนุมานจาก created_at
-status: proposed
+status: approved
 date: 2026-11-07
+updated: 2026-11-08
 requested_by: feedback อบรมระบบ 2026-11-03 (#1222, แยกจาก #1183)
 decided_by: kong
 layer: volatile
@@ -20,7 +21,7 @@ migration: >
   ไม่ backfill. Writer ตั๋ว food/supplies รุ่นใหม่ stamp schema_v 2; ตั๋ว food schema_v 2 ต้องมี service_date.
 ---
 
-# draft-food-ticket-service-date — `requisition_ticket.service_date`
+# CR-241 — `requisition_ticket.service_date`
 
 > **สรุป (TL;DR):**
 >
@@ -111,3 +112,4 @@ Transition ของตั๋วเดิม (spread doc เดิม) คง `s
 - 2026-11-07 — proposed (dev ตอบคำถามเปิด: วันนี้/อนาคตเท่านั้น; เสนอ immutable แทน "แก้ได้ตอน `PENDING_PICK`" เพราะข้อจำกัด VDU)
 - 2026-11-08 — เลือกล่วงหน้าได้ไม่จำกัด; ตัวกรองวันแท็บอาหารเปลี่ยนเป็นปฏิทิน + "ทุกวัน" (R5) (kong)
 - 2026-11-08 — `service_date` แก้ไม่ได้หลังสร้าง; วันผิดให้ยกเลิกตั๋วแล้วเปิดใหม่ (R4) (kong)
+- 2026-11-08 — approved (kong); รันเลขจาก `draft-food-ticket-service-date` → CR-241
