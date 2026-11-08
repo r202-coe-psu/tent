@@ -1,3 +1,5 @@
+import type { LanguageCode } from '$lib/utils/language';
+
 const ALREADY_CHECKED_IN_STAY_STATUSES = [
 	'arriving',
 	'active',
@@ -33,14 +35,14 @@ const REPRINT_REASONS_EN: Record<string, string> = {
  * Shows a reprint reason in `language`. The reasons travel as Thai text (the constants above), so
  * a screen passes what it holds through here; text that is not a known reason comes back as is.
  */
-export function localizeReprintReason(reason: string, language: 'th' | 'en' = 'th'): string {
+export function localizeReprintReason(reason: string, language: LanguageCode = 'th'): string {
 	return language === 'en' ? (REPRINT_REASONS_EN[reason] ?? reason) : reason;
 }
 
 /** Why a listed member cannot be reprinted; null when no dedicated reason applies. */
 export function reprintUnavailableReason(
 	status: string | null | undefined,
-	language: 'th' | 'en' = 'th'
+	language: LanguageCode = 'th'
 ): string | null {
 	if (status === 'pre_registered') {
 		return localizeReprintReason(REPRINT_PRE_REGISTERED_REASON, language);

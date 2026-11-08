@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { LanguageCode } from '$lib/utils/language';
 
 /** Which kiosk flows run the face check. */
 export const FACE_CHECK_FLOWS = ['check_in', 'walk_in'] as const;
@@ -207,7 +208,7 @@ export const FACE_MATCH_SHOWN_MS = 1_400;
 // --- wording ------------------------------------------------------------------------------------
 
 /** Kept local: domain code does not import the app's language store. */
-export type FaceCheckLanguage = 'th' | 'en';
+export type FaceCheckLanguage = LanguageCode;
 
 const HINT_MESSAGES: Record<FaceHint, string> = {
 	ok: 'กรุณามองตรงที่กล้อง และอยู่นิ่งสักครู่',
