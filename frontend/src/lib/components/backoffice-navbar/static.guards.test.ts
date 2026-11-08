@@ -36,10 +36,13 @@ vi.mock('$lib/features/users', () => ({
 import {
 	requireEvacueeRegistration,
 	requireBannerManagement,
+	requireDonationAccess,
 	requireIncidents,
 	requireKioskManagement,
 	requireKitchen,
 	requireManager,
+	requirePrinterManagement,
+	requireSupplyView,
 	requireTicketAccess,
 	requireVolunteerBackoffice,
 	requireWarehouseAccess
@@ -62,10 +65,10 @@ const GUARD_OF: Record<string, Guard> = {
 	'/back-office/volunteers': requireVolunteerBackoffice,
 	'/back-office/volunteers/accounts': requireVolunteerBackoffice,
 	'/back-office/referrals': requireManager,
-	'/back-office/supply': requireWarehouseAccess,
-	'/back-office/stock-donations': requireWarehouseAccess,
+	'/back-office/supply': requireSupplyView,
+	'/back-office/stock-donations': requireDonationAccess,
 	'/back-office/distribution': requireWarehouseAccess,
-	'/back-office/supply?tab=catalog': requireWarehouseAccess,
+	'/back-office/supply?tab=catalog': requireSupplyView,
 	'/back-office/tickets/kitchen': requireTicketAccess,
 	'/back-office/kitchen': requireKitchen,
 	'/back-office/shelters': requireManager,
@@ -74,7 +77,8 @@ const GUARD_OF: Record<string, Guard> = {
 	'/back-office/master-data': requireManager,
 	'/back-office/incidents': requireIncidents,
 	'/back-office/kiosks': requireKioskManagement,
-	'/back-office/kiosks/banners': requireBannerManagement
+	'/back-office/kiosks/banners': requireBannerManagement,
+	'/back-office/printers': requirePrinterManagement
 };
 
 /** No page guard yet (R2, #845). */
@@ -98,6 +102,7 @@ const ROLE_SETS: string[][] = [
 		'supply_coordinator',
 		'volunteer_coordinator',
 		'distribution_staff',
+		'donation_staff',
 		'security_officer',
 		'triage_staff',
 		'medical_staff',

@@ -299,6 +299,23 @@ describe('POST /api/back-office/donations (walk-in intake)', () => {
 		expect(written).toBeNull();
 	});
 
+	it('lets donation_staff key a walk-in, writing only donation ledger rows (CR-227)', async () => {
+		mockCouch();
+		vi.mocked(requireShelterScopeOrSA).mockResolvedValue({
+			name: 'don',
+			roles: ['shelter:SH001', 'SH001:donation_staff'],
+			isSA: false,
+			shelterCode: 'SH001'
+		});
+
+		const data = await (await POST(event(validBody))).json();
+
+		expect(data.success).toBe(true);
+		const ledgers = docsOfType('stock_ledger');
+		expect(ledgers).toHaveLength(1);
+		expect(ledgers.every((d) => d.reason === 'donation' && Number(d.qty) > 0)).toBe(true);
+	});
+
 	it('rejects a caller without the warehouse capability', async () => {
 		mockCouch();
 		vi.mocked(requireShelterScopeOrSA).mockResolvedValue({

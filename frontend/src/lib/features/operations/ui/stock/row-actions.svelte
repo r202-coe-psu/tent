@@ -12,6 +12,7 @@
 		disabled = false,
 		disabledReason,
 		distributeDisabled = false,
+		canChange = true,
 		layout = 'stack'
 	}: {
 		itemName: string;
@@ -21,6 +22,8 @@
 		/** Why `disabled` is set. Without one the buttons stay unwrapped (a read-only row is not clickable). */
 		disabledReason?: string;
 		distributeDisabled?: boolean;
+		/** False for a read-only viewer (donation_staff, CR-227): no receive / issue buttons at all. */
+		canChange?: boolean;
 		/** `stack` = one above the other (tablet, phone); `inline` = side by side (desktop). */
 		layout?: 'stack' | 'inline';
 	} = $props();
@@ -31,36 +34,38 @@
 </script>
 
 <!-- stopPropagation: the table row is itself clickable (opens the item). -->
-<div class="flex gap-1.5 {layout === 'stack' ? 'flex-col' : 'flex-col xl:flex-row'}">
-	<DisabledReason reason={disabled ? disabledReason : undefined}>
-		<Button
-			type="button"
-			{disabled}
-			aria-label="รับเข้า {itemName}"
-			class="min-h-11 gap-1.5 rounded-lg bg-[#0A2647] px-3 text-sm font-semibold text-white hover:bg-[#051930]"
-			onclick={(e: MouseEvent) => {
-				e.stopPropagation();
-				onreceive();
-			}}
-		>
-			<ArrowDownToLine class="h-4 w-4" aria-hidden="true" />
-			รับเข้า
-		</Button>
-	</DisabledReason>
-	<DisabledReason reason={distributeReason}>
-		<Button
-			type="button"
-			variant="outline"
-			disabled={disabled || distributeDisabled}
-			aria-label="เบิก {itemName}"
-			class="min-h-11 gap-1.5 rounded-lg border-slate-300 bg-white px-3 text-sm font-semibold text-slate-800 shadow-2xs"
-			onclick={(e: MouseEvent) => {
-				e.stopPropagation();
-				ondistribute();
-			}}
-		>
-			<ArrowUpFromLine class="h-4 w-4" aria-hidden="true" />
-			เบิก
-		</Button>
-	</DisabledReason>
-</div>
+{#if canChange}
+	<div class="flex gap-1.5 {layout === 'stack' ? 'flex-col' : 'flex-col xl:flex-row'}">
+		<DisabledReason reason={disabled ? disabledReason : undefined}>
+			<Button
+				type="button"
+				{disabled}
+				aria-label="รับเข้า {itemName}"
+				class="min-h-11 gap-1.5 rounded-lg bg-[#0A2647] px-3 text-sm font-semibold text-white hover:bg-[#051930]"
+				onclick={(e: MouseEvent) => {
+					e.stopPropagation();
+					onreceive();
+				}}
+			>
+				<ArrowDownToLine class="h-4 w-4" aria-hidden="true" />
+				รับเข้า
+			</Button>
+		</DisabledReason>
+		<DisabledReason reason={distributeReason}>
+			<Button
+				type="button"
+				variant="outline"
+				disabled={disabled || distributeDisabled}
+				aria-label="เบิก {itemName}"
+				class="min-h-11 gap-1.5 rounded-lg border-slate-300 bg-white px-3 text-sm font-semibold text-slate-800 shadow-2xs"
+				onclick={(e: MouseEvent) => {
+					e.stopPropagation();
+					ondistribute();
+				}}
+			>
+				<ArrowUpFromLine class="h-4 w-4" aria-hidden="true" />
+				เบิก
+			</Button>
+		</DisabledReason>
+	</div>
+{/if}

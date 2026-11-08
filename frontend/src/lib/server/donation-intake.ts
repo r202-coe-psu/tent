@@ -1,8 +1,8 @@
 import { error, json } from '@sveltejs/kit';
 import { adminRaw, requireShelterScopeOrSA, type Caller } from '$lib/server/couch-admin';
-import { hasStaffCapability, isShelterManager } from '$lib/auth/roles';
+import { hasStaffCapability, isDonationStaff, isShelterManager } from '$lib/auth/roles';
 import type { PublicDonationDoc, ReceiveDonationInput } from '$lib/features/donations';
-import type { CountedItem } from '$lib/features/operations/server';
+import type { CountedItem, StockLedger } from '$lib/features/operations/server';
 import { isSupplyItem, type SupplyItem, CATALOG_DB } from '$lib/features/supply/server';
 import {
 	isItemMaster,
@@ -24,17 +24,41 @@ type RegistryRow = { id: string; doc?: { code?: string } };
 type RegistryAllDocs = { rows?: RegistryRow[] };
 
 /**
- * Warehouse intake gate — `warehouse_staff` (+ `shelter_manager` / SA), NOT
- * CouchDB `_admin`. Mirrors the CR-024 capability pattern (`requireKitchen`).
+ * Donation intake gate — `warehouse_staff` (+ `shelter_manager` / SA), plus `donation_staff`
+ * (CR-227), NOT CouchDB `_admin`. Mirrors the CR-024 capability pattern (`requireKitchen`).
+ *
+ * `warehouse_staff` is checked against any shelter (#477, unchanged). `donation_staff` is a new
+ * role, so it is held to the caller's own shelter (`caller.shelterCode`) — the one every route on
+ * this surface acts on for a non-SA caller.
  */
-export async function authorizeWarehouse(cookie: string | null): Promise<Caller> {
+export async function authorizeDonation(cookie: string | null): Promise<Caller> {
 	const caller = await requireShelterScopeOrSA(cookie); // authenticated; resolves roles/scope
 	const allowed =
 		caller.isSA ||
 		isShelterManager(caller.roles) ||
-		hasStaffCapability(caller.roles, 'warehouse_staff');
-	if (!allowed) throw error(403, 'Requires warehouse_staff, shelter_manager, or system_admin');
+		hasStaffCapability(caller.roles, 'warehouse_staff') ||
+		(!!caller.shelterCode && isDonationStaff(caller.roles, caller.shelterCode));
+	if (!allowed) {
+		throw error(403, 'Requires warehouse_staff, donation_staff, shelter_manager, or system_admin');
+	}
 	return caller;
+}
+
+/**
+ * Guard for the admin `_bulk_docs` receive writes, which skip the stock validate_doc_update: every
+ * row they append must be a positive `donation` receipt. `keyDonationReceipt` builds rows that
+ * way; this keeps `donation_staff` (CR-227, who is refused any other ledger write by the VDU)
+ * from ever getting another reason through this route.
+ */
+export function assertDonationLedgerRows(rows: readonly StockLedger[]): void {
+	for (const row of rows) {
+		if (row.type !== 'stock_ledger' || row.reason !== 'donation' || !(Number(row.qty) > 0)) {
+			throw error(
+				500,
+				'Donation receipt may only write positive stock_ledger rows of reason donation'
+			);
+		}
+	}
 }
 
 /** Every shelter code in the registry (`shelter:{ulid}` docs carry `code`). */

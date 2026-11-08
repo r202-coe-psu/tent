@@ -217,6 +217,20 @@ describe('GET /api/back-office/donations (pending intake queue)', () => {
 		expect(paths.some((p) => p.includes('_find'))).toBe(false);
 	});
 
+	it('lists the own shelter queue for donation_staff (CR-227)', async () => {
+		vi.mocked(requireShelterScopeOrSA).mockResolvedValue({
+			name: 'don',
+			roles: ['shelter:SH001', 'SH001:donation_staff'],
+			isSA: false,
+			shelterCode: 'SH001'
+		});
+		mockCouch();
+
+		const response = await GET(event());
+
+		expect(response.status).toBe(200);
+	});
+
 	it('returns 403 for a signed-in user without a warehouse capability', async () => {
 		vi.mocked(requireShelterScopeOrSA).mockResolvedValue({
 			name: 'reg',

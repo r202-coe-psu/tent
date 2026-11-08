@@ -311,7 +311,7 @@ describe('Back-office GET & POST /api/back-office/donations/[query]', () => {
 				unit: 'kg',
 				reason: 'donation',
 				ref_id: 'donation:123',
-				schema_v: 6, // 4 = CR-088 (lot_no / storage_zone); 5 = draft-shelter-storage-points (storage_point_id); 6 = CR-143 §C (adjust_reason)
+				schema_v: 7, // 4 = CR-088 (lot_no / storage_zone); 5 = draft-shelter-storage-points (storage_point_id); 6 = CR-143 §C (adjust_reason); 7 = CR-234 (lot.self_purchased)
 				shelter_code: 'SH001',
 				created_by: 'admin'
 			});
@@ -613,6 +613,66 @@ describe('Back-office GET & POST /api/back-office/donations/[query]', () => {
 
 			expect(response.status).toBe(403);
 			expect(appendedDocs()).toHaveLength(0);
+		});
+
+		describe('donation_staff (CR-227)', () => {
+			const donationStaff = (code: string) => ({
+				name: 'don',
+				roles: [`shelter:${code}`, `${code}:donation_staff`],
+				isSA: false,
+				shelterCode: code
+			});
+
+			it('POST receives a donation of its own shelter, writing only donation ledger rows', async () => {
+				vi.mocked(requireShelterScopeOrSA).mockResolvedValue(donationStaff('SH001'));
+				mockCouch(withItems([{ item_id: 'item:rice', qty: '10', unit: 'kg' }]));
+
+				const response = await POST(
+					postEvent({
+						status: 'received',
+						items: [{ item_id: 'item:rice', qty: '10', unit: 'kg' }]
+					})
+				);
+
+				expect(response.status).toBe(200);
+				const ledgers = appendedDocs().filter((d) => d.type === 'stock_ledger');
+				expect(ledgers.length).toBeGreaterThan(0);
+				expect(ledgers.every((d) => d.reason === 'donation')).toBe(true);
+			});
+
+			it('GET reads a donation of its own shelter', async () => {
+				vi.mocked(requireShelterScopeOrSA).mockResolvedValue(donationStaff('SH001'));
+				mockCouch(baseDonation);
+
+				const response = await GET({
+					params: { query: 'DN-999999' },
+					request: { headers: { get: () => 'session-cookie' } }
+				} as unknown as GetEvent);
+
+				expect(response.status).toBe(200);
+			});
+
+			it('POST returns 403 when it receives another shelter donation, and writes nothing', async () => {
+				vi.mocked(requireShelterScopeOrSA).mockResolvedValue(donationStaff('SH002'));
+				mockCouch(baseDonation);
+
+				const response = await POST(postEvent({ status: 'received' }));
+
+				expect(response.status).toBe(403);
+				expect(appendedDocs()).toHaveLength(0);
+			});
+
+			it('GET returns 403 for another shelter donation', async () => {
+				vi.mocked(requireShelterScopeOrSA).mockResolvedValue(donationStaff('SH002'));
+				mockCouch(baseDonation);
+
+				const response = await GET({
+					params: { query: 'DN-999999' },
+					request: { headers: { get: () => 'session-cookie' } }
+				} as unknown as GetEvent);
+
+				expect(response.status).toBe(403);
+			});
 		});
 
 		it('POST returns 403 for a signed-in user without a warehouse capability', async () => {

@@ -2,12 +2,15 @@
 	import * as Sheet from '$lib/components/ui/sheet';
 	import * as Tabs from '$lib/components/ui/tabs';
 	import { Button } from '$lib/components/ui/button/index.js';
+	import { Switch } from '$lib/components/ui/switch/index.js';
+	import { Label } from '$lib/components/ui/label/index.js';
 	import { ItemPolicyPanel } from '$lib/features/sop-ratios/item-policy';
 	import ArrowDownToLine from '@lucide/svelte/icons/arrow-down-to-line';
 	import ArrowUpFromLine from '@lucide/svelte/icons/arrow-up-from-line';
 	import SlidersHorizontal from '@lucide/svelte/icons/sliders-horizontal';
 	import Boxes from '@lucide/svelte/icons/boxes';
 	import type { LotPriorityItem } from '../domain/lot-priority';
+	import { qtyGt } from '$lib/utils/qty';
 	import type { StockLotBalance } from '../domain/operations';
 	import { useStoragePoints } from '../application/use-storage-points.svelte';
 	import LedgerTable from './ledger-table.svelte';
@@ -23,9 +26,12 @@
 		row,
 		lots,
 		itemsById,
+		selfPurchasedRefs,
+		selfPurchasedFilter = false,
 		shelterCode,
 		offline = false,
 		canDistribute = true,
+		canChange = true,
 		onaction
 	}: {
 		open?: boolean;
@@ -39,11 +45,40 @@
 		offline?: boolean;
 		/** False when user lacks warehouse_staff capability in the active shelter. */
 		canDistribute?: boolean;
+		/** False for a read-only viewer (donation_staff, CR-227): no receive / issue / adjust buttons. */
+		canChange?: boolean;
+		/** `lot_ref`s the shelter bought itself — those lots get a "ซื้อเอง" badge. */
+		selfPurchasedRefs?: ReadonlySet<string>;
+		/** The table's "ซื้อเอง" filter is on: the lots tab starts with its own switch on. */
+		selfPurchasedFilter?: boolean;
 		onaction: (kind: ItemDetailAction) => void;
 	} = $props();
 
 	const storagePoints = useStoragePoints(() => shelterCode);
-	const lotRows = $derived(buildLotRows(lots, storagePoints.points, Date.now(), itemsById));
+	const LOT_EXPIRY_CLASS = {
+		expired: 'text-red-700',
+		expiring: 'text-amber-700',
+		ok: 'text-slate-500'
+	};
+
+	const lotRows = $derived(
+		buildLotRows(lots, storagePoints.points, Date.now(), itemsById, selfPurchasedRefs)
+	);
+
+	// "ซื้อเอง" switch of the lots tab. A choice is remembered for that item only; otherwise the
+	// switch follows the table's filter.
+	let selfOnlyChoice = $state<{ itemId: string; value: boolean } | null>(null);
+	const selfOnly = $derived(
+		row !== undefined && selfOnlyChoice?.itemId === row._id
+			? selfOnlyChoice.value
+			: selfPurchasedFilter
+	);
+	// Keep each lot's place in the consumption order when the list is narrowed.
+	const shownLots = $derived(
+		lotRows
+			.map((lot, index) => ({ lot, order: index + 1 }))
+			.filter(({ lot }) => !selfOnly || lot.isSelfPurchased)
+	);
 
 	const ACTIONS = [
 		{ kind: 'receive', label: 'รับเข้า', icon: ArrowDownToLine },
@@ -79,6 +114,12 @@
 								{row.usableNote}
 							</dd>
 						{/if}
+						{#if row.selfPurchasedQty && qtyGt(row.selfPurchasedQty, 0)}
+							<dd class="mt-0.5 text-xs font-medium text-sky-900 tabular-nums">
+								ซื้อเอง {row.selfPurchasedQty}
+								{row.unitLabel}
+							</dd>
+						{/if}
 					</div>
 					<div class="rounded-xl border border-slate-200/80 bg-slate-50 p-2.5">
 						<dt class="text-xs text-slate-500">เกณฑ์</dt>
@@ -103,32 +144,34 @@
 					</div>
 				</dl>
 
-				<div class="grid grid-cols-3 gap-2">
-					{#each ACTIONS as action (action.kind)}
-						{@const isDis = offline || (action.kind === 'distribute' && !canDistribute)}
-						{@const btnTitle = offline
-							? OFFLINE_HINT
-							: action.kind === 'distribute' && !canDistribute
-								? DISTRIBUTE_FORBIDDEN_HINT
-								: undefined}
-						<DisabledReason reason={isDis ? btnTitle : undefined}>
-							<Button
-								type="button"
-								variant={action.kind === 'receive' ? 'default' : 'outline'}
-								aria-label="{action.label} {row.name}"
-								class="min-h-11 gap-1.5 rounded-lg px-2 text-sm font-semibold {action.kind ===
-								'receive'
-									? 'bg-[#0A2647] text-white hover:bg-[#051930]'
-									: 'border-slate-300 bg-white text-slate-800 shadow-2xs'}"
-								disabled={isDis}
-								onclick={() => onaction(action.kind)}
-							>
-								<action.icon class="h-4 w-4" aria-hidden="true" />
-								{action.label}
-							</Button>
-						</DisabledReason>
-					{/each}
-				</div>
+				{#if canChange}
+					<div class="grid grid-cols-3 gap-2">
+						{#each ACTIONS as action (action.kind)}
+							{@const isDis = offline || (action.kind === 'distribute' && !canDistribute)}
+							{@const btnTitle = offline
+								? OFFLINE_HINT
+								: action.kind === 'distribute' && !canDistribute
+									? DISTRIBUTE_FORBIDDEN_HINT
+									: undefined}
+							<DisabledReason reason={isDis ? btnTitle : undefined}>
+								<Button
+									type="button"
+									variant={action.kind === 'receive' ? 'default' : 'outline'}
+									aria-label="{action.label} {row.name}"
+									class="min-h-11 gap-1.5 rounded-lg px-2 text-sm font-semibold {action.kind ===
+									'receive'
+										? 'bg-[#0A2647] text-white hover:bg-[#051930]'
+										: 'border-slate-300 bg-white text-slate-800 shadow-2xs'}"
+									disabled={isDis}
+									onclick={() => onaction(action.kind)}
+								>
+									<action.icon class="h-4 w-4" aria-hidden="true" />
+									{action.label}
+								</Button>
+							</DisabledReason>
+						{/each}
+					</div>
+				{/if}
 			</Sheet.Header>
 
 			{#key row._id}
@@ -141,11 +184,23 @@
 
 					<div class="min-h-0 flex-1 overflow-y-auto p-4">
 						<Tabs.Content value="lots">
-							{#if lotRows.length === 0}
-								<p class="py-10 text-center text-sm font-medium text-slate-500">ไม่มีล็อตคงเหลือ</p>
+							<div class="mb-3 flex min-h-11 items-center gap-2.5 px-1">
+								<Switch
+									id="lots-self-purchased"
+									checked={selfOnly}
+									onCheckedChange={(v) => (selfOnlyChoice = { itemId: row._id, value: v })}
+								/>
+								<Label for="lots-self-purchased" class="cursor-pointer text-sm text-slate-700">
+									เฉพาะล็อตที่ซื้อเอง
+								</Label>
+							</div>
+							{#if shownLots.length === 0}
+								<p class="py-10 text-center text-sm font-medium text-slate-500">
+									{selfOnly ? 'ไม่มีล็อตที่ซื้อเอง' : 'ไม่มีล็อตคงเหลือ'}
+								</p>
 							{:else}
 								<ul class="space-y-2.5">
-									{#each lotRows as lot, index (lot.lotRef)}
+									{#each shownLots as { lot, order } (lot.lotRef)}
 										<li
 											class="rounded-xl border p-3 {lot.isExpired || lot.isNegative
 												? 'border-red-200 bg-red-50/40'
@@ -158,25 +213,41 @@
 													>
 													<span class="text-sm text-slate-500">{lot.unit}</span>
 												</p>
-												{#if lot.isNegative}
-													<span
-														class="rounded-full bg-red-100 px-2.5 py-1 text-xs font-semibold text-red-800 ring-1 ring-red-300"
-													>
-														ล็อตนี้ยอดติดลบ — ต้องแก้ยอด
-													</span>
-												{:else if lot.isNext}
-													<span
-														class="rounded-full bg-teal-50 px-2.5 py-1 text-xs font-semibold text-teal-900 ring-1 ring-teal-200"
-													>
-														เบิกถัดไป
-													</span>
-												{:else if lot.isExpired}
-													<span
-														class="rounded-full bg-red-50 px-2.5 py-1 text-xs font-semibold text-red-800 ring-1 ring-red-200"
-													>
-														หมดอายุ — ปรับยอดออก
-													</span>
-												{/if}
+												<div class="flex flex-wrap items-center justify-end gap-1.5">
+													{#if lot.isNegative}
+														<span
+															class="rounded-full bg-red-100 px-2.5 py-1 text-xs font-semibold text-red-800 ring-1 ring-red-300"
+														>
+															ล็อตนี้ยอดติดลบ — ต้องแก้ยอด
+														</span>
+													{:else if lot.isNext}
+														<span
+															class="rounded-full bg-teal-50 px-2.5 py-1 text-xs font-semibold text-teal-900 ring-1 ring-teal-200"
+														>
+															เบิกถัดไป
+														</span>
+													{:else if lot.isExpired || lot.expiryState === 'expired'}
+														<span
+															class="rounded-full bg-red-50 px-2.5 py-1 text-xs font-semibold text-red-800 ring-1 ring-red-200"
+														>
+															หมดอายุ — ปรับยอดออก
+														</span>
+													{/if}
+													{#if lot.expiryState === 'expiring' && !lot.isNegative}
+														<span
+															class="rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-800 ring-1 ring-amber-200"
+														>
+															ใกล้หมดอายุ
+														</span>
+													{/if}
+													{#if lot.isSelfPurchased}
+														<span
+															class="rounded-full bg-sky-50 px-2.5 py-1 text-xs font-semibold text-sky-900 ring-1 ring-sky-200"
+														>
+															ซื้อเอง
+														</span>
+													{/if}
+												</div>
 											</div>
 											<p class="mt-1.5 text-sm text-slate-700">
 												{#if lot.lotNo}<span class="font-semibold text-slate-900 tabular-nums"
@@ -184,7 +255,12 @@
 													>{:else}<span class="text-slate-500">ไม่มีเลขล็อต</span>{/if}
 												<span class="text-slate-400" aria-hidden="true">·</span>
 												{#if lot.expiry}หมดอายุ <span class="tabular-nums">{lot.expiry}</span
-													>{:else}
+													>{#if lot.expiryRelative}
+														<span
+															class="text-xs font-medium {LOT_EXPIRY_CLASS[
+																lot.expiryState ?? 'ok'
+															]}">({lot.expiryRelative})</span
+														>{/if}{:else}
 													<span class="text-slate-500">ไม่ระบุวันหมดอายุ</span>
 												{/if}
 												{#if lot.storageName}
@@ -203,9 +279,7 @@
 													? 'text-red-800'
 													: 'text-teal-900'}"
 											>
-												{lot.isExpired || lot.isNegative
-													? ''
-													: `ลำดับที่ ${index + 1}: `}{lot.reason}
+												{lot.isExpired || lot.isNegative ? '' : `ลำดับที่ ${order}: `}{lot.reason}
 											</p>
 										</li>
 									{/each}

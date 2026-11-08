@@ -4,6 +4,7 @@
 	import ArrowUpFromLine from '@lucide/svelte/icons/arrow-up-from-line';
 	import SlidersHorizontal from '@lucide/svelte/icons/sliders-horizontal';
 	import Truck from '@lucide/svelte/icons/truck';
+	import ShoppingCart from '@lucide/svelte/icons/shopping-cart';
 	import type { DaySummaryCard, LedgerGroup } from './ledger-view';
 
 	let { cards, label }: { cards: DaySummaryCard[]; label: string } = $props();
@@ -12,11 +13,12 @@
 		in: { number: 'text-emerald-800', icon: 'text-emerald-600', Icon: ArrowDownToLine },
 		out: { number: 'text-orange-800', icon: 'text-orange-600', Icon: ArrowUpFromLine },
 		adjust: { number: 'text-blue-800', icon: 'text-blue-600', Icon: SlidersHorizontal },
-		transfer: { number: 'text-violet-800', icon: 'text-violet-600', Icon: Truck }
+		transfer: { number: 'text-violet-800', icon: 'text-violet-600', Icon: Truck },
+		self_purchased: { number: 'text-sky-800', icon: 'text-sky-600', Icon: ShoppingCart }
 	};
 </script>
 
-<section aria-label={label} class="grid grid-cols-2 gap-2.5 md:grid-cols-4 xl:gap-3">
+<section aria-label={label} class="grid grid-cols-2 gap-2.5 md:grid-cols-5 xl:gap-3">
 	{#each cards as card (card.group)}
 		{@const tone = TONE[card.group]}
 		<div

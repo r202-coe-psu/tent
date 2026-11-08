@@ -9,7 +9,9 @@ import {
 	isShelterManager,
 	isSystemAdmin,
 	canAccessManagerPages,
+	canAccessDonations,
 	canAccessWarehouse,
+	canViewSupply,
 	canAccessKitchen,
 	canAccessTickets,
 	canAccessEvacueeRegistration,
@@ -19,6 +21,7 @@ import {
 	canAccessVolunteerBackoffice,
 	canAccessZoning,
 	canManageBanners,
+	canManagePrinters,
 	canManageScanners,
 	kioskConfinement,
 	shelterCodeFromRoles
@@ -167,6 +170,20 @@ export async function requireKioskManagement(fetchFn?: typeof fetch) {
 }
 
 /**
+ * Printer management (`/back-office/printers`) guard — system_admin, or shelter_manager of the
+ * selected shelter (O-3; kiosk_staff excluded, unlike kiosks). The printer BFF routes re-check
+ * scope per printer.
+ */
+export async function requirePrinterManagement(fetchFn?: typeof fetch) {
+	await requireAuth(fetchFn);
+	const roles = authStore.user?.roles ?? [];
+	const shelter = activeShelterCode(roles);
+	if (!isSystemAdmin(roles) && !(shelter && canManagePrinters(roles, shelter))) {
+		throw redirect(302, resolve(LANDING_ROUTE));
+	}
+}
+
+/**
  * Kiosk banner management (`/back-office/kiosks/banners/**`) guard — system_admin, or
  * shelter_manager / kiosk_staff / pr_staff of the selected shelter (FR-SBO-29, issue #930). The
  * banner BFF routes re-check scope per request.
@@ -213,6 +230,32 @@ export async function requireWarehouseAccess(
 	const shelter = activeShelterCode(roles);
 	if (!canAccessWarehouse(roles, shelter)) {
 		throw redirect(302, resolve(warehouseDeniedDestination(roles, shelter, options?.deskFallback)));
+	}
+}
+
+/**
+ * Donation intake guard (`/back-office/stock-donations`) — the warehouse side plus
+ * `donation_staff` of the active shelter (CR-227). Kept apart from {@link requireWarehouseAccess}
+ * so donation_staff does not reach distribution or tickets.
+ */
+export async function requireDonationAccess(fetchFn: typeof fetch = fetch) {
+	await requireAuth(fetchFn);
+	const roles = authStore.user?.roles ?? [];
+	if (!canAccessDonations(roles, activeShelterCode(roles))) {
+		throw redirect(302, resolve(LANDING_ROUTE));
+	}
+}
+
+/**
+ * Supply / stock pages guard (`/back-office/supply`) — the warehouse side plus `donation_staff`,
+ * who sees stock read-only (CR-227). The page hides the mutating actions; the data layer stays the
+ * real boundary.
+ */
+export async function requireSupplyView(fetchFn: typeof fetch = fetch) {
+	await requireAuth(fetchFn);
+	const roles = authStore.user?.roles ?? [];
+	if (!canViewSupply(roles, activeShelterCode(roles))) {
+		throw redirect(302, resolve(LANDING_ROUTE));
 	}
 }
 
