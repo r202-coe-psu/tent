@@ -95,7 +95,7 @@
 			formErrors.reqGroupId = 'กรุณาระบุหมวดความต้องการ';
 		}
 		if (!isPositiveQty(formDailyDemand)) {
-			formErrors.dailyDemand = 'ปริมาณความต้องการต้องมากกว่า 0';
+			formErrors.dailyDemand = 'ปริมาณความต้องการต้องไม่น้อยกว่า 0.0001';
 		}
 		if (!formEffectiveDate) {
 			formErrors.effectiveDate = 'กรุณาระบุวันที่มีผลบังคับใช้';

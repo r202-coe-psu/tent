@@ -161,7 +161,7 @@
 				formErrors[`item_${i}_uom`] = 'กรุณาระบุหน่วยนับ';
 			}
 			if (!isPositiveQty(item.conversion_factor)) {
-				formErrors[`item_${i}_cf`] = 'ตัวคูณแปลงค่าต้อง > 0';
+				formErrors[`item_${i}_cf`] = 'ตัวคูณแปลงค่าต้องไม่น้อยกว่า 0.0001';
 			}
 			if (
 				item.share_percent !== undefined &&
@@ -434,6 +434,7 @@
 												id={`item-map-cf-${index}`}
 												type="number"
 												step="any"
+												min="0.0001"
 												bind:value={itemMap.conversion_factor}
 												placeholder="1"
 											/>
