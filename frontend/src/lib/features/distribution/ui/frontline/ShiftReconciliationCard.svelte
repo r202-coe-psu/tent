@@ -38,10 +38,8 @@
 	import TicketLoanSummary from '../common/TicketLoanSummary.svelte';
 	import ShiftCloseStepGuide from '../common/ShiftCloseStepGuide.svelte';
 	import TicketStatusBadge from '../common/TicketStatusBadge.svelte';
-	import TicketSummaryBadges from '../common/TicketSummaryBadges.svelte';
+	import TicketCardHeader from '../common/TicketCardHeader.svelte';
 	import Undo2 from '@lucide/svelte/icons/undo-2';
-	import MapPin from '@lucide/svelte/icons/map-pin';
-	import { ticketCardSummary } from '../model/distribution-point';
 
 	interface Props {
 		ticket: RequisitionTicket | null;
@@ -113,7 +111,6 @@
 		)
 	);
 
-	const summary = $derived(ticket ? ticketCardSummary(ticket) : null);
 	const itemIds = $derived(ticket?.items.map((i) => i.item_id) ?? []);
 	const total = (qty: string) => formatTotalWithUnit(qty, itemIds, unitOf);
 
@@ -258,8 +255,8 @@
 			<div
 				class="flex flex-col gap-3 border-b border-slate-100 pb-4 md:flex-row md:items-start md:justify-between"
 			>
-				<div class="min-w-0 space-y-3">
-					<div class="flex flex-wrap items-center gap-2">
+				<TicketCardHeader {ticket}>
+					{#snippet badges()}
 						<span
 							class="inline-flex items-center gap-1.5 rounded-full border border-teal-200 bg-teal-50 px-2.5 py-0.5 text-xs font-semibold text-teal-900"
 						>
@@ -275,24 +272,8 @@
 								ของยืมค้างคืน {loanSummary.outstandingQty}
 							</span>
 						{/if}
-					</div>
-
-					{#if summary}
-						<div class="flex flex-wrap items-center gap-2">
-							<TicketSummaryBadges {ticket} />
-						</div>
-						<div>
-							<p class="text-xs font-semibold text-slate-500">จุดแจก</p>
-							<h2 class="flex items-start gap-1.5 text-lg font-bold break-words text-slate-900">
-								<MapPin class="mt-1 size-4 shrink-0 text-slate-500" aria-hidden="true" />
-								{summary.destination}
-							</h2>
-							<p class="mt-0.5 text-sm text-slate-500">
-								เลขตั๋ว <span class="tabular-nums">{ticket.ticket_no}</span>
-							</p>
-						</div>
-					{/if}
-				</div>
+					{/snippet}
+				</TicketCardHeader>
 
 				<!-- Read-only role warning if user cannot close shift -->
 				{#if !canFrontline}
