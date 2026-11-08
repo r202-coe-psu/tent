@@ -3,7 +3,7 @@ id: CR-232
 title: Export Excel ในแท็บ dashboard ผู้อพยพ — รายชื่อชาวต่างชาติสำหรับกงสุล (PII) + ตัวเลข dashboard
 status: approved
 date: 2026-11-06
-updated: 2026-11-06
+updated: 2026-11-08
 requested_by: Dev Team B (epic #1050 · issue #1206, #1207)
 decided_by: Soravit Sukkarn (Team Lead)
 layer: volatile
@@ -65,7 +65,7 @@ affects:
 | --- | --- |
 | FR-20 | รวมเฉพาะ evacuee ที่ `country` ตรงกับประเทศที่เลือก (เทียบหลัง trim + uppercase แบบเดียวกับ view `demographics_by_country`) **และ** `current_stay.status` ∈ {`arriving`, `active`, `room_confirmed`, `temporary_leave`, `transferred`, `checked_out`, `deceased`} |
 | FR-21 | ไม่รวม `pre_registered`, `kiosk_registered`, `cancelled` และ doc ที่ `anonymized = true` |
-| FR-22 | คนที่ `privacy.search_excluded = true` หรือ `consent.mode = basic` **ยังรวมในไฟล์** (การไม่แสดงในระบบค้นหาญาติคนละเรื่องกับการแจ้งกงสุล) — **รอ DPO ยืนยัน (O-1)** |
+| FR-22 | คนที่ `privacy.search_excluded = true` หรือ `consent.mode = basic` **ยังรวมในไฟล์** (การไม่แสดงในระบบค้นหาญาติคนละเรื่องกับการแจ้งกงสุล) — **DPO ยืนยันแล้ว (O-1: approved)** |
 | FR-23 | อ่านด้วย `peopleRepository(shelterCode).listEvacuees()` ผ่าน barrel `$lib/features/people` (ไม่เรียก `allByType('evacuee')` ตรง) แล้วกรองฝั่ง client แบบเดียวกับหน้ารายชื่อ |
 
 **คอลัมน์** — ใช้มาตรฐานเดียวกับ Excel Import Template (`frontend/src/lib/features/people-import/domain/columns.ts`): หัวคอลัมน์ใช้ข้อความ `H.*` เดิม และค่า enum ใช้ label สองภาษาจาก `CARD_TYPE_CHOICES` / `GENDER_CHOICES` / `RELIGION_CHOICES` (เช่น "หนังสือเดินทาง (Passport)", "ชาย (Male)") — ไม่ตั้ง label ใหม่
@@ -123,7 +123,7 @@ N/A — ไม่เปลี่ยนรูป doc ที่ persist; `audit` d
 
 | ID | ประเด็น | ผู้ตัดสิน | สถานะ |
 | --- | --- | --- | --- |
-| O-1 | คนที่ `privacy.search_excluded = true` หรือ `consent.mode = basic` ต้องอยู่ในไฟล์กงสุลหรือไม่ (FR-22 ตั้งเป็น "รวม") | DPO | owner เลือก Option A (รวม) ไปก่อน — อาจเปลี่ยนตามมติ DPO; ถ้าผลเป็น "ไม่รวม" ให้แก้ FR-22 + S1 ก่อน merge |
+| O-1 | คนที่ `privacy.search_excluded = true` หรือ `consent.mode = basic` ต้องอยู่ในไฟล์กงสุลหรือไม่ (FR-22 ตั้งเป็น "รวม") | DPO | **approved** โดย Jackyzaz (2026-11-08) — ยืนยัน Option A (รวม) ตาม FR-22; ไม่ต้องแก้โค้ด |
 
 ## Decision log
 
@@ -132,3 +132,4 @@ N/A — ไม่เปลี่ยนรูป doc ที่ persist; `audit` d
 - 2026-11-06 — owner: O-1 เลือก Option A (รวมคน `search_excluded` / consent `basic`) ไปก่อน รอ DPO
 - 2026-11-06 — owner: FR-30 ใช้มาตรฐานเดียวกับ Excel Import Template (`people-import/domain/columns.ts`)
 - 2026-11-06 — approved by Soravit Sukkarn (Team Lead) (epic #1050, issue #1206, #1207, PR #1215) — รันหมายเลข CR-232 (หมวด 02-people)
+- 2026-11-08 — O-1 approved โดย Jackyzaz: ยืนยัน Option A (รวมคน `search_excluded` / consent `basic`) ตามที่แจ้งใน PR #1232 — ปิด warning W1
