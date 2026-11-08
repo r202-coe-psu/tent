@@ -600,7 +600,7 @@ test.describe('Pre-register: render contract (R)', { tag: ['@pre-register', '@sm
 			'บ้านเช่า',
 			'คอนโด',
 			'อะพาร์ตเมนต์ / หอพัก',
-			/^ไร้ที่อยู่อาศัย/
+			'ไร้ที่อยู่อาศัยเป็นหลักแหล่ง (ไม่มีบ้านเลขที่หรือที่อยู่ที่แน่ชัด)'
 		]);
 		await page.keyboard.press('Escape');
 
