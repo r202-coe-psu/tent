@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { compareLanguages } from './i18n-parity';
+import { compareLanguages } from '$lib/testing/i18n-parity';
 import { EVACUEE_PROFILE_I18N } from './evacuee-profile.i18n';
 
 describe('EVACUEE_PROFILE_I18N', () => {
