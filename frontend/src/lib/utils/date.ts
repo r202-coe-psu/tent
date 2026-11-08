@@ -103,10 +103,10 @@ export function formatThaiDateTime(iso?: string | null): string {
 	return formatDisplayDateTime(iso, 'th');
 }
 
-/** Locale per UI language; `en-GB` keeps day-month order and a 24-hour clock. */
-const DISPLAY_LOCALE_BY_LANGUAGE = { th: DISPLAY_LOCALE, en: 'en-GB' } as const;
-
-/** Like `formatThaiDateTime`, in the given UI language (EN: "4 Jul 2026, 21:30"). */
+/**
+ * Like `formatThaiDateTime`, in the given UI language. Both stay `th-TH` + Buddhist year
+ * (CONVENTIONS §10); EN uses a numeric month so no Thai script shows ("4/7/2569 21:30").
+ */
 export function formatDisplayDateTime(
 	iso: string | null | undefined,
 	language: 'th' | 'en'
@@ -114,14 +114,29 @@ export function formatDisplayDateTime(
 	if (!iso) return '';
 	const date = new Date(iso);
 	if (Number.isNaN(date.getTime())) return iso;
-	return date.toLocaleString(DISPLAY_LOCALE_BY_LANGUAGE[language], {
+	if (language === 'th') {
+		return date.toLocaleString(DISPLAY_LOCALE, {
+			timeZone: DISPLAY_TIME_ZONE,
+			year: 'numeric',
+			month: 'short',
+			day: 'numeric',
+			hour: '2-digit',
+			minute: '2-digit'
+		});
+	}
+	const parts = new Intl.DateTimeFormat(DISPLAY_LOCALE, {
 		timeZone: DISPLAY_TIME_ZONE,
+		numberingSystem: 'latn',
+		hourCycle: 'h23',
 		year: 'numeric',
-		month: 'short',
+		month: 'numeric',
 		day: 'numeric',
 		hour: '2-digit',
 		minute: '2-digit'
-	});
+	}).formatToParts(date);
+	const part = (type: Intl.DateTimeFormatPartTypes) =>
+		parts.find((p) => p.type === type)?.value ?? '';
+	return `${part('day')}/${part('month')}/${part('year')} ${part('hour')}:${part('minute')}`;
 }
 
 /** แปลง ISO timestamp string → ข้อความเวลาภาษาไทย (เช่น "21:30") */

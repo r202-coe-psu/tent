@@ -45,11 +45,9 @@ describe('date utilities', () => {
 			expect(formatDisplayDateTime(iso, 'th')).toBe(formatThaiDateTime(iso));
 		});
 
-		it('en: English month, Gregorian year, Bangkok wall clock', () => {
+		it('en: th-TH Buddhist year as numbers (CONVENTIONS §10), no Thai script', () => {
 			const formatted = formatDisplayDateTime(iso, 'en');
-			expect(formatted).toMatch(/Jul/);
-			expect(formatted).toMatch(/2026/);
-			expect(formatted).toMatch(/21:30/);
+			expect(formatted).toBe('4/7/2569 21:30');
 			expect(formatted).not.toMatch(/[฀-๿]/);
 		});
 
