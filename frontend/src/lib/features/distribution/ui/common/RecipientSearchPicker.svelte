@@ -329,7 +329,8 @@
 			{/if}
 		</Button>
 
-		{#if scanError}
+		<!-- While the scanner dialog is open it shows this error itself: render it once, not twice. -->
+		{#if scanError && !scannerOpen}
 			<div
 				class="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800"
 				role="alert"

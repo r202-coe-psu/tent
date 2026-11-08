@@ -214,6 +214,8 @@
 				embedded={true}
 				dismissible={false}
 				printable={false}
+				stationOnly={true}
+				qrSource="family_batch"
 				bind:issuedPayload={issuedByMember[member._id]}
 				onClose={onDone}
 			/>
@@ -224,8 +226,9 @@
 		class="sticky bottom-0 z-10 -mx-1 border-t border-border bg-background/95 p-3 backdrop-blur-sm"
 	>
 		<div class="flex flex-col gap-2 sm:flex-row sm:justify-end">
-			<!-- The only printer button on this page (member cards hide theirs, nextActions has none):
-			     one instance = one print state, no double print. -->
+			<!-- The only print button on this page: member cards hide the station button (`printable={false}`)
+			     and the PDF button (`stationOnly`), and nextActions has none. One instance = one print
+			     state, so no double print and no second issue path rotating the QRs just printed. -->
 			{#if total > 0}
 				<!-- Keyed by the family: the button keeps unsent chunks for Retry, which must not outlive a
 				     change of members (it would print the old labels). Invariant: `members` is a snapshot

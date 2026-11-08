@@ -89,6 +89,19 @@ describe('FamilyBatchPrint', () => {
 		expect(byTestId('station-print')).toHaveLength(1);
 	});
 
+	it('gives member cards no print button of their own (no second issue path)', () => {
+		render();
+
+		const cards = [...document.querySelectorAll('section')].filter((c) => c.querySelector('h3'));
+		expect(cards).toHaveLength(2);
+		for (const card of cards) {
+			expect(card.querySelector('[data-testid="station-print"]')).toBeNull();
+			const labels = [...card.querySelectorAll('button')].map((b) => b.textContent?.trim());
+			expect(labels).not.toContain('พิมพ์บัตรประจำตัว');
+		}
+		expect(issue).not.toHaveBeenCalled();
+	});
+
 	it.each([
 		['while printing', 'station-print'],
 		['while a job already sent may still print', 'station-retry-held']

@@ -22,6 +22,8 @@ function ev(id: string): Evacuee {
 	} as Evacuee;
 }
 
+const ULID = '01JC8ZQ4V6M2N5R7T9XBDEFGH0';
+
 describe('lookupFederatedByScanCodeWithDeps', () => {
 	it('returns couch hit on getEvacuee', async () => {
 		const found = ev('evacuee:01A');
@@ -65,6 +67,39 @@ describe('lookupFederatedByScanCodeWithDeps', () => {
 			listQrPrints: vi.fn().mockResolvedValue([])
 		};
 		expect(await lookupFederatedByScanCodeWithDeps('unknown', deps)).toBeNull();
+	});
+
+	it('rejects a handover-slip path once a Person QR was printed, without opening the evacuee', async () => {
+		const deps: FederatedScanLookupDeps = {
+			getEvacuee: vi.fn(),
+			searchEvacuees: vi.fn(),
+			searchUnassigned: vi.fn(),
+			listQrPrints: vi
+				.fn()
+				.mockResolvedValue([{ printed_at: '2026-11-08T01:00:00.000Z', hash: 'abcdef' }])
+		};
+		const hit = await lookupFederatedByScanCodeWithDeps(
+			`/onsite/medical-screening/evacuee:${ULID}`,
+			deps
+		);
+		expect(hit).toMatchObject({ source: 'qr_rejected', verdict: { status: 'expired' } });
+		expect(deps.getEvacuee).not.toHaveBeenCalled();
+		expect(deps.searchEvacuees).not.toHaveBeenCalled();
+	});
+
+	it('still opens a handover-slip path when no Person QR was ever printed', async () => {
+		const found = ev(`evacuee:${ULID}`);
+		const deps: FederatedScanLookupDeps = {
+			getEvacuee: vi.fn().mockResolvedValue(found),
+			searchEvacuees: vi.fn(),
+			searchUnassigned: vi.fn(),
+			listQrPrints: vi.fn().mockResolvedValue([])
+		};
+		const hit = await lookupFederatedByScanCodeWithDeps(
+			`/onsite/medical-screening/evacuee:${ULID}`,
+			deps
+		);
+		expect(hit).toEqual({ source: 'couch', evacuee: found });
 	});
 
 	it('parses zoning path before couch get', async () => {
