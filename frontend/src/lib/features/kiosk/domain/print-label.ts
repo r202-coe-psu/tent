@@ -86,11 +86,20 @@ export function kioskLabelPageCss(): string {
 export const KIOSK_LABEL_TEXT = {
 	name: { pt: 16, lineHeight: 1.3, weight: 700, maxLines: 3 },
 	zone: { pt: 12, lineHeight: 1.3, weight: 700 },
-	checklist: { pt: 10, lineHeight: 1.3, weight: 500 },
+	/** Emergency contact row under the zone; same face as the checklist, so no extra font load. */
+	emergency: { pt: 9, lineHeight: 1.3, weight: 500 },
+	checklist: { pt: 9, lineHeight: 1.3, weight: 500 },
 	link: { pt: 7, lineHeight: 1.3, weight: 500 }
 } as const;
 /** Site address printed small at the bottom of the text column. */
 export const KIOSK_LABEL_LINK = 'shelter.psu.ac.th';
+/**
+ * Two lines centred under the QR on evacuee labels (Thai, then English: one bilingual line is
+ * ~39 mm at 7 pt, wider than the QR). Printed in the link's style.
+ */
+export const KIOSK_LABEL_QR_CAPTION = ['สำหรับใช้ภายในศูนย์', '(For shelter use only)'] as const;
+/** QR image → caption. With the image's 2 margin modules this keeps the 4-module quiet zone. */
+export const KIOSK_LABEL_QR_CAPTION_GAP_MM = 2;
 /** Space between the checklist and the link under it. */
 export const KIOSK_LABEL_LINK_GAP_MM = 1;
 /** Zone row under the name, as on the field form. */
@@ -108,6 +117,17 @@ export const KIOSK_LABEL_ZONE = {
 export type LabelZoneLine = { label: string; value: string | null };
 
 /**
+ * Row under the zone: the evacuee's emergency contact phone. ~37 mm with a 10-digit number at
+ * 9 pt, inside the ~38.7 mm text column; a longer number is squeezed to fit. No phone → no row.
+ */
+export const KIOSK_LABEL_EMERGENCY_PREFIX = 'ติดต่อฉุกเฉิน:';
+
+/** The emergency row of a label, or null when there is no phone to print. */
+export function labelEmergencyLine(phone: string | null | undefined): LabelZoneLine | null {
+	return phone ? { label: KIOSK_LABEL_EMERGENCY_PREFIX, value: phone } : null;
+}
+
+/**
  * The zone row of a QR label: the assigned zone's name, or a null value for a blank dotted rule
  * staff fill in by hand (first print, before Station 3 assigns a zone).
  */
@@ -115,19 +135,27 @@ export function labelZoneLine(zone: string | null | undefined): LabelZoneLine {
 	return { label: KIOSK_LABEL_ZONE_PREFIX, value: zone?.trim() || null };
 }
 
-/** Staff ID card checklist, one box per intake station. */
-export const KIOSK_LABEL_CHECKLIST = ['เช็คอิน', 'คัดกรอง', 'ที่พัก'] as const;
-/** A label printed right after a kiosk check-in or walk-in: only เช็คอิน is done. */
+/**
+ * ID card checklist, one box per intake station. Paper cannot follow the UI language, so every
+ * label prints Thai with the English in brackets, whoever printed it. Widest row at 9 pt
+ * IBM Plex Sans Thai is ~29 mm; the text beside the box has ~34.5 mm next to a 33 mm QR.
+ */
+export const KIOSK_LABEL_CHECKLIST = [
+	'เช็คอิน (Checked-in)',
+	'คัดกรอง (Screened)',
+	'ที่พัก (Stayed)'
+] as const;
+/** A label printed right after a kiosk check-in or walk-in: only check-in is done. */
 export const KIOSK_CHECK_IN_TICKS = 1;
 export const KIOSK_LABEL_CHECKBOX = {
-	sizeMm: 3.5,
+	sizeMm: 3,
 	borderMm: 0.3,
 	/** Stroke of the tick in a box whose station is done. */
 	tickMm: 0.4,
 	/** Box → its text. */
-	textGapMm: 1.5,
+	textGapMm: 1.2,
 	/** Between checklist rows (one item per row). */
-	rowGapMm: 1.5
+	rowGapMm: 1.2
 } as const;
 
 const PT_PER_INCH = 72;
