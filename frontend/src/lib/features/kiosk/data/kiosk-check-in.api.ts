@@ -8,6 +8,9 @@ export type GateInput =
 	| { source: 'phone'; phone: string; primary_evacuee_id?: string }
 	| { source: 'thaid'; session_id: string };
 
+/** Unmasked label text from the server; `emergency_phone` only when the evacuee has one. */
+export type KioskLabelIdentity = { name: string; phone: string | null; emergency_phone?: string };
+
 export interface KioskEvacueeSummary {
 	evacuee_id: string;
 	first_name: string;
@@ -51,7 +54,7 @@ export interface KioskCheckInMemberResult {
 	 * Unmasked name + phone for the printed label; only with a `qr_payload`. A lookup never carries
 	 * it, so a reprint asks /check-in (no write for arriving members) when the visitor taps print.
 	 */
-	label?: { name: string; phone: string | null };
+	label?: KioskLabelIdentity;
 }
 
 export interface KioskCheckInResult {
@@ -68,7 +71,7 @@ export interface KioskRegistrationResult {
 	/** `null` with `qr_issue_failed` when the QR entry could not be written (FR-EQR-24). */
 	qr_payload: string | null;
 	qr_issue_failed?: boolean;
-	label: { name: string; phone: string | null };
+	label: KioskLabelIdentity;
 	consent_ref: string;
 	consent_mode: ConsentMode;
 }
@@ -153,7 +156,7 @@ export interface KioskReprintMember {
 	 * `zone` is the member's current zone (short name, else full name), or null before one is
 	 * assigned; `stations_passed` (0–3) is how many checklist boxes the label ticks.
 	 */
-	label: { name: string; phone: string | null; zone: string | null; stations_passed: number };
+	label: KioskLabelIdentity & { zone: string | null; stations_passed: number };
 }
 
 export interface KioskReprintResult {

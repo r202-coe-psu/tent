@@ -31,7 +31,7 @@
 		useEvacuees,
 		formatPersonName,
 		normalizeCheckoutRemark,
-		STATUS_LABELS,
+		peopleLabels,
 		zoneLabel,
 		type Evacuee,
 		type StayStatus
@@ -44,6 +44,12 @@
 	import { getShelterCode } from '$lib/db/shelter';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
 	import { useShelter } from '$lib/features/shelters';
+	import { langState } from '$lib/states/i18n.svelte';
+	import { getTranslation } from '$lib/utils/i18n';
+	import { SEARCH_SCAN_I18N } from '../_constants/search-scan.i18n';
+
+	const t = $derived(getTranslation(SEARCH_SCAN_I18N, langState.current).scan);
+	const stayStatusLabels = $derived(peopleLabels(langState.current).stayStatus);
 
 	let scanCode = $state('');
 	let isScanning = $state(false);
@@ -160,7 +166,7 @@
 				}
 			)
 			.catch(() => {
-				cameraError = 'ไม่สามารถเข้าถึงกล้องได้ โปรดตรวจสอบการอนุญาตใช้งานกล้อง';
+				cameraError = t.cameraError;
 			});
 
 		return () => {
@@ -186,9 +192,9 @@
 			if (!result) {
 				scanResult = {
 					success: false,
-					message: `ไม่พบข้อมูลผู้ประสบภัยจากรหัส/ชื่อ "${cleanCode}" ในศูนย์ ${getShelterCode()}`
+					message: t.toast.notFoundMessage(cleanCode, getShelterCode())
 				};
-				toast.error(`ไม่พบรหัสนี้ในศูนย์ ${getShelterCode()} — โปรดตรวจสอบศูนย์ที่เลือกด้านบน`);
+				toast.error(t.toast.notFound(getShelterCode()));
 				return;
 			}
 
@@ -202,9 +208,9 @@
 			if (result.source === 'unassigned') {
 				scanResult = {
 					success: false,
-					message: 'พบคิวลงทะเบียนล่วงหน้า (คิวกลาง) — รับเข้าศูนย์ก่อนเช็คอิน/เอาต์'
+					message: t.toast.unassignedMessage
 				};
-				toast.success('พบคิวลงทะเบียนล่วงหน้า (คิวกลาง)');
+				toast.success(t.toast.unassigned);
 				claimHit = result.hit;
 				claimOpen = true;
 				scanCode = '';
@@ -214,17 +220,17 @@
 			const evacuee = result.evacuee;
 			scanResult = {
 				success: true,
-				message: 'พบข้อมูลผู้ประสบภัย',
+				message: t.toast.foundMessage,
 				evacuee
 			};
-			toast.success(`พบข้อมูล ${formatPersonName(evacuee)}`);
+			toast.success(t.toast.found(formatPersonName(evacuee)));
 			scanCode = ''; // Clear input
 		} catch (err) {
 			scanResult = {
 				success: false,
-				message: `เกิดข้อผิดพลาด: ${err instanceof Error ? err.message : String(err)}`
+				message: t.toast.errorMessage(err instanceof Error ? err.message : String(err))
 			};
-			toast.error('เกิดข้อผิดพลาดในการดำเนินการ');
+			toast.error(t.toast.operationFailed);
 		} finally {
 			isScanning = false;
 		}
@@ -245,7 +251,7 @@
 	async function confirmZoneAndCheckIn() {
 		const zone = pickedZone.trim();
 		if (!zone) {
-			toast.error('การเช็คอินต้องระบุโซน');
+			toast.error(t.toast.zoneRequired);
 			return;
 		}
 		zoneDialogOpen = false;
@@ -277,17 +283,15 @@
 			}
 
 			if (rejectedResults.length === 0) {
-				toast.success(`เช็คอินสำเร็จ ${targets.length} คน`);
+				toast.success(t.toast.checkInSuccess(targets.length));
 			} else if (fulfilledResults.length > 0) {
-				toast.warning(
-					`เช็คอินสำเร็จ ${fulfilledResults.length} คน, ล้มเหลว ${rejectedResults.length} คน`
-				);
+				toast.warning(t.toast.checkInPartial(fulfilledResults.length, rejectedResults.length));
 			} else {
 				const firstError = rejectedResults[0];
-				toast.error(firstError instanceof Error ? firstError.message : 'เช็คอินไม่สำเร็จ');
+				toast.error(firstError instanceof Error ? firstError.message : t.toast.checkInFailed);
 			}
 		} catch (err) {
-			toast.error(err instanceof Error ? err.message : 'เช็คอินไม่สำเร็จ');
+			toast.error(err instanceof Error ? err.message : t.toast.checkInFailed);
 		}
 	}
 
@@ -302,8 +306,9 @@
 		let reason: string;
 		try {
 			reason = normalizeCheckoutRemark(checkoutReason);
-		} catch (err) {
-			checkoutReasonError = err instanceof Error ? err.message : 'ต้องระบุเหตุผลการเช็คเอาต์';
+		} catch {
+			// The domain only rejects an empty remark; show that in the staff language.
+			checkoutReasonError = t.toast.checkoutReasonRequired;
 			return;
 		}
 		checkoutDialogOpen = false;
@@ -328,23 +333,21 @@
 			}
 
 			if (rejectedResults.length === 0) {
-				toast.success(`เช็คเอาต์สำเร็จ ${targets.length} คน`);
+				toast.success(t.toast.checkOutSuccess(targets.length));
 			} else if (fulfilledResults.length > 0) {
-				toast.warning(
-					`เช็คเอาต์สำเร็จ ${fulfilledResults.length} คน, ล้มเหลว ${rejectedResults.length} คน`
-				);
+				toast.warning(t.toast.checkOutPartial(fulfilledResults.length, rejectedResults.length));
 			} else {
 				const firstError = rejectedResults[0];
-				toast.error(firstError instanceof Error ? firstError.message : 'เช็คเอาต์ไม่สำเร็จ');
+				toast.error(firstError instanceof Error ? firstError.message : t.toast.checkOutFailed);
 			}
 		} catch (err) {
-			toast.error(err instanceof Error ? err.message : 'เช็คเอาต์ไม่สำเร็จ');
+			toast.error(err instanceof Error ? err.message : t.toast.checkOutFailed);
 		}
 	}
 
 	// Helper for status label translation
 	function getStatusLabel(status: StayStatus) {
-		return STATUS_LABELS[status] ?? status;
+		return stayStatusLabels[status] ?? status;
 	}
 </script>
 
@@ -357,7 +360,7 @@
 				size="icon"
 				onclick={() => goto(resolve('/portal'))}
 				class="h-10 w-10 rounded-full"
-				title="กลับ"
+				title={t.back}
 			>
 				<ArrowLeft class="size-5" />
 			</Button>
@@ -366,10 +369,10 @@
 					class="flex items-center gap-2 text-xl font-bold text-slate-900 md:text-2xl dark:text-white"
 				>
 					<Scan class="size-5 text-[#0A2647] md:size-6 dark:text-blue-400" />
-					สแกนเข้า-ออกศูนย์ (Check-in / Out)
+					{t.title}
 				</h1>
 				<p class="mt-0.5 text-xs font-semibold text-slate-500 dark:text-slate-400">
-					สแกนรหัสเพื่อจัดการสถานะผู้พำนัก
+					{t.subtitle}
 				</p>
 			</div>
 		</div>
@@ -379,7 +382,7 @@
 				class="h-10 rounded-xl bg-[#22C55E] px-4 text-xs font-bold text-white shadow-sm hover:bg-[#16A34A]"
 			>
 				<Search class="mr-1.5 size-3.5" />
-				ค้นหาด้วยชื่อ/เลขบัตร
+				{t.searchByName}
 			</Button>
 		</div>
 	</div>
@@ -426,8 +429,8 @@
 								<p class="text-xs font-semibold text-red-400">{cameraError}</p>
 							{:else}
 								<Scan class="mb-4 size-16 text-[#003B71]/30 dark:text-blue-500/20" />
-								<p class="text-xs font-bold text-slate-400">กล้องสแกนเนอร์ปิดอยู่</p>
-								<p class="mt-1 text-2xs text-slate-500">สามารถค้นหาด้วยชื่อหรือพิมพ์รหัสแทนได้</p>
+								<p class="text-xs font-bold text-slate-400">{t.cameraOff}</p>
+								<p class="mt-1 text-2xs text-slate-500">{t.cameraOffHint}</p>
 							{/if}
 						</div>
 					{/if}
@@ -436,11 +439,10 @@
 				<!-- Instructions -->
 				<div class="mt-6 text-center">
 					<h3 class="text-base font-bold text-slate-800 dark:text-slate-200">
-						สแกนรหัสเพื่อจัดการสถานะ
+						{t.instructionsTitle}
 					</h3>
 					<p class="mt-2 max-w-sm text-xs leading-relaxed text-slate-500 dark:text-slate-400">
-						ใช้เครื่องสแกนบาร์โค้ดสแกนที่บัตรผู้ประสบภัย หรือพิมพ์รหัสลงในช่องด้านล่าง
-						ระบบจะพาไปยังหน้าจัดการสถานะทันที
+						{t.instructionsBody}
 					</p>
 				</div>
 
@@ -454,7 +456,7 @@
 				>
 					<Input
 						type="text"
-						placeholder="กรอกรหัส หรือ สแกน QR..."
+						placeholder={t.codePlaceholder}
 						bind:value={scanCode}
 						disabled={isScanning}
 						class="h-11 flex-1 border-slate-300 bg-slate-50 text-sm dark:border-slate-700 dark:bg-slate-900"
@@ -467,7 +469,7 @@
 						{#if isScanning}
 							<Loader class="mr-1 size-4 animate-spin" />
 						{/if}
-						ตกลง
+						{t.submit}
 					</Button>
 				</form>
 
@@ -521,9 +523,7 @@
 														? 'bg-slate-500'
 														: 'bg-amber-500'}"
 											></span>
-											{found.current_stay
-												? getStatusLabel(found.current_stay.status)
-												: 'ไม่มีข้อมูลสถานะ'}
+											{found.current_stay ? getStatusLabel(found.current_stay.status) : t.noStatus}
 										</span>
 										{#if found.current_stay?.zone}
 											<span
@@ -543,7 +543,7 @@
 								>
 									<div class="mb-3 flex items-center justify-between">
 										<h5 class="text-xs font-bold text-slate-800 dark:text-slate-200">
-											จัดการเช็คอิน/เช็คเอาต์พร้อมกับครอบครัว
+											{t.familyTitle}
 										</h5>
 										<label
 											class="flex cursor-pointer items-center gap-1.5 text-xs font-semibold text-[#003B71] select-none dark:text-blue-400"
@@ -564,7 +564,7 @@
 												}}
 												class="rounded-sm border-slate-300 dark:border-slate-700"
 											/>
-											เลือกทั้งหมด
+											{t.selectAll}
 										</label>
 									</div>
 									<div class="max-h-48 space-y-2 overflow-y-auto pr-1">
@@ -603,14 +603,14 @@
 														{#if isScanned}
 															<span
 																class="ml-1 rounded-full bg-primary/10 px-1.5 py-0.5 text-2xs font-bold text-primary"
-																>คนที่สแกน</span
+																>{t.scannedMember}</span
 															>
 														{/if}
 														{#if isActionCheckIn && needsIntakeBeforeStay(member)}
 															<span
 																class="block text-2xs font-normal text-amber-700 dark:text-amber-300"
 															>
-																ยังไม่ผ่านจุดคัดกรอง/จัดโซน — ส่งไปสถานี 2–3
+																{t.memberNeedsIntake}
 															</span>
 														{/if}
 													</span>
@@ -642,7 +642,7 @@
 										)}
 									class="flex h-11 shrink-0 items-center gap-0.5 rounded-xl px-2.5 text-2xs font-bold text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200"
 								>
-									โปรไฟล์
+									{t.profile}
 									<ChevronRight class="size-3.5" />
 								</button>
 
@@ -657,7 +657,7 @@
 										{:else}
 											<LogOut class="size-4" />
 										{/if}
-										เช็คเอาต์
+										{t.checkOut}
 									</Button>
 								{:else if canCheckIn}
 									<Button
@@ -670,21 +670,21 @@
 										{:else}
 											<LogIn class="size-4" />
 										{/if}
-										เช็คอิน
+										{t.checkIn}
 									</Button>
 								{:else if found && needsIntakeBeforeStay(found)}
 									<p
 										class="flex h-11 flex-1 items-center justify-center rounded-xl bg-amber-100 px-2 text-center text-xs font-semibold text-amber-900 dark:bg-amber-950 dark:text-amber-200"
 										role="status"
 									>
-										ยังไม่ผ่านจุดคัดกรอง/จัดโซน — ส่งไปสถานี 1–3 ก่อนเช็คอิน
+										{t.needsIntake}
 									</p>
 								{:else}
 									<Button
 										disabled
 										class="h-11 flex-1 rounded-xl bg-slate-200 text-sm font-bold text-slate-500 dark:bg-slate-800 dark:text-slate-400"
 									>
-										ไม่สามารถเปลี่ยนสถานะนี้ได้
+										{t.cannotChange}
 									</Button>
 								{/if}
 							</div>
@@ -696,7 +696,7 @@
 										{scanResult.message}
 									</p>
 									<p class="mt-0.5 text-2xs font-medium text-slate-500 dark:text-slate-400">
-										โปรดตรวจสอบข้อมูลรหัสบัตรประชาชน หรือ QR code ของผู้ประสบภัยอีกครั้ง
+										{t.recheckHint}
 									</p>
 								</div>
 							</div>
@@ -728,14 +728,14 @@
 <Dialog.Root bind:open={zoneDialogOpen}>
 	<Dialog.Content class="sm:max-w-md">
 		<Dialog.Header>
-			<Dialog.Title>เลือกโซนสำหรับเช็คอิน</Dialog.Title>
-			<Dialog.Description>ผู้ประสบภัยยังไม่มีโซนเดิม — เลือกโซนที่จะเช็คอินเข้า</Dialog.Description>
+			<Dialog.Title>{t.zoneDialogTitle}</Dialog.Title>
+			<Dialog.Description>{t.zoneDialogDescription}</Dialog.Description>
 		</Dialog.Header>
 		{#if openZones.length > 0}
 			<Select.Root type="single" bind:value={pickedZone}>
-				<Select.Trigger class="h-11 w-full" aria-label="โซนสำหรับเช็คอิน">
+				<Select.Trigger class="h-11 w-full" aria-label={t.zoneSelectAria}>
 					{@const picked = openZones.find((z) => z.code === pickedZone)}
-					{picked ? `${picked.name || picked.code} (${picked.code})` : 'เลือกโซน'}
+					{picked ? `${picked.name || picked.code} (${picked.code})` : t.pickZone}
 				</Select.Trigger>
 				<Select.Content>
 					{#each openZones as zone (zone.code)}
@@ -745,16 +745,16 @@
 			</Select.Root>
 		{:else}
 			<div class="space-y-1.5">
-				<Label for="check-in-zone">รหัสโซน</Label>
-				<Input id="check-in-zone" bind:value={pickedZone} placeholder="เช่น Z1" />
+				<Label for="check-in-zone">{t.zoneCodeLabel}</Label>
+				<Input id="check-in-zone" bind:value={pickedZone} placeholder={t.zoneCodePlaceholder} />
 			</div>
 		{/if}
 		<Dialog.Footer>
 			<Button type="button" variant="outline" onclick={() => (zoneDialogOpen = false)}
-				>ยกเลิก</Button
+				>{t.cancel}</Button
 			>
 			<Button type="button" disabled={!pickedZone.trim()} onclick={confirmZoneAndCheckIn}>
-				ยืนยันเช็คอิน
+				{t.confirmCheckIn}
 			</Button>
 		</Dialog.Footer>
 	</Dialog.Content>
@@ -763,13 +763,11 @@
 <Dialog.Root bind:open={checkoutDialogOpen}>
 	<Dialog.Content class="sm:max-w-md">
 		<Dialog.Header>
-			<Dialog.Title>เหตุผลการเช็คเอาต์</Dialog.Title>
-			<Dialog.Description
-				>ระบุเหตุผลหรือหมายเหตุ (บังคับ) เช่น ออกไปธุระนอกพื้นที่</Dialog.Description
-			>
+			<Dialog.Title>{t.checkoutDialogTitle}</Dialog.Title>
+			<Dialog.Description>{t.checkoutDialogDescription}</Dialog.Description>
 		</Dialog.Header>
 		<div class="space-y-1.5">
-			<Label for="checkout-reason">เหตุผลการเช็คเอาต์</Label>
+			<Label for="checkout-reason">{t.checkoutReasonLabel}</Label>
 			<Input
 				id="checkout-reason"
 				bind:value={checkoutReason}
@@ -783,9 +781,9 @@
 		</div>
 		<Dialog.Footer>
 			<Button type="button" variant="outline" onclick={() => (checkoutDialogOpen = false)}>
-				ยกเลิก
+				{t.cancel}
 			</Button>
-			<Button type="button" onclick={confirmCheckOut}>ยืนยันเช็คเอาต์</Button>
+			<Button type="button" onclick={confirmCheckOut}>{t.confirmCheckOut}</Button>
 		</Dialog.Footer>
 	</Dialog.Content>
 </Dialog.Root>

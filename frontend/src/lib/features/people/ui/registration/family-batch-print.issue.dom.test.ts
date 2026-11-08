@@ -28,7 +28,10 @@ vi.mock('$lib/features/kiosk', () => ({
 		return 'AAAA';
 	}
 }));
-vi.mock('$lib/features/shelters', () => ({ useShelter: () => ({ data: undefined }) }));
+vi.mock('$lib/features/shelters', async (importOriginal) => ({
+	...(await importOriginal<typeof import('$lib/features/shelters')>()),
+	useShelter: () => ({ data: undefined })
+}));
 vi.mock('$lib/features/people', async (importOriginal) => ({
 	...(await importOriginal<typeof import('$lib/features/people')>()),
 	useScreeningsByEvacuee: () => ({ data: [] })

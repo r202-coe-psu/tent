@@ -7,6 +7,9 @@
 	import Check from '@lucide/svelte/icons/check';
 	import ChevronsUpDown from '@lucide/svelte/icons/chevrons-up-down';
 	import Loader from '@lucide/svelte/icons/loader';
+	import { STAFF_CHROME_I18N } from '$lib/constants/i18n/staff-chrome';
+	import { langState } from '$lib/states/i18n.svelte';
+	import { getTranslation } from '$lib/utils/i18n';
 
 	interface Props {
 		name: string;
@@ -28,10 +31,10 @@
 		name,
 		id,
 		value = $bindable(''),
-		placeholder = 'เลือก...',
-		searchPlaceholder = 'ค้นหา...',
-		emptyText = 'ไม่พบข้อมูล',
-		loadingText = 'กำลังโหลด...',
+		placeholder: placeholderProp,
+		searchPlaceholder: searchPlaceholderProp,
+		emptyText: emptyTextProp,
+		loadingText: loadingTextProp,
 		class: className,
 		disabled = false,
 		loading = false,
@@ -39,6 +42,12 @@
 		controlProps = {},
 		options = []
 	}: Props = $props();
+
+	const t = $derived(getTranslation(STAFF_CHROME_I18N, langState.current).searchSelect);
+	const placeholder = $derived(placeholderProp ?? t.placeholder);
+	const searchPlaceholder = $derived(searchPlaceholderProp ?? t.searchPlaceholder);
+	const emptyText = $derived(emptyTextProp ?? t.emptyText);
+	const loadingText = $derived(loadingTextProp ?? t.loadingText);
 
 	/** Tailwind `max-sm` — bottom sheet on narrow viewports, Popover above. */
 	const isMobileViewport = new IsMobile(640);
@@ -113,7 +122,7 @@
 			{/each}
 			{#if truncatedCount > 0}
 				<div class="px-3 py-2 text-center text-xs text-muted-foreground">
-					พิมพ์เพิ่มเพื่อค้นหาอีก {truncatedCount} รายการ
+					{t.moreResults(truncatedCount)}
 				</div>
 			{/if}
 		{/if}

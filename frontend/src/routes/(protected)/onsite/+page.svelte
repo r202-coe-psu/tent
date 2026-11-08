@@ -9,6 +9,9 @@
 	import Truck from '@lucide/svelte/icons/truck';
 	import { resolve } from '$app/paths';
 	import { authStore } from '$lib/stores/auth.svelte';
+	import { STAFF_CHROME_I18N } from '$lib/constants/i18n/staff-chrome';
+	import { langState } from '$lib/states/i18n.svelte';
+	import { getTranslation } from '$lib/utils/i18n';
 	import {
 		canAccessDistributionDesk,
 		canAccessMedicalScreening,
@@ -17,6 +20,8 @@
 	import { useShelter } from '$lib/features/shelters';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
 	import { getShelterCode } from '$lib/db/shelter';
+
+	const t = $derived(getTranslation(STAFF_CHROME_I18N, langState.current).onsite);
 
 	const canAccessMedical = $derived(canAccessMedicalScreening(authStore.user?.roles ?? []));
 	const canZoning = $derived(canAccessZoning(authStore.user?.roles ?? []));
@@ -45,13 +50,13 @@
 			class="inline-flex items-center gap-2 rounded-full bg-muted px-4 py-2 text-sm text-muted-foreground transition-colors hover:bg-accent"
 		>
 			<ArrowLeft class="size-3.5" />
-			<span>กลับหน้าหลัก</span>
+			<span>{t.back}</span>
 		</a>
 	</div>
 
 	<header class="mb-8">
-		<h1 class="text-3xl font-bold text-foreground">ระบบส่วนหน้า ณ ศูนย์พักพิง</h1>
-		<p class="mt-1 text-sm text-muted-foreground">เลือกงานที่ต้องการทำ</p>
+		<h1 class="text-3xl font-bold text-foreground">{t.title}</h1>
+		<p class="mt-1 text-sm text-muted-foreground">{t.subtitle}</p>
 	</header>
 
 	<main class="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
@@ -65,9 +70,9 @@
 				<ClipboardList class="size-6" />
 			</div>
 			<div>
-				<h2 class="mb-1 text-2xl font-bold text-foreground">ทะเบียนผู้ประสบภัย</h2>
+				<h2 class="mb-1 text-2xl font-bold text-foreground">{t.tiles.registration.title}</h2>
 				<p class="text-xs font-medium tracking-wider text-muted-foreground uppercase">
-					Registration Desk (Station 1)
+					{t.tiles.registration.caption}
 				</p>
 			</div>
 		</a>
@@ -83,9 +88,9 @@
 					<Stethoscope class="size-6" />
 				</div>
 				<div>
-					<h2 class="mb-1 text-2xl font-bold text-foreground">คัดกรองผู้เข้าพัก</h2>
+					<h2 class="mb-1 text-2xl font-bold text-foreground">{t.tiles.screening.title}</h2>
 					<p class="text-xs font-medium tracking-wider text-muted-foreground uppercase">
-						Occupant Screening (Station 2)
+						{t.tiles.screening.caption}
 					</p>
 				</div>
 			</a>
@@ -102,9 +107,9 @@
 					<MapPin class="size-6" />
 				</div>
 				<div>
-					<h2 class="mb-1 text-2xl font-bold text-foreground">จัดสรรที่พัก</h2>
+					<h2 class="mb-1 text-2xl font-bold text-foreground">{t.tiles.zoning.title}</h2>
 					<p class="text-xs font-medium tracking-wider text-muted-foreground uppercase">
-						Zoning Desk (Station 3)
+						{t.tiles.zoning.caption}
 					</p>
 				</div>
 			</a>
@@ -121,9 +126,9 @@
 					<Truck class="size-6" />
 				</div>
 				<div>
-					<h2 class="mb-1 text-2xl font-bold text-foreground">จุดแจกจ่ายพัสดุและอาหาร</h2>
+					<h2 class="mb-1 text-2xl font-bold text-foreground">{t.tiles.distribution.title}</h2>
 					<p class="text-xs font-medium tracking-wider text-muted-foreground uppercase">
-						Distribution Desk (Station 4)
+						{t.tiles.distribution.caption}
 					</p>
 				</div>
 			</a>
@@ -139,9 +144,9 @@
 				<Search class="size-6" />
 			</div>
 			<div>
-				<h2 class="mb-1 text-2xl font-bold text-foreground">ค้นหาและแก้ไขข้อมูล</h2>
+				<h2 class="mb-1 text-2xl font-bold text-foreground">{t.tiles.searchEdit.title}</h2>
 				<p class="text-xs font-medium tracking-wider text-muted-foreground uppercase">
-					Search &amp; Update
+					{t.tiles.searchEdit.caption}
 				</p>
 			</div>
 		</a>
@@ -156,9 +161,9 @@
 				<Expand class="size-6" />
 			</div>
 			<div>
-				<h2 class="mb-1 text-2xl font-bold text-foreground">สแกนเข้า-ออกศูนย์</h2>
+				<h2 class="mb-1 text-2xl font-bold text-foreground">{t.tiles.checkInOut.title}</h2>
 				<p class="text-xs font-medium tracking-wider text-muted-foreground uppercase">
-					Check-in / Out
+					{t.tiles.checkInOut.caption}
 				</p>
 			</div>
 		</a>
@@ -172,9 +177,9 @@
 				<HeartHandshake class="size-6" />
 			</div>
 			<div>
-				<h2 class="mb-1 text-2xl font-bold text-foreground">เช็คอินจิตอาสาเข้างาน</h2>
+				<h2 class="mb-1 text-2xl font-bold text-foreground">{t.tiles.volunteer.title}</h2>
 				<p class="text-xs font-medium tracking-wider text-muted-foreground uppercase">
-					Check-in Volunteer
+					{t.tiles.volunteer.caption}
 				</p>
 			</div>
 		</a>

@@ -6,8 +6,6 @@ export type EvacueeQrLabelInput = {
 	zones?: readonly ZoneLabelSource[] | null;
 	/** Whether the evacuee has at least one screening record (ticks คัดกรอง). */
 	hasScreening: boolean;
-	/** Localised checklist row copy, in station order: check-in, screening, lodging. */
-	checklist: readonly string[];
 	/**
 	 * The server-issued payload (CR-233). Omit for the on-open preview: the label then carries a
 	 * QR placeholder that is not a usable Person QR (FR-EQR-21a).
@@ -24,20 +22,25 @@ export type EvacueeQrLabel = {
 	label: {
 		name: string;
 		zone: string | null;
-		checklist: readonly string[];
+		/** Emergency contact phone, digits only (the kiosk server's `toLabelIdentity` form); null if none. */
+		emergencyPhone: string | null;
 		/** Intake stations passed: this many checklist boxes are ticked. */
 		checkedCount: 0 | 1 | 2 | 3;
 	};
 };
 
-/** The kiosk-style QR label content for an evacuee: payload, name, zone and intake checklist. */
+/**
+ * The kiosk-style QR label content for an evacuee: payload (issued, or a preview placeholder), name,
+ * zone, emergency phone and how many intake boxes are ticked. The checklist copy is the label's
+ * fixed bilingual rows.
+ */
 export function buildEvacueeQrLabel(evacuee: Evacuee, input: EvacueeQrLabelInput): EvacueeQrLabel {
 	return {
 		qrPayload: input.qrPayload ?? EVACUEE_QR_PLACEHOLDER_PAYLOAD,
 		label: {
 			name: formatPersonName(evacuee),
 			zone: labelZoneName(evacuee.current_stay?.zone, input.zones),
-			checklist: input.checklist,
+			emergencyPhone: evacuee.emergency_contact?.phone?.replace(/[\s-]/g, '') || null,
 			checkedCount: intakeStationsPassed(evacuee.current_stay, input.hasScreening)
 		}
 	};

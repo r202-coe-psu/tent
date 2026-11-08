@@ -18,13 +18,18 @@
 	import { buildEvacueeQrLabel } from '../../domain/evacuee-qr-label';
 	import { headFirst } from '../../domain/household-label-order';
 	import { formatPersonName, type Evacuee, type Household } from '../../domain/people';
-	import { getTranslation } from '$lib/utils/i18n';
-	import { languageStore } from '$lib/stores/language.svelte';
-	import { EVACUEE_QR_MODAL_I18N } from '../_constants/evacuee-qr-modal.i18n';
 	import EvacueeQrModal from '../evacuee-profile/evacuee-qr-modal.svelte';
 	import { useShelter } from '$lib/features/shelters/index.js';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
 	import { getShelterCode } from '$lib/db/shelter';
+	import { langState } from '$lib/states/i18n.svelte';
+	import { getTranslation } from '$lib/utils/i18n';
+	import {
+		PRIMARY_CONTACT_LABEL,
+		PRIMARY_CONTACT_LABEL_EN
+	} from '../../domain/unified-registration';
+	import { STATION1_REGISTRATION_I18N } from '../_constants/station1-registration.i18n';
+	import { EVACUEE_QR_MODAL_I18N } from '../_constants/evacuee-qr-modal.i18n';
 
 	let {
 		household,
@@ -56,8 +61,7 @@
 	);
 
 	const queryClient = safeQuery(() => useQueryClient(), null);
-	const qrT = $derived(getTranslation(EVACUEE_QR_MODAL_I18N, languageStore.current));
-	const printersT = $derived(getTranslation(PRINTERS_I18N, languageStore.current));
+	const printersT = $derived(getTranslation(PRINTERS_I18N, langState.current));
 	const shelterCode = $derived(shelterStore.selectedShelterCode ?? getShelterCode());
 
 	/**
@@ -73,7 +77,6 @@
 		const client = queryClient;
 		if (!client) throw new Error('Query client is not available');
 		const zones = shelterQuery.data?.zones;
-		const checklist = [qrT.checklistCheckIn, qrT.checklistScreening, qrT.checklistLodging];
 		const ordered = headFirst(members, household.head_evacuee_id);
 
 		let issued: Awaited<ReturnType<typeof issueQrPayloads>>;
@@ -108,7 +111,6 @@
 				const { qrPayload, label } = buildEvacueeQrLabel(member, {
 					zones,
 					hasScreening: screenings.length > 0,
-					checklist,
 					qrPayload: issued.payloads.get(member._id)
 				});
 				return renderKioskQrLabelPng(qrPayload, label);
@@ -120,18 +122,22 @@
 		shelterQuery.data?.feature_flags?.enable_medical_screening ?? false
 	);
 
+	const t = $derived(getTranslation(STATION1_REGISTRATION_I18N, langState.current).batch);
+	const qrT = $derived(getTranslation(EVACUEE_QR_MODAL_I18N, langState.current));
+	const primaryContactLabel = $derived(
+		langState.current === 'en' ? PRIMARY_CONTACT_LABEL_EN : PRIMARY_CONTACT_LABEL
+	);
+
 	const total = $derived(members.length);
 	const nextStation = $derived<IntakeNextStation>(medicalScreeningEnabled ? 'medical' : 'zoning');
-	const nextStationLabel = $derived(
-		nextStation === 'medical' ? 'ไปคัดกรองผู้เข้าพัก (สถานี 2)' : 'ไปจัดโซน (สถานี 3)'
-	);
+	const nextStationLabel = $derived(nextStation === 'medical' ? t.toMedical : t.toZoning);
 	const facts = $derived([
-		{ label: 'ครอบครัว', value: household.label || '—' },
-		{ label: 'จำนวน', value: `${total} คน` },
-		{ label: 'สถานะ', value: 'รายงานตัวแล้ว · รอเข้าพัก' },
+		{ label: t.factFamily, value: household.label || '—' },
+		{ label: t.factCount, value: t.count(total) },
+		{ label: t.factStatus, value: t.statusValue },
 		{
-			label: 'ขั้นถัดไป',
-			value: nextStation === 'medical' ? 'คัดกรองผู้เข้าพัก (สถานี 2)' : 'จัดโซน (สถานี 3)'
+			label: t.factNext,
+			value: nextStation === 'medical' ? t.nextMedical : t.nextZoning
 		}
 	]);
 
@@ -173,26 +179,26 @@
 			onclick={onRegisterAnother}
 		>
 			<UserPlus class="mr-1.5 size-4" />
-			ลงทะเบียนครอบครัวถัดไป
+			{t.registerAnother}
 		</Button>
 	{/if}
 	<Button type="button" variant="ghost" class="min-h-11" disabled={leaveLocked} onclick={onDone}>
-		กลับคิวทะเบียน
+		{t.backToQueue}
 	</Button>
 {/snippet}
 
 <div class="space-y-4 pb-20">
 	<StationCompletionSummary
-		title="ลงทะเบียนสำเร็จ"
+		title={t.title}
 		titleId="family-batch-print-heading"
-		subtitle="พิมพ์บัตรด้านล่างทีละใบ (Person QR ของทุกคน) แล้วส่งต่อไปขั้นถัดไป"
+		subtitle={t.subtitle}
 		{facts}
 		actions={nextActions}
 	>
 		<ul class="flex flex-wrap gap-1.5 text-sm">
 			{#each members as member, i (member._id)}
 				<li class="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-0.5 text-slate-700">
-					{formatPersonName(member)}{isHead(member, i) ? ' (ผู้ติดต่อหลัก)' : ''}
+					{formatPersonName(member)}{isHead(member, i) ? ` (${primaryContactLabel})` : ''}
 				</li>
 			{/each}
 		</ul>
@@ -201,7 +207,7 @@
 	{#each members as member, i (member._id)}
 		<section class="space-y-3">
 			<h3 class="text-base font-semibold text-foreground">
-				{isHead(member, i) ? 'ผู้ติดต่อหลัก' : 'สมาชิก'}: {formatPersonName(member)}
+				{isHead(member, i) ? primaryContactLabel : t.member}: {formatPersonName(member)}
 			</h3>
 			<EvacueeQrModal
 				show={true}

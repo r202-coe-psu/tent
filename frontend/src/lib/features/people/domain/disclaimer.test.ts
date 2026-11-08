@@ -161,4 +161,69 @@ describe('buildDisclaimerGroups', () => {
 			'🐶 สัตว์เลี้ยง'
 		]);
 	});
+
+	describe('in English', () => {
+		it('translates group labels and fallbacks', () => {
+			const groups = buildDisclaimerGroups({
+				assetDescription: 'cash',
+				petCount: 1,
+				vehicleCount: 1,
+				shelter: undefined,
+				language: 'en'
+			});
+
+			expect(groups.map((g) => g.label)).toEqual([
+				'🎒 Valuables / luggage',
+				'🚗 Vehicles',
+				'🐶 Pets'
+			]);
+			expect(groups.flatMap((g) => g.items).join(' ')).not.toMatch(/[\u0E00-\u0E7F]/);
+		});
+
+		it('translates configured master-data rules but keeps shelter free text as entered', () => {
+			const shelter = {
+				parking_policy: { rules: ['no_liability'], rules_other: 'จอดได้ถึง 18:00' },
+				admission_policy: {
+					pet_policy: {
+						policy: 'conditional',
+						categories: [{ category: 'large_dog', conditions: ['muzzle_and_leash'] }]
+					}
+				}
+			} as unknown as ShelterSummary;
+
+			const groups = buildDisclaimerGroups({
+				...baseInput(),
+				vehicleCount: 1,
+				petCount: 1,
+				shelter,
+				language: 'en'
+			});
+
+			expect(groups.find((g) => g.label === '🚗 Vehicles')?.items).toEqual([
+				'The shelter is not liable for loss of or damage to vehicles in any case.',
+				'จอดได้ถึง 18:00'
+			]);
+			expect(groups.find((g) => g.label === '🐶 Pets')?.items).toEqual([
+				'🐕 Large dogs / animals needing special control',
+				'Must wear a muzzle and be leashed at all times.'
+			]);
+		});
+
+		it('translates the no-pets notice', () => {
+			const shelter = {
+				admission_policy: { pet_policy: { policy: 'no_pets', categories: [] } }
+			} as unknown as ShelterSummary;
+
+			const groups = buildDisclaimerGroups({
+				...baseInput(),
+				petCount: 1,
+				shelter,
+				language: 'en'
+			});
+
+			expect(groups.find((g) => g.label === '🐶 Pets')?.items).toEqual([
+				'This shelter does not allow pets.'
+			]);
+		});
+	});
 });

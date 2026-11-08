@@ -98,7 +98,6 @@
 		return buildEvacueeQrLabel(evacuee, {
 			zones: shelterQuery.data?.zones,
 			hasScreening: (screeningsQuery.data?.length ?? 0) > 0,
-			checklist: [t.checklistCheckIn, t.checklistScreening, t.checklistLodging],
 			qrPayload
 		});
 	}

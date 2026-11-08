@@ -46,6 +46,7 @@ interface Fixture {
 	household_id: string | null;
 	current_stay: { status: string; zone?: string | null };
 	privacy?: { search_excluded?: boolean };
+	emergency_contact?: { name?: string; relationship?: string; phone?: string | null };
 }
 
 let docs: Fixture[] = [];
@@ -253,6 +254,30 @@ describe('reprintKioskLabels', () => {
 			reprintKioskLabels(shelterCode, pinInput(), { verifyStaffPin })
 		).rejects.toBeInstanceOf(KioskReprintNotFoundError);
 		expect(verifyStaffPin).not.toHaveBeenCalled();
+	});
+
+	it('prints only the emergency contact phone, and only for members who have one', async () => {
+		docs = [
+			evacuee(0, {
+				emergency_contact: { name: 'สมศรี ใจดี', relationship: 'มารดา', phone: '081-234 5679' }
+			}),
+			evacuee(1, { emergency_contact: { name: 'สมปอง', relationship: 'บิดา', phone: null } }),
+			evacuee(2)
+		];
+
+		const members = await reprintKioskLabels(
+			shelterCode,
+			input({ evacuee_ids: [ids[0], ids[1], ids[2]] })
+		);
+
+		expect(members[0].label.emergency_phone).toBe('0812345679');
+		expect(members[1].label).not.toHaveProperty('emergency_phone');
+		expect(members[2].label).not.toHaveProperty('emergency_phone');
+		// The contact's name and relationship never leave the server.
+		const serialized = JSON.stringify(members);
+		expect(serialized).not.toContain('สมศรี');
+		expect(serialized).not.toContain('มารดา');
+		expect(serialized).not.toContain('สมปอง');
 	});
 
 	it('prints the current zone name of members already given a zone', async () => {

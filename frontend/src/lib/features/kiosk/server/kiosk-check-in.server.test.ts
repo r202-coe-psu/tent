@@ -10,7 +10,8 @@ import {
 	kioskCheckInInputSchema,
 	kioskGateInputSchema,
 	lookupPreRegisteredEvacuee,
-	saveKioskCheckInCardPhoto
+	saveKioskCheckInCardPhoto,
+	toLabelIdentity
 } from './kiosk-check-in.server';
 import {
 	KioskUnassignedClaimConflictError,
@@ -2726,5 +2727,25 @@ describe('checkInSelectedMembers QR issuing (CR-233)', () => {
 		const results = await checkInSelectedMembers(shelterCode, primary._id, [primary._id]);
 		expect(results[0]).toMatchObject({ status: 'already_checked_in', qr_issue_failed: true });
 		expect(results[0]).not.toHaveProperty('qr_payload');
+	});
+});
+
+describe('toLabelIdentity', () => {
+	const doc = { first_name: 'สมชาย', last_name: 'ใจดี', phone: '0812345678' };
+
+	it('carries the emergency contact phone for the label, without spaces or dashes', () => {
+		expect(
+			toLabelIdentity({
+				...doc,
+				emergency_contact: { name: 'สมหญิง', phone: ' 089-123 4567 ', relation: 'ภรรยา' }
+			})
+		).toEqual({ name: 'สมชาย ใจดี', phone: '0812345678', emergency_phone: '0891234567' });
+	});
+
+	it('leaves the emergency phone out when there is none, so the label leaves the row blank', () => {
+		expect(toLabelIdentity(doc)).toEqual({ name: 'สมชาย ใจดี', phone: '0812345678' });
+		expect(
+			toLabelIdentity({ ...doc, emergency_contact: { name: 'สมหญิง', phone: '  ', relation: '' } })
+		).toEqual({ name: 'สมชาย ใจดี', phone: '0812345678' });
 	});
 });

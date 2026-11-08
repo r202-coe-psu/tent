@@ -18,7 +18,10 @@ vi.mock('$lib/features/kiosk', () => ({
 	KIOSK_LABEL_MM: { width: 80, height: 60 },
 	renderKioskQrLabelPng: async () => 'AAAA'
 }));
-vi.mock('$lib/features/shelters', () => ({ useShelter: () => ({ data: undefined }) }));
+vi.mock('$lib/features/shelters', async (importOriginal) => ({
+	...(await importOriginal<typeof import('$lib/features/shelters')>()),
+	useShelter: () => ({ data: undefined })
+}));
 vi.mock('$lib/features/people', async (importOriginal) => ({
 	...(await importOriginal<typeof import('$lib/features/people')>()),
 	useScreeningsByEvacuee: () => ({ data: [] })

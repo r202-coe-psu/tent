@@ -10,20 +10,24 @@
 	import Ambulance from '@lucide/svelte/icons/ambulance';
 	import ClipboardList from '@lucide/svelte/icons/clipboard-list';
 	import Truck from '@lucide/svelte/icons/truck';
+	import { PUBLIC_VOLUNTEERS_I18N } from '$lib/constants/i18n/public-volunteers';
 	import { PublicHeroMetrics, PublicPageShell } from '$lib/features/public-portal';
+	import { langState } from '$lib/states/i18n.svelte';
+	import { getTranslation } from '$lib/utils/i18n';
 
 	let activeTab = $state('register'); // register | portal | needs
+	const t = $derived(getTranslation(PUBLIC_VOLUNTEERS_I18N, langState.current));
 </script>
 
 <svelte:head>
-	<title>ระบบงานข้อมูลอาสาสมัคร — Smart Shelter</title>
+	<title>{t.pageTitle}</title>
 </svelte:head>
 
 <PublicPageShell class="space-y-8 lg:px-8" maxWidth="max-w-7xl">
 	<PublicHeroMetrics
-		title="ระบบงานข้อมูลอาสาสมัครร่วมบูรณาการภัยพิบัติ"
-		description="เชื่อมประสานความดี ขจัดปัญหาร่วมกระจุกตัว ด้วยการคัดกรองทักษะ (Skill Matching) ออกรหัสลงทะเบียน (Role Card) ปฏิบัติอาสา และติดตามสวัสดิการตามมาตรฐาน Sphere"
-		badgeText="Rescue Volunteer Platform"
+		title={t.heroTitle}
+		description={t.heroDescription}
+		badgeText={t.heroBadge}
 		badgeIcon={UserPlus}
 		showLivePing={false}
 		bgClass="bg-domain-volunteer-strong"
@@ -41,7 +45,7 @@
 					: 'text-muted-foreground hover:text-foreground'}"
 			>
 				<UserPlus class="h-3.5 w-3.5" />
-				รวมสมัครพลังอาสา
+				{t.tabRegister}
 			</button>
 			<button
 				onclick={() => (activeTab = 'portal')}
@@ -51,7 +55,7 @@
 					: 'text-muted-foreground hover:text-foreground'}"
 			>
 				<QrCode class="h-3.5 w-3.5" />
-				พอร์ทัล & บัตรงานอาสา
+				{t.tabPortal}
 			</button>
 			<button
 				onclick={() => (activeTab = 'needs')}
@@ -61,7 +65,7 @@
 					: 'text-muted-foreground hover:text-foreground'}"
 			>
 				<ClipboardList class="h-3.5 w-3.5" />
-				ประกาศความต้องการกำลังพล
+				{t.tabNeeds}
 			</button>
 		</div>
 	</div>
@@ -72,28 +76,27 @@
 			<!-- Form area -->
 			<div class="lg:col-span-2">
 				<div class="rounded-3xl border border-border bg-card p-6 shadow-sm md:p-8">
-					<h2 class="text-base font-bold text-foreground">1. ลงทะเบียนร่วมเป็นกำลังอาสา</h2>
+					<h2 class="text-base font-bold text-foreground">{t.registerTitle}</h2>
 					<p class="mt-1 text-xs text-muted-foreground">
-						เมื่อผ่านขบวนลงทะเบียน ระบบจะออกรหัสประจำตัวอาสาสำหรับใช้เช็คอิน และแจกจ่ายบัตรงาน Role
-						Card หน้าจุดในทันที
+						{t.registerIntro}
 					</p>
 
 					<form onsubmit={(e) => e.preventDefault()} class="mt-6 space-y-5">
 						<div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
 							<div class="flex flex-col gap-1.5">
 								<label class="text-xs font-bold text-foreground" for="fullname"
-									>ชื่อ-นามสกุล ของท่าน</label
+									>{t.fullNameLabel}</label
 								>
 								<input
 									id="fullname"
 									type="text"
-									placeholder="ระบุชื่อจริง นามสกุล"
+									placeholder={t.fullNamePlaceholder}
 									class="rounded-xl border border-border bg-muted/20 px-3.5 py-3 text-xs text-foreground outline-hidden focus:border-domain-volunteer-strong focus:ring-1 focus:ring-domain-volunteer-strong"
 								/>
 							</div>
 							<div class="flex flex-col gap-1.5">
 								<label class="text-xs font-bold text-foreground" for="emergency-phone"
-									>เบอร์ติดต่อกรณีฉุกเฉิน</label
+									>{t.emergencyPhoneLabel}</label
 								>
 								<input
 									id="emergency-phone"
@@ -105,37 +108,32 @@
 						</div>
 
 						<div class="flex flex-col gap-1.5">
-							<label class="text-xs font-bold text-foreground" for="shelter"
-								>ศูนย์พักพิงที่ต้องการเข้าช่วย</label
+							<label class="text-xs font-bold text-foreground" for="shelter">{t.shelterLabel}</label
 							>
 							<select
 								id="shelter"
 								class="rounded-xl border border-border bg-muted/20 px-3.5 py-3 text-xs text-foreground outline-hidden focus:ring-1 focus:ring-domain-volunteer-strong"
 							>
-								<option>ศูนย์พักพิง เทศบาลนครหาดใหญ่ (โรงเรียนเทศบาล 2)</option>
-								<option>ศูนย์พักพิง เทศบาลเมืองคลองแห (โรงเรียนวัดคลองแห)</option>
+								<option>{t.shelterHatYai}</option>
+								<option>{t.shelterKhlongHae}</option>
 							</select>
 						</div>
 
 						<div class="flex flex-col gap-1.5">
-							<label class="text-xs font-bold text-foreground" for="shift"
-								>กะการเข้าร่วมช่วยเหลือ (Shift)</label
-							>
+							<label class="text-xs font-bold text-foreground" for="shift">{t.shiftLabel}</label>
 							<select
 								id="shift"
 								class="rounded-xl border border-border bg-muted/20 px-3.5 py-3 text-xs text-foreground outline-hidden focus:ring-1 focus:ring-domain-volunteer-strong"
 							>
-								<option>กะเช้า (08:00 - 16:00)</option>
-								<option>กะบ่าย (16:00 - 00:00)</option>
-								<option>กะดึก (00:00 - 08:00)</option>
+								<option>{t.shiftMorning}</option>
+								<option>{t.shiftAfternoon}</option>
+								<option>{t.shiftNight}</option>
 							</select>
 						</div>
 
 						<!-- Skills checklist with visual boxes -->
 						<div>
-							<span class="mb-3 block text-xs font-bold text-foreground"
-								>ทักษะที่เกี่ยวข้องของตัวท่าน (รับเฉพาะเกณฑ์คัดกรอง)</span
-							>
+							<span class="mb-3 block text-xs font-bold text-foreground">{t.skillsLabel}</span>
 							<div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
 								<label
 									class="flex cursor-pointer items-start gap-3 rounded-2xl border border-border bg-card p-4 select-none hover:bg-muted/10"
@@ -147,10 +145,10 @@
 									<div>
 										<span class="flex items-center gap-1.5 text-xs font-bold text-foreground">
 											<ChefHat class="h-3.5 w-3.5 text-warning" />
-											ประกอบอาหาร (Cooking)
+											{t.skillCooking}
 										</span>
 										<p class="mt-1 text-xs text-muted-foreground">
-											ศูนย์ขาดแคลนกำลังทำอาหารจำนวนมาก
+											{t.skillCookingNote}
 										</p>
 									</div>
 								</label>
@@ -165,10 +163,10 @@
 									<div>
 										<span class="flex items-center gap-1.5 text-xs font-bold text-foreground">
 											<Ambulance class="h-3.5 w-3.5 text-danger" />
-											การแพทย์/ปฐมพยาบาล (Medical)
+											{t.skillMedical}
 										</span>
 										<p class="mt-1 text-xs text-muted-foreground">
-											ต้องการพยาบาลและผู้ดูแลผู้ป่วยไข้
+											{t.skillMedicalNote}
 										</p>
 									</div>
 								</label>
@@ -183,10 +181,10 @@
 									<div>
 										<span class="flex items-center gap-1.5 text-xs font-bold text-foreground">
 											<FileText class="h-3.5 w-3.5 text-domain-volunteer-strong" />
-											คัดกรองประวัติ (Screening)
+											{t.skillScreening}
 										</span>
 										<p class="mt-1 text-xs text-muted-foreground">
-											บันทึกข้อมูลหน้าจุดลงทะเบียนร่วมกับระบบคลาวด์
+											{t.skillScreeningNote}
 										</p>
 									</div>
 								</label>
@@ -201,10 +199,10 @@
 									<div>
 										<span class="flex items-center gap-1.5 text-xs font-bold text-foreground">
 											<Truck class="h-3.5 w-3.5 text-warning-foreground" />
-											ขนย้ายสิ่งของ (Lifting/Logistics)
+											{t.skillLogistics}
 										</span>
 										<p class="mt-1 text-xs text-muted-foreground">
-											ใช้แรงจัดขนของ ยานพาหนะ อุปกรณ์ช่วยเหลือภัยน้ำท่วม
+											{t.skillLogisticsNote}
 										</p>
 									</div>
 								</label>
@@ -215,7 +213,7 @@
 							type="submit"
 							class="flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-domain-volunteer-strong py-3.5 text-xs font-bold text-white shadow-sm transition-colors hover:bg-domain-volunteer-text"
 						>
-							+ ยื่นส่งแบบฟอร์มอาสาสมัคร
+							{t.submit}
 						</button>
 					</form>
 				</div>
@@ -227,37 +225,37 @@
 				<div class="rounded-3xl border border-border bg-card p-5 shadow-sm">
 					<h3 class="flex items-center gap-1.5 text-sm font-bold text-foreground">
 						<Heart class="h-4.5 w-4.5 text-danger" />
-						คุณจะได้รับสวัสดิการอะไรบ้าง?
+						{t.welfareTitle}
 					</h3>
 					<p class="mt-2 text-xs leading-relaxed text-muted-foreground">
-						โครงการยึดถือมาตรฐานสากลในการดูแลช่วยเหลือและสนับสนุนปัจจัยสี่ให้กับอาสาสมัครส่วนหน้าระหว่างปฏิบัติงาน:
+						{t.welfareIntro}
 					</p>
 
 					<div class="mt-4 space-y-3.5">
 						<div class="flex gap-2.5">
 							<span class="text-sm">🍱</span>
 							<div>
-								<h4 class="text-xs font-bold text-foreground">โภชนาการประจำมื้อ</h4>
+								<h4 class="text-xs font-bold text-foreground">{t.welfareMealTitle}</h4>
 								<p class="text-xs text-muted-foreground">
-									รับสิทธิ์อาหารหลักกล่องฟรีตามที่จองลงกะงาน
+									{t.welfareMealBody}
 								</p>
 							</div>
 						</div>
 						<div class="flex gap-2.5">
 							<span class="text-sm">💧</span>
 							<div>
-								<h4 class="text-xs font-bold text-foreground">น้ำดื่มผลิตสะอาด</h4>
+								<h4 class="text-xs font-bold text-foreground">{t.welfareWaterTitle}</h4>
 								<p class="text-xs text-muted-foreground">
-									ได้รับการจัดสรรน้ำขวดพกพาปฏิบัติงานอย่างต่อเนื่อง
+									{t.welfareWaterBody}
 								</p>
 							</div>
 						</div>
 						<div class="flex gap-2.5">
 							<span class="text-sm">🦺</span>
 							<div>
-								<h4 class="text-xs font-bold text-foreground">ชุดเครื่องแต่งกาย & อุปกรณ์ PPE</h4>
+								<h4 class="text-xs font-bold text-foreground">{t.welfareGearTitle}</h4>
 								<p class="text-xs text-muted-foreground">
-									เสื้อสะท้อนแสง หน้ากาก ถุงมือ ปฐมพยาบาลครบครัน
+									{t.welfareGearBody}
 								</p>
 							</div>
 						</div>
@@ -268,11 +266,10 @@
 				<div class="rounded-3xl border border-warning-border/40 bg-warning/5 p-5">
 					<h4 class="flex items-center gap-1.5 text-xs font-bold text-warning-foreground">
 						<Info class="h-4 w-4 text-warning-foreground" />
-						ข้อทดสอบความปลอดภัย
+						{t.safetyTitle}
 					</h4>
 					<p class="mt-2 text-[10.5px] leading-relaxed text-muted-foreground">
-						อาสาสมัครทุกคนจะต้องปฏิบัติตามแผนคำสั่งและคำแนะนำของหัวหน้าเวรศูนย์พักพิงหลัก
-						หากพบอาการไม่สบาย มีไข้ หรือเกิดอุบัติเหตุแจ้งทีมแพทย์ส่วนหลังทันที!
+						{t.safetyBody}
 					</p>
 				</div>
 			</div>
@@ -284,10 +281,10 @@
 		<div class="mx-auto max-w-2xl rounded-3xl border border-border bg-card p-6 shadow-sm md:p-8">
 			<h2 class="flex items-center gap-2 text-base font-bold text-foreground">
 				<UserCheck class="h-5 w-5 text-domain-volunteer-strong" />
-				พอร์ทัลอาสาสมัคร (My Portal)
+				{t.portalTitle}
 			</h2>
 			<p class="mt-1 text-xs text-muted-foreground">
-				เข้าสู่ระบบด้วยรหัสอาสา หรือค้นหาจากชื่อเพื่อดูข้อมูล Role Card
+				{t.portalIntro}
 			</p>
 
 			<!-- Search Bar -->
@@ -295,7 +292,7 @@
 				<div class="relative flex-1">
 					<input
 						type="text"
-						placeholder="ระบุรหัส V-1025 หรือชื่อ"
+						placeholder={t.portalSearchPlaceholder}
 						class="w-full rounded-xl border border-border bg-muted/20 px-3.5 py-3 pl-10 text-xs text-foreground outline-hidden focus:border-domain-volunteer-strong focus:ring-1 focus:ring-domain-volunteer-strong"
 					/>
 					<Search class="absolute top-3.5 left-3.5 h-4 w-4 text-muted-foreground" />
@@ -303,7 +300,7 @@
 				<button
 					class="rounded-xl bg-domain-volunteer-strong px-5 py-3 text-xs font-bold text-white shadow-sm transition-colors hover:bg-domain-volunteer-text"
 				>
-					ค้นหาประวัติ
+					{t.portalSearchButton}
 				</button>
 			</div>
 
@@ -314,10 +311,9 @@
 				>
 					<QrCode class="h-6 w-6" />
 				</div>
-				<h4 class="text-sm font-bold text-foreground">กรุณาค้นหาเพื่อเข้าสู่บัตรประจำตัว</h4>
+				<h4 class="text-sm font-bold text-foreground">{t.portalEmptyTitle}</h4>
 				<p class="mx-auto mt-1.5 max-w-sm text-xs text-muted-foreground">
-					ใช้รหัส V-XXXX หรือชื่อ-นามสกุลจริง เปิดดู Role Card รับทราบหน้าที่
-					และรายงานตัวแบบเรียลไทม์
+					{t.portalEmptyBody}
 				</p>
 			</div>
 		</div>
@@ -332,17 +328,17 @@
 				<div>
 					<h2 class="flex items-center gap-2 text-base font-bold text-foreground">
 						<ClipboardList class="h-5 w-5 text-domain-volunteer-strong" />
-						ประกาศความต้องการกำลังพล
+						{t.needsTitle}
 					</h2>
 					<p class="mt-1 text-xs text-muted-foreground">
-						ประกาศรับสมัครอาสาสมัครตามความต้องการของแต่ละศูนย์พักพิง
+						{t.needsIntro}
 					</p>
 				</div>
 				<!-- Search -->
 				<div class="relative w-full md:w-80">
 					<input
 						type="text"
-						placeholder="ค้นหาชื่อศูนย์ หรือ อปท."
+						placeholder={t.needsSearchPlaceholder}
 						class="w-full rounded-xl border border-border bg-muted/20 px-3.5 py-2.5 pl-9 text-xs text-foreground outline-hidden focus:border-domain-volunteer-strong focus:ring-1 focus:ring-domain-volunteer-strong"
 					/>
 					<Search class="absolute top-3 left-3 h-3.5 w-3.5 text-muted-foreground" />
@@ -358,38 +354,38 @@
 					>
 						<div>
 							<h3 class="text-sm font-bold text-foreground">
-								ศูนย์พักพิง เทศบาลนครหาดใหญ่ (โรงเรียนเทศบาล 2)
+								{t.shelterHatYai}
 							</h3>
 							<p class="mt-0.5 text-xs text-muted-foreground">
-								อปท. เทศบาลนครหาดใหญ่ | จำนวนผู้พักพิง 1/250 คน
+								{t.needsHatYaiOwner}
 							</p>
 						</div>
 						<span
 							class="shrink-0 rounded-lg bg-danger-muted/30 px-3 py-1.5 text-xs font-bold text-danger"
 						>
-							ต้องการอาสาเพิ่ม 6 อัตรา
+							{t.needsMoreVolunteers(6)}
 						</span>
 					</div>
 
-					<div class="mb-3 text-xs font-bold text-foreground">ความต้องการทักษะเฉพาะด้าน:</div>
+					<div class="mb-3 text-xs font-bold text-foreground">{t.needsSkillsHeading}</div>
 					<div class="mb-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
 						<div
 							class="flex items-center justify-between rounded-xl border border-border bg-card p-3 text-xs"
 						>
-							<span class="text-muted-foreground">• แม่ครัว/ทำอาหาร</span>
-							<span class="font-bold text-foreground">ต้องการ: 2 คน</span>
+							<span class="text-muted-foreground">• {t.needsCook}</span>
+							<span class="font-bold text-foreground">{t.needsPeople(2)}</span>
 						</div>
 						<div
 							class="flex items-center justify-between rounded-xl border border-border bg-card p-3 text-xs"
 						>
-							<span class="text-muted-foreground">• ทีมแพทย์/พยาบาล</span>
-							<span class="font-bold text-foreground">ต้องการ: 0 คน</span>
+							<span class="text-muted-foreground">• {t.needsMedical}</span>
+							<span class="font-bold text-foreground">{t.needsPeople(0)}</span>
 						</div>
 						<div
 							class="flex items-center justify-between rounded-xl border border-border bg-card p-3 text-xs"
 						>
-							<span class="text-muted-foreground">• ทีมคัดกรองประวัติ</span>
-							<span class="font-bold text-foreground">ต้องการ: 1 คน</span>
+							<span class="text-muted-foreground">• {t.needsScreening}</span>
+							<span class="font-bold text-foreground">{t.needsPeople(1)}</span>
 						</div>
 					</div>
 
@@ -397,7 +393,7 @@
 						onclick={() => (activeTab = 'register')}
 						class="flex w-full cursor-pointer items-center justify-center rounded-xl bg-domain-volunteer-strong py-3 text-xs font-bold text-primary-foreground shadow-sm transition-colors hover:bg-domain-volunteer-text"
 					>
-						สมัครเป็นอาสาสมัครประจำศูนย์นี้
+						{t.needsApply}
 					</button>
 				</div>
 
@@ -408,38 +404,38 @@
 					>
 						<div>
 							<h3 class="text-sm font-bold text-foreground">
-								ศูนย์พักพิง เทศบาลเมืองคลองแห (โรงเรียนวัดคลองแห)
+								{t.shelterKhlongHae}
 							</h3>
 							<p class="mt-0.5 text-xs text-muted-foreground">
-								อปท. เทศบาลเมืองคลองแห | จำนวนผู้พักพิง 1/180 คน
+								{t.needsKhlongHaeOwner}
 							</p>
 						</div>
 						<span
 							class="shrink-0 rounded-lg bg-danger-muted/30 px-3 py-1.5 text-xs font-bold text-danger"
 						>
-							ต้องการอาสาเพิ่ม 6 อัตรา
+							{t.needsMoreVolunteers(6)}
 						</span>
 					</div>
 
-					<div class="mb-3 text-xs font-bold text-foreground">ความต้องการทักษะเฉพาะด้าน:</div>
+					<div class="mb-3 text-xs font-bold text-foreground">{t.needsSkillsHeading}</div>
 					<div class="mb-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
 						<div
 							class="flex items-center justify-between rounded-xl border border-border bg-card p-3 text-xs"
 						>
-							<span class="text-muted-foreground">• แม่ครัว/ทำอาหาร</span>
-							<span class="font-bold text-foreground">ต้องการ: 4 คน</span>
+							<span class="text-muted-foreground">• {t.needsCook}</span>
+							<span class="font-bold text-foreground">{t.needsPeople(4)}</span>
 						</div>
 						<div
 							class="flex items-center justify-between rounded-xl border border-border bg-card p-3 text-xs"
 						>
-							<span class="text-muted-foreground">• ทีมแพทย์/พยาบาล</span>
-							<span class="font-bold text-foreground">ต้องการ: 1 คน</span>
+							<span class="text-muted-foreground">• {t.needsMedical}</span>
+							<span class="font-bold text-foreground">{t.needsPeople(1)}</span>
 						</div>
 						<div
 							class="flex items-center justify-between rounded-xl border border-border bg-card p-3 text-xs"
 						>
-							<span class="text-muted-foreground">• ทีมคัดกรองประวัติ</span>
-							<span class="font-bold text-foreground">ต้องการ: 1 คน</span>
+							<span class="text-muted-foreground">• {t.needsScreening}</span>
+							<span class="font-bold text-foreground">{t.needsPeople(1)}</span>
 						</div>
 					</div>
 
@@ -447,7 +443,7 @@
 						onclick={() => (activeTab = 'register')}
 						class="flex w-full cursor-pointer items-center justify-center rounded-xl bg-domain-volunteer-strong py-3 text-xs font-bold text-primary-foreground shadow-sm transition-colors hover:bg-domain-volunteer-text"
 					>
-						สมัครเป็นอาสาสมัครประจำศูนย์นี้
+						{t.needsApply}
 					</button>
 				</div>
 			</div>

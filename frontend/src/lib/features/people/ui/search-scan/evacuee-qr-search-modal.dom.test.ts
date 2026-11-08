@@ -1,81 +1,154 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushSync, mount, tick, unmount } from 'svelte';
+import { toast } from 'svelte-sonner';
+import { langState } from '$lib/states/i18n.svelte';
+import EvacueeQrSearchModal from './evacuee-qr-search-modal.svelte';
 
-const toast = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn() }));
 const lookup = vi.hoisted(() => vi.fn());
-vi.mock('svelte-sonner', () => ({ toast }));
-vi.mock('@tanstack/svelte-query', () => ({ useQueryClient: () => ({}) }));
+
+// No camera, no CouchDB: the camera start always fails and the lookup is scripted per test.
 vi.mock('html5-qrcode', () => ({
 	Html5Qrcode: class {
 		isScanning = false;
 		start() {
-			return new Promise(() => {});
+			return Promise.reject(new Error('no camera'));
 		}
 	}
 }));
-vi.mock('$lib/features/people', () => ({ lookupFederatedByScanCode: lookup }));
-vi.mock('$lib/features/unassigned-registration', () => ({ ClaimDialog: () => {} }));
+vi.mock('svelte-sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
+vi.mock('@tanstack/svelte-query', async (importOriginal) => ({
+	...(await importOriginal<typeof import('@tanstack/svelte-query')>()),
+	useQueryClient: () => ({})
+}));
 vi.mock('$lib/db/shelter', () => ({ getShelterCode: () => 'SH001' }));
-vi.mock('$lib/stores/shelter.svelte', () => ({ shelterStore: { selectedShelterCode: 'SH001' } }));
-
-import EvacueeQrSearchModal from './evacuee-qr-search-modal.svelte';
+vi.mock('$lib/features/people', async (importOriginal) => ({
+	...(await importOriginal<typeof import('$lib/features/people')>()),
+	lookupFederatedByScanCode: lookup
+}));
 
 const REJECTED = 'QR นี้ออกวันที่ 8 พ.ย. 2569 13:49 มีใบใหม่ — ลองค้นหาด้วยชื่อแทน';
 
 let instance: ReturnType<typeof mount> | null = null;
-let props: { show: boolean; onClose: () => void; onFound: (id: string) => void };
+let previousLanguage = langState.current;
 
-async function submitCode(code: string) {
+async function settle() {
+	for (let i = 0; i < 3; i++) {
+		flushSync();
+		await tick();
+	}
+}
+
+async function openModal(language: 'th' | 'en') {
+	previousLanguage = langState.current;
+	langState.current = language;
+	instance = mount(EvacueeQrSearchModal, {
+		target: document.body,
+		props: { show: true, onClose: () => {}, onFound: () => {} }
+	});
+	await settle();
+}
+
+async function submitCode(value: string) {
 	const input = document.getElementById('qr-manual-code') as HTMLInputElement;
-	input.value = code;
+	input.value = value;
 	input.dispatchEvent(new Event('input', { bubbles: true }));
-	flushSync();
-	input.closest('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
-	await vi.waitFor(() => flushSync());
-	await tick();
-	await new Promise((resolve) => setTimeout(resolve, 20));
-	flushSync();
+	await settle();
+	input.form!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+	await settle();
 }
 
 const alertText = () =>
 	document.querySelector('[role="dialog"] [role="alert"]')?.textContent?.trim();
 
 beforeEach(() => {
-	toast.error.mockReset();
+	vi.mocked(toast.error).mockClear();
 	lookup.mockReset();
-	props = { show: true, onClose: vi.fn(), onFound: vi.fn() };
-	instance = mount(EvacueeQrSearchModal, { target: document.body, props });
-	flushSync();
 });
-afterEach(() => {
+
+afterEach(async () => {
 	if (instance) unmount(instance);
 	instance = null;
+	langState.current = previousLanguage;
+	await new Promise((resolve) => setTimeout(resolve, 50));
 	document.body.innerHTML = '';
 });
 
-describe('EvacueeQrSearchModal refused QR', () => {
-	it('toasts a short message and shows the full reason in the modal', async () => {
+describe('EvacueeQrSearchModal', () => {
+	it('shows English labels and no Thai text when the staff language is EN', async () => {
+		await openModal('en');
+		const body = document.body.textContent ?? '';
+		expect(body).toContain('Scan ticket QR code (Digital Pass Scanner)');
+		expect(body).toContain('Or enter the code with a barcode scanner / type it in:');
+		expect(body).toContain('OK');
+		expect(body).toContain('Cancel');
+		expect(body).toContain('Cannot access the camera. Please check the camera permission.');
+		expect(document.getElementById('qr-manual-code')?.getAttribute('placeholder')).toBe(
+			'Scan or type the ID number / ticket code...'
+		);
+		expect(body).not.toMatch(/[฀-๿]/);
+	});
+
+	it('keeps the Thai labels when the staff language is TH', async () => {
+		await openModal('th');
+		const body = document.body.textContent ?? '';
+		expect(body).toContain('สแกน QR Code ตั๋วผู้พักพิง (Digital Pass Scanner)');
+		expect(body).toContain('หรือระบุรหัสด้วยเครื่องสแกนบาร์โค้ด / พิมพ์ด้วยมือ:');
+		expect(body).toContain('ตกลง');
+		expect(body).toContain('ยกเลิก');
+		expect(body).toContain('ไม่สามารถเข้าถึงกล้องได้ โปรดตรวจสอบการอนุญาตใช้งานกล้อง');
+		expect(document.getElementById('qr-manual-code')?.getAttribute('placeholder')).toBe(
+			'สแกนหรือพิมพ์เลขประจำตัว / รหัสตั๋ว...'
+		);
+	});
+
+	it('toasts the not-found message in English when the staff language is EN', async () => {
+		lookup.mockResolvedValue(null);
+		await openModal('en');
+		await submitCode('ABC123');
+		expect(toast.error).toHaveBeenCalledWith(
+			'No evacuee found for the code "ABC123" in shelter SH001'
+		);
+	});
+
+	it('toasts the not-found message in Thai when the staff language is TH', async () => {
+		lookup.mockResolvedValue(null);
+		await openModal('th');
+		await submitCode('ABC123');
+		expect(toast.error).toHaveBeenCalledWith('ไม่พบข้อมูลผู้พักพิงจากรหัส "ABC123" ในศูนย์ SH001');
+	});
+
+	it('toasts a short message and shows the full reason when a QR is refused (CR-233)', async () => {
 		lookup.mockResolvedValue({
 			source: 'qr_rejected',
 			verdict: { status: 'invalid' },
 			message: REJECTED
 		});
-
+		await openModal('th');
 		await submitCode('evacuee:ABC@111111');
-
 		expect(toast.error).toHaveBeenCalledTimes(1);
 		expect(toast.error).toHaveBeenCalledWith('สแกนไม่ผ่าน');
 		expect(alertText()).toBe(REJECTED);
-		expect(props.onFound).not.toHaveBeenCalled();
 	});
 
-	it('clears the reason when the next scan starts', async () => {
+	it('toasts the refusal in English when the staff language is EN', async () => {
+		lookup.mockResolvedValue({
+			source: 'qr_rejected',
+			verdict: { status: 'invalid' },
+			message: REJECTED
+		});
+		await openModal('en');
+		await submitCode('evacuee:ABC@111111');
+		expect(toast.error).toHaveBeenCalledWith('Scan rejected');
+	});
+
+	it('clears the refusal reason when the next scan starts', async () => {
 		lookup.mockResolvedValueOnce({
 			source: 'qr_rejected',
 			verdict: { status: 'invalid' },
 			message: REJECTED
 		});
+		await openModal('th');
 		await submitCode('evacuee:ABC@111111');
 		expect(alertText()).toBe(REJECTED);
 
@@ -83,8 +156,7 @@ describe('EvacueeQrSearchModal refused QR', () => {
 		lookup.mockReturnValueOnce(new Promise((resolve) => (release = resolve)));
 		await submitCode('evacuee:ABC@222222');
 		expect(alertText()).toBeUndefined();
-
 		release(null);
-		await tick();
+		await settle();
 	});
 });

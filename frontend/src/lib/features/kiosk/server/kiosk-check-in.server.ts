@@ -124,6 +124,7 @@ export type EvacueeDoc = {
 	first_name?: string;
 	last_name?: string;
 	phone?: string | null;
+	emergency_contact?: { name?: string; phone?: string; relation?: string };
 	gender?: string;
 	age?: number;
 	birth_year?: number;
@@ -149,7 +150,12 @@ export interface KioskEvacueeSummary {
 	selectable: boolean;
 }
 
-export type KioskLabelIdentity = { name: string; phone: string | null };
+export type KioskLabelIdentity = {
+	name: string;
+	phone: string | null;
+	/** Emergency contact phone printed under the zone (CR-151 §16); absent when there is none. */
+	emergency_phone?: string;
+};
 
 export interface KioskLookupResult {
 	shelter_code: string;
@@ -204,8 +210,9 @@ export type KioskCheckInMemberResult = {
 	/** CR-233 FR-EQR-24: the QR entry could not be written; no `qr_payload`, the kiosk must not print. */
 	qr_issue_failed?: true;
 	/**
-	 * Unmasked name + phone for the printed ID-card label: only with a `qr_payload` (just checked
-	 * in, or already arriving), never in a lookup — the lookup screen keeps the masked `last_name`.
+	 * Unmasked name, phone and emergency contact phone (digits only, never the contact's name) for
+	 * the printed ID-card label: only with a `qr_payload` (just checked in, or already arriving),
+	 * never in a lookup — the lookup screen keeps the masked `last_name`.
 	 */
 	label?: KioskLabelIdentity;
 };
@@ -251,15 +258,21 @@ function toSummary(
 	};
 }
 
-/** Unmasked name + phone for the printed label (check-in and a fresh walk-in registration). */
+/** Unmasked name + phones for the printed label (check-in and a fresh walk-in registration). */
 export function toLabelIdentity(
-	doc: Pick<EvacueeDoc, 'first_name' | 'last_name' | 'phone'>
+	doc: Pick<EvacueeDoc, 'first_name' | 'last_name' | 'phone' | 'emergency_contact'>
 ): KioskLabelIdentity {
 	const name = [doc.first_name, doc.last_name]
 		.map((part) => part?.trim())
 		.filter(Boolean)
 		.join(' ');
-	return { name, phone: doc.phone?.trim() || null };
+	// Spaces and dashes dropped: the label row has room for the digits only.
+	const emergencyPhone = doc.emergency_contact?.phone?.replace(/[\s-]/g, '');
+	return {
+		name,
+		phone: doc.phone?.trim() || null,
+		...(emergencyPhone ? { emergency_phone: emergencyPhone } : {})
+	};
 }
 
 async function expandHousehold(

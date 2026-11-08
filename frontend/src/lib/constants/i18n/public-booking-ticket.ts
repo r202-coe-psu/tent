@@ -23,6 +23,7 @@ export const PUBLIC_BOOKING_TICKET_I18N = {
 		statusAwaitingShelter: 'รอรับเข้าศูนย์พักพิง',
 		unassignedShelter: 'ไม่ระบุศูนย์พักพิง',
 		unassignedShelterPrint: 'ยังไม่ระบุศูนย์พักพิง',
+		registrationCodeLabel: 'รหัส',
 		memberCountLabel: 'จำนวนสมาชิก',
 		memberCountValue: (count: number) => `${count} คน`,
 		unassignedSuccessDesc:
@@ -52,6 +53,7 @@ export const PUBLIC_BOOKING_TICKET_I18N = {
 		statusAwaitingShelter: 'Awaiting shelter admission',
 		unassignedShelter: 'No shelter selected',
 		unassignedShelterPrint: 'No shelter selected yet',
+		registrationCodeLabel: 'Code',
 		memberCountLabel: 'Members',
 		memberCountValue: (count: number) => `${count} ${count === 1 ? 'person' : 'people'}`,
 		unassignedSuccessDesc:
