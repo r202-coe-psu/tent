@@ -10,13 +10,14 @@ related:
   - docs/changes/06-A-volunteer/CR-213-coordinator-limited-access-grant.md (FR-12 sweep, นอกขอบเขต "edge fallback")
   - docs/changes/06-A-volunteer/CR-221-coordinator-grant-edit-and-roles.md (FR-20 ถอนเมื่อโปรไฟล์ปิด)
   - docs/changes/01-core/CR-171-users-edge-shelters-soft-delete.md (selector `edge_shelters`)
-  - docs/changes/01-core/CR-064-edge-disaster-continuity.md (edge appliance, OD-6)
+  - docs/changes/01-core/CR-064-edge-disaster-continuity.md (edge appliance, OD-1 container list, OD-6)
   - "#1173 / #1179 / #1180 (EDGE_MODE — A2 บล็อกการเขียน `_users` ที่ edge)"
 affects:
   - docs/data/schema.md §6 `_users` (field ใหม่ `edge_revoked_at` — มีเฉพาะบน edge)
-  - docs/data/data-model.md §1 แถว `_users` และ §6 (พฤติกรรม grant บน edge; แก้ข้อความ "role `shelter:{id}`" ที่ §6 ให้ตรง selector `edge_shelters`)
+  - docs/data/data-model.md §6 (พฤติกรรม grant บน edge; แก้ข้อความ "role `shelter:{id}`" ที่ §6 ให้ตรง selector `edge_shelters` — ส่วน §1 แถว `_users` ทำแล้วใน PR #348)
   - docs/couchdb-replication/README.md §7 (ข้อจำกัด A2 และแถว "การถอดสิทธิ์ช่วง WAN ล่มไม่ถึง edge"), SETUP-EDGE.md
   - docs/features/edge-disaster-continuity-idea.md (§4 ตาราง `_users`, OD-6 ต่อ / A2)
+  - docs/changes/01-core/CR-064-edge-disaster-continuity.md (บันทึกข้อยกเว้น OD-1 เพิ่ม container `edge-grant-sweep` บน edge)
   - docs/changes/06-A-volunteer/CR-213-coordinator-limited-access-grant.md (นอกขอบเขต "edge fallback" → ชี้ CR นี้)
   - ไม่ bump `schema_v` (`_users` ไม่มี common envelope / `schema_v`)
   - docker-compose.edge.yml (service ใหม่ `edge-grant-sweep`), .env.edge.example
@@ -71,7 +72,7 @@ why: grant ของ coordinator หมดอายุตามปกติท�
 - ปิด failure mode 1 สำหรับกรณีที่เกิดบ่อยที่สุด (หมดอายุ) โดยไม่แก้รูป role, selector หรือ VDU
 - จิตอาสายังใช้ edge ได้จนถึงวันหมดจริง (ต่างจาก C)
 - ไม่สร้าง conflict ตอน WAN ปกติ (ต่างจาก A) เพราะ edge ทำงานเฉพาะตอน central ติดต่อไม่ได้ และ conflict หลัง outage ถูกล้างโดย service เดียวกัน
-- ใช้ฟังก์ชัน pure ของ central (`grants_to_revoke` / `apply_revocations`) ร่วมกัน ผลบน edge จึงเหมือน central
+- ใช้ฟังก์ชัน pure ของ central ร่วมกัน โดยกรองผลเฉพาะ grant ของศูนย์ตัวเอง (`shelter_code == SHELTER_CODE`) ก่อนเรียก `apply_revocations` เพื่อไม่ให้ edge แตะ grant ของศูนย์อื่น
 - ถ้า Team Lead เห็นว่าต้นทุน service บน edge ไม่คุ้มสำหรับ pilot ศูนย์เดียว ให้เลือก **E** และทำเฉพาะ FR-1, FR-2, FR-12, FR-13
 
 ## Change (ตัวเลือก D)
@@ -85,10 +86,10 @@ why: grant ของ coordinator หมดอายุตามปกติท�
 
 - **FR-3:** เพิ่ม service `edge-grant-sweep` ใน `docker-compose.edge.yml` ใช้ image ของ worker กับ entrypoint ใหม่ env เฉพาะ CouchDB ของ edge (`COUCHDB_USER`, `COUCHDB_PASSWORD`), `SHELTER_CODE`, `SYNC_URL` ไม่มี MongoDB และไม่รัน job อื่นของ worker
 - **FR-4:** วนทุก `EDGE_GRANT_SWEEP_INTERVAL` (default 60 วินาที) ตรวจ central ด้วย `GET <SYNC_URL>/_up` แบบเดียวกับ `central_up` ของ `scripts/edge-watchdog.sh:45` (ต้องได้ JSON `"status":"ok"` ไม่ใช่แค่ HTTP 200)
-- **FR-5:** ถอน grant เฉพาะเมื่อ central ล้มต่อเนื่อง ≥ `EDGE_GRANT_SWEEP_AFTER` (default 900 วินาที) ถ้า central ตอบได้แม้ครั้งเดียว นับใหม่และไม่เขียน `_users`
+- **FR-5:** ถอน grant เฉพาะเมื่อ central ล้มต่อเนื่อง ≥ `EDGE_GRANT_SWEEP_AFTER` (default 900 วินาที) นับจากเวลาที่ central เริ่มติดต่อไม่ได้ โดยเก็บ timestamp `down_since` ใน memory ของ service (หาก container restart ค่าจะถูกรีเซ็ตและเริ่มนับ streak ใหม่ เป็น fail-safe ไม่ให้รีบถอนเร็วเกินไป) ถ้า central ตอบได้แม้ครั้งเดียว ให้รีเซ็ตค่านับใหม่และไม่เขียน `_users`
 - **FR-6:** ขอบเขตการถอน: grant ที่ `shelter_code == SHELTER_CODE` และ `expires_at <= now` เท่านั้น
-  - ใช้ `grants_to_revoke` (กฎหมดอายุ) + `apply_revocations` ของ `worker/src/worker/role_grants.py` ผลจึงเหมือน central: ถอน `SHxxx:<role>`, ถอด `shelter:SHxxx` เมื่อไม่เหลือ role ในศูนย์, คง `edge_shelters` และบัญชี
-  - ห้ามแตะ role ถาวร, grant ของศูนย์อื่น และกฎโปรไฟล์ (ยกเลิกยืนยันตัวตน / โปรไฟล์ปิด — CR-213 FR-12, CR-221 FR-20) ดู Q3
+  - นำผลลัพธ์จาก `grants_to_revoke(doc, now)` มากรองเฉพาะรายการที่ `grant["shelter_code"] == SHELTER_CODE` ก่อนส่งต่อเข้า `apply_revocations(doc, filtered_grants)` เพื่อถอนเฉพาะ `SHxxx:<role>` ของศูนย์ตัวเอง, ถอด `shelter:SHxxx` เมื่อไม่เหลือ role ในศูนย์ตัวเอง, คง `edge_shelters` และบัญชี
+  - ห้ามแตะ role ถาวร, grant ของศูนย์อื่น (ฟังก์ชัน `apply_revocations` ได้รับเฉพาะ grant ของศูนย์นี้จึงไม่แตะศูนย์อื่น) และกฎโปรไฟล์ (ยกเลิกยืนยันตัวตน / โปรไฟล์ปิด — CR-213 FR-12, CR-221 FR-20) ดู Q3
 - **FR-7:** revision ที่ edge เขียนตั้ง `edge_revoked_at: <ISO UTC>` เพื่อแยก branch ของ edge จาก branch ของ central เขียนด้วย admin ของ edge แบบ read-modify-write (409 = อ่านใหม่แล้วคำนวณซ้ำ เหมือน CR-213 FR-12)
 - **FR-8:** ล้าง conflict ทุกรอบ (ไม่ขึ้นกับสถานะ central): doc ใน `_users` ของ edge ที่มี `_conflicts` ให้ลบทุก revision ที่มี `edge_revoked_at` ซึ่งมี revision พี่น้องที่ไม่มี field นี้ ไม่แตะ doc ที่ไม่มี conflict
 - **FR-9:** guard นาฬิกา: ข้ามรอบและ log warning เมื่อ `now` น้อยกว่า `granted_at` ล่าสุดของ grant ในศูนย์นี้ (นาฬิกาถอยหลัง / RTC reset) ไม่ถอนอะไรในรอบนั้น
@@ -128,10 +129,10 @@ why: grant ของ coordinator หมดอายุตามปกติท�
 - **auth / sync (stable core):**
   - edge เขียน `_users` ได้เป็นครั้งแรก (ผ่าน service เดียว) — ยกเว้นจาก A2 ที่ owner (@net-lynx) ตัดสิน 2026-10-18 ต้องแก้ CR-171 amendment (#1179) ให้สอดคล้อง
   - ไม่เปลี่ยน `_session`, รูป role (CR-093), selector ของ replication หรือ VDU
-  - เพิ่ม container บน edge appliance (CR-064 OD-1 เดิม: CouchDB + nginx + frontend + init/watchdog) และพึ่งนาฬิกาของ edge
-- **ความเสี่ยงที่เหลือ:** role หมดอายุยังใช้ได้ที่ edge ช่วงแรกของ outage ไม่เกิน `EDGE_GRANT_SWEEP_AFTER` + 1 รอบ (~16 นาที) · ระหว่าง conflict ยังไม่ถูกล้าง (หลัง WAN กลับ ≤ 1 รอบ) login ที่ edge ของ doc นั้นล้มแบบ fail-closed
+  - เพิ่ม container บน edge appliance ขยายจาก CR-064 OD-1 เดิม (CouchDB + nginx + frontend + init/watchdog เพิ่ม `edge-grant-sweep`) และพึ่งนาฬิกาของ edge
+- **ความเสี่ยงที่เหลือ:** role หมดอายุยังใช้ได้ที่ edge ช่วงแรกของ outage ไม่เกิน `EDGE_GRANT_SWEEP_AFTER` + 1 รอบ (~16 นาที) โดยวัดจากเวลาที่ grant หมดอายุจริง (ไม่ใช่เวลาที่เริ่มล่ม) · หลัง WAN กลับและ edge ลบ branch ที่มี `edge_revoked_at` ออกแล้ว อาจมีช่วงสั้นๆ ที่ central ยังคงมี revision ที่มี grant หมดอายุอยู่จนกว่า retention sweep ของ central (`RETENTION_INTERVAL_SECONDS = 300`) จะรันและ replicate กลับมา · ระหว่าง conflict ยังไม่ถูกล้าง (หลัง WAN กลับ ≤ 1 รอบ) login ที่ edge ของ doc นั้นล้มแบบ fail-closed
 - **audit:** grant ที่ edge ถอนมี audit 2 ฉบับ (central `worker` ตอนหมดอายุจริง + `edge-worker`) แยกด้วย `actor`
-- **test:** worker `test_role_grants.py` (FR-2), `test_edge_grant_sweep.py` (FR-4 ถึง FR-10 ด้วย CouchDB mock), `user-service.test.ts` (FR-2), ทดสอบบน edge จริงตาม AC-3 / AC-5 (เพิ่ม test case ใน README §4)
+- **test:** worker `test_role_grants.py` (FR-2), `test_edge_grant_sweep.py` (FR-4 ถึง FR-10 ด้วย CouchDB mock พร้อมเคส multi-shelter ป้องกันการถอน grant ของศูนย์อื่น), `user-service.test.ts` (FR-2), ทดสอบบน edge จริงตาม AC-3 / AC-5 (เพิ่ม test case ใน README §4)
 
 ## Migration
 
