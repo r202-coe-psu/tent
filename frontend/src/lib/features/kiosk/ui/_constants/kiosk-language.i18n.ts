@@ -5,9 +5,9 @@
 export const KIOSK_LANGUAGE_I18N = {
 	heading: 'เลือกภาษา',
 	subheading: 'Choose your language',
-	thai: { title: 'ภาษาไทย', hint: 'แตะเพื่อเริ่มลงทะเบียน', flagLabel: 'Thai flag' },
-	english: { title: 'English', hint: 'Tap to start registration', flagLabel: 'UK flag' },
-	helpTh: 'ไม่มีบัตรประชาชนไทย หรือต้องการความช่วยเหลือ? ติดต่อเจ้าหน้าที่ Station 1',
-	helpEn: 'No Thai ID or need help? Please go to staff at Station 1',
+	thai: { title: 'ภาษาไทย', hint: 'แตะเพื่อเริ่ม' },
+	english: { title: 'English', hint: 'Tap to start' },
+	helpTh: 'ไม่มีบัตรประชาชนไทย หรือต้องการความช่วยเหลือ? ติดต่อเจ้าหน้าที่',
+	helpEn: 'No Thai ID or need help? Please ask a staff member',
 	shellButton: { label: 'ภาษา / Language', ariaLabel: 'เปลี่ยนภาษา / Change language' }
 } as const;

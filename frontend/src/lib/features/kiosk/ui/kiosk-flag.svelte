@@ -1,32 +1,21 @@
 <script lang="ts">
 	import type { LanguageCode } from '$lib/stores/language.svelte';
-	import { KIOSK_LANGUAGE_I18N } from './_constants/kiosk-language.i18n';
 
 	interface Props {
 		/** `th` draws the Thai flag, `en` the Union Jack. */
 		code: LanguageCode;
 		class?: string;
-		/** Hide from assistive tech when a label next to the flag already says it. */
-		decorative?: boolean;
 	}
 
 	// Inline SVG, not a flag emoji: the kiosk's Chromium on Linux renders those as two letters.
-	let { code, class: className = '', decorative = false }: Props = $props();
+	// Always decorative: every place it is drawn names the language in text right next to it.
+	let { code, class: className = '' }: Props = $props();
 
 	const uid = $props.id();
-	const label = $derived(
-		code === 'th' ? KIOSK_LANGUAGE_I18N.thai.flagLabel : KIOSK_LANGUAGE_I18N.english.flagLabel
-	);
 </script>
 
 {#if code === 'th'}
-	<svg
-		viewBox="0 0 9 6"
-		role="img"
-		aria-label={decorative ? undefined : label}
-		aria-hidden={decorative ? 'true' : undefined}
-		class={className}
-	>
+	<svg viewBox="0 0 9 6" aria-hidden="true" class={className}>
 		<rect width="9" height="6" fill="#A51931" />
 		<rect y="1" width="9" height="4" fill="#F4F5F8" />
 		<rect y="2" width="9" height="2" fill="#2D2A4A" />
@@ -35,9 +24,7 @@
 	<svg
 		viewBox="0 0 60 30"
 		preserveAspectRatio="xMidYMid slice"
-		role="img"
-		aria-label={decorative ? undefined : label}
-		aria-hidden={decorative ? 'true' : undefined}
+		aria-hidden="true"
 		class={className}
 	>
 		<clipPath id={`${uid}-box`}><path d="M0,0 v30 h60 v-30 z" /></clipPath>

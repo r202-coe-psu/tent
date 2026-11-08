@@ -103,11 +103,7 @@
 			data-testid="kiosk-language-button"
 			class={`inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white font-semibold whitespace-nowrap text-[#0A2647] no-underline focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:outline-none active:bg-slate-100 ${buttonClass}`}
 		>
-			<KioskFlag
-				code={languageStore.current}
-				decorative
-				class={`shrink-0 rounded-xs ${flagClass}`}
-			/>
+			<KioskFlag code={languageStore.current} class={`shrink-0 rounded-xs ${flagClass}`} />
 			<span>{KIOSK_LANGUAGE_I18N.shellButton.label}</span>
 		</a>
 	{/if}
