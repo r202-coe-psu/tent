@@ -4,7 +4,7 @@ import {
 	isSystemAdmin,
 	shelterCodesWithCapability
 } from '$lib/auth/roles';
-import { readSessionUserCtx, ServiceError } from '$lib/server/couch-admin';
+import { readSessionUserCtx, ServiceError } from '$lib/server/session-auth';
 
 /** Authenticated caller plus the shelters they may manage for one capability set. */
 export interface ScopedCaller {

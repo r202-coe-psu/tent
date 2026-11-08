@@ -13,7 +13,7 @@
 		DEFAULT_REGISTRATION_RANGE_PRESET,
 		type RegistrationRangePreset
 	} from '$lib/features/dashboard';
-	import { DashboardExportButton } from '$lib/features/data-export';
+	import { ConsulateExportButton, DashboardExportButton } from '$lib/features/data-export';
 	import { bangkokToday } from '$lib/utils/date';
 
 	import DashboardKpiCards from './dashboard-kpi-cards.svelte';
@@ -97,7 +97,8 @@
 						<DashboardNationalityList data={demographicsQuery.data.countries} />
 					{/if}
 				</div>
-				<div class="mt-6">
+				<div class="mt-6 flex flex-col gap-2">
+					<ConsulateExportButton {shelterCode} />
 					<Dialog.Root>
 						<Dialog.Trigger
 							class="w-full rounded-md border border-input bg-background py-2 text-sm font-medium text-foreground hover:bg-accent hover:text-accent-foreground"

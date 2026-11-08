@@ -2,7 +2,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
 	KIOSK_LABEL_CHECKBOX,
+	KIOSK_LABEL_CHECKLIST,
+	KIOSK_LABEL_EMERGENCY_PREFIX,
 	KIOSK_LABEL_LINK,
+	KIOSK_LABEL_QR_CAPTION,
+	KIOSK_LABEL_QR_CAPTION_GAP_MM,
 	KIOSK_LABEL_ZONE,
 	KIOSK_LABEL_ZONE_PREFIX,
 	kioskLabelLayout,
@@ -72,7 +76,8 @@ function installFakeCanvas() {
 			ready: Promise.resolve(),
 			load: vi.fn((font: string) => {
 				fontsLoaded.push(font);
-				return Promise.resolve([]);
+				// A matched face, as the browser returns once the web font is available.
+				return Promise.resolve([{ family: 'IBM Plex Sans Thai Looped' }]);
 			})
 		}
 	});
@@ -104,22 +109,79 @@ describe('renderKioskLabelPng', () => {
 		expect(harness.isOrderViolated()).toBe(false);
 	});
 
+	it('asks the font loader for the Thai subset too, not only the Latin one', async () => {
+		await renderKioskLabelPng(label);
+
+		// Web fonts split by unicode-range: `load(font)` alone checks a space and fetches only the
+		// Latin file, so Thai would draw in the fallback face until the UI happened to use it.
+		const calls = vi.mocked(document.fonts.load).mock.calls;
+		expect(calls.length).toBeGreaterThan(0);
+		for (const [, text] of calls) {
+			expect(text).toMatch(/[\u0E00-\u0E7F]/);
+			expect(text).toMatch(/[A-Za-z0-9]/);
+		}
+	});
+
 	it('draws every row with the Thai-capable family, and no phone number', async () => {
 		await renderKioskLabelPng(label);
 
 		expect(harness.fontsUsedInDrawing.length).toBeGreaterThan(0);
 		for (const font of harness.fontsUsedInDrawing) {
-			expect(font).toMatch(/'IBM Plex Sans Thai'/);
+			// Same face as the web page around the preview, so the label matches the app.
+			expect(font).toMatch(/px 'IBM Plex Sans Thai Looped', 'IBM Plex Sans Thai'/);
 		}
 		const texts = harness.fakeContext.fillText.mock.calls.map(([text]) => text);
 		expect(texts).toEqual([
 			'สมชาย ใจดี',
 			KIOSK_LABEL_ZONE_PREFIX,
-			'เช็คอิน',
-			'คัดกรอง',
-			'ที่พัก',
-			KIOSK_LABEL_LINK
+			'เช็คอิน (Checked-in)',
+			'คัดกรอง (Screened)',
+			'ที่พัก (Stayed)',
+			KIOSK_LABEL_LINK,
+			...KIOSK_LABEL_QR_CAPTION
 		]);
+	});
+
+	it('prints the emergency contact phone on its own row under the zone', async () => {
+		await renderKioskLabelPng({ ...label, emergencyPhone: '0891234567' });
+
+		const texts = harness.fakeContext.fillText.mock.calls.map(([text]) => text);
+		const zoneAt = texts.indexOf(KIOSK_LABEL_ZONE_PREFIX);
+		expect(texts.slice(zoneAt + 1, zoneAt + 3)).toEqual([
+			KIOSK_LABEL_EMERGENCY_PREFIX,
+			'0891234567'
+		]);
+		const ys = harness.fakeContext.fillText.mock.calls.map(
+			(call) => (call as unknown as [string, number, number])[2]
+		);
+		const firstCheckRow = texts.indexOf(KIOSK_LABEL_CHECKLIST[0]);
+		expect(ys[zoneAt + 1]).toBeGreaterThan(ys[zoneAt]!);
+		expect(ys[zoneAt + 1]).toBeLessThan(ys[firstCheckRow]!);
+	});
+
+	it('leaves no emergency row when there is no emergency phone', async () => {
+		await renderKioskLabelPng({ ...label, emergencyPhone: null });
+
+		const texts = harness.fakeContext.fillText.mock.calls.map(([text]) => text);
+		expect(texts).not.toContain(KIOSK_LABEL_EMERGENCY_PREFIX);
+	});
+
+	it('prints the "shelter use only" caption centred under the QR, clear of its quiet zone', async () => {
+		await renderKioskLabelPng(label);
+
+		const { qr } = kioskLabelLayout(264);
+		const rows = harness.fakeContext.fillText.mock.calls.filter(([text]) =>
+			(KIOSK_LABEL_QR_CAPTION as readonly string[]).includes(text)
+		) as unknown as [string, number, number][];
+		expect(rows.map(([text]) => text)).toEqual([...KIOSK_LABEL_QR_CAPTION]);
+		for (const [text, x] of rows) {
+			// The fake measureText is 6 dots per character.
+			expect(x + (text.length * 6) / 2).toBeCloseTo(qr.x + 264 / 2, 5);
+		}
+		const [first, second] = rows.map(([, , y]) => y);
+		expect(first).toBeGreaterThan(qr.y + 264 + mmToDots(KIOSK_LABEL_QR_CAPTION_GAP_MM));
+		expect(second).toBeGreaterThan(first!);
+		expect(second).toBeLessThan(479 - mmToDots(2));
 	});
 
 	it('draws the link left-aligned at the bottom of the text column', async () => {
@@ -150,9 +212,13 @@ describe('renderKioskLabelPng', () => {
 		await renderKioskLabelPng(label);
 
 		const rows = harness.fakeContext.fillText.mock.calls.filter(([text]) =>
-			['เช็คอิน', 'คัดกรอง', 'ที่พัก'].includes(text)
+			['เช็คอิน (Checked-in)', 'คัดกรอง (Screened)', 'ที่พัก (Stayed)'].includes(text)
 		) as unknown as [string, number, number][];
-		expect(rows.map(([text]) => text)).toEqual(['เช็คอิน', 'คัดกรอง', 'ที่พัก']);
+		expect(rows.map(([text]) => text)).toEqual([
+			'เช็คอิน (Checked-in)',
+			'คัดกรอง (Screened)',
+			'ที่พัก (Stayed)'
+		]);
 		expect(new Set(rows.map(([, x]) => x)).size).toBe(1);
 		const ys = rows.map(([, , y]) => y);
 		expect(ys[0]).toBeLessThan(ys[1]!);
@@ -174,7 +240,7 @@ describe('renderKioskLabelPng', () => {
 			// Each tick starts inside its own box, top row first.
 			const starts = harness.fakeContext.moveTo.mock.calls.map(([, y]) => y as number);
 			const rows = harness.fakeContext.fillText.mock.calls
-				.filter(([text]) => ['เช็คอิน', 'คัดกรอง'].includes(text))
+				.filter(([text]) => ['เช็คอิน (Checked-in)', 'คัดกรอง (Screened)'].includes(text))
 				.map((call) => (call as unknown as [string, number, number])[2]);
 			const boxSize = Math.round(mmToDots(KIOSK_LABEL_CHECKBOX.sizeMm));
 			starts.forEach((y, index) => expect(Math.abs(y - rows[index]!)).toBeLessThan(boxSize / 2));
@@ -209,10 +275,9 @@ describe('renderKioskLabelPng', () => {
 			await renderKioskLabelPng({ ...label, zone: 'A3' });
 
 			const drawn = texts();
-			expect(drawn.slice(drawn.indexOf(KIOSK_LABEL_ZONE_PREFIX), -4)).toEqual([
-				KIOSK_LABEL_ZONE_PREFIX,
-				'A3'
-			]);
+			expect(
+				drawn.slice(drawn.indexOf(KIOSK_LABEL_ZONE_PREFIX), drawn.indexOf(KIOSK_LABEL_CHECKLIST[0]))
+			).toEqual([KIOSK_LABEL_ZONE_PREFIX, 'A3']);
 			expect(ruleDots()).toEqual([]);
 		});
 
@@ -227,5 +292,31 @@ describe('renderKioskLabelPng', () => {
 
 	it('returns the rendered label as base64 PNG', async () => {
 		expect(await renderKioskLabelPng(label)).toBe('ZmFrZS1wbmc=');
+	});
+
+	describe('when the Thai label font cannot be loaded', () => {
+		it('rejects instead of drawing with a fallback font when the load fails', async () => {
+			vi.mocked(document.fonts.load).mockRejectedValue(new Error('network down'));
+
+			await expect(renderKioskLabelPng(label)).rejects.toThrow('network down');
+			expect(harness.fakeContext.fillText).not.toHaveBeenCalled();
+		});
+
+		it('rejects when no font face matches (load resolves an empty list)', async () => {
+			vi.mocked(document.fonts.load).mockResolvedValue([]);
+
+			await expect(renderKioskLabelPng(label)).rejects.toThrow(/font/i);
+			expect(harness.fakeContext.fillText).not.toHaveBeenCalled();
+		});
+
+		it('tries the font again on the next render instead of caching the failure', async () => {
+			vi.mocked(document.fonts.load).mockResolvedValueOnce([]);
+			await expect(renderKioskLabelPng(label)).rejects.toThrow(/font/i);
+
+			vi.mocked(document.fonts.load).mockResolvedValue([
+				{ family: 'IBM Plex Sans Thai Looped' } as unknown as FontFace
+			]);
+			expect(await renderKioskLabelPng(label)).toBe('ZmFrZS1wbmc=');
+		});
 	});
 });

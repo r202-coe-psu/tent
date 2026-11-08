@@ -7,7 +7,8 @@ import {
 	lotLocationFields,
 	lotStorageName,
 	storageLotFields,
-	isStoragePointChosen
+	isStoragePointChosen,
+	countLotsHoldingStock
 } from './lot-storage';
 import { stockLotSchema } from './operations';
 
@@ -147,5 +148,26 @@ describe('isStoragePointChosen (CR-139 N1)', () => {
 
 	it('does not accept an id that is not one of the points', () => {
 		expect(isStoragePointChosen('sp-gone', shelterPoints)).toBe(false);
+	});
+});
+
+describe('countLotsHoldingStock (#1186)', () => {
+	const lot = (qty: string, storage_point_id?: string) => ({
+		qty,
+		...(storage_point_id ? { lot: { storage_point_id } } : {})
+	});
+
+	it('counts only lots at the point with qty > 0', () => {
+		const lots = [lot('5', 'p1'), lot('0.5', 'p1'), lot('9', 'p2'), lot('3')];
+		expect(countLotsHoldingStock('p1', lots)).toBe(2);
+	});
+
+	it('is 0 (deletable) when every lot at the point is empty or the point has no lots', () => {
+		expect(countLotsHoldingStock('p1', [lot('0', 'p1'), lot('9', 'p2')])).toBe(0);
+		expect(countLotsHoldingStock('p1', [])).toBe(0);
+	});
+
+	it('does not count an overdrawn (negative) lot as stock', () => {
+		expect(countLotsHoldingStock('p1', [lot('-2', 'p1')])).toBe(0);
 	});
 });

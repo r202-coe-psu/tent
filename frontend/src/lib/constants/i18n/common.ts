@@ -28,8 +28,6 @@ export const PUBLIC_NAVBAR_I18N = {
 		volunteerPortal: 'เข้าสู่ระบบอาสาสมัคร / ตารางงาน',
 		backoffice: 'ระบบหลังบ้าน',
 		alerts: 'การแจ้งเตือนภัย',
-		switchLanguage: 'เปลี่ยนภาษา (Language)',
-		switchLanguageAria: 'Switch to English',
 		openMenu: 'เปิดเมนู',
 		closeMenu: 'ปิดเมนู',
 		menuTitle: 'เมนู'
@@ -52,8 +50,6 @@ export const PUBLIC_NAVBAR_I18N = {
 		volunteerPortal: 'Volunteer Portal / My Schedule',
 		backoffice: 'Backoffice',
 		alerts: 'Emergency Alerts',
-		switchLanguage: 'Switch Language',
-		switchLanguageAria: 'เปลี่ยนเป็นภาษาไทย',
 		openMenu: 'Open menu',
 		closeMenu: 'Close menu',
 		menuTitle: 'Menu'

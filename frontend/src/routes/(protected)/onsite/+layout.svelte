@@ -4,11 +4,15 @@
 	import ShelterNavbar from '$lib/components/shelter-navbar.svelte';
 	import { resolveOnsiteStation } from '$lib/features/portal';
 	import { colors } from '$lib/tokens';
+	import { STAFF_CHROME_I18N } from '$lib/constants/i18n/staff-chrome';
+	import { langState } from '$lib/states/i18n.svelte';
+	import { getTranslation } from '$lib/utils/i18n';
 
 	let { children }: LayoutProps = $props();
 
 	const station = $derived(resolveOnsiteStation(page.url.pathname));
 	const tone = $derived(station ? colors.station[station.id] : null);
+	const t = $derived(getTranslation(STAFF_CHROME_I18N, langState.current).onsite);
 </script>
 
 <!--
@@ -29,9 +33,11 @@
 			<div
 				class="flex h-9 items-center justify-center gap-2 px-4 text-sm font-bold tracking-wide {tone.band}"
 			>
-				<span class="tabular-nums">สถานี {station.id}</span>
+				<span class="tabular-nums">{t.stationBadge(station.id)}</span>
 				<span aria-hidden="true" class="opacity-60">·</span>
-				<span class="truncate">{tone.name}</span>
+				<span class="truncate"
+					>{langState.current === 'th' ? tone.name : t.stationNames[station.id]}</span
+				>
 			</div>
 		{/if}
 	</div>

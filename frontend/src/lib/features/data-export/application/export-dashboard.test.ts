@@ -1,10 +1,10 @@
 import ExcelJS from 'exceljs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { DASHBOARD_SHEET_NAMES, type DashboardExportData } from '../domain/dashboard-sheets';
-import { downloadBlob } from '../data/download-blob';
-import { dashboardFileName, exportDashboard } from './export-dashboard';
+import { downloadBlob } from '../data/download';
+import { dashboardFileName, exportDashboard, toWorkbookSheet } from './export-dashboard';
 
-vi.mock('../data/download-blob', () => ({ downloadBlob: vi.fn() }));
+vi.mock('../data/download', () => ({ downloadBlob: vi.fn() }));
 
 const range = { from: '2026-11-01', to: '2026-11-07' };
 
@@ -73,20 +73,38 @@ describe('dashboardFileName', () => {
 describe('exportDashboard', () => {
 	beforeEach(() => vi.mocked(downloadBlob).mockClear());
 
-	it('downloads a workbook with the six dashboard sheets and returns the filename', async () => {
+	it('downloads a workbook with the five dashboard sheets and returns the filename', async () => {
 		const now = new Date('2026-11-06T17:30:00Z');
 		const name = await exportDashboard(DATA, { code: 'SH001', name: 'ศูนย์ทดสอบ' }, now);
 
 		expect(name).toBe('dashboard-SH001-20261107-0030.xlsx');
 		expect(downloadBlob).toHaveBeenCalledTimes(1);
-		const [filename, blob] = vi.mocked(downloadBlob).mock.calls[0];
+		const [blob, filename] = vi.mocked(downloadBlob).mock.calls[0];
 		expect(filename).toBe(name);
 		expect(blob).toBeInstanceOf(Blob);
 
 		const wb = new ExcelJS.Workbook();
 		await wb.xlsx.load(await (blob as Blob).arrayBuffer());
 		expect(wb.worksheets.map((w) => w.name)).toEqual([...DASHBOARD_SHEET_NAMES]);
-		expect(wb.worksheets).toHaveLength(6);
+		expect(wb.worksheets).toHaveLength(5);
 		expect(wb.getWorksheet('KPI')!.getCell('A1').value).toContain('SH001');
+	});
+});
+
+describe('toWorkbookSheet', () => {
+	it('puts heading lines, a blank row, then columns and data; all but data is the header', () => {
+		expect(
+			toWorkbookSheet({ name: 'S', heading: ['h1', 'h2'], columns: ['a', 'b'], rows: [['x', 1]] })
+		).toEqual({
+			name: 'S',
+			rows: [['h1'], ['h2'], [], ['a', 'b'], ['x', 1]],
+			headerRows: 4
+		});
+	});
+
+	it('omits the blank row when there is no heading', () => {
+		const sheet = toWorkbookSheet({ name: 'S', heading: [], columns: ['a'], rows: [[1]] });
+		expect(sheet.rows).toEqual([['a'], [1]]);
+		expect(sheet.headerRows).toBe(1);
 	});
 });

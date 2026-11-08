@@ -71,6 +71,11 @@
 </script>
 
 <script lang="ts">
+	import { langState } from '$lib/states/i18n.svelte';
+	import { getTranslation } from '$lib/utils/i18n';
+	import { peopleLabels } from '../../domain/people';
+	import { SHARED_BADGES_I18N } from '../_constants/shared-badges.i18n';
+
 	let {
 		status,
 		size = 'sm',
@@ -85,19 +90,23 @@
 		class?: string;
 	} = $props();
 
+	const t = $derived(getTranslation(SHARED_BADGES_I18N, langState.current));
+
 	const style = $derived(
 		STAY_STATUS_BADGE_STYLES[status as StayStatus] ?? {
-			label: status || 'ไม่ระบุ',
+			label: status || t.unspecified,
 			badgeClass: 'border-slate-200 bg-slate-50 text-slate-600',
 			dotClass: 'bg-slate-400'
 		}
 	);
 
-	const displayLabel = $derived(customLabel ?? style.label);
+	const displayLabel = $derived(
+		customLabel ?? peopleLabels(langState.current).stayStatus[status as StayStatus] ?? style.label
+	);
 </script>
 
 <span
-	class="inline-flex items-center gap-1.5 rounded-full border font-medium transition-colors {style.badgeClass} {size ===
+	class="inline-flex max-w-full items-center gap-1.5 rounded-full border font-medium transition-colors {style.badgeClass} {size ===
 	'sm'
 		? 'px-2.5 py-0.5 text-xs'
 		: 'px-3 py-1 text-sm'} {className}"
@@ -105,5 +114,5 @@
 	{#if showDot}
 		<span class="size-1.5 shrink-0 rounded-full {style.dotClass}" aria-hidden="true"></span>
 	{/if}
-	<span>{displayLabel}</span>
+	<span class="min-w-0 break-words">{displayLabel}</span>
 </span>

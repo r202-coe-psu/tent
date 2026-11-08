@@ -7,6 +7,9 @@
 	import { formatPersonName, maskNationalId } from '$lib/features/people';
 	import type { Evacuee, Medical, Screening } from '$lib/features/people';
 	import { imageRepository } from '$lib/features/images';
+	import { getTranslation } from '$lib/utils/i18n';
+	import { langState } from '$lib/states/i18n.svelte';
+	import { EVACUEE_PROFILE_I18N } from '../_constants/evacuee-profile.i18n';
 
 	interface StatusInfo {
 		label: string;
@@ -35,6 +38,8 @@
 		onOpenQrModal: () => void;
 		onOpenProfileEdit: () => void;
 	} = $props();
+
+	const t = $derived(getTranslation(EVACUEE_PROFILE_I18N, langState.current).headerCard);
 
 	let photoUrl = $state<string | null>(null);
 
@@ -81,7 +86,7 @@
 			<div
 				class="flex h-20 w-20 shrink-0 flex-col items-center justify-center rounded-lg border border-slate-200 bg-slate-100 text-2xs font-semibold text-slate-400 select-none dark:border-slate-700 dark:bg-slate-800"
 			>
-				<span>No Photo</span>
+				<span>{t.noPhoto}</span>
 			</div>
 		{/if}
 
@@ -113,7 +118,7 @@
 						class="inline-flex items-center gap-1.5 rounded-full border border-red-100 bg-red-50 px-2.5 py-0.5 text-xs font-semibold text-red-600 dark:border-red-900/30 dark:bg-red-950/40 dark:text-red-400"
 					>
 						<span class="size-1.5 rounded-full bg-red-500"></span>
-						มีอาการป่วย/เฝ้าระวัง
+						{t.illness}
 					</span>
 				{/if}
 				{#if evacuee.special_needs && evacuee.special_needs.length > 0}
@@ -121,7 +126,7 @@
 						class="inline-flex items-center gap-1.5 rounded-full border border-amber-100 bg-amber-50 px-2.5 py-0.5 text-xs font-semibold text-amber-600 dark:border-amber-900/30 dark:bg-amber-950/40 dark:text-amber-400"
 					>
 						<span class="size-1.5 rounded-full bg-amber-500"></span>
-						กลุ่มเปราะบาง
+						{t.vulnerable}
 					</span>
 				{/if}
 			</div>
@@ -137,13 +142,13 @@
 				onclick={onOpenProfileEdit}
 			>
 				<Pencil class="size-4" />
-				<span>ข้อมูลส่วนบุคคล</span>
+				<span>{t.personalInfo}</span>
 			</button>
 			<button
 				class="inline-flex cursor-pointer items-center justify-center rounded-md border border-amber-400 bg-transparent px-4 py-2 text-sm font-semibold text-amber-700 transition-colors hover:bg-amber-50 dark:text-amber-400 dark:hover:bg-amber-950/30"
 				onclick={onOpenZoneModal}
 			>
-				ย้ายโซน (Change Zone)
+				{t.changeZone}
 			</button>
 
 			<button
@@ -160,7 +165,7 @@
 				onclick={onOpenQrModal}
 			>
 				<Printer class="size-4 opacity-75" />
-				<span>พิมพ์ QR</span>
+				<span>{t.printQr}</span>
 			</button>
 		{:else}
 			<span
@@ -175,7 +180,7 @@
 				onclick={() => goto(resolve(`/back-office/evacuee-management/edit/evacuee/${evacuee._id}`))}
 			>
 				<ExternalLink class="size-4 opacity-75" />
-				<span>ดูข้อมูลเต็ม / แก้ไข</span>
+				<span>{t.viewFullEdit}</span>
 			</button>
 		{/if}
 	</div>

@@ -110,16 +110,15 @@ const byName = (name: string, d = data(), m = meta) =>
 	buildDashboardSheets(d, m).find((s) => s.name === name)!;
 
 describe('buildDashboardSheets', () => {
-	it('returns exactly six sheets in the fixed order', () => {
+	it('returns exactly five sheets in the fixed order', () => {
 		const sheets = buildDashboardSheets(data(), meta);
-		expect(sheets).toHaveLength(6);
+		expect(sheets).toHaveLength(5);
 		expect(sheets.map((s) => s.name)).toEqual([
 			'KPI',
 			'ลงทะเบียนรายวัน',
 			'ช่วงอายุ',
 			'สัญชาติ',
-			'เวลาบริการต่อจุด',
-			'อันดับเจ้าหน้าที่'
+			'เวลาบริการต่อจุด'
 		]);
 		expect([...DASHBOARD_SHEET_NAMES]).toEqual(sheets.map((s) => s.name));
 	});
@@ -144,14 +143,6 @@ describe('buildDashboardSheets', () => {
 			'ให้บริการที่จับเวลาได้ (ราย)',
 			'เวลาเฉลี่ย (วินาที)',
 			'กำลังให้บริการ (ราย)'
-		]);
-		expect(cols['อันดับเจ้าหน้าที่']).toEqual([
-			'จุดบริการ',
-			'อันดับ',
-			'ชื่อ',
-			'ประเภท',
-			'ให้บริการ (ราย)',
-			'เวลาเฉลี่ย (วินาที)'
 		]);
 	});
 
@@ -190,7 +181,7 @@ describe('buildDashboardSheets', () => {
 		});
 
 		it('station sheets use stationTimes.range, not the registrations range', () => {
-			for (const name of ['เวลาบริการต่อจุด', 'อันดับเจ้าหน้าที่']) {
+			for (const name of ['เวลาบริการต่อจุด']) {
 				const line = byName(name).heading[1];
 				expect(line).toBe('ช่วงวันที่: 2026-10-20 ถึง 2026-10-25');
 				expect(line).not.toContain('2026-11-01');
@@ -318,20 +309,10 @@ describe('buildDashboardSheets', () => {
 		});
 	});
 
-	describe('actor rank', () => {
-		it('restarts rank at 1 per station and rounds seconds', () => {
-			expect(byName('อันดับเจ้าหน้าที่').rows).toEqual([
-				['Station 1 รายงานตัว / ลงทะเบียน', 1, 'สมชาย', 'เจ้าหน้าที่', 5, 40.6],
-				['Station 1 รายงานตัว / ลงทะเบียน', 2, 'ตู้ K1', 'ตู้ kiosk', 3, 90],
-				['Station 2 คัดกรองสุขภาพ', 1, 'สมหญิง', 'เจ้าหน้าที่', 9, 120]
-			]);
-		});
-
-		it('has no rows without actors', () => {
-			const d = data();
-			d.stationTimes.actors = [];
-			expect(byName('อันดับเจ้าหน้าที่', d).rows).toEqual([]);
-		});
+	it('has no staff-rank sheet and no staff names (W2)', () => {
+		const sheets = buildDashboardSheets(data(), meta);
+		expect(sheets.map((s) => s.name)).not.toContain('อันดับเจ้าหน้าที่');
+		expect(JSON.stringify(sheets)).not.toContain('สมชาย');
 	});
 
 	it('contains no evacuee-level fields', () => {

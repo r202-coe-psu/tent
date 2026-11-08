@@ -55,3 +55,37 @@ export function listDonationPoints(shelter: ShelterWithStorage | undefined): Sub
 			!(point.lat === 0 && point.lng === 0)
 	);
 }
+
+function deepEqual(a: unknown, b: unknown): boolean {
+	if (Object.is(a, b)) return true;
+	if (typeof a !== 'object' || typeof b !== 'object' || a === null || b === null) return false;
+	if (Array.isArray(a) !== Array.isArray(b)) return false;
+	const ka = Object.keys(a);
+	const kb = Object.keys(b);
+	return (
+		ka.length === kb.length &&
+		ka.every((k) => k in b && deepEqual((a as never)[k], (b as never)[k]))
+	);
+}
+
+/**
+ * `common_areas` for the shelter PATCH: drops `sub_storage` when it still equals what the form
+ * loaded, so saving the form cannot overwrite points added elsewhere (CR-230).
+ */
+export function omitUnchangedSubStorage<T extends { sub_storage?: SubStorageItem[] }>(
+	commonAreas: T,
+	baseline: readonly SubStorageItem[] | undefined
+): Omit<T, 'sub_storage'> | T {
+	if (!deepEqual(commonAreas.sub_storage ?? [], baseline ?? [])) return commonAreas;
+	const rest: Partial<T> = { ...commonAreas };
+	delete rest.sub_storage;
+	return rest as Omit<T, 'sub_storage'>;
+}
+
+/** True when two point lists are the same (missing and empty count as equal). */
+export function sameSubStorage(
+	a: readonly SubStorageItem[] | undefined,
+	b: readonly SubStorageItem[] | undefined
+): boolean {
+	return deepEqual(a ?? [], b ?? []);
+}

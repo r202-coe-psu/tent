@@ -1,7 +1,7 @@
 /**
  * domain/dashboard-sheets.ts — data-export (CR-232 §C, issue #1207)
  *
- * Pure: the figures the evacuee dashboard shows → six numeric sheets. No evacuee-level data,
+ * Pure: the figures the evacuee dashboard shows → five numeric sheets. No evacuee-level data,
  * so nothing here is PII and no audit entry is written (FR-54).
  */
 import {
@@ -23,8 +23,9 @@ export const DASHBOARD_SHEET_NAMES = [
 	'ลงทะเบียนรายวัน',
 	'ช่วงอายุ',
 	'สัญชาติ',
-	'เวลาบริการต่อจุด',
-	'อันดับเจ้าหน้าที่'
+	'เวลาบริการต่อจุด'
+	// 'อันดับเจ้าหน้าที่' — disabled (W2, PR #1233): lists staff names, which CR-232 §C says the
+	// file must not carry. Re-enable only once the owner decides (see `rankRows` below).
 ] as const;
 
 export interface DashboardExportData {
@@ -99,7 +100,7 @@ function countryRows(countries: DemographicsPayload['countries']): ExportCell[][
 }
 
 /**
- * The six dashboard sheets, in {@link DASHBOARD_SHEET_NAMES} order.
+ * The five dashboard sheets, in {@link DASHBOARD_SHEET_NAMES} order.
  *
  * `meta` supplies shelter and export time; each sheet's range line comes from the payload it
  * was fetched with, so a sheet never claims a range its numbers don't cover.
@@ -161,28 +162,29 @@ export function buildDashboardSheets(
 				seconds(s.avg_duration_sec),
 				s.open_visits
 			])
-		},
-		{
-			name: 'อันดับเจ้าหน้าที่',
-			heading: timesHeading,
-			columns: ['จุดบริการ', 'อันดับ', 'ชื่อ', 'ประเภท', 'ให้บริการ (ราย)', 'เวลาเฉลี่ย (วินาที)'],
-			rows: rankRows(stationTimes)
 		}
+		// Disabled — 'อันดับเจ้าหน้าที่' (staff rank, names per person). See DASHBOARD_SHEET_NAMES.
+		// {
+		// 	name: 'อันดับเจ้าหน้าที่',
+		// 	heading: timesHeading,
+		// 	columns: ['จุดบริการ', 'อันดับ', 'ชื่อ', 'ประเภท', 'ให้บริการ (ราย)', 'เวลาเฉลี่ย (วินาที)'],
+		// 	rows: rankRows(stationTimes)
+		// }
 	];
 }
 
-/** Rank restarts at 1 per station; the BFF already orders fastest first within a station. */
-function rankRows(t: StationTimesPayload): ExportCell[][] {
-	const rank: Record<number, number> = {};
-	return t.actors.map((a) => {
-		rank[a.station] = (rank[a.station] ?? 0) + 1;
-		return [
-			STATION_LABELS[a.station],
-			rank[a.station],
-			a.display_name,
-			CHANNEL_LABELS[a.kind],
-			a.timed_visits,
-			seconds(a.avg_duration_sec)
-		];
-	});
-}
+// /** Rank restarts at 1 per station; the BFF already orders fastest first within a station. */
+// function rankRows(t: StationTimesPayload): ExportCell[][] {
+// 	const rank: Record<number, number> = {};
+// 	return t.actors.map((a) => {
+// 		rank[a.station] = (rank[a.station] ?? 0) + 1;
+// 		return [
+// 			STATION_LABELS[a.station],
+// 			rank[a.station],
+// 			a.display_name,
+// 			CHANNEL_LABELS[a.kind],
+// 			a.timed_visits,
+// 			seconds(a.avg_duration_sec)
+// 		];
+// 	});
+// }

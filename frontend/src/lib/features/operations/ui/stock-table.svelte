@@ -7,7 +7,8 @@
 		useStockBalance,
 		useLedger,
 		useCrossShelterStockBalances,
-		useCrossShelterLedger
+		useCrossShelterLedger,
+		useIncomingStock
 	} from '../application/queries';
 	import { useSupplyItems, useThresholdOverrides } from '$lib/features/supply';
 	import { SUPPLY_CATEGORY_LABELS, type SupplyCategory } from '$lib/features/supply';
@@ -24,7 +25,12 @@
 	} from '$lib/features/catalog';
 	import { langState } from '$lib/states/i18n.svelte';
 	import { authStore } from '$lib/stores/auth.svelte';
-	import { isSystemAdmin, canChangeStock, canDistributeStock } from '$lib/auth/roles';
+	import {
+		isSystemAdmin,
+		canAccessDonations,
+		canChangeStock,
+		canDistributeStock
+	} from '$lib/auth/roles';
 	import { useShelters } from '$lib/features/shelters';
 	import { getShelterCode } from '$lib/db/shelter';
 	import * as Table from '$lib/components/ui/table/index.js';
@@ -41,15 +47,24 @@
 	import StockRow from './stock/stock-row.svelte';
 	import StockCard from './stock/stock-card.svelte';
 	import DisabledReason from './stock/disabled-reason.svelte';
-	import { DISTRIBUTE_FORBIDDEN_HINT, OFFLINE_HINT } from './stock/hints';
 	import {
+		DISTRIBUTE_FORBIDDEN_HINT,
+		INCOMING_FORBIDDEN_HINT,
+		INCOMING_LOAD_FAILED_HINT,
+		OFFLINE_HINT
+	} from './stock/hints';
+	import {
+		attachIncoming,
 		attentionCounts,
 		clampPage,
 		filterRows,
 		hiddenCatalogCount,
+		incomingAvailable,
 		locationOptions,
+		narrowToSelfPurchased,
 		pageSlice,
 		sortRows,
+		sumLotQty,
 		visibleRows,
 		type StockDisplayRow
 	} from './stock/stock-view';
@@ -59,7 +74,14 @@
 		STOCK_PAGE_SIZE,
 		type StockUrlState
 	} from './stock/stock-url-state';
-	import { negativeLotSummary, negativeLots, projectLotsByItem } from '../domain/operations';
+	import { aggregateIncoming } from '../domain/incoming-stock';
+	import {
+		negativeLotSummary,
+		negativeLots,
+		projectLotsByItem,
+		TransferForbiddenError
+	} from '../domain/operations';
+	import { selfPurchasedLotRefs } from '../domain/self-purchased';
 	import {
 		dailyConsumption,
 		daysOfCover,
@@ -81,6 +103,7 @@
 	import ArrowUpFromLine from '@lucide/svelte/icons/arrow-up-from-line';
 	import SlidersHorizontal from '@lucide/svelte/icons/sliders-horizontal';
 	import ClipboardList from '@lucide/svelte/icons/clipboard-list';
+	import Truck from '@lucide/svelte/icons/truck';
 
 	let { occupancy = 120 }: { occupancy?: number } = $props();
 
@@ -121,6 +144,29 @@
 	// Filter / sort / page live in the URL (`?q=&cat=&loc=&status=&sort=&page=&all=`) so a
 	// reload or a shared link restores the view. Other params (`tab`, …) are preserved.
 	const urlState = $derived(parseStockParams(page.url.searchParams));
+
+	// "รวมของที่กำลังมา" (#1153): off by default, and off while a storage point is filtered.
+	const incomingDisabled = $derived(!incomingAvailable(urlState.loc, urlState.selfPurchased));
+	const includeIncoming = $derived(urlState.incoming && !incomingDisabled);
+	const incomingQuery = useIncomingStock(
+		() => includeIncoming,
+		() => isSA && showOverall
+	);
+	const incomingTotals = $derived(
+		includeIncoming && incomingQuery.data ? aggregateIncoming(incomingQuery.data.rows) : []
+	);
+	const unmatchedCount = $derived(
+		includeIncoming ? (incomingQuery.data?.unmatched.length ?? 0) : 0
+	);
+	// A failed read must not look like "nothing is coming".
+	const incomingError = $derived(
+		includeIncoming && incomingQuery.isError
+			? incomingQuery.error instanceof TransferForbiddenError
+				? INCOMING_FORBIDDEN_HINT
+				: INCOMING_LOAD_FAILED_HINT
+			: ''
+	);
+	const canOpenDonations = $derived(canAccessDonations(roles, currentShelter));
 
 	function updateUrl(patch: Partial<StockUrlState>) {
 		// Any filter / sort change goes back to page 1; only an explicit `page` keeps its value.
@@ -239,6 +285,23 @@
 		return { byItem: groupLotsByItem(lots), brokenItemIds };
 	});
 	const lotsByItem = $derived(projected.byItem);
+	/** Lots the shelter bought itself ("ซื้อเอง", schema_v 7). */
+	const selfPurchasedRefs = $derived(selfPurchasedLotRefs(ledger));
+	/**
+	 * Lots the table and the detail sheet work from. With the "ซื้อเอง" filter on, only the
+	 * self-purchased lots count, so quantity, expiry and place describe what the shelter bought.
+	 */
+	const viewLotsByItem = $derived(
+		urlState.selfPurchased ? narrowToSelfPurchased(lotsByItem, selfPurchasedRefs) : lotsByItem
+	);
+	const selfPurchasedItemIds = $derived(
+		new Set(
+			[...lotsByItem.values()]
+				.flat()
+				.filter((lot) => qtyGt(lot.qty, 0) && selfPurchasedRefs.has(lot.lot_ref))
+				.map((lot) => lot.item_id)
+		)
+	);
 
 	/**
 	 * Location filter options, keyed by `lotStorageKey` so a renamed storage point stays one option
@@ -264,7 +327,7 @@
 
 	const stockSummaryByItem = $derived.by(() => {
 		const result = new SvelteMap<string, ItemStockSummary>();
-		for (const [itemId, lots] of lotsByItem) {
+		for (const [itemId, lots] of viewLotsByItem) {
 			result.set(
 				itemId,
 				summarizeItemStock(lots, undefined, undefined, lotPriorityItems.get(itemId))
@@ -276,7 +339,7 @@
 	/** Location label: the single storage point, or the first one plus a count. */
 	const locationLabelByItem = $derived.by(() => {
 		const result = new SvelteMap<string, string>();
-		for (const [itemId, lots] of lotsByItem) {
+		for (const [itemId, lots] of viewLotsByItem) {
 			const names = [
 				...new Set(
 					lots
@@ -331,13 +394,19 @@
 	/** "Ever stocked" = at least one ledger row at this shelter; the rest are catalog-only. */
 	const everStocked = $derived(everStockedItemIds(ledger));
 
-	const rows = $derived.by<StockDisplayRow[]>(() =>
+	/** Rows from in-stock data only: urgency, badges, sorting and attention cards read these. */
+	const baseRows = $derived.by<StockDisplayRow[]>(() =>
 		items.map((item) => {
 			const qtyOnHand = balance.get(item._id) ?? '0';
 			const override = overrideByItem.get(item._id);
 			const reorderThreshold = resolveReorderThreshold(occupancy, item, override);
 			const summary = stockSummaryByItem.get(item._id);
 			const negative = negativeLotSummary(lotsByItem.get(item._id) ?? []);
+			const selfPurchasedQty = sumLotQty(
+				(lotsByItem.get(item._id) ?? []).filter(
+					(lot) => selfPurchasedRefs.has(lot.lot_ref) && qtyGt(lot.qty, 0)
+				)
+			);
 			return {
 				_id: item._id,
 				name: item.name,
@@ -345,6 +414,9 @@
 				categoryLabel: getCategoryLabel(item.category),
 				unitLabel: formatUnit(item.unit, units, langState.current),
 				qtyOnHand,
+				selfPurchasedQty,
+				// "ซื้อเอง" filter: the row prints what was bought; status and cover stay on the full stock.
+				shownQty: urlState.selfPurchased ? selfPurchasedQty : undefined,
 				reorderThreshold,
 				status: deriveStockQtyStatus(qtyOnHand, reorderThreshold),
 				expiryState: summary?.expiryState ?? 'none',
@@ -358,13 +430,18 @@
 				locationLabel: locationLabelByItem.get(item._id) ?? null,
 				coverDays: daysOfCover(qtyOnHand, dailyConsumption(occupancy, item, override)),
 				neverReceived: !everStocked.has(item._id),
+				hasSelfPurchased: selfPurchasedItemIds.has(item._id),
 				aliases: 'aliases' in item ? item.aliases : []
 			};
 		})
 	);
 
-	// Card counts ignore search / category / location / status so they stay stable while filtering.
-	const counts = $derived(attentionCounts(visibleRows(rows, urlState.all)));
+	// Incoming goods ride on top of the same rows (#1153); with the switch off this is `baseRows`.
+	const rows = $derived(attachIncoming(baseRows, incomingTotals));
+
+	// Card counts ignore search / category / location / status so they stay stable while filtering,
+	// and ignore the incoming switch (FR-20): they read `baseRows`.
+	const counts = $derived(attentionCounts(visibleRows(baseRows, urlState.all)));
 	const hiddenCount = $derived(urlState.all ? 0 : hiddenCatalogCount(rows));
 
 	const filteredRows = $derived(sortRows(filterRows(rows, urlState), urlState.sort));
@@ -379,7 +456,8 @@
 		urlState.q.trim() !== '' ||
 			urlState.cat !== 'all' ||
 			urlState.loc !== 'all' ||
-			urlState.status !== 'all'
+			urlState.status !== 'all' ||
+			urlState.selfPurchased
 	);
 
 	const isLoading = $derived(
@@ -401,7 +479,7 @@
 	);
 
 	function clearFilters() {
-		updateUrl({ q: '', cat: 'all', loc: 'all', status: 'all' });
+		updateUrl({ q: '', cat: 'all', loc: 'all', status: 'all', selfPurchased: false });
 	}
 
 	const selectedManageItem = $derived(
@@ -505,6 +583,9 @@
 			loc={urlState.loc}
 			sort={urlState.sort}
 			all={urlState.all}
+			incoming={urlState.incoming}
+			{incomingDisabled}
+			selfPurchased={urlState.selfPurchased}
 			status={urlState.status}
 			categories={uniqueCategories}
 			locations={uniqueLocations}
@@ -512,6 +593,34 @@
 			canShowOverall={isSA}
 			onchange={updateUrl}
 		/>
+
+		{#if incomingError}
+			<p
+				role="alert"
+				class="border-b border-red-200 bg-red-50 px-4 py-2.5 text-sm font-semibold text-red-900"
+			>
+				{incomingError}
+			</p>
+		{/if}
+
+		{#if unmatchedCount > 0}
+			<p
+				class="flex flex-wrap items-center gap-x-2 gap-y-1 border-b border-sky-200 bg-sky-50 px-4 py-2.5 text-sm font-semibold text-sky-900"
+			>
+				<Truck class="h-4 w-4 shrink-0" aria-hidden="true" />
+				<span>
+					กำลังมา <span class="tabular-nums">{unmatchedCount}</span> รายการ ยังไม่จับคู่สินค้า
+				</span>
+				{#if canOpenDonations}
+					<a
+						href={resolve('/back-office/stock-donations')}
+						class="min-h-11 content-center rounded px-2 underline underline-offset-2 focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:outline-none"
+					>
+						ไปที่ใบบริจาค
+					</a>
+				{/if}
+			</p>
+		{/if}
 
 		{#if isLoading}
 			<div class="flex-1 space-y-3 p-4">
@@ -588,6 +697,7 @@
 								{offline}
 								{canDistribute}
 								{canChange}
+								{roles}
 								onopen={(r) => openDetail(r._id)}
 								onreceive={(r) => openQuickAction('receive', r._id)}
 								ondistribute={(r) => openQuickAction('distribute', r._id)}
@@ -623,6 +733,7 @@
 									{offline}
 									{canDistribute}
 									{canChange}
+									{roles}
 									onopen={(r) => openDetail(r._id)}
 									onreceive={(r) => openQuickAction('receive', r._id)}
 									ondistribute={(r) => openQuickAction('distribute', r._id)}
@@ -701,7 +812,9 @@
 	bind:open={detailOpen}
 	row={selectedManageItem}
 	lots={selectedItemId ? (lotsByItem.get(selectedItemId) ?? []) : []}
+	selfPurchasedFilter={urlState.selfPurchased}
 	itemsById={lotPriorityItems}
+	{selfPurchasedRefs}
 	shelterCode={getShelterCode()}
 	{offline}
 	{canDistribute}

@@ -22,20 +22,31 @@
 	 *     (scan, or a reason — CR-108) — available regardless of identity
 	 *     verification, per the point above.
 	 *   - `completed`/`no_show`/`cancelled` → final-state badge only.
+	 *
+	 * For SA / SM / coordinator (CR-221 FR-24, FR-25): a row blocked on identity offers
+	 * "ยืนยันตัวตน", the profile's identity check, so the row can be checked in without leaving
+	 * the roster; and every row shows the volunteer's system account with the same access
+	 * button as the people and applicants tabs.
 	 */
 	import History from '@lucide/svelte/icons/history';
 	import LogIn from '@lucide/svelte/icons/log-in';
 	import LogOut from '@lucide/svelte/icons/log-out';
 	import Lock from '@lucide/svelte/icons/lock';
 	import Phone from '@lucide/svelte/icons/phone';
+	import SearchCheck from '@lucide/svelte/icons/search-check';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Badge } from '$lib/components/ui/badge/index.js';
+	import { Skeleton } from '$lib/components/ui/skeleton/index.js';
 	import * as Tooltip from '$lib/components/ui/tooltip/index.js';
 	import ApplicantCheckInDialog from './applicant-check-in-dialog.svelte';
+	import VolunteerAccessActions from './volunteer-access-actions.svelte';
+	import VolunteerAccountBadge from './volunteer-account-badge.svelte';
+	import VolunteerQualificationDialog from './volunteer-qualification-dialog.svelte';
 	import { useSkillOptions } from '../application/queries';
 	import { resolveSkillOption, type SkillOption } from '../domain/skill-catalog';
 	import { assignmentAttendance } from '../domain/applicant-attendance';
 	import { describeCheckEvent } from '../domain/check-event-source';
+	import type { VolunteerAccessStatus } from '../domain/volunteer-access-status';
 	import type { Volunteer } from '../domain/volunteer.schema';
 	import type {
 		ShiftAssignment,
@@ -48,6 +59,10 @@
 		volunteer,
 		jobTitle,
 		today,
+		accessStatus = null,
+		accountsPending = false,
+		canVerify = false,
+		shelterLine = '—',
 		onhistory
 	}: {
 		assignment: ShiftAssignment;
@@ -56,6 +71,14 @@
 		jobTitle: string | undefined;
 		/** `YYYY-MM-DD` in Asia/Bangkok — only a shift dated today can be checked in. */
 		today: string;
+		/** The volunteer's system account here; `null` hides the account strip (not SA / SM / VC). */
+		accessStatus?: VolunteerAccessStatus | null;
+		/** The accounts are still loading: the strip shows a placeholder instead of a guess. */
+		accountsPending?: boolean;
+		/** SA / SM / coordinator of the tab's shelter may check identity here (FR-24). */
+		canVerify?: boolean;
+		/** Shelter name for the verify and access dialogs. */
+		shelterLine?: string;
 		onhistory: (volunteerId: string) => void;
 	} = $props();
 
@@ -82,6 +105,9 @@
 	// a shift on another date is `status` only, so it can't be checked into by accident.
 	const attendance = $derived(assignmentAttendance(assignment, volunteer.identity_verified, today));
 	const blockedByIdentity = $derived(attendance.kind === 'verify');
+	let verifyOpen = $state(false);
+	// The row's own button opens the identity check, so the access strip leaves out its copy.
+	const offersVerify = $derived(blockedByIdentity && canVerify);
 
 	const fullName = $derived(`${volunteer.first_name} ${volunteer.last_name}`.trim());
 	const phoneLast4 = $derived(volunteer.phone ? volunteer.phone.slice(-4) : null);
@@ -257,7 +283,16 @@
 				</Tooltip.Root>
 			</Tooltip.Provider>
 
-			{#if blockedByIdentity}
+			{#if offersVerify}
+				<Button
+					size="sm"
+					class="flex-1 gap-1.5 bg-amber-700 text-white hover:bg-amber-800"
+					onclick={() => (verifyOpen = true)}
+				>
+					<SearchCheck class="h-3.5 w-3.5" />
+					ยืนยันตัวตน
+				</Button>
+			{:else if blockedByIdentity}
 				<Badge variant="outline" class="gap-1.5 px-3 py-2 text-[11px] font-bold text-amber-700">
 					<Lock class="h-3.5 w-3.5" />
 					รอยืนยันตัวตน
@@ -287,7 +322,38 @@
 			{/if}
 		</div>
 	</div>
+
+	{#if accountsPending}
+		<Skeleton class="h-10 w-full rounded-lg lg:col-span-4" data-testid="roster-account-pending" />
+	{:else if accessStatus}
+		<div
+			class="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border bg-background px-3 py-2 lg:col-span-4"
+		>
+			<div class="flex min-w-0 flex-wrap items-center gap-1.5 text-xs">
+				<span class="font-semibold text-muted-foreground">บัญชีระบบ:</span>
+				<VolunteerAccountBadge
+					status={accessStatus}
+					showLogin={false}
+					testId="roster-account-status"
+				/>
+				{#if accessStatus.kind !== 'none'}
+					<span class="break-all text-muted-foreground">{accessStatus.loginName}</span>
+				{/if}
+			</div>
+			<VolunteerAccessActions
+				{volunteer}
+				status={accessStatus}
+				{shelterLine}
+				hideVerify={offersVerify}
+			/>
+		</div>
+	{/if}
 </div>
+
+<!-- Mounted only while open: a long roster would otherwise carry one dialog per row. -->
+{#if canVerify && verifyOpen}
+	<VolunteerQualificationDialog bind:open={verifyOpen} {volunteer} {shelterLine} />
+{/if}
 
 <ApplicantCheckInDialog
 	bind:open={attendanceDialogOpen}
