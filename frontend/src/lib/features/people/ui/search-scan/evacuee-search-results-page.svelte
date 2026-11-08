@@ -14,6 +14,11 @@
 	import { useShelter } from '$lib/features/shelters';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
 	import { getShelterCode } from '$lib/db/shelter';
+	import { langState } from '$lib/states/i18n.svelte';
+	import { getTranslation } from '$lib/utils/i18n';
+	import { SEARCH_SCAN_I18N } from '../_constants/search-scan.i18n';
+
+	const t = $derived(getTranslation(SEARCH_SCAN_I18N, langState.current).searchResults);
 
 	const query = $derived(page.url.searchParams.get('q') ?? '');
 
@@ -36,6 +41,10 @@
 	}
 </script>
 
+<svelte:head>
+	<title>{t.documentTitle}</title>
+</svelte:head>
+
 <div class="mx-auto w-full max-w-2xl px-4 py-8">
 	<div class="mb-6 flex items-center gap-4">
 		<Button
@@ -43,13 +52,13 @@
 			size="icon"
 			onclick={newSearch}
 			class="h-10 w-10 rounded-full"
-			title="กลับ"
+			title={t.back}
 		>
 			<ArrowLeft class="size-5" />
 		</Button>
 		<div>
-			<h1 class="text-xl font-bold text-foreground md:text-2xl">ผลการค้นหาผู้พักพิง</h1>
-			<p class="mt-0.5 text-xs font-semibold text-muted-foreground">Search Results</p>
+			<h1 class="text-xl font-bold text-foreground md:text-2xl">{t.heading}</h1>
+			<p class="mt-0.5 text-xs font-semibold text-muted-foreground">{t.subtitle}</p>
 		</div>
 	</div>
 
@@ -58,20 +67,20 @@
 			{#if isSearching}
 				<div class="flex flex-col items-center gap-3 py-16 text-center">
 					<Loader2 class="size-6 animate-spin text-primary" />
-					<p class="text-sm font-medium text-muted-foreground">กำลังค้นหาข้อมูล...</p>
+					<p class="text-sm font-medium text-muted-foreground">{t.searching}</p>
 				</div>
 			{:else}
 				<div class="mb-5 flex items-start justify-between gap-3 border-b border-border pb-4">
 					<div>
 						<h3 class="text-base font-bold text-foreground">
 							{#if searchResults.length > 0}
-								พบข้อมูลผู้พักพิงที่ตรงกัน ({searchResults.length} รายการ)
+								{t.foundTitle(searchResults.length)}
 							{:else}
-								ไม่พบข้อมูลผู้พักพิงที่ตรงกัน
+								{t.notFoundTitle}
 							{/if}
 						</h3>
 						<p class="mt-0.5 text-xs text-muted-foreground">
-							คำค้นหา: <span class="font-bold text-primary">"{query}"</span>
+							{t.queryLabel} <span class="font-bold text-primary">"{query}"</span>
 						</p>
 					</div>
 					<Button
@@ -82,7 +91,7 @@
 						class="shrink-0 gap-1.5 rounded-full"
 					>
 						<RotateCcw class="size-3.5" />
-						ค้นหาใหม่
+						{t.newSearch}
 					</Button>
 				</div>
 
@@ -102,7 +111,7 @@
 											{evacuee.last_name}
 										</p>
 										<p class="mt-0.5 truncate text-xs text-muted-foreground">
-											ID: {maskNationalId(evacuee.person_id?.number)}
+											{t.idLine(maskNationalId(evacuee.person_id?.number))}
 										</p>
 									</div>
 								</div>
@@ -110,7 +119,7 @@
 									class="mt-3 flex items-center justify-between gap-2 border-t border-border pt-3"
 								>
 									<p class="truncate text-xs text-muted-foreground">
-										Zone {zoneLabel(evacuee.current_stay.zone, shelterZones)}
+										{t.zoneLine(zoneLabel(evacuee.current_stay.zone, shelterZones))}
 									</p>
 									<Button
 										type="button"
@@ -118,7 +127,7 @@
 										onclick={() => viewEvacuee(evacuee._id)}
 										class="shrink-0 gap-1 rounded-full font-bold"
 									>
-										ดูข้อมูลและแก้ไข
+										{t.viewAndEdit}
 										<ChevronRight class="size-3.5" />
 									</Button>
 								</div>
@@ -129,7 +138,7 @@
 					<div class="flex items-center gap-2.5 rounded-2xl border border-border bg-muted/30 p-4">
 						<CircleAlert class="size-5 shrink-0 text-destructive" />
 						<p class="text-sm font-semibold text-foreground">
-							ไม่พบข้อมูลผู้พักพิงที่ตรงกับคำค้นหานี้ กรุณาตรวจสอบคำค้นหาอีกครั้ง
+							{t.notFoundBody}
 						</p>
 					</div>
 				{/if}

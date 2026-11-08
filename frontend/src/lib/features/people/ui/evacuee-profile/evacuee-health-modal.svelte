@@ -25,6 +25,9 @@
 		SpecialNeedsFields,
 		VulnerableGroupsFields
 	} from '../forms/index.js';
+	import { getTranslation } from '$lib/utils/i18n';
+	import { langState } from '$lib/states/i18n.svelte';
+	import { EVACUEE_PROFILE_MODALS_I18N } from '../_constants/evacuee-profile-modals.i18n';
 	import ModalEscapeListener from '../shared/modal-escape-listener.svelte';
 
 	export type EvacueeHealthEditData = {
@@ -59,6 +62,8 @@
 		onClose: () => void;
 		onSave: (data: EvacueeHealthEditData) => Promise<void>;
 	} = $props();
+
+	const t = $derived(getTranslation(EVACUEE_PROFILE_MODALS_I18N, langState.current).health);
 
 	// CR-186 FR-7 / #648 — legacy โรคประจำตัว / ประวัติการแพ้ labels become master codes on save.
 	const chronicDiseaseQuery = useMasterData(() => 'chronic_disease');
@@ -157,7 +162,7 @@
 		};
 		const validation = await validateForm({ update: true, focusOnError: true });
 		if (saving || masterLoading || !validation.valid) {
-			if (!validation.valid) validationError = 'กรุณากรอกข้อมูลให้ถูกต้องและครบถ้วน';
+			if (!validation.valid) validationError = t.invalidForm;
 			return;
 		}
 
@@ -216,7 +221,7 @@
 							id="evacuee-health-modal-title"
 							class="truncate text-base font-bold text-foreground"
 						>
-							แก้ไขข้อมูลสุขภาพ (Station 2 Occupant Screening)
+							{t.title}
 						</h2>
 						<p class="truncate text-xs text-muted-foreground">
 							{evacuee.first_name}
@@ -227,8 +232,8 @@
 				<button
 					type="button"
 					class="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none disabled:pointer-events-none disabled:opacity-50"
-					aria-label="ปิดหน้าต่างแก้ไขข้อมูลสุขภาพ"
-					title="ปิด"
+					aria-label={t.closeAria}
+					title={t.close}
 					onclick={onClose}
 					disabled={saving}
 				>
@@ -244,10 +249,10 @@
 							<HeartPulse class="size-4 text-primary" />
 							<div>
 								<h3 class="text-sm font-bold text-foreground">
-									1. ประวัติสุขภาพและแนวทางดูแล (Health History &amp; Care Track)
+									{t.historyTitle}
 								</h3>
 								<p class="text-xs text-muted-foreground">
-									กำหนดแนวทางดูแล ซักประวัติโรคประจำตัว ยาที่ใช้ประจำ ประวัติการแพ้ และอาการทั่วไป
+									{t.historyDesc}
 								</p>
 							</div>
 						</div>
@@ -270,9 +275,9 @@
 							<ShieldAlert class="size-4 text-primary" />
 							<div>
 								<h3 class="text-sm font-bold text-foreground">
-									2. กลุ่มเปราะบาง (Vulnerable Groups)
+									{t.vulnerableTitle}
 								</h3>
-								<p class="text-xs text-muted-foreground">เลือกได้หลายรายการ (ไม่บังคับ)</p>
+								<p class="text-xs text-muted-foreground">{t.vulnerableDesc}</p>
 							</div>
 						</div>
 
@@ -291,10 +296,10 @@
 							<HeartHandshake class="size-4 text-primary" />
 							<div>
 								<h3 class="text-sm font-bold text-foreground">
-									3. ความต้องการพิเศษ (Special needs)
+									{t.specialNeedsTitle}
 								</h3>
 								<p class="text-xs text-muted-foreground">
-									แท็กทั่วไปหรือเพิ่มความต้องการพิเศษเอง (ไม่บังคับ)
+									{t.specialNeedsDesc}
 								</p>
 							</div>
 						</div>
@@ -308,10 +313,10 @@
 							<AlertCircle class="size-4 text-primary" />
 							<div>
 								<h3 class="text-sm font-bold text-foreground">
-									4. อาการเฝ้าระวังทางระบาดวิทยา (EWAR Surveillance Symptoms)
+									{t.ewarTitle}
 								</h3>
 								<p class="text-xs text-muted-foreground">
-									กลุ่มอาการเฝ้าระวังโรคระบาด — หากไม่มีอาการไม่ต้องติ๊กเลือก
+									{t.ewarDesc}
 								</p>
 							</div>
 						</div>
@@ -337,14 +342,15 @@
 				<footer
 					class="sticky bottom-0 flex items-center justify-end gap-2 border-t border-border bg-card/95 px-4 py-3 backdrop-blur-sm sm:px-5"
 				>
-					<Button type="button" variant="outline" onclick={onClose} disabled={saving}>ยกเลิก</Button
+					<Button type="button" variant="outline" onclick={onClose} disabled={saving}
+						>{t.cancel}</Button
 					>
 					<Button type="submit" disabled={saving || masterLoading} class="min-w-28">
 						{#if saving}
 							<LoaderCircle class="size-4 animate-spin" aria-hidden="true" />
-							กำลังบันทึก
+							{t.saving}
 						{:else}
-							บันทึกข้อมูล
+							{t.save}
 						{/if}
 					</Button>
 				</footer>

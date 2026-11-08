@@ -290,7 +290,7 @@ test.describe(
 			await expect(page.getByText('ผู้ป่วยติดเตียง').first()).toBeVisible();
 			await expect(page.getByText('ผู้สูงอายุช่วยเหลือตัวเองไม่ได้').first()).toBeVisible();
 
-			await page.getByRole('button', { name: 'เพิ่มสมาชิก' }).click();
+			await page.getByRole('button', { name: 'เพิ่มสมาชิก', exact: true }).click();
 			const member2 = page.getByRole('region', { name: 'สมาชิกคนที่ 2' });
 			await expect(member2).toBeVisible();
 			await member2.locator('#member-1-first-name').fill('สมหญิง');

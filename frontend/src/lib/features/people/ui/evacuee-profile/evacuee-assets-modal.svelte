@@ -11,6 +11,9 @@
 	import { defaults, superForm } from 'sveltekit-superforms';
 	import { zod4 } from 'sveltekit-superforms/adapters';
 	import PetAssetVehicleFields from '../forms/pet-asset-vehicle-fields.svelte';
+	import { getTranslation } from '$lib/utils/i18n';
+	import { langState } from '$lib/states/i18n.svelte';
+	import { EVACUEE_PROFILE_MODALS_I18N } from '../_constants/evacuee-profile-modals.i18n';
 	import ModalEscapeListener from '../shared/modal-escape-listener.svelte';
 
 	let {
@@ -28,6 +31,8 @@
 			pets: PetGroup[];
 		}) => Promise<void>;
 	} = $props();
+
+	const t = $derived(getTranslation(EVACUEE_PROFILE_MODALS_I18N, langState.current).assets);
 
 	let vehicles = $state<HouseholdVehicle[]>(
 		untrack(() =>
@@ -104,7 +109,7 @@
 		>
 			<div class="flex items-center justify-between border-b border-border pb-2.5">
 				<h3 class="text-lg font-bold text-slate-900 dark:text-slate-50">
-					แก้ไขทรัพย์สินและสัตว์เลี้ยง (Assets &amp; Pets)
+					{t.title}
 				</h3>
 				<button
 					onclick={onClose}
@@ -124,9 +129,9 @@
 			</div>
 
 			<div class="flex justify-end gap-2 border-t border-border pt-4">
-				<Button variant="outline" onclick={onClose} disabled={saving}>ยกเลิก</Button>
+				<Button variant="outline" onclick={onClose} disabled={saving}>{t.cancel}</Button>
 				<Button type="button" disabled={saving} onclick={save}>
-					{saving ? 'กำลังบันทึก...' : 'บันทึกข้อมูล'}
+					{saving ? t.saving : t.save}
 				</Button>
 			</div>
 		</div>
