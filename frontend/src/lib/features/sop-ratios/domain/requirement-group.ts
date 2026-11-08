@@ -59,7 +59,7 @@ export const itemMapSchema = z.object({
 	item_id: z.string().min(1, 'กรุณาเลือกสิ่งของ'),
 	base_uom: z.string().min(1, 'กรุณาระบุหน่วยนับพื้นฐาน'),
 	conversion_factor: qtyStrCoerceSchema.refine((s) => qtyGt(s, 0), {
-		message: 'ตัวคูณแปลงค่าต้องมากกว่า 0'
+		message: 'ตัวคูณแปลงค่าต้องไม่น้อยกว่า 0.0001'
 	}),
 	share_percent: qtyStrCoerceSchema
 		.refine((s) => qtyGte(s, 0), { message: 'ส่วนแบ่งต้องไม่ต่ำกว่า 0' })

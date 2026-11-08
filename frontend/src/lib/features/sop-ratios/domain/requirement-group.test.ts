@@ -96,7 +96,9 @@ describe('itemMapSchema rounding and messages (#936)', () => {
 	it('rejects conversion_factor 0.00001 with the Thai message', () => {
 		const result = itemMapSchema.safeParse({ ...base, conversion_factor: '0.00001' });
 		expect(result.success).toBe(false);
-		expect(result.error?.issues.map((i) => i.message)).toContain('ตัวคูณแปลงค่าต้องมากกว่า 0');
+		expect(result.error?.issues.map((i) => i.message)).toContain(
+			'ตัวคูณแปลงค่าต้องไม่น้อยกว่า 0.0001'
+		);
 	});
 
 	it('accepts conversion_factor 0.0001', () => {

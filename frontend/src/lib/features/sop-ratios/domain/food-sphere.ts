@@ -51,7 +51,7 @@ export const foodSphereStandardInputSchema = z.object({
 	target_segment: targetSegmentSchema,
 	req_group_id: z.string().trim().min(1, 'กรุณาระบุกลุ่มความต้องการ'),
 	daily_demand: qtyStrCoerceSchema.refine((s) => qtyGt(s, 0), {
-		message: 'ปริมาณความต้องการต้องมากกว่า 0'
+		message: 'ปริมาณความต้องการต้องไม่น้อยกว่า 0.0001'
 	}),
 	standard_uom: z.string().trim().optional(),
 	effective_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'รูปแบบวันที่ต้องเป็น YYYY-MM-DD'),

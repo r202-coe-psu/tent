@@ -44,7 +44,9 @@ describe('foodSphereStandardInputSchema rounding and messages (#936)', () => {
 	it.each(['0.00001', '0.00004'])('rejects %s (rounds to 0) with the Thai message', (v) => {
 		const result = foodSphereStandardInputSchema.safeParse(standardInput(v));
 		expect(result.success).toBe(false);
-		expect(result.error?.issues.map((i) => i.message)).toContain('ปริมาณความต้องการต้องมากกว่า 0');
+		expect(result.error?.issues.map((i) => i.message)).toContain(
+			'ปริมาณความต้องการต้องไม่น้อยกว่า 0.0001'
+		);
 	});
 
 	it('accepts 0.0001', () => {
@@ -55,7 +57,7 @@ describe('foodSphereStandardInputSchema rounding and messages (#936)', () => {
 
 	it('uses the Thai message for zero', () => {
 		const result = foodSphereStandardInputSchema.safeParse(standardInput(0));
-		expect(result.error?.issues[0].message).toBe('ปริมาณความต้องการต้องมากกว่า 0');
+		expect(result.error?.issues[0].message).toBe('ปริมาณความต้องการต้องไม่น้อยกว่า 0.0001');
 	});
 });
 
