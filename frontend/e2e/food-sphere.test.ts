@@ -17,12 +17,13 @@ import {
 	createCouchUser,
 	deleteCouchUser,
 	couchLogin,
+	seedSecurityQuestion,
 	SA_ROLES,
 	STAFF_SH001_ROLES
 } from './helpers/couch';
 import { injectSession, clearSession } from './helpers/login';
 
-const BASE = 'http://localhost:4173';
+const BASE = process.env.PLAYWRIGHT_TEST_BASE_URL ?? 'http://localhost:4173';
 const SOP_PATH = '/system-management/sop-parameters';
 const BACK_OFFICE_SOP_PATH = '/back-office/sop-parameters';
 
@@ -45,6 +46,8 @@ const sessions: Record<string, string> = {};
 test.beforeAll(async () => {
 	await createCouchUser(SA);
 	await createCouchUser(MANAGER);
+	await seedSecurityQuestion(SA.name);
+	await seedSecurityQuestion(MANAGER.name);
 	sessions[SA.name] = await couchLogin(SA.name, SA.password);
 	sessions[MANAGER.name] = await couchLogin(MANAGER.name, MANAGER.password);
 });
@@ -392,7 +395,7 @@ test('TC-E2E-02: renders Food Sphere and Replenishment Policy tabs for system_ad
 	await mockSopApi(page, {});
 	await page.goto(`${BASE}${SOP_PATH}`);
 
-	await expect(page.getByRole('button', { name: /มาตรฐานการดำรงชีพด้านอาหาร/i })).toBeVisible();
+	await expect(page.getByRole('button', { name: /พารามิเตอร์อ้างอิงอาหาร/i })).toBeVisible();
 	await expect(page.getByRole('button', { name: /นโยบายการเติมสต็อก/i })).toBeVisible();
 });
 
@@ -413,7 +416,7 @@ test('TC-E2E-03: creates a Food Sphere Standard and auto-fills UOM from requirem
 	});
 	await page.goto(`${BASE}${SOP_PATH}`);
 
-	await page.getByRole('button', { name: /มาตรฐานการดำรงชีพด้านอาหาร/i }).click();
+	await page.getByRole('button', { name: /พารามิเตอร์อ้างอิงอาหาร/i }).click();
 	await page.getByRole('button', { name: /เพิ่มเกณฑ์โภชนาการ|เพิ่ม|Add/i }).click();
 	await expect(page.getByRole('dialog')).toBeVisible();
 
@@ -459,7 +462,7 @@ test('TC-E2E-04: edits an existing Food Sphere Standard', async ({ page }) => {
 		]
 	});
 	await page.goto(`${BASE}${SOP_PATH}`);
-	await page.getByRole('button', { name: /มาตรฐานการดำรงชีพด้านอาหาร/i }).click();
+	await page.getByRole('button', { name: /พารามิเตอร์อ้างอิงอาหาร/i }).click();
 
 	await page.getByRole('button', { name: /แก้ไข.*FOOD_ENERGY|Edit.*FOOD_ENERGY/i }).click();
 	await expect(page.getByRole('dialog')).toBeVisible();
@@ -489,7 +492,7 @@ test('TC-E2E-05: deletes a Food Sphere Standard', async ({ page }) => {
 		]
 	});
 	await page.goto(`${BASE}${SOP_PATH}`);
-	await page.getByRole('button', { name: /มาตรฐานการดำรงชีพด้านอาหาร/i }).click();
+	await page.getByRole('button', { name: /พารามิเตอร์อ้างอิงอาหาร/i }).click();
 
 	page.once('dialog', (d) => d.accept());
 	await page.getByRole('button', { name: /ลบ.*FOOD_ENERGY|Delete.*FOOD_ENERGY/i }).click();
@@ -631,7 +634,7 @@ for (const c of DOC_STATUS_CASES) {
 
 		// Render the page or check DocStatusBadge
 		await page.goto(`${BASE}${SOP_PATH}`);
-		await page.getByRole('button', { name: /มาตรฐานการดำรงชีพด้านอาหาร/i }).click();
+		await page.getByRole('button', { name: /พารามิเตอร์อ้างอิงอาหาร/i }).click();
 		await expect(page.getByRole('heading', { name: /เกณฑ์มาตรฐานโภชนาการ/i })).toBeVisible();
 	});
 }
