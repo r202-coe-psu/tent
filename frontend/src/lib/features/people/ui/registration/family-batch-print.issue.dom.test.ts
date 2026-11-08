@@ -82,7 +82,9 @@ afterEach(() => {
 });
 
 const clickRender = async () => {
-	document.querySelector<HTMLButtonElement>('[data-testid="render-labels"]')!.click();
+	// Member cards come first in the DOM; the family button is the last one.
+	const buttons = document.querySelectorAll<HTMLButtonElement>('[data-testid="render-labels"]');
+	buttons[buttons.length - 1].click();
 	await flush();
 };
 
@@ -105,7 +107,8 @@ describe('FamilyBatchPrint QR issuing', () => {
 			source: 'family_batch',
 			evacuee_ids: [A, B]
 		});
-		expect(rendered.calls).toEqual([`${A}@683508`, `${B}@683508`]);
+		// The cards also re-render their previews with the issued QR, so compare unique payloads.
+		expect([...new Set(rendered.calls)].sort()).toEqual([`${A}@683508`, `${B}@683508`]);
 	});
 
 	it('does not print a member whose QR was not issued and reports it', async () => {
@@ -116,7 +119,7 @@ describe('FamilyBatchPrint QR issuing', () => {
 
 		await clickRender();
 
-		expect(rendered.calls).toEqual([`${A}@683508`]);
+		expect([...new Set(rendered.calls)]).toEqual([`${A}@683508`]);
 		expect(toastError).toHaveBeenCalledTimes(1);
 	});
 

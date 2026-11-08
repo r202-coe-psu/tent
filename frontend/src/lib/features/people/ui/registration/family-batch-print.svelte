@@ -94,6 +94,7 @@
 					: qrT.issuePartialToast(issued.failedIds.length)
 			);
 		}
+		for (const [id, payload] of issued.payloads) issuedByMember[id] = payload;
 		const printable = ordered.filter((m) => issued.payloads.has(m._id));
 		if (printable.length === 0) throw new ReportedRenderError('QR was not issued');
 
@@ -138,7 +139,10 @@
 	// button's follow-up state: printing the family again would duplicate labels.
 	let printing = $state(false);
 	let retryHeld = $state(false);
-	const leaveLocked = $derived(printing || retryHeld);
+	// Latest QR issued per member (by the family button or a card), shown in each card's preview.
+	let issuedByMember = $state<Record<string, string | undefined>>({});
+	let memberLocks = $state<Record<string, boolean>>({});
+	const leaveLocked = $derived(printing || retryHeld || Object.values(memberLocks).some(Boolean));
 
 	function isHead(member: Evacuee, index: number): boolean {
 		if (household.head_evacuee_id) {
@@ -204,8 +208,11 @@
 				evacuee={member}
 				embedded={true}
 				dismissible={false}
-				printable={false}
+				bind:issuedPayload={issuedByMember[member._id]}
+				stationOnly={true}
+				printSource="walk_in"
 				qrSource="family_batch"
+				onLockedChange={(v) => (memberLocks[member._id] = v)}
 				onClose={onDone}
 			/>
 		</section>

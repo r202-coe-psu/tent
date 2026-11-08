@@ -32,7 +32,11 @@
 		dismissible = true,
 		printable = true,
 		closeLabel,
-		qrSource = 'profile'
+		qrSource = 'profile',
+		printSource = 'evacuee_qr',
+		stationOnly = false,
+		onLockedChange,
+		issuedPayload = $bindable()
 	}: {
 		show: boolean;
 		evacuee: Evacuee;
@@ -44,6 +48,20 @@
 		closeLabel?: string;
 		/** Log source of the entry written when printing (CR-233): batch page uses `family_batch`. */
 		qrSource?: 'profile' | 'family_batch';
+		/** Print-job source for the station printer (permission check). */
+		printSource?: 'walk_in' | 'evacuee_qr';
+		/**
+		 * Prints this one person through the station printer only (like the family button), labelled
+		 * "print ID card", with no PDF button. Needs `printable`.
+		 */
+		stationOnly?: boolean;
+		/** Reports while a print run, or a sent job that may still print, is pending. */
+		onLockedChange?: (locked: boolean) => void;
+		/**
+		 * The latest QR issued for this person. Bind it when a host issues QRs outside this modal
+		 * (family print), so the preview never shows a QR that has since been rotated out.
+		 */
+		issuedPayload?: string;
 	} = $props();
 
 	const effectiveCloseLabel = $derived(closeLabel ?? t.closeWindow);
@@ -55,6 +73,10 @@
 	let printing = $state(false);
 	let retryHeld = $state(false);
 	const locked = $derived(printing || retryHeld);
+
+	$effect(() => {
+		onLockedChange?.(locked);
+	});
 
 	const shelterCode = $derived(shelterStore.selectedShelterCode ?? getShelterCode());
 
@@ -70,6 +92,8 @@
 		() => show
 	);
 
+	// The QR issued by the latest print click. It is the only valid one (older ones are rotated
+	// out), so the preview shows it instead of the placeholder once a print has issued one.
 	function labelContent(qrPayload?: string) {
 		return buildEvacueeQrLabel(evacuee, {
 			zones: shelterQuery.data?.zones,
@@ -85,7 +109,7 @@
 	 */
 	const labelPng = $derived.by(() => {
 		if (!show) return null;
-		const { qrPayload, label } = labelContent();
+		const { qrPayload, label } = labelContent(issuedPayload);
 		return renderKioskQrLabelPng(qrPayload, label);
 	});
 
@@ -110,6 +134,7 @@
 			toast.error(t.issueFailedToast);
 			throw new ReportedRenderError('QR was not issued');
 		}
+		issuedPayload = payload;
 		const { qrPayload, label } = labelContent(payload);
 		return renderKioskQrLabelPng(qrPayload, label);
 	}
@@ -213,7 +238,9 @@
 				<figcaption class="mt-3 text-center text-sm text-slate-500">
 					<span class="font-semibold text-slate-700">{t.labelSize}</span>
 					· {t.printHint}
-					<span class="mt-1 block text-slate-600">{t.previewNote}</span>
+					<span class="mt-1 block text-slate-600"
+						>{issuedPayload ? t.printedNote : t.previewNote}</span
+					>
 				</figcaption>
 			</figure>
 
@@ -224,19 +251,22 @@
 						bind:retryHeld
 						{shelterCode}
 						labelCount={1}
-						source="evacuee_qr"
+						source={printSource}
 						renderLabels={renderStationLabels}
+						label={stationOnly ? t.printIdCard : undefined}
 						buttonClass="h-12 w-full gap-2 text-base"
 					/>
 				{/if}
-				<Button
-					class="h-12 w-full gap-2 text-base"
-					onclick={handlePrintPreview}
-					disabled={isExportingPdf || !labelPng}
-				>
-					<Printer class="size-4" />
-					{isExportingPdf ? t.generatingPdf : t.printIdCard}
-				</Button>
+				{#if !stationOnly}
+					<Button
+						class="h-12 w-full gap-2 text-base"
+						onclick={handlePrintPreview}
+						disabled={isExportingPdf || !labelPng}
+					>
+						<Printer class="size-4" />
+						{isExportingPdf ? t.generatingPdf : t.printIdCard}
+					</Button>
+				{/if}
 				{#if dismissible}
 					<Button
 						variant="ghost"
