@@ -33,4 +33,9 @@
 	thaidCheckInEnabled={data.thaidCheckInEnabled}
 />
 <KioskDeviceInfo />
-<KioskBannerAttract mode="live" onDismiss={() => returnToKioskLanguagePicker(contextQuery)} />
+<!-- A new person is at the kiosk: Thai again and pick a language, with or without banners. -->
+<KioskBannerAttract
+	mode="live"
+	onDismiss={() => returnToKioskLanguagePicker(contextQuery)}
+	onIdleWithoutBanners={() => returnToKioskLanguagePicker(contextQuery)}
+/>

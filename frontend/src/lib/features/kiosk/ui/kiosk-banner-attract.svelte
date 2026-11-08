@@ -13,18 +13,25 @@
 		banners?: KioskBannerSlide[];
 		/** Called when the overlay is tapped away (`live`: only while it was actually showing). */
 		onDismiss?: () => void;
+		/** `live` only: the idle window passed while there were no banners to show. */
+		onIdleWithoutBanners?: () => void;
 	};
 
 	/**
 	 * Attract overlay for `/kiosk` (CR-162 FR-KBN-42..47). `live` owns the idle/refresh state
 	 * machine; `preview` (back-office) shows the given slides at once, with no idle or refresh timer.
 	 */
-	let { mode, banners = [], onDismiss }: Props = $props();
+	let { mode, banners = [], onDismiss, onIdleWithoutBanners }: Props = $props();
 
 	// `mode` never changes for a mounted instance.
 	// svelte-ignore state_referenced_locally
 	const controller =
-		mode === 'live' ? new KioskBannerAttractController({ fetch: fetchKioskBanners }) : null;
+		mode === 'live'
+			? new KioskBannerAttractController({
+					fetch: fetchKioskBanners,
+					onIdleWithoutBanners: () => onIdleWithoutBanners?.()
+				})
+			: null;
 
 	let previewIndex = $state(0);
 	let previewDismissed = $state(false);
