@@ -7,7 +7,7 @@
  * been told about by a submit first.
  */
 
-import type { LanguageCode } from '$lib/stores/language.svelte';
+import type { LanguageCode } from '$lib/utils/language';
 import { localizeRegistrationMessage } from './registration-messages.i18n';
 
 /** A validation issue: Zod-shaped path + message (also used for the UI-only rules). */

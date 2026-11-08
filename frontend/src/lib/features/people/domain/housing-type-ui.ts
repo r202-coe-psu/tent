@@ -5,7 +5,7 @@
 
 import { formatMasterLabel } from '$lib/features/master-data';
 import type { HousingType } from './people';
-import type { LanguageCode } from '$lib/stores/language.svelte';
+import type { LanguageCode } from '$lib/utils/language';
 
 export const CR112_HOUSING_TYPE_CODES = [
 	'owned_house',

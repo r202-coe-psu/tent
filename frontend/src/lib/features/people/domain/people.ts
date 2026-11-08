@@ -13,7 +13,7 @@ import {
 import { ulid } from '$lib/db/ulid';
 import { isValidThaiNationalId } from '$lib/utils/thai-id';
 import { ConflictError } from '$lib/utils/errors';
-import type { LanguageCode } from '$lib/stores/language.svelte';
+import type { LanguageCode } from '$lib/utils/language';
 // Deep import on purpose: the `$lib/features/shared` barrel re-exports `.svelte` files, which
 // plain `tsx` cannot load — and `scripts/migrate-closed-shelter-checkout.ts` imports this domain.
 import { createAuditEntry, type AuditEntry } from '$lib/features/shared/domain/audit';

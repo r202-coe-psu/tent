@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { LanguageCode } from '$lib/stores/language.svelte';
+import type { LanguageCode } from '$lib/utils/language';
 
 /**
  * Master Data Engine — central-managed parameter lists for personal data forms

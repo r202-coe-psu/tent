@@ -1,6 +1,8 @@
 import { browser } from '$app/environment';
 
-export type LanguageCode = 'th' | 'en';
+import type { LanguageCode } from '$lib/utils/language';
+
+export type { LanguageCode };
 
 const STORAGE_KEY = 'tent:lang';
 const LEGACY_STORAGE_KEY = 'app-lang';

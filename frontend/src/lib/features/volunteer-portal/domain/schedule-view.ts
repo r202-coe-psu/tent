@@ -1,4 +1,4 @@
-import type { LanguageCode } from '$lib/stores/language.svelte';
+import type { LanguageCode } from '$lib/utils/language';
 import type { ScheduleShift, ShiftStatus, TicketSummary } from './volunteer';
 import { shiftDutyWindow } from '$lib/features/volunteers/domain/duty-window';
 

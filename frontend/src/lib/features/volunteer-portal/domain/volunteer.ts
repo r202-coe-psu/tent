@@ -6,7 +6,7 @@
  * generated types so the rules live somewhere a test can reach without a server.
  */
 import { z } from 'zod';
-import type { LanguageCode } from '$lib/stores/language.svelte';
+import type { LanguageCode } from '$lib/utils/language';
 import { isValidThaiNationalId } from '$lib/utils/thai-id';
 import { volunteerMobileSchema } from '$lib/utils/volunteer-phone';
 // Deep import: the volunteers barrel re-exports UI that imports this domain (cycle).

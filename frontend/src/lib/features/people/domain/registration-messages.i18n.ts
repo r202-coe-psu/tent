@@ -8,7 +8,7 @@
  *
  * Messages with interpolated values are matched by pattern rather than listed one by one.
  */
-import type { LanguageCode } from '$lib/stores/language.svelte';
+import type { LanguageCode } from '$lib/utils/language';
 
 const EN_BY_THAI_MESSAGE: Readonly<Record<string, string>> = {
 	// Member identity

@@ -7,7 +7,7 @@ import { z } from 'zod';
 import { evacueeConsentSchema } from '$lib/features/consent/server';
 import { CR112_VULNERABLE_GROUP_ACTIVE, formatMasterLabel } from '$lib/features/master-data';
 import { formatThaiDateTime } from '$lib/utils/date';
-import type { LanguageCode } from '$lib/stores/language.svelte';
+import type { LanguageCode } from '$lib/utils/language';
 
 /** Full Station 1 badge copy for Unassigned Registration hits (#250 / CR-113). */
 export const UNASSIGNED_QUEUE_BADGE_LABEL = 'คิวกลาง / ยังไม่ระบุศูนย์';

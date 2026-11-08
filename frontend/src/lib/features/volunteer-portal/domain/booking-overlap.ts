@@ -1,4 +1,4 @@
-import type { LanguageCode } from '$lib/stores/language.svelte';
+import type { LanguageCode } from '$lib/utils/language';
 import { defaultJobTitle, type PortalActivity } from './schedule-view';
 
 export type BookingWindow = {
