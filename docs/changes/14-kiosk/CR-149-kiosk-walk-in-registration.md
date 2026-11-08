@@ -4,7 +4,7 @@ title: Kiosk walk-in registration — เสียบบัตรแล้วไ
 status: approved
 date: 2026-09-27
 created: 2026-09-27
-updated: 2026-10-15 # ทีม kiosk ขอเลิกกรอง registered_via ของหัวหน้าใน FR-KWR-83 · 2026-10-13 ข้อเสนอแก้ไข §9 approved โดย Dev/Team Lead Soravit Sukkarn (รับ requirement จากหัวหน้าโครงการเมื่อวาน 2026-10-12)
+updated: 2026-11-06 # 2026-11-06 CR-233 supersedes payload ใน FR-KWR-19 / FR-KWR-71 · ทีม kiosk ขอเลิกกรอง registered_via ของหัวหน้าใน FR-KWR-83 · 2026-10-13 ข้อเสนอแก้ไข §9 approved โดย Dev/Team Lead Soravit Sukkarn (รับ requirement จากหัวหน้าโครงการเมื่อวาน 2026-10-12)
 requested_by: ทีม kiosk (branch feat/pre-register_kiosk)
 decided_by: Jakee Indapanya (GitHub net-lynx), Project Owner — อนุมัติ 2026-10-03 (Asia/Bangkok)
 decision_date: 2026-10-03
@@ -132,6 +132,8 @@ note: >
 | FR-KWR-18  | Doc ที่สร้าง: `schema_v: 12`, `registered_via:'kiosk'`, `current_stay:{status:'kiosk_registered', zone:null, since:now}`, `household_id:null`, `phone:null`, `country:'THAILAND'`, `person_id:{cardType:'national_id', number}`, ชื่อ/เพศ/`birth_year` (พ.ศ.)/`age` จากบัตร, `card_snapshot` ตาม `cardSnapshotSchema` (รวมที่อยู่ + `photo_base64`) + `consented_at` (ts ที่กดยินยอม, additive), `privacy:{search_excluded:false}`, `created_by` = principal ของเครื่อง |
 | FR-KWR-19  | Response: `{ shelter_code, created, member: KioskEvacueeSummary, qr_payload: 'evacuee:<ULID>' }` · ไม่มี PII เกิน FR-KPC-25                                                                                                                                                                                                                                                                                                                                             |
 | FR-KWR-19a | `scanner_client` allowlist เติม credential ให้ path นี้ (FR-KPC-06)                                                                                                                                                                                                                                                                                                                                                                                                     |
+
+> **Superseded by [CR-233](../02-people/CR-233-evacuee-qr-rotate-on-print.md)** (2026-11-06): FR-KWR-19 — `qr_payload` ไม่ใช่ `'evacuee:<ULID>'` คงที่อีก แต่เป็น `evacuee:<ULID>@<hash6>` ที่ server ออกและเขียน log `evacuee_qr` ก่อนตอบ; ส่วนอื่นของข้อนี้ยังใช้
 
 ### 4.5 สถานะ `kiosk_registered`
 
@@ -282,6 +284,8 @@ Project Owner Jakee Indapanya (GitHub net-lynx) เคาะทุกข้อ�
 | FR-KWR-72 | หน้า `/kiosk/register/done` พิมพ์ QR label 1 ครั้งอัตโนมัติ (render + `printKioskLabels`, fallback `window.print` เมื่อเครื่องพิมพ์ unavailable) · มีปุ่ม「พิมพ์อีกครั้ง」และสถานะการพิมพ์ · พัก idle timeout ระหว่างพิมพ์ · ข้อความ: ลงทะเบียนสำเร็จ รับ QR Code แล้วไปจุดคัดกรอง |
 | FR-KWR-73 | walk-in ที่ `arriving` แล้วเสียบบัตร/สแกน QR/ThaiD ซ้ำ → พิมพ์ QR ซ้ำได้แบบเดียวกับ pre-registration (CR-151 FR-KPC-101) · ไม่เขียน doc                                                                                                                                            |
 | FR-KWR-74 | outcome `kiosk_registered` ของ lookup (FR-KWR-03) คงไว้สำหรับ doc เก่า                                                                                                                                                                                                             |
+
+> **Superseded by [CR-233](../02-people/CR-233-evacuee-qr-rotate-on-print.md)** (2026-11-06): FR-KWR-71 — `qr_payload` ไม่ใช่ `evacuee_id` อีก แต่เป็น `evacuee:<ULID>@<hash6>` ที่ออกใหม่ (`source: kiosk_checkin`); ส่วนอื่นของข้อนี้ยังใช้
 
 ### 9.4 Merge ครัวเรือนเมื่อที่อยู่ตรงกัน
 

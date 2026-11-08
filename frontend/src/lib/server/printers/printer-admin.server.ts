@@ -1,0 +1,380 @@
+import { z } from 'zod';
+import { shelterCodeSchema } from '$lib/db/model';
+// eslint-disable-next-line no-restricted-imports -- server-safe domain rule; feature barrel will pull client UI/query code
+import { isPrinterOnline } from '$lib/features/printers/domain/printer-status';
+import { generatePrintSecret, hashPrintSecret, type PrintDeviceDoc } from './device-credentials';
+import type { PrintDeviceWriteResult } from './device-heartbeat';
+import {
+	createPrintJob,
+	type PrintDeviceReader,
+	type PrintJobCaller,
+	type PrintJobCreator
+} from './print-jobs.server';
+import {
+	terminal,
+	type PrintJobDoc,
+	type PrintJobPutResult,
+	type PrintJobStatus
+} from './print-queue.server';
+import { TEST_LABEL_PNG_BASE64 } from './test-label';
+
+/** Back-office printer management (plan §4.3): registry CRUD over `print_device` docs. */
+
+export const printDeviceInputSchema = z
+	.object({
+		device_id: z
+			.string()
+			.regex(/^[a-z0-9][a-z0-9-]{2,62}$/, 'Device ID must match [a-z0-9-]{3,63}'),
+		name: z.string().trim().min(1, 'Name is required').max(80, 'Name is too long'),
+		shelter_code: shelterCodeSchema,
+		station: z.string().trim().nullish()
+	})
+	.strict();
+export type PrintDeviceInput = z.infer<typeof printDeviceInputSchema>;
+
+export interface PrinterSummary {
+	id: string;
+	device_id: string;
+	name: string;
+	shelter_code: string;
+	station: string | null;
+	status: PrintDeviceDoc['status'];
+	secret_prefix: string;
+	last_seen_at: string | null;
+	queue_state: PrintDeviceDoc['queue_state'];
+	agent_version: string | null;
+	local_ips: string[];
+	online: boolean;
+}
+
+export type PrintDeviceCreateResult = { ok: true; rev: string } | { conflict: true };
+
+/** Registry port over the `printing` DB; the real adapter is `printDeviceRepository`. */
+export interface PrintDeviceAdminStore {
+	createDevice(doc: PrintDeviceDoc): Promise<PrintDeviceCreateResult>;
+	getDevice(printerId: string): Promise<PrintDeviceDoc | null>;
+	updateDevice(doc: PrintDeviceDoc): Promise<PrintDeviceWriteResult>;
+	/** Delete at `doc._rev`; a conflict means the doc changed (e.g. a heartbeat) since it was read. */
+	deleteDevice(doc: PrintDeviceDoc): Promise<{ ok: true } | { conflict: true }>;
+}
+
+export class PrintDeviceConflictError extends Error {
+	constructor(message = 'Device ID already exists') {
+		super(message);
+		this.name = 'PrintDeviceConflictError';
+	}
+}
+
+export class PrintDeviceNotFoundError extends Error {
+	constructor() {
+		super('Printer not found');
+		this.name = 'PrintDeviceNotFoundError';
+	}
+}
+
+/** O-11: a closed or cancelled shelter gets no printer and no print DB back. */
+export class PrintShelterClosedError extends Error {
+	constructor() {
+		super('Shelter is closed, cancelled or not registered');
+		this.name = 'PrintShelterClosedError';
+	}
+}
+
+/** Registry check before `printing_{code}` is provisioned: false for a closed/cancelled/unknown shelter. */
+export type IsShelterOpen = (shelterCode: string) => Promise<boolean>;
+
+export const printDevicePatchSchema = z
+	.object({
+		name: z.string().trim().min(1, 'Name is required').max(80, 'Name is too long').optional(),
+		station: z.string().trim().nullable().optional(),
+		status: z.enum(['active', 'inactive']).optional()
+	})
+	.strict()
+	.refine((value) => Object.keys(value).length > 0, { message: 'Nothing to update' });
+export type PrintDevicePatch = z.infer<typeof printDevicePatchSchema>;
+
+export function toPrinterSummary(doc: PrintDeviceDoc, now: Date): PrinterSummary {
+	return {
+		id: doc._id,
+		device_id: doc.device_id,
+		name: doc.name,
+		shelter_code: doc.shelter_code,
+		station: doc.station,
+		status: doc.status,
+		secret_prefix: doc.secret_prefix,
+		last_seen_at: doc.last_seen_at,
+		queue_state: doc.queue_state,
+		agent_version: doc.agent_version,
+		local_ips: doc.local_ips ?? [],
+		online: isPrinterOnline(doc, now)
+	};
+}
+
+const SECRET_PREFIX_LENGTH = 16;
+
+export interface CreatePrinterDeps {
+	store: PrintDeviceAdminStore;
+	isShelterOpen: IsShelterOpen;
+	/** Provision `printing_{code}` (idempotent) so the shelter DB exists before its first printer (FR-4). */
+	ensureShelterDb: (shelterCode: string) => Promise<void>;
+}
+
+/** Register a printer; the plaintext secret is returned here and never stored (hash + prefix only). */
+export async function createPrinter(
+	deps: CreatePrinterDeps,
+	input: PrintDeviceInput,
+	actor: string,
+	now: Date
+): Promise<{ device: PrinterSummary; secret: string }> {
+	if (!(await deps.isShelterOpen(input.shelter_code))) throw new PrintShelterClosedError();
+	await deps.ensureShelterDb(input.shelter_code);
+
+	const secret = generatePrintSecret();
+	const iso = now.toISOString();
+	const doc: PrintDeviceDoc = {
+		_id: `print_device:${input.device_id}`,
+		type: 'print_device',
+		schema_v: 1,
+		device_id: input.device_id,
+		name: input.name,
+		shelter_code: input.shelter_code,
+		station: input.station || null,
+		secret_hash: hashPrintSecret(secret),
+		secret_prefix: secret.slice(0, SECRET_PREFIX_LENGTH),
+		status: 'active',
+		last_seen_at: null,
+		queue_state: 'unknown',
+		agent_version: null,
+		created_at: iso,
+		updated_at: iso,
+		created_by: actor
+	};
+	if ('conflict' in (await deps.store.createDevice(doc))) throw new PrintDeviceConflictError();
+	return { device: toPrinterSummary(doc, now), secret };
+}
+
+export interface PrinterLastJob {
+	status: PrintJobDoc['status'];
+	finished_at: string | null;
+	error_code: string | null;
+	created_at: string;
+}
+
+export interface PrinterListItem extends PrinterSummary {
+	last_job: PrinterLastJob | null;
+}
+
+export interface PrintDeviceScopeLister {
+	/** Devices of any status in these shelters; `null` = every shelter. */
+	listDevicesInScope(scope: string[] | null): Promise<PrintDeviceDoc[]>;
+}
+
+export interface PrintJobLastReader {
+	/** Newest job (any status) of a printer by `created_at`; null when it never printed. */
+	lastJobOf(printerId: string): Promise<PrintJobDoc | null>;
+}
+
+export interface PrinterListDeps {
+	devices: PrintDeviceScopeLister;
+	/** Job store of one shelter: each shelter has its own `printing_{code}` DB. */
+	jobsFor: (shelterCode: string) => PrintJobLastReader;
+}
+
+export async function listPrinters(
+	deps: PrinterListDeps,
+	scope: string[] | null,
+	now: Date
+): Promise<{ printers: PrinterListItem[]; server_time: string }> {
+	const docs = await deps.devices.listDevicesInScope(scope);
+	const sorted = [...docs].sort(
+		(a, b) => a.shelter_code.localeCompare(b.shelter_code) || a.name.localeCompare(b.name)
+	);
+	const printers = await Promise.all(
+		sorted.map(async (doc): Promise<PrinterListItem> => {
+			const job = await deps.jobsFor(doc.shelter_code).lastJobOf(doc._id);
+			return {
+				...toPrinterSummary(doc, now),
+				last_job: job && {
+					status: job.status,
+					finished_at: job.finished_at,
+					error_code: job.error_code,
+					created_at: job.created_at
+				}
+			};
+		})
+	);
+	return { printers, server_time: now.toISOString() };
+}
+
+const MAX_WRITE_ATTEMPTS = 4;
+
+/**
+ * Read-modify-write one device doc. Heartbeats rewrite the doc every ~20 s, so a `_rev` conflict is
+ * normal: re-read (keeping the fresh heartbeat fields) and re-apply the change.
+ */
+async function mutateDevice(
+	store: PrintDeviceAdminStore,
+	printerId: string,
+	now: Date,
+	change: (doc: PrintDeviceDoc) => PrintDeviceDoc
+): Promise<PrintDeviceDoc> {
+	for (let attempt = 0; attempt < MAX_WRITE_ATTEMPTS; attempt += 1) {
+		const current = await store.getDevice(printerId);
+		if (!current) throw new PrintDeviceNotFoundError();
+		const next = { ...change(current), updated_at: now.toISOString() };
+		if (!('conflict' in (await store.updateDevice(next)))) return next;
+	}
+	throw new PrintDeviceConflictError('Printer was modified concurrently');
+}
+
+/** Job slice the admin use cases need to close a printer's open jobs. */
+export interface PrinterJobCloser {
+	findJobs(query: { status: PrintJobStatus; printerId?: string }): Promise<PrintJobDoc[]>;
+	put(doc: PrintJobDoc): Promise<PrintJobPutResult>;
+}
+
+/** Upper bound on `findJobs` pages per status, so a stuck conflict cannot spin forever. */
+const MAX_CLOSE_PAGES = 50;
+
+/**
+ * Fail the printer's pending/printing jobs with `errorCode`; the terminal PUT drops the labels.
+ * `findJobs` returns one page, so re-query until a page is empty or nothing in it could be written.
+ */
+async function failOpenJobs(
+	jobs: PrinterJobCloser,
+	printerId: string,
+	errorCode: 'printer_deleted' | 'printer_inactive',
+	now: Date
+): Promise<void> {
+	for (const status of ['pending', 'printing'] as const) {
+		for (let page = 0; page < MAX_CLOSE_PAGES; page += 1) {
+			let written = 0;
+			for (const job of await jobs.findJobs({ status, printerId })) {
+				// A conflict means the job just moved on (claimed/finished); the lease sweeper settles it.
+				const result = await jobs.put(terminal(job, 'failed', now, { error_code: errorCode }));
+				if (!('conflict' in result)) written += 1;
+			}
+			if (written === 0) break;
+		}
+	}
+}
+
+export interface DeletePrinterDeps {
+	devices: PrintDeviceAdminStore;
+	/** Job store of one shelter: the printer's open jobs live in its shelter DB. */
+	jobsFor: (shelterCode: string) => PrinterJobCloser;
+}
+
+/**
+ * Reactivation deps come as a pair: `printing_{code}` is provisioned (fresh, not memoized) before a
+ * printer goes active, because the shelter DB may have been dropped while it was inactive and job
+ * creation would 503, but only while the shelter is still open (O-11).
+ */
+export type UpdatePrinterDeps = DeletePrinterDeps &
+	(
+		| { isShelterOpen?: undefined; ensureShelterDb?: undefined }
+		| { isShelterOpen: IsShelterOpen; ensureShelterDb: (shelterCode: string) => Promise<void> }
+	);
+
+/**
+ * Deactivating also fails the printer's open jobs (`printer_inactive`). The device is written
+ * inactive first, so no new job can be queued or claimed while they are being closed. Activating
+ * provisions the shelter's print DB first, so the printer is never active without one.
+ */
+export async function updatePrinter(
+	deps: UpdatePrinterDeps,
+	printerId: string,
+	patch: PrintDevicePatch,
+	now: Date
+): Promise<PrinterSummary> {
+	if (patch.status === 'active' && deps.ensureShelterDb) {
+		const current = await deps.devices.getDevice(printerId);
+		if (!current) throw new PrintDeviceNotFoundError();
+		if (!(await deps.isShelterOpen(current.shelter_code))) throw new PrintShelterClosedError();
+		await deps.ensureShelterDb(current.shelter_code);
+	}
+	const doc = await mutateDevice(deps.devices, printerId, now, (current) => ({
+		...current,
+		...(patch.name !== undefined ? { name: patch.name } : {}),
+		...(patch.station !== undefined ? { station: patch.station || null } : {}),
+		...(patch.status !== undefined ? { status: patch.status } : {})
+	}));
+	if (patch.status === 'inactive')
+		await failOpenJobs(deps.jobsFor(doc.shelter_code), printerId, 'printer_inactive', now);
+	return toPrinterSummary(doc, now);
+}
+
+export async function rotatePrinterSecret(
+	store: PrintDeviceAdminStore,
+	printerId: string,
+	now: Date
+): Promise<{ device: PrinterSummary; secret: string }> {
+	const secret = generatePrintSecret();
+	const doc = await mutateDevice(store, printerId, now, (current) => ({
+		...current,
+		secret_hash: hashPrintSecret(secret),
+		secret_prefix: secret.slice(0, SECRET_PREFIX_LENGTH)
+	}));
+	return { device: toPrinterSummary(doc, now), secret };
+}
+
+export interface TestPrintDeps {
+	/** Job DB of the printer's shelter, written as the caller (their session cookie). */
+	storeFor: (shelterCode: string) => PrintJobCreator;
+	devices: PrintDeviceReader;
+	newId?: () => string;
+	/** See {@link CreatePrintJobDeps.reprovisionShelterDb}. */
+	reprovisionShelterDb?: (shelterCode: string) => Promise<void>;
+}
+
+/**
+ * Queue a 1-label test job (built-in label, no personal data) on the printer. Written with the
+ * caller's own session, so `canPrintSource(..., 'test')` and the DB's validation hook both require
+ * a shelter manager of the shelter (or SA).
+ */
+export function queueTestPrint(
+	deps: TestPrintDeps,
+	printerId: string,
+	caller: PrintJobCaller,
+	now: Date
+): Promise<{ job_id: string; shelter_code: string; expires_at: string }> {
+	return createPrintJob(
+		deps,
+		caller,
+		{ printer_id: printerId, source: 'test', labels: [TEST_LABEL_PNG_BASE64] },
+		now
+	);
+}
+
+/**
+ * Set the printer inactive (so nothing new is queued or claimed), fail its pending/printing jobs
+ * (`printer_deleted`, labels dropped), then delete it.
+ */
+export async function deletePrinter(
+	deps: DeletePrinterDeps,
+	printerId: string,
+	now: Date
+): Promise<void> {
+	const device = await deps.devices.getDevice(printerId);
+	if (!device) throw new PrintDeviceNotFoundError();
+
+	if (device.status !== 'inactive') {
+		try {
+			await mutateDevice(deps.devices, printerId, now, (current) => ({
+				...current,
+				status: 'inactive'
+			}));
+		} catch (error) {
+			if (error instanceof PrintDeviceNotFoundError) return; // deleted concurrently: nothing left to do
+			throw error;
+		}
+	}
+	await failOpenJobs(deps.jobsFor(device.shelter_code), printerId, 'printer_deleted', now);
+
+	for (let attempt = 0; attempt < MAX_WRITE_ATTEMPTS; attempt += 1) {
+		const current = await deps.devices.getDevice(printerId);
+		if (!current) return;
+		if (!('conflict' in (await deps.devices.deleteDevice(current)))) return;
+	}
+	throw new PrintDeviceConflictError('Printer was modified concurrently');
+}
