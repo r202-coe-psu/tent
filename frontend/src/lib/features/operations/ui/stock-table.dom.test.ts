@@ -130,9 +130,10 @@ beforeEach(() => {
 	mocks.search = '';
 });
 
-afterEach(() => {
+afterEach(async () => {
 	if (instance) unmount(instance);
 	instance = null;
+	await new Promise((resolve) => setTimeout(resolve, 50));
 });
 
 describe('StockTable movement buttons (CR-227)', () => {
