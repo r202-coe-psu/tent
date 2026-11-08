@@ -517,7 +517,15 @@ export async function createOrMergeUser(
 	try {
 		await createUser(input);
 		if (input.personnel_type === 'volunteer') {
-			await auditPermanentRoles(input.name, addedShelterRoles([], input.roles), caller.name);
+			try {
+				await auditPermanentRoles(input.name, addedShelterRoles([], input.roles), caller.name);
+			} catch (auditErr) {
+				// Rollback newly created user doc so we never leave an account with permanent roles
+				// that was not audited (W1 / fail-closed / retry-safe).
+				const doc = await readUserDoc(input.name, 'rollback unaudited user');
+				await adminRaw(`/_users/${userDocId(input.name)}?rev=${doc._rev}`, 'DELETE');
+				throw auditErr;
+			}
 		}
 		return { merged: false };
 	} catch (e) {
@@ -533,7 +541,7 @@ export async function createOrMergeUser(
 		if (input.volunteer_id || input.personnel_type === 'volunteer') {
 			const existing = await readUserDoc(input.name, 'read user');
 			if (
-				existing.volunteer_id !== (input.volunteer_id ?? null) ||
+				(existing.volunteer_id ?? null) !== (input.volunteer_id ?? null) ||
 				existing.personnel_type !== 'volunteer' ||
 				existing.active === false
 			) {
@@ -1129,7 +1137,7 @@ export async function updateUser(
 	// does not slip past it: becoming a volunteer issues every role it keeps (CR-221 A1).
 	const volunteerBefore = doc.personnel_type === 'volunteer';
 	const volunteerAfter = (input.personnel_type ?? doc.personnel_type) === 'volunteer';
-	if (volunteerAfter) {
+	if (volunteerAfter && (nextRoles !== undefined || !volunteerBefore)) {
 		const rawRoles = nextRoles ?? doc.roles ?? [];
 		for (const code of shelterCodesFromRoles(rawRoles)) {
 			if (capabilitiesForShelter(rawRoles, code).length === 0) {
@@ -1191,6 +1199,9 @@ export async function updateUser(
 		delete updatedDoc.salt;
 	}
 
+	// Permanent roles leave an audit record before giving the role in _users (W1 / fail-closed / retry-safe).
+	await auditPermanentRoles(name, issued, caller.name);
+
 	const res = await adminRaw(`/_users/${userDocId(name)}`, 'PUT', updatedDoc);
 	assertGrantWritten('update user', res);
 
@@ -1202,7 +1213,6 @@ export async function updateUser(
 		permanentRoles,
 		caller.name
 	);
-	await auditPermanentRoles(name, issued, caller.name);
 }
 
 /** The roles `after` holds in a shelter that `before` did not hold there (compound or legacy flat). */
@@ -1218,14 +1228,14 @@ function addedShelterRoles(
 	});
 }
 
-/** One `role_grant.permanent_issued` audit per role a manager newly gave a volunteer (A1-8). */
+/** One `role_grant.permanent_issued` audit per role a manager newly gave a volunteer (A1-8). Fail-closed so an audit failure prevents giving the role without an audit record (W1). */
 async function auditPermanentRoles(
 	name: string,
 	issued: readonly { shelter_code: string; role: string }[],
 	actor: string
 ): Promise<void> {
 	for (const { shelter_code, role } of issued) {
-		await recordRoleGrantAudit({
+		const ok = await recordRoleGrantAudit({
 			shelter_code,
 			user_name: name,
 			reason: 'role_grant.permanent_issued',
@@ -1233,6 +1243,12 @@ async function auditPermanentRoles(
 			expires_at: null,
 			actor
 		});
+		if (!ok) {
+			throw new ServiceError(
+				'INTERNAL',
+				`ไม่สามารถบันทึกประวัติการออกสิทธิ์ถาวรในศูนย์ ${shelter_code} ได้ กรุณาลองใหม่อีกครั้ง`
+			);
+		}
 	}
 }
 

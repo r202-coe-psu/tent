@@ -139,6 +139,10 @@ describe('coordinator role grants on _users (#955)', () => {
 				db[id] = { ...doc, _id: id, _rev: '2-b' };
 				return { status: 201, data: { ok: true } };
 			}
+			if (method === 'DELETE') {
+				delete db[id];
+				return { status: 200, data: { ok: true } };
+			}
 			return { status: 200, data: { ok: true } };
 		});
 	});
@@ -910,6 +914,77 @@ describe('coordinator role grants on _users (#955)', () => {
 							verifyVolunteerRoles: verify
 						})
 					).rejects.toMatchObject({ code: 'VALIDATION' });
+				});
+
+				it('allows updating non-role fields on legacy volunteer account with bare shelter scope (N1)', async () => {
+					seed('legacy-vol@example.com', {
+						personnel_type: 'volunteer',
+						volunteer_id: 'volunteer:V99',
+						roles: ['shelter:SH001']
+					});
+					await updateUser(
+						'legacy-vol@example.com',
+						{ display_name: 'Updated Name', phone: '0812345678' },
+						sm,
+						noCheck
+					);
+					expect(db[key('legacy-vol@example.com')].display_name).toBe('Updated Name');
+					expect(db[key('legacy-vol@example.com')].roles).toEqual(['shelter:SH001']);
+				});
+
+				it('refuses and leaves roles untouched when permanent role audit fails (W1)', async () => {
+					const put = vi.mocked(couchAdmin.adminRaw);
+					const originalImpl = put.getMockImplementation()!;
+					put.mockImplementation(async (path, method, body) => {
+						const clean = String(path).split('?')[0];
+						if (!clean.startsWith('/_users/')) {
+							// Fail audit write
+							return { status: 500, data: { error: 'audit_unavailable' } };
+						}
+						return originalImpl(path, method, body);
+					});
+
+					const rolesBefore = [...(db[key(EMAIL)].roles ?? [])];
+					await expect(
+						updateUser(EMAIL, { roles: [...granted, 'SH001:medical_staff'] }, sm, {
+							verifyVolunteerRoles: verify
+						})
+					).rejects.toMatchObject({ code: 'INTERNAL' });
+
+					// Roles on _users must remain unchanged (fail-closed / retry-safe)
+					expect(db[key(EMAIL)].roles).toEqual(rolesBefore);
+					put.mockImplementation(originalImpl);
+				});
+
+				it('refuses and rolls back user creation when initial permanent role audit fails (W1)', async () => {
+					const put = vi.mocked(couchAdmin.adminRaw);
+					const originalImpl = put.getMockImplementation()!;
+					put.mockImplementation(async (path, method, body) => {
+						const clean = String(path).split('?')[0];
+						if (!clean.startsWith('/_users/')) {
+							return { status: 500, data: { error: 'audit_unavailable' } };
+						}
+						return originalImpl(path, method, body);
+					});
+
+					await expect(
+						createOrMergeUser(
+							{
+								name: 'audit-fail-vol@example.com',
+								password: PASSWORD,
+								display_name: 'Audit Fail',
+								roles: ['shelter:SH001', 'SH001:kitchen_staff'],
+								personnel_type: 'volunteer',
+								volunteer_id: 'volunteer:V1'
+							},
+							sm,
+							{ verifyVolunteerRoles: verify }
+						)
+					).rejects.toMatchObject({ code: 'INTERNAL' });
+
+					// User doc must be rolled back
+					expect(db[key('audit-fail-vol@example.com')]).toBeUndefined();
+					put.mockImplementation(originalImpl);
 				});
 
 				it("makes a coordinator grant permanent when a manager's merge gives the same role (Warning 3)", async () => {
