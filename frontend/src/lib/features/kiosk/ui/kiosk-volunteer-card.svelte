@@ -65,11 +65,14 @@
 
 	const session = untrack(
 		() =>
-			new VolunteerCardSession({
-				lookup: (phone) => requestKioskVolunteerCard(phone),
-				print: (volunteer) => printVolunteerLabel(volunteer, browserPrint, languageStore.current),
-				...deps
-			})
+			new VolunteerCardSession(
+				{
+					lookup: (phone) => requestKioskVolunteerCard(phone),
+					print: (volunteer) => printVolunteerLabel(volunteer, browserPrint, languageStore.current),
+					...deps
+				},
+				() => languageStore.current
+			)
 	);
 	const idleTimeout = new KioskIdleTimeout(KIOSK_IDLE_TIMEOUT_MS, returnHome);
 

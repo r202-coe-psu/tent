@@ -1,4 +1,4 @@
-import { languageStore, type LanguageCode } from '$lib/stores/language.svelte';
+import type { LanguageCode } from '$lib/stores/language.svelte';
 import { KioskRequestError } from '../data/kiosk-check-in.api';
 import { isKioskPhoneSubmittable } from '../domain/phone';
 import type { KioskVolunteerCardResult } from '../data/kiosk-volunteer-card.api';
@@ -58,10 +58,13 @@ export class VolunteerCardSession {
 	/** Bumped by `reset()` so an answer for an abandoned visit is dropped. */
 	private generation = 0;
 
-	/** `language` is read when a message is made; it defaults to the kiosk's current language. */
+	/**
+	 * `language` is read each time a message is worded, so it follows the visitor's choice; it
+	 * defaults to Thai. The UI passes the kiosk's current language in.
+	 */
 	constructor(
 		private readonly deps: VolunteerCardSessionDeps,
-		private readonly language: () => LanguageCode = () => languageStore.current
+		private readonly language: () => LanguageCode = () => 'th'
 	) {}
 
 	get phone(): string {

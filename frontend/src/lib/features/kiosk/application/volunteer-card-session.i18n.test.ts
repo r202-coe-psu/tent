@@ -11,10 +11,10 @@ const FOUND: KioskVolunteerCardResult = {
 };
 
 async function failedLookup(error: unknown): Promise<string> {
-	const session = new VolunteerCardSession({
-		lookup: vi.fn().mockRejectedValue(error),
-		print: vi.fn()
-	});
+	const session = new VolunteerCardSession(
+		{ lookup: vi.fn().mockRejectedValue(error), print: vi.fn() },
+		() => languageStore.current
+	);
 	session.phone = '0812345678';
 	await session.submitPhone();
 	return session.error;
@@ -42,10 +42,13 @@ describe('VolunteerCardSession messages', () => {
 
 	it('says in English when the print QR could not be made', async () => {
 		languageStore.setLanguage('en');
-		const session = new VolunteerCardSession({
-			lookup: vi.fn().mockResolvedValue(FOUND),
-			print: vi.fn().mockRejectedValue(new Error('render'))
-		});
+		const session = new VolunteerCardSession(
+			{
+				lookup: vi.fn().mockResolvedValue(FOUND),
+				print: vi.fn().mockRejectedValue(new Error('render'))
+			},
+			() => languageStore.current
+		);
 		session.phone = '0812345678';
 		await session.submitPhone();
 
