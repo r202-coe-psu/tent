@@ -1653,7 +1653,7 @@ export async function recordUserConsent(
 		doc
 	);
 	if (saveRes.status !== 200 && saveRes.status !== 201) {
-		throw new ServiceError('PERSISTENCE_FAILED', 'Failed to update user consent');
+		throw new ServiceError('INTERNAL', 'Failed to update user consent');
 	}
 
 	// Record audit entry in central_ops
@@ -1670,7 +1670,7 @@ export async function recordUserConsent(
 			},
 			occurred_at: nowIso
 		},
-		{ author: username }
+		{ shelterCode: 'central', createdBy: username, roles: doc.roles ?? [] }
 	);
 
 	await adminRaw(`/central_ops/${auditDoc._id}`, 'PUT', auditDoc);
