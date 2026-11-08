@@ -394,12 +394,18 @@ test.describe('Tab 5 — shift close and returns (plan §4.7)', { tag: DESK_TAGS
 		await desk.returnQtyInput(blanket.name).fill('0');
 		await desk.returnQtyInput(kit.name).fill('-1');
 		await desk.returnQtyInput(kit.name).blur();
-		await expect(page.getByText('จำนวนส่งคืนต้องไม่ติดลบ (≥ 0)')).toBeVisible();
+		// The phone and table layouts both render the error; one is visible.
+		await expect(
+			page.getByText('จำนวนส่งคืนต้องไม่ติดลบ (≥ 0)').filter({ visible: true })
+		).toBeVisible();
 		await expect(confirm).toBeDisabled();
 
 		await desk.returnQtyInput(kit.name).fill('5');
 		await desk.returnQtyInput(kit.name).blur();
-		await expect(page.getByText('จำนวนส่งคืน (5) ต้องไม่เกินจำนวนคงเหลือในมือ (4)')).toBeVisible();
+		// The phone and table layouts both render the error; one is visible.
+		await expect(
+			page.getByText('จำนวนส่งคืน (5) ต้องไม่เกินจำนวนคงเหลือในมือ (4)').filter({ visible: true })
+		).toBeVisible();
 		await expect(confirm).toBeDisabled();
 
 		await desk.returnQtyInput(kit.name).fill('4');

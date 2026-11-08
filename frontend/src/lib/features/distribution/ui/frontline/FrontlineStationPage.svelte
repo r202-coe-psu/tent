@@ -396,7 +396,8 @@
 	const reconciliationEligibleTickets = $derived(
 		filterTicketsByPoint(allReconciliationTickets, point)
 	);
-	const showPointFilter = $derived(pointOptions.length > 1 || point !== ALL_POINTS);
+	// Shown whenever the desk has any point (as before #1183), and always while it is filtering.
+	const showPointFilter = $derived(pointOptions.length > 0 || point !== ALL_POINTS);
 
 	// Tickets that specifically need a direct frontline action right now: shift closed but
 	// returns not yet submitted, or warehouse already verified the return but the ticket still

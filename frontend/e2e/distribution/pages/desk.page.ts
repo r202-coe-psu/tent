@@ -89,9 +89,11 @@ export class DeskPage {
 		await expect(trigger).toContainText(point);
 	}
 
-	/** The open ticket picker's popover. */
+	/** The open ticket picker's popover (shadcn popover content; it has no dialog role). */
 	ticketPickerPopover(): Locator {
-		return this.page.getByRole('dialog').filter({ has: this.page.getByRole('searchbox') });
+		return this.page
+			.locator('[data-slot="popover-content"]')
+			.filter({ has: this.page.getByRole('searchbox', { name: /^ค้นหาตั๋ว/ }) });
 	}
 
 	/**
@@ -304,8 +306,11 @@ export class DeskPage {
 	}
 
 	returnQtyInput(itemName: string): Locator {
-		// The card renders a phone and a table layout; only one is visible.
-		return this.page.getByLabel(`จำนวนส่งคืน ${itemName}`).filter({ visible: true });
+		// The card renders a phone and a table layout; only one is visible. Match the accessible
+		// name ("จำนวนส่งคืน {item} ({unit})"): the label is visible text plus an sr-only item name.
+		return this.page
+			.getByRole('textbox', { name: new RegExp(`^จำนวนส่งคืน ${escapeRegExp(itemName)}`) })
+			.filter({ visible: true });
 	}
 
 	async closeShift(returns: Record<string, string>): Promise<void> {

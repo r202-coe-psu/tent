@@ -120,7 +120,7 @@ test.describe(
 			await desk.selectPoint(scenarioPoint(scenario));
 			await desk.receive(incoming);
 			await expectTicketStatus(incoming, 'DISTRIBUTING', 'Receive checkpoint');
-			await expect(page.getByLabel('เลือกจุดแจก')).toContainText('ทุกจุด');
+			await expect(page.locator('#point-select')).toContainText('ทุกจุด');
 		});
 
 		test('X-4 a handover on one desk updates the balance on another without reload', async ({
