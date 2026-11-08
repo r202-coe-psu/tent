@@ -14,9 +14,12 @@
 </svelte:head>
 
 <div class="mx-auto flex w-full max-w-7xl flex-col gap-6 p-4 sm:p-6">
-	<header
-		class="flex flex-col justify-between gap-4 border-b border-border/60 pb-5 sm:flex-row sm:items-center"
-	>
+	<header class="flex flex-col gap-2 border-b border-border/60 pb-5">
+		<BackLink
+			href={resolve('/back-office/incidents')}
+			label="กลับไปบันทึกเหตุการณ์ประจำวัน"
+			class="-ml-3"
+		/>
 		<div class="space-y-1">
 			<h2 class="text-2xl font-extrabold tracking-tight text-foreground sm:text-3xl">
 				บันทึกเหตุการณ์ใหม่
@@ -25,11 +28,6 @@
 				ไม่จำเป็นต้องผูกกับผู้เข้าพัก และระบุคู่กรณีภายหลังได้หากยังไม่ทราบตัวตน
 			</p>
 		</div>
-		<BackLink
-			href={resolve('/back-office/incidents')}
-			label="กลับไปบันทึกเหตุการณ์ประจำวัน"
-			class="shrink-0 rounded-xl"
-		/>
 	</header>
 
 	<IncidentCreateForm oncreated={openCreated} />

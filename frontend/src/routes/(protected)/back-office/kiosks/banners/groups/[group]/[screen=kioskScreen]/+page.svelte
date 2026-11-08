@@ -96,17 +96,18 @@
 </svelte:head>
 
 <StaffPageShell title="แบนเนอร์{screenMeta.label} {screenMeta.size} · {groupName}">
+	{#snippet backLink()}
+		<BackLink
+			href={resolve(`/back-office/kiosks/banners/groups/${encodeURIComponent(groupId)}`)}
+			label="กลับไปกลุ่ม {groupName}"
+			class="-ml-3"
+		/>
+	{/snippet}
+
 	{#snippet meta()}
-		<div class="flex flex-wrap items-center gap-x-4 gap-y-1">
-			<p class="text-sm text-slate-600">
-				ศูนย์: <span class="font-semibold text-slate-900">{activeShelter}</span>
-			</p>
-			<BackLink
-				href={resolve(`/back-office/kiosks/banners/groups/${encodeURIComponent(groupId)}`)}
-				label="กลับไปกลุ่ม {groupName}"
-				class="-ml-3"
-			/>
-		</div>
+		<p class="text-sm text-slate-600">
+			ศูนย์: <span class="font-semibold text-slate-900">{activeShelter}</span>
+		</p>
 	{/snippet}
 	{#snippet actions()}
 		<Button variant="outline" class="min-h-11 shrink-0 gap-2" onclick={openPreview}>

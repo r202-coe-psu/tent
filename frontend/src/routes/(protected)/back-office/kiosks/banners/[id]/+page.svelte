@@ -62,7 +62,7 @@
 </svelte:head>
 
 <StaffPageShell title="แก้ไขแบนเนอร์" maxWidth="6xl">
-	{#snippet meta()}
+	{#snippet backLink()}
 		<BackLink href={resolve(listPath)} label={backLabel} class="-ml-3" />
 	{/snippet}
 

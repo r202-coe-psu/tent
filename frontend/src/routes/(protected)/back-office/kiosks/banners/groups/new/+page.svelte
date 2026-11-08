@@ -84,17 +84,18 @@
 </svelte:head>
 
 <StaffPageShell title="สร้างกลุ่มแบนเนอร์" maxWidth="3xl">
+	{#snippet backLink()}
+		<BackLink
+			href={resolve('/back-office/kiosks/banners')}
+			label="กลับไปแบนเนอร์ Kiosk"
+			class="-ml-3"
+		/>
+	{/snippet}
+
 	{#snippet meta()}
-		<div class="flex flex-wrap items-center gap-x-4 gap-y-1">
-			<p class="text-sm text-slate-600">
-				ศูนย์: <span class="font-semibold text-slate-900">{activeShelter}</span>
-			</p>
-			<BackLink
-				href={resolve('/back-office/kiosks/banners')}
-				label="กลับไปแบนเนอร์ Kiosk"
-				class="-ml-3"
-			/>
-		</div>
+		<p class="text-sm text-slate-600">
+			ศูนย์: <span class="font-semibold text-slate-900">{activeShelter}</span>
+		</p>
 	{/snippet}
 
 	<div class={[spatial.container.staffPageCard, 'p-4 sm:p-6']}>

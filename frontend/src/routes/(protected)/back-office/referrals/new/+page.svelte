@@ -26,13 +26,11 @@
 	}
 </script>
 
-<div
-	class="flex flex-col justify-between gap-4 border-b border-border/60 pb-5 sm:flex-row sm:items-center"
->
+<div class="flex flex-col gap-2 border-b border-border/60 pb-5">
+	<BackLink href={REFERRALS_PATH} label="กลับไปรายการส่งต่อ" class="-ml-3" />
 	<h1 class="text-2xl leading-snug font-bold tracking-tight text-slate-900 md:text-3xl">
 		สร้างรายการส่งต่อ
 	</h1>
-	<div class="shrink-0"><BackLink href={REFERRALS_PATH} label="กลับไปรายการส่งต่อ" /></div>
 </div>
 
 <div class="mx-auto w-full max-w-4xl space-y-6 pb-6">

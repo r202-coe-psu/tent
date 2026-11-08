@@ -68,7 +68,7 @@
 </svelte:head>
 
 <StaffPageShell title="สร้างแบนเนอร์" maxWidth="6xl">
-	{#snippet meta()}
+	{#snippet backLink()}
 		<BackLink href={resolve(backPath)} label={backLabel} class="-ml-3" />
 	{/snippet}
 

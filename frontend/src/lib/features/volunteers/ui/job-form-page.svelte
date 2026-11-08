@@ -58,8 +58,8 @@
 		: 'กรอกรายละเอียดงานอาสาสมัคร ทักษะที่ต้องการ และตารางกะ แล้วกดบันทึกเพื่อเผยแพร่'}
 	maxWidth="6xl"
 >
-	{#snippet actions()}
-		<BackLink href={resolve(backTarget.path)} label={backTarget.label} class="rounded-xl" />
+	{#snippet backLink()}
+		<BackLink href={resolve(backTarget.path)} label={backTarget.label} class="-ml-3" />
 	{/snippet}
 
 	{#if !isEdit}

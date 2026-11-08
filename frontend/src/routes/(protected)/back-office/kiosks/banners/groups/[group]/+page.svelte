@@ -213,10 +213,7 @@
 		<p class="py-16 text-center text-muted-foreground">กำลังโหลดกลุ่มแบนเนอร์...</p>
 	</StaffPageShell>
 {:else if !group}
-	<StaffPageShell title="ไม่พบกลุ่มแบนเนอร์">
-		{#snippet meta()}
-			{@render backLink()}
-		{/snippet}
+	<StaffPageShell title="ไม่พบกลุ่มแบนเนอร์" {backLink}>
 		<div class={[spatial.container.staffPageCard, 'p-4 sm:p-6']}>
 			<p class="py-12 text-center text-slate-700">
 				ไม่พบกลุ่มแบนเนอร์นี้ — อาจถูกลบไปแล้ว หรืออยู่ในศูนย์อื่น
@@ -224,15 +221,12 @@
 		</div>
 	</StaffPageShell>
 {:else}
-	<StaffPageShell title={group.name} description={group.description ?? undefined}>
+	<StaffPageShell title={group.name} description={group.description ?? undefined} {backLink}>
 		{#snippet meta()}
 			<div class="flex flex-col gap-2">
-				<div class="flex flex-wrap items-center gap-x-4 gap-y-1">
-					<p class="text-sm text-slate-600">
-						ศูนย์: <span class="font-semibold text-slate-900">{activeShelter}</span>
-					</p>
-					{@render backLink()}
-				</div>
+				<p class="text-sm text-slate-600">
+					ศูนย์: <span class="font-semibold text-slate-900">{activeShelter}</span>
+				</p>
 				<div class="flex flex-wrap items-center gap-2" aria-label="เครื่องในกลุ่ม">
 					<Cpu class="size-4 text-slate-600" aria-hidden="true" />
 					{#if members.length === 0}
