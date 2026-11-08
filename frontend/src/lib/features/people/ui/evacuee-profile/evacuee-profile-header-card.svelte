@@ -86,7 +86,7 @@
 			<div
 				class="flex h-20 w-20 shrink-0 flex-col items-center justify-center rounded-lg border border-slate-200 bg-slate-100 text-2xs font-semibold text-slate-400 select-none dark:border-slate-700 dark:bg-slate-800"
 			>
-				<span>No Photo</span>
+				<span>{t.noPhoto}</span>
 			</div>
 		{/if}
 

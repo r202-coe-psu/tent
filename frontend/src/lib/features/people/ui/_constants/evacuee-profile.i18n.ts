@@ -177,7 +177,8 @@ const th = {
 		personalInfo: 'ข้อมูลส่วนบุคคล',
 		changeZone: 'ย้ายโซน (Change Zone)',
 		printQr: 'พิมพ์ QR',
-		viewFullEdit: 'ดูข้อมูลเต็ม / แก้ไข'
+		viewFullEdit: 'ดูข้อมูลเต็ม / แก้ไข',
+		noPhoto: 'ไม่มีรูปภาพ'
 	},
 	privacyCard: {
 		title: 'ความเป็นส่วนตัว',
@@ -456,7 +457,8 @@ const en: typeof th = {
 		personalInfo: 'Personal information',
 		changeZone: 'Change zone',
 		printQr: 'Print QR',
-		viewFullEdit: 'View full record / edit'
+		viewFullEdit: 'View full record / edit',
+		noPhoto: 'No photo'
 	},
 	privacyCard: {
 		title: 'Privacy',
