@@ -63,7 +63,7 @@
 		type PortalCredential,
 		type VolunteerProfile
 	} from '../domain/volunteer';
-	import { localizeVolunteerMessage } from '../domain/volunteer-messages.i18n';
+	import { localizeVolunteerMessage } from '$lib/constants/i18n/volunteer-messages';
 	import { accessPortalI18n } from '../i18n/access-portal.i18n';
 	import {
 		filterAndSortPortalActivities,

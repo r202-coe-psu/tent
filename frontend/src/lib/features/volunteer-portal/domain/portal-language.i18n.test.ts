@@ -11,7 +11,7 @@ import {
 	type ScheduleShift,
 	type TicketSummary
 } from './volunteer';
-import { localizeVolunteerMessage } from './volunteer-messages.i18n';
+import { localizeVolunteerMessage } from '$lib/constants/i18n/volunteer-messages';
 
 const THAI = /[฀-๿]/;
 

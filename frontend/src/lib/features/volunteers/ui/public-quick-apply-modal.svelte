@@ -36,7 +36,7 @@
 		localizedSkillLabel
 	} from '$lib/features/volunteer-portal/domain/skill-label';
 	import { PORTAL_SESSION_KEY } from '$lib/features/volunteer-portal/domain/volunteer';
-	import { localizeVolunteerMessage } from '$lib/features/volunteer-portal/domain/volunteer-messages.i18n';
+	import { localizeVolunteerMessage } from '$lib/constants/i18n/volunteer-messages';
 	import {
 		formatShiftDate,
 		groupShiftsByDate,
@@ -611,7 +611,7 @@
 			onkeydown={(e) => e.key === 'Escape' && requestClose()}
 			role="button"
 			tabindex="0"
-			aria-label="Close modal"
+			aria-label={t.closeModal}
 		></div>
 
 		<!-- Modal -->

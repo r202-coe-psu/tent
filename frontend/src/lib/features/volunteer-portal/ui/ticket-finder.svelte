@@ -10,7 +10,7 @@
 	import { useFindTicketsMutation } from '../application/queries';
 	import { resolvePortalAccess } from '../data/volunteer-api';
 	import { ticketFindSchema, ticketStatusLabel, PORTAL_SESSION_KEY } from '../domain/volunteer';
-	import { localizeVolunteerMessage } from '../domain/volunteer-messages.i18n';
+	import { localizeVolunteerMessage } from '$lib/constants/i18n/volunteer-messages';
 	import { ticketI18n } from '../i18n/ticket.i18n';
 	import { languageStore } from '$lib/stores/language.svelte';
 

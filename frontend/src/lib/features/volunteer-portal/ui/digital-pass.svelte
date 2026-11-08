@@ -18,7 +18,7 @@
 	import * as Card from '$lib/components/ui/card/index.js';
 	import { Skeleton } from '$lib/components/ui/skeleton';
 	import { languageStore } from '$lib/stores/language.svelte';
-	import { localizeVolunteerMessage } from '../domain/volunteer-messages.i18n';
+	import { localizeVolunteerMessage } from '$lib/constants/i18n/volunteer-messages';
 	import { skillLabels } from '../domain/skill-label';
 	import {
 		useCancelTicketMutation,

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { localizeVolunteerMessage } from '../domain/volunteer-messages.i18n';
+import { localizeVolunteerMessage } from '$lib/constants/i18n/volunteer-messages';
 import {
 	API_ERROR_CODES,
 	apiErrorCopy,

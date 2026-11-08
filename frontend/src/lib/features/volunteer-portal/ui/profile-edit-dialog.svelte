@@ -29,7 +29,7 @@
 	import { useUpdateProfileMutation, useVolunteerSkills } from '../application/queries';
 	import type { PortalCredential, VolunteerProfile } from '../domain/volunteer';
 	import { findSkillOption, localizedSkillLabel } from '../domain/skill-label';
-	import { localizeVolunteerMessage } from '../domain/volunteer-messages.i18n';
+	import { localizeVolunteerMessage } from '$lib/constants/i18n/volunteer-messages';
 	import { profileEditI18n } from '../i18n/profile-edit.i18n';
 
 	let {
