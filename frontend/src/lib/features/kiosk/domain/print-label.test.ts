@@ -122,8 +122,8 @@ describe('kiosk label canvas', () => {
 		expect(ptToDots(KIOSK_LABEL_TEXT.name.pt)).toBeCloseTo(45.11, 2);
 	});
 
-	it('fits a 3-line name, the zone, one checklist row per item and the link in the label', () => {
-		const { name, zone, checklist, link } = KIOSK_LABEL_TEXT;
+	it('fits a 3-line name, the zone, the emergency row, one checklist row per item and the link', () => {
+		const { name, zone, emergency, checklist, link } = KIOSK_LABEL_TEXT;
 		const checkRow = Math.max(
 			mmToDots(KIOSK_LABEL_CHECKBOX.sizeMm),
 			ptToDots(checklist.pt) * checklist.lineHeight
@@ -134,6 +134,8 @@ describe('kiosk label canvas', () => {
 			ptToDots(name.pt) * name.lineHeight * name.maxLines +
 			mmToDots(KIOSK_LABEL_ZONE.rowGapMm) +
 			ptToDots(zone.pt) * zone.lineHeight +
+			mmToDots(KIOSK_LABEL_ZONE.rowGapMm) +
+			ptToDots(emergency.pt) * emergency.lineHeight +
 			checkRow * rows +
 			mmToDots(KIOSK_LABEL_CHECKBOX.rowGapMm) * (rows - 1) +
 			mmToDots(KIOSK_LABEL_LINK_GAP_MM) +
@@ -185,12 +187,16 @@ describe('kioskLabelLayout', () => {
 });
 
 describe('KIOSK_LABEL_CHECKLIST', () => {
-	it('ships the staff ID card checklist', () => {
-		expect(KIOSK_LABEL_CHECKLIST).toEqual(['เช็คอิน', 'คัดกรอง', 'ที่พัก']);
+	it('ships the ID card checklist in Thai with English in brackets', () => {
+		expect(KIOSK_LABEL_CHECKLIST).toEqual([
+			'เช็คอิน (Checked-in)',
+			'คัดกรอง (Screened)',
+			'ที่พัก (Stayed)'
+		]);
 	});
 
-	it('ticks only เช็คอิน on a label printed at kiosk check-in', () => {
-		expect(KIOSK_LABEL_CHECKLIST.slice(0, KIOSK_CHECK_IN_TICKS)).toEqual(['เช็คอิน']);
+	it('ticks only check-in on a label printed at kiosk check-in', () => {
+		expect(KIOSK_LABEL_CHECKLIST.slice(0, KIOSK_CHECK_IN_TICKS)).toEqual(['เช็คอิน (Checked-in)']);
 	});
 });
 

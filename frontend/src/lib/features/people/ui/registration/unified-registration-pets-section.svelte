@@ -463,7 +463,7 @@
 										: ''}"
 								>
 									{#if showPetPhotoUpload}
-										<div class="flex shrink-0 items-start gap-2 sm:w-[7.5rem] sm:flex-col">
+										<div class="flex shrink-0 items-start gap-2 sm:w-32 sm:flex-col">
 											<div
 												class="relative flex size-14 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-dashed border-border bg-muted/30 sm:size-16"
 											>
@@ -487,13 +487,13 @@
 												</span>
 												<label
 													for="pet-photo-{pet.id}"
-													class="inline-flex min-h-8 cursor-pointer items-center justify-center gap-1 rounded-lg border border-border bg-background px-2.5 py-1 text-xs font-semibold text-foreground shadow-xs transition-colors hover:bg-muted {pending ||
+													class="inline-flex min-h-8 min-w-0 cursor-pointer items-center justify-center gap-1 rounded-lg border border-border bg-background px-2.5 py-1 text-xs font-semibold text-foreground shadow-xs transition-colors hover:bg-muted {pending ||
 													uploadingPetId === pet.id
 														? 'pointer-events-none opacity-60'
 														: ''}"
 												>
-													<Camera class="size-3.5 text-primary" />
-													<span class="truncate">
+													<Camera class="size-3.5 shrink-0 text-primary" />
+													<span class="min-w-0 text-center leading-tight break-words">
 														{pet.previewUrl || pet.image_url ? t.petPhotoChange : t.petPhotoPick}
 													</span>
 												</label>

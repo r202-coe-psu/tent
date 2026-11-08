@@ -8,7 +8,7 @@
 # (XP-365B ตัวอื่นรุ่นเดียวกันเสียบแทนได้เลย — queue ไม่ผูก serial)
 #
 # Usage: ./setup_printer.sh [printer-driver-xprinter_*.deb] [options]
-#   --label WxH      ขนาด label เป็น mm (default: KIOSK_LABEL_MM ใน frontend print-label.ts)
+#   --label WxH      ขนาด label เป็น mm (default: KIOSK_LABEL_MM ใน frontend label-size.ts)
 #   --gap N          ระยะ gap ระหว่าง label ของม้วนจริง (mm, 0–10, default: 2)
 #   --queue NAME     ชื่อ CUPS queue (default: PRINTER_NAME ใน .env หรือ tent_xprinter)
 #   --test           พิมพ์ label ทดสอบ 1 ดวงหลังตั้งค่าเสร็จ (รันผ่าน SSH ได้)
@@ -18,7 +18,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
-LABEL_TS="$SCRIPT_DIR/../frontend/src/lib/features/kiosk/domain/print-label.ts"
+LABEL_TS="$SCRIPT_DIR/../frontend/src/lib/utils/label-size.ts"
 POLICY_SRC="$SCRIPT_DIR/chromium-policy/tent-kiosk-print.json"
 POLICY_DST="/etc/chromium/policies/managed/tent-kiosk-print.json"
 PPD="xprinter/XP-365B.ppd"
@@ -81,7 +81,7 @@ QUEUE="${QUEUE:-tent_xprinter}"
 if [ -z "$LABEL" ]; then
     [ -f "$LABEL_TS" ] || die "ไม่พบ $LABEL_TS — ระบุ --label WxH เอง"
     LABEL="$(sed -nE 's/.*KIOSK_LABEL_MM = \{ width: ([0-9.]+), height: ([0-9.]+) \}.*/\1x\2/p' "$LABEL_TS")"
-    [ -n "$LABEL" ] || die "อ่าน KIOSK_LABEL_MM จาก print-label.ts ไม่ได้ — ระบุ --label WxH เอง"
+    [ -n "$LABEL" ] || die "อ่าน KIOSK_LABEL_MM จาก label-size.ts ไม่ได้ — ระบุ --label WxH เอง"
 fi
 [[ "$LABEL" =~ ^([0-9]+(\.[0-9]+)?)x([0-9]+(\.[0-9]+)?)$ ]] || die "--label ต้องเป็นรูปแบบ WxH (mm) เช่น 80x60"
 LABEL_W="${BASH_REMATCH[1]}"
