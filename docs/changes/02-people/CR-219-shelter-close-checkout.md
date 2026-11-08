@@ -3,7 +3,7 @@ id: CR-219
 title: ปิดศูนย์ → เช็คเอาต์ผู้พักพิงที่ยังค้าง / ยกเลิก pre-registered อัตโนมัติ (เหตุผล `shelter_closed`) พร้อม modal ยืนยันแบบพิมพ์รหัส+ชื่อศูนย์ · SA หรือ SM ของศูนย์
 status: approved
 date: 2026-10-31
-updated: 2026-11-01
+updated: 2026-11-03
 requested_by: Dev Team B #979 — chip "เข้าพักแล้ว" ขัดกับป้าย "ศูนย์อพยพปิดแล้ว" · GitHub #986
 decided_by: kong
 layer: volatile # business rule ของ stay status + flow ปิดศูนย์
@@ -77,6 +77,7 @@ affects:
 - **FR-10** — เขียนเป็น batch `_bulk_docs` (chunk ≤ 200 docs) ผ่าน domain เดิม (`applyMovementToStay` / `deriveHouseholdStatus`) — ห้าม set `current_stay.status` ตรง. ลำดับต่อ chunk: evacuee docs ก่อน → movement docs ของ evacuee ที่เขียนสำเร็จ → household docs ที่กระทบ.
 - **FR-11** — 409 (`_rev` ชน) → re-fetch แล้ว retry doc นั้นสูงสุด 3 ครั้ง; ยังไม่ผ่าน = นับเป็น failed พร้อม `evacuee_id` + เหตุผล.
 - **FR-12 — idempotent:** รันซ้ำแล้วข้ามคนที่อยู่นอก `SHELTER_CLOSE_CHECKOUT_STATUSES` ∪ `SHELTER_CLOSE_CANCEL_STATUSES` แล้ว — ไม่สร้าง movement ซ้ำ.
+- **FR-12a — ซ่อม household ที่ค้าง** *(เพิ่ม 2026-11-02, D-9)*: หลังเขียนครบทุก chunk ให้ derive household ทุกหลังในศูนย์ใหม่จากสถานะสมาชิกล่าสุด แล้วเขียนเฉพาะหลังที่สถานะ derive ได้**ไม่ตรง**กับที่เก็บอยู่ (ผ่าน `deriveHouseholdStatus`; ได้ `checked_out` และ `checkout_destination` ว่าง → `{ type: 'shelter_closed' }` ตาม FR-5). household ที่สถานะตรงอยู่แล้ว (เช่น เช็คเอาต์ด้วยมือโดยไม่มี destination) ห้ามแก้. household ที่ไม่มีสมาชิกในศูนย์ห้ามแก้. เขียนไม่สำเร็จ = นับเป็น failed (FR-13 → ไม่ปิดศูนย์).
 - **FR-13 — ลำดับ:** เช็คเอาต์/ยกเลิกคนก่อน → re-count ตาม FR-7 → ถ้าเหลือ 0 จึงเขียน registry `operation_status = closed` + `closed_at` (CR-183). ถ้ามี failed หรือ re-count > 0 → **ไม่ปิดศูนย์** สถานะศูนย์คงเดิม และตอบผลรายตัว ให้ staff กดซ้ำได้.
 - **FR-14** — response `{ closed: boolean, checked_out: n, cancelled: n, failed: [{ evacuee_id, error }] }`; ศูนย์ ~500 คนต้องเสร็จโดยไม่ timeout ของ route.
 
@@ -104,7 +105,9 @@ affects:
 - **FR-28** — script one-off `frontend/scripts/migrate-closed-shelter-checkout.ts` + `package.json` `migrate:closed-shelter-checkout` วนทุกศูนย์ที่ `operation_status = closed` แล้วเรียก service เดียวกับ FR-10..FR-12 (เช็คเอาต์ / ยกเลิกตาม FR-2, FR-6).
 - **FR-29** — โหมด backfill ข้ามการเขียน registry: ไม่แก้ `operation_status` และ **ไม่แตะ `closed_at`** (นาฬิกา retention CR-183 คงเดิม).
 - **FR-30** — movement / audit ที่สร้างใช้เวลาที่รัน script (`occurred_at = now`); audit ต่อศูนย์บันทึก `context = { backfill: true, shelter_closed_at, checked_out, cancelled, failed }`.
+- **FR-30a** *(เพิ่ม 2026-11-02, D-9 — ขยาย FR-30)*: `context` ของ audit ต่อศูนย์เพิ่ม `households_repaired` (จำนวน household ที่ซ่อมตาม FR-12a) → `{ backfill: true, shelter_closed_at, checked_out, cancelled, failed, households_repaired }`. เขียน audit เมื่อ `checked_out`, `cancelled`, `failed` หรือ `households_repaired` อย่างใดอย่างหนึ่ง > 0; ทั้งหมดเป็น 0 → ไม่เขียน (รันซ้ำไม่เขียนเพิ่ม).
 - **FR-31** — รองรับ `--dry-run` (นับอย่างเดียว) และ `--shelter <code>`; รันซ้ำได้ (FR-12); พิมพ์สรุปรายศูนย์ + รายการ failed.
+- **FR-31a** *(เพิ่ม 2026-11-02, D-9)*: สรุปรายศูนย์ทั้ง `--dry-run` และ `--write` ต้องแสดงจำนวน household ที่ซ่อม / จะซ่อมตาม FR-12a. dry-run นับเฉพาะ household ที่สมาชิกทุกคนอยู่นอกสถานะค้างแล้ว (household ที่ยังมีคนค้าง derive ใน FR-10 อยู่แล้ว).
 
 ### เปิดศูนย์ใหม่ (#645)
 
@@ -123,11 +126,12 @@ affects:
 - [ ] ทุกคนที่ถูกเช็คเอาต์มี movement `check_out` `reason = shelter_closed` หนึ่งรายการ; household status derive ถูก และ `checkout_destination.type = shelter_closed` (ถ้าเดิมว่าง).
 - [ ] คน `pre_registered` → `cancelled` ไม่มี movement, มี audit `reason = shelter_closed` ต่อ household; household ที่ทุกคน `pre_registered` → `cancelled`; household ผสม → `checked_out`.
 - [ ] จำลอง failure กลางทาง → ศูนย์ยังไม่ปิด, toast แจ้งจำนวนล้มเหลว; กดซ้ำ → ปิดได้ และไม่มี movement ซ้ำ.
+- [ ] รอบก่อนเขียน evacuee + movement สำเร็จแต่ household ล้ม → กดซ้ำ → household ที่สมาชิกเช็คเอาต์ครบเป็น `checked_out` + `shelter_closed` ก่อนศูนย์ปิด; household ที่เช็คเอาต์ด้วยมือไม่ถูกแก้ (FR-12a).
 - [ ] ศูนย์ ~500 คนปิดสำเร็จโดยไม่ timeout.
 - [ ] SM ของศูนย์ปิดและเปิดศูนย์กลับได้; SM ศูนย์อื่นหรือ role อื่นเรียก route ปิดศูนย์ → `403`; PATCH `operation_status = closed` ตรง ๆ → `400`.
 - [ ] `/search` ของคนในศูนย์ที่ปิดแสดง "เช็คเอาต์" คู่ป้าย "ศูนย์อพยพปิดแล้ว" ภายในรอบ sync.
 - [ ] ปิดแล้วเปิดศูนย์ใหม่ → คนที่ถูกปิดยังเป็น `checked_out` / `cancelled` ทั้ง staff และ `/search`; เช็คอินคนเดิมกลับเข้าศูนย์ได้ตามปกติ.
-- [ ] รัน `migrate:closed-shelter-checkout` → SH001 ไม่มีคนเหลือสถานะค้าง; `closed_at` ไม่เปลี่ยน; รันซ้ำแล้วไม่มี movement ซ้ำ; `--dry-run` ไม่เขียนอะไร.
+- [ ] รัน `migrate:closed-shelter-checkout` → SH001 ไม่มีคนเหลือสถานะค้าง; `closed_at` ไม่เปลี่ยน; รันซ้ำแล้วไม่มี movement ซ้ำ; `--dry-run` ไม่เขียนอะไร; สรุปรายศูนย์แสดงจำนวน household ที่ซ่อม และ audit มี `households_repaired` (FR-30a, FR-31a).
 - [ ] Tests: people domain (FR-1..FR-6, FR-25) · server close service (batch, 409 retry, idempotent, ลำดับ FR-13) · route (auth, `confirm_text`, PATCH block) · e2e flow ปิดศูนย์.
 
 ---
@@ -156,6 +160,8 @@ affects:
 
 - 2026-10-31 — proposed (#986).
 - 2026-11-01 — approved โดย kong; แก้ D-6 ให้ SA และ SM ของศูนย์ปิด / เปิดศูนย์ได้.
+- 2026-11-02 — เพิ่ม FR-12a, FR-30a, FR-31a (D-9) จากรีวิว PR #1117; ข้อเดิมไม่แก้.
+- 2026-11-03 — D-9 approved โดย kong (รวมผลข้างเคียงที่ household สถานะไม่ตรงอยู่ก่อนปิดศูนย์ได้ `shelter_closed`).
 
 ### D-1 — แนวทาง ✅
 เช็คเอาต์อัตโนมัติเมื่อปิดศูนย์ พร้อม modal เตือน (owner, ใน #986).
@@ -183,3 +189,6 @@ SA หรือ shelter manager ของศูนย์นั้น ทั้�
 
 ### D-8 — Backfill ศูนย์ที่ปิดไปแล้ว ✅
 script ครั้งเดียวใช้ service เดียวกัน (owner, 2026-10-31) → FR-28..FR-31. movement ใช้เวลาที่รันจริง + เก็บ `closed_at` เดิมใน audit (ไม่ backdate — บางศูนย์ `closed_at` ว่าง). ตัดทิ้ง: ปุ่ม UI สำหรับศูนย์ปิดแล้ว (งานเพิ่ม) · ปล่อยไว้ (ข้อมูลขัดกันต่อ).
+
+### D-9 — ซ่อม household ที่ค้างจากรอบที่ล้ม ✅
+เพิ่มจากรีวิว PR #1117 (2026-11-02, บันทึกใน CR-219 ตามที่ dev team ขอ) → FR-12a, FR-30a, FR-31a. เหตุผล: FR-12 ข้ามคนที่ปิดไปแล้ว ถ้ารอบก่อนเขียน evacuee + movement สำเร็จแต่ household ล้ม รอบถัดไปจะไม่กลับมา derive household นั้น → ศูนย์ปิดได้ทั้งที่ household ยังเป็น `checked_in` (QA: ศูนย์ 500 คน ค้าง 19 household). การซ่อมนี้เขียนข้อมูลในทุกศูนย์ที่ backfill จึงต้องเห็นได้ใน dry-run, log และ audit. ผลข้างเคียงที่ต้องยอมรับ: household ที่สถานะไม่ตรงอยู่แล้วก่อนปิดศูนย์ (เช่น เก็บเป็น `checked_in` แต่สมาชิกเป็น `transferred` / `deceased` หมดแล้ว) จะถูก derive เป็น `checked_out` และได้ `checkout_destination = { type: 'shelter_closed' }` ทั้งที่การปิดศูนย์ไม่ใช่สาเหตุ — backfill ทำแบบนี้ทุกศูนย์ที่ปิดแล้ว. ตัดทิ้ง: ซ่อมเฉพาะ household ที่ `checkout_destination` ว่าง (จะติดป้าย `shelter_closed` ให้ household ที่เช็คเอาต์ด้วยมือ) · ไม่บันทึกจำนวนใน audit (ศูนย์ที่มีแค่ household ถูกซ่อมจะไม่มี audit เลย).

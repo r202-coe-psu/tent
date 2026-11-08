@@ -25,7 +25,10 @@ vi.mock('$lib/features/catalog', async (importOriginal) => ({
 	useItemMasters: () => ({ data: [], isPending: false }),
 	useUnitsOfMeasure: () => ({ data: [] })
 }));
-vi.mock('$lib/db/shelter', () => ({ getShelterCode: () => 'SH001' }));
+vi.mock('$lib/db/shelter', () => ({
+	getShelterCode: () => 'SH001',
+	resolveShelterCode: () => 'SH001'
+}));
 
 let instance: ReturnType<typeof mount> | null = null;
 

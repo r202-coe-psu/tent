@@ -1,5 +1,5 @@
 /**
- * Job domain schema — CR-094 §3.3 (schema.md §2.17, `job` schema_v 2 → 3).
+ * Job domain schema — CR-094 §3.3 (schema.md §2.17, `job` schema_v 2 → 3; CR-220 schema_v 3 → 4).
  *
  * Pure TypeScript / Zod — no I/O, no PouchDB, no Svelte.
  *
@@ -73,7 +73,7 @@ export function totalShiftQuota(shifts: readonly Pick<JobShift, 'quota'>[]): num
 
 export interface Job extends BaseDoc {
 	type: 'job';
-	schema_v: 3;
+	schema_v: 3 | 4;
 	title: string;
 	description: string;
 	tier: JobTier;
@@ -93,6 +93,11 @@ export interface Job extends BaseDoc {
 	status: JobStatus;
 	/** CR-094 §3.3 — chip "ด่วนพิเศษ". */
 	is_urgent: boolean;
+	/**
+	 * CR-220 (schema_v 4) — `_id`s of applications whose quota the public ticket cancel already
+	 * gave back; appended in the same write as the counters. Absent on older docs (= none).
+	 */
+	released_application_ids?: string[];
 }
 
 export const jobSchema = z
@@ -100,7 +105,7 @@ export const jobSchema = z
 		_id: z.string().startsWith('job:'),
 		_rev: z.string().optional(),
 		type: z.literal('job'),
-		schema_v: z.literal(3),
+		schema_v: z.union([z.literal(3), z.literal(4)]),
 		shelter_code: z.string().min(1),
 		created_at: z.string(),
 		updated_at: z.string(),
@@ -118,7 +123,8 @@ export const jobSchema = z
 		shift_template: shiftTemplateSchema.optional(),
 		auto_accept: z.boolean(),
 		status: jobStatusSchema,
-		is_urgent: z.boolean()
+		is_urgent: z.boolean(),
+		released_application_ids: z.array(z.string()).default([])
 	})
 	// F-AUTO (CR-041, reaffirmed CR-094 FR-VOL-09.5): auto_accept only on operational tier.
 	.refine((d) => !d.auto_accept || d.tier === 'operational', {
@@ -205,7 +211,7 @@ export function makeJob(input: JobInput, ctx: AuthorContext): Job {
 	const quota = totalShiftQuota(d.shifts);
 	return makeDoc(
 		'job',
-		3,
+		4,
 		{
 			title: d.title,
 			description: d.description,

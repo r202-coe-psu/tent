@@ -13,6 +13,10 @@ import {
 import { ulid } from '$lib/db/ulid';
 import { isValidThaiNationalId } from '$lib/utils/thai-id';
 import { ConflictError } from '$lib/utils/errors';
+import type { LanguageCode } from '$lib/utils/language';
+// Deep import on purpose: the `$lib/features/shared` barrel re-exports `.svelte` files, which
+// plain `tsx` cannot load — and `scripts/migrate-closed-shelter-checkout.ts` imports this domain.
+import { createAuditEntry, type AuditEntry } from '$lib/features/shared/domain/audit';
 import {
 	EVACUEE_SCHEMA_V,
 	type EvacueeConsent,
@@ -153,6 +157,17 @@ export function genderLabelTh(gender: Gender | null | undefined): string {
 	return 'ไม่ระบุ';
 }
 
+/** `genderLabelTh` with an English mirror — same `null` / legacy `'other'` → "unspecified" rule. */
+export function genderLabel(
+	gender: Gender | null | undefined,
+	language: LanguageCode = 'th'
+): string {
+	if (language === 'th') return genderLabelTh(gender);
+	return peopleLabelsByLanguage.en.gender[
+		gender === 'male' || gender === 'female' ? gender : 'unspecified'
+	];
+}
+
 export const religionSchema = z.enum(['buddhist', 'muslim', 'christian', 'other', 'unknown']);
 export type Religion = z.infer<typeof religionSchema>;
 
@@ -226,8 +241,43 @@ export const MANUAL_HOUSEHOLD_STATUS_TRANSITIONS: Readonly<
 	merged: []
 };
 
+/**
+ * `shelter_closed` (CR-219 FR-1) is written only by the shelter-close flow — a manual checkout
+ * destination picker must not offer it.
+ */
+export const checkoutDestinationTypeSchema = z.enum([
+	'returned_home',
+	'transferred_shelter',
+	'referred_facility',
+	'other',
+	'shelter_closed'
+]);
+export type CheckoutDestinationType = z.infer<typeof checkoutDestinationTypeSchema>;
+
+/** Movement `reason` / audit `reason` / `checkout_destination.type` of the shelter-close flow (CR-219 D-4). */
+export const SHELTER_CLOSED_REASON = 'shelter_closed';
+
+/** Display copy for the `shelter_closed` reason (CR-219 FR-21). */
+export const SHELTER_CLOSED_REASON_LABEL = 'ศูนย์ปิด';
+
+/** English mirror of `SHELTER_CLOSED_REASON_LABEL`. */
+export const SHELTER_CLOSED_REASON_LABEL_EN = 'Shelter closed';
+
+/**
+ * Display a movement reason: the shelter-close code maps to its label (Thai by default), free text
+ * passes through as entered.
+ */
+export function movementReasonLabel(
+	reason: string | null | undefined,
+	language: LanguageCode = 'th'
+): string {
+	if (!reason) return '';
+	if (reason !== SHELTER_CLOSED_REASON) return reason;
+	return language === 'en' ? SHELTER_CLOSED_REASON_LABEL_EN : SHELTER_CLOSED_REASON_LABEL;
+}
+
 export const checkoutDestinationSchema = z.object({
-	type: z.enum(['returned_home', 'transferred_shelter', 'referred_facility', 'other']),
+	type: checkoutDestinationTypeSchema,
 	destination_name: z.string().trim().optional(),
 	notes: z.string().trim().optional()
 });
@@ -425,8 +475,62 @@ const PET_SPECIES_LABELS: Record<PetGroup['species'], string> = {
 	other: 'อื่นๆ'
 };
 
-export function petSpeciesLabel(species: PetGroup['species']): string {
-	return PET_SPECIES_LABELS[species];
+export function petSpeciesLabel(
+	species: PetGroup['species'],
+	language: LanguageCode = 'th'
+): string {
+	return peopleLabelsByLanguage[language].petSpecies[species];
+}
+
+/** Display label maps used by staff stations (registration, screening, zoning). */
+export type PeopleLabelSet = {
+	/** `unspecified` covers `null` and the legacy `'other'` value. */
+	gender: Record<Gender | 'unspecified', string>;
+	stayStatus: Record<StayStatus, string>;
+	petSpecies: Record<PetGroup['species'], string>;
+	shelterClosedReason: string;
+};
+
+/**
+ * English mirror of the Thai label maps in this file, for staff surfaces with a language toggle.
+ * The Thai maps stay the source of truth (imports and back-office match on them) — never reword
+ * them to fit a translation. Typed with the same key types so TS forces full coverage.
+ */
+const peopleLabelsEn: PeopleLabelSet = {
+	gender: { male: 'Male', female: 'Female', other: 'Not specified', unspecified: 'Not specified' },
+	stayStatus: {
+		pre_registered: 'Pre-registered',
+		kiosk_registered: 'Registered at kiosk (awaiting confirmation)',
+		arriving: 'Awaiting check-in',
+		active: 'Checked in',
+		room_confirmed: 'Arrival at zone confirmed',
+		temporary_leave: 'On temporary leave',
+		transferred: 'Transferred to another shelter',
+		checked_out: 'Checked out',
+		deceased: 'Deceased',
+		cancelled: 'Cancelled'
+	},
+	petSpecies: { dog: 'Dog', cat: 'Cat', other: 'Other' },
+	shelterClosedReason: SHELTER_CLOSED_REASON_LABEL_EN
+};
+
+export const peopleLabelsByLanguage: Record<LanguageCode, PeopleLabelSet> = {
+	th: {
+		gender: {
+			male: genderLabelTh('male'),
+			female: genderLabelTh('female'),
+			other: genderLabelTh('other'),
+			unspecified: genderLabelTh(null)
+		},
+		stayStatus: STATUS_LABELS,
+		petSpecies: PET_SPECIES_LABELS,
+		shelterClosedReason: SHELTER_CLOSED_REASON_LABEL
+	},
+	en: peopleLabelsEn
+};
+
+export function peopleLabels(language: LanguageCode = 'th'): PeopleLabelSet {
+	return peopleLabelsByLanguage[language];
 }
 
 /**
@@ -543,7 +647,7 @@ export function assertEvacueeHouseholdAssignment(
 		const targetHousehold = households.find((household) => household._id === targetHouseholdId);
 		if (!targetHousehold) throw new Error('ไม่พบครัวเรือนปลายทาง');
 		if (!isActiveHouseholdStatus(targetHousehold.status)) {
-			throw new Error('ไม่สามารถเพิ่มสมาชิกเข้าครัวเรือนที่ยกเลิกหรือเช็คเอาท์แล้ว');
+			throw new Error('ไม่สามารถเพิ่มสมาชิกเข้าครัวเรือนที่ยกเลิกหรือเช็คเอาต์แล้ว');
 		}
 	}
 
@@ -601,7 +705,7 @@ export function assertCheckoutDestination(
 	destination: CheckoutDestination | null | undefined
 ): void {
 	if (!destination) {
-		throw new Error('ต้องระบุปลายทางเมื่อเช็คเอาท์ครัวเรือน');
+		throw new Error('ต้องระบุปลายทางเมื่อเช็คเอาต์ครัวเรือน');
 	}
 	if (
 		(destination.type === 'transferred_shelter' || destination.type === 'referred_facility') &&
@@ -1879,6 +1983,56 @@ export const CHECK_OUT_ELIGIBLE_STATUSES = [
 	'room_confirmed'
 ] as const satisfies readonly StayStatus[];
 
+/**
+ * Stays the shelter-close flow checks out (CR-219 FR-2). Wider than
+ * {@link CHECK_OUT_ELIGIBLE_STATUSES}: `temporary_leave` / `arriving` / `kiosk_registered`
+ * are allowed only for the system close (FR-3).
+ */
+export const SHELTER_CLOSE_CHECKOUT_STATUSES = [
+	'active',
+	'room_confirmed',
+	'temporary_leave',
+	'arriving',
+	'kiosk_registered'
+] as const satisfies readonly StayStatus[];
+
+/** Stays the shelter-close flow cancels with hold-cancel semantics (CR-219 FR-2, FR-6). */
+export const SHELTER_CLOSE_CANCEL_STATUSES = [
+	'pre_registered'
+] as const satisfies readonly StayStatus[];
+
+/** Every stay a shelter close changes; anything else is left alone (CR-219 FR-12). */
+export const SHELTER_CLOSE_AFFECTED_STATUSES = [
+	...SHELTER_CLOSE_CHECKOUT_STATUSES,
+	...SHELTER_CLOSE_CANCEL_STATUSES
+] as const satisfies readonly StayStatus[];
+
+export function isShelterCloseCheckoutStatus(status: StayStatus): boolean {
+	return (SHELTER_CLOSE_CHECKOUT_STATUSES as readonly StayStatus[]).includes(status);
+}
+
+export function isShelterCloseCancelStatus(status: StayStatus): boolean {
+	return (SHELTER_CLOSE_CANCEL_STATUSES as readonly StayStatus[]).includes(status);
+}
+
+export function isShelterCloseAffectedStatus(status: StayStatus): boolean {
+	return isShelterCloseCheckoutStatus(status) || isShelterCloseCancelStatus(status);
+}
+
+/** CR-219 FR-3: the system-close check-out guard — never used by staff check-out. */
+export function assertShelterCloseCheckoutAllowed(
+	evacuee: Pick<Evacuee, 'current_stay'>,
+	reason: string | null | undefined
+): void {
+	if (reason !== SHELTER_CLOSED_REASON) {
+		throw new Error('การเช็คเอาต์จากการปิดศูนย์ต้องใช้เหตุผล shelter_closed');
+	}
+	const status = evacuee.current_stay.status;
+	if (!isShelterCloseCheckoutStatus(status)) {
+		throw new Error(`ไม่สามารถเช็คเอาต์จากการปิดศูนย์จากสถานะ ${status} ได้`);
+	}
+}
+
 /** Stay statuses that may receive a `zone_change` (rezone while staying). */
 export const ZONE_CHANGE_ELIGIBLE_STATUSES = [
 	'active',
@@ -1983,9 +2137,17 @@ export function listPendingZoneArrivalConfirmations(evacuees: readonly Evacuee[]
 export function assertMovementAllowed(
 	evacuee: Evacuee,
 	action: MovementAction,
-	opts: { reason?: string | null; notes?: string | null } = {}
+	opts: { reason?: string | null; notes?: string | null; systemClose?: boolean } = {}
 ): void {
 	const status = evacuee.current_stay.status;
+	if (opts.systemClose) {
+		// CR-219 FR-3: only the shelter-close flow passes `systemClose`, and only for check-out.
+		if (action !== 'check_out') {
+			throw new Error('การปิดศูนย์ใช้ได้กับการเช็คเอาต์เท่านั้น');
+		}
+		assertShelterCloseCheckoutAllowed(evacuee, opts.reason);
+		return;
+	}
 	if (status === 'deceased' && action !== 'mark_deceased') {
 		throw new Error('สถานะเสียชีวิตเป็นสถานะสุดท้าย — ไม่สามารถเปลี่ยนสถานะได้อีก');
 	}
@@ -2005,12 +2167,12 @@ export function assertMovementAllowed(
 		throw new Error('การกลับจากลาชั่วคราวต้องเช็คอินใหม่ (ระบุโซน) — ไม่ใช้การกลับจากลาแบบเดิม');
 	}
 	if (action === 'check_out' && !canCheckOutEvacuee(evacuee)) {
-		throw new Error(`ไม่สามารถเช็คเอาท์จากสถานะ ${status} ได้`);
+		throw new Error(`ไม่สามารถเช็คเอาต์จากสถานะ ${status} ได้`);
 	}
 	if (action === 'check_out') {
 		const remark = (opts.reason ?? opts.notes ?? '').trim();
 		if (!remark) {
-			throw new Error('การเช็คเอาท์ต้องระบุเหตุผลหรือหมายเหตุ');
+			throw new Error('การเช็คเอาต์ต้องระบุเหตุผลหรือหมายเหตุ');
 		}
 	}
 	if (action === 'zone_change' && !canChangeEvacueeZone(evacuee)) {
@@ -2034,11 +2196,14 @@ export function assertMovementAllowed(
  * concurrent write surfaces as a real CouchDB 409 (`ConflictError`) instead
  * of being silently overwritten.
  */
-export function movementConflictMessage(err: unknown): string {
+export function movementConflictMessage(err: unknown, language: LanguageCode = 'th'): string {
+	const en = language === 'en';
 	if (err instanceof ConflictError) {
-		return 'ข้อมูลถูกแก้ไขจากที่อื่นแล้ว กรุณาโหลดข้อมูลใหม่แล้วลองอีกครั้ง';
+		return en
+			? 'This record was changed elsewhere. Reload and try again.'
+			: 'ข้อมูลถูกแก้ไขจากที่อื่นแล้ว กรุณาโหลดข้อมูลใหม่แล้วลองอีกครั้ง';
 	}
-	return err instanceof Error ? err.message : 'บันทึกไม่สำเร็จ';
+	return err instanceof Error ? err.message : en ? 'Could not save' : 'บันทึกไม่สำเร็จ';
 }
 
 /** True when an evacuee stay may be cancelled via the hold-cancel path (D-HOLD-CANCEL). */
@@ -2059,10 +2224,15 @@ export function canCancelHouseholdPreRegistration(household: Household): boolean
  * authoritative history is the append-only movement stream; this just keeps the
  * UI snapshot in step (movement events win on conflict — data-model.md §5).
  */
-export function applyMovementToStay(evacuee: Evacuee, movement: Movement): Evacuee {
+export function applyMovementToStay(
+	evacuee: Evacuee,
+	movement: Movement,
+	opts: { systemClose?: boolean } = {}
+): Evacuee {
 	assertMovementAllowed(evacuee, movement.action, {
 		reason: movement.reason,
-		notes: undefined
+		notes: undefined,
+		systemClose: opts.systemClose
 	});
 	if (movement.action === 'zone_change') {
 		const nextZone = movement.zone?.trim() || null;
@@ -2168,7 +2338,7 @@ export function resolveStatusChangeAction(
 export function normalizeCheckoutRemark(reason: string | null | undefined): string {
 	const remark = (reason ?? '').trim();
 	if (!remark) {
-		throw new Error('การเช็คเอาท์ต้องระบุเหตุผลหรือหมายเหตุ');
+		throw new Error('การเช็คเอาต์ต้องระบุเหตุผลหรือหมายเหตุ');
 	}
 	return remark;
 }
@@ -2184,6 +2354,86 @@ export function statusChangeHandlerKind(action: MovementAction): StatusChangeHan
 	if (action === 'check_out') return 'check_out';
 	if (action === 'confirm_room') return 'confirm_room';
 	return 'record';
+}
+
+// ---------------------------------------------------------------- shelter close (CR-219)
+
+/**
+ * CR-219 FR-3/FR-4: check one evacuee out because the shelter is closing. Returns the
+ * `check_out` movement (`reason = shelter_closed`, `zone = null`) and the evacuee with the
+ * movement applied through {@link applyMovementToStay} — never a direct status write.
+ */
+export function buildShelterCloseCheckout(
+	evacuee: Evacuee,
+	ctx: AuthorContext,
+	occurredAt: Timestamp = now()
+): { movement: Movement; evacuee: Evacuee } {
+	const movement = createMovement(
+		{
+			evacuee_id: evacuee._id,
+			action: 'check_out',
+			zone: null,
+			reason: SHELTER_CLOSED_REASON,
+			occurred_at: occurredAt
+		},
+		ctx
+	);
+	return { movement, evacuee: applyMovementToStay(evacuee, movement, { systemClose: true }) };
+}
+
+/**
+ * CR-219 FR-6: cancel a `pre_registered` stay with hold-cancel semantics
+ * (`cancelPreRegistration`) — `status = cancelled`, `since = now`, no movement.
+ */
+export function buildShelterCloseCancel(evacuee: Evacuee, since: Timestamp = now()): Evacuee {
+	if (!isShelterCloseCancelStatus(evacuee.current_stay.status)) {
+		throw new Error(`ไม่สามารถยกเลิกจากการปิดศูนย์จากสถานะ ${evacuee.current_stay.status} ได้`);
+	}
+	return {
+		...evacuee,
+		updated_at: now(),
+		current_stay: { ...evacuee.current_stay, status: 'cancelled', since }
+	};
+}
+
+/**
+ * CR-219 FR-5/FR-6b: re-derive a household after its members were closed out. A household
+ * that becomes `checked_out` with no destination gets `{ type: 'shelter_closed' }`; an
+ * existing destination is kept. Returns `null` when nothing changes.
+ */
+export function deriveShelterCloseHousehold<
+	H extends Pick<Household, 'status' | 'checkout_destination' | 'updated_at'>
+>(household: H, memberStayStatuses: readonly StayStatus[]): H | null {
+	const status = deriveHouseholdStatus(memberStayStatuses);
+	const destination =
+		status === 'checked_out' && !household.checkout_destination
+			? { type: 'shelter_closed' as const }
+			: household.checkout_destination;
+	if (status === household.status && destination === household.checkout_destination) return null;
+	return { ...household, status, checkout_destination: destination, updated_at: now() };
+}
+
+/** CR-219 FR-6a: one audit per household whose pre-registered members the close cancelled. */
+export function buildShelterCloseCancelAudit(
+	householdId: string,
+	evacueeIds: readonly string[],
+	ctx: AuthorContext,
+	context: Record<string, unknown> = {}
+): AuditEntry {
+	return createAuditEntry(
+		{
+			action: 'other',
+			target_type: 'household',
+			target_id: householdId,
+			reason: SHELTER_CLOSED_REASON,
+			context: {
+				cancelled_member_count: evacueeIds.length,
+				evacuee_ids: [...evacueeIds],
+				...context
+			}
+		},
+		ctx
+	);
 }
 
 // ---------------------------------------------------------------- display helpers
@@ -2488,11 +2738,129 @@ export const EWAR_SYMPTOM_GROUPS: EwarSymptomGroup[] = [
 	}
 ];
 
-const EWAR_SYMPTOM_LABELS: ReadonlyMap<string, string> = new Map(
-	EWAR_SYMPTOM_GROUPS.flatMap((g) => g.symptoms.map((s) => [s.id, s.label] as const))
-);
+/**
+ * English mirror of `EWAR_SYMPTOM_GROUPS`: same group order, symptom ids and emoji; `sublabel`
+ * keeps only the clinical term (the Thai groups prefix some with a Thai gloss).
+ */
+export const EWAR_SYMPTOM_GROUPS_EN: EwarSymptomGroup[] = [
+	{
+		title: 'General warning signs and other emergencies',
+		symptoms: [
+			{ id: 'high_fever', emoji: '🔥', label: 'High fever above 38.5 °C' },
+			{ id: 'trauma', emoji: '💥', label: 'Injury', sublabel: 'Trauma' },
+			{
+				id: 'chemical_poisoning',
+				emoji: '☠️',
+				label: 'Chemical / toxin exposure',
+				sublabel: 'Chemical poisoning'
+			}
+		]
+	},
+	{
+		title: 'Respiratory symptoms',
+		symptoms: [
+			{
+				id: 'acute_respiratory',
+				emoji: '😷',
+				label: 'Acute respiratory infection (cough, sore throat, difficulty breathing)',
+				sublabel: 'Acute respiratory infection'
+			}
+		]
+	},
+	{
+		title: 'Gastrointestinal symptoms',
+		symptoms: [
+			{
+				id: 'acute_watery_diarrhea',
+				emoji: '💧',
+				label: 'Watery diarrhoea (suspected cholera)',
+				sublabel: 'Acute watery diarrhoea / Cholera'
+			},
+			{
+				id: 'acute_bloody_diarrhea',
+				emoji: '🩸',
+				label: 'Bloody stools (suspected dysentery)',
+				sublabel: 'Acute bloody diarrhoea / Shigellosis'
+			},
+			{ id: 'typhoid', emoji: '🌡️', label: 'Typhoid fever', sublabel: 'Typhoid' }
+		]
+	},
+	{
+		title: 'Vector-borne diseases',
+		symptoms: [
+			{ id: 'dengue', emoji: '🦟', label: 'Dengue fever', sublabel: 'Dengue' },
+			{ id: 'malaria', emoji: '🤒', label: 'Malaria', sublabel: 'Malaria' }
+		]
+	},
+	{
+		title: 'Severe infectious diseases and fever with rash',
+		symptoms: [
+			{ id: 'measles', emoji: '🔴', label: 'Measles (fever with rash)', sublabel: 'Measles' },
+			{
+				id: 'pertussis',
+				emoji: '😮‍💨',
+				label: 'Whooping cough (coughing fits)',
+				sublabel: 'Pertussis'
+			},
+			{
+				id: 'meningitis',
+				emoji: '🧠',
+				label: 'Meningitis (fever, headache, stiff neck)',
+				sublabel: 'Meningitis'
+			},
+			{ id: 'diphtheria', emoji: '🗣️', label: 'Diphtheria', sublabel: 'Diphtheria' }
+		]
+	},
+	{
+		title: 'Liver inflammation symptoms',
+		symptoms: [
+			{
+				id: 'acute_jaundice_syndrome',
+				emoji: '🟡',
+				label: 'Sudden yellowing of the skin and eyes',
+				sublabel: 'Acute jaundice syndrome'
+			},
+			{
+				id: 'Hepatitis A or E',
+				emoji: '🦠',
+				label: 'Viral hepatitis A or E',
+				sublabel: 'Hepatitis A or E'
+			}
+		]
+	},
+	{
+		title: 'Neurological and other symptoms',
+		symptoms: [
+			{
+				id: 'acute_haemorrhagic_fever_syndrome',
+				emoji: '🩸',
+				label: 'Fever with unusual bleeding',
+				sublabel: 'Acute haemorrhagic fever syndrome'
+			},
+			{ id: 'tetanus', emoji: '🩹', label: 'Tetanus', sublabel: 'Tetanus' },
+			{
+				id: 'acute_flaccid_paralysis',
+				emoji: '🦿',
+				label: 'Sudden limb weakness (suspected polio)',
+				sublabel: 'Acute flaccid paralysis / Polio'
+			}
+		]
+	}
+];
 
-/** Plain-Thai label for a persisted `Screening.symptoms` id; unknown ids are shown as-is. */
-export function ewarSymptomLabel(id: string): string {
-	return EWAR_SYMPTOM_LABELS.get(id) ?? id;
+export const ewarSymptomGroupsByLanguage: Record<LanguageCode, EwarSymptomGroup[]> = {
+	th: EWAR_SYMPTOM_GROUPS,
+	en: EWAR_SYMPTOM_GROUPS_EN
+};
+
+const EWAR_SYMPTOM_LABELS_BY_LANGUAGE: Record<LanguageCode, ReadonlyMap<string, string>> = {
+	th: new Map(EWAR_SYMPTOM_GROUPS.flatMap((g) => g.symptoms.map((s) => [s.id, s.label] as const))),
+	en: new Map(
+		EWAR_SYMPTOM_GROUPS_EN.flatMap((g) => g.symptoms.map((s) => [s.id, s.label] as const))
+	)
+};
+
+/** Plain-language label for a persisted `Screening.symptoms` id (Thai by default); unknown ids are shown as-is. */
+export function ewarSymptomLabel(id: string, language: LanguageCode = 'th'): string {
+	return EWAR_SYMPTOM_LABELS_BY_LANGUAGE[language].get(id) ?? id;
 }

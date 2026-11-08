@@ -2,14 +2,19 @@
 	import { tick } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
+	import { useQueryClient } from '@tanstack/svelte-query';
 	import { toast } from 'svelte-sonner';
 	import { superForm, defaults } from 'sveltekit-superforms';
 	import { zod4 } from 'sveltekit-superforms/adapters';
 	import {
 		useShelter,
+		sheltersKeys,
 		useCreateShelter,
 		useUpdateShelter,
-		shelterSchema,
+		needsShelterCloseModal,
+		ShelterCloseDialog,
+		type Shelter,
+		type ShelterCloseResult,
 		type SiteKind,
 		BasicInfoSection,
 		ZonesFacilitiesSection,
@@ -25,8 +30,21 @@
 		EMPTY_PARKING_POLICY,
 		DEFAULT_SHELTER_FEATURE_FLAGS
 	} from '$lib/features/shelters';
+	import type { SubStorageItem } from '../domain/schema';
+	import { sameSubStorage } from '../domain/storage-points';
+	import {
+		editsSubStorage,
+		formMetaAfterSave,
+		shelterFormSchema,
+		shelterPatchInput,
+		withoutFormMeta,
+		type ShelterForm
+	} from '../domain/shelter-form';
+	import { ServiceRequestError } from '$lib/api/service';
 	import { collectErrorMessages, findInvalidSectionIds } from './shelter-form-validation';
 	import ShelterFormStickyNav from './shelter-form-sticky-nav.svelte';
+	import { authStore } from '$lib/stores/auth.svelte';
+	import { isShelterManager, isSystemAdmin } from '$lib/auth/roles';
 	import { createScrollSpy } from '$lib/utils/scroll-spy';
 	import MapPin from '@lucide/svelte/icons/map-pin';
 	import Building2 from '@lucide/svelte/icons/building-2';
@@ -40,16 +58,20 @@
 	import AlertCircle from '@lucide/svelte/icons/alert-circle';
 	import ChevronLeft from '@lucide/svelte/icons/chevron-left';
 	import Loader2 from '@lucide/svelte/icons/loader-2';
+	import RefreshCw from '@lucide/svelte/icons/refresh-cw';
 	import Save from '@lucide/svelte/icons/save';
 	import ClipboardCheck from '@lucide/svelte/icons/clipboard-check';
 	import { Button } from '$lib/components/ui/button/index.js';
+	import * as Alert from '$lib/components/ui/alert/index.js';
 
 	let {
 		id = '',
 		isEdit,
 		basePath,
 		editBasePath,
-		siteKind
+		siteKind,
+		stockedLotCount,
+		stockReady
 	}: {
 		id?: string;
 		isEdit: boolean;
@@ -58,6 +80,10 @@
 		/** Prefix of the `…/edit/{code}` route opened after create; defaults to `basePath`. */
 		editBasePath?: string;
 		siteKind?: SiteKind;
+		/** Lots still holding stock at a storage point; blocks its delete button (CR-230 FR-11). */
+		stockedLotCount?: (pointId: string) => number;
+		/** False while the ledger behind `stockedLotCount` is still loading. */
+		stockReady?: boolean;
 	} = $props();
 
 	const resolvedBasePath = $derived(basePath ?? resolve('/portal'));
@@ -75,6 +101,147 @@
 	const shelterQuery = useShelter(() => id);
 	const createMutation = useCreateShelter();
 	const updateMutation = useUpdateShelter();
+	const queryClient = useQueryClient();
+
+	// CR-219 FR-15: saving a not-yet-closed shelter as `closed` goes through the confirm modal
+	// first; the form data waits here until the close request has finished.
+	let closeDialogOpen = $state(false);
+	let pendingCloseData = $state.raw<ShelterForm | null>(null);
+	const storedStatus = $derived(shelterQuery.data?.operation_status);
+
+	// CR-219 FR-23: only SA / this shelter's manager may pick "closed" (create mode is unchanged).
+	const canCloseShelter = $derived.by(() => {
+		if (!isEdit) return true;
+		const roles = authStore.user?.roles ?? [];
+		return isSystemAdmin(roles) || isShelterManager(roles, id);
+	});
+
+	function revertOperationStatus() {
+		if (storedStatus) $formData.operation_status = storedStatus;
+	}
+
+	function handleCloseCancel() {
+		// FR-18: nothing was sent; put the select back to the stored value.
+		pendingCloseData = null;
+		revertOperationStatus();
+	}
+
+	type ShelterDoc = NonNullable<typeof shelterQuery.data>;
+
+	/**
+	 * The form data for a stored shelter doc, including the `_rev` and points it was loaded from
+	 * (CR-230 A1). Keeping them in the form data means they are always replaced together with the
+	 * fields, whoever writes the fields.
+	 */
+	function formValuesFromDoc(d: ShelterDoc): ShelterForm {
+		return {
+			name: d.name,
+			site_kind: d.site_kind,
+			operation_status: d.operation_status,
+			shelter_type: d.shelter_type ?? null,
+			floor_count: d.floor_count ?? null,
+			project_level: d.project_level ?? null,
+			location: d.location ?? {},
+			contact: d.contact ?? {},
+			municipality_zone: d.municipality_zone ?? null,
+			community: d.community ?? null,
+			address_no: d.address_no ?? null,
+			village_no: d.village_no ?? null,
+			subdistrict: d.subdistrict ?? null,
+			district: d.district ?? null,
+			province: d.province ?? null,
+			postal_code: d.postal_code ?? null,
+			key_personnel: d.key_personnel ?? { eoc_liaison: {}, medical_lead: {}, kitchen_lead: {} },
+			capacity: d.capacity,
+			area_m2: d.area_m2 ?? null,
+			area_type: (d.area_type ?? null) as Shelter['area_type'],
+			facilities: d.facilities ?? {},
+			common_areas: d.common_areas ?? { sub_storage: [] },
+			utilities: d.utilities ?? { communications: [] },
+			risk: d.risk ?? {},
+			zones: d.zones ?? [],
+			food_distribution_points: d.food_distribution_points ?? [],
+			admission_policy: d.admission_policy ?? { ...EMPTY_ADMISSION_POLICY },
+			luggage_policy: d.luggage_policy ?? { ...EMPTY_LUGGAGE_POLICY },
+			parking_policy: d.parking_policy ?? { ...EMPTY_PARKING_POLICY },
+			feature_flags: {
+				...DEFAULT_SHELTER_FEATURE_FLAGS,
+				...(d.feature_flags ?? {})
+			},
+			_rev: d._rev,
+			// A copy: an in-place edit of the form's points must not also change the snapshot.
+			_loaded_sub_storage: $state.snapshot(d.common_areas?.sub_storage ?? [])
+		} as ShelterForm;
+	}
+
+	const SHELTER_CONFLICT_MESSAGE =
+		'ข้อมูลศูนย์ถูกแก้ไขโดยผู้อื่น โหลดข้อมูลล่าสุดให้แล้ว กรุณาแก้ไขซ้ำอีกครั้ง';
+
+	/**
+	 * Replace the form with `doc`. `untaint-all` makes the doc the clean baseline, so `isTainted`
+	 * only ever means "the user edited something".
+	 */
+	function seedForm(doc: ShelterDoc) {
+		formData.set(formValuesFromDoc(doc), { taint: 'untaint-all' });
+	}
+
+	/** Replace the form with the latest doc in the cache (the 409 path; the hook refetched it first). */
+	function reloadFromLatest() {
+		const latest = queryClient.getQueryData<ShelterDoc>(sheltersKeys.detail(id));
+		if (latest) seedForm(latest);
+	}
+
+	/**
+	 * Edit save. `rev` defaults to the one the form data was loaded with. The hook's `onError` has
+	 * awaited the refetch before this call's `onError` runs, and superforms' own write-back of the
+	 * submitted data happened when `onUpdate` returned, so a 409 reload is the last write.
+	 * On success only `_rev` and the loaded points move on (to what this save wrote), so the next
+	 * save does not 409 against our own write; typed-since fields stay. Skipped when the form was
+	 * reseeded meanwhile: its `_rev` is then not the one this data was loaded with.
+	 */
+	function saveEdit(data: ShelterForm, rev = data._rev) {
+		updateMutation.mutate(
+			{ code: id, input: shelterPatchInput(data), rev },
+			{
+				onSuccess: (result) => {
+					if ($formData._rev !== data._rev) return;
+					formData.update((d) => ({ ...d, ...formMetaAfterSave(data, result.rev) }), {
+						taint: false
+					});
+				},
+				onError: (err) => {
+					if (err instanceof ServiceRequestError && err.status === 409) reloadFromLatest();
+				}
+			}
+		);
+	}
+
+	async function handleCloseFinish(result: ShelterCloseResult) {
+		const data = pendingCloseData;
+		pendingCloseData = null;
+		if (!result.closed || !data) {
+			revertOperationStatus();
+			return;
+		}
+		// Registry is closed now, so the normal save (other edited fields) passes the PATCH guard.
+		// The close route rewrote the doc, so this save needs the fresh `_rev`. Points edited in this
+		// form must not land over points someone else changed meanwhile: `data` carries the points
+		// it was loaded with, so compare those with the fresh doc.
+		const fresh = await shelterQuery.refetch();
+		if (
+			editsSubStorage(data) &&
+			fresh.data &&
+			!sameSubStorage(
+				fresh.data.common_areas?.sub_storage,
+				data._loaded_sub_storage as SubStorageItem[] | undefined
+			)
+		) {
+			toast.error(SHELTER_CONFLICT_MESSAGE);
+			reloadFromLatest();
+			return;
+		}
+		saveEdit(data, fresh.data?._rev ?? data._rev);
+	}
 
 	const sections = [
 		{ id: 'basic-info', label: 'ข้อมูลพื้นฐานและที่ตั้ง', icon: MapPin },
@@ -107,12 +274,15 @@
 		document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 	}
 
-	const form = superForm(defaults(zod4(shelterSchema)), {
+	const form = superForm(defaults(zod4(shelterFormSchema)), {
 		SPA: true,
 		dataType: 'json',
-		validators: zod4(shelterSchema),
+		validators: zod4(shelterFormSchema),
 		resetForm: false,
-		onUpdate: async ({ form: validated }) => {
+		// SPA form with no server load to refresh; `invalidateAll` would only delay superforms'
+		// write-back of the submitted data, which could then land after a 409 reload.
+		invalidateAll: false,
+		onUpdate: async ({ form: validated, cancel }) => {
 			if (!validated.valid) {
 				showValidationSummary = true;
 				await revealValidationIssues(validated.errors);
@@ -122,11 +292,21 @@
 			showValidationSummary = false;
 			const data = validated.data;
 
+			if (isEdit && needsShelterCloseModal(storedStatus, data.operation_status)) {
+				pendingCloseData = data;
+				closeDialogOpen = true;
+				// Nothing is saved yet: a result superforms applies would untaint the form, and the
+				// seed effect would then replace the user's edits with a newer doc before the modal
+				// even opens. Cancelled, the form keeps its data and its taint for the whole flow.
+				cancel();
+				return;
+			}
+
 			if (isEdit) {
-				// Stay on the edit form; success toast comes from useUpdateShelter.
-				updateMutation.mutate({ code: id, input: data });
+				// Stay on the edit form; toasts come from useUpdateShelter.
+				saveEdit(data);
 			} else {
-				createMutation.mutate(data, {
+				createMutation.mutate(withoutFormMeta(data), {
 					onSuccess: (result) => {
 						// Deep-link to edit so further saves are updates and users unlock.
 						// Success toast comes from useCreateShelter.
@@ -139,7 +319,7 @@
 		}
 	});
 
-	const { form: formData, submitting, enhance, errors } = form;
+	const { form: formData, submitting, enhance, errors, tainted, isTainted } = form;
 
 	const invalidSectionIds = $derived.by(() =>
 		showValidationSummary ? findInvalidSectionIds($errors) : []
@@ -169,46 +349,16 @@
 		if (!isEdit && siteKind && !$formData.site_kind) $formData.site_kind = siteKind;
 	});
 
-	// Populate form data when edit query loads.
+	// The stored doc moved past the one the form was loaded from (first load, or someone saved).
+	const docIsNewer = $derived(!!shelterQuery.data && shelterQuery.data._rev !== $formData._rev);
+	// Before the first load the form only holds init defaults (which taint it), so there is
+	// nothing of the user's to protect yet.
+	const hasUnsavedEdits = $derived($formData._rev !== undefined && isTainted($tainted));
+	// Unsaved edits are never replaced: they get a notice instead.
+	const showNewerDocNotice = $derived(docIsNewer && hasUnsavedEdits);
+
 	$effect(() => {
-		if (shelterQuery.data) {
-			const d = shelterQuery.data;
-			$formData = {
-				name: d.name,
-				site_kind: d.site_kind,
-				operation_status: d.operation_status,
-				shelter_type: d.shelter_type ?? null,
-				floor_count: d.floor_count ?? null,
-				project_level: d.project_level ?? null,
-				location: d.location ?? {},
-				contact: d.contact ?? {},
-				municipality_zone: d.municipality_zone ?? null,
-				community: d.community ?? null,
-				address_no: d.address_no ?? null,
-				village_no: d.village_no ?? null,
-				subdistrict: d.subdistrict ?? null,
-				district: d.district ?? null,
-				province: d.province ?? null,
-				postal_code: d.postal_code ?? null,
-				key_personnel: d.key_personnel ?? { eoc_liaison: {}, medical_lead: {}, kitchen_lead: {} },
-				capacity: d.capacity,
-				area_m2: d.area_m2 ?? null,
-				area_type: (d.area_type ?? null) as (typeof $formData)['area_type'],
-				facilities: d.facilities ?? {},
-				common_areas: d.common_areas ?? { sub_storage: [] },
-				utilities: d.utilities ?? { communications: [] },
-				risk: d.risk ?? {},
-				zones: d.zones ?? [],
-				food_distribution_points: d.food_distribution_points ?? [],
-				admission_policy: d.admission_policy ?? { ...EMPTY_ADMISSION_POLICY },
-				luggage_policy: d.luggage_policy ?? { ...EMPTY_LUGGAGE_POLICY },
-				parking_policy: d.parking_policy ?? { ...EMPTY_PARKING_POLICY },
-				feature_flags: {
-					...DEFAULT_SHELTER_FEATURE_FLAGS,
-					...(d.feature_flags ?? {})
-				}
-			};
-		}
+		if (shelterQuery.data && docIsNewer && !hasUnsavedEdits) seedForm(shelterQuery.data);
 	});
 
 	const isPending = $derived(isEdit ? updateMutation.isPending : createMutation.isPending);
@@ -400,6 +550,21 @@
 		</div>
 	{:else}
 		<div class="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+			{#if showNewerDocNotice}
+				<Alert.Root class="mb-4 border-sky-200 bg-sky-50 text-sky-900" role="status">
+					<RefreshCw />
+					<Alert.Title>มีข้อมูลใหม่</Alert.Title>
+					<Alert.Description class="text-sky-900/80">
+						ข้อมูลศูนย์นี้ถูกแก้ไขโดยผู้อื่น ข้อมูลที่คุณแก้ยังไม่ถูกแทนที่
+						โหลดข้อมูลล่าสุดจะทำให้การแก้ไขที่ยังไม่ได้บันทึกหายไป
+					</Alert.Description>
+					<Alert.Action>
+						<Button type="button" size="sm" variant="outline" onclick={reloadFromLatest}>
+							โหลดข้อมูลล่าสุด
+						</Button>
+					</Alert.Action>
+				</Alert.Root>
+			{/if}
 			<div class="flex flex-col gap-6 pb-28 md:flex-row">
 				<!-- Desktop sticky section nav -->
 				<nav
@@ -501,10 +666,15 @@
 						onkeydown={onFormKeydown}
 						{@attach scrollSpy}
 					>
-						<BasicInfoSection {form} {formData} />
+						<BasicInfoSection
+							{form}
+							{formData}
+							canClose={canCloseShelter}
+							storedStatus={isEdit ? storedStatus : undefined}
+						/>
 						<ZonesFacilitiesSection {form} {formData} shelterCode={id} />
 						<FoodDistributionSection {form} {formData} />
-						<StoragePointsSection {form} {formData} />
+						<StoragePointsSection {form} {formData} {stockedLotCount} {stockReady} />
 						<UtilitiesSection {form} {formData} />
 						<RiskSection {form} {formData} />
 						<AdmissionPolicySection {formData} />
@@ -514,6 +684,16 @@
 				</div>
 			</div>
 		</div>
+
+		{#if isEdit && shelterQuery.data}
+			<ShelterCloseDialog
+				bind:open={closeDialogOpen}
+				code={id}
+				name={shelterQuery.data.name}
+				oncancel={handleCloseCancel}
+				onfinish={handleCloseFinish}
+			/>
+		{/if}
 
 		<ShelterFormStickyNav
 			{sections}

@@ -36,6 +36,7 @@ from worker.mongo import (
     refresh_shelter_occupants,
     refresh_shelter_stock,
     sync_booking_stay,
+    sync_job_shift_slot,
 )
 from worker.mongo.on_hand import refresh_on_hand
 from worker.projection_version import PROJECTION_VERSION
@@ -139,6 +140,10 @@ async def bootstrap_database(
         logger.info("Bootstrap complete for %s, persons only (seq=%s)", database, seq)
         return
 
+    # Shift counters depend on jobs, applications and assignments together, so they are
+    # reconciled once per shift after the scan rather than once per document (and after
+    # every job is seeded, whatever order _all_docs returned them in).
+    shift_slots: set[tuple[str, str]] = set()
     async for doc in couch.iter_all_docs(database):
         doc_type = doc.get("type")
         if doc_type == "evacuee":
@@ -170,7 +175,9 @@ async def bootstrap_database(
             await apply_job(action, payload)
         elif doc_type == "job_application":
             action, payload = project_job_application(doc, shelter_code=shelter_code)
-            await apply_job_application(action, payload)
+            pair = await apply_job_application(action, payload, reconcile=False)
+            if pair:
+                shift_slots.add(pair)
         elif doc_type == "shift_assignment":
             volunteer_id = doc.get("volunteer_id")
             volunteer = (
@@ -181,13 +188,18 @@ async def bootstrap_database(
             action, payload = project_shift_assignment(
                 doc, shelter_code=shelter_code, volunteer=volunteer
             )
-            await apply_shift_assignment(action, payload)
+            pair = await apply_shift_assignment(action, payload, reconcile=False)
+            if pair:
+                shift_slots.add(pair)
         elif doc_type == "volunteer":
             # The portal reads a profile the same way it reads a schedule — by phone
             # hash — so a volunteer registered before this worker first ran must be
             # projected here too, or their own profile screen comes back empty.
             action, payload = project_volunteer(doc, shelter_code=shelter_code)
             await apply_volunteer(action, payload)
+
+    for job_id, shift_id in sorted(shift_slots):
+        await sync_job_shift_slot(job_id=job_id, shift_id=shift_id)
 
     # Same reason the counters are seeded above: the ledger entries already on disk
     # never arrive as change events, and a counter left at on_hand_qty 0 enforces the

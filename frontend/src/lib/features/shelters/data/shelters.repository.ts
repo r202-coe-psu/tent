@@ -33,6 +33,8 @@ export interface ShelterBasic {
 }
 
 export interface ShelterSummary {
+	/** CouchDB revision of the master doc; the edit form sends it back as a save precondition. */
+	_rev?: string;
 	code: string;
 	name: string;
 	site_kind: SiteKind;

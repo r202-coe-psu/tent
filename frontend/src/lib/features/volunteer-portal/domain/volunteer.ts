@@ -6,6 +6,7 @@
  * generated types so the rules live somewhere a test can reach without a server.
  */
 import { z } from 'zod';
+import type { LanguageCode } from '$lib/utils/language';
 import { isValidThaiNationalId } from '$lib/utils/thai-id';
 import { volunteerMobileSchema } from '$lib/utils/volunteer-phone';
 // Deep import: the volunteers barrel re-exports UI that imports this domain (cycle).
@@ -502,7 +503,7 @@ export function ticketTokenFromScan(scanned: string): string | null {
 	return fromUrl ? normalizeTicketToken(fromUrl) : null;
 }
 
-export function ticketStatusLabel(status: string, lang: 'th' | 'en' = 'th'): string {
+export function ticketStatusLabel(status: string, lang: LanguageCode = 'th'): string {
 	if (lang === 'en') {
 		switch (status) {
 			case 'confirmed':
@@ -527,7 +528,26 @@ export function ticketStatusLabel(status: string, lang: 'th' | 'en' = 'th'): str
 	}
 }
 
-export function shiftStatusLabel(status: string): string {
+export function shiftStatusLabel(status: string, lang: LanguageCode = 'th'): string {
+	if (lang === 'en') {
+		switch (status) {
+			case 'assigned':
+				return 'Assigned';
+			case 'standby':
+				return 'Standby';
+			case 'checked_in':
+				return 'On duty';
+			case 'completed':
+			case 'done':
+				return 'Checked out';
+			case 'no_show':
+				return 'No-show';
+			case 'cancelled':
+				return 'Cancelled';
+			default:
+				return status;
+		}
+	}
 	switch (status) {
 		case 'assigned':
 			return 'ได้รับมอบหมาย';
@@ -589,3 +609,29 @@ export const dispatchRespondSchema = z.object({
 });
 
 export type DispatchRespondInput = z.infer<typeof dispatchRespondSchema>;
+
+/**
+ * Where a volunteer stands on staff-system access in one shelter (CR-221 FR-26): `none` = no
+ * linked account, or an account the public answer must not tell apart from it (a suspended
+ * account: phone-only callers must not learn that, Amendment A2); `lapsed` = account with
+ * nothing left in this shelter; `active`.
+ */
+export type PortalAccessStatusCode = 'none' | 'lapsed' | 'active';
+
+/**
+ * One shelter's row of the portal's "สิทธิ์ใช้งานระบบ" card. Exactly these keys and no more
+ * (CR-221 FR-28): the portal opens with a phone number, so nothing that names the account
+ * (username, email, issuer) may ever be added here.
+ */
+export type PortalAccessStatus = {
+	shelter_code: string;
+	shelter_name: string;
+	status: PortalAccessStatusCode;
+	/** Display label of the role shown; `null` unless `active`. */
+	role_label: string | null;
+	/**
+	 * `active`: ISO instant the grant ends (`null` for a permanent role). `lapsed`: when access
+	 * here ended (`null` when unknown). `null` for `none`.
+	 */
+	expires_at: string | null;
+};

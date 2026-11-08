@@ -24,11 +24,14 @@
 		volunteer,
 		status,
 		shelterLine,
+		hideVerify = false,
 		class: className = ''
 	}: {
 		volunteer: Volunteer;
 		status: VolunteerAccessStatus;
 		shelterLine: string;
+		/** The host already offers the identity check (the shift roster's row): leave out the copy. */
+		hideVerify?: boolean;
 		class?: string;
 	} = $props();
 
@@ -106,6 +109,8 @@
 			<p class="text-xs text-muted-foreground">บัญชีถูกระงับโดยผู้ดูแลระบบ</p>
 		{:else if profileClosed}
 			<!-- Nothing here: the card's "เปิดใช้งานอีกครั้ง" is the way back. -->
+		{:else if needsVerification && hideVerify}
+			<!-- Nothing here: the host's own "ยืนยันตัวตน" button comes first. -->
 		{:else if needsVerification}
 			<Button
 				size="sm"

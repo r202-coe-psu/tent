@@ -7,6 +7,8 @@
 		KIOSK_LABEL_LINK,
 		KIOSK_LABEL_MM,
 		KIOSK_LABEL_PADDING_MM,
+		KIOSK_LABEL_QR_CAPTION,
+		labelEmergencyLine,
 		kioskQrBoxMm,
 		labelZoneLine
 	} from '../domain/print-label';
@@ -37,9 +39,11 @@
 		badge={label.badge}
 		lines={label.lines}
 		zone={isStaffCard ? undefined : labelZoneLine(label.zone)}
+		emergency={isStaffCard ? undefined : labelEmergencyLine(label.emergencyPhone)}
 		checkedCount={label.checkedCount}
 		footer={KIOSK_LABEL_LINK}
 		checklist={isStaffCard ? undefined : KIOSK_LABEL_CHECKLIST}
+		qrCaption={isStaffCard ? undefined : KIOSK_LABEL_QR_CAPTION}
 	/>
 </div>
 
@@ -48,7 +52,7 @@
 		box-sizing: border-box;
 		overflow: hidden;
 		background: #fff;
-		font-family: 'IBM Plex Sans Thai', sans-serif;
+		font-family: 'IBM Plex Sans Thai Looped', 'IBM Plex Sans Thai', sans-serif;
 		color: #000;
 	}
 </style>

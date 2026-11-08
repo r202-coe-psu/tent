@@ -66,7 +66,7 @@ export async function publicShelterStatus(code: string): Promise<string | undefi
  *  1. set it `closed` (stamping `closed_at` like the app does, so a run whose
  *     later steps fail still ages out of public search) and wait for the
  *     projection (the row the worker keeps in Mongo after a delete then reads
- *     "closed", not "open");
+ *     "closed", not "open") — a timeout only warns, the delete still runs;
  *  2. delete the registry master — the worker cascades that to the shelter's
  *     public persons and needs;
  *  3. delete its CouchDB database;
@@ -98,10 +98,12 @@ export async function teardownShelter(code: string): Promise<void> {
 			updated_at: now
 		});
 		if (closed.status >= 400) throw new Error(`close ${code} failed (HTTP ${closed.status})`);
+		// A slow or stopped worker must not leave the (now closed) master behind: warn and
+		// delete anyway — a leaked registry doc is worse than a stale public row.
 		await waitForProjection(
 			`${code} closed`,
 			async () => (await publicShelterStatus(code)) !== 'open'
-		);
+		).catch((err) => console.warn(`teardown ${code}:`, err instanceof Error ? err.message : err));
 		const rev = (closed.data as { rev: string }).rev;
 		const delDoc = await couchReq('DELETE', `${path}?rev=${rev}`);
 		if (delDoc.status >= 400 && delDoc.status !== 404) {

@@ -303,11 +303,28 @@ describe('filterAssignRoster', () => {
 		expect(codes(filterAssignRoster(rows()))).toEqual(['V-003', 'V-8004', 'V-001']);
 	});
 
-	it('searches name, phone and volunteer code', () => {
+	it('searches name and phone', () => {
 		expect(codes(filterAssignRoster(rows(), { search: 'สอนใจ' }))).toEqual(['V-003']);
 		expect(codes(filterAssignRoster(rows(), { search: '0841981118' }))).toEqual(['V-8004']);
-		expect(codes(filterAssignRoster(rows(), { search: 'v-001' }))).toEqual(['V-001']);
 		expect(codes(filterAssignRoster(rows(), { search: '  ' }))).toHaveLength(3);
+	});
+
+	it.each(['084-198-1118', '084 198 1118', '0841981118'])(
+		'finds the same volunteer when the phone is typed as %s (#1122)',
+		(search) => {
+			expect(codes(filterAssignRoster(rows(), { search }))).toEqual(['V-8004']);
+		}
+	);
+
+	it('searches the volunteer code with or without its dash (#1013)', () => {
+		expect(codes(filterAssignRoster(rows(), { search: 'v-001' }))).toEqual(['V-001']);
+		expect(codes(filterAssignRoster(rows(), { search: 'v001' }))).toEqual(['V-001']);
+		expect(codes(filterAssignRoster(rows(), { search: 'V 001' }))).toEqual(['V-001']);
+	});
+
+	it('a search of only dashes or spaces matches no one by code', () => {
+		expect(codes(filterAssignRoster(rows(), { search: '-' }))).toEqual([]);
+		expect(codes(filterAssignRoster(rows(), { search: ' - ' }))).toEqual([]);
 	});
 
 	it('filters by skill match', () => {

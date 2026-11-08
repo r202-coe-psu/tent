@@ -154,8 +154,6 @@ export const PUBLIC_BOOKING_FORM_I18N = {
 		submitting: 'กำลังบันทึกข้อมูล…',
 		submitConfirm: 'ยืนยันการลงทะเบียน',
 		submitOnsite: 'บันทึกลงทะเบียนทั้งครอบครัว',
-		unassignedDisclaimerAck: 'เข้าใจว่าข้อมูลจะรอในคิวจนกว่าเจ้าหน้าที่ศูนย์จะยืนยัน',
-		unassignedDisclaimerRequired: 'กรุณายืนยันการรับทราบเงื่อนไขการใช้งานระบบก่อนส่งข้อมูล',
 		capacityAvailable: (available: number, capacity: number, unit: string) =>
 			`ว่าง ${available} / ${capacity} ${unit}`,
 		shelterNotBookable: 'ศูนย์นี้ยังไม่เปิดรับลงทะเบียนล่วงหน้าจากหน้าสาธารณะ',
@@ -669,9 +667,6 @@ export const PUBLIC_BOOKING_FORM_I18N = {
 		submitting: 'Saving...',
 		submitConfirm: 'Confirm Registration',
 		submitOnsite: 'Save family registration',
-		unassignedDisclaimerAck:
-			'I understand my information waits in the queue until shelter staff confirm it.',
-		unassignedDisclaimerRequired: 'Please acknowledge the system terms before submitting.',
 		capacityAvailable: (available: number, capacity: number, unit: string) =>
 			`${available} / ${capacity} ${unit} free`,
 		shelterNotBookable: 'This shelter is not accepting public pre-registration yet.',
@@ -692,8 +687,8 @@ export const PUBLIC_BOOKING_FORM_I18N = {
 			'If you cannot find the shelter you wish to stay at, select "No shelter selected" for now, as your shelter may not be open for pre-registration.',
 		shelterChangedToast: (name: string) => `Shelter changed to "${name}"`,
 		submitRegistration: 'Submit registration',
-		shelterSafetyTitle: 'Shelter conditions and safety rules',
-		shelterSafetyAck: "I acknowledge and will follow the shelter's safety rules.",
+		shelterSafetyTitle: 'Shelter policies and conditions',
+		shelterSafetyAck: "I acknowledge and will follow this shelter's policies and conditions.",
 		chooseShelterTitle: 'Please choose a shelter',
 		chooseShelterDesc:
 			'Choose the shelter you want to stay at, or choose "No shelter selected" to continue registering.',

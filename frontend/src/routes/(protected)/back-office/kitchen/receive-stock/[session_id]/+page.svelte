@@ -1,11 +1,11 @@
 <script lang="ts">
 	import { page } from '$app/state';
-	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { toast } from 'svelte-sonner';
 	import * as Card from '$lib/components/ui/card';
 	import * as Dialog from '$lib/components/ui/dialog';
 	import { Button } from '$lib/components/ui/button';
+	import BackLink from '$lib/components/back-link.svelte';
 	import { Label } from '$lib/components/ui/label';
 	import { Textarea } from '$lib/components/ui/textarea';
 	import { authStore } from '$lib/stores/auth.svelte';
@@ -15,6 +15,7 @@
 		useMealPlans,
 		useMealServices,
 		useMealServiceReceipts,
+		useMealServiceLedger,
 		useConfirmMealServiceYield,
 		useRejectMealServiceReceipt,
 		mealServiceReceiptOutcome,
@@ -34,7 +35,6 @@
 	import { ulid } from '$lib/db/ulid';
 	import { useTickets } from '$lib/features/tickets';
 	import { formatThaiDate, formatThaiDateTime } from '$lib/utils/date';
-	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
 	import PackageCheck from '@lucide/svelte/icons/package-check';
 	import XCircle from '@lucide/svelte/icons/x-circle';
 	import CheckCircle2 from '@lucide/svelte/icons/check-circle-2';
@@ -72,6 +72,15 @@
 		activeServiceReceipt ? mealServiceReceiptOutcome(activeServiceReceipt) : undefined
 	);
 	const serviceReceiptConfirmed = $derived(activeServiceOutcome === 'confirmed');
+	const receivedLedger = useMealServiceLedger(
+		() => activeService?._id ?? '',
+		() => serviceReceiptConfirmed
+	);
+	const receivedLines = $derived(
+		[...(receivedLedger.data ?? [])].sort((a, b) =>
+			(a.lot?.note ?? '').localeCompare(b.lot?.note ?? '')
+		)
+	);
 	const serviceRejected = $derived(activeServiceOutcome === 'rejected');
 
 	const activeTicket = $derived.by(() => {
@@ -191,10 +200,7 @@
 
 <div class="space-y-5 bg-slate-50/60 p-4 sm:p-6">
 	<div class="flex flex-wrap items-center justify-between gap-3">
-		<Button variant="outline" href={resolve('/back-office/tickets/kitchen')} class="gap-1.5">
-			<ArrowLeft class="h-4 w-4" />
-			กลับหน้ารายการ
-		</Button>
+		<BackLink href={resolve('/back-office/tickets/kitchen')} label="กลับไปคิวตั๋ว" class="-ml-2" />
 	</div>
 
 	{#if isLoading}
@@ -308,6 +314,22 @@
 									{activeServiceReceipt.received_by}
 								</p>
 							{/if}
+							{#if receivedLedger.isPending}
+								<p class="mt-2 text-xs text-green-700">กำลังโหลดรายการที่รับเข้า...</p>
+							{:else if receivedLines.length > 0}
+								<ul class="mt-2 space-y-1.5">
+									{#each receivedLines as row (row._id)}
+										<li class="text-xs text-green-900">
+											<span class="font-semibold">{row.lot?.note ?? row.item_id}</span>
+											<span class="text-green-700"> · {row.qty} {row.unit}</span>
+											<span class="text-green-700">
+												· {row.lot?.storage_zone ?? 'ไม่ระบุจุดเก็บ'}</span
+											>
+											<span class="text-green-700"> · {row.lot?.lot_no ?? 'ไม่มีเลขล็อต'}</span>
+										</li>
+									{/each}
+								</ul>
+							{/if}
 						</div>
 					</div>
 				{:else}
@@ -376,13 +398,6 @@
 						{/if}
 					</div>
 				{/if}
-
-				<div class="flex items-center justify-between pt-2">
-					<Button variant="outline" onclick={() => goto(resolve('/back-office/tickets/kitchen'))}>
-						<ArrowLeft class="mr-1 h-3.5 w-3.5" />
-						กลับไปคิวตั๋ว
-					</Button>
-				</div>
 			</Card.Content>
 		</Card.Root>
 	{/if}

@@ -21,7 +21,7 @@
 	import EditCampaignForm from './components/edit-campaign-form.svelte';
 	import ForceCutoffDialog from './components/force-cutoff-dialog.svelte';
 	import DonationSlotsManager from './components/donation-slots-manager.svelte';
-	import { useDonationNeedsBoard, type NeedItem } from '$lib/features/operations';
+	import { operationsKeys, useDonationNeedsBoard, type NeedItem } from '$lib/features/operations';
 	import { useQueryClient } from '@tanstack/svelte-query';
 	import { resolveShelterCode } from '$lib/db/shelter';
 	import { Button } from '$lib/components/ui/button/index.js';
@@ -119,7 +119,12 @@
 	// The one query the list shows right now.
 	const shownReceived = $derived(activeSearch ? searchQuery : receivedQuery);
 	const receivedRows = $derived(shownReceived.data?.pages.flatMap((p) => p.donations) ?? []);
-	const refreshQueue = () => queryClient.invalidateQueries({ queryKey: donationQueueKeys.all });
+	// Approving / receiving a booking moves goods in or out of "incoming stock" (#1153).
+	const refreshQueue = () =>
+		Promise.all([
+			queryClient.invalidateQueries({ queryKey: donationQueueKeys.all }),
+			queryClient.invalidateQueries({ queryKey: [...operationsKeys.all, 'incomingStock'] })
+		]);
 
 	/** What the list tab shows: the list, a booking under review, or the counter. */
 	let selectedPendingRequest = $state<PendingDonationRow | null>(null);

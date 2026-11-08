@@ -21,4 +21,10 @@ export {
 	volunteerApplySchema,
 	volunteerProfileUpdateSchema
 } from './domain/volunteer';
-export type { PortalCredential, TicketFindInput, VolunteerApplyInput } from './domain/volunteer';
+export type {
+	PortalAccessStatus,
+	PortalAccessStatusCode,
+	PortalCredential,
+	TicketFindInput,
+	VolunteerApplyInput
+} from './domain/volunteer';

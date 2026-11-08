@@ -15,6 +15,7 @@ function render(props: {
 	distributeDisabled?: boolean;
 	disabled?: boolean;
 	disabledReason?: string;
+	canChange?: boolean;
 }) {
 	row = document.createElement('div');
 	document.body.appendChild(row);
@@ -111,5 +112,21 @@ describe('RowActions — offline row', () => {
 		expect(wrappers).toHaveLength(1);
 		const describedBy = wrappers[0].getAttribute('aria-describedby');
 		expect(document.getElementById(describedBy!)?.textContent).toBe(HINT);
+	});
+});
+
+describe('RowActions — read-only viewer (donation_staff, CR-227)', () => {
+	it('renders no receive or issue button at all when canChange is false', () => {
+		render({ canChange: false });
+
+		expect(row.querySelector('button')).toBeNull();
+		expect(row.textContent).not.toContain('รับเข้า');
+		expect(row.textContent).not.toContain('เบิก');
+	});
+
+	it('still renders both buttons by default', () => {
+		render({});
+
+		expect(row.querySelectorAll('button')).toHaveLength(2);
 	});
 });

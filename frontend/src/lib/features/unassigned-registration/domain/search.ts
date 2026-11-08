@@ -7,6 +7,7 @@ import { z } from 'zod';
 import { evacueeConsentSchema } from '$lib/features/consent/server';
 import { CR112_VULNERABLE_GROUP_ACTIVE, formatMasterLabel } from '$lib/features/master-data';
 import { formatThaiDateTime } from '$lib/utils/date';
+import type { LanguageCode } from '$lib/utils/language';
 
 /** Full Station 1 badge copy for Unassigned Registration hits (#250 / CR-113). */
 export const UNASSIGNED_QUEUE_BADGE_LABEL = 'คิวกลาง / ยังไม่ระบุศูนย์';
@@ -116,6 +117,57 @@ const PET_SPECIES_LABELS: Record<OpenPetHit['species'], string> = {
 	other: 'อื่น ๆ'
 };
 
+/** Display copy for the claim flow; the Thai side reuses the constants and maps above/below. */
+export type UnassignedSearchCopy = {
+	badgeLabel: string;
+	badgeShort: string;
+	claimFlowStatusGuidance: string;
+	claimDialogDescription: string;
+	cardType: Record<PersonIdHit['cardType'], string>;
+	/** `unspecified` covers `null` and any gender other than male / female. */
+	gender: { male: string; female: string; unspecified: string };
+	petSpecies: Record<OpenPetHit['species'], string>;
+	noPhone: string;
+	noIdNumber: string;
+	hasCage: string;
+};
+
+/** English mirror of the Thai copy in this file — the Thai strings stay the source of truth. */
+export const unassignedSearchCopyByLanguage: Record<LanguageCode, UnassignedSearchCopy> = {
+	th: {
+		badgeLabel: UNASSIGNED_QUEUE_BADGE_LABEL,
+		badgeShort: UNASSIGNED_QUEUE_BADGE_SHORT,
+		claimFlowStatusGuidance: CLAIM_FLOW_STATUS_GUIDANCE,
+		claimDialogDescription: CLAIM_DIALOG_DESCRIPTION,
+		cardType: CARD_TYPE_LABELS,
+		gender: { male: GENDER_LABELS.male, female: GENDER_LABELS.female, unspecified: 'ไม่ระบุ' },
+		petSpecies: PET_SPECIES_LABELS,
+		noPhone: 'ไม่มีเบอร์',
+		noIdNumber: 'ไม่มีเลขบัตร',
+		hasCage: 'มีกรง'
+	},
+	en: {
+		badgeLabel: 'Central queue / shelter not yet assigned',
+		badgeShort: 'Central queue',
+		claimFlowStatusGuidance:
+			'Select the members and pets to admit to this shelter, then go to the review page. Nobody is admitted until you confirm there. Confirming creates the Evacuee in Couch (pre_registered) and immediately moves them to Arrived / awaiting screening (arriving).',
+		claimDialogDescription:
+			'Select the members and pets that are still open. They are not admitted yet; the details must be reviewed first.',
+		cardType: {
+			national_id: 'National ID card',
+			passport: 'Passport',
+			pink_card: 'Pink card',
+			other: 'Other document',
+			anonymous: 'Anonymous'
+		},
+		gender: { male: 'Male', female: 'Female', unspecified: 'Not specified' },
+		petSpecies: { dog: 'Dog', cat: 'Cat', other: 'Other' },
+		noPhone: 'No phone',
+		noIdNumber: 'No ID number',
+		hasCage: 'Has cage'
+	}
+};
+
 export interface UnassignedRegistrationSearchHit {
 	id: string;
 	reserved_household_id: string;
@@ -134,37 +186,54 @@ export function formatOpenMemberName(member: OpenMemberHit): string {
 	return `${member.first_name} ${member.last_name}`.trim();
 }
 
-export function formatOpenMemberGender(gender: string | null | undefined): string {
-	return (gender ? GENDER_LABELS[gender] : undefined) ?? 'ไม่ระบุ';
+export function formatOpenMemberGender(
+	gender: string | null | undefined,
+	language: LanguageCode = 'th'
+): string {
+	const labels = unassignedSearchCopyByLanguage[language].gender;
+	return gender === 'male' || gender === 'female' ? labels[gender] : labels.unspecified;
 }
 
-export function formatOpenMemberCardType(cardType: PersonIdHit['cardType']): string {
-	return CARD_TYPE_LABELS[cardType];
+export function formatOpenMemberCardType(
+	cardType: PersonIdHit['cardType'],
+	language: LanguageCode = 'th'
+): string {
+	return unassignedSearchCopyByLanguage[language].cardType[cardType];
 }
 
-export function formatOpenMemberVulnerableGroup(code: string): string {
+export function formatOpenMemberVulnerableGroup(
+	code: string,
+	language: LanguageCode = 'th'
+): string {
 	const hit = CR112_VULNERABLE_GROUP_ACTIVE.find((item) => item.code === code);
-	return hit ? formatMasterLabel(hit, 'th') : code;
+	return hit ? formatMasterLabel(hit, language) : code;
 }
 
 /** Phone · card type · ID number for claim-dialog identity line. */
-export function formatOpenMemberIdentityLine(member: OpenMemberHit): string {
-	const phone = member.phone ?? 'ไม่มีเบอร์';
+export function formatOpenMemberIdentityLine(
+	member: OpenMemberHit,
+	language: LanguageCode = 'th'
+): string {
+	const copy = unassignedSearchCopyByLanguage[language];
+	const phone = member.phone ?? copy.noPhone;
 	if (!member.person_id) {
-		return `${phone} · ไม่มีเลขบัตร`;
+		return `${phone} · ${copy.noIdNumber}`;
 	}
-	const cardLabel = formatOpenMemberCardType(member.person_id.cardType);
-	const number = member.person_id.number ?? 'ไม่มีเลขบัตร';
+	const cardLabel = formatOpenMemberCardType(member.person_id.cardType, language);
+	const number = member.person_id.number ?? copy.noIdNumber;
 	return `${phone} · ${cardLabel} · ${number}`;
 }
 
 /** Gender · country for claim-dialog demographics line. */
-export function formatOpenMemberDemographicsLine(member: OpenMemberHit): string {
-	return `${formatOpenMemberGender(member.gender)} · ${member.country}`;
+export function formatOpenMemberDemographicsLine(
+	member: OpenMemberHit,
+	language: LanguageCode = 'th'
+): string {
+	return `${formatOpenMemberGender(member.gender, language)} · ${member.country}`;
 }
 
-export function formatOpenPetLabel(pet: OpenPetHit): string {
-	const species = PET_SPECIES_LABELS[pet.species] ?? pet.species;
+export function formatOpenPetLabel(pet: OpenPetHit, language: LanguageCode = 'th'): string {
+	const species = unassignedSearchCopyByLanguage[language].petSpecies[pet.species] ?? pet.species;
 	const countPart = pet.count > 1 ? ` ×${pet.count}` : '';
 	const notes = pet.notes?.trim();
 	return notes ? `${species}${countPart} (${notes})` : `${species}${countPart}`;
@@ -182,9 +251,13 @@ export function totalOpenPetCount(pets: readonly OpenPetHit[]): number {
 	return pets.reduce((sum, pet) => sum + pet.count, 0);
 }
 
-export function claimedPetSummaries(pets: readonly PetSummarySource[]): ClaimedPetSummary[] {
+export function claimedPetSummaries(
+	pets: readonly PetSummarySource[],
+	language: LanguageCode = 'th'
+): ClaimedPetSummary[] {
+	const { hasCage } = unassignedSearchCopyByLanguage[language];
 	return pets.map((pet) => {
-		const details = [pet.notes?.trim(), pet.has_cage ? 'มีกรง' : '']
+		const details = [pet.notes?.trim(), pet.has_cage ? hasCage : '']
 			.filter((part): part is string => Boolean(part))
 			.join(' · ');
 		return details

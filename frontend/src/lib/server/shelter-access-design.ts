@@ -365,11 +365,15 @@ export const TICKET_DISTRIBUTION_MANGO_INDEXES = [
  *    a new offsetting entry, never by editing history.
  *  - **forward-only** `donation.status` — `received` may not fall back to `declared`
  *    (schema.md §2.3 state machine).
- *  - **role gate** on `stock_ledger` — only warehouse staff / managers may move stock.
+ *  - **role gate** on `stock_ledger` — only warehouse staff / managers may move stock; the one
+ *    exception for `donation_staff` is a positive `reason: 'donation'` receipt (CR-227).
+ *  - **role gate** on `recipe` — SM, warehouse, supply and kitchen staff of this shelter (CR-217).
+ *  - **role gate** on `replenishment_policy` / `requirement_group` / `food_sphere_standard` — SM and
+ *    warehouse staff of this shelter (CR-235); on `sop_override` — SM only (CR-235). Both cover `_deleted`.
  *
  * `_admin` bypasses so provisioning/seed writes are not blocked. NOTE: the
  * back-office intake route writes with admin credentials, so it does NOT pass
- * through here — its gate is `authorizeWarehouse()`. These rules protect the
+ * through here — its gate is `authorizeDonation()`. These rules protect the
  * session-authenticated client write path (`ReceiveStockForm` and friends).
  */
 export function buildValidateDocUpdate(code: string): string {
@@ -453,6 +457,32 @@ ${consentVduClause()}
   function canWriteBulkReturnEntry() {
     return canManageBulkReturnPool() || isRole('distribution_staff');
   }
+  // CR-217: shelter recipes are written (create, update, delete) by SM, WH, SC and KS of this
+  // shelter (+ SA via isRole), the same set as canWriteShelterRecipe on the client.
+  function canWriteRecipe() {
+    return isRole('shelter_manager') || isRole('warehouse_staff') ||
+      isRole('supply_coordinator') || isRole('kitchen_staff');
+  }
+  var RECIPE_WRITE_FORBIDDEN = 'Only shelter managers, warehouse, supply or kitchen staff of this shelter can write recipe';
+  // CR-235 (#1189): the shelter's stock parameter overrides (replenishment policy, requirement group,
+  // food sphere standard) are written (create, update, deactivate, delete) by SM and WH of this
+  // shelter (+ SA via isRole), the same set as canEditStockParameters on the client. supply_coordinator
+  // is NOT included. sop_override stays SA / SM only (canEditSopOverride) but is now enforced here too.
+  function isStockParameterDoc(doc) {
+    return !!doc && (doc.type === 'replenishment_policy' || doc.type === 'requirement_group' ||
+      doc.type === 'food_sphere_standard');
+  }
+  function canWriteStockParameter() {
+    return isRole('shelter_manager') || isRole('warehouse_staff');
+  }
+  var STOCK_PARAMETER_WRITE_FORBIDDEN = 'Only shelter managers or warehouse staff of this shelter can write replenishment_policy, requirement_group and food_sphere_standard';
+  function isSopOverrideDoc(doc) {
+    return !!doc && doc.type === 'sop_override';
+  }
+  function canWriteSopOverride() {
+    return isRole('shelter_manager');
+  }
+  var SOP_OVERRIDE_WRITE_FORBIDDEN = 'Only shelter managers of this shelter can write sop_override';
   function sameObjectExcept(previousObject, nextObject, ignoredFields) {
     var keys = {};
     var previousKeys = Object.keys(previousObject || {});
@@ -512,6 +542,15 @@ ${consentVduClause()}
     if (oldDoc && oldDoc.type === 'item_category' && oldDoc.is_protected === true) {
       throw { forbidden: 'Cannot delete system protected category: ' + oldDoc._id };
     }
+    if (oldDoc && oldDoc.type === 'recipe' && !canWriteRecipe()) {
+      throw { forbidden: RECIPE_WRITE_FORBIDDEN };
+    }
+    if (isStockParameterDoc(oldDoc) && !canWriteStockParameter()) {
+      throw { forbidden: STOCK_PARAMETER_WRITE_FORBIDDEN };
+    }
+    if (isSopOverrideDoc(oldDoc) && !canWriteSopOverride()) {
+      throw { forbidden: SOP_OVERRIDE_WRITE_FORBIDDEN };
+    }
     if (oldDoc && oldDoc.type === 'distribution_batch' && oldDoc.status === 'closed') {
       throw { forbidden: 'Closed distribution_batch cannot be modified' };
     }
@@ -566,6 +605,15 @@ ${consentVduClause()}
   require('created_at');
   require('updated_at');
   require('created_by');
+  if (newDoc.type === 'recipe' && !canWriteRecipe()) {
+    throw { forbidden: RECIPE_WRITE_FORBIDDEN };
+  }
+  if ((isStockParameterDoc(newDoc) || isStockParameterDoc(oldDoc)) && !canWriteStockParameter()) {
+    throw { forbidden: STOCK_PARAMETER_WRITE_FORBIDDEN };
+  }
+  if ((isSopOverrideDoc(newDoc) || isSopOverrideDoc(oldDoc)) && !canWriteSopOverride()) {
+    throw { forbidden: SOP_OVERRIDE_WRITE_FORBIDDEN };
+  }
   if (newDoc.shelter_code !== '${code}') {
     throw { forbidden: 'shelter_code must be ${code}' };
   }
@@ -1269,14 +1317,21 @@ ${consentVduClause()}
       newDoc.reason === 'receive' &&
       typeof newDoc.ref_id === 'string' &&
       /^distribution_log:.+/.test(newDoc.ref_id);
-    if (!isStaff && !(isLoanReturnReceipt && isRole('distribution_staff'))) {
+    // CR-227: donation_staff may only record a positive donation receipt (what the donation flow
+    // writes); every other reason, adjust, distribute, merge and requisition stay refused for it.
+    var isDonationReceipt =
+      newDoc.reason === 'donation' &&
+      typeof newDoc.qty === 'string' &&
+      /^(?:[1-9]\\d*(?:\\.\\d{1,4})?|0\\.(?!0+$)\\d{1,4})$/.test(newDoc.qty);
+    var isDonationStaffReceipt = isDonationReceipt && isRole('donation_staff');
+    if (!isStaff && !isDonationStaffReceipt && !(isLoanReturnReceipt && isRole('distribution_staff'))) {
       throw { forbidden: 'Only warehouse staff or managers can write stock ledger' };
     }
     // A DST receipt must look exactly like a counter loan return (return-workflow.ts): own actor,
     // whole positive qty, the counter-return lot note and a deterministic id. The VDU cannot read
     // the referenced log, so item/qty are not bound to it — that residual risk is accepted by
     // CR-161 R3 (physical return for DST) and mirrors warehouse receipts.
-    if (!isStaff) {
+    if (!isStaff && !isDonationStaffReceipt) {
       if (newDoc.created_by !== userCtx.name) {
         throw { forbidden: 'Loan return stock ledger created_by must match the current actor' };
       }

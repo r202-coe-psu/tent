@@ -122,7 +122,8 @@ import {
 } from './helpers/e2e-env';
 import { injectSession, routeBrowserCouchThroughApp } from './helpers/login';
 import {
-	DISCLAIMER_LABEL,
+	CONSENT_HEADING,
+	CONSENT_MAIN_LABEL,
 	JUMP_BUTTON,
 	PRE_REGISTER_PATH,
 	SUBMIT_LABEL,
@@ -346,13 +347,11 @@ test.describe('Pre-register: render contract (R)', { tag: ['@pre-register', '@sm
 		await expect(page.getByRole('heading', { name: 'ข้อมูลที่อยู่อาศัย', level: 2 })).toBeVisible();
 		await expect(page.getByRole('heading', { name: 'สมาชิกในครอบครัว', level: 2 })).toBeVisible();
 		await expect(page.getByRole('heading', { name: 'สัตว์เลี้ยง', level: 2 })).toBeVisible();
-		await expect(
-			page.getByRole('heading', { name: 'ข้อตกลงและความยินยอม', level: 3 })
-		).toBeVisible();
+		await expect(page.getByRole('heading', { name: CONSENT_HEADING, level: 3 })).toBeVisible();
 		await expect(
 			page.getByRole('heading', { name: 'ต้องรับทราบก่อนส่งข้อมูล', level: 4 })
-		).toBeVisible();
-		await expect(page.getByRole('checkbox', { name: DISCLAIMER_LABEL })).toBeVisible();
+		).toHaveCount(0);
+		await expect(page.getByRole('checkbox', { name: CONSENT_MAIN_LABEL })).toBeVisible();
 
 		// submit button in the bottom bar, repeated once in the summary aside
 		await expect(page.getByRole('button', { name: SUBMIT_LABEL })).toHaveCount(2);
@@ -552,7 +551,7 @@ test.describe('Pre-register: render contract (R)', { tag: ['@pre-register', '@sm
 	test('R2 the consent checkbox and member 2 have the same field set', async ({ page }) => {
 		await NO_BANNER(page);
 		await openPreRegister(page);
-		const consent = page.getByRole('checkbox', { name: DISCLAIMER_LABEL });
+		const consent = page.getByRole('checkbox', { name: CONSENT_MAIN_LABEL });
 		await expect(consent).toBeEnabled();
 		await expect(consent).not.toBeChecked();
 
@@ -770,7 +769,7 @@ test.describe('Pre-register: validation gates (V)', { tag: ['@pre-register', '@s
 
 		await acceptDisclaimer(page);
 		for (const button of await buttons.all()) await expect(button).toBeEnabled();
-		await page.getByRole('checkbox', { name: DISCLAIMER_LABEL }).uncheck();
+		await page.getByRole('checkbox', { name: CONSENT_MAIN_LABEL }).uncheck();
 		for (const button of await buttons.all()) await expect(button).toBeDisabled();
 
 		await acceptDisclaimer(page);
@@ -1371,7 +1370,7 @@ test.describe(
 			await expect(page.locator('#member-0-phone')).toHaveValue('0899999999');
 			await expect(page.locator('#address-no')).toHaveValue('123/45');
 			await expect(page.locator('#postal_code')).toHaveValue('90110');
-			await expect(page.getByRole('checkbox', { name: DISCLAIMER_LABEL })).toBeChecked();
+			await expect(page.getByRole('checkbox', { name: CONSENT_MAIN_LABEL })).toBeChecked();
 			await expect(page.getByText('ลงทะเบียนล่วงหน้าสำเร็จ')).toHaveCount(0);
 		}
 
@@ -1764,16 +1763,11 @@ test.describe('Pre-register: layout and language (U)', { tag: ['@pre-register', 
 		await expect(page.getByRole('heading', { name: 'ลงทะเบียนล่วงหน้า', level: 1 })).toBeVisible();
 	});
 
-	test('U3 on a phone the language toggle lives in the hamburger menu', async ({ page }) => {
+	test('U3 on a phone the language toggle stays in the header', async ({ page }) => {
 		await page.setViewportSize({ width: 390, height: 844 });
 		await openPreRegister(page);
-		// the header toggle is hidden below sm
-		await expect(
-			page.locator('header').getByRole('button', { name: 'Switch to English' })
-		).toBeHidden();
-		await page.getByRole('button', { name: /เปิดเมนู/ }).click();
-		await page.getByRole('button', { name: /เปลี่ยนภาษา/ }).click();
-		await page.keyboard.press('Escape');
+		// one switcher everywhere: no detour through the hamburger menu
+		await page.locator('header').getByRole('button', { name: 'Switch to English' }).click();
 		await expect(page.getByRole('heading', { name: 'Pre-registration', level: 1 })).toBeVisible();
 	});
 });

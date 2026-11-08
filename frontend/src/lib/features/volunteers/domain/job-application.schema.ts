@@ -1,6 +1,6 @@
 /**
  * Job application domain schema — CR-094 §3.4 (schema.md §2.18, `job_application`
- * schema_v 1 → 2). Public applications may persist only `tracking_token_hash`;
+ * schema_v 1 → 2; CR-220 schema_v 3 → 4: quota release markers). Public applications may persist only `tracking_token_hash`;
  * the raw bearer token is retained only for legacy/staff-created documents.
  *
  * Pure TypeScript / Zod — no I/O, no PouchDB, no Svelte.
@@ -110,7 +110,7 @@ export type SelectedShift = z.infer<typeof selectedShiftSchema>;
 
 export interface JobApplication extends BaseDoc {
 	type: 'job_application';
-	schema_v: 2 | 3;
+	schema_v: 2 | 3 | 4;
 	job_id: string;
 	/** Stable concrete shift identity; absent only on legacy v2 documents. */
 	shift_id?: string;
@@ -126,6 +126,13 @@ export interface JobApplication extends BaseDoc {
 	reviewed_at?: string | null;
 	reviewed_by?: string | null;
 	review_reasons?: JobApplicationReviewReason[];
+	/**
+	 * CR-220 — set with `status: cancelled` (no linked assignment, was `confirmed`) while the
+	 * job quota is still owed back. Written by the public ticket cancel only.
+	 */
+	quota_release_due_at?: string | null;
+	/** CR-220 — the quota of this application was given back to the `job` (ticket cancel only). */
+	quota_released_at?: string | null;
 }
 
 export const jobApplicationSchema = z
@@ -133,7 +140,7 @@ export const jobApplicationSchema = z
 		_id: z.string().startsWith('job_application:'),
 		_rev: z.string().optional(),
 		type: z.literal('job_application'),
-		schema_v: z.union([z.literal(2), z.literal(3)]),
+		schema_v: z.union([z.literal(2), z.literal(3), z.literal(4)]),
 		shelter_code: z.string().min(1),
 		created_at: z.string(),
 		updated_at: z.string(),
@@ -149,7 +156,9 @@ export const jobApplicationSchema = z
 		review_notes: z.string().nullable().optional(),
 		reviewed_at: z.string().nullable().optional(),
 		reviewed_by: z.string().nullable().optional(),
-		review_reasons: z.array(jobApplicationReviewReasonSchema).optional()
+		review_reasons: z.array(jobApplicationReviewReasonSchema).optional(),
+		quota_release_due_at: z.string().nullable().optional(),
+		quota_released_at: z.string().nullable().optional()
 	})
 	.refine((doc) => Boolean(doc.tracking_token || doc.tracking_token_hash), {
 		message: 'tracking_token or tracking_token_hash is required',
@@ -187,7 +196,7 @@ export function makeJobApplication(
 	const d = jobApplicationInputSchema.parse(input);
 	return makeDoc(
 		'job_application',
-		3,
+		4,
 		{
 			job_id: d.job_id,
 			shift_id: d.shift_id,

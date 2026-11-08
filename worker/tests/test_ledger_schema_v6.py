@@ -11,8 +11,8 @@ from __future__ import annotations
 
 from decimal import Decimal
 
-from worker.mongo.on_hand import on_hand_decimals
-from worker.projectors.compute_needs import on_hand_by_item
+from worker.donation_ledger import on_hand_decimals
+from worker.projectors.compute_needs import need_breakdown
 from worker.projectors.stock import compute_shelter_stocks
 
 ITEM = "item_master:rice"
@@ -47,8 +47,14 @@ def test_on_hand_decimals_sums_mixed_schema_versions() -> None:
     assert on_hand_decimals(MIXED) == {ITEM: Decimal(86)}
 
 
-def test_on_hand_by_item_sums_mixed_schema_versions() -> None:
-    assert on_hand_by_item(MIXED) == {ITEM: 86.0}
+def test_need_breakdown_sums_mixed_schema_versions() -> None:
+    campaigns = [
+        {
+            "_id": "donation_campaign:01",
+            "needs": [{"item_id": ITEM, "qty_target": "100"}],
+        }
+    ]
+    assert need_breakdown(campaigns, [], MIXED)[ITEM]["on_hand"] == Decimal(86)
 
 
 def test_compute_shelter_stocks_ignores_adjust_reason_fields() -> None:

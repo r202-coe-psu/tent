@@ -84,6 +84,32 @@ describe('coordinator role grants on _users (#955)', () => {
 					data: { rows: Object.values(db).map((doc) => ({ id: doc._id, doc })) }
 				};
 			}
+			if (method === 'POST' && clean === '/_users/_find') {
+				// Mirror `selector._id.$in` and `fields`: only the asked-for fields come back.
+				const { selector, fields } = body as {
+					selector: { _id: { $in: string[] } };
+					fields: string[];
+				};
+				const stored = (k: string) => db[`org.couchdb.user:${encodeURIComponent(k.slice(17))}`];
+				return {
+					status: 200,
+					data: {
+						docs: selector._id.$in.flatMap((k) =>
+							stored(k)
+								? [
+										{
+											...Object.fromEntries(
+												fields.map((f) => [f, stored(k)[f as keyof FakeUserDoc]])
+											),
+											// Couch answers the raw id, not the path-encoded key the fake stores.
+											_id: k
+										}
+									]
+								: []
+						)
+					}
+				};
+			}
 			if (method === 'POST' && clean === '/_users/_all_docs') {
 				// Keys are raw ids (`org.couchdb.user:a@b`); the fake stores them path-encoded.
 				const keys = (body as { keys: string[] }).keys;
@@ -661,6 +687,87 @@ describe('coordinator role grants on _users (#955)', () => {
 			await expect(revoke({ role: 'kiosk_staff' })).rejects.toMatchObject({ code: 'FORBIDDEN' });
 		});
 	});
+	describe('revoke name resolution skips soft-deleted docs (CR-171)', () => {
+		it('resolves a live case-variant when the exact name is soft-deleted', async () => {
+			seed('vol@x.test', { deleted_at: '2026-10-01T00:00:00.000Z', deleted_by: 'admin' });
+			seed('Vol@x.test', {
+				roles: ['shelter:SH001', 'SH001:kitchen_staff'],
+				role_grants: [grant()]
+			});
+			await revokeCoordinatorGrant({
+				name: 'vol@x.test',
+				volunteer_id: 'volunteer:V1',
+				shelter_code: 'SH001',
+				role: 'kitchen_staff',
+				actor: 'staff03'
+			});
+			expect(db[key('Vol@x.test')].roles).toEqual([]);
+			expect(db[key('vol@x.test')].deleted_at).toBeTruthy();
+		});
+	});
+	describe('edge_shelters on grant / revoke (CR-171 FR-1)', () => {
+		it('grant then revoke on an account with no SH001 keeps SH001 in edge_shelters', async () => {
+			seed(EMAIL, { roles: [], edge_shelters: [] });
+			await grantCoordinatorRole(input());
+			expect(db[key(EMAIL)].edge_shelters).toContain('SH001');
+			await revokeCoordinatorGrant({
+				name: EMAIL,
+				volunteer_id: 'volunteer:V1',
+				shelter_code: 'SH001',
+				role: 'kitchen_staff',
+				actor: 'staff03'
+			});
+			expect(db[key(EMAIL)].roles).toEqual([]);
+			expect(db[key(EMAIL)].edge_shelters).toContain('SH001');
+		});
+
+		it('revoke folds roles into edge_shelters on a pre-backfill account (no edge_shelters)', async () => {
+			seed(EMAIL, {
+				roles: ['shelter:SH001', 'SH001:kitchen_staff'],
+				role_grants: [grant()]
+			});
+			delete db[key(EMAIL)].edge_shelters;
+			await revokeCoordinatorGrant({
+				name: EMAIL,
+				volunteer_id: 'volunteer:V1',
+				shelter_code: 'SH001',
+				role: 'kitchen_staff',
+				actor: 'staff03'
+			});
+			expect(db[key(EMAIL)].roles).toEqual([]);
+			expect(db[key(EMAIL)].edge_shelters).toEqual(['SH001']);
+		});
+
+		it('grant folds existing roles into edge_shelters on a pre-backfill account', async () => {
+			seed(EMAIL, { roles: ['shelter:SH002'] });
+			delete db[key(EMAIL)].edge_shelters;
+			await grantCoordinatorRole(input());
+			expect(db[key(EMAIL)].edge_shelters).toEqual(expect.arrayContaining(['SH002', 'SH001']));
+		});
+	});
+
+	describe('soft-deleted accounts are not volunteer accounts (CR-171 FR-5)', () => {
+		const deleted = { deleted_at: '2026-11-01T00:00:00.000Z', roles: [], role_grants: [grant()] };
+
+		it('readVolunteerAccount counts a soft-deleted account as none', async () => {
+			seed(EMAIL, deleted);
+			expect(
+				await readVolunteerAccount({
+					name: EMAIL,
+					volunteer_id: 'volunteer:V1',
+					shelter_code: 'SH001'
+				})
+			).toEqual({ exists: false, grants: [], permanent_roles: [] });
+		});
+
+		it('readShelterVolunteerAccounts skips it, wide and narrow', async () => {
+			seed(EMAIL, deleted);
+			const links = [{ volunteer_id: 'volunteer:V1', name: EMAIL }];
+			expect(await readShelterVolunteerAccounts(links, 'SH001')).toEqual([]);
+			expect(await readShelterVolunteerAccounts(links, 'SH001', { narrow: true })).toEqual([]);
+		});
+	});
+
 	describe('reading a volunteer account for the dialog (FR-8, #1044)', () => {
 		const read = (over: Record<string, unknown> = {}) =>
 			readVolunteerAccount({
@@ -732,6 +839,33 @@ describe('coordinator role grants on _users (#955)', () => {
 					permanent_roles: []
 				}
 			]);
+		});
+
+		it('reads the same accounts with _find and a field list when narrow: no hash, salt or key loaded', async () => {
+			seed(EMAIL, {
+				roles: ['shelter:SH001', 'SH001:kitchen_staff', 'SH001:registration_staff'],
+				role_grants: [grant()]
+			});
+			seed('staff@example.com', { personnel_type: 'staff', volunteer_id: 'volunteer:V6' });
+			const links = [
+				{ volunteer_id: 'volunteer:V1', name: EMAIL },
+				{ volunteer_id: 'volunteer:V6', name: 'staff@example.com' },
+				{ volunteer_id: 'volunteer:V5', name: 'gone@example.com' }
+			];
+			const spy = vi.mocked(couchAdmin.adminRaw);
+
+			const wide = await readShelterVolunteerAccounts(links, 'SH001');
+			spy.mockClear();
+			const narrow = await readShelterVolunteerAccounts(links, 'SH001', { narrow: true });
+
+			expect(narrow).toEqual(wide);
+			expect(narrow.map((a) => a.name)).toEqual([EMAIL]);
+			const [path, method, body] = spy.mock.calls[0];
+			expect([path, method]).toEqual(['/_users/_find', 'POST']);
+			const { fields } = body as { fields: string[] };
+			for (const secret of ['derived_key', 'salt', 'password_scheme', 'password']) {
+				expect(fields).not.toContain(secret);
+			}
 		});
 
 		it('names who issued each grant here, and nothing more of the grant (CR-221 FR-8)', async () => {

@@ -462,7 +462,7 @@ interface ScreeningFill {
 /** Screen one person at Station 2. */
 async function screenEvacuee(page: Page, evacueeId: string, fill: ScreeningFill): Promise<void> {
 	await page.goto(`/onsite/medical-screening/${evacueeId}`);
-	await expect(page.getByText('Station 2', { exact: true })).toBeVisible({ timeout: 20_000 });
+	await expect(page.getByText('สถานี 2', { exact: true })).toBeVisible({ timeout: 20_000 });
 	await fillConditionTags(page, fill.conditions);
 	if (fill.medications) await page.locator('#med-medications').fill(fill.medications);
 	if (fill.allergies) await fillAllergyTags(page, fill.allergies);
@@ -498,7 +498,7 @@ async function stationTwo(
 /** Assign a zone and check the person in (→ active). */
 async function assignZone(page: Page, evacueeId: string, zoneName: string): Promise<void> {
 	await page.goto(`/onsite/zoning/${evacueeId}`);
-	await expect(page.getByText('Station 3', { exact: true })).toBeVisible({ timeout: 20_000 });
+	await expect(page.getByText('สถานี 3', { exact: true })).toBeVisible({ timeout: 20_000 });
 	await page.locator('div.grid button', { hasText: zoneName }).first().click();
 	await page.getByRole('button', { name: 'จัดเข้าโซน (รอยืนยันถึงโซน)' }).click();
 	await expect(page).toHaveURL(/\/onsite\/zoning$/, { timeout: 20_000 });
@@ -507,7 +507,7 @@ async function assignZone(page: Page, evacueeId: string, zoneName: string): Prom
 /** Zone Arrival Confirmation: active → room_confirmed. */
 async function confirmArrivalInZone(page: Page, evacueeId: string): Promise<void> {
 	await page.goto(`/onsite/zoning/${evacueeId}`);
-	await expect(page.getByText('Station 3', { exact: true })).toBeVisible({ timeout: 20_000 });
+	await expect(page.getByText('สถานี 3', { exact: true })).toBeVisible({ timeout: 20_000 });
 	await page.getByRole('button', { name: 'ยืนยันถึงโซน', exact: true }).click();
 	await expect(page).toHaveURL(/\/onsite\/zoning$/, { timeout: 20_000 });
 }
@@ -553,7 +553,7 @@ async function scanAndSelectOnly(page: Page, payload: string, others: string[]):
 	await page.getByRole('button', { name: 'ตกลง' }).click();
 	// The family panel only exists when the household has other members.
 	if (others.length > 0) {
-		await expect(page.getByText('จัดการเช็คอิน/เช็คเอาท์พร้อมกับครอบครัว')).toBeVisible({
+		await expect(page.getByText('จัดการเช็คอิน/เช็คเอาต์พร้อมกับครอบครัว')).toBeVisible({
 			timeout: 15_000
 		});
 	}
@@ -571,11 +571,11 @@ async function checkOutByScan(
 	reason: string
 ): Promise<void> {
 	await scanAndSelectOnly(page, id, others);
-	await page.getByRole('button', { name: 'เช็คเอาท์', exact: true }).click();
-	const dialog = page.getByRole('dialog', { name: 'เหตุผลการเช็คเอาท์' });
-	await dialog.getByLabel('เหตุผลการเช็คเอาท์').fill(reason);
-	await dialog.getByRole('button', { name: 'ยืนยันเช็คเอาท์' }).click();
-	await expect(page.getByText('เช็คเอาท์สำเร็จ 1 คน')).toBeVisible({ timeout: 15_000 });
+	await page.getByRole('button', { name: 'เช็คเอาต์', exact: true }).click();
+	const dialog = page.getByRole('dialog', { name: 'เหตุผลการเช็คเอาต์' });
+	await dialog.getByLabel('เหตุผลการเช็คเอาต์').fill(reason);
+	await dialog.getByRole('button', { name: 'ยืนยันเช็คเอาต์' }).click();
+	await expect(page.getByText('เช็คเอาต์สำเร็จ 1 คน')).toBeVisible({ timeout: 15_000 });
 }
 
 /** Check in through the scan page; someone with no zone to return to gets the zone dialog. */
@@ -865,14 +865,14 @@ async function walkInFlow(browser: Browser, run: Run, s: Sessions) {
 
 		// The child's Station 1 preferred zone comes preselected; staff confirm it.
 		await desk.goto(`/onsite/zoning/${ids[child.firstName]}`);
-		await expect(desk.getByText('Station 3', { exact: true })).toBeVisible({ timeout: 20_000 });
+		await expect(desk.getByText('สถานี 3', { exact: true })).toBeVisible({ timeout: 20_000 });
 		await expect(desk.getByText(`โซนที่สถานี 1 ระบุไว้: ${ZONE_VULNERABLE}`)).toBeVisible();
 		await desk.getByRole('button', { name: 'จัดเข้าโซน (รอยืนยันถึงโซน)' }).click();
 		await expect(desk).toHaveURL(/\/onsite\/zoning$/, { timeout: 20_000 });
 		await expectStay(desk, child, STATUS.active, ZONE_VULNERABLE);
 
 		await desk.goto(`/onsite/zoning/${ids[head.firstName]}`);
-		await expect(desk.getByText('Station 3', { exact: true })).toBeVisible({ timeout: 20_000 });
+		await expect(desk.getByText('สถานี 3', { exact: true })).toBeVisible({ timeout: 20_000 });
 		await desk.locator('div.grid button', { hasText: ZONE_GYM_1 }).first().click();
 		// The relative is still waiting → offered as a companion.
 		await desk.getByRole('checkbox').first().click();
