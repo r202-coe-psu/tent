@@ -3,7 +3,10 @@
 	import Thermometer from '@lucide/svelte/icons/thermometer';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Label } from '$lib/components/ui/label/index.js';
-	import { EWAR_SYMPTOM_GROUPS } from '$lib/features/people';
+	import { ewarSymptomGroupsByLanguage } from '$lib/features/people';
+	import { langState } from '$lib/states/i18n.svelte';
+	import { getTranslation } from '$lib/utils/i18n';
+	import { EWAR_SYMPTOMS_FIELDS_I18N } from '../_constants/ewar-symptoms-fields.i18n';
 
 	let {
 		symptoms = $bindable<string[]>([]),
@@ -18,6 +21,9 @@
 		showTemperature?: boolean;
 		temperatureError?: string;
 	} = $props();
+
+	const t = $derived(getTranslation(EWAR_SYMPTOMS_FIELDS_I18N, langState.current));
+	const symptomGroups = $derived(ewarSymptomGroupsByLanguage[langState.current]);
 
 	function toggleSymptom(id: string) {
 		if (disabled) return;
@@ -40,8 +46,8 @@
 	const tempValidationMsg = $derived.by(() => {
 		if (temperatureError) return temperatureError;
 		if (temperature_c === null || temperature_c === undefined) return '';
-		if (!Number.isFinite(temperature_c)) return 'กรุณากรอกอุณหภูมิเป็นตัวเลข';
-		if (temperature_c < 30 || temperature_c > 45) return 'อุณหภูมิต้องอยู่ระหว่าง 30 ถึง 45 °C';
+		if (!Number.isFinite(temperature_c)) return t.temperatureNotNumber;
+		if (temperature_c < 30 || temperature_c > 45) return t.temperatureOutOfRange;
 		return '';
 	});
 </script>
@@ -54,7 +60,7 @@
 				class="flex items-center gap-1.5 text-xs font-semibold text-foreground"
 			>
 				<Thermometer class="size-3.5 text-muted-foreground" />
-				อุณหภูมิร่างกาย (°C)
+				{t.temperatureLabel}
 			</Label>
 			<div class="flex max-w-xs items-center gap-2">
 				<Input
@@ -67,7 +73,7 @@
 					value={temperature_c ?? ''}
 					oninput={onTemperatureInput}
 					{disabled}
-					placeholder="เช่น 36.8"
+					placeholder={t.temperaturePlaceholder}
 					class="h-9"
 				/>
 				<span class="text-xs text-muted-foreground">°C</span>
@@ -79,25 +85,26 @@
 	{/if}
 
 	<div class="space-y-2">
-		<div class="flex items-center justify-between border-b border-border pb-2">
-			<h4 class="text-xs font-semibold text-foreground">
-				อาการเฝ้าระวัง (EWAR Symptoms Checklist)
+		<div class="flex items-center justify-between gap-2 border-b border-border pb-2">
+			<h4 class="min-w-0 text-xs font-semibold text-foreground">
+				{t.checklistTitle}
 			</h4>
 			{#if symptoms.length > 0}
-				<span class="text-2xs font-semibold text-red-600 dark:text-red-400">
-					เลือกแล้ว {symptoms.length} รายการ
+				<span class="shrink-0 text-2xs font-semibold text-red-600 dark:text-red-400">
+					{t.selectedCount(symptoms.length)}
 				</span>
 			{/if}
 		</div>
 
 		<div class="grid grid-cols-1 gap-2.5 md:grid-cols-2">
-			{#each EWAR_SYMPTOM_GROUPS as group (group.title)}
+			{#each symptomGroups as group (group.title)}
 				<div class="overflow-hidden rounded-lg border border-border bg-card">
 					<div
-						class="flex items-center justify-between border-b border-border bg-muted/30 px-3 py-1.5"
+						class="flex items-center justify-between gap-2 border-b border-border bg-muted/30 px-3 py-1.5"
 					>
-						<span class="text-2xs font-bold text-foreground">{group.title}</span>
-						<span class="text-2xs text-muted-foreground">
+						<span class="min-w-0 text-2xs font-bold break-words text-foreground">{group.title}</span
+						>
+						<span class="shrink-0 text-2xs text-muted-foreground">
 							{group.symptoms.filter((symptom) => symptoms.includes(symptom.id)).length}/{group
 								.symptoms.length}
 						</span>
@@ -123,7 +130,7 @@
 								>
 									{#if checked}<Check class="size-2.5" aria-hidden="true" />{/if}
 								</span>
-								<span class="flex min-w-0 flex-col leading-snug">
+								<span class="flex min-w-0 flex-col leading-snug break-words">
 									<span>{symptom.label}</span>
 									{#if symptom.sublabel}
 										<span class="text-xs font-normal text-muted-foreground">{symptom.sublabel}</span

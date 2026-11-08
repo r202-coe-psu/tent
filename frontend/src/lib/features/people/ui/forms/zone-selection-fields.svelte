@@ -5,14 +5,17 @@
 	import Sparkles from '@lucide/svelte/icons/sparkles';
 	import { Label } from '$lib/components/ui/label/index.js';
 	import * as Select from '$lib/components/ui/select/index.js';
-	import { useShelter, ZONE_TYPE_LABELS, type ZoneType } from '$lib/features/shelters/index.js';
+	import { useShelter, type ZoneType } from '$lib/features/shelters/index.js';
+	import { langState } from '$lib/states/i18n.svelte';
+	import { getTranslation } from '$lib/utils/i18n';
+	import { ZONE_SELECTION_FIELDS_I18N } from '../_constants/zone-selection-fields.i18n';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
 	import { getShelterCode } from '$lib/db/shelter';
 	import type { Evacuee, TriageLevel } from '$lib/features/people';
 	import {
 		recommendZoneKind,
 		pickRecommendedZone,
-		ZONE_KIND_LABELS,
+		zoneKindLabelsByLanguage,
 		type PreferredZoneOutcome
 	} from '$lib/features/people';
 
@@ -46,6 +49,9 @@
 		onSelectZone?: (zoneCode: string) => void;
 		disabled?: boolean;
 	} = $props();
+
+	const t = $derived(getTranslation(ZONE_SELECTION_FIELDS_I18N, langState.current));
+	const zoneKindLabels = $derived(zoneKindLabelsByLanguage[langState.current]);
 
 	function safeQuery<T>(fn: () => T, fallback: T): T {
 		try {
@@ -92,14 +98,14 @@
 	}
 
 	function recommendLabel(kind: string): string {
-		if (kind === 'quarantine') return 'แนะนำสำหรับผู้มีอาการเฝ้าระวัง (กักตัว)';
-		if (kind === 'vulnerable') return 'แนะนำสำหรับผู้มีความต้องการพิเศษหรือกลุ่มเปราะบาง';
-		return 'ไม่มีอาการเฝ้าระวังหรือความต้องการพิเศษ — แนะนำโซนทั่วไป';
+		if (kind === 'quarantine') return t.recommendQuarantine;
+		if (kind === 'vulnerable') return t.recommendVulnerable;
+		return t.recommendGeneral;
 	}
 
-	/** Thai type name; zones saved without a type count as general. */
+	/** Localised type name; zones saved without a type count as general. */
 	function zoneTypeName(type: string | undefined): string {
-		return ZONE_TYPE_LABELS[(type || 'general') as ZoneType] ?? type ?? '';
+		return t.zoneTypes[(type || 'general') as ZoneType] ?? type ?? '';
 	}
 
 	const isQuarantine = (zone: ZoneItem) => zone.type === 'quarantine';
@@ -126,12 +132,13 @@
 			role="status"
 		>
 			{#if preferred_zone.kind === 'use'}
-				โซนที่สถานี 1 ระบุไว้: <strong>{zoneName(preferred_zone.code)}</strong> — เลือกไว้ให้แล้ว เปลี่ยนได้
+				{t.preferredUsePrefix} <strong>{zoneName(preferred_zone.code)}</strong>
+				{t.preferredUseSuffix}
 			{:else if preferred_zone.kind === 'quarantine_overrides'}
-				สถานี 1 ระบุโซน <strong>{zoneName(preferred_zone.code)}</strong> ไว้ — ไม่ได้เลือกให้ เพราะมีอาการเฝ้าระวัง
-				ต้องแยกไปโซนกักโรค
+				{t.quarantineOverridesPrefix} <strong>{zoneName(preferred_zone.code)}</strong>
+				{t.quarantineOverridesSuffix}
 			{:else}
-				โซนที่สถานี 1 ระบุไว้ ({preferred_zone.code}) ไม่เปิดใช้งานแล้ว — กรุณาเลือกโซนเอง
+				{t.preferredUnavailable(preferred_zone.code)}
 			{/if}
 		</p>
 	{/if}
@@ -141,9 +148,9 @@
 			class="rounded-xl border border-amber-500/40 bg-amber-500/10 p-3 text-xs text-amber-900 dark:text-amber-100"
 		>
 			<p class="font-semibold">
-				ไม่มี{ZONE_KIND_LABELS[recommendedZoneType]} ที่เปิดอยู่
+				{t.noOpenZone(zoneKindLabels[recommendedZoneType])}
 			</p>
-			<p class="mt-0.5">{recommendLabel(recommendedZoneType)} — กรุณาเลือกโซนด้วยตนเอง</p>
+			<p class="mt-0.5">{recommendLabel(recommendedZoneType)} {t.pickManually}</p>
 		</div>
 	{:else if recommendedZone}
 		{@const isRecSelected = selected_zone === recommendedZone.code}
@@ -161,8 +168,8 @@
 					</div>
 					<div class="min-w-0">
 						<div class="flex flex-wrap items-center gap-x-2 gap-y-0.5">
-							<span class="text-xs font-bold text-foreground">โซนแนะนำ:</span>
-							<span class="text-sm font-bold text-primary"
+							<span class="text-xs font-bold text-foreground">{t.recommendedZone}</span>
+							<span class="text-sm font-bold break-words text-primary"
 								>{recommendedZone.name || recommendedZone.code}</span
 							>
 							<span class="text-xs text-muted-foreground"
@@ -181,13 +188,14 @@
 						onclick={() => handleSelect(recommendedZone.code)}
 						class="inline-flex min-h-11 shrink-0 items-center justify-center rounded-md border border-primary/40 bg-primary px-3 py-1.5 text-xs font-semibold whitespace-nowrap text-primary-foreground transition-colors hover:bg-primary/90 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none sm:min-h-9"
 					>
-						เลือกโซนแนะนำ
+						{t.selectRecommended}
 					</button>
 				{:else if isRecSelected}
 					<span
 						class="inline-flex shrink-0 items-center gap-1 self-start rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-semibold whitespace-nowrap text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300"
 					>
-						<CheckCircle class="size-3" /> เลือกอยู่
+						<CheckCircle class="size-3" />
+						{t.selectedBadge}
 					</span>
 				{/if}
 			</div>
@@ -197,13 +205,13 @@
 	<!-- Zone Selection Dropdown -->
 	<div class="space-y-1.5">
 		<Label class="text-xs font-semibold text-foreground">
-			เลือกโซนที่พัก (Active Shelter Zones)
+			{t.selectLabel}
 		</Label>
 		{#if activeZones.length === 0}
 			<p
 				class="rounded-lg border border-dashed border-border py-4 text-center text-xs text-muted-foreground"
 			>
-				ไม่พบรายการโซนในระบบ
+				{t.noZones}
 			</p>
 		{:else}
 			<Select.Root
@@ -219,7 +227,7 @@
 						{@const match = activeZones.find((z) => z.code === selected_zone)}
 						{match?.name?.trim() || match?.code || selected_zone}
 					{:else}
-						-- เลือกโซนที่พัก --
+						{t.placeholder}
 					{/if}
 				</Select.Trigger>
 				<Select.Content>
@@ -227,7 +235,7 @@
 						{@const isRec = recommendedZone?.code === zone.code}
 						<Select.Item
 							value={zone.code}
-							label={`${zone.name?.trim() || zone.code} · ${isQuarantine(zone) ? '⚠ ' : ''}${zoneTypeName(zone.type)}${isRec ? ' ★ แนะนำ' : ''}`}
+							label={`${zone.name?.trim() || zone.code} · ${isQuarantine(zone) ? '⚠ ' : ''}${zoneTypeName(zone.type)}${isRec ? t.recommendedItemSuffix : ''}`}
 						/>
 					{/each}
 				</Select.Content>
@@ -238,7 +246,7 @@
 	<!-- List of zones for quick tap/click -->
 	{#if activeZones.length > 0}
 		<div class="space-y-1.5 pt-1">
-			<span class="text-xs font-medium text-muted-foreground">รายการโซนทั้งหมด:</span>
+			<span class="text-xs font-medium text-muted-foreground">{t.allZones}</span>
 			<div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
 				{#each activeZones as zone (zone.code)}
 					{@const isSelected = selected_zone === zone.code}
@@ -247,21 +255,24 @@
 						type="button"
 						{disabled}
 						onclick={() => handleSelect(zone.code)}
-						class="flex items-center justify-between rounded-lg border p-2.5 text-left text-xs transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none disabled:pointer-events-none disabled:opacity-50 {isSelected
+						class="flex min-h-11 min-w-0 items-center justify-between gap-2 rounded-lg border p-2.5 text-left text-xs transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none disabled:pointer-events-none disabled:opacity-50 {isSelected
 							? 'border-primary bg-primary/5 font-semibold text-primary'
 							: isQuarantine(zone)
 								? 'border-red-500/50 bg-red-500/5 text-foreground hover:bg-red-500/10'
 								: 'border-border bg-card text-foreground hover:bg-muted/40'}"
 					>
-						<div class="flex items-center gap-2">
+						<div class="flex min-w-0 items-center gap-2">
 							{#if isQuarantine(zone)}
-								<ShieldAlert class="size-3.5 text-red-600 dark:text-red-400" aria-hidden="true" />
+								<ShieldAlert
+									class="size-3.5 shrink-0 text-red-600 dark:text-red-400"
+									aria-hidden="true"
+								/>
 							{:else}
-								<MapPin class="size-3.5 text-muted-foreground" />
+								<MapPin class="size-3.5 shrink-0 text-muted-foreground" />
 							{/if}
-							<div>
+							<div class="min-w-0">
 								<div class="flex flex-wrap items-center gap-1.5">
-									<span>{zone.name?.trim() || zone.code}</span>
+									<span class="min-w-0 break-words">{zone.name?.trim() || zone.code}</span>
 									<span
 										class="inline-flex items-center rounded-md px-1.5 py-px text-xs leading-5 font-semibold {isQuarantine(
 											zone
@@ -269,24 +280,25 @@
 											? 'bg-red-600 text-white dark:bg-red-500'
 											: 'bg-muted text-muted-foreground'}"
 									>
-										{isQuarantine(zone) ? 'โซน' : ''}{zoneTypeName(zone.type)}
+										{isQuarantine(zone) ? t.quarantineBadgePrefix : ''}{zoneTypeName(
+											zone.type
+										)}{isQuarantine(zone) ? t.quarantineBadgeSuffix : ''}
 									</span>
 									{#if isRec}
 										<span
 											class="inline-flex items-center rounded-md bg-amber-100 px-1.5 py-px text-xs leading-5 font-semibold text-amber-800 dark:bg-amber-950 dark:text-amber-200"
 										>
-											แนะนำ
+											{t.recommendedBadge}
 										</span>
 									{/if}
 								</div>
 								<span class="text-xs text-muted-foreground">
-									พักอยู่ {occupantCount(zone.code)}
-									{zone.capacity != null ? `/ ${zone.capacity}` : ''} คน
+									{t.occupancy(occupantCount(zone.code), zone.capacity)}
 								</span>
 							</div>
 						</div>
 						{#if isSelected}
-							<CheckCircle class="size-4 text-primary" />
+							<CheckCircle class="size-4 shrink-0 text-primary" />
 						{/if}
 					</button>
 				{/each}

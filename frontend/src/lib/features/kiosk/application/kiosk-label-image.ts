@@ -3,10 +3,13 @@ import {
 	KIOSK_LABEL_CHECKLIST,
 	KIOSK_LABEL_LINK,
 	KIOSK_LABEL_LINK_GAP_MM,
+	KIOSK_LABEL_QR_CAPTION,
+	KIOSK_LABEL_QR_CAPTION_GAP_MM,
 	KIOSK_LABEL_TEXT,
 	KIOSK_LABEL_ZONE,
 	kioskLabelDots,
 	kioskLabelLayout,
+	labelEmergencyLine,
 	labelZoneLine,
 	mmToDots,
 	type LabelZoneLine,
@@ -20,6 +23,8 @@ export type KioskLabelContent = {
 	name: string;
 	/** Current zone name; missing or null leaves a dotted rule to write the zone on. */
 	zone?: string | null;
+	/** Emergency contact phone, printed on its own row under the zone; none leaves no row. */
+	emergencyPhone?: string | null;
 	checklist?: readonly string[];
 	/** Intake stations passed: this many checklist boxes are ticked, top first. */
 	checkedCount?: number;
@@ -141,6 +146,11 @@ export async function renderKioskLabelPng(label: KioskLabelContent): Promise<str
 
 	y += mmToDots(KIOSK_LABEL_ZONE.rowGapMm);
 	drawZone(context, labelZoneLine(label.zone), fonts.zone, layout.text, y, { words, graphemes });
+	const emergency = labelEmergencyLine(label.emergencyPhone);
+	if (emergency) {
+		y += ptToDots(zoneStyle.pt) * zoneStyle.lineHeight + mmToDots(KIOSK_LABEL_ZONE.rowGapMm);
+		drawEmergency(context, emergency, fonts.checklist, layout.text, y);
+	}
 
 	// The checklist sits right above the site address, printed small at the very bottom.
 	const linkRow = ptToDots(linkStyle.pt) * linkStyle.lineHeight;
@@ -153,9 +163,45 @@ export async function renderKioskLabelPng(label: KioskLabelContent): Promise<str
 	);
 	context.font = fonts.link;
 	context.fillText(KIOSK_LABEL_LINK, layout.link.x, layout.link.y, layout.text.width);
+	drawQrCaption(context, layout.qr, qr.width, linkStyle);
 
 	binarize(context, width, height);
 	return canvas.toDataURL('image/png').slice('data:image/png;base64,'.length);
+}
+
+/**
+ * The "for use inside the shelter" lines centred under the QR. Left-aligned at a measured x, so
+ * every row on the label keeps the same `textAlign`. Uses the font already set for the link.
+ */
+function drawQrCaption(
+	context: CanvasRenderingContext2D,
+	qr: { x: number; y: number },
+	qrSize: number,
+	style: { pt: number; lineHeight: number }
+): void {
+	const row = ptToDots(style.pt) * style.lineHeight;
+	const centre = qr.x + qrSize / 2;
+	let middle = qr.y + qrSize + mmToDots(KIOSK_LABEL_QR_CAPTION_GAP_MM) + row / 2;
+	for (const line of KIOSK_LABEL_QR_CAPTION) {
+		context.fillText(line, centre - context.measureText(line).width / 2, middle);
+		middle += row;
+	}
+}
+
+/** `ติดต่อฉุกเฉิน:` then the phone, squeezed into the column rather than cut. */
+function drawEmergency(
+	context: CanvasRenderingContext2D,
+	line: { label: string; value: string | null },
+	font: string,
+	column: { x: number; width: number },
+	top: number
+): void {
+	const { pt, lineHeight } = KIOSK_LABEL_TEXT.emergency;
+	const middle = top + (ptToDots(pt) * lineHeight) / 2;
+	context.font = font;
+	context.fillText(line.label, column.x, middle, column.width);
+	const x = column.x + context.measureText(line.label).width + mmToDots(KIOSK_LABEL_ZONE.textGapMm);
+	if (line.value) context.fillText(line.value, x, middle, Math.max(1, column.x + column.width - x));
 }
 
 /** `Zone:` then the zone name cut to one line, or a dotted rule to write the zone on by hand. */

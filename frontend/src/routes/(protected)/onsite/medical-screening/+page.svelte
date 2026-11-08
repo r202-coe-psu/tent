@@ -39,6 +39,9 @@
 	import { useShelter } from '$lib/features/shelters';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
 	import { DISPLAY_LOCALE, DISPLAY_TIME_ZONE, formatThaiTime } from '$lib/utils/date';
+	import { langState } from '$lib/states/i18n.svelte';
+	import { getTranslation } from '$lib/utils/i18n';
+	import { STAFF_MEDICAL_SCREENING_I18N } from '$lib/constants/i18n/staff-medical-screening';
 	import { paginateItems } from '$lib/db/paginate';
 	import { getShelterCode } from '$lib/db/shelter';
 	import { useMasterData, formatMasterLabel } from '$lib/features/master-data';
@@ -50,6 +53,8 @@
 	} from './medical-screening.utils';
 
 	const PAGE_SIZE = 10;
+
+	const t = $derived(getTranslation(STAFF_MEDICAL_SCREENING_I18N, langState.current));
 
 	const shelterQuery = useShelter(() => shelterStore.selectedShelterCode ?? getShelterCode());
 	const enableMedical = $derived(
@@ -114,21 +119,23 @@
 		try {
 			const result = await lookupFederatedByScanCode(queryClient, raw);
 			if (!result) {
-				toast.error('ไม่พบข้อมูลผู้ประสบภัยที่ตรงกับรหัสนี้');
+				toast.error(t.toastCodeNotFound);
 				return;
 			}
 			barcodeInput = '';
 			showCameraModal = false;
 			if (result.source === 'couch') {
-				toast.success(`พบผู้ประสบภัย: ${result.evacuee.first_name} ${result.evacuee.last_name}`);
+				toast.success(
+					t.toastFoundEvacuee(`${result.evacuee.first_name} ${result.evacuee.last_name}`)
+				);
 				openScreeningForm(result.evacuee._id);
 				return;
 			}
-			toast.success('พบคิวลงทะเบียนล่วงหน้า (คิวกลาง) — รับเข้าศูนย์ก่อนคัดกรอง');
+			toast.success(t.toastFoundCentralQueue);
 			claimHit = result.hit;
 			claimOpen = true;
 		} catch (err) {
-			toast.error(err instanceof Error ? err.message : 'ค้นหาจากรหัสที่สแกนไม่สำเร็จ');
+			toast.error(err instanceof Error ? err.message : t.toastScanLookupFailed);
 		} finally {
 			lookupInFlight = false;
 		}
@@ -160,7 +167,7 @@
 				() => {}
 			)
 			.catch(() => {
-				cameraError = 'ไม่สามารถเข้าถึงกล้องได้ โปรดตรวจสอบการอนุญาตใช้งานกล้อง';
+				cameraError = t.cameraAccessError;
 			});
 
 		return () => {
@@ -170,24 +177,10 @@
 		};
 	}
 
-	const SPECIAL_NEED_LABELS: Record<string, string> = {
-		wheelchair: 'ใช้วีลแชร์',
-		bedridden: 'ผู้ป่วยติดเตียง',
-		oxygen: 'ใช้ออกซิเจน',
-		pregnant: 'หญิงตั้งครรภ์',
-		infant: 'ทารก/เด็กเล็ก',
-		visual_impaired: 'ผู้พิการทางการมองเห็น',
-		hearing_impaired: 'ผู้พิการทางการได้ยิน',
-		high_dependency: 'มีภาวะพึ่งพิงสูง',
-		elderly: 'ผู้สูงอายุ',
-		chronic_illness: 'โรคเรื้อรัง',
-		disabled: 'ผู้พิการ'
-	};
-
 	function getSpecialNeedLabel(need: string): string {
 		const masterItem = vulnerableGroupQuery.data?.items.find((i) => i.code === need);
-		if (masterItem) return formatMasterLabel(masterItem, 'th');
-		const fromLegacy = SPECIAL_NEED_LABELS[need];
+		if (masterItem) return formatMasterLabel(masterItem, langState.current);
+		const fromLegacy = t.specialNeedLabels[need];
 		if (fromLegacy) return fromLegacy;
 		if (need.startsWith('item_')) return '—';
 		return need;
@@ -202,12 +195,12 @@
 			day: 'numeric',
 			month: 'short'
 		});
-		return `${time} น. (${day})`;
+		return `${time}${t.timeSuffix} (${day})`;
 	}
 </script>
 
 <svelte:head>
-	<title>คัดกรองผู้เข้าพัก (Station 2) | SmartShelter</title>
+	<title>{t.queuePageTitle}</title>
 </svelte:head>
 
 {#if !enableMedical && !shelterQuery.isPending}
@@ -218,16 +211,24 @@
 			>
 				<Stethoscope class="size-6" />
 			</div>
-			<h2 class="text-base font-bold text-foreground">จุดคัดกรองผู้เข้าพักถูกปิดใช้งาน</h2>
+			<h2 class="text-base font-bold text-foreground">{t.disabledTitle}</h2>
 			<p class="mt-1.5 text-xs leading-relaxed text-muted-foreground">
-				ศูนย์พักพิงนี้ไม่ได้เปิดใช้งานจุดคัดกรองผู้เข้าพัก (Station 2) ตามการตั้งค่าศูนย์พักพิง
+				{t.disabledDesc}
 			</p>
 			<div class="mt-5 flex flex-col gap-2">
-				<Button variant="default" class="w-full" onclick={() => goto(resolve('/portal'))}>
-					กลับหน้าเลือกเมนูหลัก
+				<Button
+					variant="default"
+					class="h-auto min-h-9 w-full py-2 leading-tight whitespace-normal"
+					onclick={() => goto(resolve('/portal'))}
+				>
+					{t.backToPortal}
 				</Button>
-				<Button variant="outline" class="w-full" onclick={() => goto(resolve('/onsite/zoning'))}>
-					ไปจุดจัดสรรที่พัก (Station 3)
+				<Button
+					variant="outline"
+					class="h-auto min-h-9 w-full py-2 leading-tight whitespace-normal"
+					onclick={() => goto(resolve('/onsite/zoning'))}
+				>
+					{t.goToStation3}
 				</Button>
 			</div>
 		</Card.Root>
@@ -235,15 +236,15 @@
 {:else}
 	<div class="mx-auto flex w-full max-w-7xl flex-col gap-6 px-4 py-6 md:px-6">
 		<div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-			<div class="flex items-center gap-3">
+			<div class="flex min-w-0 items-center gap-3">
 				<a
 					href={resolve('/portal')}
-					class="inline-flex h-9 w-9 items-center justify-center rounded-full border border-border bg-card text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-					title="กลับหน้าเลือกเมนูหลัก"
+					class="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-border bg-card text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+					title={t.backToPortal}
 				>
 					<ArrowLeft class="size-4" />
 				</a>
-				<div>
+				<div class="min-w-0">
 					<div class="flex items-center gap-2.5">
 						<div
 							class="flex size-8 items-center justify-center rounded-lg bg-station-2-subtle text-station-2"
@@ -251,12 +252,11 @@
 							<Stethoscope class="size-5" />
 						</div>
 						<h1 class="text-2xl font-bold tracking-tight text-foreground">
-							จุดตรวจคัดกรองผู้เข้าพัก
+							{t.heading}
 						</h1>
 					</div>
 					<p class="mt-0.5 text-xs text-muted-foreground">
-						เปิดฟอร์มคัดกรองได้ 3 ทาง: เลือกคนจากคิวรอตรวจ · ค้นหาชื่อ/เบอร์/เลขบัตร · สแกน QR
-						(Handover Slip หรือ Person QR) — ไม่จำเป็นต้องสแกนเสมอ
+						{t.intro}
 					</p>
 				</div>
 			</div>
@@ -264,16 +264,16 @@
 			<div class="flex flex-wrap items-center gap-2">
 				<Badge variant="secondary" class="gap-1.5 px-3 py-1.5 text-sm font-semibold shadow-xs">
 					<Clock class="size-3.5 text-emerald-600 dark:text-emerald-400" />
-					<span>รอตรวจ:</span>
+					<span>{t.pendingBadgeLabel}</span>
 					<span class="font-bold text-emerald-700 dark:text-emerald-300">
-						{pendingEvacuees.length} คน
+						{t.peopleCount(pendingEvacuees.length)}
 					</span>
 				</Badge>
 				<Badge variant="secondary" class="gap-1.5 px-3 py-1.5 text-sm font-semibold shadow-xs">
 					<Pencil class="size-3.5 text-sky-600 dark:text-sky-400" />
-					<span>ตรวจแล้ว:</span>
+					<span>{t.screenedBadgeLabel}</span>
 					<span class="font-bold text-sky-700 dark:text-sky-300">
-						{screenedEvacuees.length} คน
+						{t.peopleCount(screenedEvacuees.length)}
 					</span>
 				</Badge>
 			</div>
@@ -287,7 +287,7 @@
 					/>
 					<Input
 						type="text"
-						placeholder="ค้นหาทันใจด้วยชื่อ, นามสกุล, เบอร์โทร, เลขบัตร หรือที่อยู่..."
+						placeholder={t.searchPlaceholder}
 						bind:value={searchQuery}
 						class="h-10 w-full bg-background pr-8 pl-9"
 					/>
@@ -296,21 +296,21 @@
 							type="button"
 							onclick={() => (searchQuery = '')}
 							class="absolute top-1/2 right-2.5 -translate-y-1/2 p-0.5 text-muted-foreground hover:text-foreground"
-							title="ล้างคำค้นหา"
+							title={t.clearSearchTitle}
 						>
 							<X class="size-3.5" />
 						</button>
 					{/if}
 				</div>
 
-				<div class="flex items-center gap-2">
-					<div class="relative min-w-[220px]">
+				<div class="flex flex-wrap items-center gap-2">
+					<div class="relative w-full min-w-0 sm:w-auto sm:min-w-[220px]">
 						<Scan
 							class="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
 						/>
 						<Input
 							type="text"
-							placeholder="สแกนรหัส / หมายเลขบัตร"
+							placeholder={t.scanPlaceholder}
 							bind:value={barcodeInput}
 							onkeydown={(e) => {
 								if (e.key === 'Enter') {
@@ -326,9 +326,9 @@
 						size="default"
 						onclick={() => handleCodeInput(barcodeInput)}
 						disabled={!barcodeInput.trim()}
-						class="h-10"
+						class="h-10 shrink-0"
 					>
-						ยืนยัน
+						{t.confirm}
 					</Button>
 					<Button
 						variant="default"
@@ -337,7 +337,7 @@
 						class="h-10 gap-1.5 bg-emerald-600 text-white hover:bg-emerald-700"
 					>
 						<Camera class="size-4" />
-						<span>สแกนกล้อง</span>
+						<span>{t.scanCamera}</span>
 					</Button>
 				</div>
 			</div>
@@ -346,19 +346,19 @@
 		{#snippet queueTable()}
 			<Card.Root class="overflow-hidden border-border bg-card shadow-sm">
 				<Card.Header class="border-b bg-muted/20 px-5 py-3.5">
-					<div class="flex items-center justify-between">
-						<div class="flex items-center gap-2">
+					<div class="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+						<div class="flex min-w-0 flex-wrap items-center gap-2">
 							<Users class="size-4 text-emerald-600 dark:text-emerald-400" />
-							<Card.Title class="text-base font-semibold">
-								{activeTab === 'pending' ? 'คิวรอตรวจคัดกรอง' : 'รายการที่ตรวจแล้ว (แก้ไขได้)'}
+							<Card.Title class="min-w-0 text-base font-semibold break-words">
+								{activeTab === 'pending' ? t.queueTitlePending : t.queueTitleScreened}
 							</Card.Title>
 							<Badge variant="secondary" class="text-xs">
-								{filteredQueue.length} ราย
+								{t.recordCount(filteredQueue.length)}
 							</Badge>
 						</div>
 						{#if searchQuery}
 							<span class="text-xs text-muted-foreground">
-								กรองจากทั้งหมด {tabEvacuees.length} ราย
+								{t.filteredFromTotal(tabEvacuees.length)}
 							</span>
 						{/if}
 					</div>
@@ -370,7 +370,7 @@
 							<div
 								class="size-6 animate-spin rounded-full border-2 border-primary border-t-transparent"
 							></div>
-							<p class="text-xs">กำลังโหลดคิว...</p>
+							<p class="text-xs">{t.loadingQueue}</p>
 						</div>
 					{:else if filteredQueue.length === 0}
 						<div
@@ -378,18 +378,18 @@
 						>
 							{#if searchQuery}
 								<Search class="size-8 text-muted-foreground/50" />
-								<p class="text-sm font-medium">ไม่พบรายชื่อที่ตรงกับ "{searchQuery}"</p>
+								<p class="text-sm font-medium">{t.noMatch(searchQuery)}</p>
 								<Button variant="ghost" size="sm" onclick={() => (searchQuery = '')}>
-									ล้างการค้นหา
+									{t.clearSearch}
 								</Button>
 							{:else if activeTab === 'pending'}
 								<Check class="size-8 text-emerald-500/60" />
 								<p class="text-sm font-medium text-foreground">
-									ไม่มีผู้ประสบภัยรอตรวจคัดกรองในขณะนี้
+									{t.emptyPending}
 								</p>
 							{:else}
 								<Pencil class="size-8 text-sky-500/60" />
-								<p class="text-sm font-medium text-foreground">ยังไม่มีรายการที่ตรวจแล้ว</p>
+								<p class="text-sm font-medium text-foreground">{t.emptyScreened}</p>
 							{/if}
 						</div>
 					{:else}
@@ -397,12 +397,12 @@
 							<Table.Root>
 								<Table.TableHeader class="bg-muted/40 text-xs">
 									<Table.TableRow>
-										<Table.TableHead class="w-[200px]">ชื่อ-นามสกุล</Table.TableHead>
-										<Table.TableHead>เลขประจำตัว</Table.TableHead>
-										<Table.TableHead>เบอร์โทร</Table.TableHead>
-										<Table.TableHead>เวลาลงทะเบียน</Table.TableHead>
-										<Table.TableHead>กลุ่มเปราะบาง / พิเศษ</Table.TableHead>
-										<Table.TableHead class="text-right">ดำเนินการ</Table.TableHead>
+										<Table.TableHead class="w-[200px]">{t.colName}</Table.TableHead>
+										<Table.TableHead>{t.colIdNo}</Table.TableHead>
+										<Table.TableHead>{t.colPhone}</Table.TableHead>
+										<Table.TableHead>{t.colRegisteredAt}</Table.TableHead>
+										<Table.TableHead>{t.colVulnerable}</Table.TableHead>
+										<Table.TableHead class="text-right">{t.colActions}</Table.TableHead>
 									</Table.TableRow>
 								</Table.TableHeader>
 								<Table.TableBody>
@@ -467,7 +467,7 @@
 													}}
 													class="h-7 text-xs"
 												>
-													{activeTab === 'pending' ? 'ตรวจคัดกรอง' : 'แก้ไขผลตรวจ'}
+													{activeTab === 'pending' ? t.btnScreen : t.btnEditResult}
 												</Button>
 											</Table.TableCell>
 										</Table.TableRow>
@@ -490,13 +490,19 @@
 		{/snippet}
 
 		<Tabs.Root bind:value={activeTab} class="gap-4">
-			<Tabs.List class="grid w-full max-w-md grid-cols-2">
-				<Tabs.Trigger value="pending" class="gap-1.5">
-					รอตรวจ
+			<Tabs.List class="grid h-auto w-full max-w-md grid-cols-2">
+				<Tabs.Trigger
+					value="pending"
+					class="min-w-0 flex-wrap gap-1.5 leading-tight whitespace-normal"
+				>
+					{t.tabPending}
 					<Badge variant="secondary" class="text-[10px]">{pendingEvacuees.length}</Badge>
 				</Tabs.Trigger>
-				<Tabs.Trigger value="screened" class="gap-1.5">
-					ตรวจแล้ว (แก้ไขได้)
+				<Tabs.Trigger
+					value="screened"
+					class="min-w-0 flex-wrap gap-1.5 leading-tight whitespace-normal"
+				>
+					{t.tabScreened}
 					<Badge variant="secondary" class="text-[10px]">{screenedEvacuees.length}</Badge>
 				</Tabs.Trigger>
 			</Tabs.List>
@@ -523,10 +529,10 @@
 				<Dialog.Header class="border-b pb-4">
 					<Dialog.Title class="flex items-center gap-2 text-base font-bold text-foreground">
 						<Scan class="size-5 text-emerald-600 dark:text-emerald-400" />
-						<span>สแกน QR Code บนใบนำทาง</span>
+						<span>{t.cameraDialogTitle}</span>
 					</Dialog.Title>
 					<Dialog.Description class="text-xs text-muted-foreground">
-						สแกน Handover Slip จากโต๊ะลงทะเบียนเพื่อเปิดฟอร์มคัดกรองเต็มหน้าจอ
+						{t.cameraDialogDesc}
 					</Dialog.Description>
 				</Dialog.Header>
 
@@ -565,7 +571,7 @@
 
 				<Dialog.Footer>
 					<Button variant="outline" onclick={() => (showCameraModal = false)} class="w-full">
-						ยกเลิก
+						{t.cancel}
 					</Button>
 				</Dialog.Footer>
 			</Dialog.Content>
