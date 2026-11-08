@@ -5,6 +5,7 @@ import {
 	setHousingTypeFromSelect,
 	housingTypeLabelForCode
 } from './housing-type-ui';
+import { MASTER_DATA_DEFS } from '../../../../../scripts/seed/master-defs';
 
 describe('housing-type-ui (CR-112 Select identity)', () => {
 	const defaults = DEFAULT_HOUSING_TYPE_ITEMS_TH;
@@ -110,5 +111,14 @@ describe('housing-type-ui (CR-112 Select identity)', () => {
 			housing_type = v;
 		});
 		expect(housing_type).toBe('rented_house');
+	});
+
+	it('keeps the homeless TH label in sync with the master seed', () => {
+		const seedLabel = MASTER_DATA_DEFS.find((d) => d.type === 'housing_type')?.items.find(
+			(i) => i.key === 'homeless'
+		)?.label_th;
+		const uiLabel = DEFAULT_HOUSING_TYPE_ITEMS_TH.find((i) => i.value === 'homeless')?.label;
+		expect(seedLabel).toBeDefined();
+		expect(uiLabel).toBe(seedLabel);
 	});
 });
