@@ -484,6 +484,7 @@
 			return {
 				qrSrc: qr.src,
 				name: labelName(result, person),
+				emergencyPhone: result.label?.emergency_phone,
 				checkedCount: KIOSK_CHECK_IN_TICKS
 			};
 		});
@@ -998,6 +999,7 @@
 						result,
 						lookup?.members.find((member) => member.evacuee_id === result.evacuee_id)
 					),
+					emergencyPhone: result.label?.emergency_phone,
 					checkedCount: KIOSK_CHECK_IN_TICKS
 				}))}
 			/>

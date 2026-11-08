@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { compareLanguages } from './i18n-parity';
+import { compareLanguages } from '$lib/testing/i18n-parity';
 import { STAFF_FORM_FIELDS_I18N } from './staff-form-fields.i18n';
 
 describe('STAFF_FORM_FIELDS_I18N', () => {

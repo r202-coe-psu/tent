@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { compareLanguages } from '$lib/features/people/ui/_constants/i18n-parity';
+import { compareLanguages } from '$lib/testing/i18n-parity';
 import { KIOSK_PRINT_I18N } from './kiosk-print.i18n';
 import { KIOSK_QR_FLOW_I18N } from './kiosk-qr-flow.i18n';
 import { KIOSK_REPRINT_I18N } from './kiosk-reprint.i18n';

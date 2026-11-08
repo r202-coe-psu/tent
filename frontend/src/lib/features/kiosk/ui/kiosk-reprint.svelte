@@ -63,6 +63,7 @@
 			qrSizeMm: images[index].sizeMm,
 			name: member.label.name,
 			zone: member.label.zone,
+			emergencyPhone: member.label.emergency_phone,
 			checkedCount: member.label.stations_passed
 		}));
 		try {
@@ -71,6 +72,7 @@
 					qrSrc: images[index].src,
 					name: member.label.name,
 					zone: member.label.zone,
+					emergencyPhone: member.label.emergency_phone,
 					checkedCount: member.label.stations_passed
 				})),
 				async () => {

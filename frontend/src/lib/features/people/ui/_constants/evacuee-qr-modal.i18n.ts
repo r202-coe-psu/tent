@@ -8,9 +8,6 @@ export const EVACUEE_QR_MODAL_I18N = {
 		pdfBlockedToast: 'เบราว์เซอร์บล็อกหน้าต่าง PDF กรุณาอนุญาตป๊อปอัปแล้วลองใหม่',
 		pdfFailedToast: 'สร้าง PDF ไม่สำเร็จ',
 		qrAlt: (name: string) => `QR Code สำหรับ ${name}`,
-		checklistCheckIn: 'เช็คอิน',
-		checklistScreening: 'คัดกรอง',
-		checklistLodging: 'ที่พัก',
 		labelSize: 'ฉลาก 80 × 60 มม.',
 		printHint: 'ตั้งเครื่องพิมพ์เป็นกระดาษขนาดนี้ พิมพ์ขนาดจริง (100%)',
 		labelRenderFailed: 'สร้างภาพฉลากไม่สำเร็จ ลองเปิดหน้าต่างนี้ใหม่'
@@ -24,9 +21,6 @@ export const EVACUEE_QR_MODAL_I18N = {
 		pdfBlockedToast: 'Browser blocked the PDF window. Please allow popups and try again.',
 		pdfFailedToast: 'Failed to generate PDF',
 		qrAlt: (name: string) => `QR Code for ${name}`,
-		checklistCheckIn: 'Check-in',
-		checklistScreening: 'Screening',
-		checklistLodging: 'Lodging',
 		labelSize: 'Label 80 × 60 mm',
 		printHint: 'Set the printer to this paper size, actual size (100%)',
 		labelRenderFailed: 'Could not render the label. Reopen this window to retry.'

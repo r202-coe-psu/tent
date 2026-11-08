@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
 	formatThaiDateTime,
+	formatDisplayDateTime,
 	formatThaiTime,
 	formatThaiShortDate,
 	formatThaiDate,
@@ -34,6 +35,25 @@ describe('date utilities', () => {
 		it('safely falls back to raw string on invalid date formats', () => {
 			const invalid = 'not-a-valid-date';
 			expect(formatThaiDateTime(invalid)).toBe(invalid);
+		});
+	});
+
+	describe('formatDisplayDateTime', () => {
+		const iso = '2026-07-04T14:30:00.000Z';
+
+		it('th: same text as formatThaiDateTime', () => {
+			expect(formatDisplayDateTime(iso, 'th')).toBe(formatThaiDateTime(iso));
+		});
+
+		it('en: th-TH Buddhist year as numbers (CONVENTIONS §10), no Thai script', () => {
+			const formatted = formatDisplayDateTime(iso, 'en');
+			expect(formatted).toBe('4/7/2569 21:30');
+			expect(formatted).not.toMatch(/[฀-๿]/);
+		});
+
+		it('handles empty and invalid input like formatThaiDateTime', () => {
+			expect(formatDisplayDateTime('', 'en')).toBe('');
+			expect(formatDisplayDateTime('not-a-valid-date', 'en')).toBe('not-a-valid-date');
 		});
 	});
 

@@ -23,7 +23,7 @@
 	import { useMasterData, formatMasterLabel } from '$lib/features/master-data';
 	import { useShelter } from '$lib/features/shelters';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
-	import { formatThaiDateTime } from '$lib/utils/date';
+	import { formatDisplayDateTime } from '$lib/utils/date';
 	import { langState } from '$lib/states/i18n.svelte';
 	import { getTranslation } from '$lib/utils/i18n';
 
@@ -218,7 +218,7 @@
 
 	function formatUpdated(iso?: string | null): string {
 		if (!iso) return '—';
-		return formatThaiDateTime(iso) || iso;
+		return formatDisplayDateTime(iso, langState.current) || iso;
 	}
 
 	function nextQueueBadgeVariant(
@@ -285,8 +285,7 @@
 			<p class="mt-0.5 text-2xs text-slate-500">
 				{#if enableMedical}
 					{t.awaitingDoctor} {waitingMedicalCount} ·
-				{/if}{t.awaitingZone}
-				{waitingZoningCount}
+				{/if}{`${t.awaitingZone} ${waitingZoningCount}`}
 			</p>
 		</div>
 	</button>

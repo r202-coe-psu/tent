@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { compareLanguages } from '$lib/features/people/ui/_constants/i18n-parity';
+import { compareLanguages } from '$lib/testing/i18n-parity';
 import { KIOSK_VOLUNTEER_I18N } from './kiosk-volunteer.i18n';
 
 describe('KIOSK_VOLUNTEER_I18N', () => {

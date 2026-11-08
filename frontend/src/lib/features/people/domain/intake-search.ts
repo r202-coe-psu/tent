@@ -5,7 +5,7 @@
 
 import type { StayStatus } from './people';
 import { isAnonymousId, peopleLabelsByLanguage } from './people';
-import type { LanguageCode } from '$lib/stores/language.svelte';
+import type { LanguageCode } from '$lib/utils/language';
 
 /** CTA when a local shelter hit is `pre_registered`. */
 export const REPORT_IN_CTA_LABEL = 'รับรายงานตัว (Report-in)';

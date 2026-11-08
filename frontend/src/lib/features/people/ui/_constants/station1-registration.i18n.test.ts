@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { compareLanguages } from './i18n-parity';
+import { compareLanguages } from '$lib/testing/i18n-parity';
 import { STATION1_REGISTRATION_I18N } from './station1-registration.i18n';
 
 describe('STATION1_REGISTRATION_I18N', () => {

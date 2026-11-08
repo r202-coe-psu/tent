@@ -290,6 +290,7 @@ export {
 	type PhoneHouseholdMatchCandidate,
 	type JoinCandidateEvacuee
 } from './domain/registration-shell';
+export { localizeRegistrationMessage } from './domain/registration-messages.i18n';
 
 export {
 	PRIMARY_CONTACT_LABEL,
@@ -460,6 +461,7 @@ export { default as InstantDuplicateDialog } from './ui/registration/instant-dup
 
 // UI — i18n dictionaries used directly by route pages
 export { EVACUEE_PAGE_I18N, type EvacueePageI18n } from './ui/_constants/evacuee-page.i18n';
+export { EVACUEE_PROFILE_I18N } from './ui/_constants/evacuee-profile.i18n';
 export { EVACUEE_SEARCH_I18N, type EvacueeSearchI18n } from './ui/_constants/evacuee-search.i18n';
 
 // UI — shared sub-form components (Issue #205)

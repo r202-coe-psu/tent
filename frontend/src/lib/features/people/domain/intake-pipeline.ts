@@ -4,7 +4,7 @@
  */
 import type { Evacuee, TriageLevel } from './people';
 import { isInShelterStayStatus } from '$lib/features/shared';
-import type { LanguageCode } from '$lib/stores/language.svelte';
+import type { LanguageCode } from '$lib/utils/language';
 
 export type NextQueueLabel = 'รอแพทย์' | 'รอโซน' | 'รอยืนยันถึงโซน' | 'พักแล้ว' | '—';
 

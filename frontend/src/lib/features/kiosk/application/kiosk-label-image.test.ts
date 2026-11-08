@@ -2,7 +2,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
 	KIOSK_LABEL_CHECKBOX,
+	KIOSK_LABEL_CHECKLIST,
+	KIOSK_LABEL_EMERGENCY_PREFIX,
 	KIOSK_LABEL_LINK,
+	KIOSK_LABEL_QR_CAPTION,
+	KIOSK_LABEL_QR_CAPTION_GAP_MM,
 	KIOSK_LABEL_ZONE,
 	KIOSK_LABEL_ZONE_PREFIX,
 	kioskLabelLayout,
@@ -130,11 +134,54 @@ describe('renderKioskLabelPng', () => {
 		expect(texts).toEqual([
 			'สมชาย ใจดี',
 			KIOSK_LABEL_ZONE_PREFIX,
-			'เช็คอิน',
-			'คัดกรอง',
-			'ที่พัก',
-			KIOSK_LABEL_LINK
+			'เช็คอิน (Checked-in)',
+			'คัดกรอง (Screened)',
+			'ที่พัก (Stayed)',
+			KIOSK_LABEL_LINK,
+			...KIOSK_LABEL_QR_CAPTION
 		]);
+	});
+
+	it('prints the emergency contact phone on its own row under the zone', async () => {
+		await renderKioskLabelPng({ ...label, emergencyPhone: '0891234567' });
+
+		const texts = harness.fakeContext.fillText.mock.calls.map(([text]) => text);
+		const zoneAt = texts.indexOf(KIOSK_LABEL_ZONE_PREFIX);
+		expect(texts.slice(zoneAt + 1, zoneAt + 3)).toEqual([
+			KIOSK_LABEL_EMERGENCY_PREFIX,
+			'0891234567'
+		]);
+		const ys = harness.fakeContext.fillText.mock.calls.map(
+			(call) => (call as unknown as [string, number, number])[2]
+		);
+		const firstCheckRow = texts.indexOf(KIOSK_LABEL_CHECKLIST[0]);
+		expect(ys[zoneAt + 1]).toBeGreaterThan(ys[zoneAt]!);
+		expect(ys[zoneAt + 1]).toBeLessThan(ys[firstCheckRow]!);
+	});
+
+	it('leaves no emergency row when there is no emergency phone', async () => {
+		await renderKioskLabelPng({ ...label, emergencyPhone: null });
+
+		const texts = harness.fakeContext.fillText.mock.calls.map(([text]) => text);
+		expect(texts).not.toContain(KIOSK_LABEL_EMERGENCY_PREFIX);
+	});
+
+	it('prints the "shelter use only" caption centred under the QR, clear of its quiet zone', async () => {
+		await renderKioskLabelPng(label);
+
+		const { qr } = kioskLabelLayout(264);
+		const rows = harness.fakeContext.fillText.mock.calls.filter(([text]) =>
+			(KIOSK_LABEL_QR_CAPTION as readonly string[]).includes(text)
+		) as unknown as [string, number, number][];
+		expect(rows.map(([text]) => text)).toEqual([...KIOSK_LABEL_QR_CAPTION]);
+		for (const [text, x] of rows) {
+			// The fake measureText is 6 dots per character.
+			expect(x + (text.length * 6) / 2).toBeCloseTo(qr.x + 264 / 2, 5);
+		}
+		const [first, second] = rows.map(([, , y]) => y);
+		expect(first).toBeGreaterThan(qr.y + 264 + mmToDots(KIOSK_LABEL_QR_CAPTION_GAP_MM));
+		expect(second).toBeGreaterThan(first!);
+		expect(second).toBeLessThan(479 - mmToDots(2));
 	});
 
 	it('draws the link left-aligned at the bottom of the text column', async () => {
@@ -165,9 +212,13 @@ describe('renderKioskLabelPng', () => {
 		await renderKioskLabelPng(label);
 
 		const rows = harness.fakeContext.fillText.mock.calls.filter(([text]) =>
-			['เช็คอิน', 'คัดกรอง', 'ที่พัก'].includes(text)
+			['เช็คอิน (Checked-in)', 'คัดกรอง (Screened)', 'ที่พัก (Stayed)'].includes(text)
 		) as unknown as [string, number, number][];
-		expect(rows.map(([text]) => text)).toEqual(['เช็คอิน', 'คัดกรอง', 'ที่พัก']);
+		expect(rows.map(([text]) => text)).toEqual([
+			'เช็คอิน (Checked-in)',
+			'คัดกรอง (Screened)',
+			'ที่พัก (Stayed)'
+		]);
 		expect(new Set(rows.map(([, x]) => x)).size).toBe(1);
 		const ys = rows.map(([, , y]) => y);
 		expect(ys[0]).toBeLessThan(ys[1]!);
@@ -189,7 +240,7 @@ describe('renderKioskLabelPng', () => {
 			// Each tick starts inside its own box, top row first.
 			const starts = harness.fakeContext.moveTo.mock.calls.map(([, y]) => y as number);
 			const rows = harness.fakeContext.fillText.mock.calls
-				.filter(([text]) => ['เช็คอิน', 'คัดกรอง'].includes(text))
+				.filter(([text]) => ['เช็คอิน (Checked-in)', 'คัดกรอง (Screened)'].includes(text))
 				.map((call) => (call as unknown as [string, number, number])[2]);
 			const boxSize = Math.round(mmToDots(KIOSK_LABEL_CHECKBOX.sizeMm));
 			starts.forEach((y, index) => expect(Math.abs(y - rows[index]!)).toBeLessThan(boxSize / 2));
@@ -224,10 +275,9 @@ describe('renderKioskLabelPng', () => {
 			await renderKioskLabelPng({ ...label, zone: 'A3' });
 
 			const drawn = texts();
-			expect(drawn.slice(drawn.indexOf(KIOSK_LABEL_ZONE_PREFIX), -4)).toEqual([
-				KIOSK_LABEL_ZONE_PREFIX,
-				'A3'
-			]);
+			expect(
+				drawn.slice(drawn.indexOf(KIOSK_LABEL_ZONE_PREFIX), drawn.indexOf(KIOSK_LABEL_CHECKLIST[0]))
+			).toEqual([KIOSK_LABEL_ZONE_PREFIX, 'A3']);
 			expect(ruleDots()).toEqual([]);
 		});
 

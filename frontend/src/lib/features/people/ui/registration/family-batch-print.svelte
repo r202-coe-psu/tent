@@ -16,13 +16,12 @@
 	import { buildEvacueeQrLabel } from '../../domain/evacuee-qr-label';
 	import { headFirst } from '../../domain/household-label-order';
 	import { formatPersonName, type Evacuee, type Household } from '../../domain/people';
-	import { getTranslation } from '$lib/utils/i18n';
-	import { EVACUEE_QR_MODAL_I18N } from '../_constants/evacuee-qr-modal.i18n';
 	import EvacueeQrModal from '../evacuee-profile/evacuee-qr-modal.svelte';
 	import { useShelter } from '$lib/features/shelters/index.js';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
 	import { getShelterCode } from '$lib/db/shelter';
 	import { langState } from '$lib/states/i18n.svelte';
+	import { getTranslation } from '$lib/utils/i18n';
 	import {
 		PRIMARY_CONTACT_LABEL,
 		PRIMARY_CONTACT_LABEL_EN
@@ -59,7 +58,6 @@
 	);
 
 	const queryClient = safeQuery(() => useQueryClient(), null);
-	const qrT = $derived(getTranslation(EVACUEE_QR_MODAL_I18N, langState.current));
 	const printersT = $derived(getTranslation(PRINTERS_I18N, langState.current));
 	const shelterCode = $derived(shelterStore.selectedShelterCode ?? getShelterCode());
 
@@ -73,7 +71,6 @@
 		const client = queryClient;
 		if (!client) throw new Error('Query client is not available');
 		const zones = shelterQuery.data?.zones;
-		const checklist = [qrT.checklistCheckIn, qrT.checklistScreening, qrT.checklistLodging];
 		return Promise.all(
 			headFirst(members, household.head_evacuee_id).map(async (member) => {
 				const screenings = await client.fetchQuery({
@@ -83,8 +80,7 @@
 				});
 				const { qrPayload, label } = buildEvacueeQrLabel(member, {
 					zones,
-					hasScreening: screenings.length > 0,
-					checklist
+					hasScreening: screenings.length > 0
 				});
 				return renderKioskQrLabelPng(qrPayload, label);
 			})

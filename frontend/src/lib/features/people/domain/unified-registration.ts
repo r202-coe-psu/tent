@@ -11,7 +11,7 @@ import {
 	type ResidenceFields
 } from './registration-shell';
 import type { AuthorContext } from '$lib/db/model';
-import type { LanguageCode } from '$lib/stores/language.svelte';
+import type { LanguageCode } from '$lib/utils/language';
 import { ulid } from '$lib/db/ulid';
 import {
 	planRegistrationConsent,

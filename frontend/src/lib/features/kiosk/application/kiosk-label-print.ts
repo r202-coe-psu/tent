@@ -11,6 +11,8 @@ export type KioskQrLabel = {
 	qrSrc: string;
 	name: string;
 	zone?: string | null;
+	/** Emergency contact phone printed under the zone; none leaves no row. */
+	emergencyPhone?: string | null;
 	/** Intake stations passed: this many checklist boxes are ticked. */
 	checkedCount?: number;
 };

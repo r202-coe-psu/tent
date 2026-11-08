@@ -24,9 +24,13 @@
 	import { toast } from 'svelte-sonner';
 	import * as Dialog from '$lib/components/ui/dialog/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
+	import { langState } from '$lib/states/i18n.svelte';
+	import { getTranslation } from '$lib/utils/i18n';
 	import { useUpdateProfileMutation, useVolunteerSkills } from '../application/queries';
 	import type { PortalCredential, VolunteerProfile } from '../domain/volunteer';
-	import { findSkillOption } from '../domain/skill-label';
+	import { findSkillOption, localizedSkillLabel } from '../domain/skill-label';
+	import { localizeVolunteerMessage } from '$lib/constants/i18n/volunteer-messages';
+	import { profileEditI18n } from '../i18n/profile-edit.i18n';
 
 	let {
 		open = $bindable(false),
@@ -37,6 +41,8 @@
 		profile: VolunteerProfile | null;
 		credential: PortalCredential | null;
 	} = $props();
+
+	const t = $derived(getTranslation(profileEditI18n, langState.current));
 
 	const save = useUpdateProfileMutation(() => credential);
 	// Scoped to the shelter that holds the profile, so a centre with its own skill list
@@ -62,7 +68,7 @@
 		const master = skillsQuery.data ?? [];
 		const known = master.map((entry) => ({
 			key: entry.code,
-			label: entry.label,
+			label: localizedSkillLabel(entry, langState.current),
 			description: entry.description,
 			controlled: entry.category === 'controlled'
 		}));
@@ -92,10 +98,13 @@
 				(value) => findSkillOption(value, skillsQuery.data ?? [])?.label ?? value
 			);
 			await save.mutateAsync([...new Set(skills)]);
-			toast.success('บันทึกโปรไฟล์แล้ว');
+			toast.success(t.saved);
 			open = false;
 		} catch (err) {
-			error = err instanceof Error ? err.message : 'บันทึกโปรไฟล์ไม่สำเร็จ';
+			error =
+				err instanceof Error
+					? localizeVolunteerMessage(err.message, langState.current)
+					: t.saveFailed;
 			toast.error(error);
 		}
 	}
@@ -105,12 +114,12 @@
 	<Dialog.Content class="max-h-[90vh] overflow-y-auto sm:max-w-lg">
 		<Dialog.Title class="flex items-center gap-2">
 			<BadgeCheck class="h-4.5 w-4.5 text-primary" />
-			แก้ไขโปรไฟล์จิตอาสา
+			{t.title}
 		</Dialog.Title>
 
 		{#if !profile}
 			<p class="py-8 text-center text-sm text-muted-foreground">
-				ยังไม่พบโปรไฟล์ของคุณในระบบ — ลองจองงานอาสาสมัครสักงานก่อน แล้วกลับมาแก้ไขได้ที่นี่
+				{t.noProfile}
 			</p>
 		{:else}
 			<div class="space-y-5">
@@ -123,7 +132,7 @@
 								{profile.last_name}
 							</p>
 							<p class="mt-0.5 text-2xs text-muted-foreground">
-								{profile.volunteer_code || 'ยังไม่มีรหัสอาสา'} · {profile.phone_masked}
+								{profile.volunteer_code || t.noVolunteerCode} · {profile.phone_masked}
 							</p>
 						</div>
 						{#if profile.identity_verified}
@@ -131,26 +140,26 @@
 								class="flex shrink-0 items-center gap-1 rounded-lg bg-emerald-50 px-2 py-1 text-3xs font-bold text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300"
 							>
 								<CheckCircle2 class="h-3 w-3" />
-								ยืนยันตัวตนแล้ว
+								{t.verified}
 							</span>
 						{/if}
 					</div>
 					{#if profile.shelter_codes.length > 0}
 						<p class="text-2xs text-muted-foreground">
-							ศูนย์ที่มีโปรไฟล์: {profile.shelter_codes.join(' · ')}
+							{t.shelters(profile.shelter_codes.join(' · '))}
 						</p>
 					{/if}
 					<p class="flex items-start gap-1.5 text-3xs text-muted-foreground">
 						<Lock class="mt-0.5 h-3 w-3 shrink-0" />
-						ชื่อ เบอร์โทร และการยืนยันตัวตน แก้ไขได้ที่เจ้าหน้าที่ศูนย์เท่านั้น — เบอร์โทรเป็นรหัสที่ใช้เข้าระบบนี้
+						{t.readOnlyNote}
 					</p>
 				</div>
 
 				<!-- The one thing the volunteer owns. -->
 				<div class="space-y-3">
 					<div class="flex items-center justify-between">
-						<p class="text-sm font-bold text-foreground">ทักษะของฉัน</p>
-						<span class="text-2xs text-muted-foreground">เลือกแล้ว {selected.length} ทักษะ</span>
+						<p class="text-sm font-bold text-foreground">{t.skillsTitle}</p>
+						<span class="text-2xs text-muted-foreground">{t.selectedCount(selected.length)}</span>
 					</div>
 
 					<div class="flex flex-wrap gap-2">
@@ -160,9 +169,7 @@
 								type="button"
 								onclick={() => toggle(option.key)}
 								aria-pressed={isSelected}
-								title={option.controlled
-									? 'ทักษะควบคุม — เจ้าหน้าที่ต้องตรวจคุณสมบัติก่อนรับงานที่ใช้ทักษะนี้'
-									: option.description || undefined}
+								title={option.controlled ? t.controlledTitle : option.description || undefined}
 								class="flex cursor-pointer items-center gap-2 rounded-full border px-3.5 py-2 text-xs font-bold transition-all {isSelected
 									? 'border-primary bg-primary text-primary-foreground shadow-sm'
 									: 'border-border bg-card text-foreground hover:bg-muted'}"
@@ -172,7 +179,7 @@
 								{/if}
 								{option.label}
 								{#if option.controlled}
-									<span class="text-3xs font-normal opacity-70">(ควบคุม)</span>
+									<span class="text-3xs font-normal opacity-70">{t.controlledTag}</span>
 								{/if}
 							</button>
 						{/each}
@@ -183,9 +190,7 @@
 					>
 						<ShieldAlert class="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-700 dark:text-amber-400" />
 						<p class="text-3xs leading-relaxed text-amber-900 dark:text-amber-200">
-							ทักษะที่เลือกเป็นข้อมูลที่ท่านแจ้งเอง ใช้ประกอบการพิจารณาของเจ้าหน้าที่ —
-							งานอาสาสมัครที่ต้องใช้ทักษะควบคุม (เช่น การแพทย์)
-							ยังต้องผ่านการตรวจคุณสมบัติเหมือนเดิม
+							{t.selfReportedNote}
 						</p>
 					</div>
 				</div>
@@ -195,12 +200,12 @@
 				{/if}
 
 				<div class="flex justify-end gap-2">
-					<Button variant="outline" onclick={() => (open = false)}>ยกเลิก</Button>
+					<Button variant="outline" onclick={() => (open = false)}>{t.cancel}</Button>
 					<Button class="gap-1.5" disabled={!dirty || save.isPending} onclick={submit}>
 						{#if save.isPending}
 							<Loader2 class="h-4 w-4 animate-spin" aria-hidden="true" />
 						{/if}
-						บันทึกการเปลี่ยนแปลง
+						{t.save}
 					</Button>
 				</div>
 			</div>

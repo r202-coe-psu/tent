@@ -6,7 +6,6 @@
 	import { resolve } from '$app/paths';
 	import { toast } from 'svelte-sonner';
 	import { formatRoleList } from '$lib/auth/roles';
-	import LanguageSwitcher from '$lib/components/language-switcher.svelte';
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
 	import { LOGOUT_ROUTE } from '$lib/guards/auth';
 	import { authStore } from '$lib/stores/auth.svelte';
@@ -83,15 +82,6 @@
 		<DropdownMenu.Item class="cursor-pointer gap-2" onSelect={() => void goToProfile()}>
 			<UserCircle class="size-4" />
 			{t.myAccount}
-		</DropdownMenu.Item>
-
-		<DropdownMenu.Item
-			class="cursor-default p-0 focus:bg-transparent data-highlighted:bg-transparent"
-			onSelect={(e) => e.preventDefault()}
-		>
-			<div class="w-full px-2 py-2">
-				<LanguageSwitcher class="w-full justify-center" />
-			</div>
 		</DropdownMenu.Item>
 
 		<DropdownMenu.Separator />

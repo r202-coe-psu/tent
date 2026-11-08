@@ -16,6 +16,9 @@
 
 	let { children, data }: LayoutProps = $props();
 
+	/** Only the portal home is translated; the TH/EN toggle stays off untranslated staff pages. */
+	const onPortal = $derived(page.url.pathname === LANDING_ROUTE);
+
 	/** Set while session is expired so we refetch errored queries on reauth. */
 	let pendingReauthRecovery = false;
 
@@ -97,7 +100,9 @@
 				</a>
 			</div>
 			<div class="flex shrink-0 items-center gap-2">
-				<LanguageSwitcher class="hidden sm:inline-flex" />
+				{#if onPortal}
+					<LanguageSwitcher class="shrink-0" />
+				{/if}
 				<StaffAccountMenu />
 			</div>
 		</header>

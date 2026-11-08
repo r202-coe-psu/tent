@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { compareLanguages } from '$lib/features/people/ui/_constants/i18n-parity';
+import { compareLanguages } from '$lib/testing/i18n-parity';
 import { KioskPrintError } from '../data/kiosk-print.api';
 import { KIOSK_PRINT_FLOW_I18N } from './kiosk-print-flow.i18n';
 import { runKioskPrintFlow } from './kiosk-print-flow';
