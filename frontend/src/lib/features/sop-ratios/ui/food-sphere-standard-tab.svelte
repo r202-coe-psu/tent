@@ -130,207 +130,226 @@
 	}
 </script>
 
+{#snippet statusBadge(active: boolean)}
+	{#if active}
+		<span
+			class="inline-flex items-center rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-semibold whitespace-nowrap text-emerald-800"
+		>
+			ใช้งาน
+		</span>
+	{:else}
+		<span
+			class="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-semibold whitespace-nowrap text-slate-600"
+		>
+			ปิดใช้งาน
+		</span>
+	{/if}
+{/snippet}
+
+{#snippet sourceBadge(source: string | undefined)}
+	{#if source === 'SHELTER_OVERRIDE'}
+		<span
+			class="inline-flex items-center rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-semibold whitespace-nowrap text-amber-800"
+		>
+			{SOURCE_LABELS.SHELTER_OVERRIDE}
+		</span>
+	{:else}
+		<span
+			class="inline-flex items-center rounded-full bg-sky-100 px-2.5 py-0.5 text-xs font-semibold whitespace-nowrap text-sky-800"
+		>
+			{SOURCE_LABELS.SPHERE_BASELINE}
+		</span>
+	{/if}
+{/snippet}
+
 {#if viewMode === 'list'}
 	<section class="min-w-0">
-		<header class="mb-6 flex flex-col gap-4">
-			<div class="flex w-full flex-col gap-4 2xl:flex-row 2xl:items-center 2xl:justify-between">
+		<div class="space-y-4">
+			<div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
 				<div>
-					<h2 class="text-lg font-bold">เกณฑ์มาตรฐานโภชนาการ</h2>
-					<p class="text-sm text-muted-foreground">
-						จัดการพารามิเตอร์เกณฑ์โภชนาการตามกลุ่มเป้าหมาย
-					</p>
+					<h2 class="text-lg font-bold text-slate-900 sm:text-xl">เกณฑ์มาตรฐานโภชนาการ</h2>
+					<p class="text-sm text-slate-600">จัดการพารามิเตอร์เกณฑ์โภชนาการตามกลุ่มเป้าหมาย</p>
 				</div>
+				{#if isSA || canEditOverride}
+					<Button
+						type="button"
+						onclick={showCreateForm}
+						class="min-h-11 gap-2 rounded-lg bg-[#0A2647] px-4 text-sm font-semibold text-white hover:bg-[#051930]"
+					>
+						<Plus class="h-4 w-4" aria-hidden="true" />
+						เพิ่มเกณฑ์โภชนาการ
+					</Button>
+				{/if}
+			</div>
 
-				<div class="flex flex-wrap items-center gap-2">
-					<div class="relative w-full sm:w-56">
-						<Search class="absolute top-2.5 left-2.5 h-4 w-4 text-muted-foreground" />
+			<div
+				class="flex min-h-[40vh] flex-col rounded-2xl border border-slate-200/80 bg-white shadow-2xs"
+			>
+				<div
+					class="grid grid-cols-2 gap-2.5 border-b border-slate-200/80 p-3 md:grid-cols-[minmax(0,1.6fr)_repeat(3,minmax(0,1fr))] md:p-4"
+				>
+					<div class="relative col-span-2 md:col-span-1">
+						<Search
+							class="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-slate-500"
+							aria-hidden="true"
+						/>
 						<Input
 							bind:value={search}
 							type="search"
-							placeholder="ค้นหาเกณฑ์..."
-							class="pl-9"
+							placeholder="ค้นหาเกณฑ์"
+							class="min-h-11 w-full rounded-lg border-slate-300 bg-white pl-9 text-base shadow-2xs md:text-sm"
 							aria-label="ค้นหาเกณฑ์"
 						/>
 					</div>
-
-					{#if isSA || canEditOverride}
-						<Button onclick={showCreateForm} class="ml-auto flex shrink-0 items-center gap-1.5">
-							<Plus class="h-4 w-4" />
-							เพิ่มเกณฑ์โภชนาการ
-						</Button>
-					{/if}
-				</div>
-			</div>
-
-			<!-- Filters bar -->
-			<div class="flex flex-wrap items-center gap-3 border-t pt-3 text-xs">
-				<div class="flex items-center gap-1.5">
-					<label for="filter-segment" class="font-medium text-muted-foreground"
-						>กลุ่มเป้าหมาย:</label
-					>
 					<select
 						id="filter-segment"
 						bind:value={filterSegment}
-						class="rounded-md border bg-background px-2.5 py-1 text-xs"
+						aria-label="กรองกลุ่มเป้าหมาย"
+						class="min-h-11 w-full min-w-0 rounded-lg border border-slate-300 bg-white px-3 text-sm shadow-2xs focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:outline-none"
 					>
-						<option value="ALL_SEGMENTS">ทั้งหมด (ทุกกลุ่มเป้าหมาย)</option>
+						<option value="ALL_SEGMENTS">กลุ่มเป้าหมาย: ทั้งหมด</option>
 						{#each targetSegmentSchema.options as seg (seg)}
-							<option value={seg}>{TARGET_SEGMENT_LABELS[seg] ?? seg}</option>
+							<option value={seg}>กลุ่มเป้าหมาย: {TARGET_SEGMENT_LABELS[seg] ?? seg}</option>
 						{/each}
 					</select>
-				</div>
-
-				<div class="flex items-center gap-1.5">
-					<label for="filter-group" class="font-medium text-muted-foreground">กลุ่มสารอาหาร:</label>
 					<select
 						id="filter-group"
 						bind:value={filterGroup}
-						class="rounded-md border bg-background px-2.5 py-1 text-xs"
+						aria-label="กรองกลุ่มสารอาหาร"
+						class="min-h-11 w-full min-w-0 rounded-lg border border-slate-300 bg-white px-3 text-sm shadow-2xs focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:outline-none"
 					>
-						<option value="ALL_GROUPS">ทั้งหมด (ทุกกลุ่ม)</option>
+						<option value="ALL_GROUPS">กลุ่มสารอาหาร: ทั้งหมด</option>
 						{#each reqGroups as g (g)}
 							{@const cleanId = g._id.replace(/^requirement_group:/, '')}
-							<option value={cleanId}>{g.name} ({cleanId})</option>
+							<option value={cleanId}>กลุ่มสารอาหาร: {g.name} ({cleanId})</option>
 						{/each}
 					</select>
-				</div>
-
-				<div class="flex items-center gap-1.5">
-					<label for="filter-status" class="font-medium text-muted-foreground">สถานะ:</label>
 					<select
 						id="filter-status"
 						bind:value={filterStatus}
-						class="rounded-md border bg-background px-2.5 py-1 text-xs"
+						aria-label="กรองสถานะ"
+						class="min-h-11 w-full min-w-0 rounded-lg border border-slate-300 bg-white px-3 text-sm shadow-2xs focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:outline-none"
 					>
-						<option value="ALL">ทุกสถานะ</option>
-						<option value="active">ใช้งานอยู่</option>
-						<option value="inactive">ปิดใช้งาน</option>
+						<option value="ALL">สถานะ: ทั้งหมด</option>
+						<option value="active">สถานะ: ใช้งานอยู่</option>
+						<option value="inactive">สถานะ: ปิดใช้งาน</option>
 					</select>
 				</div>
 
-				<div class="ml-auto text-xs text-muted-foreground">
-					แสดง {filteredStandards.length} จาก {standards.length} รายการ
-				</div>
-			</div>
-		</header>
+				<p class="border-b border-slate-100 px-4 py-2.5 text-sm text-slate-600">
+					กำลังแสดง <strong class="font-semibold text-slate-900 tabular-nums"
+						>{filteredStandards.length}</strong
+					>
+					จาก {standards.length} รายการ
+				</p>
 
-		{#if standardsQuery.isLoading}
-			<div class="flex min-h-[300px] items-center justify-center">
-				<div
-					class="h-8 w-8 animate-spin rounded-full border-2 border-slate-200 border-t-primary"
-				></div>
-			</div>
-		{:else if filteredStandards.length === 0}
-			<div class="rounded-lg border border-dashed p-8 text-center text-muted-foreground">
-				<p class="font-medium">ไม่พบรายการเกณฑ์โภชนาการตามเงื่อนไข</p>
-				{#if isSA || canEditOverride}
-					<p class="mt-1 text-sm">คลิกปุ่ม "เพิ่มเกณฑ์โภชนาการ" เพื่อเริ่มต้นกำหนดค่า</p>
-				{/if}
-			</div>
-		{:else}
-			<div class="overflow-x-auto rounded-lg border">
-				<table class="w-full text-left text-sm">
-					<thead class="bg-muted/50 text-xs font-semibold text-muted-foreground uppercase">
-						<tr>
-							<th class="p-3">กลุ่มเป้าหมาย</th>
-							<th class="p-3">กลุ่มความต้องการ</th>
-							<th class="p-3 text-right">ปริมาณต่อคนต่อวัน</th>
-							<th class="p-3">หน่วยนับ</th>
-							<th class="p-3">วันบังคับใช้</th>
-							<th class="p-3">สถานะ</th>
-							<th class="p-3">แหล่งที่มา</th>
-							<th class="p-3 text-right">การจัดการ</th>
-						</tr>
-					</thead>
-					<tbody class="divide-y">
-						{#each filteredStandards as std (std._id)}
-							{@const uom = uomMap.get(std.req_group_id) ?? std.standard_uom ?? '—'}
-							<tr class="hover:bg-muted/30">
-								<td class="p-3 font-medium text-foreground">
-									{TARGET_SEGMENT_LABELS[std.target_segment] ?? std.target_segment}
-								</td>
-								<td class="p-3 font-mono font-medium">{std.req_group_id}</td>
-								<td class="p-3 text-right font-mono font-semibold text-foreground">
-									{std.daily_demand.toLocaleString()}
-								</td>
-								<td class="p-3 font-mono text-xs">{uom}</td>
-								<td class="p-3 text-xs text-muted-foreground">{std.effective_date}</td>
-								<td class="p-3">
-									{#if (std.status ?? 'active') === 'active'}
-										<span
-											class="inline-flex items-center rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-semibold text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300"
+				{#if standardsQuery.isLoading}
+					<div class="flex-1 space-y-3 p-4" role="status" aria-label="กำลังโหลด">
+						{#each [0, 1, 2, 3] as i (i)}
+							<div
+								class="h-16 animate-pulse rounded-xl border border-slate-200/80 bg-slate-50"
+							></div>
+						{/each}
+					</div>
+				{:else if filteredStandards.length === 0}
+					<div class="flex flex-1 flex-col items-center justify-center gap-1 p-12 text-center">
+						<p class="text-sm font-medium text-slate-500">ไม่พบรายการเกณฑ์โภชนาการตามเงื่อนไข</p>
+						{#if isSA || canEditOverride}
+							<p class="text-sm text-slate-500">
+								กดปุ่ม "เพิ่มเกณฑ์โภชนาการ" เพื่อเริ่มต้นกำหนดค่า
+							</p>
+						{/if}
+					</div>
+				{:else}
+					<div class="flex-1 overflow-x-auto">
+						<table class="w-full min-w-[900px] text-left text-sm">
+							<thead
+								class="border-b border-slate-200/80 bg-slate-50 text-xs font-semibold text-slate-600"
+							>
+								<tr>
+									<th class="p-3.5 pl-4 whitespace-nowrap">กลุ่มเป้าหมาย</th>
+									<th class="p-3.5 whitespace-nowrap">กลุ่มความต้องการ</th>
+									<th class="p-3.5 text-right whitespace-nowrap">ปริมาณต่อคนต่อวัน</th>
+									<th class="p-3.5 whitespace-nowrap">หน่วยนับ</th>
+									<th class="p-3.5 whitespace-nowrap">วันบังคับใช้</th>
+									<th class="p-3.5 whitespace-nowrap">สถานะ</th>
+									<th class="p-3.5 whitespace-nowrap">แหล่งที่มา</th>
+									<th class="p-3.5 pr-4 text-right whitespace-nowrap"
+										><span class="sr-only">การจัดการ</span></th
+									>
+								</tr>
+							</thead>
+							<tbody class="divide-y divide-slate-100">
+								{#each filteredStandards as std (std._id)}
+									{@const uom = uomMap.get(std.req_group_id) ?? std.standard_uom ?? '—'}
+									<tr class="transition-colors hover:bg-slate-50">
+										<td class="p-3.5 pl-4 font-bold whitespace-nowrap text-slate-900">
+											{TARGET_SEGMENT_LABELS[std.target_segment] ?? std.target_segment}
+										</td>
+										<td
+											class="p-3.5 font-mono text-xs font-semibold whitespace-nowrap text-slate-900"
+											>{std.req_group_id}</td
 										>
-											ใช้งาน
-										</span>
-									{:else}
-										<span
-											class="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-600 dark:bg-zinc-800 dark:text-zinc-400"
+										<td
+											class="p-3.5 text-right font-mono font-bold whitespace-nowrap text-slate-900"
 										>
-											ปิดใช้งาน
-										</span>
-									{/if}
-								</td>
-								<td class="p-3">
-									{#if std.source === 'SHELTER_OVERRIDE'}
-										<span
-											class="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800 dark:bg-amber-950/60 dark:text-amber-300"
+											{std.daily_demand.toLocaleString()}
+										</td>
+										<td class="p-3.5 font-mono text-xs whitespace-nowrap text-slate-600">{uom}</td>
+										<td class="p-3.5 text-xs whitespace-nowrap text-slate-600 tabular-nums"
+											>{std.effective_date}</td
 										>
-											{SOURCE_LABELS.SHELTER_OVERRIDE}
-										</span>
-									{:else}
-										<span
-											class="rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-800 dark:bg-blue-950/60 dark:text-blue-300"
+										<td class="p-3.5"
+											>{@render statusBadge((std.status ?? 'active') === 'active')}</td
 										>
-											{SOURCE_LABELS.SPHERE_BASELINE}
-										</span>
-									{/if}
-								</td>
-								<td class="p-3 text-right">
-									<div class="flex items-center justify-end gap-2">
-										{#if isSA || canEditOverride}
-											<Button
-												variant="outline"
-												size="sm"
-												aria-label={`แก้ไข ${std.req_group_id}`}
-												onclick={() => showEditForm(std)}
-											>
-												<Settings2 class="h-3.5 w-3.5" />
-												แก้ไข
-											</Button>
-											{#if isSA || std.source === 'SHELTER_OVERRIDE'}
-												{#if (std.status ?? 'active') === 'active'}
-													<Button
-														variant="destructive"
-														size="sm"
-														aria-label={`ปิดใช้งาน ${std.req_group_id}`}
-														onclick={() => openDeleteDialog(std)}
-													>
-														<Trash2 class="h-3.5 w-3.5" />
-														ปิดใช้งาน
-													</Button>
-												{:else}
+										<td class="p-3.5">{@render sourceBadge(std.source)}</td>
+										<td class="p-3.5 pr-4 text-right">
+											<div class="flex items-center justify-end gap-2">
+												{#if isSA || canEditOverride}
 													<Button
 														variant="outline"
-														size="sm"
-														disabled={setStatusMutation.isPending}
-														aria-label={`เปิดใช้งาน ${std.req_group_id}`}
-														onclick={() => handleReactivate(std)}
-														class="flex items-center gap-1 text-emerald-600 hover:text-emerald-700 dark:text-emerald-400"
+														aria-label={`แก้ไข ${std.req_group_id}`}
+														onclick={() => showEditForm(std)}
+														class="min-h-11 gap-1.5 rounded-lg border-slate-300 text-sm font-semibold whitespace-nowrap"
 													>
-														<RotateCcw class="h-3.5 w-3.5" />
-														เปิดใช้งาน
+														<Settings2 class="h-3.5 w-3.5" aria-hidden="true" />
+														แก้ไข
 													</Button>
+													{#if isSA || std.source === 'SHELTER_OVERRIDE'}
+														{#if (std.status ?? 'active') === 'active'}
+															<Button
+																variant="destructive"
+																aria-label={`ปิดใช้งาน ${std.req_group_id}`}
+																onclick={() => openDeleteDialog(std)}
+																class="min-h-11 gap-1.5 rounded-lg text-sm font-semibold whitespace-nowrap"
+															>
+																<Trash2 class="h-3.5 w-3.5" aria-hidden="true" />
+																ปิดใช้งาน
+															</Button>
+														{:else}
+															<Button
+																variant="outline"
+																disabled={setStatusMutation.isPending}
+																aria-label={`เปิดใช้งาน ${std.req_group_id}`}
+																onclick={() => handleReactivate(std)}
+																class="min-h-11 gap-1.5 rounded-lg border-slate-300 text-sm font-semibold whitespace-nowrap text-emerald-700 hover:text-emerald-800"
+															>
+																<RotateCcw class="h-3.5 w-3.5" aria-hidden="true" />
+																เปิดใช้งาน
+															</Button>
+														{/if}
+													{/if}
 												{/if}
-											{/if}
-										{/if}
-									</div>
-								</td>
-							</tr>
-						{/each}
-					</tbody>
-				</table>
+											</div>
+										</td>
+									</tr>
+								{/each}
+							</tbody>
+						</table>
+					</div>
+				{/if}
 			</div>
-		{/if}
+		</div>
 	</section>
 {:else}
 	<div
