@@ -4,7 +4,7 @@ title: Kiosk — เปลี่ยนจาก "เสียบบัตรเ�
 status: approved
 date: 2026-09-24
 created: 2026-09-24
-updated: 2026-11-07 # 2026-11-07 ทีมเสนอแก้ §16 (branch cleanup-i18n): checklist สองภาษา, ข้อความ「สำหรับใช้ภายในศูนย์」ใต้ QR, แถว「ติดต่อฉุกเฉิน」ใต้ Zone — รอ PO เคาะ · 2026-11-06 CR-233 supersedes FR-KPC-107 (reprint เขียน log `evacuee_qr`) และ payload ใน FR-KPC-81 · 2026-10-23 rate limit superseded by CR-188 · ข้อเสนอแก้ไข §17 approved โดย Team Lead Soravit Sukkarn (2026-10-20) — พิมพ์ QR จิตอาสา (#609) · 2026-10-18 ทีม kiosk เสนอ §16 (#654): แถว Zone + checklist บน QR label, `zones[].short_name`, reprint คืน `label.zone`/`stations_passed` — รอ PO เคาะ · 2026-10-17 decision sync (#604): ฐาน local ขาด kiosk index → redeploy แล้ว + redeploy/seed deploy index ครบชุด · 2026-10-15 ทีม kiosk ขอเลิกกรอง registered_via ใน §15 (FR-KPC-101/104) · 2026-10-13 ข้อเสนอแก้ไข §15 approved โดย Dev/Team Lead Soravit Sukkarn (รับ requirement จากหัวหน้าโครงการเมื่อวาน 2026-10-12) · 2026-10-04 approved และ merge โดย Soravit Sukkar (Team Lead) + รันเลข CR-151 และลงทะเบียนใน _index.md
+updated: 2026-11-08 # 2026-11-08 §16.5 ข้อ 6 ระบุที่มา (feedback จากการ demo) และขอบเขตเบอร์ผู้ติดต่อฉุกเฉิน · 2026-11-07 ทีมเสนอแก้ §16 (branch cleanup-i18n): checklist สองภาษา, ข้อความ「สำหรับใช้ภายในศูนย์」ใต้ QR, แถว「ติดต่อฉุกเฉิน」ใต้ Zone — รอ PO เคาะ · 2026-11-06 CR-233 supersedes FR-KPC-107 (reprint เขียน log `evacuee_qr`) และ payload ใน FR-KPC-81 · 2026-10-23 rate limit superseded by CR-188 · ข้อเสนอแก้ไข §17 approved โดย Team Lead Soravit Sukkarn (2026-10-20) — พิมพ์ QR จิตอาสา (#609) · 2026-10-18 ทีม kiosk เสนอ §16 (#654): แถว Zone + checklist บน QR label, `zones[].short_name`, reprint คืน `label.zone`/`stations_passed` — รอ PO เคาะ · 2026-10-17 decision sync (#604): ฐาน local ขาด kiosk index → redeploy แล้ว + redeploy/seed deploy index ครบชุด · 2026-10-15 ทีม kiosk ขอเลิกกรอง registered_via ใน §15 (FR-KPC-101/104) · 2026-10-13 ข้อเสนอแก้ไข §15 approved โดย Dev/Team Lead Soravit Sukkarn (รับ requirement จากหัวหน้าโครงการเมื่อวาน 2026-10-12) · 2026-10-04 approved และ merge โดย Soravit Sukkar (Team Lead) + รันเลข CR-151 และลงทะเบียนใน _index.md
 requested_by: ทีม kiosk (branch feat/pre-register_kiosk)
 decided_by: Soravit Sukkar (Team Lead)
 decision_date: 2026-10-04
@@ -578,7 +578,7 @@ migration: ไม่มี — ไม่มี field ใหม่ ไม่ bump
 3. ความยาวสูงสุด 10 เหมาะกับ label 80×60 หรือไม่
 4. ส่งออก `short_name` ใน shelter import / public projection หรือไม่ — ทีมเสนอ: ยังไม่ (staff-only)
 5. label ไม่มีเบอร์โทรของผู้พักพิงแล้ว — ยืนยันว่าหน้างานไม่ต้องใช้เบอร์บน label
-6. (2026-11-07) พิมพ์เบอร์ผู้ติดต่อฉุกเฉินบน label ได้หรือไม่ — เป็นข้อมูลส่วนบุคคลของบุคคลที่สามบนบัตรที่ผู้พักพิงพกติดตัว · ทีมเสนอ: พิมพ์เฉพาะเบอร์ ไม่พิมพ์ชื่อ/ความสัมพันธ์ เพื่อให้เจ้าหน้าที่ติดต่อญาติได้ทันทีเมื่อเกิดเหตุ
+6. (2026-11-07) พิมพ์เบอร์ผู้ติดต่อฉุกเฉินบน label ได้หรือไม่ — เป็นข้อมูลส่วนบุคคลของบุคคลที่สามบนบัตรที่ผู้พักพิงพกติดตัว · ทีมเสนอ: พิมพ์เฉพาะเบอร์ ไม่พิมพ์ชื่อ/ความสัมพันธ์ เพื่อให้เจ้าหน้าที่ติดต่อญาติได้ทันทีเมื่อเกิดเหตุ · **ที่มา:** feedback จากการ demo ขอให้มีเบอร์ผู้ติดต่อฉุกเฉินบน label · ขอบเขตที่ทำ: พิมพ์เฉพาะเบอร์ (ไม่มีชื่อ/ความสัมพันธ์) และเฉพาะเมื่อมีเบอร์ — มี unit test ของ check-in และ reprint ยืนยัน · เรื่องแยก: `POST /api/v1/kiosk/check-in` สาขาที่ไม่ใช่ ThaiD ตรวจแค่ `authenticateScannerDevice` (พฤติกรรมเดิมก่อน §16) ติดตามเป็น issue ต่างหาก
 
 ### 16.6 Impact / Risks
 
