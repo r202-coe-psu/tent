@@ -1,10 +1,12 @@
 ---
-id: draft
+id: CR-239 # renumbered from draft-volunteer-phone-unique
 title: เบอร์โทรจิตอาสาไม่ซ้ำภายในศูนย์ — กันตอนเจ้าหน้าที่เพิ่ม / แก้เบอร์ และล้างโปรไฟล์ซ้ำที่มีอยู่
-status: proposed
+status: approved
 date: 2026-11-06
+updated: 2026-11-08 # approved (Soravit Sukkarn, Team Lead)
 requested_by: "#694 (@Mhapong)"
-decided_by: "@Jackyzaz (รอ approve)"
+decided_by: "Soravit Sukkarn (Team Lead)"
+decision_date: 2026-11-08
 layer: volatile
 affects:
   - docs/data/schema.md §2.8 `volunteer` (เพิ่มกฎ "เบอร์ไม่ซ้ำต่อศูนย์" ในหมายเหตุ `phone` / `phone_hash` · บันทึก `merged_into?`, `merged_at?`, `merged_by?`, `migration_run_id?` ที่ `migrate-volunteer-reapply` เขียนอยู่แล้ว · ไม่ bump `schema_v` — ดู Q6)
@@ -17,7 +19,7 @@ why: "เบอร์ซ้ำภายในศูนย์ทำให้ร�
 migration: "ไม่เปลี่ยนรูปร่างเอกสาร ไม่ bump schema_v · ล้างโปรไฟล์ซ้ำเดิมด้วย pnpm migrate:volunteer-reapply (dry-run ทุกศูนย์ก่อน, --write --confirm หลัง owner อนุมัติ)"
 ---
 
-# เบอร์โทรจิตอาสาไม่ซ้ำภายในศูนย์
+# CR-239 — เบอร์โทรจิตอาสาไม่ซ้ำภายในศูนย์
 
 > **สรุป (TL;DR):**
 >
@@ -141,4 +143,5 @@ migration: "ไม่เปลี่ยนรูปร่างเอกสา�
 ## Decision log
 
 - 2026-10-20 — #693 แก้แล้วโดย #708: `update()` คำนวณ `phone_hash` ใหม่ทุกครั้ง
-- 2026-11-06 — proposed (#694) · owner เลือก track ด้วย draft CR ไฟล์นี้ · รอ @Jackyzaz approve และตอบ Q1 ถึง Q7
+- 2026-11-06 — proposed (#694) · owner เลือก track ด้วย draft CR ไฟล์นี้
+- 2026-11-08 — approved โดย Soravit Sukkarn (Team Lead) — มอบหมายเลข CR-239
