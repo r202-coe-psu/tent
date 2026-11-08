@@ -183,3 +183,97 @@ describe('EvacueeQrModal QR issuing (CR-233)', () => {
 		expect(toastError).toHaveBeenCalledTimes(1);
 	});
 });
+
+describe('EvacueeQrModal preview after printing', () => {
+	const flush = async () => {
+		for (let i = 0; i < 20; i++) {
+			await Promise.resolve();
+			flushSync();
+		}
+	};
+	const caption = () => document.querySelector('figcaption')?.textContent ?? '';
+	const renderLabelsButton = () =>
+		document.querySelector<HTMLButtonElement>('[data-testid="render-labels"]')!;
+
+	beforeEach(() => {
+		issue.mockReset();
+		renderPng.mockClear();
+		issue.mockImplementation(async (input: { evacuee_ids: string[] }) => [
+			{
+				evacuee_id: input.evacuee_ids[0],
+				status: 'issued',
+				qr_payload: `${input.evacuee_ids[0]}@683508`
+			}
+		]);
+	});
+
+	it('shows the placeholder QR and the preview note before any print', async () => {
+		render();
+		await flush();
+
+		expect(caption()).toContain('QR จริงจะออกใหม่เมื่อกดพิมพ์');
+		expect(caption()).not.toContain('QR ล่าสุดที่ออกให้');
+	});
+
+	it('swaps the preview for the QR a station print just issued', async () => {
+		render();
+		await flush();
+		renderPng.mockClear();
+
+		renderLabelsButton().click();
+		await flush();
+
+		expect(issue).toHaveBeenCalledTimes(1);
+		const payloads = (renderPng.mock.calls as unknown as [string][]).map((c) => c[0]);
+		expect(payloads.at(-1)).toBe(`${evacuee._id}@683508`);
+		expect(caption()).toContain('QR ล่าสุดที่ออกให้');
+	});
+
+	it('shows a QR issued outside the modal when the host binds it', async () => {
+		render({ issuedPayload: `${evacuee._id}@999999` });
+		await flush();
+
+		const payloads = (renderPng.mock.calls as unknown as [string][]).map((c) => c[0]);
+		expect(payloads.at(-1)).toBe(`${evacuee._id}@999999`);
+		expect(caption()).toContain('QR ล่าสุดที่ออกให้');
+		expect(issue).not.toHaveBeenCalled();
+	});
+});
+
+describe('EvacueeQrModal stationOnly', () => {
+	const pdfButton = () =>
+		[...document.querySelectorAll<HTMLButtonElement>('button')].find(
+			(b) => b.textContent?.trim() === 'พิมพ์บัตรประจำตัว'
+		);
+
+	it('prints through the station printer only, labelled as the ID card', () => {
+		render({ stationOnly: true, printSource: 'walk_in' });
+
+		const station = stationPrint()!;
+		expect(station.dataset.label).toBe('พิมพ์บัตรประจำตัว');
+		expect(station.dataset.source).toBe('walk_in');
+		expect(pdfButton()).toBeUndefined();
+	});
+
+	it('keeps the PDF button and the default label otherwise', () => {
+		render();
+
+		expect(stationPrint()!.dataset.label).toBeUndefined();
+		expect(stationPrint()!.dataset.source).toBe('evacuee_qr');
+		expect(pdfButton()).toBeDefined();
+	});
+
+	it('reports when a print run starts and ends', () => {
+		const onLockedChange = vi.fn();
+		render({ stationOnly: true, onLockedChange });
+		expect(onLockedChange).toHaveBeenLastCalledWith(false);
+
+		stationPrint()!.click();
+		flushSync();
+		expect(onLockedChange).toHaveBeenLastCalledWith(true);
+
+		stationPrint()!.click();
+		flushSync();
+		expect(onLockedChange).toHaveBeenLastCalledWith(false);
+	});
+});

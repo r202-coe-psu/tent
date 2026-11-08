@@ -195,7 +195,7 @@
 			if (result.source === 'qr_rejected') {
 				// Expired / invalid Person QR (CR-233): no profile, no check-in/out from this scan.
 				scanResult = { success: false, message: result.message };
-				toast.error(result.message);
+				toast.error('สแกนไม่ผ่าน');
 				return;
 			}
 

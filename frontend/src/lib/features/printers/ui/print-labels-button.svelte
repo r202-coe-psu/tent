@@ -458,14 +458,17 @@
 			<p class="text-sm text-muted-foreground">{t.printerOffline(target.name)}</p>
 		{/if}
 		{#if chosen && !pickerOpen}
-			<Button
-				type="button"
-				variant="link"
-				class="h-auto self-start p-0"
-				onclick={() => (pickerOpen = true)}
-			>
-				{t.changePrinter}
-			</Button>
+			<div class="flex flex-wrap items-baseline gap-x-2 self-start text-sm">
+				<span class="text-muted-foreground" data-testid="chosen-printer-name">{chosen.name}</span>
+				<Button
+					type="button"
+					variant="link"
+					class="h-auto p-0 underline"
+					onclick={() => (pickerOpen = true)}
+				>
+					{t.changePrinter}
+				</Button>
+			</div>
 		{/if}
 		{#if pickerOpen}
 			<PrinterPicker {printers} selectedId={chosenId} onSelect={handleSelect} />

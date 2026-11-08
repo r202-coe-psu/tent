@@ -224,6 +224,32 @@ describe('PrintLabelsButton', () => {
 		expect(options()).toHaveLength(2);
 	});
 
+	it('shows the chosen printer name and an underlined change link beside it', async () => {
+		stationPrinter.set('SH001', 'p2');
+
+		await render({ printers: [printer('p1'), printer('p2', { name: 'โต๊ะ 1' })] });
+
+		const name = document.querySelector('[data-testid="chosen-printer-name"]');
+		expect(name?.textContent?.trim()).toBe('โต๊ะ 1');
+		const change = buttons().find((b) => b.textContent?.includes('เปลี่ยนเครื่อง'))!;
+		expect(change.classList.contains('underline')).toBe(true);
+		// Name first, then the link, in one row.
+		expect(name!.parentElement).toBe(change.parentElement);
+		expect(name!.compareDocumentPosition(change) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+	});
+
+	it('hides the name and link while the picker is open', async () => {
+		stationPrinter.set('SH001', 'p1');
+
+		await render({ printers: [printer('p1'), printer('p2')] });
+		buttons()
+			.find((b) => b.textContent?.includes('เปลี่ยนเครื่อง'))
+			?.click();
+		flushSync();
+
+		expect(document.querySelector('[data-testid="chosen-printer-name"]')).toBeNull();
+	});
+
 	it('renders lazily on click, sends one job and ignores a second click while printing', async () => {
 		stationPrinter.set('SH001', 'p1');
 		api.createPrintJob.mockResolvedValue({

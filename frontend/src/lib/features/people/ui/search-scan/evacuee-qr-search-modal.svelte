@@ -33,6 +33,8 @@
 	let manualCode = $state('');
 	let isLooking = $state(false);
 	let cameraError = $state<string | null>(null);
+	/** Why the last scanned Person QR was refused; shown under the camera, cleared on next scan. */
+	let scanRejection = $state<string | null>(null);
 	let claimOpen = $state(false);
 	let claimHit = $state<UnassignedRegistrationSearchHit | null>(null);
 
@@ -43,6 +45,7 @@
 		if (!show) {
 			manualCode = '';
 			cameraError = null;
+			scanRejection = null;
 			isLooking = false;
 		}
 	});
@@ -104,6 +107,7 @@
 		if (!cleanCode) return;
 
 		isLooking = true;
+		scanRejection = null;
 		try {
 			const result = await lookupFederatedByScanCode(queryClient, cleanCode);
 			if (!result) {
@@ -112,7 +116,8 @@
 			}
 			if (result.source === 'qr_rejected') {
 				// Expired / invalid Person QR (CR-233): message only, no profile, no navigation.
-				toast.error(result.message);
+				scanRejection = result.message;
+				toast.error('สแกนไม่ผ่าน');
 				return;
 			}
 			manualCode = '';
@@ -182,6 +187,15 @@
 				</div>
 			{/if}
 		</div>
+
+		{#if scanRejection}
+			<p
+				role="alert"
+				class="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive"
+			>
+				{scanRejection}
+			</p>
+		{/if}
 
 		<form
 			onsubmit={(e) => {

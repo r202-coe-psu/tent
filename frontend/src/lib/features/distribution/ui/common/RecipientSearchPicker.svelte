@@ -21,6 +21,7 @@
 		type Volunteer
 	} from '$lib/features/volunteers';
 	import { resolveStaffCard } from '$lib/features/users';
+	import { toast } from 'svelte-sonner';
 	import CameraCodeScannerDialog from '$lib/components/camera-code-scanner-dialog.svelte';
 	import { createReadGuard } from '$lib/components/camera-code-scanner-state';
 	import { Input } from '$lib/components/ui/input/index.js';
@@ -152,10 +153,14 @@
 				pickedByScan = true;
 				searchTerm = '';
 				choose(result.selection);
-			} else scanError = result.message;
+			} else {
+				scanError = result.message;
+				toast.error('สแกนไม่ผ่าน');
+			}
 		} catch (err) {
 			if (!isLatest()) return;
 			scanError = formatDistributionError(err, 'เกิดข้อผิดพลาดในการค้นหา กรุณาลองใหม่อีกครั้ง');
+			toast.error('สแกนไม่ผ่าน');
 		} finally {
 			if (isLatest()) isLookingUp = false;
 		}
@@ -434,6 +439,7 @@
 	formats={SCAN_FORMATS}
 	manualInputMode="text"
 	busy={isLookingUp}
+	error={scanError}
 	onScan={handleScan}
 	oncancel={cancelLookup}
 />

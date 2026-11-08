@@ -132,3 +132,47 @@ describe('FamilyBatchPrint QR issuing', () => {
 		expect(toastError).toHaveBeenCalledTimes(1);
 	});
 });
+
+describe('FamilyBatchPrint card previews', () => {
+	const captions = () => [...document.querySelectorAll('figcaption')].map((c) => c.textContent);
+	const issueAll = () =>
+		issue.mockImplementation(async (input: { evacuee_ids: string[] }) =>
+			input.evacuee_ids.map((id) => ({
+				evacuee_id: id,
+				status: 'issued',
+				qr_payload: `${id}@683508`
+			}))
+		);
+
+	it('shows the placeholder note on every card before any print', () => {
+		expect(captions()).toHaveLength(2);
+		for (const text of captions()) expect(text).toContain('QR จริงจะออกใหม่เมื่อกดพิมพ์');
+	});
+
+	it('updates every card preview after the family print rotates all QRs', async () => {
+		issueAll();
+
+		await clickRender();
+
+		expect(captions()).toHaveLength(2);
+		for (const text of captions()) expect(text).toContain('QR ล่าสุดที่ออกให้');
+	});
+
+	it('prints one member through the card button, issuing only that member', async () => {
+		issueAll();
+		const buttons = document.querySelectorAll<HTMLButtonElement>('[data-testid="render-labels"]');
+
+		buttons[1].click();
+		await flush();
+
+		expect(issue).toHaveBeenCalledTimes(1);
+		expect(issue).toHaveBeenCalledWith({
+			shelter_code: expect.any(String),
+			source: 'family_batch',
+			evacuee_ids: [B]
+		});
+		const [first, second] = captions();
+		expect(first).toContain('QR จริงจะออกใหม่เมื่อกดพิมพ์');
+		expect(second).toContain('QR ล่าสุดที่ออกให้');
+	});
+});
