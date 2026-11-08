@@ -163,7 +163,10 @@ test.describe(
 			await page.goto('/back-office/supply');
 			await expect(page.getByRole('heading', { name: 'คลังของศูนย์' })).toBeVisible();
 			// The stock list shows what the receipt put on the shelf — so the checks below are not vacuous.
-			await expect(page.getByText(NEED_ITEM).first()).toBeVisible({ timeout: 15_000 });
+			// The stock table renders a mobile card list and a desktop table; only one is visible.
+			await expect(page.getByText(NEED_ITEM).filter({ visible: true }).first()).toBeVisible({
+				timeout: 15_000
+			});
 
 			await expect(
 				page.getByRole('button', { name: /^(รับเข้า|เบิก|ปรับยอด|ตรวจนับ)/ })
