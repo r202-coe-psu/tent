@@ -134,6 +134,10 @@ related:
 - FR-EQR-29 — ผลประเมินเป็น pure function ใน domain คืน `valid` | `expired { issued_at | null, current_printed_at }` | `invalid`; ห้ามมีการคำนวณ hash ในฟังก์ชันนี้หรือในโค้ดฝั่ง client (ใช้ได้บน http LAN ที่ไม่มี `crypto.subtle`)
 - FR-EQR-30 — กฎนี้ใช้ที่: kiosk lookup `source:"qr"` (server), หน้า staff ที่สแกน/ค้น evacuee (`extractScanLookupToken`, `federated-scan-lookup`, `intake-pipeline`, `extractScanCode`) และหน้าแจกของ (`resolveScannedRecipient`)
 - FR-EQR-31 — QR ที่เป็น ULID เปล่า (registration id ของตั๋วคิวกลาง, `kind: 'registration'`) ไม่ใช่ Person QR: ไม่ต้องอ่าน `evacuee_qr` และพฤติกรรมเดิมไม่เปลี่ยน
+- FR-EQR-31a — ใบส่งต่อ (handover slip) ที่พิมพ์จากหน้าโปรไฟล์ผู้พักพิง ซึ่ง QR เป็น path `/onsite/medical-screening/evacuee:{ULID}` (รวมรูป `/onsite/zoning/evacuee:{ULID}` และ `?evacuee_id=evacuee:{ULID}`) **นับเป็น Person QR แบบไม่มี `@`**: ประเมินด้วยแถว 1–2 ของ FR-EQR-27 ด้วย `evacuee_id` ที่แยกจาก path ทุกจุดตาม FR-EQR-30 (รวมหน้าแจกของ — ปุ่มยอมรับความเสี่ยงของ A1 ใช้ได้ตาม FR-EQR-44) ใบส่งต่อจึงใช้ได้จนกว่าคนนั้นจะถูกพิมพ์ Person QR ด้วยระบบใหม่ครั้งแรก แล้วหมดอายุ ไม่ว่าจะพิมพ์ใบส่งต่อก่อนหรือหลังเปลี่ยนระบบ
+  - การพิมพ์ใบส่งต่อ **ไม่ใช่การปริ้น Person QR**: QR ยังเป็นสตริงคงที่สร้างฝั่ง client ไม่เรียก `POST /api/v1/evacuee-qr/issue` ไม่เขียน `evacuee_qr` และไม่ทำให้ QR ใบอื่นของคนนั้นหมดอายุ (ต่างจาก FR-EQR-21c)
+  - ข้อความ expired ของแถว 2 (FR-EQR-33: "QR นี้ออกก่อนเปลี่ยนระบบ …") จะแสดงกับใบส่งต่อที่พิมพ์หลังเปลี่ยนระบบด้วย เพราะใบส่งต่อไม่มี `issued_at` — ยอมรับถ้อยคำนี้ไว้ก่อน
+  - ULID เปล่าใน path (เช่น `/onsite/zoning/{ULID}` ของตั๋วคิวกลาง) ยังไม่ใช่ Person QR ตาม FR-EQR-31
 
 ### E. UX เมื่อ QR หมดอายุ / ไม่ถูกต้อง
 
@@ -207,6 +211,7 @@ related:
 - [ ] AC-EQR-12 — e2e: ปริ้นซ้ำ (kiosk reprint หรือ staff modal) แล้ว QR ใบเก่าสแกนไม่ผ่านทั้ง kiosk และหน้า staff ส่วน QR ใบใหม่สแกนผ่าน (`e2e/helpers/onsite.ts` `decodeQrImage` ต้องอ่าน payload ใหม่ได้)
 - [ ] AC-EQR-13 — `frontend/src/lib/utils/qrcode.test.ts` เพิ่มเคส `qrModuleCount('evacuee:{ULID}@{hash6}')` = 29 (FR-EQR-7) และเคส label ของ kiosk ที่ใช้ ECC เดียวกัน
 - [ ] AC-EQR-14 — (A1) หน้าแจกจ่ายสแกน QR expired แล้วมีปุ่มยอมรับความเสี่ยง กดแล้วได้ผู้รับและบันทึก `recipient_qr_override`; QR invalid ไม่มีปุ่ม; ก่อนกดไม่มีผู้รับถูกเลือก (FR-EQR-44..50)
+- [ ] AC-EQR-15 — (FR-EQR-31a) `extractScanPersonQr` คืน `{ evacuee_id, hash6: null }` สำหรับรูป path/`?evacuee_id=` ที่มี `evacuee:{ULID}` และคืน `null` สำหรับ ULID เปล่าใน path; `resolveScannedRecipient` และ `federated-scan-lookup` ปฏิเสธใบส่งต่อเมื่อมี log โดยไม่เปิด evacuee / ไม่เลือกผู้รับ, ยอมรับเมื่อไม่มี log, และที่โต๊ะแจกของ override ได้พร้อมบันทึก `recipient_qr_override` (`scan-lookup.test.ts`, `recipient-scan.test.ts`, `federated-scan-lookup.test.ts`)
 
 ## Superseded
 
@@ -277,3 +282,4 @@ CR นี้แทนที่ข้อความต่อไปนี้ (ไ
 - 2026-11-06 — approved by Project Owner: เก็บ `hash` (6 hex ตัวเล็ก, server เขียนตอนออก) ในทุก `prints[]` entry; ตัวตรวจทุกตัว (kiosk server และ staff client) เทียบ `hash6` ที่สแกนกับ `prints[].hash` และไม่คำนวณ hash ซ้ำ; `printed_at` ยังเพิ่มขึ้นเข้มงวด; `hash` ชนกับ entry เดิมของคนเดียวกัน → server เลื่อน `printed_at` 1 ms แล้วออกใหม่ (FR-EQR-9a, 17a, 28, 29, 38); การอัปเกรด HMAC เป็นงานฝั่ง server ล้วน สอดคล้องข้อ 6 (FR-EQR-42) — ยกเลิกข้อกำหนดเดิมที่ให้ staff คำนวณ SHA-1 บน client และข้อสรุปว่า HMAC ต้องย้ายตัวตรวจไป server
 - 2026-11-06 — renumbered CR-231 → CR-232 → CR-233 เพราะเลขชนกับ CR อื่นที่ merge เข้า `develop` ก่อน (CR-231 public search consent purpose, PR #1214; CR-232 evacuee Excel export, PR #1215) — เนื้อหาไม่เปลี่ยน
 - 2026-11-08 — approved by Project Owner (Amendment A1, ขอโดยทีมหน้างาน): หน้าแจกจ่ายยอมให้แจกด้วย QR เก่าได้ผ่านปุ่ม "ยอมรับความเสี่ยงเพื่อแจกจ่าย" · ทุกคนที่แจกจ่ายได้กดได้ + บันทึกร่องรอย (เจ้าของโครงการเลือก) · เก็บร่องรอยใน `distribution_log` และ bump `schema_v` 2→3 แบบ lazy (FR-EQR-48) — เจ้าของโครงการอนุมัติ 2026-11-08 · migration: redeploy `_design/access` ของทุก `shelter_*` ก่อน client รุ่นใหม่ (`pnpm redeploy:access`), ไม่ backfill
+- 2026-11-08 — decision recorded (ตอบ Q3 ของรีวิว PR #1285 รอบ 1–2; ผู้พัฒนา PR เลือกทาง 1 ใน 3 ทาง): ใบส่งต่อ (handover slip) แบบ path นับเป็น Person QR แบบไม่มี `@` และอยู่ใต้กฎ FR-EQR-27 ทุกจุด รวมหน้าแจกของ (FR-EQR-31a, AC-EQR-15) · ทางที่ไม่เลือก: (2) ให้ใบส่งต่อพก payload ที่ออกผ่าน `/api/v1/evacuee-qr/issue`, (3) แก้ FR-EQR-27/30/34 ให้ยกเว้นใบส่งต่อ · **สถานะ: รอ Project Owner ยืนยัน** (CR นี้ approved ก่อนมีข้อนี้ และ FR-EQR-27 แถว 1 เดิมไม่กล่าวถึงใบส่งต่อ) · ยังไม่ได้ตัดสิน: การเปิด URL `/onsite/medical-screening/{id}` / `/onsite/zoning/{id}` ตรง ๆ ที่ route ไม่ผ่านกฎ Person QR, และ Q1 (booking ticket หมดอายุตามแถว 2 ทั้งที่ FR-EQR-36 ว่านอกขอบเขต) / Q2 (retention ของ `evacuee_qr`)
