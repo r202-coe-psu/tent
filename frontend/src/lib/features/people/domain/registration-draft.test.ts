@@ -13,7 +13,8 @@ const household = {
 	housing_type: 'owned_house',
 	address_no: '12',
 	subdistrict: 'คอหงส์',
-	pets: [{ species: 'dog', count: 1, image_url: 'https://img/pet.jpg' }]
+	pets: [{ species: 'dog', count: 1, image_url: 'https://img/pet.jpg' }],
+	assets: { description: 'มอเตอร์ไซค์', image_url: 'https://img/bike.jpg' }
 } as unknown as UnifiedRegistrationInput['household'];
 
 const member = {
@@ -32,14 +33,23 @@ describe('registration draft (#358)', () => {
 		expect(draft.members[0]).toMatchObject({ first_name: 'สมชาย', phone: '0812345678' });
 		expect(draft.members[0].photo).toBeNull();
 		expect(draft.household.pets?.[0]).toMatchObject({ species: 'dog', image_url: null });
+		expect(draft.household.assets).toMatchObject({ description: 'มอเตอร์ไซค์', image_url: null });
 		expect(draft.household.address_no).toBe('12');
 	});
 
-	it('restores a fresh draft, each member laid over a blank one', () => {
+	it('restores a fresh draft, filling default household fields and laying members over blanks', () => {
 		const stored = JSON.parse(JSON.stringify(toRegistrationDraft(household, [member], NOW)));
 		delete stored.members[0].special_needs;
+		delete stored.household.province;
+		delete stored.household.vehicles;
 		const restored = fromRegistrationDraft(stored, NOW + 60_000)!;
 		expect(restored.household.subdistrict).toBe('คอหงส์');
+		expect(restored.household.province).toBe('');
+		expect(restored.household.vehicles).toEqual([]);
+		expect(restored.household.assets).toMatchObject({
+			description: 'มอเตอร์ไซค์',
+			image_url: null
+		});
 		expect(restored.members[0]).toMatchObject({ form_key: 'm1', first_name: 'สมชาย' });
 		expect(restored.members[0].special_needs).toEqual([]);
 		expect(restored.members[0].photo).toBeNull();

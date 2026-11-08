@@ -320,26 +320,47 @@
 	// Not state: once the form is sent, the effect below must not write the draft back.
 	let draftSent = false;
 
-	// Drop the draft when navigating away to another route to avoid leaving PII in sessionStorage (#358 review W1).
+	// Drop the draft when navigating away to another route to avoid leaving personal data in sessionStorage.
 	beforeNavigate(({ to }) => {
 		if (draftKey && to && to.url.pathname !== page.url.pathname) {
 			clearRegistrationDraft(draftKey);
 		}
 	});
 
+	let autosaveTimer: ReturnType<typeof setTimeout> | null = null;
 	$effect(() => {
 		if (!draftKey || readOnly) return;
-		const current = $state.snapshot({ household, members });
+		const currentHousehold = {
+			...household,
+			assets: assetDescription.trim()
+				? { description: assetDescription.trim(), image_url: null }
+				: null
+		};
+		const current = $state.snapshot({ household: currentHousehold, members });
 		if (draftSent) return;
-		if (!touched && !hasRegistrationDraftContent(current)) return;
-		saveRegistrationDraft(draftKey, current.household, current.members);
+		// Only autosave when the user has actually edited the form, preventing mount-time
+		// re-saving of restored drafts which slides the 2-hour TTL indefinitely.
+		if (!touched) return;
+		if (autosaveTimer) clearTimeout(autosaveTimer);
+		autosaveTimer = setTimeout(() => {
+			if (draftSent) return;
+			saveRegistrationDraft(draftKey, current.household, current.members);
+		}, 500);
+		return () => {
+			if (autosaveTimer) clearTimeout(autosaveTimer);
+		};
 	});
 	onMount(() => {
 		if (restoredDraft && hasRegistrationDraftContent(restoredDraft)) {
 			toast.info(t.draftRestored);
 		}
 	});
-	let assetDescription = $state(untrack(() => initialHousehold?.assets?.description ?? ''));
+	let assetDescription = $state(
+		untrack(
+			() =>
+				restoredDraft?.household?.assets?.description ?? initialHousehold?.assets?.description ?? ''
+		)
+	);
 	/** What `children` and the acknowledgement see: vehicles/assets only where the form shows them. */
 	const visibleHousehold = $derived({
 		...household,
@@ -1579,6 +1600,10 @@
 			});
 			clearDirty();
 			draftSent = true;
+			if (autosaveTimer) {
+				clearTimeout(autosaveTimer);
+				autosaveTimer = null;
+			}
 			if (draftKey) clearRegistrationDraft(draftKey);
 		} catch {
 			// Caller surfaces save errors.

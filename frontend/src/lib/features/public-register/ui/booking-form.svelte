@@ -27,6 +27,7 @@
 	import type { ConsentAcknowledgement } from '$lib/features/consent';
 	import { UNASSIGNED_SHELTER_CODE } from '../domain/booking';
 	import {
+		PUBLIC_PRE_REGISTER_DRAFT_KEY,
 		UnifiedRegistrationForm,
 		localizeRegistrationMessage,
 		type RegistrationConsent,
@@ -479,7 +480,7 @@
 		<!-- Issue #254: Mount Shared Unified Registration Form -->
 		<UnifiedRegistrationForm
 			channel="public"
-			draftKey="public-pre-register"
+			draftKey={PUBLIC_PRE_REGISTER_DRAFT_KEY}
 			includeVehiclesAssets={false}
 			pending={isSubmitting}
 			enableUnassignedPhoto={isUnassigned}

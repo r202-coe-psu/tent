@@ -14,6 +14,26 @@ import {
 
 type DraftHousehold = UnifiedRegistrationInput['household'];
 
+export const PUBLIC_PRE_REGISTER_DRAFT_KEY = 'public-pre-register';
+
+export const DEFAULT_DRAFT_HOUSEHOLD: DraftHousehold = {
+	housing_type: 'owned_house',
+	residence_landmark: null,
+	dorm_name: null,
+	dorm_building: null,
+	dorm_floor: null,
+	dorm_room: null,
+	address_no: '',
+	village_no: '',
+	subdistrict: '',
+	district: '',
+	province: '',
+	postal_code: '',
+	pets: [],
+	vehicles: [],
+	assets: null
+};
+
 export type RestoredRegistrationDraft = {
 	household: DraftHousehold;
 	members: UnifiedMemberWithMeta[];
@@ -39,7 +59,8 @@ export function toRegistrationDraft(
 		saved_at: now,
 		household: {
 			...household,
-			pets: (household.pets ?? []).map((pet) => ({ ...pet, image_url: null }))
+			pets: (household.pets ?? []).map((pet) => ({ ...pet, image_url: null })),
+			assets: household.assets ? { ...household.assets, image_url: null } : null
 		},
 		members: members.map((member) => ({ ...member, photo: null }))
 	};
@@ -60,8 +81,28 @@ export function fromRegistrationDraft(raw: unknown, now: number): RestoredRegist
 		return null;
 	}
 	if (!raw.members.every(isRecord)) return null;
+
+	const rawHousehold = raw.household as Record<string, unknown>;
+	const restoredAssets = isRecord(rawHousehold.assets)
+		? {
+				description:
+					typeof rawHousehold.assets.description === 'string'
+						? rawHousehold.assets.description
+						: '',
+				image_url: null
+			}
+		: null;
+
 	return {
-		household: raw.household as DraftHousehold,
+		household: {
+			...DEFAULT_DRAFT_HOUSEHOLD,
+			...rawHousehold,
+			pets: Array.isArray(rawHousehold.pets) ? (rawHousehold.pets as DraftHousehold['pets']) : [],
+			vehicles: Array.isArray(rawHousehold.vehicles)
+				? (rawHousehold.vehicles as DraftHousehold['vehicles'])
+				: [],
+			assets: restoredAssets
+		},
 		members: (raw.members as Record<string, unknown>[]).map((member) => ({
 			...blankUnifiedMember(),
 			...(member as Partial<UnifiedMemberWithMeta>),
@@ -72,7 +113,7 @@ export function fromRegistrationDraft(raw: unknown, now: number): RestoredRegist
 
 /**
  * Returns true only when a form has actual user-entered data rather than blank defaults.
- * Used to avoid saving empty drafts and avoid showing restore toasts on blank forms (#358 review W2).
+ * Used to avoid saving empty drafts and avoid showing restore toasts on blank forms.
  */
 export function hasRegistrationDraftContent(draft: {
 	household?: Partial<DraftHousehold> | null;

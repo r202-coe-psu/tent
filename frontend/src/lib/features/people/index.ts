@@ -319,6 +319,8 @@ export {
 	type RegistrationConsentConfig
 } from './domain/unified-registration';
 
+export { PUBLIC_PRE_REGISTER_DRAFT_KEY } from './domain/registration-draft';
+
 export {
 	defaultBirthCalendar,
 	toDisplayBirthYear,

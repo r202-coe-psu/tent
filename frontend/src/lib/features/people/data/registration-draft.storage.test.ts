@@ -2,6 +2,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
 	clearRegistrationDraft,
+	isEligibleNavigationForDraftRestore,
 	loadRegistrationDraft,
 	saveRegistrationDraft,
 	sweepExpiredDrafts
@@ -67,5 +68,30 @@ describe('registration draft storage (#358)', () => {
 		sweepExpiredDrafts(NOW);
 		expect(sessionStorage.getItem('tent.registrationDraft:old-draft')).toBeNull();
 		expect(sessionStorage.getItem('tent.registrationDraft:valid-draft')).not.toBeNull();
+	});
+
+	it('clears draft and returns null when navigation is a fresh page open (navigate)', () => {
+		saveRegistrationDraft(KEY, household, members, NOW);
+		vi.spyOn(performance, 'getEntriesByType').mockReturnValue([
+			{ type: 'navigate' } as PerformanceNavigationTiming
+		]);
+
+		expect(isEligibleNavigationForDraftRestore()).toBe(false);
+		expect(loadRegistrationDraft(KEY, NOW)).toBeNull();
+		// Draft must be wiped from storage to protect privacy on shared devices
+		expect(sessionStorage.getItem(`tent.registrationDraft:${KEY}`)).toBeNull();
+	});
+
+	it('restores draft when navigation is a reload or back/forward', () => {
+		saveRegistrationDraft(KEY, household, members, NOW);
+		const spy = vi.spyOn(performance, 'getEntriesByType');
+
+		spy.mockReturnValue([{ type: 'reload' } as PerformanceNavigationTiming]);
+		expect(isEligibleNavigationForDraftRestore()).toBe(true);
+		expect(loadRegistrationDraft(KEY, NOW)?.members[0].first_name).toBe('สมชาย');
+
+		spy.mockReturnValue([{ type: 'back_forward' } as PerformanceNavigationTiming]);
+		expect(isEligibleNavigationForDraftRestore()).toBe(true);
+		expect(loadRegistrationDraft(KEY, NOW)?.members[0].first_name).toBe('สมชาย');
 	});
 });

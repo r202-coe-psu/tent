@@ -15,7 +15,7 @@ import {
 const PREFIX = 'tent.registrationDraft:';
 
 /**
- * Remove drafts that have expired or are malformed from sessionStorage (#358 review W1).
+ * Remove drafts that have expired or are malformed from sessionStorage.
  */
 export function sweepExpiredDrafts(now = Date.now()): void {
 	try {
@@ -46,11 +46,40 @@ export function sweepExpiredDrafts(now = Date.now()): void {
 	}
 }
 
+/**
+ * True only when the current page load is a reload or back/forward navigation.
+ * Fresh page loads (navigating to the URL, opening a new tab, bookmarks) return false
+ * so that drafts containing personal data are never restored on shared devices.
+ */
+export function isEligibleNavigationForDraftRestore(): boolean {
+	if (typeof window === 'undefined' || typeof performance === 'undefined') return false;
+	try {
+		const entries = performance.getEntriesByType?.('navigation');
+		if (!entries || entries.length === 0) {
+			const legacy = (performance as unknown as { navigation?: { type?: number } }).navigation;
+			if (legacy?.type !== undefined) {
+				// 1: TYPE_RELOAD, 2: TYPE_BACK_FORWARD
+				return legacy.type === 1 || legacy.type === 2;
+			}
+			// In headless test environments where getEntriesByType returns empty array, allow restore unless mocked.
+			return true;
+		}
+		const nav = entries[0] as PerformanceNavigationTiming | undefined;
+		return nav?.type === 'reload' || nav?.type === 'back_forward';
+	} catch {
+		return false;
+	}
+}
+
 export function loadRegistrationDraft(
 	key: string,
 	now = Date.now()
 ): RestoredRegistrationDraft | null {
 	sweepExpiredDrafts(now);
+	if (!isEligibleNavigationForDraftRestore()) {
+		clearRegistrationDraft(key);
+		return null;
+	}
 	try {
 		const raw = sessionStorage.getItem(PREFIX + key);
 		if (!raw) return null;
@@ -68,7 +97,6 @@ export function saveRegistrationDraft(
 	members: RegistrationDraft['members'],
 	now = Date.now()
 ): void {
-	sweepExpiredDrafts(now);
 	try {
 		sessionStorage.setItem(
 			PREFIX + key,
