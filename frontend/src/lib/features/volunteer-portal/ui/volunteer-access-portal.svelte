@@ -1,4 +1,5 @@
 <script lang="ts">
+	import Calendar from '@lucide/svelte/icons/calendar';
 	import Check from '@lucide/svelte/icons/check';
 	import CircleAlert from '@lucide/svelte/icons/circle-alert';
 	import CircleCheck from '@lucide/svelte/icons/circle-check';
@@ -395,6 +396,49 @@
 					second: '2-digit',
 					timeZone: PORTAL_TIME_ZONE
 				})} น.`;
+	}
+
+	function shiftDateFormatted(activity: PortalActivity): string {
+		if (activity.startTs) {
+			const start = parsePortalTimestamp(activity.startTs);
+			if (!Number.isNaN(start.getTime())) {
+				return start.toLocaleDateString('th-TH', {
+					weekday: 'short',
+					day: 'numeric',
+					month: 'short',
+					year: 'numeric',
+					timeZone: PORTAL_TIME_ZONE
+				});
+			}
+		}
+		if (activity.date) {
+			const d = new Date(activity.date + 'T00:00:00Z');
+			if (!Number.isNaN(d.getTime())) {
+				return d.toLocaleDateString('th-TH', {
+					weekday: 'short',
+					day: 'numeric',
+					month: 'short',
+					year: 'numeric',
+					timeZone: 'UTC'
+				});
+			}
+			return activity.date;
+		}
+		return 'ยังไม่ระบุวัน';
+	}
+
+	function shiftTimeFormatted(activity: PortalActivity): string {
+		if (!activity.startTs) return '';
+		const start = parsePortalTimestamp(activity.startTs);
+		if (Number.isNaN(start.getTime())) return '';
+		const opts = { hour: '2-digit', minute: '2-digit', timeZone: PORTAL_TIME_ZONE } as const;
+		const from = start.toLocaleTimeString('th-TH', opts);
+		const end = activity.endTs ? parsePortalTimestamp(activity.endTs) : null;
+		const to =
+			end && !Number.isNaN(end.getTime())
+				? ` – ${end.toLocaleTimeString('th-TH', opts)} น.`
+				: ' น.';
+		return `${from}${to}`;
 	}
 
 	function timeRange(activity: PortalActivity): string {
@@ -1317,24 +1361,35 @@
 											</span>
 										</div>
 
-										<h4 class="text-base font-bold text-foreground">{activity.title}</h4>
+										<h4 class="text-base font-bold text-foreground sm:text-lg">{activity.title}</h4>
 										{#if activity.description}
 											<p class="text-xs leading-relaxed text-muted-foreground">
 												{activity.description}
 											</p>
 										{/if}
 
-										<div
-											class="flex flex-wrap items-center gap-x-4 gap-y-1 text-2xs text-muted-foreground"
-										>
-											<span class="flex items-center gap-1 font-medium text-foreground">
-												<MapPin class="size-3 text-primary" />
-												{activity.location}
-											</span>
-											<span class="flex items-center gap-1">
-												<Clock class="size-3" />
-												{timeRange(activity)}
-											</span>
+										<!-- Highlighted Date & Time Box -->
+										<div class="mt-2.5 flex flex-wrap items-center gap-2">
+											<div
+												class="inline-flex items-center gap-1.5 rounded-xl border border-blue-200/90 bg-blue-50/80 px-3 py-1.5 text-xs font-semibold text-[#0A2647] shadow-2xs sm:text-sm"
+											>
+												<Calendar class="size-4 text-[#0A2647]" />
+												<span class="font-bold">{shiftDateFormatted(activity)}</span>
+												{#if shiftTimeFormatted(activity)}
+													<span class="text-blue-300">•</span>
+													<Clock class="size-4 text-[#0A2647]" />
+													<span class="font-bold text-slate-900 tabular-nums"
+														>{shiftTimeFormatted(activity)}</span
+													>
+												{/if}
+											</div>
+
+											<div
+												class="inline-flex items-center gap-1.5 rounded-xl border border-slate-200/80 bg-slate-50 px-2.5 py-1.5 text-xs font-medium text-slate-700"
+											>
+												<MapPin class="size-3.5 text-primary" />
+												<span>{activity.location}</span>
+											</div>
 										</div>
 
 										<!-- Checkin info -->

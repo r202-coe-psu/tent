@@ -202,6 +202,16 @@ export function mergePortalActivities(
 	return activities;
 }
 
+function isShiftEnded(activity: PortalActivity, now: number): boolean {
+	if (activity.status === 'completed' || activity.status === 'cancelled') return true;
+	if (activity.endTs) {
+		const end = parsePortalTimestamp(activity.endTs).getTime();
+		if (!Number.isNaN(end)) return end < now;
+	}
+	const start = startTime(activity);
+	return !Number.isNaN(start) && start + 24 * 60 * 60 * 1000 < now;
+}
+
 export function filterAndSortPortalActivities(
 	activities: PortalActivity[],
 	filters: PortalActivityFilters = {},
@@ -232,13 +242,11 @@ export function filterAndSortPortalActivities(
 	});
 
 	return filtered.sort((left, right) => {
-		const leftTime = startTime(left);
-		const rightTime = startTime(right);
-		const leftPast = leftTime < now;
-		const rightPast = rightTime < now;
-		if (leftPast !== rightPast) return leftPast ? 1 : -1;
-		if (leftPast) return rightTime - leftTime;
-		return leftTime - rightTime;
+		const leftEnded = isShiftEnded(left, now);
+		const rightEnded = isShiftEnded(right, now);
+		if (leftEnded !== rightEnded) return leftEnded ? 1 : -1;
+		if (leftEnded) return startTime(right) - startTime(left);
+		return startTime(left) - startTime(right);
 	});
 }
 
