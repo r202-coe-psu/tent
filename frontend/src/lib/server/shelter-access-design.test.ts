@@ -4388,6 +4388,82 @@ describe('buildValidateDocUpdate', () => {
 				expect(() => compile()(validReturnableLog, null, DISTRIBUTION)).not.toThrow();
 			});
 
+			describe('recipient_qr_override (CR-233 A1, schema_v 3)', () => {
+				const audit = {
+					issued_at: '2026-11-08T06:52:00.000Z',
+					current_printed_at: '2026-11-08T06:53:00.000Z',
+					overridden_by: DISTRIBUTION.name,
+					overridden_at: '2026-11-08T07:00:00.000Z'
+				};
+				const overridden = (over: Doc = {}): Doc => ({
+					...validFoodLog,
+					schema_v: 3,
+					recipient_qr_override: audit,
+					...over
+				});
+
+				it('allows an evacuee handout with the audit on schema_v 3, null issued_at included', () => {
+					expect(() => compile()(overridden(), null, DISTRIBUTION)).not.toThrow();
+					expect(() =>
+						compile()(
+							overridden({ recipient_qr_override: { ...audit, issued_at: null } }),
+							null,
+							DISTRIBUTION
+						)
+					).not.toThrow();
+				});
+
+				it('rejects the audit below schema_v 3, on a non-evacuee and when malformed', () => {
+					expectForbidden(
+						() => compile()(overridden({ schema_v: 2 }), null, DISTRIBUTION),
+						/recipient_qr_override requires schema_v 3/
+					);
+					const outside: Doc = overridden({ recipient_type: 'outside' });
+					delete outside.recipient_id;
+					delete outside.household_id;
+					expectForbidden(
+						() => compile()(outside, null, DISTRIBUTION),
+						/applies to evacuee recipients only/
+					);
+					expectForbidden(
+						() =>
+							compile()(
+								overridden({ recipient_qr_override: { ...audit, overridden_by: '' } }),
+								null,
+								DISTRIBUTION
+							),
+						/recipient_qr_override must be/
+					);
+				});
+
+				it('refuses to edit or remove the audit after issuance', () => {
+					const stored = overridden();
+					expectForbidden(
+						() =>
+							compile()(
+								{ ...stored, recipient_qr_override: { ...audit, overridden_by: 'x' } },
+								stored,
+								DISTRIBUTION
+							),
+						/recipient_qr_override is immutable/
+					);
+					const stripped: Doc = { ...stored };
+					delete stripped.recipient_qr_override;
+					expectForbidden(
+						() => compile()(stripped, stored, DISTRIBUTION),
+						/recipient_qr_override is immutable/
+					);
+				});
+
+				it('does not allow an existing log to gain the audit later (2 -> 3)', () => {
+					const stored = { ...validFoodLog, schema_v: 2 };
+					expectForbidden(
+						() => compile()(overridden(), stored, DISTRIBUTION),
+						/recipient_qr_override is immutable/
+					);
+				});
+			});
+
 			it('accepts a staff recipient only with a user: recipient_id', () => {
 				const staffLog = (recipient_id?: string | null): Doc => {
 					const log: Doc = { ...validFoodLog, recipient_type: 'staff' };
@@ -4994,8 +5070,13 @@ describe('buildValidateDocUpdate', () => {
 						/schema_v can only stay the same or upgrade from 1 to 2/
 					);
 					expectForbidden(
-						() => compile()({ ...active, schema_v: 3 }, active, DISTRIBUTION),
+						() => compile()({ ...active, schema_v: 4 }, active, DISTRIBUTION),
 						/Unsupported distribution_log schema version/
+					);
+					// schema_v 3 is only written at issuance (CR-233 A1): no later 2 -> 3 upgrade.
+					expectForbidden(
+						() => compile()({ ...active, schema_v: 3 }, active, DISTRIBUTION),
+						/schema_v can only stay the same or upgrade from 1 to 2/
 					);
 				});
 

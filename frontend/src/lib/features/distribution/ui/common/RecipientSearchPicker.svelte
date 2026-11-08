@@ -32,7 +32,8 @@
 	import {
 		resolveScannedRecipient,
 		searchVolunteers,
-		toVolunteerSelection
+		toVolunteerSelection,
+		type QrOverrideDates
 	} from '../model/recipient-scan';
 
 	interface Props {
@@ -45,6 +46,11 @@
 		/** Accept staff QR cards. Needs `shelterCode` to resolve the card. */
 		allowStaff?: boolean;
 		shelterCode?: string | null;
+		/**
+		 * Offer "accept the risk" for an expired Person QR (CR-233 A1). Only for handouts, whose log
+		 * records the override; loan returns and bulk returns keep rejecting expired QRs.
+		 */
+		allowExpiredQrOverride?: boolean;
 		onselect?: (recipient: FrontlineRecipientSelection | null) => void;
 	}
 
@@ -55,6 +61,7 @@
 		allowVolunteer = true,
 		allowStaff = false,
 		shelterCode,
+		allowExpiredQrOverride = false,
 		onselect
 	}: Props = $props();
 
@@ -67,6 +74,8 @@
 	let scannerOpen = $state(false);
 	let isLookingUp = $state(false);
 	let scanError = $state<string | null>(null);
+	/** The scanned code behind an expired Person QR; set only while "accept the risk" is on offer (CR-233 A1). */
+	let expiredScanCode = $state<string | null>(null);
 	let outsideNotes = $state('');
 	/** Whether the current pick came from the scanner — `next()` reopens it only then. */
 	let pickedByScan = false;
@@ -108,7 +117,7 @@
 		onselect?.(selection);
 	}
 
-	function selectEvacuee(evacuee: Evacuee, viaScan: boolean) {
+	function selectEvacuee(evacuee: Evacuee, viaScan: boolean, qrOverride?: QrOverrideDates) {
 		pickedByScan = viaScan;
 		searchTerm = '';
 		scanError = null;
@@ -119,7 +128,8 @@
 			label: `${evacuee.first_name} ${evacuee.last_name}${evacuee.nickname ? ` (${evacuee.nickname})` : ''}`,
 			phone: evacuee.phone,
 			stayInfo: evacuee.current_stay?.zone ? `โซน ${evacuee.current_stay.zone}` : undefined,
-			menuTags: deriveRecipientMenuTags(evacuee)
+			menuTags: deriveRecipientMenuTags(evacuee),
+			...(qrOverride ? { qrOverride } : {})
 		});
 	}
 
@@ -130,15 +140,16 @@
 		choose(toVolunteerSelection(volunteer));
 	}
 
-	async function handleScan(code: string) {
+	async function handleScan(code: string, acceptExpiredQr = false) {
 		if (isLookingUp) return;
 		isLookingUp = true;
 		scanError = null;
+		expiredScanCode = null;
 		const isLatest = lookupGuard.begin();
 		try {
 			const result = await resolveScannedRecipient(
 				code,
-				{ allowVolunteer, allowStaff },
+				{ allowVolunteer, allowStaff, acceptExpiredQr },
 				{
 					lookupEvacuee: (c) => lookupEvacueeByScanCode(queryClient, c),
 					lookupVolunteer: (c) => lookupVolunteerByScanCode(c),
@@ -147,14 +158,17 @@
 				}
 			);
 			if (!isLatest()) return;
-			if (result.kind === 'evacuee') selectEvacuee(result.evacuee, true);
-			else if (result.kind === 'volunteer') selectVolunteer(result.volunteer, true);
+			if (result.kind === 'evacuee') {
+				selectEvacuee(result.evacuee, true, result.qrOverride);
+				if (acceptExpiredQr) scannerOpen = false;
+			} else if (result.kind === 'volunteer') selectVolunteer(result.volunteer, true);
 			else if (result.kind === 'staff_card') {
 				pickedByScan = true;
 				searchTerm = '';
 				choose(result.selection);
 			} else {
 				scanError = result.message;
+				if (result.expiredQr && allowExpiredQrOverride) expiredScanCode = code;
 				toast.error('สแกนไม่ผ่าน');
 			}
 		} catch (err) {
@@ -201,6 +215,7 @@
 	/** Open the camera scanner. */
 	export function scan() {
 		scanError = null;
+		expiredScanCode = null;
 		scannerOpen = true;
 	}
 
@@ -440,6 +455,13 @@
 	manualInputMode="text"
 	busy={isLookingUp}
 	error={scanError}
+	errorAction={expiredScanCode
+		? {
+				label: 'ยอมรับความเสี่ยงเพื่อแจกจ่าย',
+				disabled: isLookingUp,
+				onclick: () => handleScan(expiredScanCode!, true)
+			}
+		: undefined}
 	onScan={handleScan}
 	oncancel={cancelLookup}
 />

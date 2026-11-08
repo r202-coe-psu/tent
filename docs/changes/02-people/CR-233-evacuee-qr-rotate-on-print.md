@@ -3,7 +3,7 @@ id: CR-233
 title: Person QR ของผู้อพยพออกใหม่ทุกครั้งที่ปริ้น — payload `evacuee:{ULID}@{hash6}` + log `evacuee_qr:{ULID}` ให้ใบเก่าหมดอายุ
 status: approved
 date: 2026-11-06
-updated: 2026-11-06
+updated: 2026-11-08
 requested_by: feedback อบรมระบบ 03/11/2026 (GitHub issue #1156)
 decided_by: Project Owner (เจ้าของโครงการ) — อนุมัติ 2026-11-06 (grill #1156, ข้อ 1–9)
 decision_date: 2026-11-06
@@ -12,8 +12,8 @@ supersedes:
   - docs/changes/14-kiosk/CR-151-kiosk-pre-registration-check-in.md FR-KPC-107 (reprint ไม่เขียน doc) และข้อความ payload ใน FR-KPC-81
   - docs/changes/14-kiosk/CR-149-kiosk-walk-in-registration.md ข้อความ payload ใน FR-KWR-19 และ FR-KWR-71
 affects:
-  - docs/data/schema.md §1.9 (+ doc type `evacuee_qr`), §0 (ข้อยกเว้น `_id`), §8 ข้อ 1–2
-  - schema_v: `evacuee_qr` ใหม่ = 1 · `evacuee` คงที่ 15 (ไม่ bump)
+  - docs/data/schema.md §1.9 (+ doc type `evacuee_qr`), §0 (ข้อยกเว้น `_id`), §8 ข้อ 1–2 · A1: §2.30 `distribution_log` `recipient_qr_override`
+  - schema_v: `evacuee_qr` ใหม่ = 1 · `evacuee` คงที่ 15 (ไม่ bump) · A1: `distribution_log` 2 → 3 (lazy — เขียน v3 เฉพาะ log ที่ override)
   - docs/data/api-contract.md §1.3 (แถว ค้นหา/QR), §2.1 (`/kiosk/register` response), §2.1.3 (`source:"qr"`), §2.1.4 (ใหม่), §2.8 (ใหม่ — `POST /api/v1/evacuee-qr/issue`)
   - docs/sop/SOP-SmartShelter.md P3-04 · docs/sitemap.md (`/people/[id]/card`)
   - frontend/src/lib/server/evacuee-qr-service.ts (ใหม่) + frontend/src/routes/api/v1/evacuee-qr/issue/+server.ts (ใหม่)
@@ -21,6 +21,7 @@ affects:
   - frontend/src/lib/features/kiosk/{domain/kiosk-qr.ts,server/kiosk-check-in.server.ts,server/kiosk-reprint.server.ts} · frontend/src/routes/api/v1/kiosk/register/+server.ts
   - frontend/src/lib/features/people/{domain/scan-lookup.ts,domain/intake-pipeline.ts,application/federated-scan-lookup.ts,ui/evacuee-profile/evacuee-qr-modal.svelte,ui/registration/family-batch-print.svelte,ui/registration/evacuee-wristband-success.svelte}
   - frontend/src/lib/utils/scan-code.ts · frontend/src/lib/features/distribution/ui/model/recipient-scan.ts · frontend/src/lib/utils/qrcode.test.ts
+  - A1: frontend/src/lib/features/distribution/{domain/food-supplies/distribution-log.ts,application/food-supplies/distribution-workflow.ts,ui/common/RecipientSearchPicker.svelte,ui/frontline/{FoodDistributionCard,SuppliesDistributionCard}.svelte} · frontend/src/lib/components/camera-code-scanner-dialog.svelte · frontend/src/lib/server/shelter-access-design.ts (`distribution_log` VDU)
 related:
   - docs/changes/14-kiosk/CR-151-kiosk-pre-registration-check-in.md
   - docs/changes/14-kiosk/CR-149-kiosk-walk-in-registration.md
@@ -141,6 +142,18 @@ related:
 - FR-EQR-34 — หน้า staff แสดงข้อความชุดเดียวกัน (FR-EQR-33) พร้อมแนะนำให้ค้นด้วยชื่อ และต้องไม่เปิด profile / ไม่นำทางไปหน้า evacuee / ไม่บันทึกการทำรายการ (check-in, แจกของ ฯลฯ) จาก QR ที่ expired หรือ invalid
 - FR-EQR-35 — ข้อความและ response ของ expired/invalid ต้องไม่มีชื่อหรือข้อมูลส่วนบุคคลของเจ้าของ QR (มีเพียงวันที่)
 
+### J. ยอมรับความเสี่ยงตอนแจกจ่าย (Amendment A1 — approved)
+
+> **สถานะ:** approved โดยเจ้าของโครงการ 2026-11-08 · แก้เฉพาะกฎ FR-EQR-34 สำหรับหน้าแจกจ่ายพัสดุ/อาหารเท่านั้น (หน้าคืนของยืมและกองรับคืนยังปฏิเสธ QR หมดอายุเหมือนเดิม)
+
+- FR-EQR-44 — หน้าแจกจ่ายพัสดุและอาหาร (`RecipientSearchPicker` / `resolveScannedRecipient`) เมื่อสแกน Person QR ที่ผลเป็น **expired** (FR-EQR-27 แถว 2 และ 4) ต้องแสดงปุ่ม "ยอมรับความเสี่ยงเพื่อแจกจ่าย" ในหน้าต่างสแกน ถัดจากข้อความ FR-EQR-33
+- FR-EQR-45 — ผู้ใช้ที่มีสิทธิ์แจกจ่ายในหน้านั้นอยู่แล้วกดปุ่มได้ทุกคน ไม่เพิ่มหรือลดสิทธิ์ของ role ใด
+- FR-EQR-46 — เมื่อกดปุ่ม ระบบต้องเลือกผู้รับเป็น evacuee เจ้าของ QR ตามปกติ และปิดหน้าต่างสแกน; ก่อนกดปุ่มต้องไม่เลือกผู้รับและไม่บันทึกรายการใด (ตาม FR-EQR-34)
+- FR-EQR-47 — QR ที่ผลเป็น **invalid** (แถว 5) ไม่มีปุ่มนี้ และยังถูกปฏิเสธเสมอ; QR ที่ไม่ใช่ Person QR (staff / volunteer / pool) ไม่เกี่ยวข้อง
+- FR-EQR-48 — รายการแจกที่เลือกผู้รับผ่านปุ่มนี้ต้องบันทึกร่องรอยในเอกสารการแจก: `recipient_qr_override` = `{ issued_at: ISO | null, current_printed_at: ISO, overridden_by: str, overridden_at: ISO }` (field เสริม ไม่มีค่า = ไม่ได้ override) · เก็บใน `distribution_log` §2.30 (`schema_v` 2→3): log ที่มี field นี้เขียน `schema_v 3`, log อื่นยังเขียน `schema_v 2`, ไม่ backfill, ห้ามเพิ่ม field ภายหลัง, `overridden_by` มาจากผู้ใช้ที่ล็อกอิน (ไม่รับจาก client)
+- FR-EQR-49 — ข้อความบนหน้า/ปุ่มและ response ต้องไม่มีชื่อหรือข้อมูลส่วนบุคคลของเจ้าของ QR ก่อนกดปุ่ม (FR-EQR-35); หลังกดจึงแสดงชื่อผู้รับตามปกติ
+- FR-EQR-50 — การ override ไม่เปลี่ยน `evacuee_qr` (ไม่ออก QR ใหม่ ไม่เพิ่ม entry) และไม่ใช้กับ kiosk หรือหน้า staff อื่น (check-in/out, คัดกรอง, จัดโซน, ค้นหา) — หน้าเหล่านั้นยังตาม FR-EQR-34
+
 ### F. ขอบเขต (ไม่เปลี่ยน)
 
 - FR-EQR-36 — CR นี้ใช้กับ Person QR ของผู้อพยพ (`evacuee`) เท่านั้น ไม่เปลี่ยน: บัตรเจ้าหน้าที่ `TKT-STF-HASH-…` (CR-211), บัตรจิตอาสา `TKT-VOL-HASH-…` (CR-127, never rotate), QR บริจาค `TX-…` / `DN-…`, QR ของ bulk-return pool และ QR ตั๋วจอง (booking ticket / ตั๋วคิวกลาง ULID เปล่า) — การออกตั๋วเหล่านี้ไม่ถือเป็นการปริ้น Person QR และไม่เขียน `evacuee_qr`
@@ -193,6 +206,7 @@ related:
 - [ ] AC-EQR-11 — unit test: parse payload (มี/ไม่มี `@`, ตัวพิมพ์, `@` ผิดรูป), `hash6` ตาม test vector FR-EQR-3, กฎตอนสแกนครบ 5 แถว (รวมกรณีไม่มี doc), `issueEvacueeQr` (สร้าง doc, append, `409` retry, เกิน 5 ครั้ง, `printed_at` เพิ่มขึ้นเข้มงวดเมื่อนาฬิกาย้อน, เขียน `hash` ทุก entry, `hash` ชนกับ entry เดิม → เลื่อน `printed_at` 1 ms ตาม FR-EQR-17a) และตัวตรวจไม่เรียก sha1 (เทียบ `prints[].hash` อย่างเดียว)
 - [ ] AC-EQR-12 — e2e: ปริ้นซ้ำ (kiosk reprint หรือ staff modal) แล้ว QR ใบเก่าสแกนไม่ผ่านทั้ง kiosk และหน้า staff ส่วน QR ใบใหม่สแกนผ่าน (`e2e/helpers/onsite.ts` `decodeQrImage` ต้องอ่าน payload ใหม่ได้)
 - [ ] AC-EQR-13 — `frontend/src/lib/utils/qrcode.test.ts` เพิ่มเคส `qrModuleCount('evacuee:{ULID}@{hash6}')` = 29 (FR-EQR-7) และเคส label ของ kiosk ที่ใช้ ECC เดียวกัน
+- [ ] AC-EQR-14 — (A1) หน้าแจกจ่ายสแกน QR expired แล้วมีปุ่มยอมรับความเสี่ยง กดแล้วได้ผู้รับและบันทึก `recipient_qr_override`; QR invalid ไม่มีปุ่ม; ก่อนกดไม่มีผู้รับถูกเลือก (FR-EQR-44..50)
 
 ## Superseded
 
@@ -262,3 +276,4 @@ CR นี้แทนที่ข้อความต่อไปนี้ (ไ
 - 2026-11-06 — approved by Project Owner: preview ก่อนพิมพ์ — modal เปิดมาแสดง label พร้อม QR placeholder ไม่เขียน entry; กดพิมพ์จึงเรียก `POST /api/v1/evacuee-qr/issue` ได้ payload จริง render แล้วพิมพ์; การเปิดดูอย่างเดียวไม่ทำให้ QR เดิมหมดอายุ (FR-EQR-21a..21c, AC-EQR-3/4) — แทนมาร์กเกอร์ NEEDS DECISION เดิมของ FR-EQR-21
 - 2026-11-06 — approved by Project Owner: เก็บ `hash` (6 hex ตัวเล็ก, server เขียนตอนออก) ในทุก `prints[]` entry; ตัวตรวจทุกตัว (kiosk server และ staff client) เทียบ `hash6` ที่สแกนกับ `prints[].hash` และไม่คำนวณ hash ซ้ำ; `printed_at` ยังเพิ่มขึ้นเข้มงวด; `hash` ชนกับ entry เดิมของคนเดียวกัน → server เลื่อน `printed_at` 1 ms แล้วออกใหม่ (FR-EQR-9a, 17a, 28, 29, 38); การอัปเกรด HMAC เป็นงานฝั่ง server ล้วน สอดคล้องข้อ 6 (FR-EQR-42) — ยกเลิกข้อกำหนดเดิมที่ให้ staff คำนวณ SHA-1 บน client และข้อสรุปว่า HMAC ต้องย้ายตัวตรวจไป server
 - 2026-11-06 — renumbered CR-231 → CR-232 → CR-233 เพราะเลขชนกับ CR อื่นที่ merge เข้า `develop` ก่อน (CR-231 public search consent purpose, PR #1214; CR-232 evacuee Excel export, PR #1215) — เนื้อหาไม่เปลี่ยน
+- 2026-11-08 — approved by Project Owner (Amendment A1, ขอโดยทีมหน้างาน): หน้าแจกจ่ายยอมให้แจกด้วย QR เก่าได้ผ่านปุ่ม "ยอมรับความเสี่ยงเพื่อแจกจ่าย" · ทุกคนที่แจกจ่ายได้กดได้ + บันทึกร่องรอย (เจ้าของโครงการเลือก) · เก็บร่องรอยใน `distribution_log` และ bump `schema_v` 2→3 แบบ lazy (FR-EQR-48) — เจ้าของโครงการอนุมัติ 2026-11-08 · migration: redeploy `_design/access` ของทุก `shelter_*` ก่อน client รุ่นใหม่ (`pnpm redeploy:access`), ไม่ backfill

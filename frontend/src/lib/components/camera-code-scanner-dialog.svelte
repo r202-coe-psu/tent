@@ -17,6 +17,7 @@
 		manualInputMode = 'numeric',
 		busy,
 		error = null,
+		errorAction,
 		onScan,
 		oncancel
 	}: {
@@ -37,6 +38,8 @@
 		 * shows it under the camera, so staff can scan again; the caller clears it on the next read.
 		 */
 		error?: string | null;
+		/** Optional button shown with `error`, for a caller that lets staff proceed anyway. */
+		errorAction?: { label: string; onclick: () => void; disabled?: boolean };
 		/** Receives a camera read or a typed code; without `busy` the dialog closes first. */
 		onScan: (code: string) => void | Promise<unknown>;
 		/** Called when the user closes the dialog while busy; the caller should drop the pending read. */
@@ -97,6 +100,17 @@
 			<p role="alert" class="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">
 				{error}
 			</p>
+			{#if errorAction}
+				<Button
+					type="button"
+					variant="destructive"
+					class="min-h-11"
+					disabled={errorAction.disabled}
+					onclick={errorAction.onclick}
+				>
+					{errorAction.label}
+				</Button>
+			{/if}
 		{/if}
 
 		<form

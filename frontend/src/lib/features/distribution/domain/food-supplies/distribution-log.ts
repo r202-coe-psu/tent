@@ -19,9 +19,26 @@ import type { TicketItem } from './requisition-ticket';
 /**
  * schema_v 1: legacy. schema_v 2 (#658): adds `applied_bulk_entry_ids` for the v3 bulk return path.
  * A v1 doc is lazily upgraded to 2 the first time the bulk path writes the field; never 2 -> 1.
+ * schema_v 3 (CR-233 A1): adds `recipient_qr_override`, written only when staff accepted the risk of
+ * an expired Person QR; every other log keeps writing 2. A doc never downgrades.
  */
 export const DISTRIBUTION_LOG_SCHEMA_V = 2;
-const distributionLogSchemaVSchema = z.union([z.literal(1), z.literal(2)]);
+export const DISTRIBUTION_LOG_SCHEMA_V_QR_OVERRIDE = 3;
+const distributionLogSchemaVSchema = z.union([z.literal(1), z.literal(2), z.literal(3)]);
+
+/** schema_v a doc must keep when it is rewritten: never below 2, never downgraded from 3. */
+function bulkPathSchemaV(log: { schema_v?: 1 | 2 | 3 }): 2 | 3 {
+	return log.schema_v === 3 ? 3 : DISTRIBUTION_LOG_SCHEMA_V;
+}
+
+/** CR-233 A1 FR-EQR-48: audit of a handout made with an expired Person QR (dates only, no PII). */
+export const recipientQrOverrideSchema = z.object({
+	issued_at: z.string().datetime().nullable(),
+	current_printed_at: z.string().datetime(),
+	overridden_by: z.string().min(1),
+	overridden_at: z.string().datetime()
+});
+export type RecipientQrOverride = z.infer<typeof recipientQrOverrideSchema>;
 
 export const distributionRecipientTypeSchema = z.enum(['evacuee', 'volunteer', 'staff', 'outside']);
 export type DistributionRecipientType = z.infer<typeof distributionRecipientTypeSchema>;
@@ -69,6 +86,7 @@ const distributionLogFields = {
 	override_reason: z.string().trim().min(1).optional(),
 	/** #607 — `allergy` codes the recipient is allergic to that the item contains (overridden). */
 	allergen_conflicts: z.array(z.string().min(1)).optional(),
+	recipient_qr_override: recipientQrOverrideSchema.optional(),
 	is_expired_warning: z.boolean().optional(),
 	distributed_at: z.string().datetime(),
 	distributed_by: z.string().min(1),
@@ -78,7 +96,7 @@ const distributionLogFields = {
 };
 
 function validateDistributionLog(
-	log: z.infer<z.ZodObject<typeof distributionLogFields>> & { schema_v?: 1 | 2 },
+	log: z.infer<z.ZodObject<typeof distributionLogFields>> & { schema_v?: 1 | 2 | 3 },
 	ctx: z.RefinementCtx
 ): void {
 	const appliedIds = log.applied_bulk_entry_ids;
@@ -87,7 +105,7 @@ function validateDistributionLog(
 			ctx.addIssue({
 				code: 'custom',
 				path: ['applied_bulk_entry_ids'],
-				message: 'applied_bulk_entry_ids requires schema_v 2'
+				message: 'applied_bulk_entry_ids requires schema_v 2 or 3'
 			});
 		}
 		if (new Set(appliedIds).size !== appliedIds.length) {
@@ -241,6 +259,22 @@ function validateDistributionLog(
 			message: 'bulk_dropoff requires bulk_pool_id or applied_bulk_entry_ids'
 		});
 	}
+	if (log.recipient_qr_override !== undefined) {
+		if (log.schema_v !== undefined && log.schema_v !== 3) {
+			ctx.addIssue({
+				code: 'custom',
+				path: ['recipient_qr_override'],
+				message: 'recipient_qr_override requires schema_v 3'
+			});
+		}
+		if (log.recipient_type !== 'evacuee') {
+			ctx.addIssue({
+				code: 'custom',
+				path: ['recipient_qr_override'],
+				message: 'recipient_qr_override applies to evacuee recipients only'
+			});
+		}
+	}
 	if (log.allergen_conflicts?.length && !log.is_override) {
 		ctx.addIssue({
 			code: 'custom',
@@ -283,6 +317,7 @@ export const distributionLogInputSchema = z
 		is_override: z.boolean(),
 		override_reason: z.string().trim().min(1).optional(),
 		allergen_conflicts: z.array(z.string().min(1)).optional(),
+		recipient_qr_override: recipientQrOverrideSchema.optional(),
 		is_expired_warning: z.boolean().optional(),
 		distributed_at: z.string().datetime().optional(),
 		notes: z.string().trim().min(1).optional()
@@ -309,7 +344,9 @@ export function createDistributionLog(
 	return distributionLogDocSchema.parse(
 		makeDoc(
 			'distribution_log',
-			DISTRIBUTION_LOG_SCHEMA_V,
+			parsed.recipient_qr_override
+				? DISTRIBUTION_LOG_SCHEMA_V_QR_OVERRIDE
+				: DISTRIBUTION_LOG_SCHEMA_V,
 			{
 				...parsed,
 				status: parsed.is_returnable ? 'active' : 'fulfilled',
@@ -352,6 +389,13 @@ export function assertDistributionLogIssuanceImmutable(
 			throw new Error(`distribution_log.${field} is immutable after issuance`);
 		}
 	}
+	// CR-233 A1: the QR override audit is written once at issuance and never edited or removed.
+	if (
+		JSON.stringify(previous.recipient_qr_override ?? null) !==
+		JSON.stringify(next.recipient_qr_override ?? null)
+	) {
+		throw new Error('distribution_log.recipient_qr_override is immutable after issuance');
+	}
 }
 
 /** A void only reverses an erroneous, untouched issuance; it never erases return history. */
@@ -385,7 +429,7 @@ export function assertDistributionLogCanBeVoided(log: DistributionLog): void {
 	}
 }
 
-/** The v3 bulk path may only upgrade the doc 1 -> 2; it never downgrades. */
+/** The v3 bulk path may only upgrade the doc 1 -> 2; it never downgrades (a v3 doc stays 3). */
 function assertSchemaVNotDowngraded(previous: DistributionLog, next: DistributionLog): void {
 	const prev = previous.schema_v;
 	const nxt = next.schema_v;
@@ -427,7 +471,7 @@ export function applyBulkEntryToLog(
 	}
 	const next = distributionLogDocSchema.parse({
 		...log,
-		schema_v: DISTRIBUTION_LOG_SCHEMA_V,
+		schema_v: bulkPathSchemaV(log),
 		status: parseQty(nextReturned).eq(log.qty) ? 'returned' : 'partially_returned',
 		qty_returned: nextReturned,
 		clear_reason: 'bulk_dropoff',
@@ -468,7 +512,7 @@ export function revertBulkEntryFromLog(
 	const nextReturned = subQty(returned, qty);
 	const next = distributionLogDocSchema.parse({
 		...log,
-		schema_v: DISTRIBUTION_LOG_SCHEMA_V,
+		schema_v: bulkPathSchemaV(log),
 		status: qtyIsZero(nextReturned) ? 'active' : 'partially_returned',
 		qty_returned: nextReturned,
 		clear_reason: 'bulk_dropoff',

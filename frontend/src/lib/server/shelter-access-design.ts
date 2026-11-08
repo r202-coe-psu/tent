@@ -2329,12 +2329,34 @@ ${consentVduClause()}
   // A v1 log is lazily upgraded to v2 when the bulk path first writes the field; never 2 -> 1.
   // The legacy bulk path (bulk_pool_id, frontline DST/SM) is unchanged.
   if (newDoc.type === 'distribution_log') {
-    if (newDoc.schema_v !== 1 && newDoc.schema_v !== 2) {
+    if (newDoc.schema_v !== 1 && newDoc.schema_v !== 2 && newDoc.schema_v !== 3) {
       throw { forbidden: 'Unsupported distribution_log schema version' };
     }
+    // CR-233 A1 (schema_v 3): audit of a handout made with an expired Person QR. Dates only, evacuee
+    // recipients only, written at issuance and never edited or removed.
+    if (typeof newDoc.recipient_qr_override !== 'undefined') {
+      var qrOverride = newDoc.recipient_qr_override;
+      if (newDoc.schema_v !== 3) {
+        throw { forbidden: 'distribution_log.recipient_qr_override requires schema_v 3' };
+      }
+      if (newDoc.recipient_type !== 'evacuee') {
+        throw { forbidden: 'distribution_log.recipient_qr_override applies to evacuee recipients only' };
+      }
+      if (!qrOverride || typeof qrOverride !== 'object' || Array.isArray(qrOverride) ||
+          (qrOverride.issued_at !== null && typeof qrOverride.issued_at !== 'string') ||
+          typeof qrOverride.current_printed_at !== 'string' ||
+          typeof qrOverride.overridden_by !== 'string' || !qrOverride.overridden_by ||
+          typeof qrOverride.overridden_at !== 'string') {
+        throw { forbidden: 'distribution_log.recipient_qr_override must be {issued_at, current_printed_at, overridden_by, overridden_at}' };
+      }
+    }
+    if (oldDoc && oldDoc.type === 'distribution_log' &&
+        JSON.stringify(oldDoc.recipient_qr_override || null) !== JSON.stringify(newDoc.recipient_qr_override || null)) {
+      throw { forbidden: 'distribution_log.recipient_qr_override is immutable after issuance' };
+    }
     if (typeof newDoc.applied_bulk_entry_ids !== 'undefined') {
-      if (newDoc.schema_v !== 2) {
-        throw { forbidden: 'distribution_log.applied_bulk_entry_ids requires schema_v 2' };
+      if (newDoc.schema_v !== 2 && newDoc.schema_v !== 3) {
+        throw { forbidden: 'distribution_log.applied_bulk_entry_ids requires schema_v 2 or 3' };
       }
       if (!Array.isArray(newDoc.applied_bulk_entry_ids)) {
         throw { forbidden: 'distribution_log.applied_bulk_entry_ids must be an array' };
@@ -2442,7 +2464,7 @@ ${consentVduClause()}
         // #658 v3 bulk return path (apply an entry / revert a voided entry): WH, SC, SM, DST.
         // The legacy bulk path below (bulk_pool_id) stays frontline-only and never changes the ids.
         if (!canReturnLoanPhysical()) throw { forbidden: 'Only warehouse staff, supply coordinators, distribution staff, shelter managers, or system admins can apply bulk return entries to loans' };
-        if (newDoc.schema_v !== 2) throw { forbidden: 'distribution_log bulk entry changes require schema_v 2' };
+        if (newDoc.schema_v !== 2 && !(newDoc.schema_v === 3 && oldDoc.schema_v === 3)) throw { forbidden: 'distribution_log bulk entry changes require schema_v 2 (or an existing schema_v 3 doc)' };
         if (newDoc.bulk_pool_id !== oldDoc.bulk_pool_id) {
           throw { forbidden: 'distribution_log.bulk_pool_id is immutable on the v3 bulk path' };
         }

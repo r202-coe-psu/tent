@@ -9,11 +9,15 @@ import CameraCodeScannerDialog from './camera-code-scanner-dialog.svelte';
 
 let instance: ReturnType<typeof mount> | null = null;
 
-function render(props: { error?: string | null; onScan?: (code: string) => Promise<unknown> }) {
+function render(props: {
+	error?: string | null;
+	errorAction?: { label: string; onclick: () => void; disabled?: boolean };
+	onScan?: (code: string) => Promise<unknown>;
+}) {
 	const onScan = props.onScan ?? vi.fn(async () => {});
 	instance = mount(CameraCodeScannerDialog, {
 		target: document.body,
-		props: { open: true, busy: false, error: props.error, onScan }
+		props: { open: true, busy: false, error: props.error, errorAction: props.errorAction, onScan }
 	});
 	flushSync();
 	return onScan;
@@ -66,5 +70,36 @@ describe('CameraCodeScannerDialog error', () => {
 		render({ error: null });
 
 		expect(alertText()).toBeUndefined();
+	});
+});
+
+describe('CameraCodeScannerDialog errorAction', () => {
+	const actionButton = () =>
+		[...document.querySelectorAll<HTMLButtonElement>('[role="dialog"] button')].find((b) =>
+			b.textContent?.includes('ยอมรับความเสี่ยง')
+		);
+
+	it('shows the action beside the error and runs it on click', () => {
+		const onclick = vi.fn();
+		render({ error: 'QR หมดอายุ', errorAction: { label: 'ยอมรับความเสี่ยง', onclick } });
+
+		actionButton()!.click();
+
+		expect(onclick).toHaveBeenCalledTimes(1);
+	});
+
+	it('disables the action while the caller marks it disabled', () => {
+		render({
+			error: 'QR หมดอายุ',
+			errorAction: { label: 'ยอมรับความเสี่ยง', onclick: vi.fn(), disabled: true }
+		});
+
+		expect(actionButton()!.disabled).toBe(true);
+	});
+
+	it('hides the action when there is no error', () => {
+		render({ error: null, errorAction: { label: 'ยอมรับความเสี่ยง', onclick: vi.fn() } });
+
+		expect(actionButton()).toBeUndefined();
 	});
 });

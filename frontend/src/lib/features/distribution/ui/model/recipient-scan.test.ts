@@ -305,6 +305,64 @@ describe('resolveScannedRecipient — Person QR rule (CR-233)', () => {
 		expect(d.lookupEvacuee).not.toHaveBeenCalled();
 	});
 
+	it('marks an expired QR as acceptable but never an invalid one (CR-233 A1)', async () => {
+		const expired = await resolveScannedRecipient(
+			`${evacuee._id}@289170`,
+			opts,
+			deps({ listQrPrints: vi.fn().mockResolvedValue([OLD, NEW]) })
+		);
+		const invalid = await resolveScannedRecipient(
+			`${evacuee._id}@ffffff`,
+			opts,
+			deps({ listQrPrints: vi.fn().mockResolvedValue([NEW]) })
+		);
+
+		expect(expired).toMatchObject({ kind: 'error', expiredQr: true });
+		expect(invalid.kind === 'error' && invalid.expiredQr).toBeUndefined();
+	});
+
+	it('resolves the evacuee with the QR dates when the expired QR is accepted', async () => {
+		const d = deps({ listQrPrints: vi.fn().mockResolvedValue([OLD, NEW]) });
+		const result = await resolveScannedRecipient(
+			`${evacuee._id}@289170`,
+			{ ...opts, acceptExpiredQr: true },
+			d
+		);
+
+		expect(result).toMatchObject({
+			kind: 'evacuee',
+			evacuee,
+			qrOverride: { issued_at: OLD.printed_at, current_printed_at: NEW.printed_at }
+		});
+		expect(result.kind === 'evacuee' && result.qrOverride?.overridden_at).toEqual(
+			expect.any(String)
+		);
+		expect(d.lookupEvacuee).toHaveBeenCalledWith(evacuee._id);
+	});
+
+	it('still rejects an invalid QR when acceptExpiredQr is set', async () => {
+		const d = deps({ listQrPrints: vi.fn().mockResolvedValue([NEW]) });
+		const result = await resolveScannedRecipient(
+			`${evacuee._id}@ffffff`,
+			{ ...opts, acceptExpiredQr: true },
+			d
+		);
+
+		expect(result.kind).toBe('error');
+		expect(d.lookupEvacuee).not.toHaveBeenCalled();
+	});
+
+	it('adds no override to a valid QR even when acceptExpiredQr is set', async () => {
+		const d = deps({ listQrPrints: vi.fn().mockResolvedValue([OLD, NEW]) });
+		const result = await resolveScannedRecipient(
+			`${evacuee._id}@2d23a3`,
+			{ ...opts, acceptExpiredQr: true },
+			d
+		);
+
+		expect(result).toEqual({ kind: 'evacuee', evacuee });
+	});
+
 	it('rejects an invalid hash', async () => {
 		const d = deps({ listQrPrints: vi.fn().mockResolvedValue([NEW]) });
 		const result = await resolveScannedRecipient(`${evacuee._id}@ffffff`, opts, d);
