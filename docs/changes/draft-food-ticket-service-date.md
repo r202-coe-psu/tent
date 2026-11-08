@@ -4,7 +4,7 @@ title: วันที่แจก (service_date) ของตั๋วอาห
 status: proposed
 date: 2026-11-07
 requested_by: feedback อบรมระบบ 2026-11-03 (#1222, แยกจาก #1183)
-decided_by: project owner
+decided_by: kong
 layer: volatile
 affects:
   - docs/data/schema.md §2.29 (`requisition_ticket.service_date`, schema_v 1 → 2 สำหรับตั๋ว food/supplies)
