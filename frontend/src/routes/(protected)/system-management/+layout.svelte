@@ -1,5 +1,4 @@
 <script lang="ts">
-	import LanguageSwitcher from '$lib/components/language-switcher.svelte';
 	import { page } from '$app/state';
 	import { resolve } from '$app/paths';
 	import type { LayoutProps } from './$types';
@@ -58,7 +57,6 @@
 				</div>
 
 				<div class="flex shrink-0 items-center gap-2 md:gap-3">
-					<LanguageSwitcher class="hidden sm:inline-flex" />
 					<span
 						class="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2.5 py-1 text-2xs font-bold text-emerald-600"
 					>
