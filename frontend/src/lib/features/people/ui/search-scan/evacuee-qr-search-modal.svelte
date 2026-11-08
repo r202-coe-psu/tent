@@ -10,11 +10,12 @@
 	import Keyboard from '@lucide/svelte/icons/keyboard';
 	import Lock from '@lucide/svelte/icons/lock';
 	import Loader from '@lucide/svelte/icons/loader';
-	import { lookupFederatedByScanCode } from '$lib/features/people';
+	import { lookupFederatedByScanCode, staffPersonQrRejectionMessage } from '$lib/features/people';
 	import {
 		ClaimDialog,
 		type UnassignedRegistrationSearchHit
 	} from '$lib/features/unassigned-registration';
+	import type { FederatedScanRejectedHit } from '$lib/features/people';
 	import { getShelterCode } from '$lib/db/shelter';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
 	import { langState } from '$lib/states/i18n.svelte';
@@ -39,7 +40,12 @@
 	let isLooking = $state(false);
 	let cameraError = $state<string | null>(null);
 	/** Why the last scanned Person QR was refused; shown under the camera, cleared on next scan. */
-	let scanRejection = $state<string | null>(null);
+	let scanRejectionVerdict = $state<FederatedScanRejectedHit['verdict'] | null>(null);
+	const scanRejection = $derived(
+		scanRejectionVerdict
+			? staffPersonQrRejectionMessage(scanRejectionVerdict, langState.current)
+			: null
+	);
 	let claimOpen = $state(false);
 	let claimHit = $state<UnassignedRegistrationSearchHit | null>(null);
 
@@ -50,7 +56,7 @@
 		if (!show) {
 			manualCode = '';
 			cameraError = null;
-			scanRejection = null;
+			scanRejectionVerdict = null;
 			isLooking = false;
 		}
 	});
@@ -112,7 +118,7 @@
 		if (!cleanCode) return;
 
 		isLooking = true;
-		scanRejection = null;
+		scanRejectionVerdict = null;
 		try {
 			const result = await lookupFederatedByScanCode(queryClient, cleanCode);
 			if (!result) {
@@ -121,7 +127,7 @@
 			}
 			if (result.source === 'qr_rejected') {
 				// Expired / invalid Person QR (CR-233): message only, no profile, no navigation.
-				scanRejection = result.message;
+				scanRejectionVerdict = result.verdict;
 				toast.error(t.toast.scanRejected);
 				return;
 			}

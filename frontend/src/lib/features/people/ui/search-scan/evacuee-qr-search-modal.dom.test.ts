@@ -27,7 +27,11 @@ vi.mock('$lib/features/people', async (importOriginal) => ({
 	lookupFederatedByScanCode: lookup
 }));
 
-const REJECTED = 'QR นี้ออกวันที่ 8 พ.ย. 2569 13:49 มีใบใหม่ — ลองค้นหาด้วยชื่อแทน';
+const EXPIRED = {
+	status: 'expired',
+	issued_at: '2026-11-03T02:10:00.000Z',
+	current_printed_at: '2026-11-05T09:41:12.512Z'
+} as const;
 
 let instance: ReturnType<typeof mount> | null = null;
 let previousLanguage = langState.current;
@@ -121,36 +125,35 @@ describe('EvacueeQrSearchModal', () => {
 	it('toasts a short message and shows the full reason when a QR is refused (CR-233)', async () => {
 		lookup.mockResolvedValue({
 			source: 'qr_rejected',
-			verdict: { status: 'invalid' },
-			message: REJECTED
+			verdict: EXPIRED
 		});
 		await openModal('th');
 		await submitCode('evacuee:ABC@111111');
 		expect(toast.error).toHaveBeenCalledTimes(1);
 		expect(toast.error).toHaveBeenCalledWith('สแกนไม่ผ่าน');
-		expect(alertText()).toBe(REJECTED);
+		expect(alertText()).toContain('มีใบใหม่วันที่');
 	});
 
 	it('toasts the refusal in English when the staff language is EN', async () => {
 		lookup.mockResolvedValue({
 			source: 'qr_rejected',
-			verdict: { status: 'invalid' },
-			message: REJECTED
+			verdict: EXPIRED
 		});
 		await openModal('en');
 		await submitCode('evacuee:ABC@111111');
 		expect(toast.error).toHaveBeenCalledWith('Scan rejected');
+		expect(alertText()).toContain('A new one was issued on');
+		expect(alertText()).toContain('try searching by name instead');
 	});
 
 	it('clears the refusal reason when the next scan starts', async () => {
 		lookup.mockResolvedValueOnce({
 			source: 'qr_rejected',
-			verdict: { status: 'invalid' },
-			message: REJECTED
+			verdict: EXPIRED
 		});
 		await openModal('th');
 		await submitCode('evacuee:ABC@111111');
-		expect(alertText()).toBe(REJECTED);
+		expect(alertText()).toContain('มีใบใหม่วันที่');
 
 		let release!: (v: unknown) => void;
 		lookup.mockReturnValueOnce(new Promise((resolve) => (release = resolve)));

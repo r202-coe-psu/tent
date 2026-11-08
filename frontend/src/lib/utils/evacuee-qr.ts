@@ -4,6 +4,7 @@
  * Pure + synchronous — NO hashing here (FR-EQR-28/29): the scanned `hash6` is compared with the
  * `prints[].hash` the server stored. Usable on http LAN where `crypto.subtle` is unavailable.
  */
+import type { LanguageCode } from './language';
 
 export const EVACUEE_QR_SOURCES = [
 	'kiosk_checkin',
@@ -69,8 +70,8 @@ export function evaluatePersonQr(
 	return { status: 'invalid' };
 }
 
-function formatBangkok(iso: string): string {
-	return new Intl.DateTimeFormat('th-TH', {
+function formatBangkok(iso: string, language: LanguageCode = 'th'): string {
+	return new Intl.DateTimeFormat(language === 'en' ? 'en-GB' : 'th-TH', {
 		timeZone: 'Asia/Bangkok',
 		dateStyle: 'medium',
 		timeStyle: 'short'
@@ -79,12 +80,19 @@ function formatBangkok(iso: string): string {
 
 /** FR-EQR-33/34/35 copy — dates only, no personal data. */
 export function personQrVerdictMessage(
-	verdict: Exclude<PersonQrVerdict, { status: 'valid' }>
+	verdict: Exclude<PersonQrVerdict, { status: 'valid' }>,
+	language: LanguageCode = 'th'
 ): string {
-	if (verdict.status === 'invalid') return 'QR ไม่ถูกต้อง';
-	const current = formatBangkok(verdict.current_printed_at);
+	const en = language === 'en';
+	if (verdict.status === 'invalid') return en ? 'Invalid QR' : 'QR ไม่ถูกต้อง';
+	const current = formatBangkok(verdict.current_printed_at, language);
 	if (verdict.issued_at === null) {
-		return `QR นี้ออกก่อนเปลี่ยนระบบ มีใบใหม่วันที่ ${current} กรุณาใช้ QR ใบล่าสุดหรือติดต่อเจ้าหน้าที่`;
+		return en
+			? `This QR was issued before the system change. A new one was issued on ${current}. Please use the latest QR or contact staff.`
+			: `QR นี้ออกก่อนเปลี่ยนระบบ มีใบใหม่วันที่ ${current} กรุณาใช้ QR ใบล่าสุดหรือติดต่อเจ้าหน้าที่`;
 	}
-	return `QR นี้ออกวันที่ ${formatBangkok(verdict.issued_at)} มีใบใหม่วันที่ ${current} กรุณาใช้ QR ใบล่าสุดหรือติดต่อเจ้าหน้าที่`;
+	const issued = formatBangkok(verdict.issued_at, language);
+	return en
+		? `This QR was issued on ${issued}. A new one was issued on ${current}. Please use the latest QR or contact staff.`
+		: `QR นี้ออกวันที่ ${issued} มีใบใหม่วันที่ ${current} กรุณาใช้ QR ใบล่าสุดหรือติดต่อเจ้าหน้าที่`;
 }

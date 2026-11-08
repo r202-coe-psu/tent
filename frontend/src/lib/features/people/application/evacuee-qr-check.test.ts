@@ -52,5 +52,14 @@ describe('staffPersonQrRejectionMessage', () => {
 		});
 		expect(expired).toContain('มีใบใหม่วันที่');
 		expect(expired).toContain('ค้นหาด้วยชื่อ');
+		expect(staffPersonQrRejectionMessage({ status: 'invalid' }, 'en')).toBe(
+			'Invalid QR — try searching by name instead'
+		);
+		expect(
+			staffPersonQrRejectionMessage(
+				{ status: 'expired', issued_at: null, current_printed_at: NEW.printed_at },
+				'en'
+			)
+		).toContain('A new one was issued on');
 	});
 });

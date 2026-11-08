@@ -9,6 +9,7 @@ import {
 	type ParsedPersonQr,
 	type PersonQrVerdict
 } from '$lib/utils/evacuee-qr';
+import type { LanguageCode } from '$lib/utils/language';
 import { readEvacueeQrPrints } from '../data/evacuee-qr.remote';
 
 export type EvacueeQrPrintsReader = (evacueeId: string) => Promise<readonly EvacueeQrPrintRef[]>;
@@ -26,7 +27,9 @@ export async function checkPersonQr(
 
 /** FR-EQR-33/34: shared copy plus the staff hint to search by name. Dates only (FR-EQR-35). */
 export function staffPersonQrRejectionMessage(
-	verdict: Exclude<PersonQrVerdict, { status: 'valid' }>
+	verdict: Exclude<PersonQrVerdict, { status: 'valid' }>,
+	language: LanguageCode = 'th'
 ): string {
-	return `${personQrVerdictMessage(verdict)} — ลองค้นหาด้วยชื่อแทน`;
+	const hint = language === 'en' ? 'try searching by name instead' : 'ลองค้นหาด้วยชื่อแทน';
+	return `${personQrVerdictMessage(verdict, language)} — ${hint}`;
 }
