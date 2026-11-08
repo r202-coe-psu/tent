@@ -7,9 +7,10 @@
 	import { Checkbox } from '$lib/components/ui/checkbox';
 	import * as Dialog from '$lib/components/ui/dialog';
 	import { RegisteredViaBadge } from '$lib/features/people';
+	import { langState } from '$lib/states/i18n.svelte';
+	import { getTranslation } from '$lib/utils/i18n';
 
 	import {
-		CLAIM_DIALOG_DESCRIPTION,
 		formatClaimCreatedAt,
 		formatOpenMemberDemographicsLine,
 		formatOpenMemberIdentityLine,
@@ -20,6 +21,8 @@
 		togglePetSelection,
 		type UnassignedRegistrationSearchHit
 	} from '../application/queries';
+	import { unassignedSearchCopyByLanguage } from '../domain/search';
+	import { CLAIM_DIALOG_I18N } from './_constants/claim-dialog.i18n';
 	import UnassignedQueueBadge from './unassigned-queue-badge.svelte';
 
 	let {
@@ -34,6 +37,10 @@
 		/** Optional shelter code forwarded on claim (active Station 1 shelter). */
 		shelterCode?: string | null;
 	} = $props();
+
+	const lang = $derived(langState.current);
+	const t = $derived(getTranslation(CLAIM_DIALOG_I18N, lang));
+	const copy = $derived(unassignedSearchCopyByLanguage[lang]);
 
 	/** Selection is scoped to the open hit id so switching hits starts empty (CR-113 / #247). */
 	let selectedForHitId = $state<string | null>(null);
@@ -106,9 +113,9 @@
 >
 	<Dialog.Content class="flex max-h-[90vh] flex-col gap-4 sm:max-w-md">
 		<Dialog.Header>
-			<Dialog.Title>เลือกรายการจากคิวกลาง</Dialog.Title>
+			<Dialog.Title>{t.title}</Dialog.Title>
 			<Dialog.Description>
-				{CLAIM_DIALOG_DESCRIPTION}
+				{copy.claimDialogDescription}
 			</Dialog.Description>
 		</Dialog.Header>
 		{#if hit}
@@ -118,13 +125,13 @@
 						<UnassignedQueueBadge />
 						<RegisteredViaBadge via={hit.registered_via} />
 					</div>
-					<p class="text-xs font-semibold text-slate-500">ลงทะเบียนเมื่อ</p>
+					<p class="text-xs font-semibold text-slate-500">{t.registeredAt}</p>
 					<p class="text-slate-900 tabular-nums">{formatClaimCreatedAt(hit.created_at)}</p>
 				</div>
 				<div class="min-h-0 flex-1 space-y-4 overflow-y-auto">
 					{#if hit.open_members.length > 0}
 						<div>
-							<p class="mb-2 text-sm font-semibold text-slate-900">สมาชิกที่ยัง open</p>
+							<p class="mb-2 text-sm font-semibold text-slate-900">{t.openMembers}</p>
 							<ul class="space-y-2">
 								{#each hit.open_members as member (member.reserved_evacuee_id)}
 									<li class="rounded-xl border border-slate-200/80 bg-white px-3 py-2">
@@ -133,15 +140,15 @@
 												checked={effectiveSelectedIds.includes(member.reserved_evacuee_id)}
 												onCheckedChange={(v) => setMemberChecked(member.reserved_evacuee_id, v)}
 												class="mt-1"
-												aria-label={`เลือก ${formatOpenMemberName(member)}`}
+												aria-label={t.selectAria(formatOpenMemberName(member))}
 											/>
 											<div class="min-w-0 flex-1 space-y-1">
 												<p class="font-medium text-slate-900">{formatOpenMemberName(member)}</p>
 												<p class="text-xs text-muted-foreground tabular-nums">
-													{formatOpenMemberIdentityLine(member)}
+													{formatOpenMemberIdentityLine(member, lang)}
 												</p>
 												<p class="text-xs text-muted-foreground">
-													{formatOpenMemberDemographicsLine(member)}
+													{formatOpenMemberDemographicsLine(member, lang)}
 												</p>
 												{#if member.vulnerable_groups.length > 0 || member.special_needs.length > 0}
 													<div class="flex flex-wrap gap-1.5 pt-0.5">
@@ -149,7 +156,7 @@
 															<span
 																class="rounded-md border border-rose-200 bg-rose-50 px-1.5 py-0.5 text-xs text-rose-900"
 															>
-																{formatOpenMemberVulnerableGroup(code)}
+																{formatOpenMemberVulnerableGroup(code, lang)}
 															</span>
 														{/each}
 														{#each member.special_needs as need (need)}
@@ -170,7 +177,7 @@
 					{/if}
 					{#if openPets.length > 0}
 						<div>
-							<p class="mb-2 text-sm font-semibold text-slate-900">สัตว์เลี้ยงที่ยัง open</p>
+							<p class="mb-2 text-sm font-semibold text-slate-900">{t.openPets}</p>
 							<ul class="space-y-2">
 								{#each openPets as pet (pet.pet_id)}
 									<li class="rounded-xl border border-slate-200/80 bg-white px-3 py-2">
@@ -179,12 +186,12 @@
 												checked={effectiveSelectedPetIds.includes(pet.pet_id)}
 												onCheckedChange={(v) => setPetChecked(pet.pet_id, v)}
 												class="mt-1"
-												aria-label={`เลือก ${formatOpenPetLabel(pet)}`}
+												aria-label={t.selectAria(formatOpenPetLabel(pet, lang))}
 											/>
 											<div class="min-w-0 flex-1">
-												<p class="font-medium text-slate-900">{formatOpenPetLabel(pet)}</p>
+												<p class="font-medium text-slate-900">{formatOpenPetLabel(pet, lang)}</p>
 												{#if pet.has_cage}
-													<p class="text-xs text-muted-foreground">มีกรง</p>
+													<p class="text-xs text-muted-foreground">{copy.hasCage}</p>
 												{/if}
 											</div>
 										</div>
@@ -196,14 +203,16 @@
 				</div>
 				<div class="flex flex-col gap-2 border-t border-slate-200/80 pt-3">
 					<p class="text-xs text-muted-foreground">
-						เลือกแล้ว {effectiveSelectedIds.length} / {hit.open_members.length} คน
+						{t.selectedPrefix}
+						{effectiveSelectedIds.length} / {hit.open_members.length}
+						{t.unitPeople}
 						{#if openPets.length > 0}
-							· {effectiveSelectedPetIds.length} / {openPets.length} สัตว์
+							· {effectiveSelectedPetIds.length} / {openPets.length} {t.unitPets}
 						{/if}
-						· ที่ไม่ติ๊กยังคง open ในคิวกลาง
+						· {t.unselectedRemain}
 					</p>
 					<Button type="button" disabled={!canClaim} onclick={goToReview} class="w-full">
-						ตรวจสอบรายละเอียด →
+						{t.reviewButton}
 					</Button>
 				</div>
 			</div>

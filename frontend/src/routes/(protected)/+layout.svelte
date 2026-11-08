@@ -4,6 +4,7 @@
 	import { goto } from '$app/navigation';
 	import ConnectionBanner from '$lib/components/ConnectionBanner.svelte';
 	import StaffAccountMenu from '$lib/components/staff-account-menu.svelte';
+	import LanguageSwitcher from '$lib/components/language-switcher.svelte';
 	import { invalidateQueriesAfterReauth, startStaffCouchSync } from '$lib/db/staff-couch-sync';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { endpointStore } from '$lib/stores/endpoint.svelte';
@@ -14,6 +15,9 @@
 	import type { LayoutProps } from './$types';
 
 	let { children, data }: LayoutProps = $props();
+
+	/** Only the portal home is translated; the TH/EN toggle stays off untranslated staff pages. */
+	const onPortal = $derived(page.url.pathname === LANDING_ROUTE);
 
 	/** Set while session is expired so we refetch errored queries on reauth. */
 	let pendingReauthRecovery = false;
@@ -96,6 +100,9 @@
 				</a>
 			</div>
 			<div class="flex shrink-0 items-center gap-2">
+				{#if onPortal}
+					<LanguageSwitcher class="shrink-0" />
+				{/if}
 				<StaffAccountMenu />
 			</div>
 		</header>

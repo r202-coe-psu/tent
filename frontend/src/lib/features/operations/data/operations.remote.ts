@@ -1,5 +1,6 @@
 import {
 	allDocsByIds,
+	allDocsByType,
 	bulkDocs,
 	bulkDocsDetailed,
 	findDocsPage,
@@ -280,6 +281,22 @@ export class OperationsRemoteRepository implements OperationsRepository {
 		}
 		const lists = await Promise.all(batches.map((batch) => this.listTransfers({ ids: batch })));
 		return lists.flat();
+	}
+
+	/**
+	 * Every claim still held in this shelter's `stock_lot_reservation` docs. A claim is dropped
+	 * from its doc once its ledger row commits, so what remains is stock promised but not yet
+	 * written to the ledger.
+	 */
+	async listLotReservationClaims(): Promise<LotReservationClaim[]> {
+		const docs = await allDocsByType<StockLotReservation>(
+			this.dbName,
+			'stock_lot_reservation',
+			isStockLotReservationDoc
+		);
+		return docs.flatMap((doc) =>
+			doc.pending_claims.map(({ item_id, lot_ref, qty }) => ({ item_id, lot_ref, qty }))
+		);
 	}
 
 	async getBalance(): Promise<Map<string, string>> {
@@ -1475,6 +1492,15 @@ export class OperationsRemoteRepository implements OperationsRepository {
 
 let singleton: OperationsRepository | null = null;
 let singletonDbName: string | null = null;
+
+/** One pending claim on a lot, as the demand view needs it. */
+export type LotReservationClaim = { item_id: string; lot_ref: string; qty: string };
+
+const isStockLotReservationDoc = (d: unknown): d is StockLotReservation =>
+	!!d &&
+	typeof d === 'object' &&
+	(d as { type?: unknown }).type === 'stock_lot_reservation' &&
+	Array.isArray((d as { pending_claims?: unknown }).pending_claims);
 
 export function operationsRepository(shelterCode?: string): OperationsRepository {
 	const currentDb = getShelterDb(shelterCode);

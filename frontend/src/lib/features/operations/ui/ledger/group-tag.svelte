@@ -7,7 +7,8 @@
 		in: 'bg-emerald-50 text-emerald-800',
 		out: 'bg-orange-50 text-orange-800',
 		adjust: 'bg-blue-50 text-blue-800',
-		transfer: 'bg-violet-50 text-violet-800'
+		transfer: 'bg-violet-50 text-violet-800',
+		self_purchased: 'bg-sky-50 text-sky-800'
 	};
 </script>
 

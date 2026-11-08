@@ -94,7 +94,7 @@
 			translate: var(--label-offset-x) 0;
 			overflow: hidden;
 			break-inside: avoid;
-			font-family: 'IBM Plex Sans Thai', sans-serif;
+			font-family: 'IBM Plex Sans Thai Looped', 'IBM Plex Sans Thai', sans-serif;
 			color: #000;
 		}
 		.text {

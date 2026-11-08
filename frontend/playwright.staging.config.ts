@@ -56,6 +56,7 @@ export default defineConfig({
 		'donation-fullstack-admin.test.ts',
 		'donation-fullstack-race.test.ts',
 		'donation-fullstack.test.ts',
+		'food-sphere-analysis.test.ts',
 		'onsite-stations-flow.test.ts',
 		'partner-api.test.ts',
 		'public-home-flow.test.ts',

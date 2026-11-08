@@ -779,7 +779,7 @@ describe('staff card administration', () => {
 
 			expect(err).toMatchObject({
 				code: 'NOT_FOUND',
-				message: 'ยังไม่มี QR กรุณาหมุน QR เพื่อออกบัตร'
+				message: 'ยังไม่มี QR กรุณากด "ออก QR ใหม่" เพื่อออกบัตร'
 			});
 			expect(puts).toEqual([]);
 		});

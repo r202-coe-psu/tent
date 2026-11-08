@@ -8,6 +8,7 @@
 		"build": "vite build",
 		"preview": "vite preview",
 		"import-worker": "node server/shelter-import-worker.mjs",
+		"print-housekeeping": "node server/print-housekeeping.mjs",
 		"prepare": "svelte-kit sync || echo ''",
 		"check": "svelte-kit sync && cross-env NODE_OPTIONS=--max-old-space-size=4096 svelte-check --tsconfig ./tsconfig.json",
 		"check:watch": "svelte-kit sync && cross-env NODE_OPTIONS=--max-old-space-size=4096 svelte-check --tsconfig ./tsconfig.json --watch",
@@ -23,6 +24,7 @@
 		"test:e2e:public": "playwright test --config=playwright.public.config.ts",
 		"test:e2e:donations": "vite build --mode test && playwright test e2e/donation.test.ts e2e/stock-donations.test.ts",
 		"test:e2e:stock": "vite build --mode test && playwright test e2e/stock-inventory.test.ts",
+		"test:e2e:food-sphere": "vite build --mode test && playwright test e2e/food-sphere-analysis.test.ts",
 		"test:e2e:pre-register": "vite build --mode test && playwright test e2e/public-pre-register-flow.test.ts e2e/public-register.test.ts",
 		"test:e2e:pre-register:smoke": "vite build --mode test && playwright test e2e/public-pre-register-flow.test.ts e2e/public-register.test.ts --grep \"(?=.*@pre-register)(?=.*@smoke)\"",
 		"test:e2e:regression": "vite build --mode test && playwright test e2e/public-register.test.ts --grep @regression",
@@ -113,6 +115,8 @@
 		"zod": "^4.4.3"
 	},
 	"dependencies": {
+		"@fontsource/ibm-plex-sans-thai": "^5.3.0",
+		"@fontsource/ibm-plex-sans-thai-looped": "^5.3.0",
 		"@google-cloud/recaptcha-enterprise": "^7.2.0",
 		"@sinclair/typebox": "^0.34.52",
 		"@tanstack/svelte-query": "^6.1.29",

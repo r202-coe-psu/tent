@@ -20,7 +20,12 @@
 		openEvacueeRow,
 		type Evacuee
 	} from '$lib/features/people';
+	import { langState } from '$lib/states/i18n.svelte';
+	import { getTranslation } from '$lib/utils/i18n';
+	import { SEARCH_SCAN_I18N } from '../_constants/search-scan.i18n';
 	import EvacueeQrSearchModal from './evacuee-qr-search-modal.svelte';
+
+	const t = $derived(getTranslation(SEARCH_SCAN_I18N, langState.current).searchEdit);
 
 	const shelterQuery = useShelter(() => shelterStore.selectedShelterCode ?? getShelterCode());
 	const enableMedical = $derived(
@@ -69,7 +74,7 @@
 </script>
 
 <svelte:head>
-	<title>ค้นหาและแก้ไขข้อมูล | SmartShelter Thailand</title>
+	<title>{t.documentTitle}</title>
 </svelte:head>
 
 <div class="mx-auto flex w-full max-w-7xl flex-col gap-6 px-4 py-6 md:px-6">
@@ -77,7 +82,7 @@
 		<a
 			href={resolve('/portal')}
 			class="inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-200/80 bg-white text-slate-600 shadow-2xs transition-colors hover:bg-slate-50"
-			aria-label="กลับหน้าเลือกเมนูหลัก"
+			aria-label={t.backAria}
 		>
 			<ArrowLeft class="size-4" />
 		</a>
@@ -85,11 +90,11 @@
 			<div class="flex items-center gap-2">
 				<Search class="size-6 text-[#0A2647]" />
 				<h1 class="text-2xl font-bold tracking-tight text-slate-900 md:text-3xl">
-					ค้นหาและแก้ไขข้อมูลผู้พักพิง
+					{t.heading}
 				</h1>
 			</div>
 			<p class="mt-0.5 text-xs text-slate-500">
-				Search &amp; Update — ค้นหาด้วยชื่อ เลขบัตร เบอร์โทร หรือสแกน QR
+				{t.subtitle}
 			</p>
 		</div>
 	</header>
@@ -107,7 +112,7 @@
 					<Search class="absolute top-1/2 left-4 size-4 -translate-y-1/2 text-muted-foreground" />
 					<Input
 						type="text"
-						placeholder="ระบุเลขบัตรประชาชน / เบอร์โทรศัพท์ / ชื่อ-นามสกุล..."
+						placeholder={t.placeholder}
 						bind:value={queryText}
 						class="h-12 rounded-xl bg-slate-50 pl-11 text-sm focus-visible:border-primary"
 					/>
@@ -119,7 +124,7 @@
 					class="h-12 shrink-0 gap-2 rounded-xl px-6 font-bold"
 				>
 					<Search class="size-4" />
-					ค้นหาข้อมูล
+					{t.search}
 				</Button>
 				<Button
 					type="button"
@@ -128,7 +133,7 @@
 					class="h-12 shrink-0 gap-2 rounded-xl px-6 font-bold"
 				>
 					<ScanLine class="size-4" />
-					สแกน QR Code ตั๋ว
+					{t.scanQr}
 				</Button>
 			</form>
 		</Card.Content>

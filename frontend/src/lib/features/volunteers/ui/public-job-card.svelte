@@ -246,7 +246,7 @@
 							{:else if isBlocked}
 								<span
 									class="rounded-md border border-amber-300 bg-amber-50 px-2 py-0.5 text-xs font-bold text-amber-800"
-									>เวลาชน</span
+									>{t.applyShiftConflict}</span
 								>
 							{:else if isFull}
 								<span
@@ -276,7 +276,7 @@
 							<div class="flex items-start gap-2">
 								<TriangleAlert class="mt-0.5 h-4 w-4 shrink-0 text-amber-700" />
 								<div class="min-w-0">
-									<p class="font-bold">เวลาชนกับกะที่จองไว้</p>
+									<p class="font-bold">{t.conflictNote}</p>
 									<p class="mt-1 line-clamp-2 leading-relaxed">
 										{shift.conflict.title} · {shift.conflict.time}{t.timeSuffix}
 									</p>
@@ -325,7 +325,7 @@
 						{#if isClosed}
 							{t.tagClosed}
 						{:else if isBlocked}
-							เวลาชนกับกะนี้
+							{t.conflictButton}
 						{:else if isFull}
 							{t.shiftFull}
 						{:else}
