@@ -5,7 +5,7 @@
  * Bump CONSENT_NOTICE_VERSION whenever any consent wording changes.
  */
 
-export const CONSENT_NOTICE_VERSION = '2026-11-04';
+export const CONSENT_NOTICE_VERSION = '2026-11-08';
 
 export const CONSENT_COPY = {
 	heading: 'ข้อตกลงและนโยบายความเป็นส่วนตัว',
