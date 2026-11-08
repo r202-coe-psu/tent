@@ -61,6 +61,7 @@
 			type="button"
 			variant="outline"
 			aria-label={t.digit(digit)}
+			data-digit={digit}
 			disabled={disabled || value.length >= maxLength}
 			onkeydown={handleKeydown}
 			onclick={() => appendDigit(digit, true)}
@@ -84,6 +85,7 @@
 		type="button"
 		variant="outline"
 		aria-label={t.digit('0')}
+		data-digit="0"
 		disabled={disabled || value.length >= maxLength}
 		onkeydown={handleKeydown}
 		onclick={() => appendDigit('0', true)}
