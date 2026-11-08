@@ -72,7 +72,7 @@ async function settle() {
 
 const buttons = () => [...document.querySelectorAll<HTMLButtonElement>('button')];
 const printButton = () => buttons().find((b) => b.textContent?.includes('พิมพ์ที่ เครื่อง-p1'));
-const closeButtons = () => buttons().filter((b) => b.textContent?.trim() === 'ปิดหน้าต่าง');
+const closeButtons = () => buttons().filter((b) => b.textContent?.trim() === 'ปิด');
 const pressEscape = () => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
 
 beforeEach(() => {
