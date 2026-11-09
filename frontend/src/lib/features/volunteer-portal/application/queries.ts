@@ -77,12 +77,15 @@ export function useCancelTicketMutation() {
  * Disabled for a phone session: the number is guessable, so it never gets these buttons.
  */
 export function useVolunteerApplications(credential: () => PortalCredential | null) {
-	return createQuery(() => ({
-		queryKey: volunteerPortalKeys.applications(credential()?.token ?? ''),
-		queryFn: () => fetchTokenApplications(credential()!.token!),
-		enabled: Boolean(credential()?.token),
-		staleTime: 0
-	}));
+	return createQuery(() => {
+		const token = credential()?.token;
+		return {
+			queryKey: volunteerPortalKeys.applications(token ?? ''),
+			queryFn: () => (token ? fetchTokenApplications(token) : Promise.resolve([])),
+			enabled: Boolean(token),
+			staleTime: 30_000
+		};
+	});
 }
 
 /**

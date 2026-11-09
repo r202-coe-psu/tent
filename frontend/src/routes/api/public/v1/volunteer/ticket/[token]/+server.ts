@@ -25,7 +25,7 @@ export const GET: RequestHandler = async ({ params, url, fetch }) => {
 			const { dbName, shelter, volunteer } = resolved;
 			// `?application=` opens one of a permanent token's applications (#973); an id the
 			// token does not own falls back to the default pick, never to someone else's.
-			const wanted = url?.searchParams.get('application');
+			const wanted = url.searchParams.get('application');
 			const app =
 				(wanted ? resolved.applications.find((a) => a._id === wanted) : undefined) ?? resolved.app;
 			let jobTitle = 'งานจิตอาสาประจำศูนย์พักพิง';

@@ -174,6 +174,50 @@ describe('portalTicketActions (#973)', () => {
 		expect(portalTicketActions(activity(), apps, before)?.applicationId).toBe('x2');
 	});
 
+	it('does not match by date when shift_id does not match (W2)', () => {
+		// Same job, same date, but application is for a different shift
+		const mismatchedApp = app({
+			application_id: 'x1',
+			shift_id: 'shift:different',
+			date: '2026-12-01'
+		});
+		expect(
+			portalTicketActions(
+				activity({ shiftId: 'shift:2', date: '2026-12-01' }),
+				[mismatchedApp],
+				before
+			)
+		).toBeNull();
+	});
+
+	it('refuses to match when one side has shift_id and the other does not (W2)', () => {
+		const appWithoutShift = app({ application_id: 'x1', shift_id: null, date: '2026-12-01' });
+		expect(
+			portalTicketActions(
+				activity({ shiftId: 'shift:2', date: '2026-12-01' }),
+				[appWithoutShift],
+				before
+			)
+		).toBeNull();
+
+		const appWithShift = app({ application_id: 'x1', shift_id: 'shift:2', date: '2026-12-01' });
+		expect(
+			portalTicketActions(activity({ shiftId: null, date: '2026-12-01' }), [appWithShift], before)
+		).toBeNull();
+	});
+
+	it('legacy records match by date only when both sides lack shift_id', () => {
+		const legacyApp = app({ application_id: 'x-legacy', shift_id: null, date: '2026-12-01' });
+		const legacyActivity = activity({ shiftId: null, date: '2026-12-01' });
+		expect(portalTicketActions(legacyActivity, [legacyApp], before)?.applicationId).toBe(
+			'x-legacy'
+		);
+
+		// Different date does not match
+		const otherDateApp = app({ application_id: 'x-other', shift_id: null, date: '2026-12-02' });
+		expect(portalTicketActions(legacyActivity, [otherDateApp], before)).toBeNull();
+	});
+
 	it('hides cancel once the shift started, keeps open', () => {
 		const after = Date.parse('2026-12-01T03:30:00Z');
 		expect(portalTicketActions(activity(), [app()], after)).toMatchObject({

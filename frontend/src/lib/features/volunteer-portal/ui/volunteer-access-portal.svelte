@@ -361,10 +361,10 @@
 		if (!target || !token) return;
 		try {
 			await cancelTicket.mutateAsync({ token, applicationId: target.applicationId });
-			toast.success('ยกเลิกกะนี้แล้ว');
+			toast.success(t.cancelledSuccess);
 			pendingCancel = null;
 		} catch (err) {
-			toast.error(err instanceof Error ? err.message : 'ยกเลิกไม่สำเร็จ');
+			toast.error(err instanceof Error ? err.message : t.cancelFailed);
 		}
 	}
 	/**
@@ -583,7 +583,7 @@
 			Boolean(activity.assignmentId) &&
 			activity.dispatchStatus !== 'dispatched' &&
 			['assigned', 'standby'].includes(activity.status) &&
-			!ticketActionsFor(activity)
+			!ticketActionsFor(activity)?.canCancel
 		);
 	}
 
@@ -1475,17 +1475,19 @@
 													data-testid="open-ticket"
 													class="flex items-center justify-center gap-2 rounded-xl border border-primary/30 px-4 py-2.5 text-xs font-bold text-primary hover:bg-primary/5"
 												>
-													<Ticket class="size-4" /> เปิดตั๋ว
+													<Ticket class="size-4" />
+													{t.openTicket}
 												</a>
 												{#if actions.canCancel}
 													<button
 														type="button"
 														data-testid="cancel-application"
+														aria-label={t.cancelShiftAria(activity.title, activity.shiftPeriod)}
 														onclick={() =>
 															(pendingCancel = { activity, applicationId: actions.applicationId })}
 														class="rounded-xl border border-destructive/30 px-4 py-2.5 text-xs font-bold text-destructive hover:bg-destructive/5"
 													>
-														ยกเลิก
+														{t.cancelShift}
 													</button>
 												{/if}
 											{/if}
@@ -1572,11 +1574,10 @@
 							<Dialog.Header>
 								<Dialog.Title class="flex items-center gap-2">
 									<CircleAlert class="size-5 text-destructive" />
-									ยืนยันการยกเลิกกะ
+									{t.confirmCancelTitle}
 								</Dialog.Title>
 								<Dialog.Description>
-									ใบสมัครของกะนี้จะถูกยกเลิก และที่นั่งที่จองไว้จะคืนให้คนอื่น
-									กะอื่นของคุณไม่เปลี่ยน
+									{t.confirmCancelDescription}
 								</Dialog.Description>
 							</Dialog.Header>
 							{#if pendingCancel}
@@ -1593,7 +1594,7 @@
 									onclick={() => (pendingCancel = null)}
 									disabled={cancelTicket.isPending}
 								>
-									กลับไป
+									{t.confirmCancelBack}
 								</Button>
 								<Button
 									variant="destructive"
@@ -1601,7 +1602,7 @@
 									onclick={confirmCancelApplication}
 									disabled={cancelTicket.isPending}
 								>
-									ยืนยันยกเลิก
+									{t.confirmCancelConfirm}
 								</Button>
 							</Dialog.Footer>
 						</Dialog.Content>

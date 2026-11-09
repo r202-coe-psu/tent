@@ -235,6 +235,8 @@ export function mergePortalActivities(
 	return activities;
 }
 
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
+
 function isShiftEnded(activity: PortalActivity, now: number): boolean {
 	if (activity.status === 'completed' || activity.status === 'cancelled') return true;
 	if (activity.endTs) {
@@ -242,7 +244,7 @@ function isShiftEnded(activity: PortalActivity, now: number): boolean {
 		if (!Number.isNaN(end)) return end < now;
 	}
 	const start = startTime(activity);
-	return !Number.isNaN(start) && start + 24 * 60 * 60 * 1000 < now;
+	return !Number.isNaN(start) && start + MS_PER_DAY < now;
 }
 
 export function filterAndSortPortalActivities(
@@ -308,7 +310,10 @@ export type PortalTicketActions = {
 function applicationMatches(activity: PortalActivity, app: PortalApplication): boolean {
 	if (activity.jobId !== app.job_id) return false;
 	if (activity.shiftId && app.shift_id) return activity.shiftId === app.shift_id;
-	return !app.date || app.date === activity.date;
+	// If one side knows its shift_id or they mismatch, refuse to guess by date so we never
+	// cancel the wrong shift (W2). Only legacy records with no shift_id on both sides match by date.
+	if (activity.shiftId || app.shift_id) return false;
+	return Boolean(activity.date && app.date && activity.date === app.date);
 }
 
 /**
