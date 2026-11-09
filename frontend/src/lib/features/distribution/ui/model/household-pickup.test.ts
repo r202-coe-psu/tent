@@ -170,6 +170,7 @@ describe('summarizeHouseholdPickup', () => {
 describe('householdHeading', () => {
 	it('names the household, or falls back when the label is missing', () => {
 		expect(householdHeading(' บ้านสุขใจ ')).toBe('ครอบครัว บ้านสุขใจ');
+		expect(householdHeading('ครอบครัวใจดี')).toBe('ครอบครัวใจดี');
 		expect(householdHeading(undefined)).toBe('ครอบครัวของผู้รับ');
 		expect(householdHeading('  ')).toBe('ครอบครัวของผู้รับ');
 	});

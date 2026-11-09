@@ -114,7 +114,9 @@ export function summarizeHouseholdPickup(
 /** Heading for the household list; falls back when the household doc has no label yet. */
 export function householdHeading(label: string | null | undefined): string {
 	const name = label?.trim();
-	return name ? `ครอบครัว ${name}` : 'ครอบครัวของผู้รับ';
+	if (!name) return 'ครอบครัวของผู้รับ';
+	// Seeded and typed labels often start with the word already ("ครอบครัวใจดี").
+	return name.startsWith('ครอบครัว') ? name : `ครอบครัว ${name}`;
 }
 
 /** Pre-selected: a member who can collect without an override (#1154 R4/R5). */
