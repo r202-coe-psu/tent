@@ -1,9 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+const { adminRawFn } = vi.hoisted(() => ({ adminRawFn: vi.fn() }));
+
 vi.mock('$lib/server/couch-admin', async () => {
 	const actual =
 		await vi.importActual<typeof import('$lib/server/couch-admin')>('$lib/server/couch-admin');
-	return { ...actual, adminRaw: vi.fn() };
+	return { ...actual, adminRaw: adminRawFn };
 });
 
 import { adminRaw } from '$lib/server/couch-admin';
@@ -271,6 +273,81 @@ async function createSingleJob(): Promise<{ jobId: string; item: ShelterImportIt
 	return { jobId: job._id.slice('shelter_import_job:'.length), item: summary.items[0] };
 }
 
+// Queue setup is cached per module instance, so each test here imports a fresh one.
+async function freshJobStore(): Promise<typeof import('./job-store')> {
+	vi.resetModules();
+	return import('./job-store');
+}
+
+const singleJobArgs = {
+	filename: 'shelters.xlsx',
+	importedBy: 'admin',
+	idempotencyKey: 'setup-job-key',
+	duplicateAction: 'skip' as const,
+	rows: [{ row: 1, name: 'ศูนย์ A', input: input('ศูนย์ A') as never, valid: true }]
+};
+
+function queueSecurityPuts(): number {
+	return adminRawMock.mock.calls.filter(
+		([path, method]) => path === `/${IMPORT_QUEUE_DB}/_security` && method === 'PUT'
+	).length;
+}
+
+describe('import queue database setup', () => {
+	beforeEach(() => {
+		setupCouchMock();
+		adminRawMock.mockClear();
+	});
+
+	it('keeps the import queue private to CouchDB server admins', async () => {
+		const store = await freshJobStore();
+		await store.createImportJob(singleJobArgs);
+
+		expect(securityWrites.at(-1)).toEqual({
+			admins: { names: ['legacy-admin'], roles: ['system_admin', '_admin'] },
+			members: { names: [], roles: [] }
+		});
+	});
+
+	it('fails closed when security ACL setup fails', async () => {
+		adminRawMock.mockImplementation(async (path) => {
+			if (path === `/${IMPORT_QUEUE_DB}/_security`) {
+				return { status: 500, data: { error: 'database_error' } };
+			}
+			return { status: 200, data: {} };
+		});
+		const store = await freshJobStore();
+
+		await expect(store.createImportJob(singleJobArgs)).rejects.toMatchObject({
+			code: 'INTERNAL'
+		});
+	});
+
+	it('sets up the queue database once across repeated worker polls', async () => {
+		const store = await freshJobStore();
+		for (let poll = 0; poll < 5; poll++) await store.listRunnableImportJobs();
+
+		expect(queueSecurityPuts()).toBe(1);
+	});
+
+	it('retries setup on the next poll after a failed attempt', async () => {
+		const healthy = adminRawMock.getMockImplementation()!;
+		let failNextSecurityPut = true;
+		adminRawMock.mockImplementation(async (path, method, body) => {
+			if (path === `/${IMPORT_QUEUE_DB}/_security` && method === 'PUT' && failNextSecurityPut) {
+				failNextSecurityPut = false;
+				return { status: 500, data: { error: 'timeout' } };
+			}
+			return healthy(path, method, body);
+		});
+		const store = await freshJobStore();
+
+		await expect(store.listRunnableImportJobs()).rejects.toMatchObject({ code: 'INTERNAL' });
+		await expect(store.listRunnableImportJobs()).resolves.toEqual([]);
+		expect(queueSecurityPuts()).toBe(2);
+	});
+});
+
 describe('shelter import job lifecycle', () => {
 	beforeEach(() => {
 		setupCouchMock();
@@ -321,15 +398,6 @@ describe('shelter import job lifecycle', () => {
 		}
 	});
 
-	it('keeps the import queue private to CouchDB server admins', async () => {
-		await createSingleJob();
-
-		expect(securityWrites.at(-1)).toEqual({
-			admins: { names: ['legacy-admin'], roles: ['system_admin', '_admin'] },
-			members: { names: [], roles: [] }
-		});
-	});
-
 	it('does not call _all_docs on the worker hot path (list, claim, recompute)', async () => {
 		const { jobId } = await createSingleJob();
 		const calledPaths: string[] = [];
@@ -356,18 +424,6 @@ describe('shelter import job lifecycle', () => {
 			p.includes(`/${IMPORT_QUEUE_DB}/_all_docs`)
 		);
 		expect(queueAllDocsCalls).toEqual([]);
-	});
-
-	it('fails closed when security ACL setup fails', async () => {
-		adminRawMock.mockImplementation(async (path) => {
-			if (path === `/${IMPORT_QUEUE_DB}/_security`) {
-				return { status: 500, data: { error: 'database_error' } };
-			}
-			return { status: 200, data: {} };
-		});
-		await expect(createSingleJob()).rejects.toMatchObject({
-			code: 'INTERNAL'
-		});
 	});
 
 	it('replays an idempotent request and rejects key reuse with a different body', async () => {
