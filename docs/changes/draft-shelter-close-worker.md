@@ -3,7 +3,7 @@ id: draft
 title: ปิดศูนย์ด้วย durable job — เช็คเอาต์คนในศูนย์ผ่าน shelter-close-worker แทนการทำใน request เดียว
 status: proposed
 date: 2026-11-06
-updated: 2026-11-06
+updated: 2026-11-10
 requested_by: Dev Team B issue #1216 (ต่อยอด CR-219 / #986)
 decided_by: 
 layer: stable
@@ -60,6 +60,9 @@ internal route ที่ใช้ token + Node worker poll พร้อม lease
 - **FR-2** — เพิ่ม doc type `shelter_close_lock` (`_id = shelter_close_lock:<code>`, schema_v 1) ใน `central_ops`
   job ที่ `status` เป็น `queued` หรือ `running` ได้ไม่เกิน 1 ต่อศูนย์ สร้าง lock ด้วย CAS (`_rev`)
 - **FR-3** — ปล่อย lock เมื่อ job เป็น terminal (`completed` / `completed_with_errors`)
+- **FR-3a** — route ที่อ่าน lock (FR-5, FR-6, FR-9) ต้องตรวจ job ที่ lock ชี้ก่อน: job terminal หรือหาไม่พบ →
+  ลบ lock (CAS) แล้วทำต่อตามปกติ · job active แต่ `updated_at` เก่ากว่า `SHELTER_CLOSE_STALE_MS` → ตั้ง job เป็น
+  `completed_with_errors` แล้วปล่อย lock (ครอบคลุม worker ไม่ได้รัน และ crash ระหว่างจบ job กับลบ lock)
 - **FR-4** — ห้ามเก็บ job หรือ lock ใน DB `shelter_<code>`
 
 **Route ฝั่งผู้ใช้**
@@ -71,10 +74,14 @@ internal route ที่ใช้ token + Node worker poll พร้อม lease
   โดยไม่ประมวลผลคนในศูนย์ใน request นี้
 - **FR-7** — มี job active อยู่แล้ว → `409 { job_id }` ของ job เดิม ห้ามสร้าง job ที่สอง
 - **FR-8** — `GET /api/back-office/shelter/[code]/close/jobs/[id]` คืนสถานะ / ความคืบหน้า (`phase`, `counters`,
-  `sweep_round`) / `failures[]` ใช้สิทธิ์เดียวกับ FR-6 และตอบ `Cache-Control: no-store`
+  `sweep_round`) / `failures[]` ใช้สิทธิ์เดียวกับ FR-6 · `job.shelter_code` ไม่ตรง `[code]` → `404` (ไม่ใช่ `403`
+  เพื่อไม่บอกว่ามี job นั้นอยู่) · ตอบ `Cache-Control: no-store`
 - **FR-9** — `PATCH /api/back-office/shelter/[code]` ขณะมี job active ห้ามเปลี่ยน `operation_status` (รวมเปิดศูนย์
   กลับจาก `closed`) → `409` การตั้ง `closed` ตรง ๆ ยัง `400` ตาม CR-219 FR-22 เดิม
-- **FR-10** — `requested_by` ของ job มาจาก session ฝั่ง server เท่านั้น ห้ามรับจาก body
+- **FR-10** — `requested_by` ของ job มาจาก session ฝั่ง server เท่านั้น ห้ามรับจาก body · ยกเว้น job
+  `mode = backfill` (FR-31) ที่ตั้ง `requested_by = BACKFILL_CREATED_BY` (ค่าเดิมของ script)
+- **FR-10a** — worker ส่ง `job.requested_by` เป็น `createdBy` ของ step function ทุก chunk (movement / audit
+  ที่ worker เขียนจึงระบุผู้สั่งปิดศูนย์) · ตรวจสิทธิ์ครั้งเดียวตอนสร้าง job (FR-6) worker ไม่ตรวจ role ซ้ำ
 
 **Internal route และ worker**
 
@@ -188,6 +195,7 @@ internal route ที่ใช้ token + Node worker poll พร้อม lease
 | `SHELTER_CLOSE_LEASE_MS` | `60000` | อายุ lease |
 | `SHELTER_CLOSE_MAX_ATTEMPTS` | `5` | จำนวนครั้งสูงสุดที่ job ถูกรับต่อ |
 | `SHELTER_CLOSE_MAX_FAILURES` | `50` | เพดานรายการใน `failures[]` |
+| `SHELTER_CLOSE_STALE_MS` | `600000` | job active ที่ `updated_at` ไม่ขยับนานกว่านี้ถือว่าค้าง (FR-3a) · ต้องมากกว่า `SHELTER_CLOSE_LEASE_MS` |
 
 ค่า default เป็นการประมาณ ปรับหลัง load test (AC-11)
 
@@ -204,7 +212,10 @@ internal route ที่ใช้ token + Node worker poll พร้อม lease
 - [ ] **AC-9** `/api/internal/shelter-close/` เข้าจาก public listener ไม่ได้; ไม่มี token → `401` (FR-11, FR-37)
 - [ ] **AC-10** compose ทุกไฟล์ใน FR-34 มี service `shelter-close-worker` และ env ครบใน `.env.example` ทั้งสองไฟล์ (FR-34..FR-36); worker ล้มพร้อมข้อความชัดเจนเมื่อ env ผิดลำดับ (FR-16)
 - [ ] **AC-11** ศูนย์ ~5,000 คนปิดสำเร็จ (load test: `pnpm seed:master` + `pnpm seed:bulk-evacuees --shelter=SH001 --count=5000`) โดยไม่มี request ใดเกิน budget ของ route · ต้องตรวจสัดส่วนสถานะที่ `people-builder` สร้างก่อนนับ "5,000 คน" (บางคนถูกโอนย้าย)
-- [ ] **AC-12** Tests ครบ: job store (CAS lock, lease, claim) · step function (phase, cursor, sweep, finalize 2 mode, resume, `failures[]`) · close route (`202` / `409`) · job status route · internal route (token, chunk, cursor) · PATCH block · backfill script · ingress/config · UI component · e2e ปิดศูนย์ผ่าน worker
+- [ ] **AC-12** Tests ครบ: job store (CAS lock, lease, claim, lock ค้างตาม FR-3a) · step function (phase, cursor, sweep, finalize 2 mode, resume, `failures[]`, `createdBy` จาก `requested_by`) · close route (`202` / `409`) · job status route (รวม `404` เมื่อ job เป็นของศูนย์อื่น) · internal route (token, chunk, cursor) · PATCH block · backfill script · ingress/config · UI component · e2e ปิดศูนย์ผ่าน worker
+- [ ] **AC-13** lock ชี้ job ที่จบแล้วหรือไม่มีอยู่ → กดปิดศูนย์ได้ `202` · ไม่มี worker รันเกิน `SHELTER_CLOSE_STALE_MS` → job เป็น `completed_with_errors` และเปลี่ยนสถานะศูนย์ได้ (FR-3a)
+- [ ] **AC-14** SM ของศูนย์ A ขอ `close/jobs/[id]` ของ job ศูนย์ B ผ่าน path ศูนย์ A → `404` (FR-8)
+- [ ] **AC-15** movement / audit ที่ worker เขียนมีผู้เขียนเป็น `requested_by` ของ job · job backfill ใช้ `BACKFILL_CREATED_BY` (FR-10, FR-10a)
 
 ## Impact
 
@@ -226,6 +237,8 @@ internal route ที่ใช้ token + Node worker poll พร้อม lease
 ## Decision log
 
 - 2026-11-06 — proposed (draft) จาก issue #1216 (D-9 ใน issue: ทำ CR ตอนเริ่ม implement)
+- 2026-11-10 — แก้ตาม review PR #1217: เพิ่ม FR-3a (เคลียร์ lock ค้าง + `SHELTER_CLOSE_STALE_MS`), FR-8 ผูก job
+  กับศูนย์ใน path (`404`), FR-10 / FR-10a (`requested_by` ของ backfill และ `createdBy` ของ worker), AC-13..AC-15
 
 ### ตัดสินแล้วใน #1216
 
