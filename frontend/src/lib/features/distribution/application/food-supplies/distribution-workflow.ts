@@ -13,6 +13,7 @@ import {
 	type DistributionRecipientType,
 	type MenuTagSource,
 	type MenuTargetTag,
+	type RecipientQrOverride,
 	type RequisitionTicket,
 	type TicketItem
 } from '../../domain/food-supplies';
@@ -39,6 +40,16 @@ export interface DistributionWorkflowDependencies {
 	ledgerReader?: LedgerEntryReader;
 }
 
+/** The dates of the expired QR plus when it was accepted; `overridden_by` comes from the author. */
+export type QrOverrideInput = Omit<RecipientQrOverride, 'overridden_by'>;
+
+function toQrOverride(
+	input: QrOverrideInput | undefined,
+	ctx: AuthorContext
+): { recipient_qr_override: RecipientQrOverride } | Record<string, never> {
+	return input ? { recipient_qr_override: { ...input, overridden_by: ctx.createdBy } } : {};
+}
+
 export interface FoodDistributionInput {
 	item_id: string;
 	qty: string;
@@ -51,6 +62,8 @@ export interface FoodDistributionInput {
 	recipe_id?: string;
 	is_override?: boolean;
 	override_reason?: string;
+	/** CR-233 A1: recipient picked with an expired Person QR (staff accepted the risk). */
+	recipient_qr_override?: QrOverrideInput;
 	cooking_completed_at?: string;
 	notes?: string;
 	/**
@@ -79,6 +92,8 @@ export interface SuppliesDistributionInput {
 	household_id?: string;
 	is_override?: boolean;
 	override_reason?: string;
+	/** CR-233 A1: recipient picked with an expired Person QR (staff accepted the risk). */
+	recipient_qr_override?: QrOverrideInput;
 	notes?: string;
 }
 
@@ -264,6 +279,7 @@ export async function recordFoodDistribution(
 					? undefined
 					: withFreeTextAllergyReason(allergyFreeText, input.override_reason),
 			...(allergenConflicts.length > 0 ? { allergen_conflicts: allergenConflicts } : {}),
+			...toQrOverride(input.recipient_qr_override, ctx),
 			is_expired_warning: isExpiredWarning,
 			notes: input.notes
 		},
@@ -312,6 +328,7 @@ export async function recordSuppliesDistribution(
 			status: isReturnable ? 'active' : 'fulfilled',
 			is_override: input.is_override ?? false,
 			override_reason: input.override_reason,
+			...toQrOverride(input.recipient_qr_override, ctx),
 			notes: input.notes
 		},
 		ctx

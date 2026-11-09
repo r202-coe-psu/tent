@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { CouchAuthError, NetworkError } from '$lib/utils/errors';
+import { ServiceRequestError } from '$lib/api/service';
+import { EDGE_USERS_READONLY_MESSAGE } from '$lib/auth/edge-readonly';
 import { createAppQueryClient, type AuthFailureResolution } from './query-client';
 
 function setup(resolution: AuthFailureResolution = 'expired') {
@@ -79,6 +81,20 @@ describe('createAppQueryClient', () => {
 			.catch(() => {});
 		await flush();
 		expect(onMutationExpired).not.toHaveBeenCalled();
+		expect(onMutationPermissionDenied).not.toHaveBeenCalled();
+	});
+
+	it('shows no generic denial for the edge read-only 403 (the page toasts it itself)', async () => {
+		const { client, onAuthFailure, onMutationPermissionDenied } = setup('permission-denied');
+		await client
+			.getMutationCache()
+			.build(client, {
+				mutationFn: () => Promise.reject(new ServiceRequestError(EDGE_USERS_READONLY_MESSAGE, 403))
+			})
+			.execute(undefined)
+			.catch(() => {});
+		await flush();
+		expect(onAuthFailure).not.toHaveBeenCalled();
 		expect(onMutationPermissionDenied).not.toHaveBeenCalled();
 	});
 });

@@ -311,6 +311,10 @@
 						recipientSelection.recipientType === 'evacuee'
 							? recipientSelection.householdId
 							: undefined,
+					recipient_qr_override:
+						recipientSelection.recipientType === 'evacuee'
+							? recipientSelection.qrOverride
+							: undefined,
 					is_override: isOverride,
 					override_reason: overrideReason,
 					notes: notesInput.trim() || undefined,
@@ -484,6 +488,7 @@
 		bind:value={recipientSelection}
 		disabled={recordFoodMutation.isPending}
 		allowStaff
+		allowExpiredQrOverride
 		{shelterCode}
 	/>
 

@@ -61,6 +61,10 @@
 </script>
 
 <script lang="ts">
+	import { langState } from '$lib/states/i18n.svelte';
+	import { getTranslation } from '$lib/utils/i18n';
+	import { SHARED_BADGES_I18N } from '../_constants/shared-badges.i18n';
+
 	let {
 		via,
 		hasCardSnapshot = false,
@@ -79,21 +83,23 @@
 
 	const effectiveVia = $derived(via || (hasCardSnapshot ? 'kiosk' : 'staff'));
 
+	const t = $derived(getTranslation(SHARED_BADGES_I18N, langState.current));
+
 	const style = $derived(
 		REGISTERED_VIA_BADGE_STYLES[effectiveVia] ?? {
-			label: effectiveVia || 'ไม่ระบุ',
+			label: effectiveVia || t.unspecified,
 			badgeClass: 'border-slate-200 bg-slate-50 text-slate-700',
 			iconClass: 'text-slate-600',
 			icon: UserPlus
 		}
 	);
 
-	const displayLabel = $derived(customLabel ?? style.label);
+	const displayLabel = $derived(customLabel ?? t.via[effectiveVia] ?? style.label);
 	const Icon = $derived(style.icon);
 </script>
 
 <span
-	class="inline-flex items-center gap-1.5 rounded-full border font-semibold transition-colors {style.badgeClass} {size ===
+	class="inline-flex max-w-full items-center gap-1.5 rounded-full border font-semibold transition-colors {style.badgeClass} {size ===
 	'sm'
 		? 'px-2.5 py-0.5 text-xs'
 		: 'px-3 py-1 text-sm'} {className}"
@@ -101,5 +107,5 @@
 	{#if showIcon}
 		<Icon class="{size === 'sm' ? 'size-3.5' : 'size-4'} {style.iconClass} shrink-0" />
 	{/if}
-	<span>{displayLabel}</span>
+	<span class="min-w-0 break-words">{displayLabel}</span>
 </span>

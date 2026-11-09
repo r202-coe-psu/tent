@@ -205,6 +205,7 @@ const MANAGEMENT_PAGES = [
 	'/back-office/users',
 	'/back-office/kiosks',
 	'/back-office/kiosks/banners',
+	'/back-office/printers',
 	'/back-office/master-data'
 ];
 

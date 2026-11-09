@@ -4,6 +4,7 @@
  * this module adds couch `evacuee:` normalization and Mongo queue search candidates.
  */
 
+import { parsePersonQr, type ParsedPersonQr } from '$lib/utils/evacuee-qr';
 import { parseZoningQrCode } from './intake-pipeline';
 
 /**
@@ -12,6 +13,24 @@ import { parseZoningQrCode } from './intake-pipeline';
  */
 export function extractScanLookupToken(raw: string): string | null {
 	return parseZoningQrCode(raw);
+}
+
+/**
+ * Person QR (CR-233) carried by a scan, or `null` for anything else: a bare ULID registration
+ * ticket (FR-EQR-31), free text, or a malformed `@` suffix (FR-EQR-5). `evacuee_id` never contains
+ * `@` (FR-EQR-6).
+ *
+ * A path/URL payload that carries an `evacuee:{ULID}` id (the handover slip,
+ * `/onsite/medical-screening/evacuee:{ULID}`, or `?evacuee_id=`) counts as a legacy Person QR
+ * (`hash6: null`): it stays valid until the first Person QR is printed, then expires like any
+ * hash-less QR (FR-EQR-27 row 1), so it cannot bypass the "latest QR only" rule.
+ */
+export function extractScanPersonQr(raw: string): ParsedPersonQr | null {
+	const direct = parsePersonQr(raw);
+	if (direct) return direct;
+	const token = extractScanLookupToken(raw);
+	if (!token || token === raw.trim()) return null;
+	return parsePersonQr(token);
 }
 
 /** Couch doc id — always `evacuee:…` (case-normalized prefix). */

@@ -608,7 +608,7 @@ docker logs couch-edge 2>&1 | grep -i replicat   # log ฝั่ง replicator
 **A2. เขียน `_users` ที่ edge ทำให้เกิด conflict และ login ไม่ได้ (พบ 2026-10-18)**
 
 - **ข้อค้นพบ:** frontend ที่ edge มี `COUCHDB_ADMIN_URL` (`/api/back-office/*` ใช้ จึงถอดไม่ได้) → BFF เขียน `_users` ที่ edge ได้ แต่ job `users_<code>_pull` เป็นทางเดียว (central → edge) · ทดสอบบน CouchDB 3.5: แก้ user ที่ edge 2 ครั้ง แล้ว soft delete ที่ central → doc ที่ edge เกิด conflict และ login ไม่ได้ด้วย `{"error":"unauthorized","reason":"User document conflicts must be resolved before the document is used for authentication purposes."}`
-- **การตัดสินใจ (owner @net-lynx, 2026-10-18):** บล็อกการเขียน `_users` ที่ edge ด้วย flag `EDGE_MODE` (D5) — **edge mode ทำใน PR แยก** · CR-171 amendment pending (ยังไม่เพิ่ม FR ใน CR)
+- **การตัดสินใจ (owner @net-lynx, 2026-10-18):** บล็อกการเขียน `_users` ที่ edge ด้วย flag `EDGE_MODE` (D5) — **edge mode ทำใน PR แยก** · spec: FR-13–FR-17 ใน [CR-171](../changes/01-core/CR-171-users-edge-shelters-soft-delete.md) (amend 2026-11-09, #1179)
 - **ผลที่ตามมา (A3):** login ครั้งแรกที่ edge (`must_change_password`) ถูกบล็อกเหมือนการเขียนอื่น → บัญชีต้อง activate ที่ central ก่อนเปิดศูนย์
 - **ผลที่ตามมา (A4):** ไม่สร้าง user ที่ edge (คง A1 ของ idea doc) → เตรียม spare account ที่ provision + activate ที่ central ล่วงหน้า · ผู้จัดการศูนย์ประมาณจำนวนที่ต้องใช้
 
