@@ -16,6 +16,8 @@
 		formats,
 		manualInputMode = 'numeric',
 		busy,
+		error = null,
+		errorAction,
 		onScan,
 		oncancel
 	}: {
@@ -31,6 +33,13 @@
 		 * progress until the promise `onScan` returns settles, then closes.
 		 */
 		busy?: boolean;
+		/**
+		 * Why the last read was refused. While set, the dialog stays open after the read settles and
+		 * shows it under the camera, so staff can scan again; the caller clears it on the next read.
+		 */
+		error?: string | null;
+		/** Optional button shown with `error`, for a caller that lets staff proceed anyway. */
+		errorAction?: { label: string; onclick: () => void; disabled?: boolean };
 		/** Receives a camera read or a typed code; without `busy` the dialog closes first. */
 		onScan: (code: string) => void | Promise<unknown>;
 		/** Called when the user closes the dialog while busy; the caller should drop the pending read. */
@@ -56,7 +65,7 @@
 			await onScan(clean);
 		} finally {
 			// A cancelled read must not close a dialog the user has since reopened.
-			if (isLatest()) open = false;
+			if (isLatest() && !error) open = false;
 		}
 	}
 
@@ -85,6 +94,23 @@
 		<!-- Mounted only while open so the camera is released when the dialog closes. -->
 		{#if open}
 			<CameraCodeScanner onScan={deliver} {formats} busy={phase === 'busy'} />
+		{/if}
+
+		{#if error}
+			<p role="alert" class="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+				{error}
+			</p>
+			{#if errorAction}
+				<Button
+					type="button"
+					variant="destructive"
+					class="min-h-11"
+					disabled={errorAction.disabled}
+					onclick={errorAction.onclick}
+				>
+					{errorAction.label}
+				</Button>
+			{/if}
 		{/if}
 
 		<form

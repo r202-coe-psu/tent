@@ -12,7 +12,9 @@
 
 <Table.Row class="border-t border-slate-100 hover:bg-slate-50/60">
 	<Table.Cell class="px-4 py-3 text-slate-600 tabular-nums">{row.time}</Table.Cell>
-	<Table.Cell class="px-4 py-3"><GroupTag group={row.group} label={row.reasonLabel} /></Table.Cell>
+	<Table.Cell class="px-4 py-3">
+		<GroupTag group={row.group} label={row.reasonLabel} />
+	</Table.Cell>
 	<Table.Cell class="px-4 py-3 font-semibold text-slate-900">{row.itemName}</Table.Cell>
 	<Table.Cell
 		class="px-4 py-3 text-right font-bold whitespace-nowrap tabular-nums {incoming

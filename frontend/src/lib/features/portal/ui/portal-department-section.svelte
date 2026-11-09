@@ -1,11 +1,14 @@
 <script lang="ts">
 	import {
-		PORTAL_GROUP_LABELS,
 		portalDepartmentCssVars,
 		type PortalDepartmentView,
 		type PortalMenuItem,
 		type PortalVisibleItem
 	} from '../domain/portal-menu';
+	import { portalDepartmentText, portalGroupLabel } from '../domain/portal-menu-labels';
+	import { langState } from '$lib/states/i18n.svelte';
+	import { getTranslation } from '$lib/utils/i18n';
+	import { PORTAL_MENU_I18N } from './_constants/portal-menu.i18n';
 	import { PORTAL_ICONS } from './portal-icons';
 	import PortalMenuTile from './portal-menu-tile.svelte';
 
@@ -18,6 +21,8 @@
 
 	let { department, selectedShelterCode, variant = 'tile' }: Props = $props();
 
+	const t = $derived(getTranslation(PORTAL_MENU_I18N, langState.current));
+	const deptText = $derived(portalDepartmentText(department, langState.current));
 	const Icon = $derived(PORTAL_ICONS[department.icon]);
 	const compact = $derived(variant === 'compact');
 	const gridClass = $derived(
@@ -38,7 +43,7 @@
 		return groups
 			.map((group) => ({
 				key: group,
-				label: PORTAL_GROUP_LABELS[group],
+				label: portalGroupLabel(group, langState.current),
 				items: department.items.filter(({ item }) => item.group === group)
 			}))
 			.filter((block) => block.items.length > 0);
@@ -74,16 +79,16 @@
 				id={headingId}
 				class={['font-bold text-(color:--c-text)', compact ? 'text-base' : 'text-base sm:text-xl']}
 			>
-				{department.label}
+				{deptText.label}
 			</h2>
 			<p class={['text-sm text-slate-600', compact && 'line-clamp-2 sm:line-clamp-1']}>
-				{department.desc}
+				{deptText.desc}
 			</p>
 		</div>
 		<span
 			class="shrink-0 rounded-full border border-(color:--c-border) bg-white px-2.5 py-0.5 text-xs font-semibold whitespace-nowrap text-(color:--c-text) tabular-nums"
 		>
-			{department.items.length}<span class="sr-only sm:not-sr-only">&nbsp;เมนู</span>
+			{department.items.length}<span class="sr-only sm:not-sr-only">&nbsp;{t.menuUnit}</span>
 		</span>
 	</header>
 

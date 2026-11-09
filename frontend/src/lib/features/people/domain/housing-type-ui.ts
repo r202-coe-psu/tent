@@ -5,6 +5,7 @@
 
 import { formatMasterLabel } from '$lib/features/master-data';
 import type { HousingType } from './people';
+import type { LanguageCode } from '$lib/utils/language';
 
 export const CR112_HOUSING_TYPE_CODES = [
 	'owned_house',
@@ -31,6 +32,19 @@ export const DEFAULT_HOUSING_TYPE_ITEMS_TH: HousingTypeSelectItem[] = [
 	{ value: 'apartment_dorm', label: 'อะพาร์ตเมนต์/หอพัก' },
 	{ value: 'homeless', label: 'ไร้ที่อยู่อาศัยเป็นหลักแหล่ง' }
 ];
+
+/** English mirror of `DEFAULT_HOUSING_TYPE_ITEMS_TH` — same values and order. */
+export const DEFAULT_HOUSING_TYPE_ITEMS_EN: HousingTypeSelectItem[] = [
+	{ value: 'owned_house', label: 'Own house' },
+	{ value: 'rented_house', label: 'Rented house' },
+	{ value: 'condo', label: 'Condominium' },
+	{ value: 'apartment_dorm', label: 'Apartment / dormitory' },
+	{ value: 'homeless', label: 'No fixed residence' }
+];
+
+export function defaultHousingTypeItems(language: LanguageCode = 'th'): HousingTypeSelectItem[] {
+	return language === 'en' ? DEFAULT_HOUSING_TYPE_ITEMS_EN : DEFAULT_HOUSING_TYPE_ITEMS_TH;
+}
 
 /**
  * Build Select options with CR-112 codes as values.

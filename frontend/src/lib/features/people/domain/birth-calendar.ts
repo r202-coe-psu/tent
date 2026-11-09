@@ -2,7 +2,7 @@
  * Birth-year calendar display helpers for registration forms.
  * Persist is always Buddhist Era (พ.ศ.); UI may show BE or CE.
  */
-import type { LanguageCode } from '$lib/stores/language.svelte';
+import type { LanguageCode } from '$lib/utils/language';
 
 export type BirthCalendar = 'BE' | 'CE';
 

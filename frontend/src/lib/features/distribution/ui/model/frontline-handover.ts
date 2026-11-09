@@ -32,6 +32,8 @@ export type FrontlineRecipientSelection =
 			stayInfo?: string;
 			/** Menu-matching tags derived from the evacuee doc at selection time. */
 			menuTags?: MenuTargetTag[];
+			/** CR-233 A1: set when staff accepted the risk of an expired Person QR to pick this person. */
+			qrOverride?: { issued_at: string | null; current_printed_at: string; overridden_at: string };
 	  }
 	| {
 			recipientType: 'volunteer';

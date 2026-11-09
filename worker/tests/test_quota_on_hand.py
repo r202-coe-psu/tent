@@ -22,7 +22,8 @@ from tent_model import (
     set_on_hand_qty,
 )
 
-from worker.mongo.on_hand import on_hand_decimals, refresh_on_hand
+from worker.donation_ledger import on_hand_decimals
+from worker.mongo.on_hand import refresh_on_hand
 
 SHELTER = "SH001"
 CAMPAIGN = "donation_campaign:01"

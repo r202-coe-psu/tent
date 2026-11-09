@@ -22,7 +22,8 @@ vi.mock('$app/state', () => ({
 	}
 }));
 
-vi.mock('$lib/features/shelters', () => ({
+vi.mock('$lib/features/shelters', async (importOriginal) => ({
+	...(await importOriginal<typeof import('$lib/features/shelters')>()),
 	useShelters: () => mockSheltersState
 }));
 

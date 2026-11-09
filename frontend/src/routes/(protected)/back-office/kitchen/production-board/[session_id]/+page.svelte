@@ -60,6 +60,7 @@
 	import { addQty, persistQty, qtyGt, qtyLte } from '$lib/utils/qty';
 	import { formatThaiDateTime, formatThaiShortDate } from '$lib/utils/date';
 	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
+	import BackLink from '$lib/components/back-link.svelte';
 	import ChefHat from '@lucide/svelte/icons/chef-hat';
 	import Flame from '@lucide/svelte/icons/flame';
 	import CheckCircle2 from '@lucide/svelte/icons/check-circle-2';
@@ -831,13 +832,11 @@
 	<div class="rounded-2xl bg-[#0A2647] p-5 text-white shadow-sm">
 		<div class="flex flex-wrap items-start justify-between gap-4">
 			<div>
-				<a
+				<BackLink
 					href={resolve('/back-office/kitchen')}
-					class="inline-flex items-center gap-1.5 text-xs font-semibold text-white/80 transition-colors hover:text-white"
-				>
-					<ArrowLeft class="h-3.5 w-3.5" />
-					ย้อนกลับหน้าสรุปมื้อ
-				</a>
+					label="กลับไปครัวกลางและอาหาร"
+					class="-ml-3 text-white/80 hover:bg-white/10 hover:text-white"
+				/>
 				<h1 class="mt-2 text-xl font-extrabold tracking-tight sm:text-2xl">
 					แผงควบคุมและจัดสรรเครื่องครัวภัยพิบัติ
 				</h1>
@@ -1617,19 +1616,14 @@
 						<div class="flex items-center justify-between pt-2">
 							<Button variant="outline" onclick={() => (currentStage = 'B')}>
 								<ArrowLeft class="mr-1 h-3.5 w-3.5" />
-								กลับ
+								ย้อนกลับ
 							</Button>
 							{#if isServiceFinalized}
-								<div class="flex items-center gap-2">
-									<span
-										class="rounded-full bg-emerald-100 px-3 py-1 text-xs font-bold text-emerald-800"
-									>
-										✓ บันทึกผลผลิตเรียบร้อยแล้ว
-									</span>
-									<Button variant="default" onclick={() => goto(resolve('/back-office/kitchen'))}>
-										กลับหน้ารวมมื้ออาหาร
-									</Button>
-								</div>
+								<span
+									class="rounded-full bg-emerald-100 px-3 py-1 text-xs font-bold text-emerald-800"
+								>
+									✓ บันทึกผลผลิตเรียบร้อยแล้ว
+								</span>
 							{:else}
 								<Button
 									class="gap-1.5 bg-primary shadow-sm"
