@@ -59,7 +59,9 @@ services:
       - ../deployment/tent/mongodb/data:/data/db
     # No port binding — reachable only inside Docker network
     healthcheck:
-      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      # mongosh is a ~150 MB Node process per probe; stalled probes piled up to 4.5 GB and
+      # caused the 2026-11-08 staging OOM. A TCP connect costs a few MB.
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/27017"]
       interval: 5s
       timeout: 3s
       retries: 10
