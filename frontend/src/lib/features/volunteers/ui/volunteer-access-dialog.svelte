@@ -86,7 +86,8 @@
 	const expiryRange = $derived(grantExpiryRange());
 	// Access is first given, or given again, only once the identity is verified in this shelter
 	// (#1044), whoever grants. Editing or revoking a grant the account already holds stays open
-	// (CR-221 FR-3), so `blockedReason` below checks it only while the account is not `active`.
+	// (CR-221 FR-3), so `blockedReason` below checks it only while the account holds no grant here:
+	// a grant beside a manager's permanent role is a new one (A1-2).
 	const unverifiedHere = $derived(identityVerificationStatus(volunteer) !== 'verified');
 	// Any grant in this shelter can be taken back here, whoever issued it (FR-17); a role a manager
 	// gave has no grant and is changed on the users page (FR-16).
@@ -103,8 +104,8 @@
 	const grants = $derived(grantsQuery.data?.grants ?? []);
 	// Where the volunteer stands here (#1044): drives the title, the save label and the note.
 	const standing = $derived(limited ? accessState(grantsQuery.data ?? null) : accessState(null));
-	// Roles a manager gave here: shown but not selectable, and the server refuses a save while the
-	// account holds one (FR-4, FR-16); revoking a grant stays open.
+	// Roles a manager gave here: shown but not selectable, and the server refuses a grant of one
+	// (CR-221 A1-2). Any other role may be granted beside them; revoking a grant stays open.
 	const permanentRoles = $derived(standing.kind === 'active' ? standing.permanentRoles : []);
 	// CR-221 FR-10: an account that already exists (standing `active` / `lapsed`; for SM / SA, the
 	// profile's link) shows its username read-only and asks for no password. Until the grants view
@@ -121,7 +122,9 @@
 			? ([...grants].sort((a, b) => Date.parse(b.expires_at) - Date.parse(a.expires_at))[0] ?? null)
 			: null
 	);
-	const holdsManagerRole = $derived(limited && permanentRoles.length > 0);
+	/** Empty until the grantor picks one: no role is preselected (#1072). */
+	let role = $state<StaffCapability | ''>('');
+	const pickedManagerRole = $derived(limited && role !== '' && permanentRoles.includes(role));
 	// A closed profile is reopened before it can be given access (CR-221 FR-21, FR-9).
 	const profileClosed = $derived(volunteer.status === 'inactive');
 	const blockedReason = $derived(
@@ -129,9 +132,9 @@
 			? INACTIVE_PROFILE_MESSAGE
 			: phoneBlocksAccess
 				? VOLUNTEER_ACCESS_PHONE_MESSAGE
-				: unverifiedHere && standing.kind !== 'active'
+				: unverifiedHere && grants.length === 0
 					? 'อาสาสมัครยังไม่ยืนยันตัวตนในศูนย์นี้ กรุณายืนยันตัวตนก่อนจึงจะออกสิทธิ์ได้'
-					: holdsManagerRole
+					: pickedManagerRole
 						? MANAGER_GIVEN_NOTE
 						: null
 	);
@@ -160,8 +163,6 @@
 
 	let email = $state('');
 	let showPassword = $state(false);
-	/** Empty until the grantor picks one: no role is preselected (#1072). */
-	let role = $state<StaffCapability | ''>('');
 	let roleError = $state<string | null>(null);
 	let password = $state('');
 	let passwordError = $state<string | null>(null);
@@ -222,11 +223,17 @@
 		}
 		pending = true;
 		try {
-			const result = await grantVolunteerAccess(volunteer, parsed.data);
+			const result = await grantVolunteerAccess(
+				volunteer,
+				parsed.data,
+				authStore.user?.roles ?? []
+			);
 			toast.success(
 				result.created
 					? `สร้างบัญชี (${parsed.data.email}) และออกสิทธิ์แล้ว`
-					: `ผูกบัญชี (${parsed.data.email}) แล้ว รหัสผ่านเดิมไม่เปลี่ยนแปลง`
+					: result.roleAdded
+						? `ออกสิทธิ์ให้บัญชี (${parsed.data.email}) แล้ว รหัสผ่านเดิมไม่เปลี่ยนแปลง`
+						: `ผูกบัญชี (${parsed.data.email}) แล้ว รหัสผ่านเดิมไม่เปลี่ยนแปลง`
 			);
 			password = '';
 			open = false;
@@ -325,7 +332,11 @@
 				>
 					<p class="font-semibold">บัญชี ({grantedAccount}) มีสิทธิ์ในศูนย์นี้อยู่แล้ว</p>
 					<p class="mt-0.5 text-xs">
-						เลือกบทบาทและวันหมดอายุใหม่เพื่อแก้ไขหรือต่ออายุ บทบาทที่เลือกจะแทนที่บทบาทเดิม
+						{#if grants.length > 0}
+							เลือกบทบาทและวันหมดอายุใหม่เพื่อแก้ไขหรือต่ออายุ บทบาทที่เลือกจะแทนที่บทบาทเดิม
+						{:else}
+							เลือกบทบาทและวันหมดอายุเพื่อออกสิทธิ์ชั่วคราวเพิ่มจากสิทธิ์ถาวร
+						{/if}
 					</p>
 					{#if standing.permanentRoles.length > 0}
 						<p class="mt-1 text-xs">

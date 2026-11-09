@@ -16,7 +16,8 @@ import {
 	mergeEdgeShelters,
 	mergeShelterAssignment,
 	rolesFromAssignments,
-	shelterCodeFromRoles
+	shelterCodeFromRoles,
+	shelterCodesFromRoles
 } from '$lib/auth/roles';
 import { normalizeThaiPhone, THAI_MOBILE_PHONE_MESSAGE } from '$lib/db/model';
 import {
@@ -492,10 +493,40 @@ export async function createUser(input: {
  */
 export async function createOrMergeUser(
 	input: Parameters<typeof createUser>[0],
-	caller: Caller
+	caller: Caller,
+	options: VolunteerRoleOptions
 ): Promise<{ merged: boolean }> {
+	if (input.personnel_type === 'volunteer') {
+		for (const code of shelterCodesFromRoles(input.roles)) {
+			if (capabilitiesForShelter(input.roles, code).length === 0) {
+				throw new ServiceError(
+					'VALIDATION',
+					`บัญชีจิตอาสาไม่สามารถถือสิทธิ์ประจำศูนย์ ${code} โดยไม่มีบทบาทหน้าที่ได้`
+				);
+			}
+		}
+		const issued = addedShelterRoles([], input.roles);
+		if (issued.length > 0) {
+			if (!input.volunteer_id) {
+				throw new ServiceError('VALIDATION', 'อาสาสมัครต้องยืนยันตัวตนก่อนจึงจะออกสิทธิ์ได้');
+			}
+			const shelters = [...new Set(issued.map((r) => r.shelter_code))];
+			await options.verifyVolunteerRoles(shelters, input.volunteer_id);
+		}
+	}
 	try {
 		await createUser(input);
+		if (input.personnel_type === 'volunteer') {
+			try {
+				await auditPermanentRoles(input.name, addedShelterRoles([], input.roles), caller.name);
+			} catch (auditErr) {
+				// Rollback newly created user doc so we never leave an account with permanent roles
+				// that was not audited (W1 / fail-closed / retry-safe).
+				const doc = await readUserDoc(input.name, 'rollback unaudited user');
+				await adminRaw(`/_users/${userDocId(input.name)}?rev=${doc._rev}`, 'DELETE');
+				throw auditErr;
+			}
+		}
 		return { merged: false };
 	} catch (e) {
 		if (!(e instanceof ServiceError) || e.code !== 'CONFLICT' || caller.isSA) throw e;
@@ -505,12 +536,31 @@ export async function createOrMergeUser(
 		if (!code) throw e;
 		const caps = capabilitiesForShelter(input.roles, code);
 		if (caps.length === 0) throw e;
+		// The account named must be the one the request means: a volunteer profile only merges
+		// into its own active volunteer account (CR-221 A1-4), never another person's.
+		if (input.volunteer_id || input.personnel_type === 'volunteer') {
+			const existing = await readUserDoc(input.name, 'read user');
+			if (
+				(existing.volunteer_id ?? null) !== (input.volunteer_id ?? null) ||
+				existing.personnel_type !== 'volunteer' ||
+				existing.active === false
+			) {
+				throw new ServiceError(
+					'FORBIDDEN',
+					'อีเมลนี้มีบัญชีอยู่แล้วหรือสิทธิ์ไม่ตรงกัน กรุณาจัดการผ่านหน้าผู้ใช้งาน'
+				);
+			}
+		}
+		// A manager's merge gives the role for good: a coordinator grant of the same role becomes
+		// permanent instead of lapsing or being replaced later (CR-221 A1).
 		await updateUser(
 			input.name,
 			{
-				roles: input.roles
+				roles: input.roles,
+				permanent_roles: caps.map((cap) => compoundCapabilityRole(code, cap))
 			},
-			caller
+			caller,
+			options
 		);
 		return { merged: true };
 	}
@@ -628,22 +678,19 @@ export async function grantCoordinatorRole(input: {
 	const roles = existing.roles ?? [];
 	const previous = grantFor(existing.role_grants, code, grant.role);
 	const hasRole = hasCapabilityInShelter(roles, code, grant.role);
-	// A volunteer account holds one role per shelter (CR-221 FR-4): a role a manager gave (no
-	// grant) here is not the coordinator's to change or to add a second one beside (FR-16, FR-17).
-	if (
-		capabilitiesForShelter(roles, code).some(
-			(cap) => grantFor(existing.role_grants, code, cap) === null
-		)
-	) {
-		throw new ServiceError('FORBIDDEN', 'ผู้จัดการศูนย์เป็นผู้ให้ แก้ไขได้ที่หน้าผู้ใช้งาน');
+	// A role a manager gave here (no grant) stays the manager's (CR-221 A1-2): a grant of the same
+	// role would share its compound role, and its expiry would take the permanent role with it.
+	// Other roles may still be granted beside it.
+	if (hasRole && previous === null) {
+		throw new ServiceError('FORBIDDEN', 'ตำแหน่งนี้ผู้จัดการศูนย์ให้ไว้แล้ว');
 	}
 	// Any coordinator of the shelter may renew or shorten any grant here (CR-221 FR-17); the issuer
 	// stays on the grant and the audit records the caller as `actor`.
 	const shortened =
 		previous !== null && Date.parse(grant.expires_at) < Date.parse(previous.expires_at);
-	// A volunteer holds one coordinator role per shelter (draft CR #1046 FR-4, FR-18): picking
-	// another role replaces the coordinator grants here in this same write, so the shelter scope
-	// never lapses in between. Roles a manager gave (no grant) stay as they are.
+	// A volunteer holds one coordinator grant per shelter (CR-221 FR-18, A1-1): picking another
+	// role replaces the coordinator grants here in this same write, so the shelter scope never
+	// lapses in between. Roles a manager gave (no grant) stay as they are.
 	const replaced = (existing.role_grants ?? []).filter(
 		(g) => g.shelter_code === code && g.role !== grant.role
 	);
@@ -981,6 +1028,15 @@ export async function deleteUser(name: string, caller: Caller): Promise<void> {
 	if (res.status >= 400) throw serviceErrorFromCouch('delete user', res.status, res.data);
 }
 
+/** How a save checks roles it newly gives a volunteer account (CR-221 A1-7). Required: no default. */
+export type VolunteerRoleOptions = {
+	/**
+	 * Checks the linked profile is verified in these shelters, before anything is written; throws to
+	 * refuse. Lives with the volunteers feature, so callers pass it in.
+	 */
+	verifyVolunteerRoles: (shelterCodes: string[], volunteerId: string) => Promise<void>;
+};
+
 /** Update an existing user. Managers merge roles for their shelter only. */
 export async function updateUser(
 	name: string,
@@ -1005,7 +1061,8 @@ export async function updateUser(
 		/** Compound roles (`SHxxx:<role>`) to make permanent: their coordinator grant is removed. */
 		permanent_roles?: string[];
 	},
-	caller: Caller
+	caller: Caller,
+	options: VolunteerRoleOptions
 ): Promise<void> {
 	const doc = await readUserDoc(name, 'read user');
 
@@ -1032,7 +1089,10 @@ export async function updateUser(
 			// Add-from-outside: a target not yet in this shelter may only be pulled in via `roles`.
 			// Allow-list (not deny-list) so any other/new field is rejected by default; a mixed
 			// request (roles + any other field) is rejected whole, never partially applied.
-			const extra = Object.entries(input).filter(([k, v]) => k !== 'roles' && v !== undefined);
+			// `permanent_roles` rides with a merge's roles and is limited to the manager's shelter below.
+			const extra = Object.entries(input).filter(
+				([k, v]) => k !== 'roles' && k !== 'permanent_roles' && v !== undefined
+			);
 			if (!input.roles || extra.length > 0) {
 				throw new ServiceError(
 					'FORBIDDEN',
@@ -1071,6 +1131,40 @@ export async function updateUser(
 		nextRoles ?? doc.roles ?? [],
 		permanentRoles
 	);
+	// A role newly given to a volunteer account is permanent, so it needs the identity check a
+	// coordinator grant needs, and leaves an audit (CR-221 A1-7, A1-8). Keeping, removing or making
+	// a role permanent adds nothing. Switching the account to or from volunteer in the same save
+	// does not slip past it: becoming a volunteer issues every role it keeps (CR-221 A1).
+	const volunteerBefore = doc.personnel_type === 'volunteer';
+	const volunteerAfter = (input.personnel_type ?? doc.personnel_type) === 'volunteer';
+	if (volunteerAfter && (nextRoles !== undefined || !volunteerBefore)) {
+		const rawRoles = nextRoles ?? doc.roles ?? [];
+		for (const code of shelterCodesFromRoles(rawRoles)) {
+			if (capabilitiesForShelter(rawRoles, code).length === 0) {
+				throw new ServiceError(
+					'VALIDATION',
+					`บัญชีจิตอาสาไม่สามารถถือสิทธิ์ประจำศูนย์ ${code} โดยไม่มีบทบาทหน้าที่ได้`
+				);
+			}
+		}
+	}
+	const issued =
+		volunteerBefore || volunteerAfter
+			? addedShelterRoles(volunteerBefore ? (doc.roles ?? []) : [], nextRoles ?? doc.roles ?? [])
+			: [];
+	// The profile the account is linked to before the save counts too, so clearing or swapping
+	// `volunteer_id` in the same save cannot skip the check (fail-closed).
+	const profileIds = [doc.volunteer_id, input.volunteer_id].filter(
+		(id, i, all): id is string =>
+			typeof id === 'string' && id.trim() !== '' && all.indexOf(id) === i
+	);
+	if (issued.length > 0) {
+		if (profileIds.length === 0) {
+			throw new ServiceError('VALIDATION', 'อาสาสมัครต้องยืนยันตัวตนก่อนจึงจะออกสิทธิ์ได้');
+		}
+		const shelters = [...new Set(issued.map((r) => r.shelter_code))];
+		for (const volunteerId of profileIds) await options.verifyVolunteerRoles(shelters, volunteerId);
+	}
 
 	const updatedDoc = {
 		...doc,
@@ -1105,8 +1199,11 @@ export async function updateUser(
 		delete updatedDoc.salt;
 	}
 
+	// Permanent roles leave an audit record before giving the role in _users (W1 / fail-closed / retry-safe).
+	await auditPermanentRoles(name, issued, caller.name);
+
 	const res = await adminRaw(`/_users/${userDocId(name)}`, 'PUT', updatedDoc);
-	if (res.status >= 400) throw serviceErrorFromCouch('update user', res.status, res.data);
+	assertGrantWritten('update user', res);
 
 	await auditDroppedGrants(
 		name,
@@ -1116,6 +1213,43 @@ export async function updateUser(
 		permanentRoles,
 		caller.name
 	);
+}
+
+/** The roles `after` holds in a shelter that `before` did not hold there (compound or legacy flat). */
+function addedShelterRoles(
+	before: readonly string[],
+	after: readonly string[]
+): { shelter_code: string; role: string }[] {
+	return shelterCodesFromRoles(after).flatMap((code) => {
+		const held = new Set<string>(capabilitiesForShelter(before, code));
+		return capabilitiesForShelter(after, code)
+			.filter((role) => !held.has(role))
+			.map((role) => ({ shelter_code: code, role }));
+	});
+}
+
+/** One `role_grant.permanent_issued` audit per role a manager newly gave a volunteer (A1-8). Fail-closed so an audit failure prevents giving the role without an audit record (W1). */
+async function auditPermanentRoles(
+	name: string,
+	issued: readonly { shelter_code: string; role: string }[],
+	actor: string
+): Promise<void> {
+	for (const { shelter_code, role } of issued) {
+		const ok = await recordRoleGrantAudit({
+			shelter_code,
+			user_name: name,
+			reason: 'role_grant.permanent_issued',
+			role,
+			expires_at: null,
+			actor
+		});
+		if (!ok) {
+			throw new ServiceError(
+				'INTERNAL',
+				`ไม่สามารถบันทึกประวัติการออกสิทธิ์ถาวรในศูนย์ ${shelter_code} ได้ กรุณาลองใหม่อีกครั้ง`
+			);
+		}
+	}
 }
 
 /** Audit every grant a manager save dropped: made permanent on purpose, or revoked with its role. */
