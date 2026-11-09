@@ -1,11 +1,11 @@
 ---
-id: draft
+id: CR-243
 title: ปิดศูนย์ด้วย durable job — เช็คเอาต์คนในศูนย์ผ่าน shelter-close-worker แทนการทำใน request เดียว
-status: proposed
+status: approved
 date: 2026-11-06
 updated: 2026-11-10
 requested_by: Dev Team B issue #1216 (ต่อยอด CR-219 / #986)
-decided_by: 
+decided_by: kong
 layer: stable
 affects:
   - docs/data/schema.md (doc type ใหม่ `shelter_close_job` / `shelter_close_lock` ใน `central_ops`) · data-model.md
@@ -239,6 +239,7 @@ internal route ที่ใช้ token + Node worker poll พร้อม lease
 - 2026-11-06 — proposed (draft) จาก issue #1216 (D-9 ใน issue: ทำ CR ตอนเริ่ม implement)
 - 2026-11-10 — แก้ตาม review PR #1217: เพิ่ม FR-3a (เคลียร์ lock ค้าง + `SHELTER_CLOSE_STALE_MS`), FR-8 ผูก job
   กับศูนย์ใน path (`404`), FR-10 / FR-10a (`requested_by` ของ backfill และ `createdBy` ของ worker), AC-13..AC-15
+- 2026-11-10 — approved โดย kong เป็น CR-243 (track ด้วยไฟล์ CR · stable-core review ผ่าน)
 
 ### ตัดสินแล้วใน #1216
 
@@ -256,8 +257,7 @@ internal route ที่ใช้ token + Node worker poll พร้อม lease
 | D-10 | ค่า budget/lease/failures | เป็น env ตามตาราง Env | hardcode |
 | D-11 | Test seam | fake CouchDB ใหม่ · S-10 (load ~5,000) อยู่ใน scope | แก้ `FakeCouch` เดิม |
 
-### ยังไม่ตัดสิน
+### ตัดสินตอน approve (kong, 2026-11-10)
 
-> [NEEDS DECISION: วิธี track — CR ไฟล์ (ร่างนี้) / Notion / `decision sync` note; owner ต้องยืนยันตาม `docs/change-management.md` §6]
->
-> [NEEDS DECISION: stable-core review ก่อน approve (doc type ใหม่ + internal route + service ใหม่)]
+- วิธี track: ไฟล์ CR นี้ (CR-243)
+- stable-core review (doc type ใหม่ + internal route + service ใหม่): ผ่าน
