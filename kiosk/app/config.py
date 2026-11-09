@@ -61,6 +61,16 @@ FACE_CHECK_MODES = ("off", "on")
 FACE_CHECK_FLOWS = ("check_in", "walk_in")
 
 
+def is_loopback_host(hostname: str) -> bool:
+    """localhost / 127.0.0.0/8 / ::1 — origins Chromium treats as secure even over plain HTTP."""
+    if hostname in LOOPBACK_HOSTNAMES:
+        return True
+    try:
+        return ipaddress.ip_address(hostname).is_loopback
+    except ValueError:
+        return False
+
+
 def _is_trusted_plaintext_host(hostname: str) -> bool:
     """HTTP is only auto-allowed for loopback / private-LAN hosts — the on-site edge
     fallback and dev boxes. A DNS hostname (e.g. a public domain) must use HTTPS unless
