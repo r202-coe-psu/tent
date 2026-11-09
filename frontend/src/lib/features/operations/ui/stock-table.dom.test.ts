@@ -23,7 +23,8 @@ const mocks = vi.hoisted(() => ({
 	roles: [] as string[],
 	search: '',
 	ledger: null as unknown[] | null,
-	balance: null as Map<string, string> | null
+	balance: null as Map<string, string> | null,
+	incoming: undefined as unknown
 }));
 
 const q = <T>(data: T) => ({ data, isLoading: false });
@@ -40,7 +41,8 @@ vi.mock('../application/queries', () => ({
 	useStockBalance: () => q(mocks.balance ?? new Map([['item_master:rice', '10']])),
 	useLedger: () => q(mocks.ledger ?? RICE_LEDGER),
 	useCrossShelterStockBalances: () => q([]),
-	useCrossShelterLedger: () => q([])
+	useCrossShelterLedger: () => q([]),
+	useIncomingStock: () => mocks.incoming ?? q(undefined)
 }));
 vi.mock('$lib/features/supply', () => ({
 	useSupplyItems: () => q([]),
@@ -128,12 +130,12 @@ beforeEach(() => {
 	mocks.ledger = null;
 	mocks.balance = null;
 	mocks.search = '';
+	mocks.incoming = undefined;
 });
 
-afterEach(async () => {
+afterEach(() => {
 	if (instance) unmount(instance);
 	instance = null;
-	await new Promise((resolve) => setTimeout(resolve, 50));
 });
 
 describe('StockTable movement buttons (CR-227)', () => {
@@ -251,5 +253,28 @@ describe('StockTable "ซื้อเอง" filter (#1187)', () => {
 		// The header keeps the total next to the self-purchased part.
 		expect(sheet).toContain('210');
 		expect(sheet).toContain('ซื้อเอง 10');
+	});
+});
+
+describe('StockTable incoming switch (#1153)', () => {
+	const alerts = () =>
+		[...document.body.querySelectorAll('[role=alert]')].map((e) => e.textContent);
+
+	it('says so when incoming goods cannot be loaded, instead of showing nothing', async () => {
+		mocks.incoming = { data: undefined, isLoading: false, isError: true, error: new Error('x') };
+		await render(['system_admin'], '?incoming=1');
+		expect(alerts().join()).toContain('โหลดของที่กำลังมาไม่สำเร็จ');
+	});
+
+	it('stays quiet while the switch is off, even if the query errored before', async () => {
+		mocks.incoming = { data: undefined, isLoading: false, isError: true, error: new Error('x') };
+		await render(['system_admin'], '');
+		expect(alerts()).toEqual([]);
+	});
+
+	it('is off in the "ซื้อเอง" view, so no incoming error shows there', async () => {
+		mocks.incoming = { data: undefined, isLoading: false, isError: true, error: new Error('x') };
+		await render(['system_admin'], '?incoming=1&sp=1');
+		expect(alerts()).toEqual([]);
 	});
 });
