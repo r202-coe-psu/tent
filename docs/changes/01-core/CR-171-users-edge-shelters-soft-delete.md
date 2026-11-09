@@ -3,9 +3,9 @@ id: CR-171
 title: "`_users.edge_shelters` + soft delete — ถอดสิทธิ์/ลบ user ที่ central ต้องตามไปถึง edge"
 status: approved
 date: 2026-10-17
-updated: 2026-11-04
+updated: 2026-11-09
 requested_by: ทีม (review PR #348 edge replication — ข้อจำกัด A ใน docs/couchdb-replication/README.md §7)
-decided_by: "@net-lynx (project owner) — อนุมัติ 2026-10-18"
+decided_by: "@net-lynx (project owner) — อนุมัติ 2026-10-18 · amendment #1179: kong — อนุมัติ 2026-11-09"
 layer: stable
 affects:
   - docs/data/schema.md §6 (`_users` — field ใหม่ `edge_shelters`, `deleted_at`, `deleted_by` + กฎ soft delete)
@@ -20,6 +20,8 @@ affects:
   - frontend/scripts/seed/users.ts (dev parity)
   - scripts/edge-init.sh (selector ของ job `users_<code>_pull`)
   - docs/couchdb-replication/README.md §7, SETUP-EDGE.md
+  - frontend/src/lib/server/edge-mode.ts (ใหม่ — `assertUsersWritable`, FR-13) + guard ที่ทุก writer ใน user-service.ts / staff-card-service.ts, `touch*Verified` no-op (FR-14) (amendment #1179)
+  - docs/features/edge-disaster-continuity-idea.md §6 (OD-6 ต่อ), §7.D D5, Decision log · docs/couchdb-replication/README.md §7 A2 (amendment #1179)
 related:
   - docs/changes/01-core/CR-064-edge-disaster-continuity.md
   - docs/changes/01-core/CR-093-multi-shelter-compound-roles.md
@@ -31,6 +33,9 @@ related:
 > ใน `_users` แล้วให้ job `users_<code>_pull` ของ edge กรองด้วย field นี้แทน `roles` · "ลบ user" ทุกเส้นทางเปลี่ยนเป็น
 > **soft delete** (ถอด role, สุ่มรหัส, `deleted_at`) ห้าม `DELETE` · ผล: ถอดสิทธิ์/ลบที่ central ไหลถึง edge ผ่าน
 > replication เดิม · dev แก้ `user-service.ts` + OAuth login + `edge-init.sh` + backfill script · ไม่ bump `schema_v`
+>
+> **Amendment 2026-11-09 (#1179):** เพิ่ม FR-13–FR-17 — `EDGE_MODE=true` ทำให้ BFF **ปฏิเสธทุกเส้นที่เขียน `_users`**
+> (อ่าน/login ปกติ) เพราะ `users_<code>_pull` เป็นทางเดียว central → edge: เขียนที่ edge ทำให้ doc conflict แล้ว login ไม่ได้ (A2)
 
 ## Why
 
@@ -99,6 +104,44 @@ related:
   guard เดียวกันปฏิเสธการ `DELETE` doc user จาก non-admin ด้วย (บังคับ FR-3 ฝั่ง CouchDB — self-DELETE ทิ้ง tombstone
   ที่ไม่ผ่าน selector ของ edge) · ไม่ bump version เพราะ v2 ยังไม่เคย deploy.
 
+#### Amendment #1179 — `EDGE_MODE` (decision 2026-10-18, kong อนุมัติ amendment 2026-11-09)
+
+เหตุ: `users_<code>_pull` ทางเดียว (central → edge). frontend ที่ edge ถือ `COUCHDB_ADMIN_URL` จึงเขียน `_users` ได้ → แก้ที่ edge
+แล้วมี revision จาก central มาทีหลัง = doc **conflict** → CouchDB ตอบ `User document conflicts must be resolved…` และ user
+login ไม่ได้ (ทดสอบ CouchDB 3.5, 2026-10-18). ขอบเขต: **BFF อย่างเดียว** (VDU ไม่เกี่ยว).
+
+- **FR-13** ตัวแปร `EDGE_MODE` (`$env/dynamic/private`; เปิดเมื่อค่า `"true"` เท่านั้น, ไม่ตั้ง = ปิด = central). เมื่อเปิด:
+  ทุก writer ที่ PUT/POST `_users` ใน BFF ต้องเรียก `assertUsersWritable()` (`$lib/server/edge-mode.ts`) **เป็นบรรทัดแรก**
+  (ก่อนอ่าน doc / เรียก CouchDB) แล้ว throw `ServiceError('FORBIDDEN', 'แก้ไขบัญชีได้เฉพาะที่ระบบกลาง')` → HTTP 403 ทุกเส้นด้านล่าง.
+  ห้ามเช็กที่ route แต่ละตัว (กันหลุดเมื่อมี route ใหม่เรียก service เดิม) — จุดเดียวที่ service.
+- **FR-14** `touchGoogleMfaVerified` / `touchThaidMfaVerified` เมื่อ `EDGE_MODE` → **return เงียบ ๆ ไม่เขียน ไม่ throw**
+  (OAuth login + step-up ที่ edge ทำงานต่อได้ — mint session ใช้แค่ `salt` ที่อ่านมา). เหตุผลที่ไม่ปิด OAuth login ที่ edge:
+  `verified_at` ไม่มีโค้ดใดอ่าน (มีแต่เขียน — `grep verified_at` 2026-11-09) การข้ามจึงไม่เสียพฤติกรรมใด; ปิด OAuth login = ตัดทางเข้าตอน
+  ลืมรหัสผ่านโดยไม่ได้อะไรคืน. ผลข้างเคียง: `verified_at` ของ doc ที่ edge ไม่ขยับ (central ก็ไม่ได้ค่านี้จาก edge เพราะ pull ทางเดียว).
+- **FR-15** เส้นที่ **ปฏิเสธ** เมื่อ `EDGE_MODE` (ไล่จาก `adminRaw(... /_users/...)` ทุกจุด, 2026-11-09):
+
+  | เส้น | writer | หมายเหตุ |
+  | --- | --- | --- |
+  | `POST/PUT/DELETE /api/v1/users` | `createOrMergeUser`/`createUser`, `updateUser`, `deleteUser` | รวม soft delete (FR-3) |
+  | `POST /api/v1/users/reset-password` | `resetUserPasswordByAdmin` | |
+  | `POST /api/v1/users/staff-card/rotate` | `rotateStaffCard` (`staff_token_hash`) | **อ่าน**บัตร/สแกนบัตร (`resolveStaffCard`, `getMyCard`, `getStaffCardForAdmin`) ยังทำงาน |
+  | `PATCH /api/v1/auth/me` | `updateOwnProfile` | เส้นเดียวกับ "`/api/v1/me`" ในรายการเดิมของ issue — `/api/v1/me` จริงเป็น GET อย่างเดียว |
+  | `POST /api/v1/auth/forgot-password` | `verifySecurityQuestionAndResetPassword` | `getSecurityQuestionChallenge` (อ่าน) ยังทำงาน แต่ UI ควรแจ้งว่าตั้งรหัสใหม่ได้ที่ระบบกลาง |
+  | `POST /api/v1/auth/force-setup` | `setupSecurityQuestionAndResetPassword` | = A3 login ครั้งแรก (`must_change_password`) ถูกบล็อก → activate ที่ central ก่อนเปิดศูนย์ |
+  | `POST /api/v1/auth/link-account` | `linkGoogleMfa` / `linkThaidMfa` | OAuth login ที่ยังไม่ผูก → ไป `/login/link` ได้แต่ผูกไม่ได้ |
+  | `GET /api/v1/auth/oauth/{google,thaid}/callback` โหมด `link` | `linkGoogleMfa` / `linkThaidMfa` | โหมด login / step-up ไม่อยู่ในรายการนี้ (ดู FR-14, FR-16) |
+  | `POST /api/v1/auth/oauth/{google,thaid}/unlink` | `unlinkGoogleMfa` / `unlinkThaidMfa` | ทั้งตัวเอง และ SA/SM unlink ให้คนอื่น = "MFA clear" ในรายการ PO |
+  | `POST/DELETE /api/v1/volunteer-access` | `createUser`, `grantCoordinatorRole`, `revokeCoordinatorGrant` | **แก้รายการเดิมของ issue**: `/api/v1/shelters/[code]/staff` เป็น `GET` อย่างเดียว — เส้นเขียน `roles`/`role_grants` คือ volunteer-access |
+  | `POST /api/register` | — | ปิดอยู่แล้ว (404, #474) — ไม่ต้องทำอะไร |
+
+- **FR-16** เส้นที่ **ทำงานปกติ** (ไม่เขียน `_users`): login ด้วยชื่อ/เบอร์ (`POST /api/v1/auth/resolve-login` → CouchDB `_session`), `GET /api/v1/auth/me`,
+  `GET /api/v1/me`, `POST /api/v1/auth/mfa/{clear,skip}` (cookie เท่านั้น), OAuth login + step-up (Google, ThaID — ตาม FR-14),
+  ทุก `GET`/`listUsers`/`listShelterStaffDirectory`/`readVolunteerAccount` (อ่าน).
+- **FR-17** ไม่อยู่ในขอบเขต `EDGE_MODE`: `ensurePublicWriter` / `ensurePrintingService` (เรียกจาก `scripts/seed/users.ts`, `scripts/redeploy-access.ts`
+  เท่านั้น — ไม่ใช่ BFF runtime; `shelter-close` / `registry-redeploy` import แค่ type `CouchReq`) และ
+  `_users/_design/tent_guard` (deploy จาก central ด้วย `sync:central`). ห้ามรันสคริปต์เหล่านี้กับ CouchDB ของ edge (runbook).
+  จำกัดที่เหลือ: เขียน `_users` ตรง (Fauxton / admin API) ที่ edge ยังข้ามได้ — เหมือนข้อจำกัดเดิมของ CR นี้.
+
 ### Acceptance
 
 - สร้าง user `shelter:SH001` → doc มี `edge_shelters: ["SH001"]`; เพิ่ม SH002 → `["SH001","SH002"]`; ถอด SH001 → ยัง
@@ -111,12 +154,16 @@ related:
 - edge (CouchDB 3.5): ถอด role / soft delete ที่ central → doc ที่ edge ได้ revision ใหม่ (`roles: []`) ภายในรอบ
   replication และ login ที่ edge ไม่ผ่าน.
 - `backfill:edge-shelters --write` รอบสองรายงาน 0 doc เปลี่ยน.
+- (#1179) `EDGE_MODE=true`: ทุกเส้นใน FR-15 ตอบ 403 "แก้ไขบัญชีได้เฉพาะที่ระบบกลาง" และ `_users` doc ไม่ถูกเขียน (ไม่มี revision ใหม่);
+  login ด้วยชื่อและเบอร์, `GET auth/me`, OAuth login/step-up ผ่านและไม่เขียน `_users`; unit test ต่อ writer แต่ละตัวใน `user-service.ts` +
+  `staff-card-service.ts` (throw ก่อนเรียก `adminRaw`) และ test ล็อกว่า writer ใหม่ทุกตัวที่ PUT `_users` ต้องผ่าน `assertUsersWritable`.
+- (#1179) `EDGE_MODE` ไม่ตั้ง/`false`: พฤติกรรมเดิมทุกเส้น (regression test).
 
 ## Impact
 
 - **Code:** ตาม `affects`. Unit test: `roles.test.ts` (`mergeEdgeShelters`), `user-service.test.ts` (FR-1–FR-7),
   OAuth resolve (FR-8).
-- **Docs:** schema.md §6, data-model.md §1 แถว `_users`, README §7 ข้อจำกัด A → แก้ด้วย CR นี้ (เหลือช่องที่ระบุด้านล่าง).
+- **Docs:** (amendment #1179) idea doc §6/§7.D D5/Decision log + replication README §7 A2 ชี้มาที่ FR-13–FR-17 ของ CR นี้ · schema.md §6, data-model.md §1 แถว `_users`, README §7 ข้อจำกัด A → แก้ด้วย CR นี้ (เหลือช่องที่ระบุด้านล่าง).
 - **พฤติกรรม UI:** ปุ่มลบ user ยังเป็นปุ่มเดิม ผลต่อผู้ใช้เหมือนเดิม (หายจากรายการ, login ไม่ได้).
 - **ข้อจำกัดที่เหลือ (ยอมรับ):**
   - ลบ/แก้ `_users` ตรงผ่าน Fauxton / admin API นอก `user-service` ข้ามกฎนี้ได้ — ห้ามทำใน runbook.
@@ -159,3 +206,8 @@ user ที่ถูก `DELETE` ไปก่อน CR นี้ (tombstone) ไ
 - 2026-11-04 — kong: FR-12 guard ปฏิเสธ non-admin `DELETE` doc user (F9 จาก pre-merge review #348). CouchDB 3.5 default
   ให้ `_users` เป็น admin-only และ `_security` ของ `_users` แก้ไม่ได้ (ทดสอบแล้ว: non-admin เข้า `_users` ไม่ได้เลย)
   จึงเป็น defense in depth ถ้า config เปลี่ยนในอนาคต — ไม่ใช่ช่องโหว่ใน config ปัจจุบัน.
+- 2026-11-09 — kong อนุมัติ amendment ใน #1179 (เพิ่ม FR-13–FR-17 — `EDGE_MODE`). Decisions จากการไล่ call site 2026-11-09:
+  - OAuth login ที่เขียน `verified_at`: **ข้าม `touch*Verified` ตอน edge mode** (FR-14) ไม่ปิด OAuth login ที่ edge — `verified_at` ไม่มีโค้ดอ่าน.
+  - guard อยู่ที่ service (`assertUsersWritable`) ไม่ใช่ที่ route — กัน route ใหม่หลุด.
+  - แก้รายการเส้นใน issue: `updateOwnProfile` = `PATCH /api/v1/auth/me` (ไม่ใช่เส้นแยก), grant/revoke coordinator เข้าผ่าน `/api/v1/volunteer-access` (ไม่ใช่ `shelters/[code]/staff`).
+  - ไม่แตะ VDU, ไม่ bump `schema_v`, ไม่เพิ่ม field. gate เดิมคงอยู่: ห้ามติดตั้ง edge ศูนย์จริงก่อน PR implement edge mode merge.
