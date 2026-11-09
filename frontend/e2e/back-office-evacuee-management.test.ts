@@ -3,7 +3,8 @@
  *
  * Live `@release` on an own `E2E` shelter (not SH001): staff creates the shelter,
  * registers one household at Station 1, then proves the critical path on the
- * evacuee + household tabs (list → search → open detail / edit).
+ * evacuee + household tabs (list → search → open detail / edit) and the
+ * dashboard zone occupancy card.
  *
  * Tags: `@back-office` + `@critical` + `@release`. Runs locally or on a remote
  * target with `ALLOW_REMOTE_WRITES=true` (staging); read-only remote otherwise.
@@ -16,6 +17,7 @@ import { injectSession, routeBrowserCouchThroughApp } from './helpers/login';
 import { fictitiousNationalId, fictitiousPhone } from './helpers/pre-register';
 import { recordCreatedShelter, teardownShelter } from './helpers/public-cleanup';
 import {
+	configureOnsiteShelterViaUi,
 	createShelterViaUi,
 	registerHouseholdViaUi,
 	selectActiveShelter
@@ -31,6 +33,7 @@ const LAST_NAME = `จ5${RUN_ID}`;
 const HEAD_FIRST = `หัวหน้าจ5${RUN_ID}`;
 const MEMBER_FIRST = `สมาชิกจ5${RUN_ID}`;
 const HEAD_FULL = `${HEAD_FIRST} ${LAST_NAME}`;
+const ZONE_NAME = `โซนจ5${RUN_ID}`;
 const PHONE = fictitiousPhone(5);
 const NATIONAL_ID = fictitiousNationalId(Number(String(Date.now()).slice(-11)));
 
@@ -182,6 +185,39 @@ test.describe(
 			await expect(page.getByText(HEAD_FIRST).filter({ visible: true }).first()).toBeVisible({
 				timeout: 30_000
 			});
+		});
+
+		test('dashboard tab shows per-zone occupancy and the capacity gauge (CR-226)', async ({
+			page
+		}) => {
+			test.setTimeout(120_000);
+			expect(shelterCode).toBeTruthy();
+			const admin = await bootstrapAdminSession();
+			await routeBrowserCouchThroughApp(page);
+			await injectSession(page, admin.user, admin.cookie);
+			await selectActiveShelter(page, shelterCode!);
+
+			const zoneCard = page
+				.locator('div.rounded-xl')
+				.filter({ has: page.getByRole('heading', { name: 'ความเต็มรายโซน' }) });
+
+			await page.goto('/back-office/evacuee-management?tab=dashboard');
+			await expect(zoneCard.getByText('ศูนย์นี้ยังไม่มีโซน')).toBeVisible({ timeout: 30_000 });
+			await expect(page.getByRole('heading', { name: 'ภาพรวมความจุ' })).toHaveCount(0);
+
+			await page.goto(`/system-management/shelters/edit/${shelterCode}`);
+			await configureOnsiteShelterViaUi(page, shelterCode!, {
+				zones: [{ name: ZONE_NAME, capacity: 20 }]
+			});
+
+			await page.goto('/back-office/evacuee-management?tab=dashboard');
+			const zoneRow = zoneCard.getByRole('listitem').filter({ hasText: ZONE_NAME });
+			await expect(zoneRow).toBeVisible({ timeout: 30_000 });
+			await expect(zoneRow).toContainText('0 / 20 คน');
+			await expect(zoneRow).toContainText('0%');
+
+			await expect(page.getByRole('heading', { name: 'ภาพรวมความจุ' })).toBeVisible();
+			await expect(page.getByRole('img', { name: 'ใช้ความจุไป 0% (0 จาก 20 คน)' })).toBeVisible();
 		});
 
 		test('Z teardown leaves no E2E shelter from this run', async () => {
