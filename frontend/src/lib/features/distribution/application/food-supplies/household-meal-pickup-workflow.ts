@@ -24,6 +24,12 @@ export interface HouseholdMealPickupInput {
 	/** The member standing at the desk; may be anyone in the household. */
 	collector_id: string;
 	selections: readonly HouseholdMealSelection[];
+	/**
+	 * Expired-QR audit dates (CR-233 A1) for the QR the collector scanned. Only the collector's own
+	 * log carries them: the members collected for were never scanned, so there is no QR to audit.
+	 * CR-233 does not describe the household case; this is #1208's reading, flagged for review.
+	 */
+	collector_qr_override?: FoodDistributionInput['recipient_qr_override'];
 	meal_service_id?: string;
 	recipe_id?: string;
 	notes?: string;
@@ -95,6 +101,8 @@ export async function recordHouseholdMealPickup(
 					household_id: input.household_id,
 					collected_by_recipient_id:
 						selection.evacuee_id === input.collector_id ? undefined : input.collector_id,
+					recipient_qr_override:
+						selection.evacuee_id === input.collector_id ? input.collector_qr_override : undefined,
 					meal_service_id: input.meal_service_id,
 					recipe_id: input.recipe_id,
 					is_override: selection.override_reason !== undefined,

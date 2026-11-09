@@ -1458,6 +1458,34 @@ describe('recordHouseholdMealPickup (#1154)', () => {
 		}
 	});
 
+	it('puts the collector expired-QR override on the collector log only (CR-233 A1)', async () => {
+		const qr = {
+			issued_at: '2026-11-08T06:52:00.000Z',
+			current_printed_at: '2026-11-08T06:53:00.000Z',
+			overridden_at: '2026-11-08T07:00:00.000Z'
+		};
+		await recordHouseholdMealPickup(
+			ticketId,
+			{
+				item_id: 'item:curry',
+				household_id: HOUSEHOLD,
+				collector_id: P2,
+				collector_qr_override: qr,
+				selections: [P1, P2, P3].map((evacuee_id) => ({ evacuee_id }))
+			},
+			CTX,
+			deps()
+		);
+
+		const byRecipient = new Map([...logRepo.logs.values()].map((l) => [l.recipient_id, l]));
+		expect(byRecipient.get(P2)?.recipient_qr_override).toEqual({
+			...qr,
+			overridden_by: CTX.createdBy
+		});
+		expect(byRecipient.get(P1)?.recipient_qr_override).toBeUndefined();
+		expect(byRecipient.get(P3)?.recipient_qr_override).toBeUndefined();
+	});
+
 	it('makes a member who was collected for hit the repeat-meal check when they scan themselves', async () => {
 		await pickup(P1, [{ evacuee_id: P1 }, { evacuee_id: P3 }]);
 

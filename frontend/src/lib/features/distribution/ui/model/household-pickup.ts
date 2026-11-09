@@ -98,6 +98,25 @@ export function buildHouseholdPickupRows(input: {
 	return rows.sort((a, b) => Number(b.isCollector) - Number(a.isCollector));
 }
 
+/** "Received 3 of 4": members already served this meal over all in-shelter members. */
+export function summarizeHouseholdPickup(
+	rows: readonly Pick<HouseholdPickupRow, 'lastDistributedAt'>[]
+): {
+	received: number;
+	total: number;
+} {
+	return {
+		received: rows.filter((r) => r.lastDistributedAt !== undefined).length,
+		total: rows.length
+	};
+}
+
+/** Heading for the household list; falls back when the household doc has no label yet. */
+export function householdHeading(label: string | null | undefined): string {
+	const name = label?.trim();
+	return name ? `ครอบครัว ${name}` : 'ครอบครัวของผู้รับ';
+}
+
 /** Pre-selected: a member who can collect without an override (#1154 R4/R5). */
 export function isPreselected(row: HouseholdPickupRow): boolean {
 	return !row.needsOverride;

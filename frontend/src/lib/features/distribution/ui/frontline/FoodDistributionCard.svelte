@@ -500,6 +500,9 @@
 			menu={selectedMenu}
 			inHandQty={capacitySummary.inHandQty}
 			collectorId={householdCollector.collectorId}
+			collectorQrOverride={recipientSelection?.recipientType === 'evacuee'
+				? recipientSelection.qrOverride
+				: undefined}
 			householdId={householdCollector.householdId}
 			bind:notes={notesInput}
 			{shelterCode}

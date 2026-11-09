@@ -12,18 +12,21 @@
 	import { Label } from '$lib/components/ui/label/index.js';
 	import { itemAllergens, type ItemMaster } from '$lib/features/catalog';
 	import { useMasterData } from '$lib/features/master-data';
-	import { useHouseholdMembers } from '$lib/features/people';
+	import { useHousehold, useHouseholdMembers } from '$lib/features/people';
 	import {
 		useEvacueeAllergies,
 		useRecipientsDistributionLogs,
 		useRecordHouseholdMealPickup
 	} from '../../application/queries';
 	import type { MealPeriod, TicketItem } from '../../domain/food-supplies';
+	import type { FoodDistributionInput } from '../../application/food-supplies/distribution-workflow';
 	import {
 		buildHouseholdPickupRows,
+		householdHeading,
 		isSelectedByDefault,
 		notPreselectedReasons,
-		picksAfterPartialFailure
+		picksAfterPartialFailure,
+		summarizeHouseholdPickup
 	} from '../model/household-pickup';
 	import { formatDistributionError } from '../model/distribution-error';
 
@@ -34,6 +37,8 @@
 		menu: ItemMaster | undefined;
 		inHandQty: string;
 		collectorId: string;
+		/** CR-233 A1: the collector's expired-QR audit dates, recorded on their own log only. */
+		collectorQrOverride?: FoodDistributionInput['recipient_qr_override'];
 		householdId: string;
 		notes: string;
 		shelterCode?: string;
@@ -51,6 +56,7 @@
 		menu,
 		inHandQty,
 		collectorId,
+		collectorQrOverride,
 		householdId,
 		notes = $bindable(''),
 		shelterCode,
@@ -61,6 +67,7 @@
 
 	const mutation = useRecordHouseholdMealPickup();
 
+	const householdQuery = useHousehold(() => householdId);
 	const membersQuery = useHouseholdMembers(() => householdId);
 	const members = $derived(membersQuery.data ?? []);
 	const memberIds = $derived(members.map((m) => m._id));
@@ -125,6 +132,7 @@
 	const isSelected = (row: (typeof rows)[number]) =>
 		picks[key(row.evacueeId)] ?? isSelectedByDefault(row, retryIds);
 	const selectedRows = $derived(rows.filter(isSelected));
+	const summary = $derived(summarizeHouseholdPickup(rows));
 	const missingReason = $derived(
 		selectedRows.some((r) => r.needsOverride && !overrideReasons[key(r.evacueeId)]?.trim())
 	);
@@ -159,6 +167,7 @@
 					item_id: item.item_id,
 					household_id: householdId,
 					collector_id: collectorId,
+					collector_qr_override: collectorQrOverride,
 					notes: notes.trim() || undefined,
 					selections: selectedRows.map((r) => ({
 						evacuee_id: r.evacueeId,
@@ -207,18 +216,26 @@
 		<span class="flex flex-wrap items-center justify-between gap-2">
 			<span class="flex items-center gap-2 text-base font-semibold text-slate-800">
 				<Users class="size-5 text-slate-500" aria-hidden="true" />
-				รับแทนสมาชิกครัวเรือน
+				{householdHeading(householdQuery.data?.label)}
 			</span>
 		</span>
-		<span class="mt-0.5 block text-sm text-slate-500">แสดงเฉพาะสมาชิกที่อยู่ในศูนย์</span>
+		<span class="mt-0.5 block text-sm text-slate-500">
+			รับแทนสมาชิกครอบครัว · แสดงเฉพาะสมาชิกที่อยู่ในศูนย์
+		</span>
 	</legend>
 	{#if !loading && !loadError && rows.length > 0}
-		<p
-			aria-live="polite"
-			class="inline-block rounded-full border border-sky-200 bg-sky-50 px-2.5 py-0.5 text-xs font-semibold text-sky-900 tabular-nums"
-		>
-			เลือก {selectedRows.length} จาก {rows.length} คน
-		</p>
+		<div class="flex flex-wrap gap-2" aria-live="polite">
+			<p
+				class="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-xs font-semibold text-emerald-900 tabular-nums"
+			>
+				รับมื้อนี้แล้ว {summary.received} จาก {summary.total} คน
+			</p>
+			<p
+				class="rounded-full border border-sky-200 bg-sky-50 px-2.5 py-0.5 text-xs font-semibold text-sky-900 tabular-nums"
+			>
+				เลือก {selectedRows.length} จาก {rows.length} คน
+			</p>
+		</div>
 	{/if}
 
 	{#if loading}

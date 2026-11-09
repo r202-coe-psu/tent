@@ -4,7 +4,9 @@ import {
 	isPreselected,
 	isSelectedByDefault,
 	notPreselectedReasons,
-	picksAfterPartialFailure
+	householdHeading,
+	picksAfterPartialFailure,
+	summarizeHouseholdPickup
 } from './household-pickup';
 
 const A = 'evacuee:01J0000000000000000000000A';
@@ -149,5 +151,26 @@ describe('isSelectedByDefault', () => {
 	it('unticks a failed member whose write landed after all', () => {
 		const landed = { ...allergic, lastDistributedAt: AT };
 		expect(isSelectedByDefault(landed, new Set([A]))).toBe(false);
+	});
+});
+
+describe('summarizeHouseholdPickup', () => {
+	it('counts members who already received this meal over all in-shelter members', () => {
+		expect(
+			summarizeHouseholdPickup([
+				{ lastDistributedAt: AT },
+				{ lastDistributedAt: AT },
+				{ lastDistributedAt: undefined }
+			])
+		).toEqual({ received: 2, total: 3 });
+		expect(summarizeHouseholdPickup([])).toEqual({ received: 0, total: 0 });
+	});
+});
+
+describe('householdHeading', () => {
+	it('names the household, or falls back when the label is missing', () => {
+		expect(householdHeading(' บ้านสุขใจ ')).toBe('ครอบครัว บ้านสุขใจ');
+		expect(householdHeading(undefined)).toBe('ครอบครัวของผู้รับ');
+		expect(householdHeading('  ')).toBe('ครอบครัวของผู้รับ');
 	});
 });
