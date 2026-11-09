@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { needsCloseOutAction } from './desk-mode';
 import { closeOutGroup, resolveCloseOutGroup, searchTickets } from './ticket-picker';
 
 describe('searchTickets', () => {
@@ -23,9 +24,24 @@ describe('closeOutGroup', () => {
 	it('puts tickets the desk must act on under action', () => {
 		expect(closeOutGroup('DISTRIBUTING')).toBe('action');
 		expect(closeOutGroup('SHIFT_CLOSED')).toBe('action');
-		expect(closeOutGroup('RETURN_COMPLETED')).toBe('action');
+		expect(closeOutGroup('RETURN_COMPLETED')).toBe('waiting');
 		expect(closeOutGroup('RETURN_PENDING_RECEIPT')).toBe('waiting');
 		expect(closeOutGroup('COMPLETED')).toBe('done');
+	});
+
+	it('uses the same rule as the close-out tab badge, so the two counts agree', () => {
+		const statuses = [
+			'DISTRIBUTING',
+			'SHIFT_CLOSED',
+			'RETURN_PENDING_RECEIPT',
+			'RETURN_COMPLETED',
+			'COMPLETED'
+		] as const;
+		for (const status of statuses) {
+			expect(closeOutGroup(status) === 'action').toBe(
+				status === 'DISTRIBUTING' || needsCloseOutAction({ status })
+			);
+		}
 	});
 });
 

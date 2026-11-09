@@ -1,4 +1,5 @@
 import type { RequisitionTicketStatus } from '../../domain/food-supplies';
+import { needsCloseOutAction } from './desk-mode';
 
 /**
  * Tickets whose text contains every word of `query` (any order, case-insensitive), so
@@ -22,14 +23,15 @@ export type CloseOutGroup = 'action' | 'waiting' | 'done';
 
 export const CLOSE_OUT_GROUPS: readonly { id: CloseOutGroup; label: string }[] = [
 	{ id: 'action', label: 'ต้องทำตอนนี้' },
-	{ id: 'waiting', label: 'รอคลังตรวจรับ' },
+	{ id: 'waiting', label: 'รอคลัง' },
 	{ id: 'done', label: 'เสร็จแล้ว' }
 ];
 
+/** The one rule for what the desk must act on: close the shift, then send the leftovers back. */
 export function closeOutGroup(status: RequisitionTicketStatus): CloseOutGroup {
-	if (status === 'RETURN_PENDING_RECEIPT') return 'waiting';
+	if (status === 'DISTRIBUTING' || needsCloseOutAction({ status })) return 'action';
 	if (status === 'COMPLETED') return 'done';
-	return 'action';
+	return 'waiting';
 }
 
 /**
