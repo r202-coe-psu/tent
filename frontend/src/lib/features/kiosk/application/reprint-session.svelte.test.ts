@@ -5,7 +5,11 @@ import {
 	type KioskLookupResponse,
 	type KioskReprintResult
 } from '../data/kiosk-check-in.api';
-import { ReprintSession, type ReprintSessionDeps } from './reprint-session.svelte';
+import {
+	QR_ISSUE_FAILED_MESSAGE,
+	ReprintSession,
+	type ReprintSessionDeps
+} from './reprint-session.svelte';
 
 type FakeDeps = { [K in keyof ReprintSessionDeps]: Mock<ReprintSessionDeps[K]> };
 
@@ -448,6 +452,48 @@ describe('ReprintSession printing', () => {
 		expect(session.step).toBe('done');
 		expect(deps.reprint).toHaveBeenCalledTimes(1);
 		expect(deps.print).toHaveBeenCalledTimes(2);
+	});
+
+	it('prints only members with a payload and tells the visitor how many were skipped (FR-EQR-24)', async () => {
+		const reprint = vi.fn<ReprintSessionDeps['reprint']>().mockResolvedValue({
+			shelter_code: 'SH001',
+			members: [
+				{ ...REPRINT_RESULT.members[0] },
+				{ evacuee_id: 'EV2', qr_issue_failed: true, label: REPRINT_RESULT.members[1].label }
+			]
+		});
+		const { deps, session } = setup({ reprint });
+		await toVerify(session);
+		session.idLast4 = '1234';
+
+		await session.submitVerify();
+
+		expect(deps.print).toHaveBeenCalledTimes(1);
+		expect(deps.print.mock.calls[0][0].map((m) => m.evacuee_id)).toEqual(['EV1']);
+		expect(session.step).toBe('done');
+		expect(session.printedCount).toBe(1);
+		expect(session.qrIssueFailedCount).toBe(1);
+	});
+
+	it('prints nothing and returns to the member step when no QR could be issued', async () => {
+		const reprint = vi.fn<ReprintSessionDeps['reprint']>().mockResolvedValue({
+			shelter_code: 'SH001',
+			members: REPRINT_RESULT.members.map((m) => ({
+				evacuee_id: m.evacuee_id,
+				qr_issue_failed: true,
+				label: m.label
+			}))
+		});
+		const { deps, session } = setup({ reprint });
+		await toVerify(session);
+		session.idLast4 = '1234';
+
+		await session.submitVerify();
+
+		expect(deps.print).not.toHaveBeenCalled();
+		expect(session.step).toBe('members');
+		expect(session.error).toBe(QR_ISSUE_FAILED_MESSAGE);
+		expect(session.printable).toEqual([]);
 	});
 
 	it('reports a thrown print as a failure instead of leaving the page on printing', async () => {

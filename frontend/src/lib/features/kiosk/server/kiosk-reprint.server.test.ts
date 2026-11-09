@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { adminFetch } from '$lib/server/couch-admin';
 import { findMasterByCode } from '$lib/server/shelters.admin';
+import { issueEvacueeQr } from '$lib/server/evacuee-qr-service';
 import { KioskInputError, KioskLookupUnavailableError } from './kiosk-check-in.server';
 import {
 	KioskReprintNotFoundError,
@@ -15,9 +16,12 @@ import {
 
 vi.mock('$lib/server/couch-admin', () => ({ adminFetch: vi.fn() }));
 vi.mock('$lib/server/shelters.admin', () => ({ findMasterByCode: vi.fn() }));
+vi.mock('$lib/server/evacuee-qr-service', () => ({ issueEvacueeQr: vi.fn() }));
 
 const mockAdminFetch = vi.mocked(adminFetch);
 const mockFindMasterByCode = vi.mocked(findMasterByCode);
+const mockIssueQr = vi.mocked(issueEvacueeQr);
+const issuedQr = (evacueeId: string) => `${evacueeId}@a1b2c3`;
 const shelterCode = 'SH001';
 const phone = '0812345678';
 const ids = [
@@ -99,6 +103,12 @@ describe('reprintKioskLabels', () => {
 		vi.clearAllMocks();
 		docs = [];
 		screenings = [];
+		mockIssueQr.mockReset();
+		mockIssueQr.mockImplementation(async ({ evacuee_id }) => ({
+			evacuee_id,
+			qr_payload: issuedQr(evacuee_id),
+			printed_at: '2026-11-06T08:15:30.123Z'
+		}));
 		mockAdminFetch.mockImplementation(async (path, init) => {
 			if (path.endsWith('/_find')) {
 				const { selector } = JSON.parse(String(init?.body)) as {
@@ -123,18 +133,59 @@ describe('reprintKioskLabels', () => {
 		expect(members).toEqual([
 			{
 				evacuee_id: ids[0],
-				qr_payload: ids[0],
+				qr_payload: issuedQr(ids[0]),
 				label: { name: 'สมชาย0\nใจดี', phone, zone: null, stations_passed: 1 }
 			},
 			{
 				evacuee_id: ids[1],
-				qr_payload: ids[1],
+				qr_payload: issuedQr(ids[1]),
 				label: { name: 'สมชาย1\nใจดี', phone: null, zone: null, stations_passed: 1 }
 			}
 		]);
 		expect(writes()).toEqual([]);
 		// Nobody has a zone yet: the shelter's zone names are not needed.
 		expect(mockFindMasterByCode).not.toHaveBeenCalled();
+	});
+
+	it('issues a kiosk_reprint entry per printed member, printed_by the device (CR-233)', async () => {
+		docs = [evacuee(0), evacuee(1, { current_stay: { status: 'active' } })];
+
+		await reprintKioskLabels(shelterCode, input({ evacuee_ids: [ids[0], ids[1]] }), {
+			deviceId: 'kiosk-sh001-01'
+		});
+
+		expect(mockIssueQr.mock.calls.map(([arg]) => arg)).toEqual([
+			{
+				shelter_code: shelterCode,
+				evacuee_id: ids[0],
+				source: 'kiosk_reprint',
+				printed_by: 'kiosk:kiosk-sh001-01'
+			},
+			{
+				shelter_code: shelterCode,
+				evacuee_id: ids[1],
+				source: 'kiosk_reprint',
+				printed_by: 'kiosk:kiosk-sh001-01'
+			}
+		]);
+	});
+
+	it('does not issue for skipped members', async () => {
+		docs = [evacuee(0), evacuee(1, { current_stay: { status: 'pre_registered' } })];
+		await reprintKioskLabels(shelterCode, input({ evacuee_ids: [ids[0], ids[1]] }));
+		expect(mockIssueQr.mock.calls.map(([arg]) => arg.evacuee_id)).toEqual([ids[0]]);
+	});
+
+	it('flags qr_issue_failed without a payload for a member whose entry failed (FR-EQR-24)', async () => {
+		docs = [evacuee(0), evacuee(1, { current_stay: { status: 'active' } })];
+		mockIssueQr.mockRejectedValueOnce(new Error('CONFLICT'));
+
+		const members = await reprintKioskLabels(shelterCode, input({ evacuee_ids: [ids[0], ids[1]] }));
+
+		expect(members[0]).toMatchObject({ evacuee_id: ids[0], qr_issue_failed: true });
+		expect(members[0]).not.toHaveProperty('qr_payload');
+		expect(members[1]).toMatchObject({ qr_payload: issuedQr(ids[1]) });
+		expect(members[1]).not.toHaveProperty('qr_issue_failed');
 	});
 
 	it('returns the labels when a staff PIN is accepted, even if the primary has no citizen id', async () => {
