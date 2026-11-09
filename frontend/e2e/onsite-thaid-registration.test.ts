@@ -25,7 +25,7 @@ import { injectSession, routeBrowserCouchThroughApp } from './helpers/login';
 import {
 	expectStay,
 	finishPrintScreen,
-	idsFromPrintScreen,
+	expectPrintScreen,
 	openAsShelterStaff,
 	STAY_STATUS,
 	type OnsitePerson
@@ -259,7 +259,7 @@ test.describe('Station 1 ThaiD autofill (#588)', { tag: ['@onsite', '@critical']
 			await expect(confirmNew.or(printHeading)).toBeVisible({ timeout: 30_000 });
 			if (await confirmNew.isVisible()) await confirmNew.click();
 
-			await idsFromPrintScreen(desk, [head, member]);
+			await expectPrintScreen(desk, [head, member]);
 			await finishPrintScreen(desk);
 			// Station 1 search by national id finds each person → the id was saved.
 			await expectStay(desk, head, STAY_STATUS.arriving);

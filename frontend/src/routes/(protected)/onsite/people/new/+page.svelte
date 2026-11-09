@@ -19,11 +19,7 @@
 		duplicateCheckKey,
 		hasFederatedIntakeHits,
 		isIntakeNewRegistrationLocked,
-		OVERRIDE_NEW_REG_TITLE,
-		OVERRIDE_NEW_REG_BODY,
-		OVERRIDE_NEW_REG_POOL_ERROR_BODY,
-		OVERRIDE_NEW_REG_CONFIRM,
-		OVERRIDE_NEW_REG_CANCEL,
+		intakeSearchCopyByLanguage,
 		EVACUEE_PAGE_I18N,
 		type Evacuee,
 		type Household,
@@ -38,8 +34,13 @@
 	import { UlidReservation } from '$lib/db/ulid-reservation';
 	import { getTranslation } from '$lib/utils/i18n';
 	import { languageStore } from '$lib/stores/language.svelte';
+	import { langState } from '$lib/states/i18n.svelte';
+	import { STAFF_REGISTRATION_DESK_I18N } from '$lib/constants/i18n/staff-registration-desk';
 
 	const t = $derived(getTranslation(EVACUEE_PAGE_I18N, languageStore.current));
+	const td = $derived(getTranslation(STAFF_REGISTRATION_DESK_I18N, langState.current));
+	const tw = $derived(td.walkIn);
+	const copy = $derived(intakeSearchCopyByLanguage[langState.current]);
 	const createFamily = useCreateFamilyRegistration();
 	// CR-192: when the walk-in form was opened — the Station 1 `start` time (plain const: not reactive).
 	const formOpenedAt = new Date().toISOString();
@@ -62,7 +63,10 @@
 	let isNavigatingAfterSave = $state(false);
 	let checkingDuplicate = $state(false);
 	let overrideDialogOpen = $state(false);
-	let overrideDialogBody = $state(OVERRIDE_NEW_REG_BODY);
+	let overrideDialogPoolError = $state(false);
+	const overrideDialogBody = $derived(
+		overrideDialogPoolError ? copy.overridePoolErrorBody : copy.overrideBody
+	);
 	/** Member cards (display names) whose search hit someone — shown in the override dialog. */
 	let overrideMatchedMembers = $state<string[]>([]);
 	let overrideConfirmedForKey = '';
@@ -107,7 +111,7 @@
 			localHits = await peopleRepository().searchEvacueesMany(queries.map((q) => q.query));
 		} catch {
 			checkingDuplicate = false;
-			toast.error('ตรวจสอบข้อมูลซ้ำไม่ได้ ลองบันทึกใหม่อีกครั้ง');
+			toast.error(tw.duplicateCheckFailed);
 			return false;
 		}
 
@@ -142,9 +146,9 @@
 			.map((index) => {
 				const member = input.members[index];
 				const name = `${member.first_name} ${member.last_name ?? ''}`.trim();
-				return `สมาชิกคนที่ ${index + 1}${name ? ` — ${name}` : ''}`;
+				return tw.matchedMember(index + 1, name);
 			});
-		overrideDialogBody = poolError ? OVERRIDE_NEW_REG_POOL_ERROR_BODY : OVERRIDE_NEW_REG_BODY;
+		overrideDialogPoolError = poolError;
 		overrideDialogOpen = true;
 		return new Promise<boolean>((resolve) => {
 			overrideResolver = (confirmed) => {
@@ -171,7 +175,7 @@
 
 	beforeNavigate((nav) => {
 		if (isNavigatingAfterSave || completed) return;
-		if (isDirty && !confirm('มีการแก้ไขที่ยังไม่ได้บันทึก ต้องการออกจากหน้านี้หรือไม่?')) {
+		if (isDirty && !confirm(td.common.leaveConfirm)) {
 			nav.cancel();
 		}
 	});
@@ -191,7 +195,7 @@
 
 		const createdBy = authStore.user?.name;
 		if (!shelterCode || !createdBy) {
-			toast.error('ยังไม่ได้เลือกศูนย์พักพิง — เลือกศูนย์ก่อนลงทะเบียน');
+			toast.error(tw.noShelterToast);
 			throw new Error('registration blocked: no active shelter or user');
 		}
 		const ctx = { shelterCode, createdBy };
@@ -212,18 +216,18 @@
 			isNavigatingAfterSave = true;
 			completed = { ...result, consentRef: consent?.decision.ref ?? null };
 			await focusCompletionHeading();
-			toast.success(`ลงทะเบียนครอบครัว ${result.members.length} คน สำเร็จ`);
+			toast.success(tw.registered(result.members.length));
 		} catch (err) {
 			const partial = isRegistrationCompensationIncomplete(err);
 			saveError = buildSaveFailureReport(err, {
 				summaryTh: t.saveErrorSummary,
 				shelterCode: ctx.shelterCode,
 				rollbackNote: partial
-					? 'ยกเลิกข้อมูลที่บันทึกไปแล้วได้ไม่ครบ — กดบันทึกซ้ำได้โดยไม่ต้องแก้ข้อมูล (ระบบจะไม่สร้างซ้ำ) ถ้าแก้ข้อมูลแล้ว ให้ค้นหาชื่อในคิวทะเบียนก่อน'
+					? tw.partialRollbackNote
 					: 'compensated: deleted household + members created in this submit when possible'
 			});
 			if (partial) {
-				toast.warning('ข้อมูลอาจถูกบันทึกไปบางส่วน — กดบันทึกซ้ำได้โดยไม่ต้องแก้ข้อมูล');
+				toast.warning(tw.partialToast);
 			} else {
 				toast.error(t.toastSaveFailed);
 			}
@@ -272,7 +276,7 @@
 </script>
 
 <svelte:head>
-	<title>ลงทะเบียนครอบครัว | SmartShelter</title>
+	<title>{tw.pageTitle}</title>
 </svelte:head>
 
 <div class="mx-auto w-full max-w-6xl px-4 py-4 md:px-6 md:py-6 xl:max-w-7xl">
@@ -298,13 +302,12 @@
 			class="mb-3 inline-flex min-h-11 cursor-pointer items-center gap-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
 		>
 			<ArrowLeft class="size-4" />
-			<span>กลับคิวทะเบียน</span>
+			<span>{td.common.backToQueue}</span>
 		</button>
 
-		<h1 class="mb-2 text-2xl font-bold md:mb-1 md:text-3xl">ลงทะเบียนครอบครัว</h1>
+		<h1 class="mb-2 text-2xl font-bold md:mb-1 md:text-3xl">{tw.heading}</h1>
 		<p class="mb-4 text-sm text-muted-foreground md:mb-6">
-			กรอกข้อมูลครอบครัวร่วมด้านบน แล้วเพิ่มสมาชิกทีละคนด้านล่าง — คนที่ 1
-			คือผู้ติดต่อหลักของครอบครัวที่ศูนย์จะประสานงานด้วย
+			{tw.intro}
 		</p>
 
 		{#if !shelterCode}
@@ -312,11 +315,11 @@
 				role="alert"
 				class="rounded-md border border-destructive/40 bg-destructive/5 p-4 text-sm text-destructive"
 			>
-				ยังไม่ได้เลือกศูนย์พักพิง — เลือกศูนย์จากแถบด้านบนก่อนลงทะเบียน
+				{tw.noShelterAlert}
 			</div>
 		{:else}
 			<p class="mb-4 text-sm">
-				บันทึกเข้าศูนย์ <span class="font-semibold">{shelterCode}</span>
+				{tw.saveInto} <span class="font-semibold">{shelterCode}</span>
 			</p>
 
 			{#if saveError}
@@ -339,12 +342,12 @@
 <AlertDialog.Root bind:open={overrideDialogOpen}>
 	<AlertDialog.Content>
 		<AlertDialog.Header>
-			<AlertDialog.Title>{OVERRIDE_NEW_REG_TITLE}</AlertDialog.Title>
+			<AlertDialog.Title>{copy.overrideTitle}</AlertDialog.Title>
 			<AlertDialog.Description>{overrideDialogBody}</AlertDialog.Description>
 		</AlertDialog.Header>
 		{#if overrideMatchedMembers.length > 0}
 			<div class="text-sm">
-				<p class="font-medium">พบข้อมูลที่อาจซ้ำของ:</p>
+				<p class="font-medium">{tw.possibleDuplicates}</p>
 				<ul class="mt-1 list-disc pl-5">
 					{#each overrideMatchedMembers as label (label)}
 						<li>{label}</li>
@@ -353,8 +356,8 @@
 			</div>
 		{/if}
 		<AlertDialog.Footer>
-			<AlertDialog.Cancel>{OVERRIDE_NEW_REG_CANCEL}</AlertDialog.Cancel>
-			<AlertDialog.Action onclick={confirmOverride}>{OVERRIDE_NEW_REG_CONFIRM}</AlertDialog.Action>
+			<AlertDialog.Cancel>{copy.overrideCancel}</AlertDialog.Cancel>
+			<AlertDialog.Action onclick={confirmOverride}>{copy.overrideConfirm}</AlertDialog.Action>
 		</AlertDialog.Footer>
 	</AlertDialog.Content>
 </AlertDialog.Root>

@@ -16,12 +16,15 @@
 		policy = null,
 		isEdit = false,
 		shelterCode = '',
+		presetTargetId = '',
 		onsuccess,
 		oncancel
 	}: {
 		policy?: ReplenishmentPolicy | null;
 		isEdit?: boolean;
 		shelterCode?: string;
+		/** Requirement group (clean id) a new policy starts on; falls back to the first active group. */
+		presetTargetId?: string;
 		onsuccess?: () => void;
 		oncancel?: () => void;
 	} = $props();
@@ -78,7 +81,8 @@
 		} else {
 			formScope = 'REQUIREMENT_GROUP';
 			const defaultGroup = groups.find((g) => (g.status ?? 'active') === 'active') ?? groups[0];
-			formTargetId = defaultGroup ? defaultGroup._id.replace(/^requirement_group:/, '') : '';
+			formTargetId =
+				presetTargetId || (defaultGroup ? defaultGroup._id.replace(/^requirement_group:/, '') : '');
 			formLeadTime = 2;
 			formReviewPeriod = 3;
 			formSafetyDays = 2;

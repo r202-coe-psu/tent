@@ -218,6 +218,16 @@ export class DeskPage {
 		await dialog.getByRole('button', { name: 'ตกลง' }).click();
 	}
 
+	/** The scan dialog's "accept the risk" button for an expired Person QR (CR-233 A1). */
+	acceptExpiredQrButton(): Locator {
+		return this.scannerDialog().getByRole('button', { name: 'ยอมรับความเสี่ยงเพื่อแจกจ่าย' });
+	}
+
+	/** Scan a code and leave the dialog open (for a refused QR); no wait on the result. */
+	async scanCodeKeepingDialog(code: string): Promise<void> {
+		await this.chooseRecipientByScan(code);
+	}
+
 	async chooseOutsideRecipient(notes?: string): Promise<void> {
 		await this.page.getByRole('button', { name: 'บุคคลภายนอก' }).click();
 		if (notes) await this.page.locator('#outside-notes').fill(notes);
