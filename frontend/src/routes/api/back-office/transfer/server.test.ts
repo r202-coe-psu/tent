@@ -302,6 +302,52 @@ describe('BFF Transfer List and Create Endpoints', () => {
 			);
 		});
 
+		describe('multi-shelter user (#477)', () => {
+			beforeEach(() => {
+				vi.mocked(requireShelterScopeOrSA).mockResolvedValue({
+					name: 'two_shelter_user',
+					roles: [
+						'shelter:SH001',
+						'shelter:SH002',
+						'SH001:registration_staff',
+						'SH002:warehouse_staff'
+					],
+					isSA: false,
+					shelterCode: 'SH001'
+				});
+			});
+
+			it('403 when creating as the shelter where they hold no warehouse capability', async () => {
+				const res = await POST(createMockEvent({ shelter_code: 'SH001' }, validBody));
+				expect(res.status).toBe(403);
+				expect(mockCreate).not.toHaveBeenCalled();
+			});
+
+			it('creates from the chosen shelter where they hold the capability', async () => {
+				mockCreate.mockResolvedValue({ _id: 'stock_transfer:new', status: 'requested' });
+				const res = await POST(
+					createMockEvent(
+						{ shelter_code: 'SH002' },
+						{ ...validBody, from_shelter: 'SH002', to_shelter: 'SH001' }
+					)
+				);
+				expect(res.status).toBe(201);
+				expect(mockCreate).toHaveBeenCalledWith(
+					expect.objectContaining({ from_shelter: 'SH002' }),
+					{
+						shelterCode: 'SH002',
+						createdBy: 'two_shelter_user'
+					}
+				);
+			});
+
+			it('400 when no shelter is named', async () => {
+				const res = await POST(createMockEvent({}, validBody));
+				expect(res.status).toBe(400);
+				expect(mockCreate).not.toHaveBeenCalled();
+			});
+		});
+
 		it('returns 400 on validation failure', async () => {
 			vi.mocked(requireShelterScopeOrSA).mockResolvedValue({
 				name: 'ws_user',
