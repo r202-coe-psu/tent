@@ -30,7 +30,7 @@ test.describe('Kiosk language across routes', () => {
 	});
 
 	test(
-		'boot picks a language, it survives a flow, and idle resets it to Thai',
+		'boot picks a language, it survives a flow, and a visit end resets it to Thai',
 		TAGS,
 		async ({ page }) => {
 			await test.step('boot lands on the picker, keeping the kiosk context', async () => {
@@ -57,6 +57,15 @@ test.describe('Kiosk language across routes', () => {
 				await expect(
 					page.getByRole('heading', { name: 'Registration', exact: true })
 				).toBeVisible();
+			});
+
+			await test.step('a visit left idle inside a flow ends on the picker in Thai', async () => {
+				await page.getByRole('link', { name: /Print QR/ }).click();
+				await expect(page).toHaveURL(/\/kiosk\/print-qr\?shelter_code=SH001$/);
+				await page.clock.fastForward(61_000);
+				await expect(page).toHaveURL(/\/kiosk\/language\?shelter_code=SH001$/);
+				await page.locator('[data-language="en"]').click();
+				await expect(page).toHaveURL(/\/kiosk\?shelter_code=SH001$/);
 			});
 
 			await test.step('idle on the method page with no banners resets to Thai', async () => {

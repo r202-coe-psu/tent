@@ -1,7 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { Html5Qrcode } from 'html5-qrcode';
-	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import AlertCircle from '@lucide/svelte/icons/alert-circle';
 	import CameraOff from '@lucide/svelte/icons/camera-off';
@@ -15,6 +14,7 @@
 	import KioskReaderPointer from './kiosk-reader-pointer.svelte';
 	import type { GateInput } from '../data/kiosk-check-in.api';
 	import { loadKioskHardware } from '../application/kiosk-qr-input';
+	import { navigateToKioskHome } from '../application/kiosk-navigation';
 	import { selectCameraId } from '../domain/kiosk-camera';
 	import { qrInputPlan, type KioskHardware } from '../domain/kiosk-hardware';
 	import { createKeyboardWedge } from '../domain/keyboard-wedge';
@@ -47,7 +47,7 @@
 	const backUrl = $derived(resolve(`/kiosk${contextQuery}`));
 	const idleTimeout = new KioskIdleTimeout(KIOSK_IDLE_TIMEOUT_MS, () => {
 		resetScan();
-		void goto(resolve(`/kiosk${contextQuery}`));
+		navigateToKioskHome(contextQuery);
 	});
 	const cameraReaderId = 'kiosk-registration-qr-reader';
 
