@@ -120,7 +120,7 @@ describe('POST /api/v1/kiosk/register', () => {
 			status: 'created',
 			evacuee_id: 'evacuee:01ARZ3NDEKTSV4RRFFQ69G5FAV',
 			qr_payload: 'evacuee:01ARZ3NDEKTSV4RRFFQ69G5FAV',
-			label: { name: 'สมชาย ใจดี', phone: '0812345678' },
+			label: { name: 'สมชาย\nใจดี', phone: '0812345678' },
 			consent_ref: validBody.consent.ref,
 			consent_mode: 'full'
 		});
@@ -354,7 +354,7 @@ describe('POST /api/v1/kiosk/register source thaid', () => {
 		expect(response.status).toBe(200);
 		expect(await response.json()).toMatchObject({
 			qr_payload: 'evacuee:01ARZ3NDEKTSV4RRFFQ69G5FAV',
-			label: { name: 'สมชาย ใจดี', phone: null }
+			label: { name: 'สมชาย\nใจดี', phone: null }
 		});
 		expect(mockRegisterThaid.mock.calls[0]?.[3]).toBeNull();
 	});
