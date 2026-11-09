@@ -220,6 +220,22 @@ describe('makeVolunteer', () => {
 			makeVolunteer({ ...baseInput, national_id: 'garbage' }, ctx, { volunteer_code: 'V-005' })
 		).toThrow();
 	});
+
+	it('accepts merged_* migration fields (CR-239)', () => {
+		const doc = {
+			...validVolunteerDoc(),
+			merged_into: 'volunteer:01BBBBBBBBBBBBBBBBBBBBBBBB',
+			merged_at: '2026-11-08T00:00:00.000Z',
+			merged_by: 'migration-script',
+			migration_run_id: 'run-123'
+		};
+		expect(isVolunteer(doc)).toBe(true);
+		const parsed = volunteerSchema.parse(doc);
+		expect(parsed.merged_into).toBe('volunteer:01BBBBBBBBBBBBBBBBBBBBBBBB');
+		expect(parsed.merged_at).toBe('2026-11-08T00:00:00.000Z');
+		expect(parsed.merged_by).toBe('migration-script');
+		expect(parsed.migration_run_id).toBe('run-123');
+	});
 });
 
 describe('volunteer phone rule (#951)', () => {

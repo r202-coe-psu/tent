@@ -4,6 +4,7 @@ import { flushSync, mount, tick, unmount } from 'svelte';
 import type { Evacuee } from '$lib/features/people';
 import { toast } from 'svelte-sonner';
 import WalkInRegistrationDialog from './walk-in-registration-dialog.svelte';
+import { VolunteerPhoneTakenError } from '../domain/phone-errors';
 
 const MANAGER = ['shelter:SH001', 'SH001:shelter_manager'];
 const REGISTRATION = ['shelter:SH001', 'SH001:registration_staff'];
@@ -435,5 +436,38 @@ describe('WalkInRegistrationDialog — who may search evacuees (#1062)', () => {
 			first_name: 'มานะ',
 			source: 'walk_in'
 		});
+	});
+});
+
+describe('WalkInRegistrationDialog — duplicate phone rejection (CR-239)', () => {
+	it('shows error and duplicate volunteer button when phone is taken', async () => {
+		mocks.roles = COORDINATOR;
+		mocks.createMutateAsync.mockRejectedValueOnce(
+			new VolunteerPhoneTakenError([
+				{
+					_id: 'volunteer:01TEST',
+					volunteer_code: 'V-012',
+					first_name: 'สมชาย',
+					last_name: 'ใจดี',
+					status: 'active'
+				}
+			])
+		);
+
+		await render();
+		await typeInto(field('first_name'), 'สมศักดิ์');
+		await typeInto(field('last_name'), 'รักชาติ');
+		await typeInto(field('phone'), '0812345678');
+		submitForm();
+
+		await vi.waitFor(() => {
+			expect(toast.error).toHaveBeenCalledWith(
+				expect.stringContaining('เบอร์นี้มีอยู่แล้วในศูนย์: V-012 สมชาย ใจดี'),
+				expect.anything()
+			);
+		});
+
+		expect(document.body.textContent).toContain('พบโปรไฟล์ที่ใช้เบอร์นี้แล้วในศูนย์');
+		expect(document.body.textContent).toContain('เปิดโปรไฟล์ V-012');
 	});
 });

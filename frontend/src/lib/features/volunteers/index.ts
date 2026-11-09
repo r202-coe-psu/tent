@@ -11,6 +11,7 @@
 
 // domain
 export * from './domain/volunteer.schema';
+export * from './domain/phone-errors';
 export {
 	isVolunteerMobile,
 	volunteerMobileSchema,

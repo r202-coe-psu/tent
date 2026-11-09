@@ -68,8 +68,15 @@
 	import { canAccessEvacueeRegistration } from '$lib/auth/roles';
 	import {
 		walkInVolunteerFormSchema,
-		type WalkInVolunteerFormValues
+		type WalkInVolunteerFormValues,
+		type Volunteer
 	} from '../domain/volunteer.schema';
+	import {
+		isVolunteerPhoneTakenError,
+		type ExistingVolunteerSummary
+	} from '../domain/phone-errors';
+	import VolunteerManageDialog from './volunteer-manage-dialog.svelte';
+	import { volunteerRepository } from '../data/volunteer.remote';
 	import { shiftKindFor } from '../domain/assign-roster';
 	import { isWithinDutyWindow } from '../domain/duty-window';
 	import { toSkillCode } from '../domain/skill-catalog';
@@ -190,6 +197,19 @@
 				reset();
 				open = false;
 			} catch (err) {
+				if (isVolunteerPhoneTakenError(err)) {
+					setError(validated, 'phone', err.message);
+					phoneConflictExisting = err.existing;
+					toast.error(err.message, {
+						action: err.existing[0]
+							? {
+									label: `เปิด ${err.existing[0].volunteer_code || 'โปรไฟล์'}`,
+									onClick: () => void openConflictVolunteer(err.existing[0]._id)
+								}
+							: undefined
+					});
+					return;
+				}
 				const message = err instanceof Error ? err.message : 'ลงทะเบียนไม่สำเร็จ';
 				setError(validated, message);
 				toast.error(message);
@@ -198,6 +218,20 @@
 	});
 
 	const { form: formData, errors, submitting } = form;
+
+	let phoneConflictExisting = $state<ExistingVolunteerSummary[]>([]);
+	let conflictVolunteer = $state<Volunteer | null>(null);
+	let conflictManageOpen = $state(false);
+
+	async function openConflictVolunteer(id: string) {
+		const v = await volunteerRepository().get(id);
+		if (v) {
+			conflictVolunteer = v;
+			conflictManageOpen = true;
+		} else {
+			toast.error('ไม่พบข้อมูลโปรไฟล์ดังกล่าว');
+		}
+	}
 
 	/** What the last pick wrote, so a second pick does not leave the first person's data behind. */
 	let lastPrefill: WalkInPrefill = {};
@@ -227,6 +261,7 @@
 		selectedSkills = [];
 		jobShiftSelection = null;
 		instantCheckIn = true;
+		phoneConflictExisting = [];
 	}
 
 	const isPending = $derived(
@@ -308,6 +343,28 @@
 							{/snippet}
 						</Form.Control>
 						<Form.FieldErrors />
+						{#if phoneConflictExisting.length > 0}
+							<div
+								class="mt-2 space-y-1.5 rounded-lg border border-destructive/20 bg-destructive/10 p-2.5 text-xs text-destructive"
+							>
+								<p class="font-medium">พบโปรไฟล์ที่ใช้เบอร์นี้แล้วในศูนย์</p>
+								<div class="flex flex-wrap gap-1.5">
+									{#each phoneConflictExisting as ex (ex._id)}
+										<Button
+											type="button"
+											size="sm"
+											variant="outline"
+											class="h-7 bg-background text-xs text-foreground hover:bg-muted"
+											onclick={() => void openConflictVolunteer(ex._id)}
+										>
+											เปิดโปรไฟล์ {ex.volunteer_code || 'ดูข้อมูล'}{ex.status === 'inactive'
+												? ' (ปิดใช้งานอยู่)'
+												: ''}
+										</Button>
+									{/each}
+								</div>
+							</div>
+						{/if}
 					</Form.Field>
 					<Form.Field {form} name="nickname">
 						<Form.Control>
@@ -484,3 +541,12 @@
 		</div>
 	</Dialog.Content>
 </Dialog.Root>
+
+{#if conflictVolunteer}
+	<VolunteerManageDialog
+		bind:open={conflictManageOpen}
+		volunteer={conflictVolunteer}
+		shelterLine={shelterLabel}
+		todayShift={null}
+	/>
+{/if}

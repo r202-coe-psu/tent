@@ -12,6 +12,7 @@ vi.mock('$lib/db/shelter', () => ({ getShelterDb: () => 'shelter_sh001' }));
 
 import { createVolunteerRepositoryForTest } from './volunteer.remote';
 import type { VolunteerInput } from '../domain/volunteer.schema';
+import { VolunteerPhoneTakenError } from '../domain/phone-errors';
 
 const ctx: AuthorContext = { shelterCode: 'SH001', createdBy: 'tester' };
 
@@ -32,7 +33,10 @@ describe('VolunteerRemoteRepository', () => {
 	it('mints sequential volunteer_code starting at V-001', async () => {
 		const repo = createVolunteerRepositoryForTest('shelter_sh001');
 		const first = await repo.create(baseInput, ctx);
-		const second = await repo.create({ ...baseInput, first_name: 'สมหญิง' }, ctx);
+		const second = await repo.create(
+			{ ...baseInput, first_name: 'สมหญิง', phone: '0823456789' },
+			ctx
+		);
 
 		expect(first.volunteer_code).toBe('V-001');
 		expect(second.volunteer_code).toBe('V-002');
@@ -61,8 +65,10 @@ describe('VolunteerRemoteRepository', () => {
 
 	it('list() filters by status/source/checkedIn', async () => {
 		const repo = createVolunteerRepositoryForTest('shelter_sh001');
-		await repo.create(baseInput, ctx, { status: 'active' });
-		await repo.create({ ...baseInput, source: 'public_apply' }, ctx, { status: 'inactive' });
+		await repo.create({ ...baseInput, phone: '0811111111' }, ctx, { status: 'active' });
+		await repo.create({ ...baseInput, phone: '0822222222', source: 'public_apply' }, ctx, {
+			status: 'inactive'
+		});
 
 		expect((await repo.list({ status: 'inactive' })).length).toBe(1);
 		expect((await repo.list({ source: 'public_apply' })).length).toBe(1);
@@ -114,10 +120,10 @@ describe('VolunteerRemoteRepository', () => {
 		});
 	});
 
-	it('getByTrackingToken / getByPhoneHash return null when absent', async () => {
+	it('getByTrackingToken returns null and listByPhoneHash returns empty array when absent', async () => {
 		const repo = createVolunteerRepositoryForTest('shelter_sh001');
 		expect(await repo.getByTrackingToken('missing')).toBeNull();
-		expect(await repo.getByPhoneHash('missing')).toBeNull();
+		expect(await repo.listByPhoneHash('missing')).toEqual([]);
 	});
 
 	it('getByTrackingToken queries by the hashed, normalized token (trimmed + upper-cased before hashing), with a legacy plaintext fallback — mirrors job-application.remote.ts#getByTrackingToken', async () => {
@@ -169,8 +175,9 @@ describe('VolunteerRemoteRepository', () => {
 			const updated = await repo.update({ ...created, phone: '0898765432' });
 
 			expect(updated.phone_hash).toBe(await sha256Hex('0898765432'));
-			expect((await repo.getByPhoneHash(await sha256Hex('0898765432')))?._id).toBe(created._id);
-			expect(await repo.getByPhoneHash(await sha256Hex('0812345678'))).toBeNull();
+			const found = await repo.listByPhoneHash(await sha256Hex('0898765432'));
+			expect(found[0]?._id).toBe(created._id);
+			expect(await repo.listByPhoneHash(await sha256Hex('0812345678'))).toEqual([]);
 		});
 
 		it('clears phone_hash when the phone is removed', async () => {
@@ -180,7 +187,7 @@ describe('VolunteerRemoteRepository', () => {
 			const updated = await repo.update({ ...created, phone: null });
 
 			expect(updated.phone_hash).toBeNull();
-			expect(await repo.getByPhoneHash(await sha256Hex('0812345678'))).toBeNull();
+			expect(await repo.listByPhoneHash(await sha256Hex('0812345678'))).toEqual([]);
 		});
 
 		it('clears phone_hash when the phone is only whitespace', async () => {
@@ -198,7 +205,8 @@ describe('VolunteerRemoteRepository', () => {
 
 			await repo.update({ ...created, phone: '+66 89-876-5432' });
 
-			expect((await repo.getByPhoneHash(await sha256Hex('0898765432')))?._id).toBe(created._id);
+			const found = await repo.listByPhoneHash(await sha256Hex('0898765432'));
+			expect(found[0]?._id).toBe(created._id);
 		});
 
 		it('keeps phone_hash when another field changes and the phone stays the same', async () => {
@@ -208,7 +216,95 @@ describe('VolunteerRemoteRepository', () => {
 			const updated = await repo.update({ ...created, first_name: 'สมศักดิ์' });
 
 			expect(updated.phone_hash).toBe(await sha256Hex('0812345678'));
-			expect((await repo.getByPhoneHash(await sha256Hex('0812345678')))?._id).toBe(created._id);
+			const found = await repo.listByPhoneHash(await sha256Hex('0812345678'));
+			expect(found[0]?._id).toBe(created._id);
+		});
+	});
+
+	describe('phone uniqueness per shelter (CR-239)', () => {
+		it('create() throws VolunteerPhoneTakenError when phone number already exists', async () => {
+			const repo = createVolunteerRepositoryForTest('shelter_sh001');
+			const existing = await repo.create(baseInput, ctx);
+
+			await expect(
+				repo.create({ ...baseInput, first_name: 'สมศรี', last_name: 'ใจงาม' }, ctx)
+			).rejects.toThrow(VolunteerPhoneTakenError);
+
+			try {
+				await repo.create({ ...baseInput, first_name: 'สมศรี', last_name: 'ใจงาม' }, ctx);
+			} catch (err) {
+				expect(err).toBeInstanceOf(VolunteerPhoneTakenError);
+				const taken = err as VolunteerPhoneTakenError;
+				expect(taken.existing[0]._id).toBe(existing._id);
+				expect(taken.existing[0].volunteer_code).toBe(existing.volunteer_code);
+				expect(taken.message).toContain('เบอร์นี้มีอยู่แล้วในศูนย์');
+			}
+		});
+
+		it('create() allows creating multiple volunteers without a phone (null phone)', async () => {
+			const repo = createVolunteerRepositoryForTest('shelter_sh001');
+			const v1 = await repo.create({ ...baseInput, phone: null }, ctx);
+			const v2 = await repo.create({ ...baseInput, first_name: 'สมหญิง', phone: null }, ctx);
+
+			expect(v1._id).not.toBe(v2._id);
+			expect(v1.phone).toBeNull();
+			expect(v2.phone).toBeNull();
+		});
+
+		it('create() rejects duplicates even if existing profile is inactive (FR-2)', async () => {
+			const repo = createVolunteerRepositoryForTest('shelter_sh001');
+			const existing = await repo.create(baseInput, ctx, { status: 'inactive' });
+			expect(existing.status).toBe('inactive');
+
+			await expect(
+				repo.create({ ...baseInput, first_name: 'สมศรี', last_name: 'ใจงาม' }, ctx)
+			).rejects.toThrow(VolunteerPhoneTakenError);
+
+			try {
+				await repo.create({ ...baseInput, first_name: 'สมศรี', last_name: 'ใจงาม' }, ctx);
+			} catch (err) {
+				const taken = err as VolunteerPhoneTakenError;
+				expect(taken.message).toContain('(ปิดใช้งานอยู่)');
+			}
+		});
+
+		it('create() ignores profiles that have merged_into flag (FR-5)', async () => {
+			const repo = createVolunteerRepositoryForTest('shelter_sh001');
+			const v1 = await repo.create(baseInput, ctx);
+			// Simulate merged profile
+			await memoryRepo.put({ ...v1, merged_into: 'volunteer:canonical' });
+
+			// Creating new volunteer with the same phone should now succeed because v1 was merged
+			const v2 = await repo.create({ ...baseInput, first_name: 'สมศรี' }, ctx);
+			expect(v2._id).toBeDefined();
+		});
+
+		it('update() throws VolunteerPhoneTakenError when changing phone to one that already exists', async () => {
+			const repo = createVolunteerRepositoryForTest('shelter_sh001');
+			await repo.create({ ...baseInput, phone: '0811111111' }, ctx);
+			const v2 = await repo.create({ ...baseInput, phone: '0822222222' }, ctx);
+
+			await expect(repo.update({ ...v2, phone: '0811111111' })).rejects.toThrow(
+				VolunteerPhoneTakenError
+			);
+		});
+
+		it('update() preserves merged_* metadata on update (FR-6)', async () => {
+			const repo = createVolunteerRepositoryForTest('shelter_sh001');
+			const v1 = await repo.create(baseInput, ctx);
+			await memoryRepo.put({
+				...v1,
+				merged_into: 'volunteer:canonical',
+				merged_at: '2026-11-08T00:00:00.000Z',
+				merged_by: 'admin',
+				migration_run_id: 'run-1'
+			});
+
+			const updated = await repo.update({ ...v1, first_name: 'ชื่อใหม่' });
+			expect(updated.merged_into).toBe('volunteer:canonical');
+			expect(updated.merged_at).toBe('2026-11-08T00:00:00.000Z');
+			expect(updated.merged_by).toBe('admin');
+			expect(updated.migration_run_id).toBe('run-1');
 		});
 	});
 

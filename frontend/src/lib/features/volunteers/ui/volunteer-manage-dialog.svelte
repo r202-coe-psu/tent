@@ -47,6 +47,11 @@
 	} from '../domain/verification';
 	import type { PersonnelType, Volunteer } from '../domain/volunteer.schema';
 	import type { ShiftKind } from '../domain/shift-assignment.schema';
+	import {
+		isVolunteerPhoneTakenError,
+		type ExistingVolunteerSummary
+	} from '../domain/phone-errors';
+	import { volunteerRepository } from '../data/volunteer.remote';
 
 	let {
 		open = $bindable(false),
@@ -89,6 +94,9 @@
 	let personnelType = $state<PersonnelType>('volunteer');
 	let assignedShift = $state<ShiftKind | 'unset'>('unset');
 	let verificationNotes = $state('');
+	let overrideVolunteer = $state<Volunteer | null>(null);
+	const currentVolunteer = $derived(overrideVolunteer ?? volunteer);
+	let phoneConflictExisting = $state<ExistingVolunteerSummary[]>([]);
 
 	// Rehydrate from the volunteer prop each time the dialog opens on a
 	// (possibly different) row — the same per-row rehydrate guard dialogs in this feature use.
@@ -96,16 +104,30 @@
 	$effect(() => {
 		if (!open) {
 			lastOpenedId = null;
+			phoneConflictExisting = [];
+			overrideVolunteer = null;
 			return;
 		}
-		if (lastOpenedId === volunteer._id) return;
-		fullName = `${volunteer.first_name} ${volunteer.last_name}`.trim();
-		phone = volunteer.phone ?? '';
-		selectedSkills = toSkillCodes(volunteer.skills, skillsList);
-		personnelType = volunteer.personnel_type;
+		if (lastOpenedId === currentVolunteer._id) return;
+		fullName = `${currentVolunteer.first_name} ${currentVolunteer.last_name}`.trim();
+		phone = currentVolunteer.phone ?? '';
+		selectedSkills = toSkillCodes(currentVolunteer.skills, skillsList);
+		personnelType = currentVolunteer.personnel_type;
 		assignedShift = todayShift ?? 'unset';
-		lastOpenedId = volunteer._id;
+		phoneConflictExisting = [];
+		lastOpenedId = currentVolunteer._id;
 	});
+
+	async function openConflictVolunteer(id: string) {
+		const v = await volunteerRepository().get(id);
+		if (v) {
+			overrideVolunteer = v;
+			phoneConflictExisting = [];
+			toast.info(`เปิดโปรไฟล์ ${v.volunteer_code}`);
+		} else {
+			toast.error('ไม่พบข้อมูลโปรไฟล์ดังกล่าว');
+		}
+	}
 
 	function toggleSkill(code: string) {
 		const canonicalCode = toSkillCode(code, skillsList);
@@ -117,7 +139,7 @@
 	const generalSelectedCount = $derived(
 		selectedSkills.filter((s) => !isControlledSkill(s, skillCatalog.controlledValues)).length
 	);
-	const identityStatus = $derived(identityVerificationStatus(volunteer));
+	const identityStatus = $derived(identityVerificationStatus(currentVolunteer));
 	const identityActionStatus = $derived<VerificationStatus>(
 		identityStatus === 'verified' ? 'pending' : 'verified'
 	);
@@ -128,7 +150,7 @@
 	async function reviewIdentity(status: VerificationStatus) {
 		try {
 			await identityReviewMutation.mutateAsync({
-				id: volunteer._id,
+				id: currentVolunteer._id,
 				status,
 				notes: verificationNotes.trim() || null
 			});
@@ -156,7 +178,7 @@
 
 		try {
 			await updateMutation.mutateAsync({
-				...volunteer,
+				...currentVolunteer,
 				first_name: name.slice(0, spaceIndex).trim(),
 				last_name: name.slice(spaceIndex + 1).trim(),
 				phone: parsedPhone.data,
@@ -166,6 +188,18 @@
 			toast.success('บันทึกข้อมูลอาสาสมัครแล้ว');
 			open = false;
 		} catch (err) {
+			if (isVolunteerPhoneTakenError(err)) {
+				phoneConflictExisting = err.existing;
+				toast.error(err.message, {
+					action: err.existing[0]
+						? {
+								label: `เปิด ${err.existing[0].volunteer_code || 'โปรไฟล์'}`,
+								onClick: () => void openConflictVolunteer(err.existing[0]._id)
+							}
+						: undefined
+				});
+				return;
+			}
 			toast.error(err instanceof Error ? err.message : 'บันทึกข้อมูลไม่สำเร็จ');
 		}
 	}
@@ -265,7 +299,7 @@
 			<div class="space-y-3">
 				<div class="flex items-center justify-between gap-2">
 					<p class="text-xs font-bold text-foreground">ข้อมูลพื้นฐาน (BASIC INFORMATION)</p>
-					<Badge variant="outline" class="text-[11px]">ID: {volunteer.volunteer_code}</Badge>
+					<Badge variant="outline" class="text-[11px]">ID: {currentVolunteer.volunteer_code}</Badge>
 				</div>
 				<div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
 					<div class="space-y-1.5">
@@ -275,6 +309,28 @@
 					<div class="space-y-1.5">
 						<Label for="vm-phone">เบอร์มือถือ</Label>
 						<Input id="vm-phone" bind:value={phone} class="h-11" />
+						{#if phoneConflictExisting.length > 0}
+							<div
+								class="mt-2 space-y-1.5 rounded-lg border border-destructive/20 bg-destructive/10 p-2.5 text-xs text-destructive"
+							>
+								<p class="font-medium">พบโปรไฟล์ที่ใช้เบอร์นี้แล้วในศูนย์</p>
+								<div class="flex flex-wrap gap-1.5">
+									{#each phoneConflictExisting as ex (ex._id)}
+										<Button
+											type="button"
+											size="sm"
+											variant="outline"
+											class="h-7 bg-background text-xs text-foreground hover:bg-muted"
+											onclick={() => void openConflictVolunteer(ex._id)}
+										>
+											เปิดโปรไฟล์ {ex.volunteer_code || 'ดูข้อมูล'}{ex.status === 'inactive'
+												? ' (ปิดใช้งานอยู่)'
+												: ''}
+										</Button>
+									{/each}
+								</div>
+							</div>
+						{/if}
 					</div>
 				</div>
 			</div>

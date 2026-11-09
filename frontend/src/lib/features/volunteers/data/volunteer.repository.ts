@@ -134,7 +134,7 @@ export interface VolunteerRepository {
 	list(filter?: VolunteerFilter): Promise<Volunteer[]>;
 	get(id: string): Promise<Volunteer | null>;
 	getByTrackingToken(token: string): Promise<Volunteer | null>;
-	getByPhoneHash(phoneHash: string): Promise<Volunteer | null>;
+	listByPhoneHash(phoneHash: string): Promise<Volunteer[]>;
 	/**
 	 * Mint a volunteer from form input + author context. `volunteer_code` is
 	 * assigned here (`domain/volunteer-code.ts#nextVolunteerCode` over the
