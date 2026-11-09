@@ -146,6 +146,18 @@
 	const PAGE_SIZE = 10;
 	let currentPage = $state(1);
 
+	$effect(() => {
+		void statFilter;
+		void approvalChip;
+		void search;
+		void skillFilter;
+		void shiftStatusFilter;
+		void sourceFilter;
+		void personnelTypeFilter;
+		void accountFilter;
+		currentPage = 1;
+	});
+
 	const totalFiltered = $derived(filteredVolunteers.length);
 	const totalPages = $derived(Math.max(1, Math.ceil(totalFiltered / PAGE_SIZE)));
 	const safePage = $derived(Math.max(1, Math.min(currentPage, totalPages)));

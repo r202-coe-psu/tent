@@ -298,6 +298,14 @@
 	const PAGE_SIZE = 10;
 	let currentPage = $state(1);
 
+	$effect(() => {
+		void search;
+		void skillFilter;
+		void availabilityFilter;
+		void eligibilityFilter;
+		currentPage = 1;
+	});
+
 	const unassignedTotal = $derived(unassigned.length);
 	const totalPages = $derived(Math.max(1, Math.ceil(unassignedTotal / PAGE_SIZE)));
 	const safePage = $derived(Math.max(1, Math.min(currentPage, totalPages)));
@@ -328,6 +336,7 @@
 		}
 
 		selectedIds = [];
+		currentPage = 1;
 		detailCandidate = null;
 		detailOpen = false;
 		bulkResult = null;
