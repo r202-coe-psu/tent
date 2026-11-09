@@ -11,6 +11,7 @@
 	import { PrintApiError } from '../data/printers.api';
 	import { stationPrinter } from '../application/station-printer.svelte';
 	import { chunkLabels } from '../domain/chunk-labels';
+	import { ReportedRenderError } from '../domain/reported-error';
 	import { canPrintSource } from '../domain/print-permission';
 	import { isTerminalJobStatus, PRINT_JOB_POLL_TIMEOUT_MS } from '../domain/print-job-status';
 	import {
@@ -260,9 +261,11 @@
 				if (abort.signal.aborted || !labels) return finishAborted(abort.signal, false);
 				progressTotal = labels.length;
 				setUnsent(chunkLabels(labels).map((chunk) => ({ labels: chunk, jobId: ulid() })));
-			} catch {
+			} catch (error) {
 				if (abort.signal.aborted) return finishAborted(abort.signal, false);
 				running = false;
+				// The callback already toasted its own specific message.
+				if (error instanceof ReportedRenderError) return;
 				toast.error(t.renderFailed);
 				return;
 			}
@@ -455,14 +458,17 @@
 			<p class="text-sm text-muted-foreground">{t.printerOffline(target.name)}</p>
 		{/if}
 		{#if chosen && !pickerOpen}
-			<Button
-				type="button"
-				variant="link"
-				class="h-auto self-start p-0"
-				onclick={() => (pickerOpen = true)}
-			>
-				{t.changePrinter}
-			</Button>
+			<div class="flex flex-wrap items-baseline gap-x-2 self-start text-sm">
+				<span class="text-muted-foreground" data-testid="chosen-printer-name">{chosen.name}</span>
+				<Button
+					type="button"
+					variant="link"
+					class="h-auto p-0 underline"
+					onclick={() => (pickerOpen = true)}
+				>
+					{t.changePrinter}
+				</Button>
+			</div>
 		{/if}
 		{#if pickerOpen}
 			<PrinterPicker {printers} selectedId={chosenId} onSelect={handleSelect} />

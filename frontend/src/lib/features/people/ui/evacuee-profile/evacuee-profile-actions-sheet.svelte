@@ -16,6 +16,9 @@
 	import { useShelter } from '$lib/features/shelters';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
 	import { getShelterCode } from '$lib/db/shelter';
+	import { getTranslation } from '$lib/utils/i18n';
+	import { langState } from '$lib/states/i18n.svelte';
+	import { EVACUEE_PROFILE_I18N } from '../_constants/evacuee-profile.i18n';
 	import EvacueePhoto from '../shared/evacuee-photo.svelte';
 
 	interface StatusInfo {
@@ -52,6 +55,7 @@
 	const shelterQuery = useShelter(() => shelterStore.selectedShelterCode ?? getShelterCode());
 	const shelterZones = $derived(shelterQuery.data?.zones ?? []);
 
+	const t = $derived(getTranslation(EVACUEE_PROFILE_I18N, langState.current).actionsSheet);
 	const displayName = $derived(formatPersonName(evacuee));
 	const hasIllnessAlert = $derived(
 		(medical !== null && (medical.conditions.length > 0 || !!medical.notes)) ||
@@ -72,9 +76,9 @@
 		class="flex max-h-[85dvh] flex-col gap-0 overflow-y-auto rounded-t-2xl p-0"
 	>
 		<Sheet.Header class="border-b border-slate-200/80 px-4 py-3 text-left">
-			<Sheet.Title class="text-base font-bold text-slate-900">การดำเนินการ</Sheet.Title>
+			<Sheet.Title class="text-base font-bold text-slate-900">{t.title}</Sheet.Title>
 			<Sheet.Description class="sr-only">
-				เมนูด่วนสำหรับโปรไฟล์ผู้พักพิง {displayName}
+				{t.description(displayName)}
 			</Sheet.Description>
 		</Sheet.Header>
 
@@ -99,7 +103,7 @@
 								class="inline-flex items-center gap-1 rounded-md border border-slate-200/80 bg-slate-50 px-2 py-0.5 text-xs font-semibold text-slate-700"
 							>
 								<MapPin class="size-3 shrink-0 text-[#0A2647]" />
-								โซน {zoneLabel(evacuee.current_stay.zone, shelterZones)}
+								{t.zone(zoneLabel(evacuee.current_stay.zone, shelterZones))}
 							</span>
 						</div>
 
@@ -110,7 +114,7 @@
 									<span
 										class="inline-flex items-center rounded-full border border-red-200 bg-red-50 px-2 py-0.5 text-xs font-semibold text-red-700"
 									>
-										เฝ้าระวังสุขภาพ
+										{t.healthWatch}
 									</span>
 								{/if}
 								{#each specialNeeds as need (need)}
@@ -129,13 +133,13 @@
 			<!-- Column 2: actions -->
 			<section class="min-w-0 space-y-2 sm:border-l sm:border-slate-200/80 sm:pl-4">
 				{#if !readonly}
-					<p class="text-xs font-bold tracking-wide text-slate-500 uppercase">ปฏิบัติการ</p>
+					<p class="text-xs font-bold tracking-wide text-slate-500 uppercase">{t.operations}</p>
 					<button
 						type="button"
 						onclick={() => runAction(onOpenZoneModal)}
 						class="inline-flex min-h-10 w-full cursor-pointer items-center justify-center rounded-xl border border-amber-400 bg-transparent px-3 py-2 text-sm font-semibold text-amber-800 transition-colors hover:bg-amber-50 focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none"
 					>
-						ย้ายโซน
+						{t.changeZone}
 					</button>
 					<button
 						type="button"
@@ -143,7 +147,7 @@
 						class="inline-flex min-h-10 w-full cursor-pointer items-center justify-center gap-1.5 rounded-xl border px-3 py-2 text-sm font-semibold transition-colors hover:brightness-95 focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none {statusInfo?.colorClass}"
 					>
 						<span class="size-1.5 rounded-full {statusInfo?.dotClass}"></span>
-						เปลี่ยนสถานะ
+						{t.changeStatus}
 					</button>
 					<button
 						type="button"
@@ -151,7 +155,7 @@
 						class="inline-flex min-h-10 w-full cursor-pointer items-center justify-center gap-1.5 rounded-xl border border-slate-200/80 bg-white px-3 py-2 text-sm font-semibold text-slate-800 transition-colors hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none"
 					>
 						<Printer class="size-4 opacity-75" />
-						พิมพ์ QR
+						{t.printQr}
 					</button>
 					<button
 						type="button"
@@ -159,7 +163,7 @@
 						class="inline-flex min-h-10 w-full cursor-pointer items-center justify-center gap-1.5 rounded-xl border border-slate-200/80 bg-white px-3 py-2 text-sm font-semibold text-slate-800 transition-colors hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none"
 					>
 						<FileText class="size-4 opacity-75" />
-						พิมพ์ใบส่งตัว
+						{t.printSlip}
 					</button>
 				{:else}
 					<button
@@ -171,7 +175,7 @@
 						class="inline-flex min-h-10 w-full cursor-pointer items-center justify-center gap-1.5 rounded-xl border border-slate-200/80 bg-white px-3 py-2 text-sm font-semibold text-slate-800 transition-colors hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none"
 					>
 						<ExternalLink class="size-4 opacity-75" />
-						ดูข้อมูลเต็ม
+						{t.viewFull}
 					</button>
 				{/if}
 			</section>

@@ -1,3 +1,4 @@
+import { isEdgeUsersReadonlyError } from '$lib/auth/edge-readonly';
 import { MutationCache, QueryCache, QueryClient } from '@tanstack/svelte-query';
 import { classifyAuthFailure, shouldRetryQuery } from '$lib/auth/session-expiry';
 
@@ -37,6 +38,8 @@ export function createAppQueryClient(options: AppQueryClientOptions): QueryClien
 		}),
 		mutationCache: new MutationCache({
 			onError: (error) => {
+				// Edge read-only refusal is a 403 the page already toasts itself — no generic "denied" on top.
+				if (isEdgeUsersReadonlyError(error)) return;
 				if (!isAuthShaped(error)) return;
 				void options.onAuthFailure(error).then((outcome) => {
 					if (outcome === 'expired') options.onMutationExpired();

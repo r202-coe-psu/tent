@@ -12,11 +12,16 @@ vi.mock('$lib/features/printers', async (importOriginal) => ({
 		await import('../evacuee-profile/__fixtures__/print-labels-button-stub.svelte')
 	).default
 }));
+const issue = vi.hoisted(() => vi.fn());
+vi.mock('$lib/features/people/data/evacuee-qr.api', () => ({ issueEvacueeQrs: issue }));
 vi.mock('$lib/features/kiosk', () => ({
 	KIOSK_LABEL_MM: { width: 80, height: 60 },
 	renderKioskQrLabelPng: async () => 'AAAA'
 }));
-vi.mock('$lib/features/shelters', () => ({ useShelter: () => ({ data: undefined }) }));
+vi.mock('$lib/features/shelters', async (importOriginal) => ({
+	...(await importOriginal<typeof import('$lib/features/shelters')>()),
+	useShelter: () => ({ data: undefined })
+}));
 vi.mock('$lib/features/people', async (importOriginal) => ({
 	...(await importOriginal<typeof import('$lib/features/people')>()),
 	useScreeningsByEvacuee: () => ({ data: [] })
@@ -72,10 +77,29 @@ afterEach(() => {
 });
 
 describe('FamilyBatchPrint', () => {
-	it('shows one station-printer button for the whole family', () => {
+	it('never issues a QR just by being shown (FR-EQR-21a)', () => {
+		render();
+
+		expect(issue).not.toHaveBeenCalled();
+	});
+
+	it('shows exactly one station-printer button: the family one (member cards hide theirs)', () => {
 		render();
 
 		expect(byTestId('station-print')).toHaveLength(1);
+	});
+
+	it('gives member cards no print button of their own (no second issue path)', () => {
+		render();
+
+		const cards = [...document.querySelectorAll('section')].filter((c) => c.querySelector('h3'));
+		expect(cards).toHaveLength(2);
+		for (const card of cards) {
+			expect(card.querySelector('[data-testid="station-print"]')).toBeNull();
+			const labels = [...card.querySelectorAll('button')].map((b) => b.textContent?.trim());
+			expect(labels).not.toContain('พิมพ์บัตรประจำตัว');
+		}
+		expect(issue).not.toHaveBeenCalled();
 	});
 
 	it.each([

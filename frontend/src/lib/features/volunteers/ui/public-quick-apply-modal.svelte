@@ -36,6 +36,7 @@
 		localizedSkillLabel
 	} from '$lib/features/volunteer-portal/domain/skill-label';
 	import { PORTAL_SESSION_KEY } from '$lib/features/volunteer-portal/domain/volunteer';
+	import { localizeVolunteerMessage } from '$lib/constants/i18n/volunteer-messages';
 	import {
 		formatShiftDate,
 		groupShiftsByDate,
@@ -249,9 +250,11 @@
 	const siteKey = env.PUBLIC_RECAPTCHA_SITE_KEY || '';
 	const captchaEnabled = isCaptchaKeyConfigured(siteKey);
 
+	/** Server and schema messages arrive in Thai; they are read here in the current language. */
 	function showSubmitError(message: string) {
-		errorMessage = message;
-		toast.error(message);
+		const shown = localizeVolunteerMessage(message, languageStore.current);
+		errorMessage = shown;
+		toast.error(shown);
 	}
 
 	async function captchaToken(): Promise<string | null> {
@@ -314,7 +317,9 @@
 	}
 
 	function shiftFailureReason(result: ShiftApplyResult): string {
-		return result.ok ? '' : (apiErrorCopy(result.error) ?? t.errApplyGeneric);
+		if (result.ok) return '';
+		const copy = apiErrorCopy(result.error);
+		return copy ? localizeVolunteerMessage(copy, languageStore.current) : t.errApplyGeneric;
 	}
 
 	/**
@@ -346,7 +351,7 @@
 			return;
 		}
 		if (pickedShifts.some((shift) => shift.conflict)) {
-			showSubmitError('เวลาของกะนี้ชนกับกะที่คุณจองไว้แล้ว');
+			showSubmitError(t.errShiftConflict);
 			return;
 		}
 		isSubmitting = true;
@@ -507,7 +512,7 @@
 			return;
 		}
 		if (pickedShifts.some((shift) => shift.conflict)) {
-			showSubmitError('เวลาของกะนี้ชนกับกะที่คุณจองไว้แล้ว กรุณาเลือกกะอื่นที่ไม่ทับซ้อนกัน');
+			showSubmitError(t.errShiftConflictPickOther);
 			return;
 		}
 		if (!isPortalApplicant && !formData.firstName.trim()) {
@@ -521,11 +526,7 @@
 		if (!isVolunteerMobile(cleanApplicantPhone())) {
 			const needsOriginalPhone =
 				isPortalApplicant && applicantCredential && 'token' in applicantCredential;
-			showSubmitError(
-				needsOriginalPhone
-					? 'กรุณากรอกเบอร์โทรศัพท์ที่ใช้สมัครเดิมเพื่อสมัครงานอาสาสมัครจาก portal'
-					: t.errPhone
-			);
+			showSubmitError(needsOriginalPhone ? t.errPortalPhone : t.errPhone);
 			return;
 		}
 		errorMessage = null;
@@ -567,7 +568,7 @@
 			isSubmitting = false;
 			await submitApplication();
 		} catch (err) {
-			showSubmitError(err instanceof Error ? err.message : 'ตรวจสอบข้อมูลก่อนสมัครไม่สำเร็จ');
+			showSubmitError(err instanceof Error ? err.message : t.errPreflightFallback);
 		} finally {
 			isSubmitting = false;
 		}
@@ -610,7 +611,7 @@
 			onkeydown={(e) => e.key === 'Escape' && requestClose()}
 			role="button"
 			tabindex="0"
-			aria-label="Close modal"
+			aria-label={t.closeModal}
 		></div>
 
 		<!-- Modal -->
@@ -672,33 +673,33 @@
 								aria-modal="true"
 								tabindex="-1"
 							>
-								<h3 class="text-lg font-bold text-foreground">เบอร์โทรนี้เคยสมัครไว้แล้ว</h3>
+								<h3 class="text-lg font-bold text-foreground">{t.existingTitle}</h3>
 								<p class="mt-2 text-sm leading-relaxed text-muted-foreground">
-									ระบบจะอัปเดต Volunteer profile เดิม และสร้างใบสมัครงานใหม่ให้คุณ
-									ข้อมูลการสมัครงานเดิมจะไม่ถูกลบ
+									{t.existingBody}
 								</p>
 								<div class="mt-4 space-y-3 rounded-xl bg-muted/30 p-4 text-sm">
 									<div class="flex items-center justify-between gap-3">
-										<span class="text-muted-foreground">โปรไฟล์</span>
+										<span class="text-muted-foreground">{t.existingProfile}</span>
 										<span class="font-semibold text-foreground"
 											>{preflightResult.existing_profile.display_name}</span
 										>
 									</div>
 									<div class="flex items-center justify-between gap-3">
-										<span class="text-muted-foreground">Volunteer code</span>
+										<span class="text-muted-foreground">{t.existingVolunteerCode}</span>
 										<span class="font-semibold text-foreground"
 											>{preflightResult.existing_profile.volunteer_code || '—'}</span
 										>
 									</div>
 									<div>
-										<p class="text-xs text-muted-foreground">ทักษะเดิม</p>
+										<p class="text-xs text-muted-foreground">{t.existingSkills}</p>
 										<p class="mt-1 font-medium text-foreground">
-											{preflightResult.existing_profile.existing_skills.join(', ') || 'ยังไม่มี'}
+											{preflightResult.existing_profile.existing_skills.join(', ') ||
+												t.existingSkillsNone}
 										</p>
 									</div>
 									{#if preflightResult.existing_profile.new_skills.length > 0}
 										<div>
-											<p class="text-xs text-muted-foreground">ทักษะใหม่ที่จะเพิ่ม</p>
+											<p class="text-xs text-muted-foreground">{t.existingNewSkills}</p>
 											<p class="mt-1 font-medium text-foreground">
 												{preflightResult.existing_profile.new_skills.join(', ')}
 											</p>
@@ -709,8 +710,7 @@
 									<div
 										class="mt-4 rounded-xl border border-amber-300 bg-amber-50 p-3 text-xs leading-relaxed text-amber-900"
 									>
-										ทักษะควบคุมใหม่จะรอตรวจสอบก่อนใช้งาน
-										เจ้าหน้าที่ต้องรับรองก่อนจึงจะใช้ทักษะนี้กับงานได้
+										{t.existingControlledNote}
 									</div>
 								{/if}
 								<!-- Stacked on a phone so the long confirm label never breaks over 3 lines. -->
@@ -723,7 +723,7 @@
 										}}
 										class="min-h-11 rounded-xl border border-border bg-muted/30 px-4 py-3 text-sm font-bold text-foreground hover:bg-muted sm:flex-1"
 									>
-										ยกเลิก
+										{t.existingCancel}
 									</button>
 									<button
 										type="button"
@@ -731,7 +731,7 @@
 										onclick={submitApplication}
 										class="min-h-11 rounded-xl bg-primary px-4 py-3 text-sm font-bold text-primary-foreground hover:bg-primary-strong disabled:opacity-70 sm:flex-[2]"
 									>
-										{isSubmitting ? 'กำลังบันทึก...' : 'ยืนยันอัปเดตโปรไฟล์และสมัครงาน'}
+										{isSubmitting ? t.existingSaving : t.existingConfirm}
 									</button>
 								</div>
 							</div>
@@ -835,13 +835,12 @@
 						<div
 							class="mb-6 rounded-xl border border-amber-300 bg-amber-50 p-4 text-xs text-amber-900"
 						>
-							<p class="font-bold">คุณเข้าสู่ระบบด้วย QR Code ตั๋วอาสาสมัคร</p>
+							<p class="font-bold">{t.portalNoteTitle}</p>
 							<p class="mt-1 leading-relaxed">
-								เพื่อสมัครงานอาสาสมัครใหม่ กรุณากรอกเบอร์โทรศัพท์ที่ใช้สมัครเดิม
-								ระบบจะใช้เบอร์นี้เชื่อมใบสมัครกับโปรไฟล์ Volunteer ของคุณ
+								{t.portalNoteBody}
 							</p>
 							<label for="portalApplyPhone" class="mt-3 block font-bold">
-								เบอร์โทรศัพท์ที่ใช้สมัครเดิม <span class="text-danger">*</span>
+								{t.portalPhoneLabel} <span class="text-danger">*</span>
 							</label>
 							<input
 								id="portalApplyPhone"
@@ -879,7 +878,7 @@
 												bind:value={formData.firstName}
 												readonly={isPortalApplicant}
 												aria-readonly={isPortalApplicant}
-												placeholder="เช่น เก่งกล้า"
+												placeholder={t.firstNamePlaceholder}
 												class="w-full rounded-xl border border-border bg-card px-4 py-2.5 text-sm outline-hidden transition-all focus:border-primary focus:ring-1 focus:ring-primary"
 											/>
 										</div>
@@ -894,7 +893,7 @@
 												bind:value={formData.lastName}
 												readonly={isPortalApplicant}
 												aria-readonly={isPortalApplicant}
-												placeholder="เช่น งานอาสา"
+												placeholder={t.lastNamePlaceholder}
 												class="w-full rounded-xl border border-border bg-card px-4 py-2.5 text-sm outline-hidden transition-all focus:border-primary focus:ring-1 focus:ring-primary"
 											/>
 										</div>
@@ -911,7 +910,7 @@
 												bind:value={formData.nickname}
 												readonly={isPortalApplicant}
 												aria-readonly={isPortalApplicant}
-												placeholder="เช่น กล้า, พิมพ์"
+												placeholder={t.nicknamePlaceholder}
 												class="w-full rounded-xl border border-border bg-card px-4 py-2.5 text-sm outline-hidden transition-all focus:border-primary focus:ring-1 focus:ring-primary"
 											/>
 										</div>

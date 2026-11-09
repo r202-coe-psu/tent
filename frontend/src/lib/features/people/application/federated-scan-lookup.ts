@@ -10,7 +10,11 @@ import { unassignedRegistrationRemote } from '$lib/features/unassigned-registrat
 import type { UnassignedRegistrationSearchHit } from '$lib/features/unassigned-registration/domain/search';
 import { peopleRepository } from '../data/people.remote';
 import type { Evacuee } from '../domain/people';
+import type { EvacueeQrPrintRef, PersonQrVerdict } from '$lib/utils/evacuee-qr';
+import { readEvacueeQrPrints } from '../data/evacuee-qr.remote';
+import { checkPersonQr, staffPersonQrRejectionMessage } from './evacuee-qr-check';
 import {
+	extractScanPersonQr,
 	extractScanLookupToken,
 	mongoUnassignedSearchQueries,
 	pickUnassignedSearchHit,
@@ -27,12 +31,25 @@ export type FederatedScanUnassignedHit = {
 	hit: UnassignedRegistrationSearchHit;
 };
 
-export type FederatedScanHit = FederatedScanCouchHit | FederatedScanUnassignedHit;
+/**
+ * Expired / invalid Person QR (CR-233 FR-EQR-34): carries only the message, no evacuee. Callers
+ * toast `message` and must not open a profile or record any action.
+ */
+export type FederatedScanRejectedHit = {
+	source: 'qr_rejected';
+	verdict: Exclude<PersonQrVerdict, { status: 'valid' }>;
+	message: string;
+};
+
+export type FederatedScanHit =
+	FederatedScanCouchHit | FederatedScanUnassignedHit | FederatedScanRejectedHit;
 
 export type FederatedScanLookupDeps = {
 	getEvacuee: (id: string) => Promise<Evacuee | null>;
 	searchEvacuees: (q: string) => Promise<Evacuee[]>;
 	searchUnassigned: (q: string) => Promise<{ results: UnassignedRegistrationSearchHit[] }>;
+	/** `evacuee_qr:{ULID}` prints (missing doc = []). Errors propagate: never treated as valid. */
+	listQrPrints: (evacueeId: string) => Promise<readonly EvacueeQrPrintRef[]>;
 };
 
 /** Pure orchestration — unit-tested with injected deps. */
@@ -43,7 +60,17 @@ export async function lookupFederatedByScanCodeWithDeps(
 	const token = extractScanLookupToken(raw);
 	if (!token) return null;
 
-	const couchId = toCouchEvacueeId(token);
+	// Person QR (`evacuee:{ULID}[@hash6]`): apply the scan rule before anything is opened. A bare
+	// ULID registration ticket is not a Person QR and skips this (FR-EQR-31).
+	const personQr = extractScanPersonQr(raw);
+	if (personQr) {
+		const verdict = await checkPersonQr(personQr, deps.listQrPrints);
+		if (verdict.status !== 'valid') {
+			return { source: 'qr_rejected', verdict, message: staffPersonQrRejectionMessage(verdict) };
+		}
+	}
+
+	const couchId = personQr?.evacuee_id ?? toCouchEvacueeId(token);
 	try {
 		const byId = await deps.getEvacuee(couchId);
 		if (byId) return { source: 'couch', evacuee: byId };
@@ -80,7 +107,8 @@ export async function lookupFederatedByScanCode(
 	const result = await lookupFederatedByScanCodeWithDeps(code, {
 		getEvacuee: (id) => peopleRepository().getEvacuee(id),
 		searchEvacuees: (q) => peopleRepository().searchEvacuees(q),
-		searchUnassigned: (q) => unassignedRegistrationRemote.searchOpen(q)
+		searchUnassigned: (q) => unassignedRegistrationRemote.searchOpen(q),
+		listQrPrints: (id) => readEvacueeQrPrints(id)
 	});
 
 	// Warm / refresh related cache so Station 1 table + profile queries catch up

@@ -438,6 +438,26 @@ Local run (the preview server must see `FASTAPI_INTERNAL_URL` and `EXTERNAL_API_
 images must be current — `docker compose up -d --build fastapi worker`):
 `env -u E2E_BASE_URL PLAYWRIGHT_TEST_BASE_URL=http://localhost:4187 npx playwright test e2e/partner-api.test.ts`
 
+### 8.6 Food sphere analysis suite (`@food-sphere`)
+
+`food-sphere-analysis.test.ts` drives the supply "วิเคราะห์เสบียงอาหาร" tab (`/back-office/supply?tab=food-sphere`)
+as SA, `warehouse_staff` and `supply_coordinator` of SH001. The page is only read, nothing is saved.
+Assertions compare the page with itself (a status card's count vs the rows it filters to, the five
+status counts vs "ของทั้งหมด"), so they hold on any seeded shelter; a shelter with no items skips the
+data tests. Tag: `@critical` (it creates three throwaway `E2E FoodSphere` accounts, removed in
+`afterAll` and asserted gone by the Z test) + `@food-sphere`, so it needs `CAN_WRITE` like the other
+`@critical` suites. A second describe covers create / update / delete in its own `E2E FoodSphere CUD <run>`
+shelter (never SH001 or the central catalog): `warehouse_staff` creates a group, turns a central group
+into a shelter override, renames it, deactivates and reactivates it and edits a replenishment policy,
+and `supply_coordinator` is refused with 403 for create, update and delete. Its `afterAll` drops the
+shelter and accounts even after a red run, and the Z test asserts they are gone. It is in
+`playwright.staging.config.ts`'s allowlist; budget about 1 minute.
+
+```bash
+pnpm test:e2e:food-sphere                     # build + run
+playwright test e2e/food-sphere-analysis.test.ts --grep @food-sphere
+```
+
 ## 9. Agent handoff
 
 ### 9.0 Rules for every agent (non-negotiable)
