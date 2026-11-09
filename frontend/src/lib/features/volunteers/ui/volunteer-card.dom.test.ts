@@ -7,8 +7,14 @@ import VolunteerCard from './volunteer-card.svelte';
 
 vi.mock('@tanstack/svelte-query', () => ({ useQueryClient: () => ({}) }));
 vi.mock('svelte-sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
+const COORDINATOR = ['shelter:SH001', 'SH001:volunteer_coordinator'];
+const auth = vi.hoisted(() => ({ roles: [] as string[] }));
 vi.mock('$lib/stores/auth.svelte', () => ({
-	authStore: { user: { name: 'u', roles: ['shelter:SH001', 'SH001:volunteer_coordinator'] } }
+	authStore: {
+		get user() {
+			return { name: 'u', roles: auth.roles };
+		}
+	}
 }));
 vi.mock('$lib/stores/shelter.svelte', () => ({ shelterStore: { selectedShelterCode: 'SH001' } }));
 vi.mock('../application/queries', () => ({
@@ -78,7 +84,10 @@ const grantRole = {
 };
 const managerRole = { role: 'warehouse_staff', label: 'เจ้าหน้าที่คลัง', expiresAt: null };
 
-beforeEach(() => vi.clearAllMocks());
+beforeEach(() => {
+	vi.clearAllMocks();
+	auth.roles = COORDINATOR;
+});
 afterEach(async () => {
 	if (instance) await unmount(instance);
 	instance = null;
@@ -96,7 +105,8 @@ describe('VolunteerCard close-profile notices (CR-221 FR-20)', () => {
 		expect(byTestId('close-keeps-manager-role')).toBeNull();
 	});
 
-	it('warns that a manager-given role stays and only the manager can take it back', async () => {
+	it('warns a shelter manager that a manager-given role stays and only the manager can take it back', async () => {
+		auth.roles = ['shelter:SH001', 'SH001:shelter_manager'];
 		await render({ kind: 'active', loginName: 'vol@example.com', roles: [managerRole] });
 		await openCloseDialog();
 		expect(byTestId('close-keeps-manager-role')?.textContent).toContain('ต้องให้ผู้จัดการศูนย์ถอน');
@@ -108,6 +118,30 @@ describe('VolunteerCard close-profile notices (CR-221 FR-20)', () => {
 		await openCloseDialog();
 		expect(byTestId('close-revokes-grants')).toBeNull();
 		expect(byTestId('close-keeps-manager-role')).toBeNull();
+	});
+});
+
+describe('VolunteerCard close button for a manager-given role (CR-221 A1-6)', () => {
+	const closeButton = () =>
+		document.body.querySelector<HTMLButtonElement>('[aria-label="ปิดใช้งานอาสาสมัคร"]')!;
+	const REASON = 'จิตอาสามีสิทธิ์ถาวรจากผู้จัดการศูนย์ ให้ผู้จัดการศูนย์ปิดหรือถอนสิทธิ์ก่อน';
+
+	it('is disabled for a coordinator, with the reason', async () => {
+		await render({ kind: 'active', loginName: 'vol@example.com', roles: [grantRole, managerRole] });
+		expect(closeButton().disabled).toBe(true);
+		expect(document.body.textContent).toContain(REASON);
+	});
+
+	it('stays open to a coordinator when the account holds coordinator grants only', async () => {
+		await render({ kind: 'active', loginName: 'vol@example.com', roles: [grantRole] });
+		expect(closeButton().disabled).toBe(false);
+		expect(document.body.textContent).not.toContain(REASON);
+	});
+
+	it('stays open to a shelter manager', async () => {
+		auth.roles = ['shelter:SH001', 'SH001:shelter_manager'];
+		await render({ kind: 'active', loginName: 'vol@example.com', roles: [managerRole] });
+		expect(closeButton().disabled).toBe(false);
 	});
 });
 

@@ -27,6 +27,7 @@ import {
 import { rotateStaffCard } from './staff-card-service';
 
 const MESSAGE = 'แก้ไขบัญชีได้เฉพาะที่ระบบกลาง';
+const options = { verifyVolunteerRoles: async () => undefined };
 const caller = { isSA: true, name: 'sa', roles: ['system_admin'] } as unknown as Caller;
 
 const writers: [string, () => Promise<unknown>][] = [
@@ -39,10 +40,11 @@ const writers: [string, () => Promise<unknown>][] = [
 		() =>
 			createOrMergeUser(
 				{ name: 'u', password: 'Temp-Pass-123', display_name: 'U', roles: [] },
-				caller
+				caller,
+				options
 			)
 	],
-	['updateUser', () => updateUser('u', { display_name: 'V' }, caller)],
+	['updateUser', () => updateUser('u', { display_name: 'V' }, caller, options)],
 	['deleteUser', () => deleteUser('u', caller)],
 	['resetUserPasswordByAdmin', () => resetUserPasswordByAdmin('u', caller)],
 	['rotateStaffCard', () => rotateStaffCard(caller, 'u')],

@@ -40,6 +40,9 @@ const UNVERIFIABLE_MESSAGE = 'ไม่สามารถยืนยันต�
 const VERIFY_FAILED_MESSAGE = 'เลข 4 ตัวท้ายไม่ถูกต้อง';
 const GENERIC_MESSAGE = 'ระบบไม่สามารถทำรายการได้ กรุณาลองอีกครั้ง';
 const PRINT_RENDER_FAILED_MESSAGE = 'สร้าง QR Code สำหรับพิมพ์ไม่สำเร็จ';
+/** CR-233 FR-EQR-24: no QR could be issued, so nothing is printed. */
+export const QR_ISSUE_FAILED_MESSAGE =
+	'ออก QR ใหม่ไม่สำเร็จ ยังไม่ได้พิมพ์ กรุณาลองอีกครั้งหรือติดต่อเจ้าหน้าที่';
 
 function messageFor(error: unknown): string {
 	if (!(error instanceof KioskRequestError)) return GENERIC_MESSAGE;
@@ -82,6 +85,8 @@ export class ReprintSession {
 	/** Verified labels of the household, kept so a printer failure can retry without re-asking. */
 	printable = $state.raw<KioskReprintMember[]>([]);
 	printedCount = $state(0);
+	/** Members of the last print whose QR could not be issued (not printed): tell the visitor. */
+	qrIssueFailedCount = $state(0);
 
 	private phoneValue = $state('');
 	private last4Value = $state('');
@@ -307,6 +312,7 @@ export class ReprintSession {
 		this.clearHousehold();
 		this.printable = [];
 		this.printedCount = 0;
+		this.qrIssueFailedCount = 0;
 		this.fromCandidates = false;
 		this.step = 'phone';
 	}
@@ -343,6 +349,17 @@ export class ReprintSession {
 	}
 
 	private async printLabels(generation: number): Promise<void> {
+		// A member without a freshly issued payload is never printed (FR-EQR-24).
+		const printable = this.printable.filter((m) => !m.qr_issue_failed && Boolean(m.qr_payload));
+		const failedCount = this.printable.length - printable.length;
+		if (printable.length === 0) {
+			this.printable = [];
+			this.error = QR_ISSUE_FAILED_MESSAGE;
+			this.step = 'members';
+			return;
+		}
+		this.printable = printable;
+		this.qrIssueFailedCount = failedCount;
 		this.step = 'printing';
 		let outcome: KioskPrintFlowResult;
 		try {
