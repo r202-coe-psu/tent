@@ -1,4 +1,5 @@
 import { env } from '$env/dynamic/private';
+import { EDGE_USERS_READONLY_MESSAGE } from '$lib/auth/edge-readonly';
 import { ServiceError } from '$lib/server/couch-admin';
 
 /** CR-171 FR-13: `EDGE_MODE=true` marks this frontend as an edge replica (central leaves it unset). */
@@ -12,6 +13,6 @@ export function isEdgeMode(): boolean {
  */
 export function assertUsersWritable(): void {
 	if (isEdgeMode()) {
-		throw new ServiceError('FORBIDDEN', 'แก้ไขบัญชีได้เฉพาะที่ระบบกลาง');
+		throw new ServiceError('FORBIDDEN', EDGE_USERS_READONLY_MESSAGE);
 	}
 }
