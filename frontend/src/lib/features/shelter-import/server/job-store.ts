@@ -312,14 +312,25 @@ export async function deployQueueDesign(): Promise<void> {
 	}
 }
 
-async function ensureImportQueueDatabase(): Promise<void> {
-	await ensurePrivateDatabase(IMPORT_QUEUE_DB, 'import queue');
-	await deployQueueDesign();
+// Setup writes _security and design docs, so it runs once per process rather than on every
+// worker poll (every 3 s). A failed attempt is retried on the next call.
+function oncePerProcess(setup: () => Promise<void>): () => Promise<void> {
+	let ready: Promise<void> | null = null;
+	return () =>
+		(ready ??= setup().catch((error: unknown) => {
+			ready = null;
+			throw error;
+		}));
 }
 
-async function ensureImportAuditDatabase(): Promise<void> {
-	await ensurePrivateDatabase(IMPORT_AUDIT_DB, 'import audit');
-}
+const ensureImportQueueDatabase = oncePerProcess(async () => {
+	await ensurePrivateDatabase(IMPORT_QUEUE_DB, 'import queue');
+	await deployQueueDesign();
+});
+
+const ensureImportAuditDatabase = oncePerProcess(() =>
+	ensurePrivateDatabase(IMPORT_AUDIT_DB, 'import audit')
+);
 
 async function getDoc<T extends { _id: string }>(id: string): Promise<T | null> {
 	const res = await adminRaw(`/${IMPORT_QUEUE_DB}/${encodeURIComponent(id)}`, 'GET');
