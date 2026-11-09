@@ -1,6 +1,7 @@
 services:
   couchdb:
     container_name: tent-couchdb-staging
+    restart: unless-stopped
     image: couchdb:3.5
     ulimits:
       nofile:
@@ -50,6 +51,7 @@ services:
 
   mongodb:
     container_name: tent-mongodb-staging
+    restart: unless-stopped
     image: mongo:8.0
     # Workaround: kernel ≥6.19 + MongoDB 8 TCMalloc rseq crash (exit 139).
     environment:
