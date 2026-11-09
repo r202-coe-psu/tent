@@ -43,7 +43,8 @@
 			new TestPrint({
 				prepareQrImage: prepareKioskQrImage,
 				printLabels: printKioskQrLabels,
-				fallbackPrint: browserPrint
+				fallbackPrint: browserPrint,
+				language: () => languageStore.current
 			})
 	);
 
