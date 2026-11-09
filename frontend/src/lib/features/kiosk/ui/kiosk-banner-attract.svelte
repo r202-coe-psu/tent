@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { untrack } from 'svelte';
 	import { fade } from 'svelte/transition';
 	import { fetchKioskBanners } from '../data/kiosk-banners.api';
 	import type { KioskBannerSlide } from '../domain/kiosk-banner-feed';
@@ -52,7 +53,8 @@
 
 	// Lifecycle only: start/stop the live controller, drop a pending click guard, rotate the preview.
 	$effect(() => {
-		controller?.start();
+		// `start()` reads `phase`; tracking it would destroy + restart the controller on every change.
+		untrack(() => controller?.start());
 		return () => {
 			controller?.destroy();
 			cancelSwallow?.();
