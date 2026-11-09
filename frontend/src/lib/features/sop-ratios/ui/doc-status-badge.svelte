@@ -24,32 +24,32 @@
 		CRITICAL: {
 			badgeClass: 'badge-status-critical',
 			dotClass: 'badge-dot-critical',
-			label: 'สต็อกวิกฤต',
-			compactLabel: 'สต็อกวิกฤต'
+			label: 'เสี่ยงขาดของ',
+			compactLabel: 'เสี่ยงขาดของ'
 		},
 		WARNING_REORDER: {
 			badgeClass: 'badge-status-warning',
 			dotClass: 'badge-dot-warning',
-			label: 'ถึงจุดสั่งเติม',
-			compactLabel: 'ถึงจุดสั่งเติม'
+			label: 'ควรจัดหาเพิ่ม',
+			compactLabel: 'ควรจัดหาเพิ่ม'
 		},
 		ADEQUATE: {
 			badgeClass: 'badge-status-adequate',
 			dotClass: 'badge-dot-adequate',
-			label: 'สต็อกปลอดภัย',
-			compactLabel: 'สต็อกปลอดภัย'
+			label: 'เพียงพอ',
+			compactLabel: 'เพียงพอ'
 		},
 		OVERSTOCK: {
 			badgeClass: 'badge-status-overstock',
 			dotClass: 'badge-dot-overstock',
-			label: 'สต็อกเกินเกณฑ์',
-			compactLabel: 'สต็อกเกินเกณฑ์'
+			label: 'ของเกินจำเป็น',
+			compactLabel: 'ของเกินจำเป็น'
 		},
 		UNCONFIGURED: {
 			badgeClass: 'badge-status-unconfigured',
 			dotClass: 'badge-dot-unconfigured',
-			label: 'ยังไม่ได้ตั้งค่า',
-			compactLabel: 'ยังไม่ได้ตั้งค่า'
+			label: 'ยังไม่ตั้งนโยบาย',
+			compactLabel: 'ยังไม่ตั้งนโยบาย'
 		}
 	};
 

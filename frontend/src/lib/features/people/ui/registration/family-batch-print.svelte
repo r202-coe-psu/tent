@@ -8,21 +8,28 @@
 	import ArrowRight from '@lucide/svelte/icons/arrow-right';
 	import UserPlus from '@lucide/svelte/icons/user-plus';
 	import { Button } from '$lib/components/ui/button/index.js';
-	import { PRINTERS_I18N, PrintLabelsButton } from '$lib/features/printers';
+	import { PRINTERS_I18N, PrintLabelsButton, ReportedRenderError } from '$lib/features/printers';
 	import { renderKioskQrLabelPng } from '$lib/features/kiosk';
+	import { toast } from 'svelte-sonner';
+	import { issueQrPayloads } from '../../application/evacuee-qr-issue';
 	import StationCompletionSummary from '../shared/station-completion-summary.svelte';
 	import { peopleKeys } from '../../application/queries';
 	import { peopleRepository } from '../../data/people.remote';
 	import { buildEvacueeQrLabel } from '../../domain/evacuee-qr-label';
 	import { headFirst } from '../../domain/household-label-order';
 	import { formatPersonName, type Evacuee, type Household } from '../../domain/people';
-	import { getTranslation } from '$lib/utils/i18n';
-	import { languageStore } from '$lib/stores/language.svelte';
-	import { EVACUEE_QR_MODAL_I18N } from '../_constants/evacuee-qr-modal.i18n';
 	import EvacueeQrModal from '../evacuee-profile/evacuee-qr-modal.svelte';
 	import { useShelter } from '$lib/features/shelters/index.js';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
 	import { getShelterCode } from '$lib/db/shelter';
+	import { langState } from '$lib/states/i18n.svelte';
+	import { getTranslation } from '$lib/utils/i18n';
+	import {
+		PRIMARY_CONTACT_LABEL,
+		PRIMARY_CONTACT_LABEL_EN
+	} from '../../domain/unified-registration';
+	import { STATION1_REGISTRATION_I18N } from '../_constants/station1-registration.i18n';
+	import { EVACUEE_QR_MODAL_I18N } from '../_constants/evacuee-qr-modal.i18n';
 
 	let {
 		household,
@@ -54,8 +61,7 @@
 	);
 
 	const queryClient = safeQuery(() => useQueryClient(), null);
-	const qrT = $derived(getTranslation(EVACUEE_QR_MODAL_I18N, languageStore.current));
-	const printersT = $derived(getTranslation(PRINTERS_I18N, languageStore.current));
+	const printersT = $derived(getTranslation(PRINTERS_I18N, langState.current));
 	const shelterCode = $derived(shelterStore.selectedShelterCode ?? getShelterCode());
 
 	/**
@@ -63,14 +69,40 @@
 	 * the tick on คัดกรอง reflects the screenings that exist right now: each member's screenings are
 	 * fetched through the query client under the same key `useScreeningsByEvacuee` uses (the
 	 * member cards below already populate it; staleTime 0 here forces a fresh read at click time).
+	 *
+	 * CR-233: also the only place this page issues QRs (`family_batch`, one call for the members
+	 * being printed, FR-EQR-21c). Members that were not issued are not printed and are reported.
 	 */
 	async function renderFamilyLabels(): Promise<string[]> {
 		const client = queryClient;
 		if (!client) throw new Error('Query client is not available');
 		const zones = shelterQuery.data?.zones;
-		const checklist = [qrT.checklistCheckIn, qrT.checklistScreening, qrT.checklistLodging];
+		const ordered = headFirst(members, household.head_evacuee_id);
+
+		let issued: Awaited<ReturnType<typeof issueQrPayloads>>;
+		try {
+			issued = await issueQrPayloads({
+				shelterCode,
+				source: 'family_batch',
+				evacueeIds: ordered.map((m) => m._id)
+			});
+		} catch {
+			toast.error(qrT.issueFailedToast);
+			throw new ReportedRenderError('QR was not issued');
+		}
+		if (issued.failedIds.length > 0) {
+			toast.error(
+				issued.failedIds.length === ordered.length
+					? qrT.issueFailedToast
+					: qrT.issuePartialToast(issued.failedIds.length)
+			);
+		}
+		for (const [id, payload] of issued.payloads) issuedByMember[id] = payload;
+		const printable = ordered.filter((m) => issued.payloads.has(m._id));
+		if (printable.length === 0) throw new ReportedRenderError('QR was not issued');
+
 		return Promise.all(
-			headFirst(members, household.head_evacuee_id).map(async (member) => {
+			printable.map(async (member) => {
 				const screenings = await client.fetchQuery({
 					queryKey: peopleKeys.screeningsByEvacuee(member._id),
 					queryFn: () => peopleRepository().listScreeningsByEvacuee(member._id),
@@ -79,7 +111,7 @@
 				const { qrPayload, label } = buildEvacueeQrLabel(member, {
 					zones,
 					hasScreening: screenings.length > 0,
-					checklist
+					qrPayload: issued.payloads.get(member._id)
 				});
 				return renderKioskQrLabelPng(qrPayload, label);
 			})
@@ -90,18 +122,22 @@
 		shelterQuery.data?.feature_flags?.enable_medical_screening ?? false
 	);
 
+	const t = $derived(getTranslation(STATION1_REGISTRATION_I18N, langState.current).batch);
+	const qrT = $derived(getTranslation(EVACUEE_QR_MODAL_I18N, langState.current));
+	const primaryContactLabel = $derived(
+		langState.current === 'en' ? PRIMARY_CONTACT_LABEL_EN : PRIMARY_CONTACT_LABEL
+	);
+
 	const total = $derived(members.length);
 	const nextStation = $derived<IntakeNextStation>(medicalScreeningEnabled ? 'medical' : 'zoning');
-	const nextStationLabel = $derived(
-		nextStation === 'medical' ? 'ไปคัดกรองผู้เข้าพัก (สถานี 2)' : 'ไปจัดโซน (สถานี 3)'
-	);
+	const nextStationLabel = $derived(nextStation === 'medical' ? t.toMedical : t.toZoning);
 	const facts = $derived([
-		{ label: 'ครอบครัว', value: household.label || '—' },
-		{ label: 'จำนวน', value: `${total} คน` },
-		{ label: 'สถานะ', value: 'รายงานตัวแล้ว · รอเข้าพัก' },
+		{ label: t.factFamily, value: household.label || '—' },
+		{ label: t.factCount, value: t.count(total) },
+		{ label: t.factStatus, value: t.statusValue },
 		{
-			label: 'ขั้นถัดไป',
-			value: nextStation === 'medical' ? 'คัดกรองผู้เข้าพัก (สถานี 2)' : 'จัดโซน (สถานี 3)'
+			label: t.factNext,
+			value: nextStation === 'medical' ? t.nextMedical : t.nextZoning
 		}
 	]);
 
@@ -109,6 +145,8 @@
 	// button's follow-up state: printing the family again would duplicate labels.
 	let printing = $state(false);
 	let retryHeld = $state(false);
+	// Latest QR issued per member by the family button, shown in each card's preview.
+	let issuedByMember = $state<Record<string, string | undefined>>({});
 	const leaveLocked = $derived(printing || retryHeld);
 
 	function isHead(member: Evacuee, index: number): boolean {
@@ -140,26 +178,26 @@
 			onclick={onRegisterAnother}
 		>
 			<UserPlus class="mr-1.5 size-4" />
-			ลงทะเบียนครอบครัวถัดไป
+			{t.registerAnother}
 		</Button>
 	{/if}
 	<Button type="button" variant="ghost" class="min-h-11" disabled={leaveLocked} onclick={onDone}>
-		กลับคิวทะเบียน
+		{t.backToQueue}
 	</Button>
 {/snippet}
 
 <div class="space-y-4 pb-20">
 	<StationCompletionSummary
-		title="ลงทะเบียนสำเร็จ"
+		title={t.title}
 		titleId="family-batch-print-heading"
-		subtitle="พิมพ์บัตรด้านล่างทีละใบ (Person QR ของทุกคน) แล้วส่งต่อไปขั้นถัดไป"
+		subtitle={t.subtitle}
 		{facts}
 		actions={nextActions}
 	>
 		<ul class="flex flex-wrap gap-1.5 text-sm">
 			{#each members as member, i (member._id)}
 				<li class="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-0.5 text-slate-700">
-					{formatPersonName(member)}{isHead(member, i) ? ' (ผู้ติดต่อหลัก)' : ''}
+					{formatPersonName(member)}{isHead(member, i) ? ` (${primaryContactLabel})` : ''}
 				</li>
 			{/each}
 		</ul>
@@ -168,7 +206,7 @@
 	{#each members as member, i (member._id)}
 		<section class="space-y-3">
 			<h3 class="text-base font-semibold text-foreground">
-				{isHead(member, i) ? 'ผู้ติดต่อหลัก' : 'สมาชิก'}: {formatPersonName(member)}
+				{isHead(member, i) ? primaryContactLabel : t.member}: {formatPersonName(member)}
 			</h3>
 			<EvacueeQrModal
 				show={true}
@@ -176,6 +214,9 @@
 				embedded={true}
 				dismissible={false}
 				printable={false}
+				stationOnly={true}
+				qrSource="family_batch"
+				bind:issuedPayload={issuedByMember[member._id]}
 				onClose={onDone}
 			/>
 		</section>
@@ -185,8 +226,9 @@
 		class="sticky bottom-0 z-10 -mx-1 border-t border-border bg-background/95 p-3 backdrop-blur-sm"
 	>
 		<div class="flex flex-col gap-2 sm:flex-row sm:justify-end">
-			<!-- The only printer button on this page (member cards hide theirs, nextActions has none):
-			     one instance = one print state, no double print. -->
+			<!-- The only print button on this page: member cards hide the station button (`printable={false}`)
+			     and the PDF button (`stationOnly`), and nextActions has none. One instance = one print
+			     state, so no double print and no second issue path rotating the QRs just printed. -->
 			{#if total > 0}
 				<!-- Keyed by the family: the button keeps unsent chunks for Retry, which must not outlive a
 				     change of members (it would print the old labels). Invariant: `members` is a snapshot

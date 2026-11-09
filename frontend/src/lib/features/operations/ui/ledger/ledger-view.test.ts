@@ -13,6 +13,7 @@ import {
 	ledgerRefHref,
 	ledgerToCsv,
 	LEDGER_CSV_HEADER,
+	ledgerEntryLabel,
 	summarizeRows,
 	toLedgerRow,
 	type LedgerLookup
@@ -214,6 +215,62 @@ describe('filterLedger', () => {
 	});
 });
 
+describe('self-purchased receipts (schema_v 7)', () => {
+	const bought = entry({
+		reason: 'adjust',
+		adjust_reason: 'found',
+		qty: '6',
+		occurred_at: at(2, 11),
+		lot: { self_purchased: true }
+	});
+	const transferIn = entry({
+		reason: 'transfer_in',
+		qty: '9',
+		ref_id: 'stock_transfer:TR-1',
+		occurred_at: at(2, 12),
+		lot: { self_purchased: true }
+	});
+	const rows = buildLedgerRows([...all, bought, transferIn], lookup);
+	const open = { from: null, to: null };
+
+	it('groups only a flagged receipt as ซื้อเอง; old rows and a stray transfer_in keep their group', () => {
+		expect(rows.filter((r) => r.group === 'self_purchased').map((r) => r.id)).toEqual([bought._id]);
+		expect(toLedgerRow(bought, lookup).reasonLabel).toBe('ซื้อเอง');
+		expect(toLedgerRow(receive, lookup).group).toBe('in');
+		expect(toLedgerRow(transferIn, lookup).group).toBe('transfer');
+	});
+
+	it('ledgerEntryLabel gives the same label the per-item history prints', () => {
+		expect(ledgerEntryLabel(bought)).toBe('ซื้อเอง');
+		expect(ledgerEntryLabel(receive)).toBe(toLedgerRow(receive, lookup).reasonLabel);
+	});
+
+	it('an adjust/found row without the flag stays an adjust', () => {
+		const found = entry({
+			reason: 'adjust',
+			adjust_reason: 'found',
+			qty: '2',
+			occurred_at: at(2, 13)
+		});
+		expect(toLedgerRow(found, lookup).group).toBe('adjust');
+		expect(toLedgerRow(found, lookup).reasonLabel).toBe('ปรับปรุงคลัง');
+	});
+
+	it('the ซื้อเอง type filter keeps only those rows', () => {
+		const out = filterLedger(rows, { range: open, type: 'self_purchased', q: '' });
+		expect(out.map((r) => r.id)).toEqual([bought._id]);
+	});
+
+	it('counts a self-purchased row on its own card, not on ปรับยอด', () => {
+		const cards = summarizeRows(rows);
+		const count = (g: string) => cards.find((c) => c.group === g)?.count;
+		expect(count('self_purchased')).toBe(1);
+		expect(count('adjust')).toBe(
+			summarizeRows(buildLedgerRows(all, lookup)).find((c) => c.group === 'adjust')?.count
+		);
+	});
+});
+
 describe('groupByDay', () => {
 	it('splits at local midnight and keeps order', () => {
 		const groups = groupByDay(buildLedgerRows(all, lookup));
@@ -229,13 +286,14 @@ describe('groupByDay', () => {
 });
 
 describe('summarizeRows', () => {
-	it('counts the four cards from the ledger alone', () => {
+	it('counts the five cards from the ledger alone', () => {
 		const cards = summarizeRows(buildLedgerRows(all, lookup));
 		expect(cards.map((c) => [c.group, c.count])).toEqual([
 			['in', 2],
 			['out', 1],
 			['adjust', 1],
-			['transfer', 1]
+			['transfer', 1],
+			['self_purchased', 0]
 		]);
 		expect(cards[0].hint).toBe('รายการ · จาก 1 ใบบริจาค');
 		expect(cards[1].hint).toBe('รายการ · ครัวกลาง 1');
@@ -249,7 +307,7 @@ describe('summarizeRows', () => {
 	});
 
 	it('is all zeros for no rows', () => {
-		expect(summarizeRows([]).map((c) => c.count)).toEqual([0, 0, 0, 0]);
+		expect(summarizeRows([]).map((c) => c.count)).toEqual([0, 0, 0, 0, 0]);
 	});
 });
 

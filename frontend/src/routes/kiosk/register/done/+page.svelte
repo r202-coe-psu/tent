@@ -51,6 +51,7 @@
 						qrSrc: qrImage?.src,
 						qrSizeMm: qrImage?.sizeMm,
 						name: registration.label.name,
+						emergencyPhone: registration.label.emergency_phone,
 						checkedCount: KIOSK_CHECK_IN_TICKS
 					}
 				]
@@ -78,6 +79,11 @@
 
 	async function printLabel(): Promise<void> {
 		if (!registration || printPhase === 'printing') return;
+		// CR-233 FR-EQR-24: no QR was issued for this person, so there is nothing valid to print.
+		if (registration.qr_issue_failed || !registration.qr_payload) {
+			printError = 'ออก QR ไม่สำเร็จ ยังไม่ได้พิมพ์ กรุณาติดต่อเจ้าหน้าที่เพื่อพิมพ์ QR ใหม่';
+			return;
+		}
 		// Not sent home while the label comes out; resuming restarts the idle countdown.
 		idleTimeout.setPaused(true);
 		printError = '';
@@ -91,6 +97,7 @@
 					{
 						qrSrc: qrImage.src,
 						name: registration.label.name,
+						emergencyPhone: registration.label.emergency_phone,
 						checkedCount: KIOSK_CHECK_IN_TICKS
 					}
 				],

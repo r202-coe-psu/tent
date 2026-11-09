@@ -12,6 +12,9 @@
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { getShelterCode } from '$lib/db/shelter';
 	import { UlidReservation } from '$lib/db/ulid-reservation';
+	import { langState } from '$lib/states/i18n.svelte';
+	import { getTranslation } from '$lib/utils/i18n';
+	import { STAFF_REGISTRATION_DESK_I18N } from '$lib/constants/i18n/staff-registration-desk';
 	import { ConsentSummary, initialSearchVisible } from '$lib/features/consent';
 	import {
 		FamilyBatchPrint,
@@ -36,6 +39,9 @@
 	} from '$lib/features/people';
 
 	let { data } = $props();
+
+	const td = $derived(getTranslation(STAFF_REGISTRATION_DESK_I18N, langState.current));
+	const t = $derived(td.reportIn);
 
 	const evacueeQuery = useEvacuee(() => data.evacueeId);
 	const evacuee = $derived(evacueeQuery.data ?? null);
@@ -101,7 +107,7 @@
 
 	beforeNavigate((nav) => {
 		if (isNavigatingAfterSave || completed) return;
-		if (isDirty && !confirm('มีการแก้ไขที่ยังไม่ได้บันทึก ต้องการออกจากหน้านี้หรือไม่?')) {
+		if (isDirty && !confirm(td.common.leaveConfirm)) {
 			nav.cancel();
 		}
 	});
@@ -169,13 +175,13 @@
 			isNavigatingAfterSave = true;
 			completed = { ...result, consentRef: consent?.decision.ref ?? null };
 			await focusCompletionHeading();
-			toast.success(`รายงานตัวสำเร็จ ${result.members.length} คน`);
+			toast.success(t.toastSuccess(result.members.length));
 		} catch (err) {
 			saveError = buildSaveFailureReport(err, {
-				summaryTh: 'บันทึกการรายงานตัวไม่สำเร็จ',
+				summaryTh: t.failSummary,
 				shelterCode
 			});
-			toast.error('บันทึกการรายงานตัวไม่สำเร็จ กรุณาลองใหม่อีกครั้ง');
+			toast.error(t.failToast);
 			throw err;
 		}
 	}
@@ -191,7 +197,7 @@
 
 <svelte:head>
 	<title>
-		{evacuee ? `รายงานตัว · ${evacuee.first_name}` : 'รายงานตัว'} | SmartShelter
+		{t.pageTitle(evacuee ? evacuee.first_name : null)} | SmartShelter
 	</title>
 </svelte:head>
 
@@ -233,17 +239,15 @@
 			class="mb-3 inline-flex min-h-11 cursor-pointer items-center gap-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
 		>
 			<ArrowLeft class="size-4" />
-			<span>กลับคิวทะเบียน</span>
+			<span>{td.common.backToQueue}</span>
 		</button>
 
 		<div class="mb-2 flex flex-wrap items-center gap-2">
 			<ClipboardList class="size-6 text-primary" />
-			<h1 class="text-2xl font-bold md:text-3xl">รายงานตัวผู้ประสบภัย</h1>
+			<h1 class="text-2xl font-bold md:text-3xl">{t.heading}</h1>
 		</div>
 		<p class="mb-4 text-sm text-muted-foreground md:mb-6">
-			{alreadyReportedIn
-				? 'แสดงข้อมูลแบบอ่านอย่างเดียว — การแก้ไขทำได้ที่หน้าโปรไฟล์ผู้ประสบภัยเท่านั้น'
-				: 'ตรวจสอบข้อมูลครอบครัว เลือกสมาชิกที่เดินทางมารายงานตัวในรอบนี้ และสามารถเพิ่มสมาชิกใหม่ได้'}
+			{alreadyReportedIn ? t.introReadOnly : t.introEdit}
 		</p>
 
 		{#if saveError}
@@ -255,7 +259,7 @@
 				<div
 					class="size-6 animate-spin rounded-full border-2 border-primary border-t-transparent"
 				></div>
-				<p class="text-xs">กำลังโหลดข้อมูลผู้ประสบภัยและครอบครัว...</p>
+				<p class="text-xs">{t.loading}</p>
 			</div>
 		{:else if !evacuee}
 			<Card.Root class="border-border bg-card p-6 text-center shadow-sm">
@@ -264,11 +268,12 @@
 				>
 					<AlertTriangle class="size-6" />
 				</div>
-				<h2 class="text-base font-bold">ไม่พบผู้ประสบภัย</h2>
+				<h2 class="text-base font-bold">{t.notFoundTitle}</h2>
 				<p class="mt-1.5 text-xs text-muted-foreground">
-					รหัส <span class="font-mono">{data.evacueeId}</span> ไม่มีในศูนย์นี้
+					{t.notFoundPrefix} <span class="font-mono">{data.evacueeId}</span>
+					{t.notFoundSuffix}
 				</p>
-				<Button class="mt-4" onclick={backToQueue}>กลับคิวทะเบียน</Button>
+				<Button class="mt-4" onclick={backToQueue}>{td.common.backToQueue}</Button>
 			</Card.Root>
 		{:else if alreadyReportedIn}
 			<Card.Root class="border-border bg-card p-6 text-center shadow-sm">
@@ -277,16 +282,15 @@
 				>
 					<Lock class="size-6" />
 				</div>
-				<h2 class="text-base font-bold">ผู้ประสบภัยรายงานตัวแล้ว</h2>
+				<h2 class="text-base font-bold">{t.alreadyTitle}</h2>
 				<p class="mt-1.5 text-xs text-muted-foreground">
-					สถานะปัจจุบัน: {evacuee.current_stay.status} — ข้อมูลด้านล่างแสดงแบบอ่านอย่างเดียว หากต้องการแก้ไข
-					กรุณาไปที่หน้าโปรไฟล์ผู้ประสบภัย
+					{t.alreadyBody(evacuee.current_stay.status)}
 				</p>
 				<Button
 					class="mt-4"
 					onclick={() => goto(resolve(`/onsite/people/evacuee-profile-view/${evacuee._id}`))}
 				>
-					ไปที่หน้าโปรไฟล์
+					{t.goToProfile}
 				</Button>
 			</Card.Root>
 			{@render registrationForm(true)}

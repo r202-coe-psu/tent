@@ -100,7 +100,9 @@ export {
 	petCategoryLabels,
 	petConditionLabels,
 	petCategoryConditions,
-	petCategoryOrder
+	petCategoryOrder,
+	policyLabelsByLanguage,
+	type PolicyLabelSet
 } from './domain/policy-labels';
 
 export {

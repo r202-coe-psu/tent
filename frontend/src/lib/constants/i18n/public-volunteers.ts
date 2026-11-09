@@ -1,0 +1,140 @@
+/** Copy for the `/volunteers` landing page (registration teaser, portal teaser, staffing needs). */
+export const PUBLIC_VOLUNTEERS_I18N = {
+	th: {
+		pageTitle: 'ระบบงานข้อมูลอาสาสมัคร — Smart Shelter',
+		heroTitle: 'ระบบงานข้อมูลอาสาสมัครร่วมบูรณาการภัยพิบัติ',
+		heroDescription:
+			'เชื่อมประสานความดี ขจัดปัญหาร่วมกระจุกตัว ด้วยการคัดกรองทักษะ (Skill Matching) ออกรหัสลงทะเบียน (Role Card) ปฏิบัติอาสา และติดตามสวัสดิการตามมาตรฐาน Sphere',
+		heroBadge: 'Rescue Volunteer Platform',
+		tabRegister: 'รวมสมัครพลังอาสา',
+		tabPortal: 'พอร์ทัล & บัตรงานอาสา',
+		tabNeeds: 'ประกาศความต้องการกำลังพล',
+
+		registerTitle: '1. ลงทะเบียนร่วมเป็นกำลังอาสา',
+		registerIntro:
+			'เมื่อผ่านขบวนลงทะเบียน ระบบจะออกรหัสประจำตัวอาสาสำหรับใช้เช็คอิน และแจกจ่ายบัตรงาน Role Card หน้าจุดในทันที',
+		fullNameLabel: 'ชื่อ-นามสกุล ของท่าน',
+		fullNamePlaceholder: 'ระบุชื่อจริง นามสกุล',
+		emergencyPhoneLabel: 'เบอร์ติดต่อกรณีฉุกเฉิน',
+		shelterLabel: 'ศูนย์พักพิงที่ต้องการเข้าช่วย',
+		shelterHatYai: 'ศูนย์พักพิง เทศบาลนครหาดใหญ่ (โรงเรียนเทศบาล 2)',
+		shelterKhlongHae: 'ศูนย์พักพิง เทศบาลเมืองคลองแห (โรงเรียนวัดคลองแห)',
+		shiftLabel: 'กะการเข้าร่วมช่วยเหลือ (Shift)',
+		shiftMorning: 'กะเช้า (08:00 - 16:00)',
+		shiftAfternoon: 'กะบ่าย (16:00 - 00:00)',
+		shiftNight: 'กะดึก (00:00 - 08:00)',
+		skillsLabel: 'ทักษะที่เกี่ยวข้องของตัวท่าน (รับเฉพาะเกณฑ์คัดกรอง)',
+		skillCooking: 'ประกอบอาหาร (Cooking)',
+		skillCookingNote: 'ศูนย์ขาดแคลนกำลังทำอาหารจำนวนมาก',
+		skillMedical: 'การแพทย์/ปฐมพยาบาล (Medical)',
+		skillMedicalNote: 'ต้องการพยาบาลและผู้ดูแลผู้ป่วยไข้',
+		skillScreening: 'คัดกรองประวัติ (Screening)',
+		skillScreeningNote: 'บันทึกข้อมูลหน้าจุดลงทะเบียนร่วมกับระบบคลาวด์',
+		skillLogistics: 'ขนย้ายสิ่งของ (Lifting/Logistics)',
+		skillLogisticsNote: 'ใช้แรงจัดขนของ ยานพาหนะ อุปกรณ์ช่วยเหลือภัยน้ำท่วม',
+		submit: '+ ยื่นส่งแบบฟอร์มอาสาสมัคร',
+
+		welfareTitle: 'คุณจะได้รับสวัสดิการอะไรบ้าง?',
+		welfareIntro:
+			'โครงการยึดถือมาตรฐานสากลในการดูแลช่วยเหลือและสนับสนุนปัจจัยสี่ให้กับอาสาสมัครส่วนหน้าระหว่างปฏิบัติงาน:',
+		welfareMealTitle: 'โภชนาการประจำมื้อ',
+		welfareMealBody: 'รับสิทธิ์อาหารหลักกล่องฟรีตามที่จองลงกะงาน',
+		welfareWaterTitle: 'น้ำดื่มผลิตสะอาด',
+		welfareWaterBody: 'ได้รับการจัดสรรน้ำขวดพกพาปฏิบัติงานอย่างต่อเนื่อง',
+		welfareGearTitle: 'ชุดเครื่องแต่งกาย & อุปกรณ์ PPE',
+		welfareGearBody: 'เสื้อสะท้อนแสง หน้ากาก ถุงมือ ปฐมพยาบาลครบครัน',
+		safetyTitle: 'ข้อทดสอบความปลอดภัย',
+		safetyBody:
+			'อาสาสมัครทุกคนจะต้องปฏิบัติตามแผนคำสั่งและคำแนะนำของหัวหน้าเวรศูนย์พักพิงหลัก หากพบอาการไม่สบาย มีไข้ หรือเกิดอุบัติเหตุแจ้งทีมแพทย์ส่วนหลังทันที!',
+
+		portalTitle: 'พอร์ทัลอาสาสมัคร (My Portal)',
+		portalIntro: 'เข้าสู่ระบบด้วยรหัสอาสา หรือค้นหาจากชื่อเพื่อดูข้อมูล Role Card',
+		portalSearchPlaceholder: 'ระบุรหัส V-1025 หรือชื่อ',
+		portalSearchButton: 'ค้นหาประวัติ',
+		portalEmptyTitle: 'กรุณาค้นหาเพื่อเข้าสู่บัตรประจำตัว',
+		portalEmptyBody:
+			'ใช้รหัส V-XXXX หรือชื่อ-นามสกุลจริง เปิดดู Role Card รับทราบหน้าที่ และรายงานตัวแบบเรียลไทม์',
+
+		needsTitle: 'ประกาศความต้องการกำลังพล',
+		needsIntro: 'ประกาศรับสมัครอาสาสมัครตามความต้องการของแต่ละศูนย์พักพิง',
+		needsSearchPlaceholder: 'ค้นหาชื่อศูนย์ หรือ อปท.',
+		needsHatYaiOwner: 'อปท. เทศบาลนครหาดใหญ่ | จำนวนผู้พักพิง 1/250 คน',
+		needsKhlongHaeOwner: 'อปท. เทศบาลเมืองคลองแห | จำนวนผู้พักพิง 1/180 คน',
+		needsMoreVolunteers: (count: number) => `ต้องการอาสาเพิ่ม ${count} อัตรา`,
+		needsSkillsHeading: 'ความต้องการทักษะเฉพาะด้าน:',
+		needsCook: 'แม่ครัว/ทำอาหาร',
+		needsMedical: 'ทีมแพทย์/พยาบาล',
+		needsScreening: 'ทีมคัดกรองประวัติ',
+		needsPeople: (count: number) => `ต้องการ: ${count} คน`,
+		needsApply: 'สมัครเป็นอาสาสมัครประจำศูนย์นี้'
+	},
+	en: {
+		pageTitle: 'Volunteer information system — Smart Shelter',
+		heroTitle: 'Integrated disaster volunteer information system',
+		heroDescription:
+			'Connecting good will and spreading help where it is needed through skill matching, registration codes (Role Cards), volunteer duty, and welfare tracking to Sphere standards',
+		heroBadge: 'Rescue Volunteer Platform',
+		tabRegister: 'Join as a volunteer',
+		tabPortal: 'Portal & volunteer card',
+		tabNeeds: 'Staffing needs',
+
+		registerTitle: '1. Register to volunteer',
+		registerIntro:
+			'Once you pass registration, the system issues your volunteer ID for check-in and hands out your Role Card at the point right away',
+		fullNameLabel: 'Your full name',
+		fullNamePlaceholder: 'Enter first and last name',
+		emergencyPhoneLabel: 'Emergency contact number',
+		shelterLabel: 'Shelter you want to help at',
+		shelterHatYai: 'Hat Yai City Municipality shelter (Municipal School 2)',
+		shelterKhlongHae: 'Khlong Hae Town Municipality shelter (Wat Khlong Hae School)',
+		shiftLabel: 'Shift you can help',
+		shiftMorning: 'Morning shift (08:00 - 16:00)',
+		shiftAfternoon: 'Afternoon shift (16:00 - 00:00)',
+		shiftNight: 'Night shift (00:00 - 08:00)',
+		skillsLabel: 'Your relevant skills (screened applicants only)',
+		skillCooking: 'Cooking',
+		skillCookingNote: 'Shelters are short of people who can cook in volume',
+		skillMedical: 'Medical / first aid',
+		skillMedicalNote: 'Nurses and caregivers for the sick are needed',
+		skillScreening: 'Record screening',
+		skillScreeningNote: 'Record details at the registration point, synced with the cloud system',
+		skillLogistics: 'Lifting / logistics',
+		skillLogisticsNote: 'Physical help moving goods, vehicles and flood relief equipment',
+		submit: '+ Submit volunteer form',
+
+		welfareTitle: 'What welfare will you receive?',
+		welfareIntro:
+			'The programme follows international standards in looking after front-line volunteers and providing the basics while they work:',
+		welfareMealTitle: 'Meals',
+		welfareMealBody: 'Free boxed main meals for the shifts you booked',
+		welfareWaterTitle: 'Clean drinking water',
+		welfareWaterBody: 'Bottled water to carry on duty, supplied continuously',
+		welfareGearTitle: 'Uniform & PPE',
+		welfareGearBody: 'Reflective vest, mask, gloves and a full first-aid kit',
+		safetyTitle: 'Safety notice',
+		safetyBody:
+			'Every volunteer must follow the orders and advice of the main shelter shift lead. If you feel unwell, have a fever or have an accident, tell the medical team at the rear immediately!',
+
+		portalTitle: 'Volunteer portal (My Portal)',
+		portalIntro: 'Sign in with your volunteer code, or search by name to see your Role Card',
+		portalSearchPlaceholder: 'Enter code V-1025 or a name',
+		portalSearchButton: 'Search records',
+		portalEmptyTitle: 'Search to open your ID card',
+		portalEmptyBody:
+			'Use your V-XXXX code or your real full name to open your Role Card, see your duties and report in real time',
+
+		needsTitle: 'Staffing needs',
+		needsIntro: 'Volunteer calls based on the needs of each shelter',
+		needsSearchPlaceholder: 'Search shelter or local authority',
+		needsHatYaiOwner: 'Hat Yai City Municipality | Sheltering 1/250 people',
+		needsKhlongHaeOwner: 'Khlong Hae Town Municipality | Sheltering 1/180 people',
+		needsMoreVolunteers: (count: number) =>
+			`${count} more ${count === 1 ? 'volunteer' : 'volunteers'} needed`,
+		needsSkillsHeading: 'Specialist skills needed:',
+		needsCook: 'Cooks / meal preparation',
+		needsMedical: 'Medical team / nurses',
+		needsScreening: 'Record screening team',
+		needsPeople: (count: number) => `Needed: ${count}`,
+		needsApply: 'Volunteer at this shelter'
+	}
+} as const;

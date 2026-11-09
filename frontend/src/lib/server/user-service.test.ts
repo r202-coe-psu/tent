@@ -32,6 +32,9 @@ import type { CouchUserDoc } from './user-service';
 import { hashSecurityAnswer } from './security-questions';
 import { ServiceError } from './couch-admin';
 
+/** Saves that add no volunteer role never call it; the A1-7 cases pass their own. */
+const noCheck = { verifyVolunteerRoles: async () => {} };
+
 /** `_users` docs carry the password field that `CouchUserDoc` intentionally omits. */
 type FakeUserDoc = CouchUserDoc & { password?: string };
 
@@ -911,7 +914,8 @@ describe('user-service', () => {
 			await updateUser(
 				'staff01',
 				{ display_name: 'After', roles: ['shelter:SH001', 'triage_staff'] },
-				sa
+				sa,
+				noCheck
 			);
 
 			const saved = fakeUsersDb['org.couchdb.user:staff01'];
@@ -952,7 +956,7 @@ describe('user-service', () => {
 				{ display_name: 'hijacked' },
 				{ must_change_password: true }
 			]) {
-				await expect(updateUser('0820000001', input, sm)).rejects.toMatchObject({
+				await expect(updateUser('0820000001', input, sm, noCheck)).rejects.toMatchObject({
 					code: 'FORBIDDEN'
 				});
 			}
@@ -962,9 +966,9 @@ describe('user-service', () => {
 		it('forbids an SM from editing an SM of another shelter', async () => {
 			await seed('0820000002', ['shelter:SH002', 'shelter_manager']);
 			await expect(
-				updateUser('0820000002', { password: 'NewPassword123!' }, sm)
+				updateUser('0820000002', { password: 'NewPassword123!' }, sm, noCheck)
 			).rejects.toMatchObject({ code: 'FORBIDDEN' });
-			await expect(updateUser('0820000002', { active: false }, sm)).rejects.toMatchObject({
+			await expect(updateUser('0820000002', { active: false }, sm, noCheck)).rejects.toMatchObject({
 				code: 'FORBIDDEN'
 			});
 		});
@@ -975,7 +979,8 @@ describe('user-service', () => {
 				updateUser(
 					'0820000003',
 					{ roles: ['shelter:SH001', 'registration_staff'], password: 'NewPassword123!' },
-					sm
+					sm,
+					noCheck
 				)
 			).rejects.toMatchObject({ code: 'FORBIDDEN' });
 			expect(fakeUsersDb[key('0820000003')].roles).toEqual(['shelter:SH002', 'registration_staff']);
@@ -983,7 +988,7 @@ describe('user-service', () => {
 
 		it('still lets an SM add an outside staff into the shelter via roles only', async () => {
 			await seed('0820000004', ['shelter:SH002', 'registration_staff']);
-			await updateUser('0820000004', { roles: ['shelter:SH001', 'triage_staff'] }, sm);
+			await updateUser('0820000004', { roles: ['shelter:SH001', 'triage_staff'] }, sm, noCheck);
 			const roles = fakeUsersDb[key('0820000004')].roles;
 			expect(roles).toContain('shelter:SH001');
 			expect(roles).toContain('shelter:SH002');
@@ -994,7 +999,8 @@ describe('user-service', () => {
 			await updateUser(
 				'0820000005',
 				{ display_name: 'renamed', active: false, email: 'in@example.com' },
-				sm
+				sm,
+				noCheck
 			);
 			const doc = fakeUsersDb[key('0820000005')];
 			expect(doc.display_name).toBe('renamed');
@@ -1004,7 +1010,7 @@ describe('user-service', () => {
 
 		it('leaves SA unrestricted', async () => {
 			await seed('0820000006', ['shelter:SH002', 'registration_staff']);
-			await updateUser('0820000006', { active: false, phone: '0877777777' }, sa);
+			await updateUser('0820000006', { active: false, phone: '0877777777' }, sa, noCheck);
 			const doc = fakeUsersDb[key('0820000006')];
 			expect(doc.active).toBe(false);
 			expect(doc.phone).toBe('0877777777');
@@ -1020,7 +1026,8 @@ describe('user-service', () => {
 					personnel_type: 'staff',
 					roles: ['shelter:SH001', 'triage_staff']
 				},
-				sm
+				sm,
+				noCheck
 			);
 			expect(result.merged).toBe(true);
 			const doc = fakeUsersDb[key('0820000007')];
@@ -1039,7 +1046,8 @@ describe('user-service', () => {
 					personnel_type: 'staff',
 					roles: ['shelter:SH001', 'triage_staff']
 				},
-				sm
+				sm,
+				noCheck
 			);
 			expect(result.merged).toBe(true);
 			const doc = fakeUsersDb[key('0820000008')];
@@ -1065,10 +1073,10 @@ describe('user-service', () => {
 			await createUser({ ...base, name: 'e1', roles: ['shelter:SH001', 'registration_staff'] });
 			expect(fakeUsersDb[idOf('e1')].edge_shelters).toEqual(['SH001']);
 
-			await updateUser('e1', { roles: ['shelter:SH001', 'shelter:SH002'] }, sa);
+			await updateUser('e1', { roles: ['shelter:SH001', 'shelter:SH002'] }, sa, noCheck);
 			expect(fakeUsersDb[idOf('e1')].edge_shelters).toEqual(['SH001', 'SH002']);
 
-			await updateUser('e1', { roles: ['shelter:SH002'] }, sa);
+			await updateUser('e1', { roles: ['shelter:SH002'] }, sa, noCheck);
 			expect(fakeUsersDb[idOf('e1')].edge_shelters).toEqual(['SH001', 'SH002']);
 		});
 
@@ -1099,7 +1107,7 @@ describe('user-service', () => {
 				type: 'user',
 				roles: ['shelter:SH001', 'shelter:SH002', 'SH001:registration_staff']
 			};
-			await updateUser('legacy', { roles: ['shelter:SH002'] }, sa);
+			await updateUser('legacy', { roles: ['shelter:SH002'] }, sa, noCheck);
 			expect(fakeUsersDb[idOf('legacy')].edge_shelters).toEqual(['SH001', 'SH002']);
 
 			fakeUsersDb[idOf('legacy2')] = {
@@ -1165,7 +1173,7 @@ describe('user-service', () => {
 			await expect(resetUserPasswordByAdmin('e5', sa)).rejects.toMatchObject({
 				code: 'VALIDATION'
 			});
-			await expect(updateUser('e5', { display_name: 'x' }, sa)).rejects.toMatchObject({
+			await expect(updateUser('e5', { display_name: 'x' }, sa, noCheck)).rejects.toMatchObject({
 				code: 'VALIDATION'
 			});
 			await expect(deleteUser('e5', sa)).rejects.toMatchObject({ code: 'VALIDATION' });
@@ -1220,7 +1228,8 @@ describe('user-service', () => {
 			await expect(
 				createOrMergeUser(
 					{ ...base, name: 'e9', roles: ['shelter:SH002', 'registration_staff'] },
-					manager('SH002')
+					manager('SH002'),
+					noCheck
 				)
 			).rejects.toMatchObject({ code: 'CONFLICT', message: DELETED_MSG });
 			expect(fakeUsersDb[idOf('e9')]).toEqual(before);
