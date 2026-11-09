@@ -41,6 +41,10 @@
 			(lookupErrorCode === 'PRE_REGISTRATION_NOT_FOUND' ||
 				lookupErrorCode === 'KIOSK_TOO_MANY_MATCHES')
 	);
+	/** CR-233: an expired / malformed Person QR cannot be retried; scan the latest one. */
+	const isQrRejected = $derived(
+		lookupErrorCode === 'KIOSK_QR_EXPIRED' || lookupErrorCode === 'KIOSK_QR_INVALID'
+	);
 	/** The verified ThaiD session was used up, expired or mismatched: only a new QR scan can go on. */
 	const isThaidSessionInvalid = $derived(lookupErrorCode === 'KIOSK_THAID_SESSION_INVALID');
 	/** Retrying cannot find a pre-registration that is not there, and ThaiD never offers walk-in. */
@@ -52,7 +56,7 @@
 
 <!-- Rendered in a KioskNoticePanel's actions: the panel stacks and sizes them. -->
 {#if !backIsPrimary}
-	{#if isThaidSessionInvalid}
+	{#if isThaidSessionInvalid || isQrRejected}
 		<Button type="button" onclick={onrescan ?? onreset} class={KIOSK_NOTICE_PRIMARY_ACTION}
 			>สแกนใหม่</Button
 		>
