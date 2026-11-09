@@ -399,7 +399,7 @@
 <Sheet.Root bind:open={sheetOpen}>
 	<Sheet.Content
 		side="right"
-		class="flex h-[100dvh] w-full flex-col gap-0 overflow-hidden border-0 p-0 pb-[env(safe-area-inset-bottom)] sm:max-w-none md:w-[36rem] md:border-l"
+		class="flex h-[100dvh] w-full flex-col gap-0 overflow-hidden border-0 p-0 pb-[env(safe-area-inset-bottom)] sm:max-w-none md:w-[42rem] md:border-l lg:w-[48rem]"
 	>
 		{#if sheetMode === 'view' && selected}
 			{@const o = catalogOrigin(selected, shelterCode)}

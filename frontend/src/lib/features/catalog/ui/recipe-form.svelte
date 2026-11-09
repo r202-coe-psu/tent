@@ -195,27 +195,39 @@
 			<section
 				class="space-y-6 rounded-2xl border border-slate-100 bg-slate-50/60 p-6 dark:border-zinc-800 dark:bg-zinc-900/30"
 			>
-				<div class="space-y-1">
-					<h3 class="text-sm font-bold text-slate-800 dark:text-slate-200">
-						รายการส่วนประกอบ (Ingredients / JSON)
-					</h3>
-					<Form.Field {form} name="ingredients">
-						<Form.Control>
-							{#snippet children({ props })}
-								<input type="hidden" {...props} />
-							{/snippet}
-						</Form.Control>
-						<Form.FieldErrors class="text-xs font-semibold text-destructive" />
-					</Form.Field>
+				<div class="flex items-center justify-between">
+					<div class="space-y-1">
+						<h3 class="text-sm font-bold text-slate-800 dark:text-slate-200">
+							รายการส่วนประกอบ (Ingredients / JSON)
+						</h3>
+						<Form.Field {form} name="ingredients">
+							<Form.Control>
+								{#snippet children({ props })}
+									<input type="hidden" {...props} />
+								{/snippet}
+							</Form.Control>
+							<Form.FieldErrors class="text-xs font-semibold text-destructive" />
+						</Form.Field>
+					</div>
+					<Button
+						type="button"
+						variant="outline"
+						size="sm"
+						onclick={addIngredient}
+						class="min-h-9 gap-1.5 rounded-xl border-slate-200 bg-white font-bold text-[#002f6c] hover:bg-slate-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-blue-400"
+					>
+						<Plus class="h-3.5 w-3.5" />
+						เพิ่มวัตถุดิบ
+					</Button>
 				</div>
 
 				<div class="space-y-3">
 					{#each $formData.ingredients as conv, index (index)}
 						<div
-							class="flex flex-col items-stretch gap-3 rounded-2xl border border-slate-100 bg-white p-5 shadow-sm md:flex-row md:items-end dark:border-zinc-800 dark:bg-zinc-950"
+							class="flex flex-col items-stretch gap-3 rounded-2xl border border-slate-100 bg-white p-4 shadow-2xs sm:flex-row sm:items-end dark:border-zinc-800 dark:bg-zinc-950"
 						>
 							<!-- ค้นหาวัตถุดิบจากคลัง -->
-							<div class="flex-1 space-y-1.5">
+							<div class="min-w-0 flex-1 space-y-1.5">
 								<span class="text-xs font-bold text-blue-700 dark:text-blue-400"
 									>ค้นหาวัตถุดิบจากคลัง</span
 								>
@@ -229,7 +241,7 @@
 							</div>
 
 							<!-- ปริมาณ -->
-							<div class="w-full space-y-1.5 md:w-28">
+							<div class="w-full shrink-0 space-y-1.5 sm:w-28">
 								<span class="text-xs font-bold text-blue-700 dark:text-blue-400">ปริมาณ</span>
 								<Input
 									type="number"
@@ -245,7 +257,7 @@
 							</div>
 
 							<!-- หน่วย -->
-							<div class="w-full space-y-1.5 md:w-28">
+							<div class="w-full shrink-0 space-y-1.5 sm:w-28">
 								<span class="text-xs font-bold text-blue-700 dark:text-blue-400">หน่วย</span>
 								<Input
 									type="text"
@@ -261,30 +273,32 @@
 							</div>
 
 							<!-- Action Buttons -->
-							<div class="mt-4 flex items-center gap-2 md:mt-0">
-								{#if $formData.ingredients.length > 1}
+							{#if $formData.ingredients.length > 1}
+								<div class="flex items-center sm:pb-0">
 									<Button
 										type="button"
 										variant="ghost"
 										class="h-12 w-12 shrink-0 rounded-xl border border-slate-100 text-destructive hover:bg-destructive/10 dark:border-zinc-800"
 										onclick={() => removeIngredient(index)}
+										title={`ลบวัตถุดิบแถวที่ ${index + 1}`}
 									>
 										<Trash2 class="h-5 w-5" />
+										<span class="sr-only">ลบวัตถุดิบแถวที่ {index + 1}</span>
 									</Button>
-								{/if}
-								{#if index === $formData.ingredients.length - 1}
-									<Button
-										type="button"
-										onclick={addIngredient}
-										class="flex h-12 shrink-0 items-center gap-1 rounded-xl bg-slate-100 px-5 font-bold text-[#002f6c] hover:bg-slate-200 dark:bg-zinc-800 dark:text-blue-400 dark:hover:bg-zinc-700"
-									>
-										<Plus class="h-4 w-4" />
-										เพิ่ม
-									</Button>
-								{/if}
-							</div>
+								</div>
+							{/if}
 						</div>
 					{/each}
+
+					<Button
+						type="button"
+						variant="outline"
+						onclick={addIngredient}
+						class="flex h-12 w-full items-center justify-center gap-1.5 rounded-xl border-2 border-dashed border-slate-200 bg-white text-sm font-bold text-[#002f6c] hover:border-slate-300 hover:bg-slate-50 dark:border-zinc-800 dark:bg-zinc-950 dark:text-blue-400 dark:hover:bg-zinc-900"
+					>
+						<Plus class="h-4 w-4" />
+						เพิ่มวัตถุดิบ
+					</Button>
 				</div>
 
 				<div class="grid grid-cols-1 gap-4 pt-2 md:grid-cols-2">

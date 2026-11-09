@@ -57,7 +57,7 @@
 	}
 </script>
 
-<div class="relative w-full">
+<div class="relative w-full min-w-0">
 	<div class="relative">
 		<Search class="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
 		<Input
@@ -72,7 +72,7 @@
 
 	{#if isOpen && filtered.length > 0}
 		<ul
-			class="absolute z-50 mt-1 max-h-56 w-full overflow-y-auto rounded-xl border border-slate-100 bg-popover py-1.5 text-popover-foreground shadow-lg dark:border-zinc-800"
+			class="absolute top-full left-0 z-50 mt-1 max-h-56 w-full min-w-[16rem] overflow-y-auto rounded-xl border border-slate-200/80 bg-popover py-1.5 text-popover-foreground shadow-lg dark:border-zinc-800"
 		>
 			{#each filtered as item (item._id)}
 				<li>
@@ -96,7 +96,7 @@
 		</ul>
 	{:else if isOpen}
 		<div
-			class="absolute z-50 mt-1 w-full rounded-xl border border-slate-100 bg-popover px-4 py-3 text-center text-xs font-semibold text-muted-foreground shadow-lg dark:border-zinc-800"
+			class="absolute top-full left-0 z-50 mt-1 w-full min-w-[16rem] rounded-xl border border-slate-200/80 bg-popover px-4 py-3 text-center text-xs font-semibold text-muted-foreground shadow-lg dark:border-zinc-800"
 		>
 			ไม่พบข้อมูลวัตถุดิบ
 		</div>
