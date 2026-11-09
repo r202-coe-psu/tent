@@ -125,181 +125,216 @@
 	}
 </script>
 
+{#snippet statusBadge(active: boolean)}
+	{#if active}
+		<span
+			class="inline-flex items-center rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-semibold whitespace-nowrap text-emerald-800"
+		>
+			ใช้งาน
+		</span>
+	{:else}
+		<span
+			class="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-semibold whitespace-nowrap text-slate-600"
+		>
+			ปิดใช้งาน
+		</span>
+	{/if}
+{/snippet}
+
+{#snippet sourceBadge(source: string | undefined)}
+	{#if source === 'SHELTER_OVERRIDE'}
+		<span
+			class="inline-flex items-center rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-semibold whitespace-nowrap text-amber-800"
+		>
+			{SOURCE_LABELS.SHELTER_OVERRIDE}
+		</span>
+	{:else}
+		<span
+			class="inline-flex items-center rounded-full bg-sky-100 px-2.5 py-0.5 text-xs font-semibold whitespace-nowrap text-sky-800"
+		>
+			{SOURCE_LABELS.SPHERE_BASELINE}
+		</span>
+	{/if}
+{/snippet}
+
 {#if viewMode === 'list'}
 	<section class="min-w-0">
-		<header class="mb-6 flex flex-col gap-4">
-			<div class="flex w-full flex-col gap-4 2xl:flex-row 2xl:items-center 2xl:justify-between">
+		<div class="space-y-4">
+			<div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
 				<div>
-					<h2 class="text-lg font-bold">กลุ่มสารอาหาร & หน่วยนับมาตรฐาน</h2>
-					<p class="text-sm text-muted-foreground">
-						จัดการกลุ่มความต้องการสารอาหาร หน่วยนับกลาง และรายการสินค้าคู่เทียบ
+					<h2 class="text-lg font-bold text-slate-900 sm:text-xl">
+						กลุ่มสารอาหาร & หน่วยนับมาตรฐาน
+					</h2>
+					<p class="text-sm text-slate-600">
+						จัดการกลุ่มความต้องการสารอาหาร หน่วยนับกลาง และรายการสินค้าในกลุ่ม
 					</p>
 				</div>
+				{#if isSA || canEditOverride}
+					<Button
+						type="button"
+						onclick={showCreateForm}
+						class="min-h-11 gap-2 rounded-lg bg-[#0A2647] px-4 text-sm font-semibold text-white hover:bg-[#051930]"
+					>
+						<Plus class="h-4 w-4" aria-hidden="true" />
+						เพิ่มกลุ่มความต้องการ
+					</Button>
+				{/if}
+			</div>
 
-				<div class="flex flex-wrap items-center gap-2">
-					<div class="relative w-full sm:w-56">
-						<Search class="absolute top-2.5 left-2.5 h-4 w-4 text-muted-foreground" />
+			<div
+				class="flex min-h-[40vh] flex-col rounded-2xl border border-slate-200/80 bg-white shadow-2xs"
+			>
+				<div
+					class="grid grid-cols-2 gap-2.5 border-b border-slate-200/80 p-3 md:grid-cols-4 md:p-4"
+				>
+					<div class="relative col-span-2">
+						<Search
+							class="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-slate-500"
+							aria-hidden="true"
+						/>
 						<Input
 							bind:value={search}
 							type="search"
-							placeholder="ค้นหากลุ่มความต้องการ..."
-							class="pl-9"
+							placeholder="ค้นหากลุ่มความต้องการ"
+							class="min-h-11 w-full rounded-lg border-slate-300 bg-white pl-9 text-base shadow-2xs md:text-sm"
 							aria-label="ค้นหากลุ่มความต้องการ"
 						/>
 					</div>
-
-					<div class="w-full sm:w-36">
+					<div class="col-span-2">
 						<Select.Root type="single" bind:value={filterStatus}>
-							<Select.Trigger class="h-9 w-full rounded-md border-input bg-background text-xs">
-								{filterStatus === 'ALL'
-									? 'ทุกสถานะ'
+							<Select.Trigger
+								class="min-h-11 w-full rounded-lg border-slate-300 bg-white text-sm shadow-2xs"
+								aria-label="กรองสถานะ"
+							>
+								สถานะ: {filterStatus === 'ALL'
+									? 'ทั้งหมด'
 									: filterStatus === 'active'
 										? 'ใช้งานอยู่'
 										: 'ปิดใช้งาน'}
 							</Select.Trigger>
 							<Select.Content>
-								<Select.Item value="ALL" label="ทุกสถานะ" />
+								<Select.Item value="ALL" label="ทั้งหมด" />
 								<Select.Item value="active" label="ใช้งานอยู่" />
 								<Select.Item value="inactive" label="ปิดใช้งาน" />
 							</Select.Content>
 						</Select.Root>
 					</div>
-
-					{#if isSA || canEditOverride}
-						<Button onclick={showCreateForm} class="ml-auto flex shrink-0 items-center gap-1.5">
-							<Plus class="h-4 w-4" />
-							เพิ่มกลุ่มความต้องการ
-						</Button>
-					{/if}
 				</div>
-			</div>
-		</header>
 
-		{#if reqGroupsQuery.isLoading}
-			<div class="flex min-h-80 items-center justify-center">
-				<div
-					class="h-8 w-8 animate-spin rounded-full border-2 border-slate-200 border-t-primary"
-				></div>
-			</div>
-		{:else if filteredGroups.length === 0}
-			<div class="rounded-lg border border-dashed p-8 text-center text-muted-foreground">
-				<p class="font-medium">ไม่พบข้อมูลกลุ่มความต้องการ</p>
-				{#if isSA || canEditOverride}
-					<p class="mt-1 text-sm">
-						คลิกปุ่ม "เพิ่มกลุ่มความต้องการ" เพื่อเริ่มต้นกำหนดกลุ่มสารอาหาร
-					</p>
+				<p class="border-b border-slate-100 px-4 py-2.5 text-sm text-slate-600">
+					กำลังแสดง <strong class="font-semibold text-slate-900 tabular-nums"
+						>{filteredGroups.length}</strong
+					> รายการ
+				</p>
+
+				{#if reqGroupsQuery.isLoading}
+					<div class="flex-1 space-y-3 p-4" role="status" aria-label="กำลังโหลด">
+						{#each [0, 1, 2, 3] as i (i)}
+							<div
+								class="h-16 animate-pulse rounded-xl border border-slate-200/80 bg-slate-50"
+							></div>
+						{/each}
+					</div>
+				{:else if filteredGroups.length === 0}
+					<div class="flex flex-1 flex-col items-center justify-center gap-1 p-12 text-center">
+						<p class="text-sm font-medium text-slate-500">ไม่พบข้อมูลกลุ่มความต้องการ</p>
+						{#if isSA || canEditOverride}
+							<p class="text-sm text-slate-500">
+								กดปุ่ม "เพิ่มกลุ่มความต้องการ" เพื่อเริ่มต้นกำหนดกลุ่มสารอาหาร
+							</p>
+						{/if}
+					</div>
+				{:else}
+					<div class="flex-1 overflow-x-auto">
+						<table class="w-full min-w-[900px] text-left text-sm">
+							<thead
+								class="border-b border-slate-200/80 bg-slate-50 text-xs font-semibold text-slate-600"
+							>
+								<tr>
+									<th class="min-w-[200px] p-3.5 pl-4 whitespace-nowrap">ชื่อกลุ่มความต้องการ</th>
+									<th class="p-3.5 whitespace-nowrap">รหัสกลุ่ม</th>
+									<th class="p-3.5 whitespace-nowrap">หน่วยนับมาตรฐาน</th>
+									<th class="min-w-[220px] p-3.5 whitespace-nowrap">สินค้าที่อยู่ในกลุ่ม</th>
+									<th class="p-3.5 whitespace-nowrap">สถานะ</th>
+									<th class="p-3.5 whitespace-nowrap">แหล่งที่มา</th>
+									<th class="p-3.5 pr-4 text-right whitespace-nowrap"
+										><span class="sr-only">การจัดการ</span></th
+									>
+								</tr>
+							</thead>
+							<tbody class="divide-y divide-slate-100">
+								{#each filteredGroups as group (group._id)}
+									<tr class="transition-colors hover:bg-slate-50">
+										<td class="p-3.5 pl-4 font-bold text-slate-900">{group.name}</td>
+										<td class="p-3.5 font-mono text-xs whitespace-nowrap text-slate-500">
+											{group._id.replace(/^requirement_group:/, '')}
+										</td>
+										<td class="p-3.5">
+											<span
+												class="rounded bg-slate-100 px-2 py-0.5 font-mono text-xs font-semibold whitespace-nowrap text-slate-900"
+											>
+												{group.standard_uom}
+											</span>
+										</td>
+										<td class="p-3.5 text-slate-600">
+											{#if (group.item_maps ?? []).length > 0}
+												<span class="text-xs">
+													{(group.item_maps ?? []).length} รายการ ({(group.item_maps ?? [])
+														.map((m) => itemNameMap.get(m.item_id) ?? m.item_id)
+														.join(', ')})
+												</span>
+											{:else}
+												<span class="text-xs text-slate-400 italic">ยังไม่มีสินค้าในกลุ่ม</span>
+											{/if}
+										</td>
+										<td class="p-3.5"
+											>{@render statusBadge((group.status ?? 'active') === 'active')}</td
+										>
+										<td class="p-3.5">{@render sourceBadge(group.source)}</td>
+										<td class="p-3.5 pr-4 text-right">
+											<div class="flex items-center justify-end gap-2">
+												{#if isSA || canEditOverride}
+													<Button
+														variant="outline"
+														onclick={() => showEditForm(group)}
+														class="min-h-11 gap-1.5 rounded-lg border-slate-300 text-sm font-semibold whitespace-nowrap"
+													>
+														<Settings2 class="h-3.5 w-3.5" aria-hidden="true" />
+														แก้ไข
+													</Button>
+													{#if isSA || group.source === 'SHELTER_OVERRIDE'}
+														{#if (group.status ?? 'active') === 'active'}
+															<Button
+																variant="destructive"
+																onclick={() => openDeleteDialog(group)}
+																class="min-h-11 gap-1.5 rounded-lg text-sm font-semibold whitespace-nowrap"
+															>
+																<Trash2 class="h-3.5 w-3.5" aria-hidden="true" />
+																ปิดใช้งาน
+															</Button>
+														{:else}
+															<Button
+																variant="outline"
+																disabled={setStatusMutation.isPending}
+																onclick={() => handleReactivate(group)}
+																class="min-h-11 gap-1.5 rounded-lg border-slate-300 text-sm font-semibold whitespace-nowrap text-emerald-700 hover:text-emerald-800"
+															>
+																<RotateCcw class="h-3.5 w-3.5" aria-hidden="true" />
+																เปิดใช้งาน
+															</Button>
+														{/if}
+													{/if}
+												{/if}
+											</div>
+										</td>
+									</tr>
+								{/each}
+							</tbody>
+						</table>
+					</div>
 				{/if}
 			</div>
-		{:else}
-			<div class="overflow-x-auto rounded-lg border">
-				<table class="w-full text-left text-sm">
-					<thead class="bg-muted/50 text-xs font-semibold text-muted-foreground uppercase">
-						<tr>
-							<th class="p-3">ชื่อกลุ่มความต้องการ</th>
-							<th class="p-3">รหัสกลุ่ม (ID)</th>
-							<th class="p-3">หน่วยนับมาตรฐาน</th>
-							<th class="p-3">สินค้าคู่เทียบ (Item Maps)</th>
-							<th class="p-3">สถานะ</th>
-							<th class="p-3">แหล่งที่มา</th>
-							<th class="p-3 text-right">การจัดการ</th>
-						</tr>
-					</thead>
-					<tbody class="divide-y">
-						{#each filteredGroups as group (group._id)}
-							<tr class="hover:bg-muted/30">
-								<td class="p-3 font-medium text-foreground">{group.name}</td>
-								<td class="p-3 font-mono text-muted-foreground">
-									{group._id.replace(/^requirement_group:/, '')}
-								</td>
-								<td class="p-3">
-									<span class="rounded bg-muted px-2 py-0.5 font-mono text-xs font-semibold">
-										{group.standard_uom}
-									</span>
-								</td>
-								<td class="p-3">
-									{#if (group.item_maps ?? []).length > 0}
-										<span class="text-xs text-muted-foreground">
-											{(group.item_maps ?? []).length} รายการ ({(group.item_maps ?? [])
-												.map((m) => itemNameMap.get(m.item_id) ?? m.item_id)
-												.join(', ')})
-										</span>
-									{:else}
-										<span class="text-xs text-muted-foreground italic">ไม่มีสินค้าคู่เทียบ</span>
-									{/if}
-								</td>
-								<td class="p-3">
-									{#if (group.status ?? 'active') === 'active'}
-										<span
-											class="inline-flex items-center rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-semibold text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300"
-										>
-											ใช้งาน
-										</span>
-									{:else}
-										<span
-											class="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-600 dark:bg-zinc-800 dark:text-zinc-400"
-										>
-											ปิดใช้งาน
-										</span>
-									{/if}
-								</td>
-								<td class="p-3">
-									{#if group.source === 'SHELTER_OVERRIDE'}
-										<span
-											class="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800 dark:bg-amber-950/60 dark:text-amber-300"
-										>
-											{SOURCE_LABELS.SHELTER_OVERRIDE}
-										</span>
-									{:else}
-										<span
-											class="rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-800 dark:bg-blue-950/60 dark:text-blue-300"
-										>
-											{SOURCE_LABELS.SPHERE_BASELINE}
-										</span>
-									{/if}
-								</td>
-								<td class="p-3 text-right">
-									<div class="flex items-center justify-end gap-2">
-										{#if isSA || (canEditOverride && group.source === 'SHELTER_OVERRIDE')}
-											<Button
-												variant="outline"
-												size="sm"
-												onclick={() => showEditForm(group)}
-												class="flex items-center gap-1"
-											>
-												<Settings2 class="h-3.5 w-3.5" />
-												แก้ไข
-											</Button>
-											{#if (group.status ?? 'active') === 'active'}
-												<Button
-													variant="destructive"
-													size="sm"
-													onclick={() => openDeleteDialog(group)}
-													class="flex items-center gap-1"
-												>
-													<Trash2 class="h-3.5 w-3.5" />
-													ปิดใช้งาน
-												</Button>
-											{:else}
-												<Button
-													variant="outline"
-													size="sm"
-													disabled={setStatusMutation.isPending}
-													onclick={() => handleReactivate(group)}
-													class="flex items-center gap-1 text-emerald-600 hover:text-emerald-700 dark:text-emerald-400"
-												>
-													<RotateCcw class="h-3.5 w-3.5" />
-													เปิดใช้งาน
-												</Button>
-											{/if}
-										{/if}
-									</div>
-								</td>
-							</tr>
-						{/each}
-					</tbody>
-				</table>
-			</div>
-		{/if}
+		</div>
 	</section>
 {:else}
 	<div

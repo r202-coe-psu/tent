@@ -5,6 +5,7 @@ import {
 	authenticateScannerDevice,
 	ScannerAuthError
 } from '$lib/server/scanners/device-credentials';
+import { issueEvacueeQr } from '$lib/server/evacuee-qr-service';
 import { findMasterByCode } from '$lib/server/shelters.admin';
 import { ServiceError } from '$lib/server/couch-admin';
 import {
@@ -31,6 +32,7 @@ vi.mock('$lib/features/kiosk-devices/server', () => ({
 	}
 }));
 vi.mock('$lib/server/shelters.admin', () => ({ findMasterByCode: vi.fn() }));
+vi.mock('$lib/server/evacuee-qr-service', () => ({ issueEvacueeQr: vi.fn() }));
 vi.mock('$lib/server/scanners/device-credentials', async () => {
 	const actual = await vi.importActual<typeof import('$lib/server/scanners/device-credentials')>(
 		'$lib/server/scanners/device-credentials'
@@ -47,6 +49,7 @@ vi.mock('$lib/features/kiosk/server/kiosk-thaid-gate.server', () => ({
 	isKioskThaidCheckInAllowed: vi.fn()
 }));
 
+const mockIssueQr = vi.mocked(issueEvacueeQr);
 const mockAuthenticate = vi.mocked(authenticateScannerDevice);
 const mockFindShelter = vi.mocked(findMasterByCode);
 const mockRegister = vi.mocked(registerKioskWalkIn);
@@ -103,6 +106,12 @@ describe('POST /api/v1/kiosk/register', () => {
 		mockFindShelter.mockResolvedValue({
 			feature_flags: { kiosk_walk_in_registration_enabled: true }
 		} as never);
+		mockIssueQr.mockReset();
+		mockIssueQr.mockResolvedValue({
+			evacuee_id: 'evacuee:01ARZ3NDEKTSV4RRFFQ69G5FAV',
+			qr_payload: 'evacuee:01ARZ3NDEKTSV4RRFFQ69G5FAV@a1b2c3',
+			printed_at: '2026-11-06T08:15:30.123Z'
+		});
 		mockRegister.mockResolvedValue({
 			_id: 'evacuee:01ARZ3NDEKTSV4RRFFQ69G5FAV',
 			first_name: 'สมชาย',
@@ -112,6 +121,19 @@ describe('POST /api/v1/kiosk/register', () => {
 		} as never);
 	});
 
+	it('returns qr_payload null + qr_issue_failed when the QR entry fails; the record stays (FR-EQR-24)', async () => {
+		mockIssueQr.mockRejectedValue(new Error('CONFLICT'));
+		const response = await POST(request(validBody));
+		expect(response.status).toBe(200);
+		const body = await response.json();
+		expect(body).toMatchObject({
+			status: 'created',
+			evacuee_id: 'evacuee:01ARZ3NDEKTSV4RRFFQ69G5FAV',
+			qr_payload: null,
+			qr_issue_failed: true
+		});
+	});
+
 	it('creates a record only under the authenticated shelter and disables caching', async () => {
 		const response = await POST(request(validBody));
 		expect(response.status).toBe(200);
@@ -119,10 +141,16 @@ describe('POST /api/v1/kiosk/register', () => {
 		expect(await response.json()).toEqual({
 			status: 'created',
 			evacuee_id: 'evacuee:01ARZ3NDEKTSV4RRFFQ69G5FAV',
-			qr_payload: 'evacuee:01ARZ3NDEKTSV4RRFFQ69G5FAV',
+			qr_payload: 'evacuee:01ARZ3NDEKTSV4RRFFQ69G5FAV@a1b2c3',
 			label: { name: 'สมชาย ใจดี', phone: '0812345678' },
 			consent_ref: validBody.consent.ref,
 			consent_mode: 'full'
+		});
+		expect(mockIssueQr).toHaveBeenCalledWith({
+			shelter_code: 'SH001',
+			evacuee_id: 'evacuee:01ARZ3NDEKTSV4RRFFQ69G5FAV',
+			source: 'kiosk_checkin',
+			printed_by: 'kiosk:KIOSK-01'
 		});
 		expect(mockRegister).toHaveBeenCalledWith(
 			'SH001',
@@ -353,7 +381,7 @@ describe('POST /api/v1/kiosk/register source thaid', () => {
 		const response = await POST(request(thaidBody(completedSession(), { phone: null })));
 		expect(response.status).toBe(200);
 		expect(await response.json()).toMatchObject({
-			qr_payload: 'evacuee:01ARZ3NDEKTSV4RRFFQ69G5FAV',
+			qr_payload: 'evacuee:01ARZ3NDEKTSV4RRFFQ69G5FAV@a1b2c3',
 			label: { name: 'สมชาย ใจดี', phone: null }
 		});
 		expect(mockRegisterThaid.mock.calls[0]?.[3]).toBeNull();

@@ -6,6 +6,7 @@
  * generated types so the rules live somewhere a test can reach without a server.
  */
 import { z } from 'zod';
+import type { LanguageCode } from '$lib/utils/language';
 import { isValidThaiNationalId } from '$lib/utils/thai-id';
 import { volunteerMobileSchema } from '$lib/utils/volunteer-phone';
 // Deep import: the volunteers barrel re-exports UI that imports this domain (cycle).
@@ -502,7 +503,7 @@ export function ticketTokenFromScan(scanned: string): string | null {
 	return fromUrl ? normalizeTicketToken(fromUrl) : null;
 }
 
-export function ticketStatusLabel(status: string, lang: 'th' | 'en' = 'th'): string {
+export function ticketStatusLabel(status: string, lang: LanguageCode = 'th'): string {
 	if (lang === 'en') {
 		switch (status) {
 			case 'confirmed':
@@ -527,7 +528,26 @@ export function ticketStatusLabel(status: string, lang: 'th' | 'en' = 'th'): str
 	}
 }
 
-export function shiftStatusLabel(status: string): string {
+export function shiftStatusLabel(status: string, lang: LanguageCode = 'th'): string {
+	if (lang === 'en') {
+		switch (status) {
+			case 'assigned':
+				return 'Assigned';
+			case 'standby':
+				return 'Standby';
+			case 'checked_in':
+				return 'On duty';
+			case 'completed':
+			case 'done':
+				return 'Checked out';
+			case 'no_show':
+				return 'No-show';
+			case 'cancelled':
+				return 'Cancelled';
+			default:
+				return status;
+		}
+	}
 	switch (status) {
 		case 'assigned':
 			return 'ได้รับมอบหมาย';

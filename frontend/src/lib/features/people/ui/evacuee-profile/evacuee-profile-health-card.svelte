@@ -5,13 +5,16 @@
 	import HeartHandshake from '@lucide/svelte/icons/heart-handshake';
 	import AlertCircle from '@lucide/svelte/icons/alert-circle';
 	import type { Evacuee, Medical, Screening } from '$lib/features/people';
-	import { EWAR_SYMPTOM_GROUPS } from '$lib/features/people';
+	import { ewarSymptomLabel } from '$lib/features/people';
 	import {
 		CR112_VULNERABLE_GROUP_ACTIVE,
 		formatMasterLabel,
 		formatMasterLabelByCode,
 		useMasterData
 	} from '$lib/features/master-data';
+	import { getTranslation } from '$lib/utils/i18n';
+	import { langState } from '$lib/states/i18n.svelte';
+	import { EVACUEE_PROFILE_I18N } from '../_constants/evacuee-profile.i18n';
 
 	let {
 		evacuee,
@@ -27,13 +30,7 @@
 		onOpenEdit: () => void;
 	} = $props();
 
-	function getSymptomLabel(id: string): string {
-		for (const g of EWAR_SYMPTOM_GROUPS) {
-			const s = g.symptoms.find((sym) => sym.id === id);
-			if (s) return s.label;
-		}
-		return id;
-	}
+	const t = $derived(getTranslation(EVACUEE_PROFILE_I18N, langState.current).healthCard);
 
 	const chronicDiseaseQuery = useMasterData(() => 'chronic_disease');
 	/** #649 — conditions hold `chronic_disease` codes or free text. */
@@ -41,7 +38,8 @@
 	const conditionLabels = $derived([
 		...new Set(
 			(medical?.conditions ?? []).map(
-				(c) => formatMasterLabelByCode(c, chronicDiseaseQuery.data?.items ?? []) || c
+				(c) =>
+					formatMasterLabelByCode(c, chronicDiseaseQuery.data?.items ?? [], langState.current) || c
 			)
 		)
 	]);
@@ -50,16 +48,16 @@
 	/** #648 — allergies hold `allergy` codes or free text. */
 	const allergyLabels = $derived(
 		(medical?.allergies ?? []).map(
-			(a) => formatMasterLabelByCode(a, allergyQuery.data?.items ?? []) || a
+			(a) => formatMasterLabelByCode(a, allergyQuery.data?.items ?? [], langState.current) || a
 		)
 	);
 
 	const vulnerableGroupQuery = useMasterData(() => 'vulnerable_group');
 	function vulnerableLabel(code: string): string {
 		const fromMaster = vulnerableGroupQuery.data?.items.find((i) => i.code === code);
-		if (fromMaster) return formatMasterLabel(fromMaster, 'th');
+		if (fromMaster) return formatMasterLabel(fromMaster, langState.current);
 		const fallback = CR112_VULNERABLE_GROUP_ACTIVE.find((i) => i.code === code);
-		return fallback ? formatMasterLabel(fallback, 'th') : code;
+		return fallback ? formatMasterLabel(fallback, langState.current) : code;
 	}
 
 	const careTrack = $derived(medical?.track ?? screening?.track ?? 'normal');
@@ -78,13 +76,13 @@
 		<Stethoscope class="size-5 text-blue-600 dark:text-blue-500" />
 		<div class="flex flex-1 items-center justify-between">
 			<h3 class="text-sm font-bold text-slate-900 dark:text-slate-50">
-				ข้อมูลสุขภาพ และ ความเปราะบาง (Health &amp; Vulnerability)
+				{t.title}
 			</h3>
 			{#if !readonly}
 				<button
 					type="button"
-					aria-label="แก้ไขข้อมูลสุขภาพ"
-					title="แก้ไขข้อมูลสุขภาพ"
+					aria-label={t.editAria}
+					title={t.editAria}
 					onclick={onOpenEdit}
 					class="inline-flex size-8 cursor-pointer items-center justify-center rounded-md text-red-600 transition-colors hover:bg-red-100 hover:text-red-800 dark:text-red-400 dark:hover:bg-red-950"
 				>
@@ -100,38 +98,36 @@
 			<!-- Care Track & Infection Risk status -->
 			<div class="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2">
 				<div class="min-w-0">
-					<span class="block text-xs font-medium text-muted-foreground"
-						>แนวทางดูแล (Care Track):</span
-					>
+					<span class="block text-xs font-medium text-muted-foreground">{t.careTrack}</span>
 					<div class="mt-1">
 						{#if isFastTrack}
 							<span
 								class="inline-flex items-center rounded-full border border-red-200 bg-red-50 px-2.5 py-0.5 text-xs font-bold text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-400"
 							>
-								Fast track (เร่งด่วน / ติดตามใกล้ชิด)
+								{t.fastTrack}
 							</span>
 						{:else}
 							<span
 								class="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-xs font-semibold text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950 dark:text-emerald-400"
 							>
-								ดูแลตามปกติ (Normal)
+								{t.normalTrack}
 							</span>
 						{/if}
 					</div>
 				</div>
 
 				<div class="min-w-0">
-					<span class="block text-xs font-medium text-muted-foreground">ความเสี่ยงแพร่เชื้อ:</span>
+					<span class="block text-xs font-medium text-muted-foreground">{t.infectionRisk}</span>
 					<div class="mt-1">
 						{#if hasEwarSymptoms}
 							<span
 								class="inline-flex items-center rounded-full border border-red-200 bg-red-100 px-2.5 py-0.5 text-xs font-bold text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-400"
 							>
-								ควรแยกกักโรค (มีอาการเฝ้าระวัง)
+								{t.shouldIsolate}
 							</span>
 						{:else}
 							<span class="text-sm font-semibold text-slate-500 dark:text-slate-400">
-								ไม่มีความเสี่ยงแพร่เชื้อ
+								{t.noInfectionRisk}
 							</span>
 						{/if}
 					</div>
@@ -140,15 +136,14 @@
 
 			<!-- General symptoms from Station 2 -->
 			<div class="border-t border-border/40 pt-3">
-				<span class="block text-xs font-medium text-muted-foreground">อาการและข้อสังเกตทั่วไป:</span
-				>
+				<span class="block text-xs font-medium text-muted-foreground">{t.generalSymptoms}</span>
 				<div
 					class="mt-1.5 rounded-md border border-slate-100 bg-slate-50 p-3 text-sm break-words text-slate-800 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200"
 				>
 					{#if screening?.notes}
 						<span class="font-medium">{screening.notes}</span>
 					{:else}
-						<span class="text-muted-foreground italic">ไม่มีอาการระบุ</span>
+						<span class="text-muted-foreground italic">{t.noSymptomsNoted}</span>
 					{/if}
 				</div>
 			</div>
@@ -158,7 +153,7 @@
 				<div class="flex items-center gap-1.5">
 					<AlertCircle class="size-3.5 text-amber-600 dark:text-amber-500" />
 					<span class="text-xs font-semibold text-foreground">
-						อาการเฝ้าระวังทางระบาดวิทยา (EWAR):
+						{t.ewar}
 					</span>
 				</div>
 				<div class="mt-2">
@@ -168,12 +163,12 @@
 								<span
 									class="inline-flex items-center rounded-full border border-red-200 bg-red-50 px-2.5 py-0.5 text-xs font-semibold text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-300"
 								>
-									{getSymptomLabel(sym)}
+									{ewarSymptomLabel(sym, langState.current)}
 								</span>
 							{/each}
 						</div>
 					{:else}
-						<span class="text-xs text-muted-foreground italic">ไม่มีอาการเฝ้าระวัง</span>
+						<span class="text-xs text-muted-foreground italic">{t.noEwar}</span>
 					{/if}
 				</div>
 			</div>
@@ -181,36 +176,34 @@
 			<!-- Medical History: Conditions, Medications, Allergies -->
 			<div class="grid min-w-0 grid-cols-1 gap-4 border-t border-border/40 pt-3 sm:grid-cols-3">
 				<div class="min-w-0">
-					<span class="block text-xs font-medium text-muted-foreground">โรคประจำตัว:</span>
+					<span class="block text-xs font-medium text-muted-foreground">{t.conditions}</span>
 					<span
 						class="mt-0.5 block text-sm font-semibold break-words text-slate-800 dark:text-slate-200"
 					>
-						{conditionLabels.length ? conditionLabels.join(', ') : 'ไม่มี'}
+						{conditionLabels.length ? conditionLabels.join(', ') : t.noConditions}
 					</span>
 				</div>
 				<div class="min-w-0">
-					<span class="block text-xs font-medium text-muted-foreground">ยาที่ใช้ประจำ:</span>
+					<span class="block text-xs font-medium text-muted-foreground">{t.medications}</span>
 					<span
 						class="mt-0.5 block text-sm font-semibold break-words text-slate-800 dark:text-slate-200"
 					>
-						{medical?.medications?.length ? medical.medications.join(', ') : 'ไม่ระบุ'}
+						{medical?.medications?.length ? medical.medications.join(', ') : t.unspecified}
 					</span>
 				</div>
 				<div class="min-w-0">
-					<span class="block text-xs font-medium text-muted-foreground">ประวัติการแพ้:</span>
+					<span class="block text-xs font-medium text-muted-foreground">{t.allergies}</span>
 					<span
 						class="mt-0.5 block text-sm font-semibold break-words text-slate-800 dark:text-slate-200"
 					>
-						{allergyLabels.length ? allergyLabels.join(', ') : 'ไม่ระบุ'}
+						{allergyLabels.length ? allergyLabels.join(', ') : t.unspecified}
 					</span>
 				</div>
 			</div>
 
 			{#if medical?.notes}
 				<div class="min-w-0 border-t border-border/40 pt-3">
-					<span class="block text-xs font-medium text-muted-foreground"
-						>บันทึกการดูแลต่อเนื่อง:</span
-					>
+					<span class="block text-xs font-medium text-muted-foreground">{t.careNotes}</span>
 					<div
 						class="mt-1.5 rounded-md border border-blue-100/50 bg-blue-50/50 p-3 text-xs break-words text-blue-800 dark:border-blue-900/20 dark:bg-blue-950/20 dark:text-blue-300"
 					>
@@ -228,9 +221,7 @@
 			<div class="min-w-0">
 				<div class="flex items-center gap-1.5">
 					<ShieldAlert class="size-4 text-amber-700 dark:text-amber-500" />
-					<span class="text-xs font-semibold text-foreground"
-						>กลุ่มเปราะบาง (Vulnerable Groups):</span
-					>
+					<span class="text-xs font-semibold text-foreground">{t.vulnerableGroups}</span>
 				</div>
 				<div class="mt-2 flex flex-wrap gap-1.5">
 					{#if vulnerableGroups.length > 0}
@@ -242,7 +233,7 @@
 							</span>
 						{/each}
 					{:else}
-						<span class="text-xs text-muted-foreground italic">ทั่วไป (ไม่มีกลุ่มเปราะบาง)</span>
+						<span class="text-xs text-muted-foreground italic">{t.noVulnerableGroups}</span>
 					{/if}
 				</div>
 			</div>
@@ -251,7 +242,7 @@
 			<div class="min-w-0 border-t border-border/40 pt-3">
 				<div class="flex items-center gap-1.5">
 					<HeartHandshake class="size-4 text-sky-700 dark:text-sky-500" />
-					<span class="text-xs font-semibold text-foreground">ความต้องการพิเศษ:</span>
+					<span class="text-xs font-semibold text-foreground">{t.specialNeeds}</span>
 				</div>
 				<div class="mt-2 flex flex-wrap gap-1.5">
 					{#if specialNeeds.length > 0}
@@ -263,7 +254,7 @@
 							</span>
 						{/each}
 					{:else}
-						<span class="text-xs text-muted-foreground italic">ไม่มีความต้องการพิเศษ</span>
+						<span class="text-xs text-muted-foreground italic">{t.noSpecialNeeds}</span>
 					{/if}
 				</div>
 			</div>

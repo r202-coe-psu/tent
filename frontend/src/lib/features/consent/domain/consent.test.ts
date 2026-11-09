@@ -19,7 +19,7 @@ import {
 	type ConsentMember,
 	type EvacueeConsent
 } from './consent';
-import { CONSENT_COPY, CONSENT_NOTICE_VERSION } from './consent-notice.i18n';
+import { CONSENT_BLOCK_I18N, CONSENT_COPY, CONSENT_NOTICE_VERSION } from './consent-notice.i18n';
 
 const stamp = {
 	ref: 'CS-7K3QZ9MD',
@@ -271,6 +271,10 @@ describe('formatConsentTime', () => {
 	it('falls back to the raw value for an invalid timestamp', () => {
 		expect(formatConsentTime('not a date')).toBe('not a date');
 	});
+
+	it('keeps the Buddhist-era date in English but drops the Thai time suffix', () => {
+		expect(formatConsentTime('2026-10-25T03:15:00.000Z', 'en')).toBe('25/10/2569 10:15');
+	});
 });
 
 describe('summarizeConsent (spec §5)', () => {
@@ -331,6 +335,41 @@ describe('summarizeConsent (spec §5)', () => {
 		expect(byKey(summary.rows).verbal.value).toBe('สมชาย (USR-0427)');
 		expect(byKey(summarizeConsent(verbal, false).rows).verbal.value).toBe('USR-0427');
 		expect(summarizeConsent(consentOf(), false).rows.map((r) => r.key)).not.toContain('verbal');
+	});
+});
+
+describe('summarizeConsent in English', () => {
+	const en = CONSENT_BLOCK_I18N.en;
+	const consent = {
+		mode: 'full',
+		health: false,
+		...stamp,
+		channel: 'staff',
+		recorded_verbally_by: null,
+		given_by: 'self',
+		giver_evacuee_id: null
+	} as EvacueeConsent;
+
+	it('labels every row, the title and the footer in English', () => {
+		const summary = summarizeConsent(consent, false, { language: 'en' });
+		expect(summary.title).toBe(en.result.title);
+		expect(summary.footer).toBe(en.result.withdrawNote);
+		const rows = byKey(summary.rows);
+		expect(rows.mode).toMatchObject({ label: en.summary.mode, value: en.summary.modeFull });
+		expect(rows.health).toMatchObject({ label: en.summary.health, value: en.summary.no });
+		expect(rows.search).toMatchObject({ label: en.summary.search, value: en.summary.yes });
+		expect(rows.time).toMatchObject({ label: en.summary.time, value: '25/10/2569 10:15' });
+		expect(rows.ref.label).toBe(en.summary.ref);
+	});
+
+	it('has no Thai text outside the Buddhist-era year', () => {
+		const summary = summarizeConsent(consent, false, { language: 'en' });
+		const text = [
+			summary.title,
+			summary.footer,
+			...summary.rows.flatMap((r) => [r.label, r.value])
+		];
+		expect(text.join(' ')).not.toMatch(/[\u0E00-\u0E7F]/);
 	});
 });
 

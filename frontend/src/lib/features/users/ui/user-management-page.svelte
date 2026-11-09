@@ -261,11 +261,13 @@
 				staffCard = card;
 				staffCardMissingMessage = null;
 			}
-			toast.success(`หมุน QR บัตรของ "${target.display_name ?? target.name}" แล้ว`);
+			toast.success(
+				`ออก QR ใหม่ให้ "${target.display_name ?? target.name}" แล้ว บัตรเดิมใช้ไม่ได้`
+			);
 			await queryClient.invalidateQueries({ queryKey: usersKeys.all });
 		} catch (err) {
 			rotateConfirmOpen = false;
-			toast.error(err instanceof Error ? err.message : 'ไม่สามารถหมุน QR ได้');
+			toast.error(err instanceof Error ? err.message : 'ออก QR ใหม่ไม่สำเร็จ');
 		} finally {
 			rotating = false;
 		}
@@ -591,7 +593,7 @@
 					onclick={requestRotate}
 				>
 					<RotateCw class="size-4" aria-hidden="true" />
-					{#if rotating}กำลังหมุน QR...{:else}หมุน QR{/if}
+					{#if rotating}กำลังออก QR ใหม่...{:else}ออก QR ใหม่{/if}
 				</Button>
 			</div>
 		{/if}
@@ -601,7 +603,9 @@
 <AlertDialog.Root bind:open={rotateConfirmOpen}>
 	<AlertDialog.Content class="rounded-2xl p-6 sm:max-w-[420px]">
 		<AlertDialog.Header>
-			<AlertDialog.Title class="text-lg font-bold text-red-700">ยืนยันการหมุน QR</AlertDialog.Title>
+			<AlertDialog.Title class="text-lg font-bold text-red-700"
+				>ยืนยันการออก QR ใหม่</AlertDialog.Title
+			>
 			<AlertDialog.Description class="pt-2 text-sm leading-relaxed text-slate-600">
 				บัตรเดิมของ
 				<strong class="text-slate-900">{staffCardUser?.display_name ?? staffCardUser?.name}</strong>
@@ -618,7 +622,7 @@
 					void handleRotate();
 				}}
 			>
-				{#if rotating}กำลังหมุน QR...{:else}ยืนยันหมุน QR{/if}
+				{#if rotating}กำลังออก QR ใหม่...{:else}ยืนยันออก QR ใหม่{/if}
 			</AlertDialog.Action>
 		</AlertDialog.Footer>
 	</AlertDialog.Content>

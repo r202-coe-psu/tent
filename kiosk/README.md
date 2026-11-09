@@ -742,7 +742,7 @@ user ของ kiosk ต้องรัน `kiosk/start_kiosk.sh` ได้ (scr
 
 - Scanner Client เปิด Chromium พร้อม `--kiosk-printing` เองในโหมด Kiosk (ควบคุมด้วย `KIOSK_SILENT_PRINT` ใน `.env`)
 - Driver ของ Xprinter **จำเป็น** — ติดตั้งครั้งเดียวต่อเครื่อง (ไม่ใช่โปรแกรมที่รันค้าง; CUPS เรียกใช้เฉพาะตอนพิมพ์)
-- ขนาด label ถูกกำหนดที่ `KIOSK_LABEL_MM` ใน `frontend/src/lib/features/kiosk/domain/print-label.ts` — queue ของเครื่องพิมพ์ **ต้องตั้งขนาดเท่ากัน** ไม่เช่นนั้นจะพิมพ์คร่อมหรือได้ label ว่าง
+- ขนาด label ถูกกำหนดที่ `KIOSK_LABEL_MM` ใน `frontend/src/lib/utils/label-size.ts` — queue ของเครื่องพิมพ์ **ต้องตั้งขนาดเท่ากัน** ไม่เช่นนั้นจะพิมพ์คร่อมหรือได้ label ว่าง
 
 ### 1. ติดตั้งครั้งแรก
 
