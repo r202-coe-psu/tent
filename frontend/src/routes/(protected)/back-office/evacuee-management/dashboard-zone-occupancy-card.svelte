@@ -23,8 +23,15 @@
 		toZoneOccupancies(zoneQuery.data?.rows ?? [], shelterQuery.data?.zones ?? [])
 	);
 	const summary = $derived(summarizeZoneOccupancy(zones));
-	const isPending = $derived(zoneQuery.isPending || shelterQuery.isPending);
-	const isError = $derived(zoneQuery.isError || shelterQuery.isError);
+	// Branch on `status`, not the isPending/isError flags: those alone never re-render this
+	// card once both queries settle, leaving the skeleton up.
+	const status = $derived(
+		zoneQuery.status === 'error' || shelterQuery.status === 'error'
+			? 'error'
+			: zoneQuery.status === 'pending' || shelterQuery.status === 'pending'
+				? 'pending'
+				: 'success'
+	);
 
 	const BAR: Record<ZoneOccupancyLevel, string> = {
 		normal: 'bg-emerald-500',
@@ -45,7 +52,7 @@
 			<h3 class="leading-none font-semibold tracking-tight">ความเต็มรายโซน</h3>
 		</div>
 
-		{#if isError}
+		{#if status === 'error'}
 			<Alert variant="destructive">
 				<AlertCircle class="h-4 w-4" />
 				<AlertTitle>เกิดข้อผิดพลาด</AlertTitle>
@@ -53,7 +60,7 @@
 					>ไม่สามารถโหลดข้อมูลความเต็มรายโซนได้ กรุณาลองใหม่อีกครั้ง</AlertDescription
 				>
 			</Alert>
-		{:else if isPending}
+		{:else if status === 'pending'}
 			<Skeleton class="h-32 w-full" />
 		{:else if zones.length === 0}
 			<p class="text-sm text-muted-foreground">ศูนย์นี้ยังไม่มีโซน</p>
@@ -97,7 +104,7 @@
 			</ul>
 		{/if}
 	</div>
-	{#if !isError && !isPending && zones.length > 0}
+	{#if status === 'success' && zones.length > 0}
 		<DashboardZoneSummaryCard {summary} />
 	{/if}
 </div>
