@@ -13,6 +13,9 @@
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { ValidationError } from '$lib/utils/errors';
 	import { getShelterCode } from '$lib/db/shelter';
+	import { langState } from '$lib/states/i18n.svelte';
+	import { getTranslation } from '$lib/utils/i18n';
+	import { STAFF_REGISTRATION_DESK_I18N } from '$lib/constants/i18n/staff-registration-desk';
 	import { ConsentSummary, initialSearchVisible } from '$lib/features/consent';
 	import {
 		FamilyBatchPrint,
@@ -43,6 +46,7 @@
 		petsOverCapForConfirm,
 		totalOpenPetCount,
 		unassignedHouseholdToUnifiedInput,
+		unassignedSearchCopyByLanguage,
 		unassignedMemberToUnifiedMember,
 		unassignedPhotoUrl,
 		useClaimUnassignedRegistration,
@@ -51,6 +55,11 @@
 	} from '$lib/features/unassigned-registration';
 
 	let { data } = $props();
+
+	const lang = $derived(langState.current);
+	const td = $derived(getTranslation(STAFF_REGISTRATION_DESK_I18N, lang));
+	const t = $derived(td.unassigned);
+	const hasCageSuffix = $derived(` · ${unassignedSearchCopyByLanguage[lang].hasCage}`);
 
 	const reviewQuery = useUnassignedRegistrationReview(() => data.registrationId);
 	const review = $derived(reviewQuery.data ?? null);
@@ -83,8 +92,8 @@
 	const householdPetsBeforeClaim = $derived(householdPetsAtClaim ?? existingHousehold?.pets ?? []);
 	const householdPetCountBeforeClaim = $derived(countPetGroups(householdPetsBeforeClaim));
 	const recordedPets = $derived([
-		...claimedPetSummaries(householdPetsBeforeClaim),
-		...claimedPetSummaries(openPets)
+		...claimedPetSummaries(householdPetsBeforeClaim, lang),
+		...claimedPetSummaries(openPets, lang)
 	]);
 
 	const initialHousehold = $derived(review ? unassignedHouseholdToUnifiedInput(review) : null);
@@ -129,7 +138,7 @@
 
 	beforeNavigate((nav) => {
 		if (isNavigatingAfterSave || completed) return;
-		if (isDirty && !confirm('มีการแก้ไขที่ยังไม่ได้บันทึก ต้องการออกจากหน้านี้หรือไม่?')) {
+		if (isDirty && !confirm(td.common.leaveConfirm)) {
 			nav.cancel();
 		}
 	});
@@ -151,12 +160,8 @@
 		};
 	}
 
-	const PET_CAP_TOAST = 'สัตว์เลี้ยงเกินเพดานของครัวเรือน';
-
 	function petCapError(check: PetCapCheck, advice: string) {
-		return new ValidationError(
-			`สัตว์เลี้ยงของครัวเรือนนี้จะรวมเป็น ${check.total} ตัว เกินเพดาน ${check.cap} ตัวต่อครัวเรือนอยู่ ${check.over} ตัว — ${advice}`
-		);
+		return new ValidationError(t.petCapError(check.total, check.cap, check.over, advice));
 	}
 
 	async function petsOnHouseholdBeforeClaim(): Promise<PetGroup[]> {
@@ -187,10 +192,7 @@
 					input.household.pets
 				);
 				if (petsCheck.over > 0) {
-					throw petCapError(
-						petsCheck,
-						'ลดสัตว์เลี้ยงที่กรอกเพิ่มในขั้นตอนที่ 3 หรือกลับไปเลือกจากคิวกลางให้น้อยลง'
-					);
+					throw petCapError(petsCheck, t.adviceReduceOrPool);
 				}
 				householdPetsAtClaim = petsBefore;
 				const claimResult = await claimMutation.mutateAsync(claimPayload());
@@ -203,9 +205,7 @@
 			if (petsWrittenByClaim === null) {
 				const freshHousehold = await peopleRepository().getHousehold(claimedHouseholdId);
 				if (!freshHousehold) {
-					throw new Error(
-						'อ่านข้อมูลครัวเรือนหลังรับเข้าศูนย์ไม่ได้ — กดยืนยันอีกครั้งเพื่อบันทึกการรายงานตัว'
-					);
+					throw new Error(t.readHouseholdFailed);
 				}
 				petsWrittenByClaim = freshHousehold.pets ?? [];
 			}
@@ -213,10 +213,7 @@
 			const mergedPets = petsForReportIn(petsWrittenByClaim, input.household.pets);
 			const mergedCheck = petsOverCapAfterClaim(mergedPets);
 			if (mergedCheck.over > 0) {
-				throw petCapError(
-					mergedCheck,
-					'ลดสัตว์เลี้ยงที่กรอกเพิ่มในขั้นตอนที่ 3 แล้วกดยืนยันอีกครั้ง'
-				);
+				throw petCapError(mergedCheck, t.adviceReduceRetry);
 			}
 
 			const result = await submitReportIn.mutateAsync({
@@ -233,23 +230,22 @@
 			isDirty = false;
 			isNavigatingAfterSave = true;
 			completed = { ...result, consentRef: consent?.decision.ref ?? null };
-			toast.success(`รับเข้าศูนย์สำเร็จ ${result.members.length} คน`);
+			toast.success(t.claimed(result.members.length));
 		} catch (err) {
 			if (err instanceof ValidationError) {
 				saveError = buildSaveFailureReport(err, {
-					summaryTh: 'ยังยืนยันไม่ได้ — สัตว์เลี้ยงเกินเพดานของครัวเรือน'
+					summaryTh: t.confirmCapSummary
 				});
-				toast.error(PET_CAP_TOAST);
+				toast.error(t.petCapToast);
 				throw err;
 			}
 			saveError = !claimedHouseholdId
-				? buildSaveFailureReport(err, { summaryTh: 'รับเข้าศูนย์ไม่สำเร็จ' })
+				? buildSaveFailureReport(err, { summaryTh: t.claimFailedSummary })
 				: buildSaveFailureReport(err, {
-						summaryTh: 'บันทึกการรายงานตัวไม่สำเร็จ',
-						rollbackNote:
-							'รับเข้าศูนย์แล้ว — กดยืนยันอีกครั้งเพื่อบันทึกการรายงานตัว หรือไปที่หน้ารายงานตัวของผู้ประสบภัยแต่ละคนแทน'
+						summaryTh: t.reportInFailedSummary,
+						rollbackNote: t.reportInFailedRollback
 					});
-			toast.error('ยืนยันไม่สำเร็จ กรุณาลองใหม่อีกครั้ง');
+			toast.error(t.confirmFailedToast);
 			throw err;
 		}
 	}
@@ -266,21 +262,21 @@
 				[]
 			);
 			if (petsCheck.over > 0) {
-				throw petCapError(petsCheck, 'กลับไปที่คิวทะเบียนแล้วเลือกสัตว์เลี้ยงให้น้อยลง');
+				throw petCapError(petsCheck, t.adviceBackToQueue);
 			}
 			const result = await claimMutation.mutateAsync(claimPayload());
 			isNavigatingAfterSave = true;
-			toast.success(`รับเข้าศูนย์ ${result.claimed_pets.length} สัตว์สำเร็จ`);
+			toast.success(t.petsClaimed(result.claimed_pets.length));
 			await goto(resolve('/onsite/people'));
 		} catch (err) {
 			if (err instanceof ValidationError) {
 				saveError = buildSaveFailureReport(err, {
-					summaryTh: 'ยังรับเข้าศูนย์ไม่ได้ — สัตว์เลี้ยงเกินเพดานของครัวเรือน'
+					summaryTh: t.petsCapSummary
 				});
-				toast.error(PET_CAP_TOAST);
+				toast.error(t.petCapToast);
 			} else {
-				saveError = buildSaveFailureReport(err, { summaryTh: 'รับเข้าศูนย์ไม่สำเร็จ' });
-				toast.error('รับเข้าศูนย์ไม่สำเร็จ กรุณาลองใหม่อีกครั้ง');
+				saveError = buildSaveFailureReport(err, { summaryTh: t.claimFailedSummary });
+				toast.error(t.claimFailedToast);
 			}
 		} finally {
 			isConfirmingPetsOnly = false;
@@ -289,7 +285,7 @@
 </script>
 
 <svelte:head>
-	<title>ตรวจสอบก่อนรับเข้าศูนย์ | SmartShelter</title>
+	<title>{t.pageTitle}</title>
 </svelte:head>
 
 {#snippet backLink()}
@@ -299,7 +295,7 @@
 		class="mb-3 inline-flex min-h-11 cursor-pointer items-center gap-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
 	>
 		<ArrowLeft class="size-4" />
-		<span>กลับคิวทะเบียน</span>
+		<span>{td.common.backToQueue}</span>
 	</button>
 {/snippet}
 
@@ -311,7 +307,7 @@
 			class="mt-3 inline-flex min-h-11 cursor-pointer items-center gap-1.5 text-xs font-medium text-muted-foreground underline-offset-4 transition-colors hover:text-foreground hover:underline"
 		>
 			<Undo2 class="size-3.5" aria-hidden="true" />
-			เลือกเฉพาะสัตว์เลี้ยงที่ติ๊กมาตอนแรก
+			{t.undoClaimAll}
 		</button>
 	{/if}
 {/snippet}
@@ -324,18 +320,16 @@
 				<div class="min-w-0 flex-1">
 					<h2 class="text-sm font-bold text-amber-900">
 						{claimedHouseholdId
-							? `สัตว์เลี้ยง ${leftBehindCount} ตัวยังค้างอยู่ในคิวกลาง`
-							: `ยังมีสัตว์เลี้ยง ${leftBehindCount} ตัวที่ไม่ได้เลือก`}
+							? t.leftBehindClaimedTitle(leftBehindCount)
+							: t.leftBehindTitle(leftBehindCount)}
 					</h2>
 					<p class="mt-1 text-xs text-amber-900">
-						{claimedHouseholdId
-							? 'รับเข้าศูนย์ไปแล้วโดยไม่มีสัตว์เลี้ยงด้านล่าง — กดยืนยันซ้ำจะไม่รับเข้าให้อีก ต้องกลับไปที่คิวทะเบียนแล้วรับเข้าแยกอีกครั้ง'
-							: 'ถ้ารับเข้าศูนย์ตอนนี้ สัตว์เลี้ยงด้านล่างจะค้างอยู่ในคิวกลาง และจะไม่ปรากฏในข้อมูลครัวเรือนที่สถานี 1'}
+						{claimedHouseholdId ? t.leftBehindClaimedBody : t.leftBehindBody}
 					</p>
 					<ul class="mt-2 space-y-1">
 						{#each leftBehindPets as pet (pet.pet_id)}
 							<li class="text-xs font-medium text-amber-900">
-								{formatOpenPetLabel(pet)}{pet.has_cage ? ' · มีกรง' : ''}
+								{formatOpenPetLabel(pet, lang)}{pet.has_cage ? hasCageSuffix : ''}
 							</li>
 						{/each}
 					</ul>
@@ -346,7 +340,7 @@
 							onclick={() => (claimEveryOpenPet = true)}
 						>
 							<PawPrint class="size-4" aria-hidden="true" />
-							เพิ่มสัตว์เลี้ยงที่เหลือเข้ารายการนี้
+							{t.addRemainingPets}
 						</Button>
 					{/if}
 				</div>
@@ -374,12 +368,11 @@
 
 		<div class="mb-2 flex flex-wrap items-center gap-2">
 			<ClipboardList class="size-6 text-primary" />
-			<h1 class="text-2xl font-bold md:text-3xl">ตรวจสอบก่อนรับเข้าศูนย์</h1>
+			<h1 class="text-2xl font-bold md:text-3xl">{t.heading}</h1>
 			<Badge variant="outline">Station 1 · Review</Badge>
 		</div>
 		<p class="mb-4 text-sm text-muted-foreground md:mb-6">
-			ยังไม่มีการรับเข้าศูนย์ — ตรวจสอบข้อมูลด้านล่างแล้วกดยืนยัน จึงจะสร้าง Evacuee
-			และรับเข้าศูนย์จริง
+			{t.intro}
 		</p>
 
 		{#if saveError}
@@ -391,7 +384,7 @@
 				<div
 					class="size-6 animate-spin rounded-full border-2 border-primary border-t-transparent"
 				></div>
-				<p class="text-xs">กำลังโหลดข้อมูลจากคิวกลาง...</p>
+				<p class="text-xs">{t.loading}</p>
 			</div>
 		{:else if reviewQuery.isError || !review}
 			<Card.Root class="border-border bg-card p-6 text-center shadow-sm">
@@ -400,11 +393,11 @@
 				>
 					<AlertTriangle class="size-6" />
 				</div>
-				<h2 class="text-base font-bold">ไม่พบรายการนี้ในคิวกลาง</h2>
+				<h2 class="text-base font-bold">{t.notFoundTitle}</h2>
 				<p class="mt-1.5 text-xs text-muted-foreground">
-					รายการอาจถูกรับเข้าศูนย์ไปแล้ว หรือถูกยกเลิก — กลับไปค้นหาใหม่อีกครั้ง
+					{t.notFoundBody}
 				</p>
-				<Button class="mt-4" onclick={backToQueue}>กลับคิวทะเบียน</Button>
+				<Button class="mt-4" onclick={backToQueue}>{td.common.backToQueue}</Button>
 			</Card.Root>
 		{:else if staleMemberSelection}
 			<Card.Root class="border-border bg-card p-6 text-center shadow-sm">
@@ -413,22 +406,21 @@
 				>
 					<AlertTriangle class="size-6" />
 				</div>
-				<h2 class="text-base font-bold">สมาชิกที่เลือกไม่ว่างแล้ว</h2>
+				<h2 class="text-base font-bold">{t.staleTitle}</h2>
 				<p class="mt-1.5 text-xs text-muted-foreground">
-					สมาชิกที่ติ๊กไว้ถูกรับเข้าศูนย์อื่นไปแล้วระหว่างที่เปิดหน้านี้ค้างไว้ —
-					กลับไปค้นหาใหม่อีกครั้ง
+					{t.staleBody}
 				</p>
-				<Button class="mt-4" onclick={backToQueue}>กลับคิวทะเบียน</Button>
+				<Button class="mt-4" onclick={backToQueue}>{td.common.backToQueue}</Button>
 			</Card.Root>
 		{:else if isPetsOnly}
 			<Card.Root class="border-border bg-card p-6 shadow-sm">
 				<div class="mb-3 flex items-center gap-2">
 					<PawPrint class="size-5 text-primary" />
-					<h2 class="text-base font-bold">สัตว์เลี้ยงที่จะรับเข้าศูนย์</h2>
+					<h2 class="text-base font-bold">{t.petsToClaimTitle}</h2>
 				</div>
 				{#if householdPetCountBeforeClaim > 0}
 					<p class="mb-3 text-xs text-muted-foreground">
-						ครัวเรือนนี้อยู่ในศูนย์แล้ว ({householdPetCountBeforeClaim} สัตว์เดิม) — รายการด้านล่างจะถูกเพิ่มเข้าไป
+						{t.householdAlreadyHere(householdPetCountBeforeClaim)}
 					</p>
 				{/if}
 				<ul class="space-y-2">
@@ -444,9 +436,11 @@
 								/>
 							{/if}
 							<div class="min-w-0 flex-1">
-								<p class="font-medium text-slate-900">{formatOpenPetLabel(pet)}</p>
+								<p class="font-medium text-slate-900">{formatOpenPetLabel(pet, lang)}</p>
 								{#if pet.has_cage}
-									<p class="text-xs text-muted-foreground">มีกรง</p>
+									<p class="text-xs text-muted-foreground">
+										{unassignedSearchCopyByLanguage[lang].hasCage}
+									</p>
 								{/if}
 							</div>
 						</li>
@@ -454,7 +448,7 @@
 				</ul>
 				{@render claimAllUndo()}
 				<Button class="mt-4 w-full" disabled={isConfirmingPetsOnly} onclick={handleConfirmPetsOnly}>
-					{isConfirmingPetsOnly ? 'กำลังรับเข้าศูนย์...' : 'ยืนยันรับเข้าศูนย์'}
+					{isConfirmingPetsOnly ? t.confirming : t.confirmClaim}
 				</Button>
 			</Card.Root>
 			{@render leftBehindWarning()}
@@ -464,12 +458,12 @@
 				<Card.Root class="mb-4 border-border bg-card p-4 shadow-sm">
 					<div class="mb-2 flex items-center gap-2">
 						<PawPrint class="size-4 text-primary" />
-						<h2 class="text-sm font-bold">สัตว์เลี้ยงที่จะรับเข้าศูนย์พร้อมกัน</h2>
+						<h2 class="text-sm font-bold">{t.petsAlongsideTitle}</h2>
 					</div>
 					<ul class="space-y-1">
 						{#each openPets as pet (pet.pet_id)}
 							<li class="text-xs text-muted-foreground">
-								{formatOpenPetLabel(pet)}{pet.has_cage ? ' · มีกรง' : ''}
+								{formatOpenPetLabel(pet, lang)}{pet.has_cage ? hasCageSuffix : ''}
 							</li>
 						{/each}
 					</ul>

@@ -74,8 +74,7 @@
 		if (!show) return null;
 		const { qrPayload, label } = buildEvacueeQrLabel(evacuee, {
 			zones: shelterQuery.data?.zones,
-			hasScreening: (screeningsQuery.data?.length ?? 0) > 0,
-			checklist: [t.checklistCheckIn, t.checklistScreening, t.checklistLodging]
+			hasScreening: (screeningsQuery.data?.length ?? 0) > 0
 		});
 		return renderKioskQrLabelPng(qrPayload, label);
 	});

@@ -1,25 +1,26 @@
 <script lang="ts">
 	import { Badge } from '$lib/components/ui/badge';
 
-	import {
-		UNASSIGNED_QUEUE_BADGE_LABEL,
-		UNASSIGNED_QUEUE_BADGE_SHORT
-	} from '../application/queries';
+	import { langState } from '$lib/states/i18n.svelte';
+
+	import { unassignedSearchCopyByLanguage } from '../domain/search';
 
 	/** `compact` = table cell `[คิวกลาง]`; default = dialog full label. */
 	let { compact = false }: { compact?: boolean } = $props();
+
+	const copy = $derived(unassignedSearchCopyByLanguage[langState.current]);
 </script>
 
 {#if compact}
 	<Badge
 		variant="outline"
 		class="border-sky-300 bg-sky-50 font-normal text-sky-900"
-		title={`[${UNASSIGNED_QUEUE_BADGE_LABEL}]`}
+		title={`[${copy.badgeLabel}]`}
 	>
-		[{UNASSIGNED_QUEUE_BADGE_SHORT}]
+		[{copy.badgeShort}]
 	</Badge>
 {:else}
 	<Badge variant="outline" class="border-sky-300 bg-sky-50 font-normal text-sky-900">
-		[{UNASSIGNED_QUEUE_BADGE_LABEL}]
+		[{copy.badgeLabel}]
 	</Badge>
 {/if}

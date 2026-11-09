@@ -8,6 +8,10 @@
 		type PortalItemState,
 		type PortalMenuItem
 	} from '../domain/portal-menu';
+	import { portalItemText } from '../domain/portal-menu-labels';
+	import { langState } from '$lib/states/i18n.svelte';
+	import { getTranslation } from '$lib/utils/i18n';
+	import { PORTAL_MENU_I18N } from './_constants/portal-menu.i18n';
 	import { PORTAL_ICONS } from './portal-icons';
 
 	interface Props {
@@ -20,6 +24,8 @@
 
 	let { item, state, selectedShelterCode, variant = 'tile' }: Props = $props();
 
+	const t = $derived(getTranslation(PORTAL_MENU_I18N, langState.current));
+	const text = $derived(portalItemText(item, langState.current));
 	const Icon = $derived(PORTAL_ICONS[item.icon]);
 	const href = $derived(resolvePortalHref(item, selectedShelterCode));
 	const compact = $derived(variant === 'compact');
@@ -39,12 +45,12 @@
 
 {#snippet title()}
 	<div class="flex flex-wrap items-center gap-x-2 gap-y-1">
-		<span class="min-w-0 {labelSize} font-semibold text-slate-900">{item.label}</span>
+		<span class="min-w-0 {labelSize} font-semibold text-slate-900">{text.label}</span>
 		{#if item.station}
 			<span
 				class="inline-flex shrink-0 items-center rounded-full border border-(color:--c-border) bg-(--c-subtle) px-2 py-0.5 text-xs font-semibold whitespace-nowrap text-(color:--c-text) tabular-nums"
 			>
-				สถานี {item.station}
+				{t.stationBadge(item.station)}
 			</span>
 		{/if}
 	</div>
@@ -65,7 +71,7 @@
 		<div class="min-w-0 flex-1">
 			{@render title()}
 			{#if !compact}
-				<p class="mt-0.5 text-sm text-slate-600">{item.desc}</p>
+				<p class="mt-0.5 text-sm text-slate-600">{text.desc}</p>
 			{/if}
 		</div>
 		<ChevronRight class="size-4 shrink-0 text-slate-400 sm:size-5" aria-hidden="true" />
@@ -79,7 +85,7 @@
 				<Skeleton class="h-3.5 w-full" />
 			{/if}
 		</div>
-		<span class="sr-only">กำลังตรวจสอบการเปิดใช้งาน {item.label}</span>
+		<span class="sr-only">{t.checkingEnablement(text.label)}</span>
 	</div>
 {:else}
 	<div aria-disabled="true" class="{rowBase} border-dashed border-slate-300 bg-slate-50">
@@ -90,16 +96,16 @@
 			<Icon class={iconSize} />
 		</span>
 		<div class="min-w-0 flex-1">
-			<span class="block {labelSize} font-semibold text-slate-600">{item.label}</span>
+			<span class="block {labelSize} font-semibold text-slate-600">{text.label}</span>
 			{#if !compact}
-				<p class="mt-0.5 text-sm text-slate-500">{item.desc}</p>
+				<p class="mt-0.5 text-sm text-slate-500">{text.desc}</p>
 			{/if}
 		</div>
 		<span
 			class="inline-flex shrink-0 items-center gap-1 rounded-full border border-slate-300 bg-white px-2 py-0.5 text-xs font-semibold whitespace-nowrap text-slate-600"
 		>
 			<Clock class="size-3.5" aria-hidden="true" />
-			เร็วๆ นี้
+			{t.comingSoon}
 		</span>
 	</div>
 {/if}

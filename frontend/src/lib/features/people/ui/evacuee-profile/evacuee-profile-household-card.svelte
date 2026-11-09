@@ -11,13 +11,14 @@
 		formatPersonName,
 		zoneLabel,
 		type Evacuee,
-		type Household,
-		type HouseholdStatus,
-		type StayStatus
+		type Household
 	} from '$lib/features/people';
 	import { useShelter } from '$lib/features/shelters';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
 	import { getShelterCode } from '$lib/db/shelter';
+	import { getTranslation } from '$lib/utils/i18n';
+	import { langState } from '$lib/states/i18n.svelte';
+	import { EVACUEE_PROFILE_I18N } from '../_constants/evacuee-profile.i18n';
 
 	let {
 		evacuee,
@@ -41,27 +42,7 @@
 	const shelterQuery = useShelter(() => shelterStore.selectedShelterCode ?? getShelterCode());
 	const shelterZones = $derived(shelterQuery.data?.zones ?? []);
 
-	const HOUSEHOLD_STATUS_LABEL: Record<HouseholdStatus, string> = {
-		pre_registered: 'ลงทะเบียนล่วงหน้า',
-		arriving: 'กำลังเดินทางมา',
-		checked_in: 'เช็คอินแล้ว',
-		checked_out: 'เช็คเอาต์แล้ว',
-		cancelled: 'ยกเลิก',
-		merged: 'รวมแล้ว'
-	};
-
-	const STAY_STATUS_LABEL: Partial<Record<StayStatus, string>> = {
-		active: 'อยู่ในศูนย์',
-		room_confirmed: 'ยืนยันถึงโซนแล้ว',
-		pre_registered: 'ลงทะเบียนล่วงหน้า',
-		kiosk_registered: 'ลงทะเบียนที่ตู้ (รอยืนยัน)',
-		arriving: 'รอจัดโซน',
-		temporary_leave: 'ออกชั่วคราว',
-		transferred: 'ย้ายศูนย์',
-		checked_out: 'ย้ายออก',
-		deceased: 'เสียชีวิต',
-		cancelled: 'ยกเลิก'
-	};
+	const t = $derived(getTranslation(EVACUEE_PROFILE_I18N, langState.current).householdCard);
 
 	const isHead = $derived(!!household && household.head_evacuee_id === evacuee._id);
 
@@ -69,7 +50,7 @@
 		const code = household?.housing_type;
 		if (!code) return null;
 		const item = (housingTypeQuery.data?.items ?? []).find((i) => i.code === code);
-		return item ? formatMasterLabel(item, 'th') : code;
+		return item ? formatMasterLabel(item, langState.current) : code;
 	});
 
 	const addressLine = $derived.by(() => {
@@ -77,9 +58,9 @@
 		const parts = [
 			household.address_no || '',
 			household.village_no || '',
-			household.subdistrict ? `ต.${household.subdistrict}` : '',
-			household.district ? `อ.${household.district}` : '',
-			household.province ? `จ.${household.province}` : '',
+			household.subdistrict ? t.subdistrict(household.subdistrict) : '',
+			household.district ? t.district(household.district) : '',
+			household.province ? t.province(household.province) : '',
 			household.postal_code || ''
 		]
 			.map((p) => p.trim())
@@ -92,13 +73,13 @@
 	<div class="flex items-center justify-between border-b border-slate-200/80 pb-2">
 		<div class="flex items-center gap-2.5">
 			<Home class="size-4.5 text-[#0A2647]" />
-			<h3 class="text-base font-bold text-slate-900">ครัวเรือน / ครอบครัว</h3>
+			<h3 class="text-base font-bold text-slate-900">{t.title}</h3>
 		</div>
 		{#if !readonly}
 			<button
 				type="button"
-				aria-label="แก้ไขสังกัดครัวเรือน"
-				title="แก้ไขสังกัดครัวเรือน"
+				aria-label={t.editAffiliationAria}
+				title={t.editAffiliationAria}
 				onclick={onOpenHouseholdModal}
 				class="inline-flex size-11 min-h-11 min-w-11 cursor-pointer items-center justify-center rounded-lg text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900 focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none"
 			>
@@ -109,13 +90,13 @@
 
 	{#if !household}
 		<div class="rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-center">
-			<p class="text-sm font-medium text-slate-700">ยังไม่สังกัดครัวเรือน</p>
+			<p class="text-sm font-medium text-slate-700">{t.noHouseholdTitle}</p>
 			<p class="mt-1 text-sm text-slate-500">
-				ผู้พักพิงคนนี้ยังไม่ได้เชื่อมกับเอกสารครัวเรือนในระบบ
+				{t.noHouseholdBody}
 			</p>
 			{#if !readonly}
 				<Button class="mt-4" variant="outline" onclick={onOpenHouseholdModal}>
-					เลือก / เชื่อมครัวเรือน
+					{t.linkHousehold}
 				</Button>
 			{/if}
 		</div>
@@ -123,7 +104,7 @@
 		<div class="space-y-4">
 			<div class="flex flex-wrap items-start justify-between gap-2">
 				<div class="min-w-0 space-y-1">
-					<span class="block text-sm font-semibold text-slate-700">ชื่อครัวเรือน</span>
+					<span class="block text-sm font-semibold text-slate-700">{t.householdName}</span>
 					<p class="text-base font-bold text-slate-900">{household.label || '—'}</p>
 				</div>
 				<div class="flex flex-wrap items-center gap-1.5">
@@ -131,16 +112,16 @@
 						variant="outline"
 						class="border border-sky-200 bg-sky-50 text-xs font-semibold text-sky-900"
 					>
-						{HOUSEHOLD_STATUS_LABEL[household.status] ?? household.status}
+						{t.householdStatus[household.status] ?? household.status}
 					</Badge>
 					{#if isHead}
 						<Badge
 							class="border border-emerald-200 bg-emerald-50 text-xs font-semibold text-emerald-900"
 						>
-							บทบาท: หัวหน้า
+							{t.roleHead}
 						</Badge>
 					{:else}
-						<Badge variant="secondary" class="text-xs font-semibold">บทบาท: สมาชิก</Badge>
+						<Badge variant="secondary" class="text-xs font-semibold">{t.roleMember}</Badge>
 					{/if}
 				</div>
 			</div>
@@ -148,25 +129,25 @@
 			<div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
 				{#if housingTypeLabel}
 					<div>
-						<span class="block text-sm font-semibold text-slate-700">ประเภทที่อยู่อาศัย</span>
+						<span class="block text-sm font-semibold text-slate-700">{t.housingType}</span>
 						<p class="mt-0.5 text-sm font-medium text-slate-900">{housingTypeLabel}</p>
 					</div>
 				{/if}
 				{#if household.residence_landmark}
 					<div>
-						<span class="block text-sm font-semibold text-slate-700">จุดสังเกตใกล้เคียง</span>
+						<span class="block text-sm font-semibold text-slate-700">{t.landmark}</span>
 						<p class="mt-0.5 text-sm font-medium text-slate-900">{household.residence_landmark}</p>
 					</div>
 				{/if}
 				{#if household.municipality_zone || household.community}
 					<div class="sm:col-span-2">
-						<span class="block text-sm font-semibold text-slate-700">เขต / ชุมชน</span>
+						<span class="block text-sm font-semibold text-slate-700">{t.zoneCommunity}</span>
 						<p class="mt-0.5 text-sm font-medium text-slate-900">
 							{#if household.municipality_zone}
-								เขต {household.municipality_zone}
+								{t.zone(household.municipality_zone)}
 							{/if}
 							{#if household.community}
-								{household.municipality_zone ? ' · ' : ''}ชุมชน {household.community}
+								{household.municipality_zone ? ' · ' : ''}{t.community(household.community)}
 							{/if}
 						</p>
 					</div>
@@ -175,14 +156,15 @@
 
 			<div class="space-y-2 border-t border-slate-200/80 pt-3">
 				<div class="flex items-center justify-between gap-2">
-					<span class="text-sm font-semibold text-slate-700">ที่อยู่ครัวเรือน</span>
+					<span class="text-sm font-semibold text-slate-700">{t.address}</span>
 					{#if !readonly}
 						<button
 							type="button"
 							onclick={onOpenAddressModal}
 							class="inline-flex min-h-11 cursor-pointer items-center gap-1 rounded-lg px-2 py-1 text-sm font-semibold text-[#0284C7] transition-colors hover:bg-sky-50 focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none"
 						>
-							<Pencil class="size-3.5" /> แก้ไขที่อยู่
+							<Pencil class="size-3.5" />
+							{t.editAddress}
 						</button>
 					{/if}
 				</div>
@@ -192,14 +174,14 @@
 					{#if addressLine}
 						{addressLine}
 					{:else}
-						<span class="text-slate-500 italic">ไม่มีที่อยู่จัดเก็บ</span>
+						<span class="text-slate-500 italic">{t.noAddress}</span>
 					{/if}
 				</div>
 			</div>
 
 			{#if household.notes}
 				<div>
-					<span class="block text-sm font-semibold text-slate-700">หมายเหตุครัวเรือน</span>
+					<span class="block text-sm font-semibold text-slate-700">{t.notes}</span>
 					<p class="mt-0.5 text-sm break-words text-slate-700">{household.notes}</p>
 				</div>
 			{/if}
@@ -208,12 +190,12 @@
 				<div class="flex items-center gap-2">
 					<Users class="size-4 text-[#0A2647]" />
 					<span class="text-sm font-bold text-slate-900">
-						รายชื่อสมาชิก ({members.length} คน)
+						{t.members(members.length)}
 					</span>
 				</div>
 
 				{#if members.length === 0}
-					<p class="py-4 text-center text-sm text-slate-500 italic">ไม่มีสมาชิกในครัวเรือนนี้</p>
+					<p class="py-4 text-center text-sm text-slate-500 italic">{t.noMembers}</p>
 				{:else}
 					<div class="divide-y divide-slate-200/80 rounded-xl border border-slate-200/80 bg-white">
 						{#each members as m (m._id)}
@@ -234,28 +216,28 @@
 											<Badge
 												class="border border-emerald-200 bg-emerald-50 text-xs font-semibold text-emerald-900"
 											>
-												หัวหน้า
+												{t.head}
 											</Badge>
 										{:else}
-											<Badge variant="secondary" class="text-xs font-semibold">สมาชิก</Badge>
+											<Badge variant="secondary" class="text-xs font-semibold">{t.member}</Badge>
 										{/if}
 										{#if isCurrent}
 											<Badge
 												class="border border-sky-200 bg-sky-50 text-xs font-semibold text-sky-900"
 											>
-												กำลังดู
+												{t.viewing}
 											</Badge>
 										{/if}
 									</div>
 									<p class="text-sm text-slate-600">
 										{#if age != null}
-											<span class="tabular-nums">อายุ {age} ปี</span>
+											<span class="tabular-nums">{t.age(age)}</span>
 											<span aria-hidden="true"> · </span>
 										{/if}
-										{STAY_STATUS_LABEL[m.current_stay.status] ?? m.current_stay.status}
+										{t.stayStatus[m.current_stay.status] ?? m.current_stay.status}
 										{#if m.current_stay.zone}
 											<span aria-hidden="true"> · </span>
-											โซน {zoneLabel(m.current_stay.zone, shelterZones)}
+											{t.memberZone(zoneLabel(m.current_stay.zone, shelterZones))}
 										{/if}
 									</p>
 								</div>
@@ -268,7 +250,7 @@
 										onclick={() => onViewMember(m._id)}
 									>
 										<Eye class="mr-1.5 size-3.5" />
-										ดูโปรไฟล์
+										{t.viewProfile}
 									</Button>
 								{/if}
 							</div>

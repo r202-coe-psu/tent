@@ -58,6 +58,9 @@ const ERROR_COPY: Record<string, string> = {
 	ROLE_CARD_WRITE_FAILED: 'ไม่สามารถสร้าง QR Role Card ได้ กรุณาลองใหม่อีกครั้ง'
 };
 
+/** Every code `ERROR_COPY` words — lets a test prove each one has an English reading. */
+export const API_ERROR_CODES: readonly string[] = Object.keys(ERROR_COPY);
+
 /** Applicant-facing copy for one API error code, or `null` when there is none. */
 export function apiErrorCopy(code: string): string | null {
 	return ERROR_COPY[code] ?? null;
