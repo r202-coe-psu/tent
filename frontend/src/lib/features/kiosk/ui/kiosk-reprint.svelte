@@ -52,13 +52,14 @@
 	async function printMembers(
 		members: Parameters<ReprintSessionDeps['print']>[0]
 	): ReturnType<ReprintSessionDeps['print']> {
-		const images = await Promise.all(members.map((m) => prepareKioskQrImage(m.qr_payload)));
+		const images = await Promise.all(members.map((m) => prepareKioskQrImage(m.qr_payload ?? '')));
 		sheetLabels = members.map((member, index) => ({
 			key: member.evacuee_id,
 			qrSrc: images[index].src,
 			qrSizeMm: images[index].sizeMm,
 			name: member.label.name,
 			zone: member.label.zone,
+			emergencyPhone: member.label.emergency_phone,
 			checkedCount: member.label.stations_passed
 		}));
 		try {
@@ -67,6 +68,7 @@
 					qrSrc: images[index].src,
 					name: member.label.name,
 					zone: member.label.zone,
+					emergencyPhone: member.label.emergency_phone,
 					checkedCount: member.label.stations_passed
 				})),
 				async () => {
@@ -149,6 +151,11 @@
 			role="status"
 		>
 			<p>รับ QR Code {session.printedCount} ดวงที่ช่องพิมพ์ แล้วไปที่จุดคัดกรอง</p>
+			{#if session.qrIssueFailedCount > 0}
+				<p role="alert">
+					ออก QR ไม่สำเร็จ {session.qrIssueFailedCount} คน (ยังไม่ได้พิมพ์) กรุณาลองพิมพ์ใหม่หรือติดต่อเจ้าหน้าที่
+				</p>
+			{/if}
 			{#snippet actions()}
 				<Button type="button" onclick={returnHome} class={KIOSK_NOTICE_PRIMARY_ACTION}
 					>กลับหน้าแรก</Button

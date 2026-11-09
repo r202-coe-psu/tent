@@ -19,7 +19,7 @@
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { getShelterCode } from '$lib/db/shelter';
 	import * as Select from '$lib/components/ui/select/index.js';
-	import { useShelter, ZONE_TYPE_LABELS, type ZoneType } from '$lib/features/shelters';
+	import { useShelter, type ZoneType } from '$lib/features/shelters';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
 	import {
 		uploadShelterBookingPhoto,
@@ -54,6 +54,8 @@
 		checkPublicDuplicate,
 		type InstantDuplicateMatch
 	} from '../../domain/instant-duplicate';
+	import { STATION1_REGISTRATION_I18N } from '../_constants/station1-registration.i18n';
+	import { ZONE_SELECTION_FIELDS_I18N } from '../_constants/zone-selection-fields.i18n';
 	import PullPreRegisteredDialog from './pull-pre-registered-dialog.svelte';
 	import InstantDuplicateDialog from './instant-duplicate-dialog.svelte';
 	import {
@@ -106,6 +108,10 @@
 	} = $props();
 
 	const t = $derived(getTranslation(PUBLIC_BOOKING_FORM_I18N, langState.current));
+	const tm = $derived(getTranslation(STATION1_REGISTRATION_I18N, langState.current).memberCard);
+	const zoneTypeLabels = $derived(
+		getTranslation(ZONE_SELECTION_FIELDS_I18N, langState.current).zoneTypes
+	);
 	// Joining keeps the family's existing head; a new card is never the primary contact.
 	const isPrimary = $derived(index === 0 && !isJoiningExistingHousehold);
 	const sequenceNumber = $derived(numberOffset + index + 1);
@@ -141,7 +147,7 @@
 		(shelterForZones?.data?.zones ?? []).filter((z) => z.status !== 'closed')
 	);
 	function zoneOptionLabel(zone: { code: string; name?: string; type?: string }): string {
-		const type = ZONE_TYPE_LABELS[(zone.type || 'general') as ZoneType] ?? '';
+		const type = zoneTypeLabels[(zone.type || 'general') as ZoneType] ?? '';
 		return `${zone.name?.trim() || zone.code}${type ? ` · ${type}` : ''}`;
 	}
 
@@ -486,7 +492,7 @@
 		emergency.relation = converted.emergency_contact?.relation ?? '';
 		wasPulled = true;
 		onReportingInChange?.(true);
-		toast.success(`ดึงข้อมูลคุณ ${converted.first_name} จากคิวสำเร็จ`);
+		toast.success(tm.pulledToast(converted.first_name));
 	}
 
 	function handleUnlinkQueue() {
@@ -524,7 +530,7 @@
 		duplicateMatches = [];
 		duplicateModalOpen = false;
 		onReportingInChange?.(true);
-		toast.info('ล้างข้อมูลและยกเลิกการเชื่อมโยงเรียบร้อยแล้ว');
+		toast.info(tm.unlinkedToast);
 	}
 
 	$effect(() => {
@@ -721,11 +727,11 @@
 							variant="outline"
 							class="border-amber-500/40 bg-amber-500/10 text-2xs text-amber-700 dark:text-amber-400"
 						>
-							ลงทะเบียนล่วงหน้า
+							{tm.badgePreRegistered}
 						</Badge>
 					{:else}
 						<Badge variant="default" class="bg-emerald-600 text-2xs text-white">
-							สมาชิกใหม่ (รายงานตัวทันที)
+							{tm.badgeNewMember}
 						</Badge>
 					{/if}
 				{/if}
@@ -740,14 +746,14 @@
 					<span
 						class="inline-flex min-h-11 items-center rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm font-medium text-slate-500"
 					>
-						เข้ารายงานตัวแล้ว
+						{tm.alreadyReportedIn}
 					</span>
 				{:else if isNewReportInMember}
 					<span
 						class="inline-flex min-h-11 items-center gap-1.5 rounded-xl border border-emerald-300 bg-emerald-50 px-3 text-sm font-semibold text-emerald-800"
 					>
 						<Check class="size-4 shrink-0" aria-hidden="true" />
-						รายงานตัวรอบนี้
+						{tm.reportingThisRound}
 					</span>
 					<Button
 						type="button"
@@ -758,7 +764,7 @@
 						class="h-9 gap-1.5 rounded-xl border-blue-300 bg-blue-50/80 px-3 text-xs font-semibold text-blue-700 shadow-2xs hover:bg-blue-100 hover:text-blue-900"
 					>
 						<UserSearch class="size-4 text-blue-600" />
-						<span>ดึงข้อมูลจากคิว</span>
+						<span>{tm.pullFromQueue}</span>
 					</Button>
 				{:else}
 					<label
@@ -779,9 +785,9 @@
 						/>
 						{#if isReportingInSelected}
 							<Check class="size-4 shrink-0 text-primary" aria-hidden="true" />
-							<span>เลือกแล้ว — รายงานตัวรอบนี้</span>
+							<span>{tm.selectedReporting}</span>
 						{:else}
-							<span>ยังไม่เลือก — ไม่มาในรอบนี้</span>
+							<span>{tm.notSelected}</span>
 						{/if}
 					</label>
 					{#if wasPulled}
@@ -794,7 +800,7 @@
 							class="h-11 gap-1 text-xs text-muted-foreground hover:text-destructive"
 						>
 							<RotateCcw class="size-3.5" />
-							<span>ยกเลิกการดึง</span>
+							<span>{tm.unlinkPull}</span>
 						</Button>
 					{/if}
 				{/if}
@@ -1038,9 +1044,9 @@
 					<span class="flex min-w-0 items-start gap-2 text-left">
 						<MapPin class="mt-0.5 size-4 shrink-0 text-primary" aria-hidden="true" />
 						<span class="flex min-w-0 flex-col gap-0.5">
-							<span class="text-sm font-semibold text-foreground">โซนที่ต้องการ (ไม่บังคับ)</span>
+							<span class="text-sm font-semibold text-foreground">{tm.preferredZoneTitle}</span>
 							<span class="text-xs leading-snug font-normal text-muted-foreground">
-								เป็นค่าแนะนำให้จุดจัดโซน (สถานี 3) — ทุกคนยังต้องผ่านจุดคัดกรองและจัดโซน
+								{tm.preferredZoneHint}
 							</span>
 						</span>
 					</span>
@@ -1048,7 +1054,7 @@
 				<Accordion.Content>
 					<div class="pt-1 pb-2">
 						{#if openZones.length === 0}
-							<p class="text-xs text-muted-foreground">ศูนย์นี้ยังไม่มีโซนที่เปิดใช้งาน</p>
+							<p class="text-xs text-muted-foreground">{tm.noOpenZones}</p>
 						{:else}
 							<Select.Root
 								type="single"
@@ -1058,12 +1064,12 @@
 								}}
 								disabled={fieldsDisabled}
 							>
-								<Select.Trigger class="h-11 w-full text-sm" aria-label="โซนที่ต้องการ">
+								<Select.Trigger class="h-11 w-full text-sm" aria-label={tm.preferredZoneAria}>
 									{@const picked = openZones.find((z) => z.code === member.preferred_zone)}
-									{picked ? zoneOptionLabel(picked) : 'ไม่ระบุ'}
+									{picked ? zoneOptionLabel(picked) : tm.unspecified}
 								</Select.Trigger>
 								<Select.Content>
-									<Select.Item value={NO_PREFERRED_ZONE} label="ไม่ระบุ" />
+									<Select.Item value={NO_PREFERRED_ZONE} label={tm.unspecified} />
 									{#each openZones as zone (zone.code)}
 										<Select.Item value={zone.code} label={zoneOptionLabel(zone)} />
 									{/each}

@@ -26,7 +26,7 @@
 
 	import { shelterStore } from '$lib/stores/shelter.svelte';
 	import { authStore } from '$lib/stores/auth.svelte';
-	import { isSystemAdmin, isShelterManager, shelterCodeFromRoles } from '$lib/auth/roles';
+	import { isSystemAdmin, canEditSopOverride, canEditStockParameters } from '$lib/auth/roles';
 	import { toast } from 'svelte-sonner';
 	import ConsoleBanner from '$lib/components/console-banner.svelte';
 	import StaffHub from '$lib/components/staff-hub.svelte';
@@ -92,9 +92,9 @@
 
 	const roles = $derived(authStore.user?.roles ?? []);
 	const isSA = $derived(isSystemAdmin(roles));
-	const canEditOverride = $derived(
-		isSA || (isShelterManager(roles) && shelterCodeFromRoles(roles) === shelterCode)
-	);
+	// Per tab: sop_override stays SA / SM; the three stock parameter tabs also allow WH (CR-235).
+	const canEditSopOverrideTab = $derived(canEditSopOverride(roles, shelterCode));
+	const canEditStockParams = $derived(canEditStockParameters(roles, shelterCode));
 
 	async function createInitialOverride() {
 		if (!activeMaster || !shelterCode) {
@@ -189,11 +189,11 @@
 
 		<div class="min-w-0 p-4 sm:p-6">
 			{#if activeTab === 'food_sphere_standard'}
-				<FoodSphereStandardTab {shelterCode} {isSA} {canEditOverride} />
+				<FoodSphereStandardTab {shelterCode} {isSA} canEditOverride={canEditStockParams} />
 			{:else if activeTab === 'requirement_group'}
-				<RequirementGroupTab {shelterCode} {isSA} {canEditOverride} />
+				<RequirementGroupTab {shelterCode} {isSA} canEditOverride={canEditStockParams} />
 			{:else if activeTab === 'replenishment_policy'}
-				<ReplenishmentPolicyTab {shelterCode} {isSA} {canEditOverride} />
+				<ReplenishmentPolicyTab {shelterCode} {isSA} canEditOverride={canEditStockParams} />
 			{:else if activeTab === 'sphere_standard'}
 				{#if masterQuery.isLoading || (shelterCode && overrideQuery.isLoading)}
 					<div class="flex min-h-160 items-center justify-center py-12">
@@ -240,7 +240,7 @@
 							bind:activeContext
 							hasOverride={!!activeOverride}
 							{isSA}
-							{canEditOverride}
+							canEditOverride={canEditSopOverrideTab}
 							{shelterCode}
 							{disabled}
 							onEditAll={handleEditAll}

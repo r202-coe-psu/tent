@@ -23,7 +23,13 @@ export function centralCouchBase(): string {
 }
 
 export type ServiceErrorCode =
-	'UNAUTHENTICATED' | 'FORBIDDEN' | 'NOT_FOUND' | 'VALIDATION' | 'CONFLICT' | 'INTERNAL';
+	| 'UNAUTHENTICATED'
+	| 'FORBIDDEN'
+	| 'NOT_FOUND'
+	| 'VALIDATION'
+	| 'CONFLICT'
+	| 'INTERNAL'
+	| 'DEPENDENCY_UNAVAILABLE';
 
 const STATUS_BY_CODE: Record<ServiceErrorCode, number> = {
 	UNAUTHENTICATED: 401,
@@ -31,7 +37,8 @@ const STATUS_BY_CODE: Record<ServiceErrorCode, number> = {
 	NOT_FOUND: 404,
 	VALIDATION: 422,
 	CONFLICT: 409,
-	INTERNAL: 500
+	INTERNAL: 500,
+	DEPENDENCY_UNAVAILABLE: 503
 };
 
 /** HTTP status for a {@link ServiceErrorCode} — for callers that answer with `fail()` instead of JSON. */

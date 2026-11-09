@@ -32,6 +32,7 @@
 	import { langState } from '$lib/states/i18n.svelte';
 	import { getTranslation } from '$lib/utils/i18n';
 	import { PUBLIC_BOOKING_FORM_I18N } from '$lib/constants/i18n';
+	import { STAFF_FORM_FIELDS_I18N } from '../_constants/staff-form-fields.i18n';
 
 	let {
 		first_name = $bindable(''),
@@ -90,6 +91,7 @@
 	} = $props();
 
 	const t = $derived(getTranslation(PUBLIC_BOOKING_FORM_I18N, langState.current));
+	const tf = $derived(getTranslation(STAFF_FORM_FIELDS_I18N, langState.current));
 	const countryOptions = $derived(countriesForLanguage(langState.current));
 
 	const errClass =
@@ -358,7 +360,7 @@
 						aria-live="polite"
 					>
 						<Loader2 class="size-3 animate-spin" />
-						<span>กำลังตรวจสอบ...</span>
+						<span>{tf.checking}</span>
 					</span>
 				{/if}
 			</div>
@@ -483,7 +485,7 @@
 			{/if}
 		</div>
 
-		<!-- Own row: three options never fit a third of the row (English "Unspecified" overflowed) -->
+		<!-- Own row; options size to their label and wrap onto a new line instead of overflowing (English "Unspecified") -->
 		<div class="flex flex-col gap-1.5 sm:col-span-2">
 			<div class="flex min-h-7 items-center">
 				<Label class="text-xs font-semibold text-foreground" id={fid('gender-label')}>
@@ -503,10 +505,10 @@
 				aria-labelledby={fid('gender-label')}
 				aria-invalid={!!errors?.gender}
 				aria-describedby={errors?.gender ? fid('gender-error') : undefined}
-				class="grid grid-cols-3 gap-2"
+				class="flex flex-wrap gap-2"
 			>
 				<label
-					class="flex min-h-11 w-full cursor-pointer items-center gap-2.5 rounded-md border border-border px-2 py-2 text-sm sm:px-3 {genderRadioValue ===
+					class="flex min-h-11 flex-auto cursor-pointer items-center gap-2 rounded-md border border-border px-2.5 py-2 text-sm sm:px-3 {genderRadioValue ===
 					'male'
 						? 'border-primary bg-primary/5 font-semibold'
 						: ''} {disabled ? 'pointer-events-none opacity-60' : ''}"
@@ -516,7 +518,7 @@
 					{t.genderMale}
 				</label>
 				<label
-					class="flex min-h-11 w-full cursor-pointer items-center gap-2.5 rounded-md border border-border px-2 py-2 text-sm sm:px-3 {genderRadioValue ===
+					class="flex min-h-11 flex-auto cursor-pointer items-center gap-2 rounded-md border border-border px-2.5 py-2 text-sm sm:px-3 {genderRadioValue ===
 					'female'
 						? 'border-primary bg-primary/5 font-semibold'
 						: ''} {disabled ? 'pointer-events-none opacity-60' : ''}"
@@ -526,7 +528,7 @@
 					{t.genderFemale}
 				</label>
 				<label
-					class="flex min-h-11 w-full cursor-pointer items-center gap-2.5 rounded-md border border-border px-2 py-2 text-sm sm:px-3 {genderRadioValue ===
+					class="flex min-h-11 flex-auto cursor-pointer items-center gap-2 rounded-md border border-border px-2.5 py-2 text-sm sm:px-3 {genderRadioValue ===
 					GENDER_UNSPECIFIED
 						? 'border-primary bg-primary/5 font-semibold'
 						: ''} {disabled ? 'pointer-events-none opacity-60' : ''}"
@@ -623,7 +625,7 @@
 				<Label for={fid('phone')} class="text-xs font-semibold text-foreground">
 					{t.phoneFieldLabel}
 					{#if phoneOptional}
-						<span class="text-2xs font-normal text-muted-foreground">(ทางเลือก)</span>
+						<span class="text-2xs font-normal text-muted-foreground">{tf.optional}</span>
 					{:else if !no_phone || hideNoPhone}
 						<span class="text-destructive">*</span>
 					{/if}
@@ -635,7 +637,7 @@
 						aria-live="polite"
 					>
 						<Loader2 class="size-3 animate-spin" />
-						<span>กำลังตรวจสอบ...</span>
+						<span>{tf.checking}</span>
 					</span>
 				{/if}
 			</div>

@@ -1,7 +1,8 @@
 import { z } from 'zod';
 import { ulid } from '$lib/db/ulid';
 import { DISPLAY_LOCALE, DISPLAY_TIME_ZONE } from '$lib/utils/date';
-import { CONSENT_COPY, CONSENT_NOTICE_VERSION } from './consent-notice.i18n';
+import type { LanguageCode } from '$lib/utils/language';
+import { CONSENT_BLOCK_I18N, CONSENT_NOTICE_VERSION } from './consent-notice.i18n';
 
 export const CONSENT_MODES = ['full', 'basic'] as const;
 export const CONSENT_GIVERS = ['self', 'guardian', 'household_member', 'backfill'] as const;
@@ -238,7 +239,7 @@ export interface ConsentSummary {
 	footer: string;
 }
 
-export function formatConsentTime(iso: string): string {
+export function formatConsentTime(iso: string, language: LanguageCode = 'th'): string {
 	const date = new Date(iso);
 	if (Number.isNaN(date.getTime())) return iso;
 	const parts = new Intl.DateTimeFormat(DISPLAY_LOCALE, {
@@ -254,7 +255,9 @@ export function formatConsentTime(iso: string): string {
 	}).formatToParts(date);
 	const part = (type: Intl.DateTimeFormatPartTypes) =>
 		parts.find((p) => p.type === type)?.value ?? '';
-	return `${part('day')}/${part('month')}/${part('year')} ${part('hour')}:${part('minute')} ${CONSENT_COPY.summary.timeSuffix}`;
+	const suffix = CONSENT_BLOCK_I18N[language].summary.timeSuffix;
+	const time = `${part('day')}/${part('month')}/${part('year')} ${part('hour')}:${part('minute')}`;
+	return suffix ? `${time} ${suffix}` : time;
 }
 
 export function summarizeConsent(
@@ -262,9 +265,12 @@ export function summarizeConsent(
 	searchExcluded: boolean,
 	extras: {
 		staff?: { name: string; userId: string } | null;
+		language?: LanguageCode;
 	} = {}
 ): ConsentSummary {
-	const copy = CONSENT_COPY.summary;
+	const language = extras.language ?? 'th';
+	const dict = CONSENT_BLOCK_I18N[language];
+	const copy = dict.summary;
 	const basic = consent.mode === 'basic';
 	const yesNo = (key: ConsentSummaryRow['key'], label: string, consented: boolean) => ({
 		key,
@@ -293,14 +299,19 @@ export function summarizeConsent(
 		});
 	}
 	rows.push(
-		{ key: 'time', label: copy.time, value: formatConsentTime(consent.given_at), mono: true },
+		{
+			key: 'time',
+			label: copy.time,
+			value: formatConsentTime(consent.given_at, language),
+			mono: true
+		},
 		{ key: 'ref', label: copy.ref, value: consent.ref, mono: true }
 	);
 
 	return {
-		title: CONSENT_COPY.result.title,
+		title: dict.result.title,
 		rows,
-		footer: CONSENT_COPY.result.withdrawNote
+		footer: dict.result.withdrawNote
 	};
 }
 

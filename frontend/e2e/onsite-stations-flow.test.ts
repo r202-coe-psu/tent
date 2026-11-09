@@ -41,7 +41,8 @@ import {
 	fillMemberCard,
 	fillWalkInAddress,
 	finishPrintScreen,
-	idsFromPrintScreen,
+	evacueeIdsFromSearch,
+	expectPrintScreen,
 	openAsShelterStaff,
 	screenEvacuee,
 	searchStation1,
@@ -207,11 +208,13 @@ test.describe(
 				if (await confirmNew.isVisible()) await confirmNew.click();
 			});
 
-			await test.step('Station 1: Person QR print carries evacuee ids', async () => {
-				Object.assign(ids, await idsFromPrintScreen(desk, people));
+			await test.step('Station 1: print screen previews a label per member', async () => {
+				await expectPrintScreen(desk, people);
 				await finishPrintScreen(desk);
 				await expectStay(desk, head, STAY_STATUS.arriving);
 				await expectStay(desk, member, STAY_STATUS.arriving);
+				// CR-233: no QR is issued until staff print, so the ids come from the search hits.
+				Object.assign(ids, await evacueeIdsFromSearch(desk, people));
 			});
 
 			await test.step('Station 2: shelter_manager screens both members', async () => {

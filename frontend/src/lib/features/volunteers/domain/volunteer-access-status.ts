@@ -117,6 +117,27 @@ export function closeProfileAccessNotice(status: VolunteerAccessStatus): {
 	};
 }
 
+export const COORDINATOR_CLOSE_BLOCKED_MESSAGE =
+	'จิตอาสามีสิทธิ์ถาวรจากผู้จัดการศูนย์ ให้ผู้จัดการศูนย์ปิดหรือถอนสิทธิ์ก่อน';
+export const CLOSE_WAITS_FOR_ROLES_MESSAGE = 'กำลังตรวจสิทธิ์ของบัญชี กรุณารอสักครู่';
+
+/**
+ * Why the caller may not close the profile, or null (CR-221 A1-6): a role a shelter manager gave
+ * here makes the account the manager's, so only SA / SM close it. Checked in the UI only — the
+ * shelter database cannot read `_users` — so it fails closed: while a linked account's roles are
+ * not known yet, a coordinator waits.
+ */
+export function closeProfileBlockedReason(
+	status: VolunteerAccessStatus,
+	callerIsManager: boolean
+): string | null {
+	if (callerIsManager) return null;
+	if (status.kind === 'active' && status.roles === null) return CLOSE_WAITS_FOR_ROLES_MESSAGE;
+	return closeProfileAccessNotice(status).keepsManagerRole
+		? COORDINATOR_CLOSE_BLOCKED_MESSAGE
+		: null;
+}
+
 /**
  * How an account's role here ended, split for display (#1044): the role it had ("เคยเป็น …",
  * null when the audit does not say) and how it ended ("หมดอายุ", "ถูกถอน…"). Null without one.

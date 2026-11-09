@@ -209,7 +209,9 @@ export {
 	operationsKeys,
 	useLedger,
 	useLedgerByItem,
+	useLedgerByItems,
 	useStockBalance,
+	useLotReservationClaims,
 	useReceiveStock,
 	useDistributeBatch,
 	useAdjustStock,
@@ -218,6 +220,7 @@ export {
 	useStockLedgers,
 	useDonationLots,
 	useDonations,
+	useIncomingStock,
 	useCreateCampaign,
 	useDonationSlotSchedule,
 	useSaveDonationSlot,
@@ -239,6 +242,18 @@ export {
 	useCrossShelterLedger,
 	startOperationsLiveQuery
 } from './application/queries';
+
+// Incoming stock (#1153) — approved donation lines + shipped transfers not yet in the ledger
+export {
+	aggregateIncoming,
+	DONATION_NOT_INCOMING_STATUSES,
+	type IncomingItemTotal,
+	type IncomingRow,
+	type IncomingSource,
+	type IncomingStockResult,
+	type UnmatchedIncoming,
+	type UnmatchedReason
+} from './domain/incoming-stock';
 export { useDonationNeedsBoard } from './application/use-donation-needs-board.svelte';
 export { useStoragePoints } from './application/use-storage-points.svelte';
 export { useDonationPoints } from './application/use-donation-points.svelte';
