@@ -75,6 +75,11 @@
 	let barcodeInput = $state('');
 	let showCameraModal = $state(false);
 	let cameraError = $state<string | null>(null);
+	/** Why the last scanned Person QR was refused; shown in the scanner modal, cleared on next scan. */
+	let scanRejection = $state<string | null>(null);
+	$effect(() => {
+		if (!showCameraModal) scanRejection = null;
+	});
 	let activeTab = $state<ScreeningQueueTab>('pending');
 	let currentPage = $state(1);
 	let claimOpen = $state(false);
@@ -116,10 +121,17 @@
 	async function handleCodeInput(raw: string) {
 		if (lookupInFlight) return;
 		lookupInFlight = true;
+		scanRejection = null;
 		try {
 			const result = await lookupFederatedByScanCode(queryClient, raw);
 			if (!result) {
 				toast.error(t.toastCodeNotFound);
+				return;
+			}
+			if (result.source === 'qr_rejected') {
+				// Expired / invalid Person QR (CR-233): message only, nothing opened or recorded.
+				scanRejection = result.message;
+				toast.error('สแกนไม่ผ่าน');
 				return;
 			}
 			barcodeInput = '';
@@ -567,6 +579,14 @@
 							</div>
 						{/if}
 					</div>
+					{#if scanRejection}
+						<p
+							role="alert"
+							class="mt-4 w-full rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive"
+						>
+							{scanRejection}
+						</p>
+					{/if}
 				</div>
 
 				<Dialog.Footer>

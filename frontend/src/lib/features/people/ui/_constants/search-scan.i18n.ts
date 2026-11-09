@@ -101,7 +101,8 @@ const th = {
 				`ไม่พบข้อมูลผู้พักพิงจากรหัส "${code}" ในศูนย์ ${shelter}`,
 			unassigned: 'พบคิวลงทะเบียนล่วงหน้า (คิวกลาง)',
 			scanned: (name: string) => `สแกนสำเร็จ: พบข้อมูล ${name}`,
-			searchFailed: 'เกิดข้อผิดพลาดในการค้นหา'
+			searchFailed: 'เกิดข้อผิดพลาดในการค้นหา',
+			scanRejected: 'สแกนไม่ผ่าน'
 		}
 	},
 	searchResults: {
@@ -223,7 +224,8 @@ const en: typeof th = {
 				`No evacuee found for the code "${code}" in shelter ${shelter}`,
 			unassigned: 'Found a pre-registration (central queue)',
 			scanned: (name: string) => `Scan successful: found ${name}`,
-			searchFailed: 'Something went wrong with the search'
+			searchFailed: 'Something went wrong with the search',
+			scanRejected: 'Scan rejected'
 		}
 	},
 	searchResults: {

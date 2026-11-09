@@ -76,6 +76,8 @@ export class ReprintSession {
 	/** Verified labels of the household, kept so a printer failure can retry without re-asking. */
 	printable = $state.raw<KioskReprintMember[]>([]);
 	printedCount = $state(0);
+	/** Members of the last print whose QR could not be issued (not printed): tell the visitor. */
+	qrIssueFailedCount = $state(0);
 
 	private phoneValue = $state('');
 	private last4Value = $state('');
@@ -312,6 +314,7 @@ export class ReprintSession {
 		this.clearHousehold();
 		this.printable = [];
 		this.printedCount = 0;
+		this.qrIssueFailedCount = 0;
 		this.fromCandidates = false;
 		this.step = 'phone';
 	}
@@ -348,6 +351,17 @@ export class ReprintSession {
 	}
 
 	private async printLabels(generation: number): Promise<void> {
+		// A member without a freshly issued payload is never printed (FR-EQR-24).
+		const printable = this.printable.filter((m) => !m.qr_issue_failed && Boolean(m.qr_payload));
+		const failedCount = this.printable.length - printable.length;
+		if (printable.length === 0) {
+			this.printable = [];
+			this.error = this.messages.qrIssueFailed;
+			this.step = 'members';
+			return;
+		}
+		this.printable = printable;
+		this.qrIssueFailedCount = failedCount;
 		this.step = 'printing';
 		let outcome: KioskPrintFlowResult;
 		try {

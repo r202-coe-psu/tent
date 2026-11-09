@@ -18,7 +18,9 @@
 		initialSelection,
 		isAllSelected,
 		toExistingReportResults,
-		toggleAllSelection
+		toggleAllSelection,
+		canPrintQr,
+		isQrIssueFailed
 	} from '../domain/household-selection';
 	import { Checkbox } from '$lib/components/ui/checkbox/index.js';
 	import {
@@ -114,6 +116,8 @@
 	let results = $state<KioskCheckInMemberResult[]>([]);
 	let retryableIds = $state<string[]>([]);
 	let qrImages = $state<Record<string, KioskQrImage>>({});
+	/** The payload each cached `qrImages` entry was drawn from: a new QR (reissue) must redraw. */
+	let qrImagePayloads: Record<string, string> = {};
 	let actionError = $state('');
 	let printError = $state('');
 	let printBusy = $state(false);
@@ -153,9 +157,10 @@
 			!canRegister &&
 			(input?.source === 'smart-card' || input?.source === 'thaid')
 	);
-	const successfulResults = $derived(
-		results.filter((result) => result.status === 'checked_in' || result.qr_payload)
-	);
+	/** Members that have (or can be reissued) a QR to print; never a `qr_issue_failed` one (FR-EQR-24). */
+	const successfulResults = $derived(results.filter((result) => canPrintQr(result)));
+	/** Members whose QR entry failed: not printed, the visitor may retry or ask staff. */
+	const qrFailedResults = $derived(results.filter((result) => isQrIssueFailed(result)));
 	const printableResults = $derived(
 		isReprintOnly
 			? successfulResults.filter((result) => printSelectedIds.includes(result.evacuee_id))
@@ -166,7 +171,8 @@
 			(result) =>
 				result.status === 'checked_in' ||
 				result.status === 'already_checked_in' ||
-				result.qr_payload
+				result.qr_payload ||
+				result.qr_issue_failed
 		)
 	);
 	/** Card face check (hold) or ThaiD: step 3 is proving who is at the kiosk, not a plain lookup. */
@@ -389,8 +395,12 @@
 		const nextImages: Record<string, KioskQrImage> = { ...qrImages };
 		try {
 			for (const item of items) {
-				if (!item.qr_payload || nextImages[item.evacuee_id]) continue;
+				if (!item.qr_payload) continue;
+				if (nextImages[item.evacuee_id] && qrImagePayloads[item.evacuee_id] === item.qr_payload) {
+					continue;
+				}
 				nextImages[item.evacuee_id] = await prepareKioskQrImage(item.qr_payload);
+				qrImagePayloads[item.evacuee_id] = item.qr_payload;
 			}
 			if (generation !== undefined && generation !== lookupGeneration) return false;
 			qrImages = nextImages;
@@ -404,18 +414,15 @@
 	}
 
 	/**
-	 * A lookup never carries the unmasked label text, so a reprint fetches it from /check-in when the
-	 * visitor taps print (arriving members are not written again, only returned with their label).
+	 * Ask /check-in for a fresh QR + the unmasked label text of these members. A lookup carries
+	 * neither; arriving members are not written again, only reissued a QR (CR-233 FR-EQR-23).
 	 */
-	async function loadMissingLabels(items: KioskCheckInMemberResult[]): Promise<boolean> {
-		const missing = items
-			.filter((item) => item.qr_payload && !item.label)
-			.map((item) => item.evacuee_id);
-		if (missing.length === 0) return true;
+	async function fetchFreshQr(ids: string[]): Promise<boolean> {
+		if (ids.length === 0) return true;
 		if (!lookup) return false;
 		printError = '';
 		try {
-			const response = await checkInSelectedMembers(lookup.primary_evacuee_id, missing, {
+			const response = await checkInSelectedMembers(lookup.primary_evacuee_id, ids, {
 				batchLimit: 20
 			});
 			results = mergeCheckInResults(results, response.members);
@@ -429,6 +436,31 @@
 		}
 	}
 
+	/**
+	 * Reprint: every print command issues a new QR (FR-EQR-21), so these always refetch. A fresh
+	 * check-in already holds its QR and only lacks the label text when it came from a lookup.
+	 */
+	function loadMissingLabels(items: KioskCheckInMemberResult[]): Promise<boolean> {
+		return fetchFreshQr(
+			items
+				.filter((item) => isReprintOnly || !item.qr_payload || !item.label)
+				.map((item) => item.evacuee_id)
+		);
+	}
+
+	/** Try again to issue the QR of the members it failed for; nothing is printed here. */
+	async function retryQrIssue(): Promise<void> {
+		if (printBusy || isSubmitting) return;
+		isSubmitting = true;
+		try {
+			if (await fetchFreshQr(qrFailedResults.map((result) => result.evacuee_id))) {
+				await prepareQrImages(results);
+			}
+		} finally {
+			isSubmitting = false;
+		}
+	}
+
 	async function printWristbands(): Promise<void> {
 		if (printableResults.length === 0 || printBusy) return;
 		printBusy = true;
@@ -436,7 +468,8 @@
 		try {
 			if (!(await loadMissingLabels(printableResults))) return;
 			// Re-read: a member who moved past arriving since the lookup has no QR to reprint any more.
-			const toPrint = printableResults;
+			// A member whose QR could not be issued is never printed (FR-EQR-24).
+			const toPrint = printableResults.filter((result) => result.qr_payload);
 			if (toPrint.length === 0) return;
 			if (!(await prepareQrImages(toPrint))) return;
 			let labels: KioskQrLabel[];
@@ -860,7 +893,7 @@
 									? t.results.partial
 									: results.some((result) => result.status === 'already_checked_in')
 										? t.results.reported
-										: successfulResults.length > 0
+										: successfulResults.length > 0 || qrFailedResults.length > 0
 											? t.results.saved
 											: t.results.none}
 							</h2>
@@ -930,6 +963,23 @@
 						{actionError}
 					</p>
 				{/if}
+				{#if qrFailedResults.length > 0}
+					<div
+						class="mt-3 flex flex-col gap-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-base font-semibold text-amber-950 sm:flex-row sm:items-center kiosk-portrait:mt-5 kiosk-portrait:p-4 kiosk-portrait:text-xl kiosk-compact:text-sm"
+						role="alert"
+					>
+						<p class="flex-1">
+							{t.results.qrIssueFailed(qrFailedResults.length)}
+						</p>
+						<Button
+							type="button"
+							variant="outline"
+							disabled={isSubmitting || printBusy}
+							onclick={() => void retryQrIssue()}
+							class="{KIOSK_NOTICE_SECONDARY_ACTION} sm:w-auto">{t.results.retryQrIssue}</Button
+						>
+					</div>
+				{/if}
 				{#if printError}<p
 						class="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-base font-semibold text-amber-950 kiosk-portrait:mt-5 kiosk-portrait:p-4 kiosk-portrait:text-xl kiosk-compact:text-sm"
 						role="alert"
@@ -942,15 +992,16 @@
 							(member) => member.evacuee_id === result.evacuee_id
 						)}
 						<svelte:element
-							this={isReprintOnly && result.qr_payload ? 'label' : 'div'}
+							this={isReprintOnly && canPrintQr(result) ? 'label' : 'div'}
 							class="flex items-center gap-3 rounded-xl border kiosk-portrait:min-h-24 kiosk-portrait:gap-5 kiosk-portrait:px-6 {isReprintOnly &&
 							result.qr_payload
 								? 'cursor-pointer'
-								: ''} {result.qr_payload || result.status === 'already_checked_in'
+								: ''} {!isQrIssueFailed(result) &&
+							(result.qr_payload || result.status === 'already_checked_in')
 								? 'border-emerald-200 bg-emerald-50'
 								: 'border-amber-200 bg-amber-50'} p-4 kiosk-compact:p-3"
 						>
-							{#if isReprintOnly && result.qr_payload}<Checkbox
+							{#if isReprintOnly && canPrintQr(result)}<Checkbox
 									checked={printSelectedIds.includes(result.evacuee_id)}
 									onCheckedChange={(checked) => togglePrint(result.evacuee_id, checked)}
 									disabled={printBusy}
@@ -958,7 +1009,7 @@
 									aria-describedby={`result-status-${result.evacuee_id}`}
 									class="size-12 shrink-0 bg-white kiosk-compact:size-10"
 								/>{:else if isReprintOnly}<span class="size-12 shrink-0" aria-hidden="true"
-								></span>{:else if result.qr_payload || result.status === 'already_checked_in'}<CheckCircle2
+								></span>{:else if !isQrIssueFailed(result) && (result.qr_payload || result.status === 'already_checked_in')}<CheckCircle2
 									class="size-6 shrink-0 text-emerald-800 kiosk-portrait:size-8"
 									aria-hidden="true"
 								/>{:else}<CircleAlert
@@ -976,13 +1027,15 @@
 									id={`result-status-${result.evacuee_id}`}
 									class="mt-1 text-base text-slate-700 kiosk-portrait:mt-2 kiosk-portrait:text-xl kiosk-compact:text-sm"
 								>
-									{result.status === 'checked_in'
-										? t.results.rowCheckedIn
-										: result.qr_payload
-											? t.results.rowReprintable
-											: result.status === 'already_checked_in'
-												? statusLabel(result.stay_status ?? 'unknown')
-												: t.results.rowFailed}
+									{isQrIssueFailed(result)
+										? t.results.rowQrIssueFailed
+										: result.status === 'checked_in'
+											? t.results.rowCheckedIn
+											: canPrintQr(result)
+												? t.results.rowReprintable
+												: result.status === 'already_checked_in'
+													? statusLabel(result.stay_status ?? 'unknown')
+													: t.results.rowFailed}
 								</p>
 							</div>
 						</svelte:element>
@@ -991,17 +1044,19 @@
 			</section>
 
 			<KioskLabelSheet
-				labels={printableResults.map((result) => ({
-					key: result.evacuee_id,
-					qrSrc: qrImages[result.evacuee_id]?.src,
-					qrSizeMm: qrImages[result.evacuee_id]?.sizeMm,
-					name: labelName(
-						result,
-						lookup?.members.find((member) => member.evacuee_id === result.evacuee_id)
-					),
-					emergencyPhone: result.label?.emergency_phone,
-					checkedCount: KIOSK_CHECK_IN_TICKS
-				}))}
+				labels={printableResults
+					.filter((result) => result.qr_payload)
+					.map((result) => ({
+						key: result.evacuee_id,
+						qrSrc: qrImages[result.evacuee_id]?.src,
+						qrSizeMm: qrImages[result.evacuee_id]?.sizeMm,
+						name: labelName(
+							result,
+							lookup?.members.find((member) => member.evacuee_id === result.evacuee_id)
+						),
+						emergencyPhone: result.label?.emergency_phone,
+						checkedCount: KIOSK_CHECK_IN_TICKS
+					}))}
 			/>
 		{/if}
 

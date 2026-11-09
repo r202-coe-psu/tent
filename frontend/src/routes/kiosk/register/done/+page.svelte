@@ -81,6 +81,11 @@
 
 	async function printLabel(): Promise<void> {
 		if (!registration || printPhase === 'printing') return;
+		// CR-233 FR-EQR-24: no QR was issued for this person, so there is nothing valid to print.
+		if (registration.qr_issue_failed || !registration.qr_payload) {
+			printError = t.qrIssueFailed;
+			return;
+		}
 		// Not sent home while the label comes out; resuming restarts the idle countdown.
 		idleTimeout.setPaused(true);
 		printError = '';

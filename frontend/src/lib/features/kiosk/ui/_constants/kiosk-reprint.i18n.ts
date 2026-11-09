@@ -34,6 +34,8 @@ const th = {
 	done: {
 		title: 'พิมพ์ QR เรียบร้อย',
 		body: (count: number) => `รับ QR Code ${count} ดวงที่ช่องพิมพ์ แล้วไปที่จุดคัดกรอง`,
+		qrIssueFailed: (count: number) =>
+			`ออก QR ไม่สำเร็จ ${count} คน (ยังไม่ได้พิมพ์) กรุณาลองพิมพ์ใหม่หรือติดต่อเจ้าหน้าที่`,
 		home: 'กลับหน้าแรก'
 	},
 	failed: {
@@ -88,6 +90,8 @@ const en: typeof th = {
 		title: 'QR printed',
 		body: (count: number) =>
 			`Take your ${count} QR Code ${count === 1 ? 'label' : 'labels'} at the print slot, then go to the screening point`,
+		qrIssueFailed: (count: number) =>
+			`Could not issue a QR for ${count} ${count === 1 ? 'person' : 'people'} (not printed). Please print again or contact staff.`,
 		home: 'Back to home'
 	},
 	failed: {

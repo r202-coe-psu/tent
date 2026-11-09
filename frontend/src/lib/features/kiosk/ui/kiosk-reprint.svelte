@@ -56,7 +56,7 @@
 	async function printMembers(
 		members: Parameters<ReprintSessionDeps['print']>[0]
 	): ReturnType<ReprintSessionDeps['print']> {
-		const images = await Promise.all(members.map((m) => prepareKioskQrImage(m.qr_payload)));
+		const images = await Promise.all(members.map((m) => prepareKioskQrImage(m.qr_payload ?? '')));
 		sheetLabels = members.map((member, index) => ({
 			key: member.evacuee_id,
 			qrSrc: images[index].src,
@@ -159,6 +159,9 @@
 			role="status"
 		>
 			<p>{t.done.body(session.printedCount)}</p>
+			{#if session.qrIssueFailedCount > 0}
+				<p role="alert">{t.done.qrIssueFailed(session.qrIssueFailedCount)}</p>
+			{/if}
 			{#snippet actions()}
 				<Button type="button" onclick={returnHome} class={KIOSK_NOTICE_PRIMARY_ACTION}
 					>{t.done.home}</Button

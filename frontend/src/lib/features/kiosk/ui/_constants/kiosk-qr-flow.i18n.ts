@@ -146,8 +146,12 @@ const th = {
 			printQrCount: (count: number) => `พิมพ์ QR Code · ${count} คน`,
 			done: 'เสร็จสิ้น',
 			rowCheckedIn: 'รายงานตัวสำเร็จ · รอคัดกรอง',
-			rowReprintable: 'รายงานตัวแล้ว · ใช้ QR เดิมเพื่อพิมพ์ซ้ำได้',
-			rowFailed: 'ไม่สามารถรายงานตัวได้ กรุณาให้เจ้าหน้าที่ตรวจสอบ'
+			rowReprintable: 'รายงานตัวแล้ว · พิมพ์ QR ใหม่ได้ (QR ใบเก่าจะใช้ไม่ได้)',
+			rowFailed: 'ไม่สามารถรายงานตัวได้ กรุณาให้เจ้าหน้าที่ตรวจสอบ',
+			rowQrIssueFailed: 'ออก QR ไม่สำเร็จ · ยังไม่ได้พิมพ์ กรุณาลองใหม่หรือติดต่อเจ้าหน้าที่',
+			qrIssueFailed: (count: number) =>
+				`ออก QR ไม่สำเร็จ ${count} คน (ยังไม่ได้พิมพ์) กรุณาลองใหม่หรือติดต่อเจ้าหน้าที่`,
+			retryQrIssue: 'ลองออก QR ใหม่'
 		},
 		qrNoPersonalData: 'QR ไม่มีข้อมูลส่วนบุคคล'
 	}
@@ -298,8 +302,12 @@ const en: typeof th = {
 			printQrCount: (count: number) => `Print QR Code · ${count}`,
 			done: 'Done',
 			rowCheckedIn: 'Checked in successfully · awaiting screening',
-			rowReprintable: 'Already checked in · the same QR can be printed again',
-			rowFailed: 'Could not check in. Please ask staff to check.'
+			rowReprintable: 'Already checked in · a new QR can be printed (the old QR will stop working)',
+			rowFailed: 'Could not check in. Please ask staff to check.',
+			rowQrIssueFailed: 'Could not issue a QR · not printed. Please try again or contact staff.',
+			qrIssueFailed: (count: number) =>
+				`Could not issue a QR for ${count} ${count === 1 ? 'person' : 'people'} (not printed). Please try again or contact staff.`,
+			retryQrIssue: 'Try issuing the QR again'
 		},
 		qrNoPersonalData: 'The QR holds no personal data'
 	}

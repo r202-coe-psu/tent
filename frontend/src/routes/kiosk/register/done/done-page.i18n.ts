@@ -11,6 +11,7 @@ const th = {
 	consentRef: CONSENT_COPY.summary.ref as string,
 	printFailedHint: (error: string) => `${error} กดพิมพ์อีกครั้ง หรือติดต่อเจ้าหน้าที่`,
 	printRenderFailed: 'สร้าง QR Code สำหรับพิมพ์ไม่สำเร็จ',
+	qrIssueFailed: 'ออก QR ไม่สำเร็จ ยังไม่ได้พิมพ์ กรุณาติดต่อเจ้าหน้าที่เพื่อพิมพ์ QR ใหม่',
 	removeCard: 'กรุณานำบัตรออกจากเครื่อง',
 	contactStaff: 'กรุณาติดต่อเจ้าหน้าที่เพื่อพิมพ์ QR Code',
 	printAgain: 'พิมพ์อีกครั้ง',
@@ -27,6 +28,8 @@ const en: typeof th = {
 	consentRef: 'Consent reference',
 	printFailedHint: (error: string) => `${error} Press print again or contact staff.`,
 	printRenderFailed: 'Could not create the QR Code to print',
+	qrIssueFailed:
+		'Could not issue a QR, so nothing was printed. Please contact staff to print a new QR.',
 	removeCard: 'Please take your card out of the reader',
 	contactStaff: 'Please contact staff to print your QR Code',
 	printAgain: 'Print again',

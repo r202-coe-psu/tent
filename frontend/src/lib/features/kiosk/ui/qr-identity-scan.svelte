@@ -114,7 +114,16 @@
 
 		scanNotice = '';
 		cameraError = '';
-		gate = { source: 'qr', token: qr.kind === 'evacuee' ? qr.token : qr.registration_id };
+		gate = {
+			source: 'qr',
+			// CR-233: the scanned `@hash6` travels with the token so the server can judge it.
+			token:
+				qr.kind === 'evacuee'
+					? qr.hash6
+						? `${qr.token}@${qr.hash6}`
+						: qr.token
+					: qr.registration_id
+		};
 		if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(100);
 	}
 

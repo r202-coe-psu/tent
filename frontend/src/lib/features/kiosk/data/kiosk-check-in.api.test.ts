@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { languageStore } from '$lib/stores/language.svelte';
 import { mintConsentStamp, type ConsentDecision } from '$lib/features/consent/server';
+import { personQrVerdictMessage } from '$lib/utils/evacuee-qr';
 import {
 	checkInSelectedMembers,
 	KioskPartialCheckInError,
@@ -326,6 +327,72 @@ const decision: ConsentDecision = {
 	...mintConsentStamp()
 };
 
+describe('lookupPreRegisteredEvacuee QR errors (CR-233)', () => {
+	afterEach(() => vi.unstubAllGlobals());
+
+	function stub(status: number, body: unknown) {
+		vi.stubGlobal(
+			'fetch',
+			vi.fn(async () => new Response(JSON.stringify(body), { status }))
+		);
+	}
+
+	it('turns KIOSK_QR_EXPIRED into Bangkok-dated copy and exposes the dates', async () => {
+		stub(409, {
+			error: {
+				code: 'KIOSK_QR_EXPIRED',
+				message: 'server text',
+				issued_at: '2026-11-03T02:10:00.000Z',
+				current_printed_at: '2026-11-05T09:41:12.512Z'
+			}
+		});
+		const error = await lookupPreRegisteredEvacuee({
+			source: 'qr',
+			token: 'evacuee:X@289170'
+		}).catch((e: unknown) => e);
+		expect(error).toBeInstanceOf(KioskRequestError);
+		const err = error as KioskRequestError;
+		expect(err.status).toBe(409);
+		expect(err.code).toBe('KIOSK_QR_EXPIRED');
+		expect(err.details).toEqual({
+			issued_at: '2026-11-03T02:10:00.000Z',
+			current_printed_at: '2026-11-05T09:41:12.512Z'
+		});
+		expect(err.message).toBe(
+			personQrVerdictMessage({
+				status: 'expired',
+				issued_at: '2026-11-03T02:10:00.000Z',
+				current_printed_at: '2026-11-05T09:41:12.512Z'
+			})
+		);
+		expect(err.message).toContain('QR นี้ออกวันที่');
+		expect(err.message).toContain('มีใบใหม่วันที่');
+		expect(err.message).not.toContain('server text');
+	});
+
+	it('uses the pre-change copy when issued_at is null', async () => {
+		stub(409, {
+			error: {
+				code: 'KIOSK_QR_EXPIRED',
+				issued_at: null,
+				current_printed_at: '2026-11-05T09:41:12.512Z'
+			}
+		});
+		const err = (await lookupPreRegisteredEvacuee({ source: 'qr', token: 'evacuee:X' }).catch(
+			(e: unknown) => e
+		)) as KioskRequestError;
+		expect(err.message).toContain('QR นี้ออกก่อนเปลี่ยนระบบ');
+		expect(err.details?.issued_at).toBeNull();
+	});
+
+	it('shows "QR ไม่ถูกต้อง" for KIOSK_QR_INVALID', async () => {
+		stub(400, { error: { code: 'KIOSK_QR_INVALID', message: 'x' } });
+		await expect(
+			lookupPreRegisteredEvacuee({ source: 'qr', token: 'evacuee:X@ffffff' })
+		).rejects.toMatchObject({ status: 400, code: 'KIOSK_QR_INVALID', message: 'QR ไม่ถูกต้อง' });
+	});
+});
+
 describe('registerKioskWalkIn', () => {
 	afterEach(() => vi.unstubAllGlobals());
 
@@ -564,5 +631,72 @@ describe('kiosk request messages language', () => {
 		const error = await requestError(new Response('{}', { status: 500 }));
 
 		expect(error.message).toBe('The system could not complete this request');
+	});
+
+	function errorResponse(status: number, error: Record<string, unknown>): Response {
+		return new Response(JSON.stringify({ error }), { status });
+	}
+
+	it('words a known server error code in English instead of the Thai server text', async () => {
+		languageStore.setLanguage('en');
+
+		const error = await requestError(
+			errorResponse(503, {
+				code: 'DEPENDENCY_UNAVAILABLE',
+				message: 'บริการค้นหาข้อมูลไม่พร้อมใช้งาน'
+			})
+		);
+
+		expect(error.message).toBe(
+			'The service is not available right now. Please try again or contact staff.'
+		);
+		expect(error.code).toBe('DEPENDENCY_UNAVAILABLE');
+	});
+
+	it('falls back to the English generic message for a code it has no English for', async () => {
+		languageStore.setLanguage('en');
+
+		const error = await requestError(
+			errorResponse(500, { code: 'SOMETHING_NEW', message: 'ข้อความไทยจาก server' })
+		);
+
+		expect(error.message).toBe('The system could not complete this request');
+	});
+
+	it('keeps the Thai server text on the Thai screen', async () => {
+		const error = await requestError(
+			errorResponse(503, {
+				code: 'DEPENDENCY_UNAVAILABLE',
+				message: 'บริการค้นหาข้อมูลไม่พร้อมใช้งาน'
+			})
+		);
+
+		expect(error.message).toBe('บริการค้นหาข้อมูลไม่พร้อมใช้งาน');
+	});
+
+	it('words an invalid QR in English', async () => {
+		languageStore.setLanguage('en');
+
+		const error = await requestError(
+			errorResponse(400, { code: 'KIOSK_QR_INVALID', message: 'QR ไม่ถูกต้อง' })
+		);
+
+		expect(error.message).toBe('Invalid QR');
+	});
+
+	it('words an expired QR in English with its dates', async () => {
+		languageStore.setLanguage('en');
+
+		const error = await requestError(
+			errorResponse(409, {
+				code: 'KIOSK_QR_EXPIRED',
+				message: 'QR นี้หมดอายุแล้ว',
+				issued_at: '2026-01-01T03:00:00.000Z',
+				current_printed_at: '2026-01-02T03:00:00.000Z'
+			})
+		);
+
+		expect(error.message).toMatch(/^This QR was issued on .+\. A new one was issued on .+\./);
+		expect(error.message).not.toMatch(/[\u0E00-\u0E7F]/);
 	});
 });
