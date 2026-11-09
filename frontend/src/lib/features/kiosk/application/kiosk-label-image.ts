@@ -14,12 +14,14 @@ import {
 	mmToDots,
 	type LabelZoneLine,
 	ptToDots,
+	wrapLabelName,
 	wrapLabelText
 } from '../domain/print-label';
 
 export type KioskLabelContent = {
 	/** QR data URL rendered at 1 px per printer dot (see `kioskQrPrintSize`). */
 	qrSrc: string;
+	/** Name parts (first, last) separated by `\n`; each part starts on its own label line. */
 	name: string;
 	/** Current zone name; missing or null leaves a dotted rule to write the zone on. */
 	zone?: string | null;
@@ -127,16 +129,13 @@ export async function renderKioskLabelPng(label: KioskLabelContent): Promise<str
 	const nameSize = ptToDots(nameStyle.pt);
 	context.font = fonts.name;
 	const measure = (text: string) => context.measureText(text).width;
-	// Break between first and last name when each fits a line (always at a `\n`); the Thai word
-	// segmenter splits proper names mid-name, so it only cuts a part too wide for the column.
-	const nameSegments = label.name
-		.split(/(\n|[^\S\n]+)/)
-		.flatMap((part) => (measure(part.trim()) > layout.text.width ? words(part) : [part]));
-	const nameLines = wrapLabelText(
-		nameSegments,
+	// First and last name sit on their own lines (`\n`); the last name always keeps a line.
+	const nameLines = wrapLabelName(
+		label.name,
 		layout.text.width,
 		measure,
 		nameStyle.maxLines,
+		words,
 		graphemes
 	);
 	for (const line of nameLines) {

@@ -166,8 +166,8 @@ export function ptToDots(pt: number): number {
 
 /**
  * Greedy line wrap for label text. Thai has no spaces, so `segments` should come from a word
- * segmenter; a segment wider than the line is split into graphemes. A `\n` segment forces a
- * break. Overflow past `maxLines` ends the last line with an ellipsis (matching CSS `line-clamp`).
+ * segmenter; a segment wider than the line is split into graphemes. Overflow past `maxLines`
+ * ends the last line with an ellipsis (matching CSS `line-clamp`).
  */
 export function wrapLabelText(
 	segments: readonly string[],
@@ -182,11 +182,6 @@ export function wrapLabelText(
 	const lines: string[] = [];
 	let current = '';
 	for (const piece of pieces) {
-		if (piece === '\n') {
-			if (current) lines.push(current.trimEnd());
-			current = '';
-			continue;
-		}
 		if (current === '' || measure(current + piece) <= maxWidth) {
 			current = (current + piece).trimStart();
 			continue;
@@ -203,6 +198,36 @@ export function wrapLabelText(
 	while (graphemes.length > 0 && measure(withEllipsis()) > maxWidth) graphemes.pop();
 	kept[maxLines - 1] = withEllipsis();
 	return kept;
+}
+
+/**
+ * Wraps a label name whose parts (first name, last name) are separated by `\n`: each part starts
+ * on its own line, and a part never takes the lines the later parts still need, so a long first
+ * name cannot push the last name off the label. Within a part, `words` splits Thai words only
+ * when the part is wider than the line (the segmenter would otherwise split names mid-name).
+ */
+export function wrapLabelName(
+	name: string,
+	maxWidth: number,
+	measure: (text: string) => number,
+	maxLines: number,
+	splitWords: (text: string) => string[],
+	splitGraphemes: (text: string) => string[] = (text) => Array.from(text)
+): string[] {
+	const parts = name
+		.split('\n')
+		.map((part) => part.trim())
+		.filter(Boolean);
+	const lines: string[] = [];
+	parts.forEach((part, index) => {
+		const reserved = parts.length - index - 1;
+		const available = Math.max(1, maxLines - lines.length - reserved);
+		const segments = part
+			.split(/(\s+)/)
+			.flatMap((piece) => (measure(piece.trim()) > maxWidth ? splitWords(piece) : [piece]));
+		lines.push(...wrapLabelText(segments, maxWidth, measure, available, splitGraphemes));
+	});
+	return lines;
 }
 
 export type KioskLabelLayout = {
