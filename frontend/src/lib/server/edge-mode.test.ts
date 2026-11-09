@@ -30,10 +30,17 @@ const MESSAGE = 'แก้ไขบัญชีได้เฉพาะที่
 const caller = { isSA: true, name: 'sa', roles: ['system_admin'] } as unknown as Caller;
 
 const writers: [string, () => Promise<unknown>][] = [
-	['createUser', () => createUser({ name: 'u', password: 'x', display_name: 'U', roles: [] })],
+	[
+		'createUser',
+		() => createUser({ name: 'u', password: 'Temp-Pass-123', display_name: 'U', roles: [] })
+	],
 	[
 		'createOrMergeUser',
-		() => createOrMergeUser({ name: 'u', password: 'x', display_name: 'U', roles: [] }, caller)
+		() =>
+			createOrMergeUser(
+				{ name: 'u', password: 'Temp-Pass-123', display_name: 'U', roles: [] },
+				caller
+			)
 	],
 	['updateUser', () => updateUser('u', { display_name: 'V' }, caller)],
 	['deleteUser', () => deleteUser('u', caller)],
@@ -66,7 +73,7 @@ const writers: [string, () => Promise<unknown>][] = [
 				linked_user_name: null,
 				grant: {
 					shelter_code: 'SH001',
-					role: 'volunteer_coordinator',
+					role: 'registration_staff',
 					granted_by: 'sa'
 				} as unknown as Parameters<typeof grantCoordinatorRole>[0]['grant']
 			})
@@ -78,7 +85,7 @@ const writers: [string, () => Promise<unknown>][] = [
 				name: 'u',
 				volunteer_id: 'v',
 				shelter_code: 'SH001',
-				role: 'volunteer_coordinator',
+				role: 'registration_staff',
 				actor: 'sa'
 			})
 	]
@@ -90,6 +97,7 @@ describe('EDGE_MODE (CR-171 FR-13/14)', () => {
 	beforeEach(() => {
 		vi.restoreAllMocks();
 		delete env.EDGE_MODE;
+		env.COUCHDB_ADMIN_URL = 'http://admin:pw@couchdb:5984';
 		adminRaw = vi
 			.spyOn(couchAdmin, 'adminRaw')
 			.mockResolvedValue({ status: 404, data: { error: 'not_found' } });
@@ -131,12 +139,13 @@ describe('EDGE_MODE (CR-171 FR-13/14)', () => {
 	});
 
 	describe('flag off (central)', () => {
-		it.each(writers)('%s does not hit the edge guard', async (_n, run) => {
+		it.each(writers)('%s passes the edge guard and reaches CouchDB', async (_n, run) => {
 			const err = await run().then(
 				() => null,
 				(e: unknown) => e
 			);
 			expect((err as Error | null)?.message).not.toBe(MESSAGE);
+			expect(adminRaw).toHaveBeenCalled();
 		});
 
 		it('touch* still reads the doc', async () => {
