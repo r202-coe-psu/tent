@@ -78,7 +78,7 @@ edge <code> ──(repl_<code>_<suffix>, role repl:<CODE>)──► shelter_<cod
 |                                  | ก่อน                                                          | หลัง                                                                                       |
 | -------------------------------- | ------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
 | credential ฝั่ง central ของ edge | `CENTRAL_REPL_USER` / `CENTRAL_REPL_PASSWORD` = central admin | `EDGE_REPL_USER` / `EDGE_REPL_PASSWORD` = `repl_<code>_<suffix>` (ไม่ใช่ admin)            |
-| source ของ `users_<code>_pull`   | `$CEN/_users` + selector `edge_shelters`                      | `$CEN/edge_users_<code>` (ไม่มี selector — กรองแล้วที่ central)                            |
+| source ของ `users_<code>_pull`   | `$CEN/_users` + selector `edge_shelters`                      | `$CEN/edge_users_<code>` (selector กรองแค่ `_design/*` — กรอง user แล้วที่ central)        |
 | ตัวกรอง user ต่อศูนย์            | selector ของ job บน edge                                      | selector ของ job `edge_users_<code>` บน `_replicator` ของ central (กฎเดียวกับ CR-171 FR-9) |
 | ปิดเครื่อง edge หนึ่งเครื่อง     | หมุนรหัส admin + แก้ edge ทุกเครื่อง                          | `scripts/central-repl-user.sh <CODE> --remove` ที่ central                                 |
 
@@ -110,7 +110,7 @@ edge <code> ──(repl_<code>_<suffix>, role repl:<CODE>)──► shelter_<cod
 ### Requirements — edge
 
 - **FR-14** — `scripts/edge-init.sh` ใช้ `EDGE_REPL_USER` / `EDGE_REPL_PASSWORD` กับทุก job ฝั่ง central (`registry_pull`, `catalog_pull`, `<code>_pull`, `<code>_push`, `users_<code>_pull`) · ไม่อ่าน `CENTRAL_REPL_*` อีก
-- **FR-15** — `users_<code>_pull` = source `$CEN/edge_users_<code>` → target `$LOC/_users` ไม่มี selector
+- **FR-15** — `users_<code>_pull` = source `$CEN/edge_users_<code>` → target `$LOC/_users` · selector กรองแค่ `_design/*` (กัน `_design/readonly` ของ FR-8 ลงไปอยู่ใน `_users` ของ edge)
 - **FR-16** — `edge-init.sh` ตรวจ credential ก่อนสร้าง job: `GET $CEN/_session` ด้วย `EDGE_REPL_*` ต้องได้ 200 และ `userCtx.roles` ต้องมี `repl:<SHELTER_CODE>` และ**ไม่มี** `_admin` — ไม่ผ่าน = `FAILED` exit 1 (กันเอา admin มาใส่ซ้ำ)
 - **FR-17** — จุดตรวจ uuid (`GET $CEN/`) ทำงานด้วย `EDGE_REPL_*`
 - **FR-18** — `.env.edge.example`, `docker-compose.edge.yml` (`edge-init`, `edge-watchdog`) ใช้ `EDGE_REPL_*` · ลบ `CENTRAL_REPL_*` ออกทั้งหมด (`edge-watchdog` เรียกแค่ `GET $SYNC_URL/_up` ไม่ใช้ credential)
@@ -135,7 +135,7 @@ edge <code> ──(repl_<code>_<suffix>, role repl:<CODE>)──► shelter_<cod
 - **AC-5** — ยิงรหัสผิดด้วย `repl_sh001_*` จนถูกล็อก → replication ของ SH002 ยังทำงาน
 - **AC-6** — `central-repl-user.sh SH001 --remove` → job ของ SH001 หยุด (401) ส่วน SH002 ยัง sync ได้
 - **AC-7** — sync สองทางของ `shelter_<code>` ครบทุก doc type (รวม `evacuee_qr`, doc ที่มี `created_by`, `daily_sop_role_assessment` ข้ามวัน) และ login ที่ edge ตอน WAN ล่ม ผ่าน checklist ใน SETUP-EDGE.md
-- **AC-8** — user ที่ถูกถอด role หรือ soft delete ที่ central → login ที่ edge ไม่ได้ภายในเวลา sync ปกติ
+- **AC-8** — ภายในเวลา sync ปกติ: user ที่ถูก soft delete ที่ central → login ที่ edge ไม่ได้ (401) · user ที่ถูกถอด role อย่างเดียว → login ได้แต่ `roles` ว่าง และอ่าน `shelter_<code>` ที่ edge ได้ 403
 - **AC-9** — edge ที่ติดตั้งก่อน CR นี้ เปลี่ยน credential + รัน `edge-init` ใหม่ → `_users` ของ edge ไม่มี conflict
 - **AC-10** — `edge-init` ด้วย credential ที่เป็น admin → `FAILED` (FR-16)
 - **AC-11** — unit test VDU FR-6–FR-8 ครอบ `repl:<CODE>` ตรงศูนย์, ต่างศูนย์, ไม่มี role · `scripts/tests/central-repl-user.test.sh` ครอบ FR-1–FR-4, FR-10–FR-12 บน CouchDB local (แบบเดียวกับ `edge-watchdog.test.sh`)
@@ -158,4 +158,5 @@ edge <code> ──(repl_<code>_<suffix>, role repl:<CODE>)──► shelter_<cod
 - 2026-10-18 — decision sync: ทบทวน OD-6 ก่อนติดตั้ง edge ศูนย์ที่สอง หรือเมื่อเครื่อง edge หาย
 - 2026-11-07 — PO เลือกข้อ 1 (replication user ต่อศูนย์) ใน #1165
 - 2026-11-09 — kong: ทำข้อ 1 + 2 คู่กัน · บันทึกเป็น CR
+- 2026-11-09 — แก้ FR-15 / AC-8 ตามผล e2e ใน #1305: `_design/readonly` หลุดลง `_users` ของ edge · ถอด role อย่างเดียวไม่ได้ทำให้ CouchDB ปฏิเสธ login
 - 2026-11-09 — proposed (#1298) · ตัวเลือกในร่าง: ตัว copy ใช้ `_replicator` ของ central แทนโค้ดใน `worker/` (FR-11) · ต่อยอด `scripts/central-repl-user.sh` แทนเขียนคำสั่งใหม่ (FR-1)
