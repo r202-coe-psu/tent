@@ -86,4 +86,28 @@ describe('buildEvacueeQrLabel', () => {
 		});
 		expect(label.name).toBe('สมชาย');
 	});
+
+	it('omits a whitespace-only last name', () => {
+		const { label } = buildEvacueeQrLabel(ev({ status: 'arriving', last_name: '   ' }), {
+			zones: ZONES,
+			hasScreening: false
+		});
+		expect(label.name).toBe('สมชาย');
+	});
+
+	it('gives an empty name when both names are blank', () => {
+		const { label } = buildEvacueeQrLabel(
+			ev({ status: 'arriving', first_name: ' ', last_name: '' }),
+			{ zones: ZONES, hasScreening: false }
+		);
+		expect(label.name).toBe('');
+	});
+
+	it('trims each name part before joining', () => {
+		const { label } = buildEvacueeQrLabel(
+			ev({ status: 'arriving', first_name: ' สมชาย ', last_name: ' ใจดี ' }),
+			{ zones: ZONES, hasScreening: false }
+		);
+		expect(label.name).toBe('สมชาย\nใจดี');
+	});
 });

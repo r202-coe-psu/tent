@@ -1,5 +1,5 @@
 import { intakeStationsPassed } from './intake-pipeline';
-import { labelZoneName, type Evacuee, type ZoneLabelSource } from './people';
+import { labelZoneName, personNameParts, type Evacuee, type ZoneLabelSource } from './people';
 
 export type EvacueeQrLabelInput = {
 	/** The shelter's living zones, used to resolve the zone text; absent until loaded. */
@@ -30,10 +30,7 @@ export function buildEvacueeQrLabel(evacuee: Evacuee, input: EvacueeQrLabelInput
 	return {
 		qrPayload: evacuee._id,
 		label: {
-			name: [evacuee.first_name, evacuee.last_name ?? '']
-				.map((part) => part.trim())
-				.filter(Boolean)
-				.join('\n'),
+			name: personNameParts(evacuee).join('\n'),
 			zone: labelZoneName(evacuee.current_stay?.zone, input.zones),
 			emergencyPhone: evacuee.emergency_contact?.phone?.replace(/[\s-]/g, '') || null,
 			checkedCount: intakeStationsPassed(evacuee.current_stay, input.hasScreening)
