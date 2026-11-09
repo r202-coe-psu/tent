@@ -27,6 +27,7 @@ import {
 	withoutGrantedRole,
 	type RoleGrant
 } from '$lib/auth/role-grants';
+import { assertUsersWritable, isEdgeMode } from '$lib/server/edge-mode';
 import { recordRoleGrantAudit } from '$lib/server/role-grant-audit';
 import { validatePassword, validateProvisionedPassword } from '$lib/server/password-policy';
 import {
@@ -422,6 +423,7 @@ export async function createUser(input: {
 	affiliation_tags?: string[];
 	role_grants?: RoleGrant[];
 }): Promise<void> {
+	assertUsersWritable();
 	const {
 		name,
 		display_name,
@@ -496,6 +498,7 @@ export async function createOrMergeUser(
 	caller: Caller,
 	options: VolunteerRoleOptions
 ): Promise<{ merged: boolean }> {
+	assertUsersWritable();
 	if (input.personnel_type === 'volunteer') {
 		for (const code of shelterCodesFromRoles(input.roles)) {
 			if (capabilitiesForShelter(input.roles, code).length === 0) {
@@ -622,6 +625,7 @@ export async function grantCoordinatorRole(input: {
 	linked_user_name: string | null;
 	grant: RoleGrant;
 }): Promise<{ created: boolean; unchanged: boolean; name: string }> {
+	assertUsersWritable();
 	const { volunteer_id, grant } = input;
 	const code = grant.shelter_code;
 	const actor = grant.granted_by;
@@ -767,6 +771,7 @@ export async function revokeCoordinatorGrant(input: {
 	role: string;
 	actor: string;
 }): Promise<void> {
+	assertUsersWritable();
 	const { volunteer_id, shelter_code: code, role, actor } = input;
 	if (!isCoordinatorGrantableRole(role)) {
 		throw new ServiceError('FORBIDDEN', 'A coordinator may not revoke this role');
@@ -978,6 +983,7 @@ function managerMayMutateTarget(caller: Caller, targetRoles: readonly string[]):
 
 /** Delete a user. A manager strips own-shelter assignment; full delete only if no shelters remain. */
 export async function deleteUser(name: string, caller: Caller): Promise<void> {
+	assertUsersWritable();
 	const doc = await readUserDoc(name, 'read user');
 
 	if (isProtectedBootstrapAdmin(doc, bootstrapAdminName())) {
@@ -1064,6 +1070,7 @@ export async function updateUser(
 	caller: Caller,
 	options: VolunteerRoleOptions
 ): Promise<void> {
+	assertUsersWritable();
 	const doc = await readUserDoc(name, 'read user');
 
 	if (isProtectedBootstrapAdmin(doc, bootstrapAdminName())) {
@@ -1314,6 +1321,7 @@ export async function updateOwnProfile(
 	name: string,
 	fields: OwnProfileFields & Record<string, unknown>
 ): Promise<UserSummary> {
+	assertUsersWritable();
 	const keys = Object.keys(fields);
 	const rejected = keys.filter((k) => !OWN_PROFILE_KEYS.has(k));
 	if (rejected.length > 0) {
@@ -1367,6 +1375,7 @@ export async function resetUserPasswordByAdmin(
 	name: string,
 	caller: Caller
 ): Promise<{ temporary_password: string }> {
+	assertUsersWritable();
 	const doc = await readUserDoc(name, 'read user');
 
 	if (isProtectedBootstrapAdmin(doc, bootstrapAdminName())) {
@@ -1431,6 +1440,7 @@ export async function verifySecurityQuestionAndResetPassword(
 	rawAnswer: string,
 	newPassword: string
 ): Promise<void> {
+	assertUsersWritable();
 	const name = await resolveLoginName(phoneOrUsername);
 	const doc = await readUserDoc(name, 'verify security question');
 
@@ -1469,6 +1479,7 @@ export async function setupSecurityQuestionAndResetPassword(input: {
 	question_id: string;
 	raw_answer: string;
 }): Promise<void> {
+	assertUsersWritable();
 	const { username, new_password, question_id, raw_answer } = input;
 	const doc = await readUserDoc(username, 'setup security question');
 
@@ -1522,6 +1533,7 @@ export async function linkGoogleMfa(
 	name: string,
 	input: { subject: string; email?: string | null }
 ): Promise<void> {
+	assertUsersWritable();
 	const subject = input.subject.trim();
 	if (!subject) {
 		throw new ServiceError('VALIDATION', 'Google subject is required');
@@ -1560,6 +1572,7 @@ export async function linkGoogleMfa(
 
 /** Clear Google MFA link. Pass `caller` for admin/manager authz; omit for self-service. */
 export async function unlinkGoogleMfa(name: string, caller?: Caller): Promise<void> {
+	assertUsersWritable();
 	const doc = await readUserDoc(name, 'unlink google mfa');
 
 	if (caller) {
@@ -1593,6 +1606,7 @@ export async function unlinkGoogleMfa(name: string, caller?: Caller): Promise<vo
 
 /** Update `verified_at` on the linked Google provider after a successful step-up. */
 export async function touchGoogleMfaVerified(name: string): Promise<void> {
+	if (isEdgeMode()) return;
 	const doc = await readUserDoc(name, 'touch google mfa verified');
 	const google = getGoogleMfa(doc);
 	if (!google) {
@@ -1637,6 +1651,7 @@ export async function linkThaidMfa(
 	name: string,
 	input: { subject: string; name?: string | null; pid_masked?: string | null }
 ): Promise<void> {
+	assertUsersWritable();
 	const subject = input.subject.trim();
 	if (!subject) {
 		throw new ServiceError('VALIDATION', 'ThaID subject is required');
@@ -1676,6 +1691,7 @@ export async function linkThaidMfa(
 
 /** Clear ThaID MFA link. Pass `caller` for admin/manager authz; omit for self-service. */
 export async function unlinkThaidMfa(name: string, caller?: Caller): Promise<void> {
+	assertUsersWritable();
 	const doc = await readUserDoc(name, 'unlink thaid mfa');
 
 	if (caller) {
@@ -1709,6 +1725,7 @@ export async function unlinkThaidMfa(name: string, caller?: Caller): Promise<voi
 
 /** Update `verified_at` on the linked ThaID provider after a successful step-up or login. */
 export async function touchThaidMfaVerified(name: string): Promise<void> {
+	if (isEdgeMode()) return;
 	const doc = await readUserDoc(name, 'touch thaid mfa verified');
 	const thaid = getThaidMfa(doc);
 	if (!thaid) {
