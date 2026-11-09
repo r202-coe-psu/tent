@@ -157,7 +157,7 @@ rep sh001_push     $LOC/shelter_sh001 $CEN/shelter_sh001
 
 # filtered _users (เฉพาะ user ของ SH001) — POC ตอนแรกใช้ `roles` อย่างเดียว · production ใช้ `$or` กับ
 # `edge_shelters` ตาม CR-171 — **หลัง CR #1298 selector นี้ย้ายไปอยู่ที่ job `edge_users_sh001` ใน `_replicator` ของ central**
-# และ edge ดึงจาก `$CEN/edge_users_sh001` โดยไม่มี selector (ดู scripts/edge-init.sh · SETUP-EDGE.md)
+# และ edge ดึงจาก `$CEN/edge_users_sh001` (selector กรองแค่ `_design/*`) (ดู scripts/edge-init.sh · SETUP-EDGE.md)
 rep users_sh001_pull $CEN/_users $LOC/_users \
   '"selector": {"$or": [{"edge_shelters": {"$elemMatch": {"$eq": "SH001"}}}, {"roles": {"$elemMatch": {"$eq": "shelter:SH001"}}}]}'
 ```

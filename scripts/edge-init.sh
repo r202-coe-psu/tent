@@ -157,7 +157,9 @@ job "${CODE_LC}_push" "$LOC/$SHELTER_DB" "$LOC_AUTH" "$CEN/$SHELTER_DB" "$CEN_AU
 
 # _users: pull จาก DB `edge_users_<code>` ที่ central ซึ่งมีเฉพาะ _users doc ของศูนย์นี้อยู่แล้ว (FR-15)
 # CR-171 selector (`edge_shelters` OR `roles`) ย้ายไปอยู่ใน job `_replicator` ฝั่ง central ที่ copy
-# `_users` → `edge_users_<code>` (scripts/central-repl-user.sh) — ฝั่ง edge จึงไม่มี selector (draft CR #1298)
-job "users_${CODE_LC}_pull" "$CEN/edge_users_${CODE_LC}" "$CEN_AUTH" "$LOC/_users" "$LOC_AUTH"
+# `_users` → `edge_users_<code>` (scripts/central-repl-user.sh) — ฝั่ง edge จึงไม่กรอง user (draft CR #1298)
+# กรองแค่ `_design/*`: `_design/readonly` ของ edge_users_<code> (เขียนได้เฉพาะ _admin) ไม่ใช่ของ _users ที่ edge
+job "users_${CODE_LC}_pull" "$CEN/edge_users_${CODE_LC}" "$CEN_AUTH" "$LOC/_users" "$LOC_AUTH" \
+	"\"selector\":{\"_id\":{\"\$not\":{\"\$regex\":\"^_design/\"}}}"
 
 echo "== done — ดูสถานะ: curl -s \$E/_scheduler/docs/_replicator"
