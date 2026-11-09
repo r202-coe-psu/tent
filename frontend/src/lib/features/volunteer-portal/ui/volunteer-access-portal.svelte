@@ -406,10 +406,11 @@
 	}
 
 	function shiftDateFormatted(activity: PortalActivity): string {
+		const locale = langState.current === 'en' ? 'en-US' : 'th-TH';
 		if (activity.startTs) {
 			const start = parsePortalTimestamp(activity.startTs);
 			if (!Number.isNaN(start.getTime())) {
-				return start.toLocaleDateString('th-TH', {
+				return start.toLocaleDateString(locale, {
 					weekday: 'short',
 					day: 'numeric',
 					month: 'short',
@@ -421,7 +422,7 @@
 		if (activity.date) {
 			const d = new Date(activity.date + 'T00:00:00Z');
 			if (!Number.isNaN(d.getTime())) {
-				return d.toLocaleDateString('th-TH', {
+				return d.toLocaleDateString(locale, {
 					weekday: 'short',
 					day: 'numeric',
 					month: 'short',
@@ -431,20 +432,21 @@
 			}
 			return activity.date;
 		}
-		return 'ยังไม่ระบุวัน';
+		return t.noDate;
 	}
 
 	function shiftTimeFormatted(activity: PortalActivity): string {
 		if (!activity.startTs) return '';
 		const start = parsePortalTimestamp(activity.startTs);
 		if (Number.isNaN(start.getTime())) return '';
+		const locale = langState.current === 'en' ? 'en-US' : 'th-TH';
 		const opts = { hour: '2-digit', minute: '2-digit', timeZone: PORTAL_TIME_ZONE } as const;
-		const from = start.toLocaleTimeString('th-TH', opts);
+		const from = start.toLocaleTimeString(locale, opts);
 		const end = activity.endTs ? parsePortalTimestamp(activity.endTs) : null;
 		const to =
 			end && !Number.isNaN(end.getTime())
-				? ` – ${end.toLocaleTimeString('th-TH', opts)} น.`
-				: ' น.';
+				? ` – ${end.toLocaleTimeString(locale, opts)}${t.clockSuffix}`
+				: t.clockSuffix;
 		return `${from}${to}`;
 	}
 

@@ -51,7 +51,12 @@ vi.mock('../application/queries', () => {
 			get data() {
 				return { tickets: state.tickets, phoneMasked: 'xxx-xxx-2222' };
 			}
-		})
+		}),
+		useVolunteerApplications: () => ({
+			...settled,
+			data: []
+		}),
+		useCancelTicketMutation: () => idleMutation
 	};
 });
 vi.mock('$app/navigation', () => ({ goto: vi.fn(async () => {}) }));
