@@ -152,6 +152,8 @@
 	const whenChecked = (reviewedAt: string | null) =>
 		reviewedAt ? `เมื่อ ${formatThaiShortDate(reviewedAt)}` : '(ไม่ระบุวันที่)';
 
+	const isPending = $derived(identityReviewMutation.isPending || skillReviewMutation.isPending);
+
 	/** Accept another shelter's identity result (FR-8): no notes, the source kept in `accepted_from`. */
 	async function acceptIdentity(match: CrossShelterMatch) {
 		if (isPending) return;
@@ -210,7 +212,6 @@
 		lastOpenedId = volunteer._id;
 	});
 
-	const isPending = $derived(identityReviewMutation.isPending || skillReviewMutation.isPending);
 	const needsReason = $derived(decision === 'rejected' && notes.trim().length === 0);
 	const decisionLabel = $derived(
 		decision === 'controlled'

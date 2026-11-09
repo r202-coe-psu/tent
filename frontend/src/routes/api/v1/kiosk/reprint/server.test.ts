@@ -77,7 +77,7 @@ describe('POST /api/v1/kiosk/reprint', () => {
 		vi.clearAllMocks();
 		mockAuthenticate.mockImplementation(async (deviceId) => {
 			if (!deviceId) throw new ScannerAuthError();
-			return { registry_id: deviceId, shelter_code: 'SH001' } as never;
+			return { registry_id: deviceId, device_id: 'kiosk-sh001-01', shelter_code: 'SH001' } as never;
 		});
 		vi.mocked(scannerServerRepository.updateDeviceLastSeen).mockResolvedValue(undefined);
 		mockReprint.mockResolvedValue(members);
@@ -127,7 +127,8 @@ describe('POST /api/v1/kiosk/reprint', () => {
 		expect(response.headers.get('cache-control')).toBe('no-store');
 		expect(await response.json()).toEqual({ shelter_code: 'SH001', members });
 		expect(mockReprint).toHaveBeenCalledWith('SH001', validBody, {
-			verifyStaffPin: expect.any(Function)
+			verifyStaffPin: expect.any(Function),
+			deviceId: 'kiosk-sh001-01'
 		});
 	});
 

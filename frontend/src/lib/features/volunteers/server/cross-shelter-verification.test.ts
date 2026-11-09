@@ -29,6 +29,8 @@ let dbs: Record<string, Doc[]>;
 let failing: Set<string>;
 let registryStatus: number;
 let audits: Doc[];
+let putFailures: number;
+let putCalls: Doc[];
 
 const own = (over: Doc = {}): Doc => ({
 	_id: 'volunteer:own',
@@ -87,6 +89,8 @@ beforeEach(() => {
 	failing = new Set();
 	registryStatus = 200;
 	audits = [];
+	putFailures = 0;
+	putCalls = [];
 	dbs = {
 		registry: [shelter('SH001'), shelter('SH002'), shelter('SH003')],
 		shelter_sh001: [source()],
@@ -111,6 +115,11 @@ beforeEach(() => {
 		if (!(db in dbs))
 			return { status: 404, data: { error: 'not_found', reason: 'Database does not exist.' } };
 		if (method === 'PUT') {
+			putCalls.push(body as Doc);
+			if (putFailures > 0) {
+				putFailures--;
+				return { status: 500, data: { error: 'write_failed' } };
+			}
 			audits.push(body as Doc);
 			return { status: 201, data: { ok: true } };
 		}
@@ -294,5 +303,35 @@ describe('findCrossShelterVerifications (CR-228)', () => {
 		for (const secret of ['volunteer:src', 'ph-1', 'nid-1', 'สมชาย', 'sm01']) {
 			expect(written).not.toContain(secret);
 		}
+	});
+
+	it('retries audit PUT on failure and succeeds with same _id (FR-16)', async () => {
+		putFailures = 2;
+		const res = await find();
+		expect(res.matches).toHaveLength(1);
+		expect(putCalls).toHaveLength(3);
+		// All attempts must use the same _id
+		const id0 = putCalls[0]._id;
+		expect(putCalls[1]._id).toBe(id0);
+		expect(putCalls[2]._id).toBe(id0);
+		expect(audits).toHaveLength(1);
+		expect(audits[0]._id).toBe(id0);
+	});
+
+	it('logs error when audit write fails all 3 attempts but response still resolves (FR-16)', async () => {
+		putFailures = 3;
+		const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+		const res = await find();
+		expect(res.matches).toHaveLength(1);
+		expect(putCalls).toHaveLength(3);
+		expect(audits).toHaveLength(0);
+		expect(errorSpy).toHaveBeenCalledWith(
+			'[cross-shelter-verification] audit not written',
+			expect.objectContaining({
+				target_id: 'volunteer:own',
+				reason: 'cross_shelter_verification.search'
+			})
+		);
+		errorSpy.mockRestore();
 	});
 });

@@ -13,6 +13,7 @@ import { isControlledSkill } from '../domain/skills';
 import {
 	identityVerificationStatus,
 	isDirectlyVerified,
+	skillVerificationRecord,
 	skillVerificationStatus,
 	type VerificationRecord
 } from '../domain/verification';
@@ -104,6 +105,8 @@ async function undecidedControlledSkills(
 	return codes;
 }
 
+const FIND_LIMIT = 50;
+
 /** The same person's active profiles in one shelter: both hashes match (FR-3). 404 = no DB. */
 async function sameProfiles(
 	shelterCode: string,
@@ -112,7 +115,7 @@ async function sameProfiles(
 	const res = await adminRaw(`/${shelterDbName(shelterCode)}/_find`, 'POST', {
 		selector: { type: 'volunteer', ...hashes },
 		fields: ['status', 'identity_verified', 'identity_verification', 'skill_verifications'],
-		limit: 20
+		limit: FIND_LIMIT
 	}).catch(() => null);
 	if (res?.status === 404) return null;
 	if (!res || res.status >= 400) {
@@ -121,8 +124,17 @@ async function sameProfiles(
 			`${shelterCode}: ${res ? `HTTP ${res.status}` : 'unreachable'}`
 		);
 	}
-	const docs = ((res.data as { docs?: ProfileDoc[] } | null)?.docs ?? []) as ProfileDoc[];
-	return docs.filter((doc) => doc.status !== 'inactive');
+	const docs = (res.data as { docs?: unknown } | null)?.docs;
+	if (!Array.isArray(docs)) {
+		throw unavailable('ข้อมูลศูนย์อื่น', `${shelterCode}: no docs in _find body`);
+	}
+	if (docs.length >= FIND_LIMIT) {
+		throw unavailable(
+			'ข้อมูลศูนย์อื่น',
+			`${shelterCode}: volunteer profile search hit limit (${FIND_LIMIT})`
+		);
+	}
+	return (docs as ProfileDoc[]).filter((doc) => doc.status !== 'inactive');
 }
 
 /** What one other shelter checked in person, limited to what this shelter still needs (FR-4, FR-5). */
@@ -141,7 +153,7 @@ function matchFrom(
 		if (wantIdentity && !identity && direct)
 			identity = { reviewed_at: record?.reviewed_at ?? null };
 		for (const code of wantSkills) {
-			const skill = source.skill_verifications?.[code];
+			const skill = skillVerificationRecord(source, code);
 			if (!skills.has(code) && isDirectlyVerified(skill))
 				skills.set(code, skill?.reviewed_at ?? null);
 		}
@@ -245,13 +257,20 @@ export async function findCrossShelterVerifications(
 	const matches: CrossShelterMatch[] = [];
 	let sheltersSearched = 0;
 	if (searchable && (wantIdentity || wantSkills.length > 0)) {
+		const SEARCH_FAN_OUT = 5;
 		const others = (await registryShelters()).filter((s) => s.code !== shelterCode);
-		const results = await Promise.all(
-			others.map(async (shelter) => ({
-				shelter,
-				profiles: await sameProfiles(shelter.code, { phone_hash, national_id_hash })
-			}))
-		);
+		const results: { shelter: ShelterRef; profiles: ProfileDoc[] | null }[] = [];
+		for (let i = 0; i < others.length; i += SEARCH_FAN_OUT) {
+			const chunk = others.slice(i, i + SEARCH_FAN_OUT);
+			results.push(
+				...(await Promise.all(
+					chunk.map(async (shelter) => ({
+						shelter,
+						profiles: await sameProfiles(shelter.code, { phone_hash, national_id_hash })
+					}))
+				))
+			);
+		}
 		for (const { shelter, profiles } of results) {
 			if (profiles === null) continue; // no DB any more: skipped, not searched
 			sheltersSearched += 1;

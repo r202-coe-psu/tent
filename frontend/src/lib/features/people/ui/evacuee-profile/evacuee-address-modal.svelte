@@ -9,6 +9,9 @@
 	import { defaults, superForm } from 'sveltekit-superforms';
 	import { zod4 } from 'sveltekit-superforms/adapters';
 	import HouseholdAddressFields from '../forms/household-address-fields.svelte';
+	import { getTranslation } from '$lib/utils/i18n';
+	import { langState } from '$lib/states/i18n.svelte';
+	import { EVACUEE_PROFILE_MODALS_I18N } from '../_constants/evacuee-profile-modals.i18n';
 	import ModalEscapeListener from '../shared/modal-escape-listener.svelte';
 
 	let {
@@ -31,6 +34,8 @@
 			community: string;
 		}) => Promise<void>;
 	} = $props();
+
+	const t = $derived(getTranslation(EVACUEE_PROFILE_MODALS_I18N, langState.current).address);
 
 	let addressNo = $state(untrack(() => household.address_no ?? ''));
 	let villageNo = $state(untrack(() => household.village_no ?? ''));
@@ -80,7 +85,7 @@
 				try {
 					await onSave({ ...validated.data });
 				} catch (error) {
-					formError = error instanceof Error ? error.message : 'บันทึกข้อมูลไม่สำเร็จ';
+					formError = error instanceof Error ? error.message : t.saveFailed;
 				} finally {
 					saving = false;
 				}
@@ -111,7 +116,7 @@
 	>
 		<div
 			class="w-full max-w-2xl animate-in overflow-hidden rounded-lg border border-border bg-card shadow-xl duration-150 zoom-in-95 fade-in"
-			aria-label="แก้ไขที่อยู่ครอบครัว"
+			aria-label={t.title}
 			aria-modal="true"
 			role="dialog"
 		>
@@ -120,14 +125,14 @@
 					class="flex items-start justify-between gap-4 border-b border-border px-5 py-4 sm:px-6"
 				>
 					<div class="min-w-0">
-						<h2 class="text-lg font-bold text-foreground">แก้ไขที่อยู่ครอบครัว</h2>
+						<h2 class="text-lg font-bold text-foreground">{t.title}</h2>
 					</div>
 					<button
 						type="button"
 						class="-mt-1 -mr-2 inline-flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-50"
 						onclick={onClose}
 						disabled={saving}
-						aria-label="ปิด"
+						aria-label={t.close}
 					>
 						<X class="size-5" />
 					</button>
@@ -137,13 +142,13 @@
 					<div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
 						<div class="space-y-1.5">
 							<Label for="municipality-zone" class="text-xs font-semibold text-foreground">
-								เขตเทศบาล
+								{t.municipalityZone}
 							</Label>
 							<Input
 								id="municipality-zone"
 								bind:value={municipalityZone}
 								disabled={saving}
-								placeholder="ระบุเขตเทศบาล..."
+								placeholder={t.municipalityZonePlaceholder}
 								class="h-9"
 							/>
 							{#if $errors.municipalityZone?.[0]}
@@ -151,12 +156,14 @@
 							{/if}
 						</div>
 						<div class="space-y-1.5">
-							<Label for="community" class="text-xs font-semibold text-foreground">ชุมชน</Label>
+							<Label for="community" class="text-xs font-semibold text-foreground"
+								>{t.community}</Label
+							>
 							<Input
 								id="community"
 								bind:value={community}
 								disabled={saving}
-								placeholder="ระบุชุมชน..."
+								placeholder={t.communityPlaceholder}
 								class="h-9"
 							/>
 							{#if $errors.community?.[0]}
@@ -194,14 +201,15 @@
 				</div>
 
 				<footer class="flex justify-end gap-2 border-t border-border px-5 py-4 sm:px-6">
-					<Button type="button" variant="outline" onclick={onClose} disabled={saving}>ยกเลิก</Button
+					<Button type="button" variant="outline" onclick={onClose} disabled={saving}
+						>{t.cancel}</Button
 					>
 					<Button type="submit" disabled={saving}>
 						{#if saving}
 							<LoaderCircle class="size-4 animate-spin" />
-							กำลังบันทึก...
+							{t.saving}
 						{:else}
-							บันทึกข้อมูล
+							{t.save}
 						{/if}
 					</Button>
 				</footer>

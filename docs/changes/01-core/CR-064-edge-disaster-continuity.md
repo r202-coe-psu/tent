@@ -114,7 +114,7 @@ N/A สำหรับ `schema_v` ในรอบนี้ (ยังไม่ b
   - **A2 — บล็อกการเขียน `_users` ที่ edge (D5)** ด้วย flag `EDGE_MODE`: frontend ที่ edge มี `COUCHDB_ADMIN_URL` (BFF เขียน `_users` ได้)
     แต่ job `_users` เป็น pull ทางเดียว · ทดสอบ CouchDB 3.5: แก้ user ที่ edge 2 ครั้ง + soft delete ที่ central → conflict ที่ edge
     และ login ไม่ได้ (`User document conflicts must be resolved before the document is used for authentication purposes.`) ·
-    edge mode — PR แยก, CR-171 amendment pending
+    edge mode — PR แยก, spec = FR-13–FR-17 ของ [CR-171](CR-171-users-edge-shelters-soft-delete.md) (amend 2026-11-09, #1179)
   - **A3 — login ครั้งแรกที่ edge (`must_change_password`)** ถูกบล็อกเหมือนการเขียนอื่น: บัญชีต้อง activate ที่ central ก่อนเปิดศูนย์
   - **A4 — ไม่สร้าง user ที่ edge** (คง A1 ของ idea doc): เตรียม spare account ที่ provision + activate ที่ central ล่วงหน้า · ผู้จัดการศูนย์ประมาณจำนวน
   - **Gate:** ห้ามติดตั้ง edge ที่ศูนย์จริงจนกว่า PR edge mode (A2) จะ merge · PR #348 merge ได้ตามปกติ

@@ -24,7 +24,9 @@
 	import { Checkbox } from '$lib/components/ui/checkbox/index.js';
 	import type { ConsentBlockState } from '../application/consent-block.svelte';
 	import type { ConsentDecision } from '../domain/consent';
-	import { CONSENT_COPY as copy } from '../domain/consent-notice.i18n';
+	import { langState } from '$lib/states/i18n.svelte';
+	import { getTranslation } from '$lib/utils/i18n';
+	import { CONSENT_BLOCK_I18N } from '../domain/consent-notice.i18n';
 
 	let {
 		block,
@@ -53,6 +55,7 @@
 		onconfirm?: (decision: ConsentDecision) => void;
 	} = $props();
 
+	const copy = $derived(getTranslation(CONSENT_BLOCK_I18N, langState.current));
 	const uid = $props.id();
 	const needMessageId = $derived(needId ?? `${uid}-need`);
 

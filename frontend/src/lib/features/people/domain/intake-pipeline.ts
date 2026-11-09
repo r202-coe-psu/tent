@@ -4,8 +4,27 @@
  */
 import type { Evacuee, TriageLevel } from './people';
 import { isInShelterStayStatus } from '$lib/features/shared';
+import { parsePersonQr } from '$lib/utils/evacuee-qr';
+import type { LanguageCode } from '$lib/utils/language';
 
 export type NextQueueLabel = 'รอแพทย์' | 'รอโซน' | 'รอยืนยันถึงโซน' | 'พักแล้ว' | '—';
+
+/**
+ * English mirror of the `NextQueueLabel` values (the Thai strings are the union members, so they
+ * are the keys here).
+ */
+export const nextQueueLabelsEn: Record<NextQueueLabel, string> = {
+	รอแพทย์: 'Awaiting doctor',
+	รอโซน: 'Awaiting zone',
+	รอยืนยันถึงโซน: 'Awaiting arrival confirmation',
+	พักแล้ว: 'Settled in',
+	'—': '—'
+};
+
+/** Display text for a `nextQueueLabel` result — Thai passes through, English maps it. */
+export function nextQueueLabelText(label: NextQueueLabel, language: LanguageCode = 'th'): string {
+	return language === 'en' ? nextQueueLabelsEn[label] : label;
+}
 
 export type ZoningQueueTab = 'pending' | 'awaiting_confirm' | 'assigned';
 
@@ -239,6 +258,17 @@ export const ZONE_KIND_LABELS: Record<ZoningRecommendKind, string> = {
 	general: 'โซนทั่วไป'
 };
 
+const zoneKindLabelsEn: Record<ZoningRecommendKind, string> = {
+	quarantine: 'Quarantine zone (watch-list symptoms)',
+	vulnerable: 'Vulnerable group zone',
+	general: 'General zone'
+};
+
+export const zoneKindLabelsByLanguage: Record<LanguageCode, Record<ZoningRecommendKind, string>> = {
+	th: ZONE_KIND_LABELS,
+	en: zoneKindLabelsEn
+};
+
 /**
  * First open zone whose type matches `kind` (zones without a type count as general).
  * Returns null when none matches — callers must not fall back to an unrelated zone,
@@ -340,6 +370,13 @@ export function parseZoningQrCode(input: string): string | null {
 		return null;
 	}
 
+	// Person QR `evacuee:{ULID}@{hash6}` (CR-233): the id handed onward never carries `@` (FR-EQR-6);
+	// the hash is read separately by the scan-rule evaluation. A malformed `@` suffix is not a
+	// Person QR at all (FR-EQR-5).
+	if (/^evacuee:/i.test(trimmed) && trimmed.includes('@')) {
+		return parsePersonQr(trimmed)?.evacuee_id ?? null;
+	}
+
 	return trimmed;
 }
 
@@ -369,19 +406,29 @@ export function sortByZoningQueueSince<T extends Evacuee>(
 }
 
 /** 「รอ 5 นาที」 / 「รอ 2 ชม. 10 นาที」 / 「รอ 1 วัน 3 ชม.」 — elapsed time since `sinceIso`. */
-export function formatQueueWait(sinceIso: string | null | undefined, now: Date): string {
+export function formatQueueWait(
+	sinceIso: string | null | undefined,
+	now: Date,
+	language: LanguageCode = 'th'
+): string {
 	if (!sinceIso) return '—';
 	const since = new Date(sinceIso).getTime();
 	if (Number.isNaN(since)) return '—';
 	const minutes = Math.max(0, Math.floor((now.getTime() - since) / 60_000));
-	if (minutes < 1) return 'เพิ่งเข้าคิว';
-	if (minutes < 60) return `รอ ${minutes} นาที`;
+	const en = language === 'en';
+	if (minutes < 1) return en ? 'Just joined' : 'เพิ่งเข้าคิว';
+	if (minutes < 60) return en ? `Waiting ${minutes} min` : `รอ ${minutes} นาที`;
 	const hours = Math.floor(minutes / 60);
 	if (hours < 24) {
 		const rest = minutes % 60;
+		if (en) return rest > 0 ? `Waiting ${hours} hr ${rest} min` : `Waiting ${hours} hr`;
 		return rest > 0 ? `รอ ${hours} ชม. ${rest} นาที` : `รอ ${hours} ชม.`;
 	}
 	const days = Math.floor(hours / 24);
 	const restHours = hours % 24;
+	if (en) {
+		const dayText = days === 1 ? '1 day' : `${days} days`;
+		return restHours > 0 ? `Waiting ${dayText} ${restHours} hr` : `Waiting ${dayText}`;
+	}
 	return restHours > 0 ? `รอ ${days} วัน ${restHours} ชม.` : `รอ ${days} วัน`;
 }
