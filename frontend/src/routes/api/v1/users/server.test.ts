@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { mockCreateOrMergeUser, mockAssertVerified } = vi.hoisted(() => ({
+const { mockCreateOrMergeUser, mockUpdateUser, mockAssertVerified } = vi.hoisted(() => ({
 	mockCreateOrMergeUser: vi.fn(),
+	mockUpdateUser: vi.fn(),
 	mockAssertVerified: vi.fn()
 }));
 
@@ -24,7 +25,7 @@ vi.mock('$lib/server/user-service', () => ({
 	createOrMergeUser: mockCreateOrMergeUser,
 	deleteUser: vi.fn(),
 	listUsers: vi.fn(),
-	updateUser: vi.fn()
+	updateUser: mockUpdateUser
 }));
 vi.mock('$lib/features/volunteers/server/volunteer-access-grant', () => ({
 	assertVolunteerVerifiedForAccess: mockAssertVerified
@@ -33,7 +34,7 @@ vi.mock('$lib/server/password-policy', () => ({
 	validateProvisionedPassword: vi.fn((p: string) => p)
 }));
 
-import { POST } from './+server';
+import { POST, PUT } from './+server';
 
 function post(body: Record<string, unknown>) {
 	const request = new Request('http://localhost/api/v1/users', {
@@ -63,7 +64,9 @@ describe('POST /api/v1/users — CR-141 FR-23', () => {
 			expect(res.status).toBe(200);
 			expect(mockCreateOrMergeUser).toHaveBeenCalledWith(
 				expect.objectContaining({ must_change_password: true }),
-				expect.anything()
+				expect.anything(),
+				// A merge checks the merged account's own profile (CR-221 A1-7).
+				{ verifyVolunteerRoles: mockAssertVerified }
 			);
 		}
 	);
@@ -99,5 +102,28 @@ describe('POST /api/v1/users with volunteer_id — CR-221 FR-3', () => {
 	it('leaves an account without a volunteer profile unchecked', async () => {
 		await post({ ...body, personnel_type: 'staff' });
 		expect(mockAssertVerified).not.toHaveBeenCalled();
+	});
+});
+
+describe('PUT /api/v1/users — CR-221 A1-7', () => {
+	beforeEach(() => vi.clearAllMocks());
+
+	it('hands the identity check to the save, which runs it only for a role it adds', async () => {
+		const request = new Request('http://localhost/api/v1/users', {
+			method: 'PUT',
+			headers: { 'Content-Type': 'application/json', cookie: 'AuthSession=x' },
+			body: JSON.stringify({
+				name: 'vol@example.com',
+				roles: ['shelter:SH001', 'SH001:medical_staff']
+			})
+		});
+		const res = await PUT({ request } as Parameters<typeof PUT>[0]);
+		expect(res.status).toBe(200);
+		expect(mockUpdateUser).toHaveBeenCalledWith(
+			'vol@example.com',
+			expect.objectContaining({ roles: ['shelter:SH001', 'SH001:medical_staff'] }),
+			expect.objectContaining({ isSA: true }),
+			{ verifyVolunteerRoles: mockAssertVerified }
+		);
 	});
 });

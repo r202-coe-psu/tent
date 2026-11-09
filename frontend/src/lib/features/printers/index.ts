@@ -5,6 +5,7 @@ export * from './domain/print-job-status';
 export * from './domain/printer-status';
 export * from './domain/printers.i18n';
 export * from './domain/chunk-labels';
+export * from './domain/reported-error';
 export * from './data/printers.api';
 export * from './application/queries';
 export * from './application/station-printer.svelte';

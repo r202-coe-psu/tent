@@ -127,7 +127,9 @@ export const POST: RequestHandler = async ({ request }) => {
 				must_change_password,
 				affiliation_tags
 			},
-			caller
+			caller,
+			// A merge into an existing volunteer account checks that account's own profile (A1-7).
+			{ verifyVolunteerRoles: assertVolunteerVerifiedForAccess }
 		);
 		return json({ ok: true, merged: result.merged });
 	} catch (e) {
@@ -205,7 +207,10 @@ export const PUT: RequestHandler = async ({ request }) => {
 				affiliation_tags,
 				permanent_roles
 			},
-			caller
+			caller,
+			// A role added to a volunteer account needs the profile verified there, as on POST
+			// (CR-221 A1-7); a save that adds no role is not checked.
+			{ verifyVolunteerRoles: assertVolunteerVerifiedForAccess }
 		);
 		return json({ ok: true });
 	} catch (e) {
