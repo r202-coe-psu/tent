@@ -246,7 +246,7 @@ curl -s -X PUT -u <staff>:<pw> $EDGE/couch/shelter_sh001/evacuee:01OUTAGE0000000
 - **ปฏิเสธ** (403 "แก้ไขบัญชีได้เฉพาะที่ระบบกลาง" และไม่เขียน doc): users CRUD / reset password / rotate staff card, `PATCH auth/me`,
   forgot-password, force-setup, link/unlink Google·ThaID, volunteer-access — รายการเต็มที่ [CR-171 FR-15](../changes/01-core/CR-171-users-edge-shelters-soft-delete.md)
 - **ทำงานปกติ:** login (ชื่อ/เบอร์/OAuth), `GET auth/me`, mfa clear/skip, อ่านทุกอย่าง · OAuth login ข้ามการเขียน `verified_at` (FR-14)
-- ตั้งด้วย `docker compose ... up -d frontend` หลัง `git pull` (ไม่ต้อง build ใหม่) · ตรวจ: แก้ profile ที่ edge ต้องถูกปฏิเสธ
+- `EDGE_MODE` ตั้งใน compose แล้ว แต่ guard เป็นโค้ดใหม่ ต้อง **build image frontend ใหม่** หลัง `git pull` (`docker compose -f docker-compose.edge.yml up -d --build frontend` · ถ้าใช้ `FRONTEND_IMAGE` ให้ pull image ที่ build จากโค้ดนี้) ไม่งั้นยังรันโค้ดเก่าที่ไม่มี guard · ตรวจ: แก้ profile ที่ edge ต้องถูกปฏิเสธ
 
 #### บัญชีสำรอง (ต้องเตรียมก่อนเปิดศูนย์)
 
