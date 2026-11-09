@@ -36,7 +36,6 @@
 		DESK_MODE_IDS,
 		STEP_TITLES,
 		modePendingCount,
-		needsCloseOutAction,
 		isDeskMode,
 		resolveInitialMode,
 		stepAfterModeSwitch,
@@ -399,13 +398,11 @@
 	// Shown whenever the desk has any point (as before #1183), and always while it is filtering.
 	const showPointFilter = $derived(pointOptions.length > 0 || point !== ALL_POINTS);
 
-	// Tickets that specifically need a direct frontline action right now: shift closed but
-	// returns not yet submitted, or warehouse already verified the return but the ticket still
-	// needs to be closed. Excludes DISTRIBUTING (already surfaced by the food/supplies tabs),
-	// RETURN_PENDING_RECEIPT (waiting on the warehouse, not frontline), and COMPLETED.
-	// Counted before the point filter — it feeds a tab badge.
+	// Tickets the desk must act on right now, counted by the same rule as the "ต้องทำตอนนี้" group
+	// so the tab badge and the group button cannot disagree. Counted before the point filter — it
+	// feeds a tab badge.
 	const reconciliationPendingActionCount = $derived(
-		allReconciliationTickets.filter(needsCloseOutAction).length
+		allReconciliationTickets.filter((t) => closeOutGroup(t.status) === 'action').length
 	);
 
 	let pickedReconciliationTicketId = $state<string>('');
