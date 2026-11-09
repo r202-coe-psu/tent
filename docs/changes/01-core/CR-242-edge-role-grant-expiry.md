@@ -1,10 +1,11 @@
 ---
-id: draft
+id: CR-242
 title: ถอน role ที่ grant หมดอายุบน edge CouchDB ระหว่าง WAN ล่ม (edge fallback ของ `_users.role_grants`)
-status: proposed
+status: approved
 date: 2026-11-06
+updated: 2026-11-09
 requested_by: "#1002 (@Mhapong) — review PR #1000 / D7"
-decided_by: "@Jackyzaz (รอ approve) · Team Lead (stable core)"
+decided_by: Soravit Sukkarn (Team Lead)
 layer: stable
 related:
   - docs/changes/06-A-volunteer/CR-213-coordinator-limited-access-grant.md (FR-12 sweep, นอกขอบเขต "edge fallback")
@@ -27,19 +28,14 @@ affects:
 why: grant ของ coordinator หมดอายุตามปกติทุกฉบับ แต่ระหว่าง WAN ล่ม sweep ที่ central ไปไม่ถึง edge ทำให้ role ที่หมดอายุยังใช้ login และเขียน `shelter_{code}` ที่ edge ได้ตลอดช่วงที่ WAN ล่ม
 ---
 
-<!--
-ร่าง (proposed): ยังไม่รันเลข CR-NNN และยังไม่ลง _index.md
-หลัง approve: รันเลขจาก _index.md บน develop → ย้ายไป docs/changes/01-core/CR-NNN-edge-role-grant-expiry.md
--->
-
-# ถอน role ที่ grant หมดอายุบน edge ระหว่าง WAN ล่ม
+# CR-242 — ถอน role ที่ grant หมดอายุบน edge ระหว่าง WAN ล่ม
 
 > **สรุป (TL;DR):**
 >
 > - **ปัญหา:** `_users` ถูก replicate ลง edge แล้ว (PR #348, `scripts/edge-init.sh`) แต่ sweep ถอน grant (CR-213 FR-12) รันที่ central เท่านั้น ระหว่าง WAN ล่ม role ที่หมดอายุยังใช้ได้ที่ edge จนกว่า WAN กลับ
 > - **ข้อเสนอ (ตัวเลือก D):** คง selector `edge_shelters` ของ CR-171 (ส่งการถอนลง edge เมื่อ WAN ปกติ — มีอยู่แล้ว ต้องล็อกด้วย test) และเพิ่ม service `edge-grant-sweep` บน edge ที่ถอน grant หมดอายุของศูนย์ตัวเอง **เฉพาะเมื่อ central ติดต่อไม่ได้ ≥ 15 นาที** แล้วล้าง conflict เมื่อ WAN กลับ
 > - **ทางเลือกที่ถูกที่สุด (ตัวเลือก E):** ยอมรับเป็นข้อจำกัด เหมือนการถอดสิทธิ์โดย SM (decision sync 2026-10-18)
-> - **layer: stable** (auth + sync + edge appliance) ต้อง review ก่อน approve · ไม่ bump `schema_v` · ขึ้นกับ EDGE_MODE (#1179, #1180)
+> - **layer: stable** (auth + sync + edge appliance) · approved โดย Soravit Sukkarn (Team Lead) 2026-11-09 · ไม่ bump `schema_v` · ขึ้นกับ EDGE_MODE (#1179, #1180)
 
 ---
 
@@ -156,3 +152,4 @@ why: grant ของ coordinator หมดอายุตามปกติท�
 - 2026-10-28 — เปิด #1002 (@Mhapong) ขณะนั้นยังไม่มีโค้ด replicate `_users` ลง edge
 - 2026-11-05 — PR #348 merge: job `users_<code>_pull` ใช้ selector `edge_shelters` (CR-171) failure mode 2 จึงแก้แล้วสำหรับ path ที่เขียนผ่าน `user-service` และ worker
 - 2026-11-06 — proposed (ร่างนี้): เสนอ D, ทางเลือกราคาต่ำ E · ตัด A (conflict ทุกครั้งที่ grant หมดตอน WAN ปกติ) และ C (ต้องแก้รูป role และจิตอาสาเสีย edge)
+- 2026-11-09 — approved โดย Soravit Sukkarn (Team Lead) เลือกตัวเลือก D (service edge-grant-sweep บน edge) · รันเลข CR-242 และบันทึกลง _index.md §01-core
