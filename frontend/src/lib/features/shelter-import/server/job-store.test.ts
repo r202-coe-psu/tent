@@ -1,11 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { adminRawFn } = vi.hoisted(() => ({ adminRawFn: vi.fn() }));
-
 vi.mock('$lib/server/couch-admin', async () => {
 	const actual =
 		await vi.importActual<typeof import('$lib/server/couch-admin')>('$lib/server/couch-admin');
-	return { ...actual, adminRaw: adminRawFn };
+	return { ...actual, adminRaw: vi.fn() };
 });
 
 import { adminRaw } from '$lib/server/couch-admin';
@@ -21,6 +19,7 @@ import {
 	MAX_IMPORT_ATTEMPTS,
 	IMPORT_QUEUE_DB,
 	IMPORT_AUDIT_DB,
+	resetImportQueueSetupForTests,
 	type ShelterImportItemSummary
 } from './job-store';
 
@@ -273,12 +272,6 @@ async function createSingleJob(): Promise<{ jobId: string; item: ShelterImportIt
 	return { jobId: job._id.slice('shelter_import_job:'.length), item: summary.items[0] };
 }
 
-// Queue setup is cached per module instance, so each test here imports a fresh one.
-async function freshJobStore(): Promise<typeof import('./job-store')> {
-	vi.resetModules();
-	return import('./job-store');
-}
-
 const singleJobArgs = {
 	filename: 'shelters.xlsx',
 	importedBy: 'admin',
@@ -296,12 +289,12 @@ function queueSecurityPuts(): number {
 describe('import queue database setup', () => {
 	beforeEach(() => {
 		setupCouchMock();
+		resetImportQueueSetupForTests();
 		adminRawMock.mockClear();
 	});
 
 	it('keeps the import queue private to CouchDB server admins', async () => {
-		const store = await freshJobStore();
-		await store.createImportJob(singleJobArgs);
+		await createImportJob(singleJobArgs);
 
 		expect(securityWrites.at(-1)).toEqual({
 			admins: { names: ['legacy-admin'], roles: ['system_admin', '_admin'] },
@@ -316,16 +309,14 @@ describe('import queue database setup', () => {
 			}
 			return { status: 200, data: {} };
 		});
-		const store = await freshJobStore();
 
-		await expect(store.createImportJob(singleJobArgs)).rejects.toMatchObject({
+		await expect(createImportJob(singleJobArgs)).rejects.toMatchObject({
 			code: 'INTERNAL'
 		});
 	});
 
 	it('sets up the queue database once across repeated worker polls', async () => {
-		const store = await freshJobStore();
-		for (let poll = 0; poll < 5; poll++) await store.listRunnableImportJobs();
+		for (let poll = 0; poll < 5; poll++) await listRunnableImportJobs();
 
 		expect(queueSecurityPuts()).toBe(1);
 	});
@@ -340,10 +331,26 @@ describe('import queue database setup', () => {
 			}
 			return healthy(path, method, body);
 		});
-		const store = await freshJobStore();
 
-		await expect(store.listRunnableImportJobs()).rejects.toMatchObject({ code: 'INTERNAL' });
-		await expect(store.listRunnableImportJobs()).resolves.toEqual([]);
+		await expect(listRunnableImportJobs()).rejects.toMatchObject({ code: 'INTERNAL' });
+		await expect(listRunnableImportJobs()).resolves.toEqual([]);
+		expect(queueSecurityPuts()).toBe(2);
+	});
+
+	it('sets the queue up again on the next poll after its database is dropped', async () => {
+		await listRunnableImportJobs();
+		const healthy = adminRawMock.getMockImplementation()!;
+		let databaseDropped = true;
+		adminRawMock.mockImplementation(async (path, method, body) => {
+			if (path.includes('/_view/jobs_by_runnable') && databaseDropped) {
+				databaseDropped = false;
+				return { status: 404, data: { error: 'not_found', reason: 'Database does not exist.' } };
+			}
+			return healthy(path, method, body);
+		});
+
+		await expect(listRunnableImportJobs()).rejects.toMatchObject({ code: 'INTERNAL' });
+		await expect(listRunnableImportJobs()).resolves.toEqual([]);
 		expect(queueSecurityPuts()).toBe(2);
 	});
 });
@@ -351,6 +358,7 @@ describe('import queue database setup', () => {
 describe('shelter import job lifecycle', () => {
 	beforeEach(() => {
 		setupCouchMock();
+		resetImportQueueSetupForTests();
 	});
 
 	it('uses full job references, padded item ids, and bounded attempts', async () => {
